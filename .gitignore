@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Virtual environment (local to each PC, never in project)
+venv/
+
+# Video sources (too large for git, kept locally)
+sons/videos/
+
+# WAV cache (generated at runtime)
+*.wav
+
+# Temp/debug scripts
+_probe.py
+_*.py
+
+# OS junk
+Thumbs.db
+.DS_Store
+
+# Claude Code
+CLAUDE.md
