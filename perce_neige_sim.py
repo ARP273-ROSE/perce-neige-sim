@@ -34,6 +34,7 @@ from PyQt6.QtGui import (
     QBrush,
     QColor,
     QConicalGradient,
+    QDesktopServices,
     QFont,
     QIcon,
     QKeyEvent,
@@ -48,7 +49,14 @@ from PyQt6.QtGui import (
 )
 from PyQt6.QtWidgets import (
     QApplication,
+    QDialog,
+    QDialogButtonBox,
+    QLabel,
+    QLineEdit,
     QMainWindow,
+    QMessageBox,
+    QPlainTextEdit,
+    QVBoxLayout,
     QWidget,
 )
 
@@ -58,7 +66,7 @@ try:
 except ImportError:
     _QTMULTIMEDIA_OK = False
 
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 APP_NAME = "Perce-Neige Simulator"
 
 # ---------------------------------------------------------------------------
@@ -419,7 +427,7 @@ class Train:
     pax_car2: int = 0           # pax in upper car
     # Cockpit state (realistic funicular driver station)
     lights_cabin: bool = True    # interior cabin lighting
-    lights_head: bool = True     # front tunnel headlights
+    lights_head: bool = False    # front tunnel headlights (driver turns on)
     horn: bool = False           # momentary audible warning
     electric_stop: bool = False  # latched service stop — motor off + brake
     dead_man_timer: float = 0.0  # seconds since last driver action
@@ -437,7 +445,12 @@ class Train:
     tension_dan_disp: float = 0.0
     power_kw_disp: float = 0.0
     jerk_sum: float = 0.0       # integrated jerk for comfort score
-    autopilot: bool = False     # press A to toggle
+    autopilot: bool = True      # on by default; press A to toggle
+    # Drum-mounted parking (maintenance) brake — engaged at start of
+    # every trip and whenever the driver pulls the emergency. It
+    # releases automatically when the trip starts (buzzer ends) or when
+    # the emergency brake is released while stopped.
+    maint_brake: bool = True
 
     @property
     def pax(self) -> int:
@@ -543,9 +556,10 @@ class Physics:
         # The regulator computes the actual motor throttle to track it,
         # respecting the station-approach envelope (creep zone + programmed
         # deceleration) so the train always stops cleanly at STOP_S.
-        if tr.autopilot and st.trip_started:
-            # Autopilot drives speed_cmd up to 100% automatically
-            tr.speed_cmd = min(1.0, tr.speed_cmd + 0.8 * dt)
+        # Autopilot no longer forces the setpoint to 100 %. The driver
+        # is always responsible for dialing in the speed command — the
+        # regulator takes care of smooth acceleration, station approach
+        # and creep-zone deceleration regardless of the autopilot flag.
         self._regulator(tr, dt)
 
         # --- Motor force ----------------------------------------------------
@@ -640,13 +654,33 @@ class Physics:
             new_v = -v_limit * tr.direction
         tr.s += ((tr.v + new_v) / 2.0) * dt
         tr.v = new_v
-        # Train centre clamped between station stop points
-        tr.s = max(START_S, min(STOP_S, tr.s))
-        # Parking clamp : while the doors are physically open, the real
-        # funicular engages the parking brake on the drum so the train
-        # can't drift under the gravity imbalance. Mirror that here by
-        # forcing v and a to zero whenever the doors aren't fully shut.
-        if tr.doors_open:
+        # Train centre clamped between station stop points. When hitting a
+        # terminus with residual velocity (regulator hasn't fully killed
+        # motion yet), snap v to 0 so the train doesn't "grind" against
+        # the stop while reporting a stale speed readout.
+        if tr.s >= STOP_S:
+            tr.s = STOP_S
+            if tr.v > 0:
+                tr.v = 0.0
+                a = 0.0
+        elif tr.s <= START_S:
+            tr.s = START_S
+            if tr.v < 0:
+                tr.v = 0.0
+                a = 0.0
+        # Parking (drum / maintenance) brake. The real funicular has a
+        # mechanical drum brake on the bull wheel that holds the train
+        # absolutely still when engaged — this is what makes the cabin
+        # rock-solid on the platform with the doors open. It engages :
+        #   - automatically whenever the doors are open (station stop)
+        #   - alongside the emergency brake (so the train can't drift
+        #     if the driver just stamped the emergency button)
+        #   - on demand, tracked via tr.maint_brake
+        # It releases automatically the instant trip_started flips True
+        # (motors take the load) OR when the driver clears the emergency
+        # brake while the train is stationary.
+        parked = tr.maint_brake or tr.doors_open
+        if parked:
             tr.v = 0.0
             a = 0.0
 
@@ -655,12 +689,33 @@ class Physics:
         tr.jerk_sum += jerk * dt
         tr.a = a
 
-        # Cable tension estimate (N) — dominant term is the imbalance + inertia
-        tension_n = (
-            abs(dm) * G * sint           # gravity imbalance
-            + m_total * max(abs(a), 0.0)  # inertial load
-            + MU_ROLL * m_total * G * cost
-        )
+        # Cable tension (N) — proper funicular model.
+        # On a counterweighted funicular the drive cable between the top
+        # bull-wheel and the HEAVIER (usually ascending, loaded) train is
+        # where maximum tension develops. That cable segment must carry
+        # the full weight component of the heavy side along the slope
+        # (gravity), plus rolling friction on that side, plus the motor's
+        # pulling force when it is accelerating the train in the travel
+        # direction. Deceleration via the service brake (train wheels) or
+        # natural gravity coast does NOT add cable tension — the brake
+        # absorbs the deceleration force directly on the rail, so the
+        # cable "unloads" rather than loads.
+        #
+        # Reference : Fatzer 52 mm, nominal 22 500 daN on Perce-Neige,
+        # breaking 191 200 daN. A 58 t fully loaded train at 30 % grade
+        # yields ~16 500 daN, well within the nominal envelope.
+        m_heavy = max(m_up, m_down)
+        # Acceleration in the travel direction : +: accelerating,
+        # -: decelerating (motor easing off or braking).
+        a_travel = a * tr.direction
+        t_gravity = m_heavy * G * sint
+        t_friction = MU_ROLL * m_heavy * G * cost
+        # Only add inertia when the motor is pulling harder than gravity
+        # (accelerating in the travel direction). During deceleration or
+        # braking the cable is NOT the force path, so tension does not
+        # rise — the wheel brake or natural gravity coast absorb it.
+        t_inertia = max(0.0, m_heavy * a_travel)
+        tension_n = t_gravity + t_friction + t_inertia
         tr.tension_dan = tension_n / 10.0
         tr.power_kw = max(0.0, (f_motor * tr.v) / 1000.0)
         # Smoothed display values — EMA with τ ≈ 0.3 s avoids flicker
@@ -695,8 +750,10 @@ class Physics:
 
         # Arrival detection : direction-aware.
         if not st.finished and abs(tr.v) < 0.4:
+            arrived = False
             if tr.direction > 0 and tr.s >= STOP_S - 0.3:
                 st.finished = True
+                arrived = True
                 st.score_time = st.trip_time
                 add_event(
                     st, "arrive",
@@ -705,12 +762,21 @@ class Physics:
                 )
             elif tr.direction < 0 and tr.s <= START_S + 0.3:
                 st.finished = True
+                arrived = True
                 st.score_time = st.trip_time
                 add_event(
                     st, "arrive",
                     "Arrived at Val Claret — 2111 m",
                     "Arrivée à Val Claret — 2111 m", "info",
                 )
+            # On arrival, relax the speed command and release the
+            # service/emergency brakes so the driver can command door
+            # opening (D) manually, just like before departure.
+            if arrived:
+                tr.speed_cmd = 0.0
+                tr.throttle = 0.0
+                tr.brake = 0.0
+                tr.emergency = False
 
     def _regulator(self, tr: Train, dt: float) -> None:
         """Speed-command regulator — always active, direction-aware.
@@ -752,18 +818,42 @@ class Physics:
         # Travel-direction velocity magnitude.
         v_travel = tr.v * tr.direction
 
-        # --- Speed envelope : gravity-natural coast on the climbing
-        # trip, programmed decel on the descending trip -------------------
+        # --- Gravity-along-travel sign --------------------------------------
+        # We need to know whether gravity currently HELPS or OPPOSES the
+        # travel direction. On a classic ascent (heavy main climbing),
+        # gravity opposes and the motor has to pull. On a descent with a
+        # heavy main (typical after a mid-tunnel reversal), gravity
+        # already accelerates the train downhill and the motor must stay
+        # OFF — the brake is what holds the speed.
+        m_main_r = tr.mass_kg
+        m_ghost_r = TRAIN_EMPTY_KG + self.state.ghost_pax * PAX_KG
+        m_total_r = m_main_r + m_ghost_r
+        dm_r = m_main_r - m_ghost_r
+        g_slope_r = gradient_at(tr.s)
+        theta_r = math.atan(g_slope_r)
+        # f_grav_s : net +s force on main from gravity imbalance.
+        f_grav_s = -dm_r * G * math.sin(theta_r)
+        # Projected onto travel direction : >0 means gravity accelerates
+        # the train in the direction it's trying to go.
+        f_grav_travel = f_grav_s * tr.direction
+        gravity_helps = f_grav_travel > 200.0   # N threshold
+
+        # --- Speed envelope : adaptive to whether gravity helps or not --
         d_to_creep = max(0.0, dist_to_stop - CREEP_DIST)
-        if tr.direction > 0:
-            # Climb : coast with gravity (~0.45 m/s²) — envelope barely
-            # triggers until the last ~160 m, so the driver can hold
-            # 100 % almost all the way and the train coasts in.
+        if gravity_helps:
+            # Gravity is pushing us toward the platform (heavy main
+            # descending — most commonly after a mid-tunnel reversal).
+            # Envelope must actively brake : use a conservative decel so
+            # the train actually slows down before the creep zone.
+            a_env = A_TARGET
+        elif tr.direction > 0:
+            # Classic climb — pure coast, gravity opposes travel.
             a_env = A_NATURAL_UP
         else:
-            # Descent : gravity can accelerate a loaded main train, so
-            # the envelope must actively brake with programmed decel.
-            a_env = A_TARGET
+            # Classic descent with empty main + heavy ghost : gravity
+            # opposes travel too (ghost counterweight pulls main up),
+            # so a gentle coast envelope suffices.
+            a_env = A_NATURAL_UP
         v_envelope = math.sqrt(CREEP_V * CREEP_V + 2.0 * a_env * d_to_creep)
 
         driver_target = tr.speed_cmd * V_MAX
@@ -779,71 +869,57 @@ class Physics:
             target_v = 0.0
             envelope_active = True
 
-        # --- Proportional speed tracker (in travel-direction magnitudes) --
+        # --- Unified control law ------------------------------------------
+        # Single continuous P-controller (no branch-switching) so the
+        # brake and throttle commands vary smoothly with the tracking
+        # error. A feed-forward term cancels the steady-state gravity
+        # + rolling-friction load at the current speed target, so the
+        # proportional term only has to fight transient error — no
+        # more "bang-bang" oscillation between the heavy-brake branch
+        # and the hold branch during a gravity-assisted descent.
         err = target_v - v_travel
         slew = 1.5 * dt          # up to 150 %/s throttle rate of change
+        v_eff = max(abs(tr.v), 0.8)
+        f_motor_max = min(F_STALL, P_MAX / v_eff)
+
+        # Feed-forward : force along TRAVEL direction required to hold
+        # the train at target_v. Positive → motor must pull ; negative
+        # → brake must resist gravity.
+        f_ff = (-f_grav_travel
+                + MU_ROLL * m_total_r * G * math.cos(theta_r))
+        ff_throttle = max(0.0, f_ff) / max(f_motor_max, 1.0)
+        ff_brake = max(0.0, -f_ff) / (A_BRAKE_NORMAL * m_total_r)
+
         if target_v < 0.01 and v_travel < 0.4:
             # Arrived — kill motor, hold with brake
             demand_throttle = 0.0
-            demand_brake = 0.4
-        elif err > 0.3:
-            demand_throttle = min(1.0, 0.25 + err * 0.15)
-            demand_brake = 0.0
-        elif err > 0.05:
-            demand_throttle = min(1.0, 0.20 + err * 0.10)
-            demand_brake = 0.0
-        elif err < -0.4:
-            # Overshoot — cut motor.
-            # On the CLIMB, gravity alone does all the decel work and we
-            # never touch the service brake (this matches real operation
-            # — the arrival is pure coast + final creep). On the DESCENT
-            # gravity accelerates a loaded main so the envelope must
-            # brake. The "driver lowered the setpoint" case is still a
-            # motor-off coast only, no brake.
-            demand_throttle = 0.0
-            if envelope_active and tr.direction < 0:
-                demand_brake = min(0.5, -err * 0.08)
-            else:
-                demand_brake = 0.0
-        elif err < -0.1:
-            demand_throttle = 0.0
-            demand_brake = 0.0     # coast down
+            demand_brake = 0.5
         else:
-            # Hold : feed-forward against gradient + rolling resistance.
-            # f_hold_travel is the motor force in the TRAVEL direction
-            # needed to hold v constant. If that force is negative it
-            # means gravity is pushing harder than we want — throttle
-            # can't represent that, so we fall back to a small service
-            # brake (typical of a heavy descending trip).
-            g_slope = gradient_at(tr.s)
-            theta = math.atan(g_slope)
-            m_main = tr.mass_kg
-            m_down = TRAIN_EMPTY_KG + self.state.ghost_pax * PAX_KG
-            m_total = m_main + m_down
-            dm = m_main - m_down
-            # Net +s gravity on the main = -dm * g * sin. To hold in
-            # travel dir we need +s motor = +dm * g * sin ; translated
-            # to travel-dir magnitude : * tr.direction.
-            f_hold = (dm * G * math.sin(theta) * tr.direction
-                      + MU_ROLL * m_total * G * math.cos(theta))
-            v_eff = max(abs(tr.v), 0.8)
-            f_motor_max = min(F_STALL, P_MAX / v_eff)
-            if f_hold >= 0:
-                demand_throttle = max(
-                    0.0, min(1.0, f_hold / max(f_motor_max, 1.0))
-                )
-                demand_brake = 0.0
-            else:
-                demand_throttle = 0.0
-                demand_brake = max(
-                    0.0, min(0.5, -f_hold / (A_BRAKE_NORMAL * m_total))
-                )
+            # P-controller around the feed-forward bias.
+            # err > 0 : need more forward force (more motor / less brake)
+            # err < 0 : need less forward force (less motor / more brake)
+            k_p = 0.18  # brake/throttle per m/s error
+            demand_throttle = max(0.0, min(1.0, ff_throttle + err * k_p))
+            demand_brake = max(0.0, min(1.0, ff_brake - err * k_p))
+            # Resolve conflict : if both are non-zero (shouldn't happen
+            # algebraically but keep a safety net) the larger wins and
+            # the other collapses to zero so the control authority isn't
+            # wasted fighting itself.
+            if demand_throttle > 0.0 and demand_brake > 0.0:
+                if demand_throttle > demand_brake:
+                    demand_throttle -= demand_brake
+                    demand_brake = 0.0
+                else:
+                    demand_brake -= demand_throttle
+                    demand_throttle = 0.0
 
-        # Apply slew rate
+        # Throttle slew — unchanged, smooth motor ramp.
         dth = max(-slew, min(slew, demand_throttle - tr.throttle))
         tr.throttle = max(0.0, min(1.0, tr.throttle + dth))
-        # Brake responds faster
-        db = max(-4.0 * dt, min(4.0 * dt, demand_brake - tr.brake))
+        # Brake slew — slightly slower than before (2.5/s vs 4/s) to
+        # iron out any residual jitter in the displayed % value, still
+        # fast enough for a 2.5 m/s² service brake to respond cleanly.
+        db = max(-2.5 * dt, min(2.5 * dt, demand_brake - tr.brake))
         tr.brake = max(0.0, min(1.0, tr.brake + db))
 
 
@@ -1264,6 +1340,17 @@ class SoundSystem:
         if self._horn_player is not None:
             self._horn_player.stop()
 
+    def stop_announcements(self) -> None:
+        """Interrupt any announcement currently playing and clear the queue.
+
+        Called when the driver triggers a new announcement manually (we
+        don't want the new one to queue *behind* a previous one that's
+        still chaining through its translations) or when Esc is pressed.
+        """
+        self._queue.clear()
+        if self._player is not None:
+            self._player.stop()
+
     def update_ambient(self, speed: float) -> None:
         """Fade real ambient sound in/out based on train speed."""
         if not self.enabled or self.muted:
@@ -1358,7 +1445,7 @@ class SoundSystem:
 # Key → (announcement group, EN label, FR label). Order matters for menu.
 ANNOUNCEMENT_MENU: list[tuple[int, str, str, str, str]] = [
     (Qt.Key.Key_1, "doors_close",     "1", "Doors closing",            "Fermeture des portes"),
-    (Qt.Key.Key_2, "welcome",         "2", "Welcome to the funicular", "Bienvenue à bord"),
+    (Qt.Key.Key_2, "welcome",         "2", "Zone boarding announcement", "Zone — annonce embarquement"),
     (Qt.Key.Key_3, "brake_noise",     "3", "Brake noise (normal)",     "Bruit des freins (normal)"),
     (Qt.Key.Key_4, "minor_incident",  "4", "Minor incident 5–10 min",  "Incident mineur 5–10 min"),
     (Qt.Key.Key_5, "tech_incident",   "5", "Technical incident",       "Incident technique"),
@@ -1369,8 +1456,8 @@ ANNOUNCEMENT_MENU: list[tuple[int, str, str, str, str]] = [
     (Qt.Key.Key_0, "return_station",  "0", "Return to station",        "Retour en gare"),
     (Qt.Key.Key_Q, "evac",            "Q", "Vehicle evacuation",       "Évacuation du véhicule"),
     (Qt.Key.Key_W, "evac_car2",       "W", "Second car evacuation",    "Évacuation 2e wagon"),
-    (Qt.Key.Key_E, "exit_upstream",   "E", "Upstream passenger exit",  "Sortie amont (1ère)"),
-    (Qt.Key.Key_T, "exit_downstream", "T", "Downstream exit",          "Sortie aval"),
+    (Qt.Key.Key_E, "exit_upstream",   "E", "Upstream exit — 1st car",  "Sortie amont — 1re voiture"),
+    (Qt.Key.Key_T, "exit_downstream", "T", "Downstream exit — 1st car", "Sortie aval — 1re voiture"),
     (Qt.Key.Key_Y, "exit_left",       "Y", "Exit on the left",         "Sortie côté gauche"),
 ]
 
@@ -1381,7 +1468,7 @@ class GameWidget(QWidget):
         self.state = GameState()
         self.physics = Physics(self.state)
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
-        self.setMinimumSize(1280, 780)
+        self.setMinimumSize(1280, 900)
         self.timer = QTimer(self)
         self.timer.timeout.connect(self._tick)
         self.timer.start(16)       # ~60 Hz
@@ -1421,12 +1508,70 @@ class GameWidget(QWidget):
         self._last_panne_kind: str = ""
         self._welcome_played = False
         self._arrival_played = False
+        # Mid-tunnel stop tracking — drives the "remise en route"
+        # announcement when the driver restarts from an unplanned stop.
+        self._was_stopped_mid_tunnel = False
+        self._mid_tunnel_stop_timer = 0.0
         self._show_annmenu = False       # F2 announcement console
         self._cabin_view = False         # F4 cabin/tunnel first-person view
         self._tunnel_scroll = 0.0        # accumulated tunnel texture offset
         self.new_trip(first=True)
 
     # ----- lifecycle -------------------------------------------------------
+
+    def reverse_trip(self) -> None:
+        """Flip the travel direction and re-arm the departure sequence in
+        place — works both at a terminus (after arrival) AND mid-tunnel
+        if the driver has brought the train to a stop and decides to go
+        back the way they came. The real Perce-Neige has a dedicated
+        "retour en gare" announcement for exactly this scenario.
+
+        The train keeps its current slope position ``tr.s`` — no teleport.
+        The driver must press READY (V) then START (Z) to set off again.
+        """
+        st = self.state
+        tr = st.train
+        tr.direction = -tr.direction
+        st.selected_direction = tr.direction
+        # Ghost mirrors main position on the cable.
+        st.ghost_s = LENGTH - tr.s
+        # Reset trip-state flags so the driver can re-run the ready /
+        # buzzer / start sequence and head back. We deliberately KEEP
+        # the current brake configuration (service brake, emergency
+        # rail brake, drum parking brake) — if the driver stamped the
+        # emergency before reversing, they must release it manually
+        # before arming READY. The motor / ready state are zeroed.
+        tr.v = 0.0
+        tr.a = 0.0
+        tr.speed_cmd = 1.0
+        tr.throttle = 0.0
+        tr.ready = False
+        tr.dead_man_timer = 0.0
+        tr.dead_man_fault = False
+        st.ghost_ready = False
+        st.ghost_ready_timer = 0.0
+        st.ghost_ready_delay = 0.0
+        st.trip_started = False
+        st.trip_time = 0.0
+        st.finished = False
+        st.rebound_timer = 0.0
+        st.departure_buzzer_remaining = 0.0
+        self._welcome_played = False
+        self._arrival_played = False
+        self._was_stopped_mid_tunnel = False
+        # Trigger the real "return to station" announcement over the
+        # on-board PA — but only when reversing mid-tunnel (abnormal
+        # situation). Reversing at a terminus is the normal turnaround
+        # and silently flips the direction.
+        self.sounds.stop_announcements()
+        at_terminus = (tr.s <= START_S + 5.0) or (tr.s >= STOP_S - 5.0)
+        if not at_terminus:
+            self.sounds.play_bilingual("return_station", cooldown=5.0)
+        dest_en = "Val Claret (2111 m)" if tr.direction < 0 else "Grande Motte (3032 m)"
+        add_event(st, "reverse",
+                  f"Reversing — return toward {dest_en}",
+                  f"Inversion du sens — retour vers {dest_en}",
+                  "warn")
 
     def new_trip(self, first: bool = False) -> None:
         st = self.state
@@ -1439,16 +1584,23 @@ class GameWidget(QWidget):
         tr.s = START_S if direction > 0 else STOP_S
         tr.v = 0.0
         tr.a = 0.0
-        tr.speed_cmd = 0.0
+        # Speed setpoint at 100 % by default — matches the real-life
+        # departure where the driver already has the throttle dialed up
+        # and the train pulls out at full cruise speed once the motors
+        # take the load. Driver can still lower it manually mid-trip.
+        tr.speed_cmd = 1.0
         tr.throttle = 0.0
         tr.brake = 0.0
         tr.emergency = False
         tr.emergency_ramp = 0.0
+        # Drum parking brake engaged at the start of every trip (cabin
+        # held on the platform while passengers board).
+        tr.maint_brake = True
         tr.doors_open = True
         tr.doors_cmd = True
         tr.doors_timer = 0.0
         tr.lights_cabin = True
-        tr.lights_head = True
+        tr.lights_head = False
         tr.horn = False
         tr.electric_stop = False
         tr.dead_man_timer = 0.0
@@ -1472,7 +1624,10 @@ class GameWidget(QWidget):
         tr.tension_dan_disp = 0.0
         tr.power_kw_disp = 0.0
         tr.jerk_sum = 0.0
-        tr.autopilot = False
+        # Autopilot enabled by default — smooth soft-start ramp while
+        # the driver can still fine-tune the speed setpoint manually
+        # and hit STOP whenever needed.
+        tr.autopilot = True
         # Counterweight (ghost) starts at the opposite station.
         st.ghost_s = LENGTH - tr.s
         st.trip_time = 0.0
@@ -1493,6 +1648,8 @@ class GameWidget(QWidget):
         self._last_panne_kind = ""
         self._welcome_played = False
         self._arrival_played = False
+        self._was_stopped_mid_tunnel = False
+        self._mid_tunnel_stop_timer = 0.0
         if hasattr(self, "sounds"):
             self.sounds.reset()
         if first:
@@ -1528,8 +1685,12 @@ class GameWidget(QWidget):
         # Positive v (climbing) → clockwise rotation in the profile view.
         # QPainter.rotate(degrees) with screen-Y-down: positive = CW.
         self._pulley_angle += (self.state.train.v / 2.1) * dt
-        # Tunnel scroll for cabin view — accumulate distance
-        self._tunnel_scroll += self.state.train.v * dt
+        # Tunnel scroll for cabin view — accumulate travel-direction
+        # distance so the rings always approach the driver, whether the
+        # train is climbing (+1) or descending (-1).
+        self._tunnel_scroll += (
+            self.state.train.v * self.state.train.direction * dt
+        )
         # Advance snowflakes
         for fl in self._snowflakes:
             fl[1] += fl[2] * dt
@@ -1569,6 +1730,14 @@ class GameWidget(QWidget):
                     0.0, st.departure_buzzer_remaining - dt)
                 if st.departure_buzzer_remaining <= 0.0:
                     st.trip_started = True
+                    # Motors take the load — release the driver's service
+                    # brake and the drum parking brake automatically.
+                    # The regulator will now manage throttle and braking
+                    # on its own, matching the real Perce-Neige logic
+                    # where the drum releases as the drive contactor
+                    # closes.
+                    st.train.brake = 0.0
+                    st.train.maint_brake = False
                     # Interior departure ambient — smooth ramp from
                     # silence to cruise, bridges buzzer → ambient loop.
                     self.sounds.play_departure_ambient()
@@ -1591,32 +1760,66 @@ class GameWidget(QWidget):
                 if tr_welcome.direction > 0
                 else tr_welcome.s - START_S
             )
+            # Only at the upper station (Grande Motte, direction > 0).
+            # When reversing back down to Val Claret we do not broadcast
+            # the "zone de ski" welcome message.
             if (st.trip_started and not self._welcome_played
+                    and tr_welcome.direction > 0
                     and dist_remain_welcome < 220.0
                     and abs(tr_welcome.v) < 6.5):
                 self.sounds.play("welcome", lang="fr", cooldown=600.0)
                 self._welcome_played = True
+            # Mid-tunnel stop tracking : flag is set after the train
+            # has been stationary away from a terminus for ~3 s. The
+            # "Remise en route" announcement itself is now fired when
+            # the driver rearms READY (see keyPressEvent Key_V) so the
+            # passengers hear it BEFORE the buzzer / start sequence.
+            tr_r = st.train
+            in_tunnel = (START_S + 40.0 < tr_r.s < STOP_S - 40.0)
+            if (st.trip_started and not st.finished and in_tunnel
+                    and abs(tr_r.v) < 0.1):
+                self._mid_tunnel_stop_timer += dt
+                if self._mid_tunnel_stop_timer > 3.0:
+                    self._was_stopped_mid_tunnel = True
+            else:
+                self._mid_tunnel_stop_timer = 0.0
             # Brake squeal when emergency brake engaged
             if st.train.emergency:
                 self.sounds.play_bilingual("brake_noise", cooldown=20.0)
-            # Fault announcements — pick the matching message bilingually
-            if st.panne_active and st.panne_kind != self._last_panne_kind:
-                self._last_panne_kind = st.panne_kind
-                if st.panne_kind in ("tension", "ice"):
-                    self.sounds.play_bilingual("minor_incident", cooldown=45.0)
-                elif st.panne_kind in ("door", "thermal"):
-                    self.sounds.play_bilingual("tech_incident", cooldown=45.0)
-                elif st.panne_kind == "fire":
-                    self.sounds.play_bilingual("dim_light", cooldown=45.0)
-                    self.sounds.play_bilingual("evac", cooldown=60.0)
-            elif not st.panne_active and self._last_panne_kind:
-                # Panne resolved — play "restart"
-                self._last_panne_kind = ""
-                self.sounds.play_bilingual("restart", cooldown=30.0)
-            # Arrival announcement — upstream exit, once
+            # Fault announcements — pick the matching message bilingually.
+            # Suppressed entirely once the train has arrived so a resolved
+            # emergency never leaks evac / restart messages onto the
+            # station platform.
+            if not st.finished:
+                if st.panne_active and st.panne_kind != self._last_panne_kind:
+                    self._last_panne_kind = st.panne_kind
+                    if st.panne_kind in ("tension", "ice"):
+                        self.sounds.play_bilingual("minor_incident", cooldown=45.0)
+                    elif st.panne_kind in ("door", "thermal"):
+                        self.sounds.play_bilingual("tech_incident", cooldown=45.0)
+                    elif st.panne_kind == "fire":
+                        self.sounds.play_bilingual("dim_light", cooldown=45.0)
+                        self.sounds.play_bilingual("evac", cooldown=60.0)
+                elif not st.panne_active and self._last_panne_kind:
+                    # Panne resolved — play "restart"
+                    self._last_panne_kind = ""
+                    self.sounds.play_bilingual("restart", cooldown=30.0)
+            # Arrival announcement — upstream exit at Grande Motte (upper)
+            # or downstream exit at Val Claret (lower). Plays once per
+            # arrival. Both stations get the generic "exit on the left"
+            # message queued right after.
             if st.finished and not self._arrival_played:
                 self._arrival_played = True
-                self.sounds.play_bilingual("exit_upstream", cooldown=120.0)
+                # Normal arrival overrides any residual fault broadcast
+                # (evac, tech_incident, restart…) queued during the trip.
+                self.sounds.stop_announcements()
+                self._last_panne_kind = ""
+                if st.train.direction > 0:
+                    # Arrived at Grande Motte (3032 m, upper)
+                    self.sounds.play_bilingual("exit_upstream", cooldown=120.0)
+                else:
+                    # Arrived at Val Claret (2111 m, lower)
+                    self.sounds.play_bilingual("exit_downstream", cooldown=120.0)
                 self.sounds.play_bilingual("exit_left", cooldown=120.0)
         self.update()
 
@@ -1680,11 +1883,15 @@ class GameWidget(QWidget):
         st = self.state
         k = ev.key()
         self._key_state.add(k)
-        # Announcement console hotkeys (only when menu is visible)
-        if self._show_annmenu:
+        # Announcement console hotkeys (only when menu is visible).
+        # Ignore auto-repeat so holding the key doesn't cascade the same
+        # announcement dozens of times into the queue.
+        if self._show_annmenu and not ev.isAutoRepeat():
             for entry_k, group, _lbl, en, fr in ANNOUNCEMENT_MENU:
                 if k == entry_k:
-                    # Manual trigger bypasses cooldown
+                    # Interrupt any announcement currently playing — a
+                    # new command always takes over, no cascading queue.
+                    self.sounds.stop_announcements()
                     self.sounds._cooldowns.pop(group, None)
                     self.sounds.play_bilingual(group, cooldown=5.0)
                     add_event(st, "ann",
@@ -1697,6 +1904,9 @@ class GameWidget(QWidget):
             return
         if k == Qt.Key.Key_Escape:
             if self._show_annmenu:
+                # Closing the menu also stops any announcement still in
+                # flight — driver's "abort" path.
+                self.sounds.stop_announcements()
                 self._show_annmenu = False
                 return
             if st.mode == MODE_RUN:
@@ -1718,6 +1928,17 @@ class GameWidget(QWidget):
         elif k == Qt.Key.Key_R:
             if st.finished or st.mode == MODE_OVER:
                 self.new_trip()
+        elif k == Qt.Key.Key_I:
+            # Reverse direction — allowed whenever the train is at rest
+            # (|v| < 0.1 m/s), whether that's at a terminus after arrival
+            # OR mid-tunnel after an unscheduled stop. Real Perce-Neige
+            # plays the "retour en gare" announcement in that case.
+            if abs(st.train.v) < 0.1:
+                self.reverse_trip()
+        elif k == Qt.Key.Key_X:
+            # Abort any announcement currently playing (and drop whatever
+            # is still queued behind it).
+            self.sounds.stop_announcements()
         elif k == Qt.Key.Key_F1:
             self._show_help = not self._show_help
             if self._show_help:
@@ -1744,6 +1965,7 @@ class GameWidget(QWidget):
             st.run_mode = order[(idx + 1) % len(order)]
         elif k == Qt.Key.Key_Shift:
             st.train.emergency = True
+            st.train.maint_brake = True
         elif k == Qt.Key.Key_D:
             tr = st.train
             # Interlocks : can't operate the doors while moving or while
@@ -1805,18 +2027,28 @@ class GameWidget(QWidget):
                 tr.dead_man_timer = 0.0
                 tr.dead_man_fault = False
         elif k == Qt.Key.Key_4:
-            # Emergency stop — latched rail-brake. Press again to release
-            # when stopped.
+            # Emergency stop — latched rail-brake. Pressing it also
+            # drops the drum parking brake so the cabin can't drift on
+            # a slope once it's been immobilised. Press again to release
+            # while stopped : both brakes come off together and gravity
+            # / motor take over again. This mirrors the real machinery
+            # where the safety chain cuts the drive and bolts the drum.
             tr = st.train
             if not tr.emergency:
                 tr.emergency = True
-                add_event(st, "eurg", "EMERGENCY STOP — rail brakes",
-                          "ARRÊT D'URGENCE — freins sur rail", "alarm")
+                tr.maint_brake = True
+                add_event(st, "eurg",
+                          "EMERGENCY STOP — rail + drum brakes",
+                          "ARRÊT D'URGENCE — freins rail + tambour",
+                          "alarm")
                 self.sounds.play_bilingual("brake_noise", cooldown=30.0)
             elif abs(tr.v) < 0.1:
                 tr.emergency = False
-                add_event(st, "eurg", "Emergency released",
-                          "Urgence relâchée", "info")
+                tr.maint_brake = False
+                add_event(st, "eurg",
+                          "Emergency released — drum brake off",
+                          "Urgence relâchée — frein tambour desserré",
+                          "info")
         elif k == Qt.Key.Key_H:
             tr = st.train
             tr.lights_head = not tr.lights_head
@@ -1869,11 +2101,68 @@ class GameWidget(QWidget):
             tr = st.train
             if st.trip_started or st.finished:
                 return
+            # Interlocks : the ready button is wired through the safety
+            # chain of the real Perce-Neige. Arming READY is only
+            # possible when every condition below is satisfied. Canceling
+            # (tr.ready → False) is always allowed.
+            if not tr.ready:
+                at_terminus_v = ((tr.s <= START_S + 5.0)
+                                 or (tr.s >= STOP_S - 5.0))
+                reason_en = ""
+                reason_fr = ""
+                # Interlocks that ALWAYS apply (terminus or mid-tunnel) :
+                # doors must be closed, no electric stop, no vigilance
+                # fault, no active fault.
+                if tr.doors_open or tr.doors_cmd or tr.doors_timer > 0.0:
+                    reason_en = "doors not fully closed"
+                    reason_fr = "portes pas totalement fermées"
+                elif tr.electric_stop:
+                    reason_en = "electric stop engaged"
+                    reason_fr = "arrêt électrique engagé"
+                elif tr.dead_man_fault:
+                    reason_en = "vigilance fault — acknowledge first"
+                    reason_fr = "défaut veille — acquittement requis"
+                elif st.panne_active:
+                    reason_en = "fault active — clear it first"
+                    reason_fr = "panne en cours — à résoudre d'abord"
+                # Interlocks that apply AT A TERMINUS only. Mid-tunnel
+                # restart is an abnormal situation : the driver may
+                # pre-arm READY while the emergency brake is still on
+                # so the "Remise en route" announcement plays BEFORE
+                # they release the emergency and the cabin starts
+                # drifting under gravity.
+                elif at_terminus_v and (tr.emergency
+                                        or tr.emergency_ramp > 0.0):
+                    reason_en = "emergency brake engaged"
+                    reason_fr = "freins d'urgence engagés"
+                elif at_terminus_v and abs(tr.v) > 0.1:
+                    reason_en = "train still moving"
+                    reason_fr = "train encore en mouvement"
+                if reason_en:
+                    add_event(st, "ready",
+                              f"Cannot arm READY — {reason_en}",
+                              f"Prêt impossible — {reason_fr}",
+                              "warn")
+                    return
             tr.ready = not tr.ready
             if tr.ready:
                 st.ghost_ready = False
                 st.ghost_ready_timer = 0.0
                 st.ghost_ready_delay = random.uniform(2.0, 4.0)
+                # Abnormal-situation restart : arming READY mid-tunnel
+                # (i.e. NOT at one of the two termini) triggers the
+                # real funicular's "Remise en route" announcement
+                # (file #8) so passengers know the service is resuming.
+                at_terminus_v = ((tr.s <= START_S + 5.0)
+                                 or (tr.s >= STOP_S - 5.0))
+                if not at_terminus_v:
+                    self.sounds.stop_announcements()
+                    self.sounds.play_bilingual("restart", cooldown=30.0)
+                    add_event(st, "ready",
+                              "Mid-tunnel restart — 'Resuming service' announcement",
+                              "Reprise en tunnel — annonce 'Remise en route'",
+                              "info")
+                    self._was_stopped_mid_tunnel = False
                 add_event(st, "ready",
                           "Ready to depart — waiting for second cabin",
                           "Prêt au départ — attente autre rame",
@@ -1900,34 +2189,82 @@ class GameWidget(QWidget):
                           "Départ impossible — les deux rames doivent être prêtes",
                           "warn")
                 return
-            # Close the doors (3 s transition)
+            # Traction interlocks : don't fire the buzzer / doors chime
+            # if the train physically can't accelerate once the buzzer
+            # ends. Buzzing at the platform while the train stays put
+            # would be misleading for the passengers.
+            reason_en = ""
+            reason_fr = ""
+            if tr.emergency or tr.emergency_ramp > 0.0:
+                reason_en = "emergency brake engaged"
+                reason_fr = "freins d'urgence engagés"
+            elif tr.electric_stop:
+                reason_en = "electric stop engaged"
+                reason_fr = "arrêt électrique engagé"
+            elif tr.dead_man_fault:
+                reason_en = "vigilance fault — acknowledge first"
+                reason_fr = "défaut veille — acquittement requis"
+            elif st.panne_active:
+                reason_en = "fault active — clear it first"
+                reason_fr = "panne en cours — à résoudre d'abord"
+            elif tr.speed_cmd < 0.01:
+                reason_en = "speed setpoint at 0 — dial it up first"
+                reason_fr = "consigne de vitesse à 0 — la monter d'abord"
+            if reason_en:
+                add_event(st, "dep",
+                          f"Cannot start — {reason_en}",
+                          f"Départ impossible — {reason_fr}",
+                          "warn")
+                return
+            # Close the doors (3 s transition) — play the closing chime
+            # only if they were actually open. Skipping this avoids the
+            # spurious "attention fermeture" announcement when restarting
+            # from a mid-tunnel stop or after a direction reversal where
+            # the doors never reopened in the first place.
             if tr.doors_cmd:
                 tr.doors_cmd = False
                 tr.doors_timer = DOOR_CLOSE_TIME
-            self.sounds.play("doors_close", lang="fr", cooldown=60.0)
+                self.sounds.play("doors_close", lang="fr", cooldown=60.0)
             # Departure signal: different sound per station.
             # Each WAV includes ~1.5 s of pre-buzzer ambient for a
             # smooth fade-in, so the countdown matches the full WAV.
             # Upper (Glacier, direction=-1): ambient + industrial buzzer
             # Lower (Val Claret, direction=+1): ambient + bell/ring
+            # Buzzers are physical speakers on the station platforms —
+            # they are only audible when the train is actually at one
+            # of the termini. Mid-tunnel restarts skip the buzzer.
             at_upper = tr.direction == -1
-            BUZZER_DURATION = 6.5 if at_upper else 8.0
-            st.departure_buzzer_remaining = BUZZER_DURATION
-            self.sounds.play_buzzer(upper_station=at_upper)
-            secs = int(BUZZER_DURATION)
-            add_event(st, "doors",
-                      f"Buzzer — departure in {secs} s",
-                      f"Buzzer — départ dans {secs} s",
-                      "info")
+            at_station = (tr.s <= START_S + 5.0) or (tr.s >= STOP_S - 5.0)
+            if at_station:
+                BUZZER_DURATION = 6.5 if at_upper else 8.0
+                st.departure_buzzer_remaining = BUZZER_DURATION
+                self.sounds.play_buzzer(upper_station=at_upper)
+                secs = int(BUZZER_DURATION)
+                add_event(st, "doors",
+                          f"Buzzer — departure in {secs} s",
+                          f"Buzzer — départ dans {secs} s",
+                          "info")
+            else:
+                # Short silent delay before the trip resumes — no buzzer
+                # because we're out in the tunnel, far from the platform
+                # speakers.
+                st.departure_buzzer_remaining = 1.5
+                add_event(st, "dep",
+                          "Resuming mid-tunnel — no buzzer",
+                          "Reprise en tunnel — pas de buzzer",
+                          "info")
 
     def keyReleaseEvent(self, ev: QKeyEvent) -> None:  # noqa: N802
         k = ev.key()
         self._key_state.discard(k)
         if k == Qt.Key.Key_Shift:
             # Shift is the hold-to-emergency override. Only clear emergency
-            # if it wasn't latched via the dedicated button (4).
+            # if it wasn't latched via the dedicated button (4). The drum
+            # parking brake is released alongside so the train can move
+            # again if gravity / motor take over.
             if self.state.train.emergency and abs(self.state.train.v) < 0.1:
                 self.state.train.emergency = False
+                self.state.train.maint_brake = False
         if k == Qt.Key.Key_K:
             self.state.train.horn = False
             self.sounds.stop_horn()
@@ -1967,10 +2304,6 @@ class GameWidget(QWidget):
                     ev.accept()
                     return
             # Click outside any zone on the title screen — ignore.
-            return
-        if st.finished or st.mode == MODE_OVER:
-            self.new_trip()
-            ev.accept()
             return
         # Reverse-iterate so later buttons win (none overlap currently, but
         # future overlays might be drawn on top).
@@ -2269,237 +2602,178 @@ class GameWidget(QWidget):
         visible_cx = vx + (frame_left + (vw - cabin_wall_w)) / 2.0
         visible_cy = vy + vh * 0.48
 
-        # Vanishing point — shifts with curvature, centered on visible area
-        curv = curvature_at(tr.s)
-        vp_shift = curv * 3000.0  # pixels per deg/m
-        vp_x = visible_cx + vp_shift
-        vp_y = vy + vh * 0.30     # upper third — tunnel climbs
+        # === Real pinhole-camera perspective ===
+        # True geometric projection: screen_r = focal * R_tunnel / d.
+        # This makes near walls fill the screen and far rings shrink
+        # rapidly (hyperbolic falloff), matching human eye optics and
+        # giving correct motion-parallax speed perception.
+        #
+        #   FOV 72° horizontal matches the driver's wide windshield.
+        #   The effective viewport excludes the left frame and the
+        #   right-hand cabin wall.
+        fov_h = 72.0 * math.pi / 180.0
+        frame_left_px = 48.0
+        effective_view_w = max(200.0, vw - cabin_wall_w - frame_left_px)
+        focal = (effective_view_w * 0.5) / math.tan(fov_h * 0.5)
+        R_t = 1.55  # real TBM bore radius (~ 3.1 m diameter)
 
-        # --- Draw nested tunnel rings receding into distance ---
-        # Each ring represents a cross-section at increasing distance.
-        # Rings get smaller and converge on the vanishing point.
-        # Drawing order: NEAR → FAR so each farther ring's grey annulus
-        # is visible inside the nearer ring's dark centre bore.
-        n_rings = 36
-        max_depth = 350.0  # visual depth in metres
-        ring_spacing = max_depth / n_rings  # ≈ 9.7 m per ring
-        # Scroll offset synced to actual train movement so rings approach
-        # the viewer at exactly the train's speed (1:1).
-        scroll_phase = (self._tunnel_scroll % ring_spacing) / ring_spacing
-
-        # Eye position — centre of visible windshield opening
         eye_x = visible_cx
         eye_y = visible_cy
 
-        for i in range(1, n_rings + 1):
-            # Distance from viewer (nearest first for tunnel depth layering)
-            t = (i - scroll_phase) / n_rings
-            if t <= 0.02:
-                continue
-            depth = t * max_depth
-            track_s = tr.s + depth  # position on the track
+        # --- Visibility depth, gated by the headlights -----------------
+        # Headlights OFF: the driver barely sees a few metres of concrete
+        #   past the windshield — only the wall fluorescents glow as
+        #   beacons in the dark.
+        # Headlights ON: the beam reaches ~50 m before the concrete dust
+        #   swallows it, with exponential falloff (Beer-Lambert-ish).
+        if tr.lights_head:
+            max_depth = 100.0
+            head_reach = 38.0  # exponential decay length (m)
+        else:
+            max_depth = 14.0
+            head_reach = 0.0
 
-            # Perspective scale: things farther away are smaller
-            scale = 1.0 / (1.0 + depth * 0.012)
+        # Real TBM segment pitch ~ 1.5 m. Ring depths are generated from
+        # the accumulated scroll so rings "flow" at exactly the physical
+        # train speed.
+        ring_spacing = 1.5
+        phase_m = self._tunnel_scroll % ring_spacing
+        d0 = ring_spacing - phase_m
+        if d0 < 0.8:
+            d0 += ring_spacing
+        ring_depths: list[float] = []
+        d_cur = d0
+        while d_cur <= max_depth:
+            ring_depths.append(d_cur)
+            d_cur += ring_spacing
 
-            # Ring centre: near rings at eye position, far rings converge
-            # toward the vanishing point — natural perspective funnel.
-            frac = 1.0 - scale  # 0 = nearest, ~0.83 = farthest
-            deep_curv = curvature_at(min(track_s, LENGTH))
-            cx = eye_x + (vp_x - eye_x) * frac + deep_curv * 2000.0 * scale
-            cy = eye_y + (vp_y - eye_y) * frac
+        def _ring_xyr(d: float) -> tuple[float, float, float, float, float]:
+            """Project ring at depth d. Returns (cx, cy, r_px, ts, near_f)."""
+            ts = max(0.0, min(LENGTH, tr.s + d * tr.direction))
+            curv_d = curvature_at(ts) * tr.direction
+            # Ring-centre lateral offset from accumulated curvature
+            # (chord ≈ ½·κ·d² → projected screen offset ≈ ½·f·κ·d)
+            cxp = eye_x + 0.5 * focal * curv_d * d
+            cyp = eye_y
+            # Pinhole radius, clamped so near rings stay on-canvas
+            r_raw = focal * R_t / max(d, 0.35)
+            r_px = min(r_raw, effective_view_w * 1.25)
+            # Nearness factor for alpha / line widths (1 at d=3, 0.1 at d=30)
+            near_f = min(1.0, 3.0 / max(d, 3.0))
+            return cxp, cyp, r_px, ts, near_f
 
-            # Tunnel radius in pixels
-            base_r = min(vw, vh) * 0.46
-            r = base_r * scale
-
-            # Check if this section is lit
-            lit = tunnel_lit_at(min(track_s, LENGTH))
-            near_station = track_s < 100 or track_s > LENGTH - 100
-
-            # Wall colour depends on lighting
+        # === Pass 1: tunnel walls (near → far) =========================
+        for d in ring_depths:
+            cx, cy, r_px, track_s_c, near_f = _ring_xyr(d)
+            lit = tunnel_lit_at(track_s_c)
+            near_station = track_s_c < 100 or track_s_c > LENGTH - 100
+            head_boost = (115.0 * math.exp(-d / head_reach)
+                          if head_reach > 0 else 0.0)
             if near_station:
-                wall_bright = 140
+                base_b = 140
             elif lit:
-                wall_bright = int(75 + 50 * scale)  # brighter when closer
+                base_b = 48
             else:
-                wall_bright = int(25 + 20 * scale)   # dark section
-
-            # Tunnel wall colour — concrete grey-green tint
+                base_b = 6
+            wall_bright = int(min(220, base_b + head_boost))
             wc = QColor(wall_bright,
                         int(wall_bright * 1.02),
                         int(wall_bright * 0.96))
-
-            # Check tunnel shape
-            shape = tunnel_shape_at(min(track_s, LENGTH))
-
+            dark_c = QColor(max(wall_bright - 30, 4),
+                            max(wall_bright - 28, 4),
+                            max(wall_bright - 32, 4))
+            shape = tunnel_shape_at(track_s_c)
             if shape == "circular":
-                # Circular TBM bore
                 p.setPen(Qt.PenStyle.NoPen)
                 p.setBrush(QBrush(wc))
-                p.drawEllipse(QPointF(cx, cy), r, r)
-                # Dark inner (tunnel depth)
-                inner_r = r * 0.92
-                dark_c = QColor(max(wall_bright - 30, 10),
-                                max(wall_bright - 28, 10),
-                                max(wall_bright - 32, 10))
+                p.drawEllipse(QPointF(cx, cy), r_px, r_px)
                 p.setBrush(QBrush(dark_c))
-                p.drawEllipse(QPointF(cx, cy), inner_r, inner_r)
+                p.drawEllipse(QPointF(cx, cy), r_px * 0.92, r_px * 0.92)
             else:
-                # Horseshoe section near stations — wider, rectangular bottom
-                hw = r * 1.2
-                hh = r * 1.1
+                hw = r_px * 1.2
+                hh = r_px * 1.1
                 p.setPen(Qt.PenStyle.NoPen)
                 p.setBrush(QBrush(wc))
-                # Rounded rectangle for horseshoe
                 path = QPainterPath()
                 path.addRoundedRect(cx - hw, cy - hh * 0.8,
-                                    hw * 2, hh * 1.8, r * 0.5, r * 0.5)
+                                    hw * 2, hh * 1.8,
+                                    r_px * 0.5, r_px * 0.5)
                 p.drawPath(path)
-                inner_hw = hw * 0.90
-                inner_hh = hh * 0.90
-                dark_c = QColor(max(wall_bright - 30, 10),
-                                max(wall_bright - 28, 10),
-                                max(wall_bright - 32, 10))
                 p.setBrush(QBrush(dark_c))
                 path2 = QPainterPath()
-                path2.addRoundedRect(cx - inner_hw, cy - inner_hh * 0.8,
-                                     inner_hw * 2, inner_hh * 1.8,
-                                     r * 0.4, r * 0.4)
+                path2.addRoundedRect(cx - hw * 0.9, cy - hh * 0.72,
+                                     hw * 1.8, hh * 1.62,
+                                     r_px * 0.4, r_px * 0.4)
                 p.drawPath(path2)
+            # Wall cables (only visible when nearby)
+            if r_px > 12 and near_f > 0.15:
+                cable_alpha = int(min(200, 60 + 140 * near_f))
+                p.setPen(QPen(QColor(40, 40, 45, cable_alpha),
+                              max(2.0 * near_f, 0.5)))
+                for off in (0.35, 0.55, 0.75):
+                    p.drawPoint(QPointF(cx - r_px * 0.88,
+                                        cy - r_px * off + r_px * 0.3))
 
-            # --- Fluorescent light strip on ceiling ---
-            if lit and r > 8:
-                light_len = r * 0.4
-                light_w = max(1.5 * scale, 0.8)
-                p.setPen(QPen(QColor(220, 230, 240, int(180 * scale)), light_w))
-                p.drawLine(QPointF(cx - light_len, cy - r * 0.85),
-                           QPointF(cx + light_len, cy - r * 0.85))
-
-            # --- Wall cables (left side) ---
-            if r > 5:
-                cable_alpha = int(min(200 * scale, 180))
-                p.setPen(QPen(QColor(40, 40, 45, cable_alpha), max(1.0 * scale, 0.5)))
-                for j, off in enumerate([0.65, 0.70, 0.75]):
-                    cable_x = cx - r * 0.88
-                    cable_y = cy - r * off + r * 0.3
-                    p.drawPoint(QPointF(cable_x, cable_y))
-
-            # (Passing loop drawn in second pass with rails)
-
-        # --- Rails, cable guide, neon lights, and landmarks ---
-        # Drawn over tunnel rings (from far to near).
+        # === Pass 2: rails, ties, chevrons (far → near) ================
         prev_pts: dict[str, QPointF | None] = {
-            'lr': None, 'rr': None, 'cg': None
+            'lr': None, 'rr': None, 'cg': None,
         }
-        # Neon tube spacing (real: ~10 m apart, vertical on right wall)
-        NEON_SPACING = 10.0  # metres between neon tubes
-
-        for i in range(n_rings, 0, -1):
-            t = (i - scroll_phase) / n_rings
-            if t <= 0.0:
+        for d in reversed(ring_depths):
+            cx, cy, r_px, track_s_c, near_f = _ring_xyr(d)
+            if r_px < 1.0:
                 continue
-            depth = t * max_depth
-            track_s = tr.s + depth
-            scale = 1.0 / (1.0 + depth * 0.012)
-            frac = 1.0 - scale
-            deep_curv = curvature_at(min(track_s, LENGTH))
-            cx = eye_x + (vp_x - eye_x) * frac + deep_curv * 2000.0 * scale
-            cy = eye_y + (vp_y - eye_y) * frac
-            base_r = min(vw, vh) * 0.46
-            r = base_r * scale
-
-            # Rail positions (gauge 1200mm = ~1/3 of tunnel diameter)
-            gauge_px = r * 0.35
-            rail_y = cy + r * 0.75  # rails at bottom of tunnel
+            gauge_px = r_px * 0.35
+            rail_y = cy + r_px * 0.75
             left_rail = QPointF(cx - gauge_px, rail_y)
             right_rail = QPointF(cx + gauge_px, rail_y)
-            cable_guide = QPointF(cx, rail_y - r * 0.03)
-
-            # Draw rail lines connecting to previous points
-            rail_alpha = int(min(220 * scale, 200))
-            if r > 3:
-                pen_w = max(1.5 * scale, 0.5)
-                # Left rail
-                p.setPen(QPen(QColor(160, 165, 155, rail_alpha), pen_w))
-                if prev_pts['lr'] is not None:
-                    p.drawLine(prev_pts['lr'], left_rail)
-                prev_pts['lr'] = left_rail
-                # Right rail
-                if prev_pts['rr'] is not None:
-                    p.drawLine(prev_pts['rr'], right_rail)
-                prev_pts['rr'] = right_rail
-                # Cable guide (central ladder)
-                p.setPen(QPen(QColor(100, 105, 95, rail_alpha), pen_w * 0.8))
-                if prev_pts['cg'] is not None:
-                    p.drawLine(prev_pts['cg'], cable_guide)
-                prev_pts['cg'] = cable_guide
-
-                # Cable guide cross-ties every few rings
-                if i % 3 == 0:
-                    tie_w = gauge_px * 0.25
-                    p.drawLine(QPointF(cx - tie_w, rail_y),
-                               QPointF(cx + tie_w, rail_y))
-
-            # --- Vertical neon tubes on right wall ---
-            # Fixed positions along the track that scroll with the train.
-            # Only draw if this ring happens to be near a neon position.
-            ts_clamped = min(track_s, LENGTH)
-            neon_phase = ts_clamped % NEON_SPACING
-            if neon_phase < ring_spacing and r > 4:
-                lit_here = tunnel_lit_at(ts_clamped)
-                if lit_here:
-                    neon_h = r * 0.45  # vertical tube height
-                    neon_x = cx + r * 0.82  # right wall
-                    neon_y = cy - r * 0.05  # slightly above centre
-                    neon_alpha = int(min(255, 200 * scale + 55))
-                    # Warm white neon glow
-                    p.setPen(QPen(QColor(230, 240, 255, neon_alpha),
-                                  max(2.5 * scale, 1.0)))
-                    p.drawLine(QPointF(neon_x, neon_y - neon_h / 2),
-                               QPointF(neon_x, neon_y + neon_h / 2))
-                    # Glow halo
-                    glow_w = max(5.0 * scale, 1.5)
-                    p.setPen(QPen(QColor(200, 215, 240, int(60 * scale)),
-                                  glow_w))
-                    p.drawLine(QPointF(neon_x, neon_y - neon_h / 2),
-                               QPointF(neon_x, neon_y + neon_h / 2))
-
-            # --- Passing loop: double bore visible on left ---
-            in_loop_here = is_passing_loop(ts_clamped)
-            if in_loop_here and r > 10:
-                loop_alpha = int(min(150, 130 * scale + 20))
-                loop_r = r * 0.55
-                loop_cx = cx - r * 1.25
-                loop_cy = cy + r * 0.05
+            cable_guide = QPointF(cx, rail_y - r_px * 0.03)
+            pen_w = max(2.0 * near_f, 0.5)
+            rail_alpha = int(min(220, 70 + 150 * near_f))
+            p.setPen(QPen(QColor(160, 165, 155, rail_alpha), pen_w))
+            if prev_pts['lr'] is not None:
+                p.drawLine(prev_pts['lr'], left_rail)
+            prev_pts['lr'] = left_rail
+            if prev_pts['rr'] is not None:
+                p.drawLine(prev_pts['rr'], right_rail)
+            prev_pts['rr'] = right_rail
+            p.setPen(QPen(QColor(100, 105, 95, rail_alpha), pen_w * 0.8))
+            if prev_pts['cg'] is not None:
+                p.drawLine(prev_pts['cg'], cable_guide)
+            prev_pts['cg'] = cable_guide
+            # Sleeper + central cable-guide bolt
+            tie_alpha = int(min(230, 70 + 160 * near_f))
+            tie_w = gauge_px * 1.05
+            tie_h = max(3.0 * near_f, 1.0)
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(QBrush(QColor(55, 48, 38, tie_alpha)))
+            p.drawRect(QRectF(cx - tie_w, rail_y - tie_h * 0.5,
+                              tie_w * 2.0, tie_h))
+            bolt_w = max(2.0 * near_f, 0.7)
+            p.setBrush(QBrush(QColor(140, 135, 120,
+                                     int(tie_alpha * 0.8))))
+            p.drawRect(QRectF(cx - bolt_w, rail_y - tie_h * 0.7,
+                              bolt_w * 2.0, tie_h * 1.4))
+            # Passing loop
+            if is_passing_loop(track_s_c) and r_px > 10:
+                loop_alpha = int(min(150, 40 + 110 * near_f))
+                loop_r = r_px * 0.55
+                loop_cx = cx - r_px * 1.25
+                loop_cy = cy + r_px * 0.05
                 p.setPen(Qt.PenStyle.NoPen)
                 p.setBrush(QBrush(QColor(55, 60, 50, loop_alpha)))
                 p.drawEllipse(QPointF(loop_cx, loop_cy), loop_r, loop_r)
                 p.setBrush(QBrush(QColor(18, 20, 16, loop_alpha)))
                 p.drawEllipse(QPointF(loop_cx, loop_cy),
                               loop_r * 0.85, loop_r * 0.85)
-                # Second track rails visible through opening
-                if r > 20:
-                    p.setPen(QPen(QColor(130, 135, 125, int(80 * scale)),
-                                  max(1.0 * scale, 0.4)))
-                    p.drawLine(QPointF(loop_cx - loop_r * 0.3,
-                                       loop_cy + loop_r * 0.6),
-                               QPointF(loop_cx + loop_r * 0.3,
-                                       loop_cy + loop_r * 0.6))
-
-            # --- Curve markers (chevron signs on outer wall) ---
-            abs_curv = abs(curvature_at(ts_clamped))
-            if abs_curv > 0.003 and r > 8:
-                # Yellow chevron stripe on the outer wall of curves
-                chev_alpha = int(min(200, 170 * scale + 30))
-                sign_curv = curvature_at(ts_clamped)
-                # Chevron on right wall if curving right, left if left
-                chev_x = cx + r * 0.85 if sign_curv > 0 else cx - r * 0.85
+            # Curve chevrons
+            sign_curv = curvature_at(track_s_c)
+            if abs(sign_curv) > 0.003 and r_px > 8:
+                chev_alpha = int(min(200, 40 + 160 * near_f))
+                chev_x = cx + r_px * 0.85 if sign_curv > 0 else cx - r_px * 0.85
                 chev_y = cy
-                chev_sz = r * 0.12
+                chev_sz = r_px * 0.12
                 p.setPen(QPen(QColor(240, 200, 40, chev_alpha),
-                              max(1.5 * scale, 0.6)))
-                # V-shaped chevron pointing toward curve centre
+                              max(1.5 * near_f, 0.6)))
                 if sign_curv > 0:
                     p.drawLine(QPointF(chev_x, chev_y - chev_sz),
                                QPointF(chev_x - chev_sz * 0.5, chev_y))
@@ -2510,6 +2784,56 @@ class GameWidget(QWidget):
                                QPointF(chev_x + chev_sz * 0.5, chev_y))
                     p.drawLine(QPointF(chev_x + chev_sz * 0.5, chev_y),
                                QPointF(chev_x, chev_y + chev_sz))
+
+        # === Neon tubes on the upper wall ==============================
+        # Installed on the left wall in the climbing direction → on the
+        # driver's right when the cabin is turned for the return trip.
+        # They emit their own light and remain visible as beacons even
+        # with headlights off.
+        NEON_SPACING = 12.0
+        NEON_LENGTH = 1.6
+        neon_side = -1.0 if tr.direction > 0 else +1.0
+        neon_max_depth = 55.0 if tr.lights_head else 28.0
+
+        def _proj_wall(d: float) -> tuple[float, float, float]:
+            ts = max(0.0, min(LENGTH, tr.s + d * tr.direction))
+            curv_w = curvature_at(ts) * tr.direction
+            cxw = eye_x + 0.5 * focal * curv_w * d
+            cyw = eye_y
+            rw_raw = focal * R_t / max(d, 0.35)
+            rw = min(rw_raw, effective_view_w * 1.25)
+            wall_x = cxw + neon_side * rw * 0.85
+            wall_y = cyw - rw * 0.45
+            nf = min(1.0, 3.0 / max(d, 3.0))
+            return wall_x, wall_y, nf
+
+        k_span = int(neon_max_depth / NEON_SPACING) + 3
+        k_center = int(tr.s / NEON_SPACING)
+        for k in range(k_center - k_span, k_center + k_span + 1):
+            neon_s = k * NEON_SPACING
+            if neon_s < 0.0 or neon_s > LENGTH:
+                continue
+            if not tunnel_lit_at(neon_s):
+                continue
+            depth_c = (neon_s - tr.s) * tr.direction
+            if depth_c < 1.0 or depth_c > neon_max_depth:
+                continue
+            d_near = max(0.5, depth_c - NEON_LENGTH * 0.5)
+            d_far = min(neon_max_depth, depth_c + NEON_LENGTH * 0.5)
+            x1, y1, nf = _proj_wall(d_near)
+            x2, y2, _ = _proj_wall(d_far)
+            halo_w = max(14.0 * nf, 4.0)
+            mid_w = max(7.0 * nf, 2.2)
+            core_w = max(3.2 * nf, 1.2)
+            alpha_halo = int(min(180, 80 + 100 * nf))
+            alpha_mid = int(min(230, 120 + 110 * nf))
+            alpha_core = int(min(255, 180 + 75 * nf))
+            p.setPen(QPen(QColor(170, 200, 255, alpha_halo), halo_w))
+            p.drawLine(QPointF(x1, y1), QPointF(x2, y2))
+            p.setPen(QPen(QColor(220, 235, 255, alpha_mid), mid_w))
+            p.drawLine(QPointF(x1, y1), QPointF(x2, y2))
+            p.setPen(QPen(QColor(255, 255, 245, alpha_core), core_w))
+            p.drawLine(QPointF(x1, y1), QPointF(x2, y2))
 
         # --- Cabin frame overlay (beige interior, windshield frame) ---
         # Windshield border — dark frame around the tunnel view
@@ -2792,6 +3116,20 @@ class GameWidget(QWidget):
                    int(Qt.AlignmentFlag.AlignRight),
                    "3 × 800 kW DC")
 
+        # --- Readouts: wheel diameter / RPM / cable speed -----------------
+        # Placed right under the title so they stay readable — the
+        # machinery drawing below never obscures them.
+        v_abs = abs(self.state.train.v)
+        rpm = v_abs / (2.0 * math.pi * 2.1) * 60.0
+        p.setPen(QPen(COLOR_TEXT_DIM))
+        p.setFont(QFont("Consolas", 8))
+        p.drawText(
+            QRectF(rect.x() + 8, rect.y() + 18,
+                   rect.width() - 16, 12),
+            int(Qt.AlignmentFlag.AlignLeft),
+            f"⌀ 4.2 m   {rpm:5.1f} rpm   v {v_abs:4.1f} m/s",
+        )
+
         # Machinery floor
         floor_y = rect.y() + rect.height() - 16
         p.setBrush(QBrush(QColor(48, 52, 64)))
@@ -2897,83 +3235,82 @@ class GameWidget(QWidget):
             p.drawEllipse(QPointF(cx - 12, ped.y() + ped.height() - 4), 1.5, 1.5)
             p.drawEllipse(QPointF(cx + 12, ped.y() + ped.height() - 4), 1.5, 1.5)
 
-        # --- Haul cable figure-of-eight — 3-layer rendering:
-        #   Layer 1: cable arcs (behind the wheels, hidden by wheel face)
-        #   Layer 2: bull wheel faces (opaque, cover the arcs)
-        #   Layer 3: free-span cable segments (entry, diagonal cross, exit)
-        cable_r = R + 6.0  # cable sits outside the wheel rim
+        # --- Haul cable figure-of-eight ---
+        # Drawn as a single continuous QPainterPath so the joints between
+        # the arcs and the tangent lines are smooth (no visible seams).
+        cable_r = R + 2.0  # cable hugs the wheel rim closely
         angle = self._pulley_angle
 
         cable_shadow = QPen(QColor(5, 5, 10, 200), 5.0,
-                            Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap)
+                            Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap,
+                            Qt.PenJoinStyle.RoundJoin)
         cable_core = QPen(QColor(215, 218, 228), 2.4,
-                          Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap)
+                          Qt.PenStyle.SolidLine, Qt.PenCapStyle.RoundCap,
+                          Qt.PenJoinStyle.RoundJoin)
 
-        # --- Layer 1: cable arcs behind wheels ---
+        # Internal tangent geometry — tangent lines connect the two
+        # cable circles smoothly (same direction as the arc at the
+        # tangent points, so no seam).
+        half_d = (cx2 - cx1) / 2.0
+        alpha = math.acos(cable_r / half_d)
+        alpha_deg = math.degrees(alpha)
+        cos_a = math.cos(alpha)
+        sin_a = math.sin(alpha)
+
+        # Tangent points on P1 (right side, facing P2)
+        p1_up = QPointF(cx1 + cable_r * cos_a, cy - cable_r * sin_a)
+        p1_dn = QPointF(cx1 + cable_r * cos_a, cy + cable_r * sin_a)
+        # Tangent points on P2 (left side, facing P1)
+        p2_up = QPointF(cx2 - cable_r * cos_a, cy - cable_r * sin_a)
+        p2_dn = QPointF(cx2 - cable_r * cos_a, cy + cable_r * sin_a)
+
         r1 = QRectF(cx1 - cable_r, cy - cable_r, cable_r * 2, cable_r * 2)
         r2 = QRectF(cx2 - cable_r, cy - cable_r, cable_r * 2, cable_r * 2)
-        p.setBrush(Qt.BrushStyle.NoBrush)
-        # P1 arc: 270° CW from 180° (left→top→right→bottom)
-        for pen in (cable_shadow, cable_core):
-            p.setPen(pen)
-            p.drawArc(r1, 180 * 16, -270 * 16)
-        # P2 arc: 270° CCW from 90° (top→left→bottom→right)
-        for pen in (cable_shadow, cable_core):
-            p.setPen(pen)
-            p.drawArc(r2, 90 * 16, 270 * 16)
 
-        # --- Layer 2: bull wheels on top (cover the arcs) ---
+        # Single continuous path : P1 outer arc → CROSS 1 → P2 outer
+        # arc → CROSS 2 → back to start (closed figure-8 loop).
+        arc_span = -(360.0 - 2.0 * alpha_deg)  # CW
+        figure8 = QPainterPath()
+        figure8.moveTo(p1_dn)
+        figure8.arcTo(r1, -alpha_deg, arc_span)                       # P1 CW
+        figure8.lineTo(p2_dn)                                         # CROSS 1
+        figure8.arcTo(r2, 180.0 + alpha_deg, -arc_span)               # P2 CCW
+        figure8.lineTo(p1_dn)                                         # CROSS 2
+        figure8.closeSubpath()
+
+        # Draw figure-8 loop (behind wheels — cable hugs the rim)
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        for pen in (cable_shadow, cable_core):
+            p.setPen(pen)
+            p.drawPath(figure8)
+
+        # Draw bull wheels on top — cover the interior part of the loop,
+        # leaving only the outer 2 px crescent visible (the cable on
+        # the rim).  Tangent crosses are outside both wheels so they
+        # stay fully visible.
         self._draw_bullwheel(p, cx1, cy, R, angle, drive=True)
         self._draw_bullwheel(p, cx2, cy, R, -angle, drive=False)
 
-        # --- Layer 3: free-span cable (in front of wheels) ---
-        # Clip the cable so it never draws inside the wheel faces.
-        # The diagonal cross between the two wheels would otherwise cut
-        # straight through both yellow discs.
-        p.save()
-        clip_path = QPainterPath()
-        clip_path.addRect(QRectF(rect))
-        wheel1_clip = QPainterPath()
-        wheel1_clip.addEllipse(QPointF(cx1, cy), R + 1, R + 1)
-        wheel2_clip = QPainterPath()
-        wheel2_clip.addEllipse(QPointF(cx2, cy), R + 1, R + 1)
-        clip_path = clip_path.subtracted(wheel1_clip)
-        clip_path = clip_path.subtracted(wheel2_clip)
-        p.setClipPath(clip_path)
-
+        # Entry and exit cables — vertical strands from floor to the
+        # bottom of each cable circle (tangent 270° point, on the arc).
         for pen in (cable_shadow, cable_core):
             p.setPen(pen)
-            # Entry: from floor up to P1 left tangent (180°)
-            p.drawLine(QPointF(cx1 - cable_r, floor_y + 1),
-                       QPointF(cx1 - cable_r, cy))
-            # Diagonal cross: P1 bottom (270°) → P2 top (90°)
-            # Clipped to only appear in the gap between the two wheels.
-            p.drawLine(QPointF(cx1, cy + cable_r),
-                       QPointF(cx2, cy - cable_r))
-            # Exit: from P2 right tangent (0°) down to floor
-            p.drawLine(QPointF(cx2 + cable_r, cy),
-                       QPointF(cx2 + cable_r, floor_y + 1))
+            p.drawLine(QPointF(cx1, floor_y + 1),
+                       QPointF(cx1, cy + cable_r))
+            p.drawLine(QPointF(cx2, cy + cable_r),
+                       QPointF(cx2, floor_y + 1))
 
-        p.restore()  # remove clip
-
-        # --- Readouts: RPM + cable speed ---------------------------------
-        # Real rotation: ω = v / r with r = 2.1 m  →  rpm = ω × 60 / 2π
-        v_abs = abs(self.state.train.v)
-        rpm = v_abs / (2.0 * math.pi * 2.1) * 60.0
-        p.setPen(QPen(COLOR_TEXT_DIM))
-        p.setFont(QFont("Consolas", 8))
-        p.drawText(
-            QRectF(rect.x() + 8, rect.y() + rect.height() - 32,
-                   rect.width() - 16, 12),
-            int(Qt.AlignmentFlag.AlignLeft),
-            f"⌀ 4.2 m   {rpm:5.1f} rpm",
-        )
-        p.drawText(
-            QRectF(rect.x() + 8, rect.y() + rect.height() - 32,
-                   rect.width() - 16, 12),
-            int(Qt.AlignmentFlag.AlignRight),
-            f"v {v_abs:4.1f} m/s",
-        )
+        # --- Moving mark on the cable ---
+        # Advances along the figure-8 loop at cable speed = ω × cable_r.
+        # Makes it visually obvious the cable is moving (and which way).
+        path_len = figure8.length()
+        if path_len > 0:
+            dist = self._pulley_angle * cable_r
+            t = (dist % path_len) / path_len
+            mark_pt = figure8.pointAtPercent(t)
+            p.setBrush(QBrush(QColor(20, 20, 28)))
+            p.setPen(QPen(QColor(240, 240, 245), 0.8))
+            p.drawEllipse(mark_pt, 3.0, 3.0)
 
         # Power LED — green → red with load
         led_col = QColor(
@@ -3294,8 +3631,8 @@ class GameWidget(QWidget):
         g = gradient_at(max(0.0, min(LENGTH, s_pos)))
         theta = math.atan(g)
         # Visual exaggeration: real train is 31.6 m but at the profile's
-        # scale that would be ~26 px — invisible detail. Draw 2.2× larger.
-        total_len_m = 70.0
+        # scale that would be ~26 px — invisible detail. Draw 1.6× larger.
+        total_len_m = 50.0
         car_len_m = total_len_m / 2.0
 
         def slope_pt(offset_m: float) -> QPointF:
@@ -3322,7 +3659,7 @@ class GameWidget(QWidget):
         nx, ny = -uy, ux                   # normal (perpendicular) to axis
 
         car_len_px = length_px / 2.0
-        thickness = max(12.0, length_px * 0.42)   # faux-3D height, scaled
+        thickness = max(10.0, length_px * 0.35)   # faux-3D height, scaled
 
         # Cable visible between cars along the tunnel
         p.setPen(QPen(QColor(200, 200, 210), 1.2))
@@ -3362,11 +3699,11 @@ class GameWidget(QWidget):
         color: QColor,
         car_index: int = 0,
     ) -> None:
-        """Draw one ovoid car based on the real Perce-Neige design.
+        """Draw one clean cylindrical car matching the logo style.
 
-        Real wagons (CFD/Von Roll 1993) are ovoid Ø 3.6 m with alternating
-        yellow and grey-blue structural arches visible on the exterior,
-        rounded nose caps, vertical sliding doors, and windows between arches.
+        Clean yellow cylindrical body, prominent dome end caps, a row of
+        blue rectangular windows, and a highlight strip — no structural
+        arches.  Doors and headlights preserved for game mechanics.
         """
         half = length_px / 2.0
         t = thickness
@@ -3374,59 +3711,52 @@ class GameWidget(QWidget):
         p0 = QPointF(center.x() - ux * half, center.y() - uy * half)
         p1 = QPointF(center.x() + ux * half, center.y() + uy * half)
 
-        # Ovoid body — slightly taller on top than bottom (egg shape).
-        # The top bulges more than the bottom (real car profile).
-        t_top = t * 1.15
-        t_bot = t * 0.85
+        # Cylindrical body — uniform thickness (logo style, not ovoid)
         body = QPolygonF([
-            QPointF(p0.x() + nx * t_top, p0.y() + ny * t_top),
-            QPointF(p1.x() + nx * t_top, p1.y() + ny * t_top),
-            QPointF(p1.x() - nx * t_bot, p1.y() - ny * t_bot),
-            QPointF(p0.x() - nx * t_bot, p0.y() - ny * t_bot),
+            QPointF(p0.x() + nx * t, p0.y() + ny * t),
+            QPointF(p1.x() + nx * t, p1.y() + ny * t),
+            QPointF(p1.x() - nx * t, p1.y() - ny * t),
+            QPointF(p0.x() - nx * t, p0.y() - ny * t),
         ])
         # Shading gradient perpendicular to axis (light on top, shadow below)
-        top = QPointF(center.x() + nx * t_top, center.y() + ny * t_top)
-        bot = QPointF(center.x() - nx * t_bot, center.y() - ny * t_bot)
+        top = QPointF(center.x() + nx * t, center.y() + ny * t)
+        bot = QPointF(center.x() - nx * t, center.y() - ny * t)
         grad = QLinearGradient(top, bot)
-        grad.setColorAt(0.0, color.lighter(145))
-        grad.setColorAt(0.45, color)
-        grad.setColorAt(1.0, color.darker(170))
+        grad.setColorAt(0.0, color.lighter(140))
+        grad.setColorAt(0.40, color)
+        grad.setColorAt(1.0, color.darker(160))
         p.setBrush(QBrush(grad))
-        p.setPen(QPen(QColor(80, 50, 0), 1.3))
+        p.setPen(QPen(QColor(120, 80, 0), 1.5))
         p.drawPolygon(body)
 
-        # Structural arches — grey-blue vertical ribs visible on exterior.
-        # Real car has ~8-10 arches per car creating the ribbed look.
-        n_arches = 8
-        arch_color = QColor(140, 155, 180)
-        arch_width = max(1.0, length_px * 0.008)
-        for i in range(n_arches):
-            frac = (i + 1.0) / (n_arches + 1.0)
-            ax = p0.x() + ux * length_px * frac
-            ay = p0.y() + uy * length_px * frac
-            at = QPointF(ax + nx * t_top, ay + ny * t_top)
-            ab = QPointF(ax - nx * t_bot, ay - ny * t_bot)
-            p.setPen(QPen(arch_color, arch_width))
-            p.drawLine(at, ab)
-
-        # End caps (rounded nose domes) — the real car has smooth yellow noses
-        cap_rx = max(2.0, t * 0.6)
-        cap_ry = max(t_top, t_bot)
+        # End caps (prominent dome ellipses — logo style)
+        cap_rx = max(3.0, t * 0.55)
+        cap_ry = t
         for pt in (p0, p1):
             cap = QRectF(pt.x() - cap_rx, pt.y() - cap_ry,
                          cap_rx * 2, cap_ry * 2)
-            grad_cap = QLinearGradient(QPointF(cap.x(), cap.y()),
-                                       QPointF(cap.x(), cap.y() + cap.height()))
-            grad_cap.setColorAt(0.0, color.lighter(130))
-            grad_cap.setColorAt(1.0, color.darker(180))
+            grad_cap = QLinearGradient(
+                QPointF(pt.x() + nx * t, pt.y() + ny * t),
+                QPointF(pt.x() - nx * t, pt.y() - ny * t))
+            grad_cap.setColorAt(0.0, color.lighter(125))
+            grad_cap.setColorAt(1.0, color.darker(170))
             p.setBrush(QBrush(grad_cap))
-            p.setPen(QPen(QColor(40, 30, 0), 1.0))
+            p.setPen(QPen(QColor(100, 60, 0), 1.2))
             p.drawEllipse(cap)
+
+        # Highlight reflection strip along top of body (logo style)
+        hl_offset = t * 0.55
+        hl0 = QPointF(p0.x() + nx * hl_offset + ux * 4,
+                      p0.y() + ny * hl_offset + uy * 4)
+        hl1 = QPointF(p1.x() + nx * hl_offset - ux * 4,
+                      p1.y() + ny * hl_offset - uy * 4)
+        p.setPen(QPen(QColor(255, 255, 220, 180), max(1.4, t * 0.06)))
+        p.drawLine(hl0, hl1)
 
         # Headlight on the outer end of each car
         outer_pt = p0 if car_index == 0 else p1
-        hl_cx = outer_pt.x() + nx * (t_top * 0.3)
-        hl_cy = outer_pt.y() + ny * (t_top * 0.3)
+        hl_cx = outer_pt.x() + nx * (t * 0.3)
+        hl_cy = outer_pt.y() + ny * (t * 0.3)
         if self.state.train.lights_head:
             p.setBrush(QBrush(QColor(255, 255, 200)))
         else:
@@ -3434,23 +3764,15 @@ class GameWidget(QWidget):
         p.setPen(QPen(QColor(40, 40, 30), 0.6))
         p.drawEllipse(QPointF(hl_cx, hl_cy), 1.8, 1.8)
 
-        # Highlight reflection strip along top of body
-        hl_offset = t_top * 0.55
-        hl0 = QPointF(p0.x() + nx * hl_offset + ux * 4,
-                      p0.y() + ny * hl_offset + uy * 4)
-        hl1 = QPointF(p1.x() + nx * hl_offset - ux * 4,
-                      p1.y() + ny * hl_offset - uy * 4)
-        p.setPen(QPen(QColor(255, 255, 230, 150), 1.6))
-        p.drawLine(hl0, hl1)
-
-        # Window strip — between the structural arches
-        n_windows = n_arches - 1  # windows sit between arches
-        win_h = t * 0.5
+        # Window strip — 5 clean blue windows (logo style)
+        n_windows = 5
+        win_h = t * 0.7
+        win_spacing = length_px / (n_windows + 1)
+        win_w_px = win_spacing * 0.6
         for i in range(n_windows):
-            frac = (i + 1.5) / (n_arches + 1.0)
+            frac = (i + 1.0) / (n_windows + 1.0)
             cx = p0.x() + ux * length_px * frac
             cy = p0.y() + uy * length_px * frac
-            win_w_px = length_px / (n_arches + 1.0) * 0.6
             corners = [
                 QPointF(cx + ux * (-win_w_px / 2) + nx * (-win_h / 2),
                         cy + uy * (-win_w_px / 2) + ny * (-win_h / 2)),
@@ -3461,11 +3783,8 @@ class GameWidget(QWidget):
                 QPointF(cx + ux * (-win_w_px / 2) + nx * (+win_h / 2),
                         cy + uy * (-win_w_px / 2) + ny * (+win_h / 2)),
             ]
-            grad_w = QLinearGradient(corners[0], corners[2])
-            grad_w.setColorAt(0.0, QColor(160, 220, 255, 230))
-            grad_w.setColorAt(1.0, QColor(40, 70, 110, 230))
-            p.setBrush(QBrush(grad_w))
-            p.setPen(QPen(QColor(20, 20, 20), 0.8))
+            p.setBrush(QBrush(QColor(120, 200, 240)))
+            p.setPen(QPen(QColor(20, 20, 30), 0.8))
             p.drawPolygon(QPolygonF(corners))
 
         # Doors — vertical sliding, located at 1/3 and 2/3 of car length
@@ -3478,7 +3797,7 @@ class GameWidget(QWidget):
         else:
             door_color = QColor(80, 200, 120) if doors_open else QColor(210, 140, 20)
             door_edge = QColor(30, 60, 20) if doors_open else QColor(60, 30, 0)
-        dw = length_px / (n_arches + 1.0) * 0.5
+        dw = win_spacing * 0.5
         dh = t * 1.35
         for di in range(DOORS_PER_CAR):
             frac = (di + 1) / (DOORS_PER_CAR + 1)
@@ -3663,9 +3982,29 @@ class GameWidget(QWidget):
                  int(Qt.Key.Key_Z), False)
             )
 
+        # REVERSE [I] — appears whenever the train is at a full standstill
+        # (|v| < 0.1 m/s), both at termini AND mid-tunnel after an
+        # unscheduled stop. Lets the driver head back the way they came,
+        # triggering the real "retour en gare" PA announcement.
+        rev_y = dep_y + dep_h + 4
+        rev_can = abs(tr.v) < 0.1
+        rev_col = (QColor(120, 200, 240) if rev_can
+                   else QColor(80, 90, 110))
+        rev_rect_hud = QRectF(rect.x() + 20, rev_y, 350, dep_h)
+        self._draw_touch_button(
+            p, rev_rect_hud,
+            T("↔ REVERSE DIRECTION [I]", "↔ INVERSER LE SENS [I]"),
+            rev_col, font_pt=10,
+        )
+        if rev_can:
+            self._hit_zones.append(
+                (rev_rect_hud, int(Qt.Key.Key_I), False)
+            )
+
         # --- Cockpit control buttons (realistic panel) --------------------
         # Three rows × three columns of real buttons the driver uses.
-        btn_y = rect.y() + 288
+        # Shifted down 26 px to clear the REVERSE button added above.
+        btn_y = rect.y() + 314
         btn_w = 115
         btn_h = 36
         gap = 8
@@ -3765,11 +4104,12 @@ class GameWidget(QWidget):
             (QRectF(col2, row2, btn_w, btn_h), int(Qt.Key.Key_N), False)
         )
 
-        # Info block (compact, left column of rows below the buttons)
-        # Buttons end at btn_y + 3*(btn_h+gap) - gap = 288+(3*44)-8 = 412.
-        # Keep at least 14 px margin.
+        # Info block (compact, left column of rows below the buttons).
+        # Row 2 bottom = btn_y + 2*(btn_h+gap) + btn_h = 314 + 88 + 36 = 438.
+        # Keep a 10 px margin below the buttons so the info rows never
+        # overlap the AUTO / DOORS / SOUND row.
         ox = rect.x() + 20
-        oy = rect.y() + 428
+        oy = rect.y() + 450
         p.setFont(QFont("Consolas", 10))
         p.setPen(QPen(COLOR_TEXT))
         cabin_x_m, cabin_y_m = geom_at(tr.s)
@@ -4208,12 +4548,35 @@ class GameWidget(QWidget):
             p.drawText(int(box.x() + 120), int(y), k)
             p.setPen(QPen(COLOR_TEXT))
             p.drawText(int(box.x() + 260), int(y), v)
-        p.setFont(QFont("Segoe UI", 11))
-        p.setPen(QPen(COLOR_NEEDLE))
-        p.drawText(QRectF(box.x(), box.y() + box.height() - 52, box.width(), 20),
+        # --- On-screen buttons : reverse direction / new trip ---------
+        # The simulation stays live : the driver can open/close doors,
+        # fire announcements, toggle lights, and then pick one of these
+        # two buttons to continue.
+        btn_y = box.y() + box.height() - 78
+        btn_w = 230
+        btn_h = 40
+        rev_rect = QRectF(box.x() + 20, btn_y, btn_w, btn_h)
+        new_rect = QRectF(box.x() + box.width() - btn_w - 20, btn_y, btn_w, btn_h)
+        # Reverse button (I) — primary action, green
+        self._draw_touch_button(
+            p, rev_rect,
+            T("↔ REVERSE [I]", "↔ INVERSER [I]"),
+            QColor(80, 220, 140), font_pt=11,
+        )
+        self._hit_zones.append((rev_rect, int(Qt.Key.Key_I), False))
+        # New trip button (R) — full reset, amber
+        self._draw_touch_button(
+            p, new_rect,
+            T("↻ NEW TRIP [R]", "↻ NOUVEAU [R]"),
+            QColor(240, 200, 80), font_pt=11,
+        )
+        self._hit_zones.append((new_rect, int(Qt.Key.Key_R), False))
+        p.setFont(QFont("Segoe UI", 9))
+        p.setPen(QPen(COLOR_TEXT_DIM))
+        p.drawText(QRectF(box.x(), box.y() + box.height() - 28, box.width(), 16),
                    int(Qt.AlignmentFlag.AlignHCenter),
-                   T("R : new trip   Esc : menu   P : pause",
-                     "R : nouveau trajet   Échap : menu   P : pause"))
+                   T("Doors, lights, announcements remain available",
+                     "Portes, éclairage, annonces restent disponibles"))
 
     def _draw_ann_menu(self, p: QPainter, w: int, h: int) -> None:
         """Overlay panel listing the 15 on-board announcements.
@@ -4243,11 +4606,20 @@ class GameWidget(QWidget):
         p.setFont(QFont("Consolas", 9))
         p.setPen(QPen(COLOR_TEXT_DIM))
         p.drawText(
-            QRectF(x + 16, y + 34, panel_w - 32, 16),
+            QRectF(x + 16, y + 34, panel_w - 190, 16),
             int(Qt.AlignmentFlag.AlignLeft),
             T("Press a key to trigger — Esc / F2 to close",
               "Appuyer sur une touche pour déclencher — Esc / F2 pour fermer"),
         )
+        # STOP button — aborts the announcement currently playing (and
+        # clears the queue). Bound to X key as well.
+        stop_rect = QRectF(x + panel_w - 166, y + 30, 150, 22)
+        self._draw_touch_button(
+            p, stop_rect,
+            T("⏹ STOP [X]", "⏹ STOP [X]"),
+            QColor(220, 120, 80), font_pt=9,
+        )
+        self._hit_zones.append((stop_rect, int(Qt.Key.Key_X), False))
         # Entries — each row is also a click target that triggers the
         # announcement exactly like pressing its hotkey.
         p.setFont(QFont("Consolas", 11))
@@ -4407,6 +4779,8 @@ class GameWidget(QWidget):
               "• L'urgence [4 ou Shift] engage les freins rail (5 m/s²) — réservez aux vrais cas"),
             T("• Vigilance [W] : optional, off by default — once enabled, touch a control every 20 s",
               "• Veille [W] : optionnelle, désactivée par défaut — si activée, touchez une commande toutes les 20 s"),
+            T("• Help menu : check GitHub for updates, or send an anonymous bug report (opens pre-filled issue)",
+              "• Menu Aide : vérifier les MAJ GitHub, ou signaler un bug anonymement (ticket pré-rempli)"),
         ]
         for i, line in enumerate(tips):
             p.drawText(QRectF(tips_box.x() + 12, tips_box.y() + 30 + i * 16,
@@ -4579,18 +4953,268 @@ class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         self.setWindowTitle(f"{APP_NAME}  v{VERSION}")
-        self.resize(1320, 840)
+        self.resize(1360, 940)
         self.game = GameWidget(self)
         self.setCentralWidget(self.game)
         ico = Path(__file__).parent / "logo.ico"
         if ico.exists():
             self.setWindowIcon(QIcon(str(ico)))
+        # Help menu — auto-update + bug report entries
+        try:
+            self._install_help_menu()
+        except Exception:
+            pass
+        # Background update check, 3 s after launch
+        QTimer.singleShot(3000, self._bg_check_update)
+        # Check for pending crash reports from a previous run
+        QTimer.singleShot(1500, self._offer_pending_crash_reports)
+
+    # ------------------------------------------------------------------
+    # Help menu / auto-update / bug report
+    # ------------------------------------------------------------------
+    def _lang(self) -> str:
+        try:
+            return self.game.state.lang
+        except Exception:
+            return "en"
+
+    def _tr(self, en: str, fr: str) -> str:
+        return fr if self._lang() == "fr" else en
+
+    def _install_help_menu(self) -> None:
+        bar = self.menuBar()
+        menu = bar.addMenu(self._tr("&Help", "&Aide"))
+        act_upd = menu.addAction(
+            self._tr("Check for updates…", "Vérifier les mises à jour…"))
+        act_upd.triggered.connect(self._manual_check_update)
+        act_bug = menu.addAction(
+            self._tr("Report a bug…", "Signaler un bug…"))
+        act_bug.triggered.connect(self._manual_bug_report)
+        menu.addSeparator()
+        act_about = menu.addAction(self._tr("About", "À propos"))
+        act_about.triggered.connect(self._show_about)
+
+    def _show_about(self) -> None:
+        QMessageBox.about(
+            self,
+            self._tr("About", "À propos"),
+            f"<b>{APP_NAME}</b> v{VERSION}<br>"
+            + self._tr(
+                "Accurate simulator of the Tignes underground funicular.",
+                "Simulateur fidèle du funiculaire souterrain de Tignes.")
+            + "<br><br>"
+            + self._tr(
+                "Repository : ", "Dépôt : ")
+            + "<a href='https://github.com/"
+            + f"{autoupdate_mod_owner()}/{autoupdate_mod_repo()}'>GitHub</a>"
+            + "<br>"
+            + self._tr("License : MIT", "Licence : MIT"))
+
+    def _bg_check_update(self) -> None:
+        try:
+            import autoupdate
+        except Exception:
+            return
+        owner = autoupdate_mod_owner()
+        repo = autoupdate_mod_repo()
+        thread = autoupdate.UpdateCheckThread(
+            owner, repo, self._on_update_check_result)
+        thread.start()
+        self._upd_thread = thread  # keep ref
+
+    def _on_update_check_result(self, info) -> None:
+        # Called from a worker thread — bounce back to the GUI thread
+        QTimer.singleShot(
+            0, lambda: self._show_update_if_newer(info, silent=True))
+
+    def _show_update_if_newer(self, info, silent: bool) -> None:
+        try:
+            import autoupdate
+        except Exception:
+            return
+        if info is None:
+            if not silent:
+                QMessageBox.warning(
+                    self,
+                    self._tr("Update check", "Mise à jour"),
+                    self._tr(
+                        "Could not reach GitHub. Check your connection.",
+                        "Impossible de joindre GitHub. Vérifiez la connexion."))
+            return
+        if not autoupdate.is_newer(info.version, VERSION):
+            if not silent:
+                QMessageBox.information(
+                    self,
+                    self._tr("Up to date", "À jour"),
+                    self._tr(
+                        f"You already run the latest version (v{VERSION}).",
+                        f"Vous utilisez déjà la dernière version (v{VERSION})."))
+            return
+        self._prompt_update_dialog(info)
+
+    def _prompt_update_dialog(self, info) -> None:
+        import autoupdate
+        msg = QMessageBox(self)
+        msg.setIcon(QMessageBox.Icon.Information)
+        msg.setWindowTitle(self._tr("Update available", "Mise à jour disponible"))
+        text = self._tr(
+            f"Version <b>{info.version}</b> is available.<br>"
+            f"You run v{VERSION}.<br><br>Download and install now?",
+            f"La version <b>{info.version}</b> est disponible.<br>"
+            f"Vous utilisez v{VERSION}.<br><br>"
+            "Télécharger et installer maintenant ?")
+        msg.setText(text)
+        if info.body:
+            msg.setDetailedText(info.body[:4000])
+        btn_ok = msg.addButton(
+            self._tr("Install && restart", "Installer && redémarrer"),
+            QMessageBox.ButtonRole.AcceptRole)
+        msg.addButton(
+            self._tr("Skip", "Ignorer"),
+            QMessageBox.ButtonRole.RejectRole)
+        msg.exec()
+        if msg.clickedButton() is not btn_ok:
+            return
+        try:
+            autoupdate.download_and_install(
+                info, Path(__file__).resolve().parent)
+        except Exception as e:
+            QMessageBox.critical(
+                self,
+                self._tr("Update failed", "Échec de la mise à jour"),
+                self._tr(f"Error : {e}", f"Erreur : {e}"))
+            return
+        QMessageBox.information(
+            self,
+            self._tr("Update installed", "Mise à jour installée"),
+            self._tr(
+                "The application will restart now.",
+                "L'application va redémarrer."))
+        autoupdate.relaunch_app()
+
+    def _manual_check_update(self) -> None:
+        try:
+            import autoupdate
+        except Exception:
+            QMessageBox.warning(self, "Update", "autoupdate module missing")
+            return
+        info = autoupdate.check_latest_release(
+            autoupdate_mod_owner(), autoupdate_mod_repo())
+        self._show_update_if_newer(info, silent=False)
+
+    # --- Bug / crash reporting ----------------------------------------
+    def _offer_pending_crash_reports(self) -> None:
+        try:
+            import bugreport
+        except Exception:
+            return
+        project_dir = Path(__file__).resolve().parent
+        reports = bugreport.list_pending_reports(project_dir)
+        if not reports:
+            return
+        latest = reports[-1]
+        data = bugreport.load_report(latest)
+        if data is None:
+            return
+        msg = QMessageBox(self)
+        msg.setIcon(QMessageBox.Icon.Warning)
+        msg.setWindowTitle(self._tr("Crash detected", "Plantage détecté"))
+        exc_t = data.get("exception_type", "")
+        ts = data.get("timestamp", "")
+        msg.setText(self._tr(
+            f"A crash was recorded at {ts} ({exc_t}).<br>"
+            "Open a pre-filled (anonymous) GitHub issue now?",
+            f"Un plantage a été enregistré à {ts} ({exc_t}).<br>"
+            "Ouvrir un ticket GitHub pré-rempli (anonyme) maintenant ?"))
+        msg.setDetailedText(bugreport.format_crash_body(data)[:4000])
+        btn_send = msg.addButton(
+            self._tr("Send (opens browser)", "Envoyer (ouvre navigateur)"),
+            QMessageBox.ButtonRole.AcceptRole)
+        btn_del = msg.addButton(
+            self._tr("Delete", "Supprimer"),
+            QMessageBox.ButtonRole.DestructiveRole)
+        msg.addButton(
+            self._tr("Keep", "Garder"),
+            QMessageBox.ButtonRole.RejectRole)
+        msg.exec()
+        clicked = msg.clickedButton()
+        if clicked is btn_send:
+            title = f"Crash {exc_t} @ v{data.get('system', {}).get('app_version', '')}"
+            url = bugreport.make_issue_url(title, bugreport.format_crash_body(data))
+            QDesktopServices.openUrl(QUrl(url))
+            bugreport.delete_report(latest)
+        elif clicked is btn_del:
+            bugreport.delete_report(latest)
+
+    def _manual_bug_report(self) -> None:
+        try:
+            import bugreport
+        except Exception:
+            return
+        dlg = QDialog(self)
+        dlg.setWindowTitle(self._tr("Report a bug", "Signaler un bug"))
+        dlg.resize(520, 420)
+        form = QVBoxLayout(dlg)
+        lbl_desc = QLabel(self._tr(
+            "Short description :", "Description courte :"))
+        ed_title = QLineEdit()
+        lbl_body = QLabel(self._tr(
+            "What happened ?", "Que s'est-il passé ?"))
+        ed_body = QPlainTextEdit()
+        lbl_steps = QLabel(self._tr(
+            "Steps to reproduce :", "Étapes de reproduction :"))
+        ed_steps = QPlainTextEdit()
+        note = QLabel(self._tr(
+            "<i>This opens a pre-filled GitHub issue. No data is sent "
+            "automatically. Paths are anonymized.</i>",
+            "<i>Ceci ouvre un ticket GitHub pré-rempli. Rien n'est envoyé "
+            "automatiquement. Les chemins sont anonymisés.</i>"))
+        note.setWordWrap(True)
+        btns = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok
+            | QDialogButtonBox.StandardButton.Cancel)
+        btns.button(QDialogButtonBox.StandardButton.Ok).setText(
+            self._tr("Open issue", "Ouvrir le ticket"))
+        form.addWidget(lbl_desc)
+        form.addWidget(ed_title)
+        form.addWidget(lbl_body)
+        form.addWidget(ed_body)
+        form.addWidget(lbl_steps)
+        form.addWidget(ed_steps)
+        form.addWidget(note)
+        form.addWidget(btns)
+        btns.accepted.connect(dlg.accept)
+        btns.rejected.connect(dlg.reject)
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+        body = bugreport.format_manual_body(
+            ed_body.toPlainText(),
+            ed_steps.toPlainText(),
+            VERSION)
+        url = bugreport.make_issue_url(ed_title.text(), body)
+        QDesktopServices.openUrl(QUrl(url))
+
+
+def autoupdate_mod_owner() -> str:
+    return "ARP273-ROSE"
+
+
+def autoupdate_mod_repo() -> str:
+    return "perce-neige-sim"
 
 
 def main() -> None:
     app = QApplication(sys.argv)
     app.setApplicationName(APP_NAME)
     app.setApplicationVersion(VERSION)
+    # Install anonymous crash handler — writes a JSON report if the app
+    # crashes so the next launch can offer to open a GitHub issue.
+    try:
+        import bugreport
+        bugreport.install_crash_handler(
+            Path(__file__).resolve().parent, VERSION)
+    except Exception:
+        pass
     win = MainWindow()
     win.show()
     sys.exit(app.exec())

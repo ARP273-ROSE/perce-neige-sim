@@ -22,3 +22,22 @@ Thumbs.db
 
 # Claude Code
 CLAUDE.md
+
+# Crash reports (generated at runtime, anonymized)
+crash_reports/
+
+# LaTeX build artifacts (we commit the PDF, not the .tex source)
+*.tex
+*.aux
+*.log
+*.toc
+*.out
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+
+# Frames extracted from reference videos (local only)
+tmp_frames/
+
+# Progress / session scratch files
+_progress.json
