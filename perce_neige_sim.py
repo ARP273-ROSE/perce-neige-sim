@@ -16,7 +16,7 @@ Wikipedia (FR/EN), remontees-mecaniques.net and CFD (rolling stock maker):
   - Passing loop       : ~200 m middle section with twin tunnels
   - Built by           : Von Roll / CFD. Opened 14 April 1993.
 
-Author : Kevin Guion (original TI-Basic FUNIC), PyQt6 port 2026.
+Author : ARP273-ROSE (original TI-Basic FUNIC), PyQt6 port 2026.
 """
 
 from __future__ import annotations
@@ -4919,8 +4919,8 @@ class GameWidget(QWidget):
         p.setFont(footer_font)
         p.drawText(QRectF(box.x(), box.y() + box_h - 26, box.width(), 18),
                    int(Qt.AlignmentFlag.AlignHCenter),
-                   T("Simulation © 2026 Kevin Guion — data from public sources",
-                     "Simulation © 2026 Kevin Guion — données de sources publiques"))
+                   T("Simulation © 2026 ARP273-ROSE — data from public sources",
+                     "Simulation © 2026 ARP273-ROSE — données de sources publiques"))
 
     def _draw_wrapped(self, p: QPainter, text: str, rect: QRectF,
                       font: QFont) -> None:
