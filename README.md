@@ -196,4 +196,4 @@ Sourced from Wikipedia (FR + EN), `remontees-mecaniques.net`, and CFD's official
 
 ## License
 
-MIT. Author : Kevin Guion — 2006 TI-Basic original, 2026 PyQt6 port.
+MIT. Author : ARP273-ROSE — 2006 TI-Basic original, 2026 PyQt6 port.
