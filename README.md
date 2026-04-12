@@ -50,10 +50,45 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 - **Cable elasticity rebound** : after the main train stops at the upper station, the counterweight wagon at Val Claret creeps up ~1.2 m over 2 seconds because the long cable relaxes (motor is at the top)
 - **Dead-man vigilance** : the driver must touch a control at least once every 20 s, otherwise the system triggers an automatic electric stop (press `G` to acknowledge)
 
+### Cabin first-person view (F4)
+- **Real pinhole-camera perspective** — `screen_r = focal · R_tunnel / d`
+  with a 72° horizontal FOV, matching the wide driver windshield and the
+  tight 3.1 m TBM bore
+- TBM segment pitch 1.5 m : at 12 m/s, 8 rings stream past every second,
+  with the correct 1/d size falloff that makes near walls fill the view
+- **Wall fluorescents** : long horizontal tubes (~1.6 m, spaced 12 m)
+  on the left wall while climbing / right wall while descending —
+  layered halo + mid-glow + bright core, exactly like the HD footage
+- **Headlights gate visibility** : off → you barely see a few metres of
+  concrete and only the wall neons as beacons ; on → the beam reaches
+  ~100 m with Beer-Lambert exponential falloff
+- Sleepers drawn one per ring with a central cable-guide bolt, rails +
+  cable guide connect smoothly between consecutive rings
+- Correct handling of curves (lateral offset `½·focal·κ·d`) and passing
+  loop double-bore on the opposite wall
+
 ### Game modes
 - **Normal** — just drive a trip
 - **Challenge** — optimise time + comfort + energy
 - **Faults** — random incidents : cable tension spikes, motor thermal, door faults, smoke alarm, icy upper section
+
+### Auto-update (GitHub)
+- Background check on startup (3 s after launch) — silent unless an
+  update is available
+- Manual check via **Help → Check for updates**
+- Downloads the release zipball from GitHub, validates size, rejects
+  path-traversal and symlinks, copies a whitelist of files and restarts
+- User data (venv, CLAUDE.md, `.git`, `crash_reports/`) is never touched
+
+### Bug reports (anonymous)
+- `sys.excepthook` writes an anonymized JSON crash report into
+  `crash_reports/` if the app ever crashes
+- Next launch offers to open a **pre-filled GitHub issue** — paths and
+  user names are stripped before anything leaves your machine
+- Manual report via **Help → Report a bug** : form with description +
+  steps ; opens the same pre-filled issue URL in your browser
+- **No telemetry** : nothing is sent automatically, nothing contacts a
+  server without your explicit click
 
 ### Real on-board announcements
 - Authentic recordings from the actual Perce-Neige cabins, bundled under
