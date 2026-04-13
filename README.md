@@ -6,7 +6,7 @@
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
 ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey.svg)
 
-**Drive the longest funicular in France — 3 491 m of underground tunnel from Val Claret (2 111 m) to the Grande Motte glacier (3 032 m) in Tignes, France.**
+**Drive the longest funicular in France — 3 474 m of underground tunnel from Val Claret (2 111 m) to the Grande Motte glacier (3 032 m) in Tignes, France.**
 
 An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1989–1991, opened 14 April 1993 by Von Roll / CFD). Distant descendant of the author's 2006 TI-84 `FUNIC` program — same spirit, real physics, proper graphics.
 
@@ -15,9 +15,11 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 ## Features
 
 ### Real-world fidelity
-- **Slope length** 3 491 m, **vertical drop** 921 m, altitudes 2 111 m → 3 032 m
-- **Gradient profile** from 18 % (gentle start) to 30 % (steepest), passing loop at the midpoint
-- **Speed** capped at 12 m/s (43.2 km/h) — the real regulator limit
+- **Slope length** 3 474 m (cockpit counter reference), **vertical drop** 921 m, altitudes 2 111 m → 3 032 m
+- **Gradient profile** from 8 % (gentle square-section start) to 30 % (steepest sustained middle), eases to 6 % at the upper square-section platform — calibrated directly against the real cockpit video
+- **Square cut-and-cover** at both ends (s < 257 m and s > 3 420 m), **round TBM bore** through the middle — exact transition distances read from the on-board counter
+- **Passing loop** s=1 601 → 1 823 m, curves at s=1 297 → 1 541 m and s=1 884 → 2 369 m
+- **Speed** capped at 10.1 m/s (36.4 km/h) — the operational regulator setpoint observed in the real cab. Trip time matches the real 7 min 54 s Val Claret → Grande Motte.
 - **Train** : two coupled cylindrical cars, ∅ 3.60 m, 32 t empty, up to 334 passengers (58.8 t max)
 - **Motors** 3 × 800 kW DC at the upper drive station, below the *Panoramic* restaurant
 - **Cable** 52 mm Fatzer, nominal 22 500 daN, breaking 191 200 daN
@@ -43,7 +45,7 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 - Fully **bilingual FR / EN**, auto-detected from system locale (toggle with `L`)
 
 ### Realistic driving regulator
-- The driver sets a **speed command** (percentage of V_MAX = 12 m/s) with `↑` / `↓` — the regulator smoothly tracks it with a realistic accel/decel envelope (capped at ~1 m/s²), exactly like the real Von Roll speed programmer
+- The driver sets a **speed command** (percentage of V_MAX = 10.1 m/s) with `↑` / `↓` — the regulator smoothly tracks it with a realistic accel/decel envelope, exactly like the real Von Roll speed programmer
 - **Programmed station approach** : the envelope automatically clamps the setpoint so the train always has enough distance to reach the creep zone before the platform
 - **Creep zone** : when the front is 20 m before the platform, the train crawls at 1 m/s through the 20 m approach and the 35 m platform, stopping flush at the platform end
 - **Counterweight wagon** : the descending train *is* the counterweight — mechanically linked by the cable. In real operation the down-going wagon is almost always empty because skiers go *up* by funicular and come *back down on skis*; only the summer glacier season sees a handful of passengers coming down. The ascending train therefore has to lift close to a full load of net imbalance
@@ -54,7 +56,7 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 - **Real pinhole-camera perspective** — `screen_r = focal · R_tunnel / d`
   with a 72° horizontal FOV, matching the wide driver windshield and the
   tight 3.1 m TBM bore
-- TBM segment pitch 1.5 m : at 12 m/s, 8 rings stream past every second,
+- TBM segment pitch 1.5 m : at 10.1 m/s, ~7 rings stream past every second,
   with the correct 1/d size falloff that makes near walls fill the view
 - **Wall fluorescents** : long horizontal tubes (~1.6 m, spaced 12 m)
   on the left wall while climbing / right wall while descending —
@@ -218,12 +220,12 @@ Sourced from Wikipedia (FR + EN), `remontees-mecaniques.net`, and CFD's official
 
 | Property                  | Value             |
 |---------------------------|-------------------|
-| Length (along slope)      | 3 491 m           |
+| Length (along slope)      | 3 474 m           |
 | Vertical drop             | 921 m             |
 | Lower station             | Val Claret 2 111 m |
 | Upper station             | Glacier 3 032 m   |
 | Max gradient              | 30 %              |
-| Max speed                 | 12 m/s            |
+| Max speed                 | 10.1 m/s (operational) |
 | Trains                    | 2 × 2 coupled cars |
 | Capacity                  | 334 pax + 1 conductor |
 | Empty / loaded mass       | 32.3 t / 58.8 t   |
