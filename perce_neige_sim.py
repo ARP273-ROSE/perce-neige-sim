@@ -69,7 +69,7 @@ try:
 except ImportError:
     _QTMULTIMEDIA_OK = False
 
-VERSION = "1.5.0"
+VERSION = "1.5.1"
 APP_NAME = "Perce-Neige Simulator"
 
 
@@ -143,12 +143,12 @@ ALT_LOW = 2111.0            # lower station altitude (m)
 ALT_HIGH = 3032.0           # upper station altitude (m)
 DROP = ALT_HIGH - ALT_LOW   # 921 m
 
-# Regulator cap calibrated from the cockpit speedometer's observed peak
-# reading in the real run (10.1 m/s, funiculaire_cabine_hd.mp4). The
-# mechanical limit published by Von Roll is 12 m/s, but the operational
-# envelope the regulator actually programs is ~10.1 m/s — that's what
-# matches the true 7 min 54 s Val Claret → Grande Motte trip time.
-V_MAX = 10.1                # operational regulator cap (m/s)
+# Regulator cap is 12 m/s — the published Von Roll mechanical limit.
+# In the reference cockpit video the driver runs at a speed_cmd of
+# ~84 %, producing a cruise of 10.1 m/s ; that's the speed used below
+# to map the observed timestamps to slope-distance landmarks, but the
+# simulator itself still lets the driver push all the way to 12 m/s.
+V_MAX = 12.0                # hard cap regulator (m/s) — real value
 # Acceleration profile calibrated from video analysis of a real 12 m/s
 # run (YouTube FUNI284, 414 s total, filmed at upper station Aug 2013).
 # The run shows a cosine-ramp accel over ~64 s (2→12 m/s) with peak
@@ -157,9 +157,10 @@ V_MAX = 10.1                # operational regulator cap (m/s)
 # Accel target calibrated from cockpit observation : the train covers
 # 257 m between departure (1:43) and tunnel-shape change (2:25) = 42 s,
 # which fits a trapezoidal velocity profile with ~33 s of acceleration
-# to V_MAX = 10.1 m/s (covering 167 m) followed by 9 s of cruise at
-# 10.1 m/s (covering 91 m) → 258 m, matching the observation to 1 m.
-# That places the programmed accel target at 10.1 / 33 ≈ 0.306 m/s².
+# to the observed cruise of 10.1 m/s (covering 167 m) followed by 9 s
+# of cruise (covering 91 m) → 258 m, matching the observation to 1 m.
+# That places the programmed accel ramp at 10.1 / 33 ≈ 0.306 m/s² — a
+# property of the regulator independent of the target setpoint.
 A_TARGET = 0.30             # programmed accel target (m/s^2)
 A_MAX_REG = 0.32            # hard cap on motor-induced accel
 # Soft-start profile — real Von Roll speed programmer.
