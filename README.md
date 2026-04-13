@@ -110,6 +110,15 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 - **No telemetry** : nothing is sent automatically, nothing contacts a
   server without your explicit click
 
+### Real cabin ambient sound
+- Two long loops extracted from the real 10-minute HD cabin recording :
+  a 25 s slow/approach segment and a 60 s steady-cruise segment,
+  loudness-matched and crossfaded live based on the train's current
+  speed — stops sound like stops, cruise sounds like cruise, no more
+  11-second clip heard on repeat
+- Volume ceiling lifted to ~95 % so the tunnel rumble actually feels
+  like being inside the car
+
 ### Real on-board announcements
 - Authentic recordings from the actual Perce-Neige cabins, bundled under
   `sons/Funiculaire perce neige/`
