@@ -69,7 +69,7 @@ try:
 except ImportError:
     _QTMULTIMEDIA_OK = False
 
-VERSION = "1.5.1"
+VERSION = "1.5.2"
 APP_NAME = "Perce-Neige Simulator"
 
 
@@ -1818,7 +1818,11 @@ class SoundSystem:
         # the dict entries at their bundled location if present.
         bundled_amb_dir = project_dir / "sons" / "ambients"
         for key, filename in (("ambient_cruise", "ambient_cruise.wav"),
-                              ("ambient_slow", "ambient_slow.wav")):
+                              ("ambient_slow", "ambient_slow.wav"),
+                              ("door_buzzer_real", "door_buzzer.wav"),
+                              ("door_motion_real", "door_motion.wav"),
+                              ("crossing_real", "crossing.wav"),
+                              ("buzzer_real", "buzzer_upper.wav")):
             candidate = bundled_amb_dir / filename
             if candidate.exists():
                 self._ambient_wavs[key] = candidate
@@ -1884,6 +1888,21 @@ class SoundSystem:
             self._amb_loaded_path: str | None = None
             self._amb2_loaded_path: str | None = None
             self._fx_loaded_path: str | None = None
+            # Dedicated player for door-warning buzzer + door-motion SFX
+            # so they can overlap the announcement without ducking the
+            # departure buzzer on _fx_player.
+            self._door_player = QMediaPlayer()
+            self._door_audio = QAudioOutput()
+            self._door_audio.setVolume(0.80)
+            self._door_player.setAudioOutput(self._door_audio)
+            self._door_loaded_path: str | None = None
+            # Dedicated player for the passing-loop crossing whoosh —
+            # one-shot, plays over the ambient loops without ducking.
+            self._cross_player = QMediaPlayer()
+            self._cross_audio = QAudioOutput()
+            self._cross_audio.setVolume(0.85)
+            self._cross_player.setAudioOutput(self._cross_audio)
+            self._cross_loaded_path: str | None = None
         except Exception:
             self.enabled = False
 
@@ -1953,6 +1972,57 @@ class SoundSystem:
             self._fx_player.setSource(QUrl.fromLocalFile(spath))
             self._fx_loaded_path = spath
         self._fx_player.play()
+
+    def play_door_buzzer(self) -> None:
+        """Play the door-warning buzzer heard just before the leaves
+        start closing (real cabin recording, t=1:08→1:15 of the HD
+        ascent). Falls back silently if the extract is missing.
+        """
+        if not self.enabled or self.muted:
+            return
+        path = self._ambient_wavs.get("door_buzzer_real")
+        if path is None or not path.exists():
+            return
+        spath = str(path)
+        if self._door_loaded_path != spath:
+            self._door_player.setSource(QUrl.fromLocalFile(spath))
+            self._door_loaded_path = spath
+        self._door_player.setLoops(1)
+        self._door_player.play()
+
+    def play_door_motion(self) -> None:
+        """Play the door-motion sound (hydraulic whoosh + mechanical
+        clunk) heard as the leaves actually close — real cabin recording
+        t=1:15→1:22 of the HD ascent.
+        """
+        if not self.enabled or self.muted:
+            return
+        path = self._ambient_wavs.get("door_motion_real")
+        if path is None or not path.exists():
+            return
+        spath = str(path)
+        if self._door_loaded_path != spath:
+            self._door_player.setSource(QUrl.fromLocalFile(spath))
+            self._door_loaded_path = spath
+        self._door_player.setLoops(1)
+        self._door_player.play()
+
+    def play_crossing(self) -> None:
+        """Play the passing-loop crossing whoosh (real cabin recording
+        captured at the meet point around t=4:47 of the HD ascent).
+        One-shot, overlays the ambient without ducking.
+        """
+        if not self.enabled or self.muted:
+            return
+        path = self._ambient_wavs.get("crossing_real")
+        if path is None or not path.exists():
+            return
+        spath = str(path)
+        if self._cross_loaded_path != spath:
+            self._cross_player.setSource(QUrl.fromLocalFile(spath))
+            self._cross_loaded_path = spath
+        self._cross_player.setLoops(1)
+        self._cross_player.play()
 
     def play_departure_ambient(self) -> None:
         """Play the interior departure ramp-up sound (single shot).
@@ -2285,6 +2355,7 @@ class GameWidget(QWidget):
         self._last_panne_kind: str = ""
         self._welcome_played = False
         self._arrival_played = False
+        self._crossing_triggered = False
         # Mid-tunnel stop tracking — drives the "remise en route"
         # announcement when the driver restarts from an unplanned stop.
         self._was_stopped_mid_tunnel = False
@@ -2546,6 +2617,17 @@ class GameWidget(QWidget):
         self.sounds.tick(dt)
         # Ambient motor/rumble: fades with speed
         self.sounds.update_ambient(st.train.v)
+        # Passing-loop crossing whoosh : fire once when the two trains
+        # are within ~40 m of each other inside the loop, reset after
+        # they have separated again so it can re-fire on the return leg.
+        gap = abs(st.train.s - st.ghost_s)
+        in_loop = PASSING_START - 20.0 < st.train.s < PASSING_END + 20.0
+        if not self._crossing_triggered:
+            if in_loop and gap < 40.0 and abs(st.train.v) > 1.0:
+                self.sounds.play_crossing()
+                self._crossing_triggered = True
+        elif gap > 120.0:
+            self._crossing_triggered = False
 
         if st.mode == MODE_RUN:
             self._apply_keys(dt)
@@ -2605,10 +2687,16 @@ class GameWidget(QWidget):
             # Only at the upper station (Grande Motte, direction > 0).
             # When reversing back down to Val Claret we do not broadcast
             # the "zone de ski" welcome message.
+            # The 35 m platform + 20 m creep-in zone is a very slow 55 m
+            # final approach (~55 s at creep speed). The arrival "welcome
+            # to the ski zone" announcement must wait until the train is
+            # almost fully stopped — not when it's still 220 m away at
+            # 6 m/s — otherwise the message is over long before the
+            # passengers can actually exit. Trigger when |v| < 1 m/s.
             if (st.trip_started and not self._welcome_played
                     and tr_welcome.direction > 0
                     and dist_remain_welcome < 220.0
-                    and abs(tr_welcome.v) < 6.5):
+                    and abs(tr_welcome.v) < 1.0):
                 self.sounds.play("welcome", lang=st.ann_lang, cooldown=600.0)
                 self._welcome_played = True
             # Mid-tunnel stop tracking : flag is set after the train
@@ -2914,6 +3002,13 @@ class GameWidget(QWidget):
                 else:
                     tr.doors_timer = DOOR_CLOSE_TIME
                     self.sounds.play("doors_close", lang=st.ann_lang, cooldown=60.0)
+                    # Real door sequence : warning buzzer first, then the
+                    # hydraulic motion whoosh a beat later. Overlays the
+                    # announcement (different audio channel).
+                    self.sounds.play_door_buzzer()
+                    QTimer.singleShot(
+                        int(DOOR_CLOSE_TIME * 500),
+                        self.sounds.play_door_motion)
                     add_event(st, "doors",
                               "Doors closing...",
                               "Fermeture des portes...", "info")
@@ -3158,6 +3253,10 @@ class GameWidget(QWidget):
                 tr.doors_cmd = False
                 tr.doors_timer = DOOR_CLOSE_TIME
                 self.sounds.play("doors_close", lang=st.ann_lang, cooldown=60.0)
+                self.sounds.play_door_buzzer()
+                QTimer.singleShot(
+                    int(DOOR_CLOSE_TIME * 500),
+                    self.sounds.play_door_motion)
             # Departure signal: different sound per station.
             # Each WAV includes ~1.5 s of pre-buzzer ambient for a
             # smooth fade-in, so the countdown matches the full WAV.
@@ -4690,7 +4789,42 @@ class GameWidget(QWidget):
         # headlights — override the tunnel max_depth here so the driver
         # can see it well before arrival.
         bumper_max = 180.0  # real sight distance in a lit station vault
-        if 0.0 < d_to_end <= bumper_max:
+        # Line-of-sight test : the driver's tangent ray from the eye
+        # heads along the *local* slope. If the tunnel floor ahead
+        # crests above that ray at any intermediate distance, the
+        # bumper + beacon are hidden behind the hump and must NOT be
+        # drawn (otherwise they appear to float through the mountain,
+        # which is exactly the artefact reported on approach to the
+        # Glacier terminus where the grade eases from 30 % to 6 %).
+        los_clear = True
+        if d_to_end > 0.0:
+            alt0 = geom_at(view_s)[1]
+            eps = 1.0  # metres, slope delta for finite-diff
+            # Local tangent dalt/ds at the eye position (signed along
+            # travel direction). Matches heading, not ground gradient.
+            s_ahead_for_slope = max(0.0, min(LENGTH,
+                                             view_s + eps * tr.direction))
+            slope0 = ((geom_at(s_ahead_for_slope)[1] - alt0)
+                      / max(abs(s_ahead_for_slope - view_s), 1e-3))
+            # Sample intermediate floor altitudes ; if any crests above
+            # the tangent line (by more than driver eye half-height ~ 1 m
+            # to tolerate minor numerical ripple), mark occluded.
+            n_samples = 30
+            for i_s in range(1, n_samples):
+                ds = d_to_end * i_s / n_samples
+                s_i = view_s + ds * tr.direction
+                alt_i = geom_at(s_i)[1]
+                alt_tangent = alt0 + ds * slope0 * tr.direction
+                # Ascending : occlusion if actual alt exceeds tangent.
+                # Descending : symmetric — actual alt falls below tangent.
+                if tr.direction > 0:
+                    crest = alt_i - alt_tangent
+                else:
+                    crest = alt_tangent - alt_i
+                if crest > 1.0:
+                    los_clear = False
+                    break
+        if los_clear and 0.0 < d_to_end <= bumper_max:
             dE = d_to_end
             cxE, cyE, rE, _tsE, _nfE = _ring_xyr(dE)
             # Fully opaque wall — a concrete barrier doesn't fade with
@@ -6048,16 +6182,21 @@ class GameWidget(QWidget):
         # train half-length). Direction-aware so the readout counts UP
         # from 0 to the effective travel length in both climbing and
         # descending trips.
-        travel_total_m = STOP_S - START_S
+        # The real cockpit counter shows the full 3474 m slope length at
+        # arrival, not the 3422 m between train-centre start and stop —
+        # it measures the tunnel itself, not the usable travel span. We
+        # rescale so the readout runs from 0 to LENGTH exactly.
+        usable = STOP_S - START_S
         if tr.direction > 0:
-            travel_done_m = max(0.0, tr.s - START_S)
+            raw = max(0.0, tr.s - START_S)
             alt_start = geom_at(START_S)[1]
             alt_end = geom_at(STOP_S)[1]
         else:
-            travel_done_m = max(0.0, STOP_S - tr.s)
+            raw = max(0.0, STOP_S - tr.s)
             alt_start = geom_at(STOP_S)[1]
             alt_end = geom_at(START_S)[1]
-        travel_done_m = min(travel_done_m, travel_total_m)
+        travel_total_m = LENGTH
+        travel_done_m = min(LENGTH, raw * LENGTH / usable)
         alt_total = alt_end - alt_start               # +921 climb / −921 down
         alt_done = cabin_y_m - alt_start               # same sign as alt_total
         rows = [
