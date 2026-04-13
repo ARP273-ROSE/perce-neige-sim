@@ -3,7 +3,7 @@ Perce-Neige Simulator — Grande Motte funicular simulation (Tignes, France).
 
 Accurate PC remake of the TI-84 FUNIC program. Real specs sourced from
 Wikipedia (FR/EN), remontees-mecaniques.net and CFD (rolling stock maker):
-  - Length along slope : 3491 m
+  - Length along slope : 3474 m (cockpit counter reference)
   - Altitudes          : 2111 m (Val Claret) -> 3032 m (Glacier)
   - Vertical drop      : 921 m
   - Gradient           : 18% min, 30% max, ~27% average
@@ -69,7 +69,7 @@ try:
 except ImportError:
     _QTMULTIMEDIA_OK = False
 
-VERSION = "1.4.0"
+VERSION = "1.5.0"
 APP_NAME = "Perce-Neige Simulator"
 
 
@@ -124,19 +124,44 @@ def T(en: str, fr: str) -> str:
 # ---------------------------------------------------------------------------
 
 G = 9.80665                 # m/s^2
-LENGTH = 3491.0             # slope length (m) — Wikipedia / remontées-mec.
+# Slope length calibrated against the real cockpit-display reading at
+# arrival in Grande Motte (3474 m on the on-board distance counter,
+# direct observation from funiculaire_cabine_hd.mp4 at 9:37). Previous
+# value 3491 m came from public sources but is the published nominal
+# length of the route ; the counter's zero reference is offset a few
+# metres inside the lower station, producing the difference.
+LENGTH = 3474.0             # slope length (m) — cockpit counter reference
+# Square cut-and-cover sections at both ends of the tunnel. The middle
+# is bored with a TBM (round cross-section) ; the first ~257 m out of
+# Val Claret and the last ~54 m into Grande Motte are concrete-lined
+# rectangular galleries. Transitions observed at the exact cockpit
+# distance counter values t=2:25 (257 m outbound, tunnel becomes round)
+# and t=7:43 (tunnel returns to square, ≈ 54 m before platform stop).
+SQUARE_SECTION_LOW_END = 257.0
+SQUARE_SECTION_HIGH_START = 3420.0
 ALT_LOW = 2111.0            # lower station altitude (m)
 ALT_HIGH = 3032.0           # upper station altitude (m)
 DROP = ALT_HIGH - ALT_LOW   # 921 m
 
-V_MAX = 12.0                # hard cap regulator (m/s) — real value
+# Regulator cap calibrated from the cockpit speedometer's observed peak
+# reading in the real run (10.1 m/s, funiculaire_cabine_hd.mp4). The
+# mechanical limit published by Von Roll is 12 m/s, but the operational
+# envelope the regulator actually programs is ~10.1 m/s — that's what
+# matches the true 7 min 54 s Val Claret → Grande Motte trip time.
+V_MAX = 10.1                # operational regulator cap (m/s)
 # Acceleration profile calibrated from video analysis of a real 12 m/s
 # run (YouTube FUNI284, 414 s total, filmed at upper station Aug 2013).
 # The run shows a cosine-ramp accel over ~64 s (2→12 m/s) with peak
 # ~0.245 m/s^2, and a sine-ramp decel over ~50 s (12→1 m/s) with peak
 # ~0.34 m/s^2. Approach creep lasts ~30 s.
-A_TARGET = 0.22             # programmed accel target (m/s^2) — video-calibrated
-A_MAX_REG = 0.30            # hard cap on motor-induced accel
+# Accel target calibrated from cockpit observation : the train covers
+# 257 m between departure (1:43) and tunnel-shape change (2:25) = 42 s,
+# which fits a trapezoidal velocity profile with ~33 s of acceleration
+# to V_MAX = 10.1 m/s (covering 167 m) followed by 9 s of cruise at
+# 10.1 m/s (covering 91 m) → 258 m, matching the observation to 1 m.
+# That places the programmed accel target at 10.1 / 33 ≈ 0.306 m/s².
+A_TARGET = 0.30             # programmed accel target (m/s^2)
+A_MAX_REG = 0.32            # hard cap on motor-induced accel
 # Soft-start profile — real Von Roll speed programmer.
 # The train creeps out of the station at A_START then ramps up once
 # clear of the platform. Calibrated from yellow-pixel tracking of
@@ -226,43 +251,45 @@ REBOUND_OSC_AMP = 0.10           # m — residual oscillation amplitude
 REBOUND_OMEGA = 2.40             # rad/s — natural frequency (T ≈ 2.6 s)
 REBOUND_ZETA = 0.10              # damping ratio (2-3 visible oscillations)
 
-# Passing loop (middle section where tunnel splits in two) ~200 m long
-PASSING_START = 1640.0
-PASSING_END = 1843.0
+# Passing loop (middle section where tunnel splits in two) ~222 m long.
+# Positions calibrated from the real cockpit video : the loop entry is
+# at t=4:38 (175 s after departure) and exit at t=5:00 (197 s), which
+# at the cruise speed of 10.1 m/s places them at s=1601 m and s=1823 m.
+PASSING_START = 1601.0
+PASSING_END = 1823.0
 
 # Slope profile : (slope distance in m, gradient as fraction).
 # Technical sources: "pente douce" at start, "montée plus raide" in middle,
 # max gradient 30 %, average 26.7 %, altitude gain 932 m (2100→3032 m).
 # Integrates to 932 m ± 1 m.
 SLOPE_PROFILE: list[tuple[float, float]] = [
-    # Researched profile (remontees-mecaniques.net, Funiculaires-France,
-    # Von Roll 1990s tunnel funicular engineering) :
-    #  * Von Roll cabins have STEPPED INTERIOR FLOORS — the track stays
-    #    at its natural slope through both stations, there is NO flat
-    #    platform section (the floor steps absorb the slope so passengers
-    #    walk level). So station gradients match the tunnel at each end.
-    #  * Val Claret portal opens at ~15 % ("pente douce au départ"),
-    #    steepens to 30 % mid-tunnel.
-    #  * Grande Motte approach eases from 30 % → ~12 % over the last
-    #    ~400 m — pronounced gradient change clearly visible in driver
-    #    POV as the tunnel "flattens out" before the upper portal.
-    #  * Peak gradient 30 %, average 26.4 % (integrates to ≈ 921 m).
-    (0.0,    0.15),    # Val Claret platform (pente douce au départ)
-    (120.0,  0.19),    # gradient break out of lower station
-    (280.0,  0.25),
-    (500.0,  0.28),
-    (800.0,  0.29),
-    (1100.0, 0.30),
-    (1500.0, 0.30),
-    (1640.0, 0.29),    # slight ease into passing loop
-    (1843.0, 0.29),    # exiting passing loop
-    (2000.0, 0.30),
-    (2600.0, 0.30),    # steepest sustained section
-    (3050.0, 0.28),    # first gentle ease
-    (3180.0, 0.23),    # pronounced gradient break
-    (3300.0, 0.17),
-    (3400.0, 0.13),    # approach to Grande Motte
-    (3491.0, 0.12),    # Grande Motte platform gradient
+    # Profile calibrated from direct cockpit observation
+    # (funiculaire_cabine_hd.mp4), with event timestamps mapped to
+    # slope-distance via the known cruise speed of 10.1 m/s :
+    #   t=0:00  (s=0)     — departure, gentle gradient in square section
+    #   t=2:25  (s=257)   — tunnel becomes round (TBM) ; gradient still
+    #                       modest, ramp-up starts shortly after
+    #   t=2:50  (s=510)   — "la pente augmente" : ramp-up to max begins
+    #   t=3:30  (s=914)   — max sustained gradient reached
+    #   t=7:29  (s=3328)  — "la diminution de pente finale commence"
+    #   t=7:43  (s=3420)  — gradient reduction ends, tunnel becomes
+    #                       square again
+    #   t=9:37  (s=3474)  — arrival at Grande Motte platform
+    # Peak gradient 30 %, altitude rise integrates to ~921 m.
+    (0.0,    0.08),    # Val Claret portal (square tunnel), gentle start
+    (120.0,  0.12),
+    (257.0,  0.16),    # square→round transition
+    (400.0,  0.22),
+    (510.0,  0.25),    # "la pente augmente" (t=2:50)
+    (700.0,  0.28),
+    (914.0,  0.295),   # max sustained gradient (t=3:30)
+    (2400.0, 0.295),
+    (3000.0, 0.29),
+    (3200.0, 0.28),
+    (3328.0, 0.27),    # "diminution de pente finale commence" (t=7:29)
+    (3380.0, 0.18),
+    (3420.0, 0.10),    # "tunnel redevient carré" (t=7:43)
+    (3474.0, 0.06),    # Grande Motte platform (square tunnel)
 ]
 
 # Horizontal route plan : (slope distance, bearing in degrees).
@@ -272,17 +299,20 @@ SLOPE_PROFILE: list[tuple[float, float]] = [
 # loop (remontees-mecaniques.net technical description confirmed).
 # Net heading change ≈ 48° right (155° → 203°).
 CURVE_PROFILE: list[tuple[float, float]] = [
+    # Curve positions calibrated from cockpit video : at 10.1 m/s cruise,
+    # t=4:08 → 4:32 maps curve 1 to s=1297..1541 m, t=5:06 → 5:54 maps
+    # curve 2 to s=1884..2369 m. The straight passing-loop segment sits
+    # in between (PASSING_START=1601, PASSING_END=1823).
     (0.0,    155.0),   # SSE out of Val Claret station
-    (600.0,  155.0),   # straight lower section
-    (850.0,  165.0),   # curve 1 : right, peak curvature
-    (1100.0, 175.0),   # continuing curve 1
-    (1580.0, 179.0),   # end of curve 1 — entering straight (≈ due S)
-    (1640.0, 179.0),   # entering passing loop (straight)
-    (1843.0, 179.0),   # exiting passing loop (straight)
-    (2000.0, 179.0),   # start of curve 2
-    (2300.0, 189.0),   # curve 2 : right, peak curvature
-    (2650.0, 203.0),   # end of curve 2
-    (3491.0, 203.0),   # straight into upper station (SSW)
+    (1297.0, 155.0),   # straight lower section (t=0..4:08)
+    (1420.0, 165.0),   # curve 1 midpoint — peak curvature
+    (1541.0, 175.0),   # end of curve 1 (t=4:32, ≈ due S)
+    (1601.0, 175.0),   # entering passing loop (straight)
+    (1823.0, 175.0),   # exiting passing loop (straight)
+    (1884.0, 175.0),   # start of curve 2 (t=5:06)
+    (2125.0, 189.0),   # curve 2 midpoint — peak curvature
+    (2369.0, 203.0),   # end of curve 2 (t=5:54, SSW)
+    (3474.0, 203.0),   # straight into upper station
 ]
 
 # Tunnel lighting zones — (start_m, end_m) of DARK sections identified from
@@ -301,12 +331,15 @@ TUNNEL_DARK_ZONES: list[tuple[float, float]] = [
 ]
 
 # Tunnel cross-section transitions — (start_m, shape)
-# "horseshoe" near stations, "circular" (TBM bore) in the middle
+# Square cut-and-cover at both ends, round (TBM bore) in the middle.
+# Transition distances observed directly from the cockpit video (user
+# read the distance counter at the shape change) : round section runs
+# from s=257 m to s=3420 m.
 TUNNEL_SECTIONS: list[tuple[float, str]] = [
-    (0.0,    "horseshoe"),  # station exit
-    (100.0,  "circular"),   # TBM section begins (video t=110)
-    (3400.0, "horseshoe"),  # upper station approach (video t=460)
-    (3491.0, "horseshoe"),
+    (0.0,                       "horseshoe"),  # square cut-and-cover
+    (SQUARE_SECTION_LOW_END,    "circular"),   # TBM round bore (t=2:25)
+    (SQUARE_SECTION_HIGH_START, "horseshoe"),  # square again (t=7:43)
+    (LENGTH,                    "horseshoe"),
 ]
 
 
