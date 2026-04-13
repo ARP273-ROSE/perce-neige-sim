@@ -41,3 +41,8 @@ tmp_frames/
 
 # Progress / session scratch files
 _progress.json
+
+# PyInstaller build artefacts
+build/
+dist/
+*.manifest

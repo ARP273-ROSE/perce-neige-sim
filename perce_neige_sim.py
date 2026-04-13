@@ -66,8 +66,36 @@ try:
 except ImportError:
     _QTMULTIMEDIA_OK = False
 
-VERSION = "1.1.0"
+VERSION = "1.2.0"
 APP_NAME = "Perce-Neige Simulator"
+
+
+# ---------------------------------------------------------------------------
+# Resource paths — handle PyInstaller frozen mode transparently
+# ---------------------------------------------------------------------------
+
+def _resource_path(rel: str) -> Path:
+    """Return absolute path to a bundled read-only resource.
+
+    In PyInstaller frozen mode, data files are unpacked into the
+    temporary directory exposed via ``sys._MEIPASS``.  Otherwise we
+    resolve relative to this source file.
+    """
+    base = getattr(sys, "_MEIPASS", None)
+    if base:
+        return Path(base) / rel
+    return Path(__file__).resolve().parent / rel
+
+
+def _writable_dir() -> Path:
+    """Directory where the app may write data (crash reports, logs).
+
+    - Frozen .exe : next to the executable
+    - Source      : project directory
+    """
+    if getattr(sys, "frozen", False):
+        return Path(sys.executable).resolve().parent
+    return Path(__file__).resolve().parent
 
 # ---------------------------------------------------------------------------
 # I18N — bilingual FR / EN, auto-detected from system locale
@@ -451,6 +479,20 @@ class Train:
     # releases automatically when the trip starts (buzzer ends) or when
     # the emergency brake is released while stopped.
     maint_brake: bool = True
+    # --- Fault simulation state (persistent, modified by maybe_random_event
+    # and cleared by _reset_trip). Each field describes *how* a fault
+    # currently affects the live simulation, so the gauges/physics
+    # actually move when a fault is announced.
+    tension_fault_dan: float = 0.0    # extra daN added on cable tension (surge)
+    thermal_derate: float = 1.0       # motor power multiplier (1.0 = nominal)
+    motor_count: int = 3              # 3 active motors by default; 2 = degraded
+    speed_fault_cap: float = 999.0    # dynamic v_limit (m/s); high = no cap
+    slack_fault_dan: float = 0.0      # daN *subtracted* from cable tension
+    aux_power_fault: bool = False     # 400 V auxiliaries lost → motor cut
+    overspeed_tripped: bool = False   # latched after v > 1.1·V_MAX
+    door_fault: bool = False          # door sensor fault — must stop at station
+    parking_stuck: bool = False       # parking brake release failure
+    fault_timer: float = 0.0          # seconds until current fault auto-clears
 
     @property
     def pax(self) -> int:
@@ -549,7 +591,9 @@ class Physics:
 
         # Single hard speed limit — the real Perce-Neige passes the loop
         # at full 12 m/s, the loop is just a widening of the tunnel.
-        v_limit = V_MAX
+        # Dynamic speed cap : ice on the upper rails, degraded mode on
+        # 2/3 motors, or any other fault can lower the operational ceiling.
+        v_limit = min(V_MAX, tr.speed_fault_cap)
 
         # --- Speed command regulator ---------------------------------------
         # The driver sets a speed setpoint (speed_cmd, 0..1 = 0..V_MAX).
@@ -568,7 +612,11 @@ class Physics:
         # forces so the motor can overcome gravity at steep gradients
         # and the train can actually reach V_MAX on the cruise section.
         v_eff = max(abs(tr.v), 0.8)
-        f_motor_power_cap = P_MAX / v_eff             # P = F v
+        # Effective motor power after thermal derate and motor-count
+        # degradation (real Von Roll drive has 3 × 800 kW groups ; losing
+        # one leaves 1 600 kW = 67 % of nominal).
+        p_eff = P_MAX * tr.thermal_derate * (tr.motor_count / 3.0)
+        f_motor_power_cap = p_eff / v_eff             # P = F v
         f_motor_max = min(F_STALL, f_motor_power_cap)
         f_motor = tr.throttle * f_motor_max * tr.direction
 
@@ -582,6 +630,16 @@ class Physics:
         # leaves are shut. The parking brake is applied further down so the
         # train can't drift backwards under the gravity imbalance.
         if tr.doors_open:
+            f_motor = 0.0
+
+        # Auxiliary 400 V power failure : main drive contactor drops out.
+        # Parking brake hydraulics cut back in — train coasts / held.
+        if tr.aux_power_fault:
+            f_motor = 0.0
+
+        # Parking brake mechanical release failure : motor can still pull
+        # but the drum brake keeps the drive pulley locked.
+        if tr.parking_stuck:
             f_motor = 0.0
 
         # --- Gravity imbalance ---------------------------------------------
@@ -717,6 +775,28 @@ class Physics:
         t_inertia = max(0.0, m_heavy * a_travel)
         tension_n = t_gravity + t_friction + t_inertia
         tr.tension_dan = tension_n / 10.0
+        # Apply persistent fault offsets so the gauge actually moves
+        # when a cable surge or slack fault is announced.
+        tr.tension_dan += tr.tension_fault_dan
+        tr.tension_dan -= tr.slack_fault_dan
+        if tr.tension_dan < 0.0:
+            tr.tension_dan = 0.0
+
+        # Overspeed auto-trip (STRMTG regulation : any revenue funicular
+        # must cut traction + close emergency brake if v > 110 % V_MAX).
+        # Latched — the driver must acknowledge and reset.
+        if abs(tr.v) > 1.10 * V_MAX and not tr.overspeed_tripped:
+            tr.overspeed_tripped = True
+            tr.emergency = True
+            tr.speed_cmd = 0.0
+            tr.throttle = 0.0
+            add_event(
+                st,
+                "overspeed",
+                "OVERSPEED TRIP ! emergency brake engaged.",
+                "SURVITESSE ! frein d'urgence engagé.",
+                "alarm",
+            )
         tr.power_kw = max(0.0, (f_motor * tr.v) / 1000.0)
         # Smoothed display values — EMA with τ ≈ 0.3 s avoids flicker
         alpha = min(1.0, dt / 0.3)
@@ -935,41 +1015,173 @@ def add_event(st: GameState, key: str, en: str, fr: str, severity: str = "info")
         st.events.pop(0)
 
 
+def clear_fault(st: GameState) -> None:
+    """Clear every persistent fault effect on the active train.
+
+    Called when a fault's duration expires, when the driver resets the
+    overspeed trip, or when a new trip starts. Keeps latched safety
+    states (overspeed_tripped) in sync with the event log.
+    """
+    tr = st.train
+    tr.tension_fault_dan = 0.0
+    tr.thermal_derate = 1.0
+    tr.motor_count = 3
+    tr.speed_fault_cap = 999.0
+    tr.slack_fault_dan = 0.0
+    tr.aux_power_fault = False
+    tr.door_fault = False
+    tr.parking_stuck = False
+    tr.fault_timer = 0.0
+    st.panne_active = False
+    st.panne_kind = ""
+
+
 def maybe_random_event(st: GameState, dt: float) -> None:
+    """Fault scheduler — runs only in the 'panne' game mode.
+
+    Each tick the active fault's duration counts down and clears its
+    persistent effects when it expires. If no fault is currently active
+    we roll a small chance of starting a new one, with realistic
+    per-scenario parameters so every announced fault actually moves
+    the simulation (cable gauge jumps, motor power drops, speed caps
+    lower, etc.).
+    """
     if st.run_mode != "panne":
         return
+    tr = st.train
+
+    # Decay of active fault ---------------------------------------------
+    if st.panne_active and tr.fault_timer > 0.0:
+        tr.fault_timer -= dt
+        if tr.fault_timer <= 0.0:
+            cleared = st.panne_kind
+            add_event(
+                st,
+                "fault_cleared",
+                f"Fault cleared : {cleared}.",
+                f"Panne résolue : {cleared}.",
+                "info",
+            )
+            clear_fault(st)
+
+    # Don't roll another fault while one is still active or latched
+    # by the overspeed trip.
+    if st.panne_active or tr.overspeed_tripped:
+        return
+
     st.event_cooldown -= dt
     if st.event_cooldown > 0:
         return
     if random.random() > 0.0025:   # ~1 chance / 400 ticks at 60 Hz
         return
-    st.event_cooldown = 8.0
-    tr = st.train
-    kind = random.choice(["tension", "door", "thermal", "fire", "ice"])
+    st.event_cooldown = 10.0
+
+    kind = random.choice([
+        "tension", "door", "thermal", "fire", "ice",
+        "motor_degraded", "slack", "aux_power", "parking_stuck",
+    ])
     st.panne_active = True
     st.panne_kind = kind
+
     if kind == "tension":
-        add_event(st, "tension",
-                  "Cable tension spike ! reduce throttle.",
-                  "Pic de tension câble ! réduire la puissance.", "warn")
-        tr.tension_dan += 6000
+        # +6 500 daN surge (≈ 30 % of nominal) — pushes the gauge into
+        # the warning band and trips the "Câble" warning light.
+        tr.tension_fault_dan = 6500.0
+        tr.fault_timer = 22.0
+        add_event(
+            st, "tension",
+            "Cable tension spike +6 500 daN — reduce throttle.",
+            "Pic de tension câble +6 500 daN — réduire la puissance.",
+            "warn",
+        )
     elif kind == "door":
-        add_event(st, "door",
-                  "Door sensor fault — stop at next station.",
-                  "Défaut capteur porte — arrêt station suivante.", "warn")
+        tr.door_fault = True
+        tr.fault_timer = 35.0
+        add_event(
+            st, "door",
+            "Door sensor fault — stop at next station.",
+            "Défaut capteur porte — arrêt station suivante.",
+            "warn",
+        )
     elif kind == "thermal":
-        add_event(st, "thermal",
-                  "Motor over-temperature — power reduced.",
-                  "Surchauffe moteur — puissance réduite.", "warn")
+        # Motor windings 85 → 105 °C : protection derates to 55 % power.
+        tr.thermal_derate = 0.55
+        tr.speed_fault_cap = 8.0
+        tr.fault_timer = 80.0
+        add_event(
+            st, "thermal",
+            "Motor over-temperature — power 55 %, v≤8 m/s.",
+            "Surchauffe moteur — puissance 55 %, v≤8 m/s.",
+            "warn",
+        )
     elif kind == "fire":
-        add_event(st, "fire",
-                  "Smoke detected in tunnel ! EMERGENCY STOP.",
-                  "Fumée dans le tunnel ! ARRÊT D'URGENCE.", "alarm")
         tr.emergency = True
+        tr.fault_timer = 60.0
+        add_event(
+            st, "fire",
+            "Smoke detected in tunnel ! EMERGENCY STOP.",
+            "Fumée dans le tunnel ! ARRÊT D'URGENCE.",
+            "alarm",
+        )
     elif kind == "ice":
-        add_event(st, "ice",
-                  "Ice on upper rails — speed reduced.",
-                  "Givre sur voie haute — vitesse réduite.", "warn")
+        # Real Perce-Neige : upper 600 m can ice up in shoulder seasons.
+        # Regulator clamps to 4 m/s until the rails are swept.
+        tr.speed_fault_cap = 4.0
+        tr.fault_timer = 45.0
+        add_event(
+            st, "ice",
+            "Ice on upper rails — speed capped at 4 m/s.",
+            "Givre sur voie haute — vitesse limitée à 4 m/s.",
+            "warn",
+        )
+    elif kind == "motor_degraded":
+        # One of the three 800 kW DC motor groups dropped out — service
+        # continues on 2/3 motors (real Von Roll redundancy design).
+        tr.motor_count = 2
+        tr.speed_fault_cap = 9.0
+        tr.fault_timer = 90.0
+        add_event(
+            st, "motor_degraded",
+            "Motor group M3 fault — degraded mode 2/3, v≤9 m/s.",
+            "Groupe moteur M3 HS — mode dégradé 2/3, v≤9 m/s.",
+            "warn",
+        )
+    elif kind == "slack":
+        # Cable slack detected : momentary drop of tension (can happen
+        # when the heavier train decelerates abruptly and the elastic
+        # 3.5 km of 52 mm Fatzer unloads). Safety : if it persists the
+        # slack-cable switch trips the emergency.
+        tr.slack_fault_dan = 8000.0
+        tr.fault_timer = 12.0
+        add_event(
+            st, "slack",
+            "Cable slack detected −8 000 daN — brake smoothly.",
+            "Mou du câble détecté −8 000 daN — freiner doucement.",
+            "warn",
+        )
+    elif kind == "aux_power":
+        # Loss of 400 V auxiliaries : traction contactor drops, drum
+        # brake clamps. Train coasts then stops. Self-resolves when the
+        # backup feeder picks up.
+        tr.aux_power_fault = True
+        tr.fault_timer = 25.0
+        add_event(
+            st, "aux_power",
+            "400 V auxiliaries lost — traction cut, brake held.",
+            "Auxiliaires 400 V perdus — traction coupée, frein serré.",
+            "alarm",
+        )
+    elif kind == "parking_stuck":
+        # Parking (drum) brake release failure : motor can't move the
+        # pulley until the driver resets via the emergency-stop cycle.
+        tr.parking_stuck = True
+        tr.fault_timer = 18.0
+        add_event(
+            st, "parking_stuck",
+            "Parking brake release failure — cycle emergency stop.",
+            "Défaut déverrouillage frein parking — cycler arrêt d'urgence.",
+            "warn",
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -1504,7 +1716,7 @@ class GameWidget(QWidget):
                 random.uniform(1.0, 2.6),
             ])
         # Real on-board announcements
-        self.sounds = SoundSystem(Path(__file__).resolve().parent)
+        self.sounds = SoundSystem(_resource_path(""))
         self._last_panne_kind: str = ""
         self._welcome_played = False
         self._arrival_played = False
@@ -1643,6 +1855,17 @@ class GameWidget(QWidget):
         st.event_cooldown = 5.0
         st.panne_active = False
         st.panne_kind = ""
+        # Reset persistent fault effects so a new trip starts clean.
+        tr.tension_fault_dan = 0.0
+        tr.thermal_derate = 1.0
+        tr.motor_count = 3
+        tr.speed_fault_cap = 999.0
+        tr.slack_fault_dan = 0.0
+        tr.aux_power_fault = False
+        tr.overspeed_tripped = False
+        tr.door_fault = False
+        tr.parking_stuck = False
+        tr.fault_timer = 0.0
         st.finished = False
         st.rebound_timer = 0.0
         self._last_panne_kind = ""
@@ -1793,9 +2016,10 @@ class GameWidget(QWidget):
             if not st.finished:
                 if st.panne_active and st.panne_kind != self._last_panne_kind:
                     self._last_panne_kind = st.panne_kind
-                    if st.panne_kind in ("tension", "ice"):
+                    if st.panne_kind in ("tension", "ice", "slack"):
                         self.sounds.play_bilingual("minor_incident", cooldown=45.0)
-                    elif st.panne_kind in ("door", "thermal"):
+                    elif st.panne_kind in ("door", "thermal", "motor_degraded",
+                                            "aux_power", "parking_stuck"):
                         self.sounds.play_bilingual("tech_incident", cooldown=45.0)
                     elif st.panne_kind == "fire":
                         self.sounds.play_bilingual("dim_light", cooldown=45.0)
@@ -2045,6 +2269,16 @@ class GameWidget(QWidget):
             elif abs(tr.v) < 0.1:
                 tr.emergency = False
                 tr.maint_brake = False
+                # Cycling the emergency also clears the overspeed latch
+                # and resets a stuck parking brake release.
+                if tr.overspeed_tripped:
+                    tr.overspeed_tripped = False
+                    add_event(st, "overspeed_reset",
+                              "Overspeed trip acknowledged and reset.",
+                              "Survitesse acquittée et réarmée.", "info")
+                if tr.parking_stuck:
+                    tr.parking_stuck = False
+                    clear_fault(st)
                 add_event(st, "eurg",
                           "Emergency released — drum brake off",
                           "Urgence relâchée — frein tambour desserré",
@@ -4956,7 +5190,7 @@ class MainWindow(QMainWindow):
         self.resize(1360, 940)
         self.game = GameWidget(self)
         self.setCentralWidget(self.game)
-        ico = Path(__file__).parent / "logo.ico"
+        ico = _resource_path("logo.ico")
         if ico.exists():
             self.setWindowIcon(QIcon(str(ico)))
         # Help menu — auto-update + bug report entries
@@ -5058,38 +5292,30 @@ class MainWindow(QMainWindow):
         msg.setIcon(QMessageBox.Icon.Information)
         msg.setWindowTitle(self._tr("Update available", "Mise à jour disponible"))
         text = self._tr(
-            f"Version <b>{info.version}</b> is available.<br>"
-            f"You run v{VERSION}.<br><br>Download and install now?",
-            f"La version <b>{info.version}</b> est disponible.<br>"
-            f"Vous utilisez v{VERSION}.<br><br>"
-            "Télécharger et installer maintenant ?")
+            f"Version <b>{info.version}</b> is available.<br><br>"
+            "Install now?",
+            f"La version <b>{info.version}</b> est disponible.<br><br>"
+            "Installer maintenant ?")
         msg.setText(text)
         if info.body:
             msg.setDetailedText(info.body[:4000])
         btn_ok = msg.addButton(
-            self._tr("Install && restart", "Installer && redémarrer"),
+            self._tr("Install", "Installer"),
             QMessageBox.ButtonRole.AcceptRole)
         msg.addButton(
-            self._tr("Skip", "Ignorer"),
+            self._tr("Later", "Plus tard"),
             QMessageBox.ButtonRole.RejectRole)
         msg.exec()
         if msg.clickedButton() is not btn_ok:
             return
         try:
-            autoupdate.download_and_install(
-                info, Path(__file__).resolve().parent)
+            autoupdate.download_and_install(info, _writable_dir())
         except Exception as e:
             QMessageBox.critical(
                 self,
                 self._tr("Update failed", "Échec de la mise à jour"),
                 self._tr(f"Error : {e}", f"Erreur : {e}"))
             return
-        QMessageBox.information(
-            self,
-            self._tr("Update installed", "Mise à jour installée"),
-            self._tr(
-                "The application will restart now.",
-                "L'application va redémarrer."))
         autoupdate.relaunch_app()
 
     def _manual_check_update(self) -> None:
@@ -5108,7 +5334,7 @@ class MainWindow(QMainWindow):
             import bugreport
         except Exception:
             return
-        project_dir = Path(__file__).resolve().parent
+        project_dir = _writable_dir()
         reports = bugreport.list_pending_reports(project_dir)
         if not reports:
             return
@@ -5211,8 +5437,7 @@ def main() -> None:
     # crashes so the next launch can offer to open a GitHub issue.
     try:
         import bugreport
-        bugreport.install_crash_handler(
-            Path(__file__).resolve().parent, VERSION)
+        bugreport.install_crash_handler(_writable_dir(), VERSION)
     except Exception:
         pass
     win = MainWindow()
