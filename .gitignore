@@ -11,6 +11,8 @@ sons/videos/
 
 # WAV cache (generated at runtime)
 *.wav
+# …except the shipped real-ambient extracts (bundled in the .exe)
+!sons/ambients/*.wav
 
 # Temp/debug scripts
 _probe.py

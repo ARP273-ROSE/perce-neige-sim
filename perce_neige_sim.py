@@ -69,7 +69,7 @@ try:
 except ImportError:
     _QTMULTIMEDIA_OK = False
 
-VERSION = "1.3.0"
+VERSION = "1.4.0"
 APP_NAME = "Perce-Neige Simulator"
 
 
@@ -1543,6 +1543,13 @@ def _plan_ambient_paths(dest_dir: Path) -> dict[str, Path]:
         ("departure_ambient", "departure_ambient.wav"),
     ):
         out[key] = dest_dir / name
+    # Real cabin-interior ambient segments extracted from the
+    # 10-minute HD cabin recording. Shipped inside the .exe under
+    # sons/ambients/, loaded here by _resolve_bundled_ambients
+    # later — the Path values below are placeholders that the
+    # resolver will overwrite with the real bundled locations.
+    out["ambient_cruise"] = dest_dir / "ambient_cruise.wav"
+    out["ambient_slow"] = dest_dir / "ambient_slow.wav"
     return out
 
 
@@ -1772,6 +1779,15 @@ class SoundSystem:
         except OSError:
             pass
         self._ambient_wavs = _plan_ambient_paths(wav_dir)
+        # Real cabin-ambient segments (cruise + slow) are shipped inside
+        # the application (sons/ambients/) rather than synthesised. Point
+        # the dict entries at their bundled location if present.
+        bundled_amb_dir = project_dir / "sons" / "ambients"
+        for key, filename in (("ambient_cruise", "ambient_cruise.wav"),
+                              ("ambient_slow", "ambient_slow.wav")):
+            candidate = bundled_amb_dir / filename
+            if candidate.exists():
+                self._ambient_wavs[key] = candidate
         self._wav_gen_thread = threading.Thread(
             target=_generate_ambient_wavs,
             args=(wav_dir,),
@@ -1813,15 +1829,26 @@ class SoundSystem:
             # block here if WAV generation is still running on the
             # background thread.
             self._horn_loaded = False
-            # Ambient player (loops motor hum while train moves)
-            self._amb_player = QMediaPlayer()
+            # Two parallel ambient loops (slow + cruise) — crossfaded
+            # by update_ambient so the mix matches the current speed
+            # instead of a single 11-second loop heard over and over.
+            # Each loop has its own QMediaPlayer + QAudioOutput.
+            self._amb_player = QMediaPlayer()          # slow/approach loop
             self._amb_audio = QAudioOutput()
-            self._amb_audio.setVolume(0.0)  # faded in/out dynamically
+            self._amb_audio.setVolume(0.0)
             self._amb_player.setAudioOutput(self._amb_audio)
             self._amb_player.setLoops(QMediaPlayer.Loops.Infinite)
+            self._amb2_player = QMediaPlayer()         # cruise loop
+            self._amb2_audio = QAudioOutput()
+            self._amb2_audio.setVolume(0.0)
+            self._amb2_player.setAudioOutput(self._amb2_audio)
+            self._amb2_player.setLoops(QMediaPlayer.Loops.Infinite)
             self._amb_playing = False
+            self._amb2_playing = False
             self._amb_vol_target = 0.0
+            self._amb2_vol_target = 0.0
             self._amb_loaded_path: str | None = None
+            self._amb2_loaded_path: str | None = None
             self._fx_loaded_path: str | None = None
         except Exception:
             self.enabled = False
@@ -1945,6 +1972,11 @@ class SoundSystem:
             self._amb_audio.setVolume(self._pre_duck_amb * 0.30)
         except Exception:
             pass
+        try:
+            self._pre_duck_amb2 = self._amb2_audio.volume()
+            self._amb2_audio.setVolume(self._pre_duck_amb2 * 0.30)
+        except Exception:
+            pass
         self._horn_player.play()
 
     def stop_horn(self) -> None:
@@ -1961,11 +1993,15 @@ class SoundSystem:
                 self._fx_audio.setVolume(self._pre_duck_fx)
             except Exception:
                 pass
-            # Ambient volume target is driven dynamically by speed, so
-            # let update_ambient reassert it on the next tick instead
-            # of restoring the pre-duck snapshot.
+            # Ambient volume targets are driven dynamically by speed,
+            # so let update_ambient reassert them on the next tick
+            # instead of restoring the pre-duck snapshot.
             try:
                 self._amb_audio.setVolume(self._pre_duck_amb)
+            except Exception:
+                pass
+            try:
+                self._amb2_audio.setVolume(self._pre_duck_amb2)
             except Exception:
                 pass
 
@@ -1981,35 +2017,89 @@ class SoundSystem:
             self._player.stop()
 
     def update_ambient(self, speed: float) -> None:
-        """Fade real ambient sound in/out based on train speed."""
+        """Crossfade real-cabin ambient loops based on speed.
+
+        Two parallel loops run : a 25-second slow/approach segment and
+        a 60-second steady-cruise segment, both extracted from the real
+        10-minute HD cabin recording. The mix is driven by the current
+        speed so that low speeds sound like the start-up/arrival phases
+        and cruise sounds exactly like cruise, instead of hearing the
+        same 11-second clip on repeat.
+
+        Volume model (both loops summed, then scaled by |v|) :
+          - |v| below 1 m/s      → both fade to zero (stationary silence)
+          - |v| between 1..6 m/s → slow loop dominant, cruise fades in
+          - |v| above 6 m/s      → cruise dominant, slow fades out
+          - Peak ceiling ~0.95 so it actually feels like being inside the
+            cabin (the old 0.35 ceiling was the weak-ambient complaint).
+        """
         if not self.enabled or self.muted:
             if self._amb_playing:
                 self._amb_player.stop()
                 self._amb_playing = False
+            if self._amb2_playing:
+                self._amb2_player.stop()
+                self._amb2_playing = False
             return
-        # Target volume proportional to speed (silent at stop, max at V_MAX)
-        v_norm = min(abs(speed) / 10.0, 1.0)
-        self._amb_vol_target = v_norm * 0.35  # max 35% volume
-        # Start looping ambient if not already
-        if v_norm > 0.02 and not self._amb_playing:
-            # Prefer real audio extracted from video
-            real = self._ambient_wavs.get("ambient_real")
-            path = real if (real and real.exists()) else self._ambient_wavs.get("rumble")
-            if path and path.exists():
-                spath = str(path)
+        v = abs(speed)
+        # Cruise-dominance factor : 0 at v=1 m/s, 1 at v=7 m/s and above.
+        lo, hi = 1.0, 7.0
+        cruise_mix = 0.0 if v <= lo else (
+            1.0 if v >= hi else (v - lo) / (hi - lo))
+        # Overall scale from speed : silent when halted, full at V_MAX.
+        v_norm = min(v / 10.0, 1.0)
+        overall = v_norm * 0.95  # new ceiling (was 0.35)
+        # Individual targets. A small overlap floor (0.12) on the slow
+        # loop when cruising adds grit so the cruise isn't clinical.
+        slow_mix = (1.0 - cruise_mix) + 0.12 * cruise_mix
+        self._amb_vol_target = overall * slow_mix
+        self._amb2_vol_target = overall * cruise_mix
+
+        slow_path = self._ambient_wavs.get("ambient_slow")
+        cruise_path = self._ambient_wavs.get("ambient_cruise")
+        # Legacy fallback if bundled extracts are missing
+        if not (slow_path and slow_path.exists()):
+            slow_path = self._ambient_wavs.get("ambient_real")
+        if not (slow_path and slow_path.exists()):
+            slow_path = self._ambient_wavs.get("rumble")
+        if not (cruise_path and cruise_path.exists()):
+            cruise_path = slow_path
+
+        moving = v_norm > 0.02
+
+        # Start / stop slow loop
+        if moving and not self._amb_playing:
+            if slow_path and slow_path.exists():
+                spath = str(slow_path)
                 if self._amb_loaded_path != spath:
                     self._amb_player.setSource(QUrl.fromLocalFile(spath))
                     self._amb_loaded_path = spath
                 self._amb_player.play()
                 self._amb_playing = True
-        elif v_norm <= 0.01 and self._amb_playing:
+        elif not moving and self._amb_playing:
             self._amb_player.stop()
             self._amb_playing = False
-        # Smooth volume ramp
-        cur = self._amb_audio.volume()
-        diff = self._amb_vol_target - cur
-        if abs(diff) > 0.005:
-            self._amb_audio.setVolume(cur + diff * 0.15)
+
+        # Start / stop cruise loop
+        if moving and not self._amb2_playing:
+            if cruise_path and cruise_path.exists():
+                spath = str(cruise_path)
+                if self._amb2_loaded_path != spath:
+                    self._amb2_player.setSource(QUrl.fromLocalFile(spath))
+                    self._amb2_loaded_path = spath
+                self._amb2_player.play()
+                self._amb2_playing = True
+        elif not moving and self._amb2_playing:
+            self._amb2_player.stop()
+            self._amb2_playing = False
+
+        # Smooth volume ramps (~150 ms to target at 60 fps)
+        for audio, target in ((self._amb_audio, self._amb_vol_target),
+                              (self._amb2_audio, self._amb2_vol_target)):
+            cur = audio.volume()
+            diff = target - cur
+            if abs(diff) > 0.005:
+                audio.setVolume(cur + diff * 0.15)
 
     def tick(self, dt: float) -> None:
         for k in list(self._cooldowns.keys()):
@@ -2022,7 +2112,9 @@ class SoundSystem:
             self._fx_player.stop()
             self._horn_player.stop()
             self._amb_player.stop()
+            self._amb2_player.stop()
             self._amb_playing = False
+            self._amb2_playing = False
             self._queue.clear()
         return self.muted
 
@@ -2033,7 +2125,9 @@ class SoundSystem:
             self._fx_player.stop()
             self._horn_player.stop()
             self._amb_player.stop()
+            self._amb2_player.stop()
             self._amb_playing = False
+            self._amb2_playing = False
 
     def reset(self) -> None:
         self._queue.clear()
@@ -2043,7 +2137,9 @@ class SoundSystem:
             self._fx_player.stop()
             self._horn_player.stop()
             self._amb_player.stop()
+            self._amb2_player.stop()
             self._amb_playing = False
+            self._amb2_playing = False
 
     # ----- internals -------------------------------------------------------
 
@@ -3629,7 +3725,13 @@ class GameWidget(QWidget):
         # Render : linear ramp over the real switch transition length
         # (~15 m of actual rail divergence) at both ends.
         TRACK_SEP_M = 3.0         # centre-to-centre track separation (m)
-        SWITCH_RAMP_M = 15.0      # Abt switch divergence zone (m)
+        # Abt switch divergence zone. Real turnouts use a lead curve +
+        # clothoid transition so lateral acceleration ramps up and down
+        # smoothly. We emulate that with a 5th-order smootherstep
+        # (6t⁵-15t⁴+10t³) which is C² continuous — zero first AND second
+        # derivative at both ends — so the train has no jerk at the
+        # switch entry / exit.
+        SWITCH_RAMP_M = 22.0
         # Own side sign : physical side the main train takes through the
         # Abt loop. Defined early (also used later for rail drawing) so
         # _plan_local can shift the driver onto his own track — otherwise
@@ -3637,19 +3739,29 @@ class GameWidget(QWidget):
         # straddling both tracks during the passing manoeuvre.
         own_side_sign = -1 if ((tr.number == 1) == (tr.direction > 0)) else +1
 
-        def _loop_sep(ts: float) -> float:
-            if PASSING_START <= ts <= PASSING_END:
-                # Smooth step at the very edges so the walls don't kink
-                edge = 2.0
-                if ts - PASSING_START < edge:
-                    return (ts - PASSING_START) / edge
-                if PASSING_END - ts < edge:
-                    return (PASSING_END - ts) / edge
+        def _smootherstep(t: float) -> float:
+            if t <= 0.0:
+                return 0.0
+            if t >= 1.0:
                 return 1.0
-            if PASSING_START - SWITCH_RAMP_M < ts < PASSING_START:
-                return (ts - (PASSING_START - SWITCH_RAMP_M)) / SWITCH_RAMP_M
-            if PASSING_END < ts < PASSING_END + SWITCH_RAMP_M:
-                return 1.0 - (ts - PASSING_END) / SWITCH_RAMP_M
+            return t * t * t * (t * (t * 6.0 - 15.0) + 10.0)
+
+        def _loop_sep(ts: float) -> float:
+            # Full divergence only in the flat core of the loop ; the
+            # switch transition is centered on each loop end, half inside
+            # and half outside, so the rail curve enters the loop already
+            # parallel to the centerline and stays parallel throughout.
+            half = SWITCH_RAMP_M * 0.5
+            if ts <= PASSING_START - half:
+                return 0.0
+            if ts < PASSING_START + half:
+                return _smootherstep(
+                    (ts - (PASSING_START - half)) / SWITCH_RAMP_M)
+            if ts <= PASSING_END - half:
+                return 1.0
+            if ts < PASSING_END + half:
+                return _smootherstep(
+                    1.0 - (ts - (PASSING_END - half)) / SWITCH_RAMP_M)
             return 0.0
 
         # --- True plan-view pinhole projection for curves ---------------
