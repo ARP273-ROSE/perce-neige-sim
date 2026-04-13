@@ -24,8 +24,10 @@ from __future__ import annotations
 import locale
 import math
 import os
+import tempfile
 import random
 import sys
+import threading
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -46,6 +48,7 @@ from PyQt6.QtGui import (
     QPolygonF,
     QRadialGradient,
     QTransform,
+    QWheelEvent,
 )
 from PyQt6.QtWidgets import (
     QApplication,
@@ -66,7 +69,7 @@ try:
 except ImportError:
     _QTMULTIMEDIA_OK = False
 
-VERSION = "1.2.0"
+VERSION = "1.3.0"
 APP_NAME = "Perce-Neige Simulator"
 
 
@@ -172,12 +175,23 @@ CAR_DIAM_M = 3.60               # cylindrical diameter
 # Platform / station geometry
 PLATFORM_LEN = 35.0             # platform slope length (m)
 # Positions of the train *centre* at rest in each station :
-START_S = TRAIN_HALF            # back of train flush with s=0
-STOP_S = LENGTH - TRAIN_HALF    # front of train flush with s=LENGTH
+# Real Von Roll / Perce-Neige procedure: the train stops with ≈ 10 m
+# clearance between the leading cabin nose and the concrete bumper
+# wall. Never docks flush — leaves room for cable slack, emergency
+# inspection, AND the visual perspective the driver expects (with
+# only 3 m eye setback from the nose, a 5 m clearance gave only 8 m
+# of forward view at arrival, collapsing the perspective). 10 m ≈
+# real sight distance seen in Perce-Neige cab videos at Grande Motte
+# and Val Claret termini (back wall visible a comfortable way off).
+BUMPER_CLEAR = 10.0
+START_S = TRAIN_HALF + BUMPER_CLEAR     # back of train 10 m past s=0
+STOP_S = LENGTH - TRAIN_HALF - BUMPER_CLEAR  # front 10 m before s=LENGTH
 
 # Approach profile — the train decelerates to CREEP_V and maintains it
 # from CREEP_START up to STOP_S, entering the station quietly.
-CREEP_V = 1.0                   # creep speed on platform approach (m/s)
+CREEP_V = 0.5                   # creep speed on platform approach (m/s)
+                                # Real Von Roll procedural creep is 0.3-0.5
+                                # m/s — platform docking always < 1 m/s.
 # Front reaches 1 m/s when 20 m before the platform start, then rolls
 # at 1 m/s through the 20 m approach + 35 m platform = 55 m.
 CREEP_DIST = 20.0 + PLATFORM_LEN        # 55 m measured in centre-position
@@ -194,13 +208,23 @@ MU_ROLL = 0.0025                # rail rolling resistance
 DOOR_CLOSE_TIME = 3.0           # s (fermeture)
 DOOR_OPEN_TIME = 2.0            # s (ouverture)
 
-# Cable elasticity rebound — damped oscillation when the train stops.
-# Measured from video imkfB1YDoAA (arrival at Val Claret) and validated
-# by cable stretch physics (E≈100 GPa, L=3491 m, A=π×26² mm²).
-# Model : x(t) = A·exp(-ζωt)·sin(ωt)   (spring-damper)
-REBOUND_AMP = 0.04              # m — initial oscillation amplitude (~4 cm)
-REBOUND_OMEGA = 1.6             # rad/s — natural frequency (T ≈ 3.9 s)
-REBOUND_ZETA = 0.05             # damping ratio (3-4 visible oscillations)
+# Cable elasticity rebound — visible cable-stretch release + residual damped
+# oscillation when the train stops. Derived from cable stiffness physics :
+# Fatzer 52 mm, E ≈ 100 GPa, A ≈ π·26² mm² = 2124 mm², L = 3491 m → k ≈ 60.8
+# kN/m. A 58 t loaded train creates ~16.5 kN of travel-direction force on
+# the cable at 30 % grade, so the cable is stretched ~0.27 m under that load.
+# During the approach + brake phase, the load shifts — the bull-wheel motor
+# pulls up to ~100 kN peak, adding ~1.0 m of additional stretch. When the
+# train stops and the motor shuts off, the stretch is released over ~1-2 s,
+# causing the OPPOSITE train (ghost counterweight) to creep forward along
+# the cable by a visible amount — measured at ≈1.1 m over 2 s on video.
+# Model : x(t) = A_creep · (1 - exp(-t/τ)) + A_osc · exp(-ζωt) · sin(ωt)
+REBOUND_GHOST_AMP = 1.10         # m — release creep for opposite train
+REBOUND_MAIN_AMP = 0.22          # m — residual creep on the main train
+REBOUND_TAU = 0.70               # s — creep time constant (1/e); ~95 % at 2 s
+REBOUND_OSC_AMP = 0.10           # m — residual oscillation amplitude
+REBOUND_OMEGA = 2.40             # rad/s — natural frequency (T ≈ 2.6 s)
+REBOUND_ZETA = 0.10              # damping ratio (2-3 visible oscillations)
 
 # Passing loop (middle section where tunnel splits in two) ~200 m long
 PASSING_START = 1640.0
@@ -211,20 +235,34 @@ PASSING_END = 1843.0
 # max gradient 30 %, average 26.7 %, altitude gain 932 m (2100→3032 m).
 # Integrates to 932 m ± 1 m.
 SLOPE_PROFILE: list[tuple[float, float]] = [
-    (0.0,    0.15),    # gentle release from Val Claret station
-    (150.0,  0.20),    # transition to steeper climb
-    (400.0,  0.24),
-    (800.0,  0.28),
-    (1250.0, 0.29),
-    (1500.0, 0.29),    # entering first right curve
-    (1640.0, 0.29),    # entering passing loop
+    # Researched profile (remontees-mecaniques.net, Funiculaires-France,
+    # Von Roll 1990s tunnel funicular engineering) :
+    #  * Von Roll cabins have STEPPED INTERIOR FLOORS — the track stays
+    #    at its natural slope through both stations, there is NO flat
+    #    platform section (the floor steps absorb the slope so passengers
+    #    walk level). So station gradients match the tunnel at each end.
+    #  * Val Claret portal opens at ~15 % ("pente douce au départ"),
+    #    steepens to 30 % mid-tunnel.
+    #  * Grande Motte approach eases from 30 % → ~12 % over the last
+    #    ~400 m — pronounced gradient change clearly visible in driver
+    #    POV as the tunnel "flattens out" before the upper portal.
+    #  * Peak gradient 30 %, average 26.4 % (integrates to ≈ 921 m).
+    (0.0,    0.15),    # Val Claret platform (pente douce au départ)
+    (120.0,  0.19),    # gradient break out of lower station
+    (280.0,  0.25),
+    (500.0,  0.28),
+    (800.0,  0.29),
+    (1100.0, 0.30),
+    (1500.0, 0.30),
+    (1640.0, 0.29),    # slight ease into passing loop
     (1843.0, 0.29),    # exiting passing loop
-    (2000.0, 0.29),    # entering second right curve
-    (2400.0, 0.30),    # steepest section
-    (2800.0, 0.30),
-    (3100.0, 0.26),    # easing toward upper station
-    (3300.0, 0.20),
-    (3491.0, 0.12),    # slow approach to Panoramic station
+    (2000.0, 0.30),
+    (2600.0, 0.30),    # steepest sustained section
+    (3050.0, 0.28),    # first gentle ease
+    (3180.0, 0.23),    # pronounced gradient break
+    (3300.0, 0.17),
+    (3400.0, 0.13),    # approach to Grande Motte
+    (3491.0, 0.12),    # Grande Motte platform gradient
 ]
 
 # Horizontal route plan : (slope distance, bearing in degrees).
@@ -288,6 +326,24 @@ def _interp(table: list[tuple[float, float]], s: float) -> float:
 
 def gradient_at(s: float) -> float:
     return _interp(SLOPE_PROFILE, s)
+
+
+def slope_angle_at(s: float) -> float:
+    """Slope ANGLE (radians) at distance s. Positive = uphill."""
+    return math.atan(gradient_at(s))
+
+
+def slope_curvature_at(s: float) -> float:
+    """Vertical curvature = d(angle)/ds in rad/m at distance s.
+
+    Positive = track pitches UP relative to current heading (compression
+    of a valley → hill transition). Negative = pitches DOWN (crest).
+    Used in the F4 cabin view so the tunnel ahead visibly tilts up or
+    down as the real Perce-Neige slope profile changes from 15 % near
+    Val Claret → 30 % mid-tunnel → 12 % easing into Grande Motte.
+    """
+    ds = 5.0
+    return (slope_angle_at(s + ds) - slope_angle_at(s - ds)) / (2.0 * ds)
 
 
 def heading_at(s: float) -> float:
@@ -437,6 +493,13 @@ class Train:
     # (0.0 = 0 m/s, 1.0 = 12 m/s). The internal motor throttle is derived
     # from this by the regulator so the train smoothly tracks the setpoint.
     speed_cmd: float = 0.0      # 0..1 — driver's commanded speed percentage
+    # Slew-limited "effective" setpoint actually followed by the regulator.
+    # Real Von Roll drives ramp the internal setpoint at ~0.25 m/s² when the
+    # driver turns the speed-command knob — you never get an instantaneous
+    # velocity change no matter how fast the knob is spun. speed_cmd_eff
+    # tracks speed_cmd at a fixed rate so abrupt knob movements produce a
+    # realistic smooth deceleration/acceleration instead of a hard "pile".
+    speed_cmd_eff: float = 0.0
     throttle: float = 0.0       # 0..1 — internal motor demand (set by regulator)
     brake: float = 0.0          # 0..1 normal
     emergency: bool = False
@@ -469,6 +532,8 @@ class Train:
     # Cached values
     tension_dan: float = 0.0
     power_kw: float = 0.0
+    regen_kw: float = 0.0        # recovered generator power on descent
+    inrush_timer: float = 0.0    # remaining time (s) of startup inrush boost
     # Smoothed display values (EMA τ ≈ 0.3 s) to avoid flicker
     tension_dan_disp: float = 0.0
     power_kw_disp: float = 0.0
@@ -541,6 +606,7 @@ class GameState:
     panne_kind: str = ""
     finished: bool = False
     rebound_timer: float = 0.0  # cable elasticity rebound (after arrival)
+    rebound_amp_m: float = 0.0  # actual cable stretch (m) captured at arrival
     best_time: float | None = None
     # Trip direction selection from the title screen.
     # direction = +1 (Val Claret → Glacier, climb) or -1 (Glacier → Val Claret).
@@ -549,6 +615,10 @@ class GameState:
     selected_direction: int = +1
     selected_train: int = 1
     vigilance_enabled: bool = False  # dead-man vigilance off by default
+    # Announcement language for the F2 console — one of fr / en / it / de / es.
+    # Independent from the UI language so the driver can play any translation
+    # of any announcement on demand.
+    ann_lang: str = "fr"
 
 
 class Physics:
@@ -591,8 +661,9 @@ class Physics:
 
         # Single hard speed limit — the real Perce-Neige passes the loop
         # at full 12 m/s, the loop is just a widening of the tunnel.
-        # Dynamic speed cap : ice on the upper rails, degraded mode on
-        # 2/3 motors, or any other fault can lower the operational ceiling.
+        # Dynamic speed cap : wet rails (condensation/ingress), degraded
+        # mode on 2/3 motors, or any other fault lowers the operational
+        # ceiling.
         v_limit = min(V_MAX, tr.speed_fault_cap)
 
         # --- Speed command regulator ---------------------------------------
@@ -616,6 +687,18 @@ class Physics:
         # degradation (real Von Roll drive has 3 × 800 kW groups ; losing
         # one leaves 1 600 kW = 67 % of nominal).
         p_eff = P_MAX * tr.thermal_derate * (tr.motor_count / 3.0)
+        # Startup inrush : DC drives typically draw ~4.5× nominal during
+        # the first ~1.2 s of acceleration from standstill while the
+        # armature magnetizes and shaft inertia is overcome. Re-arm only
+        # when the train is effectively stopped and the driver commands
+        # traction — prevents a second spike mid-trip.
+        if abs(tr.v) < 0.2 and tr.throttle > 0.2 and tr.inrush_timer <= 0.0:
+            tr.inrush_timer = 1.2
+        if tr.inrush_timer > 0.0:
+            tr.inrush_timer = max(0.0, tr.inrush_timer - dt)
+            # Boost tapers from 4.5× down to 1.0× as the timer expires.
+            boost = 1.0 + 3.5 * (tr.inrush_timer / 1.2)
+            p_eff *= boost
         f_motor_power_cap = p_eff / v_eff             # P = F v
         f_motor_max = min(F_STALL, f_motor_power_cap)
         f_motor = tr.throttle * f_motor_max * tr.direction
@@ -660,6 +743,20 @@ class Physics:
         # Emergency brake ramps over ~0.4 s so it's brutal but not an
         # instantaneous jerk step (real rail brakes engage mechanically
         # but still through a pneumatic/spring release delay).
+        #
+        # Physics note — the emergency brake force here is the PARACHUTE
+        # friction on the rail head (approximately constant). The NET
+        # deceleration felt by the driver is NOT constant because gravity
+        # works with or against the brake :
+        #   - ascending main : gravity + brake decelerate together → fast
+        #     stop (~10 m on 30 % grade)
+        #   - descending main : gravity fights the brake → slow stop
+        #     (~30 m on 30 % grade)
+        # The cable-linked counterweight (ghost) naturally absorbs part
+        # of the energy when it is intact, which is why a real funicular
+        # with intact cable stops markedly faster than the "cable rupture"
+        # calculation in the manual. A_BRAKE_EMERGENCY = 5 m/s² matches
+        # the STRMTG passenger-comfort ceiling (RM5 §2.4).
         if tr.emergency:
             tr.emergency_ramp = min(
                 1.0, tr.emergency_ramp + A_BRAKE_EMERG_RAMP * dt
@@ -694,8 +791,12 @@ class Physics:
             elif a < -soft_cap:
                 a = -soft_cap
 
-        # If brakes kill the last sliver of motion, snap to zero.
-        if a_brk > 0 and abs(tr.v) < 0.2:
+        # Final creep kill : ONLY snap below 3 cm/s to avoid the visible
+        # "everything freezes" jolt that used to happen around 0.2 m/s.
+        # The regulator + cable elasticity take the train from ~1 m/s
+        # down to a few cm/s smoothly ; this is just a floor to kill
+        # numerical jitter once the train is mechanically at rest.
+        if a_brk > 0 and abs(tr.v) < 0.03:
             tr.v = 0.0
             a = 0.0
 
@@ -706,26 +807,50 @@ class Physics:
         # Cap |v| at v_limit in the travel direction (coasting past is
         # fine — the motor is off — but we still don't let the physics
         # blow up if something goes wrong).
+        # Soft over-speed bleed-off : when the train exceeds v_limit
+        # (wet-rail cap suddenly activated, etc.) don't snap the velocity to
+        # the cap — that caused the visible "pile" glitch. Instead bleed
+        # off the excess at ≤ 1.5 m/s² so the train glides down to the
+        # new ceiling over a couple of seconds. The regulator's slewed
+        # setpoint already handles the general case ; this is a safety
+        # net that only kicks in if something forces |v| above v_limit.
         if new_v * tr.direction > v_limit and f_motor == 0:
-            new_v = v_limit * tr.direction
+            excess = new_v * tr.direction - v_limit
+            bleed = min(excess, 1.5 * dt)
+            new_v -= bleed * tr.direction
         if new_v * tr.direction < -v_limit:
-            new_v = -v_limit * tr.direction
+            excess = -v_limit - new_v * tr.direction
+            bleed = min(excess, 1.5 * dt)
+            new_v += bleed * tr.direction
         tr.s += ((tr.v + new_v) / 2.0) * dt
         tr.v = new_v
-        # Train centre clamped between station stop points. When hitting a
-        # terminus with residual velocity (regulator hasn't fully killed
-        # motion yet), snap v to 0 so the train doesn't "grind" against
-        # the stop while reporting a stale speed readout.
-        if tr.s >= STOP_S:
-            tr.s = STOP_S
-            if tr.v > 0:
-                tr.v = 0.0
-                a = 0.0
-        elif tr.s <= START_S:
-            tr.s = START_S
-            if tr.v < 0:
-                tr.v = 0.0
-                a = 0.0
+        # Train centre clamped between station stop points. Only kill v
+        # when we're actively trying to push PAST the platform end (so
+        # the cable-elasticity rebound can still move the cabin a few
+        # cm forward/backward in its damped oscillation after arrival).
+        # Soft position-clamp : if the train would push past the stop
+        # point, don't snap the velocity to zero (that's what caused the
+        # old "instant stop" at arrival). Apply a strong-but-finite buffer
+        # deceleration of 2 m/s² — the train dissipates any residual
+        # energy over ~0.1 s without a visible jolt. The regulator's new
+        # quadratic-taper approach already brings |v| below 0.1 m/s by
+        # the time s reaches the threshold, so this is just a safety net.
+        # After arrival we relax the clamp by the rebound headroom so
+        # the cable-elastic bounce is visible instead of being instantly
+        # crushed back to the stop point. During the normal approach
+        # (not finished) we hard-clamp so physics can't drift outside.
+        clamp_lo = START_S - (1.2 if st.finished else 0.0)
+        clamp_hi = STOP_S + (1.2 if st.finished else 0.0)
+        if tr.s >= clamp_hi:
+            tr.s = clamp_hi
+            if tr.v > 0.0:
+                tr.v = max(0.0, tr.v - 2.0 * dt)
+                a = -2.0
+        elif tr.s <= clamp_lo:
+            tr.s = clamp_lo
+            if tr.v < 0.0:
+                tr.v = min(0.0, tr.v + 2.0 * dt)
+                a = 2.0
         # Parking (drum / maintenance) brake. The real funicular has a
         # mechanical drum brake on the bull wheel that holds the train
         # absolutely still when engaged — this is what makes the cabin
@@ -797,66 +922,158 @@ class Physics:
                 "SURVITESSE ! frein d'urgence engagé.",
                 "alarm",
             )
-        tr.power_kw = max(0.0, (f_motor * tr.v) / 1000.0)
+        # Power flow at the motor : positive when the motor pulls the
+        # cable (traction), negative when gravity drives the wheel and
+        # the motor acts as a generator (regenerative braking on loaded
+        # descent — real Perce-Neige recovers ~42 kWh per full loaded
+        # descent according to the CFD datasheet). We track both signs
+        # but display only the positive side on the gauge.
+        power_signed_kw = (f_motor * tr.v) / 1000.0
+        if power_signed_kw >= 0.0:
+            tr.power_kw = power_signed_kw
+            tr.regen_kw = 0.0
+        else:
+            tr.power_kw = 0.0
+            # Efficiency chain : bull wheel → DC machine → inverter → grid
+            # is roughly 0.80 round-trip at full load.
+            tr.regen_kw = -power_signed_kw * 0.80
         # Smoothed display values — EMA with τ ≈ 0.3 s avoids flicker
         alpha = min(1.0, dt / 0.3)
         tr.tension_dan_disp += (tr.tension_dan - tr.tension_dan_disp) * alpha
         tr.power_kw_disp += (tr.power_kw - tr.power_kw_disp) * alpha
 
         # Ghost train position : symmetric on the cable.
-        # Cable elasticity rebound : damped oscillation after stopping.
-        # Measured from arrival video — the wagon oscillates ~4 cm with
-        # period ≈ 3.9 s and damps out over 3-4 cycles (ζ ≈ 0.05).
+        # Cable elasticity rebound — two-stage relaxation after arrival :
+        #   (1) release-creep : exponential return to equilibrium as the
+        #       motor unloads and ~1 m of cable stretch shortens back,
+        #       pushing the ghost (counterweight) forward along the cable.
+        #   (2) residual oscillation : small damped sine around the new
+        #       equilibrium until internal friction dissipates the energy.
+        # Sign convention : rebound is applied in the TRAVEL direction of
+        # the arrival (positive = train would continue past the platform),
+        # which means the ghost at the opposite terminus creeps BACKWARDS
+        # from its stop point into the tunnel — exactly what you see in
+        # footage of the opposite wagon "sliding" after a stop.
         base_ghost_s = LENGTH - tr.s
         if st.finished:
             st.rebound_timer += dt
             t_r = st.rebound_timer
-            rebound = (REBOUND_AMP
-                       * math.exp(-REBOUND_ZETA * REBOUND_OMEGA * t_r)
-                       * math.sin(REBOUND_OMEGA * t_r))
-            if tr.direction > 0:
-                # Main arrived at top → ghost at bottom oscillates
-                base_ghost_s += rebound
+            creep = 1.0 - math.exp(-t_r / REBOUND_TAU)
+            osc = (math.exp(-REBOUND_ZETA * REBOUND_OMEGA * t_r)
+                   * math.sin(REBOUND_OMEGA * t_r))
+            # The motor / bull wheel is at the UPPER station. Only the
+            # cabin sitting at the LOWER (Val Claret) terminus is attached
+            # to a long stretched cable (~3.5 km) that stores enough
+            # elastic energy to visibly rebound. The cabin at the UPPER
+            # terminus is right beside the bull wheel — ~0 m of cable
+            # between it and the fixed pulley, no stretch, no rebound.
+            main_is_upper = tr.s > LENGTH * 0.5
+            # Physical stretch released = snapshot at arrival, clamped
+            # so aberrant huge values (fault conditions) don't drive the
+            # rebound off-screen.
+            amp = min(max(st.rebound_amp_m, 0.3), 5.0)
+            osc_amp = min(REBOUND_OSC_AMP, amp * 0.15)
+            if main_is_upper:
+                # Main at top — the loaded span is ~0 m so there's no
+                # cable elastic rebound, BUT the DC motor shaft + gear
+                # reducer + bull-wheel assembly still has a finite
+                # torsional compliance. When the brake clamps, the
+                # stored strain in the drive train springs back a few
+                # cm, producing a small damped oscillation on the main
+                # cabin — just enough to feel the "settle" instead of
+                # an instant stop. Amplitude ~ 8 cm, same natural
+                # frequency as the cable rebound (drive-line is stiffer
+                # but inertia is similar).
+                DRIVE_TRAIN_AMP = 0.08   # m
+                main_amp_top = DRIVE_TRAIN_AMP
+                osc_amp_top = DRIVE_TRAIN_AMP * 0.6
+                # Direction: arriving train overshoots forward first,
+                # then settles back (classic elastic bounce).
+                main_disp_top = tr.direction * (
+                    main_amp_top * creep + osc_amp_top * osc
+                )
+                tr.s += main_disp_top * dt * 2.5
+                # Ghost at bottom also rebounds by the full cable stretch.
+                ghost_disp = (-tr.direction) * (amp * creep + osc_amp * osc)
+                base_ghost_s += ghost_disp
             else:
-                # Main arrived at bottom → main train oscillates
-                tr.s += rebound * 0.3  # attenuated visual effect
+                # Main at bottom — it rebounds. Ghost at top is static.
+                main_amp = amp * 0.20   # 20 % of stretch felt on main
+                main_disp = (tr.direction) * (
+                    main_amp * creep + (osc_amp * 0.5) * osc
+                )
+                tr.s += main_disp * dt * 2.5
+                d_creep_dt = (main_amp / REBOUND_TAU) * math.exp(-t_r / REBOUND_TAU)
+                d_osc_dt = (osc_amp * 0.5) * (
+                    REBOUND_OMEGA * math.exp(-REBOUND_ZETA * REBOUND_OMEGA * t_r)
+                    * math.cos(REBOUND_OMEGA * t_r)
+                    - REBOUND_ZETA * REBOUND_OMEGA
+                    * math.exp(-REBOUND_ZETA * REBOUND_OMEGA * t_r)
+                    * math.sin(REBOUND_OMEGA * t_r)
+                )
+                tr.v = tr.direction * (d_creep_dt + d_osc_dt)
         st.ghost_s = max(START_S, min(LENGTH - START_S, base_ghost_s))
 
         if st.trip_started:
             st.trip_time += dt
 
-        st.score_energy += tr.power_kw * dt / 3600.0
+        # Net energy = traction consumed minus regen recovered.
+        st.score_energy += (tr.power_kw - tr.regen_kw) * dt / 3600.0
         st.score_comfort = max(0.0, 100.0 - tr.jerk_sum * 0.015)
 
-        # Arrival detection : direction-aware.
-        if not st.finished and abs(tr.v) < 0.4:
+        # Arrival detection : direction-aware. Silent : no popup, no
+        # announcement, no event banner — a discreet line in the log is
+        # enough. The driver stays in the cabin and prepares the return
+        # trip at their own pace via the standard D / V / Z protocol.
+        # The threshold must be TIGHT (|v| < 0.08 m/s and tr.s within
+        # 0.08 m of the terminus) so the quadratic-taper final approach
+        # is allowed to finish naturally. Firing too early would engage
+        # the parking drum brake while the train still has 0.4 m/s and
+        # 2 m to go — that's the "instant stop" the driver saw.
+        if not st.finished and abs(tr.v) < 0.08:
             arrived = False
-            if tr.direction > 0 and tr.s >= STOP_S - 0.3:
+            if tr.direction > 0 and tr.s >= STOP_S - 0.08:
                 st.finished = True
                 arrived = True
                 st.score_time = st.trip_time
                 add_event(
                     st, "arrive",
-                    "Arrived at Grande Motte glacier — 3032 m",
-                    "Arrivée à la Grande Motte — 3032 m", "info",
+                    "At Grande Motte (3032 m) — press V when ready to depart",
+                    "À la Grande Motte (3032 m) — V quand prêt au départ", "info",
                 )
-            elif tr.direction < 0 and tr.s <= START_S + 0.3:
+            elif tr.direction < 0 and tr.s <= START_S + 0.08:
                 st.finished = True
                 arrived = True
                 st.score_time = st.trip_time
                 add_event(
                     st, "arrive",
-                    "Arrived at Val Claret — 2111 m",
-                    "Arrivée à Val Claret — 2111 m", "info",
+                    "At Val Claret (2111 m) — press V when ready to depart",
+                    "À Val Claret (2111 m) — V quand prêt au départ", "info",
                 )
             # On arrival, relax the speed command and release the
-            # service/emergency brakes so the driver can command door
-            # opening (D) manually, just like before departure.
+            # service/emergency brakes, then engage the parking drum
+            # brake. Because the detection window is now |v| < 0.08
+            # m/s (tight), snapping v to 0 at this point is visually
+            # imperceptible — much better than the old 0.4 m/s threshold
+            # which felt like an instant stop.
             if arrived:
                 tr.speed_cmd = 0.0
                 tr.throttle = 0.0
                 tr.brake = 0.0
                 tr.emergency = False
+                tr.maint_brake = True
+                # Snapshot the physical cable stretch at the moment of
+                # arrival — this is what will be released during the
+                # rebound. Formula : Δl = F·L / (A·E) on the Fatzer
+                # rope. Only meaningful when main is at the LOWER
+                # terminus (long loaded span) ; at the upper terminus
+                # the loaded span is ~0 and stretch ≈ 0.
+                A_cable = 2.12e-3
+                E_cable = 1.05e11
+                L_loaded = LENGTH - tr.s if tr.direction > 0 else tr.s
+                F_peak = tr.tension_dan * 10.0
+                st.rebound_amp_m = max(0.0, F_peak * L_loaded
+                                       / (A_cable * E_cable))
 
     def _regulator(self, tr: Train, dt: float) -> None:
         """Speed-command regulator — always active, direction-aware.
@@ -879,14 +1096,47 @@ class Physics:
             return
 
         # Electric stop (latched service-stop button) : kill motor, apply
-        # a steady service brake until the driver releases the button.
+        # a MILD service brake only what's needed to track a gentle decel.
         # No rail brakes — the train coasts to a halt smoothly.
         if tr.electric_stop or tr.dead_man_fault:
-            tr.speed_cmd = 0.0
+            # Drop the commanded setpoint progressively (not instantly)
+            # so releasing electric stop doesn't kick the regulator.
+            tr.speed_cmd = max(0.0, tr.speed_cmd - 0.5 * dt)
+            tr.speed_cmd_eff = max(0.0, tr.speed_cmd_eff - 0.5 * dt)
             tr.throttle = 0.0
-            target = 0.35 if abs(tr.v) > 0.5 else 0.5
-            db = max(-4.0 * dt, min(4.0 * dt, target - tr.brake))
-            tr.brake = max(0.0, min(1.0, tr.brake + db))
+            # "Arrêt simple" (service stop) — Von Roll doctrine : motor
+            # cut + regenerative braking. Real decel target ≈ 0.4 m/s²
+            # (passengers standing barely notice). From 12 m/s that's
+            # 30 s and 180 m — very gentle, very long. The key is to
+            # NEVER let the brake slam on : it must ramp in over 3–4 s
+            # like the DC drive current ramping down.
+            TARGET_DECEL = 0.4  # m/s² — Von Roll service stop comfort
+            # Engagement ramp limiter : brake command can rise at most
+            # 0.05/s (fully engaged in ~5 s, matching real hydraulic
+            # service-brake engagement) and fall freely. This is the
+            # dominant shape when the driver first hits the button.
+            BRAKE_RAMP_UP = 0.05       # per second
+            BRAKE_RAMP_DOWN = 0.25     # per second
+            BRAKE_CAP = 0.30           # max brake in service mode
+            # Nearly-stopped regime — settle to a gentle hold at 0.20.
+            if abs(tr.v) < 0.5:
+                hold = 0.20
+                err_b = hold - tr.brake
+                step = max(-BRAKE_RAMP_DOWN * dt,
+                           min(BRAKE_RAMP_UP * dt, err_b))
+                tr.brake = max(0.0, min(BRAKE_CAP, tr.brake + step))
+                return
+            # Cruising regime — closed-loop around TARGET_DECEL.
+            # obs_decel > 0 when the train is actually slowing down.
+            obs_decel = -math.copysign(tr.a, tr.v)
+            err = TARGET_DECEL - obs_decel
+            # Small proportional nudge per frame, well under the ramp
+            # cap so the brake rises SMOOTHLY with time, not in jumps.
+            p_gain = 0.12
+            raw_step = err * p_gain * dt
+            step = max(-BRAKE_RAMP_DOWN * dt,
+                       min(BRAKE_RAMP_UP * dt, raw_step))
+            tr.brake = max(0.0, min(BRAKE_CAP, tr.brake + step))
             return
 
         # Distance remaining along travel direction (always positive).
@@ -936,17 +1186,50 @@ class Physics:
             a_env = A_NATURAL_UP
         v_envelope = math.sqrt(CREEP_V * CREEP_V + 2.0 * a_env * d_to_creep)
 
+        # --- Setpoint slewing ---------------------------------------------
+        # Real Von Roll speed-command knob is not directly tracked by the
+        # motor : an internal ramp limiter accelerates / decelerates the
+        # effective setpoint at a fixed rate. Accel up  → ~0.35 m/s² (so
+        # 0→12 m/s takes ~35 s with feed-forward). Decel down → ~0.25 m/s²
+        # (gentle service deceleration — matches what the driver feels on
+        # a real Perce-Neige trip). This is what prevents an abrupt knob
+        # movement from kicking the brake hard.
+        RAMP_UP = 0.35          # m/s per s when raising the setpoint
+        RAMP_DOWN = 0.25        # m/s per s when lowering the setpoint
         driver_target = tr.speed_cmd * V_MAX
-        target_v = min(driver_target, v_envelope)
-        envelope_active = v_envelope < driver_target - 0.05
+        # Speed-cap faults (wet rails, motor degraded, thermal, …)
+        # also clamp the effective driver setpoint : this way the slew
+        # limiter brings the train down to the new ceiling smoothly over
+        # ~30 s instead of the physics engine slamming v to the cap
+        # (the old behaviour felt like an instant "pile" from 12 to 4 m/s).
+        if tr.speed_fault_cap < V_MAX:
+            driver_target = min(driver_target, tr.speed_fault_cap)
+        de = driver_target - tr.speed_cmd_eff
+        if de > 0.0:
+            tr.speed_cmd_eff = min(driver_target,
+                                   tr.speed_cmd_eff + RAMP_UP * dt)
+        elif de < 0.0:
+            tr.speed_cmd_eff = max(driver_target,
+                                   tr.speed_cmd_eff - RAMP_DOWN * dt)
+        # Use the slewed setpoint as the regulator's true target.
+        target_v = min(tr.speed_cmd_eff, v_envelope)
+        envelope_active = v_envelope < tr.speed_cmd_eff - 0.05
 
-        # Creep zone : last CREEP_DIST metres crawl at CREEP_V
+        # Creep zone : last CREEP_DIST metres crawl at CREEP_V, then
+        # taper smoothly to zero over the final ~6 m using a square-root
+        # profile v = √(2·a·d) with a very gentle deceleration (0.04 m/s²
+        # — roughly a 20 s final docking, as seen on video). That kills
+        # the old "instant stop at threshold" where the train would snap
+        # from CREEP_V straight to 0 when dist_to_stop crossed 0.5 m.
         if dist_to_stop < CREEP_DIST:
-            target_v = CREEP_V
-            envelope_active = True
-        # Final 50 cm : full stop
-        if dist_to_stop < 0.5:
-            target_v = 0.0
+            PARK_DECEL = 0.04         # m/s² final-docking decel
+            FINAL_DIST = 6.0          # m over which the taper applies
+            if dist_to_stop > FINAL_DIST:
+                target_v = CREEP_V
+            else:
+                v_park = math.sqrt(2.0 * PARK_DECEL
+                                   * max(dist_to_stop, 0.001))
+                target_v = min(CREEP_V, v_park)
             envelope_active = True
 
         # --- Unified control law ------------------------------------------
@@ -1011,7 +1294,12 @@ def add_event(st: GameState, key: str, en: str, fr: str, severity: str = "info")
     ev = Event(key=key, message_en=en, message_fr=fr, severity=severity,
                timestamp=st.trip_time)
     st.events.append(ev)
+    # Length cap (40) AND age cap (5 min) — prevents unbounded growth
+    # during long sessions and keeps the log focused on recent activity.
     if len(st.events) > 40:
+        st.events.pop(0)
+    min_ts = st.trip_time - 300.0
+    while st.events and st.events[0].timestamp < min_ts:
         st.events.pop(0)
 
 
@@ -1077,7 +1365,7 @@ def maybe_random_event(st: GameState, dt: float) -> None:
     st.event_cooldown = 10.0
 
     kind = random.choice([
-        "tension", "door", "thermal", "fire", "ice",
+        "tension", "door", "thermal", "fire", "wet_rail",
         "motor_degraded", "slack", "aux_power", "parking_stuck",
     ])
     st.panne_active = True
@@ -1123,15 +1411,18 @@ def maybe_random_event(st: GameState, dt: float) -> None:
             "Fumée dans le tunnel ! ARRÊT D'URGENCE.",
             "alarm",
         )
-    elif kind == "ice":
-        # Real Perce-Neige : upper 600 m can ice up in shoulder seasons.
-        # Regulator clamps to 4 m/s until the rails are swept.
-        tr.speed_fault_cap = 4.0
-        tr.fault_timer = 45.0
+    elif kind == "wet_rail":
+        # Fully-enclosed tunnel under 900 m of rock : ice is impossible,
+        # but seasonal thaw water seeps from the vault and condensation
+        # on the cold upper section (still 0–4 °C year-round) leaves a
+        # wet film on the rails. Adhesion drops, the regulator caps
+        # speed to 6 m/s until the train wipes the rails clear.
+        tr.speed_fault_cap = 6.0
+        tr.fault_timer = 35.0
         add_event(
-            st, "ice",
-            "Ice on upper rails — speed capped at 4 m/s.",
-            "Givre sur voie haute — vitesse limitée à 4 m/s.",
+            st, "wet_rail",
+            "Wet rails — reduced adhesion, speed capped at 6 m/s.",
+            "Rails humides — adhérence réduite, vitesse limitée à 6 m/s.",
             "warn",
         )
     elif kind == "motor_degraded":
@@ -1192,7 +1483,15 @@ COLOR_BG_TOP = QColor(12, 20, 34)
 COLOR_BG_BOT = QColor(34, 48, 72)
 COLOR_MOUNT_1 = QColor(58, 50, 45)
 COLOR_MOUNT_2 = QColor(86, 76, 68)
+COLOR_MOUNT_FAR = QColor(108, 118, 140)   # atmospheric haze (distant ridges)
+COLOR_MOUNT_MID = QColor(74, 72, 78)      # mid-distance ridge
 COLOR_GLACIER = QColor(232, 240, 252)
+COLOR_GLACIER_SHADE = QColor(186, 202, 226)
+COLOR_PINE = QColor(32, 58, 42)
+COLOR_PINE_HILIGHT = QColor(56, 92, 64)
+COLOR_PYLON = QColor(120, 110, 104)
+COLOR_CLOUD = QColor(235, 238, 245, 200)
+COLOR_CLOUD_SHADE = QColor(190, 200, 215, 170)
 COLOR_TUNNEL = QColor(24, 24, 30)
 COLOR_TUNNEL_WALL = QColor(72, 72, 86)
 COLOR_CABIN = QColor(255, 210, 60)
@@ -1207,10 +1506,45 @@ COLOR_WARN = QColor(240, 180, 40)
 COLOR_ALARM = QColor(240, 80, 80)
 COLOR_NEEDLE = QColor(255, 230, 80)
 
+# Ghost wagon cylindrical bands — 7 horizontal slices shaded bottom→top
+# for a 3D cylinder look. Hoisted to module scope so QColors are built
+# once instead of 60×/s while the ghost is on screen.
+_GHOST_BANDS = (
+    (0.00, 0.35,  QColor(18, 16, 14, 240)),    # undercarriage
+    (0.35, 0.55,  QColor(60, 48, 22, 235)),    # bogie fairing
+    (0.55, 1.20,  QColor(150, 120, 38, 230)),  # lower body (shadow)
+    (1.20, 2.05,  QColor(185, 150, 48, 230)),  # window band base
+    (2.05, 2.70,  QColor(220, 185, 68, 230)),  # upper body (lit)
+    (2.70, 3.05,  QColor(205, 168, 55, 230)),  # shoulder
+    (3.05, 3.20,  QColor(120, 95, 30, 230)),   # roof curve cap
+)
+
 
 # ---------------------------------------------------------------------------
 # Sound system — plays the real Perce-Neige on-board announcements
 # ---------------------------------------------------------------------------
+
+def _plan_ambient_paths(dest_dir: Path) -> dict[str, Path]:
+    """Return the full set of WAV paths without generating any content.
+    Used to populate the SoundSystem dict synchronously so consumers
+    can guard on `.exists()` while the heavy synthesis runs in a
+    background thread on first launch.
+    """
+    out: dict[str, Path] = {
+        "rumble": dest_dir / "ambient_rumble.wav",
+        "motor": dest_dir / "motor_hum.wav",
+        "buzzer": dest_dir / "departure_buzzer.wav",
+        "horn": dest_dir / "horn_v3.wav",
+    }
+    for key, name in (
+        ("ambient_real", "ambient_real.wav"),
+        ("buzzer_real", "departure_buzzer_real.wav"),
+        ("buzzer_bas", "departure_buzzer_bas.wav"),
+        ("departure_ambient", "departure_ambient.wav"),
+    ):
+        out[key] = dest_dir / name
+    return out
+
 
 def _generate_ambient_wavs(dest_dir: Path) -> dict[str, Path]:
     """Create small procedural loops used for the moving-train ambient.
@@ -1329,28 +1663,37 @@ def _generate_ambient_wavs(dest_dir: Path) -> dict[str, Path]:
             w.setframerate(sample_rate)
             w.writeframes(bytes(data))
     out["buzzer"] = buzzer
-    # Horn WAV (generated procedurally if missing)
-    horn = dest_dir / "horn.wav"
+    # Horn WAV : industrial two-tone pneumatic funicular horn, seamless
+    # 1 s loop (no envelope so setLoops(Infinite) doesn't click). Two
+    # dissonant fundamentals (220/277 Hz — a major third) with strong
+    # sawtooth-like harmonic stack for brass bite, pressurised-air
+    # hiss overlay, and a slow beat to feel alive. Peak-limited to
+    # just below full scale for max loudness without clipping.
+    horn = dest_dir / "horn_v3.wav"
     if not horn.exists():
-        dur_h = 0.8
+        dur_h = 1.0
         n_h = int(sample_rate * dur_h)
         data_h = bytearray()
-        f1_h, f2_h = 280.0, 350.0
+        f1_h, f2_h = 220.0, 277.0  # major-third dyad, loud & dissonant
+        prev_n = 0.0
         for i in range(n_h):
             t_h = i / sample_rate
-            s_h = (_m.sin(2 * _m.pi * f1_h * t_h) * 0.40
-                   + _m.sin(2 * _m.pi * f2_h * t_h) * 0.35
-                   + _m.sin(2 * _m.pi * f1_h * 2 * t_h) * 0.10
-                   + _m.sin(2 * _m.pi * f2_h * 2 * t_h) * 0.08)
-            env_h = 1.0
-            att_h = int(sample_rate * 0.02)
-            rel_h = int(sample_rate * 0.02)
-            if i < att_h:
-                env_h = i / att_h
-            elif i > n_h - rel_h:
-                env_h = (n_h - i) / rel_h
-            s_h *= env_h * 0.65
-            s_h = max(-1.0, min(1.0, s_h))
+            # Sawtooth-approximated brass via summed harmonics 1..8
+            s_h = 0.0
+            for k in range(1, 9):
+                amp = 1.0 / k
+                s_h += _m.sin(2 * _m.pi * f1_h * k * t_h) * amp * 0.55
+                s_h += _m.sin(2 * _m.pi * f2_h * k * t_h) * amp * 0.50
+            # Subharmonic for chest-punch
+            s_h += _m.sin(2 * _m.pi * (f1_h * 0.5) * t_h) * 0.25
+            # Pressurised-air hiss (band-passed white noise, low-level)
+            white = _r.uniform(-1.0, 1.0)
+            prev_n = prev_n * 0.75 + white * 0.25
+            s_h += prev_n * 0.18
+            # Slight 5 Hz tremolo to feel like a mechanical horn
+            s_h *= 0.82 + 0.08 * _m.sin(2 * _m.pi * 5.0 * t_h)
+            # Soft clip — keeps perceived loudness high without harsh clip
+            s_h = _m.tanh(s_h * 0.55) * 0.80
             data_h += struct.pack("<h", int(s_h * 32767))
         with wave.open(str(horn), "wb") as w:
             w.setnchannels(1)
@@ -1418,8 +1761,23 @@ class SoundSystem:
         self._horn_player = None
         self._horn_audio = None
         # Generate procedural ambient/buzzer WAVs (cached in temp dir)
-        wav_dir = Path(os.environ.get("TEMP", "/tmp")) / "perce_neige_wav"
-        self._ambient_wavs = _generate_ambient_wavs(wav_dir)
+        wav_dir = Path(tempfile.gettempdir()) / "perce_neige_wav"
+        # Plan paths synchronously (cheap), defer heavy synthesis to a
+        # daemon thread so first launch doesn't freeze the GUI. Every
+        # consumer already guards with `.exists()`, so calls before the
+        # thread finishes simply no-op. On subsequent launches the files
+        # exist and the thread returns almost instantly.
+        try:
+            wav_dir.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            pass
+        self._ambient_wavs = _plan_ambient_paths(wav_dir)
+        self._wav_gen_thread = threading.Thread(
+            target=_generate_ambient_wavs,
+            args=(wav_dir,),
+            daemon=True,
+        )
+        self._wav_gen_thread.start()
         if not self.enabled:
             return
         for f in sorted(self.sons_dir.iterdir()):
@@ -1448,14 +1806,13 @@ class SoundSystem:
             # Horn player (dedicated — loops while key held)
             self._horn_player = QMediaPlayer()
             self._horn_audio = QAudioOutput()
-            self._horn_audio.setVolume(0.80)
+            self._horn_audio.setVolume(1.0)
             self._horn_player.setAudioOutput(self._horn_audio)
             self._horn_player.setLoops(QMediaPlayer.Loops.Infinite)
-            # Pre-load horn source so play() is instant on key press
-            horn_path = self._ambient_wavs.get("horn")
-            if horn_path and horn_path.exists():
-                self._horn_player.setSource(
-                    QUrl.fromLocalFile(str(horn_path)))
+            # Horn source is set lazily on first play() so we don't
+            # block here if WAV generation is still running on the
+            # background thread.
+            self._horn_loaded = False
             # Ambient player (loops motor hum while train moves)
             self._amb_player = QMediaPlayer()
             self._amb_audio = QAudioOutput()
@@ -1464,22 +1821,31 @@ class SoundSystem:
             self._amb_player.setLoops(QMediaPlayer.Loops.Infinite)
             self._amb_playing = False
             self._amb_vol_target = 0.0
+            self._amb_loaded_path: str | None = None
+            self._fx_loaded_path: str | None = None
         except Exception:
             self.enabled = False
 
     # ----- public ----------------------------------------------------------
 
-    def play(self, group: str, lang: str = "fr", cooldown: float = 30.0) -> None:
-        """Queue an announcement. Per-group cooldown avoids spam."""
+    def play(self, group: str, lang: str = "fr", cooldown: float = 30.0,
+             strict: bool = False) -> None:
+        """Queue an announcement. Per-group cooldown avoids spam.
+
+        strict: if True, skip silently when the requested language is not
+        available for this group (no fallback to another language).
+        """
         if not self.enabled or self.muted:
             return
         if self._cooldowns.get(group, 0.0) > 0:
             return
-        f = self._pick(group, lang)
+        f = self._pick(group, lang, strict=strict)
         if f is None:
             return
         self._cooldowns[group] = cooldown
         self._queue.append(f)
+        if self._player is None:
+            return
         if self._player.playbackState() != QMediaPlayer.PlaybackState.PlayingState:
             self._play_next()
 
@@ -1498,6 +1864,8 @@ class SoundSystem:
             self._queue.append(fr)
         if en is not None and en != fr:
             self._queue.append(en)
+        if self._player is None:
+            return
         if self._player.playbackState() != QMediaPlayer.PlaybackState.PlayingState:
             self._play_next()
 
@@ -1519,7 +1887,10 @@ class SoundSystem:
             path = self._ambient_wavs.get("buzzer")
         if path is None or not path.exists():
             return
-        self._fx_player.setSource(QUrl.fromLocalFile(str(path)))
+        spath = str(path)
+        if self._fx_loaded_path != spath:
+            self._fx_player.setSource(QUrl.fromLocalFile(spath))
+            self._fx_loaded_path = spath
         self._fx_player.play()
 
     def play_departure_ambient(self) -> None:
@@ -1535,7 +1906,10 @@ class SoundSystem:
         if path is None or not path.exists():
             return
         self._fx_player.setLoops(1)
-        self._fx_player.setSource(QUrl.fromLocalFile(str(path)))
+        spath = str(path)
+        if self._fx_loaded_path != spath:
+            self._fx_player.setSource(QUrl.fromLocalFile(spath))
+            self._fx_loaded_path = spath
         self._fx_player.play()
 
     def start_horn(self) -> None:
@@ -1544,13 +1918,56 @@ class SoundSystem:
             return
         if self._horn_player is None:
             return
-        # Source already pre-loaded at init; just play
+        if not self._horn_loaded:
+            horn_path = self._ambient_wavs.get("horn")
+            if horn_path and horn_path.exists():
+                self._horn_player.setSource(
+                    QUrl.fromLocalFile(str(horn_path)))
+                self._horn_loaded = True
+            else:
+                return  # WAV synth still running — silent this time
+        # Duck the other channels so the OS mixer doesn't clip when
+        # horn + ambient + announcement sum above full scale. Snapshot
+        # current volumes so we can restore exactly what was playing.
+        self._ducked = True
+        try:
+            self._pre_duck_audio = self._audio.volume()
+            self._audio.setVolume(self._pre_duck_audio * 0.30)
+        except Exception:
+            pass
+        try:
+            self._pre_duck_fx = self._fx_audio.volume()
+            self._fx_audio.setVolume(self._pre_duck_fx * 0.30)
+        except Exception:
+            pass
+        try:
+            self._pre_duck_amb = self._amb_audio.volume()
+            self._amb_audio.setVolume(self._pre_duck_amb * 0.30)
+        except Exception:
+            pass
         self._horn_player.play()
 
     def stop_horn(self) -> None:
         """Stop the horn sound."""
         if self._horn_player is not None:
             self._horn_player.stop()
+        if getattr(self, "_ducked", False):
+            self._ducked = False
+            try:
+                self._audio.setVolume(self._pre_duck_audio)
+            except Exception:
+                pass
+            try:
+                self._fx_audio.setVolume(self._pre_duck_fx)
+            except Exception:
+                pass
+            # Ambient volume target is driven dynamically by speed, so
+            # let update_ambient reassert it on the next tick instead
+            # of restoring the pre-duck snapshot.
+            try:
+                self._amb_audio.setVolume(self._pre_duck_amb)
+            except Exception:
+                pass
 
     def stop_announcements(self) -> None:
         """Interrupt any announcement currently playing and clear the queue.
@@ -1579,7 +1996,10 @@ class SoundSystem:
             real = self._ambient_wavs.get("ambient_real")
             path = real if (real and real.exists()) else self._ambient_wavs.get("rumble")
             if path and path.exists():
-                self._amb_player.setSource(QUrl.fromLocalFile(str(path)))
+                spath = str(path)
+                if self._amb_loaded_path != spath:
+                    self._amb_player.setSource(QUrl.fromLocalFile(spath))
+                    self._amb_loaded_path = spath
                 self._amb_player.play()
                 self._amb_playing = True
         elif v_norm <= 0.01 and self._amb_playing:
@@ -1627,14 +2047,23 @@ class SoundSystem:
 
     # ----- internals -------------------------------------------------------
 
-    def _pick(self, group: str, lang: str) -> Path | None:
+    def _pick(self, group: str, lang: str,
+              strict: bool = False) -> Path | None:
         rng = self.GROUPS.get(group)
         if rng is None:
             return None
         start, end = rng
         offset = self.LANG_OFFSET.get(lang, 0)
-        # Try requested language first, then FR, then any file in range.
-        for candidate in (start + offset, start, start + 1):
+        target = start + offset
+        # Strict mode : only return the exact requested language, no
+        # fallback. Used by the F2 manual announcement menu so choosing
+        # Italian never plays French instead.
+        if strict:
+            if start <= target <= end and target in self._files_by_num:
+                return self._files_by_num[target]
+            return None
+        # Lenient mode : try requested, then FR, then EN, then any.
+        for candidate in (target, start, start + 1):
             if start <= candidate <= end and candidate in self._files_by_num:
                 return self._files_by_num[candidate]
         for n in range(start, end + 1):
@@ -1705,6 +2134,12 @@ class GameWidget(QWidget):
         # train_number). Populated by _draw_title_overlay and consumed
         # by mousePressEvent when st.mode == MODE_TITLE.
         self._title_zones: list[tuple[QRectF, int, int]] = []
+        # Cached paint resources — recreating QPen/QFont/QLinearGradient
+        # every frame burned noticeable CPU in paintEvent. These static
+        # ones are built once and reused.
+        self._pen_version = QPen(COLOR_TEXT_DIM)
+        self._font_version = QFont("Consolas", 9)
+        self._cached_bg_grad: tuple[int, QLinearGradient] | None = None
         self._pulley_angle = 0.0          # radians — animated drive pulley
         self._cloud_offset = 0.0          # slow scroll for sky
         self._snowflakes: list[list[float]] = []   # [x, y, vy, size]
@@ -1727,11 +2162,19 @@ class GameWidget(QWidget):
         self._show_annmenu = False       # F2 announcement console
         self._cabin_view = False         # F4 cabin/tunnel first-person view
         self._tunnel_scroll = 0.0        # accumulated tunnel texture offset
+        # Side-view zoom factor. 1.0 = default 850 m window, 0.35 ≈ ~300 m
+        # tight, 4.2 ≈ full 3491 m trip. Driver adjusts with +/- or wheel.
+        self._profile_zoom = 1.0
+        # Dead-man vigilance : real funiculars require a release-then-press
+        # cycle on the vigilance pedal — you can't wedge a stone on it. We
+        # track the previous "any_action" state so only a rising edge
+        # resets the dead-man timer. Holding a key does NOT qualify.
+        self._prev_any_action: bool = False
         self.new_trip(first=True)
 
     # ----- lifecycle -------------------------------------------------------
 
-    def reverse_trip(self) -> None:
+    def reverse_trip(self, silent: bool = False) -> None:
         """Flip the travel direction and re-arm the departure sequence in
         place — works both at a terminus (after arrival) AND mid-tunnel
         if the driver has brought the train to a stop and decides to go
@@ -1755,11 +2198,23 @@ class GameWidget(QWidget):
         # before arming READY. The motor / ready state are zeroed.
         tr.v = 0.0
         tr.a = 0.0
+        # Speed setpoint kept at 100 % — matches new_trip() and the real
+        # Perce-Neige departure procedure : the consigne de vitesse is
+        # always dialed at V_MAX by default. Traction is gated by the
+        # ready / buzzer / start interlock, not by the setpoint value.
         tr.speed_cmd = 1.0
+        tr.speed_cmd_eff = 0.0    # slewed from 0 so the train ramps up
         tr.throttle = 0.0
+        tr.brake = 0.0
+        # Parking brake and drum hold re-applied so the train cannot
+        # drift under gravity while the reversal protocol runs.
+        tr.maint_brake = True
         tr.ready = False
         tr.dead_man_timer = 0.0
         tr.dead_man_fault = False
+        # Clear any latched overspeed trip from the previous leg —
+        # otherwise the train can't depart again.
+        tr.overspeed_tripped = False
         st.ghost_ready = False
         st.ghost_ready_timer = 0.0
         st.ghost_ready_delay = 0.0
@@ -1768,6 +2223,34 @@ class GameWidget(QWidget):
         st.finished = False
         st.rebound_timer = 0.0
         st.departure_buzzer_remaining = 0.0
+        # Doors : open ONLY when reversing at a terminus (passengers
+        # can board). Reversing mid-tunnel keeps the doors shut — no
+        # one is getting on in the tunnel, and opening them into a
+        # 3 m bore is obviously wrong.
+        at_terminus = (tr.s <= START_S + 5.0) or (tr.s >= STOP_S - 5.0)
+        if at_terminus:
+            tr.doors_open = True
+            tr.doors_cmd = True
+            tr.doors_timer = 0.0
+            # Passenger turnover : at a terminus everyone exits and a
+            # new load boards for the return leg. Perce-Neige skier
+            # traffic is asymmetric — almost all trips go UP with skis
+            # and everyone comes back DOWN on skis, so the descending
+            # direction is nearly empty while the ascending one is
+            # heavily loaded. Mirror exactly the new_trip() logic.
+            half = PAX_MAX // 2
+            if tr.direction > 0:
+                tr.pax_car1 = random.randint(90, half)
+                tr.pax_car2 = random.randint(90, half)
+                st.ghost_pax = random.randint(0, 12)
+            else:
+                tr.pax_car1 = random.randint(0, 8)
+                tr.pax_car2 = random.randint(0, 8)
+                st.ghost_pax = random.randint(90, PAX_MAX - 20)
+        else:
+            tr.doors_open = False
+            tr.doors_cmd = False
+            tr.doors_timer = 0.0
         self._welcome_played = False
         self._arrival_played = False
         self._was_stopped_mid_tunnel = False
@@ -1776,14 +2259,19 @@ class GameWidget(QWidget):
         # situation). Reversing at a terminus is the normal turnaround
         # and silently flips the direction.
         self.sounds.stop_announcements()
-        at_terminus = (tr.s <= START_S + 5.0) or (tr.s >= STOP_S - 5.0)
-        if not at_terminus:
-            self.sounds.play_bilingual("return_station", cooldown=5.0)
+        if not at_terminus and not silent:
+            self.sounds.play("return_station", lang=st.ann_lang, cooldown=5.0)
         dest_en = "Val Claret (2111 m)" if tr.direction < 0 else "Grande Motte (3032 m)"
-        add_event(st, "reverse",
-                  f"Reversing — return toward {dest_en}",
-                  f"Inversion du sens — retour vers {dest_en}",
-                  "warn")
+        if not silent:
+            add_event(st, "reverse",
+                      f"Reversing — return toward {dest_en}",
+                      f"Inversion du sens — retour vers {dest_en}",
+                      "warn")
+        else:
+            add_event(st, "reverse",
+                      f"Preparing return trip toward {dest_en}",
+                      f"Préparation du retour vers {dest_en}",
+                      "info")
 
     def new_trip(self, first: bool = False) -> None:
         st = self.state
@@ -1801,6 +2289,7 @@ class GameWidget(QWidget):
         # and the train pulls out at full cruise speed once the motors
         # take the load. Driver can still lower it manually mid-trip.
         tr.speed_cmd = 1.0
+        tr.speed_cmd_eff = 0.0    # slewed from 0 so the train ramps up
         tr.throttle = 0.0
         tr.brake = 0.0
         tr.emergency = False
@@ -1990,7 +2479,7 @@ class GameWidget(QWidget):
                     and tr_welcome.direction > 0
                     and dist_remain_welcome < 220.0
                     and abs(tr_welcome.v) < 6.5):
-                self.sounds.play("welcome", lang="fr", cooldown=600.0)
+                self.sounds.play("welcome", lang=st.ann_lang, cooldown=600.0)
                 self._welcome_played = True
             # Mid-tunnel stop tracking : flag is set after the train
             # has been stationary away from a terminus for ~3 s. The
@@ -2008,7 +2497,7 @@ class GameWidget(QWidget):
                 self._mid_tunnel_stop_timer = 0.0
             # Brake squeal when emergency brake engaged
             if st.train.emergency:
-                self.sounds.play_bilingual("brake_noise", cooldown=20.0)
+                self.sounds.play("brake_noise", lang=st.ann_lang, cooldown=20.0)
             # Fault announcements — pick the matching message bilingually.
             # Suppressed entirely once the train has arrived so a resolved
             # emergency never leaks evac / restart messages onto the
@@ -2016,35 +2505,49 @@ class GameWidget(QWidget):
             if not st.finished:
                 if st.panne_active and st.panne_kind != self._last_panne_kind:
                     self._last_panne_kind = st.panne_kind
-                    if st.panne_kind in ("tension", "ice", "slack"):
-                        self.sounds.play_bilingual("minor_incident", cooldown=45.0)
-                    elif st.panne_kind in ("door", "thermal", "motor_degraded",
-                                            "aux_power", "parking_stuck"):
-                        self.sounds.play_bilingual("tech_incident", cooldown=45.0)
+                    # Category of fault drives which (if any) announcement
+                    # plays. Silent-advisory faults (wet-rail cap, minor
+                    # tension/slack readings) don't interrupt the cabin
+                    # with a PA — they stay on the event log / gauge only.
+                    # Faults that actually stop or degrade service play a
+                    # matching announcement once at onset.
+                    if st.panne_kind in ("door", "thermal", "motor_degraded",
+                                          "aux_power", "parking_stuck"):
+                        self.sounds.play("tech_incident",
+                                         lang=st.ann_lang, cooldown=45.0)
                     elif st.panne_kind == "fire":
-                        self.sounds.play_bilingual("dim_light", cooldown=45.0)
-                        self.sounds.play_bilingual("evac", cooldown=60.0)
+                        self.sounds.play("dim_light",
+                                         lang=st.ann_lang, cooldown=45.0)
+                        self.sounds.play("evac",
+                                         lang=st.ann_lang, cooldown=60.0)
+                    # "tension", "wet_rail", "slack" : no PA, just dashboard.
                 elif not st.panne_active and self._last_panne_kind:
-                    # Panne resolved — play "restart"
+                    # A fault has just been cleared. Only play the
+                    # "Remise en route" announcement if the train actually
+                    # stopped in the tunnel because of the fault (real
+                    # Perce-Neige rule : passengers are told service is
+                    # resuming only when they felt it halt). A silent-
+                    # advisory fault that was managed without a stop gets
+                    # a brief log line and no PA.
+                    resolved_kind = self._last_panne_kind
                     self._last_panne_kind = ""
-                    self.sounds.play_bilingual("restart", cooldown=30.0)
-            # Arrival announcement — upstream exit at Grande Motte (upper)
-            # or downstream exit at Val Claret (lower). Plays once per
-            # arrival. Both stations get the generic "exit on the left"
-            # message queued right after.
+                    was_stopping_kind = resolved_kind in (
+                        "door", "thermal", "motor_degraded",
+                        "aux_power", "parking_stuck", "fire",
+                    )
+                    if was_stopping_kind and self._was_stopped_mid_tunnel:
+                        self.sounds.play("restart",
+                                         lang=st.ann_lang, cooldown=30.0)
+                        self._was_stopped_mid_tunnel = False
+            # Arrival : no automatic announcement. The driver stays in the
+            # cabin, opens the doors manually (D), and can trigger any
+            # announcement on demand via the F2 console. We simply stop
+            # whatever was playing so residual fault messages (evac, tech
+            # incident, restart…) don't leak onto the station platform.
             if st.finished and not self._arrival_played:
                 self._arrival_played = True
-                # Normal arrival overrides any residual fault broadcast
-                # (evac, tech_incident, restart…) queued during the trip.
                 self.sounds.stop_announcements()
                 self._last_panne_kind = ""
-                if st.train.direction > 0:
-                    # Arrived at Grande Motte (3032 m, upper)
-                    self.sounds.play_bilingual("exit_upstream", cooldown=120.0)
-                else:
-                    # Arrived at Val Claret (2111 m, lower)
-                    self.sounds.play_bilingual("exit_downstream", cooldown=120.0)
-                self.sounds.play_bilingual("exit_left", cooldown=120.0)
         self.update()
 
     def _apply_keys(self, dt: float) -> None:
@@ -2057,16 +2560,25 @@ class GameWidget(QWidget):
             tr.doors_timer = max(0.0, tr.doors_timer - dt)
             if tr.doors_timer <= 0.0:
                 tr.doors_open = tr.doors_cmd
+                # Whenever the doors physically open, the driver's "ready
+                # to depart" lamp must drop : the departure interlock is
+                # cleared so the next leg requires a fresh ready-press
+                # after closing the doors again. Matches real Von Roll
+                # cab logic (ready lamp is wired via door-closed contact).
+                if tr.doors_open:
+                    tr.ready = False
+                    st.ghost_ready = False
         active = self._key_state | self._mouse_hold
         up = Qt.Key.Key_Up in active
         down = Qt.Key.Key_Down in active
         brake_key = (Qt.Key.Key_Space in active) or (Qt.Key.Key_B in active)
         # Up/Down adjust the driver's speed command (percentage of V_MAX).
         # Regulator takes care of realistic accel/decel to track it.
-        # Interlock : speed_cmd is LOCKED until the departure sequence
-        # is complete (both cabins ready, doors closed, trip_started).
+        # Available at any time — the departure interlock is enforced by
+        # the ready / buzzer / start sequence on the traction side, not
+        # by locking the setpoint itself.
         any_action = False
-        if up and st.trip_started:
+        if up:
             tr.speed_cmd = min(1.0, tr.speed_cmd + 0.35 * dt)
             any_action = True
         if down:
@@ -2082,10 +2594,14 @@ class GameWidget(QWidget):
         # --- Dead-man vigilance (optional, off by default) : driver must
         # touch any control at least once every DEAD_MAN_LIMIT seconds
         # while moving, otherwise the system triggers an automatic stop.
+        # Rising-edge detection : only a press-AFTER-release counts as
+        # acknowledgement (you cannot wedge the pedal down permanently).
+        action_edge = any_action and not self._prev_any_action
+        self._prev_any_action = any_action
         if st.vigilance_enabled:
             DEAD_MAN_LIMIT = 20.0
             if abs(tr.v) > 0.2 and not tr.dead_man_fault:
-                if any_action:
+                if action_edge:
                     tr.dead_man_timer = 0.0
                 else:
                     tr.dead_man_timer += dt
@@ -2111,17 +2627,45 @@ class GameWidget(QWidget):
         # Ignore auto-repeat so holding the key doesn't cascade the same
         # announcement dozens of times into the queue.
         if self._show_annmenu and not ev.isAutoRepeat():
+            # Language selector hotkeys : F/E/I/D/S pick the announcement
+            # language played by the next selection. Independent of the
+            # UI language (L) so the driver can queue any translation.
+            lang_keys = {
+                Qt.Key.Key_F: "fr",
+                Qt.Key.Key_E: "en",
+                Qt.Key.Key_I: "it",
+                Qt.Key.Key_G: "de",  # G for German (D is the doors key)
+                Qt.Key.Key_S: "es",
+            }
+            if k in lang_keys:
+                st.ann_lang = lang_keys[k]
+                add_event(st, "ann_lang",
+                          f"Announcement language → {st.ann_lang.upper()}",
+                          f"Langue des annonces → {st.ann_lang.upper()}",
+                          "info")
+                return
             for entry_k, group, _lbl, en, fr in ANNOUNCEMENT_MENU:
                 if k == entry_k:
                     # Interrupt any announcement currently playing — a
                     # new command always takes over, no cascading queue.
                     self.sounds.stop_announcements()
                     self.sounds._cooldowns.pop(group, None)
-                    self.sounds.play_bilingual(group, cooldown=5.0)
-                    add_event(st, "ann",
-                              f"Announcement : {en}",
-                              f"Annonce : {fr}",
-                              "info")
+                    # Check the file exists for the requested language
+                    # BEFORE playing — if not, warn the driver instead of
+                    # falling back to another language silently.
+                    available = self.sounds._pick(group, st.ann_lang, strict=True)
+                    if available is None:
+                        add_event(st, "ann",
+                                  f"Announcement [{st.ann_lang.upper()}] not available : {en}",
+                                  f"Annonce [{st.ann_lang.upper()}] indisponible : {fr}",
+                                  "warn")
+                    else:
+                        self.sounds.play(group, lang=st.ann_lang,
+                                         cooldown=5.0, strict=True)
+                        add_event(st, "ann",
+                                  f"Announcement [{st.ann_lang.upper()}] : {en}",
+                                  f"Annonce [{st.ann_lang.upper()}] : {fr}",
+                                  "info")
                     return
         if k == Qt.Key.Key_F2:
             self._show_annmenu = not self._show_annmenu
@@ -2152,6 +2696,15 @@ class GameWidget(QWidget):
         elif k == Qt.Key.Key_R:
             if st.finished or st.mode == MODE_OVER:
                 self.new_trip()
+        elif k == Qt.Key.Key_Home:
+            # Return to the main title screen at any time — the driver
+            # can start a fresh simulation (different direction / train)
+            # or simply quit with Esc.
+            self.sounds.stop_announcements()
+            self.sounds.reset()
+            st.mode = MODE_TITLE
+            st.finished = False
+            return
         elif k == Qt.Key.Key_I:
             # Reverse direction — allowed whenever the train is at rest
             # (|v| < 0.1 m/s), whether that's at a terminus after arrival
@@ -2173,6 +2726,15 @@ class GameWidget(QWidget):
                 self._show_help = False
         elif k == Qt.Key.Key_F4:
             self._cabin_view = not self._cabin_view
+        elif k in (Qt.Key.Key_Plus, Qt.Key.Key_Equal):
+            # Side-view zoom in (narrower window, more detail)
+            self._profile_zoom = max(0.35, self._profile_zoom / 1.25)
+        elif k == Qt.Key.Key_Minus:
+            # Side-view zoom out (up to whole trip in one view)
+            self._profile_zoom = min(4.2, self._profile_zoom * 1.25)
+        elif k == Qt.Key.Key_0 and not self._show_annmenu:
+            # Reset zoom
+            self._profile_zoom = 1.0
         elif k == Qt.Key.Key_L:
             global LANG
             LANG = "en" if LANG == "fr" else "fr"
@@ -2221,7 +2783,7 @@ class GameWidget(QWidget):
                               "info")
                 else:
                     tr.doors_timer = DOOR_CLOSE_TIME
-                    self.sounds.play("doors_close", lang="fr", cooldown=60.0)
+                    self.sounds.play("doors_close", lang=st.ann_lang, cooldown=60.0)
                     add_event(st, "doors",
                               "Doors closing...",
                               "Fermeture des portes...", "info")
@@ -2265,7 +2827,7 @@ class GameWidget(QWidget):
                           "EMERGENCY STOP — rail + drum brakes",
                           "ARRÊT D'URGENCE — freins rail + tambour",
                           "alarm")
-                self.sounds.play_bilingual("brake_noise", cooldown=30.0)
+                self.sounds.play("brake_noise", lang=st.ann_lang, cooldown=30.0)
             elif abs(tr.v) < 0.1:
                 tr.emergency = False
                 tr.maint_brake = False
@@ -2299,7 +2861,7 @@ class GameWidget(QWidget):
                       "info")
             if not tr.lights_cabin:
                 # Real announcement when dimming the cabin
-                self.sounds.play_bilingual("dim_light", cooldown=60.0)
+                self.sounds.play("dim_light", lang=st.ann_lang, cooldown=60.0)
         elif k == Qt.Key.Key_K:
             st.train.horn = True
             self.sounds.start_horn()
@@ -2333,7 +2895,14 @@ class GameWidget(QWidget):
             # valid at standstill in a station, with the doors still
             # open (departure sequence hasn't started).
             tr = st.train
-            if st.trip_started or st.finished:
+            if st.trip_started:
+                return
+            # After arrival : first V press silently flips the travel
+            # direction and re-arms the departure sequence. The F4 view,
+            # ghost position and HUD heading all update automatically.
+            # The driver then goes through the normal D → V → Z cycle.
+            if st.finished:
+                self.reverse_trip(silent=True)
                 return
             # Interlocks : the ready button is wired through the safety
             # chain of the real Perce-Neige. Arming READY is only
@@ -2391,7 +2960,7 @@ class GameWidget(QWidget):
                                  or (tr.s >= STOP_S - 5.0))
                 if not at_terminus_v:
                     self.sounds.stop_announcements()
-                    self.sounds.play_bilingual("restart", cooldown=30.0)
+                    self.sounds.play("restart", lang=st.ann_lang, cooldown=30.0)
                     add_event(st, "ready",
                               "Mid-tunnel restart — 'Resuming service' announcement",
                               "Reprise en tunnel — annonce 'Remise en route'",
@@ -2458,7 +3027,7 @@ class GameWidget(QWidget):
             if tr.doors_cmd:
                 tr.doors_cmd = False
                 tr.doors_timer = DOOR_CLOSE_TIME
-                self.sounds.play("doors_close", lang="fr", cooldown=60.0)
+                self.sounds.play("doors_close", lang=st.ann_lang, cooldown=60.0)
             # Departure signal: different sound per station.
             # Each WAV includes ~1.5 s of pre-buzzer ambient for a
             # smooth fade-in, so the countdown matches the full WAV.
@@ -2549,6 +3118,17 @@ class GameWidget(QWidget):
                 ev.accept()
                 return
 
+    def wheelEvent(self, ev: QWheelEvent) -> None:  # noqa: N802
+        # Mouse wheel zooms the side-view (F4 off). Ignored in cabin view.
+        if self._cabin_view:
+            return
+        delta = ev.angleDelta().y()
+        if delta == 0:
+            return
+        factor = 0.85 if delta > 0 else 1.18
+        self._profile_zoom = max(0.35, min(4.2, self._profile_zoom * factor))
+        ev.accept()
+
     def mouseReleaseEvent(self, ev: QMouseEvent) -> None:  # noqa: N802
         if ev.button() != Qt.MouseButton.LeftButton:
             return
@@ -2585,8 +3165,8 @@ class GameWidget(QWidget):
             self._draw_title_overlay(p, w, h)
         elif self.state.mode == MODE_PAUSED:
             self._draw_paused_overlay(p, w, h)
-        elif self.state.finished:
-            self._draw_finished_overlay(p, w, h)
+        # No "trip completed" overlay — the driver simply stays in the
+        # cabin, doors open, ready to prepare the return trip on demand.
 
         if self._show_help:
             self._draw_help_overlay(p, w, h)
@@ -2598,8 +3178,8 @@ class GameWidget(QWidget):
             self._draw_ann_menu(p, w, h)
 
         # Version + fps
-        p.setPen(QPen(COLOR_TEXT_DIM))
-        p.setFont(QFont("Consolas", 9))
+        p.setPen(self._pen_version)
+        p.setFont(self._font_version)
         p.drawText(
             QRectF(w - 140, h - 18, 130, 16),
             int(Qt.AlignmentFlag.AlignRight),
@@ -2610,9 +3190,16 @@ class GameWidget(QWidget):
     # ----- background ------------------------------------------------------
 
     def _draw_background(self, p: QPainter, w: int, h: int) -> None:
-        grad = QLinearGradient(0, 0, 0, h)
-        grad.setColorAt(0, COLOR_BG_TOP)
-        grad.setColorAt(1, COLOR_BG_BOT)
+        # Gradient only depends on height — cache keyed on h to avoid
+        # rebuilding QLinearGradient every frame.
+        cache = self._cached_bg_grad
+        if cache is None or cache[0] != h:
+            grad = QLinearGradient(0, 0, 0, h)
+            grad.setColorAt(0, COLOR_BG_TOP)
+            grad.setColorAt(1, COLOR_BG_BOT)
+            self._cached_bg_grad = (h, grad)
+        else:
+            grad = cache[1]
         p.fillRect(0, 0, w, h, QBrush(grad))
 
     # ----- main world view -------------------------------------------------
@@ -2639,13 +3226,19 @@ class GameWidget(QWidget):
         view_w = rect.width() - 20
 
         # Determine camera in horizontal metres. Narrower = more zoom.
-        cam_width_m = 850.0
+        # _profile_zoom: 1.0 = 850 m window (default), 0.35 ≈ tight close-up,
+        # ≥ 4.2 shows the whole 3491 m trip in one frame.
+        cam_width_m = 850.0 * self._profile_zoom
         cabin_x_m, cabin_y_m = geom_at(tr.s)
         cam_x_m = max(0.0, min(max(H_MAX - cam_width_m, 0),
                                cabin_x_m - cam_width_m * 0.48))
 
-        # Y range: follow the cabin vertically so we stay close to the track
-        y_span = 350.0
+        # Y span must scale LINEARLY with cam_width_m so the world→screen
+        # aspect ratio stays identical across zooms — otherwise the slope
+        # would appear steeper or gentler as the driver zooms in/out, which
+        # is both wrong and disorienting. Reference ratio 850 : 350 m matches
+        # the view_w : view_h aspect and gives a realistic visual slope.
+        y_span = cam_width_m * (350.0 / 850.0)
         y_mid = max(ALT_LOW + y_span / 2,
                     min(ALT_HIGH - y_span / 2 + 40, cabin_y_m + 40))
         y_top_m = y_mid + y_span / 2
@@ -2655,6 +3248,55 @@ class GameWidget(QWidget):
             px = view_x + (xm - cam_x_m) / cam_width_m * view_w
             py = view_y + (y_top_m - ym) / (y_top_m - y_bot_m) * view_h
             return QPointF(px, py)
+
+        # === Distant hazy ridges (atmospheric perspective) ===
+        # Two silhouette layers behind the main massif give the scene
+        # depth. Each ridge is a shallow sine-noise profile parallax-offset
+        # so far ridges scroll slowly relative to the train's position.
+        for layer_idx, (color, top_off, parallax, freq) in enumerate((
+            (COLOR_MOUNT_FAR, 560.0, 0.35, 0.0025),
+            (COLOR_MOUNT_MID, 380.0, 0.65, 0.0041),
+        )):
+            ridge = QPolygonF()
+            ridge.append(QPointF(view_x, view_y + view_h))
+            for i in range(0, 61):
+                fx = view_x + (view_w * i / 60.0)
+                # parallax: far ridges move slower as cam pans
+                world_x = cam_x_m * parallax + (i / 60.0) * cam_width_m
+                y_noise = (
+                    top_off
+                    + 90.0 * math.sin(world_x * freq + layer_idx * 1.3)
+                    + 45.0 * math.sin(world_x * freq * 2.1 + layer_idx * 2.7)
+                    + 22.0 * math.sin(world_x * freq * 4.3)
+                )
+                # Base of ridge sits near tunnel altitude
+                base_ym = ALT_LOW + 400 + y_noise
+                py = view_y + (y_top_m - base_ym) / (y_top_m - y_bot_m) * view_h
+                ridge.append(QPointF(fx, py))
+            ridge.append(QPointF(view_x + view_w, view_y + view_h))
+            p.setBrush(QBrush(color))
+            p.setPen(Qt.PenStyle.NoPen)
+            p.drawPolygon(ridge)
+
+        # === Drifting clouds high in the sky ===
+        # Large soft ellipses at ~3100–3300 m, also parallax-offset so
+        # they appear to float independently of the foreground.
+        for cx_off, cy_off, rad_x, rad_y, cshade in (
+            (  0.0, 3280.0, 160.0, 22.0, False),
+            (620.0, 3210.0, 210.0, 30.0, True),
+            (1320.0, 3305.0, 140.0, 18.0, False),
+            (2100.0, 3240.0, 240.0, 26.0, True),
+            (2900.0, 3280.0, 180.0, 22.0, False),
+        ):
+            cx = cx_off - cam_x_m * 0.45
+            pt = world_to_screen(cx, cy_off)
+            if -260 < pt.x() - view_x < view_w + 260:
+                p.setBrush(QBrush(COLOR_CLOUD_SHADE if cshade else COLOR_CLOUD))
+                p.setPen(Qt.PenStyle.NoPen)
+                # horizontal width in pixels depends on zoom
+                rx_px = rad_x * (view_w / cam_width_m) * 0.8
+                ry_px = rad_y * (view_h / (y_top_m - y_bot_m)) * 0.9
+                p.drawEllipse(pt, rx_px, ry_px)
 
         # Draw mountain outline as filled polygon from the tunnel line up
         # to the top of the view, thickened upward for the mountain body.
@@ -2697,9 +3339,56 @@ class GameWidget(QWidget):
             snow_poly.append(pt)
         for pt in reversed(snow_bot):
             snow_poly.append(pt)
-        p.setBrush(QBrush(COLOR_GLACIER))
+        grad_snow = QLinearGradient(0, view_y, 0, view_y + view_h * 0.6)
+        grad_snow.setColorAt(0.0, COLOR_GLACIER)
+        grad_snow.setColorAt(1.0, COLOR_GLACIER_SHADE)
+        p.setBrush(QBrush(grad_snow))
         p.setPen(Qt.PenStyle.NoPen)
         p.drawPolygon(snow_poly)
+
+        # === Pine tree line at alt 2200–2500 m ===
+        # Draw small conifer silhouettes scattered along the slope.
+        # Deterministic placement (hashed by segment index) so trees don't
+        # flicker frame-to-frame.
+        tree_step_m = 60.0
+        s_start = max(0.0, cam_x_m - 50.0)
+        s_end = min(H_MAX, cam_x_m + cam_width_m + 50.0)
+        # Walk in slope-s space so trees follow tunnel curvature.
+        s_m = 0.0
+        tree_idx = 0
+        while s_m < LENGTH:
+            xm, ym = geom_at(s_m)
+            if s_start <= xm <= s_end and ym < 2550.0:
+                # Pseudo-random per-segment offset + size
+                h_off = ((tree_idx * 131) % 17) * 2.0
+                v_off = ((tree_idx * 53) % 11) * 1.4
+                size_px = 6.0 + ((tree_idx * 37) % 7)
+                base_pt = world_to_screen(xm + h_off, ym + 30 + v_off)
+                # Draw triangle (conifer)
+                tri = QPolygonF()
+                tri.append(QPointF(base_pt.x(), base_pt.y() - size_px))
+                tri.append(QPointF(base_pt.x() - size_px * 0.55, base_pt.y()))
+                tri.append(QPointF(base_pt.x() + size_px * 0.55, base_pt.y()))
+                # Alternate shade for variation
+                p.setBrush(QBrush(COLOR_PINE_HILIGHT if tree_idx & 1 else COLOR_PINE))
+                p.setPen(Qt.PenStyle.NoPen)
+                p.drawPolygon(tri)
+            s_m += tree_step_m
+            tree_idx += 1
+
+        # === Rock outcrops on bare mountain (above tree line, below snow) ===
+        # Small darker patches to break up the flat rock color.
+        p.setBrush(QBrush(QColor(46, 40, 38)))
+        p.setPen(Qt.PenStyle.NoPen)
+        for seed in range(8):
+            xw = cam_x_m + (seed * 137.0 % cam_width_m)
+            xm_seed, ym_seed = xw, 0.0
+            # Get rock-surface altitude at that x (approx: linearly between track ends)
+            frac = xw / max(1.0, H_MAX)
+            ym_seed = ALT_LOW + (ALT_HIGH - ALT_LOW) * frac + 90
+            if ym_seed < 2650.0:
+                pt = world_to_screen(xw, ym_seed)
+                p.drawEllipse(pt, 14.0, 4.0)
 
         # Draw tunnel as a darker tube along the slope
         pen_tunnel = QPen(COLOR_TUNNEL, 10)
@@ -2776,6 +3465,15 @@ class GameWidget(QWidget):
             T(f"slope  {grad_now:4.1f}%  ({ang:4.1f}°)",
               f"pente  {grad_now:4.1f}%  ({ang:4.1f}°)"),
         )
+        # Zoom indicator (+/− or wheel to zoom, 0 to reset)
+        p.setPen(QPen(COLOR_TEXT_DIM))
+        p.setFont(QFont("Consolas", 9))
+        p.drawText(
+            QRectF(view_x + view_w - 180, view_y + 22, 170, 14),
+            int(Qt.AlignmentFlag.AlignRight),
+            T(f"zoom {1.0 / self._profile_zoom:4.2f}×  (+/− 0)",
+              f"zoom {1.0 / self._profile_zoom:4.2f}×  (+/− 0)"),
+        )
 
         # Snowflakes drifting across the view (falls inside the clip)
         p.setPen(Qt.PenStyle.NoPen)
@@ -2799,8 +3497,17 @@ class GameWidget(QWidget):
         mini_rect = QRectF(view_x + 4, view_y + 2, view_w - 220, 32)
         self._draw_minimap(p, mini_rect)
 
-        # Plan view (bird's eye) inset — bottom-left of world view
-        plan_rect = QRectF(view_x + 8, view_y + view_h - 150, 240, 138)
+        # Plan view (bird's eye) inset — middle-left of world view
+        # (vertically centred on the side-view window so it doesn't
+        # overlap the bottom motor-room inset and leaves breathing
+        # room for distance markers along the base).
+        plan_w = 260.0
+        plan_h = 148.0
+        plan_rect = QRectF(
+            view_x + 8,
+            view_y + (view_h - plan_h) / 2.0,
+            plan_w, plan_h,
+        )
         self._draw_planview(p, plan_rect)
 
         p.restore()
@@ -2861,7 +3568,12 @@ class GameWidget(QWidget):
         # Headlights ON: the beam reaches ~50 m before the concrete dust
         #   swallows it, with exponential falloff (Beer-Lambert-ish).
         if tr.lights_head:
-            max_depth = 100.0
+            # Extended from 100 m → 260 m so the driver can actually SEE
+            # the tunnel curving up/down when approaching a slope break
+            # (e.g. the 30 %→12 % transition on the last 400 m before
+            # Grande Motte). Fog / exponential dim still swallows anything
+            # past ~120 m so realism is preserved.
+            max_depth = 260.0
             head_reach = 38.0  # exponential decay length (m)
         else:
             max_depth = 14.0
@@ -2875,30 +3587,179 @@ class GameWidget(QWidget):
         d0 = ring_spacing - phase_m
         if d0 < 0.8:
             d0 += ring_spacing
+        # Driver's eye is inside the front cabin, not at tr.s (which
+        # tracks the train centre). Shift by (TRAIN_HALF − EYE_BACK) in
+        # the travel direction : the nose of the train is at TRAIN_HALF,
+        # the driver's seat sits EYE_BACK ≈ 3 m back from the nose so
+        # when stopped flush at a terminus there is still a few metres
+        # of platform visible forward (otherwise bumper + eye are the
+        # exact same point and the platform is entirely behind us).
+        EYE_BACK = 3.0
+        view_s = tr.s + (TRAIN_HALF - EYE_BACK) * tr.direction
+        # Distance from the driver's eye to the nearest tunnel end in the
+        # travel direction. Past this distance there is a concrete bumper
+        # wall — no more rings to draw.
+        if tr.direction > 0:
+            d_to_end = max(0.0, LENGTH - view_s)
+        else:
+            d_to_end = max(0.0, view_s)
+        ring_limit = min(max_depth, d_to_end)
         ring_depths: list[float] = []
         d_cur = d0
-        while d_cur <= max_depth:
+        while d_cur <= ring_limit:
             ring_depths.append(d_cur)
             d_cur += ring_spacing
 
+        # Vertical pitch of the tunnel ahead relative to the cabin's
+        # current attitude. The cabin floor is always aligned with the
+        # LOCAL slope (driver sees a level platform), so a ring AHEAD
+        # appears vertically offset by (angle_ahead - angle_here) × d,
+        # projected to screen via the focal length. Positive delta →
+        # ring centre moves UP on screen (track steepens uphill); we
+        # flip sign on descent so "steeper ahead" still reads correctly.
+        local_slope_rad = slope_angle_at(tr.s)
+
+        # --- Abt passing-loop separation factor -------------------------
+        # Real Perce-Neige has a 203 m Abt passing loop between
+        # PASSING_START and PASSING_END — a passive double-track section
+        # where the single bore widens, two parallel tracks run 3 m
+        # apart, the trains cross, and the rails rejoin via a symmetric
+        # switch at the far end. No moving parts : Abt switch uses
+        # asymmetric wheel flanges so each wagon biases to its own side.
+        # Render : linear ramp over the real switch transition length
+        # (~15 m of actual rail divergence) at both ends.
+        TRACK_SEP_M = 3.0         # centre-to-centre track separation (m)
+        SWITCH_RAMP_M = 15.0      # Abt switch divergence zone (m)
+        # Own side sign : physical side the main train takes through the
+        # Abt loop. Defined early (also used later for rail drawing) so
+        # _plan_local can shift the driver onto his own track — otherwise
+        # the cabin sits on the bore centerline and looks like it's
+        # straddling both tracks during the passing manoeuvre.
+        own_side_sign = -1 if ((tr.number == 1) == (tr.direction > 0)) else +1
+
+        def _loop_sep(ts: float) -> float:
+            if PASSING_START <= ts <= PASSING_END:
+                # Smooth step at the very edges so the walls don't kink
+                edge = 2.0
+                if ts - PASSING_START < edge:
+                    return (ts - PASSING_START) / edge
+                if PASSING_END - ts < edge:
+                    return (PASSING_END - ts) / edge
+                return 1.0
+            if PASSING_START - SWITCH_RAMP_M < ts < PASSING_START:
+                return (ts - (PASSING_START - SWITCH_RAMP_M)) / SWITCH_RAMP_M
+            if PASSING_END < ts < PASSING_END + SWITCH_RAMP_M:
+                return 1.0 - (ts - PASSING_END) / SWITCH_RAMP_M
+            return 0.0
+
+        # --- True plan-view pinhole projection for curves ---------------
+        # Instead of the old linear "½ f κ d" chord approximation (which
+        # fails badly once curvature changes along the view — produces
+        # stray off-centre "dark circles" in the distance and a visible
+        # kink where a curve meets a straight), project every track
+        # point through the real plan geometry. For each target s we
+        # fetch its world (px, py) from _GEOM, transform to the driver's
+        # local frame (forward along his heading, lateral to his right),
+        # and apply the standard pinhole x/z = focal · lateral / forward.
+        # Driver eye is at view_s (front cab) ; his heading equals the
+        # tunnel bearing at that s, flipped 180° when running in reverse.
+        p0x, p0y = plan_at(view_s)
+        h0_deg = heading_at(view_s)
+        if tr.direction < 0:
+            h0_deg += 180.0
+        h0_rad = math.radians(h0_deg)
+        sin_h0 = math.sin(h0_rad)
+        cos_h0 = math.cos(h0_rad)
+        # Driver's own-track lateral offset from the bore centerline.
+        # Inside the Abt passing loop the two tracks sit 3 m apart centre
+        # to centre ; the driver is on HIS side, not on the bore axis.
+        # Subtracting this offset from every projected point effectively
+        # moves the camera onto the own-track centerline, so the cabin
+        # follows its actual rails and the opposing track + ghost wagon
+        # appear offset to the opposite side — exactly how it looks from
+        # the real Perce-Neige driver's seat during the crossing.
+        own_eye_offset = own_side_sign * (TRACK_SEP_M * 0.5) * _loop_sep(view_s)
+
+        def _plan_local(s_target: float) -> tuple[float, float]:
+            """Return (forward_m, lateral_m) of track point at slope s in
+            the driver's local frame. forward > 0 = ahead, lateral > 0
+            = to the driver's right."""
+            px, py = plan_at(s_target)
+            dx = px - p0x
+            dy = py - p0y
+            # Driver heading unit vector : (sin h0, cos h0) in (east, north).
+            fwd = dx * sin_h0 + dy * cos_h0
+            lat = dx * cos_h0 - dy * sin_h0
+            # Shift the camera onto the own-track centerline during the
+            # passing loop : everything world-referenced appears laterally
+            # offset by −own_eye_offset.
+            return fwd, lat - own_eye_offset
+
+        # === True 3-axis pinhole projection ===============================
+        # _plan_local gives bird's-eye (fwd_plan, lat). To render vertical
+        # slope curvature EXACTLY (symmetric to horizontal curves), we also
+        # need the integrated altitude delta relative to the driver — pulled
+        # from geom_at (which holds the fully integrated tunnel profile) —
+        # and we rotate the (fwd_plan, dz) pair by the driver's pitch to
+        # obtain the true camera-frame (forward, up) axes. This replaces the
+        # old 1st-order `tan(slope_ahead − slope_here)` approximation that
+        # collapsed when slope varied sharply along view depth (e.g. the
+        # 30 %→2 % break at Grande Motte platform approach).
+        local_pitch = local_slope_rad * tr.direction
+        sin_pitch = math.sin(local_pitch)
+        cos_pitch = math.cos(local_pitch)
+        _driver_alt = geom_at(view_s)[1]
+
+        def _proj_local(s_target: float) -> tuple[float, float, float]:
+            """Return (fwd_cam, lat, up_cam) — camera-frame coordinates in
+            metres. fwd_cam is straight-line 3D distance along the driver's
+            look axis, up_cam the perpendicular vertical offset. Both
+            horizontal (plan) and vertical (altitude) track curvature are
+            integrated via _GEOM so the projection is physically exact."""
+            fwd_plan, lat = _plan_local(s_target)
+            dz = geom_at(s_target)[1] - _driver_alt
+            fwd_cam = fwd_plan * cos_pitch + dz * sin_pitch
+            up_cam = -fwd_plan * sin_pitch + dz * cos_pitch
+            return fwd_cam, lat, up_cam
+
         def _ring_xyr(d: float) -> tuple[float, float, float, float, float]:
-            """Project ring at depth d. Returns (cx, cy, r_px, ts, near_f)."""
-            ts = max(0.0, min(LENGTH, tr.s + d * tr.direction))
-            curv_d = curvature_at(ts) * tr.direction
-            # Ring-centre lateral offset from accumulated curvature
-            # (chord ≈ ½·κ·d² → projected screen offset ≈ ½·f·κ·d)
-            cxp = eye_x + 0.5 * focal * curv_d * d
-            cyp = eye_y
-            # Pinhole radius, clamped so near rings stay on-canvas
-            r_raw = focal * R_t / max(d, 0.35)
+            """Project ring at depth d. Returns (cx, cy, r_px, ts, near_f).
+
+            Uses true plan projection so curved tunnels render correctly
+            through their whole depth — no stray ring silhouettes, no
+            kink at curve/straight transitions."""
+            ts = max(0.0, min(LENGTH, view_s + d * tr.direction))
+            fwd, lat, up = _proj_local(ts)
+            fwd = max(fwd, 0.35)
+            cxp = eye_x + focal * lat / fwd
+            # True 3D pinhole projection : vertical offset comes from the
+            # integrated altitude delta (geom_at) rotated into the driver's
+            # pitched camera frame — renders sharp slope breaks correctly.
+            cyp = eye_y - focal * up / fwd
+            r_raw = focal * R_t / fwd
             r_px = min(r_raw, effective_view_w * 1.25)
-            # Nearness factor for alpha / line widths (1 at d=3, 0.1 at d=30)
             near_f = min(1.0, 3.0 / max(d, 3.0))
             return cxp, cyp, r_px, ts, near_f
 
         # === Pass 1: tunnel walls (near → far) =========================
+        # Cull rings whose centre lies more than 1.5 viewports off-axis
+        # — those are "behind the curve" and contribute only phantom
+        # dark circles at the horizon. Keep a generous margin so rings
+        # partially inside the frame still render correctly.
+        cull_x = effective_view_w * 1.5
+        # Collect ring envelope points so we can draw continuous floor /
+        # ceiling / sidewall-arch polylines between passes. Connecting the
+        # edges of successive rings is what perceptually reveals tunnel
+        # curvature — lateral (turns) AND vertical (slope breaks) — as
+        # a smooth bending surface instead of a stack of isolated discs.
+        floor_pts: list[tuple[QPointF, float]] = []   # (pt, near_f)
+        ceil_pts: list[tuple[QPointF, float]] = []
+        arch_l_pts: list[tuple[QPointF, float]] = []  # side arch (wall-height)
+        arch_r_pts: list[tuple[QPointF, float]] = []
         for d in ring_depths:
             cx, cy, r_px, track_s_c, near_f = _ring_xyr(d)
+            if abs(cx - eye_x) > cull_x + r_px:
+                continue
             lit = tunnel_lit_at(track_s_c)
             near_station = track_s_c < 100 or track_s_c > LENGTH - 100
             head_boost = (115.0 * math.exp(-d / head_reach)
@@ -2917,15 +3778,28 @@ class GameWidget(QWidget):
                             max(wall_bright - 28, 4),
                             max(wall_bright - 32, 4))
             shape = tunnel_shape_at(track_s_c)
+            # Widen the tunnel cross-section in the passing loop : the
+            # real cavern holds two 1.2 m-gauge tracks 3 m apart plus
+            # clearance ≈ 7-8 m overall width, i.e. ~2.3 × the running
+            # bore. Horizontal radius scales linearly with sep.
+            sep = _loop_sep(track_s_c)
+            fwd_d = max(d, 0.35)
+            px_per_m_d = focal / fwd_d
+            # Half-separation between the two parallel tracks in px at
+            # this depth.
+            track_half_px = (TRACK_SEP_M * 0.5) * px_per_m_d * sep
+            rx_px = r_px + sep * (TRACK_SEP_M * 0.5 + 0.8) * px_per_m_d
+            ry_px = r_px + sep * 0.6 * px_per_m_d  # slight vertical rise
             if shape == "circular":
                 p.setPen(Qt.PenStyle.NoPen)
                 p.setBrush(QBrush(wc))
-                p.drawEllipse(QPointF(cx, cy), r_px, r_px)
+                p.drawEllipse(QPointF(cx, cy), rx_px, ry_px)
                 p.setBrush(QBrush(dark_c))
-                p.drawEllipse(QPointF(cx, cy), r_px * 0.92, r_px * 0.92)
+                p.drawEllipse(QPointF(cx, cy),
+                              rx_px * 0.96, ry_px * 0.92)
             else:
-                hw = r_px * 1.2
-                hh = r_px * 1.1
+                hw = rx_px * 1.2
+                hh = ry_px * 1.1
                 p.setPen(Qt.PenStyle.NoPen)
                 p.setBrush(QBrush(wc))
                 path = QPainterPath()
@@ -2939,6 +3813,21 @@ class GameWidget(QWidget):
                                      hw * 1.8, hh * 1.62,
                                      r_px * 0.4, r_px * 0.4)
                 p.drawPath(path2)
+            # Central median : in the Abt passing loop there is a
+            # low concrete divider (≈ 40 cm high) between the two
+            # tracks, carrying the cable-guide pulleys. Draw as a
+            # thin dark bar at rail level, shrinking to nothing at the
+            # switch transitions.
+            if sep > 0.15 and r_px > 3.0:
+                med_h_px = focal * 0.40 / fwd_d
+                med_w_px = max(1.2, focal * 0.30 / fwd_d)
+                med_rail_y = cy + ry_px * 0.72
+                p.setPen(Qt.PenStyle.NoPen)
+                p.setBrush(QBrush(QColor(75, 72, 68,
+                                         int(120 + 120 * sep * near_f))))
+                p.drawRect(QRectF(cx - med_w_px * 0.5,
+                                  med_rail_y - med_h_px,
+                                  med_w_px, med_h_px))
             # Wall cables (only visible when nearby)
             if r_px > 12 and near_f > 0.15:
                 cable_alpha = int(min(200, 60 + 140 * near_f))
@@ -2947,20 +3836,122 @@ class GameWidget(QWidget):
                 for off in (0.35, 0.55, 0.75):
                     p.drawPoint(QPointF(cx - r_px * 0.88,
                                         cy - r_px * off + r_px * 0.3))
+            # Collect envelope points — ceiling (top of bore), floor
+            # (bottom of bore at ballast), and the two side arches at
+            # wall-mid height — for continuous polylines drawn between
+            # passes. These reveal BOTH horizontal and vertical tunnel
+            # curvature as a bending surface, matching how the real eye
+            # perceives a tube.
+            floor_pts.append((QPointF(cx, cy + ry_px), near_f))
+            ceil_pts.append((QPointF(cx, cy - ry_px), near_f))
+            arch_l_pts.append(
+                (QPointF(cx - rx_px * 0.92, cy - ry_px * 0.35), near_f))
+            arch_r_pts.append(
+                (QPointF(cx + rx_px * 0.92, cy - ry_px * 0.35), near_f))
+
+        # === Pass 1.5: tunnel envelope polylines ========================
+        # Continuous floor / ceiling / arch lines traced through the
+        # collected ring-edge points. Stroked with near-to-far alpha
+        # ramping so distant parts fade into the dark, and with slight
+        # thickening near the camera for a natural perspective feel.
+        def _draw_envelope(pts: list[tuple[QPointF, float]],
+                           base_color: QColor,
+                           width_near: float,
+                           width_far: float) -> None:
+            if len(pts) < 2:
+                return
+            for i in range(len(pts) - 1):
+                a, nfa = pts[i]
+                b, nfb = pts[i + 1]
+                nf = 0.5 * (nfa + nfb)
+                alpha = int(min(230, 60 + 170 * nf))
+                pen_w = width_far + (width_near - width_far) * nf
+                col = QColor(base_color.red(), base_color.green(),
+                             base_color.blue(), alpha)
+                p.setPen(QPen(col, pen_w))
+                p.drawLine(a, b)
+
+        # Floor (dark, wider) — dominant visual cue for slope dip / rise.
+        _draw_envelope(floor_pts, QColor(24, 20, 16), 4.0, 1.2)
+        # Ceiling (medium) — reveals pitch symmetry.
+        _draw_envelope(ceil_pts, QColor(60, 52, 42), 2.5, 0.8)
+        # Side arches (subtle) — give tube a sense of walls, reveal turns.
+        _draw_envelope(arch_l_pts, QColor(55, 48, 40), 2.0, 0.6)
+        _draw_envelope(arch_r_pts, QColor(55, 48, 40), 2.0, 0.6)
 
         # === Pass 2: rails, ties, chevrons (far → near) ================
+        # Cable visibility rules (single loop around upper bull wheel):
+        #   climbing  — before loop: 1 cable (center)
+        #             — past loop:   2 cables (2nd offset toward own side:
+        #                            Train 1 → right of 1st, Train 2 → left)
+        #   descending — before loop (above loop): 1 cable
+        #              — past loop (below loop):   0 cables
+        # The "own side" for the second cable is the physical side of the
+        # track the train runs on through the Abt switch — flips in F4
+        # driver POV when direction reverses (east/west stays absolute, but
+        # left/right on screen inverts).
+        # (own_side_sign is defined earlier so _plan_local can use it.)
+        # Second-cable side when climbing past loop (user spec):
+        # Train 1 climbing → right of 1st, Train 2 climbing → left of 1st.
+        # On descent past loop no second cable is drawn so side unused.
+        second_cable_side = +1 if tr.number == 1 else -1
+        # Cable count transitions EXACTLY when the main train passes the
+        # opposing wagon (not when crossing a static loop boundary). The
+        # ghost centre at tr.s means the two trains are alongside ; the
+        # n_cables rule flips the frame the ghost crosses our eye plane.
+        ghost_ahead_m = (st.ghost_s - tr.s) * tr.direction
+        has_crossed = ghost_ahead_m < 0.0
+        if tr.direction > 0:
+            n_cables_main = 2 if has_crossed else 1
+        else:
+            n_cables_main = 0 if has_crossed else 1
         prev_pts: dict[str, QPointF | None] = {
-            'lr': None, 'rr': None, 'cg': None,
+            'lr': None, 'rr': None, 'cg1': None, 'cg2': None,
+            # Opposing track rails (only drawn inside the passing loop)
+            'olr': None, 'orr': None,
         }
         for d in reversed(ring_depths):
             cx, cy, r_px, track_s_c, near_f = _ring_xyr(d)
             if r_px < 1.0:
                 continue
+            if abs(cx - eye_x) > cull_x + r_px:
+                prev_pts = {'lr': None, 'rr': None,
+                            'cg1': None, 'cg2': None,
+                            'olr': None, 'orr': None}
+                continue
+            # Passing loop : shift own track toward own_side_sign by
+            # ½·TRACK_SEP and draw opposing rails at the mirrored
+            # position. `sep` ramps 0→1 through the Abt switch so the
+            # rails visibly fan out / rejoin.
+            sep_r = _loop_sep(track_s_c)
+            fwd_d = max(d, 0.35)
+            track_half_px_r = (TRACK_SEP_M * 0.5) * (focal / fwd_d) * sep_r
+            own_cx = cx + own_side_sign * track_half_px_r
+            opp_cx = cx - own_side_sign * track_half_px_r
             gauge_px = r_px * 0.35
             rail_y = cy + r_px * 0.75
-            left_rail = QPointF(cx - gauge_px, rail_y)
-            right_rail = QPointF(cx + gauge_px, rail_y)
-            cable_guide = QPointF(cx, rail_y - r_px * 0.03)
+            left_rail = QPointF(own_cx - gauge_px, rail_y)
+            right_rail = QPointF(own_cx + gauge_px, rail_y)
+            n_cables = n_cables_main
+            # Cable-guide positioning :
+            #   - Outside the loop (sep_r ≈ 0) : cable 1 runs down the
+            #     bore centerline (centered on climb, shifted left on
+            #     descent), cable 2 sits slightly off to second_cable_side.
+            #   - Inside the loop (sep_r > 0) : the traction cables split
+            #     onto their own tracks — cable 1 on OWN track centerline,
+            #     cable 2 on OPPOSING track centerline — so the visual
+            #     match the real Abt loop where each wagon is pulled by
+            #     its own side of the figure-8 rope.
+            # Because track_half_px_r already scales with sep_r, own_cx
+            # and opp_cx collapse onto cx outside the loop, so the
+            # transition is smooth without an explicit blend.
+            fade_straight = 1.0 - sep_r
+            cable1_x = (own_cx
+                        + (-gauge_px * 0.45 if tr.direction < 0 else 0.0)
+                          * fade_straight)
+            cable1 = QPointF(cable1_x, rail_y - r_px * 0.03)
+            cable2_x = opp_cx + second_cable_side * gauge_px * 0.45 * fade_straight
+            cable2 = QPointF(cable2_x, rail_y - r_px * 0.03)
             pen_w = max(2.0 * near_f, 0.5)
             rail_alpha = int(min(220, 70 + 150 * near_f))
             p.setPen(QPen(QColor(160, 165, 155, rail_alpha), pen_w))
@@ -2971,34 +3962,54 @@ class GameWidget(QWidget):
                 p.drawLine(prev_pts['rr'], right_rail)
             prev_pts['rr'] = right_rail
             p.setPen(QPen(QColor(100, 105, 95, rail_alpha), pen_w * 0.8))
-            if prev_pts['cg'] is not None:
-                p.drawLine(prev_pts['cg'], cable_guide)
-            prev_pts['cg'] = cable_guide
-            # Sleeper + central cable-guide bolt
+            if n_cables >= 1:
+                if prev_pts['cg1'] is not None:
+                    p.drawLine(prev_pts['cg1'], cable1)
+                prev_pts['cg1'] = cable1
+            else:
+                prev_pts['cg1'] = None
+            if n_cables >= 2:
+                if prev_pts['cg2'] is not None:
+                    p.drawLine(prev_pts['cg2'], cable2)
+                prev_pts['cg2'] = cable2
+            else:
+                prev_pts['cg2'] = None
+            # Opposing-track rails inside the passing loop.
+            if sep_r > 0.02:
+                opp_left = QPointF(opp_cx - gauge_px, rail_y)
+                opp_right = QPointF(opp_cx + gauge_px, rail_y)
+                p.setPen(QPen(QColor(150, 155, 145, rail_alpha), pen_w))
+                if prev_pts['olr'] is not None:
+                    p.drawLine(prev_pts['olr'], opp_left)
+                prev_pts['olr'] = opp_left
+                if prev_pts['orr'] is not None:
+                    p.drawLine(prev_pts['orr'], opp_right)
+                prev_pts['orr'] = opp_right
+            else:
+                prev_pts['olr'] = None
+                prev_pts['orr'] = None
+            # Sleeper + central cable-guide bolt. Inside the passing
+            # loop the sleeper extends across BOTH tracks — real Abt
+            # loops use continuous ties from one rail set to the other.
             tie_alpha = int(min(230, 70 + 160 * near_f))
-            tie_w = gauge_px * 1.05
             tie_h = max(3.0 * near_f, 1.0)
             p.setPen(Qt.PenStyle.NoPen)
             p.setBrush(QBrush(QColor(55, 48, 38, tie_alpha)))
-            p.drawRect(QRectF(cx - tie_w, rail_y - tie_h * 0.5,
-                              tie_w * 2.0, tie_h))
+            if sep_r > 0.05:
+                # Continuous tie spanning own + opp rails.
+                tie_x_lo = min(own_cx, opp_cx) - gauge_px * 1.05
+                tie_x_hi = max(own_cx, opp_cx) + gauge_px * 1.05
+                p.drawRect(QRectF(tie_x_lo, rail_y - tie_h * 0.5,
+                                  tie_x_hi - tie_x_lo, tie_h))
+            else:
+                tie_w = gauge_px * 1.05
+                p.drawRect(QRectF(own_cx - tie_w, rail_y - tie_h * 0.5,
+                                  tie_w * 2.0, tie_h))
             bolt_w = max(2.0 * near_f, 0.7)
             p.setBrush(QBrush(QColor(140, 135, 120,
                                      int(tie_alpha * 0.8))))
-            p.drawRect(QRectF(cx - bolt_w, rail_y - tie_h * 0.7,
+            p.drawRect(QRectF(own_cx - bolt_w, rail_y - tie_h * 0.7,
                               bolt_w * 2.0, tie_h * 1.4))
-            # Passing loop
-            if is_passing_loop(track_s_c) and r_px > 10:
-                loop_alpha = int(min(150, 40 + 110 * near_f))
-                loop_r = r_px * 0.55
-                loop_cx = cx - r_px * 1.25
-                loop_cy = cy + r_px * 0.05
-                p.setPen(Qt.PenStyle.NoPen)
-                p.setBrush(QBrush(QColor(55, 60, 50, loop_alpha)))
-                p.drawEllipse(QPointF(loop_cx, loop_cy), loop_r, loop_r)
-                p.setBrush(QBrush(QColor(18, 20, 16, loop_alpha)))
-                p.drawEllipse(QPointF(loop_cx, loop_cy),
-                              loop_r * 0.85, loop_r * 0.85)
             # Curve chevrons
             sign_curv = curvature_at(track_s_c)
             if abs(sign_curv) > 0.003 and r_px > 8:
@@ -3019,55 +4030,586 @@ class GameWidget(QWidget):
                     p.drawLine(QPointF(chev_x + chev_sz * 0.5, chev_y),
                                QPointF(chev_x, chev_y + chev_sz))
 
-        # === Neon tubes on the upper wall ==============================
-        # Installed on the left wall in the climbing direction → on the
-        # driver's right when the cabin is turned for the return trip.
-        # They emit their own light and remain visible as beacons even
-        # with headlights off.
-        NEON_SPACING = 12.0
-        NEON_LENGTH = 1.6
+        # === Fluorescent tubes on the tunnel wall ======================
+        # Real Perce-Neige tunnel : VERTICAL fluorescent tubes (~1.2 m
+        # long), mounted on the left wall in the climbing direction at
+        # a constant spacing. They are present the WHOLE length of the
+        # tunnel — no gaps, no dark sections from the driver's POV
+        # (the earlier "intermittent" look was a brightness-analysis
+        # artifact, not real installation geometry).
+        NEON_SPACING = 8.0              # ~8 m between tubes (constant)
+        NEON_LENGTH = 1.2               # vertical tube length (m)
         neon_side = -1.0 if tr.direction > 0 else +1.0
-        neon_max_depth = 55.0 if tr.lights_head else 28.0
+        neon_max_depth = 90.0 if tr.lights_head else 40.0
 
-        def _proj_wall(d: float) -> tuple[float, float, float]:
-            ts = max(0.0, min(LENGTH, tr.s + d * tr.direction))
-            curv_w = curvature_at(ts) * tr.direction
-            cxw = eye_x + 0.5 * focal * curv_w * d
-            cyw = eye_y
-            rw_raw = focal * R_t / max(d, 0.35)
+        def _proj_wall_point(d: float, h_above_rail: float
+                             ) -> tuple[float, float, float]:
+            """Project a point on the side wall at depth d, height h
+            above rail level (metres). Returns screen (x, y, near_f).
+            Uses plan-projection so neons stay attached to the wall
+            correctly through curves."""
+            ts = max(0.0, min(LENGTH, view_s + d * tr.direction))
+            fwd, lat, up = _proj_local(ts)
+            fwd = max(fwd, 0.35)
+            cxw = eye_x + focal * lat / fwd
+            cyw = eye_y - focal * up / fwd
+            rw_raw = focal * R_t / fwd
             rw = min(rw_raw, effective_view_w * 1.25)
             wall_x = cxw + neon_side * rw * 0.85
-            wall_y = cyw - rw * 0.45
+            rail_y = cyw + rw * 0.75
+            wall_y = rail_y - (focal * h_above_rail / fwd)
             nf = min(1.0, 3.0 / max(d, 3.0))
             return wall_x, wall_y, nf
 
+        # Tube geometry : mounted 1.5-2.7 m above rail, vertical span 1.2 m.
+        NEON_Y_BOTTOM = 1.5              # m above rail
+        NEON_Y_TOP = NEON_Y_BOTTOM + NEON_LENGTH
+
         k_span = int(neon_max_depth / NEON_SPACING) + 3
-        k_center = int(tr.s / NEON_SPACING)
+        # Anchor the tube positions to absolute slope metres so they
+        # don't wobble as the train moves (phase-locked to s=0).
+        k_center = int(view_s / NEON_SPACING)
         for k in range(k_center - k_span, k_center + k_span + 1):
             neon_s = k * NEON_SPACING
             if neon_s < 0.0 or neon_s > LENGTH:
                 continue
-            if not tunnel_lit_at(neon_s):
-                continue
-            depth_c = (neon_s - tr.s) * tr.direction
+            depth_c = (neon_s - view_s) * tr.direction
             if depth_c < 1.0 or depth_c > neon_max_depth:
                 continue
-            d_near = max(0.5, depth_c - NEON_LENGTH * 0.5)
-            d_far = min(neon_max_depth, depth_c + NEON_LENGTH * 0.5)
-            x1, y1, nf = _proj_wall(d_near)
-            x2, y2, _ = _proj_wall(d_far)
-            halo_w = max(14.0 * nf, 4.0)
-            mid_w = max(7.0 * nf, 2.2)
-            core_w = max(3.2 * nf, 1.2)
+            xb, yb, nf = _proj_wall_point(depth_c, NEON_Y_BOTTOM)
+            xt, yt, _ = _proj_wall_point(depth_c, NEON_Y_TOP)
+            halo_w = max(11.0 * nf, 3.0)
+            mid_w = max(5.5 * nf, 1.8)
+            core_w = max(2.6 * nf, 1.0)
             alpha_halo = int(min(180, 80 + 100 * nf))
             alpha_mid = int(min(230, 120 + 110 * nf))
             alpha_core = int(min(255, 180 + 75 * nf))
             p.setPen(QPen(QColor(170, 200, 255, alpha_halo), halo_w))
-            p.drawLine(QPointF(x1, y1), QPointF(x2, y2))
+            p.drawLine(QPointF(xb, yb), QPointF(xt, yt))
             p.setPen(QPen(QColor(220, 235, 255, alpha_mid), mid_w))
-            p.drawLine(QPointF(x1, y1), QPointF(x2, y2))
+            p.drawLine(QPointF(xb, yb), QPointF(xt, yt))
             p.setPen(QPen(QColor(255, 255, 245, alpha_core), core_w))
-            p.drawLine(QPointF(x1, y1), QPointF(x2, y2))
+            p.drawLine(QPointF(xb, yb), QPointF(xt, yt))
+
+        # === Opposing wagon at the passing loop =========================
+        # When both trains are near the Abt passing loop, the opposing
+        # wagon is physically alongside us on the parallel track (203 m
+        # long, ~3 m lateral separation). Draw a cylindrical silhouette
+        # with windows on the opposing side of the tunnel, projected at
+        # the slope-s range occupied by the opposing train.
+        opposing_side_sign = -own_side_sign
+        ghost_d_front = (st.ghost_s + TRAIN_HALF - view_s) * tr.direction
+        ghost_d_back = (st.ghost_s - TRAIN_HALF - view_s) * tr.direction
+        ghost_d_lo, ghost_d_hi = sorted((ghost_d_front, ghost_d_back))
+        show_ghost = (
+            (is_passing_loop(tr.s) or is_passing_loop(st.ghost_s))
+            and ghost_d_hi > 1.0 and ghost_d_lo < max_depth
+        )
+        if show_ghost:
+            # Ghost track half-separation from bore centerline : 1.5 m, but
+            # ramps with _loop_sep so the ghost swings laterally across the
+            # switch frog like a real Abt wagon (no hard jump from centre).
+            # Combined with own_eye_offset (driver on his own track), the
+            # NET lateral separation seen from the cabin is ≈ 3 m centre
+            # to centre while inside the loop — matching the real passing
+            # loop geometry.
+            GHOST_HALF = TRACK_SEP_M * 0.5     # 1.5 m
+            CAB_R = 1.80                        # cabin radius (m)
+            CAB_TOP = 3.20                      # cabin roof height above rail
+            CAB_BOT = 0.00                      # underframe bottom
+            # Vertical layering for a cylindrical side-view with 3D shading.
+            # Each tuple is (h_lo, h_hi, fill_color). From bottom up :
+            # undercarriage (bogie shadow), lower cylinder face (self-shadow),
+            # window band (light interior behind frames), upper cylinder
+            # face (direct highlight), roof curve (top cap with darker
+            # gradient). Values chosen so the wagon reads as a cylinder
+            # lit from above (tunnel neons are on the opposite wall which
+            # from the ghost cabin's view is its OWN side, so the side
+            # facing us is mostly in shadow with a highlight just below
+            # the roof curve).
+            BANDS = _GHOST_BANDS
+
+            def _proj_ghost(s_slope: float, h_above_rail: float
+                            ) -> tuple[float, float, float] | None:
+                d = (s_slope - view_s) * tr.direction
+                if d < 0.8 or d > max_depth:
+                    return None
+                ts = max(0.0, min(LENGTH, s_slope))
+                fwd, lat, up = _proj_local(ts)
+                fwd = max(fwd, 0.35)
+                sep_g = _loop_sep(ts)
+                lat_g = lat + opposing_side_sign * GHOST_HALF * sep_g
+                cxw = eye_x + focal * lat_g / fwd
+                cyw = eye_y - focal * up / fwd
+                rw = focal * R_t / fwd
+                rail_y = cyw + rw * 0.75
+                y = rail_y - focal * h_above_rail / fwd
+                return cxw, y, min(1.0, 4.0 / max(d, 4.0))
+
+            # Sample 28 points along the opposing train in slope-s space.
+            # (2 cars × 16 m = 32 m, so one sample per ≈ 1.1 m.)
+            n_samples = 28
+            s_start = st.ghost_s - TRAIN_HALF
+            s_end = st.ghost_s + TRAIN_HALF
+            # Build a table : for every sampled s_m, project every band
+            # height in BANDS to an (x, y) screen point.
+            band_rows: list[list[QPointF | None]] = [
+                [] for _ in BANDS
+            ]          # band_rows[band_idx][sample_idx]
+            # Plus a supplementary row at window-centre height (1.55 m)
+            # so we can place window glass rectangles anchored to the
+            # actual geometry rather than rely on a separate projection.
+            win_row_top: list[tuple[float, float, float] | None] = []
+            win_row_bot: list[tuple[float, float, float] | None] = []
+            sample_s: list[float] = []
+            for i in range(n_samples + 1):
+                s_m = s_start + (s_end - s_start) * (i / n_samples)
+                sample_s.append(s_m)
+                # Skip samples behind the driver — projection undefined.
+                d_m = (s_m - view_s) * tr.direction
+                if d_m < 0.6:
+                    for row in band_rows:
+                        row.append(None)
+                    win_row_top.append(None)
+                    win_row_bot.append(None)
+                    continue
+                for bi, (h_lo, h_hi, _col) in enumerate(BANDS):
+                    # Store the UPPER edge point (h_hi) ; lower edge of
+                    # band N = upper edge of band N−1 so we don't double
+                    # sample. For band 0 we need the floor separately.
+                    pt = _proj_ghost(s_m, h_hi)
+                    if pt is None:
+                        band_rows[bi].append(None)
+                    else:
+                        band_rows[bi].append(QPointF(pt[0], pt[1]))
+                pt_floor = _proj_ghost(s_m, BANDS[0][0])
+                # Window row : upper/lower frame for lit glass.
+                pt_wt = _proj_ghost(s_m, 2.00)
+                pt_wb = _proj_ghost(s_m, 1.25)
+                win_row_top.append(pt_wt)
+                win_row_bot.append(pt_wb)
+
+            # Draw each band as a quad strip from lower edge to upper edge
+            # (far-to-near painter order already by sample s order — but
+            # correct left-to-right draw ordering is what matters for
+            # alpha compositing).
+            # Build a "floor" row = projection at h = BANDS[0][0].
+            floor_row: list[QPointF | None] = []
+            for s_m in sample_s:
+                pt = _proj_ghost(s_m, BANDS[0][0])
+                if pt is None:
+                    floor_row.append(None)
+                else:
+                    floor_row.append(QPointF(pt[0], pt[1]))
+
+            def _band_pairs(idx: int):
+                """Yield (lower_pt, upper_pt) for band idx across samples."""
+                lower_row = floor_row if idx == 0 else band_rows[idx - 1]
+                upper_row = band_rows[idx]
+                return list(zip(lower_row, upper_row))
+
+            p.setPen(Qt.PenStyle.NoPen)
+            for bi, (h_lo, h_hi, col) in enumerate(BANDS):
+                pairs = _band_pairs(bi)
+                # Split into continuous segments (None breaks the strip).
+                seg: list[tuple[QPointF, QPointF]] = []
+                for lp, up in pairs:
+                    if lp is None or up is None:
+                        if len(seg) >= 2:
+                            path = QPainterPath()
+                            path.moveTo(seg[0][0])  # first lower
+                            for _lp, _up in seg:
+                                path.lineTo(_lp)
+                            for _lp, _up in reversed(seg):
+                                path.lineTo(_up)
+                            path.closeSubpath()
+                            p.setBrush(QBrush(col))
+                            p.drawPath(path)
+                        seg = []
+                    else:
+                        seg.append((lp, up))
+                if len(seg) >= 2:
+                    path = QPainterPath()
+                    path.moveTo(seg[0][0])
+                    for _lp, _up in seg:
+                        path.lineTo(_lp)
+                    for _lp, _up in reversed(seg):
+                        path.lineTo(_up)
+                    path.closeSubpath()
+                    p.setBrush(QBrush(col))
+                    p.drawPath(path)
+
+            # Windows : 6 per car (two cars), drawn as bright panels with
+            # dark frame. Use a window every ~2.5 m along the car length.
+            # s_start → s_end spans the full train ; cars meet at ghost_s.
+            car_joint = st.ghost_s
+            for win_i in range(12):
+                # Window centre position along the train. Skip the 2-m
+                # region around the car joint where the gangway goes.
+                frac = (win_i + 0.5) / 12.0
+                s_w = s_start + (s_end - s_start) * frac
+                if abs(s_w - car_joint) < 1.0:
+                    continue
+                pt_t = _proj_ghost(s_w, 2.00)
+                pt_b = _proj_ghost(s_w, 1.25)
+                pt_c = _proj_ghost(s_w, 1.62)
+                if pt_t is None or pt_b is None or pt_c is None:
+                    continue
+                # Frame geometry : horizontal window, ~1.2 m wide along
+                # the train. Use the pair s_w ± 0.6 m for width.
+                pt_l_t = _proj_ghost(s_w - 0.55, 2.00)
+                pt_l_b = _proj_ghost(s_w - 0.55, 1.25)
+                pt_r_t = _proj_ghost(s_w + 0.55, 2.00)
+                pt_r_b = _proj_ghost(s_w + 0.55, 1.25)
+                if any(v is None for v in (pt_l_t, pt_l_b, pt_r_t, pt_r_b)):
+                    continue
+                # Deep window recess : darker outer frame, then glass.
+                wf = pt_c[2]
+                frame = QPainterPath()
+                frame.moveTo(QPointF(pt_l_t[0], pt_l_t[1]))
+                frame.lineTo(QPointF(pt_r_t[0], pt_r_t[1]))
+                frame.lineTo(QPointF(pt_r_b[0], pt_r_b[1]))
+                frame.lineTo(QPointF(pt_l_b[0], pt_l_b[1]))
+                frame.closeSubpath()
+                p.setBrush(QBrush(QColor(18, 14, 10, 235)))
+                p.drawPath(frame)
+                # Inset glass — shrink 25 % toward centre.
+                def _shrink(px, py, tx, ty, k=0.25):
+                    return (px + (tx - px) * k, py + (ty - py) * k)
+                gl_lt = _shrink(pt_l_t[0], pt_l_t[1], pt_c[0], pt_c[1])
+                gl_rt = _shrink(pt_r_t[0], pt_r_t[1], pt_c[0], pt_c[1])
+                gl_rb = _shrink(pt_r_b[0], pt_r_b[1], pt_c[0], pt_c[1])
+                gl_lb = _shrink(pt_l_b[0], pt_l_b[1], pt_c[0], pt_c[1])
+                glass = QPainterPath()
+                glass.moveTo(QPointF(*gl_lt))
+                glass.lineTo(QPointF(*gl_rt))
+                glass.lineTo(QPointF(*gl_rb))
+                glass.lineTo(QPointF(*gl_lb))
+                glass.closeSubpath()
+                glass_col = QColor(205, 220, 245, int(180 + 60 * wf))
+                p.setBrush(QBrush(glass_col))
+                p.drawPath(glass)
+
+            # Inter-car gangway : dark band between the two cars.
+            pt_j_t = _proj_ghost(car_joint, CAB_TOP - 0.10)
+            pt_j_b = _proj_ghost(car_joint, CAB_BOT)
+            pt_j_lt = _proj_ghost(car_joint - 0.60, CAB_TOP - 0.10)
+            pt_j_lb = _proj_ghost(car_joint - 0.60, CAB_BOT)
+            pt_j_rt = _proj_ghost(car_joint + 0.60, CAB_TOP - 0.10)
+            pt_j_rb = _proj_ghost(car_joint + 0.60, CAB_BOT)
+            if all(v is not None for v in (pt_j_lt, pt_j_lb, pt_j_rt, pt_j_rb)):
+                gang = QPainterPath()
+                gang.moveTo(QPointF(pt_j_lt[0], pt_j_lt[1]))
+                gang.lineTo(QPointF(pt_j_rt[0], pt_j_rt[1]))
+                gang.lineTo(QPointF(pt_j_rb[0], pt_j_rb[1]))
+                gang.lineTo(QPointF(pt_j_lb[0], pt_j_lb[1]))
+                gang.closeSubpath()
+                p.setBrush(QBrush(QColor(30, 24, 18, 230)))
+                p.drawPath(gang)
+
+            # Dark outline along top + bottom for silhouette crispness.
+            p.setPen(QPen(QColor(35, 28, 18, 230), 1.4))
+            top_row = band_rows[-1]
+            prev_t = None
+            for pt in top_row:
+                if pt is not None and prev_t is not None:
+                    p.drawLine(prev_t, pt)
+                prev_t = pt
+            prev_b = None
+            for pt in floor_row:
+                if pt is not None and prev_b is not None:
+                    p.drawLine(prev_b, pt)
+                prev_b = pt
+
+            # Cylindrical rounded end caps — on the leading end of the
+            # ghost relative to the driver, build a hemispherical nose
+            # cap from 5 nested shaded ellipses so the wagon reads as
+            # a 3D cylinder with a domed face, not a flat silhouette.
+            # Do the same for the trailing end so when the ghost passes,
+            # both noses look correctly rounded.
+            for lead_idx, cap_sign in ((0, -1), (n_samples, +1)):
+                lead_s = sample_s[lead_idx]
+                pt_lead_top = _proj_ghost(lead_s, CAB_TOP)
+                pt_lead_bot = _proj_ghost(lead_s, CAB_BOT)
+                pt_lead_mid = _proj_ghost(lead_s, (CAB_TOP + CAB_BOT) * 0.5)
+                if (pt_lead_top is None or pt_lead_bot is None
+                        or pt_lead_mid is None):
+                    continue
+                d_lead = (lead_s - view_s) * tr.direction
+                if d_lead <= 1.0:
+                    continue
+                cap_h = abs(pt_lead_top[1] - pt_lead_bot[1])
+                cap_w = max(2.0, focal * CAB_R * 0.5 / max(d_lead, 0.35))
+                cap_cx = pt_lead_mid[0]
+                cap_cy = pt_lead_mid[1]
+                p.setPen(Qt.PenStyle.NoPen)
+                # Build 5 shaded rings from rim (dark) to centre (bright
+                # highlight offset up-left, as if lit by tunnel neons on
+                # the opposite bore wall). Each ring shrinks by 20 %.
+                rings = 5
+                for ri in range(rings):
+                    frac = 1.0 - ri / float(rings)
+                    # Colour ramps from rim (dark brown, #2a1f10) to
+                    # highlight (warm amber, #d2a548) along the normal.
+                    t = ri / float(rings - 1)
+                    r_col = int(42 + (210 - 42) * t)
+                    g_col = int(32 + (165 - 32) * t)
+                    b_col = int(18 + (72 - 18) * t)
+                    a = int(230 - 30 * t)
+                    # Shift highlight up-left for 3D lit-dome illusion
+                    shift_x = -cap_w * 0.15 * t
+                    shift_y = -cap_h * 0.08 * t
+                    p.setBrush(QBrush(QColor(r_col, g_col, b_col, a)))
+                    p.drawEllipse(
+                        QPointF(cap_cx + shift_x, cap_cy + shift_y),
+                        cap_w * frac,
+                        cap_h * 0.5 * frac,
+                    )
+                # Rim outline for silhouette crispness
+                p.setPen(QPen(QColor(25, 20, 12, 230), 1.2))
+                p.setBrush(Qt.BrushStyle.NoBrush)
+                p.drawEllipse(QPointF(cap_cx, cap_cy), cap_w, cap_h * 0.5)
+            # Keep lead_s defined for the headlight block below
+            lead_idx = 0 if ghost_d_front < ghost_d_back else n_samples
+            lead_s = sample_s[lead_idx]
+
+            # Headlights on the leading end if ghost is heading towards us
+            # and close enough (< 40 m). Pair of bright warm LEDs near
+            # the front of the cap at 2.3 m height.
+            ghost_travel_sign = (1 if st.ghost_s < tr.s else -1) * tr.direction
+            if ghost_travel_sign * (lead_s - st.ghost_s) > 0:
+                d_lead = (lead_s - view_s) * tr.direction
+                if 1.0 < d_lead < 40.0:
+                    for side in (-0.4, +0.4):
+                        pt_h = _proj_ghost(lead_s + side, 2.30)
+                        if pt_h is None:
+                            continue
+                        hx, hy, hf = pt_h
+                        hr = max(3.0, focal * 0.12 / max(d_lead, 0.35))
+                        p.setPen(Qt.PenStyle.NoPen)
+                        p.setBrush(QBrush(QColor(255, 220, 150,
+                                                  int(200 * hf + 40))))
+                        p.drawEllipse(QPointF(hx, hy), hr, hr * 0.7)
+
+        # === Station platforms (only visible near a terminus) ===========
+        # Both sides have a real platform — Perce-Neige cabins open on
+        # both sides at the termini so passengers flow through. Draw a
+        # proper 3D platform : top deck (light concrete), vertical face
+        # (darker concrete with recessed lip shadow), tactile yellow edge
+        # stripe, coping bar, and structural columns every 6 m supporting
+        # the ceiling. Ceiling line above each platform hints at the
+        # wider station vault.
+        PLAT_LEN = 32.0
+        PLAT_HEIGHT = 0.55       # above rail (m)
+        PLAT_DEPTH = 3.2         # back from cabin side to wall (m)
+        PLAT_Y_LIP = 0.06        # shadow lip thickness (m)
+        # Platform centre on each terminus — aligned with the train's
+        # STOPPED centre position (not flush with the bumper). Train
+        # spans ± TRAIN_HALF around START_S / STOP_S, and the platform
+        # matches that span, so when the driver looks forward at
+        # departure there is still ~ BUMPER_CLEAR + a few m of platform
+        # visible ahead rather than a blank black tunnel.
+        plat_centres_s = [
+            START_S,                        # Val Claret (lower)
+            STOP_S,                         # Grande Motte (upper)
+        ]
+
+        def _plat_pt(s_slope: float, lateral: float, h: float
+                     ) -> tuple[QPointF, float]:
+            """Project a point on the platform at absolute slope s,
+            lateral offset `lateral` m from the tunnel centreline
+            (positive = right in driver frame), at height `h` m above
+            rail. Uses plan-projection for correct curve handling."""
+            ts2 = max(0.0, min(LENGTH, s_slope))
+            fwd, lat, up = _proj_local(ts2)
+            fwd = max(fwd, 0.35)
+            cxp2 = eye_x + focal * lat / fwd
+            cyp2 = eye_y - focal * up / fwd
+            rail_y2 = cyp2 + focal * R_t * 0.75 / fwd
+            px_per_m = focal / fwd
+            x = cxp2 + lateral * px_per_m
+            y = rail_y2 - h * px_per_m
+            return QPointF(x, y), fwd
+
+        for pc_s in plat_centres_s:
+            d_centre = (pc_s - view_s) * tr.direction
+            if d_centre > neon_max_depth + PLAT_LEN or d_centre < -PLAT_LEN:
+                continue
+            step_s = 1.0
+            s_lo = pc_s - PLAT_LEN * 0.5
+            s_hi = pc_s + PLAT_LEN * 0.5
+            k_lo = int(math.ceil(s_lo / step_s))
+            k_hi = int(math.floor(s_hi / step_s))
+            # Platforms on BOTH sides. Edge must sit INSIDE the tunnel
+            # bore radius (R_t = 1.55 m) otherwise it is hidden behind
+            # the cylindrical wall render. Real stations widen to a
+            # vault but we approximate by keeping the platform edge
+            # just clear of the loading gauge, at 62 % of the bore
+            # radius (matches the old single-side rendering).
+            EDGE_M = R_t * 0.62       # ≈ 0.96 m lateral
+            BACK_M = EDGE_M + 1.4     # back wall ~ 2.4 m lateral
+            CEIL_M = R_t * 1.05       # vault above, just above bore top
+            for side in (-1, +1):
+                edge_top: list[QPointF] = []
+                edge_bot: list[QPointF] = []
+                back_top: list[QPointF] = []
+                ceil_line: list[QPointF] = []
+                for k in range(k_lo, k_hi + 1):
+                    s_plat = k * step_s
+                    dd = (s_plat - view_s) * tr.direction
+                    if dd < 0.6 or dd > neon_max_depth + 1.0:
+                        continue
+                    et, _ = _plat_pt(s_plat, side * EDGE_M, PLAT_HEIGHT)
+                    eb, _ = _plat_pt(s_plat, side * EDGE_M, 0.0)
+                    bt, _ = _plat_pt(s_plat, side * BACK_M, PLAT_HEIGHT)
+                    ce, _ = _plat_pt(s_plat, side * EDGE_M, CEIL_M)
+                    edge_top.append(et)
+                    edge_bot.append(eb)
+                    back_top.append(bt)
+                    ceil_line.append(ce)
+                if len(edge_top) < 2:
+                    continue
+                # 1. Top deck (light concrete, slightly warm) — quad strip.
+                p.setPen(Qt.PenStyle.NoPen)
+                p.setBrush(QBrush(QColor(190, 186, 176)))
+                for i in range(len(edge_top) - 1):
+                    poly = QPolygonF([edge_top[i], back_top[i],
+                                      back_top[i + 1], edge_top[i + 1]])
+                    p.drawPolygon(poly)
+                # 2. Vertical face (darker concrete) between edge_top and
+                # rail level, with a narrow recessed lip above the rail.
+                p.setBrush(QBrush(QColor(145, 140, 132)))
+                face = QPainterPath()
+                face.moveTo(edge_top[0])
+                for pt in edge_top[1:]:
+                    face.lineTo(pt)
+                for pt in reversed(edge_bot):
+                    face.lineTo(pt)
+                face.closeSubpath()
+                p.drawPath(face)
+                # 3. Lip shadow along the bottom of the face.
+                p.setPen(QPen(QColor(60, 58, 54), 1.8))
+                for i in range(len(edge_bot) - 1):
+                    p.drawLine(edge_bot[i], edge_bot[i + 1])
+                # 4. Dark coping bar along the edge top (structural lip).
+                p.setPen(QPen(QColor(70, 68, 62), 2.5))
+                for i in range(len(edge_top) - 1):
+                    p.drawLine(edge_top[i], edge_top[i + 1])
+                # 5. Yellow tactile safety stripe set back ~25 cm.
+                stripe_top: list[QPointF] = []
+                for k in range(k_lo, k_hi + 1):
+                    s_plat = k * step_s
+                    dd = (s_plat - view_s) * tr.direction
+                    if dd < 0.6 or dd > neon_max_depth + 1.0:
+                        continue
+                    st_pt, _ = _plat_pt(s_plat, side * (EDGE_M + 0.25),
+                                        PLAT_HEIGHT + 0.002)
+                    stripe_top.append(st_pt)
+                p.setPen(QPen(QColor(245, 210, 55), 4.0))
+                for i in range(len(stripe_top) - 1):
+                    p.drawLine(stripe_top[i], stripe_top[i + 1])
+                # 6. Structural columns every 6 m between platform back
+                # and ceiling (hints at the widened station vault).
+                col_step = 6.0
+                col_k_lo = int(math.ceil(s_lo / col_step))
+                col_k_hi = int(math.floor(s_hi / col_step))
+                p.setPen(Qt.PenStyle.NoPen)
+                for kc in range(col_k_lo, col_k_hi + 1):
+                    s_col = kc * col_step
+                    dd = (s_col - view_s) * tr.direction
+                    if dd < 0.8 or dd > neon_max_depth:
+                        continue
+                    base, _ = _plat_pt(s_col, side * BACK_M, PLAT_HEIGHT)
+                    top, _ = _plat_pt(s_col, side * BACK_M, CEIL_M)
+                    col_w_px = max(2.5, focal * 0.30 / dd)
+                    p.setBrush(QBrush(QColor(120, 115, 108)))
+                    p.drawRect(QRectF(base.x() - col_w_px * 0.5,
+                                      top.y(),
+                                      col_w_px,
+                                      base.y() - top.y()))
+                # 7. Thin warm-white ceiling line just above platform
+                # (station vault lighting hint).
+                if len(ceil_line) >= 2:
+                    p.setPen(QPen(QColor(220, 210, 175, 130), 2.0))
+                    for i in range(len(ceil_line) - 1):
+                        p.drawLine(ceil_line[i], ceil_line[i + 1])
+
+        # === Tunnel-end bumper (butoir) ================================
+        # Real Perce-Neige termini have a classic rail bumper : concrete
+        # back-wall closes the tunnel, two heavy rail-mounted bumper
+        # posts stand in front with red/white caution stripes, a cross
+        # beam, and a flashing red warning beacon on top that's visible
+        # from a long way out. Bumper is inside the lit station vault
+        # (last 100 m) so it's always fully visible regardless of
+        # headlights — override the tunnel max_depth here so the driver
+        # can see it well before arrival.
+        bumper_max = 180.0  # real sight distance in a lit station vault
+        if 0.0 < d_to_end <= bumper_max:
+            dE = d_to_end
+            cxE, cyE, rE, _tsE, _nfE = _ring_xyr(dE)
+            # Fully opaque wall — a concrete barrier doesn't fade with
+            # distance the way suspended dust does.
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(QBrush(QColor(88, 82, 74)))
+            p.drawEllipse(QPointF(cxE, cyE), rE * 0.98, rE * 0.98)
+            # Darker base shadow.
+            p.setBrush(QBrush(QColor(32, 30, 28)))
+            rail_yE = cyE + rE * 0.75
+            p.drawRect(QRectF(cxE - rE * 0.55, rail_yE - rE * 0.04,
+                              rE * 1.10, rE * 0.08))
+            # Posts — bigger + zebra stripes (real OSJD / UIC pattern).
+            post_h_px = focal * 1.20 / max(dE, 0.35)
+            post_w_px = max(3.0, focal * 0.25 / max(dE, 0.35))
+            gauge_px_E = rE * 0.35
+            for side in (-1, +1):
+                px_c = cxE + side * gauge_px_E
+                # Red base
+                p.setBrush(QBrush(QColor(215, 40, 40)))
+                p.drawRect(QRectF(px_c - post_w_px * 0.5,
+                                  rail_yE - post_h_px,
+                                  post_w_px, post_h_px))
+                # Five-band zebra (red/white alternating, 45° hint by
+                # offsetting bands at slight slant not worth at pixel
+                # scale — keep horizontal).
+                p.setBrush(QBrush(QColor(240, 235, 225)))
+                for k_band in (0.15, 0.45, 0.75):
+                    p.drawRect(QRectF(px_c - post_w_px * 0.5,
+                                      rail_yE - post_h_px * (1.0 - k_band),
+                                      post_w_px, post_h_px * 0.10))
+            # Cross-beam linking the two posts at ~0.8 m above rail
+            beam_y = rail_yE - focal * 0.80 / max(dE, 0.35)
+            beam_h = max(2.0, focal * 0.15 / max(dE, 0.35))
+            p.setBrush(QBrush(QColor(60, 55, 50)))
+            p.drawRect(QRectF(cxE - gauge_px_E, beam_y - beam_h * 0.5,
+                              gauge_px_E * 2, beam_h))
+            # Red flashing warning beacon on top centre of the cross-beam.
+            # 1 Hz sine flash so it's catches the eye at long range.
+            flash = 0.5 + 0.5 * math.sin(self._tunnel_scroll * 2.0 * math.pi
+                                          / max(12.0, 1.0))
+            beac_y = beam_y - max(4.0, focal * 0.40 / max(dE, 0.35))
+            beac_r = max(3.0, focal * 0.18 / max(dE, 0.35))
+            glow_r = beac_r * (2.5 + 1.2 * flash)
+            # Outer halo
+            p.setBrush(QBrush(QColor(255, 40, 40,
+                                     int(90 + 120 * flash))))
+            p.drawEllipse(QPointF(cxE, beac_y), glow_r, glow_r)
+            # Bright core
+            p.setBrush(QBrush(QColor(255, 120, 100,
+                                     int(200 + 55 * flash))))
+            p.drawEllipse(QPointF(cxE, beac_y), beac_r, beac_r)
+            # "STOP" label visible from far (scaled with distance).
+            if dE < 80.0:
+                label_h = max(7.0, focal * 0.40 / max(dE, 1.0))
+                f_stop = p.font()
+                f_stop.setPixelSize(int(label_h))
+                f_stop.setBold(True)
+                p.setFont(f_stop)
+                p.setPen(QPen(QColor(245, 230, 120), 1))
+                p.drawText(QRectF(cxE - gauge_px_E,
+                                  beam_y - label_h * 1.6,
+                                  gauge_px_E * 2, label_h * 1.3),
+                           int(Qt.AlignmentFlag.AlignCenter),
+                           "STOP")
 
         # --- Cabin frame overlay (beige interior, windshield frame) ---
         # Windshield border — dark frame around the tunnel view
@@ -3119,17 +4661,6 @@ class GameWidget(QWidget):
         p.setBrush(QBrush(console_grad))
         p.setPen(Qt.PenStyle.NoPen)
         p.drawRect(QRectF(vx, vy + vh - console_h, vw, console_h))
-
-        # Cylindrical structural tube (right of console) — visible in video
-        tube_x = vx + vw * 0.58
-        tube_w = 28
-        tube_grad = QLinearGradient(tube_x, 0, tube_x + tube_w, 0)
-        tube_grad.setColorAt(0.0, QColor(140, 135, 128))
-        tube_grad.setColorAt(0.4, QColor(180, 175, 165))
-        tube_grad.setColorAt(1.0, QColor(120, 115, 108))
-        p.setBrush(QBrush(tube_grad))
-        p.drawRect(QRectF(tube_x, vy + vh * 0.35, tube_w,
-                          vh * 0.65))
 
         # --- Driver's console panel ---
         self._draw_console_panel(p, vx + 20, vy + vh - console_h + 12,
@@ -3486,7 +5017,9 @@ class GameWidget(QWidget):
         # cable circles smoothly (same direction as the arc at the
         # tangent points, so no seam).
         half_d = (cx2 - cx1) / 2.0
-        alpha = math.acos(cable_r / half_d)
+        if half_d < cable_r * 1.01:
+            return
+        alpha = math.acos(max(-1.0, min(1.0, cable_r / half_d)))
         alpha_deg = math.degrees(alpha)
         cos_a = math.cos(alpha)
         sin_a = math.sin(alpha)
@@ -4065,8 +5598,8 @@ class GameWidget(QWidget):
         st = self.state
         tr = st.train
         # Reset hit zones for this frame — repopulated below as we draw
-        # each clickable control.
-        self._hit_zones = []
+        # each clickable control. .clear() reuses the list (no realloc).
+        self._hit_zones.clear()
         p.setBrush(QBrush(COLOR_HUD_BG))
         p.setPen(QPen(COLOR_HUD_BORDER, 2))
         p.drawRoundedRect(rect, 10, 10)
@@ -4100,6 +5633,23 @@ class GameWidget(QWidget):
             warn=T_NOMINAL_DAN,
             crit=T_WARN_DAN,
             title=T("Cable", "Câble"),
+        )
+        # Live cable elongation — Hooke's law on the Fatzer 52 mm rope.
+        # A = π·(0.052)² / 4 ≈ 2.12e-3 m²,  E ≈ 105 GPa (locked coil).
+        # The loaded span is the slope length between the main train and
+        # the bull wheel at the top station.
+        cable_len = max(50.0, LENGTH - tr.s if tr.direction > 0 else tr.s)
+        stretch_m = (tr.tension_dan_disp * 10.0 * cable_len) / (2.12e-3 * 1.05e11)
+        # Tucked inside the gauge's bottom rim (was overlapping the
+        # brake bar's "URG!" / % text just below the gauge).
+        p.setPen(QPen(COLOR_TEXT_DIM))
+        p.setFont(QFont("Consolas", 8))
+        p.drawText(
+            QRectF(ten_rect.x(), ten_rect.y() + ten_rect.height() - 14,
+                   ten_rect.width(), 11),
+            int(Qt.AlignmentFlag.AlignHCenter),
+            T(f"stretch {stretch_m:.2f} m",
+              f"allong. {stretch_m:.2f} m"),
         )
 
         # Vertical bars : speed command, brake, power
@@ -4347,6 +5897,23 @@ class GameWidget(QWidget):
         p.setFont(QFont("Consolas", 10))
         p.setPen(QPen(COLOR_TEXT))
         cabin_x_m, cabin_y_m = geom_at(tr.s)
+        # Distance travelled from the driver's own departure terminus (not
+        # raw slope-s which starts at 26 m because of bumper clearance +
+        # train half-length). Direction-aware so the readout counts UP
+        # from 0 to the effective travel length in both climbing and
+        # descending trips.
+        travel_total_m = STOP_S - START_S
+        if tr.direction > 0:
+            travel_done_m = max(0.0, tr.s - START_S)
+            alt_start = geom_at(START_S)[1]
+            alt_end = geom_at(STOP_S)[1]
+        else:
+            travel_done_m = max(0.0, STOP_S - tr.s)
+            alt_start = geom_at(STOP_S)[1]
+            alt_end = geom_at(START_S)[1]
+        travel_done_m = min(travel_done_m, travel_total_m)
+        alt_total = alt_end - alt_start               # +921 climb / −921 down
+        alt_done = cabin_y_m - alt_start               # same sign as alt_total
         rows = [
             (T("Pilot",     "Pilote"),      st.pilot),
             (T("Mode",      "Mode"),
@@ -4358,7 +5925,9 @@ class GameWidget(QWidget):
             (T("Cmd",       "Consigne"),
              f"{tr.speed_cmd * V_MAX:4.1f} m/s  ({int(tr.speed_cmd * 100):3d}%)"),
             (T("Distance",  "Distance"),
-             f"{tr.s:7.1f}/{LENGTH:.0f}  alt {cabin_y_m:4.0f}"),
+             f"{travel_done_m:6.1f} / {travel_total_m:.0f} m"),
+            (T("Elevation", "Dénivelé"),
+             f"{alt_done:+5.1f} / {alt_total:+.0f} m"),
             (T("Time",      "Temps"),       f"{st.trip_time:6.1f} s"),
             (T("Comfort",   "Confort"),
              f"{st.score_comfort:5.1f}  {st.score_energy:4.2f} kWh"),
@@ -4813,13 +6382,12 @@ class GameWidget(QWidget):
                      "Portes, éclairage, annonces restent disponibles"))
 
     def _draw_ann_menu(self, p: QPainter, w: int, h: int) -> None:
-        """Overlay panel listing the 15 on-board announcements.
-
-        Each line shows its hotkey ; pressing it plays the announcement
-        in FR then EN just like the real train. Esc or F2 closes.
+        """Overlay panel listing every on-board announcement, with a
+        language selector at the top so the driver can play any of the
+        five bundled translations (FR / EN / IT / DE / ES) of any message.
         """
-        panel_w = 520
-        panel_h = 430
+        panel_w = 540
+        panel_h = 480
         x = (w - panel_w) / 2
         y = (h - panel_h) / 2
         # Dim background
@@ -4842,8 +6410,8 @@ class GameWidget(QWidget):
         p.drawText(
             QRectF(x + 16, y + 34, panel_w - 190, 16),
             int(Qt.AlignmentFlag.AlignLeft),
-            T("Press a key to trigger — Esc / F2 to close",
-              "Appuyer sur une touche pour déclencher — Esc / F2 pour fermer"),
+            T("Click a language, then a message — Esc / F2 to close",
+              "Choisir une langue puis un message — Esc / F2 pour fermer"),
         )
         # STOP button — aborts the announcement currently playing (and
         # clears the queue). Bound to X key as well.
@@ -4854,11 +6422,48 @@ class GameWidget(QWidget):
             QColor(220, 120, 80), font_pt=9,
         )
         self._hit_zones.append((stop_rect, int(Qt.Key.Key_X), False))
+        # Language selector row — 5 clickable pills, the current one
+        # highlighted. Pressing F/E/I/G/S also switches.
+        st_for_lang = self.state
+        lang_row_y = y + 58
+        p.setFont(QFont("Segoe UI", 9))
+        p.setPen(QPen(COLOR_TEXT_DIM))
+        p.drawText(QPointF(x + 16, lang_row_y + 14),
+                   T("Language :", "Langue :"))
+        lang_entries = [
+            ("FR", "fr", Qt.Key.Key_F),
+            ("EN", "en", Qt.Key.Key_E),
+            ("IT", "it", Qt.Key.Key_I),
+            ("DE", "de", Qt.Key.Key_G),
+            ("ES", "es", Qt.Key.Key_S),
+        ]
+        pill_w = 52
+        pill_h = 22
+        lx = x + 96
+        for lbl, code, hk in lang_entries:
+            rect = QRectF(lx, lang_row_y, pill_w, pill_h)
+            selected = (st_for_lang.ann_lang == code)
+            if selected:
+                col = QColor(80, 220, 140)
+                text_col = QColor(15, 25, 15)
+            else:
+                col = QColor(50, 70, 100)
+                text_col = COLOR_TEXT
+            p.setBrush(QBrush(col))
+            p.setPen(QPen(QColor(120, 170, 220), 1))
+            p.drawRoundedRect(rect, 6, 6)
+            p.setPen(QPen(text_col))
+            p.setFont(QFont("Consolas", 10, QFont.Weight.Bold))
+            p.drawText(rect, int(Qt.AlignmentFlag.AlignCenter),
+                       f"{lbl} [{chr(hk).upper()}]")
+            self._hit_zones.append((rect, int(hk), False))
+            lx += pill_w + 8
         # Entries — each row is also a click target that triggers the
         # announcement exactly like pressing its hotkey.
         p.setFont(QFont("Consolas", 11))
+        list_top = y + 92
         for i, (entry_k, group, label, en, fr) in enumerate(ANNOUNCEMENT_MENU):
-            row_y = y + 66 + i * 22
+            row_y = list_top + i * 22
             row_rect = QRectF(x + 14, row_y - 2, panel_w - 28, 22)
             # Row hover background (always subtle) + click zone
             p.setBrush(QBrush(QColor(40, 60, 90, 120)))
@@ -4963,6 +6568,10 @@ class GameWidget(QWidget):
                          "infos machine réelle + liens")),
                 ("F4", T("cabin / side view toggle",
                          "vue cabine / vue latérale")),
+                ("+ / −  /  0", T("side-view zoom in/out / reset",
+                                  "zoom vue latérale +/− / reset")),
+                (T("Mouse wheel", "Molette souris"),
+                 T("zoom side-view", "zoom vue latérale")),
                 ("R / Enter", T("new trip (after arrival)",
                                 "nouveau trajet (après arrivée)")),
             ]),
