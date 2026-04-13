@@ -22,6 +22,7 @@ Delete them freely — the next launch simply won't find anything to offer.
 from __future__ import annotations
 
 import json
+import locale
 import os
 import platform
 import re
@@ -76,7 +77,9 @@ def _system_info(version: str) -> dict:
         "release": platform.release(),
         "machine": platform.machine(),
         "arch": platform.architecture()[0],
-        "locale": os.environ.get("LANG", ""),
+        # locale is read from Python (not env var) to avoid leaking
+        # user-set LANG values that may contain personal/region info.
+        "locale": (locale.getlocale()[0] or "")[:5] if locale else "",
     }
 
 
