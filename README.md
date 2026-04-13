@@ -107,6 +107,10 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 
 ## Installation
 
+**For everyone (recommended, no Python required)** — go to the [latest release](https://github.com/ARP273-ROSE/perce-neige-sim/releases/latest), download **`PerceNeigeSimulator-windows.exe`** and double-click it. Done. The app updates itself automatically when a new version is published on GitHub.
+
+### From source (developers)
+
 Windows :
 ```cmd
 launch.bat
@@ -117,13 +121,24 @@ Linux / macOS :
 ./launch.sh
 ```
 
-Both launchers create a local venv outside the project folder (so the project stays clean when synced to a NAS), install PyQt6 + Pillow, and launch the game.
+Both launchers create a local venv outside the project folder, install PyQt6 + Pillow, and launch the game.
 
 Manual install :
 ```bash
 pip install -r requirements.txt
 python perce_neige_sim.py
 ```
+
+### Building the standalone executable yourself
+
+```bash
+pip install pyinstaller pillow
+python make_logo.py
+pyinstaller perce_neige.spec
+# → dist/PerceNeigeSimulator(.exe)
+```
+
+A GitHub Actions workflow (`.github/workflows/build.yml`) builds the Windows `.exe` automatically and attaches it to every tagged release.
 
 ---
 
