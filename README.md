@@ -61,11 +61,31 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
   layered halo + mid-glow + bright core, exactly like the HD footage
 - **Headlights gate visibility** : off → you barely see a few metres of
   concrete and only the wall neons as beacons ; on → the beam reaches
-  ~100 m with Beer-Lambert exponential falloff
+  ~260 m with Beer-Lambert exponential falloff, far enough to actually
+  *see* the tunnel curving up or down through the gradient breaks
 - Sleepers drawn one per ring with a central cable-guide bolt, rails +
   cable guide connect smoothly between consecutive rings
 - Correct handling of curves (lateral offset `½·focal·κ·d`) and passing
   loop double-bore on the opposite wall
+- **Exact 3D vertical curvature** — every tunnel ring, wall panel,
+  platform edge and ghost-wagon vertex is projected through a true
+  pinhole camera frame (forward + altitude difference rotated by the
+  local slope pitch), so a gradient break ahead is rendered with the
+  same geometric fidelity as a horizontal turn
+- **Continuous floor / ceiling / arch envelope polylines** drawn across
+  successive rings give vertical curvature the same visual clarity that
+  rail continuity gives to horizontal turns
+
+### Side-profile view (default)
+- **Researched gradient profile** — 15 % at Val Claret ramp-up, 30 %
+  sustained in the mid-tunnel main climb, 12 % easing out onto the
+  Grande Motte glacier platform, pronounced break at ~3 180 m
+- **Mouse-wheel zoom** (or `+` / `-` / `0` to reset) with an aspect-ratio
+  lock : the visual slope angle is exactly the real slope angle at any
+  zoom level — zooming reveals more detail without distorting steepness
+- **Distance + elevation readout** : `travel / total m` and `Δalt / total m`
+  are trip-relative (0 at departure platform, full span at arrival),
+  direction-aware for descending trips
 
 ### Game modes
 - **Normal** — just drive a trip
