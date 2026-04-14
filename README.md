@@ -100,7 +100,34 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 ### Game modes
 - **Normal** — just drive a trip
 - **Challenge** — optimise time + comfort + energy
-- **Faults** — random incidents : cable tension spikes, motor thermal, door faults, smoke alarm, icy upper section
+- **Faults** — 15 incident types, sourced from real documented funicular
+  failures (STRMTG RM5, BEA-TT Glória Lisboa 2025, Kaprun 2000, Carmelit,
+  Perce-Neige 2008 outage, Montmartre 2006, Sassi-Superga, M2 Lausanne).
+  Random weighted scheduler by default; press **F** to open the manual
+  picker dialog (choose a specific fault or toggle auto/manual scheduler)
+
+### Fault catalogue (press F in Faults mode)
+Common operational faults : `tension`, `door`, `thermal`, `fire`,
+`wet_rail`, `motor_degraded` (M1/M2/M3 named, Sassi-Superga precedent),
+`slack`, `aux_power` (Perce-Neige 2008 pattern), `parking_stuck`.
+Severe / catastrophic : `cable_rupture` (Glória Lisboa 2025 class),
+`service_brake_fail` (Glória double-failure), `flood_tunnel`,
+`comms_loss` (Kaprun lesson), `switch_abt_fault` (Abt crossing interlock),
+`fire_vent_fail` (fire + désenfumage down, Kaprun class).
+
+Physics realism : overspeed cascade in three stages per EP0392938A1
+POMA + STRMTG RM5 — +10 % service brake, +12 % secondary emergency,
++20 % mechanical Belleville parachute centrifugal trip. Cable cumulative
+fatigue counter (Palmgren-Miner, ISO 4309 / DIN EN 12927-6) tracks
+round-trip cycles and `cable_wear_pct` for each trip.
+
+### Documentation download (F6)
+Press **F6** to open the docs dialog : downloads the latest
+`manuel_perce_neige.pdf` (user manual) and `guide_theorique.pdf`
+(theory guide with full formula derivations, regulatory sources, audio
+calibration validation) from the GitHub repo into your Downloads folder
+and opens them in the default PDF viewer — handy when running the
+standalone EXE which doesn't bundle the PDFs.
 
 ### Auto-update (GitHub)
 - Background check on startup (3 s after launch) — silent unless an
