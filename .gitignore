@@ -1,0 +1,56 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Virtual environment (local to each PC, never in project)
+venv/
+
+# Video sources (too large for git, kept locally)
+sons/videos/
+
+# WAV cache (generated at runtime)
+*.wav
+# …except the shipped real-ambient extracts (bundled in the .exe)
+!sons/ambients/*.wav
+
+# Temp/debug scripts
+_probe.py
+_*.py
+
+# OS junk
+Thumbs.db
+.DS_Store
+
+# Claude Code
+CLAUDE.md
+
+# Crash reports (generated at runtime, anonymized)
+crash_reports/
+
+# Exploitation DB (trip log generated at runtime, PC-local)
+exploitation.db
+exploitation.db-journal
+exploitation.db-wal
+exploitation.db-shm
+
+# LaTeX build artifacts (we commit the PDF, not the .tex source)
+*.tex
+*.aux
+*.log
+*.toc
+*.out
+*.fls
+*.fdb_latexmk
+*.synctex.gz
+
+# Frames extracted from reference videos (local only)
+tmp_frames/
+
+# Progress / session scratch files
+_progress.json
+
+# PyInstaller build artefacts
+build/
+dist/
+*.manifest
