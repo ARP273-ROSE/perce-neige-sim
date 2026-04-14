@@ -80,7 +80,7 @@ try:
 except ImportError:
     _QTMULTIMEDIA_OK = False
 
-VERSION = "1.9.0"
+VERSION = "1.9.1"
 APP_NAME = "Perce-Neige Simulator"
 
 
@@ -2701,6 +2701,25 @@ class SoundSystem:
         if self._player is not None:
             self._player.stop()
 
+    def is_announcing(self) -> bool:
+        """True if a voice announcement is currently playing OR queued.
+
+        Used by callers (fault state machine, brake-squeal scheduler)
+        that want to defer a new clip until the current sequence has
+        fully ended — so dim_light + evac + restart never overlap or
+        cut each other off, and the brake squeal doesn't slot itself
+        between two halves of an evacuation announcement.
+        """
+        if not self.enabled or self._player is None:
+            return False
+        if self._queue:
+            return True
+        try:
+            return (self._player.playbackState()
+                    == QMediaPlayer.PlaybackState.PlayingState)
+        except Exception:
+            return False
+
     def update_ambient(self, speed: float) -> None:
         """Crossfade real-cabin ambient loops based on speed.
 
@@ -3930,12 +3949,15 @@ class GameWidget(QWidget):
         For non-catastrophic faults this is a no-op (their auto-clear is
         handled by the legacy fault_timer in maybe_random_event).
 
-        For catastrophic faults the train trip is permanently terminated.
-        We sequence : active → intervention_called → evacuating →
-        out_of_service. Each phase plays the appropriate PA. Once we
-        reach out_of_service, only R (new trip) can clear the state —
-        READY (V) and DEPART (Z) refuse to arm and the driver is told
-        to start a new trip.
+        For catastrophic faults the trip is permanently terminated. We
+        sequence : active → intervention_called → evacuating →
+        out_of_service. Phase transitions are gated on the previous
+        announcement having fully finished (is_announcing() == False)
+        AND a minimum dwell time, so messages never cut each other
+        off. A brief 1.5 s "settle" pause sits between every PA so
+        the cabin doesn't sound like a rapid-fire emergency drill.
+        Once we reach out_of_service, only R (new trip) clears the
+        state — READY (V) and DEPART (Z) refuse to arm.
         """
         st = self.state
         if not st.panne_active:
@@ -3944,9 +3966,10 @@ class GameWidget(QWidget):
             return
         st.fault_phase_timer += dt
         tr = st.train
-        # 1) ACTIVE  — wait for the cabin to fully stop. Only then do we
-        #    play the technical-incident PA. The trip is suspended exactly
-        #    like a manual emergency : trip_started → False, drum brake on.
+
+        # 1) ACTIVE — wait for the cabin to fully stop. Only then suspend
+        #    the trip and queue the "tech incident" PA. Drum brake on so
+        #    nothing drifts under gravity while the announcement plays.
         if st.fault_phase == "active":
             if abs(tr.v) < 0.1 and st.fault_phase_timer > 1.5:
                 st.trip_started = False
@@ -3956,38 +3979,61 @@ class GameWidget(QWidget):
                 st.ghost_ready_timer = 0.0
                 st.ghost_ready_delay = 0.0
                 st.departure_buzzer_remaining = 0.0
-                # Fire is announced via dim_light + evac later in the
-                # sequence ; cable_rupture / brake_fail / vent_fail go
-                # through the "tech_incident" PA first.
-                self.sounds.stop_announcements()
+                # Don't stop_announcements() here — if any previous
+                # message is still finishing (e.g. brake squeal from the
+                # parachute engagement) we let it run and queue tech_
+                # incident behind it. The queue chains naturally.
                 self.sounds.play("tech_incident",
-                                 lang=st.ann_lang, cooldown=60.0)
+                                 lang=st.ann_lang, cooldown=120.0)
                 add_event(st, "incident",
                           "Intervention call placed — service halted",
                           "Demande d'intervention — service interrompu",
                           "alarm")
                 st.fault_phase = "intervention_called"
                 st.fault_phase_timer = 0.0
-        # 2) INTERVENTION_CALLED — short dwell so the PA is heard, then
-        #    we move to the evacuation phase (dim cabin lights + evac PA).
+
+        # 2) INTERVENTION_CALLED — wait for tech_incident to finish AND
+        #    a minimum dwell, then queue dim_light. Playing dim_light
+        #    and evac one after another via the queue mechanism means
+        #    they chain seamlessly without ever overlapping or cutting.
         elif st.fault_phase == "intervention_called":
-            if st.fault_phase_timer > 12.0:
-                self.sounds.stop_announcements()
+            min_dwell = 5.0
+            if (st.fault_phase_timer > min_dwell
+                    and not self.sounds.is_announcing()):
                 self.sounds.play("dim_light",
-                                 lang=st.ann_lang, cooldown=60.0)
-                self.sounds.play("evac",
-                                 lang=st.ann_lang, cooldown=60.0)
-                # Cabin lights actually dim — visible in the F4 cabin view.
+                                 lang=st.ann_lang, cooldown=120.0)
                 tr.lights_cabin = False
+                add_event(st, "dim",
+                          "Cabin lights dimmed — evacuation imminent",
+                          "Lumières cabine baissées — évacuation imminente",
+                          "warn")
+                st.fault_phase = "dim_announced"
+                st.fault_phase_timer = 0.0
+
+        # 2b) DIM_ANNOUNCED — wait for dim_light to finish, then queue
+        #     the evacuation announcement. Two separate phases (instead
+        #     of queuing both at once) so that brake_noise / restart /
+        #     anything else can't accidentally slot itself in between.
+        elif st.fault_phase == "dim_announced":
+            min_dwell = 3.0
+            if (st.fault_phase_timer > min_dwell
+                    and not self.sounds.is_announcing()):
+                self.sounds.play("evac",
+                                 lang=st.ann_lang, cooldown=120.0)
                 add_event(st, "evac",
                           "Evacuation announcement — passengers exit cabin",
                           "Annonce d'évacuation — passagers sortent",
                           "alarm")
                 st.fault_phase = "evacuating"
                 st.fault_phase_timer = 0.0
-        # 3) EVACUATING — passengers are leaving. ~25 s evacuation drill.
+
+        # 3) EVACUATING — wait for evac PA to finish AND a 20 s drill
+        #    so passengers actually walk out. Then mark the cabin empty
+        #    and move to the terminal out_of_service state.
         elif st.fault_phase == "evacuating":
-            if st.fault_phase_timer > 25.0:
+            min_dwell = 20.0
+            if (st.fault_phase_timer > min_dwell
+                    and not self.sounds.is_announcing()):
                 tr.pax_car1 = 0
                 tr.pax_car2 = 0
                 add_event(st, "out_of_service",
@@ -3996,10 +4042,11 @@ class GameWidget(QWidget):
                           "alarm")
                 st.fault_phase = "out_of_service"
                 st.fault_phase_timer = 0.0
+
         # 4) OUT_OF_SERVICE — terminal. The cabin sits stopped, brakes
-        #    engaged, lights dim, no passengers. The driver MUST press R
-        #    to start a brand-new trip from the menu sequence (which
-        #    calls new_trip() and force-clears the fault state).
+        #    engaged, lights dim, no passengers. Driver MUST press R to
+        #    start a brand-new trip (calls new_trip() which force-clears
+        #    every fault flag).
 
     def reverse_trip(self, silent: bool = False) -> None:
         """Flip the travel direction and re-arm the departure sequence in
@@ -4398,8 +4445,20 @@ class GameWidget(QWidget):
                     self._was_stopped_mid_tunnel = True
             else:
                 self._mid_tunnel_stop_timer = 0.0
-            # Brake squeal when emergency brake engaged
-            if st.train.emergency:
+            # Brake squeal when emergency brake engaged. Gated three ways
+            # so it doesn't loop forever (catastrophic faults park the
+            # cabin with emergency=True permanently) and never queues
+            # itself between two halves of a voice announcement (e.g.
+            # cuts dim_light off before evac fires) :
+            #   - skip while any announcement is playing or queued
+            #   - skip once the cabin is at rest (no kinetic energy left)
+            #   - skip in catastrophic out_of_service (event sequence over)
+            cata_done = (st.panne_active and is_catastrophic(st.panne_kind)
+                         and st.fault_phase in ("evacuating", "out_of_service"))
+            if (st.train.emergency
+                    and abs(st.train.v) > 0.5
+                    and not self.sounds.is_announcing()
+                    and not cata_done):
                 self.sounds.play("brake_noise", lang=st.ann_lang, cooldown=20.0)
             # Fault announcements — pick the matching message bilingually.
             # Suppressed entirely once the train has arrived so a resolved
@@ -9200,22 +9259,23 @@ class GameWidget(QWidget):
 
         # Catastrophic-only : phase indicator + explicit recovery key.
         if catastrophic:
-            phases = ["active", "intervention_called",
+            phases = ["active", "intervention_called", "dim_announced",
                       "evacuating", "out_of_service"]
-            phase_labels_fr = ["Détection", "Intervention", "Évacuation",
-                               "Hors service"]
-            phase_labels_en = ["Detected", "Intervention", "Evacuating",
-                               "Out of service"]
+            phase_labels_fr = ["Détection", "Intervention", "Lumières",
+                               "Évacuation", "Hors service"]
+            phase_labels_en = ["Detected", "Intervention", "Dim lights",
+                               "Evacuating", "Out of service"]
             cur = st.fault_phase if st.fault_phase in phases else "active"
             cur_idx = phases.index(cur)
             p.setFont(QFont("Consolas", 8))
+            n = len(phases)
             for i, lbl in enumerate(phase_labels_fr if lang == "fr"
                                     else phase_labels_en):
                 col = COLOR_ALARM if i == cur_idx else (
                     COLOR_TEXT if i < cur_idx else COLOR_TEXT_DIM)
                 p.setPen(QPen(col))
-                p.drawText(QRectF(x + 12 + i * (section_w / 4), cy,
-                                  section_w / 4, 14),
+                p.drawText(QRectF(x + 12 + i * (section_w / n), cy,
+                                  section_w / n, 14),
                            int(Qt.AlignmentFlag.AlignLeft), f"{i+1}. {lbl}")
             cy += 18
 

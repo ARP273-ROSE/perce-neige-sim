@@ -121,7 +121,7 @@ POMA + STRMTG RM5 — +10 % service brake, +12 % secondary emergency,
 fatigue counter (Palmgren-Miner, ISO 4309 / DIN EN 12927-6) tracks
 round-trip cycles and `cable_wear_pct` for each trip.
 
-### Fault realism — recovery state machine (v1.9.0)
+### Fault realism — recovery state machine (v1.9.0 / v1.9.1)
 Faults are now classified by **severity** and have realistic recovery paths :
 
 - **Advisory** (`tension`, `wet_rail`, `slack`, `comms_loss`) — dashboard
@@ -142,8 +142,14 @@ Faults are now classified by **severity** and have realistic recovery paths :
 
 A persistent **on-screen panel** (top-left of the world view) tells the
 driver in real time : what's happening, what to do, what's blocked, and —
-for catastrophic faults — a 4-stage phase indicator and the explicit
+for catastrophic faults — a 5-stage phase indicator and the explicit
 "Press R for new trip" hint once evacuation has begun.
+
+**v1.9.1 patch** — announcement queue hardening : every PA in the
+catastrophic chain (`tech_incident` → `dim_light` → `evac`) now waits
+for the previous one to fully finish before the next one fires, so no
+message is ever cut off. The emergency brake squeal (`brake_noise`)
+no longer loops forever once the cabin is parked out of service.
 
 ### Documentation download (F6)
 Press **F6** to open the docs dialog : downloads the latest
