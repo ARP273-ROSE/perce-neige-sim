@@ -121,6 +121,30 @@ POMA + STRMTG RM5 — +10 % service brake, +12 % secondary emergency,
 fatigue counter (Palmgren-Miner, ISO 4309 / DIN EN 12927-6) tracks
 round-trip cycles and `cable_wear_pct` for each trip.
 
+### Fault realism — recovery state machine (v1.9.0)
+Faults are now classified by **severity** and have realistic recovery paths :
+
+- **Advisory** (`tension`, `wet_rail`, `slack`, `comms_loss`) — dashboard
+  warning only, no operational impact, auto-clears
+- **Operational** (`door`, `thermal`, `motor_degraded`, `flood_tunnel`) —
+  degraded mode (speed cap, power derate), trip continues, auto-clears on
+  timer
+- **Stopping** (`aux_power`, `parking_stuck`, `switch_abt_fault`) — train
+  must stop, then **READY (V) + DEPART (Z)** required to resume — releasing
+  the brake alone never auto-restarts the trip
+- **Catastrophic** (`cable_rupture`, `fire`, `fire_vent_fail`,
+  `service_brake_fail`) — trip is **TERMINATED**. The phase machine runs :
+  `active` → `intervention_called` (tech_incident PA) → `evacuating`
+  (dim_light + evac PA, cabin lights dimmed, passengers evacuated) →
+  `out_of_service`. READY/DEPART are blocked permanently — **press R for a
+  new trip** from the menu sequence (the only way out of a Glória / Kaprun
+  class event)
+
+A persistent **on-screen panel** (top-left of the world view) tells the
+driver in real time : what's happening, what to do, what's blocked, and —
+for catastrophic faults — a 4-stage phase indicator and the explicit
+"Press R for new trip" hint once evacuation has begun.
+
 ### Documentation download (F6)
 Press **F6** to open the docs dialog : downloads the latest
 `manuel_perce_neige.pdf` (user manual) and `guide_theorique.pdf`
