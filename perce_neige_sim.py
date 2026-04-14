@@ -80,7 +80,7 @@ try:
 except ImportError:
     _QTMULTIMEDIA_OK = False
 
-VERSION = "1.7.5"
+VERSION = "1.8.0"
 APP_NAME = "Perce-Neige Simulator"
 
 
@@ -596,13 +596,25 @@ class Train:
     tension_fault_dan: float = 0.0    # extra daN added on cable tension (surge)
     thermal_derate: float = 1.0       # motor power multiplier (1.0 = nominal)
     motor_count: int = 3              # 3 active motors by default; 2 = degraded
+    motor_id_down: int = 0            # which motor group (1/2/3) is down; 0=none
     speed_fault_cap: float = 999.0    # dynamic v_limit (m/s); high = no cap
     slack_fault_dan: float = 0.0      # daN *subtracted* from cable tension
     aux_power_fault: bool = False     # 400 V auxiliaries lost → motor cut
     overspeed_tripped: bool = False   # latched after v > 1.1·V_MAX
+    overspeed_level: int = 0          # 0 none / 1 service / 2 secours / 3 parachute
     door_fault: bool = False          # door sensor fault — must stop at station
     parking_stuck: bool = False       # parking brake release failure
     fault_timer: float = 0.0          # seconds until current fault auto-clears
+    # --- Enriched faults (post-research_failures.md audit 2026-04-14)
+    cable_rupture: bool = False       # tractor cable broken — catastrophic
+    service_brake_fail: float = 1.0   # 1.0 nominal, <1 = service brake fade
+    flood_tunnel: bool = False        # tunnel water intrusion — speed cap 4 m/s
+    comms_loss: bool = False          # PA + GSM tunnel lost — narrative only
+    switch_abt_fault: bool = False    # Abt crossing misalignment — hold before siding
+    fire_vent_fail: bool = False      # tunnel vent/desenfumage HS during fire
+    # --- Cable cumulative fatigue (Palmgren-Miner, ISO 4309 / DIN EN 12927-6)
+    fatigue_cycles: int = 0           # completed aller+retour round-trips
+    cable_wear_pct: float = 0.0       # 0..100 — percent of usable wire section
 
     @property
     def pax(self) -> int:
@@ -658,6 +670,8 @@ class GameState:
     run_mode: str = "normal"    # normal | challenge | panne
     panne_active: bool = False
     panne_kind: str = ""
+    panne_auto: bool = True     # when False, fault scheduler is paused
+                                # (driver picks faults manually via F dialog)
     finished: bool = False
     rebound_timer: float = 0.0  # cable elasticity rebound (after arrival)
     rebound_amp_m: float = 0.0  # actual cable stretch (m) captured at arrival
@@ -821,9 +835,14 @@ class Physics:
             )
         a_brk = 0.0
         if tr.emergency_ramp > 0.0:
+            # Emergency parachute (Belleville) still works even on cable
+            # rupture / service-brake fade — that is the whole point of a
+            # cable-independent rail brake (RM5 requirement).
             a_brk = tr.emergency_ramp * A_BRAKE_EMERGENCY
         elif tr.brake > 0:
-            a_brk = tr.brake * A_BRAKE_NORMAL
+            # Service brake can fade to 15–25 % of nominal when the
+            # hydraulic circuit loses pressure (Glória 2025 pattern).
+            a_brk = tr.brake * A_BRAKE_NORMAL * tr.service_brake_fail
         f_brake = -math.copysign(a_brk * m_total, tr.v) if abs(tr.v) > 0.05 else 0.0
 
         # Sum and integrate on the total cable-bound mass
@@ -958,13 +977,54 @@ class Physics:
         # when a cable surge or slack fault is announced.
         tr.tension_dan += tr.tension_fault_dan
         tr.tension_dan -= tr.slack_fault_dan
+        if tr.cable_rupture:
+            # Tractor cable severed : residual tension is only the parking
+            # anchor + parachute reaction. Gauge drops to near zero.
+            tr.tension_dan = min(tr.tension_dan, 1500.0)
         if tr.tension_dan < 0.0:
             tr.tension_dan = 0.0
+        # Cable wear model (Palmgren-Miner simplified) — ISO 4309, DIN EN
+        # 12927-6. Every tick the cumulative section-loss grows with the
+        # ratio (tension / tension_ref) squared, integrated over time.
+        # Reference : real Perce-Neige cable replaced in 1999 after 6 years
+        # (~36 000 round-trips) ≈ rebut threshold reached.
+        T_REF = 22500.0  # daN nominal
+        if tr.v != 0.0:
+            stress_ratio = max(0.0, tr.tension_dan) / T_REF
+            tr.cable_wear_pct += stress_ratio * stress_ratio * dt * 0.0002
+            if tr.cable_wear_pct > 100.0:
+                tr.cable_wear_pct = 100.0
 
-        # Overspeed auto-trip (STRMTG regulation : any revenue funicular
-        # must cut traction + close emergency brake if v > 110 % V_MAX).
-        # Latched — the driver must acknowledge and reset.
-        if abs(tr.v) > 1.10 * V_MAX and not tr.overspeed_tripped:
+        # Overspeed cascade — three thresholds aligned with the Perce-Neige
+        # Poma-style interlock chain (patent EP0392938A1, STRMTG RM5) :
+        #   +10 % V_MAX → service brake trip (electrical command)
+        #   +12 % V_MAX → secondary / emergency brake automatic closure
+        #   +20 % V_MAX → parachute Belleville mechanical trip (centrifugal)
+        # Each stage is latched and strictly cumulative : once level N is
+        # reached, physics may still escalate to N+1 but cannot regress.
+        v_abs = abs(tr.v)
+        if v_abs > 1.20 * V_MAX and tr.overspeed_level < 3:
+            tr.overspeed_level = 3
+            tr.overspeed_tripped = True
+            tr.emergency = True
+            # Force parachute to full engagement immediately — it bypasses
+            # the normal emergency ramp (mechanical flyball governor).
+            tr.emergency_ramp = 1.0
+            tr.speed_cmd = 0.0
+            tr.throttle = 0.0
+            tr.ready = False
+            st.ghost_ready = False
+            st.ghost_ready_timer = 0.0
+            st.ghost_ready_delay = 0.0
+            st.departure_buzzer_remaining = 0.0
+            add_event(
+                st, "overspeed3",
+                "PARACHUTE BRAKE ! mechanical centrifugal trip (+20 %).",
+                "FREIN PARACHUTE ! déclenchement centrifuge mécanique (+20 %).",
+                "alarm",
+            )
+        elif v_abs > 1.12 * V_MAX and tr.overspeed_level < 2:
+            tr.overspeed_level = 2
             tr.overspeed_tripped = True
             tr.emergency = True
             tr.speed_cmd = 0.0
@@ -975,10 +1035,26 @@ class Physics:
             st.ghost_ready_delay = 0.0
             st.departure_buzzer_remaining = 0.0
             add_event(
-                st,
-                "overspeed",
-                "OVERSPEED TRIP ! emergency brake engaged.",
-                "SURVITESSE ! frein d'urgence engagé.",
+                st, "overspeed2",
+                "OVERSPEED +12 % ! secondary emergency brake closed.",
+                "SURVITESSE +12 % ! frein de secours fermé automatiquement.",
+                "alarm",
+            )
+        elif v_abs > 1.10 * V_MAX and tr.overspeed_level < 1:
+            tr.overspeed_level = 1
+            tr.overspeed_tripped = True
+            tr.emergency = True
+            tr.speed_cmd = 0.0
+            tr.throttle = 0.0
+            tr.ready = False
+            st.ghost_ready = False
+            st.ghost_ready_timer = 0.0
+            st.ghost_ready_delay = 0.0
+            st.departure_buzzer_remaining = 0.0
+            add_event(
+                st, "overspeed",
+                "OVERSPEED TRIP ! service brake + emergency engaged.",
+                "SURVITESSE ! frein de service + urgence engagés.",
                 "alarm",
             )
         # Power flow at the motor : positive when the motor pulls the
@@ -1095,6 +1171,7 @@ class Physics:
                 st.finished = True
                 arrived = True
                 st.score_time = st.trip_time
+                tr.fatigue_cycles += 1
                 add_event(
                     st, "arrive",
                     "At Grande Motte (3032 m) — press V when ready to depart",
@@ -1104,6 +1181,7 @@ class Physics:
                 st.finished = True
                 arrived = True
                 st.score_time = st.trip_time
+                tr.fatigue_cycles += 1
                 add_event(
                     st, "arrive",
                     "At Val Claret (2111 m) — press V when ready to depart",
@@ -1373,11 +1451,18 @@ def clear_fault(st: GameState) -> None:
     tr.tension_fault_dan = 0.0
     tr.thermal_derate = 1.0
     tr.motor_count = 3
+    tr.motor_id_down = 0
     tr.speed_fault_cap = 999.0
     tr.slack_fault_dan = 0.0
     tr.aux_power_fault = False
     tr.door_fault = False
     tr.parking_stuck = False
+    tr.cable_rupture = False
+    tr.service_brake_fail = 1.0
+    tr.flood_tunnel = False
+    tr.comms_loss = False
+    tr.switch_abt_fault = False
+    tr.fire_vent_fail = False
     tr.fault_timer = 0.0
     st.panne_active = False
     st.panne_kind = ""
@@ -1416,6 +1501,11 @@ def maybe_random_event(st: GameState, dt: float) -> None:
     if st.panne_active or tr.overspeed_tripped:
         return
 
+    # Manual mode : the scheduler is disabled and the driver uses the
+    # F dialog to trigger faults on demand.
+    if not st.panne_auto:
+        return
+
     st.event_cooldown -= dt
     if st.event_cooldown > 0:
         return
@@ -1423,10 +1513,71 @@ def maybe_random_event(st: GameState, dt: float) -> None:
         return
     st.event_cooldown = 10.0
 
-    kind = random.choice([
-        "tension", "door", "thermal", "fire", "wet_rail",
-        "motor_degraded", "slack", "aux_power", "parking_stuck",
-    ])
+    # Weighted pool : common faults stay common, catastrophic ones rare.
+    # Weights are calibrated from research_failures.md §2 — aux_power and
+    # thermal dominate real funiculars, cable_rupture is Glória-class rare
+    # but must be represented in "panne" mode to make the scenario
+    # pedagogically complete.
+    kind_pool = [
+        ("tension",          4),
+        ("door",             4),
+        ("thermal",          5),
+        ("fire",             3),
+        ("wet_rail",         4),
+        ("motor_degraded",   4),
+        ("slack",            4),
+        ("aux_power",        5),
+        ("parking_stuck",    4),
+        ("cable_rupture",    1),   # Glória 2025 — catastrophic, rare
+        ("service_brake_fail", 2), # Glória double-failure pattern
+        ("flood_tunnel",     2),   # glacier melt / vault seepage
+        ("comms_loss",       3),   # Kaprun lesson — narrative only
+        ("switch_abt_fault", 2),   # Perce-Neige specific (Abt crossing)
+        ("fire_vent_fail",   2),   # amplifier of fire (desenfumage HS)
+    ]
+    choices, weights = zip(*kind_pool)
+    kind = random.choices(choices, weights=weights, k=1)[0]
+    trigger_fault(st, kind)
+
+
+# All known fault kinds — used by the manual picker dialog + the weighted
+# random pool. Order = display order in the dialog.
+FAULT_KINDS = [
+    "tension", "door", "thermal", "fire", "wet_rail", "motor_degraded",
+    "slack", "aux_power", "parking_stuck", "cable_rupture",
+    "service_brake_fail", "flood_tunnel", "comms_loss",
+    "switch_abt_fault", "fire_vent_fail",
+]
+
+
+def fault_label(kind: str, lang: str) -> str:
+    """Bilingual human-readable label for a fault kind (UI dialog)."""
+    labels = {
+        "tension":          ("Cable tension spike",     "Pic tension câble"),
+        "door":             ("Door sensor fault",       "Défaut capteur porte"),
+        "thermal":          ("Motor overheat",          "Surchauffe moteur"),
+        "fire":             ("Smoke / fire",            "Fumée / feu"),
+        "wet_rail":         ("Wet rails",               "Rails humides"),
+        "motor_degraded":   ("Motor group fault",       "Groupe moteur HS"),
+        "slack":            ("Cable slack",             "Mou de câble"),
+        "aux_power":        ("400 V auxiliaries lost",  "Auxiliaires 400 V perdus"),
+        "parking_stuck":    ("Parking brake stuck",     "Frein parking bloqué"),
+        "cable_rupture":    ("Cable rupture (Glória)",  "Rupture câble (Glória)"),
+        "service_brake_fail": ("Service brake fade",    "Frein service inop."),
+        "flood_tunnel":     ("Tunnel flooding",         "Inondation tunnel"),
+        "comms_loss":       ("PA / radio lost",         "PA / radio perdus"),
+        "switch_abt_fault": ("Abt crossing misalign.",  "Aiguillage Abt désaligné"),
+        "fire_vent_fail":   ("Fire + vent failure",     "Feu + désenfumage HS"),
+    }
+    en, fr = labels.get(kind, (kind, kind))
+    return fr if lang == "fr" else en
+
+
+def trigger_fault(st: GameState, kind: str) -> None:
+    """Activate a specific fault. Used by the random scheduler AND by the
+    manual F-dialog picker. Caller guarantees no other fault is active.
+    """
+    tr = st.train
     st.panne_active = True
     st.panne_kind = kind
 
@@ -1487,13 +1638,16 @@ def maybe_random_event(st: GameState, dt: float) -> None:
     elif kind == "motor_degraded":
         # One of the three 800 kW DC motor groups dropped out — service
         # continues on 2/3 motors (real Von Roll redundancy design).
+        # Sassi-Superga precedent : specific motor named (M1/M2/M3).
         tr.motor_count = 2
+        tr.motor_id_down = random.choice([1, 2, 3])
         tr.speed_fault_cap = 9.0
         tr.fault_timer = 90.0
+        mid = tr.motor_id_down
         add_event(
             st, "motor_degraded",
-            "Motor group M3 fault — degraded mode 2/3, v≤9 m/s.",
-            "Groupe moteur M3 HS — mode dégradé 2/3, v≤9 m/s.",
+            f"Motor group M{mid} fault — degraded mode 2/3, v≤9 m/s.",
+            f"Groupe moteur M{mid} HS — mode dégradé 2/3, v≤9 m/s.",
             "warn",
         )
     elif kind == "slack":
@@ -1531,6 +1685,80 @@ def maybe_random_event(st: GameState, dt: float) -> None:
             "Parking brake release failure — cycle emergency stop.",
             "Défaut déverrouillage frein parking — cycler arrêt d'urgence.",
             "warn",
+        )
+    elif kind == "cable_rupture":
+        # Catastrophic : tractor cable severed (Glória Lisbon 2025, 16 deaths).
+        # Tension collapses, service brake useless (Glória pattern : cable
+        # rupture also killed the pneumatic service brake). Only the
+        # parachute Belleville (emergency rail brake) can hold the cabin.
+        tr.cable_rupture = True
+        tr.service_brake_fail = 0.15
+        tr.slack_fault_dan = 18000.0
+        tr.emergency = True
+        tr.fault_timer = 120.0
+        add_event(
+            st, "cable_rupture",
+            "CABLE RUPTURE ! parachute brake only — Glória-class event.",
+            "RUPTURE CÂBLE ! frein parachute seul — événement type Glória.",
+            "alarm",
+        )
+    elif kind == "service_brake_fail":
+        # Hydraulic service brake fade — driver commanded brake % is
+        # only partly effective. Emergency parachute still works.
+        tr.service_brake_fail = 0.25
+        tr.fault_timer = 45.0
+        add_event(
+            st, "service_brake_fail",
+            "Service brake fade — use emergency to stop.",
+            "Frein de service inopérant — utiliser l'urgence pour arrêter.",
+            "alarm",
+        )
+    elif kind == "flood_tunnel":
+        # Water ingress in tunnel (glacier-fed section). Adhesion collapses
+        # far below wet_rail — cap at 4 m/s.
+        tr.flood_tunnel = True
+        tr.speed_fault_cap = 4.0
+        tr.fault_timer = 60.0
+        add_event(
+            st, "flood_tunnel",
+            "Tunnel water ingress — adhesion critical, v≤4 m/s.",
+            "Inondation tunnel — adhérence critique, v≤4 m/s.",
+            "warn",
+        )
+    elif kind == "comms_loss":
+        # PA + GSM relays lost (narrative — Kaprun lesson). No physics
+        # effect but scores down driver's situational awareness.
+        tr.comms_loss = True
+        tr.fault_timer = 40.0
+        add_event(
+            st, "comms_loss",
+            "Tunnel PA + radio lost — passengers isolated.",
+            "PA + radio tunnel perdus — passagers isolés.",
+            "warn",
+        )
+    elif kind == "switch_abt_fault":
+        # Abt crossing (siding at mid-length) misalignment — train must
+        # hold before the siding point until the interlock clears.
+        tr.switch_abt_fault = True
+        tr.speed_fault_cap = 2.0
+        tr.fault_timer = 50.0
+        add_event(
+            st, "switch_abt_fault",
+            "Abt crossing misaligned — crawl to siding, v≤2 m/s.",
+            "Aiguillage Abt désaligné — marche au pas vers l'évitement, v≤2 m/s.",
+            "warn",
+        )
+    elif kind == "fire_vent_fail":
+        # Fire + tunnel vent (desenfumage) failed — the single worst
+        # compound fault documented (Kaprun class). Extended timer.
+        tr.emergency = True
+        tr.fire_vent_fail = True
+        tr.fault_timer = 120.0
+        add_event(
+            st, "fire_vent_fail",
+            "FIRE + VENT FAILURE — evacuate, desenfumage offline.",
+            "FEU + DÉSENFUMAGE HS — évacuation, ventilation coupée.",
+            "alarm",
         )
 
 
@@ -2534,7 +2762,7 @@ class AutoOps:
             tr.emergency = False
             tr.electric_stop = False
             tr.dead_man_fault = False
-            tr.overspeed_tripped = False
+            tr.overspeed_tripped = False; tr.overspeed_level = 0
             tr.brake = 0.0
             state.pending_incident = False
             # Pick the right phase based on where the train actually is
@@ -2628,7 +2856,7 @@ class AutoOps:
         if tr.emergency or tr.electric_stop or tr.overspeed_tripped:
             tr.emergency = False
             tr.electric_stop = False
-            tr.overspeed_tripped = False
+            tr.overspeed_tripped = False; tr.overspeed_level = 0
             tr.maint_brake = False
             tr.brake = 0.0
         # During any pre-departure phase the drum must stay engaged so
@@ -3083,6 +3311,188 @@ class AutoOpsLogger:
             pass
 
 
+class DocsDownloadDialog(QDialog):
+    """Downloads manuel_perce_neige.pdf and guide_theorique.pdf from the
+    GitHub repo into the user's Downloads folder (or opens them if already
+    bundled next to the EXE). Useful in the frozen EXE where the PDFs are
+    not bundled — the user can grab the latest versions on demand."""
+
+    REPO_BASE = "https://github.com/ARP273-ROSE/perce-neige-sim/raw/main"
+    DOCS = [
+        ("manuel_perce_neige.pdf",
+         "Manuel utilisateur", "User manual"),
+        ("guide_theorique.pdf",
+         "Guide théorique (formules + sources)", "Theory guide (formulas + sources)"),
+    ]
+
+    def __init__(self, lang: str = "fr", parent: QWidget | None = None):
+        super().__init__(parent)
+        self._lang = lang
+        self.setWindowTitle(
+            "Documents PDF" if lang == "fr" else "PDF documents")
+        self.setModal(True)
+        self.setMinimumWidth(520)
+
+        lay = QVBoxLayout(self)
+        intro = QLabel(
+            "<b>Documents</b><br>Téléchargez la dernière version du manuel "
+            "et du guide théorique depuis GitHub. Le fichier s'enregistre "
+            "dans votre dossier Téléchargements et s'ouvre automatiquement."
+            if lang == "fr" else
+            "<b>Documents</b><br>Download the latest manual and theory "
+            "guide from GitHub. The file is saved to your Downloads folder "
+            "and opened automatically."
+        )
+        intro.setWordWrap(True)
+        lay.addWidget(intro)
+
+        self._status = QLabel("")
+        self._status.setWordWrap(True)
+        lay.addWidget(self._status)
+
+        for filename, fr_label, en_label in self.DOCS:
+            btn = QPushButton(
+                f"{'Télécharger' if lang == 'fr' else 'Download'} — "
+                f"{fr_label if lang == 'fr' else en_label}",
+                self
+            )
+            btn.setToolTip(f"{self.REPO_BASE}/{filename}")
+            btn.clicked.connect(
+                lambda _=False, f=filename: self._download(f))
+            lay.addWidget(btn)
+
+        close = QPushButton(
+            "Fermer" if lang == "fr" else "Close", self)
+        close.clicked.connect(self.accept)
+        lay.addWidget(close)
+
+    def _download(self, filename: str) -> None:
+        import urllib.request, os
+        url = f"{self.REPO_BASE}/{filename}"
+        downloads = Path.home() / "Downloads"
+        downloads.mkdir(exist_ok=True)
+        dest = downloads / filename
+        self._status.setText(
+            (f"Téléchargement de {filename}…" if self._lang == "fr" else
+             f"Downloading {filename}…")
+        )
+        QApplication.processEvents()
+        try:
+            req = urllib.request.Request(
+                url, headers={"User-Agent": f"PerceNeige/{VERSION}"})
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                data = resp.read()
+            if len(data) < 1024:
+                raise ValueError("file too small — check URL")
+            dest.write_bytes(data)
+            self._status.setText(
+                (f"✓ Enregistré : {dest}" if self._lang == "fr" else
+                 f"✓ Saved : {dest}")
+            )
+            # Open it in the default PDF viewer
+            if os.name == "nt":
+                os.startfile(str(dest))  # noqa: S606
+            else:
+                import subprocess
+                opener = "open" if sys.platform == "darwin" else "xdg-open"
+                subprocess.Popen([opener, str(dest)])  # noqa: S603
+        except Exception as e:
+            self._status.setText(
+                (f"✗ Échec : {e}" if self._lang == "fr" else
+                 f"✗ Failed : {e}")
+            )
+
+
+class FaultPickerDialog(QDialog):
+    """Manual fault picker used in 'panne' mode. Lists every fault kind
+    with a button, plus a toggle for the auto-scheduler. Fires the chosen
+    fault immediately via trigger_fault()."""
+
+    def __init__(self, state: GameState, parent: QWidget | None = None):
+        super().__init__(parent)
+        self._state = state
+        lang = state.lang
+        self.setWindowTitle("Pannes / Faults")
+        self.setModal(True)
+        self.setMinimumWidth(420)
+
+        lay = QVBoxLayout(self)
+
+        lbl = QLabel(
+            "<b>Mode Pannes</b> — sélectionnez une panne à déclencher "
+            "immédiatement, ou activez l'auto-scheduler."
+            if lang == "fr" else
+            "<b>Fault mode</b> — pick a fault to trigger now, or enable "
+            "the auto-scheduler."
+        )
+        lbl.setWordWrap(True)
+        lay.addWidget(lbl)
+
+        # Auto-mode toggle
+        self._auto_btn = QPushButton(self)
+        self._refresh_auto_btn_label()
+        self._auto_btn.clicked.connect(self._toggle_auto)
+        self._auto_btn.setToolTip(
+            "Activé : pannes aléatoires. Désactivé : manuel seulement."
+            if lang == "fr" else
+            "On: random faults. Off: manual only."
+        )
+        lay.addWidget(self._auto_btn)
+
+        sep = QLabel("—" * 30)
+        sep.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        lay.addWidget(sep)
+
+        # Fault grid : 2 columns
+        grid = QHBoxLayout()
+        col_a, col_b = QVBoxLayout(), QVBoxLayout()
+        for i, kind in enumerate(FAULT_KINDS):
+            btn = QPushButton(fault_label(kind, lang), self)
+            btn.setToolTip(
+                f"Déclencher immédiatement : {kind}"
+                if lang == "fr" else
+                f"Trigger now : {kind}"
+            )
+            btn.clicked.connect(lambda _=False, k=kind: self._fire(k))
+            (col_a if i % 2 == 0 else col_b).addWidget(btn)
+        grid.addLayout(col_a)
+        grid.addLayout(col_b)
+        lay.addLayout(grid)
+
+        close = QPushButton(
+            "Fermer (F)" if lang == "fr" else "Close (F)", self)
+        close.clicked.connect(self.accept)
+        lay.addWidget(close)
+
+    def _refresh_auto_btn_label(self) -> None:
+        on = self._state.panne_auto
+        lang = self._state.lang
+        if lang == "fr":
+            self._auto_btn.setText(
+                f"Auto-scheduler : {'ACTIVÉ' if on else 'OFF (manuel)'}")
+        else:
+            self._auto_btn.setText(
+                f"Auto-scheduler : {'ON' if on else 'OFF (manual)'}")
+
+    def _toggle_auto(self) -> None:
+        self._state.panne_auto = not self._state.panne_auto
+        self._refresh_auto_btn_label()
+
+    def _fire(self, kind: str) -> None:
+        st = self._state
+        if st.panne_active or st.train.overspeed_tripped:
+            # Don't stack — inform + close
+            add_event(
+                st, "fault_busy",
+                "A fault is already active — wait for it to clear.",
+                "Une panne est déjà active — attendre sa résolution.",
+                "warn",
+            )
+        else:
+            trigger_fault(st, kind)
+        self.accept()
+
+
 class GameWidget(QWidget):
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -3283,7 +3693,7 @@ class GameWidget(QWidget):
         tr.dead_man_fault = False
         # Clear any latched overspeed trip from the previous leg —
         # otherwise the train can't depart again.
-        tr.overspeed_tripped = False
+        tr.overspeed_tripped = False; tr.overspeed_level = 0
         st.ghost_ready = False
         st.ghost_ready_timer = 0.0
         st.ghost_ready_delay = 0.0
@@ -3420,7 +3830,7 @@ class GameWidget(QWidget):
         tr.speed_fault_cap = 999.0
         tr.slack_fault_dan = 0.0
         tr.aux_power_fault = False
-        tr.overspeed_tripped = False
+        tr.overspeed_tripped = False; tr.overspeed_level = 0
         tr.door_fault = False
         tr.parking_stuck = False
         tr.fault_timer = 0.0
@@ -3785,6 +4195,14 @@ class GameWidget(QWidget):
 
     # ----- keyboard --------------------------------------------------------
 
+    def _open_fault_picker(self) -> None:
+        dlg = FaultPickerDialog(self.state, self)
+        dlg.exec()
+
+    def _open_docs_download(self) -> None:
+        dlg = DocsDownloadDialog(self.state.lang, self)
+        dlg.exec()
+
     def keyPressEvent(self, ev: QKeyEvent) -> None:  # noqa: N802
         st = self.state
         k = ev.key()
@@ -3920,6 +4338,8 @@ class GameWidget(QWidget):
             self._cabin_view = not self._cabin_view
         elif k == Qt.Key.Key_F5:
             self._open_trip_log_viewer()
+        elif k == Qt.Key.Key_F6:
+            self._open_docs_download()
         elif k in (Qt.Key.Key_Plus, Qt.Key.Key_Equal):
             # Side-view zoom in (narrower window, more detail)
             self._profile_zoom = max(0.35, self._profile_zoom / 1.25)
@@ -3943,6 +4363,10 @@ class GameWidget(QWidget):
             order = ["normal", "challenge", "panne"]
             idx = order.index(st.run_mode) if st.run_mode in order else 0
             st.run_mode = order[(idx + 1) % len(order)]
+        elif k == Qt.Key.Key_F:
+            # Fault picker dialog — only useful in "panne" mode
+            if st.run_mode == "panne":
+                self._open_fault_picker()
         elif k == Qt.Key.Key_Shift:
             st.train.emergency = True
             st.train.maint_brake = True
@@ -4051,7 +4475,7 @@ class GameWidget(QWidget):
                 # Cycling the emergency also clears the overspeed latch
                 # and resets a stuck parking brake release.
                 if tr.overspeed_tripped:
-                    tr.overspeed_tripped = False
+                    tr.overspeed_tripped = False; tr.overspeed_level = 0
                     add_event(st, "overspeed_reset",
                               "Overspeed trip acknowledged and reset.",
                               "Survitesse acquittée et réarmée.", "info")
@@ -8372,6 +8796,8 @@ class GameWidget(QWidget):
                 ("P / Esc", T("pause / resume", "pause / reprise")),
                 ("M", T("mode : normal / challenge / faults",
                         "mode : normal / défi / pannes")),
+                ("F", T("fault picker (only in faults mode)",
+                        "sélecteur de panne (mode pannes seulement)")),
                 ("L", T("language FR / EN", "langue FR / EN")),
                 ("F1", T("toggle this help", "ouvrir/fermer cette aide")),
                 ("F2", T("announcement console",
@@ -8382,6 +8808,8 @@ class GameWidget(QWidget):
                          "vue cabine / vue latérale")),
                 ("F5", T("auto-exploitation trip log",
                          "journal des trajets auto")),
+                ("F6", T("download PDF manual + theory guide",
+                         "télécharger manuel PDF + guide théorique")),
                 ("+ / −  /  0", T("side-view zoom in/out / reset",
                                   "zoom vue latérale +/− / reset")),
                 (T("Mouse wheel", "Molette souris"),
