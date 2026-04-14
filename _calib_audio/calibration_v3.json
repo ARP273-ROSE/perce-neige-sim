@@ -1,0 +1,181 @@
+{
+  "method": "Viterbi-like peak tracker on median-detrended spectrogram. Anchor at t=46 s in band 40-90 Hz (motor idle pitch). Forward tracking with max slew 8 Hz/s and +/-12 Hz search window. Idle -> v=0, cruise plateau (auto-detected) -> v=10.1 m/s.",
+  "video": "sons/videos/funiculaire_machinerie_1080p.mp4",
+  "segment": [
+    46.0,
+    100.0
+  ],
+  "anchor_t_s": 46.0,
+  "pitch_idle_Hz": 83.44,
+  "pitch_cruise_Hz": 401.4,
+  "pitch_ratio": 4.81,
+  "v_cruise_ref_m_s": 12.0,
+  "t_launch_abs_s": 48.99,
+  "a_init_m_s2": 0.109,
+  "a_mid_m_s2": 0.294,
+  "a_peak_m_s2": 0.302,
+  "t_to_0p9_vc_s": 151.12,
+  "t_to_0p95_vc_s": 153.11,
+  "s_curve_fit": {
+    "A_start_m_s2": 0.03,
+    "A_target_m_s2": 0.22,
+    "V_soft_ramp_m_s": 2.4
+  },
+  "sim_reference": {
+    "A_START": 0.12,
+    "A_TARGET": 0.3,
+    "V_SOFT_RAMP": 3.0
+  },
+  "samples_2s_steps": [
+    {
+      "t_since_launch_s": 0.0,
+      "pitch_Hz": 96.72,
+      "v_m_s": 0.5,
+      "a_m_s2": 0.097
+    },
+    {
+      "t_since_launch_s": 2.0,
+      "pitch_Hz": 98.43,
+      "v_m_s": 0.57,
+      "a_m_s2": 0.262
+    },
+    {
+      "t_since_launch_s": 3.99,
+      "pitch_Hz": 99.77,
+      "v_m_s": 0.62,
+      "a_m_s2": 0.302
+    },
+    {
+      "t_since_launch_s": 5.99,
+      "pitch_Hz": 110.26,
+      "v_m_s": 1.01,
+      "a_m_s2": 0.055
+    },
+    {
+      "t_since_launch_s": 8.01,
+      "pitch_Hz": 110.52,
+      "v_m_s": 1.02,
+      "a_m_s2": 0.12
+    },
+    {
+      "t_since_launch_s": 10.01,
+      "pitch_Hz": 122.43,
+      "v_m_s": 1.47,
+      "a_m_s2": 0.302
+    },
+    {
+      "t_since_launch_s": 12.0,
+      "pitch_Hz": 124.66,
+      "v_m_s": 1.56,
+      "a_m_s2": -0.253
+    },
+    {
+      "t_since_launch_s": 14.0,
+      "pitch_Hz": 127.55,
+      "v_m_s": 1.66,
+      "a_m_s2": 0.302
+    },
+    {
+      "t_since_launch_s": 16.0,
+      "pitch_Hz": 143.52,
+      "v_m_s": 2.27,
+      "a_m_s2": 0.302
+    },
+    {
+      "t_since_launch_s": 18.0,
+      "pitch_Hz": 159.47,
+      "v_m_s": 2.87,
+      "a_m_s2": 0.132
+    },
+    {
+      "t_since_launch_s": 19.99,
+      "pitch_Hz": 171.59,
+      "v_m_s": 3.33,
+      "a_m_s2": 0.302
+    },
+    {
+      "t_since_launch_s": 21.99,
+      "pitch_Hz": 187.56,
+      "v_m_s": 3.93,
+      "a_m_s2": 0.302
+    },
+    {
+      "t_since_launch_s": 24.01,
+      "pitch_Hz": 203.72,
+      "v_m_s": 4.54,
+      "a_m_s2": 0.302
+    },
+    {
+      "t_since_launch_s": 26.01,
+      "pitch_Hz": 219.7,
+      "v_m_s": 5.14,
+      "a_m_s2": 0.302
+    },
+    {
+      "t_since_launch_s": 28.0,
+      "pitch_Hz": 235.67,
+      "v_m_s": 5.75,
+      "a_m_s2": 0.302
+    },
+    {
+      "t_since_launch_s": 30.0,
+      "pitch_Hz": 251.65,
+      "v_m_s": 6.35,
+      "a_m_s2": 0.302
+    },
+    {
+      "t_since_launch_s": 32.0,
+      "pitch_Hz": 267.62,
+      "v_m_s": 6.95,
+      "a_m_s2": 0.302
+    },
+    {
+      "t_since_launch_s": 33.99,
+      "pitch_Hz": 283.46,
+      "v_m_s": 7.55,
+      "a_m_s2": 0.302
+    },
+    {
+      "t_since_launch_s": 35.99,
+      "pitch_Hz": 299.44,
+      "v_m_s": 8.15,
+      "a_m_s2": 0.302
+    },
+    {
+      "t_since_launch_s": 38.01,
+      "pitch_Hz": 315.6,
+      "v_m_s": 8.76,
+      "a_m_s2": 0.302
+    },
+    {
+      "t_since_launch_s": 40.01,
+      "pitch_Hz": 328.13,
+      "v_m_s": 9.23,
+      "a_m_s2": 0.302
+    },
+    {
+      "t_since_launch_s": 42.0,
+      "pitch_Hz": 340.76,
+      "v_m_s": 9.71,
+      "a_m_s2": 0.302
+    },
+    {
+      "t_since_launch_s": 44.0,
+      "pitch_Hz": 347.45,
+      "v_m_s": 9.96,
+      "a_m_s2": 0.214
+    },
+    {
+      "t_since_launch_s": 46.0,
+      "pitch_Hz": 354.88,
+      "v_m_s": 10.24,
+      "a_m_s2": -0.008
+    },
+    {
+      "t_since_launch_s": 48.0,
+      "pitch_Hz": 347.53,
+      "v_m_s": 9.97,
+      "a_m_s2": -0.163
+    }
+  ]
+}
