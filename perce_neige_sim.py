@@ -80,7 +80,7 @@ try:
 except ImportError:
     _QTMULTIMEDIA_OK = False
 
-VERSION = "1.8.2"
+VERSION = "1.9.0"
 APP_NAME = "Perce-Neige Simulator"
 
 
@@ -672,6 +672,17 @@ class GameState:
     panne_kind: str = ""
     panne_auto: bool = True     # when False, fault scheduler is paused
                                 # (driver picks faults manually via F dialog)
+    # Catastrophic-fault state machine. For non-catastrophic faults this
+    # stays empty and the legacy timer-based auto-clear runs. For
+    # catastrophic faults (cable_rupture, fire, fire_vent_fail,
+    # service_brake_fail) the machine cycles :
+    #   "active" → train comes to rest
+    #   "intervention_called" → tech_incident PA, ~10 s dwell
+    #   "evacuating" → dim_light + evac PA, evacuation in progress
+    #   "out_of_service" → permanent. READY/DEPART blocked. R = new trip.
+    fault_phase: str = ""
+    fault_phase_timer: float = 0.0
+    fault_show_panel: bool = True   # driver can hide the on-screen panel
     finished: bool = False
     rebound_timer: float = 0.0  # cable elasticity rebound (after arrival)
     rebound_amp_m: float = 0.0  # actual cable stretch (m) captured at arrival
@@ -1466,6 +1477,8 @@ def clear_fault(st: GameState) -> None:
     tr.fault_timer = 0.0
     st.panne_active = False
     st.panne_kind = ""
+    st.fault_phase = ""
+    st.fault_phase_timer = 0.0
 
 
 def maybe_random_event(st: GameState, dt: float) -> None:
@@ -1483,18 +1496,22 @@ def maybe_random_event(st: GameState, dt: float) -> None:
     tr = st.train
 
     # Decay of active fault ---------------------------------------------
-    if st.panne_active and tr.fault_timer > 0.0:
-        tr.fault_timer -= dt
-        if tr.fault_timer <= 0.0:
-            cleared = st.panne_kind
-            add_event(
-                st,
-                "fault_cleared",
-                f"Fault cleared : {cleared}.",
-                f"Panne résolue : {cleared}.",
-                "info",
-            )
-            clear_fault(st)
+    # Catastrophic faults DO NOT auto-clear on the timer : they wait for
+    # the driver to press R (new trip from menu). Their state machine is
+    # advanced separately in advance_fault_phase().
+    if st.panne_active and not is_catastrophic(st.panne_kind):
+        if tr.fault_timer > 0.0:
+            tr.fault_timer -= dt
+            if tr.fault_timer <= 0.0:
+                cleared = st.panne_kind
+                add_event(
+                    st,
+                    "fault_cleared",
+                    f"Fault cleared : {cleared}.",
+                    f"Panne résolue : {cleared}.",
+                    "info",
+                )
+                clear_fault(st)
 
     # Don't roll another fault while one is still active or latched
     # by the overspeed trip.
@@ -1550,6 +1567,251 @@ FAULT_KINDS = [
 ]
 
 
+# ---------------------------------------------------------------------------
+# Per-fault behaviour profile : drives realism (recovery path, what the
+# driver can / can't do, evacuation requirement, end-of-trip logic).
+# ---------------------------------------------------------------------------
+# severity  : "advisory"     → no operational impact, dashboard-only warning
+#             "operational"  → degraded mode, trip can continue (limp home)
+#             "stopping"     → train must stop, can resume after recovery
+#             "catastrophic" → trip terminated, intervention + evacuation,
+#                              the only way out is R (new trip from menu)
+#
+# A catastrophic fault NEVER auto-clears on the timer : the driver MUST
+# press R to start a new trip from the title sequence. READY (V) and
+# DEPART (Z) are blocked permanently. The phase machine runs through
+# "active" → "intervention_called" → "evacuating" → "out_of_service".
+# ---------------------------------------------------------------------------
+FAULT_PROFILES: dict[str, dict] = {
+    "tension": {
+        "severity": "advisory",
+        "what_fr": "Pic de tension transitoire (+6 500 daN) sur le câble — "
+                   "le régulateur a déjà commencé à atténuer.",
+        "what_en": "Transient cable tension surge (+6 500 daN) — the "
+                   "regulator is already damping it.",
+        "do_fr": "Réduire un peu la consigne de vitesse jusqu'à ce que le "
+                 "voyant Câble s'éteigne.",
+        "do_en": "Ease the speed setpoint down until the Cable warning "
+                 "light goes out.",
+        "blocked_fr": "Aucune restriction.",
+        "blocked_en": "No restriction.",
+    },
+    "door": {
+        "severity": "operational",
+        "what_fr": "Capteur de porte défectueux : la sécurité interdit le "
+                   "redémarrage tant que la séquence n'a pas été cyclée.",
+        "what_en": "Faulty door sensor : safety chain blocks restart until "
+                   "the door sequence is cycled.",
+        "do_fr": "S'arrêter à la prochaine station, ouvrir/refermer les "
+                 "portes (touche D), puis PRÊT (V) + DÉPART (Z).",
+        "do_en": "Stop at the next station, open/close the doors (D key), "
+                 "then READY (V) + DEPART (Z).",
+        "blocked_fr": "DÉPART tant que les portes ne sont pas cyclées.",
+        "blocked_en": "DEPART blocked until the doors are cycled.",
+    },
+    "thermal": {
+        "severity": "operational",
+        "what_fr": "Bobinages moteur à 105 °C — la protection thermique "
+                   "déclasse la puissance à 55 % et plafonne à 8 m/s.",
+        "what_en": "Motor windings at 105 °C — thermal protection derates "
+                   "power to 55 % and caps speed at 8 m/s.",
+        "do_fr": "Continuer en mode dégradé jusqu'au terminus, le système "
+                 "se refroidit en roulant.",
+        "do_en": "Limp home to the terminus — the motors cool down while "
+                 "rolling.",
+        "blocked_fr": "Vitesse > 8 m/s, accélérations brusques.",
+        "blocked_en": "Speed > 8 m/s, sharp accelerations.",
+    },
+    "fire": {
+        "severity": "catastrophic",
+        "what_fr": "DÉTECTION FUMÉE en cabine ou en tunnel. Frein "
+                   "d'urgence engagé automatiquement. Risque vital.",
+        "what_en": "SMOKE / FIRE DETECTION in cabin or tunnel. Emergency "
+                   "brake engaged automatically. Life-threatening.",
+        "do_fr": "1) Arrêt complet  2) Annonce 'évacuation' (auto)  "
+                 "3) Évacuer les passagers  4) Service terminé : "
+                 "appuyer sur R pour un nouveau voyage depuis le menu.",
+        "do_en": "1) Full stop  2) Evacuation announcement (auto)  "
+                 "3) Evacuate passengers  4) Service over : press R "
+                 "for a new trip from the menu.",
+        "blocked_fr": "PRÊT, DÉPART, redémarrage du voyage. Service terminé.",
+        "blocked_en": "READY, DEPART, trip restart. Service over.",
+    },
+    "wet_rail": {
+        "severity": "advisory",
+        "what_fr": "Suintement / condensation sur les rails — adhérence "
+                   "réduite, plafond auto à 6 m/s.",
+        "what_en": "Wall seepage / condensation on the rails — adhesion "
+                   "drops, speed auto-capped at 6 m/s.",
+        "do_fr": "Continuer doucement, les patins essuient le rail au "
+                 "passage. La protection se relèvera seule.",
+        "do_en": "Keep going gently, the brake shoes wipe the rails. "
+                 "Protection will reset on its own.",
+        "blocked_fr": "Vitesse > 6 m/s.",
+        "blocked_en": "Speed > 6 m/s.",
+    },
+    "motor_degraded": {
+        "severity": "operational",
+        "what_fr": "Un des trois groupes moteurs HS — service en mode 2/3 "
+                   "(redondance Von Roll). Plafond 9 m/s.",
+        "what_en": "One of the three motor groups failed — 2/3 mode "
+                   "(Von Roll redundancy). Speed cap 9 m/s.",
+        "do_fr": "Continuer jusqu'au terminus en mode dégradé. Aucun "
+                 "redémarrage requis.",
+        "do_en": "Limp home in degraded mode. No restart required.",
+        "blocked_fr": "Vitesse > 9 m/s, accélérations vives.",
+        "blocked_en": "Speed > 9 m/s, sharp accelerations.",
+    },
+    "slack": {
+        "severity": "advisory",
+        "what_fr": "Mou de câble détecté (-8 000 daN) — l'élasticité "
+                   "des 3,5 km Fatzer s'est relâchée brièvement.",
+        "what_en": "Cable slack detected (-8 000 daN) — the 3.5 km Fatzer "
+                   "elasticity unloaded momentarily.",
+        "do_fr": "Freiner doucement pour rétablir la précontrainte.",
+        "do_en": "Brake smoothly to restore preload.",
+        "blocked_fr": "Aucune restriction (sauf accélérations brusques).",
+        "blocked_en": "No restriction (avoid sharp accelerations).",
+    },
+    "aux_power": {
+        "severity": "stopping",
+        "what_fr": "Perte des auxiliaires 400 V — contacteur traction "
+                   "ouvert, frein tambour serré. Le train s'arrête.",
+        "what_en": "400 V auxiliaries lost — traction contactor opened, "
+                   "drum brake clamped. Train will halt.",
+        "do_fr": "Attendre la reprise du secours (≈ 25 s), puis "
+                 "PRÊT (V) + DÉPART (Z) pour repartir.",
+        "do_en": "Wait for the backup feeder to pick up (≈ 25 s), then "
+                 "READY (V) + DEPART (Z) to resume.",
+        "blocked_fr": "Traction, PRÊT et DÉPART tant que le 400 V n'est "
+                      "pas restauré.",
+        "blocked_en": "Traction, READY and DEPART blocked until 400 V "
+                      "is back.",
+    },
+    "parking_stuck": {
+        "severity": "stopping",
+        "what_fr": "Frein parking (tambour) refuse de se relâcher — la "
+                   "rame ne peut pas démarrer.",
+        "what_en": "Parking (drum) brake refuses to release — the cabin "
+                   "cannot move.",
+        "do_fr": "Cycler l'arrêt d'urgence (Maj + 4) à l'arrêt complet, "
+                 "puis PRÊT (V) + DÉPART (Z).",
+        "do_en": "Cycle the emergency stop (Shift + 4) at full stop, "
+                 "then READY (V) + DEPART (Z).",
+        "blocked_fr": "Toute traction tant que le tambour ne se libère pas.",
+        "blocked_en": "All traction blocked until the drum releases.",
+    },
+    "cable_rupture": {
+        "severity": "catastrophic",
+        "what_fr": "RUPTURE DU CÂBLE TRACTEUR — événement type Glória "
+                   "(Lisbonne 2025, 16 morts). La tension s'est effondrée, "
+                   "le frein de service est noyé (pattern double-failure), "
+                   "seul le parachute Belleville centrifuge retient la cabine.",
+        "what_en": "TRACTION CABLE RUPTURE — Glória-class event (Lisbon "
+                   "2025, 16 deaths). Tension collapsed, service brake "
+                   "swamped (double-failure pattern), only the centrifugal "
+                   "Belleville parachute is holding the cabin.",
+        "do_fr": "1) Maintenir la cabine à l'arrêt  2) Annonce 'incident "
+                 "technique' puis 'évacuation' (auto)  3) Évacuer les "
+                 "passagers vers le passage de service  4) Demande "
+                 "d'intervention de la maintenance  5) Service terminé : "
+                 "appuyer sur R pour un nouveau voyage depuis le menu.",
+        "do_en": "1) Hold the cabin stopped  2) 'Technical incident' then "
+                 "'evacuation' announcements (auto)  3) Evacuate to the "
+                 "service walkway  4) Maintenance call-out  5) Service "
+                 "over : press R for a new trip from the menu.",
+        "blocked_fr": "PRÊT, DÉPART, frein de service à 15 % seulement, "
+                      "redémarrage interdit. Service terminé.",
+        "blocked_en": "READY, DEPART, service brake only 15 % effective, "
+                      "restart forbidden. Service over.",
+    },
+    "service_brake_fail": {
+        "severity": "catastrophic",
+        "what_fr": "Frein de service hydraulique en perte d'efficacité "
+                   "(25 %) — pattern de double-défaillance. Le parachute "
+                   "fonctionne encore mais la rame n'est plus apte au "
+                   "service commercial.",
+        "what_en": "Hydraulic service brake fade (25 % effective) — "
+                   "double-failure pattern. The parachute still works "
+                   "but the cabin is no longer fit for commercial service.",
+        "do_fr": "1) Arrêt d'urgence (parachute) au plus vite  "
+                 "2) Annonce incident technique (auto)  3) Évacuer  "
+                 "4) Service terminé : appuyer sur R.",
+        "do_en": "1) Emergency stop (parachute) as soon as possible  "
+                 "2) Technical incident announcement (auto)  "
+                 "3) Evacuate  4) Service over : press R.",
+        "blocked_fr": "PRÊT, DÉPART, redémarrage du voyage.",
+        "blocked_en": "READY, DEPART, trip restart.",
+    },
+    "flood_tunnel": {
+        "severity": "operational",
+        "what_fr": "Eau stagnante dans le tunnel (alimentation glaciaire) "
+                   "— adhérence critique, plafond auto à 4 m/s.",
+        "what_en": "Standing water in the tunnel (glacier-fed) — critical "
+                   "adhesion, speed auto-capped at 4 m/s.",
+        "do_fr": "Continuer doucement jusqu'au terminus en marche au pas.",
+        "do_en": "Crawl to the terminus carefully.",
+        "blocked_fr": "Vitesse > 4 m/s.",
+        "blocked_en": "Speed > 4 m/s.",
+    },
+    "comms_loss": {
+        "severity": "advisory",
+        "what_fr": "PA + radio tunnel perdus — passagers et machinerie "
+                   "isolés (leçon Kaprun 2000 : information = sécurité).",
+        "what_en": "Tunnel PA + radio lost — passengers and machinery "
+                   "isolated (Kaprun 2000 lesson : information = safety).",
+        "do_fr": "Continuer normalement, surveiller les autres systèmes "
+                 "de plus près.",
+        "do_en": "Continue normally, watch the other systems more closely.",
+        "blocked_fr": "Annonces sonores tunnel.",
+        "blocked_en": "Tunnel PA announcements.",
+    },
+    "switch_abt_fault": {
+        "severity": "stopping",
+        "what_fr": "Aiguillage Abt à l'évitement central désaligné — "
+                   "circulation à 2 m/s maximum jusqu'au verrouillage.",
+        "what_en": "Abt crossing switch at the central siding misaligned "
+                   "— 2 m/s crawl until the interlock clears.",
+        "do_fr": "Marche au pas vers la zone d'évitement, attendre la "
+                 "remise en place de l'aiguillage.",
+        "do_en": "Crawl to the siding zone, wait for the switch to "
+                 "realign.",
+        "blocked_fr": "Vitesse > 2 m/s.",
+        "blocked_en": "Speed > 2 m/s.",
+    },
+    "fire_vent_fail": {
+        "severity": "catastrophic",
+        "what_fr": "FEU EN TUNNEL + DÉSENFUMAGE HORS SERVICE — défaut "
+                   "composé de classe Kaprun 2000 (155 morts). Les fumées "
+                   "ne peuvent pas être extraites du tunnel.",
+        "what_en": "TUNNEL FIRE + VENTILATION OFFLINE — Kaprun-class "
+                   "compound fault (155 deaths). Smoke cannot be extracted "
+                   "from the tunnel.",
+        "do_fr": "1) Arrêt immédiat  2) Annonce 'évacuation' (auto)  "
+                 "3) Évacuation IMMÉDIATE par le passage de service "
+                 "(descente, sortir des fumées)  4) Service terminé.",
+        "do_en": "1) Immediate stop  2) Evacuation announcement (auto)  "
+                 "3) IMMEDIATE evacuation via the service walkway "
+                 "(downward, out of the smoke)  4) Service over.",
+        "blocked_fr": "PRÊT, DÉPART, redémarrage du voyage. Service terminé.",
+        "blocked_en": "READY, DEPART, trip restart. Service over.",
+    },
+}
+
+
+def fault_profile(kind: str) -> dict:
+    """Return the per-fault realism profile (description, instructions,
+    severity). Empty dict for unknown kinds — caller should fall back to
+    fault_label() for the human name."""
+    return FAULT_PROFILES.get(kind, {})
+
+
+def is_catastrophic(kind: str) -> bool:
+    """A catastrophic fault terminates the trip : evacuation announcements
+    play and the only way to restart is R (new trip from menu)."""
+    return fault_profile(kind).get("severity") == "catastrophic"
+
+
 def fault_label(kind: str, lang: str) -> str:
     """Bilingual human-readable label for a fault kind (UI dialog)."""
     labels = {
@@ -1580,6 +1842,15 @@ def trigger_fault(st: GameState, kind: str) -> None:
     tr = st.train
     st.panne_active = True
     st.panne_kind = kind
+    # Initialise the catastrophic state machine. For non-catastrophic
+    # faults the phase stays empty and the legacy auto-clear path runs.
+    if is_catastrophic(kind):
+        st.fault_phase = "active"
+        st.fault_phase_timer = 0.0
+    else:
+        st.fault_phase = ""
+        st.fault_phase_timer = 0.0
+    st.fault_show_panel = True
 
     if kind == "tension":
         # +6 500 daN surge (≈ 30 % of nominal) — pushes the gauge into
@@ -3653,6 +3924,83 @@ class GameWidget(QWidget):
 
     # ----- lifecycle -------------------------------------------------------
 
+    def _advance_fault_phase(self, dt: float) -> None:
+        """Drive the catastrophic fault state machine.
+
+        For non-catastrophic faults this is a no-op (their auto-clear is
+        handled by the legacy fault_timer in maybe_random_event).
+
+        For catastrophic faults the train trip is permanently terminated.
+        We sequence : active → intervention_called → evacuating →
+        out_of_service. Each phase plays the appropriate PA. Once we
+        reach out_of_service, only R (new trip) can clear the state —
+        READY (V) and DEPART (Z) refuse to arm and the driver is told
+        to start a new trip.
+        """
+        st = self.state
+        if not st.panne_active:
+            return
+        if not is_catastrophic(st.panne_kind):
+            return
+        st.fault_phase_timer += dt
+        tr = st.train
+        # 1) ACTIVE  — wait for the cabin to fully stop. Only then do we
+        #    play the technical-incident PA. The trip is suspended exactly
+        #    like a manual emergency : trip_started → False, drum brake on.
+        if st.fault_phase == "active":
+            if abs(tr.v) < 0.1 and st.fault_phase_timer > 1.5:
+                st.trip_started = False
+                tr.maint_brake = True
+                tr.ready = False
+                st.ghost_ready = False
+                st.ghost_ready_timer = 0.0
+                st.ghost_ready_delay = 0.0
+                st.departure_buzzer_remaining = 0.0
+                # Fire is announced via dim_light + evac later in the
+                # sequence ; cable_rupture / brake_fail / vent_fail go
+                # through the "tech_incident" PA first.
+                self.sounds.stop_announcements()
+                self.sounds.play("tech_incident",
+                                 lang=st.ann_lang, cooldown=60.0)
+                add_event(st, "incident",
+                          "Intervention call placed — service halted",
+                          "Demande d'intervention — service interrompu",
+                          "alarm")
+                st.fault_phase = "intervention_called"
+                st.fault_phase_timer = 0.0
+        # 2) INTERVENTION_CALLED — short dwell so the PA is heard, then
+        #    we move to the evacuation phase (dim cabin lights + evac PA).
+        elif st.fault_phase == "intervention_called":
+            if st.fault_phase_timer > 12.0:
+                self.sounds.stop_announcements()
+                self.sounds.play("dim_light",
+                                 lang=st.ann_lang, cooldown=60.0)
+                self.sounds.play("evac",
+                                 lang=st.ann_lang, cooldown=60.0)
+                # Cabin lights actually dim — visible in the F4 cabin view.
+                tr.lights_cabin = False
+                add_event(st, "evac",
+                          "Evacuation announcement — passengers exit cabin",
+                          "Annonce d'évacuation — passagers sortent",
+                          "alarm")
+                st.fault_phase = "evacuating"
+                st.fault_phase_timer = 0.0
+        # 3) EVACUATING — passengers are leaving. ~25 s evacuation drill.
+        elif st.fault_phase == "evacuating":
+            if st.fault_phase_timer > 25.0:
+                tr.pax_car1 = 0
+                tr.pax_car2 = 0
+                add_event(st, "out_of_service",
+                          "Cabin empty — out of service. Press R for new trip.",
+                          "Cabine vidée — hors service. R pour nouveau voyage.",
+                          "alarm")
+                st.fault_phase = "out_of_service"
+                st.fault_phase_timer = 0.0
+        # 4) OUT_OF_SERVICE — terminal. The cabin sits stopped, brakes
+        #    engaged, lights dim, no passengers. The driver MUST press R
+        #    to start a brand-new trip from the menu sequence (which
+        #    calls new_trip() and force-clears the fault state).
+
     def reverse_trip(self, silent: bool = False) -> None:
         """Flip the travel direction and re-arm the departure sequence in
         place — works both at a terminus (after arrival) AND mid-tunnel
@@ -3823,16 +4171,26 @@ class GameWidget(QWidget):
         st.event_cooldown = 5.0
         st.panne_active = False
         st.panne_kind = ""
+        st.fault_phase = ""
+        st.fault_phase_timer = 0.0
+        st.fault_show_panel = True
         # Reset persistent fault effects so a new trip starts clean.
         tr.tension_fault_dan = 0.0
         tr.thermal_derate = 1.0
         tr.motor_count = 3
+        tr.motor_id_down = 0
         tr.speed_fault_cap = 999.0
         tr.slack_fault_dan = 0.0
         tr.aux_power_fault = False
         tr.overspeed_tripped = False; tr.overspeed_level = 0
         tr.door_fault = False
         tr.parking_stuck = False
+        tr.cable_rupture = False
+        tr.service_brake_fail = 1.0
+        tr.flood_tunnel = False
+        tr.comms_loss = False
+        tr.switch_abt_fault = False
+        tr.fire_vent_fail = False
         tr.fault_timer = 0.0
         st.finished = False
         st.rebound_timer = 0.0
@@ -3929,6 +4287,7 @@ class GameWidget(QWidget):
             self._apply_keys(dt)
             self.physics.step(dt)
             maybe_random_event(st, dt)
+            self._advance_fault_phase(dt)
             # Ghost driver ready countdown : once the main driver has
             # pressed READY, the other wagon's driver confirms after a
             # small random delay (2–4 s) — real cable-car protocol.
@@ -4055,39 +4414,38 @@ class GameWidget(QWidget):
                     # with a PA — they stay on the event log / gauge only.
                     # Faults that actually stop or degrade service play a
                     # matching announcement once at onset.
-                    stopping_kind = st.panne_kind in (
-                        "door", "thermal", "motor_degraded",
-                        "aux_power", "parking_stuck", "fire",
-                    )
+                    sev = fault_profile(st.panne_kind).get("severity", "")
+                    stopping_kind = sev in ("stopping", "catastrophic")
                     at_term_p = ((st.train.s <= START_S + 5.0)
                                  or (st.train.s >= STOP_S - 5.0))
                     if stopping_kind:
                         # Safety chain : a service-stopping fault disarms
                         # READY exactly like a manual emergency / electric
-                        # stop would. The driver has to re-arm once the
-                        # fault clears and the train has halted.
+                        # stop would. The driver has to re-arm (V) and
+                        # press DEPART (Z) once the fault clears and the
+                        # train has halted — releasing the brake alone
+                        # never auto-restarts the trip.
                         tr_f = st.train
                         tr_f.ready = False
                         st.ghost_ready = False
                         st.ghost_ready_timer = 0.0
                         st.ghost_ready_delay = 0.0
                         st.departure_buzzer_remaining = 0.0
-                        # Mid-tunnel stopping fault : defer the PA until
-                        # the cabin actually halts (pending_incident). At
-                        # the terminus the train isn't rolling anyway, so
-                        # the message can play straight away.
-                        if not at_term_p and st.trip_started:
+                        # Catastrophic faults run their own announcement
+                        # state machine in _advance_fault_phase() — no
+                        # pending_incident / immediate PA here, otherwise
+                        # we'd play two overlapping messages.
+                        if is_catastrophic(st.panne_kind):
+                            pass
+                        elif not at_term_p and st.trip_started:
+                            # Mid-tunnel stopping fault : defer the PA
+                            # until the cabin actually halts.
                             st.pending_incident = True
                             st.pending_incident_kind = st.panne_kind
-                        elif st.panne_kind == "fire":
-                            self.sounds.play("dim_light",
-                                             lang=st.ann_lang, cooldown=45.0)
-                            self.sounds.play("evac",
-                                             lang=st.ann_lang, cooldown=60.0)
                         else:
                             self.sounds.play("tech_incident",
                                              lang=st.ann_lang, cooldown=45.0)
-                    # "tension", "wet_rail", "slack" : no PA, just dashboard.
+                    # advisory / operational : no PA, just dashboard.
                 elif not st.panne_active and self._last_panne_kind:
                     # A fault has just been cleared. Only play the
                     # "Remise en route" announcement if the train actually
@@ -4098,10 +4456,8 @@ class GameWidget(QWidget):
                     # a brief log line and no PA.
                     resolved_kind = self._last_panne_kind
                     self._last_panne_kind = ""
-                    was_stopping_kind = resolved_kind in (
-                        "door", "thermal", "motor_degraded",
-                        "aux_power", "parking_stuck", "fire",
-                    )
+                    res_sev = fault_profile(resolved_kind).get("severity", "")
+                    was_stopping_kind = res_sev in ("stopping", "catastrophic")
                     if was_stopping_kind and self._was_stopped_mid_tunnel:
                         self.sounds.play("restart",
                                          lang=st.ann_lang, cooldown=30.0)
@@ -4308,7 +4664,16 @@ class GameWidget(QWidget):
             elif st.mode == MODE_OVER:
                 self.new_trip()
         elif k == Qt.Key.Key_R:
-            if st.finished or st.mode == MODE_OVER:
+            # New trip allowed after a normal arrival, after game-over,
+            # OR when a catastrophic fault has terminated the service —
+            # this is the ONLY way to clear a Glória / Kaprun-class
+            # event. The driver is told to press R via the on-screen
+            # fault panel and the V/Z refusal messages.
+            catastrophic_done = (
+                st.panne_active and is_catastrophic(st.panne_kind)
+                and st.fault_phase in ("evacuating", "out_of_service")
+            )
+            if st.finished or st.mode == MODE_OVER or catastrophic_done:
                 self.new_trip()
         elif k == Qt.Key.Key_Home:
             # Return to the main title screen at any time — the driver
@@ -4590,6 +4955,11 @@ class GameWidget(QWidget):
                 elif tr.dead_man_fault:
                     reason_en = "vigilance fault — acknowledge first"
                     reason_fr = "défaut veille — acquittement requis"
+                elif st.panne_active and is_catastrophic(st.panne_kind):
+                    reason_en = ("trip terminated by "
+                                 f"{st.panne_kind} — press R for new trip")
+                    reason_fr = ("voyage terminé par "
+                                 f"{st.panne_kind} — R pour nouveau voyage")
                 elif st.panne_active:
                     reason_en = "fault active — clear it first"
                     reason_fr = "panne en cours — à résoudre d'abord"
@@ -4672,6 +5042,11 @@ class GameWidget(QWidget):
             elif tr.dead_man_fault:
                 reason_en = "vigilance fault — acknowledge first"
                 reason_fr = "défaut veille — acquittement requis"
+            elif st.panne_active and is_catastrophic(st.panne_kind):
+                reason_en = ("trip terminated by "
+                             f"{st.panne_kind} — press R for new trip")
+                reason_fr = ("voyage terminé par "
+                             f"{st.panne_kind} — R pour nouveau voyage")
             elif st.panne_active:
                 reason_en = "fault active — clear it first"
                 reason_fr = "panne en cours — à résoudre d'abord"
@@ -4881,6 +5256,13 @@ class GameWidget(QWidget):
             self._draw_paused_overlay(p, w, h)
         # No "trip completed" overlay — the driver simply stays in the
         # cabin, doors open, ready to prepare the return trip on demand.
+
+        # Fault info panel — always visible while a fault is active so the
+        # driver knows what is happening, what they can/can't do, and how
+        # to recover. Drawn in the upper-left corner of the world view.
+        if (self.state.panne_active and self.state.fault_show_panel
+                and self.state.mode == MODE_RUN):
+            self._draw_fault_panel(p, view_rect)
 
         if self._show_help:
             self._draw_help_overlay(p, w, h)
@@ -8733,11 +9115,127 @@ class GameWidget(QWidget):
                   "Backend audio indisponible (QtMultimedia)"),
             )
 
+    def _draw_fault_panel(self, p: QPainter, view_rect: QRectF) -> None:
+        """Realism panel : while a fault is active, tell the driver
+        WHAT is happening, WHAT they can do, WHAT is blocked, and the
+        recovery path. Catastrophic faults also show a phase indicator
+        (active → intervention → evacuating → out_of_service) and the
+        explicit instruction to press R for a new trip.
+        """
+        st = self.state
+        kind = st.panne_kind
+        prof = fault_profile(kind)
+        lang = st.lang
+        catastrophic = is_catastrophic(kind)
+
+        # Panel geometry — top-left of the world view, narrow column.
+        pw = 360
+        ph = 290 if catastrophic else 230
+        x = view_rect.x() + 12
+        y = view_rect.y() + 12
+        rect = QRectF(x, y, pw, ph)
+
+        # Background : red tint for catastrophic, amber otherwise.
+        bg = QColor(70, 12, 14, 235) if catastrophic else QColor(70, 50, 12, 230)
+        border = COLOR_ALARM if catastrophic else COLOR_WARN
+        p.setBrush(QBrush(bg))
+        p.setPen(QPen(border, 2))
+        p.drawRoundedRect(rect, 10, 10)
+
+        # Title bar
+        p.setPen(QPen(COLOR_TEXT))
+        p.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
+        title = (("⚠ PANNE — " if lang == "fr" else "⚠ FAULT — ")
+                 + fault_label(kind, lang).upper())
+        p.drawText(QRectF(x + 12, y + 8, pw - 24, 20),
+                   int(Qt.AlignmentFlag.AlignLeft), title)
+
+        # Severity tag
+        sev = prof.get("severity", "")
+        sev_fr = {"advisory": "Avis", "operational": "Opérationnel",
+                  "stopping": "Arrêt requis", "catastrophic": "CATASTROPHIQUE"
+                  }.get(sev, sev)
+        sev_en = {"advisory": "Advisory", "operational": "Operational",
+                  "stopping": "Stopping", "catastrophic": "CATASTROPHIC"
+                  }.get(sev, sev)
+        p.setFont(QFont("Consolas", 8, QFont.Weight.Bold))
+        p.setPen(QPen(border))
+        p.drawText(QRectF(x + 12, y + 28, pw - 24, 14),
+                   int(Qt.AlignmentFlag.AlignLeft),
+                   f"[{sev_fr if lang == 'fr' else sev_en}]")
+
+        # Sections
+        cy = y + 48
+        section_w = pw - 24
+
+        def draw_section(label_fr: str, label_en: str, body: str,
+                         color: QColor, max_h: int) -> int:
+            nonlocal cy
+            p.setFont(QFont("Segoe UI", 9, QFont.Weight.Bold))
+            p.setPen(QPen(color))
+            p.drawText(QRectF(x + 12, cy, section_w, 14),
+                       int(Qt.AlignmentFlag.AlignLeft),
+                       label_fr if lang == "fr" else label_en)
+            cy += 14
+            p.setFont(QFont("Segoe UI", 9))
+            p.setPen(QPen(COLOR_TEXT))
+            p.drawText(QRectF(x + 12, cy, section_w, max_h),
+                       int(Qt.AlignmentFlag.AlignLeft
+                           | Qt.AlignmentFlag.AlignTop
+                           | Qt.TextFlag.TextWordWrap),
+                       body)
+            cy += max_h + 6
+            return cy
+
+        what = prof.get("what_fr" if lang == "fr" else "what_en", "")
+        do = prof.get("do_fr" if lang == "fr" else "do_en", "")
+        blocked = prof.get("blocked_fr" if lang == "fr" else "blocked_en", "")
+
+        draw_section("Ce qui se passe :", "What's happening:", what,
+                     COLOR_TEXT_DIM, 50)
+        draw_section("À faire :", "What to do:", do,
+                     QColor(140, 220, 140), 70 if catastrophic else 50)
+        draw_section("Bloqué :", "Blocked:", blocked,
+                     COLOR_ALARM if catastrophic else COLOR_WARN, 28)
+
+        # Catastrophic-only : phase indicator + explicit recovery key.
+        if catastrophic:
+            phases = ["active", "intervention_called",
+                      "evacuating", "out_of_service"]
+            phase_labels_fr = ["Détection", "Intervention", "Évacuation",
+                               "Hors service"]
+            phase_labels_en = ["Detected", "Intervention", "Evacuating",
+                               "Out of service"]
+            cur = st.fault_phase if st.fault_phase in phases else "active"
+            cur_idx = phases.index(cur)
+            p.setFont(QFont("Consolas", 8))
+            for i, lbl in enumerate(phase_labels_fr if lang == "fr"
+                                    else phase_labels_en):
+                col = COLOR_ALARM if i == cur_idx else (
+                    COLOR_TEXT if i < cur_idx else COLOR_TEXT_DIM)
+                p.setPen(QPen(col))
+                p.drawText(QRectF(x + 12 + i * (section_w / 4), cy,
+                                  section_w / 4, 14),
+                           int(Qt.AlignmentFlag.AlignLeft), f"{i+1}. {lbl}")
+            cy += 18
+
+            # R hint — only meaningful once we reach evacuation /
+            # out-of-service (before that the cabin is still rolling /
+            # being announced).
+            if st.fault_phase in ("evacuating", "out_of_service"):
+                p.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
+                p.setPen(QPen(QColor(255, 220, 100)))
+                hint = ("Appuyez sur R pour un nouveau voyage."
+                        if lang == "fr"
+                        else "Press R for a new trip.")
+                p.drawText(QRectF(x + 12, cy, section_w, 16),
+                           int(Qt.AlignmentFlag.AlignLeft), hint)
+
     def _draw_help_overlay(self, p: QPainter, w: int, h: int) -> None:
         """Full in-game help panel : goal + all controls."""
         p.fillRect(0, 0, w, h, QColor(0, 0, 0, 170))
         box_w = 780
-        box_h = 800
+        box_h = 820
         box = QRectF(w / 2 - box_w / 2, h / 2 - box_h / 2, box_w, box_h)
         p.setBrush(QBrush(QColor(20, 26, 40, 245)))
         p.setPen(QPen(COLOR_HUD_BORDER, 3))
@@ -8839,8 +9337,8 @@ class GameWidget(QWidget):
                            int(Qt.AlignmentFlag.AlignLeft), desc)
                 y += 34
 
-        # Tips box at the bottom — sized to fit all 9 tips without overflow
-        tips_box_h = 200
+        # Tips box at the bottom — sized to fit all 10 tips without overflow
+        tips_box_h = 220
         tips_y = box.y() + box_h - tips_box_h - 26
         tips_box = QRectF(box.x() + 30, tips_y, box_w - 60, tips_box_h)
         p.setBrush(QBrush(QColor(30, 38, 56, 220)))
@@ -8873,6 +9371,8 @@ class GameWidget(QWidget):
               "• Survolez un bouton du cockpit à la souris — les tooltips bilingues décrivent chaque commande"),
             T("• Help menu : check GitHub for updates, or send an anonymous bug report (opens pre-filled issue)",
               "• Menu Aide : vérifier les MAJ GitHub, ou signaler un bug anonymement (ticket pré-rempli)"),
+            T("• Catastrophic fault (cable rupture, fire, brake fade, vent failure) : trip is OVER. Wait through evac, then press R for a new trip from menu",
+              "• Panne catastrophique (rupture câble, feu, frein HS, désenfumage HS) : voyage TERMINÉ. Attendre l'évac, puis R pour un nouveau voyage depuis le menu"),
         ]
         for i, line in enumerate(tips):
             p.drawText(QRectF(tips_box.x() + 12, tips_box.y() + 30 + i * 16,
