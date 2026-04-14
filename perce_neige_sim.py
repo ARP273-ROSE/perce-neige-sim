@@ -80,7 +80,7 @@ try:
 except ImportError:
     _QTMULTIMEDIA_OK = False
 
-VERSION = "1.8.0"
+VERSION = "1.8.1"
 APP_NAME = "Perce-Neige Simulator"
 
 
@@ -8737,7 +8737,7 @@ class GameWidget(QWidget):
         """Full in-game help panel : goal + all controls."""
         p.fillRect(0, 0, w, h, QColor(0, 0, 0, 170))
         box_w = 780
-        box_h = 620
+        box_h = 720
         box = QRectF(w / 2 - box_w / 2, h / 2 - box_h / 2, box_w, box_h)
         p.setBrush(QBrush(QColor(20, 26, 40, 245)))
         p.setPen(QPen(COLOR_HUD_BORDER, 3))
@@ -8839,9 +8839,10 @@ class GameWidget(QWidget):
                            int(Qt.AlignmentFlag.AlignLeft), desc)
                 y += 34
 
-        # Tips box at the bottom
-        tips_y = box.y() + box_h - 146
-        tips_box = QRectF(box.x() + 30, tips_y, box_w - 60, 120)
+        # Tips box at the bottom — sized to fit all 9 tips without overflow
+        tips_box_h = 200
+        tips_y = box.y() + box_h - tips_box_h - 26
+        tips_box = QRectF(box.x() + 30, tips_y, box_w - 60, tips_box_h)
         p.setBrush(QBrush(QColor(30, 38, 56, 220)))
         p.setPen(QPen(COLOR_HUD_BORDER, 1))
         p.drawRoundedRect(tips_box, 8, 8)
