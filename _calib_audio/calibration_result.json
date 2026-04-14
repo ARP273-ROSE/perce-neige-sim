@@ -1,0 +1,156 @@
+{
+  "segment": [
+    46.0,
+    100.0
+  ],
+  "duration_s": 54.0,
+  "f_ref_Hz": 958.3,
+  "v_cruise_ref_m_s": 10.1,
+  "t_launch_in_clip_s": 0.0,
+  "idle_pitch_Hz": 895.0,
+  "peak_accel_m_s2": 1.286,
+  "peak_speed_m_s": 10.21,
+  "t_to_0p9_vc_s": 0.0,
+  "samples": [
+    {
+      "t_clip_s": 0.0,
+      "t_launch_s": 0.0,
+      "pitch_Hz": 899.5,
+      "v_m_s": 9.48,
+      "a_m_s2": -0.028
+    },
+    {
+      "t_clip_s": 2.0,
+      "t_launch_s": 2.0,
+      "pitch_Hz": 886.6,
+      "v_m_s": 9.34,
+      "a_m_s2": 0.841
+    },
+    {
+      "t_clip_s": 3.99,
+      "t_launch_s": 3.99,
+      "pitch_Hz": 936.0,
+      "v_m_s": 9.86,
+      "a_m_s2": -1.386
+    },
+    {
+      "t_clip_s": 5.99,
+      "t_launch_s": 5.99,
+      "pitch_Hz": 897.1,
+      "v_m_s": 9.45,
+      "a_m_s2": -1.376
+    },
+    {
+      "t_clip_s": 8.01,
+      "t_launch_s": 8.01,
+      "pitch_Hz": 816.2,
+      "v_m_s": 8.6,
+      "a_m_s2": 0.61
+    },
+    {
+      "t_clip_s": 10.01,
+      "t_launch_s": 10.01,
+      "pitch_Hz": 900.9,
+      "v_m_s": 9.49,
+      "a_m_s2": 0.457
+    },
+    {
+      "t_clip_s": 12.0,
+      "t_launch_s": 12.0,
+      "pitch_Hz": 861.1,
+      "v_m_s": 9.08,
+      "a_m_s2": -0.809
+    },
+    {
+      "t_clip_s": 14.0,
+      "t_launch_s": 14.0,
+      "pitch_Hz": 850.9,
+      "v_m_s": 8.97,
+      "a_m_s2": 0.457
+    },
+    {
+      "t_clip_s": 16.0,
+      "t_launch_s": 16.0,
+      "pitch_Hz": 862.9,
+      "v_m_s": 9.09,
+      "a_m_s2": -0.297
+    },
+    {
+      "t_clip_s": 18.0,
+      "t_launch_s": 18.0,
+      "pitch_Hz": 906.4,
+      "v_m_s": 9.55,
+      "a_m_s2": -0.314
+    },
+    {
+      "t_clip_s": 19.99,
+      "t_launch_s": 19.99,
+      "pitch_Hz": 869.3,
+      "v_m_s": 9.16,
+      "a_m_s2": -0.643
+    },
+    {
+      "t_clip_s": 21.99,
+      "t_launch_s": 21.99,
+      "pitch_Hz": 930.6,
+      "v_m_s": 9.81,
+      "a_m_s2": 1.017
+    },
+    {
+      "t_clip_s": 24.01,
+      "t_launch_s": 24.01,
+      "pitch_Hz": 944.0,
+      "v_m_s": 9.95,
+      "a_m_s2": 0.422
+    },
+    {
+      "t_clip_s": 26.01,
+      "t_launch_s": 26.01,
+      "pitch_Hz": 915.0,
+      "v_m_s": 9.64,
+      "a_m_s2": -0.425
+    },
+    {
+      "t_clip_s": 28.0,
+      "t_launch_s": 28.0,
+      "pitch_Hz": 918.0,
+      "v_m_s": 9.68,
+      "a_m_s2": 0.158
+    },
+    {
+      "t_clip_s": 30.0,
+      "t_launch_s": 30.0,
+      "pitch_Hz": 870.2,
+      "v_m_s": 9.17,
+      "a_m_s2": -0.852
+    },
+    {
+      "t_clip_s": 32.0,
+      "t_launch_s": 32.0,
+      "pitch_Hz": 944.0,
+      "v_m_s": 9.95,
+      "a_m_s2": 0.355
+    },
+    {
+      "t_clip_s": 33.99,
+      "t_launch_s": 33.99,
+      "pitch_Hz": 883.6,
+      "v_m_s": 9.31,
+      "a_m_s2": 0.129
+    },
+    {
+      "t_clip_s": 35.99,
+      "t_launch_s": 35.99,
+      "pitch_Hz": 925.4,
+      "v_m_s": 9.75,
+      "a_m_s2": 0.101
+    },
+    {
+      "t_clip_s": 38.01,
+      "t_launch_s": 38.01,
+      "pitch_Hz": 949.1,
+      "v_m_s": 10.0,
+      "a_m_s2": -0.11
+    }
+  ]
+}
