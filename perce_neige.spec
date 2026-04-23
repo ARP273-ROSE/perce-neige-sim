@@ -36,17 +36,52 @@ def _collect_sons():
     return out
 
 
-datas = _collect_sons() + [
+def _collect_godot_bundled():
+    """Bundle le viewer Godot 3D standalone exporté pour la plateforme cible.
+    Le binaire .x86_64 / .exe / .app contient le moteur + le projet PCK,
+    donc l'utilisateur n'a RIEN à installer pour la vue F4 en 3D.
+    Si bundled_godot/ n'existe pas (build sans le viewer 3D), tant pis :
+    F4 fait fallback sur la vue cabine procédurale Python.
+    """
+    out = []
+    root = HERE / "bundled_godot"
+    if not root.exists():
+        return out
+    target = sys.platform
+    for p in root.rglob("*"):
+        if not p.is_file():
+            continue
+        name = p.name
+        # Filtre selon la plateforme courante (PyInstaller build OS-spécifique)
+        if target.startswith("win"):
+            if not (name.endswith(".exe") or name.endswith(".pck")):
+                continue
+        elif target == "darwin":
+            # macOS : tout le contenu de l'app bundle
+            if ".app" not in str(p):
+                continue
+        else:  # linux + autres
+            if not (name.endswith(".x86_64") or name.endswith(".pck")):
+                continue
+        rel = p.relative_to(root)
+        dest = "bundled_godot" / rel.parent
+        out.append((str(p), str(dest)))
+    return out
+
+
+datas = _collect_sons() + _collect_godot_bundled() + [
     ("logo.png", "."),
     ("logo_64.png", "."),
     ("logo.ico", "."),
     ("manuel_perce_neige.pdf", "."),
+    ("godot_bridge.py", "."),
 ]
 
 hiddenimports = [
     "autoupdate",
     "bugreport",
     "PyQt6.QtMultimedia",
+    "godot_bridge",
 ]
 
 block_cipher = None

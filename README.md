@@ -61,6 +61,16 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 - **Dead-man vigilance** : the driver must touch a control at least once every 20 s, otherwise the system triggers an automatic electric stop (press `G` to acknowledge)
 
 ### Cabin first-person view (F4)
+> **NEW in v1.10.0** — F4 now launches the **standalone Godot 3D viewer**
+> in a separate window (bundled binary, nothing to install). The Python
+> sim drives the physics over UDP at 60 Hz and the 3D viewer renders the
+> real cockpit perspective with full Phase 4-10 features : tunnel TBM
+> with chamber, Abt switch passing loop, machine room, animated cable,
+> 3D dashboard, animated passengers, voice announcements. If the bundled
+> binary isn't found (custom build), F4 falls back silently to the
+> built-in procedural cabin view documented below.
+
+#### Built-in procedural cabin view (fallback)
 - **Real pinhole-camera perspective** — `screen_r = focal · R_tunnel / d`
   with a 72° horizontal FOV, matching the wide driver windshield and the
   tight 3.1 m TBM bore

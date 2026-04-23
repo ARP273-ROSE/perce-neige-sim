@@ -54,3 +54,9 @@ _progress.json
 build/
 dist/
 *.manifest
+
+# Viewer Godot 3D bundled (gros binaires, exportés via build_godot_viewer.sh
+# avant chaque build PyInstaller — pas committés dans le repo)
+bundled_godot/
+*.x86_64
+*.pck
