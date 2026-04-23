@@ -80,7 +80,16 @@ try:
 except ImportError:
     _QTMULTIMEDIA_OK = False
 
-VERSION = "1.9.1"
+# Bridge optionnel vers le viewer Godot 3D (rendu FPV cockpit en F4).
+# Si le module n'est pas dispo ou Godot pas installé, le sim continue
+# avec sa vue cabine procédurale traditionnelle (aucune régression).
+try:
+    from godot_bridge import GodotBridge, physics_to_state_dict
+    _GODOT_BRIDGE_OK = True
+except ImportError:
+    _GODOT_BRIDGE_OK = False
+
+VERSION = "1.10.0"
 APP_NAME = "Perce-Neige Simulator"
 
 
@@ -3931,6 +3940,19 @@ class GameWidget(QWidget):
         self._show_annmenu = False       # F2 announcement console
         self._cabin_view = False         # F4 cabin/tunnel first-person view
         self._tunnel_scroll = 0.0        # accumulated tunnel texture offset
+        # Bridge vers le viewer Godot 3D pour la vue F4 (rendu FPV réaliste).
+        # Le binaire viewer est BUNDLED dans la distribution PyInstaller
+        # (bundled_godot/perce_neige_3d.{exe,x86_64,app}) — l'utilisateur
+        # final n'a RIEN à installer. En dev, fallback sur Godot system +
+        # projet source ~/Documents/perce-neige-sim-3d/ s'il existe.
+        self._godot_bridge: GodotBridge | None = None
+        if _GODOT_BRIDGE_OK:
+            bundled_dir = _resource_path("bundled_godot")
+            dev_project = Path.home() / "Documents" / "perce-neige-sim-3d"
+            self._godot_bridge = GodotBridge(
+                bundled_dir=bundled_dir,
+                dev_project_dir=dev_project if dev_project.exists() else None,
+            )
         # Side-view zoom factor. 1.0 = default 850 m window, 0.35 ≈ ~300 m
         # tight, 4.2 ≈ full 3491 m trip. Driver adjusts with +/- or wheel.
         self._profile_zoom = 1.0
@@ -4334,6 +4356,11 @@ class GameWidget(QWidget):
             self._apply_keys(dt)
             self.physics.step(dt)
             maybe_random_event(st, dt)
+            # Stream l'état physique vers Godot 3D si le viewer est actif (F4)
+            if (self._godot_bridge is not None
+                    and self._godot_bridge.is_running()):
+                state_dict = physics_to_state_dict(st.train, st)
+                self._godot_bridge.send_state(state_dict)
             self._advance_fault_phase(dt)
             # Ghost driver ready countdown : once the main driver has
             # pressed READY, the other wagon's driver confirms after a
@@ -4760,6 +4787,26 @@ class GameWidget(QWidget):
                 self._show_help = False
         elif k == Qt.Key.Key_F4:
             self._cabin_view = not self._cabin_view
+            # Si on a le bridge Godot dispo : tente de lancer/arrêter le viewer 3D
+            # Si Godot pas installé → fallback silencieux sur vue procédurale,
+            # avec message info dans le journal d'évènements.
+            if self._cabin_view and self._godot_bridge is not None:
+                ok, reason = self._godot_bridge.is_available()
+                if ok:
+                    started = self._godot_bridge.start()
+                    if started:
+                        add_event(self.state, "godot_3d",
+                            "Godot 3D viewer launched (separate window)",
+                            "Viewer Godot 3D lancé (fenêtre séparée)",
+                            "info")
+                else:
+                    add_event(self.state, "godot_unavail",
+                        "Godot 3D viewer unavailable — using built-in cabin view",
+                        "Viewer Godot 3D indisponible — vue cabine intégrée",
+                        "info")
+            elif (not self._cabin_view) and self._godot_bridge is not None:
+                if self._godot_bridge.is_running():
+                    self._godot_bridge.stop()
         elif k == Qt.Key.Key_F5:
             self._open_trip_log_viewer()
         elif k == Qt.Key.Key_F6:
@@ -5726,7 +5773,18 @@ class GameWidget(QWidget):
 
         The tunnel sections scroll toward the viewer as the train moves.
         Dark zones, the passing loop, and station approach are rendered.
+
+        Si le viewer Godot 3D est actif (bridge lancé via F4), on n'affiche
+        plus la vue procédurale Python : on dessine un placeholder qui
+        rappelle où regarder, et on laisse Godot rendre la vraie 3D dans
+        sa propre fenêtre.
         """
+        # Si Godot 3D actif → placeholder + retour anticipé
+        if (self._godot_bridge is not None
+                and self._godot_bridge.is_running()):
+            self._draw_godot_placeholder(p, rect)
+            return
+
         p.save()
         p.setClipRect(rect)
         st = self.state
@@ -7137,6 +7195,76 @@ class GameWidget(QWidget):
                    int(Qt.AlignmentFlag.AlignLeft),
                    T("CABIN VIEW [F4]", "VUE CABINE [F4]"))
 
+        p.restore()
+
+    def _draw_godot_placeholder(self, p: QPainter, rect: QRectF) -> None:
+        """Affiche un placeholder dans la zone vue cabine quand le viewer
+        Godot 3D tourne dans une fenêtre séparée (Phase 1 d'intégration —
+        l'embarquement X11 viendra ensuite si validation).
+        """
+        p.save()
+        p.setClipRect(rect)
+        # Fond sombre dégradé
+        from PyQt6.QtGui import QLinearGradient
+        grad = QLinearGradient(0, rect.y(), 0, rect.y() + rect.height())
+        grad.setColorAt(0.0, QColor(15, 18, 25))
+        grad.setColorAt(1.0, QColor(8, 10, 14))
+        p.fillRect(rect, QBrush(grad))
+        # Bordure dorée style cockpit
+        p.setPen(QPen(QColor(220, 175, 60), 2))
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        p.drawRect(rect)
+        # Titre
+        p.setPen(QPen(QColor(220, 175, 60)))
+        p.setFont(QFont("Consolas", 18, QFont.Weight.Bold))
+        cx = rect.x() + rect.width() / 2.0
+        cy = rect.y() + rect.height() / 2.0 - 60
+        p.drawText(
+            QRectF(rect.x(), cy, rect.width(), 36),
+            int(Qt.AlignmentFlag.AlignCenter),
+            T("GODOT 3D VIEWER ACTIVE", "VIEWER GODOT 3D ACTIF")
+        )
+        # Sous-titre
+        p.setPen(QPen(QColor(180, 200, 220)))
+        p.setFont(QFont("Consolas", 11))
+        p.drawText(
+            QRectF(rect.x(), cy + 40, rect.width(), 22),
+            int(Qt.AlignmentFlag.AlignCenter),
+            T("→ Look at the Godot window for the real-time 3D cockpit view",
+              "→ La fenêtre Godot affiche la vue 3D temps réel du cockpit")
+        )
+        # État stream
+        st = self.state
+        tr = st.train
+        p.setPen(QPen(QColor(120, 220, 140)))
+        p.setFont(QFont("Consolas", 10))
+        info_y = cy + 80
+        info = (
+            f"s = {tr.s:.0f} m   v = {abs(tr.v):.1f} m/s "
+            f"({abs(tr.v) * 3.6:.0f} km/h)   "
+            f"{'↑ UP' if tr.direction > 0 else '↓ DOWN'}"
+        )
+        p.drawText(
+            QRectF(rect.x(), info_y, rect.width(), 18),
+            int(Qt.AlignmentFlag.AlignCenter), info
+        )
+        p.setPen(QPen(QColor(150, 160, 175)))
+        p.setFont(QFont("Consolas", 9))
+        p.drawText(
+            QRectF(rect.x(), info_y + 22, rect.width(), 16),
+            int(Qt.AlignmentFlag.AlignCenter),
+            T("Streaming physics state via UDP localhost:7777 @ 60Hz",
+              "Stream état physique via UDP localhost:7777 @ 60Hz")
+        )
+        # Hint pour fermer
+        p.setPen(QPen(QColor(200, 180, 100, 180)))
+        p.setFont(QFont("Consolas", 10))
+        p.drawText(
+            QRectF(rect.x(), cy + 130, rect.width(), 18),
+            int(Qt.AlignmentFlag.AlignCenter),
+            T("Press F4 again to close the Godot viewer",
+              "Appuyer F4 à nouveau pour fermer le viewer Godot")
+        )
         p.restore()
 
     def _draw_console_panel(self, p: QPainter, x: float, y: float,
@@ -9362,8 +9490,8 @@ class GameWidget(QWidget):
                          "console d'annonces")),
                 ("F3", T("real machine info + links",
                          "infos machine réelle + liens")),
-                ("F4", T("cabin / side view toggle",
-                         "vue cabine / vue latérale")),
+                ("F4", T("cabin view toggle (Godot 3D viewer if available)",
+                         "vue cabine (viewer Godot 3D si dispo)")),
                 ("F5", T("auto-exploitation trip log",
                          "journal des trajets auto")),
                 ("F6", T("download PDF manual + theory guide",
@@ -9624,6 +9752,13 @@ class MainWindow(QMainWindow):
     def closeEvent(self, ev) -> None:  # noqa: N802
         try:
             self.game.auto_ops._log.checkpoint_truncate()
+        except Exception:
+            pass
+        # Tue proprement le viewer Godot 3D s'il tournait
+        try:
+            if (getattr(self.game, "_godot_bridge", None) is not None
+                    and self.game._godot_bridge.is_running()):
+                self.game._godot_bridge.stop()
         except Exception:
             pass
         super().closeEvent(ev)
