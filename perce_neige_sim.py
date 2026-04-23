@@ -89,7 +89,7 @@ try:
 except ImportError:
     _GODOT_BRIDGE_OK = False
 
-VERSION = "1.10.0"
+VERSION = "1.10.1"
 APP_NAME = "Perce-Neige Simulator"
 
 
@@ -892,6 +892,13 @@ class Physics:
         if a_brk > 0 and abs(tr.v) < 0.03:
             tr.v = 0.0
             a = 0.0
+
+        # Auto-park : si on est en emergency stop et que le train est
+        # immobilisé, on engage automatiquement le frein parking (drum)
+        # pour éviter qu'il ne reparte sur la pente. Comportement réel
+        # de la chaîne de sécurité Von Roll après un arrêt d'urgence.
+        if tr.emergency and abs(tr.v) < 0.05 and not tr.maint_brake:
+            tr.maint_brake = True
 
         # Integrate — tr.v is SIGNED in the +s direction. Going up the
         # slope, v > 0. Going down, v < 0. tr.direction is ±1 and tells
@@ -4839,8 +4846,12 @@ class GameWidget(QWidget):
             if st.run_mode == "panne":
                 self._open_fault_picker()
         elif k == Qt.Key.Key_Shift:
+            # Engage le frein d'urgence rail (5 m/s² ramp) — pas le frein
+            # parking (drum). maint_brake serait instantané (v=0 = 20G !) ;
+            # c'est emergency_ramp qui gère la décélération réaliste.
+            # Le frein parking est engagé AUTO une fois le train arrêté
+            # (cf physique : auto-park après emergency stop).
             st.train.emergency = True
-            st.train.maint_brake = True
         elif k == Qt.Key.Key_D:
             tr = st.train
             # Interlocks : can't operate the doors while moving or while
@@ -4925,10 +4936,12 @@ class GameWidget(QWidget):
             tr = st.train
             if not tr.emergency:
                 tr.emergency = True
-                tr.maint_brake = True
+                # NE PAS engager maint_brake immédiatement (= v=0 = 20G).
+                # Le drum brake est engagé AUTO par la physique quand le
+                # train s'arrête (auto-park après emergency stop).
                 add_event(st, "eurg",
-                          "EMERGENCY STOP — rail + drum brakes",
-                          "ARRÊT D'URGENCE — freins rail + tambour",
+                          "EMERGENCY STOP — rail brakes engaged (5 m/s²)",
+                          "ARRÊT D'URGENCE — freins rail engagés (5 m/s²)",
                           "alarm")
                 self.sounds.play("brake_noise", lang=st.ann_lang, cooldown=30.0)
                 tr.ready = False
@@ -9994,16 +10007,4 @@ def main() -> None:
     app.setApplicationName(APP_NAME)
     app.setApplicationVersion(VERSION)
     # Install anonymous crash handler — writes a JSON report if the app
-    # crashes so the next launch can offer to open a GitHub issue.
-    try:
-        import bugreport
-        bugreport.install_crash_handler(_writable_dir(), VERSION)
-    except Exception:
-        pass
-    win = MainWindow()
-    win.show()
-    sys.exit(app.exec())
-
-
-if __name__ == "__main__":
-    main()
+    # crashes so the ne
