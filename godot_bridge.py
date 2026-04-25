@@ -172,6 +172,36 @@ class GodotBridge:
             return False
         return self._proc.poll() is None
 
+    def find_window_xid(self, timeout_s: float = 4.0) -> int | None:
+        """Cherche l'XID X11 de la fenêtre Godot via xdotool (Linux only).
+        Retourne l'XID en int, ou None si pas trouvé / pas X11 / xdotool absent.
+        Bloquant jusqu'à timeout_s.
+        """
+        if self._proc is None:
+            return None
+        if not sys.platform.startswith("linux"):
+            return None
+        if shutil.which("xdotool") is None:
+            return None
+        import time
+        deadline = time.monotonic() + timeout_s
+        pid = self._proc.pid
+        while time.monotonic() < deadline:
+            try:
+                # Cherche une fenêtre visible appartenant au PID Godot
+                out = subprocess.check_output(
+                    ["xdotool", "search", "--pid", str(pid), "--onlyvisible", "--name", "Perce-Neige"],
+                    stderr=subprocess.DEVNULL,
+                ).decode().strip()
+                if out:
+                    # Plusieurs fenêtres possibles (splash, main) ; prend la dernière
+                    # qui est typiquement la window principale 3D
+                    return int(out.splitlines()[-1])
+            except subprocess.CalledProcessError:
+                pass
+            time.sleep(0.10)
+        return None
+
     # ------------------------------------------------------------------ #
     # State streaming
     # ------------------------------------------------------------------ #
