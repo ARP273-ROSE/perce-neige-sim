@@ -89,7 +89,7 @@ try:
 except ImportError:
     _GODOT_BRIDGE_OK = False
 
-VERSION = "1.10.1"
+VERSION = "1.11.0"
 APP_NAME = "Perce-Neige Simulator"
 
 
@@ -126,7 +126,15 @@ def _writable_dir() -> Path:
 
 def _detect_lang() -> str:
     try:
-        lang = (locale.getdefaultlocale()[0] or "").lower()
+        # Python 3.11+ : getlocale() au lieu de getdefaultlocale() (deprecated)
+        lang = (locale.getlocale()[0] or "").lower()
+        if not lang:
+            # Fallback : variables d'environnement LANG / LC_ALL / LC_MESSAGES
+            for env_var in ("LC_ALL", "LC_MESSAGES", "LANG"):
+                val = os.environ.get(env_var, "")
+                if val:
+                    lang = val.lower()
+                    break
     except Exception:
         lang = ""
     return "fr" if lang.startswith("fr") else "en"
@@ -3945,7 +3953,20 @@ class GameWidget(QWidget):
         self._was_stopped_mid_tunnel = False
         self._mid_tunnel_stop_timer = 0.0
         self._show_annmenu = False       # F2 announcement console
-        self._cabin_view = False         # F4 cabin/tunnel first-person view
+        # Vue cabine F4 : 3 états successifs au lieu d'un toggle binaire.
+        #   0 = OFF (vue latérale par défaut)
+        #   1 = vue cabine procédurale Python (la classique)
+        #   2 = viewer Godot 3D embarqué dans la zone F4 (X11 reparent)
+        # Cycle par F4 : 0 → 1 → 2 → 0.
+        # _cabin_view (bool) gardé pour compat des bouts de code existants
+        # qui le testent (équivalent à _cabin_view_state != 0).
+        self._cabin_view_state: int = 0
+        self._cabin_view = False
+        # Widget conteneur Qt qui embarque la fenêtre X11 du viewer Godot
+        # via QWindow.fromWinId() + createWindowContainer(). Créé à
+        # l'entrée en état 2, détruit à la sortie.
+        self._godot_embed_widget = None
+        self._godot_embed_window = None  # QWindow.fromWinId result
         self._tunnel_scroll = 0.0        # accumulated tunnel texture offset
         # Bridge vers le viewer Godot 3D pour la vue F4 (rendu FPV réaliste).
         # Le binaire viewer est BUNDLED dans la distribution PyInstaller
@@ -4793,27 +4814,7 @@ class GameWidget(QWidget):
             if self._show_info:
                 self._show_help = False
         elif k == Qt.Key.Key_F4:
-            self._cabin_view = not self._cabin_view
-            # Si on a le bridge Godot dispo : tente de lancer/arrêter le viewer 3D
-            # Si Godot pas installé → fallback silencieux sur vue procédurale,
-            # avec message info dans le journal d'évènements.
-            if self._cabin_view and self._godot_bridge is not None:
-                ok, reason = self._godot_bridge.is_available()
-                if ok:
-                    started = self._godot_bridge.start()
-                    if started:
-                        add_event(self.state, "godot_3d",
-                            "Godot 3D viewer launched (separate window)",
-                            "Viewer Godot 3D lancé (fenêtre séparée)",
-                            "info")
-                else:
-                    add_event(self.state, "godot_unavail",
-                        "Godot 3D viewer unavailable — using built-in cabin view",
-                        "Viewer Godot 3D indisponible — vue cabine intégrée",
-                        "info")
-            elif (not self._cabin_view) and self._godot_bridge is not None:
-                if self._godot_bridge.is_running():
-                    self._godot_bridge.stop()
+            self._cycle_cabin_view()
         elif k == Qt.Key.Key_F5:
             self._open_trip_log_viewer()
         elif k == Qt.Key.Key_F6:
@@ -5792,9 +5793,15 @@ class GameWidget(QWidget):
         rappelle où regarder, et on laisse Godot rendre la vraie 3D dans
         sa propre fenêtre.
         """
-        # Si Godot 3D actif → placeholder + retour anticipé
+        # État 2 : viewer Godot embarqué → ne rien peindre (le widget
+        # natif Qt est superposé). On garde un fond pour éviter le flash.
+        if self._cabin_view_state == 2:
+            p.fillRect(rect, QColor(8, 10, 14))
+            return
+        # État Godot fenêtre séparée (legacy fallback) : placeholder
         if (self._godot_bridge is not None
-                and self._godot_bridge.is_running()):
+                and self._godot_bridge.is_running()
+                and self._godot_embed_widget is None):
             self._draw_godot_placeholder(p, rect)
             return
 
@@ -7209,6 +7216,95 @@ class GameWidget(QWidget):
                    T("CABIN VIEW [F4]", "VUE CABINE [F4]"))
 
         p.restore()
+
+    def _cycle_cabin_view(self) -> None:
+        """F4 cycle : OFF → procédural Python → Godot 3D embarqué → OFF.
+        Si Godot pas dispo, état 2 retombe en OFF (skip).
+        """
+        prev_state = self._cabin_view_state
+        # Avance d'un cran
+        new_state = (prev_state + 1) % 3
+        # Si on essaye d'aller en mode Godot mais pas dispo → skip à 0
+        if new_state == 2:
+            if self._godot_bridge is None:
+                new_state = 0
+            else:
+                ok, reason = self._godot_bridge.is_available()
+                if not ok:
+                    new_state = 0
+                    add_event(self.state, "godot_unavail",
+                        "Godot 3D viewer unavailable — back to side view",
+                        "Viewer Godot 3D indisponible — retour vue latérale",
+                        "info")
+        # Sortie de l'état Godot embarqué : libérer le widget + tuer le subprocess
+        if prev_state == 2 and new_state != 2:
+            self._release_godot_embed()
+        # Entrée dans l'état Godot embarqué : lancer + embarquer
+        if new_state == 2 and prev_state != 2:
+            if self._godot_bridge.start():
+                self._embed_godot_window()
+                add_event(self.state, "godot_3d",
+                    "Godot 3D viewer embedded in cabin view",
+                    "Viewer Godot 3D embarqué dans la vue cabine",
+                    "info")
+            else:
+                # Échec démarrage Godot → skip à 0
+                new_state = 0
+        self._cabin_view_state = new_state
+        self._cabin_view = (new_state != 0)
+        # Notification courte sur quelle vue est active
+        if new_state == 1:
+            add_event(self.state, "view_proc",
+                "Cabin view : built-in procedural (Python)",
+                "Vue cabine : procédurale intégrée (Python)",
+                "info")
+
+    def _embed_godot_window(self) -> None:
+        """Trouve l'XID X11 de la fenêtre Godot et l'embarque dans un widget
+        Qt enfant via QWindow.fromWinId() + createWindowContainer().
+        Linux X11 only — sans effet sur Wayland / Windows / macOS.
+        """
+        if self._godot_bridge is None:
+            return
+        xid = self._godot_bridge.find_window_xid(timeout_s=4.0)
+        if xid is None or xid == 0:
+            print("[GodotBridge] XID fenêtre Godot non trouvé — fenêtre séparée affichée")
+            return
+        try:
+            from PyQt6.QtGui import QWindow
+            qwin = QWindow.fromWinId(int(xid))
+            container = QWidget.createWindowContainer(qwin, parent=self)
+            container.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+            container.setAttribute(Qt.WidgetAttribute.WA_NativeWindow, True)
+            self._godot_embed_window = qwin
+            self._godot_embed_widget = container
+            self._reposition_godot_embed()
+            container.show()
+            container.raise_()
+        except Exception as e:
+            print(f"[GodotBridge] Embed échoué : {e} — fenêtre séparée")
+
+    def _reposition_godot_embed(self) -> None:
+        """Place le widget embarqué pile dans le rect de la vue cabine."""
+        if self._godot_embed_widget is None:
+            return
+        w, h = self.width(), self.height()
+        # Mêmes coordonnées que dans paintEvent : QRectF(20, 20, w-440, h-260)
+        x, y, ww, hh = 20, 20, max(100, w - 440), max(100, h - 260)
+        self._godot_embed_widget.setGeometry(int(x), int(y), int(ww), int(hh))
+
+    def _release_godot_embed(self) -> None:
+        """Détruit le widget embarqué et tue le subprocess Godot."""
+        if self._godot_embed_widget is not None:
+            try:
+                self._godot_embed_widget.hide()
+                self._godot_embed_widget.deleteLater()
+            except Exception:
+                pass
+            self._godot_embed_widget = None
+            self._godot_embed_window = None
+        if self._godot_bridge is not None and self._godot_bridge.is_running():
+            self._godot_bridge.stop()
 
     def _draw_godot_placeholder(self, p: QPainter, rect: QRectF) -> None:
         """Affiche un placeholder dans la zone vue cabine quand le viewer
@@ -9503,8 +9599,8 @@ class GameWidget(QWidget):
                          "console d'annonces")),
                 ("F3", T("real machine info + links",
                          "infos machine réelle + liens")),
-                ("F4", T("cabin view toggle (Godot 3D viewer if available)",
-                         "vue cabine (viewer Godot 3D si dispo)")),
+                ("F4", T("cabin view cycle: off → procedural → Godot 3D embedded",
+                         "vue cabine cycle : off → procédurale → Godot 3D embarqué")),
                 ("F5", T("auto-exploitation trip log",
                          "journal des trajets auto")),
                 ("F6", T("download PDF manual + theory guide",
@@ -9762,14 +9858,26 @@ class MainWindow(QMainWindow):
         # Check for pending crash reports from a previous run
         QTimer.singleShot(1500, self._offer_pending_crash_reports)
 
+    def resizeEvent(self, ev) -> None:  # noqa: N802
+        # Si le viewer Godot est embarqué dans la zone F4, le repositionne
+        # à la nouvelle taille de la fenêtre principale.
+        try:
+            if (getattr(self.game, "_godot_embed_widget", None) is not None):
+                self.game._reposition_godot_embed()
+        except Exception:
+            pass
+        super().resizeEvent(ev)
+
     def closeEvent(self, ev) -> None:  # noqa: N802
         try:
             self.game.auto_ops._log.checkpoint_truncate()
         except Exception:
             pass
-        # Tue proprement le viewer Godot 3D s'il tournait
+        # Tue proprement le viewer Godot 3D s'il tournait + libère l'embed
         try:
-            if (getattr(self.game, "_godot_bridge", None) is not None
+            if hasattr(self.game, "_release_godot_embed"):
+                self.game._release_godot_embed()
+            elif (getattr(self.game, "_godot_bridge", None) is not None
                     and self.game._godot_bridge.is_running()):
                 self.game._godot_bridge.stop()
         except Exception:
@@ -10007,4 +10115,16 @@ def main() -> None:
     app.setApplicationName(APP_NAME)
     app.setApplicationVersion(VERSION)
     # Install anonymous crash handler — writes a JSON report if the app
-    # crashes so the ne
+    # crashes so the next launch can offer to open a GitHub issue.
+    try:
+        import bugreport
+        bugreport.install_crash_handler(_writable_dir(), VERSION)
+    except Exception:
+        pass
+    win = MainWindow()
+    win.show()
+    sys.exit(app.exec())
+
+
+if __name__ == "__main__":
+    main()
