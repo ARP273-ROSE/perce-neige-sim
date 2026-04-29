@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0a1428"/>
+      <stop offset="1" stop-color="#1a3a5c"/>
+    </linearGradient>
+    <linearGradient id="cabin" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#e8a500"/>
+      <stop offset="0.5" stop-color="#ffd84a"/>
+      <stop offset="1" stop-color="#b37800"/>
+    </linearGradient>
+  </defs>
+  <rect width="128" height="128" rx="24" fill="url(#bg)"/>
+  <!-- mountain silhouette -->
+  <path d="M 8 96 L 44 40 L 64 62 L 88 28 L 120 96 Z" fill="#2a3a52" opacity="0.7"/>
+  <!-- tunnel -->
+  <path d="M 8 106 L 120 106 L 120 116 L 8 116 Z" fill="#000"/>
+  <!-- cabin -->
+  <rect x="32" y="78" width="64" height="22" rx="11" fill="url(#cabin)" stroke="#000" stroke-width="1.5"/>
+  <rect x="40" y="82" width="10" height="8" rx="1" fill="#0a1428"/>
+  <rect x="54" y="82" width="10" height="8" rx="1" fill="#0a1428"/>
+  <rect x="68" y="82" width="10" height="8" rx="1" fill="#0a1428"/>
+  <rect x="82" y="82" width="8" height="8" rx="1" fill="#0a1428"/>
+  <!-- cable -->
+  <line x1="0" y1="70" x2="128" y2="50" stroke="#888" stroke-width="1.2"/>
+  <!-- snowflake accent -->
+  <g transform="translate(64,20)" stroke="#b8d8ff" stroke-width="1.5" stroke-linecap="round">
+    <line x1="-8" y1="0" x2="8" y2="0"/>
+    <line x1="0" y1="-8" x2="0" y2="8"/>
+    <line x1="-6" y1="-6" x2="6" y2="6"/>
+    <line x1="-6" y1="6" x2="6" y2="-6"/>
+  </g>
+</svg>
