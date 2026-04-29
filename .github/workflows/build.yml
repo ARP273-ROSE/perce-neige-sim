@@ -9,8 +9,72 @@ on:
 permissions:
   contents: write
 
+env:
+  GODOT_VERSION: "4.6.1-stable"
+  GODOT_BIN_TAG: "4.6.1"
+
 jobs:
+  # --------------------------------------------------------------------- #
+  # Job 1 : exporte le viewer Godot 3D (Linux + Windows binaires) sur
+  # Linux runner. Cross-compile Windows depuis Linux via les templates.
+  # Les binaires sont uploadés en artifact pour les jobs build-* qui suivent.
+  # --------------------------------------------------------------------- #
+  godot-export:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Cache Godot binary + templates
+        id: godot-cache
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/godot/godot
+            ~/.local/share/godot/export_templates
+          key: godot-${{ env.GODOT_VERSION }}-linux
+
+      - name: Download Godot binary + templates
+        if: steps.godot-cache.outputs.cache-hit != 'true'
+        run: |
+          set -e
+          mkdir -p ~/godot
+          cd ~/godot
+          wget -q "https://github.com/godotengine/godot/releases/download/${{ env.GODOT_VERSION }}/Godot_v${{ env.GODOT_VERSION }}_linux.x86_64.zip"
+          unzip -q "Godot_v${{ env.GODOT_VERSION }}_linux.x86_64.zip"
+          mv "Godot_v${{ env.GODOT_VERSION }}_linux.x86_64" godot
+          chmod +x godot
+          mkdir -p ~/.local/share/godot/export_templates/${{ env.GODOT_BIN_TAG }}.stable
+          cd /tmp
+          wget -q "https://github.com/godotengine/godot/releases/download/${{ env.GODOT_VERSION }}/Godot_v${{ env.GODOT_VERSION }}_export_templates.tpz"
+          unzip -q "Godot_v${{ env.GODOT_VERSION }}_export_templates.tpz"
+          cp templates/* ~/.local/share/godot/export_templates/${{ env.GODOT_BIN_TAG }}.stable/
+
+      - name: Export Linux x86_64 viewer
+        run: |
+          set -e
+          mkdir -p bundled_godot
+          ~/godot/godot --headless --path godot_project --export-release "Linux x86_64" || true
+          ls -lh bundled_godot/ || (echo "ERROR: export Linux échoué"; exit 1)
+
+      - name: Export Windows x86_64 viewer
+        run: |
+          set -e
+          ~/godot/godot --headless --path godot_project --export-release "Windows x86_64" || true
+          ls -lh bundled_godot/
+
+      - name: Upload viewer artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: godot-viewers
+          path: bundled_godot/
+          retention-days: 7
+
+  # --------------------------------------------------------------------- #
+  # Job 2 : Windows build avec viewer Godot embarqué
+  # --------------------------------------------------------------------- #
   build-windows:
+    needs: godot-export
     runs-on: windows-latest
     steps:
       - name: Checkout
@@ -28,6 +92,18 @@ jobs:
           pip install -r requirements.txt
           pip install pyinstaller pillow
 
+      - name: Download Godot viewers
+        uses: actions/download-artifact@v4
+        with:
+          name: godot-viewers
+          path: bundled_godot
+
+      - name: Verify bundled_godot content
+        shell: bash
+        run: |
+          ls -lh bundled_godot/
+          test -f bundled_godot/perce_neige_3d.exe || (echo "ERROR: viewer Windows manquant" && exit 1)
+
       - name: Regenerate logos (ensure icon is present)
         shell: bash
         run: python make_logo.py
@@ -39,6 +115,10 @@ jobs:
       - name: Rename asset
         shell: bash
         run: mv dist/PerceNeigeSimulator.exe dist/PerceNeigeSimulator-windows.exe
+
+      - name: Show final exe size
+        shell: bash
+        run: ls -lh dist/
 
       - name: Upload asset to release
         if: startsWith(github.ref, 'refs/tags/')

@@ -1,0 +1,22 @@
+# Godot 4 project — ignore runtime caches
+.godot/
+.import/
+export.cfg
+*.translation
+
+# OS / éditeur
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.vscode/
+.idea/
+
+# Build artifacts
+builds/
+exports/
+*.pck
+*.zip
+
+# Secrets
+CLAUDE.md
