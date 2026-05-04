@@ -1,0 +1,19 @@
+[remap]
+
+importer="mp3"
+type="AudioStreamMP3"
+uid="uid://0bbl45wddgrs"
+path="res://.godot/imported/47 aval _ Sortie des passagers 1ère.mp3-486518157a4c1bfad674e9d1ad1f6deb.mp3str"
+
+[deps]
+
+source_file="res://sounds/announcements/47 aval _ Sortie des passagers 1ère.mp3"
+dest_files=["res://.godot/imported/47 aval _ Sortie des passagers 1ère.mp3-486518157a4c1bfad674e9d1ad1f6deb.mp3str"]
+
+[params]
+
+loop=false
+loop_offset=0
+bpm=0
+beat_count=0
+bar_beats=4

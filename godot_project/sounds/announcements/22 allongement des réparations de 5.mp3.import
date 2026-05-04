@@ -1,0 +1,19 @@
+[remap]
+
+importer="mp3"
+type="AudioStreamMP3"
+uid="uid://3fxew40536k2"
+path="res://.godot/imported/22 allongement des réparations de 5.mp3-76d5ab8be27447c26e51d70dcdbb1db9.mp3str"
+
+[deps]
+
+source_file="res://sounds/announcements/22 allongement des réparations de 5.mp3"
+dest_files=["res://.godot/imported/22 allongement des réparations de 5.mp3-76d5ab8be27447c26e51d70dcdbb1db9.mp3str"]
+
+[params]
+
+loop=false
+loop_offset=0
+bpm=0
+beat_count=0
+bar_beats=4

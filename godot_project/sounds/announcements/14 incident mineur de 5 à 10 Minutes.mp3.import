@@ -1,0 +1,19 @@
+[remap]
+
+importer="mp3"
+type="AudioStreamMP3"
+uid="uid://v56uoacari57"
+path="res://.godot/imported/14 incident mineur de 5 à 10 Minutes.mp3-61fea05c19545fdd0333985f26f5bd6b.mp3str"
+
+[deps]
+
+source_file="res://sounds/announcements/14 incident mineur de 5 à 10 Minutes.mp3"
+dest_files=["res://.godot/imported/14 incident mineur de 5 à 10 Minutes.mp3-61fea05c19545fdd0333985f26f5bd6b.mp3str"]
+
+[params]
+
+loop=false
+loop_offset=0
+bpm=0
+beat_count=0
+bar_beats=4

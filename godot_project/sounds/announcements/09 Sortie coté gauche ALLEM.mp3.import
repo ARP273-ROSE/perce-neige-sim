@@ -1,0 +1,19 @@
+[remap]
+
+importer="mp3"
+type="AudioStreamMP3"
+uid="uid://cngc2u2e8toox"
+path="res://.godot/imported/09 Sortie coté gauche ALLEM.mp3-7b8c17e9dd5af966cc100ea867ea72df.mp3str"
+
+[deps]
+
+source_file="res://sounds/announcements/09 Sortie coté gauche ALLEM.mp3"
+dest_files=["res://.godot/imported/09 Sortie coté gauche ALLEM.mp3-7b8c17e9dd5af966cc100ea867ea72df.mp3str"]
+
+[params]
+
+loop=false
+loop_offset=0
+bpm=0
+beat_count=0
+bar_beats=4
