@@ -1,0 +1,19 @@
+[remap]
+
+importer="mp3"
+type="AudioStreamMP3"
+uid="uid://dyvas40pbg0hs"
+path="res://.godot/imported/35 Remise en route ALLEM.mp3-c8178401258eba9861918ddf77afe61a.mp3str"
+
+[deps]
+
+source_file="res://sounds/announcements/35 Remise en route ALLEM.mp3"
+dest_files=["res://.godot/imported/35 Remise en route ALLEM.mp3-c8178401258eba9861918ddf77afe61a.mp3str"]
+
+[params]
+
+loop=false
+loop_offset=0
+bpm=0
+beat_count=0
+bar_beats=4

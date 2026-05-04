@@ -89,7 +89,7 @@ try:
 except ImportError:
     _GODOT_BRIDGE_OK = False
 
-VERSION = "1.11.2"
+VERSION = "1.11.3"
 APP_NAME = "Perce-Neige Simulator"
 
 
@@ -2374,7 +2374,8 @@ class SoundSystem:
                               ("door_buzzer_real", "door_buzzer.wav"),
                               ("door_motion_real", "door_motion.wav"),
                               ("crossing_real", "crossing.wav"),
-                              ("buzzer_real", "buzzer_upper.wav")):
+                              ("buzzer_real", "buzzer_upper.wav"),
+                              ("buzzer_bas", "buzzer_lower.wav")):
             candidate = bundled_amb_dir / filename
             if candidate.exists():
                 self._ambient_wavs[key] = candidate
@@ -3976,10 +3977,17 @@ class GameWidget(QWidget):
         self._godot_bridge: GodotBridge | None = None
         if _GODOT_BRIDGE_OK:
             bundled_dir = _resource_path("bundled_godot")
-            dev_project = Path.home() / "Documents" / "perce-neige-sim-3d"
+            in_repo = _resource_path("godot_project")
+            ext_clone = Path.home() / "Documents" / "perce-neige-sim-3d"
+            if in_repo.exists() and (in_repo / "project.godot").is_file():
+                dev_project = in_repo
+            elif ext_clone.exists():
+                dev_project = ext_clone
+            else:
+                dev_project = None
             self._godot_bridge = GodotBridge(
                 bundled_dir=bundled_dir,
-                dev_project_dir=dev_project if dev_project.exists() else None,
+                dev_project_dir=dev_project,
             )
         # Side-view zoom factor. 1.0 = default 850 m window, 0.35 ≈ ~300 m
         # tight, 4.2 ≈ full 3491 m trip. Driver adjusts with +/- or wheel.
@@ -7232,9 +7240,11 @@ class GameWidget(QWidget):
                 ok, reason = self._godot_bridge.is_available()
                 if not ok:
                     new_state = 0
+                    print(f"[F4] {reason}")
+                    first_line = reason.splitlines()[0] if reason else "indisponible"
                     add_event(self.state, "godot_unavail",
-                        "Godot 3D viewer unavailable — back to side view",
-                        "Viewer Godot 3D indisponible — retour vue latérale",
+                        f"Godot 3D unavailable — {first_line} (see console)",
+                        f"Viewer Godot 3D indispo — {first_line} (voir console)",
                         "info")
         # Sortie de l'état Godot embarqué : libérer le widget + tuer le subprocess
         if prev_state == 2 and new_state != 2:

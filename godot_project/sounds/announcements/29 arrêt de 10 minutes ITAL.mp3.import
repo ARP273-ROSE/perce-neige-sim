@@ -1,0 +1,19 @@
+[remap]
+
+importer="mp3"
+type="AudioStreamMP3"
+uid="uid://iaxnavvfuxqn"
+path="res://.godot/imported/29 arrêt de 10 minutes ITAL.mp3-d928e37ec03c9c2f5661320ed9335cea.mp3str"
+
+[deps]
+
+source_file="res://sounds/announcements/29 arrêt de 10 minutes ITAL.mp3"
+dest_files=["res://.godot/imported/29 arrêt de 10 minutes ITAL.mp3-d928e37ec03c9c2f5661320ed9335cea.mp3str"]
+
+[params]
+
+loop=false
+loop_offset=0
+bpm=0
+beat_count=0
+bar_beats=4

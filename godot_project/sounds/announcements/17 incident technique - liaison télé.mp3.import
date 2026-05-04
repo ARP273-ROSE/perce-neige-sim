@@ -1,0 +1,19 @@
+[remap]
+
+importer="mp3"
+type="AudioStreamMP3"
+uid="uid://d1ayuvr8fvr1k"
+path="res://.godot/imported/17 incident technique - liaison télé.mp3-2504b689b6141ea0676670606cd85ab8.mp3str"
+
+[deps]
+
+source_file="res://sounds/announcements/17 incident technique - liaison télé.mp3"
+dest_files=["res://.godot/imported/17 incident technique - liaison télé.mp3-2504b689b6141ea0676670606cd85ab8.mp3str"]
+
+[params]
+
+loop=false
+loop_offset=0
+bpm=0
+beat_count=0
+bar_beats=4

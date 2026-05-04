@@ -1,0 +1,19 @@
+[remap]
+
+importer="mp3"
+type="AudioStreamMP3"
+uid="uid://bx32ghqvw17mr"
+path="res://.godot/imported/55 évacuation 2ème wagon ALLEM.mp3-343932114871c99e710765bfe2d8fd65.mp3str"
+
+[deps]
+
+source_file="res://sounds/announcements/55 évacuation 2ème wagon ALLEM.mp3"
+dest_files=["res://.godot/imported/55 évacuation 2ème wagon ALLEM.mp3-343932114871c99e710765bfe2d8fd65.mp3str"]
+
+[params]
+
+loop=false
+loop_offset=0
+bpm=0
+beat_count=0
+bar_beats=4

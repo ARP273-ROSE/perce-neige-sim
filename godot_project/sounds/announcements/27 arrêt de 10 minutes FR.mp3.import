@@ -1,0 +1,19 @@
+[remap]
+
+importer="mp3"
+type="AudioStreamMP3"
+uid="uid://drfox8ci0b583"
+path="res://.godot/imported/27 arrêt de 10 minutes FR.mp3-d0ac9bb72ccf89b8faffb424570afd65.mp3str"
+
+[deps]
+
+source_file="res://sounds/announcements/27 arrêt de 10 minutes FR.mp3"
+dest_files=["res://.godot/imported/27 arrêt de 10 minutes FR.mp3-d0ac9bb72ccf89b8faffb424570afd65.mp3str"]
+
+[params]
+
+loop=false
+loop_offset=0
+bpm=0
+beat_count=0
+bar_beats=4

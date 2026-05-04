@@ -1,0 +1,19 @@
+[remap]
+
+importer="mp3"
+type="AudioStreamMP3"
+uid="uid://cdtyk0rf4157w"
+path="res://.godot/imported/61 diminution de l'éclairage du wago.mp3-3af1e7d362c7c7f1129897c6f74aaa5d.mp3str"
+
+[deps]
+
+source_file="res://sounds/announcements/61 diminution de l'éclairage du wago.mp3"
+dest_files=["res://.godot/imported/61 diminution de l'éclairage du wago.mp3-3af1e7d362c7c7f1129897c6f74aaa5d.mp3str"]
+
+[params]
+
+loop=false
+loop_offset=0
+bpm=0
+beat_count=0
+bar_beats=4
