@@ -1,0 +1,19 @@
+[remap]
+
+importer="mp3"
+type="AudioStreamMP3"
+uid="uid://d26by2lck0x4c"
+path="res://.godot/imported/33 Remise en route ANG.mp3-a245b789fe7d7a307810550b60456e8b.mp3str"
+
+[deps]
+
+source_file="res://sounds/announcements/33 Remise en route ANG.mp3"
+dest_files=["res://.godot/imported/33 Remise en route ANG.mp3-a245b789fe7d7a307810550b60456e8b.mp3str"]
+
+[params]
+
+loop=false
+loop_offset=0
+bpm=0
+beat_count=0
+bar_beats=4

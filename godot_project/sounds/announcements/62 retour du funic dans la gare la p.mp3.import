@@ -1,0 +1,19 @@
+[remap]
+
+importer="mp3"
+type="AudioStreamMP3"
+uid="uid://bu0vhmivsuulk"
+path="res://.godot/imported/62 retour du funic dans la gare la p.mp3-20d26e0c0264ac42eb3d6ee6858d5213.mp3str"
+
+[deps]
+
+source_file="res://sounds/announcements/62 retour du funic dans la gare la p.mp3"
+dest_files=["res://.godot/imported/62 retour du funic dans la gare la p.mp3-20d26e0c0264ac42eb3d6ee6858d5213.mp3str"]
+
+[params]
+
+loop=false
+loop_offset=0
+bpm=0
+beat_count=0
+bar_beats=4

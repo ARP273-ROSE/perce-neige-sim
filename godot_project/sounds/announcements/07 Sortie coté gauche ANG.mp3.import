@@ -1,0 +1,19 @@
+[remap]
+
+importer="mp3"
+type="AudioStreamMP3"
+uid="uid://dquuqaou3adwr"
+path="res://.godot/imported/07 Sortie coté gauche ANG.mp3-24b2ce98136123460945af7292e1368a.mp3str"
+
+[deps]
+
+source_file="res://sounds/announcements/07 Sortie coté gauche ANG.mp3"
+dest_files=["res://.godot/imported/07 Sortie coté gauche ANG.mp3-24b2ce98136123460945af7292e1368a.mp3str"]
+
+[params]
+
+loop=false
+loop_offset=0
+bpm=0
+beat_count=0
+bar_beats=4

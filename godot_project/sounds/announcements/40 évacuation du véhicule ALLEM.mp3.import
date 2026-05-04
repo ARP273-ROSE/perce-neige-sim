@@ -1,0 +1,19 @@
+[remap]
+
+importer="mp3"
+type="AudioStreamMP3"
+uid="uid://brckol2wgcsyd"
+path="res://.godot/imported/40 évacuation du véhicule ALLEM.mp3-c0f9b454107ebe37fb86432e335a9147.mp3str"
+
+[deps]
+
+source_file="res://sounds/announcements/40 évacuation du véhicule ALLEM.mp3"
+dest_files=["res://.godot/imported/40 évacuation du véhicule ALLEM.mp3-c0f9b454107ebe37fb86432e335a9147.mp3str"]
+
+[params]
+
+loop=false
+loop_offset=0
+bpm=0
+beat_count=0
+bar_beats=4

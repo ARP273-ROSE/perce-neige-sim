@@ -1,0 +1,19 @@
+[remap]
+
+importer="mp3"
+type="AudioStreamMP3"
+uid="uid://bfaaocnn6d85w"
+path="res://.godot/imported/71 bruit des freins ESP.mp3-eaf93bc446a81cccb8328a21082e670f.mp3str"
+
+[deps]
+
+source_file="res://sounds/announcements/71 bruit des freins ESP.mp3"
+dest_files=["res://.godot/imported/71 bruit des freins ESP.mp3-eaf93bc446a81cccb8328a21082e670f.mp3str"]
+
+[params]
+
+loop=false
+loop_offset=0
+bpm=0
+beat_count=0
+bar_beats=4

@@ -1,0 +1,19 @@
+[remap]
+
+importer="mp3"
+type="AudioStreamMP3"
+uid="uid://1ygq0nq1r8ga"
+path="res://.godot/imported/54 évacuation 2ème wagon ITAL.mp3-20c51b13d21c2e9d03f428fd8116dfc7.mp3str"
+
+[deps]
+
+source_file="res://sounds/announcements/54 évacuation 2ème wagon ITAL.mp3"
+dest_files=["res://.godot/imported/54 évacuation 2ème wagon ITAL.mp3-20c51b13d21c2e9d03f428fd8116dfc7.mp3str"]
+
+[params]
+
+loop=false
+loop_offset=0
+bpm=0
+beat_count=0
+bar_beats=4

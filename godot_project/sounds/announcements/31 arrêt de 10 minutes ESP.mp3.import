@@ -1,0 +1,19 @@
+[remap]
+
+importer="mp3"
+type="AudioStreamMP3"
+uid="uid://dowlvjebr5wu6"
+path="res://.godot/imported/31 arrêt de 10 minutes ESP.mp3-1a71181bc3c74e2879604a18eacd9cac.mp3str"
+
+[deps]
+
+source_file="res://sounds/announcements/31 arrêt de 10 minutes ESP.mp3"
+dest_files=["res://.godot/imported/31 arrêt de 10 minutes ESP.mp3-1a71181bc3c74e2879604a18eacd9cac.mp3str"]
+
+[params]
+
+loop=false
+loop_offset=0
+bpm=0
+beat_count=0
+bar_beats=4

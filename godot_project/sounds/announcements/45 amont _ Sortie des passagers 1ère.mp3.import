@@ -1,0 +1,19 @@
+[remap]
+
+importer="mp3"
+type="AudioStreamMP3"
+uid="uid://ddp2wyl7bfysb"
+path="res://.godot/imported/45 amont _ Sortie des passagers 1ère.mp3-e6b66e43ccc208c4d51bcfa4a915c26b.mp3str"
+
+[deps]
+
+source_file="res://sounds/announcements/45 amont _ Sortie des passagers 1ère.mp3"
+dest_files=["res://.godot/imported/45 amont _ Sortie des passagers 1ère.mp3-e6b66e43ccc208c4d51bcfa4a915c26b.mp3str"]
+
+[params]
+
+loop=false
+loop_offset=0
+bpm=0
+beat_count=0
+bar_beats=4

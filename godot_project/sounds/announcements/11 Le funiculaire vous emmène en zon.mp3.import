@@ -1,0 +1,19 @@
+[remap]
+
+importer="mp3"
+type="AudioStreamMP3"
+uid="uid://ctgiltwnr8l6h"
+path="res://.godot/imported/11 Le funiculaire vous emmène en zon.mp3-3ae4be308e8ebb1e7e0a8c6404667c73.mp3str"
+
+[deps]
+
+source_file="res://sounds/announcements/11 Le funiculaire vous emmène en zon.mp3"
+dest_files=["res://.godot/imported/11 Le funiculaire vous emmène en zon.mp3-3ae4be308e8ebb1e7e0a8c6404667c73.mp3str"]
+
+[params]
+
+loop=false
+loop_offset=0
+bpm=0
+beat_count=0
+bar_beats=4

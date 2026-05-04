@@ -70,6 +70,58 @@ class GodotBridge:
             cand = self.bundled_dir / "perce_neige_3d.x86_64"
         return cand if cand.is_file() else None
 
+    @staticmethod
+    def _find_godot_executable() -> Optional[str]:
+        """Cherche le binaire Godot installé sur la machine.
+        - Essaie d'abord le PATH du processus (cas standard).
+        - Sur Windows, fallback : lit le PATH utilisateur du registre +
+          emplacements connus (~/Documents/Godot, paquet winget). Ce
+          fallback couvre le cas où launch.bat est lancé depuis un
+          Explorer.exe qui hérite d'un PATH antérieur à l'install Godot
+          (les variables utilisateur ne se propagent pas aux processus
+          déjà lancés).
+        - Préfère un .exe Godot direct au wrapper .cmd, car CreateProcess
+          sur Windows ne sait pas spawner un .cmd sans shell=True.
+        """
+        found = shutil.which("godot")
+        if found:
+            return found
+        if not sys.platform.startswith("win"):
+            return None
+        candidate_dirs: list[Path] = []
+        try:
+            import winreg
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Environment") as key:
+                user_path, _ = winreg.QueryValueEx(key, "Path")
+            for entry in user_path.split(";"):
+                entry = entry.strip().strip('"')
+                if entry:
+                    candidate_dirs.append(Path(os.path.expandvars(entry)))
+        except (OSError, ImportError, FileNotFoundError):
+            pass
+        home = Path.home()
+        candidate_dirs.extend([
+            home / "Documents" / "Godot",
+            home / "AppData" / "Local" / "Microsoft" / "WinGet" / "Packages" /
+                "GodotEngine.GodotEngine_Microsoft.Winget.Source_8wekyb3d8bbwe",
+        ])
+        for d in candidate_dirs:
+            if not d.is_dir():
+                continue
+            # Préférence 1 : .exe Godot principal (exclut le binaire console)
+            exes = sorted(
+                p for p in d.glob("Godot*.exe")
+                if p.is_file() and "console" not in p.name.lower()
+            )
+            if exes:
+                return str(exes[-1])  # tri lexico → version la plus récente en dernier
+            # Préférence 2 : wrapper .cmd / .bat
+            for name in ("godot.cmd", "godot.bat", "godot.exe"):
+                cand = d / name
+                if cand.is_file():
+                    return str(cand)
+        return None
+
     def _resolve_command(self) -> Optional[list]:
         """Retourne la cmdline complète à exécuter, ou None si rien trouvé.
         Préfère le binaire exporté standalone, fallback sur Godot system + projet.
@@ -80,7 +132,7 @@ class GodotBridge:
             return [str(bundled), "--", "--client", f"--port={self.port}"]
         # 2. Fallback dev : godot system + projet source
         if self.dev_project_dir and self.dev_project_dir.is_dir():
-            sys_godot = shutil.which("godot")
+            sys_godot = self._find_godot_executable()
             if sys_godot is not None:
                 return [sys_godot, "--path", str(self.dev_project_dir),
                         "--", "--client", f"--port={self.port}"]
@@ -97,22 +149,48 @@ class GodotBridge:
         Godot system + projet source.
         """
         cmd = self._resolve_command()
-        if cmd is None:
-            # Diagnostic détaillé
-            bundled = self._bundled_binary_path()
-            if self.bundled_dir is None:
-                msg = "Aucun bundled_dir configuré et pas de mode dev"
-            elif bundled is None:
-                msg = (
-                    f"Binaire 3D bundled non trouvé dans {self.bundled_dir}.\n"
-                    f"Plateforme attendue : {sys.platform}.\n"
-                    f"Fichier attendu selon OS : "
-                    f"perce_neige_3d.exe (Win) / .x86_64 (Linux) / .app/... (macOS)"
-                )
-            else:
-                msg = "Configuration inconsistante"
-            return False, msg
-        return True, ""
+        if cmd is not None:
+            return True, ""
+        bundled = self._bundled_binary_path()
+        has_dev_proj = self.dev_project_dir is not None and self.dev_project_dir.is_dir()
+        sys_godot = self._find_godot_executable()
+        if sys.platform.startswith("win"):
+            bin_name = "perce_neige_3d.exe"
+            install_hint = "godotengine.org/download/windows (Godot 4.6 Standard)"
+        elif sys.platform == "darwin":
+            bin_name = "perce_neige_3d.app"
+            install_hint = "godotengine.org/download/macos (Godot 4.6 Standard)"
+        else:
+            bin_name = "perce_neige_3d.x86_64"
+            install_hint = "godotengine.org/download/linux (Godot 4.6 Standard)"
+        bundled_loc = str(self.bundled_dir) if self.bundled_dir else "<non configuré>"
+        if bundled is None and not has_dev_proj and sys_godot is None:
+            msg = (
+                f"Viewer 3D indisponible — ni binaire bundlé, ni Godot installé.\n"
+                f"  • Binaire bundlé attendu : {bundled_loc}/{bin_name} (absent)\n"
+                f"  • Godot system (fallback dev) : pas dans le PATH\n"
+                f"  • Projet 3D source : {self.dev_project_dir or '<absent>'}\n"
+                f"→ Installer Godot 4.6 : {install_hint}"
+            )
+        elif bundled is None and has_dev_proj and sys_godot is None:
+            msg = (
+                f"Viewer 3D indisponible — projet trouvé ({self.dev_project_dir}) "
+                f"mais Godot pas dans le PATH.\n"
+                f"→ Installer Godot 4.6 : {install_hint}"
+            )
+        elif bundled is None and not has_dev_proj and sys_godot is not None:
+            msg = (
+                f"Viewer 3D indisponible — Godot trouvé ({sys_godot}) "
+                f"mais aucun projet 3D source.\n"
+                f"→ Cloner github.com/ARP273-ROSE/perce-neige-sim-3d "
+                f"dans ~/Documents/, ou builder le binaire bundlé via build_godot_viewer."
+            )
+        else:
+            msg = (
+                f"Viewer 3D indisponible — état inattendu "
+                f"(bundled={bundled}, dev_proj={has_dev_proj}, godot={sys_godot})"
+            )
+        return False, msg
 
     def start(self) -> bool:
         """Démarre Godot en mode --client. Retourne True si OK.
