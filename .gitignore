@@ -8,6 +8,8 @@ venv/
 
 # Video sources (too large for git, kept locally)
 sons/videos/
+# Reference videos shot on the real funicular (April 2026, 4K HEVC, ~3.7 GB)
+sons/photos/*.mp4
 
 # WAV cache (generated at runtime)
 *.wav
