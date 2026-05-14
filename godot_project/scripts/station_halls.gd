@@ -50,11 +50,13 @@ func _build_hall_low() -> void:
 	# (= vers l'arrière du portail bas, où se trouve l'entrée Val Claret)
 	_build_hall(
 		anchor, +1.0,
-		"VAL CLARET",
-		_t("ALTITUDE 2111 m", "ALTITUDE 2111 m"),
+		"ALTITUDE EXPERIENCE",
+		_t("FUNICULAIRE — GARE DE DÉPART  ·  Val Claret 2111 m",
+		   "FUNICULAIRE — GARE DE DÉPART  ·  Val Claret 2111 m"),
 		_t("EXIT TO VILLAGE ↑", "SORTIE VILLAGE ↑"),
 		Color(0.85, 0.92, 1.00),  # teinte bleue (lumière jour)
 		"hall_low",
+		Color(1.00, 0.95, 0.92),  # branding blanc cassé (panneau lumineux sur fond rouge)
 	)
 
 
@@ -68,11 +70,12 @@ func _build_hall_high() -> void:
 	var anchor: Transform3D = tunnel.transform_at(PNConstants.LENGTH)
 	_build_hall(
 		anchor, -1.0,
-		"GRANDE MOTTE",
-		_t("GLACIER 3032 m", "GLACIER 3032 m"),
+		"DESTINATION GLACIER",
+		_t("GRANDE MOTTE — 3032 m", "GRANDE MOTTE — 3032 m"),
 		_t("EXIT TO GLACIER ↑", "SORTIE GLACIER ↑"),
 		Color(0.95, 0.97, 1.00),  # teinte plus blanche (neige glacier)
 		"hall_high",
+		Color(1.00, 0.65, 0.20),  # orange ampoules vintage du vrai panneau
 	)
 
 
@@ -85,6 +88,7 @@ func _build_hall_high() -> void:
 func _build_hall(
 	anchor: Transform3D, direction: float, name_txt: String, alt_txt: String,
 	exit_txt: String, sky_tint: Color, name: String,
+	sign_color: Color = Color(1.0, 0.85, 0.25),
 ) -> void:
 	var origin: Vector3 = anchor.origin
 	var right: Vector3 = anchor.basis.x
@@ -215,8 +219,13 @@ func _build_hall(
 		add_child(neon)
 
 	# --- Panneau "STATION" géant au fond ---------------------------------
+	# Reproduit la signalétique du vrai funiculaire :
+	#   - aval (Val Claret) : "ALTITUDE EXPERIENCE" en blanc cassé sur
+	#     fond mural (style panneau lumineux rouge)
+	#   - amont (Grande Motte) : "DESTINATION GLACIER" en orange ampoules
+	#     vintage (caisson noir + lettres formées d'ampoules)
 	var sign_pos: Vector3 = origin + up * (y_ceil - 1.5) + fwd * (L - 0.05)
-	_emit_label3d(sign_pos, name_txt, 240, Color(1.0, 0.85, 0.25), 14)
+	_emit_label3d(sign_pos, name_txt, 240, sign_color, 14)
 	var alt_pos: Vector3 = origin + up * (y_ceil - 2.5) + fwd * (L - 0.05)
 	_emit_label3d(alt_pos, alt_txt, 100, Color(0.95, 0.95, 0.95), 8)
 
