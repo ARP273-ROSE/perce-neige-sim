@@ -48,13 +48,21 @@ func _build() -> void:
 	_build_curve3d()
 
 	# Matériau béton tunnel — CULL_DISABLED pour voir l'intérieur
-	# quel que soit le winding des triangles
+	# quel que soit le winding des triangles.
+	# Calibré sur les frames intérieures (béton gris-vert humide, légèrement
+	# bleuté sous l'éclairage néon, surface mate sans reflet métallique).
 	var mat: StandardMaterial3D = StandardMaterial3D.new()
-	mat.albedo_color = Color(0.45, 0.42, 0.38)
-	mat.roughness = 0.88
+	mat.albedo_color = Color(0.40, 0.43, 0.43)  # gris-vert béton humide
+	mat.roughness = 0.95                         # très mat (était 0.88)
 	mat.metallic = 0.0
 	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
-	mat.uv1_scale = Vector3(4.0, 2.0, 1.0)
+	# UV plus fin pour densifier les détails de noise procédural si une
+	# texture future est branchée (UV_scale=8,4 → environ 1 cycle par
+	# 0.5 m de tunnel, échelle réaliste pour des taches d'humidité)
+	mat.uv1_scale = Vector3(8.0, 4.0, 1.0)
+	# Léger AO ambient pour donner du relief sans texture
+	mat.ao_enabled = true
+	mat.ao_light_affect = 0.35
 
 	# 3 sections — aiguillage Abt en CHAMBRE CONTINUE.
 	# Schéma vu de dessus (lentille / vesica) :
