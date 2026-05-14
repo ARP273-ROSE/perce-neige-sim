@@ -251,33 +251,48 @@ class GodotBridge:
         return self._proc.poll() is None
 
     def find_window_xid(self, timeout_s: float = 4.0) -> int | None:
-        """Cherche l'XID X11 de la fenêtre Godot via xdotool (Linux only).
-        Retourne l'XID en int, ou None si pas trouvé / pas X11 / xdotool absent.
-        Bloquant jusqu'à timeout_s.
+        """Alias historique de find_window_id (X11 seul)."""
+        return self.find_window_id(timeout_s=timeout_s)
+
+    def find_window_id(self, timeout_s: float = 4.0) -> int | None:
+        """Cherche le handle natif de la fenêtre Godot.
+
+        Multiplateforme :
+          - Linux X11 : XID via `xdotool search --pid`
+          - Windows   : HWND via `EnumWindows + GetWindowThreadProcessId`
+                        (utilise ctypes, aucune dépendance externe)
+          - macOS / Wayland : non supporté → retourne None
+
+        Le handle retourné est compatible avec `QWindow.fromWinId(int)`
+        sur la plateforme courante. Bloquant jusqu'à timeout_s (poll ~10 Hz).
         """
         if self._proc is None:
-            return None
-        if not sys.platform.startswith("linux"):
-            return None
-        if shutil.which("xdotool") is None:
             return None
         import time
         deadline = time.monotonic() + timeout_s
         pid = self._proc.pid
-        while time.monotonic() < deadline:
-            try:
-                # Cherche une fenêtre visible appartenant au PID Godot
-                out = subprocess.check_output(
-                    ["xdotool", "search", "--pid", str(pid), "--onlyvisible", "--name", "Perce-Neige"],
-                    stderr=subprocess.DEVNULL,
-                ).decode().strip()
-                if out:
-                    # Plusieurs fenêtres possibles (splash, main) ; prend la dernière
-                    # qui est typiquement la window principale 3D
-                    return int(out.splitlines()[-1])
-            except subprocess.CalledProcessError:
-                pass
-            time.sleep(0.10)
+
+        if sys.platform.startswith("win"):
+            return _find_hwnd_for_pid(pid, deadline)
+
+        if sys.platform.startswith("linux"):
+            if shutil.which("xdotool") is None:
+                return None
+            while time.monotonic() < deadline:
+                try:
+                    out = subprocess.check_output(
+                        ["xdotool", "search", "--pid", str(pid),
+                         "--onlyvisible", "--name", "Perce-Neige"],
+                        stderr=subprocess.DEVNULL,
+                    ).decode().strip()
+                    if out:
+                        return int(out.splitlines()[-1])
+                except subprocess.CalledProcessError:
+                    pass
+                time.sleep(0.10)
+            return None
+
+        # macOS, Wayland, autres : non supporté pour l'embedding
         return None
 
     # ------------------------------------------------------------------ #
@@ -299,6 +314,56 @@ class GodotBridge:
         except (BlockingIOError, OSError):
             # Buffer plein ou socket fermé : on ignore (next frame réessaiera)
             pass
+
+
+def _find_hwnd_for_pid(target_pid: int, deadline: float) -> int | None:
+    """Cherche le HWND d'une fenêtre top-level appartenant à `target_pid`.
+
+    Polling jusqu'à `deadline` (time.monotonic()). On enumère toutes les
+    fenêtres top-level visibles via user32.EnumWindows et on garde la
+    première dont le PID propriétaire match (ou la dernière si plusieurs,
+    Godot crée parfois une splash + main window).
+
+    Pas de dépendance externe : ctypes seulement, dispo sur tout Python
+    Windows. Retourne None si aucune fenêtre trouvée avant la deadline.
+    """
+    import ctypes
+    import ctypes.wintypes as wt
+    import time
+
+    user32 = ctypes.windll.user32
+    EnumWindowsProc = ctypes.WINFUNCTYPE(
+        wt.BOOL, wt.HWND, wt.LPARAM)
+
+    def _enum_once() -> int | None:
+        found: list[int] = []
+
+        def _cb(hwnd: int, _lparam: int) -> bool:
+            if not user32.IsWindowVisible(hwnd):
+                return True
+            pid = wt.DWORD()
+            user32.GetWindowThreadProcessId(
+                hwnd, ctypes.byref(pid))
+            if pid.value == target_pid:
+                # Filtre : titre contient "Perce-Neige" pour éviter de tomber
+                # sur une splash invisible ou une window utilitaire de Godot.
+                length = user32.GetWindowTextLengthW(hwnd)
+                if length > 0:
+                    buf = ctypes.create_unicode_buffer(length + 1)
+                    user32.GetWindowTextW(hwnd, buf, length + 1)
+                    if "Perce-Neige" in buf.value:
+                        found.append(hwnd)
+            return True   # continue l'énumération
+
+        user32.EnumWindows(EnumWindowsProc(_cb), 0)
+        return found[-1] if found else None
+
+    while time.monotonic() < deadline:
+        hwnd = _enum_once()
+        if hwnd is not None:
+            return int(hwnd)
+        time.sleep(0.10)
+    return None
 
 
 def physics_to_state_dict(tr, st=None) -> dict:
