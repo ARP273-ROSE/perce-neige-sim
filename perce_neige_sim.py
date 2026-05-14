@@ -7209,6 +7209,22 @@ class GameWidget(QWidget):
                 p, QRectF(vx + frame_w + 32, vy + frame_w + 4,
                           cctv_w, cctv_h))
 
+        # Bandeau d'info de quai (visible uniquement à l'arrêt en gare).
+        # Vu au-dessus du pare-brise, simule la signalétique de la vraie
+        # gare (rouge "ALTITUDE EXPERIENCE" en aval, ampoules orange
+        # "DESTINATION GLACIER" en amont).
+        if abs(tr.v) < 0.3:
+            if tr.s < 30.0:
+                self._draw_platform_banner(p, QRectF(
+                    vx + frame_w + 200, vy + 4,
+                    max(vw - frame_w - cabin_wall_w - 220, 280),
+                    min(vh * 0.10, 70)), at_lower=True)
+            elif tr.s > LENGTH - 30.0:
+                self._draw_platform_banner(p, QRectF(
+                    vx + frame_w + 200, vy + 4,
+                    max(vw - frame_w - cabin_wall_w - 220, 280),
+                    min(vh * 0.10, 70)), at_lower=False)
+
         # Bottom frame — console area
         console_h = vh * 0.22
         console_grad = QLinearGradient(0, vy + vh - console_h, 0, vy + vh)
@@ -7405,6 +7421,123 @@ class GameWidget(QWidget):
               "Appuyer F4 à nouveau pour fermer le viewer Godot")
         )
         p.restore()
+
+    def _draw_platform_banner(self, p: QPainter, rect: QRectF,
+                              at_lower: bool) -> None:
+        """Bandeau signalétique de gare visible à travers le pare-brise.
+
+        Reproduit deux panneaux observés sur les photos du vrai
+        funiculaire :
+
+          - aval (Val Claret) : façade rouge avec branding blanc
+            "ALTITUDE EXPERIENCE" et écran info bleu en surimpression
+            ("FUNICULAIRE GARE DE DÉPART" + "Prochain départ X min")
+          - amont (Glacier) : caisson noir avec lettres orange à
+            ampoules vintage "DESTINATION GLACIER"
+
+        Affiché tant que la cabine est à l'arrêt dans la gare
+        concernée.
+        """
+        bx, by, bw, bh = rect.x(), rect.y(), rect.width(), rect.height()
+        if bw < 200 or bh < 30:
+            return
+
+        # Estimation du temps avant prochain départ : si un AutoOperator
+        # tourne, on lit station_dwell_s - phase_t en BOARDING ; sinon
+        # on tombe sur "Embarquement".
+        ao = getattr(self.state, "auto_op", None) or getattr(
+            self, "auto_op", None)
+        remain_s: float | None = None
+        try:
+            if ao is not None and getattr(ao, "phase", None) == "BOARDING":
+                remain_s = max(0.0, ao.station_dwell_s - ao.phase_t)
+        except Exception:
+            remain_s = None
+
+        if at_lower:
+            # ===== Gare aval — façade rouge "ALTITUDE EXPERIENCE" =====
+            # Fond rouge légèrement dégradé
+            g = QLinearGradient(bx, by, bx, by + bh)
+            g.setColorAt(0, QColor(195, 35, 30))
+            g.setColorAt(1, QColor(155, 20, 18))
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(QBrush(g))
+            p.drawRoundedRect(rect, 4, 4)
+            # Liseré métal
+            p.setPen(QPen(QColor(220, 200, 100, 200), 1.2))
+            p.setBrush(Qt.BrushStyle.NoBrush)
+            p.drawRoundedRect(rect.adjusted(1, 1, -1, -1), 3, 3)
+
+            # Titre "ALTITUDE EXPERIENCE" — typographie large, blanc
+            title_h = bh * 0.55
+            p.setFont(QFont("Arial", max(int(title_h * 0.45), 10),
+                            QFont.Weight.Black))
+            p.setPen(QPen(QColor(255, 255, 255)))
+            p.drawText(QRectF(bx + 8, by + 4, bw - 16, title_h),
+                       int(Qt.AlignmentFlag.AlignVCenter
+                           | Qt.AlignmentFlag.AlignLeft),
+                       "ALTITUDE EXPERIENCE")
+            # Écran info bleu (en surimpression à droite)
+            info_w = min(bw * 0.40, 170)
+            info_x = bx + bw - info_w - 6
+            info_y = by + 4
+            info_h = bh - 8
+            p.setPen(QPen(QColor(40, 80, 130), 1))
+            p.setBrush(QBrush(QColor(25, 50, 95)))
+            p.drawRoundedRect(QRectF(info_x, info_y, info_w, info_h), 3, 3)
+            # Lignes de texte écran info
+            p.setFont(QFont("Consolas", 7, QFont.Weight.Bold))
+            p.setPen(QPen(QColor(255, 255, 255)))
+            p.drawText(QRectF(info_x + 4, info_y + 2, info_w - 8, 10),
+                       int(Qt.AlignmentFlag.AlignLeft),
+                       "FUNICULAIRE — GARE DE DÉPART")
+            p.setFont(QFont("Consolas", 7))
+            p.setPen(QPen(QColor(180, 220, 255)))
+            line2 = ("Prochain départ : "
+                     + (f"{int(remain_s // 60):d} min"
+                        if remain_s is not None and remain_s > 60
+                        else (f"{int(remain_s):d} s"
+                              if remain_s is not None
+                              else "Embarquement")))
+            p.drawText(QRectF(info_x + 4, info_y + 13, info_w - 8, 10),
+                       int(Qt.AlignmentFlag.AlignLeft), line2)
+            # Sous-titre "Bienvenue" + altitude
+            if info_h > 30:
+                p.setPen(QPen(QColor(150, 200, 240)))
+                p.drawText(QRectF(info_x + 4, info_y + 24, info_w - 8, 10),
+                           int(Qt.AlignmentFlag.AlignLeft),
+                           f"Val Claret — {int(ALT_LOW)} m")
+            return
+
+        # ===== Gare amont — caisson noir + ampoules orange =====
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QBrush(QColor(20, 18, 16)))
+        p.drawRoundedRect(rect, 4, 4)
+        # Liseré rouge sombre (comme la base éclairée du vrai panneau)
+        p.setPen(QPen(QColor(140, 30, 25), 1.2))
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        p.drawRoundedRect(rect.adjusted(1, 1, -1, -1), 3, 3)
+        # Texte "DESTINATION GLACIER" en lettres ampoules orange.
+        # Effet ampoules : on dessine d'abord un halo, puis le glyphe orange.
+        title = "DESTINATION GLACIER"
+        p.setFont(QFont("Arial Black", max(int(bh * 0.42), 10),
+                        QFont.Weight.Black))
+        text_rect = QRectF(bx + 4, by + 2, bw - 8, bh * 0.62)
+        # Halo orange diffus
+        p.setPen(QPen(QColor(255, 140, 30, 90), 4))
+        p.drawText(text_rect,
+                   int(Qt.AlignmentFlag.AlignCenter), title)
+        # Cœur du glyphe : orange chaud
+        p.setPen(QPen(QColor(255, 165, 60)))
+        p.drawText(text_rect,
+                   int(Qt.AlignmentFlag.AlignCenter), title)
+        # Sous-titre discret + altitude
+        p.setFont(QFont("Arial", max(int(bh * 0.16), 7)))
+        p.setPen(QPen(QColor(180, 130, 90)))
+        sub_rect = QRectF(bx + 4, by + bh * 0.65, bw - 8, bh * 0.30)
+        p.drawText(sub_rect,
+                   int(Qt.AlignmentFlag.AlignCenter),
+                   f"Grande Motte — {int(ALT_HIGH)} m")
 
     def _draw_cctv_monitor(self, p: QPainter, rect: QRectF) -> None:
         """Petit moniteur CCTV 2×2 (caméras intérieures de la rame).
