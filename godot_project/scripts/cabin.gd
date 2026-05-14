@@ -124,9 +124,15 @@ func _build_interior() -> void:
 	interior_root.name = "Interior"
 	add_child(interior_root)
 	_build_floor_ceiling()
-	_build_dashboard()           # pupitre Von Roll 3D (refondu d'après photos)
-	_build_cctv_monitor()        # moniteur CCTV plafond gauche (4 caméras)
-	_build_windshield()          # pare-brise courbe devant le conducteur
+	# Pas de pupitre 3D : le caisson + pare-brise 3 vitres + labels Label3D
+	# géants masquaient les rails et donnaient un rendu très peu fidèle aux
+	# photos. Tous les détails de console (POSTE 1/2, PORTES, FREINS,
+	# ÉCLAIRAGE, écran "VOITURE AVAL" avec diagramme rame + vitesse + dist)
+	# sont rendus en HUD 2D côté Python (_draw_console_panel + bandeau de
+	# quai + CCTV refondus dans perce_neige_sim.py). En FPV Godot on garde
+	# juste l'environnement immersif (tunnel + voie + sièges) sans masquer
+	# la vue de conduite.
+	_build_cctv_monitor()        # petit moniteur 4 caméras plafond gauche
 	_build_driver_seat()
 	_build_passenger_seats()
 	_build_passengers()
@@ -422,7 +428,12 @@ func _make_dash_label(pos: Vector3, txt: String, col: Color) -> Label3D:
 # ---------------------------------------------------------------------------
 
 func _build_cctv_monitor() -> void:
-	var z_mon: float = -train_length * 0.5 + 1.7
+	# Petit moniteur discret au plafond avant gauche, taille 24×15 cm
+	# (vs 32×22 cm précédemment qui prenait trop de place visuelle).
+	# Positionné haut (y=1.50) et loin sur le côté gauche (x=-1.0)
+	# pour qu'il ne soit visible qu'en levant les yeux à gauche, jamais
+	# en regardant droit devant.
+	var z_mon: float = -train_length * 0.5 + 1.4
 	var bezel_mat: StandardMaterial3D = StandardMaterial3D.new()
 	bezel_mat.albedo_color = Color(0.05, 0.05, 0.06)
 	bezel_mat.roughness = 0.5
@@ -432,41 +443,39 @@ func _build_cctv_monitor() -> void:
 	screen_mat.albedo_color = Color(0.05, 0.08, 0.14)
 	screen_mat.emission_enabled = true
 	screen_mat.emission = Color(0.20, 0.40, 0.65)
-	screen_mat.emission_energy_multiplier = 0.55
+	screen_mat.emission_energy_multiplier = 0.45
 	screen_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 
-	# Boîtier du moniteur, plafond avant gauche, légèrement orienté
-	# vers le siège conducteur (rotation Y +0.30 rad).
 	var body: MeshInstance3D = MeshInstance3D.new()
 	body.name = "CctvBody"
 	var body_mesh: BoxMesh = BoxMesh.new()
-	body_mesh.size = Vector3(0.32, 0.22, 0.04)
+	body_mesh.size = Vector3(0.24, 0.15, 0.03)
 	body_mesh.material = bezel_mat
 	body.mesh = body_mesh
 	body.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	body.position = Vector3(-0.85, 1.30, z_mon)
-	body.rotation = Vector3(0.0, 0.30, 0.0)
+	body.position = Vector3(-1.00, 1.50, z_mon)
+	body.rotation = Vector3(-0.20, 0.35, 0.0)   # incliné face au conducteur
 	interior_root.add_child(body)
 
 	# 4 cellules 2×2 émissives (alignées avec la rotation du body)
-	var ang: float = 0.30
+	var ang: float = 0.35
 	var c_ang: float = cos(ang)
 	var s_ang: float = sin(ang)
 	for r in range(2):
 		for c in range(2):
 			var cell: MeshInstance3D = MeshInstance3D.new()
 			var cell_mesh: BoxMesh = BoxMesh.new()
-			cell_mesh.size = Vector3(0.14, 0.095, 0.005)
+			cell_mesh.size = Vector3(0.105, 0.065, 0.004)
 			cell_mesh.material = screen_mat
 			cell.mesh = cell_mesh
 			cell.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-			var dx: float = (-0.075 + float(c) * 0.150)
-			var dy: float = (+0.052 - float(r) * 0.104)
+			var dx: float = (-0.058 + float(c) * 0.116)
+			var dy: float = (+0.036 - float(r) * 0.072)
 			cell.position = Vector3(
-				-0.85 + dx * c_ang,
-				1.30 + dy,
-				z_mon - dx * s_ang + 0.022)
-			cell.rotation = Vector3(0.0, ang, 0.0)
+				-1.00 + dx * c_ang,
+				1.50 + dy,
+				z_mon - dx * s_ang + 0.017)
+			cell.rotation = Vector3(-0.20, ang, 0.0)
 			interior_root.add_child(cell)
 
 
