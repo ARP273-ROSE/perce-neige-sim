@@ -7487,20 +7487,24 @@ class GameWidget(QWidget):
             p.setPen(QPen(QColor(40, 80, 130), 1))
             p.setBrush(QBrush(QColor(25, 50, 95)))
             p.drawRoundedRect(QRectF(info_x, info_y, info_w, info_h), 3, 3)
-            # Lignes de texte écran info
+            # Lignes de texte écran info (bilingue : signalétique passagers)
             p.setFont(QFont("Consolas", 7, QFont.Weight.Bold))
             p.setPen(QPen(QColor(255, 255, 255)))
             p.drawText(QRectF(info_x + 4, info_y + 2, info_w - 8, 10),
                        int(Qt.AlignmentFlag.AlignLeft),
-                       "FUNICULAIRE — GARE DE DÉPART")
+                       T("FUNICULAR — DEPARTURE STATION",
+                         "FUNICULAIRE — GARE DE DÉPART"))
             p.setFont(QFont("Consolas", 7))
             p.setPen(QPen(QColor(180, 220, 255)))
-            line2 = ("Prochain départ : "
-                     + (f"{int(remain_s // 60):d} min"
-                        if remain_s is not None and remain_s > 60
-                        else (f"{int(remain_s):d} s"
-                              if remain_s is not None
-                              else "Embarquement")))
+            if remain_s is not None and remain_s > 60:
+                value = T(f"{int(remain_s // 60):d} min",
+                          f"{int(remain_s // 60):d} min")
+            elif remain_s is not None:
+                value = T(f"{int(remain_s):d} s",
+                          f"{int(remain_s):d} s")
+            else:
+                value = T("Boarding", "Embarquement")
+            line2 = T("Next departure: ", "Prochain départ : ") + value
             p.drawText(QRectF(info_x + 4, info_y + 13, info_w - 8, 10),
                        int(Qt.AlignmentFlag.AlignLeft), line2)
             # Sous-titre "Bienvenue" + altitude
@@ -7533,13 +7537,15 @@ class GameWidget(QWidget):
         p.setPen(QPen(QColor(255, 165, 60)))
         p.drawText(text_rect,
                    int(Qt.AlignmentFlag.AlignCenter), title)
-        # Sous-titre discret + altitude
+        # Sous-titre discret + altitude (Grande Motte est un toponyme, pas
+        # traduit ; on précise "summit" en EN pour clarifier)
         p.setFont(QFont("Arial", max(int(bh * 0.16), 7)))
         p.setPen(QPen(QColor(180, 130, 90)))
         sub_rect = QRectF(bx + 4, by + bh * 0.65, bw - 8, bh * 0.30)
         p.drawText(sub_rect,
                    int(Qt.AlignmentFlag.AlignCenter),
-                   f"Grande Motte — {int(ALT_HIGH)} m")
+                   T(f"Grande Motte summit — {int(ALT_HIGH)} m",
+                     f"Grande Motte — {int(ALT_HIGH)} m"))
 
     def _draw_cctv_monitor(self, p: QPainter, rect: QRectF) -> None:
         """Petit moniteur CCTV 2×2 (caméras intérieures de la rame).
