@@ -7212,7 +7212,7 @@ class GameWidget(QWidget):
 
         # --- Driver's console panel ---
         self._draw_console_panel(p, vx + 20, vy + vh - console_h + 12,
-                                 min(vw * 0.40, 320),
+                                 min(vw * 0.48, 420),
                                  console_h - 24)
 
         # --- Status text overlays ---
@@ -7401,148 +7401,198 @@ class GameWidget(QWidget):
                             pw: float, ph: float) -> None:
         """Draw the Von Roll driver's console panel.
 
-        Based on HD frames of the real console (t=88-490 of FUNI284 montée):
-        - Red mushroom E-STOP button (far left)
-        - Colour LCD screen showing track schematic
-        - ~10 illuminated push-buttons in 2 rows (green LEDs)
-        - Rotary speed-command knob
+        Refondu d'après les photos HD du vrai pupitre Perce-Neige
+        (clichés 26/04/2026, gros plans en montée). Layout :
+
+          [Écran tactile VOITURE AVAL]   [POSTE 1] [POSTE 2]
+          | diagramme 5 wagons +         [PORTES 1+8] [PORTES 7+10]
+          | vitesse m/s + distance m     [FREINS] [ÉCLAIRAGE]
+          [E-STOP 1]                            [E-STOP 2]
+
+        Tout s'adapte à pw : sous ~340 px le bloc droit est compacté.
         """
         st = self.state
         tr = st.train
 
-        # Panel background
+        # Panel background + metallic bezel
         p.setPen(QPen(QColor(30, 30, 30), 1))
         p.setBrush(QBrush(QColor(25, 25, 28)))
         p.drawRoundedRect(QRectF(x, y, pw, ph), 4, 4)
-
-        # Metallic bezel
         p.setPen(QPen(QColor(90, 88, 82), 1.5))
         p.setBrush(Qt.BrushStyle.NoBrush)
         p.drawRoundedRect(QRectF(x - 1, y - 1, pw + 2, ph + 2), 5, 5)
 
-        # --- E-STOP mushroom button (left) ---
-        estop_x = x + 14
-        estop_y = y + ph * 0.35
-        estop_r = min(ph * 0.22, 14)
-        # Yellow ring
-        p.setPen(Qt.PenStyle.NoPen)
-        p.setBrush(QBrush(QColor(180, 170, 30)))
-        p.drawEllipse(QPointF(estop_x, estop_y), estop_r + 3, estop_r + 3)
-        # Red mushroom cap
-        estop_active = tr.emergency
-        cap_col = QColor(220, 40, 30) if not estop_active else QColor(140, 20, 15)
-        grad_e = QRadialGradient(estop_x - 2, estop_y - 2, estop_r)
-        grad_e.setColorAt(0, cap_col.lighter(140))
-        grad_e.setColorAt(1, cap_col)
-        p.setBrush(QBrush(grad_e))
-        p.drawEllipse(QPointF(estop_x, estop_y), estop_r, estop_r)
-
-        # --- LCD screen (track position schematic) ---
-        lcd_x = x + 36
+        # =========================================================
+        # Layout : LCD à gauche (40-45 %), bloc commandes à droite.
+        # 2 mushrooms E-STOP encadrent la rangée du bas (gauche/droite).
+        # =========================================================
+        lcd_w = min(pw * 0.42, 180)
+        lcd_x = x + 8
         lcd_y = y + 6
-        lcd_w = min(pw * 0.30, 90)
-        lcd_h = ph - 12
-        # Screen bezel
+        lcd_h = ph - 30                    # laisse de la place pour E-STOP en bas
+
+        # ----- LCD "VOITURE AVAL" -----
         p.setPen(QPen(QColor(50, 50, 50), 1))
-        p.setBrush(QBrush(QColor(15, 25, 40)))
+        p.setBrush(QBrush(QColor(20, 35, 60)))
         p.drawRect(QRectF(lcd_x, lcd_y, lcd_w, lcd_h))
-
-        # Draw track position on LCD
-        if lcd_w > 30 and lcd_h > 20:
-            p.setPen(QPen(QColor(80, 180, 80), 1))
-            # Track line (vertical on LCD = slope)
-            track_x = lcd_x + lcd_w * 0.5
-            track_top = lcd_y + 4
-            track_bot = lcd_y + lcd_h - 4
-            p.drawLine(QPointF(track_x, track_top),
-                       QPointF(track_x, track_bot))
-            # Train position marker
-            frac = tr.s / LENGTH
-            marker_y = track_bot - frac * (track_bot - track_top)
-            p.setPen(Qt.PenStyle.NoPen)
-            p.setBrush(QBrush(QColor(255, 220, 50)))
-            p.drawRect(QRectF(track_x - 4, marker_y - 2, 8, 4))
-            # Passing loop marker
-            loop_frac = (PASSING_START + PASSING_END) / 2 / LENGTH
-            loop_y = track_bot - loop_frac * (track_bot - track_top)
-            p.setPen(QPen(QColor(80, 180, 80), 1))
-            p.drawLine(QPointF(track_x - 6, loop_y),
-                       QPointF(track_x + 6, loop_y))
-            # Speed text
-            p.setPen(QPen(QColor(60, 200, 60)))
-            p.setFont(QFont("Consolas", 7))
-            p.drawText(QRectF(lcd_x + 2, lcd_y + 2, lcd_w - 4, 12),
+        # Titre tactile
+        if lcd_w > 60 and lcd_h > 30:
+            p.setFont(QFont("Consolas", 7, QFont.Weight.Bold))
+            p.setPen(QPen(QColor(200, 220, 255)))
+            p.drawText(QRectF(lcd_x + 2, lcd_y + 2, lcd_w - 4, 10),
+                       int(Qt.AlignmentFlag.AlignHCenter),
+                       "VOITURE AVAL")
+            # Diagramme de la rame : 5 wagons schématiques
+            car_y = lcd_y + 14
+            car_h = max(lcd_h * 0.22, 12)
+            cars = 5
+            car_w = (lcd_w - 16) / cars - 1
+            for i in range(cars):
+                cx = lcd_x + 8 + i * (car_w + 1)
+                p.setBrush(QBrush(QColor(255, 145, 30)))   # orange cabine
+                p.setPen(QPen(QColor(180, 90, 10), 0.8))
+                p.drawRoundedRect(QRectF(cx, car_y, car_w, car_h), 2, 2)
+                # mini-LED par porte (2 par wagon)
+                door_r = max(car_h * 0.12, 1.0)
+                ok = not tr.doors_open
+                col = QColor(80, 220, 80) if ok else QColor(220, 180, 50)
+                p.setBrush(QBrush(col))
+                p.setPen(Qt.PenStyle.NoPen)
+                p.drawEllipse(QPointF(cx + car_w * 0.3, car_y + car_h - door_r * 2),
+                              door_r, door_r)
+                p.drawEllipse(QPointF(cx + car_w * 0.7, car_y + car_h - door_r * 2),
+                              door_r, door_r)
+            # Position rame le long du tracé (mini-track sous le diagramme)
+            track_y = car_y + car_h + 8
+            track_x0 = lcd_x + 8
+            track_x1 = lcd_x + lcd_w - 8
+            if track_y + 4 < lcd_y + lcd_h - 14:
+                p.setPen(QPen(QColor(120, 180, 220), 1))
+                p.drawLine(QPointF(track_x0, track_y),
+                           QPointF(track_x1, track_y))
+                # marqueur croisement (boucle Abt à mi-parcours)
+                mid = (track_x0 + track_x1) * 0.5
+                p.drawLine(QPointF(mid - 4, track_y - 3),
+                           QPointF(mid + 4, track_y - 3))
+                p.drawLine(QPointF(mid - 4, track_y + 3),
+                           QPointF(mid + 4, track_y + 3))
+                # marqueur cabine (curseur)
+                frac = max(0.0, min(1.0, tr.s / LENGTH))
+                cur_x = track_x0 + frac * (track_x1 - track_x0)
+                p.setBrush(QBrush(QColor(255, 230, 80)))
+                p.setPen(Qt.PenStyle.NoPen)
+                p.drawRect(QRectF(cur_x - 2, track_y - 3, 4, 6))
+            # Vitesse + distance (gros chiffres en bas, comme le vrai)
+            p.setFont(QFont("Consolas", 8, QFont.Weight.Bold))
+            p.setPen(QPen(QColor(120, 240, 120)))
+            text_y = lcd_y + lcd_h - 14
+            p.drawText(QRectF(lcd_x + 4, text_y, lcd_w * 0.5 - 4, 12),
                        int(Qt.AlignmentFlag.AlignLeft),
-                       f"{abs(tr.v):.1f} m/s")
+                       f"{abs(tr.v):.2f} m/s")
+            p.setPen(QPen(QColor(255, 200, 80)))
+            p.drawText(QRectF(lcd_x + lcd_w * 0.5, text_y, lcd_w * 0.5 - 4, 12),
+                       int(Qt.AlignmentFlag.AlignRight),
+                       f"{int(tr.s):>4d} m")
 
-        # --- Push-buttons (2 rows × 4-5 buttons) ---
-        btn_area_x = lcd_x + lcd_w + 8
-        btn_area_w = pw - (btn_area_x - x) - 10
-        if btn_area_w > 40:
-            btn_cols = 4
-            btn_rows = 2
-            btn_size = min(btn_area_w / btn_cols - 3,
-                          (ph - 16) / btn_rows - 3, 14)
-            btn_gap = btn_size + 3
+        # ----- Bloc commandes à droite -----
+        ctl_x = lcd_x + lcd_w + 10
+        ctl_w = (x + pw - 10) - ctl_x
+        if ctl_w >= 70:
+            # Helpers locaux pour dessiner un bouton illuminé
+            def _btn(cx, cy, r, on, col_on=QColor(60, 220, 60),
+                     col_off=QColor(35, 40, 35)):
+                p.setPen(QPen(QColor(60, 60, 60), 0.6))
+                p.setBrush(QBrush(QColor(45, 45, 48)))
+                p.drawRoundedRect(QRectF(cx - r, cy - r, r * 2, r * 2), 2, 2)
+                if on:
+                    grad = QRadialGradient(cx, cy, r * 0.85)
+                    grad.setColorAt(0, col_on.lighter(160))
+                    grad.setColorAt(0.6, col_on)
+                    grad.setColorAt(1, col_on.darker(180))
+                    p.setBrush(QBrush(grad))
+                else:
+                    p.setBrush(QBrush(col_off))
+                p.setPen(Qt.PenStyle.NoPen)
+                p.drawEllipse(QPointF(cx, cy), r * 0.55, r * 0.55)
 
-            # Button states (green = active, grey = inactive)
-            btn_states = [
-                tr.v > 0.1,                     # traction
-                True,                            # system OK
-                not tr.electric_stop,            # no E-stop
-                not tr.doors_open,               # doors closed
-                tr.lights_head,                  # headlights
-                tr.lights_cabin,                 # cabin lights
-                not tr.emergency,                # no emergency
-                st.trip_started,                 # trip active
-            ]
+            # 1ère rangée (top) : POSTE 1 + POSTE 2 (2 voyants ronds chacun)
+            row_h = max((ph - 14) * 0.30, 16)
+            top_y = y + 8 + row_h * 0.5
+            poste_w = (ctl_w - 6) / 2
+            poste1_cx = ctl_x + poste_w * 0.5
+            poste2_cx = ctl_x + poste_w * 1.5 + 6
+            p.setFont(QFont("Arial", 6, QFont.Weight.Bold))
+            p.setPen(QPen(QColor(200, 210, 220)))
+            p.drawText(QRectF(ctl_x, y + 2, poste_w, 8),
+                       int(Qt.AlignmentFlag.AlignHCenter), "POSTE 1")
+            p.drawText(QRectF(ctl_x + poste_w + 6, y + 2, poste_w, 8),
+                       int(Qt.AlignmentFlag.AlignHCenter), "POSTE 2")
+            # POSTE 1 actif si on monte (v >= 0), POSTE 2 si on descend
+            poste1_on = (tr.v >= -0.05)
+            poste2_on = (tr.v <= 0.05)
+            led_r = min(row_h * 0.35, 5)
+            _btn(poste1_cx - 7, top_y, led_r, poste1_on)
+            _btn(poste1_cx + 7, top_y, led_r, poste1_on and st.trip_started)
+            _btn(poste2_cx - 7, top_y, led_r, poste2_on)
+            _btn(poste2_cx + 7, top_y, led_r, poste2_on and st.trip_started)
 
-            for row in range(btn_rows):
-                for col in range(btn_cols):
-                    idx = row * btn_cols + col
-                    bx = btn_area_x + col * btn_gap
-                    by = y + 8 + row * btn_gap
-                    active = btn_states[idx] if idx < len(btn_states) else False
+            # 2ème rangée : PORTES 1+8 | PORTES 7+10 (4 voyants chacun)
+            mid_y = top_y + row_h
+            p.setPen(QPen(QColor(200, 210, 220)))
+            p.drawText(QRectF(ctl_x, mid_y - row_h * 0.5 - 8, poste_w, 8),
+                       int(Qt.AlignmentFlag.AlignHCenter), "PORTES 1+8")
+            p.drawText(QRectF(ctl_x + poste_w + 6, mid_y - row_h * 0.5 - 8,
+                              poste_w, 8),
+                       int(Qt.AlignmentFlag.AlignHCenter), "PORTES 7+10")
+            doors_closed = not tr.doors_open
+            for i in range(4):
+                step = poste_w / 5
+                cx = ctl_x + step * (i + 1)
+                _btn(cx, mid_y, led_r, doors_closed)
+            for i in range(4):
+                step = poste_w / 5
+                cx = ctl_x + poste_w + 6 + step * (i + 1)
+                _btn(cx, mid_y, led_r, doors_closed)
 
-                    # Button body
-                    p.setPen(QPen(QColor(60, 60, 60), 0.5))
-                    p.setBrush(QBrush(QColor(45, 45, 48)))
-                    p.drawRoundedRect(QRectF(bx, by, btn_size, btn_size), 2, 2)
-                    # LED indicator
-                    led_r = btn_size * 0.25
-                    led_cx = bx + btn_size / 2
-                    led_cy = by + btn_size / 2
-                    if active:
-                        led_grad = QRadialGradient(led_cx, led_cy, led_r)
-                        led_grad.setColorAt(0, QColor(140, 255, 140))
-                        led_grad.setColorAt(0.6, QColor(50, 200, 50))
-                        led_grad.setColorAt(1, QColor(30, 120, 30))
-                        p.setBrush(QBrush(led_grad))
-                    else:
-                        p.setBrush(QBrush(QColor(35, 40, 35)))
-                    p.setPen(Qt.PenStyle.NoPen)
-                    p.drawEllipse(QPointF(led_cx, led_cy), led_r, led_r)
+            # 3ème rangée : FREINS + ÉCLAIRAGE
+            bot_y = mid_y + row_h
+            if bot_y + led_r < y + ph - 6:
+                p.setPen(QPen(QColor(200, 210, 220)))
+                p.drawText(QRectF(ctl_x, bot_y - row_h * 0.5 - 8, poste_w, 8),
+                           int(Qt.AlignmentFlag.AlignHCenter), "FREINS")
+                p.drawText(QRectF(ctl_x + poste_w + 6,
+                                  bot_y - row_h * 0.5 - 8, poste_w, 8),
+                           int(Qt.AlignmentFlag.AlignHCenter), "ÉCLAIRAGE")
+                # FREINS : 2 voyants (service / urgence) blancs sur fond noir
+                _btn(ctl_x + poste_w * 0.35, bot_y, led_r,
+                     tr.brake > 0.05, col_on=QColor(255, 255, 255))
+                _btn(ctl_x + poste_w * 0.70, bot_y, led_r,
+                     tr.emergency, col_on=QColor(255, 80, 80))
+                # ÉCLAIRAGE : phares + cabine, voyants blancs
+                _btn(ctl_x + poste_w + 6 + poste_w * 0.35, bot_y, led_r,
+                     tr.lights_head, col_on=QColor(255, 240, 200))
+                _btn(ctl_x + poste_w + 6 + poste_w * 0.70, bot_y, led_r,
+                     tr.lights_cabin, col_on=QColor(255, 240, 200))
 
-        # --- Rotary speed-command knob ---
-        knob_x = btn_area_x + btn_area_w * 0.5 if btn_area_w > 40 else x + pw - 25
-        knob_y = y + ph - 18
-        knob_r = 8
-        # Knob body
-        knob_grad = QRadialGradient(knob_x, knob_y, knob_r)
-        knob_grad.setColorAt(0, QColor(90, 88, 82))
-        knob_grad.setColorAt(1, QColor(50, 48, 42))
-        p.setBrush(QBrush(knob_grad))
-        p.setPen(QPen(QColor(30, 30, 30), 1))
-        p.drawEllipse(QPointF(knob_x, knob_y), knob_r, knob_r)
-        # Knob pointer (shows speed command %)
-        cmd_frac = st.speed_cmd if hasattr(st, 'speed_cmd') else 0.0
-        angle = -140 + cmd_frac * 280  # degrees
-        rad = math.radians(angle - 90)
-        ptr_len = knob_r * 0.7
-        p.setPen(QPen(QColor(220, 220, 220), 1.5))
-        p.drawLine(QPointF(knob_x, knob_y),
-                   QPointF(knob_x + ptr_len * math.cos(rad),
-                           knob_y + ptr_len * math.sin(rad)))
+        # ----- 2 boutons coup-de-poing E-STOP (bas gauche / bas droit) -----
+        estop_r = min(ph * 0.13, 9)
+        ring_r = estop_r + 2
+        cap_on = QColor(220, 40, 30) if not tr.emergency else QColor(140, 20, 15)
+        cap_off = cap_on
+        for ex, ey in (
+            (x + 14, y + ph - estop_r - 4),
+            (x + pw - 14, y + ph - estop_r - 4),
+        ):
+            # Anneau jaune
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(QBrush(QColor(190, 175, 30)))
+            p.drawEllipse(QPointF(ex, ey), ring_r, ring_r)
+            # Coiffe rouge
+            grad_e = QRadialGradient(ex - 1, ey - 1, estop_r)
+            grad_e.setColorAt(0, cap_on.lighter(140))
+            grad_e.setColorAt(1, cap_on)
+            p.setBrush(QBrush(grad_e))
+            p.drawEllipse(QPointF(ex, ey), estop_r, estop_r)
 
     # ----- motor room inset -----------------------------------------------
 
