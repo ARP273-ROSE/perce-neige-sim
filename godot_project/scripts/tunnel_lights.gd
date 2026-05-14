@@ -69,7 +69,8 @@ func _add_crossing_signals() -> void:
 	led_mesh.rings = 6
 
 	# Placer une paire (côte à côte) à chaque bord du loop + une au milieu.
-	var ceiling_y: float = 1.55  # un peu sous le plafond du tunnel (R=1.95)
+	# ceiling_y relatif à tunnel_radius : reste cohérent si on retune le rayon.
+	var ceiling_y: float = (tunnel.tunnel_radius if tunnel else 1.95) - 0.40
 	var pair_dx: float = 0.18    # écart entre les 2 LED de la paire
 	var positions: Array = [
 		PNConstants.PASSING_START + 4.0,

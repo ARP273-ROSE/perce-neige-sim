@@ -25,6 +25,13 @@ extends Node3D
 @export var passing_offset_max: float = 3.50     # décalage latéral PEAK au milieu du loop (m)
 @export var passing_transition: float = 0.0      # plus utilisé (gardé pour compat)
 
+# Câbles électriques de paroi (cf. _build_wall_cables)
+@export var wall_cable_radius: float = 0.022
+@export var wall_cable_x_local: float = -1.55    # contre la paroi gauche
+@export var wall_cable_sample_m: float = 4.0
+@export var wall_cable_y1: float = 0.35
+@export var wall_cable_y2: float = 0.55
+
 var path_points: Array = []                  # Vector3[] — positions monde
 var path_tangents: Array = []                # Vector3[] — direction locale
 var path_curve: Curve3D = null               # spline Catmull-Rom pour sampling smooth
@@ -85,12 +92,6 @@ func _build() -> void:
 # v1_11, v1_15…). Mesh continu via SurfaceTool, suit la spline avec un
 # sample tous les 4 m → ~870 segments × 2 câbles × 8 faces = peu de
 # vertices au total.
-@export var wall_cable_radius: float = 0.022
-@export var wall_cable_x_local: float = -1.55  # contre la paroi gauche (rayon - 40 cm)
-@export var wall_cable_sample_m: float = 4.0
-@export var wall_cable_y1: float = 0.35
-@export var wall_cable_y2: float = 0.55
-
 func _build_wall_cables() -> void:
 	var mat: StandardMaterial3D = StandardMaterial3D.new()
 	mat.albedo_color = Color(0.08, 0.08, 0.09)
