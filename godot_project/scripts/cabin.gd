@@ -124,7 +124,9 @@ func _build_interior() -> void:
 	interior_root.name = "Interior"
 	add_child(interior_root)
 	_build_floor_ceiling()
-	# Pas de dashboard 3D (était moche et obstruait la vue) → tout passe en HUD
+	_build_dashboard()           # pupitre Von Roll 3D (refondu d'après photos)
+	_build_cctv_monitor()        # moniteur CCTV plafond gauche (4 caméras)
+	_build_windshield()          # pare-brise courbe devant le conducteur
 	_build_driver_seat()
 	_build_passenger_seats()
 	_build_passengers()
@@ -132,10 +134,14 @@ func _build_interior() -> void:
 
 
 func _build_floor_ceiling() -> void:
-	# Sol cabine — visible depuis FPV (sous les sièges, dans l'aisle)
+	# Sol cabine — plancher caillebotis sombre (matériau acier mat),
+	# bien plus contrasté que la dalle béton du tunnel pour qu'on
+	# distingue clairement "intérieur" vs "voie" depuis le siège.
 	var floor_mat: StandardMaterial3D = StandardMaterial3D.new()
-	floor_mat.albedo_color = Color(0.22, 0.22, 0.25)
-	floor_mat.roughness = 0.65
+	floor_mat.albedo_color = Color(0.15, 0.15, 0.17)
+	floor_mat.roughness = 0.35
+	floor_mat.metallic = 0.6
+	floor_mat.metallic_specular = 0.4
 	floor_mat.uv1_scale = Vector3(8.0, 16.0, 1.0)
 
 	var floor_mesh: BoxMesh = BoxMesh.new()
@@ -344,6 +350,41 @@ func _build_dashboard() -> void:
 		led.position = Vector3(-0.6 + float(i) * 0.4, 0.18, z_dash + 0.21)
 		interior_root.add_child(led)
 
+	# 2 mushrooms E-STOP rouges (gauche / droite) — comme sur le vrai
+	# pupitre Von Roll. Anneau jaune + coiffe rouge bombée.
+	var estop_yellow: StandardMaterial3D = StandardMaterial3D.new()
+	estop_yellow.albedo_color = Color(0.80, 0.72, 0.10)
+	estop_yellow.roughness = 0.6
+	var estop_red: StandardMaterial3D = StandardMaterial3D.new()
+	estop_red.albedo_color = Color(0.90, 0.12, 0.10)
+	estop_red.roughness = 0.35
+	estop_red.metallic = 0.1
+	for side in [-1.0, 1.0]:
+		var ring: MeshInstance3D = MeshInstance3D.new()
+		var ring_mesh: CylinderMesh = CylinderMesh.new()
+		ring_mesh.top_radius = 0.045
+		ring_mesh.bottom_radius = 0.045
+		ring_mesh.height = 0.012
+		ring_mesh.radial_segments = 16
+		ring_mesh.material = estop_yellow
+		ring.mesh = ring_mesh
+		ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		ring.position = Vector3(side * 0.78, screen_y - 0.04, screen_z + 0.01)
+		ring.rotation = Vector3(PI * 0.5 - 0.30, 0.0, 0.0)
+		interior_root.add_child(ring)
+		var cap: MeshInstance3D = MeshInstance3D.new()
+		var cap_mesh: SphereMesh = SphereMesh.new()
+		cap_mesh.radius = 0.036
+		cap_mesh.height = 0.040
+		cap_mesh.radial_segments = 14
+		cap_mesh.rings = 5
+		cap_mesh.material = estop_red
+		cap.mesh = cap_mesh
+		cap.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		cap.position = Vector3(side * 0.78, screen_y - 0.02, screen_z + 0.013)
+		cap.rotation = Vector3(-0.30, 0.0, 0.0)
+		interior_root.add_child(cap)
+
 	# Volant / poignée de commande, plus bas pour ne pas obstruer
 	var wheel: MeshInstance3D = MeshInstance3D.new()
 	wheel.name = "ControlWheel"
@@ -372,6 +413,108 @@ func _make_dash_label(pos: Vector3, txt: String, col: Color) -> Label3D:
 	lbl.rotation = Vector3(-0.25, 0.0, 0.0)
 	interior_root.add_child(lbl)
 	return lbl
+
+
+# ---------------------------------------------------------------------------
+# Moniteur CCTV plafond — plaque noire avec 4 cellules bleu nuit (réplique
+# du moniteur 2×2 visible en haut à gauche du pare-brise sur toutes les
+# photos du vrai cockpit Perce-Neige). Cellules émissives.
+# ---------------------------------------------------------------------------
+
+func _build_cctv_monitor() -> void:
+	var z_mon: float = -train_length * 0.5 + 1.7
+	var bezel_mat: StandardMaterial3D = StandardMaterial3D.new()
+	bezel_mat.albedo_color = Color(0.05, 0.05, 0.06)
+	bezel_mat.roughness = 0.5
+	bezel_mat.metallic = 0.2
+
+	var screen_mat: StandardMaterial3D = StandardMaterial3D.new()
+	screen_mat.albedo_color = Color(0.05, 0.08, 0.14)
+	screen_mat.emission_enabled = true
+	screen_mat.emission = Color(0.20, 0.40, 0.65)
+	screen_mat.emission_energy_multiplier = 0.55
+	screen_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+
+	# Boîtier du moniteur, plafond avant gauche, légèrement orienté
+	# vers le siège conducteur (rotation Y +0.30 rad).
+	var body: MeshInstance3D = MeshInstance3D.new()
+	body.name = "CctvBody"
+	var body_mesh: BoxMesh = BoxMesh.new()
+	body_mesh.size = Vector3(0.32, 0.22, 0.04)
+	body_mesh.material = bezel_mat
+	body.mesh = body_mesh
+	body.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	body.position = Vector3(-0.85, 1.30, z_mon)
+	body.rotation = Vector3(0.0, 0.30, 0.0)
+	interior_root.add_child(body)
+
+	# 4 cellules 2×2 émissives (alignées avec la rotation du body)
+	var ang: float = 0.30
+	var c_ang: float = cos(ang)
+	var s_ang: float = sin(ang)
+	for r in range(2):
+		for c in range(2):
+			var cell: MeshInstance3D = MeshInstance3D.new()
+			var cell_mesh: BoxMesh = BoxMesh.new()
+			cell_mesh.size = Vector3(0.14, 0.095, 0.005)
+			cell_mesh.material = screen_mat
+			cell.mesh = cell_mesh
+			cell.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			var dx: float = (-0.075 + float(c) * 0.150)
+			var dy: float = (+0.052 - float(r) * 0.104)
+			cell.position = Vector3(
+				-0.85 + dx * c_ang,
+				1.30 + dy,
+				z_mon - dx * s_ang + 0.022)
+			cell.rotation = Vector3(0.0, ang, 0.0)
+			interior_root.add_child(cell)
+
+
+# ---------------------------------------------------------------------------
+# Pare-brise courbe — 3 vitres légèrement angulées + 2 montants noirs
+# entre, pour suggérer la courbure du pare-brise réel. Vitres transparentes
+# semi-réfléchissantes (très peu opaques, ne masque pas le tunnel).
+# ---------------------------------------------------------------------------
+
+func _build_windshield() -> void:
+	var z_glass: float = -train_length * 0.5 + 1.0   # 1m devant la caméra FPV
+	var glass_mat: StandardMaterial3D = StandardMaterial3D.new()
+	glass_mat.albedo_color = Color(0.55, 0.65, 0.75, 0.12)
+	glass_mat.roughness = 0.05
+	glass_mat.metallic = 0.0
+	glass_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	glass_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+
+	var frame_mat: StandardMaterial3D = StandardMaterial3D.new()
+	frame_mat.albedo_color = Color(0.06, 0.06, 0.07)
+	frame_mat.roughness = 0.55
+	frame_mat.metallic = 0.2
+
+	for i in range(3):
+		var pane: MeshInstance3D = MeshInstance3D.new()
+		var pane_mesh: BoxMesh = BoxMesh.new()
+		pane_mesh.size = Vector3(0.95, 1.20, 0.010)
+		pane_mesh.material = glass_mat
+		pane.mesh = pane_mesh
+		pane.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		var ang2: float = (float(i) - 1.0) * 0.22
+		pane.position = Vector3(sin(ang2) * 0.95, 1.00,
+				z_glass + cos(ang2) * 0.04)
+		pane.rotation = Vector3(0.0, ang2, 0.0)
+		interior_root.add_child(pane)
+
+		if i < 2:
+			var post: MeshInstance3D = MeshInstance3D.new()
+			var post_mesh: BoxMesh = BoxMesh.new()
+			post_mesh.size = Vector3(0.04, 1.25, 0.07)
+			post_mesh.material = frame_mat
+			post.mesh = post_mesh
+			post.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			var ang_post: float = (float(i) - 0.5) * 0.22
+			post.position = Vector3(sin(ang_post) * 1.05, 1.00,
+					z_glass + cos(ang_post) * 0.04)
+			post.rotation = Vector3(0.0, ang_post, 0.0)
+			interior_root.add_child(post)
 
 
 func _build_driver_seat() -> void:
