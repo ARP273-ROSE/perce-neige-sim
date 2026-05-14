@@ -46,6 +46,59 @@ func _populate() -> void:
 			_add_neon(s, neon_mesh, neon_mat, neon_color)
 		s += spacing_m
 
+	# Signaux LED vertes au plafond de chaque entrée du croisement Abt
+	# (cf. photos v1_17 et frames V2 d'entrée du loop : on voit 2 LED
+	# vertes brillantes côte à côte au-dessus du tunnel à chaque bout
+	# de la chambre).
+	_add_crossing_signals()
+
+
+func _add_crossing_signals() -> void:
+	var green: Color = Color(0.3, 1.0, 0.4)
+	var led_mat: StandardMaterial3D = StandardMaterial3D.new()
+	led_mat.albedo_color = Color(0.8, 1.0, 0.85)
+	led_mat.emission_enabled = true
+	led_mat.emission = green
+	led_mat.emission_energy_multiplier = 8.0
+	led_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+
+	var led_mesh: SphereMesh = SphereMesh.new()
+	led_mesh.radius = 0.06
+	led_mesh.height = 0.12
+	led_mesh.radial_segments = 10
+	led_mesh.rings = 6
+
+	# Placer une paire (côte à côte) à chaque bord du loop + une au milieu.
+	var ceiling_y: float = 1.55  # un peu sous le plafond du tunnel (R=1.95)
+	var pair_dx: float = 0.18    # écart entre les 2 LED de la paire
+	var positions: Array = [
+		PNConstants.PASSING_START + 4.0,
+		(PNConstants.PASSING_START + PNConstants.PASSING_END) * 0.5,
+		PNConstants.PASSING_END - 4.0,
+	]
+	for s_led in positions:
+		var xform: Transform3D = tunnel.transform_at(s_led)
+		var right: Vector3 = xform.basis.x
+		var up: Vector3 = xform.basis.y
+		var base_pos: Vector3 = xform.origin + up * ceiling_y
+		for side in [-1.0, 1.0]:
+			var pos: Vector3 = base_pos + right * (pair_dx * side)
+			# Lumière diffuse omnidirectionnelle
+			var light: OmniLight3D = OmniLight3D.new()
+			light.position = pos
+			light.light_color = green
+			light.light_energy = 3.0
+			light.omni_range = 6.0
+			light.shadow_enabled = false
+			add_child(light)
+			# Mesh visible (sphère émissive)
+			var led: MeshInstance3D = MeshInstance3D.new()
+			led.mesh = led_mesh
+			led.set_surface_override_material(0, led_mat)
+			led.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			add_child(led)
+			led.global_position = pos
+
 
 func _add_neon(s: float, mesh: BoxMesh, neon_mat: StandardMaterial3D, color: Color) -> void:
 	var xform: Transform3D = tunnel.transform_at(s)
