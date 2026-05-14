@@ -7530,8 +7530,12 @@ class GameWidget(QWidget):
         p.drawRoundedRect(rect.adjusted(1, 1, -1, -1), 3, 3)
         # Texte "DESTINATION GLACIER" en lettres ampoules orange.
         # Effet ampoules : on dessine d'abord un halo, puis le glyphe orange.
+        # Note portabilité : QFont("Arial", Weight.Black) résout vers Arial Black
+        # sur Windows et fallback sur la sans-serif noire la plus proche sur
+        # Linux/macOS (DejaVu Sans Bold, Helvetica Black, etc.) — plus portable
+        # que QFont("Arial Black", …) qui dépend du nom exact de la famille.
         title = "DESTINATION GLACIER"
-        p.setFont(QFont("Arial Black", max(int(bh * 0.42), 10),
+        p.setFont(QFont("Arial", max(int(bh * 0.42), 10),
                         QFont.Weight.Black))
         text_rect = QRectF(bx + 4, by + 2, bw - 8, bh * 0.62)
         # Halo orange diffus
