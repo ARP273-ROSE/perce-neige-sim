@@ -23,10 +23,10 @@ extends Node3D
 @export var slab_thickness: float = 0.25     # épaisseur dalle béton
 @export var slab_width: float = 3.20         # largeur dalle (déborde sous banquettes)
 
-@export var sleeper_spacing: float = 0.60    # entraxe traverses (600 mm)
-@export var sleeper_length: float = 1.80     # longueur traverse
-@export var sleeper_width: float = 0.24      # largeur traverse
-@export var sleeper_height: float = 0.16     # épaisseur traverse
+@export var sleeper_spacing: float = 0.95    # entraxe blocs (≈ 950 mm, gaps visibles)
+@export var sleeper_length: float = 1.55     # longueur transverse (~bord à bord rails)
+@export var sleeper_width: float = 0.36      # largeur (sens voie), gap ≈ 60 cm
+@export var sleeper_height: float = 0.20     # épaisseur (un peu plus haut, profil béton apparent)
 
 @export var guide_spacing: float = 13.57     # entraxe RÉEL : 3474 m / 256 paires (source CFD)
 @export var pulley_radius: float = 0.15      # rayon poulie/galet (300 mm)
