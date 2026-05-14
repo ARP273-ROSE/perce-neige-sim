@@ -2759,12 +2759,13 @@ class SoundSystem:
     def update_ambient(self, speed: float) -> None:
         """Crossfade real-cabin ambient loops based on speed.
 
-        Two parallel loops run : a 25-second slow/approach segment and
-        a 60-second steady-cruise segment, both extracted from the real
-        10-minute HD cabin recording. The mix is driven by the current
-        speed so that low speeds sound like the start-up/arrival phases
-        and cruise sounds exactly like cruise, instead of hearing the
-        same 11-second clip on repeat.
+        Two parallel loops run : a 30-second cruise variant clip
+        (real_cruise_loop_v2.wav) for low/approach speeds and the
+        primary 30-second cruise clip (real_cruise_loop.wav) for
+        steady-state cruise, both extracted from the 2026 4K cabin
+        recording. The mix is driven by the current speed so that
+        low speeds sound like the start-up/arrival phases and cruise
+        sounds exactly like cruise.
 
         Volume model (both loops summed, then scaled by |v|) :
           - |v| below 1 m/s      → both fade to zero (stationary silence)
@@ -7213,17 +7214,18 @@ class GameWidget(QWidget):
         # Vu au-dessus du pare-brise, simule la signalétique de la vraie
         # gare (rouge "ALTITUDE EXPERIENCE" en aval, ampoules orange
         # "DESTINATION GLACIER" en amont).
+        # Skippé en fenêtre étroite (banner_w<280) pour ne jamais peindre
+        # hors zone ni se superposer au CCTV.
         if abs(tr.v) < 0.3:
-            if tr.s < 30.0:
-                self._draw_platform_banner(p, QRectF(
-                    vx + frame_w + 200, vy + 4,
-                    max(vw - frame_w - cabin_wall_w - 220, 280),
-                    min(vh * 0.10, 70)), at_lower=True)
-            elif tr.s > LENGTH - 30.0:
-                self._draw_platform_banner(p, QRectF(
-                    vx + frame_w + 200, vy + 4,
-                    max(vw - frame_w - cabin_wall_w - 220, 280),
-                    min(vh * 0.10, 70)), at_lower=False)
+            banner_x = vx + frame_w + 200
+            banner_w = vw - frame_w - cabin_wall_w - 220
+            if banner_w >= 280:
+                banner_rect = QRectF(banner_x, vy + 4,
+                                     banner_w, min(vh * 0.10, 70))
+                if tr.s < 30.0:
+                    self._draw_platform_banner(p, banner_rect, at_lower=True)
+                elif tr.s > LENGTH - 30.0:
+                    self._draw_platform_banner(p, banner_rect, at_lower=False)
 
         # Bottom frame — console area
         console_h = vh * 0.22
@@ -7569,6 +7571,9 @@ class GameWidget(QWidget):
         cell_h = (bh - gap) * 0.5
         # Petite phase animée pour scanlines + flicker
         t = self._board_animation * 4.0
+        # Horloge système calculée 1× hors de la boucle (4 cellules → 1 appel
+        # datetime.now() au lieu de 4 × ~60Hz)
+        clock_text = datetime.now().strftime("%H:%M")
         for idx in range(4):
             r, c = divmod(idx, 2)
             cx = bx + c * (cell_w + gap)
@@ -7615,11 +7620,10 @@ class GameWidget(QWidget):
                        int(Qt.AlignmentFlag.AlignLeft),
                        f"CH{idx + 1}")
             # mini horloge cabine = heure système du PC (comme sur le
-            # vrai moniteur)
-            now = datetime.now()
+            # vrai moniteur). clock_text est calculé 1× hors de la boucle.
             p.drawText(QRectF(cx + 2, cy + 1, cell_w - 4, 8),
                        int(Qt.AlignmentFlag.AlignRight),
-                       now.strftime("%H:%M"))
+                       clock_text)
 
         # Petit point d'enregistrement clignotant en bas-droite du bezel
         if int(t) % 2 == 0:
@@ -7805,22 +7809,33 @@ class GameWidget(QWidget):
                      tr.lights_cabin, col_on=QColor(255, 240, 200))
 
         # ----- 2 boutons coup-de-poing E-STOP (bas gauche / bas droit) -----
+        # Cosmétique : au repos = rouge mat (mushroom relâché) ; engagé
+        # = rouge vif + halo flash autour pour signaler clairement l'état.
+        # (Inversé par rapport à la version initiale qui assombrissait
+        # à l'engagement — peu lisible côté joueur.)
         estop_r = min(ph * 0.13, 9)
         ring_r = estop_r + 2
-        cap_on = QColor(220, 40, 30) if not tr.emergency else QColor(140, 20, 15)
-        cap_off = cap_on
+        engaged = tr.emergency
+        cap_col = QColor(245, 60, 45) if engaged else QColor(180, 35, 30)
         for ex, ey in (
             (x + 14, y + ph - estop_r - 4),
             (x + pw - 14, y + ph - estop_r - 4),
         ):
+            # Halo flash si engagé (clignotant léger via _board_animation)
+            if engaged:
+                flash = 0.55 + 0.45 * math.sin(self._board_animation * 8.0)
+                halo_col = QColor(255, 80, 60, int(120 * flash))
+                p.setPen(Qt.PenStyle.NoPen)
+                p.setBrush(QBrush(halo_col))
+                p.drawEllipse(QPointF(ex, ey), ring_r + 5, ring_r + 5)
             # Anneau jaune
             p.setPen(Qt.PenStyle.NoPen)
             p.setBrush(QBrush(QColor(190, 175, 30)))
             p.drawEllipse(QPointF(ex, ey), ring_r, ring_r)
             # Coiffe rouge
             grad_e = QRadialGradient(ex - 1, ey - 1, estop_r)
-            grad_e.setColorAt(0, cap_on.lighter(140))
-            grad_e.setColorAt(1, cap_on)
+            grad_e.setColorAt(0, cap_col.lighter(140))
+            grad_e.setColorAt(1, cap_col)
             p.setBrush(QBrush(grad_e))
             p.drawEllipse(QPointF(ex, ey), estop_r, estop_r)
 

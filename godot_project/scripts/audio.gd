@@ -47,7 +47,12 @@ func _create_player(path: String, vol_db: float, loop: bool) -> AudioStreamPlaye
 	if stream is AudioStreamWAV and loop:
 		var wav: AudioStreamWAV = stream
 		wav.loop_mode = AudioStreamWAV.LOOP_FORWARD
-		wav.loop_end = wav.data.size() / (4 if wav.stereo else 2)
+		# NE PAS calculer loop_end depuis data.size() : avec compress/mode=2
+		# (QOA, défaut Godot 4) ou IMA-ADPCM, data.size() représente des bytes
+		# compressés, pas des samples PCM → loop_end faux → coupe prématurée.
+		# loop_end=0 demande à Godot d'utiliser la fin réelle du buffer décodé.
+		wav.loop_begin = 0
+		wav.loop_end = 0
 	player.stream = stream
 	player.volume_db = vol_db
 	player.bus = "Master"

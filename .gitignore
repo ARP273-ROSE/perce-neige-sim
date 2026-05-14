@@ -10,6 +10,10 @@ venv/
 sons/videos/
 # Reference videos shot on the real funicular (April 2026, 4K HEVC, ~3.7 GB)
 sons/photos/*.mp4
+# Reference photos shot on the real funicular (~150 MB total — used locally
+# for visual reference + frame extraction, not bundled with the build)
+sons/photos/*.jpg
+sons/photo_*.jpg
 
 # WAV cache (generated at runtime)
 *.wav
