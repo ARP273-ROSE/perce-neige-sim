@@ -2670,12 +2670,17 @@ class SoundSystem:
             path = self._ambient_wavs.get("departure_ambient")
         if path is None or not path.exists():
             return
-        self._fx_player.setLoops(1)
-        spath = str(path)
-        if self._fx_loaded_path != spath:
-            self._fx_player.setSource(QUrl.fromLocalFile(spath))
-            self._fx_loaded_path = spath
-        self._fx_player.play()
+        try:
+            self._fx_player.setLoops(1)
+            spath = str(path)
+            if self._fx_loaded_path != spath:
+                self._fx_player.setSource(QUrl.fromLocalFile(spath))
+                self._fx_loaded_path = spath
+            self._fx_player.play()
+        except Exception:
+            # WAV corrompu, backend audio Qt cassé, ou setSource hostile :
+            # on no-op silencieusement plutôt que de casser la frame courante.
+            pass
 
     def start_horn(self) -> None:
         """Start playing the horn (looped while held)."""
