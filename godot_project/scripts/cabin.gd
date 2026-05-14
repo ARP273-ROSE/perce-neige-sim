@@ -424,27 +424,43 @@ func _make_dash_label(pos: Vector3, txt: String, col: Color) -> Label3D:
 # ---------------------------------------------------------------------------
 
 func _build_console_pupitre() -> void:
-	# Géométrie : tube horizontal le long de X, posé sur 2 supports métal
-	var z_console: float = -train_length * 0.5 + 5.2   # 2.8m devant la caméra FPV (à z=-12)
-	var y_top: float = 0.50                            # hauteur du sommet du tube
-	var tube_radius: float = 0.085                     # tube fin (≈ 17 cm de diamètre)
-	var tube_length: float = 1.20                      # 1.2 m de large
-	var tube_y: float = y_top - tube_radius            # centre du cylindre
+	# Géométrie d'après photo HD 20260426_094402.jpg (gros plan pupitre) :
+	#   - tube blanc cassé mat horizontal, calé bas et incliné vers le siège
+	#   - plaque alu rectangulaire encastrée sur le top du tube
+	#   - écran LCD couleur à gauche de la plaque
+	#   - 4 LED vertes "POSTES 1+8 / 7+10" en haut + 4 boutons noirs au
+	#     centre + 2 LED blanches "ÉCLAIRAGE" en bas
+	#   - PAS de mushrooms sur le pupitre (le vrai cockpit a les arrêts
+	#     d'urgence ailleurs — sur la console latérale ou la cloison)
+	var z_console: float = -train_length * 0.5 + 5.2   # 2.8m devant caméra
+	var y_top: float = 0.52                            # hauteur sommet tube
+	var tube_radius: float = 0.090                     # ≈ 18 cm de diamètre
+	var tube_length: float = 1.10                      # 1.10 m de large
+	var tube_y: float = y_top - tube_radius
+	var tilt: float = 0.07                             # léger penchant vers conducteur
 
-	# Matériaux
+	# ----- Matériaux -----------------------------------------------------
 	var tube_mat: StandardMaterial3D = StandardMaterial3D.new()
-	tube_mat.albedo_color = Color(0.86, 0.85, 0.82)    # blanc cassé brillant
-	tube_mat.roughness = 0.35
-	tube_mat.metallic = 0.25
-	tube_mat.metallic_specular = 0.6
+	tube_mat.albedo_color = Color(0.84, 0.83, 0.81)    # blanc cassé MAT
+	tube_mat.roughness = 0.65
+	tube_mat.metallic = 0.05
 
-	var screen_mat: StandardMaterial3D = StandardMaterial3D.new()
-	screen_mat.albedo_color = Color(0.10, 0.40, 0.18)
-	screen_mat.emission_enabled = true
-	screen_mat.emission = Color(0.20, 0.85, 0.35)
-	screen_mat.emission_energy_multiplier = 0.60
-	screen_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	# Plaque alu brossé encastrée sur le top
+	var alu_mat: StandardMaterial3D = StandardMaterial3D.new()
+	alu_mat.albedo_color = Color(0.78, 0.78, 0.80)
+	alu_mat.roughness = 0.42
+	alu_mat.metallic = 0.85
+	alu_mat.metallic_specular = 0.9
 
+	# Écran LCD couleur (interface PC industrielle, bleuté pâle)
+	var lcd_mat: StandardMaterial3D = StandardMaterial3D.new()
+	lcd_mat.albedo_color = Color(0.82, 0.88, 0.96)
+	lcd_mat.emission_enabled = true
+	lcd_mat.emission = Color(0.65, 0.78, 0.95)
+	lcd_mat.emission_energy_multiplier = 0.55
+	lcd_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+
+	# LED verte (POSTE / PORTES)
 	var led_green: StandardMaterial3D = StandardMaterial3D.new()
 	led_green.albedo_color = Color(0.20, 0.95, 0.30)
 	led_green.emission_enabled = true
@@ -452,128 +468,159 @@ func _build_console_pupitre() -> void:
 	led_green.emission_energy_multiplier = 1.4
 	led_green.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 
+	# LED blanche (ÉCLAIRAGE on)
 	var led_white: StandardMaterial3D = StandardMaterial3D.new()
 	led_white.albedo_color = Color(0.98, 0.98, 0.95)
 	led_white.emission_enabled = true
 	led_white.emission = Color(1.0, 1.0, 0.95)
-	led_white.emission_energy_multiplier = 1.2
+	led_white.emission_energy_multiplier = 1.4
 	led_white.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 
-	var estop_yellow: StandardMaterial3D = StandardMaterial3D.new()
-	estop_yellow.albedo_color = Color(0.80, 0.72, 0.10)
-	estop_yellow.roughness = 0.5
-
-	var estop_red: StandardMaterial3D = StandardMaterial3D.new()
-	estop_red.albedo_color = Color(0.92, 0.15, 0.10)
-	estop_red.roughness = 0.30
+	# Bouton noir (poussoir / sélecteur)
+	var btn_black: StandardMaterial3D = StandardMaterial3D.new()
+	btn_black.albedo_color = Color(0.08, 0.08, 0.09)
+	btn_black.roughness = 0.55
+	btn_black.metallic = 0.15
 
 	var bracket_mat: StandardMaterial3D = StandardMaterial3D.new()
 	bracket_mat.albedo_color = Color(0.25, 0.25, 0.28)
 	bracket_mat.roughness = 0.45
 	bracket_mat.metallic = 0.7
 
-	# --- Tube principal (cylindre couché le long de X) -------------------
-	# CylinderMesh par défaut : axe Y. On rotate Z=PI/2 pour aligner sur X.
+	# ----- Tube principal (cylindre couché le long de X, incliné) -------
+	# Rotation Z=π/2 pour aligner l'axe Y du cylindre sur X.
+	# Le tilt vers le conducteur se fait via une rotation X additionnelle.
 	var tube: MeshInstance3D = MeshInstance3D.new()
 	tube.name = "PupitreTube"
 	var tube_mesh: CylinderMesh = CylinderMesh.new()
 	tube_mesh.top_radius = tube_radius
 	tube_mesh.bottom_radius = tube_radius
 	tube_mesh.height = tube_length
-	tube_mesh.radial_segments = 20
+	tube_mesh.radial_segments = 24
 	tube_mesh.material = tube_mat
 	tube.mesh = tube_mesh
 	tube.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	tube.position = Vector3(0.0, tube_y, z_console)
-	tube.rotation = Vector3(0.0, 0.0, PI * 0.5)
+	tube.rotation = Vector3(tilt, 0.0, PI * 0.5)
 	interior_root.add_child(tube)
 
-	# --- 2 supports métal verticaux qui descendent vers le sol -----------
-	for x_brk in [-tube_length * 0.35, tube_length * 0.35]:
+	# ----- 2 supports métal verticaux descendant au sol -----------------
+	for x_brk in [-tube_length * 0.38, tube_length * 0.38]:
 		var brk: MeshInstance3D = MeshInstance3D.new()
 		var brk_mesh: BoxMesh = BoxMesh.new()
-		brk_mesh.size = Vector3(0.025, tube_y + 0.95, 0.025)   # descend jusqu'au sol
+		brk_mesh.size = Vector3(0.022, tube_y + 0.95, 0.022)
 		brk_mesh.material = bracket_mat
 		brk.mesh = brk_mesh
 		brk.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		brk.position = Vector3(x_brk, (tube_y - 0.95) * 0.5, z_console + tube_radius)
+		brk.position = Vector3(x_brk, (tube_y - 0.95) * 0.5,
+				z_console + tube_radius * 0.6)
 		interior_root.add_child(brk)
 
-	# --- Écran tactile sur le top, côté gauche du pupitre ---------------
-	# Encastré tangent au sommet du cylindre (y = y_top + epsilon)
+	# ----- Plaque alu encastrée sur le top (la "console") ----------------
+	# 35×18 cm posée tangente au sommet du tube, légèrement inclinée
+	# pour suivre le tube (rotation X = tilt).
+	var plate: MeshInstance3D = MeshInstance3D.new()
+	plate.name = "PupitreAluPlate"
+	var plate_mesh: BoxMesh = BoxMesh.new()
+	plate_mesh.size = Vector3(0.55, 0.006, 0.16)
+	plate_mesh.material = alu_mat
+	plate.mesh = plate_mesh
+	plate.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	# Position : au-dessus du tube, à droite (côté boutons sur la photo)
+	plate.position = Vector3(0.10, y_top + 0.005,
+			z_console - sin(tilt) * 0.03)
+	plate.rotation = Vector3(tilt, 0.0, 0.0)
+	interior_root.add_child(plate)
+
+	# ----- Écran LCD couleur à gauche du pupitre (face supérieure) ------
+	# Encastré directement sur le tube (pas sur la plaque alu, à gauche
+	# de celle-ci).
 	var screen: MeshInstance3D = MeshInstance3D.new()
 	screen.name = "PupitreScreen"
 	var screen_mesh: BoxMesh = BoxMesh.new()
-	screen_mesh.size = Vector3(0.18, 0.005, 0.10)
-	screen_mesh.material = screen_mat
+	screen_mesh.size = Vector3(0.16, 0.005, 0.12)
+	screen_mesh.material = lcd_mat
 	screen.mesh = screen_mesh
 	screen.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	screen.position = Vector3(-0.38, y_top + 0.003, z_console)
+	screen.position = Vector3(-0.31, y_top + 0.004,
+			z_console - sin(tilt) * 0.03)
+	screen.rotation = Vector3(tilt, 0.0, 0.0)
 	interior_root.add_child(screen)
 
-	# --- 8 voyants LED verts en 2 rangées au centre (POSTE + PORTES) ----
-	# Disposition : 4 voyants × 2 rangées (avant/arrière sur l'axe Z)
-	var led_size: float = 0.012
-	for row in [0, 1]:
-		var z_off: float = (-0.025 if row == 0 else 0.025)
-		for i in range(4):
-			var led: MeshInstance3D = MeshInstance3D.new()
-			var led_mesh: SphereMesh = SphereMesh.new()
-			led_mesh.radius = led_size
-			led_mesh.height = led_size * 2.0
-			led_mesh.radial_segments = 10
-			led_mesh.rings = 5
-			led_mesh.material = led_green
-			led.mesh = led_mesh
-			led.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-			var x_led: float = -0.10 + float(i) * 0.06   # 4 LED espacées de 6 cm
-			led.position = Vector3(x_led, y_top + 0.002, z_console + z_off)
-			interior_root.add_child(led)
+	# Bezel noir autour de l'écran LCD
+	var bezel: MeshInstance3D = MeshInstance3D.new()
+	var bezel_mesh: BoxMesh = BoxMesh.new()
+	bezel_mesh.size = Vector3(0.18, 0.005, 0.14)
+	bezel_mesh.material = btn_black
+	bezel.mesh = bezel_mesh
+	bezel.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	bezel.position = Vector3(-0.31, y_top + 0.0035,
+			z_console - sin(tilt) * 0.03)
+	bezel.rotation = Vector3(tilt, 0.0, 0.0)
+	interior_root.add_child(bezel)
 
-	# --- 4 voyants blancs ÉCLAIRAGE/FREINS sur la droite -----------------
+	# ----- 4 LED VERTES en haut de la plaque alu (POSTES 1+8 / 7+10) ----
+	# Disposition : 4 LED alignées le long de X, légèrement vers l'arrière
+	# de la plaque (z plus petit côté tunnel).
+	var led_r: float = 0.012
+	var z_top_row: float = z_console - 0.045
 	for i in range(4):
+		var led: MeshInstance3D = MeshInstance3D.new()
+		var led_mesh: SphereMesh = SphereMesh.new()
+		led_mesh.radius = led_r
+		led_mesh.height = led_r * 2.0
+		led_mesh.radial_segments = 12
+		led_mesh.rings = 6
+		led_mesh.material = led_green
+		led.mesh = led_mesh
+		led.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		var x_led: float = -0.02 + float(i) * 0.06
+		led.position = Vector3(x_led, y_top + 0.013, z_top_row)
+		interior_root.add_child(led)
+
+	# ----- 4 boutons noirs au centre de la plaque (sélecteurs) ----------
+	var z_mid_row: float = z_console - 0.005
+	for i in range(4):
+		var btn: MeshInstance3D = MeshInstance3D.new()
+		var btn_mesh: CylinderMesh = CylinderMesh.new()
+		btn_mesh.top_radius = 0.014
+		btn_mesh.bottom_radius = 0.014
+		btn_mesh.height = 0.010
+		btn_mesh.radial_segments = 14
+		btn_mesh.material = btn_black
+		btn.mesh = btn_mesh
+		btn.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		var x_btn: float = -0.02 + float(i) * 0.06
+		btn.position = Vector3(x_btn, y_top + 0.012, z_mid_row)
+		interior_root.add_child(btn)
+
+	# ----- 2 LED BLANCHES en bas de la plaque (ÉCLAIRAGE phares/cabine) -
+	var z_bot_row: float = z_console + 0.035
+	for i in range(2):
 		var bled: MeshInstance3D = MeshInstance3D.new()
 		var bled_mesh: SphereMesh = SphereMesh.new()
-		bled_mesh.radius = led_size
-		bled_mesh.height = led_size * 2.0
-		bled_mesh.radial_segments = 10
-		bled_mesh.rings = 5
+		bled_mesh.radius = led_r
+		bled_mesh.height = led_r * 2.0
+		bled_mesh.radial_segments = 12
+		bled_mesh.rings = 6
 		bled_mesh.material = led_white
 		bled.mesh = bled_mesh
 		bled.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		var col_idx: int = i % 2
-		var row_idx: int = i / 2
-		var x_led2: float = 0.22 + float(col_idx) * 0.04
-		var z_led2: float = z_console + (-0.025 if row_idx == 0 else 0.025)
-		bled.position = Vector3(x_led2, y_top + 0.002, z_led2)
+		var x_bled: float = 0.10 + float(i) * 0.055
+		bled.position = Vector3(x_bled, y_top + 0.013, z_bot_row)
 		interior_root.add_child(bled)
 
-	# --- 2 mushrooms E-STOP rouges aux extrémités du pupitre -------------
-	for x_mu in [-tube_length * 0.48, tube_length * 0.48]:
-		# Anneau jaune (cylindre aplati)
-		var ring: MeshInstance3D = MeshInstance3D.new()
-		var ring_mesh: CylinderMesh = CylinderMesh.new()
-		ring_mesh.top_radius = 0.032
-		ring_mesh.bottom_radius = 0.032
-		ring_mesh.height = 0.008
-		ring_mesh.radial_segments = 14
-		ring_mesh.material = estop_yellow
-		ring.mesh = ring_mesh
-		ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		ring.position = Vector3(x_mu, y_top + 0.005, z_console)
-		interior_root.add_child(ring)
-		# Coiffe rouge (sphère aplatie posée sur l'anneau)
-		var cap: MeshInstance3D = MeshInstance3D.new()
-		var cap_mesh: SphereMesh = SphereMesh.new()
-		cap_mesh.radius = 0.026
-		cap_mesh.height = 0.030
-		cap_mesh.radial_segments = 14
-		cap_mesh.rings = 6
-		cap_mesh.material = estop_red
-		cap.mesh = cap_mesh
-		cap.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		cap.position = Vector3(x_mu, y_top + 0.020, z_console)
-		interior_root.add_child(cap)
+	# ----- Lumière douce qui éclaire la plaque alu depuis le bas -------
+	# Suggère le rétroéclairage des LED (les LED elles-mêmes émissent
+	# faiblement, on ajoute une petite lumière pour donner du relief
+	# aux boutons noirs sans surcharger le moteur de lumières)
+	var fill: OmniLight3D = OmniLight3D.new()
+	fill.position = Vector3(0.10, y_top + 0.05, z_console)
+	fill.light_color = Color(0.85, 0.95, 1.0)
+	fill.light_energy = 0.6
+	fill.omni_range = 0.6
+	fill.shadow_enabled = false
+	interior_root.add_child(fill)
 
 
 # ---------------------------------------------------------------------------
