@@ -70,8 +70,89 @@ func _build() -> void:
 	_build_tunnel_section(mat, PNConstants.PASSING_START, PNConstants.PASSING_END, 0.0, "TunnelPassingChamber", true)
 	_build_tunnel_section(mat, PNConstants.PASSING_END, PNConstants.LENGTH, 0.0, "TunnelHigh", false)
 
+	# Câbles électriques le long du flanc gauche du tunnel (visibles sur
+	# toutes les frames intérieures du vrai funiculaire). 2 câbles
+	# parallèles, fixés à mi-hauteur, fins (~25 mm) et noirs.
+	_build_wall_cables()
+
 	if show_debug_path:
 		_draw_debug_path()
+
+
+# Câbles électriques posés sur le flanc gauche du tunnel.
+# Deux conduits parallèles épais de ~25 mm, fixés à mi-hauteur, qu'on voit
+# défiler dans toutes les frames intérieures du vrai funiculaire (v1_07,
+# v1_11, v1_15…). Mesh continu via SurfaceTool, suit la spline avec un
+# sample tous les 4 m → ~870 segments × 2 câbles × 8 faces = peu de
+# vertices au total.
+@export var wall_cable_radius: float = 0.022
+@export var wall_cable_x_local: float = -1.55  # contre la paroi gauche (rayon - 40 cm)
+@export var wall_cable_sample_m: float = 4.0
+@export var wall_cable_y1: float = 0.35
+@export var wall_cable_y2: float = 0.55
+
+func _build_wall_cables() -> void:
+	var mat: StandardMaterial3D = StandardMaterial3D.new()
+	mat.albedo_color = Color(0.08, 0.08, 0.09)
+	mat.roughness = 0.55
+	mat.metallic = 0.10
+
+	var n_steps: int = maxi(2, int(PNConstants.LENGTH / wall_cable_sample_m))
+	var radial: int = 8
+	for which in [0, 1]:
+		var y_off: float = wall_cable_y1 if which == 0 else wall_cable_y2
+		var st: SurfaceTool = SurfaceTool.new()
+		st.begin(Mesh.PRIMITIVE_TRIANGLES)
+		st.set_material(mat)
+
+		var prev_xform: Transform3D = transform_at(0.0)
+		for i in range(1, n_steps + 1):
+			var s_cur: float = float(i) / float(n_steps) * PNConstants.LENGTH
+			var cur_xform: Transform3D = transform_at(s_cur)
+
+			var p0: Vector3 = prev_xform.origin \
+				+ prev_xform.basis.x * wall_cable_x_local \
+				+ prev_xform.basis.y * y_off
+			var p1: Vector3 = cur_xform.origin \
+				+ cur_xform.basis.x * wall_cable_x_local \
+				+ cur_xform.basis.y * y_off
+
+			for k in range(radial):
+				var a0: float = float(k) / float(radial) * TAU
+				var a1: float = float(k + 1) / float(radial) * TAU
+				var c0: float = cos(a0)
+				var s0: float = sin(a0)
+				var c1: float = cos(a1)
+				var s1: float = sin(a1)
+				var off0_prev: Vector3 = prev_xform.basis.x * (c0 * wall_cable_radius) \
+					+ prev_xform.basis.y * (s0 * wall_cable_radius)
+				var off1_prev: Vector3 = prev_xform.basis.x * (c1 * wall_cable_radius) \
+					+ prev_xform.basis.y * (s1 * wall_cable_radius)
+				var off0_cur: Vector3 = cur_xform.basis.x * (c0 * wall_cable_radius) \
+					+ cur_xform.basis.y * (s0 * wall_cable_radius)
+				var off1_cur: Vector3 = cur_xform.basis.x * (c1 * wall_cable_radius) \
+					+ cur_xform.basis.y * (s1 * wall_cable_radius)
+
+				var v00: Vector3 = p0 + off0_prev
+				var v01: Vector3 = p0 + off1_prev
+				var v10: Vector3 = p1 + off0_cur
+				var v11: Vector3 = p1 + off1_cur
+
+				st.set_uv(Vector2(0, 0)); st.add_vertex(v00)
+				st.set_uv(Vector2(0, 1)); st.add_vertex(v10)
+				st.set_uv(Vector2(1, 1)); st.add_vertex(v11)
+				st.set_uv(Vector2(0, 0)); st.add_vertex(v00)
+				st.set_uv(Vector2(1, 1)); st.add_vertex(v11)
+				st.set_uv(Vector2(1, 0)); st.add_vertex(v01)
+
+			prev_xform = cur_xform
+
+		st.generate_normals()
+		var mi: MeshInstance3D = MeshInstance3D.new()
+		mi.name = "WallCable_%d" % which
+		mi.mesh = st.commit()
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(mi)
 
 
 # Construit un tronçon de tunnel entre s_start et s_end.
