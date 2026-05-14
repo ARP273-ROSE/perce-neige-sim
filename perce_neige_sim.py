@@ -7793,6 +7793,16 @@ class GameWidget(QWidget):
                 step = poste_w / 5
                 cx = ctl_x + poste_w + 6 + step * (i + 1)
                 _btn(cx, mid_y, led_r, doors_closed)
+            # Hit zones cliquables sur les 2 blocs PORTES → toggle portes (D),
+            # avec tooltip bilingue via self._key_tooltips[Qt.Key.Key_D].
+            portes_block_y = mid_y - row_h * 0.5
+            self._hit_zones.append(
+                (QRectF(ctl_x, portes_block_y, poste_w, row_h),
+                 int(Qt.Key.Key_D), False))
+            self._hit_zones.append(
+                (QRectF(ctl_x + poste_w + 6, portes_block_y,
+                        poste_w, row_h),
+                 int(Qt.Key.Key_D), False))
 
             # 3ème rangée : FREINS + ÉCLAIRAGE
             bot_y = mid_y + row_h
@@ -7804,15 +7814,38 @@ class GameWidget(QWidget):
                                   bot_y - row_h * 0.5 - 8, poste_w, 8),
                            int(Qt.AlignmentFlag.AlignHCenter), "ÉCLAIRAGE")
                 # FREINS : 2 voyants (service / urgence) blancs sur fond noir
-                _btn(ctl_x + poste_w * 0.35, bot_y, led_r,
+                freins_svc_cx = ctl_x + poste_w * 0.35
+                freins_urg_cx = ctl_x + poste_w * 0.70
+                _btn(freins_svc_cx, bot_y, led_r,
                      tr.brake > 0.05, col_on=QColor(255, 255, 255))
-                _btn(ctl_x + poste_w * 0.70, bot_y, led_r,
+                _btn(freins_urg_cx, bot_y, led_r,
                      tr.emergency, col_on=QColor(255, 80, 80))
+                # Hit zones FREINS : service = Space (hold), urgence = Key_4
+                hit_r = led_r + 3
+                self._hit_zones.append(
+                    (QRectF(freins_svc_cx - hit_r, bot_y - hit_r,
+                            hit_r * 2, hit_r * 2),
+                     int(Qt.Key.Key_Space), True))
+                self._hit_zones.append(
+                    (QRectF(freins_urg_cx - hit_r, bot_y - hit_r,
+                            hit_r * 2, hit_r * 2),
+                     int(Qt.Key.Key_4), False))
                 # ÉCLAIRAGE : phares + cabine, voyants blancs
-                _btn(ctl_x + poste_w + 6 + poste_w * 0.35, bot_y, led_r,
+                ecl_head_cx = ctl_x + poste_w + 6 + poste_w * 0.35
+                ecl_cab_cx = ctl_x + poste_w + 6 + poste_w * 0.70
+                _btn(ecl_head_cx, bot_y, led_r,
                      tr.lights_head, col_on=QColor(255, 240, 200))
-                _btn(ctl_x + poste_w + 6 + poste_w * 0.70, bot_y, led_r,
+                _btn(ecl_cab_cx, bot_y, led_r,
                      tr.lights_cabin, col_on=QColor(255, 240, 200))
+                # Hit zones ÉCLAIRAGE : phares = H, cabine = C
+                self._hit_zones.append(
+                    (QRectF(ecl_head_cx - hit_r, bot_y - hit_r,
+                            hit_r * 2, hit_r * 2),
+                     int(Qt.Key.Key_H), False))
+                self._hit_zones.append(
+                    (QRectF(ecl_cab_cx - hit_r, bot_y - hit_r,
+                            hit_r * 2, hit_r * 2),
+                     int(Qt.Key.Key_C), False))
 
         # ----- 2 boutons coup-de-poing E-STOP (bas gauche / bas droit) -----
         # Cosmétique : au repos = rouge mat (mushroom relâché) ; engagé
@@ -7844,6 +7877,11 @@ class GameWidget(QWidget):
             grad_e.setColorAt(1, cap_col)
             p.setBrush(QBrush(grad_e))
             p.drawEllipse(QPointF(ex, ey), estop_r, estop_r)
+            # Hit zone E-STOP → Key_4 (latched emergency stop)
+            self._hit_zones.append(
+                (QRectF(ex - ring_r - 2, ey - ring_r - 2,
+                        (ring_r + 2) * 2, (ring_r + 2) * 2),
+                 int(Qt.Key.Key_4), False))
 
     # ----- motor room inset -----------------------------------------------
 
