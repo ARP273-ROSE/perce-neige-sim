@@ -2125,13 +2125,17 @@ def _plan_ambient_paths(dest_dir: Path) -> dict[str, Path]:
         ("departure_ambient", "departure_ambient.wav"),
     ):
         out[key] = dest_dir / name
-    # Real cabin-interior ambient segments extracted from the
-    # 10-minute HD cabin recording. Shipped inside the .exe under
-    # sons/ambients/, loaded here by _resolve_bundled_ambients
-    # later — the Path values below are placeholders that the
-    # resolver will overwrite with the real bundled locations.
-    out["ambient_cruise"] = dest_dir / "ambient_cruise.wav"
-    out["ambient_slow"] = dest_dir / "ambient_slow.wav"
+    # Real cabin-interior ambient segments cut from the 4K recordings
+    # filmed on the Perce-Neige in April 2026. Shipped under
+    # sons/ambients/ (real_*.wav) and resolved in SoundSystem.__init__
+    # — the placeholders below are overwritten if the bundled file
+    # is present.
+    out["ambient_cruise"] = dest_dir / "real_cruise_loop.wav"
+    out["ambient_slow"] = dest_dir / "real_cruise_loop_v2.wav"
+    out["motor_start_real"] = dest_dir / "real_motor_start.wav"
+    out["brake_approach_real"] = dest_dir / "real_brake_approach.wav"
+    out["station_lower_real"] = dest_dir / "real_station_lower.wav"
+    out["station_upper_real"] = dest_dir / "real_station_upper.wav"
     return out
 
 
@@ -2369,8 +2373,12 @@ class SoundSystem:
         # the application (sons/ambients/) rather than synthesised. Point
         # the dict entries at their bundled location if present.
         bundled_amb_dir = project_dir / "sons" / "ambients"
-        for key, filename in (("ambient_cruise", "ambient_cruise.wav"),
-                              ("ambient_slow", "ambient_slow.wav"),
+        for key, filename in (("ambient_cruise", "real_cruise_loop.wav"),
+                              ("ambient_slow", "real_cruise_loop_v2.wav"),
+                              ("motor_start_real", "real_motor_start.wav"),
+                              ("brake_approach_real", "real_brake_approach.wav"),
+                              ("station_lower_real", "real_station_lower.wav"),
+                              ("station_upper_real", "real_station_upper.wav"),
                               ("door_buzzer_real", "door_buzzer.wav"),
                               ("door_motion_real", "door_motion.wav"),
                               ("crossing_real", "crossing.wav"),
@@ -2652,11 +2660,14 @@ class SoundSystem:
 
         Played right after the buzzer ends, bridges the gap between
         the buzzer and the cruise ambient loop.  Same sound for both
-        stations (real cabin interior recording).
+        stations. Prefers the field-recorded motor-start cut from the
+        2026 4K footage; falls back to the procedural ramp-up clip.
         """
         if not self.enabled or self.muted:
             return
-        path = self._ambient_wavs.get("departure_ambient")
+        path = self._ambient_wavs.get("motor_start_real")
+        if not (path and path.exists()):
+            path = self._ambient_wavs.get("departure_ambient")
         if path is None or not path.exists():
             return
         self._fx_player.setLoops(1)
