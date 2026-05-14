@@ -51,7 +51,7 @@ func _build_hall_low() -> void:
 	_build_hall(
 		anchor, +1.0,
 		"ALTITUDE EXPERIENCE",
-		_t("FUNICULAIRE — GARE DE DÉPART  ·  Val Claret 2111 m",
+		_t("FUNICULAR — DEPARTURE STATION  ·  Val Claret 2111 m",
 		   "FUNICULAIRE — GARE DE DÉPART  ·  Val Claret 2111 m"),
 		_t("EXIT TO VILLAGE ↑", "SORTIE VILLAGE ↑"),
 		Color(0.85, 0.92, 1.00),  # teinte bleue (lumière jour)
@@ -71,7 +71,8 @@ func _build_hall_high() -> void:
 	_build_hall(
 		anchor, -1.0,
 		"DESTINATION GLACIER",
-		_t("GRANDE MOTTE — 3032 m", "GRANDE MOTTE — 3032 m"),
+		_t("Grande Motte summit — 3032 m",
+		   "Grande Motte — 3032 m"),
 		_t("EXIT TO GLACIER ↑", "SORTIE GLACIER ↑"),
 		Color(0.95, 0.97, 1.00),  # teinte plus blanche (neige glacier)
 		"hall_high",
