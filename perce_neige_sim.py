@@ -7200,6 +7200,15 @@ class GameWidget(QWidget):
             p.drawLine(QPointF(win_x + 6, stripe_y),
                        QPointF(win_x + win_w - 6, stripe_y))
 
+        # CCTV ceiling monitor (en haut à gauche du pare-brise, comme
+        # sur les photos du vrai pupitre) — mosaïque 2x2 N&B.
+        if vw > 600 and vh > 400:
+            cctv_w = min(vw * 0.16, 150)
+            cctv_h = cctv_w * 0.72
+            self._draw_cctv_monitor(
+                p, QRectF(vx + frame_w + 32, vy + frame_w + 4,
+                          cctv_w, cctv_h))
+
         # Bottom frame — console area
         console_h = vh * 0.22
         console_grad = QLinearGradient(0, vy + vh - console_h, 0, vy + vh)
@@ -7396,6 +7405,94 @@ class GameWidget(QWidget):
               "Appuyer F4 à nouveau pour fermer le viewer Godot")
         )
         p.restore()
+
+    def _draw_cctv_monitor(self, p: QPainter, rect: QRectF) -> None:
+        """Petit moniteur CCTV 2×2 (caméras intérieures de la rame).
+
+        Sur les photos du vrai pupitre, ce moniteur pend au plafond
+        en haut à gauche du pare-brise et affiche 4 vues intérieures
+        des wagons en N&B / bleu nuit. On rend ici une mosaïque
+        procédurale (silhouettes + grain TV + scanlines + horloge)
+        qui anime légèrement pour évoquer une vraie liaison vidéo.
+        """
+        st = self.state
+        tr = st.train
+        bx, by, bw, bh = rect.x(), rect.y(), rect.width(), rect.height()
+
+        # Boîtier moniteur (noir mat, bezel léger)
+        p.setPen(QPen(QColor(15, 15, 15), 1))
+        p.setBrush(QBrush(QColor(12, 12, 12)))
+        p.drawRoundedRect(QRectF(bx - 3, by - 3, bw + 6, bh + 10), 3, 3)
+        # Étrier de plafond (2 petits traits gris)
+        p.setPen(QPen(QColor(70, 70, 70), 1.5))
+        p.drawLine(QPointF(bx + bw * 0.30, by - 3),
+                   QPointF(bx + bw * 0.30, by - 9))
+        p.drawLine(QPointF(bx + bw * 0.70, by - 3),
+                   QPointF(bx + bw * 0.70, by - 9))
+
+        # 4 cellules 2x2
+        gap = 2.0
+        cell_w = (bw - gap) * 0.5
+        cell_h = (bh - gap) * 0.5
+        # Petite phase animée pour scanlines + flicker
+        t = self._board_animation * 4.0
+        for idx in range(4):
+            r, c = divmod(idx, 2)
+            cx = bx + c * (cell_w + gap)
+            cy = by + r * (cell_h + gap)
+            # Fond bleu très sombre type CCTV nuit
+            tint = QColor(18, 28, 42) if tr.lights_cabin else QColor(8, 12, 18)
+            p.fillRect(QRectF(cx, cy, cell_w, cell_h), tint)
+            # Silhouettes simplifiées (sièges + passagers) — varient par cam
+            seat_col = QColor(70, 95, 130) if tr.lights_cabin else QColor(40, 55, 75)
+            pax_col = QColor(150, 170, 190) if tr.lights_cabin else QColor(85, 100, 120)
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(QBrush(seat_col))
+            n_seats = 3 + idx % 2
+            seat_y = cy + cell_h * 0.62
+            for i in range(n_seats):
+                sx = cx + (i + 0.5) * (cell_w / n_seats)
+                p.drawRoundedRect(
+                    QRectF(sx - cell_w * 0.08, seat_y,
+                           cell_w * 0.16, cell_h * 0.18), 1.5, 1.5)
+            # Silhouettes passagers : couronne au-dessus des sièges
+            p.setBrush(QBrush(pax_col))
+            # Nombre variable selon cam pour donner de la vie
+            n_pax = (idx + int(t)) % 4 + 1
+            for i in range(n_pax):
+                px = cx + ((i + 0.4) / max(n_pax, 1)) * cell_w + idx * 1.5
+                py = cy + cell_h * 0.38
+                p.drawEllipse(QPointF(px, py),
+                              cell_w * 0.045, cell_h * 0.07)
+                p.drawRoundedRect(
+                    QRectF(px - cell_w * 0.04, py + cell_h * 0.04,
+                           cell_w * 0.08, cell_h * 0.16), 1, 1)
+            # Scanlines fines (effet CRT)
+            p.setPen(QPen(QColor(0, 0, 0, 35), 0.8))
+            step = max(2.0, cell_h / 18)
+            offset = (t * 6.0) % step
+            sy = cy + offset
+            while sy < cy + cell_h:
+                p.drawLine(QPointF(cx, sy), QPointF(cx + cell_w, sy))
+                sy += step
+            # Étiquette CH1..CH4 + horloge
+            p.setFont(QFont("Consolas", 6, QFont.Weight.Bold))
+            p.setPen(QPen(QColor(220, 255, 230)))
+            p.drawText(QRectF(cx + 2, cy + 1, cell_w - 4, 8),
+                       int(Qt.AlignmentFlag.AlignLeft),
+                       f"CH{idx + 1}")
+            # mini horloge cabine = heure système du PC (comme sur le
+            # vrai moniteur)
+            now = datetime.now()
+            p.drawText(QRectF(cx + 2, cy + 1, cell_w - 4, 8),
+                       int(Qt.AlignmentFlag.AlignRight),
+                       now.strftime("%H:%M"))
+
+        # Petit point d'enregistrement clignotant en bas-droite du bezel
+        if int(t) % 2 == 0:
+            p.setBrush(QBrush(QColor(220, 30, 30)))
+            p.setPen(Qt.PenStyle.NoPen)
+            p.drawEllipse(QPointF(bx + bw - 6, by + bh + 3), 2.0, 2.0)
 
     def _draw_console_panel(self, p: QPainter, x: float, y: float,
                             pw: float, ph: float) -> None:
