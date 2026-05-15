@@ -13,7 +13,14 @@ var _player_crossing: AudioStreamPlayer = null
 var _player_vent: AudioStreamPlayer = null    # ventilation cabine
 
 var _trip_was_started: bool = false
-var _doors_were_open: bool = true
+var _doors_were_open: bool = false   # défaut "portes fermées" : en mode client
+                                      # on reçoit l'état réel au 1er tick et le flag
+                                      # _first_update_consumed empêche toute fausse
+                                      # transition (avant : init à `true` → 1er
+                                      # tick avec doors_open=false vu comme une
+                                      # transition open→close → jouait à tort le
+                                      # buzzer + l'animation portes).
+var _first_update_consumed: bool = false
 var _crossing_played: bool = false   # une seule fois par trip
 const CROSSING_S_CENTER: float = PNConstants.LENGTH * 0.5    # = 1737 m
 const CROSSING_S_WINDOW: float = 40.0   # fenêtre de déclenchement ±40 m
@@ -66,6 +73,18 @@ func set_physics(p: TrainPhysics) -> void:
 
 func _process(_delta: float) -> void:
 	if physics == null:
+		return
+
+	# Premier tick après set_physics : on synchronise l'état "previous" sur
+	# l'état courant SANS déclencher de transition. Sinon, en mode client
+	# (Godot piloté par le sim Python), les valeurs reçues au 1er packet
+	# (typiquement doors_open=false, trip_started=true) seraient lues comme
+	# des transitions depuis les défauts du _ready et déclencheraient à tort
+	# les sons de fermeture portes / démarrage trip.
+	if not _first_update_consumed:
+		_doors_were_open = physics.doors_open
+		_trip_was_started = physics.trip_started
+		_first_update_consumed = true
 		return
 
 	# Démarrer l'ambient quand le trip démarre
