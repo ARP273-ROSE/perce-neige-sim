@@ -45,17 +45,6 @@ extends Node3D
 
 @export var sampling_step: float = 0.5       # pas échantillonnage rails/dalle
 
-# --- Crémaillère centrale (Strub / Von Roll) -----------------------------
-# Visible sur toutes les frames intérieures : double rangée de dents
-# métalliques noires entre les rails, espacées ≈ 10 cm, légèrement plus
-# basses que les rails. C'est ce qui assure la traction sur les pentes
-# raides (≤ 31 %). Modélisée via MultiMeshInstance3D (1 BoxMesh par dent).
-@export var rack_tooth_spacing: float = 0.10    # entraxe entre dents (100 mm)
-@export var rack_tooth_l: float = 0.060         # longueur (sens voie, 60 mm)
-@export var rack_tooth_w: float = 0.022         # épaisseur (25 mm — affinée)
-@export var rack_tooth_h: float = 0.075         # hauteur (75 mm)
-@export var rack_row_gap: float = 0.10          # écart entre les 2 rangées (100 mm)
-
 var tunnel: TunnelBuilder = null
 
 # Segments des 2 brins de câble (1 câble unique en boucle, 2 brins visibles).
@@ -82,7 +71,6 @@ func build(t: TunnelBuilder) -> void:
 	_build_slab()
 	_build_rails()
 	_build_sleepers()
-	_build_rack()        # crémaillère centrale (double rangée)
 	_build_guides()
 	_build_cable()
 
@@ -485,63 +473,6 @@ func _build_sleepers() -> void:
 
 	var mmi: MultiMeshInstance3D = MultiMeshInstance3D.new()
 	mmi.name = "Sleepers"
-	mmi.multimesh = mm
-	mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	add_child(mmi)
-
-
-# ---------------------------------------------------------------------------
-# Crémaillère centrale — double rangée de dents métalliques noires entre les
-# rails. Système Strub (lame verticale dentelée) ou Von Roll, indispensable
-# sur les pentes ≤ 31 % du Perce-Neige. Visible sur toutes les frames
-# intérieures comme une bande sombre granuleuse au milieu de la voie.
-# ---------------------------------------------------------------------------
-
-func _build_rack() -> void:
-	var steel_mat: StandardMaterial3D = StandardMaterial3D.new()
-	steel_mat.albedo_color = Color(0.10, 0.10, 0.11)
-	steel_mat.roughness = 0.55
-	steel_mat.metallic = 0.85
-	steel_mat.metallic_specular = 0.6
-
-	var tooth: BoxMesh = BoxMesh.new()
-	tooth.size = Vector3(rack_tooth_w, rack_tooth_h, rack_tooth_l)
-	tooth.material = steel_mat
-
-	# Hauteur : juste au-dessus de la dalle, comparable aux traverses
-	var top_slab: float = floor_y_local + slab_thickness
-	var y_center: float = top_slab + rack_tooth_h * 0.5
-
-	# Positions latérales des 2 rangées (autour de l'axe central x=0)
-	var x_off_left: float = -rack_row_gap * 0.5
-	var x_off_right: float = +rack_row_gap * 0.5
-
-	# Couvre [0, LENGTH] hors zones d'aiguillage (la crémaillère ne passe
-	# que sous la rame propriétaire de la voie au moment où elle traverse
-	# la chambre). Pour simplifier on continue à l'axe central : la dent
-	# reste à x=0±gap dans la chambre aussi (les 2 voies passent par
-	# au-dessus de cette zone à des instants différents).
-	var n_per_row: int = int(PNConstants.LENGTH / rack_tooth_spacing)
-	var total: int = n_per_row * 2
-
-	var mm: MultiMesh = MultiMesh.new()
-	mm.transform_format = MultiMesh.TRANSFORM_3D
-	mm.mesh = tooth
-	mm.instance_count = total
-
-	var idx: int = 0
-	for i in range(n_per_row):
-		var s: float = (float(i) + 0.5) * rack_tooth_spacing
-		var xform: Transform3D = tunnel.transform_at(s)
-		var base: Vector3 = xform.origin + xform.basis.y * y_center
-		for x_off in [x_off_left, x_off_right]:
-			var tr: Transform3D = Transform3D(xform.basis,
-				base + xform.basis.x * x_off)
-			mm.set_instance_transform(idx, tr)
-			idx += 1
-
-	var mmi: MultiMeshInstance3D = MultiMeshInstance3D.new()
-	mmi.name = "RackTeeth"
 	mmi.multimesh = mm
 	mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(mmi)
