@@ -67,6 +67,12 @@ func _process(_delta: float) -> void:
 		return
 	_apply(latest)
 	_last_packet_time = Time.get_ticks_msec() / 1000.0
+	# Diag minimal : log au 1er packet + tous les 300 packets (~5s à 60Hz)
+	# pour vérifier que la cabine reçoit bien la position depuis Python.
+	if _packet_count == 1 or _packet_count % 300 == 0:
+		print("[StateReceiver] packet #%d : s=%.1f m, v=%.2f m/s, trip=%s, doors=%s"
+			% [_packet_count, physics.s, physics.v,
+			   physics.trip_started, physics.doors_open])
 
 
 func _apply(d: Dictionary) -> void:
