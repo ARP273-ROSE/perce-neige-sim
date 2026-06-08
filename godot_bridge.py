@@ -55,6 +55,11 @@ class GodotBridge:
         self._addr = ("127.0.0.1", port)
         # Résolution du binaire à utiliser (cache)
         self._resolved_cmd: Optional[list] = None
+        # Fichier de log : capture stderr du viewer + diagnostic de lancement,
+        # car le sim PyInstaller tourne sans console (console=False) → c'est le
+        # seul moyen de savoir POURQUOI la vue 3D n'a pas démarré.
+        import tempfile
+        self._logfile = Path(tempfile.gettempdir()) / "perce_neige_3d.log"
 
     def _bundled_binary_path(self) -> Optional[Path]:
         """Retourne le chemin du binaire exporté standalone selon la plateforme,
@@ -122,21 +127,70 @@ class GodotBridge:
                     return str(cand)
         return None
 
-    def _resolve_command(self) -> Optional[list]:
+    def _resolve_command(self, engine_args: Optional[list] = None) -> Optional[list]:
         """Retourne la cmdline complète à exécuter, ou None si rien trouvé.
         Préfère le binaire exporté standalone, fallback sur Godot system + projet.
+
+        ``engine_args`` : arguments moteur Godot insérés AVANT le ``--`` (p.ex.
+        ``["--rendering-method", "gl_compatibility"]`` pour forcer le rendu
+        OpenGL sur une machine sans Vulkan).
         """
+        eng = list(engine_args) if engine_args else []
         # 1. Binaire bundled exporté
         bundled = self._bundled_binary_path()
         if bundled is not None:
-            return [str(bundled), "--", "--client", f"--port={self.port}"]
+            return [str(bundled), *eng, "--", "--client", f"--port={self.port}"]
         # 2. Fallback dev : godot system + projet source
         if self.dev_project_dir and self.dev_project_dir.is_dir():
             sys_godot = self._find_godot_executable()
             if sys_godot is not None:
                 return [sys_godot, "--path", str(self.dev_project_dir),
-                        "--", "--client", f"--port={self.port}"]
+                        *eng, "--", "--client", f"--port={self.port}"]
         return None
+
+    def _log(self, msg: str) -> None:
+        try:
+            with open(self._logfile, "a", encoding="utf-8") as f:
+                f.write(msg + "\n")
+        except OSError:
+            pass
+
+    def _spawn(self, cmd: list, grace_s: float = 1.6) -> bool:
+        """Lance ``cmd`` et attend ``grace_s`` pour détecter une mort précoce
+        (échec d'init du driver Vulkan/OpenGL → sortie en ~1 s). Retourne True
+        si le process est encore vivant après le délai (et stocke self._proc),
+        False sinon (process déjà mort, ou échec de spawn).
+        """
+        import time
+        try:
+            logf = open(self._logfile, "ab")
+        except OSError:
+            logf = subprocess.DEVNULL
+        try:
+            proc = subprocess.Popen(
+                cmd,
+                stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL,
+                stderr=logf,
+            )
+        except (FileNotFoundError, OSError, PermissionError) as e:
+            self._log(f"[spawn] échec lancement : {e}\n  cmd={cmd}")
+            if logf not in (subprocess.DEVNULL,):
+                try:
+                    logf.close()
+                except OSError:
+                    pass
+            return False
+        deadline = time.monotonic() + grace_s
+        while time.monotonic() < deadline:
+            if proc.poll() is not None:
+                self._log(
+                    f"[spawn] viewer 3D mort en <{grace_s}s (rc={proc.returncode})\n"
+                    f"  cmd={cmd}\n  → tentative de fallback rendu si dispo")
+                return False
+            time.sleep(0.1)
+        self._proc = proc
+        return True
 
     # ------------------------------------------------------------------ #
     # Subprocess management
@@ -202,21 +256,42 @@ class GodotBridge:
         cmd = self._resolve_command()
         if cmd is None:
             ok, reason = self.is_available()
+            self._log(f"[start] indisponible : {reason}")
             print(f"[GodotBridge] Viewer 3D non disponible — {reason}")
             print(f"[GodotBridge] → Fallback : vue cabine procédurale Python")
             return False
-        self._resolved_cmd = cmd
-        try:
-            self._proc = subprocess.Popen(
-                cmd,
-                stdin=subprocess.DEVNULL,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
-        except (FileNotFoundError, OSError, PermissionError) as e:
-            print(f"[GodotBridge] Lancement viewer 3D échoué : {e}")
+
+        # Deux tentatives :
+        #  1. rendu par défaut du projet (Forward+ / Vulkan) — qualité maximale
+        #     (SDFGI, brouillard volumétrique) sur les machines compatibles.
+        #  2. si le viewer meurt aussitôt (pas de Vulkan : Intel HD ancien,
+        #     drivers absents, machine virtuelle…), relance en rendu OpenGL
+        #     "Compatibility" qui tourne quasiment partout. On perd quelques
+        #     effets avancés mais la vue 3D s'affiche.
+        attempts = [
+            ("Forward+/Vulkan (défaut)", None),
+            ("OpenGL Compatibility (fallback)",
+             ["--rendering-method", "gl_compatibility",
+              "--rendering-driver", "opengl3"]),
+        ]
+        started = False
+        for label, eng_args in attempts:
+            c = self._resolve_command(engine_args=eng_args) if eng_args else cmd
+            if c is None:
+                continue
+            self._log(f"[start] tentative : {label}")
+            if self._spawn(c):
+                self._resolved_cmd = c
+                started = True
+                self._log(f"[start] OK ({label}, PID={self._proc.pid})")
+                break
+
+        if not started:
+            print(f"[GodotBridge] Lancement viewer 3D échoué (Vulkan ET OpenGL)")
+            print(f"[GodotBridge] → voir {self._logfile}")
             print(f"[GodotBridge] → Fallback : vue cabine procédurale Python")
             return False
+
         # Crée le socket UDP de send
         if self._sock is None:
             self._sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -295,6 +370,32 @@ class GodotBridge:
         # macOS, Wayland, autres : non supporté pour l'embedding
         return None
 
+    def find_window_id_once(self) -> int | None:
+        """Recherche du handle natif de la fenêtre en UNE seule passe, SANS
+        bloquer (ni sleep, ni timeout). Destiné à être appelé en boucle par
+        un QTimer côté sim pour ne jamais geler l'UI. Retourne le handle ou
+        None si pas (encore) trouvé."""
+        if self._proc is None or self._proc.poll() is not None:
+            return None
+        pid = self._proc.pid
+        if sys.platform.startswith("win"):
+            return _enum_hwnd_for_pid(pid)
+        if sys.platform.startswith("linux"):
+            if shutil.which("xdotool") is None:
+                return None
+            try:
+                out = subprocess.check_output(
+                    ["xdotool", "search", "--pid", str(pid),
+                     "--onlyvisible", "--name", "Perce-Neige"],
+                    stderr=subprocess.DEVNULL,
+                ).decode().strip()
+                if out:
+                    return int(out.splitlines()[-1])
+            except subprocess.CalledProcessError:
+                pass
+            return None
+        return None
+
     # ------------------------------------------------------------------ #
     # State streaming
     # ------------------------------------------------------------------ #
@@ -316,50 +417,45 @@ class GodotBridge:
             pass
 
 
-def _find_hwnd_for_pid(target_pid: int, deadline: float) -> int | None:
-    """Cherche le HWND d'une fenêtre top-level appartenant à `target_pid`.
-
-    Polling jusqu'à `deadline` (time.monotonic()). On enumère toutes les
-    fenêtres top-level visibles via user32.EnumWindows et on garde la
-    première dont le PID propriétaire match (ou la dernière si plusieurs,
-    Godot crée parfois une splash + main window).
-
-    Pas de dépendance externe : ctypes seulement, dispo sur tout Python
-    Windows. Retourne None si aucune fenêtre trouvée avant la deadline.
-    """
+def _enum_hwnd_for_pid(target_pid: int) -> int | None:
+    """UNE passe EnumWindows (non bloquante). Renvoie le HWND top-level
+    visible appartenant à `target_pid` dont le titre contient "Perce-Neige"
+    (la dernière si plusieurs — Godot crée parfois une splash + main window),
+    ou None. ctypes seulement, dispo sur tout Python Windows."""
     import ctypes
     import ctypes.wintypes as wt
-    import time
 
     user32 = ctypes.windll.user32
-    EnumWindowsProc = ctypes.WINFUNCTYPE(
-        wt.BOOL, wt.HWND, wt.LPARAM)
+    EnumWindowsProc = ctypes.WINFUNCTYPE(wt.BOOL, wt.HWND, wt.LPARAM)
+    found: list[int] = []
 
-    def _enum_once() -> int | None:
-        found: list[int] = []
+    def _cb(hwnd: int, _lparam: int) -> bool:
+        if not user32.IsWindowVisible(hwnd):
+            return True
+        pid = wt.DWORD()
+        user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
+        if pid.value == target_pid:
+            # Filtre : titre contient "Perce-Neige" pour éviter de tomber
+            # sur une splash invisible ou une window utilitaire de Godot.
+            length = user32.GetWindowTextLengthW(hwnd)
+            if length > 0:
+                buf = ctypes.create_unicode_buffer(length + 1)
+                user32.GetWindowTextW(hwnd, buf, length + 1)
+                if "Perce-Neige" in buf.value:
+                    found.append(hwnd)
+        return True   # continue l'énumération
 
-        def _cb(hwnd: int, _lparam: int) -> bool:
-            if not user32.IsWindowVisible(hwnd):
-                return True
-            pid = wt.DWORD()
-            user32.GetWindowThreadProcessId(
-                hwnd, ctypes.byref(pid))
-            if pid.value == target_pid:
-                # Filtre : titre contient "Perce-Neige" pour éviter de tomber
-                # sur une splash invisible ou une window utilitaire de Godot.
-                length = user32.GetWindowTextLengthW(hwnd)
-                if length > 0:
-                    buf = ctypes.create_unicode_buffer(length + 1)
-                    user32.GetWindowTextW(hwnd, buf, length + 1)
-                    if "Perce-Neige" in buf.value:
-                        found.append(hwnd)
-            return True   # continue l'énumération
+    user32.EnumWindows(EnumWindowsProc(_cb), 0)
+    return found[-1] if found else None
 
-        user32.EnumWindows(EnumWindowsProc(_cb), 0)
-        return found[-1] if found else None
 
+def _find_hwnd_for_pid(target_pid: int, deadline: float) -> int | None:
+    """Cherche le HWND d'une fenêtre top-level appartenant à `target_pid`,
+    en pollant jusqu'à `deadline` (time.monotonic()). Retourne None si rien
+    trouvé avant l'échéance."""
+    import time
     while time.monotonic() < deadline:
-        hwnd = _enum_once()
+        hwnd = _enum_hwnd_for_pid(target_pid)
         if hwnd is not None:
             return int(hwnd)
         time.sleep(0.10)
