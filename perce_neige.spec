@@ -19,8 +19,13 @@ import sys
 HERE = Path(SPECPATH).resolve() if "SPECPATH" in globals() else Path.cwd()
 
 def _collect_sons():
-    """Bundle on-board announcement audio but EXCLUDE sons/videos/
-    which contains large local reference material not needed at runtime."""
+    """Bundle ONLY the on-board audio actually loaded at runtime: ambient
+    .wav (sons/ambients/) and announcement .mp3 (sons/Funiculaire perce
+    neige/). Everything else under sons/ is local reference material —
+    photos (.jpg) et clips (.mp4 dans photos/ et videos/) — qui peut peser
+    plusieurs Go et ne doit PAS gonfler la distribution. Filtrer par
+    extension audio est robuste à tout fichier parasite ajouté plus tard."""
+    AUDIO_EXTS = {".wav", ".mp3", ".ogg"}
     out = []
     root = HERE / "sons"
     if not root.exists():
@@ -28,9 +33,9 @@ def _collect_sons():
     for p in root.rglob("*"):
         if not p.is_file():
             continue
-        rel_parts = p.relative_to(root).parts
-        if rel_parts and rel_parts[0] == "videos":
+        if p.suffix.lower() not in AUDIO_EXTS:
             continue
+        rel_parts = p.relative_to(root).parts
         dest = "sons" / Path(*rel_parts).parent
         out.append((str(p), str(dest)))
     return out
