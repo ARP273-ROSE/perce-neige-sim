@@ -89,7 +89,7 @@ try:
 except ImportError:
     _GODOT_BRIDGE_OK = False
 
-VERSION = "1.11.4"
+VERSION = "1.11.5"
 APP_NAME = "Perce-Neige Simulator"
 
 
@@ -3992,6 +3992,11 @@ class GameWidget(QWidget):
         self._godot_launch_thread = None
         self._godot_embed_timer = None
         self._godot_embed_deadline = 0.0
+        # HWND de la fenêtre Godot reparentée en enfant Win32 (Windows only).
+        # Sous Windows on n'utilise PAS createWindowContainer (qui ne reparente
+        # pas une fenêtre externe → elle flotte et passe derrière) mais
+        # SetParent direct → vraie fenêtre WS_CHILD intégrée.
+        self._godot_child_hwnd = None
         self._tunnel_scroll = 0.0        # accumulated tunnel texture offset
         # Bridge vers le viewer Godot 3D pour la vue F4 (rendu FPV réaliste).
         # Le binaire viewer est BUNDLED dans la distribution PyInstaller
@@ -7388,9 +7393,13 @@ class GameWidget(QWidget):
             "info")
 
     def _embed_godot_window_xid(self, xid: int) -> None:
-        """Embarque la fenêtre native `xid` (HWND Windows / XID X11) dans un
-        widget Qt enfant via QWindow.fromWinId() + createWindowContainer()."""
+        """Embarque la fenêtre native `xid` dans la zone vue cabine.
+        Windows : reparentage Win32 SetParent (fenêtre WS_CHILD réellement
+        intégrée). Linux X11 : QWindow.fromWinId() + createWindowContainer()."""
         if self._godot_bridge is None or xid is None or xid == 0:
+            return
+        if sys.platform.startswith("win"):
+            self._embed_win32_child(int(xid))
             return
         try:
             from PyQt6.QtGui import QWindow
@@ -7406,13 +7415,63 @@ class GameWidget(QWidget):
         except Exception as e:
             print(f"[GodotBridge] Embed échoué : {e} — fenêtre séparée")
 
+    def _embed_win32_child(self, hwnd: int) -> None:
+        """Reparente la fenêtre Godot (`hwnd`) en fenêtre ENFANT (WS_CHILD) de
+        la fenêtre principale Qt via l'API Win32 SetParent. Une vraie fenêtre
+        enfant est clippée au parent, se déplace avec lui et ne peut JAMAIS
+        passer derrière → la vue 3D reste intégrée même quand on clique sur
+        les boutons (le createWindowContainer de Qt échoue à reparenter une
+        fenêtre appartenant à un autre processus sous Windows)."""
+        try:
+            import ctypes
+            user32 = ctypes.windll.user32
+            GWL_STYLE, GWL_EXSTYLE = -16, -20
+            WS_CHILD = 0x40000000
+            WS_POPUP = 0x80000000
+            WS_CAPTION = 0x00C00000
+            WS_THICKFRAME = 0x00040000
+            WS_MINIMIZEBOX = 0x00020000
+            WS_MAXIMIZEBOX = 0x00010000
+            WS_SYSMENU = 0x00080000
+            WS_EX_APPWINDOW = 0x00040000
+            WS_EX_TOOLWINDOW = 0x00000080
+            parent = int(self.winId())
+            style = user32.GetWindowLongW(hwnd, GWL_STYLE)
+            style = (style & ~WS_POPUP & ~WS_CAPTION & ~WS_THICKFRAME
+                     & ~WS_MINIMIZEBOX & ~WS_MAXIMIZEBOX & ~WS_SYSMENU) | WS_CHILD
+            user32.SetWindowLongW(hwnd, GWL_STYLE, style)
+            ex = user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
+            ex = (ex & ~WS_EX_APPWINDOW) | WS_EX_TOOLWINDOW
+            user32.SetWindowLongW(hwnd, GWL_EXSTYLE, ex)
+            if not user32.SetParent(hwnd, parent):
+                raise OSError(f"SetParent a échoué (err={ctypes.get_last_error()})")
+            self._godot_child_hwnd = hwnd
+            self._reposition_godot_embed()
+            user32.ShowWindow(hwnd, 5)  # SW_SHOW
+        except Exception as e:
+            print(f"[GodotBridge] Embed Win32 échoué : {e} — fenêtre séparée")
+            self._godot_child_hwnd = None
+
     def _reposition_godot_embed(self) -> None:
-        """Place le widget embarqué pile dans le rect de la vue cabine."""
+        """Place la vue 3D embarquée pile dans le rect de la vue cabine
+        (mêmes coordonnées que paintEvent : 20, 20, w-440, h-260)."""
+        w, h = self.width(), self.height()
+        x, y, ww, hh = 20, 20, max(100, w - 440), max(100, h - 260)
+        # Chemin Windows : MoveWindow sur le HWND enfant (coords device px).
+        if self._godot_child_hwnd:
+            try:
+                import ctypes
+                dpr = self.devicePixelRatioF()
+                ctypes.windll.user32.MoveWindow(
+                    self._godot_child_hwnd,
+                    int(x * dpr), int(y * dpr),
+                    int(ww * dpr), int(hh * dpr), True)
+            except Exception:
+                pass
+            return
+        # Chemin Linux : widget conteneur Qt.
         if self._godot_embed_widget is None:
             return
-        w, h = self.width(), self.height()
-        # Mêmes coordonnées que dans paintEvent : QRectF(20, 20, w-440, h-260)
-        x, y, ww, hh = 20, 20, max(100, w - 440), max(100, h - 260)
         self._godot_embed_widget.setGeometry(int(x), int(y), int(ww), int(hh))
 
     def _release_godot_embed(self) -> None:
@@ -7420,6 +7479,15 @@ class GameWidget(QWidget):
         # Stoppe un éventuel poll d'embarquement en cours.
         if self._godot_embed_timer is not None:
             self._godot_embed_timer.stop()
+        # Windows : détache le HWND enfant avant de tuer le process (évite un
+        # glitch visuel sur la fenêtre principale pendant la destruction).
+        if self._godot_child_hwnd:
+            try:
+                import ctypes
+                ctypes.windll.user32.SetParent(self._godot_child_hwnd, 0)
+            except Exception:
+                pass
+            self._godot_child_hwnd = None
         if self._godot_embed_widget is not None:
             try:
                 self._godot_embed_widget.hide()
@@ -10303,7 +10371,8 @@ class MainWindow(QMainWindow):
         # Si le viewer Godot est embarqué dans la zone F4, le repositionne
         # à la nouvelle taille de la fenêtre principale.
         try:
-            if (getattr(self.game, "_godot_embed_widget", None) is not None):
+            if (getattr(self.game, "_godot_embed_widget", None) is not None
+                    or getattr(self.game, "_godot_child_hwnd", None)):
                 self.game._reposition_godot_embed()
         except Exception:
             pass
