@@ -7,7 +7,7 @@
 #   - Godot 4.6.x installé (binaire `godot` dans le PATH)
 #   - Templates d'export Godot installés (depuis godotengine.org/download)
 #     ~/.local/share/godot/export_templates/4.6.1.stable/
-#   - Projet Godot dans ~/Documents/perce-neige-sim-3d/ (ou variable GODOT_PROJ)
+#   - Projet Godot dans godot_project/ du repo (ou variable GODOT_PROJ)
 #
 # Usage :
 #   ./build_godot_viewer.sh           # toutes plateformes
@@ -17,9 +17,11 @@
 
 set -euo pipefail
 
-GODOT_PROJ="${GODOT_PROJ:-$HOME/Documents/perce-neige-sim-3d}"
 GODOT_BIN="${GODOT_BIN:-godot}"
 SIM_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Le projet 3D vit dans le repo (godot_project/) ; l'ancien clone séparé
+# ~/Documents/perce-neige-sim-3d est un vestige vide.
+GODOT_PROJ="${GODOT_PROJ:-$SIM_DIR/godot_project}"
 BUNDLED_DIR="$SIM_DIR/bundled_godot"
 
 if ! command -v "$GODOT_BIN" >/dev/null 2>&1; then
@@ -29,7 +31,7 @@ fi
 
 if [[ ! -d "$GODOT_PROJ" ]]; then
     echo "Erreur : projet Godot introuvable : $GODOT_PROJ" >&2
-    echo "Cloner depuis github.com/ARP273-ROSE/perce-neige-sim-3d" >&2
+    echo "Le projet 3D est dans godot_project/ du repo perce-neige-sim" >&2
     exit 1
 fi
 
