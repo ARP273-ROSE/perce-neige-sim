@@ -53,6 +53,11 @@ class GodotBridge:
         self._proc: Optional[subprocess.Popen] = None
         self._sock: Optional[socket.socket] = None
         self._addr = ("127.0.0.1", port)
+        # Posé par stop() : si un start() est encore en cours dans un autre
+        # thread (grâce de spawn ~1,6 s), il verra le flag à sa sortie et
+        # tuera lui-même le process au lieu de le laisser zombie en fenêtre
+        # séparée (race F4 pressé deux fois rapidement).
+        self._abort = False
         # Résolution du binaire à utiliser (cache)
         self._resolved_cmd: Optional[list] = None
         # Fichier de log : capture stderr du viewer + diagnostic de lancement,
@@ -140,7 +145,13 @@ class GodotBridge:
         bundled = self._bundled_binary_path()
         if bundled is not None:
             return [str(bundled), *eng, "--", "--client", f"--port={self.port}"]
-        # 2. Fallback dev : godot system + projet source
+        # 2. Fallback dev : godot system + projet source.
+        #    Désactivé en mode frozen (exe PyInstaller distribué) : on ne va
+        #    pas chercher un Godot*.exe dans des dossiers inscriptibles par
+        #    l'utilisateur depuis une appli installée — le bundled est la
+        #    seule source légitime chez l'utilisateur final.
+        if getattr(sys, "frozen", False):
+            return None
         if self.dev_project_dir and self.dev_project_dir.is_dir():
             sys_godot = self._find_godot_executable()
             if sys_godot is not None:
@@ -175,12 +186,20 @@ class GodotBridge:
             )
         except (FileNotFoundError, OSError, PermissionError) as e:
             self._log(f"[spawn] échec lancement : {e}\n  cmd={cmd}")
-            if logf not in (subprocess.DEVNULL,):
+            if logf is not subprocess.DEVNULL:
                 try:
                     logf.close()
                 except OSError:
                     pass
             return False
+        # Le child a hérité du descripteur stderr : notre copie parent peut
+        # (et doit) être fermée tout de suite, sinon on fuit un fd par
+        # lancement du viewer.
+        if logf is not subprocess.DEVNULL:
+            try:
+                logf.close()
+            except OSError:
+                pass
         deadline = time.monotonic() + grace_s
         while time.monotonic() < deadline:
             if proc.poll() is not None:
@@ -236,8 +255,8 @@ class GodotBridge:
             msg = (
                 f"Viewer 3D indisponible — Godot trouvé ({sys_godot}) "
                 f"mais aucun projet 3D source.\n"
-                f"→ Cloner github.com/ARP273-ROSE/perce-neige-sim-3d "
-                f"dans ~/Documents/, ou builder le binaire bundlé via build_godot_viewer."
+                f"→ Le projet source vit dans godot_project/ du repo "
+                f"perce-neige-sim, ou builder le binaire bundlé via build_godot_viewer."
             )
         else:
             msg = (
@@ -253,6 +272,7 @@ class GodotBridge:
         """
         if self.is_running():
             return True
+        self._abort = False
         cmd = self._resolve_command()
         if cmd is None:
             ok, reason = self.is_available()
@@ -292,6 +312,14 @@ class GodotBridge:
             print(f"[GodotBridge] → Fallback : vue cabine procédurale Python")
             return False
 
+        # stop() a été appelé pendant la grâce de spawn (l'utilisateur a
+        # quitté la vue 3D avant la fin du lancement) → on tue le viewer
+        # qu'on vient de démarrer au lieu de le laisser orphelin.
+        if self._abort:
+            self._log("[start] abandonné pendant le lancement → stop()")
+            self.stop()
+            return False
+
         # Crée le socket UDP de send
         if self._sock is None:
             self._sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -301,6 +329,7 @@ class GodotBridge:
         return True
 
     def stop(self) -> None:
+        self._abort = True
         if self._proc is not None:
             try:
                 self._proc.terminate()

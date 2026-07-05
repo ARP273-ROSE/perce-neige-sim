@@ -27,6 +27,13 @@ var state_receiver: StateReceiver = null
 # désactivés. Le HUD est masqué (Python a son propre HUD).
 var client_mode: bool = false
 
+# Préréglage de rendu (--quality=low|medium|high en arg projet) :
+#   high   (défaut) : SDFGI + fog volumétrique + SSR — machines Vulkan solides
+#   medium          : SDFGI off (le poste GPU le plus cher, peu utile dans un
+#                     tunnel éclairé aux omnis sans ombres)
+#   low             : SDFGI + fog volumétrique + SSR off — iGPU / fallback
+var quality: String = "high"
+
 # État précédent pour détection de transition (annonces)
 var _prev_doors_open: bool = true
 var _prev_trip_started: bool = false
@@ -38,6 +45,7 @@ var _prev_finished: bool = false
 
 var _physics_accum: float = 0.0
 var _paused: bool = false
+var _light_cull_accum: float = 999.0   # force un 1er culling dès la frame 1
 
 # Contrôles
 var speed_cmd_rate: float = 0.4    # variation par seconde du setpoint
@@ -48,8 +56,16 @@ func _ready() -> void:
 	for arg in OS.get_cmdline_user_args():
 		if arg == "--client":
 			client_mode = true
+		elif arg.begins_with("--quality="):
+			var q: String = arg.substr(10)
+			if q in ["low", "medium", "high"]:
+				quality = q
+			else:
+				push_warning("[PerceNeige3D] --quality=%s inconnu — high conservé" % q)
 	if client_mode:
 		print("[PerceNeige3D] CLIENT MODE — physique pilotée par le sim Python")
+	if quality != "high":
+		print("[PerceNeige3D] Préréglage rendu : %s" % quality)
 
 	print("[PerceNeige3D] Build starting…")
 	_build_environment()
@@ -186,7 +202,8 @@ func _build_environment() -> void:
 	env.ambient_light_sky_contribution = 0.3
 
 	# --- SDFGI (global illumination) -------------------------------------
-	env.sdfgi_enabled = true
+	# Le poste GPU le plus cher de tout le pipeline — coupé sous high.
+	env.sdfgi_enabled = (quality == "high")
 	env.sdfgi_cascades = 4
 	env.sdfgi_min_cell_size = 0.4
 	env.sdfgi_use_occlusion = true
@@ -201,8 +218,8 @@ func _build_environment() -> void:
 	env.fog_height = 2500.0
 	env.fog_height_density = 0.0
 	env.fog_sky_affect = 0.5
-	# Volumétrique plus subtil
-	env.volumetric_fog_enabled = true
+	# Volumétrique plus subtil (coût froxels × lumières — coupé en low)
+	env.volumetric_fog_enabled = (quality != "low")
 	env.volumetric_fog_density = 0.008
 	env.volumetric_fog_albedo = Color(0.85, 0.88, 0.95)
 	env.volumetric_fog_emission = Color(0.0, 0.0, 0.0)
@@ -221,7 +238,7 @@ func _build_environment() -> void:
 	env.glow_hdr_threshold = 1.5
 
 	# --- SSR -------------------------------------------------------------
-	env.ssr_enabled = true
+	env.ssr_enabled = (quality != "low")
 	env.ssr_max_steps = 40
 
 	# --- Ajustements couleur ---------------------------------------------
@@ -324,6 +341,13 @@ func _process(delta: float) -> void:
 			physics.step(PHYSICS_DT)
 			_physics_accum -= PHYSICS_DT
 			steps += 1
+
+	# Culling des lumières du tunnel à 2 Hz (les ~230 OmniLight3D pèsent
+	# sur le clustering Forward+ et le fog volumétrique même hors champ)
+	_light_cull_accum += delta
+	if _light_cull_accum >= 0.5:
+		_light_cull_accum = 0.0
+		lights.update_light_culling(physics.s)
 
 	# Masquage dynamique des brins de câble selon la position des rames
 	track.update_cable_visibility(physics.s)

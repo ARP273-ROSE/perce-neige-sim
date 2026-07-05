@@ -17,6 +17,10 @@ Security
 --------
 - Max download size : 200 MB (protects against zip bombs / oversized
   binaries)
+- Binary integrity : frozen-mode assets are verified against the
+  ``SHA256SUMS`` file published in the same release (mandatory --- a
+  release without checksums is refused). Size must also match the
+  size announced by the GitHub API.
 - Zip member validation : reject '..', '\\', null bytes and any path
   that escapes the extraction root
 - Reject symlinks in zipballs
@@ -27,6 +31,7 @@ Network : uses urllib from stdlib to avoid adding a dependency.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import shutil
@@ -201,6 +206,46 @@ def _stream_download(url: str, dest: Path,
                     progress(downloaded, total)
 
 
+def _sha256_file(path: Path) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _verify_asset_sha256(release: ReleaseInfo, asset: ReleaseAsset,
+                         downloaded: Path) -> None:
+    """Verify ``downloaded`` against the SHA256SUMS asset of the release.
+
+    Raises RuntimeError on any mismatch or if the release ships no
+    SHA256SUMS --- we refuse to swap the running executable for an
+    unverifiable binary (defense against a tampered release asset).
+    """
+    sums_asset = next(
+        (a for a in release.assets if a.name == "SHA256SUMS"), None)
+    if sums_asset is None:
+        raise RuntimeError(
+            f"release {release.tag} has no SHA256SUMS asset — refusing "
+            f"to install an unverified binary")
+    tmp = Path(tempfile.mkdtemp(prefix="pn_sums_")) / "SHA256SUMS"
+    _stream_download(sums_asset.url, tmp, max_bytes=64 * 1024)
+    expected = None
+    for line in tmp.read_text(encoding="utf-8", errors="replace").splitlines():
+        parts = line.split()
+        if len(parts) >= 2 and parts[-1].lstrip("*") == asset.name:
+            expected = parts[0].lower()
+            break
+    if expected is None or len(expected) != 64:
+        raise RuntimeError(
+            f"SHA256SUMS has no valid entry for {asset.name!r}")
+    actual = _sha256_file(downloaded)
+    if actual != expected:
+        raise RuntimeError(
+            f"SHA-256 mismatch for {asset.name}: expected {expected}, "
+            f"got {actual} — download corrupted or tampered")
+
+
 def _swap_windows_exe(new_exe: Path) -> None:
     """Schedule replacement of the currently-running .exe on Windows.
 
@@ -261,6 +306,11 @@ def _install_frozen(release: ReleaseInfo,
     _stream_download(asset.url, new_bin, progress=progress)
     if new_bin.stat().st_size < 1024:
         raise RuntimeError("downloaded asset is suspiciously small")
+    if asset.size and new_bin.stat().st_size != asset.size:
+        raise RuntimeError(
+            f"downloaded size {new_bin.stat().st_size} != announced "
+            f"size {asset.size}")
+    _verify_asset_sha256(release, asset, new_bin)
 
     if sys.platform == "win32":
         # Move into the target directory first so move /Y is atomic

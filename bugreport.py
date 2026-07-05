@@ -111,6 +111,13 @@ def save_crash_report(
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
         path = d / f"crash_{ts}.json"
         path.write_text(json.dumps(report, indent=2), encoding="utf-8")
+        # Rotation : ne garde que les 20 rapports les plus récents (sinon
+        # crash_reports/ accumule des centaines de JSON au fil des mois).
+        for old in sorted(d.glob("crash_*.json"))[:-20]:
+            try:
+                old.unlink()
+            except OSError:
+                pass
         return path
     except Exception:
         return None

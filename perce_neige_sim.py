@@ -3700,6 +3700,12 @@ class DocsDownloadDialog(QDialog):
 
     def _download(self, filename: str) -> None:
         import urllib.request, os
+        # Garde anti-réentrance : le processEvents() ci-dessous redonne la
+        # main à la boucle Qt — sans ce flag, un double-clic empilerait deux
+        # téléchargements imbriqués.
+        if getattr(self, "_downloading", False):
+            return
+        self._downloading = True
         url = f"{self.REPO_BASE}/{filename}"
         downloads = Path.home() / "Downloads"
         downloads.mkdir(exist_ok=True)
@@ -3710,12 +3716,27 @@ class DocsDownloadDialog(QDialog):
         )
         QApplication.processEvents()
         try:
+            max_bytes = 50 * 1024 * 1024  # les PDF du repo font < 1 Mo
             req = urllib.request.Request(
                 url, headers={"User-Agent": f"PerceNeige/{VERSION}"})
             with urllib.request.urlopen(req, timeout=30) as resp:
-                data = resp.read()
+                total = int(resp.headers.get("Content-Length", "0") or 0)
+                if total > max_bytes:
+                    raise ValueError("file too large")
+                chunks, size = [], 0
+                while True:
+                    chunk = resp.read(256 * 1024)
+                    if not chunk:
+                        break
+                    size += len(chunk)
+                    if size > max_bytes:
+                        raise ValueError("file too large")
+                    chunks.append(chunk)
+                data = b"".join(chunks)
             if len(data) < 1024:
                 raise ValueError("file too small — check URL")
+            if filename.lower().endswith(".pdf") and not data.startswith(b"%PDF-"):
+                raise ValueError("not a PDF — unexpected content")
             dest.write_bytes(data)
             self._status.setText(
                 (f"✓ Enregistré : {dest}" if self._lang == "fr" else
@@ -3733,6 +3754,8 @@ class DocsDownloadDialog(QDialog):
                 (f"✗ Échec : {e}" if self._lang == "fr" else
                  f"✗ Failed : {e}")
             )
+        finally:
+            self._downloading = False
 
 
 class FaultPickerDialog(QDialog):
@@ -3997,6 +4020,9 @@ class GameWidget(QWidget):
         # pas une fenêtre externe → elle flotte et passe derrière) mais
         # SetParent direct → vraie fenêtre WS_CHILD intégrée.
         self._godot_child_hwnd = None
+        # Accumulateur du heartbeat 1 Hz envoyé au viewer 3D hors MODE_RUN
+        # (permet au viewer de distinguer « sim en menu » de « sim mort »).
+        self._godot_hb_acc = 0.0
         self._tunnel_scroll = 0.0        # accumulated tunnel texture offset
         # Bridge vers le viewer Godot 3D pour la vue F4 (rendu FPV réaliste).
         # Le binaire viewer est BUNDLED dans la distribution PyInstaller
@@ -4416,6 +4442,27 @@ class GameWidget(QWidget):
                 self._crossing_triggered = True
         elif not in_loop:
             self._crossing_triggered = False
+
+        # --- Viewer Godot 3D : watchdog + heartbeat -----------------------
+        if self._godot_bridge is not None:
+            _g_running = self._godot_bridge.is_running()
+            # Watchdog : le viewer EMBARQUÉ est mort (crash driver GPU…) →
+            # libérer l'embed et retomber sur la vue procédurale plutôt que
+            # de laisser une zone noire figée jusqu'au prochain cycle F4.
+            if (self._cabin_view_state == 2 and not _g_running
+                    and (self._godot_child_hwnd
+                         or self._godot_embed_widget is not None)):
+                print("[GodotBridge] viewer 3D mort — fallback vue procédurale")
+                self._release_godot_embed()
+                self._godot_fallback_to_procedural()
+            # Heartbeat 1 Hz hors MODE_RUN (en MODE_RUN l'état part à 60 Hz) :
+            # le viewer s'auto-ferme sur silence prolongé → pas d'orphelin si
+            # le sim Python crashe, sans confondre avec une pause menu.
+            elif _g_running and st.mode != MODE_RUN:
+                self._godot_hb_acc += dt
+                if self._godot_hb_acc >= 1.0:
+                    self._godot_hb_acc = 0.0
+                    self._godot_bridge.send_state({"hb": 1})
 
         if st.mode == MODE_RUN:
             self._apply_keys(dt)
@@ -7496,7 +7543,11 @@ class GameWidget(QWidget):
                 pass
             self._godot_embed_widget = None
             self._godot_embed_window = None
-        if self._godot_bridge is not None and self._godot_bridge.is_running():
+        # stop() inconditionnel (idempotent) : is_running() peut être False
+        # pendant la grâce de spawn (~1,6 s) alors qu'un viewer est bien en
+        # train de démarrer dans le thread de lancement — stop() pose le flag
+        # d'abandon que start() teste à sa sortie (pas de viewer zombie).
+        if self._godot_bridge is not None:
             self._godot_bridge.stop()
 
     def _draw_godot_placeholder(self, p: QPainter, rect: QRectF) -> None:
@@ -10499,15 +10550,62 @@ class MainWindow(QMainWindow):
         msg.exec()
         if msg.clickedButton() is not btn_ok:
             return
-        try:
-            autoupdate.download_and_install(info, _writable_dir())
-        except Exception as e:
-            QMessageBox.critical(
-                self,
-                self._tr("Update failed", "Échec de la mise à jour"),
-                self._tr(f"Error : {e}", f"Erreur : {e}"))
-            return
-        autoupdate.relaunch_app()
+        self._run_update_install(info)
+
+    def _run_update_install(self, info) -> None:
+        """Télécharge + installe la mise à jour dans un thread de fond
+        (jusqu'à 200 Mo — un download synchrone gèlerait l'UI en « Ne
+        répond pas »), avec dialogue de progression. Le thread ne touche
+        jamais Qt directement : il écrit dans un dict partagé qu'un QTimer
+        du thread GUI vient lire à 10 Hz."""
+        import autoupdate
+        from PyQt6.QtWidgets import QProgressDialog
+        prog = QProgressDialog(
+            self._tr("Downloading update…", "Téléchargement de la mise à jour…"),
+            None, 0, 100, self)
+        prog.setWindowTitle(self._tr("Update", "Mise à jour"))
+        prog.setWindowModality(Qt.WindowModality.WindowModal)
+        prog.setCancelButton(None)
+        prog.setMinimumDuration(0)
+        state = {"done": 0, "total": 0, "finished": False, "error": None}
+
+        def _progress(done: int, total: int) -> None:
+            state["done"], state["total"] = done, total
+
+        def _worker() -> None:
+            try:
+                autoupdate.download_and_install(
+                    info, _writable_dir(), progress=_progress)
+            except Exception as e:
+                state["error"] = e
+            finally:
+                state["finished"] = True
+
+        threading.Thread(target=_worker, daemon=True,
+                         name="pn-update-install").start()
+        poll = QTimer(self)
+        poll.setInterval(100)
+
+        def _on_poll() -> None:
+            if state["finished"]:
+                poll.stop()
+                prog.close()
+                if state["error"] is not None:
+                    QMessageBox.critical(
+                        self,
+                        self._tr("Update failed", "Échec de la mise à jour"),
+                        self._tr(f"Error : {state['error']}",
+                                 f"Erreur : {state['error']}"))
+                    return
+                import autoupdate as _au
+                _au.relaunch_app()
+                return
+            if state["total"] > 0:
+                prog.setValue(min(99, state["done"] * 100 // state["total"]))
+
+        poll.timeout.connect(_on_poll)
+        poll.start()
+        prog.show()
 
     def _manual_check_update(self) -> None:
         try:
@@ -10515,9 +10613,14 @@ class MainWindow(QMainWindow):
         except Exception:
             QMessageBox.warning(self, "Update", "autoupdate module missing")
             return
-        info = autoupdate.check_latest_release(
-            autoupdate_mod_owner(), autoupdate_mod_repo())
-        self._show_update_if_newer(info, silent=False)
+        # Check réseau dans un thread (comme le check auto au démarrage) :
+        # check_latest_release peut bloquer jusqu'à 15 s de timeout réseau.
+        thread = autoupdate.UpdateCheckThread(
+            autoupdate_mod_owner(), autoupdate_mod_repo(),
+            lambda info: QTimer.singleShot(
+                0, lambda: self._show_update_if_newer(info, silent=False)))
+        thread.start()
+        self._upd_thread = thread  # keep ref
 
     # --- Bug / crash reporting ----------------------------------------
     def _offer_pending_crash_reports(self) -> None:
