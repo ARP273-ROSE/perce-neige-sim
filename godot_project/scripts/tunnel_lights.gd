@@ -77,8 +77,9 @@ func _add_crossing_signals() -> void:
 	led_mesh.rings = 6
 
 	# Placer une paire (côte à côte) à chaque bord du loop + une au milieu.
-	# ceiling_y relatif à tunnel_radius : reste cohérent si on retune le rayon.
-	var ceiling_y: float = (tunnel.tunnel_radius if tunnel else 1.95) - 0.40
+	# ceiling_y suit le plafond local : dans la chambre, le rayon croît de
+	# |passing_loop_offset| → la LED du milieu reste collée au plafond au
+	# lieu de flotter à 1,55 m dans une chambre de 5,45 m de rayon.
 	var pair_dx: float = 0.18    # écart entre les 2 LED de la paire
 	var positions: Array = [
 		PNConstants.PASSING_START + 4.0,
@@ -89,6 +90,9 @@ func _add_crossing_signals() -> void:
 		var xform: Transform3D = tunnel.transform_at(s_led)
 		var right: Vector3 = xform.basis.x
 		var up: Vector3 = xform.basis.y
+		var r_local: float = (tunnel.tunnel_radius if tunnel else 1.95) \
+			+ absf(tunnel.passing_loop_offset(s_led, 1.0))
+		var ceiling_y: float = r_local - 0.40
 		var base_pos: Vector3 = xform.origin + up * ceiling_y
 		for side in [-1.0, 1.0]:
 			var pos: Vector3 = base_pos + right * (pair_dx * side)
@@ -126,8 +130,11 @@ func _add_neon(s: float, mesh: BoxMesh, neon_mat: StandardMaterial3D, color: Col
 	var xform: Transform3D = tunnel.transform_at(s)
 	var right: Vector3 = xform.basis.x
 	var up: Vector3 = xform.basis.y
-	# Néon sur le mur gauche (côté -X local)
-	var wall_pos: Vector3 = xform.origin - right * wall_offset + up * height_offset
+	# Néon sur le mur gauche (côté -X local). Dans la chambre de croisement,
+	# la paroi s'écarte de |passing_loop_offset| → le néon suit le mur au
+	# lieu de rester suspendu au milieu (la rame le traverserait).
+	var wall_x: float = wall_offset + absf(tunnel.passing_loop_offset(s, 1.0))
+	var wall_pos: Vector3 = xform.origin - right * wall_x + up * height_offset
 
 	# Source lumineuse
 	var light: OmniLight3D = OmniLight3D.new()

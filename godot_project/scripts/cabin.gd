@@ -19,11 +19,6 @@ var camera_fpv: Camera3D = null
 var camera_ext: Camera3D = null
 var interior_light: OmniLight3D = null
 
-# Labels dynamiques affichés sur les écrans du dashboard (mis à jour chaque frame)
-var _label_speed: Label3D = null
-var _label_tension: Label3D = null
-var _label_power: Label3D = null
-
 # Passagers — références pour animer les têtes selon l'accel/courbure
 var _passenger_heads: Array = []   # Array[MeshInstance3D]
 var _passenger_torsos: Array = []  # Array[MeshInstance3D]
@@ -234,184 +229,6 @@ func _build_handrails() -> void:
 			pole.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 			pole.position = Vector3(0.0, 0.20, z_pole)
 			interior_root.add_child(pole)
-
-
-func _build_dashboard() -> void:
-	# Cockpit du conducteur, à l'AVANT du car 1 (caméra FPV à z=-12, y=0.85).
-	# IMPORTANT : le dashboard doit rester SOUS l'horizon du regard pour ne
-	# pas masquer la vue du tunnel devant. Top du dashboard à y≈0.55, bien
-	# en dessous des yeux du conducteur.
-	var z_dash: float = -train_length * 0.5 + 2.5   # = -13.5 (1.5m devant caméra)
-
-	var dash_mat: StandardMaterial3D = StandardMaterial3D.new()
-	dash_mat.albedo_color = Color(0.10, 0.10, 0.12)
-	dash_mat.roughness = 0.45
-	dash_mat.metallic = 0.4
-
-	var screen_mat: StandardMaterial3D = StandardMaterial3D.new()
-	screen_mat.albedo_color = Color(0.05, 0.25, 0.10)
-	screen_mat.emission_enabled = true
-	screen_mat.emission = Color(0.15, 0.65, 0.25)
-	screen_mat.emission_energy_multiplier = 1.0
-	screen_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-
-	var amber_mat: StandardMaterial3D = StandardMaterial3D.new()
-	amber_mat.albedo_color = Color(0.25, 0.15, 0.05)
-	amber_mat.emission_enabled = true
-	amber_mat.emission = Color(0.85, 0.50, 0.10)
-	amber_mat.emission_energy_multiplier = 0.9
-	amber_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-
-	var red_mat: StandardMaterial3D = StandardMaterial3D.new()
-	red_mat.albedo_color = Color(0.30, 0.05, 0.05)
-	red_mat.emission_enabled = true
-	red_mat.emission = Color(0.95, 0.20, 0.18)
-	red_mat.emission_energy_multiplier = 1.4
-	red_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-
-	# Corps dashboard (caisson) — top à y=0.55 (bien sous l'horizon du regard à 0.85)
-	var dash_body: MeshInstance3D = MeshInstance3D.new()
-	dash_body.name = "DashboardBody"
-	var dash_mesh: BoxMesh = BoxMesh.new()
-	dash_mesh.size = Vector3(1.80, 0.45, 0.40)
-	dash_mesh.material = dash_mat
-	dash_body.mesh = dash_mesh
-	dash_body.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	dash_body.position = Vector3(0.0, 0.30, z_dash)   # centre y=0.30 → top y=0.525
-	interior_root.add_child(dash_body)
-
-	# Tableau de bord supérieur incliné vers le conducteur (lecture en regardant en bas)
-	var dash_top: MeshInstance3D = MeshInstance3D.new()
-	dash_top.name = "DashboardTop"
-	var top_mesh: BoxMesh = BoxMesh.new()
-	top_mesh.size = Vector3(1.80, 0.03, 0.42)
-	top_mesh.material = dash_mat
-	dash_top.mesh = top_mesh
-	dash_top.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	dash_top.position = Vector3(0.0, 0.53, z_dash + 0.05)
-	dash_top.rotation = Vector3(-0.30, 0.0, 0.0)
-	interior_root.add_child(dash_top)
-
-	# Vitesse (écran vert, à gauche) — sur le top incliné
-	var s_h: float = 0.13   # demi-hauteur écran
-	var screen_y: float = 0.55
-	var screen_z: float = z_dash + 0.22
-	var speedo: MeshInstance3D = MeshInstance3D.new()
-	speedo.name = "Speedometer"
-	var s_mesh: BoxMesh = BoxMesh.new()
-	s_mesh.size = Vector3(0.26, s_h, 0.005)
-	s_mesh.material = screen_mat
-	speedo.mesh = s_mesh
-	speedo.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	speedo.position = Vector3(-0.45, screen_y, screen_z)
-	speedo.rotation = Vector3(-0.30, 0.0, 0.0)
-	interior_root.add_child(speedo)
-
-	# Tension câble (jauge ambre, milieu)
-	var tension: MeshInstance3D = MeshInstance3D.new()
-	tension.name = "TensionGauge"
-	var t_mesh: BoxMesh = BoxMesh.new()
-	t_mesh.size = Vector3(0.20, s_h, 0.005)
-	t_mesh.material = amber_mat
-	tension.mesh = t_mesh
-	tension.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	tension.position = Vector3(0.0, screen_y, screen_z)
-	tension.rotation = Vector3(-0.30, 0.0, 0.0)
-	interior_root.add_child(tension)
-
-	# Puissance moteur (écran vert, à droite)
-	var power: MeshInstance3D = MeshInstance3D.new()
-	power.name = "PowerGauge"
-	var p_mesh: BoxMesh = BoxMesh.new()
-	p_mesh.size = Vector3(0.26, s_h, 0.005)
-	p_mesh.material = screen_mat
-	power.mesh = p_mesh
-	power.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	power.position = Vector3(+0.45, screen_y, screen_z)
-	power.rotation = Vector3(-0.30, 0.0, 0.0)
-	interior_root.add_child(power)
-
-	# Labels dynamiques sur les écrans (depth-test ON, taille petite, lecture
-	# en baissant les yeux comme un vrai cockpit)
-	_label_speed = _make_dash_label(Vector3(-0.45, screen_y + 0.005, screen_z + 0.005), "0", Color(0.55, 1.0, 0.65))
-	_label_tension = _make_dash_label(Vector3(0.0, screen_y + 0.005, screen_z + 0.005), "0", Color(1.0, 0.80, 0.45))
-	_label_power = _make_dash_label(Vector3(+0.45, screen_y + 0.005, screen_z + 0.005), "0", Color(0.55, 1.0, 0.65))
-
-	# Voyants alarme (rangée de 4 LED rouges sur la face avant du dashboard)
-	for i in range(4):
-		var led: MeshInstance3D = MeshInstance3D.new()
-		var led_mesh: SphereMesh = SphereMesh.new()
-		led_mesh.radius = 0.020
-		led_mesh.height = 0.04
-		led_mesh.material = red_mat
-		led.mesh = led_mesh
-		led.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		led.position = Vector3(-0.6 + float(i) * 0.4, 0.18, z_dash + 0.21)
-		interior_root.add_child(led)
-
-	# 2 mushrooms E-STOP rouges (gauche / droite) — comme sur le vrai
-	# pupitre Von Roll. Anneau jaune + coiffe rouge bombée.
-	var estop_yellow: StandardMaterial3D = StandardMaterial3D.new()
-	estop_yellow.albedo_color = Color(0.80, 0.72, 0.10)
-	estop_yellow.roughness = 0.6
-	var estop_red: StandardMaterial3D = StandardMaterial3D.new()
-	estop_red.albedo_color = Color(0.90, 0.12, 0.10)
-	estop_red.roughness = 0.35
-	estop_red.metallic = 0.1
-	for side in [-1.0, 1.0]:
-		var ring: MeshInstance3D = MeshInstance3D.new()
-		var ring_mesh: CylinderMesh = CylinderMesh.new()
-		ring_mesh.top_radius = 0.045
-		ring_mesh.bottom_radius = 0.045
-		ring_mesh.height = 0.012
-		ring_mesh.radial_segments = 16
-		ring_mesh.material = estop_yellow
-		ring.mesh = ring_mesh
-		ring.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		ring.position = Vector3(side * 0.78, screen_y - 0.04, screen_z + 0.01)
-		ring.rotation = Vector3(PI * 0.5 - 0.30, 0.0, 0.0)
-		interior_root.add_child(ring)
-		var cap: MeshInstance3D = MeshInstance3D.new()
-		var cap_mesh: SphereMesh = SphereMesh.new()
-		cap_mesh.radius = 0.036
-		cap_mesh.height = 0.040
-		cap_mesh.radial_segments = 14
-		cap_mesh.rings = 5
-		cap_mesh.material = estop_red
-		cap.mesh = cap_mesh
-		cap.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		cap.position = Vector3(side * 0.78, screen_y - 0.02, screen_z + 0.013)
-		cap.rotation = Vector3(-0.30, 0.0, 0.0)
-		interior_root.add_child(cap)
-
-	# Volant / poignée de commande, plus bas pour ne pas obstruer
-	var wheel: MeshInstance3D = MeshInstance3D.new()
-	wheel.name = "ControlWheel"
-	var wheel_mesh: TorusMesh = TorusMesh.new()
-	wheel_mesh.inner_radius = 0.13
-	wheel_mesh.outer_radius = 0.16
-	wheel_mesh.material = dash_mat
-	wheel.mesh = wheel_mesh
-	wheel.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	wheel.position = Vector3(0.0, 0.20, z_dash + 0.28)
-	wheel.rotation = Vector3(PI * 0.5 - 0.30, 0.0, 0.0)
-	interior_root.add_child(wheel)
-
-
-func _make_dash_label(pos: Vector3, txt: String, col: Color) -> Label3D:
-	var lbl: Label3D = Label3D.new()
-	lbl.text = txt
-	lbl.font_size = 80
-	lbl.pixel_size = 0.0025
-	lbl.modulate = col
-	lbl.outline_size = 0
-	lbl.shaded = false
-	lbl.double_sided = true
-	lbl.no_depth_test = true
-	lbl.position = pos
-	lbl.rotation = Vector3(-0.25, 0.0, 0.0)
-	interior_root.add_child(lbl)
-	return lbl
 
 
 # ---------------------------------------------------------------------------
@@ -679,53 +496,6 @@ func _build_cctv_monitor() -> void:
 				z_mon - dx * s_ang + 0.017)
 			cell.rotation = Vector3(-0.20, ang, 0.0)
 			interior_root.add_child(cell)
-
-
-# ---------------------------------------------------------------------------
-# Pare-brise courbe — 3 vitres légèrement angulées + 2 montants noirs
-# entre, pour suggérer la courbure du pare-brise réel. Vitres transparentes
-# semi-réfléchissantes (très peu opaques, ne masque pas le tunnel).
-# ---------------------------------------------------------------------------
-
-func _build_windshield() -> void:
-	var z_glass: float = -train_length * 0.5 + 1.0   # 1m devant la caméra FPV
-	var glass_mat: StandardMaterial3D = StandardMaterial3D.new()
-	glass_mat.albedo_color = Color(0.55, 0.65, 0.75, 0.12)
-	glass_mat.roughness = 0.05
-	glass_mat.metallic = 0.0
-	glass_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	glass_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
-
-	var frame_mat: StandardMaterial3D = StandardMaterial3D.new()
-	frame_mat.albedo_color = Color(0.06, 0.06, 0.07)
-	frame_mat.roughness = 0.55
-	frame_mat.metallic = 0.2
-
-	for i in range(3):
-		var pane: MeshInstance3D = MeshInstance3D.new()
-		var pane_mesh: BoxMesh = BoxMesh.new()
-		pane_mesh.size = Vector3(0.95, 1.20, 0.010)
-		pane_mesh.material = glass_mat
-		pane.mesh = pane_mesh
-		pane.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		var ang2: float = (float(i) - 1.0) * 0.22
-		pane.position = Vector3(sin(ang2) * 0.95, 1.00,
-				z_glass + cos(ang2) * 0.04)
-		pane.rotation = Vector3(0.0, ang2, 0.0)
-		interior_root.add_child(pane)
-
-		if i < 2:
-			var post: MeshInstance3D = MeshInstance3D.new()
-			var post_mesh: BoxMesh = BoxMesh.new()
-			post_mesh.size = Vector3(0.04, 1.25, 0.07)
-			post_mesh.material = frame_mat
-			post.mesh = post_mesh
-			post.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-			var ang_post: float = (float(i) - 0.5) * 0.22
-			post.position = Vector3(sin(ang_post) * 1.05, 1.00,
-					z_glass + cos(ang_post) * 0.04)
-			post.rotation = Vector3(0.0, ang_post, 0.0)
-			interior_root.add_child(post)
 
 
 func _build_driver_seat() -> void:
@@ -1030,8 +800,6 @@ func _process(_delta: float) -> void:
 			xform.basis = xform.basis.rotated(xform.basis.y, PI)
 	global_transform = xform
 
-	# Update des écrans dashboard (FPV)
-	_update_dashboard_screens()
 	# Animation des passagers selon dynamique
 	_animate_passengers(_delta)
 	# Sync des lumières depuis physics (drives by Python sim in client mode)
@@ -1078,14 +846,6 @@ func _animate_passengers(delta: float) -> void:
 		if torso != null:
 			torso.rotation = Vector3(pitch * 0.4, 0.0, roll * 0.4)
 
-
-func _update_dashboard_screens() -> void:
-	if _label_speed == null or physics == null or is_ghost:
-		return
-	var v_kmh: float = absf(physics.v) * 3.6
-	_label_speed.text = "%.0f" % v_kmh
-	_label_tension.text = "%.0f" % physics.tension_dan_disp
-	_label_power.text = "%.0f" % physics.power_kw_disp
 
 
 # Position monde de la cabine à la distance s, en tenant compte du déport

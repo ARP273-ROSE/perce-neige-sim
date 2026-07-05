@@ -92,6 +92,36 @@ func _ready() -> void:
 		_build_announcements()
 	print("[PerceNeige3D] Ready.")
 
+	# Diagnostic : --mesh-stats en arg projet → imprime le nombre de vertices
+	# par nœud et le total, puis continue normalement. Sert à vérifier que le
+	# chunking/échantillonnage adaptatif tient ses promesses.
+	if "--mesh-stats" in OS.get_cmdline_user_args():
+		_print_mesh_stats()
+
+
+func _print_mesh_stats() -> void:
+	var totals: Dictionary = {"verts": 0, "meshes": 0, "mm_instances": 0}
+	_collect_mesh_stats(self, totals)
+	print("[MeshStats] %d MeshInstance3D, %d vertices, %d instances MultiMesh"
+		% [totals["meshes"], totals["verts"], totals["mm_instances"]])
+
+
+func _collect_mesh_stats(node: Node, totals: Dictionary) -> void:
+	if node is MeshInstance3D and node.mesh != null:
+		var v: int = 0
+		for si in range(node.mesh.get_surface_count()):
+			var arrays: Array = node.mesh.surface_get_arrays(si)
+			if arrays.size() > Mesh.ARRAY_VERTEX and arrays[Mesh.ARRAY_VERTEX] != null:
+				v += arrays[Mesh.ARRAY_VERTEX].size()
+		totals["verts"] += v
+		totals["meshes"] += 1
+		if v > 20000:
+			print("[MeshStats]   %-28s %8d verts" % [node.name, v])
+	elif node is MultiMeshInstance3D and node.multimesh != null:
+		totals["mm_instances"] += node.multimesh.instance_count
+	for child in node.get_children():
+		_collect_mesh_stats(child, totals)
+
 
 func _build_state_receiver() -> void:
 	state_receiver = StateReceiver.new()

@@ -68,13 +68,27 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 > sim drives the physics over UDP at 60 Hz and the 3D viewer renders
 > the real cockpit perspective with full Phase 4-10 features : tunnel
 > TBM with chamber, Abt switch passing loop, machine room, animated
-> cable, 3D dashboard, animated passengers, voice announcements. On
-> Linux X11, the Godot window is reparented into the F4 widget area
-> (xdotool + QWindow.fromWinId() + createWindowContainer). On other
-> platforms (Wayland / Windows / macOS), the Godot window opens
-> separately. If the bundled binary isn't found (custom build), F4
-> cycles back to OFF and falls back to the built-in procedural cabin
-> view documented below.
+> cable, animated passengers, voice announcements. On Windows the
+> Godot window is reparented as a true Win32 child (SetParent) ; on
+> Linux X11 via xdotool + QWindow.fromWinId() + createWindowContainer.
+> On Wayland / macOS, the Godot window opens separately.
+
+#### Faut-il installer Godot ? / Do I need Godot installed?
+**Non / No.**
+- **Release .exe (recommandé)** : le viewer 3D est **embarqué dans
+  l'exécutable** — rien à installer.
+- **Depuis les sources (`git clone` + `launch.bat`)** : le binaire
+  `bundled_godot/perce_neige_3d.exe` est **gitignoré** (~125 Mo) donc
+  absent après un clone. Au premier F4, l'appli **propose de le
+  télécharger automatiquement** depuis la dernière release GitHub
+  (intégrité vérifiée SHA-256). Alternatives : le télécharger à la main
+  depuis la page Releases dans `bundled_godot/`, installer Godot 4.6
+  (fallback dev), ou le builder via `./build_godot_viewer.sh`.
+- Si aucun viewer n'est trouvable, F4 retombe proprement sur la vue
+  cabine procédurale Python documentée ci-dessous.
+
+Préréglages de rendu du viewer (arg projet) : `--quality=low|medium|high`
+(low : SDFGI + fog volumétrique + SSR coupés — pour iGPU).
 
 #### Built-in procedural cabin view (fallback)
 - **Real pinhole-camera perspective** — `screen_r = focal · R_tunnel / d`

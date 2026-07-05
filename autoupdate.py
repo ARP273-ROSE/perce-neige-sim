@@ -75,6 +75,13 @@ PLATFORM_ASSET_SUFFIX = {
     "linux":  "-linux.AppImage",
 }
 
+# Viewer Godot 3D standalone publié en asset de release (gitignoré dans le
+# repo car ~125 Mo). asset name → nom de fichier local dans bundled_godot/.
+VIEWER_ASSETS = {
+    "win32":  ("perce_neige_3d-windows.exe",   "perce_neige_3d.exe"),
+    "linux":  ("perce_neige_3d-linux.x86_64",  "perce_neige_3d.x86_64"),
+}
+
 
 @dataclass
 class ReleaseAsset:
@@ -366,6 +373,46 @@ def _install_source(release: ReleaseInfo, project_dir: Path,
         dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(src, dst)
     return tmp
+
+
+# ---------------------------------------------------------------------------
+# Viewer 3D — téléchargement du binaire Godot standalone depuis la release
+# ---------------------------------------------------------------------------
+
+def download_viewer(owner: str, repo: str, dest_dir: Path,
+                    progress: Optional[Callable[[int, int], None]] = None,
+                    ) -> Path:
+    """Télécharge le viewer 3D standalone depuis la dernière release et
+    l'installe dans ``dest_dir`` (bundled_godot/). Intégrité vérifiée via
+    le SHA256SUMS de la release (obligatoire). Lève RuntimeError sur tout
+    échec. Utilisé en mode source quand bundled_godot/ est vide (le binaire
+    est gitignoré) et que Godot n'est pas installé sur la machine.
+    """
+    entry = VIEWER_ASSETS.get(sys.platform)
+    if entry is None:
+        raise RuntimeError(f"pas de viewer 3D publié pour {sys.platform!r}")
+    asset_name, local_name = entry
+    release = check_latest_release(owner, repo)
+    if release is None:
+        raise RuntimeError("release GitHub injoignable")
+    asset = next((a for a in release.assets if a.name == asset_name), None)
+    if asset is None:
+        raise RuntimeError(
+            f"la release {release.tag} ne publie pas {asset_name!r} "
+            f"(release antérieure à la publication du viewer ?)")
+    tmp = Path(tempfile.mkdtemp(prefix="pn_viewer_"))
+    tmp_bin = tmp / asset_name
+    _stream_download(asset.url, tmp_bin, progress=progress)
+    if asset.size and tmp_bin.stat().st_size != asset.size:
+        raise RuntimeError("taille téléchargée != taille annoncée")
+    _verify_asset_sha256(release, asset, tmp_bin)
+    dest_dir = Path(dest_dir)
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    dest = dest_dir / local_name
+    shutil.move(str(tmp_bin), str(dest))
+    if sys.platform != "win32":
+        dest.chmod(0o755)
+    return dest
 
 
 # ---------------------------------------------------------------------------
