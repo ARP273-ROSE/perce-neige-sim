@@ -12,6 +12,30 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 
 ---
 
+## Quoi de neuf — audit 2026-07
+
+- **Sécurité auto-update** : l'exe téléchargé est vérifié **SHA-256** contre le
+  `SHA256SUMS` publié par le CI dans chaque release (release sans checksums =
+  refusée). Check et téléchargement de MAJ en arrière-plan (plus de gel UI).
+- **Vue 3D sans Godot installé** : le viewer est publié en asset de release ;
+  s'il manque (lancement depuis les sources), l'appli propose de le
+  **télécharger automatiquement** au premier F4 (intégrité SHA-256). Voir
+  « Faut-il installer Godot ? » plus bas.
+- **Robustesse de l'intégration 3D** : watchdog (viewer mort → fallback vue
+  procédurale au lieu d'une zone noire), heartbeat UDP → le viewer affiche
+  « signal perdu » puis se ferme seul si le sim crashe (plus de processus
+  orphelin), validation des paquets, port borné.
+- **Performance 3D** : géométrie découpée en tronçons de 120 m +
+  échantillonnage adaptatif (**1,64 M → 0,71 M vertices**, frustum culling
+  enfin efficace), ~230 lumières du tunnel activées seulement à moins de
+  250 m des rames, préréglages `--quality=low|medium|high`, diagnostic
+  `--mesh-stats`.
+- **Fix croisement** : les câbles muraux, néons et LED suivent désormais la
+  paroi de la chambre de croisement — la rame ne les traverse plus pendant
+  l'évitement.
+
+---
+
 ## Features
 
 ### Real-world fidelity
