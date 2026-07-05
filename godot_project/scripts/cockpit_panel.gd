@@ -56,8 +56,16 @@ func _build_slope_profile_points() -> void:
 	slope_profile_pts = pts
 
 
-func _process(_delta: float) -> void:
-	queue_redraw()
+# Redraw à ~15 Hz : le _draw() complet (jauges, profil, aiguilles) est
+# coûteux et 60 Hz n'apporte rien visuellement sur des instruments.
+var _redraw_accum: float = 0.0
+
+
+func _process(delta: float) -> void:
+	_redraw_accum += delta
+	if _redraw_accum >= 1.0 / 15.0:
+		_redraw_accum = 0.0
+		queue_redraw()
 
 
 func _draw() -> void:

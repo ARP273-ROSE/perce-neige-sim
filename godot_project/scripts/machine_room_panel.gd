@@ -35,12 +35,20 @@ func setup(p: TrainPhysics, fm: FaultManager) -> void:
 	fault_manager = fm
 
 
+# Redraw à ~15 Hz (cf. cockpit_panel) — l'angle de poulie continue de
+# s'intégrer à chaque frame pour rester exact, seul l'affichage est throttlé.
+var _redraw_accum: float = 0.0
+
+
 func _process(delta: float) -> void:
 	if physics != null:
 		# Anime la poulie motrice : ω = v / r_pulley (radius 2.08m)
 		var omega: float = physics.v / 2.08
 		_pulley_angle += omega * delta * float(physics.direction)
-	queue_redraw()
+	_redraw_accum += delta
+	if _redraw_accum >= 1.0 / 15.0:
+		_redraw_accum = 0.0
+		queue_redraw()
 
 
 func _draw() -> void:

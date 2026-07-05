@@ -12,6 +12,7 @@ extends Node3D
 @export var ring_segments: int = 20          # vertices par ring
 @export var tunnel_radius: float = 1.95      # rayon intérieur (m)
 @export var show_debug_path: bool = false    # afficher la spline en wireframe
+@export var chunk_length: float = 120.0      # découpage des meshes (frustum culling)
 
 # Horseshoe (tunnel carré cut-and-cover aux portails)
 @export var horseshoe_half_width: float = 2.05   # demi-largeur rectangle
@@ -106,62 +107,88 @@ func _build_wall_cables() -> void:
 	mat.roughness = 0.55
 	mat.metallic = 0.10
 
-	var n_steps: int = maxi(2, int(PNConstants.LENGTH / wall_cable_sample_m))
 	var radial: int = 8
 	for which in [0, 1]:
 		var y_off: float = wall_cable_y1 if which == 0 else wall_cable_y2
-		var st: SurfaceTool = SurfaceTool.new()
-		st.begin(Mesh.PRIMITIVE_TRIANGLES)
-		st.set_material(mat)
+		# Découpé en tronçons de chunk_length (même raison que le tunnel :
+		# un tube continu de 3,4 km ne se fait jamais culler).
+		var c_start: float = 0.0
+		var chunk_i: int = 0
+		while c_start < PNConstants.LENGTH - 0.001:
+			var c_end: float = minf(c_start + chunk_length, PNConstants.LENGTH)
+			_build_wall_cable_chunk(mat, y_off, radial, c_start, c_end,
+				"WallCable_%d_%d" % [which, chunk_i])
+			c_start = c_end
+			chunk_i += 1
 
-		var prev_xform: Transform3D = transform_at(0.0)
-		for i in range(1, n_steps + 1):
-			var s_cur: float = float(i) / float(n_steps) * PNConstants.LENGTH
-			var cur_xform: Transform3D = transform_at(s_cur)
 
-			var p0: Vector3 = prev_xform.origin \
-				+ prev_xform.basis.x * wall_cable_x_local \
-				+ prev_xform.basis.y * y_off
-			var p1: Vector3 = cur_xform.origin \
-				+ cur_xform.basis.x * wall_cable_x_local \
-				+ cur_xform.basis.y * y_off
+func _build_wall_cable_chunk(
+	mat: StandardMaterial3D, y_off: float, radial: int,
+	s_start: float, s_end: float, name: String,
+) -> void:
+	var n_steps: int = maxi(2, int((s_end - s_start) / wall_cable_sample_m))
+	var st: SurfaceTool = SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	st.set_material(mat)
 
-			for k in range(radial):
-				var a0: float = float(k) / float(radial) * TAU
-				var a1: float = float(k + 1) / float(radial) * TAU
-				var c0: float = cos(a0)
-				var s0: float = sin(a0)
-				var c1: float = cos(a1)
-				var s1: float = sin(a1)
-				var off0_prev: Vector3 = prev_xform.basis.x * (c0 * wall_cable_radius) \
-					+ prev_xform.basis.y * (s0 * wall_cable_radius)
-				var off1_prev: Vector3 = prev_xform.basis.x * (c1 * wall_cable_radius) \
-					+ prev_xform.basis.y * (s1 * wall_cable_radius)
-				var off0_cur: Vector3 = cur_xform.basis.x * (c0 * wall_cable_radius) \
-					+ cur_xform.basis.y * (s0 * wall_cable_radius)
-				var off1_cur: Vector3 = cur_xform.basis.x * (c1 * wall_cable_radius) \
-					+ cur_xform.basis.y * (s1 * wall_cable_radius)
+	var prev_s: float = s_start
+	var prev_xform: Transform3D = transform_at(s_start)
+	for i in range(1, n_steps + 1):
+		var s_cur: float = s_start + float(i) / float(n_steps) * (s_end - s_start)
+		var cur_xform: Transform3D = transform_at(s_cur)
 
-				var v00: Vector3 = p0 + off0_prev
-				var v01: Vector3 = p0 + off1_prev
-				var v10: Vector3 = p1 + off0_cur
-				var v11: Vector3 = p1 + off1_cur
+		var p0: Vector3 = prev_xform.origin \
+			+ prev_xform.basis.x * _wall_cable_x_at(prev_s) \
+			+ prev_xform.basis.y * y_off
+		var p1: Vector3 = cur_xform.origin \
+			+ cur_xform.basis.x * _wall_cable_x_at(s_cur) \
+			+ cur_xform.basis.y * y_off
 
-				st.set_uv(Vector2(0, 0)); st.add_vertex(v00)
-				st.set_uv(Vector2(0, 1)); st.add_vertex(v10)
-				st.set_uv(Vector2(1, 1)); st.add_vertex(v11)
-				st.set_uv(Vector2(0, 0)); st.add_vertex(v00)
-				st.set_uv(Vector2(1, 1)); st.add_vertex(v11)
-				st.set_uv(Vector2(1, 0)); st.add_vertex(v01)
+		for k in range(radial):
+			var a0: float = float(k) / float(radial) * TAU
+			var a1: float = float(k + 1) / float(radial) * TAU
+			var c0: float = cos(a0)
+			var s0: float = sin(a0)
+			var c1: float = cos(a1)
+			var s1: float = sin(a1)
+			var off0_prev: Vector3 = prev_xform.basis.x * (c0 * wall_cable_radius) \
+				+ prev_xform.basis.y * (s0 * wall_cable_radius)
+			var off1_prev: Vector3 = prev_xform.basis.x * (c1 * wall_cable_radius) \
+				+ prev_xform.basis.y * (s1 * wall_cable_radius)
+			var off0_cur: Vector3 = cur_xform.basis.x * (c0 * wall_cable_radius) \
+				+ cur_xform.basis.y * (s0 * wall_cable_radius)
+			var off1_cur: Vector3 = cur_xform.basis.x * (c1 * wall_cable_radius) \
+				+ cur_xform.basis.y * (s1 * wall_cable_radius)
 
-			prev_xform = cur_xform
+			var v00: Vector3 = p0 + off0_prev
+			var v01: Vector3 = p0 + off1_prev
+			var v10: Vector3 = p1 + off0_cur
+			var v11: Vector3 = p1 + off1_cur
 
-		st.generate_normals()
-		var mi: MeshInstance3D = MeshInstance3D.new()
-		mi.name = "WallCable_%d" % which
-		mi.mesh = st.commit()
-		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		add_child(mi)
+			st.set_uv(Vector2(0, 0)); st.add_vertex(v00)
+			st.set_uv(Vector2(0, 1)); st.add_vertex(v10)
+			st.set_uv(Vector2(1, 1)); st.add_vertex(v11)
+			st.set_uv(Vector2(0, 0)); st.add_vertex(v00)
+			st.set_uv(Vector2(1, 1)); st.add_vertex(v11)
+			st.set_uv(Vector2(1, 0)); st.add_vertex(v01)
+
+		prev_s = s_cur
+		prev_xform = cur_xform
+
+	st.generate_normals()
+	var mi: MeshInstance3D = MeshInstance3D.new()
+	mi.name = name
+	mi.mesh = st.commit()
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(mi)
+
+
+# X local du câble mural à la distance s : suit la paroi GAUCHE du tunnel,
+# y compris dans la chambre de croisement où la paroi s'écarte de
+# |passing_loop_offset|. Sans ça, le câble resterait à x constant en plein
+# milieu de la chambre et la rame le traverserait pendant l'évitement.
+func _wall_cable_x_at(s: float) -> float:
+	return wall_cable_x_local - absf(passing_loop_offset(s, 1.0))
 
 
 # Construit un tronçon de tunnel entre s_start et s_end.
@@ -176,15 +203,33 @@ func _build_tunnel_section(
 	mat: StandardMaterial3D, s_start: float, s_end: float,
 	side: float, name: String, is_chamber: bool = false,
 ) -> void:
-	var st: SurfaceTool = SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	st.set_material(mat)
-
 	# Indices de rings encadrants (on prend le ring juste avant s_start et juste
 	# après s_end pour assurer une fermeture visuelle aux extrémités)
 	var n_rings_total: int = path_points.size()
 	var idx_start: int = clampi(int(s_start / ring_spacing), 0, n_rings_total - 1)
 	var idx_end: int = clampi(int(ceil(s_end / ring_spacing)), idx_start + 1, n_rings_total - 1)
+
+	# Découpage en tronçons de ~chunk_length pour que le frustum culling
+	# fonctionne (une section continue de 1,6 km a une AABB toujours dans
+	# le champ → dessinée en entier à chaque frame).
+	var rings_per_chunk: int = maxi(2, int(chunk_length / ring_spacing))
+	var c_start: int = idx_start
+	var chunk_i: int = 0
+	while c_start < idx_end:
+		var c_end: int = mini(c_start + rings_per_chunk, idx_end)
+		_build_tunnel_chunk(mat, c_start, c_end, side,
+			"%s_%d" % [name, chunk_i], is_chamber)
+		c_start = c_end
+		chunk_i += 1
+
+
+func _build_tunnel_chunk(
+	mat: StandardMaterial3D, idx_start: int, idx_end: int,
+	side: float, name: String, is_chamber: bool,
+) -> void:
+	var st: SurfaceTool = SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	st.set_material(mat)
 
 	for i in range(idx_start + 1, idx_end + 1):
 		var prev_idx: int = i - 1
