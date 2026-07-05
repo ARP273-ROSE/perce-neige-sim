@@ -50,18 +50,23 @@ jobs:
           unzip -q "Godot_v${{ env.GODOT_VERSION }}_export_templates.tpz"
           cp templates/* ~/.local/share/godot/export_templates/${{ env.GODOT_BIN_TAG }}.stable/
 
+      # Note : l'export Godot headless peut retourner un code non nul malgré
+      # un export réussi (warnings) → on ne teste pas le code retour mais la
+      # présence effective du binaire produit.
       - name: Export Linux x86_64 viewer
         run: |
           set -e
           mkdir -p bundled_godot
           ~/godot/godot --headless --path godot_project --export-release "Linux x86_64" || true
-          ls -lh bundled_godot/ || (echo "ERROR: export Linux échoué"; exit 1)
+          ls -lh bundled_godot/
+          test -f bundled_godot/perce_neige_3d.x86_64 || (echo "ERROR: export Linux échoué (binaire absent)"; exit 1)
 
       - name: Export Windows x86_64 viewer
         run: |
           set -e
           ~/godot/godot --headless --path godot_project --export-release "Windows x86_64" || true
           ls -lh bundled_godot/
+          test -f bundled_godot/perce_neige_3d.exe || (echo "ERROR: export Windows échoué (binaire absent)"; exit 1)
 
       - name: Upload viewer artifacts
         uses: actions/upload-artifact@v4
@@ -116,6 +121,15 @@ jobs:
         shell: bash
         run: mv dist/PerceNeigeSimulator.exe dist/PerceNeigeSimulator-windows.exe
 
+      # SHA256SUMS est vérifié par autoupdate.py avant de remplacer l'exe
+      # en place — une release sans ce fichier sera REFUSÉE par l'auto-update.
+      - name: Generate SHA256SUMS
+        shell: bash
+        run: |
+          cd dist
+          sha256sum PerceNeigeSimulator-windows.exe > SHA256SUMS
+          cat SHA256SUMS
+
       - name: Show final exe size
         shell: bash
         run: ls -lh dist/
@@ -124,8 +138,10 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/PerceNeigeSimulator-windows.exe
-          fail_on_unmatched_files: false
+          files: |
+            dist/PerceNeigeSimulator-windows.exe
+            dist/SHA256SUMS
+          fail_on_unmatched_files: true
 
       - name: Upload build artifact (workflow_dispatch)
         if: github.event_name == 'workflow_dispatch'
