@@ -94,6 +94,26 @@ APP_NAME = "Perce-Neige Simulator"
 
 
 # ---------------------------------------------------------------------------
+# Cache de QFont — le rendu QPainter (~30 méthodes _draw_* à 60 Hz)
+# construisait ~90 QFont par frame ; la création d'un QFont interroge la
+# base de fontes système. Les QFont retournés sont partagés : Qt les COPIE
+# dans QPainter.setFont(), donc aucun risque de mutation croisée tant qu'on
+# ne modifie pas l'objet retourné (tous les sites d'appel font un setFont
+# immédiat).
+# ---------------------------------------------------------------------------
+
+_FONT_CACHE: dict = {}
+
+
+def _cached_font(*args) -> "QFont":
+    font = _FONT_CACHE.get(args)
+    if font is None:
+        font = QFont(*args)
+        _FONT_CACHE[args] = font
+    return font
+
+
+# ---------------------------------------------------------------------------
 # Resource paths — handle PyInstaller frozen mode transparently
 # ---------------------------------------------------------------------------
 
@@ -5490,27 +5510,33 @@ class GameWidget(QWidget):
         self._draw_clock_badge(p, w, h)
         p.end()
 
+    # Jours/mois hoistés en constantes de classe : reconstruire ces listes
+    # (et les gradients/fonts plus bas) à chaque frame coûtait cher à 60 Hz.
+    _CLOCK_DAYS = {
+        "fr": ["lundi", "mardi", "mercredi", "jeudi",
+               "vendredi", "samedi", "dimanche"],
+        "en": ["Monday", "Tuesday", "Wednesday", "Thursday",
+               "Friday", "Saturday", "Sunday"],
+    }
+    _CLOCK_MONTHS = {
+        "fr": ["janvier", "février", "mars", "avril", "mai",
+               "juin", "juillet", "août", "septembre",
+               "octobre", "novembre", "décembre"],
+        "en": ["January", "February", "March", "April", "May",
+               "June", "July", "August", "September",
+               "October", "November", "December"],
+    }
+
     def _draw_clock_badge(self, p: QPainter, w: int, h: int) -> None:
         """Small top-centre pill showing the real wall clock. Drawn in
         every mode so the driver always knows the time without hunting
         for the auto-ops panel."""
         now = datetime.now()
-        if LANG == "fr":
-            days = ["lundi", "mardi", "mercredi", "jeudi",
-                    "vendredi", "samedi", "dimanche"]
-            months = ["janvier", "février", "mars", "avril", "mai",
-                      "juin", "juillet", "août", "septembre",
-                      "octobre", "novembre", "décembre"]
-            date_txt = (f"{days[now.weekday()]} {now.day} "
-                        f"{months[now.month - 1]} {now.year}")
-        else:
-            days = ["Monday", "Tuesday", "Wednesday", "Thursday",
-                    "Friday", "Saturday", "Sunday"]
-            months = ["January", "February", "March", "April", "May",
-                      "June", "July", "August", "September",
-                      "October", "November", "December"]
-            date_txt = (f"{days[now.weekday()]} {now.day} "
-                        f"{months[now.month - 1]} {now.year}")
+        lang = "fr" if LANG == "fr" else "en"
+        days = self._CLOCK_DAYS[lang]
+        months = self._CLOCK_MONTHS[lang]
+        date_txt = (f"{days[now.weekday()]} {now.day} "
+                    f"{months[now.month - 1]} {now.year}")
         time_txt = now.strftime("%H:%M:%S")
         pad = 10
         pill_w = 196
@@ -5524,12 +5550,12 @@ class GameWidget(QWidget):
         p.setPen(QPen(QColor(120, 180, 240, 180), 1.2))
         p.drawRoundedRect(pill, 10, 10)
         p.setPen(QPen(QColor(190, 220, 255)))
-        p.setFont(QFont("Consolas", 13, QFont.Weight.Bold))
+        p.setFont(_cached_font("Consolas", 13, QFont.Weight.Bold))
         p.drawText(QRectF(pill.x(), pill.y() + 2,
                           pill.width(), pill.height() / 2 + 2),
                    int(Qt.AlignmentFlag.AlignCenter), time_txt)
         p.setPen(QPen(QColor(150, 180, 220)))
-        p.setFont(QFont("Segoe UI", 8))
+        p.setFont(_cached_font("Segoe UI", 8))
         p.drawText(QRectF(pill.x(), pill.y() + pill.height() / 2,
                           pill.width(), pill.height() / 2 - 2),
                    int(Qt.AlignmentFlag.AlignCenter), date_txt)
@@ -5559,7 +5585,7 @@ class GameWidget(QWidget):
 
         # Title
         p.setPen(QPen(COLOR_TEXT))
-        p.setFont(QFont("Segoe UI", 14, QFont.Weight.DemiBold))
+        p.setFont(_cached_font("Segoe UI", 14, QFont.Weight.DemiBold))
         p.drawText(
             QRectF(rect.x(), rect.y(), rect.width(), 22),
             int(Qt.AlignmentFlag.AlignHCenter | Qt.AlignmentFlag.AlignVCenter),
@@ -5780,7 +5806,7 @@ class GameWidget(QWidget):
 
         # Altitude markers
         p.setPen(QPen(COLOR_TEXT_DIM, 1, Qt.PenStyle.DotLine))
-        p.setFont(QFont("Consolas", 9))
+        p.setFont(_cached_font("Consolas", 9))
         for alt in range(2100, 3101, 100):
             y_scr = view_y + (y_top_m - alt) / (y_top_m - y_bot_m) * view_h
             p.drawLine(int(view_x), int(y_scr), int(view_x + view_w), int(y_scr))
@@ -5803,7 +5829,7 @@ class GameWidget(QWidget):
 
         # Current slope display
         p.setPen(QPen(COLOR_TEXT))
-        p.setFont(QFont("Consolas", 10))
+        p.setFont(_cached_font("Consolas", 10))
         grad_now = gradient_at(tr.s) * 100
         ang = math.degrees(math.atan(gradient_at(tr.s)))
         p.drawText(
@@ -5814,7 +5840,7 @@ class GameWidget(QWidget):
         )
         # Zoom indicator (+/− or wheel to zoom, 0 to reset)
         p.setPen(QPen(COLOR_TEXT_DIM))
-        p.setFont(QFont("Consolas", 9))
+        p.setFont(_cached_font("Consolas", 9))
         p.drawText(
             QRectF(view_x + view_w - 180, view_y + 22, 170, 14),
             int(Qt.AlignmentFlag.AlignRight),
@@ -7308,7 +7334,7 @@ class GameWidget(QWidget):
 
         # --- Status text overlays ---
         p.setPen(QPen(QColor(200, 210, 220)))
-        p.setFont(QFont("Consolas", 10))
+        p.setFont(_cached_font("Consolas", 10))
         # Speed
         v_text = f"{abs(tr.v):.1f} m/s  ({abs(tr.v)*3.6:.0f} km/h)"
         p.drawText(QRectF(vx + vw * 0.62, vy + 15, 200, 20),
@@ -7320,7 +7346,7 @@ class GameWidget(QWidget):
                    int(Qt.AlignmentFlag.AlignRight), pos_text)
         # View mode label
         p.setPen(QPen(QColor(180, 190, 200, 160)))
-        p.setFont(QFont("Consolas", 9))
+        p.setFont(_cached_font("Consolas", 9))
         p.drawText(QRectF(vx + 55, vy + 5, 200, 16),
                    int(Qt.AlignmentFlag.AlignLeft),
                    T("CABIN VIEW [F4]", "VUE CABINE [F4]"))
@@ -7348,6 +7374,10 @@ class GameWidget(QWidget):
                         f"Godot 3D unavailable — {first_line} (see console)",
                         f"Viewer Godot 3D indispo — {first_line} (voir console)",
                         "info")
+                    # Mode source sans viewer bundlé (il est gitignoré) ni
+                    # Godot installé : proposer le téléchargement du binaire
+                    # depuis la release GitHub (vérifié SHA-256).
+                    self._offer_viewer_download()
         # Sortie de l'état Godot embarqué : libérer le widget + tuer le subprocess
         if prev_state == 2 and new_state != 2:
             self._release_godot_embed()
@@ -7428,6 +7458,95 @@ class GameWidget(QWidget):
                     "info")
             else:
                 self._godot_fallback_to_procedural()
+
+    def _offer_viewer_download(self) -> None:
+        """Propose de télécharger le viewer 3D standalone depuis la dernière
+        release GitHub (intégrité vérifiée via SHA256SUMS) dans bundled_godot/.
+
+        Cas visé : sim lancé DEPUIS LES SOURCES sur une machine sans Godot —
+        le binaire viewer est gitignoré (~125 Mo) donc absent après un
+        clone/pull. En mode frozen (exe distribué) le viewer est embarqué,
+        on ne propose rien."""
+        try:
+            import autoupdate
+        except Exception:
+            return
+        if autoupdate.is_frozen():
+            return
+        if self._godot_bridge is None or self._godot_bridge.bundled_dir is None:
+            return
+        if sys.platform not in autoupdate.VIEWER_ASSETS:
+            return
+        # Une seule proposition par session (F4 re-pressé ne re-spamme pas)
+        if getattr(self, "_viewer_dl_offered", False):
+            return
+        self._viewer_dl_offered = True
+        fr = (LANG == "fr")
+        ret = QMessageBox.question(
+            self, "Viewer 3D",
+            ("Le viewer 3D n'est pas installé (binaire absent de "
+             "bundled_godot/, et Godot n'est pas sur cette machine).\n\n"
+             "Le télécharger depuis la dernière release GitHub "
+             "(~120 Mo, intégrité vérifiée SHA-256) ?") if fr else
+            ("The 3D viewer is not installed (binary missing from "
+             "bundled_godot/, and Godot is not on this machine).\n\n"
+             "Download it from the latest GitHub release "
+             "(~120 MB, SHA-256 verified)?"),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+        if ret != QMessageBox.StandardButton.Yes:
+            return
+
+        from PyQt6.QtWidgets import QProgressDialog
+        prog = QProgressDialog(
+            "Téléchargement du viewer 3D…" if fr else "Downloading 3D viewer…",
+            None, 0, 100, self)
+        prog.setWindowTitle("Viewer 3D")
+        prog.setWindowModality(Qt.WindowModality.WindowModal)
+        prog.setCancelButton(None)
+        prog.setMinimumDuration(0)
+        state = {"done": 0, "total": 0, "finished": False, "error": None}
+
+        def _progress(done: int, total: int) -> None:
+            state["done"], state["total"] = done, total
+
+        def _worker() -> None:
+            try:
+                autoupdate.download_viewer(
+                    autoupdate_mod_owner(), autoupdate_mod_repo(),
+                    self._godot_bridge.bundled_dir, progress=_progress)
+            except Exception as e:
+                state["error"] = e
+            finally:
+                state["finished"] = True
+
+        threading.Thread(target=_worker, daemon=True,
+                         name="pn-viewer-download").start()
+        poll = QTimer(self)
+        poll.setInterval(100)
+
+        def _on_poll() -> None:
+            if state["finished"]:
+                poll.stop()
+                prog.close()
+                if state["error"] is not None:
+                    QMessageBox.warning(
+                        self, "Viewer 3D",
+                        (f"Échec du téléchargement : {state['error']}") if fr
+                        else (f"Download failed: {state['error']}"))
+                    # Re-autoriser une nouvelle tentative plus tard
+                    self._viewer_dl_offered = False
+                    return
+                add_event(self.state, "godot_3d",
+                    "3D viewer installed — press F4 twice to enable it",
+                    "Viewer 3D installé — appuyez 2× sur F4 pour l'activer",
+                    "info")
+                return
+            if state["total"] > 0:
+                prog.setValue(min(99, state["done"] * 100 // state["total"]))
+
+        poll.timeout.connect(_on_poll)
+        poll.start()
+        prog.show()
 
     def _godot_fallback_to_procedural(self) -> None:
         """Échec du viewer 3D → bascule propre sur la vue cabine procédurale
@@ -7569,7 +7688,7 @@ class GameWidget(QWidget):
         p.drawRect(rect)
         # Titre
         p.setPen(QPen(QColor(220, 175, 60)))
-        p.setFont(QFont("Consolas", 18, QFont.Weight.Bold))
+        p.setFont(_cached_font("Consolas", 18, QFont.Weight.Bold))
         cx = rect.x() + rect.width() / 2.0
         cy = rect.y() + rect.height() / 2.0 - 60
         p.drawText(
@@ -7579,7 +7698,7 @@ class GameWidget(QWidget):
         )
         # Sous-titre
         p.setPen(QPen(QColor(180, 200, 220)))
-        p.setFont(QFont("Consolas", 11))
+        p.setFont(_cached_font("Consolas", 11))
         p.drawText(
             QRectF(rect.x(), cy + 40, rect.width(), 22),
             int(Qt.AlignmentFlag.AlignCenter),
@@ -7590,7 +7709,7 @@ class GameWidget(QWidget):
         st = self.state
         tr = st.train
         p.setPen(QPen(QColor(120, 220, 140)))
-        p.setFont(QFont("Consolas", 10))
+        p.setFont(_cached_font("Consolas", 10))
         info_y = cy + 80
         info = (
             f"s = {tr.s:.0f} m   v = {abs(tr.v):.1f} m/s "
@@ -7602,7 +7721,7 @@ class GameWidget(QWidget):
             int(Qt.AlignmentFlag.AlignCenter), info
         )
         p.setPen(QPen(QColor(150, 160, 175)))
-        p.setFont(QFont("Consolas", 9))
+        p.setFont(_cached_font("Consolas", 9))
         p.drawText(
             QRectF(rect.x(), info_y + 22, rect.width(), 16),
             int(Qt.AlignmentFlag.AlignCenter),
@@ -7611,7 +7730,7 @@ class GameWidget(QWidget):
         )
         # Hint pour fermer
         p.setPen(QPen(QColor(200, 180, 100, 180)))
-        p.setFont(QFont("Consolas", 10))
+        p.setFont(_cached_font("Consolas", 10))
         p.drawText(
             QRectF(rect.x(), cy + 130, rect.width(), 18),
             int(Qt.AlignmentFlag.AlignCenter),
@@ -7668,7 +7787,7 @@ class GameWidget(QWidget):
 
             # Titre "ALTITUDE EXPERIENCE" — typographie large, blanc
             title_h = bh * 0.55
-            p.setFont(QFont("Arial", max(int(title_h * 0.45), 10),
+            p.setFont(_cached_font("Arial", max(int(title_h * 0.45), 10),
                             QFont.Weight.Black))
             p.setPen(QPen(QColor(255, 255, 255)))
             p.drawText(QRectF(bx + 8, by + 4, bw - 16, title_h),
@@ -7684,13 +7803,13 @@ class GameWidget(QWidget):
             p.setBrush(QBrush(QColor(25, 50, 95)))
             p.drawRoundedRect(QRectF(info_x, info_y, info_w, info_h), 3, 3)
             # Lignes de texte écran info (bilingue : signalétique passagers)
-            p.setFont(QFont("Consolas", 7, QFont.Weight.Bold))
+            p.setFont(_cached_font("Consolas", 7, QFont.Weight.Bold))
             p.setPen(QPen(QColor(255, 255, 255)))
             p.drawText(QRectF(info_x + 4, info_y + 2, info_w - 8, 10),
                        int(Qt.AlignmentFlag.AlignLeft),
                        T("FUNICULAR — DEPARTURE STATION",
                          "FUNICULAIRE — GARE DE DÉPART"))
-            p.setFont(QFont("Consolas", 7))
+            p.setFont(_cached_font("Consolas", 7))
             p.setPen(QPen(QColor(180, 220, 255)))
             if remain_s is not None and remain_s > 60:
                 value = T(f"{int(remain_s // 60):d} min",
@@ -7726,7 +7845,7 @@ class GameWidget(QWidget):
         # Linux/macOS (DejaVu Sans Bold, Helvetica Black, etc.) — plus portable
         # que QFont("Arial Black", …) qui dépend du nom exact de la famille.
         title = "DESTINATION GLACIER"
-        p.setFont(QFont("Arial", max(int(bh * 0.42), 10),
+        p.setFont(_cached_font("Arial", max(int(bh * 0.42), 10),
                         QFont.Weight.Black))
         text_rect = QRectF(bx + 4, by + 2, bw - 8, bh * 0.62)
         # Halo orange diffus
@@ -7739,7 +7858,7 @@ class GameWidget(QWidget):
                    int(Qt.AlignmentFlag.AlignCenter), title)
         # Sous-titre discret + altitude (Grande Motte est un toponyme, pas
         # traduit ; on précise "summit" en EN pour clarifier)
-        p.setFont(QFont("Arial", max(int(bh * 0.16), 7)))
+        p.setFont(_cached_font("Arial", max(int(bh * 0.16), 7)))
         p.setPen(QPen(QColor(180, 130, 90)))
         sub_rect = QRectF(bx + 4, by + bh * 0.65, bw - 8, bh * 0.30)
         p.drawText(sub_rect,
@@ -7820,7 +7939,7 @@ class GameWidget(QWidget):
                 p.drawLine(QPointF(cx, sy), QPointF(cx + cell_w, sy))
                 sy += step
             # Étiquette CH1..CH4 + horloge
-            p.setFont(QFont("Consolas", 6, QFont.Weight.Bold))
+            p.setFont(_cached_font("Consolas", 6, QFont.Weight.Bold))
             p.setPen(QPen(QColor(220, 255, 230)))
             p.drawText(QRectF(cx + 2, cy + 1, cell_w - 4, 8),
                        int(Qt.AlignmentFlag.AlignLeft),
@@ -7877,7 +7996,7 @@ class GameWidget(QWidget):
         p.drawRect(QRectF(lcd_x, lcd_y, lcd_w, lcd_h))
         # Titre tactile
         if lcd_w > 60 and lcd_h > 30:
-            p.setFont(QFont("Consolas", 7, QFont.Weight.Bold))
+            p.setFont(_cached_font("Consolas", 7, QFont.Weight.Bold))
             p.setPen(QPen(QColor(200, 220, 255)))
             p.drawText(QRectF(lcd_x + 2, lcd_y + 2, lcd_w - 4, 10),
                        int(Qt.AlignmentFlag.AlignHCenter),
@@ -7923,7 +8042,7 @@ class GameWidget(QWidget):
                 p.setPen(Qt.PenStyle.NoPen)
                 p.drawRect(QRectF(cur_x - 2, track_y - 3, 4, 6))
             # Vitesse + distance (gros chiffres en bas, comme le vrai)
-            p.setFont(QFont("Consolas", 8, QFont.Weight.Bold))
+            p.setFont(_cached_font("Consolas", 8, QFont.Weight.Bold))
             p.setPen(QPen(QColor(120, 240, 120)))
             text_y = lcd_y + lcd_h - 14
             p.drawText(QRectF(lcd_x + 4, text_y, lcd_w * 0.5 - 4, 12),
@@ -7961,7 +8080,7 @@ class GameWidget(QWidget):
             poste_w = (ctl_w - 6) / 2
             poste1_cx = ctl_x + poste_w * 0.5
             poste2_cx = ctl_x + poste_w * 1.5 + 6
-            p.setFont(QFont("Arial", 6, QFont.Weight.Bold))
+            p.setFont(_cached_font("Arial", 6, QFont.Weight.Bold))
             p.setPen(QPen(QColor(200, 210, 220)))
             p.drawText(QRectF(ctl_x, y + 2, poste_w, 8),
                        int(Qt.AlignmentFlag.AlignHCenter), "POSTE 1")
@@ -8118,7 +8237,7 @@ class GameWidget(QWidget):
 
         # Header
         p.setPen(QPen(COLOR_TEXT))
-        p.setFont(QFont("Segoe UI", 9, QFont.Weight.DemiBold))
+        p.setFont(_cached_font("Segoe UI", 9, QFont.Weight.DemiBold))
         p.drawText(QRectF(rect.x() + 8, rect.y() + 4,
                           rect.width() - 16, 14),
                    int(Qt.AlignmentFlag.AlignLeft),
@@ -8135,7 +8254,7 @@ class GameWidget(QWidget):
         v_abs = abs(self.state.train.v)
         rpm = v_abs / (2.0 * math.pi * 2.1) * 60.0
         p.setPen(QPen(COLOR_TEXT_DIM))
-        p.setFont(QFont("Consolas", 8))
+        p.setFont(_cached_font("Consolas", 8))
         p.drawText(
             QRectF(rect.x() + 8, rect.y() + 18,
                    rect.width() - 16, 12),
@@ -8482,7 +8601,7 @@ class GameWidget(QWidget):
 
         # Labels
         p.setPen(QPen(COLOR_TEXT_DIM))
-        p.setFont(QFont("Consolas", 8))
+        p.setFont(_cached_font("Consolas", 8))
         p.drawText(QPointF(track_x0 - 4, rect.y() + 10), "2111")
         p.drawText(QPointF(track_x1 - 18, rect.y() + 10), "3032")
         p.restore()
@@ -8498,7 +8617,7 @@ class GameWidget(QWidget):
         p.setClipRect(rect)
 
         p.setPen(QPen(COLOR_TEXT))
-        p.setFont(QFont("Segoe UI", 9, QFont.Weight.DemiBold))
+        p.setFont(_cached_font("Segoe UI", 9, QFont.Weight.DemiBold))
         p.drawText(QRectF(rect.x() + 6, rect.y() + 2, rect.width() - 12, 14),
                    int(Qt.AlignmentFlag.AlignLeft),
                    T("Plan view — tunnel route", "Vue en plan — tracé du tunnel"))
@@ -8586,7 +8705,7 @@ class GameWidget(QWidget):
             pt = to_screen(r[3], r[4])
             p.drawRect(QRectF(pt.x() - 4, pt.y() - 4, 8, 8))
             p.setPen(QPen(COLOR_TEXT_DIM))
-            p.setFont(QFont("Consolas", 7))
+            p.setFont(_cached_font("Consolas", 7))
             p.drawText(QPointF(pt.x() + 6, pt.y() + 3), tag)
             p.setPen(QPen(QColor(40, 40, 50), 1))
 
@@ -8608,7 +8727,7 @@ class GameWidget(QWidget):
         p.drawLine(QPointF(nx, ny + 8), QPointF(nx, ny - 8))
         p.drawLine(QPointF(nx, ny - 8), QPointF(nx - 3, ny - 4))
         p.drawLine(QPointF(nx, ny - 8), QPointF(nx + 3, ny - 4))
-        p.setFont(QFont("Consolas", 7))
+        p.setFont(_cached_font("Consolas", 7))
         p.setPen(QPen(COLOR_TEXT_DIM))
         p.drawText(QPointF(nx - 3, ny + 18), "N")
         p.restore()
@@ -8625,7 +8744,7 @@ class GameWidget(QWidget):
         roof = QPolygonF([QPointF(x - 4, y), QPointF(x + w + 4, y), QPointF(x + w / 2, y - 14)])
         p.drawPolygon(roof)
         p.setPen(QPen(COLOR_TEXT))
-        p.setFont(QFont("Segoe UI", 9, QFont.Weight.DemiBold))
+        p.setFont(_cached_font("Segoe UI", 9, QFont.Weight.DemiBold))
         p.drawText(QPointF(x, y + h + 14), f"{name}  {alt}")
 
     def _draw_cabin(
@@ -8699,7 +8818,7 @@ class GameWidget(QWidget):
         mid = QPointF((p_head.x() + p_tail.x()) / 2,
                       (p_head.y() + p_tail.y()) / 2)
         p.setPen(QPen(COLOR_TEXT))
-        p.setFont(QFont("Consolas", 8, QFont.Weight.Bold))
+        p.setFont(_cached_font("Consolas", 8, QFont.Weight.Bold))
         p.drawText(QPointF(mid.x() + nx * 22 - 28,
                            mid.y() + ny * 22 - 4), label)
 
@@ -8853,7 +8972,7 @@ class GameWidget(QWidget):
         p.drawRoundedRect(rect, 10, 10)
 
         p.setPen(QPen(COLOR_TEXT))
-        p.setFont(QFont("Segoe UI", 13, QFont.Weight.DemiBold))
+        p.setFont(_cached_font("Segoe UI", 13, QFont.Weight.DemiBold))
         p.drawText(QRectF(rect.x() + 14, rect.y() + 10, rect.width() - 28, 22),
                    int(Qt.AlignmentFlag.AlignLeft),
                    T("Control panel", "Pupitre de conduite"))
@@ -8891,7 +9010,7 @@ class GameWidget(QWidget):
         # Tucked inside the gauge's bottom rim (was overlapping the
         # brake bar's "URG!" / % text just below the gauge).
         p.setPen(QPen(COLOR_TEXT_DIM))
-        p.setFont(QFont("Consolas", 8))
+        p.setFont(_cached_font("Consolas", 8))
         p.drawText(
             QRectF(ten_rect.x(), ten_rect.y() + ten_rect.height() - 14,
                    ten_rect.width(), 11),
@@ -9142,7 +9261,7 @@ class GameWidget(QWidget):
         # overlap the AUTO / DOORS / SOUND row.
         ox = rect.x() + 20
         oy = rect.y() + 450
-        p.setFont(QFont("Consolas", 10))
+        p.setFont(_cached_font("Consolas", 10))
         p.setPen(QPen(COLOR_TEXT))
         cabin_x_m, cabin_y_m = geom_at(tr.s)
         # Distance travelled from the driver's own departure terminus (not
@@ -9203,7 +9322,7 @@ class GameWidget(QWidget):
         ]
         lx = rect.x() + 20
         ly = rect.y() + rect.height() - 38
-        p.setFont(QFont("Consolas", 9))
+        p.setFont(_cached_font("Consolas", 9))
         for i, (name, on, c) in enumerate(lights):
             x = lx + i * 72
             col = c if on else QColor(40, 46, 60)
@@ -9231,7 +9350,7 @@ class GameWidget(QWidget):
         p.setPen(QPen(QColor(14, 16, 20), 1.4))
         p.drawRoundedRect(r, 5, 5)
         p.setPen(QPen(QColor(0, 0, 0)))
-        p.setFont(QFont("Segoe UI", font_pt, QFont.Weight.Bold))
+        p.setFont(_cached_font("Segoe UI", font_pt, QFont.Weight.Bold))
         p.drawText(r, int(Qt.AlignmentFlag.AlignCenter), label)
 
     def _draw_button(
@@ -9280,7 +9399,7 @@ class GameWidget(QWidget):
             p.setPen(QPen(QColor(60, 0, 0), 1))
             p.drawEllipse(dome)
         # Label
-        p.setFont(QFont("Segoe UI", 9, QFont.Weight.Bold))
+        p.setFont(_cached_font("Segoe UI", 9, QFont.Weight.Bold))
         p.setPen(QPen(dark_color if on else COLOR_TEXT_DIM))
         rt = QRectF(x, y + (h - 14) - (6 if mushroom else 0), w, 14)
         p.drawText(rt, int(Qt.AlignmentFlag.AlignCenter), label)
@@ -9347,15 +9466,15 @@ class GameWidget(QWidget):
         p.restore()
         # Big text
         p.setPen(QPen(COLOR_TEXT))
-        p.setFont(QFont("Consolas", 14, QFont.Weight.Bold))
+        p.setFont(_cached_font("Consolas", 14, QFont.Weight.Bold))
         p.drawText(QRectF(rect.x(), cy + 8, rect.width(), 20),
                    int(Qt.AlignmentFlag.AlignHCenter), big_text)
-        p.setFont(QFont("Segoe UI", 9))
+        p.setFont(_cached_font("Segoe UI", 9))
         p.setPen(QPen(COLOR_TEXT_DIM))
         p.drawText(QRectF(rect.x(), cy + 28, rect.width(), 16),
                    int(Qt.AlignmentFlag.AlignHCenter), label)
         if title:
-            p.setFont(QFont("Segoe UI", 9, QFont.Weight.DemiBold))
+            p.setFont(_cached_font("Segoe UI", 9, QFont.Weight.DemiBold))
             p.setPen(QPen(COLOR_TEXT))
             p.drawText(QRectF(rect.x(), rect.y() - 2, rect.width(), 14),
                        int(Qt.AlignmentFlag.AlignHCenter), title)
@@ -9374,7 +9493,7 @@ class GameWidget(QWidget):
         text: str,
     ) -> None:
         p.setPen(QPen(COLOR_TEXT_DIM))
-        p.setFont(QFont("Segoe UI", 9))
+        p.setFont(_cached_font("Segoe UI", 9))
         p.drawText(QRectF(x, y - 14, w, 12),
                    int(Qt.AlignmentFlag.AlignLeft), label)
         p.setBrush(QBrush(QColor(28, 32, 42)))
@@ -9385,7 +9504,7 @@ class GameWidget(QWidget):
         p.setPen(Qt.PenStyle.NoPen)
         p.drawRoundedRect(QRectF(x + 2, y + 2, (w - 4) * f, h - 4), 3, 3)
         p.setPen(QPen(COLOR_TEXT))
-        p.setFont(QFont("Consolas", 9, QFont.Weight.Bold))
+        p.setFont(_cached_font("Consolas", 9, QFont.Weight.Bold))
         p.drawText(QRectF(x, y, w, h),
                    int(Qt.AlignmentFlag.AlignCenter), text)
 
@@ -9396,13 +9515,13 @@ class GameWidget(QWidget):
         p.setPen(QPen(COLOR_HUD_BORDER, 2))
         p.drawRoundedRect(rect, 10, 10)
         p.setPen(QPen(COLOR_TEXT))
-        p.setFont(QFont("Segoe UI", 11, QFont.Weight.DemiBold))
+        p.setFont(_cached_font("Segoe UI", 11, QFont.Weight.DemiBold))
         p.drawText(QRectF(rect.x() + 14, rect.y() + 8, rect.width() - 28, 18),
                    int(Qt.AlignmentFlag.AlignLeft),
                    T("Event log", "Journal de bord"))
         # Events (oldest first, scroll bottom)
         evs = self.state.events[-10:]
-        p.setFont(QFont("Consolas", 10))
+        p.setFont(_cached_font("Consolas", 10))
         for i, ev in enumerate(evs):
             y = rect.y() + 30 + i * 18
             col = {
@@ -9540,7 +9659,7 @@ class GameWidget(QWidget):
         path.closeSubpath()
         p.drawPath(path)
         p.setPen(QPen(QColor(255, 220, 140)))
-        p.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
+        p.setFont(_cached_font("Segoe UI", 11, QFont.Weight.Bold))
         p.drawText(QRectF(rect.x() + 10, rect.y() + 4,
                           rect.width() - 20, 18),
                    int(Qt.AlignmentFlag.AlignLeft),
@@ -9562,7 +9681,7 @@ class GameWidget(QWidget):
         p.setPen(QPen(QColor(10, 8, 4), 1))
         p.drawRoundedRect(pill, 6, 6)
         p.setPen(QPen(QColor(10, 8, 4)))
-        p.setFont(QFont("Consolas", 8, QFont.Weight.Bold))
+        p.setFont(_cached_font("Consolas", 8, QFont.Weight.Bold))
         p.drawText(pill, int(Qt.AlignmentFlag.AlignCenter), pill_txt)
 
         # --- Rows --------------------------------------------------------
@@ -9602,7 +9721,7 @@ class GameWidget(QWidget):
             (T("Pax",      "Pax"),      f"{ao.day_pax}"),
             (T("Distance", "Distance"), f"{km:.2f} km"),
         ]
-        p.setFont(QFont("Consolas", 10))
+        p.setFont(_cached_font("Consolas", 10))
         row_y = rect.y() + 32
         for k_lbl, v_lbl in rows:
             p.setPen(QPen(QColor(220, 180, 120)))
@@ -9613,7 +9732,7 @@ class GameWidget(QWidget):
 
         # --- Footer hint -------------------------------------------------
         p.setPen(QPen(QColor(200, 170, 110, 200)))
-        p.setFont(QFont("Segoe UI", 8))
+        p.setFont(_cached_font("Segoe UI", 8))
         foot = QRectF(rect.x() + 10,
                       rect.y() + rect.height() - 34,
                       rect.width() - 20, 28)
@@ -9640,15 +9759,15 @@ class GameWidget(QWidget):
 
         # Title header
         p.setPen(QPen(COLOR_TEXT))
-        p.setFont(QFont("Segoe UI", 30, QFont.Weight.Bold))
+        p.setFont(_cached_font("Segoe UI", 30, QFont.Weight.Bold))
         p.drawText(QRectF(box.x(), box.y() + 18, box.width(), 50),
                    int(Qt.AlignmentFlag.AlignHCenter), "PERCE-NEIGE")
-        p.setFont(QFont("Segoe UI", 13))
+        p.setFont(_cached_font("Segoe UI", 13))
         p.drawText(QRectF(box.x(), box.y() + 64, box.width(), 22),
                    int(Qt.AlignmentFlag.AlignHCenter),
                    T("Grande Motte funicular simulator",
                      "Simulateur Funiculaire Grande Motte"))
-        p.setFont(QFont("Segoe UI", 10))
+        p.setFont(_cached_font("Segoe UI", 10))
         p.setPen(QPen(COLOR_TEXT_DIM))
         p.drawText(QRectF(box.x(), box.y() + 90, box.width(), 18),
                    int(Qt.AlignmentFlag.AlignHCenter),
@@ -9657,7 +9776,7 @@ class GameWidget(QWidget):
 
         # --- Trip selection — 4 big buttons (Train 1/2 × Up/Down) --------
         sel_title_y = box.y() + 128
-        p.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
+        p.setFont(_cached_font("Segoe UI", 12, QFont.Weight.Bold))
         p.setPen(QPen(COLOR_NEEDLE))
         p.drawText(QRectF(box.x(), sel_title_y, box.width(), 20),
                    int(Qt.AlignmentFlag.AlignHCenter),
@@ -9715,7 +9834,7 @@ class GameWidget(QWidget):
             p.setPen(QPen(QColor(80, 50, 0), 1.5))
             p.drawRoundedRect(pill, 6, 6)
             p.setPen(QPen(QColor(40, 20, 0)))
-            p.setFont(QFont("Segoe UI", 20, QFont.Weight.Bold))
+            p.setFont(_cached_font("Segoe UI", 20, QFont.Weight.Bold))
             p.drawText(pill, int(Qt.AlignmentFlag.AlignCenter), str(num))
             # Direction arrow
             arrow_x = bx + btn_w - 40
@@ -9737,15 +9856,15 @@ class GameWidget(QWidget):
                            QPointF(arrow_x + 16, arrow_y + 6))
             # Labels
             p.setPen(QPen(QColor(255, 255, 255)))
-            p.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
+            p.setFont(_cached_font("Segoe UI", 11, QFont.Weight.Bold))
             p.drawText(QRectF(bx + 66, by + 14, btn_w - 120, 20),
                        int(Qt.AlignmentFlag.AlignLeft), title_txt)
-            p.setFont(QFont("Segoe UI", 9))
+            p.setFont(_cached_font("Segoe UI", 9))
             p.setPen(QPen(QColor(220, 230, 245)))
             p.drawText(QRectF(bx + 66, by + 36, btn_w - 120, 18),
                        int(Qt.AlignmentFlag.AlignLeft), sub_txt)
             # Hover-hint keyboard shortcut
-            p.setFont(QFont("Consolas", 8))
+            p.setFont(_cached_font("Consolas", 8))
             p.setPen(QPen(QColor(200, 220, 255)))
             p.drawText(QRectF(bx + 66, by + 52, btn_w - 120, 14),
                        int(Qt.AlignmentFlag.AlignLeft),
@@ -9754,14 +9873,14 @@ class GameWidget(QWidget):
             self._title_zones.append((rect_btn, direction, num))
 
         # Hint + shortcuts
-        p.setFont(QFont("Segoe UI", 9))
+        p.setFont(_cached_font("Segoe UI", 9))
         p.setPen(QPen(COLOR_TEXT_DIM))
         p.drawText(QRectF(box.x(), box.y() + box_h - 52, box.width(), 16),
                    int(Qt.AlignmentFlag.AlignHCenter),
                    T("Enter starts a default trip (Train 1, climb)  •  F1 help  •  F3 real machine info",
                      "Entrée lance un trajet par défaut (Rame 1, montée)  •  F1 aide  •  F3 infos machine"))
         # Blinking prompt
-        p.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
+        p.setFont(_cached_font("Segoe UI", 11, QFont.Weight.Bold))
         p.setPen(QPen(COLOR_NEEDLE))
         blink = int(self._board_animation * 2) % 2 == 0
         if blink:
@@ -9774,11 +9893,11 @@ class GameWidget(QWidget):
     def _draw_paused_overlay(self, p: QPainter, w: int, h: int) -> None:
         p.fillRect(0, 0, w, h, QColor(0, 0, 0, 140))
         p.setPen(QPen(COLOR_TEXT))
-        p.setFont(QFont("Segoe UI", 32, QFont.Weight.Bold))
+        p.setFont(_cached_font("Segoe UI", 32, QFont.Weight.Bold))
         p.drawText(QRectF(0, h / 2 - 40, w, 60),
                    int(Qt.AlignmentFlag.AlignCenter),
                    T("-- PAUSED --", "-- PAUSE --"))
-        p.setFont(QFont("Segoe UI", 12))
+        p.setFont(_cached_font("Segoe UI", 12))
         p.drawText(QRectF(0, h / 2 + 24, w, 22),
                    int(Qt.AlignmentFlag.AlignCenter),
                    T("Press P or Esc to resume",
@@ -9792,11 +9911,11 @@ class GameWidget(QWidget):
         p.drawRoundedRect(box, 16, 16)
         st = self.state
         p.setPen(QPen(COLOR_TEXT))
-        p.setFont(QFont("Segoe UI", 24, QFont.Weight.Bold))
+        p.setFont(_cached_font("Segoe UI", 24, QFont.Weight.Bold))
         p.drawText(QRectF(box.x(), box.y() + 20, box.width(), 36),
                    int(Qt.AlignmentFlag.AlignHCenter),
                    T("TRIP COMPLETED", "TRAJET TERMINÉ"))
-        p.setFont(QFont("Consolas", 13))
+        p.setFont(_cached_font("Consolas", 13))
         score_total = (
             max(0.0, 100.0 - max(0.0, st.score_time - 420.0) * 0.5)
             + st.score_comfort
@@ -9838,7 +9957,7 @@ class GameWidget(QWidget):
             QColor(240, 200, 80), font_pt=11,
         )
         self._hit_zones.append((new_rect, int(Qt.Key.Key_R), False))
-        p.setFont(QFont("Segoe UI", 9))
+        p.setFont(_cached_font("Segoe UI", 9))
         p.setPen(QPen(COLOR_TEXT_DIM))
         p.drawText(QRectF(box.x(), box.y() + box.height() - 28, box.width(), 16),
                    int(Qt.AlignmentFlag.AlignHCenter),
@@ -9862,14 +9981,14 @@ class GameWidget(QWidget):
         p.drawRoundedRect(QRectF(x, y, panel_w, panel_h), 12, 12)
         # Title
         p.setPen(QPen(COLOR_TEXT))
-        p.setFont(QFont("Segoe UI", 14, QFont.Weight.DemiBold))
+        p.setFont(_cached_font("Segoe UI", 14, QFont.Weight.DemiBold))
         p.drawText(
             QRectF(x + 16, y + 12, panel_w - 32, 22),
             int(Qt.AlignmentFlag.AlignLeft),
             T("On-board announcement console",
               "Console des annonces embarquées"),
         )
-        p.setFont(QFont("Consolas", 9))
+        p.setFont(_cached_font("Consolas", 9))
         p.setPen(QPen(COLOR_TEXT_DIM))
         p.drawText(
             QRectF(x + 16, y + 34, panel_w - 190, 16),
@@ -9892,7 +10011,7 @@ class GameWidget(QWidget):
         # highlighted. Pressing F/E/I/G/S also switches.
         st_for_lang = self.state
         lang_row_y = y + 58
-        p.setFont(QFont("Segoe UI", 9))
+        p.setFont(_cached_font("Segoe UI", 9))
         p.setPen(QPen(COLOR_TEXT_DIM))
         p.drawText(QPointF(x + 16, lang_row_y + 14),
                    T("Language :", "Langue :"))
@@ -9919,14 +10038,14 @@ class GameWidget(QWidget):
             p.setPen(QPen(QColor(120, 170, 220), 1))
             p.drawRoundedRect(rect, 6, 6)
             p.setPen(QPen(text_col))
-            p.setFont(QFont("Consolas", 10, QFont.Weight.Bold))
+            p.setFont(_cached_font("Consolas", 10, QFont.Weight.Bold))
             p.drawText(rect, int(Qt.AlignmentFlag.AlignCenter),
                        f"{lbl} [{chr(hk).upper()}]")
             self._hit_zones.append((rect, int(hk), False))
             lx += pill_w + 8
         # Entries — each row is also a click target that triggers the
         # announcement exactly like pressing its hotkey.
-        p.setFont(QFont("Consolas", 11))
+        p.setFont(_cached_font("Consolas", 11))
         list_top = y + 92
         for i, (entry_k, group, label, en, fr) in enumerate(ANNOUNCEMENT_MENU):
             row_y = list_top + i * 22
@@ -9948,13 +10067,13 @@ class GameWidget(QWidget):
             p.drawText(QPointF(x + 48, row_y + 14), T(en, fr))
             # Group key dim on the right
             p.setPen(QPen(COLOR_TEXT_DIM))
-            p.setFont(QFont("Consolas", 9))
+            p.setFont(_cached_font("Consolas", 9))
             p.drawText(QPointF(x + panel_w - 150, row_y + 14), group)
-            p.setFont(QFont("Consolas", 11))
+            p.setFont(_cached_font("Consolas", 11))
         # Mute indicator
         if self.sounds.muted:
             p.setPen(QPen(COLOR_ALARM))
-            p.setFont(QFont("Consolas", 10, QFont.Weight.Bold))
+            p.setFont(_cached_font("Consolas", 10, QFont.Weight.Bold))
             p.drawText(
                 QRectF(x + 16, y + panel_h - 24, panel_w - 32, 18),
                 int(Qt.AlignmentFlag.AlignRight),
@@ -9963,7 +10082,7 @@ class GameWidget(QWidget):
             )
         elif not self.sounds.enabled:
             p.setPen(QPen(COLOR_WARN))
-            p.setFont(QFont("Consolas", 10))
+            p.setFont(_cached_font("Consolas", 10))
             p.drawText(
                 QRectF(x + 16, y + panel_h - 24, panel_w - 32, 18),
                 int(Qt.AlignmentFlag.AlignRight),
@@ -10000,7 +10119,7 @@ class GameWidget(QWidget):
 
         # Title bar
         p.setPen(QPen(COLOR_TEXT))
-        p.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
+        p.setFont(_cached_font("Segoe UI", 12, QFont.Weight.Bold))
         title = (("⚠ PANNE — " if lang == "fr" else "⚠ FAULT — ")
                  + fault_label(kind, lang).upper())
         p.drawText(QRectF(x + 12, y + 8, pw - 24, 20),
@@ -10014,7 +10133,7 @@ class GameWidget(QWidget):
         sev_en = {"advisory": "Advisory", "operational": "Operational",
                   "stopping": "Stopping", "catastrophic": "CATASTROPHIC"
                   }.get(sev, sev)
-        p.setFont(QFont("Consolas", 8, QFont.Weight.Bold))
+        p.setFont(_cached_font("Consolas", 8, QFont.Weight.Bold))
         p.setPen(QPen(border))
         p.drawText(QRectF(x + 12, y + 28, pw - 24, 14),
                    int(Qt.AlignmentFlag.AlignLeft),
@@ -10027,13 +10146,13 @@ class GameWidget(QWidget):
         def draw_section(label_fr: str, label_en: str, body: str,
                          color: QColor, max_h: int) -> int:
             nonlocal cy
-            p.setFont(QFont("Segoe UI", 9, QFont.Weight.Bold))
+            p.setFont(_cached_font("Segoe UI", 9, QFont.Weight.Bold))
             p.setPen(QPen(color))
             p.drawText(QRectF(x + 12, cy, section_w, 14),
                        int(Qt.AlignmentFlag.AlignLeft),
                        label_fr if lang == "fr" else label_en)
             cy += 14
-            p.setFont(QFont("Segoe UI", 9))
+            p.setFont(_cached_font("Segoe UI", 9))
             p.setPen(QPen(COLOR_TEXT))
             p.drawText(QRectF(x + 12, cy, section_w, max_h),
                        int(Qt.AlignmentFlag.AlignLeft
@@ -10064,7 +10183,7 @@ class GameWidget(QWidget):
                                "Evacuating", "Out of service"]
             cur = st.fault_phase if st.fault_phase in phases else "active"
             cur_idx = phases.index(cur)
-            p.setFont(QFont("Consolas", 8))
+            p.setFont(_cached_font("Consolas", 8))
             n = len(phases)
             for i, lbl in enumerate(phase_labels_fr if lang == "fr"
                                     else phase_labels_en):
@@ -10080,7 +10199,7 @@ class GameWidget(QWidget):
             # out-of-service (before that the cabin is still rolling /
             # being announced).
             if st.fault_phase in ("evacuating", "out_of_service"):
-                p.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
+                p.setFont(_cached_font("Segoe UI", 10, QFont.Weight.Bold))
                 p.setPen(QPen(QColor(255, 220, 100)))
                 hint = ("Appuyez sur R pour un nouveau voyage."
                         if lang == "fr"
@@ -10099,11 +10218,11 @@ class GameWidget(QWidget):
         p.drawRoundedRect(box, 14, 14)
 
         p.setPen(QPen(COLOR_TEXT))
-        p.setFont(QFont("Segoe UI", 22, QFont.Weight.Bold))
+        p.setFont(_cached_font("Segoe UI", 22, QFont.Weight.Bold))
         p.drawText(QRectF(box.x(), box.y() + 16, box.width(), 36),
                    int(Qt.AlignmentFlag.AlignHCenter),
                    T("Help — Controls", "Aide — Commandes"))
-        p.setFont(QFont("Segoe UI", 10))
+        p.setFont(_cached_font("Segoe UI", 10))
         p.setPen(QPen(COLOR_TEXT_DIM))
         p.drawText(QRectF(box.x(), box.y() + 54, box.width(), 18),
                    int(Qt.AlignmentFlag.AlignHCenter),
@@ -10179,12 +10298,12 @@ class GameWidget(QWidget):
         for ci, (title, entries) in enumerate(groups):
             x = col_x[ci]
             y = box.y() + 92
-            p.setFont(QFont("Segoe UI", 12, QFont.Weight.Bold))
+            p.setFont(_cached_font("Segoe UI", 12, QFont.Weight.Bold))
             p.setPen(QPen(COLOR_NEEDLE))
             p.drawText(QRectF(x, y, col_w - 10, 20),
                        int(Qt.AlignmentFlag.AlignLeft), title)
             y += 26
-            p.setFont(QFont("Consolas", 10))
+            p.setFont(_cached_font("Consolas", 10))
             for key, desc in entries:
                 p.setPen(QPen(COLOR_TEXT))
                 p.drawText(QRectF(x, y, col_w - 10, 16),
@@ -10202,13 +10321,13 @@ class GameWidget(QWidget):
         p.setPen(QPen(COLOR_HUD_BORDER, 1))
         p.drawRoundedRect(tips_box, 8, 8)
         p.setPen(QPen(COLOR_NEEDLE))
-        p.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
+        p.setFont(_cached_font("Segoe UI", 11, QFont.Weight.Bold))
         p.drawText(QRectF(tips_box.x() + 12, tips_box.y() + 8,
                           tips_box.width() - 24, 18),
                    int(Qt.AlignmentFlag.AlignLeft),
                    T("Driving tips", "Conseils de conduite"))
         p.setPen(QPen(COLOR_TEXT_DIM))
-        p.setFont(QFont("Consolas", 9))
+        p.setFont(_cached_font("Consolas", 9))
         tips = [
             T("• Ramp the speed command gradually — accel is capped at ~1 m/s², the regulator handles the rest",
               "• Augmentez la consigne progressivement — l'accél. est plafonnée ~1 m/s², le régulateur fait le reste"),
@@ -10247,12 +10366,12 @@ class GameWidget(QWidget):
         p.drawRoundedRect(box, 14, 14)
 
         p.setPen(QPen(COLOR_TEXT))
-        p.setFont(QFont("Segoe UI", 22, QFont.Weight.Bold))
+        p.setFont(_cached_font("Segoe UI", 22, QFont.Weight.Bold))
         p.drawText(QRectF(box.x(), box.y() + 16, box.width(), 36),
                    int(Qt.AlignmentFlag.AlignHCenter),
                    T("The real Perce-Neige funicular",
                      "Le vrai Funiculaire Perce-Neige"))
-        p.setFont(QFont("Segoe UI", 10))
+        p.setFont(_cached_font("Segoe UI", 10))
         p.setPen(QPen(COLOR_TEXT_DIM))
         p.drawText(QRectF(box.x(), box.y() + 52, box.width(), 18),
                    int(Qt.AlignmentFlag.AlignHCenter),
@@ -10260,7 +10379,7 @@ class GameWidget(QWidget):
                      "Tignes, Savoie, France — F3 pour fermer"))
 
         # Intro paragraph
-        p.setFont(QFont("Segoe UI", 10))
+        p.setFont(_cached_font("Segoe UI", 10))
         p.setPen(QPen(COLOR_TEXT))
         intro = T(
             "Longest underground funicular in France. Opened 14 April 1993 by "
@@ -10326,7 +10445,7 @@ class GameWidget(QWidget):
             (T("Cable T break","Rupture câble"),  "191 200 daN"),
         ]
 
-        p.setFont(QFont("Consolas", 10))
+        p.setFont(_cached_font("Consolas", 10))
         for i, (k, v) in enumerate(left_specs):
             y = col_y + i * 18
             p.setPen(QPen(COLOR_TEXT_DIM))
@@ -10342,13 +10461,13 @@ class GameWidget(QWidget):
 
         # Sources
         sources_y = box.y() + box_h - 160
-        p.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
+        p.setFont(_cached_font("Segoe UI", 11, QFont.Weight.Bold))
         p.setPen(QPen(COLOR_NEEDLE))
         p.drawText(QRectF(box.x() + 30, sources_y, box.width() - 60, 18),
                    int(Qt.AlignmentFlag.AlignLeft),
                    T("Sources & further reading",
                      "Sources et pour en savoir plus"))
-        p.setFont(QFont("Consolas", 9))
+        p.setFont(_cached_font("Consolas", 9))
         p.setPen(QPen(QColor(140, 190, 240)))
         sources = [
             "Wikipedia FR  : https://fr.wikipedia.org/wiki/Funiculaire_du_Perce-Neige",

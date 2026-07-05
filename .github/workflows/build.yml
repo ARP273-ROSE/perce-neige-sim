@@ -121,13 +121,24 @@ jobs:
         shell: bash
         run: mv dist/PerceNeigeSimulator.exe dist/PerceNeigeSimulator-windows.exe
 
+      # Le viewer 3D standalone est aussi publié en asset de release :
+      # il est gitignoré (125 Mo), donc quand on lance le sim DEPUIS LES
+      # SOURCES sur une machine sans Godot, l'appli propose de le
+      # télécharger ici (vérifié via SHA256SUMS).
+      - name: Stage viewer assets
+        shell: bash
+        run: |
+          cp bundled_godot/perce_neige_3d.exe dist/perce_neige_3d-windows.exe
+          cp bundled_godot/perce_neige_3d.x86_64 dist/perce_neige_3d-linux.x86_64 || true
+
       # SHA256SUMS est vérifié par autoupdate.py avant de remplacer l'exe
-      # en place — une release sans ce fichier sera REFUSÉE par l'auto-update.
+      # en place ou d'installer le viewer 3D — une release sans ce fichier
+      # sera REFUSÉE par l'auto-update.
       - name: Generate SHA256SUMS
         shell: bash
         run: |
           cd dist
-          sha256sum PerceNeigeSimulator-windows.exe > SHA256SUMS
+          sha256sum PerceNeigeSimulator-windows.exe perce_neige_3d-* > SHA256SUMS
           cat SHA256SUMS
 
       - name: Show final exe size
@@ -140,8 +151,10 @@ jobs:
         with:
           files: |
             dist/PerceNeigeSimulator-windows.exe
+            dist/perce_neige_3d-windows.exe
+            dist/perce_neige_3d-linux.x86_64
             dist/SHA256SUMS
-          fail_on_unmatched_files: true
+          fail_on_unmatched_files: false
 
       - name: Upload build artifact (workflow_dispatch)
         if: github.event_name == 'workflow_dispatch'

@@ -43,7 +43,17 @@ extends Node3D
 @export var cable_segments: int = 8          # segments radiaux
 @export var cable_sample_spacing: float = 2.0  # spline sampling
 
-@export var sampling_step: float = 0.5       # pas échantillonnage rails/dalle
+@export var sampling_step: float = 0.5       # pas MIN échantillonnage rails/dalle
+@export var max_step: float = 3.0            # pas MAX (lignes droites)
+@export var chord_tolerance: float = 0.004   # déviation de corde max tolérée (m)
+@export var chunk_length: float = 120.0      # découpage des meshes continus (m)
+# Pourquoi : les rails/dalle étaient des meshes continus de 3 474 m échantillonnés
+# uniformément à 0,5 m → ~1 M de vertices TOUJOURS dans le frustum (AABB de
+# 3,4 km dans l'axe de la vue = culling inopérant). Le chunking rend le frustum
+# culling efficace (~5-10 % des tronçons visibles), et l'échantillonnage
+# adaptatif (bisection sur la déviation de corde) garde 0,5 m dans les
+# transitions du loop / virages mais monte à 3 m en ligne droite — même
+# fidélité visuelle (déviation < 4 mm), ~6× moins de vertices.
 
 var tunnel: TunnelBuilder = null
 
@@ -104,6 +114,21 @@ func _build_slab_section(
 	mat: StandardMaterial3D, s_start: float, s_end: float,
 	side: float, name: String, is_chamber: bool = false,
 ) -> void:
+	# Découpage en tronçons de chunk_length pour un frustum culling efficace.
+	var c_start: float = s_start
+	var chunk_i: int = 0
+	while c_start < s_end - 0.001:
+		var c_end: float = minf(c_start + chunk_length, s_end)
+		_build_slab_chunk(mat, c_start, c_end, side,
+			"%s_%d" % [name, chunk_i], is_chamber)
+		c_start = c_end
+		chunk_i += 1
+
+
+func _build_slab_chunk(
+	mat: StandardMaterial3D, s_start: float, s_end: float,
+	side: float, name: String, is_chamber: bool,
+) -> void:
 	var st: SurfaceTool = SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	st.set_material(mat)
@@ -112,16 +137,19 @@ func _build_slab_section(
 	var slab_top_y: float = floor_y_local + slab_thickness
 	var slab_bot_y: float = floor_y_local
 
-	var n_steps: int = maxi(1, int((s_end - s_start) / sampling_step))
-	var step: float = (s_end - s_start) / float(n_steps)
+	# Référence d'adaptativité : en chambre, l'élargissement sinusoïdal des
+	# bords suit passing_loop_offset(s, 1) → on échantillonne sur ce chemin.
+	var ref_side: float = 1.0 if is_chamber else side
+	var s_list: Array = _adaptive_s_list(s_start, s_end, ref_side)
 
-	var prev_xform: Transform3D = tunnel.transform_at(s_start)
-	var prev_off: float = _track_center_x(s_start, side)
+	var prev_s: float = s_list[0]
+	var prev_xform: Transform3D = tunnel.transform_at(prev_s)
+	var prev_off: float = _track_center_x(prev_s, side)
 	var prev_half_w: float = base_half_w
 	if is_chamber:
-		prev_half_w += absf(tunnel.passing_loop_offset(s_start, 1.0))
-	for i in range(1, n_steps + 1):
-		var s_cur: float = s_start + float(i) * step
+		prev_half_w += absf(tunnel.passing_loop_offset(prev_s, 1.0))
+	for i in range(1, s_list.size()):
+		var s_cur: float = s_list[i]
 		var cur_xform: Transform3D = tunnel.transform_at(s_cur)
 		var cur_off: float = _track_center_x(s_cur, side)
 		var cur_half_w: float = base_half_w
@@ -135,7 +163,7 @@ func _build_slab_section(
 		var u0: Vector3 = prev_xform.basis.y
 		var u1: Vector3 = cur_xform.basis.y
 
-		var v0: float = (s_cur - step)
+		var v0: float = prev_s
 		var v1: float = s_cur
 
 		# Dessus
@@ -169,6 +197,7 @@ func _build_slab_section(
 			Vector2(0.75, v1), Vector2(1.0, v1),
 		)
 
+		prev_s = s_cur
 		prev_xform = cur_xform
 		prev_off = cur_off
 		prev_half_w = cur_half_w
@@ -188,6 +217,34 @@ func _track_center_x(s: float, side: float) -> float:
 	if side == 0.0:
 		return 0.0
 	return tunnel.passing_loop_offset(s, side)
+
+
+# Point 3D du chemin de référence (spline + offset latéral de voie) à s.
+func _path_point(s: float, side: float) -> Vector3:
+	var xf: Transform3D = tunnel.transform_at(s)
+	return xf.origin + xf.basis.x * _track_center_x(s, side)
+
+
+# Échantillonnage adaptatif : liste de s croissants entre s_start et s_end
+# tels que la corde entre 2 échantillons consécutifs dévie de moins de
+# chord_tolerance du chemin réel (test au point milieu, pas divisé par 2
+# jusqu'à sampling_step si besoin). Ligne droite → pas de max_step.
+func _adaptive_s_list(s_start: float, s_end: float, side: float) -> Array:
+	var out: Array = [s_start]
+	var s: float = s_start
+	while s < s_end - 0.001:
+		var step: float = minf(max_step, s_end - s)
+		while step > sampling_step + 0.001:
+			var pa: Vector3 = _path_point(s, side)
+			var pb: Vector3 = _path_point(s + step, side)
+			var pm: Vector3 = _path_point(s + step * 0.5, side)
+			if pm.distance_to((pa + pb) * 0.5) <= chord_tolerance:
+				break
+			step *= 0.5
+		step = maxf(step, minf(sampling_step, s_end - s))
+		s = minf(s + step, s_end)
+		out.append(s)
+	return out
 
 
 # ---------------------------------------------------------------------------
@@ -242,6 +299,21 @@ func _build_rail_strip(
 	rail_mat: StandardMaterial3D, rail_top_mat: StandardMaterial3D,
 	s_start: float, s_end: float, side: float, hg_signed: float, name: String,
 ) -> void:
+	# Découpage en tronçons de chunk_length pour un frustum culling efficace.
+	var c_start: float = s_start
+	var chunk_i: int = 0
+	while c_start < s_end - 0.001:
+		var c_end: float = minf(c_start + chunk_length, s_end)
+		_build_rail_chunk(rail_mat, rail_top_mat, c_start, c_end, side,
+			hg_signed, "%s_%d" % [name, chunk_i])
+		c_start = c_end
+		chunk_i += 1
+
+
+func _build_rail_chunk(
+	rail_mat: StandardMaterial3D, rail_top_mat: StandardMaterial3D,
+	s_start: float, s_end: float, side: float, hg_signed: float, name: String,
+) -> void:
 	var st_rail: SurfaceTool = SurfaceTool.new()
 	st_rail.begin(Mesh.PRIMITIVE_TRIANGLES)
 	st_rail.set_material(rail_mat)
@@ -267,13 +339,13 @@ func _build_rail_strip(
 	var head_y1: float = rail_top_y
 	var head_w: float = rail_head_width * 0.5
 
-	var n_steps: int = maxi(1, int((s_end - s_start) / sampling_step))
-	var step: float = (s_end - s_start) / float(n_steps)
+	var s_list: Array = _adaptive_s_list(s_start, s_end, side)
 
-	var prev_xform: Transform3D = tunnel.transform_at(s_start)
-	var prev_cx: float = _track_center_x(s_start, side) + hg_signed
-	for i in range(1, n_steps + 1):
-		var s_cur: float = s_start + float(i) * step
+	var prev_s: float = s_list[0]
+	var prev_xform: Transform3D = tunnel.transform_at(prev_s)
+	var prev_cx: float = _track_center_x(prev_s, side) + hg_signed
+	for i in range(1, s_list.size()):
+		var s_cur: float = s_list[i]
 		var cur_xform: Transform3D = tunnel.transform_at(s_cur)
 		var cur_cx: float = _track_center_x(s_cur, side) + hg_signed
 
@@ -284,7 +356,7 @@ func _build_rail_strip(
 		var u0: Vector3 = prev_xform.basis.y
 		var u1: Vector3 = cur_xform.basis.y
 
-		var v0: float = (s_cur - step)
+		var v0: float = prev_s
 		var v1: float = s_cur
 
 		# Foot
@@ -308,6 +380,7 @@ func _build_rail_strip(
 			prev_cx, cur_cx, head_y1 - 0.012, head_y1, head_w, head_w, v0, v1,
 		)
 
+		prev_s = s_cur
 		prev_xform = cur_xform
 		prev_cx = cur_cx
 
@@ -914,7 +987,16 @@ func _build_cable_segment(
 # avec s_rame2 = LENGTH - s_rame1 (positions symétriques des 2 cabines).
 # ---------------------------------------------------------------------------
 
+var _last_vis_seg_idx: int = -1
+
+
 func update_cable_visibility(s_rame1: float) -> void:
+	# La visibilité ne change que quand la rame franchit une frontière de
+	# segment (15 m) — inutile d'itérer ~460 segments à 60 Hz entre-temps.
+	var seg_idx: int = int(s_rame1 / cable_segment_length)
+	if seg_idx == _last_vis_seg_idx:
+		return
+	_last_vis_seg_idx = seg_idx
 	var s_rame2: float = PNConstants.LENGTH - s_rame1
 	for seg in cable_left_segments:
 		# Segment visible si une partie est au-dessus (en amont) de rame 1
