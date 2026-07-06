@@ -19,6 +19,16 @@ extends Node3D
 @export var horseshoe_half_height: float = 2.05  # demi-hauteur rectangle
 @export var horseshoe_transition: float = 20.0   # longueur de blend circular ↔ horseshoe
 
+# Salles de gare (zones de quai) : la section carrée s'élargit pour loger
+# les quais-escaliers de chaque côté du train. Fidèle aux photos du
+# 2026-04-26 : la salle reste ÉTROITE (murs parallèles au train à ~3,5 m
+# de l'axe, soit ~1,7 m du flanc de cabine) et basse de plafond.
+@export var station_room_half_width: float = 3.50
+@export var station_room_half_height: float = 2.65
+@export var station_low_end: float = 52.0        # fin de la salle Val Claret
+@export var station_high_start: float = 3421.0   # début de la salle Grande Motte
+@export var station_room_transition: float = 6.0 # fondu salle ↔ tube carré
+
 # Passing loop (boucle de croisement au milieu du tunnel)
 # Géométrie réelle aiguillage Abt : courbe sinusoïdale continue symétrique
 # entre PASSING_START et PASSING_END. Pas de section droite intermédiaire.
@@ -185,10 +195,11 @@ func _build_wall_cable_chunk(
 
 # X local du câble mural à la distance s : suit la paroi GAUCHE du tunnel,
 # y compris dans la chambre de croisement où la paroi s'écarte de
-# |passing_loop_offset|. Sans ça, le câble resterait à x constant en plein
-# milieu de la chambre et la rame le traverserait pendant l'évitement.
+# |passing_loop_offset|, et dans les salles de gare élargies. Sans ça, le
+# câble resterait à x constant en plein milieu et la rame le traverserait.
 func _wall_cable_x_at(s: float) -> float:
-	return wall_cable_x_local - absf(passing_loop_offset(s, 1.0))
+	var room_extra: float = _horseshoe_dims_at(s).x - horseshoe_half_width
+	return wall_cable_x_local - absf(passing_loop_offset(s, 1.0)) - room_extra
 
 
 # Construit un tronçon de tunnel entre s_start et s_end.
@@ -267,11 +278,15 @@ func _build_tunnel_chunk(
 			cur_blend = 0.0
 			prev_blend = 0.0
 
+		# Dimensions horseshoe locales (élargies dans les salles de gare)
+		var prev_dims: Vector2 = _horseshoe_dims_at(s_prev)
+		var cur_dims: Vector2 = _horseshoe_dims_at(s_cur)
+
 		for k in range(ring_segments):
-			var prev_0: Vector2 = _profile_xy(k, ring_segments, prev_radius, prev_blend)
-			var prev_1: Vector2 = _profile_xy(k + 1, ring_segments, prev_radius, prev_blend)
-			var cur_0: Vector2 = _profile_xy(k, ring_segments, cur_radius, cur_blend)
-			var cur_1: Vector2 = _profile_xy(k + 1, ring_segments, cur_radius, cur_blend)
+			var prev_0: Vector2 = _profile_xy(k, ring_segments, prev_radius, prev_blend, prev_dims.x, prev_dims.y)
+			var prev_1: Vector2 = _profile_xy(k + 1, ring_segments, prev_radius, prev_blend, prev_dims.x, prev_dims.y)
+			var cur_0: Vector2 = _profile_xy(k, ring_segments, cur_radius, cur_blend, cur_dims.x, cur_dims.y)
+			var cur_1: Vector2 = _profile_xy(k + 1, ring_segments, cur_radius, cur_blend, cur_dims.x, cur_dims.y)
 
 			var p_prev_0: Vector3 = prev_center + prev_right * prev_0.x + prev_up * prev_0.y
 			var p_prev_1: Vector3 = prev_center + prev_right * prev_1.x + prev_up * prev_1.y
@@ -362,6 +377,31 @@ func _radius_at(s: float) -> float:
 	return tunnel_radius
 
 
+# 1.0 = pleine salle de gare (section élargie), 0.0 = tube carré standard.
+# Fondu linéaire sur station_room_transition à la jonction salle/tube.
+func _station_room_blend_at(s: float) -> float:
+	if s <= station_low_end - station_room_transition:
+		return 1.0
+	if s < station_low_end:
+		return (station_low_end - s) / station_room_transition
+	if s >= station_high_start + station_room_transition:
+		return 1.0
+	if s > station_high_start:
+		return (s - station_high_start) / station_room_transition
+	return 0.0
+
+
+# Demi-largeur / demi-hauteur du profil horseshoe à la distance s
+# (élargi en salle de gare, standard ailleurs).
+func _horseshoe_dims_at(s: float) -> Vector2:
+	var k: float = _station_room_blend_at(s)
+	if k <= 0.0:
+		return Vector2(horseshoe_half_width, horseshoe_half_height)
+	return Vector2(
+		lerpf(horseshoe_half_width, station_room_half_width, k),
+		lerpf(horseshoe_half_height, station_room_half_height, k))
+
+
 func _horseshoe_blend_at(s: float) -> float:
 	# Retourne 0.0 = full circular, 1.0 = full horseshoe.
 	# Transitions smooth autour de s=257 (portail bas) et s=3420 (portail haut).
@@ -384,16 +424,18 @@ func _horseshoe_blend_at(s: float) -> float:
 # Point du profil à u ∈ [0, 1] (progression le long du contour de la section).
 # u=0 → (R, 0) à droite, parcours anti-horaire (haut → gauche → bas → retour).
 # Blend linéaire entre profil circulaire et profil horseshoe rectangulaire.
-func _profile_xy(k: int, n: int, radius: float, blend: float) -> Vector2:
+func _profile_xy(k: int, n: int, radius: float, blend: float,
+		hs_w: float = -1.0, hs_h: float = -1.0) -> Vector2:
 	var u: float = float(k) / float(n)
 	var angle: float = u * TAU
 	# Profil circulaire
 	var circ: Vector2 = Vector2(cos(angle) * radius, sin(angle) * radius)
 	if blend <= 0.001:
 		return circ
-	# Profil horseshoe rectangulaire (largeur 2W, hauteur 2H) parcouru anti-horaire.
-	var W: float = horseshoe_half_width
-	var H: float = horseshoe_half_height
+	# Profil horseshoe rectangulaire (largeur 2W, hauteur 2H) parcouru
+	# anti-horaire. W/H surchargables (salles de gare élargies).
+	var W: float = hs_w if hs_w > 0.0 else horseshoe_half_width
+	var H: float = hs_h if hs_h > 0.0 else horseshoe_half_height
 	var perim: float = 4.0 * (W + H)
 	var s_ct: float = u * perim
 	var hs: Vector2
