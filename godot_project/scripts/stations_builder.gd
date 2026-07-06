@@ -13,10 +13,10 @@ extends Node3D
 
 @export var platform_length: float = 48.0      # allongé pour contenir tout le train
 # Quais EN ESCALIER (photos du 2026-04-26) : pas de quai-rampe lisse —
-# une volée de marches-paliers horizontales longe le train de chaque côté,
-# étroite (~1,5 m), la contremarche de chaque marche découlant de la pente
+# une volée de marches-paliers horizontales de 3 m de large longe le train
+# de chaque côté, la contremarche de chaque marche découlant de la pente
 # locale de la voie. Nez de marche contrastés (alu en bas, rouges en haut).
-@export var platform_width: float = 1.62       # largeur quai latéral (étroit, cf. photos ; bord extérieur ≈ au mur de salle)
+@export var platform_width: float = 3.00       # largeur quai latéral (bord extérieur ≈ au mur de salle)
 @export var platform_inner_x: float = 1.85     # distance depuis centre tunnel au bord intérieur (hors gabarit cabine ∅3.6m)
 @export var platform_height: float = 0.40      # hauteur quai vs plancher voie (plancher cabine bas)
 @export var tread_depth: float = 0.95          # profondeur d'une marche-palier
