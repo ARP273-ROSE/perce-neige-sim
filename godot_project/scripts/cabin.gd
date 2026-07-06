@@ -128,6 +128,15 @@ func _build_interior() -> void:
 
 
 func _build_floor_ceiling() -> void:
+	# Limite AVANT de l'intérieur visible : dans la vraie cabine, le
+	# plancher et le plafond s'arrêtent au pare-brise, ~1,6 m devant les
+	# yeux du conducteur (caméra FPV à −train_length/2 + 4,0). Les boîtes
+	# étaient centrées sur z=0 et couvraient 97 % du train → 3,5 m de
+	# plancher/plafond en porte-à-faux DEVANT le poste de pilotage, comme
+	# un plongeoir au-dessus de la voie.
+	var z_front: float = -train_length * 0.5 + 2.4    # = 1,6 m devant la caméra
+	var z_rear: float = train_length * 0.5 * 0.97
+
 	# Sol cabine — plancher caillebotis sombre (matériau acier mat),
 	# bien plus contrasté que la dalle béton du tunnel pour qu'on
 	# distingue clairement "intérieur" vs "voie" depuis le siège.
@@ -139,13 +148,14 @@ func _build_floor_ceiling() -> void:
 	floor_mat.uv1_scale = Vector3(8.0, 16.0, 1.0)
 
 	var floor_mesh: BoxMesh = BoxMesh.new()
-	floor_mesh.size = Vector3(2.40, 0.05, train_length * 0.97)
+	floor_mesh.size = Vector3(2.40, 0.05, z_rear - z_front)
 	floor_mesh.material = floor_mat
 	var floor_node: MeshInstance3D = MeshInstance3D.new()
 	floor_node.name = "InteriorFloor"
 	floor_node.mesh = floor_mesh
 	floor_node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	floor_node.position = Vector3(0.0, -1.05, 0.0)   # juste au-dessus du slab
+	# juste au-dessus du slab, recentré sur l'empattement raccourci
+	floor_node.position = Vector3(0.0, -1.05, (z_front + z_rear) * 0.5)
 	interior_root.add_child(floor_node)
 
 	# Plafond cabine — surface plate visible quand on lève les yeux
@@ -155,13 +165,13 @@ func _build_floor_ceiling() -> void:
 	ceil_mat.metallic = 0.15
 
 	var ceil_mesh: BoxMesh = BoxMesh.new()
-	ceil_mesh.size = Vector3(2.40, 0.04, train_length * 0.97)
+	ceil_mesh.size = Vector3(2.40, 0.04, z_rear - z_front)
 	ceil_mesh.material = ceil_mat
 	var ceil_node: MeshInstance3D = MeshInstance3D.new()
 	ceil_node.name = "InteriorCeiling"
 	ceil_node.mesh = ceil_mesh
 	ceil_node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	ceil_node.position = Vector3(0.0, 1.45, 0.0)
+	ceil_node.position = Vector3(0.0, 1.45, (z_front + z_rear) * 0.5)
 	interior_root.add_child(ceil_node)
 
 	# Bandeau LED plafond (lumineux) le long du milieu, donne le côté "métro moderne"
@@ -172,14 +182,15 @@ func _build_floor_ceiling() -> void:
 	led_mat.emission_energy_multiplier = 1.6
 	led_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 
+	var led_z_rear: float = train_length * 0.5 * 0.92
 	var led_mesh: BoxMesh = BoxMesh.new()
-	led_mesh.size = Vector3(0.25, 0.04, train_length * 0.92)
+	led_mesh.size = Vector3(0.25, 0.04, led_z_rear - z_front)
 	led_mesh.material = led_mat
 	var led_node: MeshInstance3D = MeshInstance3D.new()
 	led_node.name = "InteriorLEDStrip"
 	led_node.mesh = led_mesh
 	led_node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	led_node.position = Vector3(0.0, 1.42, 0.0)
+	led_node.position = Vector3(0.0, 1.42, (z_front + led_z_rear) * 0.5)
 	interior_root.add_child(led_node)
 
 
@@ -191,18 +202,22 @@ func _build_handrails() -> void:
 	rail_mat.metallic = 0.85
 	rail_mat.metallic_specular = 0.95
 
-	# 2 mains courantes horizontales le long du plafond, à x=±0.35 (au-dessus de l'aisle)
+	# 2 mains courantes horizontales le long du plafond, à x=±0.35 (au-dessus
+	# de l'aisle). Elles s'arrêtent 0,6 m en retrait du front du plafond
+	# (zone conducteur = pas de main courante dans le vrai cockpit).
+	var rail_z_front: float = -train_length * 0.5 + 3.0
+	var rail_z_rear: float = train_length * 0.5 * 0.85
 	for side in [-1.0, 1.0]:
 		var rail: MeshInstance3D = MeshInstance3D.new()
 		var rail_mesh: CylinderMesh = CylinderMesh.new()
 		rail_mesh.top_radius = 0.025
 		rail_mesh.bottom_radius = 0.025
-		rail_mesh.height = train_length * 0.85
+		rail_mesh.height = rail_z_rear - rail_z_front
 		rail_mesh.radial_segments = 10
 		rail_mesh.material = rail_mat
 		rail.mesh = rail_mesh
 		rail.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		rail.position = Vector3(side * 0.35, 1.30, 0.0)
+		rail.position = Vector3(side * 0.35, 1.30, (rail_z_front + rail_z_rear) * 0.5)
 		# Cylindre axe Y → on veut axe Z (le long de la voie)
 		rail.rotation = Vector3(PI * 0.5, 0.0, 0.0)
 		interior_root.add_child(rail)
@@ -452,7 +467,10 @@ func _build_cctv_monitor() -> void:
 	# Positionné haut (y=1.50) et loin sur le côté gauche (x=-1.0)
 	# pour qu'il ne soit visible qu'en levant les yeux à gauche, jamais
 	# en regardant droit devant.
-	var z_mon: float = -train_length * 0.5 + 1.4
+	# Accroché juste EN DEDANS du nouveau front du plafond (z_front=−13.6,
+	# cf. _build_floor_ceiling) — avant il pendait à −14.6, au-delà du
+	# plafond raccourci, donc flottait dans le vide.
+	var z_mon: float = -train_length * 0.5 + 2.65
 	var bezel_mat: StandardMaterial3D = StandardMaterial3D.new()
 	bezel_mat.albedo_color = Color(0.05, 0.05, 0.06)
 	bezel_mat.roughness = 0.5
