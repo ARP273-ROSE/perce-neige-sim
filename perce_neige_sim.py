@@ -2171,6 +2171,29 @@ _GHOST_BANDS = (
 # Sound system — plays the real Perce-Neige on-board announcements
 # ---------------------------------------------------------------------------
 
+# --- Sifflement moteur : hauteur asservie à la vitesse --------------------
+# Calibration (_calib_audio) : fondamentale 172 Hz à l'arrêt → 197 Hz à
+# 10,1 m/s → 202 Hz extrapolé à 12 m/s. Les boucles d'ambiance QSoundEffect
+# (sans couture) ne savent pas changer de hauteur → on émule le glissando
+# par crossfade entre 6 banques synthétisées à fondamentales étagées.
+MOTOR_BANKS = 6
+MOTOR_F_BANKS = [172, 178, 184, 190, 196, 202]   # Hz, entiers → boucles 2 s sans couture
+
+
+def _motor_bank_weights(v: float) -> list[float]:
+    """Poids de crossfade des banques moteur pour la vitesse |v| (m/s).
+    Au plus DEUX banques adjacentes actives → glissando perçu continu.
+    v=0 → banque 172 Hz seule ; v=12 → banque 202 Hz seule."""
+    x = max(0.0, min(1.0, abs(v) / 12.0)) * (MOTOR_BANKS - 1)
+    lo = int(x)
+    hi = min(lo + 1, MOTOR_BANKS - 1)
+    frac = x - lo
+    w = [0.0] * MOTOR_BANKS
+    w[lo] = 1.0 - frac
+    w[hi] += frac
+    return w
+
+
 def _plan_ambient_paths(dest_dir: Path) -> dict[str, Path]:
     """Return the full set of WAV paths without generating any content.
     Used to populate the SoundSystem dict synchronously so consumers
@@ -2179,10 +2202,14 @@ def _plan_ambient_paths(dest_dir: Path) -> dict[str, Path]:
     """
     out: dict[str, Path] = {
         "rumble": dest_dir / "ambient_rumble.wav",
-        "motor": dest_dir / "motor_hum.wav",
         "buzzer": dest_dir / "departure_buzzer.wav",
         "horn": dest_dir / "horn_v3.wav",
     }
+    # Banques de sifflement moteur à hauteurs étagées (172 → 202 Hz) —
+    # crossfadées selon la vitesse (les QSoundEffect gapless ne savent
+    # pas pitcher, on émule le glissando par mélange de banques).
+    for k in range(MOTOR_BANKS):
+        out[f"motor_{k}"] = dest_dir / f"ambient_motor_{k}.wav"
     for key, name in (
         ("ambient_real", "ambient_real.wav"),
         ("buzzer_real", "departure_buzzer_real.wav"),
@@ -2248,39 +2275,39 @@ def _generate_ambient_wavs(dest_dir: Path) -> dict[str, Path]:
             w.setframerate(sample_rate)
             w.writeframes(bytes(data))
     out["rumble"] = rumble
-    # ---- Motor hum : 1 s loop tuned to the real 197 Hz cruise fundamental
-    # (calibrated from spectral analysis of YouTube FUNI284, cruise phase
-    # t=120-300 s, bandpass 60-300 Hz centroid = 196.9 Hz at 12 m/s).
-    motor = dest_dir / "ambient_motor.wav"
-    if not motor.exists():
-        dur = 1.0
-        n = int(sample_rate * dur)
-        data = bytearray()
-        f0 = 197.0     # real cruise fundamental
-        for i in range(n):
-            t = i / sample_rate
-            # Stacked harmonics for a DC-motor whine (real fundamental)
-            s = (
-                _m.sin(2 * _m.pi * (f0 * 0.5) * t) * 0.15
-                + _m.sin(2 * _m.pi * f0 * t) * 0.30
-                + _m.sin(2 * _m.pi * (f0 * 2) * t) * 0.18
-                + _m.sin(2 * _m.pi * (f0 * 3) * t) * 0.06
-            )
-            env = 1.0
-            fade = int(sample_rate * 0.03)
-            if i < fade:
-                env = i / fade
-            elif i > n - fade:
-                env = (n - i) / fade
-            s *= env * 0.5
-            s = max(-1.0, min(1.0, s))
-            data += struct.pack("<h", int(s * 32767))
-        with wave.open(str(motor), "wb") as w:
-            w.setnchannels(1)
-            w.setsampwidth(2)
-            w.setframerate(sample_rate)
-            w.writeframes(bytes(data))
-    out["motor"] = motor
+    # ---- Motor whine banks : boucles de 2 s aux fondamentales étagées
+    # 172 → 202 Hz. Calibration _calib_audio/calibration_final.json :
+    # 172,3 Hz à l'arrêt, 196,6 Hz à 10,1 m/s (spectral HPS du footage
+    # machinerie) → extrapolé 202 Hz à 12 m/s. Fondamentales ARRONDIES à
+    # l'entier : sur 2 s, chaque harmonique (0,5/1/2/3 × f0) fait un nombre
+    # ENTIER de cycles → boucle parfaitement sans couture, sans fondu (le
+    # fondu de l'ancienne version créait un creux d'amplitude audible à
+    # chaque tour de boucle).
+    for k in range(MOTOR_BANKS):
+        f0 = MOTOR_F_BANKS[k]
+        motor_k = dest_dir / f"ambient_motor_{k}.wav"
+        if not motor_k.exists():
+            dur = 2.0
+            n = int(sample_rate * dur)
+            data = bytearray()
+            for i in range(n):
+                t = i / sample_rate
+                # Stacked harmonics for a DC-motor whine
+                s = (
+                    _m.sin(2 * _m.pi * (f0 * 0.5) * t) * 0.15
+                    + _m.sin(2 * _m.pi * f0 * t) * 0.30
+                    + _m.sin(2 * _m.pi * (f0 * 2) * t) * 0.18
+                    + _m.sin(2 * _m.pi * (f0 * 3) * t) * 0.06
+                )
+                s *= 0.5
+                s = max(-1.0, min(1.0, s))
+                data += struct.pack("<h", int(s * 32767))
+            with wave.open(str(motor_k), "wb") as w:
+                w.setnchannels(1)
+                w.setsampwidth(2)
+                w.setframerate(sample_rate)
+                w.writeframes(bytes(data))
+        out[f"motor_{k}"] = motor_k
     # ---- Departure buzzer : ~12 s tone at 1077 Hz + sub-harmonic 556 Hz.
     # Precisely measured from interior cabin audio (video A_oxDO8jtXo,
     # FFT at 0.5 Hz resolution): fundamental 1077 Hz, sub-harmonic 556 Hz
@@ -2433,6 +2460,10 @@ class SoundSystem:
         self._fx_duck_level = 0.0
         self._station_which: str | None = None
         self._station_target = 0.0
+        # Banques de sifflement moteur (crossfade de hauteur selon v) —
+        # créées paresseusement quand la synthèse WAV de fond a fini.
+        self._motor_fx: list = []
+        self._motor_ready = False
         # Generate procedural ambient/buzzer WAVs (cached in temp dir)
         wav_dir = Path(tempfile.gettempdir()) / "perce_neige_wav"
         # Plan paths synchronously (cheap), defer heavy synthesis to a
@@ -3064,6 +3095,50 @@ class SoundSystem:
             sp.stop()
             self._station_which = None
 
+        # Sifflement moteur : hauteur asservie à la vitesse (crossfade de
+        # banques 172→202 Hz), volume suivant l'ambiance (mêmes ducks).
+        self._update_motor_whine(v, overall, moving, a_vol)
+
+    def _update_motor_whine(self, v: float, overall: float,
+                            moving: bool, a_vol: float) -> None:
+        """Couche de sifflement moteur DC dont la HAUTEUR suit la vitesse
+        (calibration 172 Hz arrêt → 197 Hz croisière → 202 Hz à 12 m/s).
+        Mélange de 6 banques QSoundEffect à fondamentales étagées : au plus
+        deux banques adjacentes audibles, crossfadées → glissando continu
+        SANS couture de boucle. Discrète (gain 0,33) sous les boucles
+        d'ambiance réelles, elle en suit les ducks via `overall`."""
+        if not self._motor_ready:
+            paths = [self._ambient_wavs.get(f"motor_{k}")
+                     for k in range(MOTOR_BANKS)]
+            if not all(p is not None and p.exists() for p in paths):
+                return  # synthèse de fond pas finie — réessaie au tick suivant
+            try:
+                for p in paths:
+                    fx = QSoundEffect()
+                    fx.setSource(QUrl.fromLocalFile(str(p)))
+                    fx.setLoopCount(QSoundEffect.Loop.Infinite.value)
+                    fx.setVolume(0.0)
+                    self._motor_fx.append(fx)
+                self._motor_ready = True
+            except Exception:
+                self._motor_fx = []
+                return
+        weights = _motor_bank_weights(v)
+        gain = (overall * 0.33) if moving else 0.0
+        for k, fx in enumerate(self._motor_fx):
+            target = gain * weights[k]
+            try:
+                cur = fx.volume()
+                diff = target - cur
+                if abs(diff) > 0.002:
+                    fx.setVolume(max(0.0, min(1.0, cur + diff * a_vol)))
+                if target > 0.004 and not fx.isPlaying():
+                    fx.play()
+                elif target <= 0.004 and fx.isPlaying() and fx.volume() < 0.01:
+                    fx.stop()
+            except Exception:
+                pass
+
     def set_station_ambient(self, which: str | None) -> None:
         """Ambiance de quai enregistrée (station basse/haute), jouée en
         boucle discrète à l'arrêt portes ouvertes. `which` ∈ (None,
@@ -3135,6 +3210,12 @@ class SoundSystem:
             pass
         self._station_which = None
         self._station_target = 0.0
+        for fx in self._motor_fx:
+            try:
+                fx.stop()
+                fx.setVolume(0.0)
+            except Exception:
+                pass
 
     def toggle_mute(self) -> bool:
         self.muted = not self.muted
