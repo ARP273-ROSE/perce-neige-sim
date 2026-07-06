@@ -282,23 +282,20 @@ MU_ROLL = 0.0025                # rail rolling resistance
 DOOR_CLOSE_TIME = 3.0           # s (fermeture)
 DOOR_OPEN_TIME = 2.0            # s (ouverture)
 
-# Cable elasticity rebound — visible cable-stretch release + residual damped
-# oscillation when the train stops. Derived from cable stiffness physics :
-# Fatzer 52 mm, E ≈ 100 GPa, A ≈ π·26² mm² = 2124 mm², L = 3491 m → k ≈ 60.8
-# kN/m. A 58 t loaded train creates ~16.5 kN of travel-direction force on
-# the cable at 30 % grade, so the cable is stretched ~0.27 m under that load.
-# During the approach + brake phase, the load shifts — the bull-wheel motor
-# pulls up to ~100 kN peak, adding ~1.0 m of additional stretch. When the
-# train stops and the motor shuts off, the stretch is released over ~1-2 s,
-# causing the OPPOSITE train (ghost counterweight) to creep forward along
-# the cable by a visible amount — measured at ≈1.1 m over 2 s on video.
-# Model : x(t) = A_creep · (1 - exp(-t/τ)) + A_osc · exp(-ζωt) · sin(ωt)
-REBOUND_GHOST_AMP = 1.10         # m — release creep for opposite train
-REBOUND_MAIN_AMP = 0.22          # m — residual creep on the main train
-REBOUND_TAU = 0.70               # s — creep time constant (1/e); ~95 % at 2 s
-REBOUND_OSC_AMP = 0.10           # m — residual oscillation amplitude
-REBOUND_OMEGA = 2.40             # rad/s — natural frequency (T ≈ 2.6 s)
-REBOUND_ZETA = 0.10              # damping ratio (2-3 visible oscillations)
+# --- Câble tracteur : raideur, masse, rebond élastique à l'arrêt ----------
+# Le câble est un ressort : k = EA/L où L = longueur de câble entre la rame
+# et la poulie motrice (machinerie en GARE HAUTE). À l'arrêt en gare BASSE,
+# L ≈ 3,45 km → k ≈ 36 kN/m → la rame chargée oscille VISIBLEMENT à
+# l'arrêt (T = 2π√(m/k) ≈ 8 s, amplitude 20-45 cm). En gare HAUTE, L ≈ 25 m
+# → k ~140× plus raide → oscillation millimétrique, invisible. L'asymétrie
+# bas/haut ÉMERGE de la longueur du câble — aucun flag câblé en dur.
+# EA effectif : section métallique du Fatzer 52 mm ≈ 1250 mm² (remplissage
+# ~0,59 du cercle de 2124 mm²), module effectif du toron ≈ 100 GPa.
+CABLE_EA_N = 1.25e8              # N — raideur longitudinale EA du câble
+CABLE_KG_M = 11.0                # kg/m — masse linéique (≈ 38 t sur la ligne)
+REBOUND_ZETA = 0.15              # amortissement (frottement torons + galets)
+REBOUND_GRAB_A = 0.35            # m/s² — force résiduelle relâchée quand le
+                                 # tambour serre (fin du freinage régulé)
 
 # Passing loop (middle section where tunnel splits in two) ~222 m long.
 # Positions calibrated from the real cockpit video : the loop entry is
@@ -722,7 +719,7 @@ class GameState:
     fault_show_panel: bool = True   # driver can hide the on-screen panel
     finished: bool = False
     rebound_timer: float = 0.0  # cable elasticity rebound (after arrival)
-    rebound_amp_m: float = 0.0  # actual cable stretch (m) captured at arrival
+    rebound_anchor_s: float = 0.0  # position d'arrêt (m) — le rebond oscille autour
     best_time: float | None = None
     # Trip direction selection from the title screen.
     # direction = +1 (Val Claret → Glacier, climb) or -1 (Glacier → Val Claret).
@@ -767,13 +764,17 @@ class Physics:
         # Mass imbalance felt on the cable
         dm = m_up - m_down
 
-        # Slope at the main train's position — the ghost train is at (L - s)
-        # but for simplicity we take the local slope of the up train ; in a
-        # balanced cable system this is slightly asymmetric but visually fine.
+        # Pente LOCALE de chaque rame : le profil n'est pas symétrique
+        # (8 % au départ, 30 % au milieu, 6 % en haut), donc la rame
+        # principale à s et le contrepoids à (L − s) sont rarement sur la
+        # même pente — l'équilibre du câble dépend des DEUX sinus.
         g_slope = gradient_at(tr.s)
         theta = math.atan(g_slope)
         sint = math.sin(theta)
         cost = math.cos(theta)
+        theta_g = math.atan(gradient_at(LENGTH - tr.s))
+        sint_g = math.sin(theta_g)
+        cost_g = math.cos(theta_g)
 
         # Single hard speed limit — the real Perce-Neige passes the loop
         # at full 12 m/s, the loop is just a widening of the tunnel.
@@ -846,13 +847,13 @@ class Physics:
         # direction (up the slope). The ghost at (L - s) contributes via
         # the cable : its weight along its own downhill pulls the cable,
         # which on the main side becomes a +s force. Result :
-        #     f_grav_s = -(m_main - m_ghost) * g * sin = -dm * g * sin
-        # This sign is in absolute +s, independent of which direction
-        # the main train happens to be travelling — gravity doesn't care.
-        f_grav_net = -dm * G * sint
+        #     f_grav_s = -(m_main·sinθ_main - m_ghost·sinθ_ghost) * g
+        # Chaque rame avec SA pente locale (profil asymétrique). Sign in
+        # absolute +s, independent of travel direction.
+        f_grav_net = -(m_up * sint - m_down * sint_g) * G
 
-        # --- Rolling friction (both trains) ---------------------------------
-        f_roll_mag = MU_ROLL * m_total * G * cost
+        # --- Rolling friction (both trains, chacune sur sa pente) -----------
+        f_roll_mag = MU_ROLL * G * (m_up * cost + m_down * cost_g)
         f_roll = -math.copysign(f_roll_mag, tr.v) if abs(tr.v) > 0.05 else 0.0
 
         # --- Brakes ---------------------------------------------------------
@@ -1013,20 +1014,32 @@ class Physics:
         # cable "unloads" rather than loads.
         #
         # Reference : Fatzer 52 mm, nominal 22 500 daN on Perce-Neige,
-        # breaking 191 200 daN. A 58 t fully loaded train at 30 % grade
-        # yields ~16 500 daN, well within the nominal envelope.
+        # breaking 191 200 daN. Composantes :
+        #   - poids de la rame lourde le long de SA pente locale
+        #   - poids PROPRE du câble au-dessus d'elle : 11 kg/m sur un brin
+        #     qui grimpe jusqu'à la poulie → ρ·g·Δaltitude ≈ 9 900 daN
+        #     quand la rame est en bas, ~0 en haut. C'est ce terme qui fait
+        #     évoluer la jauge le long du trajet (max ~21 500 daN au cœur
+        #     de la section à 30 %, proche du nominal — cohérent).
+        #   - frottement + inertie de traction.
         m_heavy = max(m_up, m_down)
+        s_heavy = tr.s if m_up >= m_down else (LENGTH - tr.s)
+        theta_h = math.atan(gradient_at(s_heavy))
         # Acceleration in the travel direction : +: accelerating,
         # -: decelerating (motor easing off or braking).
         a_travel = a * tr.direction
-        t_gravity = m_heavy * G * sint
-        t_friction = MU_ROLL * m_heavy * G * cost
+        t_gravity = m_heavy * G * math.sin(theta_h)
+        t_friction = MU_ROLL * m_heavy * G * math.cos(theta_h)
+        # Poids du brin de câble entre la rame lourde et la poulie motrice
+        # (gare haute) : composante le long de la pente = ρ·g·(alt_haut −
+        # alt_rame), exact quel que soit le profil (∫ρg·sinθ·ds = ρg·Δh).
+        t_cable = CABLE_KG_M * G * max(0.0, ALT_HIGH - geom_at(s_heavy)[1])
         # Only add inertia when the motor is pulling harder than gravity
         # (accelerating in the travel direction). During deceleration or
         # braking the cable is NOT the force path, so tension does not
         # rise — the wheel brake or natural gravity coast absorb it.
         t_inertia = max(0.0, m_heavy * a_travel)
-        tension_n = t_gravity + t_friction + t_inertia
+        tension_n = t_gravity + t_friction + t_cable + t_inertia
         tr.tension_dan = tension_n / 10.0
         # Apply persistent fault offsets so the gauge actually moves
         # when a cable surge or slack fault is announced.
@@ -1146,62 +1159,31 @@ class Physics:
         # footage of the opposite wagon "sliding" after a stop.
         base_ghost_s = LENGTH - tr.s
         if st.finished:
+            # Rebond élastique du câble — modèle masse-ressort ANALYTIQUE
+            # (position posée directement, pas d'intégration → pas de
+            # dérive : l'ancien code intégrait un déplacement comme une
+            # vitesse et la rame glissait de 1,2 m avant de rester coincée
+            # contre le clamp).
+            #
+            # Chaque rame pend à son brin de câble jusqu'à la poulie
+            # motrice en GARE HAUTE : k = EA/L. La rame arrêtée en gare
+            # BASSE a L ≈ 3,45 km → k ≈ 36 kN/m → oscillation lente et
+            # visible (T ≈ 8 s, jusqu'à 45 cm). La rame en gare HAUTE a
+            # L ≈ 25 m → amplitude millimétrique : l'oscillation n'est
+            # visible QUE en bas, uniquement à cause de la longueur du
+            # câble — rien n'est câblé en dur.
             st.rebound_timer += dt
             t_r = st.rebound_timer
-            creep = 1.0 - math.exp(-t_r / REBOUND_TAU)
-            osc = (math.exp(-REBOUND_ZETA * REBOUND_OMEGA * t_r)
-                   * math.sin(REBOUND_OMEGA * t_r))
-            # The motor / bull wheel is at the UPPER station. Only the
-            # cabin sitting at the LOWER (Val Claret) terminus is attached
-            # to a long stretched cable (~3.5 km) that stores enough
-            # elastic energy to visibly rebound. The cabin at the UPPER
-            # terminus is right beside the bull wheel — ~0 m of cable
-            # between it and the fixed pulley, no stretch, no rebound.
-            main_is_upper = tr.s > LENGTH * 0.5
-            # Physical stretch released = snapshot at arrival, clamped
-            # so aberrant huge values (fault conditions) don't drive the
-            # rebound off-screen.
-            amp = min(max(st.rebound_amp_m, 0.3), 5.0)
-            osc_amp = min(REBOUND_OSC_AMP, amp * 0.15)
-            if main_is_upper:
-                # Main at top — the loaded span is ~0 m so there's no
-                # cable elastic rebound, BUT the DC motor shaft + gear
-                # reducer + bull-wheel assembly still has a finite
-                # torsional compliance. When the brake clamps, the
-                # stored strain in the drive train springs back a few
-                # cm, producing a small damped oscillation on the main
-                # cabin — just enough to feel the "settle" instead of
-                # an instant stop. Amplitude ~ 8 cm, same natural
-                # frequency as the cable rebound (drive-line is stiffer
-                # but inertia is similar).
-                DRIVE_TRAIN_AMP = 0.08   # m
-                main_amp_top = DRIVE_TRAIN_AMP
-                osc_amp_top = DRIVE_TRAIN_AMP * 0.6
-                # Direction: arriving train overshoots forward first,
-                # then settles back (classic elastic bounce).
-                main_disp_top = tr.direction * (
-                    main_amp_top * creep + osc_amp_top * osc
-                )
-                tr.s += main_disp_top * dt * 2.5
-                # Ghost at bottom also rebounds by the full cable stretch.
-                ghost_disp = (-tr.direction) * (amp * creep + osc_amp * osc)
-                base_ghost_s += ghost_disp
-            else:
-                # Main at bottom — it rebounds. Ghost at top is static.
-                main_amp = amp * 0.20   # 20 % of stretch felt on main
-                main_disp = (tr.direction) * (
-                    main_amp * creep + (osc_amp * 0.5) * osc
-                )
-                tr.s += main_disp * dt * 2.5
-                d_creep_dt = (main_amp / REBOUND_TAU) * math.exp(-t_r / REBOUND_TAU)
-                d_osc_dt = (osc_amp * 0.5) * (
-                    REBOUND_OMEGA * math.exp(-REBOUND_ZETA * REBOUND_OMEGA * t_r)
-                    * math.cos(REBOUND_OMEGA * t_r)
-                    - REBOUND_ZETA * REBOUND_OMEGA
-                    * math.exp(-REBOUND_ZETA * REBOUND_OMEGA * t_r)
-                    * math.sin(REBOUND_OMEGA * t_r)
-                )
-                tr.v = tr.direction * (d_creep_dt + d_osc_dt)
+            anchor = st.rebound_anchor_s
+            m_ghost = TRAIN_EMPTY_KG + st.ghost_pax * PAX_KG
+            x_main = self._cable_bounce(anchor, tr.mass_kg, tr.mass_kg, t_r)
+            tr.s = anchor + tr.direction * x_main
+            # Le contrepoids ressent le même relâchement de force via SON
+            # brin (signe opposé : le câble le tire vers l'arrière quand
+            # la rame principale déborde vers l'avant).
+            x_ghost = self._cable_bounce(
+                LENGTH - anchor, m_ghost, tr.mass_kg, t_r)
+            base_ghost_s = (LENGTH - anchor) - tr.direction * x_ghost
         st.ghost_s = max(START_S, min(LENGTH - START_S, base_ghost_s))
 
         if st.trip_started:
@@ -1254,18 +1236,29 @@ class Physics:
                 tr.brake = 0.0
                 tr.emergency = False
                 tr.maint_brake = True
-                # Snapshot the physical cable stretch at the moment of
-                # arrival — this is what will be released during the
-                # rebound. Formula : Δl = F·L / (A·E) on the Fatzer
-                # rope. Only meaningful when main is at the LOWER
-                # terminus (long loaded span) ; at the upper terminus
-                # the loaded span is ~0 and stretch ≈ 0.
-                A_cable = 2.12e-3
-                E_cable = 1.05e11
-                L_loaded = LENGTH - tr.s if tr.direction > 0 else tr.s
-                F_peak = tr.tension_dan * 10.0
-                st.rebound_amp_m = max(0.0, F_peak * L_loaded
-                                       / (A_cable * E_cable))
+                # Ancre du rebond élastique : la rame oscille AUTOUR de
+                # son point d'arrêt (cf. _cable_bounce), le chrono part
+                # de zéro à l'instant du serrage.
+                st.rebound_anchor_s = tr.s
+                st.rebound_timer = 0.0
+
+    @staticmethod
+    def _cable_bounce(s_cabin: float, m_cabin: float,
+                      m_arriving: float, t: float) -> float:
+        """Oscillation amortie d'une rame suspendue à son brin de câble
+        élastique après le serrage du frein tambour (poulie motrice en
+        gare haute). x(t) = A·e^(−ζωt)·sin(ωt), avec :
+          k = EA / L        (L = câble entre la rame et la poulie haute)
+          ω = √(k/m)        (rame chargée en bas : T ≈ 8 s)
+          A = m_arr·a_grab/k, plafonné à 45 cm
+        La rame du HAUT a L ≈ 25 m → A de quelques mm : rien à coder,
+        l'asymétrie sort de la physique.
+        """
+        span = max(LENGTH - s_cabin, 20.0)
+        k = CABLE_EA_N / span
+        omega = math.sqrt(k / max(m_cabin, 1.0))
+        amp = min(m_arriving * REBOUND_GRAB_A / k, 0.45)
+        return amp * math.exp(-REBOUND_ZETA * omega * t) * math.sin(omega * t)
 
     def _regulator(self, tr: Train, dt: float) -> None:
         """Speed-command regulator — always active, direction-aware.
