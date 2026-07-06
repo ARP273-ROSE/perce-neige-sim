@@ -84,8 +84,10 @@ func _ready() -> void:
 		physics.trip_started = true
 		physics.doors_open = false
 		_build_state_receiver()
-		# HUD minimal (juste status pour debug)
-		_build_audio()   # le son ambient cruise est sympa à garder
+		# PAS de TrainAudio en mode client : le sim Python joue déjà les
+		# versions réelles de TOUT (boucles d'ambiance crossfadées,
+		# croisement, buzzers, portes, annonces) — les deux ensemble
+		# donnaient un doublon phasé de chaque son pendant le trajet.
 	else:
 		_build_hud()
 		_build_audio()
