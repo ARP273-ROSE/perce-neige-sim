@@ -34,8 +34,11 @@ func build(t: TunnelBuilder) -> void:
 
 func _populate() -> void:
 	var neon_color: Color = Color(0.75, 0.85, 1.0)  # blanc-bleuté néon industriel
-	var s: float = 30.0  # commence après la station basse
-	var max_s: float = PNConstants.LENGTH - 30.0
+	# Commence APRÈS la salle de gare basse et s'arrête AVANT la haute :
+	# dans les salles élargies, un néon à wall_offset du centre flotterait
+	# loin du mur (les gares ont leur propre éclairage plafond).
+	var s: float = tunnel.station_low_end + 4.0
+	var max_s: float = tunnel.station_high_start - 4.0
 
 	# Mesh visible du néon lui-même (bâtonnet émissif)
 	var neon_mat: StandardMaterial3D = StandardMaterial3D.new()
