@@ -92,8 +92,22 @@ func _build() -> void:
 	# atteint son rayon max au milieu (1.95 + 3.50 = 5.45m), et se referme
 	# proprement aux extrémités (jonction continue avec la voie unique).
 	# Les 2 voies sont des courbes continues à l'intérieur de cette chambre.
+	# Croisement : DEUX TUBES SÉPARÉS, pas une chambre élargie. Sources :
+	# remontees-mecaniques.net (« le croisement se fait ici dans deux tubes
+	# séparés », contrairement à Val d'Isère) + chronologie chantier (« tube
+	# d'évitement » percé le 02/10/1991). Aux extrémités, les deux tubes
+	# fusionnent : tant que l'écartement d < R les deux cercles se
+	# chevauchent → profil « binoculaire » (union des deux cercles) qui se
+	# pince progressivement ; au-delà (d ≥ R), deux tubes circulaires
+	# distincts avec le rocher entre les deux.
+	var pinch: float = _loop_pinch_ds()
+	var s_pinch_lo: float = PNConstants.PASSING_START + pinch
+	var s_pinch_hi: float = PNConstants.PASSING_END - pinch
 	_build_tunnel_section(mat, 0.0, PNConstants.PASSING_START, 0.0, "TunnelLow", false)
-	_build_tunnel_section(mat, PNConstants.PASSING_START, PNConstants.PASSING_END, 0.0, "TunnelPassingChamber", true)
+	_build_tunnel_fusion(mat, PNConstants.PASSING_START, s_pinch_lo, "TunnelFusionLow")
+	_build_tunnel_section(mat, s_pinch_lo, s_pinch_hi, -1.0, "TunnelLoopL", false)
+	_build_tunnel_section(mat, s_pinch_lo, s_pinch_hi, +1.0, "TunnelLoopR", false)
+	_build_tunnel_fusion(mat, s_pinch_hi, PNConstants.PASSING_END, "TunnelFusionHigh")
 	_build_tunnel_section(mat, PNConstants.PASSING_END, PNConstants.LENGTH, 0.0, "TunnelHigh", false)
 
 	# Câbles électriques le long du flanc gauche du tunnel (visibles sur
@@ -292,6 +306,108 @@ func _build_tunnel_chunk(
 			var p_prev_1: Vector3 = prev_center + prev_right * prev_1.x + prev_up * prev_1.y
 			var p_cur_0: Vector3 = cur_center + cur_right * cur_0.x + cur_up * cur_0.y
 			var p_cur_1: Vector3 = cur_center + cur_right * cur_1.x + cur_up * cur_1.y
+
+			var u0: float = float(k) / float(ring_segments)
+			var u1: float = float(k + 1) / float(ring_segments)
+			var v0: float = s_prev / 10.0
+			var v1: float = s_cur / 10.0
+
+			st.set_uv(Vector2(u0, v0)); st.add_vertex(p_prev_0)
+			st.set_uv(Vector2(u0, v1)); st.add_vertex(p_cur_0)
+			st.set_uv(Vector2(u1, v1)); st.add_vertex(p_cur_1)
+
+			st.set_uv(Vector2(u0, v0)); st.add_vertex(p_prev_0)
+			st.set_uv(Vector2(u1, v1)); st.add_vertex(p_cur_1)
+			st.set_uv(Vector2(u1, v0)); st.add_vertex(p_prev_1)
+
+	st.generate_normals()
+	st.generate_tangents()
+	var mi: MeshInstance3D = MeshInstance3D.new()
+	mi.name = name
+	mi.mesh = st.commit()
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(mi)
+
+
+# Distance (depuis PASSING_START) à laquelle l'écartement des voies atteint
+# le rayon du tube → point de pincement : avant, les deux cercles se
+# chevauchent (profil binoculaire) ; après, deux tubes disjoints.
+func _loop_pinch_ds() -> float:
+	var ds: float = 0.0
+	while ds < 120.0:
+		if absf(passing_loop_offset(PNConstants.PASSING_START + ds, 1.0)) >= tunnel_radius:
+			return ds
+		ds += 0.5
+	return 60.0  # fallback théorique
+
+
+# Contour « binoculaire » : union de deux cercles de rayon tunnel_radius
+# centrés à x = ±d (d ≤ R). n points, boucle fermée CCW. Départ au point
+# extrême droit (angle 0 du cercle droit) → à d=0 le contour est EXACTEMENT
+# le cercle échantillonné comme _profile_xy (jonction sans couture avec le
+# tube unique). À d=R les deux lobes se touchent à l'origine (pincement).
+func _fusion_outline(d: float, n: int) -> PackedVector2Array:
+	var R: float = tunnel_radius
+	d = clampf(d, 0.0, R)
+	var h: float = sqrt(maxf(R * R - d * d, 0.0))
+	var beta: float = atan2(h, -d)   # intersection HAUTE vue du centre droit
+	var gamma: float = atan2(h, d)   # idem vue du centre gauche
+	var n4: int = int(n / 4.0)
+	var n2: int = int(n / 2.0)
+	var n_c: int = n - n4 - n2
+	var pts: PackedVector2Array = PackedVector2Array()
+	# Arc A : cercle droit, 0 → beta (quart supérieur droit du contour)
+	for j in range(n4):
+		var a: float = beta * float(j) / float(n4)
+		pts.append(Vector2(d + R * cos(a), R * sin(a)))
+	# Arc B : cercle gauche, gamma → 2π−gamma (tout le lobe gauche)
+	for j in range(n2):
+		var a2: float = gamma + (TAU - 2.0 * gamma) * float(j) / float(n2)
+		pts.append(Vector2(-d + R * cos(a2), R * sin(a2)))
+	# Arc C : cercle droit, 2π−beta → 2π (quart inférieur droit)
+	for j in range(n_c):
+		var a3: float = (TAU - beta) + beta * float(j) / float(n_c)
+		pts.append(Vector2(d + R * cos(a3), R * sin(a3)))
+	return pts
+
+
+# Tronçon de fusion des deux tubes (extrémités de l'évitement) : anneaux au
+# profil binoculaire, écartement d(s) = |passing_loop_offset|. Chunké comme
+# le reste du tunnel.
+func _build_tunnel_fusion(
+	mat: StandardMaterial3D, s_start: float, s_end: float, name: String,
+) -> void:
+	var st: SurfaceTool = SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	st.set_material(mat)
+
+	var n_rings_total: int = path_points.size()
+	var idx_start: int = clampi(int(s_start / ring_spacing), 0, n_rings_total - 1)
+	var idx_end: int = clampi(int(ceil(s_end / ring_spacing)), idx_start + 1, n_rings_total - 1)
+
+	for i in range(idx_start + 1, idx_end + 1):
+		var prev_idx: int = i - 1
+		var s_cur: float = float(i) * ring_spacing
+		var s_prev: float = float(prev_idx) * ring_spacing
+
+		var cur_xform: Transform3D = tunnel_xform_raw(float(i))
+		var prev_xform: Transform3D = tunnel_xform_raw(float(prev_idx))
+
+		var prev_pts: PackedVector2Array = _fusion_outline(
+			absf(passing_loop_offset(s_prev, 1.0)), ring_segments)
+		var cur_pts: PackedVector2Array = _fusion_outline(
+			absf(passing_loop_offset(s_cur, 1.0)), ring_segments)
+
+		for k in range(ring_segments):
+			var k1: int = (k + 1) % ring_segments
+			var p_prev_0: Vector3 = prev_xform.origin \
+				+ prev_xform.basis.x * prev_pts[k].x + prev_xform.basis.y * prev_pts[k].y
+			var p_prev_1: Vector3 = prev_xform.origin \
+				+ prev_xform.basis.x * prev_pts[k1].x + prev_xform.basis.y * prev_pts[k1].y
+			var p_cur_0: Vector3 = cur_xform.origin \
+				+ cur_xform.basis.x * cur_pts[k].x + cur_xform.basis.y * cur_pts[k].y
+			var p_cur_1: Vector3 = cur_xform.origin \
+				+ cur_xform.basis.x * cur_pts[k1].x + cur_xform.basis.y * cur_pts[k1].y
 
 			var u0: float = float(k) / float(ring_segments)
 			var u1: float = float(k + 1) / float(ring_segments)

@@ -79,24 +79,34 @@ func _add_crossing_signals() -> void:
 	led_mesh.radial_segments = 10
 	led_mesh.rings = 6
 
-	# Placer une paire (côte à côte) à chaque bord du loop + une au milieu.
-	# ceiling_y suit le plafond local : dans la chambre, le rayon croît de
-	# |passing_loop_offset| → la LED du milieu reste collée au plafond au
-	# lieu de flotter à 1,55 m dans une chambre de 5,45 m de rayon.
+	# Évitement = DEUX TUBES SÉPARÉS (cf. tunnel_builder) :
+	#  - aux bouches (±4 m), le profil est encore quasi le tube unique →
+	#    une paire centrée, plafond = h(d) = √(R²−d²)
+	#  - au milieu, chaque tube a SA paire au plafond de SON tube
 	var pair_dx: float = 0.18    # écart entre les 2 LED de la paire
-	var positions: Array = [
-		PNConstants.PASSING_START + 4.0,
-		(PNConstants.PASSING_START + PNConstants.PASSING_END) * 0.5,
-		PNConstants.PASSING_END - 4.0,
+	var R: float = tunnel.tunnel_radius if tunnel else 1.95
+	var s_mid: float = (PNConstants.PASSING_START + PNConstants.PASSING_END) * 0.5
+	# [s, offset latéral du support]
+	var placements: Array = [
+		[PNConstants.PASSING_START + 4.0, 0.0],
+		[s_mid, tunnel.passing_loop_offset(s_mid, -1.0)],
+		[s_mid, tunnel.passing_loop_offset(s_mid, +1.0)],
+		[PNConstants.PASSING_END - 4.0, 0.0],
 	]
-	for s_led in positions:
+	for placement in placements:
+		var s_led: float = placement[0]
+		var lat: float = placement[1]
 		var xform: Transform3D = tunnel.transform_at(s_led)
 		var right: Vector3 = xform.basis.x
 		var up: Vector3 = xform.basis.y
-		var r_local: float = (tunnel.tunnel_radius if tunnel else 1.95) \
-			+ absf(tunnel.passing_loop_offset(s_led, 1.0))
-		var ceiling_y: float = r_local - 0.40
-		var base_pos: Vector3 = xform.origin + up * ceiling_y
+		var ceiling_y: float
+		if lat == 0.0:
+			# Bouche de fusion : plafond du profil binoculaire au centre
+			var d: float = absf(tunnel.passing_loop_offset(s_led, 1.0))
+			ceiling_y = sqrt(maxf(R * R - d * d, 0.25)) - 0.40
+		else:
+			ceiling_y = R - 0.40
+		var base_pos: Vector3 = xform.origin + right * lat + up * ceiling_y
 		for side in [-1.0, 1.0]:
 			var pos: Vector3 = base_pos + right * (pair_dx * side)
 			# Lumière diffuse omnidirectionnelle
