@@ -271,8 +271,20 @@ CREEP_V = 0.5                   # creep speed on platform approach (m/s)
 CREEP_DIST = 20.0 + PLATFORM_LEN        # 55 m measured in centre-position
 CREEP_START_S = STOP_S - CREEP_DIST     # centre position at creep entry
 
-A_BRAKE_NORMAL = 2.5            # m/s^2
-A_BRAKE_EMERGENCY = 5.0         # m/s^2 — full emergency deceleration
+# --- Décélérations de freinage (sources : recherche du repo §4.2
+# research_failures.md, RM5/POMA, ISR/CEN) — hiérarchie réelle :
+#   arrêt régulé (approche gare)     ~0,30-0,34 m/s² (calibré vidéo)
+#   frein de service (conducteur)    ≤ 2,5 m/s² (plafond, modulé 0..1)
+#   ARRÊT D'URGENCE COMMANDÉ         ≤ 1,25 m/s² — bouton rouge = frein
+#     de sécurité sur la POULIE MOTRICE, câble intact ; les passagers
+#     sont debout, la norme limite la décélération du freinage brusque
+#   FREIN PARACHUTE (pinces rail)    3,6 m/s² — pratique mesurée
+#     3,2-4,1 sur freins Belleville, extrapolé Perce-Neige (le plafond
+#     absolu STRMTG de 5 m/s² n'est PAS la valeur de fonctionnement).
+#     Déclenché UNIQUEMENT par survitesse +20 % ou rupture de câble.
+A_BRAKE_NORMAL = 2.5            # m/s^2 — frein de service à fond
+A_BRAKE_EMERG_DRIVE = 1.25      # m/s^2 — arrêt d'urgence commandé (poulie)
+A_BRAKE_PARACHUTE = 3.6         # m/s^2 — pinces Belleville sur rail
 A_BRAKE_EMERG_RAMP = 8.0        # ramp rate (1/s) : emergency brake reaches
                                 # full effect in ~0.4 s instead of instantly.
 MU_ROLL = 0.0025                # rail rolling resistance
@@ -641,6 +653,10 @@ class Train:
     fault_timer: float = 0.0          # seconds until current fault auto-clears
     # --- Enriched faults (post-research_failures.md audit 2026-04-14)
     cable_rupture: bool = False       # tractor cable broken — catastrophic
+    parachute_engaged: bool = False   # pinces Belleville sur rail (3,6 m/s²)
+                                      # — survitesse +20 % ou rupture câble ;
+                                      # le bouton rouge seul n'utilise QUE le
+                                      # frein poulie (1,25 m/s²)
     service_brake_fail: float = 1.0   # 1.0 nominal, <1 = service brake fade
     flood_tunnel: bool = False        # tunnel water intrusion — speed cap 4 m/s
     comms_loss: bool = False          # PA + GSM tunnel lost — narrative only
@@ -854,6 +870,18 @@ class Physics:
 
         # --- Rolling friction (both trains, chacune sur sa pente) -----------
         f_roll_mag = MU_ROLL * G * (m_up * cost + m_down * cost_g)
+
+        # --- Rupture du câble tracteur : DÉCOUPLAGE ---------------------------
+        # Plus de contrepoids ni de traction : la rame principale est seule
+        # sur sa pente, tirée par TOUT son poids (plus d'équilibrage), et le
+        # moteur n'a plus de chemin de force. Seuls ses freins embarqués
+        # (parachute) et son propre frottement agissent sur SA masse.
+        if tr.cable_rupture:
+            m_total = m_up
+            f_grav_net = -m_up * G * sint
+            f_roll_mag = MU_ROLL * m_up * G * cost
+            f_motor = 0.0
+
         f_roll = -math.copysign(f_roll_mag, tr.v) if abs(tr.v) > 0.05 else 0.0
 
         # --- Brakes ---------------------------------------------------------
@@ -872,8 +900,9 @@ class Physics:
         # The cable-linked counterweight (ghost) naturally absorbs part
         # of the energy when it is intact, which is why a real funicular
         # with intact cable stops markedly faster than the "cable rupture"
-        # calculation in the manual. A_BRAKE_EMERGENCY = 5 m/s² matches
-        # the STRMTG passenger-comfort ceiling (RM5 §2.4).
+        # calculation in the manual. Valeurs : cf. bloc de constantes
+        # A_BRAKE_* (1,25 commandé / 3,6 parachute, 5 m/s² = plafond
+        # réglementaire absolu, pas une valeur de fonctionnement).
         if tr.emergency:
             tr.emergency_ramp = min(
                 1.0, tr.emergency_ramp + A_BRAKE_EMERG_RAMP * dt
@@ -884,10 +913,16 @@ class Physics:
             )
         a_brk = 0.0
         if tr.emergency_ramp > 0.0:
-            # Emergency parachute (Belleville) still works even on cable
-            # rupture / service-brake fade — that is the whole point of a
-            # cable-independent rail brake (RM5 requirement).
-            a_brk = tr.emergency_ramp * A_BRAKE_EMERGENCY
+            # Deux étages distincts (cf. constantes) :
+            #  - bouton rouge = arrêt d'urgence COMMANDÉ : frein de sécurité
+            #    sur la poulie motrice, câble intact → ≤ 1,25 m/s² (norme
+            #    passagers debout)
+            #  - parachute Belleville sur rail (survitesse +20 % ou rupture
+            #    câble) : 3,6 m/s², indépendant du câble — c'est le seul qui
+            #    fonctionne encore câble rompu (RM5 requirement).
+            a_full = (A_BRAKE_PARACHUTE if tr.parachute_engaged
+                      else A_BRAKE_EMERG_DRIVE)
+            a_brk = tr.emergency_ramp * a_full
         elif tr.brake > 0:
             # Service brake can fade to 15–25 % of nominal when the
             # hydraulic circuit loses pressure (Glória 2025 pattern).
@@ -943,11 +978,18 @@ class Physics:
         # new ceiling over a couple of seconds. The regulator's slewed
         # setpoint already handles the general case ; this is a safety
         # net that only kicks in if something forces |v| above v_limit.
-        if new_v * tr.direction > v_limit and f_motor == 0:
+        # Le bleed représente le freinage RÉGÉNÉRATIF de l'entraînement
+        # (moteur en génératrice via le câble). Il n'existe donc PLUS si le
+        # chemin de force est coupé : câble rompu ou drive hors tension —
+        # sinon il écrêtait silencieusement la vitesse à V_MAX et la
+        # cascade de survitesse (+10/+12/+20 %) ne pouvait JAMAIS se
+        # déclencher, même en emballement réel.
+        drive_path_ok = not tr.cable_rupture and not tr.aux_power_fault
+        if new_v * tr.direction > v_limit and f_motor == 0 and drive_path_ok:
             excess = new_v * tr.direction - v_limit
             bleed = min(excess, 1.5 * dt)
             new_v -= bleed * tr.direction
-        if new_v * tr.direction < -v_limit:
+        if new_v * tr.direction < -v_limit and drive_path_ok:
             excess = -v_limit - new_v * tr.direction
             bleed = min(excess, 1.5 * dt)
             new_v += bleed * tr.direction
@@ -1075,6 +1117,9 @@ class Physics:
             tr.overspeed_level = 3
             tr.overspeed_tripped = True
             tr.emergency = True
+            # Pinces Belleville sur rail : SEUL le niveau 3 les engage
+            # (3,6 m/s²) — les niveaux 1-2 passent par le frein poulie.
+            tr.parachute_engaged = True
             # Force parachute to full engagement immediately — it bypasses
             # the normal emergency ramp (mechanical flyball governor).
             tr.emergency_ramp = 1.0
@@ -1184,7 +1229,10 @@ class Physics:
             x_ghost = self._cable_bounce(
                 LENGTH - anchor, m_ghost, tr.mass_kg, t_r)
             base_ghost_s = (LENGTH - anchor) - tr.direction * x_ghost
-        st.ghost_s = max(START_S, min(LENGTH - START_S, base_ghost_s))
+        # Câble rompu : la rame opposée n'est plus couplée — son propre
+        # parachute l'a clouée sur place, elle ne suit plus le miroir.
+        if not tr.cable_rupture:
+            st.ghost_s = max(START_S, min(LENGTH - START_S, base_ghost_s))
 
         if st.trip_started:
             st.trip_time += dt
@@ -1506,6 +1554,7 @@ def clear_fault(st: GameState) -> None:
     tr.door_fault = False
     tr.parking_stuck = False
     tr.cable_rupture = False
+    tr.parachute_engaged = False
     tr.service_brake_fail = 1.0
     tr.flood_tunnel = False
     tr.comms_loss = False
@@ -2003,6 +2052,9 @@ def trigger_fault(st: GameState, kind: str) -> None:
         tr.service_brake_fail = 0.15
         tr.slack_fault_dan = 18000.0
         tr.emergency = True
+        # Câble rompu : le frein poulie n'a plus de chemin de force vers
+        # la rame — seules les pinces Belleville sur rail agissent.
+        tr.parachute_engaged = True
         tr.fault_timer = 120.0
         add_event(
             st, "cable_rupture",
@@ -4485,6 +4537,7 @@ class GameWidget(QWidget):
         tr.door_fault = False
         tr.parking_stuck = False
         tr.cable_rupture = False
+        tr.parachute_engaged = False
         tr.service_brake_fail = 1.0
         tr.flood_tunnel = False
         tr.comms_loss = False
