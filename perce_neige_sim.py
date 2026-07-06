@@ -2702,10 +2702,14 @@ class SoundSystem:
         self._door_player.setLoops(1)
         self._door_player.play()
 
-    def play_crossing(self) -> None:
-        """Play the full 20-s passing-loop crossing ambience (real
-        cabin recording, 4:40→5:00 of the HD ascent = exactly the
-        switch-to-switch transit at 10.1 m/s). Ducks the main ambient
+    # Le clip de croisement (enregistrement cabine réel) couvre EXACTEMENT
+    # le transit aiguillage → aiguillage (202 m) parcouru à la croisière.
+    CROSSING_CLIP_S = 20.0       # durée du clip (s)
+    CROSSING_REF_SPEED = 10.1    # vitesse de la rame pendant l'enregistrement
+
+    def start_crossing(self, progress: float = 0.0) -> None:
+        """Démarre l'ambiance de croisement, calée sur la position du nez
+        de la rame dans l'évitement (progress 0..1). Ducks the main ambient
         loops so the crossing's distinctive rattle + airflow shift is
         actually audible instead of drowning under the cruise rumble.
         """
@@ -2721,12 +2725,15 @@ class SoundSystem:
         self._cross_player.setLoops(1)
         # Flag picked up by update_ambient to ramp the crossing overlay
         # in smoothly and duck the main loops in sync. Cleared early by
-        # update_ambient when the clip is near its end, or by the
-        # EndOfMedia status signal as a safety net.
+        # update_ambient when the clip is near its end, by end_crossing()
+        # à la sortie de l'évitement, or by the EndOfMedia status signal.
         self._crossing_active = True
         self._crossing_level = 0.0
         try:
             self._cross_audio.setVolume(0.0)
+            self._cross_player.setPosition(
+                int(max(0.0, min(1.0, progress)) * self.CROSSING_CLIP_S * 1000.0))
+            self._cross_player.setPlaybackRate(1.0)
         except Exception:
             pass
         try:
@@ -2737,6 +2744,40 @@ class SoundSystem:
         self._cross_player.mediaStatusChanged.connect(
             self._on_crossing_status)
         self._cross_player.play()
+
+    def update_crossing(self, progress: float, speed_mps: float) -> None:
+        """Asservit le clip de croisement à la géométrie : la vitesse de
+        lecture suit la vitesse réelle (rapport à la vitesse de
+        l'enregistrement), la position de lecture est resynchronisée sur
+        le nez de la rame en cas de dérive franche (> 0,7 s — pas de seek
+        permanent, ça clique). Rame arrêtée dans l'évitement → pause (pas
+        de mouvement = pas de crécelle d'aiguillage)."""
+        if not self.enabled or self.muted or not self._crossing_active:
+            return
+        try:
+            if speed_mps < 1.0:
+                if (self._cross_player.playbackState()
+                        == QMediaPlayer.PlaybackState.PlayingState):
+                    self._cross_player.pause()
+                return
+            if (self._cross_player.playbackState()
+                    != QMediaPlayer.PlaybackState.PlayingState):
+                self._cross_player.play()
+            rate = max(0.35, min(1.7, speed_mps / self.CROSSING_REF_SPEED))
+            if abs(rate - self._cross_player.playbackRate()) > 0.03:
+                self._cross_player.setPlaybackRate(rate)
+            expected_ms = int(max(0.0, min(1.0, progress))
+                              * self.CROSSING_CLIP_S * 1000.0)
+            if abs(self._cross_player.position() - expected_ms) > 700:
+                self._cross_player.setPosition(expected_ms)
+        except Exception:
+            pass
+
+    def end_crossing(self) -> None:
+        """Sortie de l'évitement : lance le fondu de sortie (update_ambient
+        ramène _crossing_level à 0) même si le clip n'est pas fini —
+        c'est la GÉOMÉTRIE qui commande, pas la durée du clip."""
+        self._crossing_active = False
 
     def _on_crossing_status(self, status) -> None:
         if status == QMediaPlayer.MediaStatus.EndOfMedia:
@@ -4642,12 +4683,26 @@ class GameWidget(QWidget):
         # the train's head enters the loop so the ambient stays aligned
         # with the rails for the whole crossing. Reset after exiting so
         # the next round-trip re-triggers it.
-        in_loop = PASSING_START <= st.train.s <= PASSING_END
-        if not self._crossing_triggered:
-            if in_loop and abs(st.train.v) > 1.0:
-                self.sounds.play_crossing()
+        # Synchro du croisement sur la GÉOMÉTRIE, pas sur le temps : le clip
+        # couvre le transit aiguillage→aiguillage à 10,1 m/s. Position de
+        # lecture asservie au NEZ de la rame dans l'évitement, vitesse de
+        # lecture asservie à la vitesse réelle → l'entrée, le passage de la
+        # rame opposée et la sortie tombent juste quelle que soit l'allure,
+        # même si elle varie (ou s'annule) en cours de traversée.
+        _tr_x = st.train
+        _s_front = _tr_x.s + TRAIN_HALF * _tr_x.direction
+        _prog = (_s_front - PASSING_START) / (PASSING_END - PASSING_START)
+        if _tr_x.direction < 0:
+            _prog = 1.0 - _prog
+        in_loop = 0.0 <= _prog <= 1.0
+        if in_loop and not self._crossing_triggered:
+            if abs(_tr_x.v) > 0.5:
+                self.sounds.start_crossing(_prog)
                 self._crossing_triggered = True
-        elif not in_loop:
+        elif in_loop and self._crossing_triggered:
+            self.sounds.update_crossing(_prog, abs(_tr_x.v))
+        elif not in_loop and self._crossing_triggered:
+            self.sounds.end_crossing()
             self._crossing_triggered = False
 
         # --- Viewer Godot 3D : watchdog + heartbeat -----------------------
