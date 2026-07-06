@@ -24,9 +24,19 @@ extends Node3D
 @export var slab_width: float = 3.20         # largeur dalle (déborde sous banquettes)
 
 @export var sleeper_spacing: float = 0.95    # entraxe blocs (≈ 950 mm, gaps visibles)
-@export var sleeper_length: float = 1.55     # longueur transverse (~bord à bord rails)
-@export var sleeper_width: float = 0.36      # largeur (sens voie), gap ≈ 60 cm
-@export var sleeper_height: float = 0.20     # épaisseur (un peu plus haut, profil béton apparent)
+# Blochets INDÉPENDANTS sous chaque rail (photos du 2026-04-26 : les
+# traverses ne sont PAS continues entre les deux rails comme en voie
+# ferrée classique — chaque rail repose sur sa propre rangée de plots
+# béton, et l'espace central est occupé par la longrine des galets).
+@export var block_width: float = 0.55        # largeur transverse d'un blochet
+@export var sleeper_width: float = 0.42      # longueur (sens voie) d'un blochet
+@export var sleeper_height: float = 0.20     # épaisseur (profil béton apparent)
+
+# Longrine CONTINUE entre les deux rails : c'est elle qui porte les
+# supports de galets du câble tracteur (photos : canal central avec le
+# câble posé sur ses galets tout du long, y compris dans le loop).
+@export var cable_beam_width: float = 0.50
+@export var cable_beam_height: float = 0.10
 
 @export var guide_spacing: float = 13.57     # entraxe RÉEL : 3474 m / 256 paires (source CFD)
 @export var pulley_radius: float = 0.15      # rayon poulie/galet (300 mm)
@@ -81,6 +91,7 @@ func build(t: TunnelBuilder) -> void:
 	_build_slab()
 	_build_rails()
 	_build_sleepers()
+	_build_cable_beam()
 	_build_guides()
 	_build_cable()
 
@@ -503,33 +514,42 @@ func _emit_rail_step(
 # ---------------------------------------------------------------------------
 
 func _build_sleepers() -> void:
-	# Traverses béton un peu plus sombres que la dalle pour les rendre
+	# Blochets béton un peu plus sombres que la dalle pour les rendre
 	# clairement visibles depuis loin (avant le tuning : delta de 0.06
 	# seulement avec la dalle → indistinguables au-delà de 5 m).
+	#
+	# Fidèle aux photos du vrai Perce-Neige (2026-04-26) : PAS de traverse
+	# continue entre les rails — chaque rail repose sur sa propre rangée
+	# de blochets indépendants, le canal central restant libre pour la
+	# longrine des galets du câble (cf. _build_cable_beam).
 	var mat: StandardMaterial3D = StandardMaterial3D.new()
 	mat.albedo_color = Color(0.22, 0.21, 0.19)
 	mat.roughness = 0.95
 	mat.metallic = 0.0
 
 	var box: BoxMesh = BoxMesh.new()
-	box.size = Vector3(sleeper_length, sleeper_height, sleeper_width)
+	box.size = Vector3(block_width, sleeper_height, sleeper_width)
 	box.material = mat
 
-	# Construit la liste des positions :
-	# - Hors loop plat : 1 traverse centrée (x=0)
-	# - Dans loop plat [PASSING_START, PASSING_END] : 2 traverses, une par voie,
-	#   décalées par tunnel.passing_loop_offset(s, ±1) (qui vaut ±2.20m au cœur du loop).
-	# Les zones de transition (15m de chaque côté) gardent une seule traverse centrée,
-	# acceptable visuellement vu qu'on est en mouvement à 10 m/s.
-	var positions: Array = []  # [{s: float, off: float}, ...]
+	# Construit la liste des positions : un blochet SOUS CHAQUE RAIL
+	# (x = centre de voie ± demi-écartement).
+	# - Hors loop plat : 1 voie centrée → 2 blochets
+	# - Dans loop plat [PASSING_START, PASSING_END] : 2 voies décalées par
+	#   tunnel.passing_loop_offset(s, ±1) → 4 blochets
+	var hg: float = gauge_m * 0.5
+	var positions: Array = []  # [{s: float, off: float}, ...] — off = centre du blochet
 	var n_total: int = int(PNConstants.LENGTH / sleeper_spacing)
 	for i in range(n_total):
 		var s: float = (float(i) + 0.5) * sleeper_spacing
+		var track_offs: Array = []
 		if s >= PNConstants.PASSING_START and s <= PNConstants.PASSING_END:
-			positions.append({"s": s, "off": tunnel.passing_loop_offset(s, -1.0)})
-			positions.append({"s": s, "off": tunnel.passing_loop_offset(s, +1.0)})
+			track_offs = [tunnel.passing_loop_offset(s, -1.0),
+						  tunnel.passing_loop_offset(s, +1.0)]
 		else:
-			positions.append({"s": s, "off": 0.0})
+			track_offs = [0.0]
+		for toff in track_offs:
+			positions.append({"s": s, "off": toff - hg})
+			positions.append({"s": s, "off": toff + hg})
 
 	var mm: MultiMesh = MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
@@ -552,6 +572,136 @@ func _build_sleepers() -> void:
 
 
 # ---------------------------------------------------------------------------
+# Longrine centrale continue — support des galets du câble tracteur.
+# Sur les photos du vrai funiculaire, l'espace entre les deux rails est
+# occupé par un support béton/acier CONTINU sur lequel sont fixés les
+# supports de galets (256 paires sur la ligne). Les socles ponctuels de
+# _build_guides posent dessus.
+# ---------------------------------------------------------------------------
+
+func _build_cable_beam() -> void:
+	var mat: StandardMaterial3D = StandardMaterial3D.new()
+	mat.albedo_color = Color(0.34, 0.33, 0.31)   # béton, plus sombre que la dalle
+	mat.roughness = 0.90
+	mat.metallic = 0.05
+
+	# Hors loop : UNE longrine centrale porte les deux câbles (2 galets côte
+	# à côte sur chaque socle). Dans le loop : chaque voie a la sienne.
+	# La fourche se fait au point où les voies se sont écartées d'une
+	# demi-largeur de longrine — avant ce point, les deux longrines de voie
+	# se superposeraient au centre (z-fighting) ; après, elles sont
+	# disjointes et prolongent proprement la face de fin de la centrale.
+	var fork_ds: float = _beam_fork_ds()
+	var s_fork_lo: float = PNConstants.PASSING_START + fork_ds
+	var s_fork_hi: float = PNConstants.PASSING_END - fork_ds
+	_build_cable_beam_section(mat, 0.0, s_fork_lo, 0.0, "CableBeamLow")
+	_build_cable_beam_section(mat, s_fork_lo, s_fork_hi, -1.0, "CableBeamLoopL")
+	_build_cable_beam_section(mat, s_fork_lo, s_fork_hi, +1.0, "CableBeamLoopR")
+	_build_cable_beam_section(mat, s_fork_hi, PNConstants.LENGTH, 0.0, "CableBeamHigh")
+
+
+# Distance (depuis PASSING_START) à laquelle l'écartement des voies
+# atteint une demi-largeur de longrine + marge → point de fourche.
+func _beam_fork_ds() -> float:
+	var target: float = cable_beam_width * 0.5 + 0.02
+	var ds: float = 0.0
+	while ds < 100.0:
+		if absf(tunnel.passing_loop_offset(PNConstants.PASSING_START + ds, 1.0)) >= target:
+			return ds
+		ds += 0.5
+	return 20.0  # fallback théorique (jamais atteint avec l'offset sin²)
+
+
+func _build_cable_beam_section(
+	mat: StandardMaterial3D, s_start: float, s_end: float,
+	side: float, name: String,
+) -> void:
+	var c_start: float = s_start
+	var chunk_i: int = 0
+	while c_start < s_end - 0.001:
+		var c_end: float = minf(c_start + chunk_length, s_end)
+		_build_cable_beam_chunk(mat, c_start, c_end, side,
+			"%s_%d" % [name, chunk_i])
+		c_start = c_end
+		chunk_i += 1
+
+
+func _build_cable_beam_chunk(
+	mat: StandardMaterial3D, s_start: float, s_end: float,
+	side: float, name: String,
+) -> void:
+	var st: SurfaceTool = SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	st.set_material(mat)
+
+	var half_w: float = cable_beam_width * 0.5
+	var y_lo: float = floor_y_local + slab_thickness - 0.01
+	var y_hi: float = y_lo + cable_beam_height
+
+	var s_list: Array = _adaptive_s_list(s_start, s_end, side)
+	var prev_s: float = s_list[0]
+	var prev_xform: Transform3D = tunnel.transform_at(prev_s)
+	var prev_off: float = _track_center_x(prev_s, side)
+	for i in range(1, s_list.size()):
+		var s_cur: float = s_list[i]
+		var cur_xform: Transform3D = tunnel.transform_at(s_cur)
+		var cur_off: float = _track_center_x(s_cur, side)
+
+		var p0: Vector3 = prev_xform.origin
+		var p1: Vector3 = cur_xform.origin
+		var r0: Vector3 = prev_xform.basis.x
+		var r1: Vector3 = cur_xform.basis.x
+		var u0: Vector3 = prev_xform.basis.y
+		var u1: Vector3 = cur_xform.basis.y
+
+		var v0: float = prev_s
+		var v1: float = s_cur
+
+		# Dessus
+		_emit_quad_strip(
+			st,
+			_pt(p0, r0, u0, prev_off - half_w, y_hi),
+			_pt(p0, r0, u0, prev_off + half_w, y_hi),
+			_pt(p1, r1, u1, cur_off - half_w, y_hi),
+			_pt(p1, r1, u1, cur_off + half_w, y_hi),
+			Vector2(0.0, v0), Vector2(1.0, v0),
+			Vector2(0.0, v1), Vector2(1.0, v1),
+		)
+		# Flanc gauche
+		_emit_quad_strip(
+			st,
+			_pt(p0, r0, u0, prev_off - half_w, y_lo),
+			_pt(p0, r0, u0, prev_off - half_w, y_hi),
+			_pt(p1, r1, u1, cur_off - half_w, y_lo),
+			_pt(p1, r1, u1, cur_off - half_w, y_hi),
+			Vector2(0.0, v0), Vector2(0.2, v0),
+			Vector2(0.0, v1), Vector2(0.2, v1),
+		)
+		# Flanc droite
+		_emit_quad_strip(
+			st,
+			_pt(p0, r0, u0, prev_off + half_w, y_hi),
+			_pt(p0, r0, u0, prev_off + half_w, y_lo),
+			_pt(p1, r1, u1, cur_off + half_w, y_hi),
+			_pt(p1, r1, u1, cur_off + half_w, y_lo),
+			Vector2(0.8, v0), Vector2(1.0, v0),
+			Vector2(0.8, v1), Vector2(1.0, v1),
+		)
+
+		prev_s = s_cur
+		prev_xform = cur_xform
+		prev_off = cur_off
+
+	st.generate_normals()
+	st.generate_tangents()
+	var mi: MeshInstance3D = MeshInstance3D.new()
+	mi.name = name
+	mi.mesh = st.commit()
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(mi)
+
+
+# ---------------------------------------------------------------------------
 # Guides câble réalistes — socle + équerres + poulie/galet rotatif
 #
 # Structure Von Roll : socle béton fixé au sol entre les rails, deux équerres
@@ -562,7 +712,10 @@ func _build_sleepers() -> void:
 # ---------------------------------------------------------------------------
 
 func _build_guides() -> void:
-	var top_slab: float = floor_y_local + slab_thickness  # top de dalle
+	# Les socles de galets posent sur la LONGRINE continue (cf.
+	# _build_cable_beam), pas directement sur la dalle — le câble et les
+	# poulies montent d'autant (cable_beam_height).
+	var top_slab: float = floor_y_local + slab_thickness - 0.01 + cable_beam_height
 
 	# Hauteurs dans la base locale
 	var y_base_lo: float = top_slab
