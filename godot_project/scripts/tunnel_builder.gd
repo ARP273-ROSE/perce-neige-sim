@@ -20,10 +20,10 @@ extends Node3D
 @export var horseshoe_transition: float = 20.0   # longueur de blend circular ↔ horseshoe
 
 # Salles de gare (zones de quai) : la section carrée s'élargit pour loger
-# les quais-escaliers de chaque côté du train. Fidèle aux photos du
-# 2026-04-26 : la salle reste ÉTROITE (murs parallèles au train à ~3,5 m
-# de l'axe, soit ~1,7 m du flanc de cabine) et basse de plafond.
-@export var station_room_half_width: float = 3.50
+# les quais-escaliers de 3 m de chaque côté du train (murs parallèles au
+# train calés juste derrière le bord extérieur des quais), plafond bas.
+# Murs calés sur des quais de 3 m : inner 1,85 + 3,00 + 5 cm de jeu.
+@export var station_room_half_width: float = 4.90
 @export var station_room_half_height: float = 2.65
 @export var station_low_end: float = 52.0        # fin de la salle Val Claret
 @export var station_high_start: float = 3421.0   # début de la salle Grande Motte
