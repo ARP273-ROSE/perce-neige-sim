@@ -104,8 +104,11 @@ func _process(_delta: float) -> void:
 		var gate: float = clampf(v_abs, 0.0, 1.0)
 		_player_slow.volume_db = lerpf(-12.0, -40.0, blend) + lerpf(-30.0, 0.0, gate)
 		_player_cruise.volume_db = lerpf(-40.0, -8.0, blend) + lerpf(-30.0, 0.0, gate)
-		# Pitch du moteur monte avec v → effet "whine" classique (1.0 → 1.35)
-		_player_cruise.pitch_scale = lerpf(0.85, 1.35, blend)
+		# Pitch du moteur : CALIBRÉ (_calib_audio : 172 Hz à l'arrêt →
+		# 197 Hz à la croisière enregistrée → 202 Hz à V_MAX). La boucle
+		# est enregistrée en croisière → rate = f(v)/197 : 0,87 → 1,03.
+		# (l'ancien 0,85→1,35 exagérait le glissando d'un facteur ~4.)
+		_player_cruise.pitch_scale = lerpf(0.873, 1.025, blend)
 
 	# Ventilation cabine : démarre dès que la cabine est en service, indep de v
 	if not _player_vent.playing and _player_vent.stream:
