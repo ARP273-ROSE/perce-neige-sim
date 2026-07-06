@@ -95,12 +95,15 @@ func _process(_delta: float) -> void:
 			_player_cruise.play()
 	_trip_was_started = physics.trip_started
 
-	# Crossfade selon vitesse : slow dominant à basse vitesse, cruise à haute
+	# Crossfade selon vitesse : slow dominant à basse vitesse, cruise à haute.
+	# `gate` étouffe le tout à l'arrêt (−30 dB sous 1 m/s) : avant, la boucle
+	# slow restait à −12 dB en boucle infinie à quai après le 1er trajet.
 	if _player_slow.playing and _player_cruise.playing:
 		var v_abs: float = absf(physics.v)
 		var blend: float = clampf(v_abs / PNConstants.V_MAX, 0.0, 1.0)
-		_player_slow.volume_db = lerpf(-12.0, -40.0, blend)
-		_player_cruise.volume_db = lerpf(-40.0, -8.0, blend)
+		var gate: float = clampf(v_abs, 0.0, 1.0)
+		_player_slow.volume_db = lerpf(-12.0, -40.0, blend) + lerpf(-30.0, 0.0, gate)
+		_player_cruise.volume_db = lerpf(-40.0, -8.0, blend) + lerpf(-30.0, 0.0, gate)
 		# Pitch du moteur monte avec v → effet "whine" classique (1.0 → 1.35)
 		_player_cruise.pitch_scale = lerpf(0.85, 1.35, blend)
 

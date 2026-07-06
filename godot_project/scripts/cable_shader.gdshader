@@ -27,7 +27,19 @@ uniform float trough_sharpness : hint_range(0.5, 8.0) = 2.2;  // netteté des cr
 // Facteur de conversion UV → m :
 uniform float uv_y_to_meters = 0.5;
 
+// Coupe du brin au fragment près : le câble n'existe qu'ENTRE la rame qu'il
+// tire (attache culot, s = cut_below_s) et la poulie motrice en haut. Le
+// masquage par segments entiers de 15 m laissait dépasser jusqu'à 15 m de
+// câble DEVANT la cabine en descente (morceaux qui apparaissaient puis
+// disparaissaient d'un coup au franchissement de chaque segment).
+uniform float cut_below_s = 0.0;
+
 void fragment() {
+	// Position géométrique (non animée) le long du câble, en mètres.
+	float s_geom = UV.y * uv_y_to_meters;
+	if (s_geom < cut_below_s) {
+		discard;
+	}
 	// Distance le long du câble en mètres, animée par cable_phase
 	float s_meters = UV.y * uv_y_to_meters - cable_phase;
 

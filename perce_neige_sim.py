@@ -75,7 +75,7 @@ from PyQt6.QtWidgets import (
 )
 
 try:
-    from PyQt6.QtMultimedia import QAudioOutput, QMediaPlayer
+    from PyQt6.QtMultimedia import QAudioOutput, QMediaPlayer, QSoundEffect
     _QTMULTIMEDIA_OK = True
 except ImportError:
     _QTMULTIMEDIA_OK = False
@@ -2377,6 +2377,17 @@ class SoundSystem:
         self._audio = None
         self._horn_player = None
         self._horn_audio = None
+        # Défauts posés AVANT le try de création des players : si l'init
+        # QtMultimedia échoue en cours de route (pas de périphérique audio,
+        # backend cassé), enabled repasse à False mais update_ambient et
+        # toggle_mute touchent ces attributs → sans ces défauts, le sim
+        # crashait à chaque tick sur les machines sans audio.
+        self._amb_playing = False
+        self._amb2_playing = False
+        self._fx_oneshot_active = False
+        self._fx_duck_level = 0.0
+        self._station_which: str | None = None
+        self._station_target = 0.0
         # Generate procedural ambient/buzzer WAVs (cached in temp dir)
         wav_dir = Path(tempfile.gettempdir()) / "perce_neige_wav"
         # Plan paths synchronously (cheap), defer heavy synthesis to a
@@ -2451,17 +2462,16 @@ class SoundSystem:
             # Two parallel ambient loops (slow + cruise) — crossfaded
             # by update_ambient so the mix matches the current speed
             # instead of a single 11-second loop heard over and over.
-            # Each loop has its own QMediaPlayer + QAudioOutput.
-            self._amb_player = QMediaPlayer()          # slow/approach loop
-            self._amb_audio = QAudioOutput()
-            self._amb_audio.setVolume(0.0)
-            self._amb_player.setAudioOutput(self._amb_audio)
-            self._amb_player.setLoops(QMediaPlayer.Loops.Infinite)
-            self._amb2_player = QMediaPlayer()         # cruise loop
-            self._amb2_audio = QAudioOutput()
-            self._amb2_audio.setVolume(0.0)
-            self._amb2_player.setAudioOutput(self._amb2_audio)
-            self._amb2_player.setLoops(QMediaPlayer.Loops.Infinite)
+            # QSoundEffect (pas QMediaPlayer) : le bouclage de QMediaPlayer
+            # laisse un blanc audible à chaque redémarrage de boucle (toutes
+            # les 30 s !) sur le backend Windows Media Foundation ;
+            # QSoundEffect est conçu pour les WAV en boucle sans couture.
+            self._amb_player = QSoundEffect()          # slow/approach loop
+            self._amb_player.setLoopCount(QSoundEffect.Loop.Infinite.value)
+            self._amb_player.setVolume(0.0)
+            self._amb2_player = QSoundEffect()         # cruise loop
+            self._amb2_player.setLoopCount(QSoundEffect.Loop.Infinite.value)
+            self._amb2_player.setVolume(0.0)
             self._amb_playing = False
             self._amb2_playing = False
             self._amb_vol_target = 0.0
@@ -2469,6 +2479,18 @@ class SoundSystem:
             self._amb_loaded_path: str | None = None
             self._amb2_loaded_path: str | None = None
             self._fx_loaded_path: str | None = None
+            # One-shot fx en cours (motor start / brake approach) : niveau
+            # de ducking rampé appliqué aux boucles d'ambiance pour que le
+            # clip réel domine le mix sans doubler le bruit moteur.
+            self._fx_oneshot_active = False
+            self._fx_duck_level = 0.0
+            # Ambiance de quai (station lower/upper) — boucle discrète
+            # jouée à l'arrêt portes ouvertes, fondue quand elles ferment.
+            self._station_player = QSoundEffect()
+            self._station_player.setLoopCount(QSoundEffect.Loop.Infinite.value)
+            self._station_player.setVolume(0.0)
+            self._station_which: str | None = None
+            self._station_target = 0.0
             # Dedicated player for door-warning buzzer + door-motion SFX
             # so they can overlap the announcement without ducking the
             # departure buzzer on _fx_player.
@@ -2697,6 +2719,9 @@ class SoundSystem:
                 self._fx_player.setSource(QUrl.fromLocalFile(spath))
                 self._fx_loaded_path = spath
             self._fx_player.play()
+            # Ducke les boucles d'ambiance pendant le clip (il contient
+            # déjà la montée moteur réelle) — relâché en fondu à sa fin.
+            self._fx_oneshot_active = True
         except Exception:
             # WAV corrompu, backend audio Qt cassé, ou setSource hostile :
             # on no-op silencieusement plutôt que de casser la frame courante.
@@ -2781,7 +2806,7 @@ class SoundSystem:
         except Exception:
             return False
 
-    def update_ambient(self, speed: float) -> None:
+    def update_ambient(self, speed: float, dt: float = 1.0 / 60.0) -> None:
         """Crossfade real-cabin ambient loops based on speed.
 
         Two parallel loops run : a 30-second cruise variant clip
@@ -2798,6 +2823,15 @@ class SoundSystem:
           - |v| above 6 m/s      → cruise dominant, slow fades out
           - Peak ceiling ~0.95 so it actually feels like being inside the
             cabin (the old 0.35 ceiling was the weak-ambient complaint).
+
+        Ducking (tous rampés, jamais de saut de volume) :
+          - klaxon ×0.25, croisement ×0.40 au pic (existant)
+          - one-shot réel en cours (motor start / brake approach) ×0.45 au
+            pic — le clip contient déjà le bruit moteur, sans duck on
+            l'entendait en double
+          - annonce vocale en cours ×0.55 — intelligibilité de la voix
+
+        `dt` rend les rampes indépendantes du framerate (α = 1−e^(−dt/τ)).
         """
         if not self.enabled or self.muted:
             if self._amb_playing:
@@ -2807,6 +2841,9 @@ class SoundSystem:
                 self._amb2_player.stop()
                 self._amb2_playing = False
             return
+        # Coefficients de lissage indépendants du framerate
+        a_vol = 1.0 - math.exp(-dt / 0.12)     # volumes : τ ≈ 120 ms
+        a_duck = 1.0 - math.exp(-dt / 0.25)    # niveaux de duck : τ ≈ 250 ms
         v = abs(speed)
         # Cruise-dominance factor : 0 at v=1 m/s, 1 at v=7 m/s and above.
         lo, hi = 1.0, 7.0
@@ -2820,6 +2857,30 @@ class SoundSystem:
         # snapshot-based ducking the very next tick.
         if getattr(self, "_ducked", False):
             overall *= 0.25
+        # Annonce vocale en cours → l'ambiance s'efface sous la voix.
+        # Le changement est lissé par la rampe de volume plus bas.
+        if self.is_announcing():
+            overall *= 0.55
+        # One-shot réel en cours sur le canal fx (motor start au départ,
+        # brake approach à l'arrivée) : même mécanique de fondu que le
+        # croisement — montée à l'attaque du clip, redescente ~1,2 s avant
+        # sa fin pour un passage de relais doux vers les boucles.
+        fx_active = self._fx_oneshot_active
+        if fx_active:
+            try:
+                pos = self._fx_player.position()
+                dur = self._fx_player.duration()
+                playing = (self._fx_player.playbackState()
+                           == QMediaPlayer.PlaybackState.PlayingState)
+                if (dur > 0 and dur - pos < 1200) or (pos > 500 and not playing):
+                    self._fx_oneshot_active = False
+                    fx_active = False
+            except Exception:
+                pass
+        fx_target = 1.0 if fx_active else 0.0
+        self._fx_duck_level += (fx_target - self._fx_duck_level) * a_duck
+        if self._fx_duck_level > 0.001:
+            overall *= (1.0 - 0.45 * self._fx_duck_level)
         # Passing-loop crossing : smooth cross-fade on entry AND exit.
         # _crossing_level ramps 0→1 while active, 1→0 once we near the
         # end of the clip (or EndOfMedia fires). Applied both to the
@@ -2836,10 +2897,8 @@ class SoundSystem:
             except Exception:
                 pass
         target_lvl = 1.0 if active else 0.0
-        diff_lvl = target_lvl - self._crossing_level
-        if abs(diff_lvl) > 0.005:
-            self._crossing_level += diff_lvl * 0.08
-        else:
+        self._crossing_level += (target_lvl - self._crossing_level) * a_duck
+        if abs(target_lvl - self._crossing_level) < 0.005:
             self._crossing_level = target_lvl
         if self._crossing_level > 0.001:
             overall *= (1.0 - 0.60 * self._crossing_level)
@@ -2870,7 +2929,7 @@ class SoundSystem:
 
         moving = v_norm > 0.02
 
-        # Start / stop slow loop
+        # Start slow loop (l'arrêt est géré plus bas, APRÈS le fondu à zéro)
         if moving and not self._amb_playing:
             if slow_path and slow_path.exists():
                 spath = str(slow_path)
@@ -2879,11 +2938,8 @@ class SoundSystem:
                     self._amb_loaded_path = spath
                 self._amb_player.play()
                 self._amb_playing = True
-        elif not moving and self._amb_playing:
-            self._amb_player.stop()
-            self._amb_playing = False
 
-        # Start / stop cruise loop
+        # Start cruise loop
         if moving and not self._amb2_playing:
             if cruise_path and cruise_path.exists():
                 spath = str(cruise_path)
@@ -2892,57 +2948,125 @@ class SoundSystem:
                     self._amb2_loaded_path = spath
                 self._amb2_player.play()
                 self._amb2_playing = True
-        elif not moving and self._amb2_playing:
-            self._amb2_player.stop()
-            self._amb2_playing = False
 
-        # Smooth volume ramps (~150 ms to target at 60 fps)
-        for audio, target in ((self._amb_audio, self._amb_vol_target),
-                              (self._amb2_audio, self._amb2_vol_target)):
-            cur = audio.volume()
+        # Smooth volume ramps — QSoundEffect.volume() est linéaire 0..1.
+        # À l'arrêt (targets → 0), on laisse le fondu finir PUIS on stoppe :
+        # l'ancien stop() immédiat coupait la boucle en pleine amplitude
+        # (clic audible à chaque arrivée en gare).
+        for player, target, attr in (
+                (self._amb_player, self._amb_vol_target, "_amb_playing"),
+                (self._amb2_player, self._amb2_vol_target, "_amb2_playing")):
+            cur = player.volume()
             diff = target - cur
-            if abs(diff) > 0.005:
-                audio.setVolume(cur + diff * 0.15)
+            if abs(diff) > 0.003:
+                player.setVolume(max(0.0, min(1.0, cur + diff * a_vol)))
+            elif cur != target:
+                player.setVolume(target)
+            if (not moving and getattr(self, attr)
+                    and player.volume() < 0.01):
+                player.stop()
+                setattr(self, attr, False)
+
+        # Ambiance de quai : fondu vers la cible posée par
+        # set_station_ambient(), arrêt une fois inaudible.
+        sp = self._station_player
+        cur = sp.volume()
+        diff = self._station_target - cur
+        if abs(diff) > 0.003:
+            sp.setVolume(max(0.0, min(1.0, cur + diff * a_vol)))
+        if self._station_target <= 0.0 and sp.isPlaying() and sp.volume() < 0.01:
+            sp.stop()
+            self._station_which = None
+
+    def set_station_ambient(self, which: str | None) -> None:
+        """Ambiance de quai enregistrée (station basse/haute), jouée en
+        boucle discrète à l'arrêt portes ouvertes. `which` ∈ (None,
+        "lower", "upper"). Le fondu (entrée ET sortie) est fait par
+        update_ambient — quand les portes ferment au buzzer de départ,
+        l'ambiance de quai s'efface toute seule avant la mise en route."""
+        if not self.enabled or self.muted:
+            self._station_target = 0.0
+            return
+        if which is None:
+            self._station_target = 0.0
+            return
+        key = "station_lower_real" if which == "lower" else "station_upper_real"
+        path = self._ambient_wavs.get(key)
+        if path is None or not path.exists():
+            self._station_target = 0.0
+            return
+        try:
+            if self._station_which != which:
+                self._station_player.setSource(QUrl.fromLocalFile(str(path)))
+                self._station_which = which
+            if not self._station_player.isPlaying():
+                self._station_player.play()
+            self._station_target = 0.35
+        except Exception:
+            self._station_target = 0.0
+
+    def play_brake_approach(self) -> None:
+        """One-shot du freinage d'approche réel (20 s, extrait du footage
+        4K) — joué une fois par trajet pendant la décélération finale.
+        L'ambiance est duckée pendant le clip (cf. update_ambient) puis
+        reprend en fondu quand il se termine."""
+        if not self.enabled or self.muted:
+            return
+        path = self._ambient_wavs.get("brake_approach_real")
+        if path is None or not path.exists():
+            return
+        try:
+            self._fx_player.setLoops(1)
+            spath = str(path)
+            if self._fx_loaded_path != spath:
+                self._fx_player.setSource(QUrl.fromLocalFile(spath))
+                self._fx_loaded_path = spath
+            self._fx_player.play()
+            self._fx_oneshot_active = True
+        except Exception:
+            pass
 
     def tick(self, dt: float) -> None:
         for k in list(self._cooldowns.keys()):
             self._cooldowns[k] = max(0.0, self._cooldowns[k] - dt)
 
+    def _halt_all_players(self) -> None:
+        """Arrêt immédiat de tous les canaux (mute / stop / reset —
+        action explicite de l'utilisateur, pas de fondu)."""
+        self._player.stop()
+        self._fx_player.stop()
+        self._horn_player.stop()
+        self._amb_player.stop()
+        self._amb2_player.stop()
+        self._amb_playing = False
+        self._amb2_playing = False
+        self._fx_oneshot_active = False
+        self._fx_duck_level = 0.0
+        try:
+            self._station_player.stop()
+            self._station_player.setVolume(0.0)
+        except Exception:
+            pass
+        self._station_which = None
+        self._station_target = 0.0
+
     def toggle_mute(self) -> bool:
         self.muted = not self.muted
         if self.muted and self._player is not None:
-            self._player.stop()
-            self._fx_player.stop()
-            self._horn_player.stop()
-            self._amb_player.stop()
-            self._amb2_player.stop()
-            self._amb_playing = False
-            self._amb2_playing = False
+            self._halt_all_players()
             self._queue.clear()
         return self.muted
 
     def stop(self) -> None:
         self._queue.clear()
         if self._player is not None:
-            self._player.stop()
-            self._fx_player.stop()
-            self._horn_player.stop()
-            self._amb_player.stop()
-            self._amb2_player.stop()
-            self._amb_playing = False
-            self._amb2_playing = False
+            self._halt_all_players()
 
     def reset(self) -> None:
         self._queue.clear()
         self._cooldowns.clear()
         if self._player is not None:
-            self._player.stop()
-            self._fx_player.stop()
-            self._horn_player.stop()
-            self._amb_player.stop()
-            self._amb2_player.stop()
-            self._amb_playing = False
-            self._amb2_playing = False
+            self._halt_all_players()
 
     # ----- internals -------------------------------------------------------
 
@@ -4007,6 +4131,7 @@ class GameWidget(QWidget):
         self.auto_ops = AutoOps(self)
         self._last_panne_kind: str = ""
         self._welcome_played = False
+        self._brake_snd_played = False
         self._arrival_played = False
         self._crossing_triggered = False
         # Mid-tunnel stop tracking — drives the "remise en route"
@@ -4259,6 +4384,7 @@ class GameWidget(QWidget):
             tr.doors_cmd = False
             tr.doors_timer = 0.0
         self._welcome_played = False
+        self._brake_snd_played = False
         self._arrival_played = False
         self._was_stopped_mid_tunnel = False
         # Trigger the real "return to station" announcement over the
@@ -4376,6 +4502,7 @@ class GameWidget(QWidget):
         st.rebound_timer = 0.0
         self._last_panne_kind = ""
         self._welcome_played = False
+        self._brake_snd_played = False
         self._arrival_played = False
         self._was_stopped_mid_tunnel = False
         self._mid_tunnel_stop_timer = 0.0
@@ -4445,8 +4572,22 @@ class GameWidget(QWidget):
                 fl[3] = random.uniform(1.0, 2.6)
 
         self.sounds.tick(dt)
-        # Ambient motor/rumble: fades with speed
-        self.sounds.update_ambient(st.train.v)
+        # Ambient motor/rumble: fades with speed (dt → rampes indépendantes
+        # du framerate)
+        self.sounds.update_ambient(st.train.v, dt)
+        # Ambiance de quai réelle : à l'arrêt portes ouvertes à une station.
+        # Quand les portes ferment (buzzer de départ), doors_open passe à
+        # False → l'ambiance de quai s'efface toute seule avant le démarrage.
+        _tr_sta = st.train
+        if _tr_sta.doors_open and abs(_tr_sta.v) < 0.05:
+            if _tr_sta.s <= START_S + 5.0:
+                self.sounds.set_station_ambient("lower")
+            elif _tr_sta.s >= STOP_S - 5.0:
+                self.sounds.set_station_ambient("upper")
+            else:
+                self.sounds.set_station_ambient(None)
+        else:
+            self.sounds.set_station_ambient(None)
         # Auto-exploitation state machine (no-op when disabled)
         self.auto_ops.tick(dt)
         # Passing-loop crossing whoosh : the real cabin recording spans
@@ -4565,6 +4706,7 @@ class GameWidget(QWidget):
                                   "Departing Grande Motte — 3032 m",
                                   "Départ Grande Motte — 3032 m", "info")
                     self._welcome_played = False
+                    self._brake_snd_played = False
             # File 11 "Le funiculaire vous emmène en zone..." — arrival
             # message broadcast in the last ~220 m as the train rolls
             # quietly into the destination platform. Works for either
@@ -4590,6 +4732,18 @@ class GameWidget(QWidget):
                     and abs(tr_welcome.v) < 1.0):
                 self.sounds.play("welcome", lang=st.ann_lang, cooldown=600.0)
                 self._welcome_played = True
+            # Freinage d'approche réel (real_brake_approach.wav, 20 s,
+            # extrait du footage 4K) : une fois par trajet, au moment où
+            # la rame décélère dans les ~100 derniers mètres. L'ambiance
+            # de croisière est duckée pendant le clip puis reprend en
+            # fondu (cf. SoundSystem.update_ambient). Marche dans les
+            # deux sens (montée ET descente).
+            if (st.trip_started and not st.finished
+                    and not self._brake_snd_played
+                    and dist_remain_welcome < 100.0
+                    and 1.5 < abs(tr_welcome.v) < 8.0):
+                self.sounds.play_brake_approach()
+                self._brake_snd_played = True
             # Mid-tunnel stop tracking : flag is set after the train
             # has been stationary away from a terminus for ~3 s. The
             # "Remise en route" announcement itself is now fired when
