@@ -1028,3 +1028,10 @@ func update_cable_phase(s_rame1: float, _v_rame1: float, _delta: float) -> void:
 		return
 	cable_left_material.set_shader_parameter("cable_phase", s_rame1)
 	cable_right_material.set_shader_parameter("cable_phase", -s_rame1)
+	# Coupe au fragment près : chaque brin n'existe qu'entre SA rame et la
+	# poulie en haut. Complète le masquage par segments (grossier, 15 m) —
+	# sans ça, en descente on voyait des bouts de son propre câble
+	# apparaître devant la cabine puis disparaître d'un coup.
+	cable_left_material.set_shader_parameter("cut_below_s", s_rame1)
+	cable_right_material.set_shader_parameter(
+		"cut_below_s", PNConstants.LENGTH - s_rame1)
