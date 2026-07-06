@@ -12,11 +12,16 @@ extends Node3D
 ## Les coordonnées s sont relatives au portail bas (0) / haut (LENGTH).
 
 @export var platform_length: float = 48.0      # allongé pour contenir tout le train
-@export var platform_width: float = 1.20       # largeur quai latéral
+# Quais EN ESCALIER (photos du 2026-04-26) : pas de quai-rampe lisse —
+# une volée de marches-paliers horizontales longe le train de chaque côté,
+# étroite (~1,5 m), la contremarche de chaque marche découlant de la pente
+# locale de la voie. Nez de marche contrastés (alu en bas, rouges en haut).
+@export var platform_width: float = 1.62       # largeur quai latéral (étroit, cf. photos ; bord extérieur ≈ au mur de salle)
 @export var platform_inner_x: float = 1.85     # distance depuis centre tunnel au bord intérieur (hors gabarit cabine ∅3.6m)
 @export var platform_height: float = 0.40      # hauteur quai vs plancher voie (plancher cabine bas)
-@export var yellow_band_width: float = 0.12    # bande jaune
-@export var yellow_band_height: float = 0.020  # saillie de la bande
+@export var tread_depth: float = 0.95          # profondeur d'une marche-palier
+@export var tread_thickness: float = 0.55      # épaisseur du bloc (descend sous la marche suivante)
+@export var railing_height: float = 0.95       # garde-corps côté voie
 @export var ceiling_height: float = 1.85       # hauteur centre → plafond
 @export var bumper_height: float = 1.30
 @export var bumper_width: float = 1.60
@@ -103,108 +108,148 @@ func _build_station_high() -> void:
 # ---------------------------------------------------------------------------
 
 func _build_platform(s_start: float, s_end: float, is_low: bool, side: float = 1.0) -> void:
-	# Matériaux
-	var concrete_mat: StandardMaterial3D = StandardMaterial3D.new()
-	concrete_mat.albedo_color = Color(0.42, 0.40, 0.37)
-	concrete_mat.roughness = 0.92
-	concrete_mat.metallic = 0.0
-	concrete_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
-
-	var yellow_mat: StandardMaterial3D = StandardMaterial3D.new()
-	yellow_mat.albedo_color = Color(0.92, 0.70, 0.08)
-	yellow_mat.emission_enabled = true
-	yellow_mat.emission = Color(0.92, 0.70, 0.08)
-	yellow_mat.emission_energy_multiplier = 0.12
-	yellow_mat.roughness = 0.6
-	yellow_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
-
-	# Construction du quai via SurfaceTool — ruban continu 3 faces
-	var st: SurfaceTool = SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	st.set_material(concrete_mat)
-
-	var st_yellow: SurfaceTool = SurfaceTool.new()
-	st_yellow.begin(Mesh.PRIMITIVE_TRIANGLES)
-	st_yellow.set_material(yellow_mat)
-
-	var step: float = 0.5
-	var s_cur: float = s_start
-	var prev_xform: Transform3D = tunnel.transform_at(s_cur)
-	while s_cur < s_end:
-		var s_next: float = minf(s_cur + step, s_end)
-		var cur_xform: Transform3D = tunnel.transform_at(s_next)
-
-		var p0: Vector3 = prev_xform.origin
-		var p1: Vector3 = cur_xform.origin
-		var r0: Vector3 = prev_xform.basis.x
-		var r1: Vector3 = cur_xform.basis.x
-		var u0: Vector3 = prev_xform.basis.y
-		var u1: Vector3 = cur_xform.basis.y
-
-		# Positions : x_inner = coin intérieur (côté voie), x_outer = coin extérieur
-		# side = +1 → quai à droite (+X local), -1 → quai à gauche.
-		# Hors gabarit cabine ∅3.6m (radius 1.80m) : platform_inner_x ≥ 1.85m.
-		var x_inner: float = side * platform_inner_x
-		var x_outer: float = side * (platform_inner_x + platform_width)
-		var y_top: float = FLOOR_Y_LOCAL + platform_height
-		var y_bot: float = FLOOR_Y_LOCAL
-
-		# Top de quai
-		var a_in: Vector3 = _pt(p0, r0, u0, x_inner, y_top)
-		var a_out: Vector3 = _pt(p0, r0, u0, x_outer, y_top)
-		var b_in: Vector3 = _pt(p1, r1, u1, x_inner, y_top)
-		var b_out: Vector3 = _pt(p1, r1, u1, x_outer, y_top)
-		_quad(st, a_in, a_out, b_in, b_out)
-
-		# Face frontale (coté voie)
-		var a_in_bot: Vector3 = _pt(p0, r0, u0, x_inner, y_bot)
-		var b_in_bot: Vector3 = _pt(p1, r1, u1, x_inner, y_bot)
-		_quad(st, a_in_bot, a_in, b_in_bot, b_in)
-
-		# Face bout (si on est au début / fin)
-		if s_cur == s_start:
-			var a_out_bot: Vector3 = _pt(p0, r0, u0, x_outer, y_bot)
-			_quad(st, a_in_bot, a_out_bot, a_in, a_out)
-		if s_next >= s_end:
-			var b_out_bot: Vector3 = _pt(p1, r1, u1, x_outer, y_bot)
-			_quad(st, b_in, b_out, b_in_bot, b_out_bot)
-
-		# Bande jaune de sécurité : peinte SUR le quai, côté voie, 12 cm de large,
-		# très légère saillie pour la visibilité.
-		var xb_in: float = x_inner
-		var xb_out: float = x_inner + yellow_band_width * side
-		var yb_lo: float = y_top
-		var yb_hi: float = y_top + yellow_band_height
-		var ya_in: Vector3 = _pt(p0, r0, u0, xb_in, yb_lo)
-		var ya_out: Vector3 = _pt(p0, r0, u0, xb_out, yb_lo)
-		var yb_in_v: Vector3 = _pt(p1, r1, u1, xb_in, yb_lo)
-		var yb_out_v: Vector3 = _pt(p1, r1, u1, xb_out, yb_lo)
-		var ya_in_t: Vector3 = _pt(p0, r0, u0, xb_in, yb_hi)
-		var ya_out_t: Vector3 = _pt(p0, r0, u0, xb_out, yb_hi)
-		var yb_in_t: Vector3 = _pt(p1, r1, u1, xb_in, yb_hi)
-		var yb_out_t: Vector3 = _pt(p1, r1, u1, xb_out, yb_hi)
-		_quad(st_yellow, ya_in_t, ya_out_t, yb_in_t, yb_out_t)  # top
-		_quad(st_yellow, ya_in, ya_in_t, yb_in_v, yb_in_t)       # côté voie
-		_quad(st_yellow, ya_out_t, ya_out, yb_out_t, yb_out_v)   # côté intérieur quai
-
-		s_cur = s_next
-		prev_xform = cur_xform
-
-	st.generate_normals()
-	st.generate_tangents()
-	var mi: MeshInstance3D = MeshInstance3D.new()
+	# Quai EN ESCALIER (photos 20260426_094104 / 095119) : volée de
+	# marches-paliers HORIZONTALES le long du train. Le dessus de chaque
+	# marche est calé sur l'élévation de la voie à son bord AMONT — la
+	# contremarche qui en résulte est exactement pente_locale × profondeur
+	# (géométrie honnête, pas de marches inventées).
 	var side_name: String = "R" if side > 0.0 else "L"
-	mi.name = "Platform_%s_%s" % [("low" if is_low else "high"), side_name]
-	mi.mesh = st.commit()
-	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	add_child(mi)
+	var sta: String = "low" if is_low else "high"
 
-	st_yellow.generate_normals()
-	var my: MeshInstance3D = MeshInstance3D.new()
-	my.name = "PlatformYellow_%s_%s" % [("low" if is_low else "high"), side_name]
-	my.mesh = st_yellow.commit()
-	my.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	add_child(my)
+	# Tôle damier alu (marches métalliques des photos)
+	var tread_mat: StandardMaterial3D = StandardMaterial3D.new()
+	tread_mat.albedo_color = Color(0.58, 0.59, 0.62)
+	tread_mat.roughness = 0.45
+	tread_mat.metallic = 0.75
+	tread_mat.metallic_specular = 0.6
+
+	# Nez de marche : alu brut en gare basse, ROUGES en gare haute (photos)
+	var nose_mat: StandardMaterial3D = StandardMaterial3D.new()
+	if is_low:
+		nose_mat.albedo_color = Color(0.80, 0.81, 0.84)
+		nose_mat.roughness = 0.35
+		nose_mat.metallic = 0.85
+	else:
+		nose_mat.albedo_color = Color(0.72, 0.14, 0.12)
+		nose_mat.roughness = 0.65
+		nose_mat.metallic = 0.10
+
+	var rail_mat: StandardMaterial3D = StandardMaterial3D.new()
+	rail_mat.albedo_color = Color(0.75, 0.76, 0.78)
+	rail_mat.roughness = 0.35
+	rail_mat.metallic = 0.85
+
+	var lat_center: float = side * (platform_inner_x + platform_width * 0.5)
+	var y_top_local: float = FLOOR_Y_LOCAL + platform_height
+
+	# --- Marches (MultiMesh) ---------------------------------------------
+	var n_treads: int = maxi(1, int(ceil((s_end - s_start) / tread_depth)))
+	var tread_mesh: BoxMesh = BoxMesh.new()
+	tread_mesh.size = Vector3(platform_width, tread_thickness, tread_depth)
+	tread_mesh.material = tread_mat
+
+	var nose_mesh: BoxMesh = BoxMesh.new()
+	nose_mesh.size = Vector3(platform_width, 0.035, 0.11)
+	nose_mesh.material = nose_mat
+
+	var mm_treads: MultiMesh = MultiMesh.new()
+	mm_treads.transform_format = MultiMesh.TRANSFORM_3D
+	mm_treads.mesh = tread_mesh
+	mm_treads.instance_count = n_treads
+
+	var mm_noses: MultiMesh = MultiMesh.new()
+	mm_noses.transform_format = MultiMesh.TRANSFORM_3D
+	mm_noses.mesh = nose_mesh
+	mm_noses.instance_count = n_treads
+
+	for i in range(n_treads):
+		var s_dn: float = s_start + float(i) * tread_depth          # bord aval
+		var s_up: float = minf(s_dn + tread_depth, s_end)           # bord amont
+		var s_mid: float = (s_dn + s_up) * 0.5
+		var xf_up: Transform3D = tunnel.transform_at(s_up)
+		var xf_mid: Transform3D = tunnel.transform_at(s_mid)
+		# Élévation MONDE du dessus de marche = niveau du quai au bord amont
+		var top_y: float = (xf_up.origin + xf_up.basis.y * y_top_local).y
+		# Base nivelée : right local (déjà horizontal), up = UP monde
+		var right_h: Vector3 = xf_mid.basis.x
+		var level_basis: Basis = Basis(
+			right_h, Vector3.UP, right_h.cross(Vector3.UP)).orthonormalized()
+		var center: Vector3 = xf_mid.origin + xf_mid.basis.x * lat_center
+		center.y = top_y - tread_thickness * 0.5
+		mm_treads.set_instance_transform(i, Transform3D(level_basis, center))
+		# Nez : au bord AVAL de la marche, affleurant le dessus
+		var xf_dn: Transform3D = tunnel.transform_at(s_dn + 0.06)
+		var nose_c: Vector3 = xf_dn.origin + xf_dn.basis.x * lat_center
+		nose_c.y = top_y - 0.017
+		mm_noses.set_instance_transform(i, Transform3D(level_basis, nose_c))
+
+	var mi_treads: MultiMeshInstance3D = MultiMeshInstance3D.new()
+	mi_treads.name = "PlatformSteps_%s_%s" % [sta, side_name]
+	mi_treads.multimesh = mm_treads
+	mi_treads.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(mi_treads)
+
+	var mi_noses: MultiMeshInstance3D = MultiMeshInstance3D.new()
+	mi_noses.name = "PlatformNoses_%s_%s" % [sta, side_name]
+	mi_noses.multimesh = mm_noses
+	mi_noses.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(mi_noses)
+
+	# --- Garde-corps côté voie (poteaux + main courante inclinée) ---------
+	var post_spacing: float = 1.9
+	var n_posts: int = maxi(2, int((s_end - s_start) / post_spacing) + 1)
+	var lat_rail: float = side * (platform_inner_x + 0.06)
+
+	var post_mesh: CylinderMesh = CylinderMesh.new()
+	post_mesh.top_radius = 0.022
+	post_mesh.bottom_radius = 0.022
+	post_mesh.height = railing_height
+	post_mesh.radial_segments = 8
+	post_mesh.material = rail_mat
+
+	var mm_posts: MultiMesh = MultiMesh.new()
+	mm_posts.transform_format = MultiMesh.TRANSFORM_3D
+	mm_posts.mesh = post_mesh
+	mm_posts.instance_count = n_posts
+
+	var rail_seg_mesh: CylinderMesh = CylinderMesh.new()
+	rail_seg_mesh.top_radius = 0.028
+	rail_seg_mesh.bottom_radius = 0.028
+	rail_seg_mesh.height = post_spacing + 0.15
+	rail_seg_mesh.radial_segments = 8
+	rail_seg_mesh.material = rail_mat
+
+	var mm_rails: MultiMesh = MultiMesh.new()
+	mm_rails.transform_format = MultiMesh.TRANSFORM_3D
+	mm_rails.mesh = rail_seg_mesh
+	mm_rails.instance_count = n_posts
+
+	var rot_along: Basis = Basis(Vector3(1, 0, 0), PI * 0.5)
+	for i in range(n_posts):
+		var s_p: float = minf(s_start + float(i) * post_spacing, s_end)
+		var xf: Transform3D = tunnel.transform_at(s_p)
+		var base: Vector3 = xf.origin + xf.basis.x * lat_rail \
+			+ xf.basis.y * y_top_local
+		# Poteau vertical monde
+		var post_c: Vector3 = base + Vector3.UP * (railing_height * 0.5)
+		mm_posts.set_instance_transform(i, Transform3D(Basis(), post_c))
+		# Main courante : segment INCLINÉ le long de la pente (cylindre Y →
+		# Z local du ring via rotation X 90° dans la base du ring)
+		var rail_c: Vector3 = base + Vector3.UP * railing_height
+		mm_rails.set_instance_transform(
+			i, Transform3D(xf.basis * rot_along, rail_c))
+
+	var mi_posts: MultiMeshInstance3D = MultiMeshInstance3D.new()
+	mi_posts.name = "PlatformPosts_%s_%s" % [sta, side_name]
+	mi_posts.multimesh = mm_posts
+	mi_posts.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(mi_posts)
+
+	var mi_rails: MultiMeshInstance3D = MultiMeshInstance3D.new()
+	mi_rails.name = "PlatformRails_%s_%s" % [sta, side_name]
+	mi_rails.multimesh = mm_rails
+	mi_rails.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(mi_rails)
 
 
 # ---------------------------------------------------------------------------
@@ -260,10 +305,13 @@ func _build_bumper(s: float, _is_low: bool) -> void:
 
 func _build_ceiling_lights(s_start: float, s_end: float) -> void:
 	var spacing: float = 4.0
+	# Néons collés au plafond de la SALLE élargie (2,65 m), pas à l'ancienne
+	# hauteur de tube (1,85 m) où ils flotteraient en plein milieu.
+	var y_neon: float = tunnel.station_room_half_height - 0.25
 	var s: float = s_start
 	while s < s_end:
 		var xform: Transform3D = tunnel.transform_at(s)
-		var pos: Vector3 = xform.origin + xform.basis.y * (ceiling_height - 0.2)
+		var pos: Vector3 = xform.origin + xform.basis.y * y_neon
 
 		var light: OmniLight3D = OmniLight3D.new()
 		light.position = pos
