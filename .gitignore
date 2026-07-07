@@ -68,3 +68,4 @@ dist/
 bundled_godot/
 *.x86_64
 *.pck
+.pytest_cache/

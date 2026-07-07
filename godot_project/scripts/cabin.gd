@@ -264,7 +264,10 @@ func _build_console_pupitre() -> void:
 	#     centre + 2 LED blanches "ÉCLAIRAGE" en bas
 	#   - PAS de mushrooms sur le pupitre (le vrai cockpit a les arrêts
 	#     d'urgence ailleurs — sur la console latérale ou la cloison)
-	var z_console: float = -train_length * 0.5 + 5.2   # 2.8m devant caméra
+	# 1,35 m DEVANT la caméra FPV (z=−12). L'ancien −10,8 (« 2,8 m devant
+	# caméra ») datait d'une caméra à −8 : après son avancée à −12, le
+	# pupitre s'était retrouvé 1,2 m DERRIÈRE les yeux → invisible en FPV.
+	var z_console: float = -train_length * 0.5 + 2.65
 	var y_top: float = 0.52                            # hauteur sommet tube
 	var tube_radius: float = 0.090                     # ≈ 18 cm de diamètre
 	var tube_length: float = 1.10                      # 1.10 m de large
