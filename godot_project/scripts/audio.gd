@@ -6,7 +6,8 @@ var physics: TrainPhysics = null
 
 var _player_slow: AudioStreamPlayer = null
 var _player_cruise: AudioStreamPlayer = null
-var _player_buzzer: AudioStreamPlayer = null
+var _player_buzzer: AudioStreamPlayer = null       # buzzer gare haute
+var _player_buzzer_low: AudioStreamPlayer = null   # buzzer gare basse (8 s, distinct)
 var _player_door: AudioStreamPlayer = null
 var _player_door_motion: AudioStreamPlayer = null
 var _player_crossing: AudioStreamPlayer = null
@@ -35,6 +36,7 @@ func _build_players() -> void:
 	_player_slow = _create_player("res://sounds/ambient_slow.wav", -20.0, true)
 	_player_cruise = _create_player("res://sounds/ambient_cruise.wav", -30.0, true)
 	_player_buzzer = _create_player("res://sounds/buzzer_upper.wav", -10.0, false)
+	_player_buzzer_low = _create_player("res://sounds/buzzer_lower.wav", -10.0, false)
 	_player_door = _create_player("res://sounds/door_buzzer.wav", -10.0, false)
 	_player_crossing = _create_player("res://sounds/crossing.wav", -8.0, false)
 	_player_door_motion = _create_player("res://sounds/door_motion.wav", -14.0, false)
@@ -87,8 +89,14 @@ func _process(_delta: float) -> void:
 		_first_update_consumed = true
 		return
 
-	# Démarrer l'ambient quand le trip démarre
+	# Démarrer l'ambient quand le trip démarre + buzzer de départ de la
+	# gare de départ (haut/bas ont des buzzers distincts — buzzer_lower
+	# n'était jamais joué en mode standalone).
 	if physics.trip_started and not _trip_was_started:
+		var at_upper: bool = physics.s > PNConstants.LENGTH * 0.5
+		var buz: AudioStreamPlayer = _player_buzzer if at_upper else _player_buzzer_low
+		if buz != null and buz.stream:
+			buz.play()
 		if _player_slow.stream:
 			_player_slow.play()
 		if _player_cruise.stream:
