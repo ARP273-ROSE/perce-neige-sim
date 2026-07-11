@@ -135,10 +135,11 @@ static func curvature_at(s: float) -> float:
 	return (heading_at(s + ds) - heading_at(s - ds)) / (2.0 * ds)
 
 
-static func tunnel_lit_at(s: float) -> bool:
-	for zone in TUNNEL_DARK_ZONES:
-		if zone[0] <= s and s <= zone[1]:
-			return false
+static func tunnel_lit_at(_s: float) -> bool:
+	# Retour d'exploitation (2026-07) : le tunnel est éclairé UNIFORMÉMENT
+	# tout du long — pas de sections éteintes. Les « zones sombres »
+	# venaient de l'exposition caméra de la vidéo de calibration.
+	# TUNNEL_DARK_ZONES conservé en archive, plus utilisé.
 	return true
 
 

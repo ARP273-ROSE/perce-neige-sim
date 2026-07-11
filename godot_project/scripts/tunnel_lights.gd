@@ -11,7 +11,9 @@ extends Node3D
 @export var wall_offset: float = 1.4         # distance du centre du tunnel
 @export var height_offset: float = 0.9       # hauteur (plafond)
 @export var light_energy: float = 8.0
-@export var light_range: float = 18.0
+@export var light_range: float = 26.0   # recouvre l'entraxe de 24 m des
+                                        # néons ALLUMÉS (un sur deux) →
+                                        # éclairage uniforme, sans creux
 
 # Culling par distance : ~225 néons + signaux = autant d'OmniLight3D qui
 # participent toutes au clustering Forward+ et au fog volumétrique chaque
@@ -48,12 +50,24 @@ func _populate() -> void:
 	neon_mat.emission_energy_multiplier = 4.0
 	neon_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 
+	# Tube ÉTEINT : un néon sur deux — retour d'exploitation 2026-07 : le
+	# tunnel est éclairé uniformément TOUT DU LONG (pas de zones sombres),
+	# mais seul un néon sur deux est allumé. Le tube éteint reste visible
+	# (gris, sans émission ni lumière).
+	var neon_mat_off: StandardMaterial3D = StandardMaterial3D.new()
+	neon_mat_off.albedo_color = Color(0.45, 0.47, 0.50)
+	neon_mat_off.roughness = 0.55
+	neon_mat_off.metallic = 0.2
+
 	var neon_mesh: BoxMesh = BoxMesh.new()
 	neon_mesh.size = Vector3(0.05, 0.08, 1.6)    # tube horizontal 1.6 m
 
+	var idx: int = 0
 	while s < max_s:
-		if SlopeProfile.tunnel_lit_at(s):
-			_add_neon(s, neon_mesh, neon_mat, neon_color)
+		var lit: bool = (idx % 2) == 0
+		_add_neon(s, neon_mesh, neon_mat if lit else neon_mat_off,
+			neon_color, lit)
+		idx += 1
 		s += spacing_m
 	# (Signaux LED verts du croisement SUPPRIMÉS — retour d'essai 2026-07 :
 	# ils teintaient le tunnel en vert/rouge à l'entrée, au milieu et à la
@@ -73,7 +87,8 @@ func update_light_culling(s_cabin: float) -> void:
 		light.visible = d < LIGHT_CULL_DIST
 
 
-func _add_neon(s: float, mesh: BoxMesh, neon_mat: StandardMaterial3D, color: Color) -> void:
+func _add_neon(s: float, mesh: BoxMesh, neon_mat: StandardMaterial3D,
+		color: Color, lit: bool = true) -> void:
 	var xform: Transform3D = tunnel.transform_at(s)
 	var right: Vector3 = xform.basis.x
 	var up: Vector3 = xform.basis.y
@@ -83,16 +98,17 @@ func _add_neon(s: float, mesh: BoxMesh, neon_mat: StandardMaterial3D, color: Col
 	var wall_x: float = wall_offset + absf(tunnel.passing_loop_offset(s, 1.0))
 	var wall_pos: Vector3 = xform.origin - right * wall_x + up * height_offset
 
-	# Source lumineuse
-	var light: OmniLight3D = OmniLight3D.new()
-	light.position = wall_pos
-	light.light_color = color
-	light.light_energy = light_energy
-	light.omni_range = light_range
-	light.omni_attenuation = 1.2
-	light.shadow_enabled = false
-	add_child(light)
-	_lights.append([light, s])
+	# Source lumineuse — seulement pour les tubes ALLUMÉS (un sur deux)
+	if lit:
+		var light: OmniLight3D = OmniLight3D.new()
+		light.position = wall_pos
+		light.light_color = color
+		light.light_energy = light_energy
+		light.omni_range = light_range
+		light.omni_attenuation = 1.2
+		light.shadow_enabled = false
+		add_child(light)
+		_lights.append([light, s])
 
 	# Bâtonnet visible (pour voir la source dans le brouillard volumétrique)
 	var neon: MeshInstance3D = MeshInstance3D.new()

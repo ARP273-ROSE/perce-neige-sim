@@ -89,7 +89,7 @@ try:
 except ImportError:
     _GODOT_BRIDGE_OK = False
 
-VERSION = "1.12.3"
+VERSION = "1.12.4"
 APP_NAME = "Perce-Neige Simulator"
 
 
@@ -477,10 +477,15 @@ def curvature_at(s: float) -> float:
 
 
 def tunnel_lit_at(s: float) -> bool:
-    """Return True if the tunnel is lit at slope distance *s*."""
-    for dark_start, dark_end in TUNNEL_DARK_ZONES:
-        if dark_start <= s <= dark_end:
-            return False
+    """Éclairage du tunnel à la distance *s*.
+
+    Retour d'exploitation (témoin direct, 2026-07) : le tunnel est
+    éclairé UNIFORMÉMENT sur toute sa longueur — il n'existe aucune
+    section éteinte. Les « zones sombres » de TUNNEL_DARK_ZONES
+    venaient de l'exposition de la caméra sur la vidéo de calibration,
+    pas de la réalité ; la table est conservée comme donnée d'archive
+    mais n'est plus utilisée pour l'éclairage.
+    """
     return True
 
 
