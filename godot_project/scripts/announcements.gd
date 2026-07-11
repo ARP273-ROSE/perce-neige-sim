@@ -79,15 +79,22 @@ func _load_files() -> void:
 	dir.list_dir_begin()
 	var f: String = dir.get_next()
 	while f != "":
+		# Dans un build EXPORTÉ (pck/Web), la liste renvoie les fichiers
+		# sous leur nom remappé « xxx.mp3.import » / « xxx.mp3.remap » —
+		# sans ce strip, AUCUNE annonce n'était chargée hors éditeur
+		# (constaté sur la PWA Android : annonce d'arrivée muette).
+		if f.ends_with(".import") or f.ends_with(".remap"):
+			f = f.get_basename()   # retire la dernière extension
 		if f.ends_with(".mp3") and not dir.current_is_dir():
 			# Format attendu : "NN ...mp3" — extraire le numéro
 			var two: String = f.substr(0, 2)
 			if two.is_valid_int():
 				var num: int = two.to_int()
 				var path: String = "res://sounds/announcements/" + f
-				var stream: AudioStream = load(path)
-				if stream != null:
-					_files_by_num[num] = stream
+				if not _files_by_num.has(num):
+					var stream: AudioStream = load(path)
+					if stream != null:
+						_files_by_num[num] = stream
 		f = dir.get_next()
 	dir.list_dir_end()
 	print("[Announcements] %d fichiers MP3 chargés (langue=%s)" % [_files_by_num.size(), lang])
