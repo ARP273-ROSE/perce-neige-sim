@@ -62,6 +62,12 @@ func step(dt: float) -> void:
 	# Clamp dt pour éviter de casser la physique sur un gros hiccup
 	dt = clampf(dt, 0.001, 0.1)
 
+	# Séquence de départ : décompte du buzzer, la traction colle à la fin.
+	if departure_buzzer_remaining > 0.0:
+		departure_buzzer_remaining = maxf(0.0, departure_buzzer_remaining - dt)
+		if departure_buzzer_remaining <= 0.0:
+			start_trip()
+
 	var m_up: float = mass_kg()
 	var m_down: float = ghost_mass_kg()
 	var m_total: float = m_up + m_down
@@ -167,6 +173,7 @@ func step(dt: float) -> void:
 			acc = -2.0
 		if direction > 0 and not finished:
 			finished = true
+			_terminus_turnaround()
 	elif s <= clamp_lo:
 		s = clamp_lo
 		if v < 0.0:
@@ -174,6 +181,7 @@ func step(dt: float) -> void:
 			acc = 2.0
 		if direction < 0 and not finished:
 			finished = true
+			_terminus_turnaround()
 
 	# Frein parking (drum) ou frein urgence (panne grave)
 	if maint_brake or doors_open or emergency_brake:
@@ -309,6 +317,34 @@ func _regulator(
 
 
 # --- Actions conducteur --------------------------------------------------
+
+# Arrivée au terminus : demi-tour automatique — portes rouvertes, frein
+# tambour serré, direction inversée, consigne à zéro. Sans ça, en manuel,
+# PRÊT/DÉPART ne refaisait JAMAIS rien après le premier trajet
+# (trip_started restait vrai, portes fermées) → « plus de buzzer ni de
+# son de portes au 2e départ » (retour d'essai Android 2026-07).
+func _terminus_turnaround() -> void:
+	trip_started = false
+	maint_brake = true
+	doors_open = true
+	speed_cmd = 0.0
+	speed_cmd_eff = 0.0
+	departure_buzzer_remaining = 0.0
+	direction = -direction
+
+
+# Séquence de départ réelle : les portes se ferment et le BUZZER sonne
+# 6 s (gare haute) / 8 s (gare basse — fichiers réels), la traction ne
+# colle qu'à la FIN du buzzer (le frein tambour tient pendant ce temps).
+var departure_buzzer_remaining: float = 0.0
+
+
+func request_depart() -> void:
+	if trip_started or departure_buzzer_remaining > 0.0:
+		return
+	doors_open = false
+	departure_buzzer_remaining = 8.0 if s < PNConstants.LENGTH * 0.5 else 6.0
+
 
 func start_trip() -> void:
 	trip_started = true

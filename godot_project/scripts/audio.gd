@@ -23,6 +23,7 @@ var _doors_were_open: bool = false   # défaut "portes fermées" : en mode clien
                                       # buzzer + l'animation portes).
 var _first_update_consumed: bool = false
 var _crossing_played: bool = false   # une seule fois par trip
+var _prev_buzzer_remaining: float = 0.0   # front montant du buzzer de départ
 const CROSSING_S_CENTER: float = PNConstants.LENGTH * 0.5    # = 1737 m
 const CROSSING_S_WINDOW: float = 40.0   # fenêtre de déclenchement ±40 m
 
@@ -91,14 +92,18 @@ func _process(_delta: float) -> void:
 		_first_update_consumed = true
 		return
 
-	# Démarrer l'ambient quand le trip démarre + buzzer de départ de la
-	# gare de départ (haut/bas ont des buzzers distincts — buzzer_lower
-	# n'était jamais joué en mode standalone).
-	if physics.trip_started and not _trip_was_started:
+	# Buzzer de départ : déclenché au DÉBUT de la séquence (portes qui se
+	# ferment + buzzer 6-8 s, traction à la fin — cf. request_depart).
+	# Gares haut/bas ont des buzzers distincts.
+	if physics.departure_buzzer_remaining > 0.0 and _prev_buzzer_remaining <= 0.0:
 		var at_upper: bool = physics.s > PNConstants.LENGTH * 0.5
 		var buz: AudioStreamPlayer = _player_buzzer if at_upper else _player_buzzer_low
 		if buz != null and buz.stream:
 			buz.play()
+	_prev_buzzer_remaining = physics.departure_buzzer_remaining
+
+	# Démarrer les boucles d'ambiance quand la traction colle.
+	if physics.trip_started and not _trip_was_started:
 		if _player_slow.stream:
 			_player_slow.play()
 		if _player_cruise.stream:
