@@ -345,18 +345,34 @@ func _draw_slope_profile(x: float, y: float, w: float, h: float) -> void:
 	draw_rect(Rect2(Vector2(loop_x_start, plot_y), Vector2(loop_x_end - loop_x_start, plot_h)),
 		Color(1.0, 0.85, 0.20, 0.20), true)
 
-	# Position cabine
+	# Position des DEUX rames — liées par le câble : s_opposée = LENGTH − s.
+	# Les dots sont posés SUR la courbe d'altitude (échantillonnage des
+	# points du profil, pas l'approximation linéaire d'avant qui flottait
+	# au-dessus de la courbe en milieu de ligne).
 	if physics != null:
-		var cabin_x: float = plot_x + clampf(physics.s / PNConstants.LENGTH, 0.0, 1.0) * plot_w
-		var alt_norm: float = (PNConstants.ALT_LOW + (physics.s / PNConstants.LENGTH) * (PNConstants.ALT_HIGH - PNConstants.ALT_LOW) - PNConstants.ALT_LOW) / (PNConstants.ALT_HIGH - PNConstants.ALT_LOW)
-		var cabin_y: float = plot_y + plot_h - alt_norm * plot_h
-		# Trait vertical
-		draw_line(Vector2(cabin_x, plot_y), Vector2(cabin_x, plot_y + plot_h), Color(1.0, 0.65, 0.10, 0.6), 1.2)
-		# Dot
-		draw_circle(Vector2(cabin_x, cabin_y), 5.0, Color(1.0, 0.65, 0.10))
-		draw_circle(Vector2(cabin_x, cabin_y), 5.0, Color(1, 1, 1), false, 1.0)
+		var frac: float = clampf(physics.s / PNConstants.LENGTH, 0.0, 1.0)
+		var p_own: Vector2 = _profile_plot_point(frac, plot_x, plot_y, plot_w, plot_h)
+		var p_opp: Vector2 = _profile_plot_point(1.0 - frac, plot_x, plot_y, plot_w, plot_h)
+		# Rame opposée (bleu clair, plus petite)
+		draw_line(Vector2(p_opp.x, plot_y), Vector2(p_opp.x, plot_y + plot_h), Color(0.45, 0.75, 1.0, 0.40), 1.0)
+		draw_circle(p_opp, 4.0, Color(0.45, 0.75, 1.0))
+		draw_circle(p_opp, 4.0, Color(1, 1, 1), false, 1.0)
+		_draw_text(Vector2(p_opp.x - 8.0, p_opp.y - 8.0), "R2", 9, Color(0.45, 0.75, 1.0))
+		# Rame pilotée (orange)
+		draw_line(Vector2(p_own.x, plot_y), Vector2(p_own.x, plot_y + plot_h), Color(1.0, 0.65, 0.10, 0.6), 1.2)
+		draw_circle(p_own, 5.0, Color(1.0, 0.65, 0.10))
+		draw_circle(p_own, 5.0, Color(1, 1, 1), false, 1.0)
 		# Distance
 		_draw_text(Vector2(plot_x, y + h - 16.0), "%.0f / %.0f m" % [physics.s, PNConstants.LENGTH], 10, Color(0.85, 0.88, 0.92))
+
+
+# Point (px) sur la courbe du mini-profil pour une fraction 0..1 de la ligne.
+func _profile_plot_point(frac: float, plot_x: float, plot_y: float, plot_w: float, plot_h: float) -> Vector2:
+	if slope_profile_pts.is_empty():
+		return Vector2(plot_x + frac * plot_w, plot_y + plot_h)
+	var idx: int = clampi(int(round(frac * float(slope_profile_pts.size() - 1))), 0, slope_profile_pts.size() - 1)
+	var sp: Vector2 = slope_profile_pts[idx]
+	return Vector2(plot_x + sp.x * plot_w, plot_y + plot_h - sp.y * plot_h)
 
 
 # ---------------------------------------------------------------------------
