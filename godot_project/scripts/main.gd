@@ -62,6 +62,11 @@ func _ready() -> void:
 				quality = q
 			else:
 				push_warning("[PerceNeige3D] --quality=%s inconnu — high conservé" % q)
+	if OS.has_feature("web"):
+		# Export Web (iPad PWA) : la plateforme impose le rendu
+		# Compatibility → SDFGI/fog volumétrique/SSR n'existent pas,
+		# on force le préréglage low pour rester cohérent.
+		quality = "low"
 	if client_mode:
 		print("[PerceNeige3D] CLIENT MODE — physique pilotée par le sim Python")
 	if quality != "high":
@@ -92,6 +97,12 @@ func _ready() -> void:
 		_build_hud()
 		_build_audio()
 		_build_announcements()
+		# Écran tactile (iPad / export Web PWA) : boutons à l'écran qui
+		# émettent les mêmes actions que le clavier.
+		if DisplayServer.is_touchscreen_available():
+			var touch: TouchControls = TouchControls.new()
+			touch.name = "TouchControls"
+			add_child(touch)
 	print("[PerceNeige3D] Ready.")
 
 	# Diagnostic : --mesh-stats en arg projet → imprime le nombre de vertices
