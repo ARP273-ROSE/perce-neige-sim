@@ -56,12 +56,14 @@ func _create_player(path: String, vol_db: float, loop: bool) -> AudioStreamPlaye
 	if stream is AudioStreamWAV and loop:
 		var wav: AudioStreamWAV = stream
 		wav.loop_mode = AudioStreamWAV.LOOP_FORWARD
-		# NE PAS calculer loop_end depuis data.size() : avec compress/mode=2
-		# (QOA, défaut Godot 4) ou IMA-ADPCM, data.size() représente des bytes
-		# compressés, pas des samples PCM → loop_end faux → coupe prématurée.
-		# loop_end=0 demande à Godot d'utiliser la fin réelle du buffer décodé.
 		wav.loop_begin = 0
-		wav.loop_end = 0
+		# loop_end en FRAMES, calculé depuis la durée × mix_rate (robuste
+		# quelle que soit la compression : QOA/ADPCM ont un data.size() en
+		# octets compressés, inutilisable). L'ancien loop_end=0 créait une
+		# boucle de longueur NULLE → silence définitif dès la fin du
+		# premier passage (constaté sur l'export Web Android : plus aucun
+		# son en boucle après le buzzer de départ).
+		wav.loop_end = maxi(int(wav.get_length() * wav.mix_rate) - 1, 0)
 	player.stream = stream
 	player.volume_db = vol_db
 	player.bus = "Master"
