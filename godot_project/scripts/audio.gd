@@ -22,10 +22,12 @@ var _doors_were_open: bool = false   # défaut "portes fermées" : en mode clien
                                       # transition open→close → jouait à tort le
                                       # buzzer + l'animation portes).
 var _first_update_consumed: bool = false
-var _crossing_played: bool = false   # une seule fois par trip
+var _crossing_active: bool = false   # clip de croisement asservi en cours
 var _prev_buzzer_remaining: float = 0.0   # front montant du buzzer de départ
-const CROSSING_S_CENTER: float = PNConstants.LENGTH * 0.5    # = 1737 m
-const CROSSING_S_WINDOW: float = 40.0   # fenêtre de déclenchement ±40 m
+# Le clip crossing.wav couvre le transit aiguillage → aiguillage complet
+# (202 m) enregistré à la vitesse de croisière réelle.
+const CROSSING_CLIP_S: float = 20.0
+const CROSSING_REF_SPEED: float = 10.1
 
 
 func _ready() -> void:
@@ -141,12 +143,50 @@ func _process(_delta: float) -> void:
 			_player_door_motion.play()
 	_doors_were_open = physics.doors_open
 
-	# Son de croisement au passage de rame 2 (s ≈ LENGTH/2)
-	if physics.trip_started and not _crossing_played:
-		if absf(physics.s - CROSSING_S_CENTER) < CROSSING_S_WINDOW:
-			if _player_crossing.stream:
-				_player_crossing.play()
-			_crossing_played = true
-	# Reset à chaque nouveau trip
-	if not physics.trip_started:
-		_crossing_played = false
+	# Son de croisement asservi à la GÉOMÉTRIE (port du servo Python) :
+	# le clip démarre quand le NEZ de la rame franchit l'aiguillage
+	# d'entrée, position de lecture recalée sur la progression dans
+	# l'évitement, vitesse de lecture = v / vitesse d'enregistrement.
+	# L'ancien déclencheur (± 40 m autour du milieu de ligne, lecture à
+	# vitesse fixe depuis le début du clip) partait ~13 s trop tard :
+	# l'entrée d'aiguillage du clip tombait au niveau du croisement réel.
+	_update_crossing_servo()
+
+
+func _update_crossing_servo() -> void:
+	if _player_crossing == null or _player_crossing.stream == null:
+		return
+	var s_front: float = physics.s + PNConstants.TRAIN_HALF * float(physics.direction)
+	var prog: float = (s_front - PNConstants.PASSING_START) \
+		/ (PNConstants.PASSING_END - PNConstants.PASSING_START)
+	if physics.direction < 0:
+		prog = 1.0 - prog
+	var in_loop: bool = prog >= 0.0 and prog <= 1.0
+	var v_abs: float = absf(physics.v)
+
+	if in_loop and not _crossing_active:
+		if v_abs > 0.5:
+			_player_crossing.pitch_scale = clampf(v_abs / CROSSING_REF_SPEED, 0.35, 1.7)
+			_player_crossing.play(prog * CROSSING_CLIP_S)
+			_crossing_active = true
+	elif in_loop and _crossing_active:
+		# Rame quasi arrêtée dans l'évitement → pause (pas de mouvement,
+		# pas de crécelle d'aiguillage)
+		if v_abs < 1.0:
+			_player_crossing.stream_paused = true
+			return
+		_player_crossing.stream_paused = false
+		var rate: float = clampf(v_abs / CROSSING_REF_SPEED, 0.35, 1.7)
+		if absf(rate - _player_crossing.pitch_scale) > 0.03:
+			_player_crossing.pitch_scale = rate
+		# Resynchro sur dérive franche seulement (> 0,7 s — seek permanent = clics)
+		var expected: float = prog * CROSSING_CLIP_S
+		if _player_crossing.playing \
+				and absf(_player_crossing.get_playback_position() - expected) > 0.7:
+			_player_crossing.play(expected)
+	elif not in_loop and _crossing_active:
+		# La géométrie commande, pas la durée du clip
+		_player_crossing.stop()
+		_player_crossing.stream_paused = false
+		_player_crossing.pitch_scale = 1.0
+		_crossing_active = false

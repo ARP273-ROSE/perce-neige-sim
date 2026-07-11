@@ -38,7 +38,7 @@ var quality: String = "high"
 var _prev_doors_open: bool = true
 var _prev_trip_started: bool = false
 var _prev_direction: int = 1
-var _last_welcome_time: float = -999.0
+var _welcome_played: bool = false
 var _exit_announced_for_stop: bool = false
 var _prev_fault_id: String = ""
 var _prev_finished: bool = false
@@ -104,7 +104,47 @@ func _ready() -> void:
 			touch.name = "TouchControls"
 			touch.setup(self)   # accès direct AUTO/PANNE + reflet d'état
 			add_child(touch)
+		# Web : le navigateur exige un geste utilisateur pour débloquer
+		# l'audio — et ce premier tap atterrissait parfois PILE sur le
+		# bouton PRÊT/DÉPART → séquence de départ lancée « toute seule »
+		# à l'allumage (retour d'essai Android 2026-07). Un voile plein
+		# écran avale ce premier tap.
+		if OS.has_feature("web"):
+			_build_web_start_overlay()
+		if "--autotest" in OS.get_cmdline_user_args():
+			auto_operator.enabled = true
+			auto_operator._enter_initial_state()
+			print("[Autotest] auto-exploitation forcée ON")
 	print("[PerceNeige3D] Ready.")
+
+
+# Voile de démarrage web : couche au-dessus de tout, consomme le premier
+# tap (qui déclenche aussi la reprise du contexte audio du navigateur)
+# puis disparaît.
+func _build_web_start_overlay() -> void:
+	var layer: CanvasLayer = CanvasLayer.new()
+	layer.name = "WebStartOverlay"
+	layer.layer = 100
+	add_child(layer)
+	var veil: ColorRect = ColorRect.new()
+	veil.color = Color(0.0, 0.0, 0.0, 0.55)
+	veil.set_anchors_preset(Control.PRESET_FULL_RECT)
+	veil.mouse_filter = Control.MOUSE_FILTER_STOP
+	layer.add_child(veil)
+	var lbl: Label = Label.new()
+	lbl.text = "TOUCHEZ L'ÉCRAN POUR DÉMARRER"
+	lbl.add_theme_font_size_override("font_size", 30)
+	lbl.add_theme_color_override("font_color", Color(1.0, 0.85, 0.30))
+	lbl.add_theme_color_override("font_outline_color", Color.BLACK)
+	lbl.add_theme_constant_override("outline_size", 6)
+	lbl.set_anchors_preset(Control.PRESET_CENTER)
+	lbl.grow_horizontal = Control.GROW_DIRECTION_BOTH
+	lbl.grow_vertical = Control.GROW_DIRECTION_BOTH
+	veil.add_child(lbl)
+	veil.gui_input.connect(func(event: InputEvent) -> void:
+		if (event is InputEventScreenTouch and not event.pressed) \
+				or (event is InputEventMouseButton and not event.pressed):
+			layer.queue_free())
 
 	# Diagnostic : --mesh-stats en arg projet → imprime le nombre de vertices
 	# par nœud et le total, puis continue normalement. Sert à vérifier que le
@@ -414,9 +454,16 @@ func _update_announcement_triggers() -> void:
 	if announcements == null:
 		return
 
-	# Trip vient de démarrer (départ) → annonce + log
-	if physics.trip_started and not _prev_trip_started:
+	# Annonce « fermeture des portes » au moment où les portes se FERMENT
+	# (début de la séquence de départ) — avant, elle était accrochée à
+	# trip_started, soit 11,5 s après la fermeture réelle (portes 3,5 s +
+	# buzzer 8 s), donc pendant que la rame partait déjà.
+	if not physics.doors_open and _prev_doors_open:
 		announcements.queue("doors_close")
+
+	# Trip vient de démarrer (départ) → log + arme l'annonce d'approche
+	if physics.trip_started and not _prev_trip_started:
+		_welcome_played = false
 		if exploitation_log != null:
 			exploitation_log.start_trip(physics.direction)
 
@@ -450,15 +497,17 @@ func _update_announcement_triggers() -> void:
 			announcements.queue("exit_left")
 		_exit_announced_for_stop = true
 
-	# Annonce de bienvenue : portes ouvertes immobile à une station, espacée
-	# de 30s pour ne pas spammer.
-	var now: float = Time.get_ticks_msec() / 1000.0
-	if physics.doors_open and absf(physics.v) < 0.05 and (now - _last_welcome_time) > 30.0:
-		var at_low: bool = physics.s <= PNConstants.START_S + 5.0
-		var at_high: bool = physics.s >= PNConstants.STOP_S - 5.0
-		if at_low or at_high:
-			announcements.queue("welcome")
-			_last_welcome_time = now
+	# Annonce « zone Grande Motte » (fichier 11) : comme dans la réalité et
+	# le sim Python, elle passe en APPROCHE FINALE de la gare supérieure
+	# (montée, < 220 m restants, allure de creep), une fois par trajet.
+	# Retour d'essai Android 2026-07 : l'ancienne version la jouait à
+	# l'allumage à quai puis TOUTES LES 30 s → annonce fantôme au boot.
+	if (physics.trip_started and not _welcome_played
+			and physics.direction > 0
+			and PNConstants.STOP_S - physics.s < 220.0
+			and absf(physics.v) < 1.0):
+		announcements.queue("welcome")
+		_welcome_played = true
 
 	# Reset du flag exit_announced quand on quitte la station
 	if not physics.doors_open and _exit_announced_for_stop:
