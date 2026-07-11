@@ -232,3 +232,37 @@ def test_motor_banques():
     w = pn._motor_bank_weights(10.1)
     f = sum(pn.MOTOR_F_BANKS[k] * x for k, x in enumerate(w))
     assert abs(f - 197.0) < 1.5, f"{f:.1f} Hz à 10,1 m/s (attendu ~197)"
+
+
+# ---------------------------------------------------------------------------
+# Auto-update : sélection du bon asset (le sim, jamais le viewer 3D)
+# ---------------------------------------------------------------------------
+
+def test_update_picks_sim_not_viewer():
+    import autoupdate as au
+
+    def _mk(names):
+        assets = [au.ReleaseAsset(name=n, url="https://x/" + n, size=100)
+                  for n in names]
+        return au.ReleaseInfo(tag="v9.9.9", version="9.9.9", name="", body="",
+                              zipball_url="", html_url="", assets=assets)
+
+    order_a = ["PerceNeigeSimulator-windows.exe", "perce_neige_3d-windows.exe"]
+    order_b = ["perce_neige_3d-windows.exe", "PerceNeigeSimulator-windows.exe"]
+    orig = au.sys.platform
+    try:
+        au.sys.platform = "win32"
+        for order in (order_a, order_b):
+            a = au._pick_binary_asset(_mk(order))
+            assert a is not None and a.name == "PerceNeigeSimulator-windows.exe", \
+                f"mauvais asset choisi pour l'ordre {order}: {a and a.name}"
+    finally:
+        au.sys.platform = orig
+
+
+def test_update_version_compare():
+    import autoupdate as au
+    assert au.is_newer("1.12.4", "1.12.0")
+    assert au.is_newer("1.12.10", "1.12.9")   # comparaison numérique, pas lexicale
+    assert not au.is_newer("1.12.0", "1.12.0")
+    assert not au.is_newer("1.11.9", "1.12.0")
