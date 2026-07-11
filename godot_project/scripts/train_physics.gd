@@ -62,8 +62,13 @@ func step(dt: float) -> void:
 	# Clamp dt pour éviter de casser la physique sur un gros hiccup
 	dt = clampf(dt, 0.001, 0.1)
 
-	# Séquence de départ : décompte du buzzer, la traction colle à la fin.
-	if departure_buzzer_remaining > 0.0:
+	# Séquence de départ : phase portes, puis buzzer, puis traction.
+	if door_phase_remaining > 0.0:
+		door_phase_remaining = maxf(0.0, door_phase_remaining - dt)
+		if door_phase_remaining <= 0.0:
+			departure_buzzer_remaining = \
+				8.0 if s < PNConstants.LENGTH * 0.5 else 6.0
+	elif departure_buzzer_remaining > 0.0:
 		departure_buzzer_remaining = maxf(0.0, departure_buzzer_remaining - dt)
 		if departure_buzzer_remaining <= 0.0:
 			start_trip()
@@ -330,20 +335,26 @@ func _terminus_turnaround() -> void:
 	speed_cmd = 0.0
 	speed_cmd_eff = 0.0
 	departure_buzzer_remaining = 0.0
+	door_phase_remaining = 0.0
 	direction = -direction
 
 
-# Séquence de départ réelle : les portes se ferment et le BUZZER sonne
-# 6 s (gare haute) / 8 s (gare basse — fichiers réels), la traction ne
-# colle qu'à la FIN du buzzer (le frein tambour tient pendant ce temps).
+# Séquence de départ réelle, en DEUX phases (retour d'essai : portes et
+# buzzer superposés étaient indistinguables) :
+#   1. fermeture des portes (~3,5 s, son de portes seul)
+#   2. BUZZER de départ 6 s (gare haute) / 8 s (gare basse — durées des
+#      enregistrements réels), traction à la FIN du buzzer seulement
+#      (le frein tambour tient pendant toute la séquence).
 var departure_buzzer_remaining: float = 0.0
+var door_phase_remaining: float = 0.0
 
 
 func request_depart() -> void:
-	if trip_started or departure_buzzer_remaining > 0.0:
+	if trip_started or departure_buzzer_remaining > 0.0 \
+			or door_phase_remaining > 0.0:
 		return
 	doors_open = false
-	departure_buzzer_remaining = 8.0 if s < PNConstants.LENGTH * 0.5 else 6.0
+	door_phase_remaining = 3.5
 
 
 func start_trip() -> void:
