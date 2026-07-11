@@ -266,3 +266,22 @@ def test_update_version_compare():
     assert au.is_newer("1.12.10", "1.12.9")   # comparaison numérique, pas lexicale
     assert not au.is_newer("1.12.0", "1.12.0")
     assert not au.is_newer("1.11.9", "1.12.0")
+
+
+def test_pas_de_depart_sans_sequence():
+    # Bug terrain (2026-07) : « le funiculaire s'est mis en route quand
+    # j'ai fermé les portes » — départ gare amont, sans PRÊT(V)+buzzer(Z).
+    # Même avec un état incohérent (frein tambour desserré, consigne à
+    # 100 %, portes fermées), la rame ne doit PAS bouger tant que
+    # trip_started est faux, et le tambour doit se réengager seul.
+    st, ph = _make(-1, pn.STOP_S, 5, 100, v0=0.0, cmd=1.0)
+    st.trip_started = False
+    tr = st.train
+    tr.trip_started = False
+    tr.maint_brake = False      # état incohérent volontaire
+    tr.doors_open = False       # portes fermées
+    for _ in range(int(10.0 / DT)):
+        ph.step(DT)
+    assert abs(tr.v) < 0.01, f"la rame bouge sans séquence de départ (v={tr.v})"
+    assert abs(tr.s - pn.STOP_S) < 0.1, f"la rame a dérivé (s={tr.s})"
+    assert tr.maint_brake, "le tambour ne s'est pas réengagé"
