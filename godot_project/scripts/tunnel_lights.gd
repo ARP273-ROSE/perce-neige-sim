@@ -17,7 +17,7 @@ extends Node3D
 # participent toutes au clustering Forward+ et au fog volumétrique chaque
 # frame si on les laisse actives. Au-delà de LIGHT_CULL_DIST des deux rames,
 # la lumière est éteinte (le bâtonnet émissif, lui, reste visible de loin).
-const LIGHT_CULL_DIST: float = 250.0
+const LIGHT_CULL_DIST: float = 450.0
 
 var tunnel: TunnelBuilder = null
 var _lights: Array = []   # paires [OmniLight3D, s_m] pour le culling
@@ -55,76 +55,10 @@ func _populate() -> void:
 		if SlopeProfile.tunnel_lit_at(s):
 			_add_neon(s, neon_mesh, neon_mat, neon_color)
 		s += spacing_m
+	# (Signaux LED verts du croisement SUPPRIMÉS — retour d'essai 2026-07 :
+	# ils teintaient le tunnel en vert/rouge à l'entrée, au milieu et à la
+	# sortie de l'évitement ; l'éclairage doit rester uniforme comme ailleurs.)
 
-	# Signaux LED vertes au plafond de chaque entrée du croisement Abt
-	# (les positions s des signaux sont enregistrées dans _lights aussi)
-	# (cf. photos v1_17 et frames V2 d'entrée du loop : on voit 2 LED
-	# vertes brillantes côte à côte au-dessus du tunnel à chaque bout
-	# de la chambre).
-	_add_crossing_signals()
-
-
-func _add_crossing_signals() -> void:
-	var green: Color = Color(0.3, 1.0, 0.4)
-	var led_mat: StandardMaterial3D = StandardMaterial3D.new()
-	led_mat.albedo_color = Color(0.8, 1.0, 0.85)
-	led_mat.emission_enabled = true
-	led_mat.emission = green
-	led_mat.emission_energy_multiplier = 8.0
-	led_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-
-	var led_mesh: SphereMesh = SphereMesh.new()
-	led_mesh.radius = 0.06
-	led_mesh.height = 0.12
-	led_mesh.radial_segments = 10
-	led_mesh.rings = 6
-
-	# Évitement = DEUX TUBES SÉPARÉS (cf. tunnel_builder) :
-	#  - aux bouches (±4 m), le profil est encore quasi le tube unique →
-	#    une paire centrée, plafond = h(d) = √(R²−d²)
-	#  - au milieu, chaque tube a SA paire au plafond de SON tube
-	var pair_dx: float = 0.18    # écart entre les 2 LED de la paire
-	var R: float = tunnel.tunnel_radius if tunnel else 1.95
-	var s_mid: float = (PNConstants.PASSING_START + PNConstants.PASSING_END) * 0.5
-	# [s, offset latéral du support]
-	var placements: Array = [
-		[PNConstants.PASSING_START + 4.0, 0.0],
-		[s_mid, tunnel.passing_loop_offset(s_mid, -1.0)],
-		[s_mid, tunnel.passing_loop_offset(s_mid, +1.0)],
-		[PNConstants.PASSING_END - 4.0, 0.0],
-	]
-	for placement in placements:
-		var s_led: float = placement[0]
-		var lat: float = placement[1]
-		var xform: Transform3D = tunnel.transform_at(s_led)
-		var right: Vector3 = xform.basis.x
-		var up: Vector3 = xform.basis.y
-		var ceiling_y: float
-		if lat == 0.0:
-			# Bouche de fusion : plafond du profil binoculaire au centre
-			var d: float = absf(tunnel.passing_loop_offset(s_led, 1.0))
-			ceiling_y = sqrt(maxf(R * R - d * d, 0.25)) - 0.40
-		else:
-			ceiling_y = R - 0.40
-		var base_pos: Vector3 = xform.origin + right * lat + up * ceiling_y
-		for side in [-1.0, 1.0]:
-			var pos: Vector3 = base_pos + right * (pair_dx * side)
-			# Lumière diffuse omnidirectionnelle
-			var light: OmniLight3D = OmniLight3D.new()
-			light.position = pos
-			light.light_color = green
-			light.light_energy = 3.0
-			light.omni_range = 6.0
-			light.shadow_enabled = false
-			add_child(light)
-			_lights.append([light, s_led])
-			# Mesh visible (sphère émissive)
-			var led: MeshInstance3D = MeshInstance3D.new()
-			led.mesh = led_mesh
-			led.set_surface_override_material(0, led_mat)
-			led.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-			add_child(led)
-			led.global_position = pos
 
 
 # Éteint les OmniLight3D loin des deux rames (rame 1 à s_cabin, rame 2 à

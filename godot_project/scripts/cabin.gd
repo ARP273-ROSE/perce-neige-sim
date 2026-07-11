@@ -134,7 +134,11 @@ func _build_floor_ceiling() -> void:
 	# étaient centrées sur z=0 et couvraient 97 % du train → 3,5 m de
 	# plancher/plafond en porte-à-faux DEVANT le poste de pilotage, comme
 	# un plongeoir au-dessus de la voie.
-	var z_front: float = -train_length * 0.5 + 2.4    # = 1,6 m devant la caméra
+	var z_front: float = -train_length * 0.5 + 2.4    # plancher (sous le pupitre)
+	# Plafond + bandeau LED : encore plus courts (retour d'essai : « un
+	# plafond qui avance moins vers l'avant au-dessus de nous ») —
+	# 0,4 m devant la caméra seulement, simple casquette.
+	var z_front_ceil: float = -train_length * 0.5 + 3.2
 	var z_rear: float = train_length * 0.5 * 0.97
 
 	# Sol cabine — plancher caillebotis sombre (matériau acier mat),
@@ -165,13 +169,13 @@ func _build_floor_ceiling() -> void:
 	ceil_mat.metallic = 0.15
 
 	var ceil_mesh: BoxMesh = BoxMesh.new()
-	ceil_mesh.size = Vector3(2.40, 0.04, z_rear - z_front)
+	ceil_mesh.size = Vector3(2.40, 0.04, z_rear - z_front_ceil)
 	ceil_mesh.material = ceil_mat
 	var ceil_node: MeshInstance3D = MeshInstance3D.new()
 	ceil_node.name = "InteriorCeiling"
 	ceil_node.mesh = ceil_mesh
 	ceil_node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	ceil_node.position = Vector3(0.0, 1.45, (z_front + z_rear) * 0.5)
+	ceil_node.position = Vector3(0.0, 1.45, (z_front_ceil + z_rear) * 0.5)
 	interior_root.add_child(ceil_node)
 
 	# Bandeau LED plafond (lumineux) le long du milieu, donne le côté "métro moderne"
@@ -184,13 +188,13 @@ func _build_floor_ceiling() -> void:
 
 	var led_z_rear: float = train_length * 0.5 * 0.92
 	var led_mesh: BoxMesh = BoxMesh.new()
-	led_mesh.size = Vector3(0.25, 0.04, led_z_rear - z_front)
+	led_mesh.size = Vector3(0.25, 0.04, led_z_rear - z_front_ceil)
 	led_mesh.material = led_mat
 	var led_node: MeshInstance3D = MeshInstance3D.new()
 	led_node.name = "InteriorLEDStrip"
 	led_node.mesh = led_mesh
 	led_node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	led_node.position = Vector3(0.0, 1.42, (z_front + led_z_rear) * 0.5)
+	led_node.position = Vector3(0.0, 1.42, (z_front_ceil + led_z_rear) * 0.5)
 	interior_root.add_child(led_node)
 
 
@@ -205,7 +209,7 @@ func _build_handrails() -> void:
 	# 2 mains courantes horizontales le long du plafond, à x=±0.35 (au-dessus
 	# de l'aisle). Elles s'arrêtent 0,6 m en retrait du front du plafond
 	# (zone conducteur = pas de main courante dans le vrai cockpit).
-	var rail_z_front: float = -train_length * 0.5 + 3.0
+	var rail_z_front: float = -train_length * 0.5 + 3.4
 	var rail_z_rear: float = train_length * 0.5 * 0.85
 	for side in [-1.0, 1.0]:
 		var rail: MeshInstance3D = MeshInstance3D.new()
@@ -264,10 +268,10 @@ func _build_console_pupitre() -> void:
 	#     centre + 2 LED blanches "ÉCLAIRAGE" en bas
 	#   - PAS de mushrooms sur le pupitre (le vrai cockpit a les arrêts
 	#     d'urgence ailleurs — sur la console latérale ou la cloison)
-	# 1,35 m DEVANT la caméra FPV (z=−12). L'ancien −10,8 (« 2,8 m devant
-	# caméra ») datait d'une caméra à −8 : après son avancée à −12, le
-	# pupitre s'était retrouvé 1,2 m DERRIÈRE les yeux → invisible en FPV.
-	var z_console: float = -train_length * 0.5 + 2.65
+	# 0,7 m DEVANT la caméra FPV (z=−12,4) : assez proche pour que le
+	# pupitre occupe le BAS de l'image (retour d'essai : à 1,35 m il
+	# flottait en plein milieu de la vue).
+	var z_console: float = -train_length * 0.5 + 2.9
 	var y_top: float = 0.52                            # hauteur sommet tube
 	var tube_radius: float = 0.090                     # ≈ 18 cm de diamètre
 	var tube_length: float = 1.10                      # 1.10 m de large
@@ -723,7 +727,9 @@ func _build_camera() -> void:
 	camera_fpv.fov = 72.0
 	camera_fpv.near = 0.05
 	camera_fpv.far = 800.0
-	camera_fpv.position = Vector3(0.0, 0.85, -train_length * 0.5 + 4.0)
+	# Avancée de 0,4 m (retour d'essai 2026-07 : « trop loin du panneau
+	# de commande ») — le pupitre à 0,7 m devant tombe en bas de l'image.
+	camera_fpv.position = Vector3(0.0, 0.85, -train_length * 0.5 + 3.6)
 	camera_fpv.rotation = Vector3(0.0, 0.0, 0.0)
 	add_child(camera_fpv)
 
