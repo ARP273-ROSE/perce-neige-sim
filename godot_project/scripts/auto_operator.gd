@@ -94,12 +94,14 @@ func _process(delta: float) -> void:
 				_state_timer = 0.0
 
 		State.READY_TO_DEPART:
-			# Démarrer le trip et accélérer
+			# Séquence de départ réelle : buzzer 6-8 s puis traction.
 			if not physics.trip_started:
-				physics.start_trip()
-			physics.speed_cmd = 1.0   # plein gaz
-			state = State.DEPARTING
-			_state_timer = 0.0
+				if physics.departure_buzzer_remaining <= 0.0:
+					physics.request_depart()
+			else:
+				physics.speed_cmd = 1.0   # plein gaz
+				state = State.DEPARTING
+				_state_timer = 0.0
 
 		State.DEPARTING:
 			# Maintien plein gaz jusqu'à V_CRUISE_PEAK
@@ -168,11 +170,12 @@ func _request_close_doors() -> void:
 func _request_open_doors() -> void:
 	if physics == null:
 		return
-	# À l'arrivée, inverser direction et attendre nouveau départ
+	# Le demi-tour terminus (portes, trip_started, direction inversée)
+	# est désormais géré par TrainPhysics._terminus_turnaround() à
+	# l'arrivée — le refaire ici inverserait la direction DEUX fois.
+	# On s'assure juste que l'état est bien celui attendu.
 	physics.doors_open = true
-	physics.trip_started = false
 	physics.finished = false
-	physics.direction = -physics.direction
 
 
 func _maybe_inject_fault() -> void:
