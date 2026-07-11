@@ -89,7 +89,7 @@ try:
 except ImportError:
     _GODOT_BRIDGE_OK = False
 
-VERSION = "1.12.5"
+VERSION = "1.12.6"
 APP_NAME = "Perce-Neige Simulator"
 
 
@@ -876,6 +876,21 @@ class Physics:
         # train can't drift backwards under the gravity imbalance.
         if tr.doors_open:
             f_motor = 0.0
+
+        # Chaîne de départ : le contacteur de traction ne colle qu'une fois
+        # la séquence PRÊT (V) + buzzer (Z) TERMINÉE (trip_started). Sans ce
+        # verrou, la consigne étant à 100 % par défaut, il suffisait d'un
+        # frein tambour desserré (état incohérent, clic sur AUTO…) pour que
+        # la rame parte TOUTE SEULE à la fermeture des portes — constaté en
+        # exploitation (2026-07, départ gare amont). L'exploitation auto
+        # passe par la même séquence buzzer → trip_started : inchangée.
+        if not st.trip_started:
+            f_motor = 0.0
+            # Ceinture + bretelles : rame immobile hors séquence de départ
+            # et hors urgence → le tambour se réengage automatiquement
+            # (réel : le drum ne se lève qu'au collage du contacteur).
+            if not tr.emergency and abs(tr.v) < 0.05 and not tr.maint_brake:
+                tr.maint_brake = True
 
         # Auxiliary 400 V power failure : main drive contactor drops out.
         # Parking brake hydraulics cut back in — train coasts / held.
