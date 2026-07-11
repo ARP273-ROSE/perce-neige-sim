@@ -104,6 +104,9 @@ func _setup_player() -> void:
 	_player = AudioStreamPlayer.new()
 	_player.bus = "Master"
 	_player.volume_db = volume_db
+	# Safari : lecture Sample muette/instable → Stream (cf. PNConstants)
+	if PNConstants.safari_web():
+		_player.playback_type = AudioServer.PLAYBACK_TYPE_STREAM
 	_player.finished.connect(_on_player_finished)
 	add_child(_player)
 
