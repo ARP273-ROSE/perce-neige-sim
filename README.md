@@ -12,27 +12,45 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 
 ---
 
-## Quoi de neuf — audit 2026-07
+## Quoi de neuf — v1.12.x (audit + retours d'essai terrain, juillet 2026)
 
-- **Sécurité auto-update** : l'exe téléchargé est vérifié **SHA-256** contre le
-  `SHA256SUMS` publié par le CI dans chaque release (release sans checksums =
-  refusée). Check et téléchargement de MAJ en arrière-plan (plus de gel UI).
-- **Vue 3D sans Godot installé** : le viewer est publié en asset de release ;
-  s'il manque (lancement depuis les sources), l'appli propose de le
-  **télécharger automatiquement** au premier F4 (intégrité SHA-256). Voir
-  « Faut-il installer Godot ? » plus bas.
-- **Robustesse de l'intégration 3D** : watchdog (viewer mort → fallback vue
-  procédurale au lieu d'une zone noire), heartbeat UDP → le viewer affiche
-  « signal perdu » puis se ferme seul si le sim crashe (plus de processus
-  orphelin), validation des paquets, port borné.
-- **Performance 3D** : géométrie découpée en tronçons de 120 m +
-  échantillonnage adaptatif (**1,64 M → 0,71 M vertices**, frustum culling
-  enfin efficace), ~230 lumières du tunnel activées seulement à moins de
-  250 m des rames, préréglages `--quality=low|medium|high`, diagnostic
-  `--mesh-stats`.
-- **Fix croisement** : les câbles muraux, néons et LED suivent désormais la
-  paroi de la chambre de croisement — la rame ne les traverse plus pendant
-  l'évitement.
+**Fidélité au réel** (calibrée sur photos/vidéos embarquées + témoignage
+d'un utilisateur régulier de la ligne) :
+- **Évitement en deux tubes séparés** (conforme au chantier de 1991 : « tube
+  d'évitement » distinct, contrairement à Val d'Isère) avec zones de fusion
+  binoculaires calculées aux extrémités ; les deux voies divergent
+  symétriquement, l'évitement est décalé 25 m vers l'aval (la rame montante
+  est à l'abri dans son tube avant l'arrivée de la descendante).
+- **Voie fidèle** : blochets indépendants sous chaque rail, longrine centrale
+  continue portant les 256 paires de galets du câble. **Gares** : quais en
+  escalier de 3 m des deux côtés (marches-paliers calées sur la pente, nez
+  alu en bas / rouges en haut), sans garde-corps.
+- **Tunnel éclairé uniformément** tout du long, un néon sur deux allumé.
+- **Physique vérifiée au banc** : tension du câble avec son poids propre
+  (~22 000 daN en bas → ~4 000 en haut), rebond élastique à l'arrêt en gare
+  basse (k = EA/L : ±27 cm, période ~7 s — millimétrique en gare haute),
+  freins réels (arrêt d'urgence poulie 1,25 m/s² ≠ parachute Belleville
+  3,6 m/s²), cascade de survitesse +10/+12/+20 %, **entrée en gare à
+  0,75 m/s**, verrou du contacteur de traction (aucun départ possible sans
+  séquence PRÊT + buzzer).
+- **Son asservi** : boucles d'ambiance réelles sans couture, hauteur moteur
+  calibrée 172→202 Hz selon la vitesse, croisement synchronisé à la
+  géométrie de l'évitement (position ET vitesse de lecture), freinage
+  d'approche et ambiances de quai réels, ducking sous les annonces.
+
+**Sécurité & robustesse** :
+- Auto-update vérifié **SHA-256** (`SHA256SUMS` publié par le CI), sortie et
+  swap fiabilisés, journal dans `%TEMP%\perce_neige_update.log`.
+- Vue 3D sans Godot installé : viewer publié en asset de release,
+  **téléchargement automatique** proposé au premier F4 (mode source).
+- Intégration 3D blindée : watchdog, heartbeat UDP, auto-fermeture du
+  viewer orphelin, validation des paquets.
+- **16 tests physiques anti-régression** exécutés par le CI à chaque push.
+
+**Performance 3D** : géométrie en tronçons de 120 m + échantillonnage
+adaptatif (1,64 M → 0,73 M vertices, frustum culling efficace), lumières
+activées à moins de 450 m des rames, préréglages
+`--quality=low|medium|high`, diagnostic `--mesh-stats`.
 
 ---
 
