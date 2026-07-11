@@ -163,6 +163,26 @@ def test_cascade_survitesse():
     assert abs(tr.v) < 0.1, "emballement non arrêté"
 
 
+def test_entree_en_gare_a_075():
+    # Retour d'essai exploitant (2026-07) : l'entrée en gare se fait à
+    # ~0,75 m/s. L'ancien réglage (0,04 m/s² sur 6 m) rampait à 0,2 m/s
+    # à l'aller et calait quasi à l'arrêt au retour.
+    for direction, s0 in ((1, pn.STOP_S - 400.0), (-1, pn.START_S + 400.0)):
+        st, ph = _make(direction, s0, 100, 0, v0=8.0 * direction, cmd=1.0)
+        t, v_at_5m = 0.0, None
+        while not st.finished and t < 300:
+            ph.step(DT)
+            t += DT
+            dist = ((pn.STOP_S - st.train.s) if direction > 0
+                    else (st.train.s - pn.START_S))
+            if v_at_5m is None and dist < 5.0:
+                v_at_5m = abs(st.train.v)
+        assert st.finished, f"pas arrivé (dir={direction}, t={t:.0f}s)"
+        assert v_at_5m is not None and 0.55 < v_at_5m < 0.95, \
+            f"v à 5 m du quai = {v_at_5m} (dir={direction}, attendu ~0,75)"
+        assert t < 200, f"approche trop lente ({t:.0f} s, dir={direction})"
+
+
 # ---------------------------------------------------------------------------
 # Rebond élastique à l'arrêt (k = EA/L → visible en bas, pas en haut)
 # ---------------------------------------------------------------------------
