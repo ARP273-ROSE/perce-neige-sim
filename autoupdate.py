@@ -52,6 +52,20 @@ GITHUB_API = "https://api.github.com/repos/{owner}/{repo}/releases/latest"
 MAX_DOWNLOAD_BYTES = 200 * 1024 * 1024  # 200 MB
 NETWORK_TIMEOUT = 15.0
 
+
+def _log(msg: str) -> None:
+    """Trace l'auto-update dans %TEMP%/perce_neige_update.log. Le sim
+    frozen tourne sans console → sans ce journal, un échec de swap est
+    totalement muet (« la MAJ marche pas » sans le moindre indice)."""
+    try:
+        import tempfile
+        from datetime import datetime
+        logf = Path(tempfile.gettempdir()) / "perce_neige_update.log"
+        with open(logf, "a", encoding="utf-8") as f:
+            f.write(f"[{datetime.now().isoformat(timespec='seconds')}] {msg}\n")
+    except Exception:
+        pass
+
 # Files that auto-update is allowed to overwrite in source mode.
 UPDATE_WHITELIST = {
     "perce_neige_sim.py",
@@ -174,12 +188,25 @@ def _platform_suffix() -> str:
     return PLATFORM_ASSET_SUFFIX.get(sys.platform, "")
 
 
+# Nom de l'application principale (préfixe de l'asset à installer). Le
+# viewer 3D (perce_neige_3d-windows.exe) porte AUSSI le suffixe
+# "-windows.exe" → sans ce filtre par préfixe, l'updater pouvait
+# remplacer le simulateur par le viewer selon l'ordre (non garanti) des
+# assets renvoyés par l'API GitHub.
+APP_ASSET_PREFIX = "PerceNeigeSimulator"
+
+
 def _pick_binary_asset(release: ReleaseInfo) -> Optional[ReleaseAsset]:
     suffix = _platform_suffix()
     if not suffix:
         return None
+    # 1. Match exact : l'exe du simulateur (préfixe app + suffixe plateforme).
     for a in release.assets:
-        if a.name.endswith(suffix):
+        if a.name.startswith(APP_ASSET_PREFIX) and a.name.endswith(suffix):
+            return a
+    # 2. Repli : un asset au bon suffixe qui n'est PAS le viewer 3D.
+    for a in release.assets:
+        if a.name.endswith(suffix) and "perce_neige_3d" not in a.name:
             return a
     return None
 
@@ -260,28 +287,56 @@ def _swap_windows_exe(new_exe: Path) -> None:
     batch script next to the new file that waits for our PID to exit,
     swaps the binaries, deletes itself and relaunches the app.
     """
+    import tempfile
     current = Path(sys.executable).resolve()
     pid = os.getpid()
     swap_bat = new_exe.parent / "_pn_update_swap.bat"
-    # Use CRLF line endings, no UTF-8 BOM -- cmd.exe friendly.
+    bat_log = Path(tempfile.gettempdir()) / "perce_neige_update_swap.log"
+    # Robustesse (retours terrain « la MAJ marche pas ») :
+    #  - attente du PID bornée (~60 s) puis on force le swap : si la
+    #    détection tasklist déraille, on ne reste pas bloqué à l'infini ;
+    #  - `move` réessayé 10 × (le fichier .exe reste parfois verrouillé
+    #    une poignée de secondes après la sortie du process) ;
+    #  - tout est journalisé dans %TEMP%/perce_neige_update_swap.log ;
+    #  - l'appli est RELANCÉE même si le swap échoue (l'ancienne version
+    #    plutôt que rien), pour ne jamais laisser l'utilisateur sans app.
     script = (
         "@echo off\r\n"
-        "setlocal\r\n"
+        "setlocal enableextensions\r\n"
         f'set "PID={pid}"\r\n'
         f'set "TARGET={current}"\r\n'
         f'set "NEW={new_exe}"\r\n'
+        f'set "LOG={bat_log}"\r\n'
+        'echo [swap] start pid=%PID% > "%LOG%"\r\n'
+        "set /a WAIT=0\r\n"
         ":waitloop\r\n"
         'tasklist /FI "PID eq %PID%" 2>nul | find "%PID%" >nul\r\n'
         "if %errorlevel%==0 (\r\n"
+        "  set /a WAIT+=1\r\n"
+        "  if %WAIT% geq 60 goto doswap\r\n"
         "  timeout /t 1 /nobreak >nul\r\n"
         "  goto waitloop\r\n"
         ")\r\n"
+        ":doswap\r\n"
+        'echo [swap] pid gone, swapping >> "%LOG%"\r\n'
         'del /Q "%TARGET%" >nul 2>&1\r\n'
-        'move /Y "%NEW%" "%TARGET%" >nul\r\n'
+        "set /a TRY=0\r\n"
+        ":moveloop\r\n"
+        'move /Y "%NEW%" "%TARGET%" >nul 2>&1\r\n'
+        "if exist \"%NEW%\" (\r\n"
+        "  set /a TRY+=1\r\n"
+        '  echo [swap] move retry %TRY% >> "%LOG%"\r\n'
+        "  if %TRY% geq 10 goto relaunch\r\n"
+        "  timeout /t 1 /nobreak >nul\r\n"
+        "  goto moveloop\r\n"
+        ")\r\n"
+        ":relaunch\r\n"
+        'echo [swap] relaunch %TARGET% >> "%LOG%"\r\n'
         'start "" "%TARGET%"\r\n'
         '(goto) 2>nul & del "%~f0"\r\n'
     )
     swap_bat.write_bytes(script.encode("cp1252", errors="replace"))
+    _log(f"[swap] batch écrit : {swap_bat} (pid={pid}, target={current})")
 
     DETACHED_PROCESS = 0x00000008
     CREATE_NEW_PROCESS_GROUP = 0x00000200
@@ -307,6 +362,8 @@ def _install_frozen(release: ReleaseInfo,
         raise RuntimeError(
             f"No binary asset for platform {sys.platform!r} in release "
             f"{release.tag}")
+    _log(f"[install] release {release.tag}, asset choisi : {asset.name} "
+         f"({asset.size} o)")
     current = Path(sys.executable).resolve()
     tmp = Path(tempfile.mkdtemp(prefix="pn_update_"))
     new_bin = tmp / asset.name
@@ -318,13 +375,19 @@ def _install_frozen(release: ReleaseInfo,
             f"downloaded size {new_bin.stat().st_size} != announced "
             f"size {asset.size}")
     _verify_asset_sha256(release, asset, new_bin)
+    _log(f"[install] téléchargé + SHA-256 vérifié → {new_bin}")
 
     if sys.platform == "win32":
         # Move into the target directory first so move /Y is atomic
         staged = current.parent / (current.stem + ".new.exe")
+        try:
+            if staged.exists():
+                staged.unlink()
+        except OSError:
+            pass
         shutil.move(str(new_bin), str(staged))
         _swap_windows_exe(staged)
-        # Parent continues; caller will sys.exit() via relaunch_app()
+        # Parent continues; caller will hard-exit via relaunch_app()
     else:
         _swap_unix_binary(new_bin)
 
@@ -437,16 +500,25 @@ def download_and_install(
 
 
 def relaunch_app() -> None:
-    """Relaunch the app.  In frozen/Windows mode the swap .bat handles
-    the restart, so we just exit cleanly."""
+    """Termine le process pour laisser le batch de swap remplacer l'exe
+    puis relancer la nouvelle version.
+
+    IMPORTANT : en frozen/Windows on utilise ``os._exit(0)`` — une sortie
+    DURE — et pas ``sys.exit(0)``. sys.exit() lève SystemExit, qui est
+    avalé par la boucle d'événements Qt quand relaunch_app est appelé
+    depuis un slot/QTimer : le process ne mourait pas, le batch attendait
+    la mort du PID indéfiniment et le swap n'avait jamais lieu (cause n°1
+    du « la MAJ marche pas »). os._exit tue le process immédiatement."""
+    _log("[relaunch] fin du process pour laisser le swap opérer")
     if is_frozen() and sys.platform == "win32":
-        # swap .bat will start the new .exe once our PID dies
-        sys.exit(0)
+        # Laisse le temps aux tampons du log de partir, puis exit dur.
+        sys.stdout.flush() if sys.stdout else None
+        os._exit(0)
     try:
         python = sys.executable
         os.execv(python, [python] + sys.argv)
     except Exception:
-        sys.exit(0)
+        os._exit(0)
 
 
 class UpdateCheckThread(threading.Thread):
