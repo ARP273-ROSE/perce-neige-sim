@@ -496,8 +496,10 @@ func _handle_continuous_input(delta: float) -> void:
 			physics.release_emergency()
 			print("[Emergency released]")
 		elif not physics.trip_started:
-			physics.start_trip()
-			print("[Trip started]")
+			# Séquence réelle : portes + buzzer 6-8 s, traction à la fin.
+			physics.request_depart()
+			print("[Departure sequence] buzzer %.0f s" %
+				physics.departure_buzzer_remaining)
 
 	if Input.is_action_just_pressed("pause"):
 		_paused = not _paused
