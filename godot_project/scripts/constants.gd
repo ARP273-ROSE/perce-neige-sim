@@ -10,6 +10,24 @@ extends Node
 
 const G: float = 9.80665  # m/s²
 
+
+# Safari (iPad/iPhone/macOS) : la lecture audio « Sample » des exports web
+# (défaut Godot ≥ 4.3) est muette puis fait planter la page sous WebKit
+# (godot#116750) — le contournement documenté est le mode « Stream ».
+# Chrome/Android marche très bien en Sample → bascule à l'EXÉCUTION,
+# uniquement quand l'UA est un vrai Safari (WebKit sans Chrome/Android).
+static func safari_web() -> bool:
+	if not OS.has_feature("web"):
+		return false
+	var ua: Variant = JavaScriptBridge.eval("navigator.userAgent", true)
+	if not (ua is String):
+		return false
+	var s: String = ua
+	return s.contains("Safari") and not s.contains("Chrome") \
+		and not s.contains("CriOS") and not s.contains("Chromium") \
+		and not s.contains("Android") and not s.contains("Edg") \
+		and not s.contains("FxiOS")
+
 # ---------------------------------------------------------------------------
 # Géométrie du funiculaire (specs réelles Von Roll / CFD 1993)
 # ---------------------------------------------------------------------------

@@ -70,6 +70,9 @@ func _create_player(path: String, vol_db: float, loop: bool) -> AudioStreamPlaye
 	player.stream = stream
 	player.volume_db = vol_db
 	player.bus = "Master"
+	# Safari : lecture Sample muette/instable → Stream (cf. PNConstants)
+	if PNConstants.safari_web():
+		player.playback_type = AudioServer.PLAYBACK_TYPE_STREAM
 	add_child(player)
 	return player
 
