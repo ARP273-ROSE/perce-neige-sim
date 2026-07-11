@@ -102,6 +102,7 @@ func _ready() -> void:
 		if DisplayServer.is_touchscreen_available():
 			var touch: TouchControls = TouchControls.new()
 			touch.name = "TouchControls"
+			touch.setup(self)   # accès direct AUTO/PANNE + reflet d'état
 			add_child(touch)
 	print("[PerceNeige3D] Ready.")
 
