@@ -26,7 +26,7 @@ const SQUARE_SECTION_HIGH_START: float = 3420.0  # transition rond→carré haut
 const V_MAX: float = 12.0                # m/s (43.2 km/h)
 const V_CRUISE_PEAK: float = 12.0        # heure de pointe
 const V_CRUISE_OFFPEAK: float = 10.3     # hors pointe
-const V_CREEP: float = 0.5               # vitesse creep sur plateforme
+const V_CREEP: float = 0.75              # vitesse creep (fait terrain : entrée en gare à 0,75 m/s)
 
 # Accélération — profil calibré vidéo FUNI284 (2→12 m/s en ~33 s)
 const A_TARGET: float = 0.30             # accel programmée (m/s²)
