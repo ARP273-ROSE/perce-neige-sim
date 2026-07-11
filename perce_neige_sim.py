@@ -89,7 +89,7 @@ try:
 except ImportError:
     _GODOT_BRIDGE_OK = False
 
-VERSION = "1.12.2"
+VERSION = "1.12.3"
 APP_NAME = "Perce-Neige Simulator"
 
 
@@ -286,9 +286,10 @@ STOP_S = LENGTH - TRAIN_HALF - BUMPER_CLEAR  # front 10 m before s=LENGTH
 
 # Approach profile — the train decelerates to CREEP_V and maintains it
 # from CREEP_START up to STOP_S, entering the station quietly.
-CREEP_V = 0.5                   # creep speed on platform approach (m/s)
-                                # Real Von Roll procedural creep is 0.3-0.5
-                                # m/s — platform docking always < 1 m/s.
+CREEP_V = 0.75                  # creep speed on platform approach (m/s)
+                                # Constaté en cabine (aller-retour du
+                                # 2026-07 par l'exploitant) : l'entrée en
+                                # gare se fait à ~0,75 m/s, pas 0,3-0,5.
 # Front reaches 1 m/s when 20 m before the platform start, then rolls
 # at 1 m/s through the 20 m approach + 35 m platform = 55 m.
 CREEP_DIST = 20.0 + PLATFORM_LEN        # 55 m measured in centre-position
@@ -1472,14 +1473,14 @@ class Physics:
         envelope_active = v_envelope < tr.speed_cmd_eff - 0.05
 
         # Creep zone : last CREEP_DIST metres crawl at CREEP_V, then
-        # taper smoothly to zero over the final ~6 m using a square-root
-        # profile v = √(2·a·d) with a very gentle deceleration (0.04 m/s²
-        # — roughly a 20 s final docking, as seen on video). That kills
-        # the old "instant stop at threshold" where the train would snap
-        # from CREEP_V straight to 0 when dist_to_stop crossed 0.5 m.
+        # taper smoothly to zero over the final ~2,5 m (√(2·a·d)).
+        # L'ancien couple (0,04 m/s² sur 6 m) donnait une entrée en gare
+        # interminable — ~0,2 m/s pendant 20 s, constaté sur machine par
+        # l'exploitant. Le profil garde CREEP_V (0,75) jusqu'à 2,5 m puis
+        # docke en ~4 s, sans le « snap » historique à 0.
         if dist_to_stop < CREEP_DIST:
-            PARK_DECEL = 0.04         # m/s² final-docking decel
-            FINAL_DIST = 6.0          # m over which the taper applies
+            PARK_DECEL = 0.15         # m/s² final-docking decel
+            FINAL_DIST = 2.5          # m over which the taper applies
             if dist_to_stop > FINAL_DIST:
                 target_v = CREEP_V
             else:

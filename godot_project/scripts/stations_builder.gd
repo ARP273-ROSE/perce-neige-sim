@@ -3,9 +3,8 @@ extends Node3D
 ## Plateformes Val Claret (bas) et Grande Motte (haut).
 ##
 ## Pour chaque station :
-##   - quai latéral béton (35 m) avec bande jaune de sécurité
+##   - quais en escalier SANS garde-corps (on embarque par là)
 ##   - éclairage station renforcé (néons plafond + spots)
-##   - signalétique Label3D bilingue (nom + altitude)
 ##   - tampons de fin de voie (rouge-blanc rayé)
 ##   - cabine de commande / panneau technique (volume simple)
 ##
@@ -21,7 +20,6 @@ extends Node3D
 @export var platform_height: float = 0.40      # hauteur quai vs plancher voie (plancher cabine bas)
 @export var tread_depth: float = 0.95          # profondeur d'une marche-palier
 @export var tread_thickness: float = 0.55      # épaisseur du bloc (descend sous la marche suivante)
-@export var railing_height: float = 0.95       # garde-corps côté voie
 @export var ceiling_height: float = 1.85       # hauteur centre → plafond
 @export var bumper_height: float = 1.30
 @export var bumper_width: float = 1.60
@@ -55,10 +53,6 @@ func _t(en: String, fr: String) -> String:
 # ---------------------------------------------------------------------------
 
 func _build_station_low() -> void:
-	var name_txt: String = "VAL CLARET"
-	var alt_txt: String = _t("ALT. 2111 m", "ALT. 2111 m")
-	var direction_txt: String = _t("→ GLACIER 3032 m", "→ GLACIER 3032 m")
-
 	# Le train occupe s ∈ [10, 42] (centre à START_S=26, half_length=16).
 	# Plateforme déborde de chaque côté : [3, 51] — 8m en arrière, 9m devant le nez.
 	var s_bumper: float = 2.0
@@ -72,11 +66,6 @@ func _build_station_low() -> void:
 	_build_platform(s_plat_start, s_plat_end, true, -1.0)
 	_build_bumper(s_bumper, true)
 	_build_ceiling_lights(s_plat_start, s_plat_end)
-	_build_station_signage(
-		s_plat_start + platform_length * 0.5,
-		name_txt, alt_txt, direction_txt,
-		true
-	)
 
 
 # ---------------------------------------------------------------------------
@@ -84,10 +73,6 @@ func _build_station_low() -> void:
 # ---------------------------------------------------------------------------
 
 func _build_station_high() -> void:
-	var name_txt: String = "GRANDE MOTTE"
-	var alt_txt: String = "ALT. 3032 m"
-	var direction_txt: String = _t("VAL CLARET 2111 m ←", "VAL CLARET 2111 m ←")
-
 	var s_bumper: float = PNConstants.LENGTH - 0.4   # collé contre la fin du tunnel
 	var s_plat_end: float = PNConstants.LENGTH - 1.0
 	var s_plat_start: float = s_plat_end - platform_length
@@ -96,11 +81,6 @@ func _build_station_high() -> void:
 	_build_platform(s_plat_start, s_plat_end, false, -1.0)
 	_build_bumper(s_bumper, false)
 	_build_ceiling_lights(s_plat_start, s_plat_end)
-	_build_station_signage(
-		s_plat_start + platform_length * 0.5,
-		name_txt, alt_txt, direction_txt,
-		false
-	)
 
 
 # ---------------------------------------------------------------------------
@@ -195,61 +175,6 @@ func _build_platform(s_start: float, s_end: float, is_low: bool, side: float = 1
 	mi_noses.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(mi_noses)
 
-	# --- Garde-corps côté voie (poteaux + main courante inclinée) ---------
-	var post_spacing: float = 1.9
-	var n_posts: int = maxi(2, int((s_end - s_start) / post_spacing) + 1)
-	var lat_rail: float = side * (platform_inner_x + 0.06)
-
-	var post_mesh: CylinderMesh = CylinderMesh.new()
-	post_mesh.top_radius = 0.022
-	post_mesh.bottom_radius = 0.022
-	post_mesh.height = railing_height
-	post_mesh.radial_segments = 8
-	post_mesh.material = rail_mat
-
-	var mm_posts: MultiMesh = MultiMesh.new()
-	mm_posts.transform_format = MultiMesh.TRANSFORM_3D
-	mm_posts.mesh = post_mesh
-	mm_posts.instance_count = n_posts
-
-	var rail_seg_mesh: CylinderMesh = CylinderMesh.new()
-	rail_seg_mesh.top_radius = 0.028
-	rail_seg_mesh.bottom_radius = 0.028
-	rail_seg_mesh.height = post_spacing + 0.15
-	rail_seg_mesh.radial_segments = 8
-	rail_seg_mesh.material = rail_mat
-
-	var mm_rails: MultiMesh = MultiMesh.new()
-	mm_rails.transform_format = MultiMesh.TRANSFORM_3D
-	mm_rails.mesh = rail_seg_mesh
-	mm_rails.instance_count = n_posts
-
-	var rot_along: Basis = Basis(Vector3(1, 0, 0), PI * 0.5)
-	for i in range(n_posts):
-		var s_p: float = minf(s_start + float(i) * post_spacing, s_end)
-		var xf: Transform3D = tunnel.transform_at(s_p)
-		var base: Vector3 = xf.origin + xf.basis.x * lat_rail \
-			+ xf.basis.y * y_top_local
-		# Poteau vertical monde
-		var post_c: Vector3 = base + Vector3.UP * (railing_height * 0.5)
-		mm_posts.set_instance_transform(i, Transform3D(Basis(), post_c))
-		# Main courante : segment INCLINÉ le long de la pente (cylindre Y →
-		# Z local du ring via rotation X 90° dans la base du ring)
-		var rail_c: Vector3 = base + Vector3.UP * railing_height
-		mm_rails.set_instance_transform(
-			i, Transform3D(xf.basis * rot_along, rail_c))
-
-	var mi_posts: MultiMeshInstance3D = MultiMeshInstance3D.new()
-	mi_posts.name = "PlatformPosts_%s_%s" % [sta, side_name]
-	mi_posts.multimesh = mm_posts
-	mi_posts.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	add_child(mi_posts)
-
-	var mi_rails: MultiMeshInstance3D = MultiMeshInstance3D.new()
-	mi_rails.name = "PlatformRails_%s_%s" % [sta, side_name]
-	mi_rails.multimesh = mm_rails
-	mi_rails.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	add_child(mi_rails)
 
 
 # ---------------------------------------------------------------------------
@@ -342,88 +267,6 @@ func _build_ceiling_lights(s_start: float, s_end: float) -> void:
 		add_child(neon)
 
 		s += spacing
-
-
-# ---------------------------------------------------------------------------
-# Signalétique — Label3D suspendu + fond cadre
-# ---------------------------------------------------------------------------
-
-func _build_station_signage(
-	s: float, name_txt: String, alt_txt: String, direction_txt: String, is_low: bool,
-) -> void:
-	var xform: Transform3D = tunnel.transform_at(s)
-	var y_sign: float = ceiling_height - 0.8
-
-	# Cadre panneau : fond sombre
-	var frame_mat: StandardMaterial3D = StandardMaterial3D.new()
-	frame_mat.albedo_color = Color(0.08, 0.10, 0.14)
-	frame_mat.roughness = 0.3
-	frame_mat.metallic = 0.6
-
-	var frame: MeshInstance3D = MeshInstance3D.new()
-	var frame_mesh: BoxMesh = BoxMesh.new()
-	frame_mesh.size = Vector3(3.2, 0.70, 0.08)
-	frame_mesh.material = frame_mat
-	frame.mesh = frame_mesh
-	frame.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	var tr_frame: Transform3D = xform
-	tr_frame.origin += xform.basis.y * y_sign
-	# Signage perpendiculaire à l'axe voyage : on garde l'orientation du ring
-	# (right = X local, face visible vers +Z local — le train arrive depuis ±Z)
-	frame.transform = tr_frame
-	add_child(frame)
-
-	# Nom station — grand. Billboard enabled : toujours face caméra, lisible quel
-	# que soit l'angle (signalétique lumineuse, pas un vrai panneau texturé).
-	var name_label: Label3D = Label3D.new()
-	name_label.text = name_txt
-	name_label.font_size = 140
-	name_label.pixel_size = 0.008
-	name_label.modulate = Color(1.0, 0.85, 0.25)
-	name_label.outline_size = 10
-	name_label.outline_modulate = Color(0.0, 0.0, 0.0)
-	name_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	name_label.shaded = false
-	name_label.double_sided = true
-	var tr_name: Transform3D = xform
-	tr_name.origin += xform.basis.y * (y_sign + 0.20)
-	name_label.transform = tr_name
-	add_child(name_label)
-
-	# Altitude — petit
-	var alt_label: Label3D = Label3D.new()
-	alt_label.text = alt_txt
-	alt_label.font_size = 90
-	alt_label.pixel_size = 0.007
-	alt_label.modulate = Color(0.95, 0.95, 0.95)
-	alt_label.outline_size = 7
-	alt_label.outline_modulate = Color(0.0, 0.0, 0.0)
-	alt_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	alt_label.shaded = false
-	alt_label.double_sided = true
-	var tr_alt: Transform3D = xform
-	tr_alt.origin += xform.basis.y * (y_sign - 0.25)
-	alt_label.transform = tr_alt
-	add_child(alt_label)
-
-	# Direction — plus petit, décalé le long du quai
-	var dir_label: Label3D = Label3D.new()
-	dir_label.text = direction_txt
-	dir_label.font_size = 60
-	dir_label.pixel_size = 0.006
-	dir_label.modulate = Color(0.60, 0.90, 1.0)
-	dir_label.outline_size = 6
-	dir_label.outline_modulate = Color(0.0, 0.0, 0.0)
-	dir_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	dir_label.shaded = false
-	dir_label.double_sided = true
-	var s_dir: float = s + (12.0 if is_low else -12.0)
-	var xform_dir: Transform3D = tunnel.transform_at(s_dir)
-	var tr_dir: Transform3D = xform_dir
-	tr_dir.origin += xform_dir.basis.y * (ceiling_height - 0.9)
-	dir_label.transform = tr_dir
-	add_child(dir_label)
-
 
 # ---------------------------------------------------------------------------
 # Helpers
