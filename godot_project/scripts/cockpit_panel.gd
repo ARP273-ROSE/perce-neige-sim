@@ -367,11 +367,16 @@ func _draw_slope_profile(x: float, y: float, w: float, h: float) -> void:
 
 
 # Point (px) sur la courbe du mini-profil pour une fraction 0..1 de la ligne.
+# Interpolation CONTINUE entre les échantillons de 50 m — l'ancien snap au
+# point le plus proche faisait sauter les rames de ~4 px par à-coups
+# (retour d'essai iPad 2026-07-12).
 func _profile_plot_point(frac: float, plot_x: float, plot_y: float, plot_w: float, plot_h: float) -> Vector2:
 	if slope_profile_pts.is_empty():
 		return Vector2(plot_x + frac * plot_w, plot_y + plot_h)
-	var idx: int = clampi(int(round(frac * float(slope_profile_pts.size() - 1))), 0, slope_profile_pts.size() - 1)
-	var sp: Vector2 = slope_profile_pts[idx]
+	var fidx: float = clampf(frac, 0.0, 1.0) * float(slope_profile_pts.size() - 1)
+	var i0: int = int(floor(fidx))
+	var i1: int = mini(i0 + 1, slope_profile_pts.size() - 1)
+	var sp: Vector2 = slope_profile_pts[i0].lerp(slope_profile_pts[i1], fidx - float(i0))
 	return Vector2(plot_x + sp.x * plot_w, plot_y + plot_h - sp.y * plot_h)
 
 
