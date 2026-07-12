@@ -82,6 +82,13 @@ func _populate() -> void:
 # Éteint les OmniLight3D loin des deux rames (rame 1 à s_cabin, rame 2 à
 # LENGTH - s_cabin). À appeler à basse fréquence (~2 Hz) depuis main.gd —
 # inutile de le faire à 60 Hz, une rame parcourt < 7 m entre deux appels.
+#
+# Allumage PROGRESSIF (retour d'essai iPad 2026-07-12) : l'énergie monte
+# en fondu sur les LIGHT_FADE_M derniers mètres avant la limite de
+# culling au lieu d'un tout-ou-rien — les néons ne « poppent » plus par
+# salves à l'approche, et light_energy est un simple uniform (pas cher).
+const LIGHT_FADE_M: float = 60.0
+
 func update_light_culling(s_cabin: float) -> void:
 	var cull: float = LIGHT_CULL_DIST_WEB if OS.has_feature("web") else LIGHT_CULL_DIST
 	var s_ghost: float = PNConstants.LENGTH - s_cabin
@@ -89,7 +96,10 @@ func update_light_culling(s_cabin: float) -> void:
 		var light: OmniLight3D = entry[0]
 		var ls: float = entry[1]
 		var d: float = minf(absf(ls - s_cabin), absf(ls - s_ghost))
-		light.visible = d < cull
+		var k: float = clampf((cull - d) / LIGHT_FADE_M, 0.0, 1.0)
+		light.visible = k > 0.01
+		if light.visible:
+			light.light_energy = light_energy * k
 
 
 func _add_neon(s: float, mesh: BoxMesh, neon_mat: StandardMaterial3D,
