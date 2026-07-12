@@ -14,6 +14,13 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 
 ## Quoi de neuf — v1.12.x (audit + retours d'essai terrain, juillet 2026)
 
+**v1.12.8** — vue 3D : rebond élastique du câble à l'arrêt en gare basse
+(±31 cm, T ≈ 6 s, amorti — millimétrique en gare haute : l'asymétrie sort
+de la longueur du câble), arrivée temporisée 15 s frein tambour serré
+avant l'ouverture des portes, sélecteur de scénario au démarrage (gare de
+départ + rame 1/2), boutons de conduite grisés en mode auto, bouton PANNE
+protégé (double-tap), habillage tactile nettoyé.
+
 **v1.12.7** — retours d'essai iPad/web généralisés au desktop :
 - **Annonces vocales réparées dans les builds exportés** (le viewer 3D
   autonome n'en jouait aucune depuis toujours : le scan des MP3 ne voyait
