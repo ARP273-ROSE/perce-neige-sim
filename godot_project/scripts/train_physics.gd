@@ -207,8 +207,14 @@ func step(dt: float) -> void:
 
 	# Auto-park (chaîne de sécurité Von Roll, comme le PC) : train
 	# immobilisé sous frein d'urgence → le tambour se réengage seul pour
-	# qu'il ne reparte pas sur la pente.
+	# qu'il ne reparte pas sur la pente. (Relâché avec l'urgence par
+	# release_emergency si le voyage est en cours — reprise en tunnel.)
 	if emergency and absf(v) < 0.05 and not maint_brake:
+		maint_brake = true
+	# Ceinture + bretelles (verrou v1.12.6 du PC) : rame immobile HORS
+	# séquence de voyage et hors urgence → tambour réengagé (le drum ne se
+	# lève qu'au collage du contacteur, fin de buzzer).
+	if not trip_started and not emergency and absf(v) < 0.05 and not maint_brake:
 		maint_brake = true
 
 	# Intégration
@@ -493,12 +499,63 @@ var departure_buzzer_remaining: float = 0.0
 var door_phase_remaining: float = 0.0
 
 
+# La rame est-elle à quai (fenêtre ±5 m autour des points d'arrêt) ?
+# Sert aux interlocks portes/buzzer : les buzzers sont des haut-parleurs
+# PHYSIQUES sur les quais — inaudibles (et sans objet) en plein tunnel.
+func at_station() -> bool:
+	return s <= PNConstants.START_S + 5.0 or s >= PNConstants.STOP_S - 5.0
+
+
 func request_depart() -> void:
 	if trip_started or announce_phase_remaining > 0.0 \
 			or departure_buzzer_remaining > 0.0 \
 			or door_phase_remaining > 0.0:
 		return
-	announce_phase_remaining = ANNOUNCE_PHASE_S
+	if at_station() or doors_open:
+		# Séquence complète : annonce → fermeture portes → buzzer.
+		announce_phase_remaining = ANNOUNCE_PHASE_S
+	else:
+		# Reprise EN TUNNEL (après inversion de sens / arrêt anormal) :
+		# portes déjà fermées, pas de buzzer de quai — courte tempo
+		# silencieuse puis traction, comme le PC (« Resuming mid-tunnel —
+		# no buzzer », 1,5 s).
+		departure_buzzer_remaining = 1.5
+
+
+# Inversion du sens de marche — port de reverse_trip() du PC (touche I) :
+# autorisé à l'ARRÊT TOTAL uniquement, à quai comme en plein tunnel (cas
+# d'usage réel : panne en voie → on redescend chercher la gare). La rame
+# garde sa position, le tambour se réengage le temps du protocole, et le
+# conducteur relance par PRÊT/DÉPART (sans buzzer si en tunnel). Retourne
+# true si l'inversion a eu lieu (l'appelant joue l'annonce « retour en
+# gare » et log l'événement).
+func reverse_trip() -> bool:
+	if absf(v) >= 0.1:
+		return false
+	direction = -direction
+	v = 0.0
+	a = 0.0
+	speed_cmd = 0.0
+	speed_cmd_eff = 0.0
+	throttle = 0.0
+	brake = 0.0
+	maint_brake = true
+	trip_started = false
+	finished = false
+	trip_time = 0.0
+	rebound_timer = -1.0
+	turnaround_delay_remaining = 0.0
+	announce_phase_remaining = 0.0
+	departure_buzzer_remaining = 0.0
+	door_phase_remaining = 0.0
+	# Portes : ouvertes UNIQUEMENT si on inverse à quai (embarquement,
+	# avec rotation passagers) ; en tunnel elles restent fermées — on
+	# n'ouvre pas sur un tube de 3 m.
+	if at_station():
+		doors_open = true
+		roll_pax()
+	print("[Physics] inversion du sens — direction %d, s=%.0f" % [direction, s])
+	return true
 
 
 func start_trip() -> void:
@@ -517,3 +574,13 @@ func end_trip() -> void:
 func release_emergency() -> void:
 	emergency = false
 	emergency_ramp = 0.0
+	# Comme le PC (keyReleaseEvent Shift) : le tambour, réengagé par
+	# l'auto-park pendant l'arrêt d'urgence, est relâché AVEC l'urgence
+	# quand la rame est immobilisée EN VOIE (voyage en cours, portes
+	# fermées) — le régulateur reprend la charge et la conduite peut
+	# repartir. Sans ça : tambour serré à vie après un arrêt d'urgence
+	# en tunnel, impossible de repartir (retour d'essai PWA 2026-07-12).
+	# À quai hors voyage, le tambour RESTE serré : c'est la séquence
+	# PRÊT/DÉPART (buzzer → start_trip) qui le lèvera.
+	if trip_started and not doors_open and absf(v) < 0.1:
+		maint_brake = false

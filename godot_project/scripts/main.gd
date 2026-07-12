@@ -615,7 +615,7 @@ func _handle_continuous_input(delta: float) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	# Pannes + auto-exploitation
+	# Pannes + auto-exploitation + inversion de sens
 	if event is InputEventKey and event.pressed and not event.echo:
 		if event.keycode == KEY_F1 and fault_manager != null:
 			fault_manager.trigger_random()
@@ -623,3 +623,24 @@ func _unhandled_input(event: InputEvent) -> void:
 			fault_manager.clear_active()
 		elif event.keycode == KEY_F3 and auto_operator != null:
 			auto_operator.toggle()
+		elif event.keycode == KEY_I:
+			do_reverse()
+
+
+# Inversion du sens de marche (touche I / bouton INVERSER) — cas d'usage :
+# panne en plein tunnel, on fait demi-tour pour revenir à la gare. Comme le
+# PC : arrêt total requis, annonce « retour en gare », puis PRÊT/DÉPART
+# relance (sans buzzer en tunnel). En mode AUTO, l'automate se recale et
+# relance le départ tout seul.
+func do_reverse() -> void:
+	if client_mode or physics == null:
+		return
+	if not physics.reverse_trip():
+		print("[Reverse] refusé — rame pas à l'arrêt (v=%.2f m/s)" % physics.v)
+		return
+	if announcements != null:
+		announcements.play_now("return_station")
+	if exploitation_log != null:
+		exploitation_log.end_trip(false)
+	if auto_operator != null and auto_operator.enabled:
+		auto_operator._enter_initial_state()
