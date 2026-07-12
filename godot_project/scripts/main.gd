@@ -112,98 +112,16 @@ func _ready() -> void:
 			touch.name = "TouchControls"
 			touch.setup(self)   # accès direct AUTO/PANNE + reflet d'état
 			add_child(touch)
-		# Web : le navigateur exige un geste utilisateur pour débloquer
-		# l'audio — et ce premier tap atterrissait parfois PILE sur le
-		# bouton PRÊT/DÉPART → séquence de départ lancée « toute seule »
-		# à l'allumage (retour d'essai Android 2026-07). Un voile plein
-		# écran avale ce premier tap.
-		if OS.has_feature("web"):
-			_build_web_start_overlay()
-			_install_web_audio_probe()
+		# Web : le déverrouillage audio (reprise des AudioContext dans le
+		# geste utilisateur + audioSession 'playback' anti-mode-silencieux
+		# iPad) est géré par le hook JS injecté via html/head_include du
+		# preset d'export — plus de voile ni de bip de test (retirés à la
+		# demande de Kevin, essai iPad 2026-07-12).
 		if "--autotest" in OS.get_cmdline_user_args():
 			auto_operator.enabled = true
 			auto_operator._enter_initial_state()
 			print("[Autotest] auto-exploitation forcée ON")
 	print("[PerceNeige3D] Ready.")
-
-
-# Voile de démarrage web : couche au-dessus de tout, consomme le premier
-# tap (qui déclenche aussi la reprise du contexte audio du navigateur)
-# puis disparaît.
-func _build_web_start_overlay() -> void:
-	var layer: CanvasLayer = CanvasLayer.new()
-	layer.name = "WebStartOverlay"
-	layer.layer = 100
-	add_child(layer)
-	var veil: ColorRect = ColorRect.new()
-	veil.color = Color(0.0, 0.0, 0.0, 0.55)
-	veil.set_anchors_preset(Control.PRESET_FULL_RECT)
-	veil.mouse_filter = Control.MOUSE_FILTER_STOP
-	layer.add_child(veil)
-	var lbl: Label = Label.new()
-	lbl.text = "TOUCHEZ L'ÉCRAN POUR DÉMARRER\n\nbuild 2026-07-12e — un bip confirme l'audio"
-	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	lbl.add_theme_font_size_override("font_size", 30)
-	lbl.add_theme_color_override("font_color", Color(1.0, 0.85, 0.30))
-	lbl.add_theme_color_override("font_outline_color", Color.BLACK)
-	lbl.add_theme_constant_override("outline_size", 6)
-	lbl.set_anchors_preset(Control.PRESET_CENTER)
-	lbl.grow_horizontal = Control.GROW_DIRECTION_BOTH
-	lbl.grow_vertical = Control.GROW_DIRECTION_BOTH
-	veil.add_child(lbl)
-	veil.gui_input.connect(func(event: InputEvent) -> void:
-		if (event is InputEventScreenTouch and not event.pressed) \
-				or (event is InputEventMouseButton and not event.pressed):
-			layer.queue_free())
-
-
-# Bip de diagnostic : écouteur DOM NATIF installé au boot, déclenché au
-# premier touchend/mouseup. Contrairement à un eval depuis gui_input
-# (Godot traite ses événements dans la boucle de rendu, DONC HORS du
-# geste utilisateur au sens Safari → resume() bloqué : c'était le défaut
-# du 1er bip), celui-ci s'exécute dans la vraie pile du geste. L'état du
-# contexte est publié dans window.__pn_audio_state, affiché par le HUD.
-func _install_web_audio_probe() -> void:
-	if not OS.has_feature("web"):
-		return
-	JavaScriptBridge.eval("""
-		(function(){
-			if (window.__pn_beep_installed) return;
-			window.__pn_beep_installed = true;
-			window.__pn_audio_state = 'attente geste';
-			var handler = function(){
-				document.removeEventListener('touchend', handler, true);
-				document.removeEventListener('mouseup', handler, true);
-				try {
-					var C = window.AudioContext || window.webkitAudioContext;
-					var c = new C();
-					var go = function(){
-						window.__pn_audio_state = c.state;
-						var o = c.createOscillator();
-						var g = c.createGain();
-						g.gain.value = 0.6;
-						o.frequency.value = 880;
-						o.connect(g); g.connect(c.destination);
-						o.start();
-						setTimeout(function(){ o.frequency.value = 440; }, 500);
-						setTimeout(function(){
-							o.stop();
-							window.__pn_audio_state = c.state + ' (bip joue)';
-							c.close();
-						}, 1000);
-					};
-					if (c.state === 'running') go();
-					else c.resume().then(go, function(){
-						window.__pn_audio_state = 'resume rejete';
-					});
-				} catch (e) {
-					window.__pn_audio_state = 'erreur ' + e;
-				}
-			};
-			document.addEventListener('touchend', handler, true);
-			document.addEventListener('mouseup', handler, true);
-		})();
-	""", true)
 
 	# Diagnostic : --mesh-stats en arg projet → imprime le nombre de vertices
 	# par nœud et le total, puis continue normalement. Sert à vérifier que le
@@ -499,15 +417,6 @@ func _process(delta: float) -> void:
 	if _light_cull_accum >= 0.5:
 		_light_cull_accum = 0.0
 		lights.update_light_culling(physics.s)
-		# Diag audio web : états des contextes du MOTEUR (capturés par le
-		# hook head_include) + celui de la sonde bip, relayés vers le HUD.
-		# Ex. « suspended | running (bip joue) » = le contexte Godot n'est
-		# jamais déverrouillé alors que l'appareil est sain.
-		if OS.has_feature("web") and hud != null:
-			var st: Variant = JavaScriptBridge.eval(
-				"(window.__pn_ctxs||[]).map(function(c){return c.state}).join('/')" +
-				" + ' | ' + (window.__pn_audio_state||'')", true)
-			hud.web_audio_state = str(st) if st != null else ""
 
 	# Masquage dynamique des brins de câble selon la position des rames
 	# (s_render : suit la cabine interpolée, sinon le câble « vibre »
