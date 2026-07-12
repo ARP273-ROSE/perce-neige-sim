@@ -47,9 +47,34 @@ var path_points: Array = []                  # Vector3[] — positions monde
 var path_tangents: Array = []                # Vector3[] — direction locale
 var path_curve: Curve3D = null               # spline Catmull-Rom pour sampling smooth
 
+# Matériau béton partagé par TOUTES les sections de paroi — mémorisé pour
+# pouvoir le rendre translucide en vue extérieure (voir set_wall_see_through).
+var wall_material: StandardMaterial3D = null
+
 
 func _ready() -> void:
 	_build()
+
+
+# Rend les parois du tunnel translucides (vue extérieure : on veut voir la
+# rame À L'INTÉRIEUR du tube) ou opaques (vue cockpit). Toutes les sections
+# partagent wall_material → un seul réglage suffit.
+func set_wall_see_through(on: bool) -> void:
+	if wall_material == null:
+		return
+	var c: Color = wall_material.albedo_color
+	if on:
+		wall_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		c.a = 0.22
+		# Ne dessiner que les faces arrière : la paroi la plus proche de la
+		# caméra disparaît, on voit direct l'intérieur sans double couche
+		# translucide qui grisonne tout.
+		wall_material.cull_mode = BaseMaterial3D.CULL_FRONT
+	else:
+		wall_material.transparency = BaseMaterial3D.TRANSPARENCY_DISABLED
+		c.a = 1.0
+		wall_material.cull_mode = BaseMaterial3D.CULL_DISABLED
+	wall_material.albedo_color = c
 
 
 func _build() -> void:
@@ -67,6 +92,7 @@ func _build() -> void:
 	mat.roughness = 0.95                         # très mat (était 0.88)
 	mat.metallic = 0.0
 	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	wall_material = mat
 	# UV plus fin pour densifier les détails de noise procédural si une
 	# texture future est branchée (UV_scale=8,4 → environ 1 cycle par
 	# 0.5 m de tunnel, échelle réaliste pour des taches d'humidité)
