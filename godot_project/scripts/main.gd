@@ -67,10 +67,13 @@ func _ready() -> void:
 		# Compatibility → SDFGI/fog volumétrique/SSR n'existent pas,
 		# on force le préréglage low pour rester cohérent.
 		quality = "low"
-		# iPad Pro ProMotion : requestAnimationFrame tourne à 120 Hz →
-		# charge GPU doublée et alternance 120/60 irrégulière perçue
-		# comme des saccades dans le tunnel (retour d'essai 2026-07).
-		Engine.max_fps = 60
+		# iPad Pro ProMotion : capper à 60 fps donnait une cadence
+		# 1-vsync/2-vsync irrégulière (rails toujours saccadés, retour
+		# d'essai 2026-07-12) → rendu au taux natif de l'écran (120 Hz),
+		# et la facture GPU est payée par un rendu 3D à 70 % upscalé
+		# bilinéaire (l'UI reste à la résolution native).
+		get_viewport().scaling_3d_mode = Viewport.SCALING_3D_MODE_BILINEAR
+		get_viewport().scaling_3d_scale = 0.7
 	if client_mode:
 		print("[PerceNeige3D] CLIENT MODE — physique pilotée par le sim Python")
 	if quality != "high":
@@ -137,7 +140,7 @@ func _build_web_start_overlay() -> void:
 	veil.mouse_filter = Control.MOUSE_FILTER_STOP
 	layer.add_child(veil)
 	var lbl: Label = Label.new()
-	lbl.text = "TOUCHEZ L'ÉCRAN POUR DÉMARRER\n\nbuild 2026-07-12b — un bip confirme l'audio"
+	lbl.text = "TOUCHEZ L'ÉCRAN POUR DÉMARRER\n\nbuild 2026-07-12c — un bip confirme l'audio"
 	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	lbl.add_theme_font_size_override("font_size", 30)
 	lbl.add_theme_color_override("font_color", Color(1.0, 0.85, 0.30))
@@ -177,15 +180,16 @@ func _install_web_audio_probe() -> void:
 						window.__pn_audio_state = c.state;
 						var o = c.createOscillator();
 						var g = c.createGain();
-						g.gain.value = 0.2;
-						o.frequency.value = 660;
+						g.gain.value = 0.6;
+						o.frequency.value = 880;
 						o.connect(g); g.connect(c.destination);
 						o.start();
+						setTimeout(function(){ o.frequency.value = 440; }, 500);
 						setTimeout(function(){
 							o.stop();
 							window.__pn_audio_state = c.state + ' (bip joue)';
 							c.close();
-						}, 400);
+						}, 1000);
 					};
 					if (c.state === 'running') go();
 					else c.resume().then(go, function(){
@@ -494,9 +498,14 @@ func _process(delta: float) -> void:
 	if _light_cull_accum >= 0.5:
 		_light_cull_accum = 0.0
 		lights.update_light_culling(physics.s)
-		# Diag audio web : relaie l'état du contexte de test vers le HUD
+		# Diag audio web : états des contextes du MOTEUR (capturés par le
+		# hook head_include) + celui de la sonde bip, relayés vers le HUD.
+		# Ex. « suspended | running (bip joue) » = le contexte Godot n'est
+		# jamais déverrouillé alors que l'appareil est sain.
 		if OS.has_feature("web") and hud != null:
-			var st: Variant = JavaScriptBridge.eval("window.__pn_audio_state || ''", true)
+			var st: Variant = JavaScriptBridge.eval(
+				"(window.__pn_ctxs||[]).map(function(c){return c.state}).join('/')" +
+				" + ' | ' + (window.__pn_audio_state||'')", true)
 			hud.web_audio_state = str(st) if st != null else ""
 
 	# Masquage dynamique des brins de câble selon la position des rames
