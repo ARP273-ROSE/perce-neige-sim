@@ -89,7 +89,7 @@ try:
 except ImportError:
     _GODOT_BRIDGE_OK = False
 
-VERSION = "1.12.11"
+VERSION = "1.12.12"
 APP_NAME = "Perce-Neige Simulator"
 
 
@@ -865,9 +865,13 @@ class Physics:
         f_motor_max = min(F_STALL, f_motor_power_cap)
         f_motor = tr.throttle * f_motor_max * tr.direction
 
-        # Don't pump power if already at limit.
-        if tr.v * tr.direction >= v_limit and f_motor * tr.direction > 0:
-            f_motor = 0.0
+        # Don't pump power at the limit — FONDU sur 0,25 m/s au-delà de
+        # v_limit au lieu de la coupure sèche : le tout-ou-rien hachait la
+        # force moteur à 60 Hz dès que v effleurait la limite (à-coups de
+        # puissance sur les jauges, flagrant sous plafond de panne).
+        if f_motor * tr.direction > 0:
+            f_motor *= max(0.0, min(1.0,
+                (v_limit + 0.25 - tr.v * tr.direction) / 0.25))
 
         # Door interlock : no traction while the doors are physically open.
         # Real Perce-Neige : the drive contactor is wired to the door-closed
@@ -1033,7 +1037,8 @@ class Physics:
         # cascade de survitesse (+10/+12/+20 %) ne pouvait JAMAIS se
         # déclencher, même en emballement réel.
         drive_path_ok = not tr.cable_rupture and not tr.aux_power_fault
-        if new_v * tr.direction > v_limit and f_motor == 0 and drive_path_ok:
+        if (new_v * tr.direction > v_limit
+                and f_motor * tr.direction <= 1000.0 and drive_path_ok):
             excess = new_v * tr.direction - v_limit
             bleed = min(excess, 1.5 * dt)
             new_v -= bleed * tr.direction
@@ -1241,7 +1246,10 @@ class Physics:
         # ~42 kWh récupérés par descente chargée (datasheet CFD) — jamais
         # affiché auparavant (f_motor·v ne devient jamais négatif : le
         # throttle est toujours ≥ 0 dans le sens de marche).
-        if (f_motor == 0.0 and not tr.emergency and drive_path_ok
+        # Seuil 2 000 N (et plus f_motor == 0.0 exact) : avec les fondus
+        # d'autorité et de limite, la force moteur frôle zéro sans y être.
+        if (f_motor * tr.direction < 2000.0 and not tr.emergency
+                and drive_path_ok
                 and f_grav_net * tr.direction > 0.0 and abs(tr.v) > 0.3):
             f_retenue = ((a_pre_cap - a) * tr.direction * m_total
                          + a_brk * m_total)
@@ -1568,15 +1576,16 @@ class Physics:
             k_p = 0.18  # brake/throttle per m/s error
             demand_throttle = max(0.0, min(1.0, ff_throttle + err * k_p))
             demand_brake = max(0.0, min(1.0, ff_brake - err * k_p))
-            # EXCÉDENT DE GRAVITÉ (f_ff ≤ 0 : la gravité pousse déjà plus
-            # fort que le frottement dans le sens de marche — typiquement
-            # rame lourde en descente après une inversion en tunnel) : le
-            # moteur reste COUPÉ, la gravité accélère (bridée par la rampe
-            # de confort = retenue de l'entraînement) et le frein module.
-            # Sans ce verrou, le terme P mettait plein gaz pendant le
-            # rattrapage de consigne → traction fantôme sur les jauges.
-            if f_ff <= 0.0:
-                demand_throttle = 0.0
+            # EXCÉDENT DE GRAVITÉ : quand la gravité pousse déjà plus fort
+            # que le frottement dans le sens de marche (rame lourde en
+            # descente), le moteur n'a rien à faire — la gravité accélère
+            # (bridée par la rampe de confort = retenue) et le frein
+            # module. L'AUTORITÉ de traction s'éteint en FONDU sur
+            # 6 000 N d'excédent (pleine à f_ff ≥ 0, nulle à −6 000 N) :
+            # un tout-ou-rien claquerait la traction on/off au passage
+            # par zéro (points d'équilibre du profil asymétrique).
+            authority = max(0.0, min(1.0, 1.0 + f_ff / 6000.0))
+            demand_throttle *= authority
             # Resolve conflict : if both are non-zero (shouldn't happen
             # algebraically but keep a safety net) the larger wins and
             # the other collapses to zero so the control authority isn't
