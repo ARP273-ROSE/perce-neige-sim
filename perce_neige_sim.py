@@ -89,7 +89,7 @@ try:
 except ImportError:
     _GODOT_BRIDGE_OK = False
 
-VERSION = "1.12.10"
+VERSION = "1.12.11"
 APP_NAME = "Perce-Neige Simulator"
 
 
@@ -982,6 +982,10 @@ class Physics:
         # emergency stop. Uses a soft-start profile so the train pulls out
         # gently from standstill and ramps to full A_MAX_REG progressively,
         # matching the Von Roll S-curve launch logic.
+        # a_pre_cap mémorisé : l'écart (a_pre_cap − a) est la retenue
+        # active de l'entraînement quand la gravité pousse plus fort que
+        # la rampe — puissance RÉGÉNÉRÉE, affichée plus bas.
+        a_pre_cap = a
         if not tr.emergency and tr.brake < 0.05:
             v_abs = abs(tr.v)
             soft_cap = A_START + (A_MAX_REG - A_START) * min(
@@ -1109,22 +1113,23 @@ class Physics:
         #     de la section à 30 %, proche du nominal — cohérent).
         #   - frottement + inertie de traction.
         m_heavy = max(m_up, m_down)
-        s_heavy = tr.s if m_up >= m_down else (LENGTH - tr.s)
+        main_is_heavy = m_up >= m_down
+        s_heavy = tr.s if main_is_heavy else (LENGTH - tr.s)
         theta_h = math.atan(gradient_at(s_heavy))
-        # Acceleration in the travel direction : +: accelerating,
-        # -: decelerating (motor easing off or braking).
-        a_travel = a * tr.direction
         t_gravity = m_heavy * G * math.sin(theta_h)
         t_friction = MU_ROLL * m_heavy * G * math.cos(theta_h)
         # Poids du brin de câble entre la rame lourde et la poulie motrice
         # (gare haute) : composante le long de la pente = ρ·g·(alt_haut −
         # alt_rame), exact quel que soit le profil (∫ρg·sinθ·ds = ρg·Δh).
         t_cable = CABLE_KG_M * G * max(0.0, ALT_HIGH - geom_at(s_heavy)[1])
-        # Only add inertia when the motor is pulling harder than gravity
-        # (accelerating in the travel direction). During deceleration or
-        # braking the cable is NOT the force path, so tension does not
-        # rise — the wheel brake or natural gravity coast absorb it.
-        t_inertia = max(0.0, m_heavy * a_travel)
+        # Inertie SIGNÉE par l'accélération de la rame lourde le long de
+        # SA pente (Newton sur la rame pendue au brin : T = m·g·sinθ +
+        # m·a_s). Rame lourde qui monte en accélérant → +T. Rame lourde
+        # qui DESCEND en accélérant (a_s < 0, cas typique : inversion de
+        # sens en tunnel) → le brin se DÉCHARGE. L'ancien
+        # max(0, a·direction) ajoutait à tort l'inertie dans ce cas.
+        a_s_heavy = a if main_is_heavy else -a
+        t_inertia = m_heavy * a_s_heavy
         tension_n = t_gravity + t_friction + t_cable + t_inertia
         tr.tension_dan = tension_n / 10.0
         # Apply persistent fault offsets so the gauge actually moves
@@ -1229,6 +1234,20 @@ class Physics:
             # Efficiency chain : bull wheel → DC machine → inverter → grid
             # is roughly 0.80 round-trip at full load.
             tr.regen_kw = -power_signed_kw * 0.80
+        # Retenue régénératrice : moteur coupé, la gravité pousse dans le
+        # sens de marche (rame lourde en descente) → l'entraînement retient
+        # via le câble. Force de retenue = excédent écrêté par la rampe de
+        # confort + frein de service en modulation. C'est le mécanisme des
+        # ~42 kWh récupérés par descente chargée (datasheet CFD) — jamais
+        # affiché auparavant (f_motor·v ne devient jamais négatif : le
+        # throttle est toujours ≥ 0 dans le sens de marche).
+        if (f_motor == 0.0 and not tr.emergency and drive_path_ok
+                and f_grav_net * tr.direction > 0.0 and abs(tr.v) > 0.3):
+            f_retenue = ((a_pre_cap - a) * tr.direction * m_total
+                         + a_brk * m_total)
+            if f_retenue > 0.0:
+                tr.regen_kw = f_retenue * abs(tr.v) * 0.80 / 1000.0
+                tr.power_kw = 0.0
         # Smoothed display values — EMA with τ ≈ 0.3 s avoids flicker
         alpha = min(1.0, dt / 0.3)
         tr.tension_dan_disp += (tr.tension_dan - tr.tension_dan_disp) * alpha
@@ -1435,11 +1454,18 @@ class Physics:
         m_main_r = tr.mass_kg
         m_ghost_r = TRAIN_EMPTY_KG + self.state.ghost_pax * PAX_KG
         m_total_r = m_main_r + m_ghost_r
-        dm_r = m_main_r - m_ghost_r
         g_slope_r = gradient_at(tr.s)
         theta_r = math.atan(g_slope_r)
-        # f_grav_s : net +s force on main from gravity imbalance.
-        f_grav_s = -dm_r * G * math.sin(theta_r)
+        theta_gr = math.atan(gradient_at(LENGTH - tr.s))
+        # f_grav_s : net +s force on main from gravity imbalance — avec la
+        # pente locale de CHAQUE rame, comme la physique. L'ancien
+        # raccourci mono-pente (−dm·g·sinθ_main) se trompait de SIGNE dès
+        # que l'asymétrie du profil l'emportait sur l'écart de masse (ex :
+        # rame chargée en bas de ligne à 22 % vs contrepoids vide à 29 %) —
+        # le feed-forward coupait alors la traction à tort et la rame
+        # dérivait vers l'équilibre au lieu de suivre la consigne.
+        f_grav_s = -(m_main_r * math.sin(theta_r)
+                     - m_ghost_r * math.sin(theta_gr)) * G
         # Projected onto travel direction : >0 means gravity accelerates
         # the train in the direction it's trying to go.
         f_grav_travel = f_grav_s * tr.direction
@@ -1526,7 +1552,8 @@ class Physics:
         # the train at target_v. Positive → motor must pull ; negative
         # → brake must resist gravity.
         f_ff = (-f_grav_travel
-                + MU_ROLL * m_total_r * G * math.cos(theta_r))
+                + MU_ROLL * G * (m_main_r * math.cos(theta_r)
+                                 + m_ghost_r * math.cos(theta_gr)))
         ff_throttle = max(0.0, f_ff) / max(f_motor_max, 1.0)
         ff_brake = max(0.0, -f_ff) / (A_BRAKE_NORMAL * m_total_r)
 
@@ -1541,6 +1568,15 @@ class Physics:
             k_p = 0.18  # brake/throttle per m/s error
             demand_throttle = max(0.0, min(1.0, ff_throttle + err * k_p))
             demand_brake = max(0.0, min(1.0, ff_brake - err * k_p))
+            # EXCÉDENT DE GRAVITÉ (f_ff ≤ 0 : la gravité pousse déjà plus
+            # fort que le frottement dans le sens de marche — typiquement
+            # rame lourde en descente après une inversion en tunnel) : le
+            # moteur reste COUPÉ, la gravité accélère (bridée par la rampe
+            # de confort = retenue de l'entraînement) et le frein module.
+            # Sans ce verrou, le terme P mettait plein gaz pendant le
+            # rattrapage de consigne → traction fantôme sur les jauges.
+            if f_ff <= 0.0:
+                demand_throttle = 0.0
             # Resolve conflict : if both are non-zero (shouldn't happen
             # algebraically but keep a safety net) the larger wins and
             # the other collapses to zero so the control authority isn't
