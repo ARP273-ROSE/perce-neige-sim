@@ -19,7 +19,9 @@ const BTN_FONT_BIG := 26
 
 var _main: Node = null          # référence à Main (AUTO / PANNE / état)
 var _b_auto: Button = null
+var _drive_buttons: Array = []  # boutons de conduite, grisés quand AUTO actif
 var _sync_accum: float = 0.0
+var _fault_tap_time: float = -10.0   # double-tap PANNE (anti fausse manip)
 
 
 func setup(main_node: Node) -> void:
@@ -39,7 +41,15 @@ func _process(delta: float) -> void:
 		return
 	_sync_accum = 0.0
 	if _b_auto != null and _main != null and _main.auto_operator != null:
-		_b_auto.set_pressed_no_signal(_main.auto_operator.enabled)
+		var auto_on: bool = _main.auto_operator.enabled
+		_b_auto.set_pressed_no_signal(auto_on)
+		# En AUTO, l'automate écrase la consigne chaque frame → les
+		# boutons de conduite sont sans effet : les griser pour que ce
+		# soit lisible (retour d'essai iPad : « les contrôles vitesse ne
+		# marchent pas » — AUTO était actif).
+		for b: Button in _drive_buttons:
+			b.disabled = auto_on
+			b.modulate.a = 0.35 if auto_on else 0.92
 
 
 func _mk_button(text: String, tip: String, big: bool = false) -> Button:
@@ -96,11 +106,13 @@ func _build() -> void:
 	b_up.custom_minimum_size = Vector2(132, 112)
 	_bind_hold(b_up, "speed_up")
 	left.add_child(b_up)
+	_drive_buttons.append(b_up)
 
 	var b_dn: Button = _mk_button("-\nVITESSE", "Réduire la consigne (maintenir)", true)
 	b_dn.custom_minimum_size = Vector2(132, 112)
 	_bind_hold(b_dn, "speed_down")
 	left.add_child(b_dn)
+	_drive_buttons.append(b_dn)
 
 	# --- Colonne DROITE : freins — décalée à GAUCHE du panneau salle des
 	# machines (~330 px) qui recouvrait les boutons au bord droit.
@@ -114,6 +126,7 @@ func _build() -> void:
 	b_brake.custom_minimum_size = Vector2(132, 112)
 	_bind_hold(b_brake, "brake")
 	right.add_child(b_brake)
+	_drive_buttons.append(b_brake)
 
 	var b_emerg: Button = _mk_button("URGENCE", "Arrêt d'urgence", true)
 	b_emerg.custom_minimum_size = Vector2(132, 112)
@@ -132,6 +145,7 @@ func _build() -> void:
 	b_go.position = Vector2(-125, -300)
 	_bind_tap(b_go, "ready_depart")
 	root.add_child(b_go)
+	_drive_buttons.append(b_go)
 
 	# --- Rangée haut-droite : boutons secondaires -------------------------
 	var top: HBoxContainer = HBoxContainer.new()
@@ -150,21 +164,9 @@ func _build() -> void:
 	_bind_tap(b_view, "toggle_view")
 	top.add_child(b_view)
 
-	# PANNE / AUTO : appel DIRECT du jeu (pas de synthèse clavier — plus
-	# fiable sur web) ; AUTO est un vrai bouton à bascule, vert quand
-	# l'exploitation automatique est active.
-	var b_fault: Button = _mk_button("PANNE",
-		"Déclencher une panne aléatoire — nouvel appui : lever la panne")
-	b_fault.custom_minimum_size = Vector2(102, 56)
-	b_fault.pressed.connect(func() -> void:
-		if _main == null or _main.fault_manager == null:
-			return
-		if _main.fault_manager.is_active():
-			_main.fault_manager.clear_active()
-		else:
-			_main.fault_manager.trigger_random())
-	top.add_child(b_fault)
-
+	# AUTO : appel DIRECT du jeu (pas de synthèse clavier — plus fiable
+	# sur web) ; vrai bouton à bascule, vert quand l'exploitation
+	# automatique est active.
 	_b_auto = _mk_button("AUTO",
 		"Exploitation automatique : embarquement ~30 s puis départ, " +
 		"trajets enchaînés. Vert = actif.")
@@ -174,3 +176,26 @@ func _build() -> void:
 		if _main != null and _main.auto_operator != null:
 			_main.auto_operator.toggle())
 	top.add_child(_b_auto)
+
+	# PANNE : isolé en HAUT-GAUCHE, loin d'AUTO — un doigt qui ratait
+	# AUTO déclenchait une panne (dont l'annonce « évacuation », retour
+	# d'essai iPad 2026-07-12) ; et DOUBLE-TAP requis (< 1,5 s) pour
+	# déclencher, un seul tap suffit pour la lever.
+	var b_fault: Button = _mk_button("PANNE",
+		"DOUBLE-TAP : déclencher une panne aléatoire — un tap : la lever")
+	b_fault.custom_minimum_size = Vector2(102, 56)
+	b_fault.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	b_fault.position = Vector2(320, 10)   # à droite du panneau status
+	b_fault.pressed.connect(func() -> void:
+		if _main == null or _main.fault_manager == null:
+			return
+		if _main.fault_manager.is_active():
+			_main.fault_manager.clear_active()
+			return
+		var now: float = Time.get_ticks_msec() / 1000.0
+		if now - _fault_tap_time < 1.5:
+			_main.fault_manager.trigger_random()
+			_fault_tap_time = -10.0
+		else:
+			_fault_tap_time = now)
+	root.add_child(b_fault)
