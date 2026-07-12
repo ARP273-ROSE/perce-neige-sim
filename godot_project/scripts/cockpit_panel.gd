@@ -62,6 +62,7 @@ func _build_slope_profile_points() -> void:
 # Redraw à ~15 Hz : le _draw() complet (jauges, profil, aiguilles) est
 # coûteux et 60 Hz n'apporte rien visuellement sur des instruments.
 var _redraw_accum: float = 0.0
+var _regen_mode: bool = false   # état hystérésis de la jauge puissance/régen
 
 
 func _process(delta: float) -> void:
@@ -226,9 +227,18 @@ func _draw_power_gauge(x: float, y: float, w: float, h: float) -> void:
 	draw_rect(Rect2(Vector2(x, y), Vector2(w, h)), bezel_color, false, 1.2)
 	# Mode RÉGEN : rame lourde retenue en descente → l'entraînement
 	# fonctionne en génératrice. La jauge bascule (titre + barre cyan)
-	# au lieu d'afficher une traction fantôme.
+	# au lieu d'afficher une traction fantôme. HYSTÉRÉSIS : on entre en
+	# RÉGEN à > 30 kW récupérés (traction < 15) et on n'en sort qu'en
+	# dessous de 15 kW (ou traction > 30) — un seuil simple faisait
+	# claquer le titre/la couleur au moindre frôlement.
 	var regen: float = physics.regen_kw_disp
-	var regen_mode: bool = regen > 10.0 and physics.power_kw_disp < 10.0
+	if _regen_mode:
+		if regen < 15.0 or physics.power_kw_disp > 30.0:
+			_regen_mode = false
+	else:
+		if regen > 30.0 and physics.power_kw_disp < 15.0:
+			_regen_mode = true
+	var regen_mode: bool = _regen_mode
 	_draw_text_center(Vector2(x + w * 0.5, y + 14),
 		"RÉGEN" if regen_mode else "PUISSANCE", 10,
 		Color(0.45, 0.85, 1.0) if regen_mode else label_color)

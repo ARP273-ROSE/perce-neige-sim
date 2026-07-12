@@ -149,9 +149,13 @@ func step(dt: float) -> void:
 	var f_motor_max: float = minf(PNConstants.F_STALL, f_motor_power_cap)
 	var f_motor: float = throttle * f_motor_max * float(direction)
 
-	# Ne pas pomper de puissance si déjà à la limite
-	if v * direction >= v_limit and f_motor * direction > 0.0:
-		f_motor = 0.0
+	# Ne pas pomper de puissance à la limite — FONDU sur 0,25 m/s au-delà
+	# de v_limit au lieu de la coupure sèche : l'ancien tout-ou-rien
+	# hachait la force moteur à 60 Hz dès que v effleurait la limite
+	# (flagrant sous plafond de panne : 910 sauts > 100 kW/frame mesurés
+	# au banc) → à-coups de puissance sur la jauge et la tension.
+	if f_motor * direction > 0.0:
+		f_motor *= clampf((v_limit + 0.25 - v * float(direction)) / 0.25, 0.0, 1.0)
 
 	# Interlock portes : pas de traction si portes ouvertes
 	if doors_open:
@@ -224,8 +228,10 @@ func step(dt: float) -> void:
 
 	# Intégration
 	var new_v: float = v + acc * dt
-	# Bleed-off survitesse (régénératif) — les DEUX sens, comme le PC
-	if new_v * direction > v_limit and f_motor == 0.0:
+	# Bleed-off survitesse (régénératif) — les DEUX sens, comme le PC.
+	# Seuil 1 000 N (et plus f_motor == 0.0 exact) : avec le fondu moteur
+	# à la limite, f_motor traîne près de zéro sans jamais y être.
+	if new_v * direction > v_limit and f_motor * float(direction) <= 1000.0:
 		var excess: float = new_v * direction - v_limit
 		var bleed: float = minf(excess, 1.5 * dt)
 		new_v -= bleed * float(direction)
@@ -323,7 +329,11 @@ func step(dt: float) -> void:
 	# + frein de service en modulation. Rendement chaîne ~0,80 (roue →
 	# machine DC → réseau, cf. datasheet CFD : ~42 kWh récupérés par
 	# descente chargée).
-	if f_motor == 0.0 and not emergency \
+	# Seuil 2 000 N (et plus f_motor == 0.0 exact) : avec les fondus
+	# d'autorité et de limite, la force moteur frôle zéro sans y être —
+	# l'égalité stricte faisait basculer la jauge RÉGEN↔PUISSANCE en
+	# claquements.
+	if f_motor * float(direction) < 2000.0 and not emergency \
 			and f_grav_net * float(direction) > 0.0 and absf(v) > 0.3:
 		var f_retenue: float = (acc_pre_cap - acc) * float(direction) * m_total \
 			+ a_brk * m_total
@@ -391,6 +401,11 @@ func _regulator(
 	var ramp_up: float = 0.35
 	var ramp_down: float = 0.25
 	var driver_target: float = speed_cmd * PNConstants.V_MAX
+	# Plafond de panne : borne aussi la CIBLE, pas seulement v_limit côté
+	# physique (porté du PC) — sinon err reste énorme, le régulateur
+	# pousse à fond et la limite hache la puissance en continu.
+	if speed_cap_external < PNConstants.V_MAX:
+		driver_target = minf(driver_target, speed_cap_external)
 	var de: float = driver_target - speed_cmd_eff
 	if de > 0.0:
 		speed_cmd_eff = minf(driver_target, speed_cmd_eff + ramp_up * dt)
@@ -431,16 +446,17 @@ func _regulator(
 		var k_p: float = 0.18
 		demand_throttle = clampf(ff_throttle + err * k_p, 0.0, 1.0)
 		demand_brake = clampf(ff_brake - err * k_p, 0.0, 1.0)
-		# EXCÉDENT DE GRAVITÉ (f_ff ≤ 0 : la gravité pousse déjà plus fort
-		# que le frottement dans le sens de marche — typiquement rame
-		# lourde en descente après une inversion en tunnel) : le moteur
-		# reste COUPÉ. C'est la gravité qui accélère (bridée par la rampe
-		# de confort = retenue de l'entraînement), le frein module. Sans
-		# ce verrou, le terme P mettait plein gaz pendant la phase de
-		# rattrapage de consigne → grosse puissance affichée pour rien
-		# (retour d'essai 2026-07-13).
-		if f_ff <= 0.0:
-			demand_throttle = 0.0
+		# EXCÉDENT DE GRAVITÉ : quand la gravité pousse déjà plus fort que
+		# le frottement dans le sens de marche (rame lourde en descente),
+		# le moteur n'a rien à faire — la gravité accélère (bridée par la
+		# rampe de confort = retenue) et le frein module. L'AUTORITÉ de
+		# traction s'éteint en FONDU sur 6 000 N d'excédent (pleine à
+		# f_ff ≥ 0, nulle à f_ff ≤ −6 000 N) : le tout-ou-rien de la
+		# première version claquait la traction on/off au passage par
+		# zéro (points d'équilibre du profil, transitions de pente) →
+		# à-coups de puissance (retour d'essai 2026-07-13).
+		var throttle_authority: float = clampf(1.0 + f_ff / 6000.0, 0.0, 1.0)
+		demand_throttle *= throttle_authority
 		if demand_throttle > 0.0 and demand_brake > 0.0:
 			if demand_throttle > demand_brake:
 				demand_throttle -= demand_brake
