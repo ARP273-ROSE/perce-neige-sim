@@ -49,6 +49,26 @@ var trip_started: bool = false
 var trip_time: float = 0.0
 var finished: bool = false
 
+# --- Rebond élastique du câble à l'arrêt (port du Python _cable_bounce) --
+# x(t) = A·e^(−ζωt)·sin(ωt) avec k = EA/L (L = câble entre la rame et la
+# poulie motrice en GARE HAUTE) : en bas L ≈ 3,45 km → T ≈ 5-8 s, jusqu'à
+# ±25 cm ; en haut L ≈ 25 m → millimétrique. L'asymétrie sort de la
+# physique, rien n'est câblé en dur. Appliqué à s_render (visuel) : le s
+# physique est tenu par le clamp + frein tambour.
+const CABLE_EA_N: float = 1.25e8
+const REBOUND_ZETA: float = 0.15
+const REBOUND_GRAB_A: float = 0.35   # m/s² relâchés au serrage du tambour
+var rebound_timer: float = -1.0      # < 0 = inactif
+var rebound_anchor_s: float = 0.0
+var rebound_dir: int = 1             # direction figée au serrage (le
+                                     # demi-tour inverse `direction` alors
+                                     # que l'oscillation court encore)
+
+# Temporisation d'arrivée : la rame reste immobilisée portes fermées
+# (rebond visible) avant l'ouverture des portes + inversion du sens.
+const TURNAROUND_DELAY_S: float = 15.0
+var turnaround_delay_remaining: float = 0.0
+
 # --- Accesseurs -----------------------------------------------------------
 
 func pax() -> int:
@@ -194,7 +214,7 @@ func step(dt: float) -> void:
 			acc = -2.0
 		if direction > 0 and not finished:
 			finished = true
-			_terminus_turnaround()
+			_arrival_grab()
 	elif s <= clamp_lo:
 		s = clamp_lo
 		if v < 0.0:
@@ -202,7 +222,17 @@ func step(dt: float) -> void:
 			acc = 2.0
 		if direction < 0 and not finished:
 			finished = true
+			_arrival_grab()
+
+	# Temporisation d'arrivée → demi-tour (portes + inversion)
+	if turnaround_delay_remaining > 0.0:
+		turnaround_delay_remaining = maxf(0.0, turnaround_delay_remaining - dt)
+		if turnaround_delay_remaining <= 0.0:
 			_terminus_turnaround()
+
+	# Chrono du rebond élastique
+	if rebound_timer >= 0.0:
+		rebound_timer += dt
 
 	# Frein parking (drum) ou frein urgence (panne grave)
 	if maint_brake or doors_open or emergency_brake:
@@ -339,21 +369,51 @@ func _regulator(
 
 # --- Actions conducteur --------------------------------------------------
 
-# Arrivée au terminus : demi-tour automatique — portes rouvertes, frein
-# tambour serré, direction inversée, consigne à zéro. Sans ça, en manuel,
-# PRÊT/DÉPART ne refaisait JAMAIS rien après le premier trajet
+# Arrivée au terminus, phase 1 : serrage immédiat du frein tambour —
+# coupe la traction, déclenche le rebond élastique du câble (visible en
+# gare basse) et arme la temporisation avant l'ouverture des portes.
+func _arrival_grab() -> void:
+	trip_started = false
+	maint_brake = true
+	speed_cmd = 0.0
+	speed_cmd_eff = 0.0
+	rebound_anchor_s = s
+	rebound_dir = direction
+	rebound_timer = 0.0
+	turnaround_delay_remaining = TURNAROUND_DELAY_S
+	print("[Physics] arrivée s=%.0f — frein tambour serré, rebond armé, portes dans %.0f s"
+		% [s, TURNAROUND_DELAY_S])
+
+
+# Arrivée au terminus, phase 2 (après TURNAROUND_DELAY_S) : demi-tour —
+# portes rouvertes, direction inversée, séquences remises à zéro. Sans ça,
+# en manuel, PRÊT/DÉPART ne refaisait JAMAIS rien après le premier trajet
 # (trip_started restait vrai, portes fermées) → « plus de buzzer ni de
 # son de portes au 2e départ » (retour d'essai Android 2026-07).
 func _terminus_turnaround() -> void:
-	trip_started = false
-	maint_brake = true
 	doors_open = true
-	speed_cmd = 0.0
-	speed_cmd_eff = 0.0
 	announce_phase_remaining = 0.0
 	departure_buzzer_remaining = 0.0
 	door_phase_remaining = 0.0
 	direction = -direction
+
+
+# Décalage visuel (m, signé le long de la pente) du rebond élastique.
+# À ajouter à s_render — s'éteint tout seul (< 1 mm → coupé).
+func rebound_offset() -> float:
+	if rebound_timer < 0.0:
+		return 0.0
+	var span: float = maxf(PNConstants.LENGTH - rebound_anchor_s, 20.0)
+	var k: float = CABLE_EA_N / span
+	var m: float = mass_kg()
+	var omega: float = sqrt(k / maxf(m, 1.0))
+	var amp: float = minf(m * REBOUND_GRAB_A / k, 0.45)
+	var x: float = amp * exp(-REBOUND_ZETA * omega * rebound_timer) \
+		* sin(omega * rebound_timer)
+	if amp * exp(-REBOUND_ZETA * omega * rebound_timer) < 0.001:
+		rebound_timer = -1.0   # éteint — plus de calcul
+		return 0.0
+	return float(rebound_dir) * x
 
 
 # Séquence de départ réelle, en TROIS phases successives :
@@ -385,6 +445,7 @@ func start_trip() -> void:
 	maint_brake = false
 	doors_open = false
 	finished = false
+	rebound_timer = -1.0
 
 
 func end_trip() -> void:

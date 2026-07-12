@@ -251,7 +251,7 @@ func _draw_status_leds(x: float, y: float, w: float, h: float) -> void:
 			["CABINE", physics.lights_cabin, Color(1.0, 0.95, 0.40)],
 			["FREIN P", physics.maint_brake, Color(1.0, 0.55, 0.10)],
 			["FREIN U", physics.emergency_brake or physics.emergency, Color(1.0, 0.20, 0.18)],
-			["DIR↑" if physics.direction > 0 else "DIR↓", true, Color(0.30, 0.75, 1.0)],
+			["DIR HAUT" if physics.direction > 0 else "DIR BAS", true, Color(0.30, 0.75, 1.0)],
 			["VOYAGE", physics.trip_started, Color(0.85, 0.75, 0.30)],
 		]
 	var led_size: float = 12.0

@@ -121,7 +121,47 @@ func _ready() -> void:
 			auto_operator.enabled = true
 			auto_operator._enter_initial_state()
 			print("[Autotest] auto-exploitation forcée ON")
+		elif "--drivetest" in OS.get_cmdline_user_args():
+			_drivetest()
+		else:
+			# Sélecteur de scénario (gare de départ + rame) au démarrage
+			var scen: ScenarioPanel = ScenarioPanel.new()
+			scen.name = "ScenarioPanel"
+			add_child(scen)
+			scen.chosen.connect(_apply_scenario)
 	print("[PerceNeige3D] Ready.")
+
+
+# Applique le scénario choisi au démarrage : gare haute = départ en
+# descente ; rame 2 = voie DROITE dans l'évitement (la rame 1 prend la
+# gauche) — les deux cabines échangent leur voie.
+func _apply_scenario(from_top: bool, rame2: bool) -> void:
+	if from_top:
+		physics.s = PNConstants.STOP_S
+		physics.s_prev_step = physics.s
+		physics.s_render = physics.s
+		physics.direction = -1
+	if rame2:
+		cabin.passing_side = +1.0
+		cabin_ghost.passing_side = -1.0
+	print("[Scenario] depart %s, rame %d" % [
+		"gare haute" if from_top else "gare basse", 2 if rame2 else 1])
+
+
+# Banc : vérifie le chemin bouton tactile → Input.action_press →
+# is_action_pressed → consigne → vitesse, en conduite MANUELLE.
+func _drivetest() -> void:
+	await get_tree().create_timer(1.0).timeout
+	physics.request_depart()
+	print("[DriveTest] request_depart lancé")
+	while not physics.trip_started:
+		await get_tree().create_timer(0.5).timeout
+	print("[DriveTest] trip démarré — action_press(speed_up) 6 s")
+	Input.action_press("speed_up")
+	await get_tree().create_timer(6.0).timeout
+	Input.action_release("speed_up")
+	print("[DriveTest] speed_cmd=%.2f v=%.2f (attendu : cmd>0.9, v>1)"
+		% [physics.speed_cmd, physics.v])
 
 	# Diagnostic : --mesh-stats en arg projet → imprime le nombre de vertices
 	# par nœud et le total, puis continue normalement. Sert à vérifier que le
@@ -405,8 +445,11 @@ func _process(delta: float) -> void:
 		# Position de RENDU interpolée entre les deux derniers états
 		# physiques — supprime la saccade du défilement (rails/tunnel)
 		# quand le rendu ne tombe pas pile sur les pas de 1/60 s.
+		# + rebond élastique du câble après l'arrêt (gare basse : ±25 cm,
+		# T ≈ 6 s — millimétrique en haut, la physique fait le tri).
 		physics.s_render = lerpf(physics.s_prev_step, physics.s,
-			clampf(_physics_accum / PHYSICS_DT, 0.0, 1.0))
+			clampf(_physics_accum / PHYSICS_DT, 0.0, 1.0)) \
+			+ physics.rebound_offset()
 	else:
 		# Mode client : l'état arrive tout fait du sim Python
 		physics.s_render = physics.s
