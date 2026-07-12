@@ -89,8 +89,8 @@ func _build_ui() -> void:
 	_help_label = Label.new()
 	_help_label.visible = not DisplayServer.is_touchscreen_available()
 	_help_label.text = _t(
-		"Haut/Bas Setpoint · Space Brake · Shift Emerg · H Phares · V View · Enter Depart · F1 Fault · F2 Clear · F3 Auto-op",
-		"Haut/Bas Consigne · Espace Frein · Shift Urgence · H Phares · V Vue · Entrée Départ · F1 Panne · F2 Clear · F3 Auto-exploit"
+		"Haut/Bas Setpoint · Space Brake · Shift Emerg · H Phares · V View · Enter Depart · I Reverse · F1 Fault · F2 Clear · F3 Auto-op",
+		"Haut/Bas Consigne · Espace Frein · Shift Urgence · H Phares · V Vue · Entrée Départ · I Inverser · F1 Panne · F2 Clear · F3 Auto-exploit"
 	)
 	_help_label.position = Vector2(20, 218)
 	_help_label.size = Vector2(1560, 22)
