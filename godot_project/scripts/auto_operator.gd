@@ -21,7 +21,10 @@ enum State {
 }
 
 const STATION_DWELL_S: float = 30.0    # temps en gare avant départ auto
-const RANDOM_FAULT_CHANCE_PER_TRIP: float = 0.20   # 20% chance d'une panne par voyage
+# Pannes aléatoires en mode auto : DÉSACTIVÉES (retour d'essai iPad
+# 2026-07 : « j'ai pas demandé des pannes »). Les pannes se déclenchent
+# uniquement à la demande (bouton PANNE / F1).
+const RANDOM_FAULT_CHANCE_PER_TRIP: float = 0.0
 
 var physics: TrainPhysics = null
 var fault_manager: FaultManager = null
