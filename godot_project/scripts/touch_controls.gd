@@ -173,9 +173,20 @@ func _build() -> void:
 	# --- Rangée haut-droite : boutons secondaires -------------------------
 	var top: HBoxContainer = HBoxContainer.new()
 	top.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	top.position = Vector2(-4 - 5 * 112, 10)
+	top.position = Vector2(-4 - 6 * 112, 10)
 	top.add_theme_constant_override("separation", 10)
 	root.add_child(top)
+
+	# INVERSER : demi-tour sur place (rame à l'arrêt total, à quai ou en
+	# plein tunnel — cas panne : on redescend chercher la gare). Appel
+	# direct de main.do_reverse(), qui joue l'annonce « retour en gare ».
+	var b_rev: Button = _mk_button("INVERSER",
+		"Inverser le sens de marche (rame à l'arrêt) — retour vers la gare")
+	b_rev.custom_minimum_size = Vector2(112, 56)
+	b_rev.pressed.connect(func() -> void:
+		if _main != null:
+			_main.do_reverse())
+	top.add_child(b_rev)
 
 	var b_lights: Button = _mk_button("PHARES", "Phares avant")
 	b_lights.custom_minimum_size = Vector2(102, 56)
