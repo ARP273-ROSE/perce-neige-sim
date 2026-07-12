@@ -14,6 +14,30 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 
 ## Quoi de neuf — v1.12.x (audit + retours d'essai terrain, juillet 2026)
 
+**v1.12.11** — traction/retenue en descente lourde + jauges (2D **et** 3D) :
+- **Plus de traction fantôme en descente lourde** (constaté après une
+  inversion en tunnel) : quand la gravité pousse déjà dans le sens de
+  marche, le moteur reste coupé — la gravité accélère (bridée par la rampe
+  de confort = retenue de l'entraînement) et le frein module.
+- **Retenue régénératrice affichée** : la jauge puissance bascule en RÉGEN
+  (cyan, valeur négative) — ~560 kW en descente chargée à 12 m/s, soit
+  ~47 kWh par descente (datasheet CFD : ~42 kWh). Jamais affiché avant.
+- **Tension câble : inertie signée par la rame lourde le long de SA pente**
+  (T = m·g·sinθ + m·a) : une rame lourde qui dévale DÉCHARGE le brin —
+  l'ancien code ajoutait l'inertie dans les deux cas.
+- **Feed-forward du régulateur à deux pentes** : l'ancien raccourci
+  mono-pente se trompait de signe quand l'asymétrie du profil l'emportait
+  sur l'écart de masse (rame chargée en bas à 22 % vs contrepoids vide à
+  29 %) — la rame dérivait vers l'équilibre au lieu de suivre la consigne.
+- **Jauge de tension à l'échelle de service** (0–42 000 daN, plus 0–rupture :
+  le vert faisait 12 % de la barre) : vert jusqu'à l'alerte 28 000 — le
+  nominal 22 500 est une valeur de service, marquée d'un repère, pas un
+  seuil d'alarme — orange 28–35 000, rouge au-delà, rupture hors échelle.
+- Cadran vitesse : lecture km/h sortie du cadran (elle chevauchait les
+  graduations basses).
+- 16/16 tests physique desktop verts (les 2 nouveaux cas de descente
+  asymétrique compris).
+
 **v1.12.10** — audit de parité physique PWA/3D ↔ programme PC (le port 3D
 datait de la v1.9.1 et avait raté plusieurs corrections) :
 - **Passagers enfin embarqués dans la 3D** : trafic skieur asymétrique comme
