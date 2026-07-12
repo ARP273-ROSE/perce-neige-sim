@@ -78,7 +78,7 @@ func step(dt: float) -> void:
 		announce_phase_remaining = maxf(0.0, announce_phase_remaining - dt)
 		if announce_phase_remaining <= 0.0:
 			doors_open = false
-			door_phase_remaining = 3.5
+			door_phase_remaining = DOOR_PHASE_S
 	elif door_phase_remaining > 0.0:
 		door_phase_remaining = maxf(0.0, door_phase_remaining - dt)
 		if door_phase_remaining <= 0.0:
@@ -359,11 +359,14 @@ func _terminus_turnaround() -> void:
 # Séquence de départ réelle, en TROIS phases successives :
 #   1. annonce « fermeture des portes » (7,5 s — durée du fichier 01,
 #      portes encore OUVERTES)
-#   2. fermeture des portes (~3,5 s, son de portes seul)
+#   2. fermeture des portes (7,0 s — durée MESURÉE de door_buzzer.wav ;
+#      avec 3,5 s la moitié du son débordait sur le buzzer, retour
+#      d'essai iPad 2026-07-12)
 #   3. BUZZER de départ 6 s (gare haute) / 8 s (gare basse — durées des
 #      enregistrements réels), traction à la FIN du buzzer seulement
 #      (le frein tambour tient pendant toute la séquence).
 const ANNOUNCE_PHASE_S: float = 7.5
+const DOOR_PHASE_S: float = 7.0
 var announce_phase_remaining: float = 0.0
 var departure_buzzer_remaining: float = 0.0
 var door_phase_remaining: float = 0.0
