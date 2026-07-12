@@ -48,6 +48,7 @@ var inrush_timer: float = 0.0
 var trip_started: bool = false
 var trip_time: float = 0.0
 var finished: bool = false
+var dbg_f_grav_net: float = 0.0          # dernière gravité nette (banc de parité)
 
 # --- Rebond élastique du câble à l'arrêt (port du Python _cable_bounce) --
 # x(t) = A·e^(−ζωt)·sin(ωt) avec k = EA/L (L = câble entre la rame et la
@@ -112,12 +113,19 @@ func step(dt: float) -> void:
 	var m_up: float = mass_kg()
 	var m_down: float = ghost_mass_kg()
 	var m_total: float = m_up + m_down
-	var dm: float = m_up - m_down
 
-	var g_slope: float = SlopeProfile.gradient_at(s)
+	# Pente LOCALE de chaque rame (port du sim Python) : le profil n'est
+	# pas symétrique (8 % au départ, 30 % au milieu, 6 % en haut), donc la
+	# rame principale à s et le contrepoids à (L − s) sont rarement sur la
+	# même pente — l'équilibre du câble dépend des DEUX sinus. L'ancien
+	# port utilisait la pente de la rame pilotée pour les deux.
+	var g_slope: float = SlopeProfile.gradient_phys_at(s)
 	var theta: float = atan(g_slope)
 	var sint: float = sin(theta)
 	var cost: float = cos(theta)
+	var theta_g: float = atan(SlopeProfile.gradient_phys_at(PNConstants.LENGTH - s))
+	var sint_g: float = sin(theta_g)
+	var cost_g: float = cos(theta_g)
 
 	var v_limit: float = minf(PNConstants.V_MAX, speed_cap_external)
 
@@ -149,10 +157,14 @@ func step(dt: float) -> void:
 		f_motor = 0.0
 
 	# --- Gravité (déséquilibre cable) ------------------------------------
-	var f_grav_net: float = -dm * PNConstants.G * sint
+	# Chaque rame avec SA pente locale (comme le sim Python) :
+	#   f_grav_s = −(m_main·sinθ_main − m_ghost·sinθ_ghost)·g
+	var f_grav_net: float = -(m_up * sint - m_down * sint_g) * PNConstants.G
+	dbg_f_grav_net = f_grav_net   # exposé pour le banc de parité PC↔3D
 
-	# --- Friction roulement ----------------------------------------------
-	var f_roll_mag: float = PNConstants.MU_ROLL * m_total * PNConstants.G * cost
+	# --- Friction roulement (les 2 rames, chacune sur sa pente) -----------
+	var f_roll_mag: float = PNConstants.MU_ROLL * PNConstants.G \
+		* (m_up * cost + m_down * cost_g)
 	var f_roll: float = 0.0
 	if absf(v) > 0.05:
 		f_roll = -signf(v) * f_roll_mag
@@ -193,13 +205,23 @@ func step(dt: float) -> void:
 		v = 0.0
 		acc = 0.0
 
+	# Auto-park (chaîne de sécurité Von Roll, comme le PC) : train
+	# immobilisé sous frein d'urgence → le tambour se réengage seul pour
+	# qu'il ne reparte pas sur la pente.
+	if emergency and absf(v) < 0.05 and not maint_brake:
+		maint_brake = true
+
 	# Intégration
 	var new_v: float = v + acc * dt
-	# Bleed-off survitesse
+	# Bleed-off survitesse (régénératif) — les DEUX sens, comme le PC
 	if new_v * direction > v_limit and f_motor == 0.0:
 		var excess: float = new_v * direction - v_limit
 		var bleed: float = minf(excess, 1.5 * dt)
 		new_v -= bleed * float(direction)
+	if new_v * direction < -v_limit:
+		var excess_r: float = -v_limit - new_v * direction
+		var bleed_r: float = minf(excess_r, 1.5 * dt)
+		new_v += bleed_r * float(direction)
 
 	s += ((v + new_v) / 2.0) * dt
 	v = new_v
@@ -241,13 +263,28 @@ func step(dt: float) -> void:
 
 	a = acc
 
-	# --- Tension câble ---------------------------------------------------
+	# --- Tension câble (port complet du modèle Python) --------------------
+	# Le brin entre la poulie motrice (gare haute) et la rame LOURDE porte :
+	#   - le poids de la rame lourde le long de SA pente locale (pas celle
+	#     de la rame pilotée — elles diffèrent sur ce profil asymétrique)
+	#   - le poids PROPRE du câble au-dessus d'elle : ρ·g·Δaltitude, exact
+	#     quel que soit le profil (∫ρg·sinθ·ds = ρg·Δh) — ~9 900 daN quand
+	#     la rame lourde est en bas, ~0 en haut. C'est CE terme qui fait
+	#     évoluer la jauge le long du trajet (manquait dans le port 3D :
+	#     les valeurs ne collaient pas avec le programme PC).
+	#   - le frottement de roulement de la rame lourde
+	#   - l'inertie de traction, uniquement en accélération (au freinage le
+	#     câble se DÉCHARGE : le frein absorbe sur le rail).
 	var m_heavy: float = maxf(m_up, m_down)
+	var s_heavy: float = s if m_up >= m_down else (PNConstants.LENGTH - s)
+	var theta_h: float = atan(SlopeProfile.gradient_phys_at(s_heavy))
 	var a_travel: float = acc * float(direction)
-	var t_gravity: float = m_heavy * PNConstants.G * sint
-	var t_friction: float = PNConstants.MU_ROLL * m_heavy * PNConstants.G * cost
+	var t_gravity: float = m_heavy * PNConstants.G * sin(theta_h)
+	var t_friction: float = PNConstants.MU_ROLL * m_heavy * PNConstants.G * cos(theta_h)
+	var t_cable: float = PNConstants.CABLE_KG_M * PNConstants.G \
+		* maxf(0.0, PNConstants.ALT_HIGH - SlopeProfile.altitude_at(s_heavy))
 	var t_inertia: float = maxf(0.0, m_heavy * a_travel)
-	tension_dan = (t_gravity + t_friction + t_inertia) / 10.0
+	tension_dan = (t_gravity + t_friction + t_cable + t_inertia) / 10.0
 	if tension_dan < 0.0:
 		tension_dan = 0.0
 
@@ -322,10 +359,13 @@ func _regulator(
 
 	var target_v: float = minf(speed_cmd_eff, v_envelope)
 
-	# Zone creep : dernière CREEP_DIST m à CREEP_V
+	# Zone creep : dernière CREEP_DIST m à CREEP_V, puis docking final en
+	# ~4 s sur les 2,5 derniers mètres (0,15 m/s²) — ALIGNÉ sur le sim
+	# Python v1.12.3 : l'ancien couple 0,04/6 m du port donnait une entrée
+	# en gare interminable (~0,2 m/s pendant 20 s, constaté machine).
 	if dist_to_stop < PNConstants.CREEP_DIST:
-		var park_decel: float = 0.04
-		var final_dist: float = 6.0
+		var park_decel: float = 0.15
+		var final_dist: float = 2.5
 		if dist_to_stop > final_dist:
 			target_v = PNConstants.V_CREEP
 		else:
@@ -396,6 +436,27 @@ func _terminus_turnaround() -> void:
 	departure_buzzer_remaining = 0.0
 	door_phase_remaining = 0.0
 	direction = -direction
+	# Rotation passagers : tout le monde descend, une nouvelle charge
+	# embarque pour le trajet retour (direction déjà inversée).
+	roll_pax()
+
+
+# Embarquement — port de la logique Python : le trafic skieur est
+# asymétrique (on MONTE en funiculaire, on redescend à ski) → montée
+# chargée (90..167 pax/voiture), descente quasi vide (0..8), et le
+# contrepoids reçoit l'inverse. C'est ce déséquilibre dm qui pilote la
+# gravité nette, la tension câble et la puissance — l'ancien port laissait
+# TOUT à zéro (dm = 0 : sim parfaitement équilibrée, compteur pax à 0).
+func roll_pax() -> void:
+	var half: int = PNConstants.PAX_MAX / 2
+	if direction > 0:
+		pax_car1 = randi_range(90, half)
+		pax_car2 = randi_range(90, half)
+		ghost_pax = randi_range(0, 12)
+	else:
+		pax_car1 = randi_range(0, 8)
+		pax_car2 = randi_range(0, 8)
+		ghost_pax = randi_range(90, PNConstants.PAX_MAX - 20)
 
 
 # Décalage visuel (m, signé le long de la pente) du rebond élastique.
