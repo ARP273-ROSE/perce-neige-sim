@@ -87,8 +87,16 @@ func _process(delta: float) -> void:
 			# ne plus fermer les portes nous-mêmes : la séquence le fait
 			# au bon moment (après l'annonce).
 			physics.speed_cmd = 0.0
-			if _state_timer > STATION_DWELL_S:
-				physics.request_depart()
+			# Départ FORCÉ par le conducteur (bouton PRÊT/DÉPART) : la
+			# séquence tourne déjà → on embraye tout de suite sans attendre
+			# les 30 s. Sinon, on part au terme du dwell automatique.
+			var seq_running: bool = physics.announce_phase_remaining > 0.0 \
+				or physics.door_phase_remaining > 0.0 \
+				or physics.departure_buzzer_remaining > 0.0 \
+				or physics.trip_started
+			if _state_timer > STATION_DWELL_S or seq_running:
+				if not seq_running:
+					physics.request_depart()
 				state = State.READY_TO_DEPART
 				_state_timer = 0.0
 				_fault_injected_this_trip = false

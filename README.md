@@ -14,6 +14,25 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 
 ## Quoi de neuf — v1.12.x (audit + retours d'essai terrain, juillet 2026)
 
+**v1.12.9** — retours d'essai iPad/PWA :
+- **Câble & profil de ligne suivent la rame pilotée** : en scénario « rame 2 »,
+  c'est le bon brin (voie droite) qui reste accroché à la cabine — visibilité,
+  animation des torons et coupe fragment échangées ; le mini-profil étiquette
+  la rame pilotée « R2 » et l'opposée « R1 ».
+- **Plus d'annonce intempestive après le demi-tour** : l'annonce de sortie
+  (« Sortie des passagers » amont/aval) ne se déclenche plus automatiquement à
+  l'ouverture des portes du terminus — elle était perçue comme une annonce de
+  panne. Elle reste diffusable à la demande (bouton ANNONCES).
+- **Parois du tunnel translucides en vue extérieure** (alpha 0,22, faces avant
+  coupées) : on voit la rame à l'intérieur du tube ; opaques en vue cockpit.
+- **Bouton PRÊT/DÉPART actif en mode auto** : il force le départ sans attendre
+  les 30 s de stationnement (l'automate embraie sur la séquence lancée).
+- **Arrêt d'urgence adouci** : décélération 5,0 → 3,0 m/s² et rampe 8 → 4/s
+  (jerk divisé par ~3), reste plus ferme que le frein de service (2,5).
+- **Menu des annonces audio** : nouveau bouton ANNONCES → 14 messages
+  (sortie, incidents, évacuation, remise en route…) diffusables à la demande,
+  avec STOP et FERMER.
+
 **v1.12.8** — vue 3D : rebond élastique du câble à l'arrêt en gare basse
 (±31 cm, T ≈ 6 s, amorti — millimétrique en gare haute : l'asymétrie sort
 de la longueur du câble), arrivée temporisée 15 s frein tambour serré

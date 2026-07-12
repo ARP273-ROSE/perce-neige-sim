@@ -22,6 +22,26 @@ var _b_auto: Button = null
 var _drive_buttons: Array = []  # boutons de conduite, grisés quand AUTO actif
 var _sync_accum: float = 0.0
 var _fault_tap_time: float = -10.0   # double-tap PANNE (anti fausse manip)
+var _announce_menu: Control = null   # panneau des annonces audio (diffusion manuelle)
+
+# Menu des annonces diffusables à la demande : clé de groupe → libellé FR.
+# (Ordre = ordre d'exploitation logique. brake_noise exclu : pas de MP3.)
+const ANNOUNCE_MENU: Array = [
+	["doors_close",     "Fermeture des portes"],
+	["welcome",         "Accueil zone glacier"],
+	["exit_left",       "Sortie côté gauche"],
+	["exit_upstream",   "Sortie amont (Grande Motte)"],
+	["exit_downstream", "Sortie aval (Val Claret)"],
+	["minor_incident",  "Incident mineur (5-10 min)"],
+	["tech_incident",   "Incident technique"],
+	["long_repair",     "Réparation prolongée"],
+	["stop_10min",      "Arret de 10 minutes"],
+	["restart",         "Remise en route"],
+	["dim_light",       "Diminution de l'eclairage"],
+	["return_station",  "Retour en gare"],
+	["evac",            "Evacuation du vehicule"],
+	["evac_car2",       "Evacuation 2e wagon"],
+]
 
 
 func setup(main_node: Node) -> void:
@@ -145,12 +165,15 @@ func _build() -> void:
 	b_go.position = Vector2(-125, -300)
 	_bind_tap(b_go, "ready_depart")
 	root.add_child(b_go)
-	_drive_buttons.append(b_go)
+	# PRÊT / DÉPART reste ACTIF même en mode auto : sans clavier (« Entrée »),
+	# c'est le seul moyen de forcer le départ sans attendre les 30 s d'arrêt
+	# en gare. L'automate détecte la séquence lancée et embraye (cf.
+	# AutoOperator.WAITING_AT_STATION). → volontairement PAS dans _drive_buttons.
 
 	# --- Rangée haut-droite : boutons secondaires -------------------------
 	var top: HBoxContainer = HBoxContainer.new()
 	top.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	top.position = Vector2(-4 - 4 * 112, 10)
+	top.position = Vector2(-4 - 5 * 112, 10)
 	top.add_theme_constant_override("separation", 10)
 	root.add_child(top)
 
@@ -163,6 +186,13 @@ func _build() -> void:
 	b_view.custom_minimum_size = Vector2(102, 56)
 	_bind_tap(b_view, "toggle_view")
 	top.add_child(b_view)
+
+	# ANNONCES : ouvre/ferme le menu des annonces audio à diffuser à la
+	# demande (appel direct du système d'annonces, pas de synthèse clavier).
+	var b_ann: Button = _mk_button("ANNONCES", "Diffuser une annonce audio")
+	b_ann.custom_minimum_size = Vector2(120, 56)
+	b_ann.pressed.connect(_toggle_announce_menu)
+	top.add_child(b_ann)
 
 	# AUTO : appel DIRECT du jeu (pas de synthèse clavier — plus fiable
 	# sur web) ; vrai bouton à bascule, vert quand l'exploitation
@@ -199,3 +229,101 @@ func _build() -> void:
 		else:
 			_fault_tap_time = now)
 	root.add_child(b_fault)
+
+	# Menu des annonces (masqué par défaut, superposé au centre)
+	_build_announce_menu(root)
+
+
+# ---------------------------------------------------------------------------
+# Menu des annonces audio — diffusion manuelle à la demande.
+# ---------------------------------------------------------------------------
+
+func _build_announce_menu(root: Control) -> void:
+	# Voile semi-opaque plein écran + panneau centré avec un bouton par
+	# annonce. Chaque bouton appelle Announcements.play_now(clé) → coupe
+	# l'annonce en cours et diffuse tout de suite (pas de cooldown).
+	var overlay: Panel = Panel.new()
+	overlay.name = "AnnounceMenu"
+	overlay.set_anchors_preset(Control.PRESET_FULL_RECT)
+	overlay.visible = false
+	var ov_style: StyleBoxFlat = StyleBoxFlat.new()
+	ov_style.bg_color = Color(0.0, 0.0, 0.0, 0.55)
+	overlay.add_theme_stylebox_override("panel", ov_style)
+	root.add_child(overlay)
+	_announce_menu = overlay
+
+	var panel: PanelContainer = PanelContainer.new()
+	panel.set_anchors_preset(Control.PRESET_CENTER)
+	panel.custom_minimum_size = Vector2(560, 620)
+	panel.position = Vector2(-280, -310)
+	var p_style: StyleBoxFlat = StyleBoxFlat.new()
+	p_style.bg_color = Color(0.08, 0.11, 0.17, 0.97)
+	p_style.border_color = Color(0.55, 0.75, 1.0, 0.85)
+	p_style.set_border_width_all(2)
+	p_style.set_corner_radius_all(16)
+	p_style.set_content_margin_all(16)
+	panel.add_theme_stylebox_override("panel", p_style)
+	overlay.add_child(panel)
+
+	var vbox: VBoxContainer = VBoxContainer.new()
+	vbox.add_theme_constant_override("separation", 8)
+	panel.add_child(vbox)
+
+	var title: Label = Label.new()
+	title.text = "ANNONCES AUDIO"
+	title.add_theme_font_size_override("font_size", 22)
+	title.add_theme_color_override("font_color", Color(0.85, 0.92, 1.0))
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	vbox.add_child(title)
+
+	# Liste défilante des annonces
+	var scroll: ScrollContainer = ScrollContainer.new()
+	scroll.custom_minimum_size = Vector2(528, 470)
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	vbox.add_child(scroll)
+
+	var list: VBoxContainer = VBoxContainer.new()
+	list.add_theme_constant_override("separation", 6)
+	list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(list)
+
+	for entry: Array in ANNOUNCE_MENU:
+		var key: String = entry[0]
+		var label: String = entry[1]
+		var b: Button = _mk_button(label, "Diffuser : " + label)
+		b.custom_minimum_size = Vector2(508, 52)
+		b.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		b.pressed.connect(_play_announcement.bind(key))
+		list.add_child(b)
+
+	# Pied : STOP (couper) + FERMER
+	var footer: HBoxContainer = HBoxContainer.new()
+	footer.add_theme_constant_override("separation", 10)
+	footer.alignment = BoxContainer.ALIGNMENT_CENTER
+	vbox.add_child(footer)
+
+	var b_stop: Button = _mk_button("STOP", "Couper l'annonce en cours")
+	b_stop.custom_minimum_size = Vector2(240, 56)
+	var sb_stop: StyleBoxFlat = b_stop.get_theme_stylebox("normal").duplicate()
+	sb_stop.bg_color = Color(0.45, 0.20, 0.08, 0.75)
+	sb_stop.border_color = Color(1.0, 0.60, 0.30, 0.9)
+	b_stop.add_theme_stylebox_override("normal", sb_stop)
+	b_stop.pressed.connect(func() -> void:
+		if _main != null and _main.announcements != null:
+			_main.announcements.stop_all())
+	footer.add_child(b_stop)
+
+	var b_close: Button = _mk_button("FERMER", "Fermer le menu")
+	b_close.custom_minimum_size = Vector2(240, 56)
+	b_close.pressed.connect(_toggle_announce_menu)
+	footer.add_child(b_close)
+
+
+func _toggle_announce_menu() -> void:
+	if _announce_menu != null:
+		_announce_menu.visible = not _announce_menu.visible
+
+
+func _play_announcement(key: String) -> void:
+	if _main != null and _main.announcements != null:
+		_main.announcements.play_now(key)
