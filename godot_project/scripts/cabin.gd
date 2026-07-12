@@ -777,12 +777,13 @@ func set_physics(p: TrainPhysics) -> void:
 func _process(_delta: float) -> void:
 	if tunnel == null or physics == null:
 		return
-	# Position le long de la spline : rame 1 à physics.s, rame 2 (ghost) à LENGTH - physics.s
+	# Position le long de la spline : rame 1 à s_render (position physique
+	# interpolée pour le rendu), rame 2 (ghost) à LENGTH - s_render
 	var s_pos: float
 	if is_ghost:
-		s_pos = PNConstants.LENGTH - physics.s
+		s_pos = PNConstants.LENGTH - physics.s_render
 	else:
-		s_pos = physics.s
+		s_pos = physics.s_render
 
 	# IMPORTANT : la cabine doit suivre l'orientation de SA trajectoire, pas celle
 	# de l'axe central du tunnel. Dans le passing loop, le déport latéral ajoute

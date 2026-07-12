@@ -11,6 +11,8 @@ extends CanvasLayer
 var physics: TrainPhysics = null
 var fault_manager: FaultManager = null
 var lang: String = "fr"
+# Diag audio web (état du contexte WebAudio de test, publié par main.gd)
+var web_audio_state: String = ""
 
 @onready var _status_label: Label
 @onready var _help_label: Label
@@ -166,6 +168,12 @@ func _process(_delta: float) -> void:
 
 
 func _status_text() -> String:
+	if web_audio_state != "":
+		return "%s\nAUDIO: %s" % [_status_core(), web_audio_state]
+	return _status_core()
+
+
+func _status_core() -> String:
 	if physics.emergency or physics.emergency_brake:
 		return _t("EMERGENCY BRAKE", "FREIN URGENCE")
 	if physics.finished:

@@ -10,6 +10,13 @@ extends RefCounted
 
 # --- État du train (équivalent dataclass Train + GameState) --------------
 var s: float = PNConstants.START_S       # distance pente depuis portail bas
+# Interpolation de rendu : la physique avance par quanta de 1/60 s alors
+# que le rendu tourne à 60-120 Hz → sans interpolation, le défilement du
+# monde saccade (retour d'essai iPad : rails saccadés, roue HUD fluide).
+# s_prev_step = s au début du dernier step ; s_render = position lissée
+# recalculée chaque frame par main.gd (lerp selon l'accumulateur).
+var s_prev_step: float = PNConstants.START_S
+var s_render: float = PNConstants.START_S
 var v: float = 0.0                       # vitesse signée (m/s)
 var a: float = 0.0                       # dernière accel (m/s²)
 var direction: int = 1                   # +1 montée, -1 descente
@@ -61,6 +68,7 @@ func ghost_mass_kg() -> float:
 func step(dt: float) -> void:
 	# Clamp dt pour éviter de casser la physique sur un gros hiccup
 	dt = clampf(dt, 0.001, 0.1)
+	s_prev_step = s
 
 	# Séquence de départ : phase portes, puis buzzer, puis traction.
 	if door_phase_remaining > 0.0:

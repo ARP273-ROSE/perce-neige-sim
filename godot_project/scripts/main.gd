@@ -115,6 +115,7 @@ func _ready() -> void:
 		# écran avale ce premier tap.
 		if OS.has_feature("web"):
 			_build_web_start_overlay()
+			_install_web_audio_probe()
 		if "--autotest" in OS.get_cmdline_user_args():
 			auto_operator.enabled = true
 			auto_operator._enter_initial_state()
@@ -136,7 +137,7 @@ func _build_web_start_overlay() -> void:
 	veil.mouse_filter = Control.MOUSE_FILTER_STOP
 	layer.add_child(veil)
 	var lbl: Label = Label.new()
-	lbl.text = "TOUCHEZ L'ÉCRAN POUR DÉMARRER\n\nbuild 2026-07-12 — un bip confirme l'audio"
+	lbl.text = "TOUCHEZ L'ÉCRAN POUR DÉMARRER\n\nbuild 2026-07-12b — un bip confirme l'audio"
 	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	lbl.add_theme_font_size_override("font_size", 30)
 	lbl.add_theme_color_override("font_color", Color(1.0, 0.85, 0.30))
@@ -149,32 +150,53 @@ func _build_web_start_overlay() -> void:
 	veil.gui_input.connect(func(event: InputEvent) -> void:
 		if (event is InputEventScreenTouch and not event.pressed) \
 				or (event is InputEventMouseButton and not event.pressed):
-			_web_audio_beep()
 			layer.queue_free())
 
 
-# Bip de diagnostic en PUR JavaScript (oscillateur WebAudio, ne passe PAS
-# par le driver audio de Godot). Émis dans le geste utilisateur → si le
-# bip est audible mais pas les sons du jeu, le blocage est côté Godot ;
-# si même le bip est muet, c'est l'appareil (mode silencieux / volume).
-func _web_audio_beep() -> void:
+# Bip de diagnostic : écouteur DOM NATIF installé au boot, déclenché au
+# premier touchend/mouseup. Contrairement à un eval depuis gui_input
+# (Godot traite ses événements dans la boucle de rendu, DONC HORS du
+# geste utilisateur au sens Safari → resume() bloqué : c'était le défaut
+# du 1er bip), celui-ci s'exécute dans la vraie pile du geste. L'état du
+# contexte est publié dans window.__pn_audio_state, affiché par le HUD.
+func _install_web_audio_probe() -> void:
 	if not OS.has_feature("web"):
 		return
 	JavaScriptBridge.eval("""
 		(function(){
-			try {
-				var C = window.AudioContext || window.webkitAudioContext;
-				var c = new C();
-				c.resume().then(function(){
-					var o = c.createOscillator();
-					var g = c.createGain();
-					g.gain.value = 0.15;
-					o.frequency.value = 660;
-					o.connect(g); g.connect(c.destination);
-					o.start();
-					setTimeout(function(){ o.stop(); c.close(); }, 350);
-				});
-			} catch (e) {}
+			if (window.__pn_beep_installed) return;
+			window.__pn_beep_installed = true;
+			window.__pn_audio_state = 'attente geste';
+			var handler = function(){
+				document.removeEventListener('touchend', handler, true);
+				document.removeEventListener('mouseup', handler, true);
+				try {
+					var C = window.AudioContext || window.webkitAudioContext;
+					var c = new C();
+					var go = function(){
+						window.__pn_audio_state = c.state;
+						var o = c.createOscillator();
+						var g = c.createGain();
+						g.gain.value = 0.2;
+						o.frequency.value = 660;
+						o.connect(g); g.connect(c.destination);
+						o.start();
+						setTimeout(function(){
+							o.stop();
+							window.__pn_audio_state = c.state + ' (bip joue)';
+							c.close();
+						}, 400);
+					};
+					if (c.state === 'running') go();
+					else c.resume().then(go, function(){
+						window.__pn_audio_state = 'resume rejete';
+					});
+				} catch (e) {
+					window.__pn_audio_state = 'erreur ' + e;
+				}
+			};
+			document.addEventListener('touchend', handler, true);
+			document.addEventListener('mouseup', handler, true);
 		})();
 	""", true)
 
@@ -457,6 +479,14 @@ func _process(delta: float) -> void:
 			physics.step(PHYSICS_DT)
 			_physics_accum -= PHYSICS_DT
 			steps += 1
+		# Position de RENDU interpolée entre les deux derniers états
+		# physiques — supprime la saccade du défilement (rails/tunnel)
+		# quand le rendu ne tombe pas pile sur les pas de 1/60 s.
+		physics.s_render = lerpf(physics.s_prev_step, physics.s,
+			clampf(_physics_accum / PHYSICS_DT, 0.0, 1.0))
+	else:
+		# Mode client : l'état arrive tout fait du sim Python
+		physics.s_render = physics.s
 
 	# Culling des lumières du tunnel à 2 Hz (les ~230 OmniLight3D pèsent
 	# sur le clustering Forward+ et le fog volumétrique même hors champ)
@@ -464,12 +494,18 @@ func _process(delta: float) -> void:
 	if _light_cull_accum >= 0.5:
 		_light_cull_accum = 0.0
 		lights.update_light_culling(physics.s)
+		# Diag audio web : relaie l'état du contexte de test vers le HUD
+		if OS.has_feature("web") and hud != null:
+			var st: Variant = JavaScriptBridge.eval("window.__pn_audio_state || ''", true)
+			hud.web_audio_state = str(st) if st != null else ""
 
 	# Masquage dynamique des brins de câble selon la position des rames
-	track.update_cable_visibility(physics.s)
+	# (s_render : suit la cabine interpolée, sinon le câble « vibre »
+	# d'une frame par rapport à la rame)
+	track.update_cable_visibility(physics.s_render)
 	# Animation des torons (brin gauche = fixe par rapport à rame 1,
 	# brin droite = défile à 2×v en référentiel rame 1)
-	track.update_cable_phase(physics.s, physics.v * float(physics.direction), delta)
+	track.update_cable_phase(physics.s_render, physics.v * float(physics.direction), delta)
 	# Rotation de la poulie motrice selon la vitesse du câble
 	machine_room.update_rotation(physics.v * float(physics.direction), delta)
 
