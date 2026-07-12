@@ -1149,15 +1149,22 @@ func _build_cable_segment(
 # ---------------------------------------------------------------------------
 
 var _last_vis_seg_idx: int = -1
+var _last_vis_rame2: bool = false
 
 
 func update_cable_visibility(s_driver: float) -> void:
 	# La visibilité ne change que quand la rame franchit une frontière de
 	# segment (15 m) — inutile d'itérer ~460 segments à 60 Hz entre-temps.
+	# MAIS on force le recalcul si le choix de rame a changé : sinon, après
+	# le sélecteur de scénario (rame 2), la config visible restait figée sur
+	# rame 1 tant que la cabine ne bougeait pas de 15 m → le brin droit
+	# (celui de la rame pilotée) restait masqué et « le câble disparaissait »
+	# à quai et en début de montée (retour d'essai PWA 2026-07-12).
 	var seg_idx: int = int(s_driver / cable_segment_length)
-	if seg_idx == _last_vis_seg_idx:
+	if seg_idx == _last_vis_seg_idx and driver_is_rame2 == _last_vis_rame2:
 		return
 	_last_vis_seg_idx = seg_idx
+	_last_vis_rame2 = driver_is_rame2
 	# Où commence chaque brin visible (position de LA rame qu'il tire) :
 	#   - rame 1 pilotée : brin gauche part de la cabine (s_driver),
 	#                      brin droit part de la rame opposée (LENGTH−s).
