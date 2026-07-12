@@ -43,6 +43,7 @@ var tension_dan_disp: float = 0.0        # lissé pour affichage
 var power_kw: float = 0.0
 var power_kw_disp: float = 0.0
 var regen_kw: float = 0.0
+var regen_kw_disp: float = 0.0           # lissé pour affichage
 var inrush_timer: float = 0.0
 
 var trip_started: bool = false
@@ -189,7 +190,11 @@ func step(dt: float) -> void:
 	var net: float = f_motor + f_grav_net + f_roll + f_brake
 	var acc: float = net / m_total
 
-	# Cap accel moteur (confort) — soft-start progressive
+	# Cap accel moteur (confort) — soft-start progressive.
+	# acc_pre_cap mémorisé : l'écart (acc_pre_cap − acc) est la retenue
+	# active de l'entraînement quand la gravité pousse plus fort que la
+	# rampe — c'est de la puissance RÉGÉNÉRÉE, affichée plus bas.
+	var acc_pre_cap: float = acc
 	if not emergency and brake < 0.05:
 		var v_abs: float = absf(v)
 		var soft_cap: float = PNConstants.A_START + \
@@ -282,14 +287,23 @@ func step(dt: float) -> void:
 	#   - l'inertie de traction, uniquement en accélération (au freinage le
 	#     câble se DÉCHARGE : le frein absorbe sur le rail).
 	var m_heavy: float = maxf(m_up, m_down)
-	var s_heavy: float = s if m_up >= m_down else (PNConstants.LENGTH - s)
+	var main_is_heavy: bool = m_up >= m_down
+	var s_heavy: float = s if main_is_heavy else (PNConstants.LENGTH - s)
 	var theta_h: float = atan(SlopeProfile.gradient_phys_at(s_heavy))
-	var a_travel: float = acc * float(direction)
 	var t_gravity: float = m_heavy * PNConstants.G * sin(theta_h)
 	var t_friction: float = PNConstants.MU_ROLL * m_heavy * PNConstants.G * cos(theta_h)
 	var t_cable: float = PNConstants.CABLE_KG_M * PNConstants.G \
 		* maxf(0.0, PNConstants.ALT_HIGH - SlopeProfile.altitude_at(s_heavy))
-	var t_inertia: float = maxf(0.0, m_heavy * a_travel)
+	# Inertie SIGNÉE par l'accélération de la rame lourde le long de SA
+	# pente (Newton sur la rame pendue au câble : T = m·g·sinθ + m·a_s).
+	# Rame lourde qui MONTE en accélérant → le câble tire plus (+).
+	# Rame lourde qui DESCEND en accélérant (a_s < 0) → le câble se
+	# DÉCHARGE (−) : le poids part en mouvement, pas dans le brin.
+	# L'ancien max(0, a·direction) ajoutait à tort l'inertie dans ce cas
+	# (constaté après une inversion en tunnel : tension qui GRIMPE alors
+	# que la rame lourde dévale — retour d'essai 2026-07-13).
+	var a_s_heavy: float = acc if main_is_heavy else -acc
+	var t_inertia: float = m_heavy * a_s_heavy
 	tension_dan = (t_gravity + t_friction + t_cable + t_inertia) / 10.0
 	if tension_dan < 0.0:
 		tension_dan = 0.0
@@ -303,10 +317,25 @@ func step(dt: float) -> void:
 		power_kw = 0.0
 		regen_kw = -power_signed_kw * 0.80
 
+	# Retenue régénératrice : moteur coupé, la gravité pousse dans le sens
+	# de marche (rame lourde en descente) → l'entraînement retient via le
+	# câble. Force de retenue = excédent écrêté par la rampe de confort
+	# + frein de service en modulation. Rendement chaîne ~0,80 (roue →
+	# machine DC → réseau, cf. datasheet CFD : ~42 kWh récupérés par
+	# descente chargée).
+	if f_motor == 0.0 and not emergency \
+			and f_grav_net * float(direction) > 0.0 and absf(v) > 0.3:
+		var f_retenue: float = (acc_pre_cap - acc) * float(direction) * m_total \
+			+ a_brk * m_total
+		if f_retenue > 0.0:
+			regen_kw = f_retenue * absf(v) * 0.80 / 1000.0
+			power_kw = 0.0
+
 	# Lissage affichage (EMA τ ≈ 0.3 s)
 	var alpha: float = minf(1.0, dt / 0.3)
 	tension_dan_disp += (tension_dan - tension_dan_disp) * alpha
 	power_kw_disp += (power_kw - power_kw_disp) * alpha
+	regen_kw_disp += (regen_kw - regen_kw_disp) * alpha
 
 	if trip_started:
 		trip_time += dt
@@ -338,9 +367,14 @@ func _regulator(
 
 	var v_travel: float = v * float(direction)
 
-	# Gravité projetée sur direction de voyage
-	var dm_r: float = m_up - _m_down
-	var f_grav_s: float = -dm_r * PNConstants.G * sin(theta)
+	# Gravité projetée sur direction de voyage — avec la pente locale de
+	# CHAQUE rame, comme la physique. L'ancien raccourci mono-pente
+	# (−dm·g·sinθ_main) se trompait de SIGNE dès que l'asymétrie du profil
+	# l'emportait sur l'écart de masse (rame chargée en bas à 22 % vs
+	# contrepoids vide à 29 %) : le feed-forward coupait la traction à
+	# tort et la rame dérivait vers l'équilibre au lieu de descendre.
+	var theta_gr: float = atan(SlopeProfile.gradient_phys_at(PNConstants.LENGTH - s))
+	var f_grav_s: float = -(m_up * sin(theta) - _m_down * sin(theta_gr)) * PNConstants.G
 	var f_grav_travel: float = f_grav_s * float(direction)
 	var gravity_helps: bool = f_grav_travel > 200.0
 
@@ -383,7 +417,8 @@ func _regulator(
 	var v_eff: float = maxf(absf(v), 0.8)
 	var f_motor_max: float = minf(PNConstants.F_STALL, PNConstants.P_MAX / v_eff)
 
-	var f_ff: float = -f_grav_travel + PNConstants.MU_ROLL * m_total * PNConstants.G * cos(theta)
+	var f_ff: float = -f_grav_travel + PNConstants.MU_ROLL * PNConstants.G \
+		* (m_up * cos(theta) + _m_down * cos(theta_gr))
 	var ff_throttle: float = maxf(0.0, f_ff) / maxf(f_motor_max, 1.0)
 	var ff_brake: float = maxf(0.0, -f_ff) / (PNConstants.A_BRAKE_NORMAL * m_total)
 
@@ -396,6 +431,16 @@ func _regulator(
 		var k_p: float = 0.18
 		demand_throttle = clampf(ff_throttle + err * k_p, 0.0, 1.0)
 		demand_brake = clampf(ff_brake - err * k_p, 0.0, 1.0)
+		# EXCÉDENT DE GRAVITÉ (f_ff ≤ 0 : la gravité pousse déjà plus fort
+		# que le frottement dans le sens de marche — typiquement rame
+		# lourde en descente après une inversion en tunnel) : le moteur
+		# reste COUPÉ. C'est la gravité qui accélère (bridée par la rampe
+		# de confort = retenue de l'entraînement), le frein module. Sans
+		# ce verrou, le terme P mettait plein gaz pendant la phase de
+		# rattrapage de consigne → grosse puissance affichée pour rien
+		# (retour d'essai 2026-07-13).
+		if f_ff <= 0.0:
+			demand_throttle = 0.0
 		if demand_throttle > 0.0 and demand_brake > 0.0:
 			if demand_throttle > demand_brake:
 				demand_throttle -= demand_brake
