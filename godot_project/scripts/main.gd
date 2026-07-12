@@ -74,7 +74,7 @@ func _ready() -> void:
 		# et la facture GPU est payée par un rendu 3D à 70 % upscalé
 		# bilinéaire (l'UI reste à la résolution native).
 		get_viewport().scaling_3d_mode = Viewport.SCALING_3D_MODE_BILINEAR
-		get_viewport().scaling_3d_scale = 0.7
+		get_viewport().scaling_3d_scale = 0.6
 	if client_mode:
 		print("[PerceNeige3D] CLIENT MODE — physique pilotée par le sim Python")
 	if quality != "high":
