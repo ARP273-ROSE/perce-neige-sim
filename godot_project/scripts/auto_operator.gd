@@ -82,25 +82,29 @@ func _process(delta: float) -> void:
 
 	match state:
 		State.WAITING_AT_STATION:
-			# Portes ouvertes, on attend STATION_DWELL_S puis on ferme
+			# Portes ouvertes, on attend STATION_DWELL_S puis on lance la
+			# séquence de départ COMPLÈTE (annonce → portes → buzzer) —
+			# ne plus fermer les portes nous-mêmes : la séquence le fait
+			# au bon moment (après l'annonce).
 			physics.speed_cmd = 0.0
 			if _state_timer > STATION_DWELL_S:
-				_request_close_doors()
-				state = State.CLOSING_DOORS
+				physics.request_depart()
+				state = State.READY_TO_DEPART
 				_state_timer = 0.0
 				_fault_injected_this_trip = false
 
 		State.CLOSING_DOORS:
-			# Attendre que doors_open passe à false (animation ~3s)
-			if not physics.doors_open:
-				state = State.READY_TO_DEPART
-				_state_timer = 0.0
+			# (état conservé pour compat — plus utilisé, la séquence de
+			# départ gère la fermeture)
+			state = State.READY_TO_DEPART
+			_state_timer = 0.0
 
 		State.READY_TO_DEPART:
-			# Séquence de départ réelle : buzzer 6-8 s puis traction.
+			# Séquence de départ réelle en cours (annonce → portes →
+			# buzzer → traction). request_depart() est sans effet si la
+			# séquence tourne déjà (garde interne).
 			if not physics.trip_started:
-				if physics.departure_buzzer_remaining <= 0.0:
-					physics.request_depart()
+				physics.request_depart()
 			else:
 				physics.speed_cmd = 1.0   # plein gaz
 				state = State.DEPARTING
@@ -160,14 +164,6 @@ func _distance_to_stop() -> float:
 		return maxf(0.0, PNConstants.STOP_S - physics.s)
 	else:
 		return maxf(0.0, physics.s - PNConstants.START_S)
-
-
-func _request_close_doors() -> void:
-	if physics == null:
-		return
-	# Trigger fermeture portes — ici on met juste doors_open=false
-	# (le sim Python a une animation 3s, on simplifie)
-	physics.doors_open = false
 
 
 func _request_open_doors() -> void:
