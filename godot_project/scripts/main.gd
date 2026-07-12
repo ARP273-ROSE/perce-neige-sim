@@ -67,6 +67,10 @@ func _ready() -> void:
 		# Compatibility → SDFGI/fog volumétrique/SSR n'existent pas,
 		# on force le préréglage low pour rester cohérent.
 		quality = "low"
+		# iPad Pro ProMotion : requestAnimationFrame tourne à 120 Hz →
+		# charge GPU doublée et alternance 120/60 irrégulière perçue
+		# comme des saccades dans le tunnel (retour d'essai 2026-07).
+		Engine.max_fps = 60
 	if client_mode:
 		print("[PerceNeige3D] CLIENT MODE — physique pilotée par le sim Python")
 	if quality != "high":
@@ -132,7 +136,8 @@ func _build_web_start_overlay() -> void:
 	veil.mouse_filter = Control.MOUSE_FILTER_STOP
 	layer.add_child(veil)
 	var lbl: Label = Label.new()
-	lbl.text = "TOUCHEZ L'ÉCRAN POUR DÉMARRER"
+	lbl.text = "TOUCHEZ L'ÉCRAN POUR DÉMARRER\n\nbuild 2026-07-12 — un bip confirme l'audio"
+	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	lbl.add_theme_font_size_override("font_size", 30)
 	lbl.add_theme_color_override("font_color", Color(1.0, 0.85, 0.30))
 	lbl.add_theme_color_override("font_outline_color", Color.BLACK)
@@ -144,7 +149,34 @@ func _build_web_start_overlay() -> void:
 	veil.gui_input.connect(func(event: InputEvent) -> void:
 		if (event is InputEventScreenTouch and not event.pressed) \
 				or (event is InputEventMouseButton and not event.pressed):
+			_web_audio_beep()
 			layer.queue_free())
+
+
+# Bip de diagnostic en PUR JavaScript (oscillateur WebAudio, ne passe PAS
+# par le driver audio de Godot). Émis dans le geste utilisateur → si le
+# bip est audible mais pas les sons du jeu, le blocage est côté Godot ;
+# si même le bip est muet, c'est l'appareil (mode silencieux / volume).
+func _web_audio_beep() -> void:
+	if not OS.has_feature("web"):
+		return
+	JavaScriptBridge.eval("""
+		(function(){
+			try {
+				var C = window.AudioContext || window.webkitAudioContext;
+				var c = new C();
+				c.resume().then(function(){
+					var o = c.createOscillator();
+					var g = c.createGain();
+					g.gain.value = 0.15;
+					o.frequency.value = 660;
+					o.connect(g); g.connect(c.destination);
+					o.start();
+					setTimeout(function(){ o.stop(); c.close(); }, 350);
+				});
+			} catch (e) {}
+		})();
+	""", true)
 
 	# Diagnostic : --mesh-stats en arg projet → imprime le nombre de vertices
 	# par nœud et le total, puis continue normalement. Sert à vérifier que le
