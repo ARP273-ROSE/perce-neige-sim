@@ -84,11 +84,13 @@ func _build_ui() -> void:
 	_status_label.add_theme_font_size_override("font_size", 12)
 	top_vbox.add_child(_status_label)
 
-	# --- Help bar (raccourcis) ---
+	# --- Help bar (raccourcis CLAVIER — masquée sur écran tactile : les
+	# boutons tactiles couvrent tout, et F1/F2… n'ont pas de sens) ---
 	_help_label = Label.new()
+	_help_label.visible = not DisplayServer.is_touchscreen_available()
 	_help_label.text = _t(
-		"↑/↓ Setpoint · Space Brake · Shift Emerg · H Phares · V View · Enter Depart · F1 Fault · F2 Clear · F3 Auto-op",
-		"↑/↓ Consigne · Espace Frein · Shift Urgence · H Phares · V Vue · Entrée Départ · F1 Panne · F2 Clear · F3 Auto-exploit"
+		"Haut/Bas Setpoint · Space Brake · Shift Emerg · H Phares · V View · Enter Depart · F1 Fault · F2 Clear · F3 Auto-op",
+		"Haut/Bas Consigne · Espace Frein · Shift Urgence · H Phares · V Vue · Entrée Départ · F1 Panne · F2 Clear · F3 Auto-exploit"
 	)
 	_help_label.position = Vector2(20, 218)
 	_help_label.size = Vector2(1560, 22)
@@ -174,9 +176,11 @@ func _status_text() -> String:
 		return _t("READY — press Enter to depart", "PRÊT — Entrée pour départ")
 	if absf(physics.v) < 0.1:
 		return _t("Stopped at station", "Arrêté en gare")
+	# (pas de flèches ni glyphes exotiques : la police par défaut des
+	# exports mobiles les rend en carrés — retour d'essai iPad 2026-07-12)
 	if physics.direction > 0:
-		return _t("Climbing → Glacier", "Montée → Glacier")
-	return _t("Descending → Val Claret", "Descente → Val Claret")
+		return _t("Climbing to Glacier", "Montee vers le Glacier")
+	return _t("Descending to Val Claret", "Descente vers Val Claret")
 
 
 func _update_fault_panel() -> void:
