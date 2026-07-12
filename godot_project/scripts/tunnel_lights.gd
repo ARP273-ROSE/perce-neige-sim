@@ -20,6 +20,10 @@ extends Node3D
 # frame si on les laisse actives. Au-delà de LIGHT_CULL_DIST des deux rames,
 # la lumière est éteinte (le bâtonnet émissif, lui, reste visible de loin).
 const LIGHT_CULL_DIST: float = 450.0
+# Web (rendu Compatibility, iPad) : chaque OmniLight active coûte cher en
+# WebGL2 → rayon de culling réduit. Les bâtonnets émissifs restent
+# visibles au-delà, l'éclairage perçu reste uniforme.
+const LIGHT_CULL_DIST_WEB: float = 200.0
 
 var tunnel: TunnelBuilder = null
 var _lights: Array = []   # paires [OmniLight3D, s_m] pour le culling
@@ -79,12 +83,13 @@ func _populate() -> void:
 # LENGTH - s_cabin). À appeler à basse fréquence (~2 Hz) depuis main.gd —
 # inutile de le faire à 60 Hz, une rame parcourt < 7 m entre deux appels.
 func update_light_culling(s_cabin: float) -> void:
+	var cull: float = LIGHT_CULL_DIST_WEB if OS.has_feature("web") else LIGHT_CULL_DIST
 	var s_ghost: float = PNConstants.LENGTH - s_cabin
 	for entry in _lights:
 		var light: OmniLight3D = entry[0]
 		var ls: float = entry[1]
 		var d: float = minf(absf(ls - s_cabin), absf(ls - s_ghost))
-		light.visible = d < LIGHT_CULL_DIST
+		light.visible = d < cull
 
 
 func _add_neon(s: float, mesh: BoxMesh, neon_mat: StandardMaterial3D,

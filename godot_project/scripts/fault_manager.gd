@@ -254,9 +254,14 @@ func trigger(fault_id: String) -> void:
 	_active_total_duration = dur
 	_active_remaining = dur if dur > 0.0 else INF
 
-	# Effet immédiat : si la panne arrête le train, déclenche frein urgence
+	# Effet immédiat : si la panne arrête le train, déclenche le frein
+	# d'urgence RAMPÉ (décélération ~2,5 m/s², comme le vrai frein de
+	# chariot). Retour d'essai iPad 2026-07 : l'ancien
+	# `emergency_brake = true` était traité par la physique comme un
+	# clamp v = 0 instantané → arrêt sec non physique.
 	if FAULTS[fault_id]["stops_train"] and physics != null:
-		physics.emergency_brake = true
+		physics.emergency = true
+		physics.speed_cmd = 0.0
 
 	# Annonce vocale liée
 	var ann_key: String = FAULTS[fault_id]["announcement"]
@@ -270,8 +275,9 @@ func trigger(fault_id: String) -> void:
 func clear_active() -> void:
 	if _active_id == "":
 		return
-	# Si stopping/catastrophic, libère le frein urgence
+	# Si stopping/catastrophic, libère le frein urgence (rampé + legacy)
 	if physics != null:
+		physics.release_emergency()
 		physics.emergency_brake = false
 	print("[Fault] %s clearée" % _active_id)
 	_active_id = ""
