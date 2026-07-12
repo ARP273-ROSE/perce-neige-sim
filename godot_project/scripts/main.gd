@@ -140,7 +140,7 @@ func _build_web_start_overlay() -> void:
 	veil.mouse_filter = Control.MOUSE_FILTER_STOP
 	layer.add_child(veil)
 	var lbl: Label = Label.new()
-	lbl.text = "TOUCHEZ L'ÉCRAN POUR DÉMARRER\n\nbuild 2026-07-12c — un bip confirme l'audio"
+	lbl.text = "TOUCHEZ L'ÉCRAN POUR DÉMARRER\n\nbuild 2026-07-12d — un bip confirme l'audio"
 	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	lbl.add_theme_font_size_override("font_size", 30)
 	lbl.add_theme_color_override("font_color", Color(1.0, 0.85, 0.30))
