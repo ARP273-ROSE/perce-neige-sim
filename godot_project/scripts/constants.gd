@@ -53,13 +53,15 @@ const A_START: float = 0.12              # accel initiale à v=0
 const V_SOFT_RAMP: float = 2.0           # vitesse où cap atteint A_MAX_REG
 const A_NATURAL_UP: float = 0.25         # décel coast en montée
 const A_BRAKE_NORMAL: float = 2.5        # frein service (m/s²)
-# Frein d'urgence : décélération volontairement ADOUCIE (retour d'essai
-# 2026-07-12 : « l'arrêt d'urgence est trop brutal »). 3,0 m/s² reste plus
-# ferme que le frein service (2,5) mais sans le à-coup violent de l'ancien
-# 5,0. La rampe descend aussi à 4,0/s (montée en 0,25 s au lieu de 0,125),
-# ce qui divise le jerk par ~3.
-const A_BRAKE_EMERGENCY: float = 3.0     # frein urgence (m/s²)
-const A_BRAKE_EMERG_RAMP: float = 4.0    # rampe frein urgence (1/s)
+# Frein d'urgence : ALIGNÉ SUR LE SIM PYTHON (audit décélérations 2026-07-06,
+# sources RM5/POMA/STRMTG) : le bouton rouge = frein de sécurité sur la
+# POULIE motrice, câble intact → 1,25 m/s² (norme passagers debout). Le
+# parachute Belleville 3,6 m/s² n'existe qu'en survitesse +20 % / rupture
+# câble (pas modélisé dans le port 3D). Répond aussi au retour d'essai
+# 2026-07-12 « arrêt d'urgence trop brutal » (5,0 = plafond réglementaire
+# absolu appliqué à tort).
+const A_BRAKE_EMERGENCY: float = 1.25    # frein urgence commandé (m/s²)
+const A_BRAKE_EMERG_RAMP: float = 8.0    # rampe frein urgence (1/s) — idem PC
 const MU_ROLL: float = 0.0025            # frottement roulement
 
 # Moteurs — 3 × 800 kW DC
@@ -71,6 +73,10 @@ const T_NOMINAL_DAN: float = 22500.0
 const T_WARN_DAN: float = 28000.0
 const T_BREAK_DAN: float = 191200.0
 const CABLE_DIAM_MM: float = 52.0
+# Masse linéique du câble (≈ 38 t sur la ligne) — le poids du brin entre la
+# rame lourde et la poulie motrice pèse jusqu'à ~9 900 daN sur la jauge de
+# tension quand la rame est en bas (port du modèle Python, audit 2026-07-06).
+const CABLE_KG_M: float = 11.0
 
 # Tunnel
 const TUNNEL_DIAM_M: float = 3.9         # diamètre min

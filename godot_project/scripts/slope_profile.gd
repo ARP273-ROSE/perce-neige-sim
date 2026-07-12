@@ -117,6 +117,59 @@ static func gradient_at(s: float) -> float:
 	return interp_smooth(SLOPE_PROFILE, s)
 
 
+# Gradient pour la PHYSIQUE — interpolation LINÉAIRE, comme gradient_at()
+# du sim Python : c'est ce qui rend les valeurs (gravité nette, tension,
+# puissance) exactement raccord avec le programme PC. Le smoothstep de
+# gradient_at() reste réservé à la GÉOMÉTRIE 3D (continuité de courbure,
+# sinon les rails tressautent aux points de contrôle) — l'écart entre les
+# deux est < 0,5 % de pente, invisible à l'œil mais mesurable sur la jauge.
+static func gradient_phys_at(s: float) -> float:
+	return interp(SLOPE_PROFILE, s)
+
+
+# ---------------------------------------------------------------------------
+# Altitude (m) à la distance-pente s — équivalent du geom_at()[1] du sim
+# Python. Intègre le gradient par pas de 2 m puis NORMALISE pour atteindre
+# exactement DROP = 921 m (même correction que build_path_points). Table
+# calculée une fois (static var) : lookup lerp O(1) ensuite. Utilisé par la
+# tension câble (poids du brin = ρ·g·(ALT_HIGH − alt(s_rame_lourde))).
+# ---------------------------------------------------------------------------
+
+const _ALT_DS: float = 2.0
+static var _alt_table: PackedFloat32Array = PackedFloat32Array()
+
+
+static func _build_alt_table() -> void:
+	var n: int = int(PNConstants.LENGTH / _ALT_DS)
+	_alt_table.resize(n + 1)
+	var y: float = PNConstants.ALT_LOW
+	_alt_table[0] = y
+	var s: float = 0.0
+	for i in range(n):
+		# Interp linéaire (gradient_phys_at) : même intégration que le
+		# _build_geometry du PC → altitudes identiques au dm près.
+		var g: float = gradient_phys_at(s + _ALT_DS * 0.5)
+		y += _ALT_DS * sin(atan(g))
+		s += _ALT_DS
+		_alt_table[i + 1] = y
+	# Normalisation du dénivelé intégré sur DROP exact
+	var drop_raw: float = _alt_table[n] - PNConstants.ALT_LOW
+	if drop_raw > 0.0:
+		var k: float = PNConstants.DROP / drop_raw
+		for i in range(n + 1):
+			_alt_table[i] = PNConstants.ALT_LOW \
+				+ (_alt_table[i] - PNConstants.ALT_LOW) * k
+
+
+static func altitude_at(s: float) -> float:
+	if _alt_table.is_empty():
+		_build_alt_table()
+	var fidx: float = clampf(s, 0.0, PNConstants.LENGTH) / _ALT_DS
+	var i0: int = clampi(int(fidx), 0, _alt_table.size() - 1)
+	var i1: int = mini(i0 + 1, _alt_table.size() - 1)
+	return lerpf(_alt_table[i0], _alt_table[i1], fidx - float(i0))
+
+
 static func slope_angle_at(s: float) -> float:
 	return atan(gradient_at(s))
 

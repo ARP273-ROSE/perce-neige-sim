@@ -14,6 +14,29 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 
 ## Quoi de neuf — v1.12.x (audit + retours d'essai terrain, juillet 2026)
 
+**v1.12.10** — audit de parité physique PWA/3D ↔ programme PC (le port 3D
+datait de la v1.9.1 et avait raté plusieurs corrections) :
+- **Passagers enfin embarqués dans la 3D** : trafic skieur asymétrique comme
+  sur PC (montée chargée 180–334 pax, descente quasi vide, contrepoids
+  inversé), re-tirage à chaque demi-tour — avant, les deux rames restaient à
+  0 pax → déséquilibre nul, gravité nette nulle, compteur pax figé à 0.
+- **Pente locale de CHAQUE rame** dans la gravité nette et le frottement
+  (profil asymétrique 8 % → 29,5 % → 6 % ; l'ancien port appliquait la pente
+  de la rame pilotée aux deux).
+- **Tension câble complète** : poids propre du câble (11 kg/m, jusqu'à
+  ~9 900 daN quand la rame lourde est en bas) + pente locale de la rame
+  LOURDE — la jauge évolue maintenant le long du trajet comme sur PC.
+- **Interpolation physique linéaire** (comme le PC) : gravité/tension/altitude
+  **identiques au dixième près** sur tout le profil (banc de parité 5 points) ;
+  le smoothstep reste réservé à la géométrie 3D.
+- **Arrêt d'urgence = frein poulie 1,25 m/s²** (norme passagers debout, comme
+  le PC depuis l'audit décélérations) : arrêt depuis 12 m/s en montée chargée
+  en 37 m — la table PC donne 38 m.
+- **Docking final v1.12.3 porté** (0,15 m/s² sur 2,5 m — fini l'entrée en gare
+  interminable), auto-park après arrêt d'urgence, bleed survitesse bidirectionnel.
+- Banc validé : montée pleine charge 7,1 min, vmax 12,0 m/s, tension max
+  24 100 daN (pic inrush), P max 1 240 kW.
+
 **v1.12.9** — retours d'essai iPad/PWA :
 - **Câble & profil de ligne suivent la rame pilotée** : en scénario « rame 2 »,
   c'est le bon brin (voie droite) qui reste accroché à la cabine — visibilité,
