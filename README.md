@@ -14,6 +14,21 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 
 ## Quoi de neuf — v1.12.x (audit + retours d'essai terrain, juillet 2026)
 
+**v1.12.7** — retours d'essai iPad/web généralisés au desktop :
+- **Annonces vocales réparées dans les builds exportés** (le viewer 3D
+  autonome n'en jouait aucune depuis toujours : le scan des MP3 ne voyait
+  pas les noms remappés `.import` des exports).
+- **Séquence de départ en 3 phases aux durées réelles des enregistrements** :
+  annonce « fermeture des portes » (7,5 s) → fermeture des portes (7,0 s) →
+  buzzer 8 s (gare basse) / 6 s (gare haute) → traction.
+- Annonce « zone Grande Motte » en approche finale de la gare haute
+  uniquement (plus d'annonce fantôme à quai), défilement 3D interpolé
+  (fini les saccades à haute fréquence d'affichage), arrêt de panne par
+  frein d'urgence rampé (2,5 m/s², plus d'arrêt sec), pannes aléatoires du
+  mode auto désactivées, néons en allumage progressif.
+- **Version Web/PWA jouable sur tablette** (Safari/Chrome, contrôles
+  tactiles, audio anti-mode-silencieux iPad).
+
 **Fidélité au réel** (calibrée sur photos/vidéos embarquées + témoignage
 d'un utilisateur régulier de la ligne) :
 - **Évitement en deux tubes séparés** (conforme au chantier de 1991 : « tube
