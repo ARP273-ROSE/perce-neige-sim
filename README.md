@@ -14,6 +14,21 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 
 ## Quoi de neuf — v1.12.x (audit + retours d'essai terrain, juillet 2026)
 
+**v1.12.12** — à-coups de puissance éliminés (2D **et** 3D), audit balayage :
+- Toutes les **marches d'escalier** du modèle remplacées par des fondus
+  continus : coupure moteur au plafond de vitesse (elle hachait la force à
+  60 Hz — 910 sauts > 100 kW/frame mesurés au banc sous plafond de panne,
+  0 après), verrou de gravité excédentaire (autorité de traction en fondu
+  sur 6 000 N au lieu du tout-ou-rien), bascule RÉGEN/traction (seuil
+  2 000 N + hystérésis d'affichage 15/30 kW).
+- Plafond de panne : la CIBLE du régulateur est bornée aussi côté 3D
+  (porté du PC) — le régulateur ne pousse plus contre la limite.
+- **Audit balayage 60 scénarios** (5 positions × 3 charges × 2 sens ×
+  2 vitesses × 40 s) : zéro NaN, tension dans [0 ; 45 000 daN], accél
+  bornée, jamais traction et régen simultanées, zéro survitesse, zéro
+  à-coup hors pics d'inrush (voulus). Parité statique PWA↔PC intacte,
+  16/16 tests desktop.
+
 **v1.12.11** — traction/retenue en descente lourde + jauges (2D **et** 3D) :
 - **Plus de traction fantôme en descente lourde** (constaté après une
   inversion en tunnel) : quand la gravité pousse déjà dans le sens de
