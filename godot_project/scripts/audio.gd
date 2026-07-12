@@ -99,8 +99,11 @@ func _process(_delta: float) -> void:
 
 	# Buzzer de départ : déclenché au DÉBUT de la séquence (portes qui se
 	# ferment + buzzer 6-8 s, traction à la fin — cf. request_depart).
-	# Gares haut/bas ont des buzzers distincts.
-	if physics.departure_buzzer_remaining > 0.0 and _prev_buzzer_remaining <= 0.0:
+	# Gares haut/bas ont des buzzers distincts. UNIQUEMENT À QUAI : les
+	# buzzers sont des haut-parleurs de quai — une reprise en plein tunnel
+	# (après inversion de sens) est silencieuse, comme sur le PC.
+	if physics.departure_buzzer_remaining > 0.0 and _prev_buzzer_remaining <= 0.0 \
+			and physics.at_station():
 		var at_upper: bool = physics.s > PNConstants.LENGTH * 0.5
 		var buz: AudioStreamPlayer = _player_buzzer if at_upper else _player_buzzer_low
 		if buz != null and buz.stream:
