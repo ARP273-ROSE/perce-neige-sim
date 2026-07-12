@@ -38,6 +38,7 @@ var quality: String = "high"
 var _prev_doors_open: bool = true
 var _prev_trip_started: bool = false
 var _prev_direction: int = 1
+var _prev_announce_remaining: float = 0.0
 var _welcome_played: bool = false
 var _exit_announced_for_stop: bool = false
 var _prev_fault_id: String = ""
@@ -140,7 +141,7 @@ func _build_web_start_overlay() -> void:
 	veil.mouse_filter = Control.MOUSE_FILTER_STOP
 	layer.add_child(veil)
 	var lbl: Label = Label.new()
-	lbl.text = "TOUCHEZ L'ÉCRAN POUR DÉMARRER\n\nbuild 2026-07-12d — un bip confirme l'audio"
+	lbl.text = "TOUCHEZ L'ÉCRAN POUR DÉMARRER\n\nbuild 2026-07-12e — un bip confirme l'audio"
 	lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	lbl.add_theme_font_size_override("font_size", 30)
 	lbl.add_theme_color_override("font_color", Color(1.0, 0.85, 0.30))
@@ -531,12 +532,12 @@ func _update_announcement_triggers() -> void:
 	if announcements == null:
 		return
 
-	# Annonce « fermeture des portes » au moment où les portes se FERMENT
-	# (début de la séquence de départ) — avant, elle était accrochée à
-	# trip_started, soit 11,5 s après la fermeture réelle (portes 3,5 s +
-	# buzzer 8 s), donc pendant que la rame partait déjà.
-	if not physics.doors_open and _prev_doors_open:
+	# Annonce « fermeture des portes » au DÉBUT de la séquence de départ
+	# (phase 1 : annonce seule, portes encore ouvertes — la fermeture et
+	# le buzzer suivent, chacun son tour).
+	if physics.announce_phase_remaining > 0.0 and _prev_announce_remaining <= 0.0:
 		announcements.queue("doors_close")
+	_prev_announce_remaining = physics.announce_phase_remaining
 
 	# Trip vient de démarrer (départ) → log + arme l'annonce d'approche
 	if physics.trip_started and not _prev_trip_started:

@@ -70,8 +70,16 @@ func step(dt: float) -> void:
 	dt = clampf(dt, 0.001, 0.1)
 	s_prev_step = s
 
-	# Séquence de départ : phase portes, puis buzzer, puis traction.
-	if door_phase_remaining > 0.0:
+	# Séquence de départ en TROIS phases successives (retour d'essai iPad
+	# 2026-07-12 : annonce, portes et buzzer se superposaient) :
+	# annonce « fermeture des portes » (7,5 s, portes encore ouvertes) →
+	# fermeture des portes (3,5 s) → buzzer 6-8 s → traction.
+	if announce_phase_remaining > 0.0:
+		announce_phase_remaining = maxf(0.0, announce_phase_remaining - dt)
+		if announce_phase_remaining <= 0.0:
+			doors_open = false
+			door_phase_remaining = 3.5
+	elif door_phase_remaining > 0.0:
 		door_phase_remaining = maxf(0.0, door_phase_remaining - dt)
 		if door_phase_remaining <= 0.0:
 			departure_buzzer_remaining = \
@@ -342,27 +350,31 @@ func _terminus_turnaround() -> void:
 	doors_open = true
 	speed_cmd = 0.0
 	speed_cmd_eff = 0.0
+	announce_phase_remaining = 0.0
 	departure_buzzer_remaining = 0.0
 	door_phase_remaining = 0.0
 	direction = -direction
 
 
-# Séquence de départ réelle, en DEUX phases (retour d'essai : portes et
-# buzzer superposés étaient indistinguables) :
-#   1. fermeture des portes (~3,5 s, son de portes seul)
-#   2. BUZZER de départ 6 s (gare haute) / 8 s (gare basse — durées des
+# Séquence de départ réelle, en TROIS phases successives :
+#   1. annonce « fermeture des portes » (7,5 s — durée du fichier 01,
+#      portes encore OUVERTES)
+#   2. fermeture des portes (~3,5 s, son de portes seul)
+#   3. BUZZER de départ 6 s (gare haute) / 8 s (gare basse — durées des
 #      enregistrements réels), traction à la FIN du buzzer seulement
 #      (le frein tambour tient pendant toute la séquence).
+const ANNOUNCE_PHASE_S: float = 7.5
+var announce_phase_remaining: float = 0.0
 var departure_buzzer_remaining: float = 0.0
 var door_phase_remaining: float = 0.0
 
 
 func request_depart() -> void:
-	if trip_started or departure_buzzer_remaining > 0.0 \
+	if trip_started or announce_phase_remaining > 0.0 \
+			or departure_buzzer_remaining > 0.0 \
 			or door_phase_remaining > 0.0:
 		return
-	doors_open = false
-	door_phase_remaining = 3.5
+	announce_phase_remaining = ANNOUNCE_PHASE_S
 
 
 func start_trip() -> void:
