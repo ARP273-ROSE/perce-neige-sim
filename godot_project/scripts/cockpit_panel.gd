@@ -158,9 +158,11 @@ func _draw_speedometer(cx: float, cy: float) -> void:
 	draw_line(Vector2(cx, cy), needle_end, Color(1.0, 0.30, 0.20), 3.0)
 	draw_circle(Vector2(cx, cy), 5.0, Color(0.85, 0.88, 0.92))
 	draw_circle(Vector2(cx, cy), 3.0, Color(0.10, 0.10, 0.10))
-	# Lecture digitale au centre-bas
-	_draw_text_center(Vector2(cx, cy + radius * 0.55), "%.1f m/s" % absf(physics.v), 13, Color(0.55, 1.0, 0.65))
-	_draw_text_center(Vector2(cx, cy + radius * 0.78), "%.0f km/h" % v_kmh, 11, Color(0.85, 0.88, 0.92))
+	# Lecture digitale : m/s dans le cadran (zone libre sous le moyeu),
+	# km/h SOUS le cadran — l'ancien placement à 0.78×R tombait sur les
+	# graduations du bas (retour d'essai 2026-07-13 : valeurs confondues).
+	_draw_text_center(Vector2(cx, cy + radius * 0.48), "%.1f m/s" % absf(physics.v), 13, Color(0.55, 1.0, 0.65))
+	_draw_text_center(Vector2(cx, cy + radius + 16.0), "%.0f km/h" % v_kmh, 11, Color(0.85, 0.88, 0.92))
 	# Label
 	_draw_text_center(Vector2(cx, cy - radius - 12.0), "VITESSE", 11, label_color)
 
@@ -171,50 +173,65 @@ func _draw_tension_gauge(x: float, y: float, w: float, h: float) -> void:
 	draw_rect(Rect2(Vector2(x, y), Vector2(w, h)), bezel_color, false, 1.2)
 	# Label
 	_draw_text(Vector2(x + 6, y + 14), "TENSION CÂBLE", 11, label_color)
-	# Bar : valeur courante / breakage. Seuils :
-	#   0 → T_NOMINAL : zone verte
-	#   T_NOMINAL → T_WARN : zone jaune
-	#   T_WARN → T_BREAK : zone rouge
-	var t_break: float = PNConstants.T_BREAK_DAN
+	# Échelle de SERVICE 0 → T_GAUGE_MAX (42 000 daN), pas 0 → rupture :
+	# à l'échelle de la rupture (191 200, facteur de sécurité ~8,5) le vert
+	# faisait 12 % de la barre et le rouge 85 % — illisible et anxiogène.
+	# Zones : VERT jusqu'à T_WARN (la tension NOMINALE 22 500 est une valeur
+	# de service normale, pas un seuil d'alerte — repère blanc « NOM »),
+	# ORANGE T_WARN → T_RED, ROUGE au-delà. La rupture est hors échelle.
+	var t_max: float = PNConstants.T_GAUGE_MAX_DAN
 	var t_nom: float = PNConstants.T_NOMINAL_DAN
 	var t_warn: float = PNConstants.T_WARN_DAN
+	var t_red: float = PNConstants.T_RED_DAN
 	var t_cur: float = physics.tension_dan_disp
 	var bar_y: float = y + 30.0
 	var bar_h: float = 24.0
 	var bar_w: float = w - 12.0
 	var bar_x: float = x + 6.0
 	# Fond zones colorées (proportionnelles aux seuils)
-	var x_nom: float = bar_x + bar_w * (t_nom / t_break)
-	var x_warn: float = bar_x + bar_w * (t_warn / t_break)
-	# Zone verte
-	draw_rect(Rect2(Vector2(bar_x, bar_y), Vector2(x_nom - bar_x, bar_h)), Color(0.10, 0.45, 0.15, 0.7), true)
-	# Zone jaune
-	draw_rect(Rect2(Vector2(x_nom, bar_y), Vector2(x_warn - x_nom, bar_h)), Color(0.65, 0.50, 0.10, 0.7), true)
+	var x_warn: float = bar_x + bar_w * (t_warn / t_max)
+	var x_red: float = bar_x + bar_w * (t_red / t_max)
+	# Zone verte (service normal, nominal inclus)
+	draw_rect(Rect2(Vector2(bar_x, bar_y), Vector2(x_warn - bar_x, bar_h)), Color(0.10, 0.45, 0.15, 0.7), true)
+	# Zone orange (alerte)
+	draw_rect(Rect2(Vector2(x_warn, bar_y), Vector2(x_red - x_warn, bar_h)), Color(0.65, 0.50, 0.10, 0.7), true)
 	# Zone rouge
-	draw_rect(Rect2(Vector2(x_warn, bar_y), Vector2(bar_x + bar_w - x_warn, bar_h)), Color(0.65, 0.15, 0.10, 0.7), true)
+	draw_rect(Rect2(Vector2(x_red, bar_y), Vector2(bar_x + bar_w - x_red, bar_h)), Color(0.65, 0.15, 0.10, 0.7), true)
+	# Repère de la tension nominale (trait blanc pointillé + « NOM »)
+	var x_nom: float = bar_x + bar_w * (t_nom / t_max)
+	draw_dashed_line(Vector2(x_nom, bar_y - 2.0), Vector2(x_nom, bar_y + bar_h + 2.0),
+		Color(1.0, 1.0, 1.0, 0.75), 1.5, 3.0)
+	_draw_text(Vector2(x_nom - 12.0, bar_y - 5.0), "NOM", 8, Color(0.85, 0.88, 0.92))
 	# Aiguille de la valeur courante
-	var x_cur: float = bar_x + bar_w * clampf(t_cur / t_break, 0.0, 1.0)
+	var x_cur: float = bar_x + bar_w * clampf(t_cur / t_max, 0.0, 1.0)
 	draw_line(Vector2(x_cur, bar_y - 3.0), Vector2(x_cur, bar_y + bar_h + 3.0), Color(1.0, 1.0, 1.0), 2.5)
 	# Cadre bar
 	draw_rect(Rect2(Vector2(bar_x, bar_y), Vector2(bar_w, bar_h)), Color(0.85, 0.88, 0.92), false, 1.0)
-	# Lecture sous la bar
+	# Lecture sous la bar — les couleurs suivent les zones de la jauge
 	var col: Color = Color(0.55, 1.0, 0.65)
-	if t_cur >= t_warn:
+	if t_cur >= t_red:
 		col = Color(1.0, 0.30, 0.25)
-	elif t_cur >= t_nom:
+	elif t_cur >= t_warn:
 		col = Color(1.0, 0.85, 0.30)
 	_draw_text(Vector2(bar_x, y + h - 38.0),
 		"%.0f daN" % t_cur, 14, col)
 	# Seuils en petit
 	_draw_text(Vector2(bar_x, y + h - 18.0),
-		"NOM %d   WARN %d   RUPT %d" % [int(t_nom), int(t_warn), int(t_break)],
+		"NOM %d · ALERTE %d · RUPTURE %d (hors échelle)" % [int(t_nom), int(t_warn), int(PNConstants.T_BREAK_DAN)],
 		9, Color(0.65, 0.70, 0.75))
 
 
 func _draw_power_gauge(x: float, y: float, w: float, h: float) -> void:
 	draw_rect(Rect2(Vector2(x, y), Vector2(w, h)), Color(0.04, 0.05, 0.07), true)
 	draw_rect(Rect2(Vector2(x, y), Vector2(w, h)), bezel_color, false, 1.2)
-	_draw_text_center(Vector2(x + w * 0.5, y + 14), "PUISSANCE", 10, label_color)
+	# Mode RÉGEN : rame lourde retenue en descente → l'entraînement
+	# fonctionne en génératrice. La jauge bascule (titre + barre cyan)
+	# au lieu d'afficher une traction fantôme.
+	var regen: float = physics.regen_kw_disp
+	var regen_mode: bool = regen > 10.0 and physics.power_kw_disp < 10.0
+	_draw_text_center(Vector2(x + w * 0.5, y + 14),
+		"RÉGEN" if regen_mode else "PUISSANCE", 10,
+		Color(0.45, 0.85, 1.0) if regen_mode else label_color)
 	# Bar verticale
 	var bar_x: float = x + w * 0.30
 	var bar_y: float = y + 28.0
@@ -222,19 +239,22 @@ func _draw_power_gauge(x: float, y: float, w: float, h: float) -> void:
 	var bar_h: float = h - 50.0
 	draw_rect(Rect2(Vector2(bar_x, bar_y), Vector2(bar_w, bar_h)), Color(0.10, 0.10, 0.12), true)
 	var p_max: float = PNConstants.P_MAX / 1000.0   # kW
-	var p_cur: float = physics.power_kw_disp
+	var p_cur: float = regen if regen_mode else physics.power_kw_disp
 	var p_norm: float = clampf(p_cur / p_max, 0.0, 1.0)
 	var fill_h: float = bar_h * p_norm
-	# Couleur du remplissage
-	var fill_col: Color = Color(0.20, 0.85, 0.35)
-	if p_norm > 0.85:
-		fill_col = Color(1.0, 0.30, 0.20)
-	elif p_norm > 0.65:
-		fill_col = Color(1.0, 0.80, 0.20)
+	# Couleur du remplissage — cyan en régénération
+	var fill_col: Color = Color(0.20, 0.65, 0.95) if regen_mode else Color(0.20, 0.85, 0.35)
+	if not regen_mode:
+		if p_norm > 0.85:
+			fill_col = Color(1.0, 0.30, 0.20)
+		elif p_norm > 0.65:
+			fill_col = Color(1.0, 0.80, 0.20)
 	draw_rect(Rect2(Vector2(bar_x, bar_y + bar_h - fill_h), Vector2(bar_w, fill_h)), fill_col, true)
 	draw_rect(Rect2(Vector2(bar_x, bar_y), Vector2(bar_w, bar_h)), Color(0.85, 0.88, 0.92), false, 1.0)
 	# Lecture
-	_draw_text_center(Vector2(x + w * 0.5, y + h - 24.0), "%.0f kW" % p_cur, 12, Color(0.85, 1.0, 0.85))
+	var read_col: Color = Color(0.55, 0.90, 1.0) if regen_mode else Color(0.85, 1.0, 0.85)
+	_draw_text_center(Vector2(x + w * 0.5, y + h - 24.0),
+		("-%.0f kW" if regen_mode else "%.0f kW") % p_cur, 12, read_col)
 	_draw_text_center(Vector2(x + w * 0.5, y + h - 8.0), "/ %d" % int(p_max), 9, Color(0.65, 0.70, 0.75))
 
 

@@ -77,12 +77,12 @@ func _draw() -> void:
 	var cable_left_x: float = pulley_cx - 18.0
 	var cable_right_x: float = pulley_cx + 18.0
 	var t_cur: float = physics.tension_dan_disp
-	var t_warn: float = PNConstants.T_WARN_DAN
-	var t_break: float = PNConstants.T_BREAK_DAN
+	# Le nominal (22 500) est la tension de SERVICE — le câble ne passe
+	# orange qu'à l'ALERTE (28 000) et rouge en zone rouge (35 000).
 	var cable_color: Color = Color(0.55, 0.55, 0.55)
-	if t_cur >= t_warn:
+	if t_cur >= PNConstants.T_RED_DAN:
 		cable_color = Color(1.0, 0.30, 0.20)
-	elif t_cur >= PNConstants.T_NOMINAL_DAN:
+	elif t_cur >= PNConstants.T_WARN_DAN:
 		cable_color = Color(1.0, 0.80, 0.30)
 	# Ligne brin gauche (vers cabine 1)
 	draw_line(Vector2(cable_left_x, cable_top_y), Vector2(cable_left_x, cable_bot_y), cable_color, 4.0)

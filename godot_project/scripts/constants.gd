@@ -68,9 +68,15 @@ const MU_ROLL: float = 0.0025            # frottement roulement
 const P_MAX: float = 2_400_000.0         # puissance totale (W)
 const F_STALL: float = 260_000.0         # force max moteur (N)
 
-# Câble Fatzer 52 mm
+# Câble Fatzer 52 mm.
+# T_NOMINAL = tension de SERVICE normale (la jauge vit autour de cette
+# valeur toute la journée — ce n'est PAS un seuil d'alerte) ; l'alerte ne
+# commence qu'à T_WARN, le rouge à T_RED. La rupture (191 200 daN, facteur
+# de sécurité ~8,5) est très au-delà de l'échelle affichable.
 const T_NOMINAL_DAN: float = 22500.0
 const T_WARN_DAN: float = 28000.0
+const T_RED_DAN: float = 35000.0         # zone rouge de la jauge (affichage)
+const T_GAUGE_MAX_DAN: float = 42000.0   # pleine échelle de la jauge (affichage)
 const T_BREAK_DAN: float = 191200.0
 const CABLE_DIAM_MM: float = 52.0
 # Masse linéique du câble (≈ 38 t sur la ligne) — le poids du brin entre la
