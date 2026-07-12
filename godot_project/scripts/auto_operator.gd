@@ -143,14 +143,18 @@ func _process(delta: float) -> void:
 			# Frein doux jusqu'à arrêt complet
 			physics.speed_cmd = 0.0
 			if absf(physics.v) < 0.05:
-				_request_open_doors()
 				state = State.OPENING_DOORS
 				_state_timer = 0.0
 				_trip_count += 1
 				print("[AutoOp] Trip %d terminé, arrivée en gare" % _trip_count)
 
 		State.OPENING_DOORS:
-			# Attendre que doors_open passe à true
+			# Les portes s'ouvrent TOUTES SEULES après la temporisation
+			# d'arrivée de la physique (rebond de câble visible pendant
+			# ~15 s) — ne rien forcer ici, juste attendre. (Surtout pas
+			# `finished = false` : ça réarmait le serrage d'arrivée à
+			# chaque frame → tempo jamais écoulée, portes jamais
+			# ouvertes. start_trip() remet finished à zéro au départ.)
 			if physics.doors_open:
 				state = State.WAITING_AT_STATION
 				_state_timer = 0.0
@@ -164,17 +168,6 @@ func _distance_to_stop() -> float:
 		return maxf(0.0, PNConstants.STOP_S - physics.s)
 	else:
 		return maxf(0.0, physics.s - PNConstants.START_S)
-
-
-func _request_open_doors() -> void:
-	if physics == null:
-		return
-	# Le demi-tour terminus (portes, trip_started, direction inversée)
-	# est désormais géré par TrainPhysics._terminus_turnaround() à
-	# l'arrivée — le refaire ici inverserait la direction DEUX fois.
-	# On s'assure juste que l'état est bien celui attendu.
-	physics.doors_open = true
-	physics.finished = false
 
 
 func _maybe_inject_fault() -> void:

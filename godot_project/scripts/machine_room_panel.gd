@@ -90,7 +90,7 @@ func _draw() -> void:
 	draw_line(Vector2(cable_right_x, cable_top_y), Vector2(cable_right_x, cable_bot_y), cable_color, 4.0)
 	# Annotation tension
 	_draw_text(Vector2(pulley_cx + 30.0, (cable_top_y + cable_bot_y) * 0.5),
-		"Câble Ø52", 10, label_color)
+		"Cable diam. 52", 10, label_color)
 	_draw_text(Vector2(pulley_cx + 30.0, (cable_top_y + cable_bot_y) * 0.5 + 15.0),
 		"%.0f daN" % t_cur, 11, cable_color)
 
@@ -99,7 +99,7 @@ func _draw() -> void:
 
 	# 4. Stats résumées (encart bas)
 	var stats_y: float = h - 60.0
-	_draw_text(Vector2(10.0, stats_y), "ω poulie  :", 10, label_color)
+	_draw_text(Vector2(10.0, stats_y), "Rot. poulie :", 10, label_color)
 	var omega: float = physics.v / 2.08
 	_draw_text(Vector2(110.0, stats_y), "%.2f rad/s  (%.1f tr/min)" %
 		[absf(omega), absf(omega) * 60.0 / TAU], 10, Color(0.85, 0.95, 1.0))
@@ -133,7 +133,7 @@ func _draw_pulley(cx: float, cy: float, r: float) -> void:
 	draw_circle(Vector2(cx + cos(marker_ang) * r * 0.85, cy + sin(marker_ang) * r * 0.85), 5.0, Color(1.0, 0.30, 0.10))
 	# Label dimensions
 	_draw_text_center(Vector2(cx, cy + r + 14.0), "POULIE MOTRICE", 10, label_color)
-	_draw_text_center(Vector2(cx, cy + r + 26.0), "Ø 4160 mm", 9, Color(0.65, 0.70, 0.75))
+	_draw_text_center(Vector2(cx, cy + r + 26.0), "diam. 4160 mm", 9, Color(0.65, 0.70, 0.75))
 
 
 func _draw_motor_bank(x: float, y: float, w: float, h: float) -> void:
