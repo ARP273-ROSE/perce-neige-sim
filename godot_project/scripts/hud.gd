@@ -152,6 +152,11 @@ func set_physics(p: TrainPhysics) -> void:
 		_machine_room.setup(p, fault_manager)
 
 
+func set_driver_rame2(rame2: bool) -> void:
+	if _cockpit != null:
+		_cockpit.driver_is_rame2 = rame2
+
+
 func set_fault_manager(fm: FaultManager) -> void:
 	fault_manager = fm
 	if _cockpit != null and physics != null:

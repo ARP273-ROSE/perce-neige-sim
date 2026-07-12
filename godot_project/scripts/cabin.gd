@@ -758,6 +758,10 @@ func _apply_view_mode() -> void:
 	else:
 		mesh_root.visible = true
 		camera_ext.make_current()
+	# Parois du tunnel translucides en vue extérieure pour voir la rame à
+	# l'intérieur du tube (seule la cabine pilotée bascule la vue).
+	if not is_ghost and tunnel != null:
+		tunnel.set_wall_see_through(view_mode == ViewMode.EXTERIOR)
 
 
 func toggle_view() -> void:
