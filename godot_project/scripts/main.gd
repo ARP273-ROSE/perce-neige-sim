@@ -147,6 +147,10 @@ func _apply_scenario(from_top: bool, rame2: bool) -> void:
 		physics.s_prev_step = physics.s
 		physics.s_render = physics.s
 		physics.direction = -1
+		# Re-tire la charge passagers pour un départ en DESCENTE (rame
+		# quasi vide, contrepoids chargé) — le premier roll de
+		# _build_physics supposait une montée.
+		physics.roll_pax()
 	if rame2:
 		cabin.passing_side = +1.0
 		cabin_ghost.passing_side = -1.0
@@ -386,6 +390,9 @@ func _build_physics() -> void:
 	physics.maint_brake = true
 	physics.trip_started = false
 	physics.lights_head = true      # phares ON au démarrage
+	# Charge passagers initiale (montée chargée / contrepoids vide) — sans
+	# ça dm = 0 : tension/puissance fausses et compteur pax à 0.
+	physics.roll_pax()
 
 
 func _build_tunnel() -> void:
