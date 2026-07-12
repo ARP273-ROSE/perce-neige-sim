@@ -78,6 +78,14 @@ var cable_right_segments: Array = []   # brin retour — attaché à rame 2
 var cable_left_material: ShaderMaterial = null
 var cable_right_material: ShaderMaterial = null
 
+# La rame PILOTÉE prend la voie GAUCHE (brin gauche) par défaut. Si le
+# scénario « rame 2 » est choisi, la cabine pilotée passe sur la voie
+# DROITE : c'est alors le brin DROIT qui est « le sien ». On échange donc
+# quel brin suit la cabine pilotée pour la visibilité, l'animation des
+# torons et la coupe fragment. Sans ça, le câble restait accroché à la
+# rame 1 quel que soit le choix (retour d'essai 2026-07-12).
+var driver_is_rame2: bool = false
+
 # Phase accumulée du câble (en mètres). Croît avec le temps selon la vitesse
 # de la rame. Pour le brin gauche (qui tient rame 1), cette phase compense le
 # mouvement de rame 1 de sorte que les torons apparaissent FIXES dans le
@@ -1143,19 +1151,24 @@ func _build_cable_segment(
 var _last_vis_seg_idx: int = -1
 
 
-func update_cable_visibility(s_rame1: float) -> void:
+func update_cable_visibility(s_driver: float) -> void:
 	# La visibilité ne change que quand la rame franchit une frontière de
 	# segment (15 m) — inutile d'itérer ~460 segments à 60 Hz entre-temps.
-	var seg_idx: int = int(s_rame1 / cable_segment_length)
+	var seg_idx: int = int(s_driver / cable_segment_length)
 	if seg_idx == _last_vis_seg_idx:
 		return
 	_last_vis_seg_idx = seg_idx
-	var s_rame2: float = PNConstants.LENGTH - s_rame1
+	# Où commence chaque brin visible (position de LA rame qu'il tire) :
+	#   - rame 1 pilotée : brin gauche part de la cabine (s_driver),
+	#                      brin droit part de la rame opposée (LENGTH−s).
+	#   - rame 2 pilotée : c'est l'inverse (la cabine est sur la voie droite).
+	var s_left: float = (PNConstants.LENGTH - s_driver) if driver_is_rame2 else s_driver
+	var s_right: float = PNConstants.LENGTH - s_left
 	for seg in cable_left_segments:
-		# Segment visible si une partie est au-dessus (en amont) de rame 1
-		seg.mesh.visible = seg.s_end >= s_rame1
+		# Segment visible si une partie est en amont (au-dessus) de sa rame
+		seg.mesh.visible = seg.s_end >= s_left
 	for seg in cable_right_segments:
-		seg.mesh.visible = seg.s_end >= s_rame2
+		seg.mesh.visible = seg.s_end >= s_right
 
 
 # Animation des torons. `v_rame1` est la vitesse SIGNÉE de rame 1 (m/s) dans
@@ -1176,15 +1189,21 @@ func update_cable_visibility(s_rame1: float) -> void:
 # Pour le brin droite, on fait l'opposé : cable_phase(droite) = −s_rame1.
 # (La phase absolue s'annule pour rame 1 sur le brin gauche, et le brin droite
 # défile au double du s_rame1 relatif.)
-func update_cable_phase(s_rame1: float, _v_rame1: float, _delta: float) -> void:
+func update_cable_phase(s_driver: float, _v_driver: float, _delta: float) -> void:
 	if cable_left_material == null or cable_right_material == null:
 		return
-	cable_left_material.set_shader_parameter("cable_phase", s_rame1)
-	cable_right_material.set_shader_parameter("cable_phase", -s_rame1)
+	# Le brin de LA rame pilotée doit apparaître FIXE dans le référentiel de
+	# la cabine (phase = s_driver) ; l'autre brin défile (phase = −s_driver).
+	# Selon rame 1 / rame 2, ce n'est pas le même brin qui est « le sien ».
+	var left_phase: float = (-s_driver) if driver_is_rame2 else s_driver
+	var right_phase: float = s_driver if driver_is_rame2 else (-s_driver)
+	cable_left_material.set_shader_parameter("cable_phase", left_phase)
+	cable_right_material.set_shader_parameter("cable_phase", right_phase)
 	# Coupe au fragment près : chaque brin n'existe qu'entre SA rame et la
 	# poulie en haut. Complète le masquage par segments (grossier, 15 m) —
 	# sans ça, en descente on voyait des bouts de son propre câble
 	# apparaître devant la cabine puis disparaître d'un coup.
-	cable_left_material.set_shader_parameter("cut_below_s", s_rame1)
+	var s_left: float = (PNConstants.LENGTH - s_driver) if driver_is_rame2 else s_driver
+	cable_left_material.set_shader_parameter("cut_below_s", s_left)
 	cable_right_material.set_shader_parameter(
-		"cut_below_s", PNConstants.LENGTH - s_rame1)
+		"cut_below_s", PNConstants.LENGTH - s_left)

@@ -53,8 +53,13 @@ const A_START: float = 0.12              # accel initiale à v=0
 const V_SOFT_RAMP: float = 2.0           # vitesse où cap atteint A_MAX_REG
 const A_NATURAL_UP: float = 0.25         # décel coast en montée
 const A_BRAKE_NORMAL: float = 2.5        # frein service (m/s²)
-const A_BRAKE_EMERGENCY: float = 5.0     # frein urgence (m/s²)
-const A_BRAKE_EMERG_RAMP: float = 8.0    # rampe frein urgence (1/s)
+# Frein d'urgence : décélération volontairement ADOUCIE (retour d'essai
+# 2026-07-12 : « l'arrêt d'urgence est trop brutal »). 3,0 m/s² reste plus
+# ferme que le frein service (2,5) mais sans le à-coup violent de l'ancien
+# 5,0. La rampe descend aussi à 4,0/s (montée en 0,25 s au lieu de 0,125),
+# ce qui divise le jerk par ~3.
+const A_BRAKE_EMERGENCY: float = 3.0     # frein urgence (m/s²)
+const A_BRAKE_EMERG_RAMP: float = 4.0    # rampe frein urgence (1/s)
 const MU_ROLL: float = 0.0025            # frottement roulement
 
 # Moteurs — 3 × 800 kW DC

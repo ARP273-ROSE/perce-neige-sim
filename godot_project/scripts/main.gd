@@ -5,6 +5,12 @@ extends Node3D
 const PHYSICS_HZ: float = 60.0
 const PHYSICS_DT: float = 1.0 / PHYSICS_HZ
 
+# Annonce de sortie ("Sortie des passagers", amont/aval) jouée automatiquement
+# à l'ouverture des portes en gare. Coupée par défaut : elle tombait toujours
+# juste après le demi-tour auto et était perçue comme une annonce de panne.
+# Disponible à la demande via le bouton ANNONCES.
+const AUTO_EXIT_ANNOUNCE: bool = false
+
 var physics: TrainPhysics = null
 var tunnel: TunnelBuilder = null
 var track: TrackBuilder = null
@@ -144,6 +150,13 @@ func _apply_scenario(from_top: bool, rame2: bool) -> void:
 	if rame2:
 		cabin.passing_side = +1.0
 		cabin_ghost.passing_side = -1.0
+	# Propage le choix de rame aux représentations liées à rame 1 par défaut :
+	# le câble (quel brin suit la cabine) et le mini-profil de ligne (quelle
+	# étiquette porte le point piloté).
+	if track != null:
+		track.driver_is_rame2 = rame2
+	if hud != null:
+		hud.set_driver_rame2(rame2)
 	print("[Scenario] depart %s, rame %d" % [
 		"gare haute" if from_top else "gare basse", 2 if rame2 else 1])
 
@@ -514,8 +527,14 @@ func _update_announcement_triggers() -> void:
 			exploitation_log.record_fault(fid)
 		_prev_fault_id = fid
 
-	# Portes viennent de s'ouvrir → annonce "sortie côté gauche" (arrivée gare)
-	if physics.doors_open and not _prev_doors_open:
+	# Portes viennent de s'ouvrir → annonce "sortie des passagers" (arrivée gare).
+	# DÉSACTIVÉ (retour d'essai 2026-07-12) : les portes ne s'ouvrent qu'au
+	# demi-tour automatique du terminus, donc cette annonce partait
+	# systématiquement « juste après le demi-tour » — Kevin l'entendait comme
+	# une annonce de panne intempestive. Elle reste diffusable À LA DEMANDE
+	# via le bouton ANNONCES (menu tactile). Repasser AUTO_EXIT_ANNOUNCE à
+	# true pour restaurer le comportement automatique.
+	if AUTO_EXIT_ANNOUNCE and physics.doors_open and not _prev_doors_open:
 		# Choix de l'annonce selon où on est arrivé
 		if physics.s >= PNConstants.STOP_S - 5.0:
 			# Arrivée Grande Motte (haut)
