@@ -63,6 +63,7 @@ var trip_started: bool = false
 var trip_time: float = 0.0
 var finished: bool = false
 var dbg_f_grav_net: float = 0.0          # dernière gravité nette (banc de parité)
+var _reg_hold: bool = true               # régulateur en maintien à l'arrêt
 
 # --- Rebond élastique du câble à l'arrêt (port du Python _cable_bounce) --
 # x(t) = A·e^(−ζωt)·sin(ωt) avec k = EA/L (L = câble entre la rame et la
@@ -83,6 +84,20 @@ var rebound_dir: int = 1             # direction figée au serrage (le
 # (rebond visible) avant l'ouverture des portes + inversion du sens.
 const TURNAROUND_DELAY_S: float = 15.0
 var turnaround_delay_remaining: float = 0.0
+
+# --- Affaissement d'embarquement (allongement élastique du brin) ---------
+# À quai, tambour serré en gare haute, la rame pend à son brin : chaque
+# passager qui monte allonge le câble de δ = Δm·g·sinθ·L/(EA). En gare
+# BASSE (L ≈ 3,45 km) : ~1,6 mm/passager → jusqu'à ~37 cm pour une pleine
+# charge, la rame « descend doucement » pendant l'embarquement. En gare
+# haute (L ≈ 17 m) : invisible. Pendant le buzzer de départ,
+# l'entraînement pré-tensionne et remonte la rame au repère (réel).
+# Purement VISUEL : appliqué à s_render, le s physique est tenu au clamp.
+const SAG_RETENSION_M_S: float = 0.08    # vitesse de rattrapage au buzzer
+var _sag_ref_m_main: float = -1.0        # masse à l'ancrage (−1 = pas ancré)
+var _sag_ref_m_ghost: float = -1.0
+var _sag_main: float = 0.0               # affaissement courant (m, ≥ 0 vers le bas)
+var _sag_ghost: float = 0.0
 
 # --- Accesseurs -----------------------------------------------------------
 
@@ -156,6 +171,31 @@ func step(dt: float) -> void:
 	var theta_g: float = atan(SlopeProfile.gradient_phys_at(PNConstants.LENGTH - s))
 	var sint_g: float = sin(theta_g)
 	var cost_g: float = cos(theta_g)
+
+	# Affaissement d'embarquement : actif à l'arrêt hors séquence de
+	# départ ; le buzzer (pré-tension de l'entraînement) et le départ le
+	# résorbent en douceur.
+	if not trip_started and (maint_brake or doors_open) \
+			and departure_buzzer_remaining <= 0.0:
+		if _sag_ref_m_main < 0.0:
+			_sag_ref_m_main = m_up
+			_sag_ref_m_ghost = m_down
+		var sag_t_main: float = maxf(0.0,
+			(m_up - _sag_ref_m_main) * PNConstants.G * sint
+			* (PNConstants.LENGTH - s) / CABLE_EA_N)
+		var sag_t_ghost: float = maxf(0.0,
+			(m_down - _sag_ref_m_ghost) * PNConstants.G * sint_g
+			* s / CABLE_EA_N)
+		# Suit le flux d'embarquement (≈ 2 cm/s max — « doucement »)
+		_sag_main = move_toward(_sag_main, sag_t_main, 0.03 * dt)
+		_sag_ghost = move_toward(_sag_ghost, sag_t_ghost, 0.03 * dt)
+	else:
+		# Pré-tension / trajet : retour au repère, puis désancrage
+		_sag_main = move_toward(_sag_main, 0.0, SAG_RETENSION_M_S * dt)
+		_sag_ghost = move_toward(_sag_ghost, 0.0, SAG_RETENSION_M_S * dt)
+		if trip_started:
+			_sag_ref_m_main = -1.0
+			_sag_ref_m_ghost = -1.0
 
 	var v_limit: float = minf(PNConstants.V_MAX, speed_cap_external)
 
@@ -238,8 +278,15 @@ func step(dt: float) -> void:
 		elif acc < -soft_cap:
 			acc = -soft_cap
 
-	# Kill creep final
-	if a_brk > 0.0 and absf(v) < 0.03:
+	# Kill creep final — UNIQUEMENT quand l'arrêt est voulu (régulateur en
+	# maintien, urgence, ou gros frein manuel). L'ancien « tout frein +
+	# quasi-arrêt → v=0 » gelait DÉFINITIVEMENT les départs à gravité
+	# excédentaire : contrepoids chargé qui tire la rame vide vers le
+	# haut → le régulateur en force module au FREIN (la rampe 0,30 <
+	# accélération naturelle) → kill à chaque frame → « elle n'a jamais
+	# voulu repartir » (retour d'essai 2026-07-13, inversion en descente).
+	if a_brk > 0.0 and absf(v) < 0.03 \
+			and (_reg_hold or emergency or brake > 0.5):
 		v = 0.0
 		acc = 0.0
 
@@ -404,6 +451,7 @@ func _regulator(
 		speed_cmd = maxf(0.0, speed_cmd - 0.5 * dt)
 		speed_cmd_eff = maxf(0.0, speed_cmd_eff - 0.5 * dt)
 		throttle = 0.0
+		_reg_hold = true
 		return
 
 	# Distance restante dans la direction de marche
@@ -489,7 +537,8 @@ func _regulator(
 
 	var demand_throttle: float
 	var demand_brake: float
-	if target_v < 0.01 and v_travel < 0.4:
+	_reg_hold = target_v < 0.01 and v_travel < 0.4
+	if _reg_hold:
 		demand_throttle = 0.0
 		demand_brake = 0.5
 	else:
@@ -575,6 +624,17 @@ func roll_pax(instant: bool = false) -> void:
 		_pax1_f = float(pax_car1)
 		_pax2_f = float(pax_car2)
 		_ghost_f = float(ghost_pax)
+
+
+# Affaissement d'embarquement de la rame pilotée (m, signé le long de s :
+# négatif = glisse vers le bas de la pente). À ajouter à s_render.
+func boarding_sag_offset() -> float:
+	return -_sag_main
+
+
+# Affaissement du wagon opposé (même convention, appliqué à SA position).
+func ghost_sag_offset() -> float:
+	return -_sag_ghost
 
 
 # Décalage visuel (m, signé le long de la pente) du rebond élastique.
