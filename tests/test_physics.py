@@ -98,8 +98,12 @@ def test_montee_complete_chargee():
     # Tension : pic au départ bas chargé (gravité + câble + inrush),
     # nominal 22 500 daN — le pic doit rester dans l'enveloppe réaliste.
     assert 20000 < tmax_tension < 27000, f"tension pic {tmax_tension:.0f} daN"
-    # Arrivée en haut : brin quasi nul au-dessus → tension faible.
-    assert st.train.tension_dan < 7000, \
+    # Arrivée en haut, modèle DEUX BRINS : le brin de la rame pleine en
+    # haut est quasi nul, mais celui du contrepoids (vide, en bas) porte
+    # ses 3,4 km de câble (~9 900 daN) + son poids sur la pente du bas →
+    # le max affiché reste ~11-14 000 daN. (L'ancien modèle mono-brin
+    # « rame lourde » attendait < 7 000 : il ignorait le brin bas.)
+    assert 10000 < st.train.tension_dan < 15000, \
         f"tension arrivée haut {st.train.tension_dan:.0f} daN"
 
 
