@@ -337,16 +337,25 @@ func step(dt: float) -> void:
 			v = maxf(0.0, v - 2.0 * dt)
 			acc = -2.0
 			buffer_clamp = true
-		if direction > 0 and not finished:
-			finished = true
-			_arrival_grab()
 	elif s <= clamp_lo:
 		s = clamp_lo
 		if v < 0.0:
 			v = minf(0.0, v + 2.0 * dt)
 			acc = 2.0
 			buffer_clamp = true
-		if direction < 0 and not finished:
+
+	# Détection d'arrivée SERRÉE (port du PC v1.12.3) : le serrage du
+	# tambour n'a lieu que quand le docking s'est achevé NATURELLEMENT
+	# (|v| < 0,08 m/s ET à moins de 8 cm du point d'arrêt). L'ancien port
+	# serrait au CONTACT du clamp, vitesse résiduelle comprise → les
+	# ~0,25 m/s restants coupés en une frame = « l'arrêt en gare
+	# supérieure est instantané » (retour d'essai 2026-07-13). Le clamp
+	# ci-dessus reste un simple amortisseur de butoir (2 m/s²).
+	if not finished and trip_started and absf(v) < 0.08:
+		if direction > 0 and s >= PNConstants.STOP_S - 0.08:
+			finished = true
+			_arrival_grab()
+		elif direction < 0 and s <= PNConstants.START_S + 0.08:
 			finished = true
 			_arrival_grab()
 
@@ -360,9 +369,14 @@ func step(dt: float) -> void:
 	if rebound_timer >= 0.0:
 		rebound_timer += dt
 
-	# Frein parking (drum) ou frein urgence (panne grave)
+	# Frein parking (drum) ou frein urgence (panne grave). Serrage
+	# PROGRESSIF du résiduel (≤ 8 cm/s au moment du grab d'arrivée) :
+	# v décroît à 1,2 m/s² au lieu d'être coupée en une frame — dernier
+	# à-coup de l'arrêt en gare (retour d'essai 2026-07-13). La gravité
+	# (≤ 0,7 m/s² intégrée juste avant) ne peut pas vaincre la rampe :
+	# le tambour tient rigoureusement v = 0 une fois posé.
 	if maint_brake or doors_open or emergency_brake:
-		v = 0.0
+		v = move_toward(v, 0.0, 1.2 * dt)
 		acc = 0.0
 
 	a = acc
@@ -505,17 +519,30 @@ func _regulator(
 	var target_v: float = minf(speed_cmd_eff, v_envelope)
 
 	# Zone creep : dernière CREEP_DIST m à CREEP_V, puis docking final en
-	# ~4 s sur les 2,5 derniers mètres (0,15 m/s²) — ALIGNÉ sur le sim
+	# ~5 s sur les 2,5 derniers mètres (0,15 m/s²) — ALIGNÉ sur le sim
 	# Python v1.12.3 : l'ancien couple 0,04/6 m du port donnait une entrée
 	# en gare interminable (~0,2 m/s pendant 20 s, constaté machine).
+	# a_ff_env : décélération d'ENVELOPPE anticipée (feed-forward) — sans
+	# elle, le contrôleur P doit accumuler ~0,4 m/s d'erreur pour commander
+	# la rampe → la rame traînait 0,4 m/s au-dessus du profil et finissait
+	# sur le butoir (« arrêt instantané », retour d'essai 2026-07-13).
+	# Le ff = VRAIE dérivée de la cible : d(√(2ad))/dt = −a·(v/v_cible) —
+	# plein quand on SUIT le profil, nul quand on est en dessous (un ff
+	# constant créait un équilibre parasite : rame plantée 0,5 m avant le
+	# quai, a_des ≤ 0 dès que v passait sous le profil).
+	var a_ff_env: float = 0.0
+	if v_envelope < speed_cmd_eff and dist_to_stop >= PNConstants.CREEP_DIST:
+		a_ff_env = -a_env * clampf(v_travel / maxf(v_envelope, 0.05), 0.0, 1.2)
 	if dist_to_stop < PNConstants.CREEP_DIST:
 		var park_decel: float = 0.15
 		var final_dist: float = 2.5
 		if dist_to_stop > final_dist:
 			target_v = PNConstants.V_CREEP
+			a_ff_env = 0.0
 		else:
 			var v_park: float = sqrt(2.0 * park_decel * maxf(dist_to_stop, 0.001))
 			target_v = minf(PNConstants.V_CREEP, v_park)
+			a_ff_env = -park_decel * clampf(v_travel / maxf(target_v, 0.05), 0.0, 1.2)
 
 	# Contrôleur unifié en FORCE (2026-07-13). L'entraînement calcule :
 	#   a_des  = accélération désirée (erreur de vitesse, bornée par la
@@ -550,8 +577,11 @@ func _regulator(
 		# Borne haute = rampe programmée (confort moteur) ; borne basse =
 		# frein service plein (−2,5) : le régulateur doit pouvoir
 		# commander un vrai freinage (consigne coupée à pleine vitesse),
-		# pas seulement la décélération de croisière.
-		var a_des: float = clampf(err * k_a, -PNConstants.A_BRAKE_NORMAL, PNConstants.A_TARGET)
+		# pas seulement la décélération de croisière. a_ff_env anticipe la
+		# pente de l'enveloppe (approche/docking) pour que le P ne serve
+		# qu'aux transitoires.
+		var a_des: float = clampf(a_ff_env + err * k_a,
+			-PNConstants.A_BRAKE_NORMAL, PNConstants.A_TARGET)
 		var f_req: float = m_total * a_des + f_ff
 		if f_req >= 0.0:
 			demand_throttle = clampf(f_req / maxf(f_motor_max, 1.0), 0.0, 1.0)
