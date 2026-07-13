@@ -71,6 +71,15 @@ func _populate() -> void:
 		var lit: bool = (idx % 2) == 0
 		_add_neon(s, neon_mesh, neon_mat if lit else neon_mat_off,
 			neon_color, lit)
+		# Tube d'évitement DROIT (voie de la rame 2) : sa propre rangée de
+		# néons — la rangée principale suit la paroi du tube GAUCHE, et le
+		# tube droit restait noir (retour d'essai 2026-07-13). Ajoutée
+		# seulement quand les deux tubes sont réellement séparés (offset
+		# suffisant) ; aux extrémités fusionnées, la rangée principale
+		# éclaire l'espace commun.
+		if absf(tunnel.passing_loop_offset(s, 1.0)) > wall_offset + 0.4:
+			_add_neon(s, neon_mesh, neon_mat if lit else neon_mat_off,
+				neon_color, lit, true)
 		idx += 1
 		s += spacing_m
 	# (Signaux LED verts du croisement SUPPRIMÉS — retour d'essai 2026-07 :
@@ -103,15 +112,21 @@ func update_light_culling(s_cabin: float) -> void:
 
 
 func _add_neon(s: float, mesh: BoxMesh, neon_mat: StandardMaterial3D,
-		color: Color, lit: bool = true) -> void:
+		color: Color, lit: bool = true, right_tube: bool = false) -> void:
 	var xform: Transform3D = tunnel.transform_at(s)
 	var right: Vector3 = xform.basis.x
 	var up: Vector3 = xform.basis.y
 	# Néon sur le mur gauche (côté -X local). Dans la chambre de croisement,
 	# la paroi s'écarte de |passing_loop_offset| → le néon suit le mur au
 	# lieu de rester suspendu au milieu (la rame le traverserait).
-	var wall_x: float = wall_offset + absf(tunnel.passing_loop_offset(s, 1.0))
-	var wall_pos: Vector3 = xform.origin - right * wall_x + up * height_offset
+	# `right_tube` : néon du tube d'évitement DROIT — posé sur le flanc
+	# gauche de CE tube (axe à +offset, mur à +offset − wall_offset).
+	var loop_off: float = absf(tunnel.passing_loop_offset(s, 1.0))
+	var wall_pos: Vector3
+	if right_tube:
+		wall_pos = xform.origin + right * (loop_off - wall_offset) + up * height_offset
+	else:
+		wall_pos = xform.origin - right * (wall_offset + loop_off) + up * height_offset
 
 	# Source lumineuse — seulement pour les tubes ALLUMÉS (un sur deux)
 	if lit:
