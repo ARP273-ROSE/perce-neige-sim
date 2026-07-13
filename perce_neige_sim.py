@@ -1140,7 +1140,17 @@ class Physics:
         # brake while the train is stationary.
         parked = tr.maint_brake or tr.doors_open
         if parked:
-            tr.v = 0.0
+            # Serrage PROGRESSIF du résiduel (≤ 8 cm/s au grab d'arrivée) :
+            # v décroît à 1,2 m/s² au lieu d'être coupée net — la gravité
+            # (≤ 0,7 m/s² intégrée juste avant) ne vainc pas la rampe, le
+            # tambour tient rigoureusement v = 0 une fois posé.
+            step_v = 1.2 * dt
+            if tr.v > step_v:
+                tr.v -= step_v
+            elif tr.v < -step_v:
+                tr.v += step_v
+            else:
+                tr.v = 0.0
             a = 0.0
 
         # Comfort / jerk
@@ -1584,21 +1594,36 @@ class Physics:
         target_v = min(tr.speed_cmd_eff, v_envelope)
         envelope_active = v_envelope < tr.speed_cmd_eff - 0.05
 
+        # a_ff_env : décélération d'ENVELOPPE anticipée (feed-forward) —
+        # sans elle, le contrôleur P doit accumuler ~0,4 m/s d'erreur pour
+        # commander la rampe → la rame traînait au-dessus du profil de
+        # docking et finissait sur le butoir (« arrêt instantané »).
+        # ff = VRAIE dérivée de la cible : −a·(v/v_cible), plein quand on
+        # SUIT le profil, nul en dessous (un ff constant créait un
+        # équilibre parasite : rame plantée avant le quai).
+        a_ff_env = 0.0
+        if envelope_active and dist_to_stop >= CREEP_DIST:
+            a_ff_env = -a_env * max(0.0, min(1.2, v_travel
+                                             / max(v_envelope, 0.05)))
+
         # Creep zone : last CREEP_DIST metres crawl at CREEP_V, then
         # taper smoothly to zero over the final ~2,5 m (√(2·a·d)).
         # L'ancien couple (0,04 m/s² sur 6 m) donnait une entrée en gare
         # interminable — ~0,2 m/s pendant 20 s, constaté sur machine par
         # l'exploitant. Le profil garde CREEP_V (0,75) jusqu'à 2,5 m puis
-        # docke en ~4 s, sans le « snap » historique à 0.
+        # docke en ~5 s, sans le « snap » historique à 0.
         if dist_to_stop < CREEP_DIST:
             PARK_DECEL = 0.15         # m/s² final-docking decel
             FINAL_DIST = 2.5          # m over which the taper applies
             if dist_to_stop > FINAL_DIST:
                 target_v = CREEP_V
+                a_ff_env = 0.0
             else:
                 v_park = math.sqrt(2.0 * PARK_DECEL
                                    * max(dist_to_stop, 0.001))
                 target_v = min(CREEP_V, v_park)
+                a_ff_env = -PARK_DECEL * max(0.0, min(1.2, v_travel
+                                                      / max(target_v, 0.05)))
             envelope_active = True
 
         # --- Unified control law ------------------------------------------
@@ -1641,8 +1666,10 @@ class Physics:
             k_a = 0.35   # m/s² de correction par m/s d'erreur
             # Borne haute = rampe programmée (confort moteur) ; borne
             # basse = frein service plein (−2,5) : le régulateur doit
-            # pouvoir commander un vrai freinage.
-            a_des = max(-A_BRAKE_NORMAL, min(A_TARGET, err * k_a))
+            # pouvoir commander un vrai freinage. a_ff_env anticipe la
+            # pente de l'enveloppe (approche/docking) : le P ne sert
+            # qu'aux transitoires.
+            a_des = max(-A_BRAKE_NORMAL, min(A_TARGET, a_ff_env + err * k_a))
             f_req = m_total_r * a_des + f_ff
             if f_req >= 0.0:
                 demand_throttle = max(0.0, min(1.0, f_req / max(f_motor_max, 1.0)))
