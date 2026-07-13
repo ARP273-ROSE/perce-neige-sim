@@ -38,6 +38,19 @@ var pax_car1: int = 0
 var pax_car2: int = 0
 var ghost_pax: int = 0                   # passagers wagon opposé
 
+# Embarquement PROGRESSIF : roll_pax() fixe des CIBLES, les effectifs réels
+# glissent vers elles pendant que les portes sont ouvertes (~12 pax/s et
+# par voiture — 3 portes larges). L'échange instantané faisait sauter la
+# masse (et donc la jauge de tension) d'une frame à l'autre au demi-tour.
+# Si le conducteur part avant la fin, l'embarquement s'arrête là (réaliste).
+const BOARDING_PAX_PER_S: float = 12.0
+var pax_t_car1: int = 0                  # cibles d'embarquement
+var pax_t_car2: int = 0
+var ghost_pax_t: int = 0
+var _pax1_f: float = 0.0                 # effectifs continus internes
+var _pax2_f: float = 0.0
+var _ghost_f: float = 0.0
+
 var tension_dan: float = 0.0
 var tension_dan_disp: float = 0.0        # lissé pour affichage
 var power_kw: float = 0.0
@@ -91,6 +104,22 @@ func step(dt: float) -> void:
 	# Clamp dt pour éviter de casser la physique sur un gros hiccup
 	dt = clampf(dt, 0.001, 0.1)
 	s_prev_step = s
+
+	# Rotation passagers progressive tant que les portes sont ouvertes
+	# (le wagon opposé embarque en même temps dans SA gare). Portes
+	# fermées : resynchro des effectifs continus sur les entiers
+	# (affectations directes des bancs de test, mode client…).
+	if doors_open:
+		_pax1_f = move_toward(_pax1_f, float(pax_t_car1), BOARDING_PAX_PER_S * dt)
+		_pax2_f = move_toward(_pax2_f, float(pax_t_car2), BOARDING_PAX_PER_S * dt)
+		_ghost_f = move_toward(_ghost_f, float(ghost_pax_t), BOARDING_PAX_PER_S * dt)
+		pax_car1 = int(roundf(_pax1_f))
+		pax_car2 = int(roundf(_pax2_f))
+		ghost_pax = int(roundf(_ghost_f))
+	else:
+		_pax1_f = float(pax_car1)
+		_pax2_f = float(pax_car2)
+		_ghost_f = float(ghost_pax)
 
 	# Séquence de départ en TROIS phases successives (retour d'essai iPad
 	# 2026-07-12 : annonce, portes et buzzer se superposaient) :
@@ -243,7 +272,12 @@ func step(dt: float) -> void:
 	s += ((v + new_v) / 2.0) * dt
 	v = new_v
 
-	# Clamp position
+	# Clamp position. L'accélération ±2,0 posée ici est SYNTHÉTIQUE
+	# (amortisseur numérique du butoir) : le flag l'exclut de l'inertie
+	# de tension — c'est le butoir/rail qui absorbe, pas le câble. Sans
+	# ça, la masse du brin (38 t) × 2 m/s² ajoutait ~18 000 daN fantômes
+	# à la jauge au contact du point d'arrêt.
+	var buffer_clamp: bool = false
 	var clamp_lo: float = PNConstants.START_S
 	var clamp_hi: float = PNConstants.STOP_S
 	if s >= clamp_hi:
@@ -251,6 +285,7 @@ func step(dt: float) -> void:
 		if v > 0.0:
 			v = maxf(0.0, v - 2.0 * dt)
 			acc = -2.0
+			buffer_clamp = true
 		if direction > 0 and not finished:
 			finished = true
 			_arrival_grab()
@@ -259,6 +294,7 @@ func step(dt: float) -> void:
 		if v < 0.0:
 			v = minf(0.0, v + 2.0 * dt)
 			acc = 2.0
+			buffer_clamp = true
 		if direction < 0 and not finished:
 			finished = true
 			_arrival_grab()
@@ -280,39 +316,28 @@ func step(dt: float) -> void:
 
 	a = acc
 
-	# --- Tension câble (port complet du modèle Python) --------------------
-	# Le brin entre la poulie motrice (gare haute) et la rame LOURDE porte :
-	#   - le poids de la rame lourde le long de SA pente locale (pas celle
-	#     de la rame pilotée — elles diffèrent sur ce profil asymétrique)
-	#   - le poids PROPRE du câble au-dessus d'elle : ρ·g·Δaltitude, exact
-	#     quel que soit le profil (∫ρg·sinθ·ds = ρg·Δh) — ~9 900 daN quand
-	#     la rame lourde est en bas, ~0 en haut. C'est CE terme qui fait
-	#     évoluer la jauge le long du trajet (manquait dans le port 3D :
-	#     les valeurs ne collaient pas avec le programme PC).
-	#   - le frottement de roulement de la rame lourde
-	#   - l'inertie de traction, uniquement en accélération (au freinage le
-	#     câble se DÉCHARGE : le frein absorbe sur le rail).
-	var m_heavy: float = maxf(m_up, m_down)
-	var main_is_heavy: bool = m_up >= m_down
-	var s_heavy: float = s if main_is_heavy else (PNConstants.LENGTH - s)
-	var theta_h: float = atan(SlopeProfile.gradient_phys_at(s_heavy))
-	var t_gravity: float = m_heavy * PNConstants.G * sin(theta_h)
-	var t_friction: float = PNConstants.MU_ROLL * m_heavy * PNConstants.G * cos(theta_h)
-	var t_cable: float = PNConstants.CABLE_KG_M * PNConstants.G \
-		* maxf(0.0, PNConstants.ALT_HIGH - SlopeProfile.altitude_at(s_heavy))
-	# Inertie SIGNÉE par l'accélération de la rame lourde le long de SA
-	# pente (Newton sur la rame pendue au câble : T = m·g·sinθ + m·a_s).
-	# Rame lourde qui MONTE en accélérant → le câble tire plus (+).
-	# Rame lourde qui DESCEND en accélérant (a_s < 0) → le câble se
-	# DÉCHARGE (−) : le poids part en mouvement, pas dans le brin.
-	# L'ancien max(0, a·direction) ajoutait à tort l'inertie dans ce cas
-	# (constaté après une inversion en tunnel : tension qui GRIMPE alors
-	# que la rame lourde dévale — retour d'essai 2026-07-13).
-	var a_s_heavy: float = acc if main_is_heavy else -acc
-	var t_inertia: float = m_heavy * a_s_heavy
-	tension_dan = (t_gravity + t_friction + t_cable + t_inertia) / 10.0
-	if tension_dan < 0.0:
-		tension_dan = 0.0
+	# --- Tension câble : modèle DEUX BRINS, max à la poulie ----------------
+	# Chaque brin, au niveau de la poulie motrice (gare haute), porte :
+	#   - le poids de SA rame le long de SA pente locale,
+	#   - le poids PROPRE du brin : ρ·g·Δaltitude jusqu'à la rame (exact
+	#     quel que soit le profil : ∫ρg·sinθ·ds = ρg·Δh) — ~9 900 daN pour
+	#     une rame en bas de ligne, ~0 en haut,
+	#   - le frottement de roulement de SA rame,
+	#   - l'inertie (rame + brin) SIGNÉE par SON accélération le long de
+	#     SA pente (T = m·g·sinθ + m·a_s : une rame qui dévale DÉCHARGE
+	#     son brin).
+	# La jauge affiche le brin le plus chargé — presque toujours celui de
+	# la rame BASSE (3,4 km de câble pendu). L'ancien modèle « brin de la
+	# rame lourde » montrait ~3 000 daN à l'arrivée en haut à pleine
+	# charge alors que le brin de la rame vide EN BAS portait ~12 700, et
+	# sautait à ~14 000 à l'échange de passagers du demi-tour (retour
+	# d'essai 2026-07-13). Avec le max des deux brins : 12 767 → 13 994,
+	# transition continue.
+	var a_t: float = 0.0 if buffer_clamp else acc
+	tension_dan = maxf(
+		_side_tension_n(m_up, s, a_t),
+		_side_tension_n(m_down, PNConstants.LENGTH - s, -a_t),
+	) / 10.0
 
 	# --- Puissance ------------------------------------------------------
 	var power_signed_kw: float = (f_motor * v) / 1000.0
@@ -349,6 +374,19 @@ func step(dt: float) -> void:
 
 	if trip_started:
 		trip_time += dt
+
+
+# Tension (N) d'UN brin au niveau de la poulie motrice : rame de masse m à
+# la position s_pos, accélérée à a_s le long de sa pente (signe +s).
+func _side_tension_n(m: float, s_pos: float, a_s: float) -> float:
+	var theta_s: float = atan(SlopeProfile.gradient_phys_at(s_pos))
+	var m_brin: float = PNConstants.CABLE_KG_M * maxf(PNConstants.LENGTH - s_pos, 0.0)
+	var t: float = m * PNConstants.G * sin(theta_s) \
+		+ PNConstants.MU_ROLL * m * PNConstants.G * cos(theta_s) \
+		+ PNConstants.CABLE_KG_M * PNConstants.G \
+			* maxf(0.0, PNConstants.ALT_HIGH - SlopeProfile.altitude_at(s_pos)) \
+		+ (m + m_brin) * a_s
+	return maxf(t, 0.0)
 
 
 # --- Régulateur Von Roll -------------------------------------------------
@@ -427,15 +465,27 @@ func _regulator(
 			var v_park: float = sqrt(2.0 * park_decel * maxf(dist_to_stop, 0.001))
 			target_v = minf(PNConstants.V_CREEP, v_park)
 
-	# Contrôleur P unifié avec feed-forward
+	# Contrôleur unifié en FORCE (2026-07-13). L'entraînement calcule :
+	#   a_des  = accélération désirée (erreur de vitesse, bornée par la
+	#            rampe programmée ±A_TARGET)
+	#   F_req  = m_total·a_des + f_ff   (f_ff = charge statique : gravité
+	#            nette 2 pentes + frottement des 2 rames)
+	#   F_req > 0 → traction ; F_req < 0 → retenue (frein/génératrice).
+	# Continu dans les QUATRE quadrants. L'« autorité » de la version
+	# précédente coupait la traction dès que la gravité aidait, même
+	# quand l'accélération commandée exigeait ENCORE du couple : au
+	# départ gare basse, le contrepoids attaque sa section à 27-29 %
+	# pendant que la rame chargée est sur les 8-16 % du bas → gravité
+	# nette MOTRICE de s≈120 à ≈330 m (jusqu'à +21 kN pour 230 pax) →
+	# puissance qui tombait à 0 en pleine accélération (retour d'essai
+	# 2026-07-13). Avec F_req : le moteur fournit le complément exact
+	# (m·0,30 − excédent), la puissance CREUSE sans jamais claquer à 0.
 	var err: float = target_v - v_travel
 	var v_eff: float = maxf(absf(v), 0.8)
 	var f_motor_max: float = minf(PNConstants.F_STALL, PNConstants.P_MAX / v_eff)
 
 	var f_ff: float = -f_grav_travel + PNConstants.MU_ROLL * PNConstants.G \
 		* (m_up * cos(theta) + _m_down * cos(theta_gr))
-	var ff_throttle: float = maxf(0.0, f_ff) / maxf(f_motor_max, 1.0)
-	var ff_brake: float = maxf(0.0, -f_ff) / (PNConstants.A_BRAKE_NORMAL * m_total)
 
 	var demand_throttle: float
 	var demand_brake: float
@@ -443,27 +493,19 @@ func _regulator(
 		demand_throttle = 0.0
 		demand_brake = 0.5
 	else:
-		var k_p: float = 0.18
-		demand_throttle = clampf(ff_throttle + err * k_p, 0.0, 1.0)
-		demand_brake = clampf(ff_brake - err * k_p, 0.0, 1.0)
-		# EXCÉDENT DE GRAVITÉ : quand la gravité pousse déjà plus fort que
-		# le frottement dans le sens de marche (rame lourde en descente),
-		# le moteur n'a rien à faire — la gravité accélère (bridée par la
-		# rampe de confort = retenue) et le frein module. L'AUTORITÉ de
-		# traction s'éteint en FONDU sur 6 000 N d'excédent (pleine à
-		# f_ff ≥ 0, nulle à f_ff ≤ −6 000 N) : le tout-ou-rien de la
-		# première version claquait la traction on/off au passage par
-		# zéro (points d'équilibre du profil, transitions de pente) →
-		# à-coups de puissance (retour d'essai 2026-07-13).
-		var throttle_authority: float = clampf(1.0 + f_ff / 6000.0, 0.0, 1.0)
-		demand_throttle *= throttle_authority
-		if demand_throttle > 0.0 and demand_brake > 0.0:
-			if demand_throttle > demand_brake:
-				demand_throttle -= demand_brake
-				demand_brake = 0.0
-			else:
-				demand_brake -= demand_throttle
-				demand_throttle = 0.0
+		var k_a: float = 0.35   # m/s² de correction par m/s d'erreur
+		# Borne haute = rampe programmée (confort moteur) ; borne basse =
+		# frein service plein (−2,5) : le régulateur doit pouvoir
+		# commander un vrai freinage (consigne coupée à pleine vitesse),
+		# pas seulement la décélération de croisière.
+		var a_des: float = clampf(err * k_a, -PNConstants.A_BRAKE_NORMAL, PNConstants.A_TARGET)
+		var f_req: float = m_total * a_des + f_ff
+		if f_req >= 0.0:
+			demand_throttle = clampf(f_req / maxf(f_motor_max, 1.0), 0.0, 1.0)
+			demand_brake = 0.0
+		else:
+			demand_throttle = 0.0
+			demand_brake = clampf(-f_req / (PNConstants.A_BRAKE_NORMAL * m_total), 0.0, 1.0)
 
 	# Slew throttle et brake
 	var slew: float = 1.5 * dt
@@ -514,16 +556,25 @@ func _terminus_turnaround() -> void:
 # contrepoids reçoit l'inverse. C'est ce déséquilibre dm qui pilote la
 # gravité nette, la tension câble et la puissance — l'ancien port laissait
 # TOUT à zéro (dm = 0 : sim parfaitement équilibrée, compteur pax à 0).
-func roll_pax() -> void:
+# Fixe des CIBLES (embarquement progressif portes ouvertes) ; `instant`
+# force la bascule immédiate (initialisation, bancs de test).
+func roll_pax(instant: bool = false) -> void:
 	var half: int = PNConstants.PAX_MAX / 2
 	if direction > 0:
-		pax_car1 = randi_range(90, half)
-		pax_car2 = randi_range(90, half)
-		ghost_pax = randi_range(0, 12)
+		pax_t_car1 = randi_range(90, half)
+		pax_t_car2 = randi_range(90, half)
+		ghost_pax_t = randi_range(0, 12)
 	else:
-		pax_car1 = randi_range(0, 8)
-		pax_car2 = randi_range(0, 8)
-		ghost_pax = randi_range(90, PNConstants.PAX_MAX - 20)
+		pax_t_car1 = randi_range(0, 8)
+		pax_t_car2 = randi_range(0, 8)
+		ghost_pax_t = randi_range(90, PNConstants.PAX_MAX - 20)
+	if instant:
+		pax_car1 = pax_t_car1
+		pax_car2 = pax_t_car2
+		ghost_pax = ghost_pax_t
+		_pax1_f = float(pax_car1)
+		_pax2_f = float(pax_car2)
+		_ghost_f = float(ghost_pax)
 
 
 # Décalage visuel (m, signé le long de la pente) du rebond élastique.

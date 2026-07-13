@@ -89,7 +89,7 @@ try:
 except ImportError:
     _GODOT_BRIDGE_OK = False
 
-VERSION = "1.12.12"
+VERSION = "1.12.13"
 APP_NAME = "Perce-Neige Simulator"
 
 
@@ -262,6 +262,11 @@ TRAIN_EMPTY_KG = 32_300.0       # empty train mass (two coupled cars)
 TRAIN_MAX_KG = 58_800.0         # max loaded — matches real spec
 PAX_KG = 75.0
 PAX_MAX = 334                   # 334 + 1 conductor per train
+# Cadence d'embarquement (pax/s et par voiture, 3 portes larges) : les
+# effectifs réels glissent vers leurs cibles pendant que les portes sont
+# ouvertes — l'échange instantané faisait sauter la masse (donc la jauge
+# de tension) d'une frame à l'autre au demi-tour.
+BOARDING_PAX_PER_S = 12.0
 CAR_COUNT = 2                   # cars per train
 DOORS_PER_CAR = 3               # 3 doors per side per car
 CAR_LEN_M = 16.0                # single car length (m)
@@ -636,6 +641,11 @@ class Train:
     doors_timer: float = 0.0
     pax_car1: int = 0           # pax in lower car
     pax_car2: int = 0           # pax in upper car
+    # Embarquement progressif : cibles + effectifs continus internes
+    pax_car1_target: int = 0
+    pax_car2_target: int = 0
+    pax1_f: float = 0.0
+    pax2_f: float = 0.0
     # Cockpit state (realistic funicular driver station)
     lights_cabin: bool = True    # interior cabin lighting
     lights_head: bool = False    # front tunnel headlights (driver turns on)
@@ -722,6 +732,8 @@ class GameState:
     # Opposing train (counterweight — bound by cable, moves symmetrically)
     ghost_s: float = LENGTH     # starts at top, comes down
     ghost_pax: int = 0          # passengers in the counterweight train
+    ghost_pax_target: int = 0   # cible d'embarquement du contrepoids
+    ghost_f: float = 0.0        # effectif continu interne
     trip_time: float = 0.0
     trip_started: bool = False
     # Departure buzzer countdown: sounds for 6.5 s (upper) or 8 s (lower)
@@ -800,6 +812,29 @@ class Physics:
         tr = st.train
         if st.mode != MODE_RUN:
             return
+
+        # Rotation passagers PROGRESSIVE tant que les portes sont ouvertes
+        # (le wagon opposé embarque en même temps dans SA gare). Portes
+        # fermées : les effectifs continus se resynchronisent sur les
+        # entiers (affectations directes : évac, tests, new_trip).
+        if tr.doors_open:
+            rate = BOARDING_PAX_PER_S * dt
+
+            def _toward(cur: float, target: float) -> float:
+                if cur < target:
+                    return min(target, cur + rate)
+                return max(target, cur - rate)
+
+            tr.pax1_f = _toward(tr.pax1_f, float(tr.pax_car1_target))
+            tr.pax2_f = _toward(tr.pax2_f, float(tr.pax_car2_target))
+            st.ghost_f = _toward(st.ghost_f, float(st.ghost_pax_target))
+            tr.pax_car1 = int(round(tr.pax1_f))
+            tr.pax_car2 = int(round(tr.pax2_f))
+            st.ghost_pax = int(round(st.ghost_f))
+        else:
+            tr.pax1_f = float(tr.pax_car1)
+            tr.pax2_f = float(tr.pax_car2)
+            st.ghost_f = float(st.ghost_pax)
 
         # Both trains on the cable. "Main" train is the one the player drives
         # (goes up this trip). Ghost mirrors it downward.
@@ -1063,6 +1098,10 @@ class Physics:
         # the cable-elastic bounce is visible instead of being instantly
         # crushed back to the stop point. During the normal approach
         # (not finished) we hard-clamp so physics can't drift outside.
+        # L'accélération ±2,0 posée ici est SYNTHÉTIQUE (amortisseur
+        # numérique du butoir) : le flag l'exclut de l'inertie de tension
+        # — c'est le butoir/rail qui absorbe, pas le câble.
+        buffer_clamp = False
         clamp_lo = START_S - (1.2 if st.finished else 0.0)
         clamp_hi = STOP_S + (1.2 if st.finished else 0.0)
         if tr.s >= clamp_hi:
@@ -1070,11 +1109,13 @@ class Physics:
             if tr.v > 0.0:
                 tr.v = max(0.0, tr.v - 2.0 * dt)
                 a = -2.0
+                buffer_clamp = True
         elif tr.s <= clamp_lo:
             tr.s = clamp_lo
             if tr.v < 0.0:
                 tr.v = min(0.0, tr.v + 2.0 * dt)
                 a = 2.0
+                buffer_clamp = True
         # Parking (drum / maintenance) brake. The real funicular has a
         # mechanical drum brake on the bull wheel that holds the train
         # absolutely still when engaged — this is what makes the cabin
@@ -1117,26 +1158,30 @@ class Physics:
         #     évoluer la jauge le long du trajet (max ~21 500 daN au cœur
         #     de la section à 30 %, proche du nominal — cohérent).
         #   - frottement + inertie de traction.
-        m_heavy = max(m_up, m_down)
-        main_is_heavy = m_up >= m_down
-        s_heavy = tr.s if main_is_heavy else (LENGTH - tr.s)
-        theta_h = math.atan(gradient_at(s_heavy))
-        t_gravity = m_heavy * G * math.sin(theta_h)
-        t_friction = MU_ROLL * m_heavy * G * math.cos(theta_h)
-        # Poids du brin de câble entre la rame lourde et la poulie motrice
-        # (gare haute) : composante le long de la pente = ρ·g·(alt_haut −
-        # alt_rame), exact quel que soit le profil (∫ρg·sinθ·ds = ρg·Δh).
-        t_cable = CABLE_KG_M * G * max(0.0, ALT_HIGH - geom_at(s_heavy)[1])
-        # Inertie SIGNÉE par l'accélération de la rame lourde le long de
-        # SA pente (Newton sur la rame pendue au brin : T = m·g·sinθ +
-        # m·a_s). Rame lourde qui monte en accélérant → +T. Rame lourde
-        # qui DESCEND en accélérant (a_s < 0, cas typique : inversion de
-        # sens en tunnel) → le brin se DÉCHARGE. L'ancien
-        # max(0, a·direction) ajoutait à tort l'inertie dans ce cas.
-        a_s_heavy = a if main_is_heavy else -a
-        t_inertia = m_heavy * a_s_heavy
-        tension_n = t_gravity + t_friction + t_cable + t_inertia
-        tr.tension_dan = tension_n / 10.0
+        # Modèle DEUX BRINS, max au niveau de la poulie : chaque brin
+        # porte le poids de SA rame le long de SA pente locale, le poids
+        # PROPRE du brin (ρ·g·Δh jusqu'à la rame, exact quel que soit le
+        # profil : ∫ρg·sinθ·ds = ρg·Δh), le frottement de SA rame et
+        # l'inertie (rame + brin) SIGNÉE par SON accélération. La jauge
+        # affiche le brin le plus chargé — presque toujours celui de la
+        # rame BASSE (3,4 km de câble pendu ≈ 9 900 daN). L'ancien modèle
+        # « brin de la rame lourde » montrait ~3 000 daN à l'arrivée en
+        # haut à pleine charge alors que le brin de la rame vide EN BAS
+        # portait ~12 700, et sautait à ~14 000 au demi-tour.
+        def _side_tension_n(m: float, s_pos: float, a_s: float) -> float:
+            theta_s = math.atan(gradient_at(s_pos))
+            m_brin = CABLE_KG_M * max(LENGTH - s_pos, 0.0)
+            t = (m * G * math.sin(theta_s)
+                 + MU_ROLL * m * G * math.cos(theta_s)
+                 + CABLE_KG_M * G * max(0.0, ALT_HIGH - geom_at(s_pos)[1])
+                 + (m + m_brin) * a_s)
+            return max(t, 0.0)
+
+        a_t = 0.0 if buffer_clamp else a
+        tr.tension_dan = max(
+            _side_tension_n(m_up, tr.s, a_t),
+            _side_tension_n(m_down, LENGTH - tr.s, -a_t),
+        ) / 10.0
         # Apply persistent fault offsets so the gauge actually moves
         # when a cable surge or slack fault is announced.
         tr.tension_dan += tr.tension_fault_dan
@@ -1562,41 +1607,35 @@ class Physics:
         f_ff = (-f_grav_travel
                 + MU_ROLL * G * (m_main_r * math.cos(theta_r)
                                  + m_ghost_r * math.cos(theta_gr)))
-        ff_throttle = max(0.0, f_ff) / max(f_motor_max, 1.0)
-        ff_brake = max(0.0, -f_ff) / (A_BRAKE_NORMAL * m_total_r)
 
         if target_v < 0.01 and v_travel < 0.4:
             # Arrived — kill motor, hold with brake
             demand_throttle = 0.0
             demand_brake = 0.5
         else:
-            # P-controller around the feed-forward bias.
-            # err > 0 : need more forward force (more motor / less brake)
-            # err < 0 : need less forward force (less motor / more brake)
-            k_p = 0.18  # brake/throttle per m/s error
-            demand_throttle = max(0.0, min(1.0, ff_throttle + err * k_p))
-            demand_brake = max(0.0, min(1.0, ff_brake - err * k_p))
-            # EXCÉDENT DE GRAVITÉ : quand la gravité pousse déjà plus fort
-            # que le frottement dans le sens de marche (rame lourde en
-            # descente), le moteur n'a rien à faire — la gravité accélère
-            # (bridée par la rampe de confort = retenue) et le frein
-            # module. L'AUTORITÉ de traction s'éteint en FONDU sur
-            # 6 000 N d'excédent (pleine à f_ff ≥ 0, nulle à −6 000 N) :
-            # un tout-ou-rien claquerait la traction on/off au passage
-            # par zéro (points d'équilibre du profil asymétrique).
-            authority = max(0.0, min(1.0, 1.0 + f_ff / 6000.0))
-            demand_throttle *= authority
-            # Resolve conflict : if both are non-zero (shouldn't happen
-            # algebraically but keep a safety net) the larger wins and
-            # the other collapses to zero so the control authority isn't
-            # wasted fighting itself.
-            if demand_throttle > 0.0 and demand_brake > 0.0:
-                if demand_throttle > demand_brake:
-                    demand_throttle -= demand_brake
-                    demand_brake = 0.0
-                else:
-                    demand_brake -= demand_throttle
-                    demand_throttle = 0.0
+            # Contrôleur unifié en FORCE (2026-07-13) :
+            #   a_des = accélération désirée (erreur de vitesse bornée
+            #           par la rampe programmée ±A_TARGET)
+            #   F_req = m·a_des + f_ff → >0 traction, <0 retenue/frein.
+            # Continu dans les QUATRE quadrants. L'ancienne « autorité »
+            # coupait la traction dès que la gravité aidait, même quand
+            # l'accélération commandée exigeait encore du couple : au
+            # départ gare basse le contrepoids attaque sa section à
+            # 27-29 % pendant que la rame chargée est sur les 8-16 % du
+            # bas → gravité nette MOTRICE de s≈120 à ≈330 m → puissance
+            # qui tombait à 0 en pleine accélération.
+            k_a = 0.35   # m/s² de correction par m/s d'erreur
+            # Borne haute = rampe programmée (confort moteur) ; borne
+            # basse = frein service plein (−2,5) : le régulateur doit
+            # pouvoir commander un vrai freinage.
+            a_des = max(-A_BRAKE_NORMAL, min(A_TARGET, err * k_a))
+            f_req = m_total_r * a_des + f_ff
+            if f_req >= 0.0:
+                demand_throttle = max(0.0, min(1.0, f_req / max(f_motor_max, 1.0)))
+                demand_brake = 0.0
+            else:
+                demand_throttle = 0.0
+                demand_brake = max(0.0, min(1.0, -f_req / (A_BRAKE_NORMAL * m_total_r)))
 
         # Throttle slew — unchanged, smooth motor ramp.
         dth = max(-slew, min(slew, demand_throttle - tr.throttle))
@@ -3714,11 +3753,11 @@ class AutoOps:
                 self._leg_depart_ts = now
                 self._leg_depart_s = tr.s
                 self._leg_direction = tr.direction
-                self._leg_pax = self._sample_pax_load(now, tr.direction)
-                tr.pax_car1 = self._leg_pax // 2
-                tr.pax_car2 = self._leg_pax - tr.pax_car1
-                # tr.pax and tr.mass_kg are computed properties
-                # (pax_car1 + pax_car2), so they update automatically.
+                # Effectif réellement embarqué pendant le dwell : les
+                # cibles horaires sont fixées à _begin_boarding et
+                # l'embarquement est PROGRESSIF (Physics.step) — au coup
+                # de buzzer, on part avec ceux qui sont montés.
+                self._leg_pax = tr.pax
                 self._leg_incidents = 0
                 self._set_phase(self.PHASE_DEPARTING)
                 add_event(state, "ops",
@@ -3811,6 +3850,12 @@ class AutoOps:
             tr.doors_cmd = True
             tr.doors_timer = DOOR_OPEN_TIME
             self.w.sounds.play_door_motion()
+        # Cible d'embarquement liée à l'heure réelle (affinage de la
+        # cible grossière posée par reverse_trip) — les effectifs
+        # glissent vers elle pendant le dwell portes ouvertes.
+        leg = self._sample_pax_load(now, tr.direction)
+        tr.pax_car1_target = leg // 2
+        tr.pax_car2_target = leg - leg // 2
 
     def _within_operating_hours(self, now: datetime) -> bool:
         if self.force_any_hours:
@@ -4550,6 +4595,8 @@ class GameWidget(QWidget):
                     and not self.sounds.is_announcing()):
                 tr.pax_car1 = 0
                 tr.pax_car2 = 0
+                tr.pax_car1_target = 0
+                tr.pax_car2_target = 0
                 add_event(st, "out_of_service",
                           "Cabin empty — out of service. Press R for new trip.",
                           "Cabine vidée — hors service. R pour nouveau voyage.",
@@ -4626,15 +4673,18 @@ class GameWidget(QWidget):
             # and everyone comes back DOWN on skis, so the descending
             # direction is nearly empty while the ascending one is
             # heavily loaded. Mirror exactly the new_trip() logic.
+            # CIBLES d'embarquement : les effectifs réels glissent vers
+            # elles pendant que les portes sont ouvertes (Physics.step) —
+            # l'échange instantané faisait sauter la jauge de tension.
             half = PAX_MAX // 2
             if tr.direction > 0:
-                tr.pax_car1 = random.randint(90, half)
-                tr.pax_car2 = random.randint(90, half)
-                st.ghost_pax = random.randint(0, 12)
+                tr.pax_car1_target = random.randint(90, half)
+                tr.pax_car2_target = random.randint(90, half)
+                st.ghost_pax_target = random.randint(0, 12)
             else:
-                tr.pax_car1 = random.randint(0, 8)
-                tr.pax_car2 = random.randint(0, 8)
-                st.ghost_pax = random.randint(90, PAX_MAX - 20)
+                tr.pax_car1_target = random.randint(0, 8)
+                tr.pax_car2_target = random.randint(0, 8)
+                st.ghost_pax_target = random.randint(90, PAX_MAX - 20)
         else:
             tr.doors_open = False
             tr.doors_cmd = False
@@ -4707,6 +4757,14 @@ class GameWidget(QWidget):
             tr.pax_car1 = random.randint(0, 8)
             tr.pax_car2 = random.randint(0, 8)
             st.ghost_pax = random.randint(90, PAX_MAX - 20)
+        # new_trip = remise à zéro complète : bascule INSTANTANÉE (cibles
+        # alignées sur les effectifs, pas d'embarquement progressif ici).
+        tr.pax_car1_target = tr.pax_car1
+        tr.pax_car2_target = tr.pax_car2
+        st.ghost_pax_target = st.ghost_pax
+        tr.pax1_f = float(tr.pax_car1)
+        tr.pax2_f = float(tr.pax_car2)
+        st.ghost_f = float(st.ghost_pax)
         tr.number = st.selected_train if not first else random.choice([1, 2])
         tr.name = T("Train", "Rame") + f" {tr.number}"
         tr.tension_dan = 0.0

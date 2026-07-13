@@ -14,6 +14,36 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 
 ## Quoi de neuf — v1.12.x (audit + retours d'essai terrain, juillet 2026)
 
+**v1.12.13** — tension à DEUX brins, régulateur en force, embarquement
+progressif (2D **et** 3D) :
+- **Tension câble : max des deux brins à la poulie.** L'ancien modèle
+  « brin de la rame lourde » ignorait l'autre brin : à l'arrivée en haut à
+  pleine charge il affichait ~3 000 daN alors que le brin de la rame vide
+  EN BAS portait ~12 700 (3,4 km de câble pendu ≈ 9 900 daN + son poids),
+  puis sautait à ~14 000 à l'échange de passagers. Désormais chaque brin
+  est calculé avec SA rame, SA pente, SON câble et SON inertie
+  (rame + brin) — la jauge suit le brin le plus chargé, continûment.
+- **Embarquement progressif** (~12 pax/s par voiture, portes ouvertes) :
+  fini l'échange de masse instantané au demi-tour — la tension glisse de
+  12 767 à 13 994 daN pendant que les passagers tournent. Si on part
+  avant la fin, on part avec ceux qui sont montés.
+- **Régulateur unifié en FORCE** : accélération désirée bornée
+  [−frein service ; +rampe programmée], force requise = m·a_dés + charge
+  statique (gravité 2 pentes + frottements) → traction si positive,
+  retenue sinon. Continu dans les 4 quadrants. Corrige la puissance qui
+  tombait à 0 en pleine accélération au départ gare basse : le contrepoids
+  attaque sa section à 27-29 % pendant que la rame chargée est sur les
+  8-16 % du bas → gravité nette brièvement MOTRICE (s ≈ 120-330 m) — le
+  moteur fournit maintenant le complément exact (creux à ~40 kW, sans
+  jamais claquer à 0).
+- L'amortisseur numérique du butoir (±2 m/s²) est exclu de l'inertie de
+  tension (il ajoutait ~18 000 daN fantômes au contact du point d'arrêt).
+- Validation : parité statique PWA↔PC au 0,1 daN (5 points, nouveau
+  modèle), demi-tour continu (saut max 1 222 daN/frame = relâchement
+  d'inertie au serrage, lissé à l'affichage), grille 60 scénarios sans
+  échec, 16/16 tests desktop (assertion d'arrivée mise à jour au modèle
+  2 brins).
+
 **v1.12.12** — à-coups de puissance éliminés (2D **et** 3D), audit balayage :
 - Toutes les **marches d'escalier** du modèle remplacées par des fondus
   continus : coupure moteur au plafond de vitesse (elle hachait la force à
