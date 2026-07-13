@@ -172,11 +172,14 @@ func step(dt: float) -> void:
 	var sint_g: float = sin(theta_g)
 	var cost_g: float = cos(theta_g)
 
-	# Affaissement d'embarquement : actif à l'arrêt hors séquence de
-	# départ ; le buzzer (pré-tension de l'entraînement) et le départ le
-	# résorbent en douceur.
-	if not trip_started and (maint_brake or doors_open) \
-			and departure_buzzer_remaining <= 0.0:
+	# Affaissement d'embarquement : suit la masse tant que la rame est
+	# ancrée (tambour/portes), Y COMPRIS pendant la séquence de départ —
+	# l'allongement élastique PERSISTE tant que la charge est là, la rame
+	# ne « remonte » pas au repère avant de partir (retour d'essai
+	# 2026-07-13 : elle remontait au PRÊT/DÉPART, faux). Une fois en
+	# marche, l'écart se fond dans le trajet (résorption lente,
+	# imperceptible pendant que le paysage défile).
+	if not trip_started and (maint_brake or doors_open):
 		if _sag_ref_m_main < 0.0:
 			_sag_ref_m_main = m_up
 			_sag_ref_m_ghost = m_down
@@ -189,13 +192,14 @@ func step(dt: float) -> void:
 		# Suit le flux d'embarquement (≈ 2 cm/s max — « doucement »)
 		_sag_main = move_toward(_sag_main, sag_t_main, 0.03 * dt)
 		_sag_ghost = move_toward(_sag_ghost, sag_t_ghost, 0.03 * dt)
-	else:
-		# Pré-tension / trajet : retour au repère, puis désancrage
-		_sag_main = move_toward(_sag_main, 0.0, SAG_RETENSION_M_S * dt)
-		_sag_ghost = move_toward(_sag_ghost, 0.0, SAG_RETENSION_M_S * dt)
-		if trip_started:
-			_sag_ref_m_main = -1.0
-			_sag_ref_m_ghost = -1.0
+	elif trip_started:
+		_sag_ref_m_main = -1.0
+		_sag_ref_m_ghost = -1.0
+		# Résorption uniquement EN MARCHE (5 cm/s, invisible à 12 m/s) —
+		# à l'arrêt traction collée mais immobile, l'affaissement tient.
+		if absf(v) > 0.3:
+			_sag_main = move_toward(_sag_main, 0.0, SAG_RETENSION_M_S * dt)
+			_sag_ghost = move_toward(_sag_ghost, 0.0, SAG_RETENSION_M_S * dt)
 
 	var v_limit: float = minf(PNConstants.V_MAX, speed_cap_external)
 
