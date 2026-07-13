@@ -14,6 +14,29 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 
 ## Quoi de neuf — v1.12.x (audit + retours d'essai terrain, juillet 2026)
 
+**v1.12.15** — accostage progressif, finitions réalisme :
+- **Arrêt en gare enfin progressif** (« l'arrêt en gare supérieure est
+  instantané ») : détection d'arrivée SERRÉE portée du PC (serrage
+  uniquement à |v| < 0,08 m/s et à 8 cm du repère — le docking finit
+  naturellement), feed-forward d'enveloppe dans le régulateur (vraie
+  dérivée de la cible −a·(v/v_cible) : il SUIT le profil au lieu de le
+  poursuivre avec 0,4 m/s de retard et de finir sur le butoir), et
+  serrage du tambour rampé à 1,2 m/s². Pic de décélération finale :
+  ~15 → 1,33 m/s², approche 0,44 → 0,20 → 0,08 m/s sur les 3 dernières
+  secondes. 2D + 3D, deux gares.
+- **L'affaissement d'embarquement persiste jusqu'au départ** (il
+  « remontait » à tort au PRÊT/DÉPART) : l'allongement élastique reste
+  tant que la charge est là — la rame part de sa position affaissée et
+  l'écart se fond dans le trajet.
+- **Boucles d'ambiance indétectables** : fondu circulaire de 4 s entre
+  les segments les plus corrélés du fichier (recherche par corrélation
+  normalisée), gain compensé exactement (RMS constant à 0,2 dB), import
+  PCM (plus d'artefact codec au bouclage).
+- **Néons dans le tube d'évitement droit** (voie rame 2) — il était noir.
+- Manuel mis à jour (tensiomètre 2 brins + zones réalistes, jauge RÉGEN,
+  creep 0,75 m/s + rampe de docking, rebond analytique ±25-45 cm,
+  affaissement d'embarquement), FR + EN.
+
 **v1.12.14** — départ à gravité excédentaire réparé, sons lissés,
 affaissement d'embarquement :
 - **« Elle n'a jamais voulu repartir »** (inversion en descente pour
