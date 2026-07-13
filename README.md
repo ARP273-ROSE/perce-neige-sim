@@ -14,6 +14,30 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 
 ## Quoi de neuf — v1.12.x (audit + retours d'essai terrain, juillet 2026)
 
+**v1.12.14** — départ à gravité excédentaire réparé, sons lissés,
+affaissement d'embarquement :
+- **« Elle n'a jamais voulu repartir »** (inversion en descente pour
+  remonter) : le creep-kill (« frein > 0 et quasi-arrêt → v = 0 »)
+  gelait définitivement les départs où la gravité fait le travail
+  (contrepoids chargé qui tire la rame vide vers le haut : le régulateur
+  en force module au FREIN dès le départ → v recollée à 0 chaque frame).
+  Le kill ne s'applique plus que si l'arrêt est VOULU (régulateur en
+  maintien, urgence, gros frein manuel). 2D + 3D. La grille de
+  validation vérifie désormais que chaque scénario DÉMARRE (18/18).
+- **Boucles d'ambiance sans couture** : fondu circulaire hors-ligne à
+  puissance constante (la fin du fichier est fondue dans son début sur
+  1,5 s) — le raccord de boucle est continu par construction, sans
+  variation d'amplitude. Fichiers 30 → 28,5 s.
+- **Son d'évitement fondu** : entrée et sortie du clip de croisement en
+  fondu de 0,7 s calées sur la géométrie — plus de coupure sèche aux
+  aiguillages ; le corps du clip joue à volume constant.
+- **Affaissement d'embarquement (3D)** : à quai, chaque passager qui
+  monte allonge élastiquement le brin (δ = Δm·g·sinθ·L/EA) — en gare
+  basse la rame descend doucement jusqu'à ~40 cm pendant le remplissage,
+  puis l'entraînement la remonte au repère pendant le buzzer
+  (pré-tension) ; millimétrique en gare haute, l'asymétrie sort de la
+  longueur du câble. Visible aussi sur le wagon opposé.
+
 **v1.12.13** — tension à DEUX brins, régulateur en force, embarquement
 progressif (2D **et** 3D) :
 - **Tension câble : max des deux brins à la poulie.** L'ancien modèle

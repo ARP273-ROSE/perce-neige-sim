@@ -785,7 +785,9 @@ func _process(_delta: float) -> void:
 	# interpolée pour le rendu), rame 2 (ghost) à LENGTH - s_render
 	var s_pos: float
 	if is_ghost:
-		s_pos = PNConstants.LENGTH - physics.s_render
+		# Le ghost embarque dans SA gare : son propre affaissement de
+		# brin s'applique à SA position (visible quand il est en bas).
+		s_pos = PNConstants.LENGTH - physics.s_render + physics.ghost_sag_offset()
 	else:
 		s_pos = physics.s_render
 
