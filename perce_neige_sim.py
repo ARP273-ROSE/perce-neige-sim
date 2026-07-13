@@ -89,7 +89,7 @@ try:
 except ImportError:
     _GODOT_BRIDGE_OK = False
 
-VERSION = "1.12.13"
+VERSION = "1.12.14"
 APP_NAME = "Perce-Neige Simulator"
 
 
@@ -806,6 +806,12 @@ class Physics:
 
     def __init__(self, state: GameState) -> None:
         self.state = state
+        # Régulateur en maintien à l'arrêt (deadband) — conditionne le
+        # creep-kill : sans ce flag, tout frein modulé + quasi-arrêt
+        # gelait les départs à gravité excédentaire (contrepoids chargé
+        # qui tire la rame vide : le régulateur en force module au FREIN
+        # dès le départ → v recollé à 0 chaque frame → jamais parti).
+        self._reg_hold = True
 
     def step(self, dt: float) -> None:
         st = self.state
@@ -1040,7 +1046,12 @@ class Physics:
         # The regulator + cable elasticity take the train from ~1 m/s
         # down to a few cm/s smoothly ; this is just a floor to kill
         # numerical jitter once the train is mechanically at rest.
-        if a_brk > 0 and abs(tr.v) < 0.03:
+        # UNIQUEMENT quand l'arrêt est voulu (régulateur en maintien,
+        # urgence, ou gros frein manuel) : sans ce garde-fou, le frein
+        # modulé du départ à gravité excédentaire recollait v à 0 chaque
+        # frame → jamais parti (inversion en descente, 2026-07-13).
+        if (a_brk > 0 and abs(tr.v) < 0.03
+                and (self._reg_hold or tr.emergency or tr.brake > 0.5)):
             tr.v = 0.0
             a = 0.0
 
@@ -1442,12 +1453,14 @@ class Physics:
         """
         # Hard stop override : driver emergency-braking stays in control.
         if tr.emergency:
+            self._reg_hold = True
             return
 
         # Electric stop (latched service-stop button) : kill motor, apply
         # a MILD service brake only what's needed to track a gentle decel.
         # No rail brakes — the train coasts to a halt smoothly.
         if tr.electric_stop or tr.dead_man_fault:
+            self._reg_hold = True   # arrêt voulu → le creep-kill s'applique
             # Drop the commanded setpoint progressively (not instantly)
             # so releasing electric stop doesn't kick the regulator.
             tr.speed_cmd = max(0.0, tr.speed_cmd - 0.5 * dt)
@@ -1608,7 +1621,8 @@ class Physics:
                 + MU_ROLL * G * (m_main_r * math.cos(theta_r)
                                  + m_ghost_r * math.cos(theta_gr)))
 
-        if target_v < 0.01 and v_travel < 0.4:
+        self._reg_hold = target_v < 0.01 and v_travel < 0.4
+        if self._reg_hold:
             # Arrived — kill motor, hold with brake
             demand_throttle = 0.0
             demand_brake = 0.5

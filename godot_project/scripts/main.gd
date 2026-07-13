@@ -467,9 +467,11 @@ func _process(delta: float) -> void:
 		# quand le rendu ne tombe pas pile sur les pas de 1/60 s.
 		# + rebond élastique du câble après l'arrêt (gare basse : ±25 cm,
 		# T ≈ 6 s — millimétrique en haut, la physique fait le tri).
+		# + affaissement d'embarquement (le brin s'allonge sous la charge
+		# croissante à quai : la rame « descend doucement » en gare basse)
 		physics.s_render = lerpf(physics.s_prev_step, physics.s,
 			clampf(_physics_accum / PHYSICS_DT, 0.0, 1.0)) \
-			+ physics.rebound_offset()
+			+ physics.rebound_offset() + physics.boarding_sag_offset()
 	else:
 		# Mode client : l'état arrive tout fait du sim Python
 		physics.s_render = physics.s

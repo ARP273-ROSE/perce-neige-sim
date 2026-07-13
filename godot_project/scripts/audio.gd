@@ -28,6 +28,13 @@ var _prev_buzzer_remaining: float = 0.0   # front montant du buzzer de départ
 # (202 m) enregistré à la vitesse de croisière réelle.
 const CROSSING_CLIP_S: float = 20.0
 const CROSSING_REF_SPEED: float = 10.1
+# Fondu d'entrée/sortie du clip d'évitement (s) : l'ancien démarrage/stop
+# secs s'entendait nettement avant et après le croisement. Le corps du
+# clip joue à volume CONSTANT (−8 dB) — seuls les bords sont fondus.
+const CROSSING_BASE_DB: float = -8.0
+const CROSSING_FADE_S: float = 0.7
+var _crossing_fade: float = 0.0      # 0..1 (gain linéaire du fondu)
+var _crossing_fading_out: bool = false
 
 
 func _ready() -> void:
@@ -156,10 +163,10 @@ func _process(_delta: float) -> void:
 	# L'ancien déclencheur (± 40 m autour du milieu de ligne, lecture à
 	# vitesse fixe depuis le début du clip) partait ~13 s trop tard :
 	# l'entrée d'aiguillage du clip tombait au niveau du croisement réel.
-	_update_crossing_servo()
+	_update_crossing_servo(_delta)
 
 
-func _update_crossing_servo() -> void:
+func _update_crossing_servo(delta: float) -> void:
 	if _player_crossing == null or _player_crossing.stream == null:
 		return
 	var s_front: float = physics.s + PNConstants.TRAIN_HALF * float(physics.direction)
@@ -173,9 +180,15 @@ func _update_crossing_servo() -> void:
 	if in_loop and not _crossing_active:
 		if v_abs > 0.5:
 			_player_crossing.pitch_scale = clampf(v_abs / CROSSING_REF_SPEED, 0.35, 1.7)
+			# Démarre INAUDIBLE puis fondu d'entrée (0,7 s) — le start sec
+			# en pleine amplitude s'entendait nettement à l'aiguillage.
+			_crossing_fade = 0.0
+			_crossing_fading_out = false
+			_player_crossing.volume_db = -60.0
 			_player_crossing.play(prog * CROSSING_CLIP_S)
 			_crossing_active = true
 	elif in_loop and _crossing_active:
+		_crossing_fading_out = false
 		# Rame quasi arrêtée dans l'évitement → pause (pas de mouvement,
 		# pas de crécelle d'aiguillage)
 		if v_abs < 1.0:
@@ -191,8 +204,22 @@ func _update_crossing_servo() -> void:
 				and absf(_player_crossing.get_playback_position() - expected) > 0.7:
 			_player_crossing.play(expected)
 	elif not in_loop and _crossing_active:
-		# La géométrie commande, pas la durée du clip
-		_player_crossing.stop()
-		_player_crossing.stream_paused = false
-		_player_crossing.pitch_scale = 1.0
-		_crossing_active = false
+		# La géométrie commande la SORTIE — en fondu (0,7 s), plus de
+		# coupure sèche à l'aiguillage de sortie.
+		_crossing_fading_out = true
+
+	# Progression du fondu : le CORPS du clip joue à volume constant
+	# (−8 dB), seuls les bords entrent/sortent en fondu.
+	if _crossing_active:
+		var step_f: float = delta / CROSSING_FADE_S
+		_crossing_fade = clampf(
+			_crossing_fade + (-step_f if _crossing_fading_out else step_f), 0.0, 1.0)
+		_player_crossing.volume_db = CROSSING_BASE_DB \
+			+ linear_to_db(maxf(_crossing_fade, 0.001))
+		if _crossing_fading_out and _crossing_fade <= 0.0:
+			_player_crossing.stop()
+			_player_crossing.stream_paused = false
+			_player_crossing.pitch_scale = 1.0
+			_player_crossing.volume_db = CROSSING_BASE_DB
+			_crossing_active = false
+			_crossing_fading_out = false
