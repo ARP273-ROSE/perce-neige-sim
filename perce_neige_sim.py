@@ -89,7 +89,7 @@ try:
 except ImportError:
     _GODOT_BRIDGE_OK = False
 
-VERSION = "1.12.15"
+VERSION = "1.12.16"
 APP_NAME = "Perce-Neige Simulator"
 
 
