@@ -4721,11 +4721,12 @@ class GameWidget(QWidget):
             if tr.direction > 0:
                 tr.pax_car1_target = random.randint(90, half)
                 tr.pax_car2_target = random.randint(90, half)
-                st.ghost_pax_target = random.randint(0, 12)
+                st.ghost_pax_target = random.randint(0, 8) + random.randint(0, 8)
             else:
                 tr.pax_car1_target = random.randint(0, 8)
                 tr.pax_car2_target = random.randint(0, 8)
-                st.ghost_pax_target = random.randint(90, PAX_MAX - 20)
+                st.ghost_pax_target = (random.randint(90, half)
+                                       + random.randint(90, half))
         else:
             tr.doors_open = False
             tr.doors_cmd = False
@@ -4789,23 +4790,33 @@ class GameWidget(QWidget):
         tr.ready = False
         # Passenger loading — realistic : heavy in the climbing direction,
         # nearly empty in the descending direction (skiers come back on skis).
+        # Les DEUX rames tirent leur charge dans la MÊME loi (2 voitures de
+        # 90..half en montée, 2 de 0..8 en descente) : l'installation est
+        # statistiquement identique quelle que soit la cabine pilotée —
+        # l'ancien tirage du contrepoids (90..PAX_MAX-20 en un seul jet,
+        # moyenne ~202 contre ~257) faisait afficher moins de puissance
+        # quand on pilotait la rame descendante.
         half = PAX_MAX // 2
         if direction > 0:
-            tr.pax_car1 = random.randint(90, half)
-            tr.pax_car2 = random.randint(90, half)
-            st.ghost_pax = random.randint(0, 12)
+            tr.pax_car1_target = random.randint(90, half)
+            tr.pax_car2_target = random.randint(90, half)
+            st.ghost_pax_target = random.randint(0, 8) + random.randint(0, 8)
         else:
-            tr.pax_car1 = random.randint(0, 8)
-            tr.pax_car2 = random.randint(0, 8)
-            st.ghost_pax = random.randint(90, PAX_MAX - 20)
-        # new_trip = remise à zéro complète : bascule INSTANTANÉE (cibles
-        # alignées sur les effectifs, pas d'embarquement progressif ici).
-        tr.pax_car1_target = tr.pax_car1
-        tr.pax_car2_target = tr.pax_car2
-        st.ghost_pax_target = st.ghost_pax
-        tr.pax1_f = float(tr.pax_car1)
-        tr.pax2_f = float(tr.pax_car2)
-        st.ghost_f = float(st.ghost_pax)
+            tr.pax_car1_target = random.randint(0, 8)
+            tr.pax_car2_target = random.randint(0, 8)
+            st.ghost_pax_target = (random.randint(90, half)
+                                   + random.randint(90, half))
+        # Embarquement PROGRESSIF dès le trajet initial (parité PWA/3D) :
+        # les rames partent VIDES à quai, les effectifs réels glissent vers
+        # les cibles pendant que les portes sont ouvertes (Physics.step,
+        # ~12 pax/s) — l'ancienne bascule instantanée ne réservait le
+        # remplissage progressif qu'au demi-tour.
+        tr.pax_car1 = 0
+        tr.pax_car2 = 0
+        st.ghost_pax = 0
+        tr.pax1_f = 0.0
+        tr.pax2_f = 0.0
+        st.ghost_f = 0.0
         tr.number = st.selected_train if not first else random.choice([1, 2])
         tr.name = T("Train", "Rame") + f" {tr.number}"
         tr.tension_dan = 0.0
@@ -4870,11 +4881,12 @@ class GameWidget(QWidget):
             st.mode = MODE_RUN
         dep_en = "Val Claret (2111 m)" if direction > 0 else "Grande Motte (3032 m)"
         dep_fr = dep_en
+        pax_total = tr.pax_car1_target + tr.pax_car2_target
         add_event(st, "board",
-                  f"{tr.pax} passengers boarding train {tr.number} at "
-                  f"{dep_en} ({tr.pax_car1}+{tr.pax_car2})",
-                  f"{tr.pax} passagers embarquent rame {tr.number} à "
-                  f"{dep_fr} ({tr.pax_car1}+{tr.pax_car2})",
+                  f"{pax_total} passengers boarding train {tr.number} at "
+                  f"{dep_en} ({tr.pax_car1_target}+{tr.pax_car2_target})",
+                  f"{pax_total} passagers embarquent rame {tr.number} à "
+                  f"{dep_fr} ({tr.pax_car1_target}+{tr.pax_car2_target})",
                   "info")
 
     # ----- game tick -------------------------------------------------------
