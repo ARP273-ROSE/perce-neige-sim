@@ -14,6 +14,22 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 
 ## Quoi de neuf — v1.12.x (audit + retours d'essai terrain, juillet 2026)
 
+**v1.12.16** — charge symétrique, embarquement progressif dès le départ :
+- **La puissance ne dépend plus de la cabine choisie** (« quand je prends
+  la rame qui descend, la puissance affichée est inférieure ») : la rame
+  montante était tirée 2 × (90..167) passagers (moyenne ~257) quand on la
+  pilotait, mais 90..314 en un seul jet (moyenne ~202) quand elle était
+  le contrepoids — soit ~4,4 t de déséquilibre en moins en pilotant la
+  descente. Les deux rames tirent désormais leur charge dans la même loi
+  (montée 2 voitures de 90..167, descente 2 voitures de 0..8) :
+  l'installation est statistiquement identique quel que soit le côté
+  piloté. Corrigé aux trois points de tirage (départ + demi-tour PC,
+  `roll_pax` 3D).
+- **Embarquement progressif dès le trajet initial sur le programme PC**
+  (il n'existait qu'au demi-tour — la PWA/3D l'avait déjà au lancement) :
+  les rames partent vides à quai, les effectifs glissent vers les cibles
+  à ~12 pax/s portes ouvertes, masse et tension suivent en direct.
+
 **v1.12.15** — accostage progressif, finitions réalisme :
 - **Arrêt en gare enfin progressif** (« l'arrêt en gare supérieure est
   instantané ») : détection d'arrivée SERRÉE portée du PC (serrage
