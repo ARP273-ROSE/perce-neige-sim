@@ -35,7 +35,8 @@ from datetime import datetime, time as dtime
 from pathlib import Path
 from typing import Any
 
-from PyQt6.QtCore import QEvent, QPointF, QRectF, Qt, QTimer, QUrl
+from PyQt6.QtCore import (QEvent, QPointF, QRectF, Qt, QTimer, QUrl,
+                          pyqtSignal)
 from PyQt6.QtGui import (
     QBrush,
     QColor,
@@ -89,7 +90,7 @@ try:
 except ImportError:
     _GODOT_BRIDGE_OK = False
 
-VERSION = "1.12.16"
+VERSION = "1.12.17"
 APP_NAME = "Perce-Neige Simulator"
 
 
@@ -11054,8 +11055,17 @@ class GameWidget(QWidget):
 # ---------------------------------------------------------------------------
 
 class MainWindow(QMainWindow):
+    # Résultat du check de mise à jour (info, silent) — émis depuis le
+    # thread réseau, livré en file d'attente dans le thread GUI. Un
+    # QTimer.singleShot appelé DEPUIS le thread de fond ne fire JAMAIS
+    # (pas de boucle d'événements Qt dans un threading.Thread) → ni le
+    # check au démarrage ni « Vérifier les mises à jour » n'affichaient
+    # quoi que ce soit (constat exe Windows, 2026-07-22).
+    _upd_result = pyqtSignal(object, bool)
+
     def __init__(self) -> None:
         super().__init__()
+        self._upd_result.connect(self._show_update_if_newer)
         self.setWindowTitle(f"{APP_NAME}  v{VERSION}")
         self.resize(1360, 940)
         self.game = GameWidget(self)
@@ -11155,8 +11165,9 @@ class MainWindow(QMainWindow):
 
     def _on_update_check_result(self, info) -> None:
         # Called from a worker thread — bounce back to the GUI thread
-        QTimer.singleShot(
-            0, lambda: self._show_update_if_newer(info, silent=True))
+        # via a queued signal (thread-safe, contrairement à un
+        # QTimer.singleShot créé hors boucle d'événements).
+        self._upd_result.emit(info, True)
 
     def _show_update_if_newer(self, info, silent: bool) -> None:
         try:
@@ -11272,8 +11283,7 @@ class MainWindow(QMainWindow):
         # check_latest_release peut bloquer jusqu'à 15 s de timeout réseau.
         thread = autoupdate.UpdateCheckThread(
             autoupdate_mod_owner(), autoupdate_mod_repo(),
-            lambda info: QTimer.singleShot(
-                0, lambda: self._show_update_if_newer(info, silent=False)))
+            lambda info: self._upd_result.emit(info, False))
         thread.start()
         self._upd_thread = thread  # keep ref
 

@@ -14,6 +14,19 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 
 ## Quoi de neuf — v1.12.x (audit + retours d'essai terrain, juillet 2026)
 
+**v1.12.17** — le check de mise à jour affiche enfin son résultat :
+- « Vérifier les mises à jour » ne faisait **rien** (ni dialogue « à
+  jour », ni proposition d'installation), et le check silencieux du
+  démarrage ne proposait jamais les nouvelles versions : le résultat du
+  thread réseau était renvoyé au GUI par un `QTimer.singleShot` créé
+  **depuis le thread de fond** — sans boucle d'événements Qt dans un
+  `threading.Thread`, ce timer ne se déclenche jamais (vérifié au banc :
+  le callback n'est PAS appelé, alors qu'un signal Qt inter-threads est
+  bien délivré). Remplacé par un signal `pyqtSignal(object, bool)` en
+  livraison en file d'attente. ⚠️ Les exécutables ≤ 1.12.16 ne peuvent
+  donc pas se mettre à jour seuls : télécharger cette version une fois
+  à la main depuis la page Releases.
+
 **v1.12.16** — charge symétrique, embarquement progressif dès le départ :
 - **La puissance ne dépend plus de la cabine choisie** (« quand je prends
   la rame qui descend, la puissance affichée est inférieure ») : la rame
