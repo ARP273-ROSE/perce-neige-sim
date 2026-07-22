@@ -639,6 +639,11 @@ func _terminus_turnaround() -> void:
 # contrepoids reçoit l'inverse. C'est ce déséquilibre dm qui pilote la
 # gravité nette, la tension câble et la puissance — l'ancien port laissait
 # TOUT à zéro (dm = 0 : sim parfaitement équilibrée, compteur pax à 0).
+# Les DEUX rames tirent leur charge dans la MÊME loi (2 voitures de
+# 90..half en montée, 2 voitures de 0..8 en descente) : l'installation est
+# statistiquement identique quelle que soit la cabine pilotée — l'ancien
+# tirage du contrepoids (90..PAX_MAX-20 en un seul jet, moyenne ~202 contre
+# ~257) faisait afficher moins de puissance quand on pilotait la descente.
 # Fixe des CIBLES (embarquement progressif portes ouvertes) ; `instant`
 # force la bascule immédiate (initialisation, bancs de test).
 func roll_pax(instant: bool = false) -> void:
@@ -646,11 +651,11 @@ func roll_pax(instant: bool = false) -> void:
 	if direction > 0:
 		pax_t_car1 = randi_range(90, half)
 		pax_t_car2 = randi_range(90, half)
-		ghost_pax_t = randi_range(0, 12)
+		ghost_pax_t = randi_range(0, 8) + randi_range(0, 8)
 	else:
 		pax_t_car1 = randi_range(0, 8)
 		pax_t_car2 = randi_range(0, 8)
-		ghost_pax_t = randi_range(90, PNConstants.PAX_MAX - 20)
+		ghost_pax_t = randi_range(90, half) + randi_range(90, half)
 	if instant:
 		pax_car1 = pax_t_car1
 		pax_car2 = pax_t_car2
