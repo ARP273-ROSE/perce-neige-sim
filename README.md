@@ -14,6 +14,18 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 
 ## Quoi de neuf — v1.12.x (audit + retours d'essai terrain, juillet 2026)
 
+**v1.12.24** — creux de vitesse à l'arrivée corrigé (PWA + PC) :
+- « En gare du haut, la vitesse a diminué jusqu'à 0,1 m/s avant de
+  réaccélérer à 0,75 m/s » : le feed-forward de pente de consigne
+  (introduit par l'audit v1.12.21/23) se **cumulait** avec l'enveloppe
+  d'approche quand la consigne descendait pendant l'arrivée (mode auto,
+  ou molette baissée) → sur-freinage sous le profil, creux, puis
+  remontée au creep. Le feed-forward est maintenant **exclusif** : la
+  dérivée de la cible ACTIVE (consigne quand elle gouverne, enveloppe
+  en approche/creep). Cas de non-régression « arrivée profil auto »
+  ajouté aux deux bancs : v ne descend plus jamais sous 0,75 dans la
+  zone de creep, arrivée propre.
+
 **v1.12.23** — l'audit physique porté à la PWA/3D (banc `godot_project/bench_pannes_3d.gd`) :
 - **Plafonds de panne progressifs côté 3D** : mêmes causes racines que
   le PC (fondu moteur + bleed-off référés au cap de panne) → référés au
