@@ -91,7 +91,7 @@ try:
 except ImportError:
     _GODOT_BRIDGE_OK = False
 
-VERSION = "1.12.37"
+VERSION = "1.12.38"
 APP_NAME = "Perce-Neige Simulator"
 
 
@@ -11801,6 +11801,13 @@ class GameWidget(QWidget):
                 ("P / Esc", T("pause / resume", "pause / reprise")),
                 ("M", T("mode : normal / challenge / faults",
                         "mode : normal / défi / pannes")),
+                ("", T("DÉFI: manual, no auto-dock — scored on comfort, "
+                       "stop precision & discipline; alarm if too fast; "
+                       "crash into the buffer / derail if reckless",
+                       "DÉFI : manuel, sans auto-dock — noté sur confort, "
+                       "précision d'arrêt & régularité ; alarme si trop "
+                       "vite ; collision au butoir / déraillement si "
+                       "imprudent")),
                 ("F", T("fault picker (only in faults mode)",
                         "sélecteur de panne (mode pannes seulement)")),
                 ("L", T("language FR / EN", "langue FR / EN")),
