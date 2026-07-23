@@ -26,6 +26,11 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
   marche → décél nette 0,82 m/s² en zone 30 % (3,6 parachute −
   g·sinθ 2,78), 87 m d'arrêt depuis 12 m/s contre 18 m câble intact,
   indépendant de la charge. Cas ajoutés au banc `tests/bench_pannes.py`.
+- **Documentation à jour** : manuel du conducteur (`manuel_perce_neige.pdf`,
+  41 p, FR+EN) et guide théorique (`guide_theorique.pdf`, 14 p, FR+EN)
+  recompilés — chaînes de sécurité automatiques, acquittement R,
+  arrêt électrique régénératif 0,45 m/s², rupture en descente chiffrée,
+  panneau de panne en bandeau bas.
 
 **v1.12.21** — audit physique complet des pannes et des arrêts
 (détail : `AUDIT_PHYSIQUE_PANNES.md`, banc reproductible
