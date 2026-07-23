@@ -84,7 +84,11 @@ UPDATE_WHITELIST = {
 
 # Platform → expected asset name suffix (matches our GitHub Actions build)
 PLATFORM_ASSET_SUFFIX = {
-    "win32":  "-windows.exe",
+    # Windows : asset VERSIONNÉ « PerceNeigeSimulator_v1.12.33.exe » →
+    # on matche sur « .exe » (+ préfixe app, hors viewer 3D) plutôt que
+    # sur l'ancien « -windows.exe » (retour d'essai 2026-07-24 : nom
+    # clair demandé).
+    "win32":  ".exe",
     "darwin": "-macos.dmg",
     "linux":  "-linux.AppImage",
 }
@@ -200,9 +204,14 @@ def _pick_binary_asset(release: ReleaseInfo) -> Optional[ReleaseAsset]:
     suffix = _platform_suffix()
     if not suffix:
         return None
-    # 1. Match exact : l'exe du simulateur (préfixe app + suffixe plateforme).
+    # 1. Match exact : l'exe/app du simulateur (préfixe app +
+    #    l'extension plateforme). Sous Windows l'asset est désormais
+    #    VERSIONNÉ (« PerceNeigeSimulator_v1.12.33.exe ») — le préfixe
+    #    « PerceNeigeSimulator » + l'extension .exe suffisent, et le
+    #    filtre viewer (perce_neige_3d) ci-dessous écarte le binaire 3D.
     for a in release.assets:
-        if a.name.startswith(APP_ASSET_PREFIX) and a.name.endswith(suffix):
+        if (a.name.startswith(APP_ASSET_PREFIX) and a.name.endswith(suffix)
+                and "perce_neige_3d" not in a.name):
             return a
     # 2. Repli : un asset au bon suffixe qui n'est PAS le viewer 3D.
     for a in release.assets:
@@ -280,47 +289,40 @@ def _verify_asset_sha256(release: ReleaseInfo, asset: ReleaseAsset,
             f"got {actual} — download corrupted or tampered")
 
 
-def _swap_windows_exe(new_exe: Path) -> None:
-    """Schedule replacement of the currently-running .exe on Windows.
+def _swap_windows_exe(new_exe: Path, target: Path) -> None:
+    """Installe le nouveau .exe sous un nom VERSIONNÉ (`target`) et
+    supprime l'ancien, via un batch détaché qui attend la sortie du
+    process courant.
 
-    You cannot overwrite a running .exe directly.  We drop a small
-    batch script next to the new file that waits for our PID to exit,
-    swaps the binaries, deletes itself and relaunches the app.
+    `new_exe` : fichier de staging téléchargé.
+    `target`  : nom versionné final (PerceNeigeSimulator_v1.12.xx.exe),
+                DISTINCT de l'exe courant → on n'écrase jamais rien : on
+                installe à côté puis on supprime l'ancien SEULEMENT si
+                l'install a réussi. L'utilisateur n'est jamais sans exe.
     """
     import tempfile
     current = Path(sys.executable).resolve()
     pid = os.getpid()
     swap_bat = new_exe.parent / "_pn_update_swap.bat"
     bat_log = Path(tempfile.gettempdir()) / "perce_neige_update_swap.log"
-    # Robustesse (retours terrain « la MAJ marche pas ») :
-    #  - attente du PID bornée (~60 s) puis on force le swap : si la
-    #    détection tasklist déraille, on ne reste pas bloqué à l'infini ;
-    #  - `move` réessayé 10 × (le fichier .exe reste parfois verrouillé
-    #    une poignée de secondes après la sortie du process) ;
-    #  - tout est journalisé dans %TEMP%/perce_neige_update_swap.log ;
-    #  - l'appli est RELANCÉE même si le swap échoue (l'ancienne version
-    #    plutôt que rien), pour ne jamais laisser l'utilisateur sans app.
-    # Nom de sauvegarde FIXE (pas dérivé du stem, qui composerait comme
-    # le staging — cf. _install_frozen).
-    backup = current.with_name("_pn_update_backup.exe")
-    # Séquence SÛRE (retour d'essai 2026-07-24 « à la fin du téléchargement
-    # ça bug ») : l'ancien batch faisait `del TARGET` PUIS `move NEW
-    # TARGET`. Si le move échouait (antivirus verrouillant le .exe
-    # fraîchement téléchargé, dossier non inscriptible…), l'exe était
-    # supprimé SANS remplaçant → l'appli disparaissait, jamais relancée.
-    # Nouvelle logique atomique-ish, sans jamais laisser l'utilisateur
-    # sans exe :
-    #   1. renommer TARGET → TARGET.old (libère le nom cible)
-    #   2. move NEW → TARGET (réessayé : NEW peut rester verrouillé qq s)
-    #   3. si TARGET recréé → OK : supprimer TARGET.old, relancer
-    #   4. si échec → RESTAURER TARGET.old → TARGET, relancer l'ancienne
+    same = current.resolve() == target.resolve()
+    # Séquence :
+    #   1. attendre la sortie du PID (bornée ~60 s) ;
+    #   2. move NEW → TARGET (réessayé : NEW peut rester verrouillé qq s
+    #      par l'antivirus qui scanne le fichier fraîchement écrit) ;
+    #   3. si TARGET installé → supprimer l'ANCIEN exe (sauf s'il EST la
+    #      cible) et les _MEI* périmés, puis relancer TARGET ;
+    #   4. si le move échoue → relancer l'ANCIEN (toujours présent).
+    del_old = "" if same else (
+        'echo [swap] remove old exe >> "%LOG%"\r\n'
+        'del /Q "%OLD%" >nul 2>&1\r\n')
     script = (
         "@echo off\r\n"
         "setlocal enableextensions\r\n"
         f'set "PID={pid}"\r\n'
-        f'set "TARGET={current}"\r\n'
+        f'set "OLD={current}"\r\n'
+        f'set "TARGET={target}"\r\n'
         f'set "NEW={new_exe}"\r\n'
-        f'set "BACKUP={backup}"\r\n'
         f'set "LOG={bat_log}"\r\n'
         'echo [swap] start pid=%PID% > "%LOG%"\r\n'
         "set /a WAIT=0\r\n"
@@ -333,47 +335,34 @@ def _swap_windows_exe(new_exe: Path) -> None:
         "  goto waitloop\r\n"
         ")\r\n"
         ":doswap\r\n"
-        'echo [swap] pid gone, swapping >> "%LOG%"\r\n'
-        'del /Q "%BACKUP%" >nul 2>&1\r\n'
-        # 1. écarte l'ancien exe (réessayé : il peut rester verrouillé un
-        #    court instant après la sortie du process).
-        "set /a TRY=0\r\n"
-        ":renloop\r\n"
-        'move /Y "%TARGET%" "%BACKUP%" >nul 2>&1\r\n'
-        'if exist "%TARGET%" (\r\n'
-        "  set /a TRY+=1\r\n"
-        '  echo [swap] rename retry %TRY% >> "%LOG%"\r\n'
-        "  if %TRY% geq 15 goto relaunch\r\n"
-        "  timeout /t 1 /nobreak >nul\r\n"
-        "  goto renloop\r\n"
-        ")\r\n"
-        # 2. installe le nouveau à la place.
+        'echo [swap] pid gone, installing >> "%LOG%"\r\n'
         "set /a TRY=0\r\n"
         ":moveloop\r\n"
         'move /Y "%NEW%" "%TARGET%" >nul 2>&1\r\n'
         'if not exist "%TARGET%" (\r\n'
         "  set /a TRY+=1\r\n"
         '  echo [swap] move retry %TRY% >> "%LOG%"\r\n'
-        "  if %TRY% geq 15 goto restore\r\n"
+        "  if %TRY% geq 15 goto fail\r\n"
         "  timeout /t 1 /nobreak >nul\r\n"
         "  goto moveloop\r\n"
         ")\r\n"
-        # 3. succès → supprime la sauvegarde et relance la NOUVELLE.
-        'echo [swap] ok, new installed >> "%LOG%"\r\n'
-        'del /Q "%BACKUP%" >nul 2>&1\r\n'
-        "goto relaunch\r\n"
-        # 4. échec d'installation → restaure l'ANCIENNE (ne jamais
-        #    laisser l'utilisateur sans exe).
-        ":restore\r\n"
-        'echo [swap] move failed, restoring backup >> "%LOG%"\r\n'
-        'if exist "%BACKUP%" move /Y "%BACKUP%" "%TARGET%" >nul 2>&1\r\n'
-        ":relaunch\r\n"
+        # succès → supprimer l'ancien exe + les _MEI* périmés, relancer.
+        'echo [swap] installed ok >> "%LOG%"\r\n'
+        + del_old +
+        'for /d %%D in ("%TEMP%\\_MEI*") do rd /s /q "%%D" >nul 2>&1\r\n'
         'echo [swap] relaunch %TARGET% >> "%LOG%"\r\n'
-        'if exist "%TARGET%" start "" "%TARGET%"\r\n'
+        'start "" "%TARGET%"\r\n'
+        'goto done\r\n'
+        # échec → relancer l'ancien (jamais sans exe).
+        ":fail\r\n"
+        'echo [swap] install failed, relaunch old >> "%LOG%"\r\n'
+        'if exist "%OLD%" start "" "%OLD%"\r\n'
+        ":done\r\n"
         '(goto) 2>nul & del "%~f0"\r\n'
     )
     swap_bat.write_bytes(script.encode("cp1252", errors="replace"))
-    _log(f"[swap] batch écrit : {swap_bat} (pid={pid}, target={current})")
+    _log(f"[swap] batch écrit : {swap_bat} (pid={pid}, old={current}, "
+         f"target={target})")
 
     DETACHED_PROCESS = 0x00000008
     CREATE_NEW_PROCESS_GROUP = 0x00000200
@@ -415,13 +404,10 @@ def _install_frozen(release: ReleaseInfo,
     _log(f"[install] téléchargé + SHA-256 vérifié → {new_bin}")
 
     if sys.platform == "win32":
-        # Nom de staging FIXE et canonique (retour d'essai 2026-07-24 :
-        # « PerceNeigeSimulator-windows(1).new.new.exe »). L'ancien
-        # `current.stem + ".new.exe"` s'ACCUMULAIT quand l'exe courant
-        # finissait déjà par « .new » (swap précédent bâclé, doublon
-        # navigateur « (1) »…) → .new.new.exe, .new.new.new.exe. Un nom
-        # fixe ne compose jamais ; la cible du swap reste l'exe courant
-        # (sys.executable), quel que soit son nom.
+        # Staging FIXE (jamais de composition « .new.new.exe ») puis
+        # installation sous un nom VERSIONNÉ, clair et stable, à côté de
+        # l'ancien (« PerceNeigeSimulator_v1.12.33.exe ») — demandé par
+        # Kevin (2026-07-24). L'ancien exe est supprimé APRÈS l'install.
         staged = current.parent / "_pn_update_staged.exe"
         try:
             if staged.exists():
@@ -429,7 +415,8 @@ def _install_frozen(release: ReleaseInfo,
         except OSError:
             pass
         shutil.move(str(new_bin), str(staged))
-        _swap_windows_exe(staged)
+        target = current.parent / f"PerceNeigeSimulator_v{release.version}.exe"
+        _swap_windows_exe(staged, target)
         # Parent continues; caller will hard-exit via relaunch_app()
     else:
         _swap_unix_binary(new_bin)
@@ -554,7 +541,26 @@ def relaunch_app() -> None:
     du « la MAJ marche pas »). os._exit tue le process immédiatement."""
     _log("[relaunch] fin du process pour laisser le swap opérer")
     if is_frozen() and sys.platform == "win32":
-        # Laisse le temps aux tampons du log de partir, puis exit dur.
+        # Sortie PROPRE via QApplication.quit() : os._exit(0) SAUTE le
+        # nettoyage du dossier temporaire _MEIxxxx de PyInstaller onefile
+        # → « Failed to remove temporary directory …\_MEIxxxxx » après la
+        # MAJ (retour d'essai 2026-07-24). app.quit() rend la main à
+        # app.exec(), main() se termine normalement et le bootloader
+        # PyInstaller efface son _MEI. Filet de sécurité : si la boucle
+        # ne rend pas la main (thread bloquant), exit DUR après 5 s — le
+        # batch de swap attend de toute façon la sortie du PID.
+        try:
+            from PyQt6.QtWidgets import QApplication
+            app = QApplication.instance()
+            if app is not None:
+                def _hard_exit() -> None:
+                    time.sleep(5.0)
+                    os._exit(0)
+                threading.Thread(target=_hard_exit, daemon=True).start()
+                app.quit()
+                return
+        except Exception:
+            pass
         sys.stdout.flush() if sys.stdout else None
         os._exit(0)
     try:
