@@ -164,6 +164,33 @@ for v0 in (12.0, 6.0):
         audit_stop("Parachute (pinces rail)", v0, d, s_parachute)
 
 print()
+print("=== ARRIVÉE, CONSIGNE BAISSÉE PENDANT L'APPROCHE (profil auto) ===")
+# Régression PWA 2026-07-24 : le ff de pente de consigne se cumulait avec
+# l'enveloppe d'approche → v plongeait à ~0,1 m/s puis réaccélérait à
+# 0,75 pour finir. v ne doit jamais descendre sous le creep dans la zone.
+st, ph = make(+1, pn.STOP_S - 400.0, 250, 8, 10.0)
+tr = st.train
+v_min_creep = 99.0
+t = 0.0
+while t < 240.0 and not st.finished:
+    dist = pn.STOP_S - tr.s
+    if dist > 200.0:
+        tr.speed_cmd = 1.0
+    elif dist > 50.0:
+        tr.speed_cmd = 0.3 + 0.7 * (dist - 50.0) / 150.0
+    elif dist > 8.0:
+        tr.speed_cmd = 0.15
+    else:
+        tr.speed_cmd = 0.0
+    ph.step(DT)
+    if 3.0 < dist < 40.0:
+        v_min_creep = min(v_min_creep, abs(tr.v))
+    t += DT
+print(f"  v_min zone creep = {v_min_creep:.2f} m/s, "
+      f"arrivée = {st.finished}"
+      f"{'  ⚠ CREUX' if v_min_creep < 0.55 or not st.finished else '  OK'}")
+
+print()
 print("=== RUPTURE CÂBLE EN DESCENTE — pente défavorable (zone 30 %) ===")
 # La rame descendante découplée est tirée par TOUT son poids dans son
 # sens de marche : décél nette = parachute 3,6 − g·sinθ − résistance.

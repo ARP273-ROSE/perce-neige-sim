@@ -90,7 +90,7 @@ try:
 except ImportError:
     _GODOT_BRIDGE_OK = False
 
-VERSION = "1.12.23"
+VERSION = "1.12.24"
 APP_NAME = "Perce-Neige Simulator"
 
 
@@ -1770,12 +1770,18 @@ class Physics:
             # pouvoir commander un vrai freinage. a_ff_env anticipe la
             # pente de l'enveloppe (approche/docking) : le P ne sert
             # qu'aux transitoires.
-            # Les deux feed-forwards (enveloppe d'approche, pente de
-            # consigne) sont des CIBLES de décélération : on prend la
-            # plus contraignante, pas la somme (les additionner
-            # double-freinerait quand un cap de panne tombe en pleine
-            # approche de gare).
-            a_ff_total = min(a_ff_env, min(0.0, a_cmd_ff))
+            # Le feed-forward est la dérivée de la CIBLE ACTIVE,
+            # exclusivement : consigne (a_cmd_ff) quand elle gouverne,
+            # enveloppe (a_ff_env) quand l'approche/creep gouverne. Le
+            # min() des deux (v1.12.21) cumulait les freinages quand la
+            # consigne descendait PENDANT l'approche (molette baissée,
+            # mode auto) → v plongeait sous le profil (~0,1 m/s) puis
+            # réaccélérait à 0,75 pour finir (retour d'essai PWA gare
+            # haute 2026-07-24, même défaut latent ici).
+            setpoint_binding = (tr.speed_cmd_eff <= v_envelope
+                                and dist_to_stop >= CREEP_DIST)
+            a_ff_total = (min(0.0, a_cmd_ff) if setpoint_binding
+                          else a_ff_env)
             a_des = max(-A_BRAKE_NORMAL,
                         min(A_TARGET, a_ff_total + err * k_a))
             f_req = m_total_r * a_des + f_ff
