@@ -364,11 +364,16 @@ def _swap_windows_exe(new_exe: Path, target: Path) -> None:
     _log(f"[swap] batch écrit : {swap_bat} (pid={pid}, old={current}, "
          f"target={target})")
 
+    # CREATE_NO_WINDOW : le batch tourne SANS fenêtre console (retour
+    # d'essai 2026-07-24 : « une console s'ouvre avec find 16916 »). +
+    # /Q sur cmd et redirection : rien ne s'affiche à l'écran.
     DETACHED_PROCESS = 0x00000008
     CREATE_NEW_PROCESS_GROUP = 0x00000200
+    CREATE_NO_WINDOW = 0x08000000
     subprocess.Popen(
         ["cmd.exe", "/c", str(swap_bat)],
-        creationflags=DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP,
+        creationflags=(DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP
+                       | CREATE_NO_WINDOW),
         close_fds=True,
     )
 
@@ -541,26 +546,18 @@ def relaunch_app() -> None:
     du « la MAJ marche pas »). os._exit tue le process immédiatement."""
     _log("[relaunch] fin du process pour laisser le swap opérer")
     if is_frozen() and sys.platform == "win32":
-        # Sortie PROPRE via QApplication.quit() : os._exit(0) SAUTE le
-        # nettoyage du dossier temporaire _MEIxxxx de PyInstaller onefile
-        # → « Failed to remove temporary directory …\_MEIxxxxx » après la
-        # MAJ (retour d'essai 2026-07-24). app.quit() rend la main à
-        # app.exec(), main() se termine normalement et le bootloader
-        # PyInstaller efface son _MEI. Filet de sécurité : si la boucle
-        # ne rend pas la main (thread bloquant), exit DUR après 5 s — le
-        # batch de swap attend de toute façon la sortie du PID.
-        try:
-            from PyQt6.QtWidgets import QApplication
-            app = QApplication.instance()
-            if app is not None:
-                def _hard_exit() -> None:
-                    time.sleep(5.0)
-                    os._exit(0)
-                threading.Thread(target=_hard_exit, daemon=True).start()
-                app.quit()
-                return
-        except Exception:
-            pass
+        # os._exit(0) : sortie DURE et IMMÉDIATE — c'est la SEULE fiable
+        # ici. La sortie « propre » via QApplication.quit() (tentée en
+        # v1.12.33 pour éviter le message _MEI) POUVAIT NE PAS rendre la
+        # main (threads audio/réseau) → le process restait vivant, le
+        # batch de swap tournait indéfiniment (« une console s'ouvre avec
+        # find <PID> et ça reste bloqué », retour d'essai 2026-07-24) et
+        # l'exe n'était jamais remplacé. os._exit tue le process net → le
+        # batch voit le PID disparaître et fait le swap. Effet de bord :
+        # os._exit saute le nettoyage du _MEIxxxx de PyInstaller, mais le
+        # batch efface les _MEI* périmés à la place, et surtout il ne
+        # DÉCLENCHE pas le message d'erreur (le nettoyage qui échouait ne
+        # tourne plus). Fiabilité > cosmétique.
         sys.stdout.flush() if sys.stdout else None
         os._exit(0)
     try:
