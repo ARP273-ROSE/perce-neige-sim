@@ -14,6 +14,20 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 
 ## Quoi de neuf — v1.12.x (audit + retours d'essai terrain, juillet 2026)
 
+**v1.12.32** — confort réactif + vrai mode Défi (PC) :
+- **Score de confort enfin réaliste** : il restait au max même après un
+  arrêt d'urgence « tout le monde par terre ». Nouveau modèle ISO 2631 :
+  pénalité quadratique sur l'excès d'accélération (au-delà de ~0,9 m/s²
+  debout) + jerk + forte pénalité pendant un arrêt d'urgence. Un arrêt
+  d'urgence fait chuter le confort (~50 pour le frein poulie, ~0 au
+  parachute) ; la conduite douce reste à ~100.
+- **Mode Défi opérationnel** (touche M) : conduite manuelle NOTÉE à
+  l'arrivée sur trois critères — **confort** (40 %), **précision
+  d'arrêt** au repère de quai (35 %), **régularité** sans urgence ni
+  panne (25 %). Bandeau de résultat avec note /100 et étoiles, repère
+  d'arrêt live au pupitre, et **record persistant** (survit aux
+  fermetures).
+
 **v1.12.31** — pannes bien plus rares + altitude au pupitre :
 - **Pannes nettement moins fréquentes** (« encore beaucoup trop
   souvent ») : le hasard de déclenchement passe de 1/45 s à 1/240 s
