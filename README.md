@@ -14,6 +14,39 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 
 ## Quoi de neuf — v1.12.x (audit + retours d'essai terrain, juillet 2026)
 
+**v1.12.41** — chaos jouable + pannes en exploitation auto :
+- **Emballement enfin atteignable consigne à fond** : le moteur peut
+  SURRÉGIMER en Défi (le fondu à 12,25 m/s est levé + surcharge ×1,8) —
+  la rame dépasse 12 m/s **même en montée chargée** et grimpe jusqu'à la
+  cascade (+20 % ≈ 14,4 m/s → moteur détruit → câble rompu).
+- **Frein parachute opérant après rupture** : câble rompu, le frein
+  poulie n'a plus de chemin de force → l'urgence engage directement le
+  parachute rail (3,6 m/s²) qui **freine réellement** ; plus d'urgence
+  « activée d'office mais inopérante » (le pressostat auto est levé en
+  Défi : c'est vous qui freinez).
+- **Couper la puissance quand on freine** (TOUS les modes) : le moteur ne
+  tire plus contre un frein serré (urgence, parachute, frein manuel,
+  frein de service) → décélération franche.
+- **Rouler portes ouvertes en Défi** : plus d'auto-fermeture au départ,
+  ouverture/fermeture (D) possible à tout moment ; réduire la consigne
+  freine désormais aussi portes ouvertes (« part à fond » corrigé).
+- **Consigne 0 = dérive** vers la rame la plus lourde (freins lâchés,
+  sans traction) — nulle à l'évitement (équilibre), forte aux terminus.
+- **Pannes en exploitation AUTO** : le conducteur IA laisse les pannes se
+  produire ET les gère seul — **R automatique après une évacuation**
+  (catastrophe), et **retour à la gare la plus proche** à vitesse réduite
+  (avec changement de sens si elle est derrière) pour les pannes qui
+  arrêtent la rame (400 V, frein parking, aiguillage).
+- **Avis passagers** : plus étoffés (nombreuses nationalités), affichés
+  au bandeau **et dans le journal de bord** (persistant) ; un avis déjà
+  en français n'est plus écrit deux fois ; piques demi-tour & portes
+  ouvertes.
+- **Correctifs** : R après un crash repart de la gare du crash ; le
+  déraillement à l'aiguillage n'est plus confondu avec une collision de
+  l'autre rame (qui, elle, s'est arrêtée ailleurs) ; le journal ne dit
+  plus « Départ de Val Claret » lors d'une reprise en pleine voie ;
+  tension câble à 0 à la rupture.
+
 **v1.12.40** — mode chaos : finitions physiques + retours d'essai :
 - **Câble rompu → tension à 0** : quand le câble tracteur se sectionne
   (emballement), la jauge de tension **tombe à zéro** (le brin de la rame

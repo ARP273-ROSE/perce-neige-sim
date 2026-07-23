@@ -91,7 +91,7 @@ try:
 except ImportError:
     _GODOT_BRIDGE_OK = False
 
-VERSION = "1.12.40"
+VERSION = "1.12.41"
 APP_NAME = "Perce-Neige Simulator"
 
 
@@ -289,6 +289,10 @@ V_SOFT_RAMP = 2.0           # speed at which cap reaches A_MAX_REG (m/s)
 A_NATURAL_UP = 0.25         # expected coast decel on ascending trip (m/s^2)
 P_MAX = 2_400_000.0         # total motor power (W) — 3 × 800 kW
 F_STALL = 260_000.0         # hard cap on motor force (N)
+# Surcharge moteur en mode Défi (chaos) : le conducteur surrégime le
+# moteur au-delà du nominal → la consigne pleine dépasse V_MAX même en
+# montée chargée, jusqu'à la cascade de survitesse. Réglable.
+CHAOS_MOTOR_OVERDRIVE = 1.8
 
 T_NOMINAL_DAN = 22_500.0    # nominal cable tension (daN)
 T_WARN_DAN = 28_000.0       # warning threshold
@@ -804,6 +808,13 @@ class GameState:
     # Which announcement to play once the cabin has come to rest :
     # "" → generic tech_incident, "fire" → dim_light + evac, etc.
     pending_incident_kind: str = ""
+    # Retour à la gare la plus proche (pannes « stopping » : aux_power,
+    # parking_stuck, switch_abt) : après l'arrêt en pleine voie, la rame
+    # doit rejoindre la gare LA PLUS PROCHE à vitesse réduite — ce qui
+    # peut imposer un CHANGEMENT DE SENS si cette gare est derrière.
+    limp_home: bool = False        # protocole retour gare active
+    limp_dir: int = 0              # sens à prendre pour l'atteindre (±1)
+    limp_cap: float = 3.0          # plafond de vitesse réduit (m/s)
     score_time: float = 0.0
     score_comfort: float = 100.0
     score_energy: float = 0.0
@@ -984,6 +995,16 @@ class Physics:
             boost = 1.0 + 3.5 * (tr.inrush_timer / 1.2)
             p_eff *= boost
         f_motor_power_cap = p_eff / v_eff             # P = F v
+        # CHAOS (mode Défi) : plus de bridage thermique/électronique — le
+        # conducteur peut SURRÉGIMER le moteur (retours d'essai 2026-07-23 :
+        # « à fond ça dépasse pas 12,2 m/s » ; « le moteur est bien plus
+        # puissant, il tire au-delà de 12 même en montée »). On desserre
+        # franchement la limite de puissance : à consigne pleine, la rame
+        # dépasse V_MAX — MÊME en montée chargée (gravité défavorable) — et
+        # grimpe jusqu'à la cascade de survitesse (+20 % → moteur détruit →
+        # câble rompu). En Normal/Auto/Pannes, le moteur reste nominal.
+        if st.run_mode == "challenge":
+            f_motor_power_cap *= CHAOS_MOTOR_OVERDRIVE
         f_motor_max = min(F_STALL, f_motor_power_cap)
         f_motor = tr.throttle * f_motor_max * tr.direction
         # Force de FREINAGE PAR L'ENTRAÎNEMENT (génératrice) : oppose le
@@ -1004,7 +1025,11 @@ class Physics:
         # de panne passe désormais par le RÉGULATEUR (rampe de consigne
         # dédiée 0,60 m/s²), avec la surveillance cap_over_timer en
         # filet de sécurité.
-        if f_motor * tr.direction > 0:
+        # Fondu anti-pompage à V_MAX (machine) — SAUF en mode Défi, où le
+        # moteur peut surrégimer : c'est ce fondu qui écrêtait la vitesse à
+        # ~12,25 m/s même consigne à fond. Levé en chaos, la rame s'emballe
+        # au-delà de V_MAX jusqu'à la cascade de survitesse.
+        if f_motor * tr.direction > 0 and st.run_mode != "challenge":
             f_motor *= max(0.0, min(1.0,
                 (V_MAX + 0.25 - tr.v * tr.direction) / 0.25))
 
@@ -1041,6 +1066,17 @@ class Physics:
         # Parking brake mechanical release failure : motor can still pull
         # but the drum brake keeps the drive pulley locked.
         if tr.parking_stuck:
+            f_motor = 0.0
+
+        # FREIN ENGAGÉ → COUPER LA TRACTION (tous les modes). Le moteur ne
+        # doit JAMAIS tirer contre un frein serré : sinon il annule le
+        # freinage et la décélération devient ridicule (retour d'essai
+        # 2026-07-23 : « dans tous les modes il faut couper la puissance
+        # quand le frein est déclenché »). Vaut pour l'urgence (rail /
+        # parachute), le frein de service manuel (Espace) et tout freinage
+        # de service commandé significatif.
+        if (tr.emergency or tr.emergency_ramp > 0.0
+                or self.state.manual_brake_held or tr.brake > 0.05):
             f_motor = 0.0
 
         # --- Gravity imbalance ---------------------------------------------
@@ -1088,6 +1124,13 @@ class Physics:
         # calculation in the manual. Valeurs : cf. bloc de constantes
         # A_BRAKE_* (1,25 commandé / 3,6 parachute, 5 m/s² = plafond
         # réglementaire absolu, pas une valeur de fonctionnement).
+        # Câble rompu : le frein poulie (drive) n'a plus de chemin de force.
+        # Le SEUL organe encore actif est le parachute Belleville sur rail
+        # (3,6 m/s²) → dès que l'urgence est engagée (par le conducteur,
+        # quelle que soit la voie : Maj ou bouton), c'est le parachute qui
+        # agit — sinon l'urgence « ne faisait rien » câble rompu.
+        if tr.cable_rupture and (tr.emergency or tr.emergency_ramp > 0.0):
+            tr.parachute_engaged = True
         if tr.emergency:
             tr.emergency_ramp = min(
                 1.0, tr.emergency_ramp + A_BRAKE_EMERG_RAMP * dt
@@ -1119,7 +1162,14 @@ class Physics:
         # perte 400 V, tambour bloqué, câble rompu) ET pendant l'urgence
         # (le frein de sécurité prend le relais). Sinon la gravité serait
         # retenue par un couple génératrice qui n'a plus de chemin.
-        drive_off = (tr.doors_open or not st.trip_started
+        # EN DÉFI, rouler PORTES OUVERTES ne coupe PLUS l'entraînement (la
+        # traction passait déjà, cf. f_motor ci-dessus) : sinon la RETENUE
+        # régénérative disparaissait portes ouvertes → réduire la consigne
+        # ne freinait plus rien et la rame « partait à fond » sous la
+        # gravité (retour d'essai 2026-07-23). Symétrie traction/retenue.
+        chaos_doors_ok = (st.run_mode == "challenge" and st.trip_started)
+        drive_off = ((tr.doors_open and not chaos_doors_ok)
+                     or not st.trip_started
                      or tr.aux_power_fault or tr.parking_stuck
                      or tr.cable_rupture)
         if drive_off or tr.emergency or tr.emergency_ramp > 0.0:
@@ -1277,20 +1327,29 @@ class Physics:
         # déraillant.
         SWITCH_DERAIL_V = 13.5
         in_switch = PASSING_START <= tr.s <= PASSING_END
-        # Câble rompu : l'AUTRE rame a déclenché son frein et s'est
-        # immobilisée à l'évitement (voie opposée). La vôtre, découplée
-        # et emballée, la percute en l'atteignant (> 1,5 m/s).
-        cabin_hit = (tr.cable_rupture and in_switch and abs(tr.v) > 1.5)
-        # Déraillement à l'aiguillage en survitesse (sans rupture).
+        # DÉRAILLEMENT À L'AIGUILLAGE (priorité) : franchir l'évitement en
+        # survitesse réelle (> 13,5 m/s) fait sortir la rame des rails —
+        # AVANT toute idée de collision. (Retour d'essai 2026-07-23 : « j'ai
+        # déraillé sur l'aiguillage mais tu m'as dit collision avec l'autre
+        # rame » — la collision primait à tort dès 1,5 m/s.)
         derail = (st.run_mode == "challenge" and in_switch
                   and abs(tr.v) > SWITCH_DERAIL_V)
+        # COLLISION AVEC L'AUTRE RAME : câble rompu → l'autre rame,
+        # découplée, a freiné et s'est immobilisée (ghost_s figé). La vôtre,
+        # emballée, la percute LÀ OÙ ELLE EST RÉELLEMENT (proximité < 1
+        # longueur de rame), en se rapprochant d'elle — pas « à
+        # l'aiguillage » alors qu'elle est restée bien plus bas.
+        _gap = st.ghost_s - tr.s
+        _closing = (_gap * tr.v) > 0.0        # la rame va VERS le ghost
+        cabin_hit = (tr.cable_rupture and abs(_gap) < 2.0 * TRAIN_HALF
+                     and abs(tr.v) > 1.5 and _closing)
         _fire = (not st.crashed and not st.finished and st.trip_started)
-        if cabin_hit and _fire:
-            _trigger_crash(st, abs(tr.v), kind="cabin")
+        if derail and _fire:
+            _trigger_crash(st, abs(tr.v), kind="derail")
             tr.v = 0.0
             a = 0.0
-        elif derail and _fire:
-            _trigger_crash(st, abs(tr.v), kind="derail")
+        elif cabin_hit and _fire:
+            _trigger_crash(st, abs(tr.v), kind="cabin")
             tr.v = 0.0
             a = 0.0
         elif hit_end and _fire:
@@ -1537,7 +1596,14 @@ class Physics:
         # La surveillance réelle d'un funiculaire ne laisse JAMAIS rouler
         # un défaut grave : chaque chaîne ci-dessous déclenche l'arrêt
         # d'urgence commandé (frein poulie 1,25 m/s²) toute seule.
-        if not tr.emergency and st.trip_started:
+        # SAUF en mode DÉFI (chaos) : plus AUCUN filet automatique — c'est
+        # le conducteur qui freine. Sans ce garde, à la rupture du câble le
+        # pressostat (frein service dégradé) engageait l'urgence « d'office »
+        # avec le frein poulie SANS CHEMIN DE FORCE (câble rompu) → « rien
+        # ne se passe, je peux pas cliquer dessus car c'est déjà activé et
+        # ça s'emballe » (retour d'essai 2026-07-23). En chaos, l'urgence
+        # n'est engagée QUE par le conducteur (Maj → parachute rail 3,6).
+        if not tr.emergency and st.trip_started and st.run_mode != "challenge":
             # 1. Frein de service dégradé (perte de pression hydraulique) :
             #    le pressostat de la chaîne de sécurité détecte le défaut
             #    et déclenche en ~3 s — le conducteur n'a pas à « penser à
@@ -1734,6 +1800,21 @@ class Physics:
                 # de zéro à l'instant du serrage.
                 st.rebound_anchor_s = tr.s
                 st.rebound_timer = 0.0
+                # Retour gare la plus proche accompli : la maintenance
+                # prend la rame à quai, la panne « stopping » est levée et
+                # le plafond réduit retiré.
+                if st.limp_home:
+                    st.limp_home = False
+                    st.limp_dir = 0
+                    if st.panne_active and not is_catastrophic(st.panne_kind):
+                        clear_fault(st)
+                    add_event(
+                        st, "limp_done",
+                        "Nearest station reached — fault handed to "
+                        "maintenance, service can resume.",
+                        "Gare la plus proche atteinte — panne remise à la "
+                        "maintenance, service peut reprendre.",
+                        "info")
 
     @staticmethod
     def _cable_bounce(s_cabin: float, m_cabin: float,
@@ -1998,18 +2079,25 @@ class Physics:
                                  + m_ghost_r * math.cos(theta_gr)))
 
         # Mode DÉFI : à consigne 0, le régulateur NE MAINTIENT PAS la rame
-        # tout seul. Si le conducteur n'a pas serré le frein (Espace) ni
-        # le tambour, la rame RESTE LIBRE → elle repart sous la gravité
-        # dans le sens de la rame la plus lourde, sans limite de vitesse
-        # (retour d'essai 2026-07-24). C'est le rôle du frein manuel.
+        # tout seul. Sans traction ni frein serré, la rame RESTE LIBRE →
+        # elle dérive sous la gravité dans le sens de la rame LA PLUS
+        # LOURDE, sans limite de vitesse (retours d'essai : « si je lâche
+        # les freins, sans traction, ça doit partir dans le sens de la
+        # rame la plus lourde »). C'est le rôle du frein manuel (Espace) /
+        # du tambour. Le déséquilibre gravitaire est nul près de
+        # l'évitement (la rame « s'arrête » au milieu) et MAXIMAL près des
+        # terminus (la rame dévale à l'arrivée) — physique attendue.
+        # RÉDUIRE la consigne (>0) freine TOUJOURS par la retenue de
+        # l'entraînement (branche else) : c'est le lâcher COMPLET (0) sans
+        # frein qui laisse la gravité reprendre la main.
         chaos_hold = (self.state.run_mode == "challenge")
         self._reg_hold = (not chaos_hold
                           and target_v < 0.01 and v_travel < 0.4)
         demand_regen = 0.0
         if self.state.manual_brake_held:
             # Frein de service manuel prioritaire : plein (2,5 m/s²) tant
-            # qu'on appuie, moteur coupé — même en Défi (drift) il permet
-            # de tenir/arrêter la rame.
+            # qu'on appuie, moteur coupé — même en Défi il permet de
+            # tenir/arrêter la rame.
             demand_throttle = 0.0
             demand_brake = 1.0
             demand_regen = 0.0
@@ -2191,6 +2279,48 @@ PAX_REVIEWS: dict[str, list[tuple[str, str, str, str]]] = {
          "oublierait presque qu'on est sous terre. Splendide. Continuez.",
          "Frightfully smooth. Not a drop of tea disturbed. One almost "
          "forgets one is underground. Splendid. Carry on."),
+        ("🇸🇪 Astrid, Göteborg",
+         "Lagom. Precis rätt fart, mjuk inbromsning, ingen dramatik. "
+         "Precis så en resa ska vara. Tack så mycket.",
+         "Lagom. La vitesse juste comme il faut, freinage doux, aucun "
+         "drame. Exactement ce qu'un trajet doit être. Merci beaucoup.",
+         "Lagom. Exactly the right speed, gentle braking, no drama. "
+         "Exactly how a ride should be. Thank you very much."),
+        ("🇳🇱 Sanne, Utrecht",
+         "Netjes op de meter gestopt. Geen gedoe, gewoon goed geregeld. "
+         "Hier kan de NS nog wat van leren.",
+         "Arrêté pile au mètre. Aucun tracas, du travail bien fait. Les "
+         "chemins de fer néerlandais pourraient en prendre de la graine.",
+         "Stopped right on the metre. No fuss, just well done. Our own "
+         "railways could learn a thing or two here."),
+        ("🇰🇷 Min-jun, Séoul",
+         "완벽해요! 커피 한 방울도 안 흘렸어요. 기사님 진짜 프로. "
+         "별 다섯 개 드려요. 최고!",
+         "Parfait ! Pas une goutte de café renversée. Le conducteur, un "
+         "vrai pro. Cinq étoiles. Le meilleur !",
+         "Perfect! Not a drop of coffee spilled. The driver is a real "
+         "pro. Five stars. The best!"),
+        ("🇺🇸 Karen, Ohio",
+         "Honestly? I came ready to complain and I have NOTHING. Smooth, "
+         "on time, spotless. I'm as shocked as you are. Five stars.",
+         "Franchement ? Je venais pour râler et je n'ai RIEN. Doux, à "
+         "l'heure, impeccable. Aussi surprise que vous. Cinq étoiles.",
+         "Honestly? I came ready to complain and I have NOTHING. Smooth, "
+         "on time, spotless. I'm as shocked as you are. Five stars."),
+        ("🇫🇷 Josiane, Roubaix",
+         "Alors là, rien à dire. Doux, pile à l'arrêt, propre. Pour une "
+         "fois que je monte quelque part sans avoir peur. Bravo le petit.",
+         "Alors là, rien à dire. Doux, pile à l'arrêt, propre. Pour une "
+         "fois que je monte quelque part sans avoir peur. Bravo le petit.",
+         "Well, nothing to say. Smooth, stopped right on the mark, clean. "
+         "For once I go up somewhere without being scared. Well done, lad."),
+        ("🇷🇺 Dmitri, Novosibirsk",
+         "Мягко. Ровно. Как надо. У нас так не умеют. Возьму вас "
+         "машинистом в Сибирь. Пять звёзд.",
+         "Doux. Régulier. Comme il faut. Chez nous, on ne sait pas faire. "
+         "Je vous embauche comme conducteur en Sibérie. Cinq étoiles.",
+         "Smooth. Steady. As it should be. Back home they can't do this. "
+         "I'm hiring you as a driver in Siberia. Five stars."),
     ],
     "rough": [
         ("🇯🇵 Yuki, Osaka",
@@ -2223,6 +2353,51 @@ PAX_REVIEWS: dict[str, list[tuple[str, str, str, str]]] = {
          "imaginaire a souffert. Mais l'ambiance, au top.",
          "Eita! A little involuntary samba on arrival. My imaginary "
          "caipirinha suffered. But the vibe, top-notch."),
+        ("🇨🇳 Wei, Shanghai",
+         "有点急刹车啊。我的奶茶洒了一点。风景不错，但是师傅下次温柔点。"
+         "三星。",
+         "Freinage un peu brusque. Mon thé au lait a débordé un peu. "
+         "Belle vue, mais chef, plus de douceur la prochaine fois. Trois "
+         "étoiles.",
+         "Braking a touch abrupt. My bubble tea spilled a little. Nice "
+         "view, but master, go gentler next time. Three stars."),
+        ("🇩🇪 Helga, Bremen",
+         "Also. Der Kaffee war heiß. Jetzt ist er auf meiner Hose. Die "
+         "Aussicht war schön, der Halt weniger. Na ja.",
+         "Bon. Le café était chaud. Il est maintenant sur mon pantalon. "
+         "La vue était belle, l'arrêt moins. Enfin bref.",
+         "Well. The coffee was hot. It's now on my trousers. The view "
+         "was lovely, the stop less so. Oh well."),
+        ("🇺🇸 Chad, Florida",
+         "Okay that stop had some SEND to it, not gonna lie. My buddy "
+         "spilled his slushie. Still kinda fun tho. Three stars.",
+         "Ok, cet arrêt avait du PUNCH, faut l'avouer. Mon pote a "
+         "renversé sa granita. C'était marrant quand même. Trois étoiles.",
+         "Okay that stop had some SEND to it, not gonna lie. My buddy "
+         "spilled his slushie. Still kinda fun tho. Three stars."),
+        ("🇮🇳 Priya, Mumbai",
+         "Arre! Thoda zyada jhatka tha, boss. Chai gir gayi. Par view "
+         "first-class hai. Agli baar smooth chalao na. Teen star.",
+         "Arre ! Un peu trop de secousse, chef. Mon chai a coulé. Mais la "
+         "vue est première classe. La prochaine fois, tout en douceur. "
+         "Trois étoiles.",
+         "Arre! A bit too much of a jolt, boss. My chai spilled. But the "
+         "view is first-class. Drive smooth next time. Three stars."),
+        ("🇫🇷 Jean-Michel, Lyon",
+         "Bon, ça secoue un peu, hein. J'ai mordu dans mon sandwich au "
+         "mauvais moment. Rien de grave, mais bon. Trois étoiles.",
+         "Bon, ça secoue un peu, hein. J'ai mordu dans mon sandwich au "
+         "mauvais moment. Rien de grave, mais bon. Trois étoiles.",
+         "Well, it shakes a bit. I bit my sandwich at the wrong moment. "
+         "Nothing serious, but still. Three stars."),
+        ("🇵🇹 Tiago, Porto",
+         "Epá, travagem à bruta! O meu pastel de nata quase saltou. "
+         "Paisagem linda, mas calma nas travagens, se faz favor.",
+         "Eh là, freinage à la dure ! Mon pastel de nata a failli "
+         "sauter. Paysage magnifique, mais du calme au freinage, s'il "
+         "vous plaît.",
+         "Whoa, brutal braking! My custard tart nearly jumped. Beautiful "
+         "scenery, but easy on the brakes, please."),
     ],
     "disaster": [
         ("🇯🇵 Yuki, Osaka",
@@ -2368,6 +2543,12 @@ def _trigger_crash(st: GameState, speed: float, kind: str = "buffer") -> None:
     st.crash_review_who = rev[0]
     st.crash_review_native = rev[1]
     st.crash_review_txt = rev[3] if LANG == "en" else rev[2]
+    # L'avis 1 étoile est aussi journalisé (persistant, en plus de l'écran
+    # de game-over).
+    add_event(st, "pax_review",
+              f"★☆☆☆☆  {rev[0]} : {rev[3]}",
+              f"★☆☆☆☆  {rev[0]} : {rev[2]}",
+              "warn")
     st.crash_shake_t = 1.4 if kind != "buffer" else 1.2
     st.mode = MODE_OVER
     # À-coup dans le câble : la rame stoppe net mais le brin élastique
@@ -2464,7 +2645,13 @@ def maybe_random_event(st: GameState, dt: float) -> None:
     # the driver to press R (new trip from menu). Their state machine is
     # advanced separately in advance_fault_phase().
     if st.panne_active and not is_catastrophic(st.panne_kind):
-        if tr.fault_timer > 0.0:
+        # Les pannes « retour gare la plus proche » (aux_power,
+        # parking_stuck, aiguillage) ne s'effacent PAS au chrono : elles
+        # se lèvent à l'ARRIVÉE en gare (maintenance à quai). Sinon la
+        # panne disparaissait avant la fin du limp-home.
+        if fault_recovery(st.panne_kind) == "nearest_station":
+            pass
+        elif tr.fault_timer > 0.0:
             tr.fault_timer -= dt
             if tr.fault_timer <= 0.0:
                 cleared = st.panne_kind
@@ -2478,8 +2665,9 @@ def maybe_random_event(st: GameState, dt: float) -> None:
                 clear_fault(st)
 
     # Don't roll another fault while one is still active or latched
-    # by the overspeed trip.
-    if st.panne_active or tr.overspeed_tripped:
+    # by the overspeed trip — ni pendant un retour gare la plus proche
+    # (limp_home) : la panne est levée mais la manœuvre n'est pas finie.
+    if st.panne_active or tr.overspeed_tripped or st.limp_home:
         return
 
     # Manual mode : the scheduler is disabled and the driver uses the
@@ -2788,6 +2976,34 @@ def is_catastrophic(kind: str) -> bool:
     """A catastrophic fault terminates the trip : evacuation announcements
     play and the only way to restart is R (new trip from menu)."""
     return fault_profile(kind).get("severity") == "catastrophic"
+
+
+def fault_recovery(kind: str) -> str:
+    """Recovery protocol implied by a fault's severity :
+      - "evac"            : catastrophic → evacuate, service over (R).
+      - "nearest_station" : the cabin HALTS in the line and must limp to
+                            the NEAREST station at reduced speed — which
+                            may require reversing direction if that
+                            station is behind (severity "stopping").
+      - "limp"            : degraded, keep rolling to the terminus at a
+                            reduced cap (severity "operational").
+      - "none"            : advisory, no movement restriction.
+    """
+    sev = fault_profile(kind).get("severity", "")
+    if sev == "catastrophic":
+        return "evac"
+    if sev == "stopping":
+        return "nearest_station"
+    if sev == "operational":
+        return "limp"
+    return "none"
+
+
+def nearest_station_dir(s: float) -> int:
+    """Direction (±1) to travel to reach the NEAREST station from slope
+    position ``s`` : +1 heads up toward Grande Motte (STOP_S), -1 heads
+    down toward Val Claret (START_S). Ties resolve downhill (-1)."""
+    return +1 if (STOP_S - s) < (s - START_S) else -1
 
 
 def fault_label(kind: str, lang: str) -> str:
@@ -4341,6 +4557,9 @@ class AutoOps:
         self._leg_incidents = 0
         # True once the full doors-close audio chain finishes.
         self._sequence_done = False
+        # Retour gare la plus proche (auto) : état du protocole limp-home.
+        self._limp_armed = False    # départ de secours déjà lancé
+        self._limp_dwell = 0.0      # temporisation de reprise à l'arrêt
         # Init logger DB
         self._log = AutoOpsLogger()
         self._log.ensure_schema()
@@ -4442,6 +4661,88 @@ class AutoOps:
                       "Exploitation auto désactivée", "info")
         return self.enabled
 
+    def _handle_auto_fault(self, dt: float, state: "GameState", tr) -> bool:
+        """Gestion autonome d'une panne en exploitation auto. Renvoie True
+        si la panne prend la main sur la machine d'états ce tick (la suite
+        de tick() est alors sautée).
+
+        - Catastrophique : on laisse la séquence d'évacuation se dérouler
+          (_advance_fault_phase) puis, à `out_of_service`, on appuie sur R
+          (new_trip) pour relancer le service — le conducteur IA gère même
+          le désastre.
+        - « Stopping » (aux_power, parking_stuck, aiguillage Abt) : après
+          l'arrêt en pleine voie, on rejoint la GARE LA PLUS PROCHE à
+          vitesse réduite, en INVERSANT le sens si elle est derrière, puis
+          on rend la main à la machine normale qui déclenche le départ.
+        - « limp » / advisory : rien de spécial, la rame continue sous le
+          plafond de vitesse de la panne.
+        """
+        # --- Retour gare la plus proche : cycle de vie INDÉPENDANT de la
+        # panne (elle peut s'être auto-résolue ; le limp doit s'achever) ---
+        if state.limp_home:
+            if abs(tr.v) >= 0.1 and not self._limp_armed:
+                return True   # la rame finit de s'immobiliser
+            if not self._limp_armed:
+                # Brève reprise (secours 400 V / réarmement tambour) avant
+                # de bouger, puis relâche le frein de la panne.
+                self._limp_dwell += dt
+                if self._limp_dwell < 6.0:
+                    return True
+                # Reprise du secours : on LÈVE la panne (400 V rétabli /
+                # tambour réarmé) pour rendre la traction possible, MAIS on
+                # garde un plafond de vitesse RÉDUIT (limp) pour rejoindre
+                # la gare doucement. clear_fault remet les caps au nominal
+                # → on ré-applique le plafond limp juste après.
+                clear_fault(state)
+                tr.emergency = False
+                tr.electric_stop = False
+                tr.overspeed_tripped = False; tr.overspeed_level = 0
+                tr.brake = 0.0
+                tr.maint_brake = False
+                tr.speed_fault_cap = state.limp_cap
+                # Inverser le sens si la gare la plus proche est derrière.
+                if state.limp_dir != 0 and state.limp_dir != tr.direction:
+                    self.w.reverse_trip(silent=True)
+                # On arme PRÊT et on laisse READY_WAIT tirer le départ en
+                # pleine voie (buzzer court) vers la gare la plus proche.
+                tr.ready = True
+                tr.speed_cmd = 1.0
+                tr.speed_cmd_eff = 0.0
+                state.ghost_ready = True
+                state.ghost_ready_timer = 0.0
+                state.ghost_ready_delay = 0.0
+                self._set_phase(self.PHASE_READY_WAIT)
+                self._limp_armed = True
+                add_event(state, "ops",
+                          "Auto : limping to the nearest station",
+                          "Auto : rejoint la gare la plus proche",
+                          "info")
+                return True
+            # Armé : la machine normale conduit à la gare la plus proche ;
+            # l'arrivée lèvera limp_home + la panne.
+            return False
+        if not state.panne_active:
+            self._limp_armed = False
+            self._limp_dwell = 0.0
+            return False
+        # --- Catastrophique : évacuation puis R ---
+        if is_catastrophic(state.panne_kind):
+            if state.fault_phase == "out_of_service":
+                self.w.new_trip()
+                self._set_phase(self.PHASE_IDLE)
+                self.phase_t = 0.0
+                add_event(state, "ops",
+                          "Auto : service restarted after evacuation (R)",
+                          "Auto : service relancé après évacuation (R)",
+                          "info")
+            return True
+        # --- Stopping (avant l'arrêt) : on attend l'immobilisation, le
+        # bloc pending_incident posera limp_home ---
+        if fault_recovery(state.panne_kind) == "nearest_station":
+            return True
+        # limp / advisory : rien de spécial côté auto-op.
+        return False
+
     def tick(self, dt: float) -> None:
         if not self.enabled:
             return
@@ -4452,12 +4753,22 @@ class AutoOps:
         self.phase_t += dt
         state = self.w.state
         tr = state.train
-        # Safety net : the AI driver never engages emergency or
-        # electric stop on its own. If something latched one — stray
-        # Shift keystroke, overspeed trip, etc. — release it now so
-        # the state machine doesn't stall mid-cycle while the brake
-        # announcement loops on top.
-        if tr.emergency or tr.electric_stop or tr.overspeed_tripped:
+        # Gestion autonome des PANNES en exploitation auto — le conducteur
+        # IA doit LAISSER les pannes se produire et les traiter tout seul
+        # (retour d'essai 2026-07-23 : « en mode panne+auto aucune panne ne
+        # se déclenche, tu peux tout gérer seul y compris R »). Renvoie True
+        # si la panne a pris la main sur la machine d'états ce tick.
+        if self._handle_auto_fault(dt, state, tr):
+            return
+        # Safety net : the AI driver never engages emergency or electric
+        # stop on its own. If something latched one — stray Shift keystroke,
+        # overspeed trip, etc. — release it now so the state machine doesn't
+        # stall mid-cycle while the brake announcement loops on top. MAIS on
+        # ne touche PAS aux latches quand une panne légitime est active
+        # (_handle_auto_fault s'en charge), sinon on annulerait l'effet même
+        # de la panne (l'urgence qu'elle engage) chaque frame.
+        if (not state.panne_active
+                and (tr.emergency or tr.electric_stop or tr.overspeed_tripped)):
             tr.emergency = False
             tr.electric_stop = False
             tr.overspeed_tripped = False; tr.overspeed_level = 0
@@ -5750,6 +6061,8 @@ class GameWidget(QWidget):
         st.challenge_review_who = ""
         st.challenge_review_native = ""
         st.challenge_review_txt = ""
+        st.limp_home = False
+        st.limp_dir = 0
         st.rebound_timer = 0.0
         self._last_panne_kind = ""
         self._welcome_played = False
@@ -5973,6 +6286,46 @@ class GameWidget(QWidget):
                           "Train halted — incident announcement",
                           "Arrêt de la rame — annonce incident",
                           "warn")
+                # Protocole RETOUR GARE LA PLUS PROCHE : les pannes
+                # « stopping » (aux_power, parking_stuck, aiguillage Abt)
+                # imposent, après l'arrêt en pleine voie, de rejoindre la
+                # gare LA PLUS PROCHE à vitesse réduite — éventuellement en
+                # CHANGEANT DE SENS si elle est derrière.
+                if (fault_recovery(kind) == "nearest_station"
+                        and st.panne_active):
+                    _tr_lh = st.train
+                    _need_dir = nearest_station_dir(_tr_lh.s)
+                    st.limp_home = True
+                    st.limp_dir = _need_dir
+                    st.limp_cap = 3.0
+                    _tr_lh.speed_fault_cap = min(_tr_lh.speed_fault_cap
+                                                 if _tr_lh.speed_fault_cap > 0
+                                                 else 99.0, st.limp_cap)
+                    _reverse = (_need_dir != _tr_lh.direction)
+                    _sta_en = "Grande Motte" if _need_dir > 0 else "Val Claret"
+                    _sta_fr = _sta_en
+                    _dist_lh = (abs(STOP_S - _tr_lh.s) if _need_dir > 0
+                                else abs(_tr_lh.s - START_S))
+                    if _reverse:
+                        add_event(
+                            st, "limp_home",
+                            f"Recover to NEAREST station {_sta_en} "
+                            f"({_dist_lh:.0f} m BEHIND) at ≤{st.limp_cap:.0f} "
+                            f"m/s — REVERSE direction (I), then READY + DEPART.",
+                            f"Regagner la gare LA PLUS PROCHE {_sta_fr} "
+                            f"({_dist_lh:.0f} m DERRIÈRE) à ≤{st.limp_cap:.0f} "
+                            f"m/s — INVERSER le sens (I), puis PRÊT + DÉPART.",
+                            "warn")
+                    else:
+                        add_event(
+                            st, "limp_home",
+                            f"Recover to NEAREST station {_sta_en} "
+                            f"({_dist_lh:.0f} m ahead) at ≤{st.limp_cap:.0f} "
+                            f"m/s — READY + DEPART.",
+                            f"Regagner la gare LA PLUS PROCHE {_sta_fr} "
+                            f"({_dist_lh:.0f} m devant) à ≤{st.limp_cap:.0f} "
+                            f"m/s — PRÊT + DÉPART.",
+                            "warn")
             # Departure sequence — the buzzer must finish sounding before
             # the trip actually starts. The Z key sets
             # departure_buzzer_remaining = BUZZER_DURATION, and we count
@@ -6011,7 +6364,23 @@ class GameWidget(QWidget):
                     # Interior departure ambient — smooth ramp from
                     # silence to cruise, bridges buzzer → ambient loop.
                     self.sounds.play_departure_ambient()
-                    if st.train.direction > 0:
+                    # Le message « Départ Val Claret / Grande Motte » ne
+                    # vaut qu'AU TERMINUS. Une reprise en pleine voie (après
+                    # un arrêt tunnel : panne, urgence, arrêt volontaire) ne
+                    # part d'aucune gare → journal « Reprise en voie » avec
+                    # l'altitude réelle (retour d'essai 2026-07-23 : « quand
+                    # on repart dans le tunnel le journal dit Départ de Val
+                    # Claret 2111 m »).
+                    _dep_tr = st.train
+                    _at_terminus_dep = (_dep_tr.s <= START_S + 5.0
+                                        or _dep_tr.s >= STOP_S - 5.0)
+                    if not _at_terminus_dep:
+                        _alt_dep = geom_at(_dep_tr.s)[1]
+                        add_event(st, "dep",
+                                  f"Resuming on the line — {_alt_dep:.0f} m",
+                                  f"Reprise en voie — {_alt_dep:.0f} m",
+                                  "info")
+                    elif _dep_tr.direction > 0:
                         add_event(st, "dep",
                                   "Departing Val Claret — 2111 m",
                                   "Départ Val Claret — 2111 m", "info")
@@ -6254,6 +6623,17 @@ class GameWidget(QWidget):
         st.challenge_review_who = rev[0]
         st.challenge_review_native = rev[1]
         st.challenge_review_txt = rev[3] if LANG == "en" else rev[2]
+        # L'avis passager est AUSSI journalisé (bandeau de 8 s facile à
+        # rater — retour d'essai « je n'ai toujours pas les avis à la fin
+        # du défi, juste mon score »). Le journal, lui, reste consultable.
+        _stars = "★★★★★" if score >= 90 else (
+            "★★★★☆" if score >= 80 else (
+                "★★★☆☆" if score >= 60 else "★★☆☆☆"))
+        add_event(
+            st, "pax_review",
+            f"{_stars}  {rev[0]} : {rev[3]}",
+            f"{_stars}  {rev[0]} : {rev[2]}",
+            "info")
         if score > st.challenge_best:
             st.challenge_best = score
             self._save_challenge_best(score)
@@ -6614,15 +6994,22 @@ class GameWidget(QWidget):
             # "at station" window is START_S±5 m or STOP_S±5 m so door
             # ops never fire while the train is mid-tunnel.
             at_station = (tr.s <= START_S + 5.0) or (tr.s >= STOP_S - 5.0)
-            if abs(tr.v) >= 0.2:
+            # Mode DÉFI (chaos) : plus AUCUN verrou de porte — on ouvre /
+            # ferme QUAND ON VEUT, même à 40 km/h en plein tunnel (retour
+            # d'essai 2026-07-23 : « je pars portes ouvertes mais tu me les
+            # fermes en route et je peux pas les rouvrir »). En Normal/Auto/
+            # Pannes, les verrous de sécurité tiennent.
+            chaos_doors = (st.run_mode == "challenge")
+            if abs(tr.v) >= 0.2 and not chaos_doors:
                 add_event(st, "doors",
                           "Cannot operate doors while moving",
                           "Portes verrouillées — train en marche",
                           "warn")
             elif tr.doors_timer > 0.0:
                 pass  # transition already in progress
-            elif not tr.doors_cmd and not at_station:
-                # Trying to open but we're in the tunnel — forbidden.
+            elif not tr.doors_cmd and not at_station and not chaos_doors:
+                # Trying to open but we're in the tunnel — forbidden
+                # (sauf mode Défi : ouverture en pleine voie autorisée).
                 add_event(st, "doors",
                           "Cannot open doors outside a station",
                           "Ouverture impossible hors station",
@@ -6971,7 +7358,10 @@ class GameWidget(QWidget):
             # spurious "attention fermeture" announcement when restarting
             # from a mid-tunnel stop or after a direction reversal where
             # the doors never reopened in the first place.
-            if tr.doors_cmd:
+            # EXCEPTION mode DÉFI : si le conducteur part PORTES OUVERTES,
+            # on ne les referme PAS d'office — il roule portes ouvertes et
+            # les gère lui-même (retour d'essai 2026-07-23).
+            if tr.doors_cmd and st.run_mode != "challenge":
                 tr.doors_cmd = False
                 tr.doors_timer = DOOR_CLOSE_TIME
                 self.sounds.play_doors_close_sequence(
@@ -7284,19 +7674,27 @@ class GameWidget(QWidget):
         p.setPen(_cached_pen(QColor(220, 210, 200)))
         p.drawText(QRectF(rev.x() + 12, rev.y() + 8, rev.width() - 24, 18),
                    int(Qt.AlignmentFlag.AlignRight), st.crash_review_who)
-        # Texte en langue d'origine (italique, gris clair).
-        f_native = _cached_font("Segoe UI", 10)
-        f_native.setItalic(True)
-        p.setFont(f_native)
-        p.setPen(_cached_pen(QColor(190, 200, 210)))
-        p.drawText(QRectF(rev.x() + 12, rev.y() + 30, rev.width() - 24, 56),
-                   int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop
-                       | Qt.TextFlag.TextWordWrap),
-                   st.crash_review_native)
-        # Traduction (FR/EN).
+        # VO (italique) + traduction — mais si l'avis est DÉJÀ dans la
+        # langue affichée (passager francophone en FR), on ne l'écrit
+        # qu'UNE fois (retour d'essai 2026-07-23 : « si l'avis est en
+        # français, pas besoin de l'écrire deux fois »).
+        _show_native = (st.crash_review_native
+                        and st.crash_review_native != st.crash_review_txt)
+        if _show_native:
+            f_native = _cached_font("Segoe UI", 10)
+            f_native.setItalic(True)
+            p.setFont(f_native)
+            p.setPen(_cached_pen(QColor(190, 200, 210)))
+            p.drawText(QRectF(rev.x() + 12, rev.y() + 30, rev.width() - 24, 56),
+                       int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop
+                           | Qt.TextFlag.TextWordWrap),
+                       st.crash_review_native)
+            _txt_y = 88
+        else:
+            _txt_y = 34
         p.setFont(_cached_font("Segoe UI", 11))
         p.setPen(_cached_pen(QColor(235, 230, 225)))
-        p.drawText(QRectF(rev.x() + 12, rev.y() + 88, rev.width() - 24, 60),
+        p.drawText(QRectF(rev.x() + 12, rev.y() + _txt_y, rev.width() - 24, 78),
                    int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop
                        | Qt.TextFlag.TextWordWrap),
                    st.crash_review_txt)
@@ -7371,17 +7769,25 @@ class GameWidget(QWidget):
             p.setPen(_cached_pen(COLOR_TEXT_DIM))
             p.drawText(QRectF(revr.x() + 10, revr.y() + 5, revr.width() - 20, 15),
                        int(Qt.AlignmentFlag.AlignRight), st.challenge_review_who)
-            f_nat = _cached_font("Segoe UI", 9)
-            f_nat.setItalic(True)
-            p.setFont(f_nat)
-            p.setPen(_cached_pen(QColor(185, 195, 205)))
-            p.drawText(QRectF(revr.x() + 10, revr.y() + 22, revr.width() - 20, 40),
-                       int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop
-                           | Qt.TextFlag.TextWordWrap),
-                       st.challenge_review_native)
+            # VO (italique) puis traduction — une seule fois si l'avis est
+            # déjà dans la langue affichée (passager francophone en FR).
+            _show_nat = (st.challenge_review_native
+                         and st.challenge_review_native != st.challenge_review_txt)
+            if _show_nat:
+                f_nat = _cached_font("Segoe UI", 9)
+                f_nat.setItalic(True)
+                p.setFont(f_nat)
+                p.setPen(_cached_pen(QColor(185, 195, 205)))
+                p.drawText(QRectF(revr.x() + 10, revr.y() + 22, revr.width() - 20, 40),
+                           int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop
+                               | Qt.TextFlag.TextWordWrap),
+                           st.challenge_review_native)
+                _cty = 62
+            else:
+                _cty = 24
             p.setFont(_cached_font("Segoe UI", 10))
             p.setPen(_cached_pen(QColor(225, 228, 235)))
-            p.drawText(QRectF(revr.x() + 10, revr.y() + 62, revr.width() - 20, 42),
+            p.drawText(QRectF(revr.x() + 10, revr.y() + _cty, revr.width() - 20, 80),
                        int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop
                            | Qt.TextFlag.TextWordWrap),
                        st.challenge_review_txt)
@@ -12235,7 +12641,7 @@ class GameWidget(QWidget):
         """Full in-game help panel : goal + all controls."""
         p.fillRect(0, 0, w, h, QColor(0, 0, 0, 170))
         box_w = 780
-        box_h = 820
+        box_h = 858
         box = QRectF(w / 2 - box_w / 2, h / 2 - box_h / 2, box_w, box_h)
         p.setBrush(QBrush(QColor(20, 26, 40, 245)))
         p.setPen(_cached_pen(COLOR_HUD_BORDER, 3))
@@ -12355,7 +12761,7 @@ class GameWidget(QWidget):
                 y += 34
 
         # Tips box at the bottom — sized to fit all 10 tips without overflow
-        tips_box_h = 220
+        tips_box_h = 246
         tips_y = box.y() + box_h - tips_box_h - 26
         tips_box = QRectF(box.x() + 30, tips_y, box_w - 60, tips_box_h)
         p.setBrush(QBrush(QColor(30, 38, 56, 220)))
@@ -12390,8 +12796,10 @@ class GameWidget(QWidget):
               "• Menu Aide : vérifier les MAJ GitHub, ou signaler un bug anonymement (ticket pré-rempli)"),
             T("• Catastrophic fault (cable rupture, fire, brake fade, vent failure) : trip is OVER. Wait through evac, then press R for a new trip from menu",
               "• Panne catastrophique (rupture câble, feu, frein HS, désenfumage HS) : voyage TERMINÉ. Attendre l'évac, puis R pour un nouveau voyage depuis le menu"),
-            T("• CHAOS mode : if the cable snaps in a runaway, the parachute brake (Shift) still works but fights gravity — apply it EARLY; after a crash, R restarts from the station you crashed at (the return)",
-              "• Mode CHAOS : si le câble rompt en emballement, le frein parachute (Shift) marche encore mais lutte contre la gravité — serrez TÔT ; après un crash, R relance depuis la gare où vous vous êtes écrasé (le retour)"),
+            T("• CHAOS mode : full command over-revs the motor past 12 m/s (even climbing) up to the overspeed cascade; if the cable snaps, ONLY the parachute (Shift) brakes it — apply it EARLY. Any brake cuts traction. Setpoint 0 without braking = drift toward the heavier car",
+              "• Mode CHAOS : consigne à fond = surrégime au-delà de 12 m/s (même en montée) jusqu'à la cascade ; câble rompu, SEUL le parachute (Maj) freine — serrez TÔT. Tout frein coupe la traction. Consigne 0 sans frein = dérive vers la rame la plus lourde"),
+            T("• Faults + auto-operation (X) : the AI driver handles incidents alone — limps to the NEAREST station (reversing if it's behind) for blocking faults, and presses R itself after an evacuation",
+              "• Pannes + exploitation auto (X) : le conducteur IA gère seul — retour à la gare LA PLUS PROCHE (demi-tour si elle est derrière) pour les pannes bloquantes, et R automatique après une évacuation"),
         ]
         for i, line in enumerate(tips):
             p.drawText(QRectF(tips_box.x() + 12, tips_box.y() + 30 + i * 16,
