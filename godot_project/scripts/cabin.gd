@@ -27,6 +27,35 @@ var _prev_v_for_acc: float = 0.0   # vitesse à la frame précédente pour calcu
 enum ViewMode { FPV, EXTERIOR }
 var view_mode: int = ViewMode.FPV
 
+# Caméra orbitale (vue extérieure) — sphérique autour du centre de la
+# rame, dans le repère LOCAL de la cabine (la vue suit l'orientation du
+# train comme l'ancienne vue fixe). Défauts = ancienne position (3,10,25).
+var orbit_yaw: float = atan2(3.0, 25.0)
+var orbit_pitch: float = asin(10.0 / 27.06)
+var orbit_dist: float = 27.06
+
+
+func orbit_rotate(dx: float, dy: float) -> void:
+	orbit_yaw -= dx * 0.006
+	orbit_pitch = clampf(orbit_pitch + dy * 0.006, -0.15, 1.35)
+
+
+func orbit_zoom(factor: float) -> void:
+	orbit_dist = clampf(orbit_dist * factor, 8.0, 120.0)
+
+
+func _update_orbit_camera() -> void:
+	if camera_ext == null:
+		return
+	var cp: float = cos(orbit_pitch)
+	camera_ext.position = Vector3(
+		orbit_dist * cp * sin(orbit_yaw),
+		orbit_dist * sin(orbit_pitch),
+		orbit_dist * cp * cos(orbit_yaw))
+	if is_inside_tree():
+		camera_ext.look_at(
+			global_transform.origin + Vector3(0.0, 2.0, 0.0), Vector3.UP)
+
 # Mode ghost : rame 2 (pas de caméra, mesh visible, offset latéral passing loop)
 # side = -1 pour rame 1 (voie gauche au passing loop), +1 pour rame 2 ghost
 @export var is_ghost: bool = false
@@ -733,20 +762,19 @@ func _build_camera() -> void:
 	camera_fpv.rotation = Vector3(0.0, 0.0, 0.0)
 	add_child(camera_fpv)
 
-	# Caméra extérieure — orbitale derrière et au-dessus du train
+	# Caméra extérieure — VRAIE orbitale autour de la rame (retour d'essai
+	# 2026-07-24 : « cette vue est fixe ») : yaw/pitch/distance pilotés au
+	# doigt (drag 1 doigt = angle, pincement 2 doigts = zoom) ou à la
+	# souris (clic gauche maintenu + molette). Position recalculée chaque
+	# frame par _update_orbit_camera ; les défauts reproduisent l'ancienne
+	# vue fixe (3, 10, 25).
 	camera_ext = Camera3D.new()
 	camera_ext.name = "CameraExt"
 	camera_ext.fov = 60.0
 	camera_ext.near = 0.1
 	camera_ext.far = 1500.0
-	# 25m derrière le train (en montée = vers Val Claret) + 10m au-dessus
-	camera_ext.position = Vector3(3.0, 10.0, 25.0)
-	camera_ext.look_at_from_position(
-		Vector3(3.0, 10.0, 25.0),
-		Vector3(0.0, 0.0, 0.0),
-		Vector3.UP
-	)
 	add_child(camera_ext)
+	_update_orbit_camera()
 
 	camera_fpv.make_current()
 
@@ -781,6 +809,9 @@ func set_physics(p: TrainPhysics) -> void:
 func _process(_delta: float) -> void:
 	if tunnel == null or physics == null:
 		return
+	# Caméra orbitale : suit la rame chaque frame en vue extérieure.
+	if not is_ghost and view_mode == ViewMode.EXTERIOR:
+		_update_orbit_camera()
 	# Position le long de la spline : rame 1 à s_render (position physique
 	# interpolée pour le rendu), rame 2 (ghost) à LENGTH - s_render
 	var s_pos: float
