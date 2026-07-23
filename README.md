@@ -14,6 +14,15 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 
 ## Quoi de neuf — v1.12.x (audit + retours d'essai terrain, juillet 2026)
 
+**v1.12.31** — pannes bien plus rares + altitude au pupitre :
+- **Pannes nettement moins fréquentes** (« encore beaucoup trop
+  souvent ») : le hasard de déclenchement passe de 1/45 s à 1/240 s
+  d'exposition, cooldown 20 → 90 s → environ un incident toutes les
+  5-6 minutes (≈ un par trajet) au lieu de ~1/min. Déclenchement manuel
+  toujours possible via le dialogue F.
+- **Altitude instantanée** affichée dans l'en-tête du pupitre de
+  conduite (PC), interpolée sur le profil réel (2111 m → 3032 m).
+
 **v1.12.30** — bouton DÉMARRER qui débordait : le libellé était trop
 gros (19 pt sur 320 px) et sortait des deux côtés. Bouton élargi
 (460 px), police réduite (15 pt), texte tronqué proprement en dernier

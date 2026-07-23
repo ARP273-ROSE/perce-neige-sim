@@ -91,7 +91,7 @@ try:
 except ImportError:
     _GODOT_BRIDGE_OK = False
 
-VERSION = "1.12.30"
+VERSION = "1.12.31"
 APP_NAME = "Perce-Neige Simulator"
 
 
@@ -1973,20 +1973,18 @@ def maybe_random_event(st: GameState, dt: float) -> None:
     st.event_cooldown -= dt
     if st.event_cooldown > 0:
         return
-    # Aléa de déclenchement INDÉPENDANT DU FRAMERATE. L'ancien tirage
-    # « random() > 0.0025 par frame » était une probabilité PAR IMAGE :
-    # à 60 Hz ~1 chance/400 ticks (≈7 s), mais sur un écran 144/240 Hz
-    # les pannes fusaient 2,4 à 4× plus vite (« yen a une toutes les
-    # 3 secondes », retour 2026-07-24). Hazard exponentiel calé sur le
-    # temps réel : λ = 1 panne / 45 s d'exposition (après le cooldown),
-    # soit un incident toutes les ~60 s en moyenne — laisse le temps de
-    # gérer chaque panne. P(déclenche pendant dt) = λ·dt.
-    FAULT_HAZARD_PER_S = 1.0 / 45.0
+    # Aléa de déclenchement INDÉPENDANT DU FRAMERATE (hazard exponentiel
+    # en temps réel : P = λ·dt). Fréquence NETTEMENT baissée après deux
+    # retours « les pannes c'est beaucoup trop souvent » (2026-07-24) :
+    # λ = 1 panne / 240 s d'exposition (≈ 4 min) + cooldown 90 s → un
+    # incident toutes les ~5-6 min en moyenne, soit environ un par
+    # trajet (un aller ≈ 6 min). En mode Pannes on veut GÉRER un
+    # incident de temps en temps, pas enchaîner. (Déclenchement manuel
+    # toujours dispo via le dialogue F.)
+    FAULT_HAZARD_PER_S = 1.0 / 240.0
     if random.random() > FAULT_HAZARD_PER_S * dt:
         return
-    # Cooldown post-panne : pas de nouvel incident avant 20 s (le temps
-    # que la précédente soit résolue et digérée).
-    st.event_cooldown = 20.0
+    st.event_cooldown = 90.0
 
     # Weighted pool : common faults stay common, catastrophic ones rare.
     # Weights are calibrated from research_failures.md §2 — aux_power and
@@ -9992,6 +9990,15 @@ class GameWidget(QWidget):
         p.drawText(QRectF(rect.x() + 14, rect.y() + 10, rect.width() - 28, 22),
                    int(Qt.AlignmentFlag.AlignLeft),
                    T("Control panel", "Pupitre de conduite"))
+        # Altitude instantanée (compteur du pupitre) — interpolée sur le
+        # profil altimétrique réel (2111 m Val Claret → 3032 m Grande
+        # Motte). geom_at(s) rend (x_projeté, altitude).
+        alt_m = geom_at(tr.s)[1]
+        p.setPen(_cached_pen(QColor(150, 220, 255)))
+        p.setFont(_cached_font("Consolas", 14, QFont.Weight.Bold))
+        p.drawText(QRectF(rect.x() + 14, rect.y() + 10, rect.width() - 28, 22),
+                   int(Qt.AlignmentFlag.AlignRight),
+                   f"{alt_m:4.0f} m")
 
         # Speedometer (top) — main unit m/s, sub-label shows km/h equivalent
         speed_rect = QRectF(rect.x() + 20, rect.y() + 40, 160, 160)
