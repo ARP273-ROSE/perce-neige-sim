@@ -14,6 +14,24 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 
 ## Quoi de neuf — v1.12.x (audit + retours d'essai terrain, juillet 2026)
 
+**v1.12.40** — mode chaos : finitions physiques + retours d'essai :
+- **Câble rompu → tension à 0** : quand le câble tracteur se sectionne
+  (emballement), la jauge de tension **tombe à zéro** (le brin de la rame
+  pilotée n'est plus tendu) — plus d'à-coup fantôme au crash si le câble
+  était déjà rompu.
+- **R après un crash = le RETOUR** : après une collision à l'arrivée,
+  appuyer sur **R** relance le voyage **depuis la gare où l'on s'est
+  écrasé** (le retour), et non plus systématiquement depuis la gare de
+  départ d'origine.
+- **Piques sarcastiques demi-tour & portes ouvertes** : faire demi-tour
+  inutilement ou **rouler portes ouvertes** en Défi déclenche des
+  commentaires dédiés (bilingues).
+- **Avis passagers en VO + traduction** au bandeau de résultat *et* à
+  l'écran de game-over (l'avis « bon / correct » n'était pas affiché à la
+  fin d'un trajet réussi — corrigé).
+- **Manuel (43 p), README, menu d'aide (F1)** mis à jour, tout le
+  programme bilingue FR/EN.
+
 **v1.12.39** — mode Défi « chaos » : conséquences physiques + avis
 passagers :
 - **Survitesse / emballement** : en Défi, laisser la consigne à fond sur
