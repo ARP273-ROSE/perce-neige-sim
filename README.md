@@ -14,6 +14,24 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 
 ## Quoi de neuf — v1.12.x (audit + retours d'essai terrain, juillet 2026)
 
+**v1.12.39** — mode Défi « chaos » : conséquences physiques + avis
+passagers :
+- **Survitesse / emballement** : en Défi, laisser la consigne à fond sur
+  une descente chargée lève le plafond de vitesse — la gravité emballe la
+  rame au-delà de 12 m/s (à vous de freiner : Espace / Maj).
+- **Moteur détruit → câble rompu** : à +20 % de survitesse, message
+  clair (« moteur détruit, CÂBLE ROMPU — freinez ! »). La rame découplée
+  **suit alors la physique** (dévale, plus de contrepoids).
+- **Fin dramatique au choix de vos bêtises** : collision au **vrai
+  butoir** (la rame roule jusqu'au mur avant l'impact), **déraillement**
+  à l'aiguillage en survitesse (> 13,5 m/s, au-dessus de la tolérance de
+  certif), ou **collision frontale avec l'autre rame** (qui, elle, a
+  freiné) à l'évitement.
+- **Avis passagers** stylés par nationalité (interjection en VO +
+  français, références locales), adaptés à la circonstance : voyage
+  nickel (5★) → arrivée brusque (3★) → catastrophe (1★). Affichés au
+  bandeau de résultat et à l'écran de game-over.
+
 **v1.12.38** — doc du mode Défi : manuel (42 p) et menu d'aide (F1) mis
 à jour avec le mode Défi complet — notation confort/précision/
 régularité, absence d'auto-dock, alarme « TROP VITE », collision au
