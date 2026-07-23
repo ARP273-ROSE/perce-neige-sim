@@ -14,6 +14,17 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 
 ## Quoi de neuf — v1.12.x (audit + retours d'essai terrain, juillet 2026)
 
+**v1.12.34** — collision en bout de voie (mode Défi) :
+- En **mode Défi**, le filet d'auto-docking Von Roll est **levé** : c'est
+  au conducteur de freiner (la consigne devient réactive, 2,4 m/s²). Si
+  tu ralentis **trop tard ou pas du tout**, la rame **percute le butoir**
+  → écran de **COLLISION** avec secousse d'écran, flash rouge, vitesse
+  d'impact et un **message sarcastique** tiré au hasard. R pour repartir.
+  (En Normal/Auto, le régulateur dock toujours proprement — pas de
+  crash possible par erreur de conduite.)
+- L'arrivée en Défi est validée dès l'arrêt dans la zone de quai (±6 m),
+  la précision d'arrêt notant l'écart exact au repère.
+
 **v1.12.33** — exe versionné + erreur temp `_MEI` à la MAJ :
 - **Nom d'exe versionné** : l'asset et l'exe installé s'appellent
   désormais `PerceNeigeSimulator_v1.12.33.exe` (clair, plus de
