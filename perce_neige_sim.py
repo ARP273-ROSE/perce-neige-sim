@@ -90,7 +90,7 @@ try:
 except ImportError:
     _GODOT_BRIDGE_OK = False
 
-VERSION = "1.12.28"
+VERSION = "1.12.29"
 APP_NAME = "Perce-Neige Simulator"
 
 
@@ -10817,6 +10817,9 @@ class GameWidget(QWidget):
         # au premier clic → impossible de régler les deux options (retour
         # d'essai 2026-07-24). Maintenant deux rangées de bascules (rame,
         # sens) qui mémorisent le choix + un bouton DÉMARRER explicite.
+        st = self.state   # NB : _draw_title_overlay ne recevait PAS st →
+        # NameError silencieux dans paintEvent → écran d'accueil VIDE
+        # (retour d'essai 2026-07-24).
         sel = getattr(self, "_selected_train", st.selected_train)
         seldir = getattr(self, "_selected_direction", st.selected_direction)
 

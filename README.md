@@ -14,6 +14,17 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 
 ## Quoi de neuf — v1.12.x (audit + retours d'essai terrain, juillet 2026)
 
+**v1.12.29** — écran d'accueil vide corrigé + noms de MAJ propres :
+- **L'écran d'accueil était vide** (régression v1.12.27) : la fonction
+  de dessin de l'écran-titre référençait `st` sans le définir →
+  exception silencieuse dans le paint → rien à l'écran. Corrigé (test
+  de rendu ajouté).
+- **Noms d'exe de mise à jour qui s'accumulaient**
+  (`...(1).new.new.exe`) : le fichier de staging dérivait du nom courant
+  (`stem + ".new.exe"`) et se composait quand l'exe finissait déjà par
+  « .new ». Passé à des noms fixes canoniques (`_pn_update_staged.exe`,
+  `_pn_update_backup.exe`) — plus d'accumulation.
+
 **v1.12.28** — auto-update : swap sûr (plus jamais d'exe perdu) :
 - Le remplacement de l'exe à la fin du téléchargement pouvait
   **supprimer l'ancien exe sans installer le nouveau** (le batch faisait
