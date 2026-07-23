@@ -14,6 +14,32 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 
 ## Quoi de neuf — v1.12.x (audit + retours d'essai terrain, juillet 2026)
 
+**v1.12.37** — MAJ auto débloquée, puissance, et Défi (décél, alarme,
+déraillement) :
+- **Auto-update qui restait bloqué** (« une console s'ouvre avec
+  find <PID> et ça reste figé, l'exe n'est pas remplacé ») : la sortie
+  « propre » via `QApplication.quit()` (tentée pour l'erreur `_MEI`)
+  pouvait ne jamais rendre la main → le process restait vivant, le batch
+  de swap attendait indéfiniment. Retour à `os._exit(0)` (sortie
+  immédiate fiable) + le batch tourne désormais **sans fenêtre console**
+  (`CREATE_NO_WINDOW`). Le swap installe le nom versionné et supprime
+  l'ancien comme prévu.
+- **Puissance ridicule en descente** (« je descends et il affiche 54 kW,
+  600 en montée ») : si tu inversais et repartais avant la fin de
+  l'embarquement, la rame descendait encore chargée (gravité qui assiste
+  → quasi pas de puissance). Effectifs et contrepoids sont maintenant
+  alignés sur la charge de la direction **au moment du départ**.
+- **Décélération réaliste en Défi** : réduire la vitesse freine à
+  1,2 m/s² (au lieu de 2,4 qui « jetait tout le monde en avant ») —
+  ~60 m pour s'arrêter depuis 12 m/s, il faut anticiper.
+- **Alarme « TROP VITE » anticipée** : dès qu'on dépasse le profil que
+  l'automate tiendrait à cette position (plus « trop tard »).
+- **Déraillement à l'aiguillage** : en Défi, franchir l'évitement Abt à
+  plus de 11 m/s (40 km/h) fait dérailler — game-over + message
+  sarcastique dédié.
+- **Annonce d'accueil même à pleine vitesse** en Défi ; liste de
+  messages sarcastiques étoffée (collision + déraillement).
+
 **v1.12.36** — annonce d'accueil en gare haute réactivée : le message
 « zone Grande Motte » (fichier 11) se déclenche à nouveau
 automatiquement en approche finale de la Grande Motte. Il avait été
