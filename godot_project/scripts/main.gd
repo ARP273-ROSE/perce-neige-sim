@@ -561,7 +561,14 @@ func _update_announcement_triggers() -> void:
 	# (montée, < 220 m restants, allure de creep), une fois par trajet.
 	# Retour d'essai Android 2026-07 : l'ancienne version la jouait à
 	# l'allumage à quai puis TOUTES LES 30 s → annonce fantôme au boot.
-	if (physics.trip_started and not _welcome_played
+	# DÉSACTIVÉ en automatique (retour d'essai 2026-07-24) : le fichier 11
+	# est un message de 54 s MULTILINGUE (FR puis EN « please do not
+	# leave… » puis DE/IT/ES) → la partie anglaise sonnait comme une
+	# annonce parasite juste avant l'arrivée. Toujours diffusable à la
+	# demande via le bouton ANNONCES. Passer WELCOME_AUTO à true pour
+	# restaurer le déclenchement automatique.
+	var WELCOME_AUTO: bool = false
+	if (WELCOME_AUTO and physics.trip_started and not _welcome_played
 			and physics.direction > 0
 			and PNConstants.STOP_S - physics.s < 220.0
 			and absf(physics.v) < 1.0):

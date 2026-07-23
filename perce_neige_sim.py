@@ -90,7 +90,7 @@ try:
 except ImportError:
     _GODOT_BRIDGE_OK = False
 
-VERSION = "1.12.26"
+VERSION = "1.12.27"
 APP_NAME = "Perce-Neige Simulator"
 
 
@@ -155,14 +155,52 @@ def _resource_path(rel: str) -> Path:
 
 
 def _writable_dir() -> Path:
-    """Directory where the app may write data (crash reports, logs).
+    """Directory where the app may write EPHEMERAL data (crash reports,
+    downloaded 3D viewer, temp WAVs).
 
     - Frozen .exe : next to the executable
     - Source      : project directory
+
+    NB : en mode exe ce dossier est REMPLACÉ à chaque mise à jour auto
+    (swap de l'exécutable) — n'y mettre que du régénérable. Les données
+    à conserver (base d'exploitation) vont dans _persistent_data_dir().
     """
     if getattr(sys, "frozen", False):
         return Path(sys.executable).resolve().parent
     return Path(__file__).resolve().parent
+
+
+def _persistent_data_dir() -> Path:
+    """Dossier de données utilisateur qui SURVIT aux mises à jour et
+    fermetures du programme (base d'exploitation). L'exe étant remplacé
+    à chaque auto-update, la base ne doit PAS vivre à côté de lui
+    (retour d'essai 2026-07-24 : « la db d'exploitation doit survivre
+    aux MAJ et fermetures »).
+
+    - Windows : %APPDATA%\\PerceNeigeSimulator
+    - macOS   : ~/Library/Application Support/PerceNeigeSimulator
+    - Linux   : $XDG_DATA_HOME ou ~/.local/share/PerceNeigeSimulator
+    - Source  : dossier projet (confort développeur, versionné hors git)
+    """
+    if not getattr(sys, "frozen", False):
+        return Path(__file__).resolve().parent
+    app = "PerceNeigeSimulator"
+    try:
+        if sys.platform.startswith("win"):
+            base = os.environ.get("APPDATA") or (
+                Path.home() / "AppData" / "Roaming")
+            d = Path(base) / app
+        elif sys.platform == "darwin":
+            d = Path.home() / "Library" / "Application Support" / app
+        else:
+            base = os.environ.get("XDG_DATA_HOME") or (
+                Path.home() / ".local" / "share")
+            d = Path(base) / app
+        d.mkdir(parents=True, exist_ok=True)
+        return d
+    except Exception:
+        # Repli : à côté de l'exe (au moins ça marche, même si volatile).
+        return _writable_dir()
 
 # ---------------------------------------------------------------------------
 # I18N — bilingual FR / EN, auto-detected from system locale
@@ -4072,24 +4110,33 @@ class AutoOps:
         elif self.phase == self.PHASE_ARRIVING:
             if state.finished and abs(tr.v) < 0.05:
                 self._finalize_leg(now)
-                # Open doors at this terminus and start the next cycle
-                # by reversing the direction.
-                self.w.reverse_trip(silent=True)
+                # Arrivée : on OUVRE les portes et on laisse le temps aux
+                # passagers de descendre AVANT d'inverser le sens. L'ancien
+                # code appelait reverse_trip DÈS l'arrêt → le sens
+                # basculait à l'instant de l'arrivée (« le sens s'inverse
+                # avant même d'être arrivé », retour d'essai 2026-07-24).
+                # Le demi-tour n'a lieu qu'après le dwell (DOORS_OPENING).
+                tr.doors_open = True
+                tr.doors_cmd = True
+                tr.doors_timer = 0.0
                 self._set_phase(self.PHASE_DOORS_OPENING)
                 add_event(state, "ops",
-                          "Auto : arrived — opening doors & turnaround",
-                          "Auto : arrivé — ouverture portes & demi-tour",
+                          "Auto : arrived — doors open",
+                          "Auto : arrivé — ouverture des portes",
                           "info")
 
         elif self.phase == self.PHASE_DOORS_OPENING:
-            # reverse_trip already set doors_open=True at a terminus.
-            # Wait a beat so the announcements play, then begin next
-            # boarding cycle.
-            if self.phase_t >= 3.0:
+            # Dwell d'arrivée (5 s) portes ouvertes — descente des
+            # passagers + ambiance de gare — PUIS demi-tour (inversion du
+            # sens) + embarquement (qui a son propre dwell station_dwell_s).
+            # Le sens ne bascule donc qu'après cette attente, jamais à
+            # l'instant de l'arrivée.
+            if self.phase_t >= 5.0:
+                self.w.reverse_trip(silent=True)
                 self._begin_boarding(now)
                 add_event(state, "ops",
-                          "Auto : boarding new leg",
-                          "Auto : embarquement nouveau trajet",
+                          "Auto : turnaround — boarding new leg",
+                          "Auto : demi-tour — embarquement nouveau trajet",
                           "info")
 
     # ---------- internals -----------------------------------------------
@@ -4125,9 +4172,20 @@ class AutoOps:
         # Cible d'embarquement liée à l'heure réelle (affinage de la
         # cible grossière posée par reverse_trip) — les effectifs
         # glissent vers elle pendant le dwell portes ouvertes.
+        # BUG (retour d'essai 2026-07-24 « le remplissage en auto est
+        # complètement bidon ») : seules les 2 voitures PILOTÉES étaient
+        # mises à jour ; le CONTREPOIDS (ghost_pax_target) gardait la
+        # valeur aléatoire posée par reverse_trip → déséquilibre de masse
+        # incohérent avec les charges affichées (voitures échantillonnées
+        # sur l'heure, contrepoids sur un autre tirage). On échantillonne
+        # aussi le contrepoids, dans le SENS OPPOSÉ (il fait le trajet
+        # inverse) : montée chargée ↔ contrepoids descendant quasi vide,
+        # et inversement.
         leg = self._sample_pax_load(now, tr.direction)
         tr.pax_car1_target = leg // 2
         tr.pax_car2_target = leg - leg // 2
+        self.w.state.ghost_pax_target = self._sample_pax_load(
+            now, -tr.direction)
 
     def _within_operating_hours(self, now: datetime) -> bool:
         if self.force_any_hours:
@@ -4258,8 +4316,25 @@ class AutoOpsLogger:
     """
 
     def __init__(self) -> None:
-        self.db_path = _writable_dir() / "exploitation.db"
+        # Base dans le dossier PERSISTANT (survit aux MAJ / fermetures).
+        self.db_path = _persistent_data_dir() / "exploitation.db"
         self._lock = threading.Lock()
+        # Migration douce depuis l'ancien emplacement (à côté de l'exe) :
+        # récupère la base d'un utilisateur qui met à jour depuis une
+        # version ≤ 1.12.26 avant qu'un futur swap ne l'efface. Copie
+        # unique, jamais destructrice (on ne touche pas à l'ancienne).
+        try:
+            old = _writable_dir() / "exploitation.db"
+            if (old.exists() and not self.db_path.exists()
+                    and old.resolve() != self.db_path.resolve()):
+                import shutil
+                for suffix in ("", "-wal", "-shm"):
+                    src = old.with_name(old.name + suffix)
+                    if src.exists():
+                        shutil.copy2(src, self.db_path.with_name(
+                            self.db_path.name + suffix))
+        except Exception:
+            pass
 
     def _connect(self) -> sqlite3.Connection:
         c = sqlite3.connect(str(self.db_path), timeout=5.0,
@@ -5055,7 +5130,12 @@ class GameWidget(QWidget):
         tr.pax1_f = 0.0
         tr.pax2_f = 0.0
         st.ghost_f = 0.0
-        tr.number = st.selected_train if not first else random.choice([1, 2])
+        # La rame pilotée = celle choisie (défaut 1). L'ancien tirage
+        # ALÉATOIRE au tout premier trajet (first=True) faisait annoncer
+        # « embarquent rame 2 » alors que le conducteur est en rame 1, y
+        # compris en mode auto qui enchaîne sans repasser par new_trip
+        # (retour d'essai 2026-07-24).
+        tr.number = st.selected_train
         tr.name = T("Train", "Rame") + f" {tr.number}"
         tr.tension_dan = 0.0
         tr.power_kw = 0.0
@@ -5186,11 +5266,16 @@ class GameWidget(QWidget):
         # Ambient motor/rumble: fades with speed (dt → rampes indépendantes
         # du framerate)
         self.sounds.update_ambient(st.train.v, dt)
-        # Ambiance de quai réelle : à l'arrêt portes ouvertes à une station.
-        # Quand les portes ferment (buzzer de départ), doors_open passe à
-        # False → l'ambiance de quai s'efface toute seule avant le démarrage.
+        # Ambiance de quai réelle : dès que la rame est À L'ARRÊT à une
+        # station (portes ouvertes OU non). Avant, la condition exigeait
+        # doors_open → à l'ARRIVÉE (portes encore fermées) c'était le
+        # silence total en gare, jusqu'à l'ouverture manuelle (retour
+        # d'essai 2026-07-24 : « en arrivant en haut après l'annonce
+        # d'accueil c'est le silence total » + « plus d'ambiance en gare
+        # basse »). L'ambiance s'efface d'elle-même dès que la rame
+        # repart (v monte → fondu dans update_ambient).
         _tr_sta = st.train
-        if _tr_sta.doors_open and abs(_tr_sta.v) < 0.05:
+        if abs(_tr_sta.v) < 0.2:
             if _tr_sta.s <= START_S + 5.0:
                 self.sounds.set_station_ambient("lower")
             elif _tr_sta.s >= STOP_S - 5.0:
@@ -5360,16 +5445,17 @@ class GameWidget(QWidget):
                 if tr_welcome.direction > 0
                 else tr_welcome.s - START_S
             )
-            # Only at the upper station (Grande Motte, direction > 0).
-            # When reversing back down to Val Claret we do not broadcast
-            # the "zone de ski" welcome message.
-            # The 35 m platform + 20 m creep-in zone is a very slow 55 m
-            # final approach (~55 s at creep speed). The arrival "welcome
-            # to the ski zone" announcement must wait until the train is
-            # almost fully stopped — not when it's still 220 m away at
-            # 6 m/s — otherwise the message is over long before the
-            # passengers can actually exit. Trigger when |v| < 1 m/s.
-            if (st.trip_started and not self._welcome_played
+            # Annonce « zone Grande Motte » (fichier 11) DÉSACTIVÉE en
+            # automatique (retour d'essai 2026-07-24) : c'est un message
+            # de 54 s MULTILINGUE (FR puis EN « please do not leave… »
+            # puis DE/IT/ES) — la partie anglaise tombait juste avant
+            # l'arrivée et sonnait comme une annonce parasite. Elle reste
+            # diffusable à la demande via le menu ANNONCES (touche 2 /
+            # bouton tactile). Remettre le bloc ci-dessous pour restaurer
+            # le déclenchement automatique.
+            _WELCOME_AUTO = False
+            if (_WELCOME_AUTO and st.trip_started
+                    and not self._welcome_played
                     and tr_welcome.direction > 0
                     and dist_remain_welcome < 220.0
                     and abs(tr_welcome.v) < 1.0):
@@ -5670,10 +5756,13 @@ class GameWidget(QWidget):
             return
         elif k == Qt.Key.Key_Return or k == Qt.Key.Key_Enter:
             if st.mode == MODE_TITLE:
-                # Default trip : Train 1, climbing direction. Mouse
-                # users can pick any of the 4 options on the title.
-                st.selected_direction = +1
-                st.selected_train = 1
+                # Entrée lance le trajet avec la sélection COURANTE
+                # (rame + sens choisis via les bascules ; défaut rame 1,
+                # montée).
+                st.selected_train = getattr(
+                    self, "_selected_train", st.selected_train)
+                st.selected_direction = getattr(
+                    self, "_selected_direction", st.selected_direction)
                 self._show_help = False
                 self.new_trip()
             elif st.mode == MODE_OVER:
@@ -6224,13 +6313,27 @@ class GameWidget(QWidget):
         pos = ev.position()
         st = self.state
         if st.mode == MODE_TITLE:
-            # Match a title-screen trip-selection zone.
-            for rect, direction, train_num in self._title_zones:
+            # Sélections SÉPARÉES : un clic « train »/« dir » ne fait que
+            # mémoriser le choix (mis en évidence) ; seul « start » lance
+            # le trajet. Fini le départ au premier clic (retour d'essai
+            # 2026-07-24).
+            for rect, kind, value in self._title_zones:
                 if rect.contains(pos):
-                    st.selected_direction = direction
-                    st.selected_train = train_num
-                    self._show_help = False
-                    self.new_trip()
+                    if kind == "train":
+                        self._selected_train = value
+                        st.selected_train = value
+                    elif kind == "dir":
+                        self._selected_direction = value
+                        st.selected_direction = value
+                    elif kind == "start":
+                        st.selected_train = getattr(
+                            self, "_selected_train", st.selected_train)
+                        st.selected_direction = getattr(
+                            self, "_selected_direction",
+                            st.selected_direction)
+                        self._show_help = False
+                        self.new_trip()
+                    self.update()
                     ev.accept()
                     return
             # Click outside any zone on the title screen — ignore.
@@ -9915,9 +10018,13 @@ class GameWidget(QWidget):
         )
         # Live cable elongation — Hooke's law on the Fatzer 52 mm rope.
         # A = π·(0.052)² / 4 ≈ 2.12e-3 m²,  E ≈ 105 GPa (locked coil).
-        # The loaded span is the slope length between the main train and
-        # the bull wheel at the top station.
-        cable_len = max(50.0, LENGTH - tr.s if tr.direction > 0 else tr.s)
+        # La poulie MOTRICE est en gare HAUTE : le brin qui porte la rame
+        # pilotée monte jusqu'à elle, donc la longueur pendante = LENGTH − s
+        # QUEL QUE SOIT LE SENS. L'ancienne formule « …if direction > 0
+        # else s » donnait 0,03 m (valeur du HAUT) à l'arrivée EN BAS et ne
+        # se corrigeait qu'à l'inversion du trajet (retour d'essai
+        # 2026-07-24 : « ça passe instantanément à la bonne valeur »).
+        cable_len = max(50.0, LENGTH - tr.s)
         stretch_m = (tr.tension_dan_disp * 10.0 * cable_len) / (2.12e-3 * 1.05e11)
         # Tucked inside the gauge's bottom rim (was overlapping the
         # brake bar's "URG!" / % text just below the gauge).
@@ -10705,111 +10812,100 @@ class GameWidget(QWidget):
                    T("Tignes, France  —  2111 m → 3032 m  —  3491 m underground  —  12 m/s",
                      "Tignes, France  —  2111 m → 3032 m  —  3491 m sous terre  —  12 m/s"))
 
-        # --- Trip selection — 4 big buttons (Train 1/2 × Up/Down) --------
-        sel_title_y = box.y() + 128
-        p.setFont(_cached_font("Segoe UI", 12, QFont.Weight.Bold))
-        p.setPen(_cached_pen(COLOR_NEEDLE))
-        p.drawText(QRectF(box.x(), sel_title_y, box.width(), 20),
-                   int(Qt.AlignmentFlag.AlignHCenter),
-                   T("Choose your trip — click a cabin",
-                     "Choisissez votre trajet — cliquez une cabine"))
+        # --- Trip selection — sélections SÉPARÉES puis DÉMARRER ----------
+        # Avant : 4 boutons combinés (rame × sens) qui LANÇAIENT le trajet
+        # au premier clic → impossible de régler les deux options (retour
+        # d'essai 2026-07-24). Maintenant deux rangées de bascules (rame,
+        # sens) qui mémorisent le choix + un bouton DÉMARRER explicite.
+        sel = getattr(self, "_selected_train", st.selected_train)
+        seldir = getattr(self, "_selected_direction", st.selected_direction)
 
-        btn_w = 360
-        btn_h = 72
-        gap_x = 20
-        gap_y = 14
-        grid_x0 = box.x() + (box.width() - (btn_w * 2 + gap_x)) / 2
-        grid_y0 = sel_title_y + 32
-        configs = [
-            (0, 0, +1, 1,
-             T("Train 1  —  Val Claret → Grande Motte",
-               "Rame 1  —  Val Claret → Grande Motte"),
-             T("climb  •  3491 m  •  2111 m → 3032 m",
-               "montée  •  3491 m  •  2111 m → 3032 m")),
-            (1, 0, +1, 2,
-             T("Train 2  —  Val Claret → Grande Motte",
-               "Rame 2  —  Val Claret → Grande Motte"),
-             T("climb  •  3491 m  •  2111 m → 3032 m",
-               "montée  •  3491 m  •  2111 m → 3032 m")),
-            (0, 1, -1, 1,
-             T("Train 1  —  Grande Motte → Val Claret",
-               "Rame 1  —  Grande Motte → Val Claret"),
-             T("descent  •  3491 m  •  3032 m → 2111 m",
-               "descente  •  3491 m  •  3032 m → 2111 m")),
-            (1, 1, -1, 2,
-             T("Train 2  —  Grande Motte → Val Claret",
-               "Rame 2  —  Grande Motte → Val Claret"),
-             T("descent  •  3491 m  •  3032 m → 2111 m",
-               "descente  •  3491 m  •  3032 m → 2111 m")),
-        ]
-        for col, row, direction, num, title_txt, sub_txt in configs:
-            bx = grid_x0 + col * (btn_w + gap_x)
-            by = grid_y0 + row * (btn_h + gap_y)
-            rect_btn = QRectF(bx, by, btn_w, btn_h)
-            # Direction-tinted gradient
-            if direction > 0:
-                c0 = QColor(80, 180, 110)
-                c1 = QColor(30, 90, 60)
-            else:
-                c0 = QColor(100, 160, 230)
-                c1 = QColor(30, 60, 120)
-            grad = QLinearGradient(bx, by, bx, by + btn_h)
-            grad.setColorAt(0.0, c0)
-            grad.setColorAt(1.0, c1)
+        def _toggle(bx, by, bw, bh, active, label, sub, kind, value,
+                    c_on, c_off):
+            rect_btn = QRectF(bx, by, bw, bh)
+            grad = QLinearGradient(bx, by, bx, by + bh)
+            top = c_on if active else c_off
+            grad.setColorAt(0.0, top.lighter(120))
+            grad.setColorAt(1.0, top)
             p.setBrush(QBrush(grad))
-            p.setPen(_cached_pen(COLOR_HUD_BORDER, 2))
+            p.setPen(_cached_pen(
+                QColor(255, 220, 90) if active else COLOR_HUD_BORDER,
+                3 if active else 1.5))
             p.drawRoundedRect(rect_btn, 10, 10)
-            # Cabin number pill (left)
-            pill = QRectF(bx + 14, by + 14, 40, 44)
-            p.setBrush(QBrush(QColor(255, 220, 80)))
-            p.setPen(_cached_pen(QColor(80, 50, 0), 1.5))
-            p.drawRoundedRect(pill, 6, 6)
-            p.setPen(_cached_pen(QColor(40, 20, 0)))
-            p.setFont(_cached_font("Segoe UI", 20, QFont.Weight.Bold))
-            p.drawText(pill, int(Qt.AlignmentFlag.AlignCenter), str(num))
-            # Direction arrow
-            arrow_x = bx + btn_w - 40
-            arrow_y = by + btn_h / 2
-            p.setPen(_cached_pen(QColor(255, 255, 255), 3))
-            if direction > 0:
-                p.drawLine(QPointF(arrow_x, arrow_y + 14),
-                           QPointF(arrow_x + 16, arrow_y - 14))
-                p.drawLine(QPointF(arrow_x + 16, arrow_y - 14),
-                           QPointF(arrow_x + 10, arrow_y - 10))
-                p.drawLine(QPointF(arrow_x + 16, arrow_y - 14),
-                           QPointF(arrow_x + 16, arrow_y - 6))
-            else:
-                p.drawLine(QPointF(arrow_x, arrow_y - 14),
-                           QPointF(arrow_x + 16, arrow_y + 14))
-                p.drawLine(QPointF(arrow_x + 16, arrow_y + 14),
-                           QPointF(arrow_x + 10, arrow_y + 10))
-                p.drawLine(QPointF(arrow_x + 16, arrow_y + 14),
-                           QPointF(arrow_x + 16, arrow_y + 6))
-            # Labels
             p.setPen(_cached_pen(QColor(255, 255, 255)))
-            p.setFont(_cached_font("Segoe UI", 11, QFont.Weight.Bold))
-            p.drawText(QRectF(bx + 66, by + 14, btn_w - 120, 20),
-                       int(Qt.AlignmentFlag.AlignLeft), title_txt)
-            p.setFont(_cached_font("Segoe UI", 9))
-            p.setPen(_cached_pen(QColor(220, 230, 245)))
-            p.drawText(QRectF(bx + 66, by + 36, btn_w - 120, 18),
-                       int(Qt.AlignmentFlag.AlignLeft), sub_txt)
-            # Hover-hint keyboard shortcut
-            p.setFont(_cached_font("Consolas", 8))
-            p.setPen(_cached_pen(QColor(200, 220, 255)))
-            p.drawText(QRectF(bx + 66, by + 52, btn_w - 120, 14),
-                       int(Qt.AlignmentFlag.AlignLeft),
-                       T("click to start", "cliquez pour démarrer"))
-            # Click zone
-            self._title_zones.append((rect_btn, direction, num))
+            p.setFont(_cached_font("Segoe UI", 15, QFont.Weight.Bold))
+            p.drawText(QRectF(bx, by + 10, bw, 24),
+                       int(Qt.AlignmentFlag.AlignHCenter), label)
+            if sub:
+                p.setFont(_cached_font("Segoe UI", 9))
+                p.setPen(_cached_pen(QColor(220, 230, 245)))
+                p.drawText(QRectF(bx, by + 36, bw, 16),
+                           int(Qt.AlignmentFlag.AlignHCenter), sub)
+            self._title_zones.append((rect_btn, kind, value))
+
+        col_w = 260
+        col_gap = 24
+        row_x0 = box.x() + (box.width() - (col_w * 2 + col_gap)) / 2
+
+        # Rangée RAME
+        y_r = box.y() + 138
+        p.setFont(_cached_font("Segoe UI", 11, QFont.Weight.Bold))
+        p.setPen(_cached_pen(COLOR_NEEDLE))
+        p.drawText(QRectF(box.x(), y_r, box.width(), 18),
+                   int(Qt.AlignmentFlag.AlignHCenter),
+                   T("1 — Cabin", "1 — Rame pilotée"))
+        yb = y_r + 22
+        _toggle(row_x0, yb, col_w, 58, sel == 1,
+                T("Cabin 1", "Rame 1"), T("left track", "voie gauche"),
+                "train", 1, QColor(60, 110, 90), QColor(40, 48, 62))
+        _toggle(row_x0 + col_w + col_gap, yb, col_w, 58, sel == 2,
+                T("Cabin 2", "Rame 2"), T("right track", "voie droite"),
+                "train", 2, QColor(60, 110, 90), QColor(40, 48, 62))
+
+        # Rangée SENS
+        y_d = yb + 78
+        p.setFont(_cached_font("Segoe UI", 11, QFont.Weight.Bold))
+        p.setPen(_cached_pen(COLOR_NEEDLE))
+        p.drawText(QRectF(box.x(), y_d, box.width(), 18),
+                   int(Qt.AlignmentFlag.AlignHCenter),
+                   T("2 — Direction", "2 — Sens de départ"))
+        yb2 = y_d + 22
+        _toggle(row_x0, yb2, col_w, 58, seldir > 0,
+                T("↑ Climb", "↑ Montée"),
+                T("Val Claret → Grande Motte", "Val Claret → Grande Motte"),
+                "dir", +1, QColor(70, 140, 90), QColor(40, 48, 62))
+        _toggle(row_x0 + col_w + col_gap, yb2, col_w, 58, seldir < 0,
+                T("↓ Descent", "↓ Descente"),
+                T("Grande Motte → Val Claret", "Grande Motte → Val Claret"),
+                "dir", -1, QColor(70, 110, 180), QColor(40, 48, 62))
+
+        # Bouton DÉMARRER
+        y_go = yb2 + 82
+        go_w = 320
+        go_x = box.x() + (box.width() - go_w) / 2
+        go_rect = QRectF(go_x, y_go, go_w, 56)
+        gg = QLinearGradient(go_x, y_go, go_x, y_go + 56)
+        gg.setColorAt(0.0, QColor(250, 205, 70))
+        gg.setColorAt(1.0, QColor(210, 150, 30))
+        p.setBrush(QBrush(gg))
+        p.setPen(_cached_pen(QColor(255, 240, 160), 2.5))
+        p.drawRoundedRect(go_rect, 12, 12)
+        p.setPen(_cached_pen(QColor(40, 25, 0)))
+        p.setFont(_cached_font("Segoe UI", 19, QFont.Weight.Bold))
+        sens_lbl = (T("climb", "montée") if seldir > 0
+                    else T("descent", "descente"))
+        p.drawText(go_rect, int(Qt.AlignmentFlag.AlignCenter),
+                   T(f"START  —  Cabin {sel}, {sens_lbl}",
+                     f"DÉMARRER  —  Rame {sel}, {sens_lbl}"))
+        self._title_zones.append((go_rect, "start", 0))
 
         # Hint + shortcuts
         p.setFont(_cached_font("Segoe UI", 9))
         p.setPen(_cached_pen(COLOR_TEXT_DIM))
         p.drawText(QRectF(box.x(), box.y() + box_h - 52, box.width(), 16),
                    int(Qt.AlignmentFlag.AlignHCenter),
-                   T("Enter starts a default trip (Train 1, climb)  •  F1 help  •  F3 real machine info",
-                     "Entrée lance un trajet par défaut (Rame 1, montée)  •  F1 aide  •  F3 infos machine"))
+                   T("Pick cabin + direction, then START (or press Enter)  •  F1 help  •  F3 machine info",
+                     "Choisissez rame + sens, puis DÉMARRER (ou Entrée)  •  F1 aide  •  F3 infos machine"))
         # Blinking prompt
         p.setFont(_cached_font("Segoe UI", 11, QFont.Weight.Bold))
         p.setPen(_cached_pen(COLOR_NEEDLE))
