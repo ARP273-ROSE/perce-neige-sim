@@ -91,7 +91,7 @@ try:
 except ImportError:
     _GODOT_BRIDGE_OK = False
 
-VERSION = "1.12.31"
+VERSION = "1.12.32"
 APP_NAME = "Perce-Neige Simulator"
 
 
@@ -810,6 +810,16 @@ class GameState:
     events: list[Event] = field(default_factory=list)
     event_cooldown: float = 0.0
     run_mode: str = "normal"    # normal | challenge | panne
+    # --- Mode DÉFI : conduite manuelle notée (confort + précision d'arrêt
+    # + régularité). Évalué à l'arrivée de chaque trajet.
+    challenge_emergency_used: bool = False   # urgence engagée pendant le trajet
+    challenge_fault_hit: bool = False        # panne subie pendant le trajet
+    challenge_docking_err: float = 0.0       # |arrêt − repère| (m)
+    challenge_last_score: float = -1.0       # dernier score (−1 = pas encore)
+    challenge_comfort: float = 0.0           # confort figé à l'arrivée
+    challenge_reg: float = 0.0               # sous-score régularité
+    challenge_best: float = 0.0              # meilleur score (chargé du disque)
+    challenge_result_t: float = 0.0          # chrono d'affichage du résultat
     panne_active: bool = False
     panne_kind: str = ""
     panne_auto: bool = True     # when False, fault scheduler is paused
@@ -1240,10 +1250,33 @@ class Physics:
                 tr.v = 0.0
             a = 0.0
 
-        # Comfort / jerk
+        # Confort passager — ISO 2631. L'ancien modèle n'intégrait que le
+        # jerk avec un poids minuscule (0,015) : un arrêt d'urgence à 3,6
+        # m/s² (« tout le monde par terre ») ne faisait PAS bouger le
+        # score (retour d'essai 2026-07-24). Nouveau modèle réactif :
+        #  - pénalité quadratique sur l'EXCÈS d'accélération au-delà du
+        #    confort debout (~0,9 m/s²) — une chute pèse bien plus qu'un
+        #    à-coup léger ;
+        #  - pénalité sur le jerk (variation brutale) ;
+        #  - forte pénalité FIXE tant qu'un arrêt d'urgence/parachute est
+        #    engagé à vitesse notable : les passagers non préparés sont
+        #    projetés.
         jerk = abs(a - tr.a) / max(dt, 1e-3)
-        tr.jerk_sum += jerk * dt
+        A_COMFORT = 0.9
+        a_excess = max(0.0, abs(a) - A_COMFORT)
+        pen = a_excess * a_excess * 4.0 + max(0.0, jerk - 0.8) * 0.05
+        if tr.emergency and abs(tr.v) > 1.0:
+            pen += 8.0
+        tr.jerk_sum += pen * dt
         tr.a = a
+
+        # Mode Défi : mémorise les fautes du trajet (urgence, panne subie)
+        # pour le sous-score de régularité évalué à l'arrivée.
+        if st.run_mode == "challenge" and st.trip_started:
+            if tr.emergency:
+                st.challenge_emergency_used = True
+            if st.panne_active:
+                st.challenge_fault_hit = True
 
         # Cable tension (N) — proper funicular model.
         # On a counterweighted funicular the drive cable between the top
@@ -1521,7 +1554,7 @@ class Physics:
 
         # Net energy = traction consumed minus regen recovered.
         st.score_energy += (tr.power_kw - tr.regen_kw) * dt / 3600.0
-        st.score_comfort = max(0.0, 100.0 - tr.jerk_sum * 0.015)
+        st.score_comfort = max(0.0, 100.0 - tr.jerk_sum)
 
         # Arrival detection : direction-aware. Silent : no popup, no
         # announcement, no event banner — a discreet line in the log is
@@ -5159,6 +5192,13 @@ class GameWidget(QWidget):
         st.score_time = 0.0
         st.score_comfort = 100.0
         st.score_energy = 0.0
+        # Défi : remise à zéro des fautes du trajet (le record persiste,
+        # chargé du disque au 1er passage). Le bandeau de résultat reste
+        # affiché quelques secondes au-delà de l'arrivée précédente.
+        st.challenge_emergency_used = False
+        st.challenge_fault_hit = False
+        if st.challenge_best <= 0.0:
+            st.challenge_best = self._load_challenge_best()
         st.events = []
         st.event_cooldown = 5.0
         st.panne_active = False
@@ -5571,7 +5611,73 @@ class GameWidget(QWidget):
                 self._arrival_played = True
                 self.sounds.stop_announcements()
                 self._last_panne_kind = ""
+                if st.run_mode == "challenge":
+                    self._evaluate_challenge()
+        # Chrono d'affichage du résultat de défi (bandeau ~8 s).
+        if st.challenge_result_t > 0.0:
+            st.challenge_result_t = max(0.0, st.challenge_result_t - dt)
         self.update()
+
+    # ----- mode Défi -------------------------------------------------------
+
+    def _challenge_file(self) -> Path:
+        return _persistent_data_dir() / "challenge_best.json"
+
+    def _load_challenge_best(self) -> float:
+        try:
+            import json
+            with open(self._challenge_file(), encoding="utf-8") as f:
+                return float(json.load(f).get("best", 0.0))
+        except Exception:
+            return 0.0
+
+    def _save_challenge_best(self, best: float) -> None:
+        try:
+            import json
+            with open(self._challenge_file(), "w", encoding="utf-8") as f:
+                json.dump({"best": round(best, 1)}, f)
+        except Exception:
+            pass
+
+    def _evaluate_challenge(self) -> None:
+        """Note le trajet qui vient de s'achever (mode Défi) : confort +
+        précision d'arrêt + régularité, combinés en un score /100. Le
+        résultat s'affiche en bandeau et le record est persisté."""
+        st = self.state
+        tr = st.train
+        # Précision d'arrêt : écart au repère de quai (STOP_S en montée,
+        # START_S en descente). 100 à ≤ 0,10 m, 0 à ≥ 2,0 m.
+        ideal = STOP_S if tr.direction > 0 else START_S
+        err = abs(tr.s - ideal)
+        st.challenge_docking_err = err
+        precision = max(0.0, min(100.0, 100.0 * (1.0 - (err - 0.10) / 1.90)))
+        # Régularité : plein pot si aucune urgence ni panne subie.
+        reg = 100.0
+        if st.challenge_emergency_used:
+            reg -= 60.0
+        if st.challenge_fault_hit:
+            reg -= 40.0
+        reg = max(0.0, reg)
+        st.challenge_reg = reg
+        comfort = st.score_comfort
+        st.challenge_comfort = comfort
+        # Pondération : confort 40 %, précision 35 %, régularité 25 %.
+        score = 0.40 * comfort + 0.35 * precision + 0.25 * reg
+        st.challenge_last_score = score
+        st.challenge_result_t = 8.0
+        if score > st.challenge_best:
+            st.challenge_best = score
+            self._save_challenge_best(score)
+        add_event(
+            st, "challenge",
+            f"Challenge : {score:.0f}/100 "
+            f"(comfort {comfort:.0f}, precision {precision:.0f}, "
+            f"discipline {reg:.0f}) — docking {err:.2f} m",
+            f"Défi : {score:.0f}/100 "
+            f"(confort {comfort:.0f}, précision {precision:.0f}, "
+            f"régularité {reg:.0f}) — arrêt à {err:.2f} m",
+            "info",
+        )
 
     def _apply_keys(self, dt: float) -> None:
         tr = self.state.train
@@ -5872,6 +5978,16 @@ class GameWidget(QWidget):
             order = ["normal", "challenge", "panne"]
             idx = order.index(st.run_mode) if st.run_mode in order else 0
             st.run_mode = order[(idx + 1) % len(order)]
+            if st.run_mode == "challenge":
+                if st.challenge_best <= 0.0:
+                    st.challenge_best = self._load_challenge_best()
+                add_event(
+                    st, "challenge",
+                    "CHALLENGE mode : drive smoothly, stop precisely on "
+                    "the mark, avoid emergencies — scored at arrival.",
+                    "Mode DÉFI : conduite douce, arrêt PILE au repère, "
+                    "sans urgence ni panne — noté à l'arrivée.",
+                    "info")
         elif k == Qt.Key.Key_F:
             # Fault picker dialog — only useful in "panne" mode
             if st.run_mode == "panne":
@@ -6450,10 +6566,63 @@ class GameWidget(QWidget):
             int(Qt.AlignmentFlag.AlignRight),
             f"v{VERSION}  {self._fps:.0f} fps",
         )
+        # Bandeau de résultat du DÉFI (quelques secondes après l'arrivée).
+        if (self.state.run_mode == "challenge"
+                and self.state.challenge_result_t > 0.0
+                and self.state.challenge_last_score >= 0.0):
+            self._draw_challenge_result(p, w, h)
         # Persistent wall-clock overlay — always drawn last so it's
         # visible above every screen (title, run, paused, menus).
         self._draw_clock_badge(p, w, h)
         p.end()
+
+    def _draw_challenge_result(self, p: QPainter, w: int, h: int) -> None:
+        st = self.state
+        score = st.challenge_last_score
+        # Grade + couleur selon le score.
+        if score >= 90:
+            grade, col = "★★★", QColor(90, 220, 130)
+        elif score >= 75:
+            grade, col = "★★", QColor(150, 210, 90)
+        elif score >= 60:
+            grade, col = "★", QColor(230, 200, 80)
+        else:
+            grade = T("retry", "à retravailler")
+            col = QColor(230, 130, 80)
+        bw, bh = 460, 168
+        bx, by = (w - bw) / 2, h * 0.26
+        card = QRectF(bx, by, bw, bh)
+        # Fondu d'entrée/sortie sur le dernier tiers du chrono.
+        alpha = int(235 * min(1.0, st.challenge_result_t / 1.5))
+        p.setBrush(QBrush(QColor(18, 24, 38, alpha)))
+        p.setPen(_cached_pen(col, 3))
+        p.drawRoundedRect(card, 16, 16)
+        p.setPen(_cached_pen(col))
+        p.setFont(_cached_font("Segoe UI", 15, QFont.Weight.Bold))
+        p.drawText(QRectF(bx, by + 12, bw, 24),
+                   int(Qt.AlignmentFlag.AlignHCenter),
+                   T("CHALLENGE RESULT", "RÉSULTAT DU DÉFI"))
+        p.setFont(_cached_font("Segoe UI", 40, QFont.Weight.Bold))
+        p.setPen(_cached_pen(QColor(240, 245, 255)))
+        p.drawText(QRectF(bx, by + 40, bw, 52),
+                   int(Qt.AlignmentFlag.AlignHCenter),
+                   f"{score:.0f} / 100   {grade}")
+        p.setFont(_cached_font("Consolas", 11))
+        p.setPen(_cached_pen(COLOR_TEXT_DIM))
+        detail = T(
+            f"comfort {st.challenge_comfort:.0f}   "
+            f"docking {st.challenge_docking_err:.2f} m   "
+            f"discipline {st.challenge_reg:.0f}",
+            f"confort {st.challenge_comfort:.0f}   "
+            f"arrêt {st.challenge_docking_err:.2f} m   "
+            f"régularité {st.challenge_reg:.0f}")
+        p.drawText(QRectF(bx, by + 100, bw, 18),
+                   int(Qt.AlignmentFlag.AlignHCenter), detail)
+        p.setFont(_cached_font("Consolas", 10))
+        p.drawText(QRectF(bx, by + 128, bw, 16),
+                   int(Qt.AlignmentFlag.AlignHCenter),
+                   T(f"best {st.challenge_best:.0f} / 100",
+                     f"record {st.challenge_best:.0f} / 100"))
 
     # Jours/mois hoistés en constantes de classe : reconstruire ces listes
     # (et les gradients/fonts plus bas) à chaque frame coûtait cher à 60 Hz.
@@ -10350,6 +10519,16 @@ class GameWidget(QWidget):
             (T("Comfort",   "Confort"),
              f"{st.score_comfort:5.1f}  {st.score_energy:4.2f} kWh"),
         ]
+        if st.run_mode == "challenge":
+            # Repère de conduite : distance au repère d'arrêt (cible du
+            # sous-score précision) + confort live + meilleur score.
+            ideal_c = STOP_S if tr.direction > 0 else START_S
+            to_mark = (ideal_c - tr.s) if tr.direction > 0 else (tr.s - ideal_c)
+            rows.append((T("Challenge", "Défi"),
+                         T(f"stop in {to_mark:6.1f} m",
+                           f"repère à {to_mark:6.1f} m")))
+            rows.append((T("Best", "Record"),
+                         f"{st.challenge_best:5.1f} / 100"))
         for i, (k, v) in enumerate(rows):
             y = oy + i * 14
             p.setPen(_cached_pen(COLOR_TEXT_DIM))
