@@ -43,6 +43,7 @@ from PyQt6.QtGui import (
     QConicalGradient,
     QDesktopServices,
     QFont,
+    QFontMetrics,
     QIcon,
     QKeyEvent,
     QLinearGradient,
@@ -90,7 +91,7 @@ try:
 except ImportError:
     _GODOT_BRIDGE_OK = False
 
-VERSION = "1.12.29"
+VERSION = "1.12.30"
 APP_NAME = "Perce-Neige Simulator"
 
 
@@ -10882,9 +10883,13 @@ class GameWidget(QWidget):
                 T("Grande Motte → Val Claret", "Grande Motte → Val Claret"),
                 "dir", -1, QColor(70, 110, 180), QColor(40, 48, 62))
 
-        # Bouton DÉMARRER
+        # Bouton DÉMARRER — élargi + police réduite pour que le libellé
+        # (« DÉMARRER — Rame 1, montée ») tienne DANS le bouton (retour
+        # d'essai 2026-07-24 : « écrit trop gros, ça dépasse des deux
+        # côtés »). Marge intérieure : texte tracé dans un rect réduit de
+        # 20 px de chaque côté, elide si jamais ça déborde encore.
         y_go = yb2 + 82
-        go_w = 320
+        go_w = 460
         go_x = box.x() + (box.width() - go_w) / 2
         go_rect = QRectF(go_x, y_go, go_w, 56)
         gg = QLinearGradient(go_x, y_go, go_x, y_go + 56)
@@ -10894,12 +10899,17 @@ class GameWidget(QWidget):
         p.setPen(_cached_pen(QColor(255, 240, 160), 2.5))
         p.drawRoundedRect(go_rect, 12, 12)
         p.setPen(_cached_pen(QColor(40, 25, 0)))
-        p.setFont(_cached_font("Segoe UI", 19, QFont.Weight.Bold))
+        go_font = _cached_font("Segoe UI", 15, QFont.Weight.Bold)
+        p.setFont(go_font)
         sens_lbl = (T("climb", "montée") if seldir > 0
                     else T("descent", "descente"))
-        p.drawText(go_rect, int(Qt.AlignmentFlag.AlignCenter),
-                   T(f"START  —  Cabin {sel}, {sens_lbl}",
-                     f"DÉMARRER  —  Rame {sel}, {sens_lbl}"))
+        go_txt = T(f"START  —  Cabin {sel}, {sens_lbl}",
+                   f"DÉMARRER  —  Rame {sel}, {sens_lbl}")
+        # Garde-fou : tronque proprement si la police système rend plus
+        # large que prévu.
+        go_txt = QFontMetrics(go_font).elidedText(
+            go_txt, Qt.TextElideMode.ElideRight, int(go_w - 32))
+        p.drawText(go_rect, int(Qt.AlignmentFlag.AlignCenter), go_txt)
         self._title_zones.append((go_rect, "start", 0))
 
         # Hint + shortcuts
