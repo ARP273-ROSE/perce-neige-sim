@@ -31,6 +31,11 @@ var regen_level: float = 0.0             # freinage de l'ENTRAÎNEMENT en
                                          # frein de service (audit 2026-07-24)
 var emergency: bool = false              # frein urgence latché
 var emergency_ramp: float = 0.0          # rampe engagement (0..1)
+var manual_brake_held: bool = false      # frein de service TENU par le
+                                         # conducteur (bouton FREIN) — le
+                                         # régulateur le respecte : couple
+                                         # coupé, frein plein (ne pas tirer
+                                         # contre le frein)
 
 var doors_open: bool = true
 var lights_cabin: bool = true
@@ -249,6 +254,16 @@ func step(dt: float) -> void:
 
 	# Interlock portes : pas de traction si portes ouvertes
 	if doors_open:
+		f_motor = 0.0
+
+	# FREIN ENGAGÉ → COUPER LA TRACTION (tous les cas). Le moteur ne doit
+	# JAMAIS tirer contre un frein serré : sinon il annule le freinage et
+	# la décélération devient ridicule (retour d'essai 2026-07-23 : « dans
+	# tous les modes il faut couper la puissance quand le frein est
+	# déclenché »). Le frein de service manuel (bouton FREIN maintenu) ne
+	# remet PAS la consigne à 0 → sans cette coupure, le régulateur
+	# continuait de commander du couple pendant que le conducteur freinait.
+	if emergency or emergency_ramp > 0.0 or manual_brake_held or brake > 0.05:
 		f_motor = 0.0
 
 	# --- Gravité (déséquilibre cable) ------------------------------------
@@ -621,7 +636,15 @@ func _regulator(
 	var demand_brake: float
 	var demand_regen: float = 0.0
 	_reg_hold = target_v < 0.01 and v_travel < 0.4
-	if _reg_hold:
+	if manual_brake_held:
+		# Frein de service manuel prioritaire : le régulateur NE tire PAS
+		# contre lui. Couple coupé, frein plein tant que le bouton est tenu
+		# (sinon il abaissait `brake` et remontait le throttle → le moteur
+		# annulait le freinage, décél ridicule).
+		demand_throttle = 0.0
+		demand_brake = 1.0
+		demand_regen = 0.0
+	elif _reg_hold:
 		demand_throttle = 0.0
 		demand_brake = 0.5
 	else:
