@@ -91,7 +91,7 @@ try:
 except ImportError:
     _GODOT_BRIDGE_OK = False
 
-VERSION = "1.12.34"
+VERSION = "1.12.35"
 APP_NAME = "Perce-Neige Simulator"
 
 
@@ -1988,6 +1988,15 @@ def _trigger_crash(st: GameState, speed: float) -> None:
     st.crash_msg = quip[1] if LANG == "en" else quip[0]
     st.crash_shake_t = 1.2
     st.mode = MODE_OVER
+    # À-coup dans le câble : la rame stoppe net contre le butoir mais le
+    # brin élastique (3,4 km) encaisse l'énergie → la jauge de tension
+    # bondit d'un coup, proportionnellement à la vitesse d'impact. La
+    # physique s'arrêtant (MODE_OVER), on force directement l'affichage
+    # (il reste figé sur l'écran de collision) ; la secousse d'écran rend
+    # le choc lui-même.
+    st.train.tension_dan = min(42000.0, st.train.tension_dan
+                               + 4000.0 + speed * 4500.0)
+    st.train.tension_dan_disp = st.train.tension_dan
     add_event(
         st, "crash",
         f"COLLISION with the buffer stop at {speed * 3.6:.0f} km/h — "
@@ -5401,14 +5410,20 @@ class GameWidget(QWidget):
         # d'accueil c'est le silence total » + « plus d'ambiance en gare
         # basse »). L'ambiance s'efface d'elle-même dès que la rame
         # repart (v monte → fondu dans update_ambient).
+        # Déclenchement par POSITION (plus par la vitesse) : l'ambiance
+        # s'entend dès l'APPROCHE de la gare, pas seulement une fois
+        # arrêté. Avant (seuil |v| < 0,2), le fluage d'entrée en gare à
+        # 0,75 m/s restait au-dessus du seuil → silence pendant toute
+        # l'approche, l'ambiance ne « reprenait » qu'après l'arrêt (retour
+        # d'essai 2026-07-24). Fenêtre 45 m autour du repère de quai ;
+        # l'ambiance monte en fondu à l'approche et s'efface quand la rame
+        # s'éloigne au départ (update_ambient gère le fondu).
         _tr_sta = st.train
-        if abs(_tr_sta.v) < 0.2:
-            if _tr_sta.s <= START_S + 5.0:
-                self.sounds.set_station_ambient("lower")
-            elif _tr_sta.s >= STOP_S - 5.0:
-                self.sounds.set_station_ambient("upper")
-            else:
-                self.sounds.set_station_ambient(None)
+        STATION_AMB_DIST = 45.0
+        if _tr_sta.s <= START_S + STATION_AMB_DIST:
+            self.sounds.set_station_ambient("lower")
+        elif _tr_sta.s >= STOP_S - STATION_AMB_DIST:
+            self.sounds.set_station_ambient("upper")
         else:
             self.sounds.set_station_ambient(None)
         # Auto-exploitation state machine (no-op when disabled)
@@ -10310,15 +10325,33 @@ class GameWidget(QWidget):
         p.drawText(QRectF(rect.x() + 14, rect.y() + 10, rect.width() - 28, 22),
                    int(Qt.AlignmentFlag.AlignLeft),
                    T("Control panel", "Pupitre de conduite"))
-        # Altitude instantanée (compteur du pupitre) — interpolée sur le
-        # profil altimétrique réel (2111 m Val Claret → 3032 m Grande
-        # Motte). geom_at(s) rend (x_projeté, altitude).
-        alt_m = geom_at(tr.s)[1]
-        p.setPen(_cached_pen(QColor(150, 220, 255)))
-        p.setFont(_cached_font("Consolas", 14, QFont.Weight.Bold))
-        p.drawText(QRectF(rect.x() + 14, rect.y() + 10, rect.width() - 28, 22),
-                   int(Qt.AlignmentFlag.AlignRight),
-                   f"{alt_m:4.0f} m")
+        # (L'altitude instantanée est affichée dans le tableau latéral,
+        # sous le dénivelé — cf. _draw_world.)
+
+        # Alarme rouge « TROP VITE » (en-tête, à droite) : la vitesse
+        # actuelle ne permet plus de s'arrêter au repère avec le frein de
+        # service à fond (2,5 m/s²). PUREMENT INDICATIVE — le sim
+        # n'intervient PAS (retour d'essai 2026-07-24). Surtout utile en
+        # Défi (filet d'auto-dock levé → on peut percuter le butoir).
+        if tr.direction > 0:
+            _d_stop = STOP_S - tr.s
+        else:
+            _d_stop = tr.s - START_S
+        overspeed_pos = False
+        if (st.trip_started and not st.finished and _d_stop > 0.5
+                and abs(tr.v) > 1.0):
+            brake_dist = (tr.v * tr.v) / (2.0 * A_BRAKE_NORMAL)
+            overspeed_pos = brake_dist > _d_stop * 0.9
+        if overspeed_pos and int(st.trip_time * 3) % 2 == 0:
+            warn = QRectF(rect.x() + rect.width() - 190, rect.y() + 8,
+                          176, 24)
+            p.setBrush(QBrush(QColor(150, 20, 20, 240)))
+            p.setPen(_cached_pen(COLOR_ALARM, 2))
+            p.drawRoundedRect(warn, 6, 6)
+            p.setPen(_cached_pen(QColor(255, 235, 235)))
+            p.setFont(_cached_font("Segoe UI", 11, QFont.Weight.Bold))
+            p.drawText(warn, int(Qt.AlignmentFlag.AlignCenter),
+                       T("⚠ TOO FAST", "⚠ TROP VITE"))
 
         # Speedometer (top) — main unit m/s, sub-label shows km/h equivalent
         speed_rect = QRectF(rect.x() + 20, rect.y() + 40, 160, 160)
@@ -10666,6 +10699,8 @@ class GameWidget(QWidget):
              f"{travel_done_m:6.1f} / {travel_total_m:.0f} m"),
             (T("Elevation", "Dénivelé"),
              f"{alt_done:+5.1f} / {alt_total:+.0f} m"),
+            (T("Altitude",  "Altitude"),
+             f"{geom_at(tr.s)[1]:4.0f} m"),
             (T("Time",      "Temps"),       f"{st.trip_time:6.1f} s"),
             (T("Comfort",   "Confort"),
              f"{st.score_comfort:5.1f}  {st.score_energy:4.2f} kWh"),
