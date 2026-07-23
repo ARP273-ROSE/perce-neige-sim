@@ -14,6 +14,12 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 
 ## Quoi de neuf — v1.12.x (audit + retours d'essai terrain, juillet 2026)
 
+**v1.12.36** — annonce d'accueil en gare haute réactivée : le message
+« zone Grande Motte » (fichier 11) se déclenche à nouveau
+automatiquement en approche finale de la Grande Motte. Il avait été
+désactivé à tort — le charabia anglais signalé venait en fait de
+l'ambiance de quai contaminée (corrigée), pas de cette annonce.
+
 **v1.12.35** — alarme survitesse, à-coup de câble, ambiance, altitude :
 - **Alarme rouge « TROP VITE »** au pupitre (clignotante) dès que la
   vitesse ne permet plus de s'arrêter au repère au frein de service —
