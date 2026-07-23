@@ -14,6 +14,25 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 
 ## Quoi de neuf — v1.12.x (audit + retours d'essai terrain, juillet 2026)
 
+**v1.12.23** — l'audit physique porté à la PWA/3D (banc `godot_project/bench_pannes_3d.gd`) :
+- **Plafonds de panne progressifs côté 3D** : mêmes causes racines que
+  le PC (fondu moteur + bleed-off référés au cap de panne) → référés au
+  V_MAX machine, rampe de consigne 0,60 m/s² + feed-forward de pente.
+  Mesuré : 10→6 m/s à ≤ 0,75 m/s².
+- **Surveillance du plafond** portée (urgence auto si v > cap + 1 m/s
+  12 s sans décélération franche — validée au banc par sabotage de
+  consigne : déclenche à 15 s).
+- **Pressostat frein de service** : l'urgence tombe ~3 s après le
+  déclenchement de `service_brake_fail` (plus d'arrêt dans la frame).
+- **Aiguillage Abt : arrêt AVANT l'évitement** — le point d'interlock
+  (15 m en amont) devient la cible d'arrêt du régulateur : enveloppe,
+  feed-forward, creep et docking s'y appliquent naturellement (le
+  simple min() sur l'enveloppe dépassait l'aiguillage de ~175 m —
+  banc : arrêt à s=1596 pour un aiguillage à 1611). Correctif appliqué
+  aux DEUX versions (le PC v1.12.21 avait le même dépassement).
+- Bouton tactile PANNE : déjà l'équivalent de l'acquittement (un appui
+  panne active = clear) — inchangé.
+
 **v1.12.22** — acquittement maintenance, rupture en descente vérifiée :
 - **R à quai = acquittement maintenance** : une panne non catastrophique
   bloquait le départ jusqu'à la fin de son chrono (35–90 s). Rame à
