@@ -14,6 +14,21 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 
 ## Quoi de neuf — v1.12.x (audit + retours d'essai terrain, juillet 2026)
 
+**v1.12.25** — vue extérieure orbitale (PWA + PC) :
+- **La vue « ensemble » n'est plus figée** : en vue extérieure (bouton
+  VUE sur la PWA, touche **O** sur le PC avec la 3D embarquée F4),
+  l'angle se règle dans tous les sens au glisser — un doigt sur
+  tactile, clic gauche maintenu à la souris — et le zoom au pincement
+  à deux doigts ou à la molette (distance 8–120 m, tangage borné).
+  La caméra reste centrée sur la rame pilotée et la suit ; la position
+  par défaut reproduit l'ancienne vue fixe.
+- Côté PC, la touche O bascule FPV ↔ orbitale via le pont UDP
+  (`ext_view`, appliqué sur changement) ; la souris agit directement
+  dans la fenêtre 3D embarquée. Entrée ajoutée au menu d'aide (F1) et
+  au manuel (42 p, couverture 1.12.25).
+- (Release : la v1.12.24 n'a jamais été construite — incident de
+  livraison d'événement GitHub Actions ; son contenu est inclus ici.)
+
 **v1.12.24** — creux de vitesse à l'arrivée corrigé (PWA + PC) :
 - « En gare du haut, la vitesse a diminué jusqu'à 0,1 m/s avant de
   réaccélérer à 0,75 m/s » : le feed-forward de pente de consigne
