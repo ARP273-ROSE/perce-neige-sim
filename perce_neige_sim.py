@@ -90,7 +90,7 @@ try:
 except ImportError:
     _GODOT_BRIDGE_OK = False
 
-VERSION = "1.12.22"
+VERSION = "1.12.23"
 APP_NAME = "Perce-Neige Simulator"
 
 
@@ -1586,6 +1586,21 @@ class Physics:
         else:
             dist_to_stop = max(0.0, tr.s - START_S)
 
+        # Aiguillage Abt désaligné : le point d'arrêt de l'interlock
+        # (15 m en amont de l'aiguillage d'entrée) DEVIENT la cible
+        # d'arrêt si la rame est en amont — toute la machinerie
+        # d'approche (enveloppe, feed-forward, creep, docking)
+        # s'applique naturellement au point de hold. Le simple min()
+        # sur l'enveloppe (première version v1.12.21) sans feed-forward
+        # dépassait l'aiguillage de ~175 m (banc 3D 2026-07-23).
+        if tr.switch_abt_fault:
+            if tr.direction > 0:
+                d_hold = max(0.0, (PASSING_START - 15.0) - tr.s)
+            else:
+                d_hold = max(0.0, tr.s - (PASSING_END + 15.0))
+            if d_hold > 0.0:
+                dist_to_stop = min(dist_to_stop, d_hold)
+
         # Travel-direction velocity magnitude.
         v_travel = tr.v * tr.direction
 
@@ -1633,22 +1648,6 @@ class Physics:
             # so a gentle coast envelope suffices.
             a_env = A_NATURAL_UP
         v_envelope = math.sqrt(CREEP_V * CREEP_V + 2.0 * a_env * d_to_creep)
-
-        # Aiguillage Abt désaligné : l'interlock impose l'ARRÊT avant le
-        # point de l'évitement (annonce « hold before the siding ») — pas
-        # seulement 2 m/s. Enveloppe de freinage (0,6 m/s²) vers un point
-        # d'arrêt 15 m avant l'aiguillage d'entrée ; une fois l'interlock
-        # retombé (fin du défaut), l'enveloppe se lève et la marche
-        # reprend. Rame déjà DANS l'évitement : le cap 2 m/s s'applique
-        # jusqu'à la sortie (audit physique 2026-07-23).
-        if tr.switch_abt_fault:
-            if tr.direction > 0:
-                d_hold = (PASSING_START - 15.0) - tr.s
-            else:
-                d_hold = tr.s - (PASSING_END + 15.0)
-            if d_hold > 0.0:
-                v_envelope = min(v_envelope,
-                                 math.sqrt(2.0 * 0.6 * d_hold))
 
         # --- Setpoint slewing ---------------------------------------------
         # Real Von Roll speed-command knob is not directly tracked by the
