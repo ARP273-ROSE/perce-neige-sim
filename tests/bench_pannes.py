@@ -162,3 +162,27 @@ for v0 in (12.0, 6.0):
         audit_stop("Arrêt électrique (service stop)", v0, d, s_estop)
         audit_stop("Urgence commandée (frein poulie)", v0, d, s_emerg)
         audit_stop("Parachute (pinces rail)", v0, d, s_parachute)
+
+print()
+print("=== RUPTURE CÂBLE EN DESCENTE — pente défavorable (zone 30 %) ===")
+# La rame descendante découplée est tirée par TOUT son poids dans son
+# sens de marche : décél nette = parachute 3,6 − g·sinθ − résistance.
+# Pire cas : pleine charge, pente max, 12 m/s.
+for pax, label in ((8, "rame quasi vide"), (334, "rame pleine")):
+    st, ph = make(-1, 2000.0, pax, 8, -12.0)
+    trig = {"done": False}
+
+    def on_t(t, st):
+        if t >= 1.0 and not trig["done"]:
+            pn.trigger_fault(st, "cable_rupture")
+            trig["done"] = True
+
+    hist = run(st, ph, 130.0, on_t)
+    tr = st.train
+    post = [h for h in hist if h[0] >= 1.0]
+    d = abs(hist[-1][9] - post[0][9])
+    theta = pn.slope_angle_at(2000.0)
+    net = (abs(12.0) ** 2) / (2 * d) if d > 1 else 0.0
+    print(f"  s=2000 m (pente {math.tan(theta)*100:.0f} %), {label:15s} : "
+          f"arrêt en {d:6.1f} m, {hist[-1][0] - 1.0:5.1f} s, décél nette "
+          f"{net:.2f} m/s² (parachute 3,6 − g·sinθ {9.81*math.sin(theta):.2f})")
