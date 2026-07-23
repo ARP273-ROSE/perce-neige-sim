@@ -90,7 +90,7 @@ try:
 except ImportError:
     _GODOT_BRIDGE_OK = False
 
-VERSION = "1.12.21"
+VERSION = "1.12.22"
 APP_NAME = "Perce-Neige Simulator"
 
 
@@ -5625,7 +5625,32 @@ class GameWidget(QWidget):
                 st.panne_active and is_catastrophic(st.panne_kind)
                 and st.fault_phase in ("evacuating", "out_of_service")
             )
-            if st.finished or st.mode == MODE_OVER or catastrophic_done:
+            # Acquittement maintenance : une panne NON catastrophique,
+            # rame À QUAI et À L'ARRÊT, se solde par l'intervention du
+            # technicien — R la lève immédiatement au lieu d'attendre la
+            # fin du chrono (jusqu'à 90 s : « faudrait passer à autre
+            # chose rapidement pour partir », retour 2026-07-23). En
+            # ligne ou en mouvement, le chrono reste la seule issue ;
+            # les catastrophiques gardent leur R = nouveau voyage.
+            tr_r = st.train
+            at_sta_r = (tr_r.s <= START_S + 5.0) or (tr_r.s >= STOP_S - 5.0)
+            if (st.panne_active and not is_catastrophic(st.panne_kind)
+                    and not st.finished and st.mode == MODE_RUN
+                    and at_sta_r and abs(tr_r.v) < 0.1):
+                clear_fault(st)
+                # L'intervention réarme aussi la chaîne : urgence
+                # relâchée (rame à l'arrêt), latches de survitesse levés.
+                tr_r.emergency = False
+                if tr_r.overspeed_tripped:
+                    tr_r.overspeed_tripped = False
+                    tr_r.overspeed_level = 0
+                add_event(st, "fault_ack",
+                          "Maintenance acknowledged the fault — "
+                          "departure possible.",
+                          "Panne acquittée par la maintenance — "
+                          "départ possible.",
+                          "info")
+            elif st.finished or st.mode == MODE_OVER or catastrophic_done:
                 self.new_trip()
         elif k == Qt.Key.Key_Home:
             # Return to the main title screen at any time — the driver
@@ -10985,6 +11010,17 @@ class GameWidget(QWidget):
                      QColor(140, 220, 140), 46 if catastrophic else 50)
         draw_section("Bloqué :", "Blocked:", blocked,
                      COLOR_ALARM if catastrophic else COLOR_WARN, 18)
+
+        # Panne non catastrophique : rappel de l'acquittement rapide
+        # (R à quai, à l'arrêt) pour ne pas attendre la fin du chrono.
+        if not catastrophic:
+            p.setFont(_cached_font("Segoe UI", 9, QFont.Weight.Bold))
+            p.setPen(_cached_pen(QColor(255, 220, 100)))
+            hint_ack = ("À quai, à l'arrêt : R = acquittement maintenance."
+                        if lang == "fr" else
+                        "At a platform, stopped : R = maintenance ack.")
+            p.drawText(QRectF(x + 12, cy, section_w, 14),
+                       int(Qt.AlignmentFlag.AlignLeft), hint_ack)
 
         # Catastrophic-only : phase indicator + explicit recovery key.
         if catastrophic:

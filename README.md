@@ -14,6 +14,19 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 
 ## Quoi de neuf — v1.12.x (audit + retours d'essai terrain, juillet 2026)
 
+**v1.12.22** — acquittement maintenance, rupture en descente vérifiée :
+- **R à quai = acquittement maintenance** : une panne non catastrophique
+  bloquait le départ jusqu'à la fin de son chrono (35–90 s). Rame à
+  quai et à l'arrêt, R lève la panne (urgence relâchée, survitesse
+  réarmée) et le départ est immédiatement possible — rappel affiché
+  dans le panneau de panne. En ligne, le chrono reste la seule issue ;
+  les catastrophiques gardent R = nouveau voyage.
+- **Rupture de câble en descente — pente défavorable vérifiée au banc** :
+  la rame découplée est tirée par tout son poids dans son sens de
+  marche → décél nette 0,82 m/s² en zone 30 % (3,6 parachute −
+  g·sinθ 2,78), 87 m d'arrêt depuis 12 m/s contre 18 m câble intact,
+  indépendant de la charge. Cas ajoutés au banc `tests/bench_pannes.py`.
+
 **v1.12.21** — audit physique complet des pannes et des arrêts
 (détail : `AUDIT_PHYSIQUE_PANNES.md`, banc reproductible
 `tests/bench_pannes.py`) :
