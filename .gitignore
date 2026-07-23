@@ -69,3 +69,6 @@ bundled_godot/
 *.x86_64
 *.pck
 .pytest_cache/
+
+# Runtime : meilleur score du mode Défi (données utilisateur)
+challenge_best.json

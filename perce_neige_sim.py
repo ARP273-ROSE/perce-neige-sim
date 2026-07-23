@@ -91,7 +91,7 @@ try:
 except ImportError:
     _GODOT_BRIDGE_OK = False
 
-VERSION = "1.12.39"
+VERSION = "1.12.40"
 APP_NAME = "Perce-Neige Simulator"
 
 
@@ -814,6 +814,11 @@ class GameState:
     # + régularité). Évalué à l'arrivée de chaque trajet.
     challenge_emergency_used: bool = False   # urgence engagée pendant le trajet
     challenge_fault_hit: bool = False        # panne subie pendant le trajet
+    challenge_unsafe: bool = False           # départ dangereux (portes
+                                             # ouvertes / cabine pas prête)
+    manual_brake_held: bool = False          # frein de service tenu à la
+                                             # main (Espace/clic) — prime
+                                             # sur le régulateur
     challenge_docking_err: float = 0.0       # |arrêt − repère| (m)
     challenge_last_score: float = -1.0       # dernier score (−1 = pas encore)
     challenge_comfort: float = 0.0           # confort figé à l'arrivée
@@ -829,8 +834,10 @@ class GameState:
     crash_derail: bool = False               # (legacy) True si déraillement
     crash_kind: str = "buffer"               # buffer | derail | cabin
     crash_review_who: str = ""               # avis passager : nom + drapeau
-    crash_review_txt: str = ""               # avis passager : texte
+    crash_review_native: str = ""            # avis en langue d'origine
+    crash_review_txt: str = ""               # avis traduit (FR/EN)
     challenge_review_who: str = ""           # avis passager (bandeau défi)
+    challenge_review_native: str = ""
     challenge_review_txt: str = ""
     v_profile: float = 99.0                  # vitesse d'enveloppe auto à
                                              # la position courante (alarme)
@@ -1004,9 +1011,11 @@ class Physics:
         # Door interlock : no traction while the doors are physically open.
         # Real Perce-Neige : the drive contactor is wired to the door-closed
         # relay, the driver can command speed but nothing moves until the
-        # leaves are shut. The parking brake is applied further down so the
-        # train can't drift backwards under the gravity imbalance.
-        if tr.doors_open:
+        # leaves are shut. EXCEPTION mode DÉFI : le verrou saute une fois
+        # le voyage lancé (départ sauvage portes ouvertes) — la rame part
+        # AVEC les portes ouvertes, passagers en train d'embarquer.
+        if tr.doors_open and not (st.run_mode == "challenge"
+                                  and st.trip_started):
             f_motor = 0.0
 
         # Chaîne de départ : le contacteur de traction ne colle qu'une fois
@@ -1133,13 +1142,19 @@ class Physics:
         # au lieu de 29). La force de retenue est identique à l'ancien
         # frein ; seule l'attribution change.
         braking_cmd = tr.brake >= 0.05 or tr.regen_level >= 0.05
+        # Mode DÉFI : le cap de confort au lancement est LEVÉ → moteur à
+        # fond, la rame peut réellement s'emballer en survitesse même sur
+        # une descente vide (« consigne à fond ça reste plafonné à 12 »,
+        # retour d'essai 2026-07-24). En Normal/Auto/Pannes il reste.
+        chaos_accel = (st.run_mode == "challenge")
         if not tr.emergency:
             v_abs = abs(tr.v)
             soft_cap = A_START + (A_MAX_REG - A_START) * min(
                 1.0, v_abs / V_SOFT_RAMP
             )
-            # Cap de confort au LANCEMENT (traction) — toujours actif.
-            if a > soft_cap:
+            # Cap de confort au LANCEMENT (traction) — toujours actif
+            # sauf en Défi (emballement autorisé).
+            if a > soft_cap and not chaos_accel:
                 a = soft_cap
             # Cap en décélération — seulement hors retenue commandée :
             # un arrêt voulu (frein ou régén plein) doit freiner ferme.
@@ -1400,9 +1415,10 @@ class Physics:
         tr.tension_dan += tr.tension_fault_dan
         tr.tension_dan -= tr.slack_fault_dan
         if tr.cable_rupture:
-            # Tractor cable severed : residual tension is only the parking
-            # anchor + parachute reaction. Gauge drops to near zero.
-            tr.tension_dan = min(tr.tension_dan, 1500.0)
+            # Câble tracteur SECTIONNÉ : le brin de la rame pilotée n'est
+            # plus tendu → la jauge tombe à ZÉRO (retour d'essai
+            # 2026-07-24 : « si le câble casse sa tension tombe à 0 »).
+            tr.tension_dan = 0.0
         if tr.tension_dan < 0.0:
             tr.tension_dan = 0.0
         # Cable wear model (Palmgren-Miner simplified) — ISO 4309, DIN EN
@@ -1872,7 +1888,15 @@ class Physics:
         # (frein de service modulé), pas le confort 0,25 du bouton de
         # consigne — mais jamais la coupure sèche d'avant l'audit
         # 2026-07-23 (moteur tué en 1 frame, chute libre à 1,8 m/s²).
-        driver_target = tr.speed_cmd * V_MAX
+        # Mode DÉFI : la plage de consigne va au-delà de V_MAX (jusqu'à
+        # 15 m/s) → consigne À FOND = le drive pousse la machine EN
+        # SURVITESSE (au lieu de plafonner à 12 même en descente vide,
+        # où la gravité s'oppose : « avec la consigne à fond ça reste
+        # plafonné à 12 », retour d'essai 2026-07-24). Franchir 1,20·V_MAX
+        # = 14,4 déclenche moteur détruit + câble rompu. Croisière
+        # normale = ~80 % de consigne (12/15).
+        v_cmd_max = 15.0 if self.state.run_mode == "challenge" else V_MAX
+        driver_target = tr.speed_cmd * v_cmd_max
         ramp_down = RAMP_DOWN
         # Speed-cap faults (wet rails, motor degraded, thermal, …)
         # clamp the effective driver setpoint : the slew limiter brings
@@ -1891,7 +1915,7 @@ class Physics:
         # 12 m/s prend ~60 m : il faut ANTICIPER le freinage, sinon on
         # percute le butoir — c'est l'intérêt du mode.
         if self.state.run_mode == "challenge":
-            ramp_down = 1.2
+            ramp_down = 0.7
         # Feed-forward de la PENTE de consigne : sans lui, le P (k_a =
         # 0,35) doit accumuler ~1,7 m/s d'erreur pour tenir une rampe de
         # 0,6 m/s² → la rame traînait au-dessus du plafond de panne (et
@@ -1973,13 +1997,32 @@ class Physics:
                 + MU_ROLL * G * (m_main_r * math.cos(theta_r)
                                  + m_ghost_r * math.cos(theta_gr)))
 
-        self._reg_hold = target_v < 0.01 and v_travel < 0.4
+        # Mode DÉFI : à consigne 0, le régulateur NE MAINTIENT PAS la rame
+        # tout seul. Si le conducteur n'a pas serré le frein (Espace) ni
+        # le tambour, la rame RESTE LIBRE → elle repart sous la gravité
+        # dans le sens de la rame la plus lourde, sans limite de vitesse
+        # (retour d'essai 2026-07-24). C'est le rôle du frein manuel.
+        chaos_hold = (self.state.run_mode == "challenge")
+        self._reg_hold = (not chaos_hold
+                          and target_v < 0.01 and v_travel < 0.4)
         demand_regen = 0.0
-        if self._reg_hold:
+        if self.state.manual_brake_held:
+            # Frein de service manuel prioritaire : plein (2,5 m/s²) tant
+            # qu'on appuie, moteur coupé — même en Défi (drift) il permet
+            # de tenir/arrêter la rame.
+            demand_throttle = 0.0
+            demand_brake = 1.0
+            demand_regen = 0.0
+        elif self._reg_hold:
             # Arrived — kill motor, hold with the friction brake (parking
             # transition). No regen at standstill.
             demand_throttle = 0.0
             demand_brake = 0.5
+        elif chaos_hold and target_v < 0.01:
+            # Consigne à 0 en Défi : moteur coupé, AUCUN frein auto — la
+            # rame est laissée à la gravité (le conducteur gère le frein).
+            demand_throttle = 0.0
+            demand_brake = 0.0
         else:
             # Contrôleur unifié en FORCE (2026-07-13) :
             #   a_des = accélération désirée (erreur de vitesse bornée
@@ -2102,104 +2145,152 @@ CRASH_QUIPS: list[tuple[str, str]] = [
 ]
 
 # Avis passagers stylés par NATIONALITÉ (clichés bon enfant + références
-# locales + interjection en langue d'origine, le reste traduit en
-# français / anglais). Organisés par CIRCONSTANCE :
+# locales). Chaque entrée : (drapeau + nom, texte en LANGUE D'ORIGINE,
+# traduction FR, traduction EN). L'affichage montre la VO puis la
+# traduction. Organisés par CIRCONSTANCE :
 #   great    = voyage nickel (5★)
 #   rough    = arrivée brusque / à-coups (2-3★)
 #   disaster = collision / déraillement / catastrophe (1★)
-# Chaque entrée : (drapeau + nom, texte FR, texte EN).
-PAX_REVIEWS: dict[str, list[tuple[str, str, str]]] = {
+PAX_REVIEWS: dict[str, list[tuple[str, str, str, str]]] = {
     "great": [
         ("🇯🇵 Yuki, Osaka",
-         "« Sugoi ! (すごい) Arrêt parfait, pile au repère. Le conducteur "
-         "a l'âme d'un maître du thé. Je reviendrai. Merci infiniment. »",
-         "“Sugoi! (すごい) Perfect stop, right on the mark. The driver has "
-         "the soul of a tea master. I'll be back. Thank you kindly.”"),
+         "すごい！完璧な停車、ぴったり目標に。運転手さんは茶道の達人の心を"
+         "持っています。また乗ります。ありがとうございました。",
+         "Sugoi ! Arrêt parfait, pile au repère. Le conducteur a l'âme "
+         "d'un maître du thé. Je reviendrai. Merci infiniment.",
+         "Sugoi! Perfect stop, right on the mark. The driver has the "
+         "soul of a tea master. I'll be back. Thank you so much."),
         ("🇩🇪 Klaus, Stuttgart",
-         "« Korrekt. Décélération dans les tolérances, arrêt au "
+         "Korrekt. Verzögerung innerhalb der Toleranz, Halt auf den "
+         "Millimeter. Ich habe es gestoppt: tadellos. Fünf Sterne — "
+         "das passiert mir nie.",
+         "Korrekt. Décélération dans les tolérances, arrêt au "
          "millimètre. J'ai chronométré : irréprochable. Cinq étoiles, "
-         "et ça ne m'arrive jamais. »",
-         "“Korrekt. Deceleration within tolerance, stop to the "
+         "et ça ne m'arrive jamais.",
+         "Korrekt. Deceleration within tolerance, stop to the "
          "millimetre. I timed it: flawless. Five stars, which never "
-         "happens.”"),
+         "happens to me."),
         ("🇨🇭 Heidi, Zürich",
-         "« À l'heure ET à l'arrêt. Voilà. C'est tout ce que je demande. "
-         "Presque aussi bien qu'à la maison. »",
-         "“On time AND on the mark. There. That's all I ask. Almost as "
-         "good as back home.”"),
+         "Pünktlich UND am Haltepunkt. Voilà. Meh bruchts nöd. Fascht "
+         "so guet wie dihei.",
+         "À l'heure ET au repère. Voilà. Il n'en faut pas plus. "
+         "Presque aussi bien qu'à la maison.",
+         "On time AND on the mark. Voilà. Nothing more needed. Almost "
+         "as good as back home."),
         ("🇮🇹 Nonna Rosa, Napoli",
-         "« Bravissimo ! Doux comme une gondole. J'ai même fini mon "
-         "espresso sans en renverser une goutte. Tiens, mange un cannolo. »",
-         "“Bravissimo! Smooth as a gondola. I even finished my espresso "
-         "without spilling a drop. Here, have a cannolo.”"),
+         "Bravissimo ! Liscio come una gondola. Ho pure finito il "
+         "caffè senza versarne una goccia. Tieni, mangia un cannolo.",
+         "Bravissimo ! Doux comme une gondole. J'ai même fini mon café "
+         "sans en renverser une goutte. Tiens, mange un cannolo.",
+         "Bravissimo! Smooth as a gondola. I even finished my coffee "
+         "without spilling a drop. Here, have a cannolo."),
+        ("🇬🇧 Nigel, London",
+         "Frightfully smooth. Not a drop of tea disturbed. One almost "
+         "forgets one is underground. Splendid. Carry on.",
+         "Remarquablement doux. Pas une goutte de thé renversée. On en "
+         "oublierait presque qu'on est sous terre. Splendide. Continuez.",
+         "Frightfully smooth. Not a drop of tea disturbed. One almost "
+         "forgets one is underground. Splendid. Carry on."),
     ],
     "rough": [
         ("🇯🇵 Yuki, Osaka",
-         "« Euh… un peu rapide, peut-être. Excusez-moi. Je ne veux pas "
+         "あの…ちょっと速かったかもしれません。すみません。ご迷惑を"
+         "かけたくないのですが、お茶が少しこぼれました。でも大丈夫です。",
+         "Euh… un peu rapide, peut-être. Excusez-moi. Je ne veux pas "
          "déranger, mais mon thé s'est un peu renversé. C'est très bien "
-         "quand même. Sumimasen. »",
-         "“Um… a little fast, maybe. Excuse me. I don't want to be a "
-         "bother, but my tea spilled a bit. It's fine, really. "
-         "Sumimasen.”"),
+         "quand même.",
+         "Um… a little fast, maybe. Excuse me. I don't want to be a "
+         "bother, but my tea spilled a bit. It's fine, really."),
         ("🇬🇧 Nigel, London",
-         "« Eh bien. C'était… vigoureux. Je ne me plains pas, évidemment. "
-         "Simplement, mon chapeau a changé de rangée. Cordialement. »",
-         "“Well. That was… spirited. Not complaining, of course. It's "
-         "just that my hat changed rows. Regards.”"),
+         "Well. That was… spirited. Not complaining, obviously. It's "
+         "merely that my hat has relocated three rows back. Regards.",
+         "Eh bien. C'était… vigoureux. Je ne me plains pas, évidemment. "
+         "Simplement, mon chapeau a déménagé trois rangs plus loin. "
+         "Cordialement.",
+         "Well. That was… spirited. Not complaining, obviously. It's "
+         "merely that my hat has relocated three rows back. Regards."),
         ("🇩🇪 Klaus, Stuttgart",
-         "« La décélération a dépassé 2,5 m/s². J'ai chronométré. Je "
-         "note trois étoiles et je joins un graphique. »",
-         "“Deceleration exceeded 2.5 m/s². I timed it. Three stars, and "
-         "I'm attaching a chart.”"),
+         "Die Verzögerung überschritt 2,5 m/s². Ich habe es gestoppt. "
+         "Drei Sterne, und ich lege ein Diagramm bei.",
+         "La décélération a dépassé 2,5 m/s². J'ai chronométré. Je mets "
+         "trois étoiles et je joins un graphique.",
+         "Deceleration exceeded 2.5 m/s². I timed it. Three stars, and "
+         "I'm attaching a chart."),
         ("🇧🇷 Ana, Rio",
-         "« Eita! Un petit coup de samba involontaire à l'arrivée. Mon "
-         "caipirinha imaginaire a souffert. Mais l'ambiance, top. »",
-         "“Eita! A little involuntary samba on arrival. My imaginary "
-         "caipirinha suffered. But the vibe, top-notch.”"),
+         "Eita! Um sambinha involuntário na chegada. Minha caipirinha "
+         "imaginária sofreu. Mas o clima, top demais.",
+         "Eita ! Un petit samba involontaire à l'arrivée. Ma caipirinha "
+         "imaginaire a souffert. Mais l'ambiance, au top.",
+         "Eita! A little involuntary samba on arrival. My imaginary "
+         "caipirinha suffered. But the vibe, top-notch."),
     ],
     "disaster": [
         ("🇯🇵 Yuki, Osaka",
-         "« …Excusez-moi. Je crois que nous avons heurté quelque chose. "
+         "…すみません。何かにぶつかったようです。大丈夫です。いえ、"
+         "少しだけ大丈夫ではありません。お茶はもう存在しません。ごめんなさい。",
+         "…Excusez-moi. Je crois que nous avons heurté quelque chose. "
          "Ce n'est pas grave. Enfin, si, un peu. Mon thé n'existe plus. "
-         "Gomennasai. »",
-         "“…Excuse me. I believe we hit something. It's fine. Well, sort "
-         "of. My tea no longer exists. Gomennasai.”"),
+         "Gomennasai.",
+         "…Excuse me. I believe we hit something. It's fine. Well, "
+         "sort of. My tea no longer exists. Gomennasai."),
         ("🇩🇪 Klaus, Stuttgart",
-         "« INAKZEPTABEL. Impact à décélération non mesurable car mon "
+         "INAKZEPTABEL. Aufprallverzögerung nicht messbar — meine "
+         "Stoppuhr ist zerbrochen. Ich verlange einen Bericht. Und eine "
+         "neue Stoppuhr.",
+         "INAKZEPTABEL. Décélération d'impact non mesurable : mon "
          "chronomètre s'est brisé. J'exige un rapport. Et un nouveau "
-         "chronomètre. »",
-         "“INAKZEPTABEL. Impact deceleration unmeasurable — my stopwatch "
-         "shattered. I demand a report. And a new stopwatch.”"),
+         "chronomètre.",
+         "INAKZEPTABEL. Impact deceleration unmeasurable — my stopwatch "
+         "shattered. I demand a report. And a new stopwatch."),
         ("🇺🇸 Chad, Florida",
-         "« BRO. C'était genre une montagne russe SANS les rails ?? "
-         "5 étoiles pour l'adrénaline, 1 pour mes lunettes pulvérisées. »",
-         "“BRO. That was like a roller coaster WITHOUT the rails?? "
-         "5 stars for the adrenaline, 1 for my pulverized shades.”"),
+         "BRO. That was like a roller coaster WITHOUT the rails?? "
+         "5 stars for the adrenaline, 1 for my pulverized Ray-Bans.",
+         "BRO. C'était genre une montagne russe SANS les rails ?? "
+         "5 étoiles pour l'adrénaline, 1 pour mes Ray-Ban pulvérisées.",
+         "BRO. That was like a roller coaster WITHOUT the rails?? "
+         "5 stars for the adrenaline, 1 for my pulverized Ray-Bans."),
         ("🇮🇹 Giulia, Napoli",
-         "« MAMMA MIA ! J'ai crié plus fort qu'au San Paolo ! Mon "
-         "espresso, mon costume, TOUT par terre ! Vergogna ! »",
-         "“MAMMA MIA! I screamed louder than at the San Paolo! My "
-         "espresso, my suit, EVERYTHING on the floor! Vergogna!”"),
+         "MAMMA MIA! Ho urlato più forte che al Maradona! Il caffè, il "
+         "vestito buono, TUTTO per terra! Vergogna!",
+         "MAMMA MIA ! J'ai crié plus fort qu'au stade Maradona ! Le "
+         "café, le beau costume, TOUT par terre ! Vergogna !",
+         "MAMMA MIA! I screamed louder than at the Maradona stadium! "
+         "The coffee, the good suit, EVERYTHING on the floor! Vergogna!"),
         ("🇫🇷 Jean-Michel, Lyon",
-         "« Non mais c'est un scandale, hein. 40 euros pour finir dans "
-         "le mur. J'écris au maire. Et à ma belle-mère, tant qu'à faire. »",
-         "“An absolute disgrace. 40 euros to end up in the wall. I'm "
-         "writing to the mayor. And my mother-in-law, while I'm at it.”"),
+         "Non mais c'est un scandale, hein. 40 euros pour finir dans le "
+         "mur. J'écris au maire. Et à ma belle-mère, tant qu'à faire.",
+         "Non mais c'est un scandale, hein. 40 euros pour finir dans le "
+         "mur. J'écris au maire. Et à ma belle-mère, tant qu'à faire.",
+         "This is an absolute disgrace. 40 euros to end up in the wall. "
+         "I'm writing to the mayor. And my mother-in-law, while I'm at it."),
         ("🇦🇺 Bruce, Sydney",
-         "« Crikey ! On est devenus un satellite pendant deux secondes ! "
-         "Mémorable. Mais où est passée ma casquette, au juste ? »",
-         "“Crikey! We were a satellite for two seconds there! Memorable. "
-         "But where exactly did my cap go?”"),
+         "Crikey! We were a satellite for two seconds there! Bloody "
+         "memorable. But where the heck did my cap go, mate?",
+         "Crikey ! On est devenus un satellite pendant deux secondes ! "
+         "Sacrément mémorable. Mais où est passée ma casquette, l'ami ?",
+         "Crikey! We were a satellite for two seconds there! Bloody "
+         "memorable. But where the heck did my cap go, mate?"),
         ("🇨🇳 Wei, Shanghai",
-         "« J'ai tout filmé. Déjà viral, 2 millions de vues. Le "
-         "conducteur est célèbre. Pour de très mauvaises raisons. »",
-         "“I filmed everything. Already viral, 2 million views. The "
-         "driver is famous. For very bad reasons.”"),
+         "全程都拍下来了。已经上热搜了，两百万播放。司机现在出名了。"
+         "因为非常糟糕的原因。",
+         "J'ai tout filmé. Déjà dans les tendances, 2 millions de vues. "
+         "Le conducteur est célèbre. Pour de très mauvaises raisons.",
+         "I filmed everything. Already trending, 2 million views. The "
+         "driver is famous now. For very bad reasons."),
         ("🇨🇭 Heidi, Zürich",
-         "« En Suisse, cela n'arriverait jamais. Je le dis, c'est tout. "
-         "Une étoile, et c'est généreux. »",
-         "“In Switzerland this would never happen. Just saying. One "
-         "star, and that's generous.”"),
+         "In der Schweiz würde das nie passieren. Ich sag's ja nur. "
+         "Ein Stern, und das ist grosszügig.",
+         "En Suisse, cela n'arriverait jamais. Je dis ça, je dis rien. "
+         "Une étoile, et c'est généreux.",
+         "In Switzerland this would never happen. Just saying. One "
+         "star, and that's generous."),
+        ("🇪🇸 Rocío, Sevilla",
+         "¡Madre mía! ¡Ni en la Feria hay tanto meneo! Mi abanico por "
+         "los aires y mi dignidad también. Olé tú.",
+         "¡Madre mía ! Même à la Feria on ne secoue pas autant ! Mon "
+         "éventail en l'air, et ma dignité avec. Olé.",
+         "¡Madre mía! Not even at the Feria do we shake this much! My "
+         "fan went flying, and so did my dignity. Olé."),
     ],
 }
 
@@ -2230,6 +2321,34 @@ DERAIL_QUIPS: list[tuple[str, str]] = [
      "Curve physics: a class you clearly skipped."),
 ]
 
+# Messages sarcastiques de DEMI-TOUR (inversion du sens en mode Défi).
+REVERSE_QUIPS: list[tuple[str, str]] = [
+    ("Demi-tour. Les passagers adorent refaire le trajet à l'envers.",
+     "U-turn. Passengers just love doing the whole trip backwards."),
+    ("Vous avez oublié quelque chose là-haut ? Un peu de jugeote ?",
+     "Forgot something up there? Your common sense, maybe?"),
+    ("Le funiculaire n'est pas un manège. Mais continuez.",
+     "A funicular isn't a fairground ride. But do go on."),
+    ("Retour à la case départ. Les skieurs vous remercient chaleureusement.",
+     "Back to square one. The skiers thank you warmly."),
+    ("Inversion du sens : parce que le premier trajet était trop réussi ?",
+     "Reversing: because the first trip went too well?"),
+]
+
+# Messages sarcastiques quand la rame ROULE PORTES OUVERTES (mode Défi).
+DOORS_OPEN_QUIPS: list[tuple[str, str]] = [
+    ("Portes ouvertes à 40 km/h. L'aération, version extrême.",
+     "Doors open at 40 km/h. Air conditioning, extreme edition."),
+    ("Un passager vient de découvrir le vide. En temps réel.",
+     "A passenger just discovered the void. In real time."),
+    ("Le règlement dit « portes fermées ». Le règlement pleure.",
+     "The rulebook says 'doors closed'. The rulebook is weeping."),
+    ("Comptez vos passagers à l'arrivée. Il en manquera.",
+     "Count your passengers at the top. Some will be missing."),
+    ("Rouler portes ouvertes : une première, un record, un procès.",
+     "Driving with the doors open: a first, a record, a lawsuit."),
+]
+
 
 def _trigger_crash(st: GameState, speed: float, kind: str = "buffer") -> None:
     """Game-over de conduite (mode Défi). `kind` ∈ {buffer, derail,
@@ -2243,19 +2362,23 @@ def _trigger_crash(st: GameState, speed: float, kind: str = "buffer") -> None:
     quip = random.choice(quips)
     st.crash_msg = quip[1] if LANG == "en" else quip[0]
     st.crash_derail = (kind == "derail")
-    # Avis passager 1 étoile (circonstance = catastrophe), stylé par
-    # nationalité (clichés bon enfant + interjection en VO).
+    # Avis passager 1 étoile (circonstance = catastrophe), en langue
+    # d'origine + traduction, stylé par nationalité.
     rev = random.choice(PAX_REVIEWS["disaster"])
     st.crash_review_who = rev[0]
-    st.crash_review_txt = rev[2] if LANG == "en" else rev[1]
+    st.crash_review_native = rev[1]
+    st.crash_review_txt = rev[3] if LANG == "en" else rev[2]
     st.crash_shake_t = 1.4 if kind != "buffer" else 1.2
     st.mode = MODE_OVER
     # À-coup dans le câble : la rame stoppe net mais le brin élastique
     # (3,4 km) encaisse l'énergie → la jauge de tension bondit,
     # proportionnellement à la vitesse. Physique figée (MODE_OVER), on
     # force l'affichage ; la secousse rend le choc.
-    st.train.tension_dan = min(42000.0, st.train.tension_dan
-                               + 4000.0 + speed * 4500.0)
+    # MAIS si le câble est DÉJÀ rompu (runaway), il n'y a plus de brin à
+    # tendre → la jauge reste à zéro (pas d'à-coup).
+    if not st.train.cable_rupture:
+        st.train.tension_dan = min(42000.0, st.train.tension_dan
+                                   + 4000.0 + speed * 4500.0)
     st.train.tension_dan_disp = st.train.tension_dan
     _ev = {
         "derail": ("derail",
@@ -3749,9 +3872,16 @@ class SoundSystem:
         lo, hi = 1.0, 7.0
         cruise_mix = 0.0 if v <= lo else (
             1.0 if v >= hi else (v - lo) / (hi - lo))
-        # Overall scale from speed : silent when halted, full at V_MAX.
+        # Échelle globale selon la vitesse. PLANCHER de 0,14 quand les
+        # boucles tournent (voyage en cours) : la cabine garde un fond
+        # sonore (ventilation, câble) même À L'ARRÊT — avant, ça tombait
+        # à zéro sous 1 m/s → « le son d'ambiance se coupe en dessous de
+        # 1 m/s » (retour d'essai 2026-07-24). Les boucles ne tournent
+        # qu'entre départ et arrivée, donc le plancher ne s'applique pas
+        # à quai/au titre.
         v_norm = min(v / 10.0, 1.0)
-        overall = v_norm * 0.95  # new ceiling (was 0.35)
+        floor = 0.14 if (self._amb_playing or self._amb2_playing) else 0.0
+        overall = max(floor, v_norm * 0.95)
         # Duck ambient hard while the horn is sounding — update_ambient
         # runs every frame so it would otherwise undo start_horn()'s
         # snapshot-based ducking the very next tick.
@@ -5173,6 +5303,7 @@ class GameWidget(QWidget):
         self._last_panne_kind: str = ""
         self._welcome_played = False
         self._brake_snd_played = False
+        self._doors_quip_played = False
         self._arrival_played = False
         self._crash_played = False
         self._crossing_triggered = False
@@ -5440,6 +5571,7 @@ class GameWidget(QWidget):
             tr.doors_timer = 0.0
         self._welcome_played = False
         self._brake_snd_played = False
+        self._doors_quip_played = False
         self._arrival_played = False
         self._was_stopped_mid_tunnel = False
         # Trigger the real "return to station" announcement over the
@@ -5455,6 +5587,11 @@ class GameWidget(QWidget):
                       f"Reversing — return toward {dest_en}",
                       f"Inversion du sens — retour vers {dest_en}",
                       "warn")
+            # Pique sarcastique en mode Défi (retour d'essai : commentaire
+            # sarcastique au demi-tour).
+            if st.run_mode == "challenge":
+                _rq = random.choice(REVERSE_QUIPS)
+                add_event(st, "reverse_quip", _rq[1], _rq[0], "info")
         else:
             add_event(st, "reverse",
                       f"Preparing return trip toward {dest_en}",
@@ -5465,6 +5602,15 @@ class GameWidget(QWidget):
         st = self.state
         tr = st.train
         direction = st.selected_direction if not first else +1
+        # Après un CRASH à l'arrivée (mode Défi), R relance le voyage
+        # depuis la gare où la rame s'est écrasée — le RETOUR — et non
+        # depuis la gare de départ d'origine (retour d'essai 2026-07-23 :
+        # « quand on s'écrase dans une gare et qu'on fait R on part
+        # systématiquement de l'autre gare »). On lit la position réelle
+        # de la rame : plus proche de STOP_S ⇒ on repart en descente.
+        if st.crashed and not first:
+            direction = -1 if abs(tr.s - STOP_S) < abs(tr.s - START_S) else +1
+            st.selected_direction = direction
         tr.direction = direction
         # Start position depends on direction : climbing trip starts at
         # Val Claret (s = START_S), descent starts at Grande Motte
@@ -5559,6 +5705,8 @@ class GameWidget(QWidget):
         # affiché quelques secondes au-delà de l'arrivée précédente.
         st.challenge_emergency_used = False
         st.challenge_fault_hit = False
+        st.challenge_unsafe = False
+        st.manual_brake_held = False
         if st.challenge_best <= 0.0:
             st.challenge_best = self._load_challenge_best()
         st.events = []
@@ -5597,11 +5745,16 @@ class GameWidget(QWidget):
         st.crash_derail = False
         st.crash_kind = "buffer"
         st.crash_review_who = ""
+        st.crash_review_native = ""
         st.crash_review_txt = ""
+        st.challenge_review_who = ""
+        st.challenge_review_native = ""
+        st.challenge_review_txt = ""
         st.rebound_timer = 0.0
         self._last_panne_kind = ""
         self._welcome_played = False
         self._brake_snd_played = False
+        self._doors_quip_played = False
         self._arrival_played = False
         self._was_stopped_mid_tunnel = False
         self._mid_tunnel_stop_timer = 0.0
@@ -5868,6 +6021,7 @@ class GameWidget(QWidget):
                                   "Départ Grande Motte — 3032 m", "info")
                     self._welcome_played = False
                     self._brake_snd_played = False
+                    self._doors_quip_played = False
             # File 11 "Le funiculaire vous emmène en zone..." — arrival
             # message broadcast in the last ~220 m as the train rolls
             # quietly into the destination platform. Works for either
@@ -5904,6 +6058,14 @@ class GameWidget(QWidget):
                     and _welcome_ok):
                 self.sounds.play("welcome", lang=st.ann_lang, cooldown=600.0)
                 self._welcome_played = True
+            # Pique sarcastique une fois par trajet quand on ROULE portes
+            # ouvertes en mode Défi (retour d'essai : commentaire au fait
+            # de conduire portes ouvertes).
+            if (st.run_mode == "challenge" and not self._doors_quip_played
+                    and tr_welcome.doors_open and abs(tr_welcome.v) > 3.0):
+                _dq = random.choice(DOORS_OPEN_QUIPS)
+                add_event(st, "doors_quip", _dq[1], _dq[0], "alarm")
+                self._doors_quip_played = True
             # Freinage d'approche réel (real_brake_approach.wav, 20 s,
             # extrait du footage 4K) : une fois par trajet, au moment où
             # la rame décélère dans les ~100 derniers mètres. L'ambiance
@@ -6068,12 +6230,15 @@ class GameWidget(QWidget):
         err = abs(tr.s - ideal)
         st.challenge_docking_err = err
         precision = max(0.0, min(100.0, 100.0 * (1.0 - (err - 0.10) / 1.90)))
-        # Régularité : plein pot si aucune urgence ni panne subie.
+        # Régularité : plein pot si aucune urgence ni panne subie ni
+        # départ dangereux (portes ouvertes / cabine pas prête).
         reg = 100.0
         if st.challenge_emergency_used:
             reg -= 60.0
         if st.challenge_fault_hit:
             reg -= 40.0
+        if st.challenge_unsafe:
+            reg -= 50.0
         reg = max(0.0, reg)
         st.challenge_reg = reg
         comfort = st.score_comfort
@@ -6087,7 +6252,8 @@ class GameWidget(QWidget):
         tier = "great" if score >= 80.0 else "rough"
         rev = random.choice(PAX_REVIEWS[tier])
         st.challenge_review_who = rev[0]
-        st.challenge_review_txt = rev[2] if LANG == "en" else rev[1]
+        st.challenge_review_native = rev[1]
+        st.challenge_review_txt = rev[3] if LANG == "en" else rev[2]
         if score > st.challenge_best:
             st.challenge_best = score
             self._save_challenge_best(score)
@@ -6136,11 +6302,15 @@ class GameWidget(QWidget):
         if down:
             tr.speed_cmd = max(0.0, tr.speed_cmd - 0.35 * dt)
             any_action = True
-        # Emergency-style manual brake override : while held, forces the
-        # regulator off and commands full brake.
+        # Frein de service manuel (Espace / B / clic « FREIN maintenu ») :
+        # tant qu'il est tenu, il PRIME sur le régulateur (flag lu dans
+        # _regulator → demand_brake plein), sinon le régulateur ramenait
+        # tr.brake à 0 chaque frame et le frein « ne répondait pas »
+        # (retour d'essai 2026-07-24). Réaliste : frein de service à fond
+        # (2,5 m/s²) tant qu'on appuie.
+        st.manual_brake_held = brake_key
         if brake_key:
             tr.speed_cmd = max(0.0, tr.speed_cmd - 0.8 * dt)
-            tr.brake = min(1.0, tr.brake + 1.4 * dt)
             any_action = True
 
         # --- Dead-man vigilance (optional, off by default) : driver must
@@ -6426,8 +6596,16 @@ class GameWidget(QWidget):
             # seules les pinces Belleville sur rail agissent. L'urgence
             # engage donc directement le parachute (dernière chance
             # d'arrêter la rame emballée avant le butoir, mode chaos).
-            if st.train.cable_rupture:
+            if st.train.cable_rupture and not st.train.parachute_engaged:
                 st.train.parachute_engaged = True
+                add_event(
+                    st, "parachute",
+                    "PARACHUTE engaged (3.6 m/s²) — but gravity fights it "
+                    "on the slope, the runaway takes a long way to stop.",
+                    "PARACHUTE engagé (3,6 m/s²) — mais la gravité le "
+                    "combat en pente : l'arrêt de la rame emballée est long.",
+                    "alarm",
+                )
         elif k == Qt.Key.Key_D:
             tr = st.train
             # Interlocks : can't operate the doors while moving or while
@@ -6635,13 +6813,21 @@ class GameWidget(QWidget):
                                  or (tr.s >= STOP_S - 5.0))
                 reason_en = ""
                 reason_fr = ""
+                # Mode DÉFI (chaos) : les verrous « portes » sautent — on
+                # PEUT s'armer prêt portes ouvertes / en plein embarquement
+                # (à ses risques et périls ; ça se paiera au score et dans
+                # les avis clients). Les verrous urgence/panne restent.
+                chaos_ready = (st.run_mode == "challenge")
                 # Interlocks that ALWAYS apply (terminus or mid-tunnel) :
                 # doors must be closed, no electric stop, no vigilance
                 # fault, no active fault.
-                if tr.doors_open or tr.doors_cmd or tr.doors_timer > 0.0:
+                if (not chaos_ready
+                        and (tr.doors_open or tr.doors_cmd
+                             or tr.doors_timer > 0.0)):
                     reason_en = "doors not fully closed"
                     reason_fr = "portes pas totalement fermées"
-                elif getattr(self.sounds, "_close_seq_active", False):
+                elif (not chaos_ready
+                        and getattr(self.sounds, "_close_seq_active", False)):
                     reason_en = "doors-close chime still sounding"
                     reason_fr = "séquence sonore de fermeture en cours"
                 elif tr.electric_stop:
@@ -6716,12 +6902,38 @@ class GameWidget(QWidget):
                 return
             if st.departure_buzzer_remaining > 0.0:
                 return  # already sounding
-            if not (tr.ready and st.ghost_ready):
+            chaos_dep = (st.run_mode == "challenge")
+            if not tr.ready:
+                add_event(st, "dep",
+                          "Cannot start — arm READY (V) first",
+                          "Départ impossible — armez PRÊT (V) d'abord",
+                          "warn")
+                return
+            if not st.ghost_ready and not chaos_dep:
                 add_event(st, "dep",
                           "Cannot start — both cabins must be ready",
                           "Départ impossible — les deux rames doivent être prêtes",
                           "warn")
                 return
+            # Mode DÉFI : on PEUT partir sans que l'autre cabine soit
+            # prête et/ou portes ouvertes — départ dangereux, noté et
+            # commenté par les passagers (embarquement interrompu).
+            if chaos_dep and (not st.ghost_ready or tr.doors_open):
+                st.challenge_unsafe = True
+                if not st.ghost_ready and tr.doors_open:
+                    m_en = ("RECKLESS START — other cabin not ready AND "
+                            "doors open, passengers still boarding !")
+                    m_fr = ("DÉPART SAUVAGE — autre rame pas prête ET "
+                            "portes ouvertes, ça embarque encore !")
+                elif not st.ghost_ready:
+                    m_en = "RECKLESS START — the other cabin isn't ready !"
+                    m_fr = "DÉPART SAUVAGE — l'autre rame n'est pas prête !"
+                else:
+                    m_en = ("RECKLESS START — doors still open, passengers "
+                            "boarding !")
+                    m_fr = ("DÉPART SAUVAGE — portes encore ouvertes, ça "
+                            "embarque !")
+                add_event(st, "dep_unsafe", m_en, m_fr, "alarm")
             # Traction interlocks : don't fire the buzzer / doors chime
             # if the train physically can't accelerate once the buzzer
             # ends. Buzzing at the platform while the train stays put
@@ -7024,7 +7236,7 @@ class GameWidget(QWidget):
         if flash > 0:
             p.fillRect(0, 0, w, h, QColor(180, 20, 20, flash))
         p.fillRect(0, 0, w, h, QColor(0, 0, 0, 150))
-        bw, bh = 620, 340
+        bw, bh = 620, 388
         bx, by = (w - bw) / 2, h * 0.24
         card = QRectF(bx, by, bw, bh)
         p.setBrush(QBrush(QColor(24, 12, 14, 245)))
@@ -7058,8 +7270,8 @@ class GameWidget(QWidget):
                        | Qt.AlignmentFlag.AlignTop
                        | Qt.TextFlag.TextWordWrap),
                    st.crash_msg)
-        # Avis passager 1 étoile (encadré, stylé nationalité).
-        rev = QRectF(bx + 24, by + 160, bw - 48, 116)
+        # Avis passager 1 étoile (encadré) : nom, VO, puis traduction.
+        rev = QRectF(bx + 24, by + 158, bw - 48, 156)
         p.setBrush(QBrush(QColor(35, 30, 22, 230)))
         p.setPen(_cached_pen(QColor(120, 100, 70), 1.5))
         p.drawRoundedRect(rev, 8, 8)
@@ -7067,15 +7279,24 @@ class GameWidget(QWidget):
         p.setPen(_cached_pen(QColor(255, 210, 120)))
         p.drawText(QRectF(rev.x() + 12, rev.y() + 8, rev.width() - 24, 18),
                    int(Qt.AlignmentFlag.AlignLeft),
-                   T("Passenger review", "Avis passager")
-                   + "   ★☆☆☆☆")
+                   T("Passenger review", "Avis passager") + "   ★☆☆☆☆")
         p.setFont(_cached_font("Segoe UI", 10))
         p.setPen(_cached_pen(QColor(220, 210, 200)))
         p.drawText(QRectF(rev.x() + 12, rev.y() + 8, rev.width() - 24, 18),
                    int(Qt.AlignmentFlag.AlignRight), st.crash_review_who)
+        # Texte en langue d'origine (italique, gris clair).
+        f_native = _cached_font("Segoe UI", 10)
+        f_native.setItalic(True)
+        p.setFont(f_native)
+        p.setPen(_cached_pen(QColor(190, 200, 210)))
+        p.drawText(QRectF(rev.x() + 12, rev.y() + 30, rev.width() - 24, 56),
+                   int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop
+                       | Qt.TextFlag.TextWordWrap),
+                   st.crash_review_native)
+        # Traduction (FR/EN).
         p.setFont(_cached_font("Segoe UI", 11))
         p.setPen(_cached_pen(QColor(235, 230, 225)))
-        p.drawText(QRectF(rev.x() + 12, rev.y() + 30, rev.width() - 24, 78),
+        p.drawText(QRectF(rev.x() + 12, rev.y() + 88, rev.width() - 24, 60),
                    int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop
                        | Qt.TextFlag.TextWordWrap),
                    st.crash_review_txt)
@@ -7098,7 +7319,7 @@ class GameWidget(QWidget):
         else:
             grade = T("retry", "à retravailler")
             col = QColor(230, 130, 80)
-        bw, bh = 520, 262
+        bw, bh = 520, 272
         bx, by = (w - bw) / 2, h * 0.20
         card = QRectF(bx, by, bw, bh)
         # Fondu d'entrée/sortie sur le dernier tiers du chrono.
@@ -7132,27 +7353,35 @@ class GameWidget(QWidget):
                    int(Qt.AlignmentFlag.AlignHCenter),
                    T(f"best {st.challenge_best:.0f} / 100",
                      f"record {st.challenge_best:.0f} / 100"))
-        # Avis passager (circonstancié great/rough).
+        # Avis passager (circonstancié great/rough) : VO + traduction.
         if st.challenge_review_txt:
             stars = "★★★★★" if score >= 90 else (
                 "★★★★☆" if score >= 80 else (
                     "★★★☆☆" if score >= 60 else "★★☆☆☆"))
-            revr = QRectF(bx + 18, by + 146, bw - 36, 100)
+            revr = QRectF(bx + 18, by + 146, bw - 36, 108)
             p.setBrush(QBrush(QColor(30, 34, 48, alpha)))
             p.setPen(_cached_pen(QColor(90, 110, 150), 1.2))
             p.drawRoundedRect(revr, 8, 8)
             p.setFont(_cached_font("Segoe UI", 9, QFont.Weight.Bold))
             p.setPen(_cached_pen(QColor(180, 200, 240)))
-            p.drawText(QRectF(revr.x() + 10, revr.y() + 6, revr.width() - 20, 16),
+            p.drawText(QRectF(revr.x() + 10, revr.y() + 5, revr.width() - 20, 15),
                        int(Qt.AlignmentFlag.AlignLeft),
                        T("Passenger", "Avis passager") + "  " + stars)
             p.setFont(_cached_font("Segoe UI", 9))
             p.setPen(_cached_pen(COLOR_TEXT_DIM))
-            p.drawText(QRectF(revr.x() + 10, revr.y() + 6, revr.width() - 20, 16),
+            p.drawText(QRectF(revr.x() + 10, revr.y() + 5, revr.width() - 20, 15),
                        int(Qt.AlignmentFlag.AlignRight), st.challenge_review_who)
+            f_nat = _cached_font("Segoe UI", 9)
+            f_nat.setItalic(True)
+            p.setFont(f_nat)
+            p.setPen(_cached_pen(QColor(185, 195, 205)))
+            p.drawText(QRectF(revr.x() + 10, revr.y() + 22, revr.width() - 20, 40),
+                       int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop
+                           | Qt.TextFlag.TextWordWrap),
+                       st.challenge_review_native)
             p.setFont(_cached_font("Segoe UI", 10))
             p.setPen(_cached_pen(QColor(225, 228, 235)))
-            p.drawText(QRectF(revr.x() + 10, revr.y() + 26, revr.width() - 20, 68),
+            p.drawText(QRectF(revr.x() + 10, revr.y() + 62, revr.width() - 20, 42),
                        int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop
                            | Qt.TextFlag.TextWordWrap),
                        st.challenge_review_txt)
@@ -12065,13 +12294,21 @@ class GameWidget(QWidget):
                 ("P / Esc", T("pause / resume", "pause / reprise")),
                 ("M", T("mode : normal / challenge / faults",
                         "mode : normal / défi / pannes")),
-                ("", T("DÉFI: manual, no auto-dock — scored on comfort, "
-                       "stop precision & discipline; alarm if too fast; "
-                       "crash into the buffer / derail if reckless",
-                       "DÉFI : manuel, sans auto-dock — noté sur confort, "
-                       "précision d'arrêt & régularité ; alarme si trop "
-                       "vite ; collision au butoir / déraillement si "
-                       "imprudent")),
+                ("", T("DÉFI (CHAOS): no safety net — you may leave doors "
+                       "open / other cabin not ready; full command on a "
+                       "load can RUN AWAY (overspeed) → motor blows → CABLE "
+                       "SNAPS (tension→0); brake it or crash at the buffer, "
+                       "derail at the switch, or hit the other cabin. "
+                       "Scored on comfort, stop precision & discipline; "
+                       "passengers leave a review (native lang + translation)",
+                       "DÉFI (CHAOS) : plus de sécu — départ portes "
+                       "ouvertes / autre rame pas prête possible ; consigne "
+                       "à fond en charge = EMBALLEMENT (survitesse) → moteur "
+                       "explosé → CÂBLE ROMPU (tension→0) ; freinez ou "
+                       "collision au butoir, déraillement à l'aiguillage, ou "
+                       "choc avec l'autre rame. Noté sur confort, précision "
+                       "d'arrêt & régularité ; les passagers laissent un "
+                       "avis (langue d'origine + traduction)")),
                 ("F", T("fault picker (only in faults mode)",
                         "sélecteur de panne (mode pannes seulement)")),
                 ("L", T("language FR / EN", "langue FR / EN")),
@@ -12153,6 +12390,8 @@ class GameWidget(QWidget):
               "• Menu Aide : vérifier les MAJ GitHub, ou signaler un bug anonymement (ticket pré-rempli)"),
             T("• Catastrophic fault (cable rupture, fire, brake fade, vent failure) : trip is OVER. Wait through evac, then press R for a new trip from menu",
               "• Panne catastrophique (rupture câble, feu, frein HS, désenfumage HS) : voyage TERMINÉ. Attendre l'évac, puis R pour un nouveau voyage depuis le menu"),
+            T("• CHAOS mode : if the cable snaps in a runaway, the parachute brake (Shift) still works but fights gravity — apply it EARLY; after a crash, R restarts from the station you crashed at (the return)",
+              "• Mode CHAOS : si le câble rompt en emballement, le frein parachute (Shift) marche encore mais lutte contre la gravité — serrez TÔT ; après un crash, R relance depuis la gare où vous vous êtes écrasé (le retour)"),
         ]
         for i, line in enumerate(tips):
             p.drawText(QRectF(tips_box.x() + 12, tips_box.y() + 30 + i * 16,
