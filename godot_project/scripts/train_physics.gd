@@ -34,6 +34,10 @@ var lights_head: bool = false
 var maint_brake: bool = true             # frein parking (drum)
 var emergency_brake: bool = false        # frein urgence (panne grave)
 var speed_cap_external: float = INF      # plafond vitesse imposé par panne (m/s)
+var abt_hold: bool = false               # aiguillage Abt désaligné → arrêt
+                                         # imposé AVANT l'évitement
+var cap_over_timer: float = 0.0          # s passées > plafond de panne + 1
+                                         # sans décélération franche
 var pax_car1: int = 0
 var pax_car2: int = 0
 var ghost_pax: int = 0                   # passagers wagon opposé
@@ -201,7 +205,11 @@ func step(dt: float) -> void:
 			_sag_main = move_toward(_sag_main, 0.0, SAG_RETENSION_M_S * dt)
 			_sag_ghost = move_toward(_sag_ghost, 0.0, SAG_RETENSION_M_S * dt)
 
-	var v_limit: float = minf(PNConstants.V_MAX, speed_cap_external)
+	# AUDIT 2026-07-23 (port du PC v1.12.21) : le plafond DE PANNE ne
+	# passe plus par v_limit (fondu moteur + bleed) — il est l'affaire du
+	# régulateur (rampe 0,60 + feed-forward) et de la surveillance
+	# cap_over_timer. v_limit = V_MAX machine uniquement.
+	var v_limit: float = PNConstants.V_MAX
 
 	# --- Régulateur (met à jour throttle et brake) ------------------------
 	_regulator(dt, m_up, m_down, m_total, g_slope, theta)
@@ -381,6 +389,23 @@ func step(dt: float) -> void:
 
 	a = acc
 
+	# Surveillance du plafond de panne (port du PC v1.12.21) : la rampe
+	# du régulateur (0,60 m/s²) doit ramener v sous le cap ; si v reste
+	# au-dessus de cap + 1 m/s plus de 12 s SANS décélération franche
+	# (adhérence perdue, frein insuffisant…), l'urgence tombe toute
+	# seule — la surveillance réelle ne laisse jamais rouler un défaut.
+	if not emergency and trip_started and speed_cap_external < PNConstants.V_MAX:
+		var decel_along: float = -acc * (1.0 if v > 0.0 else -1.0)
+		if absf(v) > speed_cap_external + 1.0 and decel_along < 0.25:
+			cap_over_timer += dt
+			if cap_over_timer > 12.0:
+				emergency = true
+				print("[Physics] plafond de panne dépassé trop longtemps — urgence auto")
+		else:
+			cap_over_timer = 0.0
+	else:
+		cap_over_timer = 0.0
+
 	# --- Tension câble : modèle DEUX BRINS, max à la poulie ----------------
 	# Chaque brin, au niveau de la poulie motrice (gare haute), porte :
 	#   - le poids de SA rame le long de SA pente locale,
@@ -479,6 +504,22 @@ func _regulator(
 	else:
 		dist_to_stop = maxf(0.0, s - PNConstants.START_S)
 
+	# Aiguillage Abt désaligné : le point d'arrêt de l'interlock (15 m
+	# en amont de l'aiguillage d'entrée) DEVIENT la cible d'arrêt si la
+	# rame est en amont — toute la machinerie d'approche (enveloppe,
+	# feed-forward, creep, docking) s'applique alors naturellement au
+	# point de hold. Un simple min() sur l'enveloppe sans ff faisait
+	# dépasser l'aiguillage de ~175 m (mesuré au banc). Rame déjà dans
+	# l'évitement : le cap de panne s'applique jusqu'à la sortie.
+	if abt_hold:
+		var d_hold: float
+		if direction > 0:
+			d_hold = maxf(0.0, (PNConstants.PASSING_START - 15.0) - s)
+		else:
+			d_hold = maxf(0.0, s - (PNConstants.PASSING_END + 15.0))
+		if d_hold > 0.0:
+			dist_to_stop = minf(dist_to_stop, d_hold)
+
 	var v_travel: float = v * float(direction)
 
 	# Gravité projetée sur direction de voyage — avec la pente locale de
@@ -505,16 +546,25 @@ func _regulator(
 	var ramp_up: float = 0.35
 	var ramp_down: float = 0.25
 	var driver_target: float = speed_cmd * PNConstants.V_MAX
-	# Plafond de panne : borne aussi la CIBLE, pas seulement v_limit côté
-	# physique (porté du PC) — sinon err reste énorme, le régulateur
-	# pousse à fond et la limite hache la puissance en continu.
-	if speed_cap_external < PNConstants.V_MAX:
-		driver_target = minf(driver_target, speed_cap_external)
+	# Plafond de panne : borne la CIBLE et la rejoint par une rampe
+	# DÉDIÉE de 0,60 m/s² (port du PC v1.12.21) — réduction franche de
+	# type frein de service modulé, mais jamais la coupure sèche
+	# d'avant l'audit (« le funi réduit sa vitesse quasi
+	# instantanément »).
+	if speed_cap_external < PNConstants.V_MAX and driver_target > speed_cap_external:
+		driver_target = speed_cap_external
+		ramp_down = 0.60
+	# Feed-forward de la PENTE de consigne (port du PC v1.12.21) : sans
+	# lui, le P (k_a = 0,35) doit accumuler ~1,7 m/s d'erreur pour tenir
+	# une rampe de 0,6 — la rame traînait au-dessus du plafond et la
+	# surveillance cap_over déclenchait à tort.
+	var eff_prev: float = speed_cmd_eff
 	var de: float = driver_target - speed_cmd_eff
 	if de > 0.0:
 		speed_cmd_eff = minf(driver_target, speed_cmd_eff + ramp_up * dt)
 	elif de < 0.0:
 		speed_cmd_eff = maxf(driver_target, speed_cmd_eff - ramp_down * dt)
+	var a_cmd_ff: float = (speed_cmd_eff - eff_prev) / dt if dt > 0.0 else 0.0
 
 	var target_v: float = minf(speed_cmd_eff, v_envelope)
 
@@ -580,7 +630,11 @@ func _regulator(
 		# pas seulement la décélération de croisière. a_ff_env anticipe la
 		# pente de l'enveloppe (approche/docking) pour que le P ne serve
 		# qu'aux transitoires.
-		var a_des: float = clampf(a_ff_env + err * k_a,
+		# Les deux feed-forwards (enveloppe d'approche, pente de
+		# consigne) sont des CIBLES de décélération : on prend la plus
+		# contraignante, pas la somme (port du PC v1.12.21).
+		var a_ff_total: float = minf(a_ff_env, minf(0.0, a_cmd_ff))
+		var a_des: float = clampf(a_ff_total + err * k_a,
 			-PNConstants.A_BRAKE_NORMAL, PNConstants.A_TARGET)
 		var f_req: float = m_total * a_des + f_ff
 		if f_req >= 0.0:
