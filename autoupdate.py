@@ -300,12 +300,25 @@ def _swap_windows_exe(new_exe: Path) -> None:
     #  - tout est journalisé dans %TEMP%/perce_neige_update_swap.log ;
     #  - l'appli est RELANCÉE même si le swap échoue (l'ancienne version
     #    plutôt que rien), pour ne jamais laisser l'utilisateur sans app.
+    backup = current.with_name(current.stem + ".old.exe")
+    # Séquence SÛRE (retour d'essai 2026-07-24 « à la fin du téléchargement
+    # ça bug ») : l'ancien batch faisait `del TARGET` PUIS `move NEW
+    # TARGET`. Si le move échouait (antivirus verrouillant le .exe
+    # fraîchement téléchargé, dossier non inscriptible…), l'exe était
+    # supprimé SANS remplaçant → l'appli disparaissait, jamais relancée.
+    # Nouvelle logique atomique-ish, sans jamais laisser l'utilisateur
+    # sans exe :
+    #   1. renommer TARGET → TARGET.old (libère le nom cible)
+    #   2. move NEW → TARGET (réessayé : NEW peut rester verrouillé qq s)
+    #   3. si TARGET recréé → OK : supprimer TARGET.old, relancer
+    #   4. si échec → RESTAURER TARGET.old → TARGET, relancer l'ancienne
     script = (
         "@echo off\r\n"
         "setlocal enableextensions\r\n"
         f'set "PID={pid}"\r\n'
         f'set "TARGET={current}"\r\n'
         f'set "NEW={new_exe}"\r\n'
+        f'set "BACKUP={backup}"\r\n'
         f'set "LOG={bat_log}"\r\n'
         'echo [swap] start pid=%PID% > "%LOG%"\r\n'
         "set /a WAIT=0\r\n"
@@ -319,20 +332,42 @@ def _swap_windows_exe(new_exe: Path) -> None:
         ")\r\n"
         ":doswap\r\n"
         'echo [swap] pid gone, swapping >> "%LOG%"\r\n'
-        'del /Q "%TARGET%" >nul 2>&1\r\n'
+        'del /Q "%BACKUP%" >nul 2>&1\r\n'
+        # 1. écarte l'ancien exe (réessayé : il peut rester verrouillé un
+        #    court instant après la sortie du process).
+        "set /a TRY=0\r\n"
+        ":renloop\r\n"
+        'move /Y "%TARGET%" "%BACKUP%" >nul 2>&1\r\n'
+        'if exist "%TARGET%" (\r\n'
+        "  set /a TRY+=1\r\n"
+        '  echo [swap] rename retry %TRY% >> "%LOG%"\r\n'
+        "  if %TRY% geq 15 goto relaunch\r\n"
+        "  timeout /t 1 /nobreak >nul\r\n"
+        "  goto renloop\r\n"
+        ")\r\n"
+        # 2. installe le nouveau à la place.
         "set /a TRY=0\r\n"
         ":moveloop\r\n"
         'move /Y "%NEW%" "%TARGET%" >nul 2>&1\r\n'
-        "if exist \"%NEW%\" (\r\n"
+        'if not exist "%TARGET%" (\r\n'
         "  set /a TRY+=1\r\n"
         '  echo [swap] move retry %TRY% >> "%LOG%"\r\n'
-        "  if %TRY% geq 10 goto relaunch\r\n"
+        "  if %TRY% geq 15 goto restore\r\n"
         "  timeout /t 1 /nobreak >nul\r\n"
         "  goto moveloop\r\n"
         ")\r\n"
+        # 3. succès → supprime la sauvegarde et relance la NOUVELLE.
+        'echo [swap] ok, new installed >> "%LOG%"\r\n'
+        'del /Q "%BACKUP%" >nul 2>&1\r\n'
+        "goto relaunch\r\n"
+        # 4. échec d'installation → restaure l'ANCIENNE (ne jamais
+        #    laisser l'utilisateur sans exe).
+        ":restore\r\n"
+        'echo [swap] move failed, restoring backup >> "%LOG%"\r\n'
+        'if exist "%BACKUP%" move /Y "%BACKUP%" "%TARGET%" >nul 2>&1\r\n'
         ":relaunch\r\n"
         'echo [swap] relaunch %TARGET% >> "%LOG%"\r\n'
-        'start "" "%TARGET%"\r\n'
+        'if exist "%TARGET%" start "" "%TARGET%"\r\n'
         '(goto) 2>nul & del "%~f0"\r\n'
     )
     swap_bat.write_bytes(script.encode("cp1252", errors="replace"))
