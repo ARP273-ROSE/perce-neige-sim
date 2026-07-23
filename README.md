@@ -14,6 +14,26 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 
 ## Quoi de neuf — v1.12.x (audit + retours d'essai terrain, juillet 2026)
 
+**v1.12.26** — pannes moins fréquentes + retenue = régénération (PWA + PC) :
+- **Les pannes ne fusent plus** (« une toutes les 3 secondes ») : le
+  scheduler tirait une probabilité PAR IMAGE (`random() > 0.0025`) —
+  calibrée pour 60 Hz, mais sur un écran 144/240 Hz les pannes
+  arrivaient 2,4 à 4× plus vite. Remplacé par un hasard exponentiel
+  indépendant du framerate (λ = 1/45 s + cooldown 20 s → un incident
+  toutes les ~60 s en moyenne, le temps de gérer chacun).
+- **La retenue en descente est enfin de la RÉGÉNÉRATION, pas du frein**
+  (« sur le PC il n'y a pas marqué régénération mais un pourcentage de
+  frein ») : physiquement, un funiculaire retient une descente chargée
+  par l'entraînement en génératrice (~42 kWh récupérés par descente,
+  datasheet CFD), pas par le frein de service à friction — qui ne sert
+  qu'à l'arrêt final et à l'urgence. Le modèle applique désormais une
+  vraie force de freinage de l'entraînement (`regen_level`) : en
+  descente chargée le frein de service reste à **0 %** et la jauge
+  affiche la puissance **récupérée** (cyan « RÉGÉN »), avec bascule à
+  hystérésis. Refonte appliquée aux deux moteurs physiques (PC + 3D) ;
+  décélérations et distances d'arrêt inchangées (mêmes forces, seule
+  l'attribution frein↔drive change).
+
 **v1.12.25** — vue extérieure orbitale (PWA + PC) :
 - **La vue « ensemble » n'est plus figée** : en vue extérieure (bouton
   VUE sur la PWA, touche **O** sur le PC avec la 3D embarquée F4),

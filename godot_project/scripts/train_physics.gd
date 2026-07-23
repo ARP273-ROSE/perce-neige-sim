@@ -24,7 +24,11 @@ var direction: int = 1                   # +1 montée, -1 descente
 var speed_cmd: float = 0.0               # setpoint conducteur (0..1)
 var speed_cmd_eff: float = 0.0           # setpoint effectif (slew-limited, m/s)
 var throttle: float = 0.0                # demande moteur interne (0..1)
-var brake: float = 0.0                   # frein service (0..1)
+var brake: float = 0.0                   # frein service à FRICTION (0..1)
+var regen_level: float = 0.0             # freinage de l'ENTRAÎNEMENT en
+                                         # génératrice (0..1) — vrai organe
+                                         # de retenue de la descente, pas le
+                                         # frein de service (audit 2026-07-24)
 var emergency: bool = false              # frein urgence latché
 var emergency_ramp: float = 0.0          # rampe engagement (0..1)
 
@@ -229,6 +233,11 @@ func step(dt: float) -> void:
 	var f_motor_power_cap: float = p_eff / v_eff
 	var f_motor_max: float = minf(PNConstants.F_STALL, f_motor_power_cap)
 	var f_motor: float = throttle * f_motor_max * float(direction)
+	# Force de FREINAGE PAR L'ENTRAÎNEMENT (génératrice) : oppose la
+	# marche, même enveloppe que la traction. Retient la descente
+	# chargée (frein de service à ~0 %). Coupée si le chemin de force
+	# est ouvert (drive_off) ou en urgence — voir plus bas.
+	var f_regen: float = -regen_level * f_motor_max * float(direction)
 
 	# Ne pas pomper de puissance à la limite — FONDU sur 0,25 m/s au-delà
 	# de v_limit au lieu de la coupure sèche : l'ancien tout-ou-rien
@@ -271,23 +280,32 @@ func step(dt: float) -> void:
 	if absf(v) > 0.05:
 		f_brake = -signf(v) * a_brk * m_total
 
+	# Le freinage par l'entraînement partage le chemin de force du moteur :
+	# coupé dès que celui-ci l'est (portes, hors trip, câble rompu) ou en
+	# urgence (le frein de sécurité prend le relais).
+	# (les pannes « stoppantes »/catastrophiques du 3D passent par
+	# emergency → f_regen coupé ci-dessous, pas besoin d'un flag câble.)
+	var drive_off: bool = doors_open or not trip_started
+	if drive_off or emergency or emergency_ramp > 0.0:
+		f_regen = 0.0
+
 	# Somme et intégration
-	var net: float = f_motor + f_grav_net + f_roll + f_brake
+	var net: float = f_motor + f_regen + f_grav_net + f_roll + f_brake
 	var acc: float = net / m_total
 
-	# Cap accel moteur (confort) — soft-start progressive.
-	# acc_pre_cap mémorisé : l'écart (acc_pre_cap − acc) est la retenue
-	# active de l'entraînement quand la gravité pousse plus fort que la
-	# rampe — c'est de la puissance RÉGÉNÉRÉE, affichée plus bas.
-	var acc_pre_cap: float = acc
-	if not emergency and brake < 0.05:
+	# Cap accel moteur (confort) — soft-start progressive. Retenue
+	# délibérée = frein de service OU régén : sans inclure regen_level,
+	# le cap bridait la décélération commandée (arrêt de service mou),
+	# la retenue passant désormais par la régén (audit 2026-07-24).
+	var braking_cmd: bool = brake >= 0.05 or regen_level >= 0.05
+	if not emergency:
 		var v_abs: float = absf(v)
 		var soft_cap: float = PNConstants.A_START + \
 			(PNConstants.A_MAX_REG - PNConstants.A_START) * \
 			minf(1.0, v_abs / PNConstants.V_SOFT_RAMP)
 		if acc > soft_cap:
 			acc = soft_cap
-		elif acc < -soft_cap:
+		elif acc < -soft_cap and not braking_cmd:
 			acc = -soft_cap
 
 	# Kill creep final — UNIQUEMENT quand l'arrêt est voulu (régulateur en
@@ -430,31 +448,13 @@ func step(dt: float) -> void:
 	) / 10.0
 
 	# --- Puissance ------------------------------------------------------
-	var power_signed_kw: float = (f_motor * v) / 1000.0
-	if power_signed_kw >= 0.0:
-		power_kw = power_signed_kw
-		regen_kw = 0.0
-	else:
-		power_kw = 0.0
-		regen_kw = -power_signed_kw * 0.80
-
-	# Retenue régénératrice : moteur coupé, la gravité pousse dans le sens
-	# de marche (rame lourde en descente) → l'entraînement retient via le
-	# câble. Force de retenue = excédent écrêté par la rampe de confort
-	# + frein de service en modulation. Rendement chaîne ~0,80 (roue →
-	# machine DC → réseau, cf. datasheet CFD : ~42 kWh récupérés par
-	# descente chargée).
-	# Seuil 2 000 N (et plus f_motor == 0.0 exact) : avec les fondus
-	# d'autorité et de limite, la force moteur frôle zéro sans y être —
-	# l'égalité stricte faisait basculer la jauge RÉGEN↔PUISSANCE en
-	# claquements.
-	if f_motor * float(direction) < 2000.0 and not emergency \
-			and f_grav_net * float(direction) > 0.0 and absf(v) > 0.3:
-		var f_retenue: float = (acc_pre_cap - acc) * float(direction) * m_total \
-			+ a_brk * m_total
-		if f_retenue > 0.0:
-			regen_kw = f_retenue * absf(v) * 0.80 / 1000.0
-			power_kw = 0.0
+	# Traction : le moteur tire → puissance consommée. Régén :
+	# l'entraînement freine en génératrice (f_regen) → puissance
+	# récupérée = |F·v|·0,80 (roue → machine DC → réseau ; ~42 kWh par
+	# descente chargée). Vraie force du modèle désormais, plus une
+	# heuristique — le frein de service reste à ~0 % en marche normale.
+	power_kw = maxf(0.0, (f_motor * v) / 1000.0)
+	regen_kw = absf(f_regen * v) * 0.80 / 1000.0
 
 	# Lissage affichage (EMA τ ≈ 0.3 s)
 	var alpha: float = minf(1.0, dt / 0.3)
@@ -494,6 +494,7 @@ func _regulator(
 		speed_cmd = maxf(0.0, speed_cmd - 0.5 * dt)
 		speed_cmd_eff = maxf(0.0, speed_cmd_eff - 0.5 * dt)
 		throttle = 0.0
+		regen_level = 0.0
 		_reg_hold = true
 		return
 
@@ -618,6 +619,7 @@ func _regulator(
 
 	var demand_throttle: float
 	var demand_brake: float
+	var demand_regen: float = 0.0
 	_reg_hold = target_v < 0.01 and v_travel < 0.4
 	if _reg_hold:
 		demand_throttle = 0.0
@@ -648,13 +650,25 @@ func _regulator(
 			demand_throttle = clampf(f_req / maxf(f_motor_max, 1.0), 0.0, 1.0)
 			demand_brake = 0.0
 		else:
+			# Retenue : l'ENTRAÎNEMENT freine en génératrice (le vrai
+			# organe de retenue en descente chargée, ~42 kWh/descente),
+			# le frein de service à friction ne prend que le débordement
+			# au-delà de l'enveloppe du drive (audit 2026-07-24).
 			demand_throttle = 0.0
-			demand_brake = clampf(-f_req / (PNConstants.A_BRAKE_NORMAL * m_total), 0.0, 1.0)
+			var f_need: float = -f_req
+			var f_regen_max: float = maxf(f_motor_max, 1.0)
+			demand_regen = clampf(f_need / f_regen_max, 0.0, 1.0)
+			var overflow: float = f_need - f_regen_max
+			demand_brake = clampf(overflow / (PNConstants.A_BRAKE_NORMAL \
+				* m_total), 0.0, 1.0) if overflow > 0.0 else 0.0
 
-	# Slew throttle et brake
+	# Slew throttle, regen et brake
 	var slew: float = 1.5 * dt
 	var dth: float = clampf(demand_throttle - throttle, -slew, slew)
 	throttle = clampf(throttle + dth, 0.0, 1.0)
+
+	var drg: float = clampf(demand_regen - regen_level, -slew, slew)
+	regen_level = clampf(regen_level + drg, 0.0, 1.0)
 
 	var db: float = clampf(demand_brake - brake, -2.5 * dt, 2.5 * dt)
 	brake = clampf(brake + db, 0.0, 1.0)
@@ -810,6 +824,7 @@ func reverse_trip() -> bool:
 	speed_cmd = 0.0
 	speed_cmd_eff = 0.0
 	throttle = 0.0
+	regen_level = 0.0
 	brake = 0.0
 	maint_brake = true
 	trip_started = false
