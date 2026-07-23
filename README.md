@@ -14,6 +14,19 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 
 ## Quoi de neuf — v1.12.x (audit + retours d'essai terrain, juillet 2026)
 
+**v1.12.35** — alarme survitesse, à-coup de câble, ambiance, altitude :
+- **Alarme rouge « TROP VITE »** au pupitre (clignotante) dès que la
+  vitesse ne permet plus de s'arrêter au repère au frein de service —
+  purement **indicative**, le sim n'intervient pas (à toi de freiner).
+- **À-coup de câble à la collision** : l'impact fait bondir la jauge de
+  tension (∝ vitesse d'impact), en plus de la secousse d'écran.
+- **Ambiance de gare à l'approche** : jouée dès ~45 m du quai (par
+  position, plus par la vitesse) — fini le silence pendant le fluage
+  d'entrée en gare, l'ambiance ne « reprend » plus seulement après
+  l'arrêt.
+- **Altitude déplacée** dans le tableau latéral, juste sous le
+  **Dénivelé** (au lieu de l'en-tête du pupitre).
+
 **v1.12.34** — collision en bout de voie (mode Défi) :
 - En **mode Défi**, le filet d'auto-docking Von Roll est **levé** : c'est
   au conducteur de freiner (la consigne devient réactive, 2,4 m/s²). Si
