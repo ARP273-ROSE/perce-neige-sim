@@ -91,7 +91,7 @@ try:
 except ImportError:
     _GODOT_BRIDGE_OK = False
 
-VERSION = "1.12.38"
+VERSION = "1.12.39"
 APP_NAME = "Perce-Neige Simulator"
 
 
@@ -826,7 +826,12 @@ class GameState:
     crash_speed: float = 0.0                 # vitesse d'impact (m/s)
     crash_msg: str = ""                      # message sarcastique tiré
     crash_shake_t: float = 0.0               # chrono de secousse écran
-    crash_derail: bool = False               # collision butoir vs déraillement
+    crash_derail: bool = False               # (legacy) True si déraillement
+    crash_kind: str = "buffer"               # buffer | derail | cabin
+    crash_review_who: str = ""               # avis passager : nom + drapeau
+    crash_review_txt: str = ""               # avis passager : texte
+    challenge_review_who: str = ""           # avis passager (bandeau défi)
+    challenge_review_txt: str = ""
     v_profile: float = 99.0                  # vitesse d'enveloppe auto à
                                              # la position courante (alarme)
     panne_active: bool = False
@@ -1188,7 +1193,12 @@ class Physics:
         # du régulateur. Il se réfère désormais au V_MAX MACHINE : le
         # plafond de panne est l'affaire du régulateur (rampe 0,60) et du
         # filet cap_over_timer (urgence auto si dépassement persistant).
-        drive_path_ok = not tr.cable_rupture and not tr.aux_power_fault
+        # CHAOS (mode Défi) : le bleed régénératif qui plafonne à V_MAX
+        # est LEVÉ → la rame peut s'emballer en survitesse (le conducteur
+        # doit freiner). En Normal/Auto/Pannes, le plafond tient.
+        chaos = (st.run_mode == "challenge")
+        drive_path_ok = (not tr.cable_rupture and not tr.aux_power_fault
+                         and not chaos)
         if (new_v * tr.direction > V_MAX
                 and f_motor * tr.direction <= 1000.0 and drive_path_ok):
             excess = new_v * tr.direction - V_MAX
@@ -1221,6 +1231,17 @@ class Physics:
         buffer_clamp = False
         clamp_lo = START_S - (1.2 if st.finished else 0.0)
         clamp_hi = STOP_S + (1.2 if st.finished else 0.0)
+        # En Défi, la rame qui ARRIVE TROP VITE doit visuellement rouler
+        # jusqu'au VRAI butoir (BUMPER_CLEAR = 10 m au-delà du repère
+        # d'arrêt) avant de percuter — sinon le crash se déclenchait au
+        # repère, 10 m avant le mur, et « le crash a lieu avant que la
+        # visu montre qu'on a tapé » (retour d'essai 2026-07-24). Hors
+        # arrivée normale (non finished), on repousse donc le point de
+        # collision au mur ; le repère STOP_S reste la cible du score de
+        # précision.
+        if st.run_mode == "challenge" and not st.finished:
+            clamp_hi = STOP_S + BUMPER_CLEAR
+            clamp_lo = START_S - BUMPER_CLEAR
         # COLLISION EN BOUT DE VOIE : si la rame atteint le repère d'arrêt
         # à plus de CRASH_SPEED sans s'être arrêtée normalement, elle
         # percute le butoir. N'arrive QUE quand le filet d'auto-dock est
@@ -1241,16 +1262,24 @@ class Physics:
         # déraillant.
         SWITCH_DERAIL_V = 13.5
         in_switch = PASSING_START <= tr.s <= PASSING_END
+        # Câble rompu : l'AUTRE rame a déclenché son frein et s'est
+        # immobilisée à l'évitement (voie opposée). La vôtre, découplée
+        # et emballée, la percute en l'atteignant (> 1,5 m/s).
+        cabin_hit = (tr.cable_rupture and in_switch and abs(tr.v) > 1.5)
+        # Déraillement à l'aiguillage en survitesse (sans rupture).
         derail = (st.run_mode == "challenge" and in_switch
                   and abs(tr.v) > SWITCH_DERAIL_V)
-        if (derail and not st.crashed and not st.finished
-                and st.trip_started):
-            _trigger_crash(st, abs(tr.v), derail=True)
+        _fire = (not st.crashed and not st.finished and st.trip_started)
+        if cabin_hit and _fire:
+            _trigger_crash(st, abs(tr.v), kind="cabin")
             tr.v = 0.0
             a = 0.0
-        elif (hit_end and not st.crashed and not st.finished
-                and st.trip_started):
-            _trigger_crash(st, abs(tr.v))
+        elif derail and _fire:
+            _trigger_crash(st, abs(tr.v), kind="derail")
+            tr.v = 0.0
+            a = 0.0
+        elif hit_end and _fire:
+            _trigger_crash(st, abs(tr.v), kind="buffer")
             tr.s = clamp_hi if tr.v > 0 else clamp_lo
             tr.v = 0.0
             a = 0.0
@@ -1396,7 +1425,42 @@ class Physics:
         # Each stage is latched and strictly cumulative : once level N is
         # reached, physics may still escalate to N+1 but cannot regress.
         v_abs = abs(tr.v)
-        if v_abs > 1.20 * V_MAX and tr.overspeed_level < 3:
+        # CHAOS (mode Défi) : pas de filet de sécurité automatique. La
+        # survitesse monte jusqu'à la DESTRUCTION — à +20 % le contrôle de
+        # survitesse du moteur lâche et le CÂBLE CASSE. Découplage : la
+        # rame dévale, plus de contrepoids. Le conducteur doit engager
+        # l'urgence (Maj → parachute) sinon emballement → collision.
+        if (st.run_mode == "challenge" and v_abs > 1.10 * V_MAX):
+            if v_abs > 1.20 * V_MAX and not tr.cable_rupture:
+                tr.overspeed_level = 3
+                tr.overspeed_tripped = True
+                tr.cable_rupture = True
+                tr.service_brake_fail = 0.15
+                tr.slack_fault_dan = 18000.0
+                st.panne_active = True
+                st.panne_kind = "cable_rupture"
+                st.fault_phase = "active"
+                st.fault_phase_timer = 0.0
+                tr.speed_cmd = 0.0
+                tr.throttle = 0.0
+                add_event(
+                    st, "chaos_rupture",
+                    "OVERSPEED +20% — motor destroyed, CABLE SNAPPED. "
+                    "Brake NOW (Shift) or you run away !",
+                    "SURVITESSE +20 % — moteur détruit, CÂBLE ROMPU. "
+                    "Freinez MAINTENANT (Maj) sinon c'est l'emballement !",
+                    "alarm",
+                )
+            elif tr.overspeed_level < 1:
+                tr.overspeed_level = 1
+                tr.overspeed_tripped = True
+                add_event(
+                    st, "chaos_overspeed",
+                    "OVERSPEED — no safety net in Challenge. Brake !",
+                    "SURVITESSE — aucun filet en Défi. Freinez !",
+                    "warn",
+                )
+        elif v_abs > 1.20 * V_MAX and tr.overspeed_level < 3:
             tr.overspeed_level = 3
             tr.overspeed_tripped = True
             tr.emergency = True
@@ -1953,6 +2017,16 @@ class Physics:
                 demand_throttle = max(0.0, min(1.0, f_req / max(f_motor_max, 1.0)))
                 demand_brake = 0.0
                 demand_regen = 0.0
+            elif challenge_drive and tr.speed_cmd >= 0.95:
+                # CHAOS (mode Défi, consigne à fond) : plus AUCUNE retenue
+                # automatique. Sur une descente chargée, la gravité
+                # excède ce que le moteur demande → la rame S'EMBALLE
+                # au-delà de V_MAX (le cap de bleed est levé plus bas).
+                # C'est au conducteur de serrer le frein (Espace) ou
+                # l'urgence (Maj) : sinon survitesse → moteur/câble.
+                demand_throttle = 0.0
+                demand_regen = 0.0
+                demand_brake = 0.0
             else:
                 # Retenue : l'ENTRAÎNEMENT freine en génératrice (4
                 # quadrants) — c'est lui qui tient la vitesse en descente
@@ -2027,6 +2101,121 @@ CRASH_QUIPS: list[tuple[str, str]] = [
      "Von Roll: safety factor 8.5. You: factor 0."),
 ]
 
+# Avis passagers stylés par NATIONALITÉ (clichés bon enfant + références
+# locales + interjection en langue d'origine, le reste traduit en
+# français / anglais). Organisés par CIRCONSTANCE :
+#   great    = voyage nickel (5★)
+#   rough    = arrivée brusque / à-coups (2-3★)
+#   disaster = collision / déraillement / catastrophe (1★)
+# Chaque entrée : (drapeau + nom, texte FR, texte EN).
+PAX_REVIEWS: dict[str, list[tuple[str, str, str]]] = {
+    "great": [
+        ("🇯🇵 Yuki, Osaka",
+         "« Sugoi ! (すごい) Arrêt parfait, pile au repère. Le conducteur "
+         "a l'âme d'un maître du thé. Je reviendrai. Merci infiniment. »",
+         "“Sugoi! (すごい) Perfect stop, right on the mark. The driver has "
+         "the soul of a tea master. I'll be back. Thank you kindly.”"),
+        ("🇩🇪 Klaus, Stuttgart",
+         "« Korrekt. Décélération dans les tolérances, arrêt au "
+         "millimètre. J'ai chronométré : irréprochable. Cinq étoiles, "
+         "et ça ne m'arrive jamais. »",
+         "“Korrekt. Deceleration within tolerance, stop to the "
+         "millimetre. I timed it: flawless. Five stars, which never "
+         "happens.”"),
+        ("🇨🇭 Heidi, Zürich",
+         "« À l'heure ET à l'arrêt. Voilà. C'est tout ce que je demande. "
+         "Presque aussi bien qu'à la maison. »",
+         "“On time AND on the mark. There. That's all I ask. Almost as "
+         "good as back home.”"),
+        ("🇮🇹 Nonna Rosa, Napoli",
+         "« Bravissimo ! Doux comme une gondole. J'ai même fini mon "
+         "espresso sans en renverser une goutte. Tiens, mange un cannolo. »",
+         "“Bravissimo! Smooth as a gondola. I even finished my espresso "
+         "without spilling a drop. Here, have a cannolo.”"),
+    ],
+    "rough": [
+        ("🇯🇵 Yuki, Osaka",
+         "« Euh… un peu rapide, peut-être. Excusez-moi. Je ne veux pas "
+         "déranger, mais mon thé s'est un peu renversé. C'est très bien "
+         "quand même. Sumimasen. »",
+         "“Um… a little fast, maybe. Excuse me. I don't want to be a "
+         "bother, but my tea spilled a bit. It's fine, really. "
+         "Sumimasen.”"),
+        ("🇬🇧 Nigel, London",
+         "« Eh bien. C'était… vigoureux. Je ne me plains pas, évidemment. "
+         "Simplement, mon chapeau a changé de rangée. Cordialement. »",
+         "“Well. That was… spirited. Not complaining, of course. It's "
+         "just that my hat changed rows. Regards.”"),
+        ("🇩🇪 Klaus, Stuttgart",
+         "« La décélération a dépassé 2,5 m/s². J'ai chronométré. Je "
+         "note trois étoiles et je joins un graphique. »",
+         "“Deceleration exceeded 2.5 m/s². I timed it. Three stars, and "
+         "I'm attaching a chart.”"),
+        ("🇧🇷 Ana, Rio",
+         "« Eita! Un petit coup de samba involontaire à l'arrivée. Mon "
+         "caipirinha imaginaire a souffert. Mais l'ambiance, top. »",
+         "“Eita! A little involuntary samba on arrival. My imaginary "
+         "caipirinha suffered. But the vibe, top-notch.”"),
+    ],
+    "disaster": [
+        ("🇯🇵 Yuki, Osaka",
+         "« …Excusez-moi. Je crois que nous avons heurté quelque chose. "
+         "Ce n'est pas grave. Enfin, si, un peu. Mon thé n'existe plus. "
+         "Gomennasai. »",
+         "“…Excuse me. I believe we hit something. It's fine. Well, sort "
+         "of. My tea no longer exists. Gomennasai.”"),
+        ("🇩🇪 Klaus, Stuttgart",
+         "« INAKZEPTABEL. Impact à décélération non mesurable car mon "
+         "chronomètre s'est brisé. J'exige un rapport. Et un nouveau "
+         "chronomètre. »",
+         "“INAKZEPTABEL. Impact deceleration unmeasurable — my stopwatch "
+         "shattered. I demand a report. And a new stopwatch.”"),
+        ("🇺🇸 Chad, Florida",
+         "« BRO. C'était genre une montagne russe SANS les rails ?? "
+         "5 étoiles pour l'adrénaline, 1 pour mes lunettes pulvérisées. »",
+         "“BRO. That was like a roller coaster WITHOUT the rails?? "
+         "5 stars for the adrenaline, 1 for my pulverized shades.”"),
+        ("🇮🇹 Giulia, Napoli",
+         "« MAMMA MIA ! J'ai crié plus fort qu'au San Paolo ! Mon "
+         "espresso, mon costume, TOUT par terre ! Vergogna ! »",
+         "“MAMMA MIA! I screamed louder than at the San Paolo! My "
+         "espresso, my suit, EVERYTHING on the floor! Vergogna!”"),
+        ("🇫🇷 Jean-Michel, Lyon",
+         "« Non mais c'est un scandale, hein. 40 euros pour finir dans "
+         "le mur. J'écris au maire. Et à ma belle-mère, tant qu'à faire. »",
+         "“An absolute disgrace. 40 euros to end up in the wall. I'm "
+         "writing to the mayor. And my mother-in-law, while I'm at it.”"),
+        ("🇦🇺 Bruce, Sydney",
+         "« Crikey ! On est devenus un satellite pendant deux secondes ! "
+         "Mémorable. Mais où est passée ma casquette, au juste ? »",
+         "“Crikey! We were a satellite for two seconds there! Memorable. "
+         "But where exactly did my cap go?”"),
+        ("🇨🇳 Wei, Shanghai",
+         "« J'ai tout filmé. Déjà viral, 2 millions de vues. Le "
+         "conducteur est célèbre. Pour de très mauvaises raisons. »",
+         "“I filmed everything. Already viral, 2 million views. The "
+         "driver is famous. For very bad reasons.”"),
+        ("🇨🇭 Heidi, Zürich",
+         "« En Suisse, cela n'arriverait jamais. Je le dis, c'est tout. "
+         "Une étoile, et c'est généreux. »",
+         "“In Switzerland this would never happen. Just saying. One "
+         "star, and that's generous.”"),
+    ],
+}
+
+# Messages sarcastiques de COLLISION AVEC L'AUTRE RAME (câble rompu :
+# elle a freiné et s'est immobilisée, la vôtre lui rentre dedans).
+CABIN_QUIPS: list[tuple[str, str]] = [
+    ("L'autre rame avait, elle, pensé à freiner. Quelle idée.",
+     "The other car had, unlike you, thought about braking. What a concept."),
+    ("Deux rames, un câble, zéro survivant à l'ego du conducteur.",
+     "Two cars, one cable, zero survivors to the driver's ego."),
+    ("Vous avez inventé le premier funiculaire à collision frontale.",
+     "You invented the first head-on funicular."),
+    ("La rame 2 déposera plainte. Elle a des témoins : 334.",
+     "Car 2 will press charges. It has witnesses: 334 of them."),
+]
+
 # Messages sarcastiques de DÉRAILLEMENT à l'aiguillage d'évitement.
 DERAIL_QUIPS: list[tuple[str, str]] = [
     ("Un aiguillage, ça se prend au pas. Pas au sprint.",
@@ -2042,17 +2231,24 @@ DERAIL_QUIPS: list[tuple[str, str]] = [
 ]
 
 
-def _trigger_crash(st: GameState, speed: float, derail: bool = False) -> None:
-    """Game-over de conduite (mode Défi) : collision au butoir (defaut)
-    ou DÉRAILLEMENT à l'aiguillage d'évitement (`derail`). Secousse
-    d'écran + mot sarcastique + à-coup de câble."""
+def _trigger_crash(st: GameState, speed: float, kind: str = "buffer") -> None:
+    """Game-over de conduite (mode Défi). `kind` ∈ {buffer, derail,
+    cabin} : collision au butoir, déraillement à l'aiguillage, ou
+    collision avec l'AUTRE rame (câble rompu, elle a freiné). Secousse
+    d'écran + mot sarcastique + avis passager + à-coup de câble."""
     st.crashed = True
     st.crash_speed = speed
-    quips = DERAIL_QUIPS if derail else CRASH_QUIPS
+    st.crash_kind = kind
+    quips = {"derail": DERAIL_QUIPS, "cabin": CABIN_QUIPS}.get(kind, CRASH_QUIPS)
     quip = random.choice(quips)
     st.crash_msg = quip[1] if LANG == "en" else quip[0]
-    st.crash_derail = derail
-    st.crash_shake_t = 1.4 if derail else 1.2
+    st.crash_derail = (kind == "derail")
+    # Avis passager 1 étoile (circonstance = catastrophe), stylé par
+    # nationalité (clichés bon enfant + interjection en VO).
+    rev = random.choice(PAX_REVIEWS["disaster"])
+    st.crash_review_who = rev[0]
+    st.crash_review_txt = rev[2] if LANG == "en" else rev[1]
+    st.crash_shake_t = 1.4 if kind != "buffer" else 1.2
     st.mode = MODE_OVER
     # À-coup dans le câble : la rame stoppe net mais le brin élastique
     # (3,4 km) encaisse l'énergie → la jauge de tension bondit,
@@ -2061,24 +2257,23 @@ def _trigger_crash(st: GameState, speed: float, derail: bool = False) -> None:
     st.train.tension_dan = min(42000.0, st.train.tension_dan
                                + 4000.0 + speed * 4500.0)
     st.train.tension_dan_disp = st.train.tension_dan
-    if derail:
-        add_event(
-            st, "derail",
-            f"DERAILMENT at the passing loop at {speed * 3.6:.0f} km/h — "
-            f"press R for a new trip.",
-            f"DÉRAILLEMENT à l'évitement à {speed * 3.6:.0f} km/h — "
-            f"R pour un nouveau voyage.",
-            "alarm",
-        )
-    else:
-        add_event(
-            st, "crash",
-            f"COLLISION with the buffer stop at {speed * 3.6:.0f} km/h — "
-            f"press R for a new trip.",
-            f"COLLISION avec le butoir à {speed * 3.6:.0f} km/h — "
-            f"R pour un nouveau voyage.",
-            "alarm",
-        )
+    _ev = {
+        "derail": ("derail",
+                   f"DERAILMENT at the passing loop at {speed*3.6:.0f} km/h "
+                   f"— press R for a new trip.",
+                   f"DÉRAILLEMENT à l'évitement à {speed*3.6:.0f} km/h — "
+                   f"R pour un nouveau voyage."),
+        "cabin": ("cabin_crash",
+                  f"HEAD-ON with the other car at {speed*3.6:.0f} km/h — "
+                  f"press R for a new trip.",
+                  f"COLLISION avec l'autre rame à {speed*3.6:.0f} km/h — "
+                  f"R pour un nouveau voyage."),
+    }.get(kind, ("crash",
+                 f"COLLISION with the buffer stop at {speed*3.6:.0f} km/h "
+                 f"— press R for a new trip.",
+                 f"COLLISION avec le butoir à {speed*3.6:.0f} km/h — "
+                 f"R pour un nouveau voyage."))
+    add_event(st, _ev[0], _ev[1], _ev[2], "alarm")
 
 
 def add_event(st: GameState, key: str, en: str, fr: str, severity: str = "info") -> None:
@@ -5400,6 +5595,9 @@ class GameWidget(QWidget):
         st.crash_msg = ""
         st.crash_shake_t = 0.0
         st.crash_derail = False
+        st.crash_kind = "buffer"
+        st.crash_review_who = ""
+        st.crash_review_txt = ""
         st.rebound_timer = 0.0
         self._last_panne_kind = ""
         self._welcome_played = False
@@ -5693,9 +5891,13 @@ class GameWidget(QWidget):
             # la vitesse — « même pleine balle tu déclenches l'annonce »
             # (retour d'essai 2026-07-24 ; sans auto-dock on n'atteint pas
             # forcément |v| < 1 avant le butoir).
+            # En Défi, sans fluage < 1 m/s, on déclenche à l'entrée en
+            # zone (< 60 m du repère) quelle que soit la vitesse — « juste
+            # avant d'entrer en gare comme normal », pas 200 m avant
+            # (retour d'essai 2026-07-24).
             _welcome_ok = (abs(tr_welcome.v) < 1.0
                            or (st.run_mode == "challenge"
-                               and dist_remain_welcome < 200.0))
+                               and dist_remain_welcome < 60.0))
             if (st.trip_started and not self._welcome_played
                     and tr_welcome.direction > 0
                     and dist_remain_welcome < 220.0
@@ -5880,6 +6082,12 @@ class GameWidget(QWidget):
         score = 0.40 * comfort + 0.35 * precision + 0.25 * reg
         st.challenge_last_score = score
         st.challenge_result_t = 8.0
+        # Avis passager circonstancié : voyage nickel (great) ou brusque
+        # (rough) selon le score.
+        tier = "great" if score >= 80.0 else "rough"
+        rev = random.choice(PAX_REVIEWS[tier])
+        st.challenge_review_who = rev[0]
+        st.challenge_review_txt = rev[2] if LANG == "en" else rev[1]
         if score > st.challenge_best:
             st.challenge_best = score
             self._save_challenge_best(score)
@@ -6214,6 +6422,12 @@ class GameWidget(QWidget):
             # Le frein parking est engagé AUTO une fois le train arrêté
             # (cf physique : auto-park après emergency stop).
             st.train.emergency = True
+            # Câble rompu : le frein poulie n'a plus de chemin de force —
+            # seules les pinces Belleville sur rail agissent. L'urgence
+            # engage donc directement le parachute (dernière chance
+            # d'arrêter la rame emballée avant le butoir, mode chaos).
+            if st.train.cable_rupture:
+                st.train.parachute_engaged = True
         elif k == Qt.Key.Key_D:
             tr = st.train
             # Interlocks : can't operate the doors while moving or while
@@ -6810,7 +7024,7 @@ class GameWidget(QWidget):
         if flash > 0:
             p.fillRect(0, 0, w, h, QColor(180, 20, 20, flash))
         p.fillRect(0, 0, w, h, QColor(0, 0, 0, 150))
-        bw, bh = 620, 250
+        bw, bh = 620, 340
         bx, by = (w - bw) / 2, h * 0.24
         card = QRectF(bx, by, bw, bh)
         p.setBrush(QBrush(QColor(24, 12, 14, 245)))
@@ -6818,30 +7032,56 @@ class GameWidget(QWidget):
         p.drawRoundedRect(card, 16, 16)
         p.setPen(_cached_pen(QColor(255, 90, 70)))
         p.setFont(_cached_font("Segoe UI", 34, QFont.Weight.Bold))
+        _titles = {"derail": T("🚋 DERAILMENT", "🚋 DÉRAILLEMENT"),
+                   "cabin": T("🚋 HEAD-ON", "🚋 COLLISION DE RAMES")}
+        _subs = {
+            "derail": T(f"Derailed at the switch at {st.crash_speed*3.6:.0f} km/h",
+                        f"Déraillé à l'aiguillage à {st.crash_speed*3.6:.0f} km/h"),
+            "cabin": T(f"Hit the other car at {st.crash_speed*3.6:.0f} km/h",
+                       f"L'autre rame percutée à {st.crash_speed*3.6:.0f} km/h"),
+        }
         p.drawText(QRectF(bx, by + 18, bw, 46),
                    int(Qt.AlignmentFlag.AlignHCenter),
-                   (T("🚋 DERAILMENT", "🚋 DÉRAILLEMENT") if st.crash_derail
-                    else "💥 COLLISION"))
+                   _titles.get(st.crash_kind, "💥 COLLISION"))
         p.setFont(_cached_font("Segoe UI", 13))
         p.setPen(_cached_pen(QColor(240, 220, 220)))
         p.drawText(QRectF(bx, by + 70, bw, 22),
                    int(Qt.AlignmentFlag.AlignHCenter),
-                   (T(f"Derailed at the switch at {st.crash_speed*3.6:.0f} km/h",
-                      f"Déraillé à l'aiguillage à {st.crash_speed*3.6:.0f} km/h")
-                    if st.crash_derail else
-                    T(f"Buffer stop hit at {st.crash_speed * 3.6:.0f} km/h",
-                      f"Butoir percuté à {st.crash_speed * 3.6:.0f} km/h")))
+                   _subs.get(st.crash_kind,
+                             T(f"Buffer stop hit at {st.crash_speed*3.6:.0f} km/h",
+                               f"Butoir percuté à {st.crash_speed*3.6:.0f} km/h")))
         # Message sarcastique, sur 2 lignes si besoin.
         p.setFont(_cached_font("Segoe UI", 15, QFont.Weight.DemiBold))
         p.setPen(_cached_pen(QColor(255, 210, 120)))
-        p.drawText(QRectF(bx + 24, by + 104, bw - 48, 70),
+        p.drawText(QRectF(bx + 24, by + 104, bw - 48, 60),
                    int(Qt.AlignmentFlag.AlignHCenter
                        | Qt.AlignmentFlag.AlignTop
                        | Qt.TextFlag.TextWordWrap),
                    st.crash_msg)
+        # Avis passager 1 étoile (encadré, stylé nationalité).
+        rev = QRectF(bx + 24, by + 160, bw - 48, 116)
+        p.setBrush(QBrush(QColor(35, 30, 22, 230)))
+        p.setPen(_cached_pen(QColor(120, 100, 70), 1.5))
+        p.drawRoundedRect(rev, 8, 8)
+        p.setFont(_cached_font("Segoe UI", 10, QFont.Weight.Bold))
+        p.setPen(_cached_pen(QColor(255, 210, 120)))
+        p.drawText(QRectF(rev.x() + 12, rev.y() + 8, rev.width() - 24, 18),
+                   int(Qt.AlignmentFlag.AlignLeft),
+                   T("Passenger review", "Avis passager")
+                   + "   ★☆☆☆☆")
+        p.setFont(_cached_font("Segoe UI", 10))
+        p.setPen(_cached_pen(QColor(220, 210, 200)))
+        p.drawText(QRectF(rev.x() + 12, rev.y() + 8, rev.width() - 24, 18),
+                   int(Qt.AlignmentFlag.AlignRight), st.crash_review_who)
+        p.setFont(_cached_font("Segoe UI", 11))
+        p.setPen(_cached_pen(QColor(235, 230, 225)))
+        p.drawText(QRectF(rev.x() + 12, rev.y() + 30, rev.width() - 24, 78),
+                   int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop
+                       | Qt.TextFlag.TextWordWrap),
+                   st.crash_review_txt)
         p.setFont(_cached_font("Segoe UI", 12, QFont.Weight.Bold))
         p.setPen(_cached_pen(QColor(200, 220, 255)))
-        p.drawText(QRectF(bx, by + bh - 34, bw, 22),
+        p.drawText(QRectF(bx, by + bh - 30, bw, 22),
                    int(Qt.AlignmentFlag.AlignHCenter),
                    T("Press R for a new trip", "R pour un nouveau voyage"))
 
@@ -6858,8 +7098,8 @@ class GameWidget(QWidget):
         else:
             grade = T("retry", "à retravailler")
             col = QColor(230, 130, 80)
-        bw, bh = 460, 168
-        bx, by = (w - bw) / 2, h * 0.26
+        bw, bh = 520, 262
+        bx, by = (w - bw) / 2, h * 0.20
         card = QRectF(bx, by, bw, bh)
         # Fondu d'entrée/sortie sur le dernier tiers du chrono.
         alpha = int(235 * min(1.0, st.challenge_result_t / 1.5))
@@ -6888,10 +7128,34 @@ class GameWidget(QWidget):
         p.drawText(QRectF(bx, by + 100, bw, 18),
                    int(Qt.AlignmentFlag.AlignHCenter), detail)
         p.setFont(_cached_font("Consolas", 10))
-        p.drawText(QRectF(bx, by + 128, bw, 16),
+        p.drawText(QRectF(bx, by + 124, bw, 16),
                    int(Qt.AlignmentFlag.AlignHCenter),
                    T(f"best {st.challenge_best:.0f} / 100",
                      f"record {st.challenge_best:.0f} / 100"))
+        # Avis passager (circonstancié great/rough).
+        if st.challenge_review_txt:
+            stars = "★★★★★" if score >= 90 else (
+                "★★★★☆" if score >= 80 else (
+                    "★★★☆☆" if score >= 60 else "★★☆☆☆"))
+            revr = QRectF(bx + 18, by + 146, bw - 36, 100)
+            p.setBrush(QBrush(QColor(30, 34, 48, alpha)))
+            p.setPen(_cached_pen(QColor(90, 110, 150), 1.2))
+            p.drawRoundedRect(revr, 8, 8)
+            p.setFont(_cached_font("Segoe UI", 9, QFont.Weight.Bold))
+            p.setPen(_cached_pen(QColor(180, 200, 240)))
+            p.drawText(QRectF(revr.x() + 10, revr.y() + 6, revr.width() - 20, 16),
+                       int(Qt.AlignmentFlag.AlignLeft),
+                       T("Passenger", "Avis passager") + "  " + stars)
+            p.setFont(_cached_font("Segoe UI", 9))
+            p.setPen(_cached_pen(COLOR_TEXT_DIM))
+            p.drawText(QRectF(revr.x() + 10, revr.y() + 6, revr.width() - 20, 16),
+                       int(Qt.AlignmentFlag.AlignRight), st.challenge_review_who)
+            p.setFont(_cached_font("Segoe UI", 10))
+            p.setPen(_cached_pen(QColor(225, 228, 235)))
+            p.drawText(QRectF(revr.x() + 10, revr.y() + 26, revr.width() - 20, 68),
+                       int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop
+                           | Qt.TextFlag.TextWordWrap),
+                       st.challenge_review_txt)
 
     # Jours/mois hoistés en constantes de classe : reconstruire ces listes
     # (et les gradients/fonts plus bas) à chaque frame coûtait cher à 60 Hz.
