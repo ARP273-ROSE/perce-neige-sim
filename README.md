@@ -14,6 +14,34 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 
 ## Quoi de neuf — v1.12.x (audit + retours d'essai terrain, juillet 2026)
 
+**v1.12.27** — lot de retours d'essai (écran-titre, auto, gares, base) :
+- **Écran-titre PC refait** : rame et sens sont maintenant deux
+  sélections séparées (bascules mises en évidence) + un bouton
+  **DÉMARRER** — fini le départ au premier clic qui empêchait de régler
+  la 2ᵉ option.
+- **Allongement du câble corrigé** : la poulie motrice est en gare
+  haute, donc la longueur pendante = LENGTH − s **quel que soit le
+  sens**. Avant, à l'arrivée en bas il affichait 0,03 m (la valeur du
+  haut) et ne se corrigeait qu'en inversant le trajet.
+- **Annonce d'accueil (fichier 11) désactivée en automatique** : c'est
+  un message de 54 s multilingue dont la partie anglaise (« please do
+  not leave… ») tombait juste avant l'arrivée — reste diffusable via le
+  menu ANNONCES.
+- **Ambiance de gare à l'arrivée** : jouée dès que la rame est à l'arrêt
+  en gare (avant : seulement portes ouvertes → silence total à
+  l'arrivée). **Gare basse** dotée d'une ambiance distincte (elle était
+  devenue identique à la haute).
+- **Mode auto** : la rame annoncée correspond à celle choisie (plus de
+  « rame 2 » aléatoire) ; le remplissage met à jour le **contrepoids**
+  (déséquilibre de masse cohérent) ; le demi-tour attend l'arrêt +
+  ouverture des portes + un temps de descente **avant** d'inverser le
+  sens.
+- **Base d'exploitation persistante** : rangée dans le dossier de
+  données utilisateur (%APPDATA% / ~/.local/share), elle **survit
+  désormais aux mises à jour** de l'exe (avant, à côté de l'exécutable,
+  elle était effacée à chaque auto-update) — migration automatique de
+  la base existante.
+
 **v1.12.26** — pannes moins fréquentes + retenue = régénération (PWA + PC) :
 - **Les pannes ne fusent plus** (« une toutes les 3 secondes ») : le
   scheduler tirait une probabilité PAR IMAGE (`random() > 0.0025`) —
