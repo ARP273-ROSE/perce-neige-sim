@@ -638,10 +638,14 @@ func _unhandled_input(event: InputEvent) -> void:
 			# touche O du sim PC via le state dict "ext_view").
 			cabin.toggle_view()
 
-	# --- Caméra orbitale : drag 1 doigt = angle, pincement = zoom,
-	# clic gauche maintenu = angle, molette = zoom. Actif uniquement en
-	# vue EXTÉRIEURE ; les boutons tactiles (Control) consomment leurs
-	# événements avant d'arriver ici, donc pas de conflit avec l'UI.
+
+# --- Caméra orbitale : drag 1 doigt = angle, pincement = zoom, clic
+# gauche maintenu = angle, molette = zoom. Dans _input (PAS
+# _unhandled_input) : priorité maximale, aucun Control ne peut avaler le
+# geste (retour d'essai Safari 2026-07-24 : « marche pas dans la PWA »).
+# Actif uniquement en vue EXTÉRIEURE ; les taps sur les boutons tactiles
+# restent fonctionnels (on ne consomme pas l'événement).
+func _input(event: InputEvent) -> void:
 	if cabin == null or cabin.view_mode != cabin.ViewMode.EXTERIOR:
 		return
 	if event is InputEventScreenTouch:
@@ -660,6 +664,12 @@ func _unhandled_input(event: InputEvent) -> void:
 			if _orbit_pinch_dist > 1.0 and d > 1.0:
 				cabin.orbit_zoom(_orbit_pinch_dist / d)
 			_orbit_pinch_dist = d
+	elif event is InputEventMagnifyGesture:
+		# Safari/iPadOS et trackpads livrent parfois le pincement en
+		# geste de magnification plutôt qu'en deux ScreenTouch.
+		cabin.orbit_zoom(1.0 / maxf(event.factor, 0.01))
+	elif event is InputEventPanGesture:
+		cabin.orbit_rotate(event.delta.x * 2.0, event.delta.y * 2.0)
 	elif event is InputEventMouseButton and event.pressed:
 		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
 			cabin.orbit_zoom(0.9)
