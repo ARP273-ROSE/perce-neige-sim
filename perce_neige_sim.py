@@ -91,7 +91,7 @@ try:
 except ImportError:
     _GODOT_BRIDGE_OK = False
 
-VERSION = "1.12.33"
+VERSION = "1.12.34"
 APP_NAME = "Perce-Neige Simulator"
 
 
@@ -820,6 +820,12 @@ class GameState:
     challenge_reg: float = 0.0               # sous-score régularité
     challenge_best: float = 0.0              # meilleur score (chargé du disque)
     challenge_result_t: float = 0.0          # chrono d'affichage du résultat
+    # --- Collision en bout de voie (mode Défi : plus de filet auto-dock,
+    # le conducteur DOIT freiner à temps).
+    crashed: bool = False
+    crash_speed: float = 0.0                 # vitesse d'impact (m/s)
+    crash_msg: str = ""                      # message sarcastique tiré
+    crash_shake_t: float = 0.0               # chrono de secousse écran
     panne_active: bool = False
     panne_kind: str = ""
     panne_auto: bool = True     # when False, fault scheduler is paused
@@ -1212,7 +1218,22 @@ class Physics:
         buffer_clamp = False
         clamp_lo = START_S - (1.2 if st.finished else 0.0)
         clamp_hi = STOP_S + (1.2 if st.finished else 0.0)
-        if tr.s >= clamp_hi:
+        # COLLISION EN BOUT DE VOIE : si la rame atteint le repère d'arrêt
+        # à plus de CRASH_SPEED sans s'être arrêtée normalement, elle
+        # percute le butoir. N'arrive QUE quand le filet d'auto-dock est
+        # levé (mode Défi) ou sous panne de frein — en Normal/Auto le
+        # régulateur dock toujours. Déclenche l'écran de collision.
+        CRASH_SPEED = 1.5
+        hit_end = ((tr.s >= clamp_hi and tr.v > CRASH_SPEED)
+                   or (tr.s <= clamp_lo and tr.v < -CRASH_SPEED))
+        if (hit_end and not st.crashed and not st.finished
+                and st.trip_started):
+            _trigger_crash(st, abs(tr.v))
+            tr.s = clamp_hi if tr.v > 0 else clamp_lo
+            tr.v = 0.0
+            a = 0.0
+            buffer_clamp = True
+        elif tr.s >= clamp_hi:
             tr.s = clamp_hi
             if tr.v > 0.0:
                 tr.v = max(0.0, tr.v - 2.0 * dt)
@@ -1565,9 +1586,16 @@ class Physics:
         # is allowed to finish naturally. Firing too early would engage
         # the parking drum brake while the train still has 0.4 m/s and
         # 2 m to go — that's the "instant stop" the driver saw.
-        if not st.finished and abs(tr.v) < 0.08:
+        # En mode DÉFI, plus de creep auto-align : le conducteur s'arrête
+        # où il peut. On valide donc l'arrivée dès qu'il est À L'ARRÊT
+        # DANS LA ZONE DE QUAI (± 6 m du repère) — sinon un arrêt prudent
+        # à 1 m ne « finissait » jamais le trajet (pas de note de défi).
+        # Le sous-score de précision reflète l'écart exact. Hors défi, la
+        # fenêtre serrée 8 cm reste (l'auto-dock aligne pile).
+        arr_win = 6.0 if st.run_mode == "challenge" else 0.08
+        if not st.finished and not st.crashed and abs(tr.v) < 0.10:
             arrived = False
-            if tr.direction > 0 and tr.s >= STOP_S - 0.08:
+            if tr.direction > 0 and tr.s >= STOP_S - arr_win:
                 st.finished = True
                 arrived = True
                 st.score_time = st.trip_time
@@ -1577,7 +1605,7 @@ class Physics:
                     "At Grande Motte (3032 m) — press V when ready to depart",
                     "À la Grande Motte (3032 m) — V quand prêt au départ", "info",
                 )
-            elif tr.direction < 0 and tr.s <= START_S + 0.08:
+            elif tr.direction < 0 and tr.s <= START_S + arr_win:
                 st.finished = True
                 arrived = True
                 st.score_time = st.trip_time
@@ -1764,6 +1792,12 @@ class Physics:
         # (rampe régénérative du drive, cf. branche ci-dessus).
         if tr.electric_stop or tr.dead_man_fault:
             ramp_down = 0.45
+        # Mode DÉFI : la consigne du conducteur est RÉACTIVE (rampe
+        # 2,4 m/s²) — baisser le levier freine vraiment la rame (via le
+        # frein de service du régulateur), sinon impossible de s'arrêter
+        # à temps et on percute le butoir. C'est tout l'intérêt du mode.
+        if self.state.run_mode == "challenge":
+            ramp_down = 2.4
         # Feed-forward de la PENTE de consigne : sans lui, le P (k_a =
         # 0,35) doit accumuler ~1,7 m/s d'erreur pour tenir une rampe de
         # 0,6 m/s² → la rame traînait au-dessus du plafond de panne (et
@@ -1779,9 +1813,18 @@ class Physics:
             tr.speed_cmd_eff = max(driver_target,
                                    tr.speed_cmd_eff - ramp_down * dt)
         a_cmd_ff = (tr.speed_cmd_eff - eff_prev) / dt if dt > 0.0 else 0.0
-        # Use the slewed setpoint as the regulator's true target.
-        target_v = min(tr.speed_cmd_eff, v_envelope)
-        envelope_active = v_envelope < tr.speed_cmd_eff - 0.05
+        # Mode DÉFI : plus de filet d'auto-dock. Le régulateur suit la
+        # consigne du CONDUCTEUR (pas d'enveloppe d'approche, pas de
+        # creep automatique) — c'est à lui de réduire la consigne / de
+        # freiner à temps, sous peine de percuter le butoir. En
+        # Normal/Auto, l'enveloppe Von Roll dock toujours proprement.
+        challenge_drive = (self.state.run_mode == "challenge")
+        if challenge_drive:
+            target_v = tr.speed_cmd_eff
+            envelope_active = False
+        else:
+            target_v = min(tr.speed_cmd_eff, v_envelope)
+            envelope_active = v_envelope < tr.speed_cmd_eff - 0.05
 
         # a_ff_env : décélération d'ENVELOPPE anticipée (feed-forward) —
         # sans elle, le contrôleur P doit accumuler ~0,4 m/s d'erreur pour
@@ -1791,7 +1834,8 @@ class Physics:
         # SUIT le profil, nul en dessous (un ff constant créait un
         # équilibre parasite : rame plantée avant le quai).
         a_ff_env = 0.0
-        if envelope_active and dist_to_stop >= CREEP_DIST:
+        if (not challenge_drive and envelope_active
+                and dist_to_stop >= CREEP_DIST):
             a_ff_env = -a_env * max(0.0, min(1.2, v_travel
                                              / max(v_envelope, 0.05)))
 
@@ -1801,7 +1845,7 @@ class Physics:
         # interminable — ~0,2 m/s pendant 20 s, constaté sur machine par
         # l'exploitant. Le profil garde CREEP_V (0,75) jusqu'à 2,5 m puis
         # docke en ~5 s, sans le « snap » historique à 0.
-        if dist_to_stop < CREEP_DIST:
+        if not challenge_drive and dist_to_stop < CREEP_DIST:
             PARK_DECEL = 0.15         # m/s² final-docking decel
             FINAL_DIST = 2.5          # m over which the taper applies
             if dist_to_stop > FINAL_DIST:
@@ -1914,6 +1958,45 @@ class Physics:
 # ---------------------------------------------------------------------------
 # Events and random incidents
 # ---------------------------------------------------------------------------
+
+# Messages sarcastiques tirés au hasard à la collision (FR, EN).
+CRASH_QUIPS: list[tuple[str, str]] = [
+    ("Freiner, c'était une option. Vous avez choisi « non ».",
+     "Braking was optional. You chose ‘no’."),
+    ("Le butoir vous remercie de l'avoir testé. Personnellement.",
+     "The buffer stop thanks you for testing it. Personally."),
+    ("Les 334 passagers ont adoré le mur. Vraiment.",
+     "All 334 passengers loved the wall. Truly."),
+    ("Nouveau record de décélération. Et de réclamations.",
+     "New deceleration record. And complaint record."),
+    ("À ce stade, ce n'est plus une gare, c'est une cible.",
+     "At this point it's not a station, it's a target."),
+    ("La physique : 1. Vous : 0.",
+     "Physics: 1. You: 0."),
+    ("Von Roll a mis un frein. Vous, une intention.",
+     "Von Roll fitted a brake. You brought good intentions."),
+]
+
+
+def _trigger_crash(st: GameState, speed: float) -> None:
+    """Collision en bout de voie : passe en game-over avec secousse
+    d'écran et un mot sarcastique. Appelé par la physique quand la rame
+    percute le butoir (mode Défi sans freinage à temps)."""
+    st.crashed = True
+    st.crash_speed = speed
+    quip = random.choice(CRASH_QUIPS)
+    st.crash_msg = quip[1] if LANG == "en" else quip[0]
+    st.crash_shake_t = 1.2
+    st.mode = MODE_OVER
+    add_event(
+        st, "crash",
+        f"COLLISION with the buffer stop at {speed * 3.6:.0f} km/h — "
+        f"press R for a new trip.",
+        f"COLLISION avec le butoir à {speed * 3.6:.0f} km/h — "
+        f"R pour un nouveau voyage.",
+        "alarm",
+    )
+
 
 def add_event(st: GameState, key: str, en: str, fr: str, severity: str = "info") -> None:
     ev = Event(key=key, message_en=en, message_fr=fr, severity=severity,
@@ -4813,6 +4896,7 @@ class GameWidget(QWidget):
         self._welcome_played = False
         self._brake_snd_played = False
         self._arrival_played = False
+        self._crash_played = False
         self._crossing_triggered = False
         # Mid-tunnel stop tracking — drives the "remise en route"
         # announcement when the driver restarts from an unplanned stop.
@@ -5228,6 +5312,10 @@ class GameWidget(QWidget):
         tr.fire_vent_fail = False
         tr.fault_timer = 0.0
         st.finished = False
+        st.crashed = False
+        st.crash_speed = 0.0
+        st.crash_msg = ""
+        st.crash_shake_t = 0.0
         st.rebound_timer = 0.0
         self._last_panne_kind = ""
         self._welcome_played = False
@@ -5616,6 +5704,19 @@ class GameWidget(QWidget):
         # Chrono d'affichage du résultat de défi (bandeau ~8 s).
         if st.challenge_result_t > 0.0:
             st.challenge_result_t = max(0.0, st.challenge_result_t - dt)
+        # Collision : son d'impact au front montant + décroissance de la
+        # secousse d'écran.
+        if st.crashed and not self._crash_played:
+            self._crash_played = True
+            try:
+                self.sounds.play_buzzer(upper_station=True)  # « thud » grave
+                self.sounds.play("brake_noise", lang=st.ann_lang, cooldown=0.0)
+            except Exception:
+                pass
+        if not st.crashed:
+            self._crash_played = False
+        if st.crash_shake_t > 0.0:
+            st.crash_shake_t = max(0.0, st.crash_shake_t - dt)
         self.update()
 
     # ----- mode Défi -------------------------------------------------------
@@ -6508,6 +6609,15 @@ class GameWidget(QWidget):
         p.setRenderHint(QPainter.RenderHint.TextAntialiasing, True)
         w, h = self.width(), self.height()
 
+        # Secousse d'écran de collision : translate tout le rendu d'un
+        # offset aléatoire décroissant pendant crash_shake_t. Décrémenté
+        # dans le tick ; l'amplitude suit la vitesse d'impact.
+        _shake = self.state.crash_shake_t
+        if _shake > 0.0:
+            amp = 14.0 * min(1.0, _shake / 1.2) * min(1.0,
+                                                      self.state.crash_speed / 6.0)
+            p.translate(random.uniform(-amp, amp), random.uniform(-amp, amp))
+
         self._draw_background(p, w, h)
         view_rect = QRectF(20, 20, w - 440, h - 260)
         if self._cabin_view and self.state.mode == MODE_RUN:
@@ -6566,8 +6676,11 @@ class GameWidget(QWidget):
             int(Qt.AlignmentFlag.AlignRight),
             f"v{VERSION}  {self._fps:.0f} fps",
         )
+        # Écran de COLLISION (game-over, priorité sur le reste).
+        if self.state.crashed:
+            self._draw_crash_overlay(p, w, h)
         # Bandeau de résultat du DÉFI (quelques secondes après l'arrivée).
-        if (self.state.run_mode == "challenge"
+        elif (self.state.run_mode == "challenge"
                 and self.state.challenge_result_t > 0.0
                 and self.state.challenge_last_score >= 0.0):
             self._draw_challenge_result(p, w, h)
@@ -6575,6 +6688,44 @@ class GameWidget(QWidget):
         # visible above every screen (title, run, paused, menus).
         self._draw_clock_badge(p, w, h)
         p.end()
+
+    def _draw_crash_overlay(self, p: QPainter, w: int, h: int) -> None:
+        st = self.state
+        # Flash rouge (fort au tout début de la secousse, s'estompe).
+        flash = int(150 * min(1.0, st.crash_shake_t / 1.2))
+        if flash > 0:
+            p.fillRect(0, 0, w, h, QColor(180, 20, 20, flash))
+        p.fillRect(0, 0, w, h, QColor(0, 0, 0, 150))
+        bw, bh = 620, 250
+        bx, by = (w - bw) / 2, h * 0.24
+        card = QRectF(bx, by, bw, bh)
+        p.setBrush(QBrush(QColor(24, 12, 14, 245)))
+        p.setPen(_cached_pen(COLOR_ALARM, 3))
+        p.drawRoundedRect(card, 16, 16)
+        p.setPen(_cached_pen(QColor(255, 90, 70)))
+        p.setFont(_cached_font("Segoe UI", 34, QFont.Weight.Bold))
+        p.drawText(QRectF(bx, by + 18, bw, 46),
+                   int(Qt.AlignmentFlag.AlignHCenter),
+                   T("💥 COLLISION", "💥 COLLISION"))
+        p.setFont(_cached_font("Segoe UI", 13))
+        p.setPen(_cached_pen(QColor(240, 220, 220)))
+        p.drawText(QRectF(bx, by + 70, bw, 22),
+                   int(Qt.AlignmentFlag.AlignHCenter),
+                   T(f"Buffer stop hit at {st.crash_speed * 3.6:.0f} km/h",
+                     f"Butoir percuté à {st.crash_speed * 3.6:.0f} km/h"))
+        # Message sarcastique, sur 2 lignes si besoin.
+        p.setFont(_cached_font("Segoe UI", 15, QFont.Weight.DemiBold))
+        p.setPen(_cached_pen(QColor(255, 210, 120)))
+        p.drawText(QRectF(bx + 24, by + 104, bw - 48, 70),
+                   int(Qt.AlignmentFlag.AlignHCenter
+                       | Qt.AlignmentFlag.AlignTop
+                       | Qt.TextFlag.TextWordWrap),
+                   st.crash_msg)
+        p.setFont(_cached_font("Segoe UI", 12, QFont.Weight.Bold))
+        p.setPen(_cached_pen(QColor(200, 220, 255)))
+        p.drawText(QRectF(bx, by + bh - 34, bw, 22),
+                   int(Qt.AlignmentFlag.AlignHCenter),
+                   T("Press R for a new trip", "R pour un nouveau voyage"))
 
     def _draw_challenge_result(self, p: QPainter, w: int, h: int) -> None:
         st = self.state
