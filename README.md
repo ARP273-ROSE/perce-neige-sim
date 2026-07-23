@@ -14,6 +14,16 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 
 ## Quoi de neuf — v1.12.x (audit + retours d'essai terrain, juillet 2026)
 
+**v1.12.28** — auto-update : swap sûr (plus jamais d'exe perdu) :
+- Le remplacement de l'exe à la fin du téléchargement pouvait
+  **supprimer l'ancien exe sans installer le nouveau** (le batch faisait
+  `del` avant `move` ; si l'antivirus verrouillait le fichier
+  fraîchement téléchargé, le `move` échouait → appli disparue). Nouvelle
+  séquence : renommer l'ancien en `.old`, installer le nouveau, et
+  **restaurer l'ancien si l'installation échoue** — l'utilisateur n'est
+  jamais laissé sans exe. (Bénéfice pour les mises à jour à partir de
+  cette version.)
+
 **v1.12.27** — lot de retours d'essai (écran-titre, auto, gares, base) :
 - **Écran-titre PC refait** : rame et sens sont maintenant deux
   sélections séparées (bascules mises en évidence) + un bouton
