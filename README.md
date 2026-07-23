@@ -14,6 +14,11 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 
 ## Quoi de neuf — v1.12.x (audit + retours d'essai terrain, juillet 2026)
 
+**v1.12.38** — doc du mode Défi : manuel (42 p) et menu d'aide (F1) mis
+à jour avec le mode Défi complet — notation confort/précision/
+régularité, absence d'auto-dock, alarme « TROP VITE », collision au
+butoir et déraillement à l'aiguillage.
+
 **v1.12.37** — MAJ auto débloquée, puissance, et Défi (décél, alarme,
 déraillement) :
 - **Auto-update qui restait bloqué** (« une console s'ouvre avec
