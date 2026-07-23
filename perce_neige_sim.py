@@ -90,7 +90,7 @@ try:
 except ImportError:
     _GODOT_BRIDGE_OK = False
 
-VERSION = "1.12.20"
+VERSION = "1.12.21"
 APP_NAME = "Perce-Neige Simulator"
 
 
@@ -698,6 +698,10 @@ class Train:
                                       # le bouton rouge seul n'utilise QUE le
                                       # frein poulie (1,25 m/s²)
     service_brake_fail: float = 1.0   # 1.0 nominal, <1 = service brake fade
+    # Chaînes de sécurité automatiques (audit physique 2026-07-23) : la
+    # surveillance réelle ne laisse pas rouler un funi en défaut grave.
+    sbf_trip_timer: float = 0.0       # s de frein-service dégradé en marche
+    cap_over_timer: float = 0.0       # s passées > plafond de panne + marge
     flood_tunnel: bool = False        # tunnel water intrusion — speed cap 4 m/s
     comms_loss: bool = False          # PA + GSM tunnel lost — narrative only
     switch_abt_fault: bool = False    # Abt crossing misalignment — hold before siding
@@ -865,10 +869,9 @@ class Physics:
 
         # Single hard speed limit — the real Perce-Neige passes the loop
         # at full 12 m/s, the loop is just a widening of the tunnel.
-        # Dynamic speed cap : wet rails (condensation/ingress), degraded
-        # mode on 2/3 motors, or any other fault lowers the operational
-        # ceiling.
-        v_limit = min(V_MAX, tr.speed_fault_cap)
+        # Le plafond DYNAMIQUE de panne (rails humides, mode dégradé…)
+        # n'agit plus ici : il passe par la rampe de consigne du
+        # régulateur (0,60 m/s²) + la surveillance cap_over_timer.
 
         # --- Speed command regulator ---------------------------------------
         # The driver sets a speed setpoint (speed_cmd, 0..1 = 0..V_MAX).
@@ -908,12 +911,18 @@ class Physics:
         f_motor = tr.throttle * f_motor_max * tr.direction
 
         # Don't pump power at the limit — FONDU sur 0,25 m/s au-delà de
-        # v_limit au lieu de la coupure sèche : le tout-ou-rien hachait la
-        # force moteur à 60 Hz dès que v effleurait la limite (à-coups de
-        # puissance sur les jauges, flagrant sous plafond de panne).
+        # V_MAX ABSOLU (machine) au lieu de la coupure sèche. AUDIT
+        # 2026-07-23 : ce fondu utilisait v_limit (= plafond de panne) →
+        # au déclenchement d'un cap (rails humides 6 m/s…), le moteur
+        # était coupé en UNE frame à 10 m/s et la rame décélérait en
+        # chute libre à ~1,8 m/s² (jerk 120) — « le funi réduit sa
+        # vitesse quasi instantanément, c'est pas possible ». Le plafond
+        # de panne passe désormais par le RÉGULATEUR (rampe de consigne
+        # dédiée 0,60 m/s²), avec la surveillance cap_over_timer en
+        # filet de sécurité.
         if f_motor * tr.direction > 0:
             f_motor *= max(0.0, min(1.0,
-                (v_limit + 0.25 - tr.v * tr.direction) / 0.25))
+                (V_MAX + 0.25 - tr.v * tr.direction) / 0.25))
 
         # Door interlock : no traction while the doors are physically open.
         # Real Perce-Neige : the drive contactor is wired to the door-closed
@@ -1083,14 +1092,20 @@ class Physics:
         # sinon il écrêtait silencieusement la vitesse à V_MAX et la
         # cascade de survitesse (+10/+12/+20 %) ne pouvait JAMAIS se
         # déclencher, même en emballement réel.
+        # AUDIT 2026-07-23 : le bleed se référait à v_limit (plafond de
+        # panne) → au déclenchement d'un cap il écrêtait la vitesse à
+        # 1,5 m/s² en quelques secondes, court-circuitant la rampe douce
+        # du régulateur. Il se réfère désormais au V_MAX MACHINE : le
+        # plafond de panne est l'affaire du régulateur (rampe 0,60) et du
+        # filet cap_over_timer (urgence auto si dépassement persistant).
         drive_path_ok = not tr.cable_rupture and not tr.aux_power_fault
-        if (new_v * tr.direction > v_limit
+        if (new_v * tr.direction > V_MAX
                 and f_motor * tr.direction <= 1000.0 and drive_path_ok):
-            excess = new_v * tr.direction - v_limit
+            excess = new_v * tr.direction - V_MAX
             bleed = min(excess, 1.5 * dt)
             new_v -= bleed * tr.direction
-        if new_v * tr.direction < -v_limit and drive_path_ok:
-            excess = -v_limit - new_v * tr.direction
+        if new_v * tr.direction < -V_MAX and drive_path_ok:
+            excess = -V_MAX - new_v * tr.direction
             bleed = min(excess, 1.5 * dt)
             new_v += bleed * tr.direction
         tr.s += ((tr.v + new_v) / 2.0) * dt
@@ -1291,6 +1306,80 @@ class Physics:
                 "SURVITESSE ! frein de service + urgence engagés.",
                 "alarm",
             )
+        # --- Chaînes de sécurité automatiques (audit physique 2026-07-23).
+        # La surveillance réelle d'un funiculaire ne laisse JAMAIS rouler
+        # un défaut grave : chaque chaîne ci-dessous déclenche l'arrêt
+        # d'urgence commandé (frein poulie 1,25 m/s²) toute seule.
+        if not tr.emergency and st.trip_started:
+            # 1. Frein de service dégradé (perte de pression hydraulique) :
+            #    le pressostat de la chaîne de sécurité détecte le défaut
+            #    et déclenche en ~3 s — le conducteur n'a pas à « penser à
+            #    l'urgence » pendant que la rame file (« le funi continue
+            #    le trajet à fond avec 0 kW et le frein à moitié serré »).
+            if tr.service_brake_fail < 1.0 and abs(tr.v) > 0.5:
+                tr.sbf_trip_timer += dt
+                if tr.sbf_trip_timer > 3.0:
+                    tr.emergency = True
+                    add_event(
+                        st, "sbf_trip",
+                        "Safety chain : service brake pressure low — "
+                        "automatic emergency stop.",
+                        "Chaîne de sécurité : pression frein service basse "
+                        "— arrêt d'urgence automatique.",
+                        "alarm",
+                    )
+            else:
+                tr.sbf_trip_timer = 0.0
+            # 2. Survitesse sur PLAFOND DE PANNE : la rampe du régulateur
+            #    (0,60 m/s²) doit ramener v sous le cap ; si v reste
+            #    au-dessus de cap + 1 m/s plus de 12 s (adhérence perdue,
+            #    frein insuffisant…), la surveillance déclenche.
+            # Ne compte que si la rame ne DÉCÉLÈRE PAS franchement : une
+            # rame qui suit la rampe de rattrapage (0,6 m/s²) n'est pas
+            # en défaut, même si elle est encore au-dessus du cap.
+            decel_along = -tr.a * (1.0 if tr.v > 0 else -1.0)
+            if (tr.speed_fault_cap < V_MAX
+                    and abs(tr.v) > tr.speed_fault_cap + 1.0
+                    and decel_along < 0.25):
+                tr.cap_over_timer += dt
+                if tr.cap_over_timer > 12.0:
+                    tr.emergency = True
+                    add_event(
+                        st, "cap_over",
+                        "Fault speed ceiling exceeded too long — "
+                        "automatic emergency stop.",
+                        "Plafond de panne dépassé trop longtemps — "
+                        "arrêt d'urgence automatique.",
+                        "alarm",
+                    )
+            else:
+                tr.cap_over_timer = 0.0
+            # 3. Interrupteur de mou du câble : pendant un défaut de mou,
+            #    une décélération brutale de la rame lourde décharge le
+            #    brin → le contact de mou déclenche (c'est exactement le
+            #    « brake smoothly » de l'annonce).
+            if (tr.slack_fault_dan > 0.0 and abs(tr.a) > 1.5
+                    and abs(tr.v) > 1.0):
+                tr.emergency = True
+                add_event(
+                    st, "slack_trip",
+                    "Slack-cable switch tripped — emergency stop.",
+                    "Interrupteur de mou du câble déclenché — arrêt "
+                    "d'urgence.",
+                    "alarm",
+                )
+            # 4. Surveillance de tension : pic au-delà du seuil ROUGE de
+            #    la jauge (35 000 daN) pendant un défaut de tension.
+            if tr.tension_fault_dan > 0.0 and tr.tension_dan > 35000.0:
+                tr.emergency = True
+                add_event(
+                    st, "tension_trip",
+                    "Cable tension above red threshold — emergency stop.",
+                    "Tension câble au-dessus du seuil rouge — arrêt "
+                    "d'urgence.",
+                    "alarm",
+                )
+
         # Power flow at the motor : positive when the motor pulls the
         # cable (traction), negative when gravity drives the wheel and
         # the motor acts as a generator (regenerative braking on loaded
@@ -1471,46 +1560,25 @@ class Physics:
         # a MILD service brake only what's needed to track a gentle decel.
         # No rail brakes — the train coasts to a halt smoothly.
         if tr.electric_stop or tr.dead_man_fault:
-            self._reg_hold = True   # arrêt voulu → le creep-kill s'applique
-            # Drop the commanded setpoint progressively (not instantly)
-            # so releasing electric stop doesn't kick the regulator.
-            tr.speed_cmd = max(0.0, tr.speed_cmd - 0.5 * dt)
-            tr.speed_cmd_eff = max(0.0, tr.speed_cmd_eff - 0.5 * dt)
-            tr.throttle = 0.0
-            # "Arrêt simple" (service stop) — Von Roll doctrine : motor
-            # cut + regenerative braking. Real decel target ≈ 0.4 m/s²
-            # (passengers standing barely notice). From 12 m/s that's
-            # 30 s and 180 m — very gentle, very long. The key is to
-            # NEVER let the brake slam on : it must ramp in over 3–4 s
-            # like the DC drive current ramping down.
-            TARGET_DECEL = 0.4  # m/s² — Von Roll service stop comfort
-            # Engagement ramp limiter : brake command can rise at most
-            # 0.05/s (fully engaged in ~5 s, matching real hydraulic
-            # service-brake engagement) and fall freely. This is the
-            # dominant shape when the driver first hits the button.
-            BRAKE_RAMP_UP = 0.05       # per second
-            BRAKE_RAMP_DOWN = 0.25     # per second
-            BRAKE_CAP = 0.30           # max brake in service mode
-            # Nearly-stopped regime — settle to a gentle hold at 0.20.
-            if abs(tr.v) < 0.5:
-                hold = 0.20
-                err_b = hold - tr.brake
-                step = max(-BRAKE_RAMP_DOWN * dt,
-                           min(BRAKE_RAMP_UP * dt, err_b))
-                tr.brake = max(0.0, min(BRAKE_CAP, tr.brake + step))
-                return
-            # Cruising regime — closed-loop around TARGET_DECEL.
-            # obs_decel > 0 when the train is actually slowing down.
-            obs_decel = -math.copysign(tr.a, tr.v)
-            err = TARGET_DECEL - obs_decel
-            # Small proportional nudge per frame, well under the ramp
-            # cap so the brake rises SMOOTHLY with time, not in jumps.
-            p_gain = 0.12
-            raw_step = err * p_gain * dt
-            step = max(-BRAKE_RAMP_DOWN * dt,
-                       min(BRAKE_RAMP_UP * dt, raw_step))
-            tr.brake = max(0.0, min(BRAKE_CAP, tr.brake + step))
-            return
+            # "Arrêt simple" (service stop) — Von Roll doctrine : the DRIVE
+            # ramps down and brakes RÉGÉNÉRATIVEMENT à ≈ 0,4 m/s² (les
+            # passagers debout le sentent à peine). AUDIT 2026-07-23 :
+            # l'ancien modèle coupait le moteur net (throttle = 0) puis
+            # modulait le frein autour de 0,4 — mais moteur coupé, en
+            # montée la gravité impose ~0,6-1,0 m/s² (mesuré : moy 0,99,
+            # pic 1,64) : le drive ne peut tenir 0,4 QUE s'il garde la
+            # main (couple moteur/génératrice). On ramène donc la CONSIGNE
+            # à 0,45 m/s² et on laisse le contrôleur unifié en force
+            # suivre la rampe — décélération ~0,4-0,45 dans les DEUX sens,
+            # régen affichée à la jauge, frein service en appoint.
+            # La consigne est d'abord PLAFONNÉE à la vitesse courante :
+            # sinon, arrêt électrique déclenché à 6 m/s avec le bouton à
+            # 100 %, la consigne repartait de 12 et la rame n'amorçait
+            # sa décélération que bien plus tard (mesuré : 141 m depuis
+            # 6 m/s au lieu de ~45).
+            tr.speed_cmd = min(tr.speed_cmd, abs(tr.v) / V_MAX)
+            tr.speed_cmd = max(0.0, tr.speed_cmd - (0.45 / V_MAX) * dt)
+            tr.speed_cmd_eff = min(tr.speed_cmd_eff, abs(tr.v) + 0.1)
 
         # Distance remaining along travel direction (always positive).
         if tr.direction > 0:
@@ -1566,6 +1634,22 @@ class Physics:
             a_env = A_NATURAL_UP
         v_envelope = math.sqrt(CREEP_V * CREEP_V + 2.0 * a_env * d_to_creep)
 
+        # Aiguillage Abt désaligné : l'interlock impose l'ARRÊT avant le
+        # point de l'évitement (annonce « hold before the siding ») — pas
+        # seulement 2 m/s. Enveloppe de freinage (0,6 m/s²) vers un point
+        # d'arrêt 15 m avant l'aiguillage d'entrée ; une fois l'interlock
+        # retombé (fin du défaut), l'enveloppe se lève et la marche
+        # reprend. Rame déjà DANS l'évitement : le cap 2 m/s s'applique
+        # jusqu'à la sortie (audit physique 2026-07-23).
+        if tr.switch_abt_fault:
+            if tr.direction > 0:
+                d_hold = (PASSING_START - 15.0) - tr.s
+            else:
+                d_hold = tr.s - (PASSING_END + 15.0)
+            if d_hold > 0.0:
+                v_envelope = min(v_envelope,
+                                 math.sqrt(2.0 * 0.6 * d_hold))
+
         # --- Setpoint slewing ---------------------------------------------
         # Real Von Roll speed-command knob is not directly tracked by the
         # motor : an internal ramp limiter accelerates / decelerates the
@@ -1576,21 +1660,38 @@ class Physics:
         # movement from kicking the brake hard.
         RAMP_UP = 0.35          # m/s per s when raising the setpoint
         RAMP_DOWN = 0.25        # m/s per s when lowering the setpoint
+        RAMP_DOWN_FAULT = 0.60  # m/s per s vers un PLAFOND DE PANNE :
+        # un cap d'adhérence/mode dégradé exige une réduction franche
+        # (frein de service modulé), pas le confort 0,25 du bouton de
+        # consigne — mais jamais la coupure sèche d'avant l'audit
+        # 2026-07-23 (moteur tué en 1 frame, chute libre à 1,8 m/s²).
         driver_target = tr.speed_cmd * V_MAX
+        ramp_down = RAMP_DOWN
         # Speed-cap faults (wet rails, motor degraded, thermal, …)
-        # also clamp the effective driver setpoint : this way the slew
-        # limiter brings the train down to the new ceiling smoothly over
-        # ~30 s instead of the physics engine slamming v to the cap
-        # (the old behaviour felt like an instant "pile" from 12 to 4 m/s).
-        if tr.speed_fault_cap < V_MAX:
-            driver_target = min(driver_target, tr.speed_fault_cap)
+        # clamp the effective driver setpoint : the slew limiter brings
+        # the train down to the new ceiling smoothly.
+        if tr.speed_fault_cap < V_MAX and driver_target > tr.speed_fault_cap:
+            driver_target = tr.speed_fault_cap
+            ramp_down = RAMP_DOWN_FAULT
+        # Arrêt électrique / veille : la consigne descend à 0,45 m/s²
+        # (rampe régénérative du drive, cf. branche ci-dessus).
+        if tr.electric_stop or tr.dead_man_fault:
+            ramp_down = 0.45
+        # Feed-forward de la PENTE de consigne : sans lui, le P (k_a =
+        # 0,35) doit accumuler ~1,7 m/s d'erreur pour tenir une rampe de
+        # 0,6 m/s² → la rame traînait au-dessus du plafond de panne (et
+        # la surveillance cap_over déclenchait à tort), et l'arrêt
+        # électrique depuis 6 m/s mettait 166 m (décél 0,11). Même idée
+        # que a_ff_env pour l'enveloppe d'approche (v1.12.15).
+        eff_prev = tr.speed_cmd_eff
         de = driver_target - tr.speed_cmd_eff
         if de > 0.0:
             tr.speed_cmd_eff = min(driver_target,
                                    tr.speed_cmd_eff + RAMP_UP * dt)
         elif de < 0.0:
             tr.speed_cmd_eff = max(driver_target,
-                                   tr.speed_cmd_eff - RAMP_DOWN * dt)
+                                   tr.speed_cmd_eff - ramp_down * dt)
+        a_cmd_ff = (tr.speed_cmd_eff - eff_prev) / dt if dt > 0.0 else 0.0
         # Use the slewed setpoint as the regulator's true target.
         target_v = min(tr.speed_cmd_eff, v_envelope)
         envelope_active = v_envelope < tr.speed_cmd_eff - 0.05
@@ -1670,7 +1771,14 @@ class Physics:
             # pouvoir commander un vrai freinage. a_ff_env anticipe la
             # pente de l'enveloppe (approche/docking) : le P ne sert
             # qu'aux transitoires.
-            a_des = max(-A_BRAKE_NORMAL, min(A_TARGET, a_ff_env + err * k_a))
+            # Les deux feed-forwards (enveloppe d'approche, pente de
+            # consigne) sont des CIBLES de décélération : on prend la
+            # plus contraignante, pas la somme (les additionner
+            # double-freinerait quand un cap de panne tombe en pleine
+            # approche de gare).
+            a_ff_total = min(a_ff_env, min(0.0, a_cmd_ff))
+            a_des = max(-A_BRAKE_NORMAL,
+                        min(A_TARGET, a_ff_total + err * k_a))
             f_req = m_total_r * a_des + f_ff
             if f_req >= 0.0:
                 demand_throttle = max(0.0, min(1.0, f_req / max(f_motor_max, 1.0)))
@@ -1726,6 +1834,8 @@ def clear_fault(st: GameState) -> None:
     tr.cable_rupture = False
     tr.parachute_engaged = False
     tr.service_brake_fail = 1.0
+    tr.sbf_trip_timer = 0.0
+    tr.cap_over_timer = 0.0
     tr.flood_tunnel = False
     tr.comms_loss = False
     tr.switch_abt_fault = False
@@ -1935,10 +2045,12 @@ FAULT_PROFILES: dict[str, dict] = {
                    "ouvert, frein tambour serré. Le train s'arrête.",
         "what_en": "400 V auxiliaries lost — traction contactor opened, "
                    "drum brake clamped. Train will halt.",
-        "do_fr": "Attendre la reprise du secours (≈ 25 s), puis "
-                 "PRÊT (V) + DÉPART (Z) pour repartir.",
-        "do_en": "Wait for the backup feeder to pick up (≈ 25 s), then "
-                 "READY (V) + DEPART (Z) to resume.",
+        "do_fr": "L'urgence s'engage seule (frein à manque de courant). "
+                 "Attendre la reprise du secours (≈ 25 s), relâcher "
+                 "l'urgence, puis PRÊT (V) + DÉPART (Z).",
+        "do_en": "The emergency engages by itself (power-loss brake). "
+                 "Wait for the backup feeder (≈ 25 s), release the "
+                 "emergency, then READY (V) + DEPART (Z).",
         "blocked_fr": "Traction, PRÊT et DÉPART tant que le 400 V n'est "
                       "pas restauré.",
         "blocked_en": "Traction, READY and DEPART blocked until 400 V "
@@ -1990,12 +2102,13 @@ FAULT_PROFILES: dict[str, dict] = {
         "what_en": "Hydraulic service brake fade (25 % effective) — "
                    "double-failure pattern. The parachute still works "
                    "but the cabin is no longer fit for commercial service.",
-        "do_fr": "1) Arrêt d'urgence (parachute) au plus vite  "
-                 "2) Annonce incident technique (auto)  3) Évacuer  "
-                 "4) Service terminé : appuyer sur R.",
-        "do_en": "1) Emergency stop (parachute) as soon as possible  "
-                 "2) Technical incident announcement (auto)  "
-                 "3) Evacuate  4) Service over : press R.",
+        "do_fr": "1) La chaîne de sécurité déclenche l'arrêt d'urgence "
+                 "automatiquement (~3 s)  2) Annonce incident technique "
+                 "(auto)  3) Évacuer  4) Service terminé : appuyer sur R.",
+        "do_en": "1) The safety chain trips the emergency stop "
+                 "automatically (~3 s)  2) Technical incident "
+                 "announcement (auto)  3) Evacuate  4) Service over : "
+                 "press R.",
         "blocked_fr": "PRÊT, DÉPART, redémarrage du voyage.",
         "blocked_en": "READY, DEPART, trip restart.",
     },
@@ -2025,15 +2138,17 @@ FAULT_PROFILES: dict[str, dict] = {
     "switch_abt_fault": {
         "severity": "stopping",
         "what_fr": "Aiguillage Abt à l'évitement central désaligné — "
-                   "circulation à 2 m/s maximum jusqu'au verrouillage.",
+                   "l'interlock impose l'ARRÊT avant l'évitement "
+                   "(2 m/s max si déjà engagé) jusqu'au verrouillage.",
         "what_en": "Abt crossing switch at the central siding misaligned "
-                   "— 2 m/s crawl until the interlock clears.",
-        "do_fr": "Marche au pas vers la zone d'évitement, attendre la "
-                 "remise en place de l'aiguillage.",
-        "do_en": "Crawl to the siding zone, wait for the switch to "
-                 "realign.",
-        "blocked_fr": "Vitesse > 2 m/s.",
-        "blocked_en": "Speed > 2 m/s.",
+                   "— the interlock forces a HOLD before the siding "
+                   "(2 m/s cap if already inside) until it clears.",
+        "do_fr": "Laisser l'enveloppe arrêter la rame avant l'aiguillage, "
+                 "attendre la remise en place, puis reprendre.",
+        "do_en": "Let the envelope stop the train before the switch, "
+                 "wait for realignment, then resume.",
+        "blocked_fr": "Franchissement de l'évitement ; vitesse > 2 m/s.",
+        "blocked_en": "Passing the siding ; speed > 2 m/s.",
     },
     "fire_vent_fail": {
         "severity": "catastrophic",
@@ -2191,21 +2306,34 @@ def trigger_fault(st: GameState, kind: str) -> None:
             "warn",
         )
     elif kind == "aux_power":
-        # Loss of 400 V auxiliaries : traction contactor drops, drum
-        # brake clamps. Train coasts then stops. Self-resolves when the
-        # backup feeder picks up.
+        # Loss of 400 V auxiliaries : traction contactor drops AND the
+        # spring-applied safety brake clamps (hydraulics dead = spring
+        # wins — c'est tout l'intérêt d'un frein à manque de courant).
+        # AUDIT 2026-07-23 : l'ancien modèle coupait seulement le moteur
+        # → la rame ACCÉLÉRAIT en roue libre jusqu'à 13,2 m/s au lieu de
+        # « traction coupée, frein serré ». L'urgence est engagée ; le
+        # conducteur fait la remise en service normale au retour du 400 V.
         tr.aux_power_fault = True
+        tr.emergency = True
         tr.fault_timer = 25.0
         add_event(
             st, "aux_power",
-            "400 V auxiliaries lost — traction cut, brake held.",
-            "Auxiliaires 400 V perdus — traction coupée, frein serré.",
+            "400 V auxiliaries lost — traction cut, safety brake applied.",
+            "Auxiliaires 400 V perdus — traction coupée, frein de "
+            "sécurité serré.",
             "alarm",
         )
     elif kind == "parking_stuck":
         # Parking (drum) brake release failure : motor can't move the
         # pulley until the driver resets via the emergency-stop cycle.
+        # AUDIT 2026-07-23 : si le défaut survient EN MARCHE, le tambour
+        # qui reste serré sur la poulie FREINE la ligne (câble intact) —
+        # l'ancien modèle coupait juste le moteur et la rame continuait
+        # à 12 m/s « tambour serré ». On engage l'urgence (même organe :
+        # frein sur poulie motrice).
         tr.parking_stuck = True
+        if abs(tr.v) > 0.5:
+            tr.emergency = True
         tr.fault_timer = 18.0
         add_event(
             st, "parking_stuck",
@@ -4916,6 +5044,8 @@ class GameWidget(QWidget):
         tr.cable_rupture = False
         tr.parachute_engaged = False
         tr.service_brake_fail = 1.0
+        tr.sbf_trip_timer = 0.0
+        tr.cap_over_timer = 0.0
         tr.flood_tunnel = False
         tr.comms_loss = False
         tr.switch_abt_fault = False
