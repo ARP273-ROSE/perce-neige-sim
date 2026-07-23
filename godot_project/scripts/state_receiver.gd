@@ -27,6 +27,8 @@ var udp: PacketPeerUDP = null
 var port: int = DEFAULT_PORT
 var physics: TrainPhysics = null
 var fault_manager: FaultManager = null
+var cabin: Cabin = null            # bascule FPV/extérieure pilotée par le PC
+var _last_ext_view: bool = false
 var _last_packet_time: float = 0.0
 var _packet_count: int = 0
 var _overlay: Label = null
@@ -130,6 +132,16 @@ func _apply(d: Dictionary) -> void:
 		var m: bool = _b(d, "muted", false)
 		if AudioServer.is_bus_mute(0) != m:
 			AudioServer.set_bus_mute(0, m)
+	# Vue extérieure orbitale commandée par la touche O du sim PC.
+	# Appliquée SUR CHANGEMENT seulement : entre deux bascules PC, la vue
+	# reste modifiable localement (touche O du viewer focalisé).
+	if d.has("ext_view"):
+		var ev: bool = _b(d, "ext_view", false)
+		if ev != _last_ext_view:
+			_last_ext_view = ev
+			if cabin != null \
+					and (cabin.view_mode == Cabin.ViewMode.EXTERIOR) != ev:
+				cabin.toggle_view()
 	# Panne active : déclenche localement pour effet visuel + son
 	if d.has("active_fault") and fault_manager != null and d["active_fault"] is String:
 		var fid: String = d["active_fault"]
