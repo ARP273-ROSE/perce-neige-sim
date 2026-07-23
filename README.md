@@ -14,6 +14,27 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 
 ## Quoi de neuf — v1.12.x (audit + retours d'essai terrain, juillet 2026)
 
+**v1.12.18** — ambiances de quai nettoyées, mute pendant la fermeture :
+- **Le buzzer de portes ne joue plus en boucle au lancement** : les
+  ambiances de quai (`real_station_lower/upper.wav`, jouées en boucle à
+  l'arrêt portes ouvertes) étaient des extraits bruts des vidéos de
+  référence contenant… le buzzer de fermeture (gare basse, pics
+  1685/2106/2527 Hz identifiés au spectre) et des annonces PA captées
+  sur le quai réel — d'où le buzzer permanent à l'allumage et les
+  « annonces parasites en anglais sorties de nulle part ». Les deux
+  boucles sont reconstruites à partir de la seule fenêtre propre du
+  clip gare haute (t=2,1–7,3 s : brouhaha de hall sans voix ni buzzer),
+  refermées par fondu circulaire equal-power de 0,8 s.
+- **Couper le son (N) pendant la séquence de fermeture ne bloque plus le
+  départ** : le mute arrêtait le player au milieu de l'enchaînement
+  annonce → buzzer → portes, donc l'EndOfMedia final n'arrivait jamais
+  et `_close_seq_active` restait vrai à jamais — PRÊT refusé
+  (« séquence sonore de fermeture en cours ») et train cloué à quai.
+  Toutes les voies d'interruption (mute, stop, reset, annonce manuelle)
+  résolvent maintenant la séquence et son callback, comme le fait déjà
+  le chemin « déjà muet » ; le verrouillage physique des portes
+  (doors_timer) reste inchangé.
+
 **v1.12.17** — le check de mise à jour affiche enfin son résultat :
 - « Vérifier les mises à jour » ne faisait **rien** (ni dialogue « à
   jour », ni proposition d'installation), et le check silencieux du
