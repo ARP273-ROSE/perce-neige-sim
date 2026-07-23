@@ -14,6 +14,11 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 
 ## Quoi de neuf — v1.12.x (audit + retours d'essai terrain, juillet 2026)
 
+**v1.12.30** — bouton DÉMARRER qui débordait : le libellé était trop
+gros (19 pt sur 320 px) et sortait des deux côtés. Bouton élargi
+(460 px), police réduite (15 pt), texte tronqué proprement en dernier
+recours — il tient désormais dans le bouton.
+
 **v1.12.29** — écran d'accueil vide corrigé + noms de MAJ propres :
 - **L'écran d'accueil était vide** (régression v1.12.27) : la fonction
   de dessin de l'écran-titre référençait `st` sans le définir →
