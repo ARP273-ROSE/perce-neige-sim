@@ -90,7 +90,7 @@ try:
 except ImportError:
     _GODOT_BRIDGE_OK = False
 
-VERSION = "1.12.24"
+VERSION = "1.12.25"
 APP_NAME = "Perce-Neige Simulator"
 
 
@@ -5218,6 +5218,12 @@ class GameWidget(QWidget):
                 state_dict = physics_to_state_dict(st.train, st)
                 # Relaye le mute N au viewer 3D (il a son propre audio).
                 state_dict["muted"] = bool(self.sounds.muted)
+                # Vue extérieure orbitale (touche O) — le viewer bascule
+                # SUR CHANGEMENT ; angle à la souris (clic gauche
+                # maintenu) et zoom molette directement dans la fenêtre
+                # 3D embarquée.
+                state_dict["ext_view"] = bool(
+                    getattr(self, "_godot_ext_view", False))
                 self._godot_bridge.send_state(state_dict)
             self._advance_fault_phase(dt)
             # Ghost driver ready countdown : once the main driver has
@@ -5696,6 +5702,22 @@ class GameWidget(QWidget):
         elif k == Qt.Key.Key_0 and not self._show_annmenu:
             # Reset zoom
             self._profile_zoom = 1.0
+        elif k == Qt.Key.Key_O:
+            # Vue extérieure orbitale du viewer 3D embarqué (F4×2) :
+            # bascule FPV ↔ orbitale, streamée via le state dict. Angle
+            # à la souris (clic gauche maintenu dans la fenêtre 3D),
+            # zoom à la molette.
+            self._godot_ext_view = not getattr(self, "_godot_ext_view",
+                                               False)
+            add_event(st, "orbit",
+                      "3D view : "
+                      + ("EXTERIOR orbital (drag = angle, wheel = zoom)"
+                         if self._godot_ext_view else "FPV cockpit"),
+                      "Vue 3D : "
+                      + ("EXTÉRIEURE orbitale (glisser = angle, "
+                         "molette = zoom)"
+                         if self._godot_ext_view else "cockpit FPV"),
+                      "info")
         elif k == Qt.Key.Key_L:
             global LANG
             LANG = "en" if LANG == "fr" else "fr"
@@ -11134,6 +11156,8 @@ class GameWidget(QWidget):
                          "infos machine réelle + liens")),
                 ("F4", T("cabin view cycle: off → procedural → Godot 3D embedded",
                          "vue cabine cycle : off → procédurale → Godot 3D embarqué")),
+                ("O", T("3D exterior orbital view (left-drag = angle, wheel = zoom)",
+                        "vue 3D extérieure orbitale (glisser clic gauche = angle, molette = zoom)")),
                 ("F5", T("auto-exploitation trip log",
                          "journal des trajets auto")),
                 ("F6", T("download PDF manual + theory guide",

@@ -216,6 +216,7 @@ func _build_state_receiver() -> void:
 	state_receiver.name = "StateReceiver"
 	add_child(state_receiver)
 	state_receiver.set_physics(physics)
+	state_receiver.cabin = cabin   # bascule de vue pilotée par le PC (O)
 	# fault_manager peut être set après si besoin (en client mode minimal,
 	# on ne le construit pas pour ne pas dupliquer la logique Python)
 
@@ -616,6 +617,11 @@ func _handle_continuous_input(delta: float) -> void:
 		cabin.toggle_view()
 
 
+# Caméra orbitale (vue extérieure) : suivi des doigts pour le pincement.
+var _orbit_touches: Dictionary = {}
+var _orbit_pinch_dist: float = 0.0
+
+
 func _unhandled_input(event: InputEvent) -> void:
 	# Pannes + auto-exploitation + inversion de sens
 	if event is InputEventKey and event.pressed and not event.echo:
@@ -627,6 +633,44 @@ func _unhandled_input(event: InputEvent) -> void:
 			auto_operator.toggle()
 		elif event.keycode == KEY_I:
 			do_reverse()
+		elif event.keycode == KEY_O and cabin != null:
+			# Bascule FPV ↔ extérieure orbitale (aussi pilotée par la
+			# touche O du sim PC via le state dict "ext_view").
+			cabin.toggle_view()
+
+	# --- Caméra orbitale : drag 1 doigt = angle, pincement = zoom,
+	# clic gauche maintenu = angle, molette = zoom. Actif uniquement en
+	# vue EXTÉRIEURE ; les boutons tactiles (Control) consomment leurs
+	# événements avant d'arriver ici, donc pas de conflit avec l'UI.
+	if cabin == null or cabin.view_mode != cabin.ViewMode.EXTERIOR:
+		return
+	if event is InputEventScreenTouch:
+		if event.pressed:
+			_orbit_touches[event.index] = event.position
+		else:
+			_orbit_touches.erase(event.index)
+		_orbit_pinch_dist = 0.0
+	elif event is InputEventScreenDrag:
+		_orbit_touches[event.index] = event.position
+		if _orbit_touches.size() == 1:
+			cabin.orbit_rotate(event.relative.x, event.relative.y)
+		elif _orbit_touches.size() >= 2:
+			var pts: Array = _orbit_touches.values()
+			var d: float = (pts[0] as Vector2).distance_to(pts[1] as Vector2)
+			if _orbit_pinch_dist > 1.0 and d > 1.0:
+				cabin.orbit_zoom(_orbit_pinch_dist / d)
+			_orbit_pinch_dist = d
+	elif event is InputEventMouseButton and event.pressed:
+		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
+			cabin.orbit_zoom(0.9)
+		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+			cabin.orbit_zoom(1.1)
+	elif event is InputEventMouseMotion and _orbit_touches.is_empty():
+		# Souris réelle uniquement : sur tactile, Godot émet AUSSI des
+		# événements souris émulés — le dict de touches actives les
+		# neutralise (pas de double rotation).
+		if event.button_mask & MOUSE_BUTTON_MASK_LEFT:
+			cabin.orbit_rotate(event.relative.x, event.relative.y)
 
 
 # Inversion du sens de marche (touche I / bouton INVERSER) — cas d'usage :
