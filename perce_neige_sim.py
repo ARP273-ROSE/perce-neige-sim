@@ -90,7 +90,7 @@ try:
 except ImportError:
     _GODOT_BRIDGE_OK = False
 
-VERSION = "1.12.19"
+VERSION = "1.12.20"
 APP_NAME = "Perce-Neige Simulator"
 
 
@@ -5053,12 +5053,17 @@ class GameWidget(QWidget):
             # Watchdog : le viewer EMBARQUÉ est mort (crash driver GPU…) →
             # libérer l'embed et retomber sur la vue procédurale plutôt que
             # de laisser une zone noire figée jusqu'au prochain cycle F4.
-            if (self._cabin_view_state == 2 and not _g_running
+            # Couvre aussi le viewer gardé vivant/masqué hors vue 3D
+            # (états 0/1) : on nettoie l'embed fantôme tout de suite, le
+            # fallback d'affichage n'a de sens qu'en état 2.
+            if (not _g_running
                     and (self._godot_child_hwnd
                          or self._godot_embed_widget is not None)):
                 print("[GodotBridge] viewer 3D mort — fallback vue procédurale")
+                was_active = self._cabin_view_state == 2
                 self._release_godot_embed()
-                self._godot_fallback_to_procedural()
+                if was_active:
+                    self._godot_fallback_to_procedural()
             # Heartbeat 1 Hz hors MODE_RUN (en MODE_RUN l'état part à 60 Hz) :
             # le viewer s'auto-ferme sur silence prolongé → pas d'orphelin si
             # le sim Python crashe, sans confondre avec une pause menu.
@@ -6063,11 +6068,23 @@ class GameWidget(QWidget):
 
         # Reserve the bottom-right corner for the auto-exploitation
         # panel when the ops simulator is running — otherwise the event
-        # log can use the full width.
+        # log can use the full width. Le panneau de panne s'insère ENTRE
+        # le journal et le panneau auto (retour d'essai 2026-07-23 : dans
+        # la vue monde il était masqué par la 3D embarquée ; en bas il
+        # reste lisible SANS cacher la 3D).
         ops_panel_w = 300 if self.auto_ops.enabled else 0
-        log_w = w - 40 - (ops_panel_w + 12 if ops_panel_w else 0)
+        fault_visible = (self.state.panne_active
+                         and self.state.fault_show_panel
+                         and self.state.mode == MODE_RUN)
+        fault_w = 480 if fault_visible else 0
+        log_w = (w - 40
+                 - (ops_panel_w + 12 if ops_panel_w else 0)
+                 - (fault_w + 12 if fault_w else 0))
         log_rect = QRectF(20, h - 230, log_w, 210)
         self._draw_eventlog(p, log_rect)
+        if fault_visible:
+            fault_rect = QRectF(20 + log_w + 12, h - 230, fault_w, 210)
+            self._draw_fault_panel(p, fault_rect)
         if self.auto_ops.enabled:
             ops_rect = QRectF(w - 20 - ops_panel_w, h - 230,
                               ops_panel_w, 210)
@@ -6079,13 +6096,6 @@ class GameWidget(QWidget):
             self._draw_paused_overlay(p, w, h)
         # No "trip completed" overlay — the driver simply stays in the
         # cabin, doors open, ready to prepare the return trip on demand.
-
-        # Fault info panel — always visible while a fault is active so the
-        # driver knows what is happening, what they can/can't do, and how
-        # to recover. Drawn in the upper-left corner of the world view.
-        if (self.state.panne_active and self.state.fault_show_panel
-                and self.state.mode == MODE_RUN):
-            self._draw_fault_panel(p, view_rect)
 
         if self._show_help:
             self._draw_help_overlay(p, w, h)
@@ -7984,15 +7994,33 @@ class GameWidget(QWidget):
                     # Godot installé : proposer le téléchargement du binaire
                     # depuis la release GitHub (vérifié SHA-256).
                     self._offer_viewer_download()
-        # Sortie de l'état Godot embarqué : libérer le widget + tuer le subprocess
+        # Sortie de l'état Godot embarqué : le viewer reste VIVANT et
+        # embarqué, simplement masqué par _sync_godot_overlay_visibility
+        # (état != 2) — le prochain F4 vers la 3D est INSTANTANÉ au lieu
+        # de repayer 1-3 s de lancement + chargement de scène (« quand je
+        # retombe sur le 3D, Godot se recharge complètement », retour
+        # 2026-07-23). On ne tue le process que s'il n'a jamais fini de
+        # s'embarquer (lancement en cours / fenêtre séparée) : le laisser
+        # vivre non embarqué laisserait une fenêtre orpheline visible.
         if prev_state == 2 and new_state != 2:
-            self._release_godot_embed()
-        # Entrée dans l'état Godot embarqué : lancer EN ARRIÈRE-PLAN (non
-        # bloquant) puis embarquer la fenêtre dès qu'elle apparaît, via un
-        # QTimer. On reste optimistement en état 2 ; en cas d'échec total le
-        # poller bascule sur la vue procédurale (état 1).
+            embedded = bool(self._godot_child_hwnd
+                            or self._godot_embed_widget is not None)
+            if not (embedded and self._godot_bridge is not None
+                    and self._godot_bridge.is_running()):
+                self._release_godot_embed()
+        # Entrée dans l'état Godot embarqué : si le viewer est déjà
+        # embarqué et vivant, rien à lancer — _sync le démasque au tick
+        # suivant. Sinon, lancer EN ARRIÈRE-PLAN (non bloquant) puis
+        # embarquer la fenêtre dès qu'elle apparaît, via un QTimer. On
+        # reste optimistement en état 2 ; en cas d'échec total le poller
+        # bascule sur la vue procédurale (état 1).
         if new_state == 2 and prev_state != 2:
-            self._begin_godot_launch()
+            already = bool((self._godot_child_hwnd
+                            or self._godot_embed_widget is not None)
+                           and self._godot_bridge is not None
+                           and self._godot_bridge.is_running())
+            if not already:
+                self._begin_godot_launch()
         self._cabin_view_state = new_state
         self._cabin_view = (new_state != 0)
         # Notification courte sur quelle vue est active
@@ -8262,11 +8290,15 @@ class GameWidget(QWidget):
         reprend le rect — le conducteur garde une vue du tunnel. À la
         fermeture du panneau, la 3D réapparaît telle quelle."""
         st = self.state
+        # (Le panneau de panne n'est plus dans la liste : il vit dans le
+        # bandeau BAS depuis 2026-07-23, hors du rect 3D → la vue 3D
+        # reste visible pendant toute la panne.)
+        # Hors vue 3D (F4 → états 0/1), le viewer reste VIVANT mais
+        # masqué : retour en vue 3D instantané, pas de rechargement.
         want_hidden = bool(
             self._show_help or self._show_info or self._show_annmenu
             or st.mode in (MODE_TITLE, MODE_PAUSED, MODE_OVER)
-            or (st.panne_active and st.fault_show_panel
-                and st.mode == MODE_RUN)
+            or self._cabin_view_state != 2
         )
         if want_hidden == self._godot_embed_hidden:
             return
@@ -10749,12 +10781,15 @@ class GameWidget(QWidget):
         lang = st.lang
         catastrophic = is_catastrophic(kind)
 
-        # Panel geometry — top-left of the world view, narrow column.
-        pw = 360
-        ph = 290 if catastrophic else 230
-        x = view_rect.x() + 12
-        y = view_rect.y() + 12
-        rect = QRectF(x, y, pw, ph)
+        # Panel geometry — slot du bandeau bas fourni par paintEvent
+        # (entre le journal de bord et le panneau auto-exploitation).
+        # Avant : coin haut-gauche de la vue monde → masqué par la vue 3D
+        # embarquée (fenêtre native au-dessus du paint). En bas, il reste
+        # lisible sans avoir à cacher la 3D pendant toute la panne.
+        rect = view_rect
+        pw = rect.width()
+        x = rect.x()
+        y = rect.y()
 
         # Background : red tint for catastrophic, amber otherwise.
         bg = QColor(70, 12, 14, 235) if catastrophic else QColor(70, 50, 12, 230)
@@ -10763,15 +10798,15 @@ class GameWidget(QWidget):
         p.setPen(_cached_pen(border, 2))
         p.drawRoundedRect(rect, 10, 10)
 
-        # Title bar
+        # Title bar — sévérité inline à droite (le slot ne fait que
+        # 210 px de haut, chaque ligne compte).
         p.setPen(_cached_pen(COLOR_TEXT))
-        p.setFont(_cached_font("Segoe UI", 12, QFont.Weight.Bold))
+        p.setFont(_cached_font("Segoe UI", 11, QFont.Weight.Bold))
         title = (("⚠ PANNE — " if lang == "fr" else "⚠ FAULT — ")
                  + fault_label(kind, lang).upper())
-        p.drawText(QRectF(x + 12, y + 8, pw - 24, 20),
+        p.drawText(QRectF(x + 12, y + 8, pw - 24, 18),
                    int(Qt.AlignmentFlag.AlignLeft), title)
 
-        # Severity tag
         sev = prof.get("severity", "")
         sev_fr = {"advisory": "Avis", "operational": "Opérationnel",
                   "stopping": "Arrêt requis", "catastrophic": "CATASTROPHIQUE"
@@ -10781,12 +10816,12 @@ class GameWidget(QWidget):
                   }.get(sev, sev)
         p.setFont(_cached_font("Consolas", 8, QFont.Weight.Bold))
         p.setPen(_cached_pen(border))
-        p.drawText(QRectF(x + 12, y + 28, pw - 24, 14),
-                   int(Qt.AlignmentFlag.AlignLeft),
+        p.drawText(QRectF(x + 12, y + 10, pw - 24, 14),
+                   int(Qt.AlignmentFlag.AlignRight),
                    f"[{sev_fr if lang == 'fr' else sev_en}]")
 
         # Sections
-        cy = y + 48
+        cy = y + 32
         section_w = pw - 24
 
         def draw_section(label_fr: str, label_en: str, body: str,
@@ -10794,10 +10829,10 @@ class GameWidget(QWidget):
             nonlocal cy
             p.setFont(_cached_font("Segoe UI", 9, QFont.Weight.Bold))
             p.setPen(_cached_pen(color))
-            p.drawText(QRectF(x + 12, cy, section_w, 14),
+            p.drawText(QRectF(x + 12, cy, section_w, 13),
                        int(Qt.AlignmentFlag.AlignLeft),
                        label_fr if lang == "fr" else label_en)
-            cy += 14
+            cy += 13
             p.setFont(_cached_font("Segoe UI", 9))
             p.setPen(_cached_pen(COLOR_TEXT))
             p.drawText(QRectF(x + 12, cy, section_w, max_h),
@@ -10805,19 +10840,21 @@ class GameWidget(QWidget):
                            | Qt.AlignmentFlag.AlignTop
                            | Qt.TextFlag.TextWordWrap),
                        body)
-            cy += max_h + 6
+            cy += max_h + 3
             return cy
 
         what = prof.get("what_fr" if lang == "fr" else "what_en", "")
         do = prof.get("do_fr" if lang == "fr" else "do_en", "")
         blocked = prof.get("blocked_fr" if lang == "fr" else "blocked_en", "")
 
+        # Hauteurs calibrées pour le slot 480×210 : le panneau est plus
+        # LARGE qu'avant (480 vs 360) donc le texte wrappe moins haut.
         draw_section("Ce qui se passe :", "What's happening:", what,
-                     COLOR_TEXT_DIM, 50)
+                     COLOR_TEXT_DIM, 32)
         draw_section("À faire :", "What to do:", do,
-                     QColor(140, 220, 140), 70 if catastrophic else 50)
+                     QColor(140, 220, 140), 46 if catastrophic else 50)
         draw_section("Bloqué :", "Blocked:", blocked,
-                     COLOR_ALARM if catastrophic else COLOR_WARN, 28)
+                     COLOR_ALARM if catastrophic else COLOR_WARN, 18)
 
         # Catastrophic-only : phase indicator + explicit recovery key.
         if catastrophic:
@@ -10839,7 +10876,7 @@ class GameWidget(QWidget):
                 p.drawText(QRectF(x + 12 + i * (section_w / n), cy,
                                   section_w / n, 14),
                            int(Qt.AlignmentFlag.AlignLeft), f"{i+1}. {lbl}")
-            cy += 18
+            cy += 15
 
             # R hint — only meaningful once we reach evacuation /
             # out-of-service (before that the cabin is still rolling /
@@ -10850,7 +10887,7 @@ class GameWidget(QWidget):
                 hint = ("Appuyez sur R pour un nouveau voyage."
                         if lang == "fr"
                         else "Press R for a new trip.")
-                p.drawText(QRectF(x + 12, cy, section_w, 16),
+                p.drawText(QRectF(x + 12, cy, section_w, 14),
                            int(Qt.AlignmentFlag.AlignLeft), hint)
 
     def _draw_help_overlay(self, p: QPainter, w: int, h: int) -> None:

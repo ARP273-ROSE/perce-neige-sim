@@ -14,6 +14,19 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 
 ## Quoi de neuf — v1.12.x (audit + retours d'essai terrain, juillet 2026)
 
+**v1.12.20** — F4 instantané, panneau de panne dans le bandeau bas :
+- **Recycler F4 vers la vue 3D est instantané** : en quittant la vue 3D,
+  le viewer Godot reste vivant et embarqué, simplement masqué (il
+  continue de recevoir l'état à 60 Hz) — au retour, il réapparaît là où
+  il en est au lieu de repayer 1-3 s de lancement + chargement de scène.
+  Il n'est tué que s'il n'a jamais fini de s'embarquer, si son process
+  meurt (watchdog, étendu au viewer masqué) ou à la fermeture du sim.
+- **La description des pannes vit maintenant dans le bandeau du bas**,
+  entre le journal de bord et le panneau d'auto-exploitation (slot
+  480×210, mise en page compactée, sévérité inline). Conséquence : la
+  vue 3D n'a plus besoin d'être cachée pendant une panne — on garde la
+  3D ET le descriptif lisible en même temps.
+
 **v1.12.19** — la 3D embarquée ne masque plus l'interface, vrai mute :
 - **Les panneaux F1/F2/F3, la description des pannes et la pause sont
   enfin lisibles avec la vue 3D active** : la fenêtre Godot embarquée
