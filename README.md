@@ -14,6 +14,19 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 
 ## Quoi de neuf — v1.12.x (audit + retours d'essai terrain, juillet 2026)
 
+**v1.12.33** — exe versionné + erreur temp `_MEI` à la MAJ :
+- **Nom d'exe versionné** : l'asset et l'exe installé s'appellent
+  désormais `PerceNeigeSimulator_v1.12.33.exe` (clair, plus de
+  `(1).new.new.exe`). L'auto-update installe le nouveau à côté, relance,
+  puis supprime l'ancien.
+- **Erreur « Failed to remove temporary directory …\_MEIxxxxx »** après
+  la mise à jour : `os._exit(0)` sautait le nettoyage du dossier
+  temporaire de PyInstaller. Sortie propre via `QApplication.quit()`
+  (le bootloader efface son `_MEI`), avec exit dur de secours après 5 s,
+  et le batch de swap nettoie en plus les `_MEI*` périmés.
+  ⚠️ Comme l'asset change de nom, cette mise à jour est à télécharger
+  une fois à la main ; les suivantes seront automatiques.
+
 **v1.12.32** — confort réactif + vrai mode Défi (PC) :
 - **Score de confort enfin réaliste** : il restait au max même après un
   arrêt d'urgence « tout le monde par terre ». Nouveau modèle ISO 2631 :
