@@ -90,7 +90,7 @@ try:
 except ImportError:
     _GODOT_BRIDGE_OK = False
 
-VERSION = "1.12.25"
+VERSION = "1.12.26"
 APP_NAME = "Perce-Neige Simulator"
 
 
@@ -664,10 +664,17 @@ class Train:
     tension_dan: float = 0.0
     power_kw: float = 0.0
     regen_kw: float = 0.0        # recovered generator power on descent
+    regen_level: float = 0.0     # 0..1 : fraction de l'enveloppe de
+                                 # FREINAGE DE L'ENTRAÎNEMENT (génératrice)
+                                 # commandée pour retenir la descente —
+                                 # c'est le vrai organe de retenue, pas le
+                                 # frein de service à friction (audit
+                                 # physique 2026-07-24)
     inrush_timer: float = 0.0    # remaining time (s) of startup inrush boost
     # Smoothed display values (EMA τ ≈ 0.3 s) to avoid flicker
     tension_dan_disp: float = 0.0
     power_kw_disp: float = 0.0
+    regen_kw_disp: float = 0.0
     jerk_sum: float = 0.0       # integrated jerk for comfort score
     autopilot: bool = True      # on by default; press A to toggle
     # Drum-mounted parking (maintenance) brake — engaged at start of
@@ -909,6 +916,13 @@ class Physics:
         f_motor_power_cap = p_eff / v_eff             # P = F v
         f_motor_max = min(F_STALL, f_motor_power_cap)
         f_motor = tr.throttle * f_motor_max * tr.direction
+        # Force de FREINAGE PAR L'ENTRAÎNEMENT (génératrice) : oppose le
+        # sens de marche, même enveloppe que la traction. C'est l'organe
+        # de retenue de la descente chargée (le frein de service reste à
+        # ~0 %). Coupée si le chemin de force est ouvert (voir cutoffs
+        # doors/trip/aux/parking/rupture ci-dessous, appliqués à f_motor
+        # ET f_regen via _drive_off).
+        f_regen = -tr.regen_level * f_motor_max * tr.direction
 
         # Don't pump power at the limit — FONDU sur 0,25 m/s au-delà de
         # V_MAX ABSOLU (machine) au lieu de la coupure sèche. AUDIT
@@ -1028,8 +1042,19 @@ class Physics:
             a_brk = tr.brake * A_BRAKE_NORMAL * tr.service_brake_fail
         f_brake = -math.copysign(a_brk * m_total, tr.v) if abs(tr.v) > 0.05 else 0.0
 
+        # Le freinage par l'entraînement partage le chemin de force du
+        # moteur : coupé dès que celui-ci l'est (portes, hors trip,
+        # perte 400 V, tambour bloqué, câble rompu) ET pendant l'urgence
+        # (le frein de sécurité prend le relais). Sinon la gravité serait
+        # retenue par un couple génératrice qui n'a plus de chemin.
+        drive_off = (tr.doors_open or not st.trip_started
+                     or tr.aux_power_fault or tr.parking_stuck
+                     or tr.cable_rupture)
+        if drive_off or tr.emergency or tr.emergency_ramp > 0.0:
+            f_regen = 0.0
+
         # Sum and integrate on the total cable-bound mass
-        net = f_motor + f_grav_net + f_roll + f_brake
+        net = f_motor + f_regen + f_grav_net + f_roll + f_brake
         a = net / m_total
 
         # Comfort accel cap : clamp motor-driven acceleration (never reduce
@@ -1037,18 +1062,25 @@ class Physics:
         # emergency stop. Uses a soft-start profile so the train pulls out
         # gently from standstill and ramps to full A_MAX_REG progressively,
         # matching the Von Roll S-curve launch logic.
-        # a_pre_cap mémorisé : l'écart (a_pre_cap − a) est la retenue
-        # active de l'entraînement quand la gravité pousse plus fort que
-        # la rampe — puissance RÉGÉNÉRÉE, affichée plus bas.
-        a_pre_cap = a
-        if not tr.emergency and tr.brake < 0.05:
+        # Retenue délibérée = frein de service OU freinage de
+        # l'entraînement (régén). Depuis que la retenue passe par la
+        # régén (audit 2026-07-24), tr.brake reste ≈ 0 en descente —
+        # sans inclure regen_level ici, le cap de confort bridait la
+        # décélération commandée à 0,32 m/s² (arrêt de service en 195 m
+        # au lieu de 29). La force de retenue est identique à l'ancien
+        # frein ; seule l'attribution change.
+        braking_cmd = tr.brake >= 0.05 or tr.regen_level >= 0.05
+        if not tr.emergency:
             v_abs = abs(tr.v)
             soft_cap = A_START + (A_MAX_REG - A_START) * min(
                 1.0, v_abs / V_SOFT_RAMP
             )
+            # Cap de confort au LANCEMENT (traction) — toujours actif.
             if a > soft_cap:
                 a = soft_cap
-            elif a < -soft_cap:
+            # Cap en décélération — seulement hors retenue commandée :
+            # un arrêt voulu (frein ou régén plein) doit freiner ferme.
+            elif a < -soft_cap and not braking_cmd:
                 a = -soft_cap
 
         # Final creep kill : ONLY snap below 3 cm/s to avoid the visible
@@ -1386,36 +1418,20 @@ class Physics:
         # descent — real Perce-Neige recovers ~42 kWh per full loaded
         # descent according to the CFD datasheet). We track both signs
         # but display only the positive side on the gauge.
-        power_signed_kw = (f_motor * tr.v) / 1000.0
-        if power_signed_kw >= 0.0:
-            tr.power_kw = power_signed_kw
-            tr.regen_kw = 0.0
-        else:
-            tr.power_kw = 0.0
-            # Efficiency chain : bull wheel → DC machine → inverter → grid
-            # is roughly 0.80 round-trip at full load.
-            tr.regen_kw = -power_signed_kw * 0.80
-        # Retenue régénératrice : moteur coupé, la gravité pousse dans le
-        # sens de marche (rame lourde en descente) → l'entraînement retient
-        # via le câble. Force de retenue = excédent écrêté par la rampe de
-        # confort + frein de service en modulation. C'est le mécanisme des
-        # ~42 kWh récupérés par descente chargée (datasheet CFD) — jamais
-        # affiché auparavant (f_motor·v ne devient jamais négatif : le
-        # throttle est toujours ≥ 0 dans le sens de marche).
-        # Seuil 2 000 N (et plus f_motor == 0.0 exact) : avec les fondus
-        # d'autorité et de limite, la force moteur frôle zéro sans y être.
-        if (f_motor * tr.direction < 2000.0 and not tr.emergency
-                and drive_path_ok
-                and f_grav_net * tr.direction > 0.0 and abs(tr.v) > 0.3):
-            f_retenue = ((a_pre_cap - a) * tr.direction * m_total
-                         + a_brk * m_total)
-            if f_retenue > 0.0:
-                tr.regen_kw = f_retenue * abs(tr.v) * 0.80 / 1000.0
-                tr.power_kw = 0.0
+        # Traction : le moteur tire le câble → puissance consommée.
+        tr.power_kw = max(0.0, (f_motor * tr.v) / 1000.0)
+        # Régénération : l'entraînement freine en génératrice (f_regen
+        # oppose la marche). Puissance récupérée = |F·v|·rendement.
+        # Chaîne roue → machine DC → onduleur → réseau ≈ 0,80 à pleine
+        # charge (datasheet CFD : ~42 kWh par descente chargée). C'est
+        # désormais une VRAIE force du modèle, plus une heuristique : le
+        # frein de service (tr.brake) reste à ~0 % en marche normale.
+        tr.regen_kw = abs(f_regen * tr.v) * 0.80 / 1000.0
         # Smoothed display values — EMA with τ ≈ 0.3 s avoids flicker
         alpha = min(1.0, dt / 0.3)
         tr.tension_dan_disp += (tr.tension_dan - tr.tension_dan_disp) * alpha
         tr.power_kw_disp += (tr.power_kw - tr.power_kw_disp) * alpha
+        tr.regen_kw_disp += (tr.regen_kw - tr.regen_kw_disp) * alpha
 
         # Ghost train position : symmetric on the cable.
         # Cable elasticity rebound — two-stage relaxation after arrival :
@@ -1748,8 +1764,10 @@ class Physics:
                                  + m_ghost_r * math.cos(theta_gr)))
 
         self._reg_hold = target_v < 0.01 and v_travel < 0.4
+        demand_regen = 0.0
         if self._reg_hold:
-            # Arrived — kill motor, hold with brake
+            # Arrived — kill motor, hold with the friction brake (parking
+            # transition). No regen at standstill.
             demand_throttle = 0.0
             demand_brake = 0.5
         else:
@@ -1788,13 +1806,32 @@ class Physics:
             if f_req >= 0.0:
                 demand_throttle = max(0.0, min(1.0, f_req / max(f_motor_max, 1.0)))
                 demand_brake = 0.0
+                demand_regen = 0.0
             else:
+                # Retenue : l'ENTRAÎNEMENT freine en génératrice (4
+                # quadrants) — c'est lui qui tient la vitesse en descente
+                # chargée, PAS le frein de service à friction (qui
+                # s'userait à chaque trajet). Le frein mécanique ne prend
+                # que le DÉBORDEMENT au-delà de l'enveloppe du drive.
+                # Modélisation physique fidèle : ~42 kWh récupérés par
+                # descente chargée (datasheet CFD), frein de service à
+                # ~0 % en marche normale (audit 2026-07-24).
                 demand_throttle = 0.0
-                demand_brake = max(0.0, min(1.0, -f_req / (A_BRAKE_NORMAL * m_total_r)))
+                f_need = -f_req
+                f_regen_max = max(f_motor_max, 1.0)
+                demand_regen = max(0.0, min(1.0, f_need / f_regen_max))
+                overflow = f_need - f_regen_max
+                demand_brake = (max(0.0, min(1.0,
+                                overflow / (A_BRAKE_NORMAL * m_total_r)))
+                                if overflow > 0.0 else 0.0)
 
         # Throttle slew — unchanged, smooth motor ramp.
         dth = max(-slew, min(slew, demand_throttle - tr.throttle))
         tr.throttle = max(0.0, min(1.0, tr.throttle + dth))
+        # Regen slew — même dynamique que le throttle (le drive module son
+        # couple de freinage aussi vite qu'il monte en traction).
+        drg = max(-slew, min(slew, demand_regen - tr.regen_level))
+        tr.regen_level = max(0.0, min(1.0, tr.regen_level + drg))
         # Brake slew — slightly slower than before (2.5/s vs 4/s) to
         # iron out any residual jitter in the displayed % value, still
         # fast enough for a 2.5 m/s² service brake to respond cleanly.
@@ -1897,9 +1934,20 @@ def maybe_random_event(st: GameState, dt: float) -> None:
     st.event_cooldown -= dt
     if st.event_cooldown > 0:
         return
-    if random.random() > 0.0025:   # ~1 chance / 400 ticks at 60 Hz
+    # Aléa de déclenchement INDÉPENDANT DU FRAMERATE. L'ancien tirage
+    # « random() > 0.0025 par frame » était une probabilité PAR IMAGE :
+    # à 60 Hz ~1 chance/400 ticks (≈7 s), mais sur un écran 144/240 Hz
+    # les pannes fusaient 2,4 à 4× plus vite (« yen a une toutes les
+    # 3 secondes », retour 2026-07-24). Hazard exponentiel calé sur le
+    # temps réel : λ = 1 panne / 45 s d'exposition (après le cooldown),
+    # soit un incident toutes les ~60 s en moyenne — laisse le temps de
+    # gérer chaque panne. P(déclenche pendant dt) = λ·dt.
+    FAULT_HAZARD_PER_S = 1.0 / 45.0
+    if random.random() > FAULT_HAZARD_PER_S * dt:
         return
-    st.event_cooldown = 10.0
+    # Cooldown post-panne : pas de nouvel incident avant 20 s (le temps
+    # que la précédente soit résolue et digérée).
+    st.event_cooldown = 20.0
 
     # Weighted pool : common faults stay common, catastrophic ones rare.
     # Weights are calibrated from research_failures.md §2 — aux_power and
@@ -4664,6 +4712,7 @@ class GameWidget(QWidget):
         self._was_stopped_mid_tunnel = False
         self._mid_tunnel_stop_timer = 0.0
         self._show_annmenu = False       # F2 announcement console
+        self._regen_mode = False         # jauge puissance ↔ régén (hystérésis)
         # Vue cabine F4 : 3 états successifs au lieu d'un toggle binaire.
         #   0 = OFF (vue latérale par défaut)
         #   1 = vue cabine procédurale Python (la classique)
@@ -5010,8 +5059,11 @@ class GameWidget(QWidget):
         tr.name = T("Train", "Rame") + f" {tr.number}"
         tr.tension_dan = 0.0
         tr.power_kw = 0.0
+        tr.regen_kw = 0.0
+        tr.regen_level = 0.0
         tr.tension_dan_disp = 0.0
         tr.power_kw_disp = 0.0
+        tr.regen_kw_disp = 0.0
         tr.jerk_sum = 0.0
         # Autopilot enabled by default — smooth soft-start ramp while
         # the driver can still fine-tune the speed setpoint manually
@@ -9890,9 +9942,28 @@ class GameWidget(QWidget):
                        tr.brake, 1.0, T("Brake", "Frein"),
                        COLOR_WARN if not tr.emergency else COLOR_ALARM,
                        "URG!" if tr.emergency else f"{int(tr.brake * 100):3d}%")
-        self._draw_bar(p, rect.x() + 260, bar_y, 110, 22,
-                       tr.power_kw_disp, P_MAX / 1000.0, T("Power", "Puissance"),
-                       QColor(120, 180, 240), f"{int(tr.power_kw_disp):4d} kW")
+        # Jauge PUISSANCE / RÉGÉN : en descente chargée l'entraînement
+        # freine en génératrice (retenue) → on bascule l'affichage sur la
+        # puissance RÉCUPÉRÉE, cyan, avec hystérésis pour éviter le
+        # clignotement au voisinage de zéro (calqué sur le cockpit 3D).
+        if self._regen_mode:
+            if tr.regen_kw_disp < 15.0 or tr.power_kw_disp > 30.0:
+                self._regen_mode = False
+        else:
+            if tr.regen_kw_disp > 30.0 and tr.power_kw_disp < 15.0:
+                self._regen_mode = True
+        if self._regen_mode:
+            self._draw_bar(p, rect.x() + 260, bar_y, 110, 22,
+                           tr.regen_kw_disp, P_MAX / 1000.0,
+                           T("Regen", "Régén"),
+                           QColor(90, 220, 200),
+                           f"{int(tr.regen_kw_disp):4d} kW")
+        else:
+            self._draw_bar(p, rect.x() + 260, bar_y, 110, 22,
+                           tr.power_kw_disp, P_MAX / 1000.0,
+                           T("Power", "Puissance"),
+                           QColor(120, 180, 240),
+                           f"{int(tr.power_kw_disp):4d} kW")
 
         # --- Click controls for the speed command + brake (mouse only) ----
         # Small ▼ − / + ▲ arrow buttons under the speed bar, and a BRAKE
