@@ -630,10 +630,17 @@ func _regulator(
 		# pas seulement la décélération de croisière. a_ff_env anticipe la
 		# pente de l'enveloppe (approche/docking) pour que le P ne serve
 		# qu'aux transitoires.
-		# Les deux feed-forwards (enveloppe d'approche, pente de
-		# consigne) sont des CIBLES de décélération : on prend la plus
-		# contraignante, pas la somme (port du PC v1.12.21).
-		var a_ff_total: float = minf(a_ff_env, minf(0.0, a_cmd_ff))
+		# Le feed-forward est la dérivée de la CIBLE ACTIVE, exclusivement :
+		# consigne (a_cmd_ff) quand elle gouverne, enveloppe (a_ff_env)
+		# quand l'approche/creep gouverne. Le min() des deux (v1.12.23)
+		# cumulait les freinages à l'arrivée quand le mode auto baissait
+		# la consigne PENDANT l'approche → v plongeait à ~0,1 m/s sous le
+		# profil puis RÉACCÉLÉRAIT à 0,75 pour finir (retour d'essai PWA
+		# gare haute 2026-07-24).
+		var setpoint_binding: bool = (speed_cmd_eff <= v_envelope
+			and dist_to_stop >= PNConstants.CREEP_DIST)
+		var a_ff_total: float = minf(0.0, a_cmd_ff) if setpoint_binding \
+			else a_ff_env
 		var a_des: float = clampf(a_ff_total + err * k_a,
 			-PNConstants.A_BRAKE_NORMAL, PNConstants.A_TARGET)
 		var f_req: float = m_total * a_des + f_ff
