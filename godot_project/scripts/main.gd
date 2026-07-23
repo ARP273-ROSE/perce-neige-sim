@@ -588,10 +588,11 @@ func _handle_continuous_input(delta: float) -> void:
 	if Input.is_action_pressed("speed_down"):
 		physics.speed_cmd = clampf(physics.speed_cmd - speed_cmd_rate * delta, 0.0, 1.0)
 
-	# Frein service : tant que bouton enfoncé
-	if Input.is_action_pressed("brake"):
-		physics.brake = minf(1.0, physics.brake + 1.5 * delta)
-	# Note : le relâchement est géré par le régulateur (qui baisse brake)
+	# Frein service : tant que bouton enfoncé. On lève le flag
+	# manual_brake_held → le régulateur coupe le couple et met le frein à
+	# fond (il ne tire plus contre le frein). Le relâchement rend la main
+	# au régulateur (qui redescend brake).
+	physics.manual_brake_held = Input.is_action_pressed("brake")
 
 	# Urgence : latch sur press
 	if Input.is_action_just_pressed("emergency"):
