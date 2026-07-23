@@ -4,8 +4,8 @@
 # de signature de code le fait — mais réduit les faux positifs heuristiques).
 VSVersionInfo(
   ffi=FixedFileInfo(
-    filevers=(1, 12, 20, 0),
-    prodvers=(1, 12, 20, 0),
+    filevers=(1, 12, 21, 0),
+    prodvers=(1, 12, 21, 0),
     mask=0x3f,
     flags=0x0,
     OS=0x40004,
@@ -20,12 +20,12 @@ VSVersionInfo(
         [
           StringStruct('CompanyName', 'ARP273-ROSE'),
           StringStruct('FileDescription', 'Simulateur du funiculaire Perce-Neige de Tignes'),
-          StringStruct('FileVersion', '1.12.20'),
+          StringStruct('FileVersion', '1.12.21'),
           StringStruct('InternalName', 'PerceNeigeSimulator'),
           StringStruct('LegalCopyright', 'Projet open-source ARP273-ROSE'),
           StringStruct('OriginalFilename', 'PerceNeigeSimulator.exe'),
           StringStruct('ProductName', 'Perce-Neige Simulator'),
-          StringStruct('ProductVersion', '1.12.20'),
+          StringStruct('ProductVersion', '1.12.21'),
         ])
     ]),
     VarFileInfo([VarStruct('Translation', [0x040c, 1200])])
