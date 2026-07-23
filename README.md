@@ -14,6 +14,31 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 
 ## Quoi de neuf — v1.12.x (audit + retours d'essai terrain, juillet 2026)
 
+**v1.12.21** — audit physique complet des pannes et des arrêts
+(détail : `AUDIT_PHYSIQUE_PANNES.md`, banc reproductible
+`tests/bench_pannes.py`) :
+- **Les plafonds de panne ne « piquent » plus** (« le funi réduit sa
+  vitesse quasi instantanément ») : le moteur n'est plus coupé en une
+  frame au déclenchement — le cap passe par une rampe de consigne
+  dédiée 0,60 m/s² avec feed-forward de pente. Rails humides 10→6 m/s
+  en ~7 s à ≤ 0,75 m/s² au lieu de 2,5 s à 1,82.
+- **Chaînes de sécurité automatiques** : frein de service dégradé →
+  urgence auto en ~3 s (fini « le funi continue à fond avec 0 kW et le
+  frein à moitié serré ») ; dépassement persistant d'un plafond de
+  panne → urgence ; interrupteur de mou de câble et seuil rouge de
+  tension actifs pendant leurs défauts.
+- **aux_power** : le frein à manque de courant s'applique vraiment
+  (la rame accélérait en roue libre à 13,2 m/s) ; **parking_stuck** en
+  marche freine réellement ; **aiguillage Abt** : arrêt AVANT
+  l'évitement, pas un simple 2 m/s.
+- **Arrêt électrique conforme doctrine** : ≈ 0,4 m/s² dans les deux
+  sens via régen contrôlée (mesuré avant : jusqu'à 1,0 en montée, et
+  141 m pour s'arrêter depuis 6 m/s à cause d'une consigne qui
+  remontait) .
+- Validés tels quels (physique correcte) : urgence commandée
+  1,25 m/s² ± gravité, parachute 3,6 + gravité, rupture de câble en
+  montée à 6,4 m/s² (Belleville + pente, pas un bug).
+
 **v1.12.20** — F4 instantané, panneau de panne dans le bandeau bas :
 - **Recycler F4 vers la vue 3D est instantané** : en quittant la vue 3D,
   le viewer Godot reste vivant et embarqué, simplement masqué (il
