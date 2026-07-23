@@ -91,7 +91,7 @@ try:
 except ImportError:
     _GODOT_BRIDGE_OK = False
 
-VERSION = "1.12.36"
+VERSION = "1.12.37"
 APP_NAME = "Perce-Neige Simulator"
 
 
@@ -826,6 +826,9 @@ class GameState:
     crash_speed: float = 0.0                 # vitesse d'impact (m/s)
     crash_msg: str = ""                      # message sarcastique tiré
     crash_shake_t: float = 0.0               # chrono de secousse écran
+    crash_derail: bool = False               # collision butoir vs déraillement
+    v_profile: float = 99.0                  # vitesse d'enveloppe auto à
+                                             # la position courante (alarme)
     panne_active: bool = False
     panne_kind: str = ""
     panne_auto: bool = True     # when False, fault scheduler is paused
@@ -1226,7 +1229,26 @@ class Physics:
         CRASH_SPEED = 1.5
         hit_end = ((tr.s >= clamp_hi and tr.v > CRASH_SPEED)
                    or (tr.s <= clamp_lo and tr.v < -CRASH_SPEED))
-        if (hit_end and not st.crashed and not st.finished
+        # DÉRAILLEMENT À L'AIGUILLAGE : l'évitement Abt fait passer la rame
+        # d'une voie à l'autre par des aiguillages en biais. Le max
+        # certifié étant 12 m/s, l'évitement est franchi à pleine vitesse
+        # en exploitation NORMALE — on ne déraille donc PAS à 12,1 m/s
+        # (tolérance de certification, retour d'essai 2026-07-24). Le
+        # déraillement n'arrive qu'en SURVITESSE réelle > 13,5 m/s
+        # (+12 % ≈ 49 km/h) : dormant tant que le plafond V_MAX tient,
+        # atteignable quand la survitesse est possible (mode Défi). Le
+        # tunnel est quasi rectiligne ailleurs : pas de virage
+        # déraillant.
+        SWITCH_DERAIL_V = 13.5
+        in_switch = PASSING_START <= tr.s <= PASSING_END
+        derail = (st.run_mode == "challenge" and in_switch
+                  and abs(tr.v) > SWITCH_DERAIL_V)
+        if (derail and not st.crashed and not st.finished
+                and st.trip_started):
+            _trigger_crash(st, abs(tr.v), derail=True)
+            tr.v = 0.0
+            a = 0.0
+        elif (hit_end and not st.crashed and not st.finished
                 and st.trip_started):
             _trigger_crash(st, abs(tr.v))
             tr.s = clamp_hi if tr.v > 0 else clamp_lo
@@ -1764,6 +1786,12 @@ class Physics:
             # so a gentle coast envelope suffices.
             a_env = A_NATURAL_UP
         v_envelope = math.sqrt(CREEP_V * CREEP_V + 2.0 * a_env * d_to_creep)
+        # Exposé pour l'alarme « TROP VITE » du pupitre : c'est la vitesse
+        # que l'AUTOMATE tiendrait à cette position (profil d'approche
+        # Von Roll). L'alarme se déclenche dès qu'on s'en écarte vers le
+        # haut, même loin du butoir (retour d'essai 2026-07-24 :
+        # « l'alarme arrive trop tard »).
+        self.state.v_profile = v_envelope
 
         # --- Setpoint slewing ---------------------------------------------
         # Real Von Roll speed-command knob is not directly tracked by the
@@ -1792,12 +1820,14 @@ class Physics:
         # (rampe régénérative du drive, cf. branche ci-dessus).
         if tr.electric_stop or tr.dead_man_fault:
             ramp_down = 0.45
-        # Mode DÉFI : la consigne du conducteur est RÉACTIVE (rampe
-        # 2,4 m/s²) — baisser le levier freine vraiment la rame (via le
-        # frein de service du régulateur), sinon impossible de s'arrêter
-        # à temps et on percute le butoir. C'est tout l'intérêt du mode.
+        # Mode DÉFI : la consigne suit le conducteur à une décélération
+        # RÉALISTE de service (1,2 m/s² — arrêt ferme mais confortable,
+        # pas le frein d'urgence). 2,4 m/s² « jetait tout le monde en
+        # avant » (retour d'essai 2026-07-24). À 1,2 m/s², l'arrêt depuis
+        # 12 m/s prend ~60 m : il faut ANTICIPER le freinage, sinon on
+        # percute le butoir — c'est l'intérêt du mode.
         if self.state.run_mode == "challenge":
-            ramp_down = 2.4
+            ramp_down = 1.2
         # Feed-forward de la PENTE de consigne : sans lui, le P (k_a =
         # 0,35) doit accumuler ~1,7 m/s d'erreur pour tenir une rampe de
         # 0,6 m/s² → la rame traînait au-dessus du plafond de panne (et
@@ -1975,36 +2005,80 @@ CRASH_QUIPS: list[tuple[str, str]] = [
      "Physics: 1. You: 0."),
     ("Von Roll a mis un frein. Vous, une intention.",
      "Von Roll fitted a brake. You brought good intentions."),
+    ("Le repère d'arrêt était à 3 mètres. Vous visiez le Val d'Isère.",
+     "The stop mark was 3 m away. You aimed for the next valley."),
+    ("Score de précision : oui. Précision de score : zéro.",
+     "Precision score: yes. Score precision: zero."),
+    ("Techniquement, vous VOUS êtes arrêté. Le mur a aidé.",
+     "Technically you did stop. The wall helped."),
+    ("Le frein de service vous fait dire bonjour. Il s'ennuyait.",
+     "The service brake says hi. It was getting bored."),
+    ("2 111 mètres de montée pour finir dans un butoir. Beau parcours.",
+     "2111 m of climb to end in a buffer stop. Nice run."),
+    ("On appelle ça « l'arrêt Kaprun ». On ne devrait pas.",
+     "We call this ‘the Kaprun stop’. We shouldn't."),
+    ("Les freins existent depuis 1834. Vous, depuis quand ?",
+     "Brakes have existed since 1834. And you?"),
+    ("Rapport d'incident : conducteur convaincu d'être en descente libre.",
+     "Incident report: driver convinced they were free-riding."),
+    ("Le glacier a 10 000 ans. Votre patience à l'approche : 2 secondes.",
+     "The glacier is 10,000 years old. Your approach patience: 2 seconds."),
+    ("Von Roll : coefficient de sécurité 8,5. Vous : coefficient 0.",
+     "Von Roll: safety factor 8.5. You: factor 0."),
+]
+
+# Messages sarcastiques de DÉRAILLEMENT à l'aiguillage d'évitement.
+DERAIL_QUIPS: list[tuple[str, str]] = [
+    ("Un aiguillage, ça se prend au pas. Pas au sprint.",
+     "A switch is taken at a crawl. Not a sprint."),
+    ("Le système Abt vous salue depuis le fond du ravin.",
+     "The Abt system waves at you from the bottom of the ravine."),
+    ("Deux rails, deux directions, zéro dans la bonne.",
+     "Two rails, two directions, zero of them the right one."),
+    ("L'évitement s'appelle « évitement ». Pas « défonçage ».",
+     "The passing loop is for passing. Not for plowing through."),
+    ("La physique des courbes : un cours que vous avez séché.",
+     "Curve physics: a class you clearly skipped."),
 ]
 
 
-def _trigger_crash(st: GameState, speed: float) -> None:
-    """Collision en bout de voie : passe en game-over avec secousse
-    d'écran et un mot sarcastique. Appelé par la physique quand la rame
-    percute le butoir (mode Défi sans freinage à temps)."""
+def _trigger_crash(st: GameState, speed: float, derail: bool = False) -> None:
+    """Game-over de conduite (mode Défi) : collision au butoir (defaut)
+    ou DÉRAILLEMENT à l'aiguillage d'évitement (`derail`). Secousse
+    d'écran + mot sarcastique + à-coup de câble."""
     st.crashed = True
     st.crash_speed = speed
-    quip = random.choice(CRASH_QUIPS)
+    quips = DERAIL_QUIPS if derail else CRASH_QUIPS
+    quip = random.choice(quips)
     st.crash_msg = quip[1] if LANG == "en" else quip[0]
-    st.crash_shake_t = 1.2
+    st.crash_derail = derail
+    st.crash_shake_t = 1.4 if derail else 1.2
     st.mode = MODE_OVER
-    # À-coup dans le câble : la rame stoppe net contre le butoir mais le
-    # brin élastique (3,4 km) encaisse l'énergie → la jauge de tension
-    # bondit d'un coup, proportionnellement à la vitesse d'impact. La
-    # physique s'arrêtant (MODE_OVER), on force directement l'affichage
-    # (il reste figé sur l'écran de collision) ; la secousse d'écran rend
-    # le choc lui-même.
+    # À-coup dans le câble : la rame stoppe net mais le brin élastique
+    # (3,4 km) encaisse l'énergie → la jauge de tension bondit,
+    # proportionnellement à la vitesse. Physique figée (MODE_OVER), on
+    # force l'affichage ; la secousse rend le choc.
     st.train.tension_dan = min(42000.0, st.train.tension_dan
                                + 4000.0 + speed * 4500.0)
     st.train.tension_dan_disp = st.train.tension_dan
-    add_event(
-        st, "crash",
-        f"COLLISION with the buffer stop at {speed * 3.6:.0f} km/h — "
-        f"press R for a new trip.",
-        f"COLLISION avec le butoir à {speed * 3.6:.0f} km/h — "
-        f"R pour un nouveau voyage.",
-        "alarm",
-    )
+    if derail:
+        add_event(
+            st, "derail",
+            f"DERAILMENT at the passing loop at {speed * 3.6:.0f} km/h — "
+            f"press R for a new trip.",
+            f"DÉRAILLEMENT à l'évitement à {speed * 3.6:.0f} km/h — "
+            f"R pour un nouveau voyage.",
+            "alarm",
+        )
+    else:
+        add_event(
+            st, "crash",
+            f"COLLISION with the buffer stop at {speed * 3.6:.0f} km/h — "
+            f"press R for a new trip.",
+            f"COLLISION avec le butoir à {speed * 3.6:.0f} km/h — "
+            f"R pour un nouveau voyage.",
+            "alarm",
+        )
 
 
 def add_event(st: GameState, key: str, en: str, fr: str, severity: str = "info") -> None:
@@ -5325,6 +5399,7 @@ class GameWidget(QWidget):
         st.crash_speed = 0.0
         st.crash_msg = ""
         st.crash_shake_t = 0.0
+        st.crash_derail = False
         st.rebound_timer = 0.0
         self._last_panne_kind = ""
         self._welcome_played = False
@@ -5556,6 +5631,24 @@ class GameWidget(QWidget):
                     0.0, st.departure_buzzer_remaining - dt)
                 if st.departure_buzzer_remaining <= 0.0:
                     st.trip_started = True
+                    # Au DÉPART, la charge réelle = la cible de la
+                    # direction (montée chargée / descente vide). Si le
+                    # conducteur a écourté l'embarquement (inversion +
+                    # départ rapide), les effectifs réels traînaient
+                    # encore la charge du trajet précédent → une descente
+                    # partait avec une rame ENCORE PLEINE = gravité qui
+                    # assiste, puissance ridicule (« je descends et il me
+                    # met 54 kW », retour d'essai 2026-07-24). On aligne
+                    # donc effectifs et contrepoids sur leurs cibles à
+                    # l'instant du départ (portes fermées, plus personne
+                    # ne monte ni ne descend).
+                    _tr = st.train
+                    _tr.pax_car1 = _tr.pax_car1_target
+                    _tr.pax_car2 = _tr.pax_car2_target
+                    _tr.pax1_f = float(_tr.pax_car1_target)
+                    _tr.pax2_f = float(_tr.pax_car2_target)
+                    st.ghost_pax = st.ghost_pax_target
+                    st.ghost_f = float(st.ghost_pax_target)
                     # Motors take the load — release the driver's service
                     # brake and the drum parking brake automatically.
                     # The regulator will now manage throttle and braking
@@ -5594,10 +5687,19 @@ class GameWidget(QWidget):
             # d'une AUTRE source (ambiance de quai contaminée, corrigée en
             # v1.12.18/27), pas d'ici : réactivée à la demande de Kevin
             # (2026-07-24). Diffusable aussi via le menu ANNONCES.
+            # En Normal/Auto : attendre le fluage (|v| < 1) pour que le
+            # message tombe quand les passagers peuvent sortir. En DÉFI :
+            # le déclencher dès l'entrée en zone (< 200 m) QUELLE QUE SOIT
+            # la vitesse — « même pleine balle tu déclenches l'annonce »
+            # (retour d'essai 2026-07-24 ; sans auto-dock on n'atteint pas
+            # forcément |v| < 1 avant le butoir).
+            _welcome_ok = (abs(tr_welcome.v) < 1.0
+                           or (st.run_mode == "challenge"
+                               and dist_remain_welcome < 200.0))
             if (st.trip_started and not self._welcome_played
                     and tr_welcome.direction > 0
                     and dist_remain_welcome < 220.0
-                    and abs(tr_welcome.v) < 1.0):
+                    and _welcome_ok):
                 self.sounds.play("welcome", lang=st.ann_lang, cooldown=600.0)
                 self._welcome_played = True
             # Freinage d'approche réel (real_brake_approach.wav, 20 s,
@@ -6718,13 +6820,17 @@ class GameWidget(QWidget):
         p.setFont(_cached_font("Segoe UI", 34, QFont.Weight.Bold))
         p.drawText(QRectF(bx, by + 18, bw, 46),
                    int(Qt.AlignmentFlag.AlignHCenter),
-                   T("💥 COLLISION", "💥 COLLISION"))
+                   (T("🚋 DERAILMENT", "🚋 DÉRAILLEMENT") if st.crash_derail
+                    else "💥 COLLISION"))
         p.setFont(_cached_font("Segoe UI", 13))
         p.setPen(_cached_pen(QColor(240, 220, 220)))
         p.drawText(QRectF(bx, by + 70, bw, 22),
                    int(Qt.AlignmentFlag.AlignHCenter),
-                   T(f"Buffer stop hit at {st.crash_speed * 3.6:.0f} km/h",
-                     f"Butoir percuté à {st.crash_speed * 3.6:.0f} km/h"))
+                   (T(f"Derailed at the switch at {st.crash_speed*3.6:.0f} km/h",
+                      f"Déraillé à l'aiguillage à {st.crash_speed*3.6:.0f} km/h")
+                    if st.crash_derail else
+                    T(f"Buffer stop hit at {st.crash_speed * 3.6:.0f} km/h",
+                      f"Butoir percuté à {st.crash_speed * 3.6:.0f} km/h")))
         # Message sarcastique, sur 2 lignes si besoin.
         p.setFont(_cached_font("Segoe UI", 15, QFont.Weight.DemiBold))
         p.setPen(_cached_pen(QColor(255, 210, 120)))
@@ -10325,20 +10431,20 @@ class GameWidget(QWidget):
         # (L'altitude instantanée est affichée dans le tableau latéral,
         # sous le dénivelé — cf. _draw_world.)
 
-        # Alarme rouge « TROP VITE » (en-tête, à droite) : la vitesse
-        # actuelle ne permet plus de s'arrêter au repère avec le frein de
-        # service à fond (2,5 m/s²). PUREMENT INDICATIVE — le sim
-        # n'intervient PAS (retour d'essai 2026-07-24). Surtout utile en
+        # Alarme rouge « TROP VITE » (en-tête, à droite) : se déclenche
+        # dès que la vitesse DÉPASSE LE PROFIL que l'AUTOMATE tiendrait à
+        # cette position (st.v_profile, l'enveloppe d'approche Von Roll) —
+        # bien plus tôt que « je ne peux plus m'arrêter au frein max »
+        # (retour d'essai 2026-07-24 : « l'alarme arrive trop tard, il
+        # faut qu'elle arrive dès qu'on s'écarte du profil auto »).
+        # PUREMENT INDICATIVE — le sim n'intervient pas. Surtout utile en
         # Défi (filet d'auto-dock levé → on peut percuter le butoir).
         if tr.direction > 0:
             _d_stop = STOP_S - tr.s
         else:
             _d_stop = tr.s - START_S
-        overspeed_pos = False
-        if (st.trip_started and not st.finished and _d_stop > 0.5
-                and abs(tr.v) > 1.0):
-            brake_dist = (tr.v * tr.v) / (2.0 * A_BRAKE_NORMAL)
-            overspeed_pos = brake_dist > _d_stop * 0.9
+        overspeed_pos = (st.trip_started and not st.finished and _d_stop > 0.5
+                         and abs(tr.v) > st.v_profile + 0.4)
         if overspeed_pos and int(st.trip_time * 3) % 2 == 0:
             warn = QRectF(rect.x() + rect.width() - 190, rect.y() + 8,
                           176, 24)
