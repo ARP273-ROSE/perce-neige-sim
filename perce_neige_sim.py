@@ -90,7 +90,7 @@ try:
 except ImportError:
     _GODOT_BRIDGE_OK = False
 
-VERSION = "1.12.18"
+VERSION = "1.12.19"
 APP_NAME = "Perce-Neige Simulator"
 
 
@@ -2764,7 +2764,7 @@ class SoundSystem:
         strict: if True, skip silently when the requested language is not
         available for this group (no fallback to another language).
         """
-        if not self.enabled or self.muted:
+        if not self.enabled:
             return
         if self._cooldowns.get(group, 0.0) > 0:
             return
@@ -2791,7 +2791,7 @@ class SoundSystem:
             self._close_seq_active = False
             if on_complete:
                 on_complete()
-        if not self.enabled or self.muted:
+        if not self.enabled:
             _wrap_done()
             return
         if self._cooldowns.get("doors_close", 0.0) > 0:
@@ -2826,7 +2826,7 @@ class SoundSystem:
 
     def play_bilingual(self, group: str, cooldown: float = 30.0) -> None:
         """Queue FR then EN versions back to back, like the real train."""
-        if not self.enabled or self.muted:
+        if not self.enabled:
             return
         if self._cooldowns.get(group, 0.0) > 0:
             return
@@ -2851,7 +2851,7 @@ class SoundSystem:
                          False → bell/ring (gare du bas / Lac).
         Falls back to the synthesized buzzer if real extracts are missing.
         """
-        if not self.enabled or self.muted:
+        if not self.enabled:
             return
         if upper_station:
             path = self._ambient_wavs.get("buzzer_real")
@@ -2874,7 +2874,7 @@ class SoundSystem:
         start closing (real cabin recording, t=1:08→1:15 of the HD
         ascent). Falls back silently if the extract is missing.
         """
-        if not self.enabled or self.muted:
+        if not self.enabled:
             return
         path = self._ambient_wavs.get("door_buzzer_real")
         if path is None or not path.exists():
@@ -2891,7 +2891,7 @@ class SoundSystem:
         clunk) heard as the leaves actually close — real cabin recording
         t=1:15→1:22 of the HD ascent.
         """
-        if not self.enabled or self.muted:
+        if not self.enabled:
             return
         path = self._ambient_wavs.get("door_motion_real")
         if path is None or not path.exists():
@@ -2914,7 +2914,7 @@ class SoundSystem:
         loops so the crossing's distinctive rattle + airflow shift is
         actually audible instead of drowning under the cruise rumble.
         """
-        if not self.enabled or self.muted:
+        if not self.enabled:
             return
         path = self._ambient_wavs.get("crossing_real")
         if path is None or not path.exists():
@@ -2953,7 +2953,7 @@ class SoundSystem:
         le nez de la rame en cas de dérive franche (> 0,7 s — pas de seek
         permanent, ça clique). Rame arrêtée dans l'évitement → pause (pas
         de mouvement = pas de crécelle d'aiguillage)."""
-        if not self.enabled or self.muted or not self._crossing_active:
+        if not self.enabled or not self._crossing_active:
             return
         try:
             if speed_mps < 1.0:
@@ -2992,7 +2992,7 @@ class SoundSystem:
         stations. Prefers the field-recorded motor-start cut from the
         2026 4K footage; falls back to the procedural ramp-up clip.
         """
-        if not self.enabled or self.muted:
+        if not self.enabled:
             return
         path = self._ambient_wavs.get("motor_start_real")
         if not (path and path.exists()):
@@ -3016,7 +3016,7 @@ class SoundSystem:
 
     def start_horn(self) -> None:
         """Start playing the horn (looped while held)."""
-        if not self.enabled or self.muted:
+        if not self.enabled:
             return
         if self._horn_player is None:
             return
@@ -3121,7 +3121,7 @@ class SoundSystem:
 
         `dt` rend les rampes indépendantes du framerate (α = 1−e^(−dt/τ)).
         """
-        if not self.enabled or self.muted:
+        if not self.enabled:
             if self._amb_playing:
                 self._amb_player.stop()
                 self._amb_playing = False
@@ -3289,6 +3289,7 @@ class SoundSystem:
                     fx.setSource(QUrl.fromLocalFile(str(p)))
                     fx.setLoopCount(QSoundEffect.Loop.Infinite.value)
                     fx.setVolume(0.0)
+                    fx.setMuted(self.muted)
                     self._motor_fx.append(fx)
                 self._motor_ready = True
             except Exception:
@@ -3316,7 +3317,7 @@ class SoundSystem:
         "lower", "upper"). Le fondu (entrée ET sortie) est fait par
         update_ambient — quand les portes ferment au buzzer de départ,
         l'ambiance de quai s'efface toute seule avant la mise en route."""
-        if not self.enabled or self.muted:
+        if not self.enabled:
             self._station_target = 0.0
             return
         if which is None:
@@ -3342,7 +3343,7 @@ class SoundSystem:
         4K) — joué une fois par trajet pendant la décélération finale.
         L'ambiance est duckée pendant le clip (cf. update_ambient) puis
         reprend en fondu quand il se termine."""
-        if not self.enabled or self.muted:
+        if not self.enabled:
             return
         path = self._ambient_wavs.get("brake_approach_real")
         if path is None or not path.exists():
@@ -3407,12 +3408,37 @@ class SoundSystem:
             except Exception:
                 pass
 
+    def _apply_mute_state(self) -> None:
+        """Applique self.muted à TOUTES les sorties audio sans toucher à
+        la lecture : N est un robinet de volume, pas un stop. Les clips,
+        séquences et boucles continuent leur cours en silence et
+        redeviennent audibles au dé-mute, exactement là où ils en sont
+        (« quand je rappuie je dois réentendre le son et ça doit
+        continuer son cours », retour d'essai 2026-07-23 — l'ancien mute
+        stoppait les players et vidait la file)."""
+        m = self.muted
+        for name in ("_audio", "_fx_audio", "_horn_audio", "_door_audio",
+                     "_cross_audio"):
+            out = getattr(self, name, None)
+            if out is not None:
+                try:
+                    out.setMuted(m)
+                except Exception:
+                    pass
+        effects = [getattr(self, name, None)
+                   for name in ("_amb_player", "_amb2_player",
+                                "_station_player")]
+        effects.extend(getattr(self, "_motor_fx", []))
+        for fx in effects:
+            if fx is not None:
+                try:
+                    fx.setMuted(m)
+                except Exception:
+                    pass
+
     def toggle_mute(self) -> bool:
         self.muted = not self.muted
-        if self.muted and self._player is not None:
-            self._halt_all_players()
-            self._queue.clear()
-            self._abort_close_sequence()
+        self._apply_mute_state()
         return self.muted
 
     def stop(self) -> None:
@@ -4531,6 +4557,12 @@ class GameWidget(QWidget):
         # pas une fenêtre externe → elle flotte et passe derrière) mais
         # SetParent direct → vraie fenêtre WS_CHILD intégrée.
         self._godot_child_hwnd = None
+        # Vue 3D masquée temporairement parce qu'un overlay Qt (F1/F2/F3,
+        # panneau de panne, pause, menus) doit être lisible : la fenêtre
+        # native passerait par-dessus. Géré par
+        # _sync_godot_overlay_visibility ; la vue procédurale reprend
+        # pendant ce temps.
+        self._godot_embed_hidden = False
         # Accumulateur du heartbeat 1 Hz envoyé au viewer 3D hors MODE_RUN
         # (permet au viewer de distinguer « sim en menu » de « sim mort »).
         self._godot_hb_acc = 0.0
@@ -5012,6 +5044,11 @@ class GameWidget(QWidget):
 
         # --- Viewer Godot 3D : watchdog + heartbeat -----------------------
         if self._godot_bridge is not None:
+            # La 3D embarquée est une fenêtre NATIVE : elle passe toujours
+            # au-dessus de ce que paintEvent dessine dans son rect. Quand
+            # un panneau plein écran est ouvert (F1/F2/F3, pannes, pause,
+            # menus), on la cache et la vue procédurale reprend dessous.
+            self._sync_godot_overlay_visibility()
             _g_running = self._godot_bridge.is_running()
             # Watchdog : le viewer EMBARQUÉ est mort (crash driver GPU…) →
             # libérer l'embed et retomber sur la vue procédurale plutôt que
@@ -5039,6 +5076,8 @@ class GameWidget(QWidget):
             if (self._godot_bridge is not None
                     and self._godot_bridge.is_running()):
                 state_dict = physics_to_state_dict(st.train, st)
+                # Relaye le mute N au viewer 3D (il a son propre audio).
+                state_dict["muted"] = bool(self.sounds.muted)
                 self._godot_bridge.send_state(state_dict)
             self._advance_fault_phase(dt)
             # Ghost driver ready countdown : once the main driver has
@@ -6465,13 +6504,20 @@ class GameWidget(QWidget):
         """
         # État 2 : viewer Godot embarqué → ne rien peindre (le widget
         # natif Qt est superposé). On garde un fond pour éviter le flash.
-        if self._cabin_view_state == 2:
+        # Exception : la 3D est momentanément masquée parce qu'un overlay
+        # (F1/F2/F3, panne, pause…) doit être lisible → la vue cabine
+        # procédurale reprend le rect en attendant.
+        if self._cabin_view_state == 2 and not self._godot_embed_hidden:
             p.fillRect(rect, QColor(8, 10, 14))
             return
-        # État Godot fenêtre séparée (legacy fallback) : placeholder
+        # État Godot fenêtre séparée (legacy fallback) : placeholder.
+        # Un embed Win32 (HWND enfant) n'est PAS une fenêtre séparée —
+        # quand il est momentanément masqué par un overlay, on veut la
+        # vue procédurale ci-dessous, pas le placeholder.
         if (self._godot_bridge is not None
                 and self._godot_bridge.is_running()
-                and self._godot_embed_widget is None):
+                and self._godot_embed_widget is None
+                and not self._godot_child_hwnd):
             self._draw_godot_placeholder(p, rect)
             return
 
@@ -8179,10 +8225,14 @@ class GameWidget(QWidget):
             self._godot_child_hwnd = None
 
     def _reposition_godot_embed(self) -> None:
-        """Place la vue 3D embarquée pile dans le rect de la vue cabine
-        (mêmes coordonnées que paintEvent : 20, 20, w-440, h-260)."""
+        """Place la vue 3D embarquée dans le rect de la vue cabine, mais
+        SOUS la pendule : le pill horloge (top-centre, y 6..38) est peint
+        par Qt, or une fenêtre native enfant passe toujours AU-DESSUS de
+        tout ce que le parent peint (airspace Win32/X11) — avec y=20 la
+        pendule était « masquée à moitié » (retour 2026-07-23). Le haut
+        de la 3D démarre donc à 44 px ; le bord bas reste inchangé."""
         w, h = self.width(), self.height()
-        x, y, ww, hh = 20, 20, max(100, w - 440), max(100, h - 260)
+        x, y, ww, hh = 20, 44, max(100, w - 440), max(100, h - 284)
         # Chemin Windows : MoveWindow sur le HWND enfant (coords device px).
         if self._godot_child_hwnd:
             try:
@@ -8200,11 +8250,47 @@ class GameWidget(QWidget):
             return
         self._godot_embed_widget.setGeometry(int(x), int(y), int(ww), int(hh))
 
+    def _sync_godot_overlay_visibility(self) -> None:
+        """Cache la vue 3D embarquée tant qu'un overlay Qt doit être lu.
+
+        Une fenêtre native enfant gagne TOUJOURS la bataille d'airspace :
+        les panneaux peints par paintEvent (aide F1, console d'annonces
+        F2, infos F3, description de panne, pause, écran titre) passaient
+        dessous et étaient illisibles (retour d'essai 2026-07-23). Tant
+        que l'un d'eux est visible, la fenêtre Godot est masquée (le
+        process 3D continue de tourner) et la vue cabine procédurale
+        reprend le rect — le conducteur garde une vue du tunnel. À la
+        fermeture du panneau, la 3D réapparaît telle quelle."""
+        st = self.state
+        want_hidden = bool(
+            self._show_help or self._show_info or self._show_annmenu
+            or st.mode in (MODE_TITLE, MODE_PAUSED, MODE_OVER)
+            or (st.panne_active and st.fault_show_panel
+                and st.mode == MODE_RUN)
+        )
+        if want_hidden == self._godot_embed_hidden:
+            return
+        self._godot_embed_hidden = want_hidden
+        if self._godot_child_hwnd:
+            try:
+                import ctypes
+                # 0 = SW_HIDE, 5 = SW_SHOW
+                ctypes.windll.user32.ShowWindow(
+                    self._godot_child_hwnd, 0 if want_hidden else 5)
+            except Exception:
+                pass
+        elif self._godot_embed_widget is not None:
+            self._godot_embed_widget.setVisible(not want_hidden)
+        self.update()
+
     def _release_godot_embed(self) -> None:
         """Détruit le widget embarqué et tue le subprocess Godot."""
         # Stoppe un éventuel poll d'embarquement en cours.
         if self._godot_embed_timer is not None:
             self._godot_embed_timer.stop()
+        # Un futur ré-embed (F4) repart visible ; le masquage overlay sera
+        # recalculé au tick suivant par _sync_godot_overlay_visibility.
+        self._godot_embed_hidden = False
         # Windows : détache le HWND enfant avant de tuer le process (évite un
         # glitch visuel sur la fenêtre principale pendant la destruction).
         if self._godot_child_hwnd:
