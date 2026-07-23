@@ -300,7 +300,9 @@ def _swap_windows_exe(new_exe: Path) -> None:
     #  - tout est journalisé dans %TEMP%/perce_neige_update_swap.log ;
     #  - l'appli est RELANCÉE même si le swap échoue (l'ancienne version
     #    plutôt que rien), pour ne jamais laisser l'utilisateur sans app.
-    backup = current.with_name(current.stem + ".old.exe")
+    # Nom de sauvegarde FIXE (pas dérivé du stem, qui composerait comme
+    # le staging — cf. _install_frozen).
+    backup = current.with_name("_pn_update_backup.exe")
     # Séquence SÛRE (retour d'essai 2026-07-24 « à la fin du téléchargement
     # ça bug ») : l'ancien batch faisait `del TARGET` PUIS `move NEW
     # TARGET`. Si le move échouait (antivirus verrouillant le .exe
@@ -413,8 +415,14 @@ def _install_frozen(release: ReleaseInfo,
     _log(f"[install] téléchargé + SHA-256 vérifié → {new_bin}")
 
     if sys.platform == "win32":
-        # Move into the target directory first so move /Y is atomic
-        staged = current.parent / (current.stem + ".new.exe")
+        # Nom de staging FIXE et canonique (retour d'essai 2026-07-24 :
+        # « PerceNeigeSimulator-windows(1).new.new.exe »). L'ancien
+        # `current.stem + ".new.exe"` s'ACCUMULAIT quand l'exe courant
+        # finissait déjà par « .new » (swap précédent bâclé, doublon
+        # navigateur « (1) »…) → .new.new.exe, .new.new.new.exe. Un nom
+        # fixe ne compose jamais ; la cible du swap reste l'exe courant
+        # (sys.executable), quel que soit son nom.
+        staged = current.parent / "_pn_update_staged.exe"
         try:
             if staged.exists():
                 staged.unlink()
