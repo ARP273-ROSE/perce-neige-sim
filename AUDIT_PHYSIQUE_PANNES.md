@@ -71,5 +71,24 @@ Types d'arrêts (inchangés, validés) : urgence commandée 1,85 m/s² moyen
 parachute 4,1 m/s² (3,6 + gravité — 18 m), rupture de câble en montée
 6,4 m/s² (parachute + pente : physique, pas un bug).
 
+## Rupture de câble en DESCENTE — pente défavorable (vérifié 2026-07-23)
+
+La rame descendante découplée est tirée par TOUT son poids dans son sens
+de marche : décél nette = 3,6 (parachute) − g·sinθ − résistance. Mesuré
+au banc en zone 30 % (s = 2 000 m) depuis 12 m/s : **0,82 m/s² net,
+87,4 m d'arrêt** (contre 17,6 m câble intact) — indépendant de la charge
+(freinage et gravité proportionnels à la masse, conforme au
+dimensionnement des pinces Belleville). La pente défavorable est donc
+intégralement prise en compte.
+
+## Acquittement maintenance (v1.12.22)
+
+Une panne NON catastrophique à quai bloquait le départ jusqu'à la fin de
+son chrono (35–90 s). Rame à quai et à l'arrêt : **R = acquittement
+maintenance** — panne levée, urgence relâchée, latches de survitesse
+réarmés, départ immédiatement possible (rappel affiché dans le panneau
+de panne). En ligne ou en mouvement, le chrono reste la seule issue ;
+les catastrophiques gardent R = nouveau voyage.
+
 Tests : 16/16 inchangés ; le banc `tests/bench_pannes.py` reste dans le repo
 pour re-vérifier après toute retouche de la physique.
