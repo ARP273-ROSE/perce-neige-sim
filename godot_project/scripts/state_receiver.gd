@@ -123,6 +123,13 @@ func _apply(d: Dictionary) -> void:
 	physics.lights_head = _b(d, "lights_head", physics.lights_head)
 	physics.lights_cabin = _b(d, "lights_cabin", physics.lights_cabin)
 	physics.emergency = _b(d, "emergency", physics.emergency)
+	# Mute global relayé par le sim PC (touche N) : le viewer embarqué a
+	# son propre moteur audio — sans ce relais, couper le son côté PC
+	# laissait la 3D sonore. Bus Master muté/démuté, la lecture continue.
+	if d.has("muted"):
+		var m: bool = _b(d, "muted", false)
+		if AudioServer.is_bus_mute(0) != m:
+			AudioServer.set_bus_mute(0, m)
 	# Panne active : déclenche localement pour effet visuel + son
 	if d.has("active_fault") and fault_manager != null and d["active_fault"] is String:
 		var fid: String = d["active_fault"]

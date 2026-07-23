@@ -14,6 +14,26 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 
 ## Quoi de neuf — v1.12.x (audit + retours d'essai terrain, juillet 2026)
 
+**v1.12.19** — la 3D embarquée ne masque plus l'interface, vrai mute :
+- **Les panneaux F1/F2/F3, la description des pannes et la pause sont
+  enfin lisibles avec la vue 3D active** : la fenêtre Godot embarquée
+  est une fenêtre native enfant — elle passe TOUJOURS au-dessus de ce
+  que Qt peint dans son rect (bataille d'airspace), donc l'aide, la
+  console d'annonces et le panneau de panne étaient masqués. Tant qu'un
+  de ces overlays est ouvert, la 3D est automatiquement cachée (le
+  process continue de tourner) et la vue cabine procédurale reprend le
+  rect — on garde une vue du tunnel ; à la fermeture du panneau, la 3D
+  réapparaît là où elle en est.
+- **La pendule n'est plus coupée en deux** : le rect de la 3D démarre
+  sous le pill horloge (y=44) au lieu de passer dessous.
+- **N = un vrai bouton de volume** : couper le son ne stoppe plus les
+  players ni ne vide la file — toutes les sorties audio sont mutées,
+  les annonces/séquences/boucles continuent leur cours en silence, et
+  au dé-mute on réentend tout exactement là où ça en est (la v1.12.18
+  interrompait la séquence de fermeture ; l'interruption reste pour
+  Échap / nouveau trajet / annonce manuelle). Le mute est aussi relayé
+  au viewer 3D embarqué (bus Master Godot), qui restait sonore.
+
 **v1.12.18** — ambiances de quai nettoyées, mute pendant la fermeture :
 - **Le buzzer de portes ne joue plus en boucle au lancement** : les
   ambiances de quai (`real_station_lower/upper.wav`, jouées en boucle à
