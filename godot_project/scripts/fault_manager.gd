@@ -177,6 +177,7 @@ var announcements: Announcements = null
 var _active_id: String = ""
 var _active_remaining: float = 0.0
 var _active_total_duration: float = 0.0
+var _pending_trip_delay: float = 0.0   # pressostat service_brake_fail (~3 s)
 
 
 func _ready() -> void:
@@ -259,9 +260,19 @@ func trigger(fault_id: String) -> void:
 	# chariot). Retour d'essai iPad 2026-07 : l'ancien
 	# `emergency_brake = true` était traité par la physique comme un
 	# clamp v = 0 instantané → arrêt sec non physique.
+	# service_brake_fail : le pressostat de la chaîne de sécurité met
+	# ~3 s à détecter la perte de pression (audit PC v1.12.21) — le
+	# frein tombe avec ce délai, pas dans la frame du déclenchement.
 	if FAULTS[fault_id]["stops_train"] and physics != null:
-		physics.emergency = true
-		physics.speed_cmd = 0.0
+		if fault_id == "service_brake_fail":
+			_pending_trip_delay = 3.0
+		else:
+			physics.emergency = true
+			physics.speed_cmd = 0.0
+	# Aiguillage Abt : arrêt imposé AVANT l'évitement (enveloppe côté
+	# physique), en plus du cap de vitesse.
+	if physics != null:
+		physics.abt_hold = (fault_id == "switch_abt_fault")
 
 	# Annonce vocale liée
 	var ann_key: String = FAULTS[fault_id]["announcement"]
@@ -279,6 +290,8 @@ func clear_active() -> void:
 	if physics != null:
 		physics.release_emergency()
 		physics.emergency_brake = false
+		physics.abt_hold = false
+	_pending_trip_delay = 0.0
 	print("[Fault] %s clearée" % _active_id)
 	_active_id = ""
 	_active_remaining = 0.0
@@ -300,6 +313,14 @@ func trigger_random(exclude_catastrophic: bool = true) -> void:
 func _process(delta: float) -> void:
 	if _active_id == "":
 		return
+	# Pressostat frein de service : l'urgence tombe après le délai de
+	# détection (~3 s), si la panne est toujours active.
+	if _pending_trip_delay > 0.0:
+		_pending_trip_delay -= delta
+		if _pending_trip_delay <= 0.0 and physics != null:
+			physics.emergency = true
+			physics.speed_cmd = 0.0
+			print("[Fault] pressostat frein service — urgence automatique")
 	# Catastrophique : ne s'auto-clear jamais (intervention requise via R)
 	if FAULTS[_active_id]["severity"] == Severity.CATASTROPHIC:
 		return
