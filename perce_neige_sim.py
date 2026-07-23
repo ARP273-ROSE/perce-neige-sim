@@ -90,7 +90,7 @@ try:
 except ImportError:
     _GODOT_BRIDGE_OK = False
 
-VERSION = "1.12.17"
+VERSION = "1.12.18"
 APP_NAME = "Perce-Neige Simulator"
 
 
@@ -3073,6 +3073,7 @@ class SoundSystem:
         self._queue.clear()
         if self._player is not None:
             self._player.stop()
+        self._abort_close_sequence()
 
     def is_announcing(self) -> bool:
         """True if a voice announcement is currently playing OR queued.
@@ -3387,23 +3388,45 @@ class SoundSystem:
             except Exception:
                 pass
 
+    def _abort_close_sequence(self) -> None:
+        """Résout la séquence de fermeture des portes quand un stop/mute
+        interrompt les clips : le player arrêté n'émettra plus jamais
+        EndOfMedia, donc sans ce rattrapage `_close_seq_active` restait
+        vrai à jamais → PRÊT refusé (« séquence sonore de fermeture en
+        cours ») et auto-exploitation gelée sur son callback — « si je
+        coupe le son (N) en pleine fermeture, le train ne part plus »
+        (retour Windows 2026-07-22). Appeler le callback est le même
+        contrat que le chemin muted de play_doors_close_sequence, qui
+        complète immédiatement."""
+        self._close_seq_active = False
+        cb = self._seq_on_complete
+        self._seq_on_complete = None
+        if cb is not None:
+            try:
+                cb()
+            except Exception:
+                pass
+
     def toggle_mute(self) -> bool:
         self.muted = not self.muted
         if self.muted and self._player is not None:
             self._halt_all_players()
             self._queue.clear()
+            self._abort_close_sequence()
         return self.muted
 
     def stop(self) -> None:
         self._queue.clear()
         if self._player is not None:
             self._halt_all_players()
+        self._abort_close_sequence()
 
     def reset(self) -> None:
         self._queue.clear()
         self._cooldowns.clear()
         if self._player is not None:
             self._halt_all_players()
+        self._abort_close_sequence()
 
     # ----- internals -------------------------------------------------------
 
