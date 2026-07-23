@@ -91,7 +91,7 @@ try:
 except ImportError:
     _GODOT_BRIDGE_OK = False
 
-VERSION = "1.12.35"
+VERSION = "1.12.36"
 APP_NAME = "Perce-Neige Simulator"
 
 
@@ -5587,17 +5587,14 @@ class GameWidget(QWidget):
                 if tr_welcome.direction > 0
                 else tr_welcome.s - START_S
             )
-            # Annonce « zone Grande Motte » (fichier 11) DÉSACTIVÉE en
-            # automatique (retour d'essai 2026-07-24) : c'est un message
-            # de 54 s MULTILINGUE (FR puis EN « please do not leave… »
-            # puis DE/IT/ES) — la partie anglaise tombait juste avant
-            # l'arrivée et sonnait comme une annonce parasite. Elle reste
-            # diffusable à la demande via le menu ANNONCES (touche 2 /
-            # bouton tactile). Remettre le bloc ci-dessous pour restaurer
-            # le déclenchement automatique.
-            _WELCOME_AUTO = False
-            if (_WELCOME_AUTO and st.trip_started
-                    and not self._welcome_played
+            # Annonce d'accueil « zone Grande Motte » (fichier 11) en
+            # approche finale de la gare HAUTE, une fois par trajet. C'est
+            # LA bonne annonce (message réel multilingue de la cabine) —
+            # le charabia « please do not leave… » signalé plus tôt venait
+            # d'une AUTRE source (ambiance de quai contaminée, corrigée en
+            # v1.12.18/27), pas d'ici : réactivée à la demande de Kevin
+            # (2026-07-24). Diffusable aussi via le menu ANNONCES.
+            if (st.trip_started and not self._welcome_played
                     and tr_welcome.direction > 0
                     and dist_remain_welcome < 220.0
                     and abs(tr_welcome.v) < 1.0):
