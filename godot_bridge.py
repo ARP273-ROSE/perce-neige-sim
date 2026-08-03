@@ -159,6 +159,18 @@ class GodotBridge:
                         *eng, "--", "--client", f"--port={self.port}"]
         return None
 
+    @property
+    def logfile(self) -> Path:
+        """Chemin du log de diagnostic du viewer 3D (le sim PyInstaller
+        tourne sans console : c'est le seul canal de diagnostic)."""
+        return self._logfile
+
+    def log(self, msg: str) -> None:
+        """Écrit une ligne dans le log de diagnostic. Public : le sim y
+        journalise aussi l'embarquement de la fenêtre (SetParent), sinon un
+        échec d'intégration est totalement muet côté utilisateur."""
+        self._log(msg)
+
     def _log(self, msg: str) -> None:
         try:
             with open(self._logfile, "a", encoding="utf-8") as f:
@@ -434,7 +446,7 @@ class GodotBridge:
         Champs attendus côté Godot :
           s, v, direction, doors_open, trip_started, finished,
           tension_dan, power_kw, speed_cmd, lights_head, lights_cabin,
-          emergency, active_fault (str optionnel)
+          emergency, rame2 (bool), active_fault (str optionnel)
         """
         if self._sock is None or not self.is_running():
             return
@@ -508,6 +520,14 @@ def physics_to_state_dict(tr, st=None) -> dict:
         "lights_head": bool(getattr(tr, "lights_head", False)),
         "lights_cabin": bool(getattr(tr, "lights_cabin", True)),
         "emergency": bool(getattr(tr, "emergency", False) or getattr(tr, "electric_stop", False)),
+        # Rame pilotée (1 = voie gauche dans l'évitement Abt, 2 = voie
+        # droite). SANS ce champ, le viewer 3D restait figé sur son défaut
+        # « rame 1 » : en choisissant rame 2 au menu, la 2D mettait bien le
+        # conducteur à droite et l'autre cabine à gauche, mais la 3D
+        # croisait du mauvais côté et attachait le mauvais brin de câble —
+        # rames 1 et 2 inversées entre les deux vues (retour d'essai
+        # 2026-08-03).
+        "rame2": bool(int(getattr(tr, "number", 1)) == 2),
     }
     # Panne courante si le sim Python l'expose
     fault = getattr(st, "active_fault", None) if st is not None else None

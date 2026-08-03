@@ -14,6 +14,34 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 
 ## Quoi de neuf — v1.12.x (audit + retours d'essai terrain, juillet 2026)
 
+**v1.12.42** — rames 1/2 inversées en 3D + intégration de la fenêtre 3D sous Windows :
+- **Rame 1 / rame 2 inversées dans la vue 3D** (corrigé) : le numéro de la
+  rame pilotée n'était **jamais transmis** au viewer Godot, qui restait
+  figé sur son défaut « rame 1 = voie gauche ». En choisissant *Rame 2*,
+  la 2D vous plaçait bien sur la voie de droite et étiquetait l'autre
+  cabine « RAME 1 », mais la 3D vous faisait croiser **du mauvais côté**
+  dans l'évitement Abt, avec le mauvais brin de câble attaché à la
+  cabine. Le champ `rame2` est désormais dans le flux d'état UDP et
+  pilote la voie des deux cabines, le brin de câble et les étiquettes
+  R1/R2.
+- **Fenêtre 3D qui passe en arrière-plan** (Windows) : quand le
+  reparentage Win32 (`SetParent`) échoue, la fenêtre Godot est maintenant
+  rattachée comme **fenêtre possédée** du simulateur — elle reste au
+  premier plan au lieu de plonger derrière au premier clic sur un bouton.
+  Les styles d'origine sont restaurés en cas d'échec (plus de fenêtre
+  fantôme sans cadre).
+- **Délai d'intégration porté à 20 s** : sur une machine lente (disque
+  dur, antivirus qui scanne les 128 Mo du viewer au premier lancement,
+  tentative Vulkan qui échoue puis relance OpenGL), la fenêtre
+  apparaissait **après** l'échéance de 9 s et le simulateur renonçait
+  définitivement à l'embarquer.
+- **Diagnostic d'intégration réel** : l'échec était muet (le sim distribué
+  tourne sans console) et le code d'erreur affiché était toujours faux
+  (`ctypes.windll` ne remonte pas `GetLastError`). Les étapes
+  d'embarquement — dont l'**awareness DPI des deux fenêtres**, cause
+  documentée d'échec de `SetParent` — sont journalisées dans
+  `%TEMP%\perce_neige_3d.log`.
+
 **v1.12.41** — chaos jouable + pannes en exploitation auto :
 - **Emballement enfin atteignable consigne à fond** : le moteur peut
   SURRÉGIMER en Défi (le fondu à 12,25 m/s est levé + surcharge ×1,8) —
