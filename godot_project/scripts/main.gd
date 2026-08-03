@@ -151,9 +151,27 @@ func _apply_scenario(from_top: bool, rame2: bool) -> void:
 		# quasi vide, contrepoids chargé) — le premier roll de
 		# _build_physics supposait une montée.
 		physics.roll_pax()
-	if rame2:
-		cabin.passing_side = +1.0
-		cabin_ghost.passing_side = -1.0
+	apply_rame(rame2)
+	print("[Scenario] depart %s, rame %d" % [
+		"gare haute" if from_top else "gare basse", 2 if rame2 else 1])
+
+
+# Applique le NUMÉRO de rame pilotée à tout ce qui en dépend. Extrait de
+# _apply_scenario pour que le mode CLIENT (sim Python) puisse l'appeler à
+# la réception du champ "rame2" : sans ça le viewer restait sur son défaut
+# rame 1 et les deux cabines apparaissaient inversées par rapport à la 2D
+# (retour d'essai 2026-08-03).
+#
+# La voie prise dans l'évitement est un côté FIXE de la ligne (l'aiguille
+# Abt est passive : c'est le profil des boudins de chaque rame qui la
+# renvoie toujours du même bord), donc passing_side ne dépend PAS du sens
+# de marche — il est appliqué dans le repère du tunnel, pas dans celui du
+# conducteur.
+func apply_rame(rame2: bool) -> void:
+	if cabin != null:
+		cabin.passing_side = +1.0 if rame2 else -1.0
+	if cabin_ghost != null:
+		cabin_ghost.passing_side = -1.0 if rame2 else +1.0
 	# Propage le choix de rame aux représentations liées à rame 1 par défaut :
 	# le câble (quel brin suit la cabine) et le mini-profil de ligne (quelle
 	# étiquette porte le point piloté).
@@ -161,8 +179,6 @@ func _apply_scenario(from_top: bool, rame2: bool) -> void:
 		track.driver_is_rame2 = rame2
 	if hud != null:
 		hud.set_driver_rame2(rame2)
-	print("[Scenario] depart %s, rame %d" % [
-		"gare haute" if from_top else "gare basse", 2 if rame2 else 1])
 
 
 # Banc : vérifie le chemin bouton tactile → Input.action_press →
@@ -217,6 +233,7 @@ func _build_state_receiver() -> void:
 	add_child(state_receiver)
 	state_receiver.set_physics(physics)
 	state_receiver.cabin = cabin   # bascule de vue pilotée par le PC (O)
+	state_receiver.main = self     # application du numéro de rame (1/2)
 	# fault_manager peut être set après si besoin (en client mode minimal,
 	# on ne le construit pas pour ne pas dupliquer la logique Python)
 

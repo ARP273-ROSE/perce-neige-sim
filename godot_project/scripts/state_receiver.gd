@@ -9,7 +9,8 @@ extends Node
 ##     "doors_open": bool, "trip_started": bool, "finished": bool,
 ##     "tension_dan": float, "power_kw": float,
 ##     "speed_cmd": float, "lights_head": bool, "lights_cabin": bool,
-##     "emergency": bool, "active_fault": string (optional) }
+##     "emergency": bool, "rame2": bool (optional — rame pilotée 1/2),
+##     "active_fault": string (optional) }
 ##
 ## Lancement Godot :
 ##   godot --path /path/to/project -- --client [--port=7777]
@@ -28,7 +29,12 @@ var port: int = DEFAULT_PORT
 var physics: TrainPhysics = null
 var fault_manager: FaultManager = null
 var cabin: Cabin = null            # bascule FPV/extérieure pilotée par le PC
+var main: Node = null              # pour appliquer le numéro de rame (1/2)
 var _last_ext_view: bool = false
+# -1 = pas encore reçu → le PREMIER paquet applique toujours le choix, même
+# si c'est rame 1 (sinon un viewer relancé en cours de session garderait le
+# côté de la rame précédente).
+var _last_rame2: int = -1
 var _last_packet_time: float = 0.0
 var _packet_count: int = 0
 var _overlay: Label = null
@@ -132,6 +138,19 @@ func _apply(d: Dictionary) -> void:
 		var m: bool = _b(d, "muted", false)
 		if AudioServer.is_bus_mute(0) != m:
 			AudioServer.set_bus_mute(0, m)
+	# Rame pilotée (1/2) choisie au menu du sim Python. Détermine la voie
+	# prise dans l'évitement Abt (gauche pour rame 1, droite pour rame 2),
+	# le brin de câble attaché à la cabine et les étiquettes R1/R2. Sans ce
+	# relais, le viewer restait sur son défaut « rame 1 » et croisait du
+	# mauvais côté quand la 2D disait rame 2.
+	if d.has("rame2"):
+		var r2: bool = _b(d, "rame2", false)
+		if int(r2) != _last_rame2:
+			_last_rame2 = int(r2)
+			if main != null and main.has_method("apply_rame"):
+				main.apply_rame(r2)
+				print("[StateReceiver] rame pilotée = %d (voie %s)"
+					% [2 if r2 else 1, "droite" if r2 else "gauche"])
 	# Vue extérieure orbitale commandée par la touche O du sim PC.
 	# Appliquée SUR CHANGEMENT seulement : entre deux bascules PC, la vue
 	# reste modifiable localement (touche O du viewer focalisé).

@@ -91,7 +91,7 @@ try:
 except ImportError:
     _GODOT_BRIDGE_OK = False
 
-VERSION = "1.12.41"
+VERSION = "1.12.42"
 APP_NAME = "Perce-Neige Simulator"
 
 
@@ -9716,7 +9716,13 @@ class GameWidget(QWidget):
             target=self._godot_bridge.start, daemon=True)
         self._godot_launch_thread.start()
         # Laisse le temps à l'éventuel fallback rendu + ouverture fenêtre.
-        self._godot_embed_deadline = time.monotonic() + 9.0
+        # 20 s et pas 9 : sur une machine lente (HDD, antivirus qui scanne
+        # les 125 Mo du viewer au 1er lancement, tentative Vulkan qui échoue
+        # puis relance OpenGL), la fenêtre apparaissait APRÈS l'échéance —
+        # le sim renonçait à l'embarquer et la laissait en fenêtre séparée
+        # qui plonge derrière au premier clic (Windows 10, 2026-08-03).
+        self._godot_embed_deadline = time.monotonic() + 20.0
+        self._godot_launch_t0 = time.monotonic()
         if self._godot_embed_timer is None:
             self._godot_embed_timer = QTimer(self)
             self._godot_embed_timer.setInterval(250)
@@ -9731,8 +9737,9 @@ class GameWidget(QWidget):
         if self._cabin_view_state != 2:
             self._godot_embed_timer.stop()
             return
-        # Déjà embarqué → terminé.
-        if self._godot_embed_widget is not None:
+        # Déjà embarqué → terminé (widget conteneur Qt sous X11, HWND
+        # enfant reparenté sous Windows).
+        if self._godot_embed_widget is not None or self._godot_child_hwnd:
             self._godot_embed_timer.stop()
             return
         launching = (self._godot_launch_thread is not None
@@ -9741,6 +9748,9 @@ class GameWidget(QWidget):
             xid = self._godot_bridge.find_window_id_once()
             if xid:
                 self._godot_embed_timer.stop()
+                self._godot_log("fenêtre 3D trouvée après %.1f s" % (
+                    time.monotonic() - getattr(self, "_godot_launch_t0",
+                                               time.monotonic())))
                 self._embed_godot_window_xid(xid)
                 add_event(self.state, "godot_3d",
                     "Godot 3D viewer embedded in cabin view",
@@ -9757,8 +9767,15 @@ class GameWidget(QWidget):
             self._godot_embed_timer.stop()
             if self._godot_bridge.is_running():
                 # Viewer vivant mais fenêtre non embarquée → laissé en fenêtre
-                # séparée (déjà visible à l'écran), pas de freeze.
-                print("[GodotBridge] fenêtre non embarquée — affichée séparément")
+                # séparée (déjà visible à l'écran), pas de freeze. On tente
+                # quand même de la rattacher en fenêtre POSSÉDÉE pour qu'elle
+                # ne plonge pas derrière le sim au premier clic.
+                self._godot_log(
+                    "fenêtre 3D introuvable avant échéance — affichée "
+                    "séparément")
+                late = self._godot_bridge.find_window_id_once()
+                if late:
+                    self._win32_keep_above(int(late))
                 add_event(self.state, "godot_3d",
                     "Godot 3D viewer running in a separate window",
                     "Viewer Godot 3D en fenêtre séparée",
@@ -9888,16 +9905,86 @@ class GameWidget(QWidget):
         except Exception as e:
             print(f"[GodotBridge] Embed échoué : {e} — fenêtre séparée")
 
+    def _godot_log(self, msg: str) -> None:
+        """Journalise une étape d'embarquement dans le log du viewer 3D.
+        Le sim distribué tourne sans console (PyInstaller console=False) :
+        sans ça, un échec de SetParent est parfaitement muet — c'est ce qui
+        rendait indiagnosticable le « Godot en fenêtre séparée » de
+        Windows 10 (retour d'essai 2026-08-03)."""
+        print(f"[GodotEmbed] {msg}")
+        if self._godot_bridge is not None:
+            try:
+                self._godot_bridge.log(f"[embed] {msg}")
+            except Exception:
+                pass
+
+    @staticmethod
+    def _win32_user32():
+        """user32 avec use_last_error=True et les signatures déclarées.
+
+        `ctypes.windll.user32` NE propage PAS GetLastError vers
+        ctypes.get_last_error() (il faut use_last_error=True à la création
+        de la DLL) : l'ancien message « SetParent a échoué (err=…) »
+        affichait donc un code toujours faux. Et sans argtypes, les HWND
+        (pointeurs 64 bits) étaient passés/retournés comme des int 32 bits
+        signés — troncature silencieuse possible."""
+        import ctypes
+        import ctypes.wintypes as wt
+        u = ctypes.WinDLL("user32", use_last_error=True)
+        u.GetWindowLongW.argtypes = [wt.HWND, ctypes.c_int]
+        u.GetWindowLongW.restype = ctypes.c_long
+        u.SetWindowLongW.argtypes = [wt.HWND, ctypes.c_int, ctypes.c_long]
+        u.SetWindowLongW.restype = ctypes.c_long
+        u.SetParent.argtypes = [wt.HWND, wt.HWND]
+        u.SetParent.restype = wt.HWND
+        u.ShowWindow.argtypes = [wt.HWND, ctypes.c_int]
+        u.ShowWindow.restype = wt.BOOL
+        u.MoveWindow.argtypes = [wt.HWND, ctypes.c_int, ctypes.c_int,
+                                 ctypes.c_int, ctypes.c_int, wt.BOOL]
+        u.MoveWindow.restype = wt.BOOL
+        # SetWindowLongPtrW n'existe qu'en 64 bits ; en 32 bits l'alias est
+        # SetWindowLongW (mêmes sémantiques, LONG = LONG_PTR).
+        if ctypes.sizeof(ctypes.c_void_p) == 8:
+            u.SetWindowLongPtrW.argtypes = [wt.HWND, ctypes.c_int,
+                                            ctypes.c_ssize_t]
+            u.SetWindowLongPtrW.restype = ctypes.c_ssize_t
+        return u
+
+    @staticmethod
+    def _win32_dpi_awareness(user32, hwnd) -> str:
+        """Awareness DPI d'une fenêtre : 'unaware' / 'system' / 'per-monitor'.
+        SetParent entre deux fenêtres d'awareness DIFFÉRENTE est documenté
+        comme comportement indéfini par Microsoft — c'est la première chose
+        à comparer quand l'intégration marche sur une machine et pas sur une
+        autre. API dispo depuis Windows 10 1607 ; sinon '?'. """
+        import ctypes
+        try:
+            ctx = user32.GetWindowDpiAwarenessContext(ctypes.c_void_p(hwnd))
+            val = user32.GetAwarenessFromDpiAwarenessContext(ctx)
+        except (AttributeError, OSError):
+            return "?"
+        return {0: "unaware", 1: "system", 2: "per-monitor"}.get(int(val),
+                                                                 str(val))
+
     def _embed_win32_child(self, hwnd: int) -> None:
         """Reparente la fenêtre Godot (`hwnd`) en fenêtre ENFANT (WS_CHILD) de
         la fenêtre principale Qt via l'API Win32 SetParent. Une vraie fenêtre
         enfant est clippée au parent, se déplace avec lui et ne peut JAMAIS
         passer derrière → la vue 3D reste intégrée même quand on clique sur
         les boutons (le createWindowContainer de Qt échoue à reparenter une
-        fenêtre appartenant à un autre processus sous Windows)."""
+        fenêtre appartenant à un autre processus sous Windows).
+
+        Si le reparentage échoue (SetParent est notamment indéfini entre deux
+        fenêtres d'awareness DPI différente), on RESTAURE les styles d'origine
+        et on rattache la fenêtre Godot comme fenêtre POSSÉDÉE du sim : elle
+        reste alors une fenêtre séparée, mais Windows la maintient toujours
+        au-dessus de son propriétaire au lieu de la laisser plonger derrière
+        au premier clic sur un bouton du sim (retour d'essai 2026-08-03)."""
+        import ctypes
+        style = ex = None
+        user32 = None
         try:
-            import ctypes
-            user32 = ctypes.windll.user32
+            user32 = self._win32_user32()
             GWL_STYLE, GWL_EXSTYLE = -16, -20
             WS_CHILD = 0x40000000
             WS_POPUP = 0x80000000
@@ -9909,21 +9996,61 @@ class GameWidget(QWidget):
             WS_EX_APPWINDOW = 0x00040000
             WS_EX_TOOLWINDOW = 0x00000080
             parent = int(self.winId())
+            self._godot_log(
+                "SetParent hwnd=0x%X (dpi=%s) → parent=0x%X (dpi=%s)" % (
+                    hwnd, self._win32_dpi_awareness(user32, hwnd),
+                    parent, self._win32_dpi_awareness(user32, parent)))
+            # Styles d'origine mémorisés pour pouvoir revenir en arrière.
             style = user32.GetWindowLongW(hwnd, GWL_STYLE)
-            style = (style & ~WS_POPUP & ~WS_CAPTION & ~WS_THICKFRAME
-                     & ~WS_MINIMIZEBOX & ~WS_MAXIMIZEBOX & ~WS_SYSMENU) | WS_CHILD
-            user32.SetWindowLongW(hwnd, GWL_STYLE, style)
             ex = user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
-            ex = (ex & ~WS_EX_APPWINDOW) | WS_EX_TOOLWINDOW
-            user32.SetWindowLongW(hwnd, GWL_EXSTYLE, ex)
+            new_style = (style & ~WS_POPUP & ~WS_CAPTION & ~WS_THICKFRAME
+                         & ~WS_MINIMIZEBOX & ~WS_MAXIMIZEBOX
+                         & ~WS_SYSMENU) | WS_CHILD
+            user32.SetWindowLongW(hwnd, GWL_STYLE, new_style)
+            user32.SetWindowLongW(hwnd, GWL_EXSTYLE,
+                                  (ex & ~WS_EX_APPWINDOW) | WS_EX_TOOLWINDOW)
             if not user32.SetParent(hwnd, parent):
-                raise OSError(f"SetParent a échoué (err={ctypes.get_last_error()})")
+                raise OSError("SetParent a échoué (GetLastError=%d)"
+                              % ctypes.get_last_error())
             self._godot_child_hwnd = hwnd
             self._reposition_godot_embed()
             user32.ShowWindow(hwnd, 5)  # SW_SHOW
+            self._godot_log("fenêtre 3D embarquée (WS_CHILD) — OK")
         except Exception as e:
-            print(f"[GodotBridge] Embed Win32 échoué : {e} — fenêtre séparée")
+            self._godot_log(f"embarquement échoué : {e}")
             self._godot_child_hwnd = None
+            # Remet la fenêtre dans son état top-level d'origine, sinon elle
+            # reste WS_CHILD sans parent → fenêtre fantôme sans cadre.
+            if user32 is not None and style is not None:
+                try:
+                    user32.SetWindowLongW(hwnd, -16, style)
+                    user32.SetWindowLongW(hwnd, -20, ex)
+                except Exception:
+                    pass
+            self._win32_keep_above(hwnd)
+
+    def _win32_keep_above(self, hwnd: int) -> None:
+        """Repli quand l'intégration WS_CHILD est impossible : fait du sim le
+        PROPRIÉTAIRE de la fenêtre Godot (GWLP_HWNDPARENT). Une fenêtre
+        possédée est toujours affichée au-dessus de son propriétaire et se
+        minimise avec lui — donc plus de « la 3D passe en arrière-plan dès
+        qu'on clique un bouton », même si elle reste une fenêtre séparée."""
+        if not sys.platform.startswith("win"):
+            return
+        import ctypes
+        GWLP_HWNDPARENT = -8
+        try:
+            user32 = self._win32_user32()
+            owner = int(self.winId())
+            if ctypes.sizeof(ctypes.c_void_p) == 8:
+                user32.SetWindowLongPtrW(hwnd, GWLP_HWNDPARENT, owner)
+            else:
+                user32.SetWindowLongW(hwnd, GWLP_HWNDPARENT, owner)
+            self._godot_log(
+                "repli : fenêtre 3D séparée mais POSSÉDÉE par le sim "
+                "(reste au premier plan)")
+        except Exception as e:
+            self._godot_log(f"repli propriétaire échoué : {e}")
 
     def _reposition_godot_embed(self) -> None:
         """Place la vue 3D embarquée dans le rect de la vue cabine, mais
