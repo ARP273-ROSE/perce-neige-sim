@@ -14,6 +14,24 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 
 ## Quoi de neuf — v1.12.x (audit + retours d'essai terrain, juillet 2026)
 
+**v1.12.43** — vue 3D enfin intégrée sous Linux (session Wayland) :
+- **La 3D s'ouvrait dans une fenêtre séparée sous Linux**, au lieu d'être
+  encastrée dans la vue cabine comme sous Windows. Cause : sous Wayland il
+  n'existe aucun équivalent de XEmbed — `QWindow.fromWinId()` ne peut pas
+  adopter la surface d'un autre processus, et une fenêtre Godot native
+  Wayland n'a même pas de XID que `xdotool` puisse trouver. L'embarquement
+  échouait donc **en silence**.
+- **Correctif** : en session Wayland, le simulateur bascule sur XWayland
+  (`QT_QPA_PLATFORM=xcb`) avant de créer sa `QApplication`, et lance Godot
+  avec `--display-driver x11`. Les deux processus partagent alors le même
+  serveur X, seule configuration où le reparentage fonctionne réellement
+  (vérifié sur KDE/Wayland : `xcb`+`x11` reparente, toutes les autres
+  combinaisons non).
+- **Opt-out** : `PERCE_NEIGE_KEEP_WAYLAND=1` conserve le backend Wayland
+  natif, au prix d'une vue 3D en fenêtre détachée.
+- Sans effet sur Windows (reparentage Win32 `SetParent`) ni sur les
+  sessions Linux déjà en X11.
+
 **v1.12.42** — rames 1/2 inversées en 3D + intégration de la fenêtre 3D sous Windows :
 - **Rame 1 / rame 2 inversées dans la vue 3D** (corrigé) : le numéro de la
   rame pilotée n'était **jamais transmis** au viewer Godot, qui restait
