@@ -4,9 +4,18 @@
 # PyInstaller puisse les embarquer dans la distribution finale du sim Python.
 #
 # Prérequis :
-#   - Godot 4.6.x installé (binaire `godot` dans le PATH)
-#   - Templates d'export Godot installés (depuis godotengine.org/download)
-#     ~/.local/share/godot/export_templates/4.6.1.stable/
+#   - Godot 4.6+ installé (binaire `godot` dans le PATH)
+#   - Templates d'export de la MÊME version que l'éditeur, dans
+#     ~/.local/share/godot/export_templates/<version>.stable/
+#     (ex. 4.7.1.stable/ pour un Godot 4.7.1 — l'export échoue avec
+#     « Aucun modèle d'exportation n'a été trouvé » si la version diffère).
+#     Les templates ne sont pas packagés sous Arch/Manjaro : récupérer
+#     Godot_v<version>-stable_export_templates.tpz sur les releases GitHub
+#     de Godot puis, pour n'installer que Linux x86_64 (~141 Mo au lieu
+#     des 2 Go de l'archive complète) :
+#       unzip -jo <archive>.tpz templates/linux_debug.x86_64 \
+#              templates/linux_release.x86_64 templates/version.txt \
+#              -d ~/.local/share/godot/export_templates/<version>.stable/
 #   - Projet Godot dans godot_project/ du repo (ou variable GODOT_PROJ)
 #
 # Usage :
