@@ -132,6 +132,24 @@ class GodotBridge:
                     return str(cand)
         return None
 
+    @staticmethod
+    def _platform_engine_args() -> list:
+        """Arguments moteur imposés par la plateforme d'affichage.
+
+        Linux : le sim force Qt sur XWayland (xcb) en session Wayland, car
+        c'est la seule configuration où la fenêtre du viewer peut être
+        embarquée dans la vue cabine. Godot doit alors sortir en X11 lui
+        aussi : une fenêtre Godot native Wayland n'a pas de XID, donc
+        `xdotool search --pid` ne la trouve pas et la 3D s'ouvre dans une
+        fenêtre séparée au lieu d'être intégrée.
+        """
+        if not sys.platform.startswith("linux"):
+            return []
+        if (os.environ.get("QT_QPA_PLATFORM") == "xcb"
+                or not os.environ.get("WAYLAND_DISPLAY")):
+            return ["--display-driver", "x11"]
+        return []
+
     def _resolve_command(self, engine_args: Optional[list] = None) -> Optional[list]:
         """Retourne la cmdline complète à exécuter, ou None si rien trouvé.
         Préfère le binaire exporté standalone, fallback sur Godot system + projet.
@@ -140,7 +158,7 @@ class GodotBridge:
         ``["--rendering-method", "gl_compatibility"]`` pour forcer le rendu
         OpenGL sur une machine sans Vulkan).
         """
-        eng = list(engine_args) if engine_args else []
+        eng = [*self._platform_engine_args(), *(engine_args or [])]
         # 1. Binaire bundled exporté
         bundled = self._bundled_binary_path()
         if bundled is not None:
@@ -377,7 +395,13 @@ class GodotBridge:
           - Linux X11 : XID via `xdotool search --pid`
           - Windows   : HWND via `EnumWindows + GetWindowThreadProcessId`
                         (utilise ctypes, aucune dépendance externe)
-          - macOS / Wayland : non supporté → retourne None
+          - macOS : non supporté → retourne None
+
+        Sous Wayland, une fenêtre Godot native n'a pas de XID : c'est pour
+        cela que le sim bascule sur XWayland au démarrage (voir
+        `_force_x11_if_wayland`) et que `_platform_engine_args` impose
+        `--display-driver x11` à Godot. Sans ça on retombe ici sur None et
+        la 3D s'affiche dans une fenêtre séparée.
 
         Le handle retourné est compatible avec `QWindow.fromWinId(int)`
         sur la plateforme courante. Bloquant jusqu'à timeout_s (poll ~10 Hz).
@@ -408,7 +432,7 @@ class GodotBridge:
                 time.sleep(0.10)
             return None
 
-        # macOS, Wayland, autres : non supporté pour l'embedding
+        # macOS et autres : non supporté pour l'embedding
         return None
 
     def find_window_id_once(self) -> int | None:
