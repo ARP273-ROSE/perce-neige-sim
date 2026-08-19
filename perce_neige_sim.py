@@ -91,7 +91,7 @@ try:
 except ImportError:
     _GODOT_BRIDGE_OK = False
 
-VERSION = "1.12.42"
+VERSION = "1.12.43"
 APP_NAME = "Perce-Neige Simulator"
 
 
@@ -12919,6 +12919,8 @@ class GameWidget(QWidget):
               "• X active le mode auto depuis n'importe où (terminus, en route, arrêt tunnel) — Maj+X pour 24/7"),
             T("• Hover any cockpit button with the mouse — bilingual tooltips describe every control",
               "• Survolez un bouton du cockpit à la souris — les tooltips bilingues décrivent chaque commande"),
+            T("• F4 cycles the cabin view : off → procedural → embedded Godot 3D. On a Linux Wayland session the app switches to XWayland so the 3D view can be embedded like on Windows — set PERCE_NEIGE_KEEP_WAYLAND=1 to stay on Wayland, the 3D view then opens in its own window",
+              "• F4 fait défiler la vue cabine : off → procédurale → Godot 3D intégré. En session Linux Wayland l'appli bascule sur XWayland pour intégrer la 3D comme sous Windows — PERCE_NEIGE_KEEP_WAYLAND=1 pour rester en Wayland, la 3D s'ouvre alors dans sa propre fenêtre"),
             T("• Help menu : check GitHub for updates, or send an anonymous bug report (opens pre-filled issue)",
               "• Menu Aide : vérifier les MAJ GitHub, ou signaler un bug anonymement (ticket pré-rempli)"),
             T("• Catastrophic fault (cable rupture, fire, brake fade, vent failure) : trip is OVER. Wait through evac, then press R for a new trip from menu",
@@ -13429,7 +13431,38 @@ def autoupdate_mod_repo() -> str:
     return "perce-neige-sim"
 
 
+def _force_x11_if_wayland() -> None:
+    """Under a Wayland session, put Qt on XWayland (xcb) before it starts.
+
+    The 3D viewer is a separate Godot process whose native window gets
+    reparented into the cabin view. Wayland has no equivalent of X11's
+    XEmbed: QWindow.fromWinId() cannot adopt a foreign surface there, and
+    a Wayland Godot window has no XID for xdotool to find either. The
+    viewer would then open as a DETACHED window, unlike Windows (Win32
+    SetParent) and X11 sessions where it is embedded.
+
+    Forcing xcb keeps both processes on the same X server, which is the
+    only configuration where the embed actually works (verified on
+    KDE/Wayland: xcb+x11 reparents, every other combination does not).
+
+    Set PERCE_NEIGE_KEEP_WAYLAND=1 to keep the native Wayland backend and
+    accept a detached 3D window.
+    """
+    if not sys.platform.startswith("linux"):
+        return
+    if os.environ.get("PERCE_NEIGE_KEEP_WAYLAND"):
+        return
+    if os.environ.get("QT_QPA_PLATFORM"):
+        return                                  # explicit choice wins (incl. offscreen)
+    if not os.environ.get("WAYLAND_DISPLAY"):
+        return                                  # already an X11 session, nothing to do
+    if not os.environ.get("DISPLAY"):
+        return                                  # no XWayland: forcing xcb would not start
+    os.environ["QT_QPA_PLATFORM"] = "xcb"
+
+
 def main() -> None:
+    _force_x11_if_wayland()
     app = QApplication(sys.argv)
     app.setApplicationName(APP_NAME)
     app.setApplicationVersion(VERSION)
