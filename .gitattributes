@@ -1,0 +1,22 @@
+# Les scripts shell restent en LF, même clonés ou synchronisés depuis Windows :
+# le lanceur du bureau Linux exécute launch.sh via bash, qui échoue sur du CRLF.
+*.sh text eol=lf
+
+# Les .bat doivent garder des fins de ligne Windows, sinon cmd.exe peut
+# mal interpréter les blocs goto / if.
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# Binaires : pas de conversion, pas de diff.
+*.png binary
+*.jpg binary
+*.ico binary
+*.pdf binary
+*.db  binary
+*.wav binary
+*.ogg binary
+*.mp3 binary
+
+# Note : pas de règle « text » générique ici. Le dépôt contient déjà de
+# nombreux fichiers en CRLF ; une normalisation globale produirait un diff
+# massif sans rapport avec le code.
