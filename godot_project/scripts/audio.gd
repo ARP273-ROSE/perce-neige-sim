@@ -13,6 +13,16 @@ var _player_door_motion: AudioStreamPlayer = null
 var _player_crossing: AudioStreamPlayer = null
 var _player_vent: AudioStreamPlayer = null    # ventilation cabine
 
+# --- Accident (mode Défi) -------------------------------------------------
+# Trois sons SYNTHÉTISÉS par make_crash_sounds.py (aucun échantillon
+# externe) : impact au butoir, déraillement, puis le sting de fin de
+# service qui tombe une fois le fracas retombé.
+var _player_crash: AudioStreamPlayer = null
+var _player_derail: AudioStreamPlayer = null
+var _player_gameover: AudioStreamPlayer = null
+var _gameover_delay: float = -1.0     # < 0 = pas de sting en attente
+var _crash_muted: bool = false        # ambiance coupée après l'accident
+
 var _trip_was_started: bool = false
 var _doors_were_open: bool = false   # défaut "portes fermées" : en mode client
                                       # on reçoit l'état réel au 1er tick et le flag
@@ -54,6 +64,11 @@ func _build_players() -> void:
 	# pitchée plus haut pour suggérer un souffle continu de ventilo
 	_player_vent = _create_player("res://sounds/ambient_slow.wav", -32.0, true)
 	_player_vent.pitch_scale = 1.6
+	# Accident : plus fort que le reste (c'est l'événement du trajet), mais
+	# sous le buzzer pour ne pas saturer les haut-parleurs d'un iPad.
+	_player_crash = _create_player("res://sounds/crash_impact.wav", -3.0, false)
+	_player_derail = _create_player("res://sounds/derail.wav", -5.0, false)
+	_player_gameover = _create_player("res://sounds/game_over.wav", -7.0, false)
 
 
 func _create_player(path: String, vol_db: float, loop: bool) -> AudioStreamPlayer:
@@ -102,6 +117,19 @@ func _process(_delta: float) -> void:
 		_doors_were_open = physics.doors_open
 		_trip_was_started = physics.trip_started
 		_first_update_consumed = true
+		return
+
+	# Sting de fin de service : armé par play_crash(), il tombe une fois le
+	# fracas retombé (sinon les deux se marchent dessus).
+	if _gameover_delay > 0.0:
+		_gameover_delay -= _delta
+		if _gameover_delay <= 0.0:
+			_gameover_delay = -1.0
+			if _player_gameover != null and _player_gameover.stream:
+				_player_gameover.play()
+
+	# Après un accident, plus rien ne tourne : ni moteur, ni ventilation.
+	if _crash_muted:
 		return
 
 	# Buzzer de départ : déclenché au DÉBUT de la séquence (portes qui se
@@ -223,3 +251,34 @@ func _update_crossing_servo(delta: float) -> void:
 			_player_crossing.volume_db = CROSSING_BASE_DB
 			_crossing_active = false
 			_crossing_fading_out = false
+
+
+# --- Accident (mode Défi) -------------------------------------------------
+
+## Joue le fracas correspondant au type de collision, coupe l'ambiance et
+## arme le sting de fin de service. `kind` ∈ {buffer, derail, cabin}.
+func play_crash(kind: String) -> void:
+	for p: AudioStreamPlayer in [_player_slow, _player_cruise,
+			_player_crossing, _player_vent]:
+		if p != null:
+			p.stop()
+	_crossing_active = false
+	_crossing_fading_out = false
+	_crash_muted = true
+	var impact: AudioStreamPlayer = _player_derail if kind == "derail" \
+		else _player_crash
+	if impact != null and impact.stream:
+		impact.play()
+	# Le déraillement dure plus longtemps (crissement + impact final) : le
+	# sting attend que la rame ait fini de se coucher.
+	_gameover_delay = 2.6 if kind == "derail" else 1.4
+
+
+## Nouveau voyage : on remet l'audio en service.
+func reset_crash() -> void:
+	_crash_muted = false
+	_gameover_delay = -1.0
+	for p: AudioStreamPlayer in [_player_crash, _player_derail,
+			_player_gameover]:
+		if p != null:
+			p.stop()

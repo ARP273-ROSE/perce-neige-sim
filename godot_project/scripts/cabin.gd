@@ -27,6 +27,11 @@ var _prev_v_for_acc: float = 0.0   # vitesse à la frame précédente pour calcu
 enum ViewMode { FPV, EXTERIOR }
 var view_mode: int = ViewMode.FPV
 
+# Secousse d'écran (collision du mode Défi) — décalage aléatoire
+# décroissant appliqué à la caméra courante.
+var _shake_t: float = 0.0
+var _shake_mag: float = 0.0
+
 # Caméra orbitale (vue extérieure) — sphérique autour du centre de la
 # rame, dans le repère LOCAL de la cabine (la vue suit l'orientation du
 # train comme l'ancienne vue fixe). Défauts = ancienne position (3,10,25).
@@ -809,6 +814,7 @@ func set_physics(p: TrainPhysics) -> void:
 func _process(_delta: float) -> void:
 	if tunnel == null or physics == null:
 		return
+	_update_shake(_delta)
 	# Caméra orbitale : suit la rame chaque frame en vue extérieure.
 	if not is_ghost and view_mode == ViewMode.EXTERIOR:
 		_update_orbit_camera()
@@ -818,7 +824,9 @@ func _process(_delta: float) -> void:
 	if is_ghost:
 		# Le ghost embarque dans SA gare : son propre affaissement de
 		# brin s'applique à SA position (visible quand il est en bas).
-		s_pos = PNConstants.LENGTH - physics.s_render + physics.ghost_sag_offset()
+		# ghost_s_render() vaut LENGTH − s en marche normale, et la
+		# position FIGÉE de la rame 2 une fois le câble rompu (mode Défi).
+		s_pos = physics.ghost_s_render() + physics.ghost_sag_offset()
 	else:
 		s_pos = physics.s_render
 
@@ -929,3 +937,33 @@ func set_headlights(on: bool) -> void:
 func set_interior_lights(on: bool) -> void:
 	if interior_light:
 		interior_light.visible = on
+
+
+# --- Secousse d'écran (collision) ----------------------------------------
+
+## Déclenche une secousse : `mag` en unités de décalage caméra (≈ mètres),
+## amortie linéairement sur `duration` secondes.
+func shake(duration: float, mag: float) -> void:
+	_shake_t = maxf(_shake_t, duration)
+	_shake_mag = maxf(_shake_mag, mag)
+
+
+func _update_shake(delta: float) -> void:
+	if is_ghost:
+		return
+	var cam: Camera3D = camera_fpv if view_mode == ViewMode.FPV else camera_ext
+	if cam == null:
+		return
+	if _shake_t <= 0.0:
+		if cam.h_offset != 0.0 or cam.v_offset != 0.0:
+			cam.h_offset = 0.0
+			cam.v_offset = 0.0
+		return
+	_shake_t = maxf(0.0, _shake_t - delta)
+	var amp: float = _shake_mag * _shake_t
+	cam.h_offset = randf_range(-amp, amp)
+	cam.v_offset = randf_range(-amp, amp)
+	if _shake_t <= 0.0:
+		_shake_mag = 0.0
+		cam.h_offset = 0.0
+		cam.v_offset = 0.0

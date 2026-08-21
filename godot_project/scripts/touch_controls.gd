@@ -23,6 +23,16 @@ var _drive_buttons: Array = []  # boutons de conduite, grisés quand AUTO actif
 var _sync_accum: float = 0.0
 var _fault_tap_time: float = -10.0   # double-tap PANNE (anti fausse manip)
 var _announce_menu: Control = null   # panneau des annonces audio (diffusion manuelle)
+var _b_mode: Button = null           # bascule NORMAL / DEFI / PANNES
+var _b_fault: Button = null
+
+# Libellé du bouton MODE selon le mode courant (sans accent : police par
+# défaut des exports mobiles).
+const MODE_LABEL: Dictionary = {
+	"normal": "MODE\nNORMAL",
+	"challenge": "MODE\nDEFI",
+	"panne": "MODE\nPANNES",
+}
 
 # Menu des annonces diffusables à la demande : clé de groupe → libellé FR.
 # (Ordre = ordre d'exploitation logique. brake_noise exclu : pas de MP3.)
@@ -60,7 +70,20 @@ func _process(delta: float) -> void:
 	if _sync_accum < 0.25:
 		return
 	_sync_accum = 0.0
-	if _b_auto != null and _main != null and _main.auto_operator != null:
+	if _main == null:
+		return
+	# Reflet du mode courant (il peut être changé au clavier M, ou par le
+	# sélecteur de scénario au démarrage).
+	var mode: String = str(_main.run_mode)
+	if _b_mode != null:
+		_b_mode.text = MODE_LABEL.get(mode, "MODE")
+	if _b_fault != null:
+		_b_fault.text = "PANNES" if mode == "panne" else "PANNE"
+	if _b_auto != null and _main.auto_operator != null:
+		# DÉFI et PANNES se conduisent à la main : l'exploitation
+		# automatique y est sans objet (elle écraserait la consigne).
+		_b_auto.disabled = (mode != "normal")
+		_b_auto.modulate.a = 0.35 if _b_auto.disabled else 0.92
 		var auto_on: bool = _main.auto_operator.enabled
 		_b_auto.set_pressed_no_signal(auto_on)
 		# En AUTO, l'automate écrase la consigne chaque frame → les
@@ -223,12 +246,19 @@ func _build() -> void:
 	# d'essai iPad 2026-07-12) ; et DOUBLE-TAP requis (< 1,5 s) pour
 	# déclencher, un seul tap suffit pour la lever.
 	var b_fault: Button = _mk_button("PANNE",
-		"DOUBLE-TAP : déclencher une panne aléatoire — un tap : la lever")
+		"DOUBLE-TAP : déclencher une panne aléatoire — un tap : la lever. " +
+		"En mode PANNES : ouvre la liste des 15 pannes.")
 	b_fault.custom_minimum_size = Vector2(102, 56)
 	b_fault.set_anchors_preset(Control.PRESET_TOP_LEFT)
 	b_fault.position = Vector2(320, 10)   # à droite du panneau status
 	b_fault.pressed.connect(func() -> void:
 		if _main == null or _main.fault_manager == null:
+			return
+		# Mode PANNES : le bouton ouvre le SÉLECTEUR (les 15 pannes, avec
+		# leur sévérité) — c'est le dialogue F du sim PC. Ailleurs, on
+		# garde le double-tap historique (panne aléatoire / un tap = lever).
+		if _main.run_mode == "panne" and _main.fault_picker != null:
+			_main.fault_picker.toggle()
 			return
 		if _main.fault_manager.is_active():
 			_main.fault_manager.clear_active()
@@ -240,6 +270,24 @@ func _build() -> void:
 		else:
 			_fault_tap_time = now)
 	root.add_child(b_fault)
+	_b_fault = b_fault
+
+	# MODE : rotation NORMAL → DÉFI → PANNES (touche M au clavier). Sur
+	# iPad il n'y a pas de clavier : c'est le seul moyen de changer de mode
+	# sans relancer la page.
+	_b_mode = _mk_button("MODE\nNORMAL",
+		"Changer de mode : NORMAL (exploitation), DEFI (conduite notee), " +
+		"PANNES (incidents a gerer)")
+	_b_mode.custom_minimum_size = Vector2(126, 62)
+	_b_mode.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	_b_mode.position = Vector2(16, 88)   # sous le panneau status
+	_b_mode.pressed.connect(func() -> void:
+		if _main == null:
+			return
+		var order: Array = ["normal", "challenge", "panne"]
+		var idx: int = order.find(_main.run_mode)
+		_main.set_run_mode(order[(maxi(idx, 0) + 1) % order.size()]))
+	root.add_child(_b_mode)
 
 	# Menu des annonces (masqué par défaut, superposé au centre)
 	_build_announce_menu(root)
