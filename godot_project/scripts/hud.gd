@@ -11,6 +11,7 @@ extends CanvasLayer
 var physics: TrainPhysics = null
 var fault_manager: FaultManager = null
 var lang: String = "fr"
+var run_mode: String = "normal"   # normal | challenge | panne
 
 @onready var _status_label: Label
 @onready var _help_label: Label
@@ -18,6 +19,8 @@ var lang: String = "fr"
 @onready var _fault_label: Label
 @onready var _fault_severity_label: Label
 @onready var _fault_timer_label: Label
+@onready var _fault_what_label: Label
+@onready var _fault_do_label: Label
 @onready var _cockpit: CockpitPanel
 @onready var _machine_room: MachineRoomPanel
 
@@ -89,8 +92,8 @@ func _build_ui() -> void:
 	_help_label = Label.new()
 	_help_label.visible = not DisplayServer.is_touchscreen_available()
 	_help_label.text = _t(
-		"Haut/Bas Setpoint · Space Brake · Shift Emerg · H Phares · V View · Enter Depart · I Reverse · F1 Fault · F2 Clear · F3 Auto-op",
-		"Haut/Bas Consigne · Espace Frein · Shift Urgence · H Phares · V Vue · Entrée Départ · I Inverser · F1 Panne · F2 Clear · F3 Auto-exploit"
+		"Up/Down Setpoint · Space Brake · Shift Emerg · H Lights · V View · Enter Depart · I Reverse · M Mode · F Fault picker · R New trip · F1 Fault · F2 Clear · F3 Auto-op",
+		"Haut/Bas Consigne · Espace Frein · Shift Urgence · H Phares · V Vue · Entrée Départ · I Inverser · M Mode · F Choisir panne · R Nouveau voyage · F1 Panne · F2 Clear · F3 Auto-exploit"
 	)
 	_help_label.position = Vector2(20, 218)
 	_help_label.size = Vector2(1560, 22)
@@ -143,6 +146,22 @@ func _build_ui() -> void:
 	_fault_timer_label.add_theme_color_override("font_color", Color(0.7, 0.8, 0.9))
 	fault_vbox.add_child(_fault_timer_label)
 
+	# Consigne d'exploitation (mode Pannes) : ce qui se passe, ce qu'il faut
+	# faire, ce qui est bloqué. Sans ça, une panne n'est qu'un voyant rouge.
+	_fault_what_label = Label.new()
+	_fault_what_label.add_theme_font_size_override("font_size", 12)
+	_fault_what_label.add_theme_color_override("font_color", Color(0.90, 0.94, 1.0))
+	_fault_what_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_fault_what_label.custom_minimum_size = Vector2(656, 0)
+	fault_vbox.add_child(_fault_what_label)
+
+	_fault_do_label = Label.new()
+	_fault_do_label.add_theme_font_size_override("font_size", 12)
+	_fault_do_label.add_theme_color_override("font_color", Color(0.60, 1.0, 0.70))
+	_fault_do_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_fault_do_label.custom_minimum_size = Vector2(656, 0)
+	fault_vbox.add_child(_fault_do_label)
+
 
 func set_physics(p: TrainPhysics) -> void:
 	physics = p
@@ -155,6 +174,10 @@ func set_physics(p: TrainPhysics) -> void:
 func set_driver_rame2(rame2: bool) -> void:
 	if _cockpit != null:
 		_cockpit.driver_is_rame2 = rame2
+
+
+func set_run_mode(mode: String) -> void:
+	run_mode = mode
 
 
 func set_fault_manager(fm: FaultManager) -> void:
@@ -173,6 +196,17 @@ func _process(_delta: float) -> void:
 
 
 func _status_text() -> String:
+	var prefix: String = ""
+	if run_mode == "challenge":
+		prefix = _t("CHALLENGE - ", "DEFI - ")
+	elif run_mode == "panne":
+		prefix = _t("FAULTS - ", "PANNES - ")
+	return prefix + _status_core()
+
+
+func _status_core() -> String:
+	if physics.cable_rupture:
+		return _t("CABLE SNAPPED - runaway", "CABLE ROMPU - emballement")
 	if physics.emergency or physics.emergency_brake:
 		return _t("EMERGENCY BRAKE", "FREIN URGENCE")
 	if physics.finished:
@@ -200,6 +234,18 @@ func _update_fault_panel() -> void:
 	_fault_severity_label.text = "[%s] %s" % [fault_manager.get_active_severity_label(), fault_manager.get_active_id().to_upper()]
 	_fault_severity_label.add_theme_color_override("font_color", sev_color)
 	_fault_label.text = fault_manager.get_active_label()
+	# Le mode d'emploi n'a de sens qu'en mode Pannes (conduite manuelle) —
+	# ailleurs, la panne reste un simple voyant.
+	var show_proc: bool = run_mode == "panne"
+	_fault_what_label.visible = show_proc
+	_fault_do_label.visible = show_proc
+	if show_proc:
+		_fault_what_label.text = fault_manager.get_active_what()
+		_fault_do_label.text = _t("ACTION : ", "ACTION : ") \
+			+ fault_manager.get_active_do()
+		_fault_panel.size = Vector2(680, 168)
+	else:
+		_fault_panel.size = Vector2(680, 64)
 	var rem: float = fault_manager.get_active_remaining()
 	if is_inf(rem) or rem <= 0.0:
 		_fault_timer_label.text = _t("Manual intervention required (R for new trip)",

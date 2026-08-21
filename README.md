@@ -816,6 +816,49 @@ Préréglages de rendu du viewer (arg projet) : `--quality=low|medium|high`
   Random weighted scheduler by default; press **F** to open the manual
   picker dialog (choose a specific fault or toggle auto/manual scheduler)
 
+#### Modes de jeu dans la version Web / PWA (3D Godot)
+Les trois modes existent aussi dans l'export web (**funiculaire.giff.re**),
+choisis dans le sélecteur de démarrage (à côté de la gare de départ et du
+numéro de rame), ou en cours de partie par le bouton **MODE** (tactile) /
+la touche **M** :
+
+- **NORMAL** — exploitation Von Roll classique : enveloppe d'approche,
+  creep et arrêt automatique au repère.
+- **DÉFI** — port du mode « challenge » du PC : plus **aucun** filet.
+  Moteur surrégimé (×1,8) et consigne portée à 15 m/s (donc survitesse
+  possible), pas d'enveloppe ni d'auto-dock, pas de maintien automatique à
+  consigne 0, verrous de portes levés une fois le voyage lancé. À
+  l'arrivée, le trajet est **noté sur 100** — 40 % confort (ISO 2631),
+  35 % précision d'arrêt au repère, 25 % régularité (urgence, panne
+  subie, départ portes ouvertes) — avec un **avis passager** stylé par
+  nationalité et un record persisté dans le stockage du navigateur.
+  Trois façons de finir dans le décor, chacune avec sa pique sarcastique
+  et son avis 1 étoile : **butoir** (> 1,5 m/s en bout de voie),
+  **déraillement** à l'évitement Abt (> 13,5 m/s) et **collision avec
+  l'autre rame** après une rupture de câble (survitesse +20 % : le moteur
+  lâche, la rame 2 découplée s'immobilise, seul le parachute Belleville
+  peut encore vous arrêter). Écran de collision + secousse de caméra,
+  bouton **NOUVEAU VOYAGE** (ou touche **R**).
+- **PANNES** — conduite manuelle avec incidents : tirage pondéré
+  automatique (λ = 1 panne / 240 s + cooldown 90 s, soit ~1 par trajet)
+  et sélecteur manuel des 15 pannes (bouton **PANNES** / touche **F**).
+  Le panneau de panne affiche alors la procédure complète : ce qui se
+  passe, **l'action à faire**, et ce qui est bloqué.
+
+**Sons d'accident** — `crash_impact.wav` (butoir), `derail.wav`
+(déraillement) et `game_over.wav` (sting de fin de service) sont
+**synthétisés**, pas échantillonnés : `make_crash_sounds.py` les
+regénère à l'identique (graine fixe, Python standard, aucune
+dépendance). À l'impact, l'ambiance moteur et la ventilation sont
+coupées, le fracas part, le sting tombe 1,4 s plus tard (2,6 s pour un
+déraillement) et l'annonce d'évacuation suit à 6,5 s.
+
+Banc de non-régression : `godot_project/bench_defi_3d.gd`
+(`godot --headless --path godot_project -s bench_defi_3d.gd`) — surrégime,
+plafond en mode normal, collision butoir, cascade de survitesse,
+déraillement, absence de maintien à consigne 0, notation, profils de
+panne et fréquence du planificateur.
+
 ### Fault catalogue (press F in Faults mode)
 Common operational faults : `tension`, `door`, `thermal`, `fire`,
 `wet_rail`, `motor_degraded` (M1/M2/M3 named, Sassi-Superga precedent),

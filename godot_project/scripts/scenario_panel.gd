@@ -4,21 +4,31 @@ extends CanvasLayer
 ## « avant de mettre prêt départ on devrait pouvoir choisir rame 1 ou 2
 ## et montée ou descente »).
 ##
-## Deux choix :
+## Trois choix :
 ##   - gare de départ : BASSE (montée) / HAUTE (descente)
 ##   - rame : 1 (voie gauche dans l'évitement) / 2 (voie droite)
+##   - mode de jeu : NORMAL / DÉFI / PANNES (comme la version PC)
 ## COMMENCER émet `chosen` puis le panneau disparaît. Tout est en ASCII
 ## sûr (pas de glyphes hors police par défaut mobile).
 
-signal chosen(from_top: bool, rame2: bool)
+signal chosen(from_top: bool, rame2: bool, mode: String)
 
 var _from_top: bool = false
 var _rame2: bool = false
+var _mode: String = "normal"    # normal | challenge | panne
 
 var _b_low: Button = null
 var _b_high: Button = null
 var _b_r1: Button = null
 var _b_r2: Button = null
+var _b_mode: Dictionary = {}    # mode → Button
+var _mode_hint: Label = null
+
+const MODE_HINTS: Dictionary = {
+	"normal": "Exploitation normale : enveloppe Von Roll, arret automatique en gare.",
+	"challenge": "DEFI : plus aucun filet. Vous freinez vous-meme, vous vous arretez\nau repere, et le trajet est NOTE a l'arrivee. Trop vite au butoir = collision.",
+	"panne": "PANNES : conduite manuelle, incidents tires au sort (ou choisis) en\nligne. Le panneau vous dit quoi faire ; a vous de ramener la rame.",
+}
 
 
 func _ready() -> void:
@@ -76,6 +86,11 @@ func _build() -> void:
 
 	box.add_child(_mk_label("FUNICULAIRE PERCE-NEIGE", 30))
 	box.add_child(_mk_label("Choisissez votre scenario", 16))
+	# Tampon de build : permet de verifier que la PWA tourne bien sur la
+	# derniere version deployee et pas sur une copie du service worker.
+	var build: Label = _mk_label("build " + PNConstants.BUILD_TAG, 11)
+	build.add_theme_color_override("font_color", Color(0.65, 0.72, 0.82))
+	box.add_child(build)
 
 	box.add_child(_mk_label("GARE DE DEPART", 14))
 	var row1: HBoxContainer = HBoxContainer.new()
@@ -103,6 +118,30 @@ func _build() -> void:
 	row2.add_child(_b_r1)
 	row2.add_child(_b_r2)
 
+	box.add_child(_mk_label("MODE DE JEU", 14))
+	var row3: HBoxContainer = HBoxContainer.new()
+	row3.alignment = BoxContainer.ALIGNMENT_CENTER
+	row3.add_theme_constant_override("separation", 14)
+	box.add_child(row3)
+	for entry: Array in [["normal", "NORMAL"], ["challenge", "DEFI"],
+			["panne", "PANNES"]]:
+		var mid: String = entry[0]
+		var b: Button = _mk_toggle(entry[1])
+		b.custom_minimum_size = Vector2(160, 60)
+		b.button_pressed = (mid == _mode)
+		b.toggled.connect(func(on: bool) -> void:
+			if on:
+				_pick_mode(mid)
+			else:
+				# Un mode reste toujours sélectionné (radio, pas case à cocher)
+				b.set_pressed_no_signal(mid == _mode))
+		_b_mode[mid] = b
+		row3.add_child(b)
+
+	_mode_hint = _mk_label(MODE_HINTS["normal"], 13)
+	_mode_hint.add_theme_color_override("font_color", Color(0.82, 0.90, 1.0))
+	box.add_child(_mode_hint)
+
 	var go: Button = _mk_toggle("COMMENCER")
 	go.toggle_mode = false
 	go.custom_minimum_size = Vector2(300, 76)
@@ -112,7 +151,7 @@ func _build() -> void:
 	margin.add_child(go)
 	box.add_child(margin)
 	go.pressed.connect(func() -> void:
-		chosen.emit(_from_top, _rame2)
+		chosen.emit(_from_top, _rame2, _mode)
 		queue_free())
 
 
@@ -126,3 +165,11 @@ func _pick_rame(rame2: bool) -> void:
 	_rame2 = rame2
 	_b_r1.set_pressed_no_signal(not rame2)
 	_b_r2.set_pressed_no_signal(rame2)
+
+
+func _pick_mode(mode: String) -> void:
+	_mode = mode
+	for mid: String in _b_mode.keys():
+		(_b_mode[mid] as Button).set_pressed_no_signal(mid == mode)
+	if _mode_hint != null:
+		_mode_hint.text = MODE_HINTS.get(mode, "")

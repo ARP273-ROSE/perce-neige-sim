@@ -27,6 +27,13 @@ var fault_manager: FaultManager = null
 var auto_operator: AutoOperator = null
 var exploitation_log: ExploitationLog = null
 var state_receiver: StateReceiver = null
+var challenge: Challenge = null
+var challenge_panel: ChallengePanel = null
+var fault_picker: FaultPicker = null
+
+# Mode de jeu — comme la version PC : normal | challenge (Défi) | panne.
+var run_mode: String = "normal"
+var _scenario_rame2: bool = false
 
 # Mode CLIENT : démarré avec --client en arg projet, le sim Python pilote
 # l'état via UDP. La physique locale + l'auto-op + les annonces auto sont
@@ -129,8 +136,12 @@ func _ready() -> void:
 			print("[Autotest] auto-exploitation forcée ON")
 		elif "--drivetest" in OS.get_cmdline_user_args():
 			_drivetest()
+		elif _cmdline_mode() != "":
+			# --mode=normal|challenge|panne : démarrage direct dans un mode
+			# donné, sans passer par le sélecteur (bancs headless).
+			_apply_scenario(false, false, _cmdline_mode())
 		else:
-			# Sélecteur de scénario (gare de départ + rame) au démarrage
+			# Sélecteur de scénario (gare de départ + rame + mode de jeu)
 			var scen: ScenarioPanel = ScenarioPanel.new()
 			scen.name = "ScenarioPanel"
 			add_child(scen)
@@ -141,7 +152,8 @@ func _ready() -> void:
 # Applique le scénario choisi au démarrage : gare haute = départ en
 # descente ; rame 2 = voie DROITE dans l'évitement (la rame 1 prend la
 # gauche) — les deux cabines échangent leur voie.
-func _apply_scenario(from_top: bool, rame2: bool) -> void:
+func _apply_scenario(from_top: bool, rame2: bool, mode: String = "normal") -> void:
+	set_run_mode(mode)
 	if from_top:
 		physics.s = PNConstants.STOP_S
 		physics.s_prev_step = physics.s
@@ -152,8 +164,46 @@ func _apply_scenario(from_top: bool, rame2: bool) -> void:
 		# _build_physics supposait une montée.
 		physics.roll_pax()
 	apply_rame(rame2)
-	print("[Scenario] depart %s, rame %d" % [
-		"gare haute" if from_top else "gare basse", 2 if rame2 else 1])
+	_scenario_rame2 = rame2
+	print("[Scenario] depart %s, rame %d, mode %s" % [
+		"gare haute" if from_top else "gare basse", 2 if rame2 else 1, run_mode])
+
+
+# Bascule de mode de jeu (sélecteur de départ, ou touche M en cours de
+# partie). NORMAL = exploitation Von Roll classique ; DÉFI = conduite
+# notée sans aucun filet ; PANNES = conduite manuelle avec incidents.
+func _cmdline_mode() -> String:
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--mode="):
+			var m: String = arg.substr(7)
+			if m in ["normal", "challenge", "panne"]:
+				return m
+	return ""
+
+
+func set_run_mode(mode: String) -> void:
+	if not mode in ["normal", "challenge", "panne"]:
+		mode = "normal"
+	run_mode = mode
+	if physics != null:
+		physics.challenge_mode = (mode == "challenge")
+	if fault_manager != null:
+		fault_manager.scheduler_enabled = (mode == "panne")
+		# Changer de mode remet la ligne en ordre de marche.
+		if fault_manager.is_active():
+			fault_manager.clear_active()
+	if challenge != null:
+		challenge.enabled = (mode == "challenge")
+		challenge.reset_trip()
+		challenge.clear_crash()
+	# En Défi comme en Pannes, on CONDUIT : l'exploitation automatique est
+	# coupée (elle écraserait la consigne du conducteur à chaque frame).
+	if auto_operator != null and mode != "normal" and auto_operator.enabled:
+		auto_operator.toggle()
+	if hud != null:
+		hud.set_run_mode(mode)
+	if fault_picker != null and mode != "panne" and fault_picker.is_open():
+		fault_picker.toggle()
 
 
 # Applique le NUMÉRO de rame pilotée à tout ce qui en dépend. Extrait de
@@ -271,6 +321,72 @@ func _build_exploitation_log() -> void:
 	exploitation_log.name = "ExploitationLog"
 	add_child(exploitation_log)
 	exploitation_log.set_physics(physics)
+	_build_game_modes()
+
+
+# Modes DÉFI et PANNES : notation du trajet + écran de collision + le
+# sélecteur de panne manuel. Les trois nœuds existent en permanence ;
+# seul le mode courant les active (challenge.enabled / scheduler_enabled).
+func _build_game_modes() -> void:
+	challenge = Challenge.new()
+	challenge.name = "Challenge"
+	add_child(challenge)
+	challenge.setup(physics, fault_manager)
+
+	challenge_panel = ChallengePanel.new()
+	challenge_panel.name = "ChallengePanel"
+	add_child(challenge_panel)
+	challenge_panel.setup(challenge)
+	challenge_panel.restart_requested.connect(restart_trip)
+
+	fault_picker = FaultPicker.new()
+	fault_picker.name = "FaultPicker"
+	add_child(fault_picker)
+	fault_picker.setup(fault_manager)
+
+	physics.crash_occurred.connect(_on_crash)
+
+
+# Collision (mode Défi) : la physique se fige, l'écran tremble, la panique
+# passe en annonce d'évacuation — c'est ChallengePanel qui affiche la
+# pique et l'avis passager.
+func _on_crash(kind: String, speed: float) -> void:
+	physics.frozen = true
+	if cabin != null:
+		cabin.shake(1.4 if kind != "buffer" else 1.2,
+			minf(0.55, 0.10 + speed / 22.0))
+	# Bande-son de l'accident : fracas (impact ou déraillement), ambiance
+	# coupée, puis sting de fin de service — cf. TrainAudio.play_crash.
+	if audio != null:
+		audio.play_crash(kind)
+	if exploitation_log != null:
+		exploitation_log.end_trip(false)
+	# L'annonce d'évacuation vient APRÈS le sting (le quai réagit une fois
+	# le fracas retombé) — sinon les trois se superposent.
+	if announcements != null:
+		await get_tree().create_timer(6.5).timeout
+		if physics.crashed:
+			announcements.play_now("evac")
+
+
+# Nouveau voyage après une collision (bouton NOUVEAU VOYAGE / touche R).
+func restart_trip() -> void:
+	if physics == null:
+		return
+	physics.restart_after_crash()
+	if fault_manager != null:
+		fault_manager.clear_active()
+	if challenge != null:
+		challenge.clear_crash()
+		challenge.reset_trip()
+	if announcements != null:
+		announcements.stop_all()
+	if audio != null:
+		audio.reset_crash()
+	apply_rame(_scenario_rame2)
+	_prev_finished = false
+	_prev_trip_started = false
+	_welcome_played = false
 
 
 func _build_machine_room() -> void:
@@ -655,6 +771,25 @@ func _unhandled_input(event: InputEvent) -> void:
 			auto_operator.toggle()
 		elif event.keycode == KEY_I:
 			do_reverse()
+		elif event.keycode == KEY_M:
+			# Rotation des modes, comme la touche M du PC.
+			var order: Array = ["normal", "challenge", "panne"]
+			var idx: int = order.find(run_mode)
+			set_run_mode(order[(maxi(idx, 0) + 1) % order.size()])
+			print("[Mode] %s" % run_mode)
+		elif event.keycode == KEY_F and run_mode == "panne" \
+				and fault_picker != null:
+			fault_picker.toggle()
+		elif event.keycode == KEY_R:
+			# Nouveau voyage — UNIQUEMENT quand le service est terminé :
+			# après une collision (mode Défi) ou une panne catastrophique.
+			# Sinon un R malencontreux annulerait un trajet en cours.
+			if physics.crashed or (fault_manager != null
+					and fault_manager.is_active_catastrophic()):
+				restart_trip()
+			else:
+				print("[R] ignoré — trajet en cours (R sert après une collision "
+					+ "ou une panne catastrophique)")
 		elif event.keycode == KEY_O and cabin != null:
 			# Bascule FPV ↔ extérieure orbitale (aussi pilotée par la
 			# touche O du sim PC via le state dict "ext_view").
@@ -720,5 +855,13 @@ func do_reverse() -> void:
 		announcements.play_now("return_station")
 	if exploitation_log != null:
 		exploitation_log.end_trip(false)
+	# En Défi, le demi-tour vaut une remarque des passagers (port des
+	# REVERSE_QUIPS du PC) — affichée dans le bandeau de résultat.
+	if run_mode == "challenge" and challenge != null:
+		challenge.result_lines = [PNQuips.pick_quip(PNQuips.REVERSE, challenge.lang)]
+		challenge.last_score = -1.0
+		challenge.review = {}
+		challenge.result_t = 6.0
+		challenge.result_ready.emit({"quip_only": true})
 	if auto_operator != null and auto_operator.enabled:
 		auto_operator._enter_initial_state()
