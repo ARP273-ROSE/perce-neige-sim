@@ -10,6 +10,14 @@ extends Node
 
 const G: float = 9.80665  # m/s²
 
+# Tampon de build, affiché sur l'écran de choix du scénario. Il est
+# réécrit automatiquement par deploy_web.sh au moment de l'export (date +
+# heure), puis remis à "dev" — il sert à voir D'UN COUP D'OEIL si la PWA
+# tourne bien sur la dernière version ou sur une copie encore en cache
+# dans le service worker (retour d'essai iPad 2026-08-21 : « pas de son de
+# crash » = c'était l'ancien build qui tournait).
+const BUILD_TAG: String = "dev"
+
 
 # Safari (iPad/iPhone/macOS) : la lecture audio « Sample » des exports web
 # (défaut Godot ≥ 4.3) est muette puis fait planter la page sous WebKit

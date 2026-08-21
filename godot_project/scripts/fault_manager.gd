@@ -179,6 +179,18 @@ var _active_remaining: float = 0.0
 var _active_total_duration: float = 0.0
 var _pending_trip_delay: float = 0.0   # pressostat service_brake_fail (~3 s)
 
+# --- Planificateur du mode PANNES ----------------------------------------
+# Aléa INDÉPENDANT DU FRAMERATE (hazard exponentiel : P = λ·dt), calibré
+# comme le PC après deux retours « les pannes c'est beaucoup trop
+# souvent » : λ = 1 panne / 240 s d'exposition + cooldown de 90 s → un
+# incident toutes les 5-6 min, soit environ un par trajet (un aller ≈ 6
+# min). Le déclenchement manuel (bouton PANNES) reste dispo à tout moment.
+const HAZARD_PER_S: float = 1.0 / 240.0
+const COOLDOWN_S: float = 90.0
+
+var scheduler_enabled: bool = false    # mode Pannes, tirage automatique
+var _cooldown: float = 20.0
+
 
 func _ready() -> void:
 	_detect_lang()
@@ -273,6 +285,15 @@ func trigger(fault_id: String) -> void:
 	# physique), en plus du cap de vitesse.
 	if physics != null:
 		physics.abt_hold = (fault_id == "switch_abt_fault")
+		# Avaries MÉCANIQUES portées par la physique (mode Pannes) : le
+		# câble rompu découple la rame du contrepoids et immobilise la
+		# rame 2 ; le frein de service dégradé perd son efficacité.
+		if fault_id == "cable_rupture":
+			physics.cable_rupture = true
+			physics.service_brake_fail = 0.15
+			physics.ghost_locked_s = PNConstants.LENGTH - physics.s
+		elif fault_id == "service_brake_fail":
+			physics.service_brake_fail = 0.25
 
 	# Annonce vocale liée
 	var ann_key: String = FAULTS[fault_id]["announcement"]
@@ -291,7 +312,12 @@ func clear_active() -> void:
 		physics.release_emergency()
 		physics.emergency_brake = false
 		physics.abt_hold = false
+		# Avaries mécaniques levées avec la panne (maintenance à quai).
+		physics.cable_rupture = false
+		physics.service_brake_fail = 1.0
+		physics.ghost_locked_s = -1.0
 	_pending_trip_delay = 0.0
+	_cooldown = COOLDOWN_S
 	print("[Fault] %s clearée" % _active_id)
 	_active_id = ""
 	_active_remaining = 0.0
@@ -312,6 +338,7 @@ func trigger_random(exclude_catastrophic: bool = true) -> void:
 
 func _process(delta: float) -> void:
 	if _active_id == "":
+		_scheduler_tick(delta)
 		return
 	# Pressostat frein de service : l'urgence tombe après le délai de
 	# détection (~3 s), si la panne est toujours active.
@@ -329,3 +356,54 @@ func _process(delta: float) -> void:
 		_active_remaining -= delta
 		if _active_remaining <= 0.0:
 			clear_active()
+
+
+# --- Planificateur automatique (mode PANNES) ------------------------------
+
+func _scheduler_tick(delta: float) -> void:
+	if not scheduler_enabled or physics == null:
+		return
+	# Rien ne se déclenche à quai : une panne n'a d'intérêt qu'en ligne,
+	# quand le conducteur doit la gérer en roulant.
+	if not physics.trip_started or physics.emergency:
+		return
+	if _cooldown > 0.0:
+		_cooldown = maxf(0.0, _cooldown - delta)
+		return
+	if randf() > HAZARD_PER_S * delta:
+		return
+	_cooldown = COOLDOWN_S
+	trigger(FaultProfiles.weighted_pick())
+
+
+# --- Profil de la panne courante (quoi / que faire / ce qui est bloqué) ---
+
+func get_active_what() -> String:
+	return FaultProfiles.get_field(_active_id, "what", lang)
+
+
+func get_active_do() -> String:
+	return FaultProfiles.get_field(_active_id, "do", lang)
+
+
+func get_active_blocked() -> String:
+	return FaultProfiles.get_field(_active_id, "blocked", lang)
+
+
+func is_active_catastrophic() -> bool:
+	return _active_id != "" \
+		and FAULTS[_active_id]["severity"] == Severity.CATASTROPHIC
+
+
+## Libellé d'une panne quelconque (sélecteur manuel).
+func label_of(fault_id: String) -> String:
+	if not FAULTS.has(fault_id):
+		return fault_id
+	var key: String = "label_fr" if lang == "fr" else "label_en"
+	return FAULTS[fault_id][key]
+
+
+func severity_color_of(fault_id: String) -> Color:
+	if not FAULTS.has(fault_id):
+		return Color(1, 1, 1)
+	return SEVERITY_COLOR[FAULTS[fault_id]["severity"]]
