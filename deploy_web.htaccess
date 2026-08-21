@@ -1,0 +1,32 @@
+# Funiculaire Perce-Neige — export Godot Web servi par le conteneur web-pwa.
+# Copié en .htaccess dans /mnt/apps_pool/Web/funiculaire par deploy_web.sh.
+
+Options -Indexes
+
+<IfModule mod_headers.c>
+    Header set X-Content-Type-Options "nosniff"
+    Header set Referrer-Policy "strict-origin-when-cross-origin"
+    Header set X-Robots-Tag "noindex, nofollow"
+
+    # Les fichiers de l'export Godot forment un TOUT indissociable :
+    # index.js, index.pck et index.wasm doivent venir du MÊME build (un pck
+    # d'une version avec le wasm d'une autre = page qui ne démarre pas).
+    # Sans en-tête, Cloudflare les gardait 4 h → après chaque déploiement il
+    # fallait purger le cache à la main au dashboard (retour d'essai
+    # 2026-08-21). On les marque donc no-store pour l'edge : le service
+    # worker de la PWA, lui, garde sa copie locale (l'API Cache ignore ces
+    # directives), donc l'app reste utilisable hors ligne et ne retélécharge
+    # que quand une nouvelle version est déployée.
+    <FilesMatch "^index\.(html|js|pck|wasm|manifest\.json|service\.worker\.js|audio\.worklet\.js|audio\.position\.worklet\.js|offline\.html)$">
+        Header set Cache-Control "no-store, no-cache, must-revalidate, max-age=0, s-maxage=0"
+        Header set Pragma "no-cache"
+        Header set Expires "0"
+        Header set CDN-Cache-Control "no-store"
+        Header set Cloudflare-CDN-Cache-Control "no-store"
+    </FilesMatch>
+
+    # Icônes : stables d'un build à l'autre, elles peuvent rester en cache.
+    <FilesMatch "\.png$">
+        Header set Cache-Control "public, max-age=86400"
+    </FilesMatch>
+</IfModule>
