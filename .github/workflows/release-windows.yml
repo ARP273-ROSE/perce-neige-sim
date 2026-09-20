@@ -49,7 +49,12 @@ jobs:
         shell: bash
         run: |
           ARTEFACT=$(python -c "import json;print(json.load(open('kit.json')).get('artefact_prealable',''))")
-          if [ -n "$ARTEFACT" ] && [ "${{ github.event_name }}" = "push" ]; then
+          # On ne peut pas se fier a github.event_name : dans un workflow
+          # appele, il vaut toujours l'evenement d'origine (« push »), et la
+          # condition ecartait justement le cas legitime. C'est la presence
+          # d'une version en entree qui distingue un appel d'un declenchement
+          # par tag.
+          if [ -n "$ARTEFACT" ] && [ -z "${{ inputs.version }}" ]; then
             echo "construire=false" >> "$GITHUB_OUTPUT"
             echo "Paquet construit par le workflow amont (artefact $ARTEFACT) : rien a faire ici."
           else
