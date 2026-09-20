@@ -168,7 +168,12 @@ jobs:
           # Seuls les fichiers applicatifs : quelques centaines de kilo-octets,
           # contre plusieurs centaines de megaoctets pour le paquet complet.
           # C'est ce que telecharge l'application quand elle se met a jour.
-          cd "$RUNNER_TEMP/build/${{ steps.kit.outputs.nom_fichier }}/app"
+          # On travaille sur une COPIE : l'installeur est compile depuis le
+          # paquet, et retirer des fichiers dans le paquet lui-meme livrerait
+          # une application amputee de ses donnees.
+          rm -rf "$RUNNER_TEMP/maj"
+          cp -r "$RUNNER_TEMP/build/${{ steps.kit.outputs.nom_fichier }}/app" "$RUNNER_TEMP/maj"
+          cd "$RUNNER_TEMP/maj"
           find . -name '__pycache__' -type d -prune -exec rm -rf {} +
           # Donnees volumineuses qui ne bougent pas d'une version a l'autre
           # (sons, moteur 3D...). Les laisser ferait retelecharger des
