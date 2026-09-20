@@ -1,0 +1,57 @@
+{
+  "nom_technique": "perce-neige-sim",
+  "nom_fichier": "PerceNeigeSimulator",
+  "nom_affiche": "Simulateur Perce-Neige",
+  "depot_distribution": "ARP273-ROSE/perce-neige-sim",
+  "point_entree": "perce_neige_sim.py",
+  "fichier_version": "VERSION",
+  "icone": "logo.ico",
+  "appid": "{{9AE80F91-D062-5DDE-A075-C3A22A1C3BEE}",
+  "modules": [
+    "perce_neige_sim.py",
+    "godot_bridge.py",
+    "bugreport.py",
+    "autoupdate.py",
+    "reporting.py",
+    "updater.py"
+  ],
+  "paquets": [],
+  "assets": [
+    "VERSION",
+    "logo.ico",
+    "logo.png",
+    "logo_64.png",
+    "README.md",
+    "manuel_perce_neige.pdf",
+    "guide_theorique.pdf",
+    "challenge_best.json"
+  ],
+  "copies": [
+    {
+      "de": "sons",
+      "vers": "sons",
+      "motifs": [
+        "**/*.wav",
+        "**/*.mp3",
+        "**/*.ogg"
+      ]
+    },
+    {
+      "de": "bundled_godot",
+      "vers": "bundled_godot",
+      "motifs": [
+        "**/*"
+      ]
+    }
+  ],
+  "requirements": "requirements.txt",
+  "pip": [],
+  "binaires": [],
+  "fichiers_proteges": [
+    "exploitation.db",
+    "challenge_best.json"
+  ],
+  "artefact_prealable": "godot-viewers",
+  "artefact_dossier": "bundled_godot",
+  "verification_import": []
+}
