@@ -78,6 +78,8 @@ jobs:
   # --------------------------------------------------------------------- #
   # Job 2 : Windows build avec viewer Godot embarqué
   # --------------------------------------------------------------------- #
+  # Conserve pour l'instant en parallele du paquet du kit, le temps que la
+  # premiere installation reelle soit verifiee sous Windows.
   build-windows:
     needs: godot-export
     runs-on: windows-latest
@@ -172,3 +174,20 @@ jobs:
         with:
           name: PerceNeigeSimulator-windows
           path: dist/PerceNeigeSimulator_*.exe
+
+  # Paquet Windows du kit : il remplace l'executable PyInstaller ci-dessus.
+  # Il embarque la distribution officielle de Python, que Defender ne met pas
+  # en quarantaine, et se met a jour par archive ZIP — donc sans faire
+  # reapparaitre l'avertissement SmartScreen a chaque version.
+  #
+  # Il attend godot-export : le viewer 3D lui arrive par artefact, comme au
+  # job PyInstaller.
+  paquet-windows:
+    needs: godot-export
+    if: startsWith(github.ref, 'refs/tags/')
+    uses: ./.github/workflows/release-windows.yml
+    with:
+      version: ${{ github.ref_name }}
+    permissions:
+      contents: write
+

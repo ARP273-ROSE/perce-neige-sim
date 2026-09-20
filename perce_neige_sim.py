@@ -91,7 +91,27 @@ try:
 except ImportError:
     _GODOT_BRIDGE_OK = False
 
-VERSION = "1.12.43"
+def _lire_version() -> str:
+    """Lit le fichier VERSION : une seule source de verite.
+
+    Le numero ecrit a deux endroits finit par diverger, et une application qui
+    se croit en retard sur elle-meme propose une mise a jour a chaque
+    demarrage, sans fin. Ce fichier est aussi celui que le workflow compare
+    au tag.
+    """
+    from pathlib import Path as _Path
+    ici = _Path(__file__).resolve().parent
+    for base in (ici, ici.parent):
+        try:
+            texte = (base / "VERSION").read_text(encoding="utf-8").strip()
+            if texte:
+                return texte
+        except OSError:
+            continue
+    return ""
+
+
+VERSION = _lire_version()
 APP_NAME = "Perce-Neige Simulator"
 
 
@@ -13461,6 +13481,43 @@ def _force_x11_if_wayland() -> None:
     os.environ["QT_QPA_PLATFORM"] = "xcb"
 
 
+_fichier_faulthandler = None
+
+
+def _demarrer_rapports():
+    """Installe la remontee d'incidents et rend le module, ou None."""
+    dossier = _writable_dir()
+    trace_native = Path(dossier) / "_crash_natif.log"
+    try:
+        import faulthandler
+        global _fichier_faulthandler
+        _fichier_faulthandler = open(trace_native, "w", encoding="utf-8")
+        faulthandler.enable(file=_fichier_faulthandler, all_threads=True)
+    except Exception:
+        pass
+    try:
+        import reporting
+        reporting.init(dossier, application="perce-neige-sim", version=VERSION)
+        reporting.relever_crash_natif(trace_native)
+        reporting.reprendre_file_en_fond()
+
+        precedent = sys.excepthook
+
+        def filet(type_exc, valeur, trace):
+            import traceback as _tb
+            try:
+                reporting.signaler_plantage(
+                    "".join(_tb.format_exception(type_exc, valeur, trace)))
+            except Exception:
+                pass
+            precedent(type_exc, valeur, trace)
+
+        sys.excepthook = filet
+        return reporting
+    except Exception:
+        return None
+
+
 def main() -> None:
     _force_x11_if_wayland()
     app = QApplication(sys.argv)
@@ -13473,8 +13530,28 @@ def main() -> None:
         bugreport.install_crash_handler(_writable_dir(), VERSION)
     except Exception:
         pass
+
+    # Remontee d'incidents : ce que bugreport ecrivait en local part
+    # maintenant vers le point de collecte, et deux angles morts sont
+    # couverts — les morts brutales cote Qt ou pilote graphique, qui ne
+    # passent pas par excepthook, et les gels, qui ne laissaient jusqu'ici
+    # aucune trace du tout.
+    rapports = _demarrer_rapports()
+
     win = MainWindow()
     win.show()
+
+    if rapports is not None:
+        try:
+            vigie = rapports.Vigie(seuil=10.0, periode=2.0)
+            vigie.demarrer()
+            minuteur = QTimer(win)
+            minuteur.timeout.connect(vigie.battre)
+            minuteur.start(2000)
+            win._vigie, win._vigie_timer = vigie, minuteur
+        except Exception:
+            pass
+
     sys.exit(app.exec())
 
 
