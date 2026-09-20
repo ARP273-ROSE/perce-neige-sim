@@ -53,5 +53,9 @@
   ],
   "artefact_prealable": "godot-viewers",
   "artefact_dossier": "bundled_godot",
-  "verification_import": []
+  "verification_import": [],
+  "exclus_de_la_maj": [
+    "sons",
+    "bundled_godot"
+  ]
 }

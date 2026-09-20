@@ -34,7 +34,31 @@ permissions:
   contents: write
 
 jobs:
+  # Un projet dont le paquet depend d'un artefact produit en amont (un moteur
+  # 3D exporte, par exemple) ne peut pas etre construit par le simple push du
+  # tag : l'artefact n'existe pas encore. Dans ce cas seul l'appel depuis le
+  # workflow amont construit, et le declenchement par tag s'efface sans
+  # echouer — un echec rouge sur chaque version serait du bruit.
+  decider:
+    runs-on: ubuntu-latest
+    outputs:
+      construire: ${{ steps.choix.outputs.construire }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: choix
+        shell: bash
+        run: |
+          ARTEFACT=$(python -c "import json;print(json.load(open('kit.json')).get('artefact_prealable',''))")
+          if [ -n "$ARTEFACT" ] && [ "${{ github.event_name }}" = "push" ]; then
+            echo "construire=false" >> "$GITHUB_OUTPUT"
+            echo "Paquet construit par le workflow amont (artefact $ARTEFACT) : rien a faire ici."
+          else
+            echo "construire=true" >> "$GITHUB_OUTPUT"
+          fi
+
   build:
+    needs: decider
+    if: needs.decider.outputs.construire == 'true'
     runs-on: windows-latest
 
     steps:
@@ -50,6 +74,8 @@ jobs:
           python - <<'PY' >> "$GITHUB_OUTPUT"
           import json, pathlib
           k = json.loads(pathlib.Path('kit.json').read_text(encoding='utf-8'))
+          exclus = k.get('exclus_de_la_maj') or []
+          print('exclus_de_la_maj=' + ' '.join(exclus))
           for cle in ('nom_technique', 'nom_fichier', 'nom_affiche',
                       'depot_distribution', 'point_entree', 'icone', 'appid',
                       'fichier_version', 'artefact_prealable', 'artefact_dossier'):
@@ -139,6 +165,14 @@ jobs:
           # C'est ce que telecharge l'application quand elle se met a jour.
           cd "$RUNNER_TEMP/build/${{ steps.kit.outputs.nom_fichier }}/app"
           find . -name '__pycache__' -type d -prune -exec rm -rf {} +
+          # Donnees volumineuses qui ne bougent pas d'une version a l'autre
+          # (sons, moteur 3D...). Les laisser ferait retelecharger des
+          # centaines de megaoctets a chaque correction d'une ligne de code.
+          # Quand elles changent, c'est l'installeur complet qu'il faut.
+          for DOSSIER in ${{ steps.kit.outputs.exclus_de_la_maj }}; do
+            echo "  exclu de l'archive : $DOSSIER"
+            rm -rf "$DOSSIER"
+          done
           NOM="${{ steps.kit.outputs.nom_technique }}-app-${{ steps.version.outputs.value }}.zip"
           7z a -tzip "$GITHUB_WORKSPACE/$NOM" ./* > /dev/null
           ls -lh "$GITHUB_WORKSPACE/$NOM"
