@@ -1,0 +1,198 @@
+name: Publier une version Windows
+
+# Gabarit commun du kit : rien ici n'est propre a une application. Tout ce qui
+# varie est lu dans kit.json, a la racine du depot. Pousser un tag « v1.2.3 »
+# suffit ; le paquet, l'installeur et l'archive de mise a jour sont construits
+# puis attaches a la Release.
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version a construire (sans le v), ex. 1.2.3"
+        required: true
+  # Appelable depuis un autre workflow du depot. C'est indispensable quand une
+  # CI cree elle-meme le tag : GitHub ne declenche aucun workflow sur un
+  # evenement produit par le jeton d'un workflow (protection anti-boucle), si
+  # bien que le tag arrivait sans que rien ne construise le paquet.
+  workflow_call:
+    inputs:
+      version:
+        description: "Version a construire (sans le v)"
+        required: true
+        type: string
+      ref:
+        description: "Commit ou tag a construire. Indispensable quand la CI
+          appelante vient de pousser un commit de version : sans lui, le job
+          reprend le commit declencheur, plus ancien d'une version."
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Recuperer le depot
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+
+      - name: Lire kit.json
+        id: kit
+        shell: bash
+        run: |
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import json, pathlib
+          k = json.loads(pathlib.Path('kit.json').read_text(encoding='utf-8'))
+          for cle in ('nom_technique', 'nom_fichier', 'nom_affiche',
+                      'depot_distribution', 'point_entree', 'icone', 'appid',
+                      'fichier_version', 'artefact_prealable', 'artefact_dossier'):
+              print(f"{cle}={k.get(cle, '')}")
+          PY
+
+      - name: Determiner la version
+        id: version
+        shell: bash
+        run: |
+          if [ -n "${{ inputs.version }}" ]; then
+            V="${{ inputs.version }}"
+          else
+            V="${GITHUB_REF_NAME#v}"
+          fi
+          # Un appelant peut transmettre « v1.2.3 » (github.ref_name) aussi
+          # bien que « 1.2.3 » : on normalise plutot que de compter sur lui.
+          V="${V#v}"
+          echo "value=$V" >> "$GITHUB_OUTPUT"
+          echo "Version : $V"
+
+      - name: Verifier que la version declaree concorde avec le tag
+        shell: bash
+        run: |
+          FICHIER=$(tr -d ' \r\n' < "${{ steps.kit.outputs.fichier_version }}")
+          TAG="${{ steps.version.outputs.value }}"
+          if [ "$FICHIER" != "$TAG" ]; then
+            echo "::error::Le depot annonce la version '$FICHIER' mais le tag dit '$TAG'."
+            echo "Mettez la version a jour avant de poser le tag, sinon"
+            echo "l'application proposera sans fin une mise a jour deja installee."
+            exit 1
+          fi
+
+      # Certains projets ont besoin d'un binaire produit par un job precedent
+      # (un moteur 3D exporte, par exemple). kit.json le nomme ; les autres
+      # projets sautent cette etape.
+      - name: Recuperer l'artefact prealable
+        if: ${{ steps.kit.outputs.artefact_prealable != '' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ steps.kit.outputs.artefact_prealable }}
+          path: ${{ steps.kit.outputs.artefact_dossier }}
+
+      - name: Installer Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Construire le paquet autonome
+        shell: bash
+        run: python build_package.py --out "$RUNNER_TEMP/build"
+
+      - name: Verifier que le paquet demarre
+        shell: bash
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          PKG="$RUNNER_TEMP/build/${{ steps.kit.outputs.nom_fichier }}"
+          "$PKG/python/python.exe" -c "
+          import sys, json, pathlib
+          sys.path.insert(0, r'$PKG/app')
+          from PyQt6.QtWidgets import QApplication
+          app = QApplication(sys.argv)
+          import reporting, updater
+          kit = json.loads(pathlib.Path(r'$PKG/app/kit.json').read_text(encoding='utf-8'))
+          # Modules que l'application doit pouvoir importer : c'est le seul
+          # moyen de repérer ici une dependance oubliee dans le paquet, qui
+          # ne se verrait sinon qu'au premier lancement chez l'utilisateur.
+          for module in kit.get('verification_import', []):
+              __import__(module)
+              print('  import OK :', module)
+          attendue = '${{ steps.version.outputs.value }}'
+          vue = pathlib.Path(r'$PKG/app/' + kit['fichier_version']).read_text(encoding='utf-8').strip()
+          if vue != attendue:
+              raise SystemExit(
+                  'Le paquet s annonce en version ' + repr(vue)
+                  + ' alors que le tag dit ' + attendue
+                  + ' : il proposerait sans fin une mise a jour deja installee.')
+          print('paquet fonctionnel, version', vue)
+          "
+
+      - name: Preparer l'archive de mise a jour
+        shell: bash
+        run: |
+          # Seuls les fichiers applicatifs : quelques centaines de kilo-octets,
+          # contre plusieurs centaines de megaoctets pour le paquet complet.
+          # C'est ce que telecharge l'application quand elle se met a jour.
+          cd "$RUNNER_TEMP/build/${{ steps.kit.outputs.nom_fichier }}/app"
+          find . -name '__pycache__' -type d -prune -exec rm -rf {} +
+          NOM="${{ steps.kit.outputs.nom_technique }}-app-${{ steps.version.outputs.value }}.zip"
+          7z a -tzip "$GITHUB_WORKSPACE/$NOM" ./* > /dev/null
+          ls -lh "$GITHUB_WORKSPACE/$NOM"
+
+      - name: Installer Inno Setup
+        run: choco install innosetup --no-progress -y
+
+      - name: Compiler l'installeur
+        # PowerShell et non bash : Git Bash (MSYS) reecrit tout argument
+        # commencant par « / » en chemin Windows, si bien qu'ISCC recevait
+        # « C:/Program Files/Git/DAppVersion=... » et repondait
+        # « You may not specify more than one script filename ».
+        shell: pwsh
+        run: |
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" `
+            "/DAppVersion=${{ steps.version.outputs.value }}" `
+            "/DSourceDir=$env:RUNNER_TEMP\build\${{ steps.kit.outputs.nom_fichier }}" `
+            "/DAppName=${{ steps.kit.outputs.nom_fichier }}" `
+            "/DAppDisplayName=${{ steps.kit.outputs.nom_affiche }}" `
+            "/DAppId=${{ steps.kit.outputs.appid }}" `
+            "/DIconFile=${{ steps.kit.outputs.icone }}" `
+            "/DEntry=${{ steps.kit.outputs.point_entree }}" `
+            installer.iss
+          Get-ChildItem installer_out
+
+      - name: Publier la Release
+        uses: softprops/action-gh-release@v2
+        with:
+          repository: ${{ steps.kit.outputs.depot_distribution }}
+          token: ${{ secrets.RELEASE_TOKEN || github.token }}
+          name: ${{ steps.kit.outputs.nom_affiche }} ${{ steps.version.outputs.value }}
+          tag_name: v${{ steps.version.outputs.value }}
+          draft: false
+          files: |
+            installer_out/${{ steps.kit.outputs.nom_fichier }}-Setup-${{ steps.version.outputs.value }}.exe
+            ${{ steps.kit.outputs.nom_technique }}-app-${{ steps.version.outputs.value }}.zip
+          body: |
+            ## Installation
+
+            Telechargez **${{ steps.kit.outputs.nom_fichier }}-Setup-${{ steps.version.outputs.value }}.exe**
+            et lancez-le. L'installation se fait dans votre profil utilisateur :
+            aucun mot de passe administrateur n'est demande.
+
+            > Windows peut afficher « Windows a protege votre ordinateur » au
+            > premier lancement, parce que l'installeur n'est pas signe.
+            > Cliquez sur **Informations complementaires** puis sur
+            > **Executer quand meme**. Cet avertissement n'apparait qu'une fois :
+            > les mises a jour suivantes sont installees par l'application
+            > elle-meme et ne le declenchent pas.
+
+            ## Mise a jour
+
+            Si l'application est deja installee, ne telechargez rien : elle
+            detecte cette version au demarrage et propose de l'installer.
+
+            L'archive `*-app-*.zip` est destinee a cette mise a jour
+            automatique, elle ne s'installe pas a la main.
