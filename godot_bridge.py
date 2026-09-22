@@ -213,6 +213,12 @@ class GodotBridge:
                 stdin=subprocess.DEVNULL,
                 stdout=subprocess.DEVNULL,
                 stderr=logf,
+                # Sous `pythonw.exe`, qui n'a pas de console, lancer un
+                # sous-processus en ouvre brievement une : une fenetre noire
+                # qui clignote sur le bureau. Le drapeau n'existe que sous
+                # Windows, vaut zero ailleurs, et n'empeche pas le moteur 3D
+                # d'afficher la sienne — il ne concerne que la console.
+                creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0),
             )
         except (FileNotFoundError, OSError, PermissionError) as e:
             self._log(f"[spawn] échec lancement : {e}\n  cmd={cmd}")
