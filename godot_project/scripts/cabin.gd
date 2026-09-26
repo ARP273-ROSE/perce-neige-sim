@@ -32,6 +32,10 @@ var _body_mats: Dictionary = {}
 var _car_roots: Array = []
 var _interior_cars: Array = []
 var _wheels: Array = []              # pivots de roues, tournés à v/R
+var _doors: Array = []               # vantaux coulissants {node, side, base}
+var _door_frac: float = 0.0          # 0 fermé → 1 ouvert (côté quai)
+var _clock_label: Label3D = null     # tablette-horloge du montant gauche
+var _clock_next: float = 0.0
 
 # Passagers — références pour animer les têtes selon l'accel/courbure
 var _passenger_heads: Array = []   # Array[MeshInstance3D]
@@ -117,6 +121,9 @@ func _build_mesh() -> void:
 	_body_mats = built["mats"]
 	_car_roots = built["car_roots"]
 	_wheels = built["wheels"]
+	_doors = built["doors"]
+	for d in _doors:
+		d["base"] = (d["node"] as Node3D).position
 	# Le ghost (rame 2) roule vers nous : ses feux arrière rouges allumés
 	# côté « avant » de sa rame vue de notre sens n'ont pas de sens ; on
 	# allume ses feux d'extrémité en blanc (elle vient en face).
@@ -179,6 +186,7 @@ func _build_interior() -> void:
 		_interior_cars.append(n)
 	_build_floor_ceiling()
 	_build_console_pupitre()     # pupitre Von Roll fin (tube horizontal blanc)
+	_build_cockpit_extras()      # coups-de-poing, étiquettes, horloge, panneau latéral
 	_build_cctv_monitor()        # petit moniteur 4 caméras plafond gauche
 	_build_driver_seat()
 	_build_passenger_seats()
@@ -510,6 +518,146 @@ func _build_console_pupitre() -> void:
 # du moniteur 2×2 visible en haut à gauche du pare-brise sur toutes les
 # photos du vrai cockpit Perce-Neige). Cellules émissives.
 # ---------------------------------------------------------------------------
+
+## Compléments du poste d'après les photos 095119 / 094402 / 094413 :
+## deux coups-de-poing rouges à gauche de l'écran, combiné à l'extrémité
+## gauche, étiquettes des groupes, pastille rouge à droite du tube,
+## tablette-horloge sur le montant gauche, panneau latéral à boutons avec
+## levier et boîtier rouge, grille de ventilation à lamelles.
+func _build_cockpit_extras() -> void:
+	var z_console: float = -train_length * 0.5 + 2.9
+	var y_top: float = 0.52
+	var tilt: float = 0.07
+	var red: StandardMaterial3D = StandardMaterial3D.new()
+	red.albedo_color = Color(0.80, 0.08, 0.06)
+	red.roughness = 0.45
+	var black: StandardMaterial3D = StandardMaterial3D.new()
+	black.albedo_color = Color(0.08, 0.08, 0.09)
+	black.roughness = 0.6
+	var grey: StandardMaterial3D = StandardMaterial3D.new()
+	grey.albedo_color = Color(0.62, 0.62, 0.60)
+	grey.roughness = 0.6
+	var beige: StandardMaterial3D = StandardMaterial3D.new()
+	beige.albedo_color = Color(0.72, 0.70, 0.62)
+	beige.roughness = 0.7
+	var slat: StandardMaterial3D = StandardMaterial3D.new()
+	slat.albedo_color = Color(0.55, 0.56, 0.55)
+	slat.roughness = 0.5
+	slat.metallic = 0.3
+	var screen_dark: StandardMaterial3D = StandardMaterial3D.new()
+	screen_dark.albedo_color = Color(0.06, 0.07, 0.10)
+	screen_dark.emission_enabled = true
+	screen_dark.emission = Color(0.10, 0.12, 0.18)
+	screen_dark.emission_energy_multiplier = 0.5
+	screen_dark.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+
+	# coups-de-poing rouges (arrêt d'urgence), à gauche de l'écran
+	for k in range(2):
+		var x: float = -0.53 + float(k) * 0.075
+		var ring: MeshInstance3D = _cyl(black, 0.026, 0.010, Vector3(x, y_top + 0.012, z_console - 0.01 + float(k) * 0.03))
+		interior_root.add_child(ring)
+		var cap: MeshInstance3D = _cyl(red, 0.021, 0.022, Vector3(x, y_top + 0.028, z_console - 0.01 + float(k) * 0.03))
+		interior_root.add_child(cap)
+	# combiné / boîtier à l'extrémité gauche du tube
+	var phone: MeshInstance3D = MeshInstance3D.new()
+	var pm: BoxMesh = BoxMesh.new()
+	pm.size = Vector3(0.10, 0.05, 0.09)
+	pm.material = grey
+	phone.mesh = pm
+	phone.position = Vector3(-0.66, y_top - 0.02, z_console + 0.06)
+	interior_root.add_child(phone)
+	# pastille rouge à l'extrémité droite du tube (face avant)
+	var dot: MeshInstance3D = _cyl(red, 0.035, 0.006, Vector3(0.50, y_top - 0.08, z_console - 0.088))
+	dot.rotation = Vector3(PI * 0.5, 0.0, 0.0)
+	interior_root.add_child(dot)
+	# étiquettes des groupes, à plat sur la plaque inclinée
+	for lab in [["PORTES 1 à 6", 0.03, -0.075], ["PORTES 7 à 12", 0.17, -0.075],
+			["ÉCLAIRAGE", 0.14, 0.055], ["CABINE", 0.02, 0.055]]:
+		var l: Label3D = Label3D.new()
+		l.text = lab[0]
+		l.font_size = 28
+		l.pixel_size = 0.00045
+		l.modulate = Color(0.12, 0.12, 0.14)
+		l.position = Vector3(lab[1], y_top + 0.009, z_console + lab[2])
+		l.rotation = Vector3(-PI * 0.5 + tilt, 0.0, 0.0)
+		interior_root.add_child(l)
+	# tablette-horloge sur le montant gauche, tournée vers le conducteur
+	var tab: MeshInstance3D = MeshInstance3D.new()
+	var tm: BoxMesh = BoxMesh.new()
+	tm.size = Vector3(0.17, 0.11, 0.014)
+	tm.material = black
+	tab.mesh = tm
+	tab.position = Vector3(-0.98, 0.98, z_console - 0.05)
+	tab.rotation = Vector3(0.0, 0.55, 0.0)
+	interior_root.add_child(tab)
+	var scr: MeshInstance3D = MeshInstance3D.new()
+	var sm: BoxMesh = BoxMesh.new()
+	sm.size = Vector3(0.15, 0.09, 0.004)
+	sm.material = screen_dark
+	scr.mesh = sm
+	scr.position = Vector3(0.0, 0.0, 0.009)
+	tab.add_child(scr)
+	_clock_label = Label3D.new()
+	_clock_label.text = "--:--"
+	_clock_label.font_size = 40
+	_clock_label.pixel_size = 0.0009
+	_clock_label.modulate = Color(0.85, 0.88, 0.95)
+	_clock_label.position = Vector3(0.0, 0.0, 0.013)
+	tab.add_child(_clock_label)
+	# panneau latéral gauche : plaque beige, 4 boutons ronds, levier, boîtier rouge
+	var panel: MeshInstance3D = MeshInstance3D.new()
+	var pnm: BoxMesh = BoxMesh.new()
+	pnm.size = Vector3(0.02, 0.42, 0.30)
+	pnm.material = beige
+	panel.mesh = pnm
+	panel.position = Vector3(-1.06, 0.62, z_console - 0.55)
+	interior_root.add_child(panel)
+	for r in range(2):
+		for k in range(2):
+			var b: MeshInstance3D = _cyl(black, 0.017, 0.014,
+				Vector3(-1.04, 0.72 - float(r) * 0.09, z_console - 0.62 + float(k) * 0.10))
+			b.rotation = Vector3(0.0, 0.0, PI * 0.5)
+			interior_root.add_child(b)
+	var lever: MeshInstance3D = MeshInstance3D.new()
+	var lvm: BoxMesh = BoxMesh.new()
+	lvm.size = Vector3(0.09, 0.025, 0.025)
+	lvm.material = black
+	lever.mesh = lvm
+	lever.position = Vector3(-1.00, 0.52, z_console - 0.60)
+	lever.rotation = Vector3(0.0, 0.0, -0.5)
+	interior_root.add_child(lever)
+	var rbox: MeshInstance3D = MeshInstance3D.new()
+	var rbm: BoxMesh = BoxMesh.new()
+	rbm.size = Vector3(0.03, 0.05, 0.05)
+	rbm.material = red
+	rbox.mesh = rbm
+	rbox.position = Vector3(-1.04, 0.48, z_console - 0.44)
+	interior_root.add_child(rbox)
+	# grille de ventilation à lamelles horizontales, plus haut sur le montant
+	for k in range(12):
+		var sl: MeshInstance3D = MeshInstance3D.new()
+		var slm: BoxMesh = BoxMesh.new()
+		slm.size = Vector3(0.012, 0.014, 0.34)
+		slm.material = slat
+		sl.mesh = slm
+		sl.position = Vector3(-1.08, 0.70 + float(k) * 0.032, z_console - 0.95)
+		sl.rotation = Vector3(0.35, 0.0, 0.0)
+		interior_root.add_child(sl)
+
+
+func _cyl(mat: StandardMaterial3D, r: float, h: float, pos: Vector3) -> MeshInstance3D:
+	var mi: MeshInstance3D = MeshInstance3D.new()
+	var cm: CylinderMesh = CylinderMesh.new()
+	cm.top_radius = r
+	cm.bottom_radius = r
+	cm.height = h
+	cm.radial_segments = 16
+	cm.material = mat
+	mi.mesh = cm
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	mi.position = pos
+	return mi
+
 
 func _build_cctv_monitor() -> void:
 	# Petit moniteur discret au plafond avant gauche, taille 24×15 cm
@@ -890,6 +1038,33 @@ func _process(_delta: float) -> void:
 		var d_ang: float = -v_fwd * _delta / TrainBodyBuilder.WHEEL_R
 		for w in _wheels:
 			(w as Node3D).rotate_x(d_ang)
+
+	# Portes coulissantes (2026-09-26) : déboîtement (premier quart) puis
+	# glissement vers l'arrière, côté QUAI seulement. Les quais sont à −X
+	# du repère voie (stations_builder, side −1) : côté local −1 si la
+	# voiture regarde vers +s, +1 sinon. 2,5 s de course.
+	var target: float = 1.0 if physics.doors_open else 0.0
+	_door_frac = move_toward(_door_frac, target, _delta / 2.5)
+	if not _doors.is_empty():
+		var tx: Vector3 = tunnel.transform_at(s_pos).basis.x
+		var quai_side: float = -1.0 if xform.basis.x.dot(tx) > 0.0 else 1.0
+		var plug: float = clampf(_door_frac / 0.25, 0.0, 1.0)
+		var slide: float = clampf((_door_frac - 0.25) / 0.75, 0.0, 1.0)
+		for d in _doors:
+			var node: Node3D = d["node"]
+			var base: Vector3 = d["base"]
+			if d["side"] == quai_side:
+				node.position = base + Vector3(d["side"] * TrainBodyBuilder.DOOR_PLUG * plug,
+					0.0, TrainBodyBuilder.DOOR_SLIDE * slide)
+			else:
+				node.position = base
+
+	# Tablette-horloge du montant gauche : l'heure réelle, comme en cabine
+	if _clock_label != null:
+		_clock_next -= _delta
+		if _clock_next <= 0.0:
+			_clock_next = 1.0
+			_clock_label.text = Time.get_time_string_from_system(false).substr(0, 5)
 
 	# Animation des passagers selon dynamique
 	_animate_passengers(_delta)

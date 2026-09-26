@@ -33,9 +33,12 @@ const RIB_W: float = 0.10           # joint entre cerceaux
 const RIB_H: float = -0.03          # en creux
 const PANEL_L: float = 1.30         # longueur d'un cerceau (hublot ou porte)
 const END_BLANK: float = 0.33       # tôle pleine aux extrémités du tube
-const WELL_TOP: float = -0.60       # échancrures de la jupe au droit des bogies (y local)
-const WELL_HALF: float = 1.40       # demi-longueur d'une échancrure
-const BOGIE_OFFSET: float = 3.0     # bogies à 3 m des extrémités de voiture
+const WELL_TOP: float = -0.85       # échancrures de la jupe au droit des bogies (y local)
+const WELL_HALF: float = 1.05       # demi-longueur d'une échancrure
+const BOGIE_OFFSET: float = 2.0     # bogies à 2 m des extrémités (hors des portes)
+const DOOR_TOP_T: float = 54.0      # haut du vantail coulissant (angle depuis le sommet)
+const DOOR_PLUG: float = 0.08       # déboîtement du vantail (m) avant de glisser
+const DOOR_SLIDE: float = 1.20      # course de glissement (m)
 const WHEEL_R: float = 0.30
 const D_THETA_DEG: float = 2.5      # résolution angulaire du tube (découpes des hublots)
 const CAP_THETA_DEG: float = 2.0    # résolution angulaire de la calotte (découpes)
@@ -177,8 +180,9 @@ static func _theta_cut() -> float:
 # kind ∈ blank | rib | win | door. Panneaux W D W D W D W entre anneaux.
 static func _columns(z_a: float, z_b: float) -> Array:
 	var cols: Array = []
-	# 10 cerceaux, 3 portes par face (source CFD) : W D W W D W W D W W
-	var kinds: Array = ["win", "door", "win", "win", "door", "win", "win", "door", "win", "win"]
+	# 10 cerceaux, 3 portes par face (source CFD), placées hors des
+	# échancrures de bogie : W W D W W D W D W W
+	var kinds: Array = ["win", "win", "door", "win", "win", "door", "win", "door", "win", "win"]
 	var z: float = z_a
 	cols.append({"z0": z, "z1": z + END_BLANK, "kind": "blank"})
 	z += END_BLANK
@@ -219,8 +223,11 @@ static func _tube_uw_n(w: float, sx: float) -> Vector3:
 	return _tube_n(sx * w / R_BODY)
 
 
+## `leaves` reçoit les vantaux coulissants : {mesh, side, z_c} (géométrie
+## en repère voiture, à poser dans un MeshInstance3D animé par cabin.gd).
 static func _build_tube(mesh: ArrayMesh, mats: Dictionary, z_a: float, z_b: float,
-		yellow_a: bool = false, yellow_b: bool = false, wells: Array = []) -> void:
+		yellow_a: bool = false, yellow_b: bool = false, wells: Array = [],
+		leaves: Array = []) -> void:
 	var th_cut: float = _theta_cut()
 	var n_th: int = int(ceil(2.0 * rad_to_deg(th_cut) / D_THETA_DEG))
 	var d_th: float = 2.0 * th_cut / float(n_th)
@@ -244,9 +251,22 @@ static func _build_tube(mesh: ArrayMesh, mats: Dictionary, z_a: float, z_b: floa
 		var plen: float = z1c - z0c
 		var glazed: bool = kind == "win" or kind == "door"
 		var hole: PackedVector2Array = _window_outline(plen, kind) if glazed else PackedVector2Array()
-		# le jaune de la calotte déborde sur la tôle pleine d'extrémité
-		# (photos : tout le premier tronçon, portes de secours comprises)
-		var yellow_col: bool = kind == "blank" and ((ci == 0 and yellow_a) or (ci == cols.size() - 1 and yellow_b))
+		# le jaune de la calotte déborde sur la tôle d'extrémité ET le premier
+		# cerceau, hublot compris (photo 095438)
+		var yellow_col: bool = ((ci <= 2 and yellow_a) or (ci >= cols.size() - 3 and yellow_b)) \
+			and kind != "rib"
+		# vantail coulissant : cellules sous DOOR_TOP_T, par côté, dans leurs
+		# propres surfaces (le haut du cerceau reste solidaire de la caisse)
+		var leaf_st: Dictionary = {}
+		if kind == "door":
+			for sx in [-1.0, 1.0]:
+				var stb: SurfaceTool = SurfaceTool.new()
+				var stg: SurfaceTool = SurfaceTool.new()
+				var str_: SurfaceTool = SurfaceTool.new()
+				stb.begin(Mesh.PRIMITIVE_TRIANGLES)
+				stg.begin(Mesh.PRIMITIVE_TRIANGLES)
+				str_.begin(Mesh.PRIMITIVE_TRIANGLES)
+				leaf_st[sx] = {"body": stb, "glass": stg, "rubber": str_}
 		var r: float = R_BODY + (RIB_H if kind == "rib" else 0.0)
 		var n_sub: int = int(ceil(plen / COL_L)) if glazed else 1
 		var dz: float = plen / float(n_sub)
@@ -274,20 +294,32 @@ static func _build_tube(mesh: ArrayMesh, mats: Dictionary, z_a: float, z_b: floa
 						continue
 				var st: SurfaceTool = st_rib if kind == "rib" else (
 					st_door if kind == "door" else (st_yellow if yellow_col else st_body))
+				if kind == "door" and absf(tm) >= deg_to_rad(DOOR_TOP_T):
+					st = leaf_st[signf(tm)]["body"]
 				# quad : (t0,z1) (t1,z1) (t1,z0) (t0,z0) → face vers l'extérieur
 				_quad(st, _tube_pt(t0, r, z1), _tube_pt(t1, r, z1),
 					_tube_pt(t1, r, z0), _tube_pt(t0, r, z0),
 					_tube_n(t0), _tube_n(t1), _tube_n(t1), _tube_n(t0))
-		# hublot : joint + vitre, de chaque côté
+		# hublot : joint + vitre, de chaque côté (dans le vantail pour une porte)
 		if glazed:
 			for sx in [-1.0, 1.0]:
 				var pt_fn: Callable = func(u: float, w: float, lift: float) -> Vector3:
 					return _tube_uw_pt(u, w, z0c, sx, lift)
 				var n_fn: Callable = func(_u: float, w: float) -> Vector3:
 					return _tube_uw_n(w, sx)
-				_emit_band(st_rubber, _offset_outline(hole, -TUBE_GASKET_IN),
+				var st_r_: SurfaceTool = leaf_st[sx]["rubber"] if kind == "door" else st_rubber
+				var st_g_: SurfaceTool = leaf_st[sx]["glass"] if kind == "door" else st_glass
+				_emit_band(st_r_, _offset_outline(hole, -TUBE_GASKET_IN),
 					_offset_outline(hole, TUBE_GASKET_OUT), pt_fn, n_fn, 0.010)
-				_emit_pane(st_glass, _offset_outline(hole, -GLASS_INSET), pt_fn, n_fn, 0.016)
+				_emit_pane(st_g_, _offset_outline(hole, -GLASS_INSET), pt_fn, n_fn, 0.016)
+		if kind == "door":
+			for sx in [-1.0, 1.0]:
+				var lm: ArrayMesh = ArrayMesh.new()
+				var d: Dictionary = leaf_st[sx]
+				(d["body"] as SurfaceTool).set_material(mats["door"]); (d["body"] as SurfaceTool).commit(lm)
+				(d["rubber"] as SurfaceTool).set_material(mats["rubber"]); (d["rubber"] as SurfaceTool).commit(lm)
+				(d["glass"] as SurfaceTool).set_material(mats["glass"]); (d["glass"] as SurfaceTool).commit(lm)
+				leaves.append({"mesh": lm, "side": sx, "z_c": z0c + plen * 0.5})
 	# Fond plat (châssis) entre les échancrures, et plafond des échancrures
 	var xw: float = R_BODY * sin(th_cut)
 	var cuts: Array = [z_a]
@@ -726,6 +758,7 @@ static func build_train(root: Node3D, train_length: float, car_count: int,
 	var rear_lamps: Array = []
 	var wheels: Array = []
 	var car_roots: Array = []
+	var doors: Array = []
 	for i in range(car_count):
 		var z_c: float = (float(i) - (car_count - 1) * 0.5) * car_len
 		var car_root: Node3D = Node3D.new()
@@ -743,7 +776,14 @@ static func build_train(root: Node3D, train_length: float, car_count: int,
 		var z_b: float = z_rear_end - (CAP_LEN if is_last else GAP * 0.5)
 		var wells: Array = [z_front_end + BOGIE_OFFSET, z_rear_end - BOGIE_OFFSET]
 		var mesh: ArrayMesh = ArrayMesh.new()
-		_build_tube(mesh, mats, z_a, z_b, is_first, is_last, wells)
+		var leaves: Array = []
+		_build_tube(mesh, mats, z_a, z_b, is_first, is_last, wells, leaves)
+		for lf in leaves:
+			var dm: MeshInstance3D = MeshInstance3D.new()
+			dm.name = "Vantail%s" % ("G" if lf["side"] < 0.0 else "D")
+			dm.mesh = lf["mesh"]
+			car_root.add_child(dm)
+			doors.append({"node": dm, "side": lf["side"]})
 		if is_first:
 			_build_cap(mesh, mats, z_a, -1.0, backboard)
 		else:
@@ -784,5 +824,5 @@ static func build_train(root: Node3D, train_length: float, car_count: int,
 			bellows.mesh = bm
 			bellows.name = "Soufflet"
 			car_root.add_child(bellows)
-	return {"car_roots": car_roots, "wheels": wheels,
+	return {"car_roots": car_roots, "wheels": wheels, "doors": doors,
 		"front_lamps": front_lamps, "rear_lamps": rear_lamps, "mats": mats}
