@@ -3508,6 +3508,28 @@ MOTOR_BANKS = 6
 MOTOR_F_BANKS = [172, 178, 184, 190, 196, 202]   # Hz, entiers → boucles 2 s sans couture
 
 
+def _ambient_gain(v: float, looping: bool) -> float:
+    """Gain global (0..1) des boucles d'ambiance cabine selon |v|.
+
+    Croisière : v/10 plafonné (0,95 à 10 m/s). En dessous, DEUX planchers :
+      - plancher de FLUAGE 0,45 dès 0,5 m/s : l'entrée en gare à 0,75 m/s
+        dure 70 s, et les enregistrements réels la placent vers −19 dBFS
+        (croisière −11, approche −23, quai −19). L'ancien plancher unique
+        de 0,14 (−17 dB sous la croisière) tombait dès 1,5 m/s → « le son
+        d'ambiance se coupe à la décélération vers 1 m/s » (retour d'essai
+        2026-09-26, déjà signalé en juillet) ;
+      - plancher D'ARRÊT 0,14 sous 0,1 m/s : fond de ventilation / câble.
+    Les boucles ne tournent qu'entre départ et arrivée (looping), donc
+    aucun plancher à quai ni au titre.
+    """
+    v = abs(v)
+    overall = min(v / 10.0, 1.0) * 0.95
+    if looping:
+        creep = max(0.0, min(1.0, (v - 0.1) / 0.4))
+        overall = max(overall, 0.14 + (0.45 - 0.14) * creep)
+    return overall
+
+
 def _motor_bank_weights(v: float) -> list[float]:
     """Poids de crossfade des banques moteur pour la vitesse |v| (m/s).
     Au plus DEUX banques adjacentes actives → glissando perçu continu.
@@ -4303,8 +4325,9 @@ class SoundSystem:
         # qu'entre départ et arrivée, donc le plancher ne s'applique pas
         # à quai/au titre.
         v_norm = min(v / 10.0, 1.0)
-        floor = 0.14 if (self._amb_playing or self._amb2_playing) else 0.0
-        overall = max(floor, v_norm * 0.95)
+        # Plancher de fluage 0,45 + plancher d'arrêt 0,14 : cf. _ambient_gain
+        # (audit son 2026-09-26 : l'ambiance « se coupait » vers 1 m/s).
+        overall = _ambient_gain(v, self._amb_playing or self._amb2_playing)
         # Duck ambient hard while the horn is sounding — update_ambient
         # runs every frame so it would otherwise undo start_horn()'s
         # snapshot-based ducking the very next tick.

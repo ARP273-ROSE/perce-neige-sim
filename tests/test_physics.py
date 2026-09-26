@@ -388,3 +388,22 @@ def test_affaissement_embarquement_gare_basse():
             f"recul {recul*100:.1f} cm (dir={direction})"
         # le contrepoids, lui, n'a pas bougé
         assert abs(st.ghost_s - (pn.LENGTH - s0)) < 0.02
+
+
+def test_ambiance_ne_se_coupe_pas_au_fluage():
+    # Retour d'essai 2026-09-26 : « le son ambiant se coupe à la
+    # décélération vers 1 m/s ». L'entrée en gare à 0,75 m/s dure 70 s :
+    # l'ambiance doit y rester à un niveau franc (≥ 0,4), et ne descendre
+    # au fond d'arrêt (0,14) qu'en dessous de 0,1 m/s.
+    g = pn._ambient_gain
+    assert g(10.0, True) > 0.9
+    assert g(1.5, True) >= 0.4, f"1,5 m/s : {g(1.5, True):.2f}"
+    assert g(0.75, True) >= 0.4, f"fluage : {g(0.75, True):.2f}"
+    assert g(0.5, True) >= 0.4
+    assert abs(g(0.0, True) - 0.14) < 1e-9
+    assert g(0.0, False) == 0.0          # à quai, boucles arrêtées : rien
+    # monotone en vitesse
+    prev = -1.0
+    for v in [0.0, 0.1, 0.3, 0.5, 0.75, 1.0, 2.0, 5.0, 8.0, 12.0]:
+        assert g(v, True) >= prev - 1e-9
+        prev = g(v, True)

@@ -154,12 +154,16 @@ func _process(_delta: float) -> void:
 	_trip_was_started = physics.trip_started
 
 	# Crossfade selon vitesse : slow dominant à basse vitesse, cruise à haute.
-	# `gate` étouffe le tout à l'arrêt (−30 dB sous 1 m/s) : avant, la boucle
-	# slow restait à −12 dB en boucle infinie à quai après le 1er trajet.
+	# `gate` étouffe le tout à l'ARRÊT (−30 dB) : avant, la boucle slow
+	# restait à −12 dB en boucle infinie à quai après le 1er trajet.
+	# Le gate ne mord qu'ENTRE 0,5 et 0,1 m/s (audit son 2026-09-26) : il
+	# montait de 0 à 1 m/s, donc l'entrée en gare à 0,75 m/s (70 s) était
+	# déjà à −7,5 dB et le coude tombait pile sur la décélération → « le son
+	# d'ambiance se coupe vers 1 m/s ». Même loi que le PC (_ambient_gain).
 	if _player_slow.playing and _player_cruise.playing:
 		var v_abs: float = absf(physics.v)
 		var blend: float = clampf(v_abs / PNConstants.V_MAX, 0.0, 1.0)
-		var gate: float = clampf(v_abs, 0.0, 1.0)
+		var gate: float = clampf((v_abs - 0.1) / 0.4, 0.0, 1.0)
 		_player_slow.volume_db = lerpf(-12.0, -40.0, blend) + lerpf(-30.0, 0.0, gate)
 		_player_cruise.volume_db = lerpf(-40.0, -8.0, blend) + lerpf(-30.0, 0.0, gate)
 		# Pitch du moteur : CALIBRÉ (_calib_audio : 172 Hz à l'arrêt →

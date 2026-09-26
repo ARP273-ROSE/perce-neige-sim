@@ -12,7 +12,20 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 
 ---
 
-## Quoi de neuf — v1.13.0 (audit physique des voyages, 26 septembre 2026)
+## Quoi de neuf — v1.13.x (audit physique des voyages, 26 septembre 2026)
+
+**v1.13.1** — l'ambiance cabine ne « se coupe » plus à la décélération :
+- Retour d'essai : « le son ambiant se coupe à la décélération vers 1 m/s ».
+  Sur le PC, le volume des boucles suivait v/10 jusqu'à un plancher de 0,14
+  (−17 dB sous la croisière) atteint dès 1,5 m/s, tenu pendant les 70 s
+  d'entrée en gare à 0,75 m/s, et encore ducké ×0,55 par le clip d'approche.
+  Sur la PWA, le gate −30 dB → 0 dB montait de 0 à 1 m/s : −7,5 dB au
+  fluage, coude pile sur la décélération.
+- Les enregistrements réels placent la croisière à −11 dBFS, l'approche
+  à −23 et le quai à −19 : le fluage doit rester vers −19, pas −29.
+  Nouvelle loi commune (`_ambient_gain`) : plancher de **fluage 0,45** dès
+  0,5 m/s, fondu vers le plancher d'arrêt 0,14 entre 0,5 et 0,1 m/s ; PWA :
+  le gate ne mord qu'entre 0,5 et 0,1 m/s. Test `pytest` dédié.
 
 **v1.13.0** — le moteur physique retrouve trois forces qui lui manquaient, sur
 le programme PC **et** la PWA (`train_physics.gd`), à parité vérifiée au banc
