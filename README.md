@@ -14,6 +14,15 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 
 ## Quoi de neuf — v1.13.x (audit physique des voyages, 26 septembre 2026)
 
+**v1.13.7** — flancs refaits d'après les photos 095433/095438/094135 :
+- La caisse est une suite de **cerceaux de 1,30 m** séparés par un joint
+  sombre **en creux** (plus de nervure saillante), dix par voiture, chacun
+  percé d'**un hublot haut et étroit** : 0,75 m de large, ~1,5 m d'arc, du
+  dessus des assises (0,6 m du plancher) à la courbe du plafond (2,05 m),
+  extrémités très arrondies (r = 0,28). Trois portes par face (source CFD),
+  vantail unique de la largeur d'un cerceau avec un hublot plus étroit
+  (0,60 m), disposées W D W W D W W D W W.
+
 **v1.13.6** — face avant et hublots corrigés d'après les photos :
 - **Face avant** : seul le pare-brise est vitré. Les panneaux en D de part
   et d'autre sont les **portes d'évacuation, jaunes pleines**, avec liseré
