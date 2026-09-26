@@ -14,6 +14,27 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 
 ## Quoi de neuf — v1.13.x (audit physique des voyages, 26 septembre 2026)
 
+**v1.14.0** — portes qui coulissent, escalier du tunnel, poste enrichi :
+- **Portes coulissantes animées** : chaque vantail est une pièce séparée
+  (cerceau sous 54° depuis le sommet, hublot compris) qui se **déboîte
+  de 8 cm puis glisse de 1,20 m** vers l'arrière en 2,5 s, côté quai
+  seulement (les quais sont à −X du repère voie), à l'ouverture comme à la
+  fermeture. Portes placées hors des échancrures de bogie (W W D W W D W D
+  W W, bogies à 2 m des extrémités).
+- **Premier cerceau jaune avec son hublot**, comme sur la photo 095438.
+- **Tunnel** (vidéo cabine `20260426_094202.mp4`) : **escalier métallique
+  de service à droite en montant** — marches horizontales tous les 0,45 m
+  (13 cm de dénivelé à 30 %), deux limons, potelets tous les 3 m et câble
+  main-courante — et boîtiers gris sur le mur gauche, côté des gros câbles.
+  Tout en MultiMesh (≈ 25 000 instances, 5 appels de dessin).
+  `walkway_side` permet de le passer à gauche.
+- **Poste** (photos 095119 / 094402 / 094413) : deux coups-de-poing rouges
+  à gauche de l'écran, combiné à l'extrémité gauche, étiquettes « PORTES
+  1 à 6 / 7 à 12 / ÉCLAIRAGE / CABINE », pastille rouge à droite du tube,
+  **tablette-horloge vivante** sur le montant gauche (heure réelle), panneau
+  latéral beige à quatre boutons, levier et boîtier rouge, grille de
+  ventilation à lamelles.
+
 **v1.13.7** — flancs refaits d'après les photos 095433/095438/094135 :
 - La caisse est une suite de **cerceaux de 1,30 m** séparés par un joint
   sombre **en creux** (plus de nervure saillante), dix par voiture, chacun
