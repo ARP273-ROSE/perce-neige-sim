@@ -126,9 +126,9 @@ func _build_slab() -> void:
 	# La section "PassingChamber" est CENTRÉE et s'élargit sinusoïdalement
 	# pour couvrir toute la largeur de la chambre, supportant la cabine
 	# pendant qu'elle suit sa courbe latérale.
-	_build_slab_section(slab_mat, 0.0, PNConstants.PASSING_START, 0.0, "SlabLow", false)
+	_build_slab_section(slab_mat, pit_low_end, PNConstants.PASSING_START, 0.0, "SlabLow", false)
 	_build_slab_section(slab_mat, PNConstants.PASSING_START, PNConstants.PASSING_END, 0.0, "SlabPassingChamber", true)
-	_build_slab_section(slab_mat, PNConstants.PASSING_END, PNConstants.LENGTH, 0.0, "SlabHigh", false)
+	_build_slab_section(slab_mat, PNConstants.PASSING_END, pit_high_start, 0.0, "SlabHigh", false)
 
 
 # Construit un tronçon de dalle entre s_start et s_end avec un offset latéral.
@@ -556,6 +556,8 @@ func _build_sleepers() -> void:
 	var n_total: int = int(PNConstants.LENGTH / sleeper_spacing)
 	for i in range(n_total):
 		var s: float = (float(i) + 0.5) * sleeper_spacing
+		if s < pit_low_end or s > pit_high_start:
+			continue   # au-dessus des fosses de gare, les rails sont sur poutres
 		var track_offs: Array = []
 		if s >= PNConstants.PASSING_START and s <= PNConstants.PASSING_END:
 			track_offs = [tunnel.passing_loop_offset(s, -1.0),
@@ -595,6 +597,11 @@ func _build_sleepers() -> void:
 # Boîtiers gris sur le mur gauche tous les 24 m. Tout en MultiMesh.
 # ---------------------------------------------------------------------------
 
+# Fosses de gare (photos 093522 / 094104 en bas, 095509 / 095443 en haut) :
+# la dalle et les blochets s'arrêtent, les rails passent sur la fosse.
+# Mêmes bornes dans stations_builder (PIT_LOW_END / PIT_HIGH_START).
+@export var pit_low_end: float = 4.5
+@export var pit_high_start: float = PNConstants.LENGTH - 2.0
 @export var walkway_side: float = 1.0        # +1 = droite en montant (vidéo)
 @export var walkway_x: float = 1.02          # décalage latéral du milieu de l'escalier
 @export var walkway_step_s: float = 0.45     # espacement des marches le long de s
@@ -656,8 +663,8 @@ func _build_walkway() -> void:
 	var stringers: Array = []
 	var posts: Array = []
 	var cables: Array = []
-	var s: float = 0.6
-	while s < PNConstants.LENGTH - 0.6:
+	var s: float = pit_low_end + 0.3
+	while s < pit_high_start - 0.3:
 		var fr: Transform3D = _walkway_frame(s)
 		treads.append(fr)
 		# limons alignés sur la pente (repère spline)
@@ -1093,10 +1100,10 @@ func _heading_bank_at(s: float) -> float:
 	# Signe inversé : la rotation positive autour de forward lève le côté droit,
 	# mais pour un virage à droite (heading_rate>0) on veut lever le côté GAUCHE
 	# (banking centripète : la roue extérieure plus haut que l'intérieure).
-	# Amplifié × 4 pour rendre visible (~3° physique → ~12° visuel)
-	var bank_visual: float = -bank_natural * 4.0
-	# Sécurité : limite à ±15°
-	return clampf(bank_visual, -0.262, 0.262)
+	# Amplifié × 8 pour rendre visible (retour d'essai 2026-09-26 : « au
+	# moins deux fois plus » que le × 4 précédent), plafonné à ±32°
+	var bank_visual: float = -bank_natural * 8.0
+	return clampf(bank_visual, -0.56, 0.56)
 
 
 # Construit un ArrayMesh composite de 2 équerres verticales séparées par
