@@ -995,11 +995,18 @@ func _build_guides() -> void:
 		# la courbure horizontale locale. C'est ce qui permet au câble de
 		# "tourner" en horizontal — sans bank, les poulies restent strictement
 		# horizontales et le câble rentrerait dans le flanc des poulies.
-		var bank_rad: float = _heading_bank_at(entry.s)
-		var forward_world: Vector3 = -xform.basis.z   # = +tangent en monde
-		var banked_basis: Basis = xform.basis.rotated(forward_world.normalized(), bank_rad)
-		var banked_right: Vector3 = banked_basis.x
-		var banked_up: Vector3 = banked_basis.y
+		# 🔴 Retour d'essai 2026-09-26 : dans les virages, ce n'est PAS l'axe
+		# des deux galets qui penche (un galet finissait plus haut que
+		# l'autre) — le SUPPORT reste horizontal et CHAQUE galet est incliné
+		# dans son support, les deux à la même hauteur. Socle, équerres et
+		# axe gardent donc le repère de la voie ; seule la basis de chaque
+		# galet tourne autour de la voie, autour de son propre centre.
+		var tilt_rad: float = _heading_bank_at(entry.s)
+		var forward_world: Vector3 = (-xform.basis.z).normalized()   # +tangent
+		var roller_basis: Basis = xform.basis.rotated(forward_world, tilt_rad)
+		var banked_basis: Basis = xform.basis
+		var banked_right: Vector3 = xform.basis.x
+		var banked_up: Vector3 = xform.basis.y
 		var banked_lat: Vector3 = banked_right * entry.off
 
 		# Socle + équerres : centrés sur axe voie, avec bank
@@ -1013,7 +1020,7 @@ func _build_guides() -> void:
 
 		# Poulie A (côté gauche du guide) — uniquement si has_pulley_a
 		if entry.has_pulley_a:
-			var tr_pa: Transform3D = Transform3D(banked_basis, xform.origin)
+			var tr_pa: Transform3D = Transform3D(roller_basis, xform.origin)
 			tr_pa.origin += banked_up * y_pulley_axis - banked_right * pulley_pair_offset + banked_lat
 			tr_pa.basis = tr_pa.basis * rot90
 			mm_pulley_a.set_instance_transform(idx_pa, tr_pa)
@@ -1021,7 +1028,7 @@ func _build_guides() -> void:
 
 		# Poulie B (côté droite du guide) — uniquement si has_pulley_b
 		if entry.has_pulley_b:
-			var tr_pb: Transform3D = Transform3D(banked_basis, xform.origin)
+			var tr_pb: Transform3D = Transform3D(roller_basis, xform.origin)
 			tr_pb.origin += banked_up * y_pulley_axis + banked_right * pulley_pair_offset + banked_lat
 			tr_pb.basis = tr_pb.basis * rot90
 			mm_pulley_b.set_instance_transform(idx_pb, tr_pb)
@@ -1073,7 +1080,9 @@ func _build_guides() -> void:
 #   - virage à droite (heading augmente vers est/sud) → côté droit BAS, gauche HAUT
 #   - le câble glisse vers l'intérieur (côté droit) du virage → centripète
 #   - rotation autour de forward : signe NÉGATIF pour heading_rate positif
-# Approximation centrifuge : bank = atan(v² · κ / g), amplifié pour visibilité.
+# Inclinaison de CHAQUE galet dans son support (le support reste horizontal),
+# vers l'intérieur du virage. Approximation centrifuge : atan(v² · κ / g),
+# amplifiée pour visibilité.
 func _heading_bank_at(s: float) -> float:
 	var ds: float = 5.0
 	var h_prev: float = SlopeProfile.heading_at(s - ds)
