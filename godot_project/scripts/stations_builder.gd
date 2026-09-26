@@ -89,9 +89,7 @@ func _build_station_high() -> void:
 
 	_build_platform(s_plat_start, s_plat_end, false, +1.0)
 	_build_platform(s_plat_start, s_plat_end, false, -1.0)
-	# Fosse d'extrémité (photo 095509) : caillebotis, grandes poulies de
-	# renvoi du câble vers la machinerie, butoirs bleus à tête bois
-	_build_pit(PIT_HIGH_START, PIT_HIGH_END, true)
+	# Pas de fosse en haut (retour d'essai 2026-09-26) : butoirs bleus seuls
 	_build_bumper(s_bumper, false)
 	_build_ceiling_lights(s_plat_start, s_plat_end)
 

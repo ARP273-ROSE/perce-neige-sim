@@ -602,7 +602,7 @@ func _build_sleepers() -> void:
 # la dalle et les blochets s'arrêtent, les rails passent sur la fosse.
 # Mêmes bornes dans stations_builder (PIT_LOW_END / PIT_HIGH_START).
 @export var pit_low_end: float = 4.5
-@export var pit_high_start: float = PNConstants.LENGTH - 2.0
+@export var pit_high_start: float = PNConstants.LENGTH   # pas de fosse en haut
 @export var walkway_side: float = 1.0        # +1 = droite en montant (vidéo)
 @export var walkway_x: float = 1.02          # décalage latéral du milieu de l'escalier
 @export var walkway_step_s: float = 0.45     # espacement des marches le long de s
