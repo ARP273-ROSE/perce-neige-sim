@@ -428,6 +428,8 @@ REBOUND_GRAB_A = 0.35            # m/s² — force résiduelle relâchée quand 
 #    sur la puissance AFFICHÉE en traction — la régén avait déjà le sien.
 CABLE_ROLLER_C = 0.015           # résistance câble/galets (fraction charge normale)
 DRIVE_EFF = 0.90                 # réseau → jante, en traction
+DRIVE_CU_LOSS_FRAC = 0.04        # pertes cuivre au courant nominal (fraction de P_MAX)
+DRIVE_FIELD_KW = 15.0            # excitation + auxiliaires du drive engagé
 REGEN_EFF = 0.80                 # jante → réseau, en génératrice
 AERO_BLOCKAGE = 0.65             # β = section bloquée / section d'air libre
 AERO_BED_H_M = 0.5               # hauteur du radier béton dans le tube
@@ -1043,6 +1045,7 @@ class Physics:
         # qui tire la rame vide : le régulateur en force module au FREIN
         # dès le départ → v recollé à 0 chaque frame → jamais parti).
         self._reg_hold = True
+        self._pretensioned = False   # couple statique posé au décollage
 
     def step(self, dt: float) -> None:
         st = self.state
@@ -1351,9 +1354,19 @@ class Physics:
         chaos_accel = (st.run_mode == "challenge")
         if not tr.emergency:
             v_abs = abs(tr.v)
-            soft_cap = A_START + (A_MAX_REG - A_START) * min(
-                1.0, v_abs / V_SOFT_RAMP
-            )
+            # Démarrage doux (creep de quai, calibré vidéo) SEULEMENT près
+            # d'un terminus : en pleine voie, un redémarrage prend la rampe
+            # programmée dès le décollage (2026-09-26 : « la puissance monte
+            # très progressivement en pleine pente »). Calcul Sage
+            # audit_physique/redemarrage_pente.sage.
+            pres_quai = (tr.s < START_S + PLATFORM_LEN + 20.0
+                         or tr.s > STOP_S - PLATFORM_LEN - 20.0)
+            if pres_quai:
+                soft_cap = A_START + (A_MAX_REG - A_START) * min(
+                    1.0, v_abs / V_SOFT_RAMP
+                )
+            else:
+                soft_cap = A_MAX_REG
             # Cap de confort au LANCEMENT (traction) — toujours actif
             # sauf en Défi (emballement autorisé).
             if a > soft_cap and not chaos_accel:
@@ -1870,8 +1883,17 @@ class Physics:
         # but display only the positive side on the gauge.
         # Traction : le moteur tire le câble → puissance consommée.
         # Puissance ÉLECTRIQUE : mécanique à la jante / rendement de la
-        # chaîne (audit 2026-09-26 — la régén avait déjà le sien).
+        # chaîne (audit 2026-09-26 — la régén avait déjà le sien) + PERTES
+        # du drive dès qu'il pousse : cuivre ∝ F² (4 % du nominal au courant
+        # nominal) et excitation. Au décollage en pente le couple est là
+        # avant la vitesse (la tension saute, pas la puissance) : l'afficheur
+        # ne part plus de zéro mais des pertes (~50-90 kW).
         tr.power_kw = max(0.0, (f_motor * tr.v) / DRIVE_EFF / 1000.0)
+        if st.trip_started and not drive_off and f_motor * tr.direction > 0.0:
+            f_rated = P_MAX / V_MAX
+            tr.power_kw += (DRIVE_FIELD_KW
+                            + DRIVE_CU_LOSS_FRAC * P_MAX / 1000.0
+                            * (abs(f_motor) / f_rated) ** 2)
         # Régénération : l'entraînement freine en génératrice (f_regen
         # oppose la marche). Puissance récupérée = |F·v|·rendement.
         # Chaîne roue → machine DC → onduleur → réseau ≈ 0,80 à pleine
@@ -2297,6 +2319,16 @@ class Physics:
         # RÉDUIRE la consigne (>0) freine TOUJOURS par la retenue de
         # l'entraînement (branche else) : c'est le lâcher COMPLET (0) sans
         # frein qui laisse la gravité reprendre la main.
+        # PRÉ-TENSION (2026-09-26) : le drive pose le couple statique AVANT
+        # que le tambour ne lâche — sans ça, le throttle partait de zéro à
+        # 1,5/s et la rame reculait de 2 cm au décollage en pente.
+        if self.state.trip_started and not self._pretensioned:
+            self._pretensioned = True
+            if f_ff > 0.0 and not self.state.manual_brake_held:
+                tr.throttle = max(tr.throttle,
+                                  min(1.0, f_ff / max(f_motor_max, 1.0)))
+        elif not self.state.trip_started:
+            self._pretensioned = False
         chaos_hold = (self.state.run_mode == "challenge")
         self._reg_hold = (not chaos_hold
                           and target_v < 0.01 and v_travel < 0.4)
@@ -2346,8 +2378,14 @@ class Physics:
             # haute 2026-07-24, même défaut latent ici).
             setpoint_binding = (tr.speed_cmd_eff <= v_envelope
                                 and dist_to_stop >= CREEP_DIST)
-            a_ff_total = (min(0.0, a_cmd_ff) if setpoint_binding
-                          else a_ff_env)
+            # Feed-forward de la rampe de consigne dans LES DEUX SENS
+            # (2026-09-26) : en montée de consigne, l'ancien min(0, ·) ne
+            # laissait que le terme proportionnel accélérer → constante de
+            # temps ≈ 3 s, « la puissance monte très progressivement ».
+            # Avec la pente de consigne en avance, la rampe programmée
+            # (0,30) est tenue dès le décollage ; au quai, le cap de
+            # démarrage doux garde la main.
+            a_ff_total = (a_cmd_ff if setpoint_binding else a_ff_env)
             a_des = max(-A_BRAKE_NORMAL,
                         min(A_TARGET, a_ff_total + err * k_a))
             f_req = m_total_r * a_des + f_ff

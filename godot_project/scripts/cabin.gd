@@ -663,7 +663,7 @@ func _emit_passenger(skin_mat: StandardMaterial3D, coat_color: Color, x: float, 
 		y_torso = TrainBodyBuilder.Y_FLOOR + 0.95   # assis (siège à plancher+0,45)
 		torso_h = 0.55
 	else:
-		y_torso = 1.05   # debout
+		y_torso = TrainBodyBuilder.Y_FLOOR + 1.20   # debout (torse à 1,2 m du plancher)
 		torso_h = 0.75
 
 	# Torse

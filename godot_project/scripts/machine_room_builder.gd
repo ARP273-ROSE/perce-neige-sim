@@ -291,7 +291,7 @@ func _build_cable_wrap() -> void:
 	# Simplification : on modélise un arc de 180° du point de tangence tunnel-side
 	# (bas gauche de la poulie) au point symétrique (bas droit), faisant un demi-tour
 	# par le dessus.
-	var y_brin: float = -0.50
+	var y_brin: float = -1.00   # voie descendue de 0,50 m (2026-09-26)
 	# Distance horizontale (en s) du centre poulie au point de tangence
 	var dy: float = y_pulley_center - y_brin
 	# Si dy < r_pulley, le point de tangence existe

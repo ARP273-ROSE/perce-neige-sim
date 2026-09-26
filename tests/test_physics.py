@@ -407,3 +407,31 @@ def test_ambiance_ne_se_coupe_pas_au_fluage():
     for v in [0.0, 0.1, 0.3, 0.5, 0.75, 1.0, 2.0, 5.0, 8.0, 12.0]:
         assert g(v, True) >= prev - 1e-9
         prev = g(v, True)
+
+
+def test_redemarrage_pleine_voie_franc():
+    # Retour d'essai 2026-09-26 : « la puissance monte très progressivement,
+    # surtout au redémarrage en pleine pente ». Le démarrage doux de quai
+    # (0,12 m/s²) ne s'applique plus qu'aux terminus ; en pleine voie la
+    # rampe programmée (0,30) est prise dès le décollage, et l'afficheur
+    # part des pertes du drive (couple présent avant la vitesse).
+    st, ph = _make(1, 1500.0, 334, 0)
+    tr = st.train
+    t, v3, p05 = 0.0, None, None
+    while t < 12.0:
+        ph.step(DT)
+        t += DT
+        if p05 is None and t >= 0.5:
+            p05 = tr.power_kw
+        if v3 is None and t >= 3.0:
+            v3 = tr.v
+    assert v3 is not None and v3 > 0.70, f"v à 3 s = {v3:.2f} (attendu ≈ 0,9)"
+    assert p05 is not None and p05 > 30.0, f"puissance à 0,5 s = {p05:.0f} kW (pertes attendues)"
+    assert tr.v > 3.0, f"v à 12 s = {tr.v:.2f}"
+    # …et au quai, le démarrage doux reste : v à 3 s nettement plus faible
+    st2, ph2 = _make(1, pn.START_S, 334, 0)
+    t = 0.0
+    while t < 3.0:
+        ph2.step(DT)
+        t += DT
+    assert st2.train.v < 0.55, f"départ de quai trop brusque : v à 3 s = {st2.train.v:.2f}"
