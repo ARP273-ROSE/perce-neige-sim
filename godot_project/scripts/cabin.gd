@@ -1,10 +1,12 @@
 class_name Cabin
 extends Node3D
-## Cabine du funiculaire — cylindre jaune MVP, deux voitures couplées.
+## Cabine du funiculaire — deux voitures couplées, carrosserie d'après les
+## photos du 2026-04-26 (TrainBodyBuilder : tube gris nervuré, hublots,
+## portes, calottes jaunes, fond plat au-dessus des rails, bogies).
 ## Se positionne sur la spline via TunnelBuilder.transform_at(s).
 
 @export var train_length: float = 32.0      # 2 × 16 m
-@export var train_radius: float = 1.70      # ∅ 3.60 m - clearance
+@export var train_radius: float = 1.72      # rayon du tube (TrainBodyBuilder.R_BODY)
 @export var car_count: int = 2
 
 var tunnel: TunnelBuilder = null
@@ -18,6 +20,9 @@ var headlight_rear: SpotLight3D = null
 var camera_fpv: Camera3D = null
 var camera_ext: Camera3D = null
 var interior_light: OmniLight3D = null
+var _front_lamps: Array = []         # feux ronds de la calotte avant
+var _rear_lamps: Array = []
+var _body_mats: Dictionary = {}
 
 # Passagers — références pour animer les têtes selon l'accel/courbure
 var _passenger_heads: Array = []   # Array[MeshInstance3D]
@@ -93,50 +98,22 @@ func _build_mesh() -> void:
 	mesh_root.name = "MeshRoot"
 	add_child(mesh_root)
 
-	# Cabines : 2 cylindres couplés, jaune Perce-Neige
-	var cabin_mat: StandardMaterial3D = StandardMaterial3D.new()
-	cabin_mat.albedo_color = Color(0.95, 0.75, 0.10)
-	cabin_mat.roughness = 0.35
-	cabin_mat.metallic = 0.3
-	cabin_mat.metallic_specular = 0.6
-
-	var window_mat: StandardMaterial3D = StandardMaterial3D.new()
-	window_mat.albedo_color = Color(0.08, 0.12, 0.18, 0.7)
-	window_mat.roughness = 0.05
-	window_mat.metallic = 0.0
-	window_mat.emission_enabled = true
-	window_mat.emission = Color(0.15, 0.20, 0.30)
-	window_mat.emission_energy_multiplier = 0.5
-	window_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-
-	var car_length: float = train_length / float(car_count)
-	for i in range(car_count):
-		var car: MeshInstance3D = MeshInstance3D.new()
-		car.name = "Car%d" % (i + 1)
-		var cyl: CylinderMesh = CylinderMesh.new()
-		cyl.top_radius = train_radius
-		cyl.bottom_radius = train_radius
-		cyl.height = car_length * 0.96
-		cyl.radial_segments = 24
-		cyl.rings = 1
-		car.mesh = cyl
-		car.set_surface_override_material(0, cabin_mat)
-		# Positionner le long de -Z (forward Godot)
-		var center_offset: float = (float(i) - (car_count - 1) * 0.5) * car_length
-		car.position = Vector3(0.0, 0.0, center_offset)
-		# Orientation : cylindre axe Y → on veut axe Z (forward)
-		car.rotation = Vector3(PI * 0.5, 0.0, 0.0)
-		mesh_root.add_child(car)
-
-		# Fenêtres — bande latérale à mi-hauteur
-		for side in [-1.0, 1.0]:
-			var window_strip: MeshInstance3D = MeshInstance3D.new()
-			var box: BoxMesh = BoxMesh.new()
-			box.size = Vector3(0.05, 1.1, car_length * 0.75)
-			window_strip.mesh = box
-			window_strip.set_surface_override_material(0, window_mat)
-			window_strip.position = Vector3(side * (train_radius + 0.01), 0.3, center_offset)
-			mesh_root.add_child(window_strip)
+	# Carrosserie réaliste (voir train_body_builder.gd). L'ancien cylindre
+	# jaune Ø 3,40 centré 0,15 m sous l'axe descendait à −1,85 : sous la
+	# dalle et les rails (retour d'essai 2026-09-26 : « un cylindre qui
+	# dépasse même en dessous des rails »).
+	var built: Dictionary = TrainBodyBuilder.build_train(mesh_root, train_length, car_count)
+	_front_lamps = built["front_lamps"]
+	_rear_lamps = built["rear_lamps"]
+	_body_mats = built["mats"]
+	# Le ghost (rame 2) roule vers nous : ses feux arrière rouges allumés
+	# côté « avant » de sa rame vue de notre sens n'ont pas de sens ; on
+	# allume ses feux d'extrémité en blanc (elle vient en face).
+	if is_ghost:
+		for l in _front_lamps:
+			l.set_surface_override_material(0, _body_mats["lamp_on"])
+		for l in _rear_lamps:
+			l.set_surface_override_material(0, _body_mats["tail_on"])
 
 	# --- Intérieur cockpit + sièges + passagers — toujours visible ---------
 	if not is_ghost:
@@ -192,8 +169,9 @@ func _build_floor_ceiling() -> void:
 	floor_node.name = "InteriorFloor"
 	floor_node.mesh = floor_mesh
 	floor_node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	# juste au-dessus du slab, recentré sur l'empattement raccourci
-	floor_node.position = Vector3(0.0, -1.05, (z_front + z_rear) * 0.5)
+	# Plancher au niveau des quais-escaliers (TrainBodyBuilder.Y_FLOOR) : il
+	# était à −1,05, sous la dalle du tunnel, avec les sièges 1,5 m au-dessus.
+	floor_node.position = Vector3(0.0, TrainBodyBuilder.Y_FLOOR, (z_front + z_rear) * 0.5)
 	interior_root.add_child(floor_node)
 
 	# Plafond cabine — surface plate visible quand on lève les yeux
@@ -574,7 +552,7 @@ func _build_driver_seat() -> void:
 	base_mesh.material = seat_mat
 	base.mesh = base_mesh
 	base.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	base.position = Vector3(0.0, 0.50, z_seat)
+	base.position = Vector3(0.0, TrainBodyBuilder.Y_FLOOR + 0.50, z_seat)
 	interior_root.add_child(base)
 
 	# Dossier
@@ -585,7 +563,7 @@ func _build_driver_seat() -> void:
 	back_mesh.material = seat_mat
 	back.mesh = back_mesh
 	back.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	back.position = Vector3(0.0, 0.95, z_seat + 0.30)
+	back.position = Vector3(0.0, TrainBodyBuilder.Y_FLOOR + 0.95, z_seat + 0.30)
 	interior_root.add_child(back)
 
 
@@ -619,7 +597,7 @@ func _emit_seat(mat: StandardMaterial3D, x: float, z: float) -> void:
 	base_mesh.material = mat
 	base.mesh = base_mesh
 	base.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	base.position = Vector3(x, 0.45, z)
+	base.position = Vector3(x, TrainBodyBuilder.Y_FLOOR + 0.45, z)
 	interior_root.add_child(base)
 
 	var back: MeshInstance3D = MeshInstance3D.new()
@@ -628,7 +606,7 @@ func _emit_seat(mat: StandardMaterial3D, x: float, z: float) -> void:
 	back_mesh.material = mat
 	back.mesh = back_mesh
 	back.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	back.position = Vector3(x, 0.85, z + 0.20)
+	back.position = Vector3(x, TrainBodyBuilder.Y_FLOOR + 0.85, z + 0.20)
 	interior_root.add_child(back)
 
 
@@ -682,7 +660,7 @@ func _emit_passenger(skin_mat: StandardMaterial3D, coat_color: Color, x: float, 
 	var y_torso: float
 	var torso_h: float
 	if sitting:
-		y_torso = 0.95   # assis sur le siège (siège à y=0.45 + 0.50 jusqu'aux épaules)
+		y_torso = TrainBodyBuilder.Y_FLOOR + 0.95   # assis (siège à plancher+0,45)
 		torso_h = 0.55
 	else:
 		y_torso = 1.05   # debout
@@ -930,6 +908,11 @@ func _cabin_world_pos(s: float) -> Vector3:
 
 
 func set_headlights(on: bool) -> void:
+	if not _body_mats.is_empty():
+		for l in _front_lamps:
+			l.set_surface_override_material(0, _body_mats["lamp_on" if on else "lamp_off"])
+		for l in _rear_lamps:
+			l.set_surface_override_material(0, _body_mats["tail_on" if on else "lamp_off"])
 	if headlight_front:
 		headlight_front.visible = on
 
