@@ -1,0 +1,84 @@
+=== 1. PROFIL ===
+dénivelé intégré = 921.00 m (attendu 921), facteur d'échelle 1.0354
+pente moyenne = 26.51 % ; altitude à s=914 : 2308 m ; s=1737 (mi-ligne) : 2549 m
+
+=== 2. TERMES DU BILAN (kN), rame pilotée en s, contrepoids en L−s ===
+poids propre du câble net : s=26 → -98.9 kN ; s=1737 → 0.0 kN ; s=3448 → 98.9 kN
+valeur pleine : rho·g·921 = 99.4 kN  (= 10.1 tonnes-force)
+déséquilibre gravitaire max des rames (pleine/vide, zone 29,5 %) : 69.5 kN
+frottement roulement des 2 rames (pleine/vide) : 2.11 kN ; galets du câble (c=0.015) : 5.44 kN
+
+=== 3. AÉRODYNAMIQUE ===
+section tunnel Ø3,9 : 11.95 m² ; radier (h=0.5 m) : 0.89 m² ; section d'air libre A_T = 11.05 m²
+section d'une cabine si disque plein Ø3,6 : 10.18 m² → beta = 0.921
+rho air : 0.979 kg/m³ à 2111 m, 0.875 à 3032 m
+
+Traînée à 12 m/s, rho = 0.928 (mi-ligne), PAR RAME (l'autre rame subit la même) :
+  beta   A_t    u_rel  K     dP(Pa)   F_tube(kN)  P_tube(kW)  |  F_évitement(kN)
+  0.55   6.08   38.7  1.55     1073       8.0         96     |  0.9
+  0.60   6.63   42.0  1.73     1414      11.1        133     |  1.1
+  0.65   7.18   46.3  1.95     1936      16.1        193     |  1.2
+  0.70   7.74   52.0  2.22     2790      24.4        292     |  1.4
+  0.72   7.96   54.9  2.36     3290      29.3        351     |  1.5
+  0.75   8.29   60.0  2.59     4323      39.6        475     |  1.6
+  0.80   8.84   72.0  3.10     7462      71.5        858     |  1.8
+  0.85   9.39   92.0  3.91    15361     153.4       1841     |  2.5
+beta retenu = 0.65 → traînée totale (2 rames) à 12 m/s : 32.1 kN en tube unique, 2.5 kN quand la rame pilotée est dans l'évitement (s=1700)
+
+=== 4. PUISSANCE À 12 m/s LE LONG DE LA MONTÉE (kW élec.) — modèle actuel vs complet ===
+vide/vide      actuel : Pmax   562 kW / Rmax   390 kW   complet : Pmax  1832 kW (à s=  50) / Rmax   459 kW (à s=3400)
+pleine/vide    actuel : Pmax  1430 kW / Rmax    83 kW   complet : Pmax  2239 kW (à s= 700) / Rmax   126 kW (à s=3400)
+vide/pleine    actuel : Pmax   129 kW / Rmax  1000 kW   complet : Pmax  1524 kW (à s=  50) / Rmax   846 kW (à s=2800)
+pleine/pleine  actuel : Pmax   997 kW / Rmax   693 kW   complet : Pmax  1847 kW (à s=  50) / Rmax   366 kW (à s=3400)
+demi/demi      actuel : Pmax   779 kW / Rmax   542 kW   complet : Pmax  1840 kW (à s=  50) / Rmax   412 kW (à s=3400)
+
+Force moteur disponible à 12 m/s : P/v = 200 kN ; F_STALL = 260 kN (< 9,2 m/s)
+  vide/vide    F_résist max : actuel 42 kN (21 % de P/v) ; complet 137 kN (69 %)
+  pleine/vide  F_résist max : actuel 107 kN (54 % de P/v) ; complet 168 kN (84 %)
+
+Borne sur beta imposée par les 2 400 kW (pleine/vide à 12 m/s, rendement 0.90) :
+  beta 0.60 → pic 2107 kW  OK
+  beta 0.65 → pic 2239 kW  OK
+  beta 0.70 → pic 2460 kW  DÉPASSE la puissance installée
+  beta 0.72 → pic 2592 kW  DÉPASSE la puissance installée
+  beta 0.75 → pic 2867 kW  DÉPASSE la puissance installée
+  beta 0.80 → pic 3717 kW  DÉPASSE la puissance installée
+
+=== 5. TENSION (daN) — brin A (rame pilotée), brin B (contrepoids) ===
+vide/vide    max brin A 17084 daN à s=700 ; brin B à s=26 : 3182 daN ; sans poids du câble, max brin A serait 9042 daN
+pleine/vide  max brin A 23850 daN à s=900 ; brin B à s=26 : 3182 daN ; sans poids du câble, max brin A serait 16054 daN
+nominal constructeur 22 500 daN ; rupture 191 200 → coefficient de sécurité au pic pleine/vide = 8.0
+différence des brins à la poulie = effort moteur : à s=26 pleine/vide : 124.2 kN ; à s=3448 : -81.8 kN
+… et le bilan des forces complet (hors aéro/galets) dit : 125.7 kN et -80.3 kN → cohérent avec la jauge SI le câble pèse sur le moteur
+
+=== 6. ÉNERGIE PAR TRAJET (kWh élec.) ===
+énergie potentielle nette pleine/vide : Δm·g·Δh = 62.8 kWh
+vide/vide      montée : actuel trac   5.5 / régén   2.8   complet trac  46.5 / régén   5.0
+pleine/vide    montée : actuel trac  69.6 / régén   0.1   complet trac 108.0 / régén   0.4
+vide/pleine    montée : actuel trac   0.3 / régén  47.0   complet trac  11.9 / régén  28.0
+pleine/pleine  montée : actuel trac   9.7 / régén   4.9   complet trac  44.9 / régén   2.9
+demi/demi      montée : actuel trac   7.6 / régén   3.8   complet trac  45.4 / régén   3.7
+
+=== 7. AFFAISSEMENT À L'EMBARQUEMENT ===
+gare basse : L = 3448 m, pente 8.9 %, k = EA/L = 36253 N/m → 1.79 mm par passager, 59.8 cm pour 334 pax
+gare haute : L = 26 m → 0.012 mm par passager, 4.0 mm pour 334 pax (invisible)
+période propre rame pleine en bas : T = 2π√(m/k) = 7.9 s
+
+=== 8. BANC PC (tests/bench_voyages.py) : cohérence interne ===
+montee_pleine_vide     : 468 pts à 12 m/s, écart max |P_sim − P_recalc| = 34.1 kW ; T max 23854 daN ; durée 401 s ; E_trac 62.5 kWh
+descente_vide_pleine   : 468 pts à 12 m/s, écart max |P_sim − P_recalc| = 34.1 kW ; T max 23854 daN ; durée 401 s ; E_trac 62.5 kWh
+montee_vide_vide       : 468 pts à 12 m/s, écart max |P_sim − P_recalc| = 72.9 kW ; T max 17083 daN ; durée 401 s ; E_trac 3.9 kWh
+descente_pleine_vide   : 476 pts à 12 m/s, écart max |P_sim − P_recalc| = 207.7 kW ; T max 23854 daN ; durée 397 s ; E_trac 0.1 kWh
+MIROIR PC : écart max puissance 0.00 kW, tension 0.00 daN, régén 0.00 kW → symétrie exacte
+
+=== 10. BANC PC APRÈS CORRECTION (v1.13.0) — kWh élec., kW, daN ===
+trajet                     Pmax   Rmax  Etrac   Ereg   Tmax  durée |  Pmax0  Rmax0   Etr0   Erg0  Tmax0
+montee_vide_vide           1527    507   47.7    7.8  19021    397 |    286    248    3.9    1.9  17538
+montee_pleine_vide         2238    148  106.3    1.3  25781    399 |   1100      0   62.5    0.0  23854
+descente_pleine_vide        825   1000   13.7   31.2  21657    396 |     23    866    0.1   47.0  23854
+descente_vide_pleine       2238    148  106.3    1.3  25781    398 |   1100      0   62.5    0.0  23854
+montee_pleine_pleine       1366    441   46.4    6.0  25781    397 |    507    441    6.9    3.5  23854
+montee_demi_demi           1446    474   47.1    6.9  22364    397 |    396    345    5.4    2.7  20425
+évitement (pleine/pleine, après) : P à s=1550 697 kW → s=1712 165 kW → s=1900 399 kW
+
+figures écrites dans /home/sage/work/11_perce_neige/fig

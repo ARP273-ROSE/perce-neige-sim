@@ -50,6 +50,7 @@ où μ est le coefficient de résistance au roulement (sans dimension) et N est 
 - **Davis formula** (W.J. Davis Jr., 1926, *General Electric Review*) : R = a + b·v + c·v² (terme constant a = roulement + frottement palier ; b·v = friction air à basse vitesse ; c·v² = traînée aérodynamique). Référence dans la plupart des manuels de traction ferroviaire moderne.
 - **UIC 544-1** : norme de l'Union Internationale des Chemins de Fer pour le calcul de la résistance à l'avancement et la performance de freinage.
 - **Standard ferroviaire** : pour funiculaire à faible vitesse (≤ 12 m/s) le terme aérodynamique est négligé, on garde μ ≈ 0.002-0.004.
+- ⚠️ **Audit 2026-09-26 (`AUDIT_PHYSIQUE_VOYAGES.md`)** : cette hypothèse vaut à l'air libre, pas dans un tube de 3,90 m pour une cabine de 3,60 m. La traînée piston en tube unique (~16 kN par rame à 12 m/s pour β = 0,65, ~1 kN dans l'évitement), le poids propre du câble (±99 kN aux terminus) et la résistance des galets (~5,4 kN) sont désormais dans le bilan des forces.
 
 ### (c) Plages typiques
 - Roue acier sur rail acier propre et sec : **μ ≈ 0.001 à 0.002** (rail neuf, alignement parfait).

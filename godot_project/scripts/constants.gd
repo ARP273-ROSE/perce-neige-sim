@@ -91,6 +91,19 @@ const CABLE_DIAM_MM: float = 52.0
 # rame lourde et la poulie motrice pèse jusqu'à ~9 900 daN sur la jauge de
 # tension quand la rame est en bas (port du modèle Python, audit 2026-07-06).
 const CABLE_KG_M: float = 11.0
+# --- Audit physique 2026-09-26 (port du PC) -------------------------------
+# Poids propre du câble dans le bilan des forces, résistance des galets,
+# traînée d'air en tunnel (tube unique / évitement), rendement électrique.
+# Détail et justification : AUDIT_PHYSIQUE_VOYAGES.md à la racine du dépôt.
+const ROPE_MASS_KG: float = CABLE_KG_M * LENGTH   # ~38 t en mouvement
+const CABLE_ROLLER_C: float = 0.015      # résistance câble/galets (fraction charge normale)
+const DRIVE_EFF: float = 0.90            # réseau → jante (traction)
+const REGEN_EFF: float = 0.80            # jante → réseau (génératrice)
+const AERO_BLOCKAGE: float = 0.65        # β = section bloquée / section d'air libre
+const AERO_BED_H_M: float = 0.5          # radier béton dans le tube
+const AERO_LAMBDA: float = 0.025         # Darcy, béton + peau de la rame
+const AERO_K_IN: float = 0.4             # contraction au nez
+const AERO_LOOP_LEN_M: float = 203.0     # longueur du second tube
 
 # Tunnel
 const TUNNEL_DIAM_M: float = 3.9         # diamètre min
