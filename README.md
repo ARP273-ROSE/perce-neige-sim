@@ -14,6 +14,21 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 
 ## Quoi de neuf — v1.13.x (audit physique des voyages, 26 septembre 2026)
 
+**v1.13.5** — les deux voitures s'articulent, les roues tournent sur les
+rails :
+- **Articulation** : la rame n'est plus un bloc rigide de 32 m. Chaque
+  voiture est un nœud posé **sur la spline à sa propre abscisse** (s ∓ 8 m)
+  avec sa propre orientation, replacé chaque frame ; l'intérieur (plancher,
+  plafond, bandeau LED, sièges, passagers, mains courantes) est scindé par
+  voiture et suit. Pupitre, siège conducteur, caméra et phares restent
+  rigides avec la cabine (c'est le repère de la vue). Le soufflet suit la
+  voiture de tête.
+- **Roues** : quatre roues par bogie sur pivots, tournées à v/R (roulement
+  sans glissement), avec moyeu clair et barres radiales sur la face externe
+  — une roue lisse qui tourne ne se voit pas. Essieux, boîtes d'essieu et
+  longerons de bogie ; la jupe est **échancrée** au droit des bogies
+  (2,8 m) pour qu'on les voie sur les rails depuis la vue extérieure.
+
 **v1.13.4** — la voie descend dans le tube, la coque redevient opaque, la
 vue orbitale tourne en ligne, la puissance de redémarrage :
 - **Voie descendue de 0,50 m** (`floor_y_local` −1,85) : la table de
