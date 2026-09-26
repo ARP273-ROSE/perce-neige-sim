@@ -14,6 +14,19 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 
 ## Quoi de neuf — v1.13.x (audit physique des voyages, 26 septembre 2026)
 
+**v1.13.6** — face avant et hublots corrigés d'après les photos :
+- **Face avant** : seul le pare-brise est vitré. Les panneaux en D de part
+  et d'autre sont les **portes d'évacuation, jaunes pleines**, avec liseré
+  sombre, poignée et serrure (erreur de lecture de la v1.13.3 corrigée).
+- **Hublots des flancs** : rectangles à **grands arrondis** (r = 0,25 m,
+  ~1,0 × 1,1 m, au-dessus de la ceinture) au lieu de rectangles chanfreinés
+  d'une cellule ; même technique que le pare-brise (découpe de la tôle,
+  joint caoutchouc noir, vitre lissée à fleur de tôle), grille du tube
+  affinée (2,5°, 10 cm) sous les panneaux vitrés.
+- L'articulation verticale aux changements de pente est incluse depuis la
+  v1.13.5 (chaque voiture prend la tangente 3D de la spline à sa propre
+  abscisse, donc son propre tangage).
+
 **v1.13.5** — les deux voitures s'articulent, les roues tournent sur les
 rails :
 - **Articulation** : la rame n'est plus un bloc rigide de 32 m. Chaque
