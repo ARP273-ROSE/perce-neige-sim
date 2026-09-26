@@ -1040,24 +1040,18 @@ func _process(_delta: float) -> void:
 			(w as Node3D).rotate_x(d_ang)
 
 	# Portes coulissantes (2026-09-26) : déboîtement (premier quart) puis
-	# glissement vers l'arrière, côté QUAI seulement. Les quais sont à −X
-	# du repère voie (stations_builder, side −1) : côté local −1 si la
-	# voiture regarde vers +s, +1 sinon. 2,5 s de course.
+	# glissement vers l'arrière, des DEUX côtés (retour d'essai : les deux
+	# faces s'ouvrent en gare), 2,5 s de course.
 	var target: float = 1.0 if physics.doors_open else 0.0
 	_door_frac = move_toward(_door_frac, target, _delta / 2.5)
 	if not _doors.is_empty():
-		var tx: Vector3 = tunnel.transform_at(s_pos).basis.x
-		var quai_side: float = -1.0 if xform.basis.x.dot(tx) > 0.0 else 1.0
 		var plug: float = clampf(_door_frac / 0.25, 0.0, 1.0)
 		var slide: float = clampf((_door_frac - 0.25) / 0.75, 0.0, 1.0)
 		for d in _doors:
 			var node: Node3D = d["node"]
 			var base: Vector3 = d["base"]
-			if d["side"] == quai_side:
-				node.position = base + Vector3(d["side"] * TrainBodyBuilder.DOOR_PLUG * plug,
-					0.0, TrainBodyBuilder.DOOR_SLIDE * slide)
-			else:
-				node.position = base
+			node.position = base + Vector3(d["side"] * TrainBodyBuilder.DOOR_PLUG * plug,
+				0.0, TrainBodyBuilder.DOOR_SLIDE * slide)
 
 	# Tablette-horloge du montant gauche : l'heure réelle, comme en cabine
 	if _clock_label != null:
