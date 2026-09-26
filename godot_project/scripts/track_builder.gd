@@ -105,6 +105,7 @@ func build(t: TunnelBuilder) -> void:
 	_build_slab()
 	_build_rails()
 	_build_sleepers()
+	_build_walkway()
 	_build_cable_beam()
 	_build_guides()
 	_build_cable()
@@ -583,6 +584,127 @@ func _build_sleepers() -> void:
 	mmi.multimesh = mm
 	mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(mmi)
+
+
+# ---------------------------------------------------------------------------
+# Escalier métallique de service le long de la voie (vidéo cabine du
+# 2026-04-26 : échelle à marches à DROITE en montant, câble main-courante
+# sur potelets ; les gros câbles noirs et les boîtiers sont à gauche).
+# Marches horizontales tous les 0,45 m d'abscisse (à 30 % : 13 cm de
+# dénivelé par marche), deux limons, potelets tous les 3 m + câble.
+# Boîtiers gris sur le mur gauche tous les 24 m. Tout en MultiMesh.
+# ---------------------------------------------------------------------------
+
+@export var walkway_side: float = 1.0        # +1 = droite en montant (vidéo)
+@export var walkway_x: float = 1.02          # décalage latéral du milieu de l'escalier
+@export var walkway_step_s: float = 0.45     # espacement des marches le long de s
+@export var walkway_post_s: float = 3.0      # espacement des potelets
+
+
+func _walkway_frame(s: float) -> Transform3D:
+	# repère de pose : origine sur le bord, X = travers, Y = monde haut
+	var xf: Transform3D = tunnel.transform_at(s)
+	var off: float = _track_center_x(s, walkway_side) if (
+		s >= PNConstants.PASSING_START - 60.0 and s <= PNConstants.PASSING_END + 60.0) else 0.0
+	var origin: Vector3 = xf.origin + xf.basis.x * (off + walkway_side * walkway_x) \
+		+ xf.basis.y * (floor_y_local + slab_thickness + 0.08)
+	var fwd: Vector3 = -xf.basis.z
+	fwd.y = 0.0
+	if fwd.length() < 0.01:
+		fwd = Vector3.FORWARD
+	fwd = fwd.normalized()
+	var right: Vector3 = fwd.cross(Vector3.UP).normalized()
+	return Transform3D(Basis(right, Vector3.UP, -fwd), origin)
+
+
+func _mm_instance(mesh: Mesh, xforms: Array, name: String) -> void:
+	var mm: MultiMesh = MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.mesh = mesh
+	mm.instance_count = xforms.size()
+	for i in range(xforms.size()):
+		mm.set_instance_transform(i, xforms[i])
+	var mmi: MultiMeshInstance3D = MultiMeshInstance3D.new()
+	mmi.name = name
+	mmi.multimesh = mm
+	mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(mmi)
+
+
+func _build_walkway() -> void:
+	var galva: StandardMaterial3D = StandardMaterial3D.new()
+	galva.albedo_color = Color(0.52, 0.53, 0.52)
+	galva.roughness = 0.6
+	galva.metallic = 0.6
+	var tread: BoxMesh = BoxMesh.new()
+	tread.size = Vector3(0.44, 0.035, 0.24)
+	tread.material = galva
+	var stringer: BoxMesh = BoxMesh.new()
+	stringer.size = Vector3(0.03, 0.09, walkway_step_s + 0.02)
+	stringer.material = galva
+	var post: CylinderMesh = CylinderMesh.new()
+	post.top_radius = 0.018
+	post.bottom_radius = 0.018
+	post.height = 1.0
+	post.radial_segments = 8
+	post.material = galva
+	var cable: BoxMesh = BoxMesh.new()
+	cable.size = Vector3(0.014, 0.014, walkway_post_s + 0.05)
+	cable.material = galva
+	var treads: Array = []
+	var stringers: Array = []
+	var posts: Array = []
+	var cables: Array = []
+	var s: float = 0.6
+	while s < PNConstants.LENGTH - 0.6:
+		var fr: Transform3D = _walkway_frame(s)
+		treads.append(fr)
+		# limons alignés sur la pente (repère spline)
+		var xf: Transform3D = tunnel.transform_at(s)
+		var off: float = _track_center_x(s, walkway_side) if (
+			s >= PNConstants.PASSING_START - 60.0 and s <= PNConstants.PASSING_END + 60.0) else 0.0
+		for dx in [-0.24, 0.24]:
+			var st_xf: Transform3D = xf
+			st_xf.origin += xf.basis.x * (off + walkway_side * walkway_x + dx) \
+				+ xf.basis.y * (floor_y_local + slab_thickness + 0.06)
+			stringers.append(st_xf)
+		s += walkway_step_s
+	s = 1.5
+	while s < PNConstants.LENGTH - 1.5:
+		var fr2: Transform3D = _walkway_frame(s)
+		var p: Transform3D = fr2
+		p.origin += Vector3.UP * 0.5 + fr2.basis.x * (walkway_side * 0.24)
+		posts.append(p)
+		var xf2: Transform3D = tunnel.transform_at(s + walkway_post_s * 0.5)
+		var off2: float = _track_center_x(s + walkway_post_s * 0.5, walkway_side) if (
+			s >= PNConstants.PASSING_START - 60.0 and s <= PNConstants.PASSING_END + 60.0) else 0.0
+		var cx: Transform3D = xf2
+		cx.origin += xf2.basis.x * (off2 + walkway_side * (walkway_x + 0.24)) \
+			+ xf2.basis.y * (floor_y_local + slab_thickness + 0.08 + 1.0)
+		cables.append(cx)
+		s += walkway_post_s
+	_mm_instance(tread, treads, "WalkwayTreads")
+	_mm_instance(stringer, stringers, "WalkwayStringers")
+	_mm_instance(post, posts, "WalkwayPosts")
+	_mm_instance(cable, cables, "WalkwayHandCable")
+	# boîtiers sur le mur gauche (côté des câbles), tous les 24 m
+	var boxm: BoxMesh = BoxMesh.new()
+	boxm.size = Vector3(0.12, 0.20, 0.26)
+	var boxmat: StandardMaterial3D = StandardMaterial3D.new()
+	boxmat.albedo_color = Color(0.58, 0.58, 0.56)
+	boxmat.roughness = 0.7
+	boxm.material = boxmat
+	var boxes: Array = []
+	s = 12.0
+	while s < PNConstants.LENGTH - 12.0:
+		var xf3: Transform3D = tunnel.transform_at(s)
+		var off3: float = _track_center_x(s, -walkway_side) if (
+			s >= PNConstants.PASSING_START - 60.0 and s <= PNConstants.PASSING_END + 60.0) else 0.0
+		var bx: Transform3D = xf3
+		bx.origin += xf3.basis.x * (off3 - walkway_side * 1.48) + xf3.basis.y * 0.42
+		boxes.append(bx)
+		s += 24.0
+	_mm_instance(boxm, boxes, "WallBoxes")
 
 
 # ---------------------------------------------------------------------------
