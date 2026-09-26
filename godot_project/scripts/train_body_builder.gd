@@ -26,24 +26,39 @@ const RIB_H: float = 0.035          # saillie d'un anneau
 const PANEL_L: float = 1.63         # longueur d'un panneau (hublot ou porte)
 const END_BLANK: float = 0.77       # tôle pleine aux extrémités du tube
 const D_THETA_DEG: float = 5.0      # résolution angulaire du tube
-const CAP_THETA_DEG: float = 2.5    # résolution angulaire de la calotte (bords des vitres)
-const CAP_N_T: int = 36             # anneaux de la calotte
+const CAP_THETA_DEG: float = 2.0    # résolution angulaire de la calotte (découpes)
+const CAP_N_T: int = 45             # anneaux de la calotte
 const COL_L: float = 0.25           # résolution longitudinale
 # Fenêtres : angle depuis le sommet du tube (°) ; hublots hauts et étroits
 const WIN_T0: float = 24.0
 const WIN_T1: float = 76.0
 const WIN_MARGIN: float = 0.25      # marge longitudinale dans un panneau
-# Calotte : pare-brise et baies latérales définis en PROJECTION FRONTALE
-# (x, y − Y_CENTER), comme on les voit sur les photos : rectangles à coins
-# arrondis, pare-brise centré en haut, deux baies étroites de chaque côté.
-const WS_HALF_W: float = 0.60       # demi-largeur du pare-brise
-const WS_Y0: float = 0.50           # bas / haut du pare-brise (au-dessus de l'axe)
-const WS_Y1: float = 1.32
-const SIDE_X0: float = 0.92         # baies latérales (portes de secours)
-const SIDE_X1: float = 1.36
-const SIDE_Y0: float = 0.05
-const SIDE_Y1: float = 1.15
-const CAP_CORNER: float = 0.13      # rayon d'arrondi (par cellule)
+# Face avant (photo 20260426_095511, 220 px/m) : la face réelle va de
+# l'apex (+1,78) au fond plat (−1,33), soit 3,1 m ; dans le jeu la voie est
+# plus haute dans le tube et la face n'a que 2,43 m (apex +1,72 → coupe
+# −0,71). Les cotes verticales réelles sont donc COMPRIMÉES d'un facteur
+# 0,78 depuis l'apex, les largeurs conservées. Coordonnées en projection
+# frontale (x, y − Y_CENTER).
+#   pare-brise réel 1,40 × 1,90 m (+1,43 → −0,47), plaque dedans en bas ;
+#   baies des portes de secours : hautes et étroites CONTRE la lisière
+#   (|x| ≥ 0,93 jusqu'au bord, +1,00 → −0,97) ; « TIGNES » sous le
+#   pare-brise (−0,84), grille (−1,20) et feux ronds (±1,0 ; −1,25) en bas.
+const FACE_SCALE: float = 0.78
+const WS_HALF_W: float = 0.70
+const WS_TOP_REAL: float = 1.43
+const WS_BOT_REAL: float = -0.47
+const WS_CORNER: float = 0.20
+const SIDE_X0: float = 0.93
+const SIDE_RHO: float = 1.60        # lisière : ρ max des baies (bord en D)
+const SIDE_TOP_REAL: float = 1.00
+const SIDE_BOT_REAL: float = -0.97
+const SIDE_CORNER: float = 0.22
+const DOOR_X0: float = 0.80         # liseré des portes de secours
+const DOOR_RHO: float = 1.67
+const DOOR_TOP_REAL: float = 1.25
+const GASKET_IN: float = 0.03       # joint caoutchouc : de −0,03 à +0,075
+const GASKET_OUT: float = 0.075
+const GLASS_INSET: float = 0.02
 
 
 static func _mat(color: Color, rough: float, metal: float) -> StandardMaterial3D:
@@ -78,7 +93,8 @@ static func materials() -> Dictionary:
 		"body": _mat(Color(0.60, 0.61, 0.60), 0.55, 0.45),      # tôle alu grise
 		"door": _mat(Color(0.66, 0.67, 0.66), 0.50, 0.45),      # vantaux, un ton plus clair
 		"rib": _mat(Color(0.40, 0.41, 0.42), 0.60, 0.50),       # anneaux
-		"yellow": _mat(Color(0.94, 0.80, 0.08), 0.42, 0.10),    # calottes
+		"yellow": _mat(Color(0.92, 0.82, 0.12), 0.42, 0.10),    # calottes (jaune citron)
+		"rubber": _mat(Color(0.07, 0.07, 0.08), 0.85, 0.05),    # joints de vitres
 		"glass": glass,
 		"dark": _mat(Color(0.11, 0.11, 0.12), 0.75, 0.30),      # châssis, fond, soufflet
 		"wheel": _mat(Color(0.22, 0.22, 0.23), 0.55, 0.70),
@@ -264,14 +280,167 @@ static func _build_end_disc(mesh: ArrayMesh, mat: StandardMaterial3D, z: float, 
 
 
 # --- calotte bombée jaune ----------------------------------------------------
+
+## Ordonnée réelle (relative à l'axe) → ordonnée jeu, comprimée depuis l'apex.
+static func _face_y(y_real: float) -> float:
+	return R_BODY - (1.78 - y_real) * FACE_SCALE
+
+
+## Contour d'un rectangle à coins arrondis (repère frontal, relatif à
+## l'axe), échantillonné finement, puis rabattu radialement sur ρ ≤ rho_max
+## (bord en D des baies latérales). Sens trigonométrique.
+static func _rounded_outline(x0: float, x1: float, y0: float, y1: float, r: float,
+		rho_max: float) -> PackedVector2Array:
+	var pts: PackedVector2Array = PackedVector2Array()
+	var n_c: int = 10                 # points par coin
+	var n_e: int = 10                 # points par bord droit
+	r = minf(r, minf((x1 - x0) * 0.5, (y1 - y0) * 0.5) - 0.001)
+	var corners: Array = [
+		[Vector2(x1 - r, y0 + r), -PI * 0.5],   # bas droit
+		[Vector2(x1 - r, y1 - r), 0.0],         # haut droit
+		[Vector2(x0 + r, y1 - r), PI * 0.5],    # haut gauche
+		[Vector2(x0 + r, y0 + r), PI],          # bas gauche
+	]
+	for k in range(4):
+		var c: Vector2 = corners[k][0]
+		var a0: float = corners[k][1]
+		var prev: Vector2 = corners[(k + 3) % 4][0] + Vector2(cos(a0), sin(a0)) * r
+		var first: Vector2 = c + Vector2(cos(a0), sin(a0)) * r
+		# bord droit menant au coin k
+		for j in range(n_e):
+			pts.append(prev.lerp(first, float(j) / float(n_e)))
+		for j in range(n_c + 1):
+			var a: float = a0 + (PI * 0.5) * float(j) / float(n_c)
+			pts.append(c + Vector2(cos(a), sin(a)) * r)
+	# rabattement sur la lisière
+	for i in range(pts.size()):
+		var rho: float = pts[i].length()
+		if rho > rho_max:
+			pts[i] = pts[i] * (rho_max / rho)
+	return pts
+
+
+## Contour décalé de d (positif = vers l'extérieur) — approximation par le
+## centroïde (les formes sont convexes et peu allongées).
+static func _offset_outline(pts: PackedVector2Array, d: float) -> PackedVector2Array:
+	var c: Vector2 = Vector2.ZERO
+	for q in pts:
+		c += q
+	c /= float(pts.size())
+	var out: PackedVector2Array = PackedVector2Array()
+	for q in pts:
+		var v: Vector2 = q - c
+		var l: float = v.length()
+		out.append(c + v * ((l + d) / l) if l > 1e-6 else q)
+	return out
+
+
+## Les trois vitres de la face : [pare-brise, baie gauche, baie droite]
+static func _face_windows() -> Array:
+	var ws: PackedVector2Array = _rounded_outline(-WS_HALF_W, WS_HALF_W,
+		_face_y(WS_BOT_REAL), _face_y(WS_TOP_REAL), WS_CORNER, 99.0)
+	var side_r: PackedVector2Array = _rounded_outline(SIDE_X0, SIDE_RHO + 0.05,
+		_face_y(SIDE_BOT_REAL), _face_y(SIDE_TOP_REAL), SIDE_CORNER, SIDE_RHO)
+	var side_l: PackedVector2Array = PackedVector2Array()
+	for i in range(side_r.size() - 1, -1, -1):
+		side_l.append(Vector2(-side_r[i].x, side_r[i].y))
+	return [ws, side_l, side_r]
+
+
+## Point 3D sur l'ellipsoïde de la calotte pour (x, y_rel) frontal, décalé
+## de `lift` le long de la normale.
+static func _cap_pt(x: float, y_rel: float, z_join: float, dir_z: float, lift: float) -> Vector3:
+	var rho: float = sqrt(x * x + y_rel * y_rel)
+	var t: float = acos(clampf(rho / R_BODY, -1.0, 1.0))
+	var p: Vector3 = Vector3(x, Y_CENTER + y_rel, z_join + dir_z * CAP_LEN * sin(t))
+	return p + _cap_n(x, y_rel, dir_z) * lift
+
+
+static func _cap_n(x: float, y_rel: float, dir_z: float) -> Vector3:
+	var rho: float = sqrt(x * x + y_rel * y_rel)
+	var t: float = acos(clampf(rho / R_BODY, -1.0, 1.0))
+	return Vector3(x / (R_BODY * R_BODY), y_rel / (R_BODY * R_BODY),
+		dir_z * sin(t) / CAP_LEN).normalized()
+
+
+## Triangle orienté vers l'extérieur (normale de référence n_ref).
+static func _tri_out(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3,
+		na: Vector3, nb: Vector3, nc: Vector3) -> void:
+	var geo: Vector3 = (b - a).cross(c - a)
+	if geo.dot(na + nb + nc) >= 0.0:
+		_tri(st, a, b, c, na, nb, nc)
+	else:
+		_tri(st, a, c, b, na, nc, nb)
+
+
+## Panneau plein (vitre) : éventail depuis le centroïde avec un anneau
+## intermédiaire pour épouser la courbure.
+static func _emit_pane(st: SurfaceTool, outline: PackedVector2Array, z_join: float,
+		dir_z: float, lift: float) -> void:
+	var c: Vector2 = Vector2.ZERO
+	for q in outline:
+		c += q
+	c /= float(outline.size())
+	var n: int = outline.size()
+	var pc: Vector3 = _cap_pt(c.x, c.y, z_join, dir_z, lift)
+	var nc: Vector3 = _cap_n(c.x, c.y, dir_z)
+	for i in range(n):
+		var q0: Vector2 = outline[i]
+		var q1: Vector2 = outline[(i + 1) % n]
+		var m0: Vector2 = c.lerp(q0, 0.5)
+		var m1: Vector2 = c.lerp(q1, 0.5)
+		var p0: Vector3 = _cap_pt(q0.x, q0.y, z_join, dir_z, lift)
+		var p1: Vector3 = _cap_pt(q1.x, q1.y, z_join, dir_z, lift)
+		var pm0: Vector3 = _cap_pt(m0.x, m0.y, z_join, dir_z, lift)
+		var pm1: Vector3 = _cap_pt(m1.x, m1.y, z_join, dir_z, lift)
+		var n0: Vector3 = _cap_n(q0.x, q0.y, dir_z)
+		var n1: Vector3 = _cap_n(q1.x, q1.y, dir_z)
+		var nm0: Vector3 = _cap_n(m0.x, m0.y, dir_z)
+		var nm1: Vector3 = _cap_n(m1.x, m1.y, dir_z)
+		_tri_out(st, pc, pm0, pm1, nc, nm0, nm1)
+		_tri_out(st, pm0, p0, p1, nm0, n0, n1)
+		_tri_out(st, pm0, p1, pm1, nm0, n1, nm1)
+
+
+## Bande entre deux contours (joint caoutchouc, liseré de porte).
+static func _emit_band(st: SurfaceTool, inner: PackedVector2Array, outer: PackedVector2Array,
+		z_join: float, dir_z: float, lift: float) -> void:
+	var n: int = inner.size()
+	for i in range(n):
+		var a: Vector2 = inner[i]
+		var b: Vector2 = inner[(i + 1) % n]
+		var c: Vector2 = outer[(i + 1) % n]
+		var d: Vector2 = outer[i]
+		var pa: Vector3 = _cap_pt(a.x, a.y, z_join, dir_z, lift)
+		var pb: Vector3 = _cap_pt(b.x, b.y, z_join, dir_z, lift)
+		var pcc: Vector3 = _cap_pt(c.x, c.y, z_join, dir_z, lift)
+		var pd: Vector3 = _cap_pt(d.x, d.y, z_join, dir_z, lift)
+		var na: Vector3 = _cap_n(a.x, a.y, dir_z)
+		var nb: Vector3 = _cap_n(b.x, b.y, dir_z)
+		var ncc: Vector3 = _cap_n(c.x, c.y, dir_z)
+		var nd: Vector3 = _cap_n(d.x, d.y, dir_z)
+		_tri_out(st, pa, pb, pcc, na, nb, ncc)
+		_tri_out(st, pa, pcc, pd, na, ncc, nd)
+
+
 ## z_join = abscisse du raccord au tube ; dir_z = −1 pour l'avant (pointe
-## vers −Z), +1 pour l'arrière. Pare-brise et baies en verre.
-static func _build_cap(mesh: ArrayMesh, mats: Dictionary, z_join: float, dir_z: float) -> void:
+## vers −Z), +1 pour l'arrière. Tôle jaune DÉCOUPÉE aux vitres (cellules
+## touchant une vitre retirées), joints caoutchouc qui recouvrent le
+## crénelage de la découpe, vitres lissées à fleur de tôle, liserés des
+## portes de secours ; `backboard` pose un fond sombre derrière les vitres
+## (rame 2 : pas d'intérieur modélisé).
+static func _build_cap(mesh: ArrayMesh, mats: Dictionary, z_join: float, dir_z: float,
+		backboard: bool = false) -> void:
 	var st_y: SurfaceTool = SurfaceTool.new()
 	var st_g: SurfaceTool = SurfaceTool.new()
 	var st_d: SurfaceTool = SurfaceTool.new()
-	for st in [st_y, st_g, st_d]:
+	var st_r: SurfaceTool = SurfaceTool.new()
+	for st in [st_y, st_g, st_d, st_r]:
 		st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var windows: Array = _face_windows()
+	var holes: Array = []
+	for w in windows:
+		holes.append(_offset_outline(w, 0.0))
 	var n_t: int = CAP_N_T
 	var n_th: int = int(360.0 / CAP_THETA_DEG)
 	var d_th: float = TAU / float(n_th)
@@ -284,48 +453,61 @@ static func _build_cap(mesh: ArrayMesh, mats: Dictionary, z_join: float, dir_z: 
 			p.y = Y_CUT
 		return p
 	var nrm: Callable = func(theta: float, t: float) -> Vector3:
-		# normale de l'ellipsoïde (a=R_BODY radial, c=CAP_LEN axial)
 		var v: Vector3 = Vector3(sin(theta) * cos(t) / R_BODY, cos(theta) * cos(t) / R_BODY,
 			dir_z * sin(t) / CAP_LEN)
 		return v.normalized()
+	var frontal: Callable = func(theta: float, t: float) -> Vector2:
+		var r: float = R_BODY * cos(t)
+		return Vector2(r * sin(theta), r * cos(theta))
 
 	for k in range(n_t):
 		var t0: float = d_t * k
 		var t1: float = t0 + d_t
-		var tm: float = rad_to_deg(0.5 * (t0 + t1))
 		for i in range(n_th):
 			var th0: float = -PI + d_th * i
 			var th1: float = th0 + d_th
-			var thm: float = rad_to_deg(0.5 * (th0 + th1))
-			# cellule entièrement sous le fond plat → on la saute
 			var p00: Vector3 = pt.call(th0, t0)
 			var p10: Vector3 = pt.call(th1, t0)
 			var p11: Vector3 = pt.call(th1, t1)
 			var p01: Vector3 = pt.call(th0, t1)
 			if p00.y <= Y_CUT and p10.y <= Y_CUT and p11.y <= Y_CUT and p01.y <= Y_CUT:
 				continue
-			# centre de la cellule en projection frontale
-			var rm: float = R_BODY * cos(deg_to_rad(tm))
-			var cx: float = absf(rm * sin(deg_to_rad(thm)))
-			var cy: float = rm * cos(deg_to_rad(thm))       # au-dessus de l'axe
-			var glass: bool = false
-			if cx <= WS_HALF_W and cy >= WS_Y0 and cy <= WS_Y1:
-				var corner: bool = (cx > WS_HALF_W - CAP_CORNER) \
-					and (cy < WS_Y0 + CAP_CORNER or cy > WS_Y1 - CAP_CORNER)
-				glass = not corner
-			elif cx >= SIDE_X0 and cx <= SIDE_X1 and cy >= SIDE_Y0 and cy <= SIDE_Y1:
-				var corner2: bool = (cx < SIDE_X0 + CAP_CORNER or cx > SIDE_X1 - CAP_CORNER) \
-					and (cy < SIDE_Y0 + CAP_CORNER or cy > SIDE_Y1 - CAP_CORNER)
-				glass = not corner2
-			var st: SurfaceTool = st_g if glass else st_y
+			# découpe : la cellule touche-t-elle une vitre ?
+			var cut: bool = false
+			var corners: Array = [frontal.call(th0, t0), frontal.call(th1, t0),
+				frontal.call(th1, t1), frontal.call(th0, t1)]
+			for h in holes:
+				for q in corners:
+					if Geometry2D.is_point_in_polygon(q, h):
+						cut = true
+						break
+				if cut:
+					break
+			if cut:
+				continue
 			var n00: Vector3 = nrm.call(th0, t0)
 			var n10: Vector3 = nrm.call(th1, t0)
 			var n11: Vector3 = nrm.call(th1, t1)
 			var n01: Vector3 = nrm.call(th0, t1)
 			if dir_z < 0.0:
-				_quad(st, p00, p10, p11, p01, n00, n10, n11, n01)
+				_quad(st_y, p00, p10, p11, p01, n00, n10, n11, n01)
 			else:
-				_quad(st, p10, p00, p01, p11, n10, n00, n01, n11)
+				_quad(st_y, p10, p00, p01, p11, n10, n00, n01, n11)
+	# vitres, joints et liserés
+	for w in windows:
+		_emit_band(st_r, _offset_outline(w, -GASKET_IN), _offset_outline(w, GASKET_OUT),
+			z_join, dir_z, 0.010)
+		_emit_pane(st_g, _offset_outline(w, -GLASS_INSET), z_join, dir_z, 0.016)
+	for sx in [-1.0, 1.0]:
+		var door: PackedVector2Array = _rounded_outline(DOOR_X0, DOOR_RHO + 0.05,
+			Y_CUT - Y_CENTER + 0.05, _face_y(DOOR_TOP_REAL), 0.30, DOOR_RHO)
+		if sx < 0.0:
+			var m: PackedVector2Array = PackedVector2Array()
+			for i in range(door.size() - 1, -1, -1):
+				m.append(Vector2(-door[i].x, door[i].y))
+			door = m
+		_emit_band(st_r, _offset_outline(door, -0.008), _offset_outline(door, 0.008),
+			z_join, dir_z, 0.004)
 	# fond plat de la calotte
 	var xw: float = R_BODY * sin(_theta_cut())
 	var z_far: float = z_join + dir_z * CAP_LEN * 0.62
@@ -335,8 +517,12 @@ static func _build_cap(mesh: ArrayMesh, mats: Dictionary, z_join: float, dir_z: 
 	else:
 		_quad_flat(st_d, Vector3(-xw, Y_CUT, z_join), Vector3(-xw * 0.8, Y_CUT, z_far),
 			Vector3(xw * 0.8, Y_CUT, z_far), Vector3(xw, Y_CUT, z_join))
+	# fond sombre derrière les vitres (rame sans intérieur)
+	if backboard:
+		_build_end_disc(mesh, mats["dark"], z_join + dir_z * 0.12, dir_z, R_BODY - 0.04)
 	st_y.set_material(mats["yellow"]); st_y.commit(mesh)
 	st_d.set_material(mats["dark"]); st_d.commit(mesh)
+	st_r.set_material(mats["rubber"]); st_r.commit(mesh)
 	st_g.set_material(mats["glass"]); st_g.commit(mesh)
 
 
@@ -384,38 +570,40 @@ static func _disc(parent: Node3D, mat: StandardMaterial3D, r: float, thick: floa
 static func _build_cap_fittings(parent: Node3D, mats: Dictionary, z_join: float, dir_z: float,
 		is_front: bool) -> Array:
 	var lamps: Array = []
-	var y_lamp: float = Y_CUT + 0.30
+	# feux ronds aux coins bas (réel : ±1,0 ; −1,25 → comprimé), à fleur de tôle
+	var y_lamp: float = Y_CENTER + maxf(_face_y(-1.25), Y_CUT - Y_CENTER + 0.16)
 	for sx in [-1.0, 1.0]:
-		var p: Vector3 = cap_surface_point(sx * 1.05, y_lamp, z_join, dir_z)
+		var p: Vector3 = cap_surface_point(sx * 1.02, y_lamp, z_join, dir_z)
 		p.z += dir_z * 0.03
-		var lamp: MeshInstance3D = _disc(parent, mats["lamp_off"], 0.15, 0.10, p, true,
+		var lamp: MeshInstance3D = _disc(parent, mats["lamp_off"], 0.13, 0.10, p, true,
 			"Lamp%s%s" % ["F" if is_front else "R", "L" if sx < 0.0 else "R"])
 		lamps.append(lamp)
-	# grille de ventilation / trappe d'attelage : fente noire horizontale
-	var pg: Vector3 = cap_surface_point(0.0, Y_CUT + 0.40, z_join, dir_z)
+	# grille de ventilation : fente noire horizontale entre les feux
+	var pg: Vector3 = cap_surface_point(0.0, Y_CENTER + maxf(_face_y(-1.20), Y_CUT - Y_CENTER + 0.12), z_join, dir_z)
 	pg.z += dir_z * 0.02
-	_box(parent, mats["dark"], Vector3(1.05, 0.13, 0.06), pg, "Grille")
+	_box(parent, mats["dark"], Vector3(1.10, 0.12, 0.06), pg, "Grille")
 	# lettrage « TIGNES » en lettres argentées sous le pare-brise (photos),
 	# à fleur de tôle ; Label3D regarde vers +Z par défaut → retourné à l'avant
 	var lbl: Label3D = Label3D.new()
 	lbl.text = "TIGNES"
 	lbl.font_size = 72
-	lbl.pixel_size = 0.0042
+	lbl.pixel_size = 0.0050
 	lbl.modulate = Color(0.90, 0.90, 0.93)
 	lbl.outline_modulate = Color(0.35, 0.35, 0.38)
 	lbl.outline_size = 8
 	lbl.shaded = true
 	lbl.double_sided = false
-	var pl: Vector3 = cap_surface_point(0.0, Y_CENTER - 0.02, z_join, dir_z)
+	var pl: Vector3 = cap_surface_point(0.0, Y_CENTER + _face_y(-0.84), z_join, dir_z)
 	pl.z += dir_z * 0.02
 	lbl.position = pl
 	lbl.rotation = Vector3(0.0, PI if dir_z < 0.0 else 0.0, 0.0)
 	lbl.name = "Lettrage"
 	parent.add_child(lbl)
-	# plaque « FUNICULAIRE PERCE-NEIGE » au-dessus du lettrage
-	var pp: Vector3 = cap_surface_point(0.0, Y_CENTER + 0.30, z_join, dir_z)
-	pp.z += dir_z * 0.015
-	_box(parent, mats["letters"], Vector3(0.42, 0.12, 0.02), pp, "Plaque")
+	# plaque « FUNICULAIRE PERCE NEIGE 1 » : DANS le pare-brise, en bas au
+	# centre (derrière la vitre, comme sur la photo)
+	var pp: Vector3 = cap_surface_point(0.0, Y_CENTER + _face_y(-0.34), z_join, dir_z)
+	pp.z += dir_z * 0.004
+	_box(parent, mats["letters"], Vector3(0.45, 0.12, 0.01), pp, "Plaque")
 	return lamps
 
 
@@ -432,7 +620,8 @@ static func _build_bogie(parent: Node3D, mats: Dictionary, z_c: float) -> void:
 
 
 ## Construit la rame complète sous `root`. Retourne {front_lamps, rear_lamps}.
-static func build_train(root: Node3D, train_length: float, car_count: int) -> Dictionary:
+static func build_train(root: Node3D, train_length: float, car_count: int,
+		backboard: bool = false) -> Dictionary:
 	var mats: Dictionary = materials()
 	var car_len: float = train_length / float(car_count)
 	var front_lamps: Array = []
@@ -450,11 +639,11 @@ static func build_train(root: Node3D, train_length: float, car_count: int) -> Di
 		var mesh: ArrayMesh = ArrayMesh.new()
 		_build_tube(mesh, mats, z_a, z_b, is_first, is_last)
 		if is_first:
-			_build_cap(mesh, mats, z_a, -1.0)
+			_build_cap(mesh, mats, z_a, -1.0, backboard)
 		else:
 			_build_end_disc(mesh, mats["rib"], z_a, -1.0, R_BODY)
 		if is_last:
-			_build_cap(mesh, mats, z_b, 1.0)
+			_build_cap(mesh, mats, z_b, 1.0, backboard)
 		else:
 			_build_end_disc(mesh, mats["rib"], z_b, 1.0, R_BODY)
 		var car: MeshInstance3D = MeshInstance3D.new()
