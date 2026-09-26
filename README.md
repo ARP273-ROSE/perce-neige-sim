@@ -14,6 +14,11 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 
 ## Quoi de neuf — v1.13.x (audit physique des voyages, 26 septembre 2026)
 
+**v1.14.2** — galets du câble dans les virages : ce n'est plus l'axe de
+la paire qui penche (un galet finissait plus haut que l'autre) — le
+**support reste horizontal** et **chaque galet est incliné dans son
+support**, les deux à la même hauteur, comme en vrai.
+
 **v1.14.1** — retours d'essai : l'escalier du tunnel n'a **pas de rambarde**
 (potelets et câble retirés, `walkway_handrail` pour les remettre) ; les
 **portes s'ouvrent des deux côtés** en gare.
