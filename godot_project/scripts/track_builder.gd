@@ -599,6 +599,7 @@ func _build_sleepers() -> void:
 @export var walkway_x: float = 1.02          # décalage latéral du milieu de l'escalier
 @export var walkway_step_s: float = 0.45     # espacement des marches le long de s
 @export var walkway_post_s: float = 3.0      # espacement des potelets
+@export var walkway_handrail: bool = false   # pas de rambarde sur le vrai escalier
 
 
 func _walkway_frame(s: float) -> Transform3D:
@@ -685,8 +686,11 @@ func _build_walkway() -> void:
 		s += walkway_post_s
 	_mm_instance(tread, treads, "WalkwayTreads")
 	_mm_instance(stringer, stringers, "WalkwayStringers")
-	_mm_instance(post, posts, "WalkwayPosts")
-	_mm_instance(cable, cables, "WalkwayHandCable")
+	# Pas de rambarde (retour d'essai 2026-09-26) : potelets et câble
+	# main-courante calculés mais non posés, gardés pour un éventuel retour.
+	if walkway_handrail:
+		_mm_instance(post, posts, "WalkwayPosts")
+		_mm_instance(cable, cables, "WalkwayHandCable")
 	# boîtiers sur le mur gauche (côté des câbles), tous les 24 m
 	var boxm: BoxMesh = BoxMesh.new()
 	boxm.size = Vector3(0.12, 0.20, 0.26)

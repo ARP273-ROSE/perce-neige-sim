@@ -14,6 +14,10 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 
 ## Quoi de neuf — v1.13.x (audit physique des voyages, 26 septembre 2026)
 
+**v1.14.1** — retours d'essai : l'escalier du tunnel n'a **pas de rambarde**
+(potelets et câble retirés, `walkway_handrail` pour les remettre) ; les
+**portes s'ouvrent des deux côtés** en gare.
+
 **v1.14.0** — portes qui coulissent, escalier du tunnel, poste enrichi :
 - **Portes coulissantes animées** : chaque vantail est une pièce séparée
   (cerceau sous 54° depuis le sommet, hublot compris) qui se **déboîte
