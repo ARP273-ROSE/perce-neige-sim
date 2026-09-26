@@ -14,6 +14,21 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 
 ## Quoi de neuf — v1.13.x (audit physique des voyages, 26 septembre 2026)
 
+**v1.15.0** — le tunnel d'après les vidéos cabine (2026-04-26 et HD) :
+- **Anneaux de voussoirs** de la section au tunnelier (257 → 3 420 m) :
+  joints circulaires tous les 1,4 m et joints longitudinaux en quinconce,
+  comme les bagues visibles sur toute la vidéo.
+- **Galets blancs** : les galets du câble sont en polymère clair, la chose
+  la plus visible du tunnel — ils étaient en fonte sombre.
+- **Canalisation grise en voûte, côté droit**, et **joints horizontaux des
+  banches** dans la galerie carrée de Val Claret.
+- **Évitement Abt** : grandes **poulies horizontales orange** de renvoi du
+  câble aux deux fourchements (hd_278), plaques de cœur de croisement (les
+  roues extérieures à double boudin guident, les intérieures sont plates
+  et franchissent le cœur ; le câble du véhicule opposé passe dans un trou
+  de la voie intérieure — dossier remontees-mecaniques.net), réglettes
+  lumineuses supplémentaires dans la chambre. Tout en MultiMesh.
+
 **v1.14.4** — galets plus inclinés, gares détaillées :
 - **Galets** : inclinaison dans les virages doublée (× 8 au lieu de × 4,
   plafond 32° au lieu de 15°).

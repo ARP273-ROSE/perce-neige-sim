@@ -106,6 +106,7 @@ func build(t: TunnelBuilder) -> void:
 	_build_rails()
 	_build_sleepers()
 	_build_walkway()
+	_build_tunnel_details()
 	_build_cable_beam()
 	_build_guides()
 	_build_cable()
@@ -719,6 +720,166 @@ func _build_walkway() -> void:
 
 
 # ---------------------------------------------------------------------------
+# Détails du tunnel d'après les vidéos cabine (2026-04-26 et HD) :
+#  - section au tunnelier (257 → 3 420 m) : ANNEAUX DE VOUSSOIRS, joints
+#    circulaires tous les 1,4 m et joints longitudinaux en quinconce ;
+#    canalisation grise en voûte, côté droit ;
+#  - galeries carrées (tranchée couverte) : joints horizontaux des banches ;
+#  - évitement Abt : grandes POULIES HORIZONTALES ORANGE de renvoi du câble
+#    aux fourchements (hd_278), plaques de cœur de croisement (les roues
+#    extérieures à double boudin guident, les intérieures sont plates et
+#    passent le cœur ; « le câble du véhicule opposé passe dans un trou
+#    ménagé dans la voie intérieure », dossier remontees-mecaniques.net),
+#    réglettes lumineuses supplémentaires (la chambre est bien éclairée).
+# Tout en MultiMesh.
+# ---------------------------------------------------------------------------
+
+@export var ring_joint_spacing: float = 1.4
+
+
+func _in_loop_zone(s: float) -> bool:
+	return s >= PNConstants.PASSING_START - 60.0 and s <= PNConstants.PASSING_END + 60.0
+
+
+func _build_tunnel_details() -> void:
+	var joint_mat: StandardMaterial3D = StandardMaterial3D.new()
+	joint_mat.albedo_color = Color(0.22, 0.22, 0.21)
+	joint_mat.roughness = 0.9
+	var pipe_mat: StandardMaterial3D = StandardMaterial3D.new()
+	pipe_mat.albedo_color = Color(0.55, 0.56, 0.55)
+	pipe_mat.roughness = 0.5
+	pipe_mat.metallic = 0.4
+	var orange: StandardMaterial3D = StandardMaterial3D.new()
+	orange.albedo_color = Color(0.90, 0.42, 0.08)
+	orange.roughness = 0.5
+	orange.metallic = 0.3
+	var frog_mat: StandardMaterial3D = StandardMaterial3D.new()
+	frog_mat.albedo_color = Color(0.20, 0.20, 0.22)
+	frog_mat.roughness = 0.45
+	frog_mat.metallic = 0.8
+	var lamp_mat: StandardMaterial3D = StandardMaterial3D.new()
+	lamp_mat.albedo_color = Color(0.9, 0.95, 1.0)
+	lamp_mat.emission_enabled = true
+	lamp_mat.emission = Color(0.75, 0.85, 1.0)
+	lamp_mat.emission_energy_multiplier = 3.0
+	lamp_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+
+	# --- anneaux de voussoirs (section circulaire, hors évitement)
+	var ring: TorusMesh = TorusMesh.new()
+	ring.inner_radius = tunnel.tunnel_radius - 0.035
+	ring.outer_radius = tunnel.tunnel_radius + 0.005
+	ring.rings = 40
+	ring.ring_segments = 6
+	ring.material = joint_mat
+	var seg: BoxMesh = BoxMesh.new()
+	seg.size = Vector3(0.03, 0.03, ring_joint_spacing - 0.04)
+	seg.material = joint_mat
+	var rings: Array = []
+	var segs: Array = []
+	var s: float = PNConstants.SQUARE_SECTION_LOW_END + 0.7
+	var k: int = 0
+	while s < PNConstants.SQUARE_SECTION_HIGH_START:
+		if not _in_loop_zone(s):
+			var xf: Transform3D = tunnel.transform_at(s)
+			var tangent: Vector3 = -xf.basis.z
+			# TorusMesh a son axe en Y → axe le long de la voie
+			var rb: Basis = Basis(xf.basis.x, tangent, -xf.basis.y)
+			rings.append(Transform3D(rb, xf.origin))
+			# joints longitudinaux en quinconce, 4 par anneau, hors radier
+			var base_deg: float = 22.5 if (k % 2 == 0) else 67.5
+			var xf_mid: Transform3D = tunnel.transform_at(s + ring_joint_spacing * 0.5)
+			for q in range(4):
+				var a: float = deg_to_rad(base_deg + 90.0 * float(q))
+				if absf(fmod(rad_to_deg(a) + 180.0, 360.0) - 180.0) > 125.0:
+					continue
+				var tr: Transform3D = xf_mid
+				tr.origin += xf_mid.basis.x * ((tunnel.tunnel_radius - 0.015) * sin(a)) \
+					+ xf_mid.basis.y * ((tunnel.tunnel_radius - 0.015) * cos(a))
+				segs.append(tr)
+		s += ring_joint_spacing
+		k += 1
+	_mm_instance(ring, rings, "SegmentRings")
+	_mm_instance(seg, segs, "SegmentJoints")
+
+	# --- canalisation en voûte à droite (section circulaire, hors évitement)
+	var pipe: BoxMesh = BoxMesh.new()
+	pipe.size = Vector3(0.07, 0.07, 4.06)
+	pipe.material = pipe_mat
+	var pipes: Array = []
+	s = PNConstants.SQUARE_SECTION_LOW_END + 2.0
+	while s < PNConstants.SQUARE_SECTION_HIGH_START - 2.0:
+		if not _in_loop_zone(s):
+			var xf2: Transform3D = tunnel.transform_at(s)
+			var tr2: Transform3D = xf2
+			var rr: float = tunnel.tunnel_radius - 0.06
+			tr2.origin += xf2.basis.x * (rr * sin(deg_to_rad(42.0))) + xf2.basis.y * (rr * cos(deg_to_rad(42.0)))
+			pipes.append(tr2)
+		s += 4.0
+	_mm_instance(pipe, pipes, "CrownPipe")
+
+	# --- joints horizontaux des galeries carrées (banches), hors salles de gare
+	var hj: BoxMesh = BoxMesh.new()
+	hj.size = Vector3(0.025, 0.025, 3.02)
+	hj.material = joint_mat
+	var hjs: Array = []
+	for rng in [[tunnel.station_low_end + 3.0, PNConstants.SQUARE_SECTION_LOW_END - 1.0]]:
+		s = rng[0]
+		while s < rng[1]:
+			var xf3: Transform3D = tunnel.transform_at(s)
+			for sx in [-1.0, 1.0]:
+				for yy in [-0.9, 0.1, 1.1]:
+					var tr3: Transform3D = xf3
+					tr3.origin += xf3.basis.x * (sx * (tunnel.horseshoe_half_width - 0.02)) + xf3.basis.y * yy
+					hjs.append(tr3)
+			s += 3.0
+	_mm_instance(hj, hjs, "GalleryJoints")
+
+	# --- évitement Abt : poulies horizontales orange, cœurs, réglettes
+	var fork_ds: float = _beam_fork_ds()
+	var s_lo: float = PNConstants.PASSING_START + fork_ds
+	var s_hi: float = PNConstants.PASSING_END - fork_ds
+	var sheave: CylinderMesh = CylinderMesh.new()
+	sheave.top_radius = 0.45
+	sheave.bottom_radius = 0.45
+	sheave.height = 0.10
+	sheave.radial_segments = 24
+	sheave.material = orange
+	var sheaves: Array = []
+	var y_tr: float = floor_y_local + slab_thickness + cable_beam_height + 0.22
+	for sf in [s_lo - 2.5, s_hi + 2.5]:
+		for sx in [-0.55, 0.55]:
+			var xf4: Transform3D = tunnel.transform_at(sf)
+			var tr4: Transform3D = xf4
+			tr4.origin += xf4.basis.x * sx + xf4.basis.y * y_tr
+			sheaves.append(tr4)
+	_mm_instance(sheave, sheaves, "LoopSheaves")
+	var frog: BoxMesh = BoxMesh.new()
+	frog.size = Vector3(0.55, 0.03, 2.0)
+	frog.material = frog_mat
+	var frogs: Array = []
+	for sf in [s_lo + 1.0, s_hi - 1.0]:
+		var xf5: Transform3D = tunnel.transform_at(sf)
+		var tr5: Transform3D = xf5
+		tr5.origin += xf5.basis.y * (floor_y_local + slab_thickness + sleeper_height + rail_height - 0.06)
+		frogs.append(tr5)
+	_mm_instance(frog, frogs, "AbtFrogs")
+	var lamp: BoxMesh = BoxMesh.new()
+	lamp.size = Vector3(0.09, 0.09, 1.25)
+	lamp.material = lamp_mat
+	var lamps: Array = []
+	s = PNConstants.PASSING_START - 40.0
+	while s < PNConstants.PASSING_END + 40.0:
+		var xf6: Transform3D = tunnel.transform_at(s)
+		for side in [-1.0, 1.0]:
+			var off: float = _track_center_x(s, side)
+			var tr6: Transform3D = xf6
+			tr6.origin += xf6.basis.x * (off + side * 1.45) + xf6.basis.y * 1.15
+			lamps.append(tr6)
+		s += 8.0
+	_mm_instance(lamp, lamps, "LoopLamps")
+
+
+# ---------------------------------------------------------------------------
 # Longrine centrale continue — support des galets du câble tracteur.
 # Sur les photos du vrai funiculaire, l'espace entre les deux rails est
 # occupé par un support béton/acier CONTINU sur lequel sont fixés les
@@ -906,7 +1067,13 @@ func _build_guides() -> void:
 	pulley_mesh.height = pulley_thickness
 	pulley_mesh.radial_segments = 20
 	pulley_mesh.rings = 1
-	pulley_mesh.material = iron_mat
+	# Galets en polymère BLANC (vidéo cabine du 2026-04-26 : ils sont la
+	# chose la plus claire du tunnel), pas en fonte sombre.
+	var poly_mat: StandardMaterial3D = StandardMaterial3D.new()
+	poly_mat.albedo_color = Color(0.86, 0.86, 0.82)
+	poly_mat.roughness = 0.55
+	poly_mat.metallic = 0.05
+	pulley_mesh.material = poly_mat
 
 	# --- Axe central visible entre les 2 poulies (petit cylindre) --------
 	var axle_mesh: CylinderMesh = CylinderMesh.new()
