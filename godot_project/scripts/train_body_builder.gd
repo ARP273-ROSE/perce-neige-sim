@@ -336,7 +336,25 @@ static func _build_tube(mesh: ArrayMesh, mats: Dictionary, z_a: float, z_b: floa
 				(d["glass"] as SurfaceTool).set_material(mats["glass"]); (d["glass"] as SurfaceTool).commit(lm)
 				leaves.append({"mesh": lm, "side": sx, "z_c": z0c + plen * 0.5})
 	if inner:
+		# joints sombres intérieurs autour des hublots (doublure)
+		var st_ri2: SurfaceTool = SurfaceTool.new()
+		st_ri2.begin(Mesh.PRIMITIVE_TRIANGLES)
+		for col2 in cols:
+			var kind2: String = col2["kind"]
+			if kind2 != "win" and kind2 != "door":
+				continue
+			var z0c2: float = col2["z0"]
+			var plen2: float = col2["z1"] - z0c2
+			var hole2: PackedVector2Array = _window_outline(plen2, kind2)
+			for sx in [-1.0, 1.0]:
+				var pt_i: Callable = func(u: float, w: float, lift: float) -> Vector3:
+					return _tube_pt(sx * w / R_BODY, R_BODY - 0.05 + lift, z0c2 + u)
+				var n_i: Callable = func(_u: float, w: float) -> Vector3:
+					return _tube_uw_n(w, sx)
+				_emit_band(st_ri2, _offset_outline(hole2, -TUBE_GASKET_IN),
+					_offset_outline(hole2, 0.12), pt_i, n_i, -0.012)
 		st_body.set_material(mats["lining"]); st_body.commit(mesh)
+		st_ri2.set_material(mats["rubber"]); st_ri2.commit(mesh)
 		return
 	# Fond plat (châssis) entre les échancrures, et plafond des échancrures
 	var xw: float = R_BODY * sin(th_cut)
@@ -470,10 +488,11 @@ static func _face_doors() -> Array:
 
 ## Point 3D sur l'ellipsoïde de la calotte pour (x, y_rel) frontal, décalé
 ## de `lift` le long de la normale.
-static func _cap_pt(x: float, y_rel: float, z_join: float, dir_z: float, lift: float) -> Vector3:
+static func _cap_pt(x: float, y_rel: float, z_join: float, dir_z: float, lift: float,
+		r: float = R_BODY, l: float = CAP_LEN) -> Vector3:
 	var rho: float = sqrt(x * x + y_rel * y_rel)
-	var t: float = acos(clampf(rho / R_BODY, -1.0, 1.0))
-	var p: Vector3 = Vector3(x, Y_CENTER + y_rel, z_join + dir_z * CAP_LEN * sin(t))
+	var t: float = acos(clampf(rho / r, -1.0, 1.0))
+	var p: Vector3 = Vector3(x, Y_CENTER + y_rel, z_join + dir_z * l * sin(t))
 	return p + _cap_n(x, y_rel, dir_z) * lift
 
 
@@ -618,7 +637,20 @@ static func _build_cap(mesh: ArrayMesh, mats: Dictionary, z_join: float, dir_z: 
 			else:
 				_quad(st_y, p10, p00, p01, p11, n10, n00, n01, n11)
 	if inner:
+		# joint sombre INTÉRIEUR autour du pare-brise : il recouvre le crénelage
+		# de la découpe, vu à bout portant par le conducteur (retour d'essai
+		# 2026-09-26 : « c'est pixelisé le bord »)
+		var st_ri: SurfaceTool = SurfaceTool.new()
+		st_ri.begin(Mesh.PRIMITIVE_TRIANGLES)
+		var pt_in: Callable = func(x: float, y_rel: float, lift: float) -> Vector3:
+			return _cap_pt(x, y_rel, z_join, dir_z, lift, r_cap, l_cap)
+		var n_in: Callable = func(x: float, y_rel: float) -> Vector3:
+			return _cap_n(x, y_rel, dir_z)
+		for w in windows:
+			_emit_band(st_ri, _offset_outline(w, -GASKET_IN), _offset_outline(w, 0.11),
+				pt_in, n_in, -0.012)
 		st_y.set_material(mats["lining"]); st_y.commit(mesh)
+		st_ri.set_material(mats["rubber"]); st_ri.commit(mesh)
 		return
 	# pare-brise : joint + vitre ; portes d'évacuation : liseré sombre seul
 	var pt_fn: Callable = func(x: float, y_rel: float, lift: float) -> Vector3:

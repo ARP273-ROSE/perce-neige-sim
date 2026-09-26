@@ -14,6 +14,14 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 
 ## Quoi de neuf — v1.13.x (audit physique des voyages, 26 septembre 2026)
 
+**v1.15.2** — champ de vision du cockpit : la caméra était à 2,3 m
+derrière un pare-brise de 1,4 m (22° de champ, « la vitre est trop
+petite ») ; elle passe à ~1,8 m de la vitre avec le pupitre contre son bas
+comme sur la photo 095119 (moniteur, siège, plancher, plafond, mains
+courantes suivent), champ vertical 78°. **Joints noirs intérieurs** sur la
+doublure autour du pare-brise et des hublots : ils recouvrent le crénelage
+des découpes, vu de près (« c'est pixelisé le bord »).
+
 **v1.15.1** — pas de fosse en haut, seulement en bas (retour d'essai) : la
 dalle, les blochets et l'escalier vont jusqu'au bout à Grande Motte,
 butoirs bleus seuls.
