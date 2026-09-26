@@ -14,6 +14,22 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 
 ## Quoi de neuf — v1.13.x (audit physique des voyages, 26 septembre 2026)
 
+**v1.13.3** — la face avant, emblématique, refaite aux cotes de la photo
+(`sons/photos/20260426_095511.jpg`, 220 px/m) :
+- **Pare-brise de 1,40 m de large** presque carré, du haut de la calotte
+  jusqu'à l'axe, avec la plaque « FUNICULAIRE PERCE NEIGE 1 » dedans en bas ;
+  **deux baies de portes de secours hautes et étroites contre la lisière**
+  (bord extérieur en D suivant la calotte) ; liserés des portes ;
+  « TIGNES » sous le pare-brise, grille et feux ronds tout en bas.
+- Les vitres ne sont plus des cellules de la grille polaire (bords en
+  escalier) : contours échantillonnés finement (rectangles arrondis /
+  D), tôle **découpée** aux vitres, **joints caoutchouc noirs** qui
+  recouvrent la découpe, vitres lissées posées à fleur de tôle. La rame 2,
+  sans intérieur, a un fond sombre derrière ses vitres.
+- La face réelle mesure 3,1 m de haut (apex → fond plat) ; celle du jeu
+  n'en a que 2,43 (voie plus haute dans le tube) : les cotes verticales sont
+  comprimées de 0,78 depuis l'apex, les largeurs conservées.
+
 **v1.13.2** — des rames réalistes en 3D (PWA et vue F4 du PC), d'après les
 photos du 26 avril 2026 (`sons/photos`) :
 - L'ancienne cabine était un **cylindre jaune Ø 3,40 m centré 15 cm sous

@@ -76,6 +76,14 @@ def main():
     fig.tight_layout()
     fig.savefig(sys.argv[2], dpi=110)
     print("rendu →", sys.argv[2])
+    # face seule, en grand (la face avant est emblématique)
+    if len(sys.argv) > 3:
+        fig2, ax2 = plt.subplots(figsize=(8, 7), facecolor="#101418")
+        vue(ax2, tris, cols, alphas, R_face, light, "face avant", ((-2.0, 2.0), (-1.0, 2.2)))
+        ax2.grid(alpha=0.15)
+        fig2.tight_layout()
+        fig2.savefig(sys.argv[3], dpi=120)
+        print("face →", sys.argv[3])
 
 
 if __name__ == "__main__":
