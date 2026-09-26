@@ -108,6 +108,12 @@ static func materials() -> Dictionary:
 	glass.emission_enabled = true
 	glass.emission = Color(0.55, 0.50, 0.38)
 	glass.emission_energy_multiplier = 0.35
+	# pare-brise de la cabine pilotée : quasi clair (vu de l'intérieur)
+	var windshield: StandardMaterial3D = StandardMaterial3D.new()
+	windshield.albedo_color = Color(0.75, 0.80, 0.86, 0.16)
+	windshield.roughness = 0.05
+	windshield.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	windshield.cull_mode = BaseMaterial3D.CULL_DISABLED
 	var lamp_off: StandardMaterial3D = _mat(Color(0.12, 0.12, 0.12), 0.35, 0.2)
 	var lamp_on: StandardMaterial3D = _mat(Color(1.0, 0.97, 0.85), 0.2, 0.0)
 	lamp_on.emission_enabled = true
@@ -131,6 +137,8 @@ static func materials() -> Dictionary:
 		"lamp_on": lamp_on,
 		"tail_on": tail_on,
 		"letters": _mat(Color(0.92, 0.92, 0.94), 0.45, 0.30),
+		"lining": _mat(Color(0.82, 0.79, 0.72), 0.80, 0.05),     # habillage intérieur crème
+		"windshield": windshield,
 	}
 
 
@@ -225,9 +233,11 @@ static func _tube_uw_n(w: float, sx: float) -> Vector3:
 
 ## `leaves` reçoit les vantaux coulissants : {mesh, side, z_c} (géométrie
 ## en repère voiture, à poser dans un MeshInstance3D animé par cabin.gd).
+## `inner` : DOUBLURE intérieure (rayon − 5 cm, crème), percée aux hublots
+## et aux baies de portes, sans joints ni vitres — ce que voit le passager.
 static func _build_tube(mesh: ArrayMesh, mats: Dictionary, z_a: float, z_b: float,
 		yellow_a: bool = false, yellow_b: bool = false, wells: Array = [],
-		leaves: Array = []) -> void:
+		leaves: Array = [], inner: bool = false) -> void:
 	var th_cut: float = _theta_cut()
 	var n_th: int = int(ceil(2.0 * rad_to_deg(th_cut) / D_THETA_DEG))
 	var d_th: float = 2.0 * th_cut / float(n_th)
@@ -258,7 +268,7 @@ static func _build_tube(mesh: ArrayMesh, mats: Dictionary, z_a: float, z_b: floa
 		# vantail coulissant : cellules sous DOOR_TOP_T, par côté, dans leurs
 		# propres surfaces (le haut du cerceau reste solidaire de la caisse)
 		var leaf_st: Dictionary = {}
-		if kind == "door":
+		if kind == "door" and not inner:
 			for sx in [-1.0, 1.0]:
 				var stb: SurfaceTool = SurfaceTool.new()
 				var stg: SurfaceTool = SurfaceTool.new()
@@ -267,7 +277,7 @@ static func _build_tube(mesh: ArrayMesh, mats: Dictionary, z_a: float, z_b: floa
 				stg.begin(Mesh.PRIMITIVE_TRIANGLES)
 				str_.begin(Mesh.PRIMITIVE_TRIANGLES)
 				leaf_st[sx] = {"body": stb, "glass": stg, "rubber": str_}
-		var r: float = R_BODY + (RIB_H if kind == "rib" else 0.0)
+		var r: float = (R_BODY - 0.05) if inner else R_BODY + (RIB_H if kind == "rib" else 0.0)
 		var n_sub: int = int(ceil(plen / COL_L)) if glazed else 1
 		var dz: float = plen / float(n_sub)
 		for j in range(n_sub):
@@ -280,7 +290,10 @@ static func _build_tube(mesh: ArrayMesh, mats: Dictionary, z_a: float, z_b: floa
 				var t1: float = t0 + d_th
 				var tm: float = 0.5 * (t0 + t1)
 				# échancrure de bogie : la jupe s'arrête au-dessus des roues
-				if Y_CENTER + r * cos(tm) < WELL_TOP and _in_well(0.5 * (z0 + z1), wells):
+				if not inner and Y_CENTER + r * cos(tm) < WELL_TOP and _in_well(0.5 * (z0 + z1), wells):
+					continue
+				# doublure : baie de porte ouverte (le vantail est une pièce à part)
+				if inner and kind == "door" and absf(tm) >= deg_to_rad(DOOR_TOP_T):
 					continue
 				# découpe du hublot : cellule dont un coin est dans le contour
 				if glazed:
@@ -294,14 +307,16 @@ static func _build_tube(mesh: ArrayMesh, mats: Dictionary, z_a: float, z_b: floa
 						continue
 				var st: SurfaceTool = st_rib if kind == "rib" else (
 					st_door if kind == "door" else (st_yellow if yellow_col else st_body))
-				if kind == "door" and absf(tm) >= deg_to_rad(DOOR_TOP_T):
+				if inner:
+					st = st_body
+				elif kind == "door" and absf(tm) >= deg_to_rad(DOOR_TOP_T):
 					st = leaf_st[signf(tm)]["body"]
 				# quad : (t0,z1) (t1,z1) (t1,z0) (t0,z0) → face vers l'extérieur
 				_quad(st, _tube_pt(t0, r, z1), _tube_pt(t1, r, z1),
 					_tube_pt(t1, r, z0), _tube_pt(t0, r, z0),
 					_tube_n(t0), _tube_n(t1), _tube_n(t1), _tube_n(t0))
 		# hublot : joint + vitre, de chaque côté (dans le vantail pour une porte)
-		if glazed:
+		if glazed and not inner:
 			for sx in [-1.0, 1.0]:
 				var pt_fn: Callable = func(u: float, w: float, lift: float) -> Vector3:
 					return _tube_uw_pt(u, w, z0c, sx, lift)
@@ -312,7 +327,7 @@ static func _build_tube(mesh: ArrayMesh, mats: Dictionary, z_a: float, z_b: floa
 				_emit_band(st_r_, _offset_outline(hole, -TUBE_GASKET_IN),
 					_offset_outline(hole, TUBE_GASKET_OUT), pt_fn, n_fn, 0.010)
 				_emit_pane(st_g_, _offset_outline(hole, -GLASS_INSET), pt_fn, n_fn, 0.016)
-		if kind == "door":
+		if kind == "door" and not inner:
 			for sx in [-1.0, 1.0]:
 				var lm: ArrayMesh = ArrayMesh.new()
 				var d: Dictionary = leaf_st[sx]
@@ -320,6 +335,9 @@ static func _build_tube(mesh: ArrayMesh, mats: Dictionary, z_a: float, z_b: floa
 				(d["rubber"] as SurfaceTool).set_material(mats["rubber"]); (d["rubber"] as SurfaceTool).commit(lm)
 				(d["glass"] as SurfaceTool).set_material(mats["glass"]); (d["glass"] as SurfaceTool).commit(lm)
 				leaves.append({"mesh": lm, "side": sx, "z_c": z0c + plen * 0.5})
+	if inner:
+		st_body.set_material(mats["lining"]); st_body.commit(mesh)
+		return
 	# Fond plat (châssis) entre les échancrures, et plafond des échancrures
 	var xw: float = R_BODY * sin(th_cut)
 	var cuts: Array = [z_a]
@@ -534,7 +552,9 @@ static func _emit_band(st: SurfaceTool, inner: PackedVector2Array, outer: Packed
 ## portes de secours ; `backboard` pose un fond sombre derrière les vitres
 ## (rame 2 : pas d'intérieur modélisé).
 static func _build_cap(mesh: ArrayMesh, mats: Dictionary, z_join: float, dir_z: float,
-		backboard: bool = false) -> void:
+		backboard: bool = false, inner: bool = false) -> void:
+	var r_cap: float = R_BODY - (0.05 if inner else 0.0)
+	var l_cap: float = CAP_LEN - (0.05 if inner else 0.0)
 	var st_y: SurfaceTool = SurfaceTool.new()
 	var st_g: SurfaceTool = SurfaceTool.new()
 	var st_d: SurfaceTool = SurfaceTool.new()
@@ -551,8 +571,8 @@ static func _build_cap(mesh: ArrayMesh, mats: Dictionary, z_join: float, dir_z: 
 	var d_t: float = (PI * 0.5) / float(n_t)
 
 	var pt: Callable = func(theta: float, t: float) -> Vector3:
-		var r: float = R_BODY * cos(t)
-		var p: Vector3 = Vector3(r * sin(theta), Y_CENTER + r * cos(theta), z_join + dir_z * CAP_LEN * sin(t))
+		var r: float = r_cap * cos(t)
+		var p: Vector3 = Vector3(r * sin(theta), Y_CENTER + r * cos(theta), z_join + dir_z * l_cap * sin(t))
 		if p.y < Y_CUT:
 			p.y = Y_CUT
 		return p
@@ -597,6 +617,9 @@ static func _build_cap(mesh: ArrayMesh, mats: Dictionary, z_join: float, dir_z: 
 				_quad(st_y, p00, p10, p11, p01, n00, n10, n11, n01)
 			else:
 				_quad(st_y, p10, p00, p01, p11, n10, n00, n01, n11)
+	if inner:
+		st_y.set_material(mats["lining"]); st_y.commit(mesh)
+		return
 	# pare-brise : joint + vitre ; portes d'évacuation : liseré sombre seul
 	var pt_fn: Callable = func(x: float, y_rel: float, lift: float) -> Vector3:
 		return _cap_pt(x, y_rel, z_join, dir_z, lift)
@@ -796,6 +819,21 @@ static func build_train(root: Node3D, train_length: float, car_count: int,
 		car.name = "Car%d" % (i + 1)
 		car.mesh = mesh
 		car_root.add_child(car)
+		if not backboard:
+			# cabine pilotée : pare-brise quasi clair (dernière surface = vitre
+			# de calotte) et DOUBLURE intérieure crème (ce que voit le conducteur)
+			if is_first or is_last:
+				car.set_surface_override_material(mesh.get_surface_count() - 1, mats["windshield"])
+			var lining: ArrayMesh = ArrayMesh.new()
+			_build_tube(lining, mats, z_a, z_b, false, false, wells, [], true)
+			if is_first:
+				_build_cap(lining, mats, z_a, -1.0, false, true)
+			if is_last:
+				_build_cap(lining, mats, z_b, 1.0, false, true)
+			var lin: MeshInstance3D = MeshInstance3D.new()
+			lin.name = "Lining%d" % (i + 1)
+			lin.mesh = lining
+			car_root.add_child(lin)
 		if is_first:
 			front_lamps = _build_cap_fittings(car_root, mats, z_a, -1.0, true)
 		if is_last:

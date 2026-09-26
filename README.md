@@ -14,6 +14,18 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 
 ## Quoi de neuf — v1.13.x (audit physique des voyages, 26 septembre 2026)
 
+**v1.14.3** — le cockpit enfin *dans* la rame :
+- En vue cabine, la coque n'était pas dessinée : on voyait le tunnel de
+  tous côtés, sans montants, sans encadrement de pare-brise, sans hublots.
+  Elle reste maintenant **visible**, avec une **doublure intérieure crème**
+  (tube et calotte, 5 cm en retrait) percée aux hublots, au pare-brise et
+  aux baies de portes — les vantaux fermés se voient de l'intérieur, les
+  hublots donnent sur le tunnel. **Pare-brise quasi clair** pour la cabine
+  pilotée (α 0,16 au lieu de 0,62).
+- **Plancher en gradins** (vidéo cabine) : un palier horizontal par
+  cerceau sur la pente moyenne de 26,5 %, contremarches alu de 35 cm ;
+  sièges, passagers, potelets et siège conducteur posés sur leur palier.
+
 **v1.14.2** — galets du câble dans les virages : ce n'est plus l'axe de
 la paire qui penche (un galet finissait plus haut que l'autre) — le
 **support reste horizontal** et **chaque galet est incliné dans son
