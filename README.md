@@ -14,6 +14,41 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 
 ## Quoi de neuf — v1.13.x (audit physique des voyages, 26 septembre 2026)
 
+**v1.13.4** — la voie descend dans le tube, la coque redevient opaque, la
+vue orbitale tourne en ligne, la puissance de redémarrage :
+- **Voie descendue de 0,50 m** (`floor_y_local` −1,85) : la table de
+  roulement est à 1,23 m sous l'axe au lieu de 0,73 — en réalité les rails
+  sont au fond de l'alésage. Quais recalés au plancher cabine (−1,10),
+  brins en salle des machines, carrosserie : fond plat à −1,16, plancher
+  intérieur 2,4 m sous le plafond, **face avant de 2,93 m** (réel 3,1 m,
+  contre 2,43 avant), hublots descendus à 0,85 m du plancher, bogies
+  visibles sous la jupe. Caméra cabine inchangée : les rails passent
+  simplement plus bas sous les yeux, comme sur les photos.
+- **« Les parois sont transparentes »** en vue extérieure (PWA) : Godot
+  tient pour face avant l'enroulement horaire, la coque était construite
+  dans l'autre sens et le culling l'effaçait vue de dehors. Triangles
+  retournés + matériaux double face.
+- **Vue orbitale figée en ligne** : un doigt posé en vue extérieure et
+  relâché en vue cabine (le bouton VUE bascule sur l'appui) restait
+  mémorisé, et tout drag suivant passait pour un pincement à deux doigts.
+  Le suivi des doigts se fait maintenant dans tous les modes.
+- **Puissance au redémarrage en pleine pente** (calcul Sage
+  `audit_physique/redemarrage_pente.sage`) : P = F·v, donc l'effort et la
+  tension sont là tout de suite mais la puissance ne peut croître qu'avec la
+  vitesse — c'est physique. Deux choses étaient discutables : le démarrage
+  doux de quai (0,12 m/s² à v = 0, calibré sur la sortie de gare filmée)
+  s'appliquait aussi en pleine voie → il ne vaut plus qu'à moins de 55 m
+  d'un terminus, ailleurs la rampe programmée de 0,30 m/s² est prise dès le
+  décollage (12 m/s en 41 s au lieu de 46) ; et l'afficheur partait de
+  0 kW alors qu'un moteur DC qui pousse à l'arrêt dissipe déjà ses pertes
+  cuivre (4 % du nominal au courant nominal, ∝ F²) et son excitation
+  (15 kW) → il part maintenant de ~60 kW au décollage. Et surtout le
+  régulateur n'avait **pas de feed-forward positif** de la rampe de
+  consigne : seul le terme proportionnel accélérait (constante de temps
+  ≈ 3 s, 0,40 m/s à 3 s au lieu de 0,8). Ajouté, avec une **pré-tension**
+  (couple statique posé avant que le tambour ne lâche — la rame reculait
+  de 2 cm au décollage en pente). PC et PWA.
+
 **v1.13.3** — la face avant, emblématique, refaite aux cotes de la photo
 (`sons/photos/20260426_095511.jpg`, 220 px/m) :
 - **Pare-brise de 1,40 m de large** presque carré, du haut de la calotte

@@ -753,6 +753,8 @@ func _handle_continuous_input(delta: float) -> void:
 
 	if Input.is_action_just_pressed("toggle_view"):
 		cabin.toggle_view()
+		_orbit_touches.clear()   # plus de doigt fantôme d'une vue à l'autre
+		_orbit_pinch_dist = 0.0
 
 
 # Caméra orbitale (vue extérieure) : suivi des doigts pour le pincement.
@@ -794,6 +796,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			# Bascule FPV ↔ extérieure orbitale (aussi pilotée par la
 			# touche O du sim PC via le state dict "ext_view").
 			cabin.toggle_view()
+		_orbit_touches.clear()   # plus de doigt fantôme d'une vue à l'autre
+		_orbit_pinch_dist = 0.0
 
 
 # --- Caméra orbitale : drag 1 doigt = angle, pincement = zoom, clic
@@ -803,15 +807,23 @@ func _unhandled_input(event: InputEvent) -> void:
 # Actif uniquement en vue EXTÉRIEURE ; les taps sur les boutons tactiles
 # restent fonctionnels (on ne consomme pas l'événement).
 func _input(event: InputEvent) -> void:
-	if cabin == null or cabin.view_mode != cabin.ViewMode.EXTERIOR:
+	if cabin == null:
 		return
+	# 🔴 Le suivi des doigts se fait dans TOUS les modes de vue. Un doigt posé
+	# en vue extérieure et relâché en vue cabine — le bouton VUE lui-même,
+	# qui bascule sur l'appui — restait mémorisé : le drag suivant passait
+	# pour un pincement à deux doigts et ne tournait plus rien (« en gare ça
+	# tourne, en ligne plus possible », retour 2026-09-26).
 	if event is InputEventScreenTouch:
 		if event.pressed:
 			_orbit_touches[event.index] = event.position
 		else:
 			_orbit_touches.erase(event.index)
 		_orbit_pinch_dist = 0.0
-	elif event is InputEventScreenDrag:
+		return
+	if cabin.view_mode != cabin.ViewMode.EXTERIOR:
+		return
+	if event is InputEventScreenDrag:
 		_orbit_touches[event.index] = event.position
 		if _orbit_touches.size() == 1:
 			cabin.orbit_rotate(event.relative.x, event.relative.y)

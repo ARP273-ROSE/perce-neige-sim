@@ -77,6 +77,7 @@ var trip_time: float = 0.0
 var finished: bool = false
 var dbg_f_grav_net: float = 0.0          # dernière gravité nette (banc de parité)
 var _reg_hold: bool = true               # régulateur en maintien à l'arrêt
+var _pretensioned: bool = false          # couple statique posé au décollage
 
 # --- Rebond élastique du câble à l'arrêt (port du Python _cable_bounce) --
 # x(t) = A·e^(−ζωt)·sin(ωt) avec k = EA/L (L = câble entre la rame et la
@@ -487,9 +488,17 @@ func step(dt: float) -> void:
 	var braking_cmd: bool = brake >= 0.05 or regen_level >= 0.05
 	if not emergency:
 		var v_abs: float = absf(v)
-		var soft_cap: float = PNConstants.A_START + \
-			(PNConstants.A_MAX_REG - PNConstants.A_START) * \
-			minf(1.0, v_abs / PNConstants.V_SOFT_RAMP)
+		# Démarrage doux (creep de quai, calibré vidéo) SEULEMENT près d'un
+		# terminus : en pleine voie, un redémarrage prend la rampe programmée
+		# dès le décollage (2026-09-26 : « la puissance monte très
+		# progressivement en pleine pente »).
+		var pres_quai: bool = s < PNConstants.START_S + PNConstants.PLATFORM_LEN + 20.0 \
+			or s > PNConstants.STOP_S - PNConstants.PLATFORM_LEN - 20.0
+		var soft_cap: float = PNConstants.A_MAX_REG
+		if pres_quai:
+			soft_cap = PNConstants.A_START + \
+				(PNConstants.A_MAX_REG - PNConstants.A_START) * \
+				minf(1.0, v_abs / PNConstants.V_SOFT_RAMP)
 		# Mode DÉFI : le cap de confort au lancement est LEVÉ — moteur à
 		# fond, la rame peut réellement s'emballer.
 		if acc > soft_cap and not challenge_mode:
@@ -701,8 +710,16 @@ func step(dt: float) -> void:
 	# récupérée = |F·v|·0,80 (roue → machine DC → réseau ; ~30 kWh par
 	# descente pleine/vide, modèle sans chiffre publié). Vraie force du modèle désormais, plus une
 	# heuristique — le frein de service reste à ~0 % en marche normale.
-	# Puissance ÉLECTRIQUE : mécanique / rendement (audit 2026-09-26).
+	# Puissance ÉLECTRIQUE : mécanique / rendement (audit 2026-09-26) +
+	# PERTES du drive dès qu'il pousse : cuivre ∝ F² (4 % du nominal au
+	# courant nominal) et excitation. Au décollage en pente, le couple est
+	# là avant la vitesse : l'afficheur ne part plus de zéro.
 	power_kw = maxf(0.0, (f_motor * v) / PNConstants.DRIVE_EFF / 1000.0)
+	if trip_started and not drive_off and f_motor * float(direction) > 0.0:
+		var f_rated: float = PNConstants.P_MAX / PNConstants.V_MAX
+		power_kw += PNConstants.DRIVE_FIELD_KW \
+			+ PNConstants.DRIVE_CU_LOSS_FRAC * PNConstants.P_MAX / 1000.0 \
+				* pow(absf(f_motor) / f_rated, 2.0)
 	regen_kw = absf(f_regen * v) * PNConstants.REGEN_EFF / 1000.0
 
 	# Lissage affichage (EMA τ ≈ 0.3 s)
@@ -941,6 +958,14 @@ func _regulator(
 	# sous la gravité dans le sens de la rame la plus lourde. C'est le rôle
 	# du frein manuel / du tambour. Réduire la consigne (> 0) freine
 	# toujours par la retenue de l'entraînement (branche else).
+	# PRÉ-TENSION (2026-09-26) : couple statique posé avant que le tambour
+	# ne lâche (sinon recul de 2 cm au décollage en pente).
+	if trip_started and not _pretensioned:
+		_pretensioned = true
+		if f_ff > 0.0 and not manual_brake_held:
+			throttle = maxf(throttle, minf(1.0, f_ff / maxf(f_motor_max, 1.0)))
+	elif not trip_started:
+		_pretensioned = false
 	var chaos_hold: bool = challenge_mode
 	_reg_hold = not chaos_hold and target_v < 0.01 and v_travel < 0.4
 	if manual_brake_held:
@@ -976,7 +1001,10 @@ func _regulator(
 		# gare haute 2026-07-24).
 		var setpoint_binding: bool = (speed_cmd_eff <= v_envelope
 			and dist_to_stop >= PNConstants.CREEP_DIST)
-		var a_ff_total: float = minf(0.0, a_cmd_ff) if setpoint_binding \
+		# Feed-forward de la rampe de consigne dans les DEUX sens (2026-09-26,
+		# comme le PC) : l'ancien minf(0, ·) laissait le seul terme P
+		# accélérer (constante de temps ≈ 3 s).
+		var a_ff_total: float = a_cmd_ff if setpoint_binding \
 			else a_ff_env
 		var a_des: float = clampf(a_ff_total + err * k_a,
 			-PNConstants.A_BRAKE_NORMAL, PNConstants.A_TARGET)

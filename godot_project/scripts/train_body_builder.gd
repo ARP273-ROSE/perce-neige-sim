@@ -11,14 +11,18 @@ extends RefCounted
 ## Repère : LOCAL cabine (origine = centre tunnel − 0,15 m, cf. cabin.gd),
 ## forward = −Z. Le tube est concentrique au tunnel (rayon 1,72 dans un
 ## alésage de 1,95) ; il est COUPÉ à Y_CUT, 7 cm au-dessus de la table de
-## roulement (rail_head local = −0,58) : plus rien ne passe sous les rails.
+## roulement (rail_head local = −1,08) : plus rien ne passe sous les rails.
 ## Le plancher intérieur (Y_FLOOR) est au niveau des quais-escaliers.
 
 const R_BODY: float = 1.72          # rayon du tube
 const Y_CENTER: float = 0.20        # axe du tube (monde +0,05)
-const Y_CUT: float = -0.51          # fond plat (monde −0,66 ; rails à −0,73)
-const Y_FLOOR: float = -0.45        # plancher intérieur
-const Y_RAIL_HEAD: float = -0.58    # table de roulement (monde −0,73)
+# Voie descendue de 0,50 m dans l'alésage (2026-09-26, floor_y_local −1,85) :
+# table de roulement à −1,23 monde = −1,08 cabine. Le fond plat est 7 cm
+# au-dessus, le plancher 6 cm plus haut ; la face avant fait alors 2,93 m
+# (réel 3,1) et le plancher est 2,4 m sous le plafond intérieur.
+const Y_CUT: float = -1.01          # fond plat (monde −1,16)
+const Y_FLOOR: float = -0.95        # plancher intérieur (monde −1,10 = quais)
+const Y_RAIL_HEAD: float = -1.08    # table de roulement (monde −1,23)
 const CAP_LEN: float = 1.00         # profondeur de la calotte bombée
 const GAP: float = 0.50             # jeu entre les deux voitures
 const RIB_W: float = 0.22           # largeur d'un anneau
@@ -30,8 +34,8 @@ const CAP_THETA_DEG: float = 2.0    # résolution angulaire de la calotte (déco
 const CAP_N_T: int = 45             # anneaux de la calotte
 const COL_L: float = 0.25           # résolution longitudinale
 # Fenêtres : angle depuis le sommet du tube (°) ; hublots hauts et étroits
-const WIN_T0: float = 24.0
-const WIN_T1: float = 76.0
+const WIN_T0: float = 28.0          # hublots : du haut de la courbe…
+const WIN_T1: float = 100.0         # … jusqu'à ~0,85 m au-dessus du plancher
 const WIN_MARGIN: float = 0.25      # marge longitudinale dans un panneau
 # Face avant (photo 20260426_095511, 220 px/m) : la face réelle va de
 # l'apex (+1,78) au fond plat (−1,33), soit 3,1 m ; dans le jeu la voie est
@@ -43,7 +47,7 @@ const WIN_MARGIN: float = 0.25      # marge longitudinale dans un panneau
 #   baies des portes de secours : hautes et étroites CONTRE la lisière
 #   (|x| ≥ 0,93 jusqu'au bord, +1,00 → −0,97) ; « TIGNES » sous le
 #   pare-brise (−0,84), grille (−1,20) et feux ronds (±1,0 ; −1,25) en bas.
-const FACE_SCALE: float = 0.78
+const FACE_SCALE: float = (R_BODY + (Y_CENTER - Y_CUT)) / 3.10   # 2,93 / 3,10
 const WS_HALF_W: float = 0.70
 const WS_TOP_REAL: float = 1.43
 const WS_BOT_REAL: float = -0.47
@@ -67,6 +71,9 @@ static func _mat(color: Color, rough: float, metal: float) -> StandardMaterial3D
 	m.roughness = rough
 	m.metallic = metal
 	m.metallic_specular = 0.5
+	# Double face : la coque reste opaque quel que soit le sens des
+	# triangles (le z-buffer garde la face la plus proche).
+	m.cull_mode = BaseMaterial3D.CULL_DISABLED
 	return m
 
 
@@ -108,11 +115,16 @@ static func materials() -> Dictionary:
 
 # --- petits outils SurfaceTool ------------------------------------------
 
+## 🔴 Godot tient pour face AVANT l'enroulement HORAIRE (vu de devant). Les
+## triangles sont construits avec (b−a)×(c−a) = normale sortante, c'est-à-dire
+## anti-horaires vus de l'extérieur : on les émet donc RETOURNÉS. Sans ça, la
+## coque était éliminée par le culling vue de dehors et l'on voyait
+## l'intérieur (« les parois sont transparentes », retour 2026-09-26).
 static func _tri(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3,
 		na: Vector3, nb: Vector3, nc: Vector3) -> void:
 	st.set_normal(na); st.add_vertex(a)
-	st.set_normal(nb); st.add_vertex(b)
 	st.set_normal(nc); st.add_vertex(c)
+	st.set_normal(nb); st.add_vertex(b)
 
 
 ## Quad a-b-c-d (sens trigonométrique vu de l'extérieur), normales lissées.
@@ -123,8 +135,10 @@ static func _quad(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, d: Vector
 
 
 static func _quad_flat(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, d: Vector3) -> void:
-	var n: Vector3 = (b - a).cross(c - a).normalized()
-	_quad(st, a, b, c, d, n, n, n, n)
+	# les appelants donnent le fond plat avec (b−a)×(c−a) vers le HAUT : la
+	# face visible est celle du dessous → ordre inversé, normale vers le bas
+	var n: Vector3 = -(b - a).cross(c - a).normalized()
+	_quad(st, a, d, c, b, n, n, n, n)
 
 
 ## Point du tube : θ depuis le sommet (rad, + vers +X), rayon r, abscisse z.
@@ -265,16 +279,16 @@ static func _build_end_disc(mesh: ArrayMesh, mat: StandardMaterial3D, z: float, 
 		var a: Vector3 = _tube_pt(t0, r, z)
 		var b: Vector3 = _tube_pt(t1, r, z)
 		if dir_z < 0.0:
-			_tri(st, c, b, a, n, n, n)
-		else:
 			_tri(st, c, a, b, n, n, n)
+		else:
+			_tri(st, c, b, a, n, n, n)
 	# triangle du fond plat
 	var a2: Vector3 = _tube_pt(-th_cut, r, z)
 	var b2: Vector3 = _tube_pt(th_cut, r, z)
 	if dir_z < 0.0:
-		_tri(st, c, a2, b2, n, n, n)
-	else:
 		_tri(st, c, b2, a2, n, n, n)
+	else:
+		_tri(st, c, a2, b2, n, n, n)
 	st.set_material(mat)
 	st.commit(mesh)
 
@@ -609,7 +623,7 @@ static func _build_cap_fittings(parent: Node3D, mats: Dictionary, z_join: float,
 
 static func _build_bogie(parent: Node3D, mats: Dictionary, z_c: float) -> void:
 	# châssis de bogie (surtout caché par le fond plat) + 4 roues
-	_box(parent, mats["dark"], Vector3(2.0, 0.10, 2.1), Vector3(0.0, Y_CUT - 0.02, z_c), "Bogie")
+	_box(parent, mats["dark"], Vector3(2.0, 0.06, 2.1), Vector3(0.0, Y_CUT - 0.01, z_c), "Bogie")
 	var y_axle: float = Y_RAIL_HEAD + 0.30
 	for sx in [-0.60, 0.60]:
 		for dz in [-0.85, 0.85]:

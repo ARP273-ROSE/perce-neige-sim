@@ -98,6 +98,8 @@ const CABLE_KG_M: float = 11.0
 const ROPE_MASS_KG: float = CABLE_KG_M * LENGTH   # ~38 t en mouvement
 const CABLE_ROLLER_C: float = 0.015      # résistance câble/galets (fraction charge normale)
 const DRIVE_EFF: float = 0.90            # réseau → jante (traction)
+const DRIVE_CU_LOSS_FRAC: float = 0.04   # pertes cuivre au courant nominal (fraction de P_MAX)
+const DRIVE_FIELD_KW: float = 15.0       # excitation + auxiliaires du drive engagé
 const REGEN_EFF: float = 0.80            # jante → réseau (génératrice)
 const AERO_BLOCKAGE: float = 0.65        # β = section bloquée / section d'air libre
 const AERO_BED_H_M: float = 0.5          # radier béton dans le tube
