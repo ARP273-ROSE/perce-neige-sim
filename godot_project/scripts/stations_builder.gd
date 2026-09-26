@@ -30,6 +30,13 @@ var lang: String = "fr"
 
 # Paramètres plateforme — offsets dans la base locale
 const FLOOR_Y_LOCAL: float = -1.60 # top dalle (cohérent avec track_builder : floor_y_local + slab_thickness = -1.85+0.25 = -1.60)
+const RAIL_HEAD_Y: float = -1.24   # table de roulement (dalle −1,60 + blochet 0,20 + rail 0,17 − 0,01)
+# Fosses (mêmes bornes que track_builder.pit_low_end / pit_high_start)
+const PIT_LOW_START: float = -4.0
+const PIT_LOW_END: float = 4.5
+const PIT_HIGH_START: float = PNConstants.LENGTH - 2.0
+const PIT_HIGH_END: float = PNConstants.LENGTH + 4.0
+const PIT_DEPTH: float = 1.0
 
 
 func build(t: TunnelBuilder) -> void:
@@ -64,6 +71,9 @@ func _build_station_low() -> void:
 	# ou l'autre selon le sens d'arrivée).
 	_build_platform(s_plat_start, s_plat_end, true, +1.0)
 	_build_platform(s_plat_start, s_plat_end, true, -1.0)
+	# Fosse sous la voie et le nez de la rame (photos 093522 / 094104) :
+	# caillebotis en fond, chaînes, et butoirs bleus à tête bois
+	_build_pit(PIT_LOW_START, PIT_LOW_END, false)
 	_build_bumper(s_bumper, true)
 	_build_ceiling_lights(s_plat_start, s_plat_end)
 
@@ -79,6 +89,9 @@ func _build_station_high() -> void:
 
 	_build_platform(s_plat_start, s_plat_end, false, +1.0)
 	_build_platform(s_plat_start, s_plat_end, false, -1.0)
+	# Fosse d'extrémité (photo 095509) : caillebotis, grandes poulies de
+	# renvoi du câble vers la machinerie, butoirs bleus à tête bois
+	_build_pit(PIT_HIGH_START, PIT_HIGH_END, true)
 	_build_bumper(s_bumper, false)
 	_build_ceiling_lights(s_plat_start, s_plat_end)
 
@@ -181,52 +194,130 @@ func _build_platform(s_start: float, s_end: float, is_low: bool, side: float = 1
 # Tampon de fin de voie — box rouge avec bandes jaunes-noires
 # ---------------------------------------------------------------------------
 
-func _build_bumper(s: float, _is_low: bool) -> void:
-	var xform: Transform3D = tunnel.transform_at(s)
-	# Corps rouge
-	var red_mat: StandardMaterial3D = StandardMaterial3D.new()
-	red_mat.albedo_color = Color(0.75, 0.18, 0.15)
-	red_mat.emission_enabled = true
-	red_mat.emission = Color(0.75, 0.18, 0.15)
-	red_mat.emission_energy_multiplier = 0.25
-	red_mat.roughness = 0.5
+## Repère de pose extrapolé au-delà des bouts de ligne (la spline est bornée).
+func _xf_at(s: float) -> Transform3D:
+	var sc: float = clampf(s, 0.0, PNConstants.LENGTH)
+	var xf: Transform3D = tunnel.transform_at(sc)
+	xf.origin += (-xf.basis.z) * (s - sc)
+	return xf
 
-	var box: BoxMesh = BoxMesh.new()
-	box.size = Vector3(bumper_width, bumper_height, bumper_thickness)
-	box.material = red_mat
 
-	var mi: MeshInstance3D = MeshInstance3D.new()
-	mi.name = "Bumper"
-	mi.mesh = box
+func _place(mi: MeshInstance3D, s: float, x: float, y: float) -> void:
+	var xf: Transform3D = _xf_at(s)
+	xf.origin += xf.basis.x * x + xf.basis.y * y
+	mi.transform = xf
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	var tr: Transform3D = xform
-	tr.origin += xform.basis.y * (FLOOR_Y_LOCAL + bumper_height * 0.5 + 0.02)
-	mi.transform = tr
 	add_child(mi)
 
-	# Bandes réfléchissantes noires (visuel signal)
-	var stripe_mat: StandardMaterial3D = StandardMaterial3D.new()
-	stripe_mat.albedo_color = Color(0.98, 0.82, 0.12)
-	stripe_mat.emission_enabled = true
-	stripe_mat.emission = Color(0.98, 0.82, 0.12)
-	stripe_mat.emission_energy_multiplier = 0.6
-	for i in range(3):
-		var stripe_box: BoxMesh = BoxMesh.new()
-		stripe_box.size = Vector3(bumper_width * 1.01, 0.10, bumper_thickness * 1.01)
-		stripe_box.material = stripe_mat
-		var si: MeshInstance3D = MeshInstance3D.new()
-		si.mesh = stripe_box
-		si.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		var y_stripe: float = FLOOR_Y_LOCAL + 0.15 + float(i) * 0.42
-		var trs: Transform3D = xform
-		trs.origin += xform.basis.y * y_stripe
-		si.transform = trs
-		add_child(si)
+
+func _box(size: Vector3, mat: StandardMaterial3D, s: float, x: float, y: float, name: String = "Box") -> MeshInstance3D:
+	var mi: MeshInstance3D = MeshInstance3D.new()
+	var bm: BoxMesh = BoxMesh.new()
+	bm.size = size
+	bm.material = mat
+	mi.mesh = bm
+	mi.name = name
+	_place(mi, s, x, y)
+	return mi
 
 
-# ---------------------------------------------------------------------------
-# Éclairage station — néons plafond + spots
-# ---------------------------------------------------------------------------
+## Butoirs BLEUS (photos 095509 / 095443) : deux poutres-caissons bleues le
+## long de la voie, tête cylindrique en bois face à la rame, au niveau du
+## châssis. À la gare basse la rame a le nez vers −s, en haut vers +s.
+func _build_bumper(s: float, is_low: bool) -> void:
+	var blue: StandardMaterial3D = StandardMaterial3D.new()
+	blue.albedo_color = Color(0.12, 0.32, 0.62)
+	blue.roughness = 0.55
+	blue.metallic = 0.3
+	var wood: StandardMaterial3D = StandardMaterial3D.new()
+	wood.albedo_color = Color(0.45, 0.30, 0.18)
+	wood.roughness = 0.85
+	var dir: float = -1.0 if is_low else 1.0      # sens vers l'extérieur de la ligne
+	var y_axis: float = RAIL_HEAD_Y + 0.36
+	for sx in [-0.85, 0.85]:
+		_box(Vector3(0.30, 0.30, 2.40), blue, s + dir * 1.35, sx, y_axis, "Butoir")
+		var head: MeshInstance3D = MeshInstance3D.new()
+		var cm: CylinderMesh = CylinderMesh.new()
+		cm.top_radius = 0.14
+		cm.bottom_radius = 0.14
+		cm.height = 0.32
+		cm.radial_segments = 16
+		cm.material = wood
+		head.mesh = cm
+		head.name = "TeteButoir"
+		_place(head, s + dir * 0.10, sx, y_axis)
+		head.rotation = head.rotation + Vector3(PI * 0.5, 0.0, 0.0)
+		# pied
+		_box(Vector3(0.36, 0.60, 0.30), blue, s + dir * 2.3, sx, y_axis - 0.35, "PiedButoir")
+
+
+## Fosse sous la voie : fond en caillebotis, parois béton sombre, cornières
+## de rive ; en haut, poulies de renvoi du câble (Ø 1,6 m) vers la machinerie.
+func _build_pit(s0: float, s1: float, with_sheaves: bool) -> void:
+	var grating: StandardMaterial3D = StandardMaterial3D.new()
+	grating.albedo_color = Color(0.20, 0.21, 0.22)
+	grating.roughness = 0.6
+	grating.metallic = 0.5
+	var concrete: StandardMaterial3D = StandardMaterial3D.new()
+	concrete.albedo_color = Color(0.26, 0.25, 0.24)
+	concrete.roughness = 0.95
+	var steel: StandardMaterial3D = StandardMaterial3D.new()
+	steel.albedo_color = Color(0.60, 0.61, 0.62)
+	steel.roughness = 0.45
+	steel.metallic = 0.7
+	var iron: StandardMaterial3D = StandardMaterial3D.new()
+	iron.albedo_color = Color(0.16, 0.16, 0.18)
+	iron.roughness = 0.4
+	iron.metallic = 0.9
+	var length: float = s1 - s0
+	var sc: float = (s0 + s1) * 0.5
+	var y_bottom: float = FLOOR_Y_LOCAL - PIT_DEPTH
+	_box(Vector3(3.0, 0.06, length), grating, sc, 0.0, y_bottom + 0.03, "FondFosse")
+	for sx in [-1.5, 1.5]:
+		_box(Vector3(0.16, PIT_DEPTH, length), concrete, sc, sx, y_bottom + PIT_DEPTH * 0.5, "ParoiFosse")
+		_box(Vector3(0.08, 0.06, length), steel, sc, sx - signf(sx) * 0.04, FLOOR_Y_LOCAL + 0.03, "CorniereFosse")
+	# rails sur poutres au-dessus de la fosse : deux longrines acier
+	for sx in [-0.60, 0.60]:
+		_box(Vector3(0.12, 0.22, length), iron, sc, sx, RAIL_HEAD_Y - 0.28, "LongrineFosse")
+	if with_sheaves:
+		# deux grandes poulies verticales (une par brin) + une petite
+		for k in range(2):
+			var sheave: MeshInstance3D = MeshInstance3D.new()
+			var cm: CylinderMesh = CylinderMesh.new()
+			cm.top_radius = 0.80
+			cm.bottom_radius = 0.80
+			cm.height = 0.12
+			cm.radial_segments = 32
+			cm.material = iron
+			sheave.mesh = cm
+			sheave.name = "PoulieRenvoi"
+			var sx: float = -0.14 if k == 0 else 0.14
+			_place(sheave, s0 + 2.0 + float(k) * 1.3, sx, y_bottom + 0.85)
+			sheave.rotation = sheave.rotation + Vector3(0.0, 0.0, PI * 0.5)
+			_box(Vector3(0.6, 0.10, 0.10), iron, s0 + 2.0 + float(k) * 1.3, 0.0, y_bottom + 0.85, "AxePoulie")
+		var small: MeshInstance3D = MeshInstance3D.new()
+		var sm: CylinderMesh = CylinderMesh.new()
+		sm.top_radius = 0.45
+		sm.bottom_radius = 0.45
+		sm.height = 0.10
+		sm.radial_segments = 24
+		sm.material = iron
+		small.mesh = sm
+		_place(small, s0 + 4.6, 0.0, y_bottom + 0.50)
+		small.rotation = small.rotation + Vector3(0.0, 0.0, PI * 0.5)
+		# ruban « 1000 VOLTS » : petit repère jaune sur un brin
+		var tape: StandardMaterial3D = StandardMaterial3D.new()
+		tape.albedo_color = Color(0.95, 0.80, 0.10)
+		_box(Vector3(0.05, 0.40, 0.05), tape, s0 + 1.2, -0.14, y_bottom + 0.9, "Ruban")
+	else:
+		# chaîne de sécurité jaune/noire tendue en travers, à hauteur de quai
+		var chain: StandardMaterial3D = StandardMaterial3D.new()
+		chain.albedo_color = Color(0.85, 0.75, 0.15)
+		chain.roughness = 0.6
+		for k in range(2):
+			_box(Vector3(0.05, 0.80, 0.05), steel, s0 + 1.0, -1.35 + float(k) * 2.7, FLOOR_Y_LOCAL + 0.40, "PoteauChaine")
+		_box(Vector3(2.7, 0.03, 0.03), chain, s0 + 1.0, 0.0, FLOOR_Y_LOCAL + 0.70, "Chaine")
+
 
 func _build_ceiling_lights(s_start: float, s_end: float) -> void:
 	var spacing: float = 4.0
