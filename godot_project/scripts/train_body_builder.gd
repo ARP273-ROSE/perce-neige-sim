@@ -33,14 +33,21 @@ const WELL_TOP: float = -0.60       # échancrures de la jupe au droit des bogie
 const WELL_HALF: float = 1.40       # demi-longueur d'une échancrure
 const BOGIE_OFFSET: float = 3.0     # bogies à 3 m des extrémités de voiture
 const WHEEL_R: float = 0.30
-const D_THETA_DEG: float = 5.0      # résolution angulaire du tube
+const D_THETA_DEG: float = 2.5      # résolution angulaire du tube (découpes des hublots)
 const CAP_THETA_DEG: float = 2.0    # résolution angulaire de la calotte (découpes)
 const CAP_N_T: int = 45             # anneaux de la calotte
-const COL_L: float = 0.25           # résolution longitudinale
-# Fenêtres : angle depuis le sommet du tube (°) ; hublots hauts et étroits
-const WIN_T0: float = 28.0          # hublots : du haut de la courbe…
-const WIN_T1: float = 100.0         # … jusqu'à ~0,85 m au-dessus du plancher
-const WIN_MARGIN: float = 0.25      # marge longitudinale dans un panneau
+const COL_L: float = 0.10           # résolution longitudinale des panneaux vitrés
+# Hublots des flancs (photos intérieur/extérieur du 2026-04-26) : rectangles
+# à GRANDS arrondis, ~1,0 m de large sur 1,1 m de haut, au-dessus de la
+# ceinture (≈ 1,1 m du plancher) jusqu'à la courbe du plafond. Définis en
+# (u le long de la voiture, w = longueur d'arc depuis le sommet) ; découpe
+# + joint caoutchouc + vitre lissée, comme le pare-brise.
+const WIN_T0: float = 52.0          # angle depuis le sommet : haut du hublot
+const WIN_T1: float = 92.0          # bas du hublot (ceinture)
+const WIN_MARGIN: float = 0.315     # marge longitudinale dans un panneau (largeur 1,0 m)
+const WIN_CORNER: float = 0.25      # rayon des arrondis
+const TUBE_GASKET_IN: float = 0.03
+const TUBE_GASKET_OUT: float = 0.11 # doit couvrir une cellule (0,10 × 0,075)
 # Face avant (photo 20260426_095511, 220 px/m) : la face réelle va de
 # l'apex (+1,78) au fond plat (−1,33), soit 3,1 m ; dans le jeu la voie est
 # plus haute dans le tube et la face n'a que 2,43 m (apex +1,72 → coupe
@@ -56,14 +63,15 @@ const WS_HALF_W: float = 0.70
 const WS_TOP_REAL: float = 1.43
 const WS_BOT_REAL: float = -0.47
 const WS_CORNER: float = 0.20
-const SIDE_X0: float = 0.93
-const SIDE_RHO: float = 1.60        # lisière : ρ max des baies (bord en D)
-const SIDE_TOP_REAL: float = 1.00
-const SIDE_BOT_REAL: float = -0.97
-const SIDE_CORNER: float = 0.22
-const DOOR_X0: float = 0.80         # liseré des portes de secours
-const DOOR_RHO: float = 1.67
-const DOOR_TOP_REAL: float = 1.25
+# Portes d'évacuation d'extrémité (photo 095511) : panneaux en D JAUNES
+# PLEINS de part et d'autre du pare-brise, liseré sombre, poignée ; bord
+# extérieur suivant la lisière. Pas de vitre (erreur de lecture corrigée
+# le 2026-09-26).
+const DOOR_X0: float = 0.88
+const DOOR_RHO: float = 1.62
+const DOOR_TOP_REAL: float = 1.02
+const DOOR_BOT_REAL: float = -1.15
+const DOOR_CORNER: float = 0.24
 const GASKET_IN: float = 0.03       # joint caoutchouc : de −0,03 à +0,075
 const GASKET_OUT: float = 0.075
 const GLASS_INSET: float = 0.02
@@ -178,28 +186,28 @@ static func _columns(z_a: float, z_b: float) -> Array:
 	return cols
 
 
-## Une cellule (θ0..θ1, z0..z1) d'un panneau est-elle vitrée ?
-static func _is_glass(kind: String, th_deg: float, u0: float, u1: float, plen: float) -> bool:
-	if kind != "win" and kind != "door":
-		return false
-	var a: float = absf(th_deg)
-	if a < WIN_T0 or a > WIN_T1:
-		return false
-	if u0 < WIN_MARGIN - 0.01 or u1 > plen - WIN_MARGIN + 0.01:
-		return false
-	# coins arrondis : on retire la cellule d'angle
-	var near_edge_u: bool = u0 < WIN_MARGIN + COL_L * 0.5 or u1 > plen - WIN_MARGIN - COL_L * 0.5
-	var near_edge_t: bool = a < WIN_T0 + D_THETA_DEG * 1.01 or a > WIN_T1 - D_THETA_DEG * 1.01
-	return not (near_edge_u and near_edge_t)
-
-
-# --- tube d'une voiture ------------------------------------------------------
-
 static func _in_well(z: float, wells: Array) -> bool:
 	for w in wells:
 		if absf(z - w) < WELL_HALF:
 			return true
 	return false
+
+
+## Contour d'un hublot d'un panneau : repère (u, w), u depuis le début du
+## panneau, w = longueur d'arc depuis le sommet du tube (> 0 des deux côtés).
+static func _window_outline(plen: float) -> PackedVector2Array:
+	var w0: float = R_BODY * deg_to_rad(WIN_T0)
+	var w1: float = R_BODY * deg_to_rad(WIN_T1)
+	return _rounded_outline(WIN_MARGIN, plen - WIN_MARGIN, w0, w1, WIN_CORNER, 99.0)
+
+
+## Point du tube pour (u, w) d'un panneau commençant à z0c, côté sx (±1).
+static func _tube_uw_pt(u: float, w: float, z0c: float, sx: float, lift: float) -> Vector3:
+	return _tube_pt(sx * w / R_BODY, R_BODY + lift, z0c + u)
+
+
+static func _tube_uw_n(w: float, sx: float) -> Vector3:
+	return _tube_n(sx * w / R_BODY)
 
 
 static func _build_tube(mesh: ArrayMesh, mats: Dictionary, z_a: float, z_b: float,
@@ -214,7 +222,8 @@ static func _build_tube(mesh: ArrayMesh, mats: Dictionary, z_a: float, z_b: floa
 	var st_seam: SurfaceTool = SurfaceTool.new()
 	var st_dark: SurfaceTool = SurfaceTool.new()
 	var st_yellow: SurfaceTool = SurfaceTool.new()
-	for st in [st_body, st_door, st_rib, st_glass, st_seam, st_dark, st_yellow]:
+	var st_rubber: SurfaceTool = SurfaceTool.new()
+	for st in [st_body, st_door, st_rib, st_glass, st_seam, st_dark, st_yellow, st_rubber]:
 		st.begin(Mesh.PRIMITIVE_TRIANGLES)
 
 	var cols: Array = _columns(z_a, z_b)
@@ -224,11 +233,13 @@ static func _build_tube(mesh: ArrayMesh, mats: Dictionary, z_a: float, z_b: floa
 		var z0c: float = col["z0"]
 		var z1c: float = col["z1"]
 		var plen: float = z1c - z0c
+		var glazed: bool = kind == "win" or kind == "door"
+		var hole: PackedVector2Array = _window_outline(plen) if glazed else PackedVector2Array()
 		# le jaune de la calotte déborde sur la tôle pleine d'extrémité
 		# (photos : tout le premier tronçon, portes de secours comprises)
 		var yellow_col: bool = kind == "blank" and ((ci == 0 and yellow_a) or (ci == cols.size() - 1 and yellow_b))
 		var r: float = R_BODY + (RIB_H if kind == "rib" else 0.0)
-		var n_sub: int = 1 if kind == "rib" or kind == "blank" else int(ceil(plen / COL_L))
+		var n_sub: int = int(ceil(plen / COL_L)) if glazed else 1
 		var dz: float = plen / float(n_sub)
 		for j in range(n_sub):
 			var z0: float = z0c + dz * j
@@ -238,32 +249,52 @@ static func _build_tube(mesh: ArrayMesh, mats: Dictionary, z_a: float, z_b: floa
 			for i in range(n_th):
 				var t0: float = -th_cut + d_th * i
 				var t1: float = t0 + d_th
-				var tm_deg: float = rad_to_deg(0.5 * (t0 + t1))
+				var tm: float = 0.5 * (t0 + t1)
 				# échancrure de bogie : la jupe s'arrête au-dessus des roues
-				if Y_CENTER + r * cos(0.5 * (t0 + t1)) < WELL_TOP and _in_well(0.5 * (z0 + z1), wells):
+				if Y_CENTER + r * cos(tm) < WELL_TOP and _in_well(0.5 * (z0 + z1), wells):
 					continue
-				var glass: bool = _is_glass(kind, tm_deg, u0, u1, plen)
-				var st: SurfaceTool = st_glass if glass else (
-					st_rib if kind == "rib" else (st_door if kind == "door" else (
-						st_yellow if yellow_col else st_body)))
-				var rr: float = r - (0.02 if glass else 0.0)
+				# découpe du hublot : cellule dont un coin est dans le contour
+				if glazed:
+					var cut: bool = false
+					for corner in [Vector2(u0, R_BODY * absf(t0)), Vector2(u1, R_BODY * absf(t0)),
+							Vector2(u1, R_BODY * absf(t1)), Vector2(u0, R_BODY * absf(t1))]:
+						if Geometry2D.is_point_in_polygon(corner, hole):
+							cut = true
+							break
+					if cut:
+						continue
+				var st: SurfaceTool = st_rib if kind == "rib" else (
+					st_door if kind == "door" else (st_yellow if yellow_col else st_body))
 				# quad : (t0,z1) (t1,z1) (t1,z0) (t0,z0) → face vers l'extérieur
-				_quad(st, _tube_pt(t0, rr, z1), _tube_pt(t1, rr, z1),
-					_tube_pt(t1, rr, z0), _tube_pt(t0, rr, z0),
+				_quad(st, _tube_pt(t0, r, z1), _tube_pt(t1, r, z1),
+					_tube_pt(t1, r, z0), _tube_pt(t0, r, z0),
 					_tube_n(t0), _tube_n(t1), _tube_n(t1), _tube_n(t0))
-			# joint vertical des vantaux (deux battants) — fine bande sombre
-			if kind == "door" and j == n_sub / 2:
-				var zs: float = z0
-				for i in range(n_th):
-					var t0: float = -th_cut + d_th * i
-					var t1: float = t0 + d_th
-					var a_deg: float = absf(rad_to_deg(0.5 * (t0 + t1)))
-					if a_deg < WIN_T0 - 2.0 or a_deg > WIN_T1 + 2.0:
-						_quad(st_seam, _tube_pt(t0, r + 0.004, zs + 0.012),
-							_tube_pt(t1, r + 0.004, zs + 0.012),
-							_tube_pt(t1, r + 0.004, zs - 0.012),
-							_tube_pt(t0, r + 0.004, zs - 0.012),
-							_tube_n(t0), _tube_n(t1), _tube_n(t1), _tube_n(t0))
+		# hublot : joint + vitre, de chaque côté
+		if glazed:
+			for sx in [-1.0, 1.0]:
+				var pt_fn: Callable = func(u: float, w: float, lift: float) -> Vector3:
+					return _tube_uw_pt(u, w, z0c, sx, lift)
+				var n_fn: Callable = func(_u: float, w: float) -> Vector3:
+					return _tube_uw_n(w, sx)
+				_emit_band(st_rubber, _offset_outline(hole, -TUBE_GASKET_IN),
+					_offset_outline(hole, TUBE_GASKET_OUT), pt_fn, n_fn, 0.010)
+				_emit_pane(st_glass, _offset_outline(hole, -GLASS_INSET), pt_fn, n_fn, 0.016)
+		# joint vertical des vantaux (deux battants), hors hublot
+		if kind == "door":
+			var zs: float = z0c + plen * 0.5
+			var w_lo: float = R_BODY * deg_to_rad(WIN_T0) - TUBE_GASKET_OUT - 0.02
+			var w_hi: float = R_BODY * deg_to_rad(WIN_T1) + TUBE_GASKET_OUT + 0.02
+			for i in range(n_th):
+				var t0: float = -th_cut + d_th * i
+				var t1: float = t0 + d_th
+				var wm: float = R_BODY * absf(0.5 * (t0 + t1))
+				if wm > w_lo and wm < w_hi:
+					continue
+				_quad(st_seam, _tube_pt(t0, r + 0.004, zs + 0.012),
+					_tube_pt(t1, r + 0.004, zs + 0.012),
+					_tube_pt(t1, r + 0.004, zs - 0.012),
+					_tube_pt(t0, r + 0.004, zs - 0.012),
+					_tube_n(t0), _tube_n(t1), _tube_n(t1), _tube_n(t0))
 	# Fond plat (châssis) entre les échancrures, et plafond des échancrures
 	var xw: float = R_BODY * sin(th_cut)
 	var cuts: Array = [z_a]
@@ -281,13 +312,13 @@ static func _build_tube(mesh: ArrayMesh, mats: Dictionary, z_a: float, z_b: floa
 	for w in wells:
 		_quad_flat(st_dark, Vector3(-xw_top, WELL_TOP, w - WELL_HALF), Vector3(-xw_top, WELL_TOP, w + WELL_HALF),
 			Vector3(xw_top, WELL_TOP, w + WELL_HALF), Vector3(xw_top, WELL_TOP, w - WELL_HALF))
-	# Parois d'extrémité côté attelage : disques gris fermant le tube
 	st_body.set_material(mats["body"]); st_body.commit(mesh)
 	st_yellow.set_material(mats["yellow"]); st_yellow.commit(mesh)
 	st_door.set_material(mats["door"]); st_door.commit(mesh)
 	st_rib.set_material(mats["rib"]); st_rib.commit(mesh)
 	st_seam.set_material(mats["seam"]); st_seam.commit(mesh)
 	st_dark.set_material(mats["dark"]); st_dark.commit(mesh)
+	st_rubber.set_material(mats["rubber"]); st_rubber.commit(mesh)
 	st_glass.set_material(mats["glass"]); st_glass.commit(mesh)
 
 
@@ -376,16 +407,22 @@ static func _offset_outline(pts: PackedVector2Array, d: float) -> PackedVector2A
 	return out
 
 
-## Les trois vitres de la face : [pare-brise, baie gauche, baie droite]
+## La seule vitre de la face : le pare-brise.
 static func _face_windows() -> Array:
 	var ws: PackedVector2Array = _rounded_outline(-WS_HALF_W, WS_HALF_W,
 		_face_y(WS_BOT_REAL), _face_y(WS_TOP_REAL), WS_CORNER, 99.0)
-	var side_r: PackedVector2Array = _rounded_outline(SIDE_X0, SIDE_RHO + 0.05,
-		_face_y(SIDE_BOT_REAL), _face_y(SIDE_TOP_REAL), SIDE_CORNER, SIDE_RHO)
-	var side_l: PackedVector2Array = PackedVector2Array()
-	for i in range(side_r.size() - 1, -1, -1):
-		side_l.append(Vector2(-side_r[i].x, side_r[i].y))
-	return [ws, side_l, side_r]
+	return [ws]
+
+
+## Les deux portes d'évacuation en D (contours, côté droit puis miroir).
+static func _face_doors() -> Array:
+	var door_r: PackedVector2Array = _rounded_outline(DOOR_X0, DOOR_RHO + 0.05,
+		maxf(_face_y(DOOR_BOT_REAL), Y_CUT - Y_CENTER + 0.06), _face_y(DOOR_TOP_REAL),
+		DOOR_CORNER, DOOR_RHO)
+	var door_l: PackedVector2Array = PackedVector2Array()
+	for i in range(door_r.size() - 1, -1, -1):
+		door_l.append(Vector2(-door_r[i].x, door_r[i].y))
+	return [door_l, door_r]
 
 
 ## Point 3D sur l'ellipsoïde de la calotte pour (x, y_rel) frontal, décalé
@@ -415,29 +452,30 @@ static func _tri_out(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3,
 
 
 ## Panneau plein (vitre) : éventail depuis le centroïde avec un anneau
-## intermédiaire pour épouser la courbure.
-static func _emit_pane(st: SurfaceTool, outline: PackedVector2Array, z_join: float,
-		dir_z: float, lift: float) -> void:
+## intermédiaire pour épouser la courbure. `pt_fn(a, b, lift)` et
+## `n_fn(a, b)` décrivent la surface porteuse (calotte ou tube).
+static func _emit_pane(st: SurfaceTool, outline: PackedVector2Array,
+		pt_fn: Callable, n_fn: Callable, lift: float) -> void:
 	var c: Vector2 = Vector2.ZERO
 	for q in outline:
 		c += q
 	c /= float(outline.size())
 	var n: int = outline.size()
-	var pc: Vector3 = _cap_pt(c.x, c.y, z_join, dir_z, lift)
-	var nc: Vector3 = _cap_n(c.x, c.y, dir_z)
+	var pc: Vector3 = pt_fn.call(c.x, c.y, lift)
+	var nc: Vector3 = n_fn.call(c.x, c.y)
 	for i in range(n):
 		var q0: Vector2 = outline[i]
 		var q1: Vector2 = outline[(i + 1) % n]
 		var m0: Vector2 = c.lerp(q0, 0.5)
 		var m1: Vector2 = c.lerp(q1, 0.5)
-		var p0: Vector3 = _cap_pt(q0.x, q0.y, z_join, dir_z, lift)
-		var p1: Vector3 = _cap_pt(q1.x, q1.y, z_join, dir_z, lift)
-		var pm0: Vector3 = _cap_pt(m0.x, m0.y, z_join, dir_z, lift)
-		var pm1: Vector3 = _cap_pt(m1.x, m1.y, z_join, dir_z, lift)
-		var n0: Vector3 = _cap_n(q0.x, q0.y, dir_z)
-		var n1: Vector3 = _cap_n(q1.x, q1.y, dir_z)
-		var nm0: Vector3 = _cap_n(m0.x, m0.y, dir_z)
-		var nm1: Vector3 = _cap_n(m1.x, m1.y, dir_z)
+		var p0: Vector3 = pt_fn.call(q0.x, q0.y, lift)
+		var p1: Vector3 = pt_fn.call(q1.x, q1.y, lift)
+		var pm0: Vector3 = pt_fn.call(m0.x, m0.y, lift)
+		var pm1: Vector3 = pt_fn.call(m1.x, m1.y, lift)
+		var n0: Vector3 = n_fn.call(q0.x, q0.y)
+		var n1: Vector3 = n_fn.call(q1.x, q1.y)
+		var nm0: Vector3 = n_fn.call(m0.x, m0.y)
+		var nm1: Vector3 = n_fn.call(m1.x, m1.y)
 		_tri_out(st, pc, pm0, pm1, nc, nm0, nm1)
 		_tri_out(st, pm0, p0, p1, nm0, n0, n1)
 		_tri_out(st, pm0, p1, pm1, nm0, n1, nm1)
@@ -445,21 +483,21 @@ static func _emit_pane(st: SurfaceTool, outline: PackedVector2Array, z_join: flo
 
 ## Bande entre deux contours (joint caoutchouc, liseré de porte).
 static func _emit_band(st: SurfaceTool, inner: PackedVector2Array, outer: PackedVector2Array,
-		z_join: float, dir_z: float, lift: float) -> void:
+		pt_fn: Callable, n_fn: Callable, lift: float) -> void:
 	var n: int = inner.size()
 	for i in range(n):
 		var a: Vector2 = inner[i]
 		var b: Vector2 = inner[(i + 1) % n]
 		var c: Vector2 = outer[(i + 1) % n]
 		var d: Vector2 = outer[i]
-		var pa: Vector3 = _cap_pt(a.x, a.y, z_join, dir_z, lift)
-		var pb: Vector3 = _cap_pt(b.x, b.y, z_join, dir_z, lift)
-		var pcc: Vector3 = _cap_pt(c.x, c.y, z_join, dir_z, lift)
-		var pd: Vector3 = _cap_pt(d.x, d.y, z_join, dir_z, lift)
-		var na: Vector3 = _cap_n(a.x, a.y, dir_z)
-		var nb: Vector3 = _cap_n(b.x, b.y, dir_z)
-		var ncc: Vector3 = _cap_n(c.x, c.y, dir_z)
-		var nd: Vector3 = _cap_n(d.x, d.y, dir_z)
+		var pa: Vector3 = pt_fn.call(a.x, a.y, lift)
+		var pb: Vector3 = pt_fn.call(b.x, b.y, lift)
+		var pcc: Vector3 = pt_fn.call(c.x, c.y, lift)
+		var pd: Vector3 = pt_fn.call(d.x, d.y, lift)
+		var na: Vector3 = n_fn.call(a.x, a.y)
+		var nb: Vector3 = n_fn.call(b.x, b.y)
+		var ncc: Vector3 = n_fn.call(c.x, c.y)
+		var nd: Vector3 = n_fn.call(d.x, d.y)
 		_tri_out(st, pa, pb, pcc, na, nb, ncc)
 		_tri_out(st, pa, pcc, pd, na, ncc, nd)
 
@@ -534,21 +572,18 @@ static func _build_cap(mesh: ArrayMesh, mats: Dictionary, z_join: float, dir_z: 
 				_quad(st_y, p00, p10, p11, p01, n00, n10, n11, n01)
 			else:
 				_quad(st_y, p10, p00, p01, p11, n10, n00, n01, n11)
-	# vitres, joints et liserés
+	# pare-brise : joint + vitre ; portes d'évacuation : liseré sombre seul
+	var pt_fn: Callable = func(x: float, y_rel: float, lift: float) -> Vector3:
+		return _cap_pt(x, y_rel, z_join, dir_z, lift)
+	var n_fn: Callable = func(x: float, y_rel: float) -> Vector3:
+		return _cap_n(x, y_rel, dir_z)
 	for w in windows:
 		_emit_band(st_r, _offset_outline(w, -GASKET_IN), _offset_outline(w, GASKET_OUT),
-			z_join, dir_z, 0.010)
-		_emit_pane(st_g, _offset_outline(w, -GLASS_INSET), z_join, dir_z, 0.016)
-	for sx in [-1.0, 1.0]:
-		var door: PackedVector2Array = _rounded_outline(DOOR_X0, DOOR_RHO + 0.05,
-			Y_CUT - Y_CENTER + 0.05, _face_y(DOOR_TOP_REAL), 0.30, DOOR_RHO)
-		if sx < 0.0:
-			var m: PackedVector2Array = PackedVector2Array()
-			for i in range(door.size() - 1, -1, -1):
-				m.append(Vector2(-door[i].x, door[i].y))
-			door = m
-		_emit_band(st_r, _offset_outline(door, -0.008), _offset_outline(door, 0.008),
-			z_join, dir_z, 0.004)
+			pt_fn, n_fn, 0.010)
+		_emit_pane(st_g, _offset_outline(w, -GLASS_INSET), pt_fn, n_fn, 0.016)
+	for door in _face_doors():
+		_emit_band(st_r, _offset_outline(door, -0.012), _offset_outline(door, 0.012),
+			pt_fn, n_fn, 0.006)
 	# fond plat de la calotte
 	var xw: float = R_BODY * sin(_theta_cut())
 	var z_far: float = z_join + dir_z * CAP_LEN * 0.62
@@ -619,6 +654,14 @@ static func _build_cap_fittings(parent: Node3D, mats: Dictionary, z_join: float,
 		var lamp: MeshInstance3D = _disc(parent, mats["lamp_off"], 0.13, 0.10, p, true,
 			"Lamp%s%s" % ["F" if is_front else "R", "L" if sx < 0.0 else "R"])
 		lamps.append(lamp)
+	# poignées des portes d'évacuation (petits rectangles sombres, photo)
+	for sx in [-1.0, 1.0]:
+		var ph: Vector3 = cap_surface_point(sx * 1.22, Y_CENTER + _face_y(-0.30), z_join, dir_z)
+		ph.z += dir_z * 0.02
+		_box(parent, mats["dark"], Vector3(0.10, 0.05, 0.03), ph, "Poignee")
+		var ph2: Vector3 = cap_surface_point(sx * 1.22, Y_CENTER + _face_y(0.15), z_join, dir_z)
+		ph2.z += dir_z * 0.02
+		_box(parent, mats["dark"], Vector3(0.10, 0.05, 0.03), ph2, "Serrure")
 	# grille de ventilation : fente noire horizontale entre les feux
 	var pg: Vector3 = cap_surface_point(0.0, Y_CENTER + maxf(_face_y(-1.20), Y_CUT - Y_CENTER + 0.12), z_join, dir_z)
 	pg.z += dir_z * 0.02
