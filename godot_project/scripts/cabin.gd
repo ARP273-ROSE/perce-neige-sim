@@ -102,7 +102,7 @@ func _build_mesh() -> void:
 	# jaune Ø 3,40 centré 0,15 m sous l'axe descendait à −1,85 : sous la
 	# dalle et les rails (retour d'essai 2026-09-26 : « un cylindre qui
 	# dépasse même en dessous des rails »).
-	var built: Dictionary = TrainBodyBuilder.build_train(mesh_root, train_length, car_count)
+	var built: Dictionary = TrainBodyBuilder.build_train(mesh_root, train_length, car_count, is_ghost)
 	_front_lamps = built["front_lamps"]
 	_rear_lamps = built["rear_lamps"]
 	_body_mats = built["mats"]
