@@ -218,9 +218,10 @@ func _build_floor_ceiling() -> void:
 	floor_mat.metallic_specular = 0.4
 	floor_mat.uv1_scale = Vector3(8.0, 16.0, 1.0)
 
-	# Plancher au niveau des quais-escaliers (TrainBodyBuilder.Y_FLOOR),
+	# Plancher EN GRADINS (vidéo cabine f_001/f_002 : une marche de ~35 cm
+	# par cerceau, paliers horizontaux sur la pente moyenne de 26,5 %),
 	# scindé par voiture pour suivre l'articulation.
-	_add_interior_box(floor_mat, 2.40, 0.05, TrainBodyBuilder.Y_FLOOR, z_front, z_rear, "InteriorFloor")
+	_build_stepped_floor(floor_mat, z_front, z_rear)
 
 	# Plafond cabine — surface plate visible quand on lève les yeux
 	var ceil_mat: StandardMaterial3D = StandardMaterial3D.new()
@@ -240,6 +241,68 @@ func _build_floor_ceiling() -> void:
 
 	var led_z_rear: float = train_length * 0.5 * 0.92
 	_add_interior_box(led_mat, 0.25, 0.04, 1.42, z_front_ceil, led_z_rear, "InteriorLEDStrip")
+
+
+const FLOOR_GRADE: float = 0.265   # pente moyenne : les paliers sont horizontaux dessus
+
+
+## Centre (repère rame) du cerceau k de la voiture idx, et bornes de sa dalle.
+func _panel_center(idx: int, k: int) -> float:
+	var car_len: float = train_length / float(car_count)
+	var z_c: float = (float(idx) - (car_count - 1) * 0.5) * car_len
+	var z_a: float = -car_len * 0.5 + (TrainBodyBuilder.CAP_LEN if idx == 0 else TrainBodyBuilder.GAP * 0.5)
+	var pitch: float = TrainBodyBuilder.PANEL_L + TrainBodyBuilder.RIB_W
+	return z_c + z_a + TrainBodyBuilder.END_BLANK + TrainBodyBuilder.RIB_W + pitch * float(k) \
+		+ TrainBodyBuilder.PANEL_L * 0.5
+
+
+## Hauteur du plancher (repère rame) à l'abscisse z : palier du cerceau
+## contenant z, horizontal sur la pente moyenne (monte vers l'arrière +Z
+## dans le repère de la voiture, qui a le nez en l'air).
+func _floor_y_at(z: float) -> float:
+	var car_len: float = train_length / float(car_count)
+	var idx: int = clampi(int(floor((z + train_length * 0.5) / car_len)), 0, car_count - 1)
+	var pitch: float = TrainBodyBuilder.PANEL_L + TrainBodyBuilder.RIB_W
+	var k: int = clampi(int(round((z - _panel_center(idx, 0)) / pitch)), 0, 9)
+	return TrainBodyBuilder.Y_FLOOR + (z - _panel_center(idx, k)) * FLOOR_GRADE
+
+
+func _build_stepped_floor(mat: StandardMaterial3D, z_front: float, z_rear: float) -> void:
+	var pitch: float = TrainBodyBuilder.PANEL_L + TrainBodyBuilder.RIB_W
+	var tilt: float = -atan(FLOOR_GRADE)
+	var riser_mat: StandardMaterial3D = StandardMaterial3D.new()
+	riser_mat.albedo_color = Color(0.55, 0.55, 0.57)   # nez de marche alu
+	riser_mat.roughness = 0.4
+	riser_mat.metallic = 0.5
+	for idx in range(car_count):
+		var car_len: float = train_length / float(car_count)
+		var z_c: float = (float(idx) - (car_count - 1) * 0.5) * car_len
+		for k in range(10):
+			var zc: float = _panel_center(idx, k)
+			if zc + pitch * 0.5 < z_front or zc - pitch * 0.5 > z_rear:
+				continue
+			var land: MeshInstance3D = MeshInstance3D.new()
+			var lm: BoxMesh = BoxMesh.new()
+			lm.size = Vector3(2.40, 0.05, pitch)
+			lm.material = mat
+			land.mesh = lm
+			land.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			land.position = Vector3(0.0, TrainBodyBuilder.Y_FLOOR, zc - z_c)
+			land.rotation = Vector3(tilt, 0.0, 0.0)
+			land.name = "Palier%d_%d" % [idx + 1, k]
+			_interior_cars[idx].add_child(land)
+			if k < 9:
+				# contremarche au joint (le palier arrière est 35 cm plus bas)
+				var rz: float = zc + pitch * 0.5
+				var riser: MeshInstance3D = MeshInstance3D.new()
+				var rm: BoxMesh = BoxMesh.new()
+				rm.size = Vector3(2.40, pitch * FLOOR_GRADE, 0.03)
+				rm.material = riser_mat
+				riser.mesh = rm
+				riser.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+				riser.position = Vector3(0.0, TrainBodyBuilder.Y_FLOOR, rz - z_c)
+				riser.rotation = Vector3(tilt, 0.0, 0.0)
+				_interior_cars[idx].add_child(riser)
 
 
 func _build_handrails() -> void:
@@ -297,7 +360,7 @@ func _build_handrails() -> void:
 			pole.mesh = pole_mesh
 			pole.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 			var pp: Dictionary = _interior_parent(z_pole)
-			pole.position = Vector3(0.0, 0.20, pp["z"])
+			pole.position = Vector3(0.0, _floor_y_at(z_pole) + 1.15, pp["z"])
 			pp["node"].add_child(pole)
 
 
@@ -731,7 +794,7 @@ func _build_driver_seat() -> void:
 	base_mesh.material = seat_mat
 	base.mesh = base_mesh
 	base.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	base.position = Vector3(0.0, TrainBodyBuilder.Y_FLOOR + 0.50, z_seat)
+	base.position = Vector3(0.0, _floor_y_at(z_seat) + 0.50, z_seat)
 	interior_root.add_child(base)
 
 	# Dossier
@@ -742,7 +805,7 @@ func _build_driver_seat() -> void:
 	back_mesh.material = seat_mat
 	back.mesh = back_mesh
 	back.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	back.position = Vector3(0.0, TrainBodyBuilder.Y_FLOOR + 0.95, z_seat + 0.30)
+	back.position = Vector3(0.0, _floor_y_at(z_seat) + 0.95, z_seat + 0.30)
 	interior_root.add_child(back)
 
 
@@ -777,7 +840,8 @@ func _emit_seat(mat: StandardMaterial3D, x: float, z: float) -> void:
 	base.mesh = base_mesh
 	base.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	var ps: Dictionary = _interior_parent(z)
-	base.position = Vector3(x, TrainBodyBuilder.Y_FLOOR + 0.45, ps["z"])
+	var fy: float = _floor_y_at(z)
+	base.position = Vector3(x, fy + 0.45, ps["z"])
 	ps["node"].add_child(base)
 
 	var back: MeshInstance3D = MeshInstance3D.new()
@@ -786,7 +850,7 @@ func _emit_seat(mat: StandardMaterial3D, x: float, z: float) -> void:
 	back_mesh.material = mat
 	back.mesh = back_mesh
 	back.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	back.position = Vector3(x, TrainBodyBuilder.Y_FLOOR + 0.85, ps["z"] + 0.20)
+	back.position = Vector3(x, fy + 0.85, ps["z"] + 0.20)
 	ps["node"].add_child(back)
 
 
@@ -839,11 +903,12 @@ func _emit_passenger(skin_mat: StandardMaterial3D, coat_color: Color, x: float, 
 
 	var y_torso: float
 	var torso_h: float
+	var fy: float = _floor_y_at(z)
 	if sitting:
-		y_torso = TrainBodyBuilder.Y_FLOOR + 0.95   # assis (siège à plancher+0,45)
+		y_torso = fy + 0.95   # assis (siège à palier+0,45)
 		torso_h = 0.55
 	else:
-		y_torso = TrainBodyBuilder.Y_FLOOR + 1.20   # debout (torse à 1,2 m du plancher)
+		y_torso = fy + 1.20   # debout (torse à 1,2 m du palier)
 		torso_h = 0.75
 
 	# Torse
@@ -946,7 +1011,10 @@ func _build_camera() -> void:
 
 func _apply_view_mode() -> void:
 	if view_mode == ViewMode.FPV:
-		mesh_root.visible = false
+		# La coque reste VISIBLE en cabine (2026-09-26) : elle porte les
+		# hublots, le pare-brise et sa doublure intérieure — avant, on
+		# voyait le tunnel de tous côtés, sans montants ni vitres.
+		mesh_root.visible = true
 		camera_fpv.make_current()
 	else:
 		mesh_root.visible = true
