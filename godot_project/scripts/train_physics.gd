@@ -121,6 +121,85 @@ var _sag_ghost: float = 0.0
 # butoir : COLLISION. À plus de 13,5 m/s dans l'évitement : DÉRAILLEMENT.
 signal crash_occurred(kind: String, speed: float)
 
+
+# --- Audit physique 2026-09-26 : câble, galets, traînée en tunnel ----------
+# Mêmes formules que perce_neige_sim.py (air_density_at, _aero_coefficients,
+# aero_drag_side_n, rope_weight_force_n, ROPE_ROLLERS_N).
+static var _aero_c_single: float = -1.0
+static var _aero_c_loop: float = 0.0
+static var _rope_rollers_n: float = -1.0
+
+
+static func air_density_at(alt_m: float) -> float:
+	return 1013e2 * exp(-PNConstants.G * alt_m / (287.05 * 278.0)) / (287.05 * 278.0)
+
+
+static func _aero_init() -> void:
+	var r_t: float = PNConstants.TUNNEL_DIAM_M / 2.0
+	var h: float = PNConstants.AERO_BED_H_M
+	var a_circ: float = PI * r_t * r_t
+	var a_bed: float = r_t * r_t * acos((r_t - h) / r_t) \
+		- (r_t - h) * sqrt(2.0 * r_t * h - h * h)
+	var a_t: float = a_circ - a_bed
+	var beta: float = PNConstants.AERO_BLOCKAGE
+	var a_train: float = beta * a_t
+	var a_ann: float = a_t - a_train
+	var p_t: float = 2.0 * PI * r_t
+	var p_train: float = 2.0 * PI * sqrt(a_train / PI)
+	var d_h: float = 4.0 * a_ann / (p_t + p_train)
+	var k_fric: float = PNConstants.AERO_LAMBDA * PNConstants.TRAIN_LEN / d_h
+	var k: float = PNConstants.AERO_K_IN + k_fric + beta * beta
+	var ratio: float = (2.0 - beta) / (1.0 - beta)
+	_aero_c_single = 0.5 * ratio * ratio * (k * a_train + 0.5 * k_fric * a_ann)
+	var k2: float = 1.5 + PNConstants.AERO_LAMBDA * PNConstants.AERO_LOOP_LEN_M \
+		/ (4.0 * a_t / p_t)
+	var lo: float = 0.0
+	var hi: float = 1.0
+	for _i in range(60):
+		var mid: float = 0.5 * (lo + hi)
+		var dp_a: float = k * pow(1.0 + mid * a_t / a_ann, 2.0)
+		var dp_t: float = k2 * pow(1.0 - mid, 2.0)
+		if dp_a > dp_t:
+			hi = mid
+		else:
+			lo = mid
+	var frac: float = 0.5 * (lo + hi)
+	_aero_c_loop = 0.5 * k * pow(1.0 + frac * a_t / a_ann, 2.0) * a_train
+
+
+static func aero_drag_side_n(s_pos: float, v_: float) -> float:
+	if _aero_c_single < 0.0:
+		_aero_init()
+	var in_loop: bool = s_pos >= PNConstants.PASSING_START \
+		and s_pos <= PNConstants.PASSING_END
+	var c: float = _aero_c_loop if in_loop else _aero_c_single
+	return c * air_density_at(SlopeProfile.altitude_at(s_pos)) * v_ * v_
+
+
+static func aero_drag_n(s_pos: float, v_: float) -> float:
+	return aero_drag_side_n(s_pos, v_) \
+		+ aero_drag_side_n(PNConstants.LENGTH - s_pos, v_)
+
+
+static func rope_weight_force_n(s_pos: float) -> float:
+	return PNConstants.CABLE_KG_M * PNConstants.G \
+		* (SlopeProfile.altitude_at(s_pos)
+			- SlopeProfile.altitude_at(PNConstants.LENGTH - s_pos))
+
+
+static func rope_rollers_n() -> float:
+	if _rope_rollers_n < 0.0:
+		var acc: float = 0.0
+		var n: int = 0
+		var x: float = 0.0
+		while x < PNConstants.LENGTH:
+			acc += cos(atan(SlopeProfile.gradient_phys_at(x)))
+			n += 1
+			x += 10.0
+		_rope_rollers_n = PNConstants.CABLE_ROLLER_C * PNConstants.CABLE_KG_M \
+			* PNConstants.LENGTH * PNConstants.G * (acc / float(n))
+	return _rope_rollers_n
+
 const CHALLENGE_V_CMD_MAX: float = 15.0   # plage de consigne en Défi (m/s)
 const CHAOS_MOTOR_OVERDRIVE: float = 1.8  # surrégime moteur autorisé
 const CRASH_SPEED: float = 1.5            # m/s au-delà desquels ça percute
@@ -217,7 +296,8 @@ func step(dt: float) -> void:
 
 	var m_up: float = mass_kg()
 	var m_down: float = ghost_mass_kg()
-	var m_total: float = m_up + m_down
+	# Le câble (38 t) fait partie de la masse en mouvement (audit 2026-09-26).
+	var m_total: float = m_up + m_down + PNConstants.ROPE_MASS_KG
 
 	# Pente LOCALE de chaque rame (port du sim Python) : le profil n'est
 	# pas symétrique (8 % au départ, 30 % au milieu, 6 % en haut), donc la
@@ -327,6 +407,10 @@ func step(dt: float) -> void:
 	# Chaque rame avec SA pente locale (comme le sim Python) :
 	#   f_grav_s = −(m_main·sinθ_main − m_ghost·sinθ_ghost)·g
 	var f_grav_net: float = -(m_up * sint - m_down * sint_g) * PNConstants.G
+	# Poids propre du câble (audit 2026-09-26) : ρ·g·(z_rame − z_contrepoids),
+	# −99 kN au départ bas, +99 kN à l'arrivée haut, nul à mi-ligne. Il
+	# était dans la jauge de tension mais pas dans la dynamique.
+	f_grav_net += rope_weight_force_n(s)
 	dbg_f_grav_net = f_grav_net   # exposé pour le banc de parité PC↔3D
 
 	# CÂBLE ROMPU : la rame est découplée du contrepoids. Plus d'équilibre
@@ -339,10 +423,18 @@ func step(dt: float) -> void:
 
 	# --- Friction roulement (les 2 rames, chacune sur sa pente) -----------
 	var f_roll_mag: float = PNConstants.MU_ROLL * PNConstants.G \
-		* (m_up * cost + m_down * cost_g if not cable_rupture else m_up * cost)
+		* (m_up * cost + m_down * cost_g if not cable_rupture else m_up * cost) \
+		+ (0.0 if cable_rupture else rope_rollers_n())
 	var f_roll: float = 0.0
 	if absf(v) > 0.05:
 		f_roll = -signf(v) * f_roll_mag
+	# Traînée d'air en tunnel (les DEUX rames, chacune dans son régime
+	# tube unique / évitement) — audit 2026-09-26.
+	var f_aero_mag: float = aero_drag_side_n(s, v) if cable_rupture \
+		else aero_drag_n(s, v)
+	var f_aero: float = 0.0
+	if absf(v) > 0.05:
+		f_aero = -signf(v) * f_aero_mag
 
 	# --- Freins ----------------------------------------------------------
 	if emergency:
@@ -385,7 +477,7 @@ func step(dt: float) -> void:
 		f_motor = 0.0
 
 	# Somme et intégration
-	var net: float = f_motor + f_regen + f_grav_net + f_roll + f_brake
+	var net: float = f_motor + f_regen + f_grav_net + f_roll + f_aero + f_brake
 	var acc: float = net / m_eff
 
 	# Cap accel moteur (confort) — soft-start progressive. Retenue
@@ -599,18 +691,19 @@ func step(dt: float) -> void:
 	# transition continue.
 	var a_t: float = 0.0 if buffer_clamp else acc
 	tension_dan = maxf(
-		_side_tension_n(m_up, s, a_t),
-		_side_tension_n(m_down, PNConstants.LENGTH - s, -a_t),
+		_side_tension_n(m_up, s, a_t, v),
+		_side_tension_n(m_down, PNConstants.LENGTH - s, -a_t, -v),
 	) / 10.0
 
 	# --- Puissance ------------------------------------------------------
 	# Traction : le moteur tire → puissance consommée. Régén :
 	# l'entraînement freine en génératrice (f_regen) → puissance
-	# récupérée = |F·v|·0,80 (roue → machine DC → réseau ; ~42 kWh par
-	# descente chargée). Vraie force du modèle désormais, plus une
+	# récupérée = |F·v|·0,80 (roue → machine DC → réseau ; ~30 kWh par
+	# descente pleine/vide, modèle sans chiffre publié). Vraie force du modèle désormais, plus une
 	# heuristique — le frein de service reste à ~0 % en marche normale.
-	power_kw = maxf(0.0, (f_motor * v) / 1000.0)
-	regen_kw = absf(f_regen * v) * 0.80 / 1000.0
+	# Puissance ÉLECTRIQUE : mécanique / rendement (audit 2026-09-26).
+	power_kw = maxf(0.0, (f_motor * v) / PNConstants.DRIVE_EFF / 1000.0)
+	regen_kw = absf(f_regen * v) * PNConstants.REGEN_EFF / 1000.0
 
 	# Lissage affichage (EMA τ ≈ 0.3 s)
 	var alpha: float = minf(1.0, dt / 0.3)
@@ -664,11 +757,15 @@ func _fire_crash(kind: String, speed: float) -> void:
 
 # Tension (N) d'UN brin au niveau de la poulie motrice : rame de masse m à
 # la position s_pos, accélérée à a_s le long de sa pente (signe +s).
-func _side_tension_n(m: float, s_pos: float, a_s: float) -> float:
+# Frottement et traînée SIGNÉS (audit 2026-09-26) : ils chargent le brin
+# quand la rame va VERS la poulie, le déchargent quand elle s'en éloigne.
+func _side_tension_n(m: float, s_pos: float, a_s: float, v_side: float) -> float:
 	var theta_s: float = atan(SlopeProfile.gradient_phys_at(s_pos))
 	var m_brin: float = PNConstants.CABLE_KG_M * maxf(PNConstants.LENGTH - s_pos, 0.0)
+	var sgn: float = signf(v_side) if absf(v_side) > 0.05 else 0.0
 	var t: float = m * PNConstants.G * sin(theta_s) \
-		+ PNConstants.MU_ROLL * m * PNConstants.G * cos(theta_s) \
+		+ sgn * (PNConstants.MU_ROLL * m * PNConstants.G * cos(theta_s) \
+			+ aero_drag_side_n(s_pos, v_side) + 0.5 * rope_rollers_n()) \
 		+ PNConstants.CABLE_KG_M * PNConstants.G \
 			* maxf(0.0, PNConstants.ALT_HIGH - SlopeProfile.altitude_at(s_pos)) \
 		+ (m + m_brin) * a_s
@@ -708,14 +805,18 @@ func _regulator(
 	# point de hold. Un simple min() sur l'enveloppe sans ff faisait
 	# dépasser l'aiguillage de ~175 m (mesuré au banc). Rame déjà dans
 	# l'évitement : le cap de panne s'applique jusqu'à la sortie.
+	# 🔴 Le hold TIENT même dépassé d'un millimètre (audit 2026-09-26) :
+	# l'ancien « if d_hold > 0 » relâchait la cible dès que la rame
+	# franchissait le point d'arrêt en rampant, et elle repartait au
+	# plafond de panne (banc 3D). En amont de l'aiguillage, la cible reste
+	# le point de hold (distance 0 = arrêt).
 	if abt_hold:
-		var d_hold: float
-		if direction > 0:
-			d_hold = maxf(0.0, (PNConstants.PASSING_START - 15.0) - s)
-		else:
-			d_hold = maxf(0.0, s - (PNConstants.PASSING_END + 15.0))
-		if d_hold > 0.0:
-			dist_to_stop = minf(dist_to_stop, d_hold)
+		if direction > 0 and s < PNConstants.PASSING_START:
+			dist_to_stop = minf(dist_to_stop,
+				maxf(0.0, (PNConstants.PASSING_START - 15.0) - s))
+		elif direction < 0 and s > PNConstants.PASSING_END:
+			dist_to_stop = minf(dist_to_stop,
+				maxf(0.0, s - (PNConstants.PASSING_END + 15.0)))
 
 	var v_travel: float = v * float(direction)
 
@@ -727,6 +828,7 @@ func _regulator(
 	# tort et la rame dérivait vers l'équilibre au lieu de descendre.
 	var theta_gr: float = atan(SlopeProfile.gradient_phys_at(PNConstants.LENGTH - s))
 	var f_grav_s: float = -(m_up * sin(theta) - _m_down * sin(theta_gr)) * PNConstants.G
+	f_grav_s += rope_weight_force_n(s)   # poids propre du câble (audit 2026-09-26)
 	var f_grav_travel: float = f_grav_s * float(direction)
 	var gravity_helps: bool = f_grav_travel > 200.0
 
@@ -828,7 +930,8 @@ func _regulator(
 	var f_motor_max: float = minf(PNConstants.F_STALL, PNConstants.P_MAX / v_eff)
 
 	var f_ff: float = -f_grav_travel + PNConstants.MU_ROLL * PNConstants.G \
-		* (m_up * cos(theta) + _m_down * cos(theta_gr))
+		* (m_up * cos(theta) + _m_down * cos(theta_gr)) \
+		+ rope_rollers_n() + aero_drag_n(s, target_v)
 
 	var demand_throttle: float
 	var demand_brake: float
@@ -891,7 +994,7 @@ func _regulator(
 			demand_brake = 0.0
 		else:
 			# Retenue : l'ENTRAÎNEMENT freine en génératrice (le vrai
-			# organe de retenue en descente chargée, ~42 kWh/descente),
+			# organe de retenue en descente chargée, ~30 kWh/descente),
 			# le frein de service à friction ne prend que le débordement
 			# au-delà de l'enveloppe du drive (audit 2026-07-24).
 			demand_throttle = 0.0

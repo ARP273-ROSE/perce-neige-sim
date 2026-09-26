@@ -12,6 +12,55 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 
 ---
 
+## Quoi de neuf — v1.13.0 (audit physique des voyages, 26 septembre 2026)
+
+**v1.13.0** — le moteur physique retrouve trois forces qui lui manquaient, sur
+le programme PC **et** la PWA (`train_physics.gd`), à parité vérifiée au banc
+(p95 < 1 kW et < 2 daN entre les deux). Détail, sources et chiffres :
+`AUDIT_PHYSIQUE_VOYAGES.md` (+ rapport PDF et script Sage dans
+`audit_physique/`).
+- **Le poids propre du câble pèse sur le moteur.** Il était dans la jauge de
+  tension (ρ·g·Δh par brin) mais absent du bilan des forces. La différence
+  des deux brins à la poulie vaut ρ·g·(z_rame − z_contrepoids) = **±99 kN**
+  (10 t-force) aux terminus — plus que le déséquilibre pleine/vide des rames
+  (69,5 kN). Conséquences visibles : un départ **vide/vide** demande 1,5 MW
+  (au lieu de 0,3), l'arrivée en haut se fait en régénération, et une
+  **descente chargée commence en traction** (825 kW : le contrepoids vide,
+  en bas, porte 3,4 km de câble). Le pic pleine/vide passe à 2 240 kW —
+  enfin cohérent avec les 3 × 800 kW installés, qui étaient jusque-là
+  2,8× surdimensionnés. Le câble (38 t) entre aussi dans l'inertie.
+- **Traînée d'air en tunnel.** Cabines Ø 3,60 m dans un tube Ø 3,90 m, portes
+  de gare « hermétiques pour éviter les courants d'air dus aux différences de
+  pression » : la colonne d'air entre les deux rames ne peut s'échapper que
+  par l'espace annulaire. Modèle 1D quasi-stationnaire (débit annulaire
+  v·A_T, contraction + frottement + élargissement). **Tube unique : ~16 kN par
+  rame à 12 m/s ; dans l'évitement, le second tube court-circuite
+  l'annulaire : ~1 kN.** La puissance CREUSE donc de ~500 kW à la traversée
+  de l'évitement, chaque rame dans son tube. Taux de blocage β = 0,65, la
+  plus haute valeur compatible avec la puissance installée (à recaler sur
+  mesure ; le β géométrique brut vaut 0,7–0,9).
+- **Résistance du câble sur ses 512 galets** (~5,4 kN, 1,5 % de sa charge
+  normale) et **rendement électrique** (0,90) sur la puissance affichée en
+  traction — la régénération avait déjà le sien (0,80).
+- **Tension signée** : frottement et traînée chargent le brin d'une rame qui
+  monte vers la poulie et déchargent celui d'une rame qui s'en éloigne.
+- **Affaissement d'embarquement porté sur le PC** (la PWA l'avait) : à quai
+  en bas, chaque passager allonge les 3,45 km de brin de 1,8 mm — la rame
+  recule de ~60 cm pour 334 passagers, physiquement (le contrepoids ne
+  bouge pas). Invisible en haut (26 m de brin : 4 mm).
+- **Hold Abt** : le point d'arrêt avant l'aiguillage disparaissait dès que la
+  rame le dépassait d'un millimètre en rampant, et elle repartait au
+  plafond de panne (bug latent, révélé par le banc 3D).
+- **Test miroir** : monter la rame pleine avec contrepoids vide ≡ descendre la
+  rame vide avec contrepoids plein (même câble) — puissance, régén et
+  tension coïncident à 0,00 près, PC et PWA. 21 tests, 3 bancs
+  (`tests/bench_voyages.py`, `godot_project/bench_voyages_3d.gd`,
+  `tests/parite_pwa.py`).
+- Le « ~42 kWh par descente chargée (datasheet CFD) » cité dans le code
+  n'a pas de source : la fiche CFD ne donne aucun chiffre d'énergie. Le
+  modèle donne 31 kWh régénérés (et 14 kWh consommés au départ) pour une
+  descente pleine/vide.
+
 ## Quoi de neuf — v1.12.x (audit + retours d'essai terrain, juillet 2026)
 
 **v1.12.43** — vue 3D enfin intégrée sous Linux (session Wayland) :

@@ -402,6 +402,112 @@ REBOUND_ZETA = 0.15              # amortissement (frottement torons + galets)
 REBOUND_GRAB_A = 0.35            # m/s² — force résiduelle relâchée quand le
                                  # tambour serre (fin du freinage régulé)
 
+# --- Audit physique 2026-09-26 : ce qui manquait au bilan des forces ------
+# 1. Le POIDS PROPRE DU CÂBLE pèse sur le moteur. Il était déjà dans la
+#    jauge de tension (ρ·g·Δh par brin) mais absent de la dynamique : la
+#    différence des deux brins à la poulie — ce que le moteur fournit —
+#    vaut ρ·g·(z_rame − z_contrepoids), soit ±99 kN (10 t-force) aux
+#    terminus, PLUS que le déséquilibre pleine/vide des rames (69,5 kN).
+#    Sans lui, les 2 400 kW installés étaient 2,8× surdimensionnés ; avec
+#    lui, le pic pleine/vide à 12 m/s atteint ~2 300 kW électriques.
+#    (Aucune source ne mentionne de câble de queue ; 512 galets « en 256
+#    paires » = les deux brins d'un seul câble tracteur.)
+# 2. Le câble (38 t) roule sur 512 galets : résistance ≈ 1,5 % de sa charge
+#    normale (ordre de grandeur usuel des galets à roulement), 5,4 kN.
+# 3. TRAÎNÉE EN TUNNEL. Cabines Ø 3,60 dans un tube Ø 3,90 : l'air ne peut
+#    contourner la rame que par l'espace annulaire, et la colonne d'air
+#    entre les deux rames (portes de gare étanches « pour éviter les
+#    courants d'air dus aux différences de pression », forum
+#    haute-tarentaise) n'a pas d'autre issue. Modèle 1D quasi-stationnaire
+#    (Vardy, Sockel) : débit annulaire v·A_T, pertes contraction +
+#    frottement + Borda-Carnot. Dans l'ÉVITEMENT, le second tube
+#    court-circuite l'annulaire : la traînée s'effondre (~1 kN au lieu de
+#    ~16). β = 0,65 est la valeur la plus haute compatible avec les 2 400 kW
+#    installés (β géométrique brut : 0,7-0,9 ; à recaler sur mesure).
+# 4. Rendement de la chaîne électrique (moteur DC × réducteur × convertisseur)
+#    sur la puissance AFFICHÉE en traction — la régén avait déjà le sien.
+CABLE_ROLLER_C = 0.015           # résistance câble/galets (fraction charge normale)
+DRIVE_EFF = 0.90                 # réseau → jante, en traction
+REGEN_EFF = 0.80                 # jante → réseau, en génératrice
+AERO_BLOCKAGE = 0.65             # β = section bloquée / section d'air libre
+AERO_BED_H_M = 0.5               # hauteur du radier béton dans le tube
+AERO_LAMBDA = 0.025              # Darcy, béton + peau de la rame
+AERO_K_IN = 0.4                  # contraction au nez (arrondi)
+AERO_LOOP_LEN_M = 203.0          # longueur du second tube
+
+
+def air_density_at(alt_m: float) -> float:
+    """Masse volumique de l'air (kg/m³), atmosphère isotherme ~5 °C."""
+    return 1013e2 * math.exp(-G * alt_m / (287.05 * 278.0)) / (287.05 * 278.0)
+
+
+def _aero_coefficients() -> tuple[float, float, float]:
+    """(C_tube, C_évitement, A_rame) tels que F = C·ρ·v² pour UNE rame.
+
+    Tube unique : u_annulaire relatif = v·(2−β)/(1−β) ; K = contraction +
+    λL/D_h + β² (élargissement brusque) ; F = K·q·A_rame + ½·frottement·q·A_ann.
+    Évitement : partage du débit v·A_T entre l'annulaire et le 2e tube à
+    perte de charge égale (bissection ; le partage ne dépend pas de v).
+    """
+    r_t = TUNNEL_DIAM_M / 2.0
+    h = AERO_BED_H_M
+    a_circ = math.pi * r_t * r_t
+    a_bed = (r_t * r_t * math.acos((r_t - h) / r_t)
+             - (r_t - h) * math.sqrt(2.0 * r_t * h - h * h))
+    a_t = a_circ - a_bed
+    a_train = AERO_BLOCKAGE * a_t
+    a_ann = a_t - a_train
+    p_t = 2.0 * math.pi * r_t
+    p_train = 2.0 * math.pi * math.sqrt(a_train / math.pi)
+    d_h = 4.0 * a_ann / (p_t + p_train)
+    k_fric = AERO_LAMBDA * TRAIN_LEN / d_h
+    k = AERO_K_IN + k_fric + AERO_BLOCKAGE ** 2
+    ratio = (2.0 - AERO_BLOCKAGE) / (1.0 - AERO_BLOCKAGE)
+    c_single = 0.5 * ratio * ratio * (k * a_train + 0.5 * k_fric * a_ann)
+    # évitement : dp_ann(q) = K·½(1 + q/(v·A_ann))²·v², dp_tube = K2·½((Q−q)/A_T)²
+    k2 = 1.5 + AERO_LAMBDA * AERO_LOOP_LEN_M / (4.0 * a_t / p_t)
+    lo, hi = 0.0, 1.0            # fraction du débit v·A_T passant par l'annulaire
+    for _ in range(60):
+        mid = 0.5 * (lo + hi)
+        dp_a = k * (1.0 + mid * a_t / a_ann) ** 2
+        dp_t = k2 * (1.0 - mid) ** 2
+        if dp_a > dp_t:
+            hi = mid
+        else:
+            lo = mid
+    frac = 0.5 * (lo + hi)
+    c_loop = 0.5 * k * (1.0 + frac * a_t / a_ann) ** 2 * a_train
+    return c_single, c_loop, a_train
+
+
+_AERO_C_SINGLE, _AERO_C_LOOP, AERO_A_TRAIN = _aero_coefficients()
+
+
+def aero_drag_side_n(s_pos: float, v: float) -> float:
+    """Traînée (N, ≥ 0) d'UNE rame en s_pos à la vitesse |v|."""
+    c = _AERO_C_LOOP if PASSING_START <= s_pos <= PASSING_END else _AERO_C_SINGLE
+    return c * air_density_at(geom_at(s_pos)[1]) * v * v
+
+
+def aero_drag_n(s: float, v: float) -> float:
+    """Traînée totale (N, ≥ 0) des DEUX rames, chacune dans son régime."""
+    return aero_drag_side_n(s, v) + aero_drag_side_n(LENGTH - s, v)
+
+
+def rope_weight_force_n(s: float) -> float:
+    """Poids propre du câble projeté sur +s : ρ·g·(z_rame − z_contrepoids)."""
+    return CABLE_KG_M * G * (geom_at(s)[1] - geom_at(LENGTH - s)[1])
+
+
+def _rope_rollers_n() -> float:
+    cosm = sum(math.cos(math.atan(gradient_at(float(x))))
+               for x in range(0, int(LENGTH), 10)) / (LENGTH / 10.0)
+    return CABLE_ROLLER_C * CABLE_KG_M * LENGTH * G * cosm
+
+
+ROPE_ROLLERS_N = None            # calculé après la géométrie (voir plus bas)
+ROPE_MASS_KG = CABLE_KG_M * LENGTH
+
 # Passing loop (middle section where tunnel splits in two) ~222 m long.
 # Positions calibrated from the real cockpit video : the loop entry is
 # at t=4:38 (175 s after departure) and exit at t=5:00 (197 s), which
@@ -651,6 +757,8 @@ def plan_at(s: float) -> tuple[float, float]:
     return px0 + k * (px1 - px0), py0 + k * (py1 - py0)
 
 
+ROPE_ROLLERS_N = _rope_rollers_n()
+
 H_MAX = _GEOM[-1][1]           # side-view horizontal extent in metres
 PLAN_BOUNDS = (
     min(r[3] for r in _GEOM),
@@ -888,6 +996,16 @@ class GameState:
     fault_phase_timer: float = 0.0
     fault_show_panel: bool = True   # driver can hide the on-screen panel
     finished: bool = False
+    # Affaissement d'embarquement (port de la PWA, audit 2026-09-26) : à
+    # quai, tambour serré en gare haute, la rame pend à son brin ; chaque
+    # passager qui monte allonge le câble de Δm·g·sinθ·L/(EA) — ~1,8 mm
+    # en gare basse (L ≈ 3,45 km), soit ~60 cm pour 334 pax ; invisible en
+    # gare haute (L ≈ 26 m). C'est PHYSIQUE ici : tr.s recule réellement.
+    sag_main: float = 0.0          # m, ≥ 0, vers le bas
+    sag_ghost: float = 0.0
+    sag_ref_m_main: float = -1.0   # masse à l'ancrage (−1 = pas ancré)
+    sag_ref_m_ghost: float = -1.0
+    sag_anchor_s: float = 0.0
     rebound_timer: float = 0.0  # cable elasticity rebound (after arrival)
     rebound_anchor_s: float = 0.0  # position d'arrêt (m) — le rebond oscille autour
     best_time: float | None = None
@@ -1108,9 +1226,21 @@ class Physics:
         # Chaque rame avec SA pente locale (profil asymétrique). Sign in
         # absolute +s, independent of travel direction.
         f_grav_net = -(m_up * sint - m_down * sint_g) * G
+        # Poids propre du câble (audit 2026-09-26) : le brin de la rame
+        # pilotée pèse ρ·g·(z_top − z_rame) vers l'aval, celui du
+        # contrepoids ρ·g·(z_top − z_contrepoids) dans l'autre sens. Net
+        # sur +s : ρ·g·(z_rame − z_contrepoids), −99 kN au départ bas,
+        # +99 kN à l'arrivée haut, nul à mi-ligne.
+        f_grav_net += rope_weight_force_n(tr.s)
+        # Le câble (38 t) fait partie de la masse en mouvement.
+        m_total += ROPE_MASS_KG
 
         # --- Rolling friction (both trains, chacune sur sa pente) -----------
-        f_roll_mag = MU_ROLL * G * (m_up * cost + m_down * cost_g)
+        # + le câble sur ses 512 galets (constant, ~5,4 kN).
+        f_roll_mag = MU_ROLL * G * (m_up * cost + m_down * cost_g) + ROPE_ROLLERS_N
+        # --- Traînée d'air en tunnel (les DEUX rames, chacune dans son
+        # régime tube unique / évitement) ------------------------------------
+        f_aero_mag = aero_drag_n(tr.s, tr.v)
 
         # --- Rupture du câble tracteur : DÉCOUPLAGE ---------------------------
         # Plus de contrepoids ni de traction : la rame principale est seule
@@ -1121,9 +1251,11 @@ class Physics:
             m_total = m_up
             f_grav_net = -m_up * G * sint
             f_roll_mag = MU_ROLL * m_up * G * cost
+            f_aero_mag = aero_drag_side_n(tr.s, tr.v)
             f_motor = 0.0
 
         f_roll = -math.copysign(f_roll_mag, tr.v) if abs(tr.v) > 0.05 else 0.0
+        f_aero = -math.copysign(f_aero_mag, tr.v) if abs(tr.v) > 0.05 else 0.0
 
         # --- Brakes ---------------------------------------------------------
         # Emergency brake ramps over ~0.4 s so it's brutal but not an
@@ -1196,7 +1328,7 @@ class Physics:
             f_regen = 0.0
 
         # Sum and integrate on the total cable-bound mass
-        net = f_motor + f_regen + f_grav_net + f_roll + f_brake
+        net = f_motor + f_regen + f_grav_net + f_roll + f_aero + f_brake
         a = net / m_total
 
         # Comfort accel cap : clamp motor-driven acceleration (never reduce
@@ -1314,7 +1446,9 @@ class Physics:
         # numérique du butoir) : le flag l'exclut de l'inertie de tension
         # — c'est le butoir/rail qui absorbe, pas le câble.
         buffer_clamp = False
-        clamp_lo = START_S - (1.2 if st.finished else 0.0)
+        # L'affaissement d'embarquement recule physiquement la rame sous
+        # le repère d'arrêt : le clamp bas lui laisse cette place.
+        clamp_lo = START_S - (1.2 if st.finished else 0.0) - st.sag_main
         clamp_hi = STOP_S + (1.2 if st.finished else 0.0)
         # En Défi, la rame qui ARRIVE TROP VITE doit visuellement rouler
         # jusqu'au VRAI butoir (BUMPER_CLEAR = 10 m au-delà du repère
@@ -1416,6 +1550,34 @@ class Physics:
                 tr.v = 0.0
             a = 0.0
 
+        # --- Affaissement d'embarquement (port de la PWA, audit 2026-09-26)
+        # Tant que la rame est ancrée (tambour ou portes) hors séquence de
+        # voyage, son brin s'allonge avec la masse embarquée : la rame
+        # recule vers l'aval, « doucement » (≤ 3 cm/s), et l'allongement
+        # PERSISTE jusqu'au départ. Le contrepoids fait de même dans SA
+        # gare (le sien n'est visible qu'en bas). En marche, l'écart au
+        # miroir se résorbe lentement (0,08 m/s, imperceptible).
+        if not st.trip_started and (tr.maint_brake or tr.doors_open):
+            if st.sag_ref_m_main < 0.0:
+                st.sag_ref_m_main = m_up
+                st.sag_ref_m_ghost = m_down
+                st.sag_anchor_s = tr.s + st.sag_main
+            sag_t_main = max(0.0, (m_up - st.sag_ref_m_main) * G * sint
+                             * (LENGTH - st.sag_anchor_s) / CABLE_EA_N)
+            sag_t_ghost = max(0.0, (m_down - st.sag_ref_m_ghost) * G * sint_g
+                              * st.sag_anchor_s / CABLE_EA_N)
+            rate = 0.03 * dt
+            st.sag_main += max(-rate, min(rate, sag_t_main - st.sag_main))
+            st.sag_ghost += max(-rate, min(rate, sag_t_ghost - st.sag_ghost))
+            if not st.finished:
+                tr.s = st.sag_anchor_s - st.sag_main
+        elif st.trip_started:
+            st.sag_ref_m_main = -1.0
+            st.sag_ref_m_ghost = -1.0
+            if abs(tr.v) > 0.3:
+                st.sag_main = max(0.0, st.sag_main - 0.08 * dt)
+                st.sag_ghost = max(0.0, st.sag_ghost - 0.08 * dt)
+
         # Confort passager — ISO 2631. L'ancien modèle n'intégrait que le
         # jerk avec un poids minuscule (0,015) : un arrêt d'urgence à 3,6
         # m/s² (« tout le monde par terre ») ne faisait PAS bouger le
@@ -1475,19 +1637,26 @@ class Physics:
         # « brin de la rame lourde » montrait ~3 000 daN à l'arrivée en
         # haut à pleine charge alors que le brin de la rame vide EN BAS
         # portait ~12 700, et sautait à ~14 000 au demi-tour.
-        def _side_tension_n(m: float, s_pos: float, a_s: float) -> float:
+        # Frottement et traînée SIGNÉS (audit 2026-09-26) : ils chargent
+        # le brin quand la rame va VERS la poulie (monte), le déchargent
+        # quand elle s'en éloigne, et n'existent pas à l'arrêt.
+        def _side_tension_n(m: float, s_pos: float, a_s: float,
+                            v_side: float) -> float:
             theta_s = math.atan(gradient_at(s_pos))
             m_brin = CABLE_KG_M * max(LENGTH - s_pos, 0.0)
+            sgn = math.copysign(1.0, v_side) if abs(v_side) > 0.05 else 0.0
             t = (m * G * math.sin(theta_s)
-                 + MU_ROLL * m * G * math.cos(theta_s)
+                 + sgn * (MU_ROLL * m * G * math.cos(theta_s)
+                          + aero_drag_side_n(s_pos, v_side)
+                          + 0.5 * ROPE_ROLLERS_N)
                  + CABLE_KG_M * G * max(0.0, ALT_HIGH - geom_at(s_pos)[1])
                  + (m + m_brin) * a_s)
             return max(t, 0.0)
 
         a_t = 0.0 if buffer_clamp else a
         tr.tension_dan = max(
-            _side_tension_n(m_up, tr.s, a_t),
-            _side_tension_n(m_down, LENGTH - tr.s, -a_t),
+            _side_tension_n(m_up, tr.s, a_t, tr.v),
+            _side_tension_n(m_down, LENGTH - tr.s, -a_t, -tr.v),
         ) / 10.0
         # Apply persistent fault offsets so the gauge actually moves
         # when a cable surge or slack fault is announced.
@@ -1696,18 +1865,21 @@ class Physics:
         # Power flow at the motor : positive when the motor pulls the
         # cable (traction), negative when gravity drives the wheel and
         # the motor acts as a generator (regenerative braking on loaded
-        # descent — real Perce-Neige recovers ~42 kWh per full loaded
-        # descent according to the CFD datasheet). We track both signs
+        # descent — about 30 kWh per loaded descent in this model ; no
+        # published figure exists, audit 2026-09-26). We track both signs
         # but display only the positive side on the gauge.
         # Traction : le moteur tire le câble → puissance consommée.
-        tr.power_kw = max(0.0, (f_motor * tr.v) / 1000.0)
+        # Puissance ÉLECTRIQUE : mécanique à la jante / rendement de la
+        # chaîne (audit 2026-09-26 — la régén avait déjà le sien).
+        tr.power_kw = max(0.0, (f_motor * tr.v) / DRIVE_EFF / 1000.0)
         # Régénération : l'entraînement freine en génératrice (f_regen
         # oppose la marche). Puissance récupérée = |F·v|·rendement.
         # Chaîne roue → machine DC → onduleur → réseau ≈ 0,80 à pleine
-        # charge (datasheet CFD : ~42 kWh par descente chargée). C'est
+        # charge (~30 kWh par descente pleine/vide dans ce modèle ; aucun
+        # chiffre publié, audit 2026-09-26). C'est
         # désormais une VRAIE force du modèle, plus une heuristique : le
         # frein de service (tr.brake) reste à ~0 % en marche normale.
-        tr.regen_kw = abs(f_regen * tr.v) * 0.80 / 1000.0
+        tr.regen_kw = abs(f_regen * tr.v) * REGEN_EFF / 1000.0
         # Smoothed display values — EMA with τ ≈ 0.3 s avoids flicker
         alpha = min(1.0, dt / 0.3)
         tr.tension_dan_disp += (tr.tension_dan - tr.tension_dan_disp) * alpha
@@ -1726,7 +1898,11 @@ class Physics:
         # which means the ghost at the opposite terminus creeps BACKWARDS
         # from its stop point into the tunnel — exactly what you see in
         # footage of the opposite wagon "sliding" after a stop.
-        base_ghost_s = LENGTH - tr.s
+        # Miroir du câble, corrigé de l'affaissement : quand la rame
+        # pilotée a reculé de sag_main en s'allongeant, le contrepoids n'a
+        # PAS avancé d'autant (tambour serré) ; et lui-même recule de son
+        # propre affaissement dans sa gare.
+        base_ghost_s = LENGTH - (tr.s + st.sag_main) - st.sag_ghost
         if st.finished:
             # Rebond élastique du câble — modèle masse-ressort ANALYTIQUE
             # (position posée directement, pas d'intégration → pas de
@@ -1746,13 +1922,13 @@ class Physics:
             anchor = st.rebound_anchor_s
             m_ghost = TRAIN_EMPTY_KG + st.ghost_pax * PAX_KG
             x_main = self._cable_bounce(anchor, tr.mass_kg, tr.mass_kg, t_r)
-            tr.s = anchor + tr.direction * x_main
+            tr.s = anchor + tr.direction * x_main - st.sag_main
             # Le contrepoids ressent le même relâchement de force via SON
             # brin (signe opposé : le câble le tire vers l'arrière quand
             # la rame principale déborde vers l'avant).
             x_ghost = self._cable_bounce(
                 LENGTH - anchor, m_ghost, tr.mass_kg, t_r)
-            base_ghost_s = (LENGTH - anchor) - tr.direction * x_ghost
+            base_ghost_s = (LENGTH - anchor) - tr.direction * x_ghost - st.sag_ghost
         # Câble rompu : la rame opposée n'est plus couplée — son propre
         # parachute l'a clouée sur place, elle ne suit plus le miroir.
         if not tr.cable_rupture:
@@ -1912,13 +2088,19 @@ class Physics:
         # s'applique naturellement au point de hold. Le simple min()
         # sur l'enveloppe (première version v1.12.21) sans feed-forward
         # dépassait l'aiguillage de ~175 m (banc 3D 2026-07-23).
+        # 🔴 Le hold TIENT même dépassé d'un millimètre : l'ancien
+        # « if d_hold > 0 » relâchait la cible dès que la rame franchissait
+        # le point d'arrêt en rampant, et elle repartait au plafond de
+        # panne (banc 3D, audit 2026-09-26). Tant que la rame est en amont
+        # de l'aiguillage, la cible reste le point de hold (distance 0 =
+        # arrêt).
         if tr.switch_abt_fault:
-            if tr.direction > 0:
-                d_hold = max(0.0, (PASSING_START - 15.0) - tr.s)
-            else:
-                d_hold = max(0.0, tr.s - (PASSING_END + 15.0))
-            if d_hold > 0.0:
-                dist_to_stop = min(dist_to_stop, d_hold)
+            if tr.direction > 0 and tr.s < PASSING_START:
+                dist_to_stop = min(dist_to_stop,
+                                   max(0.0, (PASSING_START - 15.0) - tr.s))
+            elif tr.direction < 0 and tr.s > PASSING_END:
+                dist_to_stop = min(dist_to_stop,
+                                   max(0.0, tr.s - (PASSING_END + 15.0)))
 
         # Travel-direction velocity magnitude.
         v_travel = tr.v * tr.direction
@@ -1932,7 +2114,7 @@ class Physics:
         # OFF — the brake is what holds the speed.
         m_main_r = tr.mass_kg
         m_ghost_r = TRAIN_EMPTY_KG + self.state.ghost_pax * PAX_KG
-        m_total_r = m_main_r + m_ghost_r
+        m_total_r = m_main_r + m_ghost_r + ROPE_MASS_KG
         g_slope_r = gradient_at(tr.s)
         theta_r = math.atan(g_slope_r)
         theta_gr = math.atan(gradient_at(LENGTH - tr.s))
@@ -1945,6 +2127,9 @@ class Physics:
         # dérivait vers l'équilibre au lieu de suivre la consigne.
         f_grav_s = -(m_main_r * math.sin(theta_r)
                      - m_ghost_r * math.sin(theta_gr)) * G
+        # + poids propre du câble (audit 2026-09-26) : c'est de la gravité
+        # aussi, et elle change de signe à mi-ligne.
+        f_grav_s += rope_weight_force_n(tr.s)
         # Projected onto travel direction : >0 means gravity accelerates
         # the train in the direction it's trying to go.
         f_grav_travel = f_grav_s * tr.direction
@@ -2096,7 +2281,9 @@ class Physics:
         # → brake must resist gravity.
         f_ff = (-f_grav_travel
                 + MU_ROLL * G * (m_main_r * math.cos(theta_r)
-                                 + m_ghost_r * math.cos(theta_gr)))
+                                 + m_ghost_r * math.cos(theta_gr))
+                + ROPE_ROLLERS_N
+                + aero_drag_n(tr.s, target_v))
 
         # Mode DÉFI : à consigne 0, le régulateur NE MAINTIENT PAS la rame
         # tout seul. Sans traction ni frein serré, la rame RESTE LIBRE →
@@ -2184,8 +2371,8 @@ class Physics:
                 # chargée, PAS le frein de service à friction (qui
                 # s'userait à chaque trajet). Le frein mécanique ne prend
                 # que le DÉBORDEMENT au-delà de l'enveloppe du drive.
-                # Modélisation physique fidèle : ~42 kWh récupérés par
-                # descente chargée (datasheet CFD), frein de service à
+                # Modélisation physique fidèle : ~30 kWh récupérés par
+                # descente pleine/vide (modèle, aucun chiffre publié), frein de service à
                 # ~0 % en marche normale (audit 2026-07-24).
                 demand_throttle = 0.0
                 f_need = -f_req

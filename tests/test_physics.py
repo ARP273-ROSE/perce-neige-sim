@@ -289,3 +289,102 @@ def test_pas_de_depart_sans_sequence():
     assert abs(tr.v) < 0.01, f"la rame bouge sans séquence de départ (v={tr.v})"
     assert abs(tr.s - pn.STOP_S) < 0.1, f"la rame a dérivé (s={tr.s})"
     assert tr.maint_brake, "le tambour ne s'est pas réengagé"
+
+
+# ---------------------------------------------------------------------------
+# Audit physique 2026-09-26 — poids du câble, traînée, miroir, affaissement
+# ---------------------------------------------------------------------------
+
+def _voyage_complet(direction, pax, gpax):
+    s0 = pn.START_S if direction > 0 else pn.STOP_S
+    st, ph = _make(direction, s0, pax, gpax)
+    rows = []
+    t = 0.0
+    while not st.finished and t < 900:
+        ph.step(DT)
+        t += DT
+        tr = st.train
+        rows.append((tr.s, st.ghost_s, abs(tr.v), tr.power_kw, tr.regen_kw,
+                     tr.tension_dan))
+    assert st.finished, f"trajet non terminé (dir={direction}, {pax}/{gpax})"
+    return rows
+
+
+def _at(rows, key_idx, x, val_idx):
+    best = min(rows, key=lambda r: abs(r[key_idx] - x))
+    return best[val_idx]
+
+
+def test_miroir_montee_descente():
+    # Monter la rame PLEINE (contrepoids vide) est la même situation
+    # physique que descendre la rame VIDE (contrepoids plein) : même
+    # câble, mêmes deux rames. Puissance, régén et tension doivent
+    # coïncider à position égale de la rame pleine.
+    up = _voyage_complet(1, 334, 0)
+    dn = _voyage_complet(-1, 0, 334)
+    for s in range(400, 3200, 200):
+        for idx, tol, nom in ((3, 15.0, "puissance"), (4, 15.0, "régén"),
+                              (5, 150.0, "tension")):
+            a = _at(up, 0, s, idx)
+            b = _at(dn, 1, s, idx)
+            assert abs(a - b) < tol, f"miroir {nom} à s={s} : {a:.0f} vs {b:.0f}"
+
+
+def test_poids_du_cable_pese_sur_le_moteur():
+    # Deux rames VIDES : sans le poids propre du câble, le moteur ne
+    # fournirait que l'asymétrie du profil (~0,3 MW). Avec ses 38 t
+    # (±99 kN aux terminus), le départ en bas demande > 1 MW et l'arrivée
+    # en haut se fait en RÉGÉNÉRATION.
+    rows = _voyage_complet(1, 0, 0)
+    p_depart = max(r[3] for r in rows if 250 < r[0] < 600)
+    r_arrivee = max(r[4] for r in rows if 3000 < r[0] < 3300)
+    assert p_depart > 1000, f"puissance au départ vide/vide {p_depart:.0f} kW"
+    assert r_arrivee > 300, f"régén à l'arrivée vide/vide {r_arrivee:.0f} kW"
+    assert abs(pn.rope_weight_force_n(pn.LENGTH / 2.0)) < 2000, "non nul à mi-ligne"
+    assert abs(pn.rope_weight_force_n(26.0) + 98900) < 500
+
+
+def test_puissance_dans_l_enveloppe_installee():
+    # Pleine/vide à 12 m/s : le pic électrique doit tenir dans les
+    # 2 400 kW installés (3 × 800 kW) — c'est ce qui borne β.
+    rows = _voyage_complet(1, 334, 0)
+    p_max = max(r[3] for r in rows)
+    assert 1800 < p_max <= 2400, f"pic pleine/vide {p_max:.0f} kW"
+
+
+def test_trainee_chute_dans_l_evitement():
+    # Tube unique : l'air ne contourne la rame que par l'annulaire.
+    # Évitement : le second tube court-circuite → traînée ÷ 10 au moins.
+    tube = pn.aero_drag_side_n(1000.0, 12.0)
+    loop = pn.aero_drag_side_n(1700.0, 12.0)
+    assert 8000 < tube < 40000, f"traînée tube {tube:.0f} N"
+    assert loop < 0.12 * tube, f"traînée évitement {loop:.0f} N vs tube {tube:.0f}"
+    # et elle est bien visible sur la puissance : creux dans l'évitement
+    rows = _voyage_complet(1, 334, 334)
+    p_avant = _at(rows, 0, 1550.0, 3)
+    p_dedans = _at(rows, 0, 1712.0, 3)
+    assert p_avant - p_dedans > 100, f"creux évitement {p_avant:.0f} → {p_dedans:.0f} kW"
+
+
+def test_affaissement_embarquement_gare_basse():
+    # Port de la PWA : à quai en bas, chaque passager allonge le brin de
+    # ~1,8 mm (L ≈ 3,45 km) → ~60 cm pour 334 pax, rame qui recule
+    # « doucement ». En haut (L ≈ 26 m) : rien de visible.
+    for direction, s0, attendu in ((1, pn.START_S, (0.45, 0.75)),
+                                   (-1, pn.STOP_S, (0.0, 0.01))):
+        st, ph = _make(direction, s0, 0, 0)
+        st.trip_started = False
+        tr = st.train
+        tr.speed_cmd = 0.0
+        tr.doors_open = True
+        tr.maint_brake = True
+        tr.pax_car1_target = 167
+        tr.pax_car2_target = 167
+        for _ in range(int(90.0 / DT)):
+            ph.step(DT)
+        recul = s0 - tr.s if direction > 0 else s0 - tr.s
+        assert tr.pax == 334
+        assert attendu[0] <= recul <= attendu[1], \
+            f"recul {recul*100:.1f} cm (dir={direction})"
+        # le contrepoids, lui, n'a pas bougé
+        assert abs(st.ghost_s - (pn.LENGTH - s0)) < 0.02
