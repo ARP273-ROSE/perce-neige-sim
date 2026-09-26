@@ -14,6 +14,29 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 
 ## Quoi de neuf — v1.13.x (audit physique des voyages, 26 septembre 2026)
 
+**v1.13.2** — des rames réalistes en 3D (PWA et vue F4 du PC), d'après les
+photos du 26 avril 2026 (`sons/photos`) :
+- L'ancienne cabine était un **cylindre jaune Ø 3,40 m centré 15 cm sous
+  l'axe** : il descendait à −1,85 m, sous la dalle et les rails. La nouvelle
+  carrosserie (`train_body_builder.gd`) est un **tube Ø 3,44 m concentrique
+  à l'alésage, coupé à plat 7 cm au-dessus de la table de roulement**, avec
+  le plancher intérieur au niveau des quais-escaliers (les sièges sont
+  posés dessus ; caméra et pupitre inchangés).
+- **Flancs gris** en tôle alu nervurée : anneaux circonférentiels tous les
+  1,85 m, hublots hauts à coins arrondis alternés avec **trois portes par
+  face** (vantaux plus clairs, joint central), tôle pleine aux extrémités.
+- **Extrémités jaunes** en calotte bombée (1 m) débordant sur le premier
+  tronçon : pare-brise rectangulaire centré en haut, deux baies étroites de
+  portes de secours, lettrage « TIGNES » (Label3D), plaque, grille noire,
+  **deux feux ronds** en bas qui s'allument avec les phares (blanc devant,
+  rouge derrière ; la rame 2 vient en face, feux blancs allumés).
+- Bogies apparents (4 roues chacun, sur l'écartement de 1,20 m), soufflet
+  d'intercirculation sombre entre les deux voitures. Longueur visuelle
+  32,0 m exactement (repères d'arrêt et collisions inchangés).
+- Contrôles : `bench_train_mesh_3d.gd` (rien sous les rails, rien dans la
+  voûte ni les parois, 32 m) + `tests/rendu_rame.py` (rendu orthographique
+  face / flanc / dessus / trois-quarts sans GPU, à partir du maillage exporté).
+
 **v1.13.1** — l'ambiance cabine ne « se coupe » plus à la décélération :
 - Retour d'essai : « le son ambiant se coupe à la décélération vers 1 m/s ».
   Sur le PC, le volume des boucles suivait v/10 jusqu'à un plancher de 0,14
