@@ -14,6 +14,18 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 
 ## Quoi de neuf — v1.13.x (audit physique des voyages, 26 septembre 2026)
 
+**v1.14.4** — galets plus inclinés, gares détaillées :
+- **Galets** : inclinaison dans les virages doublée (× 8 au lieu de × 4,
+  plafond 32° au lieu de 15°).
+- **Gares** (photos 093522 / 094104 en bas, 095509 / 095443 en haut) : une
+  **fosse sous la voie** aux deux bouts (fond en caillebotis, parois béton,
+  cornières de rive, les rails passent sur des longrines, la dalle et les
+  blochets s'arrêtent) ; en haut, **deux grandes poulies de renvoi** du
+  câble vers la machinerie (Ø 1,6 m, une par brin) et une petite, ruban
+  « 1000 VOLTS » ; en bas, une chaîne de sécurité. Le butoir rouge générique
+  est remplacé aux deux gares par les **butoirs bleus** à tête bois de la
+  photo (deux poutres-caissons au niveau du châssis).
+
 **v1.14.3** — le cockpit enfin *dans* la rame :
 - En vue cabine, la coque n'était pas dessinée : on voyait le tunnel de
   tous côtés, sans montants, sans encadrement de pare-brise, sans hublots.
