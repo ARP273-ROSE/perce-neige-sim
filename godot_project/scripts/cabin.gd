@@ -201,11 +201,11 @@ func _build_floor_ceiling() -> void:
 	# étaient centrées sur z=0 et couvraient 97 % du train → 3,5 m de
 	# plancher/plafond en porte-à-faux DEVANT le poste de pilotage, comme
 	# un plongeoir au-dessus de la voie.
-	var z_front: float = -train_length * 0.5 + 2.4    # plancher (sous le pupitre)
+	var z_front: float = -train_length * 0.5 + 0.9    # plancher (jusqu'au bas du pare-brise)
 	# Plafond + bandeau LED : encore plus courts (retour d'essai : « un
 	# plafond qui avance moins vers l'avant au-dessus de nous ») —
 	# 0,4 m devant la caméra seulement, simple casquette.
-	var z_front_ceil: float = -train_length * 0.5 + 3.2
+	var z_front_ceil: float = -train_length * 0.5 + 1.4
 	var z_rear: float = train_length * 0.5 * 0.97
 
 	# Sol cabine — plancher caillebotis sombre (matériau acier mat),
@@ -316,7 +316,7 @@ func _build_handrails() -> void:
 	# 2 mains courantes horizontales le long du plafond, à x=±0.35 (au-dessus
 	# de l'aisle). Elles s'arrêtent 0,6 m en retrait du front du plafond
 	# (zone conducteur = pas de main courante dans le vrai cockpit).
-	var rail_z_front: float = -train_length * 0.5 + 3.4
+	var rail_z_front: float = -train_length * 0.5 + 2.6
 	var rail_z_rear: float = train_length * 0.5 * 0.85
 	var car_len_r: float = train_length / float(car_count)
 	for side in [-1.0, 1.0]:
@@ -385,7 +385,7 @@ func _build_console_pupitre() -> void:
 	# 0,7 m DEVANT la caméra FPV (z=−12,4) : assez proche pour que le
 	# pupitre occupe le BAS de l'image (retour d'essai : à 1,35 m il
 	# flottait en plein milieu de la vue).
-	var z_console: float = -train_length * 0.5 + 2.9
+	var z_console: float = -train_length * 0.5 + 1.45   # contre le bas du pare-brise (photo 095119)
 	var y_top: float = 0.52                            # hauteur sommet tube
 	var tube_radius: float = 0.090                     # ≈ 18 cm de diamètre
 	var tube_length: float = 1.10                      # 1.10 m de large
@@ -588,7 +588,7 @@ func _build_console_pupitre() -> void:
 ## tablette-horloge sur le montant gauche, panneau latéral à boutons avec
 ## levier et boîtier rouge, grille de ventilation à lamelles.
 func _build_cockpit_extras() -> void:
-	var z_console: float = -train_length * 0.5 + 2.9
+	var z_console: float = -train_length * 0.5 + 1.45   # contre le bas du pare-brise (photo 095119)
 	var y_top: float = 0.52
 	var tilt: float = 0.07
 	var red: StandardMaterial3D = StandardMaterial3D.new()
@@ -731,7 +731,7 @@ func _build_cctv_monitor() -> void:
 	# Accroché juste EN DEDANS du nouveau front du plafond (z_front=−13.6,
 	# cf. _build_floor_ceiling) — avant il pendait à −14.6, au-delà du
 	# plafond raccourci, donc flottait dans le vide.
-	var z_mon: float = -train_length * 0.5 + 2.65
+	var z_mon: float = -train_length * 0.5 + 1.75
 	var bezel_mat: StandardMaterial3D = StandardMaterial3D.new()
 	bezel_mat.albedo_color = Color(0.05, 0.05, 0.06)
 	bezel_mat.roughness = 0.5
@@ -779,7 +779,7 @@ func _build_cctv_monitor() -> void:
 
 func _build_driver_seat() -> void:
 	# Siège du conducteur, derrière le dashboard
-	var z_seat: float = -train_length * 0.5 + 4.5   # = -11.5
+	var z_seat: float = -train_length * 0.5 + 2.45  # 0,3 m derrière la caméra
 
 	var seat_mat: StandardMaterial3D = StandardMaterial3D.new()
 	seat_mat.albedo_color = Color(0.18, 0.18, 0.22)
@@ -983,12 +983,17 @@ func _build_camera() -> void:
 	# Caméra 1ère personne — position driver dans la zone cockpit
 	camera_fpv = Camera3D.new()
 	camera_fpv.name = "CameraFPV"
-	camera_fpv.fov = 72.0
+	camera_fpv.fov = 78.0
 	camera_fpv.near = 0.05
 	camera_fpv.far = 800.0
 	# Avancée de 0,4 m (retour d'essai 2026-07 : « trop loin du panneau
 	# de commande ») — le pupitre à 0,7 m devant tombe en bas de l'image.
-	camera_fpv.position = Vector3(0.0, 0.85, -train_length * 0.5 + 3.6)
+	# Retour d'essai 2026-09-26 : « le champ de vision est trop étroit, la
+	# vitre est trop petite » — la caméra était à 3,6 m du nez, soit 2,3 m
+	# derrière un pare-brise de 1,4 m (22° de champ). Le vrai conducteur est
+	# à ~1,8 m de la vitre, le pupitre contre son bas : caméra à 2,15 m du
+	# nez, pupitre 0,7 m devant, champ vertical 78°.
+	camera_fpv.position = Vector3(0.0, 0.85, -train_length * 0.5 + 2.15)
 	camera_fpv.rotation = Vector3(0.0, 0.0, 0.0)
 	add_child(camera_fpv)
 
