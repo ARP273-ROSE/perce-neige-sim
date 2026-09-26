@@ -14,6 +14,10 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 
 ## Quoi de neuf — v1.13.x (audit physique des voyages, 26 septembre 2026)
 
+**v1.15.1** — pas de fosse en haut, seulement en bas (retour d'essai) : la
+dalle, les blochets et l'escalier vont jusqu'au bout à Grande Motte,
+butoirs bleus seuls.
+
 **v1.15.0** — le tunnel d'après les vidéos cabine (2026-04-26 et HD) :
 - **Anneaux de voussoirs** de la section au tunnelier (257 → 3 420 m) :
   joints circulaires tous les 1,4 m et joints longitudinaux en quinconce,
