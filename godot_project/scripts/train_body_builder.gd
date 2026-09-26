@@ -25,10 +25,14 @@ const Y_FLOOR: float = -0.95        # plancher intérieur (monde −1,10 = quais
 const Y_RAIL_HEAD: float = -1.08    # table de roulement (monde −1,23)
 const CAP_LEN: float = 1.00         # profondeur de la calotte bombée
 const GAP: float = 0.50             # jeu entre les deux voitures
-const RIB_W: float = 0.22           # largeur d'un anneau
-const RIB_H: float = 0.035          # saillie d'un anneau
-const PANEL_L: float = 1.63         # longueur d'un panneau (hublot ou porte)
-const END_BLANK: float = 0.77       # tôle pleine aux extrémités du tube
+# Flancs (photos 095433/095438/094135) : la caisse est une suite de
+# CERCEAUX de ~1,3 m séparés par un joint sombre EN CREUX (pas une nervure
+# saillante), chacun percé d'UN hublot haut et étroit ; les portes sont des
+# vantaux uniques de la largeur d'un cerceau, avec un hublot plus étroit.
+const RIB_W: float = 0.10           # joint entre cerceaux
+const RIB_H: float = -0.03          # en creux
+const PANEL_L: float = 1.30         # longueur d'un cerceau (hublot ou porte)
+const END_BLANK: float = 0.33       # tôle pleine aux extrémités du tube
 const WELL_TOP: float = -0.60       # échancrures de la jupe au droit des bogies (y local)
 const WELL_HALF: float = 1.40       # demi-longueur d'une échancrure
 const BOGIE_OFFSET: float = 3.0     # bogies à 3 m des extrémités de voiture
@@ -37,15 +41,17 @@ const D_THETA_DEG: float = 2.5      # résolution angulaire du tube (découpes d
 const CAP_THETA_DEG: float = 2.0    # résolution angulaire de la calotte (découpes)
 const CAP_N_T: int = 45             # anneaux de la calotte
 const COL_L: float = 0.10           # résolution longitudinale des panneaux vitrés
-# Hublots des flancs (photos intérieur/extérieur du 2026-04-26) : rectangles
-# à GRANDS arrondis, ~1,0 m de large sur 1,1 m de haut, au-dessus de la
-# ceinture (≈ 1,1 m du plancher) jusqu'à la courbe du plafond. Définis en
-# (u le long de la voiture, w = longueur d'arc depuis le sommet) ; découpe
-# + joint caoutchouc + vitre lissée, comme le pare-brise.
-const WIN_T0: float = 52.0          # angle depuis le sommet : haut du hublot
-const WIN_T1: float = 92.0          # bas du hublot (ceinture)
-const WIN_MARGIN: float = 0.315     # marge longitudinale dans un panneau (largeur 1,0 m)
-const WIN_CORNER: float = 0.25      # rayon des arrondis
+# Hublots des flancs (photos du 2026-04-26) : hauts et étroits, ~0,75 m de
+# large sur ~1,5 m d'arc, du dessus des assises (0,6 m du plancher) à la
+# courbe du plafond (2,05 m), extrémités très arrondies (r = 0,28) ; ceux
+# des portes sont plus étroits (0,60). Définis en (u le long du cerceau,
+# w = longueur d'arc depuis le sommet) ; découpe + joint caoutchouc +
+# vitre lissée, comme le pare-brise.
+const WIN_T0: float = 58.0          # angle depuis le sommet : haut du hublot (2,05 m du plancher)
+const WIN_T1: float = 108.5         # bas du hublot (0,6 m du plancher, dessus des assises)
+const WIN_W: float = 0.75           # largeur d'un hublot de panneau fixe
+const DOOR_WIN_W: float = 0.60      # largeur d'un hublot de porte
+const WIN_CORNER: float = 0.28      # rayon des arrondis
 const TUBE_GASKET_IN: float = 0.03
 const TUBE_GASKET_OUT: float = 0.11 # doit couvrir une cellule (0,10 × 0,075)
 # Face avant (photo 20260426_095511, 220 px/m) : la face réelle va de
@@ -111,7 +117,7 @@ static func materials() -> Dictionary:
 	return {
 		"body": _mat(Color(0.60, 0.61, 0.60), 0.55, 0.45),      # tôle alu grise
 		"door": _mat(Color(0.66, 0.67, 0.66), 0.50, 0.45),      # vantaux, un ton plus clair
-		"rib": _mat(Color(0.40, 0.41, 0.42), 0.60, 0.50),       # anneaux
+		"rib": _mat(Color(0.20, 0.20, 0.22), 0.70, 0.40),       # joints en creux entre cerceaux
 		"yellow": _mat(Color(0.92, 0.82, 0.12), 0.42, 0.10),    # calottes (jaune citron)
 		"rubber": _mat(Color(0.07, 0.07, 0.08), 0.85, 0.05),    # joints de vitres
 		"glass": glass,
@@ -171,7 +177,8 @@ static func _theta_cut() -> float:
 # kind ∈ blank | rib | win | door. Panneaux W D W D W D W entre anneaux.
 static func _columns(z_a: float, z_b: float) -> Array:
 	var cols: Array = []
-	var kinds: Array = ["win", "door", "win", "door", "win", "door", "win"]
+	# 10 cerceaux, 3 portes par face (source CFD) : W D W W D W W D W W
+	var kinds: Array = ["win", "door", "win", "win", "door", "win", "win", "door", "win", "win"]
 	var z: float = z_a
 	cols.append({"z0": z, "z1": z + END_BLANK, "kind": "blank"})
 	z += END_BLANK
@@ -195,10 +202,12 @@ static func _in_well(z: float, wells: Array) -> bool:
 
 ## Contour d'un hublot d'un panneau : repère (u, w), u depuis le début du
 ## panneau, w = longueur d'arc depuis le sommet du tube (> 0 des deux côtés).
-static func _window_outline(plen: float) -> PackedVector2Array:
+static func _window_outline(plen: float, kind: String = "win") -> PackedVector2Array:
 	var w0: float = R_BODY * deg_to_rad(WIN_T0)
 	var w1: float = R_BODY * deg_to_rad(WIN_T1)
-	return _rounded_outline(WIN_MARGIN, plen - WIN_MARGIN, w0, w1, WIN_CORNER, 99.0)
+	var width: float = DOOR_WIN_W if kind == "door" else WIN_W
+	var margin: float = (plen - width) * 0.5
+	return _rounded_outline(margin, plen - margin, w0, w1, WIN_CORNER, 99.0)
 
 
 ## Point du tube pour (u, w) d'un panneau commençant à z0c, côté sx (±1).
@@ -234,7 +243,7 @@ static func _build_tube(mesh: ArrayMesh, mats: Dictionary, z_a: float, z_b: floa
 		var z1c: float = col["z1"]
 		var plen: float = z1c - z0c
 		var glazed: bool = kind == "win" or kind == "door"
-		var hole: PackedVector2Array = _window_outline(plen) if glazed else PackedVector2Array()
+		var hole: PackedVector2Array = _window_outline(plen, kind) if glazed else PackedVector2Array()
 		# le jaune de la calotte déborde sur la tôle pleine d'extrémité
 		# (photos : tout le premier tronçon, portes de secours comprises)
 		var yellow_col: bool = kind == "blank" and ((ci == 0 and yellow_a) or (ci == cols.size() - 1 and yellow_b))
@@ -279,22 +288,6 @@ static func _build_tube(mesh: ArrayMesh, mats: Dictionary, z_a: float, z_b: floa
 				_emit_band(st_rubber, _offset_outline(hole, -TUBE_GASKET_IN),
 					_offset_outline(hole, TUBE_GASKET_OUT), pt_fn, n_fn, 0.010)
 				_emit_pane(st_glass, _offset_outline(hole, -GLASS_INSET), pt_fn, n_fn, 0.016)
-		# joint vertical des vantaux (deux battants), hors hublot
-		if kind == "door":
-			var zs: float = z0c + plen * 0.5
-			var w_lo: float = R_BODY * deg_to_rad(WIN_T0) - TUBE_GASKET_OUT - 0.02
-			var w_hi: float = R_BODY * deg_to_rad(WIN_T1) + TUBE_GASKET_OUT + 0.02
-			for i in range(n_th):
-				var t0: float = -th_cut + d_th * i
-				var t1: float = t0 + d_th
-				var wm: float = R_BODY * absf(0.5 * (t0 + t1))
-				if wm > w_lo and wm < w_hi:
-					continue
-				_quad(st_seam, _tube_pt(t0, r + 0.004, zs + 0.012),
-					_tube_pt(t1, r + 0.004, zs + 0.012),
-					_tube_pt(t1, r + 0.004, zs - 0.012),
-					_tube_pt(t0, r + 0.004, zs - 0.012),
-					_tube_n(t0), _tube_n(t1), _tube_n(t1), _tube_n(t0))
 	# Fond plat (châssis) entre les échancrures, et plafond des échancrures
 	var xw: float = R_BODY * sin(th_cut)
 	var cuts: Array = [z_a]
