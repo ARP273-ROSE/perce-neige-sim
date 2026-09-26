@@ -17,7 +17,7 @@ extends Node3D
 # locale de la voie. Nez de marche contrastés (alu en bas, rouges en haut).
 @export var platform_width: float = 3.00       # largeur quai latéral (bord extérieur ≈ au mur de salle)
 @export var platform_inner_x: float = 1.85     # distance depuis centre tunnel au bord intérieur (hors gabarit cabine ∅3.6m)
-@export var platform_height: float = 0.40      # hauteur quai vs plancher voie (plancher cabine bas)
+@export var platform_height: float = 0.50      # hauteur quai vs dalle : quai à −1,10 = plancher cabine
 @export var tread_depth: float = 0.95          # profondeur d'une marche-palier
 @export var tread_thickness: float = 0.55      # épaisseur du bloc (descend sous la marche suivante)
 @export var ceiling_height: float = 1.85       # hauteur centre → plafond
@@ -29,7 +29,7 @@ var tunnel: TunnelBuilder = null
 var lang: String = "fr"
 
 # Paramètres plateforme — offsets dans la base locale
-const FLOOR_Y_LOCAL: float = -1.10 # top dalle (cohérent avec track_builder : floor_y_local + slab_thickness = -1.35+0.25 = -1.10)
+const FLOOR_Y_LOCAL: float = -1.60 # top dalle (cohérent avec track_builder : floor_y_local + slab_thickness = -1.85+0.25 = -1.60)
 
 
 func build(t: TunnelBuilder) -> void:

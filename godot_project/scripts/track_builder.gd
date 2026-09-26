@@ -19,7 +19,13 @@ extends Node3D
 @export var rail_web_width: float = 0.020    # âme rail
 @export var rail_foot_width: float = 0.150   # patin
 
-@export var floor_y_local: float = -1.35     # plancher dalle vs centre tunnel
+# Voie DESCENDUE de 0,50 m le 2026-09-26 : en réalité les rails sont au
+# fond de l'alésage (cabines Ø 3,60 dans un tube Ø 3,90, plancher bas) ;
+# à −1,35 la table de roulement n'était qu'à 0,73 m sous l'axe et la rame
+# ne pouvait pas y tenir sans passer sous les rails. Dalle −1,85 → table de
+# roulement à −1,23. Quais (stations_builder), brins en salle des machines
+# (machine_room_builder) et carrosserie (train_body_builder) recalés.
+@export var floor_y_local: float = -1.85     # plancher dalle vs centre tunnel
 @export var slab_thickness: float = 0.25     # épaisseur dalle béton
 @export var slab_width: float = 3.20         # largeur dalle (déborde sous banquettes)
 
