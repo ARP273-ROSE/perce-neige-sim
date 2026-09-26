@@ -29,6 +29,10 @@ const RIB_W: float = 0.22           # largeur d'un anneau
 const RIB_H: float = 0.035          # saillie d'un anneau
 const PANEL_L: float = 1.63         # longueur d'un panneau (hublot ou porte)
 const END_BLANK: float = 0.77       # tôle pleine aux extrémités du tube
+const WELL_TOP: float = -0.60       # échancrures de la jupe au droit des bogies (y local)
+const WELL_HALF: float = 1.40       # demi-longueur d'une échancrure
+const BOGIE_OFFSET: float = 3.0     # bogies à 3 m des extrémités de voiture
+const WHEEL_R: float = 0.30
 const D_THETA_DEG: float = 5.0      # résolution angulaire du tube
 const CAP_THETA_DEG: float = 2.0    # résolution angulaire de la calotte (découpes)
 const CAP_N_T: int = 45             # anneaux de la calotte
@@ -191,8 +195,15 @@ static func _is_glass(kind: String, th_deg: float, u0: float, u1: float, plen: f
 
 # --- tube d'une voiture ------------------------------------------------------
 
+static func _in_well(z: float, wells: Array) -> bool:
+	for w in wells:
+		if absf(z - w) < WELL_HALF:
+			return true
+	return false
+
+
 static func _build_tube(mesh: ArrayMesh, mats: Dictionary, z_a: float, z_b: float,
-		yellow_a: bool = false, yellow_b: bool = false) -> void:
+		yellow_a: bool = false, yellow_b: bool = false, wells: Array = []) -> void:
 	var th_cut: float = _theta_cut()
 	var n_th: int = int(ceil(2.0 * rad_to_deg(th_cut) / D_THETA_DEG))
 	var d_th: float = 2.0 * th_cut / float(n_th)
@@ -228,6 +239,9 @@ static func _build_tube(mesh: ArrayMesh, mats: Dictionary, z_a: float, z_b: floa
 				var t0: float = -th_cut + d_th * i
 				var t1: float = t0 + d_th
 				var tm_deg: float = rad_to_deg(0.5 * (t0 + t1))
+				# échancrure de bogie : la jupe s'arrête au-dessus des roues
+				if Y_CENTER + r * cos(0.5 * (t0 + t1)) < WELL_TOP and _in_well(0.5 * (z0 + z1), wells):
+					continue
 				var glass: bool = _is_glass(kind, tm_deg, u0, u1, plen)
 				var st: SurfaceTool = st_glass if glass else (
 					st_rib if kind == "rib" else (st_door if kind == "door" else (
@@ -250,10 +264,23 @@ static func _build_tube(mesh: ArrayMesh, mats: Dictionary, z_a: float, z_b: floa
 							_tube_pt(t1, r + 0.004, zs - 0.012),
 							_tube_pt(t0, r + 0.004, zs - 0.012),
 							_tube_n(t0), _tube_n(t1), _tube_n(t1), _tube_n(t0))
-	# Fond plat (châssis) sur toute la longueur du tube
+	# Fond plat (châssis) entre les échancrures, et plafond des échancrures
 	var xw: float = R_BODY * sin(th_cut)
-	_quad_flat(st_dark, Vector3(-xw, Y_CUT, z_a), Vector3(-xw, Y_CUT, z_b),
-		Vector3(xw, Y_CUT, z_b), Vector3(xw, Y_CUT, z_a))
+	var cuts: Array = [z_a]
+	for w in wells:
+		cuts.append(w - WELL_HALF)
+		cuts.append(w + WELL_HALF)
+	cuts.append(z_b)
+	for k in range(0, cuts.size() - 1, 2):
+		var za: float = maxf(cuts[k], z_a)
+		var zb: float = minf(cuts[k + 1], z_b)
+		if zb > za:
+			_quad_flat(st_dark, Vector3(-xw, Y_CUT, za), Vector3(-xw, Y_CUT, zb),
+				Vector3(xw, Y_CUT, zb), Vector3(xw, Y_CUT, za))
+	var xw_top: float = R_BODY * sin(acos(clampf((WELL_TOP - Y_CENTER) / R_BODY, -1.0, 1.0)))
+	for w in wells:
+		_quad_flat(st_dark, Vector3(-xw_top, WELL_TOP, w - WELL_HALF), Vector3(-xw_top, WELL_TOP, w + WELL_HALF),
+			Vector3(xw_top, WELL_TOP, w + WELL_HALF), Vector3(xw_top, WELL_TOP, w - WELL_HALF))
 	# Parois d'extrémité côté attelage : disques gris fermant le tube
 	st_body.set_material(mats["body"]); st_body.commit(mesh)
 	st_yellow.set_material(mats["yellow"]); st_yellow.commit(mesh)
@@ -621,37 +648,66 @@ static func _build_cap_fittings(parent: Node3D, mats: Dictionary, z_join: float,
 	return lamps
 
 
-static func _build_bogie(parent: Node3D, mats: Dictionary, z_c: float) -> void:
-	# châssis de bogie (surtout caché par le fond plat) + 4 roues
-	_box(parent, mats["dark"], Vector3(2.0, 0.06, 2.1), Vector3(0.0, Y_CUT - 0.01, z_c), "Bogie")
-	var y_axle: float = Y_RAIL_HEAD + 0.30
-	for sx in [-0.60, 0.60]:
-		for dz in [-0.85, 0.85]:
-			_disc(parent, mats["wheel"], 0.30, 0.09, Vector3(sx, y_axle, z_c + dz), false, "Roue")
-	# essieux
+## Bogie : châssis, deux essieux, quatre roues sur PIVOTS (retournés par
+## cabin.gd à v/R) avec moyeu clair et barre radiale sur la face externe —
+## une roue lisse qui tourne ne se voit pas. Retourne les pivots.
+static func _build_bogie(parent: Node3D, mats: Dictionary, z_c: float) -> Array:
+	var pivots: Array = []
+	var y_axle: float = Y_RAIL_HEAD + WHEEL_R
+	# longerons du châssis, au-dessus des roues, entre les échancrures
+	for sx in [-0.95, 0.95]:
+		_box(parent, mats["dark"], Vector3(0.12, 0.16, 2.4), Vector3(sx, WELL_TOP - 0.10, z_c), "Longeron")
 	for dz in [-0.85, 0.85]:
-		_box(parent, mats["dark"], Vector3(1.30, 0.08, 0.08), Vector3(0.0, y_axle, z_c + dz), "Essieu")
+		_box(parent, mats["dark"], Vector3(1.30, 0.07, 0.07), Vector3(0.0, y_axle, z_c + dz), "Essieu")
+		# boîtes d'essieu
+		for sx in [-0.72, 0.72]:
+			_box(parent, mats["dark"], Vector3(0.14, 0.22, 0.26), Vector3(sx, y_axle + 0.02, z_c + dz), "Boite")
+		for sx in [-0.60, 0.60]:
+			var pivot: Node3D = Node3D.new()
+			pivot.name = "Roue"
+			pivot.position = Vector3(sx, y_axle, z_c + dz)
+			parent.add_child(pivot)
+			_disc(pivot, mats["wheel"], WHEEL_R, 0.09, Vector3.ZERO, false, "Disque")
+			var outer: float = signf(sx) * 0.055
+			_disc(pivot, mats["rib"], 0.09, 0.02, Vector3(outer, 0.0, 0.0), false, "Moyeu")
+			_box(pivot, mats["rib"], Vector3(0.015, 0.50, 0.05), Vector3(outer, 0.0, 0.0), "Barre")
+			_box(pivot, mats["rib"], Vector3(0.015, 0.05, 0.50), Vector3(outer, 0.0, 0.0), "Barre2")
+			pivots.append(pivot)
+	return pivots
 
 
-## Construit la rame complète sous `root`. Retourne {front_lamps, rear_lamps}.
+## Construit la rame complète sous `root` : UN NŒUD PAR VOITURE
+## (« CarRoot%d », géométrie centrée sur la voiture, posé à z = ±8 m au
+## repos) que cabin.gd replace chaque frame sur la spline à sa propre
+## abscisse — l'articulation en courbe (retour d'essai 2026-09-26 :
+## « c'est qu'un bloc »). Retourne {car_roots, wheels, front_lamps,
+## rear_lamps, mats}.
 static func build_train(root: Node3D, train_length: float, car_count: int,
 		backboard: bool = false) -> Dictionary:
 	var mats: Dictionary = materials()
 	var car_len: float = train_length / float(car_count)
 	var front_lamps: Array = []
 	var rear_lamps: Array = []
+	var wheels: Array = []
+	var car_roots: Array = []
 	for i in range(car_count):
 		var z_c: float = (float(i) - (car_count - 1) * 0.5) * car_len
-		var z_front_end: float = z_c - car_len * 0.5      # extrémité avant (−Z)
-		var z_rear_end: float = z_c + car_len * 0.5
+		var car_root: Node3D = Node3D.new()
+		car_root.name = "CarRoot%d" % (i + 1)
+		car_root.position = Vector3(0.0, 0.0, z_c)
+		root.add_child(car_root)
+		car_roots.append(car_root)
+		var z_front_end: float = -car_len * 0.5      # extrémité avant (−Z), repère voiture
+		var z_rear_end: float = car_len * 0.5
 		var is_first: bool = (i == 0)
 		var is_last: bool = (i == car_count - 1)
 		# le tube laisse la place à la calotte à l'extrémité de rame, et un
 		# demi-jeu côté attelage
 		var z_a: float = z_front_end + (CAP_LEN if is_first else GAP * 0.5)
 		var z_b: float = z_rear_end - (CAP_LEN if is_last else GAP * 0.5)
+		var wells: Array = [z_front_end + BOGIE_OFFSET, z_rear_end - BOGIE_OFFSET]
 		var mesh: ArrayMesh = ArrayMesh.new()
-		_build_tube(mesh, mats, z_a, z_b, is_first, is_last)
+		_build_tube(mesh, mats, z_a, z_b, is_first, is_last, wells)
 		if is_first:
 			_build_cap(mesh, mats, z_a, -1.0, backboard)
 		else:
@@ -663,13 +719,13 @@ static func build_train(root: Node3D, train_length: float, car_count: int,
 		var car: MeshInstance3D = MeshInstance3D.new()
 		car.name = "Car%d" % (i + 1)
 		car.mesh = mesh
-		root.add_child(car)
+		car_root.add_child(car)
 		if is_first:
-			front_lamps = _build_cap_fittings(root, mats, z_a, -1.0, true)
+			front_lamps = _build_cap_fittings(car_root, mats, z_a, -1.0, true)
 		if is_last:
-			rear_lamps = _build_cap_fittings(root, mats, z_b, 1.0, false)
-		_build_bogie(root, mats, z_c - car_len * 0.5 + 3.0)
-		_build_bogie(root, mats, z_c + car_len * 0.5 - 3.0)
+			rear_lamps = _build_cap_fittings(car_root, mats, z_b, 1.0, false)
+		wheels.append_array(_build_bogie(car_root, mats, wells[0]))
+		wheels.append_array(_build_bogie(car_root, mats, wells[1]))
 		# soufflet d'intercirculation entre les deux voitures
 		if not is_last:
 			var bellows: MeshInstance3D = MeshInstance3D.new()
@@ -691,5 +747,6 @@ static func build_train(root: Node3D, train_length: float, car_count: int,
 			st.commit(bm)
 			bellows.mesh = bm
 			bellows.name = "Soufflet"
-			root.add_child(bellows)
-	return {"front_lamps": front_lamps, "rear_lamps": rear_lamps, "mats": mats}
+			car_root.add_child(bellows)
+	return {"car_roots": car_roots, "wheels": wheels,
+		"front_lamps": front_lamps, "rear_lamps": rear_lamps, "mats": mats}

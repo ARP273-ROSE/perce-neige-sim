@@ -20,11 +20,23 @@ func _initialize() -> void:
 	var x_max: float = 0.0
 	var z_min: float = 99.0
 	var z_max: float = -99.0
-	for child in root.get_children():
-		if not (child is MeshInstance3D):
-			continue
-		var mi: MeshInstance3D = child
+	var stack: Array = [root]
+	var meshes: Array = []
+	while not stack.is_empty():
+		var n: Node = stack.pop_back()
+		for c in n.get_children():
+			stack.append(c)
+			if c is MeshInstance3D:
+				meshes.append(c)
+	for mi_any in meshes:
+		var mi: MeshInstance3D = mi_any
+		# transform cumulé jusqu'à root (hors arbre : pas de global_transform)
 		var xf: Transform3D = mi.transform
+		var par: Node = mi.get_parent()
+		while par != null and par != root:
+			if par is Node3D:
+				xf = (par as Node3D).transform * xf
+			par = par.get_parent()
 		var mesh: Mesh = mi.mesh
 		for si in range(mesh.get_surface_count()):
 			var mat: Material = mi.get_surface_override_material(si)

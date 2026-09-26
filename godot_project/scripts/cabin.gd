@@ -23,6 +23,15 @@ var interior_light: OmniLight3D = null
 var _front_lamps: Array = []         # feux ronds de la calotte avant
 var _rear_lamps: Array = []
 var _body_mats: Dictionary = {}
+# Articulation (2026-09-26) : un nœud par voiture pour la coque
+# (_car_roots, sous mesh_root) et pour l'intérieur qui la suit
+# (_interior_cars, sous la cabine, visible en FPV). Chacun est replacé
+# chaque frame sur la spline à SA propre abscisse (s ∓ 8 m). Le pupitre,
+# le siège conducteur, la caméra et les phares restent rigides avec la
+# cabine (repère de la vue).
+var _car_roots: Array = []
+var _interior_cars: Array = []
+var _wheels: Array = []              # pivots de roues, tournés à v/R
 
 # Passagers — références pour animer les têtes selon l'accel/courbure
 var _passenger_heads: Array = []   # Array[MeshInstance3D]
@@ -106,6 +115,8 @@ func _build_mesh() -> void:
 	_front_lamps = built["front_lamps"]
 	_rear_lamps = built["rear_lamps"]
 	_body_mats = built["mats"]
+	_car_roots = built["car_roots"]
+	_wheels = built["wheels"]
 	# Le ghost (rame 2) roule vers nous : ses feux arrière rouges allumés
 	# côté « avant » de sa rame vue de notre sens n'ont pas de sens ; on
 	# allume ses feux d'extrémité en blanc (elle vient en face).
@@ -125,10 +136,47 @@ func _build_mesh() -> void:
 # Toujours visible (en FPV on regarde l'intérieur, en EXT la coque cache)
 # ---------------------------------------------------------------------------
 
+## Parent intérieur d'un élément d'abscisse z (repère rame) : la voiture
+## qui le contient, avec z ramené au repère de la voiture.
+func _interior_parent(z: float) -> Dictionary:
+	var car_len: float = train_length / float(car_count)
+	var idx: int = clampi(int(floor((z + train_length * 0.5) / car_len)), 0, car_count - 1)
+	var z_c: float = (float(idx) - (car_count - 1) * 0.5) * car_len
+	return {"node": _interior_cars[idx], "z": z - z_c}
+
+
+## Boîte intérieure allongée selon z, scindée aux limites de voiture.
+func _add_interior_box(mat: StandardMaterial3D, sx: float, sy: float, y: float,
+		z0: float, z1: float, name: String) -> void:
+	var car_len: float = train_length / float(car_count)
+	for idx in range(car_count):
+		var z_c: float = (float(idx) - (car_count - 1) * 0.5) * car_len
+		var za: float = maxf(z0, z_c - car_len * 0.5)
+		var zb: float = minf(z1, z_c + car_len * 0.5)
+		if zb - za < 0.05:
+			continue
+		var bm: BoxMesh = BoxMesh.new()
+		bm.size = Vector3(sx, sy, zb - za)
+		bm.material = mat
+		var mi: MeshInstance3D = MeshInstance3D.new()
+		mi.name = "%s%d" % [name, idx + 1]
+		mi.mesh = bm
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		mi.position = Vector3(0.0, y, (za + zb) * 0.5 - z_c)
+		_interior_cars[idx].add_child(mi)
+
+
 func _build_interior() -> void:
 	interior_root = Node3D.new()
 	interior_root.name = "Interior"
 	add_child(interior_root)
+	var car_len: float = train_length / float(car_count)
+	for idx in range(car_count):
+		var n: Node3D = Node3D.new()
+		n.name = "InteriorCar%d" % (idx + 1)
+		n.position = Vector3(0.0, 0.0, (float(idx) - (car_count - 1) * 0.5) * car_len)
+		add_child(n)
+		_interior_cars.append(n)
 	_build_floor_ceiling()
 	_build_console_pupitre()     # pupitre Von Roll fin (tube horizontal blanc)
 	_build_cctv_monitor()        # petit moniteur 4 caméras plafond gauche
@@ -162,17 +210,9 @@ func _build_floor_ceiling() -> void:
 	floor_mat.metallic_specular = 0.4
 	floor_mat.uv1_scale = Vector3(8.0, 16.0, 1.0)
 
-	var floor_mesh: BoxMesh = BoxMesh.new()
-	floor_mesh.size = Vector3(2.40, 0.05, z_rear - z_front)
-	floor_mesh.material = floor_mat
-	var floor_node: MeshInstance3D = MeshInstance3D.new()
-	floor_node.name = "InteriorFloor"
-	floor_node.mesh = floor_mesh
-	floor_node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	# Plancher au niveau des quais-escaliers (TrainBodyBuilder.Y_FLOOR) : il
-	# était à −1,05, sous la dalle du tunnel, avec les sièges 1,5 m au-dessus.
-	floor_node.position = Vector3(0.0, TrainBodyBuilder.Y_FLOOR, (z_front + z_rear) * 0.5)
-	interior_root.add_child(floor_node)
+	# Plancher au niveau des quais-escaliers (TrainBodyBuilder.Y_FLOOR),
+	# scindé par voiture pour suivre l'articulation.
+	_add_interior_box(floor_mat, 2.40, 0.05, TrainBodyBuilder.Y_FLOOR, z_front, z_rear, "InteriorFloor")
 
 	# Plafond cabine — surface plate visible quand on lève les yeux
 	var ceil_mat: StandardMaterial3D = StandardMaterial3D.new()
@@ -180,15 +220,7 @@ func _build_floor_ceiling() -> void:
 	ceil_mat.roughness = 0.70
 	ceil_mat.metallic = 0.15
 
-	var ceil_mesh: BoxMesh = BoxMesh.new()
-	ceil_mesh.size = Vector3(2.40, 0.04, z_rear - z_front_ceil)
-	ceil_mesh.material = ceil_mat
-	var ceil_node: MeshInstance3D = MeshInstance3D.new()
-	ceil_node.name = "InteriorCeiling"
-	ceil_node.mesh = ceil_mesh
-	ceil_node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	ceil_node.position = Vector3(0.0, 1.45, (z_front_ceil + z_rear) * 0.5)
-	interior_root.add_child(ceil_node)
+	_add_interior_box(ceil_mat, 2.40, 0.04, 1.45, z_front_ceil, z_rear, "InteriorCeiling")
 
 	# Bandeau LED plafond (lumineux) le long du milieu, donne le côté "métro moderne"
 	var led_mat: StandardMaterial3D = StandardMaterial3D.new()
@@ -199,15 +231,7 @@ func _build_floor_ceiling() -> void:
 	led_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 
 	var led_z_rear: float = train_length * 0.5 * 0.92
-	var led_mesh: BoxMesh = BoxMesh.new()
-	led_mesh.size = Vector3(0.25, 0.04, led_z_rear - z_front_ceil)
-	led_mesh.material = led_mat
-	var led_node: MeshInstance3D = MeshInstance3D.new()
-	led_node.name = "InteriorLEDStrip"
-	led_node.mesh = led_mesh
-	led_node.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	led_node.position = Vector3(0.0, 1.42, (z_front_ceil + led_z_rear) * 0.5)
-	interior_root.add_child(led_node)
+	_add_interior_box(led_mat, 0.25, 0.04, 1.42, z_front_ceil, led_z_rear, "InteriorLEDStrip")
 
 
 func _build_handrails() -> void:
@@ -223,20 +247,26 @@ func _build_handrails() -> void:
 	# (zone conducteur = pas de main courante dans le vrai cockpit).
 	var rail_z_front: float = -train_length * 0.5 + 3.4
 	var rail_z_rear: float = train_length * 0.5 * 0.85
+	var car_len_r: float = train_length / float(car_count)
 	for side in [-1.0, 1.0]:
-		var rail: MeshInstance3D = MeshInstance3D.new()
-		var rail_mesh: CylinderMesh = CylinderMesh.new()
-		rail_mesh.top_radius = 0.025
-		rail_mesh.bottom_radius = 0.025
-		rail_mesh.height = rail_z_rear - rail_z_front
-		rail_mesh.radial_segments = 10
-		rail_mesh.material = rail_mat
-		rail.mesh = rail_mesh
-		rail.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		rail.position = Vector3(side * 0.35, 1.30, (rail_z_front + rail_z_rear) * 0.5)
-		# Cylindre axe Y → on veut axe Z (le long de la voie)
-		rail.rotation = Vector3(PI * 0.5, 0.0, 0.0)
-		interior_root.add_child(rail)
+		for idx in range(car_count):
+			var z_c: float = (float(idx) - (car_count - 1) * 0.5) * car_len_r
+			var za: float = maxf(rail_z_front, z_c - car_len_r * 0.5)
+			var zb: float = minf(rail_z_rear, z_c + car_len_r * 0.5)
+			if zb - za < 0.1:
+				continue
+			var rail: MeshInstance3D = MeshInstance3D.new()
+			var rail_mesh: CylinderMesh = CylinderMesh.new()
+			rail_mesh.top_radius = 0.025
+			rail_mesh.bottom_radius = 0.025
+			rail_mesh.height = zb - za
+			rail_mesh.radial_segments = 10
+			rail_mesh.material = rail_mat
+			rail.mesh = rail_mesh
+			rail.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			rail.position = Vector3(side * 0.35, 1.30, (za + zb) * 0.5 - z_c)
+			rail.rotation = Vector3(PI * 0.5, 0.0, 0.0)
+			_interior_cars[idx].add_child(rail)
 
 	# Poteaux verticaux : 6 dans chaque car (1 entre chaque paire de rangées)
 	# Positionnés au milieu de l'aisle (x=0)
@@ -258,8 +288,9 @@ func _build_handrails() -> void:
 			pole_mesh.material = rail_mat
 			pole.mesh = pole_mesh
 			pole.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-			pole.position = Vector3(0.0, 0.20, z_pole)
-			interior_root.add_child(pole)
+			var pp: Dictionary = _interior_parent(z_pole)
+			pole.position = Vector3(0.0, 0.20, pp["z"])
+			pp["node"].add_child(pole)
 
 
 # ---------------------------------------------------------------------------
@@ -597,8 +628,9 @@ func _emit_seat(mat: StandardMaterial3D, x: float, z: float) -> void:
 	base_mesh.material = mat
 	base.mesh = base_mesh
 	base.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	base.position = Vector3(x, TrainBodyBuilder.Y_FLOOR + 0.45, z)
-	interior_root.add_child(base)
+	var ps: Dictionary = _interior_parent(z)
+	base.position = Vector3(x, TrainBodyBuilder.Y_FLOOR + 0.45, ps["z"])
+	ps["node"].add_child(base)
 
 	var back: MeshInstance3D = MeshInstance3D.new()
 	var back_mesh: BoxMesh = BoxMesh.new()
@@ -606,8 +638,8 @@ func _emit_seat(mat: StandardMaterial3D, x: float, z: float) -> void:
 	back_mesh.material = mat
 	back.mesh = back_mesh
 	back.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	back.position = Vector3(x, TrainBodyBuilder.Y_FLOOR + 0.85, z + 0.20)
-	interior_root.add_child(back)
+	back.position = Vector3(x, TrainBodyBuilder.Y_FLOOR + 0.85, ps["z"] + 0.20)
+	ps["node"].add_child(back)
 
 
 func _build_passengers() -> void:
@@ -673,8 +705,10 @@ func _emit_passenger(skin_mat: StandardMaterial3D, coat_color: Color, x: float, 
 	torso_mesh.material = coat_mat
 	torso.mesh = torso_mesh
 	torso.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	var pp: Dictionary = _interior_parent(z)
+	z = pp["z"]
 	torso.position = Vector3(x, y_torso, z)
-	interior_root.add_child(torso)
+	pp["node"].add_child(torso)
 	_passenger_torsos.append(torso)
 
 	# Tête
@@ -686,7 +720,7 @@ func _emit_passenger(skin_mat: StandardMaterial3D, coat_color: Color, x: float, 
 	head.mesh = head_mesh
 	head.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	head.position = Vector3(x, y_torso + torso_h * 0.5 + 0.13, z)
-	interior_root.add_child(head)
+	pp["node"].add_child(head)
 	_passenger_heads.append(head)
 
 
@@ -827,29 +861,35 @@ func _process(_delta: float) -> void:
 	if trajectory_tangent.length() < 0.5:
 		trajectory_tangent = Vector3.FORWARD
 
-	var world_up: Vector3 = Vector3.UP
-	var right: Vector3 = trajectory_tangent.cross(world_up).normalized()
-	if right.length() < 0.01:
-		right = Vector3.RIGHT
-	var up: Vector3 = right.cross(trajectory_tangent).normalized()
-
-	var xform: Transform3D = Transform3D()
-	# Convention du projet : forward = -Z, donc basis.z = -tangent
-	xform.basis = Basis(right, up, -trajectory_tangent)
-	xform.origin = pos_cur
-
-	# Cabine reste centrée verticalement (rails au fond, plancher au-dessus)
-	xform.origin += xform.basis.y * (-0.15)
-
-	# Ghost : orientation opposée (rame 2 va dans le sens -tangent quand rame 1 monte)
-	# Rame 1 : orientation suivant physics.direction
-	if is_ghost:
-		if physics.direction > 0:
-			xform.basis = xform.basis.rotated(xform.basis.y, PI)
-	else:
-		if physics.direction < 0:
-			xform.basis = xform.basis.rotated(xform.basis.y, PI)
+	var xform: Transform3D = _xform_from(pos_cur, trajectory_tangent)
 	global_transform = xform
+
+	# Articulation : chaque voiture sur la spline à SA propre abscisse.
+	# L'avant de la rame (−Z) pointe vers +s quand la rame 1 monte, vers −s
+	# quand le ghost « monte » (il est retourné).
+	var travel_sign: float = float(physics.direction) * (-1.0 if is_ghost else 1.0)
+	var car_len: float = train_length / float(car_count)
+	for idx in range(_car_roots.size()):
+		var z_c: float = (float(idx) - (car_count - 1) * 0.5) * car_len
+		var s_car: float = clampf(s_pos - travel_sign * z_c, 0.0, PNConstants.LENGTH)
+		var p_c: Vector3 = _cabin_world_pos(s_car)
+		var p_a: Vector3 = _cabin_world_pos(maxf(s_car - eps, 0.0))
+		var p_b: Vector3 = _cabin_world_pos(minf(s_car + eps, PNConstants.LENGTH))
+		var tg: Vector3 = (p_b - p_a).normalized()
+		if tg.length() < 0.5:
+			tg = trajectory_tangent
+		var xf_car: Transform3D = _xform_from(p_c, tg)
+		(_car_roots[idx] as Node3D).global_transform = xf_car
+		if idx < _interior_cars.size():
+			(_interior_cars[idx] as Node3D).global_transform = xf_car
+
+	# Roues : rotation à v/R autour de l'essieu (axe X de la voiture).
+	# Roulement sans glissement, marche avant = −Z : ω = −v/R sur X.
+	var v_fwd: float = physics.v * float(physics.direction)
+	if absf(v_fwd) > 0.001 and not _wheels.is_empty():
+		var d_ang: float = -v_fwd * _delta / TrainBodyBuilder.WHEEL_R
+		for w in _wheels:
+			(w as Node3D).rotate_x(d_ang)
 
 	# Animation des passagers selon dynamique
 	_animate_passengers(_delta)
@@ -901,6 +941,27 @@ func _animate_passengers(delta: float) -> void:
 
 # Position monde de la cabine à la distance s, en tenant compte du déport
 # latéral du passing loop (passing_side fixe la voie gauche/droite).
+## Transform d'un repère posé en `pos` le long de la tangente `tangent`
+## (forward = −Z), décalé de 0,15 m sous l'axe, retourné selon le sens de
+## marche (rame 2 va dans le sens −tangent quand la rame 1 monte).
+func _xform_from(pos: Vector3, tangent: Vector3) -> Transform3D:
+	var world_up: Vector3 = Vector3.UP
+	var right: Vector3 = tangent.cross(world_up).normalized()
+	if right.length() < 0.01:
+		right = Vector3.RIGHT
+	var up: Vector3 = right.cross(tangent).normalized()
+	var xform: Transform3D = Transform3D()
+	xform.basis = Basis(right, up, -tangent)
+	xform.origin = pos + up * (-0.15)
+	if is_ghost:
+		if physics.direction > 0:
+			xform.basis = xform.basis.rotated(xform.basis.y, PI)
+	else:
+		if physics.direction < 0:
+			xform.basis = xform.basis.rotated(xform.basis.y, PI)
+	return xform
+
+
 func _cabin_world_pos(s: float) -> Vector3:
 	var xf: Transform3D = tunnel.transform_at(s)
 	var lat: float = tunnel.passing_loop_offset(s, passing_side)
