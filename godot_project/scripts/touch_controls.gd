@@ -25,6 +25,7 @@ var _fault_tap_time: float = -10.0   # double-tap PANNE (anti fausse manip)
 var _announce_menu: Control = null   # panneau des annonces audio (diffusion manuelle)
 var _b_mode: Button = null           # bascule NORMAL / DEFI / PANNES
 var _b_fault: Button = null
+var _b_restart: Button = null        # NOUVEAU VOYAGE après une catastrophe
 
 # Libellé du bouton MODE selon le mode courant (sans accent : police par
 # défaut des exports mobiles).
@@ -79,6 +80,15 @@ func _process(delta: float) -> void:
 		_b_mode.text = MODE_LABEL.get(mode, "MODE")
 	if _b_fault != null:
 		_b_fault.text = "PANNES" if mode == "panne" else "PANNE"
+	# Après une panne catastrophique, rame immobilisée : sans clavier il
+	# n'y avait AUCUN moyen de relancer un voyage (retour d'essai iPad
+	# 2026-09-27) — le bouton NOUVEAU VOYAGE apparaît au centre. (Après une
+	# collision en Défi, l'écran de fin a déjà le sien.)
+	if _b_restart != null and _main.physics != null:
+		var wrecked: bool = (_main.fault_manager != null
+			and _main.fault_manager.is_active_catastrophic()
+			and absf(_main.physics.v) < 0.1 and not _main.physics.crashed)
+		_b_restart.visible = wrecked
 	if _b_auto != null and _main.auto_operator != null:
 		# DÉFI et PANNES se conduisent à la main : l'exploitation
 		# automatique y est sans objet (elle écraserait la consigne).
@@ -188,6 +198,23 @@ func _build() -> void:
 	b_go.position = Vector2(-125, -300)
 	_bind_tap(b_go, "ready_depart")
 	root.add_child(b_go)
+
+	# --- NOUVEAU VOYAGE (centre, caché ; visible après une catastrophe) ---
+	_b_restart = _mk_button("NOUVEAU\nVOYAGE",
+		"Repartir d'une gare après une panne catastrophique (touche R)", true)
+	_b_restart.custom_minimum_size = Vector2(240, 100)
+	_b_restart.set_anchors_preset(Control.PRESET_CENTER)
+	_b_restart.position = Vector2(-120, -50)
+	var sb_restart: StyleBoxFlat = _b_restart.get_theme_stylebox("normal").duplicate()
+	sb_restart.bg_color = Color(0.45, 0.10, 0.08, 0.92)
+	sb_restart.border_color = Color(1.0, 0.55, 0.35, 0.95)
+	_b_restart.add_theme_stylebox_override("normal", sb_restart)
+	_b_restart.add_theme_stylebox_override("hover", sb_restart)
+	_b_restart.visible = false
+	_b_restart.pressed.connect(func() -> void:
+		if _main != null and _main.has_method("restart_trip"):
+			_main.restart_trip())
+	root.add_child(_b_restart)
 	# PRÊT / DÉPART reste ACTIF même en mode auto : sans clavier (« Entrée »),
 	# c'est le seul moyen de forcer le départ sans attendre les 30 s d'arrêt
 	# en gare. L'automate détecte la séquence lancée et embraye (cf.
