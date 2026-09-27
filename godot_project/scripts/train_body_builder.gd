@@ -101,8 +101,9 @@ static func _mat(color: Color, rough: float, metal: float) -> StandardMaterial3D
 static func materials() -> Dictionary:
 	var glass: StandardMaterial3D = StandardMaterial3D.new()
 	glass.albedo_color = Color(0.10, 0.14, 0.19, 0.62)
-	glass.roughness = 0.08
-	glass.metallic = 0.1
+	glass.roughness = 0.6
+	glass.metallic = 0.0
+	glass.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
 	glass.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	glass.cull_mode = BaseMaterial3D.CULL_DISABLED
 	glass.emission_enabled = true
@@ -111,7 +112,10 @@ static func materials() -> Dictionary:
 	# pare-brise de la cabine pilotée : quasi clair (vu de l'intérieur)
 	var windshield: StandardMaterial3D = StandardMaterial3D.new()
 	windshield.albedo_color = Color(0.75, 0.80, 0.86, 0.16)
-	windshield.roughness = 0.05
+	# SANS éclairage : avec une rugosité de 0,05 le pare-brise renvoyait la
+	# tache spéculaire blanche d'une lampe en plein milieu de la vue cockpit
+	# (retour d'essai 2026-09-27). Une vitre, c'est une teinte, pas un miroir.
+	windshield.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	windshield.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	windshield.cull_mode = BaseMaterial3D.CULL_DISABLED
 	var lamp_off: StandardMaterial3D = _mat(Color(0.12, 0.12, 0.12), 0.35, 0.2)
