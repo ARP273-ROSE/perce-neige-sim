@@ -42,7 +42,7 @@ extends Node3D
 # supports de galets du câble tracteur (photos : canal central avec le
 # câble posé sur ses galets tout du long, y compris dans le loop).
 @export var cable_beam_width: float = 0.50
-@export var cable_beam_height: float = 0.10
+@export var cable_beam_height: float = 0.06   # longrine basse : le câble doit rester au niveau des blochets
 
 @export var guide_spacing: float = 13.57     # entraxe RÉEL : 3474 m / 256 paires (source CFD)
 @export var pulley_radius: float = 0.15      # rayon poulie/galet (300 mm)
@@ -50,10 +50,10 @@ extends Node3D
 @export var pulley_pair_offset: float = 0.12 # décalage latéral de chaque poulie (entraxe 0.24m)
 @export var bracket_width: float = 0.04      # épaisseur équerres
 @export var bracket_span: float = 0.42       # écart entre équerres (contient les 2 poulies)
-@export var bracket_height: float = 0.32     # hauteur équerres depuis socle
+@export var bracket_height: float = 0.12     # hauteur MAX des équerres (raccourcies pour tenir l'axe)
 @export var base_plate_width: float = 0.52   # largeur socle béton (plus large pour la paire)
 @export var base_plate_length: float = 0.16  # longueur socle (dans sens voie)
-@export var base_plate_height: float = 0.08  # épaisseur socle
+@export var base_plate_height: float = 0.02  # épaisseur socle (plaque)
 
 @export var cable_radius: float = 0.026      # rayon câble 52 mm
 @export var cable_segments: int = 8          # segments radiaux
@@ -991,12 +991,19 @@ func _build_guides() -> void:
 	# poulies montent d'autant (cable_beam_height).
 	var top_slab: float = floor_y_local + slab_thickness - 0.01 + cable_beam_height
 
-	# Hauteurs dans la base locale
+	# 🔴 Retour d'essai 2026-09-27 : « le câble et les galets sont trop
+	# hauts, ils rentrent dans la partie basse du funi ; le câble doit être
+	# au niveau des traverses, pas du sommet du rail ». Le câble était à
+	# −0,99 (table de roulement −1,24, fond de caisse −1,16). On part donc
+	# de la hauteur VOULUE du câble — 4 cm au-dessus du dessus des blochets
+	# (−1,36) — et on en déduit l'axe des galets ; le bas des galets et
+	# l'axe s'enfoncent dans la longrine (galets en échancrure), les
+	# équerres ne dépassent que de quelques centimètres.
+	var y_cable_center: float = floor_y_local + slab_thickness + sleeper_height + 0.04
+	var y_pulley_axis: float = y_cable_center - cable_radius - pulley_radius
 	var y_base_lo: float = top_slab
 	var y_base_hi: float = top_slab + base_plate_height
-	var y_bracket_hi: float = y_base_hi + bracket_height
-	# Axe poulie légèrement en-dessous du haut des équerres
-	var y_pulley_axis: float = y_bracket_hi - pulley_radius * 0.35
+	var br_h: float = clampf(y_pulley_axis + 0.06 - y_base_hi, 0.06, bracket_height)
 
 	# Matériaux
 	var concrete_mat: StandardMaterial3D = StandardMaterial3D.new()
@@ -1021,7 +1028,7 @@ func _build_guides() -> void:
 
 	# --- Paire d'équerres : ArrayMesh composite (2 boxes) -----------------
 	var bracket_mesh: ArrayMesh = _build_bracket_pair_mesh(
-		bracket_width, bracket_height, bracket_span, pulley_thickness * 1.3, steel_mat,
+		bracket_width, br_h, bracket_span, pulley_thickness * 1.3, steel_mat,
 	)
 
 	# --- Galet/poulie : CylinderMesh (tourné axe horizontal perpendiculaire voie) ---
@@ -1065,18 +1072,18 @@ func _build_guides() -> void:
 		if s >= PNConstants.PASSING_START and s <= PNConstants.PASSING_END:
 			# Voie gauche (rame 1) : seul le brin gauche (cable_left) passe → poulie A
 			positions.append({
-				"s": s, "off": tunnel.passing_loop_offset(s, -1.0),
+				"s": s, "off": tunnel.passing_loop_offset(s, -1.0), "side": -1.0,
 				"has_pulley_a": true, "has_pulley_b": false,
 			})
 			# Voie droite (rame 2) : seul le brin droite (cable_right) passe → poulie B
 			positions.append({
-				"s": s, "off": tunnel.passing_loop_offset(s, +1.0),
+				"s": s, "off": tunnel.passing_loop_offset(s, +1.0), "side": 1.0,
 				"has_pulley_a": false, "has_pulley_b": true,
 			})
 		else:
 			# Hors loop : voie unique, les 2 brins passent → 2 poulies
 			positions.append({
-				"s": s, "off": 0.0,
+				"s": s, "off": 0.0, "side": 0.0,
 				"has_pulley_a": true, "has_pulley_b": true,
 			})
 
@@ -1117,7 +1124,7 @@ func _build_guides() -> void:
 	mm_axle.instance_count = n
 
 	var y_base_center: float = (y_base_lo + y_base_hi) * 0.5
-	var y_bracket_center: float = y_base_hi + bracket_height * 0.5
+	var y_bracket_center: float = y_base_hi + br_h * 0.5
 
 	# Rotation 90° autour de Z local : axe cylindre Y → axe monde perpendiculaire voie
 	var rot90: Basis = Basis(Vector3(0, 0, 1), PI * 0.5)
@@ -1141,7 +1148,7 @@ func _build_guides() -> void:
 		# dans son support, les deux à la même hauteur. Socle, équerres et
 		# axe gardent donc le repère de la voie ; seule la basis de chaque
 		# galet tourne autour de la voie, autour de son propre centre.
-		var tilt_rad: float = _heading_bank_at(entry.s)
+		var tilt_rad: float = _heading_bank_at(entry.s, entry.side)
 		var forward_world: Vector3 = (-xform.basis.z).normalized()   # +tangent
 		var roller_basis: Basis = xform.basis.rotated(forward_world, tilt_rad)
 		var banked_basis: Basis = xform.basis
@@ -1223,11 +1230,21 @@ func _build_guides() -> void:
 # Inclinaison de CHAQUE galet dans son support (le support reste horizontal),
 # vers l'intérieur du virage. Approximation centrifuge : atan(v² · κ / g),
 # amplifiée pour visibilité.
-func _heading_bank_at(s: float) -> float:
+# Dans l'évitement, chaque voie s'écarte de l'axe (offset ±3,5 m en sin²) :
+# sa courbure propre x″(s) s'ajoute à celle de l'axe — entrée en virage vers
+# l'extérieur, contre-courbe au milieu, retour à la réunion — et les galets
+# s'inclinent avec le même signe qu'en ligne (retour d'essai 2026-09-27 :
+# « il faut incliner les galets dans l'évitement »).
+func _heading_bank_at(s: float, side: float = 0.0) -> float:
 	var ds: float = 5.0
 	var h_prev: float = SlopeProfile.heading_at(s - ds)
 	var h_next: float = SlopeProfile.heading_at(s + ds)
 	var heading_rate_rad_m: float = deg_to_rad(h_next - h_prev) / (2.0 * ds)
+	if side != 0.0:
+		var x_m: float = tunnel.passing_loop_offset(s - ds, side)
+		var x_0: float = tunnel.passing_loop_offset(s, side)
+		var x_p: float = tunnel.passing_loop_offset(s + ds, side)
+		heading_rate_rad_m += (x_p - 2.0 * x_0 + x_m) / (ds * ds)
 	var v_assumed: float = 12.0   # m/s — vitesse plafond pour calcul du bank
 	var bank_natural: float = atan(v_assumed * v_assumed * heading_rate_rad_m / 9.80665)
 	# Signe inversé : la rotation positive autour de forward lève le côté droit,
