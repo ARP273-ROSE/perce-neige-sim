@@ -14,6 +14,17 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 
 ## Quoi de neuf — v1.13.x (audit physique des voyages, 26 septembre 2026)
 
+**v1.15.12** — deux manques signalés :
+- **PWA : NOUVEAU VOYAGE après une catastrophe.** Sans clavier, rien ne
+  permettait de relancer un voyage après une panne catastrophique (la touche
+  R existait, pas de bouton). Un bouton rouge « NOUVEAU VOYAGE » apparaît au
+  centre dès que la rame est immobilisée par la panne ; il repart de la gare
+  vers laquelle on allait, dans l'autre sens (comme R). Après une collision
+  en Défi, l'écran de fin gardait déjà le sien.
+- **PC : la vue 3D d'entrée de jeu.** Le viewer Godot démarre en arrière-plan
+  au lancement quand il est disponible ; en refermant l'écran d'accueil (F1)
+  on tombe directement sur la vue cabine 3D. F4 garde son cycle.
+
 **v1.15.11** — le bouton AUTO [A] du PC fait enfin quelque chose. Il ne
 faisait que basculer un drapeau que rien ne lisait. C'est maintenant le
 **pilote automatique du voyage** promis par le manuel : engagé par le

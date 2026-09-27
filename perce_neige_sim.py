@@ -10109,6 +10109,25 @@ class GameWidget(QWidget):
 
         p.restore()
 
+    def _auto_cabin_view_3d(self) -> None:
+        """Au lancement : la vue cabine passe DIRECTEMENT en 3D Godot
+        embarquée quand le viewer est disponible (retour d'essai
+        2026-09-27 : « l'écran d'arrivée après F1 peut-il être directement
+        la vue 3D ? »). Le viewer démarre en arrière-plan pendant que
+        l'écran d'aide est affiché ; la 3D apparaît dès F1 refermé. Sans
+        viewer (sources sans binaire, Godot absent) on ne propose RIEN au
+        démarrage — F4 garde son cycle et sa proposition de téléchargement."""
+        if self._cabin_view_state != 0 or self._godot_bridge is None:
+            return
+        try:
+            ok, _reason = self._godot_bridge.is_available()
+        except Exception:
+            ok = False
+        if not ok:
+            return
+        self._cycle_cabin_view()      # 0 → 1 (procédurale)
+        self._cycle_cabin_view()      # 1 → 2 (Godot 3D, lancement en fond)
+
     def _cycle_cabin_view(self) -> None:
         """F4 cycle : OFF → procédural Python → Godot 3D embarqué → OFF.
         Si Godot pas dispo, état 2 retombe en OFF (skip).
@@ -14167,6 +14186,9 @@ def main() -> None:
 
     win = MainWindow()
     win.show()
+    # Vue cabine 3D d'entrée de jeu (si le viewer est disponible) : lancée
+    # une fois la fenêtre à l'écran, pour que l'embarquement ait un parent.
+    QTimer.singleShot(800, win.game._auto_cabin_view_3d)
 
     if rapports is not None:
         try:
