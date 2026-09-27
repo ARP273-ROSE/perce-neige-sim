@@ -14,6 +14,27 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 
 ## Quoi de neuf — v1.13.x (audit physique des voyages, 26 septembre 2026)
 
+**v1.15.17** — rapports d'incident automatiques, comme MusicOthèque :
+- **PC** : au premier lancement, le programme demande l'accord pour signaler
+  tout seul ses problèmes ; ensuite plantage Python, crash natif Qt, gel de
+  l'interface (vigie) et preuve de vie quotidienne partent au point de
+  collecte du NAS. Aide → **Signaler un problème…** envoie un signalement
+  écrit avec les derniers événements du journal de bord (copie .zip sur le
+  Bureau) ; Aide → case à cocher pour l'envoi automatique. Plus de ticket
+  GitHub proposé au lancement.
+- **PWA** : les erreurs JavaScript et les erreurs de script Godot (au plus
+  trois par session) partent au même point de collecte sous le nom
+  `funiculaire-pwa/<version>`.
+- **Pupitre** : troisième rangée de boutons **VUE 3D [F4]**, **ORBITE [O]**,
+  **AIDE [F1]** (rangées resserrées de 36 à 32 px pour la loger).
+- **Écran d'aide en cours de voyage** : deux boutons, **REPRENDRE** (ferme
+  l'aide) et **RAME / SENS…** (abandonne le voyage et revient à l'écran
+  titre) — on pouvait ne plus retrouver la sélection après avoir démarré.
+- **Icône refaite** d'après le vrai design : la face avant de la rame
+  (calotte jaune, grand pare-brise, portes en D, TIGNES, deux phares ronds,
+  tampons) dans le rond du tunnel ; `make_logo.py` produit logo.png/.ico,
+  logo_64.png et les icônes PWA.
+
 **v1.15.16** — lien de téléchargement permanent : chaque release publie
 aussi l'installeur sous le nom stable `PerceNeigeSimulator-Setup.exe`, si
 bien que
