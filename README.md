@@ -14,6 +14,14 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 
 ## Quoi de neuf — v1.13.x (audit physique des voyages, 26 septembre 2026)
 
+**v1.15.14** — gares refaites d'après les photos (les deux se ressemblent) :
+parois **bleu nuit**, plafond **clair** porté par des **poutres acier
+sombres** en travers tous les 2,8 m et deux pannes en long, **poteaux**
+sombres le long des murs, **appliques bleues** ; quais en **caillebotis
+noir** à nez de marche en tôle damier alu, avec la **bande rouge** de la gare
+haute ; néons entre les poutres. Même traitement pour le fond de la gare
+haute (mur « DESTINATION GLACIER ») ; hall de Val Claret en bardage bois.
+
 **v1.15.13** — la vue 3D lancée au démarrage passait par-dessus l'écran
 titre (« Godot passe au premier plan, on ne voit plus rien »). La fenêtre
 native est masquée sous chaque overlay Qt par un mécanisme qui n'agit que
