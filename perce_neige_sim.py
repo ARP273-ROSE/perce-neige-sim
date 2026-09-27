@@ -12294,7 +12294,7 @@ class GameWidget(QWidget):
         self._hit_zones.append(
             (QRectF(col2, row2, btn_w, btn_h), int(Qt.Key.Key_N), False)
         )
-        # Row 3 : vue cabine 3D (F4), vue orbitale (O), aide (F1)
+        # Row 3 : vue cabine 3D (F4), vue extérieure (O), aide (F1)
         self._draw_button(p, col0, row3, btn_w, btn_h,
                           T("3D VIEW [F4]", "VUE 3D [F4]"),
                           self._cabin_view_state == 2, QColor(120, 200, 255),
@@ -12303,7 +12303,7 @@ class GameWidget(QWidget):
             (QRectF(col0, row3, btn_w, btn_h), int(Qt.Key.Key_F4), False)
         )
         self._draw_button(p, col1, row3, btn_w, btn_h,
-                          T("ORBIT [O]", "ORBITE [O]"),
+                          T("EXT. VIEW [O]", "VUE EXT. [O]"),
                           bool(getattr(self, "_godot_ext_view", False)),
                           QColor(170, 210, 255), QColor(20, 40, 70))
         self._hit_zones.append(
@@ -13342,8 +13342,8 @@ class GameWidget(QWidget):
                 ("F2", T("announcement console", "console d'annonces")),
                 ("F4", T("cabin view: off → drawn → 3D",
                          "vue cabine : off → dessinée → 3D")),
-                ("O", T("3D orbital view (drag, wheel)",
-                        "vue 3D orbitale (glisser, molette)")),
+                ("O", T("exterior 3D view (drag, wheel)",
+                        "vue extérieure 3D (glisser, molette)")),
             ]),
             (T("System", "Système"), [
                 ("P / Esc", T("pause / resume", "pause / reprise")),

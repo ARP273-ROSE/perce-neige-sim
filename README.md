@@ -14,6 +14,9 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 
 ## Quoi de neuf — v1.13.x (audit physique des voyages, 26 septembre 2026)
 
+**v1.15.18** — le bouton « ORBITE [O] » s'appelle **VUE EXT. [O]**, comme la
+vue qu'il commande (aide et README alignés).
+
 **v1.15.17** — rapports d'incident automatiques, comme MusicOthèque :
 - **PC** : au premier lancement, le programme demande l'accord pour signaler
   tout seul ses problèmes ; ensuite plantage Python, crash natif Qt, gel de
@@ -25,7 +28,7 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 - **PWA** : les erreurs JavaScript et les erreurs de script Godot (au plus
   trois par session) partent au même point de collecte sous le nom
   `funiculaire-pwa/<version>`.
-- **Pupitre** : troisième rangée de boutons **VUE 3D [F4]**, **ORBITE [O]**,
+- **Pupitre** : troisième rangée de boutons **VUE 3D [F4]**, **VUE EXT. [O]**,
   **AIDE [F1]** (rangées resserrées de 36 à 32 px pour la loger).
 - **Écran d'aide en cours de voyage** : deux boutons, **REPRENDRE** (ferme
   l'aide) et **RAME / SENS…** (abandonne le voyage et revient à l'écran
@@ -1537,7 +1540,7 @@ three columns with the driving tips underneath.
 | `Backspace`      | Abort the running announcement                    |
 | `F2`             | Announcement console                              |
 | `F4`             | Cabin view: off → drawn → 3D                      |
-| `O`              | 3D orbital view (drag, wheel)                     |
+| `O`              | Exterior 3D view (drag, wheel)                    |
 
 **System**
 
