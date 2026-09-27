@@ -77,7 +77,7 @@ func _build_hall_end() -> void:
 	slab.roughness = 0.9
 	slab.cull_mode = BaseMaterial3D.CULL_DISABLED
 	var dark: StandardMaterial3D = StandardMaterial3D.new()
-	dark.albedo_color = Color(0.20, 0.21, 0.23)
+	dark.albedo_color = Color(0.13, 0.16, 0.25)     # bleu nuit des parois de gare (photos)
 	dark.roughness = 0.9
 	dark.cull_mode = BaseMaterial3D.CULL_DISABLED
 	var wood: StandardMaterial3D = StandardMaterial3D.new()
@@ -126,8 +126,18 @@ func _build_hall_end() -> void:
 	for sx in [-1.0, 1.0]:
 		_add_box(Vector3(0.30, hall_h, HALL_DEPTH), dark, xform,
 			sx * (HALL_HALF_W + 0.15), y_mid, HALL_DEPTH * 0.5, "ParoiSalle")
-	_add_box(Vector3(HALL_HALF_W * 2.0 + 0.6, 0.30, HALL_DEPTH), dark, xform,
+	var ceil_m: StandardMaterial3D = StandardMaterial3D.new()
+	ceil_m.albedo_color = Color(0.84, 0.85, 0.87)   # plafond clair (photos)
+	ceil_m.roughness = 0.75
+	ceil_m.cull_mode = BaseMaterial3D.CULL_DISABLED
+	var beam_m: StandardMaterial3D = StandardMaterial3D.new()
+	beam_m.albedo_color = Color(0.09, 0.10, 0.13)
+	beam_m.roughness = 0.45
+	beam_m.metallic = 0.5
+	_add_box(Vector3(HALL_HALF_W * 2.0 + 0.6, 0.30, HALL_DEPTH), ceil_m, xform,
 		0.0, Y_HALL_CEIL + 0.15, HALL_DEPTH * 0.5, "PlafondSalle")
+	for sb in [1.4, 4.2, 7.0]:
+		_add_box(Vector3(HALL_HALF_W * 2.0, 0.32, 0.16), beam_m, xform, 0.0, Y_HALL_CEIL - 0.24, sb, "PoutreSalle")
 	# mur du fond : bardage bois, deux baies lumineuses vers le hall, enseigne
 	_add_box(Vector3(HALL_HALF_W * 2.0 + 0.6, hall_h, 0.30), wood, xform,
 		0.0, y_mid, HALL_DEPTH + 0.15, "MurFond")
