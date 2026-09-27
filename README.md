@@ -14,6 +14,19 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 
 ## Quoi de neuf — v1.13.x (audit physique des voyages, 26 septembre 2026)
 
+**v1.15.20** — icône partout et dry run de l'exploitation automatique :
+- la nouvelle icône devient aussi l'icône du projet Godot (`icon.png`) et le
+  favicon / icône Apple de la PWA (export de l'icône réactivé).
+- **Dry runs** (PC avec lecteur d'annonces simulé aux vraies durées, PWA en
+  headless) : arrivée puis départ en exploitation automatique, dans les deux
+  sens — la séquence est cohérente (ouverture à l'arrivée, annonce, buzzer,
+  vantaux 1,3 s après le début du clip, interlock à la butée, buzzer de quai,
+  traction). Une incohérence corrigée au passage : sur PC l'exploitation
+  automatique ouvrait les portes d'un coup à l'arrivée, sans clip ni délai,
+  avant l'arrêt complet ; elle passe par la commande normale (clip, vantaux
+  à 1,3 s, interlock à 2 s). Bancs : `godot_project/bench_auto_3d.gd`,
+  `tests/dryrun_auto_pc.py`.
+
 **v1.15.19** — en vue extérieure, les deux gares redeviennent
 translucides : l'habillage de la v1.15.14 (parois, plafonds, poutres, fond
 de la gare haute) suit maintenant la paroi du tunnel (alpha 0,22, faces

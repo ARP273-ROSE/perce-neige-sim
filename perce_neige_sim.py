@@ -5286,10 +5286,11 @@ class AutoOps:
                 # basculait à l'instant de l'arrivée (« le sens s'inverse
                 # avant même d'être arrivé », retour d'essai 2026-07-24).
                 # Le demi-tour n'a lieu qu'après le dwell (DOORS_OPENING).
-                tr.doors_open = True
-                tr.doors_cmd = True
-                tr.doors_visual_open = True
-                tr.doors_timer = 0.0
+                # Ouverture PAR LA COMMANDE (clip sonore, vantaux à 1,3 s,
+                # interlock à 2 s) et non plus par bascule instantanée :
+                # la 3D voyait les portes s'ouvrir d'un coup, sans son,
+                # avant même l'arrêt complet (dry run du 2026-09-27).
+                self.w.begin_doors_open(tr)
                 self._set_phase(self.PHASE_DOORS_OPENING)
                 add_event(state, "ops",
                           "Auto : arrived — doors open",
