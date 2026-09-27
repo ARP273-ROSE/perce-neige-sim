@@ -7930,8 +7930,13 @@ class GameWidget(QWidget):
         # clic destiné à l'aide).
         if self._show_help:
             rect = getattr(self, "_help_start_rect", None)
+            home = getattr(self, "_help_home_rect", None)
             if rect is not None and rect.contains(pos):
                 self._show_help = False
+                self.update()
+            elif home is not None and home.contains(pos):
+                self._show_help = False
+                self._virtual_key(Qt.Key.Key_Home)
                 self.update()
             ev.accept()
             return
@@ -12191,14 +12196,15 @@ class GameWidget(QWidget):
         # Shifted down 26 px to clear the REVERSE button added above.
         btn_y = rect.y() + 314
         btn_w = 115
-        btn_h = 36
-        gap = 8
+        btn_h = 32          # 36 → 32 et gap 8 → 6 : place pour une 3e rangée
+        gap = 6             # (VUE 3D, ORBITE, AIDE — demande du 2026-09-27)
         col0 = rect.x() + 20
         col1 = col0 + btn_w + gap
         col2 = col1 + btn_w + gap
         row0 = btn_y
         row1 = btn_y + btn_h + gap
         row2 = btn_y + (btn_h + gap) * 2
+        row3 = btn_y + (btn_h + gap) * 3
         # Row 0 : safety stops + vigilance
         self._draw_button(p, col0, row0, btn_w, btn_h,
                           T("ELEC. STOP [3]", "ARRÊT ÉLEC. [3]"),
@@ -12288,13 +12294,35 @@ class GameWidget(QWidget):
         self._hit_zones.append(
             (QRectF(col2, row2, btn_w, btn_h), int(Qt.Key.Key_N), False)
         )
+        # Row 3 : vue cabine 3D (F4), vue orbitale (O), aide (F1)
+        self._draw_button(p, col0, row3, btn_w, btn_h,
+                          T("3D VIEW [F4]", "VUE 3D [F4]"),
+                          self._cabin_view_state == 2, QColor(120, 200, 255),
+                          QColor(10, 40, 70))
+        self._hit_zones.append(
+            (QRectF(col0, row3, btn_w, btn_h), int(Qt.Key.Key_F4), False)
+        )
+        self._draw_button(p, col1, row3, btn_w, btn_h,
+                          T("ORBIT [O]", "ORBITE [O]"),
+                          bool(getattr(self, "_godot_ext_view", False)),
+                          QColor(170, 210, 255), QColor(20, 40, 70))
+        self._hit_zones.append(
+            (QRectF(col1, row3, btn_w, btn_h), int(Qt.Key.Key_O), False)
+        )
+        self._draw_button(p, col2, row3, btn_w, btn_h,
+                          T("HELP [F1]", "AIDE [F1]"),
+                          self._show_help, QColor(230, 230, 200),
+                          QColor(50, 50, 40))
+        self._hit_zones.append(
+            (QRectF(col2, row3, btn_w, btn_h), int(Qt.Key.Key_F1), False)
+        )
 
         # Info block (compact, left column of rows below the buttons).
-        # Row 2 bottom = btn_y + 2*(btn_h+gap) + btn_h = 314 + 88 + 36 = 438.
-        # Keep a 10 px margin below the buttons so the info rows never
-        # overlap the AUTO / DOORS / SOUND row.
+        # Row 3 bottom = btn_y + 3*(btn_h+gap) + btn_h = 314 + 114 + 32 = 460.
+        # 10 px de marge : les lignes d'info ne recouvrent jamais la
+        # rangée VUE 3D / ORBITE / AIDE.
         ox = rect.x() + 20
-        oy = rect.y() + 450
+        oy = rect.y() + 470
         p.setFont(_cached_font("Consolas", 10))
         p.setPen(_cached_pen(COLOR_TEXT))
         cabin_x_m, cabin_y_m = geom_at(tr.s)
@@ -13442,20 +13470,37 @@ class GameWidget(QWidget):
         # par-dessus ; les derniers sont omis si la fenêtre est trop basse.
         tips_y = y_max + 10
         tips_h = box.y() + box_h - 18 - 46 - tips_y
-        # Bouton COMMENCER (clic = F1) en bas à droite de la boîte
+        # Boutons en bas à droite : sur l'écran titre, COMMENCER (= F1) ;
+        # une fois un voyage lancé, REPRENDRE (= F1) et RAME / SENS (= Début,
+        # retour à l'écran titre pour choisir un autre voyage) — retour
+        # d'essai 2026-09-27 : « après avoir démarré, on ne peut plus accéder
+        # à la sélection des rames et du sens ».
         bw, bh = 220.0, 40.0
+        on_title = (self.state.mode == MODE_TITLE)
         self._help_start_rect = QRectF(box.x() + box_w - margin - bw,
                                        box.y() + box_h - 18 - bh, bw, bh)
         self._draw_button(p, self._help_start_rect.x(), self._help_start_rect.y(),
-                          bw, bh, T("START  ▶", "COMMENCER  ▶"), True,
-                          QColor(120, 225, 150), QColor(20, 70, 35))
+                          bw, bh,
+                          T("START  ▶", "COMMENCER  ▶") if on_title
+                          else T("RESUME  ▶", "REPRENDRE  ▶"),
+                          True, QColor(120, 225, 150), QColor(20, 70, 35))
+        self._help_home_rect = None
+        if not on_title:
+            self._help_home_rect = QRectF(self._help_start_rect.x() - bw - 12,
+                                          self._help_start_rect.y(), bw, bh)
+            self._draw_button(p, self._help_home_rect.x(), self._help_home_rect.y(),
+                              bw, bh, T("TRAIN / DIRECTION…", "RAME / SENS…"),
+                              False, QColor(200, 200, 230), QColor(45, 45, 70))
         p.setPen(_cached_pen(COLOR_TEXT_DIM))
         p.setFont(_cached_font("Segoe UI", 9))
-        p.drawText(QRectF(box.x() + margin, box.y() + box_h - 18 - bh,
-                          box_w - 2 * margin - bw - 12, bh),
+        hint_w = box_w - 2 * margin - bw - 12 - (bw + 12 if not on_title else 0)
+        p.drawText(QRectF(box.x() + margin, box.y() + box_h - 18 - bh, hint_w, bh),
                    int(Qt.AlignmentFlag.AlignRight) | int(Qt.AlignmentFlag.AlignVCenter),
                    T("closes this screen — then choose train + direction and press START",
-                     "ferme cet écran — choisissez ensuite rame + sens, puis DÉMARRER"))
+                     "ferme cet écran — choisissez ensuite rame + sens, puis DÉMARRER")
+                   if on_title else
+                   T("RESUME closes this screen ; TRAIN / DIRECTION ends the trip and returns to the title screen",
+                     "REPRENDRE ferme cet écran ; RAME / SENS abandonne le voyage et revient à l'écran titre"))
         if tips_h < 60:
             return
         tips_box = QRectF(box.x() + margin, tips_y, box_w - 2 * margin, tips_h)
@@ -13670,8 +13715,8 @@ class MainWindow(QMainWindow):
             pass
         # Background update check, 3 s after launch
         QTimer.singleShot(3000, self._bg_check_update)
-        # Check for pending crash reports from a previous run
-        QTimer.singleShot(1500, self._offer_pending_crash_reports)
+        # (l'offre de ticket GitHub au lancement est retirée : le plantage est
+        # déjà parti tout seul au point de collecte — voir _demarrer_rapports)
 
     def resizeEvent(self, ev) -> None:  # noqa: N802
         # Si le viewer Godot est embarqué dans la zone F4, le repositionne
@@ -13719,8 +13764,21 @@ class MainWindow(QMainWindow):
             self._tr("Check for updates…", "Vérifier les mises à jour…"))
         act_upd.triggered.connect(self._manual_check_update)
         act_bug = menu.addAction(
-            self._tr("Report a bug…", "Signaler un bug…"))
-        act_bug.triggered.connect(self._manual_bug_report)
+            self._tr("Report a problem…", "Signaler un problème…"))
+        act_bug.triggered.connect(self._signaler_probleme)
+        # Envoi automatique des rapports (plantage, gel, crash natif,
+        # démarrage) : même dispositif que MusicOthèque, réglable ici.
+        try:
+            import reporting as _rep
+            act_auto = menu.addAction(self._tr(
+                "Send incident reports automatically",
+                "Envoyer les rapports d'incident automatiquement"))
+            act_auto.setCheckable(True)
+            act_auto.setChecked(_rep.consentement() is True)
+            act_auto.toggled.connect(
+                lambda on: _rep.definir_consentement(bool(on)))
+        except Exception:
+            pass
         menu.addSeparator()
         act_about = menu.addAction(self._tr("About", "À propos"))
         act_about.triggered.connect(self._show_about)
@@ -14065,6 +14123,84 @@ class MainWindow(QMainWindow):
         elif clicked is btn_del:
             bugreport.delete_report(latest)
 
+    def _signaler_probleme(self) -> None:
+        """Signalement écrit, transmis au point de collecte du NAS avec les
+        derniers événements du journal de bord (port du dialogue de
+        MusicOthèque). Repli : un .zip sur le Bureau si le réseau manque."""
+        try:
+            import reporting
+        except Exception:
+            self._manual_bug_report()
+            return
+        dlg = QDialog(self)
+        dlg.setWindowTitle(self._tr("Report a problem", "Signaler un problème"))
+        dlg.resize(560, 420)
+        form = QVBoxLayout(dlg)
+        form.addWidget(QLabel(self._tr(
+            "Tell what happened, in your own words.",
+            "Racontez ce qui s'est passé, avec vos mots.")))
+        texte = QPlainTextEdit()
+        texte.setPlaceholderText(self._tr(
+            "Example: I pressed START and the train stayed put with the buzzer on.",
+            "Exemple : j'ai appuyé sur DÉPART et la rame est restée à quai, buzzer allumé."))
+        form.addWidget(texte)
+        joindre = QCheckBox(self._tr(
+            "Attach the last events of the log (recommended)",
+            "Joindre les derniers événements du journal de bord (recommandé)"))
+        joindre.setChecked(True)
+        form.addWidget(joindre)
+        note = QLabel(self._tr(
+            "Nothing else leaves the machine: no file names, no user name.",
+            "Rien d'autre ne quitte la machine : ni noms de fichiers, ni nom d'utilisateur."))
+        note.setWordWrap(True)
+        note.setStyleSheet("color: gray;")
+        form.addWidget(note)
+        btns = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok
+            | QDialogButtonBox.StandardButton.Cancel)
+        btns.button(QDialogButtonBox.StandardButton.Ok).setText(
+            self._tr("Send", "Envoyer"))
+        form.addWidget(btns)
+        btns.accepted.connect(dlg.accept)
+        btns.rejected.connect(dlg.reject)
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+        description = texte.toPlainText().strip()
+        if not description:
+            QMessageBox.information(
+                self, self._tr("Report a problem", "Signaler un problème"),
+                self._tr("Nothing was sent: the description was empty.",
+                         "Rien n'a été envoyé : la description était vide."))
+            return
+        journal = ""
+        if joindre.isChecked():
+            try:
+                evts = list(getattr(self.game.state, "events", []))[-40:]
+                journal = "\n".join(str(e) for e in evts)
+            except Exception:
+                journal = ""
+        # Un signalement écrit à la main est toujours transmis : on vient de
+        # demander qu'on le lise. L'accord ne gouverne que l'automatique.
+        accord = reporting.consentement()
+        if accord is not True:
+            reporting.definir_consentement(True)
+        rapport = reporting.envoyer("manuel", description=description,
+                                    journal=journal, mode=str(self.game.state.run_mode),
+                                    trajet=f"s={self.game.state.train.s:.0f} v={self.game.state.train.v:.1f}")
+        if accord is not True:
+            reporting.definir_consentement(bool(accord))
+        chemin = None
+        try:
+            chemin = reporting.paquet_local(rapport, None)
+        except Exception:
+            chemin = None
+        QMessageBox.information(
+            self, self._tr("Thank you", "Merci"),
+            self._tr("Your report has been sent.", "Votre signalement a été envoyé.")
+            + ("\n\n" + self._tr("A copy was left on your Desktop: ",
+                                   "Une copie a été déposée sur votre Bureau : ")
+               + chemin.name if chemin else ""))
+
     def _manual_bug_report(self) -> None:
         try:
             import bugreport
@@ -14189,6 +14325,40 @@ def _demarrer_rapports():
         return None
 
 
+def _demander_accord_rapports(win, rapports) -> None:
+    """Au premier lancement : demander l'accord pour l'envoi automatique des
+    rapports (plantage, gel, crash natif, preuve de vie), puis signaler
+    l'installation ou le démarrage du jour — comme MusicOthèque."""
+    if rapports is None:
+        return
+    try:
+        premier = rapports.consentement() is None
+        if premier:
+            fr = (win._lang() == "fr")
+            boite = QMessageBox(win)
+            boite.setWindowTitle(APP_NAME)
+            boite.setIcon(QMessageBox.Icon.Question)
+            boite.setText("Autoriser le simulateur à signaler ses problèmes ?" if fr
+                          else "Allow the simulator to report its problems?")
+            boite.setInformativeText(
+                ("S'il plante, se fige ou refuse de démarrer, il peut l'annoncer "
+                 "tout seul à celui qui le maintient. Rien d'autre n'est envoyé : "
+                 "ni noms de fichiers, ni nom d'utilisateur.\n\n"
+                 "Ce choix est modifiable dans Aide.") if fr else
+                ("If it crashes, freezes or fails to start, it can tell its "
+                 "maintainer by itself. Nothing else is sent: no file names, "
+                 "no user name.\n\nYou can change this in the Help menu."))
+            oui = boite.addButton("Autoriser" if fr else "Allow",
+                                  QMessageBox.ButtonRole.AcceptRole)
+            boite.addButton("Non merci" if fr else "No thanks",
+                            QMessageBox.ButtonRole.RejectRole)
+            boite.exec()
+            rapports.definir_consentement(boite.clickedButton() is oui)
+        rapports.signaler_demarrage(premier=premier)
+    except Exception:
+        pass
+
+
 def main() -> None:
     _force_x11_if_wayland()
     app = QApplication(sys.argv)
@@ -14222,6 +14392,7 @@ def main() -> None:
 
     win = MainWindow()
     win.show()
+    QTimer.singleShot(1200, lambda: _demander_accord_rapports(win, rapports))
     # Vue cabine 3D d'entrée de jeu (si le viewer est disponible) : lancée
     # une fois la fenêtre à l'écran, pour que l'embarquement ait un parent.
     QTimer.singleShot(800, win.game._auto_cabin_view_3d)
