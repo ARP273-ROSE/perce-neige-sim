@@ -92,7 +92,11 @@ func _update_orbit_camera() -> void:
 # Mode ghost : rame 2 (pas de caméra, mesh visible, offset latéral passing loop)
 # side = -1 pour rame 1 (voie gauche au passing loop), +1 pour rame 2 ghost
 @export var is_ghost: bool = false
-@export var passing_side: float = -1.0
+@export var passing_side: float = -1.0:
+	set(v):
+		passing_side = v
+		_apply_wheel_types()
+var _wheel_dir_applied: int = 0
 
 
 func _ready() -> void:
@@ -142,6 +146,7 @@ func _build_mesh() -> void:
 	for l in _front_lamps:
 		(l as MeshInstance3D).set_surface_override_material(0, _head_mat)
 	set_train_number(2 if is_ghost else 1)
+	_apply_wheel_types()
 	# Le ghost (rame 2) roule vers nous : ses feux arrière rouges allumés
 	# côté « avant » de sa rame vue de notre sens n'ont pas de sens ; on
 	# allume ses feux d'extrémité en blanc (elle vient en face).
@@ -884,6 +889,155 @@ func _emit_seat(mat: StandardMaterial3D, x: float, z: float) -> void:
 const PAX_PER_LANDING: int = 14      # 2 assis + 12 debout
 const PAX_STAND_X: Array = [-0.62, -0.21, 0.21, 0.62]
 const PAX_STAND_DZ: Array = [-0.45, 0.0, 0.45]
+# masques de couleur (sommets) lus par pax_mask.gdshader : R veste / skis /
+# surf (couleur d'instance), G pantalon, B casque, alpha 0 = peau ; noir =
+# bottes, gants, lunettes, sac, fixations
+const MK_JACKET: Color = Color(1.0, 0.0, 0.0, 1.0)
+const MK_PANTS: Color = Color(0.0, 1.0, 0.0, 1.0)
+const MK_HELMET: Color = Color(0.0, 0.0, 1.0, 1.0)
+const MK_BASE: Color = Color(0.0, 0.0, 0.0, 1.0)
+const MK_SKIN: Color = Color(0.0, 0.0, 0.0, 0.0)
+
+
+## Assemble des primitives (transformées, colorées par masque) en un seul
+## ArrayMesh — un maillage par MultiMesh, quelques centaines de sommets par
+## silhouette.
+class PaxKit extends RefCounted:
+	var v: PackedVector3Array = PackedVector3Array()
+	var n: PackedVector3Array = PackedVector3Array()
+	var c: PackedColorArray = PackedColorArray()
+	var i: PackedInt32Array = PackedInt32Array()
+
+	func part(prim: PrimitiveMesh, xf: Transform3D, col: Color) -> void:
+		var arr: Array = prim.get_mesh_arrays()
+		var pv: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
+		var pn: PackedVector3Array = arr[Mesh.ARRAY_NORMAL]
+		var pi: PackedInt32Array = arr[Mesh.ARRAY_INDEX]
+		var base: int = v.size()
+		var nb: Basis = xf.basis.inverse().transposed()
+		for k in range(pv.size()):
+			v.append(xf * pv[k])
+			n.append((nb * pn[k]).normalized())
+			c.append(col)
+		for k in range(pi.size()):
+			i.append(pi[k] + base)
+
+	func commit(mat: Material) -> ArrayMesh:
+		var arrays: Array = []
+		arrays.resize(Mesh.ARRAY_MAX)
+		arrays[Mesh.ARRAY_VERTEX] = v
+		arrays[Mesh.ARRAY_NORMAL] = n
+		arrays[Mesh.ARRAY_COLOR] = c
+		arrays[Mesh.ARRAY_INDEX] = i
+		var m: ArrayMesh = ArrayMesh.new()
+		m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arrays)
+		m.surface_set_material(0, mat)
+		return m
+
+
+static func _pk_caps(r: float, h: float) -> CapsuleMesh:
+	var m: CapsuleMesh = CapsuleMesh.new()
+	m.radius = r
+	m.height = h
+	m.radial_segments = 10
+	m.rings = 3
+	return m
+
+
+static func _pk_sph(r: float, hemi: bool = false) -> SphereMesh:
+	var m: SphereMesh = SphereMesh.new()
+	m.radius = r
+	m.height = r * 2.0
+	m.radial_segments = 12
+	m.rings = 6
+	m.is_hemisphere = hemi
+	return m
+
+
+static func _pk_box(sx: float, sy: float, sz: float) -> BoxMesh:
+	var m: BoxMesh = BoxMesh.new()
+	m.size = Vector3(sx, sy, sz)
+	return m
+
+
+static func _pk_cyl(r: float, h: float) -> CylinderMesh:
+	var m: CylinderMesh = CylinderMesh.new()
+	m.top_radius = r
+	m.bottom_radius = r
+	m.height = h
+	m.radial_segments = 8
+	m.rings = 1
+	return m
+
+
+static func _pk_xf(pos: Vector3, rot: Vector3 = Vector3.ZERO, scale: Vector3 = Vector3.ONE) -> Transform3D:
+	return Transform3D(Basis.from_euler(rot).scaled(scale), pos)
+
+
+## Skieur debout, origine aux pieds, regard vers −Z : bottes, jambes, veste
+## (torse + bras + gants), sac à dos, tête casquée avec lunettes. ≈ 1,74 m.
+static func _mesh_stand(mat: Material) -> ArrayMesh:
+	var k: PaxKit = PaxKit.new()
+	for sx in [-0.11, 0.11]:
+		k.part(_pk_box(0.12, 0.14, 0.30), _pk_xf(Vector3(sx, 0.07, -0.02)), MK_BASE)
+		k.part(_pk_caps(0.085, 0.80), _pk_xf(Vector3(sx, 0.52, 0.0)), MK_PANTS)
+		k.part(_pk_caps(0.065, 0.60), _pk_xf(Vector3(sx * 2.55, 1.18, 0.02), Vector3(0.0, 0.0, -sx * 1.1)), MK_JACKET)
+		k.part(_pk_sph(0.06), _pk_xf(Vector3(sx * 2.8, 0.86, 0.04)), MK_BASE)
+	k.part(_pk_caps(0.20, 0.70), _pk_xf(Vector3(0.0, 1.20, 0.0)), MK_JACKET)
+	k.part(_pk_box(0.28, 0.36, 0.14), _pk_xf(Vector3(0.0, 1.20, 0.24)), MK_BASE)
+	k.part(_pk_sph(0.10), _pk_xf(Vector3(0.0, 1.62, 0.0)), MK_SKIN)
+	k.part(_pk_sph(0.12, true), _pk_xf(Vector3(0.0, 1.61, 0.0)), MK_HELMET)
+	k.part(_pk_box(0.19, 0.06, 0.06), _pk_xf(Vector3(0.0, 1.63, -0.085)), MK_BASE)
+	return k.commit(mat)
+
+
+## Skieur assis sur un perchoir (assise à 0,45 m), origine au sol sous
+## l'assise, regard vers −Z : cuisses horizontales, tibias, avant-bras
+## posés.
+static func _mesh_sit(mat: Material) -> ArrayMesh:
+	var k: PaxKit = PaxKit.new()
+	for sx in [-0.11, 0.11]:
+		k.part(_pk_caps(0.085, 0.50), _pk_xf(Vector3(sx, 0.55, -0.20), Vector3(PI * 0.5, 0.0, 0.0)), MK_PANTS)
+		k.part(_pk_caps(0.08, 0.50), _pk_xf(Vector3(sx, 0.28, -0.42)), MK_PANTS)
+		k.part(_pk_box(0.12, 0.14, 0.30), _pk_xf(Vector3(sx, 0.07, -0.47)), MK_BASE)
+		k.part(_pk_caps(0.065, 0.50), _pk_xf(Vector3(sx * 2.45, 0.92, -0.06), Vector3(0.45, 0.0, 0.0)), MK_JACKET)
+		k.part(_pk_sph(0.06), _pk_xf(Vector3(sx * 2.5, 0.72, -0.26)), MK_BASE)
+	k.part(_pk_caps(0.20, 0.62), _pk_xf(Vector3(0.0, 0.93, 0.0)), MK_JACKET)
+	k.part(_pk_sph(0.10), _pk_xf(Vector3(0.0, 1.32, 0.0)), MK_SKIN)
+	k.part(_pk_sph(0.12, true), _pk_xf(Vector3(0.0, 1.31, 0.0)), MK_HELMET)
+	k.part(_pk_box(0.19, 0.06, 0.06), _pk_xf(Vector3(0.0, 1.33, -0.085)), MK_BASE)
+	return k.commit(mat)
+
+
+## Paire de skis tenue debout (talons au sol) : semelles, spatules
+## relevées, fixations avant et arrière.
+static func _mesh_skis(mat: Material) -> ArrayMesh:
+	var k: PaxKit = PaxKit.new()
+	for sx in [-0.055, 0.055]:
+		k.part(_pk_box(0.09, 1.52, 0.03), _pk_xf(Vector3(sx, 0.76, 0.0)), MK_JACKET)
+		k.part(_pk_box(0.09, 0.22, 0.03), _pk_xf(Vector3(sx, 1.61, -0.045), Vector3(0.40, 0.0, 0.0)), MK_JACKET)
+		k.part(_pk_box(0.07, 0.11, 0.07), _pk_xf(Vector3(sx, 0.96, 0.04)), MK_BASE)
+		k.part(_pk_box(0.07, 0.09, 0.06), _pk_xf(Vector3(sx, 0.62, 0.035)), MK_BASE)
+	return k.commit(mat)
+
+
+## Deux bâtons : tubes, poignées, rondelles.
+static func _mesh_poles(mat: Material) -> ArrayMesh:
+	var k: PaxKit = PaxKit.new()
+	for sx in [-0.03, 0.03]:
+		k.part(_pk_cyl(0.008, 1.20), _pk_xf(Vector3(sx, 0.60, 0.0)), MK_JACKET)
+		k.part(_pk_cyl(0.015, 0.13), _pk_xf(Vector3(sx, 1.19, 0.0)), MK_BASE)
+		k.part(_pk_cyl(0.045, 0.012), _pk_xf(Vector3(sx, 0.09, 0.0)), MK_BASE)
+	return k.commit(mat)
+
+
+## Surf tenu debout : planche aux bouts arrondis, deux fixations.
+static func _mesh_board(mat: Material) -> ArrayMesh:
+	var k: PaxKit = PaxKit.new()
+	k.part(_pk_caps(0.135, 1.55), _pk_xf(Vector3(0.0, 0.775, 0.0), Vector3.ZERO, Vector3(1.0, 1.0, 0.16)), MK_JACKET)
+	for y in [0.55, 1.0]:
+		k.part(_pk_box(0.20, 0.09, 0.06), _pk_xf(Vector3(0.0, y, 0.035)), MK_BASE)
+	return k.commit(mat)
 
 
 func _build_passengers() -> void:
@@ -893,33 +1047,17 @@ func _build_passengers() -> void:
 		Color(0.85, 0.15, 0.12), Color(0.10, 0.10, 0.12), Color(0.90, 0.60, 0.10),
 		Color(0.20, 0.55, 0.75), Color(0.75, 0.75, 0.78), Color(0.35, 0.15, 0.45),
 	]
-	var helmet_colors: Array = [
-		Color(0.10, 0.10, 0.11), Color(0.92, 0.92, 0.90), Color(0.55, 0.12, 0.10),
-		Color(0.20, 0.30, 0.60), Color(0.30, 0.30, 0.32), Color(0.85, 0.70, 0.55),
-	]
 	var ski_colors: Array = [
 		Color(0.90, 0.10, 0.10), Color(0.95, 0.95, 0.95), Color(0.10, 0.60, 0.90),
 		Color(0.95, 0.75, 0.10), Color(0.12, 0.12, 0.12), Color(0.20, 0.70, 0.30),
 	]
-	var mat: StandardMaterial3D = StandardMaterial3D.new()
-	mat.vertex_color_use_as_albedo = true
-	mat.roughness = 0.85
-	var torso_mesh: BoxMesh = BoxMesh.new()
-	torso_mesh.size = Vector3(0.42, 0.75, 0.28)
-	torso_mesh.material = mat
-	var head_mesh: SphereMesh = SphereMesh.new()
-	head_mesh.radius = 0.115
-	head_mesh.height = 0.23
-	head_mesh.material = mat
-	var ski_mesh: BoxMesh = BoxMesh.new()
-	ski_mesh.size = Vector3(0.18, 1.72, 0.035)     # la paire, tenue verticale
-	ski_mesh.material = mat
-	var pole_mesh: BoxMesh = BoxMesh.new()
-	pole_mesh.size = Vector3(0.05, 1.25, 0.014)    # les deux bâtons
-	pole_mesh.material = mat
-	var board_mesh: BoxMesh = BoxMesh.new()
-	board_mesh.size = Vector3(0.27, 1.55, 0.02)
-	board_mesh.material = mat
+	var mat: ShaderMaterial = ShaderMaterial.new()
+	mat.shader = load("res://scripts/pax_mask.gdshader")
+	var mesh_stand: ArrayMesh = _mesh_stand(mat)
+	var mesh_sit: ArrayMesh = _mesh_sit(mat)
+	var mesh_skis: ArrayMesh = _mesh_skis(mat)
+	var mesh_poles: ArrayMesh = _mesh_poles(mat)
+	var mesh_board: ArrayMesh = _mesh_board(mat)
 
 	var car_len: float = train_length / float(car_count)
 	for idx in range(car_count):
@@ -943,32 +1081,32 @@ func _build_passengers() -> void:
 			var tmp: Dictionary = slots[i]
 			slots[i] = slots[j]
 			slots[j] = tmp
-		var torso_b: Array = []
-		var head_b: Array = []
-		var torso_c: Array = []
-		var head_c: Array = []
+		var stand_t: Array = []
+		var stand_c: Array = []
+		var sit_t: Array = []
+		var sit_c: Array = []
 		var ski_t: Array = []
 		var ski_c: Array = []
 		var pole_t: Array = []
 		var board_t: Array = []
 		var board_c: Array = []
-		var pre_ski: Array = [0]
-		var pre_pole: Array = [0]
-		var pre_board: Array = [0]
+		var pre: Dictionary = {"stand": [0], "sit": [0], "ski": [0], "pole": [0], "board": [0]}
 		for sl in slots:
 			var x: float = sl["x"]
 			var z: float = sl["z"]
 			var fy: float = _floor_y_at(z)
 			var zl: float = z - z_c
 			var sit: bool = sl["sit"]
-			var sy: float = 0.733 if sit else 1.0
-			var y_t: float = fy + (0.95 if sit else 1.20)
-			var yaw: float = rng.randf_range(-0.6, 0.6)
-			var bt: Basis = Basis(Vector3.UP, yaw).scaled(Vector3(1.0, sy, 1.0))
-			torso_b.append(Transform3D(bt, Vector3(x, y_t, zl)))
-			torso_c.append(coat_colors[rng.randi_range(0, coat_colors.size() - 1)])
-			head_b.append(Transform3D(Basis.IDENTITY, Vector3(x, y_t + 0.75 * sy * 0.5 + 0.13, zl)))
-			head_c.append(helmet_colors[rng.randi_range(0, helmet_colors.size() - 1)])
+			var coat: Color = coat_colors[rng.randi_range(0, coat_colors.size() - 1)]
+			if sit:
+				# sur le perchoir, tourné vers le couloir
+				var yaw: float = (PI * 0.5 if x > 0.0 else -PI * 0.5) + rng.randf_range(-0.15, 0.15)
+				sit_t.append(Transform3D(Basis(Vector3.UP, yaw), Vector3(x, fy, zl)))
+				sit_c.append(coat)
+			else:
+				var yaw2: float = rng.randf_range(-PI, PI)
+				stand_t.append(Transform3D(Basis(Vector3.UP, yaw2), Vector3(x, fy, zl)))
+				stand_c.append(coat)
 			# matériel : skis + bâtons (55 %), surf (20 %), rien (25 %),
 			# tenu debout à côté, vers le couloir
 			var side: float = -1.0 if x > 0.0 else 1.0
@@ -976,37 +1114,41 @@ func _build_passengers() -> void:
 			var gear: String = "ski" if r < 0.55 else ("board" if r < 0.75 else "")
 			if gear == "ski":
 				var tiltz: float = rng.randf_range(-0.06, 0.06)
-				ski_t.append(Transform3D(Basis(Vector3.BACK, tiltz), Vector3(x + side * 0.30, fy + 0.86, zl + 0.05)))
-				ski_c.append(ski_colors[rng.randi_range(0, ski_colors.size() - 1)])
-				pole_t.append(Transform3D(Basis(Vector3.BACK, tiltz * 1.5), Vector3(x + side * 0.42, fy + 0.62, zl + 0.08)))
+				var col: Color = ski_colors[rng.randi_range(0, ski_colors.size() - 1)]
+				ski_t.append(Transform3D(Basis(Vector3.BACK, tiltz), Vector3(x + side * 0.30, fy, zl + 0.05)))
+				ski_c.append(col)
+				pole_t.append(Transform3D(Basis(Vector3.BACK, tiltz * 1.5), Vector3(x + side * 0.42, fy, zl + 0.08)))
 			elif gear == "board":
-				board_t.append(Transform3D(Basis(Vector3.UP, rng.randf_range(0.2, 0.5)), Vector3(x + side * 0.30, fy + 0.78, zl + 0.05)))
+				board_t.append(Transform3D(Basis(Vector3.UP, rng.randf_range(0.2, 0.5)), Vector3(x + side * 0.30, fy, zl + 0.05)))
 				board_c.append(coat_colors[rng.randi_range(0, coat_colors.size() - 1)])
-			pre_ski.append(ski_t.size())
-			pre_pole.append(pole_t.size())
-			pre_board.append(board_t.size())
-		var mm_t: MultiMeshInstance3D = _pax_multimesh(idx, torso_mesh, torso_b, torso_c, "PaxTorsos")
-		var mm_h: MultiMeshInstance3D = _pax_multimesh(idx, head_mesh, head_b, head_c, "PaxHeads")
-		var mm_s: MultiMeshInstance3D = _pax_multimesh(idx, ski_mesh, ski_t, ski_c, "PaxSkis")
-		var mm_p: MultiMeshInstance3D = _pax_multimesh(idx, pole_mesh, pole_t, [], "PaxPoles")
-		var mm_b: MultiMeshInstance3D = _pax_multimesh(idx, board_mesh, board_t, board_c, "PaxBoards")
+			pre["stand"].append(stand_t.size())
+			pre["sit"].append(sit_t.size())
+			pre["ski"].append(ski_t.size())
+			pre["pole"].append(pole_t.size())
+			pre["board"].append(board_t.size())
 		_pax_slots.append(slots)
-		_pax_mm.append({"torso": mm_t, "head": mm_h, "ski": mm_s, "pole": mm_p, "board": mm_b})
-		_pax_base.append({"torso": torso_b, "head": head_b})
-		_pax_gear_prefix.append({"ski": pre_ski, "pole": pre_pole, "board": pre_board})
+		_pax_mm.append({
+			"stand": _pax_multimesh(idx, mesh_stand, stand_t, stand_c, "PaxDebout"),
+			"sit": _pax_multimesh(idx, mesh_sit, sit_t, sit_c, "PaxAssis"),
+			"ski": _pax_multimesh(idx, mesh_skis, ski_t, ski_c, "PaxSkis"),
+			"pole": _pax_multimesh(idx, mesh_poles, pole_t, ski_c, "PaxBatons"),
+			"board": _pax_multimesh(idx, mesh_board, board_t, board_c, "PaxSurfs"),
+		})
+		_pax_base.append({"stand": stand_t, "sit": sit_t})
+		_pax_gear_prefix.append(pre)
 		_pax_shown.append(-1)
 	_update_passenger_count()
 
 
-func _pax_multimesh(idx: int, mesh: Mesh, xforms: Array, colors: Array, nom: String) -> MultiMeshInstance3D:
+func _pax_multimesh(idx: int, mesh: Mesh, xforms: Array, customs: Array, nom: String) -> MultiMeshInstance3D:
 	var mm: MultiMesh = MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
-	mm.use_colors = true
+	mm.use_custom_data = true
 	mm.mesh = mesh
 	mm.instance_count = xforms.size()
 	for i in range(xforms.size()):
 		mm.set_instance_transform(i, xforms[i])
-		mm.set_instance_color(i, colors[i] if i < colors.size() else Color(0.12, 0.12, 0.13))
+		mm.set_instance_custom_data(i, customs[i] if i < customs.size() else Color(0.5, 0.5, 0.5))
 	mm.visible_instance_count = 0
 	var mi: MultiMeshInstance3D = MultiMeshInstance3D.new()
 	mi.name = "%s%d" % [nom, idx + 1]
@@ -1034,11 +1176,8 @@ func _update_passenger_count() -> void:
 		_pax_shown[idx] = n
 		var mm: Dictionary = _pax_mm[idx]
 		var pre: Dictionary = _pax_gear_prefix[idx]
-		(mm["torso"] as MultiMeshInstance3D).multimesh.visible_instance_count = n
-		(mm["head"] as MultiMeshInstance3D).multimesh.visible_instance_count = n
-		(mm["ski"] as MultiMeshInstance3D).multimesh.visible_instance_count = pre["ski"][n]
-		(mm["pole"] as MultiMeshInstance3D).multimesh.visible_instance_count = pre["pole"][n]
-		(mm["board"] as MultiMeshInstance3D).multimesh.visible_instance_count = pre["board"][n]
+		for kind in ["stand", "sit", "ski", "pole", "board"]:
+			(mm[kind] as MultiMeshInstance3D).multimesh.visible_instance_count = pre[kind][n]
 
 
 func _build_lights() -> void:
@@ -1198,9 +1337,14 @@ func _process(_delta: float) -> void:
 	for idx in range(_car_roots.size()):
 		var z_c: float = (float(idx) - (car_count - 1) * 0.5) * car_len
 		var s_car: float = clampf(s_pos - travel_sign * z_c, 0.0, PNConstants.LENGTH)
-		var p_c: Vector3 = _cabin_world_pos(s_car)
-		var p_a: Vector3 = _cabin_world_pos(maxf(s_car - eps, 0.0))
-		var p_b: Vector3 = _cabin_world_pos(minf(s_car + eps, PNConstants.LENGTH))
+		# Chaque voiture repose sur ses DEUX bogies (à ±6 m de son centre) :
+		# la caisse suit la corde entre les deux appuis, pas la tangente en
+		# son milieu — sinon, sur un changement de pente convexe, les roues
+		# décollaient du rail (retour d'essai 2026-09-27).
+		var bh: float = car_len * 0.5 - TrainBodyBuilder.BOGIE_OFFSET
+		var p_a: Vector3 = _cabin_world_pos(maxf(s_car - bh, 0.0))
+		var p_b: Vector3 = _cabin_world_pos(minf(s_car + bh, PNConstants.LENGTH))
+		var p_c: Vector3 = (p_a + p_b) * 0.5
 		var tg: Vector3 = (p_b - p_a).normalized()
 		if tg.length() < 0.5:
 			tg = trajectory_tangent
@@ -1244,6 +1388,8 @@ func _process(_delta: float) -> void:
 	_animate_passengers(_delta)
 	# Sync des lumières depuis physics (drives by Python sim in client mode)
 	_animate_headlights(_delta)
+	if physics.direction != _wheel_dir_applied:
+		_apply_wheel_types()
 	if not is_ghost:
 		if headlight_rear != null:
 			# Feu arrière toujours allumé en marche, éteint à l'arrêt complet
@@ -1271,21 +1417,22 @@ func _animate_passengers(delta: float) -> void:
 	# arrière (+X), virage à droite → têtes vers l'extérieur (−Z)
 	var pitch: float = clampf(-acc_long * 0.06, -0.20, 0.20)
 	var roll: float = clampf(-acc_lat * 0.05, -0.18, 0.18)
-	var sway_h: Basis = Basis.from_euler(Vector3(pitch, 0.0, roll))
-	var sway_t: Basis = Basis.from_euler(Vector3(pitch * 0.4, 0.0, roll * 0.4))
+	# les silhouettes se balancent autour de leurs pieds (origine du
+	# maillage) ; assis, moitié moins
+	var sway_s: Basis = Basis.from_euler(Vector3(pitch * 0.6, 0.0, roll * 0.6))
+	var sway_a: Basis = Basis.from_euler(Vector3(pitch * 0.3, 0.0, roll * 0.3))
 	for idx in range(_pax_mm.size()):
+		var pre: Dictionary = _pax_gear_prefix[idx]
 		var n: int = _pax_shown[idx]
 		if n <= 0:
 			continue
-		var mm_t: MultiMesh = (_pax_mm[idx]["torso"] as MultiMeshInstance3D).multimesh
-		var mm_h: MultiMesh = (_pax_mm[idx]["head"] as MultiMeshInstance3D).multimesh
-		var bt: Array = _pax_base[idx]["torso"]
-		var bh: Array = _pax_base[idx]["head"]
-		for i in range(n):
-			var t: Transform3D = bt[i]
-			mm_t.set_instance_transform(i, Transform3D(sway_t * t.basis, t.origin))
-			var h: Transform3D = bh[i]
-			mm_h.set_instance_transform(i, Transform3D(sway_h * h.basis, h.origin))
+		for kind in ["stand", "sit"]:
+			var mm: MultiMesh = (_pax_mm[idx][kind] as MultiMeshInstance3D).multimesh
+			var base: Array = _pax_base[idx][kind]
+			var sway: Basis = sway_s if kind == "stand" else sway_a
+			for i in range(pre[kind][n]):
+				var t: Transform3D = base[i]
+				mm.set_instance_transform(i, Transform3D(sway * t.basis, t.origin))
 
 
 ## Phares halogènes : le filament chauffe (≈ 0,3 s) et refroidit (≈ 0,6 s),
@@ -1305,6 +1452,32 @@ func _animate_headlights(delta: float) -> void:
 	if headlight_front != null:
 		headlight_front.light_energy = 14.0 * g * g
 		headlight_front.visible = g > 0.01
+
+
+## Roues Abt : la rame de la voie de GAUCHE dans l'évitement (passing_side
+## < 0, rame 1) est guidée par ses roues côté GAUCHE en regardant vers le
+## haut (rail extérieur) ; la rame de droite par ses roues de droite. Les
+## autres roues sont les cylindres larges. La caisse étant retournée quand
+## elle descend (le nez mène toujours), le côté local s'inverse avec le sens.
+func _apply_wheel_types() -> void:
+	if _wheels.is_empty():
+		return
+	var flipped: bool = false
+	if physics != null:
+		flipped = (physics.direction > 0) if is_ghost else (physics.direction < 0)
+	_wheel_dir_applied = (physics.direction if physics != null else 0)
+	for w in _wheels:
+		var pivot: Node3D = w as Node3D
+		if pivot == null or not pivot.has_meta("sx"):
+			continue
+		var sx: float = pivot.get_meta("sx")
+		var guided: bool = ((sx < 0.0) == (passing_side < 0.0)) != flipped
+		var g: Node3D = pivot.get_node_or_null("Boudin")
+		var f: Node3D = pivot.get_node_or_null("Plate")
+		if g != null:
+			g.visible = guided
+		if f != null:
+			f.visible = not guided
 
 
 func set_train_number(n: int) -> void:
