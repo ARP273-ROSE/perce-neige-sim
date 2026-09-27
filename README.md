@@ -14,6 +14,13 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 
 ## Quoi de neuf — v1.13.x (audit physique des voyages, 26 septembre 2026)
 
+**v1.15.22** — la vue extérieure (O) reste accessible en exploitation
+automatique : « je ne peux pas changer de vue avec O, c'est bloqué, mais F4
+marche ». Le verrou de l'automate (qui ignore les touches de conduite) avait
+deux listes blanches dupliquées, clavier et boutons du pupitre, et O manquait
+aux deux. Une seule liste `AUTO_OPS_META_KEYS` (X, Échap, P, L, N, Retour,
+F1–F6, O, +/−) sert désormais aux deux chemins. Test ajouté.
+
 **v1.15.21** — exploitation automatique : les portes attendent la fin des
 oscillations, le demi-tour attend la descente (PC + PWA) :
 - retour d'essai : « il inverse le sens du voyage trop vite, en bas on n'a pas

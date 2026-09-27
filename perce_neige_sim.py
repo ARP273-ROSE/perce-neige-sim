@@ -5878,6 +5878,22 @@ class FaultPickerDialog(QDialog):
 
 
 class GameWidget(QWidget):
+    # Touches encore acceptées pendant l'exploitation automatique (X) :
+    # tout ce qui ne CONDUIT pas — bascule de l'automate, menus, journal,
+    # pause, langue, annonces, zoom du profil et les VUES (F4 = 3D, O =
+    # vue extérieure). Une seule liste pour le clavier ET les boutons du
+    # pupitre (retour d'essai 2026-09-27 : « en exploitation auto je ne
+    # peux pas changer de vue avec O, c'est bloqué, mais F4 marche » — O
+    # manquait aux deux listes blanches, dupliquées).
+    AUTO_OPS_META_KEYS = frozenset(int(k) for k in (
+        Qt.Key.Key_X, Qt.Key.Key_Escape, Qt.Key.Key_P,
+        Qt.Key.Key_L, Qt.Key.Key_N, Qt.Key.Key_Backspace,
+        Qt.Key.Key_F1, Qt.Key.Key_F2, Qt.Key.Key_F3,
+        Qt.Key.Key_F4, Qt.Key.Key_F5, Qt.Key.Key_F6,
+        Qt.Key.Key_O,
+        Qt.Key.Key_Plus, Qt.Key.Key_Equal, Qt.Key.Key_Minus,
+    ))
+
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.state = GameState()
@@ -7283,14 +7299,7 @@ class GameWidget(QWidget):
         if (getattr(self, "auto_ops", None) is not None
                 and self.auto_ops.enabled
                 and not self._show_annmenu):
-            _allowed = {
-                Qt.Key.Key_X, Qt.Key.Key_Escape, Qt.Key.Key_P,
-                Qt.Key.Key_L, Qt.Key.Key_N, Qt.Key.Key_Backspace,
-                Qt.Key.Key_F1, Qt.Key.Key_F2, Qt.Key.Key_F3,
-                Qt.Key.Key_F4, Qt.Key.Key_F5,
-                Qt.Key.Key_Plus, Qt.Key.Key_Equal, Qt.Key.Key_Minus,
-            }
-            if k not in _allowed:
+            if int(k) not in self.AUTO_OPS_META_KEYS:
                 ev.accept()
                 return
         # Announcement console hotkeys (only when menu is visible).
@@ -8041,16 +8050,7 @@ class GameWidget(QWidget):
                 # Mouse clicks on cockpit buttons are filtered through
                 # the same auto-ops lockout as the keyboard path.
                 if (self.auto_ops.enabled
-                        and qk not in (int(Qt.Key.Key_X),
-                                       int(Qt.Key.Key_P),
-                                       int(Qt.Key.Key_N),
-                                       int(Qt.Key.Key_L),
-                                       int(Qt.Key.Key_Backspace),
-                                       int(Qt.Key.Key_F1),
-                                       int(Qt.Key.Key_F2),
-                                       int(Qt.Key.Key_F3),
-                                       int(Qt.Key.Key_F4),
-                                       int(Qt.Key.Key_F5))):
+                        and int(qk) not in self.AUTO_OPS_META_KEYS):
                     ev.accept()
                     return
                 if hold:
