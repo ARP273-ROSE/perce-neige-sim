@@ -14,6 +14,12 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 
 ## Quoi de neuf — v1.13.x (audit physique des voyages, 26 septembre 2026)
 
+**v1.15.16** — lien de téléchargement permanent : chaque release publie
+aussi l'installeur sous le nom stable `PerceNeigeSimulator-Setup.exe`, si
+bien que
+<https://github.com/ARP273-ROSE/perce-neige-sim/releases/latest/download/PerceNeigeSimulator-Setup.exe>
+pointe toujours vers la dernière version (page : <https://github.com/ARP273-ROSE/perce-neige-sim/releases/latest>).
+
 **v1.15.15** — écran d'accueil : bouton **COMMENCER ▶** cliquable en bas à
 droite (équivaut à F1) ; tant que l'écran d'accueil est affiché, un clic
 ailleurs n'atteint plus les zones de l'écran titre cachées dessous.
