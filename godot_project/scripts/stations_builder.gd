@@ -75,6 +75,7 @@ func _build_station_low() -> void:
 	# caillebotis en fond, chaînes, et butoirs bleus à tête bois
 	_build_pit(PIT_LOW_START, PIT_LOW_END, false)
 	_build_bumper(s_bumper, true)
+	_build_room_dressing(1.0, tunnel.station_low_end - tunnel.station_room_transition, true)
 	_build_ceiling_lights(s_plat_start, s_plat_end)
 
 
@@ -91,6 +92,8 @@ func _build_station_high() -> void:
 	_build_platform(s_plat_start, s_plat_end, false, -1.0)
 	# Pas de fosse en haut (retour d'essai 2026-09-26) : butoirs bleus seuls
 	_build_bumper(s_bumper, false)
+	_build_room_dressing(tunnel.station_high_start + tunnel.station_room_transition,
+		PNConstants.LENGTH - 0.3, false)
 	_build_ceiling_lights(s_plat_start, s_plat_end)
 
 
@@ -107,23 +110,21 @@ func _build_platform(s_start: float, s_end: float, is_low: bool, side: float = 1
 	var side_name: String = "R" if side > 0.0 else "L"
 	var sta: String = "low" if is_low else "high"
 
-	# Tôle damier alu (marches métalliques des photos)
+	# Marches en CAILLEBOTIS NOIR antidérapant (photos 095433 / 095511 :
+	# le dessus des paliers est sombre), nez en tôle damier alu ; en gare
+	# haute une BANDE ROUGE court derrière le nez (photo 095438).
 	var tread_mat: StandardMaterial3D = StandardMaterial3D.new()
-	tread_mat.albedo_color = Color(0.58, 0.59, 0.62)
-	tread_mat.roughness = 0.45
-	tread_mat.metallic = 0.75
-	tread_mat.metallic_specular = 0.6
+	tread_mat.albedo_color = Color(0.13, 0.13, 0.14)
+	tread_mat.roughness = 0.9
+	tread_mat.metallic = 0.15
 
-	# Nez de marche : alu brut en gare basse, ROUGES en gare haute (photos)
 	var nose_mat: StandardMaterial3D = StandardMaterial3D.new()
-	if is_low:
-		nose_mat.albedo_color = Color(0.80, 0.81, 0.84)
-		nose_mat.roughness = 0.35
-		nose_mat.metallic = 0.85
-	else:
-		nose_mat.albedo_color = Color(0.72, 0.14, 0.12)
-		nose_mat.roughness = 0.65
-		nose_mat.metallic = 0.10
+	nose_mat.albedo_color = Color(0.78, 0.79, 0.82)
+	nose_mat.roughness = 0.35
+	nose_mat.metallic = 0.85
+	var band_mat: StandardMaterial3D = StandardMaterial3D.new()
+	band_mat.albedo_color = Color(0.62, 0.12, 0.10)
+	band_mat.roughness = 0.7
 
 	var rail_mat: StandardMaterial3D = StandardMaterial3D.new()
 	rail_mat.albedo_color = Color(0.75, 0.76, 0.78)
@@ -152,6 +153,13 @@ func _build_platform(s_start: float, s_end: float, is_low: bool, side: float = 1
 	mm_noses.transform_format = MultiMesh.TRANSFORM_3D
 	mm_noses.mesh = nose_mesh
 	mm_noses.instance_count = n_treads
+	var band_mesh: BoxMesh = BoxMesh.new()
+	band_mesh.size = Vector3(platform_width, 0.012, 0.26)
+	band_mesh.material = band_mat
+	var mm_bands: MultiMesh = MultiMesh.new()
+	mm_bands.transform_format = MultiMesh.TRANSFORM_3D
+	mm_bands.mesh = band_mesh
+	mm_bands.instance_count = n_treads if not is_low else 0
 
 	for i in range(n_treads):
 		var s_dn: float = s_start + float(i) * tread_depth          # bord aval
@@ -173,6 +181,11 @@ func _build_platform(s_start: float, s_end: float, is_low: bool, side: float = 1
 		var nose_c: Vector3 = xf_dn.origin + xf_dn.basis.x * lat_center
 		nose_c.y = top_y - 0.017
 		mm_noses.set_instance_transform(i, Transform3D(level_basis, nose_c))
+		if not is_low:
+			var xf_bd: Transform3D = tunnel.transform_at(s_dn + 0.25)
+			var band_c: Vector3 = xf_bd.origin + xf_bd.basis.x * lat_center
+			band_c.y = top_y - 0.004
+			mm_bands.set_instance_transform(i, Transform3D(level_basis, band_c))
 
 	var mi_treads: MultiMeshInstance3D = MultiMeshInstance3D.new()
 	mi_treads.name = "PlatformSteps_%s_%s" % [sta, side_name]
@@ -185,6 +198,12 @@ func _build_platform(s_start: float, s_end: float, is_low: bool, side: float = 1
 	mi_noses.multimesh = mm_noses
 	mi_noses.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(mi_noses)
+	if not is_low:
+		var mi_bands: MultiMeshInstance3D = MultiMeshInstance3D.new()
+		mi_bands.name = "PlatformBands_%s_%s" % [sta, side_name]
+		mi_bands.multimesh = mm_bands
+		mi_bands.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(mi_bands)
 
 
 
@@ -317,8 +336,77 @@ func _build_pit(s0: float, s1: float, with_sheaves: bool) -> void:
 		_box(Vector3(2.7, 0.03, 0.03), chain, s0 + 1.0, 0.0, FLOOR_Y_LOCAL + 0.70, "Chaine")
 
 
+## Habillage des salles de gare d'après les photos (2026-09-27, les deux
+## gares se ressemblent) : parois BLEU NUIT, plafond CLAIR porté par des
+## poutres acier sombres en travers tous les 2,8 m et deux pannes en long,
+## poteaux sombres le long des murs tous les 4,2 m, appliques bleues. Les
+## boîtes sont posées juste en dedans de la section rectangulaire de la
+## salle (elles masquent la paroi lisse du tunnel).
+const NAVY: Color = Color(0.13, 0.16, 0.25)
+const CEIL_COL: Color = Color(0.84, 0.85, 0.87)
+const BEAM_COL: Color = Color(0.09, 0.10, 0.13)
+
+
+func _mkmat(col: Color, rough: float, metal: float) -> StandardMaterial3D:
+	var m: StandardMaterial3D = StandardMaterial3D.new()
+	m.albedo_color = col
+	m.roughness = rough
+	m.metallic = metal
+	m.cull_mode = BaseMaterial3D.CULL_DISABLED
+	return m
+
+
+func _build_room_dressing(s0: float, s1: float, _is_low: bool) -> void:
+	var navy: StandardMaterial3D = _mkmat(NAVY, 0.85, 0.0)
+	var ceil_m: StandardMaterial3D = _mkmat(CEIL_COL, 0.75, 0.0)
+	var beam: StandardMaterial3D = _mkmat(BEAM_COL, 0.45, 0.5)
+	var blue_lamp: StandardMaterial3D = StandardMaterial3D.new()
+	blue_lamp.albedo_color = Color(0.45, 0.65, 1.0)
+	blue_lamp.emission_enabled = true
+	blue_lamp.emission = Color(0.30, 0.55, 1.0)
+	blue_lamp.emission_energy_multiplier = 3.0
+	blue_lamp.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	var hw: float = tunnel.station_room_half_width
+	var hh: float = tunnel.station_room_half_height
+	var length: float = s1 - s0
+	var sc: float = (s0 + s1) * 0.5
+	var wall_h: float = hh - FLOOR_Y_LOCAL
+	var y_wall: float = FLOOR_Y_LOCAL + wall_h * 0.5
+	for sx in [-1.0, 1.0]:
+		_box(Vector3(0.06, wall_h, length), navy, sc, sx * (hw - 0.04), y_wall, "ParoiGare")
+	_box(Vector3(hw * 2.0, 0.06, length), ceil_m, sc, 0.0, hh - 0.04, "PlafondGare")
+	# poutres en travers (IPN sombres) et deux pannes en long
+	var s: float = s0 + 1.4
+	while s < s1 - 0.5:
+		_box(Vector3(hw * 2.0 - 0.1, 0.32, 0.16), beam, s, 0.0, hh - 0.24, "PoutreGare")
+		s += 2.8
+	for sx in [-2.6, 2.6]:
+		_box(Vector3(0.14, 0.14, length), beam, sc, sx, hh - 0.47, "PanneGare")
+	# poteaux le long des murs
+	s = s0 + 2.0
+	while s < s1 - 1.0:
+		for sx in [-1.0, 1.0]:
+			_box(Vector3(0.26, wall_h, 0.26), beam, s, sx * (hw - 0.2), y_wall, "PoteauGare")
+		s += 4.2
+	# appliques bleues (photos 095511 / 095520 : halo bleu sur les murs)
+	s = s0 + 4.0
+	while s < s1 - 2.0:
+		for sx in [-1.0, 1.0]:
+			_box(Vector3(0.10, 0.28, 0.10), blue_lamp, s, sx * (hw - 0.12), 1.25, "AppliqueBleue")
+			var l: OmniLight3D = OmniLight3D.new()
+			l.light_color = Color(0.35, 0.55, 1.0)
+			l.light_energy = 1.4
+			l.omni_range = 7.0
+			l.shadow_enabled = false
+			var xf: Transform3D = _xf_at(s)
+			l.position = xf.origin + xf.basis.x * (sx * (hw - 0.4)) + xf.basis.y * 1.25
+			add_child(l)
+		s += 8.4
+
+
 func _build_ceiling_lights(s_start: float, s_end: float) -> void:
-	var spacing: float = 4.0
+	# entre les poutres (tous les 2,8 m), tubes plus fins
+	var spacing: float = 2.8
 	# Néons collés au plafond de la SALLE élargie (2,65 m), pas à l'ancienne
 	# hauteur de tube (1,85 m) où ils flotteraient en plein milieu.
 	var y_neon: float = tunnel.station_room_half_height - 0.25
@@ -338,7 +426,7 @@ func _build_ceiling_lights(s_start: float, s_end: float) -> void:
 
 		# Bâtonnet émissif visible (source lumineuse visible dans le brouillard)
 		var neon_mesh: BoxMesh = BoxMesh.new()
-		neon_mesh.size = Vector3(1.8, 0.08, 0.15)
+		neon_mesh.size = Vector3(2.4, 0.06, 0.12)
 		var neon_mat: StandardMaterial3D = StandardMaterial3D.new()
 		neon_mat.albedo_color = Color(0.98, 0.99, 1.0)
 		neon_mat.emission_enabled = true

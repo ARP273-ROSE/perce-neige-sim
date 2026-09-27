@@ -98,7 +98,7 @@ func _build_hall(
 
 	# Matériaux
 	var concrete_mat: StandardMaterial3D = StandardMaterial3D.new()
-	concrete_mat.albedo_color = Color(0.45, 0.43, 0.40)
+	concrete_mat.albedo_color = Color(0.52, 0.38, 0.22)   # bardage bois des halls (photos 093457 / 093505)
 	concrete_mat.roughness = 0.92
 	concrete_mat.metallic = 0.0
 	concrete_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
@@ -110,7 +110,7 @@ func _build_hall(
 	floor_mat.uv1_scale = Vector3(4.0, 4.0, 1.0)
 
 	var ceiling_mat: StandardMaterial3D = StandardMaterial3D.new()
-	ceiling_mat.albedo_color = Color(0.55, 0.53, 0.50)
+	ceiling_mat.albedo_color = Color(0.86, 0.86, 0.84)   # panneaux clairs suspendus
 	ceiling_mat.roughness = 0.90
 	ceiling_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 
