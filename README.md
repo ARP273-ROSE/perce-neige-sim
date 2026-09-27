@@ -14,6 +14,14 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 
 ## Quoi de neuf — v1.13.x (audit physique des voyages, 26 septembre 2026)
 
+**v1.15.10** — PWA : salle des machines refondue comme celle du PC. Vue en
+coupe de la machinerie de la gare amont : 3 moteurs DC teintés par la
+charge, réducteur, arbre, **deux poulies jaunes Von Roll** (motrice et
+déviation) qui tournent à ω = v / r et s'inversent à la descente, câble en
+huit qui les enlace avec un repère qui défile, LED de puissance, lectures
+∅ / tr/min / vitesse câble ; en dessous les trois groupes moteurs et leurs
+barres de puissance.
+
 **v1.15.9** — historique corrigé (F3) : le funiculaire n'a pas remplacé un
 téléphérique mais les **deux télécabines 4 places Grande Motte A (1968) et
 B (1969)**, Transtélé / PHB ; le téléphérique de la Grande Motte (sommet
