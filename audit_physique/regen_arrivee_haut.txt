@@ -1,0 +1,38 @@
+=== ARRIVÉE EN HAUT, rame PLEINE (57.4 t) en montée, contrepoids VIDE (32.3 t) ===
+masse en mouvement (2 rames + câble 38.2 t) : 127.9 t
+énergie cinétique à 12 m/s : 9.2 MJ ; à 6 m/s : 2.3 MJ
+(pas de câble lest sur le Perce-Neige — remontees-mecaniques.net : « pas de câble lest ... pas de système de tension dynamique »)
+
+--- Termes du bilan (kN, + = s'oppose à la montée) ---
+ s (m)     rames     câble   roul.   galets   aéro12    aéro1 |   Σ v=12    Σ v=6    Σ v=1
+  3000      82.7     -78.8     2.1      5.4     32.2      0.2 |     43.6     19.5     11.7
+  3200      99.4     -89.4     2.1      5.4     32.1      0.2 |     49.7     25.6     17.8
+  3300     105.1     -94.1     2.1      5.4     32.1      0.2 |     50.7     26.6     18.8
+  3400      45.0     -97.8     2.2      5.4     32.1      0.2 |    -13.1    -37.2    -45.0
+  3448      16.5     -98.9     2.2      5.4     32.1      0.2 |    -42.7    -66.8    -74.6
+
+--- Puissance électrique (kW) : vitesse constante, puis décélération a = −0,5 et −1,0 m/s² ---
+F_inertie = M_TOT · a = 63.9 kN à −0,5 m/s², 127.9 kN à −1,0 m/s² (le moteur doit RETENIR cette force)
+     s     v |   trac cst  régén cst |  trac −0.5 régén −0.5 |  trac −1.0 régén −1.0
+  3300  12.0 |        676          0 |          0        127 |          0        741
+  3300   6.0 |        178          0 |          0        179 |          0        486
+  3300   3.0 |         69          0 |          0        104 |          0        257
+  3300   1.0 |         21          0 |          0         36 |          0         87
+  3400  12.0 |          0        126 |          0        740 |          0       1354
+  3400   6.0 |          0        179 |          0        485 |          0        792
+  3400   3.0 |          0        104 |          0        257 |          0        411
+  3400   1.0 |          0         36 |          0         87 |          0        138
+  3448  12.0 |          0        410 |          0       1024 |          0       1638
+  3448   6.0 |          0        321 |          0        627 |          0        934
+  3448   3.0 |          0        175 |          0        328 |          0        482
+  3448   1.0 |          0         60 |          0        111 |          0        162
+
+--- Comparaison : même rame pleine, à mi-ligne (s=1737) et en bas (s=300), à 12 m/s constant ---
+s= 300 : rames   12.8 kN, câble   88.1 kN → traction  1876 kW, régén    0 kW
+s=1737 : rames   69.5 kN, câble   -0.0 kN → traction  1061 kW, régén    0 kW
+
+--- Sans le poids du câble (hypothèse d'un câble lest, qui N'EXISTE PAS ici) ---
+s=3400 v=12.0 : cst traction  1130 / régén    0 kW ; à −0,5 m/s² traction   277 / régén     0 kW
+s=3400 v= 1.0 : cst traction    59 / régén    0 kW ; à −0,5 m/s² traction     0 / régén     9 kW
+s=3448 v=12.0 : cst traction   749 / régén    0 kW ; à −0,5 m/s² traction     0 / régén    74 kW
+s=3448 v= 1.0 : cst traction    27 / régén    0 kW ; à −0,5 m/s² traction     0 / régén    32 kW

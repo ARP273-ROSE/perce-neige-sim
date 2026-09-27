@@ -14,6 +14,14 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 
 ## Quoi de neuf — v1.13.x (audit physique des voyages, 26 septembre 2026)
 
+**Note physique (27/09)** — « RÉGEN » à l'arrivée en haut avec une rame
+pleine : c'est le poids du câble (38 t, pas de câble lest sur le Perce-Neige)
+qui, en haut, tire le contrepoids de 99 kN et l'emporte sur les 16–45 kN de
+la rame pleine ; à 12 m/s constant 126–410 kW de régénération, et jusqu'à
+1 MW pendant la décélération des 128 t en mouvement. Calcul Sage dans
+`audit_physique/regen_arrivee_haut.sage`, détail dans
+`AUDIT_PHYSIQUE_VOYAGES.md`.
+
 **v1.15.10** — PWA : salle des machines refondue comme celle du PC. Vue en
 coupe de la machinerie de la gare amont : 3 moteurs DC teintés par la
 charge, réducteur, arbre, **deux poulies jaunes Von Roll** (motrice et
