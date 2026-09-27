@@ -30,6 +30,8 @@ mkdir -p "$SIM_DIR/build/web"
     --export-release "Web" 2>&1 | grep -viE "fontconfig|get_system_font" | tail -2
 
 test -f "$SIM_DIR/build/web/index.wasm" || { echo "ERREUR : export Web échoué"; exit 1; }
+# Version dans le hook de rapport d'erreurs (X-App: funiculaire-pwa/<version>)
+sed -i "s/__PN_VERSION__/$(tr -d ' \r\n' < "$SIM_DIR/VERSION")/g" "$SIM_DIR/build/web/index.html"
 
 echo "→ Déploiement vers $WEB_ROOT (uid 33)…"
 mkdir -p "$WEB_ROOT"
