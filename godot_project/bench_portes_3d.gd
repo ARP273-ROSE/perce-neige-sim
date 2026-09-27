@@ -47,5 +47,26 @@ func _initialize() -> void:
 			t_reopen = t2
 	print("vantaux rouverts %.2f s après les portes (attendu %.2f)" % [t_reopen, PNConstants.DOOR_MOTION_LEAD])
 	ok = ok and absf(t_reopen - PNConstants.DOOR_MOTION_LEAD) < 0.05
+	# Sens du glissement (2026-09-27) : dans le MONDE, un vantail qui s'ouvre
+	# part vers le BAS de la pente, quels que soient la rame et le sens de
+	# marche — la caisse retournée (_xform_from) ne doit pas inverser ça.
+	var tangent := Vector3(0.0, 0.0, -1.0)   # voie rectiligne, montée = −Z monde
+	for ghost in [false, true]:
+		for direction in [1, -1]:
+			var cab := Cabin.new()
+			cab.is_ghost = ghost
+			var ph2 := TrainPhysics.new()
+			ph2.direction = direction
+			cab.physics = ph2
+			var xf: Transform3D = cab._xform_from(Vector3.ZERO, tangent)
+			var sgn: float = Cabin.door_slide_sign(direction, ghost)
+			var d_world: Vector3 = xf.basis * Vector3(0.0, 0.0, sgn * TrainBodyBuilder.DOOR_SLIDE)
+			var along: float = d_world.dot(tangent)     # > 0 = vers le haut
+			var bas: bool = along < -0.5
+			print("rame %d %s : vantail ouvert déplacé de %+.2f m le long de la montée → %s"
+				% [2 if ghost else 1, "monte" if direction > 0 else "descend", along,
+				"vers le BAS ✓" if bas else "vers le HAUT ✗"])
+			ok = ok and bas
+			cab.free()
 	print("BENCH_PORTES " + ("OK" if ok else "ECHEC"))
 	quit(0 if ok else 1)

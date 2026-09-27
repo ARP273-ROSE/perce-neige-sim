@@ -1366,16 +1366,23 @@ func _process(_delta: float) -> void:
 	# faces s'ouvrent en gare). Course = DOOR_MOTION_S (4,0 s), calée sur
 	# le clip sonore ; l'ordre vient de door_leaves_open (physique PWA ou
 	# état visuel envoyé par le PC), pas de doors_open (l'interlock).
+	# Sens du glissement : TOUJOURS vers le BAS de la pente à l'ouverture,
+	# vers le HAUT à la fermeture (retour d'essai 2026-09-27 : « la porte
+	# s'ouvre en se déplaçant vers le bas et se ferme vers le haut »). La
+	# caisse étant retournée quand elle descend (_xform_from), « vers
+	# l'arrière » (+Z local) n'est le bas que dans un sens : on corrige le
+	# signe avec la même règle que le retournement.
 	var target: float = 1.0 if physics.door_leaves_open else 0.0
 	_door_frac = move_toward(_door_frac, target, _delta / PNConstants.DOOR_MOTION_S)
 	if not _doors.is_empty():
 		var plug: float = clampf(_door_frac / 0.25, 0.0, 1.0)
 		var slide: float = clampf((_door_frac - 0.25) / 0.75, 0.0, 1.0)
+		var sgn: float = door_slide_sign(physics.direction, is_ghost)
 		for d in _doors:
 			var node: Node3D = d["node"]
 			var base: Vector3 = d["base"]
 			node.position = base + Vector3(d["side"] * TrainBodyBuilder.DOOR_PLUG * plug,
-				0.0, TrainBodyBuilder.DOOR_SLIDE * slide)
+				0.0, sgn * TrainBodyBuilder.DOOR_SLIDE * slide)
 
 	# Tablette-horloge du montant gauche : l'heure réelle, comme en cabine
 	if _clock_label != null:
@@ -1478,6 +1485,15 @@ func _apply_wheel_types() -> void:
 			g.visible = guided
 		if f != null:
 			f.visible = not guided
+
+
+## Signe du glissement des vantaux en Z LOCAL de la caisse pour que, dans
+## le monde, l'ouverture aille vers le bas de la pente. +Z local = arrière
+## de la caisse ; la caisse est retournée (PI autour de Y) quand la rame 1
+## descend ou quand la rame 2 (ghost) monte — même prédicat que _xform_from.
+static func door_slide_sign(direction: int, ghost: bool) -> float:
+	var flipped: bool = (direction > 0) if ghost else (direction < 0)
+	return -1.0 if flipped else 1.0
 
 
 func set_train_number(n: int) -> void:
