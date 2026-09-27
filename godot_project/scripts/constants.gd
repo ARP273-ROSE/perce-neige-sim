@@ -170,3 +170,13 @@ enum Direction {
 	UP = 1,    # Val Claret → Glacier
 	DOWN = -1, # Glacier → Val Claret
 }
+
+# Portes — calage sur les enregistrements réels (2026-09-27). La fermeture
+# est une séquence EN SÉRIE : annonce → buzzer (door_buzzer.wav, 7,0 s) →
+# clip de fermeture (door_motion.wav, 7,0 s). Dans ce clip, les vantaux
+# partent à 1,3 s et butent à 5,3 s (le « clac » de fin de course, lisible
+# dans l'enveloppe du son). Même calage côté PC (perce_neige_sim.py).
+const DOOR_BUZZER_S: float = 7.0
+const DOOR_CLIP_S: float = 7.0
+const DOOR_MOTION_LEAD: float = 1.3
+const DOOR_MOTION_S: float = 4.0

@@ -279,7 +279,8 @@ func step(dt: float) -> void:
 	# Séquence de départ en TROIS phases successives (retour d'essai iPad
 	# 2026-07-12 : annonce, portes et buzzer se superposaient) :
 	# annonce « fermeture des portes » (7,5 s, portes encore ouvertes) →
-	# fermeture des portes (3,5 s) → buzzer 6-8 s → traction.
+	# fermeture des portes (buzzer 7 s PUIS clip 7 s, vantaux à 1,3 s du
+	# clip — retour d'essai 2026-09-27) → buzzer 6-8 s → traction.
 	if announce_phase_remaining > 0.0:
 		announce_phase_remaining = maxf(0.0, announce_phase_remaining - dt)
 		if announce_phase_remaining <= 0.0:
@@ -294,6 +295,24 @@ func step(dt: float) -> void:
 		departure_buzzer_remaining = maxf(0.0, departure_buzzer_remaining - dt)
 		if departure_buzzer_remaining <= 0.0:
 			start_trip()
+
+	# Vantaux (visuel) : à l'ouverture, le clip joue tout de suite et les
+	# vantaux partent à DOOR_MOTION_LEAD ; à la fermeture, le clip ne
+	# commence qu'après le buzzer, donc les vantaux partent à
+	# DOOR_BUZZER_S + DOOR_MOTION_LEAD du début de la phase portes.
+	if doors_open and not _doors_open_prev:
+		door_leaves_timer = PNConstants.DOOR_MOTION_LEAD
+	_doors_open_prev = doors_open
+	if doors_open:
+		if not door_leaves_open:
+			door_leaves_timer -= dt
+			if door_leaves_timer <= 0.0:
+				door_leaves_open = true
+	elif door_phase_remaining > 0.0:
+		if door_phase_remaining <= DOOR_PHASE_S - PNConstants.DOOR_BUZZER_S - PNConstants.DOOR_MOTION_LEAD:
+			door_leaves_open = false
+	else:
+		door_leaves_open = false
 
 	var m_up: float = mass_kg()
 	var m_down: float = ghost_mass_kg()
@@ -1150,10 +1169,15 @@ func rebound_offset() -> float:
 #      enregistrements réels), traction à la FIN du buzzer seulement
 #      (le frein tambour tient pendant toute la séquence).
 const ANNOUNCE_PHASE_S: float = 7.5
-const DOOR_PHASE_S: float = 7.0
+const DOOR_PHASE_S: float = PNConstants.DOOR_BUZZER_S + PNConstants.DOOR_CLIP_S   # 14 s : buzzer PUIS clip
 var announce_phase_remaining: float = 0.0
 var departure_buzzer_remaining: float = 0.0
 var door_phase_remaining: float = 0.0
+# Vantaux (ce que dessine cabin.gd) : ils ne bougent qu'avec le clip de
+# fermeture, 1,3 s après son début — pas au début de la phase portes.
+var door_leaves_open: bool = true
+var door_leaves_timer: float = 0.0
+var _doors_open_prev: bool = true
 
 
 # La rame est-elle à quai (fenêtre ±5 m autour des points d'arrêt) ?

@@ -14,6 +14,32 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 
 ## Quoi de neuf — v1.13.x (audit physique des voyages, 26 septembre 2026)
 
+**v1.15.3** — mise à jour automatique, portes, poste :
+- **Mise à jour automatique (PC)** : elle ne marchait « pas du tout ». Le
+  paquet installé par le Setup passait encore par l'ancien mécanisme (échange
+  d'un .exe PyInstaller vérifié par SHA256SUMS), dont les releases ne
+  publient plus les fichiers ; en repli il recopiait quelques .py depuis le
+  dépôt sans le fichier VERSION ni le viewer 3D. Le programme se met
+  maintenant à jour comme MusicOthèque : archive ZIP téléchargée et extraite
+  par lui-même (pas de SmartScreen), **viewer 3D compris** (~30 Mo par
+  version, les sons restent en place), redémarrage proposé. Verrou
+  `PerceNeigeSimulatorEnCours` lu par l'installeur. **Une installation du
+  Setup 1.15.3 est nécessaire une fois** ; ensuite tout est automatique.
+- **Portes calées sur le son (PC + PWA)** : séquence en série annonce →
+  buzzer (7 s) → clip de fermeture (7 s), et les vantaux partent 1,3 s après
+  le début du clip pour buter à 5,3 s (le « clac » de fin de course, lu dans
+  l'enveloppe du son). Sur PC, l'interlock basculait 3 s après la commande,
+  en pleine annonce, et le viewer fermait 11 s avant le bruit ; dans la PWA,
+  buzzer et clip jouaient ensemble. Le PC envoie au viewer l'état des
+  vantaux, pas l'interlock.
+- **Porte ouverte** : un joint de hublot flottait dans la baie (la doublure
+  y est ouverte, le vantail est une pièce à part).
+- **Poste** : le pare-brise est sur la calotte, presque au nez — la caméra
+  restait à 2,1 m de la vitre. Elle passe à ~1 m, pupitre contre la doublure,
+  champ 70° ; pare-brise élargi à 1,64 m (≈ 47 % de la face sur la photo
+  094104) et rehaussé. Plancher, plafond, siège, moniteur et équipements du
+  montant gauche suivent sans sortir de la calotte.
+
 **v1.15.2** — champ de vision du cockpit : la caméra était à 2,3 m
 derrière un pare-brise de 1,4 m (22° de champ, « la vitre est trop
 petite ») ; elle passe à ~1,8 m de la vitre avec le pupitre contre son bas

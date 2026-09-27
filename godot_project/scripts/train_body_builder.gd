@@ -68,15 +68,15 @@ const TUBE_GASKET_OUT: float = 0.11 # doit couvrir une cellule (0,10 × 0,075)
 #   (|x| ≥ 0,93 jusqu'au bord, +1,00 → −0,97) ; « TIGNES » sous le
 #   pare-brise (−0,84), grille (−1,20) et feux ronds (±1,0 ; −1,25) en bas.
 const FACE_SCALE: float = (R_BODY + (Y_CENTER - Y_CUT)) / 3.10   # 2,93 / 3,10
-const WS_HALF_W: float = 0.70
-const WS_TOP_REAL: float = 1.43
-const WS_BOT_REAL: float = -0.47
+const WS_HALF_W: float = 0.82    # 1,64 m (photo 094104 : ≈ 47 % de la largeur)
+const WS_TOP_REAL: float = 1.52
+const WS_BOT_REAL: float = -0.40
 const WS_CORNER: float = 0.20
 # Portes d'évacuation d'extrémité (photo 095511) : panneaux en D JAUNES
 # PLEINS de part et d'autre du pare-brise, liseré sombre, poignée ; bord
 # extérieur suivant la lisière. Pas de vitre (erreur de lecture corrigée
 # le 2026-09-26).
-const DOOR_X0: float = 0.88
+const DOOR_X0: float = 0.98     # 1 cm entre le joint du pare-brise et celui de la porte
 const DOOR_RHO: float = 1.62
 const DOOR_TOP_REAL: float = 1.02
 const DOOR_BOT_REAL: float = -1.15
@@ -341,7 +341,10 @@ static func _build_tube(mesh: ArrayMesh, mats: Dictionary, z_a: float, z_b: floa
 		st_ri2.begin(Mesh.PRIMITIVE_TRIANGLES)
 		for col2 in cols:
 			var kind2: String = col2["kind"]
-			if kind2 != "win" and kind2 != "door":
+			# pas les portes : la doublure y est ouverte (le vantail est une
+			# pièce à part) — un joint de hublot y flottait dans le vide,
+			# porte ouverte (retour d'essai 2026-09-27)
+			if kind2 != "win":
 				continue
 			var z0c2: float = col2["z0"]
 			var plen2: float = col2["z1"] - z0c2

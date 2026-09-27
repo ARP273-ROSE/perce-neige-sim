@@ -541,7 +541,11 @@ def physics_to_state_dict(tr, st=None) -> dict:
         "s": float(getattr(tr, "s", 0.0)),
         "v": float(getattr(tr, "v", 0.0)),
         "direction": int(getattr(tr, "direction", 1)),
-        "doors_open": bool(getattr(tr, "doors_open", False)),
+        # État VISUEL des vantaux (calé sur le clip sonore), pas l'interlock :
+        # le viewer ne fait que dessiner, et il fermait les portes 11 s avant
+        # le bruit de fermeture (retour d'essai 2026-09-27).
+        "doors_open": bool(getattr(tr, "doors_visual_open",
+                                   getattr(tr, "doors_open", False))),
         "trip_started": bool(getattr(tr, "trip_started", False)) if not hasattr(st, "trip_started") else bool(getattr(st, "trip_started", False)),
         "finished": bool(getattr(tr, "finished", False)),
         "tension_dan": float(getattr(tr, "cable_tension_dan", getattr(tr, "tension_dan", 0.0))),

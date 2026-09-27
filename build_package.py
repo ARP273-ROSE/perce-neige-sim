@@ -181,7 +181,14 @@ def step_app():
         if not src.exists():
             missing.append(name)
             continue
-        shutil.copy2(src, app / name)
+        # Un dossier est un actif comme un autre : les manuels d'une
+        # application vivent dans `docs/`, ses images dans `assets/`. Les
+        # copier fichier par fichier dans kit.json n'apprendrait rien a
+        # personne et serait faux des le premier ajout.
+        if src.is_dir():
+            shutil.copytree(src, app / name, dirs_exist_ok=True)
+        else:
+            shutil.copy2(src, app / name)
     # Dossiers entiers : une application structuree en paquets (core/, gui/,
     # modules/...) ne se decrit pas fichier par fichier.
     for nom in APP_PAQUETS:

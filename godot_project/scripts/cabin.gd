@@ -201,11 +201,11 @@ func _build_floor_ceiling() -> void:
 	# étaient centrées sur z=0 et couvraient 97 % du train → 3,5 m de
 	# plancher/plafond en porte-à-faux DEVANT le poste de pilotage, comme
 	# un plongeoir au-dessus de la voie.
-	var z_front: float = -train_length * 0.5 + 0.9    # plancher (jusqu'au bas du pare-brise)
+	var z_front: float = -train_length * 0.5 + 0.55   # plancher jusqu'à la doublure de la calotte (|x| ≤ 1,0)
 	# Plafond + bandeau LED : encore plus courts (retour d'essai : « un
 	# plafond qui avance moins vers l'avant au-dessus de nous ») —
 	# 0,4 m devant la caméra seulement, simple casquette.
-	var z_front_ceil: float = -train_length * 0.5 + 1.4
+	var z_front_ceil: float = -train_length * 0.5 + 1.0   # la calotte se referme à z_join à |x| = 1,2
 	var z_rear: float = train_length * 0.5 * 0.97
 
 	# Sol cabine — plancher caillebotis sombre (matériau acier mat),
@@ -382,10 +382,10 @@ func _build_console_pupitre() -> void:
 	#     centre + 2 LED blanches "ÉCLAIRAGE" en bas
 	#   - PAS de mushrooms sur le pupitre (le vrai cockpit a les arrêts
 	#     d'urgence ailleurs — sur la console latérale ou la cloison)
-	# 0,7 m DEVANT la caméra FPV (z=−12,4) : assez proche pour que le
+	# 0,65 m DEVANT la caméra FPV : assez proche pour que le
 	# pupitre occupe le BAS de l'image (retour d'essai : à 1,35 m il
 	# flottait en plein milieu de la vue).
-	var z_console: float = -train_length * 0.5 + 1.45   # contre le bas du pare-brise (photo 095119)
+	var z_console: float = -train_length * 0.5 + 0.45   # tube contre la doublure sous le pare-brise (z_face ≈ −15,9)
 	var y_top: float = 0.52                            # hauteur sommet tube
 	var tube_radius: float = 0.090                     # ≈ 18 cm de diamètre
 	var tube_length: float = 1.10                      # 1.10 m de large
@@ -588,7 +588,10 @@ func _build_console_pupitre() -> void:
 ## tablette-horloge sur le montant gauche, panneau latéral à boutons avec
 ## levier et boîtier rouge, grille de ventilation à lamelles.
 func _build_cockpit_extras() -> void:
-	var z_console: float = -train_length * 0.5 + 1.45   # contre le bas du pare-brise (photo 095119)
+	var z_console: float = -train_length * 0.5 + 0.45   # tube contre la doublure sous le pare-brise (z_face ≈ −15,9)
+	# montant gauche : la calotte se referme vite à |x| ≈ 1 m (z_face ≈
+	# −15,7) → panneau, levier, grille et tablette restent en arrière
+	var z_side: float = -train_length * 0.5 + 1.15
 	var y_top: float = 0.52
 	var tilt: float = 0.07
 	var red: StandardMaterial3D = StandardMaterial3D.new()
@@ -650,7 +653,7 @@ func _build_cockpit_extras() -> void:
 	tm.size = Vector3(0.17, 0.11, 0.014)
 	tm.material = black
 	tab.mesh = tm
-	tab.position = Vector3(-0.98, 0.98, z_console - 0.05)
+	tab.position = Vector3(-0.98, 0.98, z_side - 0.60)
 	tab.rotation = Vector3(0.0, 0.55, 0.0)
 	interior_root.add_child(tab)
 	var scr: MeshInstance3D = MeshInstance3D.new()
@@ -673,12 +676,12 @@ func _build_cockpit_extras() -> void:
 	pnm.size = Vector3(0.02, 0.42, 0.30)
 	pnm.material = beige
 	panel.mesh = pnm
-	panel.position = Vector3(-1.06, 0.62, z_console - 0.55)
+	panel.position = Vector3(-1.06, 0.62, z_side)
 	interior_root.add_child(panel)
 	for r in range(2):
 		for k in range(2):
 			var b: MeshInstance3D = _cyl(black, 0.017, 0.014,
-				Vector3(-1.04, 0.72 - float(r) * 0.09, z_console - 0.62 + float(k) * 0.10))
+				Vector3(-1.04, 0.72 - float(r) * 0.09, z_side - 0.07 + float(k) * 0.10))
 			b.rotation = Vector3(0.0, 0.0, PI * 0.5)
 			interior_root.add_child(b)
 	var lever: MeshInstance3D = MeshInstance3D.new()
@@ -686,7 +689,7 @@ func _build_cockpit_extras() -> void:
 	lvm.size = Vector3(0.09, 0.025, 0.025)
 	lvm.material = black
 	lever.mesh = lvm
-	lever.position = Vector3(-1.00, 0.52, z_console - 0.60)
+	lever.position = Vector3(-1.00, 0.52, z_side - 0.05)
 	lever.rotation = Vector3(0.0, 0.0, -0.5)
 	interior_root.add_child(lever)
 	var rbox: MeshInstance3D = MeshInstance3D.new()
@@ -694,7 +697,7 @@ func _build_cockpit_extras() -> void:
 	rbm.size = Vector3(0.03, 0.05, 0.05)
 	rbm.material = red
 	rbox.mesh = rbm
-	rbox.position = Vector3(-1.04, 0.48, z_console - 0.44)
+	rbox.position = Vector3(-1.04, 0.48, z_side + 0.11)
 	interior_root.add_child(rbox)
 	# grille de ventilation à lamelles horizontales, plus haut sur le montant
 	for k in range(12):
@@ -703,7 +706,7 @@ func _build_cockpit_extras() -> void:
 		slm.size = Vector3(0.012, 0.014, 0.34)
 		slm.material = slat
 		sl.mesh = slm
-		sl.position = Vector3(-1.08, 0.70 + float(k) * 0.032, z_console - 0.95)
+		sl.position = Vector3(-1.08, 0.70 + float(k) * 0.032, z_side - 0.40)
 		sl.rotation = Vector3(0.35, 0.0, 0.0)
 		interior_root.add_child(sl)
 
@@ -731,7 +734,7 @@ func _build_cctv_monitor() -> void:
 	# Accroché juste EN DEDANS du nouveau front du plafond (z_front=−13.6,
 	# cf. _build_floor_ceiling) — avant il pendait à −14.6, au-delà du
 	# plafond raccourci, donc flottait dans le vide.
-	var z_mon: float = -train_length * 0.5 + 1.75
+	var z_mon: float = -train_length * 0.5 + 1.2
 	var bezel_mat: StandardMaterial3D = StandardMaterial3D.new()
 	bezel_mat.albedo_color = Color(0.05, 0.05, 0.06)
 	bezel_mat.roughness = 0.5
@@ -779,7 +782,7 @@ func _build_cctv_monitor() -> void:
 
 func _build_driver_seat() -> void:
 	# Siège du conducteur, derrière le dashboard
-	var z_seat: float = -train_length * 0.5 + 2.45  # 0,3 m derrière la caméra
+	var z_seat: float = -train_length * 0.5 + 1.4   # 0,3 m derrière la caméra
 
 	var seat_mat: StandardMaterial3D = StandardMaterial3D.new()
 	seat_mat.albedo_color = Color(0.18, 0.18, 0.22)
@@ -983,17 +986,18 @@ func _build_camera() -> void:
 	# Caméra 1ère personne — position driver dans la zone cockpit
 	camera_fpv = Camera3D.new()
 	camera_fpv.name = "CameraFPV"
-	camera_fpv.fov = 78.0
+	camera_fpv.fov = 70.0
 	camera_fpv.near = 0.05
 	camera_fpv.far = 800.0
 	# Avancée de 0,4 m (retour d'essai 2026-07 : « trop loin du panneau
 	# de commande ») — le pupitre à 0,7 m devant tombe en bas de l'image.
-	# Retour d'essai 2026-09-26 : « le champ de vision est trop étroit, la
-	# vitre est trop petite » — la caméra était à 3,6 m du nez, soit 2,3 m
-	# derrière un pare-brise de 1,4 m (22° de champ). Le vrai conducteur est
-	# à ~1,8 m de la vitre, le pupitre contre son bas : caméra à 2,15 m du
-	# nez, pupitre 0,7 m devant, champ vertical 78°.
-	camera_fpv.position = Vector3(0.0, 0.85, -train_length * 0.5 + 2.15)
+	# Retours d'essai 2026-09-26/27 : « on est trop loin, il faut zoomer,
+	# la vitre doit être plus grande ». Le pare-brise est sur la calotte,
+	# à z ≈ −15,9 (presque au nez, −16) : à 2,15 m du nez la caméra était
+	# encore à 2,1 m de la vitre. Le vrai conducteur est à ~1 m : caméra à
+	# 1,1 m du nez, pupitre 0,65 m devant, champ vertical 70° (la vitre de
+	# 1,64 × 1,8 m couvre ±37° en largeur, tout le champ en hauteur).
+	camera_fpv.position = Vector3(0.0, 0.85, -train_length * 0.5 + 1.1)
 	camera_fpv.rotation = Vector3(0.0, 0.0, 0.0)
 	add_child(camera_fpv)
 
@@ -1114,9 +1118,11 @@ func _process(_delta: float) -> void:
 
 	# Portes coulissantes (2026-09-26) : déboîtement (premier quart) puis
 	# glissement vers l'arrière, des DEUX côtés (retour d'essai : les deux
-	# faces s'ouvrent en gare), 2,5 s de course.
-	var target: float = 1.0 if physics.doors_open else 0.0
-	_door_frac = move_toward(_door_frac, target, _delta / 2.5)
+	# faces s'ouvrent en gare). Course = DOOR_MOTION_S (4,0 s), calée sur
+	# le clip sonore ; l'ordre vient de door_leaves_open (physique PWA ou
+	# état visuel envoyé par le PC), pas de doors_open (l'interlock).
+	var target: float = 1.0 if physics.door_leaves_open else 0.0
+	_door_frac = move_toward(_door_frac, target, _delta / PNConstants.DOOR_MOTION_S)
 	if not _doors.is_empty():
 		var plug: float = clampf(_door_frac / 0.25, 0.0, 1.0)
 		var slide: float = clampf((_door_frac - 0.25) / 0.75, 0.0, 1.0)

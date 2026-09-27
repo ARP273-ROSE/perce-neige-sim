@@ -119,6 +119,9 @@ func _apply(d: Dictionary) -> void:
 	physics.v = _f(d, "v", physics.v)
 	physics.direction = _i(d, "direction", physics.direction)
 	physics.doors_open = _b(d, "doors_open", physics.doors_open)
+	# le PC envoie l'état VISUEL des vantaux (doors_visual_open), calé sur
+	# le clip sonore : la cabine l'anime tel quel
+	physics.door_leaves_open = physics.doors_open
 	physics.trip_started = _b(d, "trip_started", physics.trip_started)
 	physics.finished = _b(d, "finished", physics.finished)
 	if d.has("tension_dan"):
