@@ -96,7 +96,15 @@ var rebound_dir: int = 1             # direction figée au serrage (le
 
 # Temporisation d'arrivée : la rame reste immobilisée portes fermées
 # (rebond visible) avant l'ouverture des portes + inversion du sens.
-const TURNAROUND_DELAY_S: float = 15.0
+# Critère PHYSIQUE (v1.15.21, parité PC) : les portes s'ouvrent quand
+# l'enveloppe du rebond A·e^(−ζωt) passe sous SETTLE_M — Sage
+# (audit_physique/stabilisation_rebond.sage) : 17 s rame vide en bas,
+# 26 s pleine, 0 s en haut. Bornes : TURNAROUND_MIN_S (clip d'arrêt) et
+# TURNAROUND_DELAY_S = garde-fou (ouverture forcée). Retour d'essai
+# 2026-09-27 : « attendre la fin des oscillations avant d'ouvrir ».
+const TURNAROUND_DELAY_S: float = 30.0
+const TURNAROUND_MIN_S: float = 3.0
+const SETTLE_M: float = 0.02
 var turnaround_delay_remaining: float = 0.0
 
 # --- Affaissement d'embarquement (allongement élastique du brin) ---------
@@ -631,6 +639,9 @@ func step(dt: float) -> void:
 	# Temporisation d'arrivée → demi-tour (portes + inversion)
 	if turnaround_delay_remaining > 0.0:
 		turnaround_delay_remaining = maxf(0.0, turnaround_delay_remaining - dt)
+		var elapsed: float = TURNAROUND_DELAY_S - turnaround_delay_remaining
+		if elapsed >= TURNAROUND_MIN_S and rebound_envelope() < SETTLE_M:
+			turnaround_delay_remaining = 0.0   # câble stabilisé : on ouvre
 		if turnaround_delay_remaining <= 0.0:
 			_terminus_turnaround()
 
@@ -1078,8 +1089,8 @@ func _arrival_grab() -> void:
 	rebound_dir = direction
 	rebound_timer = 0.0
 	turnaround_delay_remaining = TURNAROUND_DELAY_S
-	print("[Physics] arrivée s=%.0f — frein tambour serré, rebond armé, portes dans %.0f s"
-		% [s, TURNAROUND_DELAY_S])
+	print("[Physics] arrivée s=%.0f — frein tambour serré, rebond armé, portes à la stabilisation (< %.0f cm, %.0f s maxi)"
+		% [s, SETTLE_M * 100.0, TURNAROUND_DELAY_S])
 
 
 # Arrivée au terminus, phase 2 (après TURNAROUND_DELAY_S) : demi-tour —
@@ -1139,6 +1150,19 @@ func boarding_sag_offset() -> float:
 # Affaissement du wagon opposé (même convention, appliqué à SA position).
 func ghost_sag_offset() -> float:
 	return -_sag_ghost
+
+
+# Enveloppe A·e^(−ζωt) du rebond (m) : l'amplitude résiduelle de
+# l'oscillation, quel que soit le signe du sinus. 0 si le rebond est éteint.
+func rebound_envelope() -> float:
+	if rebound_timer < 0.0:
+		return 0.0
+	var span: float = maxf(PNConstants.LENGTH - rebound_anchor_s, 20.0)
+	var k: float = CABLE_EA_N / span
+	var m: float = mass_kg()
+	var omega: float = sqrt(k / maxf(m, 1.0))
+	var amp: float = minf(m * REBOUND_GRAB_A / k, 0.45)
+	return amp * exp(-REBOUND_ZETA * omega * rebound_timer)
 
 
 # Décalage visuel (m, signé le long de la pente) du rebond élastique.

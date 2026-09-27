@@ -14,6 +14,27 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 
 ## Quoi de neuf — v1.13.x (audit physique des voyages, 26 septembre 2026)
 
+**v1.15.21** — exploitation automatique : les portes attendent la fin des
+oscillations, le demi-tour attend la descente (PC + PWA) :
+- retour d'essai : « il inverse le sens du voyage trop vite, en bas on n'a pas
+  le temps de voir l'oscillation ; il faut attendre la fin des oscillations
+  avant d'ouvrir les portes ». Nouvelle phase **STABILISATION** de l'automate
+  PC : les portes ne s'ouvrent que lorsque l'enveloppe du rebond du câble
+  A·e^(−ζωt) passe sous **2 cm** — pour la rame pilotée ET le contrepoids
+  (quand on arrive en haut, c'est lui qui oscille en bas). Bornes 3 s / 30 s.
+  Chiffré par SageMath (`audit_physique/stabilisation_rebond.sage`) : 17 s
+  rame vide en bas, 26 s pleine, 0 s en haut. Puis **12 s** portes ouvertes
+  (descente des passagers) avant le demi-tour, au lieu de 5 s. Le panneau
+  d'exploitation affiche l'amplitude résiduelle (« STABILISATION ±12 cm »,
+  « CP » quand c'est le contrepoids).
+- PWA : le délai fixe de 15 s avant portes + demi-tour devient le même
+  critère physique (< 2 cm, 3 s mini, 30 s maxi) — en bas 17 s avec une
+  oscillation de 25 cm visible, en haut 3 s.
+- Tests : `tests/test_exploitation_auto.py` (3), `tests/conftest.py` (charge
+  `ssl` avant Qt : deux tests de mise à jour dépendaient de l'ordre des
+  fichiers dans python-lab), banc `godot_project/bench_auto_3d.gd` dans les
+  deux sens.
+
 **v1.15.20** — icône partout et dry run de l'exploitation automatique :
 - la nouvelle icône devient aussi l'icône du projet Godot (`icon.png`) et le
   favicon / icône Apple de la PWA (export de l'icône réactivé).
