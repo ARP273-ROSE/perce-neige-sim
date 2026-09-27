@@ -83,14 +83,16 @@ func _build() -> void:
 	_compute_tangents()
 	_build_curve3d()
 
-	# Matériau béton tunnel — CULL_DISABLED pour voir l'intérieur
-	# quel que soit le winding des triangles.
-	# Calibré sur les frames intérieures (béton gris-vert humide, légèrement
-	# bleuté sous l'éclairage néon, surface mate sans reflet métallique).
+	# Matériau de la paroi — CULL_DISABLED pour voir l'intérieur quel que
+	# soit le winding des triangles.
+	# Recalé sur la vidéo cabine HD (2026-09-27, « pas des dalles de
+	# béton ») : revêtement LISSE, clair, presque blanc sous les néons, avec
+	# un léger reflet (les tubes se reflètent en traînées sur la paroi) —
+	# pas le béton gris-vert mat d'avant.
 	var mat: StandardMaterial3D = StandardMaterial3D.new()
-	mat.albedo_color = Color(0.40, 0.43, 0.43)  # gris-vert béton humide
-	mat.roughness = 0.95                         # très mat (était 0.88)
-	mat.metallic = 0.0
+	mat.albedo_color = Color(0.64, 0.65, 0.64)
+	mat.roughness = 0.45
+	mat.metallic = 0.10
 	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 	wall_material = mat
 	# UV plus fin pour densifier les détails de noise procédural si une
