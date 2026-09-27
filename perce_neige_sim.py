@@ -384,8 +384,43 @@ MU_ROLL = 0.0025                # rail rolling resistance
 
 # Door transition durations — closing is longer than opening because
 # the announcement chime plays first, THEN the leaves swing shut.
-DOOR_CLOSE_TIME = 3.0           # s (fermeture)
-DOOR_OPEN_TIME = 2.0            # s (ouverture)
+# Portes — calage sur les enregistrements réels (2026-09-27). La fermeture
+# est une séquence EN SÉRIE : annonce → buzzer (7,0 s) → clip de fermeture
+# door_motion.wav (7,0 s). Dans ce clip, les vantaux partent à 1,3 s et
+# butent à 5,3 s (le « clac » de fin de course, lisible dans l'enveloppe du
+# son). L'état PHYSIQUE (interlocks) bascule à la butée ; l'état VISUEL
+# (vantaux du viewer 3D) au départ des vantaux. Les deux comptent à partir
+# du DÉBUT DU CLIP, signalé par le lecteur audio (rappel « motion ») — pas
+# de la commande : on ne sait pas d'avance quand l'annonce se termine.
+# Avant : la physique basculait 3 s après la commande, en pleine annonce,
+# et le viewer fermait les vantaux 11 s avant le bruit de fermeture.
+DOOR_MOTION_LEAD = 1.3          # s, début du clip → départ des vantaux
+DOOR_MOTION_S = 4.0             # s, course des vantaux
+DOOR_CLOSE_TIME = DOOR_MOTION_LEAD + DOOR_MOTION_S   # s, début du clip → butée
+DOOR_CLOSE_PENDING = 30.0       # s, filet si le lecteur ne rappelle jamais
+DOOR_OPEN_TIME = 2.0            # s, commande → portes ouvertes (interlocks)
+
+
+def advance_door_timers(tr, dt: float) -> bool:
+    """Fait avancer les deux temporisations de portes de `tr` ; rend True
+    si les portes viennent de s'OUVRIR physiquement.
+
+    - doors_visual_timer → doors_visual_open (les vantaux du viewer 3D),
+      DOOR_MOTION_LEAD après le début du clip, dans les deux sens ;
+    - doors_timer → doors_open (l'interlock), à la butée des vantaux.
+    Fonction de module pour être testable sans widget (tests/test_portes.py).
+    """
+    if tr.doors_visual_timer > 0.0:
+        tr.doors_visual_timer = max(0.0, tr.doors_visual_timer - dt)
+        if tr.doors_visual_timer <= 0.0:
+            tr.doors_visual_open = tr.doors_cmd
+    if tr.doors_cmd != tr.doors_open and tr.doors_timer > 0.0:
+        tr.doors_timer = max(0.0, tr.doors_timer - dt)
+        if tr.doors_timer <= 0.0:
+            tr.doors_open = tr.doors_cmd
+            tr.doors_visual_open = tr.doors_open
+            return tr.doors_open
+    return False
 
 # --- Câble tracteur : raideur, masse, rebond élastique à l'arrêt ----------
 # Le câble est un ressort : k = EA/L où L = longueur de câble entre la rame
@@ -813,6 +848,10 @@ class Train:
     # doors work : chime plays, then they mechanically swing shut.
     doors_cmd: bool = True
     doors_timer: float = 0.0
+    # État VISUEL des vantaux (ce que dessine le viewer 3D) : il suit le
+    # clip sonore, pas l'interlock — voir DOOR_MOTION_LEAD.
+    doors_visual_open: bool = True
+    doors_visual_timer: float = 0.0
     pax_car1: int = 0           # pax in lower car
     pax_car2: int = 0           # pax in upper car
     # Embarquement progressif : cibles + effectifs continus internes
@@ -3828,6 +3867,11 @@ class SoundSystem:
         self.muted = False
         self._files_by_num: dict[int, Path] = {}
         self._queue: list[Path] = []
+        # séquence de fermeture : chemin du clip de fermeture et rappel à
+        # déclencher quand il DÉMARRE (les vantaux et l'interlock se
+        # calent dessus)
+        self._seq_motion_path = None
+        self._seq_on_motion = None
         self._cooldowns: dict[str, float] = {}
         self._seq_on_complete = None
         self._close_seq_active = False
@@ -3997,16 +4041,35 @@ class SoundSystem:
             self._play_next()
 
     def play_doors_close_sequence(self, lang: str = "fr",
-                                  on_complete=None) -> None:
+                                  on_complete=None, on_step=None) -> None:
         """Chain the full doors-close sequence in series :
         announcement → door-warning buzzer → door-motion sound. Each
         clip waits for the previous one to finish. The optional
         *on_complete* callback fires when the motion sound ends —
         used by auto-exploitation to arm READY only after the doors
         have actually finished closing audibly.
+
+        *on_step("motion")* est appelé quand le clip de fermeture
+        DÉMARRE — c'est là que les vantaux partent (à 1,3 s) et que
+        l'interlock bascule (à 5,3 s). Il est garanti UNE fois, même si
+        le lecteur est muet, en cooldown ou si le clip manque (alors à la
+        fin de la séquence) : sinon les portes ne se fermeraient jamais.
         """
+        fired = {"motion": False}
+
+        def _fire_motion():
+            if fired["motion"]:
+                return
+            fired["motion"] = True
+            if on_step:
+                try:
+                    on_step("motion")
+                except Exception:
+                    pass
+
         def _wrap_done():
             self._close_seq_active = False
+            _fire_motion()
             if on_complete:
                 on_complete()
         if not self.enabled:
@@ -4039,6 +4102,10 @@ class SoundSystem:
         self._close_seq_active = True
         self._queue = list(steps[1:])
         self._seq_on_complete = _wrap_done
+        self._seq_motion_path = mot if (mot is not None and mot.exists()) else None
+        self._seq_on_motion = _fire_motion
+        if self._seq_motion_path is not None and steps[0] == self._seq_motion_path:
+            _fire_motion()          # ni annonce ni buzzer : le clip ouvre
         self._player.setSource(QUrl.fromLocalFile(str(steps[0])))
         self._player.play()
 
@@ -4710,6 +4777,11 @@ class SoundSystem:
         if not self._queue or self._player is None:
             return
         nxt = self._queue.pop(0)
+        if (self._seq_on_motion is not None and self._seq_motion_path is not None
+                and nxt == self._seq_motion_path):
+            cb = self._seq_on_motion
+            self._seq_on_motion = None
+            cb()
         self._player.setSource(QUrl.fromLocalFile(str(nxt)))
         self._player.play()
 
@@ -5076,9 +5148,7 @@ class AutoOps:
         elif self.phase == self.PHASE_BOARDING:
             # Ensure doors are open (they usually are at arrival).
             if not tr.doors_cmd:
-                tr.doors_cmd = True
-                tr.doors_timer = DOOR_OPEN_TIME
-                self.w.sounds.play_door_motion()
+                self.w.begin_doors_open(tr)
             if self.phase_t >= self.station_dwell_s:
                 # If it's past the last-ascent cutoff and we're at the
                 # lower terminus, end the day instead of sending another
@@ -5101,13 +5171,11 @@ class AutoOps:
                 # → warning buzzer → door-motion sound, each waiting
                 # for the previous to finish. When the motion clip
                 # ends, arm READY via the callback.
-                tr.doors_cmd = False
-                tr.doors_timer = DOOR_CLOSE_TIME
                 self._sequence_done = False
                 def _on_doors_shut() -> None:
                     self._sequence_done = True
-                self.w.sounds.play_doors_close_sequence(
-                    lang=state.ann_lang, on_complete=_on_doors_shut)
+                self.w.begin_doors_close(tr, state.ann_lang,
+                                         on_complete=_on_doors_shut)
 
         elif self.phase == self.PHASE_CLOSING:
             # Wait until both the physical doors-close timer AND the
@@ -5220,6 +5288,7 @@ class AutoOps:
                 # Le demi-tour n'a lieu qu'après le dwell (DOORS_OPENING).
                 tr.doors_open = True
                 tr.doors_cmd = True
+                tr.doors_visual_open = True
                 tr.doors_timer = 0.0
                 self._set_phase(self.PHASE_DOORS_OPENING)
                 add_event(state, "ops",
@@ -5268,9 +5337,7 @@ class AutoOps:
         tr.brake = 0.0
         # Doors open if they aren't already
         if not tr.doors_cmd:
-            tr.doors_cmd = True
-            tr.doors_timer = DOOR_OPEN_TIME
-            self.w.sounds.play_door_motion()
+            self.w.begin_doors_open(tr)
         # Cible d'embarquement liée à l'heure réelle (affinage de la
         # cible grossière posée par reverse_trip) — les effectifs
         # glissent vers elle pendant le dwell portes ouvertes.
@@ -6124,6 +6191,7 @@ class GameWidget(QWidget):
         if at_terminus:
             tr.doors_open = True
             tr.doors_cmd = True
+            tr.doors_visual_open = True
             tr.doors_timer = 0.0
             # Passenger turnover : at a terminus everyone exits and a
             # new load boards for the return leg. Perce-Neige skier
@@ -6147,6 +6215,7 @@ class GameWidget(QWidget):
         else:
             tr.doors_open = False
             tr.doors_cmd = False
+            tr.doors_visual_open = False
             tr.doors_timer = 0.0
         self._welcome_played = False
         self._brake_snd_played = False
@@ -6212,6 +6281,7 @@ class GameWidget(QWidget):
         tr.maint_brake = True
         tr.doors_open = True
         tr.doors_cmd = True
+        tr.doors_visual_open = True
         tr.doors_timer = 0.0
         tr.lights_cabin = True
         tr.lights_head = False
@@ -6916,24 +6986,42 @@ class GameWidget(QWidget):
             "info",
         )
 
+    def begin_doors_open(self, tr) -> None:
+        """Commande d'ouverture : clip de portes tout de suite, vantaux
+        (visuel) à DOOR_MOTION_LEAD, interlock « ouvertes » à
+        DOOR_OPEN_TIME."""
+        tr.doors_cmd = True
+        tr.doors_timer = DOOR_OPEN_TIME
+        tr.doors_visual_timer = DOOR_MOTION_LEAD
+        self.sounds.play_door_motion()
+
+    def begin_doors_close(self, tr, lang: str, on_complete=None) -> None:
+        """Commande de fermeture : annonce → buzzer → clip, en série. Les
+        temporisations physique (butée) et visuelle (départ des vantaux)
+        ne partent qu'au DÉBUT DU CLIP, signalé par le lecteur ; d'ici là
+        un filet de DOOR_CLOSE_PENDING (lecteur muet, fichier absent…)."""
+        tr.doors_cmd = False
+        tr.doors_timer = DOOR_CLOSE_PENDING
+        tr.doors_visual_timer = 0.0
+
+        def _on_step(name: str) -> None:
+            if name == "motion" and not tr.doors_cmd and tr.doors_open:
+                tr.doors_timer = DOOR_CLOSE_TIME
+                tr.doors_visual_timer = DOOR_MOTION_LEAD
+
+        self.sounds.play_doors_close_sequence(
+            lang=lang, on_complete=on_complete, on_step=_on_step)
+
     def _apply_keys(self, dt: float) -> None:
         tr = self.state.train
         st = self.state
-        # Door transition — counts down while doors_cmd != doors_open.
-        # Physical doors_open only flips at the end of the timer so the
-        # closing chime plays *before* the leaves actually shut.
-        if tr.doors_cmd != tr.doors_open and tr.doors_timer > 0.0:
-            tr.doors_timer = max(0.0, tr.doors_timer - dt)
-            if tr.doors_timer <= 0.0:
-                tr.doors_open = tr.doors_cmd
-                # Whenever the doors physically open, the driver's "ready
-                # to depart" lamp must drop : the departure interlock is
-                # cleared so the next leg requires a fresh ready-press
-                # after closing the doors again. Matches real Von Roll
-                # cab logic (ready lamp is wired via door-closed contact).
-                if tr.doors_open:
-                    tr.ready = False
-                    st.ghost_ready = False
+        # Temporisations de portes (voir advance_door_timers). Quand les
+        # portes s'OUVRENT physiquement, le voyant PRÊT retombe : l'interlock
+        # de départ exige un nouvel appui après la fermeture (logique de la
+        # cabine Von Roll : le voyant passe par le contact portes fermées).
+        if advance_door_timers(tr, dt):
+            tr.ready = False
+            st.ghost_ready = False
         active = self._key_state | self._mouse_hold
         up = Qt.Key.Key_Up in active
         down = Qt.Key.Key_Down in active
@@ -7284,20 +7372,15 @@ class GameWidget(QWidget):
                           "warn")
             else:
                 new_cmd = not tr.doors_cmd
-                tr.doors_cmd = new_cmd
                 if new_cmd:
-                    tr.doors_timer = DOOR_OPEN_TIME
-                    self.sounds.play_door_motion()
+                    self.begin_doors_open(tr)
                     add_event(st, "doors",
                               "Opening doors", "Ouverture des portes",
                               "info")
                 else:
-                    tr.doors_timer = DOOR_CLOSE_TIME
-                    # Real door sequence in series : announcement
-                    # first, then the warning buzzer when it finishes,
-                    # then the hydraulic door-motion whoosh.
-                    self.sounds.play_doors_close_sequence(
-                        lang=st.ann_lang)
+                    # Séquence réelle en série : annonce, puis buzzer,
+                    # puis clip de fermeture (les vantaux suivent le clip).
+                    self.begin_doors_close(tr, st.ann_lang)
                     add_event(st, "doors",
                               "Doors closing...",
                               "Fermeture des portes...", "info")
@@ -7630,10 +7713,7 @@ class GameWidget(QWidget):
             # on ne les referme PAS d'office — il roule portes ouvertes et
             # les gère lui-même (retour d'essai 2026-07-23).
             if tr.doors_cmd and st.run_mode != "challenge":
-                tr.doors_cmd = False
-                tr.doors_timer = DOOR_CLOSE_TIME
-                self.sounds.play_doors_close_sequence(
-                    lang=st.ann_lang)
+                self.begin_doors_close(tr, st.ann_lang)
             # Departure signal: different sound per station.
             # Each WAV includes ~1.5 s of pre-buzzer ambient for a
             # smooth fade-in, so the countdown matches the full WAV.
@@ -13462,15 +13542,40 @@ class MainWindow(QMainWindow):
             + "<br>"
             + self._tr("License : MIT", "Licence : MIT"))
 
+    # ------------------------------------------------------------------
+    # Mise à jour — trois cas selon la façon dont le programme tourne :
+    #   1. paquet du kit (Python embarqué, posé par le Setup) : archive
+    #      ZIP extraite par le programme lui-même, comme MusicOthèque ;
+    #   2. ancien .exe PyInstaller (d'avant le 20/09/2026) : les releases
+    #      ne publient plus ni l'exe ni SHA256SUMS → on renvoie à
+    #      l'installeur, à passer une fois ;
+    #   3. sources (développement) : git pull, on ne touche à rien.
+    # Retour d'essai 2026-09-27 : « la mise à jour auto marche pas du
+    # tout » — le cas 1 passait encore par l'ancien autoupdate, qui
+    # recopiait quelques .py depuis le zipball du dépôt SANS le fichier
+    # VERSION ni le viewer 3D : rien ne changeait.
+    # ------------------------------------------------------------------
+    @staticmethod
+    def _kit_packaged() -> bool:
+        try:
+            import updater
+            return bool(updater.is_packaged())
+        except Exception:
+            return False
+
     def _bg_check_update(self) -> None:
+        if self._kit_packaged():
+            self._kit_check(silent=True)
+            return
         try:
             import autoupdate
         except Exception:
             return
-        owner = autoupdate_mod_owner()
-        repo = autoupdate_mod_repo()
+        if not autoupdate.is_frozen():
+            return                      # sources : git pull
         thread = autoupdate.UpdateCheckThread(
-            owner, repo, self._on_update_check_result)
+            autoupdate_mod_owner(), autoupdate_mod_repo(),
+            self._on_update_check_result)
         thread.start()
         self._upd_thread = thread  # keep ref
 
@@ -13480,7 +13585,27 @@ class MainWindow(QMainWindow):
         # QTimer.singleShot créé hors boucle d'événements).
         self._upd_result.emit(info, True)
 
+    def _kit_check(self, silent: bool) -> None:
+        import updater
+
+        def _worker() -> None:
+            try:
+                info = updater.check(VERSION)
+            except Exception:
+                info = None
+            # le retour passe par un signal, jamais par un QTimer créé
+            # dans ce fil (il n'a pas de boucle d'événements)
+            self._upd_result.emit({"kit": True, "info": info}, silent)
+
+        thread = threading.Thread(target=_worker, daemon=True,
+                                  name="pn-kit-check")
+        thread.start()
+        self._upd_thread = thread  # keep ref
+
     def _show_update_if_newer(self, info, silent: bool) -> None:
+        if isinstance(info, dict) and info.get("kit"):
+            self._kit_offer(info.get("info"), silent)
+            return
         try:
             import autoupdate
         except Exception:
@@ -13506,37 +13631,81 @@ class MainWindow(QMainWindow):
         self._prompt_update_dialog(info)
 
     def _prompt_update_dialog(self, info) -> None:
-        import autoupdate
+        """Ancien .exe PyInstaller : plus rien à échanger — on ouvre la
+        page de la version, où l'installeur se télécharge une fois pour
+        toutes ; ensuite le programme se met à jour tout seul."""
         msg = QMessageBox(self)
         msg.setIcon(QMessageBox.Icon.Information)
         msg.setWindowTitle(self._tr("Update available", "Mise à jour disponible"))
-        text = self._tr(
+        msg.setText(self._tr(
             f"Version <b>{info.version}</b> is available.<br><br>"
-            "Install now?",
+            "The program now installs through a setup wizard: download "
+            "<b>PerceNeigeSimulator-Setup-…exe</b> from the release page "
+            "and run it once. Later versions then install themselves.",
             f"La version <b>{info.version}</b> est disponible.<br><br>"
-            "Installer maintenant ?")
-        msg.setText(text)
-        if info.body:
-            msg.setDetailedText(info.body[:4000])
-        btn_ok = msg.addButton(
-            self._tr("Install", "Installer"),
+            "Le programme s'installe désormais par un installeur : "
+            "téléchargez <b>PerceNeigeSimulator-Setup-…exe</b> sur la page "
+            "de la version et lancez-le une fois. Les versions suivantes "
+            "s'installeront ensuite toutes seules."))
+        btn_open = msg.addButton(
+            self._tr("Open the download page", "Ouvrir la page de téléchargement"),
             QMessageBox.ButtonRole.AcceptRole)
-        msg.addButton(
-            self._tr("Later", "Plus tard"),
-            QMessageBox.ButtonRole.RejectRole)
+        msg.addButton(self._tr("Later", "Plus tard"),
+                      QMessageBox.ButtonRole.RejectRole)
+        msg.exec()
+        if msg.clickedButton() is btn_open and info.html_url:
+            QDesktopServices.openUrl(QUrl(info.html_url))
+
+    def _kit_offer(self, info, silent: bool) -> None:
+        if not info:
+            if not silent:
+                QMessageBox.information(
+                    self, self._tr("Up to date", "À jour"),
+                    self._tr(
+                        f"You already run the latest version (v{VERSION}) "
+                        "— or GitHub is unreachable.",
+                        f"Vous utilisez déjà la dernière version (v{VERSION}) "
+                        "— ou GitHub est injoignable."))
+            return
+        taille = f" ({info['size'] / 1e6:.0f} Mo)" if info.get("size") else ""
+        msg = QMessageBox(self)
+        msg.setIcon(QMessageBox.Icon.Question)
+        msg.setWindowTitle(self._tr("Update available", "Mise à jour disponible"))
+        msg.setText(self._tr(
+            f"Version <b>{info['version']}</b> is available{taille}.<br><br>"
+            "Install now? Your operations log and best scores are kept.",
+            f"La version <b>{info['version']}</b> est disponible{taille}.<br><br>"
+            "Installer maintenant ? Le journal d'exploitation et les "
+            "meilleurs scores sont conservés."))
+        notes = (info.get("notes") or "").strip()
+        if notes:
+            msg.setDetailedText(notes[:4000])
+        btn_ok = msg.addButton(self._tr("Install", "Installer"),
+                               QMessageBox.ButtonRole.AcceptRole)
+        msg.addButton(self._tr("Later", "Plus tard"),
+                      QMessageBox.ButtonRole.RejectRole)
         msg.exec()
         if msg.clickedButton() is not btn_ok:
             return
-        self._run_update_install(info)
+        self._kit_install(info)
 
-    def _run_update_install(self, info) -> None:
-        """Télécharge + installe la mise à jour dans un thread de fond
-        (jusqu'à 200 Mo — un download synchrone gèlerait l'UI en « Ne
-        répond pas »), avec dialogue de progression. Le thread ne touche
-        jamais Qt directement : il écrit dans un dict partagé qu'un QTimer
-        du thread GUI vient lire à 10 Hz."""
-        import autoupdate
+    def _kit_install(self, info) -> None:
+        """Télécharge et pose l'archive dans un fil de fond (elle embarque
+        le viewer 3D, ~30 Mo : un téléchargement synchrone gèlerait
+        l'interface), avec dialogue de progression. Le fil ne touche
+        jamais Qt : il écrit dans un dict qu'un QTimer relit à 10 Hz."""
+        import updater
         from PyQt6.QtWidgets import QProgressDialog
+        # Le viewer 3D fait partie de l'archive : s'il tourne, son .exe est
+        # verrouillé et la pose échouerait (WinError 32).
+        try:
+            if hasattr(self.game, "_release_godot_embed"):
+                self.game._release_godot_embed()
+            elif (getattr(self.game, "_godot_bridge", None) is not None
+                    and self.game._godot_bridge.is_running()):
+                self.game._godot_bridge.stop()
+        except Exception:
+            pass
         prog = QProgressDialog(
             self._tr("Downloading update…", "Téléchargement de la mise à jour…"),
             None, 0, 100, self)
@@ -13544,51 +13713,106 @@ class MainWindow(QMainWindow):
         prog.setWindowModality(Qt.WindowModality.WindowModal)
         prog.setCancelButton(None)
         prog.setMinimumDuration(0)
-        state = {"done": 0, "total": 0, "finished": False, "error": None}
+        state = {"done": 0, "total": 0, "finished": False,
+                 "error": None, "applied": False}
 
         def _progress(done: int, total: int) -> None:
             state["done"], state["total"] = done, total
 
         def _worker() -> None:
             try:
-                autoupdate.download_and_install(
-                    info, _writable_dir(), progress=_progress)
+                state["applied"] = bool(
+                    updater.download_and_apply(info, progress=_progress))
             except Exception as e:
                 state["error"] = e
             finally:
                 state["finished"] = True
 
         threading.Thread(target=_worker, daemon=True,
-                         name="pn-update-install").start()
+                         name="pn-kit-install").start()
         poll = QTimer(self)
         poll.setInterval(100)
 
         def _on_poll() -> None:
-            if state["finished"]:
-                poll.stop()
-                prog.close()
-                if state["error"] is not None:
-                    QMessageBox.critical(
-                        self,
-                        self._tr("Update failed", "Échec de la mise à jour"),
-                        self._tr(f"Error : {state['error']}",
-                                 f"Erreur : {state['error']}"))
-                    return
-                import autoupdate as _au
-                _au.relaunch_app()
+            if not state["finished"]:
+                if state["total"] > 0:
+                    prog.setValue(min(99, state["done"] * 100 // state["total"]))
                 return
-            if state["total"] > 0:
-                prog.setValue(min(99, state["done"] * 100 // state["total"]))
+            poll.stop()
+            prog.close()
+            err = state["error"]
+            if err is not None:
+                texte = str(err)
+                # Sous Windows, un fichier ouvert par un processus ne peut
+                # pas être remplacé : une autre copie du programme tourne
+                # encore. Le message brut est illisible → on le traduit.
+                verrouille = (isinstance(err, PermissionError)
+                              or "WinError 32" in texte
+                              or "used by another process" in texte
+                              or "utilisé par un autre processus" in texte)
+                if verrouille:
+                    QMessageBox.warning(
+                        self, self._tr("Update", "Mise à jour"), self._tr(
+                            "The update could not be installed: some files "
+                            "are still in use.\n\nAnother copy of the program "
+                            "is probably still running. Close it (or restart "
+                            "the computer), then let the program offer the "
+                            "update again.\n\nYour current version is "
+                            "untouched and still works.",
+                            "La mise à jour n'a pas pu être installée : des "
+                            "fichiers sont encore utilisés.\n\nUne autre copie "
+                            "du programme tourne probablement encore. Fermez-la "
+                            "(ou redémarrez l'ordinateur), puis laissez le "
+                            "programme proposer à nouveau la mise à jour.\n\n"
+                            "Votre version actuelle reste en place et fonctionne."))
+                else:
+                    QMessageBox.warning(
+                        self, self._tr("Update", "Mise à jour"), self._tr(
+                            "The update could not be installed:\n\n" + texte
+                            + "\n\nYour current version is untouched and still works.",
+                            "La mise à jour n'a pas pu être installée :\n\n" + texte
+                            + "\n\nVotre version actuelle reste en place et fonctionne."))
+                return
+            if not state["applied"]:
+                return
+            rep = QMessageBox.question(
+                self, self._tr("Update installed", "Mise à jour installée"),
+                self._tr(
+                    f"Version {info['version']} is installed.\n\nThe program "
+                    "must restart to use it. Restart now?",
+                    f"La version {info['version']} est installée.\n\nLe "
+                    "programme doit redémarrer pour l'utiliser. Redémarrer "
+                    "maintenant ?"))
+            if rep != QMessageBox.StandardButton.Yes:
+                return
+            # Fermeture propre (journal, viewer 3D), relance par
+            # l'interpréteur embarqué, puis sortie DURE : la sortie Qt
+            # « propre » pouvait ne jamais rendre la main (fils audio /
+            # réseau — retour d'essai 2026-07-24) et l'ancien process
+            # resterait à côté du nouveau.
+            self.close()
+            QApplication.processEvents()
+            updater.restart()
+            os._exit(0)
 
         poll.timeout.connect(_on_poll)
         poll.start()
         prog.show()
 
     def _manual_check_update(self) -> None:
+        if self._kit_packaged():
+            self._kit_check(silent=False)
+            return
         try:
             import autoupdate
         except Exception:
             QMessageBox.warning(self, "Update", "autoupdate module missing")
+            return
+        if not autoupdate.is_frozen():
+            QMessageBox.information(
+                self, self._tr("Update", "Mise à jour"),
+                self._tr("Development version: update with git pull.",
+                         "Version de développement : mise à jour par git pull."))
             return
         # Check réseau dans un thread (comme le check auto au démarrage) :
         # check_latest_release peut bloquer jusqu'à 15 s de timeout réseau.
@@ -13770,6 +13994,17 @@ def main() -> None:
     _force_x11_if_wayland()
     app = QApplication(sys.argv)
     app.setApplicationName(APP_NAME)
+    # Verrou nommé lu par l'installeur Inno (AppMutex) : installer
+    # par-dessus une application ouverte ne remplacerait pas les fichiers
+    # en cours d'utilisation, et se terminerait pourtant en annonçant
+    # « terminé » (le logiciel repartirait dans l'ancienne version).
+    if sys.platform == "win32":
+        try:
+            import ctypes
+            app._mutex_installeur = ctypes.windll.kernel32.CreateMutexW(
+                None, False, "PerceNeigeSimulatorEnCours")
+        except Exception:
+            pass
     app.setApplicationVersion(VERSION)
     # Install anonymous crash handler — writes a JSON report if the app
     # crashes so the next launch can offer to open a GitHub issue.
