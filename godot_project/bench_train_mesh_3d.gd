@@ -75,8 +75,10 @@ func _initialize() -> void:
 	var ok: bool = true
 	print("triangles : %d ; y ∈ [%.2f, %.2f] ; |x| ≤ %.2f ; z ∈ [%.1f, %.1f]" % [n_tri, y_min, y_max, x_max, z_min, z_max])
 	# Cotes (repère cabine = centre tunnel − 0,15) : rails à −0,58, alésage 1,95
-	if y_min < TrainBodyBuilder.Y_RAIL_HEAD - 0.001:
-		print("  ECHEC : un élément descend sous la table de roulement (%.2f < %.2f)" % [y_min, TrainBodyBuilder.Y_RAIL_HEAD]); ok = false
+	# les boudins des roues guidées descendent de 3 cm sous la table de
+	# roulement, de chaque côté du rail (système Abt)
+	if y_min < TrainBodyBuilder.Y_RAIL_HEAD - 0.035:
+		print("  ECHEC : un élément descend sous les boudins (%.2f < %.2f)" % [y_min, TrainBodyBuilder.Y_RAIL_HEAD - 0.035]); ok = false
 	# repère cabine = monde + 0,15 (le nœud Cabin est posé 0,15 m sous l'axe)
 	if y_max - 0.15 > 1.95 - 0.10:
 		print("  ECHEC : la rame touche la voûte (sommet monde %.2f)" % (y_max - 0.15)); ok = false

@@ -13113,175 +13113,195 @@ class GameWidget(QWidget):
                            int(Qt.AlignmentFlag.AlignLeft), hint)
 
     def _draw_help_overlay(self, p: QPainter, w: int, h: int) -> None:
-        """Full in-game help panel : goal + all controls."""
-        p.fillRect(0, 0, w, h, QColor(0, 0, 0, 170))
-        box_w = 780
-        box_h = 858
-        box = QRectF(w / 2 - box_w / 2, h / 2 - box_h / 2, box_w, box_h)
-        p.setBrush(QBrush(QColor(20, 26, 40, 245)))
-        p.setPen(_cached_pen(COLOR_HUD_BORDER, 3))
-        p.drawRoundedRect(box, 14, 14)
-
-        p.setPen(_cached_pen(COLOR_TEXT))
-        p.setFont(_cached_font("Segoe UI", 22, QFont.Weight.Bold))
-        p.drawText(QRectF(box.x(), box.y() + 16, box.width(), 36),
-                   int(Qt.AlignmentFlag.AlignHCenter),
-                   T("Help — Controls", "Aide — Commandes"))
-        p.setFont(_cached_font("Segoe UI", 10))
-        p.setPen(_cached_pen(COLOR_TEXT_DIM))
-        p.drawText(QRectF(box.x(), box.y() + 54, box.width(), 18),
-                   int(Qt.AlignmentFlag.AlignHCenter),
-                   T("Press F1 to close — F3 for real machine info",
-                     "F1 pour fermer — F3 pour les infos machine réelle"))
-
+        """Écran d'accueil / aide : trois colonnes de raccourcis (Conduite,
+        Cabine, Système), puis les conseils de conduite dans la place qui
+        RESTE — mesurée à l'écran, plus posée à hauteur fixe. Retour d'essai
+        2026-09-27 : « les conseils de conduite masquent une partie des
+        raccourcis » (la boîte des conseils recouvrait la fin de la colonne
+        Système). Une ligne par touche, description repliée si besoin."""
         groups = [
             (T("Driving", "Conduite"), [
-                (T("Up / Down", "Haut / Bas"),
-                 T("speed command +/- (% of V_MAX = 12 m/s)",
-                   "consigne vitesse +/- (% de V_MAX = 12 m/s)")),
+                ("↑ / ↓", T("speed setpoint ± (% of 12 m/s)",
+                            "consigne de vitesse ± (% de 12 m/s)")),
                 (T("Space / B", "Espace / B"),
                  T("service brake (hold)", "frein de service (maintenir)")),
-                (T("Shift", "Shift"),
-                 T("EMERGENCY brake (hold, rail brakes)",
-                   "frein d'URGENCE (maintenir, freins rail)")),
-                ("3", T("ELECTRIC stop — latched service stop",
-                        "ARRÊT ÉLECTRIQUE — arrêt service verrouillé")),
-                ("4", T("EMERGENCY stop — latched rail brakes",
-                        "ARRÊT URGENCE — freins sur rail verrouillés")),
-                ("W", T("vigilance on / off (off by default)",
-                        "veille on / off (désactivée par défaut)")),
-                ("G", T("dead-man vigilance acknowledge",
-                        "acquittement veille automatique")),
+                (T("Shift", "Maj"),
+                 T("EMERGENCY brake — rail brakes (hold)",
+                   "frein d'URGENCE — freins rail (maintenir)")),
+                ("3", T("electric stop, latched", "arrêt électrique, verrouillé")),
+                ("4", T("emergency stop, latched", "arrêt d'urgence, verrouillé")),
+                ("V", T("READY — cabin ready to depart",
+                        "PRÊT — cabine prête au départ")),
+                ("Z", T("START — doors, buzzer, traction",
+                        "DÉPART — portes, buzzer, traction")),
+                ("I", T("reverse direction (at standstill)",
+                        "inverser le sens (à l'arrêt)")),
+                ("W", T("vigilance on / off", "veille on / off")),
+                ("G", T("vigilance acknowledge", "acquittement de la veille")),
             ]),
             (T("Cockpit", "Cabine"), [
-                ("H", T("headlights on / off", "phares on / off")),
-                ("C", T("cabin lights on / off", "éclairage cabine on / off")),
+                ("D", T("doors (at a stop)", "portes (à l'arrêt)")),
+                ("H", T("headlights", "phares")),
+                ("C", T("cabin lights", "éclairage cabine")),
                 ("K", T("horn (hold)", "klaxon (maintenir)")),
-                ("D", T("doors open / close (only at a stop)",
-                        "portes (à l'arrêt uniquement)")),
-                ("A", T("autopilot toggle", "pilote auto on / off")),
-                ("X", T("auto-exploitation on / off (takes over any time)",
-                        "exploitation auto on / off (reprend à tout moment)")),
+                ("A", T("autopilot", "pilote automatique")),
+                ("X", T("auto-operation on / off",
+                        "exploitation automatique on / off")),
                 (T("Shift+X", "Maj+X"),
-                 T("24/7 override : ignore published hours",
-                   "mode 24/7 : ignorer les horaires officiels")),
-                ("N", T("sound mute / unmute",
-                        "couper / remettre le son")),
-                (T("Backspace", "Retour arrière"),
-                 T("abort current announcement",
-                   "couper l'annonce en cours")),
+                 T("24/7: ignore opening hours", "24/7 : ignorer les horaires")),
+                ("N", T("mute / unmute", "couper / remettre le son")),
+                (T("Backspace", "Retour arr."),
+                 T("abort the announcement", "couper l'annonce")),
+                ("F2", T("announcement console", "console d'annonces")),
+                ("F4", T("cabin view: off → drawn → 3D",
+                         "vue cabine : off → dessinée → 3D")),
+                ("O", T("3D orbital view (drag, wheel)",
+                        "vue 3D orbitale (glisser, molette)")),
             ]),
             (T("System", "Système"), [
                 ("P / Esc", T("pause / resume", "pause / reprise")),
-                ("M", T("mode : normal / challenge / faults",
+                ("M", T("mode: normal / challenge / faults",
                         "mode : normal / défi / pannes")),
-                ("", T("DÉFI (CHAOS): no safety net — you may leave doors "
-                       "open / other cabin not ready; full command on a "
-                       "load can RUN AWAY (overspeed) → motor blows → CABLE "
-                       "SNAPS (tension→0); brake it or crash at the buffer, "
-                       "derail at the switch, or hit the other cabin. "
-                       "Scored on comfort, stop precision & discipline; "
-                       "passengers leave a review (native lang + translation)",
-                       "DÉFI (CHAOS) : plus de sécu — départ portes "
-                       "ouvertes / autre rame pas prête possible ; consigne "
-                       "à fond en charge = EMBALLEMENT (survitesse) → moteur "
-                       "explosé → CÂBLE ROMPU (tension→0) ; freinez ou "
-                       "collision au butoir, déraillement à l'aiguillage, ou "
-                       "choc avec l'autre rame. Noté sur confort, précision "
-                       "d'arrêt & régularité ; les passagers laissent un "
-                       "avis (langue d'origine + traduction)")),
-                ("F", T("fault picker (only in faults mode)",
-                        "sélecteur de panne (mode pannes seulement)")),
-                ("L", T("language FR / EN", "langue FR / EN")),
-                ("F1", T("toggle this help", "ouvrir/fermer cette aide")),
-                ("F2", T("announcement console",
-                         "console d'annonces")),
-                ("F3", T("real machine info + links",
-                         "infos machine réelle + liens")),
-                ("F4", T("cabin view cycle: off → procedural → Godot 3D embedded",
-                         "vue cabine cycle : off → procédurale → Godot 3D embarqué")),
-                ("O", T("3D exterior orbital view (left-drag = angle, wheel = zoom)",
-                        "vue 3D extérieure orbitale (glisser clic gauche = angle, molette = zoom)")),
-                ("F5", T("auto-exploitation trip log",
-                         "journal des trajets auto")),
-                ("F6", T("download PDF manual + theory guide",
-                         "télécharger manuel PDF + guide théorique")),
-                ("+ / −  /  0", T("side-view zoom in/out / reset",
-                                  "zoom vue latérale +/− / reset")),
-                (T("Mouse wheel", "Molette souris"),
-                 T("zoom side-view", "zoom vue latérale")),
+                ("F", T("fault picker (faults mode)",
+                        "sélecteur de panne (mode pannes)")),
                 ("R / Enter", T("new trip (after arrival)",
-                                "nouveau trajet (après arrivée)")),
+                                "nouveau trajet (après l'arrivée)")),
+                (T("Home", "Début"), T("back to the title screen",
+                                       "retour à l'écran titre")),
+                ("F1", T("this screen", "cet écran")),
+                ("F3", T("the real machine + links", "la vraie machine + liens")),
+                ("F5", T("auto-operation trip log", "journal des trajets auto")),
+                ("F6", T("download PDF manual + guide",
+                         "télécharger manuel PDF + guide")),
+                ("+ / − / 0", T("side-view zoom / reset", "zoom vue profil / reset")),
+                (T("Wheel", "Molette"), T("side-view zoom", "zoom vue profil")),
+                ("L", T("language FR / EN", "langue FR / EN")),
+                (T("Help menu", "Menu Aide"),
+                 T("update, bug report, about",
+                   "mise à jour, signalement, à propos")),
             ]),
         ]
+        tips = [
+            T("Raise the setpoint gradually: acceleration is capped at ~1 m/s², the regulator does the rest.",
+              "Augmentez la consigne progressivement : l'accélération est plafonnée à ~1 m/s², le régulateur fait le reste."),
+            T("The stop envelope brakes by itself to 1 m/s over the last 55 m — keep 100 % until then.",
+              "L'enveloppe d'arrêt freine seule à 1 m/s sur les 55 derniers mètres — gardez 100 % jusque-là."),
+            T("[3] latched electric stop (motor off + service brake). [4] or Shift: rail brakes at 5 m/s², for real emergencies only.",
+              "[3] arrêt électrique verrouillé (moteur coupé + frein de service). [4] ou Maj : freins rail à 5 m/s², pour les vrais cas."),
+            T("Vigilance [W] is optional; once on, touch a control every 20 s or the train stops by itself.",
+              "Veille [W] : optionnelle ; une fois activée, touchez une commande toutes les 20 s, sinon arrêt automatique."),
+            T("Any latched stop in the tunnel (3, 4, vigilance, fault) suspends the trip: release, then READY [V] and START [Z].",
+              "Tout arrêt verrouillé en tunnel (3, 4, veille, panne) suspend le trajet : relâcher, puis PRÊT [V] et DÉPART [Z]."),
+            T("X starts auto-operation from anywhere; the AI driver handles faults and limps to the nearest station.",
+              "X lance l'exploitation automatique depuis n'importe où ; l'IA gère les pannes et rentre à la gare la plus proche."),
+            T("Challenge (CHAOS) mode: no safeties. Full setpoint on a load = runaway then cable snap; only the parachute (Shift) still brakes — apply it early.",
+              "Mode Défi (CHAOS) : plus de sécurités. Consigne à fond en charge = emballement puis rupture du câble ; seul le parachute (Maj) freine encore — serrez tôt."),
+            T("Catastrophic fault (cable, fire, brakes, smoke extraction): the trip is over — wait for the evacuation, then R.",
+              "Panne catastrophique (câble, feu, freins, désenfumage) : le voyage est terminé — attendez l'évacuation, puis R."),
+            T("Hover the cockpit buttons: every control has a bilingual tooltip.",
+              "Survolez les boutons du cockpit : chaque commande a son info-bulle bilingue."),
+            T("F4: 3D cabin view. On Linux Wayland the app switches to XWayland to embed it; PERCE_NEIGE_KEEP_WAYLAND=1 keeps Wayland (separate window).",
+              "F4 : vue cabine 3D. Sous Linux Wayland l'application passe en XWayland pour l'intégrer ; PERCE_NEIGE_KEEP_WAYLAND=1 pour rester en Wayland (fenêtre séparée)."),
+        ]
 
-        col_w = (box_w - 60) / 3
-        col_x = [box.x() + 30 + i * col_w for i in range(3)]
+        # --- mesure d'abord : la boîte prend la hauteur de son contenu
+        box_w = float(min(1080, w - 40))
+        margin, gap = 28.0, 18.0
+        col_w = (box_w - 2 * margin - 2 * gap) / 3
+        key_w = 96.0
+        desc_w = col_w - key_w - 4
+        font_key = _cached_font("Consolas", 10, QFont.Weight.Bold)
+        font_desc = _cached_font("Segoe UI", 9)
+        wrap = (int(Qt.TextFlag.TextWordWrap) | int(Qt.AlignmentFlag.AlignLeft)
+                | int(Qt.AlignmentFlag.AlignTop))
+        p.setFont(font_desc)
+        heights = []
+        col_h = 0.0
+        for _title, entries in groups:
+            hs = []
+            yy = 28.0
+            for _key, desc in entries:
+                need = p.boundingRect(QRectF(0, 0, desc_w, 200), wrap, desc).height()
+                hh = max(16.0, need + 1)
+                hs.append(hh)
+                yy += hh + 4
+            heights.append(hs)
+            col_h = max(col_h, yy)
+        tw = box_w - 2 * margin - 24
+        tip_h = [p.boundingRect(QRectF(0, 0, tw, 200), wrap, "• " + line).height()
+                 for line in tips]
+        tips_needed = 34.0 + sum(t + 3 for t in tip_h)
+        box_h = min(float(h - 30), 78.0 + col_h + 10.0 + tips_needed + 18.0)
+        box = QRectF(w / 2 - box_w / 2, h / 2 - box_h / 2, box_w, box_h)
+
+        # --- dessin
+        p.fillRect(0, 0, w, h, QColor(0, 0, 0, 170))
+        p.setBrush(QBrush(QColor(20, 26, 40, 245)))
+        p.setPen(_cached_pen(COLOR_HUD_BORDER, 3))
+        p.drawRoundedRect(box, 14, 14)
+        p.setPen(_cached_pen(COLOR_TEXT))
+        p.setFont(_cached_font("Segoe UI", 20, QFont.Weight.Bold))
+        p.drawText(QRectF(box.x(), box.y() + 14, box.width(), 32),
+                   int(Qt.AlignmentFlag.AlignHCenter),
+                   T(f"Perce-Neige Simulator v{VERSION} — Help",
+                     f"Simulateur Perce-Neige v{VERSION} — Aide"))
+        p.setFont(_cached_font("Segoe UI", 10))
+        p.setPen(_cached_pen(COLOR_TEXT_DIM))
+        p.drawText(QRectF(box.x(), box.y() + 48, box.width(), 18),
+                   int(Qt.AlignmentFlag.AlignHCenter),
+                   T("F1 close · Enter start · F3 the real machine · "
+                     "F6 PDF manual · L language",
+                     "F1 fermer · Entrée démarrer · F3 la vraie machine · "
+                     "F6 manuel PDF · L langue"))
+        y_top = box.y() + 78
+        y_max = y_top
         for ci, (title, entries) in enumerate(groups):
-            x = col_x[ci]
-            y = box.y() + 92
+            x = box.x() + margin + ci * (col_w + gap)
+            y = y_top
             p.setFont(_cached_font("Segoe UI", 12, QFont.Weight.Bold))
             p.setPen(_cached_pen(COLOR_NEEDLE))
-            p.drawText(QRectF(x, y, col_w - 10, 20),
-                       int(Qt.AlignmentFlag.AlignLeft), title)
-            y += 26
-            p.setFont(_cached_font("Consolas", 10))
-            for key, desc in entries:
+            p.drawText(QRectF(x, y, col_w, 20), int(Qt.AlignmentFlag.AlignLeft), title)
+            y += 22
+            p.setPen(_cached_pen(COLOR_HUD_BORDER, 1))
+            p.drawLine(QPointF(x, y), QPointF(x + col_w, y))
+            y += 6
+            for (key, desc), hh in zip(entries, heights[ci]):
+                p.setFont(font_key)
                 p.setPen(_cached_pen(COLOR_TEXT))
-                p.drawText(QRectF(x, y, col_w - 10, 16),
-                           int(Qt.AlignmentFlag.AlignLeft), key)
+                p.drawText(QRectF(x, y, key_w, hh),
+                           int(Qt.AlignmentFlag.AlignLeft) | int(Qt.AlignmentFlag.AlignTop),
+                           key)
+                p.setFont(font_desc)
                 p.setPen(_cached_pen(COLOR_TEXT_DIM))
-                p.drawText(QRectF(x, y + 15, col_w - 10, 16),
-                           int(Qt.AlignmentFlag.AlignLeft), desc)
-                y += 34
+                p.drawText(QRectF(x + key_w, y, desc_w, hh), wrap, desc)
+                y += hh + 4
+            y_max = max(y_max, y)
 
-        # Tips box at the bottom — sized to fit all 10 tips without overflow
-        tips_box_h = 246
-        tips_y = box.y() + box_h - tips_box_h - 26
-        tips_box = QRectF(box.x() + 30, tips_y, box_w - 60, tips_box_h)
+        # Conseils de conduite : sous la colonne la plus longue, jamais
+        # par-dessus ; les derniers sont omis si la fenêtre est trop basse.
+        tips_y = y_max + 10
+        tips_h = box.y() + box_h - 18 - tips_y
+        if tips_h < 60:
+            return
+        tips_box = QRectF(box.x() + margin, tips_y, box_w - 2 * margin, tips_h)
         p.setBrush(QBrush(QColor(30, 38, 56, 220)))
         p.setPen(_cached_pen(COLOR_HUD_BORDER, 1))
         p.drawRoundedRect(tips_box, 8, 8)
         p.setPen(_cached_pen(COLOR_NEEDLE))
         p.setFont(_cached_font("Segoe UI", 11, QFont.Weight.Bold))
-        p.drawText(QRectF(tips_box.x() + 12, tips_box.y() + 8,
+        p.drawText(QRectF(tips_box.x() + 12, tips_box.y() + 6,
                           tips_box.width() - 24, 18),
                    int(Qt.AlignmentFlag.AlignLeft),
                    T("Driving tips", "Conseils de conduite"))
+        p.setFont(font_desc)
         p.setPen(_cached_pen(COLOR_TEXT_DIM))
-        p.setFont(_cached_font("Consolas", 9))
-        tips = [
-            T("• Ramp the speed command gradually — accel is capped at ~1 m/s², the regulator handles the rest",
-              "• Augmentez la consigne progressivement — l'accél. est plafonnée ~1 m/s², le régulateur fait le reste"),
-            T("• The station approach envelope auto-brakes to 1 m/s over the last 55 m — just hold 100 %",
-              "• L'enveloppe d'arrêt freine auto à 1 m/s sur les 55 derniers m — maintenez 100 %"),
-            T("• Electric stop [3] is a latched service stop : motor off + normal brake, no rail damage",
-              "• L'arrêt électrique [3] est verrouillé : moteur off + frein service, sans friction rail"),
-            T("• Emergency [4 or Shift] engages rail brakes (5 m/s²) — use only if you really have to",
-              "• L'urgence [4 ou Shift] engage les freins rail (5 m/s²) — réservez aux vrais cas"),
-            T("• Vigilance [W] : optional, off by default — once enabled, touch a control every 20 s",
-              "• Veille [W] : optionnelle, désactivée par défaut — si activée, touchez une commande toutes les 20 s"),
-            T("• Any latched stop (3/4/dead-man/fault) in tunnel suspends the trip : release + READY + DEPART to resume",
-              "• Tout arrêt verrouillé (3/4/veille/panne) en tunnel suspend le trajet : relâcher + PRÊT + DÉPART pour repartir"),
-            T("• X activates auto-mode from any state (terminus, mid-trip, mid-tunnel stop) — Shift+X for 24/7",
-              "• X active le mode auto depuis n'importe où (terminus, en route, arrêt tunnel) — Maj+X pour 24/7"),
-            T("• Hover any cockpit button with the mouse — bilingual tooltips describe every control",
-              "• Survolez un bouton du cockpit à la souris — les tooltips bilingues décrivent chaque commande"),
-            T("• F4 cycles the cabin view : off → procedural → embedded Godot 3D. On a Linux Wayland session the app switches to XWayland so the 3D view can be embedded like on Windows — set PERCE_NEIGE_KEEP_WAYLAND=1 to stay on Wayland, the 3D view then opens in its own window",
-              "• F4 fait défiler la vue cabine : off → procédurale → Godot 3D intégré. En session Linux Wayland l'appli bascule sur XWayland pour intégrer la 3D comme sous Windows — PERCE_NEIGE_KEEP_WAYLAND=1 pour rester en Wayland, la 3D s'ouvre alors dans sa propre fenêtre"),
-            T("• Help menu : check GitHub for updates, or send an anonymous bug report (opens pre-filled issue)",
-              "• Menu Aide : vérifier les MAJ GitHub, ou signaler un bug anonymement (ticket pré-rempli)"),
-            T("• Catastrophic fault (cable rupture, fire, brake fade, vent failure) : trip is OVER. Wait through evac, then press R for a new trip from menu",
-              "• Panne catastrophique (rupture câble, feu, frein HS, désenfumage HS) : voyage TERMINÉ. Attendre l'évac, puis R pour un nouveau voyage depuis le menu"),
-            T("• CHAOS mode : full command over-revs the motor past 12 m/s (even climbing) up to the overspeed cascade; if the cable snaps, ONLY the parachute (Shift) brakes it — apply it EARLY. Any brake cuts traction. Setpoint 0 without braking = drift toward the heavier car",
-              "• Mode CHAOS : consigne à fond = surrégime au-delà de 12 m/s (même en montée) jusqu'à la cascade ; câble rompu, SEUL le parachute (Maj) freine — serrez TÔT. Tout frein coupe la traction. Consigne 0 sans frein = dérive vers la rame la plus lourde"),
-            T("• Faults + auto-operation (X) : the AI driver handles incidents alone — limps to the NEAREST station (reversing if it's behind) for blocking faults, and presses R itself after an evacuation",
-              "• Pannes + exploitation auto (X) : le conducteur IA gère seul — retour à la gare LA PLUS PROCHE (demi-tour si elle est derrière) pour les pannes bloquantes, et R automatique après une évacuation"),
-        ]
-        for i, line in enumerate(tips):
-            p.drawText(QRectF(tips_box.x() + 12, tips_box.y() + 30 + i * 16,
-                              tips_box.width() - 24, 16),
-                       int(Qt.AlignmentFlag.AlignLeft), line)
+        ty = tips_box.y() + 28
+        tw = tips_box.width() - 24
+        for line, need in zip(tips, tip_h):
+            if ty + need > tips_box.y() + tips_box.height() - 6:
+                break
+            p.drawText(QRectF(tips_box.x() + 12, ty, tw, need), wrap, "• " + line)
+            ty += need + 3
 
     def _draw_info_overlay(self, p: QPainter, w: int, h: int) -> None:
         """Real Perce-Neige funicular facts, specs and source links."""
