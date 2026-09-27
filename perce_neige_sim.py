@@ -10388,6 +10388,9 @@ class GameWidget(QWidget):
             self._reposition_godot_embed()
             container.show()
             container.raise_()
+            # même réapplication du masquage qu'après l'embed Win32
+            self._godot_embed_hidden = False
+            self._sync_godot_overlay_visibility()
         except Exception as e:
             print(f"[GodotBridge] Embed échoué : {e} — fenêtre séparée")
 
@@ -10502,6 +10505,13 @@ class GameWidget(QWidget):
             self._reposition_godot_embed()
             user32.ShowWindow(hwnd, 5)  # SW_SHOW
             self._godot_log("fenêtre 3D embarquée (WS_CHILD) — OK")
+            # La fenêtre vient d'être MONTRÉE : si un overlay est ouvert à
+            # cet instant (écran titre au lancement, F1…), le masquage doit
+            # être réappliqué tout de suite — _sync n'agit que sur les
+            # CHANGEMENTS d'état et croyait la 3D déjà masquée (retour
+            # d'essai 2026-09-27 : « Godot passe au premier plan »).
+            self._godot_embed_hidden = False
+            self._sync_godot_overlay_visibility()
         except Exception as e:
             self._godot_log(f"embarquement échoué : {e}")
             self._godot_child_hwnd = None

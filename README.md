@@ -14,6 +14,13 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 
 ## Quoi de neuf — v1.13.x (audit physique des voyages, 26 septembre 2026)
 
+**v1.15.13** — la vue 3D lancée au démarrage passait par-dessus l'écran
+titre (« Godot passe au premier plan, on ne voit plus rien »). La fenêtre
+native est masquée sous chaque overlay Qt par un mécanisme qui n'agit que
+sur les changements d'état : quand la 3D finissait de s'embarquer pendant
+l'écran titre, elle était montrée sans que le masquage soit réappliqué. Il
+l'est maintenant dès la fin de l'embarquement ; la 3D apparaît au DÉMARRER.
+
 **v1.15.12** — deux manques signalés :
 - **PWA : NOUVEAU VOYAGE après une catastrophe.** Sans clavier, rien ne
   permettait de relancer un voyage après une panne catastrophique (la touche
