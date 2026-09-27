@@ -263,3 +263,36 @@ la montée pleine/vide et puissance résultante pour trois chargements ;
   `tests/parite_pwa.py`, `godot_project/bench_voyages_3d.gd`.
 - `audit_physique/` : `audit_voyages.sage`, `resultats.txt`, `fig/`,
   `audit_voyages.tex` + `.pdf`.
+
+## Régénération à l'arrivée en haut avec une rame pleine (question du 27/09/2026)
+
+Constat sur la PWA : rame pleine en montée, « RÉGEN » s'affiche pendant la
+décélération et l'entrée en gare haute. Le modèle a une raison de le dire :
+le câble.
+
+- **Pas de câble lest sur le Perce-Neige** (remontees-mecaniques.net : « Les
+  caractéristiques de la ligne ont permis de ne pas prévoir de câble lest,
+  ce qui signifie que l'installation n'est pas dotée d'un système de tension
+  dynamique »). Le poids du câble tracteur (11 kg/m × 3 474 m = 38 t) n'est
+  donc pas compensé : à l'arrivée en haut, le brin de la rame pleine ne fait
+  plus que ~25 m, celui du contrepoids fait 3,4 km — 921 m de dénivelé de
+  câble, soit ρ·g·Δz = **99 kN** qui tirent le contrepoids vers le bas,
+  c'est-à-dire qui aident la rame pleine à monter.
+- Les rames elles-mêmes : la pleine (57,4 t) sur les 6–8 % du haut résiste
+  de 16 à 45 kN ; le contrepoids vide (32,3 t) sur les 8 % du bas aide de
+  25 kN.
+- Bilan à vitesse constante 12 m/s (traînée 32 kN comprise) : traction
+  676 kW à s = 3 300 m, puis **régénération 126 kW à 3 400 m et 410 kW à
+  3 448 m**. Sans le poids du câble ce serait 750 à 1 130 kW de traction :
+  c'est bien le câble qui inverse le signe.
+- Pendant la décélération s'ajoute l'inertie de tout ce qui bouge (2 rames
+  + câble = 128 t, 9,2 MJ à 12 m/s) : à −0,5 m/s², 64 kN à retenir →
+  **740 kW à 1 MW de régénération** ; à −1 m/s², 1,35 à 1,64 MW.
+
+Conclusion : l'affichage est cohérent avec la physique de l'installation
+(entraînement DC à quatre quadrants, qui renvoie l'énergie de freinage au
+réseau). Ce qui reste à calibrer sur place : la traînée (β) et le rendement
+de régénération ; si l'écran de la vraie cabine montre de la traction à
+l'arrivée en haut avec une rame pleine, c'est le poids du câble ou β qu'il
+faudra revoir. Script : `audit_physique/regen_arrivee_haut.sage`, sorties
+dans `audit_physique/regen_arrivee_haut.txt`.
