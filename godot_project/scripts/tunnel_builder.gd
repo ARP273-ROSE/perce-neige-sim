@@ -59,22 +59,37 @@ func _ready() -> void:
 # Rend les parois du tunnel translucides (vue extérieure : on veut voir la
 # rame À L'INTÉRIEUR du tube) ou opaques (vue cockpit). Toutes les sections
 # partagent wall_material → un seul réglage suffit.
+# Matériaux d'habillage (parois, plafonds, poutres des gares, fond de la
+# gare haute) qui doivent suivre la paroi du tunnel en vue extérieure :
+# les bâtisseurs les y inscrivent (retour d'essai 2026-09-27 : « rends les
+# deux gares de nouveau transparentes en vue externe » — l'habillage de la
+# v1.15.14 restait opaque et cachait la rame à quai).
+var extra_see_through: Array = []
+
+
 func set_wall_see_through(on: bool) -> void:
 	if wall_material == null:
 		return
-	var c: Color = wall_material.albedo_color
+	_apply_see_through(wall_material, on)
+	for m in extra_see_through:
+		if m is StandardMaterial3D:
+			_apply_see_through(m, on)
+
+
+func _apply_see_through(mat: StandardMaterial3D, on: bool) -> void:
+	var c: Color = mat.albedo_color
 	if on:
-		wall_material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 		c.a = 0.22
 		# Ne dessiner que les faces arrière : la paroi la plus proche de la
 		# caméra disparaît, on voit direct l'intérieur sans double couche
 		# translucide qui grisonne tout.
-		wall_material.cull_mode = BaseMaterial3D.CULL_FRONT
+		mat.cull_mode = BaseMaterial3D.CULL_FRONT
 	else:
-		wall_material.transparency = BaseMaterial3D.TRANSPARENCY_DISABLED
+		mat.transparency = BaseMaterial3D.TRANSPARENCY_DISABLED
 		c.a = 1.0
-		wall_material.cull_mode = BaseMaterial3D.CULL_DISABLED
-	wall_material.albedo_color = c
+		mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	mat.albedo_color = c
 
 
 func _build() -> void:
