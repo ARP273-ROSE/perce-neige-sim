@@ -7925,6 +7925,16 @@ class GameWidget(QWidget):
             return
         pos = ev.position()
         st = self.state
+        # Écran d'accueil / aide affiché : seul son bouton COMMENCER répond
+        # (les zones de l'écran titre, dessous, ne doivent pas prendre un
+        # clic destiné à l'aide).
+        if self._show_help:
+            rect = getattr(self, "_help_start_rect", None)
+            if rect is not None and rect.contains(pos):
+                self._show_help = False
+                self.update()
+            ev.accept()
+            return
         if st.mode == MODE_TITLE:
             # Sélections SÉPARÉES : un clic « train »/« dir » ne fait que
             # mémoriser le choix (mis en évidence) ; seul « start » lance
@@ -13380,7 +13390,9 @@ class GameWidget(QWidget):
         tip_h = [p.boundingRect(QRectF(0, 0, tw, 200), wrap, "• " + line).height()
                  for line in tips]
         tips_needed = 34.0 + sum(t + 3 for t in tip_h)
-        box_h = min(float(h - 30), 78.0 + col_h + 10.0 + tips_needed + 18.0)
+        # + 46 px pour la rangée du bouton COMMENCER (retour d'essai
+        # 2026-09-27 : « rajoute une case commencer à cliquer »)
+        box_h = min(float(h - 30), 78.0 + col_h + 10.0 + tips_needed + 18.0 + 46.0)
         box = QRectF(w / 2 - box_w / 2, h / 2 - box_h / 2, box_w, box_h)
 
         # --- dessin
@@ -13429,7 +13441,21 @@ class GameWidget(QWidget):
         # Conseils de conduite : sous la colonne la plus longue, jamais
         # par-dessus ; les derniers sont omis si la fenêtre est trop basse.
         tips_y = y_max + 10
-        tips_h = box.y() + box_h - 18 - tips_y
+        tips_h = box.y() + box_h - 18 - 46 - tips_y
+        # Bouton COMMENCER (clic = F1) en bas à droite de la boîte
+        bw, bh = 220.0, 40.0
+        self._help_start_rect = QRectF(box.x() + box_w - margin - bw,
+                                       box.y() + box_h - 18 - bh, bw, bh)
+        self._draw_button(p, self._help_start_rect.x(), self._help_start_rect.y(),
+                          bw, bh, T("START  ▶", "COMMENCER  ▶"), True,
+                          QColor(120, 225, 150), QColor(20, 70, 35))
+        p.setPen(_cached_pen(COLOR_TEXT_DIM))
+        p.setFont(_cached_font("Segoe UI", 9))
+        p.drawText(QRectF(box.x() + margin, box.y() + box_h - 18 - bh,
+                          box_w - 2 * margin - bw - 12, bh),
+                   int(Qt.AlignmentFlag.AlignRight) | int(Qt.AlignmentFlag.AlignVCenter),
+                   T("closes this screen — then choose train + direction and press START",
+                     "ferme cet écran — choisissez ensuite rame + sens, puis DÉMARRER"))
         if tips_h < 60:
             return
         tips_box = QRectF(box.x() + margin, tips_y, box_w - 2 * margin, tips_h)

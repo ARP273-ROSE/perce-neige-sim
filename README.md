@@ -14,6 +14,10 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 
 ## Quoi de neuf — v1.13.x (audit physique des voyages, 26 septembre 2026)
 
+**v1.15.15** — écran d'accueil : bouton **COMMENCER ▶** cliquable en bas à
+droite (équivaut à F1) ; tant que l'écran d'accueil est affiché, un clic
+ailleurs n'atteint plus les zones de l'écran titre cachées dessous.
+
 **v1.15.14** — gares refaites d'après les photos (les deux se ressemblent) :
 parois **bleu nuit**, plafond **clair** porté par des **poutres acier
 sombres** en travers tous les 2,8 m et deux pannes en long, **poteaux**
