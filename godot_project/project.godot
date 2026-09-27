@@ -18,7 +18,7 @@ config/name="Perce-Neige Simulator 3D"
 config/description="Simulateur du funiculaire Perce-Neige de Tignes — rendu 3D Godot 4"
 run/main_scene="res://scenes/main.tscn"
 config/features=PackedStringArray("4.6", "Forward Plus")
-config/icon="res://icon.svg"
+config/icon="res://icon.png"
 
 [display]
 
