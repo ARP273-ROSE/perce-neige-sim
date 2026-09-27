@@ -436,6 +436,19 @@ CABLE_KG_M = 11.0                # kg/m — masse linéique (≈ 38 t sur la lig
 REBOUND_ZETA = 0.15              # amortissement (frottement torons + galets)
 REBOUND_GRAB_A = 0.35            # m/s² — force résiduelle relâchée quand le
                                  # tambour serre (fin du freinage régulé)
+# Exploitation automatique : on n'ouvre les portes qu'une fois la rame
+# STABILISÉE — enveloppe du rebond A·e^(−ζωt) sous AUTO_SETTLE_M, pour la
+# rame pilotée ET pour le contrepoids (celui qui est en bas oscille
+# visiblement quand l'autre arrive en haut). Chiffré par
+# audit_physique/stabilisation_rebond.sage : rame vide en bas 17 s, pleine
+# 26 s, contrepoids en bas 20 s, en haut 0 s (amplitude 4 mm). Retour
+# d'essai 2026-09-27 : « en bas on n'a pas le temps de voir l'oscillation,
+# et il faut attendre la fin des oscillations avant d'ouvrir les portes ».
+AUTO_SETTLE_M = 0.02             # m — enveloppe résiduelle « rame stabilisée »
+AUTO_SETTLE_MIN_S = 3.0          # s — frein tambour serré, clip d'arrêt fini
+AUTO_SETTLE_MAX_S = 30.0         # s — garde-fou : ouverture forcée au-delà
+AUTO_ARRIVAL_DWELL_S = 12.0      # s — portes ouvertes (descente) avant le
+                                 # demi-tour ; l'embarquement a son propre dwell
 
 # --- Audit physique 2026-09-26 : ce qui manquait au bilan des forces ------
 # 1. Le POIDS PROPRE DU CÂBLE pèse sur le moteur. Il était déjà dans la
@@ -2090,6 +2103,39 @@ class Physics:
         omega = math.sqrt(k / max(m_cabin, 1.0))
         amp = min(m_arriving * REBOUND_GRAB_A / k, 0.45)
         return amp * math.exp(-REBOUND_ZETA * omega * t) * math.sin(omega * t)
+
+    @staticmethod
+    def _cable_bounce_envelope(s_cabin: float, m_cabin: float,
+                               m_arriving: float, t: float) -> float:
+        """Enveloppe A·e^(−ζωt) de _cable_bounce : l'amplitude résiduelle
+        de l'oscillation à l'instant t (m), quel que soit le signe du sinus."""
+        span = max(LENGTH - s_cabin, 20.0)
+        k = CABLE_EA_N / span
+        omega = math.sqrt(k / max(m_cabin, 1.0))
+        amp = min(m_arriving * REBOUND_GRAB_A / k, 0.45)
+        return amp * math.exp(-REBOUND_ZETA * omega * t)
+
+    def rebound_envelopes_m(self) -> tuple:
+        """Amplitudes résiduelles du rebond du câble (m) : (rame pilotée à
+        son point d'arrêt, contrepoids à l'autre bout). Nulles tant que le
+        voyage n'est pas terminé (le rebond n'existe qu'après le serrage du
+        tambour à l'arrivée)."""
+        st = self.state
+        tr = st.train
+        if not st.finished:
+            return 0.0, 0.0
+        anchor = st.rebound_anchor_s
+        t_r = st.rebound_timer
+        m_ghost = TRAIN_EMPTY_KG + st.ghost_pax * PAX_KG
+        env_main = self._cable_bounce_envelope(anchor, tr.mass_kg, tr.mass_kg, t_r)
+        env_ghost = self._cable_bounce_envelope(
+            LENGTH - anchor, m_ghost, tr.mass_kg, t_r)
+        return env_main, env_ghost
+
+    def rebound_envelope_m(self) -> float:
+        """La plus grande des deux amplitudes résiduelles (m) : l'installation
+        est stabilisée quand les DEUX rames le sont."""
+        return max(self.rebound_envelopes_m())
 
     def _regulator(self, tr: Train, dt: float) -> None:
         """Speed-command regulator — always active, direction-aware.
@@ -4850,6 +4896,7 @@ class AutoOps:
     PHASE_DEPARTING = "DEPARTING"
     PHASE_TRANSIT = "TRANSIT"
     PHASE_ARRIVING = "ARRIVING"
+    PHASE_SETTLING = "SETTLING"
     PHASE_DOORS_OPENING = "DOORS_OPENING"
 
     def __init__(self, widget: "GameWidget") -> None:
@@ -5280,12 +5327,28 @@ class AutoOps:
         elif self.phase == self.PHASE_ARRIVING:
             if state.finished and abs(tr.v) < 0.05:
                 self._finalize_leg(now)
-                # Arrivée : on OUVRE les portes et on laisse le temps aux
-                # passagers de descendre AVANT d'inverser le sens. L'ancien
-                # code appelait reverse_trip DÈS l'arrêt → le sens
-                # basculait à l'instant de l'arrivée (« le sens s'inverse
-                # avant même d'être arrivé », retour d'essai 2026-07-24).
-                # Le demi-tour n'a lieu qu'après le dwell (DOORS_OPENING).
+                # Arrivée : tambour serré, la rame pend à son brin de
+                # câble et oscille (jusqu'à 45 cm en bas, T ≈ 8 s). On
+                # n'ouvre PAS encore : les portes attendent la fin des
+                # oscillations (SETTLING), comme dans la vraie exploitation
+                # — retour d'essai 2026-09-27 : « il faut attendre la fin
+                # des oscillations avant d'ouvrir les portes ».
+                self._set_phase(self.PHASE_SETTLING)
+                add_event(state, "ops",
+                          "Auto : arrived — waiting for the cable to settle",
+                          "Auto : arrivé — attente de la stabilisation du câble",
+                          "info")
+
+        elif self.phase == self.PHASE_SETTLING:
+            # Critère PHYSIQUE, pas un chrono : enveloppe du rebond de la
+            # rame pilotée ET du contrepoids sous AUTO_SETTLE_M (2 cm).
+            # Sage (audit_physique/stabilisation_rebond.sage) : 17 s vide
+            # en bas, 26 s pleine, 0 s en haut (mais le contrepoids en bas
+            # impose alors ≈ 20 s). Bornes : 3 s mini (clip d'arrêt),
+            # 30 s maxi (garde-fou).
+            settled = self.w.physics.rebound_envelope_m() < AUTO_SETTLE_M
+            if self.phase_t >= AUTO_SETTLE_MIN_S and (
+                    settled or self.phase_t >= AUTO_SETTLE_MAX_S):
                 # Ouverture PAR LA COMMANDE (clip sonore, vantaux à 1,3 s,
                 # interlock à 2 s) et non plus par bascule instantanée :
                 # la 3D voyait les portes s'ouvrir d'un coup, sans son,
@@ -5293,17 +5356,21 @@ class AutoOps:
                 self.w.begin_doors_open(tr)
                 self._set_phase(self.PHASE_DOORS_OPENING)
                 add_event(state, "ops",
-                          "Auto : arrived — doors open",
-                          "Auto : arrivé — ouverture des portes",
+                          "Auto : cable settled — doors open",
+                          "Auto : câble stabilisé — ouverture des portes",
                           "info")
 
         elif self.phase == self.PHASE_DOORS_OPENING:
-            # Dwell d'arrivée (5 s) portes ouvertes — descente des
-            # passagers + ambiance de gare — PUIS demi-tour (inversion du
-            # sens) + embarquement (qui a son propre dwell station_dwell_s).
-            # Le sens ne bascule donc qu'après cette attente, jamais à
-            # l'instant de l'arrivée.
-            if self.phase_t >= 5.0:
+            # Dwell d'arrivée (AUTO_ARRIVAL_DWELL_S) portes ouvertes —
+            # descente des passagers + ambiance de gare — PUIS demi-tour
+            # (inversion du sens) + embarquement (qui a son propre dwell
+            # station_dwell_s). L'ancien code appelait reverse_trip DÈS
+            # l'arrêt (« le sens s'inverse avant même d'être arrivé »,
+            # 2026-07-24), puis 5 s après l'ouverture (« il inverse le
+            # sens trop vite », 2026-09-27). Le demi-tour remet le chrono
+            # du rebond à zéro : il ne doit venir qu'une fois l'oscillation
+            # éteinte ET les passagers descendus.
+            if self.phase_t >= AUTO_ARRIVAL_DWELL_S:
                 self.w.reverse_trip(silent=True)
                 self._begin_boarding(now)
                 add_event(state, "ops",
@@ -12776,14 +12843,23 @@ class GameWidget(QWidget):
             ao.PHASE_DEPARTING:     T("DEPARTING",     "DÉPART"),
             ao.PHASE_TRANSIT:       T("TRANSIT",       "EN VOIE"),
             ao.PHASE_ARRIVING:      T("ARRIVING",      "ARRIVÉE"),
+            ao.PHASE_SETTLING:      T("SETTLING",      "STABILISATION"),
             ao.PHASE_DOORS_OPENING: T("DOORS OPENING", "OUVERTURE PORTES"),
         }
         phase_txt = phase_labels.get(ao.phase, ao.phase)
         if ao.phase == ao.PHASE_BOARDING:
             remain = max(0.0, ao.station_dwell_s - ao.phase_t)
             phase_txt = f"{phase_txt}  {int(remain):>2d} s"
+        elif ao.phase == ao.PHASE_SETTLING:
+            # Amplitude résiduelle du rebond : l'automate ouvre sous 2 cm.
+            # En haut la rame pilotée est figée (4 mm) : c'est le
+            # contrepoids, en bas, qui oscille encore — on le dit.
+            env_main, env_ghost = self.physics.rebound_envelopes_m()
+            env_cm = max(env_main, env_ghost) * 100.0
+            who = T(" CTW", " CP") if env_ghost > env_main else ""
+            phase_txt = f"{phase_txt}{who}  ±{env_cm:.0f} cm"
         elif ao.phase == ao.PHASE_DOORS_OPENING:
-            remain = max(0.0, 3.0 - ao.phase_t)
+            remain = max(0.0, AUTO_ARRIVAL_DWELL_S - ao.phase_t)
             phase_txt = f"{phase_txt}  {remain:.1f} s"
         rows = [
             (T("Clock",    "Heure"),    now.strftime("%H:%M:%S")),

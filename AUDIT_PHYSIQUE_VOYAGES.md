@@ -296,3 +296,28 @@ de régénération ; si l'écran de la vraie cabine montre de la traction à
 l'arrivée en haut avec une rame pleine, c'est le poids du câble ou β qu'il
 faudra revoir. Script : `audit_physique/regen_arrivee_haut.sage`, sorties
 dans `audit_physique/regen_arrivee_haut.txt`.
+
+## Stabilisation du rebond avant l'ouverture des portes (v1.15.21, 27/09/2026)
+
+Retour d'essai : « en exploitation automatique il inverse le sens trop vite,
+en bas on n'a pas le temps de voir l'oscillation ; il faut attendre la fin
+des oscillations avant d'ouvrir les portes ». L'automate n'ouvre plus sur un
+chrono mais sur l'**enveloppe** du rebond A·e^(−ζωt) (modèle `_cable_bounce`,
+k = EA/L) : portes quand elle passe sous 2 cm, pour la rame pilotée ET le
+contrepoids, avec 3 s mini et 30 s maxi ; puis 12 s portes ouvertes avant le
+demi-tour (qui remet le chrono du rebond à zéro — d'où l'oscillation
+« coupée » à 5 s auparavant).
+
+| cas | L (m) | k (kN/m) | T (s) | A (cm) | t < 2 cm (s) |
+|---|---|---|---|---|---|
+| rame vide arrivée en bas | 3 448 | 36,3 | 5,93 | 31,2 | 17,3 |
+| rame pleine arrivée en bas | 3 448 | 36,3 | 7,90 | 45,0 | 26,1 |
+| rame pleine arrivée en haut | 26 | 4 808 | 0,69 | 0,4 | 0 |
+| contrepoids en bas (rame pleine en haut) | 3 448 | 36,3 | 5,93 | 45,0 | 19,6 |
+
+Script : `audit_physique/stabilisation_rebond.sage`, sorties dans
+`audit_physique/stabilisation_rebond.txt`. Vérifié par
+`tests/test_exploitation_auto.py` (PC, deux sens) et
+`godot_project/bench_auto_3d.gd` (PWA, deux sens) : en bas les portes
+s'ouvrent 17,3 s après l'arrêt avec une excursion de 25 cm visible.
+
