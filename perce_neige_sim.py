@@ -5894,8 +5894,8 @@ class GameWidget(QWidget):
                 "Portes ouvrir / fermer — uniquement à l'arrêt total",
             ),
             int(K.Key_A): (
-                "Autopilot toggle — programmed station-to-station run",
-                "Pilote automatique — trajet programmé de gare à gare",
+                "AUTO — trip autopilot : closes the doors, arms READY, gives START, holds 100 %, lets the stop envelope land the train ; off on arrival or as soon as you touch the setpoint or a brake",
+                "AUTO — pilote auto du voyage : ferme les portes, arme PRÊT, donne le DÉPART, tient 100 %, laisse l'enveloppe poser la rame ; s'efface à l'arrivée ou dès que vous touchez consigne ou freins",
             ),
             int(K.Key_N): (
                 "Mute / unmute on-board announcements and ambient sound",
@@ -5932,6 +5932,12 @@ class GameWidget(QWidget):
         self._font_version = QFont("Consolas", 9)
         self._cached_bg_grad: tuple[int, QLinearGradient] | None = None
         self._pulley_angle = 0.0          # radians — animated drive pulley
+        # pilote automatique du voyage (touche A) : chrono depuis
+        # l'engagement, temporisation entre deux gestes, engagé à l'arrêt
+        # après une arrivée (il doit alors d'abord inverser le sens)
+        self._ap_since = 0.0
+        self._ap_cooldown = 0.0
+        self._ap_armed_finished = False
         self._cloud_offset = 0.0          # slow scroll for sky
         self._snowflakes: list[list[float]] = []   # [x, y, vy, size]
         for _ in range(60):
@@ -6026,6 +6032,91 @@ class GameWidget(QWidget):
         self.new_trip(first=True)
 
     # ----- lifecycle -------------------------------------------------------
+
+    # ----- pilote automatique du voyage (touche A) ----------------------
+
+    def _virtual_key(self, k) -> None:
+        """Appuie une touche comme le conducteur : mêmes verrous, mêmes
+        annonces, même journal."""
+        self.keyPressEvent(QKeyEvent(QEvent.Type.KeyPress, k,
+                                     Qt.KeyboardModifier.NoModifier))
+        self._key_state.discard(k)
+
+    def _autopilot_disengage(self, why_en: str, why_fr: str) -> None:
+        tr = self.state.train
+        if not tr.autopilot:
+            return
+        tr.autopilot = False
+        add_event(self.state, "auto",
+                  f"Autopilot OFF — {why_en}",
+                  f"Pilote auto OFF — {why_fr}", "info")
+
+    def _autopilot_tick(self, dt: float) -> None:
+        """Pilote automatique du voyage (touche A) : le simulateur fait UN
+        voyage complet comme un conducteur exemplaire — ferme les portes,
+        arme PRÊT, donne le DÉPART, tient 100 % de consigne, laisse
+        l'enveloppe d'arrêt poser la rame — puis se désengage à l'arrivée.
+        Il appuie les touches (D, V, Z) comme le conducteur, donc tous les
+        verrous et toutes les annonces s'appliquent. Il rend la main dès que
+        le conducteur touche la consigne ou un frein, sur panne, ou si
+        l'exploitation automatique (X) prend la ligne. Retour d'essai
+        2026-09-27 : « le bouton auto ne sert à rien » — il ne faisait que
+        basculer un drapeau que rien ne lisait."""
+        st = self.state
+        tr = st.train
+        if not tr.autopilot or st.mode != MODE_RUN:
+            return
+        if (getattr(self, "auto_ops", None) is not None
+                and self.auto_ops.enabled):
+            self._autopilot_disengage("auto-operation (X) runs the line",
+                                      "l'exploitation automatique (X) a la ligne")
+            return
+        if st.crashed or st.panne_active:
+            self._autopilot_disengage("fault / incident", "panne / incident")
+            return
+        if (tr.emergency or tr.electric_stop or tr.brake > 0.05
+                or st.manual_brake_held):
+            self._autopilot_disengage("driver braked", "le conducteur a freiné")
+            return
+        self._ap_since += dt
+        self._ap_cooldown = max(0.0, self._ap_cooldown - dt)
+        if st.finished:
+            # Engagé après une arrivée : on repart dans l'autre sens (V
+            # inverse le sens sans annonce) ; arrivé SOUS pilote auto : on
+            # rend la main, le conducteur décide du voyage suivant.
+            if self._ap_armed_finished and self._ap_cooldown <= 0.0:
+                self._ap_armed_finished = False
+                self._virtual_key(Qt.Key.Key_V)
+                self._ap_cooldown = 1.5
+                return
+            if not self._ap_armed_finished:
+                self._autopilot_disengage("arrived", "arrivée")
+            return
+        self._ap_armed_finished = False
+        if st.trip_started:
+            tr.speed_cmd = 1.0
+            return
+        if self._ap_cooldown > 0.0:
+            return
+        closing = bool(getattr(self.sounds, "_close_seq_active", False))
+        if tr.doors_cmd or tr.doors_timer > 0.0 or closing:
+            # portes ouvertes : fermeture après un court temps d'arrêt ;
+            # portes en cours de fermeture : on attend la fin du clip
+            if (tr.doors_cmd and tr.doors_timer <= 0.0 and not closing
+                    and self._ap_since >= 2.0):
+                self._virtual_key(Qt.Key.Key_D)
+                self._ap_cooldown = 1.5
+            return
+        if st.departure_buzzer_remaining > 0.0:
+            return
+        if not tr.ready:
+            self._virtual_key(Qt.Key.Key_V)
+            self._ap_cooldown = 1.5
+            return
+        if st.ghost_ready:
+            tr.speed_cmd = 1.0
+            self._virtual_key(Qt.Key.Key_Z)
+            self._ap_cooldown = 3.0
 
     def _advance_fault_phase(self, dt: float) -> None:
         """Drive the catastrophic fault state machine.
@@ -6334,10 +6425,10 @@ class GameWidget(QWidget):
         tr.power_kw_disp = 0.0
         tr.regen_kw_disp = 0.0
         tr.jerk_sum = 0.0
-        # Autopilot enabled by default — smooth soft-start ramp while
-        # the driver can still fine-tune the speed setpoint manually
-        # and hit STOP whenever needed.
-        tr.autopilot = True
+        # Pilote automatique du voyage (A) : ENGAGÉ PAR LE CONDUCTEUR, pas
+        # par défaut — sinon la rame partirait toute seule à chaque nouveau
+        # voyage (le manuel décrit la procédure manuelle D → V → Z).
+        tr.autopilot = False
         # Counterweight (ghost) starts at the opposite station.
         st.ghost_s = LENGTH - tr.s
         # 🔴 Affaissement d'embarquement : il s'ancre dès que la rame est
@@ -6593,6 +6684,7 @@ class GameWidget(QWidget):
                 state_dict["ext_view"] = bool(
                     getattr(self, "_godot_ext_view", False))
                 self._godot_bridge.send_state(state_dict)
+            self._autopilot_tick(dt)
             self._advance_fault_phase(dt)
             # Ghost driver ready countdown : once the main driver has
             # pressed READY, the other wagon's driver confirms after a
@@ -7044,6 +7136,10 @@ class GameWidget(QWidget):
         # the ready / buzzer / start sequence on the traction side, not
         # by locking the setpoint itself.
         any_action = False
+        # Le conducteur reprend la consigne → le pilote auto s'efface
+        if (up or down) and tr.autopilot:
+            self._autopilot_disengage("driver took the setpoint",
+                                      "reprise manuelle de la consigne")
         if up:
             tr.speed_cmd = min(1.0, tr.speed_cmd + 0.35 * dt)
             any_action = True
@@ -7403,11 +7499,17 @@ class GameWidget(QWidget):
                               "Fermeture des portes...", "info")
         elif k == Qt.Key.Key_A:
             tr = st.train
-            tr.autopilot = not tr.autopilot
-            add_event(st, "auto",
-                      f"Autopilot {'ON' if tr.autopilot else 'OFF'}",
-                      f"Pilote auto {'ON' if tr.autopilot else 'OFF'}",
-                      "info")
+            if tr.autopilot:
+                self._autopilot_disengage("switched off", "arrêté par le conducteur")
+            else:
+                tr.autopilot = True
+                self._ap_since = 0.0
+                self._ap_cooldown = 0.0
+                self._ap_armed_finished = st.finished
+                add_event(st, "auto",
+                          "Autopilot ON — doors, READY, START, 100 %, stop",
+                          "Pilote auto ON — portes, PRÊT, DÉPART, 100 %, arrêt",
+                          "info")
         elif k == Qt.Key.Key_N:
             muted = self.sounds.toggle_mute()
             add_event(st, "mute",
@@ -13161,7 +13263,8 @@ class GameWidget(QWidget):
                 ("H", T("headlights", "phares")),
                 ("C", T("cabin lights", "éclairage cabine")),
                 ("K", T("horn (hold)", "klaxon (maintenir)")),
-                ("A", T("autopilot", "pilote automatique")),
+                ("A", T("trip autopilot: doors, READY, START, 100 %, stop",
+                        "pilote auto du voyage : portes, PRÊT, DÉPART, 100 %, arrêt")),
                 ("X", T("auto-operation on / off",
                         "exploitation automatique on / off")),
                 (T("Shift+X", "Maj+X"),
