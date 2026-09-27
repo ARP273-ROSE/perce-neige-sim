@@ -14,6 +14,16 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 
 ## Quoi de neuf — v1.13.x (audit physique des voyages, 26 septembre 2026)
 
+**v1.15.5** — câble et galets descendus, galets inclinés dans l'évitement :
+- le câble était à −0,99 m (table de roulement −1,24, fond de caisse −1,16) :
+  câble et galets entraient dans le dessous des rames. Le câble est
+  maintenant au niveau des blochets (4 cm au-dessus de leur dessus), les
+  galets s'enfoncent dans la longrine, les équerres ne dépassent que de
+  quelques centimètres ; la roue aval de la gare haute suit.
+- dans l'évitement, chaque voie s'écarte de l'axe : sa courbure propre
+  incline maintenant les galets, dans le même sens qu'en ligne — vers
+  l'extérieur à l'entrée, contre-courbe au milieu, retour à la réunion.
+
 **v1.15.4** — retours d'essai du 27/09 :
 - **Paroi du tunnel** : ce n'étaient pas des dalles de béton. Revêtement
   lisse, clair, légèrement brillant comme sur la vidéo cabine ; les joints
