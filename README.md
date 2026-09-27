@@ -14,6 +14,17 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 
 ## Quoi de neuf — v1.13.x (audit physique des voyages, 26 septembre 2026)
 
+**v1.15.11** — le bouton AUTO [A] du PC fait enfin quelque chose. Il ne
+faisait que basculer un drapeau que rien ne lisait. C'est maintenant le
+**pilote automatique du voyage** promis par le manuel : engagé par le
+conducteur, il ferme les portes après un court arrêt, arme PRÊT, donne le
+DÉPART, tient 100 % de consigne et laisse l'enveloppe d'arrêt poser la rame,
+puis se désengage à l'arrivée. Il appuie les touches comme le conducteur
+(tous les verrous et annonces s'appliquent) et rend la main dès qu'on touche
+la consigne ou un frein, sur panne, ou si l'exploitation automatique (X)
+prend la ligne ; engagé après une arrivée, il inverse le sens et repart.
+Plus engagé par défaut au nouveau voyage. Test `tests/test_pilote_auto.py`.
+
 **Note physique (27/09)** — « RÉGEN » à l'arrivée en haut avec une rame
 pleine : c'est le poids du câble (38 t, pas de câble lest sur le Perce-Neige)
 qui, en haut, tire le contrepoids de 99 kN et l'emporte sur les 16–45 kN de
@@ -1462,7 +1473,7 @@ three columns with the driving tips underneath.
 | `H`              | Headlights                                        |
 | `C`              | Cabin lights                                      |
 | `K`              | Horn (hold)                                       |
-| `A`              | Autopilot                                         |
+| `A`              | Trip autopilot: doors, READY, START, 100 %, stop  |
 | `X`              | Auto-operation on / off                           |
 | `Shift+X`        | 24/7 — ignore opening hours                       |
 | `N`              | Mute / unmute                                     |
