@@ -176,6 +176,44 @@ def anonymiser(texte: str | None) -> str:
     return texte
 
 
+def _memoire_vive_go() -> float:
+    """Mémoire vive installée, en gigaoctets. 0 si on ne sait pas."""
+    try:
+        if sys.platform == 'win32':
+            import ctypes
+
+            class _Etat(ctypes.Structure):
+                _fields_ = [('dwLength', ctypes.c_ulong),
+                            ('dwMemoryLoad', ctypes.c_ulong),
+                            ('ullTotalPhys', ctypes.c_ulonglong),
+                            ('ullAvailPhys', ctypes.c_ulonglong),
+                            ('ullTotalPageFile', ctypes.c_ulonglong),
+                            ('ullAvailPageFile', ctypes.c_ulonglong),
+                            ('ullTotalVirtual', ctypes.c_ulonglong),
+                            ('ullAvailVirtual', ctypes.c_ulonglong),
+                            ('ullAvailExtendedVirtual', ctypes.c_ulonglong)]
+
+            etat = _Etat()
+            etat.dwLength = ctypes.sizeof(_Etat)
+            ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(etat))
+            return round(etat.ullTotalPhys / 1e9, 1)
+        with open('/proc/meminfo', encoding='utf-8') as f:
+            for ligne in f:
+                if ligne.startswith('MemTotal:'):
+                    return round(int(ligne.split()[1]) * 1024 / 1e9, 1)
+    except Exception:
+        pass
+    return 0.0
+
+
+def _place_libre_go(dossier) -> float:
+    try:
+        import shutil
+        return round(shutil.disk_usage(str(dossier)).free / 1e9, 1)
+    except Exception:
+        return 0.0
+
+
 def _machine() -> dict:
     """Le strict nécessaire pour reproduire un problème."""
     infos = {
@@ -184,7 +222,12 @@ def _machine() -> dict:
         'os_detail': platform.version(),
         'arch': platform.machine(),
         'python': platform.python_version(),
+        'processeur': (platform.processor() or '')[:60],
+        'coeurs': os.cpu_count() or 0,
+        'memoire_go': _memoire_vive_go(),
     }
+    if _dossier is not None:
+        infos['place_libre_go'] = _place_libre_go(_dossier.parent)
     infos['application'] = APPLICATION
     infos['version'] = VERSION_APP or '?'
     return infos
@@ -409,10 +452,28 @@ class Vigie:
         self._debut_gel = 0.0
         self._actif = False
         self._fil_gui = threading.get_ident()
+        # A-t-on deja vu battre le fil graphique, au moins une fois ?
+        #
+        # Tant que la reponse est non, la vigie n'a rien a dire : personne ne
+        # lui a branche de battement, et une interface dont on n'a jamais pris
+        # le pouls n'est pas une interface figee. Sans ce garde-fou, une
+        # integration incomplete — appeler `demarrer()` en oubliant le
+        # minuteur qui appelle `battre()` — produit une fausse alerte de gel
+        # a chaque lancement. C'est arrive : six rapports remontes d'un poste
+        # ou tout allait bien, la pile montrant le fil graphique au repos.
+        self._deja_battu = False
+        # Drapeau distinct de `_signale`, et ce n'est pas un detail : les
+        # confondre faisait annoncer la « fin » d'un gel qui n'avait jamais
+        # ete signale, avec pour duree le temps ecoule depuis le demarrage de
+        # la machine — `_debut_gel` valant encore zero. Trois rapports sont
+        # ainsi remontes d'un poste sain : « fin du gel apres 23 573 s »,
+        # soit exactement les six heures et demie d'allumage de l'ordinateur.
+        self._avertissement_sans_battement = False
 
     def battre(self) -> None:
         """À appeler depuis le fil graphique, à intervalle régulier."""
         maintenant = time.monotonic()
+        self._deja_battu = True
         if self._signale:
             duree = maintenant - self._debut_gel
             log.warning("Interface de nouveau réactive après %.0f s", duree)
@@ -433,6 +494,17 @@ class Vigie:
         while self._actif:
             time.sleep(self.periode)
             retard = time.monotonic() - self._dernier
+            if not self._deja_battu:
+                # Rien ne bat : ce n'est pas un gel, c'est un branchement
+                # manquant. On le dit dans le journal, une seule fois, et on
+                # se tait — mieux vaut une vigie muette qu'une vigie qui crie
+                # au loup a chaque demarrage.
+                if not self._avertissement_sans_battement:
+                    self._avertissement_sans_battement = True
+                    log.warning(
+                        "Vigie sans battement : aucun appel a battre() depuis "
+                        "le fil graphique. Surveillance des gels inactive.")
+                continue
             if retard >= self.seuil and not self._signale:
                 self._signale = True
                 self._debut_gel = self._dernier

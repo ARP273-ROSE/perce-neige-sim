@@ -73,7 +73,26 @@ def is_packaged():
     return (app_dir().parent / 'python' / 'python.exe').exists()
 
 
+# Seuls ces hotes peuvent livrer du code. L'adresse vient deja d'une reponse
+# de GitHub lue en TLS verifie, mais une mise a jour, c'est du code qui
+# s'execute : la provenance se verifie deux fois plutot qu'une.
+HOTES_AUTORISES = ('github.com', 'objects.githubusercontent.com',
+                   'release-assets.githubusercontent.com',
+                   'api.github.com')
+
+
+def _hote_de_confiance(url):
+    from urllib.parse import urlparse
+    decoupe = urlparse(url)
+    if decoupe.scheme != 'https':
+        return False
+    hote = (decoupe.hostname or '').lower()
+    return hote in HOTES_AUTORISES or hote.endswith('.githubusercontent.com')
+
+
 def _open(url):
+    if not _hote_de_confiance(url):
+        raise RuntimeError(f"Adresse refusee : {url}")
     req = urllib.request.Request(url, headers={
         'User-Agent': 'updater-kit-windows',
         'Accept': 'application/vnd.github+json',

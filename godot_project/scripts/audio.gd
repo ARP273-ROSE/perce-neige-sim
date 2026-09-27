@@ -10,6 +10,7 @@ var _player_buzzer: AudioStreamPlayer = null       # buzzer gare haute
 var _player_buzzer_low: AudioStreamPlayer = null   # buzzer gare basse (8 s, distinct)
 var _player_door: AudioStreamPlayer = null
 var _player_door_motion: AudioStreamPlayer = null
+var _door_motion_delay: float = 0.0   # clip de fermeture après le buzzer
 var _player_crossing: AudioStreamPlayer = null
 var _player_vent: AudioStreamPlayer = null    # ventilation cabine
 
@@ -176,11 +177,17 @@ func _process(_delta: float) -> void:
 	if not _player_vent.playing and _player_vent.stream:
 		_player_vent.play()
 
-	# Buzzer + animation portes (fermeture)
+	# Fermeture : buzzer d'abord, PUIS le clip de fermeture quand le buzzer
+	# s'est tu — en série, comme sur l'enregistrement HD (1:08→1:15 buzzer,
+	# 1:15→1:22 fermeture ; retour d'essai 2026-09-27 : les deux jouaient
+	# ensemble). Les vantaux (cabin.gd) partent 1,3 s après le début du clip.
 	if not physics.doors_open and _doors_were_open:
 		if _player_door.stream:
 			_player_door.play()
-		if _player_door_motion.stream:
+		_door_motion_delay = PNConstants.DOOR_BUZZER_S
+	if _door_motion_delay > 0.0:
+		_door_motion_delay -= _delta
+		if _door_motion_delay <= 0.0 and _player_door_motion.stream:
 			_player_door_motion.play()
 	# Animation portes (ouverture)
 	if physics.doors_open and not _doors_were_open:

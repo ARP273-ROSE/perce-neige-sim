@@ -76,12 +76,32 @@ AllowNoIcons=yes
 ; Windows 10 1809 minimum, impose par Qt 6.11.
 MinVersion=10.0.17763
 
+; Verrou nomme pose par l'application a son demarrage. Sans lui, installer
+; par-dessus une application ouverte ne remplace pas les fichiers en cours
+; d'utilisation : l'installation se termine en annoncant « termine » et le
+; logiciel repart dans l'ancienne version. Cote application, voir la note du
+; kit : CreateMutexW(None, False, '<AppName>EnCours').
+AppMutex={#AppName}EnCours
+CloseApplications=yes
+RestartApplications=no
+
 [Languages]
 Name: "french"; MessagesFile: "compiler:Languages\French.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "Créer un raccourci sur le Bureau"; \
     GroupDescription: "Raccourcis :"; Flags: checkedonce
+
+[InstallDelete]
+; L'ancienne version est effacee avant la copie.
+;
+; Inno ecrase les fichiers qu'il apporte, jamais ceux qu'il n'apporte plus.
+; Or la mise a jour automatique deballe une archive dans ce meme dossier : un
+; module retire entre deux versions y restait, et pouvait continuer d'etre
+; importe. Ces deux dossiers n'appartiennent qu'au programme ; les donnees
+; vivent dans %LOCALAPPDATA%\{#AppName} et ne sont pas touchees.
+Type: filesandordirs; Name: "{app}\app"
+Type: filesandordirs; Name: "{app}\python"
 
 [Files]
 ; Tout le paquet : python embarque, code applicatif, binaires eventuels.

@@ -129,6 +129,21 @@ jobs:
         with:
           python-version: '3.12'
 
+      # Controles statiques, quand le depot les embarque. Ils sont facultatifs
+      # par construction : un projet qui ne les a pas passe outre sans echouer.
+      # Chacun attrape un defaut qui, autrement, ne se voit que chez
+      # l'utilisateur — un nom jamais importe, un signal Qt qui recopie sa
+      # charge, un installeur qui ne sait pas que l'application tourne.
+      - name: Controles statiques
+        shell: bash
+        run: |
+          for controle in verifier_symboles.py verifier_signaux.py verifier_installeur.py; do
+            if [ -f "$controle" ]; then
+              echo "--- $controle"
+              python "$controle"
+            fi
+          done
+
       - name: Construire le paquet autonome
         shell: bash
         run: python build_package.py --out "$RUNNER_TEMP/build"

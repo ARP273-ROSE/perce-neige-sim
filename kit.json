@@ -40,7 +40,7 @@
       "de": "bundled_godot",
       "vers": "bundled_godot",
       "motifs": [
-        "**/*"
+        "**/*.exe"
       ]
     }
   ],
@@ -55,7 +55,6 @@
   "artefact_dossier": "bundled_godot",
   "verification_import": [],
   "exclus_de_la_maj": [
-    "sons",
-    "bundled_godot"
+    "sons"
   ]
 }
