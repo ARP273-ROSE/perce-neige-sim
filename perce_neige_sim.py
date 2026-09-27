@@ -6340,6 +6340,18 @@ class GameWidget(QWidget):
         tr.autopilot = True
         # Counterweight (ghost) starts at the opposite station.
         st.ghost_s = LENGTH - tr.s
+        # 🔴 Affaissement d'embarquement : il s'ancre dès que la rame est
+        # immobilisée hors voyage (tambour ou portes), donc AUSSI après un
+        # arrêt en tunnel sur panne catastrophique. Sans ce désarmement, le
+        # premier pas de physique après R ramenait la rame à l'ancrage
+        # (tr.s = sag_anchor_s − sag_main) : « il repart de l'endroit où il
+        # est et pas des gares » (retour d'essai 2026-09-27).
+        st.sag_ref_m_main = -1.0
+        st.sag_ref_m_ghost = -1.0
+        st.sag_main = 0.0
+        st.sag_ghost = 0.0
+        st.sag_anchor_s = tr.s
+        st.rebound_anchor_s = tr.s
         st.trip_time = 0.0
         st.trip_started = False
         st.departure_buzzer_remaining = 0.0
@@ -7207,9 +7219,14 @@ class GameWidget(QWidget):
             # this is the ONLY way to clear a Glória / Kaprun-class
             # event. The driver is told to press R via the on-screen
             # fault panel and the V/Z refusal messages.
+            # Dès que la rame est IMMOBILISÉE par une panne catastrophique
+            # (ou une fois l'évacuation engagée), R relance un voyage neuf
+            # depuis une gare — on n'oblige plus à attendre la fin des
+            # annonces (retour d'essai 2026-09-27).
             catastrophic_done = (
                 st.panne_active and is_catastrophic(st.panne_kind)
-                and st.fault_phase in ("evacuating", "out_of_service")
+                and (st.fault_phase in ("evacuating", "out_of_service")
+                     or abs(st.train.v) < 0.1)
             )
             # Acquittement maintenance : une panne NON catastrophique,
             # rame À QUAI et À L'ARRÊT, se solde par l'intervention du
