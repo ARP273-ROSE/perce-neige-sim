@@ -13348,15 +13348,19 @@ class GameWidget(QWidget):
         p.setPen(_cached_pen(COLOR_TEXT))
         intro = T(
             "Longest underground funicular in France. Opened 14 April 1993 by "
-            "Von Roll / CFD to replace the old cable car to the Grande Motte "
-            "glacier. Two symmetric coupled trains run on a single track with "
-            "a passing loop at the midpoint. Used by skiers year-round to "
+            "Von Roll / CFD, it replaced the two 4-seat Grande Motte A (1968) "
+            "and B (1969) gondolas (Transtélé / PHB) up to the foot of the "
+            "glacier — the Grande Motte cable car to the summit (3456 m) still "
+            "runs above it. Two symmetric coupled trains run on a single track "
+            "with a passing loop at the midpoint. Used by skiers year-round to "
             "access summer skiing on the glacier (3032 m).",
             "Le plus long funiculaire souterrain de France. Inauguré le 14 avril "
-            "1993 par Von Roll / CFD pour remplacer l'ancien téléphérique du "
-            "glacier de la Grande Motte. Deux rames couplées circulent en "
-            "symétrie sur une voie unique avec évitement au milieu. Utilisé "
-            "toute l'année pour accéder au ski d'été sur le glacier (3032 m).",
+            "1993 par Von Roll / CFD, il a remplacé les deux télécabines 4 places "
+            "Grande Motte A (1968) et B (1969), Transtélé / PHB, jusqu'au pied du "
+            "glacier — le téléphérique de la Grande Motte vers le sommet (3456 m) "
+            "existe toujours au-dessus. Deux rames couplées circulent en symétrie "
+            "sur une voie unique avec évitement au milieu. Utilisé toute l'année "
+            "pour accéder au ski d'été sur le glacier (3032 m).",
         )
         # Word-wrap manually
         self._draw_wrapped(p, intro,
