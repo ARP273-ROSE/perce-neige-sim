@@ -14,6 +14,16 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 
 ## Quoi de neuf — v1.13.x (audit physique des voyages, 26 septembre 2026)
 
+**v1.15.23** — les vantaux s'ouvrent toujours vers le BAS de la pente et se
+ferment vers le HAUT (3D, PC + PWA). Retour d'essai : « le sens d'ouverture
+n'est pas cohérent entre l'arrivée et le départ ». Les vantaux glissaient
+« vers l'arrière de la caisse », or la caisse est retournée quand elle
+descend (le nez mène toujours) : à la montée ils s'ouvraient vers le bas,
+à la descente vers le haut, et au demi-tour ils changeaient de côté. Le
+signe du glissement suit maintenant la même règle que le retournement
+(`Cabin.door_slide_sign`). Le banc `bench_portes_3d.gd` vérifie les quatre
+cas (rame 1/2 × montée/descente) : déplacement −1,20 m le long de la montée.
+
 **v1.15.22** — la vue extérieure (O) reste accessible en exploitation
 automatique : « je ne peux pas changer de vue avec O, c'est bloqué, mais F4
 marche ». Le verrou de l'automate (qui ignore les touches de conduite) avait
