@@ -360,6 +360,9 @@ func _build_room_dressing(s0: float, s1: float, _is_low: bool) -> void:
 	var navy: StandardMaterial3D = _mkmat(NAVY, 0.85, 0.0)
 	var ceil_m: StandardMaterial3D = _mkmat(CEIL_COL, 0.75, 0.0)
 	var beam: StandardMaterial3D = _mkmat(BEAM_COL, 0.45, 0.5)
+	# en vue extérieure, l'habillage devient translucide comme le tunnel
+	for m in [navy, ceil_m, beam]:
+		tunnel.extra_see_through.append(m)
 	var blue_lamp: StandardMaterial3D = StandardMaterial3D.new()
 	blue_lamp.albedo_color = Color(0.45, 0.65, 1.0)
 	blue_lamp.emission_enabled = true
