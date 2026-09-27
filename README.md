@@ -14,6 +14,20 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 
 ## Quoi de neuf — v1.13.x (audit physique des voyages, 26 septembre 2026)
 
+**v1.15.4** — retours d'essai du 27/09 :
+- **Paroi du tunnel** : ce n'étaient pas des dalles de béton. Revêtement
+  lisse, clair, légèrement brillant comme sur la vidéo cabine ; les joints
+  en quinconce disparaissent, il ne reste que de fines lignes circulaires.
+- **Gare haute** : la machinerie est sous terre. De la gare on ne voit plus
+  que le sommet de la grande roue aval qui émerge d'une fente du sol au bout
+  de la voie (les deux brins passent dessus et plongent) ; la salle des
+  machines (poulie motrice, moteurs) est construite sous la dalle, et la
+  salle de gare se termine par le mur en bardage bois « DESTINATION
+  GLACIER » de la photo 095119.
+- **Vue cockpit** : plus de tache blanche de reflet sur le pare-brise (la
+  vitre n'est plus éclairée, c'est une teinte).
+- **Évitement Abt** : les deux ronds orange aux fourchements sont retirés.
+
 **v1.15.3** — mise à jour automatique, portes, poste :
 - **Mise à jour automatique (PC)** : elle ne marchait « pas du tout ». Le
   paquet installé par le Setup passait encore par l'ancien mécanisme (échange
