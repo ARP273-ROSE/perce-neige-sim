@@ -5,7 +5,7 @@ extends Node3D
 ## - Val Claret (s=0) : hall béton avec escaliers/escalator menant vers la
 ##   surface (village Val Claret 2111m). Lumière du jour visible au sommet.
 ## - Grande Motte (s=LENGTH) : hall similaire avec sortie vers le glacier
-##   (3032m, sommet du téléphérique de la Grande Motte).
+##   (3032m, pied du téléphérique de la Grande Motte, qui monte au sommet 3456m).
 ##
 ## Construit en boîtes (SurfaceTool) ancrées au transform du portail tunnel,
 ## avec éclairage, signalétique, bancs et quelques passagers en attente.

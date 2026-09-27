@@ -71,6 +71,7 @@ retenue comme référence.
 | 18 | Câble — résistance à la rupture | 191 200 daN | Remontées-Mécaniques | « Résistance à la rupture : 191 200 daN » |
 | 19 | Câble — tension nominale | 22 500 daN | Remontées-Mécaniques | « Tension nominale : 22 500 daN » |
 | 19b | Câble — remplacement | 1999 | funiculaires-france.fr/tignes | « Cable installed/replaced in 1999 » |
+| 19c | Remontées remplacées | 2 télécabines 4 places Grande Motte A (1968) et B (1969), Transtélé / PHB, en service jusqu'en 1993 — PAS un téléphérique (le TPH Grande Motte vers le sommet existe toujours) | Remontées-Mécaniques | « victime de son succès, elle dut être doublée en 1969 par un appareil tout à fait semblable du nom de Grande Motte B » |
 | 20 | Moteurs principaux | **3 × 800 kW courant continu** | Remontées-Mécaniques | « 3 moteurs courant continu » « 800 kW » « total 2 400 kW (3 x 800 kW) » |
 | 20b | Motoriste | SICME MOTORI (Italie) | Wikipedia EN + funiculaires-france | « Make: SICME MOTORI » |
 | 21 | Moteurs de secours | 3 hydrauliques + 3 thermiques | Remontées-Mécaniques forum | « trois moteurs électriques, trois hydrauliques et trois thermiques » |

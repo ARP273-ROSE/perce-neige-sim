@@ -14,6 +14,11 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 
 ## Quoi de neuf — v1.13.x (audit physique des voyages, 26 septembre 2026)
 
+**v1.15.9** — historique corrigé (F3) : le funiculaire n'a pas remplacé un
+téléphérique mais les **deux télécabines 4 places Grande Motte A (1968) et
+B (1969)**, Transtélé / PHB ; le téléphérique de la Grande Motte (sommet
+3 456 m) existe toujours au-dessus (source remontees-mecaniques.net).
+
 **v1.15.8** — R après un arrêt en tunnel repart bien d'une gare (PC) :
 - « Quand tout est cassé au milieu, R repart parfois de l'endroit où il
   est. » Cause : l'affaissement d'embarquement (v1.13) s'ancre dès que la
