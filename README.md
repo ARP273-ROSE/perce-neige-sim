@@ -14,6 +14,25 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 
 ## Quoi de neuf — v1.13.x (audit physique des voyages, 26 septembre 2026)
 
+**v1.15.6** — cabine et faces d'après les photos (retours du 27/09) :
+- **Pare-brise** ramené à 1,52 × 1,78 m (mesuré sur la photo 094104).
+- **Plancher en marches** : le bord bas de chaque palier affleure le
+  plancher de la caisse, la contremarche de 37 cm est entière (avant, la
+  moitié de chaque palier passait sous le plancher : on ne voyait que des
+  biseaux). Sièges et passagers suivent.
+- **Passagers selon le remplissage** : 2 assis (perchoirs) + 12 debout par
+  cerceau, 126 places par voiture, le nombre affiché suit le remplissage
+  déclaré (PWA et PC — le PC envoie maintenant ses effectifs au viewer,
+  rame d'en face comprise). Casques, manteaux variés, **skis et bâtons
+  (55 %), surfs (20 %)** tenus debout à côté. Tout en MultiMesh.
+- **Phares** : la bande sombre sous « TIGNES » est en fait les deux phares
+  halogènes — deux lentilles rectangulaires par face, allumage qui chauffe
+  (≈ 0,3 s, passe par l'orange) et extinction qui refroidit (≈ 0,6 s) ;
+  les disques des coins bas sont des tampons. Seule la face de tête est
+  allumée.
+- **Plaque** du bas du pare-brise : « FUNICULAIRE / PERCE NEIGE 1 » ou
+  « 2 » selon la rame pilotée (l'autre rame porte l'autre numéro).
+
 **v1.15.5** — câble et galets descendus, galets inclinés dans l'évitement :
 - le câble était à −0,99 m (table de roulement −1,24, fond de caisse −1,16) :
   câble et galets entraient dans le dessous des rames. Le câble est

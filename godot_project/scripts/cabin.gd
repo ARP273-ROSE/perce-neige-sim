@@ -38,8 +38,18 @@ var _clock_label: Label3D = null     # tablette-horloge du montant gauche
 var _clock_next: float = 0.0
 
 # Passagers — références pour animer les têtes selon l'accel/courbure
-var _passenger_heads: Array = []   # Array[MeshInstance3D]
-var _passenger_torsos: Array = []  # Array[MeshInstance3D]
+# Passagers en MultiMesh, une série par voiture : emplacements fixes
+# (assis sur les perchoirs, debout en grille), matériel tenu à la main.
+# Le nombre affiché suit le remplissage de la physique (pax_car1/2, ou
+# ghost_pax pour la rame d'en face) — retour d'essai 2026-09-27.
+var _pax_slots: Array = []      # par voiture : Array de {x, z, sit, gear, side}
+var _pax_mm: Array = []         # par voiture : {torso, head, ski, pole, board}
+var _pax_base: Array = []       # par voiture : {torso: [Transform3D], head: [Transform3D]}
+var _pax_gear_prefix: Array = []   # par voiture : {ski: [int], pole: [int], board: [int]}
+var _pax_shown: Array = []      # par voiture : nombre affiché
+var _head_glow: float = 0.0     # phares halogènes : 0 éteint → 1 plein feu
+var _head_mat: StandardMaterial3D = null
+@export var train_number: int = 1
 var _prev_v_for_acc: float = 0.0   # vitesse à la frame précédente pour calcul accel
 
 enum ViewMode { FPV, EXTERIOR }
@@ -124,6 +134,14 @@ func _build_mesh() -> void:
 	_doors = built["doors"]
 	for d in _doors:
 		d["base"] = (d["node"] as Node3D).position
+	# phares de la face AVANT (la cabine est retournée selon le sens de
+	# marche : « avant » = tête de train) ; ceux de l'arrière restent des
+	# lentilles froides
+	_head_mat = (_body_mats["lamp_off"] as StandardMaterial3D).duplicate()
+	_head_mat.emission_enabled = true
+	for l in _front_lamps:
+		(l as MeshInstance3D).set_surface_override_material(0, _head_mat)
+	set_train_number(2 if is_ghost else 1)
 	# Le ghost (rame 2) roule vers nous : ses feux arrière rouges allumés
 	# côté « avant » de sa rame vue de notre sens n'ont pas de sens ; on
 	# allume ses feux d'extrémité en blanc (elle vient en face).
@@ -244,6 +262,12 @@ func _build_floor_ceiling() -> void:
 
 
 const FLOOR_GRADE: float = 0.265   # pente moyenne : les paliers sont horizontaux dessus
+# Relèvement des paliers : le bord AVANT (bas) de chaque palier affleure le
+# plancher plat de la caisse (Y_FLOOR), le bord arrière est 37 cm plus
+# haut, et la contremarche est entière. Sans lui, la moitié avant de chaque
+# palier passait SOUS le plancher et on ne voyait que des biseaux (retour
+# d'essai 2026-09-27 : « un plancher en escalier comme sur les photos »).
+const STEP_LIFT: float = (1.30 + 0.10) * 0.265 * 0.5   # (PANEL_L + RIB_W) · pente / 2
 
 
 ## Centre (repère rame) du cerceau k de la voiture idx, et bornes de sa dalle.
@@ -264,7 +288,7 @@ func _floor_y_at(z: float) -> float:
 	var idx: int = clampi(int(floor((z + train_length * 0.5) / car_len)), 0, car_count - 1)
 	var pitch: float = TrainBodyBuilder.PANEL_L + TrainBodyBuilder.RIB_W
 	var k: int = clampi(int(round((z - _panel_center(idx, 0)) / pitch)), 0, 9)
-	return TrainBodyBuilder.Y_FLOOR + (z - _panel_center(idx, k)) * FLOOR_GRADE
+	return TrainBodyBuilder.Y_FLOOR + STEP_LIFT + (z - _panel_center(idx, k)) * FLOOR_GRADE
 
 
 func _build_stepped_floor(mat: StandardMaterial3D, z_front: float, z_rear: float) -> void:
@@ -287,7 +311,7 @@ func _build_stepped_floor(mat: StandardMaterial3D, z_front: float, z_rear: float
 			lm.material = mat
 			land.mesh = lm
 			land.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-			land.position = Vector3(0.0, TrainBodyBuilder.Y_FLOOR, zc - z_c)
+			land.position = Vector3(0.0, TrainBodyBuilder.Y_FLOOR + STEP_LIFT, zc - z_c)
 			land.rotation = Vector3(tilt, 0.0, 0.0)
 			land.name = "Palier%d_%d" % [idx + 1, k]
 			_interior_cars[idx].add_child(land)
@@ -300,7 +324,7 @@ func _build_stepped_floor(mat: StandardMaterial3D, z_front: float, z_rear: float
 				rm.material = riser_mat
 				riser.mesh = rm
 				riser.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-				riser.position = Vector3(0.0, TrainBodyBuilder.Y_FLOOR, rz - z_c)
+				riser.position = Vector3(0.0, TrainBodyBuilder.Y_FLOOR + STEP_LIFT, rz - z_c)
 				riser.rotation = Vector3(tilt, 0.0, 0.0)
 				_interior_cars[idx].add_child(riser)
 
@@ -857,87 +881,164 @@ func _emit_seat(mat: StandardMaterial3D, x: float, z: float) -> void:
 	ps["node"].add_child(back)
 
 
+const PAX_PER_LANDING: int = 14      # 2 assis + 12 debout
+const PAX_STAND_X: Array = [-0.62, -0.21, 0.21, 0.62]
+const PAX_STAND_DZ: Array = [-0.45, 0.0, 0.45]
+
+
 func _build_passengers() -> void:
-	# Quelques passagers stylisés (boxes torse + cylindre tête).
-	# Distribution clairsemée pour ne pas surcharger la scène.
-	var skin_mat: StandardMaterial3D = StandardMaterial3D.new()
-	skin_mat.albedo_color = Color(0.85, 0.70, 0.55)
-	skin_mat.roughness = 0.85
-
-	# Manteaux d'hiver — couleurs variées (pour qu'on les distingue)
 	var coat_colors: Array = [
-		Color(0.20, 0.30, 0.55),  # bleu
-		Color(0.55, 0.20, 0.20),  # rouge
-		Color(0.15, 0.40, 0.25),  # vert
-		Color(0.45, 0.30, 0.15),  # marron
-		Color(0.30, 0.30, 0.35),  # gris
-		Color(0.55, 0.40, 0.10),  # ocre
+		Color(0.20, 0.30, 0.55), Color(0.55, 0.20, 0.20), Color(0.15, 0.40, 0.25),
+		Color(0.45, 0.30, 0.15), Color(0.30, 0.30, 0.35), Color(0.55, 0.40, 0.10),
+		Color(0.85, 0.15, 0.12), Color(0.10, 0.10, 0.12), Color(0.90, 0.60, 0.10),
+		Color(0.20, 0.55, 0.75), Color(0.75, 0.75, 0.78), Color(0.35, 0.15, 0.45),
 	]
-
-	# 12 passagers répartis dans les 2 voitures, certains assis certains debout
-	# Format : [x, z, sitting (true) ou standing (false), color_index]
-	var passengers: Array = [
-		[-0.85, -7.0, true,  0],  # car avant : 4 assis
-		[+0.85, -7.0, true,  1],
-		[-0.85, -3.5, true,  2],
-		[+0.85, -3.5, true,  3],
-		[-0.6,  -1.0, false, 4],  # debout dans aisle
-		[+0.5,   2.0, false, 5],
-		[-0.85,  4.0, true,  0],  # car arrière : assis
-		[+0.85,  4.0, true,  1],
-		[-0.85,  7.5, true,  2],
-		[+0.85,  7.5, true,  3],
-		[+0.4,  10.5, false, 4],  # debout
-		[-0.6,  13.0, false, 5],
+	var helmet_colors: Array = [
+		Color(0.10, 0.10, 0.11), Color(0.92, 0.92, 0.90), Color(0.55, 0.12, 0.10),
+		Color(0.20, 0.30, 0.60), Color(0.30, 0.30, 0.32), Color(0.85, 0.70, 0.55),
 	]
-
-	for p in passengers:
-		var x: float = p[0]
-		var z: float = p[1]
-		var sitting: bool = p[2]
-		var color: Color = coat_colors[p[3]]
-		_emit_passenger(skin_mat, color, x, z, sitting)
-
-
-func _emit_passenger(skin_mat: StandardMaterial3D, coat_color: Color, x: float, z: float, sitting: bool) -> void:
-	var coat_mat: StandardMaterial3D = StandardMaterial3D.new()
-	coat_mat.albedo_color = coat_color
-	coat_mat.roughness = 0.92
-
-	var y_torso: float
-	var torso_h: float
-	var fy: float = _floor_y_at(z)
-	if sitting:
-		y_torso = fy + 0.95   # assis (siège à palier+0,45)
-		torso_h = 0.55
-	else:
-		y_torso = fy + 1.20   # debout (torse à 1,2 m du palier)
-		torso_h = 0.75
-
-	# Torse
-	var torso: MeshInstance3D = MeshInstance3D.new()
+	var ski_colors: Array = [
+		Color(0.90, 0.10, 0.10), Color(0.95, 0.95, 0.95), Color(0.10, 0.60, 0.90),
+		Color(0.95, 0.75, 0.10), Color(0.12, 0.12, 0.12), Color(0.20, 0.70, 0.30),
+	]
+	var mat: StandardMaterial3D = StandardMaterial3D.new()
+	mat.vertex_color_use_as_albedo = true
+	mat.roughness = 0.85
 	var torso_mesh: BoxMesh = BoxMesh.new()
-	torso_mesh.size = Vector3(0.45, torso_h, 0.30)
-	torso_mesh.material = coat_mat
-	torso.mesh = torso_mesh
-	torso.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	var pp: Dictionary = _interior_parent(z)
-	z = pp["z"]
-	torso.position = Vector3(x, y_torso, z)
-	pp["node"].add_child(torso)
-	_passenger_torsos.append(torso)
-
-	# Tête
-	var head: MeshInstance3D = MeshInstance3D.new()
+	torso_mesh.size = Vector3(0.42, 0.75, 0.28)
+	torso_mesh.material = mat
 	var head_mesh: SphereMesh = SphereMesh.new()
 	head_mesh.radius = 0.115
 	head_mesh.height = 0.23
-	head_mesh.material = skin_mat
-	head.mesh = head_mesh
-	head.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	head.position = Vector3(x, y_torso + torso_h * 0.5 + 0.13, z)
-	pp["node"].add_child(head)
-	_passenger_heads.append(head)
+	head_mesh.material = mat
+	var ski_mesh: BoxMesh = BoxMesh.new()
+	ski_mesh.size = Vector3(0.18, 1.72, 0.035)     # la paire, tenue verticale
+	ski_mesh.material = mat
+	var pole_mesh: BoxMesh = BoxMesh.new()
+	pole_mesh.size = Vector3(0.05, 1.25, 0.014)    # les deux bâtons
+	pole_mesh.material = mat
+	var board_mesh: BoxMesh = BoxMesh.new()
+	board_mesh.size = Vector3(0.27, 1.55, 0.02)
+	board_mesh.material = mat
+
+	var car_len: float = train_length / float(car_count)
+	for idx in range(car_count):
+		var z_c: float = (float(idx) - (car_count - 1) * 0.5) * car_len
+		var rng: RandomNumberGenerator = RandomNumberGenerator.new()
+		rng.seed = 1000 * (2 if is_ghost else 1) + idx * 17 + 3
+		var slots: Array = []
+		for k in range(10):
+			var zc: float = _panel_center(idx, k)
+			# zone conducteur : pas de passagers dans le premier cerceau
+			if idx == 0 and k == 0:
+				continue
+			for sx in [-0.95, 0.95]:
+				slots.append({"x": sx, "z": zc, "sit": true})
+			for xs in PAX_STAND_X:
+				for dz in PAX_STAND_DZ:
+					slots.append({"x": xs, "z": zc + dz, "sit": false})
+		# ordre d'apparition mélangé (un remplissage partiel est réparti)
+		for i in range(slots.size() - 1, 0, -1):
+			var j: int = rng.randi_range(0, i)
+			var tmp: Dictionary = slots[i]
+			slots[i] = slots[j]
+			slots[j] = tmp
+		var torso_b: Array = []
+		var head_b: Array = []
+		var torso_c: Array = []
+		var head_c: Array = []
+		var ski_t: Array = []
+		var ski_c: Array = []
+		var pole_t: Array = []
+		var board_t: Array = []
+		var board_c: Array = []
+		var pre_ski: Array = [0]
+		var pre_pole: Array = [0]
+		var pre_board: Array = [0]
+		for sl in slots:
+			var x: float = sl["x"]
+			var z: float = sl["z"]
+			var fy: float = _floor_y_at(z)
+			var zl: float = z - z_c
+			var sit: bool = sl["sit"]
+			var sy: float = 0.733 if sit else 1.0
+			var y_t: float = fy + (0.95 if sit else 1.20)
+			var yaw: float = rng.randf_range(-0.6, 0.6)
+			var bt: Basis = Basis(Vector3.UP, yaw).scaled(Vector3(1.0, sy, 1.0))
+			torso_b.append(Transform3D(bt, Vector3(x, y_t, zl)))
+			torso_c.append(coat_colors[rng.randi_range(0, coat_colors.size() - 1)])
+			head_b.append(Transform3D(Basis.IDENTITY, Vector3(x, y_t + 0.75 * sy * 0.5 + 0.13, zl)))
+			head_c.append(helmet_colors[rng.randi_range(0, helmet_colors.size() - 1)])
+			# matériel : skis + bâtons (55 %), surf (20 %), rien (25 %),
+			# tenu debout à côté, vers le couloir
+			var side: float = -1.0 if x > 0.0 else 1.0
+			var r: float = rng.randf()
+			var gear: String = "ski" if r < 0.55 else ("board" if r < 0.75 else "")
+			if gear == "ski":
+				var tiltz: float = rng.randf_range(-0.06, 0.06)
+				ski_t.append(Transform3D(Basis(Vector3.BACK, tiltz), Vector3(x + side * 0.30, fy + 0.86, zl + 0.05)))
+				ski_c.append(ski_colors[rng.randi_range(0, ski_colors.size() - 1)])
+				pole_t.append(Transform3D(Basis(Vector3.BACK, tiltz * 1.5), Vector3(x + side * 0.42, fy + 0.62, zl + 0.08)))
+			elif gear == "board":
+				board_t.append(Transform3D(Basis(Vector3.UP, rng.randf_range(0.2, 0.5)), Vector3(x + side * 0.30, fy + 0.78, zl + 0.05)))
+				board_c.append(coat_colors[rng.randi_range(0, coat_colors.size() - 1)])
+			pre_ski.append(ski_t.size())
+			pre_pole.append(pole_t.size())
+			pre_board.append(board_t.size())
+		var mm_t: MultiMeshInstance3D = _pax_multimesh(idx, torso_mesh, torso_b, torso_c, "PaxTorsos")
+		var mm_h: MultiMeshInstance3D = _pax_multimesh(idx, head_mesh, head_b, head_c, "PaxHeads")
+		var mm_s: MultiMeshInstance3D = _pax_multimesh(idx, ski_mesh, ski_t, ski_c, "PaxSkis")
+		var mm_p: MultiMeshInstance3D = _pax_multimesh(idx, pole_mesh, pole_t, [], "PaxPoles")
+		var mm_b: MultiMeshInstance3D = _pax_multimesh(idx, board_mesh, board_t, board_c, "PaxBoards")
+		_pax_slots.append(slots)
+		_pax_mm.append({"torso": mm_t, "head": mm_h, "ski": mm_s, "pole": mm_p, "board": mm_b})
+		_pax_base.append({"torso": torso_b, "head": head_b})
+		_pax_gear_prefix.append({"ski": pre_ski, "pole": pre_pole, "board": pre_board})
+		_pax_shown.append(-1)
+	_update_passenger_count()
+
+
+func _pax_multimesh(idx: int, mesh: Mesh, xforms: Array, colors: Array, nom: String) -> MultiMeshInstance3D:
+	var mm: MultiMesh = MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.use_colors = true
+	mm.mesh = mesh
+	mm.instance_count = xforms.size()
+	for i in range(xforms.size()):
+		mm.set_instance_transform(i, xforms[i])
+		mm.set_instance_color(i, colors[i] if i < colors.size() else Color(0.12, 0.12, 0.13))
+	mm.visible_instance_count = 0
+	var mi: MultiMeshInstance3D = MultiMeshInstance3D.new()
+	mi.name = "%s%d" % [nom, idx + 1]
+	mi.multimesh = mm
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_interior_cars[idx].add_child(mi)
+	return mi
+
+
+## Passagers par voiture selon le remplissage de la physique.
+func _pax_count_for_car(idx: int) -> int:
+	if physics == null:
+		return 0
+	if is_ghost:
+		var n: int = physics.ghost_pax
+		return (n + 1) / 2 if idx == 0 else n / 2
+	return physics.pax_car1 if idx == 0 else physics.pax_car2
+
+
+func _update_passenger_count() -> void:
+	for idx in range(_pax_mm.size()):
+		var n: int = clampi(_pax_count_for_car(idx), 0, _pax_slots[idx].size())
+		if n == _pax_shown[idx]:
+			continue
+		_pax_shown[idx] = n
+		var mm: Dictionary = _pax_mm[idx]
+		var pre: Dictionary = _pax_gear_prefix[idx]
+		(mm["torso"] as MultiMeshInstance3D).multimesh.visible_instance_count = n
+		(mm["head"] as MultiMeshInstance3D).multimesh.visible_instance_count = n
+		(mm["ski"] as MultiMeshInstance3D).multimesh.visible_instance_count = pre["ski"][n]
+		(mm["pole"] as MultiMeshInstance3D).multimesh.visible_instance_count = pre["pole"][n]
+		(mm["board"] as MultiMeshInstance3D).multimesh.visible_instance_count = pre["board"][n]
 
 
 func _build_lights() -> void:
@@ -1142,9 +1243,8 @@ func _process(_delta: float) -> void:
 	# Animation des passagers selon dynamique
 	_animate_passengers(_delta)
 	# Sync des lumières depuis physics (drives by Python sim in client mode)
+	_animate_headlights(_delta)
 	if not is_ghost:
-		if headlight_front != null:
-			headlight_front.visible = physics.lights_head
 		if headlight_rear != null:
 			# Feu arrière toujours allumé en marche, éteint à l'arrêt complet
 			headlight_rear.visible = absf(physics.v) > 0.1
@@ -1153,7 +1253,8 @@ func _process(_delta: float) -> void:
 
 
 func _animate_passengers(delta: float) -> void:
-	if is_ghost or _passenger_heads.is_empty():
+	_update_passenger_count()
+	if is_ghost or _pax_mm.is_empty():
 		return
 	# Accel longitudinale (m/s²) — freinage = négatif, accel = positif
 	var dv: float = physics.v - _prev_v_for_acc
@@ -1161,29 +1262,57 @@ func _animate_passengers(delta: float) -> void:
 	if delta > 0.001:
 		acc_long = dv / delta
 	_prev_v_for_acc = physics.v
-
 	# Accel latérale dans le passing loop ou virages : approx via courbure horizontale
 	var heading_rate_rad_m: float = deg_to_rad(
 		SlopeProfile.heading_at(physics.s + 5.0) - SlopeProfile.heading_at(physics.s - 5.0)
 	) / 10.0
-	var v2: float = physics.v * physics.v
-	var acc_lat: float = v2 * heading_rate_rad_m   # m/s², signed
-
-	# Conversion en angles d'inclinaison (proportionnels, plafonnés)
-	# Forward accel positive → tête PAR-DEVANT plus inclinée (passagers ballotés vers l'arrière)
-	#   en cabine local, "vers arrière" = +Z ; pour pencher la tête vers l'arrière : rotation autour de X positif
+	var acc_lat: float = physics.v * physics.v * heading_rate_rad_m
+	# Inclinaisons (proportionnelles, plafonnées) : accélération → têtes en
+	# arrière (+X), virage à droite → têtes vers l'extérieur (−Z)
 	var pitch: float = clampf(-acc_long * 0.06, -0.20, 0.20)
-	# Lateral acc positive (right turn) → tête tilte vers la GAUCHE (extérieur du virage)
-	# rotation autour de Z négative
 	var roll: float = clampf(-acc_lat * 0.05, -0.18, 0.18)
+	var sway_h: Basis = Basis.from_euler(Vector3(pitch, 0.0, roll))
+	var sway_t: Basis = Basis.from_euler(Vector3(pitch * 0.4, 0.0, roll * 0.4))
+	for idx in range(_pax_mm.size()):
+		var n: int = _pax_shown[idx]
+		if n <= 0:
+			continue
+		var mm_t: MultiMesh = (_pax_mm[idx]["torso"] as MultiMeshInstance3D).multimesh
+		var mm_h: MultiMesh = (_pax_mm[idx]["head"] as MultiMeshInstance3D).multimesh
+		var bt: Array = _pax_base[idx]["torso"]
+		var bh: Array = _pax_base[idx]["head"]
+		for i in range(n):
+			var t: Transform3D = bt[i]
+			mm_t.set_instance_transform(i, Transform3D(sway_t * t.basis, t.origin))
+			var h: Transform3D = bh[i]
+			mm_h.set_instance_transform(i, Transform3D(sway_h * h.basis, h.origin))
 
-	for head in _passenger_heads:
-		if head != null:
-			head.rotation = Vector3(pitch, 0.0, roll)
-	# Léger sway des torses (moins amplitude que la tête)
-	for torso in _passenger_torsos:
-		if torso != null:
-			torso.rotation = Vector3(pitch * 0.4, 0.0, roll * 0.4)
+
+## Phares halogènes : le filament chauffe (≈ 0,3 s) et refroidit (≈ 0,6 s),
+## la lumière passe par l'orange. La lentille et le projecteur suivent.
+func _animate_headlights(delta: float) -> void:
+	if _head_mat == null:
+		return
+	var target: float = 1.0 if physics.lights_head else 0.0
+	var tau: float = 0.12 if target > _head_glow else 0.25
+	_head_glow += (target - _head_glow) * (1.0 - exp(-delta / tau))
+	if absf(target - _head_glow) < 0.002:
+		_head_glow = target
+	var g: float = _head_glow
+	_head_mat.emission = Color(1.0, 0.30 + 0.65 * g, 0.05 + 0.75 * g)
+	_head_mat.emission_energy_multiplier = 5.0 * g * g + 0.4 * g
+	_head_mat.albedo_color = Color(0.10, 0.10, 0.11).lerp(Color(1.0, 0.96, 0.85), g)
+	if headlight_front != null:
+		headlight_front.light_energy = 14.0 * g * g
+		headlight_front.visible = g > 0.01
+
+
+func set_train_number(n: int) -> void:
+	train_number = n
+	if mesh_root == null:
+		return
+	for lbl in mesh_root.find_children("PlaqueTexte", "Label3D", true, false):
+		(lbl as Label3D).text = "FUNICULAIRE\nPERCE NEIGE %d" % n
 
 
 
@@ -1217,13 +1346,10 @@ func _cabin_world_pos(s: float) -> Vector3:
 
 
 func set_headlights(on: bool) -> void:
-	if not _body_mats.is_empty():
-		for l in _front_lamps:
-			l.set_surface_override_material(0, _body_mats["lamp_on" if on else "lamp_off"])
-		for l in _rear_lamps:
-			l.set_surface_override_material(0, _body_mats["tail_on" if on else "lamp_off"])
-	if headlight_front:
-		headlight_front.visible = on
+	# l'état vient de physics.lights_head ; le fondu halogène est dans
+	# _animate_headlights, appelé à chaque tick
+	if physics != null:
+		physics.lights_head = on
 
 
 func set_interior_lights(on: bool) -> void:
