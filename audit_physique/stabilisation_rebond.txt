@@ -1,0 +1,20 @@
+Seuil de stabilisation : 20 mm
+
+cas                                           L (m)  k (kN/m)   T (s)   A (cm) t_stab (s)
+Rame pilotée arrivée en BAS, vide            3448.0      36.3    5.93     31.2      17.3
+Rame pilotée arrivée en BAS, pleine          3448.0      36.3    7.90     45.0      26.1
+Rame pilotée arrivée en HAUT, pleine           26.0    4807.7    0.69      0.4       0.0
+Contrepoids en BAS (rame pleine en haut)     3448.0      36.3    5.93     45.0      19.6
+Contrepoids en HAUT (rame pleine en bas)       26.0    4807.7    0.52      0.4       0.0
+
+Enveloppe résiduelle après t secondes, rame pleine en bas :
+  t =  0 s :  45.0 cm
+  t =  5 s :  24.8 cm
+  t = 10 s :  13.7 cm
+  t = 15 s :   7.5 cm
+  t = 20 s :   4.1 cm
+  t = 25 s :   2.3 cm
+  t = 30 s :   1.3 cm
+
+Borne haute retenue pour l'automate : 30 s (au-delà, ouverture forcée).
+Borne basse : 3 s (le temps que le frein tambour soit serré et le clip d'arrêt fini).
