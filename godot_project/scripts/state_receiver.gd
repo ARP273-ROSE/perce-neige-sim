@@ -122,6 +122,10 @@ func _apply(d: Dictionary) -> void:
 	# le PC envoie l'état VISUEL des vantaux (doors_visual_open), calé sur
 	# le clip sonore : la cabine l'anime tel quel
 	physics.door_leaves_open = physics.doors_open
+	# remplissage déclaré côté PC : la cabine affiche autant de passagers
+	physics.pax_car1 = _i(d, "pax_car1", physics.pax_car1)
+	physics.pax_car2 = _i(d, "pax_car2", physics.pax_car2)
+	physics.ghost_pax = _i(d, "ghost_pax", physics.ghost_pax)
 	physics.trip_started = _b(d, "trip_started", physics.trip_started)
 	physics.finished = _b(d, "finished", physics.finished)
 	if d.has("tension_dan"):
