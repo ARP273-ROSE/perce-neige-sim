@@ -68,9 +68,9 @@ const TUBE_GASKET_OUT: float = 0.11 # doit couvrir une cellule (0,10 × 0,075)
 #   (|x| ≥ 0,93 jusqu'au bord, +1,00 → −0,97) ; « TIGNES » sous le
 #   pare-brise (−0,84), grille (−1,20) et feux ronds (±1,0 ; −1,25) en bas.
 const FACE_SCALE: float = (R_BODY + (Y_CENTER - Y_CUT)) / 3.10   # 2,93 / 3,10
-const WS_HALF_W: float = 0.82    # 1,64 m (photo 094104 : ≈ 47 % de la largeur)
-const WS_TOP_REAL: float = 1.52
-const WS_BOT_REAL: float = -0.40
+const WS_HALF_W: float = 0.76    # 1,52 m (photo 094104 : 330 px sur une face de 3,44 m ; « un peu plus petit », 2026-09-27)
+const WS_TOP_REAL: float = 1.50
+const WS_BOT_REAL: float = -0.38
 const WS_CORNER: float = 0.20
 # Portes d'évacuation d'extrémité (photo 095511) : panneaux en D JAUNES
 # PLEINS de part et d'autre du pare-brise, liseré sombre, poignée ; bord
@@ -118,7 +118,8 @@ static func materials() -> Dictionary:
 	windshield.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	windshield.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	windshield.cull_mode = BaseMaterial3D.CULL_DISABLED
-	var lamp_off: StandardMaterial3D = _mat(Color(0.12, 0.12, 0.12), 0.35, 0.2)
+	var lamp_off: StandardMaterial3D = _mat(Color(0.10, 0.10, 0.11), 0.25, 0.3)   # lentille froide
+	var buffer: StandardMaterial3D = _mat(Color(0.42, 0.44, 0.48), 0.55, 0.6)     # tampons ronds des coins
 	var lamp_on: StandardMaterial3D = _mat(Color(1.0, 0.97, 0.85), 0.2, 0.0)
 	lamp_on.emission_enabled = true
 	lamp_on.emission = Color(1.0, 0.95, 0.80)
@@ -138,6 +139,7 @@ static func materials() -> Dictionary:
 		"wheel": _mat(Color(0.22, 0.22, 0.23), 0.55, 0.70),
 		"seam": _mat(Color(0.25, 0.25, 0.26), 0.70, 0.30),
 		"lamp_off": lamp_off,
+		"buffer": buffer,
 		"lamp_on": lamp_on,
 		"tail_on": tail_on,
 		"letters": _mat(Color(0.92, 0.92, 0.94), 0.45, 0.30),
@@ -733,13 +735,25 @@ static func _disc(parent: Node3D, mat: StandardMaterial3D, r: float, thick: floa
 static func _build_cap_fittings(parent: Node3D, mats: Dictionary, z_join: float, dir_z: float,
 		is_front: bool) -> Array:
 	var lamps: Array = []
-	# feux ronds aux coins bas (réel : ±1,0 ; −1,25 → comprimé), à fleur de tôle
-	var y_lamp: float = Y_CENTER + maxf(_face_y(-1.25), Y_CUT - Y_CENTER + 0.16)
+	# tampons ronds aux coins bas (photo 094104 : deux disques gris — ce ne
+	# sont pas des feux), à fleur de tôle
+	var y_buf: float = Y_CENTER + maxf(_face_y(-1.25), Y_CUT - Y_CENTER + 0.16)
 	for sx in [-1.0, 1.0]:
-		var p: Vector3 = cap_surface_point(sx * 1.02, y_lamp, z_join, dir_z)
+		var p: Vector3 = cap_surface_point(sx * 1.02, y_buf, z_join, dir_z)
 		p.z += dir_z * 0.03
-		var lamp: MeshInstance3D = _disc(parent, mats["lamp_off"], 0.13, 0.10, p, true,
-			"Lamp%s%s" % ["F" if is_front else "R", "L" if sx < 0.0 else "R"])
+		_disc(parent, mats["buffer"], 0.13, 0.10, p, true, "Tampon")
+	# les deux PHARES halogènes : la bande sombre sous « TIGNES » (retour
+	# d'essai 2026-09-27), deux lentilles rectangulaires ; cabin.gd anime
+	# leur allumage (filament qui chauffe) et leur extinction
+	var y_head: float = Y_CENTER + maxf(_face_y(-1.20), Y_CUT - Y_CENTER + 0.12)
+	for sx in [-1.0, 1.0]:
+		var ph0: Vector3 = cap_surface_point(sx * 0.30, y_head, z_join, dir_z)
+		ph0.z += dir_z * 0.02
+		_box(parent, mats["dark"], Vector3(0.50, 0.16, 0.05), ph0, "CadrePhare")
+		var pl0: Vector3 = ph0
+		pl0.z += dir_z * 0.02
+		var lamp: MeshInstance3D = _box(parent, mats["lamp_off"], Vector3(0.44, 0.11, 0.02), pl0,
+			"Phare%s%s" % ["F" if is_front else "R", "L" if sx < 0.0 else "R"])
 		lamps.append(lamp)
 	# poignées des portes d'évacuation (petits rectangles sombres, photo)
 	for sx in [-1.0, 1.0]:
@@ -749,10 +763,6 @@ static func _build_cap_fittings(parent: Node3D, mats: Dictionary, z_join: float,
 		var ph2: Vector3 = cap_surface_point(sx * 1.22, Y_CENTER + _face_y(0.15), z_join, dir_z)
 		ph2.z += dir_z * 0.02
 		_box(parent, mats["dark"], Vector3(0.10, 0.05, 0.03), ph2, "Serrure")
-	# grille de ventilation : fente noire horizontale entre les feux
-	var pg: Vector3 = cap_surface_point(0.0, Y_CENTER + maxf(_face_y(-1.20), Y_CUT - Y_CENTER + 0.12), z_join, dir_z)
-	pg.z += dir_z * 0.02
-	_box(parent, mats["dark"], Vector3(1.10, 0.12, 0.06), pg, "Grille")
 	# lettrage « TIGNES » en lettres argentées sous le pare-brise (photos),
 	# à fleur de tôle ; Label3D regarde vers +Z par défaut → retourné à l'avant
 	var lbl: Label3D = Label3D.new()
@@ -775,6 +785,23 @@ static func _build_cap_fittings(parent: Node3D, mats: Dictionary, z_join: float,
 	var pp: Vector3 = cap_surface_point(0.0, Y_CENTER + _face_y(-0.34), z_join, dir_z)
 	pp.z += dir_z * 0.004
 	_box(parent, mats["letters"], Vector3(0.45, 0.12, 0.01), pp, "Plaque")
+	# texte de la plaque : « FUNICULAIRE / PERCE NEIGE n », n posé par
+	# cabin.set_train_number (retour d'essai 2026-09-27)
+	var pt: Label3D = Label3D.new()
+	pt.name = "PlaqueTexte"
+	pt.text = "FUNICULAIRE\nPERCE NEIGE 1"
+	pt.font_size = 40
+	pt.pixel_size = 0.0013
+	pt.line_spacing = -6.0
+	pt.modulate = Color(0.10, 0.16, 0.42)
+	pt.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	pt.shaded = false
+	pt.double_sided = false
+	var ppt: Vector3 = pp
+	ppt.z += dir_z * 0.008
+	pt.position = ppt
+	pt.rotation = Vector3(0.0, PI if dir_z < 0.0 else 0.0, 0.0)
+	parent.add_child(pt)
 	return lamps
 
 

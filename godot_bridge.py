@@ -562,6 +562,11 @@ def physics_to_state_dict(tr, st=None) -> dict:
         # rames 1 et 2 inversées entre les deux vues (retour d'essai
         # 2026-08-03).
         "rame2": bool(int(getattr(tr, "number", 1)) == 2),
+        # Remplissage : la cabine 3D affiche autant de passagers (avec
+        # skis, bâtons, surfs) — retour d'essai 2026-09-27.
+        "pax_car1": int(getattr(tr, "pax_car1", 0)),
+        "pax_car2": int(getattr(tr, "pax_car2", 0)),
+        "ghost_pax": int(getattr(st, "ghost_pax", 0)) if st is not None else 0,
     }
     # Panne courante si le sim Python l'expose
     fault = getattr(st, "active_fault", None) if st is not None else None

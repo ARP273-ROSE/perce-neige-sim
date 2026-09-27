@@ -220,8 +220,10 @@ func set_run_mode(mode: String) -> void:
 func apply_rame(rame2: bool) -> void:
 	if cabin != null:
 		cabin.passing_side = +1.0 if rame2 else -1.0
+		cabin.set_train_number(2 if rame2 else 1)
 	if cabin_ghost != null:
 		cabin_ghost.passing_side = -1.0 if rame2 else +1.0
+		cabin_ghost.set_train_number(1 if rame2 else 2)
 	# Propage le choix de rame aux représentations liées à rame 1 par défaut :
 	# le câble (quel brin suit la cabine) et le mini-profil de ligne (quelle
 	# étiquette porte le point piloté).
