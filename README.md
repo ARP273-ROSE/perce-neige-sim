@@ -14,6 +14,11 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 
 ## Quoi de neuf — v1.13.x (audit physique des voyages, 26 septembre 2026)
 
+**v1.15.19** — en vue extérieure, les deux gares redeviennent
+translucides : l'habillage de la v1.15.14 (parois, plafonds, poutres, fond
+de la gare haute) suit maintenant la paroi du tunnel (alpha 0,22, faces
+avant coupées) au lieu de cacher la rame à quai.
+
 **v1.15.18** — le bouton « ORBITE [O] » s'appelle **VUE EXT. [O]**, comme la
 vue qu'il commande (aide et README alignés).
 

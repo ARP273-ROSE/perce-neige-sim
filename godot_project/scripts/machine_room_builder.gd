@@ -134,6 +134,9 @@ func _build_hall_end() -> void:
 	beam_m.albedo_color = Color(0.09, 0.10, 0.13)
 	beam_m.roughness = 0.45
 	beam_m.metallic = 0.5
+	# vue extérieure : le fond de la gare haute suit la paroi du tunnel
+	for mm in [slab, dark, wood, ceil_m, beam_m]:
+		tunnel.extra_see_through.append(mm)
 	_add_box(Vector3(HALL_HALF_W * 2.0 + 0.6, 0.30, HALL_DEPTH), ceil_m, xform,
 		0.0, Y_HALL_CEIL + 0.15, HALL_DEPTH * 0.5, "PlafondSalle")
 	for sb in [1.4, 4.2, 7.0]:
