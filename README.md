@@ -14,6 +14,29 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 
 ## Quoi de neuf — v1.13.x (audit physique des voyages, 26 septembre 2026)
 
+**v1.15.7** — écran d'accueil refondu, passagers modélisés, phares ronds :
+- **Écran d'accueil / aide (F1)** : les conseils de conduite recouvraient
+  la fin de la colonne des raccourcis. Refonte : trois colonnes (Conduite,
+  Cabine, Système) à une ligne par touche, description repliée si besoin,
+  et les conseils dans la place qui reste — mesurée, jamais par-dessus.
+  Toutes les touches y sont (PRÊT `V`, DÉPART `Z`, inversion `I`, `Début`).
+- **Passagers et matériel modélisés** : silhouettes articulées (bottes,
+  jambes, veste, bras, gants, sac, casque, lunettes), assises sur les
+  perchoirs ou debout ; skis à spatules et fixations, bâtons à poignées et
+  rondelles, surfs aux bouts arrondis. Un shader à masques colore chaque
+  pièce différemment par instance, toujours en MultiMesh.
+- **Phares halogènes ronds** (pas rectangulaires) dans la bande sombre
+  sous « TIGNES », avec leur cerclage.
+- **Roues du système Abt** : d'un côté des roues à **double boudin** qui
+  enserrent le rail extérieur et guident la rame (côté gauche pour la rame 1
+  en regardant vers le haut, côté droit pour la rame 2), de l'autre des
+  **cylindres larges sans boudin** qui passent sur tout l'appareil de
+  l'aiguillage. Le côté suit la rame et le sens de marche.
+- **Roues sur le rail dans les changements de pente** : chaque voiture repose
+  sur ses deux bogies (corde entre les appuis) au lieu d'être posée sur la
+  tangente en son milieu — les roues décollaient sur les crêtes convexes.
+- Manuel PDF et README mis à jour (nouveautés 1.15, touches).
+
 **v1.15.6** — cabine et faces d'après les photos (retours du 27/09) :
 - **Pare-brise** ramené à 1,52 × 1,78 m (mesuré sur la photo 094104).
 - **Plancher en marches** : le bord bas de chaque palier affleure le
@@ -1382,46 +1405,57 @@ A GitHub Actions workflow (`.github/workflows/build.yml`) builds the Windows `.e
 
 ## Controls
 
+The welcome / help screen (`F1`, shown at launch) lists the same keys in
+three columns with the driving tips underneath.
+
 **Driving**
 
 | Key              | Action                                            |
 |------------------|---------------------------------------------------|
-| `↑` / `W`        | Speed command + (raise setpoint %)                |
-| `↓` / `S`        | Speed command − (lower setpoint %)                |
+| `↑` / `↓`        | Speed setpoint ± (% of 12 m/s)                    |
 | `Space` / `B`    | Service brake (hold)                              |
-| `Shift`          | Emergency brake (hold)                            |
-| `3`              | **Electric stop** — latched service stop          |
-| `4`              | **Emergency stop** — latched rail brakes          |
-| `G`              | Dead-man vigilance acknowledge                    |
+| `Shift`          | Emergency brake — rail brakes (hold)              |
+| `3`              | **Electric stop** — latched                       |
+| `4`              | **Emergency stop** — latched                      |
+| `V`              | READY — cabin ready to depart                     |
+| `Z`              | START — doors, buzzer, traction                   |
+| `I`              | Reverse direction (at standstill)                 |
+| `W`              | Vigilance on / off                                |
+| `G`              | Vigilance acknowledge                             |
 
 **Cockpit**
 
 | Key              | Action                                            |
 |------------------|---------------------------------------------------|
-| `H`              | Headlights on / off                               |
-| `C`              | Cabin lights on / off (dims the ride)             |
+| `D`              | Doors (at a stop)                                 |
+| `H`              | Headlights                                        |
+| `C`              | Cabin lights                                      |
 | `K`              | Horn (hold)                                       |
-| `D`              | Doors open / close (only at a stop)               |
-| `A`              | Autopilot toggle (programmed run)                 |
-| `X`              | Auto-exploitation on / off (full-service ambient) |
-| `Shift+X`        | 24/7 override — ignore published opening hours    |
-| `N`              | Mute / unmute on-board announcements              |
+| `A`              | Autopilot                                         |
+| `X`              | Auto-operation on / off                           |
+| `Shift+X`        | 24/7 — ignore opening hours                       |
+| `N`              | Mute / unmute                                     |
 | `Backspace`      | Abort the running announcement                    |
+| `F2`             | Announcement console                              |
+| `F4`             | Cabin view: off → drawn → 3D                      |
+| `O`              | 3D orbital view (drag, wheel)                     |
 
 **System**
 
 | Key              | Action                                            |
 |------------------|---------------------------------------------------|
-| `P`              | Pause / resume                                    |
-| `M`              | Cycle mode : Normal → Challenge → Faults          |
+| `P` / `Esc`      | Pause / resume                                    |
+| `M`              | Mode: normal / challenge / faults                 |
+| `F`              | Fault picker (faults mode)                        |
+| `R` / `Enter`    | New trip (after arrival) / start from the title   |
+| `Home`           | Back to the title screen                          |
+| `F1`             | Help screen                                       |
+| `F3`             | The real machine + links                          |
+| `F5`             | Auto-operation trip log                           |
+| `F6`             | Download PDF manual + theory guide                |
+| `+` / `−` / `0`  | Side-view zoom / reset (or mouse wheel)           |
 | `L`              | Language FR / EN                                  |
-| `F1`             | Help overlay on / off                             |
-| `F2`             | On-board announcement console (manual trigger)    |
-| `F3`             | Real machine info overlay (specs + source links)  |
-| `F5`             | Auto-exploitation trip log viewer                 |
-| `R`              | New trip (after arrival)                          |
-| `Enter`          | Start (from title screen)                         |
-| `Esc`            | Pause / menu / quit                               |
+| Help menu        | Update, bug report, about                         |
 
 ---
 

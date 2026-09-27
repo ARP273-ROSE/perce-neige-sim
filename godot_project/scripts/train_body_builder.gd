@@ -742,17 +742,20 @@ static func _build_cap_fittings(parent: Node3D, mats: Dictionary, z_join: float,
 		var p: Vector3 = cap_surface_point(sx * 1.02, y_buf, z_join, dir_z)
 		p.z += dir_z * 0.03
 		_disc(parent, mats["buffer"], 0.13, 0.10, p, true, "Tampon")
-	# les deux PHARES halogènes : la bande sombre sous « TIGNES » (retour
-	# d'essai 2026-09-27), deux lentilles rectangulaires ; cabin.gd anime
-	# leur allumage (filament qui chauffe) et leur extinction
+	# les deux PHARES halogènes, RONDS, dans la bande sombre sous « TIGNES »
+	# (retours d'essai 2026-09-27) ; cabin.gd anime leur allumage (filament
+	# qui chauffe) et leur extinction
 	var y_head: float = Y_CENTER + maxf(_face_y(-1.20), Y_CUT - Y_CENTER + 0.12)
+	var pb: Vector3 = cap_surface_point(0.0, y_head, z_join, dir_z)
+	pb.z += dir_z * 0.02
+	_box(parent, mats["dark"], Vector3(1.10, 0.17, 0.05), pb, "BandeauPhares")
 	for sx in [-1.0, 1.0]:
-		var ph0: Vector3 = cap_surface_point(sx * 0.30, y_head, z_join, dir_z)
-		ph0.z += dir_z * 0.02
-		_box(parent, mats["dark"], Vector3(0.50, 0.16, 0.05), ph0, "CadrePhare")
-		var pl0: Vector3 = ph0
-		pl0.z += dir_z * 0.02
-		var lamp: MeshInstance3D = _box(parent, mats["lamp_off"], Vector3(0.44, 0.11, 0.02), pl0,
+		var pl0: Vector3 = cap_surface_point(sx * 0.30, y_head, z_join, dir_z)
+		pl0.z += dir_z * 0.045
+		_disc(parent, mats["buffer"], 0.085, 0.02, pl0, true, "CerclagePhare")
+		var pl1: Vector3 = pl0
+		pl1.z += dir_z * 0.012
+		var lamp: MeshInstance3D = _disc(parent, mats["lamp_off"], 0.072, 0.02, pl1, true,
 			"Phare%s%s" % ["F" if is_front else "R", "L" if sx < 0.0 else "R"])
 		lamps.append(lamp)
 	# poignées des portes d'évacuation (petits rectangles sombres, photo)
@@ -817,18 +820,39 @@ static func _build_bogie(parent: Node3D, mats: Dictionary, z_c: float) -> Array:
 	for dz in [-0.85, 0.85]:
 		_box(parent, mats["dark"], Vector3(1.30, 0.07, 0.07), Vector3(0.0, y_axle, z_c + dz), "Essieu")
 		# boîtes d'essieu
-		for sx in [-0.72, 0.72]:
+		for sx in [-0.80, 0.80]:
 			_box(parent, mats["dark"], Vector3(0.14, 0.22, 0.26), Vector3(sx, y_axle + 0.02, z_c + dz), "Boite")
 		for sx in [-0.60, 0.60]:
 			var pivot: Node3D = Node3D.new()
 			pivot.name = "Roue"
 			pivot.position = Vector3(sx, y_axle, z_c + dz)
+			pivot.set_meta("sx", sx)
 			parent.add_child(pivot)
-			_disc(pivot, mats["wheel"], WHEEL_R, 0.09, Vector3.ZERO, false, "Disque")
-			var outer: float = signf(sx) * 0.055
-			_disc(pivot, mats["rib"], 0.09, 0.02, Vector3(outer, 0.0, 0.0), false, "Moyeu")
-			_box(pivot, mats["rib"], Vector3(0.015, 0.50, 0.05), Vector3(outer, 0.0, 0.0), "Barre")
-			_box(pivot, mats["rib"], Vector3(0.015, 0.05, 0.50), Vector3(outer, 0.0, 0.0), "Barre2")
+			# Système Abt (retour d'essai 2026-09-27) : d'un côté des roues à
+			# DOUBLE BOUDIN qui enserrent le rail extérieur et guident la
+			# rame ; de l'autre des CYLINDRES LARGES sans boudin qui passent
+			# sur tout l'appareil de l'aiguillage. Le côté guidé dépend de
+			# la rame (voie de gauche ou de droite dans l'évitement) et du
+			# sens de marche (la caisse est retournée) : cabin.gd montre
+			# l'une ou l'autre variante (_apply_wheel_types).
+			var guide: Node3D = Node3D.new()
+			guide.name = "Boudin"
+			pivot.add_child(guide)
+			_disc(guide, mats["wheel"], WHEEL_R, 0.10, Vector3.ZERO, false, "Bandage")
+			for fx in [-0.06, 0.06]:
+				_disc(guide, mats["wheel"], WHEEL_R + 0.03, 0.02, Vector3(fx, 0.0, 0.0), false, "Flasque")
+			var outer_g: float = signf(sx) * 0.075
+			_disc(guide, mats["rib"], 0.09, 0.02, Vector3(outer_g, 0.0, 0.0), false, "Moyeu")
+			_box(guide, mats["rib"], Vector3(0.015, 0.50, 0.05), Vector3(outer_g, 0.0, 0.0), "Barre")
+			_box(guide, mats["rib"], Vector3(0.015, 0.05, 0.50), Vector3(outer_g, 0.0, 0.0), "Barre2")
+			var flat: Node3D = Node3D.new()
+			flat.name = "Plate"
+			pivot.add_child(flat)
+			_disc(flat, mats["wheel"], WHEEL_R, 0.24, Vector3.ZERO, false, "Cylindre")
+			var outer_f: float = signf(sx) * 0.125
+			_disc(flat, mats["rib"], 0.09, 0.02, Vector3(outer_f, 0.0, 0.0), false, "Moyeu")
+			_box(flat, mats["rib"], Vector3(0.015, 0.50, 0.05), Vector3(outer_f, 0.0, 0.0), "Barre")
+			_box(flat, mats["rib"], Vector3(0.015, 0.05, 0.50), Vector3(outer_f, 0.0, 0.0), "Barre2")
 			pivots.append(pivot)
 	return pivots
 
