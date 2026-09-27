@@ -14,6 +14,16 @@ An accurate PyQt6 simulation of the *Perce-Neige* underground funicular (built 1
 
 ## Quoi de neuf — v1.13.x (audit physique des voyages, 26 septembre 2026)
 
+**v1.15.8** — R après un arrêt en tunnel repart bien d'une gare (PC) :
+- « Quand tout est cassé au milieu, R repart parfois de l'endroit où il
+  est. » Cause : l'affaissement d'embarquement (v1.13) s'ancre dès que la
+  rame est immobilisée hors voyage — donc aussi après l'arrêt sur panne
+  catastrophique en tunnel — et `new_trip()` ne le désarmait pas : le
+  premier pas de physique ramenait la rame à l'ancrage. Désarmé au nouveau
+  voyage ; test de régression `tests/test_nouveau_voyage.py`.
+- R relance un voyage neuf dès que la rame est **immobilisée** par une panne
+  catastrophique (plus besoin d'attendre la fin des annonces d'évacuation).
+
 **v1.15.7** — écran d'accueil refondu, passagers modélisés, phares ronds :
 - **Écran d'accueil / aide (F1)** : les conseils de conduite recouvraient
   la fin de la colonne des raccourcis. Refonte : trois colonnes (Conduite,
