@@ -7,6 +7,42 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.15.24** — mode Défi et son d'ambiance (PC + PWA), retours d'essai du 28/09 :
+- **Consigne 0 en fin de montée** : « je mets la consigne à 0 et il accélère
+  pour se jeter dans le butoir ». La consigne effective touchait 0 alors que
+  la rame roulait encore à ~2 m/s, et le variateur lâchait tout (ancienne
+  « roue libre à 0 » de juillet). Or depuis l'audit du 26/09, le poids du
+  câble est dans la dynamique : sans câble lest, les 3,4 km de câble du
+  contrepoids tirent ≈ 99 kN vers la gare haute. La rame réaccélérait donc
+  jusqu'au butoir. Désormais la consigne 0 est une consigne comme une autre :
+  le variateur arrête la rame et la tient, sans ramper (l'anticipation ne
+  compte plus roulement et traînée à l'arrêt). Couper trop tard finit
+  toujours au butoir : c'est le piège du Défi.
+- **Boutons + et −** « brusques et violents » : en Défi le moteur est
+  surrégimé ×1,8 mais le régulateur calculait sa commande pour le moteur
+  nominal. Au-dessus de ~8 m/s la rame dépassait la consigne de 0,9 m/s (et y
+  restait) et freinait à 1,1 m/s² au lieu de 0,7. Le régulateur voit
+  maintenant la vraie force disponible ; côté PC, le plafond de décélération
+  de confort est levé en Défi comme dans la PWA (son relâchement donnait un
+  à-coup de 48 m/s³). Mesuré : 0,31 m/s² au +, 0,73 m/s² au −, à-coups
+  ≈ 3 m/s³, plus aucun dépassement.
+- **Rupture du câble en montée** : « la voiture ralentit et s'arrête alors
+  qu'on n'a serré aucun frein ». Sur PC, la séquence d'incident prenait le
+  passage par v = 0 au sommet de la course pour un arrêt et serrait le
+  tambour de la gare haute, qui agit par le câble rompu. Désormais le tambour
+  et l'affaissement du câble sont inopérants câble rompu, la séquence attend
+  une rame vraiment tenue, et la rame redescend. Maj (parachute) l'arrête et
+  la tient ; relâcher l'urgence la laisse repartir (parité PWA).
+- **Son d'ambiance à basse vitesse (PWA)** : entre 0,1 et 0,4 m/s la PWA
+  retirait encore 22 à 35 dB à l'ambiance, alors qu'elle devait suivre la loi
+  du PC. Elle garde maintenant un plancher à −10 dB tant que le voyage est en
+  cours. Sur PC, la mesure ne montre pas de coupure (boucle lente entre 0,25
+  et 0,45, 8 à 13 dB sous la croisière, comme les enregistrements réels).
+- Tests : `tests/test_defi.py` (4), 2 tests Défi dans `tests/test_physics.py`,
+  banc `bench_defi_3d.gd` étendu (tenue à 0, fin de montée, rupture avec et
+  sans urgence, boutons + et −). Manuel 1.15.24.
+
+
 **v1.15.23** — les vantaux s'ouvrent toujours vers le BAS de la pente et se
 ferment vers le HAUT (3D, PC + PWA). Retour d'essai : « le sens d'ouverture
 n'est pas cohérent entre l'arrivée et le départ ». Les vantaux glissaient
