@@ -161,12 +161,22 @@ func _process(_delta: float) -> void:
 	# montait de 0 à 1 m/s, donc l'entrée en gare à 0,75 m/s (70 s) était
 	# déjà à −7,5 dB et le coude tombait pile sur la décélération → « le son
 	# d'ambiance se coupe vers 1 m/s ». Même loi que le PC (_ambient_gain).
+	# 2026-09-28 : « il y a toujours une coupure du son ambiant entre 0,2 et
+	# 1 m/s, c'est le silence total ». Le gate −30 dB → 0 dB entre 0,1 et
+	# 0,5 m/s ne suivait PAS la loi du PC qu'il prétendait copier : il
+	# retirait encore 22 dB à 0,2 m/s et 15 dB à 0,3 m/s. Loi du PC
+	# (_ambient_gain) : plancher d'arrêt 0,14 contre 0,45 au fluage, soit
+	# −10 dB, tant que le voyage est en cours (rame arrêtée en tunnel,
+	# départ, arrivée). À quai, hors voyage, on garde le −30 dB d'origine
+	# (sinon la boucle ronronnait à quai indéfiniment).
 	if _player_slow.playing and _player_cruise.playing:
 		var v_abs: float = absf(physics.v)
 		var blend: float = clampf(v_abs / PNConstants.V_MAX, 0.0, 1.0)
 		var gate: float = clampf((v_abs - 0.1) / 0.4, 0.0, 1.0)
-		_player_slow.volume_db = lerpf(-12.0, -40.0, blend) + lerpf(-30.0, 0.0, gate)
-		_player_cruise.volume_db = lerpf(-40.0, -8.0, blend) + lerpf(-30.0, 0.0, gate)
+		var floor_lin: float = (0.14 / 0.45) if physics.trip_started else 0.0316
+		var gate_db: float = linear_to_db(lerpf(floor_lin, 1.0, gate))
+		_player_slow.volume_db = lerpf(-12.0, -40.0, blend) + gate_db
+		_player_cruise.volume_db = lerpf(-40.0, -8.0, blend) + gate_db
 		# Pitch du moteur : CALIBRÉ (_calib_audio : 172 Hz à l'arrêt →
 		# 197 Hz à la croisière enregistrée → 202 Hz à V_MAX). La boucle
 		# est enregistrée en croisière → rate = f(v)/197 : 0,87 → 1,03.

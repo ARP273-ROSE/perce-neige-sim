@@ -435,3 +435,43 @@ def test_redemarrage_pleine_voie_franc():
         ph2.step(DT)
         t += DT
     assert st2.train.v < 0.55, f"départ de quai trop brusque : v à 3 s = {st2.train.v:.2f}"
+
+
+# ---------------------------------------------------------------------------
+# Mode Défi : consigne 0 (retour d'essai 2026-09-28)
+# ---------------------------------------------------------------------------
+def test_defi_consigne_0_fin_de_montee_sans_butoir():
+    """« Au moment de s'arrêter en haut je mets la consigne à 0 et il
+    accélère pour se jeter dans le butoir. » Rame pleine à 12 m/s, consigne
+    coupée à 150 m du repère : elle ralentit en régénérant et s'arrête, sans
+    réaccélérer — alors que les 3,4 km de câble du contrepoids tirent
+    ≈ 99 kN vers la gare haute."""
+    st, ph = _make(+1, pn.STOP_S - 150.0, 334, 0, v0=12.0, cmd=12.0 / 15.0)
+    st.run_mode = "challenge"
+    st.train.speed_cmd_eff = 12.0
+    for _ in range(60):
+        ph.step(DT)
+    st.train.speed_cmd = 0.0
+    v_min, reaccel, t = 99.0, 0.0, 0.0
+    while t < 60.0 and not st.crashed and not st.finished:
+        ph.step(DT)
+        t += DT
+        v_min = min(v_min, abs(st.train.v))
+        reaccel = max(reaccel, abs(st.train.v) - v_min)
+    assert not st.crashed, "la rame a percuté le butoir"
+    assert reaccel < 0.1, f"réaccélération de {reaccel:.2f} m/s"
+
+
+def test_defi_consigne_0_tenue_a_l_arret():
+    """À consigne 0, le variateur tient la rame immobile, près des gares
+    comme au milieu : ni dérive, ni rampement (le feed-forward de roulement
+    le faisait ramper à 5 cm/s)."""
+    for s0, pax, gpax, d in ((3200.0, 334, 0, +1), (300.0, 0, 334, -1),
+                             (1700.0, 334, 0, +1)):
+        st, ph = _make(d, s0, pax, gpax, v0=0.0, cmd=0.0)
+        st.run_mode = "challenge"
+        st.train.speed_cmd_eff = 0.0
+        for _ in range(int(60.0 / DT)):
+            ph.step(DT)
+        assert abs(st.train.s - s0) < 0.5, f"s0={s0} : dérive {st.train.s - s0:+.2f} m"
+        assert abs(st.train.v) < 0.05
