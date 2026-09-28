@@ -8,8 +8,17 @@
 #      "buffer") ;
 #   4. survitesse > +20 % → câble rompu + frein de service dégradé ;
 #   5. franchissement de l'évitement > 13,5 m/s → déraillement ;
-#   6. en Défi, consigne 0 sans frein → la rame N'EST PAS maintenue ;
+#   6. en Défi, consigne 0 → le variateur TIENT la rame (2026-09-28 : la
+#      roue libre à 0 la jetait sur le butoir en fin de montée) ;
+#   6b. rame pleine à 12 m/s, consigne coupée à 150 m du repère → elle
+#      ralentit, s'arrête sans réaccélérer et sans toucher le butoir ;
 #   7. arrêt propre au repère → score élevé ; arrêt à 3 m → score plus bas.
+#   8. rupture du câble en montée (survitesse +20 %), aucun frein : la rame
+#      s'arrête au sommet de sa course puis REDESCEND ; avec l'urgence
+#      (parachute), elle s'arrête et reste tenue (2026-09-28).
+#   9. boutons + et − à 10 m/s : la vitesse rejoint la nouvelle consigne
+#      sans la dépasser, à la rampe prévue (le régulateur calculait pour le
+#      moteur nominal alors que le Défi le surrégime ×1,8).
 extends SceneTree
 
 var _crashes: Array = []
@@ -94,14 +103,114 @@ func _initialize() -> void:
 	var derailed: bool = _crashes.size() > 0 and str(_crashes[0]["kind"]) == "derail"
 	ok = _check("deraillement Abt", derailed, "crashes=%s" % str(_crashes)) and ok
 
-	# 6. Consigne 0 sans frein en Défi : la rame n'est PAS maintenue
+	# 6. Consigne 0 en Défi : le variateur tient la rame, où qu'elle soit
+	for s_hold in [900.0, 3200.0]:
+		_crashes.clear()
+		ph = _make(true, 1, s_hold, 0.0)
+		ph.speed_cmd = 0.0
+		ph.speed_cmd_eff = 0.0
+		r = _run(ph, 60.0)
+		ok = _check("defi tenue consigne 0 (s=%.0f)" % s_hold,
+			absf(r["v"]) < 0.05 and absf(r["s"] - s_hold) < 0.5,
+			"v=%.3f derive=%.2f m apres 60 s" % [r["v"], r["s"] - s_hold]) and ok
+
+	# 6b. Rame pleine à 12 m/s, consigne coupée à 150 m du repère : elle
+	# s'arrête sans réaccélérer (le poids du câble du contrepoids tire
+	# ≈ 99 kN vers la gare haute) et sans toucher le butoir.
 	_crashes.clear()
-	ph = _make(true, 1, 900.0, 0.0)
+	ph = _make(true, 1, PNConstants.STOP_S - 150.0, 12.0)
+	ph.pax_car1 = 167
+	ph.pax_car2 = 167
+	ph.ghost_pax = 0
+	ph.speed_cmd = 12.0 / 15.0
+	for i in range(60):
+		ph.step(1.0 / 60.0)
 	ph.speed_cmd = 0.0
-	ph.speed_cmd_eff = 0.0
-	r = _run(ph, 25.0)
-	ok = _check("defi pas de maintien", absf(r["v"]) > 0.5,
-		"v=%.2f apres 25 s consigne 0" % r["v"]) and ok
+	var v_min := 99.0
+	var reaccel := 0.0
+	var t6 := 0.0
+	while t6 < 60.0 and not ph.crashed:
+		ph.step(1.0 / 60.0)
+		t6 += 1.0 / 60.0
+		v_min = minf(v_min, absf(ph.v))
+		reaccel = maxf(reaccel, absf(ph.v) - v_min)
+	ok = _check("defi consigne 0 en fin de montee", not ph.crashed and reaccel < 0.1,
+		"crash=%s reaccel=%.2f m/s reste=%.1f m" % [ph.crashed, reaccel,
+			PNConstants.STOP_S - ph.s]) and ok
+
+	# 8. Rupture du câble en montée, sans frein : la rame redescend
+	for avec_urgence in [false, true]:
+		_crashes.clear()
+		ph = _make(true, 1, 1500.0, 14.3)
+		ph.pax_car1 = 167
+		ph.pax_car2 = 167
+		ph.ghost_pax = 0
+		ph.speed_cmd = 1.0
+		ph.speed_cmd_eff = 15.0
+		var t8 := 0.0
+		var t_rupt := -1.0
+		var v_min8 := 0.0
+		var s_arret := -1.0
+		var s_fin := 0.0
+		while t8 < 45.0 and not ph.crashed:
+			ph.step(1.0 / 60.0)
+			t8 += 1.0 / 60.0
+			if ph.cable_rupture and t_rupt < 0.0:
+				t_rupt = t8
+			if t_rupt < 0.0:
+				continue
+			if avec_urgence and t8 - t_rupt > 8.0 and not ph.emergency:
+				ph.emergency = true
+			v_min8 = minf(v_min8, ph.v)
+			if avec_urgence and s_arret < 0.0 and t8 - t_rupt > 9.0 and absf(ph.v) < 0.01:
+				s_arret = ph.s
+			s_fin = ph.s
+		if not avec_urgence:
+			ok = _check("defi rupture en montee : la rame redescend",
+				t_rupt > 0.0 and v_min8 < -5.0,
+				"rupture a %.1f s, v mini %.1f m/s" % [t_rupt, v_min8]) and ok
+		else:
+			ok = _check("defi rupture + urgence : arretee et tenue",
+				s_arret > 0.0 and absf(s_fin - s_arret) < 0.3 and absf(ph.v) < 0.05,
+				"arret a s=%.1f, fin s=%.1f v=%.3f" % [s_arret, s_fin, ph.v]) and ok
+			# Urgence relâchée câble rompu : le tambour ne tient rien, la
+			# rame repart vers l'aval.
+			ph.emergency = false
+			var s_lache := ph.s
+			for i in range(int(10.0 * 60.0)):
+				ph.step(1.0 / 60.0)
+			ok = _check("defi rupture, urgence relachee : la rame repart",
+				ph.s < s_lache - 5.0,
+				"s %.1f -> %.1f, v=%.1f m/s, tambour=%s" % [s_lache, ph.s, ph.v, ph.maint_brake]) and ok
+
+	# 9. Boutons + et − en Défi depuis 10 m/s (appui de 0,4 s)
+	for pas in [0.35, -0.35]:
+		ph = _make(true, 1, 1000.0, 10.0)
+		ph.pax_car1 = 167
+		ph.pax_car2 = 167
+		ph.ghost_pax = 0
+		ph.speed_cmd = 10.0 / 15.0
+		ph.speed_cmd_eff = 10.0
+		for i in range(int(15.0 * 60.0)):
+			ph.step(1.0 / 60.0)
+		var v_prev9 := ph.v
+		var a_pk9 := 0.0
+		var v_hi9 := ph.v
+		var v_lo9 := ph.v
+		for i in range(int(25.0 * 60.0)):
+			if i < int(0.4 * 60.0):
+				ph.speed_cmd = clampf(ph.speed_cmd + pas / 60.0, 0.0, 1.0)
+			ph.step(1.0 / 60.0)
+			a_pk9 = maxf(a_pk9, absf(ph.v - v_prev9) * 60.0)
+			v_prev9 = ph.v
+			v_hi9 = maxf(v_hi9, ph.v)
+			v_lo9 = minf(v_lo9, ph.v)
+		var cible9: float = ph.speed_cmd * 15.0
+		var depasse: float = (v_hi9 - cible9) if pas > 0.0 else (cible9 - v_lo9)
+		ok = _check("defi bouton %s : suit la consigne sans a-coup" % ("+" if pas > 0.0 else "-"),
+			depasse < 0.15 and a_pk9 < (0.45 if pas > 0.0 else 0.85) and absf(ph.v - cible9) < 0.1,
+			"cible %.2f, fin %.2f, depassement %+.2f m/s, |a| pic %.2f m/s2"
+			% [cible9, ph.v, depasse, a_pk9]) and ok
 
 	# 7. Notation : le score chute avec l'écart au repère
 	var s_perfect := _score(0.05, 0.0, false, false, false)

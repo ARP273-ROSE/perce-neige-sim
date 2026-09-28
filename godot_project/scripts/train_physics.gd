@@ -544,6 +544,15 @@ func step(dt: float) -> void:
 			and (_reg_hold or emergency or brake > 0.5):
 		v = 0.0
 		acc = 0.0
+	# Câble rompu : plus de tambour pour prendre le relais à l'arrêt, c'est
+	# le parachute qui tient la rame — frein à friction = tenue STATIQUE dès
+	# que sa force dépasse la charge (3,6 m/s² contre g·sinθ ≤ 2,8 m/s²).
+	# Sans ça la zone morte de f_brake (|v| ≤ 5 cm/s) la laissait glisser
+	# (parité PC 2026-09-28).
+	elif cable_rupture and emergency_ramp > 0.0 and absf(v) < 0.1 \
+			and a_brk * m_eff >= absf(net - f_brake):
+		v = 0.0
+		acc = 0.0
 
 	# Auto-park (chaîne de sécurité Von Roll, comme le PC) : train
 	# immobilisé sous frein d'urgence → le tambour se réengage seul pour
@@ -657,7 +666,12 @@ func step(dt: float) -> void:
 	# le tambour tient rigoureusement v = 0 une fois posé.
 	# (portes ouvertes : en Défi, une fois le voyage lancé, elles ne
 	# clouent plus la rame au sol — le départ sauvage est autorisé.)
-	if maint_brake or (doors_open and not chaos_doors_ok) or emergency_brake:
+	# CÂBLE ROMPU : le tambour serre la poulie motrice en gare haute, il n'a
+	# plus aucun lien avec la rame — seuls ses freins embarqués (parachute,
+	# frein de service dégradé) la tiennent. Sinon une rame dont on relâche
+	# l'urgence restait clouée au lieu de redescendre (parité PC 2026-09-28).
+	if ((maint_brake or (doors_open and not chaos_doors_ok)) and not cable_rupture) \
+			or emergency_brake:
 		v = move_toward(v, 0.0, 1.2 * dt)
 		acc = 0.0
 
@@ -974,20 +988,30 @@ func _regulator(
 	# (m·0,30 − excédent), la puissance CREUSE sans jamais claquer à 0.
 	var err: float = target_v - v_travel
 	var v_eff: float = maxf(absf(v), 0.8)
-	var f_motor_max: float = minf(PNConstants.F_STALL, PNConstants.P_MAX / v_eff)
+	# Enveloppe de force vue par le régulateur = celle de la physique : en
+	# Défi le moteur est surrégimé (×1,8). Calculée pour le moteur nominal,
+	# la commande produisait 1,8 fois la force voulue au-dessus de ~8 m/s →
+	# dépassement de consigne au bouton + et freinage trop sec au bouton −
+	# (retour d'essai 2026-09-28, parité PC).
+	var p_reg: float = PNConstants.P_MAX * (CHAOS_MOTOR_OVERDRIVE if challenge_mode else 1.0)
+	var f_motor_max: float = minf(PNConstants.F_STALL, p_reg / v_eff)
 
 	var f_ff: float = -f_grav_travel + PNConstants.MU_ROLL * PNConstants.G \
 		* (m_up * cos(theta) + _m_down * cos(theta_gr)) \
 		+ rope_rollers_n() + aero_drag_n(s, target_v)
+	# Tenue à l'arrêt (consigne 0, rame quasi arrêtée) : roulement, galets
+	# et traînée s'opposent au MOUVEMENT, ils ne poussent pas une rame
+	# immobile — les compter faisait ramper le variateur (parité PC).
+	if target_v < 0.01 and v_travel < 0.4:
+		f_ff = -f_grav_travel
 
 	var demand_throttle: float
 	var demand_brake: float
 	var demand_regen: float = 0.0
-	# Mode DÉFI : à consigne 0, le régulateur NE MAINTIENT PAS la rame tout
-	# seul. Sans traction ni frein serré, elle reste LIBRE → elle dérive
-	# sous la gravité dans le sens de la rame la plus lourde. C'est le rôle
-	# du frein manuel / du tambour. Réduire la consigne (> 0) freine
-	# toujours par la retenue de l'entraînement (branche else).
+	# Mode DÉFI : pas d'enveloppe d'approche ni de rampement, mais la
+	# consigne reste une CONSIGNE DE VITESSE pour le variateur 4 quadrants,
+	# 0 compris : il freine en génératrice et tient la rame. Seul le
+	# maintien au FROTTEMENT (_reg_hold, frein à 0,5) est levé.
 	# PRÉ-TENSION (2026-09-26) : couple statique posé avant que le tambour
 	# ne lâche (sinon recul de 2 cm au décollage en pente).
 	if trip_started and not _pretensioned:
@@ -1009,12 +1033,13 @@ func _regulator(
 	elif _reg_hold:
 		demand_throttle = 0.0
 		demand_brake = 0.5
-	elif chaos_hold and target_v < 0.01:
-		# Consigne à 0 en Défi : moteur coupé, AUCUN frein automatique —
-		# la rame est laissée à la gravité (le conducteur gère le frein).
-		demand_throttle = 0.0
-		demand_brake = 0.0
 	else:
+		# Consigne 0 en Défi (2026-09-28, parité PC) : le variateur suit la
+		# consigne jusqu'à 0 et TIENT la vitesse nulle — il ne lâche plus la
+		# rame. L'ancienne roue libre à 0 datait d'avant le poids du câble
+		# dans la dynamique : en fin de montée, les 3,4 km de câble du
+		# contrepoids tirent ≈ 99 kN vers la gare haute → la rame
+		# réaccélérait jusqu'au butoir (« au bout il réaccélère et boum »).
 		var k_a: float = 0.35   # m/s² de correction par m/s d'erreur
 		# Borne haute = rampe programmée (confort moteur) ; borne basse =
 		# frein service plein (−2,5) : le régulateur doit pouvoir

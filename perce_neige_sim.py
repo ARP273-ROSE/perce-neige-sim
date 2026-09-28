@@ -1248,7 +1248,10 @@ class Physics:
             # Ceinture + bretelles : rame immobile hors séquence de départ
             # et hors urgence → le tambour se réengage automatiquement
             # (réel : le drum ne se lève qu'au collage du contacteur).
-            if not tr.emergency and abs(tr.v) < 0.05 and not tr.maint_brake:
+            # (Câble rompu : le tambour est sur la poulie motrice, il ne
+            # retient plus rien — on ne le serre pas pour la forme.)
+            if (not tr.emergency and abs(tr.v) < 0.05 and not tr.maint_brake
+                    and not tr.cable_rupture):
                 tr.maint_brake = True
 
         # Auxiliary 400 V power failure : main drive contactor drops out.
@@ -1425,7 +1428,10 @@ class Physics:
                 a = soft_cap
             # Cap en décélération — seulement hors retenue commandée :
             # un arrêt voulu (frein ou régén plein) doit freiner ferme.
-            elif a < -soft_cap and not braking_cmd:
+            # Levé en Défi, comme dans la PWA : son relâchement en UNE
+            # image quand la régénération passait 5 % donnait un à-coup
+            # de 42 à 48 m/s³ au bouton − en montée chargée.
+            elif a < -soft_cap and not braking_cmd and not chaos_accel:
                 a = -soft_cap
 
         # Final creep kill : ONLY snap below 3 cm/s to avoid the visible
@@ -1439,6 +1445,16 @@ class Physics:
         # frame → jamais parti (inversion en descente, 2026-07-13).
         if (a_brk > 0 and abs(tr.v) < 0.03
                 and (self._reg_hold or tr.emergency or tr.brake > 0.5)):
+            tr.v = 0.0
+            a = 0.0
+        # Câble rompu : plus de tambour pour prendre le relais à l'arrêt,
+        # c'est le parachute qui tient la rame. Frein à friction = tenue
+        # STATIQUE dès que sa force dépasse la charge (3,6 m/s² contre
+        # g·sinθ ≤ 2,8 m/s² à 30 %). Sans ça, la zone morte de f_brake
+        # (|v| ≤ 5 cm/s) laissait la rame glisser à 8 cm/s indéfiniment.
+        elif (tr.cable_rupture and tr.parachute_engaged
+                and tr.emergency_ramp > 0.0 and abs(tr.v) < 0.1
+                and a_brk * m_total >= abs(net - f_brake)):
             tr.v = 0.0
             a = 0.0
 
@@ -1600,7 +1616,15 @@ class Physics:
         # It releases automatically the instant trip_started flips True
         # (motors take the load) OR when the driver clears the emergency
         # brake while the train is stationary.
-        parked = tr.maint_brake or tr.doors_open
+        # CÂBLE ROMPU : le tambour serre la poulie motrice en gare haute,
+        # il n'a plus aucun lien avec la rame. Seuls ses freins EMBARQUÉS
+        # (parachute sur rail, frein de service dégradé) peuvent la tenir.
+        # Sans cette exception, une rame qui montait au moment de la
+        # rupture s'arrêtait au sommet de sa course et y restait clouée
+        # (retour d'essai 2026-09-28, Défi : « elle ralentit et s'arrête
+        # alors qu'on n'a serré aucun frein, elle devrait repartir dans
+        # l'autre sens »).
+        parked = (tr.maint_brake or tr.doors_open) and not tr.cable_rupture
         if parked:
             # Serrage PROGRESSIF du résiduel (≤ 8 cm/s au grab d'arrivée) :
             # v décroît à 1,2 m/s² au lieu d'être coupée net — la gravité
@@ -1622,7 +1646,9 @@ class Physics:
         # PERSISTE jusqu'au départ. Le contrepoids fait de même dans SA
         # gare (le sien n'est visible qu'en bas). En marche, l'écart au
         # miroir se résorbe lentement (0,08 m/s, imperceptible).
-        if not st.trip_started and (tr.maint_brake or tr.doors_open):
+        if (not st.trip_started and (tr.maint_brake or tr.doors_open)
+                and not tr.cable_rupture):
+            # (câble rompu : plus de brin élastique, plus d'ancrage)
             if st.sag_ref_m_main < 0.0:
                 st.sag_ref_m_main = m_up
                 st.sag_ref_m_ghost = m_down
@@ -2381,7 +2407,17 @@ class Physics:
         err = target_v - v_travel
         slew = 1.5 * dt          # up to 150 %/s throttle rate of change
         v_eff = max(abs(tr.v), 0.8)
-        f_motor_max = min(F_STALL, P_MAX / v_eff)
+        # Enveloppe de force VUE PAR LE RÉGULATEUR = celle de la physique.
+        # En Défi le moteur est surrégimé (×1,8) : le régulateur calculait
+        # sa commande pour le moteur nominal, recevait 1,8 fois la force
+        # demandée au-dessus de ~8 m/s (zone limitée en puissance), et la
+        # rame dépassait la consigne de 0,9 m/s au bouton + (sans jamais y
+        # revenir) et freinait à 1,1 m/s² au lieu de 0,7 au bouton −
+        # (retour d'essai 2026-09-28 : « les variations de vitesse aux
+        # boutons + et − sont brusques et violentes »).
+        p_reg = P_MAX * (CHAOS_MOTOR_OVERDRIVE
+                         if self.state.run_mode == "challenge" else 1.0)
+        f_motor_max = min(F_STALL, p_reg / v_eff)
 
         # Feed-forward : force along TRAVEL direction required to hold
         # the train at target_v. Positive → motor must pull ; negative
@@ -2391,19 +2427,17 @@ class Physics:
                                  + m_ghost_r * math.cos(theta_gr))
                 + ROPE_ROLLERS_N
                 + aero_drag_n(tr.s, target_v))
+        # Tenue à l'arrêt (consigne 0, rame quasi arrêtée) : roulement,
+        # galets et traînée s'opposent au MOUVEMENT, ils ne poussent pas une
+        # rame immobile. Les compter faisait ramper le variateur à 5 cm/s
+        # en Défi (équilibre P/feed-forward). Seule la gravité est à tenir.
+        if target_v < 0.01 and v_travel < 0.4:
+            f_ff = -f_grav_travel
 
-        # Mode DÉFI : à consigne 0, le régulateur NE MAINTIENT PAS la rame
-        # tout seul. Sans traction ni frein serré, la rame RESTE LIBRE →
-        # elle dérive sous la gravité dans le sens de la rame LA PLUS
-        # LOURDE, sans limite de vitesse (retours d'essai : « si je lâche
-        # les freins, sans traction, ça doit partir dans le sens de la
-        # rame la plus lourde »). C'est le rôle du frein manuel (Espace) /
-        # du tambour. Le déséquilibre gravitaire est nul près de
-        # l'évitement (la rame « s'arrête » au milieu) et MAXIMAL près des
-        # terminus (la rame dévale à l'arrivée) — physique attendue.
-        # RÉDUIRE la consigne (>0) freine TOUJOURS par la retenue de
-        # l'entraînement (branche else) : c'est le lâcher COMPLET (0) sans
-        # frein qui laisse la gravité reprendre la main.
+        # Mode DÉFI : pas d'enveloppe d'approche ni de rampement, mais la
+        # consigne reste une CONSIGNE DE VITESSE pour le variateur 4
+        # quadrants, 0 compris : il freine en génératrice et tient la rame.
+        # Seul le maintien au FROTTEMENT (_reg_hold, frein à 0,5) est levé.
         # PRÉ-TENSION (2026-09-26) : le drive pose le couple statique AVANT
         # que le tambour ne lâche — sans ça, le throttle partait de zéro à
         # 1,5/s et la rame reculait de 2 cm au décollage en pente.
@@ -2430,12 +2464,19 @@ class Physics:
             # transition). No regen at standstill.
             demand_throttle = 0.0
             demand_brake = 0.5
-        elif chaos_hold and target_v < 0.01:
-            # Consigne à 0 en Défi : moteur coupé, AUCUN frein auto — la
-            # rame est laissée à la gravité (le conducteur gère le frein).
-            demand_throttle = 0.0
-            demand_brake = 0.0
         else:
+            # Consigne 0 en Défi (2026-09-28) : le variateur SUIT la
+            # consigne jusqu'à 0 et TIENT la vitesse nulle, comme toute
+            # consigne — il ne lâche plus la rame. L'ancienne roue libre
+            # à 0 (« dérive vers la rame la plus lourde », juillet) datait
+            # d'avant le poids du câble dans la dynamique : en fin de
+            # montée, les 3,4 km de câble du contrepoids tirent ≈ 99 kN
+            # vers la gare haute, si bien que la consigne effective
+            # touchait 0 à ~2 m/s et que la rame RÉACCÉLÉRAIT jusqu'au
+            # butoir (retour d'essai : « dans le tunnel il ralentit en
+            # régénérant et s'arrête, au bout il réaccélère et boum »).
+            # Le Défi garde ses vrais pièges : pas d'enveloppe ni de
+            # rampement, rampe de 0,7 m/s² à anticiper, survitesse à fond.
             # Contrôleur unifié en FORCE (2026-07-13) :
             #   a_des = accélération désirée (erreur de vitesse bornée
             #           par la rampe programmée ±A_TARGET)
@@ -6230,7 +6271,14 @@ class GameWidget(QWidget):
         #    the trip and queue the "tech incident" PA. Drum brake on so
         #    nothing drifts under gravity while the announcement plays.
         if st.fault_phase == "active":
-            if abs(tr.v) < 0.1 and st.fault_phase_timer > 1.5:
+            # Câble rompu : « arrêtée » veut dire TENUE par ses freins
+            # embarqués (parachute / urgence). Une rame qui montait passe
+            # par v = 0 une fraction de seconde au sommet de sa course
+            # avant de redescendre : ce n'est pas un arrêt (en Défi,
+            # l'urgence n'est pas serrée d'office à la rupture).
+            tenue = (not tr.cable_rupture or tr.emergency
+                     or tr.emergency_ramp > 0.0)
+            if abs(tr.v) < 0.1 and st.fault_phase_timer > 1.5 and tenue:
                 st.trip_started = False
                 tr.maint_brake = True
                 tr.ready = False
