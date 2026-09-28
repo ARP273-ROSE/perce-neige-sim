@@ -4071,6 +4071,10 @@ class SoundSystem:
             self._amb2_playing = False
             self._amb_vol_target = 0.0
             self._amb2_vol_target = 0.0
+            # Chien de garde des boucles (2026-09-28) : relances comptées,
+            # remontées dans le diagnostic son.
+            self._wd_acc = 0.0
+            self._wd_relances: dict[str, int] = {}
             self._amb_loaded_path: str | None = None
             self._amb2_loaded_path: str | None = None
             self._fx_loaded_path: str | None = None
@@ -4617,6 +4621,33 @@ class SoundSystem:
                 self._amb2_player.play()
                 self._amb2_playing = True
 
+        # Chien de garde (2026-09-28) : les drapeaux _amb_playing /
+        # _amb2_playing disaient « ça joue » sans jamais le vérifier auprès
+        # de Qt. Si Windows coupe les voix (changement ou réveil du
+        # périphérique audio, session réinitialisée…), la boucle de
+        # croisière se répare au prochain arrêt (elle est stoppée sous
+        # 0,2 m/s puis relancée), mais la boucle LENTE n'est jamais
+        # relancée : il ne reste sous 1 m/s que le sifflement moteur, très
+        # discret — « à la décélération, sous 1 m/s, aucun son d'ambiance »
+        # (retour d'essai 2026-09-28, PC seulement, non reproduit sous
+        # Linux). Le sifflement moteur, lui, vérifie déjà isPlaying().
+        self._wd_acc = getattr(self, "_wd_acc", 0.0) + dt
+        if self._wd_acc >= 0.5:
+            self._wd_acc = 0.0
+            for player, attr, nom in (
+                    (self._amb_player, "_amb_playing", "lente"),
+                    (self._amb2_player, "_amb2_playing", "croisiere")):
+                try:
+                    if (getattr(self, attr) and not player.isPlaying()
+                            and player.status() == QSoundEffect.Status.Ready):
+                        player.play()
+                        rel = getattr(self, "_wd_relances", {})
+                        rel[nom] = rel.get(nom, 0) + 1
+                        self._wd_relances = rel
+                        self._diag_boucle_relancee = True
+                except Exception:
+                    pass
+
         # Smooth volume ramps — QSoundEffect.volume() est linéaire 0..1.
         # À l'arrêt (targets → 0), on laisse le fondu finir PUIS on stoppe :
         # l'ancien stop() immédiat coupait la boucle en pleine amplitude
@@ -4690,6 +4721,68 @@ class SoundSystem:
                     fx.stop()
             except Exception:
                 pass
+
+    @staticmethod
+    def _etat_fx(fx) -> dict:
+        """État RÉEL d'un QSoundEffect, tel que Qt le voit."""
+        try:
+            return {"joue": bool(fx.isPlaying()),
+                    "statut": str(fx.status()).split(".")[-1],
+                    "volume": round(float(fx.volume()), 4),
+                    "muet": bool(fx.isMuted()),
+                    "boucles": int(fx.loopsRemaining()),
+                    "source": Path(fx.source().toLocalFile()).name}
+        except Exception as e:  # noqa: BLE001
+            return {"erreur": str(e)[:200]}
+
+    def diagnostic(self, v: float = 0.0) -> dict:
+        """Relevé de l'état du système son pour le rapport « diagnostic_son »
+        (2026-09-28) : ce que le code CROIT (drapeaux, cibles, ducks) face à
+        ce que Qt FAIT (lecture, statut, volume de chaque lecteur)."""
+        d: dict = {"v": round(float(v), 3), "actif": bool(self.enabled),
+                   "muet": bool(getattr(self, "muted", False))}
+        if not self.enabled:
+            return d
+        try:
+            from PyQt6.QtCore import PYQT_VERSION_STR, QT_VERSION_STR
+            d["qt"] = QT_VERSION_STR
+            d["pyqt"] = PYQT_VERSION_STR
+        except Exception:
+            pass
+        try:
+            from PyQt6.QtMultimedia import QMediaDevices
+            d["sortie_audio"] = QMediaDevices.defaultAudioOutput().description()
+        except Exception:
+            pass
+        d["drapeaux"] = {"lente": bool(self._amb_playing),
+                         "croisiere": bool(self._amb2_playing)}
+        d["cibles"] = {"lente": round(self._amb_vol_target, 4),
+                       "croisiere": round(self._amb2_vol_target, 4),
+                       "quai": round(getattr(self, "_station_target", 0.0), 4)}
+        d["gain_ambiance"] = round(_ambient_gain(v, self._amb_playing
+                                                 or self._amb2_playing), 4)
+        d["ducks"] = {"klaxon": bool(getattr(self, "_ducked", False)),
+                      "annonce": bool(self.is_announcing()),
+                      "clip_reel": round(getattr(self, "_fx_duck_level", 0.0), 3),
+                      "croisement": round(getattr(self, "_crossing_level", 0.0), 3)}
+        d["boucle_lente"] = self._etat_fx(self._amb_player)
+        d["boucle_croisiere"] = self._etat_fx(self._amb2_player)
+        d["quai"] = self._etat_fx(self._station_player)
+        d["moteur"] = [self._etat_fx(fx) for fx in getattr(self, "_motor_fx", [])]
+        d["relances"] = dict(getattr(self, "_wd_relances", {}))
+        for nom in ("_player", "_fx_player"):
+            pl = getattr(self, nom, None)
+            try:
+                d[nom.strip("_")] = {
+                    "etat": str(pl.playbackState()).split(".")[-1],
+                    "source": Path(pl.source().toLocalFile()).name,
+                    "position_ms": int(pl.position())}
+            except Exception:
+                pass
+        slow = self._ambient_wavs.get("ambient_slow")
+        d["fichier_lente"] = {"nom": getattr(slow, "name", None),
+                              "existe": bool(slow and slow.exists())}
+        return d
 
     def set_station_ambient(self, which: str | None) -> None:
         """Ambiance de quai enregistrée (station basse/haute), jouée en
@@ -6714,6 +6807,7 @@ class GameWidget(QWidget):
         # Ambient motor/rumble: fades with speed (dt → rampes indépendantes
         # du framerate)
         self.sounds.update_ambient(st.train.v, dt)
+        self._diagnostic_son_tick(dt)
         # Ambiance de quai réelle : dès que la rame est À L'ARRÊT à une
         # station (portes ouvertes OU non). Avant, la condition exigeait
         # doors_open → à l'ARRIVÉE (portes encore fermées) c'était le
@@ -7333,6 +7427,50 @@ class GameWidget(QWidget):
     def _open_docs_download(self) -> None:
         dlg = DocsDownloadDialog(self.state.lang, self)
         dlg.exec()
+
+    def _diagnostic_son_tick(self, dt: float) -> None:
+        """Diagnostic son (2026-09-28) : au premier passage sous 1 m/s en
+        décélération pendant un voyage, deux relevés de l'état réel des
+        lecteurs (au passage, puis 2 s plus tard) partent au point de
+        collecte, une fois par session — et aussitôt si le chien de garde a
+        dû relancer une boucle coupée. Sert à comprendre, sur le PC de
+        l'utilisateur, le silence d'ambiance non reproductible ailleurs."""
+        snd = self.sounds
+        if not getattr(snd, "enabled", False):
+            return
+        st = self.state
+        v_abs = abs(st.train.v)
+        v_prev = getattr(self, "_diag_v_prev", 0.0)
+        self._diag_v_prev = v_abs
+        envoye = getattr(self, "_diag_son_envoye", set())
+        self._diag_son_envoye = envoye
+        if (getattr(snd, "_diag_boucle_relancee", False)
+                and "relance" not in envoye):
+            envoye.add("relance")
+            self._envoyer_diag_son("boucle_relancee", [snd.diagnostic(v_abs)])
+        if ("decel" not in envoye and st.trip_started and not st.finished
+                and v_prev >= 1.0 and v_abs < 1.0
+                and getattr(self, "_diag_t", 0.0) <= 0.0):
+            self._diag_releves = [snd.diagnostic(v_abs)]
+            self._diag_t = 2.0
+        if getattr(self, "_diag_t", 0.0) > 0.0:
+            self._diag_t -= dt
+            if self._diag_t <= 0.0:
+                envoye.add("decel")
+                self._envoyer_diag_son(
+                    "deceleration_sous_1_ms",
+                    getattr(self, "_diag_releves", []) + [snd.diagnostic(v_abs)])
+
+    def _envoyer_diag_son(self, motif: str, releves: list) -> None:
+        try:
+            import reporting
+            reporting.envoyer("diagnostic_son", motif=motif,
+                              mode=str(self.state.run_mode),
+                              vue_3d=bool(getattr(self, "_godot_embedded", False)
+                                          or getattr(self, "_godot_bridge", None) is not None),
+                              releves=releves)
+        except Exception:
+            pass
 
     def keyPressEvent(self, ev: QKeyEvent) -> None:  # noqa: N802
         st = self.state

@@ -7,6 +7,25 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.15.25** — son d'ambiance PC : chien de garde et diagnostic.
+- Retour d'essai : « à la décélération, sous 1 m/s, aucun son d'ambiance,
+  c'est net sur le PC ». Non reproduit sous Linux : joué sur un vrai serveur
+  son et enregistré, le simulateur garde −12 à −28 dBFS pendant toute
+  l'arrivée. Qt 6.11 mélange pourtant les sons de la même façon sous Windows.
+- Fragilité trouvée : les deux boucles d'ambiance se fiaient à un drapeau
+  « ça joue » jamais vérifié auprès de Qt. Si Windows coupe une voix
+  (changement ou réveil du périphérique audio, session réinitialisée), la
+  boucle de croisière est relancée au prochain arrêt, mais la boucle lente,
+  seule à jouer sous 1 m/s, ne l'était jamais. Un chien de garde vérifie
+  toutes les 0,5 s et relance une boucle coupée (le sifflement moteur le
+  faisait déjà).
+- Diagnostic : au premier passage sous 1 m/s en décélération, deux relevés
+  de l'état réel de chaque lecteur (lecture, statut, volume, ducks, version
+  de Qt, sortie audio) partent au point de collecte du NAS, une fois par
+  session, et aussitôt si une boucle a dû être relancée. Genre
+  `diagnostic_son` ajouté au collecteur.
+- Tests : `tests/test_son.py` (3).
+
 **v1.15.24** — mode Défi et son d'ambiance (PC + PWA), retours d'essai du 28/09 :
 - **Consigne 0 en fin de montée** : « je mets la consigne à 0 et il accélère
   pour se jeter dans le butoir ». La consigne effective touchait 0 alors que
