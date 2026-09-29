@@ -115,8 +115,9 @@ func _make_materials() -> void:
 	_mat("carrelage", Color(0.88, 0.89, 0.88), 0.35, 0.0, true)   # murs carrelés blancs
 	_mat("sol", Color(0.20, 0.22, 0.27), 0.8, 0.1, true)
 	_mat("plafond_salle", Color(0.55, 0.56, 0.57), 0.9, 0.0, true)
-	_mat("jaune", Color(0.95, 0.78, 0.08), 0.45, 0.25)           # roues, réducteurs
-	_mat("garniture", Color(0.62, 0.12, 0.08), 0.7, 0.0)         # gorges garnies de rouge
+	_mat("jaune", Color(0.95, 0.78, 0.08), 0.45, 0.25)           # voiles, réducteurs
+	_mat("jante", Color(0.74, 0.13, 0.09), 0.5, 0.2)             # jante rouge (photos 2011)
+	_mat("garniture", Color(0.45, 0.08, 0.06), 0.8, 0.0)         # fond des gorges
 	_mat("acier", Color(0.42, 0.44, 0.47), 0.35, 0.85)
 	_mat("sombre", Color(0.07, 0.07, 0.08), 0.8, 0.2)
 	_mat("vert", Color(0.10, 0.52, 0.28), 0.55, 0.3)             # bâti des freins
@@ -254,6 +255,21 @@ func _wheel_x_range(grooves: Array) -> Vector2:
 	return Vector2(x0 - 0.10, x1 + 0.10)
 
 
+## Roue d'entraînement, d'après les photos de la visite du 20/06/2011
+## (forum remontees-mecaniques.net, « Une poulie », « Une des deux poulies
+## motrices », « Les freins de poulie ») : JANTE ROUGE épaisse, voile JAUNE
+## évidé d'une couronne de douze ouvertures en pétales arrondis — étroites
+## au moyeu, larges côté jante, séparées par des bras droits —, piste de
+## frein en acier sombre juste sous la jante, moyeu d'acier boulonné.
+const WEB_T: float = 0.10            # épaisseur du voile
+const RIM_IN: float = R - 0.30       # intérieur de la jante rouge
+const N_OPEN: int = 12               # ouvertures du voile
+const OPEN_R1: float = 0.40          # extrémité intérieure (× RIM_IN)
+const OPEN_R2: float = 0.86          # extrémité extérieure (× RIM_IN)
+const SPOKE_W: float = 0.28          # largeur des bras entre ouvertures
+const OPEN_FILLET: float = 0.14      # rayon des arrondis
+
+
 func _build_wheel(s_c: float, y_c: float, grooves: Array, nom: String) -> Node3D:
 	var xr: Vector2 = _wheel_x_range(grooves)
 	var x_c: float = (xr.x + xr.y) * 0.5
@@ -261,33 +277,127 @@ func _build_wheel(s_c: float, y_c: float, grooves: Array, nom: String) -> Node3D
 	spin.name = nom
 	add_child(spin)
 	_place(spin, x_c, y_c, s_c)
-	var jaune: StandardMaterial3D = _mats["jaune"]
-	# jante : couronne pleine sous les gorges (garniture rouge)
-	_ring(spin, R - 0.16, R - R_CABLE, xr.x - x_c, xr.y - x_c, _mats["garniture"])
-	# joues : de part et d'autre, et entre les gorges
+	var jante: StandardMaterial3D = _mats["jante"]
+	# jante rouge pleine sous les gorges, fond des gorges plus sombre
+	_ring(spin, RIM_IN, R - R_CABLE - 0.01, xr.x - x_c, xr.y - x_c, jante)
+	_ring(spin, R - R_CABLE - 0.01, R - R_CABLE, xr.x - x_c, xr.y - x_c, _mats["garniture"])
+	# joues rouges : de part et d'autre, et entre les gorges
 	var joues: Array = [xr.x, xr.y]
 	for i in range(grooves.size() - 1):
 		joues.append((float(grooves[i]) + float(grooves[i + 1])) * 0.5)
 	for xj in joues:
-		_ring(spin, R - 0.18, RF, float(xj) - x_c - 0.018, float(xj) - x_c + 0.018, jaune)
-	# voile plein, jaune (photo « Freins sur la poulie motrice »)
-	_disc(spin, R - 0.15, 0.10, 0.0, jaune)
-	# piste de frein côté +x : couronne d'acier
-	_ring(spin, R - 0.55, R - 0.30, xr.y - x_c, xr.y - x_c + 0.05, _mats["acier"])
+		_ring(spin, RIM_IN, RF, float(xj) - x_c - 0.018, float(xj) - x_c + 0.018, jante)
+	# voile jaune évidé
+	var web: MeshInstance3D = MeshInstance3D.new()
+	web.name = "Voile"
+	web.mesh = _web_mesh(0.40, RIM_IN + 0.02, WEB_T, _mats["jaune"])
+	web.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	spin.add_child(web)
+	# piste de frein côté +x, juste sous la jante (photo « Les freins de poulie »)
+	_ring(spin, RIM_IN - 0.14, RIM_IN, xr.y - x_c - 0.02, xr.y - x_c + 0.03, _mats["acier"])
 	# moyeu et bossages
 	_disc(spin, 0.42, 0.62, 0.0, _mats["acier"])
-	for i in range(6):
-		var a: float = float(i) / 6.0 * TAU
-		var bos: MeshInstance3D = _cyl_x(0.05, 0.66, _mats["sombre"])
-		bos.position = Vector3(0.0, cos(a) * 0.30, sin(a) * 0.30)
+	for i in range(8):
+		var a: float = float(i) / 8.0 * TAU
+		var bos: MeshInstance3D = _cyl_x(0.045, 0.66, _mats["sombre"])
+		bos.position = Vector3(0.0, cos(a) * 0.31, sin(a) * 0.31)
 		spin.add_child(bos)
-	# quatre lumières sombres dans le voile : c'est elles qu'on voit tourner
-	for i in range(4):
-		var a2: float = float(i) / 4.0 * TAU + PI * 0.25
-		var trou: MeshInstance3D = _cyl_x(0.26, 0.104, _mats["sombre"])
-		trou.position = Vector3(0.0, cos(a2) * 1.15, sin(a2) * 1.15)
-		spin.add_child(trou)
 	return spin
+
+
+## Contour de la moitié droite d'une ouverture (repère du secteur : ouverture
+## centrée sur l'axe +u, bras à ±π/N_OPEN), du bout extérieur au bout
+## intérieur, coins arrondis par des courbes de Bézier.
+func _opening_half(rw: float) -> PackedVector2Array:
+	var alpha: float = PI / float(N_OPEN)
+	var r1: float = OPEN_R1 * rw
+	var r2: float = OPEN_R2 * rw
+	var hw: float = SPOKE_W * 0.5
+	var d: Vector2 = Vector2(cos(alpha), sin(alpha))          # axe du bras
+	var off: Vector2 = Vector2(sin(alpha), -cos(alpha)) * hw  # vers l'ouverture
+	var c2: Vector2 = d * sqrt(r2 * r2 - hw * hw) + off        # coin extérieur
+	var c1: Vector2 = d * sqrt(r1 * r1 - hw * hw) + off        # coin intérieur
+	var a2: float = c2.angle()
+	var a1: float = c1.angle()
+	var rc: float = OPEN_FILLET
+	var pts: PackedVector2Array = PackedVector2Array()
+	# arc extérieur, de l'axe jusqu'avant le coin
+	var a2s: float = a2 - rc / r2
+	for k in range(7):
+		var a: float = a2s * float(k) / 6.0
+		pts.append(Vector2(cos(a), sin(a)) * r2)
+	# arrondi extérieur
+	var p_a: Vector2 = Vector2(cos(a2s), sin(a2s)) * r2
+	var p_b: Vector2 = c2 - d * rc
+	for k in range(1, 6):
+		var t: float = float(k) / 6.0
+		pts.append(p_a.lerp(c2, t).lerp(c2.lerp(p_b, t), t))
+	pts.append(p_b)
+	# le long du bras, jusqu'avant le coin intérieur
+	var q_a: Vector2 = c1 + d * rc
+	pts.append(q_a)
+	var a1s: float = a1 - rc / r1
+	var q_b: Vector2 = Vector2(cos(a1s), sin(a1s)) * r1
+	for k in range(1, 6):
+		var t2: float = float(k) / 6.0
+		pts.append(q_a.lerp(c1, t2).lerp(c1.lerp(q_b, t2), t2))
+	# arc intérieur, du coin vers l'axe
+	for k in range(0, 5):
+		var a3: float = a1s * (1.0 - float(k) / 4.0)
+		pts.append(Vector2(cos(a3), sin(a3)) * r1)
+	return pts
+
+
+## Voile plein de rayon r_hub..r_out, épaisseur t, évidé de N_OPEN ouvertures.
+## Chaque secteur est coupé en deux moitiés sans trou (triangulées par
+## Geometry2D), puis tourné ; parois des ouvertures extrudées.
+func _web_mesh(r_hub: float, r_out: float, t: float, mat: StandardMaterial3D) -> ArrayMesh:
+	var alpha: float = PI / float(N_OPEN)
+	var half: PackedVector2Array = _opening_half(RIM_IN)
+	# polygone du demi-secteur plein (côté +v)
+	var poly: PackedVector2Array = PackedVector2Array()
+	for k in range(5):
+		var a: float = alpha * float(k) / 4.0
+		poly.append(Vector2(cos(a), sin(a)) * r_hub)
+	for k in range(9):
+		var a2: float = alpha * (1.0 - float(k) / 8.0)
+		poly.append(Vector2(cos(a2), sin(a2)) * r_out)
+	for q in half:
+		poly.append(q)
+	var idx: PackedInt32Array = Geometry2D.triangulate_polygon(poly)
+	if idx.is_empty():
+		push_warning("[MachineRoom] triangulation du voile impossible")
+	# contour complet d'une ouverture (moitié droite puis gauche en miroir)
+	var loop: PackedVector2Array = half.duplicate()
+	for k in range(half.size() - 1, -1, -1):
+		loop.append(Vector2(half[k].x, -half[k].y))
+	var st: SurfaceTool = SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	st.set_material(mat)
+	for sec in range(N_OPEN):
+		var rot: float = TAU * float(sec) / float(N_OPEN)
+		for side in [1.0, -1.0]:
+			for face in [t * 0.5, -t * 0.5]:
+				for k in range(0, idx.size(), 3):
+					var tri: Array = [idx[k], idx[k + 1], idx[k + 2]]
+					if (side < 0.0) != (face < 0.0):
+						tri = [idx[k], idx[k + 2], idx[k + 1]]
+					for vi in tri:
+						var p: Vector2 = poly[vi]
+						p = Vector2(p.x, p.y * side).rotated(rot)
+						st.add_vertex(Vector3(face, p.y, p.x))
+		# parois de l'ouverture
+		for k in range(loop.size()):
+			var p0: Vector2 = loop[k].rotated(rot)
+			var p1: Vector2 = loop[(k + 1) % loop.size()].rotated(rot)
+			var v00: Vector3 = Vector3(-t * 0.5, p0.y, p0.x)
+			var v01: Vector3 = Vector3(t * 0.5, p0.y, p0.x)
+			var v10: Vector3 = Vector3(-t * 0.5, p1.y, p1.x)
+			var v11: Vector3 = Vector3(t * 0.5, p1.y, p1.x)
+			st.add_vertex(v00); st.add_vertex(v10); st.add_vertex(v11)
+			st.add_vertex(v00); st.add_vertex(v11); st.add_vertex(v01)
+	st.generate_normals()
+	return st.commit()
 
 
 ## Paliers : deux chaises d'acier sombre sur massifs, arbre gris.
@@ -310,7 +420,7 @@ func _build_brake(s_c: float, y_c: float, grooves: Array, nom: String) -> void:
 	var xr: Vector2 = _wheel_x_range(grooves)
 	var x_track: float = xr.y + 0.025
 	var a: float = -PI * 0.62            # sous la roue, côté voie
-	var r_t: float = R - 0.42
+	var r_t: float = RIM_IN - 0.07
 	var y_b: float = y_c + sin(a) * r_t
 	var s_b: float = s_c + cos(a) * r_t
 	var bati_h: float = y_b - ROOM_FLOOR
