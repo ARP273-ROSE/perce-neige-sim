@@ -7,6 +7,20 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.15.27** — roues d'entraînement redessinées d'après les photos de flanc.
+- Retour d'essai : « tu n'as pas trouvé des photos des roues vues de flanc,
+  pour avoir le bon design des ouvertures ? ». Trouvées : la visite de la
+  salle des machines du 20 juin 2011 sur le forum remontees-mecaniques.net
+  (récupérée par la Wayback Machine, le forum bloque les accès
+  automatiques), et la vidéo YouTube de la poulie motrice qui l'accompagne.
+- Les roues ont une **jante rouge épaisse** (joues comprises) et un **voile
+  jaune évidé de douze ouvertures en pétales** : arrondies côté jante,
+  pointues côté moyeu, séparées par des bras larges. Les quatre trous ronds
+  de la v1.15.26 étaient une invention. Piste de frein en acier juste sous
+  la jante, comme sur la photo des freins.
+- Voile construit par secteurs (moitiés sans trou triangulées par
+  `Geometry2D`), parois des ouvertures extrudées.
+
 **v1.15.26** — salle des machines de la gare amont refaite (3D, PC et PWA).
 - **Deux roues d'entraînement** ∅ 4 160 mm, jaunes, voile plein, gorges
   garnies de rouge, piste de frein et étriers rouge et turquoise sur bâti vert,
