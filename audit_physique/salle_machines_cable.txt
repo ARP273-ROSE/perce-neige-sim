@@ -1,0 +1,42 @@
+=== Positions
+A (aval)  : s = 0.95 m, axe y = -3.44 m
+B (amont) : s = 7.55 m, axe y = -4.44 m   entraxe 6.675 m
+
+=== Affleurement de la roue aval
+sommet des joues de A : y = -1.300 m (table de roulement -1.24, dessus de dalle -1.6)
+A dépasse de la dalle entre s = -0.14 et 2.04 m ; bras des butoirs de -0.25 à 2.15 m
+  → entre les bras : True
+  largeur de A de x = -0.46 à -0.02 ; bras à |x| = 0.7 → entre les bras : True
+
+=== Enroulements (degrés)
+  A gorge 1 (arrivée)       47.2
+  B gorge 1                257.1
+  A gorge 2                257.1
+  B gorge 2 (sortie)       218.7
+  total                    780.1
+  Euler-Eytelwein, μ = 0.2 : T1/T2 max = 15
+  Euler-Eytelwein, μ = 0.25 : T1/T2 max = 30
+
+=== Brins croisés (le « huit »)
+  longueur A→B 5.221 m, B→A 5.221 m
+  point de tangence le plus haut sur A : y = -2.026 (dessous de dalle -1.9) → sous la dalle : True
+  désaxement A1→B1 : 0.12 m sur 5.22 m → 1.32°
+  désaxement B1→A2 : 0.12 m sur 5.22 m → 1.32°
+  désaxement A2→B2 : 0.24 m sur 5.22 m → 2.63°
+
+=== Sortie par la batterie
+  quitte B à y = -2.383, s = 7.856
+  pente de la montée : 8.45° sur 6.18 m
+  déviation reprise par la batterie : 8.45° (arc de 1.55 m, de s = 0.20 à 1.74)
+  désaxement B2→voie droite : 0.24 m sur 6.18 m → 2.22°
+  jeu latéral mini entre le brin de sortie et la roue A : 0.061 m
+  B sous la dalle : sommet des joues y = -2.300 < -1.9 : True
+  le brin de sortie traverse le dessous de dalle en s = 4.61 m → fosse ouverte jusqu'à s ≈ 4.91 m
+
+=== Angles pour la 3D (radians)
+  tA_out       +0.74761
+  tA_in        -1.04835
+  tB_in        +3.88920
+  tB_out       +2.09324
+  tB_exit      -4.85995
+  arc_batterie +1.42324
