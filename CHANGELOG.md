@@ -7,6 +7,30 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.15.26** — salle des machines de la gare amont refaite (3D, PC et PWA).
+- **Deux roues d'entraînement** ∅ 4 160 mm, jaunes, voile plein, gorges
+  garnies de rouge, piste de frein et étriers rouge et turquoise sur bâti vert,
+  comme sur les photos du reportage remontees-mecaniques.net.
+- **La roue aval affleure au niveau de la voie entre les deux bras bleus des
+  butoirs** (précision de Kevin). Son sommet est à −1,30 m, sous la table de
+  roulement, et elle sort de la dalle de s = −0,14 à 2,04 m, les bras allant
+  de −0,25 à 2,15 m. La roue amont est sous la dalle.
+- **Passage du câble** : le brin gauche de la voie se pose sur le sommet de la
+  roue aval, fait un huit entre les deux roues (qui tournent en sens
+  inverses, deux passes par roue, 780° d'enroulement, désaxements ≤ 2,6°),
+  remonte à 8,5° dans la fosse et retrouve la voie droite par une batterie de
+  quatre galets entre les butoirs. Tracé déduit du principe classique (roue à
+  deux gorges et seconde roue) et vérifié par SageMath :
+  `audit_physique/salle_machines_cable.sage`.
+- **Salle sous la dalle** : murs carrelés blancs, trois moteurs à courant
+  continu bleus avec leur ventilateur, arbres sous carter grillagé jaune,
+  réducteurs jaunes, paliers, centrale hydraulique des freins, armoires
+  électriques, néons. Caillebotis sur la fosse derrière la roue. En vue
+  extérieure, la salle devient transparente comme le tunnel.
+- Banc `godot_project/bench_salle_machines_3d.gd` (cotes : affleurement,
+  position entre les bras, pente du brin) et rendu hors Godot
+  `tests/rendu_salle_machines.py`.
+
 **v1.15.25** — son d'ambiance PC : chien de garde et diagnostic.
 - Retour d'essai : « à la décélération, sous 1 m/s, aucun son d'ambiance,
   c'est net sur le PC ». Non reproduit sous Linux : joué sur un vrai serveur
