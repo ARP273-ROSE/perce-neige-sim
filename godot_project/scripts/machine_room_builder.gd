@@ -74,6 +74,21 @@ func build(t: TunnelBuilder) -> void:
 	_build_room()
 	_spin_a = _build_wheel(A_S, A_Y, A_GROOVES, "RoueAval")
 	_spin_b = _build_wheel(B_S, B_Y, B_GROOVES, "RoueAmont")
+	var geo: Dictionary = _geometry()
+	# carter rouge fixe, ouvert là où le câble entre et sort : autour de
+	# chaque point de tangence, jusqu'à ce que le brin ait quitté le rayon
+	# du carter (sa tangente l'atteint à ≈ 22° du point de contact)
+	var ouv: float = atan(sqrt(GUARD_R * GUARD_R - R * R) / R) + deg_to_rad(5.0)
+	# roue aval (horaire) : dessus ouvert entre les butoirs (arrivée au
+	# sommet + départs vers la roue amont), et retour de la roue amont
+	_build_guard(A_S, A_Y, A_GROOVES, [
+		Vector2(geo["tA_out"] - ouv, PI * 0.5 + ouv),
+		Vector2(geo["tA_in"] - deg_to_rad(5.0), geo["tA_in"] + ouv)], "CarterAval")
+	# roue amont (anti-horaire) : arrivées de la roue aval, départs vers la
+	# roue aval et vers la batterie de sortie
+	_build_guard(B_S, B_Y, B_GROOVES, [
+		Vector2(geo["tB_in"] - ouv, geo["tB_in"] + deg_to_rad(5.0)),
+		Vector2(geo["tB_exit"] - deg_to_rad(5.0), geo["tB_out"] + ouv)], "CarterAmont")
 	_build_bearings(A_S, A_Y, A_GROOVES)
 	_build_bearings(B_S, B_Y, B_GROOVES)
 	_build_brake(A_S, A_Y, A_GROOVES, "FreinAval")
@@ -257,17 +272,22 @@ func _wheel_x_range(grooves: Array) -> Vector2:
 
 ## Roue d'entraînement, d'après les photos de la visite du 20/06/2011
 ## (forum remontees-mecaniques.net, « Une poulie », « Une des deux poulies
-## motrices », « Les freins de poulie ») : JANTE ROUGE épaisse, voile JAUNE
-## évidé d'une couronne de douze ouvertures en pétales arrondis — étroites
-## au moyeu, larges côté jante, séparées par des bras droits —, piste de
-## frein en acier sombre juste sous la jante, moyeu d'acier boulonné.
+## motrices », « Les freins de poulie ») et la vidéo qui l'accompagne : roue
+## JAUNE (voile évidé d'une couronne de douze ouvertures en pétales aux coins
+## très arrondis, étroites au moyeu, larges côté jante), piste de frein en
+## acier sombre sous la jante. Le ROUGE est un CARTER FIXE qui coiffe la
+## jante et protège le câble : il ne tourne pas, le câble court dedans, et il
+## est ouvert là où le câble entre et sort (Kevin, 2026-09-29).
 const WEB_T: float = 0.10            # épaisseur du voile
 const RIM_IN: float = R - 0.30       # intérieur de la jante rouge
 const N_OPEN: int = 12               # ouvertures du voile
+const GUARD_R: float = RF + 0.10     # carter rouge fixe : rayon de la tôle extérieure
+const GUARD_IN: float = R - 0.22     # bord intérieur de ses flasques
+const GUARD_SIDE: float = 0.08       # jeu latéral entre roue et flasques
 const OPEN_R1: float = 0.40          # extrémité intérieure (× RIM_IN)
 const OPEN_R2: float = 0.86          # extrémité extérieure (× RIM_IN)
 const SPOKE_W: float = 0.28          # largeur des bras entre ouvertures
-const OPEN_FILLET: float = 0.14      # rayon des arrondis
+const OPEN_FILLET: float = 0.22      # rayon des arrondis
 
 
 func _build_wheel(s_c: float, y_c: float, grooves: Array, nom: String) -> Node3D:
@@ -277,16 +297,16 @@ func _build_wheel(s_c: float, y_c: float, grooves: Array, nom: String) -> Node3D
 	spin.name = nom
 	add_child(spin)
 	_place(spin, x_c, y_c, s_c)
-	var jante: StandardMaterial3D = _mats["jante"]
-	# jante rouge pleine sous les gorges, fond des gorges plus sombre
-	_ring(spin, RIM_IN, R - R_CABLE - 0.01, xr.x - x_c, xr.y - x_c, jante)
+	var jaune: StandardMaterial3D = _mats["jaune"]
+	# jante jaune sous les gorges (elle tourne), fond des gorges plus sombre
+	_ring(spin, RIM_IN, R - R_CABLE - 0.01, xr.x - x_c, xr.y - x_c, jaune)
 	_ring(spin, R - R_CABLE - 0.01, R - R_CABLE, xr.x - x_c, xr.y - x_c, _mats["garniture"])
-	# joues rouges : de part et d'autre, et entre les gorges
+	# joues jaunes : de part et d'autre, et entre les gorges
 	var joues: Array = [xr.x, xr.y]
 	for i in range(grooves.size() - 1):
 		joues.append((float(grooves[i]) + float(grooves[i + 1])) * 0.5)
 	for xj in joues:
-		_ring(spin, RIM_IN, RF, float(xj) - x_c - 0.018, float(xj) - x_c + 0.018, jante)
+		_ring(spin, RIM_IN, RF, float(xj) - x_c - 0.018, float(xj) - x_c + 0.018, jaune)
 	# voile jaune évidé
 	var web: MeshInstance3D = MeshInstance3D.new()
 	web.name = "Voile"
@@ -319,7 +339,7 @@ func _opening_half(rw: float) -> PackedVector2Array:
 	var c1: Vector2 = d * sqrt(r1 * r1 - hw * hw) + off        # coin intérieur
 	var a2: float = c2.angle()
 	var a1: float = c1.angle()
-	var rc: float = OPEN_FILLET
+	var rc: float = minf(OPEN_FILLET, 0.9 * a2 * r2)
 	var pts: PackedVector2Array = PackedVector2Array()
 	# arc extérieur, de l'axe jusqu'avant le coin
 	var a2s: float = a2 - rc / r2
@@ -333,10 +353,12 @@ func _opening_half(rw: float) -> PackedVector2Array:
 		var t: float = float(k) / 6.0
 		pts.append(p_a.lerp(c2, t).lerp(c2.lerp(p_b, t), t))
 	pts.append(p_b)
-	# le long du bras, jusqu'avant le coin intérieur
-	var q_a: Vector2 = c1 + d * rc
+	# le long du bras, jusqu'avant le coin intérieur (arrondi borné par la
+	# demi-largeur du bout intérieur : bout en ogive)
+	var rc_in: float = minf(rc, 0.9 * a1 * r1)
+	var q_a: Vector2 = c1 + d * rc_in
 	pts.append(q_a)
-	var a1s: float = a1 - rc / r1
+	var a1s: float = a1 - rc_in / r1
 	var q_b: Vector2 = Vector2(cos(a1s), sin(a1s)) * r1
 	for k in range(1, 6):
 		var t2: float = float(k) / 6.0
@@ -398,6 +420,88 @@ func _web_mesh(r_hub: float, r_out: float, t: float, mat: StandardMaterial3D) ->
 			st.add_vertex(v00); st.add_vertex(v11); st.add_vertex(v01)
 	st.generate_normals()
 	return st.commit()
+
+
+## Carter fixe rouge : tôle extérieure cylindrique + deux flasques, coiffant
+## la jante sur tout le tour SAUF dans les ouvertures (angles en radians,
+## même convention que _geometry : s = cos t, y = sin t). Deux pieds rouges
+## le portent jusqu'au sol.
+func _build_guard(s_c: float, y_c: float, grooves: Array, ouvertures: Array, nom: String) -> void:
+	var xr: Vector2 = _wheel_x_range(grooves)
+	var x_c: float = (xr.x + xr.y) * 0.5
+	var node: Node3D = Node3D.new()
+	node.name = nom
+	add_child(node)
+	_place(node, x_c, y_c, s_c)
+	var rouge: StandardMaterial3D = _mats["jante"]
+	var x0: float = xr.x - x_c - GUARD_SIDE
+	var x1: float = xr.y - x_c + GUARD_SIDE
+	# segments fermés = complément des ouvertures sur [0, 2π)
+	var ouv: Array = []
+	for o in ouvertures:
+		var a0: float = fposmod(o.x, TAU)
+		var a1: float = a0 + fposmod(o.y - o.x, TAU)
+		ouv.append(Vector2(a0, a1))
+	ouv.sort_custom(func(p, q): return p.x < q.x)
+	var fermes: Array = []
+	for i in range(ouv.size()):
+		var debut: float = ouv[i].y
+		var fin: float = ouv[(i + 1) % ouv.size()].x
+		if i == ouv.size() - 1:
+			fin += TAU
+		if fin > debut + 0.01:
+			fermes.append(Vector2(debut, fin))
+	for f in fermes:
+		_ring_arc(node, GUARD_R - 0.02, GUARD_R, x0, x1, f.x, f.y, rouge)
+		for xx in [x0, x1 - 0.02]:
+			_ring_arc(node, GUARD_IN, GUARD_R, xx, xx + 0.02, f.x, f.y, rouge)
+	# pieds
+	for ds in [-1.3, 1.3]:
+		var h: float = y_c - sqrt(GUARD_R * GUARD_R - ds * ds) - ROOM_FLOOR
+		if h > 0.1:
+			_box(Vector3(0.20, h, 0.20), rouge, x0 + 0.1, ROOM_FLOOR + h * 0.5, s_c + ds, nom + "Pied")
+
+
+## Portion de couronne d'axe x : rayons r_in..r_out, de x0 à x1, angles
+## a0 → a1 (convention _geometry : s = r cos a, y = r sin a ; dans le repère
+## du nœud, z = −s).
+func _ring_arc(parent: Node3D, r_in: float, r_out: float, x0: float, x1: float,
+		a0: float, a1: float, mat: StandardMaterial3D) -> void:
+	var st: SurfaceTool = SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	st.set_material(mat)
+	var n: int = maxi(2, int(ceil((a1 - a0) / deg_to_rad(3.0))))
+	for i in range(n):
+		var t0: float = lerpf(a0, a1, float(i) / float(n))
+		var t1: float = lerpf(a0, a1, float(i + 1) / float(n))
+		for q in [[r_out, x0, x1], [r_in, x1, x0]]:
+			var rr: float = q[0]
+			var p0: Vector3 = Vector3(q[1], sin(t0) * rr, -cos(t0) * rr)
+			var p1: Vector3 = Vector3(q[2], sin(t0) * rr, -cos(t0) * rr)
+			var p2: Vector3 = Vector3(q[2], sin(t1) * rr, -cos(t1) * rr)
+			var p3: Vector3 = Vector3(q[1], sin(t1) * rr, -cos(t1) * rr)
+			st.add_vertex(p0); st.add_vertex(p1); st.add_vertex(p2)
+			st.add_vertex(p0); st.add_vertex(p2); st.add_vertex(p3)
+		for xx in [x0, x1]:
+			var q0: Vector3 = Vector3(xx, sin(t0) * r_in, -cos(t0) * r_in)
+			var q1: Vector3 = Vector3(xx, sin(t0) * r_out, -cos(t0) * r_out)
+			var q2: Vector3 = Vector3(xx, sin(t1) * r_out, -cos(t1) * r_out)
+			var q3: Vector3 = Vector3(xx, sin(t1) * r_in, -cos(t1) * r_in)
+			st.add_vertex(q0); st.add_vertex(q1); st.add_vertex(q2)
+			st.add_vertex(q0); st.add_vertex(q2); st.add_vertex(q3)
+	# bouts du segment
+	for tt in [a0, a1]:
+		var e0: Vector3 = Vector3(x0, sin(tt) * r_in, -cos(tt) * r_in)
+		var e1: Vector3 = Vector3(x1, sin(tt) * r_in, -cos(tt) * r_in)
+		var e2: Vector3 = Vector3(x1, sin(tt) * r_out, -cos(tt) * r_out)
+		var e3: Vector3 = Vector3(x0, sin(tt) * r_out, -cos(tt) * r_out)
+		st.add_vertex(e0); st.add_vertex(e1); st.add_vertex(e2)
+		st.add_vertex(e0); st.add_vertex(e2); st.add_vertex(e3)
+	st.generate_normals()
+	var mi: MeshInstance3D = MeshInstance3D.new()
+	mi.mesh = st.commit()
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	parent.add_child(mi)
 
 
 ## Paliers : deux chaises d'acier sombre sur massifs, arbre gris.

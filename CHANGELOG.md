@@ -7,6 +7,23 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.15.28** — carter rouge fixe autour des roues, ouvertures plus arrondies.
+- Précision de Kevin : « le truc rouge autour de la poulie ne tourne pas, il
+  protège le câble ; le câble doit être dedans, et il faut l'interrompre pour
+  laisser sortir le câble ». Le rouge est désormais un **carter fixe** (tôle
+  extérieure et deux flasques, sur deux pieds) qui coiffe la jante ; la roue,
+  jante et joues comprises, est jaune et tourne seule. Le carter est ouvert
+  là où le câble entre et sort, calculé depuis les points de tangence (le
+  brin quitte le rayon du carter à environ 22° du point de contact) : tout
+  le dessus de la roue aval entre les butoirs, son retour depuis la roue
+  amont, et côté roue amont les arrivées, le départ vers la roue aval et la
+  sortie vers la batterie.
+- Ouvertures du voile aux coins nettement plus arrondis (bout extérieur en
+  arche, bout intérieur en ogive), comme sur la vidéo de 2011.
+- Écart entre les deux roues **non mesuré** : aucune photo trouvée ne les
+  montre ensemble (visite de 2011, reportage de 2015, vidéo) ; la position
+  reste celle du tracé calculé (entraxe 6,7 m, roue amont 1 m plus bas).
+
 **v1.15.27** — roues d'entraînement redessinées d'après les photos de flanc.
 - Retour d'essai : « tu n'as pas trouvé des photos des roues vues de flanc,
   pour avoir le bon design des ouvertures ? ». Trouvées : la visite de la
