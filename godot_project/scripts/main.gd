@@ -396,7 +396,7 @@ func _build_machine_room() -> void:
 	machine_room.name = "MachineRoom"
 	add_child(machine_room)
 	machine_room.build(tunnel)
-	print("[MachineRoom] poulie motrice ∅ 4160 mm + 3 moteurs DC construits")
+	print("[MachineRoom] deux roues d'entraînement ∅ 4160 mm, câble en huit, 3 moteurs CC construits")
 
 
 func _build_track() -> void:

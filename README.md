@@ -75,7 +75,8 @@ matériel roulant. Détail dans `SOURCES.md`.
 - **Tunnel et gares d'après vidéos et photos** : tranchées couvertes carrées
   aux extrémités, alésage tunnelier au milieu, évitement Abt de 1 601 à
   1 823 m, courbes, gares aux parois bleu nuit et caillebotis, salle des
-  machines enterrée.
+  machines enterrée aux deux roues d'entraînement jaunes (la roue aval
+  affleure entre les butoirs, câble en huit).
 - **Vue cabine 3D** (F4) : viewer Godot embarqué, rien à installer. Rames
   d'après photos (roues Abt à double boudin, phares halogènes, plaque,
   passagers avec skis), vue extérieure (O).
