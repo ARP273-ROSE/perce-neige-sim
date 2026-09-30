@@ -7,6 +7,28 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.15.36** — le son revient dans la PWA sur Android.
+- Retour de Kevin : « 0 son sur la PWA sur Android ». Reproduit dans
+  Chromium, avec l'agent utilisateur d'Android et la sortie son enregistrée
+  sur un serveur audio virtuel. La 1.15.35 donnait un silence numérique
+  total, la 1.15.33 jouait normalement (ambiance −44 dB, buzzer −23 dB).
+  La cause : le bus audio « Cabine », créé à l'exécution par la 1.15.34
+  pour effacer le son de cabine en vue salle des machines. Sur Chrome, la
+  PWA joue ses sons en échantillons Web Audio, et ce bus ajouté en cours
+  de route rendait toute la sortie muette. Le Safari de l'iPad, qui mixe
+  lui-même, n'était pas touché.
+- Plus aucun bus n'est créé. Le fondu cabine ↔ salle des machines passe
+  par une atténuation ajoutée au volume de chaque son de cabine (boucles,
+  ventilation, croisement). Après correction, dans Chromium : ambiance
+  −44 dB, buzzer −27 dB, salle des machines −24 dB en vue O. Le banc
+  vérifie qu'aucun bus n'est créé.
+- Au passage, le script de rapports d'erreur de la PWA ne s'exécutait plus.
+  Sa parenthèse « abort\( » perdait son antislash à l'export, ce qui
+  rendait l'expression régulière invalide. Elle est remplacée par
+  « abort[(] », et les rapports d'erreur de la PWA fonctionnent de nouveau.
+- Outil : `tests/pwa_son_chromium.py` ouvre la PWA dans Chromium, clique,
+  appuie sur des touches et laisse enregistrer la sortie son.
+
 **v1.15.35** — fluidité de la 3D, roue aval dégagée, frein à bande.
 - « Le défilement du tunnel saccade » dans la PWA, ainsi que la rotation en
   vue salle des machines. La vidéo d'écran de l'iPad (120 Hz) montre qu'une
