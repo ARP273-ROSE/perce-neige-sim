@@ -114,6 +114,7 @@ func build(t: TunnelBuilder) -> void:
 	_build_cable_beam()
 	_build_guides()
 	_build_abt_sheaves()
+	_build_abt_plates()
 	_build_cable()
 
 
@@ -313,20 +314,31 @@ func _loop_ds_for_offset(dv: float) -> float:
 #   A. LANGUE : naît en pointe recourbée dans la voie unique, 4 m avant la
 #      fourche, parallèle au rail extérieur opposé à l'ornière près (le
 #      boudin intérieur de l'autre rame passe entre les deux) ; elle
-#      s'écarte ensuite parallèlement à x_f décalée de e vers ce rail, et
-#      finit en LAME (tête + âme, sans patin) juste avant que le câble de
-#      l'autre rame ne la touche ;
-#   B. un second tronçon repart DÉCALÉ de e de l'autre côté du câble, en
-#      lame aussi, chevauche le premier (la roue plate de 24 cm porte sur
-#      les deux), revient sur x_f, croise l'autre rail intérieur sur le
-#      cœur en X, court tout l'évitement et finit de même à l'autre bout.
-# Le câble passe ENTRE les deux bouts : c'est la « lacune pour le câble »
-# de Wikipédia. Les rails extérieurs restent continus.
+#      rejoint ensuite la ligne de la roue x_f et finit en LAME (tête +
+#      âme, sans patin) là où le câble de l'autre rame la traverse ;
+#   B. le tronçon suivant croise l'autre rail intérieur sur le cœur en X,
+#      court tout l'évitement et finit de même à l'autre bout.
+# À la lacune (retour d'essai du 30/09, gros plans d'Hakone et de la photo
+# de Kevin) : les deux bouts sont PLIÉS pour courir PARALLÈLEMENT AU CÂBLE,
+# côte à côte, à ±8 cm de lui, sur 1 m de chevauchement ; chacun y arrive
+# par un coude franc depuis la ligne de la roue. Le câble file droit dans le
+# couloir, sur une tôle de glissement ; les bouts reposent sur des plaques.
+# La roue plate (24 cm) porte sur l'un puis sur l'autre.
 const ABT_TONGUE_BACK: float = 4.0     # la langue commence 4 m avant la fourche
 const ABT_TONGUE_OFFSET: float = 0.135 # entraxe rail extérieur / langue : tête 75 + ornière 60 mm
-const ABT_JOG: float = 0.08            # décalage des bouts de part et d'autre du câble
-const ABT_BACK_TO_LINE: float = 6.0    # retour du tronçon B sur x_f après la lacune (m)
+const ABT_CHANNEL: float = 0.08        # entraxe bout de rail / câble dans la lacune
+const ABT_OVERLAP_HALF: float = 0.5    # chaque bout dépasse le point de croisement de 0,5 m
 const FLAT_TREAD_HALF: float = 0.12    # roue plate de 24 cm (train_body_builder)
+
+
+func _cable_x(rail_i: int, s: float) -> float:
+	# brin de la rame OPPOSÉE, celui qui traverse ce rail intérieur
+	return strand_local_at(-rail_i, s).x
+
+
+# Écart orienté roue / câble : < 0 côté fourche, > 0 côté évitement.
+func _wheel_cable_gap(rail_i: int, s: float) -> float:
+	return float(rail_i) * (inner_rail_x(rail_i, s) - _cable_x(rail_i, s))
 
 
 func _compute_abt() -> void:
@@ -341,73 +353,41 @@ func _compute_abt() -> void:
 		"gaps": [], "pieces": [],
 	}
 	var clr: float = 0.008
-	var web_need: float = cable_radius + rail_web_width * 0.5 + clr
 	var foot_need: float = cable_radius + rail_foot_width * 0.5 + clr
 	for rail_i in [-1, 1]:
-		var cable_i: int = -rail_i
-		var gap: Dictionary = {"rail": rail_i, "cable": cable_i}
-		# pour chaque aiguillage : croisement nominal (câble sur x_f), puis
-		# fin de A et début de B d'après la position réelle du câble tendu
+		var gap: Dictionary = {"rail": rail_i, "cable": -rail_i}
 		for zone in [["lo", s0 + 2.0, s0 + ABT_ZONE, 1.0], ["hi", s1 - 2.0, s1 - ABT_ZONE, -1.0]]:
 			var z: String = zone[0]
 			var dirn: float = zone[3]
-			var s: float = zone[1]
-			var sc: float = s
-			var prev: float = float(rail_i) * (strand_local_at(cable_i, s).x - inner_rail_x(rail_i, s))
-			while (s - zone[2]) * dirn < 0.0:
-				var sn: float = s + 0.02 * dirn
-				var cur: float = float(rail_i) * (strand_local_at(cable_i, sn).x - inner_rail_x(rail_i, sn))
-				if signf(cur) != signf(prev):
-					sc = sn
-					break
-				prev = cur
-				s = sn
+			# croisement roue / câble, puis les deux coudes (écart = ±canal)
+			var sc: float = _scan_gap(rail_i, zone[1], zone[2], dirn, 0.0)
+			var sb_a: float = _scan_gap(rail_i, sc, sc - 8.0 * dirn, -dirn, -ABT_CHANNEL)
+			var sb_b: float = _scan_gap(rail_i, sc, sc + 8.0 * dirn, dirn, ABT_CHANNEL)
 			gap["sc_" + z] = sc
+			gap["bend_a_" + z] = sb_a
+			gap["bend_b_" + z] = sb_b
+			gap["a_end_" + z] = sc + ABT_OVERLAP_HALF * dirn
+			gap["b_start_" + z] = sc - ABT_OVERLAP_HALF * dirn
+			gap["dirn_" + z] = dirn
 		_abt.gaps.append(gap)
-	# bornes des tronçons (balayage fin autour de chaque croisement)
+	# lames (sans patin) là où le câble passe à moins d'un demi-patin
 	for gap in _abt.gaps:
 		var rail_i: int = gap.rail
-		var cable_i: int = gap.cable
 		for z in ["lo", "hi"]:
+			var dirn: float = gap["dirn_" + z]
 			var sc: float = gap["sc_" + z]
-			var dirn: float = 1.0 if z == "lo" else -1.0
-			# A : décalé vers le côté du câble AVANT croisement ; le câble
-			# s'en approche → fin de patin puis fin de lame
-			var s: float = sc - 6.0 * dirn
-			var a_blade: float = s
-			var a_end: float = s
-			while (s - (sc + 6.0 * dirn)) * dirn < 0.0:
-				var c: float = float(rail_i) * (strand_local_at(cable_i, s).x
-					- _piece_x({"kind": "A", "rail": rail_i, "zone": z}, s))
-				if c >= foot_need:
-					a_blade = s
-				if c >= web_need:
-					a_end = s
-				else:
-					break
-				s += 0.01 * dirn
-			# B : décalé de l'autre côté ; le câble s'en éloigne
-			s = sc + 6.0 * dirn
-			var b_start: float = s
-			var b_blade: float = s
-			while (s - (sc - 6.0 * dirn)) * dirn > 0.0:
-				var c2: float = float(rail_i) * (_piece_x({"kind": "B", "rail": rail_i}, s)
-					- strand_local_at(cable_i, s).x)
-				if c2 >= foot_need:
-					b_blade = s
-				if c2 >= web_need:
-					b_start = s
-				else:
-					break
+			var s: float = sc
+			while absf(_wheel_cable_gap(rail_i, s)) < foot_need and absf(s - sc) < 8.0:
 				s -= 0.01 * dirn
-			gap["a_blade_" + z] = a_blade
-			gap["a_end_" + z] = a_end
-			gap["b_start_" + z] = b_start
-			gap["b_blade_" + z] = b_blade
+			gap["a_blade_" + z] = s
+			s = sc
+			while absf(_wheel_cable_gap(rail_i, s)) < foot_need and absf(s - sc) < 8.0:
+				s += 0.01 * dirn
+			gap["b_blade_" + z] = s
 	for gap in _abt.gaps:
 		var rail_i: int = gap.rail
 		var nm: String = "RailInnerLeft" if rail_i < 0 else "RailInnerRight"
-		# A bas : de la pointe de langue à la fin de lame
+		# A bas : de la pointe de langue au bout plié le long du câble
 		_abt.pieces.append({"kind": "A", "zone": "lo", "rail": rail_i, "name": nm + "LangueBas",
 			"s_a": s0 - ABT_TONGUE_BACK, "s_b": gap.a_end_lo,
 			"blade_a": s0 - ABT_TONGUE_BACK - 1.0, "blade_b": gap.a_blade_lo,
@@ -417,43 +397,81 @@ func _compute_abt() -> void:
 			"s_a": gap.b_start_lo, "s_b": gap.b_start_hi,
 			"blade_a": gap.b_blade_lo, "blade_b": gap.b_blade_hi,
 			"tip_a": false, "tip_b": false})
-		# A haut : de la fin de lame à la pointe de langue
+		# A haut : du bout plié à la pointe de langue
 		_abt.pieces.append({"kind": "A", "zone": "hi", "rail": rail_i, "name": nm + "LangueHaut",
 			"s_a": gap.a_end_hi, "s_b": s1 + ABT_TONGUE_BACK,
 			"blade_a": gap.a_blade_hi, "blade_b": s1 + ABT_TONGUE_BACK + 1.0,
 			"tip_a": false, "tip_b": true})
 
 
+# Premier s (en partant de s_from dans le sens dirn) où l'écart roue/câble
+# franchit la valeur target ; affiné par dichotomie.
+func _scan_gap(rail_i: int, s_from: float, s_to: float, dirn: float, target: float) -> float:
+	var s: float = s_from
+	var prev: float = _wheel_cable_gap(rail_i, s) - target
+	while (s_to - s) * dirn > 0.0:
+		var sn: float = s + 0.02 * dirn
+		var cur: float = _wheel_cable_gap(rail_i, sn) - target
+		if signf(cur) != signf(prev) or cur == 0.0:
+			var a: float = s
+			var b: float = sn
+			for _it in range(30):
+				var m: float = 0.5 * (a + b)
+				if signf(_wheel_cable_gap(rail_i, m) - target) == signf(prev):
+					a = m
+				else:
+					b = m
+			return 0.5 * (a + b)
+		prev = cur
+		s = sn
+	return s
+
+
+func _gap_zone(piece: Dictionary, s: float) -> String:
+	if piece.kind == "A":
+		return piece.get("zone", "lo")
+	return "lo" if s < 0.5 * (PNConstants.PASSING_START + PNConstants.PASSING_END) else "hi"
+
+
+func _gap_of(rail_i: int) -> Dictionary:
+	for g in _abt.get("gaps", []):
+		if g.rail == rail_i:
+			return g
+	return {}
+
+
 ## Axe latéral d'un tronçon de rail intérieur à l'abscisse s.
 func _piece_x(piece: Dictionary, s: float) -> float:
 	var ri: float = float(piece.rail)
 	var xf: float = inner_rail_x(piece.rail, s)
+	var g: Dictionary = _gap_of(piece.rail)
+	var z: String = _gap_zone(piece, s)
 	if piece.kind == "A":
+		# bout plié parallèle au câble, côté fourche du câble
+		if not g.is_empty():
+			var t: float = (s - g["bend_a_" + z]) * g["dirn_" + z]
+			if t >= 0.0:
+				return _cable_x(piece.rail, s) - ri * ABT_CHANNEL
 		var d: float = absf(tunnel.passing_loop_offset(s, 1.0))
-		# langue le long du rail extérieur opposé (x = −ri·(d + hg) + ri·δ)
-		var tongue: float = ri * (ABT_TONGUE_OFFSET - d - gauge_m * 0.5)
-		var shifted: float = xf - ri * ABT_JOG
+		# langue le long du rail extérieur opposé, puis ligne de la roue ;
 		# « le plus éloigné du rail extérieur » des deux, raccord adouci
+		var tongue: float = ri * (ABT_TONGUE_OFFSET - d - gauge_m * 0.5)
 		var a: float = ri * tongue
-		var b: float = ri * shifted
+		var b: float = ri * xf
 		var k: float = 0.012
-		var m: float = 0.5 * (a + b + sqrt((a - b) * (a - b) + k * k))
-		var x: float = ri * m
+		var x: float = ri * 0.5 * (a + b + sqrt((a - b) * (a - b) + k * k))
 		# pointe de langue recourbée vers l'axe de la voie
 		var s_tip: float = PNConstants.PASSING_START - ABT_TONGUE_BACK
-		if piece.get("zone", "lo") == "hi":
+		if z == "hi":
 			s_tip = PNConstants.PASSING_END + ABT_TONGUE_BACK
-		var t: float = clampf(1.0 - absf(s - s_tip) / 0.9, 0.0, 1.0)
-		return x + ri * 0.04 * t * t
-	# B : décalé de ri·e aux deux lacunes, revient sur x_f entre les deux
-	var w: float = 0.0
-	for g in _abt.get("gaps", []):
-		if g.rail == piece.rail and g.has("sc_lo"):
-			w = maxf(w, 1.0 - smoothstep(g.sc_lo + 1.0, g.sc_lo + 1.0 + ABT_BACK_TO_LINE, s))
-			w = maxf(w, 1.0 - smoothstep(g.sc_hi - 1.0, g.sc_hi - 1.0 - ABT_BACK_TO_LINE, s))
-	if not _abt.has("gaps") or _abt.gaps.is_empty():
-		w = 1.0
-	return xf + ri * ABT_JOG * w
+		var tt: float = clampf(1.0 - absf(s - s_tip) / 0.9, 0.0, 1.0)
+		return x + ri * 0.04 * tt * tt
+	# B : bout plié parallèle au câble côté évitement, puis ligne de la roue
+	if not g.is_empty():
+		var t2: float = (s - g["bend_b_" + z]) * g["dirn_" + z]
+		if t2 <= 0.0:
+			return _cable_x(piece.rail, s) + ri * ABT_CHANNEL
+	return xf
 
 
 ## Tronçons de rail intérieur présents à l'abscisse s : [[x, demi-patin]].
@@ -485,7 +503,12 @@ func _build_rail_piece(
 ) -> void:
 	var a: float = piece.s_a
 	var b: float = piece.s_b
-	var cuts: Array = [piece.blade_a, piece.blade_b, a + 0.9, b - 0.9, a + 0.3, b - 0.3]
+	var cuts: Array = [piece.blade_a, piece.blade_b, a + 0.9, b - 0.9, a + 0.12, b - 0.12]
+	var g: Dictionary = _gap_of(piece.rail)
+	for z in ["lo", "hi"]:
+		if g.has("bend_a_" + z):
+			cuts.append(g["bend_a_" + z])    # coudes : sommets exacts
+			cuts.append(g["bend_b_" + z])
 	for sx in _abt.frog:
 		cuts.append(sx - abt_frog_half)
 		cuts.append(sx + abt_frog_half)
@@ -497,7 +520,7 @@ func _build_rail_piece(
 	while k < b:
 		if k < a + 2.0 or k > b - 2.0 or absf(k - piece.blade_a) < 8.0 or absf(k - piece.blade_b) < 8.0:
 			s_list.append(k)
-		k += 0.2
+		k += 0.1
 	s_list.sort()
 	var clean: Array = []
 	for s in s_list:
@@ -591,17 +614,18 @@ func _piece_key(piece: Dictionary, m: float) -> String:
 
 
 # Hauteur relative d'un tronçon : pointe de langue en rampe (35 % → 100 %
-# sur 0,9 m), bout de lame légèrement abaissé (80 % → 100 % sur 0,3 m).
+# sur 0,9 m) ; bout coupé franc à la lacune, simple chanfrein (88 % → 100 %
+# sur 12 cm), comme sur les photos.
 func _piece_height(piece: Dictionary, s: float) -> float:
 	var h: float = 1.0
 	if piece.tip_a:
 		h = minf(h, lerpf(0.35, 1.0, smoothstep(0.0, 1.0, clampf((s - piece.s_a) / 0.9, 0.0, 1.0))))
 	else:
-		h = minf(h, lerpf(0.8, 1.0, clampf((s - piece.s_a) / 0.3, 0.0, 1.0)))
+		h = minf(h, lerpf(0.88, 1.0, clampf((s - piece.s_a) / 0.12, 0.0, 1.0)))
 	if piece.tip_b:
 		h = minf(h, lerpf(0.35, 1.0, smoothstep(0.0, 1.0, clampf((piece.s_b - s) / 0.9, 0.0, 1.0))))
 	else:
-		h = minf(h, lerpf(0.8, 1.0, clampf((piece.s_b - s) / 0.3, 0.0, 1.0)))
+		h = minf(h, lerpf(0.88, 1.0, clampf((piece.s_b - s) / 0.12, 0.0, 1.0)))
 	return h
 
 
@@ -1644,6 +1668,87 @@ func _build_guides() -> void:
 	_mm_instance(pulley_mesh, l_pa, "GuidePulleysA")
 	_mm_instance(pulley_mesh, l_pb, "GuidePulleysB")
 	_cable_top_y = y_axis + pulley_radius
+
+
+# Lacunes de l'aiguillage : plaques d'appui sombres sous les bouts de rail
+# (photo de Kevin : une plaque boulonnée sous chaque extrémité) et tôle de
+# glissement sous le câble dans le couloir (photo d'Hakone). La tôle
+# affleure à 12 mm sous le câble : il y glisse s'il décolle des galets.
+func _build_abt_plates() -> void:
+	var mat: StandardMaterial3D = StandardMaterial3D.new()
+	mat.albedo_color = Color(0.17, 0.15, 0.14)
+	mat.roughness = 0.65
+	mat.metallic = 0.55
+	var bolt_mat: StandardMaterial3D = StandardMaterial3D.new()
+	bolt_mat.albedo_color = Color(0.30, 0.29, 0.28)
+	bolt_mat.roughness = 0.5
+	bolt_mat.metallic = 0.8
+	var y_base: float = floor_y_local + slab_thickness + sleeper_height - 0.01
+	var plate: BoxMesh = BoxMesh.new()
+	plate.size = Vector3(0.24, 0.014, 0.55)
+	plate.material = mat
+	var slide: BoxMesh = BoxMesh.new()
+	slide.size = Vector3(0.11, 0.010, 1.0)   # étirée en longueur par instance
+	slide.material = mat
+	var bolt: BoxMesh = BoxMesh.new()
+	bolt.size = Vector3(0.035, 0.022, 0.035)
+	bolt.material = bolt_mat
+	var l_plate: Array = []
+	var l_slide: Array = []
+	var l_bolt: Array = []
+	for g in _abt.gaps:
+		var ri: float = float(g.rail)
+		for z in ["lo", "hi"]:
+			var dirn: float = g["dirn_" + z]
+			var sc: float = g["sc_" + z]
+			# bout A (fin côté évitement) et bout B (début côté fourche)
+			for e in [[g["a_end_" + z], "A", -1.0], [g["b_start_" + z], "B", 1.0]]:
+				var s_end: float = e[0]
+				var piece: Dictionary = {"kind": e[1], "rail": g.rail, "zone": z}
+				var toward: float = -dirn if e[1] == "A" else dirn   # vers l'intérieur du bout
+				var s_mid: float = s_end + toward * 0.25
+				# côté opposé au câble : A est du côté −ri, B du côté +ri
+				var away: float = ri * e[2]
+				var xf: Transform3D = _abt_frame(piece, s_mid)
+				var tr: Transform3D = xf
+				tr.origin += xf.basis.x * (away * 0.075) + xf.basis.y * (y_base + 0.007)
+				l_plate.append(tr)
+				for db in [-0.17, 0.17]:
+					var tb: Transform3D = xf
+					tb.origin += xf.basis.x * (away * 0.15) - xf.basis.z * db \
+						+ xf.basis.y * (y_base + 0.018)
+					l_bolt.append(tb)
+			# tôle de glissement le long du câble, du coude A au coude B
+			var sa: float = g["bend_a_" + z]
+			var sb: float = g["bend_b_" + z]
+			var pa: Vector3 = strand_point(-g.rail, sa)
+			var pb: Vector3 = strand_point(-g.rail, sb)
+			var xa: Transform3D = tunnel.transform_at(0.5 * (sa + sb))
+			var fwd: Vector3 = (pb - pa).normalized()
+			var up: Vector3 = (xa.basis.y - fwd * xa.basis.y.dot(fwd)).normalized()
+			var right: Vector3 = fwd.cross(up)
+			var bs: Basis = Basis(right, up, -fwd).scaled_local(Vector3(1.0, 1.0, pa.distance_to(pb)))
+			var mid: Vector3 = (pa + pb) * 0.5
+			var y_mid: float = (mid - xa.origin).dot(xa.basis.y)
+			mid += xa.basis.y * (y_base + 0.005 - y_mid)
+			l_slide.append(Transform3D(bs, mid))
+	_mm_instance(plate, l_plate, "AbtPlaquesAppui")
+	_mm_instance(bolt, l_bolt, "AbtBoulons")
+	_mm_instance(slide, l_slide, "AbtToleGlissement")
+
+
+# Repère posé sur un bout de rail : origine sur l'axe de la voie à s, axe
+# −z le long du bout (parallèle au câble dans la lacune).
+func _abt_frame(piece: Dictionary, s: float) -> Transform3D:
+	var xf: Transform3D = tunnel.transform_at(s)
+	var xa: Transform3D = tunnel.transform_at(s - 0.05)
+	var xb: Transform3D = tunnel.transform_at(s + 0.05)
+	var p0: Vector3 = xa.origin + xa.basis.x * _piece_x(piece, s - 0.05)
+	var p1: Vector3 = xb.origin + xb.basis.x * _piece_x(piece, s + 0.05)
+	var fwd: Vector3 = (p1 - p0).normalized()
+	var up: Vector3 = (xf.basis.y - fwd * xf.basis.y.dot(fwd)).normalized()
+	var right: Vector3 = fwd.cross(up)
+	return Transform3D(Basis(right, up, -fwd), xf.origin + xf.basis.x * _piece_x(piece, s))
 
 
 # Galets de déviation de l'aiguillage Abt (photo d'aiguillage : grandes

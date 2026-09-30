@@ -7,6 +7,34 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.15.32** — lacunes de l'aiguillage d'après les photos, roue amont
+remontée.
+- Retour d'essai sur le rendu de la 1.15.31 : les deux lacunes entourées
+  étaient « à améliorer au vu des photos ». Les gros plans d'Hakone et de
+  la photo de Kevin montrent que les deux bouts de rail sont PLIÉS pour
+  courir côte à côte, parallèlement au câble, qui file droit dans le couloir
+  entre eux. Dans la 1.15.31, les bouts suivaient la ligne de la roue et le
+  câble les coupait en biais. Désormais, chaque bout arrive par un coude
+  franc (3,6°) depuis la ligne de la roue, puis longe le câble à 8 cm sur
+  1 m de chevauchement. Les bouts sont coupés francs avec un chanfrein,
+  posés sur des plaques d'appui boulonnées, et une tôle de glissement sombre
+  court sous le câble d'un coude à l'autre, 12 mm sous lui.
+- Salle des machines, demande de Kevin : « remonter la roue motrice amont
+  pour que la pente entre le sommet de la roue amont et celui de la roue
+  aval soit celle de la voie en gare amont ». La roue amont est remontée
+  d'1 m : les deux sommets sont alignés sur la pente de la voie. Le brin de
+  sortie quitte désormais la roue amont par son sommet, au niveau de la
+  voie, et file droit jusqu'à la voie. La batterie de galets en courbe
+  disparaît, remplacée par deux galets porteurs. La roue amont dépasse de
+  30 cm du sol du hall derrière les butoirs, dans la fosse prolongée, et un
+  garde-corps jaune l'entoure. La salle perd 1 m de hauteur, et
+  l'enroulement total passe de 780° à 774° (`salle_machines_cable.sage`).
+- Vérifié. Le banc `bench_aiguillage_3d.gd` contrôle les bouts parallèles
+  au câble (écart nul), la roue portée partout et le câble dégagé. Le banc
+  `bench_salle_machines_3d.gd` contrôle la pente A→B, nulle dans le repère
+  de la voie, le brin de sortie au niveau de la voie, et la roue amont dans
+  la fosse. Tous les bancs passent, 49 tests aussi.
+
 **v1.15.31** — aiguillage Abt : les bouts de rail qui manquaient.
 - Retour d'essai : « il manque des bouts de rail dans l'Abt, renseigne-toi
   et regarde bien les photos ». Sources : Wikipédia DE « Abtsche Weiche »

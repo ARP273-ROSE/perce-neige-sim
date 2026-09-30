@@ -118,11 +118,24 @@ func _suite() -> void:
 	ok = _check("roue aval entre les bras bleus", s0 >= -0.25 and s1 <= 2.15,
 		"émerge de s = %.2f à %.2f (bras de −0,25 à 2,15)" % [s0, s1]) and ok
 	var g: Dictionary = mr._geometry()
+	# sommets des deux roues alignés sur la pente de la voie (Kevin, 30/09) :
+	# le repère local suit la voie, donc même cote
+	var dy: float = MachineRoomBuilder.B_Y - MachineRoomBuilder.A_Y
+	var pente: float = rad_to_deg(atan2(dy, MachineRoomBuilder.B_S - MachineRoomBuilder.A_S))
+	ok = _check("sommets des roues sur la pente de la voie", absf(pente) < 0.01,
+		"pente A→B %.3f° dans le repère de la voie" % pente) and ok
 	var p_ex: Vector2 = g["P_Bexit"]
 	var p_k: Vector2 = g["P_Kin"]
-	var pente: float = rad_to_deg(atan2(p_k.y - p_ex.y, p_ex.x - p_k.x))
-	ok = _check("brin de sortie : pente raisonnable", pente > 3.0 and pente < 15.0,
-		"%.2f°" % pente) and ok
+	var pente_s: float = rad_to_deg(atan2(p_k.y - p_ex.y, p_ex.x - p_k.x))
+	ok = _check("brin de sortie au niveau de la voie", absf(pente_s) < 0.01,
+		"%.3f°, quitte la roue amont à y = %.3f (voie %.3f)" % [pente_s, p_ex.y, MachineRoomBuilder.Y_BRIN]) and ok
+	var hb: float = MachineRoomBuilder.Y_HALL_FLOOR - MachineRoomBuilder.B_Y
+	var gr: float = MachineRoomBuilder.GUARD_R
+	var e0: float = MachineRoomBuilder.B_S - sqrt(gr * gr - hb * hb)
+	var e1: float = MachineRoomBuilder.B_S + sqrt(gr * gr - hb * hb)
+	ok = _check("roue amont et carter dans la fosse", e0 > MachineRoomBuilder.PIT_S0 and e1 < MachineRoomBuilder.PIT_S1,
+		"émergent de s = %.2f à %.2f (fosse jusqu'à %.2f, mur du fond %.2f)" % [e0, e1,
+			MachineRoomBuilder.PIT_S1, MachineRoomBuilder.HALL_DEPTH]) and ok
 	print("BENCH_SALLE_MACHINES " + ("OK" if ok else "ECHEC"))
 	quit(0 if ok else 1)
 

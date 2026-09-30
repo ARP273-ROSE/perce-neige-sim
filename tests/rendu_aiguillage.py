@@ -76,6 +76,18 @@ def main():
                 ((-0.6, 0.6), (-0.45, 0.35)), f=1.4, zmin=0.05)
     plt.tight_layout()
     plt.savefig(sys.argv[2], dpi=85, facecolor=fig.get_facecolor())
+    # zoom_lacune : plan à l'échelle réelle autour des deux lacunes basses
+    fig2 = plt.figure(figsize=(16, 6), facecolor="#0b0d10")
+    ax = fig2.add_subplot(1, 1, 1)
+    m2 = (tris[:, :, 1].mean(axis=1) < 0.0) & (tris[:, :, 2].mean(axis=1) > 13) & (tris[:, :, 2].mean(axis=1) < 22)
+    uv2 = np.stack([tris[m2][:, :, 2], -tris[m2][:, :, 0]], axis=2)
+    peindre(ax, uv2, -tris[m2][:, :, 1].mean(axis=1), rgba[m2],
+            "Les deux lacunes du câble, vues de dessus à l'échelle (s de 13 à 22 m après la fourche)",
+            ((13, 22), (-1.35, 1.35)))
+    plt.tight_layout()
+    fig2.savefig(sys.argv[2].replace(".png", "_lacunes.png"), dpi=85, facecolor=fig2.get_facecolor())
+    return
+    plt.savefig(sys.argv[2], dpi=85, facecolor=fig.get_facecolor())
     print("rendu :", sys.argv[2])
 
 

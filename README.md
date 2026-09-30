@@ -74,12 +74,13 @@ matériel roulant. Détail dans `SOURCES.md`.
   programmée, rampement à 1 m/s, arrêt au repère, vigilance homme-mort.
 - **Tunnel et gares d'après vidéos et photos** : tranchées couvertes carrées
   aux extrémités, alésage tunnelier au milieu, évitement Abt de 1 601 à
-  1 823 m avec ses aiguillages dessinés (langues, lacunes où passe le
-  câble opposé entre deux bouts de rail, cœur en X, galets de déviation), courbes où le
+  1 823 m avec ses aiguillages dessinés (langues, lacunes où le câble
+  opposé file entre deux bouts de rail pliés, cœur en X, galets de
+  déviation), courbes où le
   câble file en ligne droite d'un galet au suivant, gares aux parois bleu
   nuit et caillebotis, salle des machines enterrée aux deux roues
-  d'entraînement jaunes (la roue aval affleure entre les butoirs, câble en
-  huit).
+  d'entraînement jaunes (la roue aval affleure entre les butoirs, sommets
+  des deux roues alignés sur la pente de la voie, câble en huit).
 - **Vue cabine 3D** (F4) : viewer Godot embarqué, rien à installer. Rames
   d'après photos (roues Abt à double boudin, phares halogènes, plaque,
   passagers avec skis), vue extérieure et vue libre de la salle des

@@ -20,9 +20,11 @@ extends Node3D
 ## audit_physique/salle_machines_cable.sage :
 ##   brin gauche de la voie → sommet de la roue aval A (gorge 1) → HUIT entre A
 ##   (sens horaire) et la roue amont B (sens anti-horaire), deux passes par
-##   roue → B gorge 2 → montée à 8,5° dans la fosse → batterie de galets entre
-##   les butoirs qui le remet à l'horizontale → brin droit de la voie.
-##   Enroulement total 780°, désaxements ≤ 2,6°, rien ne touche la dalle.
+##   roue → B gorge 2 → le brin quitte B par son SOMMET, au niveau de la voie,
+##   et file droit jusqu'au brin droit de la voie. Les sommets des deux roues
+##   sont alignés sur la pente de la voie en gare amont (Kevin, 30/09/2026) :
+##   B a été remontée d'1 m et dépasse de 30 cm du sol du hall derrière les
+##   butoirs, dans la fosse. Enroulement total 774°, désaxements ≤ 2,7°.
 ##
 ## Repère local : celui de tunnel.transform_at(LENGTH) — x à droite, y en haut,
 ## s le long de la voie (0 = fin du tunnel, > 0 vers la salle).
@@ -34,14 +36,13 @@ const RF: float = 2.14               # rayon extérieur des joues
 const R_CABLE: float = 0.026         # câble Fatzer 52 mm
 const A_S: float = 0.95              # roue aval : entre les bras des butoirs
 const A_Y: float = Y_BRIN - R        # son sommet affleure au niveau des brins
-const B_S: float = 7.55              # roue amont, sous la dalle
-const B_Y: float = A_Y - 1.00
+const B_S: float = 7.55              # roue amont, derrière les butoirs
+const B_Y: float = A_Y               # sommets alignés sur la pente de la voie
 const A_GROOVES: Array = [-0.12, -0.36]
 const B_GROOVES: Array = [-0.24, -0.12]
 const LANE_L: float = -0.12          # brin qui arrive sur la roue aval
-const LANE_R: float = 0.12           # brin qui repart par la batterie
-const RK: float = 10.5               # rayon de la batterie de sortie
-const S0: float = 0.20               # fin de batterie : câble horizontal
+const LANE_R: float = 0.12           # brin qui repart du sommet de la roue amont
+const S0: float = 0.20               # où le brin de sortie rejoint la voie droite
 
 # --- Gare et salle ---------------------------------------------------------
 const Y_HALL_FLOOR: float = -1.60    # dessus de dalle (stations_builder.FLOOR_Y_LOCAL)
@@ -49,8 +50,8 @@ const Y_SLAB_BOTTOM: float = -1.90
 const Y_HALL_CEIL: float = 2.65
 const HALL_HALF_W: float = 4.90
 const HALL_DEPTH: float = 9.0
-const PIT_S0: float = -0.85          # fosse ouverte autour de la roue et du brin de sortie
-const PIT_S1: float = 4.95
+const PIT_S0: float = -0.85          # fosse ouverte autour des deux roues et des brins
+const PIT_S1: float = 8.95
 const PIT_X0: float = -0.58
 const PIT_X1: float = 0.34
 const ROOM_S0: float = -2.6
@@ -101,8 +102,8 @@ func build(t: TunnelBuilder) -> void:
 	_build_guard(A_S, A_Y, A_GROOVES, [
 		Vector2(geo["tA_out"] - ouv, PI * 0.5 + ouv),
 		Vector2(geo["tA_in"] - deg_to_rad(5.0), geo["tA_in"] + ouv)], "CarterAval")
-	# roue amont (anti-horaire) : arrivées de la roue aval, départs vers la
-	# roue aval et vers la batterie de sortie
+	# roue amont (anti-horaire) : arrivées de la roue aval, départ vers la
+	# roue aval et sortie par le sommet, vers la voie
 	_build_guard(B_S, B_Y, B_GROOVES, [
 		Vector2(geo["tB_in"] - ouv, geo["tB_in"] + deg_to_rad(5.0)),
 		Vector2(geo["tB_exit"] - deg_to_rad(5.0), geo["tB_out"] + ouv)], "CarterAmont")
@@ -199,15 +200,26 @@ func _build_hall_end() -> void:
 		_box(Vector3(0.06, 0.04, PIT_S1 - rive0), jaune, xx, Y_HALL_FLOOR + 0.02, (rive0 + PIT_S1) * 0.5, "RiveFosse")
 	_box(Vector3(pit_w, 0.04, 0.06), jaune, pit_xc, Y_HALL_FLOOR + 0.02, PIT_S1, "RiveFosseFond")
 	# caillebotis (photo RM.net) sur la partie de la fosse où rien ne sort :
-	# côté gauche derrière la roue aval ; seule reste ouverte la saignée du
-	# brin de sortie, qui traverse l'épaisseur de la dalle jusqu'à s ≈ 4,6
+	# côté gauche, entre la roue aval et la roue amont ; restent ouverts le
+	# couloir du brin de sortie (au niveau de la voie, sur ses galets) et
+	# l'emprise de la roue amont, qui dépasse du sol
 	var cail: StandardMaterial3D = _mat("caillebotis", Color(0.16, 0.17, 0.19), 0.55, 0.6, true)
 	var cs0: float = A_S + 1.20
-	_box(Vector3(-0.06 - PIT_X0, 0.03, PIT_S1 - cs0), cail, (PIT_X0 - 0.06) * 0.5,
-		Y_HALL_FLOOR - 0.015, (cs0 + PIT_S1) * 0.5, "Caillebotis")
-	for k in range(int((PIT_S1 - cs0) / 0.12)):
-		_box(Vector3(-0.06 - PIT_X0, 0.012, 0.02), _mats["sombre"], (PIT_X0 - 0.06) * 0.5,
+	var cs1: float = B_S - 1.45          # la roue amont sort de la fosse après
+	var cx1: float = -0.12               # galets du brin de sortie à droite
+	_box(Vector3(cx1 - PIT_X0, 0.03, cs1 - cs0), cail, (PIT_X0 + cx1) * 0.5,
+		Y_HALL_FLOOR - 0.015, (cs0 + cs1) * 0.5, "Caillebotis")
+	for k in range(int((cs1 - cs0) / 0.12)):
+		_box(Vector3(cx1 - PIT_X0, 0.012, 0.02), _mats["sombre"], (PIT_X0 + cx1) * 0.5,
 			Y_HALL_FLOOR + 0.003, cs0 + 0.06 + 0.12 * float(k), "BarreCaillebotis")
+	# garde-corps jaune autour de la roue amont, qui dépasse de 30 cm du sol
+	var gc0: float = cs1 - 0.1
+	for xx in [PIT_X0 - 0.10, PIT_X1 + 0.10]:
+		_box(Vector3(0.05, 0.05, PIT_S1 - gc0), jaune, xx, Y_HALL_FLOOR + 1.0, (gc0 + PIT_S1) * 0.5, "GardeCorps")
+		_box(Vector3(0.04, 0.04, PIT_S1 - gc0), jaune, xx, Y_HALL_FLOOR + 0.5, (gc0 + PIT_S1) * 0.5, "GardeCorps")
+		for sp in [gc0, (gc0 + PIT_S1) * 0.5, PIT_S1 - 0.05]:
+			_box(Vector3(0.05, 1.0, 0.05), jaune, xx, Y_HALL_FLOOR + 0.5, sp, "GardeCorps")
+	_box(Vector3(PIT_X1 - PIT_X0 + 0.25, 0.05, 0.05), jaune, pit_xc, Y_HALL_FLOOR + 1.0, gc0, "GardeCorps")
 
 	# parois, plafond, poutres de la salle de gare prolongés jusqu'au fond
 	var hall_h: float = Y_HALL_CEIL - Y_HALL_FLOOR
@@ -625,35 +637,29 @@ func _build_cabinets() -> void:
 
 
 # ---------------------------------------------------------------------------
-# Batterie de galets entre les butoirs : elle remet à l'horizontale le brin
-# de sortie qui remonte de la roue amont (photo RM.net : galets entre les
-# deux bras bleus). Galets gris sur un arc de rayon RK, sous le câble.
+# Galets porteurs des brins entre les butoirs et dans la fosse (la batterie
+# en courbe de la v1.15.26 a disparu avec la roue amont remontée).
 # ---------------------------------------------------------------------------
 
 func _build_battery() -> void:
-	var geo: Dictionary = _geometry()
-	var k_c: Vector2 = Vector2(S0, Y_BRIN - RK)
-	var a_end: float = PI * 0.5
-	var a_start: float = geo["arc_batterie"]
+	# Plus de batterie en courbe : le brin de sortie file droit, au niveau
+	# de la voie, du sommet de la roue amont à la voie droite. Deux galets
+	# porteurs le soutiennent entre les roues, un galet par brin avant la
+	# roue aval (plus près, ils toucheraient la jante qui remonte).
 	var r_roll: float = 0.16
-	var n: int = 4
-	for i in range(n):
-		var a: float = lerpf(a_start, a_end, (float(i) + 0.5) / float(n))
-		var rr: float = RK - R_CABLE - r_roll
-		var p: Vector2 = k_c + Vector2(cos(a), sin(a)) * rr
+	var y_roll: float = Y_BRIN - R_CABLE - r_roll
+	for s_g in [3.5, 4.6]:
+		var f: float = (B_S - s_g) / (B_S - S0)
+		var x_g: float = float(B_GROOVES[1]) + f * (LANE_R - float(B_GROOVES[1]))
 		var g: MeshInstance3D = _cyl_x(r_roll, 0.10, _mats["acier"])
 		add_child(g)
-		_place(g, LANE_R, p.y, p.x)
-	var s_mid: float = (S0 + (k_c.x + cos(a_start) * RK)) * 0.5
-	var long: float = absf(k_c.x + cos(a_start) * RK - S0) + 0.6
-	for sx in [-1.0, 1.0]:
-		_box(Vector3(0.03, 0.30, long), _mats["sombre"], LANE_R + sx * 0.08, Y_BRIN - 0.32, s_mid, "FlasqueBatterie")
-	# brin d'arrivée : un galet porteur avant la roue (plus près, il
-	# toucherait la jante qui remonte vers le sommet)
-	for s_g in [-0.55]:
+		_place(g, x_g, y_roll, s_g)
+		for sx in [-1.0, 1.0]:
+			_box(Vector3(0.03, 0.30, 0.36), _mats["sombre"], x_g + sx * 0.08, y_roll - 0.06, s_g, "FlasqueGalet")
+	for x_l in [LANE_L, LANE_R]:
 		var g2: MeshInstance3D = _cyl_x(r_roll, 0.10, _mats["acier"])
 		add_child(g2)
-		_place(g2, LANE_L, Y_BRIN - R_CABLE - r_roll, s_g)
+		_place(g2, x_l, y_roll, -0.55)
 
 
 # ---------------------------------------------------------------------------
@@ -696,23 +702,12 @@ func _geometry() -> Dictionary:
 	var b: Vector2 = Vector2(B_S, B_Y)
 	var ab: Vector2 = _cross_tangent(a, b, true)      # A horaire → B
 	var ba: Vector2 = _cross_tangent(b, a, false)     # B anti-horaire → A
-	# sortie : tangente extérieure haute entre B (R) et l'arc de batterie (RK)
-	var k: Vector2 = Vector2(S0, Y_BRIN - RK)
-	var d: float = (k - b).length()
-	var beta: float = (k - b).angle()
-	var g: float = acos((R - RK) / d)
-	var best_t: float = 0.0
-	var best_y: float = -1e9
-	for sg in [1.0, -1.0]:
-		var t: float = beta + sg * g
-		var y_sum: float = (b + Vector2(cos(t), sin(t)) * R).y + (k + Vector2(cos(t), sin(t)) * RK).y
-		if y_sum > best_y:
-			best_y = y_sum
-			best_t = t
+	# sortie : par le SOMMET de B (anti-horaire : son sommet file vers la voie)
+	var t_ex: float = PI * 0.5
 	return {"tA_out": ab.x, "tB_in": ab.y, "tB_out": ba.x, "tA_in": ba.y,
-		"tB_exit": best_t, "arc_batterie": best_t,
-		"P_Bexit": b + Vector2(cos(best_t), sin(best_t)) * R,
-		"P_Kin": k + Vector2(cos(best_t), sin(best_t)) * RK}
+		"tB_exit": t_ex,
+		"P_Bexit": b + Vector2(cos(t_ex), sin(t_ex)) * R,
+		"P_Kin": Vector2(S0, Y_BRIN)}
 
 
 ## Arc sur une roue, de t0 à t1 dans le sens donné, à gorge x constante.
@@ -739,12 +734,10 @@ func _build_cable() -> void:
 	_arc(pts, a, R, g["tA_in"], g["tA_out"], true, A_GROOVES[1])
 	# 5. roue amont gorge 2 jusqu'à la sortie
 	_arc(pts, b, R, g["tB_in"], g["tB_exit"], false, B_GROOVES[1])
-	# 6. montée dans la fosse puis batterie (le brin rejoint la voie droite)
-	var k: Vector2 = Vector2(S0, Y_BRIN - RK)
+	# 6. du sommet de B, droit vers la voie droite, au niveau de la voie
 	var p_kin: Vector2 = g["P_Kin"]
 	pts.append(Vector3(LANE_R, p_kin.y, p_kin.x))
-	_arc(pts, k, RK, g["arc_batterie"], PI * 0.5, false, LANE_R)
-	# 7. brin droit : fin de batterie → fin de voie
+	# 7. brin droit jusqu'à la fin de voie
 	pts.append(Vector3(LANE_R, Y_BRIN, 0.0))
 	_tube(pts, _mats["cable"], "CableMachinerie")
 
