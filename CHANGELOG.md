@@ -7,6 +7,31 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.15.31** — aiguillage Abt : les bouts de rail qui manquaient.
+- Retour d'essai : « il manque des bouts de rail dans l'Abt, renseigne-toi
+  et regarde bien les photos ». Sources : Wikipédia DE « Abtsche Weiche »
+  (rails extérieurs sans lacune ; rails intérieurs à langues fixes, avec des
+  lacunes pour les boudins, pour le câble et pour la pince du frein de voie)
+  et photos Wikimedia d'Hakone, de la Polybahn de Zurich et d'Oberweißbach.
+- Chaque rail intérieur commence désormais par une **langue** qui naît dans
+  la voie unique, 4 m avant la fourche, contre le rail extérieur opposé (le
+  boudin de l'autre rame passe entre les deux), puis s'écarte avec la voie.
+  Là où le câble de la rame opposée traverse, le rail est **coupé** : la
+  langue finit en lame d'un côté du câble, un second bout décalé repart de
+  l'autre côté, et les deux se chevauchent sur 1,1 m ; la roue plate (24 cm)
+  porte sur l'un puis sur l'autre. Ce second bout revient sur la ligne de
+  la roue, croise l'autre rail intérieur sur le cœur en X à 27,5 m, et court
+  tout l'évitement. La v1.15.29 ne dessinait qu'un rail continu troué sous
+  la tête, qui n'existe pas.
+- Blochets et socles suivent les nouveaux bouts ; les galets de déviation
+  à 4,5 m, qui gênaient les langues, sont retirés. La lacune pour la pince
+  du frein de voie n'est pas dessinée : sa position sur le Perce-Neige est
+  inconnue.
+- Vérifié par le banc `bench_aiguillage_3d.gd`. La roue plate est portée
+  partout, l'ornière du boudin reste libre, le câble ne touche aucun bout de
+  rail, et aucun galet n'est posé sur un rail. Tous les bancs passent,
+  49 tests aussi.
+
 **v1.15.30** — ambiance PC : fin du « silence » sous 1 m/s en décélération.
 - Les deux rapports de diagnostic arrivés du PC de Kevin le 30/09 (Windows 10,
   Qt 6.11) ont tranché : les boucles d'ambiance jouaient bien (Qt : en
