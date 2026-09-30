@@ -114,12 +114,14 @@ func build(t: TunnelBuilder) -> void:
 	# sommet + départs vers la roue amont), et retour de la roue amont
 	_build_guard(A_S, A_Y, A_GROOVES, [
 		Vector2(geo["tA_out"] - ouv, PI * 0.5 + ouv),
-		Vector2(geo["tA_in"] - deg_to_rad(5.0), geo["tA_in"] + ouv)], "CarterAval")
+		Vector2(geo["tA_in"] - deg_to_rad(5.0), geo["tA_in"] + ouv),
+		Vector2(BRAKE_A - BRAKE_OUV, BRAKE_A + BRAKE_OUV)], "CarterAval")
 	# roue amont (anti-horaire) : arrivées de la roue aval, départ vers la
 	# roue aval et sortie par le sommet, vers la voie
 	_build_guard(B_S, B_Y, B_GROOVES, [
 		Vector2(geo["tB_in"] - ouv, geo["tB_in"] + deg_to_rad(5.0)),
-		Vector2(geo["tB_exit"] - deg_to_rad(5.0), geo["tB_out"] + ouv)], "CarterAmont")
+		Vector2(geo["tB_exit"] - deg_to_rad(5.0), geo["tB_out"] + ouv),
+		Vector2(BRAKE_A - BRAKE_OUV, BRAKE_A + BRAKE_OUV)], "CarterAmont")
 	_build_bearings(A_S, A_Y, A_GROOVES)
 	_build_bearings(B_S, B_Y, B_GROOVES)
 	_build_brake(A_S, A_Y, A_GROOVES, "FreinAval")
@@ -199,8 +201,11 @@ func _build_hall_end() -> void:
 	# dalle en quatre morceaux autour de la fosse
 	var w_l: float = PIT_X0 + HALL_HALF_W
 	var w_r: float = HALL_HALF_W - PIT_X1
-	_box(Vector3(w_l, t_slab, HALL_DEPTH), dalle, -HALL_HALF_W + w_l * 0.5, y_slab, HALL_DEPTH * 0.5, "DalleG")
-	_box(Vector3(w_r, t_slab, HALL_DEPTH), dalle, PIT_X1 + w_r * 0.5, y_slab, HALL_DEPTH * 0.5, "DalleD")
+	# de chaque côté de la fosse, depuis son bord aval (la dalle de voie
+	# s'arrête là) jusqu'au fond du hall
+	var l_dal: float = HALL_DEPTH - PIT_S0
+	_box(Vector3(w_l, t_slab, l_dal), dalle, -HALL_HALF_W + w_l * 0.5, y_slab, (PIT_S0 + HALL_DEPTH) * 0.5, "DalleG")
+	_box(Vector3(w_r, t_slab, l_dal), dalle, PIT_X1 + w_r * 0.5, y_slab, (PIT_S0 + HALL_DEPTH) * 0.5, "DalleD")
 	var pit_w: float = PIT_X1 - PIT_X0
 	var pit_xc: float = (PIT_X0 + PIT_X1) * 0.5
 	_box(Vector3(pit_w, t_slab, HALL_DEPTH - PIT_S1), dalle, pit_xc, y_slab, (PIT_S1 + HALL_DEPTH) * 0.5, "DalleArriere")
@@ -287,9 +292,16 @@ func _build_room() -> void:
 		_box(Vector3(0.30, h, long), _mats["carrelage"], sx * (ROOM_HALF_W + 0.15), y_mid, s_c, "MurMachines")
 	_box(Vector3(ROOM_HALF_W * 2.0, h, 0.30), _mats["carrelage"], 0.0, y_mid, ROOM_S0 - 0.15, "MurMachinesAval")
 	_box(Vector3(ROOM_HALF_W * 2.0, h, 0.30), _mats["carrelage"], 0.0, y_mid, ROOM_S1 + 0.15, "MurMachinesAmont")
-	# plafond sous la fin du tunnel (côté voie) et au-delà de la dalle de gare
-	_box(Vector3(ROOM_HALF_W * 2.0, 0.15, -ROOM_S0), _mats["plafond_salle"],
-		0.0, Y_SLAB_BOTTOM - 0.075, ROOM_S0 * 0.5, "PlafondMachinesAval")
+	# plafond sous la fin du tunnel (côté voie), ouvert au-dessus de la roue
+	# aval (fosse) ; et au-delà de la dalle de gare
+	var pa: StandardMaterial3D = _mats["plafond_salle"]
+	var y_pa: float = Y_SLAB_BOTTOM - 0.075
+	_box(Vector3(PIT_X0 + ROOM_HALF_W, 0.15, -ROOM_S0), pa,
+		(-ROOM_HALF_W + PIT_X0) * 0.5, y_pa, ROOM_S0 * 0.5, "PlafondMachinesAval")
+	_box(Vector3(ROOM_HALF_W - PIT_X1, 0.15, -ROOM_S0), pa,
+		(PIT_X1 + ROOM_HALF_W) * 0.5, y_pa, ROOM_S0 * 0.5, "PlafondMachinesAval")
+	_box(Vector3(PIT_X1 - PIT_X0, 0.15, PIT_S0 - ROOM_S0), pa,
+		(PIT_X0 + PIT_X1) * 0.5, y_pa, (ROOM_S0 + PIT_S0) * 0.5, "PlafondMachinesAval")
 	var s_p0: float = HALL_DEPTH
 	_box(Vector3(ROOM_HALF_W * 2.0, 0.30, ROOM_S1 - s_p0), _mats["plafond_salle"],
 		0.0, Y_SLAB_BOTTOM + 0.15, (s_p0 + ROOM_S1) * 0.5, "PlafondMachines")
@@ -332,6 +344,12 @@ const OPEN_R1: float = 0.40          # extrémité intérieure (× RIM_IN)
 const OPEN_R2: float = 0.86          # extrémité extérieure (× RIM_IN)
 const SPOKE_W: float = 0.28          # largeur des bras entre ouvertures
 const OPEN_FILLET: float = 0.22      # rayon des arrondis
+# Bande de frein : de BRAKE_R_IN à RF sur la face extérieure (+x) de la
+# roue, affleurante. Les étriers appuient dessus vers RF, sous la roue, là où
+# le carter rouge est interrompu (BRAKE_A ± BRAKE_OUV).
+const BRAKE_R_IN: float = 1.62
+const BRAKE_A: float = -PI * 0.62         # sous la roue, côté voie
+const BRAKE_OUV: float = 0.34             # demi-ouverture du carter (rad)
 
 
 func _build_wheel(s_c: float, y_c: float, grooves: Array, nom: String) -> Node3D:
@@ -350,15 +368,20 @@ func _build_wheel(s_c: float, y_c: float, grooves: Array, nom: String) -> Node3D
 	for i in range(grooves.size() - 1):
 		joues.append((float(grooves[i]) + float(grooves[i + 1])) * 0.5)
 	for xj in joues:
-		_ring(spin, RIM_IN, RF, float(xj) - x_c - 0.018, float(xj) - x_c + 0.018, jaune)
+		# la joue extérieure (côté +x) EST la bande de frein : acier nu
+		var m_j: StandardMaterial3D = _mats["acier"] if absf(float(xj) - xr.y) < 1e-6 else jaune
+		_ring(spin, RIM_IN, RF, float(xj) - x_c - 0.018, float(xj) - x_c + 0.018, m_j)
 	# voile jaune évidé
 	var web: MeshInstance3D = MeshInstance3D.new()
 	web.name = "Voile"
 	web.mesh = _web_mesh(0.40, RIM_IN + 0.02, WEB_T, _mats["jaune"])
 	web.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	spin.add_child(web)
-	# piste de frein côté +x, juste sous la jante (photo « Les freins de poulie »)
-	_ring(spin, RIM_IN - 0.14, RIM_IN, xr.y - x_c - 0.02, xr.y - x_c + 0.03, _mats["acier"])
+	# frein (photo « Les freins de poulie », DSCN3579) : une BANDE d'acier
+	# affleurante — la joue extérieure et une couronne sous la jante, au même
+	# plan — sur laquelle les étriers appuient ; rien ne dépasse de la roue
+	# (retour du 30/09 : « c'est une bande métallique, pas une excroissance »)
+	_ring(spin, BRAKE_R_IN, RIM_IN, xr.y - x_c - 0.018, xr.y - x_c + 0.018, _mats["acier"])
 	# moyeu et bossages
 	_disc(spin, 0.42, 0.62, 0.0, _mats["acier"])
 	for i in range(8):
@@ -566,20 +589,45 @@ func _build_bearings(s_c: float, y_c: float, grooves: Array) -> void:
 ## un étrier rouge et un turquoise, cloches inox.
 func _build_brake(s_c: float, y_c: float, grooves: Array, nom: String) -> void:
 	var xr: Vector2 = _wheel_x_range(grooves)
-	var x_track: float = xr.y + 0.025
-	var a: float = -PI * 0.62            # sous la roue, côté voie
-	var r_t: float = RIM_IN - 0.07
-	var y_b: float = y_c + sin(a) * r_t
-	var s_b: float = s_c + cos(a) * r_t
-	var bati_h: float = y_b - ROOM_FLOOR
-	_box(Vector3(0.50, bati_h, 1.6), _mats["vert"], x_track + 0.35, ROOM_FLOOR + bati_h * 0.5, s_b, nom + "Bati")
+	var xf: float = xr.y + 0.018          # face extérieure de la bande de frein
+	var r_p: float = (RIM_IN + RF) * 0.5  # les garnitures appuient sur la jante
+	# bâti vert sous les étriers, entièrement hors de la roue (x > face)
+	var x_bati: float = xf + 0.26
+	var y_low: float = y_c + sin(BRAKE_A) * (RF + 0.12)
+	var bati_h: float = y_low - ROOM_FLOOR
+	_box(Vector3(0.34, bati_h, 1.5), _mats["vert"], x_bati, ROOM_FLOOR + bati_h * 0.5,
+		s_c + cos(BRAKE_A) * r_p, nom + "Bati")
 	for k in range(2):
-		var ds: float = -0.38 + 0.76 * float(k)
+		var a: float = BRAKE_A + (-0.17 if k == 0 else 0.17)
 		var m: StandardMaterial3D = _mats["rouge"] if k == 0 else _mats["turquoise"]
-		_box(Vector3(0.42, 0.46, 0.40), m, x_track + 0.12, y_b + 0.05, s_b + ds, nom + "Etrier")
-		var cloche: MeshInstance3D = _cyl_x(0.16, 0.14, _mats["acier"])
+		var yy: float = y_c + sin(a) * r_p
+		var ss: float = s_c + cos(a) * r_p
+		# garniture contre la bande, corps d'étrier, vérin (« cloche »)
+		_box_rad(Vector3(0.03, 0.24, 0.30), _mats["sombre"], xf + 0.015, s_c, y_c, a, r_p, nom + "Garniture")
+		_box_rad(Vector3(0.14, 0.34, 0.36), m, xf + 0.10, s_c, y_c, a, r_p, nom + "Etrier")
+		var cloche: MeshInstance3D = _cyl_x(0.12, 0.16, _mats["acier"])
 		add_child(cloche)
-		_place(cloche, x_track + 0.40, y_b + 0.05, s_b + ds)
+		_place(cloche, xf + 0.25, yy, ss)
+		var h_bras: float = yy - y_low
+		if h_bras > 0.02:
+			_box(Vector3(0.10, h_bras, 0.12), _mats["vert"], xf + 0.10, y_low + h_bras * 0.5, ss, nom + "Bras")
+
+
+## Boîte orientée selon le rayon de la roue (axe local y = direction radiale
+## à l'angle a, repère s = r cos a, y = r sin a), centrée au rayon r.
+func _box_rad(size: Vector3, mat: StandardMaterial3D, ox: float, s_c: float, y_c: float,
+		a: float, r: float, nom: String) -> void:
+	var mi: MeshInstance3D = MeshInstance3D.new()
+	var bm: BoxMesh = BoxMesh.new()
+	bm.size = size
+	bm.material = mat
+	mi.mesh = bm
+	mi.name = nom
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	# repère du nœud : x, y, z = −s ; radial = (0, sin a, −cos a)
+	mi.transform.basis = Basis(Vector3.RIGHT, atan2(-cos(a), sin(a)))
+	add_child(mi)
+	_place(mi, ox, y_c + sin(a) * r, s_c + cos(a) * r)
 
 
 ## Chaîne cinématique : arbre sous carter grillagé jaune → réducteur jaune à

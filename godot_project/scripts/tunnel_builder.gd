@@ -338,12 +338,28 @@ func _build_tunnel_chunk(
 		# Dimensions horseshoe locales (élargies dans les salles de gare)
 		var prev_dims: Vector2 = _horseshoe_dims_at(s_prev)
 		var cur_dims: Vector2 = _horseshoe_dims_at(s_cur)
+		# Fin de ligne : la salle des machines s'étend sous les derniers
+		# mètres de la gare haute. Le caisson de la gare (sol à −2,65) la
+		# traversait et coupait la roue aval à plat (retour du 30/09) : dans
+		# les anneaux qui la couvrent, rien sous le dessous de dalle.
+		var cut_s: float = PNConstants.LENGTH + MachineRoomBuilder.ROOM_S0 - ring_spacing
+		var prev_cut: bool = s_prev >= cut_s
+		var cur_cut: bool = s_cur >= cut_s
+		var y_cut: float = MachineRoomBuilder.Y_SLAB_BOTTOM
 
 		for k in range(ring_segments):
 			var prev_0: Vector2 = _profile_xy(k, ring_segments, prev_radius, prev_blend, prev_dims.x, prev_dims.y)
 			var prev_1: Vector2 = _profile_xy(k + 1, ring_segments, prev_radius, prev_blend, prev_dims.x, prev_dims.y)
 			var cur_0: Vector2 = _profile_xy(k, ring_segments, cur_radius, cur_blend, cur_dims.x, cur_dims.y)
 			var cur_1: Vector2 = _profile_xy(k + 1, ring_segments, cur_radius, cur_blend, cur_dims.x, cur_dims.y)
+			if prev_cut and cur_cut and maxf(maxf(prev_0.y, prev_1.y), maxf(cur_0.y, cur_1.y)) <= y_cut + 0.01:
+				continue
+			if prev_cut:
+				prev_0.y = maxf(prev_0.y, y_cut)
+				prev_1.y = maxf(prev_1.y, y_cut)
+			if cur_cut:
+				cur_0.y = maxf(cur_0.y, y_cut)
+				cur_1.y = maxf(cur_1.y, y_cut)
 
 			var p_prev_0: Vector3 = prev_center + prev_right * prev_0.x + prev_up * prev_0.y
 			var p_prev_1: Vector3 = prev_center + prev_right * prev_1.x + prev_up * prev_1.y
