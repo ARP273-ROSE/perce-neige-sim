@@ -49,7 +49,7 @@ func _suite() -> void:
 	var inv: Transform3D = xf.affine_inverse()
 	var f: FileAccess = FileAccess.open(out_path, FileAccess.WRITE)
 	var n_tri: int = 0
-	for holder in [mr, st]:
+	for holder in [mr, st, _track, _tunnel]:
 		var stack: Array = [holder]
 		while not stack.is_empty():
 			var n: Node = stack.pop_back()
@@ -121,6 +121,51 @@ func _suite() -> void:
 	# bras des butoirs : de LENGTH − 0,4 + 0,15 à LENGTH − 0,4 + 2,55 (stations_builder)
 	ok = _check("roue aval entre les bras bleus", s0 >= -0.25 and s1 <= 2.15,
 		"émerge de s = %.2f à %.2f (bras de −0,25 à 2,15)" % [s0, s1]) and ok
+	# rien de la gare, de la voie ni du tunnel ne traverse la roue aval ni le
+	# carter (« un mur en béton dans la roue », retour du 30/09) : aucun
+	# triangle hors salle des machines dans le cylindre de la roue aval
+	var intrus: Dictionary = {}
+	for holder in [st, _track, _tunnel]:
+		var pile: Array = [holder]
+		while not pile.is_empty():
+			var nd: Node = pile.pop_back()
+			for c in nd.get_children():
+				pile.append(c)
+				if not (c is MeshInstance3D) or (c as MeshInstance3D).mesh == null:
+					continue
+				var mi: MeshInstance3D = c
+				var gx: Transform3D = mi.global_transform
+				for si in range(mi.mesh.get_surface_count()):
+					var arr: Array = mi.mesh.surface_get_arrays(si)
+					var vs: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
+					var ix: PackedInt32Array = PackedInt32Array()
+					if arr[Mesh.ARRAY_INDEX] != null:
+						ix = arr[Mesh.ARRAY_INDEX]
+					var nt: int = (ix.size() if ix.size() > 0 else vs.size()) / 3
+					for ti in range(nt):
+						var tri: Array = []
+						for m in range(3):
+							var vi: int = ix[ti * 3 + m] if ix.size() > 0 else ti * 3 + m
+							tri.append(inv * (gx * vs[vi]))
+						# boîte englobante loin de la roue : on passe
+						var lo: Vector3 = (tri[0] as Vector3).min(tri[1]).min(tri[2])
+						var hi: Vector3 = (tri[0] as Vector3).max(tri[1]).max(tri[2])
+						if lo.x > 0.31 or hi.x < -0.31 or -hi.z > 3.2 or -lo.z < -1.3 \
+								or lo.y > MachineRoomBuilder.A_Y + 2.3 or hi.y < MachineRoomBuilder.A_Y - 2.3:
+							continue
+						# échantillonnage barycentrique de la surface (pas de 1/12)
+						var touche: bool = false
+						for i in range(13):
+							for j in range(13 - i):
+								var q: Vector3 = tri[0] * (1.0 - (i + j) / 12.0) + tri[1] * (i / 12.0) + tri[2] * (j / 12.0)
+								if absf(q.x) > 0.31:
+									continue
+								var rr: float = Vector2(-q.z - MachineRoomBuilder.A_S, q.y - MachineRoomBuilder.A_Y).length()
+								if rr < MachineRoomBuilder.GUARD_R + 0.02:
+									touche = true
+						if touche:
+							intrus[String(mi.name)] = intrus.get(String(mi.name), 0) + 1
+	ok = _check("rien ne traverse la roue aval", intrus.is_empty(), str(intrus)) and ok
 	var g: Dictionary = mr._geometry()
 	# sommets des deux roues alignés sur la pente de la voie (Kevin, 30/09) :
 	# le repère local suit la voie, donc même cote

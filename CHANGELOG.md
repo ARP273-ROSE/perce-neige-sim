@@ -7,6 +7,44 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.15.35** — fluidité de la 3D, roue aval dégagée, frein à bande.
+- « Le défilement du tunnel saccade » dans la PWA, ainsi que la rotation en
+  vue salle des machines. La vidéo d'écran de l'iPad (120 Hz) montre qu'une
+  image sur neuf arrive en retard : 25, 33 ou 42 ms au lieu de 16,7 ms. Le
+  script n'est pas en cause : sans rendu, la scène tourne à plus de 4 000
+  images par seconde. Le dessin, lui, l'était : 1,72 million de triangles
+  par image en vue cabine.
+- La cause : les éléments répétés le long de la ligne (joints annulaires du
+  tunnel, escalier de service, blochets, galets) formaient chacun UN bloc
+  couvrant 3,5 km. Godot ne peut pas écarter un tel bloc, donc la carte
+  graphique traitait à chaque image toute la ligne, derrière la caméra
+  comprise. Les seuls joints pesaient 936 000 triangles.
+- La correction : ces éléments sont découpés en tronçons de 100 m, que
+  Godot écarte hors champ. Les petits détails s'effacent au-delà de 150 à
+  500 m. Les joints passent de 480 à 192 triangles, et les roues de la rame
+  d'en face ne sont plus dessinées au-delà de 150 m. Au même endroit (vers
+  1 450 m, à 12 m/s), l'image passe de 1,72 million à 357 000 triangles,
+  soit 79 % de moins.
+- « Dans la roue aval, une sorte de mur en béton ». Trois éléments
+  traversaient la roue : la fin du caisson de la gare haute, la dalle de
+  voie et la longrine du câble. Le caisson de la gare, dont le sol est à
+  −2,65 m, s'étendait jusqu'au bout de la voie, au-dessus des 2,6 premiers
+  mètres de la salle des machines. Désormais, ses derniers anneaux
+  s'arrêtent sous la dalle ; la dalle de voie et la longrine s'arrêtent au
+  bord de la fosse ; la dalle du hall et le plafond de la salle sont
+  découpés autour de la roue. Le banc vérifie maintenant, sur toute la
+  surface des triangles, que rien ne traverse la roue. Il détecte bien
+  l'ancien défaut.
+- Frein de roue : les étriers entraient dans la jante. Une première
+  correction avait ajouté un disque déporté, mais Kevin a précisé que c'est
+  « une bande métallique sur laquelle les freins appuient, pas une
+  excroissance ». La photo DSCN3579 le confirme. La joue extérieure de
+  chaque roue est donc une bande d'acier affleurante. Deux étriers à vérin
+  appuient dessus sous la roue, depuis l'extérieur, sur leur bâti vert, et
+  le carter rouge s'interrompt à leur droit.
+- Vérifié : tous les bancs passent, 53 tests aussi. Le rendu réel des freins
+  et de la roue aval a été contrôlé.
+
 **v1.15.34** — son de la salle des machines, fin du silence d'ambiance PC.
 - Demande de Kevin : le son de la vue salle des machines doit venir de la
   vidéo « [FUNI284] Funiculaire du Perce-Neige, Tignes (marche complète à
