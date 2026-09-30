@@ -50,6 +50,22 @@ func _suite() -> void:
 			print("  lacune rail %+d (%s) : croisement %.2f, fin de langue %.2f, reprise %.2f, chevauchement %.2f m"
 				% [g.rail, z, g["sc_" + z], g["a_end_" + z], g["b_start_" + z], ov])
 			_check("chevauchement des bouts ≥ 0,5 m", ov >= 0.5, "%.2f m" % ov)
+			# les deux bouts courent parallèlement au câble, à ±8 cm
+			var dev: float = 0.0
+			var s_lo2: float = minf(g["b_start_" + z], g["a_end_" + z])
+			var s_hi2: float = maxf(g["b_start_" + z], g["a_end_" + z])
+			var sv: float = s_lo2
+			while sv <= s_hi2:
+				var cx2: float = tr.strand_local_at(g.cable, sv).x
+				for r in tr.inner_rails_at(sv):
+					if r[2].rail == g.rail:
+						dev = maxf(dev, absf(absf(r[0] - cx2) - TrackBuilder.ABT_CHANNEL))
+				sv += 0.05
+			_check("bouts parallèles au câble à 8 cm", dev < 0.002, "écart %.4f m" % dev)
+			var coude: float = rad_to_deg(atan(absf(
+				tr._wheel_cable_gap(g.rail, g["sc_" + z] + 0.5) - tr._wheel_cable_gap(g.rail, g["sc_" + z] - 0.5))))
+			print("    coudes à %.2f et %.2f m du croisement, angle %.2f°" % [
+				absf(g["bend_a_" + z] - g["sc_" + z]), absf(g["bend_b_" + z] - g["sc_" + z]), coude])
 			var ds: float = absf(g["sc_" + z] - (s0 if z == "lo" else s1))
 			_check("lacune près de 17 m de la fourche", absf(ds - 17.0) < 1.5, "%.2f" % ds)
 

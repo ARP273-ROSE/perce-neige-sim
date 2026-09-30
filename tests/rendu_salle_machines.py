@@ -118,7 +118,7 @@ def main():
     v = f * y[m] / z[m]
     uv = np.stack([u, v], axis=2)
     peindre(ax3, uv, z[m].mean(axis=1), rgba[m],
-            "Fin de ligne vue du quai : roue aval entre les butoirs, fosse, batterie de galets",
+            "Fin de ligne vue du quai : roue aval entre les butoirs, fosse, roue amont derrière son garde-corps",
             ((-1.1, 1.1), (-0.75, 0.45)))
     plt.tight_layout()
     plt.savefig(sys.argv[2], dpi=90, facecolor=fig.get_facecolor())
