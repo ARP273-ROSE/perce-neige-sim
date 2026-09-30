@@ -243,7 +243,7 @@ func _build() -> void:
 	_bind_tap(b_lights, "toggle_headlights")
 	top.add_child(b_lights)
 
-	var b_view: Button = _mk_button("VUE", "Vue FPV / extérieure")
+	var b_view: Button = _mk_button("VUE", "Vue cabine → extérieure → salle des machines")
 	b_view.custom_minimum_size = Vector2(102, 56)
 	_bind_tap(b_view, "toggle_view")
 	top.add_child(b_view)

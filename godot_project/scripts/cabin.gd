@@ -52,8 +52,12 @@ var _head_mat: StandardMaterial3D = null
 @export var train_number: int = 1
 var _prev_v_for_acc: float = 0.0   # vitesse à la frame précédente pour calcul accel
 
-enum ViewMode { FPV, EXTERIOR }
+enum ViewMode { FPV, EXTERIOR, MACHINES }
 var view_mode: int = ViewMode.FPV
+# Vue « salle des machines » : caméra posée par main.gd dans la gare amont
+# (ne suit pas la rame). Null tant qu'elle n'existe pas → cycle à 2 vues.
+var camera_machines: MachineRoomCamera = null
+var machine_room: MachineRoomBuilder = null
 
 # Secousse d'écran (collision du mode Défi) — décalage aléatoire
 # décroissant appliqué à la caméra courante.
@@ -1259,25 +1263,41 @@ func _build_camera() -> void:
 
 
 func _apply_view_mode() -> void:
-	if view_mode == ViewMode.FPV:
-		# La coque reste VISIBLE en cabine (2026-09-26) : elle porte les
-		# hublots, le pare-brise et sa doublure intérieure — avant, on
-		# voyait le tunnel de tous côtés, sans montants ni vitres.
-		mesh_root.visible = true
-		camera_fpv.make_current()
-	else:
-		mesh_root.visible = true
-		camera_ext.make_current()
-	# Parois du tunnel translucides en vue extérieure pour voir la rame à
-	# l'intérieur du tube (seule la cabine pilotée bascule la vue).
+	if view_mode == ViewMode.MACHINES and camera_machines == null:
+		view_mode = ViewMode.FPV
+	# La coque reste VISIBLE en cabine (2026-09-26) : elle porte les
+	# hublots, le pare-brise et sa doublure intérieure — avant, on voyait
+	# le tunnel de tous côtés, sans montants ni vitres.
+	mesh_root.visible = true
+	match view_mode:
+		ViewMode.FPV:
+			camera_fpv.make_current()
+		ViewMode.EXTERIOR:
+			camera_ext.make_current()
+		ViewMode.MACHINES:
+			camera_machines.make_current()
+	if machine_room != null:
+		machine_room.set_cutaway(view_mode == ViewMode.MACHINES)
+	# Parois du tunnel translucides en vue extérieure pour voir la rame
+	# dans le tube (seule la cabine pilotée bascule la vue). La salle des
+	# machines garde ses murs : la caméra y reste à l'intérieur.
 	if not is_ghost and tunnel != null:
 		tunnel.set_wall_see_through(view_mode == ViewMode.EXTERIOR)
 
 
+## Cycle des vues 3D : cabine → extérieure → salle des machines → cabine
+## (la dernière seulement si la salle est construite).
 func toggle_view() -> void:
-	view_mode = (view_mode + 1) % 2
+	var n: int = 3 if camera_machines != null else 2
+	set_view(((view_mode + 1) % n))
+
+
+func set_view(mode: int) -> void:
+	if is_ghost:
+		return
+	view_mode = mode
 	_apply_view_mode()
-	print("[View] %s" % ["FPV cockpit" if view_mode == ViewMode.FPV else "EXTERIOR orbital"])
+	print("[View] %s" % ["FPV cockpit", "EXTERIOR orbital", "salle des machines"][view_mode])
 
 
 func set_tunnel(t: TunnelBuilder) -> void:
@@ -1559,6 +1579,8 @@ func _update_shake(delta: float) -> void:
 	if is_ghost:
 		return
 	var cam: Camera3D = camera_fpv if view_mode == ViewMode.FPV else camera_ext
+	if view_mode == ViewMode.MACHINES:
+		cam = camera_fpv    # la salle ne tremble pas ; on remet la cabine à zéro
 	if cam == null:
 		return
 	if _shake_t <= 0.0:
