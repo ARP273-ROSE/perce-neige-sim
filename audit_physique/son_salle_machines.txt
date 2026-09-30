@@ -1,0 +1,26 @@
+=== Raie de la machinerie
+  à 12 m/s (médiane de la marche 110-335 s) : f_12 = 196.11 Hz
+  dérive pendant la marche : 193.7 à 206.2 Hz (± 3.2 % : régulation du variateur)
+  moteur à 12 m/s : 1199 tr/min = 19.98 Hz (reducteur_plaque.sage) → raie = 9.81 × la rotation moteur
+
+=== Démarrage et arrivée à 12 m/s (réels)
+  accélération (70-94 s, 5,9 → 11 m/s) : 0.239 m/s² ; droite prolongée à v = 0 : t = 45.4 s
+  freinage (342-355 s) : -0.434 m/s² ; droite prolongée à v = 0 : t = 367.5 s
+  distance parcourue pendant les 1151 points suivis : 3321 m (la ligne fait 3 474 m ; le reste se fait sous 5 m/s, raie masquée)
+
+=== Niveau sonore en fonction de la vitesse
+  repos (370-412 s) : -25.0 dBFS ; marche à 12 m/s : -20.3 dBFS
+  part de la machinerie à 12 m/s : -22.1 dBFS
+  puissance de la machinerie ∝ v^0.84 (ajustement sur 151 points, 4,5-11,5 m/s)
+  soit un gain d'amplitude ∝ v^0.42
+    v =  1 m/s : machinerie  -31.1 dBFS, total  -24.0 dBFS
+    v =  2 m/s : machinerie  -28.6 dBFS, total  -23.4 dBFS
+    v =  4 m/s : machinerie  -26.1 dBFS, total  -22.5 dBFS
+    v =  6 m/s : machinerie  -24.6 dBFS, total  -21.8 dBFS
+    v =  8 m/s : machinerie  -23.5 dBFS, total  -21.2 dBFS
+    v = 10 m/s : machinerie  -22.7 dBFS, total  -20.7 dBFS
+    v = 12 m/s : machinerie  -22.1 dBFS, total  -20.3 dBFS
+
+=== Pour le simulateur
+  boucle « marche » extraite à 12 m/s, jouée à la hauteur v/12 (la raie suit la vitesse)
+  gain de la boucle marche : (v/12)^0.42 ; boucle « repos » toujours présente

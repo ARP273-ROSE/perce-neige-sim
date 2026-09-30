@@ -82,6 +82,24 @@ try:
 except ImportError:
     _QTMULTIMEDIA_OK = False
 
+if _QTMULTIMEDIA_OK:
+    class _SoundEffect(QSoundEffect):
+        """QSoundEffect qui ne joue JAMAIS à volume exactement nul.
+
+        Bogue de Qt 6.11 (moteur QRtAudioEngine, trouvé le 30/09/2026 sur un
+        vrai serveur son) : dès qu'un QSoundEffect joue à volume 0,0, TOUS
+        les autres QSoundEffect deviennent muets (−140 dB) ; à 0,00001 tout
+        va bien. C'était la cause du « silence total entre 0,2 et 1 m/s en
+        décélération » : sous 1 m/s la boucle de croisière jouait à volume
+        0,0 jusqu'à son arrêt à 0,2 m/s (rapports diagnostic_son du PC :
+        « croisière : joue, volume 0 » à 0,74 m/s). Plancher 1e-4 = −80 dB,
+        inaudible."""
+
+        VOLUME_MIN = 1e-4
+
+        def setVolume(self, volume: float) -> None:  # noqa: N802
+            super().setVolume(max(float(volume), self.VOLUME_MIN))
+
 # Bridge optionnel vers le viewer Godot 3D (rendu FPV cockpit en F4).
 # Si le module n'est pas dispo ou Godot pas installé, le sim continue
 # avec sa vue cabine procédurale traditionnelle (aucune régression).
@@ -3721,6 +3739,34 @@ def _fx_duck_strength(env_db: list, pos_ms: float) -> float:
     return max(0.0, min(1.0, (env_db[i] + 30.0) / 10.0))
 
 
+# Son de la vue « salle des machines » (2026-09-30, demande de Kevin) :
+# enregistrement réel de la gare haute, vidéo « [FUNI284] Funiculaire du
+# Perce-Neige | Tignes (marche complète à 12 m/s) », caméra fixe sur la roue
+# aval (août 2013). Deux boucles : la salle au repos, et la machinerie à
+# 12 m/s dont la raie tonale (196 Hz) est proportionnelle à la vitesse.
+# audit_physique/son_salle_machines.sage : puissance de la machinerie ∝
+# v^0,84 → amplitude ∝ v^0,42 ; à 12 m/s elle pèse 1 − 10^(−4,7/10) de
+# l'enregistrement (le reste est la salle au repos) → gain 0,813.
+MR_GAIN_12 = 0.813
+MR_EXP = 0.42
+MR_RATE_MIN = 0.25     # sous 0,22, le lecteur FFmpeg de Qt décroche (banc du 30/09)
+
+
+def _machine_room_levels(v: float) -> tuple[float, float]:
+    """(gain de la boucle « marche », débit de lecture) à la vitesse v.
+    Débit = v/12 : la hauteur suit la vitesse (compensation de hauteur
+    coupée). Sous 3 m/s, la hauteur reste celle de 3 m/s mais le niveau
+    continue de baisser (la machinerie est alors 6 dB sous la salle au
+    repos : l'écart est masqué) ; fondu à zéro entre 0,3 et 0,05 m/s."""
+    v = abs(v)
+    if v <= 0.05:
+        return 0.0, MR_RATE_MIN
+    g = MR_GAIN_12 * min(v / V_MAX, 1.0) ** MR_EXP
+    if v < 0.3:
+        g *= (v - 0.05) / 0.25
+    return g, max(MR_RATE_MIN, min(1.0, v / V_MAX))
+
+
 def _ambient_gain(v: float, looping: bool) -> float:
     """Gain global (0..1) des boucles d'ambiance cabine selon |v|.
 
@@ -4032,6 +4078,15 @@ class SoundSystem:
         # créées paresseusement quand la synthèse WAV de fond a fini.
         self._motor_fx: list = []
         self._motor_ready = False
+        # Vue « salle des machines » : 0 = son cabine, 1 = son de la salle
+        self._mr_target = False
+        self._mr_mix = 0.0
+        self._mr_idle = None
+        self._mr_run = None
+        self._mr_run_audio = None
+        self._mr_started = False
+        self._mr_rate = 1.0
+        self._mr_rate_t = 0.0
         # Generate procedural ambient/buzzer WAVs (cached in temp dir)
         wav_dir = Path(tempfile.gettempdir()) / "perce_neige_wav"
         # Plan paths synchronously (cheap), defer heavy synthesis to a
@@ -4058,7 +4113,9 @@ class SoundSystem:
                               ("door_motion_real", "door_motion.wav"),
                               ("crossing_real", "crossing.wav"),
                               ("buzzer_real", "buzzer_upper.wav"),
-                              ("buzzer_bas", "buzzer_lower.wav")):
+                              ("buzzer_bas", "buzzer_lower.wav"),
+                              ("salle_machines_marche", "salle_machines_marche_12ms.wav"),
+                              ("salle_machines_repos", "salle_machines_repos.wav")):
             candidate = bundled_amb_dir / filename
             if candidate.exists():
                 self._ambient_wavs[key] = candidate
@@ -4123,10 +4180,10 @@ class SoundSystem:
             # laisse un blanc audible à chaque redémarrage de boucle (toutes
             # les 30 s !) sur le backend Windows Media Foundation ;
             # QSoundEffect est conçu pour les WAV en boucle sans couture.
-            self._amb_player = QSoundEffect()          # slow/approach loop
+            self._amb_player = _SoundEffect()          # slow/approach loop
             self._amb_player.setLoopCount(QSoundEffect.Loop.Infinite.value)
             self._amb_player.setVolume(0.0)
-            self._amb2_player = QSoundEffect()         # cruise loop
+            self._amb2_player = _SoundEffect()         # cruise loop
             self._amb2_player.setLoopCount(QSoundEffect.Loop.Infinite.value)
             self._amb2_player.setVolume(0.0)
             self._amb_playing = False
@@ -4147,7 +4204,7 @@ class SoundSystem:
             self._fx_duck_level = 0.0
             # Ambiance de quai (station lower/upper) — boucle discrète
             # jouée à l'arrêt portes ouvertes, fondue quand elles ferment.
-            self._station_player = QSoundEffect()
+            self._station_player = _SoundEffect()
             self._station_player.setLoopCount(QSoundEffect.Loop.Infinite.value)
             self._station_player.setVolume(0.0)
             self._station_which: str | None = None
@@ -4167,6 +4224,22 @@ class SoundSystem:
             self._cross_audio.setVolume(1.0)
             self._cross_player.setAudioOutput(self._cross_audio)
             self._cross_loaded_path: str | None = None
+            # Salle des machines : repos en QSoundEffect (boucle sans
+            # couture) ; marche en QMediaPlayer, seul lecteur dont on peut
+            # faire varier le débit — compensation de hauteur COUPÉE (elle
+            # est active par défaut dans Qt 6.11) pour que la hauteur suive.
+            self._mr_idle = _SoundEffect()
+            self._mr_idle.setLoopCount(QSoundEffect.Loop.Infinite.value)
+            self._mr_idle.setVolume(0.0)
+            self._mr_run = QMediaPlayer()
+            self._mr_run_audio = QAudioOutput()
+            self._mr_run_audio.setVolume(0.0)
+            self._mr_run.setAudioOutput(self._mr_run_audio)
+            self._mr_run.setLoops(QMediaPlayer.Loops.Infinite)
+            try:
+                self._mr_run.setPitchCompensation(False)
+            except AttributeError:
+                pass    # Qt < 6.10 : pas de compensation, la hauteur suit déjà
         except Exception:
             self.enabled = False
 
@@ -4588,6 +4661,19 @@ class SoundSystem:
         # Plancher de fluage 0,45 + plancher d'arrêt 0,14 : cf. _ambient_gain
         # (audit son 2026-09-26 : l'ambiance « se coupait » vers 1 m/s).
         overall = _ambient_gain(v, self._amb_playing or self._amb2_playing)
+        # Vue salle des machines : le son de la cabine s'efface, celui de la
+        # gare haute prend le relais (fondu τ ≈ 0,35 s).
+        a_mix = 1.0 - math.exp(-dt / 0.35)
+        mr_goal = 1.0 if self._mr_target else 0.0
+        self._mr_mix += (mr_goal - self._mr_mix) * a_mix
+        if abs(mr_goal - self._mr_mix) < 0.002:
+            self._mr_mix = mr_goal
+        cabine = 1.0 - self._mr_mix
+        overall *= cabine
+        try:
+            self._fx_audio.setVolume(0.70 * (cabine if self._fx_oneshot_active else 1.0))
+        except Exception:
+            pass
         # Duck ambient hard while the horn is sounding — update_ambient
         # runs every frame so it would otherwise undo start_horn()'s
         # snapshot-based ducking the very next tick.
@@ -4646,7 +4732,7 @@ class SoundSystem:
         if self._crossing_level > 0.001:
             overall *= (1.0 - 0.60 * self._crossing_level)
             try:
-                self._cross_audio.setVolume(self._crossing_level)
+                self._cross_audio.setVolume(self._crossing_level * cabine)
             except Exception:
                 pass
         elif not active:
@@ -4741,7 +4827,7 @@ class SoundSystem:
         # set_station_ambient(), arrêt une fois inaudible.
         sp = self._station_player
         cur = sp.volume()
-        diff = self._station_target - cur
+        diff = self._station_target * cabine - cur
         if abs(diff) > 0.003:
             sp.setVolume(max(0.0, min(1.0, cur + diff * a_vol)))
         if self._station_target <= 0.0 and sp.isPlaying() and sp.volume() < 0.01:
@@ -4751,6 +4837,62 @@ class SoundSystem:
         # Sifflement moteur : hauteur asservie à la vitesse (crossfade de
         # banques 172→202 Hz), volume suivant l'ambiance (mêmes ducks).
         self._update_motor_whine(v, overall, moving, a_vol)
+        self._update_machine_room(v, dt)
+
+    def set_machine_room_view(self, active: bool) -> None:
+        """Vue 3D « salle des machines » active (touche O, 3e vue) : le son
+        de la cabine laisse la place à celui de la gare haute."""
+        self._mr_target = bool(active) and self.enabled
+
+    def _update_machine_room(self, v: float, dt: float) -> None:
+        """Son de la salle des machines : repos permanent + machinerie dont
+        le débit (donc la hauteur) et le niveau suivent la vitesse du câble."""
+        if self._mr_idle is None or self._mr_run is None:
+            return
+        mix = self._mr_mix
+        if mix <= 0.0 and not self._mr_target:
+            if self._mr_started:
+                try:
+                    self._mr_idle.stop()
+                    self._mr_idle.setVolume(0.0)
+                    self._mr_run.stop()
+                    self._mr_run_audio.setVolume(0.0)
+                except Exception:
+                    pass
+                self._mr_started = False
+            return
+        try:
+            if not self._mr_started:
+                p_idle = self._ambient_wavs.get("salle_machines_repos")
+                p_run = self._ambient_wavs.get("salle_machines_marche")
+                if not (p_idle and p_idle.exists() and p_run and p_run.exists()):
+                    return
+                if self._mr_idle.source().isEmpty():
+                    self._mr_idle.setSource(QUrl.fromLocalFile(str(p_idle)))
+                    self._mr_run.setSource(QUrl.fromLocalFile(str(p_run)))
+                self._mr_idle.setMuted(self.muted)
+                self._mr_idle.play()
+                self._mr_run.play()
+                self._mr_started = True
+            g_run, rate = _machine_room_levels(v)
+            self._mr_idle.setVolume(max(0.0, min(1.0, mix)))
+            self._mr_run_audio.setVolume(max(0.0, min(1.0, mix * g_run)))
+            # débit : au plus toutes les 50 ms et au-delà de 1 % d'écart
+            # (un appel par image ne sert à rien et charge le décodeur)
+            self._mr_rate_t += dt
+            if (self._mr_rate_t >= 0.05
+                    and abs(rate - self._mr_rate) > 0.01 * self._mr_rate):
+                self._mr_run.setPlaybackRate(rate)
+                self._mr_rate = rate
+                self._mr_rate_t = 0.0
+            # chien de garde, comme pour les boucles de la cabine
+            if (not self._mr_idle.isPlaying()
+                    and self._mr_idle.status() == QSoundEffect.Status.Ready):
+                self._mr_idle.play()
+            if self._mr_run.playbackState() != QMediaPlayer.PlaybackState.PlayingState:
+                self._mr_run.play()
+        except Exception:
+            pass
 
     def _update_motor_whine(self, v: float, overall: float,
                             moving: bool, a_vol: float) -> None:
@@ -4767,7 +4909,7 @@ class SoundSystem:
                 return  # synthèse de fond pas finie — réessaie au tick suivant
             try:
                 for p in paths:
-                    fx = QSoundEffect()
+                    fx = _SoundEffect()
                     fx.setSource(QUrl.fromLocalFile(str(p)))
                     fx.setLoopCount(QSoundEffect.Loop.Infinite.value)
                     fx.setVolume(0.0)
@@ -4844,6 +4986,16 @@ class SoundSystem:
         d["quai"] = self._etat_fx(self._station_player)
         d["moteur"] = [self._etat_fx(fx) for fx in getattr(self, "_motor_fx", [])]
         d["relances"] = dict(getattr(self, "_wd_relances", {}))
+        try:
+            d["salle_machines"] = {
+                "vue": bool(self._mr_target), "fondu": round(self._mr_mix, 3),
+                "demarree": bool(self._mr_started), "debit": round(self._mr_rate, 3),
+                "repos": self._etat_fx(self._mr_idle) if self._mr_idle is not None else None,
+                "marche": (str(self._mr_run.playbackState()).split(".")[-1]
+                           if self._mr_run is not None else None),
+            }
+        except Exception:
+            pass
         for nom in ("_player", "_fx_player"):
             pl = getattr(self, nom, None)
             try:
@@ -4941,6 +5093,16 @@ class SoundSystem:
                 fx.setVolume(0.0)
             except Exception:
                 pass
+        try:
+            if self._mr_idle is not None:
+                self._mr_idle.stop()
+                self._mr_idle.setVolume(0.0)
+            if self._mr_run is not None:
+                self._mr_run.stop()
+                self._mr_run_audio.setVolume(0.0)
+        except Exception:
+            pass
+        self._mr_started = False
 
     def _abort_close_sequence(self) -> None:
         """Résout la séquence de fermeture des portes quand un stop/mute
@@ -4971,7 +5133,7 @@ class SoundSystem:
         stoppait les players et vidait la file)."""
         m = self.muted
         for name in ("_audio", "_fx_audio", "_horn_audio", "_door_audio",
-                     "_cross_audio"):
+                     "_cross_audio", "_mr_run_audio"):
             out = getattr(self, name, None)
             if out is not None:
                 try:
@@ -4980,7 +5142,7 @@ class SoundSystem:
                     pass
         effects = [getattr(self, name, None)
                    for name in ("_amb_player", "_amb2_player",
-                                "_station_player")]
+                                "_station_player", "_mr_idle")]
         effects.extend(getattr(self, "_motor_fx", []))
         for fx in effects:
             if fx is not None:
@@ -6884,6 +7046,8 @@ class GameWidget(QWidget):
                 fl[3] = random.uniform(1.0, 2.6)
 
         self.sounds.tick(dt)
+        # Vue 3D « salle des machines » (O, 3e vue) : son de la gare haute
+        self.sounds.set_machine_room_view(self._machine_room_view_active())
         # Ambient motor/rumble: fades with speed (dt → rampes indépendantes
         # du framerate)
         self.sounds.update_ambient(st.train.v, dt)
@@ -7510,6 +7674,13 @@ class GameWidget(QWidget):
     def _open_docs_download(self) -> None:
         dlg = DocsDownloadDialog(self.state.lang, self)
         dlg.exec()
+
+    def _machine_room_view_active(self) -> bool:
+        """Vue 3D embarquée ET troisième vue (salle des machines)."""
+        bridge = getattr(self, "_godot_bridge", None)
+        return (getattr(self, "_cabin_view_state", 0) == 2
+                and int(getattr(self, "_godot_view3d", 0)) == 2
+                and bridge is not None and bridge.is_running())
 
     def _diagnostic_son_tick(self, dt: float) -> None:
         """Diagnostic son (2026-09-28) : au premier passage sous 1 m/s en

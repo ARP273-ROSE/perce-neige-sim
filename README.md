@@ -95,7 +95,9 @@ matériel roulant. Détail dans `SOURCES.md`.
   l'arrivée, demi-tour ; journal SQLite consultable (F5). Maj+X = 24/7.
   La touche A confie un seul voyage au pilote automatique.
 - **Sons** : ambiance réelle de la cabine, buzzers, annonces authentiques en
-  cinq langues (console F2), sons d'accident synthétisés.
+  cinq langues (console F2), sons d'accident synthétisés ; en vue salle des
+  machines, le son réel de la gare haute, dont la hauteur suit la vitesse du
+  câble.
 - **Autour** : mise à jour automatique, rapports d'incident anonymes (avec
   votre accord), téléchargement des PDF (F6), interface FR/EN.
 

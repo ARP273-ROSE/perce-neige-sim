@@ -636,6 +636,9 @@ func _process(delta: float) -> void:
 	# Animation des torons (brin gauche = fixe par rapport à rame 1,
 	# brin droite = défile à 2×v en référentiel rame 1)
 	track.update_cable_phase(physics.s_render, physics.v * float(physics.direction), delta)
+	# Son : vue salle des machines → ambiance de la gare haute
+	if audio != null and cabin != null:
+		audio.machine_view = cabin.view_mode == Cabin.ViewMode.MACHINES
 	# Rotation des roues motrices et défilement du câble de la salle. Le sens
 	# de référence est celui de la rame 1 (son brin entre sur la roue aval
 	# quand elle monte) : si l'on conduit la rame 2, la rame 1 descend.

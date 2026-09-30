@@ -7,6 +7,41 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.15.34** — son de la salle des machines, fin du silence d'ambiance PC.
+- Demande de Kevin : le son de la vue salle des machines doit venir de la
+  vidéo « [FUNI284] Funiculaire du Perce-Neige, Tignes (marche complète à
+  12 m/s) ». Elle a été filmée en août 2013, caméra fixe en gare haute sur
+  la roue aval, et publiée par la chaîne « Transports câblés ». Sa machinerie
+  donne une raie très nette, proportionnelle à la vitesse : 196 Hz à 12 m/s,
+  soit 9,8 fois la rotation du moteur. Deux boucles sans couture en sont
+  extraites : la salle au repos (22 s) et la machinerie à 12 m/s (16 s).
+- La machinerie est jouée à la hauteur v/12, avec la loi de niveau mesurée
+  sur l'enregistrement (`son_salle_machines.sage`) : amplitude ∝ (v/12)^0,42,
+  +4,7 dB sur la salle au repos à 12 m/s. La hauteur est bornée à 3 m/s,
+  parce que le lecteur de Qt décroche sous un débit de 0,22. En dessous, la
+  machinerie passe 6 dB sous la salle au repos, donc l'écart ne s'entend
+  pas. En vue salle des machines, le son de la cabine s'efface en 0,35 s.
+  Le bus « Cabine » de la PWA sert à ce fondu.
+- **Vraie cause du « silence total entre 0,2 et 1 m/s en décélération »**
+  sur PC, enfin trouvée. C'est un bogue de Qt 6.11, reproduit sur un vrai
+  serveur son : dès qu'un QSoundEffect joue à volume EXACTEMENT nul, tous
+  les autres deviennent muets (−140 dB). Sous 1 m/s, la boucle de croisière
+  jouait à volume 0 jusqu'à son arrêt à 0,2 m/s. Les rapports de diagnostic
+  du PC de Kevin l'affichaient déjà : « croisière : joue, volume 0 » à
+  0,74 m/s. Tous les QSoundEffect passent par une sous-classe qui garde un
+  plancher de 0,0001, soit −80 dB, inaudible. La correction de la 1.15.30
+  reste valable : elle atténue selon le niveau réel du clip de freinage.
+- Au passage, on lit sur l'enregistrement réel une accélération de
+  0,24 m/s² entre 6 et 11 m/s et un freinage de 0,43 m/s² entre 11 et
+  3 m/s. Le simulateur utilise 0,30 m/s² en accélération. Rien n'est
+  modifié, c'est noté pour information.
+- Vérifié :
+  - PC, sur une vraie sortie son : la raie enregistrée suit la vitesse à
+    1,5 % près (médiane), la salle au repos reste audible, aucun trou ;
+    +4,3 dB à 12 m/s (réel : +4,7).
+  - PWA : banc `bench_son_salle_3d.gd`.
+  - 53 tests, dont la non-régression du volume nul.
+
 **v1.15.33** — parcours du câble dans la salle des machines, câble animé.
 - Parcours décrit par Kevin, appliqué tel quel. Les deux roues sont
   ALIGNÉES latéralement, chacune avec une gorge gauche et une gorge droite,

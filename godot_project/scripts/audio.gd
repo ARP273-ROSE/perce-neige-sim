@@ -47,32 +47,60 @@ const CROSSING_FADE_S: float = 0.7
 var _crossing_fade: float = 0.0      # 0..1 (gain linéaire du fondu)
 var _crossing_fading_out: bool = false
 
+# --- Vue « salle des machines » (2026-09-30, demande de Kevin) -------------
+# Enregistrement réel de la gare haute (vidéo « [FUNI284] Funiculaire du
+# Perce-Neige | Tignes (marche complète à 12 m/s) », caméra fixe sur la roue
+# aval, août 2013) : la salle au repos + la machinerie à 12 m/s, dont la
+# raie (196 Hz) suit la vitesse → pitch_scale = v/12. Loi de niveau et gain
+# mesurés : audit_physique/son_salle_machines.sage (même loi que le PC).
+# Les sons de la CABINE passent par le bus « Cabine », effacé dans cette vue.
+const MR_GAIN_12: float = 0.813
+const MR_EXP: float = 0.42
+const MR_RATE_MIN: float = 0.25
+const MR_BASE_DB: float = -4.5       # même sonie que la cabine à 12 m/s
+var machine_view: bool = false       # posé par main.gd selon la vue 3D
+var _player_mr_idle: AudioStreamPlayer = null
+var _player_mr_run: AudioStreamPlayer = null
+var _mr_mix: float = 0.0
+var _bus_cabine: int = -1
+
 
 func _ready() -> void:
 	_build_players()
 
 
 func _build_players() -> void:
+	# Bus « Cabine » : tout ce qu'on n'entend qu'à bord, effacé en vue
+	# salle des machines
+	_bus_cabine = AudioServer.get_bus_index("Cabine")
+	if _bus_cabine < 0:
+		AudioServer.add_bus()
+		_bus_cabine = AudioServer.bus_count - 1
+		AudioServer.set_bus_name(_bus_cabine, "Cabine")
+		AudioServer.set_bus_send(_bus_cabine, "Master")
 	# Ambient loops (cruise + slow) — crossfadés selon la vitesse
-	_player_slow = _create_player("res://sounds/ambient_slow.wav", -20.0, true)
-	_player_cruise = _create_player("res://sounds/ambient_cruise.wav", -30.0, true)
+	_player_slow = _create_player("res://sounds/ambient_slow.wav", -20.0, true, "Cabine")
+	_player_cruise = _create_player("res://sounds/ambient_cruise.wav", -30.0, true, "Cabine")
 	_player_buzzer = _create_player("res://sounds/buzzer_upper.wav", -10.0, false)
 	_player_buzzer_low = _create_player("res://sounds/buzzer_lower.wav", -10.0, false)
 	_player_door = _create_player("res://sounds/door_buzzer.wav", -10.0, false)
-	_player_crossing = _create_player("res://sounds/crossing.wav", -8.0, false)
+	_player_crossing = _create_player("res://sounds/crossing.wav", -8.0, false, "Cabine")
 	_player_door_motion = _create_player("res://sounds/door_motion.wav", -14.0, false)
 	# Ventilation cabine — réutilise ambient_slow en boucle, très baissée et
 	# pitchée plus haut pour suggérer un souffle continu de ventilo
-	_player_vent = _create_player("res://sounds/ambient_slow.wav", -32.0, true)
+	_player_vent = _create_player("res://sounds/ambient_slow.wav", -32.0, true, "Cabine")
 	_player_vent.pitch_scale = 1.6
 	# Accident : plus fort que le reste (c'est l'événement du trajet), mais
 	# sous le buzzer pour ne pas saturer les haut-parleurs d'un iPad.
 	_player_crash = _create_player("res://sounds/crash_impact.wav", -3.0, false)
 	_player_derail = _create_player("res://sounds/derail.wav", -5.0, false)
 	_player_gameover = _create_player("res://sounds/game_over.wav", -7.0, false)
+	# Salle des machines (gare haute)
+	_player_mr_idle = _create_player("res://sounds/salle_machines_repos.wav", -80.0, true)
+	_player_mr_run = _create_player("res://sounds/salle_machines_marche_12ms.wav", -80.0, true)
 
 
-func _create_player(path: String, vol_db: float, loop: bool) -> AudioStreamPlayer:
+func _create_player(path: String, vol_db: float, loop: bool, bus: String = "Master") -> AudioStreamPlayer:
 	var player: AudioStreamPlayer = AudioStreamPlayer.new()
 	var stream: AudioStream = load(path)
 	if stream == null:
@@ -92,7 +120,7 @@ func _create_player(path: String, vol_db: float, loop: bool) -> AudioStreamPlaye
 		wav.loop_end = maxi(int(wav.get_length() * wav.mix_rate) - 1, 0)
 	player.stream = stream
 	player.volume_db = vol_db
-	player.bus = "Master"
+	player.bus = bus
 	# Safari : lecture Sample muette/instable → Stream (cf. PNConstants)
 	if PNConstants.safari_web():
 		player.playback_type = AudioServer.PLAYBACK_TYPE_STREAM
@@ -119,6 +147,8 @@ func _process(_delta: float) -> void:
 		_trip_was_started = physics.trip_started
 		_first_update_consumed = true
 		return
+
+	_update_machine_room(_delta)
 
 	# Sting de fin de service : armé par play_crash(), il tombe une fois le
 	# fracas retombé (sinon les deux se marchent dessus).
@@ -213,6 +243,45 @@ func _process(_delta: float) -> void:
 	# vitesse fixe depuis le début du clip) partait ~13 s trop tard :
 	# l'entrée d'aiguillage du clip tombait au niveau du croisement réel.
 	_update_crossing_servo(_delta)
+
+
+## Son de la vue salle des machines : fondu cabine ↔ gare haute (τ 0,35 s),
+## repos permanent, machinerie à la hauteur v/12 et au niveau (v/12)^0,42.
+func _update_machine_room(delta: float) -> void:
+	var goal: float = 1.0 if machine_view else 0.0
+	_mr_mix += (goal - _mr_mix) * (1.0 - exp(-delta / 0.35))
+	if absf(goal - _mr_mix) < 0.002:
+		_mr_mix = goal
+	if _bus_cabine >= 0:
+		AudioServer.set_bus_volume_db(_bus_cabine, linear_to_db(maxf(1.0 - _mr_mix, 0.0001)))
+	if _player_mr_idle == null or _player_mr_idle.stream == null \
+			or _player_mr_run == null or _player_mr_run.stream == null:
+		return
+	if _mr_mix <= 0.0:
+		if _player_mr_idle.playing:
+			_player_mr_idle.stop()
+			_player_mr_run.stop()
+		return
+	if not _player_mr_idle.playing:
+		_player_mr_idle.play()
+	if not _player_mr_run.playing:
+		_player_mr_run.play()
+	var g: Vector2 = machine_room_levels(absf(physics.v))
+	_player_mr_run.pitch_scale = g.y
+	_player_mr_idle.volume_db = MR_BASE_DB + linear_to_db(maxf(_mr_mix, 0.0001))
+	_player_mr_run.volume_db = MR_BASE_DB + linear_to_db(maxf(_mr_mix * g.x, 0.0001))
+
+
+## (gain de la machinerie, pitch_scale) à la vitesse v — même loi que le PC
+## (_machine_room_levels) : hauteur v/12 bornée à 0,25 (3 m/s), fondu à
+## zéro entre 0,3 et 0,05 m/s.
+static func machine_room_levels(v: float) -> Vector2:
+	if v <= 0.05:
+		return Vector2(0.0, MR_RATE_MIN)
+	var g: float = MR_GAIN_12 * pow(minf(v / PNConstants.V_MAX, 1.0), MR_EXP)
+	if v < 0.3:
+		g *= (v - 0.05) / 0.25
+	return Vector2(g, clampf(v / PNConstants.V_MAX, MR_RATE_MIN, 1.0))
 
 
 func _update_crossing_servo(delta: float) -> void:
