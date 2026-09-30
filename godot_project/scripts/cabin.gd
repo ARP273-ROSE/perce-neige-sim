@@ -151,6 +151,17 @@ func _build_mesh() -> void:
 		(l as MeshInstance3D).set_surface_override_material(0, _head_mat)
 	set_train_number(2 if is_ghost else 1)
 	_apply_wheel_types()
+	# Performance (retour du 30/09 : saccades sur iPad) : roues et pivots
+	# de la rame d'en face ne sont dessinés qu'à moins de 150 m — au-delà
+	# ils font moins d'un pixel ; la carrosserie, elle, reste visible.
+	if is_ghost:
+		for w in _wheels:
+			var pile: Array = [w]
+			while not pile.is_empty():
+				var nd: Node = pile.pop_back()
+				pile.append_array(nd.get_children())
+				if nd is GeometryInstance3D:
+					(nd as GeometryInstance3D).visibility_range_end = 150.0
 	# Le ghost (rame 2) roule vers nous : ses feux arrière rouges allumés
 	# côté « avant » de sa rame vue de notre sens n'ont pas de sens ; on
 	# allume ses feux d'extrémité en blanc (elle vient en face).

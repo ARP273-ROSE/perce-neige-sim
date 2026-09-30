@@ -67,6 +67,12 @@ func _suite() -> void:
 		["9b_sommet_aval", 1.9, 0.45, 2.2, 0.2, -3.0, 1.75],
 		["9c_sommet_aval", 1.35, 0.9, 2.0, 0.2, -3.3, 1.75],
 		["10_croisement", -1.35, 0.05, 5.5, 0.0, 0.0, -0.4],
+		["11_roue_aval_flanc", 1.5708, 0.05, 5.0, 0.2, -3.3, -0.3],
+		["12_roue_aval_gauche", -1.5708, 0.05, 5.0, 0.2, -3.3, -0.3],
+		["13_freins_bas", 1.05, 0.10, 2.2, 0.55, -3.9, -1.6],
+		["14_freins_amont", 1.05, 0.10, 2.2, 0.55, 2.7, -1.6],
+		["15_roue_aval_dessous", 0.55, -0.35, 4.0, 0.0, -3.3, 0.0],
+		["16_roue_aval_haut", 0.9, 0.55, 3.2, 0.0, -3.3, 1.3],
 	]
 	if OS.get_cmdline_user_args().size() > 1:
 		var keep: PackedStringArray = OS.get_cmdline_user_args()[1].split(",")

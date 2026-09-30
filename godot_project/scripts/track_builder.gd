@@ -709,7 +709,11 @@ func _build_slab() -> void:
 	# pendant qu'elle suit sa courbe latérale.
 	_build_slab_section(slab_mat, pit_low_end, PNConstants.PASSING_START, 0.0, "SlabLow", false)
 	_build_slab_section(slab_mat, PNConstants.PASSING_START, PNConstants.PASSING_END, 0.0, "SlabPassingChamber", true)
-	_build_slab_section(slab_mat, PNConstants.PASSING_END, pit_high_start, 0.0, "SlabHigh", false)
+	# en haut, la dalle s'arrête au bord de la fosse où émerge la roue aval
+	# de la salle des machines (elle la traversait : « un mur en béton dans
+	# la roue », retour du 30/09)
+	_build_slab_section(slab_mat, PNConstants.PASSING_END,
+		minf(pit_high_start, PNConstants.LENGTH + MachineRoomBuilder.PIT_S0), 0.0, "SlabHigh", false)
 
 
 # Construit un tronçon de dalle entre s_start et s_end avec un offset latéral.
@@ -1169,7 +1173,7 @@ func _build_sleepers() -> void:
 		tr.basis = xform.basis * Basis.from_scale(Vector3(entry.w / block_width, 1.0, 1.0))
 		tr.origin += xform.basis.y * (y_center - low) + xform.basis.x * entry.off
 		xforms.append(tr)
-	_mm_instance(box, xforms, "Sleepers")
+	_mm_instance(box, xforms, "Sleepers", 500.0)
 
 
 # ---------------------------------------------------------------------------
@@ -1209,22 +1213,58 @@ func _walkway_frame(s: float) -> Transform3D:
 	return Transform3D(Basis(right, Vector3.UP, -fwd), origin)
 
 
-func _mm_instance(mesh: Mesh, xforms: Array, name: String) -> void:
-	var mm: MultiMesh = MultiMesh.new()
-	mm.transform_format = MultiMesh.TRANSFORM_3D
-	mm.mesh = mesh
-	mm.instance_count = xforms.size()
-	for i in range(xforms.size()):
-		mm.set_instance_transform(i, xforms[i])
-	var mmi: MultiMeshInstance3D = MultiMeshInstance3D.new()
-	mmi.name = name
-	mmi.multimesh = mm
-	mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	# bancs sans GPU : le serveur de rendu factice ne garde pas les
-	# transformées des instances, on en garde une copie à la demande
-	if keep_instance_xforms:
-		mmi.set_meta("xforms", xforms)
-	add_child(mmi)
+# Instances répétées le long de la ligne (blochets, joints, marches,
+# galets…) : découpées en TRONÇONS de ~100 m, un MultiMeshInstance3D par
+# tronçon, posé à l'origine du tronçon. Retour d'essai du 30/09 (« le
+# défilement du tunnel saccade », vidéo d'écran iPad : une image sur neuf
+# en retard) : chaque groupe était UN seul bloc couvrant 3,5 km, que Godot
+# ne peut pas écarter du champ — la carte dessinait à chaque image 1,4 M de
+# triangles cachés (936 000 pour les seuls joints annulaires). `range_end`
+# (m) efface en plus les tronçons lointains des petits détails.
+const MM_CHUNK_M: float = 100.0
+
+
+func _mm_instance(mesh: Mesh, xforms: Array, name: String, range_end: float = 0.0) -> void:
+	var holder: Node3D = Node3D.new()
+	holder.name = name
+	add_child(holder)
+	var chunks: Array = []
+	var cur: Array = []
+	var o0: Vector3 = Vector3.ZERO
+	for xf in xforms:
+		if cur.is_empty():
+			o0 = (xf as Transform3D).origin
+		elif ((xf as Transform3D).origin - o0).length() > MM_CHUNK_M:
+			chunks.append(cur)
+			cur = []
+			o0 = (xf as Transform3D).origin
+		cur.append(xf)
+	if not cur.is_empty():
+		chunks.append(cur)
+	for ci in range(chunks.size()):
+		var part: Array = chunks[ci]
+		var base: Vector3 = (part[0] as Transform3D).origin
+		var mm: MultiMesh = MultiMesh.new()
+		mm.transform_format = MultiMesh.TRANSFORM_3D
+		mm.mesh = mesh
+		mm.instance_count = part.size()
+		for i in range(part.size()):
+			var local: Transform3D = part[i]
+			local.origin -= base
+			mm.set_instance_transform(i, local)
+		var mmi: MultiMeshInstance3D = MultiMeshInstance3D.new()
+		mmi.name = "%s_%d" % [name, ci]
+		mmi.multimesh = mm
+		mmi.position = base
+		mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		if range_end > 0.0:
+			mmi.visibility_range_end = range_end
+			mmi.visibility_range_end_margin = 20.0
+		# bancs sans GPU : le serveur de rendu factice ne garde pas les
+		# transformées des instances ; copie ABSOLUE (repère de la voie)
+		if keep_instance_xforms:
+			mmi.set_meta("xforms", part)
+		holder.add_child(mmi)
 
 
 func _build_walkway() -> void:
@@ -1279,13 +1319,13 @@ func _build_walkway() -> void:
 			+ xf2.basis.y * (floor_y_local + slab_thickness + 0.08 + 1.0)
 		cables.append(cx)
 		s += walkway_post_s
-	_mm_instance(tread, treads, "WalkwayTreads")
-	_mm_instance(stringer, stringers, "WalkwayStringers")
+	_mm_instance(tread, treads, "WalkwayTreads", 300.0)
+	_mm_instance(stringer, stringers, "WalkwayStringers", 400.0)
 	# Pas de rambarde (retour d'essai 2026-09-26) : potelets et câble
 	# main-courante calculés mais non posés, gardés pour un éventuel retour.
 	if walkway_handrail:
-		_mm_instance(post, posts, "WalkwayPosts")
-		_mm_instance(cable, cables, "WalkwayHandCable")
+		_mm_instance(post, posts, "WalkwayPosts", 300.0)
+		_mm_instance(cable, cables, "WalkwayHandCable", 300.0)
 	# boîtiers sur le mur gauche (côté des câbles), tous les 24 m
 	var boxm: BoxMesh = BoxMesh.new()
 	boxm.size = Vector3(0.12, 0.20, 0.26)
@@ -1303,7 +1343,7 @@ func _build_walkway() -> void:
 		bx.origin += xf3.basis.x * (off3 - walkway_side * 1.48) + xf3.basis.y * 0.42
 		boxes.append(bx)
 		s += 24.0
-	_mm_instance(boxm, boxes, "WallBoxes")
+	_mm_instance(boxm, boxes, "WallBoxes", 400.0)
 
 
 # ---------------------------------------------------------------------------
@@ -1352,8 +1392,8 @@ func _build_tunnel_details() -> void:
 	var ring: TorusMesh = TorusMesh.new()
 	ring.inner_radius = tunnel.tunnel_radius - 0.015
 	ring.outer_radius = tunnel.tunnel_radius + 0.005
-	ring.rings = 40
-	ring.ring_segments = 6
+	ring.rings = 24          # 192 triangles par joint (480 avant) : trait fin
+	ring.ring_segments = 4
 	ring.material = joint_mat
 	var rings: Array = []
 	var s: float = PNConstants.SQUARE_SECTION_LOW_END + 0.7
@@ -1365,7 +1405,7 @@ func _build_tunnel_details() -> void:
 			var rb: Basis = Basis(xf.basis.x, tangent, -xf.basis.y)
 			rings.append(Transform3D(rb, xf.origin))
 		s += ring_joint_spacing
-	_mm_instance(ring, rings, "SegmentRings")
+	_mm_instance(ring, rings, "SegmentRings", 250.0)
 
 	# --- canalisation en voûte à droite (section circulaire, hors évitement)
 	var pipe: BoxMesh = BoxMesh.new()
@@ -1381,7 +1421,7 @@ func _build_tunnel_details() -> void:
 			tr2.origin += xf2.basis.x * (rr * sin(deg_to_rad(42.0))) + xf2.basis.y * (rr * cos(deg_to_rad(42.0)))
 			pipes.append(tr2)
 		s += 4.0
-	_mm_instance(pipe, pipes, "CrownPipe")
+	_mm_instance(pipe, pipes, "CrownPipe", 400.0)
 
 	# --- joints horizontaux des galeries carrées (banches), hors salles de gare
 	var hj: BoxMesh = BoxMesh.new()
@@ -1398,7 +1438,7 @@ func _build_tunnel_details() -> void:
 					tr3.origin += xf3.basis.x * (sx * (tunnel.horseshoe_half_width - 0.02)) + xf3.basis.y * yy
 					hjs.append(tr3)
 			s += 3.0
-	_mm_instance(hj, hjs, "GalleryJoints")
+	_mm_instance(hj, hjs, "GalleryJoints", 300.0)
 
 	# --- évitement Abt : cœurs de croisement, réglettes (les « poulies
 	# orange » de la v1.15.0 aux fourchements n'existent pas — retour
@@ -1457,7 +1497,8 @@ func _build_cable_beam() -> void:
 	_build_cable_beam_section(mat, 0.0, s_fork_lo, 0.0, "CableBeamLow")
 	_build_cable_beam_section(mat, s_fork_lo, s_fork_hi, -1.0, "CableBeamLoopL")
 	_build_cable_beam_section(mat, s_fork_lo, s_fork_hi, +1.0, "CableBeamLoopR")
-	_build_cable_beam_section(mat, s_fork_hi, PNConstants.LENGTH, 0.0, "CableBeamHigh")
+	_build_cable_beam_section(mat, s_fork_hi, PNConstants.LENGTH + MachineRoomBuilder.PIT_S0,
+		0.0, "CableBeamHigh")
 
 
 # Distance (depuis PASSING_START) à laquelle l'écartement des voies
@@ -1663,14 +1704,14 @@ func _build_guides() -> void:
 				l_pa.append(trp)
 			else:
 				l_pb.append(trp)
-	_mm_instance(base_pair, l_base_p, "GuideBases")
-	_mm_instance(base_single, l_base_s, "GuideBasesSingle")
-	_mm_instance(br_pair, l_br_p, "GuideBrackets")
-	_mm_instance(br_single, l_br_s, "GuideBracketsSingle")
-	_mm_instance(axle_pair, l_ax_p, "GuideAxles")
-	_mm_instance(axle_single, l_ax_s, "GuideAxlesSingle")
-	_mm_instance(pulley_mesh, l_pa, "GuidePulleysA")
-	_mm_instance(pulley_mesh, l_pb, "GuidePulleysB")
+	_mm_instance(base_pair, l_base_p, "GuideBases", 400.0)
+	_mm_instance(base_single, l_base_s, "GuideBasesSingle", 400.0)
+	_mm_instance(br_pair, l_br_p, "GuideBrackets", 400.0)
+	_mm_instance(br_single, l_br_s, "GuideBracketsSingle", 400.0)
+	_mm_instance(axle_pair, l_ax_p, "GuideAxles", 300.0)
+	_mm_instance(axle_single, l_ax_s, "GuideAxlesSingle", 300.0)
+	_mm_instance(pulley_mesh, l_pa, "GuidePulleysA", 450.0)
+	_mm_instance(pulley_mesh, l_pb, "GuidePulleysB", 450.0)
 	_cable_top_y = y_axis + pulley_radius
 
 
@@ -1737,7 +1778,7 @@ func _build_abt_plates() -> void:
 			mid += xa.basis.y * (y_base + 0.005 - y_mid)
 			l_slide.append(Transform3D(bs, mid))
 	_mm_instance(plate, l_plate, "AbtPlaquesAppui")
-	_mm_instance(bolt, l_bolt, "AbtBoulons")
+	_mm_instance(bolt, l_bolt, "AbtBoulons", 150.0)
 	_mm_instance(slide, l_slide, "AbtToleGlissement")
 
 
