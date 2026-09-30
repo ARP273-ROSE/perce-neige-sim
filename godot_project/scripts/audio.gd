@@ -53,16 +53,20 @@ var _crossing_fading_out: bool = false
 # aval, août 2013) : la salle au repos + la machinerie à 12 m/s, dont la
 # raie (196 Hz) suit la vitesse → pitch_scale = v/12. Loi de niveau et gain
 # mesurés : audit_physique/son_salle_machines.sage (même loi que le PC).
-# Les sons de la CABINE passent par le bus « Cabine », effacé dans cette vue.
+# Les sons de la CABINE s'effacent dans cette vue par _cab_db, ajouté à leur
+# volume. PAS de bus créé à l'exécution : sur Android/Chrome (lecture en
+# échantillons Web Audio), l'AudioServer.add_bus() de la v1.15.34 rendait
+# TOUTE la PWA muette (reproduit dans Chromium le 30/09, 1.15.33 sonore).
 const MR_GAIN_12: float = 0.813
 const MR_EXP: float = 0.42
 const MR_RATE_MIN: float = 0.25
 const MR_BASE_DB: float = -4.5       # même sonie que la cabine à 12 m/s
+const VENT_DB: float = -32.0
 var machine_view: bool = false       # posé par main.gd selon la vue 3D
 var _player_mr_idle: AudioStreamPlayer = null
 var _player_mr_run: AudioStreamPlayer = null
 var _mr_mix: float = 0.0
-var _bus_cabine: int = -1
+var _cab_db: float = 0.0             # atténuation des sons de cabine (dB)
 
 
 func _ready() -> void:
@@ -70,25 +74,17 @@ func _ready() -> void:
 
 
 func _build_players() -> void:
-	# Bus « Cabine » : tout ce qu'on n'entend qu'à bord, effacé en vue
-	# salle des machines
-	_bus_cabine = AudioServer.get_bus_index("Cabine")
-	if _bus_cabine < 0:
-		AudioServer.add_bus()
-		_bus_cabine = AudioServer.bus_count - 1
-		AudioServer.set_bus_name(_bus_cabine, "Cabine")
-		AudioServer.set_bus_send(_bus_cabine, "Master")
 	# Ambient loops (cruise + slow) — crossfadés selon la vitesse
-	_player_slow = _create_player("res://sounds/ambient_slow.wav", -20.0, true, "Cabine")
-	_player_cruise = _create_player("res://sounds/ambient_cruise.wav", -30.0, true, "Cabine")
+	_player_slow = _create_player("res://sounds/ambient_slow.wav", -20.0, true)
+	_player_cruise = _create_player("res://sounds/ambient_cruise.wav", -30.0, true)
 	_player_buzzer = _create_player("res://sounds/buzzer_upper.wav", -10.0, false)
 	_player_buzzer_low = _create_player("res://sounds/buzzer_lower.wav", -10.0, false)
 	_player_door = _create_player("res://sounds/door_buzzer.wav", -10.0, false)
-	_player_crossing = _create_player("res://sounds/crossing.wav", -8.0, false, "Cabine")
+	_player_crossing = _create_player("res://sounds/crossing.wav", -8.0, false)
 	_player_door_motion = _create_player("res://sounds/door_motion.wav", -14.0, false)
 	# Ventilation cabine — réutilise ambient_slow en boucle, très baissée et
 	# pitchée plus haut pour suggérer un souffle continu de ventilo
-	_player_vent = _create_player("res://sounds/ambient_slow.wav", -32.0, true, "Cabine")
+	_player_vent = _create_player("res://sounds/ambient_slow.wav", -32.0, true)
 	_player_vent.pitch_scale = 1.6
 	# Accident : plus fort que le reste (c'est l'événement du trajet), mais
 	# sous le buzzer pour ne pas saturer les haut-parleurs d'un iPad.
@@ -205,8 +201,8 @@ func _process(_delta: float) -> void:
 		var gate: float = clampf((v_abs - 0.1) / 0.4, 0.0, 1.0)
 		var floor_lin: float = (0.14 / 0.45) if physics.trip_started else 0.0316
 		var gate_db: float = linear_to_db(lerpf(floor_lin, 1.0, gate))
-		_player_slow.volume_db = lerpf(-12.0, -40.0, blend) + gate_db
-		_player_cruise.volume_db = lerpf(-40.0, -8.0, blend) + gate_db
+		_player_slow.volume_db = lerpf(-12.0, -40.0, blend) + gate_db + _cab_db
+		_player_cruise.volume_db = lerpf(-40.0, -8.0, blend) + gate_db + _cab_db
 		# Pitch du moteur : CALIBRÉ (_calib_audio : 172 Hz à l'arrêt →
 		# 197 Hz à la croisière enregistrée → 202 Hz à V_MAX). La boucle
 		# est enregistrée en croisière → rate = f(v)/197 : 0,87 → 1,03.
@@ -252,8 +248,11 @@ func _update_machine_room(delta: float) -> void:
 	_mr_mix += (goal - _mr_mix) * (1.0 - exp(-delta / 0.35))
 	if absf(goal - _mr_mix) < 0.002:
 		_mr_mix = goal
-	if _bus_cabine >= 0:
-		AudioServer.set_bus_volume_db(_bus_cabine, linear_to_db(maxf(1.0 - _mr_mix, 0.0001)))
+	var cab: float = linear_to_db(maxf(1.0 - _mr_mix, 0.0001))
+	if absf(cab - _cab_db) > 0.01:
+		_cab_db = cab
+		if _player_vent != null:
+			_player_vent.volume_db = VENT_DB + _cab_db
 	if _player_mr_idle == null or _player_mr_idle.stream == null \
 			or _player_mr_run == null or _player_mr_run.stream == null:
 		return
@@ -333,7 +332,7 @@ func _update_crossing_servo(delta: float) -> void:
 		_crossing_fade = clampf(
 			_crossing_fade + (-step_f if _crossing_fading_out else step_f), 0.0, 1.0)
 		_player_crossing.volume_db = CROSSING_BASE_DB \
-			+ linear_to_db(maxf(_crossing_fade, 0.001))
+			+ linear_to_db(maxf(_crossing_fade, 0.001)) + _cab_db
 		if _crossing_fading_out and _crossing_fade <= 0.0:
 			_player_crossing.stop()
 			_player_crossing.stream_paused = false
