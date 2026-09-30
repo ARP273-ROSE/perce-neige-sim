@@ -62,8 +62,9 @@ func _suite() -> void:
 	_shots = [
 		["1_voie_unique", s0 - 5.0, 0.0, 0.45, s0 + 16.0, 0.0, -1.30, 55.0],
 		["2_coeur_X", s0 + 19.0, 0.0, -0.30, s0 + 30.0, 0.0, -1.30, 55.0],
-		["3_lacune", s0 + 14.8, -0.36, -0.78, s0 + 17.6, -0.36, -1.33, 50.0],
-		["3b_lacune_cote", s0 + 17.4, -0.80, -1.05, s0 + 17.4, -0.05, -1.36, 55.0],
+		["3_lacune", s0 + 14.6, -0.30, -0.70, s0 + 17.6, -0.33, -1.35, 42.0],
+		["3b_lacune_cote", s0 + 17.4, -0.95, -0.95, s0 + 17.4, -0.30, -1.36, 50.0],
+		["3c_lacune_dessus", s0 + 17.4, -0.33, 0.40, s0 + 17.4, -0.33, -1.36, 45.0],
 		["7_langues", s0 - 9.0, 0.0, -0.55, s0 + 2.0, 0.0, -1.30, 55.0],
 		["4_galet_deviation", s0 + 19.9, 0.10, -0.85, s0 + 22.0, -0.55, -1.40, 45.0],
 		["5_dessus", s0 + 20.0, 0.0, 16.0, s0 + 20.0, 0.0, -1.3, 42.0],
@@ -81,7 +82,7 @@ func _place(sh: Array) -> void:
 	var eye: Vector3 = a.origin + a.basis.x * sh[2] + a.basis.y * sh[3]
 	var tgt: Vector3 = b.origin + b.basis.x * sh[5] + b.basis.y * sh[6]
 	var up: Vector3 = a.basis.y
-	if sh[0] == "5_dessus":
+	if sh[0] == "5_dessus" or sh[0] == "3c_lacune_dessus":
 		up = -a.basis.z
 	_cam.fov = sh[7]
 	_cam.look_at_from_position(eye, tgt, up)
