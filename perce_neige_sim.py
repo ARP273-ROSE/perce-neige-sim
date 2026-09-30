@@ -3672,6 +3672,55 @@ MOTOR_BANKS = 6
 MOTOR_F_BANKS = [172, 178, 184, 190, 196, 202]   # Hz, entiers → boucles 2 s sans couture
 
 
+# Atténuation de l'ambiance sous un clip réel (démarrage moteur, freinage
+# d'approche) — 2026-09-30. Les rapports « diagnostic_son » du PC de Kevin
+# (FAKARAVA, Windows 10, 30/09) ont tranché le « silence sous 1 m/s » : les
+# boucles jouaient bien, mais à 0,136 = plancher de fluage 0,45 × atténuation
+# sous le clip 0,55 × atténuation sous l'annonce 0,55, pendant que le clip de
+# freinage, lui, est quasi muet après sa 4e seconde (−29 dBFS contre −12 pour
+# l'ambiance). L'atténuation ne sert qu'à ne pas entendre le moteur en double
+# quand le clip est fort : elle suit désormais le niveau RÉEL du clip.
+FX_ENV_STEP_MS = 250
+
+
+def _wav_envelope_db(path: str, step_ms: int = FX_ENV_STEP_MS) -> list:
+    """Niveau RMS (dBFS) d'un WAV PCM 16 bits par fenêtre de step_ms, voies
+    mélangées. Liste vide si le fichier n'est pas lisible."""
+    import array
+    import wave
+    try:
+        with wave.open(path, "rb") as wf:
+            if wf.getsampwidth() != 2:
+                return []
+            ch = wf.getnchannels()
+            sr = wf.getframerate()
+            raw = wf.readframes(wf.getnframes())
+    except Exception:
+        return []
+    a = array.array("h")
+    a.frombytes(raw)
+    if sys.byteorder == "big":
+        a.byteswap()
+    per = max(1, int(sr * step_ms / 1000)) * ch
+    out = []
+    for i in range(0, len(a) - per + 1, per):
+        blk = a[i:i + per]
+        s2 = sum(x * x for x in blk) / len(blk)
+        out.append(20.0 * math.log10(math.sqrt(s2) / 32768.0 + 1e-9))
+    return out
+
+
+def _fx_duck_strength(env_db: list, pos_ms: float) -> float:
+    """Force de l'atténuation (0..1) à la position pos_ms du clip : pleine à
+    −20 dBFS et au-dessus (le clip porte le bruit moteur), nulle à −30 dBFS
+    et en dessous (le clip est trop faible pour qu'on entende double).
+    Sans enveloppe (fichier illisible) : pleine, comme avant."""
+    if not env_db:
+        return 1.0
+    i = min(len(env_db) - 1, max(0, int(pos_ms // FX_ENV_STEP_MS)))
+    return max(0.0, min(1.0, (env_db[i] + 30.0) / 10.0))
+
+
 def _ambient_gain(v: float, looping: bool) -> float:
     """Gain global (0..1) des boucles d'ambiance cabine selon |v|.
 
@@ -4019,6 +4068,19 @@ class SoundSystem:
             daemon=True,
         )
         self._wav_gen_thread.start()
+        # Enveloppes de niveau des clips réels, calculées une fois en
+        # arrière-plan (Python pur, quelques dixièmes de seconde par clip) :
+        # tant qu'elles manquent, l'atténuation reste pleine, comme avant.
+        self._fx_env_cache: dict = {}
+        env_paths = [str(self._ambient_wavs[k]) for k in
+                     ("motor_start_real", "brake_approach_real")
+                     if k in self._ambient_wavs]
+
+        def _prime_env(paths=env_paths, cache=self._fx_env_cache) -> None:
+            for sp in paths:
+                cache[sp] = _wav_envelope_db(sp)
+
+        threading.Thread(target=_prime_env, daemon=True).start()
         if not self.enabled:
             return
         for f in sorted(self.sons_dir.iterdir()):
@@ -4491,8 +4553,10 @@ class SoundSystem:
         Ducking (tous rampés, jamais de saut de volume) :
           - klaxon ×0.25, croisement ×0.40 au pic (existant)
           - one-shot réel en cours (motor start / brake approach) ×0.45 au
-            pic — le clip contient déjà le bruit moteur, sans duck on
-            l'entendait en double
+            pic, MODULÉ par le niveau réel du clip (_fx_duck_strength) : le
+            clip contient le bruit moteur quand il est fort, sans duck on
+            l'entendait en double ; quand il est faible (freinage après 4 s,
+            −29 dBFS), plus d'atténuation — c'était le « silence sous 1 m/s »
           - annonce vocale en cours ×0.55 — intelligibilité de la voix
 
         `dt` rend les rampes indépendantes du framerate (α = 1−e^(−dt/τ)).
@@ -4549,7 +4613,14 @@ class SoundSystem:
                     fx_active = False
             except Exception:
                 pass
-        fx_target = 1.0 if fx_active else 0.0
+        fx_target = 0.0
+        if fx_active:
+            try:
+                fx_target = _fx_duck_strength(
+                    self._fx_envelope(self._fx_loaded_path),
+                    float(self._fx_player.position()))
+            except Exception:
+                fx_target = 1.0
         self._fx_duck_level += (fx_target - self._fx_duck_level) * a_duck
         if self._fx_duck_level > 0.001:
             overall *= (1.0 - 0.45 * self._fx_duck_level)
@@ -4764,6 +4835,9 @@ class SoundSystem:
         d["ducks"] = {"klaxon": bool(getattr(self, "_ducked", False)),
                       "annonce": bool(self.is_announcing()),
                       "clip_reel": round(getattr(self, "_fx_duck_level", 0.0), 3),
+                      "clip_niveau_db": (lambda e, pos: round(e[min(len(e) - 1, int(pos // FX_ENV_STEP_MS))], 1) if e else None)(
+                          self._fx_envelope(getattr(self, "_fx_loaded_path", None)),
+                          float(self._fx_player.position()) if getattr(self, "_fx_player", None) is not None else 0.0),
                       "croisement": round(getattr(self, "_crossing_level", 0.0), 3)}
         d["boucle_lente"] = self._etat_fx(self._amb_player)
         d["boucle_croisiere"] = self._etat_fx(self._amb2_player)
@@ -4810,6 +4884,12 @@ class SoundSystem:
             self._station_target = 0.35
         except Exception:
             self._station_target = 0.0
+
+    def _fx_envelope(self, spath) -> list:
+        """Enveloppe dBFS du clip réel (mise en cache par fichier)."""
+        if not spath:
+            return []
+        return self.__dict__.get("_fx_env_cache", {}).get(str(spath), [])
 
     def play_brake_approach(self) -> None:
         """One-shot du freinage d'approche réel (20 s, extrait du footage

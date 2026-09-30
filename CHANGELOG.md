@@ -7,6 +7,25 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.15.30** — ambiance PC : fin du « silence » sous 1 m/s en décélération.
+- Les deux rapports de diagnostic arrivés du PC de Kevin le 30/09 (Windows 10,
+  Qt 6.11) ont tranché : les boucles d'ambiance jouaient bien (Qt : en
+  lecture, aucune relance du chien de garde), mais à 0,136 de volume, soit
+  plancher de fluage 0,45 × atténuation sous le clip de freinage réel 0,55
+  × atténuation sous l'annonce 0,55. Or ce clip de freinage (20 s) est fort
+  pendant 4 s puis quasi muet (−29 dBFS, contre −12 pour l'ambiance) : on
+  étouffait l'ambiance sous un clip qu'on n'entendait plus.
+- L'atténuation sous un clip réel suit désormais le niveau RÉEL du clip,
+  mesuré par tranches de 250 ms au lancement : pleine à −20 dBFS et
+  au-dessus (le clip porte le bruit moteur, on ne l'entend pas en double),
+  nulle à −30 dBFS et en dessous. Au point relevé sur le PC (0,74 m/s,
+  clip à 16 s), l'ambiance repasse de 0,136 à 0,25 sous l'annonce, 0,45
+  sans annonce. Le rapport de diagnostic donne aussi le niveau du clip.
+- Tests : `tests/test_son.py` plantait sur la CI depuis la 1.15.25
+  (QtMultimedia absent du runner) ; les tests du lecteur s'y sautent, ceux
+  qui lisent les WAV y tournent. Trois tests rejouent le relevé du 30/09.
+  49 tests.
+
 **v1.15.29** — aiguillage Abt dessiné, câble tendu entre les galets, vue
 salle des machines.
 - Demande de Kevin, photo d'un aiguillage Abt de funiculaire à l'appui (« ce

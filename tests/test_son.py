@@ -23,7 +23,9 @@ from PyQt6.QtWidgets import QApplication  # noqa: E402
 
 import perce_neige_sim as pn  # noqa: E402
 
-QSoundEffect = pn.QSoundEffect
+# Sur la CI (runner Linux sans QtMultimedia), le simulateur tourne sans son :
+# les tests qui lisent seulement les WAV passent, ceux du lecteur se sautent.
+QSoundEffect = getattr(pn, "QSoundEffect", None)
 
 
 class FauxLecteur:
@@ -66,6 +68,8 @@ class FauxLecteur:
 
 @pytest.fixture(scope="module")
 def fenetre(tmp_path_factory):
+    if QSoundEffect is None:
+        pytest.skip("QtMultimedia indisponible")
     app = QApplication.instance() or QApplication(sys.argv)
     data = tmp_path_factory.mktemp("pn")
     pn._persistent_data_dir = lambda: Path(data)
@@ -138,3 +142,63 @@ def test_diagnostic_envoye_a_la_deceleration_sous_1_ms(fenetre, monkeypatch):
         st.train.v = v
         g._diagnostic_son_tick(1.0 / 60.0)
     assert len(envois) == 1
+
+
+# --- 2026-09-30 : les rapports du PC de Kevin ont tranché -----------------
+# Boucles bien en lecture (Qt : Ready, isPlaying) mais à 0,136 : plancher de
+# fluage 0,45 × atténuation sous le clip de freinage 0,55 × annonce 0,55,
+# alors que le clip, à 14-16 s, est quasi muet (−29 dBFS).
+
+FREIN = Path(__file__).resolve().parent.parent / "sons" / "ambients" / "real_brake_approach.wav"
+
+
+def test_enveloppe_du_clip_de_freinage():
+    env = pn._wav_envelope_db(str(FREIN))
+    assert 78 <= len(env) <= 81                  # 20 s par pas de 250 ms
+    debut = max(env[:8])                         # 2 premières secondes : fort
+    fin = sum(env[60:66]) / 6                    # 15 à 16,5 s : faible
+    assert debut > -21.0, debut
+    assert fin < -26.0, fin
+
+
+def test_attenuation_suit_le_niveau_du_clip():
+    env = pn._wav_envelope_db(str(FREIN))
+    assert pn._fx_duck_strength(env, 1000.0) == pytest.approx(1.0)
+    # position relevée sur le PC de Kevin (15 975 ms) : plus d'atténuation
+    assert pn._fx_duck_strength(env, 15975.0) < 0.25
+    # enveloppe absente (fichier illisible) : comportement d'avant
+    assert pn._fx_duck_strength([], 15975.0) == 1.0
+
+
+def test_ambiance_non_etouffee_en_fin_de_clip_de_freinage(fenetre):
+    """Rejoue le relevé du 30/09 : 0,74 m/s, clip de freinage à 16 s."""
+    win, _ = fenetre
+    snd = win.game.sounds
+    spath = str(snd._ambient_wavs["brake_approach_real"])
+    snd._fx_env_cache[spath] = pn._wav_envelope_db(spath)
+
+    class FauxFx:
+        def position(self):
+            return 15975
+
+        def duration(self):
+            return 20000
+
+        def playbackState(self):  # noqa: N802
+            return pn.QMediaPlayer.PlaybackState.PlayingState
+
+    vrai_fx, vrai_chemin = snd._fx_player, snd._fx_loaded_path
+    vrais = (snd._amb_playing, snd._fx_oneshot_active, snd._fx_duck_level)
+    try:
+        snd._fx_player = FauxFx()
+        snd._fx_loaded_path = spath
+        snd._amb_playing = True
+        snd._fx_oneshot_active = True
+        snd._fx_duck_level = 1.0                 # on sortait d'une phase forte
+        for _ in range(120):                     # 2 s à 0,74 m/s
+            snd.update_ambient(0.74, 1.0 / 60.0)
+        gain = pn._ambient_gain(0.74, True)
+        assert snd._amb_vol_target > 0.85 * gain, (snd._amb_vol_target, gain)
+    finally:
+        snd._fx_player, snd._fx_loaded_path = vrai_fx, vrai_chemin
+        snd._amb_playing, snd._fx_oneshot_active, snd._fx_duck_level = vrais
