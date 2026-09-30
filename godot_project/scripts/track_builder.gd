@@ -256,6 +256,10 @@ func _compute_cable_geometry() -> void:
 func _strand_free_point(s: float, side: float, y_nom: float) -> Dictionary:
 	var xf: Transform3D = tunnel.transform_at(s)
 	var x: float = _track_center_x(s, side) + side * pulley_pair_offset
+	# brin de la rame 2 : il remonte vers les galets qui le font passer
+	# au-dessus du sommet de la roue aval (machine_room_builder)
+	if side > 0.0 and s >= PNConstants.LENGTH - 1e-6:
+		y_nom = MachineRoomBuilder.EXIT_Y_END
 	return {"s": s, "p": xf.origin + xf.basis.x * x + xf.basis.y * y_nom, "x": x, "y": y_nom,
 		"tilt": 0.0}
 

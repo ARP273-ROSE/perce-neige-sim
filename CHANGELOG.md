@@ -7,6 +7,40 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.15.33** — parcours du câble dans la salle des machines, câble animé.
+- Parcours décrit par Kevin, appliqué tel quel. Les deux roues sont
+  ALIGNÉES latéralement, chacune avec une gorge gauche et une gorge droite,
+  aux mêmes x que les deux brins de la voie. Vu vers l'amont :
+  1. Le câble de la rame 1 entre sur le haut de la roue aval, gorge gauche.
+  2. Il descend en bas de la roue amont, s'y enroule côté gauche et sort
+     par le haut.
+  3. Il descend en bas de la roue aval, s'enroule côté droit et sort par le
+     haut.
+  4. Il redescend en bas de la roue amont, s'enroule côté droit et sort en
+     haut.
+  5. Il passe sur deux galets au-dessus du sommet de la roue aval, entre les
+     butoirs bleus, et file vers la rame 2.
+- Mesures, calculées dans `salle_machines_cable.sage` :
+  - l'enroulement total vaut 773° ;
+  - aucun brin ne se décale latéralement, sauf le passage de la gorge
+    gauche amont à la gorge droite aval (2,7°) ;
+  - au croisement, 68 mm séparent les câbles ;
+  - le brin de sortie passe 34 mm au-dessus des joues de la roue aval ;
+  - ses galets gardent 23 mm de jeu avec la roue ;
+  - il redescend ensuite à 1° jusqu'au dernier galet du tunnel.
+  Dans le tunnel, le brin de la rame 2 remonte donc de 12 cm à la fin de
+  voie pour rejoindre ces galets.
+- « Les câbles ont l'air figés dans la salle des machines alors que ça
+  tourne ». Le câble de la salle reçoit le même shader à torons que celui
+  du tunnel, et il défile au pas de la jante. Le sens de rotation des roues
+  était inversé quand on conduisait la rame 2 ; il suit désormais toujours
+  la rame 1.
+- Vérifié par le banc `bench_salle_machines_3d.gd`. Il contrôle les roues
+  alignées, le jeu du brin au-dessus de la roue aval et celui des galets. Il
+  contrôle aussi la position du dernier galet du tunnel, le raccord du brin
+  de la rame 2 et le défilement du câble. Tous les bancs passent, 49 tests
+  aussi.
+
 **v1.15.32** — lacunes de l'aiguillage d'après les photos, roue amont
 remontée.
 - Retour d'essai sur le rendu de la 1.15.31 : les deux lacunes entourées

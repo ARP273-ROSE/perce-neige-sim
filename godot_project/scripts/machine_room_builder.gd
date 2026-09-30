@@ -16,15 +16,18 @@ extends Node3D
 ##     « Funicular ») : roue à deux gorges, demi-tour, retour par une seconde
 ##     roue, second tour dans l'autre gorge — adhérence doublée.
 ##
-## Tracé du câble (déduit, aucun plan publié) — vérifié par SageMath dans
-## audit_physique/salle_machines_cable.sage :
-##   brin gauche de la voie → sommet de la roue aval A (gorge 1) → HUIT entre A
-##   (sens horaire) et la roue amont B (sens anti-horaire), deux passes par
-##   roue → B gorge 2 → le brin quitte B par son SOMMET, au niveau de la voie,
-##   et file droit jusqu'au brin droit de la voie. Les sommets des deux roues
-##   sont alignés sur la pente de la voie en gare amont (Kevin, 30/09/2026) :
-##   B a été remontée d'1 m et dépasse de 30 cm du sol du hall derrière les
-##   butoirs, dans la fosse. Enroulement total 774°, désaxements ≤ 2,7°.
+## Tracé du câble (parcours décrit par Kevin le 30/09/2026, aucun plan
+## publié) — vérifié par SageMath dans audit_physique/salle_machines_cable.sage.
+## Roues ALIGNÉES latéralement, gorges gauche (x = −0,12) et droite (+0,12)
+## aux x des brins de la voie. Vu vers l'amont : le brin de la rame 1 entre
+## sur le HAUT de la roue aval, gorge gauche ; descend en bas de la roue
+## amont (gauche), sort par le haut ; descend en bas de la roue aval
+## (droite), sort par le haut ; redescend en bas de la roue amont (droite),
+## sort en haut ; passe sur deux galets AU-DESSUS du sommet de la roue aval
+## (entre les butoirs bleus) et file vers la rame 2. Enroulement 773°.
+## Les sommets des deux roues sont alignés sur la pente de la voie en gare
+## amont (Kevin, 30/09/2026) : la roue amont dépasse de 30 cm du sol du hall
+## derrière les butoirs, dans la fosse, sous garde-corps.
 ##
 ## Repère local : celui de tunnel.transform_at(LENGTH) — x à droite, y en haut,
 ## s le long de la voie (0 = fin du tunnel, > 0 vers la salle).
@@ -38,11 +41,19 @@ const A_S: float = 0.95              # roue aval : entre les bras des butoirs
 const A_Y: float = Y_BRIN - R        # son sommet affleure au niveau des brins
 const B_S: float = 7.55              # roue amont, derrière les butoirs
 const B_Y: float = A_Y               # sommets alignés sur la pente de la voie
-const A_GROOVES: Array = [-0.12, -0.36]
-const B_GROOVES: Array = [-0.24, -0.12]
+const A_GROOVES: Array = [-0.12, 0.12]   # [gauche, droite] vu vers l'amont
+const B_GROOVES: Array = [-0.12, 0.12]   # roues alignées latéralement
 const LANE_L: float = -0.12          # brin qui arrive sur la roue aval
-const LANE_R: float = 0.12           # brin qui repart du sommet de la roue amont
-const S0: float = 0.20               # où le brin de sortie rejoint la voie droite
+const LANE_R: float = 0.12           # brin de la rame 2 : sort du sommet de la roue amont
+const S0: float = 0.20               # (ancien raccord de la sortie, gardé pour compat)
+# Brin de sortie : au-dessus du sommet de la roue aval, sur deux galets qui
+# l'encadrent (34 mm au-dessus des joues), puis descente à 1° jusqu'au
+# dernier galet du tunnel (s = 255,5 × 13,57 − 3474 = −6,865 m).
+const EXIT_Y: float = -1.24
+const EXIT_ROLL_S: Array = [0.05, 1.85]
+const EXIT_ROLL_R: float = 0.10
+const S_LAST_TUNNEL_ROLLER: float = -6.865
+const EXIT_Y_END: float = Y_BRIN + (EXIT_Y - Y_BRIN) * (0.0 - S_LAST_TUNNEL_ROLLER) / (0.05 - S_LAST_TUNNEL_ROLLER)
 
 # --- Gare et salle ---------------------------------------------------------
 const Y_HALL_FLOOR: float = -1.60    # dessus de dalle (stations_builder.FLOOR_Y_LOCAL)
@@ -81,6 +92,8 @@ var _obstacles: Array = []     # AABB monde des machines (caméra de la salle)
 var _spin_a: Node3D = null
 var _spin_b: Node3D = null
 var _angle: float = 0.0
+var _cable_phase: float = 0.0
+var _cable_mat: ShaderMaterial = null
 var _mats: Dictionary = {}
 
 
@@ -642,24 +655,26 @@ func _build_cabinets() -> void:
 # ---------------------------------------------------------------------------
 
 func _build_battery() -> void:
-	# Plus de batterie en courbe : le brin de sortie file droit, au niveau
-	# de la voie, du sommet de la roue amont à la voie droite. Deux galets
-	# porteurs le soutiennent entre les roues, un galet par brin avant la
-	# roue aval (plus près, ils toucheraient la jante qui remonte).
+	# Brin de la rame 1 : un galet porteur avant la roue aval (plus près, il
+	# toucherait la jante qui remonte).
 	var r_roll: float = 0.16
-	var y_roll: float = Y_BRIN - R_CABLE - r_roll
-	for s_g in [3.5, 4.6]:
-		var f: float = (B_S - s_g) / (B_S - S0)
-		var x_g: float = float(B_GROOVES[1]) + f * (LANE_R - float(B_GROOVES[1]))
-		var g: MeshInstance3D = _cyl_x(r_roll, 0.10, _mats["acier"])
+	var g2: MeshInstance3D = _cyl_x(r_roll, 0.10, _mats["acier"])
+	add_child(g2)
+	_place(g2, LANE_L, Y_BRIN - R_CABLE - r_roll, -0.55)
+	# Brin de la rame 2 : deux galets qui l'encadrent et le font passer
+	# au-dessus du sommet de la roue aval (photo des butoirs bleus), portés
+	# en console depuis le bord droit de la fosse.
+	var yc: float = EXIT_Y - R_CABLE - EXIT_ROLL_R
+	for s_g in EXIT_ROLL_S:
+		var g: MeshInstance3D = _cyl_x(EXIT_ROLL_R, 0.08, _mats["acier"])
 		add_child(g)
-		_place(g, x_g, y_roll, s_g)
-		for sx in [-1.0, 1.0]:
-			_box(Vector3(0.03, 0.30, 0.36), _mats["sombre"], x_g + sx * 0.08, y_roll - 0.06, s_g, "FlasqueGalet")
-	for x_l in [LANE_L, LANE_R]:
-		var g2: MeshInstance3D = _cyl_x(r_roll, 0.10, _mats["acier"])
-		add_child(g2)
-		_place(g2, x_l, y_roll, -0.55)
+		_place(g, LANE_R, yc, float(s_g))
+		var ax: MeshInstance3D = _cyl_x(0.025, 0.30, _mats["sombre"])
+		add_child(ax)
+		_place(ax, LANE_R + 0.17, yc, float(s_g))
+		_box(Vector3(0.10, 0.06, 0.10), _mats["sombre"], PIT_X1 + 0.08, yc, float(s_g), "ConsoleGalet")
+		var hp: float = yc - Y_HALL_FLOOR
+		_box(Vector3(0.08, hp, 0.08), _mats["sombre"], PIT_X1 + 0.08, Y_HALL_FLOOR + hp * 0.5, float(s_g), "PoteauGalet")
 
 
 # ---------------------------------------------------------------------------
@@ -702,12 +717,20 @@ func _geometry() -> Dictionary:
 	var b: Vector2 = Vector2(B_S, B_Y)
 	var ab: Vector2 = _cross_tangent(a, b, true)      # A horaire → B
 	var ba: Vector2 = _cross_tangent(b, a, false)     # B anti-horaire → A
-	# sortie : par le SOMMET de B (anti-horaire : son sommet file vers la voie)
+	# sortie : par le haut de B (anti-horaire), tangente jusqu'au sommet du
+	# galet amont qui porte le brin au-dessus de la roue aval
+	var q: Vector2 = Vector2(float(EXIT_ROLL_S[1]), EXIT_Y)
+	var dq: Vector2 = q - b
+	var gq: float = acos(R / dq.length())
 	var t_ex: float = PI * 0.5
+	for tt in [dq.angle() + gq, dq.angle() - gq]:
+		var pp: Vector2 = _pt(b, tt)
+		if (q - pp).normalized().dot(_vit_ccw(tt)) > 0.99:
+			t_ex = tt
 	return {"tA_out": ab.x, "tB_in": ab.y, "tB_out": ba.x, "tA_in": ba.y,
 		"tB_exit": t_ex,
-		"P_Bexit": b + Vector2(cos(t_ex), sin(t_ex)) * R,
-		"P_Kin": Vector2(S0, Y_BRIN)}
+		"P_Bexit": _pt(b, t_ex),
+		"P_Kin": q}
 
 
 ## Arc sur une roue, de t0 à t1 dans le sens donné, à gorge x constante.
@@ -734,24 +757,34 @@ func _build_cable() -> void:
 	_arc(pts, a, R, g["tA_in"], g["tA_out"], true, A_GROOVES[1])
 	# 5. roue amont gorge 2 jusqu'à la sortie
 	_arc(pts, b, R, g["tB_in"], g["tB_exit"], false, B_GROOVES[1])
-	# 6. du sommet de B, droit vers la voie droite, au niveau de la voie
-	var p_kin: Vector2 = g["P_Kin"]
-	pts.append(Vector3(LANE_R, p_kin.y, p_kin.x))
-	# 7. brin droit jusqu'à la fin de voie
-	pts.append(Vector3(LANE_R, Y_BRIN, 0.0))
-	_tube(pts, _mats["cable"], "CableMachinerie")
+	# 6. du haut de B au galet amont, puis au-dessus du sommet de la roue
+	# aval jusqu'au galet aval (gorge droite = brin de la rame 2)
+	pts.append(Vector3(LANE_R, EXIT_Y, float(EXIT_ROLL_S[1])))
+	pts.append(Vector3(LANE_R, EXIT_Y, float(EXIT_ROLL_S[0])))
+	# 7. descente vers le dernier galet du tunnel : raccord à la fin de voie
+	pts.append(Vector3(LANE_R, EXIT_Y_END, 0.0))
+	# câble animé : même shader à torons que dans le tunnel
+	_cable_mat = ShaderMaterial.new()
+	_cable_mat.shader = load("res://scripts/cable_shader.gdshader")
+	_cable_mat.set_shader_parameter("cut_below_s", -1.0)
+	_cable_mat.set_shader_parameter("cable_phase", 0.0)
+	_tube(pts, _cable_mat, "CableMachinerie")
 
 
-func _tube(pts: Array, mat: StandardMaterial3D, nom: String) -> void:
+func _tube(pts: Array, mat: Material, nom: String) -> void:
 	var st: SurfaceTool = SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	st.set_material(mat)
 	var segs: int = 8
+	var long: float = 0.0     # abscisse le long du câble (UV.y = 2 × long, cf. cable_shader)
 	for i in range(pts.size() - 1):
 		var c0: Vector3 = _to_world(pts[i])
 		var c1: Vector3 = _to_world(pts[i + 1])
 		if c0.distance_to(c1) < 1e-4:
 			continue
+		var v0: float = long * 2.0
+		long += c0.distance_to(c1)
+		var v1: float = long * 2.0
 		var tg: Vector3 = (c1 - c0).normalized()
 		var r_vec: Vector3 = tg.cross(_xf.basis.x).normalized()
 		if r_vec.length() < 0.01:
@@ -764,8 +797,14 @@ func _tube(pts: Array, mat: StandardMaterial3D, nom: String) -> void:
 			var p01: Vector3 = c0 + (r_vec * cos(a1) + u_vec * sin(a1)) * R_CABLE
 			var p10: Vector3 = c1 + (r_vec * cos(a0) + u_vec * sin(a0)) * R_CABLE
 			var p11: Vector3 = c1 + (r_vec * cos(a1) + u_vec * sin(a1)) * R_CABLE
-			st.add_vertex(p00); st.add_vertex(p10); st.add_vertex(p11)
-			st.add_vertex(p00); st.add_vertex(p11); st.add_vertex(p01)
+			var ua: float = float(kk) / float(segs)
+			var ub: float = float(kk + 1) / float(segs)
+			st.set_uv(Vector2(ua, v0)); st.add_vertex(p00)
+			st.set_uv(Vector2(ua, v1)); st.add_vertex(p10)
+			st.set_uv(Vector2(ub, v1)); st.add_vertex(p11)
+			st.set_uv(Vector2(ua, v0)); st.add_vertex(p00)
+			st.set_uv(Vector2(ub, v1)); st.add_vertex(p11)
+			st.set_uv(Vector2(ub, v0)); st.add_vertex(p01)
 	st.generate_normals()
 	var mi: MeshInstance3D = MeshInstance3D.new()
 	mi.name = nom
@@ -803,6 +842,11 @@ func update_rotation(v_cable: float, delta: float) -> void:
 	# rotation autour de +x : un angle positif amène le sommet vers −s ; la
 	# roue aval tourne sommet vers la salle quand le brin gauche y entre.
 	_angle -= v_cable / R * delta
+	# le câble défile au même pas que la jante (brin de la rame 1 vers la
+	# roue aval quand v_cable > 0) — il avait l'air figé (retour du 30/09)
+	_cable_phase += v_cable * delta
+	if _cable_mat != null:
+		_cable_mat.set_shader_parameter("cable_phase", _cable_phase)
 	var base_a: Transform3D = _local_xf(_spin_a.get_meta("x", 0.0), A_Y, A_S)
 	var base_b: Transform3D = _local_xf(_spin_b.get_meta("x", 0.0), B_Y, B_S)
 	_spin_a.transform = base_a * Transform3D(Basis(Vector3.RIGHT, _angle), Vector3.ZERO)
