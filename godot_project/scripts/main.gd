@@ -571,6 +571,16 @@ func _build_cabin() -> void:
 	cabin_ghost.set_tunnel(tunnel)
 	cabin_ghost.set_physics(physics)
 
+	# Vue « salle des machines » (O ×2 / bouton VUE) : caméra libre posée
+	# dans la gare amont, elle ne suit pas la rame (demande du 2026-09-30).
+	if machine_room != null:
+		var cam_mr: MachineRoomCamera = MachineRoomCamera.new()
+		cam_mr.name = "CameraSalleMachines"
+		add_child(cam_mr)
+		cam_mr.setup(machine_room)
+		cabin.camera_machines = cam_mr
+		cabin.machine_room = machine_room
+
 
 func _build_hud() -> void:
 	hud = HUD.new()
@@ -795,8 +805,8 @@ func _unhandled_input(event: InputEvent) -> void:
 				print("[R] ignoré — trajet en cours (R sert après une collision "
 					+ "ou une panne catastrophique)")
 		elif event.keycode == KEY_O and cabin != null:
-			# Bascule FPV ↔ extérieure orbitale (aussi pilotée par la
-			# touche O du sim PC via le state dict "ext_view").
+			# Cycle cabine → extérieure → salle des machines (aussi piloté
+			# par la touche O du sim PC via le state dict "view3d").
 			cabin.toggle_view()
 		_orbit_touches.clear()   # plus de doigt fantôme d'une vue à l'autre
 		_orbit_pinch_dist = 0.0
@@ -823,35 +833,57 @@ func _input(event: InputEvent) -> void:
 			_orbit_touches.erase(event.index)
 		_orbit_pinch_dist = 0.0
 		return
-	if cabin.view_mode != cabin.ViewMode.EXTERIOR:
+	var mr_view: bool = cabin.view_mode == cabin.ViewMode.MACHINES \
+		and cabin.camera_machines != null
+	if cabin.view_mode != cabin.ViewMode.EXTERIOR and not mr_view:
 		return
 	if event is InputEventScreenDrag:
 		_orbit_touches[event.index] = event.position
 		if _orbit_touches.size() == 1:
-			cabin.orbit_rotate(event.relative.x, event.relative.y)
+			_view_rotate(mr_view, event.relative.x, event.relative.y)
 		elif _orbit_touches.size() >= 2:
 			var pts: Array = _orbit_touches.values()
 			var d: float = (pts[0] as Vector2).distance_to(pts[1] as Vector2)
 			if _orbit_pinch_dist > 1.0 and d > 1.0:
-				cabin.orbit_zoom(_orbit_pinch_dist / d)
+				_view_zoom(mr_view, _orbit_pinch_dist / d)
 			_orbit_pinch_dist = d
+			# salle des machines : deux doigts qui glissent ensemble =
+			# déplacer le point visé (chaque doigt compte pour moitié)
+			if mr_view:
+				cabin.camera_machines.pan_by(event.relative.x * 0.5, event.relative.y * 0.5)
 	elif event is InputEventMagnifyGesture:
 		# Safari/iPadOS et trackpads livrent parfois le pincement en
 		# geste de magnification plutôt qu'en deux ScreenTouch.
-		cabin.orbit_zoom(1.0 / maxf(event.factor, 0.01))
+		_view_zoom(mr_view, 1.0 / maxf(event.factor, 0.01))
 	elif event is InputEventPanGesture:
-		cabin.orbit_rotate(event.delta.x * 2.0, event.delta.y * 2.0)
+		_view_rotate(mr_view, event.delta.x * 2.0, event.delta.y * 2.0)
 	elif event is InputEventMouseButton and event.pressed:
 		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
-			cabin.orbit_zoom(0.9)
+			_view_zoom(mr_view, 0.9)
 		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
-			cabin.orbit_zoom(1.1)
+			_view_zoom(mr_view, 1.1)
 	elif event is InputEventMouseMotion and _orbit_touches.is_empty():
 		# Souris réelle uniquement : sur tactile, Godot émet AUSSI des
 		# événements souris émulés — le dict de touches actives les
 		# neutralise (pas de double rotation).
 		if event.button_mask & MOUSE_BUTTON_MASK_LEFT:
-			cabin.orbit_rotate(event.relative.x, event.relative.y)
+			_view_rotate(mr_view, event.relative.x, event.relative.y)
+		elif mr_view and event.button_mask & (MOUSE_BUTTON_MASK_RIGHT | MOUSE_BUTTON_MASK_MIDDLE):
+			cabin.camera_machines.pan_by(event.relative.x, event.relative.y)
+
+
+func _view_rotate(mr_view: bool, dx: float, dy: float) -> void:
+	if mr_view:
+		cabin.camera_machines.rotate_by(dx, dy)
+	else:
+		cabin.orbit_rotate(dx, dy)
+
+
+func _view_zoom(mr_view: bool, factor: float) -> void:
+	if mr_view:
+		cabin.camera_machines.zoom(factor)
+	else:
+		cabin.orbit_zoom(factor)
 
 
 # Inversion du sens de marche (touche I / bouton INVERSER) — cas d'usage :

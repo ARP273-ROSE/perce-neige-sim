@@ -74,12 +74,16 @@ matériel roulant. Détail dans `SOURCES.md`.
   programmée, rampement à 1 m/s, arrêt au repère, vigilance homme-mort.
 - **Tunnel et gares d'après vidéos et photos** : tranchées couvertes carrées
   aux extrémités, alésage tunnelier au milieu, évitement Abt de 1 601 à
-  1 823 m, courbes, gares aux parois bleu nuit et caillebotis, salle des
-  machines enterrée aux deux roues d'entraînement jaunes (la roue aval
-  affleure entre les butoirs, câble en huit).
+  1 823 m avec ses aiguillages dessinés (nez des rails intérieurs, cœur en
+  X, fenêtres où passe le câble opposé, galets de déviation), courbes où le
+  câble file en ligne droite d'un galet au suivant, gares aux parois bleu
+  nuit et caillebotis, salle des machines enterrée aux deux roues
+  d'entraînement jaunes (la roue aval affleure entre les butoirs, câble en
+  huit).
 - **Vue cabine 3D** (F4) : viewer Godot embarqué, rien à installer. Rames
   d'après photos (roues Abt à double boudin, phares halogènes, plaque,
-  passagers avec skis), vue extérieure (O).
+  passagers avec skis), vue extérieure et vue libre de la salle des
+  machines (O).
 - **Trois modes** : Normal ; Défi (trajet noté sur 100, butoir,
   déraillement, collision) ; Pannes (15 pannes issues d'incidents
   documentés : STRMTG RM5, Glória Lisbonne 2025, Kaprun 2000, Carmelit,
@@ -130,7 +134,7 @@ L'écran d'accueil (F1) reprend ces touches.
 | `Retour arrière`  | Couper l'annonce en cours                       |
 | `F2`              | Console des annonces                            |
 | `F4`              | Vue cabine : profil → dessinée → 3D             |
-| `O`               | Vue extérieure 3D (glisser, molette)            |
+| `O`               | Vue 3D : cabine → extérieure → salle des machines (glisser, molette, clic droit) |
 
 **Système**
 
@@ -153,7 +157,7 @@ L'écran d'accueil (F1) reprend ces touches.
 
 ## Documentation
 
-- `manuel_perce_neige.pdf` : manuel utilisateur, FR/EN, 44 pages.
+- `manuel_perce_neige.pdf` : manuel utilisateur, FR/EN, 45 pages.
 - `guide_theorique.pdf` : formules, sources réglementaires, calibration audio.
 - `AUDIT_PHYSIQUE_VOYAGES.md`, `AUDIT_PHYSIQUE_PANNES.md` : audits du
   modèle physique, scripts SageMath et sorties dans `audit_physique/`.

@@ -1,0 +1,43 @@
+=== Évitement : d(s) = 3,50 sin²(πk)
+  courbure latérale maxi d''(1611) = 1.693e-03 /m → rayon 591 m
+  divergence maxi (k = 1/4) : 3.12°
+
+=== Nez des rails intérieurs
+  écart voulu d = 0.0675 m → nez à s = 1619.96 m (fourche + 8.96 m) ; en haut à 1804.04 m
+
+=== Cœur en X
+  croisement à s = 1638.45 m (fourche + 27.45 m), angle 4.70°
+  recouvrement des têtes : 0.91 m de long
+
+=== Passage du câble opposé dans le rail intérieur
+  écart d = 0.240 m → s = 1628.04 m (fourche + 17.04 m)
+  angle câble / rail : 3.15°
+  âme découpée sur 1.85 m, patin sur 4.22 m
+  (en haut : s = 1795.96 m)
+  dessus du câble -1.334 ; dessous de tête -1.270 → jeu 64 mm sous la tête
+  pas de galet à moins de 3.54 m de la traversée
+
+=== Corde entre deux galets (câble tendu, pas moyen 13,57 m)
+  courbe 1a (155→165°, 1297→1420 m)    R =   470 m  flèche  4.9 cm  déviation par galet 1.65°
+  courbe 1b (165→175°, 1420→1541 m)    R =   462 m  flèche  5.0 cm  déviation par galet 1.68°
+  courbe 2 (175→189°, 1884→2125 m)     R =   658 m  flèche  3.5 cm  déviation par galet 1.18°
+  courbe 2 (189→203°, 2125→2369 m)     R =   666 m  flèche  3.5 cm  déviation par galet 1.17°
+  évitement, fourche                   R =   591 m  flèche  3.9 cm  déviation par galet 1.32°
+  affaissement sous son poids (T nominale) : 11.0 mm → négligé
+
+=== Inclinaison requise d'un galet de courbe (T = 22 500 daN)
+  courbe 1a (155→165°, 1297→1420 m)    latéral  6.50 kN, poids 1.40 kN → 77.8°
+  courbe 1b (165→175°, 1420→1541 m)    latéral  6.61 kN, poids 1.40 kN → 78.0°
+  courbe 2 (175→189°, 1884→2125 m)     latéral  4.64 kN, poids 1.40 kN → 73.2°
+  courbe 2 (189→203°, 2125→2369 m)     latéral  4.59 kN, poids 1.40 kN → 73.0°
+  évitement, fourche                   latéral  5.17 kN, poids 1.40 kN → 74.8°
+  les deux galets d'une paire sont à 0,24 m : au-delà de 32° d'inclinaison ils
+  se touchent ; le reste de l'effort latéral passe par le flanc de la gorge
+  (flanc de 46° au moins pour 78° — hypothèse, pas de plan de galet publié)
+  inclinaison 32° : chaque galet déborde de 11.3 cm → jeu entre les deux galets +1.3 cm
+  inclinaison 45° : chaque galet déborde de 13.4 cm → jeu entre les deux galets -2.9 cm
+  l'inclinaison sature à 32° dès que R < 3338 m
+
+=== Soulèvement dans la concavité du bas
+  courbure verticale maxi 6.07e-04 /m (R = 1647 m)
+  soulèvement si T > 175 kN ; au bas de la ligne la tension vaut ≈ m g (sin α + 0,005) = 94 kN

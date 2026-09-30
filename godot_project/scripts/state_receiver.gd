@@ -31,6 +31,7 @@ var fault_manager: FaultManager = null
 var cabin: Cabin = null            # bascule FPV/extérieure pilotée par le PC
 var main: Node = null              # pour appliquer le numéro de rame (1/2)
 var _last_ext_view: bool = false
+var _last_view3d: int = -1
 # -1 = pas encore reçu → le PREMIER paquet applique toujours le choix, même
 # si c'est rame 1 (sinon un viewer relancé en cours de session garderait le
 # côté de la rame précédente).
@@ -161,13 +162,21 @@ func _apply(d: Dictionary) -> void:
 	# Vue extérieure orbitale commandée par la touche O du sim PC.
 	# Appliquée SUR CHANGEMENT seulement : entre deux bascules PC, la vue
 	# reste modifiable localement (touche O du viewer focalisé).
-	if d.has("ext_view"):
+	# "view3d" (0 cabine, 1 extérieure, 2 salle des machines) depuis la
+	# v1.15.29 ; "ext_view" (booléen) reste lu pour un sim plus ancien.
+	if d.has("view3d"):
+		var vm: int = clampi(int(d["view3d"]), 0, 2)
+		if vm != _last_view3d:
+			_last_view3d = vm
+			if cabin != null and cabin.view_mode != vm:
+				cabin.set_view(vm)
+	elif d.has("ext_view"):
 		var ev: bool = _b(d, "ext_view", false)
 		if ev != _last_ext_view:
 			_last_ext_view = ev
 			if cabin != null \
 					and (cabin.view_mode == Cabin.ViewMode.EXTERIOR) != ev:
-				cabin.toggle_view()
+				cabin.set_view(Cabin.ViewMode.EXTERIOR if ev else Cabin.ViewMode.FPV)
 	# Panne active : déclenche localement pour effet visuel + son
 	if d.has("active_fault") and fault_manager != null and d["active_fault"] is String:
 		var fid: String = d["active_fault"]
