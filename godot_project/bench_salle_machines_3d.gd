@@ -213,6 +213,22 @@ func _suite() -> void:
 	var ph1: float = float(mr._cable_mat.get_shader_parameter("cable_phase"))
 	ok = _check("câble de la salle animé", absf(ph1 - ph0 - 0.5) < 1e-4,
 		"phase %.3f → %.3f pour 2 m/s × 0,25 s" % [ph0, ph1]) and ok
+	# sens de rotation selon la rame et le sens de marche (retour du 30/09) :
+	# la roue aval tourne sommet vers la salle (v_rame1 > 0) quand la rame 1
+	# monte, que l'on conduise la rame 1 (qui monte) ou la rame 2 (qui descend)
+	var tp: TrainPhysics = TrainPhysics.new()
+	var sens_ok: bool = true
+	var cas: Array = []
+	for c in [[3.0, 1, false, 1.0], [-3.0, -1, false, -1.0], [3.0, 1, true, -1.0], [-3.0, -1, true, 1.0]]:
+		tp.v = c[0]
+		tp.direction = c[1]
+		var vr1: float = tp.v_rame1(c[2])
+		sens_ok = sens_ok and signf(vr1) == c[3]
+		cas.append("%s %s → %+.0f" % ["rame 2" if c[2] else "rame 1", "monte" if c[1] > 0 else "descend", vr1])
+	var a0: float = mr._angle
+	mr.update_rotation(1.0, 0.1)
+	var top_vers_salle: bool = mr._angle < a0      # angle décroissant : sommet vers +s
+	ok = _check("sens des roues selon la rame", sens_ok and top_vers_salle, ", ".join(cas)) and ok
 	var hb: float = MachineRoomBuilder.Y_HALL_FLOOR - MachineRoomBuilder.B_Y
 	var gr: float = MachineRoomBuilder.GUARD_R
 	var e0: float = MachineRoomBuilder.B_S - sqrt(gr * gr - hb * hb)

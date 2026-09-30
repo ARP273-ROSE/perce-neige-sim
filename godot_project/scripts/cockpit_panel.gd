@@ -60,16 +60,16 @@ func _build_slope_profile_points() -> void:
 
 
 # Redraw à ~15 Hz : le _draw() complet (jauges, profil, aiguilles) est
-# coûteux et 60 Hz n'apporte rien visuellement sur des instruments.
-var _redraw_accum: float = 0.0
+# coûteux et 60 Hz n'apporte rien visuellement sur des instruments. Le
+# panneau est rendu dans une SubViewport (HUD.cache_panel) qui n'est
+# redessinée qu'à ces créneaux — décalés d'un demi-créneau avec la salle
+# des machines pour ne pas charger la même image.
+var _redraw_slot: int = -1
 var _regen_mode: bool = false   # état hystérésis de la jauge puissance/régen
 
 
-func _process(delta: float) -> void:
-	_redraw_accum += delta
-	if _redraw_accum >= 1.0 / 15.0:
-		_redraw_accum = 0.0
-		queue_redraw()
+func _process(_delta: float) -> void:
+	_redraw_slot = HUD.redraw_at_15hz(self, _redraw_slot, 0.0)
 
 
 func _draw() -> void:

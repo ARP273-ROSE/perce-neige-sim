@@ -146,7 +146,28 @@ func _ready() -> void:
 			scen.name = "ScenarioPanel"
 			add_child(scen)
 			scen.chosen.connect(_apply_scenario)
+	_diag_masquer()
 	print("[PerceNeige3D] Ready.")
+
+
+# Diagnostic de performance : --masquer=hud,cabin,lights,voie/Nom… cache des
+# groupes pour mesurer ce qu'ils coûtent dans l'export Web réel (banc
+# tests/web_perf.py, Chromium sur GPU).
+func _diag_masquer() -> void:
+	for arg in OS.get_cmdline_user_args():
+		if not arg.begins_with("--masquer="):
+			continue
+		for nom in arg.substr(10).split(","):
+			var n: Node = null
+			if nom.begins_with("voie/"):
+				n = track.get_node_or_null(nom.substr(5)) if track != null else null
+			elif nom.begins_with("hud/"):
+				n = hud.get_node_or_null(nom.substr(4)) if hud != null else null
+			else:
+				n = get(nom) as Node
+			if n != null:
+				n.set("visible", false)
+				print("[Diag] masqué : ", nom)
 
 
 # Applique le scénario choisi au démarrage : gare haute = départ en
@@ -642,9 +663,7 @@ func _process(delta: float) -> void:
 	# Rotation des roues motrices et défilement du câble de la salle. Le sens
 	# de référence est celui de la rame 1 (son brin entre sur la roue aval
 	# quand elle monte) : si l'on conduit la rame 2, la rame 1 descend.
-	var v_r1: float = physics.v * float(physics.direction)
-	if track != null and track.driver_is_rame2:
-		v_r1 = -v_r1
+	var v_r1: float = physics.v_rame1(track != null and track.driver_is_rame2)
 	machine_room.update_rotation(v_r1, delta)
 
 	# Sync du plafond de vitesse imposé par la panne courante (s'il y en a une)

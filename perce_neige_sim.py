@@ -7028,7 +7028,13 @@ class GameWidget(QWidget):
         # regulator cap and the 3 × 800 kW motor speeds after reduction.
         # Positive v (climbing) → clockwise rotation in the profile view.
         # QPainter.rotate(degrees) with screen-Y-down: positive = CW.
-        self._pulley_angle += (self.state.train.v / 2.1) * dt
+        # Sens fixé par la RAME 1 (son brin entre sur la roue aval quand elle
+        # monte) : si l'on conduit la rame 2, la rame 1 va en sens inverse
+        # (même loi que la 3D, TrainPhysics.v_rame1 — retour du 30/09).
+        v_r1 = self.state.train.v
+        if int(getattr(self.state.train, "number", 1)) == 2:
+            v_r1 = -v_r1
+        self._pulley_angle += (v_r1 / 2.1) * dt
         # Tunnel scroll for cabin view — accumulate travel-direction
         # distance so the rings always approach the driver, whether the
         # train is climbing (+1) or descending (-1).
