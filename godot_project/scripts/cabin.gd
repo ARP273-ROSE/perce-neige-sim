@@ -174,6 +174,50 @@ func _build_mesh() -> void:
 	# --- Intérieur cockpit + sièges + passagers — toujours visible ---------
 	if not is_ghost:
 		_build_interior()
+	_merge_static_meshes()
+
+
+## Performance (retour du 30/09 : le tunnel saccade toujours sur iPad) :
+## ~400 MeshInstance3D → une centaine d'appels de dessin en vue cabine. Les
+## pièces fixes de chaque voiture (coque, habillage, sièges, pupitre) sont
+## fusionnées par matériau ; roues, vantaux et feux restent animables.
+func _merge_static_meshes() -> void:
+	if "--sans-fusion" in OS.get_cmdline_user_args():   # comparaison visuelle
+		return
+	var keep: Array = []
+	keep.append_array(_wheels)
+	keep.append_array(_front_lamps)
+	keep.append_array(_rear_lamps)
+	for d in _doors:
+		keep.append(d["node"])
+	var roots: Array = []
+	roots.append_array(_car_roots)
+	roots.append_array(_interior_cars)
+	if interior_root != null:
+		roots.append(interior_root)
+	for r in roots:
+		MeshMerge.merge(r as Node3D, keep)
+	# roues : chaque pivot tourne d'un bloc ; ses deux variantes (boudin
+	# guidé / roue plate, cf. _apply_wheel_types) sont fusionnées à part
+	for w in _wheels:
+		var variantes: Array = []
+		for nom in ["Boudin", "Plate"]:
+			var v: Node = (w as Node).get_node_or_null(nom)
+			if v != null:
+				variantes.append(v)
+				MeshMerge.merge(v as Node3D)
+		MeshMerge.merge(w as Node3D, variantes)
+	print("[Cabin%s] maillages fixes fusionnés : %d surfaces restantes" % [
+		" ghost" if is_ghost else "", _count_surfaces(self)])
+
+
+static func _count_surfaces(n: Node) -> int:
+	var k: int = 0
+	if n is MeshInstance3D and (n as MeshInstance3D).mesh != null:
+		k += (n as MeshInstance3D).mesh.get_surface_count()
+	for c in n.get_children():
+		k += _count_surfaces(c)
+	return k
 
 
 # ---------------------------------------------------------------------------
@@ -1241,7 +1285,7 @@ func _build_camera() -> void:
 	# Caméra 1ère personne — position driver dans la zone cockpit
 	camera_fpv = Camera3D.new()
 	camera_fpv.name = "CameraFPV"
-	camera_fpv.fov = 70.0
+	camera_fpv.fov = 78.0   # « dézoome un peu » (retour du 30/09) : 70 → 78°
 	camera_fpv.near = 0.05
 	camera_fpv.far = 800.0
 	# Avancée de 0,4 m (retour d'essai 2026-07 : « trop loin du panneau
