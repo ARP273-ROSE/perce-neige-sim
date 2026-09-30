@@ -7,6 +7,7 @@ extends SceneTree
 
 var _tunnel: TunnelBuilder
 var _root: Node3D
+var _track: TrackBuilder
 
 
 func _initialize() -> void:
@@ -33,6 +34,9 @@ func _suite() -> void:
 	var args: PackedStringArray = OS.get_cmdline_user_args()
 	if args.size() > 0:
 		out_path = args[0]
+	_track = TrackBuilder.new()
+	_root.add_child(_track)
+	_track.build(_tunnel)
 	var st: StationsBuilder = StationsBuilder.new()
 	_root.add_child(st)
 	st.build(_tunnel)
@@ -127,8 +131,43 @@ func _suite() -> void:
 	var p_ex: Vector2 = g["P_Bexit"]
 	var p_k: Vector2 = g["P_Kin"]
 	var pente_s: float = rad_to_deg(atan2(p_k.y - p_ex.y, p_ex.x - p_k.x))
-	ok = _check("brin de sortie au niveau de la voie", absf(pente_s) < 0.01,
-		"%.3f°, quitte la roue amont à y = %.3f (voie %.3f)" % [pente_s, p_ex.y, MachineRoomBuilder.Y_BRIN]) and ok
+	ok = _check("sortie par le haut de la roue amont", p_ex.y > MachineRoomBuilder.B_Y + MachineRoomBuilder.R - 0.01,
+		"quitte la roue amont à y = %.3f, monte de %.2f° vers les galets" % [p_ex.y, pente_s]) and ok
+	# roues alignées latéralement, gorges aux x des brins de la voie
+	ok = _check("roues alignées latéralement", MachineRoomBuilder.A_GROOVES == MachineRoomBuilder.B_GROOVES
+		and absf(float(MachineRoomBuilder.A_GROOVES[0]) - MachineRoomBuilder.LANE_L) < 1e-6
+		and absf(float(MachineRoomBuilder.A_GROOVES[1]) - MachineRoomBuilder.LANE_R) < 1e-6,
+		"gorges %s / %s" % [str(MachineRoomBuilder.A_GROOVES), str(MachineRoomBuilder.B_GROOVES)]) and ok
+	# brin de la rame 2 au-dessus du sommet de la roue aval
+	var jeu: float = MachineRoomBuilder.EXIT_Y - MachineRoomBuilder.R_CABLE \
+		- (MachineRoomBuilder.A_Y + MachineRoomBuilder.RF)
+	ok = _check("brin de sortie au-dessus de la roue aval", jeu > 0.02 and jeu < 0.10,
+		"%.0f mm au-dessus des joues" % (jeu * 1000.0)) and ok
+	var jeu_g: float = 99.0
+	for s_g in MachineRoomBuilder.EXIT_ROLL_S:
+		var yc: float = MachineRoomBuilder.EXIT_Y - MachineRoomBuilder.R_CABLE - MachineRoomBuilder.EXIT_ROLL_R
+		for k in range(-9, 10):
+			var ds: float = float(k) * MachineRoomBuilder.EXIT_ROLL_R / 10.0
+			var s: float = float(s_g) + ds
+			var y_g: float = yc - sqrt(MachineRoomBuilder.EXIT_ROLL_R ** 2 - ds * ds)
+			var dA: float = s - MachineRoomBuilder.A_S
+			var y_j: float = MachineRoomBuilder.A_Y + sqrt(maxf(MachineRoomBuilder.RF ** 2 - dA * dA, 0.0))
+			jeu_g = minf(jeu_g, y_g - y_j)
+	ok = _check("galets du brin de sortie au-dessus des joues", jeu_g > 0.015, "%.0f mm" % (jeu_g * 1000.0)) and ok
+	# raccord : dernier galet du tunnel et hauteur du brin à la fin de voie
+	var st_l: Array = _track.station_list()
+	var s_last: float = float(st_l[-1].s) - PNConstants.LENGTH
+	ok = _check("dernier galet du tunnel au bon endroit", absf(s_last - MachineRoomBuilder.S_LAST_TUNNEL_ROLLER) < 0.01,
+		"%.3f m (constante %.3f)" % [s_last, MachineRoomBuilder.S_LAST_TUNNEL_ROLLER]) and ok
+	var fin: Vector2 = _track.strand_local_at(1, PNConstants.LENGTH)
+	ok = _check("brin de la rame 2 raccordé à la salle", absf(fin.y - MachineRoomBuilder.EXIT_Y_END) < 0.002
+		and absf(fin.x - MachineRoomBuilder.LANE_R) < 0.002, "fin de voie x = %.3f, y = %.4f" % [fin.x, fin.y]) and ok
+	# le câble de la salle défile avec les roues (il avait l'air figé)
+	var ph0: float = float(mr._cable_mat.get_shader_parameter("cable_phase"))
+	mr.update_rotation(2.0, 0.25)
+	var ph1: float = float(mr._cable_mat.get_shader_parameter("cable_phase"))
+	ok = _check("câble de la salle animé", absf(ph1 - ph0 - 0.5) < 1e-4,
+		"phase %.3f → %.3f pour 2 m/s × 0,25 s" % [ph0, ph1]) and ok
 	var hb: float = MachineRoomBuilder.Y_HALL_FLOOR - MachineRoomBuilder.B_Y
 	var gr: float = MachineRoomBuilder.GUARD_R
 	var e0: float = MachineRoomBuilder.B_S - sqrt(gr * gr - hb * hb)

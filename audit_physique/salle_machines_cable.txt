@@ -1,41 +1,40 @@
 === Positions
-A (aval)  : s = 0.95 m, axe y = -3.44 m
-B (amont) : s = 7.55 m, axe y = -3.44 m   entraxe 6.600 m
+A (aval) : s = 0.95, axe y = -3.44 ; B (amont) : s = 7.55, axe y = -3.44 ; entraxe 6.600 m
+pente sommet A → sommet B dans le repère de la voie : 0.00° (voie : 0°)
+roues alignées : gorges gauche x = -0.12, droite x = 0.12 sur les deux roues
 
 === Affleurement de la roue aval
-sommet des joues de A : y = -1.300 m (table de roulement -1.24, dessus de dalle -1.6)
-A dépasse de la dalle entre s = -0.14 et 2.04 m ; bras des butoirs de -0.25 à 2.15 m
-  → entre les bras : True
-  largeur de A de x = -0.46 à -0.02 ; bras à |x| = 0.7 → entre les bras : True
+A dépasse du sol entre s = -0.14 et 2.04 ; bras de -0.25 à 2.15 → True
+largeur avec carter : x = -0.3 à 0.3 ; bras à |x| = 0.7 → True
 
-=== Enroulements (degrés)
-  A gorge 1 (arrivée)       39.1
-  B gorge 1                258.1
-  A gorge 2                258.1
-  B gorge 2 (sortie)       219.1
-  total                    774.4
+=== Parcours et enroulements (degrés)
+  A gauche : entrée au sommet → départ     39.1   (de   90.0° à   50.9°)
+  B gauche : bas → sommet → départ        258.1   (de  230.9° à  129.1°)
+  A droite : bas → sommet → départ        258.1   (de  309.1° à   50.9°)
+  B droite : bas → sommet → sortie        217.9   (de  230.9° à   88.8°)
+  total 773.2
   Euler-Eytelwein, μ = 0.2 : T1/T2 max = 15
   Euler-Eytelwein, μ = 0.25 : T1/T2 max = 29
 
-=== Brins croisés (le « huit »)
-  longueur A→B 5.124 m, B→A 5.124 m
-  point de tangence le plus haut sur A : y = -1.825 (dessous de dalle -1.9) → sous la dalle : False (sinon : la fosse ouverte les laisse passer)
-  désaxement A1→B1 : 0.12 m sur 5.12 m → 1.34°
-  désaxement B1→A2 : 0.12 m sur 5.12 m → 1.34°
-  désaxement A2→B2 : 0.24 m sur 5.12 m → 2.68°
+=== Brins croisés
+  A→B 5.124 m : gauche→gauche puis droite→droite, désaxement nul
+  B gauche → A droite : 0.24 m sur 5.12 m → 2.68°
+  au croisement : brins A→B à x = ±0,12, brin B→A à x = 0 → jeu entre câbles 68 mm
 
-=== Sommets des roues et sortie
-  sommet (axe câble) de A : y = -1.360 ; de B : y = -1.360 → pente A→B dans le repère de la voie : 0.00° (voie : 0°)
-  brin de sortie : de s = 7.55 à 0.20, pente 0.00° sur 7.35 m
-  désaxement gorge 2 de B → voie droite : 0.24 m sur 7.35 m → 1.87°
-  au droit du sommet de A (s = 0.95) : brin à x = 0.096, bord 0.070 ; flasque du carter de A à x = 0.060 → jeu 0.010 m
-  B dépasse du sol du hall entre s = 6.46 et 8.64 (carter : 6.27 à 8.83) ; mur du fond à s = 9,00
-  hauteur du sommet de B au-dessus du sol du hall : 0.30 m
-  points de départ des brins croisés : y = -1.825, -5.055, -5.055, -1.825 (dessous de dalle -1.9) → la fosse doit rester ouverte de s ≈ 2.26 à 6.24
+=== Sortie au-dessus de la roue aval
+  quitte B à 88.80° (s = 7.594, y = -1.360), monte de 1.20° jusqu'au galet en s = 1.85
+  au-dessus du sommet de A : axe à y = -1.24, dessous du câble -1.266, joues de A à -1.300 → jeu 34 mm
+  galet en s = 0.05 : centre y = -1.366, jeu mini avec les joues de A 23 mm
+  galet en s = 1.85 : centre y = -1.366, jeu mini avec les joues de A 23 mm
+  vers la rame 2 : descend du galet (s = 0.05) au dernier galet du tunnel (s = -6.865) : pente 0.99°, y = -1.2409 à la fin de voie
+  au niveau de la table de roulement : 0 mm (entre les butoirs, la rame n'y va pas)
+
+=== Roue amont dans le hall
+  B dépasse du sol de s = 6.46 à 8.64 (carter 6.27 à 8.83), de 0.30 m
 
 === Angles pour la 3D (radians)
-  tA_out       +0.88885
-  tA_in        -0.88885
-  tB_in        +4.03045
-  tB_out       +2.25274
-  tB_exit      +1.57080
+  tA_out   +0.88885
+  tA_in    -0.88885
+  tB_in    +4.03045
+  tB_out   +2.25274
+  tB_exit  +1.54983

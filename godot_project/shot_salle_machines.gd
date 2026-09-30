@@ -63,7 +63,14 @@ func _suite() -> void:
 		["6_amont", 3.0, 0.35, 10.0, 0.0, 0.0, 0.0],
 		["7_profil", 1.5708, 0.02, 11.0, 0.0, 0.0, 0.3],
 		["8_hall", 0.55, 0.55, 9.0, 0.0, 0.8, 1.6],
+		["9_sommet_aval", 0.9, 0.35, 2.6, 0.0, -3.3, 1.75],
+		["9b_sommet_aval", 1.9, 0.45, 2.2, 0.2, -3.0, 1.75],
+		["9c_sommet_aval", 1.35, 0.9, 2.0, 0.2, -3.3, 1.75],
+		["10_croisement", -1.35, 0.05, 5.5, 0.0, 0.0, -0.4],
 	]
+	if OS.get_cmdline_user_args().size() > 1:
+		var keep: PackedStringArray = OS.get_cmdline_user_args()[1].split(",")
+		_shots = _shots.filter(func(sh: Array) -> bool: return keep.has(sh[0]))
 	process_frame.connect(_tick)
 
 
