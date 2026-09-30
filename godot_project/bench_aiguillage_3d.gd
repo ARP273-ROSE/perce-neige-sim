@@ -39,44 +39,59 @@ func _suite() -> void:
 	var foot: float = tr.rail_foot_width * 0.5
 	var web: float = tr.rail_web_width * 0.5
 
-	print("nez %.2f / %.2f, cœurs %.2f / %.2f" % [abt.nose_lo, abt.nose_hi, abt.frog[0], abt.frog[1]])
-	_check("nez 9 m après la fourche", absf(abt.nose_lo - s0 - 8.96) < 0.1,
-		"%.2f m" % (abt.nose_lo - s0))
+	print("cœurs en X à %.2f / %.2f, %d tronçons" % [abt.frog[0], abt.frog[1], abt.pieces.size()])
 	_check("cœur en X à 27,5 m", absf(abt.frog[0] - s0 - 27.45) < 0.1,
 		"%.2f m" % (abt.frog[0] - s0))
-	_check("4 fenêtres de câble", abt.windows.size() == 4, "%d" % abt.windows.size())
-	for w in abt.windows:
-		var ds: float = minf(absf(w.s - s0), absf(s1 - w.s))
-		print("  fenêtre rail %+d / brin %+d à s = %.2f (fourche ± %.2f), âme %.2f m, patin %.2f m"
-			% [w.rail, w.cable, w.s, ds, w.web.y - w.web.x, w.foot.y - w.foot.x])
-		_check("fenêtre près de 17 m", absf(ds - 17.0) < 1.0, "%.2f" % ds)
+	_check("6 tronçons de rail intérieur (langue, rail, langue × 2)", abt.pieces.size() == 6,
+		"%d" % abt.pieces.size())
+	for g in abt.gaps:
+		for z in ["lo", "hi"]:
+			var ov: float = absf(g["a_end_" + z] - g["b_start_" + z])
+			print("  lacune rail %+d (%s) : croisement %.2f, fin de langue %.2f, reprise %.2f, chevauchement %.2f m"
+				% [g.rail, z, g["sc_" + z], g["a_end_" + z], g["b_start_" + z], ov])
+			_check("chevauchement des bouts ≥ 0,5 m", ov >= 0.5, "%.2f m" % ov)
+			var ds: float = absf(g["sc_" + z] - (s0 if z == "lo" else s1))
+			_check("lacune près de 17 m de la fourche", absf(ds - 17.0) < 1.5, "%.2f" % ds)
 
-	# 1. Câble contre les rails (échantillons tous les 5 cm dans les aiguillages)
+	# 1. Roue plate toujours portée, ornière du boudin libre, câble dégagé
+	var tread: float = TrackBuilder.FLAT_TREAD_HALF - tr.rail_head_width * 0.5 + 0.003
+	var unsupported: int = 0
+	var flange_hits: int = 0
+	var cable_hits: int = 0
 	var worst_outer: float = 99.0
-	var bad: int = 0
-	for zone in [[s0 - 5.0, s0 + 45.0], [s1 - 45.0, s1 + 5.0]]:
+	for zone in [[s0 - 6.0, s0 + 45.0], [s1 - 45.0, s1 + 6.0]]:
 		var s: float = zone[0]
 		while s <= zone[1]:
+			var d: float = absf(_tunnel.passing_loop_offset(s, 1.0))
+			var rails: Array = tr.inner_rails_at(s)
+			for ri in [-1, 1]:
+				# roue plate de la rame de la voie ri, sur la ligne x_f ;
+				# son rail extérieur côté plat = celui de l'autre voie
+				var xf: float = tr.inner_rail_x(ri, s)
+				var outer_flat: float = -float(ri) * (d + hg)
+				var ok_sup: bool = absf(xf - outer_flat) <= tread
+				for r in rails:
+					if absf(r[0] - xf) <= tread:
+						ok_sup = true
+				if not ok_sup:
+					unsupported += 1
+				# boudin intérieur de la rame guidée par le rail extérieur ri
+				var flange: float = float(ri) * (d + hg) - float(ri) * 0.06
+				for r in rails:
+					if absf(r[0] - flange) < tr.rail_head_width * 0.5 + 0.01 + 0.005:
+						flange_hits += 1
 			for cable_i in [-1, 1]:
 				var cx: float = tr.strand_local_at(cable_i, s).x
-				var d: float = absf(_tunnel.passing_loop_offset(s, 1.0))
 				for xo in [-d - hg, d + hg]:
 					worst_outer = minf(worst_outer, absf(cx - xo) - foot - rc)
-				if s >= abt.nose_lo and s <= abt.nose_hi:
-					for rail_i in [-1, 1]:
-						var xr: float = tr.inner_rail_x(rail_i, s)
-						var gap: float = absf(cx - xr)
-						if gap < rc + foot:
-							if not _in_window(abt, rail_i, s, "foot"):
-								bad += 1
-						if gap < rc + web + 0.005:
-							if not _in_window(abt, rail_i, s, "web"):
-								bad += 1
-						for sx in abt.frog:
-							if absf(s - sx) < tr.abt_frog_half + 0.2 and absf(cx) < 0.25 + rc:
-								bad += 1
+				for r in rails:
+					if absf(cx - r[0]) < rc + r[1] + 0.004:
+						cable_hits += 1
 			s += 0.05
-	_check("câble hors des rails sauf dans les fenêtres", bad == 0, "%d contacts" % bad)
+	_check("roue plate toujours portée (langue, rail, lacune)", unsupported == 0,
+		"%d points sans appui" % unsupported)
+	_check("ornière du boudin libre", flange_hits == 0, "%d contacts" % flange_hits)
+	_check("câble dégagé de tous les tronçons", cable_hits == 0, "%d contacts" % cable_hits)
 	_check("câble loin des rails extérieurs", worst_outer > 0.05, "jeu mini %.3f m" % worst_outer)
 
 	# 2. Supports de galets et galets de déviation contre les rails
@@ -85,13 +100,12 @@ func _suite() -> void:
 	var n_sheave: int = 0
 	for k in range(stations.size()):
 		var st: Dictionary = stations[k]
-		if not ((st.s > s0 - 5.0 and st.s < s0 + 45.0) or (st.s > s1 - 45.0 and st.s < s1 + 5.0)):
+		if not ((st.s > s0 - 6.0 and st.s < s0 + 45.0) or (st.s > s1 - 45.0 and st.s < s1 + 6.0)):
 			continue
 		var d2: float = absf(_tunnel.passing_loop_offset(st.s, 1.0))
-		var rails: Array = [-d2 - hg, d2 + hg]
-		if st.s >= abt.nose_lo and st.s <= abt.nose_hi:
-			rails.append(tr.inner_rail_x(-1, st.s))
-			rails.append(tr.inner_rail_x(1, st.s))
+		var rails2: Array = [[-d2 - hg, foot], [d2 + hg, foot]]
+		for r in tr.inner_rails_at(st.s):
+			rails2.append([r[0], r[1]])
 		var spans: Array = []
 		if st.paired:
 			spans.append(Vector2(-tr.base_plate_width * 0.5, tr.base_plate_width * 0.5))
@@ -102,9 +116,10 @@ func _suite() -> void:
 		if st.sheave:
 			var xf: Transform3D = _tunnel.transform_at(st.s)
 			for side_i in [-1, 1]:
-				var v: Dictionary = tr.strand_vertices(side_i)[k + 1]
 				var pts: Array = tr.strand_vertices(side_i)
-				var pull: Vector3 = ((pts[k + 2].p - v.p) as Vector3).normalized() - ((v.p - pts[k].p) as Vector3).normalized()
+				var v: Dictionary = pts[k + 1]
+				var pull: Vector3 = ((pts[k + 2].p - v.p) as Vector3).normalized() \
+					- ((v.p - pts[k].p) as Vector3).normalized()
 				var inside: float = signf(pull.dot(xf.basis.x))
 				if inside == 0.0:
 					inside = -float(side_i)
@@ -116,15 +131,15 @@ func _suite() -> void:
 				var beam_top: float = tr.floor_y_local + tr.slab_thickness - 0.01 + tr.cable_beam_height
 				if y_low < beam_top:
 					clash += 1
-					print("  galet de déviation dans la longrine à s = %.1f (bas %.3f < %.3f)" % [st.s, y_low, beam_top])
+					print("  galet de déviation dans la longrine à s = %.1f" % st.s)
 				n_sheave += 1
 		for sp in spans:
-			for xr2 in rails:
-				if sp.x < xr2 + foot and sp.y > xr2 - foot:
+			for r2 in rails2:
+				if sp.x < r2[0] + r2[1] and sp.y > r2[0] - r2[1]:
 					clash += 1
-					print("  conflit à s = %.1f : [%.3f ; %.3f] contre rail %.3f" % [st.s, sp.x, sp.y, xr2])
+					print("  conflit à s = %.1f : [%.3f ; %.3f] contre rail %.3f" % [st.s, sp.x, sp.y, r2[0]])
 	_check("galets et galets de déviation hors des rails", clash == 0, "%d conflits" % clash)
-	_check("galets de déviation posés", n_sheave == 16, "%d" % n_sheave)
+	_check("galets de déviation posés", n_sheave == 12, "%d" % n_sheave)
 
 	# 3. Câble tendu en courbe : écart de la corde à l'arc (courbe 1)
 	var dev_max: float = 0.0

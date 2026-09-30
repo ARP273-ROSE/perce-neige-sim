@@ -144,13 +144,11 @@ func build(t: TunnelBuilder) -> void:
 # 1813 m en haut, en miroir). La traversée du rail est à +17 m : aucun
 # galet à moins de 3,6 m (audit).
 const ABT_STATIONS: Array = [-3.4, 4.5, 11.0, 22.0, 31.0, 40.0]
-# Stations équipées d'un galet de déviation incliné. Pas à +11 m : le rail
-# intérieur opposé arrive contre le câble, il n'y a pas la place.
-const ABT_SHEAVE_STATIONS: Array = [4.5, 22.0, 31.0, 40.0]
+# Stations équipées d'un galet de déviation incliné. Pas à +4,5 ni +11 m :
+# la langue et le tronçon décalé occupent la place.
+const ABT_SHEAVE_STATIONS: Array = [22.0, 31.0, 40.0]
 const ABT_ZONE: float = 45.0              # étendue de l'aiguillage depuis la fourche (m)
 @export var abt_flangeway: float = 0.060  # boudin 30 mm + jeu
-@export var abt_nose_len: float = 1.2     # rampe du nez du rail intérieur
-@export var abt_nose_flare: float = 0.03  # nez écarté du rail extérieur voisin
 @export var abt_frog_half: float = 2.0    # demi-longueur du cœur en X
 @export var abt_cable_clear: float = 0.015  # jeu câble / acier dans les fenêtres
 @export var abt_switch_d: float = 0.95    # écart de voie en deçà duquel les rails intérieurs sont sur socles étroits
@@ -308,51 +306,166 @@ func _loop_ds_for_offset(dv: float) -> float:
 	return 0.5 * (a + b)
 
 
+# Rails intérieurs de l'aiguillage Abt, en TRONÇONS (retour d'essai du
+# 30/09 : « il manque des bouts de rail », photos d'Hakone, de la Polybahn
+# et schéma Wikipédia « Abtsche Weiche »). Pour la roue PLATE d'une rame
+# (voie rail_i, ligne x_f = inner_rail_x) :
+#   A. LANGUE : naît en pointe recourbée dans la voie unique, 4 m avant la
+#      fourche, parallèle au rail extérieur opposé à l'ornière près (le
+#      boudin intérieur de l'autre rame passe entre les deux) ; elle
+#      s'écarte ensuite parallèlement à x_f décalée de e vers ce rail, et
+#      finit en LAME (tête + âme, sans patin) juste avant que le câble de
+#      l'autre rame ne la touche ;
+#   B. un second tronçon repart DÉCALÉ de e de l'autre côté du câble, en
+#      lame aussi, chevauche le premier (la roue plate de 24 cm porte sur
+#      les deux), revient sur x_f, croise l'autre rail intérieur sur le
+#      cœur en X, court tout l'évitement et finit de même à l'autre bout.
+# Le câble passe ENTRE les deux bouts : c'est la « lacune pour le câble »
+# de Wikipédia. Les rails extérieurs restent continus.
+const ABT_TONGUE_BACK: float = 4.0     # la langue commence 4 m avant la fourche
+const ABT_TONGUE_OFFSET: float = 0.135 # entraxe rail extérieur / langue : tête 75 + ornière 60 mm
+const ABT_JOG: float = 0.08            # décalage des bouts de part et d'autre du câble
+const ABT_BACK_TO_LINE: float = 6.0    # retour du tronçon B sur x_f après la lacune (m)
+const FLAT_TREAD_HALF: float = 0.12    # roue plate de 24 cm (train_body_builder)
+
+
 func _compute_abt() -> void:
 	var hg: float = gauge_m * 0.5
 	var s0: float = PNConstants.PASSING_START
 	var s1: float = PNConstants.PASSING_END
-	# nez : la tête du rail intérieur laisse l'ornière du boudin de l'autre
-	# rame contre le rail extérieur opposé (2d − tête ≥ ornière)
-	var ds_nose: float = _loop_ds_for_offset((rail_head_width + abt_flangeway) * 0.5)
 	var ds_x: float = _loop_ds_for_offset(hg)
 	var ds_sw: float = _loop_ds_for_offset(abt_switch_d)
 	_abt = {
-		"nose_lo": s0 + ds_nose, "nose_hi": s1 - ds_nose,
 		"frog": [s0 + ds_x, s1 - ds_x],
 		"switch_lo": s0 + ds_sw, "switch_hi": s1 - ds_sw,
-		"windows": [],
+		"gaps": [], "pieces": [],
 	}
-	# Fenêtres : le brin OPPOSÉ traverse chaque rail intérieur (rail de la
-	# voie gauche traversé par le brin droit, et réciproquement).
+	var clr: float = 0.008
+	var web_need: float = cable_radius + rail_web_width * 0.5 + clr
+	var foot_need: float = cable_radius + rail_foot_width * 0.5 + clr
 	for rail_i in [-1, 1]:
 		var cable_i: int = -rail_i
-		for zone in [[_abt.nose_lo, s0 + ABT_ZONE], [s1 - ABT_ZONE, _abt.nose_hi]]:
-			var s: float = zone[0]
-			var f_prev: float = _strand_rail_gap(cable_i, rail_i, s)
-			while s < zone[1] - 1e-6:
-				var s_n: float = minf(s + 0.1, zone[1])
-				var f_n: float = _strand_rail_gap(cable_i, rail_i, s_n)
-				if signf(f_n) != signf(f_prev):
-					var a: float = s
-					var b: float = s_n
-					for _it in range(30):
-						var m: float = 0.5 * (a + b)
-						if signf(_strand_rail_gap(cable_i, rail_i, m)) == signf(f_prev):
-							a = m
-						else:
-							b = m
-					var sc: float = 0.5 * (a + b)
-					var rel: float = absf(_strand_rail_gap(cable_i, rail_i, sc + 0.5)
-						- _strand_rail_gap(cable_i, rail_i, sc - 0.5))
-					rel = maxf(rel, 1e-3)
-					var l_web: float = 2.0 * (cable_radius + rail_web_width * 0.5 + abt_cable_clear) / rel
-					var l_foot: float = 2.0 * (cable_radius + rail_foot_width * 0.5 + abt_cable_clear) / rel
-					_abt.windows.append({"rail": rail_i, "cable": cable_i, "s": sc,
-						"web": Vector2(sc - l_web * 0.5, sc + l_web * 0.5),
-						"foot": Vector2(sc - l_foot * 0.5, sc + l_foot * 0.5)})
-				f_prev = f_n
-				s = s_n
+		var gap: Dictionary = {"rail": rail_i, "cable": cable_i}
+		# pour chaque aiguillage : croisement nominal (câble sur x_f), puis
+		# fin de A et début de B d'après la position réelle du câble tendu
+		for zone in [["lo", s0 + 2.0, s0 + ABT_ZONE, 1.0], ["hi", s1 - 2.0, s1 - ABT_ZONE, -1.0]]:
+			var z: String = zone[0]
+			var dirn: float = zone[3]
+			var s: float = zone[1]
+			var sc: float = s
+			var prev: float = float(rail_i) * (strand_local_at(cable_i, s).x - inner_rail_x(rail_i, s))
+			while (s - zone[2]) * dirn < 0.0:
+				var sn: float = s + 0.02 * dirn
+				var cur: float = float(rail_i) * (strand_local_at(cable_i, sn).x - inner_rail_x(rail_i, sn))
+				if signf(cur) != signf(prev):
+					sc = sn
+					break
+				prev = cur
+				s = sn
+			gap["sc_" + z] = sc
+		_abt.gaps.append(gap)
+	# bornes des tronçons (balayage fin autour de chaque croisement)
+	for gap in _abt.gaps:
+		var rail_i: int = gap.rail
+		var cable_i: int = gap.cable
+		for z in ["lo", "hi"]:
+			var sc: float = gap["sc_" + z]
+			var dirn: float = 1.0 if z == "lo" else -1.0
+			# A : décalé vers le côté du câble AVANT croisement ; le câble
+			# s'en approche → fin de patin puis fin de lame
+			var s: float = sc - 6.0 * dirn
+			var a_blade: float = s
+			var a_end: float = s
+			while (s - (sc + 6.0 * dirn)) * dirn < 0.0:
+				var c: float = float(rail_i) * (strand_local_at(cable_i, s).x
+					- _piece_x({"kind": "A", "rail": rail_i, "zone": z}, s))
+				if c >= foot_need:
+					a_blade = s
+				if c >= web_need:
+					a_end = s
+				else:
+					break
+				s += 0.01 * dirn
+			# B : décalé de l'autre côté ; le câble s'en éloigne
+			s = sc + 6.0 * dirn
+			var b_start: float = s
+			var b_blade: float = s
+			while (s - (sc - 6.0 * dirn)) * dirn > 0.0:
+				var c2: float = float(rail_i) * (_piece_x({"kind": "B", "rail": rail_i}, s)
+					- strand_local_at(cable_i, s).x)
+				if c2 >= foot_need:
+					b_blade = s
+				if c2 >= web_need:
+					b_start = s
+				else:
+					break
+				s -= 0.01 * dirn
+			gap["a_blade_" + z] = a_blade
+			gap["a_end_" + z] = a_end
+			gap["b_start_" + z] = b_start
+			gap["b_blade_" + z] = b_blade
+	for gap in _abt.gaps:
+		var rail_i: int = gap.rail
+		var nm: String = "RailInnerLeft" if rail_i < 0 else "RailInnerRight"
+		# A bas : de la pointe de langue à la fin de lame
+		_abt.pieces.append({"kind": "A", "zone": "lo", "rail": rail_i, "name": nm + "LangueBas",
+			"s_a": s0 - ABT_TONGUE_BACK, "s_b": gap.a_end_lo,
+			"blade_a": s0 - ABT_TONGUE_BACK - 1.0, "blade_b": gap.a_blade_lo,
+			"tip_a": true, "tip_b": false})
+		# B : d'une lacune à l'autre, à travers les deux cœurs et l'évitement
+		_abt.pieces.append({"kind": "B", "rail": rail_i, "name": nm,
+			"s_a": gap.b_start_lo, "s_b": gap.b_start_hi,
+			"blade_a": gap.b_blade_lo, "blade_b": gap.b_blade_hi,
+			"tip_a": false, "tip_b": false})
+		# A haut : de la fin de lame à la pointe de langue
+		_abt.pieces.append({"kind": "A", "zone": "hi", "rail": rail_i, "name": nm + "LangueHaut",
+			"s_a": gap.a_end_hi, "s_b": s1 + ABT_TONGUE_BACK,
+			"blade_a": gap.a_blade_hi, "blade_b": s1 + ABT_TONGUE_BACK + 1.0,
+			"tip_a": false, "tip_b": true})
+
+
+## Axe latéral d'un tronçon de rail intérieur à l'abscisse s.
+func _piece_x(piece: Dictionary, s: float) -> float:
+	var ri: float = float(piece.rail)
+	var xf: float = inner_rail_x(piece.rail, s)
+	if piece.kind == "A":
+		var d: float = absf(tunnel.passing_loop_offset(s, 1.0))
+		# langue le long du rail extérieur opposé (x = −ri·(d + hg) + ri·δ)
+		var tongue: float = ri * (ABT_TONGUE_OFFSET - d - gauge_m * 0.5)
+		var shifted: float = xf - ri * ABT_JOG
+		# « le plus éloigné du rail extérieur » des deux, raccord adouci
+		var a: float = ri * tongue
+		var b: float = ri * shifted
+		var k: float = 0.012
+		var m: float = 0.5 * (a + b + sqrt((a - b) * (a - b) + k * k))
+		var x: float = ri * m
+		# pointe de langue recourbée vers l'axe de la voie
+		var s_tip: float = PNConstants.PASSING_START - ABT_TONGUE_BACK
+		if piece.get("zone", "lo") == "hi":
+			s_tip = PNConstants.PASSING_END + ABT_TONGUE_BACK
+		var t: float = clampf(1.0 - absf(s - s_tip) / 0.9, 0.0, 1.0)
+		return x + ri * 0.04 * t * t
+	# B : décalé de ri·e aux deux lacunes, revient sur x_f entre les deux
+	var w: float = 0.0
+	for g in _abt.get("gaps", []):
+		if g.rail == piece.rail and g.has("sc_lo"):
+			w = maxf(w, 1.0 - smoothstep(g.sc_lo + 1.0, g.sc_lo + 1.0 + ABT_BACK_TO_LINE, s))
+			w = maxf(w, 1.0 - smoothstep(g.sc_hi - 1.0, g.sc_hi - 1.0 - ABT_BACK_TO_LINE, s))
+	if not _abt.has("gaps") or _abt.gaps.is_empty():
+		w = 1.0
+	return xf + ri * ABT_JOG * w
+
+
+## Tronçons de rail intérieur présents à l'abscisse s : [[x, demi-patin]].
+func inner_rails_at(s: float) -> Array:
+	var out: Array = []
+	for p in _abt.get("pieces", []):
+		if s >= p.s_a and s <= p.s_b:
+			var half: float = rail_foot_width * 0.5
+			if s < p.blade_a or s > p.blade_b:
+				half = rail_web_width * 0.5    # lame : tête et âme seulement
+			out.append([_piece_x(p, s), half, p])
+	return out
 
 
 func abt_info() -> Dictionary:
@@ -367,35 +480,24 @@ func station_list() -> Array:
 	return _stations
 
 
-# Rail intérieur de l'évitement, du nez bas au nez haut : nez en rampe,
-# fenêtres de câble, cœur en X. Profil par tronçon (patin/âme/tête).
-func _build_inner_rail(
-	rail_mat: StandardMaterial3D, rail_top_mat: StandardMaterial3D,
-	rail_i: int, name: String,
+func _build_rail_piece(
+	rail_mat: StandardMaterial3D, rail_top_mat: StandardMaterial3D, piece: Dictionary,
 ) -> void:
-	var a: float = _abt.nose_lo
-	var b: float = _abt.nose_hi
-	var cuts: Array = [a + abt_nose_len, b - abt_nose_len]
+	var a: float = piece.s_a
+	var b: float = piece.s_b
+	var cuts: Array = [piece.blade_a, piece.blade_b, a + 0.9, b - 0.9, a + 0.3, b - 0.3]
 	for sx in _abt.frog:
 		cuts.append(sx - abt_frog_half)
 		cuts.append(sx + abt_frog_half)
-	var wins: Array = []
-	for w in _abt.windows:
-		if w.rail == rail_i:
-			wins.append(w)
-			for v in [w.web.x, w.web.y, w.foot.x, w.foot.y]:
-				cuts.append(v)
-	var s_list: Array = _adaptive_s_list(a, b, float(rail_i))
+	var s_list: Array = _adaptive_s_list(a, b, float(piece.rail))
 	for c in cuts:
 		s_list.append(c)
+	# échantillonnage fin là où le tronçon se déforme (pointes, lacunes)
 	var k: float = a
-	while k < a + abt_nose_len:
-		s_list.append(k)
-		k += 0.15
-	k = b - abt_nose_len
 	while k < b:
-		s_list.append(k)
-		k += 0.15
+		if k < a + 2.0 or k > b - 2.0 or absf(k - piece.blade_a) < 8.0 or absf(k - piece.blade_b) < 8.0:
+			s_list.append(k)
+		k += 0.2
 	s_list.sort()
 	var clean: Array = []
 	for s in s_list:
@@ -408,7 +510,7 @@ func _build_inner_rail(
 	var hw: float = rail_head_width * 0.5
 	var foot_y1: float = rail_base_y + 0.035
 	var web_y1: float = rail_base_y + 0.140
-	var top_y: float = rail_base_y + rail_height - (0.0004 if rail_i > 0 else 0.0)
+	var top_y: float = rail_base_y + rail_height - (0.0004 if piece.rail > 0 else 0.0)
 
 	var st_rail: SurfaceTool = null
 	var st_top: SurfaceTool = null
@@ -426,20 +528,7 @@ func _build_inner_rail(
 			st_top.begin(Mesh.PRIMITIVE_TRIANGLES)
 			st_top.set_material(rail_top_mat)
 			chunk_start = s0_
-		var m: float = 0.5 * (s0_ + s1_)
-		var key: String = "full"
-		for sx in _abt.frog:
-			if absf(m - sx) < abt_frog_half:
-				key = "frog"
-		if key == "full":
-			for w in wins:
-				if m > w.web.x and m < w.web.y:
-					key = "deep"
-				elif key == "full" and m > w.foot.x and m < w.foot.y:
-					key = "nofoot"
-		var nose: bool = m < a + abt_nose_len or m > b - abt_nose_len
-		if nose:
-			key = "nose"
+		var key: String = _piece_key(piece, 0.5 * (s0_ + s1_))
 		var xf0: Transform3D = tunnel.transform_at(s0_)
 		var xf1: Transform3D = tunnel.transform_at(s1_)
 		var p0: Vector3 = xf0.origin
@@ -448,77 +537,72 @@ func _build_inner_rail(
 		var r1: Vector3 = xf1.basis.x
 		var u0: Vector3 = xf0.basis.y
 		var u1: Vector3 = xf1.basis.y
-		var cx0: float = inner_rail_x(rail_i, s0_) + _nose_flare(rail_i, s0_)
-		var cx1: float = inner_rail_x(rail_i, s1_) + _nose_flare(rail_i, s1_)
-		# pièces du profil : [y_bas, y_haut, demi-largeur] aux deux bouts
+		var cx0: float = _piece_x(piece, s0_)
+		var cx1: float = _piece_x(piece, s1_)
+		# bouts abaissés : pointe de langue sur 0,9 m, bout de lame sur 0,3 m
+		var top0: float = top_y - rail_height * (1.0 - _piece_height(piece, s0_))
+		var top1: float = top_y - rail_height * (1.0 - _piece_height(piece, s1_))
 		var parts: Array = []
-		var top0: float = top_y
-		var top1: float = top_y
 		match key:
-			"nose":
-				top0 = rail_base_y + rail_height * _nose_height(s0_)
-				top1 = rail_base_y + rail_height * _nose_height(s1_)
-				parts.append([rail_base_y, top0 - 0.012, rail_base_y, top1 - 0.012, hw])
 			"frog":
-				parts.append([rail_base_y, top_y - 0.012, rail_base_y, top_y - 0.012, hw])
-			"deep":
-				# tête renforcée seule : le câble passe dessous (jeu 3 cm)
-				parts.append([web_y1 - 0.030, top_y - 0.012, web_y1 - 0.030, top_y - 0.012, hw])
-			"nofoot":
-				parts.append([foot_y1, web_y1, foot_y1, web_y1, rail_web_width * 0.5])
-				parts.append([web_y1, top_y - 0.012, web_y1, top_y - 0.012, hw])
+				parts.append([rail_base_y, top0 - 0.012, rail_base_y, top1 - 0.012, hw])
+			"blade":
+				# lame : âme et tête seulement, le câble passe à côté
+				parts.append([foot_y1, minf(web_y1, top0 - 0.012), foot_y1, minf(web_y1, top1 - 0.012), rail_web_width * 0.5])
+				parts.append([minf(web_y1, top0 - 0.012), top0 - 0.012, minf(web_y1, top1 - 0.012), top1 - 0.012, hw])
+			"tip":
+				parts.append([rail_base_y, top0 - 0.012, rail_base_y, top1 - 0.012, hw])
 			_:
 				parts.append([rail_base_y, foot_y1, rail_base_y, foot_y1, rail_foot_width * 0.5])
 				parts.append([foot_y1, web_y1, foot_y1, web_y1, rail_web_width * 0.5])
-				parts.append([web_y1, top_y - 0.012, web_y1, top_y - 0.012, hw])
+				parts.append([web_y1, top0 - 0.012, web_y1, top1 - 0.012, hw])
 		for pt in parts:
 			_emit_box_step(st_rail, p0, r0, u0, p1, r1, u1, cx0, cx1,
 				pt[0], pt[1], pt[2], pt[3], pt[4], s0_, s1_)
 		_emit_box_step(st_top, p0, r0, u0, p1, r1, u1, cx0, cx1,
 			top0 - 0.012, top0, top1 - 0.012, top1, hw, s0_, s1_)
-		# faces d'about là où le profil change (et aux deux nez)
 		if key != prev_key:
 			for pt in parts:
 				_emit_cap(st_rail, p0, r0, u0, cx0, pt[0], pt[1], pt[4])
-		var next_key: String = _inner_key_at(rail_i, 0.5 * (s1_ + (clean[i + 2] if i + 2 < clean.size() else s1_ + 0.01)), wins, a, b)
-		if next_key != key or i == clean.size() - 2:
+		var next_key: String = _piece_key(piece, s1_ + 0.001) if i + 2 < clean.size() else ""
+		if next_key != key:
 			for pt in parts:
 				_emit_cap(st_rail, p1, r1, u1, cx1, pt[2], pt[3], pt[4])
+			_emit_cap(st_top, p1, r1, u1, cx1, top1 - 0.012, top1, hw)
+		if i == 0:
+			_emit_cap(st_top, p0, r0, u0, cx0, top0 - 0.012, top0, hw)
 		prev_key = key
 		if s1_ - chunk_start >= chunk_length or i == clean.size() - 2:
-			_commit_rail_chunk(st_rail, st_top, "%s_%d" % [name, chunk_i])
+			_commit_rail_chunk(st_rail, st_top, "%s_%d" % [piece.name, chunk_i])
 			st_rail = null
 			st_top = null
 			chunk_i += 1
 
 
-func _inner_key_at(rail_i: int, m: float, wins: Array, a: float, b: float) -> String:
-	if m < a + abt_nose_len or m > b - abt_nose_len:
-		return "nose"
+func _piece_key(piece: Dictionary, m: float) -> String:
 	for sx in _abt.frog:
 		if absf(m - sx) < abt_frog_half:
 			return "frog"
-	var key: String = "full"
-	for w in wins:
-		if m > w.web.x and m < w.web.y:
-			return "deep"
-		if m > w.foot.x and m < w.foot.y:
-			key = "nofoot"
-	return key
+	if (piece.tip_a and m < piece.s_a + 0.9) or (piece.tip_b and m > piece.s_b - 0.9):
+		return "tip"
+	if m < piece.blade_a or m > piece.blade_b:
+		return "blade"
+	return "full"
 
 
-# Rampe du nez : 35 % de la hauteur à la pointe, pleine hauteur après
-# abt_nose_len (la roue plate monte dessus sans choc).
-func _nose_height(s: float) -> float:
-	var t: float = minf((s - _abt.nose_lo) / abt_nose_len, (_abt.nose_hi - s) / abt_nose_len)
-	return lerpf(0.35, 1.0, smoothstep(0.0, 1.0, clampf(t, 0.0, 1.0)))
-
-
-# Pointe écartée du rail extérieur voisin (rail gauche vers −x, droit vers +x).
-func _nose_flare(rail_i: int, s: float) -> float:
-	var t: float = minf((s - _abt.nose_lo) / abt_nose_len, (_abt.nose_hi - s) / abt_nose_len)
-	t = clampf(t, 0.0, 1.0)
-	return float(rail_i) * abt_nose_flare * (1.0 - t) * (1.0 - t)
+# Hauteur relative d'un tronçon : pointe de langue en rampe (35 % → 100 %
+# sur 0,9 m), bout de lame légèrement abaissé (80 % → 100 % sur 0,3 m).
+func _piece_height(piece: Dictionary, s: float) -> float:
+	var h: float = 1.0
+	if piece.tip_a:
+		h = minf(h, lerpf(0.35, 1.0, smoothstep(0.0, 1.0, clampf((s - piece.s_a) / 0.9, 0.0, 1.0))))
+	else:
+		h = minf(h, lerpf(0.8, 1.0, clampf((s - piece.s_a) / 0.3, 0.0, 1.0)))
+	if piece.tip_b:
+		h = minf(h, lerpf(0.35, 1.0, smoothstep(0.0, 1.0, clampf((piece.s_b - s) / 0.9, 0.0, 1.0))))
+	else:
+		h = minf(h, lerpf(0.8, 1.0, clampf((piece.s_b - s) / 0.3, 0.0, 1.0)))
+	return h
 
 
 func _commit_rail_chunk(st_rail: SurfaceTool, st_top: SurfaceTool, name: String) -> void:
@@ -772,10 +856,10 @@ func _build_rails() -> void:
 	_build_rail_strip(
 		rail_mat, rail_top_mat, 0.0, PNConstants.LENGTH, +1.0, +hg, "RailFarRight",
 	)
-	# Rails intérieurs de l'évitement, d'un nez à l'autre : nez en rampe,
-	# fenêtres où passe le câble opposé, cœur en X (cf. _compute_abt).
-	_build_inner_rail(rail_mat, rail_top_mat, -1, "RailInnerLeft")
-	_build_inner_rail(rail_mat, rail_top_mat, 1, "RailInnerRight")
+	# Rails intérieurs de l'évitement en tronçons : langues, lames,
+	# lacunes où passe le câble opposé, cœur en X (cf. _compute_abt).
+	for piece in _abt.pieces:
+		_build_rail_piece(rail_mat, rail_top_mat, piece)
 
 
 # Construit un rail entre s_start et s_end, x_local = passing_loop_offset(s, side) + hg_signed.
@@ -1017,31 +1101,35 @@ func _build_sleepers() -> void:
 		var s: float = (float(i) + 0.5) * sleeper_spacing
 		if s < pit_low_end or s > pit_high_start:
 			continue   # au-dessus des fosses de gare, les rails sont sur poutres
-		if s < PNConstants.PASSING_START or s > PNConstants.PASSING_END:
+		if s < PNConstants.PASSING_START - ABT_TONGUE_BACK or s > PNConstants.PASSING_END + ABT_TONGUE_BACK:
 			positions.append({"s": s, "off": -hg, "w": block_width})
 			positions.append({"s": s, "off": hg, "w": block_width})
 			continue
-		# Évitement : blochets sous les rails extérieurs ; rails intérieurs
-		# du nez au nez seulement. Dans l'aiguillage (écart < 0,95 m), socles
-		# étroits sous les rails intérieurs (un seul là où ils se croisent,
-		# aucun là où ils touchent le blochet du rail extérieur voisin) —
-		# avant, les blochets des deux voies se superposaient.
+		# Évitement : blochets sous les rails extérieurs. Tronçons intérieurs
+		# (langues, lames, rails de l'évitement) : sur le blochet du rail
+		# extérieur quand ils le longent, socles étroits dans l'aiguillage
+		# (un seul là où deux tronçons se touchent), blochets pleins une
+		# fois les voies bien écartées.
 		var d: float = absf(tunnel.passing_loop_offset(s, 1.0))
 		positions.append({"s": s, "off": -d - hg, "w": block_width})
 		positions.append({"s": s, "off": d + hg, "w": block_width})
-		if s < _abt.nose_lo or s > _abt.nose_hi:
-			continue
-		var xl: float = hg - d        # rail intérieur de la voie gauche
-		var xr: float = d - hg        # rail intérieur de la voie droite
-		if d >= abt_switch_d:
-			positions.append({"s": s, "off": xl, "w": block_width})
-			positions.append({"s": s, "off": xr, "w": block_width})
-		elif absf(xl - xr) < 0.22:
-			positions.append({"s": s, "off": 0.5 * (xl + xr), "w": 0.30, "low": true})
-		elif 2.0 * d >= 0.30:
-			positions.append({"s": s, "off": xl, "w": 0.20, "low": true})
-			positions.append({"s": s, "off": xr, "w": 0.20, "low": true})
-
+		var xs: Array = []
+		for r in inner_rails_at(s):
+			var xr: float = r[0]
+			if absf(xr - (-d - hg)) < 0.30 or absf(xr - (d + hg)) < 0.30:
+				continue
+			var merged: bool = false
+			for j in range(xs.size()):
+				if absf(xs[j] - xr) < 0.22:
+					xs[j] = 0.5 * (xs[j] + xr)
+					merged = true
+			if not merged:
+				xs.append(xr)
+		for xr in xs:
+			if d >= abt_switch_d:
+				positions.append({"s": s, "off": xr, "w": block_width})
+			else:
+				positions.append({"s": s, "off": xr, "w": 0.24, "low": true})
 	var xforms: Array = []
 	var y_center: float = floor_y_local + slab_thickness + sleeper_height * 0.5 - 0.01
 	for entry in positions:
