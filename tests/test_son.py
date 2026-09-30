@@ -202,3 +202,62 @@ def test_ambiance_non_etouffee_en_fin_de_clip_de_freinage(fenetre):
     finally:
         snd._fx_player, snd._fx_loaded_path = vrai_fx, vrai_chemin
         snd._amb_playing, snd._fx_oneshot_active, snd._fx_duck_level = vrais
+
+
+# --- 2026-09-30 : vue salle des machines + bogue Qt 6.11 du volume nul -----
+# Sur un vrai serveur son : un QSoundEffect qui JOUE à volume exactement 0
+# rend muets tous les autres (−140 dB). C'était le vrai « silence total
+# entre 0,2 et 1 m/s en décélération » : sous 1 m/s, la boucle de croisière
+# jouait à volume 0 jusqu'à son arrêt à 0,2 m/s.
+
+def test_soundeffect_jamais_a_volume_nul():
+    if QSoundEffect is None:
+        pytest.skip("QtMultimedia indisponible")
+    app = QApplication.instance() or QApplication(sys.argv)  # noqa: F841
+    fx = pn._SoundEffect()
+    fx.setVolume(0.0)
+    assert 0.0 < fx.volume() <= 2e-4
+    fx.setVolume(0.5)
+    assert abs(fx.volume() - 0.5) < 1e-6
+
+
+def test_boucle_de_croisiere_jamais_nulle_en_deceleration(fenetre):
+    win, _ = fenetre
+    snd = win.game.sounds
+    snd.set_machine_room_view(False)
+    for v in [3.0] * 60 + [0.9] * 60 + [0.5] * 60:
+        snd.update_ambient(v, 1.0 / 60.0)
+        for pl in (snd._amb_player, snd._amb2_player):
+            if pl.isPlaying():
+                assert pl.volume() > 0.0, "une boucle joue à volume nul : Qt coupe tout"
+
+
+def test_niveaux_de_la_salle_des_machines():
+    g12, r12 = pn._machine_room_levels(12.0)
+    assert abs(g12 - pn.MR_GAIN_12) < 1e-9 and r12 == 1.0
+    g6, r6 = pn._machine_room_levels(6.0)
+    assert abs(r6 - 0.5) < 1e-9
+    assert abs(g6 - pn.MR_GAIN_12 * 0.5 ** pn.MR_EXP) < 1e-9
+    assert pn._machine_room_levels(1.0)[1] == pn.MR_RATE_MIN     # 3 m/s mini
+    assert pn._machine_room_levels(0.0)[0] == 0.0
+    assert 0.0 < pn._machine_room_levels(0.2)[0] < pn._machine_room_levels(0.3)[0]
+
+
+def test_vue_salle_des_machines_remplace_le_son_cabine(fenetre):
+    win, _ = fenetre
+    snd = win.game.sounds
+    snd.set_machine_room_view(True)
+    for _ in range(240):                       # 4 s à 12 m/s
+        snd.update_ambient(12.0, 1.0 / 60.0)
+    assert snd._mr_mix == 1.0
+    assert snd._mr_started
+    assert snd._amb_vol_target < 1e-6 and snd._amb2_vol_target < 1e-6
+    assert abs(snd._mr_run_audio.volume() - pn.MR_GAIN_12) < 0.01
+    assert abs(snd._mr_rate - 1.0) < 0.02
+    assert snd._mr_idle.volume() > 0.99
+    d = snd.diagnostic(12.0)
+    assert d["salle_machines"]["vue"] is True
+    snd.set_machine_room_view(False)
+    for _ in range(300):
+        snd.update_ambient(12.0, 1.0 / 60.0)
+    assert snd._mr_mix == 0.0 and not snd._mr_started
