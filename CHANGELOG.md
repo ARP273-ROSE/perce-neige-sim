@@ -7,6 +7,47 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.15.29** — aiguillage Abt dessiné, câble tendu entre les galets, vue
+salle des machines.
+- Demande de Kevin, photo d'un aiguillage Abt de funiculaire à l'appui (« ce
+  n'est pas celui du funiculaire mais le principe est le même ») :
+  l'intérieur des deux aiguillages de l'évitement est dessiné. Rails
+  extérieurs continus ; chaque rail intérieur naît 9 m après la fourche,
+  contre le rail extérieur opposé, là où la lacune laisse passer le boudin
+  de l'autre rame (nez en rampe, pointe écartée) ; les deux rails intérieurs
+  se croisent en X à 27,5 m sur un cœur coulé (semelle sombre, déplacée :
+  elle était 8 m trop tôt et à mi-hauteur des rails) ; à 17 m, le câble de
+  la rame opposée traverse le rail intérieur par une fenêtre (âme et patin
+  découpés sur 1,6 et 3,7 m, tête renforcée au-dessus du câble, 3 cm de jeu).
+  Galets de l'aiguillage placés à l'écart des fenêtres ; galets de déviation
+  inclinés à moyeu rouge du côté intérieur du coude du câble. Les blochets
+  des deux voies ne se superposent plus : socles étroits sous les rails
+  intérieurs dans l'aiguillage.
+- « Normalement en courbe, le câble va en ligne droite entre les galets » :
+  le câble n'épouse plus la courbe de la voie. Il est tendu d'un galet au
+  suivant et ne change de direction qu'aux galets ; dans la grande courbe
+  (R ≈ 460 m), la corde passe 4,9 cm à l'intérieur de l'arc à mi-portée.
+  Le câble repose exactement dans la gorge de chaque galet, et l'inclinaison
+  des galets en courbe découle de l'effort (tension contre poids : 73 à 78°
+  requis, plafonnée à 32° pour que les deux galets d'une paire ne se
+  touchent pas).
+- Nouvelle vue 3D, demande de Kevin : la **salle des machines**, caméra fixe
+  par rapport à la gare amont (elle ne suit pas le train), qui tourne dans
+  tous les sens autour des deux roues, zoome, et se déplace (clic droit, ou
+  deux doigts). Elle reste dans la salle et le hall, recule si elle finirait
+  dans une machine, et efface la dalle quand on passe au-dessus. La touche
+  `O` et le bouton VUE font le tour cabine → extérieure → salle des machines.
+- Les 16 photos de visite de Kevin n'ont pas donné l'écart entre les deux
+  roues, car aucune ne les montre ensemble. La plaque du réducteur confirme
+  la vitesse maxi : 55 tr/min × π × 4,16 m = 11,98 m/s. Le secours
+  hydraulique entraîne le câble à 2,0 ou 1,3 m/s. Le pupitre donne les
+  contrôles d'entrée en gare, 8 m/s puis 1,4 m/s, et le simulateur les
+  respecte. Tout est consigné dans `SOURCES.md`, lignes 23f à 23i.
+- Vérifié : banc `bench_aiguillage_3d.gd` (aucun contact câble-rail hors
+  des 4 fenêtres, aucun galet sur un rail, 16 galets de déviation), captures
+  en vrai rendu Godot sans GPU (`shot_aiguillage.gd`,
+  `shot_salle_machines.gd` sous Xvfb + Mesa), tous les autres bancs, 46 tests.
+
 **v1.15.28** — carter rouge fixe autour des roues, ouvertures plus arrondies.
 - Précision de Kevin : « le truc rouge autour de la poulie ne tourne pas, il
   protège le câble ; le câble doit être dedans, et il faut l'interrompre pour

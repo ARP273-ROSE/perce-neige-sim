@@ -72,6 +72,7 @@ extends Node3D
 # fidélité visuelle (déviation < 4 mm), ~6× moins de vertices.
 
 var tunnel: TunnelBuilder = null
+var keep_instance_xforms: bool = false   # bancs headless (cf. _mm_instance)
 
 # Segments des 2 brins de câble (1 câble unique en boucle, 2 brins visibles).
 # Structure : [{s_start: float, s_end: float, mesh: MeshInstance3D}, ...]
@@ -102,6 +103,9 @@ var _cable_phase_meters: float = 0.0
 
 func build(t: TunnelBuilder) -> void:
 	tunnel = t
+	# Galets et câble d'abord : les fenêtres des rails intérieurs de
+	# l'aiguillage Abt se placent là où le câble tendu les traverse.
+	_compute_cable_geometry()
 	_build_slab()
 	_build_rails()
 	_build_sleepers()
@@ -109,7 +113,471 @@ func build(t: TunnelBuilder) -> void:
 	_build_tunnel_details()
 	_build_cable_beam()
 	_build_guides()
+	_build_abt_sheaves()
 	_build_cable()
+
+
+# ---------------------------------------------------------------------------
+# Câble tendu entre les galets + aiguillage Abt (2026-09-30)
+#
+# Retour d'essai : « en courbe, le câble va en ligne droite entre les
+# galets ». Le câble n'épouse plus la courbe de la voie : tendu à
+# 22 500 daN (11 kg/m → 11 mm de flèche sous son poids sur 13,57 m,
+# négligée), il ne change de direction QU'AUX galets. En courbe
+# (R ≈ 460 m), la corde passe jusqu'à 5 cm à l'intérieur de l'arc
+# (audit_physique/aiguillage_abt_cable.sage).
+#
+# Aiguillage Abt (principe d'après une photo d'aiguillage de funiculaire
+# à ciel ouvert envoyée par Kevin + dossier remontees-mecaniques.net) :
+#   - rails extérieurs continus (roues à double boudin) ;
+#   - chaque rail intérieur naît contre le rail extérieur opposé, après la
+#     lacune du boudin de l'autre rame : nez en rampe 9 m après la fourche ;
+#   - les deux rails intérieurs se croisent en X à 27,5 m (cœur coulé sans
+#     ornière : les roues intérieures sont plates et larges) ;
+#   - le câble de la rame opposée traverse le rail intérieur à 17 m par une
+#     fenêtre (« trou ménagé dans la voie intérieure ») : âme et patin
+#     découpés, tête renforcée qui porte la roue plate au-dessus du câble ;
+#   - galets de déviation inclinés du côté intérieur du coude du câble.
+# ---------------------------------------------------------------------------
+
+# Galets de l'aiguillage : décalages depuis la fourche (1611 m en bas,
+# 1813 m en haut, en miroir). La traversée du rail est à +17 m : aucun
+# galet à moins de 3,6 m (audit).
+const ABT_STATIONS: Array = [-3.4, 4.5, 11.0, 22.0, 31.0, 40.0]
+# Stations équipées d'un galet de déviation incliné. Pas à +11 m : le rail
+# intérieur opposé arrive contre le câble, il n'y a pas la place.
+const ABT_SHEAVE_STATIONS: Array = [4.5, 22.0, 31.0, 40.0]
+const ABT_ZONE: float = 45.0              # étendue de l'aiguillage depuis la fourche (m)
+@export var abt_flangeway: float = 0.060  # boudin 30 mm + jeu
+@export var abt_nose_len: float = 1.2     # rampe du nez du rail intérieur
+@export var abt_nose_flare: float = 0.03  # nez écarté du rail extérieur voisin
+@export var abt_frog_half: float = 2.0    # demi-longueur du cœur en X
+@export var abt_cable_clear: float = 0.015  # jeu câble / acier dans les fenêtres
+@export var abt_switch_d: float = 0.95    # écart de voie en deçà duquel les rails intérieurs sont sur socles étroits
+@export var sheave_radius: float = 0.16
+@export var sheave_thickness: float = 0.05
+@export var sheave_incline_deg: float = 30.0
+@export var roller_tilt_max: float = 0.56   # 32° : au-delà, les deux galets d'une paire se touchent
+
+var _stations: Array = []       # [{s, paired, sheave}]
+var _strand: Dictionary = {}    # −1 / +1 → [{s, p, x, y, tilt, center, basis}]
+var _abt: Dictionary = {}       # nez, cœurs en X, fenêtres (cf. _compute_abt)
+
+
+func _in_abt_zone(s: float) -> bool:
+	return (s > PNConstants.PASSING_START - 5.0 and s < PNConstants.PASSING_START + ABT_ZONE) \
+		or (s > PNConstants.PASSING_END - ABT_ZONE and s < PNConstants.PASSING_END + 5.0)
+
+
+# Abscisses des galets : grille réelle (3474 m / 256 paires) hors
+# aiguillages, stations dessinées dans les aiguillages.
+func _station_list() -> Array:
+	var out: Array = []
+	var n_total: int = int(PNConstants.LENGTH / guide_spacing)
+	for i in range(n_total):
+		var s: float = (float(i) + 0.5) * guide_spacing
+		if not _in_abt_zone(s):
+			out.append({"s": s, "sheave": false})
+	for o in ABT_STATIONS:
+		var sh: bool = ABT_SHEAVE_STATIONS.has(o)
+		out.append({"s": PNConstants.PASSING_START + o, "sheave": sh})
+		out.append({"s": PNConstants.PASSING_END - o, "sheave": sh})
+	out.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a.s < b.s)
+	for st in out:
+		# support commun aux deux brins tant qu'ils sont côte à côte
+		st["paired"] = absf(tunnel.passing_loop_offset(st.s, 1.0)) < 0.05
+	return out
+
+
+func _roller_axis_y() -> float:
+	# 🔴 Retour d'essai 2026-09-27 : le câble au niveau des blochets (4 cm
+	# au-dessus de leur dessus), pas du sommet du rail. On part de la
+	# hauteur voulue du câble et on en déduit l'axe des galets.
+	var y_cable_center: float = floor_y_local + slab_thickness + sleeper_height + 0.04
+	return y_cable_center - cable_radius - pulley_radius
+
+
+# Inclinaison de CHAQUE galet dans son support (le support reste
+# horizontal, les deux galets d'une paire à la même hauteur — retour
+# d'essai 2026-09-26). Le câble tendu appuie sur le galet avec T·Δθ vers
+# l'intérieur de la courbe et son poids w·L vers le bas : le galet
+# s'incline dans le sens de la résultante (73 à 78° dans les courbes,
+# audit). Plafond 32° : au-delà les deux galets d'une paire se touchent,
+# le reste passe par le flanc de la gorge. Le signe suit l'ancienne
+# convention (virage à droite → rotation négative autour de l'avant).
+func _roller_tilt(s: float, side: float, span: float) -> float:
+	var ds: float = 5.0
+	var kh: float = deg_to_rad(SlopeProfile.heading_at(s + ds) - SlopeProfile.heading_at(s - ds)) / (2.0 * ds)
+	if side != 0.0:
+		var x_m: float = tunnel.passing_loop_offset(s - ds, side)
+		var x_0: float = tunnel.passing_loop_offset(s, side)
+		var x_p: float = tunnel.passing_loop_offset(s + ds, side)
+		kh += (x_p - 2.0 * x_0 + x_m) / (ds * ds)
+	var t_n: float = PNConstants.T_NOMINAL_DAN * 10.0
+	var w: float = PNConstants.CABLE_KG_M * 9.80665
+	var lat: float = t_n * kh * span
+	var ver: float = w * span * cos(SlopeProfile.slope_angle_at(s)) \
+		- t_n * SlopeProfile.slope_curvature_at(s) * span
+	var phi: float = atan2(lat, maxf(ver, 1.0))
+	return clampf(-phi, -roller_tilt_max, roller_tilt_max)
+
+
+# Galets puis câble : chaque brin est une ligne brisée dont les sommets
+# sont les points de contact dans la gorge des galets.
+func _compute_cable_geometry() -> void:
+	_stations = _station_list()
+	var y_axis: float = _roller_axis_y()
+	var y_nom: float = y_axis + pulley_radius + cable_radius
+	_strand = {}
+	for side_i in [-1, 1]:
+		var side: float = float(side_i)
+		var pts: Array = [_strand_free_point(0.0, side, y_nom)]
+		for k in range(_stations.size()):
+			var st: Dictionary = _stations[k]
+			var s: float = st.s
+			var s_prev: float = _stations[k - 1].s if k > 0 else 0.0
+			var s_next: float = _stations[k + 1].s if k + 1 < _stations.size() else PNConstants.LENGTH
+			var xf: Transform3D = tunnel.transform_at(s)
+			var x_nom: float = _track_center_x(s, side) + side * pulley_pair_offset
+			# galet de déviation présent → il prend l'effort latéral, le
+			# galet porteur reste droit
+			var tilt: float = 0.0 if st.sheave else _roller_tilt(s, side, 0.5 * (s_next - s_prev))
+			var fwd: Vector3 = (-xf.basis.z).normalized()
+			var rb: Basis = xf.basis.rotated(fwd, tilt)
+			var center: Vector3 = xf.origin + xf.basis.y * y_axis + xf.basis.x * x_nom
+			var p: Vector3 = center + rb.y.normalized() * (pulley_radius + cable_radius)
+			var rel: Vector3 = p - xf.origin
+			pts.append({"s": s, "p": p, "x": rel.dot(xf.basis.x), "y": rel.dot(xf.basis.y),
+				"tilt": tilt, "center": center, "basis": rb})
+		pts.append(_strand_free_point(PNConstants.LENGTH, side, y_nom))
+		_strand[side_i] = pts
+	_compute_abt()
+
+
+func _strand_free_point(s: float, side: float, y_nom: float) -> Dictionary:
+	var xf: Transform3D = tunnel.transform_at(s)
+	var x: float = _track_center_x(s, side) + side * pulley_pair_offset
+	return {"s": s, "p": xf.origin + xf.basis.x * x + xf.basis.y * y_nom, "x": x, "y": y_nom,
+		"tilt": 0.0}
+
+
+# Point 3D du brin à l'abscisse s : sur la corde droite entre les deux
+# galets qui l'encadrent.
+func strand_point(side_i: int, s: float) -> Vector3:
+	var pts: Array = _strand[side_i]
+	var lo: int = 0
+	var hi: int = pts.size() - 1
+	while hi - lo > 1:
+		var mid: int = (lo + hi) / 2
+		if pts[mid].s <= s:
+			lo = mid
+		else:
+			hi = mid
+	var a: Dictionary = pts[lo]
+	var b: Dictionary = pts[hi]
+	var t: float = clampf((s - a.s) / maxf(b.s - a.s, 1e-6), 0.0, 1.0)
+	return (a.p as Vector3).lerp(b.p, t)
+
+
+# Position du brin dans le repère local de la voie à s (x latéral, y haut).
+func strand_local_at(side_i: int, s: float) -> Vector2:
+	var xf: Transform3D = tunnel.transform_at(s)
+	var rel: Vector3 = strand_point(side_i, s) - xf.origin
+	return Vector2(rel.dot(xf.basis.x), rel.dot(xf.basis.y))
+
+
+# Axe latéral du rail intérieur de la voie rail_i (−1 gauche, +1 droite).
+func inner_rail_x(rail_i: int, s: float) -> float:
+	return _track_center_x(s, float(rail_i)) - float(rail_i) * gauge_m * 0.5
+
+
+func _strand_rail_gap(cable_i: int, rail_i: int, s: float) -> float:
+	return strand_local_at(cable_i, s).x - inner_rail_x(rail_i, s)
+
+
+# Abscisse (depuis la fourche basse) où l'écart de voie vaut dv.
+func _loop_ds_for_offset(dv: float) -> float:
+	var a: float = 0.0
+	var b: float = (PNConstants.PASSING_END - PNConstants.PASSING_START) * 0.5
+	for _it in range(50):
+		var m: float = 0.5 * (a + b)
+		if absf(tunnel.passing_loop_offset(PNConstants.PASSING_START + m, 1.0)) < dv:
+			a = m
+		else:
+			b = m
+	return 0.5 * (a + b)
+
+
+func _compute_abt() -> void:
+	var hg: float = gauge_m * 0.5
+	var s0: float = PNConstants.PASSING_START
+	var s1: float = PNConstants.PASSING_END
+	# nez : la tête du rail intérieur laisse l'ornière du boudin de l'autre
+	# rame contre le rail extérieur opposé (2d − tête ≥ ornière)
+	var ds_nose: float = _loop_ds_for_offset((rail_head_width + abt_flangeway) * 0.5)
+	var ds_x: float = _loop_ds_for_offset(hg)
+	var ds_sw: float = _loop_ds_for_offset(abt_switch_d)
+	_abt = {
+		"nose_lo": s0 + ds_nose, "nose_hi": s1 - ds_nose,
+		"frog": [s0 + ds_x, s1 - ds_x],
+		"switch_lo": s0 + ds_sw, "switch_hi": s1 - ds_sw,
+		"windows": [],
+	}
+	# Fenêtres : le brin OPPOSÉ traverse chaque rail intérieur (rail de la
+	# voie gauche traversé par le brin droit, et réciproquement).
+	for rail_i in [-1, 1]:
+		var cable_i: int = -rail_i
+		for zone in [[_abt.nose_lo, s0 + ABT_ZONE], [s1 - ABT_ZONE, _abt.nose_hi]]:
+			var s: float = zone[0]
+			var f_prev: float = _strand_rail_gap(cable_i, rail_i, s)
+			while s < zone[1] - 1e-6:
+				var s_n: float = minf(s + 0.1, zone[1])
+				var f_n: float = _strand_rail_gap(cable_i, rail_i, s_n)
+				if signf(f_n) != signf(f_prev):
+					var a: float = s
+					var b: float = s_n
+					for _it in range(30):
+						var m: float = 0.5 * (a + b)
+						if signf(_strand_rail_gap(cable_i, rail_i, m)) == signf(f_prev):
+							a = m
+						else:
+							b = m
+					var sc: float = 0.5 * (a + b)
+					var rel: float = absf(_strand_rail_gap(cable_i, rail_i, sc + 0.5)
+						- _strand_rail_gap(cable_i, rail_i, sc - 0.5))
+					rel = maxf(rel, 1e-3)
+					var l_web: float = 2.0 * (cable_radius + rail_web_width * 0.5 + abt_cable_clear) / rel
+					var l_foot: float = 2.0 * (cable_radius + rail_foot_width * 0.5 + abt_cable_clear) / rel
+					_abt.windows.append({"rail": rail_i, "cable": cable_i, "s": sc,
+						"web": Vector2(sc - l_web * 0.5, sc + l_web * 0.5),
+						"foot": Vector2(sc - l_foot * 0.5, sc + l_foot * 0.5)})
+				f_prev = f_n
+				s = s_n
+
+
+func abt_info() -> Dictionary:
+	return _abt
+
+
+func strand_vertices(side_i: int) -> Array:
+	return _strand[side_i]
+
+
+func station_list() -> Array:
+	return _stations
+
+
+# Rail intérieur de l'évitement, du nez bas au nez haut : nez en rampe,
+# fenêtres de câble, cœur en X. Profil par tronçon (patin/âme/tête).
+func _build_inner_rail(
+	rail_mat: StandardMaterial3D, rail_top_mat: StandardMaterial3D,
+	rail_i: int, name: String,
+) -> void:
+	var a: float = _abt.nose_lo
+	var b: float = _abt.nose_hi
+	var cuts: Array = [a + abt_nose_len, b - abt_nose_len]
+	for sx in _abt.frog:
+		cuts.append(sx - abt_frog_half)
+		cuts.append(sx + abt_frog_half)
+	var wins: Array = []
+	for w in _abt.windows:
+		if w.rail == rail_i:
+			wins.append(w)
+			for v in [w.web.x, w.web.y, w.foot.x, w.foot.y]:
+				cuts.append(v)
+	var s_list: Array = _adaptive_s_list(a, b, float(rail_i))
+	for c in cuts:
+		s_list.append(c)
+	var k: float = a
+	while k < a + abt_nose_len:
+		s_list.append(k)
+		k += 0.15
+	k = b - abt_nose_len
+	while k < b:
+		s_list.append(k)
+		k += 0.15
+	s_list.sort()
+	var clean: Array = []
+	for s in s_list:
+		if s < a - 1e-6 or s > b + 1e-6:
+			continue
+		if clean.is_empty() or s - clean[-1] > 0.002:
+			clean.append(s)
+
+	var rail_base_y: float = floor_y_local + slab_thickness + sleeper_height - 0.01
+	var hw: float = rail_head_width * 0.5
+	var foot_y1: float = rail_base_y + 0.035
+	var web_y1: float = rail_base_y + 0.140
+	var top_y: float = rail_base_y + rail_height - (0.0004 if rail_i > 0 else 0.0)
+
+	var st_rail: SurfaceTool = null
+	var st_top: SurfaceTool = null
+	var chunk_start: float = a
+	var chunk_i: int = 0
+	var prev_key: String = ""
+	for i in range(clean.size() - 1):
+		var s0_: float = clean[i]
+		var s1_: float = clean[i + 1]
+		if st_rail == null:
+			st_rail = SurfaceTool.new()
+			st_rail.begin(Mesh.PRIMITIVE_TRIANGLES)
+			st_rail.set_material(rail_mat)
+			st_top = SurfaceTool.new()
+			st_top.begin(Mesh.PRIMITIVE_TRIANGLES)
+			st_top.set_material(rail_top_mat)
+			chunk_start = s0_
+		var m: float = 0.5 * (s0_ + s1_)
+		var key: String = "full"
+		for sx in _abt.frog:
+			if absf(m - sx) < abt_frog_half:
+				key = "frog"
+		if key == "full":
+			for w in wins:
+				if m > w.web.x and m < w.web.y:
+					key = "deep"
+				elif key == "full" and m > w.foot.x and m < w.foot.y:
+					key = "nofoot"
+		var nose: bool = m < a + abt_nose_len or m > b - abt_nose_len
+		if nose:
+			key = "nose"
+		var xf0: Transform3D = tunnel.transform_at(s0_)
+		var xf1: Transform3D = tunnel.transform_at(s1_)
+		var p0: Vector3 = xf0.origin
+		var p1: Vector3 = xf1.origin
+		var r0: Vector3 = xf0.basis.x
+		var r1: Vector3 = xf1.basis.x
+		var u0: Vector3 = xf0.basis.y
+		var u1: Vector3 = xf1.basis.y
+		var cx0: float = inner_rail_x(rail_i, s0_) + _nose_flare(rail_i, s0_)
+		var cx1: float = inner_rail_x(rail_i, s1_) + _nose_flare(rail_i, s1_)
+		# pièces du profil : [y_bas, y_haut, demi-largeur] aux deux bouts
+		var parts: Array = []
+		var top0: float = top_y
+		var top1: float = top_y
+		match key:
+			"nose":
+				top0 = rail_base_y + rail_height * _nose_height(s0_)
+				top1 = rail_base_y + rail_height * _nose_height(s1_)
+				parts.append([rail_base_y, top0 - 0.012, rail_base_y, top1 - 0.012, hw])
+			"frog":
+				parts.append([rail_base_y, top_y - 0.012, rail_base_y, top_y - 0.012, hw])
+			"deep":
+				# tête renforcée seule : le câble passe dessous (jeu 3 cm)
+				parts.append([web_y1 - 0.030, top_y - 0.012, web_y1 - 0.030, top_y - 0.012, hw])
+			"nofoot":
+				parts.append([foot_y1, web_y1, foot_y1, web_y1, rail_web_width * 0.5])
+				parts.append([web_y1, top_y - 0.012, web_y1, top_y - 0.012, hw])
+			_:
+				parts.append([rail_base_y, foot_y1, rail_base_y, foot_y1, rail_foot_width * 0.5])
+				parts.append([foot_y1, web_y1, foot_y1, web_y1, rail_web_width * 0.5])
+				parts.append([web_y1, top_y - 0.012, web_y1, top_y - 0.012, hw])
+		for pt in parts:
+			_emit_box_step(st_rail, p0, r0, u0, p1, r1, u1, cx0, cx1,
+				pt[0], pt[1], pt[2], pt[3], pt[4], s0_, s1_)
+		_emit_box_step(st_top, p0, r0, u0, p1, r1, u1, cx0, cx1,
+			top0 - 0.012, top0, top1 - 0.012, top1, hw, s0_, s1_)
+		# faces d'about là où le profil change (et aux deux nez)
+		if key != prev_key:
+			for pt in parts:
+				_emit_cap(st_rail, p0, r0, u0, cx0, pt[0], pt[1], pt[4])
+		var next_key: String = _inner_key_at(rail_i, 0.5 * (s1_ + (clean[i + 2] if i + 2 < clean.size() else s1_ + 0.01)), wins, a, b)
+		if next_key != key or i == clean.size() - 2:
+			for pt in parts:
+				_emit_cap(st_rail, p1, r1, u1, cx1, pt[2], pt[3], pt[4])
+		prev_key = key
+		if s1_ - chunk_start >= chunk_length or i == clean.size() - 2:
+			_commit_rail_chunk(st_rail, st_top, "%s_%d" % [name, chunk_i])
+			st_rail = null
+			st_top = null
+			chunk_i += 1
+
+
+func _inner_key_at(rail_i: int, m: float, wins: Array, a: float, b: float) -> String:
+	if m < a + abt_nose_len or m > b - abt_nose_len:
+		return "nose"
+	for sx in _abt.frog:
+		if absf(m - sx) < abt_frog_half:
+			return "frog"
+	var key: String = "full"
+	for w in wins:
+		if m > w.web.x and m < w.web.y:
+			return "deep"
+		if m > w.foot.x and m < w.foot.y:
+			key = "nofoot"
+	return key
+
+
+# Rampe du nez : 35 % de la hauteur à la pointe, pleine hauteur après
+# abt_nose_len (la roue plate monte dessus sans choc).
+func _nose_height(s: float) -> float:
+	var t: float = minf((s - _abt.nose_lo) / abt_nose_len, (_abt.nose_hi - s) / abt_nose_len)
+	return lerpf(0.35, 1.0, smoothstep(0.0, 1.0, clampf(t, 0.0, 1.0)))
+
+
+# Pointe écartée du rail extérieur voisin (rail gauche vers −x, droit vers +x).
+func _nose_flare(rail_i: int, s: float) -> float:
+	var t: float = minf((s - _abt.nose_lo) / abt_nose_len, (_abt.nose_hi - s) / abt_nose_len)
+	t = clampf(t, 0.0, 1.0)
+	return float(rail_i) * abt_nose_flare * (1.0 - t) * (1.0 - t)
+
+
+func _commit_rail_chunk(st_rail: SurfaceTool, st_top: SurfaceTool, name: String) -> void:
+	st_rail.generate_normals()
+	st_rail.generate_tangents()
+	var mi: MeshInstance3D = MeshInstance3D.new()
+	mi.name = name
+	mi.mesh = st_rail.commit()
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(mi)
+	st_top.generate_normals()
+	st_top.generate_tangents()
+	var mt: MeshInstance3D = MeshInstance3D.new()
+	mt.name = name + "Top"
+	mt.mesh = st_top.commit()
+	mt.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(mt)
+
+
+# Tronçon de profil rectangulaire dont les hauteurs peuvent différer aux
+# deux bouts (nez en rampe) : faces gauche, droite, dessus et dessous.
+func _emit_box_step(
+	st: SurfaceTool,
+	p0: Vector3, r0: Vector3, u0: Vector3,
+	p1: Vector3, r1: Vector3, u1: Vector3,
+	cx0: float, cx1: float,
+	ya0: float, yb0: float, ya1: float, yb1: float, w: float,
+	v0: float, v1: float,
+) -> void:
+	var a00: Vector3 = _pt(p0, r0, u0, cx0 - w, ya0)
+	var a01: Vector3 = _pt(p0, r0, u0, cx0 + w, ya0)
+	var a10: Vector3 = _pt(p0, r0, u0, cx0 + w, yb0)
+	var a11: Vector3 = _pt(p0, r0, u0, cx0 - w, yb0)
+	var b00: Vector3 = _pt(p1, r1, u1, cx1 - w, ya1)
+	var b01: Vector3 = _pt(p1, r1, u1, cx1 + w, ya1)
+	var b10: Vector3 = _pt(p1, r1, u1, cx1 + w, yb1)
+	var b11: Vector3 = _pt(p1, r1, u1, cx1 - w, yb1)
+	_emit_quad_strip(st, a00, a11, b00, b11,
+		Vector2(0.0, v0), Vector2(0.1, v0), Vector2(0.0, v1), Vector2(0.1, v1))
+	_emit_quad_strip(st, a01, b01, a10, b10,
+		Vector2(0.0, v0), Vector2(0.0, v1), Vector2(0.1, v0), Vector2(0.1, v1))
+	_emit_quad_strip(st, a11, a10, b11, b10,
+		Vector2(0.0, v0), Vector2(1.0, v0), Vector2(0.0, v1), Vector2(1.0, v1))
+	# dessous (visible dans les fenêtres, sous la tête renforcée)
+	_emit_quad_strip(st, a01, a00, b01, b00,
+		Vector2(0.0, v0), Vector2(1.0, v0), Vector2(0.0, v1), Vector2(1.0, v1))
+
+
+# Face d'about d'une pièce de rail, émise des deux côtés.
+func _emit_cap(st: SurfaceTool, p: Vector3, r: Vector3, u: Vector3,
+		cx: float, y0: float, y1: float, w: float) -> void:
+	var q0: Vector3 = _pt(p, r, u, cx - w, y0)
+	var q1: Vector3 = _pt(p, r, u, cx + w, y0)
+	var q2: Vector3 = _pt(p, r, u, cx + w, y1)
+	var q3: Vector3 = _pt(p, r, u, cx - w, y1)
+	for tri in [[q0, q1, q2], [q0, q2, q3], [q0, q2, q1], [q0, q3, q2]]:
+		for q in tri:
+			st.set_uv(Vector2(0.0, 0.0))
+			st.add_vertex(q)
 
 
 # ---------------------------------------------------------------------------
@@ -304,20 +772,10 @@ func _build_rails() -> void:
 	_build_rail_strip(
 		rail_mat, rail_top_mat, 0.0, PNConstants.LENGTH, +1.0, +hg, "RailFarRight",
 	)
-	# Les 2 rails intérieurs s'étendent sur tout le passing loop incluant les
-	# transitions [s_lo, s_hi] pour soutenir la roue intérieure de chaque cabine
-	# pendant la transition (Abt switch frog : ces rails croisent les rails
-	# extérieurs au milieu de la transition, à x=0).
-	var s_lo: float = PNConstants.PASSING_START - tunnel.passing_transition
-	var s_hi: float = PNConstants.PASSING_END + tunnel.passing_transition
-	_build_rail_strip(
-		rail_mat, rail_top_mat, s_lo, s_hi,
-		-1.0, +hg, "RailInnerLeft",
-	)
-	_build_rail_strip(
-		rail_mat, rail_top_mat, s_lo, s_hi,
-		+1.0, -hg, "RailInnerRight",
-	)
+	# Rails intérieurs de l'évitement, d'un nez à l'autre : nez en rampe,
+	# fenêtres où passe le câble opposé, cœur en X (cf. _compute_abt).
+	_build_inner_rail(rail_mat, rail_top_mat, -1, "RailInnerLeft")
+	_build_inner_rail(rail_mat, rail_top_mat, 1, "RailInnerRight")
 
 
 # Construit un rail entre s_start et s_end, x_local = passing_loop_offset(s, side) + hg_signed.
@@ -559,34 +1017,43 @@ func _build_sleepers() -> void:
 		var s: float = (float(i) + 0.5) * sleeper_spacing
 		if s < pit_low_end or s > pit_high_start:
 			continue   # au-dessus des fosses de gare, les rails sont sur poutres
-		var track_offs: Array = []
-		if s >= PNConstants.PASSING_START and s <= PNConstants.PASSING_END:
-			track_offs = [tunnel.passing_loop_offset(s, -1.0),
-						  tunnel.passing_loop_offset(s, +1.0)]
-		else:
-			track_offs = [0.0]
-		for toff in track_offs:
-			positions.append({"s": s, "off": toff - hg})
-			positions.append({"s": s, "off": toff + hg})
+		if s < PNConstants.PASSING_START or s > PNConstants.PASSING_END:
+			positions.append({"s": s, "off": -hg, "w": block_width})
+			positions.append({"s": s, "off": hg, "w": block_width})
+			continue
+		# Évitement : blochets sous les rails extérieurs ; rails intérieurs
+		# du nez au nez seulement. Dans l'aiguillage (écart < 0,95 m), socles
+		# étroits sous les rails intérieurs (un seul là où ils se croisent,
+		# aucun là où ils touchent le blochet du rail extérieur voisin) —
+		# avant, les blochets des deux voies se superposaient.
+		var d: float = absf(tunnel.passing_loop_offset(s, 1.0))
+		positions.append({"s": s, "off": -d - hg, "w": block_width})
+		positions.append({"s": s, "off": d + hg, "w": block_width})
+		if s < _abt.nose_lo or s > _abt.nose_hi:
+			continue
+		var xl: float = hg - d        # rail intérieur de la voie gauche
+		var xr: float = d - hg        # rail intérieur de la voie droite
+		if d >= abt_switch_d:
+			positions.append({"s": s, "off": xl, "w": block_width})
+			positions.append({"s": s, "off": xr, "w": block_width})
+		elif absf(xl - xr) < 0.22:
+			positions.append({"s": s, "off": 0.5 * (xl + xr), "w": 0.30, "low": true})
+		elif 2.0 * d >= 0.30:
+			positions.append({"s": s, "off": xl, "w": 0.20, "low": true})
+			positions.append({"s": s, "off": xr, "w": 0.20, "low": true})
 
-	var mm: MultiMesh = MultiMesh.new()
-	mm.transform_format = MultiMesh.TRANSFORM_3D
-	mm.mesh = box
-	mm.instance_count = positions.size()
-
+	var xforms: Array = []
 	var y_center: float = floor_y_local + slab_thickness + sleeper_height * 0.5 - 0.01
-	for i in range(positions.size()):
-		var entry: Dictionary = positions[i]
+	for entry in positions:
 		var xform: Transform3D = tunnel.transform_at(entry.s)
 		var tr: Transform3D = xform
-		tr.origin += xform.basis.y * y_center + xform.basis.x * entry.off
-		mm.set_instance_transform(i, tr)
-
-	var mmi: MultiMeshInstance3D = MultiMeshInstance3D.new()
-	mmi.name = "Sleepers"
-	mmi.multimesh = mm
-	mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	add_child(mmi)
+		# socle étroit : 2 mm plus bas que le blochet voisin (pas de
+		# scintillement des dessus coplanaires qui se chevauchent)
+		var low: float = 0.002 if entry.get("low", false) else 0.0
+		tr.basis = xform.basis * Basis.from_scale(Vector3(entry.w / block_width, 1.0, 1.0))
+		tr.origin += xform.basis.y * (y_center - low) + xform.basis.x * entry.off
+		xforms.append(tr)
+	_mm_instance(box, xforms, "Sleepers")
 
 
 # ---------------------------------------------------------------------------
@@ -637,6 +1104,10 @@ func _mm_instance(mesh: Mesh, xforms: Array, name: String) -> void:
 	mmi.name = name
 	mmi.multimesh = mm
 	mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	# bancs sans GPU : le serveur de rendu factice ne garde pas les
+	# transformées des instances, on en garde une copie à la demande
+	if keep_instance_xforms:
+		mmi.set_meta("xforms", xforms)
 	add_child(mmi)
 
 
@@ -816,17 +1287,16 @@ func _build_tunnel_details() -> void:
 	# --- évitement Abt : cœurs de croisement, réglettes (les « poulies
 	# orange » de la v1.15.0 aux fourchements n'existent pas — retour
 	# d'essai 2026-09-27)
-	var fork_ds: float = _beam_fork_ds()
-	var s_lo: float = PNConstants.PASSING_START + fork_ds
-	var s_hi: float = PNConstants.PASSING_END - fork_ds
+	# semelle du cœur en X, SOUS les rails intérieurs qui s'y croisent
+	# (le cœur était 8 m trop tôt et posé à mi-hauteur des rails)
 	var frog: BoxMesh = BoxMesh.new()
-	frog.size = Vector3(0.55, 0.03, 2.0)
+	frog.size = Vector3(0.50, 0.03, 2.0 * abt_frog_half + 0.4)
 	frog.material = frog_mat
 	var frogs: Array = []
-	for sf in [s_lo + 1.0, s_hi - 1.0]:
+	for sf in _abt.frog:
 		var xf5: Transform3D = tunnel.transform_at(sf)
 		var tr5: Transform3D = xf5
-		tr5.origin += xf5.basis.y * (floor_y_local + slab_thickness + sleeper_height + rail_height - 0.06)
+		tr5.origin += xf5.basis.y * (floor_y_local + slab_thickness + sleeper_height - 0.01 - 0.015)
 		frogs.append(tr5)
 	_mm_instance(frog, frogs, "AbtFrogs")
 	var lamp: BoxMesh = BoxMesh.new()
@@ -986,274 +1456,177 @@ func _build_cable_beam_chunk(
 # ---------------------------------------------------------------------------
 
 func _build_guides() -> void:
-	# Les socles de galets posent sur la LONGRINE continue (cf.
-	# _build_cable_beam), pas directement sur la dalle — le câble et les
-	# poulies montent d'autant (cable_beam_height).
+	# Les socles posent sur la LONGRINE continue (cf. _build_cable_beam).
+	# Positions et inclinaisons : _compute_cable_geometry (le câble tendu
+	# passe exactement dans la gorge de chaque galet).
+	var y_axis: float = _roller_axis_y()
 	var top_slab: float = floor_y_local + slab_thickness - 0.01 + cable_beam_height
-
-	# 🔴 Retour d'essai 2026-09-27 : « le câble et les galets sont trop
-	# hauts, ils rentrent dans la partie basse du funi ; le câble doit être
-	# au niveau des traverses, pas du sommet du rail ». Le câble était à
-	# −0,99 (table de roulement −1,24, fond de caisse −1,16). On part donc
-	# de la hauteur VOULUE du câble — 4 cm au-dessus du dessus des blochets
-	# (−1,36) — et on en déduit l'axe des galets ; le bas des galets et
-	# l'axe s'enfoncent dans la longrine (galets en échancrure), les
-	# équerres ne dépassent que de quelques centimètres.
-	var y_cable_center: float = floor_y_local + slab_thickness + sleeper_height + 0.04
-	var y_pulley_axis: float = y_cable_center - cable_radius - pulley_radius
 	var y_base_lo: float = top_slab
 	var y_base_hi: float = top_slab + base_plate_height
-	var br_h: float = clampf(y_pulley_axis + 0.06 - y_base_hi, 0.06, bracket_height)
+	var br_h: float = clampf(y_axis + 0.06 - y_base_hi, 0.06, bracket_height)
+	var y_base_center: float = (y_base_lo + y_base_hi) * 0.5
+	var y_bracket_center: float = y_base_hi + br_h * 0.5
 
-	# Matériaux
 	var concrete_mat: StandardMaterial3D = StandardMaterial3D.new()
 	concrete_mat.albedo_color = Color(0.42, 0.40, 0.37)
 	concrete_mat.roughness = 0.92
-	concrete_mat.metallic = 0.0
-
 	var steel_mat: StandardMaterial3D = StandardMaterial3D.new()
 	steel_mat.albedo_color = Color(0.28, 0.28, 0.30)
 	steel_mat.roughness = 0.45
 	steel_mat.metallic = 0.85
-
 	var iron_mat: StandardMaterial3D = StandardMaterial3D.new()
 	iron_mat.albedo_color = Color(0.18, 0.18, 0.20)
 	iron_mat.roughness = 0.35
 	iron_mat.metallic = 0.95
+	# Galets en polymère BLANC (vidéo cabine du 2026-04-26 : la chose la
+	# plus claire du tunnel), pas en fonte sombre.
+	var poly_mat: StandardMaterial3D = StandardMaterial3D.new()
+	poly_mat.albedo_color = Color(0.86, 0.86, 0.82)
+	poly_mat.roughness = 0.55
+	poly_mat.metallic = 0.05
 
-	# --- Socle béton -----------------------------------------------------
-	var base_mesh: BoxMesh = BoxMesh.new()
-	base_mesh.size = Vector3(base_plate_width, base_plate_height, base_plate_length)
-	base_mesh.material = concrete_mat
-
-	# --- Paire d'équerres : ArrayMesh composite (2 boxes) -----------------
-	var bracket_mesh: ArrayMesh = _build_bracket_pair_mesh(
-		bracket_width, br_h, bracket_span, pulley_thickness * 1.3, steel_mat,
-	)
-
-	# --- Galet/poulie : CylinderMesh (tourné axe horizontal perpendiculaire voie) ---
-	# Gorge profilée approximée par un mesh simple ; l'épaisseur réelle du galet
-	# est plus importante que la gorge qui est à peine visible à cette échelle.
+	var single_span: float = pulley_thickness + 0.05
+	var base_pair: BoxMesh = BoxMesh.new()
+	base_pair.size = Vector3(base_plate_width, base_plate_height, base_plate_length)
+	base_pair.material = concrete_mat
+	var base_single: BoxMesh = BoxMesh.new()
+	base_single.size = Vector3(single_span + 2.0 * bracket_width + 0.06, base_plate_height, base_plate_length)
+	base_single.material = concrete_mat
+	var br_pair: ArrayMesh = _build_bracket_pair_mesh(
+		bracket_width, br_h, bracket_span, pulley_thickness * 1.3, steel_mat)
+	var br_single: ArrayMesh = _build_bracket_pair_mesh(
+		bracket_width, br_h, single_span, pulley_thickness * 1.3, steel_mat)
 	var pulley_mesh: CylinderMesh = CylinderMesh.new()
 	pulley_mesh.top_radius = pulley_radius
 	pulley_mesh.bottom_radius = pulley_radius
 	pulley_mesh.height = pulley_thickness
 	pulley_mesh.radial_segments = 20
 	pulley_mesh.rings = 1
-	# Galets en polymère BLANC (vidéo cabine du 2026-04-26 : ils sont la
-	# chose la plus claire du tunnel), pas en fonte sombre.
-	var poly_mat: StandardMaterial3D = StandardMaterial3D.new()
-	poly_mat.albedo_color = Color(0.86, 0.86, 0.82)
-	poly_mat.roughness = 0.55
-	poly_mat.metallic = 0.05
 	pulley_mesh.material = poly_mat
+	var axle_pair: CylinderMesh = CylinderMesh.new()
+	axle_pair.top_radius = 0.020
+	axle_pair.bottom_radius = 0.020
+	axle_pair.height = bracket_span
+	axle_pair.radial_segments = 10
+	axle_pair.rings = 1
+	axle_pair.material = iron_mat
+	var axle_single: CylinderMesh = axle_pair.duplicate()
+	axle_single.height = single_span
 
-	# --- Axe central visible entre les 2 poulies (petit cylindre) --------
-	var axle_mesh: CylinderMesh = CylinderMesh.new()
-	axle_mesh.top_radius = 0.020
-	axle_mesh.bottom_radius = 0.020
-	axle_mesh.height = bracket_span
-	axle_mesh.radial_segments = 10
-	axle_mesh.rings = 1
-	axle_mesh.material = iron_mat
-
-	# Construit la liste des positions des guides :
-	# - Hors loop : 1 guide centré (axe x=0) avec 2 poulies (1 par brin de câble)
-	# - Dans loop [PASSING_START, PASSING_END] : 2 guides séparés (1 par voie),
-	#   chacun avec UNE SEULE poulie (la rame opposée ne passe jamais par cette voie)
-	#
-	# Format entry : {s, off, has_pulley_a, has_pulley_b}
-	#   pulley A = côté -pulley_pair_offset (cable_left brin)
-	#   pulley B = côté +pulley_pair_offset (cable_right brin)
-	var positions: Array = []
-	var n_total: int = int(PNConstants.LENGTH / guide_spacing)
-	for i in range(n_total):
-		var s: float = (float(i) + 0.5) * guide_spacing
-		if s >= PNConstants.PASSING_START and s <= PNConstants.PASSING_END:
-			# Voie gauche (rame 1) : seul le brin gauche (cable_left) passe → poulie A
-			positions.append({
-				"s": s, "off": tunnel.passing_loop_offset(s, -1.0), "side": -1.0,
-				"has_pulley_a": true, "has_pulley_b": false,
-			})
-			# Voie droite (rame 2) : seul le brin droite (cable_right) passe → poulie B
-			positions.append({
-				"s": s, "off": tunnel.passing_loop_offset(s, +1.0), "side": 1.0,
-				"has_pulley_a": false, "has_pulley_b": true,
-			})
-		else:
-			# Hors loop : voie unique, les 2 brins passent → 2 poulies
-			positions.append({
-				"s": s, "off": 0.0, "side": 0.0,
-				"has_pulley_a": true, "has_pulley_b": true,
-			})
-
-	var n: int = positions.size()
-	# Compte combien de poulies A et B il y a en tout
-	var n_pa: int = 0
-	var n_pb: int = 0
-	for entry in positions:
-		if entry.has_pulley_a:
-			n_pa += 1
-		if entry.has_pulley_b:
-			n_pb += 1
-
-	# --- Instances : 5 MultiMesh (socle, équerres, axe : tous; pulley A et B filtrés) ---
-	var mm_base: MultiMesh = MultiMesh.new()
-	mm_base.transform_format = MultiMesh.TRANSFORM_3D
-	mm_base.mesh = base_mesh
-	mm_base.instance_count = n
-
-	var mm_brackets: MultiMesh = MultiMesh.new()
-	mm_brackets.transform_format = MultiMesh.TRANSFORM_3D
-	mm_brackets.mesh = bracket_mesh
-	mm_brackets.instance_count = n
-
-	var mm_pulley_a: MultiMesh = MultiMesh.new()
-	mm_pulley_a.transform_format = MultiMesh.TRANSFORM_3D
-	mm_pulley_a.mesh = pulley_mesh
-	mm_pulley_a.instance_count = n_pa
-
-	var mm_pulley_b: MultiMesh = MultiMesh.new()
-	mm_pulley_b.transform_format = MultiMesh.TRANSFORM_3D
-	mm_pulley_b.mesh = pulley_mesh
-	mm_pulley_b.instance_count = n_pb
-
-	var mm_axle: MultiMesh = MultiMesh.new()
-	mm_axle.transform_format = MultiMesh.TRANSFORM_3D
-	mm_axle.mesh = axle_mesh
-	mm_axle.instance_count = n
-
-	var y_base_center: float = (y_base_lo + y_base_hi) * 0.5
-	var y_bracket_center: float = y_base_hi + br_h * 0.5
-
-	# Rotation 90° autour de Z local : axe cylindre Y → axe monde perpendiculaire voie
+	# Rotation 90° autour de Z local : axe cylindre Y → axe perpendiculaire voie
 	var rot90: Basis = Basis(Vector3(0, 0, 1), PI * 0.5)
-
-	var idx_pa: int = 0
-	var idx_pb: int = 0
-	for i in range(n):
-		var entry: Dictionary = positions[i]
-		var xform: Transform3D = tunnel.transform_at(entry.s)
-		var right: Vector3 = xform.basis.x
-		var up: Vector3 = xform.basis.y
-		var lat_offset: Vector3 = right * entry.off
-
-		# Bank (cant) : incline tout l'ensemble autour de l'axe forward selon
-		# la courbure horizontale locale. C'est ce qui permet au câble de
-		# "tourner" en horizontal — sans bank, les poulies restent strictement
-		# horizontales et le câble rentrerait dans le flanc des poulies.
-		# 🔴 Retour d'essai 2026-09-26 : dans les virages, ce n'est PAS l'axe
-		# des deux galets qui penche (un galet finissait plus haut que
-		# l'autre) — le SUPPORT reste horizontal et CHAQUE galet est incliné
-		# dans son support, les deux à la même hauteur. Socle, équerres et
-		# axe gardent donc le repère de la voie ; seule la basis de chaque
-		# galet tourne autour de la voie, autour de son propre centre.
-		var tilt_rad: float = _heading_bank_at(entry.s, entry.side)
-		var forward_world: Vector3 = (-xform.basis.z).normalized()   # +tangent
-		var roller_basis: Basis = xform.basis.rotated(forward_world, tilt_rad)
-		var banked_basis: Basis = xform.basis
-		var banked_right: Vector3 = xform.basis.x
-		var banked_up: Vector3 = xform.basis.y
-		var banked_lat: Vector3 = banked_right * entry.off
-
-		# Socle + équerres : centrés sur axe voie, avec bank
-		var tr_base: Transform3D = Transform3D(banked_basis, xform.origin)
-		tr_base.origin += banked_up * y_base_center + banked_lat
-		mm_base.set_instance_transform(i, tr_base)
-
-		var tr_br: Transform3D = Transform3D(banked_basis, xform.origin)
-		tr_br.origin += banked_up * y_bracket_center + banked_lat
-		mm_brackets.set_instance_transform(i, tr_br)
-
-		# Poulie A (côté gauche du guide) — uniquement si has_pulley_a
-		if entry.has_pulley_a:
-			var tr_pa: Transform3D = Transform3D(roller_basis, xform.origin)
-			tr_pa.origin += banked_up * y_pulley_axis - banked_right * pulley_pair_offset + banked_lat
-			tr_pa.basis = tr_pa.basis * rot90
-			mm_pulley_a.set_instance_transform(idx_pa, tr_pa)
-			idx_pa += 1
-
-		# Poulie B (côté droite du guide) — uniquement si has_pulley_b
-		if entry.has_pulley_b:
-			var tr_pb: Transform3D = Transform3D(roller_basis, xform.origin)
-			tr_pb.origin += banked_up * y_pulley_axis + banked_right * pulley_pair_offset + banked_lat
-			tr_pb.basis = tr_pb.basis * rot90
-			mm_pulley_b.set_instance_transform(idx_pb, tr_pb)
-			idx_pb += 1
-
-		# Axe central horizontal entre les équerres
-		var tr_ax: Transform3D = Transform3D(banked_basis, xform.origin)
-		tr_ax.origin += banked_up * y_pulley_axis + banked_lat
-		tr_ax.basis = tr_ax.basis * rot90
-		mm_axle.set_instance_transform(i, tr_ax)
-
-	var n_base: MultiMeshInstance3D = MultiMeshInstance3D.new()
-	n_base.name = "GuideBases"
-	n_base.multimesh = mm_base
-	n_base.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	add_child(n_base)
-
-	var n_br: MultiMeshInstance3D = MultiMeshInstance3D.new()
-	n_br.name = "GuideBrackets"
-	n_br.multimesh = mm_brackets
-	n_br.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	add_child(n_br)
-
-	var node_pa: MultiMeshInstance3D = MultiMeshInstance3D.new()
-	node_pa.name = "GuidePulleysA"
-	node_pa.multimesh = mm_pulley_a
-	node_pa.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	add_child(node_pa)
-
-	var node_pb: MultiMeshInstance3D = MultiMeshInstance3D.new()
-	node_pb.name = "GuidePulleysB"
-	node_pb.multimesh = mm_pulley_b
-	node_pb.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	add_child(node_pb)
-
-	var n_ax: MultiMeshInstance3D = MultiMeshInstance3D.new()
-	n_ax.name = "GuideAxles"
-	n_ax.multimesh = mm_axle
-	n_ax.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	add_child(n_ax)
-
-	# Expose la hauteur de câble pour _build_cable()
-	_cable_top_y = y_pulley_axis + pulley_radius
+	var l_base_p: Array = []
+	var l_base_s: Array = []
+	var l_br_p: Array = []
+	var l_br_s: Array = []
+	var l_ax_p: Array = []
+	var l_ax_s: Array = []
+	var l_pa: Array = []
+	var l_pb: Array = []
+	for k in range(_stations.size()):
+		var st: Dictionary = _stations[k]
+		var xf: Transform3D = tunnel.transform_at(st.s)
+		var up: Vector3 = xf.basis.y
+		var right: Vector3 = xf.basis.x
+		if st.paired:
+			l_base_p.append(Transform3D(xf.basis, xf.origin + up * y_base_center))
+			l_br_p.append(Transform3D(xf.basis, xf.origin + up * y_bracket_center))
+			l_ax_p.append(Transform3D(xf.basis * rot90, xf.origin + up * y_axis))
+		else:
+			for side_i in [-1, 1]:
+				var x_nom: float = _track_center_x(st.s, float(side_i)) + float(side_i) * pulley_pair_offset
+				var lat: Vector3 = right * x_nom
+				l_base_s.append(Transform3D(xf.basis, xf.origin + up * y_base_center + lat))
+				l_br_s.append(Transform3D(xf.basis, xf.origin + up * y_bracket_center + lat))
+				l_ax_s.append(Transform3D(xf.basis * rot90, xf.origin + up * y_axis + lat))
+		# galet de chaque brin : incliné dans son support autour de son centre
+		for side_i in [-1, 1]:
+			var v: Dictionary = _strand[side_i][k + 1]   # [0] = point libre à s = 0
+			var trp: Transform3D = Transform3D((v.basis as Basis) * rot90, v.center)
+			if side_i < 0:
+				l_pa.append(trp)
+			else:
+				l_pb.append(trp)
+	_mm_instance(base_pair, l_base_p, "GuideBases")
+	_mm_instance(base_single, l_base_s, "GuideBasesSingle")
+	_mm_instance(br_pair, l_br_p, "GuideBrackets")
+	_mm_instance(br_single, l_br_s, "GuideBracketsSingle")
+	_mm_instance(axle_pair, l_ax_p, "GuideAxles")
+	_mm_instance(axle_single, l_ax_s, "GuideAxlesSingle")
+	_mm_instance(pulley_mesh, l_pa, "GuidePulleysA")
+	_mm_instance(pulley_mesh, l_pb, "GuidePulleysB")
+	_cable_top_y = y_axis + pulley_radius
 
 
-# Bank (cant) angle pour un support de poulie à la distance s.
-# Calculé depuis la courbure horizontale locale (taux de changement du heading).
-# Permet aux poulies d'incliner DANS LE BON SENS dans les virages :
-#   - virage à droite (heading augmente vers est/sud) → côté droit BAS, gauche HAUT
-#   - le câble glisse vers l'intérieur (côté droit) du virage → centripète
-#   - rotation autour de forward : signe NÉGATIF pour heading_rate positif
-# Inclinaison de CHAQUE galet dans son support (le support reste horizontal),
-# vers l'intérieur du virage. Approximation centrifuge : atan(v² · κ / g),
-# amplifiée pour visibilité.
-# Dans l'évitement, chaque voie s'écarte de l'axe (offset ±3,5 m en sin²) :
-# sa courbure propre x″(s) s'ajoute à celle de l'axe — entrée en virage vers
-# l'extérieur, contre-courbe au milieu, retour à la réunion — et les galets
-# s'inclinent avec le même signe qu'en ligne (retour d'essai 2026-09-27 :
-# « il faut incliner les galets dans l'évitement »).
-func _heading_bank_at(s: float, side: float = 0.0) -> float:
-	var ds: float = 5.0
-	var h_prev: float = SlopeProfile.heading_at(s - ds)
-	var h_next: float = SlopeProfile.heading_at(s + ds)
-	var heading_rate_rad_m: float = deg_to_rad(h_next - h_prev) / (2.0 * ds)
-	if side != 0.0:
-		var x_m: float = tunnel.passing_loop_offset(s - ds, side)
-		var x_0: float = tunnel.passing_loop_offset(s, side)
-		var x_p: float = tunnel.passing_loop_offset(s + ds, side)
-		heading_rate_rad_m += (x_p - 2.0 * x_0 + x_m) / (ds * ds)
-	var v_assumed: float = 12.0   # m/s — vitesse plafond pour calcul du bank
-	var bank_natural: float = atan(v_assumed * v_assumed * heading_rate_rad_m / 9.80665)
-	# Signe inversé : la rotation positive autour de forward lève le côté droit,
-	# mais pour un virage à droite (heading_rate>0) on veut lever le côté GAUCHE
-	# (banking centripète : la roue extérieure plus haut que l'intérieure).
-	# Amplifié × 8 pour rendre visible (retour d'essai 2026-09-26 : « au
-	# moins deux fois plus » que le × 4 précédent), plafonné à ±32°
-	var bank_visual: float = -bank_natural * 8.0
-	return clampf(bank_visual, -0.56, 0.56)
+# Galets de déviation de l'aiguillage Abt (photo d'aiguillage : grandes
+# poulies inclinées à moyeu rouge de part et d'autre du câble). Ici un seul
+# galet par brin, du côté INTÉRIEUR du coude, là où la tension tire le
+# câble ; incliné de 30° sous l'horizontale, jante contre le flanc du câble.
+func _build_abt_sheaves() -> void:
+	var disc_mat: StandardMaterial3D = StandardMaterial3D.new()
+	disc_mat.albedo_color = Color(0.20, 0.20, 0.22)
+	disc_mat.roughness = 0.40
+	disc_mat.metallic = 0.85
+	var hub_mat: StandardMaterial3D = StandardMaterial3D.new()
+	hub_mat.albedo_color = Color(0.62, 0.13, 0.10)
+	hub_mat.roughness = 0.55
+	hub_mat.metallic = 0.4
+	var chape_mat: StandardMaterial3D = StandardMaterial3D.new()
+	chape_mat.albedo_color = Color(0.36, 0.34, 0.32)
+	chape_mat.roughness = 0.7
+	chape_mat.metallic = 0.5
+	var disc: CylinderMesh = CylinderMesh.new()
+	disc.top_radius = sheave_radius
+	disc.bottom_radius = sheave_radius * 0.92
+	disc.height = sheave_thickness
+	disc.radial_segments = 28
+	disc.rings = 1
+	disc.material = disc_mat
+	var hub: CylinderMesh = CylinderMesh.new()
+	hub.top_radius = 0.045
+	hub.bottom_radius = 0.045
+	hub.height = sheave_thickness + 0.06
+	hub.radial_segments = 12
+	hub.rings = 1
+	hub.material = hub_mat
+	var chape: BoxMesh = BoxMesh.new()
+	chape.size = Vector3(0.05, 1.0, 0.12)
+	chape.material = chape_mat
+
+	var l_disc: Array = []
+	var l_hub: Array = []
+	var l_chape: Array = []
+	var beta: float = deg_to_rad(sheave_incline_deg)
+	var y_floor: float = floor_y_local + slab_thickness - 0.01
+	for k in range(_stations.size()):
+		var st: Dictionary = _stations[k]
+		if not st.sheave:
+			continue
+		var xf: Transform3D = tunnel.transform_at(st.s)
+		for side_i in [-1, 1]:
+			var pts: Array = _strand[side_i]
+			var a: Vector3 = pts[k].p
+			var v: Vector3 = pts[k + 1].p
+			var b: Vector3 = pts[k + 2].p
+			var pull: Vector3 = (b - v).normalized() - (v - a).normalized()
+			var lat: float = pull.dot(xf.basis.x)
+			var inside: float = signf(lat) if absf(lat) > 1e-7 else -float(side_i)
+			var n: Vector3 = (xf.basis.x * inside * cos(beta) - xf.basis.y * sin(beta)).normalized()
+			var u: Vector3 = (b - a).normalized()
+			var axis: Vector3 = u.cross(n).normalized()
+			var bz: Vector3 = n.cross(axis).normalized()
+			var basis: Basis = Basis(n, axis, bz)
+			var center: Vector3 = v + n * (sheave_radius + cable_radius)
+			l_disc.append(Transform3D(basis, center))
+			l_hub.append(Transform3D(basis, center))
+			# chape : patte du moyeu jusqu'à la dalle, côté extérieur du galet
+			var hub_y: float = (center - xf.origin).dot(xf.basis.y)
+			var h: float = maxf(hub_y - y_floor, 0.05)
+			var cpos: Vector3 = center + xf.basis.x * (inside * 0.07) - xf.basis.y * (h * 0.5)
+			l_chape.append(Transform3D(xf.basis * Basis.from_scale(Vector3(1.0, h, 1.0)), cpos))
+	_mm_instance(disc, l_disc, "AbtSheaves")
+	_mm_instance(hub, l_hub, "AbtSheaveHubs")
+	_mm_instance(chape, l_chape, "AbtSheaveChapes")
 
 
 # Construit un ArrayMesh composite de 2 équerres verticales séparées par
@@ -1319,8 +1692,8 @@ var _cable_top_y: float = -0.6  # fixé par _build_guides(), utilisé par _build
 
 # ---------------------------------------------------------------------------
 # Câble Fatzer 52 mm unique en boucle continue — 2 brins visibles côte à côte
-# entre les rails. Le brin gauche part de l'attache culot de rame 1 vers la
-# poulie motrice en haut ; le brin droit repart de la poulie vers l'attache
+# entre les rails, TENDUS en ligne droite d'un galet au suivant. Le brin
+# gauche part de l'attache culot de rame 1 vers la poulie motrice en haut ; le brin droit repart de la poulie vers l'attache
 # culot de rame 2. Chaque brin est découpé en segments pour permettre un
 # masquage dynamique selon la position des rames (le brin n'existe que entre
 # la rame qu'il tire et la poulie en haut).
@@ -1332,99 +1705,80 @@ func _build_cable() -> void:
 	# animer les 2 brins avec des phases opposées (brin gauche fixe vs
 	# brin droite défilant à 2×v).
 	var shader: Shader = load("res://scripts/cable_shader.gdshader")
-
 	cable_left_material = ShaderMaterial.new()
 	cable_left_material.shader = shader
 	cable_left_material.set_shader_parameter("cable_phase", 0.0)
-
 	cable_right_material = ShaderMaterial.new()
 	cable_right_material.shader = shader
 	cable_right_material.set_shader_parameter("cable_phase", 0.0)
 
-	# Hauteur câble : tangent au sommet des poulies
-	var y_center: float = _cable_top_y + cable_radius
-
 	cable_left_segments.clear()
 	cable_right_segments.clear()
-
 	var total_len: float = PNConstants.LENGTH
 	var n_seg: int = int(ceil(total_len / cable_segment_length))
 	for i in range(n_seg):
 		var s_start: float = float(i) * cable_segment_length
 		var s_end: float = minf(s_start + cable_segment_length, total_len)
 		var mi_left: MeshInstance3D = _build_cable_segment(
-			cable_left_material, y_center, -1.0, -pulley_pair_offset, s_start, s_end,
-			"CableLeft_%d" % i,
-		)
+			cable_left_material, -1, s_start, s_end, "CableLeft_%d" % i)
 		cable_left_segments.append({"s_start": s_start, "s_end": s_end, "mesh": mi_left})
 		var mi_right: MeshInstance3D = _build_cable_segment(
-			cable_right_material, y_center, +1.0, +pulley_pair_offset, s_start, s_end,
-			"CableRight_%d" % i,
-		)
+			cable_right_material, 1, s_start, s_end, "CableRight_%d" % i)
 		cable_right_segments.append({"s_start": s_start, "s_end": s_end, "mesh": mi_right})
 
 
-# Génère un segment de câble (tube) entre s_start et s_end, décalé latéralement.
-# `side` : -1 pour brin gauche (suit voie 1 dans le passing loop, x = pl_offset + base_x),
-#          +1 pour brin droite (suit voie 2). 0 pour rester centré (test).
-# `base_offset_x` : offset additionnel par rapport au centre de la voie suivie
-#  (typiquement ∓pulley_pair_offset pour rester contre le bord intérieur).
+# Tronçon [s_start, s_end] d'un brin : tube droit d'un galet au suivant
+# (sommets = contacts dans la gorge, cf. _compute_cable_geometry). UV.y =
+# 2 × s : le shader y lit l'abscisse pour la coupe à la rame et l'hélice.
 func _build_cable_segment(
-	mat: Material, y_center: float, side: float, base_offset_x: float,
-	s_start: float, s_end: float, name: String,
+	mat: Material, side_i: int, s_start: float, s_end: float, name: String,
 ) -> MeshInstance3D:
 	var st: SurfaceTool = SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	st.set_material(mat)
 
-	var seg_len: float = s_end - s_start
-	var n_steps: int = maxi(1, int(seg_len / cable_sample_spacing))
-	var samples: Array = []
-	var bases_r: Array = []
-	var bases_u: Array = []
-	for i in range(n_steps + 1):
-		var s: float = s_start + float(i) / float(n_steps) * seg_len
-		var xform: Transform3D = tunnel.transform_at(s)
-		var x_off: float = base_offset_x
-		if side != 0.0:
-			x_off += tunnel.passing_loop_offset(s, side)
-		samples.append(xform.origin + xform.basis.y * y_center + xform.basis.x * x_off)
-		bases_r.append(xform.basis.x)
-		bases_u.append(xform.basis.y)
+	var chain: Array = [{"s": s_start, "p": strand_point(side_i, s_start)}]
+	for v in _strand[side_i]:
+		if v.s > s_start + 1e-4 and v.s < s_end - 1e-4:
+			chain.append({"s": v.s, "p": v.p})
+	chain.append({"s": s_end, "p": strand_point(side_i, s_end)})
 
-	for i in range(n_steps):
-		var c0: Vector3 = samples[i]
-		var c1: Vector3 = samples[i + 1]
-		var r0: Vector3 = bases_r[i]
-		var r1: Vector3 = bases_r[i + 1]
-		var u0: Vector3 = bases_u[i]
-		var u1: Vector3 = bases_u[i + 1]
+	# repère de chaque anneau : tangente = moyenne des cordes voisines,
+	# droite/haut de la voie redressés perpendiculairement (Gram-Schmidt)
+	var rights: Array = []
+	var ups: Array = []
+	for j in range(chain.size()):
+		var pa: Vector3 = chain[maxi(j - 1, 0)].p
+		var pb: Vector3 = chain[mini(j + 1, chain.size() - 1)].p
+		var tg: Vector3 = (pb - pa).normalized()
+		var xf: Transform3D = tunnel.transform_at(chain[j].s)
+		var r: Vector3 = (xf.basis.x - tg * xf.basis.x.dot(tg)).normalized()
+		var u: Vector3 = xf.basis.y - tg * xf.basis.y.dot(tg)
+		u = (u - r * u.dot(r)).normalized()
+		rights.append(r)
+		ups.append(u)
 
+	for i in range(chain.size() - 1):
+		var c0: Vector3 = chain[i].p
+		var c1: Vector3 = chain[i + 1].p
+		var r0: Vector3 = rights[i]
+		var r1: Vector3 = rights[i + 1]
+		var u0: Vector3 = ups[i]
+		var u1: Vector3 = ups[i + 1]
+		var v0_uv: float = float(chain[i].s) * 2.0
+		var v1_uv: float = float(chain[i + 1].s) * 2.0
 		for k in range(cable_segments):
 			var a0: float = float(k) / float(cable_segments) * TAU
 			var a1: float = float(k + 1) / float(cable_segments) * TAU
-			var cos0: float = cos(a0)
-			var sin0: float = sin(a0)
-			var cos1: float = cos(a1)
-			var sin1: float = sin(a1)
-
-			var p00: Vector3 = c0 + r0 * cos0 * cable_radius + u0 * sin0 * cable_radius
-			var p01: Vector3 = c0 + r0 * cos1 * cable_radius + u0 * sin1 * cable_radius
-			var p10: Vector3 = c1 + r1 * cos0 * cable_radius + u1 * sin0 * cable_radius
-			var p11: Vector3 = c1 + r1 * cos1 * cable_radius + u1 * sin1 * cable_radius
-
+			var p00: Vector3 = c0 + r0 * cos(a0) * cable_radius + u0 * sin(a0) * cable_radius
+			var p01: Vector3 = c0 + r0 * cos(a1) * cable_radius + u0 * sin(a1) * cable_radius
+			var p10: Vector3 = c1 + r1 * cos(a0) * cable_radius + u1 * sin(a0) * cable_radius
+			var p11: Vector3 = c1 + r1 * cos(a1) * cable_radius + u1 * sin(a1) * cable_radius
 			var u0_uv: float = float(k) / float(cable_segments)
 			var u1_uv: float = float(k + 1) / float(cable_segments)
-			# UV.y = distance absolue le long du câble × 2 (facteur 0.5 = uv_y_to_meters
-			# côté shader). On se base sur s_start pour garder la continuité entre
-			# segments : le shader voit une phase d'hélice continue.
-			var v0_uv: float = (s_start + float(i) * seg_len / float(n_steps)) * 2.0
-			var v1_uv: float = (s_start + float(i + 1) * seg_len / float(n_steps)) * 2.0
-
 			st.set_uv(Vector2(u0_uv, v0_uv)); st.add_vertex(p00)
 			st.set_uv(Vector2(u0_uv, v1_uv)); st.add_vertex(p10)
 			st.set_uv(Vector2(u1_uv, v1_uv)); st.add_vertex(p11)
-
 			st.set_uv(Vector2(u0_uv, v0_uv)); st.add_vertex(p00)
 			st.set_uv(Vector2(u1_uv, v1_uv)); st.add_vertex(p11)
 			st.set_uv(Vector2(u1_uv, v0_uv)); st.add_vertex(p01)

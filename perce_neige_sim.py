@@ -6903,12 +6903,15 @@ class GameWidget(QWidget):
                 state_dict = physics_to_state_dict(st.train, st)
                 # Relaye le mute N au viewer 3D (il a son propre audio).
                 state_dict["muted"] = bool(self.sounds.muted)
-                # Vue extérieure orbitale (touche O) — le viewer bascule
-                # SUR CHANGEMENT ; angle à la souris (clic gauche
-                # maintenu) et zoom molette directement dans la fenêtre
-                # 3D embarquée.
-                state_dict["ext_view"] = bool(
-                    getattr(self, "_godot_ext_view", False))
+                # Vue 3D (touche O) : 0 cabine, 1 extérieure orbitale,
+                # 2 salle des machines — le viewer bascule SUR
+                # CHANGEMENT ; angle à la souris (clic gauche maintenu),
+                # zoom molette, déplacement clic droit, directement dans
+                # la fenêtre 3D embarquée. "ext_view" reste envoyé pour
+                # un viewer plus ancien.
+                vue3d = int(getattr(self, "_godot_view3d", 0))
+                state_dict["view3d"] = vue3d
+                state_dict["ext_view"] = vue3d == 1
                 self._godot_bridge.send_state(state_dict)
             self._autopilot_tick(dt)
             self._advance_fault_phase(dt)
@@ -7658,16 +7661,23 @@ class GameWidget(QWidget):
             # bascule FPV ↔ orbitale, streamée via le state dict. Angle
             # à la souris (clic gauche maintenu dans la fenêtre 3D),
             # zoom à la molette.
-            self._godot_ext_view = not getattr(self, "_godot_ext_view",
-                                               False)
+            # 2026-09-30 : trois vues en cycle, la 3e dans la salle des
+            # machines (caméra fixe par rapport à la gare amont).
+            self._godot_view3d = (int(getattr(self, "_godot_view3d", 0))
+                                  + 1) % 3
+            vue = self._godot_view3d
             add_event(st, "orbit",
                       "3D view : "
-                      + ("EXTERIOR orbital (drag = angle, wheel = zoom)"
-                         if self._godot_ext_view else "FPV cockpit"),
+                      + ("FPV cockpit",
+                         "EXTERIOR orbital (drag = angle, wheel = zoom)",
+                         "MACHINE ROOM (drag = turn, wheel = zoom, "
+                         "right drag = move)")[vue],
                       "Vue 3D : "
-                      + ("EXTÉRIEURE orbitale (glisser = angle, "
-                         "molette = zoom)"
-                         if self._godot_ext_view else "cockpit FPV"),
+                      + ("cockpit FPV",
+                         "EXTÉRIEURE orbitale (glisser = angle, "
+                         "molette = zoom)",
+                         "SALLE DES MACHINES (glisser = tourner, molette = "
+                         "zoom, clic droit = déplacer)")[vue],
                       "info")
         elif k == Qt.Key.Key_L:
             global LANG
@@ -12556,9 +12566,12 @@ class GameWidget(QWidget):
         self._hit_zones.append(
             (QRectF(col0, row3, btn_w, btn_h), int(Qt.Key.Key_F4), False)
         )
+        vue3d = int(getattr(self, "_godot_view3d", 0))
         self._draw_button(p, col1, row3, btn_w, btn_h,
-                          T("EXT. VIEW [O]", "VUE EXT. [O]"),
-                          bool(getattr(self, "_godot_ext_view", False)),
+                          (T("EXT. VIEW [O]", "VUE EXT. [O]"),
+                           T("MACHINES [O]", "MACHINES [O]"),
+                           T("CABIN [O]", "CABINE [O]"))[vue3d],
+                          vue3d != 0,
                           QColor(170, 210, 255), QColor(20, 40, 70))
         self._hit_zones.append(
             (QRectF(col1, row3, btn_w, btn_h), int(Qt.Key.Key_O), False)
@@ -13605,8 +13618,8 @@ class GameWidget(QWidget):
                 ("F2", T("announcement console", "console d'annonces")),
                 ("F4", T("cabin view: off → drawn → 3D",
                          "vue cabine : off → dessinée → 3D")),
-                ("O", T("exterior 3D view (drag, wheel)",
-                        "vue extérieure 3D (glisser, molette)")),
+                ("O", T("3D view: cabin / ext. / machines",
+                        "vue 3D : cabine / ext. / machines")),
             ]),
             (T("System", "Système"), [
                 ("P / Esc", T("pause / resume", "pause / reprise")),

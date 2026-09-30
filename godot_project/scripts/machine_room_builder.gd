@@ -60,6 +60,23 @@ const ROOM_FLOOR: float = B_Y - RF - 0.9
 
 var tunnel: TunnelBuilder = null
 var _xf: Transform3D
+# Vue « salle des machines » (2026-09-30) : caméra libre autour des roues.
+# Écorché : chaque paroi (mur, plafond, dalle, sol) qui se trouve entre la
+# caméra et la machinerie s'efface, selon le côté où est la caméra.
+const _CUT_RULES: Dictionary = {
+	"MurMachines": "side", "JointCarrelage": "side", "ParoiSalle": "side",
+	"PlafondMachines": "top", "PlafondMachinesAval": "top",
+	"DalleG": "top", "DalleD": "top", "DalleArriere": "top", "DalleAvant": "top",
+	"RiveFosse": "top", "RiveFosseFond": "top", "Caillebotis": "top",
+	"BarreCaillebotis": "top",
+	"PlafondSalle": "hall_top", "PoutreSalle": "hall_top", "NeonSalle": "hall_top",
+	"MurMachinesAval": "s0", "MurMachinesAmont": "s1",
+	"MurFond": "hall_s1", "BaieHall": "hall_s1", "Enseigne": "hall_s1",
+	"SolMachines": "floor",
+}
+var _cut_nodes: Array = []
+var cutaway_enabled: bool = false
+var _obstacles: Array = []     # AABB monde des machines (caméra de la salle)
 var _spin_a: Node3D = null
 var _spin_b: Node3D = null
 var _angle: float = 0.0
@@ -102,6 +119,7 @@ func build(t: TunnelBuilder) -> void:
 	_build_battery()
 	_build_cable()
 	_build_lights()
+	_register_cutaway()
 
 
 # ---------------------------------------------------------------------------
@@ -216,6 +234,7 @@ func _build_hall_end() -> void:
 	sign_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	sign_l.shaded = false
 	sign_l.double_sided = true
+	sign_l.set_meta("nom", "Enseigne")
 	add_child(sign_l)
 	_place(sign_l, 0.0, Y_HALL_FLOOR + 3.0, HALL_DEPTH - 0.05)
 	for s_pos in [3.0, 7.0]:
@@ -798,6 +817,87 @@ func update_rotation(v_cable: float, delta: float) -> void:
 
 
 # ---------------------------------------------------------------------------
+# Écorché de la vue « salle des machines »
+# ---------------------------------------------------------------------------
+
+func _register_cutaway() -> void:
+	_cut_nodes.clear()
+	for c in get_children():
+		if not (c is Node3D) or not c.has_meta("nom"):
+			continue
+		var rule: String = _CUT_RULES.get(String(c.get_meta("nom")), "")
+		if rule != "":
+			_cut_nodes.append({"node": c, "rule": rule, "x": float(c.get_meta("x", 0.0))})
+
+
+## Boîtes englobantes (monde) des machines : la caméra de la salle
+## s'arrête devant au lieu de finir dans une armoire ou un moteur.
+func obstacle_aabbs() -> Array:
+	if not _obstacles.is_empty() or not is_inside_tree():
+		return _obstacles
+	var stack: Array = get_children()
+	while not stack.is_empty():
+		var n: Node = stack.pop_back()
+		stack.append_array(n.get_children())
+		if not (n is MeshInstance3D):
+			continue
+		var mi: MeshInstance3D = n
+		var nom: String = String(mi.get_meta("nom", mi.name))
+		if _CUT_RULES.has(nom) or nom.begins_with("Cable") or nom.begins_with("Neon"):
+			continue
+		var bb: AABB = mi.global_transform * mi.get_aabb()
+		if bb.size.length() > 12.0 or bb.size.length() < 0.05:
+			continue
+		_obstacles.append(bb.grow(0.12))
+	return _obstacles
+
+
+## Centre de la machinerie (entre les deux roues), en coordonnées monde.
+func focus_point() -> Vector3:
+	return _to_world(Vector3(-0.2, 0.5 * (A_Y + B_Y) + 0.4, 0.5 * (A_S + B_S)))
+
+
+## Repère de la fin de ligne (x = travers, y = haut, −z = vers l'amont).
+func frame() -> Transform3D:
+	return _xf
+
+
+func set_cutaway(on: bool) -> void:
+	cutaway_enabled = on
+	if not on:
+		for e in _cut_nodes:
+			(e.node as Node3D).visible = true
+
+
+## Masque les parois situées entre la caméra et la machinerie.
+func update_cutaway(cam_world: Vector3) -> void:
+	if not cutaway_enabled:
+		return
+	var rel: Vector3 = cam_world - _xf.origin
+	var cx: float = rel.dot(_xf.basis.x)
+	var cy: float = rel.dot(_xf.basis.y)
+	var cs: float = -rel.dot(_xf.basis.z)
+	for e in _cut_nodes:
+		var hide: bool = false
+		match e.rule:
+			"side":
+				hide = signf(cx) == signf(e.x) and absf(cx) > absf(e.x) - 0.4
+			"top":
+				hide = cy > Y_SLAB_BOTTOM
+			"hall_top":
+				hide = cy > Y_HALL_CEIL - 0.4
+			"s0":
+				hide = cs < ROOM_S0 + 0.2
+			"s1":
+				hide = cs > ROOM_S1 - 0.2
+			"hall_s1":
+				hide = cs > HALL_DEPTH - 0.2
+			"floor":
+				hide = cy < ROOM_FLOOR + 0.1
+		(e.node as Node3D).visible = not hide
+
+
+# ---------------------------------------------------------------------------
 # Géométrie élémentaire
 # ---------------------------------------------------------------------------
 
@@ -827,6 +927,7 @@ func _box(size: Vector3, mat: StandardMaterial3D, ox: float, oy: float, os_s: fl
 	bm.material = mat
 	mi.mesh = bm
 	mi.name = nom
+	mi.set_meta("nom", nom)   # Godot renomme les homonymes : la règle d'écorché lit ce méta
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(mi)
 	_place(mi, ox, oy, os_s)
