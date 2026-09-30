@@ -233,6 +233,19 @@ var ghost_locked_s: float = -1.0          # position figée de la rame 2 (< 0 = 
 ## une fois le câble rompu, la rame 2 découplée a freiné et s'est
 ## immobilisée : sa position est figée (c'est ELLE que la rame emballée
 ## percute, pas un point théorique).
+## Vitesse de la RAME 1 le long de la ligne (m/s, + = vers la gare haute),
+## qui fixe le sens de rotation des roues motrices : son brin entre sur la
+## roue aval quand elle monte. `v` est signé le long de s (s += v·dt) ; la
+## rame pilotée est la rame 1 sauf si `rame2` (la rame 1 est alors en face,
+## à LENGTH − s, et va en sens inverse). Retour du 30/09 : les roues
+## tournaient avec v·direction, toujours positif en marche — faux en
+## descente et en rame 2.
+func v_rame1(rame2: bool) -> float:
+	if ghost_locked_s >= 0.0 and rame2:
+		return 0.0
+	return -v if rame2 else v
+
+
 func ghost_s_render() -> float:
 	if ghost_locked_s >= 0.0:
 		return ghost_locked_s

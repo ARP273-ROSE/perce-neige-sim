@@ -50,6 +50,8 @@ func _build_ui() -> void:
 	_machine_room = MachineRoomPanel.new()
 	_machine_room.name = "MachineRoomPanel"
 	add_child(_machine_room)
+	cache_panel(_cockpit)
+	cache_panel(_machine_room)
 
 	# --- Petit status label haut-gauche (titre + état trip succinct) ---
 	var top_panel: Panel = Panel.new()
@@ -163,6 +165,73 @@ func _build_ui() -> void:
 	fault_vbox.add_child(_fault_do_label)
 
 
+## Performance (retour du 30/09 : le tunnel saccade toujours sur iPad) :
+## les deux grands panneaux dessinés à la main coûtaient ~220 appels de
+## dessin et ~1 500 éléments 2D À CHAQUE IMAGE, alors qu'ils ne changent
+## qu'à 15 Hz. Chacun est rendu dans une SubViewport à la résolution réelle
+## de l'écran, que l'écran réaffiche comme une simple texture ; elle n'est
+## redessinée que lorsque le panneau se redessine (redraw_at_15hz).
+func cache_panel(p: Control) -> TextureRect:
+	var idx: int = p.get_index()
+	var tr: TextureRect = TextureRect.new()
+	tr.name = String(p.name) + "Cache"
+	for prop in ["anchor_left", "anchor_top", "anchor_right", "anchor_bottom",
+			"offset_left", "offset_top", "offset_right", "offset_bottom"]:
+		tr.set(prop, p.get(prop))
+	tr.mouse_filter = p.mouse_filter
+	tr.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	tr.stretch_mode = TextureRect.STRETCH_SCALE
+	var sv: SubViewport = SubViewport.new()
+	sv.name = "Rendu"
+	sv.transparent_bg = true
+	sv.disable_3d = true
+	sv.gui_disable_input = true
+	sv.size_2d_override_stretch = true
+	sv.render_target_update_mode = SubViewport.UPDATE_ONCE
+	remove_child(p)
+	sv.add_child(p)
+	p.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	tr.add_child(sv)
+	add_child(tr)
+	move_child(tr, idx)
+	tr.texture = sv.get_texture()
+	tr.resized.connect(_fit_cache.bind(tr, sv))
+	# fenêtre redimensionnée au même rapport (plein écran…) : la taille
+	# virtuelle ne change pas, la densité de pixels si
+	get_viewport().size_changed.connect(func() -> void: _fit_cache(tr, sv))
+	_fit_cache(tr, sv)
+	return tr
+
+
+## Taille de la SubViewport = taille du panneau × facteur d'étirement de
+## l'écran (1,7 sur un iPad) : le texte reste net.
+func _fit_cache(tr: TextureRect, sv: SubViewport) -> void:
+	var virt: Vector2 = tr.get_viewport_rect().size
+	var win: Vector2 = Vector2(DisplayServer.window_get_size())
+	var k: float = 1.0
+	if virt.x > 1.0 and win.x > 1.0:
+		k = maxf(win.x / virt.x, 1.0)
+	var sz: Vector2 = tr.size
+	if sz.x < 1.0 or sz.y < 1.0:
+		return
+	sv.size = Vector2i(ceili(sz.x * k), ceili(sz.y * k))
+	sv.size_2d_override = Vector2i(roundi(sz.x), roundi(sz.y))
+	sv.render_target_update_mode = SubViewport.UPDATE_ONCE
+
+
+## Redessine `c` à 15 Hz, au créneau décalé de `phase` (fraction de
+## créneau), et rafraîchit sa SubViewport de cache. Renvoie le créneau.
+static func redraw_at_15hz(c: CanvasItem, last_slot: int, phase: float) -> int:
+	var slot: int = int(floor(float(Time.get_ticks_msec()) * 0.015 + phase))
+	if slot == last_slot:
+		return last_slot
+	c.queue_redraw()
+	var vp: Viewport = c.get_viewport()
+	if vp is SubViewport:
+		(vp as SubViewport).render_target_update_mode = SubViewport.UPDATE_ONCE
+	return slot
+
+
 func set_physics(p: TrainPhysics) -> void:
 	physics = p
 	if _cockpit != null:
@@ -174,6 +243,8 @@ func set_physics(p: TrainPhysics) -> void:
 func set_driver_rame2(rame2: bool) -> void:
 	if _cockpit != null:
 		_cockpit.driver_is_rame2 = rame2
+	if _machine_room != null:
+		_machine_room.driver_rame2 = rame2
 
 
 func set_run_mode(mode: String) -> void:

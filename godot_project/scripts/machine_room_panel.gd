@@ -24,7 +24,8 @@ const ROOM_H_REF: float = 150.0        # hauteur de référence du dessin PC
 var physics: TrainPhysics = null
 var fault_manager: FaultManager = null
 var _pulley_angle: float = 0.0
-var _redraw_accum: float = 0.0
+var driver_rame2: bool = false     # posé par le HUD (choix de rame)
+var _redraw_slot: int = -1
 
 
 func _ready() -> void:
@@ -49,13 +50,10 @@ func setup(p: TrainPhysics, fm: FaultManager) -> void:
 # s'intégrer à chaque frame pour rester exact, seul l'affichage est throttlé.
 func _process(delta: float) -> void:
 	if physics != null:
-		# Les deux poulies tournent à ω = v / r (r = 2,1 m) et s'inversent
-		# avec le sens de marche : c'est le même câble.
-		_pulley_angle += physics.v / SHEAVE_R_M * delta * float(physics.direction)
-	_redraw_accum += delta
-	if _redraw_accum >= 1.0 / 15.0:
-		_redraw_accum = 0.0
-		queue_redraw()
+		# Les deux poulies tournent à ω = v / r (r = 2,1 m), dans le sens
+		# fixé par la rame 1 (même loi que la 3D, cf. TrainPhysics.v_rame1).
+		_pulley_angle += physics.v_rame1(driver_rame2) / SHEAVE_R_M * delta
+	_redraw_slot = HUD.redraw_at_15hz(self, _redraw_slot, 0.5)
 
 
 func _draw() -> void:

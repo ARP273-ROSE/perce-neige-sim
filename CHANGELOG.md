@@ -7,6 +7,52 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.15.37** — la PWA coûte deux fois moins par image, roues dans le bon
+sens, cabine dézoomée.
+- « Ça saccade toujours le défilement du tunnel. » Pour mesurer au lieu de
+  deviner, la PWA tourne maintenant dans Chromium sur le vrai processeur
+  graphique du NAS (Radeon 740M), à la définition de l'iPad (2752 × 2064)
+  et avec son agent utilisateur : conduite d'essai, durée de chaque image,
+  profil du processeur. Une image coûtait 6,6 ms sur le fil principal
+  (9,6 ms au 99ᵉ centile). Sur l'iPad, Safari est plus lent : on frôlait
+  les 16,7 ms, d'où une image en retard de temps en temps.
+- Cause n° 1, 13 % du temps : le moteur Web de Godot dessine dans un
+  tampon hors écran puis le recopie dans la page à chaque image. La copie
+  commence par deux lectures d'état qui attendent le processeur graphique,
+  et elle oblige le navigateur à conserver l'image (`preserveDrawingBuffer`).
+  `web_patch.py` retouche l'export pour dessiner directement dans la page.
+  Le rendu est identique : cabine, vue extérieure et salle des machines
+  ont été vérifiées sur captures.
+- Cause n° 2 : les deux grands panneaux du HUD (console du bas et salle des
+  machines) représentaient environ 220 appels de dessin et 1 500 éléments
+  2D à chaque image, pour un contenu qui ne change que 15 fois par seconde.
+  Ils sont maintenant rendus dans une image intermédiaire, à la définition
+  réelle de l'écran pour que le texte reste net. Celle-ci n'est redessinée
+  qu'à leur cadence, avec un décalage entre les deux panneaux.
+- Cause n° 3 : la rame comptait 403 objets 3D (456 surfaces). Les pièces
+  fixes de chaque voiture sont fusionnées par matériau (`MeshMerge`) ; les
+  roues, les vantaux et les feux restent animés. On passe à 169 surfaces
+  pour la rame pilotée et de 286 à 137 pour la rame d'en face. Les vitres
+  ne sont pas fusionnées, pour que le tri de la transparence reste juste.
+- Résultat dans Chromium : 3,2 ms par image au lieu de 6,6 (5,2 ms au
+  99ᵉ centile au lieu de 9,6). Reste à surveiller : un à-coup unique de
+  50 à 100 ms quand un matériau apparaît pour la première fois (compilation
+  de son shader par le navigateur).
+- Roues de la salle des machines : elles tournaient avec v × sens de
+  marche, une valeur toujours positive en marche. Elles tournaient donc
+  toujours dans le même sens, qu'on monte ou qu'on descende, avec la
+  rame 1 ou avec la rame 2. Le sens suit maintenant la rame 1 : son brin
+  entre par le haut de la roue aval quand elle monte (`v_rame1`). La règle
+  s'applique à la 3D, au panneau du HUD et aux poulies du PC. Le banc
+  vérifie les quatre cas (rame 1 ou 2, montée ou descente).
+- Vue cabine : champ de vision porté de 70 à 78° (« on dirait que t'as
+  zoomé »).
+- Outils : `tests/web_perf_export.sh` (export instrumenté, option
+  `--masquer=hud,cabin,…` pour mesurer un groupe), `tests/web_perf.py` et
+  `web_perf_stats.py`, `tests/web_profile*.py`, et `shot_cabine.gd`
+  (captures avec ou sans fusion, `--sans-fusion`). `perf_groupes.gd`
+  compte maintenant aussi les appels de dessin, les objets et le HUD.
+
 **v1.15.36** — le son revient dans la PWA sur Android.
 - Retour de Kevin : « 0 son sur la PWA sur Android ». Reproduit dans
   Chromium, avec l'agent utilisateur d'Android et la sortie son enregistrée

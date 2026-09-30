@@ -30,6 +30,8 @@ mkdir -p "$SIM_DIR/build/web"
     --export-release "Web" 2>&1 | grep -viE "fontconfig|get_system_font" | tail -2
 
 test -f "$SIM_DIR/build/web/index.wasm" || { echo "ERREUR : export Web échoué"; exit 1; }
+# Présentation directe dans le canvas, sans recopie hors écran (cf. web_patch.py)
+python3 "$SIM_DIR/web_patch.py" "$SIM_DIR/build/web/index.js"
 # Version dans le hook de rapport d'erreurs (X-App: funiculaire-pwa/<version>)
 sed -i "s/__PN_VERSION__/$(tr -d ' \r\n' < "$SIM_DIR/VERSION")/g" "$SIM_DIR/build/web/index.html"
 
