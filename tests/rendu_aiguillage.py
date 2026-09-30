@@ -49,9 +49,9 @@ def main():
     uv = np.stack([tris[m][:, :, 2], -tris[m][:, :, 0] * 5.0], axis=2)
     peindre(ax1, uv, -tris[m][:, :, 1].mean(axis=1), rgba[m],
             "Aiguillage Abt bas vu de dessus : 0 = fourche, montée vers la droite (largeurs × 5)",
-            ((-6, 46), (-10.5, 10.5)))
+            ((-7, 46), (-10.5, 10.5)))
     ax1.set_aspect("auto")
-    for s_, lab in ((8.96, "nez des rails intérieurs"), (17.36, "fenêtres du câble"),
+    for s_, lab in ((-4.0, "pointes des langues"), (17.36, "lacunes du câble"),
                     (27.45, "cœur en X")):
         ax1.axvline(s_, color="0.6", lw=0.6, ls=":")
         ax1.text(s_ + 0.3, 9.4, lab, color="0.85", fontsize=9)
@@ -68,7 +68,7 @@ def main():
     # 3. gros plans
     ax4 = fig.add_subplot(gs[2, 0])
     perspective(ax4, tris, rgba, np.array([-0.72, -1.02, 15.6]), np.array([-0.36, -1.33, 17.4]),
-                "Fenêtre : le câble opposé passe sous la tête du rail intérieur",
+                "Lacune : le câble opposé passe entre les deux bouts de rail",
                 ((-0.6, 0.6), (-0.45, 0.35)), f=1.4, zmin=0.05)
     ax5 = fig.add_subplot(gs[2, 1])
     perspective(ax5, tris, rgba, np.array([0.10, -0.85, 19.9]), np.array([-0.55, -1.40, 22.0]),
