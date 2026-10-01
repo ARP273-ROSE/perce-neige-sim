@@ -785,12 +785,17 @@ func _geometry() -> Dictionary:
 
 
 ## Arc sur une roue, de t0 à t1 dans le sens donné, à gorge x constante.
-func _arc(pts: Array, c: Vector2, rr: float, t0: float, t1: float, cw: bool, x: float) -> void:
+## `sup` reçoit pour chaque point s'il est PORTÉ une fois le câble détendu :
+## sur la moitié haute de la jante, il repose dans la gorge ; sur la moitié
+## basse, plus rien ne le plaque contre la roue (rupture, cf. _slack_drops).
+func _arc(pts: Array, c: Vector2, rr: float, t0: float, t1: float, cw: bool, x: float,
+		sup: Array = []) -> void:
 	var span: float = fposmod(t0 - t1, TAU) if cw else fposmod(t1 - t0, TAU)
 	var n: int = maxi(2, int(ceil(span / deg_to_rad(4.0))))
 	for i in range(n + 1):
 		var t: float = t0 - span * float(i) / float(n) if cw else t0 + span * float(i) / float(n)
 		pts.append(Vector3(x, c.y + sin(t) * rr, c.x + cos(t) * rr))
+		sup.append(sin(t) >= -0.02)
 
 
 func _build_cable() -> void:
@@ -798,31 +803,112 @@ func _build_cable() -> void:
 	var a: Vector2 = Vector2(A_S, A_Y)
 	var b: Vector2 = Vector2(B_S, B_Y)
 	var pts: Array = []
+	var sup: Array = []       # point porté une fois le câble détendu ?
 	# 1. brin gauche : fin de voie → sommet de la roue aval
 	pts.append(Vector3(LANE_L, Y_BRIN, 0.0))
+	sup.append(true)
 	# 2. roue aval gorge 1 (horaire) jusqu'à la tangente vers B
-	_arc(pts, a, R, PI * 0.5, g["tA_out"], true, A_GROOVES[0])
+	_arc(pts, a, R, PI * 0.5, g["tA_out"], true, A_GROOVES[0], sup)
 	# 3. roue amont gorge 1 (anti-horaire)
-	_arc(pts, b, R, g["tB_in"], g["tB_out"], false, B_GROOVES[0])
+	_arc(pts, b, R, g["tB_in"], g["tB_out"], false, B_GROOVES[0], sup)
 	# 4. roue aval gorge 2 : un grand tour par le dessous, la voie et le sommet
-	_arc(pts, a, R, g["tA_in"], g["tA_out"], true, A_GROOVES[1])
+	_arc(pts, a, R, g["tA_in"], g["tA_out"], true, A_GROOVES[1], sup)
 	# 5. roue amont gorge 2 jusqu'à la sortie
-	_arc(pts, b, R, g["tB_in"], g["tB_exit"], false, B_GROOVES[1])
+	_arc(pts, b, R, g["tB_in"], g["tB_exit"], false, B_GROOVES[1], sup)
 	# 6. du haut de B au galet amont, puis au-dessus du sommet de la roue
 	# aval jusqu'au galet aval (gorge droite = brin de la rame 2)
 	pts.append(Vector3(LANE_R, EXIT_Y, float(EXIT_ROLL_S[1])))
 	pts.append(Vector3(LANE_R, EXIT_Y, float(EXIT_ROLL_S[0])))
 	# 7. descente vers le dernier galet du tunnel : raccord à la fin de voie
 	pts.append(Vector3(LANE_R, EXIT_Y_END, 0.0))
+	sup.append_array([true, true, true])
 	# câble animé : même shader à torons que dans le tunnel
 	_cable_mat = ShaderMaterial.new()
 	_cable_mat.shader = load("res://scripts/cable_shader.gdshader")
 	_cable_mat.set_shader_parameter("cut_below_s", -1.0)
 	_cable_mat.set_shader_parameter("cable_phase", 0.0)
-	_tube(pts, _cable_mat, "CableMachinerie")
+	_tube(pts, _cable_mat, "CableMachinerie", sup)
 
 
-func _tube(pts: Array, mat: Material, nom: String) -> void:
+# --- Câble détendu après une rupture (retour du 01/10 : « il reste tendu
+# dans la salle des machines ») ----------------------------------------------
+# Sans tension, le câble ne tient plus que là où quelque chose le porte : la
+# moitié haute des jantes (il repose dans la gorge), les galets du brin de
+# sortie, la fin de voie. Les tours sous les roues et les portées entre les
+# deux roues retombent jusqu'à toucher une roue ou le sol de la fosse.
+const SLACK_MR_MAX: float = 1.2       # retombée maximale (m)
+const SLACK_MR_REACH: float = 1.5     # m de câble pour atteindre ce maximum
+const SLACK_MR_STEP: float = 0.4      # pas des anneaux sur les portées droites
+var _slack_mr: float = 0.0
+
+
+## Plancher sous un point (x, y, s) du câble : sol de la fosse sous
+## l'ouverture, dessus de dalle ailleurs, ou haut d'une roue s'il est dessous.
+func _sol_sous(p: Vector3) -> float:
+	var dans_fosse: bool = p.z > PIT_S0 and p.z < PIT_S1 and p.x > PIT_X0 and p.x < PIT_X1
+	var sol: float = ROOM_FLOOR if (dans_fosse or p.y < Y_HALL_FLOOR) else Y_HALL_FLOOR
+	for c in [Vector2(A_S, A_Y), Vector2(B_S, B_Y)]:
+		var ds: float = p.z - c.x
+		if absf(ds) < RF and absf(p.x) < 0.24:
+			var haut: float = c.y + sqrt(RF * RF - ds * ds)
+			if haut < p.y + 0.01:
+				sol = maxf(sol, haut)
+	return sol
+
+
+## Retombée de chaque point à « détente totale » : croît avec la longueur
+## de câble qui le sépare du plus proche point porté, bornée par le plancher.
+func _slack_drops(pts: Array, sup: Array) -> Array:
+	var n: int = pts.size()
+	var dist: Array = []
+	dist.resize(n)
+	var acc: float = INF
+	for i in range(n):
+		if i > 0:
+			acc += (pts[i] - pts[i - 1]).length()
+		if sup[i]:
+			acc = 0.0
+		dist[i] = acc
+	acc = INF
+	for i in range(n - 1, -1, -1):
+		if i < n - 1:
+			acc += (pts[i] - pts[i + 1]).length()
+		if sup[i]:
+			acc = 0.0
+		dist[i] = minf(dist[i], acc)
+	var drops: Array = []
+	for i in range(n):
+		var libre: float = maxf((pts[i] as Vector3).y - _sol_sous(pts[i]) - R_CABLE, 0.0)
+		drops.append(minf(SLACK_MR_MAX * smoothstep(0.0, SLACK_MR_REACH, dist[i]), libre))
+	return drops
+
+
+## Détente du câble de la salle (0 tendu → 1 retombé), posée par main.gd
+## d'après TrackBuilder.cable_slack().
+func set_cable_slack(k: float) -> void:
+	if _cable_mat == null or absf(k - _slack_mr) < 1e-4:
+		return
+	_slack_mr = k
+	_cable_mat.set_shader_parameter("slack", k)
+
+
+func _tube(pts_in: Array, mat: Material, nom: String, sup_in: Array = []) -> void:
+	# portées droites redécoupées (sinon rien à faire retomber entre deux
+	# sommets éloignés) ; les points ajoutés ne sont pas portés
+	var pts: Array = []
+	var sup: Array = []
+	for i in range(pts_in.size()):
+		if i > 0:
+			var d: float = (pts_in[i] - pts_in[i - 1]).length()
+			var n_sub: int = int(ceil(d / SLACK_MR_STEP))
+			for j in range(1, n_sub):
+				pts.append((pts_in[i - 1] as Vector3).lerp(pts_in[i], float(j) / float(n_sub)))
+				sup.append(false)
+		pts.append(pts_in[i])
+		sup.append(sup_in[i] if i < sup_in.size() else true)
+	var drops: Array = _slack_drops(pts, sup)
+	var droite: Vector3 = _xf.basis.x.normalized()
+	var col: Color = Color(0.5 + 0.5 * droite.x, 0.5 + 0.5 * droite.y, 0.5 + 0.5 * droite.z)
 	var st: SurfaceTool = SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	st.set_material(mat)
@@ -836,6 +922,8 @@ func _tube(pts: Array, mat: Material, nom: String) -> void:
 		var v0: float = long * 2.0
 		long += c0.distance_to(c1)
 		var v1: float = long * 2.0
+		var dr0: Vector2 = Vector2(drops[i], float(drops[i]) / SLACK_MR_MAX)
+		var dr1: Vector2 = Vector2(drops[i + 1], float(drops[i + 1]) / SLACK_MR_MAX)
 		var tg: Vector3 = (c1 - c0).normalized()
 		var r_vec: Vector3 = tg.cross(_xf.basis.x).normalized()
 		if r_vec.length() < 0.01:
@@ -850,12 +938,12 @@ func _tube(pts: Array, mat: Material, nom: String) -> void:
 			var p11: Vector3 = c1 + (r_vec * cos(a1) + u_vec * sin(a1)) * R_CABLE
 			var ua: float = float(kk) / float(segs)
 			var ub: float = float(kk + 1) / float(segs)
-			st.set_uv(Vector2(ua, v0)); st.add_vertex(p00)
-			st.set_uv(Vector2(ua, v1)); st.add_vertex(p10)
-			st.set_uv(Vector2(ub, v1)); st.add_vertex(p11)
-			st.set_uv(Vector2(ua, v0)); st.add_vertex(p00)
-			st.set_uv(Vector2(ub, v1)); st.add_vertex(p11)
-			st.set_uv(Vector2(ub, v0)); st.add_vertex(p01)
+			st.set_color(col); st.set_uv(Vector2(ua, v0)); st.set_uv2(dr0); st.add_vertex(p00)
+			st.set_color(col); st.set_uv(Vector2(ua, v1)); st.set_uv2(dr1); st.add_vertex(p10)
+			st.set_color(col); st.set_uv(Vector2(ub, v1)); st.set_uv2(dr1); st.add_vertex(p11)
+			st.set_color(col); st.set_uv(Vector2(ua, v0)); st.set_uv2(dr0); st.add_vertex(p00)
+			st.set_color(col); st.set_uv(Vector2(ub, v1)); st.set_uv2(dr1); st.add_vertex(p11)
+			st.set_color(col); st.set_uv(Vector2(ub, v0)); st.set_uv2(dr0); st.add_vertex(p01)
 	st.generate_normals()
 	var mi: MeshInstance3D = MeshInstance3D.new()
 	mi.name = nom

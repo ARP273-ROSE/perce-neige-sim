@@ -55,7 +55,7 @@ func _tick() -> void:
 		cab.orbit_yaw = 2.6
 		cab.orbit_pitch = 0.18
 		cab.orbit_dist = 30.0
-	if _f > 5 and _f < 150:
+	if _f > 5 and _f < 180:
 		_main._process(0.0)
 	if _f == 80:
 		_shot("exterieur")
@@ -75,8 +75,6 @@ func _tick() -> void:
 		cam.look_at(track.strand_point(-1, s_b + 0.8), xf.basis.y)
 		cam.make_current()
 		_cam = cam
-		print("cam ", cam.global_position, " cible ", track.strand_point(-1, s_b + 0.8),
-			" voie ", tun.transform_at(s_b).origin, " courant ", cam.current)
 	if _f == 110:
 		_shot("breche")
 		# câble détendu entre deux galets, près de la rame
@@ -89,4 +87,15 @@ func _tick() -> void:
 		_cam.look_at(track.strand_point(-1, s_v + 5.0), xf.basis.y)
 	if _f == 140:
 		_shot("detendu")
+		# salle des machines vue de côté : brins croisés pendants, tours
+		# retombés sous les roues
+		var cab = _main.get("cabin")
+		cab.set_view(Cabin.ViewMode.MACHINES)
+		var mc = cab.camera_machines
+		mc.yaw = -1.57
+		mc.pitch = 0.12
+		mc.dist = 14.0
+		mc.pan_y = -2.6
+	if _f == 170:
+		_shot("salle")
 		quit(0)

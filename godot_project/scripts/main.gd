@@ -659,7 +659,7 @@ func _process(delta: float) -> void:
 	track.update_cable_phase(physics.s_render, physics.ghost_s_render())
 	# Câble rompu : brèche, bouts rétractés, câble retombé sur la longrine
 	track.update_cable_rupture(physics.cable_rupture, physics.s_render,
-		physics.direction, physics.tension_dan, delta)
+		physics.direction, physics.tension_dan, delta, physics.v)
 	# Son : vue salle des machines → ambiance de la gare haute
 	if audio != null and cabin != null:
 		audio.machine_view = cabin.view_mode == Cabin.ViewMode.MACHINES
@@ -669,6 +669,8 @@ func _process(delta: float) -> void:
 	# Câble rompu : la machinerie freine jusqu'à l'arrêt (update_machine).
 	physics.update_machine(track != null and track.driver_is_rame2, delta)
 	machine_room.update_rotation(physics.machine_v, delta)
+	# … et son câble se détend avec celui du tunnel (retombe sous les roues)
+	machine_room.set_cable_slack(track.cable_slack())
 
 	# Sync du plafond de vitesse imposé par la panne courante (s'il y en a une)
 	if fault_manager != null:
