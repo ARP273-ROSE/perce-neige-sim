@@ -298,6 +298,12 @@ DROP = ALT_HIGH - ALT_LOW   # 921 m
 # to map the observed timestamps to slope-distance landmarks, but the
 # simulator itself still lets the driver push all the way to 12 m/s.
 V_MAX = 12.0                # hard cap regulator (m/s) — real value
+# Rupture du câble (retour d'essai 2026-10-01 : « la machinerie doit
+# s'arrêter, là elle s'emballe ») : la chaîne de sécurité coupe
+# l'entraînement et les freins des roues motrices arrêtent la machinerie
+# déchargée — décélération à la jante, même valeur que la 3D
+# (PNConstants.A_DRIVE_TRIP, audit_physique/rupture_cable.sage).
+A_DRIVE_TRIP = 2.0
 # Acceleration profile calibrated from video analysis of a real 12 m/s
 # run (YouTube FUNI284, 414 s total, filmed at upper station Aug 2013).
 # The run shows a cosine-ramp accel over ~64 s (2→12 m/s) with peak
@@ -4082,6 +4088,7 @@ class SoundSystem:
         self._mr_target = False
         self._mr_mix = 0.0
         self._mr_present = None   # sons de la salle installés ? (cf. set_machine_room_view)
+        self._machine_speed = None  # vitesse du câble à la poulie (None : celle de la rame)
         self._mr_idle = None
         self._mr_run = None
         self._mr_run_audio = None
@@ -4838,7 +4845,14 @@ class SoundSystem:
         # Sifflement moteur : hauteur asservie à la vitesse (crossfade de
         # banques 172→202 Hz), volume suivant l'ambiance (mêmes ducks).
         self._update_motor_whine(v, overall, moving, a_vol)
-        self._update_machine_room(v, dt)
+        # la machinerie suit le câble à la poulie, pas la rame : arrêtée
+        # après une rupture (set_machine_speed, posé par le jeu)
+        self._update_machine_room(
+            v if self._machine_speed is None else self._machine_speed, dt)
+
+    def set_machine_speed(self, v_cable: float) -> None:
+        """Vitesse du câble à la poulie motrice (m/s, valeur absolue)."""
+        self._machine_speed = float(v_cable)
 
     def set_machine_room_view(self, active: bool) -> None:
         """Vue 3D « salle des machines » active (touche O, 3e vue) : le son
@@ -6410,6 +6424,7 @@ class GameWidget(QWidget):
         self._font_version = QFont("Consolas", 9)
         self._cached_bg_grad: tuple[int, QLinearGradient] | None = None
         self._pulley_angle = 0.0          # radians — animated drive pulley
+        self._machine_v = 0.0             # vitesse du câble à la poulie (m/s, sens rame 1)
         # pilote automatique du voyage (touche A) : chrono depuis
         # l'engagement, temporisation entre deux gestes, engagé à l'arrêt
         # après une arrivée (il doit alors d'abord inverser le sens)
@@ -7052,7 +7067,18 @@ class GameWidget(QWidget):
         v_r1 = self.state.train.v
         if int(getattr(self.state.train, "number", 1)) == 2:
             v_r1 = -v_r1
-        self._pulley_angle += (v_r1 / 2.1) * dt
+        # Vitesse du câble à la poulie : elle suit la rame tant que le câble
+        # tient ; rompu, plus rien ne lie la machinerie aux rames, elle
+        # freine jusqu'à l'arrêt (retour du 01/10 : elle « s'emballait »
+        # avec la rame qui dévale). Même loi que TrainPhysics.update_machine.
+        if self.state.train.cable_rupture:
+            pas = A_DRIVE_TRIP * dt
+            mv = self._machine_v
+            self._machine_v = max(0.0, mv - pas) if mv > 0.0 else min(0.0, mv + pas)
+        else:
+            self._machine_v = v_r1
+        self.sounds.set_machine_speed(abs(self._machine_v))
+        self._pulley_angle += (self._machine_v / 2.1) * dt
         # Tunnel scroll for cabin view — accumulate travel-direction
         # distance so the rings always approach the driver, whether the
         # train is climbing (+1) or descending (-1).
@@ -11779,7 +11805,8 @@ class GameWidget(QWidget):
         # --- Readouts: wheel diameter / RPM / cable speed -----------------
         # Placed right under the title so they stay readable — the
         # machinery drawing below never obscures them.
-        v_abs = abs(self.state.train.v)
+        # (vitesse du câble à la poulie : nulle après une rupture)
+        v_abs = abs(getattr(self, "_machine_v", self.state.train.v))
         rpm = v_abs / (2.0 * math.pi * 2.1) * 60.0
         p.setPen(_cached_pen(COLOR_TEXT_DIM))
         p.setFont(_cached_font("Consolas", 8))
@@ -11789,6 +11816,17 @@ class GameWidget(QWidget):
             int(Qt.AlignmentFlag.AlignLeft),
             f"⌀ 4.2 m   {rpm:5.1f} rpm   v {v_abs:4.1f} m/s",
         )
+        # Câble rompu : la chaîne de sécurité a déclenché, les freins des
+        # roues arrêtent la machinerie (retour d'essai 2026-10-01)
+        if self.state.train.cable_rupture:
+            p.setPen(_cached_pen(QColor(255, 90, 64)))
+            p.drawText(
+                QRectF(rect.x() + 8, rect.y() + 30, rect.width() - 16, 12),
+                int(Qt.AlignmentFlag.AlignLeft),
+                T("CABLE BROKEN — drive stopped", "CÂBLE ROMPU — machinerie à l'arrêt")
+                if v_abs < 0.01 else
+                T("CABLE BROKEN — wheels braking", "CÂBLE ROMPU — freinage des roues"),
+            )
 
         # Machinery floor
         floor_y = rect.y() + rect.height() - 16

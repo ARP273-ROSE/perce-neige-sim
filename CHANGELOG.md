@@ -7,6 +7,50 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.15.40** — rupture du câble : il casse, se détend, la machinerie
+s'arrête.
+- Retour de Kevin : « quand le câble casse, il doit se détendre, casser
+  quelque part et la machinerie doit s'arrêter, là elle s'emballe ». Les
+  roues de la salle des machines, le panneau du HUD et le son de la
+  machinerie suivaient la vitesse de la rame pilotée, câble rompu ou non.
+  La rame décrochée dévale en accélérant, donc la machinerie
+  « s'emballait » avec elle. Le câble, lui, restait entier et tendu.
+- **Machinerie** : nouvelle grandeur `machine_v`, la vitesse du câble à
+  la poulie motrice. Câble intact, elle suit la rame. Câble rompu, la
+  chaîne de sécurité coupe l'entraînement et les freins des roues
+  l'arrêtent à 2 m/s² (`A_DRIVE_TRIP`) : 6 s depuis 12 m/s, 7,2 s depuis
+  14,4 m/s, la survitesse du mode Défi. La règle vaut pour la 3D, le
+  panneau du HUD, le son de la machinerie, et sur le PC pour les poulies
+  2D, le régime affiché et le son. Les panneaux affichent « CÂBLE ROMPU —
+  freinage des roues », puis « … machinerie à l'arrêt ».
+- **Le câble casse quelque part** : sur le brin de la rame pilotée,
+  25 à 80 m devant elle quand elle monte (en vue du conducteur), 20 à
+  50 m derrière quand elle descend. Les deux bouts se rétractent de leur
+  allongement élastique ε·L, à la vitesse ε·c de l'onde de détente
+  (c = √(EA/ρ) ≈ 3 400 m/s). En haut, c'est quelques mètres, sur 2 km de
+  câble. Les fils d'acier sont à vif (clairs et brillants) sur 25 cm à
+  chaque bout. Le bout bas suit sa rame quand elle tire dessus en
+  reculant ; un câble ne se pousse pas, donc si la rame continue de
+  monter sur son élan, le bout reste où il est.
+- **Le câble se détend** : toute la longueur retombe des galets sur la
+  longrine en 0,18 s (chute libre de 16,4 cm). Elle s'y pose en
+  serpentant doucement, avec des boucles plus larges près des bouts
+  fouettés. Le tube du câble a maintenant un anneau tous les 2 m (avant,
+  il était droit d'un galet à l'autre) ; descente et ondulation sont
+  calculées dans le shader.
+- **L'autre rame reste clouée** par son parachute, et son brin ne défile
+  plus. Côté PC, la rupture n'était même pas transmise à la vue 3D : la
+  rame d'en face continuait en miroir, le câble restait intact. Le PC
+  envoie maintenant `cable_rupture` et la position figée de l'autre rame
+  (`ghost_s`).
+- Chiffres vérifiés dans `audit_physique/rupture_cable.sage` (onde de
+  détente, chute, rétraction, arrêt de la machinerie). Nouveau banc
+  `bench_rupture_3d.gd`, avec deux cas : panne avec parachute (rame
+  retenue), et Défi sans urgence (la rame redescend et traîne son bout de
+  câble, la machinerie reste arrêtée). Le banc son vérifie que la
+  machinerie se tait. Côté PC, un test vérifie l'arrêt de la machinerie
+  dans le temps prévu et l'envoi à la 3D. Captures : `shot_rupture.gd`.
+
 **v1.15.39** — le son de la salle des machines arrive enfin sur le PC.
 - « Sur la PWA il y a le son d'ambiance de la salle des machines, mais pas
   sur l'app PC : on entend les annonces, pas l'ambiance. » La cause : la

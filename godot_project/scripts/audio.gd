@@ -265,7 +265,7 @@ func _update_machine_room(delta: float) -> void:
 		_player_mr_idle.play()
 	if not _player_mr_run.playing:
 		_player_mr_run.play()
-	var g: Vector2 = machine_room_levels(absf(physics.v))
+	var g: Vector2 = machine_room_levels(absf(physics.machine_v))
 	_player_mr_run.pitch_scale = g.y
 	_player_mr_idle.volume_db = MR_BASE_DB + linear_to_db(maxf(_mr_mix, 0.0001))
 	_player_mr_run.volume_db = MR_BASE_DB + linear_to_db(maxf(_mr_mix * g.x, 0.0001))

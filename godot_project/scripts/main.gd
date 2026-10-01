@@ -653,18 +653,22 @@ func _process(delta: float) -> void:
 	# Masquage dynamique des brins de câble selon la position des rames
 	# (s_render : suit la cabine interpolée, sinon le câble « vibre »
 	# d'une frame par rapport à la rame)
-	track.update_cable_visibility(physics.s_render)
+	track.update_cable_visibility(physics.s_render, physics.ghost_s_render())
 	# Animation des torons (brin gauche = fixe par rapport à rame 1,
 	# brin droite = défile à 2×v en référentiel rame 1)
-	track.update_cable_phase(physics.s_render, physics.v * float(physics.direction), delta)
+	track.update_cable_phase(physics.s_render, physics.ghost_s_render())
+	# Câble rompu : brèche, bouts rétractés, câble retombé sur la longrine
+	track.update_cable_rupture(physics.cable_rupture, physics.s_render,
+		physics.direction, physics.tension_dan, delta)
 	# Son : vue salle des machines → ambiance de la gare haute
 	if audio != null and cabin != null:
 		audio.machine_view = cabin.view_mode == Cabin.ViewMode.MACHINES
 	# Rotation des roues motrices et défilement du câble de la salle. Le sens
 	# de référence est celui de la rame 1 (son brin entre sur la roue aval
 	# quand elle monte) : si l'on conduit la rame 2, la rame 1 descend.
-	var v_r1: float = physics.v_rame1(track != null and track.driver_is_rame2)
-	machine_room.update_rotation(v_r1, delta)
+	# Câble rompu : la machinerie freine jusqu'à l'arrêt (update_machine).
+	physics.update_machine(track != null and track.driver_is_rame2, delta)
+	machine_room.update_rotation(physics.machine_v, delta)
 
 	# Sync du plafond de vitesse imposé par la panne courante (s'il y en a une)
 	if fault_manager != null:

@@ -567,7 +567,13 @@ def physics_to_state_dict(tr, st=None) -> dict:
         "pax_car1": int(getattr(tr, "pax_car1", 0)),
         "pax_car2": int(getattr(tr, "pax_car2", 0)),
         "ghost_pax": int(getattr(st, "ghost_pax", 0)) if st is not None else 0,
+        # Câble rompu (Défi ou panne) : la 3D casse et détend le câble,
+        # arrête la machinerie et fige l'autre rame là où son parachute
+        # l'a clouée (retour d'essai 2026-10-01).
+        "cable_rupture": bool(getattr(tr, "cable_rupture", False)),
     }
+    if st is not None and getattr(tr, "cable_rupture", False):
+        out["ghost_s"] = float(getattr(st, "ghost_s", 0.0))
     # Panne courante si le sim Python l'expose
     fault = getattr(st, "active_fault", None) if st is not None else None
     if fault:

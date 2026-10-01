@@ -241,9 +241,25 @@ var ghost_locked_s: float = -1.0          # position figée de la rame 2 (< 0 = 
 ## tournaient avec v·direction, toujours positif en marche — faux en
 ## descente et en rame 2.
 func v_rame1(rame2: bool) -> float:
-	if ghost_locked_s >= 0.0 and rame2:
-		return 0.0
 	return -v if rame2 else v
+
+
+## Vitesse du câble à la poulie motrice, même convention que v_rame1 :
+## c'est elle qui fait tourner les roues de la salle des machines, le
+## panneau du HUD et le son de la machinerie. Câble intact : elle suit la
+## rame. Câble rompu : plus rien ne la lie aux rames — la chaîne de
+## sécurité déclenche et les freins arrêtent la machinerie (A_DRIVE_TRIP)
+## au lieu de la laisser suivre la rame qui dévale (retour du 01/10).
+## Appelée à chaque image par main.gd (aussi en mode client, où step()
+## ne tourne pas).
+var machine_v: float = 0.0
+
+
+func update_machine(rame2: bool, dt: float) -> void:
+	if cable_rupture:
+		machine_v = move_toward(machine_v, 0.0, PNConstants.A_DRIVE_TRIP * dt)
+	else:
+		machine_v = v_rame1(rame2)
 
 
 func ghost_s_render() -> float:
