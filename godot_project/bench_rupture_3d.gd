@@ -84,7 +84,9 @@ func _tick() -> void:
 	_check("câble détendu sur la longrine (les deux brins)", _param(own, "slack") > 0.999
 		and _param(other, "slack") > 0.999, "slack %.3f / %.3f" % [_param(own, "slack"), _param(other, "slack")])
 	var gap0: float = _param(own, "gap_hi") - _param(own, "gap_lo")
-	_check("bouts séparés", gap0 > 0.3, "brèche %.2f m après 0,3 s" % gap0)
+	# la rame file encore et pousse son tronçon : il bute à 60 cm du bout haut
+	_check("bouts séparés (poussé, le tronçon bute à 60 cm)",
+		gap0 > TrackBuilder.RUPTURE_GAP_MIN_M - 1e-3, "brèche %.2f m après 0,3 s" % gap0)
 
 	# la machinerie freine jusqu'à l'arrêt, quoi que fasse la rame
 	var t_arret: float = -1.0
@@ -108,10 +110,17 @@ func _tick() -> void:
 		"%.2f → %.2f m" % [ghost0, ph.ghost_s_render()])
 	_check("son brin ne défile plus", absf(_param(other, "cable_phase") - phase_autre0) < 1e-3,
 		"phase %.2f → %.2f" % [phase_autre0, _param(other, "cable_phase")])
-	var gap1: float = _param(own, "gap_hi") - _param(own, "gap_lo")
-	_check("rame retenue par le parachute, brèche stable", absf(ph.v) < 0.05
-		and absf(gap1 - gap0) < float(r.r_up) + 0.5,
-		"rame à %.1f m (rupture à %.1f), brèche %.2f → %.2f m" % [ph.s, s_rupt, gap0, gap1])
+	# la rame a continué de monter sur son élan avant d'être tenue : son
+	# tronçon de câble a avancé avec elle (jusqu'au bout haut au plus)
+	var lo_att: float = minf(float(r.s_b) - float(r.r_lo) + (ph.s_render - float(r.s0)),
+		_param(own, "gap_hi") - TrackBuilder.RUPTURE_GAP_MIN_M)
+	_check("rame retenue, son bout de câble a avancé avec elle", absf(ph.v) < 0.05
+		and absf(_param(own, "gap_lo") - lo_att) < 0.05 and ph.s > s_rupt + 1.0,
+		"rame %.1f → %.1f m, bout bas %.2f m (attendu %.2f)" % [s_rupt, ph.s,
+			_param(own, "gap_lo"), lo_att])
+	_check("câble de la salle des machines détendu", mr._slack_mr > 0.999
+		and float(mr._cable_mat.get_shader_parameter("slack")) > 0.999,
+		"slack %.3f" % mr._slack_mr)
 	_check("bout haut immobile sur les roues", absf(_param(own, "phase_upper")
 		- (float(r.ph0) + float(r.r_up))) < 1e-3, "phase %.3f" % _param(own, "phase_upper"))
 
@@ -119,7 +128,8 @@ func _tick() -> void:
 	fm.clear_active()
 	_pas(2)
 	_check("câble rétabli après la panne", track.cable_rupture_state().is_empty()
-		and _param(own, "slack") == 0.0 and _param(own, "gap_hi") <= _param(own, "gap_lo"),
+		and _param(own, "slack") == 0.0 and _param(own, "gap_hi") <= _param(own, "gap_lo")
+		and mr._slack_mr == 0.0,
 		"slack %.1f, brèche [%.1f, %.1f]" % [_param(own, "slack"), _param(own, "gap_lo"), _param(own, "gap_hi")])
 
 	# --- B. rupture sans urgence (Défi) : la rame repart en arrière -----
@@ -132,13 +142,21 @@ func _tick() -> void:
 	var rb: Dictionary = track.cable_rupture_state()
 	var lo_ini: float = float(rb.s_b)
 	var s_max: float = ph.s
+	var lo_max: float = -1.0
+	var ecart_min: float = INF
 	for i in range(int(12.0 / DT)):
 		_pas(1)
 		s_max = maxf(s_max, ph.s)
+		lo_max = maxf(lo_max, _param(own, "gap_lo"))
+		ecart_min = minf(ecart_min, _param(own, "gap_hi") - _param(own, "gap_lo"))
 	var recul: float = s0b - ph.s
 	var lo_b: float = _param(own, "gap_lo")
 	_check("rame décrochée qui dévale", recul > 30.0 and ph.v < -5.0,
 		"monte jusqu'à %.1f m puis redescend à %.1f m (%.1f m/s)" % [s_max, ph.s, ph.v])
+	_check("le bout bas avance avec la rame sur son élan, sans passer le bout haut",
+		lo_max > lo_ini + 0.5 and ecart_min > TrackBuilder.RUPTURE_GAP_MIN_M - 1e-3,
+		"bout bas jusqu'à %.1f m (+%.1f, rame +%.1f m), écart mini %.2f m" % [lo_max,
+			lo_max - lo_ini, s_max - s0b, ecart_min])
 	_check("le bout bas suit la rame qui recule", absf((lo_ini - lo_b) - recul) < float(rb.r_lo) + 0.1,
 		"bout bas %.1f → %.1f m (recul de la rame %.1f m)" % [lo_ini, lo_b, recul])
 	_check("machinerie arrêtée malgré la rame qui dévale", absf(ph.machine_v) < 1e-6,

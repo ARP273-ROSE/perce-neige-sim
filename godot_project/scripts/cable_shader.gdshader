@@ -57,8 +57,13 @@ void vertex() {
 		vec3 down = normalize((inverse(MODEL_MATRIX) * vec4(0.0, -1.0, 0.0, 0.0)).xyz);
 		vec3 droite = COLOR.rgb * 2.0 - 1.0;
 		float s = UV.y * uv_y_to_meters;
-		float onde = sin(6.2831853 * s / slack_wave_len) * 0.7
-			+ sin(6.2831853 * s / (slack_wave_len * 2.7) + 1.3) * 0.3;
+		// les ondulations appartiennent au câble : prises en abscisse
+		// MATIÈRE (s − phase), elles avancent avec le tronçon que sa rame
+		// entraîne et restent en place sur un tronçon immobile
+		float ph_v = (gap_hi > gap_lo && s >= gap_hi) ? phase_upper : cable_phase;
+		float s_mat = s - ph_v;
+		float onde = sin(6.2831853 * s_mat / slack_wave_len) * 0.7
+			+ sin(6.2831853 * s_mat / (slack_wave_len * 2.7) + 1.3) * 0.3;
 		// près de la brèche, les bouts fouettés ont fait des boucles plus
 		// larges (jusqu'à 10 cm, restent sur la longrine de 50 cm)
 		float amp = slack_wave_amp;
