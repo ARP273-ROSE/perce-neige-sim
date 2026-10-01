@@ -4081,6 +4081,7 @@ class SoundSystem:
         # Vue « salle des machines » : 0 = son cabine, 1 = son de la salle
         self._mr_target = False
         self._mr_mix = 0.0
+        self._mr_present = None   # sons de la salle installés ? (cf. set_machine_room_view)
         self._mr_idle = None
         self._mr_run = None
         self._mr_run_audio = None
@@ -4841,8 +4842,24 @@ class SoundSystem:
 
     def set_machine_room_view(self, active: bool) -> None:
         """Vue 3D « salle des machines » active (touche O, 3e vue) : le son
-        de la cabine laisse la place à celui de la gare haute."""
-        self._mr_target = bool(active) and self.enabled
+        de la cabine laisse la place à celui de la gare haute.
+
+        Seulement si les deux sons de la salle sont là (retour du 01/10 :
+        « sur l'app PC on entend les annonces mais pas le son d'ambiance ») :
+        la mise à jour automatique ne livrait pas le dossier sons/, les
+        fichiers ajoutés en 1.15.34 manquaient, et la cabine s'effaçait
+        devant une salle des machines qui ne pouvait pas démarrer."""
+        self._mr_target = (bool(active) and self.enabled
+                           and self.machine_room_sounds_present())
+
+    def machine_room_sounds_present(self) -> bool:
+        """Les deux boucles de la salle des machines sont-elles installées ?"""
+        if self._mr_present is None:
+            p_idle = self._ambient_wavs.get("salle_machines_repos")
+            p_run = self._ambient_wavs.get("salle_machines_marche")
+            self._mr_present = bool(p_idle and p_idle.exists()
+                                    and p_run and p_run.exists())
+        return self._mr_present
 
     def _update_machine_room(self, v: float, dt: float) -> None:
         """Son de la salle des machines : repos permanent + machinerie dont
@@ -4989,6 +5006,7 @@ class SoundSystem:
         try:
             d["salle_machines"] = {
                 "vue": bool(self._mr_target), "fondu": round(self._mr_mix, 3),
+                "fichiers_presents": self.machine_room_sounds_present(),
                 "demarree": bool(self._mr_started), "debit": round(self._mr_rate, 3),
                 "repos": self._etat_fx(self._mr_idle) if self._mr_idle is not None else None,
                 "marche": (str(self._mr_run.playbackState()).split(".")[-1]

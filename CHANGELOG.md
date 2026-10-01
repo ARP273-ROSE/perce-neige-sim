@@ -7,6 +7,25 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.15.39** — le son de la salle des machines arrive enfin sur le PC.
+- « Sur la PWA il y a le son d'ambiance de la salle des machines, mais pas
+  sur l'app PC : on entend les annonces, pas l'ambiance. » La cause : la
+  mise à jour automatique du PC télécharge une archive allégée, et le kit
+  en retirait le dossier `sons/` (`exclus_de_la_maj`), parce qu'il était
+  censé ne jamais changer. Les deux boucles de la salle des machines,
+  ajoutées en 1.15.34, ne sont donc jamais arrivées sur un PC mis à jour
+  par l'application. En vue salle des machines, le son de cabine s'effaçait
+  quand même, devant des lecteurs qui ne pouvaient pas démarrer : il ne
+  restait que les annonces.
+- L'archive de mise à jour contient de nouveau tout le dossier `sons/`
+  (46 Mo de plus). Le programme de mise à jour remplace ce dossier en
+  entier, annonces comprises, si bien que tout fichier ajouté depuis
+  l'installation arrive cette fois.
+- Garde-fou : si les sons de la salle manquent, la vue salle des machines
+  garde le son de cabine au lieu de tout couper. Le diagnostic son signale
+  `fichiers_presents`. Un test vérifie que la cabine reste audible quand
+  un fichier manque.
+
 **v1.15.38** — la rame ne tremble plus, phares sans éblouissement, roues
 régulières au ralenti.
 - « Tremblements excessifs de la rame quand elle roule. » Pour comprendre,
