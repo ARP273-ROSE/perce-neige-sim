@@ -261,3 +261,27 @@ def test_vue_salle_des_machines_remplace_le_son_cabine(fenetre):
     for _ in range(300):
         snd.update_ambient(12.0, 1.0 / 60.0)
     assert snd._mr_mix == 0.0 and not snd._mr_started
+
+
+# --- 2026-10-01 : sons de la salle absents (mise à jour sans sons/) --------
+# La cabine ne doit pas s'effacer devant une salle des machines muette.
+
+def test_salle_des_machines_absente_garde_le_son_cabine(fenetre):
+    win, _ = fenetre
+    snd = win.game.sounds
+    vrais = dict(snd._ambient_wavs), snd._mr_present
+    try:
+        snd._ambient_wavs["salle_machines_repos"] = Path("/nulle/part/repos.wav")
+        snd._mr_present = None
+        assert snd.machine_room_sounds_present() is False
+        snd.set_machine_room_view(True)
+        for _ in range(240):
+            snd.update_ambient(12.0, 1.0 / 60.0)
+        assert snd._mr_mix == 0.0 and not snd._mr_started
+        assert snd._amb2_vol_target > 0.1, "la cabine s'est tue"
+        assert snd.diagnostic(12.0)["salle_machines"]["fichiers_presents"] is False
+    finally:
+        snd._ambient_wavs.clear()
+        snd._ambient_wavs.update(vrais[0])
+        snd._mr_present = vrais[1]
+        snd.set_machine_room_view(False)
