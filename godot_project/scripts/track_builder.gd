@@ -2182,24 +2182,28 @@ func update_cable_phase(s_driver: float, s_other: float = -1.0) -> void:
 # détendre, casser quelque part »). La rupture a lieu sur le brin de la rame
 # pilotée — c'est elle que la physique découple et laisse dévaler — entre
 # elle et la salle des machines, en vue du conducteur quand il monte (25 à
-# 80 m devant), juste derrière lui quand il descend (20 à 50 m, visible en
-# vue extérieure). Au moment de la rupture :
+# 60 m au-delà de l'endroit où son élan l'arrêtera), juste derrière lui
+# quand il descend (20 à 50 m, visible en vue extérieure). Au moment de la
+# rupture :
 #   - les deux bouts se rétractent de leur allongement élastique T·L/(EA)
 #     (le haut vers la salle des machines, le bas vers sa rame) ;
 #   - toute la longueur se détend et retombe des galets sur la longrine
 #     (chute libre de ~16 cm, cf. audit_physique/rupture_cable.sage) ;
-#   - le bout bas suit la rame qui dévale ; le bout haut reste sur les
-#     roues, immobiles (TrainPhysics.update_machine).
+#   - le bout bas est accroché à sa rame et la suit dans les deux sens ;
+#     le bout haut reste sur les roues, immobiles (TrainPhysics.
+#     update_machine) — et le câble de la salle des machines se détend lui
+#     aussi (MachineRoomBuilder.set_cable_slack).
 # ---------------------------------------------------------------------------
 
 const RUPTURE_T_MIN_N: float = 50000.0   # tension retenue si la jauge est basse
 const RUPTURE_FALL_S: float = 0.18       # s, chute du câble sur la longrine
+const RUPTURE_GAP_MIN_M: float = 0.6     # écart mini entre les bouts poussés
 var _rupture: Dictionary = {}            # vide = câble intact
 var _last_tension_dan: float = 0.0
 
 
 func update_cable_rupture(rupture: bool, s_driver: float, direction: int,
-		tension_dan: float, delta: float) -> void:
+		tension_dan: float, delta: float, v_driver: float = 0.0) -> void:
 	if cable_left_material == null or cable_right_material == null:
 		return
 	if not rupture:
@@ -2237,19 +2241,32 @@ func update_cable_rupture(rupture: bool, s_driver: float, direction: int,
 	var k_lo: float = minf(1.0, c_onde * t / l_lo)
 	var chute: float = clampf(t / RUPTURE_FALL_S, 0.0, 1.0)
 	var hi: float = float(_rupture.s_b) + float(_rupture.r_up) * k_up
-	# Le bout bas ne suit sa rame que si elle TIRE dessus en reculant : un
-	# câble ne se pousse pas — si elle continue de monter sur son élan, elle
-	# roule sur son propre câble détendu et le bout reste où il est.
+	# Le tronçon bas est accroché à sa rame : il la suit dans les deux sens
+	# (retour du 01/10 : « le bout cassé attaché à la rame emballée devrait
+	# avancer avec elle »), glissant sur les galets. Poussé par une rame qui
+	# file encore sur son élan, il bute sur le bout haut au bout de quelques
+	# mètres (le reste s'entasserait devant la rame) : arrêt à
+	# RUPTURE_GAP_MIN_M, les deux bouts à vif restent visibles, et la brèche
+	# se rouvre dès que la rame repart en arrière.
 	var lo: float = float(_rupture.s_b) - float(_rupture.r_lo) * k_lo \
-		+ minf(0.0, s_driver - float(_rupture.s0))
-	lo = minf(maxf(lo, s_driver), hi)
+		+ (s_driver - float(_rupture.s0))
+	lo = minf(maxf(lo, s_driver), hi - RUPTURE_GAP_MIN_M)
 	own.set_shader_parameter("gap_lo", lo)
 	own.set_shader_parameter("gap_hi", hi)
 	own.set_shader_parameter("phase_upper", float(_rupture.ph0) + float(_rupture.r_up) * k_up)
+	_slack = chute * chute
 	for m in [cable_left_material, cable_right_material]:
-		(m as ShaderMaterial).set_shader_parameter("slack", chute * chute)
+		(m as ShaderMaterial).set_shader_parameter("slack", _slack)
+
+
+var _slack: float = 0.0
 
 
 ## État de la rupture pour les bancs : {} si le câble est intact.
 func cable_rupture_state() -> Dictionary:
 	return _rupture
+
+
+## Détente du câble (0 tendu → 1 retombé) : la salle des machines suit.
+func cable_slack() -> float:
+	return _slack if not _rupture.is_empty() else 0.0

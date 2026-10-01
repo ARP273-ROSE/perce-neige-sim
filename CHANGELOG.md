@@ -7,6 +7,34 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.15.41** — rupture : le câble se détend aussi dans la salle des
+machines, et le tronçon de la rame la suit.
+- Retour de Kevin sur la 1.15.40 : « il reste tendu dans la salle des
+  machines, et le bout cassé attaché à la rame emballée devrait avancer
+  avec elle, alors que là tout reste à l'arrêt ».
+- **Salle des machines** : le câble autour des roues avait sa propre
+  géométrie, restée tendue. Il se détend désormais avec celui du tunnel.
+  Il ne reste porté que là où quelque chose le tient : la moitié haute des
+  jantes (il repose dans la gorge), les galets du brin de sortie et la fin
+  de voie. Les brins croisés entre les deux roues retombent, ainsi que les
+  tours sous les roues. Chaque point descend jusqu'à 1,2 m, au plus
+  jusqu'au sol de la fosse ou jusqu'au haut d'une roue (il ne traverse
+  rien). Les portées droites sont redécoupées tous les 40 cm pour pouvoir
+  retomber.
+- **Le tronçon accroché à la rame la suit dans les deux sens.** La 1.15.40
+  ne le faisait que lorsque la rame tirait dessus en reculant. Si la rame
+  file encore sur son élan, elle pousse le tronçon, qui bute à 60 cm du
+  bout haut ; les deux bouts à vif restent visibles, et la brèche se
+  rouvre dès qu'elle repart en arrière. (En réalité, un câble poussé
+  s'entasse devant la rame : sans cette butée, le tronçon rattrapait le
+  bout haut en 0,3 s et la cassure disparaissait.)
+- Les ondulations du câble lâche appartiennent au câble : elles avancent
+  avec le tronçon que la rame entraîne au lieu de rester fixes sur la voie,
+  qui donnaient l'impression que « tout reste à l'arrêt ».
+- Banc `bench_rupture_3d.gd` : salle des machines détendue puis rétablie ;
+  tronçon poussé, sans jamais passer le bout haut ; tronçon tiré qui suit
+  la rame. `shot_rupture.gd` capture aussi la salle vue de côté.
+
 **v1.15.40** — rupture du câble : il casse, se détend, la machinerie
 s'arrête.
 - Retour de Kevin : « quand le câble casse, il doit se détendre, casser
