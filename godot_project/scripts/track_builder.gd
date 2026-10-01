@@ -1965,6 +1965,39 @@ func _build_cable() -> void:
 		cable_right_segments.append({"s_start": s_start, "s_end": s_end, "mesh": mi_right})
 
 
+# Rupture : pas des anneaux du tube et posé du câble détendu.
+const CABLE_SUBDIV_M: float = 2.0
+const SLACK_TOUCHDOWN_M: float = 1.5   # du sommet du galet à la longrine
+var _support_s: Dictionary = {}       # côté → abscisses des appuis (galets)
+
+
+## Descente du câble détendu à l'abscisse s : il quitte le sommet du galet
+## et se pose sur la longrine en SLACK_TOUCHDOWN_M (rigidité du câble de
+## 52 mm), axe à cable_radius au-dessus de la longrine. Nulle sur les
+## galets et près des gares (le brin y remonte vers la salle des machines).
+func _slack_drop_max() -> float:
+	var y_nom: float = _roller_axis_y() + pulley_radius + cable_radius
+	var y_pose: float = floor_y_local + slab_thickness - 0.01 + cable_beam_height + cable_radius
+	return maxf(y_nom - y_pose, 0.0)
+
+
+func _slack_drop(side_i: int, s: float) -> float:
+	if not _support_s.has(side_i):
+		var arr: PackedFloat64Array = PackedFloat64Array()
+		for v in _strand[side_i]:
+			arr.append(v.s)
+		_support_s[side_i] = arr
+	var sup: PackedFloat64Array = _support_s[side_i]
+	var k: int = sup.bsearch(s)
+	var d_appui: float = INF
+	if k < sup.size():
+		d_appui = minf(d_appui, sup[k] - s)
+	if k > 0:
+		d_appui = minf(d_appui, s - sup[k - 1])
+	var bouts: float = smoothstep(15.0, 30.0, minf(s, PNConstants.LENGTH - s))
+	return _slack_drop_max() * smoothstep(0.0, SLACK_TOUCHDOWN_M, d_appui) * bouts
+
+
 # Tronçon [s_start, s_end] d'un brin : tube droit d'un galet au suivant
 # (sommets = contacts dans la gorge, cf. _compute_cable_geometry). UV.y =
 # 2 × s : le shader y lit l'abscisse pour la coupe à la rame et l'hélice.
@@ -1996,15 +2029,41 @@ func _build_cable_segment(
 		rights.append(r)
 		ups.append(u)
 
+	# Anneaux intermédiaires tous les ~2 m entre deux galets : le tube était
+	# droit d'un galet à l'autre (rien à courber). Détendu après une
+	# rupture, le câble doit pouvoir retomber sur la longrine entre les
+	# galets ; chaque anneau porte en UV2.x sa descente à « détente
+	# totale » (cf. _slack_drop et cable_shader.gdshader).
+	var rings: Array = []
 	for i in range(chain.size() - 1):
-		var c0: Vector3 = chain[i].p
-		var c1: Vector3 = chain[i + 1].p
-		var r0: Vector3 = rights[i]
-		var r1: Vector3 = rights[i + 1]
-		var u0: Vector3 = ups[i]
-		var u1: Vector3 = ups[i + 1]
-		var v0_uv: float = float(chain[i].s) * 2.0
-		var v1_uv: float = float(chain[i + 1].s) * 2.0
+		var n_sub: int = maxi(1, int(ceil((chain[i + 1].s - chain[i].s) / CABLE_SUBDIV_M)))
+		for j in range(n_sub):
+			var f: float = float(j) / float(n_sub)
+			var s_r: float = lerpf(chain[i].s, chain[i + 1].s, f)
+			rings.append({"s": s_r, "p": chain[i].p.lerp(chain[i + 1].p, f),
+				"r": rights[i].lerp(rights[i + 1], f).normalized(),
+				"u": ups[i].lerp(ups[i + 1], f).normalized(),
+				"d": _slack_drop(side_i, s_r)})
+	var last: int = chain.size() - 1
+	rings.append({"s": chain[last].s, "p": chain[last].p, "r": rights[last], "u": ups[last],
+		"d": _slack_drop(side_i, chain[last].s)})
+
+	for i in range(rings.size() - 1):
+		var c0: Vector3 = rings[i].p
+		var c1: Vector3 = rings[i + 1].p
+		var r0: Vector3 = rings[i].r
+		var r1: Vector3 = rings[i + 1].r
+		var u0: Vector3 = rings[i].u
+		var u1: Vector3 = rings[i + 1].u
+		var v0_uv: float = float(rings[i].s) * 2.0
+		var v1_uv: float = float(rings[i + 1].s) * 2.0
+		# UV2 = (descente sur la longrine, poids 0 au galet → 1 posé) ;
+		# COLOR = direction « droite » de la voie, pour l'ondulation latérale
+		# du câble lâche (cable_shader.gdshader)
+		var d0: Vector2 = Vector2(rings[i].d, rings[i].d / maxf(_slack_drop_max(), 1e-3))
+		var d1: Vector2 = Vector2(rings[i + 1].d, rings[i + 1].d / maxf(_slack_drop_max(), 1e-3))
+		var col0: Color = Color(0.5 + 0.5 * r0.x, 0.5 + 0.5 * r0.y, 0.5 + 0.5 * r0.z)
+		var col1: Color = Color(0.5 + 0.5 * r1.x, 0.5 + 0.5 * r1.y, 0.5 + 0.5 * r1.z)
 		for k in range(cable_segments):
 			var a0: float = float(k) / float(cable_segments) * TAU
 			var a1: float = float(k + 1) / float(cable_segments) * TAU
@@ -2014,15 +2073,15 @@ func _build_cable_segment(
 			var p11: Vector3 = c1 + r1 * cos(a1) * cable_radius + u1 * sin(a1) * cable_radius
 			var u0_uv: float = float(k) / float(cable_segments)
 			var u1_uv: float = float(k + 1) / float(cable_segments)
-			st.set_uv(Vector2(u0_uv, v0_uv)); st.add_vertex(p00)
-			st.set_uv(Vector2(u0_uv, v1_uv)); st.add_vertex(p10)
-			st.set_uv(Vector2(u1_uv, v1_uv)); st.add_vertex(p11)
-			st.set_uv(Vector2(u0_uv, v0_uv)); st.add_vertex(p00)
-			st.set_uv(Vector2(u1_uv, v1_uv)); st.add_vertex(p11)
-			st.set_uv(Vector2(u1_uv, v0_uv)); st.add_vertex(p01)
+			st.set_color(col0); st.set_uv(Vector2(u0_uv, v0_uv)); st.set_uv2(d0); st.add_vertex(p00)
+			st.set_color(col1); st.set_uv(Vector2(u0_uv, v1_uv)); st.set_uv2(d1); st.add_vertex(p10)
+			st.set_color(col1); st.set_uv(Vector2(u1_uv, v1_uv)); st.set_uv2(d1); st.add_vertex(p11)
+			st.set_color(col0); st.set_uv(Vector2(u0_uv, v0_uv)); st.set_uv2(d0); st.add_vertex(p00)
+			st.set_color(col1); st.set_uv(Vector2(u1_uv, v1_uv)); st.set_uv2(d1); st.add_vertex(p11)
+			st.set_color(col0); st.set_uv(Vector2(u1_uv, v0_uv)); st.set_uv2(d0); st.add_vertex(p01)
 
+	# (pas de tangentes : le shader du câble n'a pas de carte de normales)
 	st.generate_normals()
-	st.generate_tangents()
 	var mi: MeshInstance3D = MeshInstance3D.new()
 	mi.name = name
 	mi.mesh = st.commit()
@@ -2042,7 +2101,7 @@ var _last_vis_seg_idx: int = -1
 var _last_vis_rame2: bool = false
 
 
-func update_cable_visibility(s_driver: float) -> void:
+func update_cable_visibility(s_driver: float, s_other: float = -1.0) -> void:
 	# La visibilité ne change que quand la rame franchit une frontière de
 	# segment (15 m) — inutile d'itérer ~460 segments à 60 Hz entre-temps.
 	# MAIS on force le recalcul si le choix de rame a changé : sinon, après
@@ -2050,7 +2109,12 @@ func update_cable_visibility(s_driver: float) -> void:
 	# rame 1 tant que la cabine ne bougeait pas de 15 m → le brin droit
 	# (celui de la rame pilotée) restait masqué et « le câble disparaissait »
 	# à quai et en début de montée (retour d'essai PWA 2026-07-12).
-	var seg_idx: int = int(s_driver / cable_segment_length)
+	# `s_other` : position de l'autre rame — LENGTH − s_driver en marche,
+	# figée quand le câble a rompu (TrainPhysics.ghost_s_render).
+	if s_other < 0.0:
+		s_other = PNConstants.LENGTH - s_driver
+	var seg_idx: int = int(s_driver / cable_segment_length) * 1000 \
+		+ int(s_other / cable_segment_length)
 	if seg_idx == _last_vis_seg_idx and driver_is_rame2 == _last_vis_rame2:
 		return
 	_last_vis_seg_idx = seg_idx
@@ -2059,8 +2123,8 @@ func update_cable_visibility(s_driver: float) -> void:
 	#   - rame 1 pilotée : brin gauche part de la cabine (s_driver),
 	#                      brin droit part de la rame opposée (LENGTH−s).
 	#   - rame 2 pilotée : c'est l'inverse (la cabine est sur la voie droite).
-	var s_left: float = (PNConstants.LENGTH - s_driver) if driver_is_rame2 else s_driver
-	var s_right: float = PNConstants.LENGTH - s_left
+	var s_left: float = s_other if driver_is_rame2 else s_driver
+	var s_right: float = s_driver if driver_is_rame2 else s_other
 	for seg in cable_left_segments:
 		# Segment visible si une partie est en amont (au-dessus) de sa rame
 		seg.mesh.visible = seg.s_end >= s_left
@@ -2086,21 +2150,106 @@ func update_cable_visibility(s_driver: float) -> void:
 # Pour le brin droite, on fait l'opposé : cable_phase(droite) = −s_rame1.
 # (La phase absolue s'annule pour rame 1 sur le brin gauche, et le brin droite
 # défile au double du s_rame1 relatif.)
-func update_cable_phase(s_driver: float, _v_driver: float, _delta: float) -> void:
+func update_cable_phase(s_driver: float, s_other: float = -1.0) -> void:
 	if cable_left_material == null or cable_right_material == null:
 		return
+	# `s_other` : position de l'autre rame (figée si le câble a rompu).
+	if s_other < 0.0:
+		s_other = PNConstants.LENGTH - s_driver
 	# Le brin de LA rame pilotée doit apparaître FIXE dans le référentiel de
-	# la cabine (phase = s_driver) ; l'autre brin défile (phase = −s_driver).
+	# la cabine (phase = s_driver) ; l'autre brin suit l'autre rame (phase =
+	# s_other − LENGTH, soit −s_driver en marche : il défile ; immobile
+	# quand l'autre rame est clouée par son parachute).
 	# Selon rame 1 / rame 2, ce n'est pas le même brin qui est « le sien ».
-	var left_phase: float = (-s_driver) if driver_is_rame2 else s_driver
-	var right_phase: float = s_driver if driver_is_rame2 else (-s_driver)
-	cable_left_material.set_shader_parameter("cable_phase", left_phase)
-	cable_right_material.set_shader_parameter("cable_phase", right_phase)
+	var own_phase: float = s_driver
+	var other_phase: float = s_other - PNConstants.LENGTH
+	cable_left_material.set_shader_parameter("cable_phase",
+		other_phase if driver_is_rame2 else own_phase)
+	cable_right_material.set_shader_parameter("cable_phase",
+		own_phase if driver_is_rame2 else other_phase)
 	# Coupe au fragment près : chaque brin n'existe qu'entre SA rame et la
 	# poulie en haut. Complète le masquage par segments (grossier, 15 m) —
 	# sans ça, en descente on voyait des bouts de son propre câble
 	# apparaître devant la cabine puis disparaître d'un coup.
-	var s_left: float = (PNConstants.LENGTH - s_driver) if driver_is_rame2 else s_driver
+	var s_left: float = s_other if driver_is_rame2 else s_driver
+	var s_right: float = s_driver if driver_is_rame2 else s_other
 	cable_left_material.set_shader_parameter("cut_below_s", s_left)
-	cable_right_material.set_shader_parameter(
-		"cut_below_s", PNConstants.LENGTH - s_left)
+	cable_right_material.set_shader_parameter("cut_below_s", s_right)
+
+
+# ---------------------------------------------------------------------------
+# Rupture du câble (retour du 01/10/2026 : « quand le câble casse, il doit se
+# détendre, casser quelque part »). La rupture a lieu sur le brin de la rame
+# pilotée — c'est elle que la physique découple et laisse dévaler — entre
+# elle et la salle des machines, en vue du conducteur quand il monte (25 à
+# 80 m devant), juste derrière lui quand il descend (20 à 50 m, visible en
+# vue extérieure). Au moment de la rupture :
+#   - les deux bouts se rétractent de leur allongement élastique T·L/(EA)
+#     (le haut vers la salle des machines, le bas vers sa rame) ;
+#   - toute la longueur se détend et retombe des galets sur la longrine
+#     (chute libre de ~16 cm, cf. audit_physique/rupture_cable.sage) ;
+#   - le bout bas suit la rame qui dévale ; le bout haut reste sur les
+#     roues, immobiles (TrainPhysics.update_machine).
+# ---------------------------------------------------------------------------
+
+const RUPTURE_T_MIN_N: float = 50000.0   # tension retenue si la jauge est basse
+const RUPTURE_FALL_S: float = 0.18       # s, chute du câble sur la longrine
+var _rupture: Dictionary = {}            # vide = câble intact
+var _last_tension_dan: float = 0.0
+
+
+func update_cable_rupture(rupture: bool, s_driver: float, direction: int,
+		tension_dan: float, delta: float) -> void:
+	if cable_left_material == null or cable_right_material == null:
+		return
+	if not rupture:
+		_last_tension_dan = tension_dan   # tension juste AVANT la rupture
+		if not _rupture.is_empty():
+			_rupture = {}
+			for m in [cable_left_material, cable_right_material]:
+				(m as ShaderMaterial).set_shader_parameter("slack", 0.0)
+				(m as ShaderMaterial).set_shader_parameter("gap_lo", -1.0)
+				(m as ShaderMaterial).set_shader_parameter("gap_hi", -1.0)
+		return
+	var own: ShaderMaterial = cable_right_material if driver_is_rame2 else cable_left_material
+	if _rupture.is_empty():
+		var ecart: float = randf_range(25.0, 80.0) if direction > 0 \
+			else randf_range(20.0, 50.0)
+		var s_b: float = minf(s_driver + ecart, PNConstants.LENGTH - 15.0)
+		s_b = maxf(s_b, s_driver + 1.0)
+		var t_n: float = maxf(maxf(tension_dan, _last_tension_dan) * 10.0, RUPTURE_T_MIN_N)
+		_rupture = {
+			"t": 0.0, "s_b": s_b, "s0": s_driver, "ph0": s_driver,
+			"r_up": minf(t_n * (PNConstants.LENGTH - s_b) / TrainPhysics.CABLE_EA_N, 8.0),
+			"r_lo": minf(t_n * (s_b - s_driver) / TrainPhysics.CABLE_EA_N, 2.0),
+		}
+		print("[Câble] rupture à s = %.1f m (rame à %.1f m), rétraction %.2f m / %.2f m" % [
+			s_b, s_driver, _rupture.r_up, _rupture.r_lo])
+	_rupture.t = float(_rupture.t) + delta
+	var t: float = _rupture.t
+	# Chaque bout recule à vitesse constante u = ε·c (onde de détente,
+	# c = √(EA/ρ) ≈ 3 400 m/s) jusqu'à avoir rendu tout son allongement
+	# ε·L : la durée vaut L/c, le temps que l'onde parcoure le tronçon.
+	var c_onde: float = sqrt(TrainPhysics.CABLE_EA_N / PNConstants.CABLE_KG_M)
+	var l_up: float = maxf(PNConstants.LENGTH - float(_rupture.s_b), 1.0)
+	var l_lo: float = maxf(float(_rupture.s_b) - float(_rupture.s0), 1.0)
+	var k_up: float = minf(1.0, c_onde * t / l_up)
+	var k_lo: float = minf(1.0, c_onde * t / l_lo)
+	var chute: float = clampf(t / RUPTURE_FALL_S, 0.0, 1.0)
+	var hi: float = float(_rupture.s_b) + float(_rupture.r_up) * k_up
+	# Le bout bas ne suit sa rame que si elle TIRE dessus en reculant : un
+	# câble ne se pousse pas — si elle continue de monter sur son élan, elle
+	# roule sur son propre câble détendu et le bout reste où il est.
+	var lo: float = float(_rupture.s_b) - float(_rupture.r_lo) * k_lo \
+		+ minf(0.0, s_driver - float(_rupture.s0))
+	lo = minf(maxf(lo, s_driver), hi)
+	own.set_shader_parameter("gap_lo", lo)
+	own.set_shader_parameter("gap_hi", hi)
+	own.set_shader_parameter("phase_upper", float(_rupture.ph0) + float(_rupture.r_up) * k_up)
+	for m in [cable_left_material, cable_right_material]:
+		(m as ShaderMaterial).set_shader_parameter("slack", chute * chute)
+
+
+## État de la rupture pour les bancs : {} si le câble est intact.
+func cable_rupture_state() -> Dictionary:
+	return _rupture
