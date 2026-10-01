@@ -7,6 +7,51 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.15.38** — la rame ne tremble plus, phares sans éblouissement, roues
+régulières au ralenti.
+- « Tremblements excessifs de la rame quand elle roule. » Pour comprendre,
+  la caméra de cabine a été relevée image par image, à 12 m/s, sur toute la
+  ligne. La trajectoire elle-même ondulait : `Curve3D.sample_baked`
+  interpole entre des points précuits tous les 0,5 m, et leur espacement
+  est retouché à chaque segment de la courbe. Il en restait une ondulation
+  de quelques millimètres. Elle donnait une accélération apparente de
+  18 m/s² en médiane, alors que la vraie, dans les courbes, vaut environ
+  0,1 m/s², avec des secousses de tangage entre 14 et 30 Hz. La caméra
+  était accrochée au centre de la rame, à 15 m de là, et ce bras de levier
+  amplifiait chaque écart d'orientation.
+- `transform_at` lit maintenant une B-spline cubique uniforme. Elle est
+  construite sur des points pris tous les 1 m, chacun moyenné sur 0,4 m
+  pour gommer l'ondulation des points précuits. La courbe obtenue est
+  continue jusqu'à l'accélération. Résultat : accélération apparente de la
+  trajectoire 18 → 1,2 m/s² (le reste est l'arrondi des flottants
+  32 bits à 3 km de l'origine), tangage parasite 0,36 → 0,04 °/s. Tous
+  les bancs 3D passent.
+- La caméra, les phares et le poste de conduite sont maintenant portés par
+  la voiture de tête, comme la coque. La caméra se déplaçait jusqu'à 39 cm
+  en travers et 9 cm en hauteur par rapport à la caisse dans les courbes.
+  Elle est désormais fixe au millimètre.
+- « Le halo central des phares fait un reflet aveuglant. » Le phare avait
+  une énergie de 14, un cône de 38° concentré sur l'axe et une atténuation
+  de 0,4, soit presque aucune perte avec la distance. Il surexposait le fond
+  du tunnel pile au point de fuite. Captures à l'appui (`shot_phares.gd`,
+  qui accepte des réglages en argument), le nouveau réglage est : énergie 5,
+  faisceau plus homogène, atténuation 0,8, cône de 32°, phare braqué 6°
+  vers la voie. La luminance au centre de l'image baisse de 65 % et la voie
+  reste éclairée.
+- « Au ralenti à l'arrivée, la rotation n'est pas complètement fluide. »
+  La vitesse physique est parfaitement régulière : 0,75 m/s constants, sans
+  à-coup. La cause est ailleurs. L'angle des roues et la phase du câble
+  s'accumulaient sans fin, environ 1 700 rad et 3,5 km par trajet, et
+  passaient au processeur graphique en flottants 32 bits. À 3 000 rad, le
+  pas de ces flottants vaut 15 % du pas d'une image à 0,2 m/s. Ils sont
+  désormais ramenés dans leur période, 2π pour les roues et 0,45 m (le pas
+  du toronnage) pour le câble, ce qui ne change rien à l'image. Le banc
+  vérifie qu'ils restent bornés après 4 km.
+- La caméra de la salle des machines refaisait à chaque image son lancer de
+  rayon (jusqu'à 500 pas) et l'écorché, même immobile. Ils ne sont refaits
+  que si la vue bouge. Dans Chromium, la vue salle des machines passe de
+  4,7 à 3,2 ms par image.
+
 **v1.15.37** — la PWA coûte deux fois moins par image, roues dans le bon
 sens, cabine dézoomée.
 - « Ça saccade toujours le défilement du tunnel. » Pour mesurer au lieu de

@@ -211,8 +211,18 @@ func _suite() -> void:
 	var ph0: float = float(mr._cable_mat.get_shader_parameter("cable_phase"))
 	mr.update_rotation(2.0, 0.25)
 	var ph1: float = float(mr._cable_mat.get_shader_parameter("cable_phase"))
-	ok = _check("câble de la salle animé", absf(ph1 - ph0 - 0.5) < 1e-4,
-		"phase %.3f → %.3f pour 2 m/s × 0,25 s" % [ph0, ph1]) and ok
+	var dph: float = fposmod(ph1 - ph0 - 0.5 + 0.01, MachineRoomBuilder.CABLE_STRAND_PITCH) - 0.01
+	ok = _check("câble de la salle animé", absf(dph) < 1e-4,
+		"phase %.3f → %.3f pour 2 m/s × 0,25 s (modulo le pas %.2f m)" % [ph0, ph1,
+			MachineRoomBuilder.CABLE_STRAND_PITCH]) and ok
+	# angle et phase restent dans une période après des heures de marche
+	# (précision des flottants 32 bits envoyés au GPU, retour du 01/10)
+	for k in range(20000):
+		mr.update_rotation(12.0, 1.0 / 60.0)
+	var ph2: float = float(mr._cable_mat.get_shader_parameter("cable_phase"))
+	ok = _check("angle et phase bornés", absf(mr._angle) <= PI and ph2 >= 0.0
+		and ph2 < MachineRoomBuilder.CABLE_STRAND_PITCH,
+		"après 4 km : angle %.3f rad, phase %.3f m" % [mr._angle, ph2]) and ok
 	# sens de rotation selon la rame et le sens de marche (retour du 30/09) :
 	# la roue aval tourne sommet vers la salle (v_rame1 > 0) quand la rame 1
 	# monte, que l'on conduise la rame 1 (qui monte) ou la rame 2 (qui descend)

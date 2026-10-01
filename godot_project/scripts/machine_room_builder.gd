@@ -93,6 +93,9 @@ var _spin_a: Node3D = null
 var _spin_b: Node3D = null
 var _angle: float = 0.0
 var _cable_phase: float = 0.0
+# pas du toronnage dans cable_shader.gdshader (strand_pitch) : le motif du
+# câble se répète à l'identique tous les CABLE_STRAND_PITCH mètres
+const CABLE_STRAND_PITCH: float = 0.45
 var _cable_mat: ShaderMaterial = null
 var _mats: Dictionary = {}
 
@@ -889,10 +892,17 @@ func update_rotation(v_cable: float, delta: float) -> void:
 		return
 	# rotation autour de +x : un angle positif amène le sommet vers −s ; la
 	# roue aval tourne sommet vers la salle quand le brin gauche y entre.
-	_angle -= v_cable / R * delta
+	# Angle et phase RAMENÉS dans une période (retour du 01/10 : « au
+	# ralenti à l'arrivée, la rotation n'est pas complètement fluide ») :
+	# accumulés sans fin (≈ 1 700 rad et 3,5 km par trajet), ils passaient
+	# au processeur graphique en flottants 32 bits, dont le pas vaut
+	# 2,4·10⁻⁴ rad à 3 000 rad — 15 % du pas d'une image à 0,2 m/s — et les
+	# torons du câble sautillaient de même. Une période entière ne change
+	# rien à l'image : 2π pour les roues, le pas du toronnage pour le câble.
+	_angle = wrapf(_angle - v_cable / R * delta, -PI, PI)
 	# le câble défile au même pas que la jante (brin de la rame 1 vers la
 	# roue aval quand v_cable > 0) — il avait l'air figé (retour du 30/09)
-	_cable_phase += v_cable * delta
+	_cable_phase = fposmod(_cable_phase + v_cable * delta, CABLE_STRAND_PITCH)
 	if _cable_mat != null:
 		_cable_mat.set_shader_parameter("cable_phase", _cable_phase)
 	var base_a: Transform3D = _local_xf(_spin_a.get_meta("x", 0.0), A_Y, A_S)
