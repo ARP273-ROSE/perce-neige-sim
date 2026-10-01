@@ -63,13 +63,30 @@ func reset() -> void:
 
 
 func _process(_delta: float) -> void:
+	if current and not _was_current:
+		_last_key = []      # retour dans la vue : l'écorché a été réinitialisé
+	_was_current = current
 	if current:
 		_update()
+
+
+var _was_current: bool = false
+
+
+# Réglage de la dernière position calculée : le lancer de rayon (jusqu'à
+# 500 pas) et l'écorché ne sont refaits que si la vue a bougé — avant, ils
+# tournaient à chaque image, même caméra immobile (retour du 01/10 :
+# rotation des roues pas tout à fait régulière en vue salle des machines).
+var _last_key: Array = []
 
 
 func _update() -> void:
 	if room == null or not is_inside_tree():
 		return
+	var key: Array = [yaw, pitch, dist, pan, pan_y, room.frame()]
+	if key == _last_key:
+		return
+	_last_key = key
 	var f: Transform3D = room.frame()
 	# repère horizontal de la gare amont : axe de la voie à plat, verticale vraie
 	var fwd: Vector3 = -f.basis.z

@@ -46,6 +46,11 @@ extends Node3D
 var path_points: Array = []                  # Vector3[] — positions monde
 var path_tangents: Array = []                # Vector3[] — direction locale
 var path_curve: Curve3D = null               # spline Catmull-Rom pour sampling smooth
+# Trajectoire lissée (retour du 01/10/2026 : « tremblements excessifs de la
+# rame quand elle roule ») : positions de la courbe tous les SMOOTH_H mètres,
+# relues par une B-spline cubique uniforme (C2) — cf. transform_at.
+const SMOOTH_H: float = 1.0
+var _smooth_nodes: PackedVector3Array = PackedVector3Array()
 
 # Matériau béton partagé par TOUTES les sections de paroi — mémorisé pour
 # pouvoir le rendre translucide en vue extérieure (voir set_wall_see_through).
@@ -97,6 +102,7 @@ func _build() -> void:
 	path_points = SlopeProfile.build_path_points(ring_spacing)
 	_compute_tangents()
 	_build_curve3d()
+	_build_smooth_path()
 
 	# Matériau de la paroi — CULL_DISABLED pour voir l'intérieur quel que
 	# soit le winding des triangles.
@@ -757,26 +763,35 @@ func passing_loop_offset(s: float, side: float) -> float:
 # ---------------------------------------------------------------------------
 
 func transform_at(s: float) -> Transform3D:
-	# Position smooth via Curve3D.sample_baked(cubic=true) — la Curve3D est
-	# construite avec les tangentes Catmull-Rom explicites dans _build_curve3d(),
-	# ce qui suffit à éliminer le tressautement (la spline devient vraiment C1).
-	# Orientation reconstruite manuellement (convention basis.z = -tangent) —
-	# sample_baked_with_rotation() retournait une basis incompatible avec
-	# la convention forward=-Z du reste du code.
+	# Position et tangente lues sur la B-spline cubique uniforme de
+	# _build_smooth_path (C2 : vitesse et accélération continues).
+	#
+	# Avant (jusqu'à la 1.15.37) : Curve3D.sample_baked(cubic) directement.
+	# Ses points précuits (tous les 0,5 m, espacement retouché à chaque
+	# segment) laissaient une ondulation de quelques millimètres : mesurée
+	# image par image à 12 m/s, l'accélération de la trajectoire valait
+	# 18 m/s² en médiane au lieu de ~0,1 (v²/R), avec des pics de tangage
+	# entre 14 et 30 Hz. La caméra, à 15 m du point de référence, amplifiait
+	# le tangage : la rame « tremblait » en roulant.
 	s = clampf(s, 0.0, PNConstants.LENGTH)
-	var baked_len: float = path_curve.get_baked_length() if path_curve else 0.0
-	if baked_len <= 0.0:
+	if _smooth_nodes.size() < 4:
 		return Transform3D.IDENTITY
-	var path_len: float = PNConstants.LENGTH
-	var offset: float = s / path_len * baked_len
-
-	var pos: Vector3 = path_curve.sample_baked(offset, true)
-	# Tangente par finite-difference sur la courbe baked (maintenant smooth grâce
-	# aux Catmull-Rom tangents set explicitement via add_point(p, in, out))
-	var eps: float = minf(0.5, baked_len * 0.5 - 0.001)
-	var pos_next: Vector3 = path_curve.sample_baked(minf(offset + eps, baked_len), true)
-	var pos_prev: Vector3 = path_curve.sample_baked(maxf(offset - eps, 0.0), true)
-	var tangent: Vector3 = (pos_next - pos_prev).normalized()
+	var u: float = s / SMOOTH_H + 1.0
+	var i: int = mini(int(u), _smooth_nodes.size() - 3)
+	var t: float = u - float(i)
+	var p1: Vector3 = _smooth_nodes[i]
+	var d0: Vector3 = _smooth_nodes[i - 1] - p1
+	var d2: Vector3 = _smooth_nodes[i + 1] - p1
+	var d3: Vector3 = _smooth_nodes[i + 2] - p1
+	var t2: float = t * t
+	var t3: float = t2 * t
+	var mt: float = 1.0 - t
+	# poids B-spline (somme 6) appliqués aux écarts à p1 : moins d'erreur
+	# d'arrondi qu'avec les coordonnées absolues (~3 km)
+	var pos: Vector3 = p1 + (d0 * (mt * mt * mt) + d2 * (-3.0 * t3 + 3.0 * t2 + 3.0 * t + 1.0)
+		+ d3 * t3) / 6.0
+	var tangent: Vector3 = (d0 * (-mt * mt) + d2 * (-3.0 * t2 + 2.0 * t + 1.0)
+		+ d3 * t2).normalized()
 
 	var world_up: Vector3 = Vector3.UP
 	var right: Vector3 = tangent.cross(world_up).normalized()
@@ -784,7 +799,38 @@ func transform_at(s: float) -> Transform3D:
 		right = Vector3.RIGHT
 	var up: Vector3 = right.cross(tangent).normalized()
 
-	var t: Transform3D = Transform3D()
-	t.basis = Basis(right, up, -tangent)  # -tangent car Godot forward = -Z
-	t.origin = pos
-	return t
+	var tf: Transform3D = Transform3D()
+	tf.basis = Basis(right, up, -tangent)  # -tangent car Godot forward = -Z
+	tf.origin = pos
+	return tf
+
+
+## Point de la courbe précuite à l'abscisse s, moyenné sur 0,4 m pour
+## gommer l'ondulation des points précuits (0,5 m).
+func _baked_at(s: float) -> Vector3:
+	var baked_len: float = path_curve.get_baked_length()
+	var acc: Vector3 = Vector3.ZERO
+	for k in range(-2, 3):
+		var off: float = clampf((s + 0.1 * float(k)) / PNConstants.LENGTH * baked_len, 0.0, baked_len)
+		acc += path_curve.sample_baked(off, true)
+	return acc / 5.0
+
+
+## Nœuds de la B-spline : un point tous les SMOOTH_H mètres, plus un nœud
+## prolongé en ligne droite de chaque côté (bouts de ligne).
+func _build_smooth_path() -> void:
+	var L: float = PNConstants.LENGTH
+	var n: int = int(ceil(L / SMOOTH_H))
+	var a: Vector3 = path_curve.sample_baked(0.0, true)
+	var ta: Vector3 = (_baked_at(SMOOTH_H) - a).normalized()
+	var b: Vector3 = path_curve.sample_baked(path_curve.get_baked_length(), true)
+	var tb: Vector3 = (b - _baked_at(L - SMOOTH_H)).normalized()
+	_smooth_nodes.resize(n + 4)
+	for j in range(n + 4):
+		var s: float = float(j - 1) * SMOOTH_H
+		if s <= 0.0:
+			_smooth_nodes[j] = a + ta * s
+		elif s >= L:
+			_smooth_nodes[j] = b + tb * (s - L)
+		else:
+			_smooth_nodes[j] = _baked_at(s)
