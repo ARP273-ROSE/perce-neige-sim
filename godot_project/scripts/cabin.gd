@@ -49,6 +49,7 @@ var _pax_gear_prefix: Array = []   # par voiture : {ski: [int], pole: [int], boa
 var _pax_shown: Array = []      # par voiture : nombre affiché
 var _head_glow: float = 0.0     # phares halogènes : 0 éteint → 1 plein feu
 var _head_mat: StandardMaterial3D = null
+var head_energy: float = 5.0    # énergie du phare avant à plein feu (14 avant le 01/10)
 @export var train_number: int = 1
 var _prev_v_for_acc: float = 0.0   # vitesse à la frame précédente pour calcul accel
 
@@ -256,9 +257,6 @@ func _add_interior_box(mat: StandardMaterial3D, sx: float, sy: float, y: float,
 
 
 func _build_interior() -> void:
-	interior_root = Node3D.new()
-	interior_root.name = "Interior"
-	add_child(interior_root)
 	var car_len: float = train_length / float(car_count)
 	for idx in range(car_count):
 		var n: Node3D = Node3D.new()
@@ -266,6 +264,15 @@ func _build_interior() -> void:
 		n.position = Vector3(0.0, 0.0, (float(idx) - (car_count - 1) * 0.5) * car_len)
 		add_child(n)
 		_interior_cars.append(n)
+	# Poste de conduite (pupitre, siège, moniteur…) : coordonnées dans le
+	# repère de la rame, mais porté par la VOITURE DE TÊTE, comme la caméra
+	# et la coque (retour du 01/10) — accroché au centre de la rame, il
+	# bougeait par rapport au pare-brise dans les courbes et les changements
+	# de pente.
+	interior_root = Node3D.new()
+	interior_root.name = "Interior"
+	interior_root.position = Vector3(0.0, 0.0, -(_interior_cars[0] as Node3D).position.z)
+	(_interior_cars[0] as Node3D).add_child(interior_root)
 	_build_floor_ceiling()
 	_build_console_pupitre()     # pupitre Von Roll fin (tube horizontal blanc)
 	_build_cockpit_extras()      # coups-de-poing, étiquettes, horloge, panneau latéral
@@ -1245,16 +1252,23 @@ func _build_lights() -> void:
 	headlight_front = SpotLight3D.new()
 	headlight_front.name = "HeadlightFront"
 	headlight_front.position = Vector3(0.0, 0.70, -train_length * 0.5 + 0.3)
-	headlight_front.rotation = Vector3(0.0, 0.0, 0.0)
+	# Retour du 01/10 : « le halo central des phares fait un reflet
+	# aveuglant ». Le phare (énergie 14, cône de 38° centré sur l'axe,
+	# atténuation 0,4 : presque aucune perte avec la distance) surexposait
+	# le fond du tunnel pile au point de fuite. Réglé sur captures (vue
+	# cabine à 1 300 m, shot_phares.gd) : énergie 5, faisceau plus homogène
+	# (1,8), atténuation 0,8, cône 32°, braqué 6° vers la voie comme un vrai
+	# phare — luminance au centre de l'image −65 %, la voie reste éclairée.
+	headlight_front.rotation = Vector3(deg_to_rad(-6.0), 0.0, 0.0)
 	headlight_front.light_color = Color(1.0, 0.95, 0.80)
-	headlight_front.light_energy = 14.0
+	headlight_front.light_energy = head_energy
 	headlight_front.spot_range = 280.0
-	headlight_front.spot_angle = 38.0
-	headlight_front.spot_angle_attenuation = 0.5
-	headlight_front.spot_attenuation = 0.4
+	headlight_front.spot_angle = 32.0
+	headlight_front.spot_angle_attenuation = 1.8
+	headlight_front.spot_attenuation = 0.8
 	headlight_front.shadow_enabled = false
 	headlight_front.visible = true  # allumés par défaut
-	add_child(headlight_front)
+	_attach_to_front_car(headlight_front, headlight_front.position)
 
 	# Phares arrière (positon = +Z, look toward +Z)
 	headlight_rear = SpotLight3D.new()
@@ -1267,7 +1281,7 @@ func _build_lights() -> void:
 	headlight_rear.spot_angle = 45.0
 	headlight_rear.shadow_enabled = false
 	headlight_rear.visible = true
-	add_child(headlight_rear)
+	_attach_to_car(headlight_rear, car_count - 1, headlight_rear.position)
 
 	# Lumière cabine intérieure (ambient jaune chaud)
 	interior_light = OmniLight3D.new()
@@ -1279,6 +1293,24 @@ func _build_lights() -> void:
 	interior_light.shadow_enabled = false
 	interior_light.visible = true
 	add_child(interior_light)
+
+
+## Accroche `n` à la voiture `idx` (repère intérieur, qui suit la caisse
+## posée sur ses deux bogies), `pos_rame` étant donné dans le repère de la
+## rame entière. Sans intérieur (rame d'en face), reste sur la rame.
+func _attach_to_car(n: Node3D, idx: int, pos_rame: Vector3) -> void:
+	if idx < 0 or idx >= _interior_cars.size():
+		n.position = pos_rame
+		add_child(n)
+		return
+	var car_len: float = train_length / float(car_count)
+	var z_c: float = (float(idx) - (car_count - 1) * 0.5) * car_len
+	n.position = pos_rame - Vector3(0.0, 0.0, z_c)
+	(_interior_cars[idx] as Node3D).add_child(n)
+
+
+func _attach_to_front_car(n: Node3D, pos_rame: Vector3) -> void:
+	_attach_to_car(n, 0, pos_rame)
 
 
 func _build_camera() -> void:
@@ -1296,9 +1328,12 @@ func _build_camera() -> void:
 	# encore à 2,1 m de la vitre. Le vrai conducteur est à ~1 m : caméra à
 	# 1,1 m du nez, pupitre 0,65 m devant, champ vertical 70° (la vitre de
 	# 1,64 × 1,8 m couvre ±37° en largeur, tout le champ en hauteur).
-	camera_fpv.position = Vector3(0.0, 0.85, -train_length * 0.5 + 1.1)
-	camera_fpv.rotation = Vector3(0.0, 0.0, 0.0)
-	add_child(camera_fpv)
+	# Portée par la VOITURE DE TÊTE (retour du 01/10 : « tremblements de la
+	# rame ») : accrochée au centre de la rame, elle suivait la tangente
+	# prise 15 m en arrière et se déplaçait par rapport au pupitre (jusqu'à
+	# 39 cm en travers dans les courbes, 9 cm en hauteur) ; tout écart
+	# d'orientation était multiplié par ce bras de levier.
+	_attach_to_front_car(camera_fpv, Vector3(0.0, 0.85, -train_length * 0.5 + 1.1))
 
 	# Caméra extérieure — VRAIE orbitale autour de la rame (retour d'essai
 	# 2026-07-24 : « cette vue est fixe ») : yaw/pitch/distance pilotés au
@@ -1532,7 +1567,7 @@ func _animate_headlights(delta: float) -> void:
 	_head_mat.emission_energy_multiplier = 5.0 * g * g + 0.4 * g
 	_head_mat.albedo_color = Color(0.10, 0.10, 0.11).lerp(Color(1.0, 0.96, 0.85), g)
 	if headlight_front != null:
-		headlight_front.light_energy = 14.0 * g * g
+		headlight_front.light_energy = head_energy * g * g
 		headlight_front.visible = g > 0.01
 
 
