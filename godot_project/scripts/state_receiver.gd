@@ -139,6 +139,19 @@ func _apply(d: Dictionary) -> void:
 	physics.lights_head = _b(d, "lights_head", physics.lights_head)
 	physics.lights_cabin = _b(d, "lights_cabin", physics.lights_cabin)
 	physics.emergency = _b(d, "emergency", physics.emergency)
+	# Câble rompu (PC, mode Défi ou panne) : sans ce relais, la 3D
+	# laissait le câble intact, l'autre rame continuer en miroir et la
+	# machinerie suivre la rame qui dévale (retour du 01/10). La position
+	# figée de l'autre rame vient du PC (ghost_s).
+	if d.has("cable_rupture"):
+		var cr: bool = _b(d, "cable_rupture", false)
+		physics.cable_rupture = cr
+		if not cr:
+			physics.ghost_locked_s = -1.0
+		elif d.has("ghost_s"):
+			physics.ghost_locked_s = _f(d, "ghost_s", PNConstants.LENGTH - physics.s)
+		elif physics.ghost_locked_s < 0.0:
+			physics.ghost_locked_s = PNConstants.LENGTH - physics.s
 	# Mute global relayé par le sim PC (touche N) : le viewer embarqué a
 	# son propre moteur audio — sans ce relais, couper le son côté PC
 	# laissait la 3D sonore. Bus Master muté/démuté, la lecture continue.

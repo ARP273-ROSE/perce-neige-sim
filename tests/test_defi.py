@@ -142,3 +142,42 @@ def test_rupture_puis_urgence_parachute_tient_la_rame(fenetre):
         g._tick()
     assert abs(tr.s - s_tenu) < 0.05, f"glisse de {tr.s - s_tenu:+.2f} m sous parachute"
     assert st.fault_phase != "active", "la séquence d'incident n'a pas démarré"
+
+
+# --- 2026-10-01 : « quand le câble casse […] la machinerie doit s'arrêter,
+# là elle s'emballe ». Les poulies suivaient la rame qui dévale.
+
+def test_rupture_la_machinerie_s_arrete(fenetre):
+    win, clock = fenetre
+    g = win.game
+    st = g.state
+    tr = st.train
+    g.new_trip()
+    st.mode = pn.MODE_RUN
+    st.run_mode = "challenge"
+    tr.pax_car1, tr.pax_car2, st.ghost_pax = 167, 167, 0
+    tr.direction = 1
+    st.selected_direction = 1
+    tr.s, tr.v = 1500.0, 14.3
+    tr.maint_brake = tr.doors_open = tr.doors_cmd = tr.doors_visual_open = False
+    tr.trip_started = st.trip_started = True
+    tr.speed_cmd, tr.speed_cmd_eff = 1.0, 15.0
+    t, t_r, mv_r, mv_max, t_arret = 0.0, None, 0.0, 0.0, None
+    while t < 20.0 and not st.crashed:
+        clock[0] += DT
+        t += DT
+        g._tick()
+        if tr.cable_rupture and t_r is None:
+            t_r, mv_r = t, abs(g._machine_v)
+            etat = pn.physics_to_state_dict(tr, st)
+            assert etat["cable_rupture"] is True and "ghost_s" in etat
+        if t_r is None:
+            continue
+        mv_max = max(mv_max, abs(g._machine_v))
+        if t_arret is None and abs(g._machine_v) < 1e-9:
+            t_arret = t - t_r
+    assert t_r is not None, "pas de rupture"
+    assert mv_max <= mv_r + 1e-9, f"la machinerie accélère ({mv_max:.2f} > {mv_r:.2f} m/s)"
+    assert t_arret is not None and abs(t_arret - mv_r / pn.A_DRIVE_TRIP) < 0.1, t_arret
+    assert tr.v < -5.0, "la rame décrochée doit dévaler"
+    assert g.sounds._machine_speed == 0.0

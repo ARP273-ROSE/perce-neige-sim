@@ -15,6 +15,9 @@ func _initialize() -> void:
 
 func _pas(au: TrainAudio, n: int) -> void:
 	for _i in range(n):
+		# la machinerie suit le câble à la poulie (main.gd l'actualise à
+		# chaque image ; ici, câble intact, rame 1)
+		au.physics.update_machine(false, 1.0 / 60.0)
 		au._process(1.0 / 60.0)
 
 
@@ -47,6 +50,16 @@ func _suite(ph: TrainPhysics, au: TrainAudio) -> void:
 	_pas(au, 5)
 	_check("1 m/s : hauteur bornée à 0,25", absf(au._player_mr_run.pitch_scale - 0.25) < 1e-3,
 		"%.3f" % au._player_mr_run.pitch_scale)
+	# câble rompu : la machinerie freine — elle ne suit plus la rame
+	ph.v = 12.0
+	_pas(au, 5)
+	ph.cable_rupture = true
+	ph.v = -15.0
+	_pas(au, int(7.0 * 60.0))
+	_check("câble rompu : la machinerie s'arrête malgré la rame qui dévale",
+		ph.machine_v == 0.0 and au._player_mr_run.volume_db < -70.0,
+		"câble %.2f m/s, marche %.1f dB" % [ph.machine_v, au._player_mr_run.volume_db])
+	ph.cable_rupture = false
 	ph.v = 0.0
 	_pas(au, 5)
 	_check("arrêt : machinerie muette, repos présent", au._player_mr_run.volume_db < -70.0

@@ -51,8 +51,9 @@ func setup(p: TrainPhysics, fm: FaultManager) -> void:
 func _process(delta: float) -> void:
 	if physics != null:
 		# Les deux poulies tournent à ω = v / r (r = 2,1 m), dans le sens
-		# fixé par la rame 1 (même loi que la 3D, cf. TrainPhysics.v_rame1).
-		_pulley_angle += physics.v_rame1(driver_rame2) / SHEAVE_R_M * delta
+		# fixé par la rame 1, à la vitesse du câble à la poulie (même loi
+		# que la 3D, cf. TrainPhysics.machine_v : arrêt si le câble rompt).
+		_pulley_angle += physics.machine_v / SHEAVE_R_M * delta
 	_redraw_slot = HUD.redraw_at_15hz(self, _redraw_slot, 0.5)
 
 
@@ -82,17 +83,23 @@ func _draw() -> void:
 	var stats_y: float = y_bank + bank_h + 16.0
 	if stats_y + 44.0 > h:
 		return
-	var omega: float = absf(physics.v) / SHEAVE_R_M
+	var omega: float = absf(physics.machine_v) / SHEAVE_R_M
 	_draw_text(Vector2(10.0, stats_y), "Rot. poulies :", 10, label_color)
 	_draw_text(Vector2(110.0, stats_y), "%.2f rad/s  (%.1f tr/min)" %
 		[omega, omega * 60.0 / TAU], 10, Color(0.85, 0.95, 1.0))
 	_draw_text(Vector2(10.0, stats_y + 14.0), "V câble   :", 10, label_color)
-	_draw_text(Vector2(110.0, stats_y + 14.0), "%.2f m/s" % absf(physics.v), 10, Color(0.85, 0.95, 1.0))
+	_draw_text(Vector2(110.0, stats_y + 14.0), "%.2f m/s" % absf(physics.machine_v), 10, Color(0.85, 0.95, 1.0))
 	_draw_text(Vector2(10.0, stats_y + 28.0), "Trajet    :", 10, label_color)
 	_draw_text(Vector2(110.0, stats_y + 28.0), "%.0f s" % physics.trip_time, 10, Color(0.85, 0.95, 1.0))
 	_draw_text(Vector2(10.0, stats_y + 42.0), "Pax tot   :", 10, label_color)
 	_draw_text(Vector2(110.0, stats_y + 42.0),
 		"%d / %d" % [physics.pax(), PNConstants.PAX_MAX], 10, Color(0.85, 0.95, 1.0))
+	# Câble rompu : la chaîne de sécurité a déclenché, les freins des
+	# roues arrêtent la machinerie (TrainPhysics.update_machine)
+	if physics.cable_rupture and stats_y + 62.0 <= h:
+		_draw_text(Vector2(10.0, stats_y + 62.0),
+			"CÂBLE ROMPU — machinerie à l'arrêt" if absf(physics.machine_v) < 0.01
+			else "CÂBLE ROMPU — freinage des roues", 10, Color(1.0, 0.35, 0.25))
 
 
 ## Vue en coupe de la machinerie : port fidèle de _draw_motor_room (PC),
@@ -111,7 +118,7 @@ func _draw_room(rect: Rect2) -> void:
 	var dim: Color = Color(0.62, 0.66, 0.72)
 	_draw_text(Vector2(x0 + 8.0, y0 + 12.0), "Machinerie — 3032 m", 9, label_color)
 	_draw_text_right(Vector2(rect.end.x - 8.0, y0 + 12.0), "3 × 800 kW DC", 9, label_color)
-	var v_abs: float = absf(physics.v)
+	var v_abs: float = absf(physics.machine_v)
 	var rpm: float = v_abs / (TAU * SHEAVE_R_M) * 60.0
 	_draw_text(Vector2(x0 + 8.0, y0 + 25.0), "∅ 4,2 m   %5.1f tr/min   v %4.1f m/s" % [rpm, v_abs], 8, dim)
 

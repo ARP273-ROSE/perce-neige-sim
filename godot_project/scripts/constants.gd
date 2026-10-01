@@ -70,6 +70,11 @@ const A_BRAKE_NORMAL: float = 2.5        # frein service (m/s²)
 # absolu appliqué à tort).
 const A_BRAKE_EMERGENCY: float = 1.25    # frein urgence commandé (m/s²)
 const A_BRAKE_EMERG_RAMP: float = 8.0    # rampe frein urgence (1/s) — idem PC
+# Rupture du câble (retour du 01/10/2026 : « la machinerie doit s'arrêter,
+# là elle s'emballe ») : la chaîne de sécurité coupe l'entraînement et les
+# freins des roues motrices arrêtent la machinerie, déchargée — décélération
+# à la jante (audit_physique/rupture_cable.sage).
+const A_DRIVE_TRIP: float = 2.0
 const MU_ROLL: float = 0.0025            # frottement roulement
 
 # Moteurs — 3 × 800 kW DC

@@ -1,0 +1,23 @@
+=== Onde de détente le long du câble
+  célérité longitudinale √(EA/ρ) = 3371 m/s → toute la ligne en 1.03 s
+  → la détente est quasi instantanée à l'échelle de l'œil : le câble entier se relâche d'un coup
+
+=== Chute du câble sur la longrine
+  axe sur galets -1.360 m, posé sur la longrine -1.524 m → chute 16.4 cm
+  chute libre : 0.183 s (RUPTURE_FALL_S = 0,18 s)
+  flèche d'un câble TENDU à 22 500 daN entre galets : 11.0 mm (rien à voir)
+
+=== Rétraction des bouts (allongement élastique rendu)
+  T =   5000 daN : ε = 0.40 ‰ → bout haut sur 2 000 m : 0.80 m ; bout bas sur 100 m : 4.0 cm
+  T =  15000 daN : ε = 1.20 ‰ → bout haut sur 2 000 m : 2.40 m ; bout bas sur 100 m : 12.0 cm
+  T =  22500 daN : ε = 1.80 ‰ → bout haut sur 2 000 m : 3.60 m ; bout bas sur 100 m : 18.0 cm
+  T =  28000 daN : ε = 2.24 ‰ → bout haut sur 2 000 m : 4.48 m ; bout bas sur 100 m : 22.4 cm
+  (le code borne à 8 m en haut et 2 m en bas ; tension mini retenue 5 000 daN)
+  vitesse de rappel du bout libre u = ε·c = 4.0 m/s (T = 15000 daN)
+  vitesse de rappel du bout libre u = ε·c = 6.1 m/s (T = 22500 daN)
+  → le bout recule à u = ε·c pendant L/c (temps de parcours de l'onde) : c'est ce que fait le rendu
+
+=== Arrêt de la machinerie
+  à 12.0 m/s, freinage de 2.0 m/s² à la jante : arrêt en 6.0 s, 36 m de câble défilé, 2.8 tours de roue
+  à 14.4 m/s, freinage de 2.0 m/s² à la jante : arrêt en 7.2 s, 52 m de câble défilé, 4.0 tours de roue
+  (14,4 m/s = +20 % de V_MAX : la rupture du mode Défi)
