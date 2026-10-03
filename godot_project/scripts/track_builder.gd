@@ -99,6 +99,8 @@ var driver_is_rame2: bool = false
 # référentiel de la cabine. Pour le brin droite, la phase est opposée →
 # les torons défilent à 2×v relative.
 var _cable_phase_meters: float = 0.0
+# Réglettes de l'évitement : coupées avec l'éclairage du tunnel (touche J)
+var _loop_lamp_mat: StandardMaterial3D = null
 
 
 func build(t: TunnelBuilder) -> void:
@@ -1365,8 +1367,10 @@ func _build_walkway() -> void:
 @export var ring_joint_spacing: float = 1.4
 
 
+## Dans l'évitement (deux tubes) : les joints et la canalisation y suivent
+## chacun leur tube (_build_loop_lining) au lieu de l'axe unique.
 func _in_loop_zone(s: float) -> bool:
-	return s >= PNConstants.PASSING_START - 60.0 and s <= PNConstants.PASSING_END + 60.0
+	return s > PNConstants.PASSING_START and s < PNConstants.PASSING_END
 
 
 func _build_tunnel_details() -> void:
@@ -1387,6 +1391,7 @@ func _build_tunnel_details() -> void:
 	lamp_mat.emission = Color(0.75, 0.85, 1.0)
 	lamp_mat.emission_energy_multiplier = 3.0
 	lamp_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_loop_lamp_mat = lamp_mat
 
 	# --- fines lignes circulaires (section circulaire, hors évitement)
 	var ring: TorusMesh = TorusMesh.new()
@@ -1420,8 +1425,18 @@ func _build_tunnel_details() -> void:
 			var rr: float = tunnel.tunnel_radius - 0.06
 			tr2.origin += xf2.basis.x * (rr * sin(deg_to_rad(42.0))) + xf2.basis.y * (rr * cos(deg_to_rad(42.0)))
 			pipes.append(tr2)
+		else:
+			# évitement : la canalisation suit la voûte droite du tube DROIT
+			# (continue avec celle du tube unique, où d = 0) — chaque
+			# tronçon orienté d'un bout à l'autre, le tube s'écartant de
+			# l'axe jusqu'à 3°
+			var p0: Vector3 = _loop_crown_point(s - 2.0)
+			var p1: Vector3 = _loop_crown_point(s + 2.0)
+			var up2: Vector3 = tunnel.transform_at(s).basis.y
+			pipes.append(Transform3D(Basis.looking_at(p1 - p0, up2), (p0 + p1) * 0.5))
 		s += 4.0
 	_mm_instance(pipe, pipes, "CrownPipe", 400.0)
+	_build_loop_rings(joint_mat)
 
 	# --- joints horizontaux des galeries carrées (banches), hors salles de gare
 	var hj: BoxMesh = BoxMesh.new()
@@ -1469,6 +1484,97 @@ func _build_tunnel_details() -> void:
 			lamps.append(tr6)
 		s += 8.0
 	_mm_instance(lamp, lamps, "LoopLamps")
+
+
+## Point de la canalisation de voûte dans le tube DROIT de l'évitement.
+func _loop_crown_point(s: float) -> Vector3:
+	var xf: Transform3D = tunnel.transform_at(s)
+	var d: float = absf(tunnel.passing_loop_offset(s, 1.0))
+	var rr: float = tunnel.tunnel_radius - 0.06
+	return xf.origin + xf.basis.x * (d + rr * sin(deg_to_rad(42.0))) \
+		+ xf.basis.y * (rr * cos(deg_to_rad(42.0)))
+
+
+## Joints annulaires DANS l'évitement (retour d'essai du 03/10 : « la section
+## de l'évitement, l'habillage du tunnel est différent » — ni joints ni
+## canalisation sur 320 m). Les tores du tube unique n'y vont pas : deux
+## tubes de rayon R centrés à ±d, qui se rejoignent aux extrémités (profil
+## « binoculaire » tant que d < R). Chaque joint est l'arc de SON cercle qui
+## borde le vide — la partie qui serait dans l'autre tube n'existe pas :
+## côté +1, cos θ ≥ −d/R ; côté −1, cos θ ≤ d/R. Même bourrelet que le tore
+## (1,5 cm de saillie), même pas de 1,4 m, en phase avec la ligne.
+func _build_loop_rings(joint_mat: StandardMaterial3D) -> void:
+	var R: float = tunnel.tunnel_radius
+	var w: float = 0.010          # demi-largeur du joint le long de la voie
+	var h: float = 0.015          # saillie vers l'intérieur
+	var mat: StandardMaterial3D = joint_mat.duplicate()
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	var s0: float = PNConstants.SQUARE_SECTION_LOW_END + 0.7
+	var s: float = s0 + ceil((PNConstants.PASSING_START - s0) / ring_joint_spacing) * ring_joint_spacing
+	var st: SurfaceTool = null
+	var s_chunk: float = s
+	var n_chunk: int = 0
+	while s < PNConstants.PASSING_END:
+		if st == null:
+			st = SurfaceTool.new()
+			st.begin(Mesh.PRIMITIVE_TRIANGLES)
+			s_chunk = s
+		var xf: Transform3D = tunnel.transform_at(s)
+		var t: Vector3 = -xf.basis.z
+		var d: float = absf(tunnel.passing_loop_offset(s, 1.0))
+		var q: float = clampf(d / R, 0.0, 1.0)
+		for side in [-1.0, 1.0]:
+			var a0: float
+			var a1: float
+			if side > 0.0:
+				var ac: float = acos(-q)          # |θ| ≤ acos(−d/R)
+				a0 = -ac
+				a1 = ac
+			else:
+				a0 = acos(q)                      # θ ∈ [acos(d/R), 2π − acos(d/R)]
+				a1 = TAU - a0
+			var n: int = maxi(4, int(ceil((a1 - a0) / TAU * 32.0)))
+			for j in range(n):
+				var ta: float = a0 + (a1 - a0) * float(j) / float(n)
+				var tb: float = a0 + (a1 - a0) * float(j + 1) / float(n)
+				var ra: Vector3 = xf.basis.x * cos(ta) + xf.basis.y * sin(ta)
+				var rb: Vector3 = xf.basis.x * cos(tb) + xf.basis.y * sin(tb)
+				var c: Vector3 = xf.origin + xf.basis.x * (side * d)
+				var wa_lo: Vector3 = c + ra * R - t * w
+				var wb_lo: Vector3 = c + rb * R - t * w
+				var wa_hi: Vector3 = c + ra * R + t * w
+				var wb_hi: Vector3 = c + rb * R + t * w
+				var aa: Vector3 = c + ra * (R - h)
+				var ab: Vector3 = c + rb * (R - h)
+				for tri in [[wa_lo, wb_lo, ab], [wa_lo, ab, aa], [aa, ab, wb_hi], [aa, wb_hi, wa_hi]]:
+					for v in tri:
+						# normale = vers l'axe du tube (comme la paroi)
+						var nr: Vector3 = -(v - c - t * t.dot(v - c)).normalized()
+						st.set_normal(nr)
+						st.add_vertex(v)
+		s += ring_joint_spacing
+		if s - s_chunk > 40.0 or s >= PNConstants.PASSING_END:
+			var mi: MeshInstance3D = MeshInstance3D.new()
+			mi.name = "LoopRings_%d" % n_chunk
+			mi.mesh = st.commit()
+			mi.material_override = mat
+			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			mi.visibility_range_end = 250.0
+			add_child(mi)
+			n_chunk += 1
+			st = null
+
+
+## Coupe ou rallume les réglettes de l'évitement avec l'éclairage du tunnel
+## (retour du 03/10 : « une deuxième rangée de néons qui font une lumière
+## fantomatique dans le noir »).
+func set_loop_lamps(on: bool) -> void:
+	if _loop_lamp_mat == null:
+		return
+	_loop_lamp_mat.emission_enabled = on
+	_loop_lamp_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED if on \
+		else BaseMaterial3D.SHADING_MODE_PER_PIXEL
+	_loop_lamp_mat.albedo_color = Color(0.9, 0.95, 1.0) if on else Color(0.45, 0.47, 0.50)
 
 
 # ---------------------------------------------------------------------------

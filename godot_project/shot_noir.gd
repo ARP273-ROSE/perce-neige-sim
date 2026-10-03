@@ -21,6 +21,8 @@ var _cabine: bool = false
 var _sans_glow: bool = false
 var _vitre_off: bool = false
 var _tunnel: bool = false
+var _caches: PackedStringArray = []   # cache=<nœud sous Main> : masque ce nœud
+var _matdbg_dist: float = 4.0    # matdbg=<m> : rayon de la liste des matériaux
 var _pb_off: bool = false
 var _env_set: Dictionary = {}       # env.propriété=valeur (str_to_var)
 var _params: PackedStringArray = []   # p=énergie,angle,att_cône,att_distance,inclinaison°
@@ -39,6 +41,10 @@ func _initialize() -> void:
 			_env_set[kv[0]] = str_to_var(kv[1])
 		elif a.begins_with("p="):
 			_params = a.substr(2).split(",")
+		elif a.begins_with("matdbg="):
+			_matdbg_dist = float(a.substr(7))
+		elif a.begins_with("cache="):
+			_caches.append(a.substr(6))
 		elif a == "tunnel":
 			_tunnel = true
 		elif a == "vitre-off":
@@ -65,6 +71,18 @@ func _tick() -> void:
 		ph.lights_head = _phares
 		ph.lights_cabin = _cabine
 		_main.set_tunnel_lights(_tunnel)
+		for c in _caches:
+			if c.begins_with("*"):
+				for n in _main.find_children(c, "Node3D", true, false):
+					(n as Node3D).visible = false
+			else:
+				(_main.get_node(c) as Node3D).visible = false
+		if "--liste-voie" in OS.get_cmdline_user_args():
+			var noms := {}
+			for n in _main.get_node("Track").get_children():
+				var k: String = String(n.name).rstrip("0123456789_")
+				noms[k] = noms.get(k, 0) + 1
+			print("VOIE ", noms)
 		if _params.size() == 5:
 			var cab = _main.get("cabin")
 			cab.head_energy = float(_params[0])
@@ -106,7 +124,7 @@ func _tick() -> void:
 			if not g.is_visible_in_tree():
 				continue
 			var ab: AABB = g.global_transform * g.get_aabb()
-			if ab.grow(1.0).has_point(cam.global_position) or ab.get_center().distance_to(cam.global_position) < 4.0:
+			if ab.grow(1.0).has_point(cam.global_position) or ab.get_center().distance_to(cam.global_position) < _matdbg_dist:
 				var info := []
 				if g is MeshInstance3D and (g as MeshInstance3D).mesh != null:
 					var mi := g as MeshInstance3D
