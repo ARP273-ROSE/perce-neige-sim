@@ -1010,6 +1010,9 @@ class GameState:
     train: Train = field(default_factory=Train)
     # Opposing train (counterweight — bound by cable, moves symmetrically)
     ghost_s: float = LENGTH     # starts at top, comes down
+    # Éclairage du tunnel (touche J) — demande du 2026-10-03 : « l'option
+    # de couper tous les éclairages du tunnel ». Relayé à la vue 3D.
+    tunnel_lights: bool = True
     ghost_pax: int = 0          # passengers in the counterweight train
     ghost_pax_target: int = 0   # cible d'embarquement du contrepoids
     ghost_f: float = 0.0        # effectif continu interne
@@ -5815,8 +5818,19 @@ class AutoOps:
         self._set_phase(self.PHASE_IDLE)
 
     def _begin_boarding(self, now: datetime) -> None:
-        self._set_phase(self.PHASE_BOARDING)
         tr = self.w.state.train
+        # Exploitation auto enclenchée en gare APRÈS UN TRAJET MANUEL
+        # (retour d'essai 2026-10-03 : « bug dans la séquence auto — c'est
+        # quand on passe du mode manuel à auto après un trajet ; au
+        # deuxième cycle ça marche ») : la rame est encore tournée vers la
+        # gare où elle vient d'arriver. L'automate l'y « renvoyait » —
+        # fermeture des portes, buzzer, « Départ », arrivée instantanée —
+        # avant de faire enfin son demi-tour. On la retourne d'abord.
+        at_top = tr.s >= STOP_S - 5.0
+        at_bottom = tr.s <= START_S + 5.0
+        if (at_top and tr.direction > 0) or (at_bottom and tr.direction < 0):
+            self.w.reverse_trip(silent=True)
+        self._set_phase(self.PHASE_BOARDING)
         # Boarding must start with the cabin absolutely parked :
         # drum engaged, setpoint at 0, otherwise as soon as the doors
         # finish closing in CLOSING the regulator would see a live
@@ -6410,6 +6424,10 @@ class GameWidget(QWidget):
             int(K.Key_N): (
                 "Mute / unmute on-board announcements and ambient sound",
                 "Couper / rétablir les annonces et l'ambiance sonore",
+            ),
+            int(K.Key_J): (
+                "TUNNEL — switch all the tunnel lighting off / on (only the headlights, stations and machine room stay lit)",
+                "TUNNEL — couper / rallumer tout l'éclairage du tunnel (restent les phares, les gares et la salle des machines)",
             ),
             int(K.Key_V): (
                 "READY — latch own cabin ready; START authorises when both ready",
@@ -8102,6 +8120,12 @@ class GameWidget(QWidget):
                           "Autopilot ON — doors, READY, START, 100 %, stop",
                           "Pilote auto ON — portes, PRÊT, DÉPART, 100 %, arrêt",
                           "info")
+        elif k == Qt.Key.Key_J:
+            st.tunnel_lights = not st.tunnel_lights
+            add_event(st, "tunnel_lights",
+                      f"Tunnel lighting {'ON' if st.tunnel_lights else 'OFF'}",
+                      f"Éclairage du tunnel {'allumé' if st.tunnel_lights else 'coupé'}",
+                      "info")
         elif k == Qt.Key.Key_N:
             muted = self.sounds.toggle_mute()
             add_event(st, "mute",
@@ -10008,6 +10032,9 @@ class GameWidget(QWidget):
         # Anchor the tube positions to absolute slope metres so they
         # don't wobble as the train moves (phase-locked to s=0).
         k_center = int(view_s / NEON_SPACING)
+        # Éclairage du tunnel coupé (touche J) : plus aucun tube allumé
+        if not st.tunnel_lights:
+            k_span = -1
         for k in range(k_center - k_span, k_center + k_span + 1):
             neon_s = k * NEON_SPACING
             if neon_s < 0.0 or neon_s > LENGTH:
@@ -12787,7 +12814,7 @@ class GameWidget(QWidget):
             )
 
         # --- Cockpit control buttons (realistic panel) --------------------
-        # Three rows × three columns of real buttons the driver uses.
+        # Five thematic rows of real buttons the driver uses.
         # Shifted down 26 px to clear the REVERSE button added above.
         btn_y = rect.y() + 314
         btn_w = 115
@@ -12836,7 +12863,18 @@ class GameWidget(QWidget):
             self._hit_zones.append(
                 (QRectF(col2, row0, btn_w, btn_h), int(Qt.Key.Key_W), False)
             )
-        # Row 1 : lights + horn
+        # Rangées THÉMATIQUES (demande du 2026-10-03 : « mets tout ce qui se
+        # rapporte aux lumières ensemble, fais un tri des boutons pour que
+        # tout soit cohérent ») :
+        #   0 sécurité   : arrêt électrique, urgence, veille
+        #   1 éclairage  : phares, cabine, tunnel
+        #   2 exploitation : portes, pilote auto, klaxon
+        #   3 vues       : vue 3D, cycle des vues 3D      (2 boutons larges)
+        #   4 système    : son, aide                      (2 boutons larges)
+        btn_w2 = (3 * btn_w + gap) / 2.0
+        col1w = col0 + btn_w2 + gap
+        row4 = btn_y + (btn_h + gap) * 4
+        # Row 1 : éclairage
         self._draw_button(p, col0, row1, btn_w, btn_h,
                           T("HEADLT. [H]", "PHARES [H]"),
                           tr.lights_head, QColor(255, 240, 160),
@@ -12845,21 +12883,20 @@ class GameWidget(QWidget):
             (QRectF(col0, row1, btn_w, btn_h), int(Qt.Key.Key_H), False)
         )
         self._draw_button(p, col1, row1, btn_w, btn_h,
-                          T("CABIN [C]", "CABINE [C]"),
+                          T("CABIN LT. [C]", "ÉCL. CABINE [C]"),
                           tr.lights_cabin, QColor(255, 230, 120),
                           QColor(70, 60, 0))
         self._hit_zones.append(
             (QRectF(col1, row1, btn_w, btn_h), int(Qt.Key.Key_C), False)
         )
         self._draw_button(p, col2, row1, btn_w, btn_h,
-                          T("HORN [K]", "KLAXON [K]"),
-                          tr.horn, QColor(120, 200, 255),
-                          QColor(10, 30, 70))
-        # Horn is hold-type.
+                          T("TUNNEL LT. [J]", "ÉCL. TUNNEL [J]"),
+                          st.tunnel_lights, QColor(255, 235, 170),
+                          QColor(60, 55, 20))
         self._hit_zones.append(
-            (QRectF(col2, row1, btn_w, btn_h), int(Qt.Key.Key_K), True)
+            (QRectF(col2, row1, btn_w, btn_h), int(Qt.Key.Key_J), False)
         )
-        # Row 2 : doors + autopilot + mute
+        # Row 2 : exploitation (portes, pilote auto du voyage, klaxon)
         if tr.doors_timer > 0.0:
             doors_lbl = T("DOORS ...", "PORTES ...")
             doors_on = True
@@ -12883,44 +12920,54 @@ class GameWidget(QWidget):
             (QRectF(col1, row2, btn_w, btn_h), int(Qt.Key.Key_A), False)
         )
         self._draw_button(p, col2, row2, btn_w, btn_h,
-                          T("SOUND [N]", "SON [N]"),
-                          not self.sounds.muted, QColor(160, 220, 255),
-                          QColor(10, 30, 60))
+                          T("HORN [K]", "KLAXON [K]"),
+                          tr.horn, QColor(120, 200, 255),
+                          QColor(10, 30, 70))
+        # Horn is hold-type.
         self._hit_zones.append(
-            (QRectF(col2, row2, btn_w, btn_h), int(Qt.Key.Key_N), False)
+            (QRectF(col2, row2, btn_w, btn_h), int(Qt.Key.Key_K), True)
         )
-        # Row 3 : vue cabine 3D (F4), vue extérieure (O), aide (F1)
-        self._draw_button(p, col0, row3, btn_w, btn_h,
+        # Row 3 : vues — vue cabine 3D (F4) et cycle des vues 3D (O) ; le
+        # libellé du cycle annonce la vue SUIVANTE
+        self._draw_button(p, col0, row3, btn_w2, btn_h,
                           T("3D VIEW [F4]", "VUE 3D [F4]"),
                           self._cabin_view_state == 2, QColor(120, 200, 255),
                           QColor(10, 40, 70))
         self._hit_zones.append(
-            (QRectF(col0, row3, btn_w, btn_h), int(Qt.Key.Key_F4), False)
+            (QRectF(col0, row3, btn_w2, btn_h), int(Qt.Key.Key_F4), False)
         )
         vue3d = int(getattr(self, "_godot_view3d", 0))
-        self._draw_button(p, col1, row3, btn_w, btn_h,
+        self._draw_button(p, col1w, row3, btn_w2, btn_h,
                           (T("EXT. VIEW [O]", "VUE EXT. [O]"),
-                           T("MACHINES [O]", "MACHINES [O]"),
-                           T("CABIN [O]", "CABINE [O]"))[vue3d],
+                           T("MACHINE ROOM [O]", "VUE MACHINES [O]"),
+                           T("CAB VIEW [O]", "VUE CABINE [O]"))[vue3d],
                           vue3d != 0,
                           QColor(170, 210, 255), QColor(20, 40, 70))
         self._hit_zones.append(
-            (QRectF(col1, row3, btn_w, btn_h), int(Qt.Key.Key_O), False)
+            (QRectF(col1w, row3, btn_w2, btn_h), int(Qt.Key.Key_O), False)
         )
-        self._draw_button(p, col2, row3, btn_w, btn_h,
+        # Row 4 : système — son, aide
+        self._draw_button(p, col0, row4, btn_w2, btn_h,
+                          T("SOUND [N]", "SON [N]"),
+                          not self.sounds.muted, QColor(160, 220, 255),
+                          QColor(10, 30, 60))
+        self._hit_zones.append(
+            (QRectF(col0, row4, btn_w2, btn_h), int(Qt.Key.Key_N), False)
+        )
+        self._draw_button(p, col1w, row4, btn_w2, btn_h,
                           T("HELP [F1]", "AIDE [F1]"),
                           self._show_help, QColor(230, 230, 200),
                           QColor(50, 50, 40))
         self._hit_zones.append(
-            (QRectF(col2, row3, btn_w, btn_h), int(Qt.Key.Key_F1), False)
+            (QRectF(col1w, row4, btn_w2, btn_h), int(Qt.Key.Key_F1), False)
         )
 
         # Info block (compact, left column of rows below the buttons).
-        # Row 3 bottom = btn_y + 3*(btn_h+gap) + btn_h = 314 + 114 + 32 = 460.
+        # Row 4 bottom = btn_y + 4*(btn_h+gap) + btn_h = 314 + 152 + 32 = 498.
         # 10 px de marge : les lignes d'info ne recouvrent jamais la
         # rangée VUE 3D / ORBITE / AIDE.
         ox = rect.x() + 20
-        oy = rect.y() + 470
+        oy = rect.y() + 508
         p.setFont(_cached_font("Consolas", 10))
         p.setPen(_cached_pen(COLOR_TEXT))
         cabin_x_m, cabin_y_m = geom_at(tr.s)
@@ -13936,6 +13983,7 @@ class GameWidget(QWidget):
                 ("D", T("doors (at a stop)", "portes (à l'arrêt)")),
                 ("H", T("headlights", "phares")),
                 ("C", T("cabin lights", "éclairage cabine")),
+                ("J", T("tunnel lighting on / off", "éclairage du tunnel on / off")),
                 ("K", T("horn (hold)", "klaxon (maintenir)")),
                 ("A", T("trip autopilot: doors, READY, START, 100 %, stop",
                         "pilote auto du voyage : portes, PRÊT, DÉPART, 100 %, arrêt")),

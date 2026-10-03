@@ -26,6 +26,9 @@ var _announce_menu: Control = null   # panneau des annonces audio (diffusion man
 var _b_mode: Button = null           # bascule NORMAL / DEFI / PANNES
 var _b_fault: Button = null
 var _b_restart: Button = null        # NOUVEAU VOYAGE après une catastrophe
+var _b_tunnel: Button = null         # éclairage du tunnel (enfoncé = allumé)
+var _b_lights: Button = null         # phares (enfoncé = allumés)
+var _b_cabin: Button = null          # éclairage cabine (enfoncé = allumé)
 
 # Libellé du bouton MODE selon le mode courant (sans accent : police par
 # défaut des exports mobiles).
@@ -80,6 +83,15 @@ func _process(delta: float) -> void:
 		_b_mode.text = MODE_LABEL.get(mode, "MODE")
 	if _b_fault != null:
 		_b_fault.text = "PANNES" if mode == "panne" else "PANNE"
+	# reflet des trois éclairages (clavier H / C / J, automate ou sim PC) :
+	# enfoncé = allumé
+	if _b_tunnel != null:
+		_b_tunnel.set_pressed_no_signal(bool(_main.tunnel_lights_on))
+	if _main.physics != null:
+		if _b_lights != null:
+			_b_lights.set_pressed_no_signal(bool(_main.physics.lights_head))
+		if _b_cabin != null:
+			_b_cabin.set_pressed_no_signal(bool(_main.physics.lights_cabin))
 	# Après une panne catastrophique, rame immobilisée : sans clavier il
 	# n'y avait AUCUN moyen de relancer un voyage (retour d'essai iPad
 	# 2026-09-27) — le bouton NOUVEAU VOYAGE apparaît au centre. (Après une
@@ -137,6 +149,14 @@ func _bind_hold(b: Button, action: String) -> void:
 func _bind_tap(b: Button, action: String) -> void:
 	b.button_down.connect(func() -> void: Input.action_press(action))
 	b.button_up.connect(func() -> void: Input.action_release(action))
+
+
+## Espace entre deux blocs de boutons d'une même rangée.
+func _spacer(w: float) -> Control:
+	var c: Control = Control.new()
+	c.custom_minimum_size = Vector2(w, 1)
+	c.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return c
 
 
 func _build() -> void:
@@ -220,10 +240,20 @@ func _build() -> void:
 	# en gare. L'automate détecte la séquence lancée et embraye (cf.
 	# AutoOperator.WAITING_AT_STATION). → volontairement PAS dans _drive_buttons.
 
-	# --- Rangée haut-droite : boutons secondaires -------------------------
+	# --- Rangée haut-droite : boutons secondaires, PAR BLOCS -------------
+	# (demande du 2026-10-03 : « mets tout ce qui se rapporte aux lumières
+	# ensemble, fais un tri des boutons pour que tout soit cohérent ») :
+	#   conduite : INVERSER, AUTO | lumières : PHARES, CABINE, TUNNEL |
+	#   affichage et son : VUE, ANNONCES
+	# Les trois boutons de lumière sont des bascules : enfoncés = allumé.
 	var top: HBoxContainer = HBoxContainer.new()
 	top.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	top.position = Vector2(-4 - 6 * 112, 10)
+	# ancrée par son bord DROIT et grandissant vers la gauche : la largeur
+	# réelle dépend du texte des boutons (ANNONCES débordait de l'écran)
+	top.grow_horizontal = Control.GROW_DIRECTION_BEGIN
+	top.offset_right = -6.0
+	top.offset_left = -6.0
+	top.offset_top = 10.0
 	top.add_theme_constant_override("separation", 10)
 	root.add_child(top)
 
@@ -238,23 +268,6 @@ func _build() -> void:
 			_main.do_reverse())
 	top.add_child(b_rev)
 
-	var b_lights: Button = _mk_button("PHARES", "Phares avant")
-	b_lights.custom_minimum_size = Vector2(102, 56)
-	_bind_tap(b_lights, "toggle_headlights")
-	top.add_child(b_lights)
-
-	var b_view: Button = _mk_button("VUE", "Vue cabine → extérieure → salle des machines")
-	b_view.custom_minimum_size = Vector2(102, 56)
-	_bind_tap(b_view, "toggle_view")
-	top.add_child(b_view)
-
-	# ANNONCES : ouvre/ferme le menu des annonces audio à diffuser à la
-	# demande (appel direct du système d'annonces, pas de synthèse clavier).
-	var b_ann: Button = _mk_button("ANNONCES", "Diffuser une annonce audio")
-	b_ann.custom_minimum_size = Vector2(120, 56)
-	b_ann.pressed.connect(_toggle_announce_menu)
-	top.add_child(b_ann)
-
 	# AUTO : appel DIRECT du jeu (pas de synthèse clavier — plus fiable
 	# sur web) ; vrai bouton à bascule, vert quand l'exploitation
 	# automatique est active.
@@ -267,6 +280,45 @@ func _build() -> void:
 		if _main != null and _main.auto_operator != null:
 			_main.auto_operator.toggle())
 	top.add_child(_b_auto)
+
+	top.add_child(_spacer(14))
+
+	_b_lights = _mk_button("PHARES", "Phares avant (touche H) — enfoncé = allumés")
+	_b_lights.custom_minimum_size = Vector2(102, 56)
+	_b_lights.toggle_mode = true
+	_bind_tap(_b_lights, "toggle_headlights")
+	top.add_child(_b_lights)
+
+	_b_cabin = _mk_button("CABINE", "Éclairage de la cabine (touche C) — enfoncé = allumé")
+	_b_cabin.custom_minimum_size = Vector2(102, 56)
+	_b_cabin.toggle_mode = true
+	_b_cabin.pressed.connect(func() -> void:
+		if _main != null:
+			_main.toggle_cabin_lights())
+	top.add_child(_b_cabin)
+
+	# TUNNEL : coupe / rallume tout l'éclairage du tunnel (touche J)
+	_b_tunnel = _mk_button("TUNNEL", "Éclairage du tunnel (touche J) — enfoncé = allumé")
+	_b_tunnel.custom_minimum_size = Vector2(102, 56)
+	_b_tunnel.toggle_mode = true
+	_b_tunnel.pressed.connect(func() -> void:
+		if _main != null:
+			_main.toggle_tunnel_lights())
+	top.add_child(_b_tunnel)
+
+	top.add_child(_spacer(14))
+
+	var b_view: Button = _mk_button("VUE", "Vue cabine → extérieure → salle des machines")
+	b_view.custom_minimum_size = Vector2(102, 56)
+	_bind_tap(b_view, "toggle_view")
+	top.add_child(b_view)
+
+	# ANNONCES : ouvre/ferme le menu des annonces audio à diffuser à la
+	# demande (appel direct du système d'annonces, pas de synthèse clavier).
+	var b_ann: Button = _mk_button("ANNONCES", "Diffuser une annonce audio")
+	b_ann.custom_minimum_size = Vector2(120, 56)
+	b_ann.pressed.connect(_toggle_announce_menu)
+	top.add_child(b_ann)
 
 	# PANNE : isolé en HAUT-GAUCHE, loin d'AUTO — un doigt qui ratait
 	# AUTO déclenchait une panne (dont l'annonce « évacuation », retour
