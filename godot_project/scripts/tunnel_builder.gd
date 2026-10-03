@@ -297,6 +297,26 @@ func _build_tunnel_section(
 		chunk_i += 1
 
 
+# Dessus de la dalle de voie (TrackBuilder.floor_y_local + slab_thickness) et
+# demi-largeur de la dalle : dessous, la paroi est cachée — sauf dans la
+# fosse centrale de la voie (retour du 03/10/2026, fond 70 cm sous la
+# dalle), que le bas du tube traversait comme un faux plancher. On ne
+# dessine donc pas la paroi sous la dalle, là où la dalle existe.
+const FLOOR_CUT_Y: float = -1.60
+const SLAB_HALF_W: float = 1.60
+const SLAB_S0: float = 4.5          # TrackBuilder.pit_low_end
+
+
+func _sous_dalle(s: float, x: float, y: float) -> bool:
+	if y >= FLOOR_CUT_Y or s < SLAB_S0 + ring_spacing \
+			or s > PNConstants.LENGTH + MachineRoomBuilder.PIT_S0 - ring_spacing:
+		return false
+	var hw: float = SLAB_HALF_W - 0.05
+	if s > PNConstants.PASSING_START and s < PNConstants.PASSING_END:
+		hw += absf(passing_loop_offset(s, 1.0))
+	return absf(x) < hw
+
+
 func _build_tunnel_chunk(
 	mat: StandardMaterial3D, idx_start: int, idx_end: int,
 	side: float, name: String, is_chamber: bool,
@@ -358,6 +378,9 @@ func _build_tunnel_chunk(
 			var prev_1: Vector2 = _profile_xy(k + 1, ring_segments, prev_radius, prev_blend, prev_dims.x, prev_dims.y)
 			var cur_0: Vector2 = _profile_xy(k, ring_segments, cur_radius, cur_blend, cur_dims.x, cur_dims.y)
 			var cur_1: Vector2 = _profile_xy(k + 1, ring_segments, cur_radius, cur_blend, cur_dims.x, cur_dims.y)
+			if _sous_dalle(s_prev, prev_off + prev_0.x, prev_0.y) and _sous_dalle(s_prev, prev_off + prev_1.x, prev_1.y) \
+					and _sous_dalle(s_cur, cur_off + cur_0.x, cur_0.y) and _sous_dalle(s_cur, cur_off + cur_1.x, cur_1.y):
+				continue
 			if prev_cut and cur_cut and maxf(maxf(prev_0.y, prev_1.y), maxf(cur_0.y, cur_1.y)) <= y_cut + 0.01:
 				continue
 			if prev_cut:
@@ -465,6 +488,9 @@ func _build_tunnel_fusion(
 
 		for k in range(ring_segments):
 			var k1: int = (k + 1) % ring_segments
+			if _sous_dalle(s_prev, prev_pts[k].x, prev_pts[k].y) and _sous_dalle(s_prev, prev_pts[k1].x, prev_pts[k1].y) \
+					and _sous_dalle(s_cur, cur_pts[k].x, cur_pts[k].y) and _sous_dalle(s_cur, cur_pts[k1].x, cur_pts[k1].y):
+				continue
 			var p_prev_0: Vector3 = prev_xform.origin \
 				+ prev_xform.basis.x * prev_pts[k].x + prev_xform.basis.y * prev_pts[k].y
 			var p_prev_1: Vector3 = prev_xform.origin \
