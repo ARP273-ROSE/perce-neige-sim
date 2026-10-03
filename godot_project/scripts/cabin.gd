@@ -16,7 +16,6 @@ var physics: TrainPhysics = null
 var mesh_root: Node3D = null         # coque extérieure (masquée en FPV)
 var interior_root: Node3D = null     # cockpit + sièges + passagers (toujours visibles)
 var headlight_front: SpotLight3D = null
-var headlight_rear: SpotLight3D = null
 var camera_fpv: Camera3D = null
 var camera_ext: Camera3D = null
 var interior_light: OmniLight3D = null
@@ -113,16 +112,10 @@ func _ready() -> void:
 		# En vue extérieure, on la montre.
 		_apply_view_mode()
 	else:
-		# Ghost : mesh toujours visible, pas de caméra ni phares
+		# Ghost : mesh toujours visible, pas de caméra ni phares.
+		# (Plus de lumière rouge au centre de la rame — retour du 03/10 :
+		# « enlève le feu rouge à l'arrière et le halo rouge qui va avec ».)
 		mesh_root.visible = true
-		# Petit feu arrière rouge pour que le ghost soit identifiable de loin
-		var rear: OmniLight3D = OmniLight3D.new()
-		rear.light_color = Color(1.0, 0.25, 0.15)
-		rear.light_energy = 1.8
-		rear.omni_range = 12.0
-		rear.shadow_enabled = false
-		rear.position = Vector3(0.0, 0.25, 0.0)
-		add_child(rear)
 
 
 func _build_mesh() -> void:
@@ -163,14 +156,13 @@ func _build_mesh() -> void:
 				pile.append_array(nd.get_children())
 				if nd is GeometryInstance3D:
 					(nd as GeometryInstance3D).visibility_range_end = 150.0
-	# Le ghost (rame 2) roule vers nous : ses feux arrière rouges allumés
-	# côté « avant » de sa rame vue de notre sens n'ont pas de sens ; on
-	# allume ses feux d'extrémité en blanc (elle vient en face).
+	# Le ghost (rame 2) roule vers nous : ses feux d'extrémité allumés en
+	# blanc (elle vient en face). Ses feux arrière restent des lentilles
+	# éteintes, comme ceux de la rame pilotée : plus de feux rouges (retour
+	# du 03/10 : pas de feu rouge à l'arrière des rames).
 	if is_ghost:
 		for l in _front_lamps:
 			l.set_surface_override_material(0, _body_mats["lamp_on"])
-		for l in _rear_lamps:
-			l.set_surface_override_material(0, _body_mats["tail_on"])
 
 	# --- Intérieur cockpit + sièges + passagers — toujours visible ---------
 	if not is_ghost:
@@ -1270,18 +1262,9 @@ func _build_lights() -> void:
 	headlight_front.visible = true  # allumés par défaut
 	_attach_to_front_car(headlight_front, headlight_front.position)
 
-	# Phares arrière (positon = +Z, look toward +Z)
-	headlight_rear = SpotLight3D.new()
-	headlight_rear.name = "HeadlightRear"
-	headlight_rear.position = Vector3(0.0, 0.2, train_length * 0.5 + 0.2)
-	headlight_rear.rotation = Vector3(0.0, PI, 0.0)
-	headlight_rear.light_color = Color(1.0, 0.30, 0.20)
-	headlight_rear.light_energy = 3.0
-	headlight_rear.spot_range = 80.0
-	headlight_rear.spot_angle = 45.0
-	headlight_rear.shadow_enabled = false
-	headlight_rear.visible = true
-	_attach_to_car(headlight_rear, car_count - 1, headlight_rear.position)
+	# (Feu arrière rouge supprimé — retour du 03/10 : « enlève le feu rouge à
+	# l'arrière des rames et le reflet / halo rouge qui va avec ». Le projecteur
+	# rouge de 80 m teintait le tunnel derrière la rame.)
 
 	# Lumière cabine intérieure (ambient jaune chaud)
 	interior_light = OmniLight3D.new()
@@ -1508,9 +1491,6 @@ func _process(_delta: float) -> void:
 	if physics.direction != _wheel_dir_applied:
 		_apply_wheel_types()
 	if not is_ghost:
-		if headlight_rear != null:
-			# Feu arrière toujours allumé en marche, éteint à l'arrêt complet
-			headlight_rear.visible = absf(physics.v) > 0.1
 		if interior_light != null:
 			interior_light.visible = physics.lights_cabin
 

@@ -124,10 +124,7 @@ static func materials() -> Dictionary:
 	lamp_on.emission_enabled = true
 	lamp_on.emission = Color(1.0, 0.95, 0.80)
 	lamp_on.emission_energy_multiplier = 4.0
-	var tail_on: StandardMaterial3D = _mat(Color(0.9, 0.15, 0.10), 0.3, 0.0)
-	tail_on.emission_enabled = true
-	tail_on.emission = Color(1.0, 0.2, 0.12)
-	tail_on.emission_energy_multiplier = 2.5
+	# (plus de matériau de feu arrière rouge : retiré le 03/10/2026)
 	return {
 		"body": _mat(Color(0.60, 0.61, 0.60), 0.55, 0.45),      # tôle alu grise
 		"door": _mat(Color(0.66, 0.67, 0.66), 0.50, 0.45),      # vantaux, un ton plus clair
@@ -141,7 +138,6 @@ static func materials() -> Dictionary:
 		"lamp_off": lamp_off,
 		"buffer": buffer,
 		"lamp_on": lamp_on,
-		"tail_on": tail_on,
 		"letters": _mat(Color(0.92, 0.92, 0.94), 0.45, 0.30),
 		"lining": _mat(Color(0.82, 0.79, 0.72), 0.80, 0.05),     # habillage intérieur crème
 		"windshield": windshield,
@@ -693,6 +689,57 @@ static func _build_cap(mesh: ArrayMesh, mats: Dictionary, z_join: float, dir_z: 
 
 ## Point de la calotte pour une cible (x, y) du plan frontal : sert à poser
 ## les feux, la grille et le lettrage à fleur de tôle.
+## Normale extérieure de la calotte (ellipsoïde ρ²/R² + z²/L² = 1) au point
+## de cap_surface_point(x, y, …).
+static func cap_surface_normal(x: float, y: float, z_join: float, dir_z: float) -> Vector3:
+	var p: Vector3 = cap_surface_point(x, y, z_join, dir_z)
+	var zr: float = p.z - z_join
+	return Vector3(x / (R_BODY * R_BODY), (y - Y_CENTER) / (R_BODY * R_BODY),
+		zr / (CAP_LEN * CAP_LEN)).normalized()
+
+
+## Mot en lettres argentées sur la calotte, chaque lettre dans le plan
+## tangent à la tôle en son centre, 1,2 cm devant (la calotte est convexe :
+## aucune partie de la lettre ne passe dessous).
+static func _build_lettering(parent: Node3D, mot: String, y_c: float, z_join: float,
+		dir_z: float) -> void:
+	const TAILLE: int = 72
+	const PIXEL: float = 0.0050
+	var font: Font = ThemeDB.fallback_font
+	var larg: Array = []
+	var total: float = 0.0
+	for c in mot:
+		var w: float = font.get_string_size(c, HORIZONTAL_ALIGNMENT_LEFT, -1, TAILLE).x * PIXEL
+		larg.append(w)
+		total += w
+	# x croissant vers la droite VU DE FACE : à l'avant (dir_z < 0) la
+	# droite du lecteur est −x
+	var sens_x: float = 1.0 if dir_z > 0.0 else -1.0
+	var x: float = -total * 0.5
+	var holder: Node3D = Node3D.new()
+	holder.name = "Lettrage"
+	parent.add_child(holder)
+	for i in range(mot.length()):
+		var xc: float = (x + float(larg[i]) * 0.5) * sens_x
+		x += float(larg[i])
+		var n: Vector3 = cap_surface_normal(xc, y_c, z_join, dir_z)
+		var droite: Vector3 = Vector3(sens_x, 0.0, 0.0)
+		droite = (droite - n * droite.dot(n)).normalized()
+		var lbl: Label3D = Label3D.new()
+		lbl.text = mot[i]
+		lbl.font_size = TAILLE
+		lbl.pixel_size = PIXEL
+		lbl.modulate = Color(0.90, 0.90, 0.93)
+		lbl.outline_modulate = Color(0.35, 0.35, 0.38)
+		lbl.outline_size = 8
+		lbl.shaded = true
+		lbl.double_sided = false
+		lbl.basis = Basis(droite, n.cross(droite), n)
+		lbl.position = cap_surface_point(xc, y_c, z_join, dir_z) + n * 0.012
+		lbl.name = "Lettre%d" % i
+		holder.add_child(lbl)
+
+
 static func cap_surface_point(x: float, y: float, z_join: float, dir_z: float) -> Vector3:
 	var rho: float = sqrt(x * x + (y - Y_CENTER) * (y - Y_CENTER))
 	var t: float = acos(clampf(rho / R_BODY, -1.0, 1.0))
@@ -766,23 +813,14 @@ static func _build_cap_fittings(parent: Node3D, mats: Dictionary, z_join: float,
 		var ph2: Vector3 = cap_surface_point(sx * 1.22, Y_CENTER + _face_y(0.15), z_join, dir_z)
 		ph2.z += dir_z * 0.02
 		_box(parent, mats["dark"], Vector3(0.10, 0.05, 0.03), ph2, "Serrure")
-	# lettrage « TIGNES » en lettres argentées sous le pare-brise (photos),
-	# à fleur de tôle ; Label3D regarde vers +Z par défaut → retourné à l'avant
-	var lbl: Label3D = Label3D.new()
-	lbl.text = "TIGNES"
-	lbl.font_size = 72
-	lbl.pixel_size = 0.0050
-	lbl.modulate = Color(0.90, 0.90, 0.93)
-	lbl.outline_modulate = Color(0.35, 0.35, 0.38)
-	lbl.outline_size = 8
-	lbl.shaded = true
-	lbl.double_sided = false
-	var pl: Vector3 = cap_surface_point(0.0, Y_CENTER + _face_y(-0.84), z_join, dir_z)
-	pl.z += dir_z * 0.02
-	lbl.position = pl
-	lbl.rotation = Vector3(0.0, PI if dir_z < 0.0 else 0.0, 0.0)
-	lbl.name = "Lettrage"
-	parent.add_child(lbl)
+	# lettrage « TIGNES » en lettres argentées sous le pare-brise (photos).
+	# Retour du 03/10 : « écris bien TIGNES, le haut des lettres du milieu
+	# est un peu mangé ». Le mot était UN panneau vertical posé devant le
+	# nez : sous le centre de la calotte bombée, la tôle avance au-dessus
+	# du lettrage et le haut de « G » et « N » passait derrière. Chaque
+	# lettre est maintenant posée TANGENTE à la calotte, à sa place : la
+	# calotte étant convexe, son plan tangent reste toujours devant elle.
+	_build_lettering(parent, "TIGNES", Y_CENTER + _face_y(-0.84), z_join, dir_z)
 	# plaque « FUNICULAIRE PERCE NEIGE 1 » : DANS le pare-brise, en bas au
 	# centre (derrière la vitre, comme sur la photo)
 	var pp: Vector3 = cap_surface_point(0.0, Y_CENTER + _face_y(-0.34), z_join, dir_z)
