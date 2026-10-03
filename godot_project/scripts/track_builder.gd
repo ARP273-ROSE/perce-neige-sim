@@ -29,7 +29,10 @@ extends Node3D
 @export var slab_thickness: float = 0.25     # épaisseur dalle béton
 @export var slab_width: float = 3.20         # largeur dalle (déborde sous banquettes)
 
-@export var sleeper_spacing: float = 0.95    # entraxe blocs (≈ 950 mm, gaps visibles)
+# Entraxe des plots MESURÉ sur la vidéo de montée du 26/04/2026 : ils
+# défilent à 5,25 Hz à 7,95 m/s (vitesse lue sur l'écran du pupitre :
+# 1 910 → 2 387 m en 60 s) → 1,51 m (0,95 m estimé auparavant).
+@export var sleeper_spacing: float = 1.51
 # Blochets INDÉPENDANTS sous chaque rail (photos du 2026-04-26 : les
 # traverses ne sont PAS continues entre les deux rails comme en voie
 # ferrée classique — chaque rail repose sur sa propre rangée de plots
@@ -44,7 +47,19 @@ extends Node3D
 @export var cable_beam_width: float = 0.50
 @export var cable_beam_height: float = 0.06   # longrine basse : le câble doit rester au niveau des blochets
 
-@export var guide_spacing: float = 13.57     # entraxe RÉEL : 3474 m / 256 paires (source CFD)
+@export var guide_spacing: float = 13.57     # ancienne grille (3474 m / 256 paires, CFD) : gare haute seulement
+# Fosse centrale (vidéo de Kevin du 26/04/2026, vue plongeante depuis le nez,
+# et retour d'essai du 03/10 : « le plancher entre les traverses au milieu
+# de la voie, faudrait le baisser de 70 cm ») : les rails sont sur de hauts
+# plots béton, le fond entre et autour des deux rangées de plots est 70 cm
+# sous l'ancienne dalle ; les supports de galets enjambent la fosse.
+@export var trench_depth: float = 0.70
+# Supports numérotés (faits de Kevin, 03/10) : AUCUN support en gare aval,
+# le n° 1 est au bout du quai aval, le n° 238 (dernier numéroté) au début du
+# quai amont. Quais 3D : [3, 51] et [3425, 3473] (stations_builder).
+const SUPPORT_S1: float = 51.5
+const SUPPORT_S_LAST: float = 3424.5
+const SUPPORT_N: int = 238
 @export var pulley_radius: float = 0.15      # rayon poulie/galet (300 mm)
 @export var pulley_thickness: float = 0.08   # épaisseur galet
 @export var pulley_pair_offset: float = 0.12 # décalage latéral de chaque poulie (entraxe 0.24m)
@@ -170,20 +185,42 @@ func _in_abt_zone(s: float) -> bool:
 		or (s > PNConstants.PASSING_END - ABT_ZONE and s < PNConstants.PASSING_END + 5.0)
 
 
-# Abscisses des galets : grille réelle (3474 m / 256 paires) hors
-# aiguillages, stations dessinées dans les aiguillages.
+# Abscisses des galets. Entre le bout du quai aval (n° 1) et le début du
+# quai amont (n° 238) : grille régulière hors aiguillages + stations
+# dessinées des aiguillages, le pas étant choisi pour qu'il y ait EXACTEMENT
+# 238 supports (14,54 m). Aucun en gare aval. En gare amont, les galets non
+# numérotés de l'ancienne grille (le dernier raccorde la salle des
+# machines, MachineRoomBuilder.S_LAST_TUNNEL_ROLLER).
 func _station_list() -> Array:
 	var out: Array = []
-	var n_total: int = int(PNConstants.LENGTH / guide_spacing)
-	for i in range(n_total):
-		var s: float = (float(i) + 0.5) * guide_spacing
-		if not _in_abt_zone(s):
-			out.append({"s": s, "sheave": false})
+	var span: float = SUPPORT_S_LAST - SUPPORT_S1
+	var grid: Array = []
+	var best_dp: float = INF
+	for g in range(SUPPORT_N - 40, SUPPORT_N + 10):
+		var sp: float = span / float(g - 1)
+		var pts: Array = []
+		for i in range(g):
+			var s: float = SUPPORT_S1 + float(i) * sp
+			if not _in_abt_zone(s):
+				pts.append(s)
+		if pts.size() + 2 * ABT_STATIONS.size() == SUPPORT_N and absf(sp - guide_spacing) < best_dp:
+			best_dp = absf(sp - guide_spacing)
+			grid = pts
+	for s in grid:
+		out.append({"s": s, "sheave": false})
 	for o in ABT_STATIONS:
 		var sh: bool = ABT_SHEAVE_STATIONS.has(o)
 		out.append({"s": PNConstants.PASSING_START + o, "sheave": sh})
 		out.append({"s": PNConstants.PASSING_END - o, "sheave": sh})
 	out.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a.s < b.s)
+	for i in range(out.size()):
+		out[i]["num"] = i + 1
+	# gare amont : galets non numérotés
+	var n_total: int = int(PNConstants.LENGTH / guide_spacing)
+	for i in range(n_total):
+		var s: float = (float(i) + 0.5) * guide_spacing
+		if s > SUPPORT_S_LAST + 5.0:
+			out.append({"s": s, "sheave": false, "num": 0})
 	for st in out:
 		# support commun aux deux brins tant qu'ils sont côte à côte
 		st["paired"] = absf(tunnel.passing_loop_offset(st.s, 1.0)) < 0.05
@@ -779,16 +816,55 @@ func _build_slab_chunk(
 		var v0: float = prev_s
 		var v1: float = s_cur
 
-		# Dessus
-		_emit_quad_strip(
-			st,
-			_pt(p0, r0, u0, prev_off - prev_half_w, slab_top_y),
-			_pt(p0, r0, u0, prev_off + prev_half_w, slab_top_y),
-			_pt(p1, r1, u1, cur_off - cur_half_w, slab_top_y),
-			_pt(p1, r1, u1, cur_off + cur_half_w, slab_top_y),
-			Vector2(0.0, v0), Vector2(1.0, v0),
-			Vector2(0.0, v1), Vector2(1.0, v1),
-		)
+		# Dessus, creusé de la fosse centrale (une par voie dans
+		# l'évitement, confondues tant que les voies se chevauchent)
+		var e0: Array = _trench_edges(prev_s, is_chamber, side)
+		var e1: Array = _trench_edges(s_cur, is_chamber, side)
+		var y_f0: float = slab_top_y - _trench_depth_at(prev_s)
+		var y_f1: float = slab_top_y - _trench_depth_at(s_cur)
+		var m0: Array = _trench_ledge(e0, slab_top_y, y_f0)
+		var m1: Array = _trench_ledge(e1, slab_top_y, y_f1)
+		# bandes hautes extérieures
+		_emit_quad_strip(st,
+			_pt(p0, r0, u0, prev_off - prev_half_w, slab_top_y), _pt(p0, r0, u0, e0[0], slab_top_y),
+			_pt(p1, r1, u1, cur_off - cur_half_w, slab_top_y), _pt(p1, r1, u1, e1[0], slab_top_y),
+			Vector2(0.0, v0), Vector2(0.3, v0), Vector2(0.0, v1), Vector2(0.3, v1))
+		_emit_quad_strip(st,
+			_pt(p0, r0, u0, e0[3], slab_top_y), _pt(p0, r0, u0, prev_off + prev_half_w, slab_top_y),
+			_pt(p1, r1, u1, e1[3], slab_top_y), _pt(p1, r1, u1, cur_off + cur_half_w, slab_top_y),
+			Vector2(0.7, v0), Vector2(1.0, v0), Vector2(0.7, v1), Vector2(1.0, v1))
+		# fonds de fosse
+		_emit_quad_strip(st,
+			_pt(p0, r0, u0, e0[0], y_f0), _pt(p0, r0, u0, m0[0], y_f0),
+			_pt(p1, r1, u1, e1[0], y_f1), _pt(p1, r1, u1, m1[0], y_f1),
+			Vector2(0.3, v0), Vector2(0.5, v0), Vector2(0.3, v1), Vector2(0.5, v1))
+		_emit_quad_strip(st,
+			_pt(p0, r0, u0, m0[1], y_f0), _pt(p0, r0, u0, e0[3], y_f0),
+			_pt(p1, r1, u1, m1[1], y_f1), _pt(p1, r1, u1, e1[3], y_f1),
+			Vector2(0.5, v0), Vector2(0.7, v0), Vector2(0.5, v1), Vector2(0.7, v1))
+		# parois extérieures de la fosse (vers l'intérieur)
+		_emit_quad_strip(st,
+			_pt(p0, r0, u0, e0[0], slab_top_y), _pt(p0, r0, u0, e0[0], y_f0),
+			_pt(p1, r1, u1, e1[0], slab_top_y), _pt(p1, r1, u1, e1[0], y_f1),
+			Vector2(0.3, v0), Vector2(0.4, v0), Vector2(0.3, v1), Vector2(0.4, v1))
+		_emit_quad_strip(st,
+			_pt(p0, r0, u0, e0[3], y_f0), _pt(p0, r0, u0, e0[3], slab_top_y),
+			_pt(p1, r1, u1, e1[3], y_f1), _pt(p1, r1, u1, e1[3], slab_top_y),
+			Vector2(0.6, v0), Vector2(0.7, v0), Vector2(0.6, v1), Vector2(0.7, v1))
+		# merlon entre les deux fosses de l'évitement
+		if is_chamber and (m0[1] - m0[0] > 0.001 or m1[1] - m1[0] > 0.001):
+			_emit_quad_strip(st,
+				_pt(p0, r0, u0, m0[0], m0[2]), _pt(p0, r0, u0, m0[1], m0[2]),
+				_pt(p1, r1, u1, m1[0], m1[2]), _pt(p1, r1, u1, m1[1], m1[2]),
+				Vector2(0.45, v0), Vector2(0.55, v0), Vector2(0.45, v1), Vector2(0.55, v1))
+			_emit_quad_strip(st,
+				_pt(p0, r0, u0, m0[0], y_f0), _pt(p0, r0, u0, m0[0], m0[2]),
+				_pt(p1, r1, u1, m1[0], y_f1), _pt(p1, r1, u1, m1[0], m1[2]),
+				Vector2(0.45, v0), Vector2(0.5, v0), Vector2(0.45, v1), Vector2(0.5, v1))
+			_emit_quad_strip(st,
+				_pt(p0, r0, u0, m0[1], m0[2]), _pt(p0, r0, u0, m0[1], y_f0),
+				_pt(p1, r1, u1, m1[1], m1[2]), _pt(p1, r1, u1, m1[1], y_f1),
+				Vector2(0.5, v0), Vector2(0.55, v0), Vector2(0.5, v1), Vector2(0.55, v1))
 		# Flanc gauche
 		_emit_quad_strip(
 			st,
@@ -822,6 +898,39 @@ func _build_slab_chunk(
 	mi.mesh = st.commit()
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(mi)
+
+
+# Bords de la fosse centrale à l'abscisse s (x local) : [g0, g1, d0, d1],
+# fosse de la voie gauche puis de la voie droite — la même hors
+# évitement. Elle va de la face extérieure d'une rangée de plots à celle
+# de l'autre (vidéo : fond profond entre les plots aussi).
+func _trench_edges(s: float, is_chamber: bool, side: float) -> Array:
+	var tw: float = gauge_m * 0.5 + block_width * 0.5
+	if is_chamber:
+		var cl: float = _track_center_x(s, -1.0)
+		var cr: float = _track_center_x(s, 1.0)
+		return [cl - tw, cl + tw, cr - tw, cr + tw]
+	var c: float = _track_center_x(s, side)
+	return [c - tw, c + tw, c - tw, c + tw]
+
+
+# Merlon entre les deux fosses : [x0, x1, y_dessus]. Nul (et au fond) tant
+# que les fosses se chevauchent ; il monte à la dalle sur 40 cm de large.
+func _trench_ledge(e: Array, y_top: float, y_floor: float) -> Array:
+	var lo: float = e[1]
+	var hi: float = e[2]
+	if hi <= lo:
+		var m: float = 0.5 * (lo + hi)
+		return [m, m, y_floor]
+	return [lo, hi, lerpf(y_floor, y_top, clampf((hi - lo) / 0.4, 0.0, 1.0))]
+
+
+# Profondeur de la fosse à l'abscisse s : pleine sur la ligne, elle remonte
+# au niveau de la dalle sur les derniers mètres avant la fosse de la roue
+# aval (gare haute), sinon son fond traverserait la roue.
+func _trench_depth_at(s: float) -> float:
+	var s_fin: float = PNConstants.LENGTH + MachineRoomBuilder.PIT_S0
+	return trench_depth * clampf((s_fin - 1.5 - s) / 2.5, 0.0, 1.0)
 
 
 # Centre latéral d'une voie ferrée à la distance s.
@@ -1119,8 +1228,9 @@ func _build_sleepers() -> void:
 	mat.roughness = 0.95
 	mat.metallic = 0.0
 
+	# Plots : du fond de la fosse jusque sous le rail (vidéo du 26/04)
 	var box: BoxMesh = BoxMesh.new()
-	box.size = Vector3(block_width, sleeper_height, sleeper_width)
+	box.size = Vector3(block_width, sleeper_height + trench_depth, sleeper_width)
 	box.material = mat
 
 	# Construit la liste des positions : un blochet SOUS CHAQUE RAIL
@@ -1165,7 +1275,8 @@ func _build_sleepers() -> void:
 			else:
 				positions.append({"s": s, "off": xr, "w": 0.24, "low": true})
 	var xforms: Array = []
-	var y_center: float = floor_y_local + slab_thickness + sleeper_height * 0.5 - 0.01
+	var y_center: float = floor_y_local + slab_thickness - trench_depth \
+		+ (sleeper_height + trench_depth) * 0.5 - 0.01
 	for entry in positions:
 		var xform: Transform3D = tunnel.transform_at(entry.s)
 		var tr: Transform3D = xform
@@ -1393,22 +1504,16 @@ func _build_tunnel_details() -> void:
 	lamp_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	_loop_lamp_mat = lamp_mat
 
-	# --- fines lignes circulaires (section circulaire, hors évitement)
-	var ring: TorusMesh = TorusMesh.new()
-	ring.inner_radius = tunnel.tunnel_radius - 0.015
-	ring.outer_radius = tunnel.tunnel_radius + 0.005
-	ring.rings = 24          # 192 triangles par joint (480 avant) : trait fin
-	ring.ring_segments = 4
-	ring.material = joint_mat
+	# --- fines lignes circulaires (section circulaire, hors évitement) :
+	# arc qui s'arrête à la dalle (un tore complet traversait la fosse
+	# centrale de la voie sous le niveau de la dalle)
+	var ring: ArrayMesh = _ring_arc_mesh(joint_mat)
 	var rings: Array = []
 	var s: float = PNConstants.SQUARE_SECTION_LOW_END + 0.7
 	while s < PNConstants.SQUARE_SECTION_HIGH_START:
 		if not _in_loop_zone(s):
 			var xf: Transform3D = tunnel.transform_at(s)
-			var tangent: Vector3 = -xf.basis.z
-			# TorusMesh a son axe en Y → axe le long de la voie
-			var rb: Basis = Basis(xf.basis.x, tangent, -xf.basis.y)
-			rings.append(Transform3D(rb, xf.origin))
+			rings.append(Transform3D(xf.basis, xf.origin))
 		s += ring_joint_spacing
 	_mm_instance(ring, rings, "SegmentRings", 250.0)
 
@@ -1486,6 +1591,38 @@ func _build_tunnel_details() -> void:
 	_mm_instance(lamp, lamps, "LoopLamps")
 
 
+## Joint annulaire du tube unique : bourrelet de 1,5 cm (comme l'ancien
+## tore) sur l'arc AU-DESSUS de la dalle, repère local du tunnel (X droite,
+## Y haut, Z le long de la voie).
+const RING_Y_MIN: float = -1.62   # 2 cm sous le dessus de la dalle
+
+
+func _ring_arc_mesh(joint_mat: StandardMaterial3D) -> ArrayMesh:
+	var R: float = tunnel.tunnel_radius
+	var w: float = 0.010
+	var h: float = 0.015
+	var a0: float = asin(clampf(RING_Y_MIN / R, -1.0, 1.0))
+	var a1: float = PI - a0
+	var n: int = 24
+	var st: SurfaceTool = SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for j in range(n):
+		var ta: float = a0 + (a1 - a0) * float(j) / float(n)
+		var tb: float = a0 + (a1 - a0) * float(j + 1) / float(n)
+		var ra: Vector3 = Vector3(cos(ta), sin(ta), 0.0)
+		var rb: Vector3 = Vector3(cos(tb), sin(tb), 0.0)
+		var z: Vector3 = Vector3(0.0, 0.0, 1.0)
+		for tri in [[ra * R - z * w, rb * R - z * w, rb * (R - h)], [ra * R - z * w, rb * (R - h), ra * (R - h)],
+				[ra * (R - h), rb * (R - h), rb * R + z * w], [ra * (R - h), rb * R + z * w, ra * R + z * w]]:
+			for v in tri:
+				st.set_normal(-Vector3(v.x, v.y, 0.0).normalized())
+				st.add_vertex(v)
+	var mat: StandardMaterial3D = joint_mat.duplicate()
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	st.set_material(mat)
+	return st.commit()
+
+
 ## Point de la canalisation de voûte dans le tube DROIT de l'évitement.
 func _loop_crown_point(s: float) -> Vector3:
 	var xf: Transform3D = tunnel.transform_at(s)
@@ -1526,13 +1663,14 @@ func _build_loop_rings(joint_mat: StandardMaterial3D) -> void:
 		for side in [-1.0, 1.0]:
 			var a0: float
 			var a1: float
+			var bas: float = asin(clampf(RING_Y_MIN / R, -1.0, 1.0))   # rien sous la dalle
 			if side > 0.0:
 				var ac: float = acos(-q)          # |θ| ≤ acos(−d/R)
-				a0 = -ac
+				a0 = maxf(-ac, bas)
 				a1 = ac
 			else:
 				a0 = acos(q)                      # θ ∈ [acos(d/R), 2π − acos(d/R)]
-				a1 = TAU - a0
+				a1 = minf(TAU - a0, PI - bas)
 			var n: int = maxi(4, int(ceil((a1 - a0) / TAU * 32.0)))
 			for j in range(n):
 				var ta: float = a0 + (a1 - a0) * float(j) / float(n)
@@ -1642,8 +1780,7 @@ func _build_cable_beam_chunk(
 	st.set_material(mat)
 
 	var half_w: float = cable_beam_width * 0.5
-	var y_lo: float = floor_y_local + slab_thickness - 0.01
-	var y_hi: float = y_lo + cable_beam_height
+	var y_lo: float = floor_y_local + slab_thickness - 0.01   # + fond de fosse (par abscisse)
 
 	var s_list: Array = _adaptive_s_list(s_start, s_end, side)
 	var prev_s: float = s_list[0]
@@ -1663,34 +1800,39 @@ func _build_cable_beam_chunk(
 
 		var v0: float = prev_s
 		var v1: float = s_cur
+		# au fond de la fosse
+		var lo0: float = y_lo - _trench_depth_at(prev_s)
+		var lo1: float = y_lo - _trench_depth_at(s_cur)
+		var hi0: float = lo0 + cable_beam_height
+		var hi1: float = lo1 + cable_beam_height
 
 		# Dessus
 		_emit_quad_strip(
 			st,
-			_pt(p0, r0, u0, prev_off - half_w, y_hi),
-			_pt(p0, r0, u0, prev_off + half_w, y_hi),
-			_pt(p1, r1, u1, cur_off - half_w, y_hi),
-			_pt(p1, r1, u1, cur_off + half_w, y_hi),
+			_pt(p0, r0, u0, prev_off - half_w, hi0),
+			_pt(p0, r0, u0, prev_off + half_w, hi0),
+			_pt(p1, r1, u1, cur_off - half_w, hi1),
+			_pt(p1, r1, u1, cur_off + half_w, hi1),
 			Vector2(0.0, v0), Vector2(1.0, v0),
 			Vector2(0.0, v1), Vector2(1.0, v1),
 		)
 		# Flanc gauche
 		_emit_quad_strip(
 			st,
-			_pt(p0, r0, u0, prev_off - half_w, y_lo),
-			_pt(p0, r0, u0, prev_off - half_w, y_hi),
-			_pt(p1, r1, u1, cur_off - half_w, y_lo),
-			_pt(p1, r1, u1, cur_off - half_w, y_hi),
+			_pt(p0, r0, u0, prev_off - half_w, lo0),
+			_pt(p0, r0, u0, prev_off - half_w, hi0),
+			_pt(p1, r1, u1, cur_off - half_w, lo1),
+			_pt(p1, r1, u1, cur_off - half_w, hi1),
 			Vector2(0.0, v0), Vector2(0.2, v0),
 			Vector2(0.0, v1), Vector2(0.2, v1),
 		)
 		# Flanc droite
 		_emit_quad_strip(
 			st,
-			_pt(p0, r0, u0, prev_off + half_w, y_hi),
-			_pt(p0, r0, u0, prev_off + half_w, y_lo),
-			_pt(p1, r1, u1, cur_off + half_w, y_hi),
-			_pt(p1, r1, u1, cur_off + half_w, y_lo),
+			_pt(p0, r0, u0, prev_off + half_w, hi0),
+			_pt(p0, r0, u0, prev_off + half_w, lo0),
+			_pt(p1, r1, u1, cur_off + half_w, hi1),
+			_pt(p1, r1, u1, cur_off + half_w, lo1),
 			Vector2(0.8, v0), Vector2(1.0, v0),
 			Vector2(0.8, v1), Vector2(1.0, v1),
 		)
@@ -1719,24 +1861,21 @@ func _build_cable_beam_chunk(
 # ---------------------------------------------------------------------------
 
 func _build_guides() -> void:
-	# Les socles posent sur la LONGRINE continue (cf. _build_cable_beam).
+	# Support = cadre blanc qui enjambe la fosse (vidéo de Kevin du 26/04,
+	# vue plongeante depuis le nez) : traverse juste sous les galets, pieds
+	# jusqu'à la longrine au fond de la fosse, équerres et galets dessus.
 	# Positions et inclinaisons : _compute_cable_geometry (le câble tendu
 	# passe exactement dans la gorge de chaque galet).
 	var y_axis: float = _roller_axis_y()
-	var top_slab: float = floor_y_local + slab_thickness - 0.01 + cable_beam_height
-	var y_base_lo: float = top_slab
-	var y_base_hi: float = top_slab + base_plate_height
-	var br_h: float = clampf(y_axis + 0.06 - y_base_hi, 0.06, bracket_height)
-	var y_base_center: float = (y_base_lo + y_base_hi) * 0.5
+	var y_fond: float = floor_y_local + slab_thickness - trench_depth - 0.01 + cable_beam_height
+	var y_cb: float = y_axis - pulley_radius - 0.01 - SUPPORT_BAR_H * 0.5   # centre de la traverse
+	var y_base_hi: float = y_cb + SUPPORT_BAR_H * 0.5
+	var br_h: float = y_axis + 0.06 - y_base_hi
+	var y_base_center: float = y_cb
 	var y_bracket_center: float = y_base_hi + br_h * 0.5
+	var leg_h: float = (y_cb - SUPPORT_BAR_H * 0.5) - y_fond
+	var y_leg_center: float = y_fond + leg_h * 0.5
 
-	var concrete_mat: StandardMaterial3D = StandardMaterial3D.new()
-	concrete_mat.albedo_color = Color(0.42, 0.40, 0.37)
-	concrete_mat.roughness = 0.92
-	var steel_mat: StandardMaterial3D = StandardMaterial3D.new()
-	steel_mat.albedo_color = Color(0.28, 0.28, 0.30)
-	steel_mat.roughness = 0.45
-	steel_mat.metallic = 0.85
 	var iron_mat: StandardMaterial3D = StandardMaterial3D.new()
 	iron_mat.albedo_color = Color(0.18, 0.18, 0.20)
 	iron_mat.roughness = 0.35
@@ -1749,16 +1888,24 @@ func _build_guides() -> void:
 	poly_mat.metallic = 0.05
 
 	var single_span: float = pulley_thickness + 0.05
+	# acier galvanisé blanc du cadre
+	var galva_mat: StandardMaterial3D = StandardMaterial3D.new()
+	galva_mat.albedo_color = Color(0.80, 0.81, 0.79)
+	galva_mat.roughness = 0.5
+	galva_mat.metallic = 0.3
 	var base_pair: BoxMesh = BoxMesh.new()
-	base_pair.size = Vector3(base_plate_width, base_plate_height, base_plate_length)
-	base_pair.material = concrete_mat
+	base_pair.size = Vector3(SUPPORT_BAR_W, SUPPORT_BAR_H, SUPPORT_BAR_D)
+	base_pair.material = galva_mat
 	var base_single: BoxMesh = BoxMesh.new()
-	base_single.size = Vector3(single_span + 2.0 * bracket_width + 0.06, base_plate_height, base_plate_length)
-	base_single.material = concrete_mat
+	base_single.size = Vector3(SUPPORT_BAR_W_SINGLE, SUPPORT_BAR_H, SUPPORT_BAR_D)
+	base_single.material = galva_mat
+	var leg: BoxMesh = BoxMesh.new()
+	leg.size = Vector3(0.05, leg_h, 0.08)
+	leg.material = galva_mat
 	var br_pair: ArrayMesh = _build_bracket_pair_mesh(
-		bracket_width, br_h, bracket_span, pulley_thickness * 1.3, steel_mat)
+		bracket_width, br_h, bracket_span, pulley_thickness * 1.3, galva_mat)
 	var br_single: ArrayMesh = _build_bracket_pair_mesh(
-		bracket_width, br_h, single_span, pulley_thickness * 1.3, steel_mat)
+		bracket_width, br_h, single_span, pulley_thickness * 1.3, galva_mat)
 	var pulley_mesh: CylinderMesh = CylinderMesh.new()
 	pulley_mesh.top_radius = pulley_radius
 	pulley_mesh.bottom_radius = pulley_radius
@@ -1786,15 +1933,22 @@ func _build_guides() -> void:
 	var l_ax_s: Array = []
 	var l_pa: Array = []
 	var l_pb: Array = []
+	var l_leg: Array = []
+	var plaques: Array = []    # [Transform3D de la plaque, numéro, base du lecteur]
 	for k in range(_stations.size()):
 		var st: Dictionary = _stations[k]
 		var xf: Transform3D = tunnel.transform_at(st.s)
 		var up: Vector3 = xf.basis.y
 		var right: Vector3 = xf.basis.x
+		var num: int = int(st.get("num", 0))
 		if st.paired:
 			l_base_p.append(Transform3D(xf.basis, xf.origin + up * y_base_center))
 			l_br_p.append(Transform3D(xf.basis, xf.origin + up * y_bracket_center))
 			l_ax_p.append(Transform3D(xf.basis * rot90, xf.origin + up * y_axis))
+			for lx in [-SUPPORT_LEG_X, SUPPORT_LEG_X]:
+				l_leg.append(Transform3D(xf.basis, xf.origin + up * y_leg_center + right * lx))
+			if num > 0:
+				plaques.append(_support_plate(st.s, num, 0.0, SUPPORT_PLATE_X, y_cb))
 		else:
 			for side_i in [-1, 1]:
 				var x_nom: float = _track_center_x(st.s, float(side_i)) + float(side_i) * pulley_pair_offset
@@ -1802,6 +1956,9 @@ func _build_guides() -> void:
 				l_base_s.append(Transform3D(xf.basis, xf.origin + up * y_base_center + lat))
 				l_br_s.append(Transform3D(xf.basis, xf.origin + up * y_bracket_center + lat))
 				l_ax_s.append(Transform3D(xf.basis * rot90, xf.origin + up * y_axis + lat))
+				l_leg.append(Transform3D(xf.basis, xf.origin + up * y_leg_center + lat))
+				if num > 0:
+					plaques.append(_support_plate(st.s, num, x_nom, 0.0, y_cb))
 		# galet de chaque brin : incliné dans son support autour de son centre
 		for side_i in [-1, 1]:
 			var v: Dictionary = _strand[side_i][k + 1]   # [0] = point libre à s = 0
@@ -1818,7 +1975,129 @@ func _build_guides() -> void:
 	_mm_instance(axle_single, l_ax_s, "GuideAxlesSingle", 300.0)
 	_mm_instance(pulley_mesh, l_pa, "GuidePulleysA", 450.0)
 	_mm_instance(pulley_mesh, l_pb, "GuidePulleysB", 450.0)
+	_mm_instance(leg, l_leg, "GuideLegs", 400.0)
+	_build_support_numbers(plaques)
 	_cable_top_y = y_axis + pulley_radius
+
+
+# --- Numéros des supports (faits de Kevin, 03/10/2026) ----------------
+# Peints en BLANC rétroréfléchissant : invisibles dans le noir, ils
+# s'allument dans les phares. En montant, un support sur deux porte un
+# numéro PAIR (2 → 238), sur la face tournée vers la rame montante, à
+# DROITE juste avant le bout de la traverse — à GAUCHE dans les virages à
+# droite. En descendant, les autres portent les numéros IMPAIRS (237 → 1),
+# même règle vue de la rame descendante. Le n° 1 (bout du quai aval) n'a
+# donc pas de numéro en montant, ni le n° 238 en descendant.
+const SUPPORT_BAR_W: float = 0.80        # traverse : enjambe la fosse entre les plots
+const SUPPORT_BAR_W_SINGLE: float = 0.26 # évitement : support d'un seul brin
+const SUPPORT_BAR_H: float = 0.10
+const SUPPORT_BAR_D: float = 0.10
+const SUPPORT_LEG_X: float = 0.30
+const SUPPORT_PLATE_X: float = 0.29      # « juste avant le bord de la traverse »
+const SUPPORT_PLATE: Vector2 = Vector2(0.18, 0.09)
+const SUPPORT_DIGIT_H: float = 0.07      # hauteur des chiffres (m)
+const VIRAGE_SEUIL: float = 0.01         # Δ de tangente sur ±10 m (R ≲ 2 km)
+
+const RETRO_SHADER: String = """
+shader_type spatial;
+render_mode cull_back;
+uniform vec3 couleur : source_color = vec3(0.93, 0.93, 0.90);
+uniform float phares = 0.0;     // 0..1 : phares de la cabine (vue cabine seulement)
+uniform float gain = 1.0;
+uniform float portee = 30.0;    // m : reflet égal à la couleur à cette distance
+void fragment() {
+	ALBEDO = couleur;
+	ROUGHNESS = 0.7;
+	float d = max(length(VERTEX), 0.5);
+	float face = clamp(dot(NORMAL, normalize(-VERTEX)), 0.0, 1.0);
+	EMISSION = couleur * phares * gain * face * min(portee * portee / (d * d), 3.0);
+}
+"""
+var _retro_mats: Array[ShaderMaterial] = []
+var _retro_level: float = -1.0
+
+
+func _retro_material(col: Color, gain: float) -> ShaderMaterial:
+	var sh: Shader = Shader.new()
+	sh.code = RETRO_SHADER
+	var m: ShaderMaterial = ShaderMaterial.new()
+	m.shader = sh
+	m.set_shader_parameter("couleur", col)
+	m.set_shader_parameter("gain", gain)
+	_retro_mats.append(m)
+	return m
+
+
+## Rétroréflexion des numéros : `level` = phares de la cabine (0..1), en vue
+## cabine seulement (ailleurs la caméra n'est pas à côté des phares).
+func set_retro(level: float) -> void:
+	if absf(level - _retro_level) < 0.002:
+		return
+	_retro_level = level
+	for m in _retro_mats:
+		m.set_shader_parameter("phares", level)
+
+
+## Δ de tangente horizontale sur ±10 m : > 0 = virage à droite en montant.
+func _virage(s: float) -> float:
+	var a: Vector3 = -tunnel.transform_at(s - 10.0).basis.z
+	var b: Vector3 = -tunnel.transform_at(s + 10.0).basis.z
+	return (b - a).dot(tunnel.transform_at(s).basis.x)
+
+
+## Plaque du support n° `num` : face tournée vers le lecteur (pair = rame
+## montante, impair = rame descendante), sur la traverse centrée en
+## `x_centre` ; `x_bord` = décalage vers la droite du lecteur (0 = centrée).
+func _support_plate(s: float, num: int, x_centre: float, x_bord: float, y_cb: float) -> Array:
+	var xf: Transform3D = tunnel.transform_at(s)
+	var montant: bool = num % 2 == 0
+	var lecteur: Basis = xf.basis if montant else Basis(-xf.basis.x, xf.basis.y, -xf.basis.z)
+	var v: float = _virage(s)
+	var virage_droite: bool = (v > VIRAGE_SEUIL) if montant else (v < -VIRAGE_SEUIL)
+	var cote: float = -1.0 if virage_droite else 1.0
+	var pos: Vector3 = xf.origin + xf.basis.y * y_cb + xf.basis.x * x_centre \
+		+ lecteur.x * (x_bord * cote) + lecteur.z * (SUPPORT_BAR_D * 0.5 + 0.003)
+	return [Transform3D(lecteur, pos), num, lecteur]
+
+
+func _build_support_numbers(plaques: Array) -> void:
+	var blanc: ShaderMaterial = _retro_material(Color(0.93, 0.93, 0.90), 1.0)
+	var bleu: ShaderMaterial = _retro_material(Color(0.06, 0.20, 0.55), 0.6)
+	var plate: BoxMesh = BoxMesh.new()
+	plate.size = Vector3(SUPPORT_PLATE.x, SUPPORT_PLATE.y, 0.004)
+	plate.material = bleu
+	var font: Font = ThemeDB.fallback_font
+	var fs: int = 64
+	var px: float = SUPPORT_DIGIT_H / (0.72 * float(fs))   # hauteur de capitale ≈ 0,72 em
+	var adv: float = font.get_string_size("0", HORIZONTAL_ALIGNMENT_LEFT, -1, fs).x * px
+	var chiffres: Array = []
+	for d in range(10):
+		var tm: TextMesh = TextMesh.new()
+		tm.text = str(d)
+		tm.font_size = fs
+		tm.pixel_size = px
+		# plat et contours grossiers : 59 triangles par chiffre au lieu de
+		# 1 864 (44 000 triangles par image avec les réglages par défaut)
+		tm.depth = 0.0
+		tm.curve_step = 4.0
+		tm.material = blanc
+		chiffres.append(tm)
+	var l_plate: Array = []
+	var l_dig: Array = []
+	for d in range(10):
+		l_dig.append([])
+	for pl in plaques:
+		var tr: Transform3D = pl[0]
+		var txt: String = str(pl[1])
+		var lb: Basis = pl[2]
+		l_plate.append(tr)
+		for i in range(txt.length()):
+			var o: float = (float(i) - 0.5 * float(txt.length() - 1)) * adv
+			var p: Vector3 = tr.origin + lb.x * o + lb.z * 0.003
+			(l_dig[int(txt[i])] as Array).append(Transform3D(lb, p))
+	_mm_instance(plate, l_plate, "SupportPlates", 120.0)
+	for d in range(10):
+		_mm_instance(chiffres[d], l_dig[d], "SupportDigits%d" % d, 120.0)
 
 
 # Lacunes de l'aiguillage : plaques d'appui sombres sous les bouts de rail
@@ -1941,7 +2220,7 @@ func _build_abt_sheaves() -> void:
 	var l_hub: Array = []
 	var l_chape: Array = []
 	var beta: float = deg_to_rad(sheave_incline_deg)
-	var y_floor: float = floor_y_local + slab_thickness - 0.01
+	var y_floor: float = floor_y_local + slab_thickness - trench_depth - 0.01
 	for k in range(_stations.size()):
 		var st: Dictionary = _stations[k]
 		if not st.sheave:
@@ -2083,7 +2362,7 @@ var _support_s: Dictionary = {}       # côté → abscisses des appuis (galets)
 ## galets et près des gares (le brin y remonte vers la salle des machines).
 func _slack_drop_max() -> float:
 	var y_nom: float = _roller_axis_y() + pulley_radius + cable_radius
-	var y_pose: float = floor_y_local + slab_thickness - 0.01 + cable_beam_height + cable_radius
+	var y_pose: float = floor_y_local + slab_thickness - trench_depth - 0.01 + cable_beam_height + cable_radius
 	return maxf(y_nom - y_pose, 0.0)
 
 

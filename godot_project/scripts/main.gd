@@ -731,6 +731,9 @@ func _process(delta: float) -> void:
 		audio.machine_view = cabin.view_mode == Cabin.ViewMode.MACHINES
 	if _ext_light != null and cabin != null:
 		_ext_light.visible = cabin.view_mode == Cabin.ViewMode.EXTERIOR
+	# numéros des supports : rétroréfléchissants dans les phares (vue cabine)
+	if track != null and cabin != null:
+		track.set_retro(cabin.head_glow() if cabin.view_mode == Cabin.ViewMode.FPV else 0.0)
 	# Rotation des roues motrices et défilement du câble de la salle. Le sens
 	# de référence est celui de la rame 1 (son brin entre sur la roue aval
 	# quand elle monte) : si l'on conduit la rame 2, la rame 1 descend.

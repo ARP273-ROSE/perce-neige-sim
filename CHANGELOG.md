@@ -7,6 +7,50 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.15.48** — la voie comme sur la vidéo : fosse centrale, hauts plots,
+supports numérotés réfléchissants.
+- **« Le plancher entre les traverses au milieu de la voie, faudrait le
+  baisser de 70 cm »**, d'après ta vidéo 4K de la montée du 26/04 (vue
+  plongeante depuis le nez) : les rails reposent sur de hauts plots en
+  béton. Le fond, entre les deux rangées de plots et entre les plots
+  eux-mêmes, est maintenant 70 cm sous l'ancienne dalle, et la longrine
+  est au fond. La fosse suit chaque voie dans l'évitement, et remonte au
+  niveau de la dalle juste avant la roue aval de la gare haute. Le bas du
+  tube du tunnel et les joints annulaires s'arrêtent à la dalle (ils
+  traversaient la fosse comme un faux plancher).
+- **Plots tous les 1,51 m** (0,95 m estimés avant) : mesuré sur la
+  vidéo, ils défilent à 5,25 Hz à 7,95 m/s.
+- **Supports de galets** : cadres en acier galvanisé blanc qui enjambent
+  la fosse (traverse sous les galets, pieds jusqu'au fond).
+  - Positions (faits de Kevin) : aucun support en gare aval ; le n° 1
+    est au bout du quai aval, le n° 238 (dernier numéroté) au début du
+    quai amont, soit 238 supports au pas de 14,54 m, plus ceux de
+    l'aiguillage. La gare amont garde trois supports non numérotés.
+  - Numéros blancs sur plaque bleue, **rétroréfléchissants** : invisibles
+    dans le noir, ils s'allument dans les phares (vue cabine).
+  - En montant : numéros pairs (2 → 238), sur la face tournée vers la
+    rame montante, à droite juste avant le bout de la traverse, à gauche
+    dans les virages à droite.
+  - En descendant : numéros impairs (237 → 1), même règle vue de la rame
+    descendante.
+- **Le pas est vérifié sur la vidéo** (question de Kevin : « la vitesse
+  de croisière de 10,1 m/s corrobore-t-elle cet écartement ? ») :
+  - l'écran du pupitre indique 1 910 m à 30 s et 2 387 m à 90 s, soit
+    7,95 m/s (il affiche 7,9 m/s) : ce jour-là, la croisière était de
+    8 m/s ;
+  - les supports défilent à 0,55–0,57 Hz (analyse de fréquence sur 60 s,
+    harmonique à 1,13 Hz, coupe temporelle), soit 14,0 à 14,5 m ;
+  - la plaque n° 174 passe à ~2 516 m, et 51,5 + 173 × 14,2 ≈ 2 508 m.
+  À 10,1 m/s, le même rythme donnerait 18 m et seulement ~190 supports.
+- Coût de rendu : chiffres plats à contours simplifiés (59 triangles par
+  chiffre au lieu de 1 864 : 44 000 triangles par image sinon), effacés
+  au-delà de 120 m.
+- Outils : `shot_voie.gd` (vue plongeante sur la voie depuis le nez,
+  fond magenta pour révéler les trous).
+- Vérifié : bancs aiguillage, salle des machines, rupture, son salle,
+  portes, pannes, rame ; aucun trou (fond magenta) en gare aval, en
+  pleine ligne, dans l'évitement et en gare amont ; 60 tests PC.
+
 **v1.15.47** — évitement : plus de lueur fantôme, même habillage que le
 reste du tunnel ; arrêt électrique actif jusqu'au quai.
 - **« Une deuxième rangée de néons qui font une lumière fantomatique dans
