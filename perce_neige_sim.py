@@ -203,9 +203,27 @@ def _writable_dir() -> Path:
     NB : en mode exe ce dossier est REMPLACÉ à chaque mise à jour auto
     (swap de l'exécutable) — n'y mettre que du régénérable. Les données
     à conserver (base d'exploitation) vont dans _persistent_data_dir().
+
+    Linux et macOS (2026-10-03) : l'AppImage est montée en lecture seule
+    et une application .app ne doit pas s'écrire dedans (signature,
+    /Applications) — on écrit dans le dossier cache de l'utilisateur
+    (~/.cache, ~/Library/Caches), sans passer par _persistent_data_dir()
+    qui se replie lui-même ici.
     """
     if getattr(sys, "frozen", False):
-        return Path(sys.executable).resolve().parent
+        if sys.platform.startswith("win"):
+            return Path(sys.executable).resolve().parent
+        try:
+            if sys.platform == "darwin":
+                base = Path.home() / "Library" / "Caches"
+            else:
+                base = Path(os.environ.get("XDG_CACHE_HOME")
+                            or (Path.home() / ".cache"))
+            d = base / "PerceNeigeSimulator"
+            d.mkdir(parents=True, exist_ok=True)
+            return d
+        except OSError:
+            return Path(tempfile.gettempdir())
     return Path(__file__).resolve().parent
 
 
@@ -14483,16 +14501,38 @@ class MainWindow(QMainWindow):
         msg = QMessageBox(self)
         msg.setIcon(QMessageBox.Icon.Information)
         msg.setWindowTitle(self._tr("Update available", "Mise à jour disponible"))
-        msg.setText(self._tr(
-            f"Version <b>{info.version}</b> is available.<br><br>"
-            "The program now installs through a setup wizard: download "
-            "<b>PerceNeigeSimulator-Setup-…exe</b> from the release page "
-            "and run it once. Later versions then install themselves.",
-            f"La version <b>{info.version}</b> est disponible.<br><br>"
-            "Le programme s'installe désormais par un installeur : "
-            "téléchargez <b>PerceNeigeSimulator-Setup-…exe</b> sur la page "
-            "de la version et lancez-le une fois. Les versions suivantes "
-            "s'installeront ensuite toutes seules."))
+        if sys.platform == "darwin":
+            # Linux et macOS (2026-10-03) : AppImage et .dmg se remplacent
+            # à la main, depuis la page de la version
+            import platform as _pf
+            fichier = ("PerceNeigeSimulator-…-macos-apple-silicon.dmg"
+                       if _pf.machine() == "arm64"
+                       else "PerceNeigeSimulator-…-macos-intel.dmg")
+        elif sys.platform.startswith("linux"):
+            fichier = "PerceNeigeSimulator-…-linux.AppImage"
+        else:
+            fichier = ""
+        if fichier:
+            msg.setText(self._tr(
+                f"Version <b>{info.version}</b> is available.<br><br>"
+                f"Download <b>{fichier}</b> from the release page and "
+                "replace the current copy with it. Your operations log and "
+                "best scores are kept.",
+                f"La version <b>{info.version}</b> est disponible.<br><br>"
+                f"Téléchargez <b>{fichier}</b> sur la page de la version et "
+                "remplacez-en la copie actuelle. Le journal d'exploitation "
+                "et les meilleurs scores sont conservés."))
+        else:
+            msg.setText(self._tr(
+                f"Version <b>{info.version}</b> is available.<br><br>"
+                "The program now installs through a setup wizard: download "
+                "<b>PerceNeigeSimulator-Setup-…exe</b> from the release page "
+                "and run it once. Later versions then install themselves.",
+                f"La version <b>{info.version}</b> est disponible.<br><br>"
+                "Le programme s'installe désormais par un installeur : "
+                "téléchargez <b>PerceNeigeSimulator-Setup-…exe</b> sur la page "
+                "de la version et lancez-le une fois. Les versions suivantes "
+                "s'installeront ensuite toutes seules."))
         btn_open = msg.addButton(
             self._tr("Open the download page", "Ouvrir la page de téléchargement"),
             QMessageBox.ButtonRole.AcceptRole)

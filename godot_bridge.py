@@ -75,7 +75,18 @@ class GodotBridge:
         if sys.platform.startswith("win"):
             cand = self.bundled_dir / "perce_neige_3d.exe"
         elif sys.platform == "darwin":
+            # L'export macOS de Godot nomme l'app d'après le projet
+            # (« Perce-Neige Simulator 3D.app ») : on prend la première
+            # .app du dossier et l'exécutable de son Contents/MacOS
+            # (renommer l'exécutable casserait sa signature).
             cand = self.bundled_dir / "perce_neige_3d.app" / "Contents" / "MacOS" / "perce_neige_3d"
+            if not cand.is_file():
+                for app in sorted(self.bundled_dir.glob("*.app")):
+                    exes = sorted(p for p in (app / "Contents" / "MacOS").glob("*")
+                                  if p.is_file())
+                    if exes:
+                        cand = exes[0]
+                        break
         else:  # linux + autres unix
             cand = self.bundled_dir / "perce_neige_3d.x86_64"
         return cand if cand.is_file() else None
@@ -196,6 +207,31 @@ class GodotBridge:
         except OSError:
             pass
 
+    @staticmethod
+    def _child_env() -> Optional[dict]:
+        """Environnement du viewer 3D.
+
+        Linux et macOS gelés (PyInstaller, AppImage — 2026-10-03) : le
+        lanceur de PyInstaller place SES bibliothèques en tête de
+        LD_LIBRARY_PATH / DYLD_LIBRARY_PATH, et l'enfant en hérite. Le
+        viewer Godot chargeait alors les copies embarquées (libstdc++,
+        libX11… d'AlmaLinux 9) à la place de celles du système, qui vont
+        avec le pilote Mesa — plantage immédiat (signal 11). PyInstaller
+        garde la valeur d'origine dans <NOM>_ORIG : on la remet."""
+        if not getattr(sys, "frozen", False) or sys.platform.startswith("win"):
+            return None
+        env = dict(os.environ)
+        for var in ("LD_LIBRARY_PATH", "DYLD_LIBRARY_PATH"):
+            orig = env.pop(var + "_ORIG", None)
+            if orig is not None:
+                env[var] = orig
+            else:
+                env.pop(var, None)
+        # variables Qt/Python du processus parent : sans objet pour Godot
+        for var in ("QT_PLUGIN_PATH", "QML2_IMPORT_PATH", "PYTHONHOME", "PYTHONPATH"):
+            env.pop(var, None)
+        return env
+
     def _spawn(self, cmd: list, grace_s: float = 1.6) -> bool:
         """Lance ``cmd`` et attend ``grace_s`` pour détecter une mort précoce
         (échec d'init du driver Vulkan/OpenGL → sortie en ~1 s). Retourne True
@@ -219,6 +255,7 @@ class GodotBridge:
                 # Windows, vaut zero ailleurs, et n'empeche pas le moteur 3D
                 # d'afficher la sienne — il ne concerne que la console.
                 creationflags=getattr(subprocess, 'CREATE_NO_WINDOW', 0),
+                env=self._child_env(),
             )
         except (FileNotFoundError, OSError, PermissionError) as e:
             self._log(f"[spawn] échec lancement : {e}\n  cmd={cmd}")
