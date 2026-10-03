@@ -7,6 +7,25 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.15.43** — plus de feux rouges, « TIGNES » lisible en entier.
+- « Enlève-moi le feu rouge à l'arrière des rames et le reflet/halo rouge
+  qui va avec. » Trois sources ont été retirées :
+  - le projecteur rouge de la rame pilotée (énergie 3, portée 80 m), qui
+    teintait cerceaux et rails derrière elle ;
+  - la lumière rouge placée au centre de la rame d'en face (portée 12 m) ;
+  - les feux arrière rouges émissifs, à l'origine du halo par effet de
+    lueur. Les feux arrière sont désormais des lentilles éteintes, comme
+    sur la rame pilotée.
+- « Écris bien TIGNES, le haut des lettres du milieu est un peu mangé. »
+  Le mot était un seul panneau vertical posé devant le nez. Sous le
+  centre de la calotte bombée, la tôle avance au-dessus du lettrage, et le
+  haut du « G » et du « N » passait derrière. Chaque lettre est maintenant
+  posée tangente à la calotte, à sa place, 1,2 cm devant
+  (`_build_lettering`, `cap_surface_normal`). La calotte étant convexe,
+  aucune lettre ne passe dessous, et le mot suit la courbure comme des
+  lettres peintes. Captures avant/après : `shot_nez.gd` (avant et
+  arrière).
+
 **v1.15.42** — le simulateur PC pour Linux et macOS.
 - Demande de Kevin : « sur GitHub, tu peux me builder les exécutables pour
   Linux toutes distributions et Mac ? » Chaque release publie désormais,
