@@ -189,6 +189,12 @@ def is_frozen() -> bool:
 
 
 def _platform_suffix() -> str:
+    # macOS (2026-10-03) : un .dmg par architecture
+    # (PerceNeigeSimulator-X.Y.Z-macos-apple-silicon.dmg / -macos-intel.dmg)
+    if sys.platform == "darwin":
+        import platform
+        return ("-macos-apple-silicon.dmg" if platform.machine() == "arm64"
+                else "-macos-intel.dmg")
     return PLATFORM_ASSET_SUFFIX.get(sys.platform, "")
 
 

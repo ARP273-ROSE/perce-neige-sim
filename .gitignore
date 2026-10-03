@@ -83,3 +83,7 @@ _crash_report.json
 dist/
 installer_out/
 .build_cache/
+
+# Paquets Linux / macOS (packaging/build_linux.sh, build_macos.sh)
+dist_linux/
+dist_macos/
