@@ -7,6 +7,28 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.15.45** — tout le son sur la même sortie, tunnel dans le noir total.
+- **Son partagé entre haut-parleurs et casque** (« l'ambiance est dans les
+  haut-parleurs, les annonces et le reste dans le casque ») : sous Qt, les
+  boucles d'ambiance et de machinerie (QSoundEffect) restent sur la sortie
+  audio trouvée au lancement, alors que les annonces (QMediaPlayer)
+  suivent la sortie par défaut du système. Brancher ou choisir le casque
+  après le lancement coupait donc le son en deux, et le bruit de la
+  machinerie qui accélère partait dans les haut-parleurs. Désormais, tous
+  les lecteurs suivent la sortie par défaut : réalignement immédiat sur
+  changement de périphérique, et contrôle toutes les 2 s. Le diagnostic
+  liste les sorties utilisées (`sorties_lecteurs`). Test :
+  `test_tous_les_lecteurs_sur_la_meme_sortie`.
+- **Éclairage coupé = noir total** (« le tunnel doit être dans le noir
+  total, là on le voit ») : lumière ambiante et teinte du brouillard à 0
+  (au lieu de 0,03 et 0,05). Le ciel ne se reflète plus sur les parois.
+  En qualité haute (vue 3D du PC), l'illumination globale SDFGI et le
+  brouillard volumétrique sont éteints aussi. Il ne reste que les phares,
+  l'éclairage cabine (C) et les gares. Vue cabine dessinée du PC : sans
+  néons ni phares, plus rien n'est tracé au-delà de 2,5 m.
+- Vérifié : 57 tests PC, bancs 3D son salle, portes, pannes et rupture ;
+  PWA dans Chromium sur GPU.
+
 **v1.15.44** — couper l'éclairage du tunnel, boutons rangés par thème,
 séquence auto corrigée.
 - **Couper l'éclairage du tunnel** (touche **J**, bouton ÉCL. TUNNEL au
