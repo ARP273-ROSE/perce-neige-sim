@@ -1659,6 +1659,11 @@ func _cabin_world_pos(s: float) -> Vector3:
 	return xf.origin + xf.basis.x * lat
 
 
+## Phares : 0 éteints → 1 plein feu (fondu halogène compris).
+func head_glow() -> float:
+	return _head_glow
+
+
 func set_headlights(on: bool) -> void:
 	# l'état vient de physics.lights_head ; le fondu halogène est dans
 	# _animate_headlights, appelé à chaque tick
