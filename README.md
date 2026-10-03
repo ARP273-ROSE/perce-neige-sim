@@ -4,7 +4,7 @@
 
 ![Python](https://img.shields.io/badge/python-3.9+-blue.svg)
 ![License](https://img.shields.io/badge/license-MIT-green.svg)
-![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Web-lightgrey.svg)
+![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS%20%7C%20Web-lightgrey.svg)
 
 **Conduisez le plus long funiculaire de France** : 3 474 m de tunnel entre
 Val Claret (2 111 m) et le glacier de la Grande Motte (3 032 m), à Tignes.
@@ -32,6 +32,23 @@ administrateur. Au premier lancement, Windows peut afficher « Windows a
 protégé votre ordinateur » (installeur non signé) : *Informations
 complémentaires* puis *Exécuter quand même*. Les mises à jour suivantes ne
 le déclenchent plus.
+
+**Linux et macOS** — sur la [page de la dernière version](https://github.com/ARP273-ROSE/perce-neige-sim/releases/latest) :
+
+- Linux : `PerceNeigeSimulator-…-linux.AppImage`, à rendre exécutable puis
+  lancer. Fonctionne sur les distributions encore suivies (glibc ≥ 2.34 :
+  Ubuntu ≥ 22.04, Debian ≥ 12, Fedora, RHEL ≥ 9, Mint ≥ 21, Arch,
+  openSUSE…) ; essayée à chaque version sur six d'entre elles. L'archive
+  `…-linux-x86_64.tar.gz` contient le même programme sans AppImage.
+- macOS : `…-macos-apple-silicon.dmg` (M1 et suivants) ou
+  `…-macos-intel.dmg`, à glisser dans Applications. L'application n'est
+  pas signée par un développeur Apple : au premier lancement, clic droit →
+  *Ouvrir* (ou Réglages Système → Confidentialité et sécurité → *Ouvrir
+  quand même*).
+
+La vue cabine 3D est incluse partout. Sous Linux et macOS, l'application
+signale les nouvelles versions au démarrage ; on remplace alors l'AppImage
+ou l'app.
 
 ---
 
