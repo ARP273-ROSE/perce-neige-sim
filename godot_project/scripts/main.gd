@@ -63,6 +63,7 @@ var _light_cull_accum: float = 999.0   # force un 1er culling dès la frame 1
 # Éclairage du tunnel (touche J, bouton TUNNEL, ou le sim PC) — demande du
 # 03/10/2026 : « rajoute l'option de couper tous les éclairages du tunnel ».
 var tunnel_lights_on: bool = true
+var _ext_light: DirectionalLight3D = null   # vue extérieure seulement
 var _env: Environment = null
 const AMBIENT_ON: float = 0.40
 const AMBIENT_OFF: float = 0.0        # noir total : seuls phares, cabine et gares éclairent
@@ -180,6 +181,9 @@ func set_tunnel_lights(on: bool) -> void:
 		_env.background_energy_multiplier = 1.0 if on else 0.0
 		_env.sdfgi_energy = 1.0 if on else 0.0
 		_env.volumetric_fog_gi_inject = 0.5 if on else 0.0
+		# reflets spéculaires du ciel (pare-brise, rails, parois lisses)
+		_env.reflected_light_source = (Environment.REFLECTION_SOURCE_BG if on
+			else Environment.REFLECTION_SOURCE_DISABLED)
 	print("[Tunnel] éclairage %s" % ["allumé" if on else "coupé"])
 
 
@@ -307,6 +311,11 @@ func _drivetest() -> void:
 	print("[DriveTest] request_depart lancé")
 	while not physics.trip_started:
 		await get_tree().create_timer(0.5).timeout
+	# --s=<m> : saute à cette abscisse (captures du tunnel en pleine ligne)
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--s="):
+			physics.s = float(a.substr(4))
+			physics.s_prev_step = physics.s
 	print("[DriveTest] trip démarré — action_press(speed_up) 6 s")
 	Input.action_press("speed_up")
 	await get_tree().create_timer(6.0).timeout
@@ -470,6 +479,7 @@ func _build_track() -> void:
 	track.name = "Track"
 	add_child(track)
 	track.build(tunnel)
+	Cabin.tag_layer.call_deferred(track, Cabin.LAYER_VOIE)   # vue extérieure
 	print("[Track] rails/dalle/câble construits (longueur=%.0fm)" % PNConstants.LENGTH)
 
 
@@ -573,15 +583,23 @@ func _build_environment() -> void:
 	we.environment = env
 	add_child(we)
 
-	# --- Soleil : directional light (illumine l'extérieur des portails) --
-	var sun: DirectionalLight3D = DirectionalLight3D.new()
-	sun.name = "Sun"
-	sun.light_color = Color(1.0, 0.96, 0.88)
-	sun.light_energy = 1.2
-	# Inclinaison : soleil d'après-midi sur le glacier (Sud-Ouest, 40° au-dessus)
-	sun.rotation = Vector3(deg_to_rad(-40.0), deg_to_rad(160.0), 0.0)
-	sun.shadow_enabled = false  # shadows désactivées pour perf sur tunnel long
-	add_child(sun)
+	# (Pas de soleil — retour du 03/10 : « y a pas de soleil, c'est un
+	# tunnel ». La lumière directionnelle, sans ombres, éclairait parois,
+	# voie et pupitre même éclairage du tunnel coupé. Les halls de gare ont
+	# leur propre lumière du jour.)
+	# Seule exception : la vue extérieure (vue d'ensemble, parois
+	# translucides) garde une lumière de « studio » qui n'éclaire QUE les
+	# rames et la voie (couches Cabin.LAYER_RAME / LAYER_VOIE), allumée dans
+	# cette vue seulement.
+	_ext_light = DirectionalLight3D.new()
+	_ext_light.name = "LumiereVueExterieure"
+	_ext_light.light_color = Color(1.0, 0.96, 0.88)
+	_ext_light.light_energy = 1.2
+	_ext_light.rotation = Vector3(deg_to_rad(-40.0), deg_to_rad(160.0), 0.0)
+	_ext_light.shadow_enabled = false
+	_ext_light.light_cull_mask = Cabin.LAYER_RAME | Cabin.LAYER_VOIE
+	_ext_light.visible = false
+	add_child(_ext_light)
 
 
 func _build_physics() -> void:
@@ -709,6 +727,8 @@ func _process(delta: float) -> void:
 	# Son : vue salle des machines → ambiance de la gare haute
 	if audio != null and cabin != null:
 		audio.machine_view = cabin.view_mode == Cabin.ViewMode.MACHINES
+	if _ext_light != null and cabin != null:
+		_ext_light.visible = cabin.view_mode == Cabin.ViewMode.EXTERIOR
 	# Rotation des roues motrices et défilement du câble de la salle. Le sens
 	# de référence est celui de la rame 1 (son brin entre sur la roue aval
 	# quand elle monte) : si l'on conduit la rame 2, la rame 1 descend.

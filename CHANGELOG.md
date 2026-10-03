@@ -7,6 +7,51 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.15.46** — noir total pour de vrai, phares de « pleins phares »,
+pupitre éteint avec la cabine.
+- **« Noir, ça veut dire qu'on ne voit rien du tout, même à 1 m »** :
+  quatre sources de lumière restaient, trouvées sur captures en rendu
+  PWA (Chromium sur le GPU du NAS) et en rendu PC (Forward+) :
+  1. un **soleil** (lumière directionnelle sans ombres) éclairait parois,
+     voie et pupitre dans tout le tunnel (« y a pas de soleil, c'est un
+     tunnel ») → supprimé. Il ne reste qu'une lumière propre à la vue
+     extérieure, qui n'éclaire que les rames et la voie ;
+  2. 🔴 **le pare-brise de la voiture de tête n'était pas sur la bonne
+     surface** depuis le 27/09 : il avait été posé sur la cloison du
+     soufflet. Le conducteur regardait donc à travers la vitre des
+     fenêtres, teintée et lumineuse, ce qui faisait un voile brun sur
+     toute la vue en rendu PC. Le pare-brise est maintenant à sa place,
+     avec la même teinte, mais sans lumière propre ;
+  3. la petite lampe du pupitre restait allumée en permanence ;
+  4. la lumière de la cabine éclairait aussi le tunnel autour de la
+     rame. Désormais, les lumières de la cabine n'éclairent que la rame
+     (couche de rendu dédiée), et les reflets du ciel sont coupés avec
+     l'éclairage du tunnel.
+  Tout éteint, l'image fait 1/255 de luminance moyenne dans la PWA,
+  contre 101 avec tout allumé.
+- **Pupitre et éclairage cabine** (« le pupitre est éclairé par la
+  cabine sauf si l'éclairage cabine est off, alors on ne voit que les
+  écrans et les boutons allumés ») :
+  - en 3D, un plafonnier du poste et la lampe du pupitre suivent la
+    touche C, ainsi que la lueur des fenêtres vue de l'extérieur ;
+  - dans la vue cabine 2D du PC, l'habillage s'assombrit et ne laisse
+    que les écrans et les voyants.
+- **Phares** (« plus de puissance, mais pas de halo central plus
+  brillant que le reste, comme des pleins phares de voiture ») : le
+  cône de 32° dessinait un rond lumineux net au bout du tunnel. Le
+  faisceau fait maintenant 75° (plus large que la vue par le
+  pare-brise), il est homogène, porte loin et éclaire presque à
+  l'horizontale ; énergie 12. Il éclaire peu le brouillard de la vue PC.
+- **Vue 2D du PC** : avec l'éclairage du tunnel coupé, le fond est noir
+  et les parois ne sont plus dessinées ; si les phares sont aussi
+  éteints, plus rien n'est tracé (sauf en gare). La fenêtre latérale
+  devient noire.
+- Outils : `shot_noir.gd` (captures et liste des lumières et vitres
+  devant la caméra) ; la PWA d'essai accepte `--s=<m>` avec
+  `--drivetest`.
+- Vérifié : 57 tests PC, bancs son salle, portes, pannes, rame, salle
+  des machines et rupture ; captures PWA, PC Forward+ et vue 2D.
+
 **v1.15.45** — tout le son sur la même sortie, tunnel dans le noir total.
 - **Son partagé entre haut-parleurs et casque** (« l'ambiance est dans les
   haut-parleurs, les annonces et le reste dans le casque ») : sous Qt, les
