@@ -195,6 +195,14 @@ jobs:
           path: dist_macos/*.dmg
           retention-days: 7
 
+      - name: Upload capture d'écran
+        uses: actions/upload-artifact@v4
+        with:
+          name: capture-macos-${{ matrix.archi }}
+          path: dist_macos/*.png
+          retention-days: 7
+          if-no-files-found: ignore
+
   # Ajoute les paquets Linux et macOS à la release créée par le paquet
   # Windows (d'où l'attente de paquet-windows), avec leurs empreintes.
   publier-unix:
