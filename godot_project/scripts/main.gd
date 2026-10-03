@@ -60,6 +60,14 @@ var _prev_finished: bool = false
 var _physics_accum: float = 0.0
 var _paused: bool = false
 var _light_cull_accum: float = 999.0   # force un 1er culling dès la frame 1
+# Éclairage du tunnel (touche J, bouton TUNNEL, ou le sim PC) — demande du
+# 03/10/2026 : « rajoute l'option de couper tous les éclairages du tunnel ».
+var tunnel_lights_on: bool = true
+var _env: Environment = null
+const AMBIENT_ON: float = 0.40
+const AMBIENT_OFF: float = 0.03       # nuit noire : seuls phares et gares éclairent
+const FOG_LIGHT_ON: float = 1.0
+const FOG_LIGHT_OFF: float = 0.05     # le brouillard ne doit pas « éclairer » le fond
 
 # Contrôles
 var speed_cmd_rate: float = 0.4    # variation par seconde du setpoint
@@ -148,6 +156,34 @@ func _ready() -> void:
 			scen.chosen.connect(_apply_scenario)
 	_diag_masquer()
 	print("[PerceNeige3D] Ready.")
+
+
+## Allume ou coupe tout l'éclairage du tunnel (néons et leurs tubes). Pour
+## une vraie nuit, la lumière ambiante et la teinte du brouillard baissent
+## aussi : il ne reste que les phares, l'éclairage des gares, de la salle
+## des machines et de la cabine.
+func set_tunnel_lights(on: bool) -> void:
+	tunnel_lights_on = on
+	if lights != null:
+		lights.set_enabled(on)
+		if on:
+			_light_cull_accum = 999.0      # rallumage dès l'image suivante
+	if _env != null:
+		_env.ambient_light_energy = AMBIENT_ON if on else AMBIENT_OFF
+		_env.fog_light_energy = FOG_LIGHT_ON if on else FOG_LIGHT_OFF
+	print("[Tunnel] éclairage %s" % ["allumé" if on else "coupé"])
+
+
+func toggle_tunnel_lights() -> void:
+	set_tunnel_lights(not tunnel_lights_on)
+
+
+## Éclairage intérieur de la cabine (touche C, bouton CABINE) — comme le PC.
+func toggle_cabin_lights() -> void:
+	if physics == null:
+		return
+	physics.lights_cabin = not physics.lights_cabin
+	print("[Cabine] éclairage %s" % ["allumé" if physics.lights_cabin else "éteint"])
 
 
 # Diagnostic de performance : --masquer=hud,cabin,lights,voie/Nom… cache des
@@ -473,7 +509,7 @@ func _build_environment() -> void:
 	# --- Ambient : modéré (tunnel doit rester lisible sans être un faisceau aveuglant) ---
 	env.ambient_light_source = Environment.AMBIENT_SOURCE_SKY
 	env.ambient_light_color = Color(0.45, 0.50, 0.60)
-	env.ambient_light_energy = 0.40
+	env.ambient_light_energy = AMBIENT_ON
 	env.ambient_light_sky_contribution = 0.3
 
 	# --- SDFGI (global illumination) -------------------------------------
@@ -522,6 +558,7 @@ func _build_environment() -> void:
 	env.adjustment_contrast = 1.05
 	env.adjustment_saturation = 1.05
 
+	_env = env
 	var we: WorldEnvironment = WorldEnvironment.new()
 	we.name = "WorldEnvironment"
 	we.environment = env
@@ -837,6 +874,10 @@ func _unhandled_input(event: InputEvent) -> void:
 			else:
 				print("[R] ignoré — trajet en cours (R sert après une collision "
 					+ "ou une panne catastrophique)")
+		elif event.keycode == KEY_J:
+			toggle_tunnel_lights()
+		elif event.keycode == KEY_C:
+			toggle_cabin_lights()
 		elif event.keycode == KEY_O and cabin != null:
 			# Cycle cabine → extérieure → salle des machines (aussi piloté
 			# par la touche O du sim PC via le state dict "view3d").

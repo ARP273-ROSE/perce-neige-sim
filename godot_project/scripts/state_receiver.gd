@@ -139,6 +139,11 @@ func _apply(d: Dictionary) -> void:
 	physics.lights_head = _b(d, "lights_head", physics.lights_head)
 	physics.lights_cabin = _b(d, "lights_cabin", physics.lights_cabin)
 	physics.emergency = _b(d, "emergency", physics.emergency)
+	# Éclairage du tunnel commandé par le sim PC (touche J)
+	if d.has("tunnel_lights") and main != null and main.has_method("set_tunnel_lights"):
+		var tl: bool = _b(d, "tunnel_lights", true)
+		if tl != bool(main.tunnel_lights_on):
+			main.set_tunnel_lights(tl)
 	# Câble rompu (PC, mode Défi ou panne) : sans ce relais, la 3D
 	# laissait le câble intact, l'autre rame continuer en miroir et la
 	# machinerie suivre la rame qui dévale (retour du 01/10). La position

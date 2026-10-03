@@ -27,6 +27,10 @@ const LIGHT_CULL_DIST_WEB: float = 200.0
 
 var tunnel: TunnelBuilder = null
 var _lights: Array = []   # paires [OmniLight3D, s_m] pour le culling
+# Interrupteur général (demande du 03/10/2026 : « l'option de couper tous
+# les éclairages du tunnel ») : éteint les sources ET le tube émissif.
+var enabled: bool = true
+var _neon_mat_on: StandardMaterial3D = null
 
 
 func _ready() -> void:
@@ -53,6 +57,7 @@ func _populate() -> void:
 	neon_mat.emission = neon_color
 	neon_mat.emission_energy_multiplier = 4.0
 	neon_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	_neon_mat_on = neon_mat
 
 	# Tube ÉTEINT : un néon sur deux — retour d'exploitation 2026-07 : le
 	# tunnel est éclairé uniformément TOUT DU LONG (pas de zones sombres),
@@ -106,9 +111,23 @@ func update_light_culling(s_cabin: float) -> void:
 		var ls: float = entry[1]
 		var d: float = minf(absf(ls - s_cabin), absf(ls - s_ghost))
 		var k: float = clampf((cull - d) / LIGHT_FADE_M, 0.0, 1.0)
-		light.visible = k > 0.01
+		light.visible = enabled and k > 0.01
 		if light.visible:
 			light.light_energy = light_energy * k
+
+
+## Allume ou coupe tout l'éclairage du tunnel : sources lumineuses ET
+## tubes (le matériau émissif est partagé par tous les tubes allumés).
+func set_enabled(on: bool) -> void:
+	enabled = on
+	if _neon_mat_on != null:
+		_neon_mat_on.emission_enabled = on
+		_neon_mat_on.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED if on \
+			else BaseMaterial3D.SHADING_MODE_PER_PIXEL
+		_neon_mat_on.albedo_color = Color(0.9, 0.95, 1.0) if on else Color(0.45, 0.47, 0.50)
+	if not on:
+		for entry in _lights:
+			(entry[0] as OmniLight3D).visible = false
 
 
 func _add_neon(s: float, mesh: BoxMesh, neon_mat: StandardMaterial3D,

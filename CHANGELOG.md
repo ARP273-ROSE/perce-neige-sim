@@ -7,6 +7,44 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.15.44** — couper l'éclairage du tunnel, boutons rangés par thème,
+séquence auto corrigée.
+- **Couper l'éclairage du tunnel** (touche **J**, bouton ÉCL. TUNNEL au
+  pupitre PC, bouton TUNNEL sur la PWA) : « rajoute l'option de couper
+  tous les éclairages du tunnel ». En 3D, les néons s'éteignent (sources
+  et tubes). La lumière ambiante descend de 0,40 à 0,03 et la teinte du
+  brouillard de 1 à 0,05, sans quoi le fond du tunnel restait gris. Il ne
+  reste que les phares, l'éclairage des gares, de la salle des machines et
+  de la cabine. Vérifié dans la PWA (Chromium sur GPU) : le tunnel est
+  noir, seul le faisceau des phares éclaire la voie. Sur le PC, la vue
+  cabine dessinée n'a plus ses tubes, et l'état est transmis à la vue 3D
+  (`tunnel_lights`).
+- **Boutons rangés par thème** (« mets tout ce qui se rapporte aux
+  lumières ensemble, fais un tri des boutons pour que tout soit
+  cohérent ») :
+  - pupitre PC en cinq rangées : sécurité (arrêt électrique, urgence,
+    veille), éclairage (phares, cabine, tunnel), exploitation (portes,
+    pilote auto, klaxon), vues (vue 3D, cycle des vues), système (son,
+    aide) ;
+  - « CABINE [C] » (lumière) et « CABINE [O] » (vue) se confondaient :
+    ils deviennent « ÉCL. CABINE » et « VUE CABINE » ;
+  - PWA : rangée du haut en trois blocs, conduite (INVERSER, AUTO),
+    lumières (PHARES, CABINE, TUNNEL) et affichage (VUE, ANNONCES). Le
+    bouton CABINE est nouveau, avec la touche C. Les trois boutons de
+    lumière s'allument en vert quand la lumière est allumée. La rangée est
+    ancrée par son bord droit, et ANNONCES ne déborde plus de l'écran.
+  - Aides clavier (PC F1, bandeau PWA) : H, C et J regroupés.
+- **Séquence auto** (« bug dans la séquence auto — c'est quand on passe
+  du mode manuel à auto après un trajet ; au deuxième cycle ça marche ») :
+  au passage en auto, la rame était encore tournée vers la gare où elle
+  venait d'arriver. L'automate l'y « renvoyait » : fermeture des portes,
+  buzzer, « Départ », arrivée instantanée, puis seulement le demi-tour. Il
+  la retourne maintenant avant tout embarquement
+  (`AutoOps._begin_boarding`). Un test reproduit le cas : il échoue sur
+  l'ancien code (départ dans le sens +1 depuis le haut) et passe
+  désormais. La PWA n'était pas touchée, car sa physique fait elle-même
+  le demi-tour à chaque arrivée.
+
 **v1.15.43** — plus de feux rouges, « TIGNES » lisible en entier.
 - « Enlève-moi le feu rouge à l'arrière des rames et le reflet/halo rouge
   qui va avec. » Trois sources ont été retirées :
