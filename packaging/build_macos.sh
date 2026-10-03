@@ -59,6 +59,14 @@ if ! "$VIEWER_BIN" --headless --quit > build/essai_viewer.log 2>&1; then
 fi
 echo "   viewer 3D OK ($(lipo -archs "$VIEWER_BIN"))"
 
+# Capture de la vraie interface (Cocoa) : les runners macOS ont une
+# session graphique. Pour contrôle à l'œil (artefact), non bloquant.
+"$APP/Contents/MacOS/PerceNeigeSimulator" > build/essai_cocoa.log 2>&1 &
+PID=$!
+sleep 30
+screencapture -x "dist_macos/capture-$ARCHI.png" || true
+kill "$PID" 2>/dev/null || true
+
 # Image disque : l'app et un raccourci vers Applications (glisser-déposer)
 STAGE=build/dmg
 rm -rf "$STAGE"
