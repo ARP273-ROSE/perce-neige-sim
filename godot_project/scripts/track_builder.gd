@@ -1993,9 +1993,12 @@ const SUPPORT_BAR_W_SINGLE: float = 0.26 # évitement : support d'un seul brin
 const SUPPORT_BAR_H: float = 0.10
 const SUPPORT_BAR_D: float = 0.10
 const SUPPORT_LEG_X: float = 0.30
-const SUPPORT_PLATE_X: float = 0.29      # « juste avant le bord de la traverse »
-const SUPPORT_PLATE: Vector2 = Vector2(0.18, 0.09)
-const SUPPORT_DIGIT_H: float = 0.07      # hauteur des chiffres (m)
+# Plaque rentrée dans le couloir libre entre les rangées de plots (retour du
+# 03/10 : « décalés vers l'intérieur car ils sont masqués par les
+# traverses »), sous les galets, haut aligné sur la traverse ; plus grande.
+const SUPPORT_PLATE_X: float = 0.19
+const SUPPORT_PLATE: Vector2 = Vector2(0.30, 0.15)
+const SUPPORT_DIGIT_H: float = 0.11      # hauteur des chiffres (m)
 const VIRAGE_SEUIL: float = 0.01         # Δ de tangente sur ±10 m (R ≲ 2 km)
 
 const RETRO_SHADER: String = """
@@ -2004,26 +2007,31 @@ render_mode cull_back;
 uniform vec3 couleur : source_color = vec3(0.93, 0.93, 0.90);
 uniform float phares = 0.0;     // 0..1 : phares de la cabine (vue cabine seulement)
 uniform float gain = 1.0;
-uniform float portee = 30.0;    // m : reflet égal à la couleur à cette distance
+uniform float plafond = 20.0;   // reflet maximal (de près) : le fond bleu reste bleu
+uniform float portee = 80.0;    // m : reflet égal à la couleur à cette distance
+// Rétroréflexion : la lumière des phares revient vers la cabine — luminance
+// en 1/d² (éclairement reçu), plafonnée de près ; « pas franchement
+// réfléchissants » à 30 m / ×3 (retour du 03/10).
 void fragment() {
 	ALBEDO = couleur;
 	ROUGHNESS = 0.7;
 	float d = max(length(VERTEX), 0.5);
 	float face = clamp(dot(NORMAL, normalize(-VERTEX)), 0.0, 1.0);
-	EMISSION = couleur * phares * gain * face * min(portee * portee / (d * d), 3.0);
+	EMISSION = couleur * phares * gain * face * min(portee * portee / (d * d), plafond);
 }
 """
 var _retro_mats: Array[ShaderMaterial] = []
 var _retro_level: float = -1.0
 
 
-func _retro_material(col: Color, gain: float) -> ShaderMaterial:
+func _retro_material(col: Color, gain: float, plafond: float = 20.0) -> ShaderMaterial:
 	var sh: Shader = Shader.new()
 	sh.code = RETRO_SHADER
 	var m: ShaderMaterial = ShaderMaterial.new()
 	m.shader = sh
 	m.set_shader_parameter("couleur", col)
 	m.set_shader_parameter("gain", gain)
+	m.set_shader_parameter("plafond", plafond)
 	_retro_mats.append(m)
 	return m
 
@@ -2055,14 +2063,15 @@ func _support_plate(s: float, num: int, x_centre: float, x_bord: float, y_cb: fl
 	var v: float = _virage(s)
 	var virage_droite: bool = (v > VIRAGE_SEUIL) if montant else (v < -VIRAGE_SEUIL)
 	var cote: float = -1.0 if virage_droite else 1.0
-	var pos: Vector3 = xf.origin + xf.basis.y * y_cb + xf.basis.x * x_centre \
+	var y_pl: float = y_cb + (SUPPORT_BAR_H - SUPPORT_PLATE.y) * 0.5   # haut au ras de la traverse
+	var pos: Vector3 = xf.origin + xf.basis.y * y_pl + xf.basis.x * x_centre \
 		+ lecteur.x * (x_bord * cote) + lecteur.z * (SUPPORT_BAR_D * 0.5 + 0.003)
 	return [Transform3D(lecteur, pos), num, lecteur]
 
 
 func _build_support_numbers(plaques: Array) -> void:
 	var blanc: ShaderMaterial = _retro_material(Color(0.93, 0.93, 0.90), 1.0)
-	var bleu: ShaderMaterial = _retro_material(Color(0.06, 0.20, 0.55), 0.6)
+	var bleu: ShaderMaterial = _retro_material(Color(0.06, 0.20, 0.55), 1.0, 2.5)
 	var plate: BoxMesh = BoxMesh.new()
 	plate.size = Vector3(SUPPORT_PLATE.x, SUPPORT_PLATE.y, 0.004)
 	plate.material = bleu
@@ -2095,7 +2104,8 @@ func _build_support_numbers(plaques: Array) -> void:
 			var o: float = (float(i) - 0.5 * float(txt.length() - 1)) * adv
 			var p: Vector3 = tr.origin + lb.x * o + lb.z * 0.003
 			(l_dig[int(txt[i])] as Array).append(Transform3D(lb, p))
-	_mm_instance(plate, l_plate, "SupportPlates", 120.0)
+	# plaques visibles loin : au fond du tunnel, une file de points qui brillent
+	_mm_instance(plate, l_plate, "SupportPlates", 300.0)
 	for d in range(10):
 		_mm_instance(chiffres[d], l_dig[d], "SupportDigits%d" % d, 120.0)
 

@@ -7,6 +7,23 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.15.49** — numéros des supports plus gros, visibles et réfléchissants.
+- **Plus gros et rentrés vers l'intérieur** (« faudrait les faire plus
+  gros, et un peu décalés vers l'intérieur car ils sont masqués par les
+  traverses ») : chiffres de 11 cm (7 avant) sur une plaque de
+  30 × 15 cm, à 19 cm de l'axe (29 avant). La plaque est maintenant dans
+  le couloir libre entre les deux rangées de plots, sous les galets, son
+  haut au ras de la traverse.
+- **Vraiment rétroréfléchissants** (« pas franchement réfléchissants
+  quand éclairés par les phares ») : reflet beaucoup plus fort et qui
+  porte plus loin (×1 à 80 m, ×20 de près). Le fond bleu est plafonné
+  pour rester bleu, sinon la plaque devenait blanche et les chiffres
+  illisibles. Les plaques restent visibles jusqu'à 300 m : on voit au
+  fond du tunnel une file de points bleus qui brillent dans les phares.
+- Vérifié sur captures depuis le poste (phares seuls, tunnel éteint) et
+  en vue plongeante ; bancs aiguillage, salle des machines, portes,
+  rupture.
+
 **v1.15.48** — la voie comme sur la vidéo : fosse centrale, hauts plots,
 supports numérotés réfléchissants.
 - **« Le plancher entre les traverses au milieu de la voie, faudrait le
