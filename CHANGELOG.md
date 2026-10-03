@@ -7,6 +7,51 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.15.42** — le simulateur PC pour Linux et macOS.
+- Demande de Kevin : « sur GitHub, tu peux me builder les exécutables pour
+  Linux toutes distributions et Mac ? » Chaque release publie désormais,
+  à côté de l'installeur Windows :
+  - `PerceNeigeSimulator-X-linux.AppImage`, avec en secours la même
+    application en `…-linux-x86_64.tar.gz` ;
+  - `…-macos-apple-silicon.dmg` et `…-macos-intel.dmg` ;
+  - `SHA256SUMS`.
+- **Linux** : PyInstaller en dossier autonome, construit dans `almalinux:9`
+  (glibc 2.34). C'est le plancher des roues PyQt6 ≥ 6.10, et Linux garde
+  ainsi la même version de Qt (6.11) que Windows. Les distributions
+  couvertes sont toutes celles encore suivies : Ubuntu ≥ 22.04,
+  Debian ≥ 12, Fedora, RHEL ≥ 9, Mint ≥ 21, Arch, openSUSE. Les
+  bibliothèques que Qt réclame sans qu'elles soient toujours installées
+  (libxcb-cursor, absente d'une Ubuntu de base) sont embarquées. L'AppImage
+  utilise le runtime statique, qui fonctionne sans libfuse2. À chaque
+  version, le job `essai-linux` la lance sur Ubuntu 22.04 et 24.04,
+  Debian 12, Fedora 41, Arch et openSUSE Tumbleweed : le démarrage est
+  vérifié sous un serveur X virtuel, sans plugin Qt manquant, et les
+  bibliothèques du viewer 3D aussi. La vue 3D a été vérifiée à l'image
+  sous Ubuntu 24.04.
+- **macOS** : application `.app` (PyInstaller) dans un `.dmg`, construite
+  sur les runners `macos-15` (Apple Silicon) et `macos-15-intel`. Le viewer
+  3D est le nouvel export Godot « macOS » : binaire universel, signature ad
+  hoc, recopié avec ditto. Tout le paquet est signé ad hoc, ce qui est
+  obligatoire sur Apple Silicon. Essais sur le runner : le simulateur
+  démarre, le viewer s'exécute (`--headless --quit`), et une capture de la
+  vraie fenêtre Cocoa est publiée en artefact. Non signé par un développeur
+  Apple : au premier lancement, clic droit → Ouvrir.
+- **Viewer 3D depuis l'AppImage** : il plantait au démarrage (signal 11).
+  Le lanceur de PyInstaller place ses propres bibliothèques dans
+  `LD_LIBRARY_PATH`, et le viewer en héritait, ce qui le faisait charger
+  la libstdc++ et la libX11 d'AlmaLinux au lieu de celles qui vont avec le
+  Mesa du système. `godot_bridge` lui rend l'environnement d'origine
+  (`*_ORIG`).
+- AppImage et `.app` sont en lecture seule : sous Linux et macOS, les
+  fichiers temporaires vont dans `~/.cache` ou `~/Library/Caches`. Le
+  message « nouvelle version » indique le fichier à télécharger pour la
+  plateforme.
+- Godot : le projet importe aussi les textures ETC2/ASTC, une condition de
+  l'export macOS universel. Le projet n'a que 5 textures, et l'export Web
+  n'est pas concerné.
+- Scripts réutilisables en local : `packaging/build_linux.sh`,
+  `build_macos.sh`, `essai_distributions.sh`, `perce_neige_unix.spec`.
+
 **v1.15.41** — rupture : le câble se détend aussi dans la salle des
 machines, et le tronçon de la rame la suit.
 - Retour de Kevin sur la 1.15.40 : « il reste tendu dans la salle des
