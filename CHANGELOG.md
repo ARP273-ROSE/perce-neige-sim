@@ -7,6 +7,24 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.15.50** — numéros des supports dégagés du câble et des plots.
+- **« Le câble masque les chiffres maintenant quand il est présent »** :
+  à 19 cm de l'axe (v1.15.49), la plaque était juste derrière le second
+  brin, qui passe à 12 cm. Elle revient au bout droit de la traverse,
+  à 29 cm de l'axe (« juste avant le bord »), à droite du brin et de son
+  galet. Pour que les plots ne la masquent plus (v1.15.48), elle est
+  **surélevée sur un potelet** : son bas 2 cm au-dessus du dessus des
+  plots, son haut sous le champignon du rail. Vue du poste, ni les plots
+  ni le câble ne passent plus devant. Même règle pour les deux voies de
+  l'évitement, et toujours à gauche dans les virages à droite.
+- Seule la face tournée vers le lecteur est bleue et réfléchissante ; le
+  dos est en métal nu (le dos des plaques de l'autre sens ressemblait à
+  un numéro sans chiffres). Chiffres de 10 cm sur une plaque de
+  25 × 14 cm.
+- Vérifié sur captures depuis le poste (avec et sans le second brin, en
+  ligne droite et en virage à droite) et en vue plongeante ; aucun trou ;
+  bancs aiguillage, salle des machines, portes, rupture.
+
 **v1.15.49** — numéros des supports plus gros, visibles et réfléchissants.
 - **Plus gros et rentrés vers l'intérieur** (« faudrait les faire plus
   gros, et un peu décalés vers l'intérieur car ils sont masqués par les
