@@ -167,6 +167,8 @@ func set_tunnel_lights(on: bool) -> void:
 	tunnel_lights_on = on
 	if lights != null:
 		lights.set_enabled(on)
+	if track != null:
+		track.set_loop_lamps(on)     # réglettes de l'évitement
 		if on:
 			_light_cull_accum = 999.0      # rallumage dès l'image suivante
 	if _env != null:

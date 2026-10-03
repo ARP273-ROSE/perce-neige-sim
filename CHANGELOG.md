@@ -7,6 +7,33 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.15.47** — évitement : plus de lueur fantôme, même habillage que le
+reste du tunnel ; arrêt électrique actif jusqu'au quai.
+- **« Une deuxième rangée de néons qui font une lumière fantomatique dans
+  le noir »** : les réglettes de l'évitement (tous les 8 m de chaque
+  côté, à 1,15 m) avaient leur propre matériau lumineux, que la touche J
+  ne coupait pas. Elles s'éteignent désormais avec l'éclairage du
+  tunnel. Vérifié : tout éteint à l'entrée de l'évitement, le 99e
+  centile de luminance passe de 93 à 0.
+- **« La section de l'évitement, l'habillage du tunnel est différent »** :
+  les joints annulaires et la canalisation de voûte s'arrêtaient 60 m
+  avant l'évitement et ne reprenaient que 60 m après, soit 320 m de
+  paroi nue. Ils continuent maintenant partout :
+  - les joints suivent chaque tube, y compris là où les deux tubes se
+    rejoignent (seul l'arc qui borde le vide est dessiné) ;
+  - la canalisation suit la voûte droite du tube droit.
+- **« En mode normal, au ralenti en entrant en gare, l'arrêt électrique
+  est inopérant »** : sur les 55 derniers mètres, le régulateur imposait
+  la vitesse de rampement (0,75 m/s) sans regarder la consigne. L'arrêt
+  électrique ramenait bien la consigne à 0, mais la rame rampait jusqu'au
+  quai. L'arrêt électrique (et la veille) prime maintenant : arrêt en
+  ~1 m, puis tambour serré comme ailleurs en ligne. Tests
+  `tests/test_arret_electrique.py` : échouent sur la v1.15.46 (la rame
+  roule encore à 0,75 m/s dix secondes après), passent maintenant ; le
+  quai est toujours atteint à 0,5 m près sans arrêt électrique.
+- Vérifié : 60 tests PC, bancs aiguillage, son salle, portes, pannes,
+  rame, salle des machines et rupture ; captures de l'évitement.
+
 **v1.15.46** — noir total pour de vrai, phares de « pleins phares »,
 pupitre éteint avec la cabine.
 - **« Noir, ça veut dire qu'on ne voit rien du tout, même à 1 m »** :
