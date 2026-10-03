@@ -2441,6 +2441,17 @@ class Physics:
                                                       / max(target_v, 0.05)))
             envelope_active = True
 
+        # Arrêt électrique / veille : leur consigne (ramenée à 0 à
+        # 0,45 m/s²) PRIME sur le rampement automatique. Sans ça, dans les
+        # CREEP_DIST derniers mètres la rame rampait à CREEP_V jusqu'au
+        # quai, arrêt électrique « inopérant » (retour d'essai du 03/10 :
+        # « au ralenti en entrant en gare, l'arrêt électrique est
+        # inopérant »).
+        if ((tr.electric_stop or tr.dead_man_fault) and not challenge_drive
+                and tr.speed_cmd_eff < target_v):
+            target_v = tr.speed_cmd_eff
+            a_ff_env = a_cmd_ff
+
         # --- Unified control law ------------------------------------------
         # Single continuous P-controller (no branch-switching) so the
         # brake and throttle commands vary smoothly with the tracking
