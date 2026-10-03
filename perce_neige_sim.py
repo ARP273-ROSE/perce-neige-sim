@@ -4271,6 +4271,25 @@ class SoundSystem:
                 pass    # Qt < 6.10 : pas de compensation, la hauteur suit déjà
         except Exception:
             self.enabled = False
+        # Tous les lecteurs sur la MÊME sortie, celle par défaut du système,
+        # et ils la suivent quand elle change (retour d'essai 2026-10-03 :
+        # « l'ambiance est dans les haut-parleurs, les annonces et le reste
+        # dans le casque ») — un QSoundEffect reste sur la sortie qu'il a
+        # trouvée en naissant, quand les lecteurs QMediaPlayer suivent la
+        # sortie par défaut : branchez un casque après le lancement, et le
+        # son se partageait entre les deux.
+        self._sortie_id = None
+        self._sortie_t = 0.0
+        self._media_devices = None
+        if self.enabled:
+            try:
+                from PyQt6.QtMultimedia import QMediaDevices
+                self._media_devices = QMediaDevices()
+                self._media_devices.audioOutputsChanged.connect(
+                    self.suivre_sortie_par_defaut)
+            except Exception:
+                self._media_devices = None
+            self.suivre_sortie_par_defaut()
 
     # ----- public ----------------------------------------------------------
 
@@ -5017,6 +5036,7 @@ class SoundSystem:
         try:
             from PyQt6.QtMultimedia import QMediaDevices
             d["sortie_audio"] = QMediaDevices.defaultAudioOutput().description()
+            d["sorties_lecteurs"] = self.peripheriques_utilises()
         except Exception:
             pass
         d["drapeaux"] = {"lente": bool(self._amb_playing),
@@ -5120,6 +5140,59 @@ class SoundSystem:
     def tick(self, dt: float) -> None:
         for k in list(self._cooldowns.keys()):
             self._cooldowns[k] = max(0.0, self._cooldowns[k] - dt)
+        # sortie par défaut changée sans changement de la liste des
+        # périphériques (choix dans les réglages du système) : contrôle
+        # toutes les 2 s, en plus du signal audioOutputsChanged
+        self._sortie_t = getattr(self, "_sortie_t", 0.0) + dt
+        if self._sortie_t >= 2.0:
+            self._sortie_t = 0.0
+            self.suivre_sortie_par_defaut()
+
+    def _sorties_audio(self) -> list:
+        """Tous les QAudioOutput et QSoundEffect du système son."""
+        objets = list(vars(self).values()) + list(getattr(self, "_motor_fx", []))
+        return [o for o in objets
+                if _QTMULTIMEDIA_OK and isinstance(o, (QAudioOutput, QSoundEffect))]
+
+    def suivre_sortie_par_defaut(self) -> None:
+        """Met chaque lecteur sur la sortie audio par défaut du système."""
+        if not self.enabled:
+            return
+        try:
+            from PyQt6.QtMultimedia import QMediaDevices
+            dev = QMediaDevices.defaultAudioOutput()
+            if dev.isNull():
+                return
+            dev_id = bytes(dev.id())
+        except Exception:
+            return
+        if dev_id == getattr(self, "_sortie_id", None):
+            return
+        self._sortie_id = dev_id
+        for o in self._sorties_audio():
+            try:
+                if isinstance(o, QAudioOutput):
+                    if bytes(o.device().id()) != dev_id:
+                        o.setDevice(dev)
+                elif bytes(o.audioDevice().id()) != dev_id:
+                    joue = o.isPlaying()
+                    o.setAudioDevice(dev)
+                    if joue:
+                        o.play()
+            except Exception:
+                pass
+
+    def peripheriques_utilises(self) -> list:
+        """Noms des sorties réellement utilisées (diagnostic) : une seule
+        entrée attendue."""
+        noms = set()
+        for o in self._sorties_audio():
+            try:
+                d = o.device() if isinstance(o, QAudioOutput) else o.audioDevice()
+                noms.add(d.description() or "(défaut)")
+            except Exception:
+                pass
+        return sorted(noms)
 
     def _halt_all_players(self) -> None:
         """Arrêt immédiat de tous les canaux (mute / stop / reset —
@@ -9346,6 +9419,10 @@ class GameWidget(QWidget):
         else:
             max_depth = 14.0
             head_reach = 0.0
+        # Éclairage du tunnel coupé (touche J) et phares éteints : noir
+        # total, seule la lumière de la cabine montre le premier mètre
+        if not st.tunnel_lights and not tr.lights_head:
+            max_depth = 2.5
 
         # Real TBM segment pitch ~ 1.5 m. Ring depths are generated from
         # the accumulated scroll so rings "flow" at exactly the physical

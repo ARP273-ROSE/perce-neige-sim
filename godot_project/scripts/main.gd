@@ -65,9 +65,9 @@ var _light_cull_accum: float = 999.0   # force un 1er culling dès la frame 1
 var tunnel_lights_on: bool = true
 var _env: Environment = null
 const AMBIENT_ON: float = 0.40
-const AMBIENT_OFF: float = 0.03       # nuit noire : seuls phares et gares éclairent
+const AMBIENT_OFF: float = 0.0        # noir total : seuls phares, cabine et gares éclairent
 const FOG_LIGHT_ON: float = 1.0
-const FOG_LIGHT_OFF: float = 0.05     # le brouillard ne doit pas « éclairer » le fond
+const FOG_LIGHT_OFF: float = 0.0      # le brouillard ne doit pas « éclairer » le fond
 
 # Contrôles
 var speed_cmd_rate: float = 0.4    # variation par seconde du setpoint
@@ -171,6 +171,15 @@ func set_tunnel_lights(on: bool) -> void:
 	if _env != null:
 		_env.ambient_light_energy = AMBIENT_ON if on else AMBIENT_OFF
 		_env.fog_light_energy = FOG_LIGHT_ON if on else FOG_LIGHT_OFF
+		# Noir TOTAL (retour du 03/10 : « éclairages éteints le tunnel doit
+		# être dans le noir total, là on le voit ») : le ciel, invisible
+		# dans le tunnel, éclairait encore par ses reflets sur les parois
+		# lisses ; en qualité haute (vue 3D du PC), l'illumination globale
+		# SDFGI et le brouillard volumétrique réinjectaient aussi de la
+		# lumière.
+		_env.background_energy_multiplier = 1.0 if on else 0.0
+		_env.sdfgi_energy = 1.0 if on else 0.0
+		_env.volumetric_fog_gi_inject = 0.5 if on else 0.0
 	print("[Tunnel] éclairage %s" % ["allumé" if on else "coupé"])
 
 

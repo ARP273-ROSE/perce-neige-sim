@@ -285,3 +285,21 @@ def test_salle_des_machines_absente_garde_le_son_cabine(fenetre):
         snd._ambient_wavs.update(vrais[0])
         snd._mr_present = vrais[1]
         snd.set_machine_room_view(False)
+
+
+# --- 2026-10-03 : « l'ambiance est dans les haut-parleurs, les annonces et
+# le reste dans le casque ». Tous les lecteurs suivent la sortie par défaut.
+
+def test_tous_les_lecteurs_sur_la_meme_sortie(fenetre):
+    win, _ = fenetre
+    snd = win.game.sounds
+    sorties = snd._sorties_audio()
+    # les boucles d'ambiance (QSoundEffect) ET les lecteurs (QAudioOutput)
+    assert any(isinstance(o, pn.QSoundEffect) for o in sorties)
+    assert any(isinstance(o, pn.QAudioOutput) for o in sorties)
+    snd._sortie_id = None               # force le réalignement
+    snd.suivre_sortie_par_defaut()
+    from PyQt6.QtMultimedia import QMediaDevices
+    if QMediaDevices.defaultAudioOutput().isNull():
+        pytest.skip("aucune sortie audio dans cet environnement")
+    assert len(snd.peripheriques_utilises()) == 1, snd.peripheriques_utilises()
