@@ -589,6 +589,8 @@ def physics_to_state_dict(tr, st=None) -> dict:
         "power_kw": float(getattr(tr, "motor_power_kw", getattr(tr, "power_kw", 0.0))),
         "speed_cmd": float(getattr(tr, "speed_cmd", 0.0)),
         "lights_head": bool(getattr(tr, "lights_head", False)),
+        # Éclairage du tunnel (touche J du sim PC, 2026-10-03)
+        "tunnel_lights": bool(getattr(st, "tunnel_lights", True)) if st is not None else True,
         "lights_cabin": bool(getattr(tr, "lights_cabin", True)),
         "emergency": bool(getattr(tr, "emergency", False) or getattr(tr, "electric_stop", False)),
         # Rame pilotée (1 = voie gauche dans l'évitement Abt, 2 = voie
