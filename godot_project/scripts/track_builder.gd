@@ -1958,7 +1958,8 @@ func _build_guides() -> void:
 				l_ax_s.append(Transform3D(xf.basis * rot90, xf.origin + up * y_axis + lat))
 				l_leg.append(Transform3D(xf.basis, xf.origin + up * y_leg_center + lat))
 				if num > 0:
-					plaques.append(_support_plate(st.s, num, x_nom, 0.0, y_cb))
+					plaques.append(_support_plate(st.s, num, _track_center_x(st.s, float(side_i)),
+						SUPPORT_PLATE_X, y_cb))
 		# galet de chaque brin : incliné dans son support autour de son centre
 		for side_i in [-1, 1]:
 			var v: Dictionary = _strand[side_i][k + 1]   # [0] = point libre à s = 0
@@ -1993,12 +1994,14 @@ const SUPPORT_BAR_W_SINGLE: float = 0.26 # évitement : support d'un seul brin
 const SUPPORT_BAR_H: float = 0.10
 const SUPPORT_BAR_D: float = 0.10
 const SUPPORT_LEG_X: float = 0.30
-# Plaque rentrée dans le couloir libre entre les rangées de plots (retour du
-# 03/10 : « décalés vers l'intérieur car ils sont masqués par les
-# traverses »), sous les galets, haut aligné sur la traverse ; plus grande.
-const SUPPORT_PLATE_X: float = 0.19
-const SUPPORT_PLATE: Vector2 = Vector2(0.30, 0.15)
-const SUPPORT_DIGIT_H: float = 0.11      # hauteur des chiffres (m)
+# Plaque au bout droit de la traverse (« juste avant le bord »), à droite
+# du brin et de son galet, SURÉLEVÉE sur un potelet : son bas au-dessus du
+# dessus des plots, son haut sous le champignon du rail. Retours des 03 et
+# 04/10 : au ras de la traverse, les plots la masquaient vue du poste ;
+# rentrée à 19 cm de l'axe, c'est le second brin du câble qui passait devant.
+const SUPPORT_PLATE_X: float = 0.29
+const SUPPORT_PLATE: Vector2 = Vector2(0.25, 0.14)
+const SUPPORT_DIGIT_H: float = 0.10      # hauteur des chiffres (m)
 const VIRAGE_SEUIL: float = 0.01         # Δ de tangente sur ±10 m (R ≲ 2 km)
 
 const RETRO_SHADER: String = """
@@ -2063,7 +2066,7 @@ func _support_plate(s: float, num: int, x_centre: float, x_bord: float, y_cb: fl
 	var v: float = _virage(s)
 	var virage_droite: bool = (v > VIRAGE_SEUIL) if montant else (v < -VIRAGE_SEUIL)
 	var cote: float = -1.0 if virage_droite else 1.0
-	var y_pl: float = y_cb + (SUPPORT_BAR_H - SUPPORT_PLATE.y) * 0.5   # haut au ras de la traverse
+	var y_pl: float = floor_y_local + slab_thickness + sleeper_height + 0.02 + SUPPORT_PLATE.y * 0.5
 	var pos: Vector3 = xf.origin + xf.basis.y * y_pl + xf.basis.x * x_centre \
 		+ lecteur.x * (x_bord * cote) + lecteur.z * (SUPPORT_BAR_D * 0.5 + 0.003)
 	return [Transform3D(lecteur, pos), num, lecteur]
@@ -2072,8 +2075,10 @@ func _support_plate(s: float, num: int, x_centre: float, x_bord: float, y_cb: fl
 func _build_support_numbers(plaques: Array) -> void:
 	var blanc: ShaderMaterial = _retro_material(Color(0.93, 0.93, 0.90), 1.0)
 	var bleu: ShaderMaterial = _retro_material(Color(0.06, 0.20, 0.55), 1.0, 2.5)
-	var plate: BoxMesh = BoxMesh.new()
-	plate.size = Vector3(SUPPORT_PLATE.x, SUPPORT_PLATE.y, 0.004)
+	# face réfléchissante (vers le lecteur seulement) + dos en métal nu :
+	# le dos des plaques de l'autre sens ne doit pas paraître bleu
+	var plate: QuadMesh = QuadMesh.new()
+	plate.size = SUPPORT_PLATE
 	plate.material = bleu
 	var font: Font = ThemeDB.fallback_font
 	var fs: int = 64
@@ -2091,6 +2096,21 @@ func _build_support_numbers(plaques: Array) -> void:
 		tm.curve_step = 4.0
 		tm.material = blanc
 		chiffres.append(tm)
+	# potelet sous la plaque, depuis le fond de la fosse
+	var y_fond: float = floor_y_local + slab_thickness - trench_depth - 0.01 + cable_beam_height
+	var y_bas: float = floor_y_local + slab_thickness + sleeper_height + 0.02
+	var post: BoxMesh = BoxMesh.new()
+	post.size = Vector3(0.025, y_bas - y_fond, 0.025)
+	var galva: StandardMaterial3D = StandardMaterial3D.new()
+	galva.albedo_color = Color(0.80, 0.81, 0.79)
+	galva.roughness = 0.5
+	galva.metallic = 0.3
+	post.material = galva
+	var dos: BoxMesh = BoxMesh.new()
+	dos.size = Vector3(SUPPORT_PLATE.x + 0.01, SUPPORT_PLATE.y + 0.01, 0.004)
+	dos.material = galva
+	var l_dos: Array = []
+	var l_post: Array = []
 	var l_plate: Array = []
 	var l_dig: Array = []
 	for d in range(10):
@@ -2100,12 +2120,17 @@ func _build_support_numbers(plaques: Array) -> void:
 		var txt: String = str(pl[1])
 		var lb: Basis = pl[2]
 		l_plate.append(tr)
+		l_dos.append(Transform3D(lb, tr.origin - lb.z * 0.0025))
+		var pied: Vector3 = tr.origin - lb.y * (SUPPORT_PLATE.y * 0.5 + (y_bas - y_fond) * 0.5) - lb.z * 0.02
+		l_post.append(Transform3D(lb, pied))
 		for i in range(txt.length()):
 			var o: float = (float(i) - 0.5 * float(txt.length() - 1)) * adv
 			var p: Vector3 = tr.origin + lb.x * o + lb.z * 0.003
 			(l_dig[int(txt[i])] as Array).append(Transform3D(lb, p))
 	# plaques visibles loin : au fond du tunnel, une file de points qui brillent
 	_mm_instance(plate, l_plate, "SupportPlates", 300.0)
+	_mm_instance(post, l_post, "SupportPlatePosts", 200.0)
+	_mm_instance(dos, l_dos, "SupportPlateBacks", 200.0)
 	for d in range(10):
 		_mm_instance(chiffres[d], l_dig[d], "SupportDigits%d" % d, 120.0)
 
