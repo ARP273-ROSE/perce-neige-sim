@@ -9375,8 +9375,9 @@ class GameWidget(QWidget):
         vw = rect.width()
         vh = rect.height()
 
-        # --- Background: dark tunnel interior ---
-        p.fillRect(rect, QColor(18, 20, 22))
+        # --- Background: dark tunnel interior (noir si éclairage coupé) ---
+        p.fillRect(rect, QColor(18, 20, 22) if st.tunnel_lights
+                   else QColor(0, 0, 0))
 
         # Visible windshield area (cabin wall covers right 22%, left frame 48px)
         cabin_wall_w = vw * 0.22
@@ -9420,9 +9421,11 @@ class GameWidget(QWidget):
             max_depth = 14.0
             head_reach = 0.0
         # Éclairage du tunnel coupé (touche J) et phares éteints : noir
-        # total, seule la lumière de la cabine montre le premier mètre
-        if not st.tunnel_lights and not tr.lights_head:
-            max_depth = 2.5
+        # total — « on ne voit rien du tout, même à 1 m » (03/10). Les
+        # gares gardent leur propre éclairage.
+        if (not st.tunnel_lights and not tr.lights_head
+                and 100.0 < tr.s < LENGTH - 100.0):
+            max_depth = 0.0
 
         # Real TBM segment pitch ~ 1.5 m. Ring depths are generated from
         # the accumulated scroll so rings "flow" at exactly the physical
@@ -9633,10 +9636,10 @@ class GameWidget(QWidget):
                           if head_reach > 0 else 0.0)
             if near_station:
                 base_b = 140
-            elif lit:
+            elif lit and st.tunnel_lights:
                 base_b = 48
             else:
-                base_b = 6
+                base_b = 6 if st.tunnel_lights else 0
             wall_bright = int(min(220, base_b + head_boost))
             wc = QColor(wall_bright,
                         int(wall_bright * 1.02),
@@ -10709,9 +10712,18 @@ class GameWidget(QWidget):
                            "STOP")
 
         # --- Cabin frame overlay (beige interior, windshield frame) ---
+        # Éclairage cabine éteint (C) : l'habillage retombe dans le noir, il
+        # ne reste que les écrans et les voyants (retour du 03/10 : « le
+        # pupitre est éclairé par la cabine sauf si l'éclairage cabine est
+        # off »).
+        k_cab = 1.0 if tr.lights_cabin else 0.10
+
+        def _cab(r: int, g: int, b: int) -> QColor:
+            return QColor(int(r * k_cab), int(g * k_cab), int(b * k_cab))
+
         # Windshield border — dark frame around the tunnel view
         frame_w = 18
-        frame_col = QColor(55, 52, 48)
+        frame_col = _cab(55, 52, 48)
         p.setPen(Qt.PenStyle.NoPen)
         p.setBrush(QBrush(frame_col))
         # Top frame
@@ -10721,9 +10733,9 @@ class GameWidget(QWidget):
         # Right frame — thicker (cabin wall, reuses cabin_wall_w from above)
         cabin_grad = QLinearGradient(vx + vw - cabin_wall_w, 0,
                                      vx + vw, 0)
-        cabin_grad.setColorAt(0.0, QColor(55, 52, 48))
-        cabin_grad.setColorAt(0.15, QColor(185, 175, 162))  # beige interior
-        cabin_grad.setColorAt(1.0, QColor(170, 160, 148))
+        cabin_grad.setColorAt(0.0, _cab(55, 52, 48))
+        cabin_grad.setColorAt(0.15, _cab(185, 175, 162))  # beige interior
+        cabin_grad.setColorAt(1.0, _cab(170, 160, 148))
         p.setBrush(QBrush(cabin_grad))
         p.drawRect(QRectF(vx + vw - cabin_wall_w, vy, cabin_wall_w, vh))
 
@@ -10733,21 +10745,26 @@ class GameWidget(QWidget):
         win_w = cabin_wall_w - 50
         win_h = vh * 0.45
         if win_w > 30 and win_h > 30:
-            p.setPen(_cached_pen(QColor(40, 38, 35), 2))
-            p.setBrush(QBrush(QColor(45, 50, 55, 180)))
+            p.setPen(_cached_pen(_cab(40, 38, 35), 2))
+            p.setBrush(QBrush(_cab(45, 50, 55)))
             p.drawRoundedRect(QRectF(win_x, win_y, win_w, win_h), 8, 8)
-            # Blue-grey tunnel wall visible through window
+            # Blue-grey tunnel wall visible through window (noire si
+            # l'éclairage du tunnel est coupé : les phares n'éclairent pas
+            # de côté)
             tw_col = QColor(60, 65, 80)
             if tunnel_lit_at(tr.s):
                 tw_col = QColor(80, 85, 95)
+            if not st.tunnel_lights:
+                tw_col = QColor(0, 0, 0)
             p.setBrush(QBrush(tw_col))
             p.drawRoundedRect(QRectF(win_x + 4, win_y + 4,
                                      win_w - 8, win_h - 8), 6, 6)
             # Golden stripe on tunnel wall (visible in video)
-            stripe_y = win_y + win_h * 0.45
-            p.setPen(_cached_pen(QColor(190, 170, 90), 3))
-            p.drawLine(QPointF(win_x + 6, stripe_y),
-                       QPointF(win_x + win_w - 6, stripe_y))
+            if st.tunnel_lights:
+                stripe_y = win_y + win_h * 0.45
+                p.setPen(_cached_pen(QColor(190, 170, 90), 3))
+                p.drawLine(QPointF(win_x + 6, stripe_y),
+                           QPointF(win_x + win_w - 6, stripe_y))
 
         # CCTV ceiling monitor (en haut à gauche du pare-brise, comme
         # sur les photos du vrai pupitre) — mosaïque 2x2 N&B.
@@ -10778,9 +10795,9 @@ class GameWidget(QWidget):
         # Bottom frame — console area
         console_h = vh * 0.22
         console_grad = QLinearGradient(0, vy + vh - console_h, 0, vy + vh)
-        console_grad.setColorAt(0.0, QColor(55, 52, 48))
-        console_grad.setColorAt(0.3, QColor(70, 68, 62))
-        console_grad.setColorAt(1.0, QColor(50, 48, 42))
+        console_grad.setColorAt(0.0, _cab(55, 52, 48))
+        console_grad.setColorAt(0.3, _cab(70, 68, 62))
+        console_grad.setColorAt(1.0, _cab(50, 48, 42))
         p.setBrush(QBrush(console_grad))
         p.setPen(Qt.PenStyle.NoPen)
         p.drawRect(QRectF(vx, vy + vh - console_h, vw, console_h))
@@ -11653,7 +11670,8 @@ class GameWidget(QWidget):
         p.setPen(_cached_pen(QColor(30, 30, 30), 1))
         p.setBrush(QBrush(QColor(25, 25, 28)))
         p.drawRoundedRect(QRectF(x, y, pw, ph), 4, 4)
-        p.setPen(_cached_pen(QColor(90, 88, 82), 1.5))
+        p.setPen(_cached_pen(QColor(90, 88, 82) if tr.lights_cabin
+                             else QColor(12, 12, 11), 1.5))
         p.setBrush(Qt.BrushStyle.NoBrush)
         p.drawRoundedRect(QRectF(x - 1, y - 1, pw + 2, ph + 2), 5, 5)
 

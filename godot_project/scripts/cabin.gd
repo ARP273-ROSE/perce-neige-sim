@@ -19,6 +19,17 @@ var headlight_front: SpotLight3D = null
 var camera_fpv: Camera3D = null
 var camera_ext: Camera3D = null
 var interior_light: OmniLight3D = null
+# Lumières du poste de conduite : suivent l'éclairage cabine (C). Éteint, il
+# ne reste que les écrans et les voyants (retour du 03/10 : « le pupitre est
+# éclairé par la cabine sauf si l'éclairage cabine est off »).
+var _cockpit_lights: Array[OmniLight3D] = []
+# Couche de rendu réservée à la rame : les lumières de la cabine n'éclairent
+# qu'elle, jamais le tunnel (« noir, ça veut dire qu'on ne voit rien du
+# tout, même à 1 m »).
+const LAYER_RAME: int = 1 << 1
+# Couche de la voie (rails, longrines, câble) : éclairée, avec les rames,
+# par la seule lumière de la vue extérieure.
+const LAYER_VOIE: int = 1 << 2
 var _front_lamps: Array = []         # feux ronds de la calotte avant
 var _rear_lamps: Array = []
 var _body_mats: Dictionary = {}
@@ -48,7 +59,7 @@ var _pax_gear_prefix: Array = []   # par voiture : {ski: [int], pole: [int], boa
 var _pax_shown: Array = []      # par voiture : nombre affiché
 var _head_glow: float = 0.0     # phares halogènes : 0 éteint → 1 plein feu
 var _head_mat: StandardMaterial3D = null
-var head_energy: float = 5.0    # énergie du phare avant à plein feu (14 avant le 01/10)
+var head_energy: float = 12.0   # énergie du phare à plein feu (faisceau large depuis le 03/10)
 @export var train_number: int = 1
 var _prev_v_for_acc: float = 0.0   # vitesse à la frame précédente pour calcul accel
 
@@ -111,8 +122,11 @@ func _ready() -> void:
 		# En vue FPV, masquer la cabine elle-même — on est DEDANS.
 		# En vue extérieure, on la montre.
 		_apply_view_mode()
+		_tag_layer_rame(self)
+		_tag_layer_rame.call_deferred(self)
 	else:
 		# Ghost : mesh toujours visible, pas de caméra ni phares.
+		_tag_layer_rame.call_deferred(self)   # éclairée en vue extérieure
 		# (Plus de lumière rouge au centre de la rame — retour du 03/10 :
 		# « enlève le feu rouge à l'arrière et le halo rouge qui va avec ».)
 		mesh_root.visible = true
@@ -651,16 +665,31 @@ func _build_console_pupitre() -> void:
 		interior_root.add_child(bled)
 
 	# ----- Lumière douce qui éclaire la plaque alu depuis le bas -------
-	# Suggère le rétroéclairage des LED (les LED elles-mêmes émissent
-	# faiblement, on ajoute une petite lumière pour donner du relief
-	# aux boutons noirs sans surcharger le moteur de lumières)
+	# Donne du relief aux boutons noirs. Elle fait partie de l'éclairage
+	# cabine : sans lui, seuls les voyants et les écrans restent visibles.
 	var fill: OmniLight3D = OmniLight3D.new()
 	fill.position = Vector3(0.10, y_top + 0.05, z_console)
 	fill.light_color = Color(0.85, 0.95, 1.0)
 	fill.light_energy = 0.6
 	fill.omni_range = 0.6
 	fill.shadow_enabled = false
+	fill.light_cull_mask = LAYER_RAME
+	fill.light_volumetric_fog_energy = 0.0   # pas de brouillard dans la cabine
 	interior_root.add_child(fill)
+	_cockpit_lights.append(fill)
+
+	# ----- Plafonnier du poste : la lumière de la cabine (celle du milieu
+	# de la rame, à 15 m, n'atteint pas le pupitre) ----------------------
+	var plafonnier: OmniLight3D = OmniLight3D.new()
+	plafonnier.position = Vector3(0.0, y_top + 1.05, z_console + 0.75)
+	plafonnier.light_color = Color(1.0, 0.90, 0.72)
+	plafonnier.light_energy = 0.9
+	plafonnier.omni_range = 2.6
+	plafonnier.shadow_enabled = false
+	plafonnier.light_cull_mask = LAYER_RAME
+	plafonnier.light_volumetric_fog_energy = 0.0   # pas de brouillard dans la cabine
+	interior_root.add_child(plafonnier)
+	_cockpit_lights.append(plafonnier)
 
 
 # ---------------------------------------------------------------------------
@@ -1245,19 +1274,24 @@ func _build_lights() -> void:
 	headlight_front.name = "HeadlightFront"
 	headlight_front.position = Vector3(0.0, 0.70, -train_length * 0.5 + 0.3)
 	# Retour du 01/10 : « le halo central des phares fait un reflet
-	# aveuglant ». Le phare (énergie 14, cône de 38° centré sur l'axe,
-	# atténuation 0,4 : presque aucune perte avec la distance) surexposait
-	# le fond du tunnel pile au point de fuite. Réglé sur captures (vue
-	# cabine à 1 300 m, shot_phares.gd) : énergie 5, faisceau plus homogène
-	# (1,8), atténuation 0,8, cône 32°, braqué 6° vers la voie comme un vrai
-	# phare — luminance au centre de l'image −65 %, la voie reste éclairée.
-	headlight_front.rotation = Vector3(deg_to_rad(-6.0), 0.0, 0.0)
+	# aveuglant » → énergie 14 → 5, cône 32°. Retour du 03/10 : « plus de
+	# puissance, mais pas de halo central plus brillant que le reste, comme
+	# des pleins phares de voiture ». Le cône de 32° dessinait un ROND
+	# lumineux net au fond du tunnel, noir autour. Désormais un faisceau
+	# très ouvert (75°, plus large que la vue par le pare-brise : son bord
+	# ne se voit plus), homogène (atténuation de cône 2), qui porte loin
+	# (atténuation 0,4) et presque à l'horizontale (−2°). Réglé sur
+	# captures (shot_noir.gd p=…), en rendu PWA et PC.
+	headlight_front.rotation = Vector3(deg_to_rad(-2.0), 0.0, 0.0)
 	headlight_front.light_color = Color(1.0, 0.95, 0.80)
 	headlight_front.light_energy = head_energy
 	headlight_front.spot_range = 280.0
-	headlight_front.spot_angle = 32.0
-	headlight_front.spot_angle_attenuation = 1.8
-	headlight_front.spot_attenuation = 0.8
+	headlight_front.spot_angle = 75.0
+	headlight_front.spot_angle_attenuation = 2.0
+	headlight_front.spot_attenuation = 0.4
+	# brouillard volumétrique (vue PC) : un faisceau large et puissant y
+	# ferait un voile laiteux devant la cabine
+	headlight_front.light_volumetric_fog_energy = 0.25
 	headlight_front.shadow_enabled = false
 	headlight_front.visible = true  # allumés par défaut
 	_attach_to_front_car(headlight_front, headlight_front.position)
@@ -1274,6 +1308,8 @@ func _build_lights() -> void:
 	interior_light.light_energy = 1.2
 	interior_light.omni_range = 15.0
 	interior_light.shadow_enabled = false
+	interior_light.light_cull_mask = LAYER_RAME
+	interior_light.light_volumetric_fog_energy = 0.0   # pas de brouillard dans la cabine
 	interior_light.visible = true
 	add_child(interior_light)
 
@@ -1491,8 +1527,7 @@ func _process(_delta: float) -> void:
 	if physics.direction != _wheel_dir_applied:
 		_apply_wheel_types()
 	if not is_ghost:
-		if interior_light != null:
-			interior_light.visible = physics.lights_cabin
+		_apply_cabin_lights(physics.lights_cabin)
 
 
 func _animate_passengers(delta: float) -> void:
@@ -1632,8 +1667,33 @@ func set_headlights(on: bool) -> void:
 
 
 func set_interior_lights(on: bool) -> void:
-	if interior_light:
+	_apply_cabin_lights(on)
+
+
+func _apply_cabin_lights(on: bool) -> void:
+	if interior_light != null:
 		interior_light.visible = on
+	# les fenêtres ne luisent (intérieur éclairé vu du dehors) que si la
+	# cabine est allumée
+	var vitre = _body_mats.get("glass")
+	if vitre is StandardMaterial3D and (vitre as StandardMaterial3D).emission_enabled != on:
+		(vitre as StandardMaterial3D).emission_enabled = on
+	for l in _cockpit_lights:
+		l.visible = on
+
+
+## Met toute la géométrie de la rame aussi sur LAYER_RAME, seule couche que
+## voient les lumières de la cabine.
+func _tag_layer_rame(n: Node) -> void:
+	tag_layer(n, LAYER_RAME)
+
+
+## Ajoute la couche `bit` à toute la géométrie sous `n`.
+static func tag_layer(n: Node, bit: int) -> void:
+	if n is VisualInstance3D:
+		(n as VisualInstance3D).layers |= bit
+	for c in n.get_children():
+		tag_layer(c, bit)
 
 
 # --- Secousse d'écran (collision) ----------------------------------------

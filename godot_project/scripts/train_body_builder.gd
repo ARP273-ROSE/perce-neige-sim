@@ -109,13 +109,17 @@ static func materials() -> Dictionary:
 	glass.emission_enabled = true
 	glass.emission = Color(0.55, 0.50, 0.38)
 	glass.emission_energy_multiplier = 0.35
-	# pare-brise de la cabine pilotée : quasi clair (vu de l'intérieur)
+	# Pare-brise de la cabine pilotée. Jusqu'au 03/10 il n'était pas posé sur
+	# la bonne surface (voir build_train) : le conducteur regardait à travers
+	# la vitre des fenêtres, teintée et émissive. Tous les réglages de
+	# lumière (néons, phares) ont été faits à travers cette teinte → on la
+	# garde, mais SANS émission (elle faisait un voile brun dans le noir
+	# total), sans reflet (tache spéculaire d'une lampe en plein milieu de
+	# la vue, retour du 27/09) et éclairée : dans le noir, elle est noire.
 	var windshield: StandardMaterial3D = StandardMaterial3D.new()
-	windshield.albedo_color = Color(0.75, 0.80, 0.86, 0.16)
-	# SANS éclairage : avec une rugosité de 0,05 le pare-brise renvoyait la
-	# tache spéculaire blanche d'une lampe en plein milieu de la vue cockpit
-	# (retour d'essai 2026-09-27). Une vitre, c'est une teinte, pas un miroir.
-	windshield.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	windshield.albedo_color = Color(0.10, 0.14, 0.19, 0.62)
+	windshield.roughness = 1.0
+	windshield.specular_mode = BaseMaterial3D.SPECULAR_DISABLED
 	windshield.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	windshield.cull_mode = BaseMaterial3D.CULL_DISABLED
 	var lamp_off: StandardMaterial3D = _mat(Color(0.10, 0.10, 0.11), 0.25, 0.3)   # lentille froide
@@ -935,12 +939,16 @@ static func build_train(root: Node3D, train_length: float, car_count: int,
 			dm.mesh = lf["mesh"]
 			car_root.add_child(dm)
 			doors.append({"node": dm, "side": lf["side"]})
+		# indices des vitres de calotte (dernière surface posée par _build_cap)
+		var cap_glass: Array[int] = []
 		if is_first:
 			_build_cap(mesh, mats, z_a, -1.0, backboard)
+			cap_glass.append(mesh.get_surface_count() - 1)
 		else:
 			_build_end_disc(mesh, mats["rib"], z_a, -1.0, R_BODY)
 		if is_last:
 			_build_cap(mesh, mats, z_b, 1.0, backboard)
+			cap_glass.append(mesh.get_surface_count() - 1)
 		else:
 			_build_end_disc(mesh, mats["rib"], z_b, 1.0, R_BODY)
 		var car: MeshInstance3D = MeshInstance3D.new()
@@ -948,10 +956,14 @@ static func build_train(root: Node3D, train_length: float, car_count: int,
 		car.mesh = mesh
 		car_root.add_child(car)
 		if not backboard:
-			# cabine pilotée : pare-brise quasi clair (dernière surface = vitre
-			# de calotte) et DOUBLURE intérieure crème (ce que voit le conducteur)
-			if is_first or is_last:
-				car.set_surface_override_material(mesh.get_surface_count() - 1, mats["windshield"])
+			# cabine pilotée : pare-brise quasi clair et DOUBLURE intérieure
+			# crème (ce que voit le conducteur). 🔴 Jusqu'au 03/10, la voiture
+			# de tête recevait le pare-brise sur sa DERNIÈRE surface, qui est
+			# chez elle la cloison du soufflet : le conducteur regardait à
+			# travers la vitre teintée à 62 % et émissive des fenêtres
+			# (voile brun en rendu PC, « éclairages éteints, on voit tout »).
+			for gi in cap_glass:
+				car.set_surface_override_material(gi, mats["windshield"])
 			var lining: ArrayMesh = ArrayMesh.new()
 			_build_tube(lining, mats, z_a, z_b, false, false, wells, [], true)
 			if is_first:
