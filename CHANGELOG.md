@@ -7,6 +7,46 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.15.53** — la 3D se règle sur la machine et s'ajuste en direct
+contre les saccades.
+- **« Détecter la config du PC, CPU, cœurs, GPU, RAM… et adapter les
+  réglages pour que ça reste fluide »** : au lancement, la vue 3D lit le
+  processeur et son nombre de cœurs, la mémoire, la carte graphique et
+  son pilote, la définition et la fréquence de l'écran, sous Windows,
+  macOS et Linux. Elle en déduit un profil de départ :
+  - carte dédiée (NVIDIA, Radeon RX) : tout activé ;
+  - Mac Apple Silicon : sans l'éclairage indirect (SDFGI) ;
+  - puce intégrée : un ou deux crans plus bas selon la mémoire et le
+    nombre de cœurs ;
+  - rendu logiciel (llvmpipe) : très bas ;
+  - écran de plus de 2560 × 1600 : rendu 3D réduit d'office.
+- **« Détecter les saccades en direct pour t'adapter en live »** :
+  - toutes les 2 s, la durée de chaque image est mesurée : images par
+    seconde, part d'à-coups (images au moins deux fois trop longues),
+    1 % des pires images, et temps GPU quand le pilote le donne ;
+  - la 3D descend d'un cran sous 83 % de la fréquence de l'écran, au-delà
+    de 3 % d'à-coups, ou si les pires images dépassent trois fois le
+    budget. Ordre des crans : éclairage indirect, puis brouillard
+    volumétrique et reflets, puis anticrénelage et rendu à 85 %, puis
+    70 %, puis 60 % sans halo, et enfin 30 images/s régulières plutôt
+    que 45 saccadées ;
+  - elle remonte quand c'est fluide : après 20 s si le GPU a de la marge,
+    après 40 s sinon. Un cran qui saccade de nouveau dans les 20 s
+    suivant une remontée est écarté pendant 3 min : pas de va-et-vient.
+- **Menu Affichage → Qualité 3D** : Automatique, Haute, Moyenne, Basse.
+  Le choix est retenu d'une session à l'autre et s'applique sans
+  relancer la 3D. Les modes fixes ne s'adaptent pas.
+- **Rapport de problème** : il contient la machine détectée et les
+  derniers changements de cran avec leur raison.
+- La PWA garde son réglage mesuré sur iPad : 60 images/s stables sur le
+  banc GPU, rendu identique.
+- Le rendu sur un fil séparé (`--render-thread separate`) n'est pas
+  activé : Godot 4.6 le donne encore pour expérimental.
+- Vérifié : banc `bench_perf_3d.gd` (19 contrôles : profils, écran 4K,
+  descente sur à-coups et sur lenteur, remontée, interdiction de 3 min,
+  modes fixes, plafond à 30 images/s), essai en fenêtre réelle, mesure
+  de la PWA, test du menu, et tous les bancs 3D et tests PC.
+
 **v1.15.52** — urgence sans oscillation, fluidité sur PC modeste, câble
 rompu non réparable en ligne.
 - **« Quand la rame monte et que je serre le frein d'urgence, elle oscille

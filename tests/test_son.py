@@ -303,3 +303,22 @@ def test_tous_les_lecteurs_sur_la_meme_sortie(fenetre):
     if QMediaDevices.defaultAudioOutput().isNull():
         pytest.skip("aucune sortie audio dans cet environnement")
     assert len(snd.peripheriques_utilises()) == 1, snd.peripheriques_utilises()
+
+
+# --- 2026-10-04 : qualité 3D (menu Affichage), transmise au viewer -------
+
+def test_qualite_3d_menu_et_flux(fenetre, tmp_path):
+    win, _ = fenetre
+    assert win.game._qualite_3d in pn.QUALITES_3D
+    pn._persistent_data_dir = lambda: tmp_path
+    win._choisir_qualite_3d("low")
+    assert win.game._qualite_3d == "low"
+    assert pn._lire_prefs().get("qualite_3d") == "low"
+    import godot_bridge as gb
+    b = gb.GodotBridge()
+    b.quality = "low"
+    b.dev_project_dir = None
+    # la commande de lancement porte le réglage
+    cmd = b._resolve_command() or []
+    assert not cmd or "--quality=low" in cmd
+    win._choisir_qualite_3d("auto")

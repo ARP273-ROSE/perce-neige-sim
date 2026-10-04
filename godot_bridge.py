@@ -50,6 +50,9 @@ class GodotBridge:
         self.bundled_dir = Path(bundled_dir).expanduser().resolve() if bundled_dir else None
         self.dev_project_dir = Path(dev_project_dir).expanduser().resolve() if dev_project_dir else None
         self.port = port
+        # Qualité 3D : « auto » = le viewer détecte la machine et s'ajuste
+        # en direct ; high / medium / low = forcée (menu Affichage du sim)
+        self.quality = "auto"
         self._proc: Optional[subprocess.Popen] = None
         self._sock: Optional[socket.socket] = None
         self._addr = ("127.0.0.1", port)
@@ -173,7 +176,8 @@ class GodotBridge:
         # 1. Binaire bundled exporté
         bundled = self._bundled_binary_path()
         if bundled is not None:
-            return [str(bundled), *eng, "--", "--client", f"--port={self.port}"]
+            return [str(bundled), *eng, "--", "--client", f"--port={self.port}",
+                    f"--quality={self.quality}"]
         # 2. Fallback dev : godot system + projet source.
         #    Désactivé en mode frozen (exe PyInstaller distribué) : on ne va
         #    pas chercher un Godot*.exe dans des dossiers inscriptibles par
@@ -185,7 +189,8 @@ class GodotBridge:
             sys_godot = self._find_godot_executable()
             if sys_godot is not None:
                 return [sys_godot, "--path", str(self.dev_project_dir),
-                        *eng, "--", "--client", f"--port={self.port}"]
+                        *eng, "--", "--client", f"--port={self.port}",
+                        f"--quality={self.quality}"]
         return None
 
     @property

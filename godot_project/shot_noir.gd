@@ -10,6 +10,8 @@
 # l'image (0-255), puis les lumières et les matériaux transparents/émissifs
 # proches de la caméra (MATDBG) : c'est ainsi qu'on a trouvé le voile brun du
 # pare-brise (03/10/2026).
+# (Ajouter --quality=high après « -- » : sinon la qualité adaptative —
+#  PerfManager — baisse le rendu en rendu logiciel.)
 extends SceneTree
 
 var _main: Node = null
