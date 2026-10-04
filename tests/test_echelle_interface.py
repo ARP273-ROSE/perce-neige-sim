@@ -157,3 +157,57 @@ def test_fenetre_memorisee(jeu):
         w2.close()
     win.show()
     app.processEvents()
+
+
+# ----- écran détecté (v1.15.55) -------------------------------------------
+# Valeurs vérifiées par audit_physique/echelle_ecran.sage (.txt)
+@pytest.mark.parametrize("ecran,attendu", [
+    ((1920, 1080, 531, 299, 1.0), 1.053),     # 24" 1080p 100 % (référence)
+    ((2560, 1440, 597, 336, 1.0), 1.361),     # 27" 1440p 100 %
+    ((2560, 1440, 597, 336, 1.5), 1.361),     # 27" 4K 150 %
+    ((3440, 1440, 800, 335, 1.0), 1.728),     # 34" 21:9
+    ((1536, 864, 310, 174, 1.25), 1.007),     # portable 14" 1080p 125 %
+    ((1440, 900, 286, 179, 2.0), 1.0),        # Mac 13" : jamais sous 1
+    ((3840, 2160, 1210, 680, 1.0), 2.499),    # téléviseur 55"
+])
+def test_facteur_selon_l_ecran(ecran, attendu):
+    e = pn._decrire_ecran(*ecran)
+    assert e["facteur"] == pytest.approx(attendu, abs=2e-3)
+
+
+@pytest.mark.parametrize("mm", [(0, 0), (2000, 1200), (5, 3)])
+def test_taille_physique_absente_ou_fantaisiste(mm):
+    assert pn._decrire_ecran(1920, 1080, mm[0], mm[1], 1.0)["facteur"] is None
+
+
+def test_ecran_dans_le_journal_au_premier_trajet(jeu):
+    app, _, g = jeu
+    _peindre(app, g, 1536, 760)
+    g._ecran_journal_fait = False
+    g.new_trip()
+    lignes = [e.message_fr for e in g.state.events if e.key == "screen"]
+    assert lignes and lignes[0].startswith("Écran ") and "interface à" in lignes[0]
+    # place insuffisante → la ligne propose le plein écran
+    assert "F11" in lignes[0]
+
+
+def test_changement_d_ecran_vu_en_direct(jeu):
+    app, _, g = jeu
+    _peindre(app, g, 1536, 760)
+    n = sum(1 for e in g.state.events if e.key == "screen")
+    g._ecran_sig = ("autre écran", 1, 1, 1, 1, 1.0)   # comme un glisser
+    g._ui_k()
+    app.processEvents()
+    assert sum(1 for e in g.state.events if e.key == "screen") == n + 1
+
+
+def test_plein_ecran_f11(jeu):
+    app, win, g = jeu
+    win.showMaximized()
+    app.processEvents()
+    QTest.keyClick(g, Qt.Key.Key_F11)
+    app.processEvents()
+    assert win.isFullScreen() and pn._lire_prefs().get("plein_ecran") is True
+    QTest.keyClick(g, Qt.Key.Key_F11)
+    app.processEvents()
+    assert not win.isFullScreen() and pn._lire_prefs().get("plein_ecran") is False

@@ -269,6 +269,33 @@ QUALITES_3D = ("auto", "high", "medium", "low")
 TAILLES_UI = {"small": 0.85, "normal": 1.0, "large": 1.15, "xlarge": 1.3}
 
 
+def _decrire_ecran(lw: float, lh: float, mm_w: float, mm_h: float,
+                   dpr: float, nom: str = "") -> dict:
+    """Ce que le système dit d'un écran → facteur d'agrandissement conseillé.
+
+    lw × lh : taille en pixels LOGIQUES (après la mise à l'échelle du
+    système, Windows 125 %…) ; mm_w × mm_h : taille physique (EDID) ;
+    dpr : facteur de mise à l'échelle. La distance de lecture probable
+    croît avec la diagonale (portable ≈ 50 cm, 24" ≈ 73 cm, 27" ≈ 80 cm,
+    téléviseur bien plus loin) ; un pixel de la maquette doit y sous-tendre
+    ≈ 1,4′ d'angle, comme sur un 24" 1080p à 100 % (référence 1,0).
+    Jamais en dessous de 1 : la mise à l'échelle choisie dans le système
+    reste le minimum. Taille physique absente ou fantaisiste (machine
+    virtuelle, certains projecteurs) → facteur None."""
+    diag = math.hypot(mm_w, mm_h) / 25.4
+    mm_px = mm_w / lw if lw > 0 and mm_w > 0 else 0.0
+    dpi = 25.4 * dpr / mm_px if mm_px > 0 else 0.0
+    facteur = None
+    dist_cm = 0.0
+    if 10.0 <= diag <= 100.0 and 50.0 <= dpi <= 600.0:
+        dist_cm = 20.0 + 2.2 * diag + 2.5 * max(0.0, diag - 32.0)
+        cible_mm = 0.004 * dist_cm
+        facteur = max(1.0, min(2.5, cible_mm / mm_px))
+    return {"nom": nom, "px": (round(lw * dpr), round(lh * dpr)),
+            "echelle": dpr, "diag_po": diag, "dpi": dpi,
+            "distance_cm": dist_cm, "facteur": facteur}
+
+
 def _lire_prefs() -> dict:
     try:
         return json.loads((_persistent_data_dir() / "reglages.json").read_text(encoding="utf-8"))
@@ -6515,6 +6542,9 @@ class GameWidget(QWidget):
         # l'échelle automatique, cf. _ui_k.
         t = _lire_prefs().get("taille_ui", 1.0)
         self._taille_ui = float(t) if t in TAILLES_UI.values() else 1.0
+        self._ecran_sig: tuple | None = None
+        self._ecran_info: dict = {}
+        self._ecran_journal_fait = False
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         # L'interface se met à l'échelle de la fenêtre (_ui_k) : pas besoin
         # d'imposer 1280 × 900, qui dépassait l'écran d'un portable 1080p
@@ -7179,6 +7209,13 @@ class GameWidget(QWidget):
         if st.challenge_best <= 0.0:
             st.challenge_best = self._load_challenge_best()
         st.events = []
+        # (pas au trajet d'initialisation : fenêtre pas encore affichée,
+        # et son journal est effacé au premier START)
+        if not first and getattr(self, "_ecran_journal_fait", True) is False:
+            self._ecran_journal_fait = True
+            en, fr = self.phrase_ecran()
+            if fr:
+                add_event(st, "screen", en, fr, "info")
         st.event_cooldown = 5.0
         st.panne_active = False
         st.panne_kind = ""
@@ -8014,6 +8051,10 @@ class GameWidget(QWidget):
     def keyPressEvent(self, ev: QKeyEvent) -> None:  # noqa: N802
         st = self.state
         k = ev.key()
+        if k == Qt.Key.Key_F11 and hasattr(self.window(), "basculer_plein_ecran"):
+            self.window().basculer_plein_ecran()
+            ev.accept()
+            return
         self._key_state.add(k)
         # Auto-exploitation input lockout : when the AI driver is
         # running the line, manual driving keys (speed, brake, doors,
@@ -8836,8 +8877,63 @@ class GameWidget(QWidget):
     def _ui_k(self) -> float:
         w, h = max(1, self.width()), max(1, self.height())
         tenir = min(w / self.UI_W_MIN, h / self.UI_H_REF)
-        voulu = max(1.0, h / self.UI_H_GRAND) * self._taille_ui
-        return max(0.4, min(tenir, voulu))
+        f = self._ecran().get("facteur")
+        if f is None:                     # taille physique inconnue
+            f = max(1.0, h / self.UI_H_GRAND)
+        return max(0.4, min(tenir, f * self._taille_ui))
+
+    # ----- écran détecté ------------------------------------------------
+    # Relu à chaque calcul d'échelle (quelques appels Qt) : un changement
+    # d'écran, de définition ou de mise à l'échelle est vu tout de suite,
+    # y compris en glissant la fenêtre d'un écran à l'autre.
+    def _ecran(self) -> dict:
+        scr = self.screen() or QApplication.primaryScreen()
+        if scr is None:
+            return self._ecran_info
+        geo, mm, dpr = scr.geometry(), scr.physicalSize(), scr.devicePixelRatio()
+        sig = (scr.name(), geo.width(), geo.height(),
+               round(mm.width()), round(mm.height()), round(dpr, 3))
+        if sig != self._ecran_sig:
+            premier = self._ecran_sig is None
+            self._ecran_sig = sig
+            self._ecran_info = _decrire_ecran(geo.width(), geo.height(),
+                                              mm.width(), mm.height(), dpr,
+                                              scr.name())
+            if not premier:
+                QTimer.singleShot(0, self._ecran_a_change)
+        return self._ecran_info
+
+    def phrase_ecran(self) -> tuple[str, str]:
+        """(en, fr) : l'écran détecté et l'échelle retenue, pour le journal."""
+        e = self._ecran()
+        if not e:
+            return ("", "")
+        k = self._ui_k()
+        f = e.get("facteur")
+        px = f"{e['px'][0]} × {e['px'][1]}"
+        pct = f"{e['echelle'] * 100:.0f} %"
+        if f is not None:
+            taille_en = f'{e["diag_po"]:.0f}" '
+            taille_fr = f"{e['diag_po']:.0f}″ "
+        else:
+            taille_en, taille_fr = "size unknown, ", "taille inconnue, "
+        en = f"Screen {taille_en}{px}, scaling {pct} → interface {k * 100:.0f} %"
+        fr = (f"Écran {taille_fr}{px}, mise à l'échelle {pct} → "
+              f"interface à {k * 100:.0f} %")
+        voulu = (f if f is not None else 1.0) * self._taille_ui
+        if k < 0.97 * voulu:
+            plein = self.window() is not None and self.window().isFullScreen()
+            en += " (limited by the room" + ("" if plein else " — F11: full screen") + ")"
+            fr += " (limitée par la place" + ("" if plein else " — F11 : plein écran") + ")"
+        return (en, fr)
+
+    def _ecran_a_change(self) -> None:
+        en, fr = self.phrase_ecran()
+        if fr:
+            add_event(self.state, "screen", en, fr, "info")
+        if self._godot_embed_widget is not None or self._godot_child_hwnd:
+            self._reposition_godot_embed()
+        self.update()
 
     def _ui_taille(self, k: float) -> tuple[int, int]:
         """Taille de la toile virtuelle (arrondie au-dessus : couvre tout)."""
@@ -14271,6 +14367,7 @@ class GameWidget(QWidget):
                 (T("Home", "Début"), T("back to the title screen",
                                        "retour à l'écran titre")),
                 ("F1", T("this screen", "cet écran")),
+                ("F11", T("full screen / window", "plein écran / fenêtre")),
                 ("F3", T("the real machine + links", "la vraie machine + liens")),
                 ("F5", T("auto-operation trip log", "journal des trajets auto")),
                 ("F6", T("download PDF manual + guide",
@@ -14675,7 +14772,8 @@ class MainWindow(QMainWindow):
 
     def closeEvent(self, ev) -> None:  # noqa: N802
         try:
-            _ecrire_prefs({"fenetre": bytes(self.saveGeometry().toHex()).decode("ascii")})
+            if not self.isFullScreen():
+                _ecrire_prefs({"fenetre": bytes(self.saveGeometry().toHex()).decode("ascii")})
         except Exception:
             pass
         try:
@@ -14733,8 +14831,8 @@ class MainWindow(QMainWindow):
         libelles_t = {
             "small": ("Smaller (more room for the view)",
                       "Plus petite (plus de place pour la vue)"),
-            "normal": ("Normal (fits the window)",
-                       "Normale (s'adapte à la fenêtre)"),
+            "normal": ("Automatic (fits this screen and the window)",
+                       "Automatique (selon l'écran et la fenêtre)"),
             "large": ("Larger", "Plus grande"),
             "xlarge": ("Largest", "Très grande"),
         }
@@ -14744,6 +14842,32 @@ class MainWindow(QMainWindow):
             act.setChecked(abs(self.game._taille_ui - f) < 1e-6)
             groupe_t.addAction(act)
             act.triggered.connect(lambda _on=False, f=f: self._choisir_taille_ui(f))
+        menu.addSeparator()
+        self._act_plein = menu.addAction(self._tr("Full screen", "Plein écran"))
+        self._act_plein.setCheckable(True)
+        self._act_plein.setShortcut("F11")
+        # (F11 est aussi traité par GameWidget : le raccourci du menu ne
+        # se déclenche pas quand le jeu a le focus clavier sous Linux)
+        self._act_plein.setShortcutContext(Qt.ShortcutContext.WidgetShortcut)
+        self._act_plein.triggered.connect(lambda _on=False: self.basculer_plein_ecran())
+
+    def basculer_plein_ecran(self) -> None:
+        """F11 : plein écran ↔ fenêtre. Sur un portable, c'est la barre
+        des tâches, la barre de titre et le menu qui reviennent à la vue
+        et au pupitre (≈ 14 % de hauteur en plus à 1536 × 864)."""
+        if self.isFullScreen():
+            if getattr(self, "_etait_agrandie", False):
+                self.showMaximized()
+            else:
+                self.showNormal()
+            plein = False
+        else:
+            self._etait_agrandie = self.isMaximized()
+            self.showFullScreen()
+            plein = True
+        if getattr(self, "_act_plein", None) is not None:
+            self._act_plein.setChecked(plein)
+        _ecrire_prefs({"plein_ecran": plein})
 
     def _choisir_taille_ui(self, f: float) -> None:
         _ecrire_prefs({"taille_ui": f})
@@ -15207,7 +15331,9 @@ class MainWindow(QMainWindow):
             reporting.definir_consentement(True)
         rapport = reporting.envoyer("manuel", description=description,
                                     journal=journal, mode=str(self.game.state.run_mode),
-                                    perf_3d=self._lignes_perf_3d(),
+                                    perf_3d="\n".join(x for x in (
+                                        self.game.phrase_ecran()[1],
+                                        self._lignes_perf_3d()) if x),
                                     trajet=f"s={self.game.state.train.s:.0f} v={self.game.state.train.v:.1f}")
         if accord is not True:
             reporting.definir_consentement(bool(accord))
@@ -15428,6 +15554,8 @@ def main() -> None:
         win.showMaximized()
     else:
         win.show()
+    if _lire_prefs().get("plein_ecran"):
+        win.basculer_plein_ecran()
     QTimer.singleShot(1200, lambda: _demander_accord_rapports(win, rapports))
     # Vue cabine 3D d'entrée de jeu (si le viewer est disponible) : lancée
     # une fois la fenêtre à l'écran, pour que l'embarquement ait un parent.
