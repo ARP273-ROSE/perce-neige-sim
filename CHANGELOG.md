@@ -7,6 +7,41 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.15.52** — urgence sans oscillation, fluidité sur PC modeste, câble
+rompu non réparable en ligne.
+- **« Quand la rame monte et que je serre le frein d'urgence, elle oscille
+  comme une dingue, avec le câble non cassé »** : jusqu'ici, l'urgence
+  freinait toute l'installation par la poulie, et la coupure du moteur
+  faisait osciller une rame pleine de 2,7 m au bout de 3 km de câble. Or
+  l'urgence et le parachute sont des **freins de voie** : chaque rame
+  serre ses pinces sur les rails et y est tenue. Tant qu'ils sont serrés,
+  le câble ne fait plus osciller les rames, et un écart en cours s'éteint
+  sans rebond. Mesuré à 500, 1 700 et 3 000 m : moins de 3 cm, contre
+  273 cm. L'oscillation normale reprend au desserrage. Test
+  `test_urgence_en_montee_pas_d_oscillation`.
+- **« Sur un PC moins puissant ça saccade »** :
+  - **vue 3D, mouvement lissé** : avec le PC, la rame avançait par sauts
+    quand le PC, chargé, envoyait ses positions à rythme irrégulier. Elle
+    avance maintenant entre deux paquets avec la vitesse reçue, puis se
+    recale en douceur sur la position envoyée ;
+  - **qualité adaptative** : la 3D du PC partait toujours en qualité
+    haute. Sous 45 images/s, elle retire un effet toutes les 3 s, du plus
+    coûteux au moins visible : éclairage indirect (SDFGI), puis
+    brouillard volumétrique, reflets (SSR) et anticrénelage, puis rendu à
+    75 % puis 60 % de la résolution, puis le halo (glow). Le journal
+    indique « [Perf] … qualité réduite (cran n/5) » ;
+  - **côté PC** : quand la 3D intégrée recouvre la vue, la fenêtre ne
+    dessine plus la vue 2D en dessous, et le reste (pupitre, jauges,
+    journal) se redessine à 30 Hz au lieu de 60.
+- **Câble rompu** : dans la PWA, le bouton LEVER, F2 ou un changement de
+  mode « réparaient » le câble en pleine ligne, et le contrepoids, figé
+  dans le tunnel, sautait en miroir de la rame (en gare haute si elle
+  avait glissé en bas). Comme au PC, seul un nouveau voyage (bouton
+  NOUVEAU VOYAGE ou R) remet maintenant l'installation en service.
+- Vérifié : 65 tests PC, parité PC ↔ PWA, bancs défi (dont la levée
+  refusée en ligne), pannes, portes, aiguillage, salle des machines,
+  rupture.
+
 **v1.15.51** — élasticité du câble en marche.
 - **Ta question** : « est-ce que tu es capable de reproduire la physique de
   l'élasticité du câble en fonction de la longueur déroulée, de la masse

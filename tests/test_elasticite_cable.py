@@ -108,3 +108,26 @@ def test_cable_rompu_plus_d_ecart_elastique():
     st.train.cable_rupture = True
     ph._elastic_step(DT, 0.3)
     assert st.el_x1 == 0.0 and st.el_v1 == 0.0
+
+
+def test_urgence_en_montee_pas_d_oscillation(fenetre):
+    """Retour du 04/10 : « quand la rame monte et que je serre le frein
+    d'urgence elle oscille comme une dingue, avec le câble non cassé ».
+    Les freins de voie tiennent la rame sur les rails : quasi rien."""
+    from PyQt6.QtCore import QEvent, Qt
+    from PyQt6.QtGui import QKeyEvent
+    win, clock = fenetre
+    g, st, tr = _lancer(win, 500.0, 12.0, +1)
+    for _ in range(int(20 / DT)):
+        clock[0] += DT
+        g._tick()
+    g.keyPressEvent(QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_Shift,
+                              Qt.KeyboardModifier.ShiftModifier))
+    assert tr.emergency
+    amp = 0.0
+    for _ in range(int(30 / DT)):
+        clock[0] += DT
+        g._tick()
+        amp = max(amp, abs(st.el_x1))
+    assert abs(tr.v) < 0.01
+    assert amp < 0.05, f"la rame oscille de ±{amp*100:.0f} cm sous l'urgence"

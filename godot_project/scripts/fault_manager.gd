@@ -304,8 +304,16 @@ func trigger(fault_id: String) -> void:
 
 
 # Force la fin d'une panne (recovery manuelle ou catastrophique → R)
-func clear_active() -> void:
+func clear_active(force: bool = false) -> void:
 	if _active_id == "":
+		return
+	# Câble rompu : pas de « réparation » en pleine ligne (bouton LEVER, F2,
+	# changement de mode). Elle recouplait le câble et le contrepoids, figé
+	# dans le tunnel, sautait en miroir de la rame — en gare haute si elle
+	# avait glissé en bas (retour du 04/10). Comme au PC, seule une remise
+	# en service complète (NOUVEAU VOYAGE / R, force = true) relance tout.
+	if not force and physics != null and physics.cable_rupture:
+		print("[Fault] câble rompu : remise en service par un nouveau voyage (R)")
 		return
 	# Si stopping/catastrophic, libère le frein urgence (rampé + legacy)
 	if physics != null:
