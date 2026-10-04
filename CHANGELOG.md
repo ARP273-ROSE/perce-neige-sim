@@ -7,6 +7,72 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.15.56** — galets de ligne fidèles et qui tournent, supports redessinés
+entre les traverses, câble accroché au milieu de la voiture amont par un
+culot, volume général.
+- **« Dessine bien les galets comme en vrai : leurs bords qui remontent,
+  le bon diamètre, la bande de roulement en caoutchouc, leur structure »**.
+  Mesures prises sur la photo d'un galet posé à plat (reportage
+  remontees-mecaniques.net, O. Lakatos 2015), avec le câble de 52 mm et
+  le culot posés à côté comme étalon :
+  - deux joues évasées en alliage Ø 640 qui forment une gorge en V ;
+  - une bande de roulement en caoutchouc noir Ø 500 au fond de la gorge,
+    où repose le câble ;
+  - un moyeu à cinq bras, visible par l'ouverture des joues.
+  Avant, c'était un cylindre blanc de 300 mm. Vus de la cabine, on
+  retrouve les deux joues claires et la gorge sombre de la vidéo du 26/04.
+  En courbe et dans l'évitement, les galets inclinés montrent leur face.
+- **« Leur bonne vitesse de rotation selon la vitesse du câble, et leur
+  ralentissement progressif une fois que le câble est parti »** :
+  - un galet sous le câble tourne à v/R, soit 458 tr/min à 12 m/s ;
+  - quand le culot de sa rame le dépasse, il est libéré et ralentit seul :
+    environ 111 s pour s'arrêter, freiné surtout par les joints de ses
+    roulements (`audit_physique/galets_ligne.sage`) ;
+  - il n'y a pas de câble lest (fiche du reportage) : les galets en aval
+    d'une rame sont immobiles ou en train de ralentir ;
+  - seuls les galets proches de la caméra sont animés. Au-delà de 70 m,
+    un modèle allégé prend le relais sans que rien disparaisse.
+- **« Redessine les supports des galets pour qu'ils soient fidèles »,
+  « mets-les entre deux traverses, tu auras plus de place en largeur »** :
+  - chaque galet tourne dans une fourche galvanisée : deux flasques, une
+    semelle, deux paliers boulonnés et l'axe. La fourche s'incline avec
+    le galet en courbe ;
+  - la fourche repose par un pied sur une traverse en U, large de 1,40 m,
+    qui enjambe la fosse sur deux cornières ;
+  - chaque support est calé au milieu de l'intervalle entre deux rangées
+    de plots, avec au moins 22 cm entre une joue et un plot. Le n° 1 reste
+    juste après le quai aval, le n° 238 juste avant le quai amont ;
+  - la plaque de numéro est décalée (36 cm de l'axe, 15 cm en avant du
+    support) pour dégager les paliers.
+- **« Le câble s'accroche au milieu de la voiture amont de chaque rame,
+  avec le dispositif qu'il y a en photo »** : un culot (cône coulé sur le
+  bout du câble, « attaches culot » de la fiche technique) est tenu par
+  une chape sous la voiture amont, plus haut que les joues des galets. Le
+  câble redescend de lui jusqu'au premier galet en amont, puis repart de
+  galet en galet. Auparavant, il s'arrêtait au centre de la rame.
+- **Galets inclinés autour du câble** : en courbe, le galet s'incline pour
+  recevoir le câble sur sa ligne. Avec les galets Ø 500, pivoter autour
+  de leur centre aurait déporté le câble de 15 cm, jusqu'à toucher les
+  rails de l'aiguillage Abt.
+- **« Un bouton à côté du son pour régler le volume général »** : entre
+  SON et AIDE, une jauge − / + (pas de 10 %), aussi sur F7 / F8 et à la
+  molette au-dessus de la jauge. Le réglage est retenu d'une session à
+  l'autre et s'applique aussi au son de la vue 3D. Chaque son garde son
+  niveau propre (fondus, ambiances) ; le volume général s'y ajoute.
+- PWA mesurée sur le GPU du NAS : toujours 60 images/s stables, 4,8 ms de
+  calcul par image en médiane, au lieu de 3,7 ms.
+- Vérifié :
+  - banc `bench_galets_3d.gd` (16 contrôles) : v/R, sens opposé sur le
+    brin de la rame descendante, pas de câble sous la rame, libération au
+    passage du culot, ralentissement conforme à l'audit, arrêt en moins
+    de 2 min, culot entre les joues et la caisse, supports entre les
+    traverses, numéros 1 et 238 ;
+  - aiguillage Abt sans conflit, bancs 3D, rupture, salle des machines,
+    Défi et voyages ;
+  - captures Forward+ de la voie droite, d'une courbe, de l'évitement et
+    du culot ;
+  - deux tests du volume ; les 94 tests PC passent.
+
 **v1.15.55** — l'interface se règle sur l'écran détecté ; plein écran F11.
 - **« Tu peux t'adapter auto à l'affichage détecté ? »** : l'échelle ne
   dépendait que de la taille de la fenêtre. Elle lit maintenant l'écran

@@ -1,0 +1,20 @@
+échelle : 1.333 et 1.196 mm/px → 1.265 mm/px
+  joue        653 mm
+  bande       511 mm
+  largeur     227 mm
+  bande_l     115 mm
+culot : base 129 mm (2.5 d), hauteur 259 mm (5.0 d)
+inclinaison maxi d'une paire sans contact : 33.6°
+câble   1.0 m/s → ω =   4.0 rad/s =   38 tr/min
+câble   6.0 m/s → ω =  24.0 rad/s =  229 tr/min
+câble  10.1 m/s → ω =  40.4 rad/s =  386 tr/min
+câble  12.0 m/s → ω =  48.0 rad/s =  458 tr/min
+I ≈ 0.941 kg·m²
+couple : joints 0.373 N·m ; total à 48 rad/s : 0.436 N·m
+arrêt complet en 111 s depuis 48 rad/s
+ajustement : M_c = 0.3777 N·m, c = 0.001216 N·m·s → τ = 773 s, a = 310.49 rad/s
+arrêt (forme fermée) en 111 s — écart 0.0 %
+  t =   5 s : ω =  45.7 rad/s (436 tr/min)
+  t =  15 s : ω =  41.1 rad/s (393 tr/min)
+  t =  30 s : ω =  34.4 rad/s (328 tr/min)
+  t =  60 s : ω =  21.2 rad/s (203 tr/min)
