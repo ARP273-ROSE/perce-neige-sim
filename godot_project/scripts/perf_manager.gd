@@ -75,6 +75,11 @@ func setup(p_main: Node, p_env: Environment, p_mode: String) -> void:
 	if _web:
 		cran_min = 4          # PWA : réglage bas + rendu 60 % (mesuré sur iPad)
 	var depart: int = _cran_de_depart()
+	# --cran=N : cran imposé, sans adaptation (captures de contrôle)
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--cran="):
+			depart = int(a.substr(7))
+			mode = "high"     # mode fixe : _evaluer ne touche plus à rien
 	_appliquer(depart, "profil de départ")
 	_log("[Perf] machine : %s" % _resume_machine())
 
