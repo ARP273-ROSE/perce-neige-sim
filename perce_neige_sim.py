@@ -264,6 +264,9 @@ def _persistent_data_dir() -> Path:
 # Préférences de l'utilisateur (qualité 3D…), dans le dossier qui survit aux
 # mises à jour.
 QUALITES_3D = ("auto", "high", "medium", "low")
+# Taille de l'interface peinte (menu Affichage) : facteur sur l'échelle
+# automatique ; « plus grande » reste bornée par ce qui tient à l'écran.
+TAILLES_UI = {"small": 0.85, "normal": 1.0, "large": 1.15, "xlarge": 1.3}
 
 
 def _lire_prefs() -> dict:
@@ -6508,8 +6511,15 @@ class GameWidget(QWidget):
         # machine et s'ajuste en direct (PerfManager côté Godot).
         q = _lire_prefs().get("qualite_3d", "auto")
         self._qualite_3d = q if q in QUALITES_3D else "auto"
+        # Taille de l'interface (menu Affichage) : facteur appliqué à
+        # l'échelle automatique, cf. _ui_k.
+        t = _lire_prefs().get("taille_ui", 1.0)
+        self._taille_ui = float(t) if t in TAILLES_UI.values() else 1.0
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
-        self.setMinimumSize(1280, 900)
+        # L'interface se met à l'échelle de la fenêtre (_ui_k) : pas besoin
+        # d'imposer 1280 × 900, qui dépassait l'écran d'un portable 1080p
+        # réglé à 125 % (1536 × 816 utiles).
+        self.setMinimumSize(900, 560)
         self.timer = QTimer(self)
         self.timer.timeout.connect(self._tick)
         self.timer.start(16)       # ~60 Hz
@@ -8710,7 +8720,7 @@ class GameWidget(QWidget):
         if ev.type() == QEvent.Type.ToolTip:
             pos = ev.pos() if hasattr(ev, "pos") else None
             if pos is not None:
-                posf = QPointF(pos)
+                posf = QPointF(pos) / self._ui_k()
                 for rect, qk, _hold in reversed(self._hit_zones):
                     if rect.contains(posf):
                         tip = self._key_tooltips.get(qk)
@@ -8728,7 +8738,7 @@ class GameWidget(QWidget):
     def mousePressEvent(self, ev: QMouseEvent) -> None:  # noqa: N802
         if ev.button() != Qt.MouseButton.LeftButton:
             return
-        pos = ev.position()
+        pos = ev.position() / self._ui_k()     # coordonnées de la toile
         st = self.state
         # Écran d'accueil / aide affiché : seul son bouton COMMENCER répond
         # (les zones de l'écran titre, dessous, ne doivent pas prendre un
@@ -8811,11 +8821,41 @@ class GameWidget(QWidget):
 
     # ----- painting --------------------------------------------------------
 
+    # ----- échelle de l'interface ---------------------------------------
+    # Tout ce qui est peint (pupitre, journal, écrans titre et aide) est
+    # placé en pixels fixes, pensé pour une zone d'au moins UI_W_MIN ×
+    # UI_H_REF. Plutôt que de tout recalculer, on peint dans une toile
+    # virtuelle mise à l'échelle d'un bloc (QPainter.scale) : la hauteur
+    # virtuelle ne descend jamais sous UI_H_REF, et la vue 3D absorbe la
+    # largeur en plus (16:10, 16:9, 21:9…). Retour d'essai 2026-10-04 :
+    # « la fenêtre s'adapte mal aux différents formats d'écran ».
+    UI_W_MIN = 1280.0
+    UI_H_REF = 1000.0     # pupitre complet, mode Défi compris (722 px)
+    UI_H_GRAND = 1300.0   # au-delà, on agrandit pour rester lisible
+
+    def _ui_k(self) -> float:
+        w, h = max(1, self.width()), max(1, self.height())
+        tenir = min(w / self.UI_W_MIN, h / self.UI_H_REF)
+        voulu = max(1.0, h / self.UI_H_GRAND) * self._taille_ui
+        return max(0.4, min(tenir, voulu))
+
+    def _ui_taille(self, k: float) -> tuple[int, int]:
+        """Taille de la toile virtuelle (arrondie au-dessus : couvre tout)."""
+        return (math.ceil(self.width() / k - 1e-6),
+                math.ceil(self.height() / k - 1e-6))
+
+    def set_taille_ui(self, f: float) -> None:
+        self._taille_ui = f
+        if self._godot_embed_widget is not None or self._godot_child_hwnd:
+            self._reposition_godot_embed()
+        self.update()
+
     def paintEvent(self, _ev) -> None:  # noqa: N802
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
         p.setRenderHint(QPainter.RenderHint.TextAntialiasing, True)
-        w, h = self.width(), self.height()
+        k = self._ui_k()
+        w, h = self._ui_taille(k)
 
         # Secousse d'écran de collision : translate tout le rendu d'un
         # offset aléatoire décroissant pendant crash_shake_t. Décrémenté
@@ -8825,6 +8865,7 @@ class GameWidget(QWidget):
             amp = 14.0 * min(1.0, _shake / 1.2) * min(1.0,
                                                       self.state.crash_speed / 6.0)
             p.translate(random.uniform(-amp, amp), random.uniform(-amp, amp))
+        p.scale(k, k)
 
         self._draw_background(p, w, h)
         view_rect = QRectF(20, 20, w - 440, h - 260)
@@ -11394,8 +11435,11 @@ class GameWidget(QWidget):
         tout ce que le parent peint (airspace Win32/X11) — avec y=20 la
         pendule était « masquée à moitié » (retour 2026-07-23). Le haut
         de la 3D démarre donc à 44 px ; le bord bas reste inchangé."""
-        w, h = self.width(), self.height()
-        x, y, ww, hh = 20, 44, max(100, w - 440), max(100, h - 284)
+        # (toile virtuelle × échelle de l'interface, cf. _ui_k)
+        k = self._ui_k()
+        w, h = self._ui_taille(k)
+        x, y = 20 * k, 44 * k
+        ww, hh = max(100, w - 440) * k, max(100, h - 284) * k
         # Chemin Windows : MoveWindow sur le HWND enfant (coords device px).
         if self._godot_child_hwnd:
             try:
@@ -12831,7 +12875,7 @@ class GameWidget(QWidget):
                        T("⚠ TOO FAST", "⚠ TROP VITE"))
 
         # Speedometer (top) — main unit m/s, sub-label shows km/h equivalent
-        speed_rect = QRectF(rect.x() + 20, rect.y() + 40, 160, 160)
+        speed_rect = QRectF(rect.x() + 26, rect.y() + 36, 152, 152)
         self._draw_gauge(
             p, speed_rect,
             value=abs(tr.v),
@@ -12843,7 +12887,7 @@ class GameWidget(QWidget):
         )
 
         # Tension gauge
-        ten_rect = QRectF(rect.x() + 200, rect.y() + 40, 160, 160)
+        ten_rect = QRectF(rect.x() + 212, rect.y() + 36, 152, 152)
         self._draw_gauge(
             p, ten_rect,
             value=tr.tension_dan_disp,
@@ -12864,13 +12908,13 @@ class GameWidget(QWidget):
         # 2026-07-24 : « ça passe instantanément à la bonne valeur »).
         cable_len = max(50.0, LENGTH - tr.s)
         stretch_m = (tr.tension_dan_disp * 10.0 * cable_len) / (2.12e-3 * 1.05e11)
-        # Tucked inside the gauge's bottom rim (was overlapping the
-        # brake bar's "URG!" / % text just below the gauge).
+        # Dans le cadran, sous « daN » : au ras du bord, il débordait du
+        # cercle et touchait le libellé « Puissance » (retour 2026-10-04).
         p.setPen(_cached_pen(COLOR_TEXT_DIM))
         p.setFont(_cached_font("Consolas", 8))
         p.drawText(
-            QRectF(ten_rect.x(), ten_rect.y() + ten_rect.height() - 14,
-                   ten_rect.width(), 11),
+            QRectF(ten_rect.x(), ten_rect.center().y() + 6 + 43,
+                   ten_rect.width(), 12),
             int(Qt.AlignmentFlag.AlignHCenter),
             T(f"stretch {stretch_m:.2f} m",
               f"allong. {stretch_m:.2f} m"),
@@ -13428,8 +13472,9 @@ class GameWidget(QWidget):
     ) -> None:
         p.setPen(_cached_pen(COLOR_TEXT_DIM))
         p.setFont(_cached_font("Segoe UI", 9))
-        p.drawText(QRectF(x, y - 14, w, 12),
-                   int(Qt.AlignmentFlag.AlignLeft), label)
+        p.drawText(QRectF(x, y - 17, w, 16),
+                   int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignBottom),
+                   label)
         p.setBrush(QBrush(QColor(28, 32, 42)))
         p.setPen(_cached_pen(COLOR_HUD_BORDER, 1))
         p.drawRoundedRect(QRectF(x, y, w, h), 4, 4)
@@ -14572,9 +14617,9 @@ class MainWindow(QMainWindow):
         super().__init__()
         self._upd_result.connect(self._show_update_if_newer)
         self.setWindowTitle(f"{APP_NAME}  v{VERSION}")
-        self.resize(1360, 940)
         self.game = GameWidget(self)
         self.setCentralWidget(self.game)
+        self._placer_fenetre()
         ico = _resource_path("logo.ico")
         if ico.exists():
             self.setWindowIcon(QIcon(str(ico)))
@@ -14592,6 +14637,31 @@ class MainWindow(QMainWindow):
         # (l'offre de ticket GitHub au lancement est retirée : le plantage est
         # déjà parti tout seul au point de collecte — voir _demarrer_rapports)
 
+    def _placer_fenetre(self) -> None:
+        """Taille et place de départ : celles de la dernière session si
+        l'écran est toujours là, sinon 1360 × 940 réduits à ce qui tient
+        sur l'écran (barre des tâches et barre de titre comprises).
+        Un écran trop petit pour la taille de base démarre agrandi."""
+        self._demarrer_agrandie = False
+        geo = _lire_prefs().get("fenetre", "")
+        if geo:
+            try:
+                from PyQt6.QtCore import QByteArray
+                if self.restoreGeometry(QByteArray.fromHex(geo.encode("ascii"))):
+                    return
+            except Exception:
+                pass
+        ecran = QApplication.primaryScreen()
+        if ecran is None:
+            self.resize(1360, 940)
+            return
+        dispo = ecran.availableGeometry()
+        lw, lh = min(1360, dispo.width() - 20), min(940, dispo.height() - 60)
+        self.resize(max(900, lw), max(600, lh))
+        self.move(dispo.x() + (dispo.width() - self.width()) // 2,
+                  dispo.y() + max(0, (dispo.height() - lh - 40) // 2))
+        self._demarrer_agrandie = lh < 900 or lw < 1280
+
     def resizeEvent(self, ev) -> None:  # noqa: N802
         # Si le viewer Godot est embarqué dans la zone F4, le repositionne
         # à la nouvelle taille de la fenêtre principale.
@@ -14604,6 +14674,10 @@ class MainWindow(QMainWindow):
         super().resizeEvent(ev)
 
     def closeEvent(self, ev) -> None:  # noqa: N802
+        try:
+            _ecrire_prefs({"fenetre": bytes(self.saveGeometry().toHex()).decode("ascii")})
+        except Exception:
+            pass
         try:
             self.game.auto_ops._log.checkpoint_truncate()
         except Exception:
@@ -14653,6 +14727,27 @@ class MainWindow(QMainWindow):
             act.setChecked(self.game._qualite_3d == q)
             groupe.addAction(act)
             act.triggered.connect(lambda _on=False, q=q: self._choisir_qualite_3d(q))
+        sous_t = menu.addMenu(self._tr("Interface size", "Taille de l'interface"))
+        groupe_t = QActionGroup(self)
+        groupe_t.setExclusive(True)
+        libelles_t = {
+            "small": ("Smaller (more room for the view)",
+                      "Plus petite (plus de place pour la vue)"),
+            "normal": ("Normal (fits the window)",
+                       "Normale (s'adapte à la fenêtre)"),
+            "large": ("Larger", "Plus grande"),
+            "xlarge": ("Largest", "Très grande"),
+        }
+        for cle, f in TAILLES_UI.items():
+            act = sous_t.addAction(self._tr(*libelles_t[cle]))
+            act.setCheckable(True)
+            act.setChecked(abs(self.game._taille_ui - f) < 1e-6)
+            groupe_t.addAction(act)
+            act.triggered.connect(lambda _on=False, f=f: self._choisir_taille_ui(f))
+
+    def _choisir_taille_ui(self, f: float) -> None:
+        _ecrire_prefs({"taille_ui": f})
+        self.game.set_taille_ui(f)
 
     def _choisir_qualite_3d(self, q: str) -> None:
         self.game._qualite_3d = q
@@ -15329,7 +15424,10 @@ def main() -> None:
     rapports = _demarrer_rapports()
 
     win = MainWindow()
-    win.show()
+    if win._demarrer_agrandie:
+        win.showMaximized()
+    else:
+        win.show()
     QTimer.singleShot(1200, lambda: _demander_accord_rapports(win, rapports))
     # Vue cabine 3D d'entrée de jeu (si le viewer est disponible) : lancée
     # une fois la fenêtre à l'écran, pour que l'embarquement ait un parent.
