@@ -137,7 +137,8 @@ func _tick() -> void:
 	ph.challenge_mode = true     # comme en Défi : pas de plafond de confort
 	ph.cable_rupture = true
 	ph.ghost_locked_s = PNConstants.LENGTH - ph.s
-	var s0b: float = ph.s
+	# position RÉELLE de la rame (poulie + écart élastique du câble, 04/10)
+	var s0b: float = ph.s + ph.el_x1
 	_pas(1)
 	var rb: Dictionary = track.cable_rupture_state()
 	var lo_ini: float = float(rb.s_b)

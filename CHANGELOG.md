@@ -7,6 +7,56 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.15.51** — élasticité du câble en marche.
+- **Ta question** : « est-ce que tu es capable de reproduire la physique de
+  l'élasticité du câble en fonction de la longueur déroulée, de la masse
+  de la rame et des variations de vitesse ? » ; et ton observation : « la
+  rame oscille déjà au ralenti quand elle rentre, pas juste après
+  l'arrêt, et quand elle part du bas elle oscille aussi à
+  l'accélération ».
+- **Modèle** (PC et PWA, identiques) :
+  - le mouvement calculé jusqu'ici devient celui du câble **à la poulie
+    motrice**, celui que mesure le codeur et que pilote le régulateur ;
+  - chaque rame pend au bout de son brin, comme à un ressort dont la
+    raideur dépend du câble déroulé jusqu'à la poulie : k = EA/L ;
+  - elle s'en écarte quand la poulie accélère :
+    m·x″ = −k·x − c·x′ − m·a_poulie, avec m = rame + 1/3 de la masse du
+    brin, et un amortissement de 0,15.
+  - Le contrepoids a son propre ressort.
+  - Chiffres (`audit_physique/elasticite_cable.sage`) :
+    - 3 450 m de câble en bas : période de 7,0 s (rame vide) à 8,7 s
+      (rame pleine) ;
+    - 25 m en haut : moins d'une seconde, quelques millimètres ;
+    - à 0,30 m/s², la rame pleine en bas traîne de 58 cm derrière la
+      poulie.
+- **Ce qu'on voit maintenant** :
+  - **départ du bas** : la rame traîne d'une soixantaine de centimètres
+    et oscille de ±10 cm pendant l'accélération, puis rattrape la poulie
+    en fin d'accélération ;
+  - **entrée en gare basse** : quand le freinage cesse et que la rame
+    passe au ralenti, elle oscille de ±35 cm environ, avant même
+    l'arrêt ;
+  - **en haut** : pratiquement rien.
+  - Le rebond après l'arrêt n'est plus une formule posée : c'est la même
+    oscillation, quand le tambour bloque la poulie. Le mode auto attend
+    toujours que les deux rames soient stabilisées (< 2 cm) avant
+    d'ouvrir les portes.
+  - La jauge de tension inclut l'effort élastique (la rame en retard
+    tire plus).
+  - La vue 3D (PC et PWA) et la vue cabine 2D montrent la position
+    réelle de la rame ; la machinerie tourne avec la poulie, régulière.
+  - À la rupture du câble, la rame libérée part de sa position et de sa
+    vitesse réelles.
+- **Corrigé au passage** : tambour serré, la poulie glissait de
+  ~1 mm/s sous la pente (sa position était intégrée avant le tambour). Le
+  rebond, qui réécrivait la position, masquait ce glissement.
+- Vérifié : 64 tests PC, dont 5 nouveaux (`tests/test_elasticite_cable.py`
+  et la période d'oscillation conforme au calcul SageMath) ; parité PC ↔
+  PWA (5 voyages types, tension à quelques dizaines de daN près) ; bancs
+  pannes, portes, défi, auto, aiguillage, salle des machines. Le banc de
+  rupture échoue de temps en temps sur la position du bout de câble à
+  0,1-0,3 m près, comme avant ce changement.
+
 **v1.15.50** — numéros des supports dégagés du câble et des plots.
 - **« Le câble masque les chiffres maintenant quand il est présent »** :
   à 19 cm de l'axe (v1.15.49), la plaque était juste derrière le second

@@ -1,0 +1,22 @@
+Onde longitudinale : c = sqrt(EA/rho) = 3371.0 m/s
+
+  L (m) | k (kN/m) | T vide (s) | T pleine (s) | f pleine (Hz) | aller-retour onde (s)
+     25 |   5000.0 |       0.51 |         0.67 |         1.484 |     0.01
+    100 |   1250.0 |       1.02 |         1.35 |         0.740 |     0.06
+    500 |    250.0 |       2.32 |         3.06 |         0.327 |     0.30
+   1000 |    125.0 |       3.37 |         4.39 |         0.228 |     0.59
+   2000 |     62.5 |       5.01 |         6.40 |         0.156 |     1.19
+   3000 |     41.7 |       6.41 |         8.05 |         0.124 |     1.78
+   3450 |     36.2 |       7.00 |         8.74 |         0.114 |     2.05
+
+accélération programmée 0,30 m/s² : allongement statique 0.580 m, surtension 21.0 kN ; en échelon, crête ×1.62 → 0.940 m / 34.1 kN
+arrêt d'urgence poulie 1,25 m/s² : allongement statique 2.418 m, surtension 87.6 kN ; en échelon, crête ×1.62 → 3.919 m / 142.0 kN
+frein de service plein 2,5 m/s² : allongement statique 4.835 m, surtension 175.2 kN ; en échelon, crête ×1.62 → 7.837 m / 284.0 kN
+
+Rampe 0 → 0,30 m/s² en tau s (rame pleine en bas, T = 8.74 s) :
+   tau =  0.5 s → oscillation résiduelle 0.577 m (×0.99 du statique)
+   tau =  2.0 s → oscillation résiduelle 0.531 m (×0.92 du statique)
+   tau =  5.0 s → oscillation résiduelle 0.314 m (×0.54 du statique)
+   tau =  7.0 s → oscillation résiduelle 0.135 m (×0.23 du statique)
+   tau = 10.0 s → oscillation résiduelle 0.071 m (×0.12 du statique)
+   tau = 15.0 s → oscillation résiduelle 0.084 m (×0.14 du statique)

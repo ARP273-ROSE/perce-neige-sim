@@ -199,11 +199,13 @@ def _rebond(direction, s0):
         ph.step(DT)
         t += DT
     assert st.finished
+    # position RÉELLE de la rame : poulie (tr.s, immobilisée par le
+    # tambour) + écart élastique au bout du câble (st.el_x1)
     s_arr = st.train.s
     amp, final = 0.0, 0.0
     for i in range(int(25.0 / DT)):
         ph.step(DT)
-        final = st.train.s - s_arr
+        final = ph.car_s() - s_arr
         amp = max(amp, abs(final))
     return amp, abs(final)
 

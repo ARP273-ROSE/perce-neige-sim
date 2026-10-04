@@ -576,6 +576,11 @@ def physics_to_state_dict(tr, st=None) -> dict:
     """
     out = {
         "s": float(getattr(tr, "s", 0.0)),
+        # Élasticité du câble (2026-10-04) : s = position de la POULIE
+        # (codeur) ; chaque rame s'en écarte de el_x1 / el_x2 (m, le long
+        # de SA voie, + = vers la gare haute).
+        "el_x1": float(getattr(st, "el_x1", 0.0)) if st is not None else 0.0,
+        "el_x2": float(getattr(st, "el_x2", 0.0)) if st is not None else 0.0,
         "v": float(getattr(tr, "v", 0.0)),
         "direction": int(getattr(tr, "direction", 1)),
         # État VISUEL des vantaux (calé sur le clip sonore), pas l'interlock :

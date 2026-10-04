@@ -698,16 +698,20 @@ func _process(delta: float) -> void:
 		# Position de RENDU interpolée entre les deux derniers états
 		# physiques — supprime la saccade du défilement (rails/tunnel)
 		# quand le rendu ne tombe pas pile sur les pas de 1/60 s.
-		# + rebond élastique du câble après l'arrêt (gare basse : ±25 cm,
-		# T ≈ 6 s — millimétrique en haut, la physique fait le tri).
+		# + écart élastique de la rame au bout de son brin de câble (en
+		# marche comme à l'arrêt : jusqu'à ~50 cm en bas, millimétrique en
+		# haut — la longueur de câble déroulée fait le tri)
 		# + affaissement d'embarquement (le brin s'allonge sous la charge
 		# croissante à quai : la rame « descend doucement » en gare basse)
-		physics.s_render = lerpf(physics.s_prev_step, physics.s,
-			clampf(_physics_accum / PHYSICS_DT, 0.0, 1.0)) \
+		physics.s_poulie_render = lerpf(physics.s_prev_step, physics.s,
+			clampf(_physics_accum / PHYSICS_DT, 0.0, 1.0))
+		physics.s_render = physics.s_poulie_render \
 			+ physics.rebound_offset() + physics.boarding_sag_offset()
 	else:
-		# Mode client : l'état arrive tout fait du sim Python
-		physics.s_render = physics.s
+		# Mode client : l'état arrive tout fait du sim Python (s = poulie,
+		# el_x1 = écart élastique de la rame)
+		physics.s_poulie_render = physics.s
+		physics.s_render = physics.s + physics.el_x1
 
 	# Culling des lumières du tunnel à 2 Hz (les ~230 OmniLight3D pèsent
 	# sur le clustering Forward+ et le fog volumétrique même hors champ)
