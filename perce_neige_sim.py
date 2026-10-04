@@ -1419,6 +1419,11 @@ class Physics:
             # hydraulic circuit loses pressure (Glória 2025 pattern).
             a_brk = tr.brake * A_BRAKE_NORMAL * tr.service_brake_fail
         f_brake = -math.copysign(a_brk * m_total, tr.v) if abs(tr.v) > 0.05 else 0.0
+        # Urgence et parachute = freins de VOIE : chaque rame serre sur ses
+        # rails, le câble ne transmet pas cet effort → il ne fait pas
+        # osciller les rames (retour du 04/10 : « quand la rame monte et
+        # que je serre le frein d'urgence elle oscille comme une dingue »).
+        a_frein_voie = f_brake / m_total if tr.emergency_ramp > 0.0 else 0.0
 
         # Le freinage par l'entraînement partage le chemin de force du
         # moteur : coupé dès que celui-ci l'est (portes, hors trip,
@@ -1736,7 +1741,9 @@ class Physics:
         a_poulie = (tr.v - v_avant) / dt if dt > 0.0 else 0.0
         if buffer_clamp or (st.crashed and not crash_avant):
             a_poulie = 0.0
-        self._elastic_step(dt, a_poulie)
+        # Freins de voie serrés (urgence, parachute) : la rame est tenue par
+        # ses pinces sur les rails, pas par le câble (cf. _elastic_step)
+        self._elastic_step(dt, a_poulie - a_frein_voie, tr.emergency_ramp > 0.0)
 
         # Confort passager — ISO 2631. L'ancien modèle n'intégrait que le
         # jerk avec un poids minuscule (0,015) : un arrêt d'urgence à 3,6
@@ -2191,7 +2198,14 @@ class Physics:
         m = m_rame + CABLE_KG_M * span / 3.0
         return k, m
 
-    def _elastic_step(self, dt: float, a_poulie: float) -> None:
+    def _elastic_step(self, dt: float, a_poulie: float,
+                      frein_voie: bool = False) -> None:
+        """frein_voie : urgence ou parachute serrés. Chaque rame est alors
+        tenue par ses pinces sur les rails — ni excitée par la poulie (la
+        coupure du moteur faisait osciller une rame pleine de 2,7 m en
+        montée), ni libre d'osciller : l'écart s'amortit sans rebond
+        (amortissement critique). Retour du 04/10 : « quand la rame monte
+        et que je serre le frein d'urgence elle oscille comme une dingue »."""
         st = self.state
         tr = st.train
         if tr.cable_rupture:
@@ -2206,11 +2220,14 @@ class Physics:
         m_ghost = TRAIN_EMPTY_KG + st.ghost_pax * PAX_KG
         # rame pilotée (repère s) et contrepoids (repère de SA voie, qui
         # avance quand la poulie recule : accélération −a_poulie)
+        if frein_voie:
+            a_poulie = 0.0
+        zeta = 1.0 if frein_voie else REBOUND_ZETA
         for i, (s_r, m_r, a_f) in enumerate(((tr.s, tr.mass_kg, a_poulie),
                                              (st.ghost_s, m_ghost, -a_poulie))):
             k, m = self._brin_k_m(s_r, m_r)
             w = math.sqrt(k / m)
-            c = 2.0 * REBOUND_ZETA * math.sqrt(k * m)
+            c = 2.0 * zeta * math.sqrt(k * m)
             x, v = (st.el_x1, st.el_v1) if i == 0 else (st.el_x2, st.el_v2)
             n = max(1, int(math.ceil(w * dt / 0.15)))
             h = dt / n
@@ -7692,7 +7709,23 @@ class GameWidget(QWidget):
             self._crash_played = False
         if st.crash_shake_t > 0.0:
             st.crash_shake_t = max(0.0, st.crash_shake_t - dt)
-        self.update()
+        # 3D embarquée visible : elle couvre la vue ; le reste de la fenêtre
+        # (pupitre, jauges, journal) se redessine à 30 Hz au lieu de 60 —
+        # le processeur va à la 3D (retour du 04/10 : « sur un PC moins
+        # puissant ça saccade »).
+        if self._godot_couvre_vue():
+            self._repeint_impair = not getattr(self, "_repeint_impair", False)
+            if self._repeint_impair:
+                self.update()
+        else:
+            self.update()
+
+    def _godot_couvre_vue(self) -> bool:
+        """La fenêtre 3D embarquée est affichée par-dessus la vue cabine."""
+        return (self._cabin_view_state == 2
+                and not getattr(self, "_godot_embed_hidden", True)
+                and (getattr(self, "_godot_embed_widget", None) is not None
+                     or bool(getattr(self, "_godot_child_hwnd", None))))
 
     # ----- mode Défi -------------------------------------------------------
 
@@ -8766,7 +8799,10 @@ class GameWidget(QWidget):
 
         self._draw_background(p, w, h)
         view_rect = QRectF(20, 20, w - 440, h - 260)
-        if self._cabin_view and self.state.mode == MODE_RUN:
+        if self._godot_couvre_vue():
+            # la 3D embarquée couvre ce rectangle : rien à y dessiner
+            p.fillRect(view_rect, QColor(0, 0, 0))
+        elif self._cabin_view and self.state.mode == MODE_RUN:
             self._draw_cabin_view(p, view_rect)
         else:
             self._draw_world(p, view_rect)

@@ -63,6 +63,12 @@ var _light_cull_accum: float = 999.0   # force un 1er culling dès la frame 1
 # Éclairage du tunnel (touche J, bouton TUNNEL, ou le sim PC) — demande du
 # 03/10/2026 : « rajoute l'option de couper tous les éclairages du tunnel ».
 var tunnel_lights_on: bool = true
+var _client_s: float = NAN        # position rendue lissée en mode client
+# Qualité adaptative (PC) : cran 0 = réglage de départ ; chaque cran retire
+# un effet coûteux quand la 3D ne tient pas 45 images/s.
+var _perf_cran: int = 0
+var _perf_t: float = -8.0         # 8 s de chauffe (compilation des shaders)
+var _perf_images: int = 0
 var _ext_light: DirectionalLight3D = null   # vue extérieure seulement
 var _env: Environment = null
 const AMBIENT_ON: float = 0.40
@@ -454,7 +460,7 @@ func restart_trip() -> void:
 		return
 	physics.restart_after_crash()
 	if fault_manager != null:
-		fault_manager.clear_active()
+		fault_manager.clear_active(true)   # remise en service complète
 	if challenge != null:
 		challenge.clear_crash()
 		challenge.reset_trip()
@@ -604,6 +610,59 @@ func _build_environment() -> void:
 	add_child(_ext_light)
 
 
+# Qualité adaptative (retour du 04/10 : « sur mon gros PC le jeu est bien
+# fluide, sur un PC moins puissant ça saccade »). Le viewer du PC partait
+# toujours en qualité haute (SDFGI, brouillard volumétrique, SSR, MSAA). On
+# mesure la cadence par fenêtres de 3 s ; sous 45 images/s, on retire un
+# effet, du plus coûteux au moins visible :
+#   1 SDFGI (éclairage indirect) · 2 brouillard volumétrique, SSR, MSAA
+#   3 rendu 3D à 75 % (mis à l'échelle) · 4 à 60 % · 5 halo (glow)
+# Jamais de remontée automatique (pas de pompage). La PWA démarre déjà en
+# réglage bas et 60 % : elle n'est concernée qu'au cran 5.
+func _qualite_adaptative(delta: float) -> void:
+	if _perf_cran >= 5:
+		return
+	# rendu logiciel (captures de contrôle sous Xvfb) : cadence sans
+	# rapport avec une vraie carte graphique — on ne touche à rien
+	if _perf_t == -8.0 and RenderingServer.get_video_adapter_name().to_lower().contains("llvmpipe"):
+		_perf_cran = 5
+		return
+	_perf_t += delta
+	if _perf_t < 0.0:
+		return
+	_perf_images += 1
+	if _perf_t < 3.0:
+		return
+	var ips: float = float(_perf_images) / _perf_t
+	_perf_t = 0.0
+	_perf_images = 0
+	if ips >= 45.0:
+		return
+	_perf_cran += 1
+	if OS.has_feature("web") and _perf_cran < 5:
+		_perf_cran = 5                      # le web est déjà au plus bas
+	var vp: Viewport = get_viewport()
+	match _perf_cran:
+		1:
+			if _env != null:
+				_env.sdfgi_enabled = false
+		2:
+			if _env != null:
+				_env.volumetric_fog_enabled = false
+				_env.ssr_enabled = false
+			vp.msaa_3d = Viewport.MSAA_DISABLED
+		3:
+			vp.scaling_3d_mode = Viewport.SCALING_3D_MODE_BILINEAR
+			vp.scaling_3d_scale = 0.75
+		4:
+			vp.scaling_3d_scale = 0.6
+		5:
+			if _env != null:
+				_env.glow_enabled = false
+	print("[Perf] %.0f images/s → qualité réduite (cran %d/5)" % [ips, _perf_cran])
+	_perf_t = -2.0          # laisse le nouveau réglage se stabiliser
+
+
 func _build_physics() -> void:
 	physics = TrainPhysics.new()
 	physics.direction = 1           # départ Val Claret → Glacier
@@ -708,10 +767,23 @@ func _process(delta: float) -> void:
 		physics.s_render = physics.s_poulie_render \
 			+ physics.rebound_offset() + physics.boarding_sag_offset()
 	else:
-		# Mode client : l'état arrive tout fait du sim Python (s = poulie,
-		# el_x1 = écart élastique de la rame)
-		physics.s_poulie_render = physics.s
-		physics.s_render = physics.s + physics.el_x1
+		# Mode client : l'état arrive du sim Python (s = poulie, el_x1 =
+		# écart élastique de la rame). Retour du 04/10 : « sur un PC moins
+		# puissant ça saccade » — le PC chargé envoie ses paquets à rythme
+		# irrégulier et la rame avançait par sauts. Entre deux paquets, la
+		# position avance avec la vitesse reçue, puis se recale en douceur
+		# (0,12 s) sur la position envoyée ; un vrai saut (nouveau voyage,
+		# demi-tour) est pris tel quel.
+		var age: float = state_receiver.packet_age() if state_receiver != null else 0.0
+		var cible: float = physics.s + physics.v * clampf(age, 0.0, 0.15)
+		if is_nan(_client_s) or absf(cible - _client_s) > 5.0:
+			_client_s = cible
+		else:
+			_client_s += physics.v * delta
+			_client_s += (cible - _client_s) * minf(1.0, delta / 0.12)
+		physics.s_poulie_render = _client_s
+		physics.s_render = _client_s + physics.el_x1
+	_qualite_adaptative(delta)
 
 	# Culling des lumières du tunnel à 2 Hz (les ~230 OmniLight3D pèsent
 	# sur le clustering Forward+ et le fog volumétrique même hors champ)

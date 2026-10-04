@@ -240,6 +240,14 @@ func _build_overlay() -> void:
 
 
 # Indique si on a reçu au moins un packet récent (utile pour debug / fallback)
+## Âge (s) du dernier paquet reçu du sim PC : sert à extrapoler la position
+## entre deux paquets (main.gd, lissage du rendu en mode client).
+func packet_age() -> float:
+	if _packet_count == 0:
+		return 0.0
+	return Time.get_ticks_msec() / 1000.0 - _last_packet_time
+
+
 func is_connected_recently() -> bool:
 	var now: float = Time.get_ticks_msec() / 1000.0
 	return _packet_count > 0 and (now - _last_packet_time) < 2.0
