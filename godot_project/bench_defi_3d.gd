@@ -275,7 +275,12 @@ func _test_pannes() -> bool:
 			and ph.ghost_locked_s >= 0.0,
 		"rupture=%s frein=%.2f ghost_fige=%.0f m" % [ph.cable_rupture,
 			ph.service_brake_fail, ph.ghost_locked_s]) and ok
+	# « Lever » ne répare pas un câble rompu en pleine ligne (04/10) : le
+	# contrepoids reste figé là où il est
 	fm.clear_active()
+	ok = _check("pas de reparation en ligne", ph.cable_rupture and ph.ghost_locked_s >= 0.0,
+		"rupture=%s ghost_fige=%.0f m" % [ph.cable_rupture, ph.ghost_locked_s]) and ok
+	fm.clear_active(true)      # nouveau voyage : remise en service complète
 	ok = _check("levee de panne", not ph.cable_rupture
 			and is_equal_approx(ph.service_brake_fail, 1.0)
 			and ph.ghost_locked_s < 0.0, "etat rendu nominal") and ok

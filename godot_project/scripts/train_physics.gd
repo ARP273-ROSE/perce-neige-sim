@@ -523,6 +523,10 @@ func step(dt: float) -> void:
 	var f_brake: float = 0.0
 	if absf(v) > 0.05:
 		f_brake = -signf(v) * a_brk * m_eff
+	# Urgence et parachute = freins de VOIE : chaque rame serre sur ses
+	# rails, le câble ne transmet pas cet effort → il ne fait pas osciller
+	# les rames (retour du 04/10, parité PC).
+	var a_frein_voie: float = f_brake / m_eff if emergency_ramp > 0.0 else 0.0
 
 	# Le freinage par l'entraînement partage le chemin de force du moteur :
 	# coupé dès que celui-ci l'est (portes, hors trip, câble rompu) ou en
@@ -784,7 +788,8 @@ func step(dt: float) -> void:
 	var a_poulie: float = (v - v_entree) / dt
 	if buffer_clamp or crashed:
 		a_poulie = 0.0
-	_elastic_step(dt, a_poulie)
+	# freins de voie serrés (urgence, parachute) : rame tenue par ses pinces
+	_elastic_step(dt, a_poulie - a_frein_voie, emergency_ramp > 0.0)
 	# Effort dynamique = allongement élastique de chaque brin (au lieu de
 	# l'inertie rigide m·a : quasi statique, k·x = m·a).
 	var km1: Vector2 = _brin_k_m(s, m_up)
@@ -1229,7 +1234,11 @@ func _brin_k_m(s_rame: float, m_rame: float) -> Vector2:
 	return Vector2(CABLE_EA_N / span, m_rame + PNConstants.CABLE_KG_M * span / 3.0)
 
 
-func _elastic_step(dt: float, a_poulie: float) -> void:
+# frein_voie : urgence ou parachute serrés — chaque rame est tenue par ses
+# pinces sur les rails : ni excitée par la poulie (la coupure du moteur
+# faisait osciller une rame pleine de 2,7 m en montée), ni libre
+# d'osciller (amortissement critique). Retour du 04/10 (parité PC).
+func _elastic_step(dt: float, a_poulie: float, frein_voie: bool = false) -> void:
 	if cable_rupture:
 		# plus de brin : la rame libérée part de sa position et de sa
 		# vitesse RÉELLES (poulie + écart), puis plus d'écart du tout
@@ -1241,13 +1250,16 @@ func _elastic_step(dt: float, a_poulie: float) -> void:
 				ghost_locked_s += el_x2
 		el_x1 = 0.0; el_v1 = 0.0; el_x2 = 0.0; el_v2 = 0.0
 		return
+	if frein_voie:
+		a_poulie = 0.0
+	var zeta: float = 1.0 if frein_voie else REBOUND_ZETA
 	var cfg: Array = [[s, mass_kg(), a_poulie], [ghost_s_phys(), ghost_mass_kg(), -a_poulie]]
 	for i in range(2):
 		var km: Vector2 = _brin_k_m(cfg[i][0], cfg[i][1])
 		var k: float = km.x
 		var m: float = km.y
 		var w: float = sqrt(k / m)
-		var c: float = 2.0 * REBOUND_ZETA * sqrt(k * m)
+		var c: float = 2.0 * zeta * sqrt(k * m)
 		var x: float = el_x1 if i == 0 else el_x2
 		var vx: float = el_v1 if i == 0 else el_v2
 		var n: int = maxi(1, ceili(w * dt / 0.15))

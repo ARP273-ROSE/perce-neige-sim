@@ -125,7 +125,7 @@ func _tick() -> void:
 		- (float(r.ph0) + float(r.r_up))) < 1e-3, "phase %.3f" % _param(own, "phase_upper"))
 
 	# fin de la panne (maintenance, nouveau voyage) : câble rétabli
-	fm.clear_active()
+	fm.clear_active(true)
 	_pas(2)
 	_check("câble rétabli après la panne", track.cable_rupture_state().is_empty()
 		and _param(own, "slack") == 0.0 and _param(own, "gap_hi") <= _param(own, "gap_lo")
