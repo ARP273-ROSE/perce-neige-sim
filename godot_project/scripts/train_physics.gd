@@ -17,6 +17,9 @@ var s: float = PNConstants.START_S       # distance pente depuis portail bas
 # recalculée chaque frame par main.gd (lerp selon l'accumulateur).
 var s_prev_step: float = PNConstants.START_S
 var s_render: float = PNConstants.START_S
+# Position rendue de la POULIE (codeur) : s_render sans l'écart élastique
+# ni l'affaissement de la rame pilotée — le contrepoids en est le miroir.
+var s_poulie_render: float = PNConstants.START_S
 var v: float = 0.0                       # vitesse signée (m/s)
 var a: float = 0.0                       # dernière accel (m/s²)
 var direction: int = 1                   # +1 montée, -1 descente
@@ -79,20 +82,22 @@ var dbg_f_grav_net: float = 0.0          # dernière gravité nette (banc de par
 var _reg_hold: bool = true               # régulateur en maintien à l'arrêt
 var _pretensioned: bool = false          # couple statique posé au décollage
 
-# --- Rebond élastique du câble à l'arrêt (port du Python _cable_bounce) --
-# x(t) = A·e^(−ζωt)·sin(ωt) avec k = EA/L (L = câble entre la rame et la
-# poulie motrice en GARE HAUTE) : en bas L ≈ 3,45 km → T ≈ 5-8 s, jusqu'à
-# ±25 cm ; en haut L ≈ 25 m → millimétrique. L'asymétrie sort de la
-# physique, rien n'est câblé en dur. Appliqué à s_render (visuel) : le s
-# physique est tenu par le clamp + frein tambour.
+# --- Élasticité du câble en marche (port de Physics._elastic_step) -------
+# s / v = mouvement du câble À LA POULIE MOTRICE (codeur, régulateur). Chaque
+# rame pend au bout de son brin, ressort k = EA/L (L = câble déroulé jusqu'à
+# la poulie, en gare haute), et s'en écarte quand la poulie accélère :
+#     m·x'' = −k·x − c·x' − m·a_poulie,   c = 2ζ√(k·m),
+# m = rame + 1/3 de son brin. En bas (3,4 km) T ≈ 7 à 8,7 s et 58 cm de
+# retard à 0,30 m/s² ; en haut (25 m) quelques mm (audit_physique/
+# elasticite_cable.sage). Retour de Kevin du 04/10 : « la rame oscille déjà
+# au ralenti quand elle rentre, et quand elle part du bas elle oscille
+# aussi à l'accélération ». Le rebond après l'arrêt en découle.
 const CABLE_EA_N: float = 1.25e8
 const REBOUND_ZETA: float = 0.15
-const REBOUND_GRAB_A: float = 0.35   # m/s² relâchés au serrage du tambour
-var rebound_timer: float = -1.0      # < 0 = inactif
-var rebound_anchor_s: float = 0.0
-var rebound_dir: int = 1             # direction figée au serrage (le
-                                     # demi-tour inverse `direction` alors
-                                     # que l'oscillation court encore)
+var el_x1: float = 0.0     # écart de la rame pilotée (m, + = vers l'amont)
+var el_v1: float = 0.0
+var el_x2: float = 0.0     # écart du contrepoids (le long de SA voie)
+var el_v2: float = 0.0
 
 # Temporisation d'arrivée : la rame reste immobilisée portes fermées
 # (rebond visible) avant l'ouverture des portes + inversion du sens.
@@ -265,7 +270,9 @@ func update_machine(rame2: bool, dt: float) -> void:
 func ghost_s_render() -> float:
 	if ghost_locked_s >= 0.0:
 		return ghost_locked_s
-	return PNConstants.LENGTH - s_render
+	# miroir de la POULIE (pas de la rame pilotée, qui oscille), plus son
+	# propre écart élastique
+	return PNConstants.LENGTH - s_poulie_render + el_x2
 
 
 func ghost_s_phys() -> float:
@@ -296,6 +303,7 @@ func step(dt: float) -> void:
 	# Clamp dt pour éviter de casser la physique sur un gros hiccup
 	dt = clampf(dt, 0.001, 0.1)
 	s_prev_step = s
+	var v_entree: float = v      # accélération de la poulie (élasticité)
 
 	# Rotation passagers progressive tant que les portes sont ouvertes
 	# (le wagon opposé embarque en même temps dans SA gare). Portes
@@ -683,10 +691,6 @@ func step(dt: float) -> void:
 		if turnaround_delay_remaining <= 0.0:
 			_terminus_turnaround()
 
-	# Chrono du rebond élastique
-	if rebound_timer >= 0.0:
-		rebound_timer += dt
-
 	# Frein parking (drum) ou frein urgence (panne grave). Serrage
 	# PROGRESSIF du résiduel (≤ 8 cm/s au moment du grab d'arrivée) :
 	# v décroît à 1,2 m/s² au lieu d'être coupée en une frame — dernier
@@ -703,6 +707,10 @@ func step(dt: float) -> void:
 			or emergency_brake:
 		v = move_toward(v, 0.0, 1.2 * dt)
 		acc = 0.0
+		# la position suit la vitesse RETENUE par le tambour (intégrée
+		# avant lui, elle glissait de ~1 mm/s sous la pente, poulie serrée)
+		if not buffer_clamp:
+			s = s_prev_step + 0.5 * (v_entree + v) * dt
 
 	# --- Confort passager (ISO 2631) — sert au score du mode Défi --------
 	# Pénalité quadratique sur l'EXCÈS d'accélération au-delà du confort
@@ -771,11 +779,23 @@ func step(dt: float) -> void:
 	# sautait à ~14 000 à l'échange de passagers du demi-tour (retour
 	# d'essai 2026-07-13). Avec le max des deux brins : 12 767 → 13 994,
 	# transition continue.
-	var a_t: float = 0.0 if buffer_clamp else acc
+	# Élasticité : accélération réelle de la poulie sur ce pas (tambour
+	# compris), sauf l'amortisseur du butoir et un choc de collision.
+	var a_poulie: float = (v - v_entree) / dt
+	if buffer_clamp or crashed:
+		a_poulie = 0.0
+	_elastic_step(dt, a_poulie)
+	# Effort dynamique = allongement élastique de chaque brin (au lieu de
+	# l'inertie rigide m·a : quasi statique, k·x = m·a).
+	var km1: Vector2 = _brin_k_m(s, m_up)
+	var km2: Vector2 = _brin_k_m(ghost_s_phys(), m_down)
+	var dyn1: float = -km1.x * el_x1 - 2.0 * REBOUND_ZETA * sqrt(km1.x * km1.y) * el_v1
+	var dyn2: float = -km2.x * el_x2 - 2.0 * REBOUND_ZETA * sqrt(km2.x * km2.y) * el_v2
 	tension_dan = maxf(
-		_side_tension_n(m_up, s, a_t, v),
-		_side_tension_n(m_down, PNConstants.LENGTH - s, -a_t, -v),
+		_side_tension_n(m_up, s, 0.0, v) + dyn1,
+		_side_tension_n(m_down, PNConstants.LENGTH - s, 0.0, -v) + dyn2,
 	) / 10.0
+	tension_dan = maxf(tension_dan, 0.0)
 
 	# --- Puissance ------------------------------------------------------
 	# Traction : le moteur tire → puissance consommée. Régén :
@@ -1139,11 +1159,8 @@ func _arrival_grab() -> void:
 	maint_brake = true
 	speed_cmd = 0.0
 	speed_cmd_eff = 0.0
-	rebound_anchor_s = s
-	rebound_dir = direction
-	rebound_timer = 0.0
 	turnaround_delay_remaining = TURNAROUND_DELAY_S
-	print("[Physics] arrivée s=%.0f — frein tambour serré, rebond armé, portes à la stabilisation (< %.0f cm, %.0f s maxi)"
+	print("[Physics] arrivée s=%.0f — frein tambour serré, portes à la stabilisation du câble (< %.0f cm, %.0f s maxi)"
 		% [s, SETTLE_M * 100.0, TURNAROUND_DELAY_S])
 
 
@@ -1206,35 +1223,60 @@ func ghost_sag_offset() -> float:
 	return -_sag_ghost
 
 
-# Enveloppe A·e^(−ζωt) du rebond (m) : l'amplitude résiduelle de
-# l'oscillation, quel que soit le signe du sinus. 0 si le rebond est éteint.
+# Raideur et masse (Rayleigh : + 1/3 du brin) du brin d'une rame à s_rame.
+func _brin_k_m(s_rame: float, m_rame: float) -> Vector2:
+	var span: float = maxf(PNConstants.LENGTH - s_rame, 20.0)
+	return Vector2(CABLE_EA_N / span, m_rame + PNConstants.CABLE_KG_M * span / 3.0)
+
+
+func _elastic_step(dt: float, a_poulie: float) -> void:
+	if cable_rupture:
+		# plus de brin : la rame libérée part de sa position et de sa
+		# vitesse RÉELLES (poulie + écart), puis plus d'écart du tout
+		if el_x1 != 0.0 or el_v1 != 0.0:
+			s += el_x1
+			s_prev_step += el_x1   # interpolation du rendu continue
+			v += el_v1
+			if ghost_locked_s >= 0.0:
+				ghost_locked_s += el_x2
+		el_x1 = 0.0; el_v1 = 0.0; el_x2 = 0.0; el_v2 = 0.0
+		return
+	var cfg: Array = [[s, mass_kg(), a_poulie], [ghost_s_phys(), ghost_mass_kg(), -a_poulie]]
+	for i in range(2):
+		var km: Vector2 = _brin_k_m(cfg[i][0], cfg[i][1])
+		var k: float = km.x
+		var m: float = km.y
+		var w: float = sqrt(k / m)
+		var c: float = 2.0 * REBOUND_ZETA * sqrt(k * m)
+		var x: float = el_x1 if i == 0 else el_x2
+		var vx: float = el_v1 if i == 0 else el_v2
+		var n: int = maxi(1, ceili(w * dt / 0.15))
+		var h: float = dt / float(n)
+		var a_f: float = cfg[i][2]
+		for _j in range(n):      # Euler semi-implicite, stable
+			vx += (-k * x - c * vx) / m * h - a_f * h
+			x += vx * h
+		if i == 0:
+			el_x1 = x; el_v1 = vx
+		else:
+			el_x2 = x; el_v2 = vx
+
+
+# Amplitude de l'oscillation élastique en cours (m), rame pilotée ET
+# contrepoids : √(x² + (x'/ω)²) — l'installation est stabilisée quand les
+# deux le sont (parité PC).
 func rebound_envelope() -> float:
-	if rebound_timer < 0.0:
-		return 0.0
-	var span: float = maxf(PNConstants.LENGTH - rebound_anchor_s, 20.0)
-	var k: float = CABLE_EA_N / span
-	var m: float = mass_kg()
-	var omega: float = sqrt(k / maxf(m, 1.0))
-	var amp: float = minf(m * REBOUND_GRAB_A / k, 0.45)
-	return amp * exp(-REBOUND_ZETA * omega * rebound_timer)
+	var km1: Vector2 = _brin_k_m(s, mass_kg())
+	var km2: Vector2 = _brin_k_m(ghost_s_phys(), ghost_mass_kg())
+	var e1: float = Vector2(el_x1, el_v1 / sqrt(km1.x / km1.y)).length()
+	var e2: float = Vector2(el_x2, el_v2 / sqrt(km2.x / km2.y)).length()
+	return maxf(e1, e2)
 
 
-# Décalage visuel (m, signé le long de la pente) du rebond élastique.
-# À ajouter à s_render — s'éteint tout seul (< 1 mm → coupé).
+# Écart élastique de la rame pilotée (m, signé le long de la pente) : à
+# ajouter à la position de la poulie pour la rendre.
 func rebound_offset() -> float:
-	if rebound_timer < 0.0:
-		return 0.0
-	var span: float = maxf(PNConstants.LENGTH - rebound_anchor_s, 20.0)
-	var k: float = CABLE_EA_N / span
-	var m: float = mass_kg()
-	var omega: float = sqrt(k / maxf(m, 1.0))
-	var amp: float = minf(m * REBOUND_GRAB_A / k, 0.45)
-	var x: float = amp * exp(-REBOUND_ZETA * omega * rebound_timer) \
-		* sin(omega * rebound_timer)
-	if amp * exp(-REBOUND_ZETA * omega * rebound_timer) < 0.001:
-		rebound_timer = -1.0   # éteint — plus de calcul
-		return 0.0
-	return float(rebound_dir) * x
+	return el_x1
 
 
 # Séquence de départ réelle, en TROIS phases successives :
@@ -1303,7 +1345,6 @@ func reverse_trip() -> bool:
 	trip_started = false
 	finished = false
 	trip_time = 0.0
-	rebound_timer = -1.0
 	turnaround_delay_remaining = 0.0
 	announce_phase_remaining = 0.0
 	departure_buzzer_remaining = 0.0
@@ -1323,7 +1364,6 @@ func start_trip() -> void:
 	maint_brake = false
 	doors_open = false
 	finished = false
-	rebound_timer = -1.0
 
 
 func end_trip() -> void:
@@ -1379,7 +1419,7 @@ func restart_after_crash() -> void:
 	trip_time = 0.0
 	maint_brake = true
 	doors_open = true
-	rebound_timer = -1.0
+	el_x1 = 0.0; el_v1 = 0.0; el_x2 = 0.0; el_v2 = 0.0   # rames au repos
 	turnaround_delay_remaining = 0.0
 	announce_phase_remaining = 0.0
 	departure_buzzer_remaining = 0.0

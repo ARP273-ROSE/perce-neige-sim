@@ -117,6 +117,9 @@ static func _b(d: Dictionary, k: String, cur: bool) -> bool:
 func _apply(d: Dictionary) -> void:
 	# Update direct des champs (la physics locale est court-circuitée)
 	physics.s = _f(d, "s", physics.s)
+	# élasticité du câble (sim PC ≥ 1.15.51) : écarts des rames à la poulie
+	physics.el_x1 = _f(d, "el_x1", 0.0)
+	physics.el_x2 = _f(d, "el_x2", 0.0)
 	physics.v = _f(d, "v", physics.v)
 	physics.direction = _i(d, "direction", physics.direction)
 	physics.doors_open = _b(d, "doors_open", physics.doors_open)

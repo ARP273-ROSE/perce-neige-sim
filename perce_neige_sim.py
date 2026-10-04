@@ -1105,8 +1105,16 @@ class GameState:
     sag_ref_m_main: float = -1.0   # masse à l'ancrage (−1 = pas ancré)
     sag_ref_m_ghost: float = -1.0
     sag_anchor_s: float = 0.0
-    rebound_timer: float = 0.0  # cable elasticity rebound (after arrival)
+    rebound_timer: float = 0.0  # temps depuis l'arrivée (s)
     rebound_anchor_s: float = 0.0  # position d'arrêt (m) — le rebond oscille autour
+    # Élasticité du câble EN MARCHE (2026-10-04) : écart de chaque rame à la
+    # position « rigide » donnée par la poulie motrice (codeur), en m le
+    # long de SA voie (+ = vers la gare haute), et sa vitesse. Cf.
+    # Physics._elastic_step.
+    el_x1: float = 0.0
+    el_v1: float = 0.0
+    el_x2: float = 0.0
+    el_v2: float = 0.0
     best_time: float | None = None
     # Trip direction selection from the title screen.
     # direction = +1 (Val Claret → Glacier, climb) or -1 (Glacier → Val Claret).
@@ -1513,6 +1521,9 @@ class Physics:
         # Integrate — tr.v is SIGNED in the +s direction. Going up the
         # slope, v > 0. Going down, v < 0. tr.direction is ±1 and tells
         # the regulator / motor what sign to push the throttle force in.
+        v_avant = tr.v      # pour l'accélération de la poulie (élasticité)
+        s_avant = tr.s
+        crash_avant = st.crashed
         new_v = tr.v + a * dt
         # Cap |v| at v_limit in the travel direction (coasting past is
         # fine — the motor is off — but we still don't let the physics
@@ -1683,6 +1694,11 @@ class Physics:
             else:
                 tr.v = 0.0
             a = 0.0
+            # la position suit la vitesse RETENUE par le tambour : intégrée
+            # avant lui, elle glissait de ~1 mm/s sous la pente, poulie
+            # serrée (masqué jusqu'ici par le rebond posé après l'arrivée)
+            if not buffer_clamp:
+                tr.s = s_avant + 0.5 * (v_avant + tr.v) * dt
 
         # --- Affaissement d'embarquement (port de la PWA, audit 2026-09-26)
         # Tant que la rame est ancrée (tambour ou portes) hors séquence de
@@ -1713,6 +1729,14 @@ class Physics:
             if abs(tr.v) > 0.3:
                 st.sag_main = max(0.0, st.sag_main - 0.08 * dt)
                 st.sag_ghost = max(0.0, st.sag_ghost - 0.08 * dt)
+
+        # --- Élasticité du câble en marche ------------------------------------
+        # Accélération RÉELLE de la poulie (frein tambour compris), sauf
+        # l'amortisseur numérique du butoir et le choc d'une collision.
+        a_poulie = (tr.v - v_avant) / dt if dt > 0.0 else 0.0
+        if buffer_clamp or (st.crashed and not crash_avant):
+            a_poulie = 0.0
+        self._elastic_step(dt, a_poulie)
 
         # Confort passager — ISO 2631. L'ancien modèle n'intégrait que le
         # jerk avec un poids minuscule (0,015) : un arrêt d'urgence à 3,6
@@ -1789,10 +1813,16 @@ class Physics:
                  + (m + m_brin) * a_s)
             return max(t, 0.0)
 
-        a_t = 0.0 if buffer_clamp else a
+        # Effort dynamique : l'allongement élastique de chaque brin (la rame
+        # en retard tire plus, en avance détend) au lieu de l'inertie
+        # rigide (m·a) — quasi statique, c'est la même chose (k·x = m·a).
+        k1, m1e = self._brin_k_m(tr.s, m_up)
+        k2, m2e = self._brin_k_m(st.ghost_s, m_down)
+        dyn1 = -k1 * st.el_x1 - 2.0 * REBOUND_ZETA * math.sqrt(k1 * m1e) * st.el_v1
+        dyn2 = -k2 * st.el_x2 - 2.0 * REBOUND_ZETA * math.sqrt(k2 * m2e) * st.el_v2
         tr.tension_dan = max(
-            _side_tension_n(m_up, tr.s, a_t, tr.v),
-            _side_tension_n(m_down, LENGTH - tr.s, -a_t, -tr.v),
+            _side_tension_n(m_up, tr.s, 0.0, tr.v) + dyn1,
+            _side_tension_n(m_down, LENGTH - tr.s, 0.0, -tr.v) + dyn2,
         ) / 10.0
         # Apply persistent fault offsets so the gauge actually moves
         # when a cable surge or slack fault is announced.
@@ -2049,31 +2079,11 @@ class Physics:
         # propre affaissement dans sa gare.
         base_ghost_s = LENGTH - (tr.s + st.sag_main) - st.sag_ghost
         if st.finished:
-            # Rebond élastique du câble — modèle masse-ressort ANALYTIQUE
-            # (position posée directement, pas d'intégration → pas de
-            # dérive : l'ancien code intégrait un déplacement comme une
-            # vitesse et la rame glissait de 1,2 m avant de rester coincée
-            # contre le clamp).
-            #
-            # Chaque rame pend à son brin de câble jusqu'à la poulie
-            # motrice en GARE HAUTE : k = EA/L. La rame arrêtée en gare
-            # BASSE a L ≈ 3,45 km → k ≈ 36 kN/m → oscillation lente et
-            # visible (T ≈ 8 s, jusqu'à 45 cm). La rame en gare HAUTE a
-            # L ≈ 25 m → amplitude millimétrique : l'oscillation n'est
-            # visible QUE en bas, uniquement à cause de la longueur du
-            # câble — rien n'est câblé en dur.
+            # Le rebond après l'arrêt n'est plus une formule posée : c'est
+            # l'oscillation élastique des rames (_elastic_step) quand le
+            # tambour immobilise la poulie. tr.s reste la position de la
+            # poulie (codeur) ; les rames oscillent autour (el_x1, el_x2).
             st.rebound_timer += dt
-            t_r = st.rebound_timer
-            anchor = st.rebound_anchor_s
-            m_ghost = TRAIN_EMPTY_KG + st.ghost_pax * PAX_KG
-            x_main = self._cable_bounce(anchor, tr.mass_kg, tr.mass_kg, t_r)
-            tr.s = anchor + tr.direction * x_main - st.sag_main
-            # Le contrepoids ressent le même relâchement de force via SON
-            # brin (signe opposé : le câble le tire vers l'arrière quand
-            # la rame principale déborde vers l'avant).
-            x_ghost = self._cable_bounce(
-                LENGTH - anchor, m_ghost, tr.mass_kg, t_r)
-            base_ghost_s = (LENGTH - anchor) - tr.direction * x_ghost - st.sag_ghost
         # Câble rompu : la rame opposée n'est plus couplée — son propre
         # parachute l'a clouée sur place, elle ne suit plus le miroir.
         if not tr.cable_rupture:
@@ -2136,9 +2146,8 @@ class Physics:
                 tr.brake = 0.0
                 tr.emergency = False
                 tr.maint_brake = True
-                # Ancre du rebond élastique : la rame oscille AUTOUR de
-                # son point d'arrêt (cf. _cable_bounce), le chrono part
-                # de zéro à l'instant du serrage.
+                # Point d'arrêt de la poulie : la rame oscille autour
+                # (élasticité du câble, _elastic_step) ; chrono à zéro.
                 st.rebound_anchor_s = tr.s
                 st.rebound_timer = 0.0
                 # Retour gare la plus proche accompli : la maintenance
@@ -2157,51 +2166,84 @@ class Physics:
                         "maintenance, service peut reprendre.",
                         "info")
 
+    # --- Élasticité du câble en marche (2026-10-04) ---------------------
+    # Question de Kevin : « reproduire la physique de l'élasticité du câble
+    # en fonction de la longueur déroulée, de la masse de la rame et des
+    # variations de vitesse » ; observé en vrai : « la rame oscille déjà au
+    # ralenti quand elle rentre, et quand elle part du bas elle oscille
+    # aussi à l'accélération ».
+    #
+    # Le mouvement intégré par step() (tr.s, tr.v) est celui du câble À LA
+    # POULIE MOTRICE — ce que mesure le codeur et que pilote le régulateur.
+    # Chaque rame pend au bout de son brin, ressort de raideur k = EA/L
+    # (L = câble déroulé entre elle et la poulie, en gare haute), et s'en
+    # écarte de x quand la poulie accélère :
+    #     m·x'' = −k·x − c·x' − m·a_poulie,   c = 2ζ√(k·m)
+    # m = rame + 1/3 de la masse de son brin (Rayleigh). En bas, 3,4 km de
+    # câble : T ≈ 7 à 8,7 s, 58 cm de retard à 0,30 m/s² ; en haut, 25 m :
+    # T < 1 s, quelques mm (audit_physique/elasticite_cable.sage).
+    # Couplage à sens unique (la poulie ne « sent » pas l'oscillation) :
+    # l'inertie des rames est déjà comptée dans le mouvement de la poulie.
     @staticmethod
-    def _cable_bounce(s_cabin: float, m_cabin: float,
-                      m_arriving: float, t: float) -> float:
-        """Oscillation amortie d'une rame suspendue à son brin de câble
-        élastique après le serrage du frein tambour (poulie motrice en
-        gare haute). x(t) = A·e^(−ζωt)·sin(ωt), avec :
-          k = EA / L        (L = câble entre la rame et la poulie haute)
-          ω = √(k/m)        (rame chargée en bas : T ≈ 8 s)
-          A = m_arr·a_grab/k, plafonné à 45 cm
-        La rame du HAUT a L ≈ 25 m → A de quelques mm : rien à coder,
-        l'asymétrie sort de la physique.
-        """
-        span = max(LENGTH - s_cabin, 20.0)
+    def _brin_k_m(s_rame: float, m_rame: float) -> tuple:
+        span = max(LENGTH - s_rame, 20.0)
         k = CABLE_EA_N / span
-        omega = math.sqrt(k / max(m_cabin, 1.0))
-        amp = min(m_arriving * REBOUND_GRAB_A / k, 0.45)
-        return amp * math.exp(-REBOUND_ZETA * omega * t) * math.sin(omega * t)
+        m = m_rame + CABLE_KG_M * span / 3.0
+        return k, m
 
-    @staticmethod
-    def _cable_bounce_envelope(s_cabin: float, m_cabin: float,
-                               m_arriving: float, t: float) -> float:
-        """Enveloppe A·e^(−ζωt) de _cable_bounce : l'amplitude résiduelle
-        de l'oscillation à l'instant t (m), quel que soit le signe du sinus."""
-        span = max(LENGTH - s_cabin, 20.0)
-        k = CABLE_EA_N / span
-        omega = math.sqrt(k / max(m_cabin, 1.0))
-        amp = min(m_arriving * REBOUND_GRAB_A / k, 0.45)
-        return amp * math.exp(-REBOUND_ZETA * omega * t)
-
-    def rebound_envelopes_m(self) -> tuple:
-        """Amplitudes résiduelles du rebond du câble (m) : (rame pilotée à
-        son point d'arrêt, contrepoids à l'autre bout). Nulles tant que le
-        voyage n'est pas terminé (le rebond n'existe qu'après le serrage du
-        tambour à l'arrivée)."""
+    def _elastic_step(self, dt: float, a_poulie: float) -> None:
         st = self.state
         tr = st.train
-        if not st.finished:
-            return 0.0, 0.0
-        anchor = st.rebound_anchor_s
-        t_r = st.rebound_timer
+        if tr.cable_rupture:
+            # Plus de brin : la rame libérée part de sa position et de sa
+            # vitesse RÉELLES (poulie + écart), puis plus d'écart du tout.
+            if st.el_x1 != 0.0 or st.el_v1 != 0.0:
+                tr.s += st.el_x1
+                tr.v += st.el_v1
+                st.ghost_s += st.el_x2
+            st.el_x1 = st.el_v1 = st.el_x2 = st.el_v2 = 0.0
+            return
         m_ghost = TRAIN_EMPTY_KG + st.ghost_pax * PAX_KG
-        env_main = self._cable_bounce_envelope(anchor, tr.mass_kg, tr.mass_kg, t_r)
-        env_ghost = self._cable_bounce_envelope(
-            LENGTH - anchor, m_ghost, tr.mass_kg, t_r)
-        return env_main, env_ghost
+        # rame pilotée (repère s) et contrepoids (repère de SA voie, qui
+        # avance quand la poulie recule : accélération −a_poulie)
+        for i, (s_r, m_r, a_f) in enumerate(((tr.s, tr.mass_kg, a_poulie),
+                                             (st.ghost_s, m_ghost, -a_poulie))):
+            k, m = self._brin_k_m(s_r, m_r)
+            w = math.sqrt(k / m)
+            c = 2.0 * REBOUND_ZETA * math.sqrt(k * m)
+            x, v = (st.el_x1, st.el_v1) if i == 0 else (st.el_x2, st.el_v2)
+            n = max(1, int(math.ceil(w * dt / 0.15)))
+            h = dt / n
+            for _ in range(n):           # Euler semi-implicite, stable
+                v += (-k * x - c * v) / m * h - a_f * h
+                x += v * h
+            if i == 0:
+                st.el_x1, st.el_v1 = x, v
+            else:
+                st.el_x2, st.el_v2 = x, v
+
+    def car_s(self) -> float:
+        """Position RÉELLE de la rame pilotée (poulie + écart élastique)."""
+        return self.state.train.s + self.state.el_x1
+
+    def ghost_car_s(self) -> float:
+        """Position réelle du contrepoids."""
+        return self.state.ghost_s + self.state.el_x2
+
+    def rebound_envelopes_m(self) -> tuple:
+        """Amplitudes de l'oscillation élastique (m) : (rame pilotée,
+        contrepoids) — √(x² + (x'/ω)²), l'amplitude de l'oscillation en
+        cours quel que soit l'instant de la période."""
+        st = self.state
+        tr = st.train
+        out = []
+        m_ghost = TRAIN_EMPTY_KG + st.ghost_pax * PAX_KG
+        for s_r, m_r, x, v in ((tr.s, tr.mass_kg, st.el_x1, st.el_v1),
+                               (st.ghost_s, m_ghost, st.el_x2, st.el_v2)):
+            k, m = self._brin_k_m(s_r, m_r)
+            w = math.sqrt(k / m)
+            out.append(math.hypot(x, v / w))
+        return out[0], out[1]
 
     def rebound_envelope_m(self) -> float:
         """La plus grande des deux amplitudes résiduelles (m) : l'installation
@@ -7125,6 +7167,7 @@ class GameWidget(QWidget):
         st.limp_home = False
         st.limp_dir = 0
         st.rebound_timer = 0.0
+        st.el_x1 = st.el_v1 = st.el_x2 = st.el_v2 = 0.0   # rames au repos
         self._last_panne_kind = ""
         self._welcome_played = False
         self._brake_snd_played = False
@@ -9454,7 +9497,8 @@ class GameWidget(QWidget):
         # of platform visible forward (otherwise bumper + eye are the
         # exact same point and the platform is entirely behind us).
         EYE_BACK = 3.0
-        view_s = tr.s + (TRAIN_HALF - EYE_BACK) * tr.direction
+        # position RÉELLE de la rame : poulie + écart élastique du câble
+        view_s = tr.s + st.el_x1 + (TRAIN_HALF - EYE_BACK) * tr.direction
         # Distance from the driver's eye to the nearest tunnel end in the
         # travel direction. Past this distance there is a concrete bumper
         # wall — no more rings to draw.
