@@ -7,6 +7,37 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.15.55** — l'interface se règle sur l'écran détecté ; plein écran F11.
+- **« Tu peux t'adapter auto à l'affichage détecté ? »** : l'échelle ne
+  dépendait que de la taille de la fenêtre. Elle lit maintenant l'écran
+  où se trouve la fenêtre : diagonale réelle, définition et mise à
+  l'échelle du système (Windows 125 %…).
+  - De la diagonale, elle déduit la distance de lecture probable :
+    portable ≈ 50 cm, 24" ≈ 73 cm, 27" ≈ 80 cm, téléviseur ≈ 2 m. Elle
+    agrandit alors le pupitre pour que le texte garde la même taille
+    apparente qu'un 24" 1080p à 100 %. Exemples : 27" 1440p ×1,36,
+    34" 21:9 ×1,73, téléviseur 55" ×2,5.
+  - Elle ne descend jamais sous la mise à l'échelle choisie dans le
+    système. Si la taille physique est absente ou fantaisiste (machine
+    virtuelle, projecteur), l'ancienne règle s'applique.
+  - Changer d'écran en glissant la fenêtre, de définition ou de mise à
+    l'échelle est pris en compte tout de suite, vue 3D comprise.
+  - Le journal de bord affiche au premier départ l'écran détecté et
+    l'échelle retenue, par exemple « Écran 14″, 1920 × 1080, mise à
+    l'échelle 125 % → interface à 76 % (limitée par la place — F11 :
+    plein écran) ». Le rapport de problème contient aussi cette ligne.
+  - Menu Affichage → Taille de l'interface : « Automatique (selon l'écran
+    et la fenêtre) » ; plus petite ou plus grande restent possibles.
+- **F11 : plein écran** (aussi dans le menu Affichage), retenu d'une
+  session à l'autre. Sur un portable, la barre des tâches et la barre de
+  titre reviennent au pupitre et à la vue : environ 14 % de hauteur en
+  plus.
+- Vérifié : facteurs calculés par `audit_physique/echelle_ecran.sage`
+  (.txt) pour neuf écrans de référence, et repris dans
+  `tests/test_echelle_interface.py`. On y contrôle aussi la taille
+  physique absente, la ligne du journal, le changement d'écran en direct
+  et F11. Les 92 tests PC passent.
+
 **v1.15.54** — la fenêtre s'adapte à tous les formats d'écran.
 - **« La fenêtre s'adapte mal aux différents formats d'écran »** : le
   pupitre, le journal et les écrans d'aide sont dessinés en pixels fixes,
