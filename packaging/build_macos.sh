@@ -66,6 +66,13 @@ PID=$!
 sleep 30
 screencapture -x "dist_macos/capture-$ARCHI.png" || true
 kill "$PID" 2>/dev/null || true
+# l'application doit être vraiment fermée avant l'image disque : sinon
+# « hdiutil: create failed - Resource busy » (v1.15.55 et v1.15.56, Intel)
+for _ in $(seq 1 20); do
+  kill -0 "$PID" 2>/dev/null || break
+  sleep 1
+done
+kill -9 "$PID" 2>/dev/null || true
 
 # Image disque : l'app et un raccourci vers Applications (glisser-déposer)
 STAGE=build/dmg
@@ -74,5 +81,13 @@ mkdir -p "$STAGE"
 ditto "$APP" "$STAGE/Perce-Neige Simulator.app"
 ln -s /Applications "$STAGE/Applications"
 DMG="dist_macos/PerceNeigeSimulator-$VERSION-macos-$ARCHI.dmg"
-hdiutil create -volname "Perce-Neige Simulator" -srcfolder "$STAGE" -ov -format UDZO "$DMG"
+# trois essais : le volume peut rester occupé quelques secondes (indexation)
+for essai in 1 2 3; do
+  if hdiutil create -volname "Perce-Neige Simulator" -srcfolder "$STAGE" -ov -format UDZO "$DMG"; then
+    break
+  fi
+  [ "$essai" = 3 ] && exit 1
+  echo "hdiutil occupé, nouvel essai dans 15 s"
+  sleep 15
+done
 ls -lh "$DMG"
