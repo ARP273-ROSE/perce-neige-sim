@@ -170,6 +170,11 @@ func _apply(d: Dictionary) -> void:
 		var m: bool = _b(d, "muted", false)
 		if AudioServer.is_bus_mute(0) != m:
 			AudioServer.set_bus_mute(0, m)
+	# Volume général du sim PC (F7/F8) : gain linéaire sur le bus Master.
+	if d.has("volume"):
+		var db: float = linear_to_db(maxf(_f(d, "volume", 1.0), 0.0001))
+		if absf(AudioServer.get_bus_volume_db(0) - db) > 0.05:
+			AudioServer.set_bus_volume_db(0, db)
 	# Rame pilotée (1/2) choisie au menu du sim Python. Détermine la voie
 	# prise dans l'évitement Abt (gauche pour rame 1, droite pour rame 2),
 	# le brin de câble attaché à la cabine et les étiquettes R1/R2. Sans ce

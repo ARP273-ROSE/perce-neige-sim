@@ -756,6 +756,13 @@ func _process(delta: float) -> void:
 	# Câble rompu : brèche, bouts rétractés, câble retombé sur la longrine
 	track.update_cable_rupture(physics.cable_rupture, physics.s_render,
 		physics.direction, physics.tension_dan, delta, physics.v)
+	# Galets : tournent sous le câble (v / R de la bande), ralentissent
+	# seuls une fois le culot passé ; animés autour de la caméra
+	var s_cam: float = physics.s_render
+	if cabin != null and cabin.view_mode == Cabin.ViewMode.MACHINES:
+		s_cam = PNConstants.LENGTH - 20.0
+	track.update_galets_rames(physics.s_render, physics.ghost_s_render(), s_cam,
+		delta, physics.cable_rupture)
 	# Son : vue salle des machines → ambiance de la gare haute
 	if audio != null and cabin != null:
 		audio.machine_view = cabin.view_mode == Cabin.ViewMode.MACHINES

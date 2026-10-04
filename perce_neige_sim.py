@@ -31,6 +31,7 @@ import random
 import sys
 import threading
 import time
+import weakref
 from dataclasses import dataclass, field
 from datetime import datetime, time as dtime
 from pathlib import Path
@@ -99,7 +100,52 @@ if _QTMULTIMEDIA_OK:
         VOLUME_MIN = 1e-4
 
         def setVolume(self, volume: float) -> None:  # noqa: N802
-            super().setVolume(max(float(volume), self.VOLUME_MIN))
+            self._v_req = float(volume)
+            _SORTIES_AUDIO.add(self)
+            super().setVolume(max(self._v_req * _VOLUME_GENERAL[0], self.VOLUME_MIN))
+
+        def volume(self) -> float:  # noqa: D102
+            return getattr(self, "_v_req", super().volume())
+
+    class _AudioOutput(QAudioOutput):
+        """Sortie audio soumise au volume général (bouton à côté de SON).
+
+        Le code règle chaque sortie à son niveau propre (fondus, ambiances,
+        annonces) ; le gain général s'applique par-dessus, et volume() rend
+        le niveau DEMANDÉ : les fondus qui lisent puis réécrivent le volume
+        ne cumulent pas le gain d'une image à l'autre."""
+
+        def setVolume(self, volume: float) -> None:  # noqa: N802
+            self._v_req = float(volume)
+            _SORTIES_AUDIO.add(self)
+            super().setVolume(self._v_req * _VOLUME_GENERAL[0])
+
+        def volume(self) -> float:  # noqa: D102
+            return getattr(self, "_v_req", super().volume())
+
+
+# Volume général du simulateur (0 → 1, pas de 10 %) : gain = niveau²,
+# proche de la sensation d'intensité (50 % ≈ −12 dB).
+_VOLUME_GENERAL: list[float] = [1.0]
+_NIVEAU_VOLUME: list[float] = [1.0]
+_SORTIES_AUDIO: "weakref.WeakSet" = weakref.WeakSet()
+
+
+def regler_volume_general(niveau: float) -> float:
+    """Règle le volume général (0 → 1) et le réapplique à toutes les sorties."""
+    n = round(max(0.0, min(1.0, float(niveau))), 2)
+    _NIVEAU_VOLUME[0] = n
+    _VOLUME_GENERAL[0] = n * n
+    for sortie in list(_SORTIES_AUDIO):
+        try:
+            sortie.setVolume(sortie.volume())
+        except RuntimeError:          # objet Qt déjà détruit
+            pass
+    return n
+
+
+def niveau_volume_general() -> float:
+    return _NIVEAU_VOLUME[0]
 
 # Bridge optionnel vers le viewer Godot 3D (rendu FPV cockpit en F4).
 # Si le module n'est pas dispo ou Godot pas installé, le sim continue
@@ -4306,18 +4352,18 @@ class SoundSystem:
         # _amb_player   → ambient loop (motor hum / rumble while moving)
         try:
             self._player = QMediaPlayer()
-            self._audio = QAudioOutput()
+            self._audio = _AudioOutput()
             self._audio.setVolume(0.85)
             self._player.setAudioOutput(self._audio)
             self._player.mediaStatusChanged.connect(self._on_status)
             # FX player for buzzer
             self._fx_player = QMediaPlayer()
-            self._fx_audio = QAudioOutput()
+            self._fx_audio = _AudioOutput()
             self._fx_audio.setVolume(0.70)
             self._fx_player.setAudioOutput(self._fx_audio)
             # Horn player (dedicated — loops while key held)
             self._horn_player = QMediaPlayer()
-            self._horn_audio = QAudioOutput()
+            self._horn_audio = _AudioOutput()
             self._horn_audio.setVolume(0.70)
             self._horn_player.setAudioOutput(self._horn_audio)
             self._horn_player.setLoops(QMediaPlayer.Loops.Infinite)
@@ -4365,14 +4411,14 @@ class SoundSystem:
             # so they can overlap the announcement without ducking the
             # departure buzzer on _fx_player.
             self._door_player = QMediaPlayer()
-            self._door_audio = QAudioOutput()
+            self._door_audio = _AudioOutput()
             self._door_audio.setVolume(0.80)
             self._door_player.setAudioOutput(self._door_audio)
             self._door_loaded_path: str | None = None
             # Dedicated player for the passing-loop crossing whoosh —
             # one-shot, plays over the ambient loops without ducking.
             self._cross_player = QMediaPlayer()
-            self._cross_audio = QAudioOutput()
+            self._cross_audio = _AudioOutput()
             self._cross_audio.setVolume(1.0)
             self._cross_player.setAudioOutput(self._cross_audio)
             self._cross_loaded_path: str | None = None
@@ -4384,7 +4430,7 @@ class SoundSystem:
             self._mr_idle.setLoopCount(QSoundEffect.Loop.Infinite.value)
             self._mr_idle.setVolume(0.0)
             self._mr_run = QMediaPlayer()
-            self._mr_run_audio = QAudioOutput()
+            self._mr_run_audio = _AudioOutput()
             self._mr_run_audio.setVolume(0.0)
             self._mr_run.setAudioOutput(self._mr_run_audio)
             self._mr_run.setLoops(QMediaPlayer.Loops.Infinite)
@@ -6526,6 +6572,7 @@ class GameWidget(QWidget):
         Qt.Key.Key_L, Qt.Key.Key_N, Qt.Key.Key_Backspace,
         Qt.Key.Key_F1, Qt.Key.Key_F2, Qt.Key.Key_F3,
         Qt.Key.Key_F4, Qt.Key.Key_F5, Qt.Key.Key_F6,
+        Qt.Key.Key_F7, Qt.Key.Key_F8, Qt.Key.Key_F11,
         Qt.Key.Key_O,
         Qt.Key.Key_Plus, Qt.Key.Key_Equal, Qt.Key.Key_Minus,
     ))
@@ -6635,6 +6682,14 @@ class GameWidget(QWidget):
                 "Mute / unmute on-board announcements and ambient sound",
                 "Couper / rétablir les annonces et l'ambiance sonore",
             ),
+            int(K.Key_F7): (
+                "Lower the simulator's overall volume (−10 %) — or mouse wheel",
+                "Baisser le volume général du simulateur (−10 %) — ou molette",
+            ),
+            int(K.Key_F8): (
+                "Raise the simulator's overall volume (+10 %) — or mouse wheel",
+                "Monter le volume général du simulateur (+10 %) — ou molette",
+            ),
             int(K.Key_J): (
                 "TUNNEL — switch all the tunnel lighting off / on (only the headlights, stations and machine room stay lit)",
                 "TUNNEL — couper / rallumer tout l'éclairage du tunnel (restent les phares, les gares et la salle des machines)",
@@ -6688,6 +6743,12 @@ class GameWidget(QWidget):
             ])
         # Real on-board announcements
         self.sounds = SoundSystem(_resource_path(""))
+        # volume général retenu d'une session à l'autre (F7/F8, molette)
+        try:
+            regler_volume_general(float(_lire_prefs().get("volume_son", 1.0)))
+        except Exception:
+            pass
+        self._vol_rect: QRectF | None = None
         # Auto-exploitation mode (background operations simulator).
         # Disabled by default — toggled with the X key.
         self.auto_ops = AutoOps(self)
@@ -7452,6 +7513,8 @@ class GameWidget(QWidget):
                 state_dict = physics_to_state_dict(st.train, st)
                 # Relaye le mute N au viewer 3D (il a son propre audio).
                 state_dict["muted"] = bool(self.sounds.muted)
+                # … et le volume général (gain linéaire, bus Master)
+                state_dict["volume"] = round(_VOLUME_GENERAL[0], 4)
                 # Vue 3D (touche O) : 0 cabine, 1 extérieure orbitale,
                 # 2 salle des machines — le viewer bascule SUR
                 # CHANGEMENT ; angle à la souris (clic gauche maintenu),
@@ -8053,6 +8116,10 @@ class GameWidget(QWidget):
         k = ev.key()
         if k == Qt.Key.Key_F11 and hasattr(self.window(), "basculer_plein_ecran"):
             self.window().basculer_plein_ecran()
+            ev.accept()
+            return
+        if k in (Qt.Key.Key_F7, Qt.Key.Key_F8):
+            self.changer_volume(-0.1 if k == Qt.Key.Key_F7 else 0.1)
             ev.accept()
             return
         self._key_state.add(k)
@@ -8839,6 +8906,14 @@ class GameWidget(QWidget):
                 return
 
     def wheelEvent(self, ev: QWheelEvent) -> None:  # noqa: N802
+        # Molette sur la jauge du volume (à côté de SON) : ±10 % par cran.
+        vr = self._vol_rect
+        if vr is not None and vr.contains(ev.position() / self._ui_k()):
+            d = ev.angleDelta().y()
+            if d:
+                self.changer_volume(0.1 if d > 0 else -0.1)
+            ev.accept()
+            return
         # Mouse wheel zooms the side-view (F4 off). Ignored in cabin view.
         if self._cabin_view:
             return
@@ -8939,6 +9014,16 @@ class GameWidget(QWidget):
         """Taille de la toile virtuelle (arrondie au-dessus : couvre tout)."""
         return (math.ceil(self.width() / k - 1e-6),
                 math.ceil(self.height() / k - 1e-6))
+
+    def changer_volume(self, pas: float) -> None:
+        """Volume général ±10 % (F7/F8, boutons − / + à côté de SON,
+        molette sur la jauge) ; retenu dans les réglages."""
+        n = regler_volume_general(niveau_volume_general() + pas)
+        _ecrire_prefs({"volume_son": n})
+        add_event(self.state, "volume",
+                  f"Overall volume {n * 100:.0f} %",
+                  f"Volume général {n * 100:.0f} %", "info")
+        self.update()
 
     def set_taille_ui(self, f: float) -> None:
         self._taille_ui = f
@@ -13301,20 +13386,22 @@ class GameWidget(QWidget):
         self._hit_zones.append(
             (QRectF(col1w, row3, btn_w2, btn_h), int(Qt.Key.Key_O), False)
         )
-        # Row 4 : système — son, aide
-        self._draw_button(p, col0, row4, btn_w2, btn_h,
+        # Row 4 : système — son, volume général (demande du 05/10 : « un
+        # bouton à côté du son pour régler le volume général »), aide
+        self._draw_button(p, col0, row4, btn_w, btn_h,
                           T("SOUND [N]", "SON [N]"),
                           not self.sounds.muted, QColor(160, 220, 255),
                           QColor(10, 30, 60))
         self._hit_zones.append(
-            (QRectF(col0, row4, btn_w2, btn_h), int(Qt.Key.Key_N), False)
+            (QRectF(col0, row4, btn_w, btn_h), int(Qt.Key.Key_N), False)
         )
-        self._draw_button(p, col1w, row4, btn_w2, btn_h,
+        self._draw_volume(p, QRectF(col1, row4, btn_w, btn_h))
+        self._draw_button(p, col2, row4, btn_w, btn_h,
                           T("HELP [F1]", "AIDE [F1]"),
                           self._show_help, QColor(230, 230, 200),
                           QColor(50, 50, 40))
         self._hit_zones.append(
-            (QRectF(col1w, row4, btn_w2, btn_h), int(Qt.Key.Key_F1), False)
+            (QRectF(col2, row4, btn_w, btn_h), int(Qt.Key.Key_F1), False)
         )
 
         # Info block (compact, left column of rows below the buttons).
@@ -13406,6 +13493,37 @@ class GameWidget(QWidget):
             p.setPen(_cached_pen(COLOR_TEXT if on else COLOR_TEXT_DIM))
             p.drawText(QRectF(x, ly, 64, 22),
                        int(Qt.AlignmentFlag.AlignCenter), name)
+
+    def _draw_volume(self, p: QPainter, r: QRectF) -> None:
+        """Jauge du volume général : − [niveau] +. Les deux pavés passent
+        par F7/F8 (mêmes zones cliquables que les autres boutons)."""
+        self._vol_rect = QRectF(r)
+        p.setBrush(QBrush(QColor(28, 32, 42)))
+        p.setPen(_cached_pen(COLOR_HUD_BORDER, 1))
+        p.drawRoundedRect(r, 6, 6)
+        pw = 20.0
+        moins = QRectF(r.x() + 3, r.y() + 3, pw, r.height() - 6)
+        plus = QRectF(r.right() - 3 - pw, r.y() + 3, pw, r.height() - 6)
+        self._draw_touch_button(p, moins, "−", QColor(120, 180, 255), 12)
+        self._draw_touch_button(p, plus, "+", QColor(120, 180, 255), 12)
+        self._hit_zones.append((moins, int(Qt.Key.Key_F7), False))
+        self._hit_zones.append((plus, int(Qt.Key.Key_F8), False))
+        n = niveau_volume_general()
+        barre = QRectF(moins.right() + 4, r.y() + 6,
+                       plus.x() - moins.right() - 8, r.height() - 12)
+        p.setBrush(QBrush(QColor(18, 22, 30)))
+        p.setPen(_cached_pen(COLOR_HUD_BORDER, 1))
+        p.drawRoundedRect(barre, 3, 3)
+        coupe = self.sounds.muted
+        if n > 0.0:
+            p.setBrush(QBrush(QColor(90, 100, 120) if coupe else QColor(120, 190, 255)))
+            p.setPen(Qt.PenStyle.NoPen)
+            p.drawRoundedRect(QRectF(barre.x() + 2, barre.y() + 2,
+                                     (barre.width() - 4) * n, barre.height() - 4), 2, 2)
+        p.setPen(_cached_pen(COLOR_TEXT))
+        p.setFont(_cached_font("Consolas", 9, QFont.Weight.Bold))
+        p.drawText(barre, int(Qt.AlignmentFlag.AlignCenter),
+                   f"{n * 100:.0f} %")
 
     def _draw_touch_button(
         self,
@@ -14368,6 +14486,7 @@ class GameWidget(QWidget):
                                        "retour à l'écran titre")),
                 ("F1", T("this screen", "cet écran")),
                 ("F11", T("full screen / window", "plein écran / fenêtre")),
+                ("F7 / F8", T("overall volume − / +", "volume général − / +")),
                 ("F3", T("the real machine + links", "la vraie machine + liens")),
                 ("F5", T("auto-operation trip log", "journal des trajets auto")),
                 ("F6", T("download PDF manual + guide",
