@@ -78,6 +78,7 @@ challenge_best.json
 # chaque plantage viendrait salir « git status ».
 _rapports/
 reglages_rapports.json
+reglages.json
 _crash_natif.log
 _crash_report.json
 dist/

@@ -7,6 +7,31 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.15.54** — la fenêtre s'adapte à tous les formats d'écran.
+- **« La fenêtre s'adapte mal aux différents formats d'écran »** : le
+  pupitre, le journal et les écrans d'aide sont dessinés en pixels fixes,
+  et l'interface exigeait au moins 1280 × 900. Un portable 1080p réglé à
+  125 % n'offre que 1536 × 760 : la fenêtre sortait de l'écran (journal
+  coupé), et le bas du pupitre (Temps, Confort) passait sous les voyants.
+  - toute l'interface est maintenant dessinée à l'échelle de la fenêtre,
+    d'un seul bloc. Elle rétrécit quand la place manque et grandit sur
+    les très grands écrans. La vue (3D ou profil) prend la largeur en
+    plus : 16:10, 16:9, 21:9 ultra-large ;
+  - les clics, les infobulles et la fenêtre 3D embarquée suivent la même
+    échelle ;
+  - la fenêtre démarre à une taille qui tient sur l'écran, ou agrandie si
+    l'écran est petit. Elle retrouve ensuite sa taille et sa place d'une
+    session à l'autre ;
+  - nouveau menu **Affichage → Taille de l'interface** : plus petite (plus
+    de place pour la vue), normale, plus grande, très grande ;
+  - pupitre : les libellés Consigne, Frein et Puissance ne sont plus
+    rognés par leurs barres. L'allongement du câble passe dans le cadran,
+    sous « daN », au lieu de déborder du cercle.
+- Vérifié : `tests/test_echelle_interface.py` (13 tests) contrôle que tout
+  tient à sept formats, du 1024 × 700 au 4K, ainsi que les clics, la
+  place de la 3D, le menu et la mémoire de la fenêtre. Captures relues
+  aux formats portable, petit écran et 21:9. Les 79 tests PC passent.
+
 **v1.15.53** — la 3D se règle sur la machine et s'ajuste en direct
 contre les saccades.
 - **« Détecter la config du PC, CPU, cœurs, GPU, RAM… et adapter les
