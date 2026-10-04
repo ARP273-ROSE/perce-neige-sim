@@ -3,6 +3,8 @@
 #   xvfb-run -a godot --path godot_project --rendering-driver opengl3 \
 #     --resolution 1376x1032 -s shot_voie.gd -- [s=1000] [incl=28] [noir] préfixe
 # `noir` : éclairage du tunnel coupé (seuls les phares : reflets des numéros).
+# (Ajouter --quality=high après « -- » : sinon la qualité adaptative —
+#  PerfManager — baisse le rendu en rendu logiciel.)
 extends SceneTree
 
 var _main: Node = null
