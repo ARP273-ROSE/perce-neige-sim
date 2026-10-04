@@ -216,9 +216,12 @@ def test_soundeffect_jamais_a_volume_nul():
     app = QApplication.instance() or QApplication(sys.argv)  # noqa: F841
     fx = pn._SoundEffect()
     fx.setVolume(0.0)
-    assert 0.0 < fx.volume() <= 2e-4
+    # niveau effectif côté Qt (volume() rend le niveau demandé depuis
+    # le volume général du 05/10/2026)
+    assert 0.0 < QSoundEffect.volume(fx) <= 2e-4
     fx.setVolume(0.5)
-    assert abs(fx.volume() - 0.5) < 1e-6
+    assert abs(QSoundEffect.volume(fx) - 0.5) < 1e-6
+    assert fx.volume() == 0.5
 
 
 def test_boucle_de_croisiere_jamais_nulle_en_deceleration(fenetre):
@@ -322,3 +325,69 @@ def test_qualite_3d_menu_et_flux(fenetre, tmp_path):
     cmd = b._resolve_command() or []
     assert not cmd or "--quality=low" in cmd
     win._choisir_qualite_3d("auto")
+
+
+def test_volume_general_f7_f8_et_sorties(fenetre, tmp_path):
+    """Volume général (05/10/2026) : F7/F8 ±10 %, gain niveau² appliqué
+    PAR-DESSUS le niveau propre de chaque sortie, retenu dans les réglages."""
+    from PyQt6.QtMultimedia import QAudioOutput, QSoundEffect
+    from PyQt6.QtCore import Qt
+    from PyQt6.QtTest import QTest
+    win, _ = fenetre
+    g = win.game
+    snd = g.sounds
+    pn._persistent_data_dir = lambda: tmp_path
+    pn.regler_volume_general(1.0)
+    out = snd._audio
+    demande = out.volume()
+    assert QAudioOutput.volume(out) == pytest.approx(demande, abs=1e-3)
+    QTest.keyClick(g, Qt.Key.Key_F7)
+    QTest.keyClick(g, Qt.Key.Key_F7)
+    assert pn.niveau_volume_general() == pytest.approx(0.8)
+    assert pn._lire_prefs().get("volume_son") == pytest.approx(0.8)
+    # la sortie garde son niveau demandé ; le gain 0,8² s'applique dessus
+    assert out.volume() == pytest.approx(demande, abs=1e-6)
+    assert QAudioOutput.volume(out) == pytest.approx(demande * 0.64, abs=2e-3)
+    amb = snd._amb_player
+    amb.setVolume(0.5)
+    assert QSoundEffect.volume(amb) == pytest.approx(0.5 * 0.64, abs=2e-3)
+    # un fondu qui relit puis réécrit le volume ne cumule pas le gain
+    for _ in range(5):
+        amb.setVolume(amb.volume())
+    assert QSoundEffect.volume(amb) == pytest.approx(0.32, abs=2e-3)
+    # à zéro, les QSoundEffect restent au plancher (bogue Qt du volume nul)
+    pn.regler_volume_general(0.0)
+    assert QSoundEffect.volume(amb) >= pn._SoundEffect.VOLUME_MIN * 0.99
+    QTest.keyClick(g, Qt.Key.Key_F8)
+    assert pn.niveau_volume_general() == pytest.approx(0.1)
+    pn.regler_volume_general(1.0)
+    assert QSoundEffect.volume(amb) == pytest.approx(0.5, abs=2e-3)
+
+
+def test_volume_jauge_cliquable(fenetre, tmp_path):
+    from PyQt6.QtCore import Qt
+    win, _ = fenetre
+    g = win.game
+    pn._persistent_data_dir = lambda: tmp_path
+    pn.regler_volume_general(0.5)
+    g._show_help = False
+    if g.state.mode == pn.MODE_TITLE:
+        g.new_trip()
+    g.grab()
+    zones = {int(qk): rect for rect, qk, _h in g._hit_zones}
+    assert int(Qt.Key.Key_F7) in zones and int(Qt.Key.Key_F8) in zones
+    appuis = []
+    vrai = g._sim_press
+    g._sim_press = lambda qk: (appuis.append(int(qk)), vrai(qk))
+    try:
+        from PyQt6.QtTest import QTest
+        from PyQt6.QtCore import QPoint
+        k = g._ui_k()
+        c = zones[int(Qt.Key.Key_F8)].center()
+        QTest.mouseClick(g, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier,
+                         QPoint(round(c.x() * k), round(c.y() * k)))
+    finally:
+        g._sim_press = vrai
+    assert appuis == [int(Qt.Key.Key_F8)]
+    assert pn.niveau_volume_general() == pytest.approx(0.6)
+    pn.regler_volume_general(1.0)
