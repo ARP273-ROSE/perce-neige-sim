@@ -197,6 +197,11 @@ def _memoire_vive_go() -> float:
             etat.dwLength = ctypes.sizeof(_Etat)
             ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(etat))
             return round(etat.ullTotalPhys / 1e9, 1)
+        if sys.platform == 'darwin':
+            import subprocess
+            octets = subprocess.run(['sysctl', '-n', 'hw.memsize'], capture_output=True,
+                                    text=True, timeout=2).stdout.strip()
+            return round(int(octets) / 1e9, 1)
         with open('/proc/meminfo', encoding='utf-8') as f:
             for ligne in f:
                 if ligne.startswith('MemTotal:'):

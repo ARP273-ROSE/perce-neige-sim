@@ -21,6 +21,7 @@ Author : ARP273-ROSE (original TI-Basic FUNIC), PyQt6 port 2026.
 
 from __future__ import annotations
 
+import json
 import locale
 import math
 import os
@@ -258,6 +259,28 @@ def _persistent_data_dir() -> Path:
     except Exception:
         # Repli : à côté de l'exe (au moins ça marche, même si volatile).
         return _writable_dir()
+
+
+# Préférences de l'utilisateur (qualité 3D…), dans le dossier qui survit aux
+# mises à jour.
+QUALITES_3D = ("auto", "high", "medium", "low")
+
+
+def _lire_prefs() -> dict:
+    try:
+        return json.loads((_persistent_data_dir() / "reglages.json").read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def _ecrire_prefs(maj: dict) -> None:
+    try:
+        d = _lire_prefs()
+        d.update(maj)
+        (_persistent_data_dir() / "reglages.json").write_text(
+            json.dumps(d, indent=2, ensure_ascii=False), encoding="utf-8")
+    except Exception:
+        pass
 
 # ---------------------------------------------------------------------------
 # I18N — bilingual FR / EN, auto-detected from system locale
@@ -6481,6 +6504,10 @@ class GameWidget(QWidget):
         super().__init__(parent)
         self.state = GameState()
         self.physics = Physics(self.state)
+        # Qualité de la vue 3D (menu Affichage) : « auto » = la 3D détecte la
+        # machine et s'ajuste en direct (PerfManager côté Godot).
+        q = _lire_prefs().get("qualite_3d", "auto")
+        self._qualite_3d = q if q in QUALITES_3D else "auto"
         self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.setMinimumSize(1280, 900)
         self.timer = QTimer(self)
@@ -6693,6 +6720,7 @@ class GameWidget(QWidget):
                 bundled_dir=bundled_dir,
                 dev_project_dir=dev_project,
             )
+            self._godot_bridge.quality = self._qualite_3d
         # Side-view zoom factor. 1.0 = default 850 m window, 0.35 ≈ ~300 m
         # tight, 4.2 ≈ full 3491 m trip. Driver adjusts with +/- or wheel.
         self._profile_zoom = 1.0
@@ -7386,6 +7414,7 @@ class GameWidget(QWidget):
                 vue3d = int(getattr(self, "_godot_view3d", 0))
                 state_dict["view3d"] = vue3d
                 state_dict["ext_view"] = vue3d == 1
+                state_dict["qualite_3d"] = self._qualite_3d
                 self._godot_bridge.send_state(state_dict)
             self._autopilot_tick(dt)
             self._advance_fault_phase(dt)
@@ -14551,6 +14580,10 @@ class MainWindow(QMainWindow):
             self.setWindowIcon(QIcon(str(ico)))
         # Help menu — auto-update + bug report entries
         try:
+            self._install_display_menu()
+        except Exception:
+            pass
+        try:
             self._install_help_menu()
         except Exception:
             pass
@@ -14597,6 +14630,36 @@ class MainWindow(QMainWindow):
 
     def _tr(self, en: str, fr: str) -> str:
         return fr if self._lang() == "fr" else en
+
+    def _install_display_menu(self) -> None:
+        """Affichage → Qualité 3D : automatique (détection de la machine +
+        ajustement en direct contre les saccades), ou forcée."""
+        from PyQt6.QtGui import QActionGroup
+        bar = self.menuBar()
+        menu = bar.addMenu(self._tr("&Display", "A&ffichage"))
+        sous = menu.addMenu(self._tr("3D quality", "Qualité 3D"))
+        groupe = QActionGroup(self)
+        groupe.setExclusive(True)
+        libelles = {
+            "auto": ("Automatic (adapts to this computer)",
+                     "Automatique (s'adapte à cet ordinateur)"),
+            "high": ("High", "Haute"),
+            "medium": ("Medium", "Moyenne"),
+            "low": ("Low", "Basse"),
+        }
+        for q in QUALITES_3D:
+            act = sous.addAction(self._tr(*libelles[q]))
+            act.setCheckable(True)
+            act.setChecked(self.game._qualite_3d == q)
+            groupe.addAction(act)
+            act.triggered.connect(lambda _on=False, q=q: self._choisir_qualite_3d(q))
+
+    def _choisir_qualite_3d(self, q: str) -> None:
+        self.game._qualite_3d = q
+        _ecrire_prefs({"qualite_3d": q})
+        if self.game._godot_bridge is not None:
+            self.game._godot_bridge.quality = q     # au prochain lancement
+        # (la vue 3D en cours la reçoit dans le flux d'état, sans relancer)
 
     def _install_help_menu(self) -> None:
         bar = self.menuBar()
@@ -15049,6 +15112,7 @@ class MainWindow(QMainWindow):
             reporting.definir_consentement(True)
         rapport = reporting.envoyer("manuel", description=description,
                                     journal=journal, mode=str(self.game.state.run_mode),
+                                    perf_3d=self._lignes_perf_3d(),
                                     trajet=f"s={self.game.state.train.s:.0f} v={self.game.state.train.v:.1f}")
         if accord is not True:
             reporting.definir_consentement(bool(accord))
@@ -15063,6 +15127,17 @@ class MainWindow(QMainWindow):
             + ("\n\n" + self._tr("A copy was left on your Desktop: ",
                                    "Une copie a été déposée sur votre Bureau : ")
                + chemin.name if chemin else ""))
+
+    def _lignes_perf_3d(self) -> str:
+        """Dernières lignes « [Perf] » du journal du viewer 3D : machine
+        détectée, crans de qualité, saccades mesurées."""
+        try:
+            chemin = self.game._godot_bridge.logfile
+            lignes = [l for l in Path(chemin).read_text(encoding="utf-8", errors="replace").splitlines()
+                      if "[Perf]" in l]
+            return "\n".join(lignes[-12:])
+        except Exception:
+            return ""
 
     def _manual_bug_report(self) -> None:
         try:
