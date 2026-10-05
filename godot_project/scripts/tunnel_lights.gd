@@ -31,6 +31,8 @@ var _lights: Array = []   # paires [OmniLight3D, s_m] pour le culling
 # les éclairages du tunnel ») : éteint les sources ET le tube émissif.
 var enabled: bool = true
 var _neon_mat_on: StandardMaterial3D = null
+var _neon_mat_off: StandardMaterial3D = null
+var _tubes_allumes: Array[MeshInstance3D] = []
 
 
 func _ready() -> void:
@@ -67,6 +69,7 @@ func _populate() -> void:
 	neon_mat_off.albedo_color = Color(0.45, 0.47, 0.50)
 	neon_mat_off.roughness = 0.55
 	neon_mat_off.metallic = 0.2
+	_neon_mat_off = neon_mat_off
 
 	var neon_mesh: BoxMesh = BoxMesh.new()
 	neon_mesh.size = Vector3(0.05, 0.08, 1.6)    # tube horizontal 1.6 m
@@ -104,30 +107,43 @@ func _populate() -> void:
 const LIGHT_FADE_M: float = 60.0
 
 func update_light_culling(s_cabin: float) -> void:
-	var cull: float = LIGHT_CULL_DIST_WEB if OS.has_feature("web") else LIGHT_CULL_DIST
+	var web: bool = OS.has_feature("web")
+	var cull: float = LIGHT_CULL_DIST_WEB if web else LIGHT_CULL_DIST
 	var s_ghost: float = PNConstants.LENGTH - s_cabin
 	for entry in _lights:
 		var light: OmniLight3D = entry[0]
 		var ls: float = entry[1]
-		var d: float = minf(absf(ls - s_cabin), absf(ls - s_ghost))
+		# Web : autour de la rame pilotée seulement. Le rendu Compatibility
+		# ne dessine qu'un nombre limité de lampes par image et laisse
+		# tomber les autres dans un ordre arbitraire : en seconde moitié de
+		# montée, les néons de l'autre rame (créés avant, plus bas)
+		# prenaient la place de ceux de la cabine → tunnel noir (retour
+		# iPad du 05/10/2026). Elle est à plus d'un kilomètre : ses néons
+		# ne servent pas en vue cabine.
+		var d: float = absf(ls - s_cabin) if web else minf(absf(ls - s_cabin), absf(ls - s_ghost))
 		var k: float = clampf((cull - d) / LIGHT_FADE_M, 0.0, 1.0)
-		light.visible = enabled and k > 0.01
+		light.visible = k > 0.01
 		if light.visible:
-			light.light_energy = light_energy * k
+			light.light_energy = light_energy * k if enabled else 0.0
 
 
 ## Allume ou coupe tout l'éclairage du tunnel : sources lumineuses ET
-## tubes (le matériau émissif est partagé par tous les tubes allumés).
+## tubes. Retour d'essai iPad du 05/10/2026 : « tu éteins le tunnel puis tu
+## le rallumes et ça reste tout sombre » (non reproduit sous Chromium ni
+## WebKit). L'ancien interrupteur cachait les ~200 lampes et changeait le
+## mode d'ombrage du matériau des tubes : deux changements qui imposent au
+## rendu web de recompiler des shaders à chaud. Ici rien ne change de
+## nature : les lampes restent en place à énergie nulle, et les tubes
+## prennent le matériau des tubes éteints, déjà compilé au chargement (la
+## moitié des tubes l'utilise).
 func set_enabled(on: bool) -> void:
 	enabled = on
-	if _neon_mat_on != null:
-		_neon_mat_on.emission_enabled = on
-		_neon_mat_on.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED if on \
-			else BaseMaterial3D.SHADING_MODE_PER_PIXEL
-		_neon_mat_on.albedo_color = Color(0.9, 0.95, 1.0) if on else Color(0.45, 0.47, 0.50)
-	if not on:
-		for entry in _lights:
-			(entry[0] as OmniLight3D).visible = false
+	for tube in _tubes_allumes:
+		tube.set_surface_override_material(0, _neon_mat_on if on else _neon_mat_off)
+	for entry in _lights:
+		var light: OmniLight3D = entry[0]
+		if light.visible and not on:
+			light.light_energy = 0.0
 
 
 func _add_neon(s: float, mesh: BoxMesh, neon_mat: StandardMaterial3D,
@@ -163,6 +179,8 @@ func _add_neon(s: float, mesh: BoxMesh, neon_mat: StandardMaterial3D,
 	var neon: MeshInstance3D = MeshInstance3D.new()
 	neon.mesh = mesh
 	neon.set_surface_override_material(0, neon_mat)
+	if lit:
+		_tubes_allumes.append(neon)
 	neon.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(neon)
 	# Positionner APRÈS add_child (global_transform nécessite d'être dans l'arbre)
