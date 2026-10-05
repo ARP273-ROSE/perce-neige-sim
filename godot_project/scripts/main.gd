@@ -197,9 +197,11 @@ func set_tunnel_lights(on: bool) -> void:
 		_env.background_energy_multiplier = 1.0 if on else 0.0
 		_env.sdfgi_energy = 1.0 if on else 0.0
 		_env.volumetric_fog_gi_inject = 0.5 if on else 0.0
-		# reflets spéculaires du ciel (pare-brise, rails, parois lisses)
-		_env.reflected_light_source = (Environment.REFLECTION_SOURCE_BG if on
-			else Environment.REFLECTION_SOURCE_DISABLED)
+		# reflets spéculaires du ciel (pare-brise, rails, parois lisses) :
+		# ciel à énergie nulle plutôt que source de reflets désactivée —
+		# même effet, sans changer les shaders à chaud (iPad, 05/10/2026)
+		if _env.sky != null and _env.sky.sky_material is PhysicalSkyMaterial:
+			(_env.sky.sky_material as PhysicalSkyMaterial).energy_multiplier = 1.0 if on else 0.0
 	print("[Tunnel] éclairage %s" % ["allumé" if on else "coupé"])
 
 

@@ -7,6 +7,33 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.15.57** — tunnel de nouveau éclairé dans la PWA.
+- **« Dans la PWA l'éclairage du tunnel n'est plus comme avant, c'est
+  tout sombre »**, au moins dans la seconde moitié de la montée, en
+  coupant puis en rallumant le tunnel (capture iPad du 05/10, 2 830 m) :
+  - cause : le rendu web (Compatibility) ne dessine qu'un nombre limité
+    de lampes par image (32 par défaut) et laisse tomber les autres dans
+    un ordre arbitraire. Autour des deux rames, il y avait déjà 32 néons,
+    plus les lampes des gares, de la salle des machines et de la cabine.
+    En seconde moitié de montée, les néons de l'autre rame, plus bas,
+    prenaient la place de ceux de la cabine ;
+  - mesure dans la PWA (Chromium sur GPU), phares coupés et tunnel
+    allumé : 15/255 de luminance à 2 730 m, contre 50 à 80 maintenant.
+    Les phares masquaient le défaut dans les essais précédents ;
+  - le web garde maintenant les néons autour de la rame pilotée
+    seulement (l'autre rame est à plus d'un kilomètre). Le quota passe à
+    128 lampes (`limits/opengl/max_renderable_lights`), ce qui sert aussi
+    aux PC en rendu OpenGL. Image un peu plus légère : 3,4 à 4,2 ms en
+    médiane, au lieu de 4,0 à 4,8 ms ;
+  - interrupteur J : les lampes restent en place à énergie nulle et les
+    tubes prennent le matériau des tubes éteints. On ne cache plus les
+    lampes et on ne change plus le mode d'ombrage, ce qui obligeait le
+    rendu web à recompiler des shaders à chaud. Le ciel s'éteint par son
+    énergie, au lieu de désactiver la source des reflets. Le noir total
+    est conservé : 2,2/255 sur PC avec tout éteint, 45 tunnel allumé.
+- Vérifié : coupé puis rallumé à 1 300 et 2 700 m dans Chromium et WebKit
+  (moteur de Safari), bancs 3D, galets, Défi, rupture, aiguillage, perf.
+
 **v1.15.56** — galets de ligne fidèles et qui tournent, supports redessinés
 entre les traverses, câble accroché au milieu de la voiture amont par un
 culot, volume général.
