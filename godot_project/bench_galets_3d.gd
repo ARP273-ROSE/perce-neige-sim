@@ -35,6 +35,19 @@ func _galet_apres(tr: TrackBuilder, side_i: int, s: float) -> int:
 	return best
 
 
+# Point du tronçon libre à l'abscisse s (comme TrackBuilder._update_culots).
+func _point_amorce(tun, pr: Dictionary, s: float) -> Vector3:
+	var d: float = float(pr.s1) - float(pr.att)
+	var x: float = clampf(s - float(pr.att), 0.0, d)
+	var xs: Array = pr.x
+	var i: int = clampi(xs.bsearch(x) - 1, 0, xs.size() - 2)
+	var u: float = clampf((x - float(xs[i])) / maxf(float(xs[i + 1]) - float(xs[i]), 1e-9), 0.0, 1.0)
+	var lat: float = lerpf(float(pr.lat[i]), float(pr.lat[i + 1]), u)
+	var y: float = lerpf(float(pr.y[i]), float(pr.y[i + 1]), u)
+	var bx: Basis = tun.transform_at(float(pr.att) + x).basis
+	return (pr.p_att as Vector3).lerp(pr.p_r1, x / d) + bx.x * lat + bx.y * y
+
+
 func _tick() -> void:
 	_f += 1
 	if _f < 5:
@@ -62,15 +75,13 @@ func _tick() -> void:
 		"a = %.0f m, x0 continu = %.1f m, galet R1 à %.1f m du culot" % [ch.x, ch.y, d_r1])
 	var y0: float = TrackBuilder.chainette_y(0.0, d_r1, TrackBuilder.CULOT_DY, ch.x)
 	var y1: float = TrackBuilder.chainette_y(d_r1, d_r1, TrackBuilder.CULOT_DY, ch.x)
-	var pente_r1: float = (TrackBuilder.chainette_y(d_r1, d_r1, TrackBuilder.CULOT_DY, ch.x)
-		- TrackBuilder.chainette_y(d_r1 - 0.01, d_r1, TrackBuilder.CULOT_DY, ch.x)) / 0.01
-	# portée suivante (même niveau) : pente au départ −L/2a
 	var l_suiv: float = float(tr.galet_etat(_galet_apres(tr, -1, pose + 0.01)).s) - pose
-	var coude: float = rad_to_deg(absf(pente_r1 - (-l_suiv / (2.0 * ch.x))))
-	# appuis discrets : le galet R1 dévie un peu le câble (0,2 à 0,6°, sur
-	# un galet de 25 cm de rayon : invisible)
-	_check("chaînette en cosh : 12 cm au culot, 0 sur R1, sans angle visible",
-		absf(y0 - TrackBuilder.CULOT_DY) < 1e-5 and absf(y1) < 1e-5 and coude < 0.8,
+	# appuis discrets : le galet R1 dévie un peu le câble, VERS LE BAS (il
+	# le porte), comme n'importe quel galet de la ligne (L/a ≈ 0,55°)
+	var k_r1: int = tr.premier_appui(-1, att, ch.x)
+	var coude: float = rad_to_deg(tr.coude_appui(-1, att, tr.strand_point(-1, att), ch.x, k_r1))
+	_check("chaînette en cosh : 12 cm au culot, 0 sur R1, coude vers le bas",
+		absf(y0 - TrackBuilder.CULOT_DY) < 1e-5 and absf(y1) < 1e-5 and coude <= 0.0 and coude > -0.8,
 		"y(0) = %.4f m, y(D) = %.5f m, coude sur R1 %.2f°" % [y0, y1, coude])
 	var l_mi: float = l_suiv
 	var fl: float = tr.fleche(-1, pose + l_mi * 0.5)
@@ -184,33 +195,128 @@ func _tick() -> void:
 	var pire_lat: float = 0.0
 	var h_min: float = INF
 	var dev_ok: bool = true
+	var coude_haut: float = -INF
+	var s_coude_haut: float = 0.0
+	var depasse: float = -INF
 	for side_i in [-1, 1]:
 		var s_r: float = 20.0
 		while s_r < 3457.0:
 			var prof: Dictionary = tr.amorce_profil(side_i, s_r, 300)
 			var att3: float = prof.att
 			var d3: float = float(prof.s1) - att3
+			if float(prof.s1) < PNConstants.LENGTH - 1.0:
+				var k3: int = tr.premier_appui(side_i, att3, float(prof.a))
+				var c3: float = rad_to_deg(tr.coude_appui(side_i, att3, prof.p_att, float(prof.a), k3))
+				if c3 > coude_haut:
+					coude_haut = c3
+					s_coude_haut = s_r
 			var vs: Array = tr.strand_vertices(side_i)
 			for j in range(1, vs.size() - 1):
 				var xv: float = float(vs[j].s) - att3
 				if xv <= 0.3 or xv >= d3 - 0.01:
 					continue
-				var i: int = clampi(int(round(xv / d3 * 300.0)), 0, 300)
 				var bx: Basis = tun.transform_at(vs[j].s).basis
-				var pp: Vector3 = (prof.p_att as Vector3).lerp(prof.p_r1, float(prof.x[i]) / d3) \
-					+ bx.x * float(prof.lat[i]) + bx.y * float(prof.y[i])
+				var pp: Vector3 = _point_amorce(tun, prof, float(vs[j].s))
 				var dp: Vector3 = pp - (vs[j].p as Vector3)
 				var hy: float = dp.dot(bx.y)
 				h_min = minf(h_min, hy)
+				# entre les joues (repère du galet, incliné en courbe) et hors
+				# de la poulie de déviation ; au décollage, le jeu croît en
+				# √h : 0,3 mm de marge sur h
+				var hors: float = tr.penetration_galet(side_i, j, dp, 0.0003)
+				depasse = maxf(depasse, hors)
 				if hy < TrackBuilder.Y_HORS_GORGE:
 					pire_lat = maxf(pire_lat, absf(dp.dot(bx.x)))
-					if sts[j - 1].sheave and absf(dp.dot(bx.x)) > 0.01:
-						dev_ok = false
+				if sts[j - 1].sheave and hors > 0.001:
+					dev_ok = false
 			s_r += 2.0
-	_check("virages et évitement : câble dans la gorge des galets survolés bas", pire_lat < 0.01,
-		"écart latéral maxi %.1f mm" % (pire_lat * 1000.0))
+	_check("virages et évitement : câble entre les joues des galets survolés", depasse < 0.001,
+		"pénétration maxi dans une joue ou une poulie %+.1f mm ; écart au centre maxi %.1f mm sous les lèvres" \
+		% [depasse * 1000.0, pire_lat * 1000.0])
 	_check("aucun galet traversé par le tronçon libre", h_min > -0.002,
 		"hauteur mini au-dessus d'un galet survolé %.1f mm" % (h_min * 1000.0))
 	_check("galets de déviation suivis", dev_ok, "")
+	# un galet porte, il ne retient pas : au premier appui, le câble plie
+	# vers le bas (ou à peine : 0,05° au plus, cas limite d'un galet
+	# intermédiaire qui dépasse de la chaînette)
+	_check("décollage sans coude vers le haut (premier galet)", coude_haut < 0.02,
+		"coude le plus « vers le haut » %+.3f° (rame à %.0f m)" % [coude_haut, s_coude_haut])
+	# 5 bis. En marche, le tronçon libre se déforme sans saut : un même
+	#    point du câble (même abscisse) avance d'une position de la rame à
+	#    l'autre (0,5 m) d'un pas comparable à ses voisins. Un saut de J
+	#    donne un pas de J entre deux pas ordinaires ; un câble qui touche
+	#    une joue et change de direction (physique) n'en donne pas.
+	var saut: float = 0.0
+	var s_saut: float = 0.0
+	for side_i in [-1, 1]:
+		var hist: Array = []
+		var s_r: float = 20.0
+		while s_r < 3440.0:
+			hist.append(tr.amorce_profil(side_i, s_r, 120))
+			if hist.size() > 4:
+				hist.pop_front()
+			if hist.size() == 4:
+				var lo: float = float(hist[3].att) + 0.5
+				var hi: float = INF
+				for h4 in hist:
+					hi = minf(hi, float(h4.s1))
+				for q in range(6):
+					var s_q: float = lerpf(lo, hi, (float(q) + 0.5) / 6.0)
+					var pq: Array = []
+					for h4 in hist:
+						pq.append(_point_amorce(tun, h4, s_q))
+					var d1: float = (pq[1] - pq[0]).length()
+					var d2: float = (pq[2] - pq[1]).length()
+					var d3: float = (pq[3] - pq[2]).length()
+					var j2: float = d2 - maxf(d1, d3)
+					if j2 > saut:
+						saut = j2
+						s_saut = s_r - 1.0
+			s_r += 0.5
+	# reste : 2 à 4,5 mm au changement de R1 près des gares (chaînette
+	# posée sur la corde, approchée) — invisible sur un câble de 52 mm
+	_check("tronçon libre sans saut en marche (pas de 0,5 m)", saut < 0.005,
+		"saut maxi d'un point du câble %.1f mm au-delà de son pas (rame à %.0f m)" % [saut * 1000.0, s_saut])
+	# 6. En marche, dans les deux sens : le câble n'est jamais interrompu
+	#    après le premier galet (segments de 15 m masqués à tort)
+	var trous: int = 0
+	var n_pos: int = 0
+	for sens in [-1.0, 1.0]:
+		var s6: float = 3400.0 if sens < 0.0 else 20.0
+		while s6 > 15.0 and s6 < 3420.0:
+			var so6: float = PNConstants.LENGTH - s6
+			tr.update_cable_visibility(s6, so6)
+			for side_i in [-1, 1]:
+				var segs: Array = tr.cable_left_segments if side_i < 0 else tr.cable_right_segments
+				var cut6: float = tr.coupe_brin(side_i, s6 if side_i < 0 else so6)
+				for seg in segs:
+					if float(seg.s_end) > cut6 + 0.01 and not seg.mesh.visible:
+						trous += 1
+						break
+			n_pos += 1
+			s6 += sens * 1.0
+	_check("câble continu au premier galet, en montée et en descente", trous == 0,
+		"%d positions sur %d avec un segment manquant" % [trous, n_pos])
+	# 7. Tronçon libre et câble posé : même repère d'anneau (angle compté
+	#    de la droite de la voie) — sinon l'hélice des torons s'inverse au
+	#    raccord
+	tr.update_cable_phase(1000.0, PNConstants.LENGTH - 1000.0)
+	var am: MeshInstance3D = tr.get_node_or_null("CulotG_amorce")
+	var sens_ok: bool = false
+	if am != null:
+		var arr: Array = (am.mesh as ImmediateMesh).surface_get_arrays(0)
+		var vx: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
+		var uvs: PackedVector2Array = arr[Mesh.ARRAY_TEX_UV]
+		var nrm: PackedVector3Array = arr[Mesh.ARRAY_NORMAL]
+		# sommet d'angle 0 (UV.x = 0) le plus proche du premier galet : sa
+		# normale doit pointer vers la droite de la voie
+		var best: int = -1
+		for i in range(uvs.size()):
+			if absf(uvs[i].x) < 1e-4 and (best < 0 or uvs[i].y > uvs[best].y):
+				best = i
+		if best >= 0:
+			var s7: float = uvs[best].y * 0.5
+			sens_ok = nrm[best].dot(tun.transform_at(s7).basis.x) > 0.9
+	_check("torons du tronçon libre dans le sens du câble posé", sens_ok, "")
 	print("BENCH_GALETS %s" % ("OK" if _ok else "ÉCHEC"))
 	quit(0 if _ok else 1)

@@ -46,7 +46,7 @@ func _tick() -> void:
 		var s_nez: float = _s + PNConstants.TRAIN_HALF + 0.6
 		var s_sup: float = -1.0
 		for st in tr.station_list():
-			if _vue == "culot" or _vue.begins_with("chainette"):
+			if _vue == "culot" or _vue.begins_with("chainette") or _vue.begins_with("contact"):
 				break
 			if float(st.s) > s_nez + 1.0:
 				s_sup = st.s
@@ -56,7 +56,29 @@ func _tick() -> void:
 		cam.near = 0.02
 		get_root().add_child(cam)
 		var y_axe: float = tr._roller_axis_y()
-		if _vue == "chainette_dessus":
+		if _vue == "contact" or _vue == "contact_long":
+			# au point de contact (premier galet touché), comme vu en vue
+			# extérieure : de côté et un peu au-dessus
+			var att4: float = TrackBuilder.attache_s(_s)
+			var s14: float = tr.coupe_brin(-1, _s)
+			var y_c4: float = tr._roller_axis_y() + tr.pulley_radius + tr.cable_radius
+			var lat4: float = tr.strand_local_at(-1, s14).x
+			var xr: Transform3D = tun.transform_at(s14)
+			var cible4: Vector3
+			var pos4: Vector3
+			if _vue == "contact":
+				# de côté, à hauteur du câble, au ras du galet
+				cible4 = xr.origin + xr.basis.x * lat4 + xr.basis.y * y_c4
+				pos4 = cible4 + xr.basis.x * 0.75 + xr.basis.y * 0.12 + xr.basis.z * 0.05
+				cam.fov = 40.0
+			else:
+				# devant la rame, en amont de R1, regard vers le nez
+				cible4 = xr.origin + xr.basis.x * lat4 + xr.basis.y * y_c4 + xr.basis.z * 6.0
+				pos4 = xr.origin + xr.basis.x * (lat4 + 0.7) + xr.basis.y * (y_c4 + 0.55) - xr.basis.z * 3.0
+				cam.fov = 55.0
+			cam.look_at_from_position(pos4, cible4, xr.basis.y)
+			print("GALETS culot %.1f, contact %.1f (%.1f m)" % [att4, s14, s14 - att4])
+		elif _vue == "chainette_dessus":
 			# vue plongeante sur le tronçon libre : culot → premier galet
 			# touché, galets survolés dessous (courbes, évitement)
 			var att3: float = TrackBuilder.attache_s(_s)
