@@ -32,20 +32,23 @@ const SLOPE_PROFILE: Array = [
 
 # ---------------------------------------------------------------------------
 # Plan horizontal : (distance, bearing degrés — 0 = Nord, 90 = Est)
-# Val Claret 45.4578°N 6.9014°E → Grande Motte 45.4354°N 6.9020°E
+# Gares (IGN BD TOPO) : Val Claret 45,45189 °N 6,89898 °E → Grande Motte
+# 45,42352 °N 6,89146 °E (3 029 m). Positions des courbes : vidéo cockpit ;
+# angles et caps : ajustés sur le tracé IGN (audit_physique/trace_ign.sage,
+# 06/10/2026 : écart moyen 2 m, max 11 m, précision IGN 10 m).
 # ---------------------------------------------------------------------------
 
 const CURVE_PROFILE: Array = [
-	[0.0,    155.0],   # SSE en sortie Val Claret
-	[1297.0, 155.0],   # rectiligne section basse
-	[1420.0, 165.0],   # courbe 1 milieu — courbure max
-	[1541.0, 175.0],   # fin courbe 1 (due sud)
-	[1621.26, 175.0],  # entrée boucle croisement (tronçon neutre de 20,26 m inséré avant)
-	[1843.26, 175.0],  # sortie boucle croisement
-	[1924.52, 175.0],  # début courbe 2 (tronçon neutre de 20,26 m inséré avant)
-	[2165.52, 189.0],  # courbe 2 milieu — courbure max
-	[2409.52, 203.0],  # fin courbe 2 (SSO)
-	[3514.52, 203.0],  # rectiligne jusqu'à station haute
+	[0.0,    169.7],   # SSE en sortie Val Claret
+	[1297.0, 169.7],   # rectiligne section basse
+	[1419.0, 177.95],  # courbe 1 milieu — courbure max
+	[1541.0, 186.2],   # fin courbe 1 (16,5° à droite)
+	[1621.26, 186.2],  # entrée boucle croisement (tronçon neutre de 20,26 m inséré avant)
+	[1843.26, 186.2],  # sortie boucle croisement
+	[1924.52, 186.2],  # début courbe 2 (tronçon neutre de 20,26 m inséré avant)
+	[2167.02, 200.35], # courbe 2 milieu — courbure max
+	[2409.52, 214.5],  # fin courbe 2 (28,3° à droite, SO)
+	[3514.52, 214.5],  # rectiligne jusqu'à station haute
 ]
 
 # ---------------------------------------------------------------------------
@@ -73,7 +76,7 @@ const TUNNEL_DARK_ZONES: Array = [
 const TUNNEL_SECTIONS: Array = [
 	[0.0,     "horseshoe"],
 	[257.0,   "circular"],
-	[3460.52, "horseshoe"],
+	[3472.56, "horseshoe"],   # PNConstants.SQUARE_SECTION_HIGH_START
 	[3514.52, "horseshoe"],
 ]
 
