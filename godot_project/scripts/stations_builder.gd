@@ -71,6 +71,9 @@ func _build_station_low() -> void:
 	# ou l'autre selon le sens d'arrivée).
 	_build_platform(s_plat_start, s_plat_end, true, +1.0)
 	_build_platform(s_plat_start, s_plat_end, true, -1.0)
+	for sd in [-1.0, 1.0]:
+		_build_platform_barrier(s_plat_start, s_plat_end,
+			PNConstants.START_S + PNConstants.TRAIN_HALF, sd, true)
 	# Fosse sous la voie et le nez de la rame (photos 093522 / 094104) :
 	# caillebotis en fond, chaînes, et butoirs bleus à tête bois
 	_build_pit(PIT_LOW_START, PIT_LOW_END, false)
@@ -92,6 +95,9 @@ func _build_station_high() -> void:
 
 	_build_platform(s_plat_start, s_plat_end, false, +1.0)
 	_build_platform(s_plat_start, s_plat_end, false, -1.0)
+	for sd in [-1.0, 1.0]:
+		_build_platform_barrier(s_plat_start, s_plat_end,
+			PNConstants.STOP_S + PNConstants.TRAIN_HALF, sd, false)
 	# Pas de fosse en haut (retour d'essai 2026-09-26) : butoirs bleus seuls
 	_build_bumper(s_bumper, false)
 	_build_room_dressing(tunnel.station_high_start + tunnel.station_room_transition,
@@ -207,6 +213,140 @@ func _build_platform(s_start: float, s_end: float, is_low: bool, side: float = 1
 		mi_bands.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		add_child(mi_bands)
 
+
+
+## Garde-corps du haut de quai (fait de Kevin, 06/10/2026, vidéo
+## d'arrivée en gare haute et photos 095443 / 095511) : en haut de la rame,
+## dans les deux gares, une barrière galvanisée à plinthe bleue longe la
+## voie depuis le nez de la rame arrêtée jusqu'au haut du quai, puis tourne
+## à angle droit pour fermer le quai, avec une porte réservée au
+## personnel. Montants verticaux, main courante et lisses parallèles à la
+## pente, plinthe qui suit les marches.
+const BARRIERE_H: float = 1.05          # main courante au-dessus du quai
+const BARRIERE_LISSES: Array = [0.38, 0.70]
+const BARRIERE_PAS: float = 1.25        # entre montants
+const PORTE_LARGEUR: float = 0.90
+
+
+func _build_platform_barrier(s_start: float, s_end: float, s_nez: float, side: float,
+		is_low: bool) -> void:
+	var galva: StandardMaterial3D = StandardMaterial3D.new()
+	galva.albedo_color = Color(0.72, 0.74, 0.76)
+	galva.roughness = 0.4
+	galva.metallic = 0.8
+	var bleu: StandardMaterial3D = StandardMaterial3D.new()
+	bleu.albedo_color = Color(0.12, 0.32, 0.62)
+	bleu.roughness = 0.5
+	bleu.metallic = 0.3
+	var nom: String = "Barriere_%s_%s" % ["low" if is_low else "high", "R" if side > 0.0 else "L"]
+	var racine: Node3D = Node3D.new()
+	racine.name = nom
+	add_child(racine)
+	var y_quai: float = FLOOR_Y_LOCAL + platform_height
+	var x_voie: float = side * (platform_inner_x + 0.06)
+	var x_mur: float = side * (platform_inner_x + platform_width - 0.05)
+	var s_a: float = clampf(s_nez, s_start, s_end - 0.2)
+	var s_b: float = s_end - 0.04
+	# dessus de la marche qui contient s (élévation MONDE, cf. _build_platform)
+	var dessus := func(s_: float) -> float:
+		var i: int = clampi(int(floor((s_ - s_start) / tread_depth)), 0, 100000)
+		var s_up: float = minf(s_start + float(i + 1) * tread_depth, s_end)
+		var xf_up: Transform3D = tunnel.transform_at(s_up)
+		return (xf_up.origin + xf_up.basis.y * y_quai).y
+	var boite := func(taille: Vector3, mat: Material, xf: Transform3D) -> void:
+		var mi: MeshInstance3D = MeshInstance3D.new()
+		var bm: BoxMesh = BoxMesh.new()
+		bm.size = taille
+		bm.material = mat
+		mi.mesh = bm
+		mi.transform = xf
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		racine.add_child(mi)
+	var montant := func(s_: float, x_: float, y_haut: float) -> void:
+		var xf: Transform3D = tunnel.transform_at(s_)
+		var droite: Vector3 = xf.basis.x
+		var b: Basis = Basis(droite, Vector3.UP, droite.cross(Vector3.UP)).orthonormalized()
+		var pied: float = dessus.call(s_)
+		var p: Vector3 = xf.origin + droite * x_
+		p.y = (pied + y_haut) * 0.5
+		boite.call(Vector3(0.05, y_haut - pied, 0.05), galva, Transform3D(b, p))
+
+	# 1. le long de la voie : du nez de la rame au haut du quai
+	var long: float = s_b - s_a
+	if long > 0.1:
+		var xm: Transform3D = tunnel.transform_at((s_a + s_b) * 0.5)
+		for h in [BARRIERE_H] + BARRIERE_LISSES:
+			var ep: float = 0.05 if h == BARRIERE_H else 0.035
+			var o: Vector3 = xm.origin + xm.basis.x * x_voie + xm.basis.y * (y_quai + h)
+			boite.call(Vector3(ep, ep, long), galva, Transform3D(xm.basis, o))
+		var n_m: int = maxi(1, int(ceil(long / BARRIERE_PAS)))
+		for i in range(n_m + 1):
+			var s_m: float = lerpf(s_a, s_b, float(i) / float(n_m))
+			var xf_m: Transform3D = tunnel.transform_at(s_m)
+			montant.call(s_m, x_voie, (xf_m.origin + xf_m.basis.y * (y_quai + BARRIERE_H)).y)
+		# plinthe bleue, marche par marche
+		var s_p: float = s_a
+		while s_p < s_b - 0.01:
+			var i: int = int(floor((s_p - s_start) / tread_depth))
+			var s_q: float = minf(s_start + float(i + 1) * tread_depth, s_b)
+			var xf_p: Transform3D = tunnel.transform_at((s_p + s_q) * 0.5)
+			var dr: Vector3 = xf_p.basis.x
+			var bl: Basis = Basis(dr, Vector3.UP, dr.cross(Vector3.UP)).orthonormalized()
+			var c: Vector3 = xf_p.origin + dr * x_voie
+			c.y = dessus.call((s_p + s_q) * 0.5) + 0.08
+			boite.call(Vector3(0.015, 0.16, s_q - s_p), bleu, Transform3D(bl, c))
+			s_p = s_q
+
+	# 2. en travers du haut du quai, avec la porte réservée au personnel
+	var xf_b: Transform3D = tunnel.transform_at(s_b)
+	var dr_b: Vector3 = xf_b.basis.x
+	var lb: Basis = Basis(dr_b, Vector3.UP, dr_b.cross(Vector3.UP)).orthonormalized()
+	var pied_b: float = dessus.call(s_b - 0.1)
+	var x_porte0: float = (x_voie + x_mur) * 0.5 - side * PORTE_LARGEUR * 0.5
+	var x_porte1: float = x_porte0 + side * PORTE_LARGEUR
+	for seg in [[x_voie, x_porte0], [x_porte1, x_mur]]:
+		var xa: float = seg[0]
+		var xb: float = seg[1]
+		var w: float = absf(xb - xa)
+		var cx: Vector3 = xf_b.origin + dr_b * ((xa + xb) * 0.5)
+		for h in [BARRIERE_H] + BARRIERE_LISSES:
+			var ep2: float = 0.05 if h == BARRIERE_H else 0.035
+			var o2: Vector3 = cx
+			o2.y = pied_b + h
+			boite.call(Vector3(w, ep2, ep2), galva, Transform3D(lb, o2))
+		var o3: Vector3 = cx
+		o3.y = pied_b + 0.08
+		boite.call(Vector3(w, 0.16, 0.015), bleu, Transform3D(lb, o3))
+		for xx in [xa, xb]:
+			montant.call(s_b, xx, pied_b + BARRIERE_H)
+	# la porte : cadre galvanisé, panneau bleu, plaque « réservé au personnel »
+	var cp: Vector3 = xf_b.origin + dr_b * ((x_porte0 + x_porte1) * 0.5)
+	var lp: float = PORTE_LARGEUR - 0.08
+	for h in [0.12, BARRIERE_H - 0.05]:
+		var o4: Vector3 = cp
+		o4.y = pied_b + h
+		boite.call(Vector3(lp, 0.04, 0.04), galva, Transform3D(lb, o4))
+	var o5: Vector3 = cp
+	o5.y = pied_b + 0.12 + (BARRIERE_H - 0.17) * 0.5
+	boite.call(Vector3(lp - 0.06, BARRIERE_H - 0.25, 0.012), bleu, Transform3D(lb, o5))
+	var o6: Vector3 = cp - lb.z * 0.012
+	o6.y = pied_b + 0.80
+	boite.call(Vector3(0.36, 0.17, 0.006), galva, Transform3D(lb, o6))
+	var plaque: Label3D = Label3D.new()
+	plaque.text = "RÉSERVÉ AU\nPERSONNEL"
+	plaque.font_size = 40
+	plaque.pixel_size = 0.0028
+	plaque.modulate = Color(0.75, 0.08, 0.06)
+	plaque.outline_size = 0
+	# face tournée vers le quai (vers l'aval de la ligne)
+	var face: Vector3 = xf_b.basis.z
+	var pb: Basis = Basis(dr_b * (1.0 if face.dot(lb.z) > 0.0 else -1.0), Vector3.UP, Vector3.ZERO)
+	pb.z = pb.x.cross(Vector3.UP).normalized()
+	if pb.z.dot(face) < 0.0:
+		pb.x = -pb.x
+		pb.z = -pb.z
+	plaque.transform = Transform3D(pb.orthonormalized(), cp + face * 0.02 + Vector3(0.0, pied_b + 0.80 - cp.y, 0.0))
+	racine.add_child(plaque)
 
 
 # ---------------------------------------------------------------------------

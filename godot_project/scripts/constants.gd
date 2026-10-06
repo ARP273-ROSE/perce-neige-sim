@@ -30,6 +30,15 @@ static func miroir(s_: float) -> float:
 	return MIROIR_S - s_
 
 
+## Compteur de distance du pupitre (fait de Kevin, 06/10/2026) : 0 m au
+## départ, 3 474 m à l'arrivée, quels que soient le sens et la rame — le
+## parcours d'arrêt à arrêt (STOP_S − START_S) ramené à LENGTH (même
+## calcul que distance_compteur du PC).
+static func distance_compteur(s_: float, direction: int) -> float:
+	var raw: float = (s_ - START_S) if direction > 0 else (STOP_S - s_)
+	return clampf(raw * LENGTH / (STOP_S - START_S), 0.0, LENGTH)
+
+
 static func safari_web() -> bool:
 	if not OS.has_feature("web"):
 		return false

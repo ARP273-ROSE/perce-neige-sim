@@ -152,7 +152,8 @@ func _draw_speedometer(cx: float, cy: float) -> void:
 			var p_label: Vector2 = Vector2(cx + cos(ang) * (radius - 26.0), cy + sin(ang) * (radius - 22.0))
 			_draw_text_center(p_label, "%.0f" % v_tick, 9, Color(0.85, 0.88, 0.92))
 	# Aiguille
-	var v_kmh: float = absf(physics.v) * 3.6
+	var v_roues: float = absf(physics.vitesse_roues())
+	var v_kmh: float = v_roues * 3.6
 	var v_norm: float = clampf(v_kmh / v_max_kmh, 0.0, 1.0)
 	var needle_ang: float = lerpf(-PI * 0.75, PI * 0.75, v_norm)
 	var needle_end: Vector2 = Vector2(cx + cos(needle_ang) * (radius - 8.0), cy + sin(needle_ang) * (radius - 8.0))
@@ -162,7 +163,7 @@ func _draw_speedometer(cx: float, cy: float) -> void:
 	# Lecture digitale : m/s dans le cadran (zone libre sous le moyeu),
 	# km/h SOUS le cadran — l'ancien placement à 0.78×R tombait sur les
 	# graduations du bas (retour d'essai 2026-07-13 : valeurs confondues).
-	_draw_text_center(Vector2(cx, cy + radius * 0.48), "%.1f m/s" % absf(physics.v), 13, Color(0.55, 1.0, 0.65))
+	_draw_text_center(Vector2(cx, cy + radius * 0.48), "%.1f m/s" % v_roues, 13, Color(0.55, 1.0, 0.65))
 	_draw_text_center(Vector2(cx, cy + radius + 16.0), "%.0f km/h" % v_kmh, 11, Color(0.85, 0.88, 0.92))
 	# Label
 	_draw_text_center(Vector2(cx, cy - radius - 12.0), "VITESSE", 11, label_color)
@@ -324,9 +325,10 @@ func _draw_setpoint_panel(x: float, y: float, w: float, h: float) -> void:
 	_draw_text_center(Vector2(bar_x + bar_w * 0.5, bar_y + 14.0), "%d %%" % int(pct * 100.0), 11, Color(1, 1, 1))
 
 	# Distance / altitude
-	var alt_cur: float = PNConstants.ALT_LOW + (physics.s / PNConstants.LENGTH) * (PNConstants.ALT_HIGH - PNConstants.ALT_LOW)
+	var alt_cur: float = SlopeProfile.altitude_at(physics.s)
 	_draw_text(Vector2(x + 8, y + 70.0), "POSITION", 10, label_color)
-	_draw_text(Vector2(x + 8, y + 88.0), "%.0f / %.0f m" % [physics.s, PNConstants.LENGTH], 12, Color(0.85, 0.95, 1.0))
+	_draw_text(Vector2(x + 8, y + 88.0), "%.0f / %.0f m" % [
+		PNConstants.distance_compteur(physics.s, physics.direction), PNConstants.LENGTH], 12, Color(0.85, 0.95, 1.0))
 	_draw_text(Vector2(x + 8, y + 106.0), "ALT %.0f m" % alt_cur, 11, Color(0.85, 0.95, 1.0))
 
 	# Slope (pente locale)

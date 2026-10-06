@@ -504,6 +504,22 @@ def miroir(s: float) -> float:
     """Position de l'autre rame quand celle-ci est à s (cf. MIROIR_S)."""
     return MIROIR_S - s
 
+
+def distance_compteur(s: float, direction: int) -> float:
+    """Compteur de distance du pupitre (fait de Kevin, 06/10/2026) : 0 m
+    au départ, 3 474 m à l'arrivée, quels que soient le sens et la rame —
+    le parcours d'arrêt à arrêt (STOP_S − START_S) est ramené à LENGTH."""
+    raw = (s - START_S) if direction > 0 else (STOP_S - s)
+    return max(0.0, min(LENGTH, raw * LENGTH / (STOP_S - START_S)))
+
+
+def vitesse_roues(st) -> float:
+    """Vitesse de la rame elle-même, celle des roues que lit l'indicateur
+    de vitesse du pupitre (fait de Kevin, 06/10/2026) : la poulie plus
+    l'oscillation élastique de la rame au bout de son brin — elle s'écarte
+    de la vitesse de la machinerie dans les régimes transitoires."""
+    return st.train.v + st.el_v1
+
 # Approach profile — the train decelerates to CREEP_V and maintains it
 # from CREEP_START up to STOP_S, entering the station quietly.
 CREEP_V = 0.75                  # creep speed on platform approach (m/s)
@@ -11220,7 +11236,8 @@ class GameWidget(QWidget):
         p.setPen(_cached_pen(QColor(200, 210, 220)))
         p.setFont(_cached_font("Consolas", 10))
         # Speed
-        v_text = f"{abs(tr.v):.1f} m/s  ({abs(tr.v)*3.6:.0f} km/h)"
+        v_r = abs(vitesse_roues(st))
+        v_text = f"{v_r:.1f} m/s  ({v_r * 3.6:.0f} km/h)"
         p.drawText(QRectF(vx + vw * 0.62, vy + 15, 200, 20),
                    int(Qt.AlignmentFlag.AlignRight), v_text)
         # Position
@@ -11817,8 +11834,8 @@ class GameWidget(QWidget):
         p.setFont(_cached_font("Consolas", 10))
         info_y = cy + 80
         info = (
-            f"s = {tr.s:.0f} m   v = {abs(tr.v):.1f} m/s "
-            f"({abs(tr.v) * 3.6:.0f} km/h)   "
+            f"s = {tr.s:.0f} m   v = {abs(vitesse_roues(st)):.1f} m/s "
+            f"({abs(vitesse_roues(st)) * 3.6:.0f} km/h)   "
             f"{'↑ UP' if tr.direction > 0 else '↓ DOWN'}"
         )
         p.drawText(
@@ -12153,11 +12170,11 @@ class GameWidget(QWidget):
             text_y = lcd_y + lcd_h - 14
             p.drawText(QRectF(lcd_x + 4, text_y, lcd_w * 0.5 - 4, 12),
                        int(Qt.AlignmentFlag.AlignLeft),
-                       f"{abs(tr.v):.2f} m/s")
+                       f"{abs(vitesse_roues(st)):.2f} m/s")
             p.setPen(_cached_pen(QColor(255, 200, 80)))
             p.drawText(QRectF(lcd_x + lcd_w * 0.5, text_y, lcd_w * 0.5 - 4, 12),
                        int(Qt.AlignmentFlag.AlignRight),
-                       f"{int(tr.s):>4d} m")
+                       f"{int(round(distance_compteur(tr.s, tr.direction))):>4d} m")
 
         # ----- Bloc commandes à droite -----
         ctl_x = lcd_x + lcd_w + 10
@@ -13126,10 +13143,10 @@ class GameWidget(QWidget):
         speed_rect = QRectF(rect.x() + 26, rect.y() + 36, 152, 152)
         self._draw_gauge(
             p, speed_rect,
-            value=abs(tr.v),
+            value=abs(vitesse_roues(st)),
             maxv=15.0,
-            label=f"m/s  ({abs(tr.v) * 3.6:4.1f} km/h)",
-            big_text=f"{abs(tr.v):4.1f}",
+            label=f"m/s  ({abs(vitesse_roues(st)) * 3.6:4.1f} km/h)",
+            big_text=f"{abs(vitesse_roues(st)):4.1f}",
             warn=V_MAX,
             crit=V_MAX + 1.0,
         )
@@ -13480,26 +13497,16 @@ class GameWidget(QWidget):
         p.setFont(_cached_font("Consolas", 10))
         p.setPen(_cached_pen(COLOR_TEXT))
         cabin_x_m, cabin_y_m = geom_at(tr.s)
-        # Distance travelled from the driver's own departure terminus (not
-        # raw slope-s which starts at 26 m because of bumper clearance +
-        # train half-length). Direction-aware so the readout counts UP
-        # from 0 to the effective travel length in both climbing and
-        # descending trips.
-        # The real cockpit counter shows the full 3474 m slope length at
-        # arrival, not the 3422 m between train-centre start and stop —
-        # it measures the tunnel itself, not the usable travel span. We
-        # rescale so the readout runs from 0 to LENGTH exactly.
-        usable = STOP_S - START_S
+        # Distance du compteur du pupitre : 0 m au départ, 3 474 m à
+        # l'arrivée, dans les deux sens (distance_compteur).
         if tr.direction > 0:
-            raw = max(0.0, tr.s - START_S)
             alt_start = geom_at(START_S)[1]
             alt_end = geom_at(STOP_S)[1]
         else:
-            raw = max(0.0, STOP_S - tr.s)
             alt_start = geom_at(STOP_S)[1]
             alt_end = geom_at(START_S)[1]
         travel_total_m = LENGTH
-        travel_done_m = min(LENGTH, raw * LENGTH / usable)
+        travel_done_m = distance_compteur(tr.s, tr.direction)
         alt_total = alt_end - alt_start               # +921 climb / −921 down
         alt_done = cabin_y_m - alt_start               # same sign as alt_total
         rows = [

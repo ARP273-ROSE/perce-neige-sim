@@ -1320,6 +1320,14 @@ func rebound_offset() -> float:
 	return el_x1
 
 
+# Vitesse de la rame elle-même, celle des roues que lit l'indicateur de
+# vitesse du pupitre (fait de Kevin, 06/10/2026) : la poulie plus
+# l'oscillation élastique de la rame au bout de son brin — elle s'écarte de
+# la vitesse de la machinerie dans les régimes transitoires.
+func vitesse_roues() -> float:
+	return v + el_v1
+
+
 # Séquence de départ réelle, en TROIS phases successives :
 #   1. annonce « fermeture des portes » (7,5 s — durée du fichier 01,
 #      portes encore OUVERTES)

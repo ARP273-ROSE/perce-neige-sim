@@ -477,3 +477,30 @@ def test_defi_consigne_0_tenue_a_l_arret():
             ph.step(DT)
         assert abs(st.train.s - s0) < 0.5, f"s0={s0} : dérive {st.train.s - s0:+.2f} m"
         assert abs(st.train.v) < 0.05
+
+
+def test_compteur_de_distance_0_a_3474():
+    # Fait de Kevin (06/10/2026) : le compteur du pupitre indique 0 m au
+    # départ et 3 474 m à l'arrivée, quels que soient le sens et la rame.
+    assert pn.distance_compteur(pn.START_S, +1) == 0.0
+    assert abs(pn.distance_compteur(pn.STOP_S, +1) - pn.LENGTH) < 1e-9
+    assert pn.distance_compteur(pn.STOP_S, -1) == 0.0
+    assert abs(pn.distance_compteur(pn.START_S, -1) - pn.LENGTH) < 1e-9
+    # un trajet réel s'arrête à 8 cm du repère : 3 474 m affichés
+    for direction, s0 in ((1, pn.STOP_S - 400.0), (-1, pn.START_S + 400.0)):
+        st, ph = _make(direction, s0, 120, 20)
+        tr = st.train
+        for _ in range(int(400.0 / DT)):
+            ph.step(DT)
+            if st.finished:
+                break
+        assert st.finished
+        assert round(pn.distance_compteur(tr.s, tr.direction)) == 3474, tr.s
+
+
+def test_vitesse_des_roues_suit_l_oscillation():
+    # L'indicateur lit les roues de la rame (poulie + oscillation élastique)
+    st = pn.GameState()
+    st.train.v = 5.0
+    st.el_v1 = 0.12
+    assert abs(pn.vitesse_roues(st) - 5.12) < 1e-12
