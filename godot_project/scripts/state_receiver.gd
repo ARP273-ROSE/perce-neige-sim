@@ -145,6 +145,15 @@ func _apply(d: Dictionary) -> void:
 	physics.lights_head = _b(d, "lights_head", physics.lights_head)
 	physics.lights_cabin = _b(d, "lights_cabin", physics.lights_cabin)
 	physics.emergency = _b(d, "emergency", physics.emergency)
+	# pupitre (écran Pro-face, voyants) — sim PC ≥ 1.15.78
+	physics.horn = _b(d, "horn", false)
+	physics.arret_elec = _b(d, "arret_elec", false)
+	if d.has("ready"):
+		physics.pret_externe = 1 if _b(d, "ready", false) else 0
+		physics.pret_autre_externe = _b(d, "ghost_ready", true)
+	physics.maint_brake = _b(d, "maint_brake", physics.maint_brake)
+	physics.brake = _f(d, "brake", physics.brake)
+	physics.alarme_externe = d.has("active_fault") and str(d["active_fault"]) != ""
 	# Éclairage du tunnel commandé par le sim PC (touche J)
 	if d.has("tunnel_lights") and main != null and main.has_method("set_tunnel_lights"):
 		var tl: bool = _b(d, "tunnel_lights", true)
