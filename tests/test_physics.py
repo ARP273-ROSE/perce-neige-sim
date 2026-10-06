@@ -211,6 +211,24 @@ def test_rampement_atteint_au_galet_238():
             f"déjà au rampement 15 m avant le galet 238 : v = {v_avant} (dir={direction})"
 
 
+def test_annonce_arrivee_finit_avant_l_arret():
+    # Retour de Kevin (06/10/2026) : l'annonce d'arrivée en haut (54,24 s)
+    # était coupée par l'arrêt. Déclenchée à ANNONCE_ARRIVEE_D de l'arrêt,
+    # elle doit finir avant, rame pleine ou vide (enveloppes 0,25 / 0,30).
+    for pax, gpax in ((150, 0), (0, 150)):
+        st, ph = _make(1, pn.STOP_S - 400.0, pax, gpax, v0=8.0, cmd=1.0)
+        t, t_annonce = 0.0, None
+        while not st.finished and t < 300:
+            ph.step(DT)
+            t += DT
+            if t_annonce is None and pn.STOP_S - st.train.s <= pn.ANNONCE_ARRIVEE_D:
+                t_annonce = t
+        assert st.finished and t_annonce is not None
+        reste = t - t_annonce
+        assert 54.24 + 1.0 < reste < 54.24 + 12.0, \
+            f"annonce à {reste:.1f} s de l'arrêt (pax {pax}/{gpax}, attendu 55-66 s)"
+
+
 # ---------------------------------------------------------------------------
 # Rebond élastique à l'arrêt (k = EA/L → visible en bas, pas en haut)
 # ---------------------------------------------------------------------------

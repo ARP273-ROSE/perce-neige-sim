@@ -186,6 +186,9 @@ const QUAI_HAUT_FIN_S: float = 3513.52   # LENGTH − 1
 # 06/10/2026) : la rame descendante entre alors au quai bas.
 const CREEP_DIST: float = 35.03          # STOP_S − (galet 238 = 3477.53 − TRAIN_HALF)
 const CREEP_START_S: float = 3461.53     # STOP_S − CREEP_DIST
+# Annonce d'arrivée en gare haute (fichier 11, 54,24 s) : déclenchée à cette
+# distance de l'arrêt, elle finit ≈ 3 s avant (audit_physique/annonce_arrivee.sage)
+const ANNONCE_ARRIVEE_D: float = 51.0
 
 # Portes
 const DOOR_CLOSE_TIME: float = 3.0

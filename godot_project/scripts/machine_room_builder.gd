@@ -71,9 +71,9 @@ const PALIER_S0: float = 6.65        # palier plat des quais (stations_builder) 
 const VERRIERE_S0: float = 1.5       # la verrière commence ici (plafond bas avant)
 const VERRIERE_HAUT: float = 6.0     # plafond de la verrière, haut des baies
 const DOME_R: float = 400.0          # rayon du dôme du panorama
-const PANO_CAP_SPAN: float = 180.0   # largeur du panorama (degrés, tools_panorama.py)
+const PANO_CAP_SPAN: float = 360.0   # largeur du panorama (degrés, tools_panorama.py) : tour complet
 const PANO_SITE_HAUT: float = 35.0   # site de la ligne du haut
-const PANO_SITE_BAS: float = -10.0   # site de la ligne du bas
+const PANO_SITE_BAS: float = -25.0   # site de la ligne du bas
 const ROOM_S0: float = -2.6
 const ROOM_S1: float = 14.0
 const ROOM_HALF_W: float = 5.2
@@ -450,13 +450,13 @@ void fragment() {
 	var centre: Vector3 = _to_world(Vector3(0.0, 0.0, HALL_DEPTH))
 	centre.y = y_p + 1.7
 	var cap0: float = SlopeProfile.heading_at(PNConstants.LENGTH)
-	var sites: Array = [-75.0, -40.0, -20.0]
+	var sites: Array = [-75.0, -45.0]
 	var sv: float = PANO_SITE_BAS
 	while sv <= PANO_SITE_HAUT + 0.01:
 		sites.append(sv)
 		sv += 2.5
 	sites.append_array([45.0, 60.0, 75.0, 88.0])
-	var n_u: int = 120
+	var n_u: int = 240
 	var st: SurfaceTool = SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var sommet := func(iu: int, site: float) -> void:
@@ -490,10 +490,17 @@ func _rendu_web() -> bool:
 	return RenderingServer.get_current_rendering_method() == "gl_compatibility"
 
 
-## Le dehors n'a de sens que vu de l'intérieur de la gare (vue cabine).
+## Dehors visible en vue cabine, et en vue extérieure / salle des machines
+## quand la caméra est près de la gare amont (retour de Kevin du 06/10/2026 :
+## « en vue ext et vue salle des machines on ne voit pas dehors le paysage »).
 func set_exterieur_visible(v: bool) -> void:
 	if _exterieur != null:
 		_exterieur.visible = v
+
+
+## Distance d'une position monde au mur vitré du fond du hall.
+func distance_au_hall(p: Vector3) -> float:
+	return p.distance_to(_to_world(Vector3(0.0, 0.0, HALL_DEPTH)))
 
 
 # ---------------------------------------------------------------------------

@@ -776,7 +776,10 @@ func _process(delta: float) -> void:
 	if _ext_light != null and cabin != null:
 		_ext_light.visible = cabin.view_mode == Cabin.ViewMode.EXTERIOR
 	if machine_room != null and cabin != null:
-		machine_room.set_exterieur_visible(cabin.view_mode == Cabin.ViewMode.FPV)
+		var cam_e: Camera3D = get_viewport().get_camera_3d()
+		var pres_gare: bool = cam_e != null \
+			and machine_room.distance_au_hall(cam_e.global_position) < 150.0
+		machine_room.set_exterieur_visible(cabin.view_mode == Cabin.ViewMode.FPV or pres_gare)
 	# numéros des supports : rétroréfléchissants dans les phares (vue cabine)
 	if track != null and cabin != null:
 		track.set_retro(cabin.head_glow() if cabin.view_mode == Cabin.ViewMode.FPV else 0.0)
@@ -853,17 +856,20 @@ func _update_announcement_triggers() -> void:
 
 	# Annonce « zone Grande Motte » (fichier 11) : comme dans la réalité et
 	# le sim Python, elle passe en APPROCHE FINALE de la gare supérieure
-	# (montée, < 220 m restants, allure de creep), une fois par trajet.
+	# (montée, à ANNONCE_ARRIVEE_D m de l'arrêt), une fois par trajet.
 	# Retour d'essai Android 2026-07 : l'ancienne version la jouait à
 	# l'allumage à quai puis TOUTES LES 30 s → annonce fantôme au boot.
 	# RÉACTIVÉE (Kevin 2026-07-24) : c'est LA bonne annonce d'accueil ; le
 	# charabia « please do not leave… » venait d'une autre source
 	# (ambiance de quai contaminée, corrigée) — approche finale gare haute,
 	# une fois par trajet. Diffusable aussi via le bouton ANNONCES.
+	# 🔴 06/10/2026 : 54,24 s d'annonce, rampement réduit à 35 m (≈ 49 s) →
+	# coupée par l'arrêt ; déclenchée à ANNONCE_ARRIVEE_D de l'arrêt quelle
+	# que soit la vitesse, elle finit 3 s avant (annonce_arrivee.sage).
+	var d_arret: float = PNConstants.STOP_S - physics.s
 	if (physics.trip_started and not _welcome_played
 			and physics.direction > 0
-			and PNConstants.STOP_S - physics.s < 220.0
-			and absf(physics.v) < 1.0):
+			and d_arret > 0.0 and d_arret <= PNConstants.ANNONCE_ARRIVEE_D):
 		announcements.queue("welcome")
 		_welcome_played = true
 

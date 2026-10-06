@@ -122,18 +122,80 @@ static func interp_smooth(table: Array, s: float) -> float:
 	return table[-1][1]
 
 
+# Interpolation cubique MONOTONE (Fritsch-Carlson, « PCHIP ») : la valeur ET
+# sa dérivée sont continues, sans dépassement entre deux points de la
+# table. Pour la pente : sa VARIATION est continue, comme dans la réalité
+# (retour de Kevin du 06/10/2026, entrée en gare haute). Le lissage par
+# intervalle (interp_smooth) annulait la variation à chaque point de la
+# table, l'interpolation linéaire la faisait changer par paliers.
+static var _pchip_m: Dictionary = {}
+
+
+static func _pchip_pentes(table: Array) -> PackedFloat64Array:
+	var n: int = table.size()
+	var m: PackedFloat64Array = PackedFloat64Array()
+	m.resize(n)
+	var h: Array = []
+	var dl: Array = []
+	for k in range(n - 1):
+		h.append(float(table[k + 1][0]) - float(table[k][0]))
+		dl.append((float(table[k + 1][1]) - float(table[k][1])) / maxf(h[k], 1e-9))
+	for k in range(1, n - 1):
+		if dl[k - 1] * dl[k] <= 0.0:
+			m[k] = 0.0
+		else:
+			var w1: float = 2.0 * h[k] + h[k - 1]
+			var w2: float = h[k] + 2.0 * h[k - 1]
+			m[k] = (w1 + w2) / (w1 / dl[k - 1] + w2 / dl[k])
+	m[0] = _pchip_bout(h[0], h[1], dl[0], dl[1]) if n > 2 else dl[0]
+	m[n - 1] = _pchip_bout(h[n - 2], h[n - 3], dl[n - 2], dl[n - 3]) if n > 2 else dl[n - 2]
+	return m
+
+
+static func _pchip_bout(h0: float, h1: float, d0: float, d1: float) -> float:
+	var mb: float = ((2.0 * h0 + h1) * d0 - h0 * d1) / (h0 + h1)
+	if signf(mb) != signf(d0):
+		return 0.0
+	if signf(d0) != signf(d1) and absf(mb) > absf(3.0 * d0):
+		return 3.0 * d0
+	return mb
+
+
+static func interp_pchip(table: Array, s: float) -> float:
+	var n: int = table.size()
+	if s <= table[0][0]:
+		return table[0][1]
+	if s >= table[n - 1][0]:
+		return table[n - 1][1]
+	var cle: int = table.hash()
+	if not _pchip_m.has(cle):
+		_pchip_m[cle] = _pchip_pentes(table)
+	var m: PackedFloat64Array = _pchip_m[cle]
+	for k in range(n - 1):
+		var x0: float = table[k][0]
+		var x1: float = table[k + 1][0]
+		if s <= x1:
+			var hk: float = x1 - x0
+			var t: float = (s - x0) / hk
+			var t2: float = t * t
+			var t3: float = t2 * t
+			return (2.0 * t3 - 3.0 * t2 + 1.0) * float(table[k][1]) \
+				+ (t3 - 2.0 * t2 + t) * hk * m[k] \
+				+ (-2.0 * t3 + 3.0 * t2) * float(table[k + 1][1]) \
+				+ (t3 - t2) * hk * m[k + 1]
+	return table[n - 1][1]
+
+
 static func gradient_at(s: float) -> float:
-	return interp_smooth(SLOPE_PROFILE, s)
+	return interp_pchip(SLOPE_PROFILE, s)
 
 
-# Gradient pour la PHYSIQUE — interpolation LINÉAIRE, comme gradient_at()
-# du sim Python : c'est ce qui rend les valeurs (gravité nette, tension,
-# puissance) exactement raccord avec le programme PC. Le smoothstep de
-# gradient_at() reste réservé à la GÉOMÉTRIE 3D (continuité de courbure,
-# sinon les rails tressautent aux points de contrôle) — l'écart entre les
-# deux est < 0,5 % de pente, invisible à l'œil mais mesurable sur la jauge.
+# Gradient pour la PHYSIQUE — même interpolation monotone que la géométrie
+# et que gradient_at() du sim Python (06/10/2026 : une seule courbe de pente
+# pour la voie dessinée, la physique et le PC ; avant, linéaire ici et
+# lissée par intervalle pour la 3D).
 static func gradient_phys_at(s: float) -> float:
-	return interp(SLOPE_PROFILE, s)
+	return interp_pchip(SLOPE_PROFILE, s)
 
 
 # ---------------------------------------------------------------------------

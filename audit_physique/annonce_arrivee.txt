@@ -1,0 +1,10 @@
+accostage final : 5.00 s sur 1.875 m
+rampement : 44.21 s sur 33.16 m
+du galet 238 à l'arrêt : 49.21 s (annonce 54.24 s : il manque 5.03 s)
+
+a = 0.25 m/s² : déclencher à 49.1 m de l'arrêt (vitesse d'enveloppe 2.76 m/s) ; temps jusqu'à l'arrêt 57.24 s
+a = 0.30 m/s² : déclencher à 50.7 m de l'arrêt (vitesse d'enveloppe 3.16 m/s) ; temps jusqu'à l'arrêt 57.24 s
+
+Retenu : déclenchement à 51 m de l'arrêt, quelle que soit la vitesse
+  a = 0.25 : 57.90 s avant l'arrêt, l'annonce finit 3.66 s avant
+  a = 0.30 : 57.32 s avant l'arrêt, l'annonce finit 3.09 s avant

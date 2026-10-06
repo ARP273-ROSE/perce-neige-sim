@@ -1,0 +1,12 @@
+notre PCHIP contre scipy : écart max 1.67e-16 (pente)
+dépassement de la table : min 0.0600 / max 0.2950 (table 0.0600 / 0.2950)
+
+Variation de la pente (‰ par mètre) de part et d'autre des points du haut :
+    point      linéaire avant/après        PCHIP avant/après
+   3240.52     -0.050 / -0.078              -0.062 / -0.062
+   3368.52     -0.078 / -1.731              -0.172 / -0.172
+   3420.52     -1.731 / -1.403              -1.553 / -1.552
+   3477.53     -1.403 / -1.081              -1.210 / -1.210
+
+entrée en gare haute : rayon vertical minimal 464 m à s = 3402 (pente 21.7 %)
+pente au galet 238 (s = 3 477,53) : 10.00 %

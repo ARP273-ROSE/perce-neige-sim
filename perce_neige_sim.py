@@ -540,6 +540,9 @@ CREEP_V = 0.75                  # creep speed on platform approach (m/s)
 GALET_238_S = 3477.53
 CREEP_DIST = STOP_S - (GALET_238_S - TRAIN_HALF)   # 35.03 m, centre-position
 CREEP_START_S = STOP_S - CREEP_DIST     # centre position at creep entry
+# Arrival announcement (file 11, 54.24 s) starts this far from the upper
+# stop so that it ends ~3 s before it (audit_physique/annonce_arrivee.sage).
+ANNONCE_ARRIVEE_D = 51.0
 
 # --- Décélérations de freinage (sources : recherche du repo §4.2
 # research_failures.md, RM5/POMA, ISR/CEN) — hiérarchie réelle :
@@ -848,8 +851,60 @@ def _interp(table: list[tuple[float, float]], s: float) -> float:
     return table[-1][1]
 
 
+def _pchip_slopes(table: list[tuple[float, float]]) -> list[float]:
+    """Fritsch-Carlson derivatives for a monotone cubic (PCHIP) through
+    `table` — same as SlopeProfile._pchip_pentes in the PWA."""
+    n = len(table)
+    h = [table[k + 1][0] - table[k][0] for k in range(n - 1)]
+    d = [(table[k + 1][1] - table[k][1]) / max(h[k], 1e-9) for k in range(n - 1)]
+    m = [0.0] * n
+
+    def sgn(x):
+        return (x > 0.0) - (x < 0.0)
+
+    def bout(h0, h1, d0, d1):
+        mb = ((2.0 * h0 + h1) * d0 - h0 * d1) / (h0 + h1)
+        if sgn(mb) != sgn(d0):
+            return 0.0
+        if sgn(d0) != sgn(d1) and abs(mb) > abs(3.0 * d0):
+            return 3.0 * d0
+        return mb
+
+    for k in range(1, n - 1):
+        if d[k - 1] * d[k] <= 0.0:
+            m[k] = 0.0
+        else:
+            w1 = 2.0 * h[k] + h[k - 1]
+            w2 = h[k] + 2.0 * h[k - 1]
+            m[k] = (w1 + w2) / (w1 / d[k - 1] + w2 / d[k])
+    m[0] = bout(h[0], h[1], d[0], d[1]) if n > 2 else d[0]
+    m[n - 1] = bout(h[n - 2], h[n - 3], d[n - 2], d[n - 3]) if n > 2 else d[n - 2]
+    return m
+
+
+_SLOPE_M = _pchip_slopes(SLOPE_PROFILE)
+
+
 def gradient_at(s: float) -> float:
-    return _interp(SLOPE_PROFILE, s)
+    """Gradient at slope distance s — monotone cubic (PCHIP) through
+    SLOPE_PROFILE : the slope AND its rate of change are continuous, as on
+    the real line (Kevin, 06/10/2026 : the slope variation before the upper
+    station was not continuous). Same curve as SlopeProfile (PWA)."""
+    t = SLOPE_PROFILE
+    if s <= t[0][0]:
+        return t[0][1]
+    if s >= t[-1][0]:
+        return t[-1][1]
+    for k in range(len(t) - 1):
+        x0, y0 = t[k]
+        x1, y1 = t[k + 1]
+        if s <= x1:
+            hk = x1 - x0
+            u = (s - x0) / hk
+            u2, u3 = u * u, u * u * u
+            return ((2 * u3 - 3 * u2 + 1) * y0 + (u3 - 2 * u2 + u) * hk * _SLOPE_M[k]
+                    + (-2 * u3 + 3 * u2) * y1 + (u3 - u2) * hk * _SLOPE_M[k + 1])
+    return t[-1][1]
 
 
 def slope_angle_at(s: float) -> float:
@@ -7772,13 +7827,14 @@ class GameWidget(QWidget):
             # zone (< 60 m du repère) quelle que soit la vitesse — « juste
             # avant d'entrer en gare comme normal », pas 200 m avant
             # (retour d'essai 2026-07-24).
-            _welcome_ok = (abs(tr_welcome.v) < 1.0
-                           or (st.run_mode == "challenge"
-                               and dist_remain_welcome < 60.0))
+            # 🔴 06/10/2026 : l'annonce dure 54,24 s et le rampement ne
+            # commence plus qu'au galet 238 (35 m de l'arrêt, ≈ 49 s) : elle
+            # était coupée par l'arrêt. Déclenchée à ANNONCE_ARRIVEE_D m de
+            # l'arrêt quelle que soit la vitesse, elle finit 3 s avant
+            # (audit_physique/annonce_arrivee.sage).
             if (st.trip_started and not self._welcome_played
                     and tr_welcome.direction > 0
-                    and dist_remain_welcome < 220.0
-                    and _welcome_ok):
+                    and 0.0 < dist_remain_welcome <= ANNONCE_ARRIVEE_D):
                 self.sounds.play("welcome", lang=st.ann_lang, cooldown=600.0)
                 self._welcome_played = True
             # Pique sarcastique une fois par trajet quand on ROULE portes
