@@ -71,7 +71,7 @@ const SQUARE_SECTION_LOW_END: float = 257.0    # transition carré→rond bas
 # Tunnel rond → carré, 1 m avant la salle de gare haute, elle-même 4 m
 # avant le quai (retour du 06/10/2026 : « rapproche la fin du tunnel du
 # début du quai » — raccourci, le quai commençait 16 m après la salle)
-const SQUARE_SECTION_HIGH_START: float = 3472.56  # QUAI_HAUT_DEBUT_S − 5
+const SQUARE_SECTION_HIGH_START: float = 3443.0   # tube rond → caisson carré (vidéo de descente, audit_physique/calage_descente.sage)
 
 # Vitesse — régulateur Von Roll plafonné à 12 m/s
 const V_MAX: float = 12.0                # m/s (43.2 km/h)

@@ -1,0 +1,24 @@
+Croisière : un néon toutes les 1.630 s (écart-type 0.026 s sur 56 intervalles)
+  vitesse affichée 12.19 m/s ; vitesse tirée de la distance affichée 12.10 m/s
+  → néons ALLUMÉS tous les 19.9 m (19.6 m à 12,0 m/s)
+
+Départ : v(t) régression sur 9 points → accélération 0.296 m/s², départ à t0 = 24.2 s
+    t =  44.2 s  v =  6.02 m/s  (modèle  5.92)
+    t =  47.3 s  v =  6.71 m/s  (modèle  6.84)
+    t =  50.1 s  v =  7.82 m/s  (modèle  7.66)
+    t =  52.6 s  v =  8.28 m/s  (modèle  8.39)
+    t =  54.9 s  v =  9.20 m/s  (modèle  9.06)
+    t =  57.0 s  v =  9.46 m/s  (modèle  9.69)
+    t =  59.0 s  v = 10.24 m/s  (modèle 10.29)
+    t =  60.9 s  v = 10.68 m/s  (modèle 10.85)
+    t =  62.7 s  v = 11.68 m/s  (modèle 11.38)
+  pleine vitesse atteinte à t = 65.4 s, après 251 m
+  contrôle : à 92 s la rame a parcouru 575 m → distance affichée attendue 2923 (lue 3 013)
+
+Portail haut (tube rond) franchi à 39.4 s → 34.1 m sous le départ du nez → s = 3446
+Portail haut (tube rond) franchi à 41.0 s → 41.6 m sous le départ du nez → s = 3439
+  retenu : tube rond → caisson carré à s ≈ 3443 m (SQUARE_SECTION_HIGH_START)
+
+Approche basse (écran) : la position passe de 42 à 30 m en 20 s → vitesse moyenne 0.64 m/s
+  vitesse VÉHICULE oscillante 0.05 à 1.56 m/s, maxima à [344, 351.500000000000, 359, 365.500000000000] s → période ≈ 7.2 s
+  (rame au bout de ≈ 3,45 km de câble : oscillation élastique autour de la vitesse de la poulie)

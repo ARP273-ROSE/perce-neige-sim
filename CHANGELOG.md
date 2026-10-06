@@ -7,6 +7,36 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.15.73** — calage sur la vidéo de descente, tunnel débouché sous la gare
+amont.
+- **« Entre les galets 213 et 214 tu as mis un truc qui ferme le tunnel »**
+  : c'était le dôme du panorama, une sphère de 400 m de rayon autour de la
+  gare amont. Le tunnel qui descend la traverse justement là, et elle
+  formait un disque en travers du tube. Le dôme est maintenant ouvert au
+  passage du tunnel. En vue cabine, il n'est affiché qu'à moins de 450 m
+  de la gare.
+- **Calage sur la descente en cabine** (vidéo « Transports câblés » de
+  2013, 12 m/s), demandé par Kevin
+  (`tools_calage_descente.py`, `audit_physique/calage_descente.sage`) :
+  - **néons** : en croisière, un néon allumé passe toutes les 1,630 s, à
+    0,026 s près sur 56 intervalles. Ils sont donc allumés tous les 20 m :
+    un tube tous les 10 m, un sur deux allumé, au lieu de 12 m (PWA, vue
+    cabine et vue en coupe du PC) ;
+  - **accélération au départ** : 0,296 m/s², mesurée sur le resserrement
+    des néons de 6 à 11,7 m/s. Le simulateur utilise 0,30 : confirmé ;
+  - **section carrée sous la gare amont** : avec ce départ, la cabine entre
+    dans le tube rond 34 à 42 m sous son point de départ. Le tube rond
+    s'arrête donc vers 3 443 m, et un caisson carré d'une trentaine de
+    mètres le relie à la salle de gare (avant, le tube allait jusqu'à la
+    salle) ;
+  - **approche du bas**, lue sur l'écran du pupitre : environ 0,64 m/s de
+    moyenne, la vitesse véhicule oscillant de 0,05 à 1,56 m/s avec une
+    période d'environ 7 s (élasticité de 3,45 km de câble). Gardé pour
+    plus tard.
+- L'écran du pupitre est identifié (terminal Pro-face « CONDUITE VÉHICULE
+  1 ») : il servira à la reproduction du pupitre.
+- Vérifié : 99 tests PC, 12 bancs PWA, parité PC/PWA OK.
+
 **v1.15.72** — correctif : la 1.15.71 ne démarrait plus sur PC.
 - **« La version 71 après mise à jour sur PC, ça ne démarre plus, rien ne
   se passe »** : la nouvelle vue en coupe lit le relief dans un nouveau

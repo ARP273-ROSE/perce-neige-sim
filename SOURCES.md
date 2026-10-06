@@ -234,6 +234,20 @@ retenue comme référence.
   - Rupture de pente prononcée à ~3 180 m
 - Source : YouTube voyage cabine passager (non redistribué avec le
   simulateur — seuls des sous-clips audio dans `sons/ambients/`).
+- **Descente en cabine à 12 m/s** : « [FUNI284] Funiculaire du
+  Perce-Neige | Tignes (descente) », chaîne « Transports câblés » (YouTube
+  -T429ismOSE), filmée le 02/09/2013 (date de l'écran du pupitre) ;
+  téléchargée pour analyse locale (`sons/videos/`, non versionnée). Mesures
+  (`tools_calage_descente.py`, `audit_physique/calage_descente.sage`) :
+  - néons allumés tous les **19,9 m** (un toutes les 1,630 s en croisière) ;
+  - accélération au départ **0,296 m/s²** (départ à 24,2 s) ;
+  - tube rond → caisson carré sous le quai haut à **s ≈ 3 443 m** (±5) ;
+  - approche du bas : environ 0,64 m/s de moyenne, la vitesse véhicule
+    oscillant de 0,05 à 1,56 m/s avec une période d'environ 7 s ;
+  - écran du pupitre (terminal Pro-face « CONDUITE VÉHICULE 1 ») :
+    voyants, boutons, VITESSE VÉHICULE 12,16-12,25 m/s, DISTANCE.
+  - non résolu : la distance affichée et l'accélération mesurée diffèrent
+    de ~90 m à 92 s (repère de la distance de l'écran inconnu).
 
 ---
 

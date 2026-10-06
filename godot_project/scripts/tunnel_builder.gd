@@ -783,9 +783,9 @@ func _horseshoe_dims_at(s: float) -> Vector2:
 
 func _horseshoe_blend_at(s: float) -> float:
 	# Retourne 0.0 = full circular, 1.0 = full horseshoe.
-	# Transitions smooth autour de s=257 (portail bas) et s=3420 (portail haut).
+	# Transitions smooth autour de s=257 (portail bas) et s=3443 (portail haut).
 	var lo_end: float = PNConstants.SQUARE_SECTION_LOW_END      # 257
-	var hi_start: float = PNConstants.SQUARE_SECTION_HIGH_START # 3420
+	var hi_start: float = PNConstants.SQUARE_SECTION_HIGH_START # 3443
 	var t: float = horseshoe_transition
 	if s <= lo_end - t:
 		return 1.0

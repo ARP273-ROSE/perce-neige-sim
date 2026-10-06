@@ -457,6 +457,19 @@ void fragment() {
 		sv += 2.5
 	sites.append_array([45.0, 60.0, 75.0, 88.0])
 	var n_u: int = 240
+	# Le tunnel descend de la gare et TRAVERSE le dôme à DOME_R du centre :
+	# la sphère y faisait un disque qui bouchait le tunnel (retour de Kevin
+	# du 06/10/2026, « entre les galets 213 et 214 tu as mis un truc qui
+	# ferme le tunnel »). On ouvre le dôme autour de ce point de passage.
+	var trou: Vector3 = Vector3.ZERO
+	var s_t: float = PNConstants.LENGTH
+	while s_t > 0.0:
+		var q_t: Vector3 = tunnel.transform_at(s_t).origin
+		if q_t.distance_to(centre) >= DOME_R:
+			trou = (q_t - centre).normalized()
+			break
+		s_t -= 2.0
+	var cos_trou: float = cos(deg_to_rad(6.0))
 	var st: SurfaceTool = SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var sommet := func(iu: int, site: float) -> void:
@@ -469,6 +482,12 @@ void fragment() {
 		st.add_vertex(centre + dir * DOME_R)
 	for j in range(sites.size() - 1):
 		for iu in range(n_u):
+			if trou != Vector3.ZERO:
+				var cap_m: float = deg_to_rad(cap0 + ((float(iu) + 0.5) / float(n_u) - 0.5) * PANO_CAP_SPAN)
+				var site_m: float = deg_to_rad((sites[j] + sites[j + 1]) * 0.5)
+				var dir_m: Vector3 = Vector3(sin(cap_m), 0.0, -cos(cap_m)) * cos(site_m) + Vector3.UP * sin(site_m)
+				if dir_m.dot(trou) > cos_trou:
+					continue
 			sommet.call(iu, sites[j])
 			sommet.call(iu + 1, sites[j])
 			sommet.call(iu + 1, sites[j + 1])

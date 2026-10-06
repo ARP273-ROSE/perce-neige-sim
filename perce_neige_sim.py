@@ -417,7 +417,7 @@ LENGTH = 3514.52            # voie le long de la pente (m) = START_S + PARCOURS 
 # distance counter values t=2:25 (257 m outbound, tunnel becomes round)
 # and t=7:43 (tunnel returns to square, ≈ 54 m before platform stop).
 SQUARE_SECTION_LOW_END = 257.0
-SQUARE_SECTION_HIGH_START = 3472.56     # 1 m avant la salle de gare haute, 5 m avant le quai (PWA)
+SQUARE_SECTION_HIGH_START = 3443.0      # round bore → square box (descent video, calage_descente.sage)
 ALT_LOW = 2111.0            # lower station altitude (m)
 ALT_HIGH = 3032.0           # upper station altitude (m)
 DROP = ALT_HIGH - ALT_LOW   # 921 m
@@ -823,7 +823,7 @@ CURVE_PROFILE: list[tuple[float, float]] = [
 
 # Tunnel lighting zones — (start_m, end_m) of DARK sections identified from
 # high-resolution brightness analysis (ceiling ROI, 1-second sampling).
-# Fluorescent tube spacing ≈ 32 m.  Passing loop is well-lit.
+# Lit fluorescent tubes every 20 m (descent video, calage_descente.sage).  Passing loop is well-lit.
 TUNNEL_DARK_ZONES: list[tuple[float, float]] = [
     (166.0,   198.0),   # 32 m semi-dark (brightness 83)
     (318.0,   401.0),   # 83 m dark (brightness 45)
@@ -9781,15 +9781,15 @@ class GameWidget(QWidget):
                                          max(4, min(int((e1 - e0) / 4.0), int(view_w / 10.0)))))
             p.setBrush(QBrush(QColor(34, 36, 44)))
             p.drawPolygon(bande_tube(-0.75, 3.20, s_vis0, s_vis1, n_t))
-            # néons : un sur deux allumé, tous les 32 m (visibles de près)
+            # néons allumés tous les 20 m (vidéo de descente ; visibles de près)
             if px_m * k_ech > 1.2:
                 p.setPen(Qt.PenStyle.NoPen)
                 p.setBrush(QBrush(QColor(255, 246, 210, 210)))
-                s_n = math.ceil(s_vis0 / 32.0) * 32.0
+                s_n = math.ceil(s_vis0 / 20.0) * 20.0
                 while s_n < s_vis1:
                     p.drawEllipse(le_long(s_n, 2.95), max(1.2, 0.35 * px_m * k_ech),
                                   max(1.0, 0.18 * px_m * k_ech))
-                    s_n += 32.0
+                    s_n += 20.0
             # dalle et rail
             p.setPen(_cached_pen(QColor(120, 118, 112), max(1.0, 0.35 * px_m * k_ech)))
             p.drawPolyline(ligne_tube(-0.2, s_vis0, s_vis1, n_t))
@@ -10663,7 +10663,8 @@ class GameWidget(QWidget):
         # tunnel — no gaps, no dark sections from the driver's POV
         # (the earlier "intermittent" look was a brightness-analysis
         # artifact, not real installation geometry).
-        NEON_SPACING = 8.0              # ~8 m between tubes (constant)
+        NEON_SPACING = 20.0             # one LIT tube every 20 m (descent video :
+                                        # one every 1.633 s at 12.2 m/s)
         NEON_LENGTH = 1.2               # vertical tube length (m)
         neon_side = -1.0 if tr.direction > 0 else +1.0
         neon_max_depth = 90.0 if tr.lights_head else 40.0
