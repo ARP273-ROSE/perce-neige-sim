@@ -11,7 +11,7 @@ Les tuiles sont mises en cache dans ~/.cache/perce-neige-dem.
 
 Rendu en perspective cylindrique depuis la gare amont du funiculaire
 (IGN BD TOPO, bout de la voie : 45,42352 °N, 6,89146 °E, 3 029 m), centre de
-l'image = cap RÉEL de la voie en arrivée (214,5°, ajusté sur l'IGN, cf.
+l'image = cap RÉEL de la voie en arrivée (214,2°, ajusté sur l'IGN, cf.
 audit_physique/trace_ign.sage ; = SlopeProfile.heading_at(LENGTH)), ±90° de
 part et d'autre ; la Grande Motte (3 653 m) est à 2,3 km au
 cap 229°, la Grande Casse (3 855 m) à 5,6 km au cap 244° ; de −10° à +35° en site, mêmes
@@ -29,7 +29,7 @@ import numpy as np
 from PIL import Image, ImageFilter
 
 LAT0, LON0 = 45.42352, 6.89146      # gare amont (IGN BD TOPO)
-CAP_CENTRE = 214.5                    # cap réel de la voie en gare amont
+CAP_CENTRE = 214.2                    # cap réel de la voie en gare amont
 W, H = 4096, 1024
 SPAN_H = 180.0                        # degrés couverts en largeur
 PX_DEG = W / SPAN_H
