@@ -7,6 +7,20 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.15.69** — la sortie de secours dessinée d'après la vidéo.
+- **« Regarde comment c'est foutu la sortie de secours à 0:54 »** (vidéo
+  de montée 20260426_094649.mp4, 0:54-0:55, au galet 145) :
+  - le tube s'élargit sur quelques mètres et l'on voit tout autour le
+    rebord circulaire de la chambre (deux anneaux sombres) ;
+  - à droite, l'ouverture est sombre et haute, depuis la passerelle, avec
+    un bord de béton clair, un petit panneau vert « SORTIE » et une
+    étiquette blanche juste après ;
+  - en face, sur la paroi gauche, juste avant l'anneau et sous les câbles :
+    un boîtier orange, un coffret blanc et sa gaine jusqu'au sol.
+- La porte plaquée et le grand panneau « SORTIE DE SECOURS » de la 1.15.68
+  sont retirés. **Pas de gyrophare** (retour de Kevin) : l'objet orange est
+  un boîtier, pas un feu.
+
 **v1.15.68** — courbes, galets et sortie de secours aux positions lues au
 compteur de la cabine.
 - **Relevés de Kevin dans la vidéo de montée** (compteur 0 au départ, nez

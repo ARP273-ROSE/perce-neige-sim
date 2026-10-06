@@ -172,118 +172,169 @@ func _build() -> void:
 # Sortie de secours (fait de Kevin, 06/10/2026, vidéo de montée :
 # « l'unique sortie de secours est sur la droite dans le sens montée, au
 # niveau du galet 145, à 2 112 m » au compteur, soit s = 2 112 + 38,56).
-# Porte métallique posée dans la paroi (le gabarit de la rame ne laisse que
-# ~15 cm : rien ne dépasse), cadre clair, barre anti-panique, panneau vert
-# « SORTIE DE SECOURS » éclairé au-dessus.
+# Dessin d'après la vidéo 20260426_094649.mp4, 0:54-0:55 : le tube
+# s'élargit sur quelques mètres (on voit le REBORD CIRCULAIRE de la
+# chambre, un anneau sombre tout autour) ; à droite, une ouverture sombre et
+# haute depuis la passerelle, un panneau vert et une étiquette blanche ; en
+# face, sur la paroi gauche juste avant l'anneau, sous les câbles : un
+# boîtier ORANGE (pas un gyrophare) et un coffret BLANC d'où une gaine
+# descend au sol. Rien ne dépasse
+# de la paroi : le gabarit de la rame ne laisse que ~15 cm.
 const SORTIE_SECOURS_S: float = 2112.0 + 38.56
 
 
 func _build_sortie_secours() -> void:
 	var s_c: float = SORTIE_SECOURS_S
-	var larg: float = 0.95
 	var blend: float = _horseshoe_blend_at(s_c)
 	var dims: Vector2 = _horseshoe_dims_at(s_c)
-	# point de la paroi droite (x > 0) à la hauteur y, sur le POLYGONE du
-	# maillage du tunnel (ring_segments côtés : la corde passe jusqu'à 2,4 cm
-	# à l'intérieur du cercle), légèrement en retrait vers l'axe
-	var paroi := func(y: float, retrait: float) -> Vector2:
+	# point de la paroi (côté +1 droite, −1 gauche) à la hauteur y, sur le
+	# POLYGONE du maillage du tunnel (la corde passe jusqu'à 2,4 cm à
+	# l'intérieur du cercle), en retrait vers l'axe
+	var paroi := func(y: float, retrait: float, cote: float) -> Vector2:
 		for k in range(ring_segments):
 			var a: Vector2 = _profile_xy(k, ring_segments, _radius_at(s_c), blend, dims.x, dims.y)
 			var b: Vector2 = _profile_xy(k + 1, ring_segments, _radius_at(s_c), blend, dims.x, dims.y)
-			if a.x > 0.0 and b.x > 0.0 and (y - a.y) * (y - b.y) <= 0.0 and absf(b.y - a.y) > 1e-6:
+			if a.x * cote > 0.0 and b.x * cote > 0.0 and (y - a.y) * (y - b.y) <= 0.0 \
+					and absf(b.y - a.y) > 1e-6:
 				var q: Vector2 = a.lerp(b, (y - a.y) / (b.y - a.y))
 				return q * (1.0 - retrait / q.length())
-		return Vector2(1.5, y)
-	var mat_porte: StandardMaterial3D = StandardMaterial3D.new()
-	mat_porte.albedo_color = Color(0.30, 0.40, 0.36)
-	mat_porte.roughness = 0.55
-	mat_porte.metallic = 0.4
-	mat_porte.cull_mode = BaseMaterial3D.CULL_DISABLED
-	var mat_cadre: StandardMaterial3D = StandardMaterial3D.new()
-	mat_cadre.albedo_color = Color(0.80, 0.80, 0.78)
-	mat_cadre.roughness = 0.5
-	mat_cadre.cull_mode = BaseMaterial3D.CULL_DISABLED
-	var y0: float = -1.20
-	var y1: float = 0.82
-	var n_y: int = 12
-	var st: SurfaceTool = SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var st_c: SurfaceTool = SurfaceTool.new()
-	st_c.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var xf_a: Transform3D = transform_at(s_c - larg * 0.5)
-	var xf_b: Transform3D = transform_at(s_c + larg * 0.5)
-	var pt := func(xf: Transform3D, q: Vector2) -> Vector3:
+		return Vector2(1.5 * cote, y)
+	var pt := func(s_: float, q: Vector2) -> Vector3:
+		var xf: Transform3D = transform_at(s_)
 		return xf.origin + xf.basis.x * q.x + xf.basis.y * q.y
-	var bande := func(stt: SurfaceTool, xa: Transform3D, xb: Transform3D, ya: float, yb: float, retrait: float) -> void:
+	var mat := func(c: Color, emis: float = 0.0) -> StandardMaterial3D:
+		var m: StandardMaterial3D = StandardMaterial3D.new()
+		m.albedo_color = c
+		m.roughness = 0.7
+		m.cull_mode = BaseMaterial3D.CULL_DISABLED
+		if emis > 0.0:
+			m.emission_enabled = true
+			m.emission = c
+			m.emission_energy_multiplier = emis
+		return m
+	var surfaces: Array = []
+	# --- surface balayée sur la paroi : y de ya à yb, s de sa à sb
+	var patch := func(sa: float, sb: float, ya: float, yb: float, retrait: float, cote: float,
+			m: StandardMaterial3D, nom: String) -> void:
+		var st: SurfaceTool = SurfaceTool.new()
+		st.begin(Mesh.PRIMITIVE_TRIANGLES)
+		var n_y: int = maxi(2, int(absf(yb - ya) / 0.15))
 		for i in range(n_y):
-			var qa: Vector2 = paroi.call(lerpf(ya, yb, float(i) / n_y), retrait)
-			var qb: Vector2 = paroi.call(lerpf(ya, yb, float(i + 1) / n_y), retrait)
-			stt.add_vertex(pt.call(xa, qa))
-			stt.add_vertex(pt.call(xb, qa))
-			stt.add_vertex(pt.call(xb, qb))
-			stt.add_vertex(pt.call(xa, qa))
-			stt.add_vertex(pt.call(xb, qb))
-			stt.add_vertex(pt.call(xa, qb))
-	# vantail
-	bande.call(st, xf_a, xf_b, y0, y1, 0.015)
-	# cadre : montants (bandes de 8 cm le long de s) et linteau
-	var c8: float = 0.08
-	bande.call(st_c, transform_at(s_c - larg * 0.5 - c8), xf_a, y0, y1 + c8, 0.02)
-	bande.call(st_c, xf_b, transform_at(s_c + larg * 0.5 + c8), y0, y1 + c8, 0.02)
-	bande.call(st_c, xf_a, xf_b, y1, y1 + c8, 0.02)
-	# barre anti-panique, à 1 m du sol de la porte
-	var xf_m: Transform3D = transform_at(s_c)
-	var qh: Vector2 = paroi.call(y0 + 1.0, 0.05)
-	var barre: MeshInstance3D = MeshInstance3D.new()
-	var bm: BoxMesh = BoxMesh.new()
-	bm.size = Vector3(0.05, 0.05, larg * 0.75)
-	bm.material = mat_cadre
-	barre.mesh = bm
-	barre.transform = Transform3D(xf_m.basis, pt.call(xf_m, qh))
-	add_child(barre)
-	for pair in [[st, mat_porte, "SortieSecours"], [st_c, mat_cadre, "SortieSecoursCadre"]]:
-		var stt: SurfaceTool = pair[0]
-		stt.set_material(pair[1])
-		stt.generate_normals()
+			var qa: Vector2 = paroi.call(lerpf(ya, yb, float(i) / n_y), retrait, cote)
+			var qb: Vector2 = paroi.call(lerpf(ya, yb, float(i + 1) / n_y), retrait, cote)
+			for v in [[sa, qa], [sb, qa], [sb, qb], [sa, qa], [sb, qb], [sa, qb]]:
+				st.add_vertex(pt.call(v[0], v[1]))
+		st.set_material(m)
+		st.generate_normals()
 		var mi: MeshInstance3D = MeshInstance3D.new()
-		mi.name = pair[2]
-		mi.mesh = stt.commit()
+		mi.name = nom
+		mi.mesh = st.commit()
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		add_child(mi)
-	# panneau vert éclairé au-dessus, plaqué contre la paroi, face à l'axe
-	var qs: Vector2 = paroi.call(y1 + 0.32, 0.05)
-	var normale: Vector3 = -(xf_m.basis.x * qs.x + xf_m.basis.y * qs.y).normalized()
-	var avant: Vector3 = -xf_m.basis.z
+	# 1. rebords circulaires de la chambre : anneaux sombres au-dessus de
+	#    la dalle, de part et d'autre de l'ouverture
+	var sombre: StandardMaterial3D = mat.call(Color(0.08, 0.08, 0.09))
+	var st_r: SurfaceTool = SurfaceTool.new()
+	st_r.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for s_r in [s_c - 2.6, s_c + 2.3]:
+		# chaque côté du polygone du tube au-dessus de la passerelle
+		for k in range(ring_segments):
+			var a: Vector2 = _profile_xy(k, ring_segments, _radius_at(s_c), blend, dims.x, dims.y)
+			var b: Vector2 = _profile_xy(k + 1, ring_segments, _radius_at(s_c), blend, dims.x, dims.y)
+			if a.y < -1.45 and b.y < -1.45:
+				continue
+			if a.y < -1.45:
+				a = a.lerp(b, (-1.45 - a.y) / (b.y - a.y))
+			elif b.y < -1.45:
+				b = b.lerp(a, (-1.45 - b.y) / (a.y - b.y))
+			a *= 1.0 - 0.012 / a.length()
+			b *= 1.0 - 0.012 / b.length()
+			for v in [[s_r, a], [s_r + 0.12, a], [s_r + 0.12, b], [s_r, a], [s_r + 0.12, b], [s_r, b]]:
+				st_r.add_vertex(pt.call(v[0], v[1]))
+	st_r.set_material(sombre)
+	st_r.generate_normals()
+	var mi_r: MeshInstance3D = MeshInstance3D.new()
+	mi_r.name = "SortieSecoursRebord"
+	mi_r.mesh = st_r.commit()
+	mi_r.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(mi_r)
+	# 2. ouverture à droite, haute, depuis la passerelle : fond sombre et
+	#    bord clair de béton coffré
+	patch.call(s_c - 0.75, s_c + 0.75, -1.25, 1.35, 0.012, 1.0,
+		mat.call(Color(0.035, 0.035, 0.04)), "SortieSecours")
+	var bord: StandardMaterial3D = mat.call(Color(0.70, 0.70, 0.67))
+	patch.call(s_c - 0.85, s_c - 0.75, -1.25, 1.45, 0.016, 1.0, bord, "SortieSecoursCadre")
+	patch.call(s_c + 0.75, s_c + 0.85, -1.25, 1.45, 0.016, 1.0, bord, "SortieSecoursCadre")
+	patch.call(s_c - 0.85, s_c + 0.85, 1.35, 1.45, 0.016, 1.0, bord, "SortieSecoursCadre")
+	# 3. panneau vert (bonhomme qui court : silhouette simplifiée) et
+	#    étiquette blanche, sur la paroi droite au-delà de l'ouverture
+	var xf_p: Transform3D = transform_at(s_c + 1.35)
+	var qs: Vector2 = paroi.call(0.15, 0.03, 1.0)
+	var normale: Vector3 = -(xf_p.basis.x * qs.x + xf_p.basis.y * qs.y).normalized()
+	var avant: Vector3 = -xf_p.basis.z
 	var haut: Vector3 = avant.cross(normale).normalized()
-	if haut.dot(xf_m.basis.y) < 0.0:
+	if haut.dot(xf_p.basis.y) < 0.0:
 		haut = -haut
-	# repère direct : x vers l'aval (le texte se lit de gauche à droite pour
-	# qui regarde la paroi droite depuis la voie), y le long de la paroi,
-	# z vers l'axe du tunnel
+	# repère direct : x vers l'aval (lecture de gauche à droite depuis la
+	# voie), y le long de la paroi, z vers l'axe
 	var b_p: Basis = Basis(-avant, haut, normale)
-	var vert: StandardMaterial3D = StandardMaterial3D.new()
-	vert.albedo_color = Color(0.0, 0.42, 0.17)
-	vert.emission_enabled = true
-	vert.emission = Color(0.0, 0.45, 0.18)
-	vert.emission_energy_multiplier = 1.2
-	var panneau: MeshInstance3D = MeshInstance3D.new()
-	var pm: BoxMesh = BoxMesh.new()
-	pm.size = Vector3(1.05, 0.22, 0.04)
-	pm.material = vert
-	panneau.mesh = pm
-	panneau.name = "SortieSecoursPanneau"
-	panneau.transform = Transform3D(b_p, pt.call(xf_m, qs))
-	add_child(panneau)
+	var boite := func(taille: Vector3, m: Material, b: Basis, o: Vector3, nom: String) -> void:
+		var mi: MeshInstance3D = MeshInstance3D.new()
+		var bm: BoxMesh = BoxMesh.new()
+		bm.size = taille
+		bm.material = m
+		mi.mesh = bm
+		mi.name = nom
+		mi.transform = Transform3D(b, o)
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(mi)
+	var o_p: Vector3 = pt.call(s_c + 1.35, qs)
+	boite.call(Vector3(0.42, 0.22, 0.03), mat.call(Color(0.0, 0.42, 0.17), 1.2), b_p, o_p, "SortieSecoursPanneau")
 	var txt: Label3D = Label3D.new()
-	txt.text = "SORTIE DE SECOURS"
+	txt.text = "SORTIE"
 	txt.font_size = 40
-	txt.pixel_size = 0.0021
+	txt.pixel_size = 0.0028
 	txt.modulate = Color(1, 1, 1)
 	txt.outline_size = 0
 	txt.shaded = false
 	txt.visibility_range_end = 150.0
-	txt.transform = Transform3D(b_p, pt.call(xf_m, qs) + normale * 0.025)
+	txt.transform = Transform3D(b_p, o_p + normale * 0.02)
 	add_child(txt)
+	var qe: Vector2 = paroi.call(0.75, 0.02, 1.0)
+	boite.call(Vector3(0.14, 0.22, 0.01), mat.call(Color(0.92, 0.92, 0.90), 0.3), b_p,
+		pt.call(s_c + 1.05, qe), "SortieSecoursEtiquette")
+	# 4. en face, paroi gauche, avant l'anneau : boîtier orange et coffret blanc
+	#    sous les câbles muraux, gaine jusqu'au sol
+	var xf_g: Transform3D = transform_at(s_c - 3.2)
+	var qg: Vector2 = paroi.call(0.05, 0.08, -1.0)
+	var n_g: Vector3 = -(xf_g.basis.x * qg.x + xf_g.basis.y * qg.y).normalized()
+	var h_g: Vector3 = n_g.cross(-xf_g.basis.z).normalized()
+	if h_g.dot(xf_g.basis.y) < 0.0:
+		h_g = -h_g
+	var b_g: Basis = Basis(-xf_g.basis.z, h_g, n_g).orthonormalized()
+	boite.call(Vector3(0.26, 0.36, 0.13), mat.call(Color(0.90, 0.90, 0.88)), b_g,
+		pt.call(s_c - 3.2, qg), "SortieSecoursCoffret")
+	# boîtier orange à côté du coffret (pas un gyrophare : retour de Kevin)
+	var qo: Vector2 = paroi.call(0.10, 0.07, -1.0)
+	boite.call(Vector3(0.14, 0.22, 0.11), mat.call(Color(0.95, 0.40, 0.08)), b_g,
+		pt.call(s_c - 3.55, qo), "SortieSecoursBoitierOrange")
+	var gaine: StandardMaterial3D = mat.call(Color(0.10, 0.10, 0.11))
+	var q_bas: Vector2 = paroi.call(-1.30, 0.03, -1.0)
+	var p_haut: Vector3 = pt.call(s_c - 3.15, paroi.call(-0.13, 0.04, -1.0))
+	var p_bas: Vector3 = pt.call(s_c - 3.05, q_bas)
+	var mi_g: MeshInstance3D = MeshInstance3D.new()
+	var cg: CylinderMesh = CylinderMesh.new()
+	cg.top_radius = 0.012
+	cg.bottom_radius = 0.012
+	cg.height = p_haut.distance_to(p_bas)
+	cg.radial_segments = 6
+	cg.material = gaine
+	mi_g.mesh = cg
+	var axe: Vector3 = (p_haut - p_bas).normalized()
+	var perp: Vector3 = axe.cross(xf_g.basis.z).normalized()
+	mi_g.transform = Transform3D(Basis(perp, axe, perp.cross(axe)).orthonormalized(), (p_haut + p_bas) * 0.5)
+	mi_g.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(mi_g)
 
 
 # Câbles électriques posés sur le flanc gauche du tunnel.
