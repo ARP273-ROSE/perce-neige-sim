@@ -141,9 +141,11 @@ func _ready() -> void:
 		_build_hud()
 		_build_audio()
 		_build_announcements()
-		# Écran tactile (iPad / export Web PWA) : boutons à l'écran qui
-		# émettent les mêmes actions que le clavier.
-		if DisplayServer.is_touchscreen_available():
+		# Écran tactile (iPad) ou navigateur (PWA, même sur PC à la souris :
+		# retour du 06/10/2026, « dans le navigateur du PC » il n'y avait
+		# aucun bouton) : boutons à l'écran qui émettent les mêmes actions
+		# que le clavier.
+		if DisplayServer.is_touchscreen_available() or OS.has_feature("web"):
 			var touch: TouchControls = TouchControls.new()
 			touch.name = "TouchControls"
 			touch.setup(self)   # accès direct AUTO/PANNE + reflet d'état
