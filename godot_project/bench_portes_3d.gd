@@ -161,9 +161,12 @@ func _debarquement() -> bool:
 	var t_vide := -1.0
 	var t_ouvert := -1.0
 	var max_apres_vide := 0
+	var compteur: float = -1.0
 	while t < 200.0:
 		ph.step(dt)
 		t += dt
+		if ph.finished and compteur < 0.0:
+			compteur = PNConstants.distance_compteur(ph.s, ph.direction)
 		if ph.doors_open and t_ouvert < 0.0:
 			t_ouvert = t
 		if t_ouvert > 0.0 and not vide_vu and ph.pax_car1 == 0 and ph.pax_car2 == 0:
@@ -173,8 +176,12 @@ func _debarquement() -> bool:
 			max_apres_vide = maxi(max_apres_vide, ph.pax_car1 + ph.pax_car2)
 		if vide_vu and t > t_vide + 20.0:
 			break
-	var ok := _verif("arrivée en haut : portes ouvertes puis rame vidée", vide_vu,
-		"ouverture à %.0f s, vide %.1f s après" % [t_ouvert, t_vide - t_ouvert])
+	var ok := _verif("compteur du pupitre à 3 474 m à l'arrivée (0 au départ)",
+		roundf(compteur) == PNConstants.LENGTH
+		and PNConstants.distance_compteur(PNConstants.START_S, 1) == 0.0,
+		"%.1f m" % compteur)
+	ok = _verif("arrivée en haut : portes ouvertes puis rame vidée", vide_vu,
+		"ouverture à %.0f s, vide %.1f s après" % [t_ouvert, t_vide - t_ouvert]) and ok
 	ok = _verif("puis embarquement de la descente (0 à 16 pax)", ph.direction < 0
 		and ph.pax_car1 + ph.pax_car2 <= 16 and ph.pax_car1 == ph.pax_t_car1,
 		"%d pax, cible %d" % [ph.pax_car1 + ph.pax_car2, ph.pax_t_car1 + ph.pax_t_car2]) and ok

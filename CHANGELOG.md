@@ -7,6 +7,37 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.15.64** — garde-corps de haut de quai, compteur et indicateur de
+vitesse du pupitre, roues qui suivent la rame.
+- **« En haut des deux rames, en gare aval comme amont, des barrières le
+  long du quai avec bordure bleue, qui commencent où la tête de rame
+  s'arrête, et vont à angle droit pour fermer le quai en haut avec une
+  porte réservée au personnel »**, d'après la vidéo d'arrivée en gare
+  haute et les photos 095443 / 095511 :
+  - un garde-corps galvanisé (montants verticaux, main courante et deux
+    lisses parallèles à la pente, plinthe bleue qui suit les marches) longe
+    la voie sur chaque quai, du nez de la rame arrêtée au haut du quai ;
+  - au haut du quai, un garde-corps en travers le ferme du bord de voie au
+    mur, avec un portillon bleu « RÉSERVÉ AU PERSONNEL ».
+- **« Quand on part, le compteur indique 0 m, quand on arrive 3 474 m,
+  quel que soit le sens ou la rame »** : la PWA affichait l'abscisse brute
+  (23 m au départ, 3 456 m à l'arrivée en haut), et le petit écran du
+  pupitre du PC aussi. Les deux affichent maintenant la distance du trajet
+  (`distance_compteur`, même calcul sur PC et PWA).
+- **« L'indicateur de vitesse prend la vitesse des roues du train, pas
+  celle de la machinerie »** : les cadrans du PC et de la PWA lisent la
+  vitesse de la poulie plus l'oscillation élastique de la rame
+  (`vitesse_roues`). C'est la même en régime établi ; elle s'en écarte
+  dans les transitoires et pendant le rebond à l'arrêt. Le panneau de la
+  salle des machines garde la vitesse du câble.
+- **« Quand la rame du bas recule pendant l'embarquement, les roues n'ont
+  pas l'air de tourner »** : elles tournaient à la vitesse de la poulie,
+  nulle à quai. Elles tournent maintenant selon le déplacement réel de la
+  rame dessinée : 1,035 rad pour 31 cm de recul, soit d/R.
+- Vérifié : 2 tests PC (compteur, vitesse des roues), contrôle du compteur
+  à 3 474 m à l'arrivée dans le banc des portes, 12 bancs PWA, 95 tests
+  PC, vues des garde-corps aux deux gares.
+
 **v1.15.63** — quais à la bonne longueur, rame d'en face complète, boutons
 dans le navigateur du PC.
 - **« Les quais sont trop longs : en bas le quai se prolonge de 4 m après

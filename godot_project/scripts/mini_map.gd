@@ -134,7 +134,8 @@ func _draw() -> void:
 		draw_circle(p_ghost, 4.0, Color(0.30, 0.65, 1.0))
 
 		# Distance restante en bas
-		var dist_text: String = "%.0f / %.0f m" % [physics.s, PNConstants.LENGTH]
+		var dist_text: String = "%.0f / %.0f m" % [
+			PNConstants.distance_compteur(physics.s, physics.direction), PNConstants.LENGTH]
 		_draw_label(Vector2(padding, map_size.y - padding + 2), dist_text, Color(0.95, 0.95, 0.95))
 
 
