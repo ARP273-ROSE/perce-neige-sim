@@ -1312,12 +1312,12 @@ func _process(_delta: float) -> void:
 	if not is_ghost and view_mode == ViewMode.EXTERIOR:
 		_update_orbit_camera()
 	# Position le long de la spline : rame 1 à s_render (position physique
-	# interpolée pour le rendu), rame 2 (ghost) à LENGTH - s_render
+	# interpolée pour le rendu), rame 2 (ghost) à MIROIR_S − s_render
 	var s_pos: float
 	if is_ghost:
 		# Le ghost embarque dans SA gare : son propre affaissement de
 		# brin s'applique à SA position (visible quand il est en bas).
-		# ghost_s_render() vaut LENGTH − s en marche normale, et la
+		# ghost_s_render() vaut MIROIR_S − s en marche normale, et la
 		# position FIGÉE de la rame 2 une fois le câble rompu (mode Défi).
 		s_pos = physics.ghost_s_render() + physics.ghost_sag_offset()
 	else:

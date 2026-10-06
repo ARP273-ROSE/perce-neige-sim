@@ -3,7 +3,8 @@
 Retour d'essai 2026-09-27 : « le bouton auto ne sert à rien » — il ne
 faisait que basculer un drapeau que rien ne lisait. Ce test fait tourner la
 fenêtre entière hors écran, avec une horloge factice, appuie A à quai et
-vérifie que la rame part, tient 100 %, arrive, et que le pilote se désengage.
+vérifie que la rame part, tient 100 %, arrive, ouvre ses portes une fois le
+câble stabilisé, laisse descendre les passagers, puis se désengage.
 
 Exécution : QT_QPA_PLATFORM=offscreen pytest tests/test_pilote_auto.py -v
 """
@@ -72,7 +73,18 @@ def test_voyage_complet_sous_pilote_auto(fenetre):
         _step(win, clock, 5.0)
         t += 5.0
     assert st.finished, f"pas arrivée après {t:.0f} s (s={tr.s:.0f})"
-    assert not tr.autopilot                   # rend la main à l'arrivée
+    # Arrivée (retour du 06/10/2026) : le pilote attend la stabilisation du
+    # câble, ouvre les portes, laisse descendre les passagers, PUIS rend
+    # la main.
+    assert tr.autopilot
+    assert abs(tr.s - pn.STOP_S) < 0.1, f"arrêt à {tr.s:.2f} (repère {pn.STOP_S})"
+    t = 0.0
+    while tr.autopilot and t < 90.0:
+        _step(win, clock, 1.0)
+        t += 1.0
+    assert not tr.autopilot, "le pilote n'a pas rendu la main"
+    assert tr.doors_open, "portes restées fermées à l'arrivée"
+    assert tr.pax == 0 and st.ghost_pax == 0, (tr.pax, st.ghost_pax)
 
 
 def test_reprise_manuelle_desengage(fenetre):

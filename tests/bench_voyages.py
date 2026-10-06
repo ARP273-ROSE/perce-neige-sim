@@ -54,7 +54,7 @@ def make(direction, pax, gpax, cmd=1.0):
     st.ghost_f = float(gpax)
     tr.direction = direction
     tr.s = pn.START_S if direction > 0 else pn.STOP_S
-    st.ghost_s = pn.LENGTH - tr.s
+    st.ghost_s = pn.miroir(tr.s)
     tr.v = 0.0
     tr.doors_open = False
     tr.doors_cmd = False
@@ -82,9 +82,9 @@ def voyage(direction, pax, gpax, cmd=1.0):
                 "t": round(t, 3), "s": tr.s, "s_ghost": st.ghost_s,
                 "v": tr.v, "a": tr.a,
                 "grad_main": pn.gradient_at(tr.s),
-                "grad_ghost": pn.gradient_at(pn.LENGTH - tr.s),
+                "grad_ghost": pn.gradient_at(pn.miroir(tr.s)),
                 "alt_main": pn.geom_at(tr.s)[1],
-                "alt_ghost": pn.geom_at(pn.LENGTH - tr.s)[1],
+                "alt_ghost": pn.geom_at(pn.miroir(tr.s))[1],
                 "m_main": tr.mass_kg,
                 "m_ghost": pn.TRAIN_EMPTY_KG + st.ghost_pax * pn.PAX_KG,
                 "throttle": tr.throttle, "regen_level": tr.regen_level,

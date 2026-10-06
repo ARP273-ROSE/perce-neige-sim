@@ -60,8 +60,9 @@ func _t(en: String, fr: String) -> String:
 # ---------------------------------------------------------------------------
 
 func _build_station_low() -> void:
-	# Le train occupe s ∈ [10, 42] (centre à START_S=26, half_length=16).
-	# Plateforme déborde de chaque côté : [3, 51] — 8m en arrière, 9m devant le nez.
+	# Le train occupe s ∈ [6,56, 38,56] (centre à START_S = 22,56) : arrière
+	# à 4,5 m de la tête du butoir (PNConstants.BUTOIR_BAS_S = 2,0 − 0,10 +
+	# 0,16 : socle à 2,0, tête de 0,32 centrée à 0,10 côté ligne).
 	var s_bumper: float = 2.0
 	var s_plat_start: float = 3.0
 	var s_plat_end: float = s_plat_start + platform_length
@@ -84,7 +85,9 @@ func _build_station_low() -> void:
 # ---------------------------------------------------------------------------
 
 func _build_station_high() -> void:
-	var s_bumper: float = PNConstants.LENGTH - 0.4   # collé contre la fin du tunnel
+	# collé contre la fin du tunnel ; tête à PNConstants.BUTOIR_HAUT_S,
+	# nez de la rame arrêtée à 1,5 m
+	var s_bumper: float = PNConstants.LENGTH - 0.4
 	var s_plat_end: float = PNConstants.LENGTH - 1.0
 	var s_plat_start: float = s_plat_end - platform_length
 

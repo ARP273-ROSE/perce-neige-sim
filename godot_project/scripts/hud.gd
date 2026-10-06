@@ -259,10 +259,21 @@ func set_fault_manager(fm: FaultManager) -> void:
 		_machine_room.setup(physics, fm)
 
 
+## Message bref à la place de l'état (refus d'une commande : portes…).
+var _flash_text: String = ""
+var _flash_t: float = 0.0
+
+
+func flash(text: String, seconds: float = 3.0) -> void:
+	_flash_text = text
+	_flash_t = seconds
+
+
 func _process(_delta: float) -> void:
 	if physics == null:
 		return
-	_status_label.text = _status_text()
+	_flash_t = maxf(0.0, _flash_t - _delta)
+	_status_label.text = _flash_text if _flash_t > 0.0 else _status_text()
 	_update_fault_panel()
 
 
