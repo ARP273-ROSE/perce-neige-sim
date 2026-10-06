@@ -68,7 +68,10 @@ const ALT_HIGH: float = 3032.0           # altitude Glacier (m)
 const DROP: float = 921.0                # dénivelé (m)
 
 const SQUARE_SECTION_LOW_END: float = 257.0    # transition carré→rond bas
-const SQUARE_SECTION_HIGH_START: float = 3460.52  # transition rond→carré haut (3420 + 40,52)
+# Tunnel rond → carré, 1 m avant la salle de gare haute, elle-même 4 m
+# avant le quai (retour du 06/10/2026 : « rapproche la fin du tunnel du
+# début du quai » — raccourci, le quai commençait 16 m après la salle)
+const SQUARE_SECTION_HIGH_START: float = 3472.56  # QUAI_HAUT_DEBUT_S − 5
 
 # Vitesse — régulateur Von Roll plafonné à 12 m/s
 const V_MAX: float = 12.0                # m/s (43.2 km/h)
@@ -178,8 +181,11 @@ const QUAI_BAS_DEBUT_S: float = 3.0
 const QUAI_BAS_FIN_S: float = 42.56      # START_S + TRAIN_HALF + 4
 const QUAI_HAUT_DEBUT_S: float = 3477.56 # STOP_S − TRAIN_HALF − 3
 const QUAI_HAUT_FIN_S: float = 3513.52   # LENGTH − 1
-const CREEP_DIST: float = 55.0           # 20 + PLATFORM_LEN
-const CREEP_START_S: float = 3441.56     # STOP_S − CREEP_DIST
+# Vitesse d'approche V_CREEP atteinte quand le nez de la rame montante
+# arrive au galet n° 238 (entrée du quai haut), PAS AVANT (fait de Kevin,
+# 06/10/2026) : la rame descendante entre alors au quai bas.
+const CREEP_DIST: float = 35.03          # STOP_S − (galet 238 = 3477.53 − TRAIN_HALF)
+const CREEP_START_S: float = 3461.53     # STOP_S − CREEP_DIST
 
 # Portes
 const DOOR_CLOSE_TIME: float = 3.0

@@ -1471,6 +1471,11 @@ func _build_walkway() -> void:
 	var boxes: Array = []
 	s = 12.0
 	while s < PNConstants.LENGTH - 12.0:
+		# pas dans les salles des gares : le boîtier y flottait loin de
+		# tout mur (retour de Kevin du 06/10/2026, gare du bas)
+		if s < tunnel.station_low_end + 1.0 or s > tunnel.station_high_start - 1.0:
+			s += 24.0
+			continue
 		var xf3: Transform3D = tunnel.transform_at(s)
 		var off3: float = _track_center_x(s, -walkway_side) if (
 			s >= PNConstants.PASSING_START - 60.0 and s <= PNConstants.PASSING_END + 60.0) else 0.0

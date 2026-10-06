@@ -411,7 +411,7 @@ LENGTH = 3514.52            # voie le long de la pente (m) = START_S + PARCOURS 
 # distance counter values t=2:25 (257 m outbound, tunnel becomes round)
 # and t=7:43 (tunnel returns to square, ≈ 54 m before platform stop).
 SQUARE_SECTION_LOW_END = 257.0
-SQUARE_SECTION_HIGH_START = 3460.52     # 3420 + 40,52
+SQUARE_SECTION_HIGH_START = 3472.56     # 1 m avant la salle de gare haute, 5 m avant le quai (PWA)
 ALT_LOW = 2111.0            # lower station altitude (m)
 ALT_HIGH = 3032.0           # upper station altitude (m)
 DROP = ALT_HIGH - ALT_LOW   # 921 m
@@ -500,7 +500,7 @@ BUTOIR_HAUT_S = round(LENGTH - 0.46, 2)   # face du butoir haut (socle à LENGTH
 JEU_BUTOIR_BAS = 4.5            # arrière de la rame ↔ butoir bas
 JEU_BUTOIR_HAUT = 1.5           # nez de la rame ↔ butoir haut
 START_S = round(BUTOIR_BAS_S + JEU_BUTOIR_BAS + TRAIN_HALF, 2)    # 22,56
-STOP_S = round(BUTOIR_HAUT_S - JEU_BUTOIR_HAUT - TRAIN_HALF, 2)   # 3456,04
+STOP_S = round(BUTOIR_HAUT_S - JEU_BUTOIR_HAUT - TRAIN_HALF, 2)   # 3496,56
 # Les deux rames sont liées par le câble : l'autre rame est au MIROIR des
 # points d'arrêt — quand l'une est à STOP_S, l'autre est à START_S. Le
 # câble entre elles fait 2·LENGTH − MIROIR_S = 3 469,4 m.
@@ -534,9 +534,11 @@ CREEP_V = 0.75                  # creep speed on platform approach (m/s)
                                 # Constaté en cabine (aller-retour du
                                 # 2026-07 par l'exploitant) : l'entrée en
                                 # gare se fait à ~0,75 m/s, pas 0,3-0,5.
-# Front reaches 1 m/s when 20 m before the platform start, then rolls
-# at 1 m/s through the 20 m approach + 35 m platform = 55 m.
-CREEP_DIST = 20.0 + PLATFORM_LEN        # 55 m measured in centre-position
+# CREEP_V reached when the up-going train's nose reaches roller no. 238
+# (upper platform entry, s = 3477.53), NOT BEFORE (Kevin, 06/10/2026) ; the
+# down-going train then enters the lower platform. Same as PNConstants.
+GALET_238_S = 3477.53
+CREEP_DIST = STOP_S - (GALET_238_S - TRAIN_HALF)   # 35.03 m, centre-position
 CREEP_START_S = STOP_S - CREEP_DIST     # centre position at creep entry
 
 # --- Décélérations de freinage (sources : recherche du repo §4.2
@@ -784,26 +786,27 @@ SLOPE_PROFILE: list[tuple[float, float]] = [
 ]
 
 # Horizontal route plan : (slope distance, bearing in degrees).
-# GPS coordinates : Val Claret 45.4578°N 6.9014°E → Grande Motte
-# 45.4354°N 6.9020°E ; straight-line bearing ≈ 179° (due S).
-# Two right curves separated by a straight section through the passing
-# loop (remontees-mecaniques.net technical description confirmed).
-# Net heading change ≈ 48° right (155° → 203°).
+# Stations (IGN BD TOPO) : Val Claret 45.45189°N 6.89898°E → Grande Motte
+# 45.42352°N 6.89146°E (3029 m). Two right curves separated by a straight
+# section through the passing loop. Curve positions : cockpit video ;
+# angles and bearings : fitted on the IGN line (audit_physique/
+# trace_ign.sage, 06/10/2026 : mean gap 2 m, max 11 m, IGN accuracy 10 m).
+# Net heading change 44.8° right (169.7° → 214.5°).
 CURVE_PROFILE: list[tuple[float, float]] = [
     # Curve positions calibrated from cockpit video : at 10.1 m/s cruise,
     # t=4:08 → 4:32 maps curve 1 to s=1297..1541 m, t=5:06 → 5:54 maps
-    # curve 2 to s=1884..2369 m. The straight passing-loop segment sits
-    # in between (PASSING_START=1601, PASSING_END=1823).
-    (0.0,    155.0),   # SSE out of Val Claret station
-    (1297.0, 155.0),   # straight lower section (t=0..4:08)
-    (1420.0, 165.0),   # curve 1 midpoint — peak curvature
-    (1541.0, 175.0),   # end of curve 1 (t=4:32, ≈ due S)
-    (1621.26, 175.0),  # entering passing loop (neutral 20.26 m inserted before)
-    (1843.26, 175.0),  # exiting passing loop (straight)
-    (1924.52, 175.0),  # start of curve 2 (neutral 20.26 m inserted before)
-    (2165.52, 189.0),  # curve 2 midpoint — peak curvature
-    (2409.52, 203.0),  # end of curve 2 (t=5:54, SSW)
-    (3514.52, 203.0),  # straight into upper station
+    # curve 2 to s=1884..2369 m (+40.52 m of neutral sections inserted
+    # around the passing loop since). Same table as SlopeProfile (PWA).
+    (0.0,    169.7),   # SSE out of Val Claret station
+    (1297.0, 169.7),   # straight lower section (t=0..4:08)
+    (1419.0, 177.95),  # curve 1 midpoint — peak curvature
+    (1541.0, 186.2),   # end of curve 1 (t=4:32, 16.5° right)
+    (1621.26, 186.2),  # entering passing loop (neutral 20.26 m inserted before)
+    (1843.26, 186.2),  # exiting passing loop (straight)
+    (1924.52, 186.2),  # start of curve 2 (neutral 20.26 m inserted before)
+    (2167.02, 200.35), # curve 2 midpoint — peak curvature
+    (2409.52, 214.5),  # end of curve 2 (t=5:54, 28.3° right, SW)
+    (3514.52, 214.5),  # straight into upper station
 ]
 
 # Tunnel lighting zones — (start_m, end_m) of DARK sections identified from

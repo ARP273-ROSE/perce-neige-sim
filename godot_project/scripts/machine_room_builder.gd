@@ -67,6 +67,13 @@ const PIT_S0: float = -0.85          # fosse ouverte autour des deux roues et de
 const PIT_S1: float = 8.95
 const PIT_X0: float = -0.58
 const PIT_X1: float = 0.34
+const PALIER_S0: float = 6.65        # palier plat des quais (stations_builder) jusqu'au fond
+const VERRIERE_S0: float = 1.5       # la verrière commence ici (plafond bas avant)
+const VERRIERE_HAUT: float = 6.0     # plafond de la verrière, haut des baies
+const DOME_R: float = 400.0          # rayon du dôme du panorama
+const PANO_CAP_SPAN: float = 180.0   # largeur du panorama (degrés, tools_panorama.py)
+const PANO_SITE_HAUT: float = 35.0   # site de la ligne du haut
+const PANO_SITE_BAS: float = -10.0   # site de la ligne du bas
 const ROOM_S0: float = -2.6
 const ROOM_S1: float = 14.0
 const ROOM_HALF_W: float = 5.2
@@ -85,7 +92,7 @@ const _CUT_RULES: Dictionary = {
 	"BarreCaillebotis": "top",
 	"PlafondSalle": "hall_top", "PoutreSalle": "hall_top", "NeonSalle": "hall_top",
 	"MurMachinesAval": "s0", "MurMachinesAmont": "s1",
-	"MurFond": "hall_s1", "BaieHall": "hall_s1", "Enseigne": "hall_s1",
+	"MurFond": "hall_s1", "Vitrage": "hall_s1", "Enseigne": "hall_s1",
 	"SolMachines": "floor",
 }
 var _cut_nodes: Array = []
@@ -100,6 +107,7 @@ var _cable_phase: float = 0.0
 const CABLE_STRAND_PITCH: float = 0.45
 var _cable_mat: ShaderMaterial = null
 var _mats: Dictionary = {}
+var _exterieur: Node3D = null
 
 
 func build(t: TunnelBuilder) -> void:
@@ -250,28 +258,13 @@ func _build_hall_end() -> void:
 	for sx in [-1.0, 1.0]:
 		_box(Vector3(0.30, hall_h, HALL_DEPTH), _mats["paroi_gare"],
 			sx * (HALL_HALF_W + 0.15), y_mid, HALL_DEPTH * 0.5, "ParoiSalle")
-	_box(Vector3(HALL_HALF_W * 2.0 + 0.6, 0.30, HALL_DEPTH), _mats["plafond"],
-		0.0, Y_HALL_CEIL + 0.15, HALL_DEPTH * 0.5, "PlafondSalle")
-	for sb in [1.4, 4.2, 7.0]:
-		_box(Vector3(HALL_HALF_W * 2.0, 0.32, 0.16), _mats["poutre"], 0.0, Y_HALL_CEIL - 0.24, sb, "PoutreSalle")
-	# mur du fond : bardage bois, deux baies lumineuses, enseigne
-	_box(Vector3(HALL_HALF_W * 2.0 + 0.6, hall_h, 0.30), _mats["bois"],
-		0.0, y_mid, HALL_DEPTH + 0.15, "MurFond")
-	for sx in [-1.0, 1.0]:
-		_box(Vector3(2.0, 1.4, 0.06), _mats["baie"], sx * 3.0, Y_HALL_FLOOR + 1.0, HALL_DEPTH - 0.04, "BaieHall")
-	var sign_l: Label3D = Label3D.new()
-	sign_l.text = "DESTINATION\nGLACIER"
-	sign_l.font_size = 96
-	sign_l.pixel_size = 0.006
-	sign_l.modulate = Color(1.0, 0.62, 0.12)
-	sign_l.outline_modulate = Color(0.5, 0.25, 0.02)
-	sign_l.outline_size = 8
-	sign_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	sign_l.shaded = false
-	sign_l.double_sided = true
-	sign_l.set_meta("nom", "Enseigne")
-	add_child(sign_l)
-	_place(sign_l, 0.0, Y_HALL_FLOOR + 3.0, HALL_DEPTH - 0.05)
+	# plafond bas jusqu'à la verrière (au-dessus du palier, cf. _build_mur_vitre)
+	_box(Vector3(HALL_HALF_W * 2.0 + 0.6, 0.30, VERRIERE_S0), _mats["plafond"],
+		0.0, Y_HALL_CEIL + 0.15, VERRIERE_S0 * 0.5, "PlafondSalle")
+	_box(Vector3(HALL_HALF_W * 2.0, 0.32, 0.16), _mats["poutre"], 0.0, Y_HALL_CEIL - 0.24,
+		VERRIERE_S0 - 0.1, "PoutreSalle")
+	_build_mur_vitre()
+	_build_exterieur()
 	for s_pos in [3.0, 7.0]:
 		var light: OmniLight3D = OmniLight3D.new()
 		light.light_color = Color(0.95, 0.97, 1.0)
@@ -280,7 +273,227 @@ func _build_hall_end() -> void:
 		light.shadow_enabled = false
 		add_child(light)
 		_place(light, 0.0, Y_HALL_CEIL - 0.4, s_pos)
-		_box(Vector3(2.4, 0.08, 0.16), _mats["neon"], 0.0, Y_HALL_CEIL - 0.25, s_pos, "NeonSalle")
+		if s_pos < VERRIERE_S0:
+			_box(Vector3(2.4, 0.08, 0.16), _mats["neon"], 0.0, Y_HALL_CEIL - 0.25, s_pos, "NeonSalle")
+
+
+# ---------------------------------------------------------------------------
+# Mur du fond (Kevin, 06/10/2026 : « des portes coulissantes avec baies
+# vitrées et vue sur les montagnes dont le sommet de la Grande Motte ») :
+# allège bois au ras du palier, baies vitrées sur toute la largeur, une
+# porte coulissante à deux vantaux en face de chaque palier, imposte bois
+# avec l'enseigne « DESTINATION GLACIER ».
+# ---------------------------------------------------------------------------
+
+## Altitude MONDE du dessus du palier (= dernière marche des quais).
+func _y_palier_monde() -> float:
+	return _to_world(Vector3(0.0, -1.10, PALIER_S0)).y
+
+
+## y local (repère incliné de la voie) d'une altitude monde, à l'abscisse s.
+func _y_local(y_monde: float, s_: float) -> float:
+	var o: Vector3 = _to_world(Vector3(0.0, 0.0, s_))
+	return (y_monde - o.y) / (_to_world(Vector3(0.0, 1.0, s_)).y - o.y)
+
+
+func _build_mur_vitre() -> void:
+	var s_m: float = HALL_DEPTH + 0.15
+	var y_seuil: float = _y_local(_y_palier_monde(), HALL_DEPTH)
+	var larg: float = HALL_HALF_W * 2.0 + 0.6
+	# allège bois sous le seuil (au centre, derrière la fosse)
+	_box(Vector3(larg, y_seuil - Y_HALL_FLOOR, 0.30), _mats["bois"], 0.0,
+		(Y_HALL_FLOOR + y_seuil) * 0.5, s_m, "MurFond")
+	# verrière : le plafond monte à VERRIERE_HAUT sur les derniers mètres,
+	# pour que le sommet de la Grande Motte (≈ 14° au-dessus de l'horizon,
+	# à 2,3 km) se voie déjà depuis la cabine, rame à quai
+	var h_l: float = VERRIERE_HAUT - Y_HALL_CEIL
+	var l_l: float = HALL_DEPTH + 0.30 - VERRIERE_S0
+	for sx in [-1.0, 1.0]:
+		_box(Vector3(0.30, h_l, l_l), _mats["paroi_gare"], sx * (HALL_HALF_W + 0.15),
+			(Y_HALL_CEIL + VERRIERE_HAUT) * 0.5, VERRIERE_S0 + l_l * 0.5, "ParoiSalle")
+	_box(Vector3(larg, h_l + 0.30, 0.30), _mats["plafond"], 0.0,
+		(Y_HALL_CEIL + VERRIERE_HAUT) * 0.5 + 0.15, VERRIERE_S0 - 0.15, "PlafondSalle")
+	# verre très clair, sans reflets : réfléchissant (SSR / SDFGI), il
+	# renvoyait le hall éclairé et délavait toute la vue sur le glacier
+	var verre: StandardMaterial3D = _mat("verre", Color(0.62, 0.78, 0.84, 0.07), 0.1, 0.0)
+	verre.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	verre.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	verre.disable_fog = true
+	var alu: StandardMaterial3D = _mat("alu", Color(0.20, 0.21, 0.23), 0.4, 0.7)
+	_box(Vector3(larg, 0.03, l_l), verre, 0.0, VERRIERE_HAUT + 0.02, VERRIERE_S0 + l_l * 0.5, "PlafondSalle")
+	for sv in [VERRIERE_S0 + 0.05, VERRIERE_S0 + 1.9, VERRIERE_S0 + 3.8, VERRIERE_S0 + 5.7, HALL_DEPTH - 0.05]:
+		_box(Vector3(larg, 0.14, 0.08), alu, 0.0, VERRIERE_HAUT - 0.05, sv, "PlafondSalle")
+	# baies vitrées sur toute la largeur et toute la hauteur
+	var h_v: float = VERRIERE_HAUT - y_seuil
+	var y_v: float = (VERRIERE_HAUT + y_seuil) * 0.5
+	_box(Vector3(HALL_HALF_W * 2.0, h_v, 0.02), verre, 0.0, y_v, HALL_DEPTH + 0.12, "Vitrage")
+	for xm in [-4.86, -4.25, -2.45, -1.25, 0.0, 1.25, 2.45, 4.25, 4.86]:
+		_box(Vector3(0.07, h_v, 0.14), alu, xm, y_v, HALL_DEPTH + 0.10, "Vitrage")
+	var h_p: float = 2.20
+	for yy in [y_seuil + 0.03, y_seuil + h_p, y_seuil + 4.4, VERRIERE_HAUT - 0.03]:
+		_box(Vector3(HALL_HALF_W * 2.0, 0.06, 0.14), alu, 0.0, yy, HALL_DEPTH + 0.10, "Vitrage")
+	# portes coulissantes face aux paliers : deux vantaux de 0,90 m,
+	# caisson du mécanisme, poignées, « SORTIE »
+	for d in [-1.0, 1.0]:
+		var xc: float = d * 3.35
+		_box(Vector3(1.84, 0.14, 0.12), alu, xc, y_seuil + h_p + 0.10, HALL_DEPTH - 0.02, "Vitrage")
+		for xv in [xc - 0.45, xc + 0.45]:
+			for xx in [xv - 0.42, xv + 0.42]:
+				_box(Vector3(0.05, h_p - 0.06, 0.06), alu, xx, y_seuil + h_p * 0.5, HALL_DEPTH + 0.06, "Vitrage")
+			for yy in [y_seuil + 0.08, y_seuil + h_p - 0.05]:
+				_box(Vector3(0.88, 0.07, 0.06), alu, xv, yy, HALL_DEPTH + 0.06, "Vitrage")
+		for xx in [xc - 0.09, xc + 0.09]:
+			_box(Vector3(0.03, 0.55, 0.05), _mats["acier"], xx, y_seuil + 1.05, HALL_DEPTH - 0.01, "Vitrage")
+		var sortie: Label3D = Label3D.new()
+		sortie.text = "SORTIE  EXIT"
+		sortie.font_size = 48
+		sortie.pixel_size = 0.004
+		sortie.modulate = Color(0.20, 0.95, 0.40)
+		sortie.outline_size = 0
+		sortie.shaded = false
+		sortie.set_meta("nom", "Vitrage")
+		add_child(sortie)
+		_place(sortie, xc, y_seuil + h_p + 0.10, HALL_DEPTH - 0.09)
+	# enseigne sur un panneau bois au-dessus des portes, au centre : sous
+	# la ligne de vue du sommet depuis la cabine
+	var y_e: float = y_seuil + h_p + 0.55
+	_box(Vector3(3.3, 0.84, 0.06), _mats["bois"], 0.0, y_e, HALL_DEPTH + 0.02, "Enseigne")
+	var sign_l: Label3D = Label3D.new()
+	sign_l.text = "DESTINATION\nGLACIER"
+	sign_l.font_size = 96
+	sign_l.pixel_size = 0.0040
+	sign_l.modulate = Color(1.0, 0.62, 0.12)
+	sign_l.outline_modulate = Color(0.5, 0.25, 0.02)
+	sign_l.outline_size = 8
+	sign_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	sign_l.shaded = false
+	sign_l.set_meta("nom", "Enseigne")
+	add_child(sign_l)
+	_place(sign_l, 0.0, y_e, HALL_DEPTH - 0.02)
+
+
+## Dehors : le glacier au pied des baies (plan de neige) et le panorama
+## RÉEL calculé sur le relief IGN/SRTM depuis la gare amont
+## (tools_panorama.py → textures/panorama_glacier.png), plaqué sur un dôme
+## centré sur le mur du fond et orienté au cap réel de la voie. Masqué dans
+## les vues extérieure et salle des machines (main.gd).
+func _build_exterieur() -> void:
+	_exterieur = Node3D.new()
+	_exterieur.name = "Exterieur"
+	add_child(_exterieur)
+	var y_p: float = _y_palier_monde()
+	var droite: Vector3 = _xf.basis.x
+	# neige devant les portes : tablier horizontal au niveau du palier, de
+	# la couleur du bas du panorama, qui se fond dans le dôme sur ses bords
+	# (un grand plan opaque laissait une ligne d'horizon blanche et nette)
+	var neige: StandardMaterial3D = StandardMaterial3D.new()
+	neige.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	neige.vertex_color_use_as_albedo = true
+	neige.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	neige.disable_fog = true
+	neige.cull_mode = BaseMaterial3D.CULL_DISABLED
+	var c_neige: Color = Color(0.72, 0.77, 0.88)   # moyenne de la dernière ligne du panorama
+	if _rendu_web():
+		c_neige = Color(pow(c_neige.r, _GAMMA_WEB), pow(c_neige.g, _GAMMA_WEB), pow(c_neige.b, _GAMMA_WEB))
+	var st_n: SurfaceTool = SurfaceTool.new()
+	st_n.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var o_n: Vector3 = _to_world(Vector3(0.0, 0.0, HALL_DEPTH + 0.30))
+	o_n.y = y_p - 0.03
+	var avant_h: Vector3 = droite.cross(Vector3.UP).normalized() * -1.0
+	if avant_h.dot(-_xf.basis.z) < 0.0:
+		avant_h = -avant_h
+	var nx: int = 12
+	var nz: int = 8
+	var larg_n: float = 36.0
+	var prof_n: float = 16.0
+	var pt_n := func(i: int, j: int) -> void:
+		var u: float = float(i) / float(nx)
+		var w: float = float(j) / float(nz)
+		# opaque sur la première moitié (couvre le toit de la salle des
+		# machines, qui dépasse sous le dehors), fondu ensuite
+		var a_n: float = clampf(minf(u, 1.0 - u) * 3.2, 0.0, 1.0) * clampf((1.0 - w) * 2.0, 0.0, 1.0)
+		st_n.set_color(Color(c_neige.r, c_neige.g, c_neige.b, a_n))
+		st_n.add_vertex(o_n + droite * ((u - 0.5) * larg_n) + avant_h * (w * prof_n))
+	for i in range(nx):
+		for j in range(nz):
+			pt_n.call(i, j)
+			pt_n.call(i + 1, j)
+			pt_n.call(i + 1, j + 1)
+			pt_n.call(i, j)
+			pt_n.call(i + 1, j + 1)
+			pt_n.call(i, j + 1)
+	st_n.set_material(neige)
+	var mi_n: MeshInstance3D = MeshInstance3D.new()
+	mi_n.name = "Neige"
+	mi_n.mesh = st_n.commit()
+	mi_n.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_exterieur.add_child(mi_n)
+	# dôme du panorama : (cap, site) de chaque sommet → (u, v) de l'image
+	# Shader minimal : le rendu Compatibility (export web, iPad) assombrit
+	# nettement les tons moyens et sombres par rapport au Forward+
+	# (mesuré le 06/10/2026 : sortie web ≈ sortie Vulkan ^ 1,6 — ciel bleu
+	# nuit). On relève le panorama d'autant en web pour garder un ciel de
+	# plein jour ; γ = 1 en Forward+.
+	var sh: Shader = Shader.new()
+	sh.code = """shader_type spatial;
+render_mode unshaded, cull_disabled, fog_disabled;
+uniform sampler2D pano : source_color, filter_linear_mipmap, repeat_disable;
+uniform float gamma = 1.0;
+void fragment() {
+	ALBEDO = pow(texture(pano, UV).rgb, vec3(gamma));
+}
+"""
+	var mat: ShaderMaterial = ShaderMaterial.new()
+	mat.shader = sh
+	mat.set_shader_parameter("pano", load("res://textures/panorama_glacier.png"))
+	mat.set_shader_parameter("gamma", _GAMMA_WEB if _rendu_web() else 1.0)
+	var centre: Vector3 = _to_world(Vector3(0.0, 0.0, HALL_DEPTH))
+	centre.y = y_p + 1.7
+	var cap0: float = SlopeProfile.heading_at(PNConstants.LENGTH)
+	var sites: Array = [-75.0, -40.0, -20.0]
+	var sv: float = PANO_SITE_BAS
+	while sv <= PANO_SITE_HAUT + 0.01:
+		sites.append(sv)
+		sv += 2.5
+	sites.append_array([45.0, 60.0, 75.0, 88.0])
+	var n_u: int = 120
+	var st: SurfaceTool = SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var sommet := func(iu: int, site: float) -> void:
+		var u: float = float(iu) / float(n_u)
+		var cap: float = deg_to_rad(cap0 + (u - 0.5) * PANO_CAP_SPAN)
+		var v: float = clampf((PANO_SITE_HAUT - site) / (PANO_SITE_HAUT - PANO_SITE_BAS), 0.002, 0.998)
+		var dir: Vector3 = Vector3(sin(cap), 0.0, -cos(cap)) * cos(deg_to_rad(site)) \
+			+ Vector3.UP * sin(deg_to_rad(site))
+		st.set_uv(Vector2(u, v))
+		st.add_vertex(centre + dir * DOME_R)
+	for j in range(sites.size() - 1):
+		for iu in range(n_u):
+			sommet.call(iu, sites[j])
+			sommet.call(iu + 1, sites[j])
+			sommet.call(iu + 1, sites[j + 1])
+			sommet.call(iu, sites[j])
+			sommet.call(iu + 1, sites[j + 1])
+			sommet.call(iu, sites[j + 1])
+	st.set_material(mat)
+	var mi_d: MeshInstance3D = MeshInstance3D.new()
+	mi_d.name = "Panorama"
+	mi_d.mesh = st.commit()
+	mi_d.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_exterieur.add_child(mi_d)
+
+
+const _GAMMA_WEB: float = 0.625
+
+
+func _rendu_web() -> bool:
+	return RenderingServer.get_current_rendering_method() == "gl_compatibility"
+
+
+## Le dehors n'a de sens que vu de l'intérieur de la gare (vue cabine).
+func set_exterieur_visible(v: bool) -> void:
+	if _exterieur != null:
+		_exterieur.visible = v
 
 
 # ---------------------------------------------------------------------------

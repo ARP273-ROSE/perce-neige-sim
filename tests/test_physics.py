@@ -187,6 +187,30 @@ def test_entree_en_gare_a_075():
         assert t < 200, f"approche trop lente ({t:.0f} s, dir={direction})"
 
 
+def test_rampement_atteint_au_galet_238():
+    # Fait de Kevin (06/10/2026) : « la vitesse de 0,7 m/s est atteinte
+    # quand on arrive au galet 238 et pas avant » — nez de la rame
+    # MONTANTE au galet n° 238 (entrée du quai haut), que l'on conduise la
+    # montante ou la descendante (les deux rames sont liées au câble).
+    for direction, s0 in ((1, pn.STOP_S - 400.0), (-1, pn.START_S + 400.0)):
+        st, ph = _make(direction, s0, 100, 0, v0=8.0 * direction, cmd=1.0)
+        t, nez_rampe, v_avant = 0.0, None, None
+        while not st.finished and t < 300:
+            ph.step(DT)
+            t += DT
+            s_mont = st.train.s if direction > 0 else pn.miroir(st.train.s)
+            nez = s_mont + pn.TRAIN_HALF
+            if v_avant is None and nez >= pn.GALET_238_S - 15.0:
+                v_avant = abs(st.train.v)
+            if nez_rampe is None and abs(st.train.v) <= pn.CREEP_V + 0.05:
+                nez_rampe = nez
+        assert st.finished, f"pas arrivé (dir={direction})"
+        assert nez_rampe is not None and abs(nez_rampe - pn.GALET_238_S) < 4.0, \
+            f"rampement atteint nez à {nez_rampe} (galet 238 à {pn.GALET_238_S}, dir={direction})"
+        assert v_avant is not None and v_avant > pn.CREEP_V + 0.3, \
+            f"déjà au rampement 15 m avant le galet 238 : v = {v_avant} (dir={direction})"
+
+
 # ---------------------------------------------------------------------------
 # Rebond élastique à l'arrêt (k = EA/L → visible en bas, pas en haut)
 # ---------------------------------------------------------------------------

@@ -26,7 +26,7 @@ extends Node3D
 @export var station_room_half_width: float = 4.90
 @export var station_room_half_height: float = 2.65
 @export var station_low_end: float = 52.0        # fin de la salle Val Claret
-@export var station_high_start: float = 3461.52  # début de la salle Grande Motte (3421 + 40,52)
+@export var station_high_start: float = 3473.56  # début de la salle Grande Motte : 4 m avant le quai (QUAI_HAUT_DEBUT_S − 4)
 @export var station_room_transition: float = 6.0 # fondu salle ↔ tube carré
 
 # Passing loop (boucle de croisement au milieu du tunnel)
@@ -185,10 +185,13 @@ func _build_wall_cables() -> void:
 		var y_off: float = wall_cable_y1 if which == 0 else wall_cable_y2
 		# Découpé en tronçons de chunk_length (même raison que le tunnel :
 		# un tube continu de 3,4 km ne se fait jamais culler).
-		var c_start: float = 0.0
+		# Seulement dans le TUBE : dans les salles des gares la paroi du
+		# tube n'existe plus et les câbles flottaient en l'air au milieu
+		# de la gare (retour de Kevin du 06/10/2026, gare du bas).
+		var c_start: float = station_low_end
 		var chunk_i: int = 0
-		while c_start < PNConstants.LENGTH - 0.001:
-			var c_end: float = minf(c_start + chunk_length, PNConstants.LENGTH)
+		while c_start < station_high_start - 0.001:
+			var c_end: float = minf(c_start + chunk_length, station_high_start)
 			_build_wall_cable_chunk(mat, y_off, radial, c_start, c_end,
 				"WallCable_%d_%d" % [which, chunk_i])
 			c_start = c_end

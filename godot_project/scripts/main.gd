@@ -519,7 +519,7 @@ func _build_station_halls() -> void:
 	station_halls.name = "StationHalls"
 	add_child(station_halls)
 	station_halls.build(tunnel)
-	print("[StationHalls] Halls Val Claret + Grande Motte (concourses + sortie surface)")
+	print("[StationHalls] Hall Val Claret (concourse + sortie surface)")
 
 
 func _build_audio() -> void:
@@ -775,6 +775,8 @@ func _process(delta: float) -> void:
 		audio.machine_view = cabin.view_mode == Cabin.ViewMode.MACHINES
 	if _ext_light != null and cabin != null:
 		_ext_light.visible = cabin.view_mode == Cabin.ViewMode.EXTERIOR
+	if machine_room != null and cabin != null:
+		machine_room.set_exterieur_visible(cabin.view_mode == Cabin.ViewMode.FPV)
 	# numéros des supports : rétroréfléchissants dans les phares (vue cabine)
 	if track != null and cabin != null:
 		track.set_retro(cabin.head_glow() if cabin.view_mode == Cabin.ViewMode.FPV else 0.0)

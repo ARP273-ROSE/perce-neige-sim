@@ -94,19 +94,68 @@ func _build_station_high() -> void:
 	# collé contre la fin du tunnel ; tête à PNConstants.BUTOIR_HAUT_S,
 	# nez de la rame arrêtée à 1,5 m
 	var s_bumper: float = PNConstants.LENGTH - 0.4
-	var s_plat_end: float = PNConstants.QUAI_HAUT_FIN_S
 	var s_plat_start: float = PNConstants.QUAI_HAUT_DEBUT_S
-
-	_build_platform(s_plat_start, s_plat_end, false, +1.0)
-	_build_platform(s_plat_start, s_plat_end, false, -1.0)
+	# La sortie est vers le HAUT (Kevin, 06/10/2026) : les marches du quai
+	# se prolongent dans le hall de la salle des machines jusqu'à un palier
+	# plat, de chaque côté de la fosse, devant les baies vitrées et les
+	# portes coulissantes du mur du fond (MachineRoomBuilder). Le garde-corps
+	# ne ferme plus le quai : il le longe depuis un peu sous le nez de la
+	# rame arrêtée (pas de vide entre la rame et la barrière) et continue le
+	# long du palier jusqu'au mur, pour qu'on ne tombe pas dans la fosse.
+	var s_palier: float = PNConstants.LENGTH + MachineRoomBuilder.PALIER_S0
+	var s_fond: float = PNConstants.LENGTH + MachineRoomBuilder.HALL_DEPTH
+	var s_debut_barriere: float = PNConstants.STOP_S + PNConstants.TRAIN_HALF - 1.0
 	for sd in [-1.0, 1.0]:
-		_build_platform_barrier(s_plat_start, s_plat_end,
-			PNConstants.STOP_S + PNConstants.TRAIN_HALF, sd, false)
+		_build_platform(s_plat_start, s_palier, false, sd)
+		_build_palier(s_palier, s_fond, sd)
+		_build_platform_barrier(s_plat_start, s_palier, s_debut_barriere, sd, false, s_fond - 0.08)
 	# Pas de fosse en haut (retour d'essai 2026-09-26) : butoirs bleus seuls
 	_build_bumper(s_bumper, false)
 	_build_room_dressing(tunnel.station_high_start + tunnel.station_room_transition,
 		PNConstants.LENGTH - 0.3, false)
-	_build_ceiling_lights(s_plat_start, s_plat_end)
+	_build_ceiling_lights(s_plat_start, PNConstants.QUAI_HAUT_FIN_S)
+
+
+## Palier plat en haut des marches (dessus = dessus de la dernière marche),
+## jusqu'au mur du fond du hall.
+func _build_palier(s0: float, s1: float, side: float) -> void:
+	var y_quai: float = FLOOR_Y_LOCAL + platform_height
+	var xf0: Transform3D = _xf_at(s0)
+	var y_top: float = (xf0.origin + xf0.basis.y * y_quai).y
+	var xm: Transform3D = _xf_at((s0 + s1) * 0.5)
+	var dr: Vector3 = xm.basis.x
+	var lb: Basis = Basis(dr, Vector3.UP, dr.cross(Vector3.UP)).orthonormalized()
+	var lat: float = side * (platform_inner_x + platform_width * 0.5)
+	var mat: StandardMaterial3D = StandardMaterial3D.new()
+	mat.albedo_color = Color(0.13, 0.13, 0.14)
+	mat.roughness = 0.9
+	mat.metallic = 0.15
+	var nez: StandardMaterial3D = StandardMaterial3D.new()
+	nez.albedo_color = Color(0.78, 0.79, 0.82)
+	nez.roughness = 0.35
+	nez.metallic = 0.85
+	var c: Vector3 = xm.origin + dr * lat
+	c.y = y_top - tread_thickness * 0.5
+	var mi: MeshInstance3D = MeshInstance3D.new()
+	var bm: BoxMesh = BoxMesh.new()
+	bm.size = Vector3(platform_width, tread_thickness, s1 - s0)
+	bm.material = mat
+	mi.mesh = bm
+	mi.name = "Palier_%s" % ("R" if side > 0.0 else "L")
+	mi.transform = Transform3D(lb, c)
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(mi)
+	var xn: Transform3D = _xf_at(s0 + 0.06)
+	var cn: Vector3 = xn.origin + xn.basis.x * lat
+	cn.y = y_top - 0.017
+	var mn: MeshInstance3D = MeshInstance3D.new()
+	var bn: BoxMesh = BoxMesh.new()
+	bn.size = Vector3(platform_width, 0.035, 0.11)
+	bn.material = nez
+	mn.mesh = bn
+	mn.transform = Transform3D(lb, cn)
+	mn.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(mn)
 
 
 # ---------------------------------------------------------------------------
@@ -177,8 +226,8 @@ func _build_platform(s_start: float, s_end: float, is_low: bool, side: float = 1
 		var s_dn: float = s_start + float(i) * tread_depth          # bord aval
 		var s_up: float = minf(s_dn + tread_depth, s_end)           # bord amont
 		var s_mid: float = (s_dn + s_up) * 0.5
-		var xf_up: Transform3D = tunnel.transform_at(s_up)
-		var xf_mid: Transform3D = tunnel.transform_at(s_mid)
+		var xf_up: Transform3D = _xf_at(s_up)
+		var xf_mid: Transform3D = _xf_at(s_mid)
 		# Élévation MONDE du dessus de marche = niveau du quai au bord amont
 		var top_y: float = (xf_up.origin + xf_up.basis.y * y_top_local).y
 		# Base nivelée : right local (déjà horizontal), up = UP monde
@@ -189,12 +238,12 @@ func _build_platform(s_start: float, s_end: float, is_low: bool, side: float = 1
 		center.y = top_y - tread_thickness * 0.5
 		mm_treads.set_instance_transform(i, Transform3D(level_basis, center))
 		# Nez : au bord AVAL de la marche, affleurant le dessus
-		var xf_dn: Transform3D = tunnel.transform_at(s_dn + 0.06)
+		var xf_dn: Transform3D = _xf_at(s_dn + 0.06)
 		var nose_c: Vector3 = xf_dn.origin + xf_dn.basis.x * lat_center
 		nose_c.y = top_y - 0.017
 		mm_noses.set_instance_transform(i, Transform3D(level_basis, nose_c))
 		if not is_low:
-			var xf_bd: Transform3D = tunnel.transform_at(s_dn + 0.25)
+			var xf_bd: Transform3D = _xf_at(s_dn + 0.25)
 			var band_c: Vector3 = xf_bd.origin + xf_bd.basis.x * lat_center
 			band_c.y = top_y - 0.004
 			mm_bands.set_instance_transform(i, Transform3D(level_basis, band_c))
@@ -219,138 +268,244 @@ func _build_platform(s_start: float, s_end: float, is_low: bool, side: float = 1
 
 
 
-## Garde-corps du haut de quai (fait de Kevin, 06/10/2026, vidéo
+## Garde-corps du haut de quai (faits de Kevin, 06/10/2026, vidéo
 ## d'arrivée en gare haute et photos 095443 / 095511) : en haut de la rame,
-## dans les deux gares, une barrière galvanisée à plinthe bleue longe la
-## voie depuis le nez de la rame arrêtée jusqu'au haut du quai, puis tourne
-## à angle droit pour fermer le quai, avec une porte réservée au
-## personnel. Montants verticaux, main courante et lisses parallèles à la
-## pente, plinthe qui suit les marches.
+## dans les deux gares, une barrière longe la voie depuis le nez de la rame
+## arrêtée. En BAS elle tourne ensuite à angle droit pour fermer le quai,
+## avec une porte réservée au personnel ; en HAUT la sortie est vers le haut,
+## elle continue le long du palier jusqu'au mur du fond. Structure en TUBE
+## ROND BLEU, angles arrondis (tube cintré) : main courante d'un seul tenant
+## qui descend en coude dans les montants d'extrémité, montants
+## intermédiaires verticaux, lisses parallèles à la pente.
 const BARRIERE_H: float = 1.05          # main courante au-dessus du quai
 const BARRIERE_LISSES: Array = [0.38, 0.70]
 const BARRIERE_PAS: float = 1.25        # entre montants
 const PORTE_LARGEUR: float = 0.90
+const BARRIERE_R: float = 0.024         # tube ∅ 48,3 (main courante, montants)
+const BARRIERE_R_LISSE: float = 0.017   # tube ∅ 33,7 (lisses)
+const BARRIERE_COUDE: float = 0.16      # rayon de cintrage des angles
 
 
 func _build_platform_barrier(s_start: float, s_end: float, s_nez: float, side: float,
-		is_low: bool) -> void:
+		is_low: bool, s_fin: float = -1.0) -> void:
+	var bleu: StandardMaterial3D = StandardMaterial3D.new()
+	bleu.albedo_color = Color(0.10, 0.30, 0.64)
+	bleu.roughness = 0.4
+	bleu.metallic = 0.35
+	bleu.cull_mode = BaseMaterial3D.CULL_DISABLED
 	var galva: StandardMaterial3D = StandardMaterial3D.new()
 	galva.albedo_color = Color(0.72, 0.74, 0.76)
 	galva.roughness = 0.4
 	galva.metallic = 0.8
-	var bleu: StandardMaterial3D = StandardMaterial3D.new()
-	bleu.albedo_color = Color(0.12, 0.32, 0.62)
-	bleu.roughness = 0.5
-	bleu.metallic = 0.3
 	var nom: String = "Barriere_%s_%s" % ["low" if is_low else "high", "R" if side > 0.0 else "L"]
 	var racine: Node3D = Node3D.new()
 	racine.name = nom
 	add_child(racine)
+	var st: SurfaceTool = SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var y_quai: float = FLOOR_Y_LOCAL + platform_height
 	var x_voie: float = side * (platform_inner_x + 0.06)
 	var x_mur: float = side * (platform_inner_x + platform_width - 0.05)
+	# en haut : la barrière continue à plat sur le palier jusqu'à s_fin
+	var palier: bool = s_fin > s_end
 	var s_a: float = clampf(s_nez, s_start, s_end - 0.2)
-	var s_b: float = s_end - 0.04
+	var s_b: float = s_fin if palier else s_end - 0.04
+	var xf_e: Transform3D = _xf_at(s_end)
+	var y_palier: float = (xf_e.origin + xf_e.basis.y * y_quai).y
 	# dessus de la marche qui contient s (élévation MONDE, cf. _build_platform)
 	var dessus := func(s_: float) -> float:
+		if palier and s_ >= s_end:
+			return y_palier
 		var i: int = clampi(int(floor((s_ - s_start) / tread_depth)), 0, 100000)
 		var s_up: float = minf(s_start + float(i + 1) * tread_depth, s_end)
-		var xf_up: Transform3D = tunnel.transform_at(s_up)
+		var xf_up: Transform3D = _xf_at(s_up)
 		return (xf_up.origin + xf_up.basis.y * y_quai).y
-	var boite := func(taille: Vector3, mat: Material, xf: Transform3D) -> void:
-		var mi: MeshInstance3D = MeshInstance3D.new()
-		var bm: BoxMesh = BoxMesh.new()
-		bm.size = taille
-		bm.material = mat
-		mi.mesh = bm
-		mi.transform = xf
-		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		racine.add_child(mi)
-	var montant := func(s_: float, x_: float, y_haut: float) -> void:
-		var xf: Transform3D = tunnel.transform_at(s_)
-		var droite: Vector3 = xf.basis.x
-		var b: Basis = Basis(droite, Vector3.UP, droite.cross(Vector3.UP)).orthonormalized()
-		var pied: float = dessus.call(s_)
-		var p: Vector3 = xf.origin + droite * x_
-		p.y = (pied + y_haut) * 0.5
-		boite.call(Vector3(0.05, y_haut - pied, 0.05), galva, Transform3D(b, p))
+	# point à la hauteur h au-dessus de la ligne des marches (ou du palier)
+	var pt := func(s_: float, x_: float, h_: float) -> Vector3:
+		var xf: Transform3D = _xf_at(s_)
+		if palier and s_ >= s_end:
+			var q: Vector3 = xf.origin + xf.basis.x * x_
+			q.y = y_palier + h_
+			return q
+		return xf.origin + xf.basis.x * x_ + xf.basis.y * (y_quai + h_)
+	var pied := func(s_: float, x_: float) -> Vector3:
+		var xf: Transform3D = _xf_at(s_)
+		var q: Vector3 = xf.origin + xf.basis.x * x_
+		q.y = dessus.call(s_)
+		return q
+	# abscisses du tracé le long de la voie (tous les ~2 m, + la cassure
+	# marches → palier)
+	var ss: Array = []
+	var n_s: int = maxi(1, int(ceil((s_b - s_a) / 2.0)))
+	for i in range(n_s + 1):
+		ss.append(lerpf(s_a, s_b, float(i) / float(n_s)))
+	if palier and s_end > s_a + 0.3 and s_end < s_b - 0.3:
+		ss.append(s_end)
+		ss.sort()
 
-	# 1. le long de la voie : du nez de la rame au haut du quai
-	var long: float = s_b - s_a
-	if long > 0.1:
-		var xm: Transform3D = tunnel.transform_at((s_a + s_b) * 0.5)
-		for h in [BARRIERE_H] + BARRIERE_LISSES:
-			var ep: float = 0.05 if h == BARRIERE_H else 0.035
-			var o: Vector3 = xm.origin + xm.basis.x * x_voie + xm.basis.y * (y_quai + h)
-			boite.call(Vector3(ep, ep, long), galva, Transform3D(xm.basis, o))
-		var n_m: int = maxi(1, int(ceil(long / BARRIERE_PAS)))
-		for i in range(n_m + 1):
-			var s_m: float = lerpf(s_a, s_b, float(i) / float(n_m))
-			var xf_m: Transform3D = tunnel.transform_at(s_m)
-			montant.call(s_m, x_voie, (xf_m.origin + xf_m.basis.y * (y_quai + BARRIERE_H)).y)
-		# plinthe bleue, marche par marche
-		var s_p: float = s_a
-		while s_p < s_b - 0.01:
-			var i: int = int(floor((s_p - s_start) / tread_depth))
-			var s_q: float = minf(s_start + float(i + 1) * tread_depth, s_b)
-			var xf_p: Transform3D = tunnel.transform_at((s_p + s_q) * 0.5)
-			var dr: Vector3 = xf_p.basis.x
-			var bl: Basis = Basis(dr, Vector3.UP, dr.cross(Vector3.UP)).orthonormalized()
-			var c: Vector3 = xf_p.origin + dr * x_voie
-			c.y = dessus.call((s_p + s_q) * 0.5) + 0.08
-			boite.call(Vector3(0.015, 0.16, s_q - s_p), bleu, Transform3D(bl, c))
-			s_p = s_q
-
-	# 2. en travers du haut du quai, avec la porte réservée au personnel
-	var xf_b: Transform3D = tunnel.transform_at(s_b)
+	# en bas : retour en travers du haut du quai, porte au milieu
+	var xf_b: Transform3D = _xf_at(s_b)
 	var dr_b: Vector3 = xf_b.basis.x
-	var lb: Basis = Basis(dr_b, Vector3.UP, dr_b.cross(Vector3.UP)).orthonormalized()
 	var pied_b: float = dessus.call(s_b - 0.1)
 	var x_porte0: float = (x_voie + x_mur) * 0.5 - side * PORTE_LARGEUR * 0.5
 	var x_porte1: float = x_porte0 + side * PORTE_LARGEUR
-	for seg in [[x_voie, x_porte0], [x_porte1, x_mur]]:
-		var xa: float = seg[0]
-		var xb: float = seg[1]
-		var w: float = absf(xb - xa)
-		var cx: Vector3 = xf_b.origin + dr_b * ((xa + xb) * 0.5)
-		for h in [BARRIERE_H] + BARRIERE_LISSES:
-			var ep2: float = 0.05 if h == BARRIERE_H else 0.035
-			var o2: Vector3 = cx
-			o2.y = pied_b + h
-			boite.call(Vector3(w, ep2, ep2), galva, Transform3D(lb, o2))
-		var o3: Vector3 = cx
-		o3.y = pied_b + 0.08
-		boite.call(Vector3(w, 0.16, 0.015), bleu, Transform3D(lb, o3))
-		for xx in [xa, xb]:
-			montant.call(s_b, xx, pied_b + BARRIERE_H)
-	# la porte : cadre galvanisé, panneau bleu, plaque « réservé au personnel »
-	var cp: Vector3 = xf_b.origin + dr_b * ((x_porte0 + x_porte1) * 0.5)
-	var lp: float = PORTE_LARGEUR - 0.08
-	for h in [0.12, BARRIERE_H - 0.05]:
-		var o4: Vector3 = cp
-		o4.y = pied_b + h
-		boite.call(Vector3(lp, 0.04, 0.04), galva, Transform3D(lb, o4))
-	var o5: Vector3 = cp
-	o5.y = pied_b + 0.12 + (BARRIERE_H - 0.17) * 0.5
-	boite.call(Vector3(lp - 0.06, BARRIERE_H - 0.25, 0.012), bleu, Transform3D(lb, o5))
-	var o6: Vector3 = cp - lb.z * 0.012
-	o6.y = pied_b + 0.80
-	boite.call(Vector3(0.36, 0.17, 0.006), galva, Transform3D(lb, o6))
-	var plaque: Label3D = Label3D.new()
-	plaque.text = "RÉSERVÉ AU\nPERSONNEL"
-	plaque.font_size = 40
-	plaque.pixel_size = 0.0028
-	plaque.modulate = Color(0.75, 0.08, 0.06)
-	plaque.outline_size = 0
-	# face tournée vers le quai (vers l'aval de la ligne)
-	var face: Vector3 = xf_b.basis.z
-	var pb: Basis = Basis(dr_b * (1.0 if face.dot(lb.z) > 0.0 else -1.0), Vector3.UP, Vector3.ZERO)
-	pb.z = pb.x.cross(Vector3.UP).normalized()
-	if pb.z.dot(face) < 0.0:
-		pb.x = -pb.x
-		pb.z = -pb.z
-	plaque.transform = Transform3D(pb.orthonormalized(), cp + face * 0.02 + Vector3(0.0, pied_b + 0.80 - cp.y, 0.0))
-	racine.add_child(plaque)
+	var travers := func(x_: float, h_: float) -> Vector3:
+		var q: Vector3 = xf_b.origin + dr_b * x_
+		q.y = pied_b + h_
+		return q
+
+	# 1. main courante d'un seul tenant : montant de départ, le long de la
+	#    voie, puis (bas) le retour jusqu'à la porte, ou (haut) le montant
+	#    final contre le mur du fond — tous les angles cintrés
+	var main: Array = [pied.call(s_a, x_voie)]
+	for s_ in ss:
+		main.append(pt.call(s_, x_voie, BARRIERE_H))
+	if is_low:
+		main.append(travers.call(x_porte0, BARRIERE_H))
+		main.append(travers.call(x_porte0, 0.0))
+	else:
+		main.append(pied.call(s_b, x_voie))
+	_tube(st, main, BARRIERE_R, BARRIERE_COUDE)
+	# lisses
+	for h in BARRIERE_LISSES:
+		var l: Array = []
+		for s_ in ss:
+			l.append(pt.call(s_, x_voie, h))
+		if is_low:
+			l.append(travers.call(x_porte0, h))
+		_tube(st, l, BARRIERE_R_LISSE, BARRIERE_COUDE)
+	# montants intermédiaires
+	var n_m: int = maxi(1, int(ceil((s_b - s_a) / BARRIERE_PAS)))
+	for i in range(1, n_m):
+		var s_m: float = lerpf(s_a, s_b, float(i) / float(n_m))
+		_tube(st, [pied.call(s_m, x_voie), pt.call(s_m, x_voie, BARRIERE_H - BARRIERE_R)], BARRIERE_R, 0.0)
+
+	if is_low:
+		# 2. de l'autre côté de la porte jusqu'au mur : cadre en U renversé
+		var c2: Array = [travers.call(x_porte1, 0.0), travers.call(x_porte1, BARRIERE_H),
+			travers.call(x_mur, BARRIERE_H), travers.call(x_mur, 0.0)]
+		_tube(st, c2, BARRIERE_R, BARRIERE_COUDE)
+		for h in BARRIERE_LISSES:
+			_tube(st, [travers.call(x_porte1, h), travers.call(x_mur, h)], BARRIERE_R_LISSE, 0.0)
+		# 3. la porte : cadre en tube cintré, traverse, plaque « réservé
+		#    au personnel »
+		var xg0: float = x_porte0 + side * 0.06
+		var xg1: float = x_porte1 - side * 0.06
+		_tube(st, [travers.call(xg0, 0.06), travers.call(xg0, BARRIERE_H - 0.04),
+			travers.call(xg1, BARRIERE_H - 0.04), travers.call(xg1, 0.06), travers.call(xg0, 0.06)],
+			BARRIERE_R_LISSE, 0.10)
+		_tube(st, [travers.call(xg0, 0.52), travers.call(xg1, 0.52)], BARRIERE_R_LISSE, 0.0)
+		var lb: Basis = Basis(dr_b, Vector3.UP, dr_b.cross(Vector3.UP)).orthonormalized()
+		var cp: Vector3 = xf_b.origin + dr_b * ((x_porte0 + x_porte1) * 0.5)
+		var face: Vector3 = xf_b.basis.z      # vers le quai (l'aval)
+		var plaque_m: MeshInstance3D = MeshInstance3D.new()
+		var pm: BoxMesh = BoxMesh.new()
+		pm.size = Vector3(0.36, 0.17, 0.006)
+		pm.material = galva
+		plaque_m.mesh = pm
+		plaque_m.transform = Transform3D(lb, Vector3(cp.x, pied_b + 0.80, cp.z) + face * 0.025)
+		plaque_m.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		racine.add_child(plaque_m)
+		var plaque: Label3D = Label3D.new()
+		plaque.text = "RÉSERVÉ AU\nPERSONNEL"
+		plaque.font_size = 40
+		plaque.pixel_size = 0.0028
+		plaque.modulate = Color(0.75, 0.08, 0.06)
+		plaque.outline_size = 0
+		var pb: Basis = Basis(dr_b, Vector3.UP, Vector3.ZERO)
+		pb.z = pb.x.cross(Vector3.UP).normalized()
+		if pb.z.dot(face) < 0.0:
+			pb.x = -pb.x
+			pb.z = -pb.z
+		plaque.transform = Transform3D(pb.orthonormalized(), Vector3(cp.x, pied_b + 0.80, cp.z) + face * 0.03)
+		racine.add_child(plaque)
+
+	var mi: MeshInstance3D = MeshInstance3D.new()
+	mi.name = "Tubes"
+	st.set_material(bleu)
+	mi.mesh = st.commit()
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	racine.add_child(mi)
+
+
+## Arrondit les angles d'une polyligne : chaque sommet intérieur devient un
+## arc (Bézier quadratique ≈ cintrage de rayon `coude`), limité à 45 % des
+## segments adjacents.
+static func _cintrer(pts: Array, coude: float) -> Array:
+	var out: Array = [pts[0]]
+	for i in range(1, pts.size() - 1):
+		var a: Vector3 = pts[i - 1]
+		var b: Vector3 = pts[i]
+		var c: Vector3 = pts[i + 1]
+		var l0: float = a.distance_to(b)
+		var l1: float = b.distance_to(c)
+		if l0 < 1e-4 or l1 < 1e-4:
+			continue
+		var d0: Vector3 = (b - a) / l0
+		var d1: Vector3 = (c - b) / l1
+		var ang: float = acos(clampf(d0.dot(d1), -1.0, 1.0))
+		if coude <= 0.0 or ang < deg_to_rad(2.0):
+			out.append(b)
+			continue
+		var tl: float = minf(coude * tan(ang * 0.5), 0.45 * minf(l0, l1))
+		var p0: Vector3 = b - d0 * tl
+		var p2: Vector3 = b + d1 * tl
+		var m: int = maxi(3, int(ceil(ang / deg_to_rad(11.0))))
+		for k in range(m + 1):
+			var t: float = float(k) / float(m)
+			out.append(p0.lerp(b, t).lerp(b.lerp(p2, t), t))
+	out.append(pts[pts.size() - 1])
+	return out
+
+
+## Tube rond balayé le long d'une polyligne MONDE (repères transportés
+## parallèlement, normales radiales lisses), angles cintrés.
+static func _tube(st: SurfaceTool, pts_in: Array, r: float, coude: float, n: int = 10) -> void:
+	var pts: Array = _cintrer(pts_in, coude)
+	var p: Array = [pts[0]]
+	for q in pts:
+		if (q as Vector3).distance_to(p[p.size() - 1]) > 0.002:
+			p.append(q)
+	if p.size() < 2:
+		return
+	var t0: Vector3 = ((p[1] as Vector3) - (p[0] as Vector3)).normalized()
+	var u: Vector3 = (Vector3.UP if absf(t0.dot(Vector3.UP)) < 0.9 else Vector3.RIGHT).cross(t0).normalized()
+	var reperes: Array = []
+	for i in range(p.size()):
+		var t: Vector3
+		if i == 0:
+			t = t0
+		elif i == p.size() - 1:
+			t = ((p[i] as Vector3) - (p[i - 1] as Vector3)).normalized()
+		else:
+			t = (((p[i] as Vector3) - (p[i - 1] as Vector3)).normalized()
+				+ ((p[i + 1] as Vector3) - (p[i] as Vector3)).normalized()).normalized()
+		u = (u - t * u.dot(t)).normalized()
+		reperes.append([u, t.cross(u)])
+	for i in range(p.size() - 1):
+		for k in range(n):
+			var a0: float = TAU * float(k) / float(n)
+			var a1: float = TAU * float(k + 1) / float(n)
+			var n00: Vector3 = reperes[i][0] * cos(a0) + reperes[i][1] * sin(a0)
+			var n01: Vector3 = reperes[i][0] * cos(a1) + reperes[i][1] * sin(a1)
+			var n10: Vector3 = reperes[i + 1][0] * cos(a0) + reperes[i + 1][1] * sin(a0)
+			var n11: Vector3 = reperes[i + 1][0] * cos(a1) + reperes[i + 1][1] * sin(a1)
+			for v in [[n00, i], [n10, i + 1], [n11, i + 1], [n00, i], [n11, i + 1], [n01, i]]:
+				st.set_normal(v[0])
+				st.add_vertex((p[v[1]] as Vector3) + (v[0] as Vector3) * r)
+	# bouchons
+	for e in [0, p.size() - 1]:
+		var c: Vector3 = p[e]
+		var nt: Vector3 = reperes[e][0].cross(reperes[e][1]) * (-1.0 if e == 0 else 1.0)
+		for k in range(n):
+			var a0: float = TAU * float(k) / float(n)
+			var a1: float = TAU * float(k + 1) / float(n)
+			st.set_normal(nt)
+			st.add_vertex(c)
+			st.set_normal(nt)
+			st.add_vertex(c + (reperes[e][0] * cos(a0) + reperes[e][1] * sin(a0)) * r)
+			st.set_normal(nt)
+			st.add_vertex(c + (reperes[e][0] * cos(a1) + reperes[e][1] * sin(a1)) * r)
 
 
 # ---------------------------------------------------------------------------

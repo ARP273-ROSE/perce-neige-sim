@@ -1,11 +1,12 @@
 class_name StationHalls
 extends Node3D
-## Bâtiments de gare aux 2 portails du tunnel.
+## Bâtiment de gare au portail bas du tunnel.
 ##
 ## - Val Claret (s=0) : hall béton avec escaliers/escalator menant vers la
 ##   surface (village Val Claret 2111m). Lumière du jour visible au sommet.
-## - Grande Motte (s=LENGTH) : hall similaire avec sortie vers le glacier
-##   (3032m, pied du téléphérique de la Grande Motte, qui monte au sommet 3456m).
+## - Grande Motte (s=LENGTH) : plus de hall depuis le 06/10/2026 — la gare
+##   se termine sur le mur vitré de la salle des machines, qui donne sur le
+##   glacier (MachineRoomBuilder).
 ##
 ## Construit en boîtes (SurfaceTool) ancrées au transform du portail tunnel,
 ## avec éclairage, signalétique, bancs et quelques passagers en attente.
@@ -26,7 +27,9 @@ func build(t: TunnelBuilder) -> void:
 	tunnel = t
 	_detect_lang()
 	_build_hall_low()
-	_build_hall_high()
+	# Plus de hall en gare amont (06/10/2026) : la gare se termine sur le
+	# mur vitré de la salle des machines, qui donne sur le glacier
+	# (MachineRoomBuilder._build_mur_vitre / _build_exterieur).
 
 
 func _detect_lang() -> void:
@@ -63,22 +66,6 @@ func _build_hall_low() -> void:
 # ---------------------------------------------------------------------------
 # Grande Motte — hall haut
 # ---------------------------------------------------------------------------
-
-func _build_hall_high() -> void:
-	# Anchor : portail haut (s=LENGTH). Le hall s'étend dans la direction du
-	# tangent (= -basis.z), "devant" le sens de marche.
-	var anchor: Transform3D = tunnel.transform_at(PNConstants.LENGTH)
-	_build_hall(
-		anchor, -1.0,
-		"DESTINATION GLACIER",
-		_t("Grande Motte summit — 3032 m",
-		   "Grande Motte — 3032 m"),
-		_t("EXIT TO GLACIER ↑", "SORTIE GLACIER ↑"),
-		Color(0.95, 0.97, 1.00),  # teinte plus blanche (neige glacier)
-		"hall_high",
-		Color(1.00, 0.65, 0.20),  # orange ampoules vintage du vrai panneau
-	)
-
 
 # ---------------------------------------------------------------------------
 # Construction d'un hall générique

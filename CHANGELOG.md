@@ -7,6 +7,54 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.15.67** — gare amont ouverte sur le glacier, tracé vérifié sur l'IGN,
+approche au galet 238.
+- **Gare amont refaite (retours de Kevin) : « la sortie est vers le
+  haut »**. Les marches des quais se prolongent dans le hall de la salle
+  des machines jusqu'à un palier plat, de chaque côté de la fosse des
+  roues. Le mur du fond devient une façade vitrée sur toute la largeur,
+  avec une porte coulissante à deux vantaux en face de chaque palier
+  (« SORTIE EXIT »). Le plafond monte à 6 m sur les 7,6 derniers mètres
+  (verrière) : le sommet de la Grande Motte, à 14° au-dessus de
+  l'horizon et à 2,3 km, se voit dès la cabine, rame à quai. L'enseigne
+  « DESTINATION GLACIER » passe sur un panneau bois au-dessus des portes.
+  L'ancien hall de 14 × 28 m, qui aurait bouché la vue, est supprimé.
+- **La vue est le vrai paysage** : panorama calculé sur le relief réel
+  (Terrain Tiles : SRTM, EU-DEM) depuis la gare amont de l'IGN, centré sur
+  le cap réel de la voie (214,5°) — la Grande Motte à 2,3 km, la Grande
+  Casse à droite. Habillage d'hiver (neige sous 37°, roche au-delà), ombres
+  du soleil, voile atmosphérique, courbure terrestre. `tools_panorama.py`
+  le régénère. Il n'est affiché qu'en vue cabine. En rendu web (iPad), une
+  correction de gamma garde un ciel de plein jour : le rendu Compatibility
+  assombrissait le ciel jusqu'au bleu nuit.
+- **Garde-corps en tube rond bleu, angles cintrés, dans les deux gares**
+  (« la structure des barrières est bleue, pas grise, c'est un tube rond et
+  les angles sont arrondis »). En haut, la barrière ne ferme plus le
+  quai. Elle part 1 m sous le nez de la rame arrêtée (« pas d'espace vide
+  entre le haut du funi et le début des barrières ») et longe le palier
+  jusqu'au mur du fond, pour qu'on ne tombe pas dans la fosse. En bas, le
+  tracé ne change pas (retour en travers et porte « réservé au personnel »).
+- **Tracé en plan vérifié de bas en haut sur l'IGN et OpenStreetMap**
+  (`audit_physique/trace_ign.sage`). Les positions des courbes (vidéo
+  cabine) étaient justes, pas leurs angles : 20° + 28° deviennent 16,5° +
+  28,3°. L'écart à la ligne IGN (précision 10 m) passe de 18 m en moyenne
+  et 38 m au pire à 2 m en moyenne et 11 m au pire. Les caps sont
+  maintenant géographiques : 169,7° au départ, 214,5° à l'arrivée. Les
+  coordonnées GPS notées dans le code étaient fausses (le point « gare
+  amont » tombait sur l'évitement) : remplacées par celles de l'IGN.
+- **« La vitesse de 0,7 m/s est atteinte quand on arrive au galet 238 et
+  pas avant »** : la vitesse d'approche (0,75 m/s) est atteinte quand le
+  nez de la rame montante passe le galet n° 238, à l'entrée du quai haut,
+  et non plus 20 m plus tôt (`CREEP_DIST` de 55 à 35,03 m, PC et PWA). Un
+  test le vérifie dans les deux sens de conduite.
+- **Le boîtier blanc en lévitation en gare basse** était un boîtier
+  électrique du tunnel posé dans la salle de la gare, loin de tout mur, et
+  les deux câbles muraux du tunnel traversaient les salles des gares dans
+  le vide. Les deux s'arrêtent maintenant à l'entrée du tube, dans les
+  deux gares.
+- Vérifié : 96 tests PC (+1), 12 bancs PWA, parité PC/PWA OK, rendus
+  Vulkan et Compatibility.
+
 **v1.15.66** — la rame pleine recule de plus d'un mètre en gare basse.
 - **« Je suis sûr du mètre » : la rame pleine recule d'au moins 1 m pendant
   l'embarquement en gare basse**. Avec un câble de 1 250 mm² d'acier à
