@@ -251,7 +251,9 @@ retenue comme référence.
 - **Terrain Tiles** (Mapzen, AWS Open Data, encodage « terrarium ») —
   sources SRTM, EU-DEM (produit avec des données Copernicus), GMTED :
   relief du panorama vu des baies vitrées de la gare amont
-  (`tools_panorama.py`).
+  (`tools_panorama.py`) et coupe du terrain de la vue profil du PC
+  (`tools_profil_coupe.py` → `profil_coupe.py`), accès commun dans
+  `tools_mnt.py`.
 
 ## 4. Sources primaires détaillées
 
