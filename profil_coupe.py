@@ -29,8 +29,8 @@ TPH_Z_GARE_AVAL = 3034.0
 TPH_Z_GARE_AMONT = 3456.0
 TPH_Z_SELLE_AVAL = 3042.0
 TPH_Z_SELLE_AMONT = 3464.0
-TPH_H_PYLONE = 61.5
-TPH_A_CHAINETTE = 2830.8
+TPH_H_PYLONE = 30.0
+TPH_A_CHAINETTE = 3997.8
 
 # Crêtes de fond à l'est, un point sur quatre de la suite
 # aval + ligne + amont ci-dessus.
