@@ -777,9 +777,12 @@ func _process(delta: float) -> void:
 		_ext_light.visible = cabin.view_mode == Cabin.ViewMode.EXTERIOR
 	if machine_room != null and cabin != null:
 		var cam_e: Camera3D = get_viewport().get_camera_3d()
-		var pres_gare: bool = cam_e != null \
-			and machine_room.distance_au_hall(cam_e.global_position) < 150.0
-		machine_room.set_exterieur_visible(cabin.view_mode == Cabin.ViewMode.FPV or pres_gare)
+		var d_hall: float = machine_room.distance_au_hall(cam_e.global_position) \
+			if cam_e != null else INF
+		# vue cabine : on ne voit dehors qu'à travers les baies, donc près de
+		# la gare ; autres vues : à moins de 150 m de la gare amont
+		machine_room.set_exterieur_visible(d_hall < 150.0
+			or (cabin.view_mode == Cabin.ViewMode.FPV and d_hall < 450.0))
 	# numéros des supports : rétroréfléchissants dans les phares (vue cabine)
 	if track != null and cabin != null:
 		track.set_retro(cabin.head_glow() if cabin.view_mode == Cabin.ViewMode.FPV else 0.0)

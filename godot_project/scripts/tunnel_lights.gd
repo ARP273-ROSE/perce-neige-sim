@@ -1,17 +1,18 @@
 class_name TunnelLights
 extends Node3D
 ## Néons muraux du tunnel Perce-Neige.
-## Un néon tous les 12 m sur le mur latéral, sauf dans les zones sombres
-## identifiées dans SlopeProfile.TUNNEL_DARK_ZONES.
+## Un tube tous les 10 m sur le mur latéral, un sur deux allumé : un néon
+## ALLUMÉ tous les 20 m, mesuré sur la vidéo de descente à 12 m/s (un néon
+## toutes les 1,633 s en croisière, audit_physique/calage_descente.sage).
 ##
 ## Sur un tunnel en montée, les néons sont sur le mur gauche.
 ## En descente, ils apparaissent sur le mur droit (même physique, vue miroir).
 
-@export var spacing_m: float = 12.0          # espacement néons
+@export var spacing_m: float = 10.0          # espacement des tubes (un sur deux allumé)
 @export var wall_offset: float = 1.4         # distance du centre du tunnel
 @export var height_offset: float = 0.9       # hauteur (plafond)
 @export var light_energy: float = 8.0
-@export var light_range: float = 26.0   # recouvre l'entraxe de 24 m des
+@export var light_range: float = 23.0   # recouvre l'entraxe de 20 m des
                                         # néons ALLUMÉS (un sur deux) →
                                         # éclairage uniforme, sans creux
 
