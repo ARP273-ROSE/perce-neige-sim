@@ -1,0 +1,45 @@
+== 1. Tension : la même pour le tronçon libre et les portées ==
+  bas (s = 50)     T =  140.5 kN, a = 1308.1 m
+  s = 1000         T =  164.0 kN, a = 1585.3 m
+  haut (s = 3400)  T =  238.6 kN, a = 2233.6 m
+  (avec la tension de la jauge pour le tronçon libre et T(Δz) pour les
+   portées, le câble pliait vers le haut sur certains premiers galets)
+
+== 2. Coude sur un galet ordinaire : 2·sinh(L/2a) ≈ L/a ==
+  a = 1308 m, L = 14.5 m : 0.635°
+  a = 1308 m, L = 15.1 m : 0.661°
+  a = 1585 m, L = 14.5 m : 0.524°
+  a = 1585 m, L = 15.1 m : 0.546°
+  a = 2233 m, L = 14.5 m : 0.372°
+  a = 2233 m, L = 15.1 m : 0.387°
+
+== 3. Premier galet : critère de hauteur ⇔ coude vers le bas ==
+  coude(R1)           = −(D² + D·L − 2ah) / (2·D·a)
+  hauteur au droit R1 = −L·(D² + D·L − 2ah) / (2·(D + L)·a)
+  hauteur / coude     = D*L/(D + L)  (> 0 : mêmes signes)
+  ⇒ coude ≤ 0 (le galet porte) ⇔ la chaînette plus longue passe sous R1 ;
+    au changement de R1 les deux s'annulent : le câble quitte le galet
+    tangentiellement, à 0 mm, sans angle.
+  cosh exact, a = 1585 m, L = 15,1 m : D critique = 13.364 m, coude = 5.29e-06 °
+  (ancien critère D(D + L) ≥ 2ah : D = 13.364 m)
+
+== 4. Jeu latéral dans la gorge du galet (RollerMesh) ==
+  pente du flanc k = 1.280 ; flanc : e(h) = 0.0326 + 0.7812·h
+  fond de gorge e = 3,2 cm·√(h/6 mm) ; il rejoint le flanc à h = 9.34 mm
+    h =   0.0 mm : jeu =   0.0 mm
+    h =   0.5 mm : jeu =   9.2 mm
+    h =   2.0 mm : jeu =  18.5 mm
+    h =   6.0 mm : jeu =  32.0 mm
+    h =  20.0 mm : jeu =  48.3 mm
+    h =  50.0 mm : jeu =  71.7 mm
+    h =  70.0 mm : jeu =  87.3 mm
+  lèvres à h = R_JOUE − R_BANDE = 70 mm : au-delà le câble passe par-dessus
+
+== 5. Poulie de déviation (inclinée de β = 30°) : chanfrein de la jante ==
+  dL/dh = -(sqrt(3)*c + 1)/(c - sqrt(3))
+  unicité de la position (contrainte monotone en L) : c < cotan β = 1.732
+    c = 0.0 :  0.58 cm d'écart latéral par cm de levée
+    c = 0.5 :  1.51 cm d'écart latéral par cm de levée
+    c = 1.0 :  3.73 cm d'écart latéral par cm de levée
+    c = 1.5 : 15.51 cm d'écart latéral par cm de levée
+  retenu c = 0,5 (arête vive : saut de 3,6 cm mesuré au banc)

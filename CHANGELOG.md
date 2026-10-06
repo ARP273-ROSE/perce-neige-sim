@@ -7,6 +7,65 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.15.61** — câble continu au galet de contact, décollage sans angle.
+- **« Au point de contact avec le galet, le câble semble s'interrompre »**.
+  Deux causes :
+  - **un vrai trou en marche.** Le câble posé est fait de segments de
+    15 m, et leur affichage n'était recalculé que quand la rame changeait
+    de tranche de 15 m. Or depuis la v1.15.59, le câble commence au
+    premier galet touché, devant la rame, et ce point avance par sauts :
+    il recule d'une rame à l'autre. Le segment juste après le galet
+    restait donc masqué, jusqu'à 15 m de câble manquant. Cela arrivait
+    dans 25 % des positions, en montée comme en descente, puisque l'une
+    des deux rames descend toujours. L'affichage suit maintenant la
+    position de cette coupe elle-même ;
+  - **une couture.** Les anneaux du tronçon libre comptaient leur angle
+    depuis la gauche de la voie, ceux du câble posé depuis la droite.
+    L'hélice des torons s'inversait donc au raccord. Ils ont maintenant
+    le même repère.
+- **« Le décollement est toujours brusque avec un angle »** :
+  - **coude vers le haut.** Dans 15 % des positions, le câble pliait
+    vers le haut sur le premier galet, jusqu'à 0,8° : un « V » qu'aucun
+    galet ne peut faire, puisqu'un galet porte et ne retient pas. Le
+    critère D·(D + L) ≥ 2ah supposait une voie droite. Surtout, le
+    tronçon libre prenait la tension de la jauge, et les portées celle du
+    câble à l'altitude, jusqu'à 239 kN en haut. Les deux ont maintenant
+    la même tension, puisque la tension est continue le long du câble.
+    Le premier galet est désormais celui sous lequel passerait la
+    chaînette qui irait plus loin, ce qui équivaut à un coude vers le
+    bas (`audit_physique/decollage_galet.sage` : hauteur / coude =
+    D·L/(D + L) > 0). Quand la rame avance, le câble quitte chaque galet
+    à 0 mm et tangentiellement. Il reste au plus +0,000° au premier
+    galet. Le coude normal, vers le bas, vaut 0,4 à 0,7°, comme sur
+    n'importe quel galet de la ligne (L/a) ;
+  - **sauts sur le côté.** En courbe et dans l'évitement, le tronçon
+    libre sautait jusqu'à 3,3 cm de côté. Au-dessus d'un galet, le
+    câble était ramené au centre de la gorge en dessous de 7 cm, et
+    laissé libre au-dessus. Il a maintenant le vrai jeu de la gorge,
+    mesuré dans le repère du galet incliné : 0 au fond, puis 3,2 cm·√(h/6
+    mm) dans le creux, puis 3,3 cm + 0,78·h le long des joues. Le tronçon
+    suit la ligne tendue (la plus courte) à travers ce jeu, qui varie
+    sans saut. Les poulies de déviation de l'aiguillage le retiennent du
+    côté intérieur du coude jusqu'à ce qu'il passe au-dessus de leur
+    jante, sur un chanfrein de pente 0,5. Avec une arête vive, il
+    sautait de 3,6 cm, et une pente doit rester sous cotan 30° = 1,73
+    pour que sa position soit unique. Il reste des pas de 4,5 mm au
+    plus, au changement de galet près des gares.
+- Plus léger : le tube du tronçon libre se reconstruit en 0,04 ms au
+  lieu de 1,1 ms, et celui de la rame lointaine (à plus de 250 m) n'est
+  plus refait. Le câble coûte 0,29 ms par image au lieu de 1,37 ms.
+- Vérifié :
+  - banc des galets à 26 contrôles, avec six nouveaux sur toute la ligne
+    dans les deux sens : coude au premier galet, câble continu en marche,
+    sens des torons, joues et poulies jamais traversées, pas de saut d'un
+    pas de 0,5 m au suivant ;
+  - le test de rupture, instable une fois sur trois (le bout suit la
+    position affichée de la rame, en retard d'un pas), a maintenant une
+    tolérance d'un pas ;
+  - bancs aiguillage, salle des machines, rame, portes, son et
+    performance ;
+  - vues au contact du galet (`shot_orbite.gd plongee descente=20`).
+
 **v1.15.60** — câble sous la rame : virages, évitement et arrivée en gare
 amont.
 - **« Vérifie la pose du câble à la descente, dans les virages et
