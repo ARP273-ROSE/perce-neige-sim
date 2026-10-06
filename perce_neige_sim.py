@@ -9556,6 +9556,7 @@ class GameWidget(QWidget):
         view_x = rect.x() + 10
         view_w = rect.width() - 20
 
+        AXE_W = 66.0                    # bande d'axe des altitudes, à gauche
         # === Vue en COUPE (refonte du 06/10/2026, demande de Kevin) ========
         # Le terrain est le relief RÉEL au-dessus de la ligne (profil_coupe.py,
         # tiré du MNT par tools_profil_coupe.py), prolongé vers le lac en aval
@@ -9645,12 +9646,14 @@ class GameWidget(QWidget):
         # le terrain couvre toujours le tube (le MNT lisse les crêtes et le
         # tube grossi doit rester sous la surface), et entoure la gare amont
         couvert = 12.0 + 4.6 * k_ech
+        # … sauf en approchant de la gare amont, qui affleure le glacier (le
+        # haut de la gare est dehors, fait de Kevin)
+        x_gare_h = geom_at(QUAI_HAUT_DEBUT_S - 15.0)[0]
         surf = []
         for x, z in coupe["surface"]:
             if 0.0 <= x <= H_MAX:
-                z = max(z, coupe["voie"](x) + couvert)
-            elif H_MAX < x < H_MAX + 40.0:
-                z = max(z, ALT_HIGH + couvert * (1.0 - (x - H_MAX) / 40.0))
+                f_c = max(0.0, min(1.0, (x_gare_h - x) / 60.0))
+                z = max(z, coupe["voie"](x) + couvert * f_c)
             surf.append((x, z))
         surf = ligne_visible(surf)
         pts_surf = [world_to_screen(x, z) for x, z in surf]
@@ -9709,17 +9712,16 @@ class GameWidget(QWidget):
                 p.drawLine(world_to_screen(x_c, z_c), world_to_screen(x_c + 6.0, z_c - 16.0))
             x_c += 97.0 + 41.0 * math.sin(x_c)
 
-        # --- repères d'altitude (fins, derrière le tube)
+        # --- repères d'altitude : traits fins derrière le tube ; les
+        #     valeurs sont dans la bande d'axe de gauche (dessinée plus bas)
         p.setPen(_cached_pen(QColor(255, 255, 255, 40), 1, Qt.PenStyle.DotLine))
-        p.setFont(_cached_font("Consolas", 9))
         pas_alt = 100 if y_span < 900 else 250
+        alts_visibles = []
         for alt in range(2000, 3801, pas_alt):
             y_scr = view_y + (y_top_m - alt) * px_m
-            if view_y < y_scr < view_y + view_h:
-                p.drawLine(int(view_x), int(y_scr), int(view_x + view_w), int(y_scr))
-                p.setPen(_cached_pen(QColor(235, 240, 250, 150)))
-                p.drawText(int(view_x + 6), int(y_scr - 3), f"{alt} m")
-                p.setPen(_cached_pen(QColor(255, 255, 255, 40), 1, Qt.PenStyle.DotLine))
+            if view_y + 14 < y_scr < view_y + view_h - 4:
+                p.drawLine(int(view_x + AXE_W), int(y_scr), int(view_x + view_w), int(y_scr))
+                alts_visibles.append((alt, y_scr))
 
         # --- tunnel : tube Ø 3,9 m (grossi comme les rames), voie, néons ;
         #     cotes de la 3D : rail à 1,24 m sous l'axe, voûte 3,19 m au-dessus
@@ -9836,6 +9838,8 @@ class GameWidget(QWidget):
         # --- gares
         self._draw_gare_aval(p, world_to_screen, le_long, px_m, k_ech)
         self._draw_gare_amont(p, world_to_screen, le_long, px_m, k_ech)
+        if coupe.get("tph"):
+            self._draw_telepherique(p, world_to_screen, coupe["tph"], px_m, k_ech, x_vis0, x_vis1)
 
         # --- câbles (vrai tracé, du culot de chaque rame à la poulie)
         for s_r in (tr.s, st.ghost_s):
@@ -9849,14 +9853,32 @@ class GameWidget(QWidget):
                     p.drawPolyline(QPolygonF([le_long(s0c + (s1c - s0c) * i / n_c, 0.25)
                                               for i in range(n_c + 1)]))
 
-        # --- repères de distance le long de la voie, tous les 500 m
-        p.setFont(_cached_font("Consolas", 9))
-        for s_m in range(0, int(LENGTH) + 1, 500):
-            if s_vis0 - 50 <= s_m <= s_vis1 + 50:
-                q = le_long(float(s_m), -2.5)
-                p.setPen(_cached_pen(QColor(235, 240, 250, 170)))
-                p.drawLine(le_long(float(s_m), -0.8), le_long(float(s_m), -1.8))
-                p.drawText(QPointF(q.x() - 18, q.y() + 12), f"{s_m} m")
+        # --- distance parcourue : bornes kilométriques JAUNES posées sur la
+        #     voie, au compteur du pupitre (0 au départ de Val Claret,
+        #     3 474 à l'arrivée ; nez de la rame montante) — retour de
+        #     Kevin : altitudes et distances, toutes deux « en m », se
+        #     confondaient
+        p.setFont(_cached_font("Segoe UI", 8, QFont.Weight.Bold))
+        fm_km = QFontMetricsF(p.font())
+        for d_c in list(range(0, int(PARCOURS), 250)) + [int(PARCOURS)]:
+            s_m = START_S + TRAIN_HALF + d_c
+            if not (s_vis0 - 50 <= s_m <= s_vis1 + 50):
+                continue
+            if d_c % 500 and px_m * k_ech < 1.0:
+                continue
+            pied = le_long(s_m, -0.9)
+            tete = le_long(s_m, -4.2)
+            p.setPen(_cached_pen(QColor(250, 205, 50), max(1.5, 0.15 * px_m * k_ech)))
+            p.drawLine(pied, tete)
+            txt = f"km {d_c / 1000:.3f}".replace(".", ",") if d_c == int(PARCOURS) \
+                else f"km {d_c / 1000:.2f}".rstrip("0").replace(".", ",").rstrip(",")
+            larg = fm_km.horizontalAdvance(txt) + 10
+            r = QRectF(tete.x() - larg / 2, tete.y(), larg, 15)
+            p.setBrush(QBrush(QColor(250, 205, 50, 235)))
+            p.setPen(_cached_pen(QColor(60, 44, 0), 1))
+            p.drawRoundedRect(r, 3, 3)
+            p.setPen(_cached_pen(QColor(40, 30, 0)))
+            p.drawText(r, int(Qt.AlignmentFlag.AlignCenter), txt)
 
         # --- les deux rames (l'autre d'abord, la nôtre par-dessus)
         nom_autre = "RAME 2" if tr.number == 1 else "RAME 1"
@@ -9864,6 +9886,35 @@ class GameWidget(QWidget):
                         st.ghost_pax // 2, st.ghost_pax - st.ghost_pax // 2, False)
         self._draw_rame(p, le_long, tr.s, px_m * k_ech, tr.name.upper(),
                         tr.pax_car1, tr.pax_car2, True)
+
+        # --- bande d'axe des ALTITUDES à gauche, et légende
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QBrush(QColor(14, 22, 38, 200)))
+        p.drawRect(QRectF(view_x, view_y, AXE_W, view_h))
+        p.setFont(_cached_font("Segoe UI", 8, QFont.Weight.Bold))
+        p.setPen(_cached_pen(QColor(170, 200, 240)))
+        p.drawText(QRectF(view_x, view_y + 2, AXE_W, 14), int(Qt.AlignmentFlag.AlignCenter),
+                   T("ALTITUDE", "ALTITUDE"))
+        p.setFont(_cached_font("Consolas", 9))
+        for alt, y_scr in alts_visibles:
+            p.setPen(_cached_pen(QColor(170, 200, 240, 160), 1))
+            p.drawLine(QPointF(view_x + AXE_W - 6, y_scr), QPointF(view_x + AXE_W, y_scr))
+            p.setPen(_cached_pen(QColor(225, 235, 250)))
+            p.drawText(QRectF(view_x, y_scr - 8, AXE_W - 8, 16),
+                       int(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter), f"{alt:,} m".replace(",", " "))
+        leg = QRectF(view_x + AXE_W + 8, view_y + view_h - 24, 330, 18)
+        p.setBrush(QBrush(QColor(14, 22, 38, 200)))
+        p.setPen(_cached_pen(QColor(90, 110, 140), 1))
+        p.drawRoundedRect(leg, 5, 5)
+        p.setFont(_cached_font("Segoe UI", 8))
+        p.setBrush(QBrush(QColor(250, 205, 50)))
+        p.setPen(_cached_pen(QColor(60, 44, 0), 1))
+        p.drawRoundedRect(QRectF(leg.x() + 8, leg.y() + 4, 22, 10), 2, 2)
+        p.setPen(_cached_pen(QColor(225, 235, 250)))
+        p.drawText(QRectF(leg.x() + 36, leg.y(), leg.width() - 40, leg.height()),
+                   int(Qt.AlignmentFlag.AlignVCenter),
+                   T("km = distance travelled (counter)  ·  left : altitude",
+                     "km = distance parcourue (compteur)  ·  à gauche : altitude"))
 
         # Current slope display
         p.setPen(_cached_pen(COLOR_TEXT))
@@ -9922,7 +9973,7 @@ class GameWidget(QWidget):
         plan_w = 260.0
         plan_h = 148.0
         plan_rect = QRectF(
-            view_x + 8,
+            view_x + AXE_W + 8,
             view_y + (view_h - plan_h) / 2.0,
             plan_w, plan_h,
         )
@@ -13073,11 +13124,9 @@ class GameWidget(QWidget):
             surf = [(-(n_av - j) * pas, z) for j, z in enumerate(pc.SURFACE_AVAL)]
             surf += [(H_MAX * i / pc.N_LIGNE, z) for i, z in enumerate(pc.SURFACE_LIGNE)]
             surf += [(H_MAX + (j + 1) * pas, z) for j, z in enumerate(pc.SURFACE_AMONT)]
-            # le MNT lisse le glacier : au droit de la gare amont il donne
-            # ~20 m de moins que le palier de sortie (ALT_HIGH + 6 m) ; on
-            # recale le relief sur cette altitude connue, en s'estompant
-            corr = ALT_HIGH + 6.0 - pc.SURFACE_LIGNE[-1]
-            surf = [(x, z + corr * math.exp(-abs(x - H_MAX) / 600.0)) for x, z in surf]
+            # (relief IGN RGE ALTI : pas de recalage — la gare amont affleure
+            # le glacier, 3 028 m pour un rail à 3 032 m, le haut de la gare
+            # est dehors)
             xs = [x for x, _ in surf]
             zs = [z for _, z in surf]
             mi = [(xs[4 * k], z) for k, z in enumerate(pc.CRETES_MOYENNES)]
@@ -13100,8 +13149,32 @@ class GameWidget(QWidget):
                 f = (x - xx[lo]) / max(xx[hi] - xx[lo], 1e-9)
                 return yy[lo] + (yy[hi] - yy[lo]) * f
 
+            tph = None
+            if hasattr(pc, "TPH_X_AVAL"):
+                xa, xp, xh = H_MAX + pc.TPH_X_AVAL, H_MAX + pc.TPH_X_PYLONE, H_MAX + pc.TPH_X_AMONT
+                z_pied = interp_x(xs, zs, xp)
+                z_top = z_pied + pc.TPH_H_PYLONE
+                a_c = pc.TPH_A_CHAINETTE
+
+                def chainette(x0: float, z0: float, x1: float, z1: float):
+                    """porteur z = c + a·cosh((x − m)/a) par (x0, z0) et (x1, z1)
+                    (même calcul que audit_physique/telepherique.sage)"""
+                    lo, hi = x0 - 20.0 * a_c, x1 + 20.0 * a_c
+                    for _ in range(100):
+                        m = 0.5 * (lo + hi)
+                        f = a_c * (math.cosh((x1 - m) / a_c) - math.cosh((x0 - m) / a_c)) - (z1 - z0)
+                        if f > 0.0:
+                            lo = m
+                        else:
+                            hi = m
+                    c = z0 - a_c * math.cosh((x0 - m) / a_c)
+                    return lambda x: c + a_c * math.cosh((x - m) / a_c)
+                tph = {"xa": xa, "xp": xp, "xh": xh, "z_pied": z_pied, "z_top": z_top,
+                       "za": pc.TPH_Z_GARE_AVAL, "zh": pc.TPH_Z_GARE_AMONT,
+                       "c1": chainette(xa, pc.TPH_Z_SELLE_AVAL, xp, z_top),
+                       "c2": chainette(xp, z_top, xh, pc.TPH_Z_SELLE_AMONT)}
             self._coupe = {
-                "surface": surf, "mi": mi, "loin": loin,
+                "surface": surf, "mi": mi, "loin": loin, "tph": tph,
                 "x_sommet": H_MAX + pc.SOMMET_AMONT_M,
                 "voie": lambda x: interp_x(xg, yg, x),
                 "surface_a": lambda x: interp_x(xs, zs, x),
@@ -13141,50 +13214,221 @@ class GameWidget(QWidget):
         self._etiquette_gare(p, QPointF(r.center().x(), r.y() - 6), "Val Claret", "2111 m")
 
     def _draw_gare_amont(self, p: QPainter, w2s, le_long, px_m: float, k: float) -> None:
-        """Gare de la Grande Motte (3 032 m) : hall bleu nuit du quai, salle
-        des machines (deux roues jaunes Ø 4,16 m) au bout de la voie, et la
-        verrière qui ouvre sur le glacier (cf. la 3D)."""
+        """Gare de la Grande Motte (3 032 m) : hall bleu nuit du quai, hall
+        d'arrivée sous la verrière qui sort sur le glacier, et sous la dalle
+        la salle des machines : les DEUX roues jaunes Ø 4,16 m alignées le
+        long de la voie, tournant en sens contraires, le câble en huit
+        (comme le schéma de la machinerie et la 3D). Au-delà du bout de
+        voie, tout est grossi comme les rames (facteur k) autour du butoir."""
         xl, zl = geom_at(LENGTH)
         th = math.atan(gradient_at(LENGTH))
-        # hall du quai (de l'entrée du quai au mur du fond)
+        ct, st_ = math.cos(th), math.sin(th)
+
+        def loc(a: float, b: float) -> QPointF:
+            """a le long de la voie depuis le bout (m, > 0 vers la salle),
+            b au-dessus du rail (m), grossis par k"""
+            return w2s(xl + (a * ct - b * st_) * k, zl + (a * st_ + b * ct) * k)
+
+        # hall du quai (le long de la vraie voie) puis hall d'arrivée
         x_q, z_q = geom_at(QUAI_HAUT_DEBUT_S)
         hall = QPolygonF([w2s(x_q, z_q - 2.0 * k), w2s(x_q, z_q + 4.3 * k),
-                          w2s(xl + 9.3, zl + 4.3 * k + 9.3 * math.tan(th)),
-                          w2s(xl + 9.3, zl - 2.0 * k + 9.3 * math.tan(th))])
+                          loc(9.3, 4.3), loc(9.3, -2.0)])
         p.setBrush(QBrush(QColor(34, 42, 66)))
         p.setPen(_cached_pen(QColor(20, 24, 36), 1))
         p.drawPolygon(hall)
         # verrière : du dessus du hall au-dessus de la surface, vitrée
-        v0 = w2s(xl + 1.5, zl + 4.3 * k)
-        v1 = w2s(xl + 9.3, zl + 4.3 * k + 9.3 * math.tan(th))
-        haut = 6.0 * k
-        verriere = QPolygonF([v0, QPointF(v0.x(), v0.y() - haut * px_m * 0.6),
-                              QPointF(v1.x(), v1.y() - haut * px_m), v1])
+        v0, v1 = loc(1.5, 4.3), loc(9.3, 4.3)
+        h0, h1 = loc(1.5, 7.5), loc(9.3, 10.3)
         p.setBrush(QBrush(QColor(150, 200, 235, 200)))
         p.setPen(_cached_pen(QColor(60, 66, 76), 1))
-        p.drawPolygon(verriere)
+        p.drawPolygon(QPolygonF([v0, h0, h1, v1]))
         p.setPen(_cached_pen(QColor(70, 78, 90, 160), 1))
         for f in (0.33, 0.66):
-            a_ = QPointF(v0.x() + (v1.x() - v0.x()) * f, v0.y() + (v1.y() - v0.y()) * f)
-            p.drawLine(a_, QPointF(a_.x(), a_.y() - haut * px_m * (0.6 + 0.4 * f)))
-        # salle des machines sous le bout de la voie : deux roues jaunes
-        r_roue = max(2.5, 2.08 * px_m * k)
-        for ds in (0.95, 7.55):
-            c = w2s(xl + ds, zl - 3.4 * k)
-            p.setBrush(QBrush(QColor(236, 196, 30)))
-            p.setPen(_cached_pen(QColor(170, 40, 30), max(1.0, 0.25 * px_m * k)))
-            p.drawEllipse(c, r_roue, r_roue)
-            if r_roue > 5:
-                p.setPen(_cached_pen(QColor(120, 100, 20), 1))
-                for a_ in range(6):
-                    ang = a_ * math.pi / 3 + time.monotonic() * 0.0
-                    p.drawLine(c, QPointF(c.x() + r_roue * 0.8 * math.cos(ang),
-                                          c.y() + r_roue * 0.8 * math.sin(ang)))
+            p.drawLine(loc(1.5 + 7.8 * f, 4.3), loc(1.5 + 7.8 * f, 7.5 + 2.8 * f))
+        # salle des machines sous la dalle (murs carrelés)
+        p.setBrush(QBrush(QColor(200, 204, 204)))
+        p.setPen(_cached_pen(QColor(90, 94, 100), 1))
+        p.drawPolygon(QPolygonF([loc(-2.6, -0.65), loc(14.0, -0.65), loc(14.0, -6.0), loc(-2.6, -6.0)]))
+        # --- câble et roues : roue aval A (sous le butoir), roue amont B
+        R = 2.08
+        a_A, a_B, b_c = 0.95, 7.55, -0.12 - R       # sommets au niveau du brin
+        cA, cB = loc(a_A, b_c), loc(a_B, b_c)
+        r_px = math.hypot(loc(R, 0).x() - loc(0, 0).x(), loc(R, 0).y() - loc(0, 0).y())
+        cable = QPainterPath()
+        n_arc = 40
+        for i in range(n_arc + 1):
+            ph = 2 * math.pi * i / n_arc
+            q = loc(a_A + R * math.cos(ph), b_c + R * math.sin(ph))
+            cable.moveTo(q) if i == 0 else cable.lineTo(q)
+        for i in range(n_arc + 1):
+            ph = 2 * math.pi * i / n_arc
+            q = loc(a_B + R * math.cos(ph), b_c + R * math.sin(ph))
+            cable.moveTo(q) if i == 0 else cable.lineTo(q)
+        # brins croisés entre les roues (huit) et brin de la voie, qui
+        # arrive au sommet de la roue aval et repart du sommet de l'amont
+        d_ab = a_B - a_A
+        al = math.acos(min(1.0, 2 * R / d_ab))
+        for sg in (1.0, -1.0):
+            p_a = (a_A + R * math.cos(al), b_c + sg * R * math.sin(al))
+            p_b = (a_B - R * math.cos(al), b_c - sg * R * math.sin(al))
+            cable.moveTo(loc(*p_a))
+            cable.lineTo(loc(*p_b))
+        cable.moveTo(loc(-30.0 / k, -0.12))
+        cable.lineTo(loc(a_B, -0.12))
+        for pen in (QPen(QColor(10, 10, 14, 200), max(2.5, 0.16 * px_m * k)),
+                    QPen(QColor(205, 208, 216), max(1.2, 0.08 * px_m * k))):
+            p.setBrush(Qt.BrushStyle.NoBrush)
+            p.setPen(pen)
+            p.drawPath(cable)
+        # roues : jante rouge, voile jaune à 12 ouvertures en pétales qui
+        # tournent avec la poulie (sens contraires : câble en huit)
+        ang = self._pulley_angle
+        for c, sens in ((cA, 1.0), (cB, -1.0)):
+            p.setPen(_cached_pen(QColor(120, 30, 20), 1))
+            p.setBrush(QBrush(QColor(186, 40, 28)))
+            p.drawEllipse(c, r_px, r_px)
+            p.setBrush(QBrush(QColor(236, 194, 26)))
+            p.setPen(Qt.PenStyle.NoPen)
+            p.drawEllipse(c, r_px * 0.86, r_px * 0.86)
+            if r_px > 7.0:
+                p.setBrush(QBrush(QColor(60, 52, 30)))
+                for i in range(12):
+                    ph = sens * ang + i * math.pi / 6
+                    o = QPointF(c.x() + 0.58 * r_px * math.cos(ph), c.y() + 0.58 * r_px * math.sin(ph))
+                    p.save()
+                    p.translate(o)
+                    p.rotate(math.degrees(ph))
+                    p.drawEllipse(QPointF(0, 0), 0.20 * r_px, 0.085 * r_px)
+                    p.restore()
+            else:
+                p.setPen(_cached_pen(QColor(90, 70, 20), 1))
+                for i in range(3):
+                    ph = sens * ang + i * math.pi / 3
+                    p.drawLine(QPointF(c.x() - 0.8 * r_px * math.cos(ph), c.y() - 0.8 * r_px * math.sin(ph)),
+                               QPointF(c.x() + 0.8 * r_px * math.cos(ph), c.y() + 0.8 * r_px * math.sin(ph)))
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(QBrush(QColor(70, 72, 78)))
+            p.drawEllipse(c, max(1.5, 0.16 * r_px), max(1.5, 0.16 * r_px))
+        # repères qui défilent sur le brin de la voie : on voit le câble
+        # avancer à la vitesse de la machinerie
+        if r_px > 4.0:
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(QBrush(QColor(30, 30, 36)))
+            pas = 1.5
+            dec = (ang * R) % pas
+            a_m = -25.0 / k + dec
+            while a_m < a_A:
+                p.drawEllipse(loc(a_m, -0.12), max(1.2, 0.07 * px_m * k), max(1.2, 0.07 * px_m * k))
+                a_m += pas
         # butoirs bleus
         p.setPen(_cached_pen(QColor(40, 90, 170), max(1.5, 0.6 * px_m * k)))
         p.drawLine(le_long(LENGTH - 0.6, 0.4), le_long(LENGTH - 0.6, 1.6))
-        top = w2s(xl + 5.0, zl + 4.3 * k + 6.0 * k + 5.0 * math.tan(th))
+        top = loc(5.0, 10.0)
         self._etiquette_gare(p, QPointF(top.x(), top.y() - 8), "Grande Motte", "3032 m")
+
+    def _draw_telepherique(self, p: QPainter, w2s, t: dict, px_m: float, k: float,
+                           x_vis0: float, x_vis1: float) -> None:
+        """Téléphérique de la Grande Motte, qui part dans la foulée du
+        funiculaire (demande de Kevin, 06/10/2026) : bicâble à va-et-vient
+        Von Roll 1975, gare aval 3 034 m, un pylône en treillis, gare amont
+        3 456 m ; porteurs en chaînette (cosh) ; deux cabines de 115 + 1
+        places qui se croisent, 5 min de trajet à 10 m/s (5,2 m/s au pylône).
+        Hauteur du pylône et tension des porteurs : déduites de la fiche
+        (audit_physique/telepherique.sage)."""
+        if x_vis1 < t["xa"] - 60.0 or x_vis0 > t["xh"] + 60.0:
+            return
+
+        def gare(x0: float, x1: float, z_q: float, nom: str, alt: str, dx: float = 0.0, dy: float = 0.0) -> None:
+            r_a, r_b = w2s(x0, z_q - 2.0), w2s(x1, z_q + 9.0 * min(k, 3.0))
+            r = QRectF(r_a.x(), r_b.y(), r_b.x() - r_a.x(), r_a.y() - r_b.y())
+            g = QLinearGradient(r.topLeft(), r.bottomLeft())
+            g.setColorAt(0.0, QColor(214, 210, 200))
+            g.setColorAt(1.0, QColor(160, 156, 148))
+            p.setBrush(QBrush(g))
+            p.setPen(_cached_pen(QColor(70, 70, 76), 1))
+            p.drawRect(r)
+            p.setBrush(QBrush(QColor(60, 80, 108)))
+            p.setPen(Qt.PenStyle.NoPen)
+            p.drawRect(QRectF(r.x() + r.width() * 0.08, r.y() + r.height() * 0.25,
+                              r.width() * 0.84, r.height() * 0.3))
+            self._etiquette_gare(p, QPointF(r.center().x() + dx, r.y() - 4 + dy), nom, alt)
+
+        # gares : l'aval tout contre la sortie du funiculaire, l'amont sur
+        # l'arête sous le sommet
+        gare(t["xa"] - 10.0, t["xa"] + 22.0, t["za"],
+             T("Grande Motte cable car", "Téléphérique"), "3034 m", dx=110.0, dy=-6.0)
+        gare(t["xh"] - 22.0, t["xh"] + 8.0, t["zh"],
+             T("Cable car top", "Gare du sommet"), "3456 m")
+        # pylône en treillis : deux membrures qui s'affinent, entretoises en X
+        pied, tete = t["z_pied"], t["z_top"]
+        lb, lh = 7.0, 2.2
+        xp = t["xp"]
+        p.setPen(_cached_pen(QColor(70, 74, 82), max(1.2, 0.35 * px_m * min(k, 3.0))))
+        p.drawLine(w2s(xp - lb, pied), w2s(xp - lh, tete))
+        p.drawLine(w2s(xp + lb, pied), w2s(xp + lh, tete))
+        n_e = 8
+        p.setPen(_cached_pen(QColor(90, 94, 102), max(1.0, 0.18 * px_m * min(k, 3.0))))
+        for i in range(n_e):
+            f0, f1 = i / n_e, (i + 1) / n_e
+            za, zb = pied + (tete - pied) * f0, pied + (tete - pied) * f1
+            la, lb_ = lb + (lh - lb) * f0, lb + (lh - lb) * f1
+            p.drawLine(w2s(xp - la, za), w2s(xp + lb_, zb))
+            p.drawLine(w2s(xp + la, za), w2s(xp - lb_, zb))
+        p.setPen(_cached_pen(QColor(70, 74, 82), max(1.5, 0.5 * px_m * min(k, 3.0))))
+        p.drawLine(w2s(xp - 6.0, tete), w2s(xp + 6.0, tete))     # sabots des porteurs
+        # porteurs (chaînettes) et tracteur juste dessous
+        c1, c2 = t["c1"], t["c2"]
+
+        def chemin(dz: float) -> QPolygonF:
+            pts = []
+            n1 = 60
+            for i in range(n1 + 1):
+                x = t["xa"] + (xp - t["xa"]) * i / n1
+                pts.append(w2s(x, c1(x) + dz))
+            for i in range(1, 21):
+                x = xp + (t["xh"] - xp) * i / 20
+                pts.append(w2s(x, c2(x) + dz))
+            return QPolygonF(pts)
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        p.setPen(_cached_pen(QColor(30, 32, 38), max(1.4, 0.12 * px_m * k)))
+        p.drawPolyline(chemin(0.0))
+        p.setPen(_cached_pen(QColor(60, 62, 70, 200), max(1.0, 0.07 * px_m * k)))
+        p.drawPolyline(chemin(-1.6 * min(k, 3.0)))
+        # cabines : va-et-vient, 5 min de trajet, 1 min en gare ; la
+        # cabine 1 monte quand la 2 descend
+        cycle = 360.0
+        ph = time.monotonic() % (2.0 * cycle)
+
+        def avancement(ph_: float) -> float:
+            if ph_ >= cycle:
+                ph_ = 2.0 * cycle - ph_
+            return max(0.0, min(1.0, (ph_ - 30.0) / (cycle - 60.0)))
+        L1 = xp - t["xa"]
+        L_tot = t["xh"] - t["xa"]
+        for u in (avancement(ph), 1.0 - avancement(ph)):
+            # vitesse réduite au passage du pylône : profil adouci autour
+            u_s = u - 0.035 * math.sin(2.0 * math.pi * u)
+            x = t["xa"] + u_s * L_tot
+            z_c = c1(x) if x <= xp else c2(x)
+            e = min(k, 4.0)
+            chariot = w2s(x, z_c)
+            cab_h, cab_w = 3.4 * e, 8.0 * e
+            suspente = 4.0 * e
+            p.setPen(_cached_pen(QColor(40, 42, 48), max(1.0, 0.12 * px_m * e)))
+            p.drawLine(chariot, w2s(x, z_c - suspente))
+            r_a = w2s(x - cab_w / 2, z_c - suspente)
+            r_b = w2s(x + cab_w / 2, z_c - suspente - cab_h)
+            r = QRectF(r_a.x(), r_b.y(), r_b.x() - r_a.x(), r_a.y() - r_b.y())
+            p.setBrush(QBrush(QColor(222, 226, 232)))
+            p.setPen(_cached_pen(QColor(60, 64, 72), 1))
+            p.drawRoundedRect(r, r.width() * 0.12, r.height() * 0.2)
+            p.setBrush(QBrush(QColor(44, 70, 98)))
+            p.setPen(Qt.PenStyle.NoPen)
+            p.drawRect(QRectF(r.x() + r.width() * 0.08, r.y() + r.height() * 0.18,
+                              r.width() * 0.84, r.height() * 0.38))
+            p.setBrush(QBrush(QColor(60, 64, 72)))
+            p.drawRect(QRectF(chariot.x() - r.width() * 0.18, chariot.y() - max(1.5, 0.6 * px_m * e),
+                              r.width() * 0.36, max(2.0, 1.0 * px_m * e)))
 
     def _etiquette_gare(self, p: QPainter, pos: QPointF, nom: str, alt: str) -> None:
         texte = f"{nom}  ·  {alt}"

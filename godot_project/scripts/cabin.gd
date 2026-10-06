@@ -127,7 +127,12 @@ func _ready() -> void:
 		_tag_layer_rame(self)
 		_tag_layer_rame.call_deferred(self)
 	else:
-		# Ghost : mesh toujours visible, pas de caméra ni phares.
+		# Ghost : mesh toujours visible, pas de caméra. Ses PHARES, oui
+		# (retour de Kevin du 06/10/2026 : de la salle des machines on voit
+		# le faisceau de la rame qui arrive, quelle qu'elle soit, éclairer
+		# peu à peu les parois du tunnel) — même interrupteur que la rame
+		# pilotée (physics.lights_head).
+		_build_headlight()
 		_tag_layer_rame.call_deferred(self)   # éclairée en vue extérieure
 		# (Plus de lumière rouge au centre de la rame — retour du 03/10 :
 		# « enlève le feu rouge à l'arrière et le halo rouge qui va avec ».)
@@ -1179,6 +1184,11 @@ func _update_passenger_count() -> void:
 
 
 func _build_lights() -> void:
+	_build_headlight()
+	_build_cabin_lights()
+
+
+func _build_headlight() -> void:
 	# Phares frontaux (forward = -Z dans Godot) — placés DEVANT la caméra
 	# pour que le cône soit visible dans le brouillard volumétrique
 	headlight_front = SpotLight3D.new()
@@ -1206,6 +1216,9 @@ func _build_lights() -> void:
 	headlight_front.shadow_enabled = false
 	headlight_front.visible = true  # allumés par défaut
 	_attach_to_front_car(headlight_front, headlight_front.position)
+
+
+func _build_cabin_lights() -> void:
 
 	# (Feu arrière rouge supprimé — retour du 03/10 : « enlève le feu rouge à
 	# l'arrière des rames et le reflet / halo rouge qui va avec ». Le projecteur

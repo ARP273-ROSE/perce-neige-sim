@@ -34,6 +34,9 @@ var enabled: bool = true
 var _neon_mat_on: StandardMaterial3D = null
 var _neon_mat_off: StandardMaterial3D = null
 var _tubes_allumes: Array[MeshInstance3D] = []
+var _tubes_s: PackedFloat32Array = PackedFloat32Array()   # abscisse de chaque tube allumable
+var _tubes_etat: PackedByteArray = PackedByteArray()      # 1 = allumé
+var _dernier_s: float = NAN
 
 
 func _ready() -> void:
@@ -107,10 +110,23 @@ func _populate() -> void:
 # salves à l'approche, et light_energy est un simple uniform (pas cher).
 const LIGHT_FADE_M: float = 60.0
 
-func update_light_culling(s_cabin: float) -> void:
+## `s_web` : rame autour de laquelle allumer les lampes en web (la rame
+## pilotée, ou en vue salle des machines celle qui approche de la gare).
+##
+## Allumage PAR ZONE (retour de Kevin du 06/10/2026 : « le tunnel vu de la
+## machinerie, s'il est allumé, ne s'allume que progressivement à
+## l'approche de la rame ») : un tube ne s'allume que dans la zone éclairée
+## autour d'une rame, tube après tube quand elle avance.
+const ZONE_ALLUMEE: float = 300.0
+
+func update_light_culling(s_cabin: float, s_web: float = NAN) -> void:
 	var web: bool = OS.has_feature("web")
 	var cull: float = LIGHT_CULL_DIST_WEB if web else LIGHT_CULL_DIST
 	var s_ghost: float = PNConstants.miroir(s_cabin)
+	_dernier_s = s_cabin
+	_appliquer_zone(s_cabin, s_ghost)
+	if is_nan(s_web):
+		s_web = s_cabin
 	for entry in _lights:
 		var light: OmniLight3D = entry[0]
 		var ls: float = entry[1]
@@ -121,11 +137,25 @@ func update_light_culling(s_cabin: float) -> void:
 		# prenaient la place de ceux de la cabine → tunnel noir (retour
 		# iPad du 05/10/2026). Elle est à plus d'un kilomètre : ses néons
 		# ne servent pas en vue cabine.
-		var d: float = absf(ls - s_cabin) if web else minf(absf(ls - s_cabin), absf(ls - s_ghost))
+		var d: float = absf(ls - s_web) if web else minf(absf(ls - s_cabin), absf(ls - s_ghost))
+		# jamais de lampe hors de la zone allumée (tube éteint)
+		d = maxf(d, minf(absf(ls - s_cabin), absf(ls - s_ghost)) + cull - ZONE_ALLUMEE)
 		var k: float = clampf((cull - d) / LIGHT_FADE_M, 0.0, 1.0)
 		light.visible = k > 0.01
 		if light.visible:
 			light.light_energy = light_energy * k if enabled else 0.0
+
+
+## Tubes allumés seulement dans la zone de ZONE_ALLUMEE autour de l'une
+## ou l'autre rame ; le matériau n'est changé que quand l'état change (le
+## matériau éteint est déjà compilé : pas de recompilation en web).
+func _appliquer_zone(s_a: float, s_b: float) -> void:
+	for i in range(_tubes_allumes.size()):
+		var ts: float = _tubes_s[i]
+		var allume: int = 1 if enabled and minf(absf(ts - s_a), absf(ts - s_b)) <= ZONE_ALLUMEE else 0
+		if _tubes_etat[i] != allume:
+			_tubes_etat[i] = allume
+			_tubes_allumes[i].set_surface_override_material(0, _neon_mat_on if allume == 1 else _neon_mat_off)
 
 
 ## Allume ou coupe tout l'éclairage du tunnel : sources lumineuses ET
@@ -139,8 +169,13 @@ func update_light_culling(s_cabin: float) -> void:
 ## moitié des tubes l'utilise).
 func set_enabled(on: bool) -> void:
 	enabled = on
-	for tube in _tubes_allumes:
-		tube.set_surface_override_material(0, _neon_mat_on if on else _neon_mat_off)
+	for i in range(_tubes_allumes.size()):
+		_tubes_etat[i] = 2      # forcer la mise à jour
+	if is_nan(_dernier_s):
+		for tube in _tubes_allumes:
+			tube.set_surface_override_material(0, _neon_mat_on if on else _neon_mat_off)
+	else:
+		_appliquer_zone(_dernier_s, PNConstants.miroir(_dernier_s))
 	for entry in _lights:
 		var light: OmniLight3D = entry[0]
 		if light.visible and not on:
@@ -182,6 +217,8 @@ func _add_neon(s: float, mesh: BoxMesh, neon_mat: StandardMaterial3D,
 	neon.set_surface_override_material(0, neon_mat)
 	if lit:
 		_tubes_allumes.append(neon)
+		_tubes_s.append(s)
+		_tubes_etat.append(1)
 	neon.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(neon)
 	# Positionner APRÈS add_child (global_transform nécessite d'être dans l'arbre)

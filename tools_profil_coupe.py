@@ -15,8 +15,9 @@ relief une ligne à 160 m au-dessus de la voie.
   horizontale (H_MAX).
 - En deçà de la gare aval : 1 200 m dans le prolongement du premier tronçon
   (vers le lac de Tignes).
-- Au-delà de la gare amont : la montée du glacier jusqu'au sommet de la
-  Grande Motte (3 653 m), puis 600 m de redescente.
+- Au-delà de la gare amont : le long du téléphérique de la Grande Motte
+  (gare aval, pylône, gare amont, OpenStreetMap), puis le sommet (3 653 m) et
+  600 m de redescente.
 - Crêtes de fond : la vue regarde vers l'EST (l'amont, au sud, est à
   droite) ; pour chaque point de la coupe, l'altitude maximale du terrain
   dans une bande perpendiculaire à l'est, de 0,8 à 4 km (crêtes moyennes)
@@ -69,14 +70,38 @@ pts_aval = []
 for j in range(int(AVAL_M / PAS), 0, -1):
     d = j * PAS
     pts_aval.append((E[0] - d * math.sin(math.radians(cap0)), N[0] - d * math.cos(math.radians(cap0)), cap0))
-e_s = (SOMMET[1] - ign[0][0]) * m_lon(lat0)
-n_s = (SOMMET[0] - lat0) * M_LAT
-cap_s = math.degrees(math.atan2(e_s - E[-1], n_s - N[-1]))
-d_s = math.hypot(e_s - E[-1], n_s - N[-1])
+# au-delà de la gare amont, la coupe suit le TÉLÉPHÉRIQUE de la Grande Motte
+# (OpenStreetMap way 23140026 : gare aval, pylône P1, gare amont), puis le
+# sommet et 600 m au-delà
+TPH = {"aval": (45.4233091, 6.8904986), "pylone": (45.4154529, 6.8776271),
+       "amont": (45.4135843, 6.874556)}
+
+
+def en_m(ll):
+    return (ll[1] - ign[0][0]) * m_lon(lat0), (ll[0] - lat0) * M_LAT
+
+
+sommets = [(E[-1], N[-1])] + [en_m(TPH[k]) for k in ("aval", "pylone", "amont")] + [en_m(SOMMET)]
+d_cum = [0.0]
+for (e0, n0), (e1, n1) in zip(sommets, sommets[1:]):
+    d_cum.append(d_cum[-1] + math.hypot(e1 - e0, n1 - n0))
 pts_amont = []
-for j in range(1, int((d_s + APRES_SOMMET_M) / PAS) + 1):
-    d = j * PAS
-    pts_amont.append((E[-1] + d * math.sin(math.radians(cap_s)), N[-1] + d * math.cos(math.radians(cap_s)), cap_s))
+total = d_cum[-1] + APRES_SOMMET_M
+d = PAS
+while d <= total:
+    k = min(len(d_cum) - 2, max(0, int(np.searchsorted(d_cum, d, side="right") - 1)))
+    (e0, n0), (e1, n1) = sommets[k], sommets[min(k + 1, len(sommets) - 1)]
+    if d > d_cum[-1]:
+        (e0, n0), (e1, n1) = sommets[-2], sommets[-1]
+        u = (d - d_cum[-2]) / (d_cum[-1] - d_cum[-2])
+    else:
+        u = (d - d_cum[k]) / max(d_cum[k + 1] - d_cum[k], 1e-9)
+    cap = math.degrees(math.atan2(e1 - e0, n1 - n0))
+    pts_amont.append((e0 + u * (e1 - e0), n0 + u * (n1 - n0), cap))
+    d += PAS
+d_s = d_cum[-1]
+TPH_X = {"aval": d_cum[1], "pylone": d_cum[2], "amont": d_cum[3]}
+TPH_CALC = json.load(open("audit_physique/telepherique_resultat.json"))
 
 
 def rge_alti(la, lo):
@@ -143,10 +168,25 @@ SURFACE_LIGNE = {arrondi(surface(pts_ligne))}
 PAS_PROLONGEMENT = {PAS}
 SURFACE_AVAL = {arrondi(surface(pts_aval))}
 
-# Au-delà de la gare amont, tous les {PAS:.0f} m, vers le sommet de la Grande
-# Motte (à {d_s:.0f} m) puis {APRES_SOMMET_M:.0f} m au-delà.
+# Au-delà de la gare amont, tous les {PAS:.0f} m, le long du téléphérique de la
+# Grande Motte puis jusqu'au sommet (à {d_s:.0f} m), et {APRES_SOMMET_M:.0f} m au-delà.
 SURFACE_AMONT = {arrondi(surface(pts_amont))}
 SOMMET_AMONT_M = {d_s:.1f}
+
+# Téléphérique de la Grande Motte (Von Roll 1975, bicâble va-et-vient
+# 115 + 1 places) : distances horizontales depuis le bout de la voie du
+# funiculaire le long de la coupe ; hauteur du pylône et paramètre de
+# chaînette a = T/w des porteurs DÉDUITS (audit_physique/telepherique.sage :
+# survol maximal 152 m et pente maximale 55 % de la fiche technique).
+TPH_X_AVAL = {TPH_X["aval"]:.1f}
+TPH_X_PYLONE = {TPH_X["pylone"]:.1f}
+TPH_X_AMONT = {TPH_X["amont"]:.1f}
+TPH_Z_GARE_AVAL = 3034.0
+TPH_Z_GARE_AMONT = 3456.0
+TPH_Z_SELLE_AVAL = {TPH_CALC["z_selle_aval"]}
+TPH_Z_SELLE_AMONT = {TPH_CALC["z_selle_amont"]}
+TPH_H_PYLONE = {TPH_CALC["h_pylone"]}
+TPH_A_CHAINETTE = {TPH_CALC["a"]}
 
 # Crêtes de fond à l'est, un point sur quatre de la suite
 # aval + ligne + amont ci-dessus.
