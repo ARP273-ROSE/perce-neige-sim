@@ -65,6 +65,7 @@ const VENT_DB: float = -32.0
 var machine_view: bool = false       # posé par main.gd selon la vue 3D
 var _player_mr_idle: AudioStreamPlayer = null
 var _player_mr_run: AudioStreamPlayer = null
+var _player_horn: AudioStreamPlayer = null
 var _mr_mix: float = 0.0
 var _cab_db: float = 0.0             # atténuation des sons de cabine (dB)
 
@@ -94,6 +95,9 @@ func _build_players() -> void:
 	# Salle des machines (gare haute)
 	_player_mr_idle = _create_player("res://sounds/salle_machines_repos.wav", -80.0, true)
 	_player_mr_run = _create_player("res://sounds/salle_machines_marche_12ms.wav", -80.0, true)
+	# Klaxon du pupitre (vue cabine) : même son que le PC (horn_v3, deux
+	# tons 220/277 Hz, boucle d'une seconde), tant que le bouton est tenu
+	_player_horn = _create_player("res://sounds/klaxon.wav", -8.0, true)
 
 
 func _create_player(path: String, vol_db: float, loop: bool, bus: String = "Master") -> AudioStreamPlayer:
@@ -122,6 +126,16 @@ func _create_player(path: String, vol_db: float, loop: bool, bus: String = "Mast
 		player.playback_type = AudioServer.PLAYBACK_TYPE_STREAM
 	add_child(player)
 	return player
+
+
+## Klaxon tenu (bouton KLAXON du pupitre).
+func set_horn(on: bool) -> void:
+	if _player_horn == null or _player_horn.stream == null:
+		return
+	if on and not _player_horn.playing:
+		_player_horn.play()
+	elif not on and _player_horn.playing:
+		_player_horn.stop()
 
 
 func set_physics(p: TrainPhysics) -> void:

@@ -12,6 +12,9 @@ var _cache: String = ""          # nom (méta) des pièces de la salle des machi
 var _sans_vol: bool = false      # sans brouillard volumétrique
 var _vue: int = 0                # 0 cabine, 2 salle des machines (avant la caméra libre)
 var _gros_plan: bool = false     # caméra cabine resserrée sur le pupitre
+var _gp_fov: float = 30.0
+var _gp_plongee: float = 0.62
+var _gp_lacet: float = 0.0
 var _cam: PackedFloat32Array = []  # caméra libre dans le repère de la salle des machines : s', x, y, cap°, site°, fov
 var _camt: PackedFloat32Array = [] # caméra libre dans le repère du tunnel : s, x, y, cap°, site°, fov
 
@@ -30,6 +33,12 @@ func _initialize() -> void:
 			_vue = int(a.substr(4))
 		elif a == "pupitre":
 			_gros_plan = true
+		elif a.begins_with("fov="):
+			_gp_fov = float(a.substr(4))
+		elif a.begins_with("plongee="):
+			_gp_plongee = float(a.substr(8))
+		elif a.begins_with("lacet="):
+			_gp_lacet = float(a.substr(6))
 		elif a.begins_with("camt="):
 			for v in a.substr(5).split(","):
 				_camt.append(float(v))
@@ -59,8 +68,9 @@ func _tick() -> void:
 		_main.get("cabin").set_view(_vue)
 	if _f == 70 and _gros_plan:
 		var cf: Camera3D = _main.get("cabin").camera_fpv
-		cf.fov = 30.0
-		cf.rotate_object_local(Vector3.RIGHT, -0.62)
+		cf.fov = _gp_fov
+		cf.rotate_object_local(Vector3.UP, _gp_lacet)
+		cf.rotate_object_local(Vector3.RIGHT, -_gp_plongee)
 	if _f == 70:
 		if _cache != "":
 			for c in _main.get("machine_room").get_children():

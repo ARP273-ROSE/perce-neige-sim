@@ -128,6 +128,7 @@ func _ready() -> void:
 	_build_machine_room()
 	_build_lights()
 	_build_cabin()
+	cabin.apres_orbite = _apres_orbite    # écorché du relief en vue extérieure
 
 	if client_mode:
 		# Démarre directement la trip pour que la cabine se positionne
@@ -508,6 +509,22 @@ func _build_track() -> void:
 	print("[Track] rails/dalle/câble construits (longueur=%.0fm)" % PNConstants.LENGTH)
 
 
+## Vue extérieure, appelé par la cabine juste après le placement de la
+## caméra : ouvre l'écorché face à elle et la garde dans l'entaille (ou
+## au-dessus du relief en très grand recul).
+func _apres_orbite(cam: Camera3D) -> void:
+	if relief == null or not relief.pret or physics == null:
+		return
+	var c: Vector3 = cabin.global_position
+	var g: Vector3 = cam.global_position
+	var y_min: float = relief.y_min_camera(g)
+	if g.y < y_min:
+		g.y = y_min
+		cam.global_position = g
+		cam.look_at(c + Vector3(0.0, 2.0, 0.0), Vector3.UP)
+	relief.set_coupe(c, physics.s_render, g, cabin.train_length)
+
+
 func _build_relief() -> void:
 	var t0: int = Time.get_ticks_msec()
 	relief = ReliefBuilder.new()
@@ -797,34 +814,36 @@ func _process(delta: float) -> void:
 	# voyant « Alarmes » et bouton DÉFAUTS de l'écran du pupitre (PWA)
 	if fault_manager != null and physics != null and not client_mode:
 		physics.alarme_externe = fault_manager.is_active()
-	# relief 3D du massif : vue extérieure seulement, ouvert autour de la rame
+	# relief 3D du massif (vue extérieure seulement), ouvert en écorché
+	# autour de la rame — l'entaille est posée par _apres_orbite(), juste
+	# après le placement de la caméra (cabin.gd)
 	if relief != null and cabin != null:
 		var ext: bool = cabin.view_mode == Cabin.ViewMode.EXTERIOR and relief.pret
-		# seulement quand la caméra est AU-DESSUS du relief : en orbite
-		# rapprochée elle est sous la montagne, dans le tunnel (vue habituelle,
-		# parois transparentes) ; en prenant du recul elle sort à l'air libre
-		if ext and cabin.camera_ext != null:
-			var pc: Vector3 = cabin.camera_ext.global_position
-			ext = pc.y > relief.hauteur(pc.x, pc.z) + 3.0
 		relief.visible = ext
-		if ext:
-			relief.set_trou(cabin.global_position, clampf(cabin.orbit_dist * 0.55, 35.0, 700.0))
+		if not ext:
+			relief.couper(false)
 		# le brouillard du tunnel (≈ 250 m de visibilité) noierait tout au
 		# loin : en vue extérieure il s'éclaircit avec le recul de la caméra
 		if _env != null:
 			var k_f: float = clampf(15.0 / cabin.orbit_dist, 0.0, 1.0) if ext else 1.0
 			_env.fog_density = 0.004 * k_f
 			_env.volumetric_fog_density = 0.008 * k_f if k_f > 0.3 else 0.0
+			_env.fog_sky_affect = 0.0 if ext else 0.5    # ciel bleu dehors
+			# dehors il fait jour, même tunnel éteint
+			var ciel: float = 1.0 if (ext or tunnel_lights_on) else 0.0
+			if _env.background_energy_multiplier != ciel:
+				_env.background_energy_multiplier = ciel
+				if _env.sky != null and _env.sky.sky_material is PhysicalSkyMaterial:
+					(_env.sky.sky_material as PhysicalSkyMaterial).energy_multiplier = ciel
 	if machine_room != null and cabin != null:
-		machine_room.set_exterieur_lointain(cabin.view_mode == Cabin.ViewMode.EXTERIOR)
+		# panorama photographié depuis la gare : vu des baies de la gare et
+		# de la salle des machines seulement ; la vue extérieure a le relief
+		machine_room.set_exterieur_lointain(false)
 		var cam_e: Camera3D = get_viewport().get_camera_3d()
 		var d_hall: float = machine_room.distance_au_hall(cam_e.global_position) \
 			if cam_e != null else INF
-		# vue cabine : on ne voit dehors qu'à travers les baies, donc près de
-		# la gare ; autres vues : à moins de 150 m de la gare amont
-		machine_room.set_exterieur_visible(d_hall < 150.0
-			or cabin.view_mode == Cabin.ViewMode.EXTERIOR
-			or (cabin.view_mode == Cabin.ViewMode.FPV and d_hall < 450.0))
+		machine_room.set_exterieur_visible(cabin.view_mode != Cabin.ViewMode.EXTERIOR
+			and (d_hall < 150.0 or (cabin.view_mode == Cabin.ViewMode.FPV and d_hall < 450.0)))
 	# numéros des supports : rétroréfléchissants dans les phares (vue cabine)
 	if track != null and cabin != null:
 		track.set_retro(cabin.head_glow() if cabin.view_mode == Cabin.ViewMode.FPV else 0.0)
@@ -975,7 +994,84 @@ var _orbit_touches: Dictionary = {}
 var _orbit_pinch_dist: float = 0.0
 
 
+# Pupitre de la vue cabine (06/10/2026, « faudrait pouvoir appuyer sur ces
+# boutons ») : clic gauche ou doigt (émulé en souris) sur une commande. En
+# _unhandled_input : les boutons tactiles de l'écran passent avant.
+var _commande_tenue: String = ""
+
+
+func _pupitre_clic(pos: Vector2, enfonce: bool) -> bool:
+	if not enfonce:
+		if _commande_tenue == "":
+			return false
+		_commande_pupitre(_commande_tenue, false)
+		_commande_tenue = ""
+		return true
+	if cabin == null or cabin.view_mode != Cabin.ViewMode.FPV:
+		return false
+	var nom: String = cabin.pupitre_commande_sous(pos)
+	if nom == "":
+		return false
+	if _commande_tenue != "":
+		_commande_pupitre(_commande_tenue, false)
+	_commande_tenue = nom
+	_commande_pupitre(nom, true)
+	return true
+
+
+## Action d'une commande du pupitre. Embarqué dans le PC (client_mode), la
+## rame est pilotée par le PC : seul le geste est montré.
+func _commande_pupitre(nom: String, enfonce: bool) -> void:
+	if nom == "marche" and enfonce and not client_mode and physics != null \
+			and cabin.pupitre_en_marche() and absf(physics.v) > 0.05:
+		_flash("Commutateur général : rame en marche")
+		return
+	cabin.pupitre_appuyer(nom, enfonce)
+	if client_mode or physics == null:
+		return
+	if nom == "klaxon":
+		physics.horn = enfonce
+		if audio != null:
+			audio.set_horn(enfonce)
+		return
+	if nom.begins_with("vite_"):
+		# sélecteur −VITE/+VITE : comme les boutons de consigne, tant qu'on
+		# le tient
+		var action: String = "speed_down" if nom == "vite_moins" else "speed_up"
+		if enfonce:
+			Input.action_press(action)
+		else:
+			Input.action_release(action)
+		return
+	if nom == "montee":
+		# MONTÉE = « on est prêt » : comme le bouton PRÊT/DÉPART (relâche
+		# l'urgence, sinon lance la séquence de départ) ; allume PRÊT
+		if enfonce and not cabin.pupitre_en_marche():
+			_flash("Commutateur général sur arrêt")
+			return
+		if enfonce:
+			Input.action_press("ready_depart")
+		else:
+			Input.action_release("ready_depart")
+		return
+	if not enfonce:
+		return
+	match nom:
+		"ouverture_0", "ouverture_1":
+			if not physics.doors_open:
+				toggle_doors()
+		"fermeture_0", "fermeture_1":
+			if physics.doors_open:
+				toggle_doors()
+		"cabine", "compartiment":
+			toggle_cabin_lights()
+
+
 func _unhandled_input(event: InputEvent) -> void:
+	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
+		if _pupitre_clic(event.position, event.pressed):
+			get_viewport().set_input_as_handled()
+			return
 	# Pannes + auto-exploitation + inversion de sens
 	if event is InputEventKey and event.pressed and not event.echo:
 		if event.keycode == KEY_F1 and fault_manager != null:
@@ -1105,8 +1201,12 @@ func toggle_doors() -> void:
 	var msg: String = physics.toggle_doors()
 	if msg != "":
 		print("[Portes] " + msg)
-		if hud != null and hud.has_method("flash"):
-			hud.flash(msg)
+		_flash(msg)
+
+
+func _flash(msg: String) -> void:
+	if hud != null and hud.has_method("flash"):
+		hud.flash(msg)
 
 
 func do_reverse() -> void:
