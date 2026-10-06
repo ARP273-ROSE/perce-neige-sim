@@ -7,6 +7,42 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.15.63** — quais à la bonne longueur, rame d'en face complète, boutons
+dans le navigateur du PC.
+- **« Les quais sont trop longs : en bas le quai se prolonge de 4 m après
+  le haut de la rame, en haut de 3 m après le bas de la rame ; le galet
+  238 doit arriver en entrée de quai, et la pente de la gare du haut doit
+  y être atteinte comme maintenant »** :
+  - les quais s'étendent maintenant de 3 à 42,56 m en bas, et de 3 437,04
+    à 3 473 m en haut. Avant, c'était 3 à 51 m et 3 425 à 3 473 m
+    (`PNConstants.QUAI_*`) ;
+  - le galet n° 1 est à 43,79 m, à 1,23 m de la fin du quai bas ; le
+    n° 238 est à 3 436,76 m, à 0,28 m de l'entrée du quai haut. Ils
+    restent entre deux traverses, et la grille garde ses 238 supports ;
+  - la pente de la gare haute (10 %) est atteinte au n° 238, sur PC comme
+    dans la PWA. La vidéo la plaçait à 3 420 m, où le tunnel redevient
+    carré, et le tunnel ne change pas. Parité PC/PWA vérifiée.
+- **« Vue salle des machines : l'autre rame à quai en haut ne contient pas
+  de passagers et la vitre du cockpit est opaque »** : la rame d'en face
+  était dessinée simplifiée (sans intérieur, disque sombre derrière des
+  vitres teintées). Elle a maintenant le même pare-brise clair, le même
+  intérieur et ses passagers, à moins de 150 m seulement (comme ses roues),
+  et sans lampe de poste pour ne pas entamer le quota de lumières de la
+  PWA. En descente, elle porte 0 à 16 passagers : les skieurs redescendent
+  à ski.
+- **Navigateur du PC** : les boutons à l'écran (PORTES, PRÊT/DÉPART…)
+  n'apparaissaient que sur écran tactile. Ils sont maintenant là dans tout
+  navigateur et se cliquent à la souris. La ligne des raccourcis clavier
+  ajoute « D Portes » et passe sous le bouton MODE.
+- Vérifié :
+  - banc des galets avec un nouveau contrôle, la pente atteinte au n° 238 ;
+  - pas de saut du câble jusqu'à 10 mm. Sur un galet incliné de −8° en
+    courbe, le câble soulevé de 1,6 mm glisse de 13 mm dans la gorge,
+    selon la loi physique du jeu en √h ;
+  - 12 bancs de la PWA, 93 tests du PC, parité PC/PWA ;
+  - vues des bouts de quai et du pare-brise de l'autre rame
+    (`shot_orbite.gd quai` / `fantome`).
+
 **v1.15.62** — arrêts calés sur les butoirs, bouton PORTES, débarquement à
 l'arrivée.
 - **« En haut on s'arrête à 1,5 m du butoir, en bas à 4 ou 5 m, pour la

@@ -730,8 +730,8 @@ SLOPE_PROFILE: list[tuple[float, float]] = [
     #   t=2:50  (s=510)   — "la pente augmente" : ramp-up to max begins
     #   t=3:30  (s=914)   — max sustained gradient reached
     #   t=7:29  (s=3328)  — "la diminution de pente finale commence"
-    #   t=7:43  (s=3420)  — gradient reduction ends, tunnel becomes
-    #                       square again
+    #   t=7:43  (s=3420)  — tunnel becomes square again (the gradient
+    #                       reduction ends at roller 238, s=3436.76)
     #   t=9:37  (s=3474)  — arrival at Grande Motte platform
     # Peak gradient 30 %, altitude rise integrates to ~921 m.
     (0.0,    0.08),    # Val Claret portal (square tunnel), gentle start
@@ -746,7 +746,10 @@ SLOPE_PROFILE: list[tuple[float, float]] = [
     (3200.0, 0.28),
     (3328.0, 0.27),    # "diminution de pente finale commence" (t=7:29)
     (3380.0, 0.18),
-    (3420.0, 0.10),    # "tunnel redevient carré" (t=7:43)
+    (3436.76, 0.10),   # pente de la gare haute atteinte au galet n° 238, à
+                       # l'entrée du quai (fait de Kevin, 06/10/2026 ; la
+                       # vidéo la plaçait à 3420, où le tunnel redevient
+                       # carré) — même table que SlopeProfile (PWA)
     (3474.0, 0.06),    # Grande Motte platform (square tunnel)
 ]
 

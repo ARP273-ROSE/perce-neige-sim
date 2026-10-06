@@ -153,6 +153,15 @@ const STOP_S: float = 3456.04            # BUTOIR_HAUT_S − JEU_BUTOIR_HAUT −
 # 4,6 m de moins que la voie (avec LENGTH − s, la rame d'en face finissait
 # 1 m DANS le butoir bas quand on arrivait en haut).
 const MIROIR_S: float = 3478.6           # START_S + STOP_S
+# Quais (fait de Kevin, 06/10/2026 : « en bas le quai se prolonge de 4 m
+# vers le haut après le haut de la rame ; en haut de 3 m après le bas de la
+# rame ») — rame arrêtée en START_S / STOP_S. Le galet n° 1 est juste après
+# le quai bas, le n° 238 à l'entrée du quai haut, où la pente de la gare
+# haute est atteinte (SlopeProfile, track_builder.SUPPORT_S*).
+const QUAI_BAS_DEBUT_S: float = 3.0
+const QUAI_BAS_FIN_S: float = 42.56      # START_S + TRAIN_HALF + 4
+const QUAI_HAUT_DEBUT_S: float = 3437.04 # STOP_S − TRAIN_HALF − 3
+const QUAI_HAUT_FIN_S: float = 3473.0    # LENGTH − 1
 const CREEP_DIST: float = 55.0           # 20 + PLATFORM_LEN
 const CREEP_START_S: float = 3401.04     # STOP_S − CREEP_DIST
 

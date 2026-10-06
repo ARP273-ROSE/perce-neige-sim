@@ -22,7 +22,9 @@ const SLOPE_PROFILE: Array = [
 	[3200.0, 0.28],
 	[3328.0, 0.27],    # diminution pente finale commence (t=7:29)
 	[3380.0, 0.18],
-	[3420.0, 0.10],    # tunnel redevient carré (t=7:43)
+	[3436.76, 0.10],   # pente de la gare haute atteinte au galet n° 238, à
+	                   # l'entrée du quai (fait de Kevin, 06/10/2026 ; la
+	                   # vidéo la plaçait à 3420, où le tunnel redevient carré)
 	[3474.0, 0.06],    # Grande Motte plateforme
 ]
 

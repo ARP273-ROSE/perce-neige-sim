@@ -142,7 +142,12 @@ func _build_mesh() -> void:
 	# jaune Ø 3,40 centré 0,15 m sous l'axe descendait à −1,85 : sous la
 	# dalle et les rails (retour d'essai 2026-09-26 : « un cylindre qui
 	# dépasse même en dessous des rails »).
-	var built: Dictionary = TrainBodyBuilder.build_train(mesh_root, train_length, car_count, is_ghost)
+	# Les deux rames ont le même pare-brise clair et le même intérieur
+	# (retour du 06/10/2026, vue salle des machines : « l'autre rame à quai
+	# en haut ne contient pas de passagers et la vitre du cockpit est
+	# opaque » — la rame d'en face n'avait ni intérieur ni passagers, un
+	# disque sombre derrière des vitres teintées).
+	var built: Dictionary = TrainBodyBuilder.build_train(mesh_root, train_length, car_count, false)
 	_front_lamps = built["front_lamps"]
 	_rear_lamps = built["rear_lamps"]
 	_body_mats = built["mats"]
@@ -180,9 +185,27 @@ func _build_mesh() -> void:
 			l.set_surface_override_material(0, _body_mats["lamp_on"])
 
 	# --- Intérieur cockpit + sièges + passagers — toujours visible ---------
-	if not is_ghost:
-		_build_interior()
+	_build_interior()
 	_merge_static_meshes()
+	# Rame d'en face : intérieur et passagers dessinés à moins de 150 m
+	# seulement, comme ses roues — au-delà ils font moins d'un pixel
+	# derrière les vitres (performance iPad).
+	if is_ghost:
+		# pas de lampes de poste pour elle : la PWA n'en dessine qu'un
+		# nombre limité (cf. v1.15.57) — la gare et le tunnel l'éclairent
+		for l in _cockpit_lights:
+			(l as Node).queue_free()
+		_cockpit_lights.clear()
+		var pile: Array = []
+		pile.append_array(_interior_cars)
+		pile.append_array(_pax_noeuds)
+		if interior_root != null:
+			pile.append(interior_root)
+		while not pile.is_empty():
+			var nd: Node = pile.pop_back()
+			pile.append_array(nd.get_children())
+			if nd is GeometryInstance3D:
+				(nd as GeometryInstance3D).visibility_range_end = 150.0
 
 
 ## Performance (retour du 30/09 : le tunnel saccade toujours sur iPad) :

@@ -56,9 +56,12 @@ extends Node3D
 @export var trench_depth: float = 0.70
 # Supports numérotés (faits de Kevin, 03/10) : AUCUN support en gare aval,
 # le n° 1 est au bout du quai aval, le n° 238 (dernier numéroté) au début du
-# quai amont. Quais 3D : [3, 51] et [3425, 3473] (stations_builder).
-const SUPPORT_S1: float = 51.5
-const SUPPORT_S_LAST: float = 3424.5
+# quai amont, là où la pente de la gare haute est atteinte (SlopeProfile).
+# Quais raccourcis le 06/10 (PNConstants.QUAI_*) : [3, 42,56] et
+# [3437,04, 3473] → n° 1 à 29 traverses (43,79 m, 1,23 m après le quai),
+# n° 238 à 2 276 traverses (3 436,76 m, 0,28 m avant le quai).
+const SUPPORT_S1: float = 43.79
+const SUPPORT_S_LAST: float = 3436.76
 const SUPPORT_N: int = 238
 # Galet de ligne (RollerMesh, photo du reportage remontees-mecaniques.net,
 # audit_physique/galets_ligne.sage) : bande de roulement Ø 500 — le câble
