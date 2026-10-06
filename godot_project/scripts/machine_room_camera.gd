@@ -140,6 +140,11 @@ func _inside(p: Vector3) -> bool:
 		return y > MachineRoomBuilder.ROOM_FLOOR + M \
 			and absf(x) < MachineRoomBuilder.ROOM_HALF_W - 0.8 \
 			and s > MachineRoomBuilder.ROOM_S0 + M and s < MachineRoomBuilder.ROOM_S1 - M
+	# ni dans les marches et paliers des quais qui montent de chaque côté
+	# de la fosse jusqu'au mur vitré (06/10/2026 : la caméra par défaut s'y
+	# retrouvait enfermée — « je ne vois plus rien »)
+	if absf(x) > 1.85 - M and y < -1.10 + M:
+		return false
 	return y < MachineRoomBuilder.Y_HALL_CEIL - M \
 		and absf(x) < MachineRoomBuilder.HALL_HALF_W - M \
 		and s > -6.0 and s < MachineRoomBuilder.HALL_DEPTH - M

@@ -263,6 +263,12 @@ retenue comme référence.
   `data.geopf.fr/altimetrie`, ressource `ign_rge_alti_wld`) — Licence
   Ouverte Etalab 2.0 : relief au-dessus de la ligne dans la vue en coupe du
   PC (`tools_profil_coupe.py`).
+- **Téléphérique de la Grande Motte** — reportage TPH115 de
+  remontees-mecaniques.net et Wikipédia FR (Von Roll 1975, 3 034 → 3 456 m,
+  1 696 m, un pylône, hauteur maximale de la ligne 152 m, pente maximale
+  55 %, 10 m/s, 115 + 1 places) ; gares et pylône P1 : OpenStreetMap way
+  23140026 ; hauteur du pylône et tension DÉDUITES
+  (`audit_physique/telepherique.sage`).
 - **OpenStreetMap** — © contributeurs OpenStreetMap, ODbL. Way
   « Funiculaire Perce-Neige » (24 nœuds ; premier tronçon rectiligne de
   1,5 km : tracé grossier, utilisé en contrôle seulement).

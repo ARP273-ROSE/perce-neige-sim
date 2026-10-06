@@ -751,7 +751,14 @@ func _process(delta: float) -> void:
 	_light_cull_accum += delta
 	if _light_cull_accum >= 0.5:
 		_light_cull_accum = 0.0
-		lights.update_light_culling(physics.s)
+		# en vue salle des machines, la rame qui compte est celle qui
+		# approche de la gare amont, pilotée ou non
+		var s_web: float = physics.s
+		if cabin != null and cabin.view_mode == Cabin.ViewMode.MACHINES:
+			var s_g: float = PNConstants.miroir(physics.s)
+			if absf(PNConstants.LENGTH - s_g) < absf(PNConstants.LENGTH - physics.s):
+				s_web = s_g
+		lights.update_light_culling(physics.s, s_web)
 
 	# Masquage dynamique des brins de câble selon la position des rames
 	# (s_render : suit la cabine interpolée, sinon le câble « vibre »
