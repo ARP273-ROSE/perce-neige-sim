@@ -158,7 +158,11 @@ func _tick() -> void:
 		lo_max > lo_ini + 0.5 and ecart_min > TrackBuilder.RUPTURE_GAP_MIN_M - 1e-3,
 		"bout bas jusqu'à %.1f m (+%.1f, rame +%.1f m), écart mini %.2f m" % [lo_max,
 			lo_max - lo_ini, s_max - s0b, ecart_min])
-	_check("le bout bas suit la rame qui recule", absf((lo_ini - lo_b) - recul) < float(rb.r_lo) + 0.1,
+	# le bout suit la position AFFICHÉE de la rame (s_render, interpolée),
+	# qui peut retarder d'un pas physique sur ph.s : à 20 m/s, 0,33 m —
+	# le test échouait une fois sur trois (06/10/2026)
+	_check("le bout bas suit la rame qui recule",
+		absf((lo_ini - lo_b) - recul) < float(rb.r_lo) + 0.1 + absf(ph.v) * DT,
 		"bout bas %.1f → %.1f m (recul de la rame %.1f m)" % [lo_ini, lo_b, recul])
 	_check("machinerie arrêtée malgré la rame qui dévale", absf(ph.machine_v) < 1e-6,
 		"%.3f m/s, rame à %.1f m/s" % [ph.machine_v, ph.v])
