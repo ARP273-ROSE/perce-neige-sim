@@ -7,6 +7,34 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.15.76** — roues de la machinerie lisibles à toute vitesse, pylône du
+téléphérique mesuré sur photo.
+- **« Les roues ne tournent pas à la bonne vitesse en fonction de la
+  vitesse, et pas dans le bon sens »** (vue en coupe du PC) : c'était un
+  effet stroboscopique. À 12 m/s, une roue de 4,16 m tourne de 11 à 17°
+  entre deux images de la vue. Ses 12 ouvertures sont espacées de 30° :
+  dès que le pas dépasse 15°, l'œil les voit tourner lentement à
+  l'envers. Corrections :
+  - chaque roue porte un repère rouge unique ;
+  - quand elle tourne de plus de 6° entre deux images, les ouvertures se
+    fondent en un voile et le repère laisse une traînée ;
+  - les deux brins de la voie sont dessinés et défilent en sens
+    contraires. Le brin de la rame 1 entre au sommet de la roue aval ;
+    celui de la rame 2 passe au-dessus d'elle sur ses galets et rejoint la
+    roue amont. Le brin de la rame qui monte entre toujours dans la gare.
+- **Pylône du téléphérique** : le reportage remontees-mecaniques
+  confirme que le survol de 152 m est « sur la partie située en aval du
+  pylône », sans donner la hauteur du pylône.
+  - Mesuré sur une de ses photos, où une cabine passe juste à côté
+    (caisse ≈ 3 m), le pylône fait environ 30 m, et non 61.
+  - Avec le survol de 152 m, la tension des porteurs est d'environ 52 t
+    (porteur de 13 kg/m, estimé). La pente du câble à vide atteint 45 %.
+  - Cabine pleine au ras du pylône, la pente monte à 57-62 % : c'est le
+    « 55 % » de la fiche (`audit_physique/telepherique.sage`).
+  - La tête du pylône est dessinée en longue poutre inclinée, comme sur la
+    photo.
+- Vérifié : 99 tests PC.
+
 **v1.15.75** — téléphérique de la Grande Motte, axes lisibles, roues
 animées ; salle des machines : phares et tunnel qui s'allument à
 l'approche.

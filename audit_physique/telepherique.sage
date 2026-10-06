@@ -14,11 +14,12 @@
 # Terrain sous la ligne : IGN RGE ALTI (audit_physique/telepherique_profil.json).
 #
 # INCONNUS — valeurs du simulateur, pas des données :
-#   * hauteur du pylône : déduite ici de la « hauteur maximale de la ligne »
-#     (152 m), en supposant que ce maximum est le survol du creux de la
-#     première portée ;
-#   * paramètre de chaînette des câbles porteurs a = T/w : déduit de la
-#     « pente maximale : 55 % » de la fiche (non publié) ;
+#   * hauteur du pylône : MESURÉE sur une photo du reportage (≈ 30 m) ;
+#     le survol maximal de 152 m est « sur la partie située en aval du
+#     pylône » (reportage) ;
+#   * paramètre de chaînette des câbles porteurs a = T/w : déduit du survol
+#     de 152 m avec ce pylône ; la « pente maximale : 55 % » se retrouve
+#     avec une cabine pleine au ras du pylône (non publié) ;
 #   * selles des porteurs : 8 m au-dessus du quai en gare.
 #
 #   docker exec sagemath sage /home/sage/work/pn/telepherique.sage
@@ -67,13 +68,25 @@ for a in (3000.0, 4000.0, 5000.0, 8000.0):
 
 
 
-# deuxième contrainte de la fiche : « pente maximale : 55 % » — atteinte en
-# arrivant au pylône (la portée la plus longue y est la plus raide) ; elle
-# fixe la tension, donc le pylône
-A_CAT = brentq(lambda a: pente_max_1(a) - 0.55, 1200.0, 8000.0)
+# Hauteur du pylône MESURÉE sur la photo du reportage (P1030395, « Partie
+# milieu de la ligne – pylône 1 ») : une cabine juste passée le pylône, à la
+# même distance ; caisse ≈ 27 px pour ≈ 3,0 m, partie visible du pylône
+# ≈ 218 px → ≈ 24 m, pied caché derrière la crête de neige → ≈ 30 m.
+H_PHOTO = 30.0
+A_CAT = brentq(lambda a: brentq(lambda hh: survol_max(hh, a) - 152.0, -300.0, 600.0) - H_PHOTO,
+               1500.0, 8000.0)
 print()
-print("Avec aussi « pente maximale 55 %% » : a = %.0f m (soit, pour un porteur Ø 50 mm de 13 kg/m,"
-      " une tension d'environ %.0f t)" % (A_CAT, A_CAT * 13.0 / 1000.0))
+print("Pylône mesuré sur photo ≈ %.0f m → avec le survol de 152 m : a = %.0f m" % (H_PHOTO, A_CAT))
+# La « pente maximale 55 % » de la fiche se retrouve AVEC LA CABINE : une
+# charge concentrée W sur un porteur de tension horizontale H casse sa pente
+# de W/H ; cabine au ras du pylône, la pente y monte d'autant.
+W_CAB = 6000.0 + 116 * 75.0          # cabine + chariot (estimé) + 116 personnes, kg
+W_PAR_PORTEUR = W_CAB / 2.0
+for w_m in (11.0, 13.0, 15.0):       # poids linéique du porteur (kg/m), non publié
+    H_t = A_CAT * w_m / 1000.0
+    pm = pente_max_1(A_CAT) + W_PAR_PORTEUR / 1000.0 / H_t
+    print("  porteur %2.0f kg/m : tension ≈ %3.0f t, pente avec cabine pleine au pylône ≈ %.0f %%"
+          % (w_m, H_t, 100 * pm))
 H_PYL = brentq(lambda h: survol_max(h, A_CAT) - 152.0, -100.0, 300.0)
 print()
 cat1, m1 = chainette(0.0, Z_AVAL, L1, Z_PIED + H_PYL, A_CAT)

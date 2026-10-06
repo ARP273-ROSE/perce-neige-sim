@@ -13273,16 +13273,37 @@ class GameWidget(QWidget):
             p_b = (a_B - R * math.cos(al), b_c - sg * R * math.sin(al))
             cable.moveTo(loc(*p_a))
             cable.lineTo(loc(*p_b))
-        cable.moveTo(loc(-30.0 / k, -0.12))
+        cable.moveTo(loc(-30.0 / k, -0.12))           # brin de la rame 1 → sommet de la roue aval
+        cable.lineTo(loc(a_A, -0.12))
+        cable.moveTo(loc(-30.0 / k, -0.12))           # brin de la rame 2, sur galets au-dessus
+        cable.lineTo(loc(a_A - 0.5, 0.30))            # de la roue aval, jusqu'au sommet de l'amont
+        cable.lineTo(loc(a_B, 0.30))
         cable.lineTo(loc(a_B, -0.12))
         for pen in (QPen(QColor(10, 10, 14, 200), max(2.5, 0.16 * px_m * k)),
                     QPen(QColor(205, 208, 216), max(1.2, 0.08 * px_m * k))):
             p.setBrush(Qt.BrushStyle.NoBrush)
             p.setPen(pen)
             p.drawPath(cable)
-        # roues : jante rouge, voile jaune à 12 ouvertures en pétales qui
-        # tournent avec la poulie (sens contraires : câble en huit)
+        # roues : jante rouge, voile jaune à 12 ouvertures en pétales,
+        # tournant avec la poulie en sens contraires (câble en huit). Le
+        # brin de la RAME 1 entre au sommet de la roue aval : quand elle
+        # monte (vitesse machinerie > 0), le sommet de la roue aval part
+        # vers la salle → sens horaire à l'écran.
+        # 🔴 Retour de Kevin (06/10/2026) : « les roues ne tournent pas à la
+        # bonne vitesse ni dans le bon sens ». À 12 m/s une roue de 4,16 m
+        # tourne de 5,8 rad/s ; avec 12 ouvertures espacées de 30° et une
+        # vue redessinée 20 à 30 fois par seconde, le pas apparent (12 à
+        # 17°) frôle ou dépasse la demi-période : effet stroboscopique, les
+        # roues semblent tourner lentement À L'ENVERS. Remèdes : un repère
+        # rouge unique (sans ambiguïté) et, dès que la roue tourne de plus
+        # de 6° entre deux images, un voile flou à la place des ouvertures
+        # et une traînée derrière le repère.
         ang = self._pulley_angle
+        d_ang = ang - getattr(self, "_ang_roues_prec", ang)
+        self._ang_roues_prec = ang
+        if abs(d_ang) > 1.0:
+            d_ang = 0.0
+        flou = abs(d_ang) > math.radians(6.0)
         for c, sens in ((cA, 1.0), (cB, -1.0)):
             p.setPen(_cached_pen(QColor(120, 30, 20), 1))
             p.setBrush(QBrush(QColor(186, 40, 28)))
@@ -13290,7 +13311,13 @@ class GameWidget(QWidget):
             p.setBrush(QBrush(QColor(236, 194, 26)))
             p.setPen(Qt.PenStyle.NoPen)
             p.drawEllipse(c, r_px * 0.86, r_px * 0.86)
-            if r_px > 7.0:
+            if flou:
+                # ouvertures fondues en un anneau plus sombre (vitesse)
+                p.setBrush(QBrush(QColor(150, 124, 40, 170)))
+                p.drawEllipse(c, r_px * 0.78, r_px * 0.78)
+                p.setBrush(QBrush(QColor(236, 194, 26)))
+                p.drawEllipse(c, r_px * 0.38, r_px * 0.38)
+            elif r_px > 7.0:
                 p.setBrush(QBrush(QColor(60, 52, 30)))
                 for i in range(12):
                     ph = sens * ang + i * math.pi / 6
@@ -13300,26 +13327,37 @@ class GameWidget(QWidget):
                     p.rotate(math.degrees(ph))
                     p.drawEllipse(QPointF(0, 0), 0.20 * r_px, 0.085 * r_px)
                     p.restore()
-            else:
-                p.setPen(_cached_pen(QColor(90, 70, 20), 1))
-                for i in range(3):
-                    ph = sens * ang + i * math.pi / 3
-                    p.drawLine(QPointF(c.x() - 0.8 * r_px * math.cos(ph), c.y() - 0.8 * r_px * math.sin(ph)),
-                               QPointF(c.x() + 0.8 * r_px * math.cos(ph), c.y() + 0.8 * r_px * math.sin(ph)))
-            p.setPen(Qt.PenStyle.NoPen)
+            # repère rouge unique sur la jante, avec traînée si la roue va vite
+            ph_r = sens * ang
+            if flou:
+                trainee = min(abs(d_ang), math.pi * 0.9)
+                p.setBrush(QBrush(QColor(200, 30, 20, 110)))
+                rect_r = QRectF(c.x() - r_px * 0.93, c.y() - r_px * 0.93, r_px * 1.86, r_px * 1.86)
+                # drawPie : angles en 1/16 de degré, sens trigonométrique,
+                # écran y vers le bas → on inverse les signes
+                debut = -math.degrees(ph_r)
+                etendue = math.degrees(trainee) * (1.0 if sens * d_ang > 0 else -1.0)
+                p.drawPie(rect_r, int(debut * 16), int(etendue * 16))
+            p.setBrush(QBrush(QColor(210, 30, 20)))
+            p.drawEllipse(QPointF(c.x() + 0.78 * r_px * math.cos(ph_r), c.y() + 0.78 * r_px * math.sin(ph_r)),
+                          max(1.5, 0.12 * r_px), max(1.5, 0.12 * r_px))
             p.setBrush(QBrush(QColor(70, 72, 78)))
             p.drawEllipse(c, max(1.5, 0.16 * r_px), max(1.5, 0.16 * r_px))
-        # repères qui défilent sur le brin de la voie : on voit le câble
-        # avancer à la vitesse de la machinerie
+        # les deux brins de la voie, qui défilent en sens contraires : celui
+        # de la rame 1 entre au sommet de la roue aval, celui de la rame 2
+        # passe sur les galets au-dessus d'elle et va au sommet de la roue
+        # amont. Repères tous les 3 m (pas d'effet stroboscopique ici).
         if r_px > 4.0:
             p.setPen(Qt.PenStyle.NoPen)
-            p.setBrush(QBrush(QColor(30, 30, 36)))
-            pas = 1.5
-            dec = (ang * R) % pas
-            a_m = -25.0 / k + dec
-            while a_m < a_A:
-                p.drawEllipse(loc(a_m, -0.12), max(1.2, 0.07 * px_m * k), max(1.2, 0.07 * px_m * k))
-                a_m += pas
+            pas = 3.0
+            for b_brin, a_fin, signe, coul in ((-0.12, a_A, 1.0, QColor(30, 30, 36)),
+                                                (0.30, a_B, -1.0, QColor(150, 40, 30))):
+                dec = (signe * ang * R) % pas
+                a_m = -25.0 / k + dec
+                p.setBrush(QBrush(coul))
+                while a_m < a_fin:
+                    p.drawEllipse(loc(a_m, b_brin), max(1.3, 0.08 * px_m * k), max(1.3, 0.08 * px_m * k))
+                    a_m += pas
         # butoirs bleus
         p.setPen(_cached_pen(QColor(40, 90, 170), max(1.5, 0.6 * px_m * k)))
         p.drawLine(le_long(LENGTH - 0.6, 0.4), le_long(LENGTH - 0.6, 1.6))
@@ -13374,8 +13412,13 @@ class GameWidget(QWidget):
             la, lb_ = lb + (lh - lb) * f0, lb + (lh - lb) * f1
             p.drawLine(w2s(xp - la, za), w2s(xp + lb_, zb))
             p.drawLine(w2s(xp + la, za), w2s(xp - lb_, zb))
-        p.setPen(_cached_pen(QColor(70, 74, 82), max(1.5, 0.5 * px_m * min(k, 3.0))))
-        p.drawLine(w2s(xp - 6.0, tete), w2s(xp + 6.0, tete))     # sabots des porteurs
+        # tête : longue poutre en caisson portant les sabots des porteurs,
+        # inclinée comme la ligne au passage (photo P1030395 du reportage)
+        p.setPen(_cached_pen(QColor(70, 74, 82), max(1.5, 0.6 * px_m * min(k, 3.0))))
+        p.drawLine(w2s(xp - 11.0, tete - 3.0), w2s(xp + 11.0, tete + 1.2))
+        p.setPen(_cached_pen(QColor(90, 94, 102), max(1.0, 0.25 * px_m * min(k, 3.0))))
+        p.drawLine(w2s(xp - 8.0, tete - 6.0), w2s(xp - 11.0, tete - 3.0))
+        p.drawLine(w2s(xp + 6.0, tete - 2.0), w2s(xp + 11.0, tete + 1.2))
         # porteurs (chaînettes) et tracteur juste dessous
         c1, c2 = t["c1"], t["c2"]
 
