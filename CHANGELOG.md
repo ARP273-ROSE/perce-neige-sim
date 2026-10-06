@@ -7,6 +7,29 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.15.70** — annonce d'arrivée entière, pente continue, paysage dans
+toutes les vues.
+- **« L'annonce d'arrivée en haut se déclenche trop tard et est coupée par
+  l'arrêt »** : elle dure 54,24 s. Elle partait au début du rampement à
+  0,75 m/s, qui ne commence plus qu'au galet 238, soit 49,2 s avant
+  l'arrêt. Elle part maintenant à 51 m de l'arrêt, quelle que soit la
+  vitesse, et finit 3 s avant (`audit_physique/annonce_arrivee.sage`, PC
+  et PWA ; test sur une rame pleine et une rame vide).
+- **« La variation de la pente en haut avant l'entrée en gare n'est pas
+  continue alors qu'elle l'est dans la réalité »** : la pente suit
+  désormais une courbe cubique monotone (Fritsch-Carlson) passant par les
+  points du profil. La pente et sa variation sont continues, sans jamais
+  dépasser les valeurs relevées. Avant, la variation changeait d'un coup à
+  chaque point du profil : ×22 à 3 368,52 m. La physique, la voie
+  dessinée et le PC suivent la même courbe
+  (`audit_physique/pente_continue.sage`, identique à scipy à 2·10⁻¹⁶
+  près). La pente reste de 10 % au galet 238.
+- **« En vue extérieure et en vue salle des machines on ne voit pas le
+  paysage »** : le panorama couvre maintenant le tour complet (6 144 ×
+  1 024, de −25° à +35°). Il s'affiche en vue cabine, et dans les autres
+  vues dès que la caméra est à moins de 150 m de la gare amont.
+- Vérifié : 97 tests PC (+1), 12 bancs PWA, parité PC/PWA OK.
+
 **v1.15.69** — la sortie de secours dessinée d'après la vidéo.
 - **« Regarde comment c'est foutu la sortie de secours à 0:54 »** (vidéo
   de montée 20260426_094649.mp4, 0:54-0:55, au galet 145) :
