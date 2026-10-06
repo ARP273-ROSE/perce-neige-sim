@@ -125,9 +125,9 @@ func _tick() -> void:
 		var lat: float
 		var dy: float
 		if _cadre == "quai":
-			# bout du quai côté voie : en bas après le nez, en haut avant l'arrière
-			s_v = PNConstants.QUAI_HAUT_DEBUT_S if haut else PNConstants.QUAI_BAS_FIN_S
-			s_c = s_v + (6.0 if haut else -6.0)
+			# haut du quai, côté nez de la rame (garde-corps et porte)
+			s_v = PNConstants.QUAI_HAUT_FIN_S if haut else PNConstants.QUAI_BAS_FIN_S
+			s_c = s_v - 6.0
 			lat = 4.5
 			dy = 1.6
 		else:

@@ -58,6 +58,7 @@ var _pax_base: Array = []       # par voiture : {torso: [Transform3D], head: [Tr
 var _pax_gear_prefix: Array = []   # par voiture : {ski: [int], pole: [int], board: [int]}
 var _pax_shown: Array = []      # par voiture : nombre affiché
 var _pax_noeuds: Array = []     # par voiture : nœud parent des passagers
+var _s_pos_roues: float = NAN   # abscisse dessinée à l'image précédente (roues)
 var _head_glow: float = 0.0     # phares halogènes : 0 éteint → 1 plein feu
 var _head_mat: StandardMaterial3D = null
 var head_energy: float = 12.0   # énergie du phare à plein feu (faisceau large depuis le 03/10)
@@ -1392,13 +1393,22 @@ func _process(_delta: float) -> void:
 		if idx < _interior_cars.size():
 			(_interior_cars[idx] as Node3D).global_transform = xf_car
 
-	# Roues : rotation à v/R autour de l'essieu (axe X de la voiture).
-	# Roulement sans glissement, marche avant = −Z : ω = −v/R sur X.
-	var v_fwd: float = physics.v * float(physics.direction)
-	if absf(v_fwd) > 0.001 and not _wheels.is_empty():
-		var d_ang: float = -v_fwd * _delta / TrainBodyBuilder.WHEEL_R
-		for w in _wheels:
-			(w as Node3D).rotate_x(d_ang)
+	# Roues : roulement sans glissement autour de l'essieu (axe X de la
+	# voiture), marche avant = −Z → angle −d/R. d = déplacement RÉEL de la
+	# rame dessinée depuis l'image précédente, pas la vitesse de la poulie :
+	# la rame du bas qui recule pendant l'embarquement (affaissement du
+	# brin), l'oscillation du câble à l'arrêt, la rame qui dévale après une
+	# rupture font tourner leurs roues (retour du 06/10/2026 : « quand la
+	# rame du bas recule pendant l'embarquement, les roues n'ont pas l'air
+	# de tourner »). En marche : identique à v/R. Saut de position
+	# (nouveau voyage, scénario) : ignoré.
+	if not is_nan(_s_pos_roues) and not _wheels.is_empty():
+		var ds: float = s_pos - _s_pos_roues
+		if absf(ds) > 1e-5 and absf(ds) < maxf(2.0, 40.0 * _delta):
+			var d_ang: float = -ds * travel_sign / TrainBodyBuilder.WHEEL_R
+			for w in _wheels:
+				(w as Node3D).rotate_x(d_ang)
+	_s_pos_roues = s_pos
 
 	# Portes coulissantes (2026-09-26) : déboîtement (premier quart) puis
 	# glissement vers l'arrière, des DEUX côtés (retour d'essai : les deux
