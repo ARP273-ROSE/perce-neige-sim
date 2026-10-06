@@ -7,6 +7,35 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.15.66** — la rame pleine recule de plus d'un mètre en gare basse.
+- **« Je suis sûr du mètre » : la rame pleine recule d'au moins 1 m pendant
+  l'embarquement en gare basse**. Avec un câble de 1 250 mm² d'acier à
+  100 GPa (EA = 1,25·10⁸ N, une estimation et non une donnée constructeur,
+  Fatzer ne publiant pas le module de ses câbles à torons), le recul
+  n'était que de 0,60 m. EA est maintenant la raideur effective de toute
+  la chaîne (câble, tassement, poulies, machinerie), calée sur cette
+  observation : 7,0·10⁷ N, soit 1,07 m de recul pour 334 passagers
+  (`audit_physique/recul_embarquement.sage`). Même valeur sur PC et dans
+  la PWA.
+- Conséquences, chiffrées par Sage :
+  - l'oscillation à l'arrêt en bas est plus lente et plus ample :
+    11,7 s par aller-retour pour une rame pleine au bout de 3 450 m de
+    câble, au lieu de 8,7 s ;
+  - la stabilisation sous 2 cm prend 35 s pour une rame pleine en bas, au
+    lieu de 26 s. Le garde-fou d'ouverture des portes passe de 30 à 45 s
+    (exploitation automatique, pilote auto, demi-tour de la PWA), sinon
+    les portes s'ouvraient en pleine oscillation ;
+  - la marge de 4,5 m au butoir bas garde au moins 3 m dans le pire cas
+    (recul de 1,07 m plus oscillation).
+- **« La barrière doit descendre jusqu'au point bas de l'allongement du
+  câble, cabine pleine en bas »** : en gare basse, le garde-corps part de
+  la position du nez quand la rame pleine a reculé au maximum
+  (`TrainPhysics.recul_embarquement_max`, 1,07 m sous le nez à l'arrêt).
+  En gare haute, l'allongement n'est que de 5 mm.
+- Tests : les valeurs attendues ont été mises à jour depuis Sage (période
+  11,68 s, recul de 1,0 à 1,2 m, rebond en bas jusqu'à 80 cm). 95 tests
+  PC, 12 bancs PWA, parité PC/PWA OK.
+
 **v1.15.65** — chaque trajet fait vraiment 3 474 m : voie rallongée de
 40,52 m.
 - **« La distance parcourue réelle de chaque trajet, c'est 3 474 m »** :
