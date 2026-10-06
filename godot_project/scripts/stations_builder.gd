@@ -71,9 +71,13 @@ func _build_station_low() -> void:
 	# ou l'autre selon le sens d'arrivée).
 	_build_platform(s_plat_start, s_plat_end, true, +1.0)
 	_build_platform(s_plat_start, s_plat_end, true, -1.0)
+	# le garde-corps descend jusqu'au point le plus bas du nez : rame
+	# pleine, câble allongé (retour du 06/10/2026 : « la barrière doit
+	# descendre jusqu'au point bas de l'allongement du câble cabine pleine »)
+	var nez_bas: float = PNConstants.START_S + PNConstants.TRAIN_HALF \
+		- TrainPhysics.recul_embarquement_max(PNConstants.START_S)
 	for sd in [-1.0, 1.0]:
-		_build_platform_barrier(s_plat_start, s_plat_end,
-			PNConstants.START_S + PNConstants.TRAIN_HALF, sd, true)
+		_build_platform_barrier(s_plat_start, s_plat_end, nez_bas, sd, true)
 	# Fosse sous la voie et le nez de la rame (photos 093522 / 094104) :
 	# caillebotis en fond, chaînes, et butoirs bleus à tête bois
 	_build_pit(PIT_LOW_START, PIT_LOW_END, false)

@@ -212,7 +212,9 @@ def _rebond(direction, s0):
 
 def test_rebond_gare_basse_visible():
     amp, final = _rebond(-1, pn.START_S + 60.0)
-    assert 0.05 < amp < 0.50, f"rebond bas {amp*100:.0f} cm hors [5, 50]"
+    # câble effectif plus souple depuis le 06/10/2026 (EA 7e7, recul de la
+    # rame pleine ≥ 1 m observé par Kevin) : le rebond en bas atteint ~50 cm
+    assert 0.05 < amp < 0.80, f"rebond bas {amp*100:.0f} cm hors [5, 80]"
     assert final < 0.06, f"ne revient pas au point d'arrêt ({final*100:.0f} cm)"
 
 
@@ -370,9 +372,11 @@ def test_trainee_chute_dans_l_evitement():
 
 def test_affaissement_embarquement_gare_basse():
     # Port de la PWA : à quai en bas, chaque passager allonge le brin de
-    # ~1,8 mm (L ≈ 3,45 km) → ~60 cm pour 334 pax, rame qui recule
-    # « doucement ». En haut (L ≈ 26 m) : rien de visible.
-    for direction, s0, attendu in ((1, pn.START_S, (0.45, 0.75)),
+    # ~3,2 mm (L ≈ 3,49 km) → ~1,07 m pour 334 pax, rame qui recule
+    # « doucement » — fait de Kevin, témoin : « au moins un mètre » (EA
+    # effectif calé, audit_physique/recul_embarquement.sage). En haut
+    # (L ≈ 26 m) : rien de visible.
+    for direction, s0, attendu in ((1, pn.START_S, (1.0, 1.2)),
                                    (-1, pn.STOP_S, (0.0, 0.01))):
         st, ph = _make(direction, s0, 0, 0)
         st.trip_started = False

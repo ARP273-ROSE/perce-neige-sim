@@ -600,13 +600,17 @@ def advance_door_timers(tr, dt: float) -> bool:
 # --- Câble tracteur : raideur, masse, rebond élastique à l'arrêt ----------
 # Le câble est un ressort : k = EA/L où L = longueur de câble entre la rame
 # et la poulie motrice (machinerie en GARE HAUTE). À l'arrêt en gare BASSE,
-# L ≈ 3,45 km → k ≈ 36 kN/m → la rame chargée oscille VISIBLEMENT à
-# l'arrêt (T = 2π√(m/k) ≈ 8 s, amplitude 20-45 cm). En gare HAUTE, L ≈ 25 m
-# → k ~140× plus raide → oscillation millimétrique, invisible. L'asymétrie
-# bas/haut ÉMERGE de la longueur du câble — aucun flag câblé en dur.
-# EA effectif : section métallique du Fatzer 52 mm ≈ 1250 mm² (remplissage
-# ~0,59 du cercle de 2124 mm²), module effectif du toron ≈ 100 GPa.
-CABLE_EA_N = 1.25e8              # N — raideur longitudinale EA du câble
+# L ≈ 3,49 km → k ≈ 20 kN/m → la rame chargée oscille VISIBLEMENT à
+# l'arrêt (T = 2π√(m/k) ≈ 8-11 s, amplitude jusqu'à 45 cm). En gare HAUTE,
+# L ≈ 25 m → k ~140× plus raide → oscillation millimétrique, invisible.
+# L'asymétrie bas/haut ÉMERGE de la longueur du câble — aucun flag câblé.
+# EA EFFECTIF (06/10/2026) : pas de donnée constructeur (Fatzer ne publie
+# pas le module de ses câbles à torons) ; raideur de toute la chaîne
+# (câble, tassement, poulies, machinerie) calée sur l'observation de
+# Kevin, témoin : la rame PLEINE recule d'au moins 1 m pendant
+# l'embarquement en gare basse → 1,07 m avec 7,0e7 N (1,25e8, soit 1250 mm²
+# à 100 GPa, n'en donnait que 0,60). audit_physique/recul_embarquement.sage.
+CABLE_EA_N = 7.0e7               # N — raideur longitudinale effective EA
 CABLE_KG_M = 11.0                # kg/m — masse linéique (≈ 38 t sur la ligne)
 REBOUND_ZETA = 0.15              # amortissement (frottement torons + galets)
 REBOUND_GRAB_A = 0.35            # m/s² — force résiduelle relâchée quand le
@@ -621,7 +625,8 @@ REBOUND_GRAB_A = 0.35            # m/s² — force résiduelle relâchée quand 
 # et il faut attendre la fin des oscillations avant d'ouvrir les portes ».
 AUTO_SETTLE_M = 0.02             # m — enveloppe résiduelle « rame stabilisée »
 AUTO_SETTLE_MIN_S = 3.0          # s — frein tambour serré, clip d'arrêt fini
-AUTO_SETTLE_MAX_S = 30.0         # s — garde-fou : ouverture forcée au-delà
+AUTO_SETTLE_MAX_S = 45.0         # s — garde-fou : ouverture forcée au-delà
+                                 # (rame pleine en bas : 35 s avec EA 7e7)
 AUTO_ARRIVAL_DWELL_S = 12.0      # s — portes ouvertes (descente) avant le
                                  # demi-tour ; l'embarquement a son propre dwell
 
@@ -6051,10 +6056,10 @@ class AutoOps:
         elif self.phase == self.PHASE_SETTLING:
             # Critère PHYSIQUE, pas un chrono : enveloppe du rebond de la
             # rame pilotée ET du contrepoids sous AUTO_SETTLE_M (2 cm).
-            # Sage (audit_physique/stabilisation_rebond.sage) : 17 s vide
-            # en bas, 26 s pleine, 0 s en haut (mais le contrepoids en bas
-            # impose alors ≈ 20 s). Bornes : 3 s mini (clip d'arrêt),
-            # 30 s maxi (garde-fou).
+            # Sage (audit_physique/recul_embarquement.sage, EA 7e7) : 26 s
+            # vide en bas, 35 s pleine, 0 s en haut (mais le contrepoids en
+            # bas impose alors ≈ 26 s). Bornes : 3 s mini (clip d'arrêt),
+            # 45 s maxi (garde-fou).
             settled = self.w.physics.rebound_envelope_m() < AUTO_SETTLE_M
             if self.phase_t >= AUTO_SETTLE_MIN_S and (
                     settled or self.phase_t >= AUTO_SETTLE_MAX_S):

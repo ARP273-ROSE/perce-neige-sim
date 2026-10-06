@@ -92,7 +92,10 @@ var _pretensioned: bool = false          # couple statique posé au décollage
 # elasticite_cable.sage). Retour de Kevin du 04/10 : « la rame oscille déjà
 # au ralenti quand elle rentre, et quand elle part du bas elle oscille
 # aussi à l'accélération ». Le rebond après l'arrêt en découle.
-const CABLE_EA_N: float = 1.25e8
+# raideur EFFECTIVE (câble + machinerie), calée sur le recul observé par
+# Kevin (≥ 1 m rame pleine en bas : 1,07 m) — même valeur que le PC,
+# audit_physique/recul_embarquement.sage
+const CABLE_EA_N: float = 7.0e7
 const REBOUND_ZETA: float = 0.15
 var el_x1: float = 0.0     # écart de la rame pilotée (m, + = vers l'amont)
 var el_v1: float = 0.0
@@ -103,11 +106,11 @@ var el_v2: float = 0.0
 # (rebond visible) avant l'ouverture des portes + inversion du sens.
 # Critère PHYSIQUE (v1.15.21, parité PC) : les portes s'ouvrent quand
 # l'enveloppe du rebond A·e^(−ζωt) passe sous SETTLE_M — Sage
-# (audit_physique/stabilisation_rebond.sage) : 17 s rame vide en bas,
-# 26 s pleine, 0 s en haut. Bornes : TURNAROUND_MIN_S (clip d'arrêt) et
+# (audit_physique/recul_embarquement.sage, EA 7e7) : 26 s rame vide en
+# bas, 35 s pleine, 0 s en haut. Bornes : TURNAROUND_MIN_S (clip d'arrêt) et
 # TURNAROUND_DELAY_S = garde-fou (ouverture forcée). Retour d'essai
 # 2026-09-27 : « attendre la fin des oscillations avant d'ouvrir ».
-const TURNAROUND_DELAY_S: float = 30.0
+const TURNAROUND_DELAY_S: float = 45.0   # garde-fou (rame pleine en bas : 35 s, EA 7e7)
 const TURNAROUND_MIN_S: float = 3.0
 const SETTLE_M: float = 0.02
 var turnaround_delay_remaining: float = 0.0
@@ -1318,6 +1321,16 @@ func rebound_envelope() -> float:
 # ajouter à la position de la poulie pour la rendre.
 func rebound_offset() -> float:
 	return el_x1
+
+
+# Recul maximal d'une rame à quai à l'abscisse s quand elle passe de vide à
+# pleine (PAX_MAX) : allongement du brin Δm·g·sin θ·(LENGTH − s)/EA, la loi
+# même de l'affaissement d'embarquement. En gare basse : 1,07 m (fait de
+# Kevin : « au moins un mètre ») ; en haut : quelques millimètres.
+static func recul_embarquement_max(s_: float) -> float:
+	var sin_t: float = sin(atan(SlopeProfile.gradient_phys_at(s_)))
+	return float(PNConstants.PAX_MAX) * PNConstants.PAX_KG * PNConstants.G * sin_t \
+		* (PNConstants.LENGTH - s_) / CABLE_EA_N
 
 
 # Vitesse de la rame elle-même, celle des roues que lit l'indicateur de
