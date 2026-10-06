@@ -7,6 +7,57 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.15.75** — téléphérique de la Grande Motte, axes lisibles, roues
+animées ; salle des machines : phares et tunnel qui s'allument à
+l'approche.
+- **Vue salle des machines (PWA) : « je ne vois plus rien »**. Sa caméra
+  par défaut se retrouvait enfermée dans les marches et le palier ajoutés
+  au hall en 1.15.67. Ils comptent maintenant comme des obstacles.
+- **« De la machinerie, j'attendais la rame qui arrive, quelle qu'elle
+  soit, et je voyais le faisceau des phares éclairer progressivement les
+  parois du tunnel »** : la rame d'en face a désormais ses phares. Ils
+  suivent le même interrupteur (touche H) et éclairent le tunnel en
+  approchant.
+- **« Le tunnel vu de la machinerie, s'il est allumé, ne s'allume que
+  progressivement à l'approche de la rame »** : les néons ne s'allument
+  que dans une zone de 300 m autour des rames, tube après tube, à mesure
+  qu'elles avancent. Avant, tous les tubes restaient allumés de bout en
+  bout. En web, en vue salle des machines, l'éclairage suit la rame qui
+  approche de la gare, pilotée ou non.
+- **« On n'arrive pas à comprendre la légende et les axes entre la
+  distance parcourue et l'altitude »** (vue en coupe du PC) :
+  - les altitudes passent dans une bande d'axe à gauche (« ALTITUDE ») ;
+  - la distance parcourue est donnée par des bornes kilométriques jaunes
+    posées sur la voie, au compteur du pupitre : « km 0 » au départ de
+    Val Claret, « km 3,474 » à l'arrivée ;
+  - une légende rappelle les deux.
+- **« Animer de manière réaliste les roues en haut de la machinerie, en
+  transposant le schéma fonctionnel »** : sous la gare amont, la salle des
+  machines montre les deux roues alignées le long de la voie, jante rouge
+  et voile jaune à douze ouvertures. Elles tournent à la vitesse de la
+  poulie en sens contraires, avec le câble en huit et des repères qui
+  défilent sur le brin.
+- **« Le haut de la gare supérieure est à l'extérieur »** : la correction
+  de +10 m du relief et la couverture forcée autour de la gare amont sont
+  retirées. Le terrain IGN y est à 3 028 m pour un rail à 3 032 m, et le
+  hall et la verrière sortent du glacier.
+- **Téléphérique de la Grande Motte, « qui part dans la foulée du funi »**
+  (bicâble à va-et-vient Von Roll 1975, 115 + 1 places, fiche
+  remontees-mecaniques.net) :
+  - la coupe suit maintenant sa ligne (OpenStreetMap), puis le sommet ;
+  - gare aval à 3 034 m contre la sortie du funiculaire, gare amont à
+    3 456 m sur l'arête, un pylône en treillis ;
+  - porteurs en chaînette (cosh) et deux cabines qui se croisent (5 min de
+    trajet, 1 min en gare) ;
+  - la hauteur du pylône et la tension ne sont pas publiées. Elles sont
+    déduites des deux chiffres de la fiche (survol maximal 152 m, pente
+    maximale 55 %) sur le relief IGN : pylône d'environ 61 m, tension
+    d'environ 37 t pour un porteur de 50 mm. La longueur développée
+    calculée est de 1 721 m pour 1 696 m annoncés
+    (`audit_physique/telepherique.sage`).
+- Vérifié : 99 tests PC, 12 bancs PWA, parité PC/PWA OK, rendus Vulkan et
+  web.
+
 **v1.15.74** — rames de la vue en coupe affinées, relief IGN, vitesse au
 centième.
 - **« Deux chiffres après la virgule dans l'affichage digital de la

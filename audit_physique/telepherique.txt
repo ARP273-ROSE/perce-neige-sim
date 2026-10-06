@@ -1,0 +1,18 @@
+Portées : gare aval → pylône 1333 m, pylône → gare amont 318 m (horizontal)
+Terrain : 3005 m au plus bas (à 308 m de la gare aval), 3376 m au pied du pylône
+
+Hauteur du pylône donnant 152 m de survol maximal :
+  a =  3000 m  →  pylône de  56.1 m, pente max 53 %
+  a =  4000 m  →  pylône de  30.0 m, pente max 45 %
+  a =  5000 m  →  pylône de  12.8 m, pente max 40 %
+  a =  8000 m  →  pylône de -12.5 m, pente max 33 %
+
+Avec aussi « pente maximale 55 % » : a = 2831 m (soit, pour un porteur Ø 50 mm de 13 kg/m, une tension d'environ 37 t)
+
+Retenu (a = 2831 m) : pylône de 61 m, sommet à 3438 m d'altitude
+  survol maximal 152 m à 966 m de la gare aval
+  1re portée : flèche à mi-portée 82.1 m
+  2e portée : flèche à mi-portée 4.5 m
+  pente des porteurs au pylône : 55.0 % avant, 2.6 % après (déviation 27.3°)
+  pente maximale des porteurs 55 % (fiche : 55 % pour la ligne)
+  longueur développée 1721 m (fiche : 1 696 m)
