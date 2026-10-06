@@ -1,0 +1,29 @@
+Longueurs horizontales : simulateur 3392 m, IGN 3412 m, OSM 3386 m
+Corde gare aval → gare amont : simulateur 3172 m, IGN 3212 m
+
+tracé actuel (20° + 28°)                     IGN : moyen  17.8 m, max  37.7 m (s = 1488) | OSM : moyen  30.0 m, max  63.0 m
+positions vidéo, angles ajustés 16.5° + 28.3° IGN : moyen   2.1 m, max  10.7 m (s = 2128) | OSM : moyen  18.6 m, max  48.9 m
+tout libre 16.6° [1243-1564] + 27.9° [2026-2296] IGN : moyen   0.7 m, max   7.9 m (s = 3515) | OSM : moyen  19.2 m, max  51.3 m
+
+Profil des écarts à l'IGN (m), tous les 250 m de pente :
+   s      actuel   angles ajustés   tout libre
+      0      0.0              0.0          0.0
+    250      5.7              0.9          0.5
+    500     11.4              1.9          1.1
+    750     17.7              2.0          0.8
+   1000     24.9              1.3          0.3
+   1250     32.3              0.3          1.7
+   1500     37.6              4.6          1.6
+   1750     26.2              1.7          0.6
+   2000     17.1              0.8          1.1
+   2250      2.6              4.8          0.6
+   2500      1.9              3.7          0.1
+   2750     10.5              2.1          0.0
+   3000     19.2              0.5          0.1
+   3250     28.7              2.0          1.0
+   3500     31.6              3.9          6.2
+
+Rotation d'ensemble qui superpose le tracé ajusté à l'IGN : +14.7° → caps géographiques : départ 169.7°, entre les courbes 186.2°, arrivée 214.5°
+(tracé actuel : rotation +13.2°)
+Précision planimétrique annoncée par l'IGN : 10 m.
+Retenu : positions vidéo, courbe 1 = 16.5°, courbe 2 = 28.3°, total 44.8° (actuel 48°)

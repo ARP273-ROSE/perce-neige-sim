@@ -34,7 +34,7 @@ func _initialize() -> void:
 			_plongee = true
 		elif a == "butoir":
 			_butoir = true
-		elif a == "quai" or a == "fantome":
+		elif a == "quai" or a == "fantome" or a == "hall" or a == "plan_haut":
 			_cadre = a
 		elif a.begins_with("vue="):
 			_vue = int(a.substr(4))
@@ -124,7 +124,19 @@ func _tick() -> void:
 		var s_c: float
 		var lat: float
 		var dy: float
-		if _cadre == "quai":
+		if _cadre == "plan_haut":
+			# plongée sur le haut de la gare amont : quai, salle des machines, hall
+			s_v = PNConstants.LENGTH + 4.0
+			s_c = PNConstants.LENGTH - 9.0
+			lat = 0.0
+			dy = 4.6
+		elif _cadre == "hall":
+			# depuis le quai, à hauteur d'homme, vers le haut de la gare
+			s_v = PNConstants.LENGTH + 14.0
+			s_c = PNConstants.LENGTH - 14.0
+			lat = 3.4
+			dy = 1.2
+		elif _cadre == "quai":
 			# haut du quai, côté nez de la rame (garde-corps et porte)
 			s_v = PNConstants.QUAI_HAUT_FIN_S if haut else PNConstants.QUAI_BAS_FIN_S
 			s_c = s_v - 6.0
@@ -141,7 +153,7 @@ func _tick() -> void:
 		var xc: Transform3D = tun.transform_at(s_c)
 		var xv: Transform3D = tun.transform_at(s_v)
 		var cam := Camera3D.new()
-		cam.fov = 70.0
+		cam.fov = 100.0 if _cadre == "plan_haut" else 70.0
 		cam.near = 0.05
 		get_root().add_child(cam)
 		cam.look_at_from_position(xc.origin + xc.basis.x * lat + xc.basis.y * dy,

@@ -236,6 +236,22 @@ retenue comme référence.
 
 ---
 
+### 3.8 Cartographie et relief (tracé en plan, panorama de la gare amont)
+
+- **IGN — BD TOPO V3, `troncon_de_voie_ferree`** (Géoplateforme, WFS
+  https://data.geopf.fr/wfs) — Licence Ouverte Etalab 2.0. Ligne nature
+  « Funiculaire ou crémaillère », souterraine, saisie sur le Scan25,
+  précision planimétrique 10 m ; bout amont à 3 029 m. Extraite le
+  2026-10-06 dans `audit_physique/trace_ign_osm.json` : **référence du
+  tracé en plan** (`audit_physique/trace_ign.sage`).
+- **OpenStreetMap** — © contributeurs OpenStreetMap, ODbL. Way
+  « Funiculaire Perce-Neige » (24 nœuds ; premier tronçon rectiligne de
+  1,5 km : tracé grossier, utilisé en contrôle seulement).
+- **Terrain Tiles** (Mapzen, AWS Open Data, encodage « terrarium ») —
+  sources SRTM, EU-DEM (produit avec des données Copernicus), GMTED :
+  relief du panorama vu des baies vitrées de la gare amont
+  (`tools_panorama.py`).
+
 ## 4. Sources primaires détaillées
 
 ### 4.1 Remontées-Mécaniques.net — Reportage FUNI-334
