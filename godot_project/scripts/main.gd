@@ -16,6 +16,7 @@ var tunnel: TunnelBuilder = null
 var track: TrackBuilder = null
 var stations: StationsBuilder = null
 var station_halls: StationHalls = null
+var relief: ReliefBuilder = null
 var machine_room: MachineRoomBuilder = null
 var lights: TunnelLights = null
 var cabin: Cabin = null
@@ -123,6 +124,7 @@ func _ready() -> void:
 	_build_track()
 	_build_stations()
 	_build_station_halls()
+	_build_relief()
 	_build_machine_room()
 	_build_lights()
 	_build_cabin()
@@ -506,6 +508,16 @@ func _build_track() -> void:
 	print("[Track] rails/dalle/câble construits (longueur=%.0fm)" % PNConstants.LENGTH)
 
 
+func _build_relief() -> void:
+	var t0: int = Time.get_ticks_msec()
+	relief = ReliefBuilder.new()
+	relief.name = "Relief"
+	add_child(relief)
+	relief.build(tunnel, perf_manager.cran if perf_manager != null else 0)
+	print("[Relief] massif 3D IGN (RGE ALTI + orthophoto) du lac de Tignes à la Grande Motte : lancé en %d ms"
+		% (Time.get_ticks_msec() - t0))
+
+
 func _build_stations() -> void:
 	stations = StationsBuilder.new()
 	stations.name = "Stations"
@@ -782,13 +794,33 @@ func _process(delta: float) -> void:
 		audio.machine_view = cabin.view_mode == Cabin.ViewMode.MACHINES
 	if _ext_light != null and cabin != null:
 		_ext_light.visible = cabin.view_mode == Cabin.ViewMode.EXTERIOR
+	# relief 3D du massif : vue extérieure seulement, ouvert autour de la rame
+	if relief != null and cabin != null:
+		var ext: bool = cabin.view_mode == Cabin.ViewMode.EXTERIOR and relief.pret
+		# seulement quand la caméra est AU-DESSUS du relief : en orbite
+		# rapprochée elle est sous la montagne, dans le tunnel (vue habituelle,
+		# parois transparentes) ; en prenant du recul elle sort à l'air libre
+		if ext and cabin.camera_ext != null:
+			var pc: Vector3 = cabin.camera_ext.global_position
+			ext = pc.y > relief.hauteur(pc.x, pc.z) + 3.0
+		relief.visible = ext
+		if ext:
+			relief.set_trou(cabin.global_position, clampf(cabin.orbit_dist * 0.55, 35.0, 700.0))
+		# le brouillard du tunnel (≈ 250 m de visibilité) noierait tout au
+		# loin : en vue extérieure il s'éclaircit avec le recul de la caméra
+		if _env != null:
+			var k_f: float = clampf(15.0 / cabin.orbit_dist, 0.0, 1.0) if ext else 1.0
+			_env.fog_density = 0.004 * k_f
+			_env.volumetric_fog_density = 0.008 * k_f if k_f > 0.3 else 0.0
 	if machine_room != null and cabin != null:
+		machine_room.set_exterieur_lointain(cabin.view_mode == Cabin.ViewMode.EXTERIOR)
 		var cam_e: Camera3D = get_viewport().get_camera_3d()
 		var d_hall: float = machine_room.distance_au_hall(cam_e.global_position) \
 			if cam_e != null else INF
 		# vue cabine : on ne voit dehors qu'à travers les baies, donc près de
 		# la gare ; autres vues : à moins de 150 m de la gare amont
 		machine_room.set_exterieur_visible(d_hall < 150.0
+			or cabin.view_mode == Cabin.ViewMode.EXTERIOR
 			or (cabin.view_mode == Cabin.ViewMode.FPV and d_hall < 450.0))
 	# numéros des supports : rétroréfléchissants dans les phares (vue cabine)
 	if track != null and cabin != null:
