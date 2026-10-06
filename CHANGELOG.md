@@ -7,6 +7,46 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.15.78** — pupitre de conduite reproduit d'après les photos, écran
+Pro-face vivant.
+- **« Le poste de conduite avec les commandes, les boutons et l'écran
+  fidèles »** : le pupitre de la cabine 3D (PWA et vue 3D du PC) est
+  refait d'après les photos de Kevin du 26/04/2026 (094300, 094305,
+  094308, 094402) et la vidéo de descente de 2013.
+  - Caisson gris sur le tube transversal. À gauche, l'écran tactile
+    Pro-face sur son cadre noir ; à droite, la plaque à boutons disposée
+    comme sur la photo :
+    - PORTES 1 à 6 et PORTES 7 à 12, chacune avec OUVERTURE et FERMETURE ;
+    - PRÊT, un bouton noir, un sélecteur, un commutateur à clé ;
+    - KLAXON, et le groupe ÉCLAIRAGE : sélecteur CABINE 0/1, COMPARTIMENT,
+      SECOURS.
+  - Les libellés du bouton noir, du sélecteur et du commutateur à clé de
+    la deuxième rangée sont illisibles sur les photos. Ils sont laissés
+    sans texte plutôt qu'inventés.
+  - Voyants et commandes suivent l'état réel de la rame :
+    - FERMETURE vert, portes fermées ; OUVERTURE blanc, portes ouvertes ;
+    - PRÊT vert, rame prête ;
+    - COMPARTIMENT allumé avec l'éclairage de la cabine, et le sélecteur
+      CABINE sur 0 ou 1 ;
+    - SECOURS toujours allumé ;
+    - KLAXON enfoncé pendant le klaxon (PC).
+  - **L'écran est vivant**, rafraîchi 4 fois par seconde, dessiné seulement
+    en vue cabine :
+    - en-tête : date et heure réelles, voyants ARRÊT FREIN DE SERVICE,
+      ARRÊT ÉLEC. et Alarmes ;
+    - en marche, la page « CONDUITE VÉHICULE n » : PRÊT MOTRICE, PRÊT
+      VÉHICULE n, TEST EN COURS, MARCHE, AUTORISATION OUVERTURE PORTES,
+      PUPITRE AVANT ; FREIN DE VOIE LEVÉ, RALENTISSEUR LEVÉ, PORTES
+      FERMÉES, PORTES SECOURS FERMÉES, VITESSE RÉDUITE ;
+    - à l'arrêt en gare, la page « VOITURE AVAL », avec les six portes de
+      la voiture (vert fermées, rouge ouvertes) ;
+    - en bas : VITESSE VÉHICULE au centième, DISTANCE, et DÉFAUTS (rouge
+      en cas de panne).
+  - Le PC transmet maintenant à la 3D le klaxon, l'arrêt électrique, l'état
+    « prêt » des deux rames et les freins, pour l'écran et les voyants.
+- Vérifié : 99 tests PC, 12 bancs PWA, parité PC/PWA OK, rendus Vulkan et
+  web.
+
 **v1.15.77** — relief 3D réel du massif en vue extérieure, graphismes plus
 économes.
 - **« Prolonger le paysage 3D jusqu'au tunnel et jusqu'en bas, jusqu'au lac

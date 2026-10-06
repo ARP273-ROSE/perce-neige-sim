@@ -45,6 +45,7 @@ var _wheels: Array = []              # pivots de roues, tournés à v/R
 var _doors: Array = []               # vantaux coulissants {node, side, base}
 var _door_frac: float = 0.0          # 0 fermé → 1 ouvert (côté quai)
 var _clock_label: Label3D = null     # tablette-horloge du montant gauche
+var _pupitre: PupitreConduite = null   # pupitre de conduite (écran, boutons, voyants)
 var _clock_next: float = 0.0
 
 # Passagers — références pour animer les têtes selon l'accel/courbure
@@ -516,208 +517,15 @@ func _build_handrails() -> void:
 # ---------------------------------------------------------------------------
 
 func _build_console_pupitre() -> void:
-	# Géométrie d'après photo HD 20260426_094402.jpg (gros plan pupitre) :
-	#   - tube blanc cassé mat horizontal, calé bas et incliné vers le siège
-	#   - plaque alu rectangulaire encastrée sur le top du tube
-	#   - écran LCD couleur à gauche de la plaque
-	#   - 4 LED vertes "POSTES 1+8 / 7+10" en haut + 4 boutons noirs au
-	#     centre + 2 LED blanches "ÉCLAIRAGE" en bas
-	#   - PAS de mushrooms sur le pupitre (le vrai cockpit a les arrêts
-	#     d'urgence ailleurs — sur la console latérale ou la cloison)
-	# 0,65 m DEVANT la caméra FPV : assez proche pour que le
-	# pupitre occupe le BAS de l'image (retour d'essai : à 1,35 m il
-	# flottait en plein milieu de la vue).
+	# Pupitre reproduit d'après les photos de Kevin et la vidéo de 2013
+	# (PupitreConduite : caisson, écran Pro-face vivant, plaque à boutons
+	# aux vrais libellés, voyants suivant l'état de la rame) — 06/10/2026.
 	var z_console: float = -train_length * 0.5 + 0.45   # tube contre la doublure sous le pare-brise (z_face ≈ −15,9)
-	var y_top: float = 0.52                            # hauteur sommet tube
-	var tube_radius: float = 0.090                     # ≈ 18 cm de diamètre
-	var tube_length: float = 1.10                      # 1.10 m de large
-	var tube_y: float = y_top - tube_radius
-	var tilt: float = 0.07                             # léger penchant vers conducteur
-
-	# ----- Matériaux -----------------------------------------------------
-	var tube_mat: StandardMaterial3D = StandardMaterial3D.new()
-	tube_mat.albedo_color = Color(0.84, 0.83, 0.81)    # blanc cassé MAT
-	tube_mat.roughness = 0.65
-	tube_mat.metallic = 0.05
-
-	# Plaque alu brossé encastrée sur le top
-	var alu_mat: StandardMaterial3D = StandardMaterial3D.new()
-	alu_mat.albedo_color = Color(0.78, 0.78, 0.80)
-	alu_mat.roughness = 0.42
-	alu_mat.metallic = 0.85
-	alu_mat.metallic_specular = 0.9
-
-	# Écran LCD couleur (interface PC industrielle, bleuté pâle)
-	var lcd_mat: StandardMaterial3D = StandardMaterial3D.new()
-	lcd_mat.albedo_color = Color(0.82, 0.88, 0.96)
-	lcd_mat.emission_enabled = true
-	lcd_mat.emission = Color(0.65, 0.78, 0.95)
-	lcd_mat.emission_energy_multiplier = 0.55
-	lcd_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-
-	# LED verte (POSTE / PORTES)
-	var led_green: StandardMaterial3D = StandardMaterial3D.new()
-	led_green.albedo_color = Color(0.20, 0.95, 0.30)
-	led_green.emission_enabled = true
-	led_green.emission = Color(0.40, 1.0, 0.50)
-	led_green.emission_energy_multiplier = 1.4
-	led_green.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-
-	# LED blanche (ÉCLAIRAGE on)
-	var led_white: StandardMaterial3D = StandardMaterial3D.new()
-	led_white.albedo_color = Color(0.98, 0.98, 0.95)
-	led_white.emission_enabled = true
-	led_white.emission = Color(1.0, 1.0, 0.95)
-	led_white.emission_energy_multiplier = 1.4
-	led_white.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-
-	# Bouton noir (poussoir / sélecteur)
-	var btn_black: StandardMaterial3D = StandardMaterial3D.new()
-	btn_black.albedo_color = Color(0.08, 0.08, 0.09)
-	btn_black.roughness = 0.55
-	btn_black.metallic = 0.15
-
-	var bracket_mat: StandardMaterial3D = StandardMaterial3D.new()
-	bracket_mat.albedo_color = Color(0.25, 0.25, 0.28)
-	bracket_mat.roughness = 0.45
-	bracket_mat.metallic = 0.7
-
-	# ----- Tube principal (cylindre couché le long de X, incliné) -------
-	# Rotation Z=π/2 pour aligner l'axe Y du cylindre sur X.
-	# Le tilt vers le conducteur se fait via une rotation X additionnelle.
-	var tube: MeshInstance3D = MeshInstance3D.new()
-	tube.name = "PupitreTube"
-	var tube_mesh: CylinderMesh = CylinderMesh.new()
-	tube_mesh.top_radius = tube_radius
-	tube_mesh.bottom_radius = tube_radius
-	tube_mesh.height = tube_length
-	tube_mesh.radial_segments = 24
-	tube_mesh.material = tube_mat
-	tube.mesh = tube_mesh
-	tube.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	tube.position = Vector3(0.0, tube_y, z_console)
-	tube.rotation = Vector3(tilt, 0.0, PI * 0.5)
-	interior_root.add_child(tube)
-
-	# ----- 2 supports métal verticaux descendant au sol -----------------
-	for x_brk in [-tube_length * 0.38, tube_length * 0.38]:
-		var brk: MeshInstance3D = MeshInstance3D.new()
-		var brk_mesh: BoxMesh = BoxMesh.new()
-		brk_mesh.size = Vector3(0.022, tube_y + 0.95, 0.022)
-		brk_mesh.material = bracket_mat
-		brk.mesh = brk_mesh
-		brk.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		brk.position = Vector3(x_brk, (tube_y - 0.95) * 0.5,
-				z_console + tube_radius * 0.6)
-		interior_root.add_child(brk)
-
-	# ----- Plaque alu encastrée sur le top (la "console") ----------------
-	# 35×18 cm posée tangente au sommet du tube, légèrement inclinée
-	# pour suivre le tube (rotation X = tilt).
-	var plate: MeshInstance3D = MeshInstance3D.new()
-	plate.name = "PupitreAluPlate"
-	var plate_mesh: BoxMesh = BoxMesh.new()
-	plate_mesh.size = Vector3(0.55, 0.006, 0.16)
-	plate_mesh.material = alu_mat
-	plate.mesh = plate_mesh
-	plate.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	# Position : au-dessus du tube, à droite (côté boutons sur la photo)
-	plate.position = Vector3(0.10, y_top + 0.005,
-			z_console - sin(tilt) * 0.03)
-	plate.rotation = Vector3(tilt, 0.0, 0.0)
-	interior_root.add_child(plate)
-
-	# ----- Écran LCD couleur à gauche du pupitre (face supérieure) ------
-	# Encastré directement sur le tube (pas sur la plaque alu, à gauche
-	# de celle-ci).
-	var screen: MeshInstance3D = MeshInstance3D.new()
-	screen.name = "PupitreScreen"
-	var screen_mesh: BoxMesh = BoxMesh.new()
-	screen_mesh.size = Vector3(0.16, 0.005, 0.12)
-	screen_mesh.material = lcd_mat
-	screen.mesh = screen_mesh
-	screen.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	screen.position = Vector3(-0.31, y_top + 0.004,
-			z_console - sin(tilt) * 0.03)
-	screen.rotation = Vector3(tilt, 0.0, 0.0)
-	interior_root.add_child(screen)
-
-	# Bezel noir autour de l'écran LCD
-	var bezel: MeshInstance3D = MeshInstance3D.new()
-	var bezel_mesh: BoxMesh = BoxMesh.new()
-	bezel_mesh.size = Vector3(0.18, 0.005, 0.14)
-	bezel_mesh.material = btn_black
-	bezel.mesh = bezel_mesh
-	bezel.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	bezel.position = Vector3(-0.31, y_top + 0.0035,
-			z_console - sin(tilt) * 0.03)
-	bezel.rotation = Vector3(tilt, 0.0, 0.0)
-	interior_root.add_child(bezel)
-
-	# ----- 4 LED VERTES en haut de la plaque alu (POSTES 1+8 / 7+10) ----
-	# Disposition : 4 LED alignées le long de X, légèrement vers l'arrière
-	# de la plaque (z plus petit côté tunnel).
-	var led_r: float = 0.012
-	var z_top_row: float = z_console - 0.045
-	for i in range(4):
-		var led: MeshInstance3D = MeshInstance3D.new()
-		var led_mesh: SphereMesh = SphereMesh.new()
-		led_mesh.radius = led_r
-		led_mesh.height = led_r * 2.0
-		led_mesh.radial_segments = 12
-		led_mesh.rings = 6
-		led_mesh.material = led_green
-		led.mesh = led_mesh
-		led.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		var x_led: float = -0.02 + float(i) * 0.06
-		led.position = Vector3(x_led, y_top + 0.013, z_top_row)
-		interior_root.add_child(led)
-
-	# ----- 4 boutons noirs au centre de la plaque (sélecteurs) ----------
-	var z_mid_row: float = z_console - 0.005
-	for i in range(4):
-		var btn: MeshInstance3D = MeshInstance3D.new()
-		var btn_mesh: CylinderMesh = CylinderMesh.new()
-		btn_mesh.top_radius = 0.014
-		btn_mesh.bottom_radius = 0.014
-		btn_mesh.height = 0.010
-		btn_mesh.radial_segments = 14
-		btn_mesh.material = btn_black
-		btn.mesh = btn_mesh
-		btn.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		var x_btn: float = -0.02 + float(i) * 0.06
-		btn.position = Vector3(x_btn, y_top + 0.012, z_mid_row)
-		interior_root.add_child(btn)
-
-	# ----- 2 LED BLANCHES en bas de la plaque (ÉCLAIRAGE phares/cabine) -
-	var z_bot_row: float = z_console + 0.035
-	for i in range(2):
-		var bled: MeshInstance3D = MeshInstance3D.new()
-		var bled_mesh: SphereMesh = SphereMesh.new()
-		bled_mesh.radius = led_r
-		bled_mesh.height = led_r * 2.0
-		bled_mesh.radial_segments = 12
-		bled_mesh.rings = 6
-		bled_mesh.material = led_white
-		bled.mesh = bled_mesh
-		bled.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		var x_bled: float = 0.10 + float(i) * 0.055
-		bled.position = Vector3(x_bled, y_top + 0.013, z_bot_row)
-		interior_root.add_child(bled)
-
-	# ----- Lumière douce qui éclaire la plaque alu depuis le bas -------
-	# Donne du relief aux boutons noirs. Elle fait partie de l'éclairage
-	# cabine : sans lui, seuls les voyants et les écrans restent visibles.
-	var fill: OmniLight3D = OmniLight3D.new()
-	fill.position = Vector3(0.10, y_top + 0.05, z_console)
-	fill.light_color = Color(0.85, 0.95, 1.0)
-	fill.light_energy = 0.6
-	fill.omni_range = 0.6
-	fill.shadow_enabled = false
-	fill.light_cull_mask = LAYER_RAME
-	fill.light_volumetric_fog_energy = 0.0   # pas de brouillard dans la cabine
-	interior_root.add_child(fill)
-	_cockpit_lights.append(fill)
+	var y_top: float = 0.52                            # face du pupitre
+	_pupitre = PupitreConduite.new()
+	_pupitre.name = "PupitreConduite"
+	interior_root.add_child(_pupitre)
+	_pupitre.construire(z_console, y_top, _cockpit_lights)
 
 	# ----- Plafonnier du poste : la lumière de la cabine (celle du milieu
 	# de la rame, à 15 m, n'atteint pas le pupitre) ----------------------
@@ -790,20 +598,10 @@ func _build_cockpit_extras() -> void:
 	phone.position = Vector3(-0.66, y_top - 0.02, z_console + 0.06)
 	interior_root.add_child(phone)
 	# pastille rouge à l'extrémité droite du tube (face avant)
-	var dot: MeshInstance3D = _cyl(red, 0.035, 0.006, Vector3(0.50, y_top - 0.08, z_console - 0.088))
+	var dot: MeshInstance3D = _cyl(red, 0.035, 0.006,
+		Vector3(0.50, y_top - 0.03 - PupitreConduite.R_TUBE, z_console - PupitreConduite.R_TUBE - 0.004))
 	dot.rotation = Vector3(PI * 0.5, 0.0, 0.0)
 	interior_root.add_child(dot)
-	# étiquettes des groupes, à plat sur la plaque inclinée
-	for lab in [["PORTES 1 à 6", 0.03, -0.075], ["PORTES 7 à 12", 0.17, -0.075],
-			["ÉCLAIRAGE", 0.14, 0.055], ["CABINE", 0.02, 0.055]]:
-		var l: Label3D = Label3D.new()
-		l.text = lab[0]
-		l.font_size = 28
-		l.pixel_size = 0.00045
-		l.modulate = Color(0.12, 0.12, 0.14)
-		l.position = Vector3(lab[1], y_top + 0.009, z_console + lab[2])
-		l.rotation = Vector3(-PI * 0.5 + tilt, 0.0, 0.0)
-		interior_root.add_child(l)
 	# tablette-horloge sur le montant gauche, tournée vers le conducteur
 	var tab: MeshInstance3D = MeshInstance3D.new()
 	var tm: BoxMesh = BoxMesh.new()
@@ -1455,6 +1253,11 @@ func _process(_delta: float) -> void:
 			var base: Vector3 = d["base"]
 			node.position = base + Vector3(d["side"] * TrainBodyBuilder.DOOR_PLUG * plug,
 				0.0, sgn * TrainBodyBuilder.DOOR_SLIDE * slide)
+
+	# Pupitre : voyants, commandes et écran Pro-face (l'écran seulement en
+	# vue cabine — inutile de le redessiner quand on ne le voit pas)
+	if _pupitre != null and physics != null:
+		_pupitre.mettre_a_jour(physics, _delta, train_number, view_mode == ViewMode.FPV)
 
 	# Tablette-horloge du montant gauche : l'heure réelle, comme en cabine
 	if _clock_label != null:

@@ -620,6 +620,13 @@ def physics_to_state_dict(tr, st=None) -> dict:
         # arrête la machinerie et fige l'autre rame là où son parachute
         # l'a clouée (retour d'essai 2026-10-01).
         "cable_rupture": bool(getattr(tr, "cable_rupture", False)),
+        # Pupitre de la cabine 3D (écran Pro-face, voyants ; 06/10/2026)
+        "horn": bool(getattr(tr, "horn", False)),
+        "arret_elec": bool(getattr(tr, "electric_stop", False)),
+        "ready": bool(getattr(tr, "ready", False)),
+        "ghost_ready": bool(getattr(st, "ghost_ready", True)) if st is not None else True,
+        "maint_brake": bool(getattr(tr, "maint_brake", False)),
+        "brake": float(getattr(tr, "brake", 0.0)),
     }
     if st is not None and getattr(tr, "cable_rupture", False):
         out["ghost_s"] = float(getattr(st, "ghost_s", 0.0))

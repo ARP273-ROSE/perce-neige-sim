@@ -43,6 +43,14 @@ var manual_brake_held: bool = false      # frein de service TENU par le
 var doors_open: bool = true
 var lights_cabin: bool = true
 var lights_head: bool = false
+# États du pupitre (écran Pro-face, voyants) : relayés par le sim PC en mode
+# embarqué ; dans la PWA, le klaxon et l'arrêt électrique n'existent pas et
+# « prêt » se déduit des portes (pret_externe = −1).
+var horn: bool = false
+var arret_elec: bool = false
+var pret_externe: int = -1
+var pret_autre_externe: bool = true
+var alarme_externe: bool = false
 var maint_brake: bool = true             # frein parking (drum)
 var emergency_brake: bool = false        # frein urgence (panne grave)
 var speed_cap_external: float = INF      # plafond vitesse imposé par panne (m/s)
