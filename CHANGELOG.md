@@ -7,6 +7,37 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.15.68** — courbes, galets et sortie de secours aux positions lues au
+compteur de la cabine.
+- **Relevés de Kevin dans la vidéo de montée** (compteur 0 au départ, nez
+  de la rame montante à s = compteur + 38,56 m) :
+  - premier et dernier galet incliné de chaque courbe : n° 81 à 1 274 m et
+    n° 98 à 1 510 m, puis n° 126 à 1 857 m et n° 163 à 2 351 m ;
+  - dernier galet de l'évitement, le n° 121, à 1 790 m ;
+  - sortie de secours au n° 145, à 2 112 m.
+- **Courbes** : leurs positions chronométrées sur la vidéo étaient
+  décalées de 15 à 30 m (la seconde commençait 29 m trop tard). Elles vont
+  maintenant exactement du premier au dernier galet incliné. Les angles,
+  recalés sur l'IGN avec ces positions, font 15,9° et 28,5° ; l'écart
+  moyen à la ligne IGN est de 2,5 m (10 m au pire, la précision de l'IGN).
+- **Les galets ne sont plus au pas constant** : ils sont serrés dans les
+  courbes (13,3 à 13,9 m) et plus espacés en ligne droite (14,5 à 15,9 m).
+  Les n° 81, 98, 126, 145 et 163 sont à moins de 0,7 m des relevés.
+  L'ancienne grille plaçait le n° 81 à 79 m trop bas. Le n° 121, posé par
+  la géométrie des aiguillages, tombe à 0,2 m du relevé : cela confirme la
+  correspondance entre compteur et position. Les galets inclinés sont
+  exactement les n° 81 à 98 et 126 à 163.
+- **Courbes en arcs de cercle dans la PWA**, comme sur PC. Le cap était
+  lissé par demi-courbe, ce qui annulait la courbure au début, au milieu
+  et à la fin : le premier galet incliné restait presque droit.
+- **Sortie de secours** : une porte métallique dans la paroi droite en
+  montant, au galet 145, avec cadre, barre anti-panique et panneau vert
+  « SORTIE DE SECOURS » éclairé au-dessus. Rien ne dépasse de la paroi, le
+  gabarit de la rame ne laisse que 15 cm.
+- Panorama de la gare amont recentré sur le nouveau cap d'arrivée
+  (214,2°).
+- Vérifié : 96 tests PC, 12 bancs PWA, parité PC/PWA OK.
+
 **v1.15.67** — gare amont ouverte sur le glacier, tracé vérifié sur l'IGN,
 approche au galet 238.
 - **Gare amont refaite (retours de Kevin) : « la sortie est vers le

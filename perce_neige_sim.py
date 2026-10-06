@@ -788,25 +788,22 @@ SLOPE_PROFILE: list[tuple[float, float]] = [
 # Horizontal route plan : (slope distance, bearing in degrees).
 # Stations (IGN BD TOPO) : Val Claret 45.45189°N 6.89898°E → Grande Motte
 # 45.42352°N 6.89146°E (3029 m). Two right curves separated by a straight
-# section through the passing loop. Curve positions : cockpit video ;
-# angles and bearings : fitted on the IGN line (audit_physique/
-# trace_ign.sage, 06/10/2026 : mean gap 2 m, max 11 m, IGN accuracy 10 m).
-# Net heading change 44.8° right (169.7° → 214.5°).
+# section through the passing loop. Curve positions : first and last tilted
+# roller, read on the cab distance counter by Kevin (06/10/2026 ;
+# s = counter + 38.56, nose of the up-going train) ; angles and bearings :
+# fitted on the IGN line (audit_physique/trace_ign.sage : mean gap 2.5 m,
+# max 10 m, IGN accuracy 10 m). Net heading change 44.4° right.
 CURVE_PROFILE: list[tuple[float, float]] = [
-    # Curve positions calibrated from cockpit video : at 10.1 m/s cruise,
-    # t=4:08 → 4:32 maps curve 1 to s=1297..1541 m, t=5:06 → 5:54 maps
-    # curve 2 to s=1884..2369 m (+40.52 m of neutral sections inserted
-    # around the passing loop since). Same table as SlopeProfile (PWA).
-    (0.0,    169.7),   # SSE out of Val Claret station
-    (1297.0, 169.7),   # straight lower section (t=0..4:08)
-    (1419.0, 177.95),  # curve 1 midpoint — peak curvature
-    (1541.0, 186.2),   # end of curve 1 (t=4:32, 16.5° right)
-    (1621.26, 186.2),  # entering passing loop (neutral 20.26 m inserted before)
-    (1843.26, 186.2),  # exiting passing loop (straight)
-    (1924.52, 186.2),  # start of curve 2 (neutral 20.26 m inserted before)
-    (2167.02, 200.35), # curve 2 midpoint — peak curvature
-    (2409.52, 214.5),  # end of curve 2 (t=5:54, 28.3° right, SW)
-    (3514.52, 214.5),  # straight into upper station
+    (0.0,    169.8),   # SSE out of Val Claret station
+    (1312.56, 169.8),  # curve 1 start : roller 81, counter 1274 m
+    (1430.56, 177.75), # curve 1 midpoint — peak curvature
+    (1548.56, 185.7),  # curve 1 end : roller 98, counter 1510 m (15.9° right)
+    (1621.26, 185.7),  # entering passing loop
+    (1843.26, 185.7),  # exiting passing loop (straight)
+    (1895.56, 185.7),  # curve 2 start : roller 126, counter 1857 m
+    (2142.56, 199.95), # curve 2 midpoint — peak curvature
+    (2389.56, 214.2),  # curve 2 end : roller 163, counter 2351 m (28.5° right, SW)
+    (3514.52, 214.2),  # straight into upper station
 ]
 
 # Tunnel lighting zones — (start_m, end_m) of DARK sections identified from

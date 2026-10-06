@@ -190,36 +190,72 @@ func _in_abt_zone(s: float) -> bool:
 		or (s > PNConstants.PASSING_END - ABT_ZONE and s < PNConstants.PASSING_END + 5.0)
 
 
-# Abscisses des galets. Entre le bout du quai aval (n° 1) et le début du
-# quai amont (n° 238) : grille régulière hors aiguillages + stations
-# dessinées des aiguillages, le pas étant choisi pour qu'il y ait EXACTEMENT
-# 238 supports (14,54 m). Aucun en gare aval. En gare amont, les galets non
-# numérotés de l'ancienne grille (le dernier raccorde la salle des
-# machines, MachineRoomBuilder.S_LAST_TUNNEL_ROLLER).
+# Galets REPÈRES relevés par Kevin au compteur de la cabine, dans la vidéo
+# de montée (06/10/2026) : numéro → abscisse du nez de la rame montante
+# (s = compteur + START_S + TRAIN_HALF = compteur + 38,56). Premier et
+# dernier galet incliné de chaque courbe, sortie de secours au n° 145,
+# entrée du quai haut au n° 238. Le pas réel n'est pas régulier : ≈ 13,3 à
+# 13,9 m dans les courbes, 14,6 à 15,9 m en ligne droite.
+const GALETS_REPERES: Array = [
+	[1, SUPPORT_S1], [81, 1312.56], [98, 1548.56], [126, 1895.56],
+	[145, 2150.56], [163, 2389.56], [238, SUPPORT_S_LAST],
+]
+
+
+# Abscisses des galets numérotés 1 à 238 : les repères ci-dessus, les
+# stations dessinées des deux aiguillages (le n° 105 est la première après
+# la fourche aval, le n° 121 la dernière avant la fourche amont — relevé au
+# compteur 1 790 m : 0,2 m d'écart), et entre deux, des galets au pas le plus
+# régulier possible (hors des aiguillages). Aucun en gare aval. En gare
+# amont, les galets non numérotés de l'ancienne grille (le dernier
+# raccorde la salle des machines, MachineRoomBuilder.S_LAST_TUNNEL_ROLLER).
 func _station_list() -> Array:
 	var out: Array = []
-	var span: float = SUPPORT_S_LAST - SUPPORT_S1
-	var grid: Array = []
-	var best_dp: float = INF
-	for g in range(SUPPORT_N - 40, SUPPORT_N + 10):
-		var sp: float = span / float(g - 1)
-		var pts: Array = []
-		for i in range(g):
-			var s: float = SUPPORT_S1 + float(i) * sp
-			if not _in_abt_zone(s):
-				pts.append(s)
-		if pts.size() + 2 * ABT_STATIONS.size() == SUPPORT_N and absf(sp - guide_spacing) < best_dp:
-			best_dp = absf(sp - guide_spacing)
-			grid = pts
-	for s in grid:
-		out.append({"s": s, "sheave": false})
+	var abt: Array = []
 	for o in ABT_STATIONS:
 		var sh: bool = ABT_SHEAVE_STATIONS.has(o)
-		out.append({"s": PNConstants.PASSING_START + o, "sheave": sh})
-		out.append({"s": PNConstants.PASSING_END - o, "sheave": sh})
+		abt.append({"s": PNConstants.PASSING_START + o, "sheave": sh})
+		abt.append({"s": PNConstants.PASSING_END - o, "sheave": sh})
+	abt.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a.s < b.s)
+	for i in range(GALETS_REPERES.size()):
+		var n_a: int = GALETS_REPERES[i][0]
+		var s_a: float = GALETS_REPERES[i][1]
+		out.append({"s": s_a, "sheave": false})
+		if i == GALETS_REPERES.size() - 1:
+			break
+		var n_b: int = GALETS_REPERES[i + 1][0]
+		var s_b: float = GALETS_REPERES[i + 1][1]
+		# points fixes de l'intervalle : les deux repères et les stations
+		# d'aiguillage qui s'y trouvent
+		var fixes: Array = [s_a]
+		for st in abt:
+			if st.s > s_a and st.s < s_b:
+				fixes.append(st.s)
+				out.append(st)
+		fixes.append(s_b)
+		var k: int = n_b - n_a - 1 - (fixes.size() - 2)
+		# intervalles libres (pas ceux internes à un aiguillage), garnis un
+		# galet à la fois là où l'écart est le plus grand
+		var gaps: Array = []
+		for j in range(fixes.size() - 1):
+			if not _in_abt_zone((fixes[j] + fixes[j + 1]) * 0.5):
+				gaps.append([fixes[j], fixes[j + 1], 0])
+		for _q in range(k):
+			var best: int = 0
+			for j in range(gaps.size()):
+				if (gaps[j][1] - gaps[j][0]) / float(gaps[j][2] + 1) \
+						> (gaps[best][1] - gaps[best][0]) / float(gaps[best][2] + 1):
+					best = j
+			gaps[best][2] += 1
+		for g in gaps:
+			for m in range(1, g[2] + 1):
+				out.append({"s": lerpf(g[0], g[1], float(m) / float(g[2] + 1)), "sheave": false})
 	out.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a.s < b.s)
 	for i in range(out.size()):
 		out[i]["num"] = i + 1
+	for r in GALETS_REPERES:
+		if absf(float(out[int(r[0]) - 1].s) - float(r[1])) > 0.01:
+			push_error("galet repère n° %d attendu à %.2f, posé à %.2f" % [r[0], r[1], out[int(r[0]) - 1].s])
 	# gare amont : galets non numérotés, au pas de l'ancienne grille, comptés
 	# depuis le dernier galet du tunnel qui raccorde la salle des machines
 	# (à LENGTH + S_LAST_TUNNEL_ROLLER, entre deux traverses) — une grille

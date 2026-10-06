@@ -30,7 +30,10 @@ def table(nom):
 
 
 PENTE = table('SLOPE_PROFILE')
-CAP = table('CURVE_PROFILE')
+# tracé du simulateur AVANT cette vérification (courbes chronométrées sur la
+# vidéo à 10,1 m/s, angles estimés 20° + 28°)
+CAP = [(0.0, 155.0), (1297.0, 155.0), (1420.0, 165.0), (1541.0, 175.0), (1924.52, 175.0),
+       (2165.52, 189.0), (2409.52, 203.0), (3514.52, 203.0)]
 LONGUEUR = PENTE[-1][0]
 C45 = float(cos(45.44 * pi / 180))
 
@@ -93,11 +96,19 @@ print("Corde gare aval → gare amont : simulateur %.0f m, IGN %.0f m"
 print()
 
 # 1) le tracé actuel
-d_actuel = resume("tracé actuel (20° + 28°)", CAP)
+d_actuel = resume("tracé d'avant (20° + 28°)", CAP)
 
-# 2) mêmes positions de courbes (calées sur la vidéo cockpit), angles libres
-S1A, S1B = 1297.0, 1541.0
-S2A, S2B = 1924.52, 2409.52
+# 2) positions des courbes RELEVÉES AU COMPTEUR par Kevin dans la vidéo
+#    cabine (06/10/2026) : premier / dernier galet incliné de chaque courbe,
+#    au passage du nez de la rame montante. Compteur 0 au départ (nez à
+#    START_S + TRAIN_HALF = 38,56 m) → s = compteur + 38,56.
+#      courbe 1 : galet 81 à 1 274 m → galet 98 à 1 510 m
+#      courbe 2 : galet 126 à 1 857 m → galet 163 à 2 351 m
+#    (anciennes positions, chronométrées sur la vidéo à 10,1 m/s :
+#     1 297-1 541 et 1 924,52-2 409,52)
+NEZ0 = 22.56 + 16.0
+S1A, S1B = 1274.0 + NEZ0, 1510.0 + NEZ0
+S2A, S2B = 1857.0 + NEZ0, 2351.0 + NEZ0
 
 
 def table_angles(d1, d2, s1a=S1A, s1b=S1B, s2a=S2A, s2b=S2B):
@@ -111,7 +122,11 @@ def obj_angles(x):
 
 fa = minimize(obj_angles, [20.0, 28.0], method='Nelder-Mead', options={'xatol': 0.05, 'fatol': 0.01})
 d1, d2 = fa.x
-d_angles = resume("positions vidéo, angles ajustés %.1f° + %.1f°" % (d1, d2), table_angles(d1, d2))
+d_angles = resume("positions Kevin, angles ajustés %.1f° + %.1f°" % (d1, d2), table_angles(d1, d2))
+fv = minimize(lambda x: (ecarts(table_angles(x[0], x[1], 1297.0, 1541.0, 1924.52, 2409.52), IGN)[0][::5] ** 2).mean(),
+              [16.5, 28.3], method='Nelder-Mead', options={'xatol': 0.05, 'fatol': 0.01})
+resume("(positions chronométrées, angles ajustés %.1f° + %.1f°)" % tuple(fv.x),
+       table_angles(fv.x[0], fv.x[1], 1297.0, 1541.0, 1924.52, 2409.52))
 
 # 3) tout libre : où l'IGN met-il les courbes ?
 def obj_libre(x):
@@ -128,7 +143,7 @@ d_libre = resume("tout libre %.1f° [%.0f-%.0f] + %.1f° [%.0f-%.0f]" % (L[0], L
                  table_angles(*L))
 print()
 print("Profil des écarts à l'IGN (m), tous les 250 m de pente :")
-print("   s      actuel   angles ajustés   tout libre")
+print("   s      avant    angles ajustés   tout libre")
 for s_ in range(0, int(LONGUEUR), 250):
     print("  %5d   %6.1f   %14.1f   %10.1f" % (s_, d_actuel[s_], d_angles[s_], d_libre[s_]))
 print()
@@ -137,6 +152,7 @@ h0_reel = 155.0 + float(np.degrees(rot))
 print("Rotation d'ensemble qui superpose le tracé ajusté à l'IGN : %+.1f° → caps géographiques : "
       "départ %.1f°, entre les courbes %.1f°, arrivée %.1f°" % (np.degrees(rot), h0_reel, h0_reel + d1, h0_reel + d1 + d2))
 _, rot0 = ecarts(CAP, IGN)
-print("(tracé actuel : rotation %+.1f°)" % np.degrees(rot0))
+print("(tracé d'avant : rotation %+.1f°)" % np.degrees(rot0))
 print("Précision planimétrique annoncée par l'IGN : 10 m.")
-print("Retenu : positions vidéo, courbe 1 = %.1f°, courbe 2 = %.1f°, total %.1f° (actuel 48°)" % (d1, d2, d1 + d2))
+print("Retenu : positions relevées par Kevin, courbe 1 [%.2f ; %.2f] = %.1f°, courbe 2 [%.2f ; %.2f] = %.1f°, total %.1f°"
+      % (S1A, S1B, d1, S2A, S2B, d2, d1 + d2))

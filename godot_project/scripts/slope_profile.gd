@@ -33,22 +33,24 @@ const SLOPE_PROFILE: Array = [
 # ---------------------------------------------------------------------------
 # Plan horizontal : (distance, bearing degrés — 0 = Nord, 90 = Est)
 # Gares (IGN BD TOPO) : Val Claret 45,45189 °N 6,89898 °E → Grande Motte
-# 45,42352 °N 6,89146 °E (3 029 m). Positions des courbes : vidéo cockpit ;
-# angles et caps : ajustés sur le tracé IGN (audit_physique/trace_ign.sage,
-# 06/10/2026 : écart moyen 2 m, max 11 m, précision IGN 10 m).
+# 45,42352 °N 6,89146 °E (3 029 m). Positions des courbes : premier et
+# dernier galet incliné, relevés au compteur de la cabine par Kevin
+# (06/10/2026 ; s = compteur + 38,56, nez de la rame montante) ; angles et
+# caps : ajustés sur le tracé IGN (audit_physique/trace_ign.sage : écart
+# moyen 2,5 m, max 10 m, précision IGN 10 m).
 # ---------------------------------------------------------------------------
 
 const CURVE_PROFILE: Array = [
-	[0.0,    169.7],   # SSE en sortie Val Claret
-	[1297.0, 169.7],   # rectiligne section basse
-	[1419.0, 177.95],  # courbe 1 milieu — courbure max
-	[1541.0, 186.2],   # fin courbe 1 (16,5° à droite)
-	[1621.26, 186.2],  # entrée boucle croisement (tronçon neutre de 20,26 m inséré avant)
-	[1843.26, 186.2],  # sortie boucle croisement
-	[1924.52, 186.2],  # début courbe 2 (tronçon neutre de 20,26 m inséré avant)
-	[2167.02, 200.35], # courbe 2 milieu — courbure max
-	[2409.52, 214.5],  # fin courbe 2 (28,3° à droite, SO)
-	[3514.52, 214.5],  # rectiligne jusqu'à station haute
+	[0.0,    169.8],   # SSE en sortie Val Claret
+	[1312.56, 169.8],  # début courbe 1 : galet 81, compteur 1 274 m
+	[1430.56, 177.75], # courbe 1 milieu — courbure max
+	[1548.56, 185.7],  # fin courbe 1 : galet 98, compteur 1 510 m (15,9° à droite)
+	[1621.26, 185.7],  # entrée boucle croisement
+	[1843.26, 185.7],  # sortie boucle croisement
+	[1895.56, 185.7],  # début courbe 2 : galet 126, compteur 1 857 m
+	[2142.56, 199.95], # courbe 2 milieu — courbure max
+	[2389.56, 214.2],  # fin courbe 2 : galet 163, compteur 2 351 m (28,5° à droite, SO)
+	[3514.52, 214.2],  # rectiligne jusqu'à station haute
 ]
 
 # ---------------------------------------------------------------------------
@@ -186,8 +188,12 @@ static func slope_curvature_at(s: float) -> float:
 	return (slope_angle_at(s + ds) - slope_angle_at(s - ds)) / (2.0 * ds)
 
 
+# Cap interpolé LINÉAIREMENT (comme le PC) : courbes en arcs de cercle, à
+# courbure constante du premier au dernier galet incliné. Le lissage par
+# demi-courbe annulait la courbure au début, au milieu et à la fin de chaque
+# courbe : le premier galet incliné (n° 81, n° 126) restait presque droit.
 static func heading_at(s: float) -> float:
-	return interp_smooth(CURVE_PROFILE, s)
+	return interp(CURVE_PROFILE, s)
 
 
 static func curvature_at(s: float) -> float:
