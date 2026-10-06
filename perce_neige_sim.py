@@ -37,7 +37,10 @@ from datetime import datetime, time as dtime
 from pathlib import Path
 from typing import Any
 
-import profil_coupe
+try:
+    import profil_coupe     # coupe du terrain réel de la vue profil (tools_profil_coupe.py)
+except ImportError:         # paquet incomplet : la vue profil se passe du relief réel
+    profil_coupe = None     # (la 1.15.71 ne démarrait plus sans lui)
 
 from PyQt6.QtCore import (QEvent, QPointF, QRectF, Qt, QTimer, QUrl,
                           pyqtSignal)
@@ -13039,6 +13042,22 @@ class GameWidget(QWidget):
         """Coupe du terrain réel (profil_coupe.py, généré par
         tools_profil_coupe.py) calée sur la géométrie de la ligne : listes
         (x horizontal, altitude) pour la surface et les crêtes de fond."""
+        if self._coupe is None and profil_coupe is None:
+            # secours sans les données : relief 80 m au-dessus de la voie,
+            # crêtes plates — la vue reste utilisable
+            xg0 = [r[1] for r in _GEOM]
+            yg0 = [r[2] for r in _GEOM]
+            surf0 = [(-1200.0 + 10.0 * j, ALT_LOW + 8.0) for j in range(120)]
+            surf0 += [(xg0[i], yg0[i] + 80.0) for i in range(0, len(xg0), 20)]
+            surf0 += [(H_MAX + 10.0 * (j + 1), ALT_HIGH + 6.0 + 0.25 * 10.0 * j) for j in range(280)]
+            self._coupe = {
+                "surface": surf0,
+                "mi": [(x, max(z, 2900.0) + 150.0) for x, z in surf0[::4]],
+                "loin": [(x, 3350.0) for x, _ in surf0[::4]],
+                "x_sommet": H_MAX + 2200.0,
+                "voie": lambda x: geom_at(s_at_x(x))[1],
+                "surface_a": lambda x: geom_at(s_at_x(x))[1] + 80.0,
+            }
         if self._coupe is None:
             pc = profil_coupe
             pas = pc.PAS_PROLONGEMENT

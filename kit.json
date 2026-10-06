@@ -13,7 +13,8 @@
     "bugreport.py",
     "autoupdate.py",
     "reporting.py",
-    "updater.py"
+    "updater.py",
+    "profil_coupe.py"
   ],
   "paquets": [],
   "assets": [
@@ -53,6 +54,9 @@
   ],
   "artefact_prealable": "godot-viewers",
   "artefact_dossier": "bundled_godot",
-  "verification_import": [],
+  "verification_import": [
+    "perce_neige_sim",
+    "profil_coupe"
+  ],
   "exclus_de_la_maj": []
 }

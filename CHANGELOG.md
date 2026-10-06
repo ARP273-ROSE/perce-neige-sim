@@ -7,6 +7,23 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.15.72** — correctif : la 1.15.71 ne démarrait plus sur PC.
+- **« La version 71 après mise à jour sur PC, ça ne démarre plus, rien ne
+  se passe »** : la nouvelle vue en coupe lit le relief dans un nouveau
+  module, `profil_coupe.py`. Il manquait dans la liste des fichiers du
+  paquet Windows (`kit.json`, « modules »). L'import échouait dès le
+  lancement, sans aucun message, puisque l'application n'a pas de console.
+- Le module est ajouté au paquet. L'import est désormais facultatif :
+  sans les données, la vue profil dessine un relief simplifié au lieu
+  d'empêcher le démarrage.
+- **Garde-fous** : la CI importe maintenant le programme principal dans le
+  paquet construit (`verification_import`, qui était vide). Un nouveau test,
+  `tests/test_paquet.py`, vérifie que tout module local importé figure bien
+  dans le kit.
+- Une 1.15.71 installée ne démarre pas, donc ne peut pas se mettre à jour
+  seule : il faut réinstaller une fois à la main.
+- Vérifié : 99 tests PC (+2).
+
 **v1.15.71** — vue profil du PC refaite : une vraie coupe du terrain.
 - **« Dans cette vue-là on peut redesigner complètement les rames et le
   reste »**. Avant, les montagnes étaient des sinusoïdes, le dessus du
