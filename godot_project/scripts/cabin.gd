@@ -84,6 +84,9 @@ var _shake_mag: float = 0.0
 var orbit_yaw: float = atan2(3.0, 25.0)
 var orbit_pitch: float = asin(10.0 / 27.06)
 var orbit_dist: float = 27.06
+## Vue extérieure : appelé avec la caméra une fois la rame placée (main.gd :
+## écorché du relief, caméra gardée hors de la montagne).
+var apres_orbite: Callable = Callable()
 
 
 func orbit_rotate(dx: float, dy: float) -> void:
@@ -108,7 +111,7 @@ func _update_orbit_camera() -> void:
 	# plans proche et lointain suivant le recul (précision du tampon de
 	# profondeur ; le panorama lointain est à 10 km)
 	camera_ext.near = clampf(orbit_dist * 0.01, 0.1, 30.0)
-	camera_ext.far = 30000.0   # panorama à 10 km de la gare + recul de 6 km
+	camera_ext.far = 60000.0   # relief lointain jusqu'à 22 km + recul de 6 km
 	camera_ext.position = Vector3(
 		orbit_dist * cp * sin(orbit_yaw),
 		orbit_dist * sin(orbit_pitch),
@@ -525,7 +528,9 @@ func _build_console_pupitre() -> void:
 	_pupitre = PupitreConduite.new()
 	_pupitre.name = "PupitreConduite"
 	interior_root.add_child(_pupitre)
-	_pupitre.construire(z_console, y_top, _cockpit_lights)
+	# face perpendiculaire au regard : œil = caméra cabine (_build_camera)
+	_pupitre.construire(z_console, y_top, _cockpit_lights,
+		Vector3(0.0, 0.85, -train_length * 0.5 + 1.1))
 
 	# ----- Plafonnier du poste : la lumière de la cabine (celle du milieu
 	# de la rame, à 15 m, n'atteint pas le pupitre) ----------------------
@@ -582,13 +587,7 @@ func _build_cockpit_extras() -> void:
 	screen_dark.emission_energy_multiplier = 0.5
 	screen_dark.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 
-	# coups-de-poing rouges (arrêt d'urgence), à gauche de l'écran
-	for k in range(2):
-		var x: float = -0.53 + float(k) * 0.075
-		var ring: MeshInstance3D = _cyl(black, 0.026, 0.010, Vector3(x, y_top + 0.012, z_console - 0.01 + float(k) * 0.03))
-		interior_root.add_child(ring)
-		var cap: MeshInstance3D = _cyl(red, 0.021, 0.022, Vector3(x, y_top + 0.028, z_console - 0.01 + float(k) * 0.03))
-		interior_root.add_child(cap)
+	# (coups-de-poing rouges : sur la face du pupitre, PupitreConduite)
 	# combiné / boîtier à l'extrémité gauche du tube
 	var phone: MeshInstance3D = MeshInstance3D.new()
 	var pm: BoxMesh = BoxMesh.new()
@@ -1060,6 +1059,23 @@ func _attach_to_car(n: Node3D, idx: int, pos_rame: Vector3) -> void:
 	(_interior_cars[idx] as Node3D).add_child(n)
 
 
+## Vue cabine : commande du pupitre sous le point d'écran `pos` ("" = aucune).
+func pupitre_commande_sous(pos: Vector2) -> String:
+	if _pupitre == null or camera_fpv == null or view_mode != ViewMode.FPV:
+		return ""
+	return _pupitre.commande_sous(camera_fpv, pos)
+
+
+## Commutateur général du pupitre (clé EN MARCHE).
+func pupitre_en_marche() -> bool:
+	return _pupitre == null or _pupitre.en_marche
+
+
+func pupitre_appuyer(nom: String, enfonce: bool) -> void:
+	if _pupitre != null:
+		_pupitre.appuyer(nom, enfonce)
+
+
 func _attach_to_front_car(n: Node3D, pos_rame: Vector3) -> void:
 	_attach_to_car(n, 0, pos_rame)
 
@@ -1189,6 +1205,9 @@ func _process(_delta: float) -> void:
 
 	var xform: Transform3D = _xform_from(pos_cur, trajectory_tangent)
 	global_transform = xform
+	if not is_ghost and view_mode == ViewMode.EXTERIOR and apres_orbite.is_valid() \
+			and camera_ext != null:
+		apres_orbite.call(camera_ext)
 
 	# Articulation : chaque voiture sur la spline à SA propre abscisse.
 	# L'avant de la rame (−Z) pointe vers +s quand la rame 1 monte, vers −s

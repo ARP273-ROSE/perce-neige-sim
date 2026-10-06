@@ -7,6 +7,68 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.15.79** — vue extérieure refondue en écorché de la montagne ; pupitre
+redressé face au regard, commandes actionnables.
+- **Vue extérieure** (« 3 m après le départ du bas, ça passe à la vue
+  panoramique du haut, statique, en lévitation totale ; faut tout
+  refondre ») :
+  - la cause : le relief n'était affiché que si la caméra était
+    au-dessus de la surface. En orbite rapprochée, elle est presque
+    toujours sous la montagne ; il ne restait alors que la photo
+    panoramique de la gare du haut, posée à 10 km ;
+  - le relief est maintenant **toujours** affiché, et **jusqu'à
+    l'horizon** :
+    - bloc IGN détaillé (25 m) ;
+    - anneau lointain de 44 × 44 km à 200 m (Terrain Tiles, orthophoto
+      IGN, rotondité de la Terre), avec une brume de distance ;
+    - plus aucune photo panoramique en vue extérieure ; le ciel reste
+      bleu et allumé, même tunnel éteint ;
+  - **écorché** : du côté de la caméra, la montagne est ouverte dans un
+    demi-disque centré sur la rame, jusqu'au niveau du tunnel :
+    - le fond suit le profil de la voie, juste sous le tube ;
+    - les parois montrent la roche à strates, l'épaisseur de montagne
+      au-dessus du tunnel jusqu'au liseré clair de la surface, et l'entrée
+      du tunnel dans la roche, un trou bordé de béton ;
+    - l'entaille a juste la taille qu'il faut pour que la visée
+      caméra → rame ne traverse jamais la montagne : elle grandit tout de
+      suite et rapetisse en douceur ;
+    - la caméra ne descend jamais sous son fond ; en très grand recul,
+      elle reste au-dessus du relief ;
+  - le tracé orange en surface est posé sur les triangles du relief
+    (il flottait 8 m au-dessus).
+- **Pupitre** :
+  - « incline ce panneau perpendiculaire à la ligne du regard » : la face
+    est tournée vers l'œil du conducteur (≈ 62°) ;
+  - « descends-le sur le truc blanc, ça masque la vue de la voie » : elle
+    est posée devant le tube, plus bas. La voie reste dégagée ;
+  - « faudrait pouvoir appuyer sur ces boutons » : au clic ou au doigt,
+    en vue cabine. Les boutons de l'écran passent avant :
+    - OUVERTURE et FERMETURE commandent les portes ;
+    - **MONTÉE** (le bouton noir, réponse de Kevin) lance le départ ; le
+      voyant **PRÊT** s'allume alors, et ce n'est plus un bouton ;
+    - **−VITE / +VITE** : sélecteur à rappel, vertical au repos ; tenu à
+      gauche ou à droite, il baisse ou monte la consigne de vitesse ;
+    - **EN MARCHE** : commutateur général à clé. Sur arrêt, le pupitre
+      s'éteint et le départ est refusé ; il est impossible de le couper
+      rame en marche ;
+    - KLAXON sonne tant qu'on le tient (même son que le PC) ;
+    - CABINE et COMPARTIMENT allument ou éteignent la cabine ;
+    - un appui sur l'écran change de page ;
+  - **coups-de-poing rouges** à gauche de l'écran, d'après la photo
+    095119 : plaque grise, un poussoir clair et deux coups-de-poing dans
+    un cadre, une clé à étiquette rouge. Les anciens, sur le tube, sont
+    supprimés. Leur fonction n'est pas encore connue : ils s'enfoncent
+    seulement ;
+  - embarqué dans le PC, le pupitre ne fait que le geste, car le PC
+    pilote la rame.
+- Vérifié :
+  - nouveaux bancs `bench_pupitre_3d` (face à 0,0° du regard ; 16
+    commandes et l'écran trouvés au clic là où on les voit ; actions) et
+    `bench_relief_3d` (6 positions × 5 cadrages : visée toujours dégagée,
+    relief affiché, fond sous le tube) ;
+  - 14 bancs Godot, 99 tests PC, parité PWA ;
+  - rendus Vulkan et Compatibility (web).
+
 **v1.15.78** — pupitre de conduite reproduit d'après les photos, écran
 Pro-face vivant.
 - **« Le poste de conduite avec les commandes, les boutons et l'écran

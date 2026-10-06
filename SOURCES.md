@@ -92,6 +92,7 @@ retenue comme référence.
 | 24d | Galets repères et sortie de secours (relevés au compteur) | courbe 1 : 1er galet incliné n° 81 à 1 274 m, dernier n° 98 à 1 510 m ; évitement : n° 105 (≈ 1 620 m, mal lu) à n° 121 à 1 790 m ; courbe 2 : n° 126 à 1 857 m → n° 163 à 2 351 m ; unique sortie de secours à droite en montant au n° 145 (2 112 m) ; entrée en gare amont au n° 238 à 3 449 m | **Kevin, 06/10/2026**, vidéo cabine de montée (compteur 0 au départ, 3 474 à l'arrivée) | position du nez de la rame montante : s = compteur + 38,56 m ; le n° 121 retombe à 0,2 m sur le dernier galet de l'aiguillage amont ; le n° 238 est gardé à l'entrée du quai (compteur 3 439 m) en attendant confirmation |
 | 24d | Galets : rotation et ralentissement | ω = v/R, R = 250 mm (458 tr/min à 12 m/s) ; libéré par le culot, arrêt en ≈ 111 s | `audit_physique/galets_ligne.sage` : I ≈ 0,94 kg·m², joints de deux roulements 6208-2RS (modèle SKF), frottement de l'air | roulements et joints supposés (aucune donnée publiée) |
 | 24e | Supports : position | entre deux rangées de plots, jamais au droit d'une | Kevin, 05/10/2026 | plots en (i + ½) × 1,51 m, supports en k × 1,51 m ; n° 1 à 51,34 m (quai aval jusqu'à 51 m), n° 238 à 3 424,68 m (quai amont dès 3 425 m) |
+| 24f | Pupitre de cabine : commandes de la 2e rangée et plaque de gauche | bouton noir marqué MONTÉE (« on est prêt » : allume le voyant PRÊT, qui n'est pas un bouton) ; sélecteur à rappel, vertical au repos, « −VITE » à gauche et « +VITE » à droite (consigne de vitesse) ; commutateur à clé EN MARCHE = commutateur général ; à gauche de l'écran : un poussoir clair et deux coups-de-poing rouges dans un cadre, une clé à étiquette rouge dessous | **Kevin, 07/10/2026** (réponses aux questions 1, 2, 3 et 8 des planches annotées) ; photo 095119 pour la plaque de gauche | libellés de la plaque de gauche illisibles (laissés vides) ; fonction des coups-de-poing rouges et du poussoir clair non précisée (gestes seulement) |
 | 25 | Largeur de voie | **1 435 mm** (écartement standard) | Remontées-Mécaniques | « Largeur de la voie : 1,435 m » (contradiction avec Wikipedia EN 1 200 mm) |
 | 26 | Vitesse max exploitation | 12 m/s (43,2 km/h) | toutes sources | « Vitesse d'exploitation maximale : 12 m/s » |
 | 27 | Train — longueur | 31,6 m | Wikipedia FR | « une longueur de 31,6 mètres » |
@@ -280,8 +281,10 @@ retenue comme référence.
 - **Terrain Tiles** (Mapzen, AWS Open Data, encodage « terrarium ») —
   sources SRTM, EU-DEM (produit avec des données Copernicus), GMTED :
   relief du panorama vu des baies vitrées de la gare amont
-  (`tools_panorama.py`) et coupe du terrain de la vue profil du PC
-  (`tools_profil_coupe.py` → `profil_coupe.py`), accès commun dans
+  (`tools_panorama.py`), coupe du terrain de la vue profil du PC
+  (`tools_profil_coupe.py` → `profil_coupe.py`) et anneau de relief
+  lointain de la vue extérieure, 44 × 44 km à 200 m, texturé par
+  l'orthophotographie IGN (`tools_relief_lointain.py`) ; accès commun dans
   `tools_mnt.py`.
 
 ## 4. Sources primaires détaillées
