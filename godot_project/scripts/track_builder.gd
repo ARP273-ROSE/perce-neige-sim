@@ -2799,18 +2799,98 @@ func chainette(s_att: float) -> Vector2:
 ## discrets : du culot, le câble décrit UNE chaînette jusqu'au galet R1 et
 ## survole ceux d'avant. R1 est le premier galet (distance D, portée
 ## suivante L) sur lequel la chaînette appuie : D·(D + L) ≥ 2·a·h (sinon le
-## câble, tiré vers le galet suivant, passe au-dessus). Renvoie l'indice
+## câble, tiré vers le galet suivant, passe au-dessus) — ou un galet
+## intermédiaire sous lequel cette chaînette passerait. Renvoie l'indice
 ## dans les sommets du brin, ou −1 (gare amont : plus de galet).
 func premier_appui(side_i: int, s_att: float, a: float) -> int:
 	var pts: Array = _strand.get(side_i, [])
+	var p_att: Vector3 = strand_point(side_i, s_att)
+	var premier: int = -1
 	for k in range(1, pts.size() - 1):
 		var d: float = float(pts[k].s) - s_att
 		if d <= 0.5:
 			continue
+		if premier < 0:
+			premier = k
 		var l: float = float(pts[k + 1].s) - float(pts[k].s)
 		if d * (d + l) >= 2.0 * a * CULOT_DY:
+			# un galet intermédiaire plus haut que la chaînette (bosse du
+			# profil en long) : le câble repose dessus
+			for j in range(premier, k):
+				if hauteur_sur_galet(side_i, s_att, p_att, pts[k].p, d, a, j) < 0.0:
+					return j
 			return k
+	# plus aucun galet ne porte (arrivée en gare amont : le câble file vers
+	# la salle des machines) — sauf si l'un d'eux dépasse de la chaînette
+	if premier > 0:
+		var s_fin: float = PNConstants.LENGTH - 0.3
+		var d_fin: float = s_fin - s_att
+		if d_fin > 0.5:
+			var p_fin: Vector3 = strand_point(side_i, s_fin)
+			for j in range(premier, pts.size() - 1):
+				if float(pts[j].s) < s_fin and hauteur_sur_galet(side_i, s_att, p_att, p_fin, d_fin, a, j) < 0.0:
+					return j
 	return -1
+
+
+## Hauteur du câble au-dessus du sommet de la gorge du galet j, pour la
+## chaînette du culot (corde p_att → p_k de longueur d) : chaînette plus
+## écart vertical entre la corde et ce galet (profil en long courbe).
+func hauteur_sur_galet(side_i: int, s_att: float, p_att: Vector3, p_k: Vector3, d: float,
+		a: float, j: int) -> float:
+	var sj: float = _strand[side_i][j].s
+	var xj: float = sj - s_att
+	var base: Vector3 = p_att.lerp(p_k, xj / d)
+	return chainette_y(xj, d, CULOT_DY, a) \
+		+ (base - (_strand[side_i][j].p as Vector3)).dot(tunnel.transform_at(sj).basis.y)
+
+
+## Tronçon libre du culot au premier appui (retour du 06/10/2026 :
+## « vérifie la pose du câble dans les virages et l'évitement »). En
+## hauteur : la chaînette. Sur le côté : la corde du culot au premier appui
+## coupe l'intérieur des virages (jusqu'à 18 cm) — or là où le câble passe
+## bas au-dessus d'un galet (moins de Y_HORS_GORGE : joues + rayon), il est
+## dans sa gorge et le galet, incliné en courbe, le guide par sa joue : le
+## câble passe par l'axe de la gorge. Galets de déviation de l'aiguillage
+## compris. Plus haut, il passe au-dessus du galet sans le toucher.
+## Renvoie {att, s1, a, x: [], lat: [], y: []} (lat : écart à la corde).
+const Y_HORS_GORGE: float = 0.07
+func amorce_profil(side_i: int, s_rame: float, n: int = AMORCE_ANNEAUX) -> Dictionary:
+	var att: float = attache_s(s_rame)
+	var a: float = chainette(att).x
+	var k1: int = premier_appui(side_i, att, a)
+	var s1: float = float(_strand[side_i][k1].s) if k1 > 0 else PNConstants.LENGTH - 0.3
+	var d: float = maxf(s1 - att, 0.5)
+	var p_att: Vector3 = strand_point(side_i, att)
+	var p_r1: Vector3 = strand_point(side_i, s1)
+	# points de guidage latéral : galets survolés bas
+	var gx: Array = [0.0]
+	var gl: Array = [0.0]
+	if k1 > 0:
+		for j in range(1, k1):
+			var sj: float = _strand[side_i][j].s
+			var xj: float = sj - att
+			if xj <= 0.3:
+				continue
+			if hauteur_sur_galet(side_i, att, p_att, p_r1, d, a, j) < Y_HORS_GORGE:
+				var base: Vector3 = p_att.lerp(p_r1, xj / d)
+				gx.append(xj)
+				gl.append(((_strand[side_i][j].p as Vector3) - base).dot(tunnel.transform_at(sj).basis.x))
+	gx.append(d)
+	gl.append(0.0)
+	var xs: Array = []
+	var lats: Array = []
+	var ys: Array = []
+	var g: int = 0
+	for i in range(n + 1):
+		var x: float = d * float(i) / float(n)
+		while g < gx.size() - 2 and x > float(gx[g + 1]):
+			g += 1
+		var u: float = clampf((x - float(gx[g])) / maxf(float(gx[g + 1]) - float(gx[g]), 1e-6), 0.0, 1.0)
+		xs.append(x)
+		lats.append(lerpf(float(gl[g]), float(gl[g + 1]), u))
+		ys.append(chainette_y(x, d, CULOT_DY, a))
+	return {"att": att, "s1": s1, "a": a, "x": xs, "lat": lats, "y": ys, "p_att": p_att, "p_r1": p_r1}
 
 
 ## Chaînette entre deux appuis de hauteurs différentes : hauteur y(x) au-
@@ -2867,27 +2947,27 @@ func _update_culots(s_rame_g: float, s_rame_d: float) -> void:
 	var y_cable: float = _roller_axis_y() + pulley_radius + cable_radius
 	for side_i in [-1, 1]:
 		var s_r: float = s_rame_g if side_i < 0 else s_rame_d
-		var att: float = attache_s(s_r)
-		var a: float = chainette(att).x
-		var s_r1: float = coupe_brin(side_i, s_r)
-		var x0: float = maxf(s_r1 - att, 0.5)
-		var p_r1: Vector3 = strand_point(side_i, s_r1)
-		var p_att: Vector3 = strand_point(side_i, att)
+		var prof: Dictionary = amorce_profil(side_i, s_r)
+		var att: float = prof.att
+		var x0: float = maxf(float(prof.s1) - att, 0.5)
+		var p_r1: Vector3 = prof.p_r1
+		var p_att: Vector3 = prof.p_att
 		var d: Dictionary = _culots[side_i]
 		var own: ShaderMaterial = cable_right_material if side_i > 0 else cable_left_material
 		var mat: ShaderMaterial = d["mat"]
 		if own != null:
 			mat.set_shader_parameter("cable_phase", own.get_shader_parameter("cable_phase"))
-		# points de la chaînette, du culot (x = 0) au décollage (x = x0)
+		# points : corde culot → R1, écart latéral (guidage par les gorges),
+		# hauteur de la chaînette
 		var pts: Array = []
 		var xs: Array = []
-		for i in range(AMORCE_ANNEAUX + 1):
-			var x: float = lerpf(0.0, x0, float(i) / float(AMORCE_ANNEAUX))
-			var y: float = chainette_y(x, x0, CULOT_DY, a)
+		for i in range((prof.x as Array).size()):
+			var x: float = prof.x[i]
 			var s_x: float = att + x
-			var p: Vector3 = p_att.lerp(p_r1, x / x0) + tunnel.transform_at(s_x).basis.y * y
+			var bx: Basis = tunnel.transform_at(s_x).basis
+			var p: Vector3 = p_att.lerp(p_r1, x / x0) + bx.x * float(prof.lat[i]) + bx.y * float(prof.y[i])
 			if _slack > 0.0 and not _rupture.is_empty():
-				p -= tunnel.transform_at(s_x).basis.y * (_slack_drop(side_i, s_x) * _slack)
+				p -= bx.y * (_slack_drop(side_i, s_x) * _slack)
 			pts.append(p)
 			xs.append(x)
 		var xf: Transform3D = tunnel.transform_at(att)

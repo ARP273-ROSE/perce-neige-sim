@@ -175,5 +175,42 @@ func _tick() -> void:
 	_check("n° 1 après le quai aval, n° 238 avant le quai amont",
 		nums.size() == 2 and nums[0] > 51.0 and nums[1] < 3425.0,
 		"%s" % str(nums))
+	# 5. Toute la ligne, montée et descente (le câble part toujours vers
+	#    l'amont) : dans les virages et l'évitement, le tronçon libre reste
+	#    dans la gorge des galets qu'il survole bas, n'en traverse aucun,
+	#    et suit les galets de déviation de l'aiguillage
+	var tun = _main.get("tunnel")
+	var sts: Array = tr.station_list()
+	var pire_lat: float = 0.0
+	var h_min: float = INF
+	var dev_ok: bool = true
+	for side_i in [-1, 1]:
+		var s_r: float = 20.0
+		while s_r < 3457.0:
+			var prof: Dictionary = tr.amorce_profil(side_i, s_r, 300)
+			var att3: float = prof.att
+			var d3: float = float(prof.s1) - att3
+			var vs: Array = tr.strand_vertices(side_i)
+			for j in range(1, vs.size() - 1):
+				var xv: float = float(vs[j].s) - att3
+				if xv <= 0.3 or xv >= d3 - 0.01:
+					continue
+				var i: int = clampi(int(round(xv / d3 * 300.0)), 0, 300)
+				var bx: Basis = tun.transform_at(vs[j].s).basis
+				var pp: Vector3 = (prof.p_att as Vector3).lerp(prof.p_r1, float(prof.x[i]) / d3) \
+					+ bx.x * float(prof.lat[i]) + bx.y * float(prof.y[i])
+				var dp: Vector3 = pp - (vs[j].p as Vector3)
+				var hy: float = dp.dot(bx.y)
+				h_min = minf(h_min, hy)
+				if hy < TrackBuilder.Y_HORS_GORGE:
+					pire_lat = maxf(pire_lat, absf(dp.dot(bx.x)))
+					if sts[j - 1].sheave and absf(dp.dot(bx.x)) > 0.01:
+						dev_ok = false
+			s_r += 2.0
+	_check("virages et évitement : câble dans la gorge des galets survolés bas", pire_lat < 0.01,
+		"écart latéral maxi %.1f mm" % (pire_lat * 1000.0))
+	_check("aucun galet traversé par le tronçon libre", h_min > -0.002,
+		"hauteur mini au-dessus d'un galet survolé %.1f mm" % (h_min * 1000.0))
+	_check("galets de déviation suivis", dev_ok, "")
 	print("BENCH_GALETS %s" % ("OK" if _ok else "ÉCHEC"))
 	quit(0 if _ok else 1)
