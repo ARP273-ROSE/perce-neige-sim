@@ -108,6 +108,10 @@ const CABLE_STRAND_PITCH: float = 0.45
 var _cable_mat: ShaderMaterial = null
 var _mats: Dictionary = {}
 var _exterieur: Node3D = null
+var _dome: MeshInstance3D = null
+var _dome_loin: MeshInstance3D = null
+var _neige: MeshInstance3D = null
+var _lointain: bool = false
 
 
 func build(t: TunnelBuilder) -> void:
@@ -425,6 +429,7 @@ func _build_exterieur() -> void:
 	st_n.set_material(neige)
 	var mi_n: MeshInstance3D = MeshInstance3D.new()
 	mi_n.name = "Neige"
+	_neige = mi_n
 	mi_n.mesh = st_n.commit()
 	mi_n.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	_exterieur.add_child(mi_n)
@@ -445,7 +450,17 @@ void fragment() {
 """
 	var mat: ShaderMaterial = ShaderMaterial.new()
 	mat.shader = sh
-	mat.set_shader_parameter("pano", load("res://textures/panorama_glacier.png"))
+	# texture de 6 144 px (25 Mo en mémoire graphique) : divisée par deux sur
+	# les machines modestes (cran ≥ 3 : iPad, carte intégrée)
+	var pano: Texture2D = load("res://textures/panorama_glacier.png")
+	if PerfManager.cran_courant >= 3:
+		var img_p: Image = pano.get_image()
+		if img_p.is_compressed():
+			img_p.decompress()
+		img_p.resize(img_p.get_width() / 2, img_p.get_height() / 2, Image.INTERPOLATE_LANCZOS)
+		img_p.generate_mipmaps()
+		pano = ImageTexture.create_from_image(img_p)
+	mat.set_shader_parameter("pano", pano)
 	mat.set_shader_parameter("gamma", _GAMMA_WEB if _rendu_web() else 1.0)
 	var centre: Vector3 = _to_world(Vector3(0.0, 0.0, HALL_DEPTH))
 	centre.y = y_p + 1.7
@@ -470,36 +485,46 @@ void fragment() {
 			break
 		s_t -= 2.0
 	var cos_trou: float = cos(deg_to_rad(6.0))
-	var st: SurfaceTool = SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var sommet := func(iu: int, site: float) -> void:
-		var u: float = float(iu) / float(n_u)
-		var cap: float = deg_to_rad(cap0 + (u - 0.5) * PANO_CAP_SPAN)
-		var v: float = clampf((PANO_SITE_HAUT - site) / (PANO_SITE_HAUT - PANO_SITE_BAS), 0.002, 0.998)
-		var dir: Vector3 = Vector3(sin(cap), 0.0, -cos(cap)) * cos(deg_to_rad(site)) \
-			+ Vector3.UP * sin(deg_to_rad(site))
-		st.set_uv(Vector2(u, v))
-		st.add_vertex(centre + dir * DOME_R)
-	for j in range(sites.size() - 1):
-		for iu in range(n_u):
-			if trou != Vector3.ZERO:
-				var cap_m: float = deg_to_rad(cap0 + ((float(iu) + 0.5) / float(n_u) - 0.5) * PANO_CAP_SPAN)
-				var site_m: float = deg_to_rad((sites[j] + sites[j + 1]) * 0.5)
-				var dir_m: Vector3 = Vector3(sin(cap_m), 0.0, -cos(cap_m)) * cos(site_m) + Vector3.UP * sin(site_m)
-				if dir_m.dot(trou) > cos_trou:
-					continue
-			sommet.call(iu, sites[j])
-			sommet.call(iu + 1, sites[j])
-			sommet.call(iu + 1, sites[j + 1])
-			sommet.call(iu, sites[j])
-			sommet.call(iu + 1, sites[j + 1])
-			sommet.call(iu, sites[j + 1])
-	st.set_material(mat)
-	var mi_d: MeshInstance3D = MeshInstance3D.new()
-	mi_d.name = "Panorama"
-	mi_d.mesh = st.commit()
-	mi_d.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	_exterieur.add_child(mi_d)
+	# deux dômes : le proche (R = 400 m) ouvert au passage du tunnel, et le
+	# lointain (vue extérieure, R = 10 km) SANS trou — repoussé à 10 km, le
+	# trou devenait un disque de 1 km ouvrant sur le sol gris du ciel
+	for lointain in [false, true]:
+		var st: SurfaceTool = SurfaceTool.new()
+		st.begin(Mesh.PRIMITIVE_TRIANGLES)
+		var r_d: float = DOME_R * (DOME_LOINTAIN if lointain else 1.0)
+		var sommet := func(iu: int, site: float) -> void:
+			var u: float = float(iu) / float(n_u)
+			var cap: float = deg_to_rad(cap0 + (u - 0.5) * PANO_CAP_SPAN)
+			var v: float = clampf((PANO_SITE_HAUT - site) / (PANO_SITE_HAUT - PANO_SITE_BAS), 0.002, 0.998)
+			var dir: Vector3 = Vector3(sin(cap), 0.0, -cos(cap)) * cos(deg_to_rad(site)) \
+				+ Vector3.UP * sin(deg_to_rad(site))
+			st.set_uv(Vector2(u, v))
+			st.add_vertex(centre + dir * r_d)
+		for j in range(sites.size() - 1):
+			for iu in range(n_u):
+				if trou != Vector3.ZERO and not lointain:
+					var cap_m: float = deg_to_rad(cap0 + ((float(iu) + 0.5) / float(n_u) - 0.5) * PANO_CAP_SPAN)
+					var site_m: float = deg_to_rad((sites[j] + sites[j + 1]) * 0.5)
+					var dir_m: Vector3 = Vector3(sin(cap_m), 0.0, -cos(cap_m)) * cos(site_m) + Vector3.UP * sin(site_m)
+					if dir_m.dot(trou) > cos_trou:
+						continue
+				sommet.call(iu, sites[j])
+				sommet.call(iu + 1, sites[j])
+				sommet.call(iu + 1, sites[j + 1])
+				sommet.call(iu, sites[j])
+				sommet.call(iu + 1, sites[j + 1])
+				sommet.call(iu, sites[j + 1])
+		st.set_material(mat)
+		var mi_d: MeshInstance3D = MeshInstance3D.new()
+		mi_d.name = "PanoramaLointain" if lointain else "Panorama"
+		mi_d.mesh = st.commit()
+		mi_d.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		mi_d.visible = not lointain
+		_exterieur.add_child(mi_d)
+		if lointain:
+			_dome_loin = mi_d
+		else:
+			_dome = mi_d
 
 
 const _GAMMA_WEB: float = 0.625
@@ -515,6 +540,21 @@ func _rendu_web() -> bool:
 func set_exterieur_visible(v: bool) -> void:
 	if _exterieur != null:
 		_exterieur.visible = v
+
+
+## Vue extérieure : le relief 3D du massif (ReliefBuilder) occupe les 10
+## premiers kilomètres ; le panorama est repoussé à 10 km (même centre) pour
+## n'en garder que les montagnes lointaines, et le tablier de neige caché.
+const DOME_LOINTAIN: float = 25.0     # × DOME_R = 10 km
+
+func set_exterieur_lointain(on: bool) -> void:
+	if _dome == null or on == _lointain:
+		return
+	_lointain = on
+	_dome.visible = not on
+	_dome_loin.visible = on
+	if _neige != null:
+		_neige.visible = not on
 
 
 ## Distance d'une position monde au mur vitré du fond du hall.

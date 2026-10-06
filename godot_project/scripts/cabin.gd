@@ -90,14 +90,24 @@ func orbit_rotate(dx: float, dy: float) -> void:
 	orbit_pitch = clampf(orbit_pitch + dy * 0.006, -0.15, 1.35)
 
 
+## Recul jusqu'à 6 km pour voir le relief 3D du massif (06/10/2026) ; au-delà
+## de 150 m, chaque cran de zoom va plus vite.
+const ORBIT_DIST_MAX: float = 6000.0
+
 func orbit_zoom(factor: float) -> void:
-	orbit_dist = clampf(orbit_dist * factor, 8.0, 120.0)
+	if orbit_dist > 150.0:
+		factor = pow(factor, 1.8)
+	orbit_dist = clampf(orbit_dist * factor, 8.0, ORBIT_DIST_MAX)
 
 
 func _update_orbit_camera() -> void:
 	if camera_ext == null:
 		return
 	var cp: float = cos(orbit_pitch)
+	# plans proche et lointain suivant le recul (précision du tampon de
+	# profondeur ; le panorama lointain est à 10 km)
+	camera_ext.near = clampf(orbit_dist * 0.01, 0.1, 30.0)
+	camera_ext.far = 30000.0   # panorama à 10 km de la gare + recul de 6 km
 	camera_ext.position = Vector3(
 		orbit_dist * cp * sin(orbit_yaw),
 		orbit_dist * sin(orbit_pitch),

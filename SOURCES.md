@@ -269,6 +269,11 @@ retenue comme référence.
   55 %, 10 m/s, 115 + 1 places) ; gares et pylône P1 : OpenStreetMap way
   23140026 ; hauteur du pylône et tension DÉDUITES
   (`audit_physique/telepherique.sage`).
+- **IGN — orthophotographie** (WMS `ORTHOIMAGERY.ORTHOPHOTOS`) et **RGE
+  ALTI** (WMS `ELEVATION.ELEVATIONGRIDCOVERAGE.HIGHRES`) de la Géoplateforme,
+  Licence Ouverte Etalab 2.0 : relief 3D du massif en vue extérieure
+  (`tools_relief3d.py`) ; noms des lacs, villages et sommets :
+  OpenStreetMap.
 - **OpenStreetMap** — © contributeurs OpenStreetMap, ODbL. Way
   « Funiculaire Perce-Neige » (24 nœuds ; premier tronçon rectiligne de
   1,5 km : tracé grossier, utilisé en contrôle seulement).
