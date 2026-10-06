@@ -10,7 +10,6 @@ extends Node3D
 ##
 ## Les coordonnées s sont relatives au portail bas (0) / haut (LENGTH).
 
-@export var platform_length: float = 48.0      # allongé pour contenir tout le train
 # Quais EN ESCALIER (photos du 2026-04-26) : pas de quai-rampe lisse —
 # une volée de marches-paliers horizontales de 3 m de large longe le train
 # de chaque côté, la contremarche de chaque marche découlant de la pente
@@ -64,8 +63,8 @@ func _build_station_low() -> void:
 	# à 4,5 m de la tête du butoir (PNConstants.BUTOIR_BAS_S = 2,0 − 0,10 +
 	# 0,16 : socle à 2,0, tête de 0,32 centrée à 0,10 côté ligne).
 	var s_bumper: float = 2.0
-	var s_plat_start: float = 3.0
-	var s_plat_end: float = s_plat_start + platform_length
+	var s_plat_start: float = PNConstants.QUAI_BAS_DEBUT_S
+	var s_plat_end: float = PNConstants.QUAI_BAS_FIN_S
 
 	# 2 quais : un de chaque côté de la voie pour symétrie (une cabine peut
 	# ouvrir ses portes des 2 côtés, ou 2 cabines successives utilisent l'un
@@ -88,8 +87,8 @@ func _build_station_high() -> void:
 	# collé contre la fin du tunnel ; tête à PNConstants.BUTOIR_HAUT_S,
 	# nez de la rame arrêtée à 1,5 m
 	var s_bumper: float = PNConstants.LENGTH - 0.4
-	var s_plat_end: float = PNConstants.LENGTH - 1.0
-	var s_plat_start: float = s_plat_end - platform_length
+	var s_plat_end: float = PNConstants.QUAI_HAUT_FIN_S
+	var s_plat_start: float = PNConstants.QUAI_HAUT_DEBUT_S
 
 	_build_platform(s_plat_start, s_plat_end, false, +1.0)
 	_build_platform(s_plat_start, s_plat_end, false, -1.0)

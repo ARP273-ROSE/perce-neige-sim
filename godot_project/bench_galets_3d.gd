@@ -183,8 +183,16 @@ func _tick() -> void:
 	for st in tr.station_list():
 		if int(st.get("num", 0)) in [1, 238]:
 			nums.append(float(st.s))
+	if nums.size() == 2:
+		# la pente de la gare haute (10 %) est atteinte au n° 238, pas avant
+		_check("pente de la gare haute atteinte au n° 238",
+			absf(SlopeProfile.gradient_at(nums[1]) - 0.10) < 1e-4
+			and SlopeProfile.gradient_at(nums[1] - 5.0) > 0.1005,
+			"pente %.3f au n° 238, %.3f 5 m avant" % [SlopeProfile.gradient_at(nums[1]),
+				SlopeProfile.gradient_at(nums[1] - 5.0)])
 	_check("n° 1 après le quai aval, n° 238 avant le quai amont",
-		nums.size() == 2 and nums[0] > 51.0 and nums[1] < 3425.0,
+		nums.size() == 2 and nums[0] > PNConstants.QUAI_BAS_FIN_S and nums[0] < PNConstants.QUAI_BAS_FIN_S + 1.6
+			and nums[1] < PNConstants.QUAI_HAUT_DEBUT_S and nums[1] > PNConstants.QUAI_HAUT_DEBUT_S - 1.6,
 		"%s" % str(nums))
 	# 5. Toute la ligne, montée et descente (le câble part toujours vers
 	#    l'amont) : dans les virages et l'évitement, le tronçon libre reste
@@ -274,8 +282,11 @@ func _tick() -> void:
 						s_saut = s_r - 1.0
 			s_r += 0.5
 	# reste : 2 à 4,5 mm au changement de R1 près des gares (chaînette
-	# posée sur la corde, approchée) — invisible sur un câble de 52 mm
-	_check("tronçon libre sans saut en marche (pas de 0,5 m)", saut < 0.005,
+	# posée sur la corde, approchée), et jusqu'à 8,6 mm sur un galet très
+	# incliné en courbe (−8°, 1 541,7 m) : soulevé de 1,6 mm, le câble
+	# glisse de 13 mm dans la gorge vers l'intérieur de la courbe (jeu en
+	# √h, physique) — invisible sur un câble de 52 mm
+	_check("tronçon libre sans saut en marche (pas de 0,5 m)", saut < 0.010,
 		"saut maxi d'un point du câble %.1f mm au-delà de son pas (rame à %.0f m)" % [saut * 1000.0, s_saut])
 	# 6. En marche, dans les deux sens : le câble n'est jamais interrompu
 	#    après le premier galet (segments de 15 m masqués à tort)

@@ -15,6 +15,9 @@ var _dist: float = 10.0
 var _descente: float = 0.0     # m parcourus en descente avant la photo
 var _plongee: bool = false      # caméra fixe plongeant sur le premier galet
 var _butoir: bool = false       # caméra de côté sur l'écart rame ↔ butoir
+var _vue: int = 1               # 1 extérieure, 2 salle des machines
+var _cadre: String = ""         # "quai" : bout de quai côté rame ; "fantome" : nez de l'autre rame
+var _m_cam: Vector3 = Vector3(NAN, 0.0, 0.0)   # salle des machines : yaw, pitch, dist
 
 
 func _initialize() -> void:
@@ -31,6 +34,13 @@ func _initialize() -> void:
 			_plongee = true
 		elif a == "butoir":
 			_butoir = true
+		elif a == "quai" or a == "fantome":
+			_cadre = a
+		elif a.begins_with("vue="):
+			_vue = int(a.substr(4))
+		elif a.begins_with("mcam="):
+			var v: PackedStringArray = a.substr(5).split(",")
+			_m_cam = Vector3(float(v[0]), float(v[1]), float(v[2]))
 		elif a.begins_with("descente="):
 			_descente = float(a.substr(9))
 		elif not a.begins_with("--"):
@@ -54,7 +64,11 @@ func _tick() -> void:
 	if _f == 5:
 		_main.set_tunnel_lights(true)
 		var cab = _main.get("cabin")
-		cab.set_view(1)
+		cab.set_view(_vue)
+		if _vue == 2 and not is_nan(_m_cam.x) and cab.camera_machines != null:
+			cab.camera_machines.yaw = _m_cam.x
+			cab.camera_machines.pitch = _m_cam.y
+			cab.camera_machines.dist = _m_cam.z
 		cab.orbit_yaw = _yaw
 		cab.orbit_pitch = _pitch
 		cab.orbit_dist = _dist
@@ -103,6 +117,37 @@ func _tick() -> void:
 		get_root().add_child(lampe)
 		lampe.global_position = xm.origin + xm.basis.y * 1.0 + xm.basis.x * 1.5
 		print("ORBITE butoir %s à %.2f, rame %.2f" % ["haut" if haut else "bas", s_b, ph.s])
+	if _f == 106 and _cadre != "":
+		var tun = _main.get("tunnel")
+		var haut: bool = ph.s > PNConstants.LENGTH * 0.5
+		var s_v: float
+		var s_c: float
+		var lat: float
+		var dy: float
+		if _cadre == "quai":
+			# bout du quai côté voie : en bas après le nez, en haut avant l'arrière
+			s_v = PNConstants.QUAI_HAUT_DEBUT_S if haut else PNConstants.QUAI_BAS_FIN_S
+			s_c = s_v + (6.0 if haut else -6.0)
+			lat = 4.5
+			dy = 1.6
+		else:
+			# nez de l'autre rame (en haut si l'on est en bas)
+			var s_g: float = PNConstants.miroir(ph.s)
+			var dir_g: float = 1.0 if s_g > PNConstants.LENGTH * 0.5 else -1.0
+			s_v = s_g + dir_g * 15.0
+			s_c = s_v + dir_g * 6.0
+			lat = 1.2
+			dy = 1.0
+		var xc: Transform3D = tun.transform_at(s_c)
+		var xv: Transform3D = tun.transform_at(s_v)
+		var cam := Camera3D.new()
+		cam.fov = 70.0
+		cam.near = 0.05
+		get_root().add_child(cam)
+		cam.look_at_from_position(xc.origin + xc.basis.x * lat + xc.basis.y * dy,
+			xv.origin + xv.basis.y * -0.4, xc.basis.y)
+		cam.current = true
+		print("ORBITE cadre %s à %.2f" % [_cadre, s_v])
 	if _f == 6 and _main.get("hud") != null:
 		_main.get("hud").visible = false
 	if _f == 120:
