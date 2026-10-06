@@ -14,6 +14,7 @@ var _pitch: float = 0.05
 var _dist: float = 10.0
 var _descente: float = 0.0     # m parcourus en descente avant la photo
 var _plongee: bool = false      # caméra fixe plongeant sur le premier galet
+var _butoir: bool = false       # caméra de côté sur l'écart rame ↔ butoir
 
 
 func _initialize() -> void:
@@ -28,6 +29,8 @@ func _initialize() -> void:
 			_dist = float(a.substr(5))
 		elif a == "plongee":
 			_plongee = true
+		elif a == "butoir":
+			_butoir = true
 		elif a.begins_with("descente="):
 			_descente = float(a.substr(9))
 		elif not a.begins_with("--"):
@@ -80,6 +83,26 @@ func _tick() -> void:
 		lampe.global_position = p1 + xr.basis.y * 0.8 - xr.basis.z * 1.0
 		cam.current = true
 		print("ORBITE premier galet %.1f, rame %.1f" % [s1, ph.s])
+	if _f == 106 and _butoir:
+		# de côté, au-dessus du quai : bout de la rame et tête du butoir
+		var tun = _main.get("tunnel")
+		var haut: bool = ph.s > PNConstants.LENGTH * 0.5
+		var s_b: float = PNConstants.BUTOIR_HAUT_S if haut else PNConstants.BUTOIR_BAS_S
+		var s_m: float = s_b + (-0.9 if haut else 2.5)
+		var xm: Transform3D = tun.transform_at(s_m)
+		var cam := Camera3D.new()
+		cam.fov = 60.0
+		cam.near = 0.05
+		get_root().add_child(cam)
+		cam.look_at_from_position(xm.origin + xm.basis.x * (4.2 if haut else 2.6) + xm.basis.y * 0.4,
+			xm.origin + xm.basis.x * -0.2 + xm.basis.y * -0.9, xm.basis.y)
+		cam.current = true
+		var lampe := OmniLight3D.new()
+		lampe.omni_range = 12.0
+		lampe.light_energy = 1.5
+		get_root().add_child(lampe)
+		lampe.global_position = xm.origin + xm.basis.y * 1.0 + xm.basis.x * 1.5
+		print("ORBITE butoir %s à %.2f, rame %.2f" % ["haut" if haut else "bas", s_b, ph.s])
 	if _f == 6 and _main.get("hud") != null:
 		_main.get("hud").visible = false
 	if _f == 120:

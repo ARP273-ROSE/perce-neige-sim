@@ -97,7 +97,7 @@ func _populate() -> void:
 
 
 # Éteint les OmniLight3D loin des deux rames (rame 1 à s_cabin, rame 2 à
-# LENGTH - s_cabin). À appeler à basse fréquence (~2 Hz) depuis main.gd —
+# MIROIR_S − s_cabin). À appeler à basse fréquence (~2 Hz) depuis main.gd —
 # inutile de le faire à 60 Hz, une rame parcourt < 7 m entre deux appels.
 #
 # Allumage PROGRESSIF (retour d'essai iPad 2026-07-12) : l'énergie monte
@@ -109,7 +109,7 @@ const LIGHT_FADE_M: float = 60.0
 func update_light_culling(s_cabin: float) -> void:
 	var web: bool = OS.has_feature("web")
 	var cull: float = LIGHT_CULL_DIST_WEB if web else LIGHT_CULL_DIST
-	var s_ghost: float = PNConstants.LENGTH - s_cabin
+	var s_ghost: float = PNConstants.miroir(s_cabin)
 	for entry in _lights:
 		var light: OmniLight3D = entry[0]
 		var ls: float = entry[1]

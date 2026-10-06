@@ -668,7 +668,7 @@ func _build_cabin() -> void:
 	cabin.set_tunnel(tunnel)
 	cabin.set_physics(physics)
 
-	# Ghost (rame 2) — visible à s_ghost = LENGTH - physics.s, voie droite au passing loop
+	# Ghost (rame 2) — visible à s_ghost = MIROIR_S − physics.s, voie droite au passing loop
 	cabin_ghost = Cabin.new()
 	cabin_ghost.name = "CabinGhost"
 	cabin_ghost.is_ghost = true
@@ -931,6 +931,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			auto_operator.toggle()
 		elif event.keycode == KEY_I:
 			do_reverse()
+		elif event.keycode == KEY_D:
+			toggle_doors()
 		elif event.keycode == KEY_M:
 			# Rotation des modes, comme la touche M du PC.
 			var order: Array = ["normal", "challenge", "panne"]
@@ -1041,6 +1043,17 @@ func _view_zoom(mr_view: bool, factor: float) -> void:
 # PC : arrêt total requis, annonce « retour en gare », puis PRÊT/DÉPART
 # relance (sans buzzer en tunnel). En mode AUTO, l'automate se recale et
 # relance le départ tout seul.
+## Portes à la demande (bouton PORTES / touche D). Refus affiché au HUD.
+func toggle_doors() -> void:
+	if client_mode or physics == null:
+		return
+	var msg: String = physics.toggle_doors()
+	if msg != "":
+		print("[Portes] " + msg)
+		if hud != null and hud.has_method("flash"):
+			hud.flash(msg)
+
+
 func do_reverse() -> void:
 	if client_mode or physics == null:
 		return

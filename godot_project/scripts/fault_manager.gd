@@ -291,7 +291,7 @@ func trigger(fault_id: String) -> void:
 		if fault_id == "cable_rupture":
 			physics.cable_rupture = true
 			physics.service_brake_fail = 0.15
-			physics.ghost_locked_s = PNConstants.LENGTH - physics.s
+			physics.ghost_locked_s = PNConstants.miroir(physics.s)
 		elif fault_id == "service_brake_fail":
 			physics.service_brake_fail = 0.25
 

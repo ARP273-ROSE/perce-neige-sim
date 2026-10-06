@@ -29,6 +29,7 @@ var _b_restart: Button = null        # NOUVEAU VOYAGE après une catastrophe
 var _b_tunnel: Button = null         # éclairage du tunnel (enfoncé = allumé)
 var _b_lights: Button = null         # phares (enfoncé = allumés)
 var _b_cabin: Button = null          # éclairage cabine (enfoncé = allumé)
+var _b_doors: Button = null          # portes (enfoncé = ouvertes)
 
 # Libellé du bouton MODE selon le mode courant (sans accent : police par
 # défaut des exports mobiles).
@@ -92,6 +93,8 @@ func _process(delta: float) -> void:
 			_b_lights.set_pressed_no_signal(bool(_main.physics.lights_head))
 		if _b_cabin != null:
 			_b_cabin.set_pressed_no_signal(bool(_main.physics.lights_cabin))
+		if _b_doors != null:
+			_b_doors.set_pressed_no_signal(bool(_main.physics.doors_open))
 	# Après une panne catastrophique, rame immobilisée : sans clavier il
 	# n'y avait AUCUN moyen de relancer un voyage (retour d'essai iPad
 	# 2026-09-27) — le bouton NOUVEAU VOYAGE apparaît au centre. (Après une
@@ -218,6 +221,22 @@ func _build() -> void:
 	b_go.position = Vector2(-125, -300)
 	_bind_tap(b_go, "ready_depart")
 	root.add_child(b_go)
+
+	# --- PORTES, à gauche de PRÊT/DÉPART (retour du 06/10/2026 : « un
+	# bouton pour les portes dans la PWA », comme la touche D du PC) :
+	# ouvre à quai, ferme (annonce → buzzer → clip) sans partir ;
+	# enfoncé = portes ouvertes. Refus (en marche, hors station) au HUD.
+	_b_doors = _mk_button("PORTES",
+		"Ouvrir / fermer les portes à l'arrêt (touche D) — enfoncé = ouvertes", true)
+	_b_doors.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
+	_b_doors.custom_minimum_size = Vector2(170, 78)
+	_b_doors.position = Vector2(-125 - 16 - 170, -300)
+	_b_doors.toggle_mode = true
+	_b_doors.pressed.connect(func() -> void:
+		if _main != null:
+			_main.toggle_doors()
+			_b_doors.set_pressed_no_signal(bool(_main.physics.doors_open)))
+	root.add_child(_b_doors)
 
 	# --- NOUVEAU VOYAGE (centre, caché ; visible après une catastrophe) ---
 	_b_restart = _mk_button("NOUVEAU\nVOYAGE",

@@ -232,7 +232,12 @@ def test_boucle_de_croisiere_jamais_nulle_en_deceleration(fenetre):
         snd.update_ambient(v, 1.0 / 60.0)
         for pl in (snd._amb_player, snd._amb2_player):
             if pl.isPlaying():
-                assert pl.volume() > 0.0, "une boucle joue à volume nul : Qt coupe tout"
+                # niveau EFFECTIF côté Qt : depuis le volume général
+                # (05/10/2026), volume() rend le niveau demandé, qui peut
+                # valoir 0 — c'est le plancher envoyé à Qt qui compte
+                eff = (QSoundEffect.volume(pl) if QSoundEffect is not None
+                       and isinstance(pl, QSoundEffect) else pl.volume())
+                assert eff > 0.0, "une boucle joue à volume nul : Qt coupe tout"
 
 
 def test_niveaux_de_la_salle_des_machines():

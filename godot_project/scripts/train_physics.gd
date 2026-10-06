@@ -192,13 +192,13 @@ static func aero_drag_side_n(s_pos: float, v_: float) -> float:
 
 static func aero_drag_n(s_pos: float, v_: float) -> float:
 	return aero_drag_side_n(s_pos, v_) \
-		+ aero_drag_side_n(PNConstants.LENGTH - s_pos, v_)
+		+ aero_drag_side_n(PNConstants.miroir(s_pos), v_)
 
 
 static func rope_weight_force_n(s_pos: float) -> float:
 	return PNConstants.CABLE_KG_M * PNConstants.G \
 		* (SlopeProfile.altitude_at(s_pos)
-			- SlopeProfile.altitude_at(PNConstants.LENGTH - s_pos))
+			- SlopeProfile.altitude_at(PNConstants.miroir(s_pos)))
 
 
 static func rope_rollers_n() -> float:
@@ -272,13 +272,13 @@ func ghost_s_render() -> float:
 		return ghost_locked_s
 	# miroir de la POULIE (pas de la rame pilotée, qui oscille), plus son
 	# propre écart élastique
-	return PNConstants.LENGTH - s_poulie_render + el_x2
+	return PNConstants.miroir(s_poulie_render) + el_x2
 
 
 func ghost_s_phys() -> float:
 	if ghost_locked_s >= 0.0:
 		return ghost_locked_s
-	return PNConstants.LENGTH - s
+	return PNConstants.miroir(s)
 
 
 func pax() -> int:
@@ -316,10 +316,21 @@ func step(dt: float) -> void:
 		pax_car1 = int(roundf(_pax1_f))
 		pax_car2 = int(roundf(_pax2_f))
 		ghost_pax = int(roundf(_ghost_f))
+		# Arrivée : tout le monde descend d'abord (cibles à 0), PUIS la
+		# nouvelle charge monte (retour du 06/10/2026 : « aller jusqu'à
+		# l'ouverture des portes et le débarquement des passagers »).
+		# (pas avant le demi-tour : roll_pax tire la charge du trajet RETOUR)
+		if _embarquement_apres_descente and pax_car1 == 0 and pax_car2 == 0 \
+				and ghost_pax == 0 and turnaround_delay_remaining <= 0.0:
+			_embarquement_apres_descente = false
+			roll_pax()
 	else:
 		_pax1_f = float(pax_car1)
 		_pax2_f = float(pax_car2)
 		_ghost_f = float(ghost_pax)
+		# portes refermées avant la fin de la descente : ceux qui
+		# restent font le trajet
+		_embarquement_apres_descente = false
 
 	# Séquence de départ en TROIS phases successives (retour d'essai iPad
 	# 2026-07-12 : annonce, portes et buzzer se superposaient) :
@@ -334,8 +345,13 @@ func step(dt: float) -> void:
 	elif door_phase_remaining > 0.0:
 		door_phase_remaining = maxf(0.0, door_phase_remaining - dt)
 		if door_phase_remaining <= 0.0:
-			departure_buzzer_remaining = \
-				8.0 if s < PNConstants.LENGTH * 0.5 else 6.0
+			if _fermeture_seule:
+				# fermeture commandée au bouton PORTES : la rame reste à
+				# quai, portes fermées, jusqu'au PRÊT/DÉPART
+				_fermeture_seule = false
+			else:
+				departure_buzzer_remaining = \
+					8.0 if s < PNConstants.LENGTH * 0.5 else 6.0
 	elif departure_buzzer_remaining > 0.0:
 		departure_buzzer_remaining = maxf(0.0, departure_buzzer_remaining - dt)
 		if departure_buzzer_remaining <= 0.0:
@@ -373,7 +389,7 @@ func step(dt: float) -> void:
 	var theta: float = atan(g_slope)
 	var sint: float = sin(theta)
 	var cost: float = cos(theta)
-	var theta_g: float = atan(SlopeProfile.gradient_phys_at(PNConstants.LENGTH - s))
+	var theta_g: float = atan(SlopeProfile.gradient_phys_at(PNConstants.miroir(s)))
 	var sint_g: float = sin(theta_g)
 	var cost_g: float = cos(theta_g)
 
@@ -393,7 +409,7 @@ func step(dt: float) -> void:
 			* (PNConstants.LENGTH - s) / CABLE_EA_N)
 		var sag_t_ghost: float = maxf(0.0,
 			(m_down - _sag_ref_m_ghost) * PNConstants.G * sint_g
-			* s / CABLE_EA_N)
+			* (PNConstants.LENGTH - PNConstants.miroir(s)) / CABLE_EA_N)
 		# Suit le flux d'embarquement (≈ 2 cm/s max — « doucement »)
 		_sag_main = move_toward(_sag_main, sag_t_main, 0.03 * dt)
 		_sag_ghost = move_toward(_sag_ghost, sag_t_ghost, 0.03 * dt)
@@ -639,11 +655,11 @@ func step(dt: float) -> void:
 	var clamp_lo: float = PNConstants.START_S
 	var clamp_hi: float = PNConstants.STOP_S
 	# En Défi, la rame qui ARRIVE TROP VITE doit rouler jusqu'au VRAI butoir
-	# (BUMPER_CLEAR au-delà du repère d'arrêt) avant de percuter — sinon le
-	# crash se déclenche 10 m avant le mur et la visu ne montre rien.
+	# (nez ou arrière contre sa tête) avant de percuter — sinon le crash se
+	# déclenche avant le mur et la visu ne montre rien.
 	if challenge_mode and not finished:
-		clamp_hi = PNConstants.STOP_S + PNConstants.BUMPER_CLEAR
-		clamp_lo = PNConstants.START_S - PNConstants.BUMPER_CLEAR
+		clamp_hi = PNConstants.STOP_S + PNConstants.JEU_BUTOIR_HAUT
+		clamp_lo = PNConstants.START_S - PNConstants.JEU_BUTOIR_BAS
 	_check_crash(clamp_lo, clamp_hi)
 	if crashed:
 		v = 0.0
@@ -741,7 +757,7 @@ func step(dt: float) -> void:
 			overspeed_level = 3
 			cable_rupture = true
 			service_brake_fail = 0.15
-			ghost_locked_s = PNConstants.LENGTH - s   # la rame 2 s'immobilise
+			ghost_locked_s = PNConstants.miroir(s)   # la rame 2 s'immobilise
 			speed_cmd = 0.0
 			throttle = 0.0
 			print("[Chaos] SURVITESSE +20 % — moteur détruit, câble rompu")
@@ -798,7 +814,7 @@ func step(dt: float) -> void:
 	var dyn2: float = -km2.x * el_x2 - 2.0 * REBOUND_ZETA * sqrt(km2.x * km2.y) * el_v2
 	tension_dan = maxf(
 		_side_tension_n(m_up, s, 0.0, v) + dyn1,
-		_side_tension_n(m_down, PNConstants.LENGTH - s, 0.0, -v) + dyn2,
+		_side_tension_n(m_down, PNConstants.miroir(s), 0.0, -v) + dyn2,
 	) / 10.0
 	tension_dan = maxf(tension_dan, 0.0)
 
@@ -941,7 +957,7 @@ func _regulator(
 	# l'emportait sur l'écart de masse (rame chargée en bas à 22 % vs
 	# contrepoids vide à 29 %) : le feed-forward coupait la traction à
 	# tort et la rame dérivait vers l'équilibre au lieu de descendre.
-	var theta_gr: float = atan(SlopeProfile.gradient_phys_at(PNConstants.LENGTH - s))
+	var theta_gr: float = atan(SlopeProfile.gradient_phys_at(PNConstants.miroir(s)))
 	var f_grav_s: float = -(m_up * sin(theta) - _m_down * sin(theta_gr)) * PNConstants.G
 	f_grav_s += rope_weight_force_n(s)   # poids propre du câble (audit 2026-09-26)
 	var f_grav_travel: float = f_grav_s * float(direction)
@@ -1177,12 +1193,13 @@ func _arrival_grab() -> void:
 func _terminus_turnaround() -> void:
 	doors_open = true
 	announce_phase_remaining = 0.0
+	_fermeture_seule = false
 	departure_buzzer_remaining = 0.0
 	door_phase_remaining = 0.0
 	direction = -direction
-	# Rotation passagers : tout le monde descend, une nouvelle charge
-	# embarque pour le trajet retour (direction déjà inversée).
-	roll_pax()
+	# Rotation passagers : tout le monde descend, puis une nouvelle charge
+	# embarque pour le trajet retour (direction déjà inversée) — cf. step.
+	debarquement()
 
 
 # Embarquement — port de la logique Python : le trafic skieur est
@@ -1215,6 +1232,18 @@ func roll_pax(instant: bool = false) -> void:
 		_pax1_f = float(pax_car1)
 		_pax2_f = float(pax_car2)
 		_ghost_f = float(ghost_pax)
+
+
+# Arrivée en gare : les passagers des deux rames descendent (cibles à 0) ;
+# la nouvelle charge (roll_pax) monte une fois les rames vides.
+var _embarquement_apres_descente: bool = false
+
+
+func debarquement() -> void:
+	pax_t_car1 = 0
+	pax_t_car2 = 0
+	ghost_pax_t = 0
+	_embarquement_apres_descente = true
 
 
 # Affaissement d'embarquement de la rame pilotée (m, signé le long de s :
@@ -1320,19 +1349,60 @@ func at_station() -> bool:
 
 
 func request_depart() -> void:
+	if (announce_phase_remaining > 0.0 or door_phase_remaining > 0.0) \
+			and _fermeture_seule:
+		# fermeture déjà lancée au bouton PORTES : elle enchaîne sur le
+		# buzzer de départ
+		_fermeture_seule = false
+		return
 	if trip_started or announce_phase_remaining > 0.0 \
 			or departure_buzzer_remaining > 0.0 \
 			or door_phase_remaining > 0.0:
 		return
-	if at_station() or doors_open:
+	if doors_open:
 		# Séquence complète : annonce → fermeture portes → buzzer.
 		announce_phase_remaining = ANNOUNCE_PHASE_S
+	elif at_station():
+		# portes déjà fermées (bouton PORTES) : buzzer de quai seul
+		departure_buzzer_remaining = 8.0 if s < PNConstants.LENGTH * 0.5 else 6.0
 	else:
 		# Reprise EN TUNNEL (après inversion de sens / arrêt anormal) :
 		# portes déjà fermées, pas de buzzer de quai — courte tempo
 		# silencieuse puis traction, comme le PC (« Resuming mid-tunnel —
 		# no buzzer », 1,5 s).
 		departure_buzzer_remaining = 1.5
+
+
+# Portes à la demande (bouton PORTES, touche D — port de la touche D du
+# PC, retour du 06/10/2026) : mêmes verrous — rame immobile (|v| < 0,2
+# m/s), ouverture à quai seulement ; en Défi, aucun verrou (on ouvre en
+# marche, en plein tunnel). Ouverture : clip et vantaux tout de suite (cf.
+# audio.gd, door_leaves). Fermeture : la séquence réelle annonce → buzzer
+# → clip, SANS le buzzer de départ ; PRÊT/DÉPART enchaîne ensuite sur le
+# buzzer seul. Une ouverture à l'arrivée fait descendre les passagers.
+# Renvoie le message à afficher ("" = fait).
+var _fermeture_seule: bool = false
+
+
+func toggle_doors() -> String:
+	var chaos: bool = challenge_mode
+	if frozen or crashed:
+		return "Rame immobilisée"
+	if absf(v) >= 0.2 and not chaos:
+		return "Portes verrouillées : rame en marche"
+	if announce_phase_remaining > 0.0 or door_phase_remaining > 0.0 \
+			or departure_buzzer_remaining > 0.0:
+		return "Séquence de portes en cours"
+	if doors_open:
+		_fermeture_seule = true
+		announce_phase_remaining = ANNOUNCE_PHASE_S
+		return ""
+	if not at_station() and not chaos:
+		return "Ouverture impossible hors station"
+	doors_open = true
+	if finished:
+		debarquement()
+	return ""
 
 
 # Inversion du sens de marche — port de reverse_trip() du PC (touche I) :
@@ -1359,6 +1429,7 @@ func reverse_trip() -> bool:
 	trip_time = 0.0
 	turnaround_delay_remaining = 0.0
 	announce_phase_remaining = 0.0
+	_fermeture_seule = false
 	departure_buzzer_remaining = 0.0
 	door_phase_remaining = 0.0
 	# Portes : ouvertes UNIQUEMENT si on inverse à quai (embarquement,
@@ -1434,6 +1505,7 @@ func restart_after_crash() -> void:
 	el_x1 = 0.0; el_v1 = 0.0; el_x2 = 0.0; el_v2 = 0.0   # rames au repos
 	turnaround_delay_remaining = 0.0
 	announce_phase_remaining = 0.0
+	_fermeture_seule = false
 	departure_buzzer_remaining = 0.0
 	door_phase_remaining = 0.0
 	_sag_ref_m_main = -1.0
@@ -1449,5 +1521,6 @@ func restart_after_crash() -> void:
 		direction = 1
 	s_prev_step = s
 	s_render = s
+	_embarquement_apres_descente = false
 	roll_pax(true)
 	print("[Physics] nouveau voyage — gare %s" % ["haute" if direction < 0 else "basse"])

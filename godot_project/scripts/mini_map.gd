@@ -126,7 +126,7 @@ func _draw() -> void:
 		draw_circle(p_cabin, 5.0, Color(1.0, 0.65, 0.10))
 		draw_circle(p_cabin, 5.0, Color.WHITE, false, 1.5)
 		# Ghost (rame opposée) au point miroir
-		var s_ghost: float = clampf(PNConstants.LENGTH - physics.s, 0.0, PNConstants.LENGTH)
+		var s_ghost: float = clampf(PNConstants.miroir(physics.s), 0.0, PNConstants.LENGTH)
 		var idx_g_f: float = s_ghost / 8.0
 		var idx_g: int = clampi(int(idx_g_f), 0, path_points_2d.size() - 2)
 		var k_g: float = idx_g_f - float(idx_g)
