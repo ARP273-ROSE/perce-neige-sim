@@ -87,6 +87,7 @@ hiddenimports = [
     "bugreport",
     "PyQt6.QtMultimedia",
     "godot_bridge",
+    "profil_coupe",      # coupe du terrain réel de la vue profil (tools_profil_coupe.py)
 ]
 
 block_cipher = None
