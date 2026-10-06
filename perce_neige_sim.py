@@ -37,6 +37,8 @@ from datetime import datetime, time as dtime
 from pathlib import Path
 from typing import Any
 
+import profil_coupe
+
 from PyQt6.QtCore import (QEvent, QPointF, QRectF, Qt, QTimer, QUrl,
                           pyqtSignal)
 from PyQt6.QtGui import (
@@ -46,6 +48,7 @@ from PyQt6.QtGui import (
     QDesktopServices,
     QFont,
     QFontMetrics,
+    QFontMetricsF,
     QIcon,
     QKeyEvent,
     QLinearGradient,
@@ -540,6 +543,12 @@ CREEP_V = 0.75                  # creep speed on platform approach (m/s)
 GALET_238_S = 3477.53
 CREEP_DIST = STOP_S - (GALET_238_S - TRAIN_HALF)   # 35.03 m, centre-position
 CREEP_START_S = STOP_S - CREEP_DIST     # centre position at creep entry
+# Platforms (same as PNConstants.QUAI_*) : the lower one ends 4 m above the
+# nose of the stopped train, the upper one starts 3 m below its rear.
+QUAI_BAS_DEBUT_S = 3.0
+QUAI_BAS_FIN_S = START_S + TRAIN_HALF + 4.0
+QUAI_HAUT_DEBUT_S = STOP_S - TRAIN_HALF - 3.0
+QUAI_HAUT_FIN_S = LENGTH - 1.0
 # Arrival announcement (file 11, 54.24 s) starts this far from the upper
 # stop so that it ends ~3 s before it (audit_physique/annonce_arrivee.sage).
 ANNONCE_ARRIVEE_D = 51.0
@@ -1049,6 +1058,25 @@ def plan_at(s: float) -> tuple[float, float]:
 ROPE_ROLLERS_N = _rope_rollers_n()
 
 H_MAX = _GEOM[-1][1]           # side-view horizontal extent in metres
+
+
+def s_at_x(x: float) -> float:
+    """Inverse de geom_at : distance-pente s dont la projection horizontale
+    (vue de côté) vaut x (bornée à la ligne)."""
+    if x <= 0.0:
+        return 0.0
+    if x >= H_MAX:
+        return LENGTH
+    lo, hi = 0, len(_GEOM) - 1
+    while hi - lo > 1:
+        mid = (lo + hi) // 2
+        if _GEOM[mid][1] <= x:
+            lo = mid
+        else:
+            hi = mid
+    s0, x0 = _GEOM[lo][0], _GEOM[lo][1]
+    s1, x1 = _GEOM[hi][0], _GEOM[hi][1]
+    return s0 + (s1 - s0) * (x - x0) / max(x1 - x0, 1e-9)
 PLAN_BOUNDS = (
     min(r[3] for r in _GEOM),
     max(r[3] for r in _GEOM),
@@ -3932,19 +3960,7 @@ def trigger_fault(st: GameState, kind: str) -> None:
 
 COLOR_BG_TOP = QColor(12, 20, 34)
 COLOR_BG_BOT = QColor(34, 48, 72)
-COLOR_MOUNT_1 = QColor(58, 50, 45)
-COLOR_MOUNT_2 = QColor(86, 76, 68)
-COLOR_MOUNT_FAR = QColor(108, 118, 140)   # atmospheric haze (distant ridges)
-COLOR_MOUNT_MID = QColor(74, 72, 78)      # mid-distance ridge
-COLOR_GLACIER = QColor(232, 240, 252)
-COLOR_GLACIER_SHADE = QColor(186, 202, 226)
-COLOR_PINE = QColor(32, 58, 42)
-COLOR_PINE_HILIGHT = QColor(56, 92, 64)
 COLOR_PYLON = QColor(120, 110, 104)
-COLOR_CLOUD = QColor(235, 238, 245, 200)
-COLOR_CLOUD_SHADE = QColor(190, 200, 215, 170)
-COLOR_TUNNEL = QColor(24, 24, 30)
-COLOR_TUNNEL_WALL = QColor(72, 72, 86)
 COLOR_CABIN = QColor(255, 210, 60)
 COLOR_CABIN_EDGE = QColor(120, 80, 0)
 COLOR_GHOST = QColor(180, 120, 60)
@@ -6927,6 +6943,7 @@ class GameWidget(QWidget):
         # Side-view zoom factor. 1.0 = default 850 m window, 0.35 ≈ ~300 m
         # tight, 4.2 ≈ full 3491 m trip. Driver adjusts with +/- or wheel.
         self._profile_zoom = 1.0
+        self._coupe: dict | None = None    # coupe du terrain réel (vue profil)
         # Dead-man vigilance : real funiculars require a release-then-press
         # cycle on the vigilance pedal — you can't wedge a stone on it. We
         # track the previous "any_action" state so only a rising edge
@@ -9536,234 +9553,314 @@ class GameWidget(QWidget):
         view_x = rect.x() + 10
         view_w = rect.width() - 20
 
-        # Determine camera in horizontal metres. Narrower = more zoom.
-        # _profile_zoom: 1.0 = 850 m window (default), 0.35 ≈ tight close-up,
-        # ≥ 4.2 shows the whole 3491 m trip in one frame.
+        # === Vue en COUPE (refonte du 06/10/2026, demande de Kevin) ========
+        # Le terrain est le relief RÉEL au-dessus de la ligne (profil_coupe.py,
+        # tiré du MNT par tools_profil_coupe.py), prolongé vers le lac en aval
+        # et jusqu'au sommet de la Grande Motte en amont ; derrière, les crêtes
+        # réelles à l'est (la vue regarde vers l'est, l'amont à droite).
+        # Échelle ISOTROPE : la pente apparente est la vraie.
         cam_width_m = 850.0 * self._profile_zoom
         cabin_x_m, cabin_y_m = geom_at(tr.s)
-        cam_x_m = max(0.0, min(max(H_MAX - cam_width_m, 0),
-                               cabin_x_m - cam_width_m * 0.48))
-
-        # Y span must scale LINEARLY with cam_width_m so the world→screen
-        # aspect ratio stays identical across zooms — otherwise the slope
-        # would appear steeper or gentler as the driver zooms in/out, which
-        # is both wrong and disorienting. Reference ratio 850 : 350 m matches
-        # the view_w : view_h aspect and gives a realistic visual slope.
-        y_span = cam_width_m * (350.0 / 850.0)
-        y_mid = max(ALT_LOW + y_span / 2,
-                    min(ALT_HIGH - y_span / 2 + 40, cabin_y_m + 40))
+        coupe = self._coupe_terrain()
+        x_min_m = coupe["surface"][0][0] + 60.0
+        x_max_m = coupe["surface"][-1][0] - 60.0
+        cam_x_m = max(x_min_m, min(x_max_m - cam_width_m,
+                                   cabin_x_m - cam_width_m * 0.48))
+        y_span = cam_width_m * view_h / max(view_w, 1.0)
+        y_mid = cabin_y_m + y_span * 0.10
+        y_mid = max(ALT_LOW - 160.0 + y_span / 2, min(3760.0 - y_span / 2, y_mid))
         y_top_m = y_mid + y_span / 2
         y_bot_m = y_mid - y_span / 2
+        px_m = view_w / cam_width_m
 
         def world_to_screen(xm: float, ym: float) -> QPointF:
-            px = view_x + (xm - cam_x_m) / cam_width_m * view_w
-            py = view_y + (y_top_m - ym) / (y_top_m - y_bot_m) * view_h
-            return QPointF(px, py)
+            return QPointF(view_x + (xm - cam_x_m) * px_m,
+                           view_y + (y_top_m - ym) * px_m)
 
-        # === Distant hazy ridges (atmospheric perspective) ===
-        # Two silhouette layers behind the main massif give the scene
-        # depth. Each ridge is a shallow sine-noise profile parallax-offset
-        # so far ridges scroll slowly relative to the train's position.
-        for layer_idx, (color, top_off, parallax, freq) in enumerate((
-            (COLOR_MOUNT_FAR, 560.0, 0.35, 0.0025),
-            (COLOR_MOUNT_MID, 380.0, 0.65, 0.0041),
-        )):
-            ridge = QPolygonF()
-            ridge.append(QPointF(view_x, view_y + view_h))
-            for i in range(0, 61):
-                fx = view_x + (view_w * i / 60.0)
-                # parallax: far ridges move slower as cam pans
-                world_x = cam_x_m * parallax + (i / 60.0) * cam_width_m
-                y_noise = (
-                    top_off
-                    + 90.0 * math.sin(world_x * freq + layer_idx * 1.3)
-                    + 45.0 * math.sin(world_x * freq * 2.1 + layer_idx * 2.7)
-                    + 22.0 * math.sin(world_x * freq * 4.3)
-                )
-                # Base of ridge sits near tunnel altitude
-                base_ym = ALT_LOW + 400 + y_noise
-                py = view_y + (y_top_m - base_ym) / (y_top_m - y_bot_m) * view_h
-                ridge.append(QPointF(fx, py))
-            ridge.append(QPointF(view_x + view_w, view_y + view_h))
-            p.setBrush(QBrush(color))
+        # grossissement des rames, du tunnel et des gares quand le zoom les
+        # rendrait illisibles (proportions gardées) : rame ≥ 120 px
+        k_ech = max(1.0, 120.0 / (TRAIN_LEN * px_m))
+        x_vis0 = cam_x_m - 80.0
+        x_vis1 = cam_x_m + cam_width_m + 80.0
+        bas_vue = view_y + view_h + 4.0
+
+        # --- ciel
+        sky = QLinearGradient(0, view_y, 0, view_y + view_h)
+        sky.setColorAt(0.0, QColor(22, 52, 110))
+        sky.setColorAt(0.55, QColor(78, 128, 190))
+        sky.setColorAt(1.0, QColor(168, 198, 228))
+        p.fillRect(QRectF(view_x, view_y, view_w, view_h), QBrush(sky))
+        c_halo = QPointF(view_x + view_w * 0.84, view_y + view_h * 0.10)
+        r_halo = view_h * 0.55
+        halo = QRadialGradient(c_halo, r_halo)
+        halo.setColorAt(0.0, QColor(255, 248, 225, 120))
+        halo.setColorAt(1.0, QColor(255, 248, 225, 0))
+        p.fillRect(QRectF(c_halo.x() - r_halo, c_halo.y() - r_halo, 2 * r_halo, 2 * r_halo)
+                   .intersected(QRectF(view_x, view_y, view_w, view_h)), QBrush(halo))
+
+        def ligne_visible(pts: list) -> list:
+            out = [pt for pt in pts if x_vis0 - 400.0 <= pt[0] <= x_vis1 + 400.0]
+            if len(out) < 2:
+                return pts[:2]
+            pas_d = max(1, int(len(out) / (view_w / 3.0)))    # ≤ 1 point / 3 px
+            return out[::pas_d] if pas_d > 1 else out
+
+        # --- crêtes réelles à l'est, en deux plans (voile atmosphérique) ;
+        #     elles blanchissent avec l'altitude (sommets enneigés)
+        for cle, bas_c, haut_c in (("loin", QColor(140, 164, 204, 120), QColor(206, 220, 242, 135)),
+                                   ("mi", QColor(96, 116, 154, 215), QColor(200, 214, 236, 215))):
+            crete = ligne_visible(coupe[cle])
+            poly = QPolygonF()
+            poly.append(QPointF(world_to_screen(crete[0][0], 0).x(), bas_vue))
+            haut_pts = [world_to_screen(x, z) for x, z in crete]
+            for q in haut_pts:
+                poly.append(q)
+            poly.append(QPointF(haut_pts[-1].x(), bas_vue))
+            dg = QLinearGradient(0, world_to_screen(0, 3500.0).y(), 0, world_to_screen(0, 2700.0).y())
+            dg.setColorAt(0.0, haut_c)
+            dg.setColorAt(1.0, bas_c)
             p.setPen(Qt.PenStyle.NoPen)
-            p.drawPolygon(ridge)
+            p.setBrush(QBrush(dg))
+            p.drawPolygon(poly)
 
-        # === Drifting clouds high in the sky ===
-        # Large soft ellipses at ~3100–3300 m, also parallax-offset so
-        # they appear to float independently of the foreground.
-        for cx_off, cy_off, rad_x, rad_y, cshade in (
-            (  0.0, 3280.0, 160.0, 22.0, False),
-            (620.0, 3210.0, 210.0, 30.0, True),
-            (1320.0, 3305.0, 140.0, 18.0, False),
-            (2100.0, 3240.0, 240.0, 26.0, True),
-            (2900.0, 3280.0, 180.0, 22.0, False),
-        ):
-            cx = cx_off - cam_x_m * 0.45
-            pt = world_to_screen(cx, cy_off)
-            if -260 < pt.x() - view_x < view_w + 260:
-                p.setBrush(QBrush(COLOR_CLOUD_SHADE if cshade else COLOR_CLOUD))
-                p.setPen(Qt.PenStyle.NoPen)
-                # horizontal width in pixels depends on zoom
-                rx_px = rad_x * (view_w / cam_width_m) * 0.8
-                ry_px = rad_y * (view_h / (y_top_m - y_bot_m)) * 0.9
-                p.drawEllipse(pt, rx_px, ry_px)
-
-        # Draw mountain outline as filled polygon from the tunnel line up
-        # to the top of the view, thickened upward for the mountain body.
-        n_points = 180
-        mountain: list[QPointF] = []
-        tunnel_line: list[QPointF] = []
-        for i in range(n_points + 1):
-            s_ = i / n_points * LENGTH
-            xm, ym = geom_at(s_)
-            tunnel_line.append(world_to_screen(xm, ym))
-            # Mountain top : add a rugged cap
-            top_y = ym + 160 + 30 * math.sin(s_ * 0.008) + 20 * math.sin(s_ * 0.021)
-            mountain.append(world_to_screen(xm, top_y))
-
-        # Sky-to-rock gradient
-        poly_mountain = QPolygonF()
-        for pt in mountain:
-            poly_mountain.append(pt)
-        for pt in reversed(tunnel_line):
-            poly_mountain.append(pt)
-        grad_rock = QLinearGradient(0, view_y, 0, view_y + view_h)
-        grad_rock.setColorAt(0.0, COLOR_MOUNT_2)
-        grad_rock.setColorAt(1.0, COLOR_MOUNT_1)
-        p.setBrush(QBrush(grad_rock))
-        p.setPen(_cached_pen(QColor(20, 20, 20), 1))
-        p.drawPolygon(poly_mountain)
-
-        # Snow line : everything above alt 2700 gets a white mantle
-        snow_poly = QPolygonF()
-        snow_top: list[QPointF] = []
-        for i, pt in enumerate(mountain):
-            snow_top.append(pt)
-        snow_bot: list[QPointF] = []
-        for i in range(n_points + 1):
-            s_ = i / n_points * LENGTH
-            xm, ym = geom_at(s_)
-            ym_snow = max(ym, 2700.0)
-            snow_bot.append(world_to_screen(xm, ym_snow))
-        for pt in snow_top:
-            snow_poly.append(pt)
-        for pt in reversed(snow_bot):
-            snow_poly.append(pt)
-        grad_snow = QLinearGradient(0, view_y, 0, view_y + view_h * 0.6)
-        grad_snow.setColorAt(0.0, COLOR_GLACIER)
-        grad_snow.setColorAt(1.0, COLOR_GLACIER_SHADE)
-        p.setBrush(QBrush(grad_snow))
+        # --- nuages légers, haut dans le ciel (dérive lente)
+        derive = (time.monotonic() * 2.0) % 9000.0
         p.setPen(Qt.PenStyle.NoPen)
-        p.drawPolygon(snow_poly)
+        for cx_off, cz, rx, rz in ((300.0, 3870.0, 230.0, 26.0), (1600.0, 3790.0, 300.0, 30.0),
+                                   (2900.0, 3900.0, 260.0, 22.0), (4300.0, 3820.0, 340.0, 34.0),
+                                   (5800.0, 3880.0, 280.0, 25.0)):
+            cxm = (cx_off + derive) % 9000.0 - 1500.0
+            if x_vis0 - rx < cxm < x_vis1 + rx:
+                c = world_to_screen(cxm, cz)
+                p.setBrush(QBrush(QColor(246, 248, 252, 150)))
+                p.drawEllipse(c, rx * px_m, rz * px_m)
+                p.setBrush(QBrush(QColor(210, 220, 236, 110)))
+                p.drawEllipse(QPointF(c.x() + rx * px_m * 0.3, c.y() + rz * px_m * 0.4),
+                              rx * px_m * 0.6, rz * px_m * 0.6)
 
-        # === Pine tree line at alt 2200–2500 m ===
-        # Draw small conifer silhouettes scattered along the slope.
-        # Deterministic placement (hashed by segment index) so trees don't
-        # flicker frame-to-frame.
-        tree_step_m = 60.0
-        s_start = max(0.0, cam_x_m - 50.0)
-        s_end = min(H_MAX, cam_x_m + cam_width_m + 50.0)
-        # Walk in slope-s space so trees follow tunnel curvature.
-        s_m = 0.0
-        tree_idx = 0
-        while s_m < LENGTH:
-            xm, ym = geom_at(s_m)
-            if s_start <= xm <= s_end and ym < 2550.0:
-                # Pseudo-random per-segment offset + size
-                h_off = ((tree_idx * 131) % 17) * 2.0
-                v_off = ((tree_idx * 53) % 11) * 1.4
-                size_px = 6.0 + ((tree_idx * 37) % 7)
-                base_pt = world_to_screen(xm + h_off, ym + 30 + v_off)
-                # Draw triangle (conifer)
-                tri = QPolygonF()
-                tri.append(QPointF(base_pt.x(), base_pt.y() - size_px))
-                tri.append(QPointF(base_pt.x() - size_px * 0.55, base_pt.y()))
-                tri.append(QPointF(base_pt.x() + size_px * 0.55, base_pt.y()))
-                # Alternate shade for variation
-                p.setBrush(QBrush(COLOR_PINE_HILIGHT if tree_idx & 1 else COLOR_PINE))
-                p.setPen(Qt.PenStyle.NoPen)
-                p.drawPolygon(tri)
-            s_m += tree_step_m
-            tree_idx += 1
-
-        # === Rock outcrops on bare mountain (above tree line, below snow) ===
-        # Small darker patches to break up the flat rock color.
-        p.setBrush(QBrush(QColor(46, 40, 38)))
+        # --- coupe du massif : roche, strates, neige, glacier
+        # le terrain couvre toujours le tube (le MNT lisse les crêtes et le
+        # tube grossi doit rester sous la surface), et entoure la gare amont
+        couvert = 12.0 + 4.6 * k_ech
+        surf = []
+        for x, z in coupe["surface"]:
+            if 0.0 <= x <= H_MAX:
+                z = max(z, coupe["voie"](x) + couvert)
+            elif H_MAX < x < H_MAX + 40.0:
+                z = max(z, ALT_HIGH + couvert * (1.0 - (x - H_MAX) / 40.0))
+            surf.append((x, z))
+        surf = ligne_visible(surf)
+        pts_surf = [world_to_screen(x, z) for x, z in surf]
+        massif = QPolygonF()
+        massif.append(QPointF(pts_surf[0].x(), bas_vue))
+        for q in pts_surf:
+            massif.append(q)
+        massif.append(QPointF(pts_surf[-1].x(), bas_vue))
+        roche = QLinearGradient(0, view_y, 0, view_y + view_h)
+        roche.setColorAt(0.0, QColor(104, 94, 86))
+        roche.setColorAt(1.0, QColor(58, 52, 50))
         p.setPen(Qt.PenStyle.NoPen)
-        for seed in range(8):
-            xw = cam_x_m + (seed * 137.0 % cam_width_m)
-            xm_seed, ym_seed = xw, 0.0
-            # Get rock-surface altitude at that x (approx: linearly between track ends)
-            frac = xw / max(1.0, H_MAX)
-            ym_seed = ALT_LOW + (ALT_HIGH - ALT_LOW) * frac + 90
-            if ym_seed < 2650.0:
-                pt = world_to_screen(xw, ym_seed)
-                p.drawEllipse(pt, 14.0, 4.0)
+        p.setBrush(QBrush(roche))
+        p.drawPolygon(massif)
+        # strates : lignes parallèles à la surface, de plus en plus pâles
+        for prof, alpha in ((38.0, 70), (90.0, 55), (160.0, 45), (250.0, 35), (360.0, 28)):
+            p.setPen(_cached_pen(QColor(40, 34, 30, alpha), max(1.0, 1.6 * px_m)))
+            y0 = view_y + y_top_m * px_m
+            p.drawPolyline(QPolygonF([
+                QPointF(view_x + (x - cam_x_m) * px_m,
+                        y0 - (z - prof + 6.0 * math.sin(x * 0.011 + prof) + 3.0 * math.sin(x * 0.037)) * px_m)
+                for x, z in surf]))
+        # manteau neigeux (≥ 3 px) et glacier au-delà de la gare amont
+        ep_neige = max(3.0 / px_m, 2.5)
+        bande = QPolygonF()
+        for q in pts_surf:
+            bande.append(q)
+        for x, z in reversed(surf):
+            ep = ep_neige
+            if H_MAX + 30.0 < x < coupe["x_sommet"] - 120.0:
+                ep = max(ep_neige, 9.0)           # glacier de la Grande Motte
+            bande.append(world_to_screen(x, z - ep))
+        neige = QLinearGradient(0, view_y, 0, view_y + view_h)
+        neige.setColorAt(0.0, QColor(250, 252, 255))
+        neige.setColorAt(1.0, QColor(214, 226, 242))
+        p.setBrush(QBrush(neige))
+        p.drawPolygon(bande)
+        # glace du glacier sous la neige, de la gare au pied du sommet
+        glace = QPolygonF()
+        g_pts = [(x, z) for x, z in surf if H_MAX + 30.0 < x < coupe["x_sommet"] - 120.0]
+        if len(g_pts) >= 2:
+            for x, z in g_pts:
+                glace.append(world_to_screen(x, z - ep_neige))
+            for x, z in reversed(g_pts):
+                glace.append(world_to_screen(x, z - 9.0))
+            p.setBrush(QBrush(QColor(168, 214, 232)))
+            p.drawPolygon(glace)
+        p.setPen(_cached_pen(QColor(255, 255, 255), max(1.0, 1.2 * px_m)))
+        p.drawPolyline(QPolygonF(pts_surf))
+        # crevasses du glacier
+        p.setPen(_cached_pen(QColor(120, 160, 200, 150), max(1.0, 1.5 * px_m)))
+        x_c = H_MAX + 220.0
+        while x_c < coupe["x_sommet"] - 300.0:
+            if x_vis0 < x_c < x_vis1:
+                z_c = coupe["surface_a"](x_c)
+                p.drawLine(world_to_screen(x_c, z_c), world_to_screen(x_c + 6.0, z_c - 16.0))
+            x_c += 97.0 + 41.0 * math.sin(x_c)
 
-        # Draw tunnel as a darker tube along the slope
-        pen_tunnel = QPen(COLOR_TUNNEL, 10)
-        pen_tunnel.setCapStyle(Qt.PenCapStyle.RoundCap)
-        p.setPen(pen_tunnel)
-        path = QPainterPath()
-        path.moveTo(tunnel_line[0])
-        for pt in tunnel_line[1:]:
-            path.lineTo(pt)
-        p.drawPath(path)
-        pen_rail = QPen(COLOR_TUNNEL_WALL, 2)
-        p.setPen(pen_rail)
-        p.drawPath(path)
-
-        # Passing loop : a slightly wider section with twin tubes
-        p_s = max(0.0, min(LENGTH, PASSING_START))
-        p_e = max(0.0, min(LENGTH, PASSING_END))
-        loop_pts_up = []
-        loop_pts_dn = []
-        for i in range(30):
-            s_ = p_s + (p_e - p_s) * i / 29
-            xm, ym = geom_at(s_)
-            loop_pts_up.append(world_to_screen(xm, ym + 3))
-            loop_pts_dn.append(world_to_screen(xm, ym - 3))
-        p.setPen(_cached_pen(COLOR_TUNNEL_WALL, 6))
-        path_up = QPainterPath()
-        path_up.moveTo(loop_pts_up[0])
-        for pt in loop_pts_up[1:]:
-            path_up.lineTo(pt)
-        path_dn = QPainterPath()
-        path_dn.moveTo(loop_pts_dn[0])
-        for pt in loop_pts_dn[1:]:
-            path_dn.lineTo(pt)
-        p.drawPath(path_up)
-        p.drawPath(path_dn)
-
-        # Stations : small buildings at base and top
-        base_x, base_y = geom_at(0.0)
-        top_x, top_y = geom_at(LENGTH)
-        self._draw_station(p, world_to_screen(base_x, base_y), "Val Claret", "2111 m", up=False)
-        self._draw_station(p, world_to_screen(top_x, top_y), "Grande Motte", "3032 m", up=True)
-
-        # Altitude markers
-        p.setPen(_cached_pen(COLOR_TEXT_DIM, 1, Qt.PenStyle.DotLine))
+        # --- repères d'altitude (fins, derrière le tube)
+        p.setPen(_cached_pen(QColor(255, 255, 255, 40), 1, Qt.PenStyle.DotLine))
         p.setFont(_cached_font("Consolas", 9))
-        for alt in range(2100, 3101, 100):
-            y_scr = view_y + (y_top_m - alt) / (y_top_m - y_bot_m) * view_h
-            p.drawLine(int(view_x), int(y_scr), int(view_x + view_w), int(y_scr))
-            p.drawText(int(view_x + 4), int(y_scr - 2), f"{alt} m")
+        pas_alt = 100 if y_span < 900 else 250
+        for alt in range(2000, 3801, pas_alt):
+            y_scr = view_y + (y_top_m - alt) * px_m
+            if view_y < y_scr < view_y + view_h:
+                p.drawLine(int(view_x), int(y_scr), int(view_x + view_w), int(y_scr))
+                p.setPen(_cached_pen(QColor(235, 240, 250, 150)))
+                p.drawText(int(view_x + 6), int(y_scr - 3), f"{alt} m")
+                p.setPen(_cached_pen(QColor(255, 255, 255, 40), 1, Qt.PenStyle.DotLine))
 
-        # Distance markers every 500 m along the slope
-        p.setPen(_cached_pen(COLOR_TEXT_DIM, 1))
+        # --- tunnel : tube Ø 3,9 m (grossi comme les rames), voie, néons ;
+        #     cotes de la 3D : rail à 1,24 m sous l'axe, voûte 3,19 m au-dessus
+        s_vis0 = max(0.0, s_at_x(x_vis0) - 5.0)
+        s_vis1 = min(LENGTH, s_at_x(x_vis1) + 5.0)
+        n_t = max(8, min(int((s_vis1 - s_vis0) / 4.0), int(view_w / 5.0)))
+
+        def le_long(s_: float, b: float) -> QPointF:
+            """point à la hauteur b (m, grossie) au-dessus du rail en s"""
+            xm, ym = geom_at(s_)
+            if b == 0.0:
+                return world_to_screen(xm, ym)
+            x1, y1 = geom_at(min(LENGTH, s_ + 1.0))
+            x0, y0 = geom_at(max(0.0, s_ - 1.0))
+            dl = math.hypot(x1 - x0, y1 - y0) or 1.0
+            return world_to_screen(xm - (y1 - y0) / dl * b * k_ech, ym + (x1 - x0) / dl * b * k_ech)
+
+        cache_ech: dict = {}
+
+        def echantillons(s0: float, s1: float, n: int) -> list:
+            """(x écran, y écran, normale x, normale y en px par m grossi) des
+            n + 1 points de s0 à s1 — calculés une fois par image"""
+            cle = (s0, s1, n)
+            if cle not in cache_ech:
+                # un point de plus de chaque côté : normales par différences
+                # centrées sur les voisins (un seul geom_at par point)
+                pas_s = (s1 - s0) / n
+                g = [geom_at(min(LENGTH, max(0.0, s0 + pas_s * i))) for i in range(-1, n + 2)]
+                pts = []
+                for i in range(1, n + 2):
+                    (x0, y0), (xm, ym), (x1, y1) = g[i - 1], g[i], g[i + 1]
+                    dl = math.hypot(x1 - x0, y1 - y0) or 1.0
+                    f = k_ech * px_m / dl
+                    pts.append((view_x + (xm - cam_x_m) * px_m, view_y + (y_top_m - ym) * px_m,
+                                -(y1 - y0) * f, -(x1 - x0) * f))
+                cache_ech[cle] = pts
+            return cache_ech[cle]
+
+        def ligne_tube(b: float, s0: float, s1: float, n: int) -> QPolygonF:
+            return QPolygonF([QPointF(x + nx_ * b, y + ny_ * b)
+                              for x, y, nx_, ny_ in echantillons(s0, s1, n)])
+
+        def bande_tube(b0: float, b1: float, s0: float, s1: float, n: int) -> QPolygonF:
+            ech = echantillons(s0, s1, n)
+            poly = QPolygonF([QPointF(x + nx_ * b1, y + ny_ * b1) for x, y, nx_, ny_ in ech])
+            for x, y, nx_, ny_ in reversed(ech):
+                poly.append(QPointF(x + nx_ * b0, y + ny_ * b0))
+            return poly
+
+        if s_vis1 > s_vis0:
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(QBrush(QColor(176, 170, 160)))
+            p.drawPolygon(bande_tube(-1.10, 3.55, s_vis0, s_vis1, n_t))
+            # évitement : chambre élargie (deux tubes côte à côte)
+            e0, e1 = max(s_vis0, PASSING_START), min(s_vis1, PASSING_END)
+            if e1 > e0:
+                p.setBrush(QBrush(QColor(150, 145, 138)))
+                p.drawPolygon(bande_tube(-1.45, 4.0, e0, e1,
+                                         max(4, min(int((e1 - e0) / 4.0), int(view_w / 10.0)))))
+            p.setBrush(QBrush(QColor(34, 36, 44)))
+            p.drawPolygon(bande_tube(-0.75, 3.20, s_vis0, s_vis1, n_t))
+            # néons : un sur deux allumé, tous les 32 m (visibles de près)
+            if px_m * k_ech > 1.2:
+                p.setPen(Qt.PenStyle.NoPen)
+                p.setBrush(QBrush(QColor(255, 246, 210, 210)))
+                s_n = math.ceil(s_vis0 / 32.0) * 32.0
+                while s_n < s_vis1:
+                    p.drawEllipse(le_long(s_n, 2.95), max(1.2, 0.35 * px_m * k_ech),
+                                  max(1.0, 0.18 * px_m * k_ech))
+                    s_n += 32.0
+            # dalle et rail
+            p.setPen(_cached_pen(QColor(120, 118, 112), max(1.0, 0.35 * px_m * k_ech)))
+            p.drawPolyline(ligne_tube(-0.2, s_vis0, s_vis1, n_t))
+            p.setPen(_cached_pen(QColor(196, 198, 204), max(1.0, 0.12 * px_m * k_ech)))
+            p.drawPolyline(ligne_tube(0.0, s_vis0, s_vis1, n_t))
+            # sortie de secours (galet 145, à droite en montant) : la galerie
+            # monte du tube à la surface, où elle débouche au bord de la
+            # piste rouge (fait de Kevin, 06/10/2026)
+            s_ss = 2112.0 + START_S + TRAIN_HALF
+            x_ss, _z = geom_at(s_ss)
+            if x_vis0 - 60.0 < x_ss < x_vis1 + 60.0:
+                x_sortie = x_ss + 18.0
+                z_sortie = max(z for x, z in surf if abs(x - x_sortie) < 12.0) \
+                    if any(abs(x - x_sortie) < 12.0 for x, _ in surf) \
+                    else coupe["surface_a"](x_sortie)
+                g0 = le_long(s_ss, 3.6)
+                g1 = world_to_screen(x_sortie, z_sortie - 1.5)
+                p.setPen(_cached_pen(QColor(150, 145, 138), max(3.0, 2.6 * px_m * k_ech)))
+                p.drawLine(g0, g1)
+                p.setPen(_cached_pen(QColor(40, 42, 50), max(1.5, 1.6 * px_m * k_ech)))
+                p.drawLine(g0, g1)
+                # piste rouge sur la neige, et l'édicule de sortie à son bord
+                p.setPen(_cached_pen(QColor(214, 40, 40, 210), max(2.0, 1.4 * px_m)))
+                x_p = x_sortie + 8.0
+                piste = [world_to_screen(x, z + 0.4) for x, z in surf if x_p <= x <= x_p + 160.0]
+                if len(piste) >= 2:
+                    p.drawPolyline(QPolygonF(piste))
+                pied = world_to_screen(x_sortie, z_sortie)
+                l_e = max(5.0, 3.0 * px_m * k_ech)
+                p.setBrush(QBrush(QColor(196, 194, 188)))
+                p.setPen(_cached_pen(QColor(60, 60, 66), 1))
+                p.drawRect(QRectF(pied.x() - l_e / 2, pied.y() - l_e * 0.9, l_e, l_e * 0.9))
+                p.setBrush(QBrush(QColor(40, 210, 110)))
+                p.setPen(Qt.PenStyle.NoPen)
+                p.drawRect(QRectF(pied.x() - l_e * 0.3, pied.y() - l_e * 0.8, l_e * 0.6, l_e * 0.25))
+                if px_m > 0.9:
+                    p.setFont(_cached_font("Segoe UI", 8))
+                    p.setPen(_cached_pen(QColor(225, 255, 235)))
+                    p.drawText(QPointF(pied.x() - 40, pied.y() - l_e - 20), T("emergency exit", "sortie de secours"))
+                    p.setPen(_cached_pen(QColor(255, 225, 225)))
+                    p.drawText(QPointF(pied.x() - 40, pied.y() - l_e - 7),
+                               T("edge of the red run", "bord de la piste rouge"))
+
+        # --- gares
+        self._draw_gare_aval(p, world_to_screen, le_long, px_m, k_ech)
+        self._draw_gare_amont(p, world_to_screen, le_long, px_m, k_ech)
+
+        # --- câbles (vrai tracé, du culot de chaque rame à la poulie)
+        for s_r in (tr.s, st.ghost_s):
+            s_att = min(LENGTH, s_r + CAR_LEN_M * 0.5)
+            if s_att < s_vis1:
+                n_c = max(4, int((min(s_vis1, LENGTH) - max(s_att, s_vis0)) / 6.0))
+                s0c = max(s_att, s_vis0)
+                s1c = min(LENGTH, s_vis1)
+                if s1c > s0c:
+                    p.setPen(_cached_pen(QColor(70, 72, 78), max(1.0, 0.18 * px_m * k_ech)))
+                    p.drawPolyline(QPolygonF([le_long(s0c + (s1c - s0c) * i / n_c, 0.25)
+                                              for i in range(n_c + 1)]))
+
+        # --- repères de distance le long de la voie, tous les 500 m
+        p.setFont(_cached_font("Consolas", 9))
         for s_m in range(0, int(LENGTH) + 1, 500):
-            xm, ym = geom_at(float(s_m))
-            pos = world_to_screen(xm, ym - 40)
-            p.drawText(int(pos.x() - 20), int(pos.y()), f"{s_m} m")
+            if s_vis0 - 50 <= s_m <= s_vis1 + 50:
+                q = le_long(float(s_m), -2.5)
+                p.setPen(_cached_pen(QColor(235, 240, 250, 170)))
+                p.drawLine(le_long(float(s_m), -0.8), le_long(float(s_m), -1.8))
+                p.drawText(QPointF(q.x() - 18, q.y() + 12), f"{s_m} m")
 
-        # Draw the counterweight (ghost) train at st.ghost_s, orange
-        ghost_xm, ghost_ym = geom_at(st.ghost_s)
-        self._draw_cabin(p, world_to_screen, ghost_xm, ghost_ym,
-                         st.ghost_s, COLOR_GHOST, "RAME 2" if tr.number == 1 else "RAME 1")
-        # Draw main cabin
-        self._draw_cabin(p, world_to_screen, cabin_x_m, cabin_y_m,
-                         tr.s, COLOR_CABIN, tr.name.upper())
+        # --- les deux rames (l'autre d'abord, la nôtre par-dessus)
+        nom_autre = "RAME 2" if tr.number == 1 else "RAME 1"
+        self._draw_rame(p, le_long, st.ghost_s, px_m * k_ech, nom_autre,
+                        st.ghost_pax // 2, st.ghost_pax - st.ghost_pax // 2, False)
+        self._draw_rame(p, le_long, tr.s, px_m * k_ech, tr.name.upper(),
+                        tr.pax_car1, tr.pax_car2, True)
 
         # Current slope display
         p.setPen(_cached_pen(COLOR_TEXT))
@@ -12938,232 +13035,290 @@ class GameWidget(QWidget):
         p.drawText(QPointF(nx - 3, ny + 18), "N")
         p.restore()
 
-    def _draw_station(self, p: QPainter, pos: QPointF, name: str, alt: str, up: bool) -> None:
-        w = 70
-        h = 36
-        x = pos.x() - w / 2
-        y = pos.y() - h
-        p.setBrush(QBrush(QColor(140, 150, 170)))
-        p.setPen(_cached_pen(QColor(40, 40, 50), 1))
-        p.drawRect(QRectF(x, y, w, h))
-        p.setBrush(QBrush(QColor(90, 60, 40)))
-        roof = QPolygonF([QPointF(x - 4, y), QPointF(x + w + 4, y), QPointF(x + w / 2, y - 14)])
-        p.drawPolygon(roof)
-        p.setPen(_cached_pen(COLOR_TEXT))
-        p.setFont(_cached_font("Segoe UI", 9, QFont.Weight.DemiBold))
-        p.drawText(QPointF(x, y + h + 14), f"{name}  {alt}")
+    def _coupe_terrain(self) -> dict:
+        """Coupe du terrain réel (profil_coupe.py, généré par
+        tools_profil_coupe.py) calée sur la géométrie de la ligne : listes
+        (x horizontal, altitude) pour la surface et les crêtes de fond."""
+        if self._coupe is None:
+            pc = profil_coupe
+            pas = pc.PAS_PROLONGEMENT
+            n_av = len(pc.SURFACE_AVAL)
+            surf = [(-(n_av - j) * pas, z) for j, z in enumerate(pc.SURFACE_AVAL)]
+            surf += [(H_MAX * i / pc.N_LIGNE, z) for i, z in enumerate(pc.SURFACE_LIGNE)]
+            surf += [(H_MAX + (j + 1) * pas, z) for j, z in enumerate(pc.SURFACE_AMONT)]
+            # le MNT lisse le glacier : au droit de la gare amont il donne
+            # ~20 m de moins que le palier de sortie (ALT_HIGH + 6 m) ; on
+            # recale le relief sur cette altitude connue, en s'estompant
+            corr = ALT_HIGH + 6.0 - pc.SURFACE_LIGNE[-1]
+            surf = [(x, z + corr * math.exp(-abs(x - H_MAX) / 600.0)) for x, z in surf]
+            xs = [x for x, _ in surf]
+            zs = [z for _, z in surf]
+            mi = [(xs[4 * k], z) for k, z in enumerate(pc.CRETES_MOYENNES)]
+            loin = [(xs[4 * k], z) for k, z in enumerate(pc.CRETES_LOINTAINES)]
+            xg = [r[1] for r in _GEOM]
+            yg = [r[2] for r in _GEOM]
 
-    def _draw_cabin(
-        self,
-        p: QPainter,
-        world_to_screen,
-        xm: float,
-        ym: float,
-        s_pos: float,
-        color: QColor,
-        label: str,
-    ) -> None:
-        """Draw a faux-3D cylindrical funicular train (2 coupled cars).
+            def interp_x(xx: list, yy: list, x: float) -> float:
+                if x <= xx[0]:
+                    return yy[0]
+                if x >= xx[-1]:
+                    return yy[-1]
+                lo, hi = 0, len(xx) - 1
+                while hi - lo > 1:
+                    mid = (lo + hi) // 2
+                    if xx[mid] <= x:
+                        lo = mid
+                    else:
+                        hi = mid
+                f = (x - xx[lo]) / max(xx[hi] - xx[lo], 1e-9)
+                return yy[lo] + (yy[hi] - yy[lo]) * f
 
-        The Perce-Neige trains are 31.6 m long, cylindrical Ø 3.60 m, with
-        two articulated cars — yellow "space capsule" look.
-        """
-        g = gradient_at(max(0.0, min(LENGTH, s_pos)))
-        theta = math.atan(g)
-        # Visual exaggeration: real train is 31.6 m but at the profile's
-        # scale that would be ~26 px — invisible detail. Draw 1.6× larger.
-        total_len_m = 50.0
-        car_len_m = total_len_m / 2.0
+            self._coupe = {
+                "surface": surf, "mi": mi, "loin": loin,
+                "x_sommet": H_MAX + pc.SOMMET_AMONT_M,
+                "voie": lambda x: interp_x(xg, yg, x),
+                "surface_a": lambda x: interp_x(xs, zs, x),
+            }
+        return self._coupe
 
-        def slope_pt(offset_m: float) -> QPointF:
-            x = xm + offset_m * math.cos(theta)
-            y = ym + offset_m * math.sin(theta)
-            return world_to_screen(x, y)
-
-        centers = [
-            slope_pt(-car_len_m / 2 - car_len_m / 2 + car_len_m / 2),   # = -car/2
-            slope_pt(+car_len_m / 2),
-        ]
-        # Actually just draw 2 cars:
-        centers = [slope_pt(-car_len_m / 2), slope_pt(+car_len_m / 2)]
-
-        # Compute axis direction on screen from first to last point
-        p_head = slope_pt(-total_len_m / 2)
-        p_tail = slope_pt(+total_len_m / 2)
-        dx = p_tail.x() - p_head.x()
-        dy = p_tail.y() - p_head.y()
-        length_px = math.hypot(dx, dy)
-        if length_px < 2:
-            return
-        ux, uy = dx / length_px, dy / length_px
-        nx, ny = -uy, ux                   # normal (perpendicular) to axis
-
-        car_len_px = length_px / 2.0
-        thickness = max(10.0, length_px * 0.35)   # faux-3D height, scaled
-
-        # Cable visible between cars along the tunnel
-        p.setPen(_cached_pen(QColor(200, 200, 210), 1.2))
-        p.drawLine(p_head, p_tail)
-
-        # Draw each car
-        for idx, c in enumerate(centers):
-            self._draw_cylinder_car(p, c, ux, uy, nx, ny,
-                                    car_len_px * 0.92, thickness, color,
-                                    car_index=idx)
-
-        # Coupling between the two cars
-        p.setPen(_cached_pen(QColor(40, 40, 40), 2))
-        p.drawLine(
-            QPointF(centers[0].x() + ux * car_len_px * 0.48,
-                    centers[0].y() + uy * car_len_px * 0.48),
-            QPointF(centers[1].x() - ux * car_len_px * 0.48,
-                    centers[1].y() - uy * car_len_px * 0.48),
-        )
-
-        # Label above
-        mid = QPointF((p_head.x() + p_tail.x()) / 2,
-                      (p_head.y() + p_tail.y()) / 2)
-        p.setPen(_cached_pen(COLOR_TEXT))
-        p.setFont(_cached_font("Consolas", 8, QFont.Weight.Bold))
-        p.drawText(QPointF(mid.x() + nx * 22 - 28,
-                           mid.y() + ny * 22 - 4), label)
-
-    def _draw_cylinder_car(
-        self,
-        p: QPainter,
-        center: QPointF,
-        ux: float, uy: float,
-        nx: float, ny: float,
-        length_px: float,
-        thickness: float,
-        color: QColor,
-        car_index: int = 0,
-    ) -> None:
-        """Draw one clean cylindrical car matching the logo style.
-
-        Clean yellow cylindrical body, prominent dome end caps, a row of
-        blue rectangular windows, and a highlight strip — no structural
-        arches.  Doors and headlights preserved for game mechanics.
-        """
-        half = length_px / 2.0
-        t = thickness
-        # Front / back of car along axis
-        p0 = QPointF(center.x() - ux * half, center.y() - uy * half)
-        p1 = QPointF(center.x() + ux * half, center.y() + uy * half)
-
-        # Cylindrical body — uniform thickness (logo style, not ovoid)
-        body = QPolygonF([
-            QPointF(p0.x() + nx * t, p0.y() + ny * t),
-            QPointF(p1.x() + nx * t, p1.y() + ny * t),
-            QPointF(p1.x() - nx * t, p1.y() - ny * t),
-            QPointF(p0.x() - nx * t, p0.y() - ny * t),
-        ])
-        # Shading gradient perpendicular to axis (light on top, shadow below)
-        top = QPointF(center.x() + nx * t, center.y() + ny * t)
-        bot = QPointF(center.x() - nx * t, center.y() - ny * t)
-        grad = QLinearGradient(top, bot)
-        grad.setColorAt(0.0, color.lighter(140))
-        grad.setColorAt(0.40, color)
-        grad.setColorAt(1.0, color.darker(160))
+    def _draw_gare_aval(self, p: QPainter, w2s, le_long, px_m: float, k: float) -> None:
+        """Gare de Val Claret (2 111 m) : hall en béton au bout de la ligne,
+        quai en escalier, butoir, bandeau rouge « ALTITUDE EXPERIENCE »."""
+        x0, z0 = geom_at(0.0)
+        # bâtiment : du butoir (s = 0) au-delà du haut du quai, hauteurs grossies
+        coin_bas = w2s(x0 - 14.0, z0 - 2.0 * k)
+        coin_haut = w2s(x0 + 50.0, z0 + 10.5 * k)
+        r = QRectF(coin_bas.x(), coin_haut.y(), coin_haut.x() - coin_bas.x(),
+                   coin_bas.y() - coin_haut.y())
+        grad = QLinearGradient(r.topLeft(), r.bottomLeft())
+        grad.setColorAt(0.0, QColor(196, 194, 188))
+        grad.setColorAt(1.0, QColor(150, 148, 142))
         p.setBrush(QBrush(grad))
-        p.setPen(_cached_pen(QColor(120, 80, 0), 1.5))
-        p.drawPolygon(body)
+        p.setPen(_cached_pen(QColor(70, 70, 76), 1))
+        p.drawRect(r)
+        # bandeau rouge et vitrage
+        h = r.height()
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QBrush(QColor(176, 54, 40)))
+        p.drawRect(QRectF(r.x(), r.y() + h * 0.10, r.width(), h * 0.16))
+        p.setBrush(QBrush(QColor(52, 74, 104)))
+        p.drawRect(QRectF(r.x() + r.width() * 0.05, r.y() + h * 0.34, r.width() * 0.9, h * 0.22))
+        if h > 26:
+            p.setPen(_cached_pen(QColor(255, 240, 230)))
+            p.setFont(_cached_font("Segoe UI", max(6, min(10, int(h * 0.12))), QFont.Weight.Bold))
+            p.drawText(QRectF(r.x(), r.y() + h * 0.10, r.width(), h * 0.16),
+                       int(Qt.AlignmentFlag.AlignCenter), "ALTITUDE EXPERIENCE")
+        # quai (marches) le long de la rame
+        p.setPen(_cached_pen(QColor(30, 30, 34), max(1.0, 0.5 * px_m * k)))
+        p.drawLine(le_long(QUAI_BAS_DEBUT_S, -0.1), le_long(QUAI_BAS_FIN_S, -0.1))
+        self._etiquette_gare(p, QPointF(r.center().x(), r.y() - 6), "Val Claret", "2111 m")
 
-        # End caps (prominent dome ellipses — logo style)
-        cap_rx = max(3.0, t * 0.55)
-        cap_ry = t
-        for pt in (p0, p1):
-            cap = QRectF(pt.x() - cap_rx, pt.y() - cap_ry,
-                         cap_rx * 2, cap_ry * 2)
-            grad_cap = QLinearGradient(
-                QPointF(pt.x() + nx * t, pt.y() + ny * t),
-                QPointF(pt.x() - nx * t, pt.y() - ny * t))
-            grad_cap.setColorAt(0.0, color.lighter(125))
-            grad_cap.setColorAt(1.0, color.darker(170))
-            p.setBrush(QBrush(grad_cap))
-            p.setPen(_cached_pen(QColor(100, 60, 0), 1.2))
-            p.drawEllipse(cap)
+    def _draw_gare_amont(self, p: QPainter, w2s, le_long, px_m: float, k: float) -> None:
+        """Gare de la Grande Motte (3 032 m) : hall bleu nuit du quai, salle
+        des machines (deux roues jaunes Ø 4,16 m) au bout de la voie, et la
+        verrière qui ouvre sur le glacier (cf. la 3D)."""
+        xl, zl = geom_at(LENGTH)
+        th = math.atan(gradient_at(LENGTH))
+        # hall du quai (de l'entrée du quai au mur du fond)
+        x_q, z_q = geom_at(QUAI_HAUT_DEBUT_S)
+        hall = QPolygonF([w2s(x_q, z_q - 2.0 * k), w2s(x_q, z_q + 4.3 * k),
+                          w2s(xl + 9.3, zl + 4.3 * k + 9.3 * math.tan(th)),
+                          w2s(xl + 9.3, zl - 2.0 * k + 9.3 * math.tan(th))])
+        p.setBrush(QBrush(QColor(34, 42, 66)))
+        p.setPen(_cached_pen(QColor(20, 24, 36), 1))
+        p.drawPolygon(hall)
+        # verrière : du dessus du hall au-dessus de la surface, vitrée
+        v0 = w2s(xl + 1.5, zl + 4.3 * k)
+        v1 = w2s(xl + 9.3, zl + 4.3 * k + 9.3 * math.tan(th))
+        haut = 6.0 * k
+        verriere = QPolygonF([v0, QPointF(v0.x(), v0.y() - haut * px_m * 0.6),
+                              QPointF(v1.x(), v1.y() - haut * px_m), v1])
+        p.setBrush(QBrush(QColor(150, 200, 235, 200)))
+        p.setPen(_cached_pen(QColor(60, 66, 76), 1))
+        p.drawPolygon(verriere)
+        p.setPen(_cached_pen(QColor(70, 78, 90, 160), 1))
+        for f in (0.33, 0.66):
+            a_ = QPointF(v0.x() + (v1.x() - v0.x()) * f, v0.y() + (v1.y() - v0.y()) * f)
+            p.drawLine(a_, QPointF(a_.x(), a_.y() - haut * px_m * (0.6 + 0.4 * f)))
+        # salle des machines sous le bout de la voie : deux roues jaunes
+        r_roue = max(2.5, 2.08 * px_m * k)
+        for ds in (0.95, 7.55):
+            c = w2s(xl + ds, zl - 3.4 * k)
+            p.setBrush(QBrush(QColor(236, 196, 30)))
+            p.setPen(_cached_pen(QColor(170, 40, 30), max(1.0, 0.25 * px_m * k)))
+            p.drawEllipse(c, r_roue, r_roue)
+            if r_roue > 5:
+                p.setPen(_cached_pen(QColor(120, 100, 20), 1))
+                for a_ in range(6):
+                    ang = a_ * math.pi / 3 + time.monotonic() * 0.0
+                    p.drawLine(c, QPointF(c.x() + r_roue * 0.8 * math.cos(ang),
+                                          c.y() + r_roue * 0.8 * math.sin(ang)))
+        # butoirs bleus
+        p.setPen(_cached_pen(QColor(40, 90, 170), max(1.5, 0.6 * px_m * k)))
+        p.drawLine(le_long(LENGTH - 0.6, 0.4), le_long(LENGTH - 0.6, 1.6))
+        top = w2s(xl + 5.0, zl + 4.3 * k + 6.0 * k + 5.0 * math.tan(th))
+        self._etiquette_gare(p, QPointF(top.x(), top.y() - 8), "Grande Motte", "3032 m")
 
-        # Highlight reflection strip along top of body (logo style)
-        hl_offset = t * 0.55
-        hl0 = QPointF(p0.x() + nx * hl_offset + ux * 4,
-                      p0.y() + ny * hl_offset + uy * 4)
-        hl1 = QPointF(p1.x() + nx * hl_offset - ux * 4,
-                      p1.y() + ny * hl_offset - uy * 4)
-        p.setPen(_cached_pen(QColor(255, 255, 220, 180), max(1.4, t * 0.06)))
-        p.drawLine(hl0, hl1)
+    def _etiquette_gare(self, p: QPainter, pos: QPointF, nom: str, alt: str) -> None:
+        texte = f"{nom}  ·  {alt}"
+        p.setFont(_cached_font("Segoe UI", 9, QFont.Weight.DemiBold))
+        larg = QFontMetricsF(p.font()).horizontalAdvance(texte) + 14
+        r = QRectF(pos.x() - larg / 2, pos.y() - 20, larg, 18)
+        p.setBrush(QBrush(QColor(18, 26, 44, 200)))
+        p.setPen(_cached_pen(QColor(150, 175, 215, 180), 1))
+        p.drawRoundedRect(r, 6, 6)
+        p.setPen(_cached_pen(QColor(235, 242, 252)))
+        p.drawText(r, int(Qt.AlignmentFlag.AlignCenter), texte)
 
-        # Headlight on the outer end of each car
-        outer_pt = p0 if car_index == 0 else p1
-        hl_cx = outer_pt.x() + nx * (t * 0.3)
-        hl_cy = outer_pt.y() + ny * (t * 0.3)
-        if self.state.train.lights_head:
-            p.setBrush(QBrush(QColor(255, 255, 200)))
-        else:
-            p.setBrush(QBrush(QColor(80, 80, 70)))
-        p.setPen(_cached_pen(QColor(40, 40, 30), 0.6))
-        p.drawEllipse(QPointF(hl_cx, hl_cy), 1.8, 1.8)
+    def _draw_rame(self, p: QPainter, le_long, s_c: float, m_px: float, nom: str,
+                   pax_aval: int, pax_amont: int, principale: bool) -> None:
+        """Une rame vue de côté sur sa pente, aux VRAIES proportions (2
+        voitures de 15,8 m, tube Ø 3,6 m), grossie uniformément quand le
+        zoom la rendrait illisible : carrosserie argent, nez jaunes avec
+        pare-brise, grandes baies où l'on voit les passagers, 3 portes par
+        voiture (vert ouvertes, ambre en mouvement), bogies, phares."""
+        tr = self.state.train
+        a0 = le_long(s_c, 0.0)
+        a1 = le_long(s_c + 1.0, 0.0)
+        du = math.hypot(a1.x() - a0.x(), a1.y() - a0.y())
+        if du < 1e-6:
+            return
+        ux, uy = (a1.x() - a0.x()) / du, (a1.y() - a0.y()) / du
+        nx, ny = uy, -ux                      # normale « vers le haut » à l'écran
+        if ny > 0:
+            nx, ny = -nx, -ny
 
-        # Window strip — 5 clean blue windows (logo style)
-        n_windows = 5
-        win_h = t * 0.7
-        win_spacing = length_px / (n_windows + 1)
-        win_w_px = win_spacing * 0.6
-        for i in range(n_windows):
-            frac = (i + 1.0) / (n_windows + 1.0)
-            cx = p0.x() + ux * length_px * frac
-            cy = p0.y() + uy * length_px * frac
-            corners = [
-                QPointF(cx + ux * (-win_w_px / 2) + nx * (-win_h / 2),
-                        cy + uy * (-win_w_px / 2) + ny * (-win_h / 2)),
-                QPointF(cx + ux * (+win_w_px / 2) + nx * (-win_h / 2),
-                        cy + uy * (+win_w_px / 2) + ny * (-win_h / 2)),
-                QPointF(cx + ux * (+win_w_px / 2) + nx * (+win_h / 2),
-                        cy + uy * (+win_w_px / 2) + ny * (+win_h / 2)),
-                QPointF(cx + ux * (-win_w_px / 2) + nx * (+win_h / 2),
-                        cy + uy * (-win_w_px / 2) + ny * (+win_h / 2)),
-            ]
-            p.setBrush(QBrush(QColor(120, 200, 240)))
-            p.setPen(_cached_pen(QColor(20, 20, 30), 0.8))
-            p.drawPolygon(QPolygonF(corners))
+        def q(a: float, b: float) -> QPointF:
+            return QPointF(a0.x() + (ux * a + nx * b) * m_px, a0.y() + (uy * a + ny * b) * m_px)
 
-        # Doors — vertical sliding, located at 1/3 and 2/3 of car length
-        tr_d = self.state.train
-        doors_open = tr_d.doors_open
-        door_transitioning = tr_d.doors_timer > 0.0
-        if door_transitioning:
-            door_color = QColor(240, 180, 40)
-            door_edge = QColor(70, 45, 0)
-        else:
-            door_color = QColor(80, 200, 120) if doors_open else QColor(210, 140, 20)
-            door_edge = QColor(30, 60, 20) if doors_open else QColor(60, 30, 0)
-        dw = win_spacing * 0.5
-        dh = t * 1.35
-        for di in range(DOORS_PER_CAR):
-            frac = (di + 1) / (DOORS_PER_CAR + 1)
-            door_cx = p0.x() + ux * length_px * frac
-            door_cy = p0.y() + uy * length_px * frac
-            door = QPolygonF([
-                QPointF(door_cx + ux * (-dw / 2) + nx * (-dh / 2),
-                        door_cy + uy * (-dw / 2) + ny * (-dh / 2)),
-                QPointF(door_cx + ux * (+dw / 2) + nx * (-dh / 2),
-                        door_cy + uy * (+dw / 2) + ny * (-dh / 2)),
-                QPointF(door_cx + ux * (+dw / 2) + nx * (+dh / 2),
-                        door_cy + uy * (+dw / 2) + ny * (+dh / 2)),
-                QPointF(door_cx + ux * (-dw / 2) + nx * (+dh / 2),
-                        door_cy + uy * (-dw / 2) + ny * (+dh / 2)),
-            ])
-            p.setBrush(QBrush(door_color))
-            p.setPen(_cached_pen(door_edge, 1.0))
-            p.drawPolygon(door)
-            # Vertical split line for the double door
-            p.setPen(_cached_pen(door_edge, 0.8))
-            p.drawLine(
-                QPointF(door_cx + nx * (-dh / 2),
-                        door_cy + ny * (-dh / 2)),
-                QPointF(door_cx + nx * (+dh / 2),
-                        door_cy + ny * (+dh / 2)),
-            )
+        b_bas, b_haut = -0.40, 3.15     # caisse Ø 3,6 m dans le tube Ø 3,9 m
+        b_mil = (b_bas + b_haut) / 2
+        demi = CAR_LEN_M * 0.5 - 0.2
+        nez = 1.7
+        for c_i, ac in enumerate((-CAR_LEN_M * 0.5, CAR_LEN_M * 0.5)):
+            pax = pax_aval if c_i == 0 else pax_amont
+            sens_ext = -1.0 if c_i == 0 else 1.0     # bout extérieur (cabine)
+            a_ext = ac + sens_ext * demi
+            a_int = ac - sens_ext * demi
+            # caisse : partie droite + nez arrondi côté cabine
+            corps = QPolygonF()
+            a_droit = a_ext - sens_ext * nez
+            corps.append(q(a_int, b_bas + 0.15))
+            corps.append(q(a_int, b_haut - 0.15))
+            corps.append(q(a_droit, b_haut))
+            for i in range(1, 12):
+                ph = math.pi / 2 - math.pi * i / 12
+                corps.append(q(a_droit + sens_ext * nez * math.cos(ph), b_mil + 1.775 * math.sin(ph)))
+            corps.append(q(a_droit, b_bas))
+            grad = QLinearGradient(q(ac, b_haut), q(ac, b_bas))
+            grad.setColorAt(0.0, QColor(238, 241, 245))
+            grad.setColorAt(0.55, QColor(196, 202, 210))
+            grad.setColorAt(1.0, QColor(132, 138, 148))
+            p.setBrush(QBrush(grad))
+            p.setPen(_cached_pen(QColor(60, 64, 72), max(1.0, 0.08 * m_px)))
+            p.drawPolygon(corps)
+            # cabine jaune au bout extérieur, pare-brise
+            cab = QPolygonF()
+            a_cab = a_ext - sens_ext * (nez + 1.3)
+            cab.append(q(a_cab, b_bas))
+            cab.append(q(a_cab, b_haut))
+            cab.append(q(a_droit, b_haut))
+            for i in range(1, 12):
+                ph = math.pi / 2 - math.pi * i / 12
+                cab.append(q(a_droit + sens_ext * nez * math.cos(ph), b_mil + 1.775 * math.sin(ph)))
+            cab.append(q(a_droit, b_bas))
+            gj = QLinearGradient(q(ac, b_haut), q(ac, b_bas))
+            gj.setColorAt(0.0, QColor(252, 214, 70))
+            gj.setColorAt(1.0, QColor(196, 146, 18))
+            p.setBrush(QBrush(gj))
+            p.drawPolygon(cab)
+            vitre = QPolygonF()
+            for i in range(0, 9):
+                ph = math.pi * 0.42 - math.pi * 0.62 * i / 8
+                vitre.append(q(a_droit + sens_ext * (nez * 0.92) * math.cos(ph) - sens_ext * 0.05,
+                               b_mil + 0.30 + 1.40 * math.sin(ph)))
+            vitre.append(q(a_droit - sens_ext * 0.6, b_mil - 0.15))
+            vitre.append(q(a_droit - sens_ext * 0.6, b_mil + 1.45))
+            p.setBrush(QBrush(QColor(28, 40, 58)))
+            p.setPen(Qt.PenStyle.NoPen)
+            p.drawPolygon(vitre)
+            # soufflet entre les voitures
+            if c_i == 1:
+                p.setBrush(QBrush(QColor(44, 46, 52)))
+                p.drawPolygon(QPolygonF([q(-0.45, 0.2), q(-0.45, 2.9), q(0.45, 2.9), q(0.45, 0.2)]))
+            # baies et passagers
+            portes = [ac - 4.6, ac, ac + 4.6]
+            baies = [ac - 2.3, ac + 2.3, a_int + sens_ext * 1.35]
+            remplissage = max(0.0, min(1.0, pax / max(1.0, PAX_MAX * 0.5)))
+            for i_b, ab in enumerate(baies):
+                bv = QPolygonF([q(ab - 0.8, 1.30), q(ab + 0.8, 1.30), q(ab + 0.8, 2.75), q(ab - 0.8, 2.75)])
+                p.setBrush(QBrush(QColor(36, 60, 92)))
+                p.setPen(_cached_pen(QColor(30, 32, 38), max(1.0, 0.07 * m_px)))
+                p.drawPolygon(bv)
+                n_t = int(round(remplissage * 3.0 + 0.2 * ((i_b + c_i) % 2)))
+                if m_px > 2.2:
+                    p.setPen(Qt.PenStyle.NoPen)
+                    for j in range(n_t):
+                        aj = ab - 0.5 + j * 0.5
+                        teinte = (QColor(222, 180, 150), QColor(196, 140, 110), QColor(240, 200, 170))[(j + i_b) % 3]
+                        habit = (QColor(200, 60, 60), QColor(60, 110, 190), QColor(240, 170, 40))[(j + c_i + i_b) % 3]
+                        p.setBrush(QBrush(habit))
+                        p.drawEllipse(q(aj, 1.60), 0.26 * m_px, 0.22 * m_px)
+                        p.setBrush(QBrush(teinte))
+                        p.drawEllipse(q(aj, 2.03), 0.17 * m_px, 0.17 * m_px)
+                # reflet
+                p.setPen(_cached_pen(QColor(255, 255, 255, 70), max(1.0, 0.06 * m_px)))
+                p.drawLine(q(ab - 0.6, 2.58), q(ab + 0.2, 2.58))
+            # portes : contour, état (vert ouvertes, ambre en mouvement)
+            ouvertes = tr.doors_open if principale else False
+            en_mvt = principale and tr.doors_timer > 0.0
+            for ap in portes:
+                if abs(ap - a_ext) < nez + 1.6:
+                    continue
+                pv = QPolygonF([q(ap - 0.62, 0.0), q(ap + 0.62, 0.0), q(ap + 0.62, 2.75), q(ap - 0.62, 2.75)])
+                p.setBrush(QBrush(QColor(24, 26, 30) if ouvertes else QColor(178, 184, 194)))
+                p.setPen(_cached_pen(QColor(70, 74, 82), max(1.0, 0.07 * m_px)))
+                p.drawPolygon(pv)
+                if not ouvertes:
+                    p.drawLine(q(ap, 0.05), q(ap, 2.7))
+                if ouvertes or en_mvt:
+                    p.setPen(Qt.PenStyle.NoPen)
+                    p.setBrush(QBrush(QColor(70, 230, 120) if ouvertes and not en_mvt else QColor(250, 180, 40)))
+                    p.drawEllipse(q(ap, 2.95), max(1.2, 0.18 * m_px), max(1.2, 0.18 * m_px))
+            # châssis et bogies
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(QBrush(QColor(52, 55, 62)))
+            p.drawPolygon(QPolygonF([q(a_int, -0.38), q(a_ext - sens_ext * 0.6, -0.38),
+                                     q(a_ext - sens_ext * 0.6, -0.08), q(a_int, -0.08)]))
+            for ab in (ac - 5.2, ac + 5.2):
+                for aw in (ab - 0.9, ab + 0.9):
+                    p.setBrush(QBrush(QColor(30, 32, 36)))
+                    p.drawEllipse(q(aw, 0.30), 0.30 * m_px, 0.30 * m_px)
+                    p.setBrush(QBrush(QColor(150, 152, 158)))
+                    p.drawEllipse(q(aw, 0.30), 0.10 * m_px, 0.10 * m_px)
+            # phares au bout extérieur
+            phare = q(a_ext - sens_ext * 0.35, 0.75)
+            allume = principale and tr.lights_head
+            p.setBrush(QBrush(QColor(255, 250, 210) if allume else QColor(90, 88, 80)))
+            p.drawEllipse(phare, max(1.2, 0.2 * m_px), max(1.2, 0.2 * m_px))
+            if allume and c_i == (1 if tr.direction > 0 else 0):
+                cone = QPolygonF([phare, q(a_ext + sens_ext * 30.0, 3.2), q(a_ext + sens_ext * 30.0, -0.7)])
+                gc = QLinearGradient(phare, q(a_ext + sens_ext * 30.0, 1.2))
+                gc.setColorAt(0.0, QColor(255, 248, 210, 120))
+                gc.setColorAt(1.0, QColor(255, 248, 210, 0))
+                p.setBrush(QBrush(gc))
+                p.drawPolygon(cone)
+        # étiquette
+        haut = q(0.0, b_haut + 1.2)
+        p.setFont(_cached_font("Segoe UI", 8, QFont.Weight.Bold))
+        texte = f"{nom} · {pax_aval + pax_amont} pax"
+        larg = QFontMetricsF(p.font()).horizontalAdvance(texte) + 12
+        r = QRectF(haut.x() - larg / 2, haut.y() - 22, larg, 16)
+        p.setBrush(QBrush(QColor(250, 205, 50, 230) if principale else QColor(40, 48, 64, 210)))
+        p.setPen(_cached_pen(QColor(30, 30, 30) if principale else QColor(160, 175, 200), 1))
+        p.drawRoundedRect(r, 5, 5)
+        p.setPen(_cached_pen(QColor(30, 26, 10) if principale else QColor(230, 236, 246)))
+        p.drawText(r, int(Qt.AlignmentFlag.AlignCenter), texte)
 
     # ----- HUD -------------------------------------------------------------
 

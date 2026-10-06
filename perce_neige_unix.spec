@@ -59,7 +59,7 @@ a = Analysis(
     binaries=[],
     datas=datas,
     hiddenimports=["autoupdate", "bugreport", "reporting", "updater",
-                   "godot_bridge", "PyQt6.QtMultimedia"],
+                   "godot_bridge", "profil_coupe", "PyQt6.QtMultimedia"],
     hookspath=[],
     runtime_hooks=[],
     excludes=["tkinter"],

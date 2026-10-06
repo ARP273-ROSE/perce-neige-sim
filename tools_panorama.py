@@ -6,8 +6,8 @@ Retour de Kevin du 06/10/2026 : « des portes coulissantes avec baies
 vitrées et vue sur les montagnes dont le sommet de la Grande Motte ».
 
 Relief : Terrain Tiles (Mapzen, AWS Open Data, encodage « terrarium ») —
-sources SRTM, EU-DEM (produit avec des données Copernicus), GMTED.
-Les tuiles sont mises en cache dans ~/.cache/perce-neige-dem.
+sources SRTM, EU-DEM (produit avec des données Copernicus), GMTED ; accès
+et cache dans tools_mnt.py.
 
 Rendu en perspective cylindrique depuis la gare amont du funiculaire
 (IGN BD TOPO, bout de la voie : 45,42352 °N, 6,89146 °E, 3 029 m), centre de
@@ -21,13 +21,12 @@ prises en compte. Habillage hivernal : neige sous 38° de pente, roche
 au-delà, forêt dans les fonds de vallée, ombres portées du soleil, voile
 atmosphérique.
 """
-import io
 import math
-import os
-import urllib.request
 
 import numpy as np
 from PIL import Image, ImageFilter
+
+from tools_mnt import px_global, tuile
 
 LAT0, LON0 = 45.42352, 6.89146      # gare amont (IGN BD TOPO)
 CAP_CENTRE = 214.2                    # cap réel de la voie en gare amont
@@ -39,27 +38,7 @@ HORIZON = SITE_HAUT * PX_DEG          # ligne du site 0°
 SOLEIL_AZ, SOLEIL_EL = 128.0, 24.0    # matinée d'hiver, sud-est
 R_TERRE = 6371000.0
 K_REFRACTION = 0.13
-CACHE = os.path.expanduser("~/.cache/perce-neige-dem")
 SORTIE = "godot_project/textures/panorama_glacier.png"
-
-
-def tuile(z, x, y):
-    os.makedirs(CACHE, exist_ok=True)
-    f = os.path.join(CACHE, f"{z}_{x}_{y}.png")
-    if not os.path.exists(f):
-        url = f"https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{z}/{x}/{y}.png"
-        with urllib.request.urlopen(url, timeout=60) as r:
-            open(f, "wb").write(r.read())
-    a = np.asarray(Image.open(f).convert("RGB"), np.float32)
-    return a[..., 0] * 256.0 + a[..., 1] + a[..., 2] / 256.0 - 32768.0
-
-
-def px_global(lat, lon, z):
-    n = 256.0 * 2 ** z
-    x = (lon + 180.0) / 360.0 * n
-    la = np.radians(lat)
-    y = (1.0 - np.log(np.tan(la) + 1.0 / np.cos(la)) / np.pi) / 2.0 * n
-    return x, y
 
 
 class Niveau:

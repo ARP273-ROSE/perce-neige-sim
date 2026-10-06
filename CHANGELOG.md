@@ -7,6 +7,44 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.15.71** — vue profil du PC refaite : une vraie coupe du terrain.
+- **« Dans cette vue-là on peut redesigner complètement les rames et le
+  reste »**. Avant, les montagnes étaient des sinusoïdes, le dessus du
+  relief une ligne à 160 m au-dessus de la voie, il y avait des sapins
+  (Val Claret est au-dessus de la limite des arbres) et les rames étaient
+  deux tonneaux jaunes grossis.
+- **Relief réel** : le terrain au-dessus de la ligne est tiré du modèle
+  numérique de terrain le long du tracé IGN. Il se prolonge vers le lac en
+  aval, et en amont par le glacier jusqu'au sommet de la Grande Motte.
+  L'outil `tools_profil_coupe.py` génère `profil_coupe.py`. Le modèle lisse
+  le glacier d'environ 20 m : il est recalé sur l'altitude de la gare
+  amont.
+- **Crêtes de fond réelles**, voilées par l'atmosphère et blanchies avec
+  l'altitude : la vue regarde vers l'est, l'amont étant à droite. Pour
+  chaque point, c'est l'altitude maximale sur une bande de 0,8 à 4 km,
+  puis de 4 à 18 km.
+- **Coupe du massif** : roche à strates, manteau neigeux, glace bleutée du
+  glacier avec ses crevasses. L'échelle est isotrope : la pente apparente
+  est la vraie.
+- **Tunnel** à ses cotes (Ø 3,9 m, rail à 1,24 m sous l'axe), avec la
+  chambre de l'évitement, les néons (un sur deux) et la voie.
+- **Sortie de secours** au galet 145 : la galerie monte jusqu'à la surface
+  et débouche au bord de la piste rouge (fait de Kevin). C'est là que le
+  tube passe le plus près de la surface.
+- **Gares** : Val Claret (hall béton, bandeau « ALTITUDE EXPERIENCE »,
+  quai) et Grande Motte (hall bleu nuit, verrière qui sort sur le glacier,
+  les deux roues jaunes de la salle des machines, butoirs bleus).
+- **Rames aux vraies proportions** : deux voitures de 15,8 m, caisse
+  Ø 3,6 m qui remplit le tube. Carrosserie argent, nez jaunes avec
+  pare-brise, grandes baies où l'on voit les passagers selon la charge,
+  trois portes par voiture (noires et voyant vert ouvertes, ambre en
+  mouvement), bogies, phares avec leur faisceau. Quand le zoom les rendrait
+  illisibles, rames, tube et gares sont grossis sans déformation. Les
+  câbles partent du milieu de la voiture amont et montent jusqu'à la
+  poulie.
+- Le dessin de la vue prend environ 9 ms par image sur le NAS (6 ms avant).
+- Vérifié : 97 tests PC.
+
 **v1.15.70** — annonce d'arrivée entière, pente continue, paysage dans
 toutes les vues.
 - **« L'annonce d'arrivée en haut se déclenche trop tard et est coupée par
