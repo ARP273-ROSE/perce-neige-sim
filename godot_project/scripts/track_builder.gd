@@ -1982,6 +1982,7 @@ var _gal_par_brin: Dictionary = {-1: PackedInt32Array(), 1: PackedInt32Array()}
 var _gal_s_brin: Dictionary = {-1: PackedFloat64Array(), 1: PackedFloat64Array()}
 var _gal_horloge: float = 0.0
 var _gal_att_prec: Dictionary = {}       # brin → abscisse du culot à l'appel précédent
+var _gal_pose_prec: Dictionary = {}      # brin → abscisse du décollage à l'appel précédent
 var _gal_u: Dictionary = {-1: 0.0, 1: 0.0}   # vitesse du câble de chaque brin (m/s, +s)
 
 
@@ -2083,11 +2084,14 @@ static func galet_theta_libre(w0: float, t: float) -> float:
 ## zone animée (caméra), pas de temps. Le câble d'un brin avance à la
 ## vitesse de son culot (sa rame) ; un brin rompu ne porte plus.
 func update_galets(att_g: float, att_d: float, s_cam: float, delta: float,
-		rompu_brin: int = 0) -> void:
+		rompu_brin: int = 0, pose_g: float = -1.0, pose_d: float = -1.0) -> void:
 	if _galets.is_empty() or delta <= 0.0:
 		return
 	_gal_horloge += delta
 	var atts: Dictionary = {-1: att_g, 1: att_d}
+	# où le câble se pose sur les galets (décollage de la chaînette) ; à
+	# défaut, au culot
+	var poses: Dictionary = {-1: pose_g if pose_g >= 0.0 else att_g, 1: pose_d if pose_d >= 0.0 else att_d}
 	for side_i in [-1, 1]:
 		var att: float = atts[side_i]
 		var prec: float = _gal_att_prec.get(side_i, att)
@@ -2098,21 +2102,24 @@ func update_galets(att_g: float, att_d: float, s_cam: float, delta: float,
 		else:
 			_gal_u[side_i] = lerpf(_gal_u[side_i], u_inst, minf(1.0, delta / 0.1))
 		_gal_att_prec[side_i] = att
+		var pose: float = poses[side_i]
+		var pose_prec: float = _gal_pose_prec.get(side_i, pose)
+		_gal_pose_prec[side_i] = pose
 		var idx: PackedInt32Array = _gal_par_brin[side_i]
 		var ss: PackedFloat64Array = _gal_s_brin[side_i]
 		# galets dont l'état (câble posé ou non) a pu changer
-		var lo: float = minf(prec, att)
-		var hi: float = maxf(prec, att)
+		var lo: float = minf(pose_prec, pose)
+		var hi: float = maxf(pose_prec, pose)
 		var k0: int = ss.bsearch(lo)
 		while k0 < ss.size() and ss[k0] <= hi + 1e-6:
-			_galet_etat(idx[k0], side_i, att, rompu_brin == side_i)
+			_galet_etat(idx[k0], side_i, pose, rompu_brin == side_i)
 			k0 += 1
 		# zone animée
 		var a0: int = ss.bsearch(s_cam - GALET_PORTEE - 30.0)
 		var a1: int = ss.bsearch(s_cam + GALET_PORTEE + 30.0)
 		for k in range(a0, mini(a1, ss.size())):
 			var q: int = idx[k]
-			_galet_etat(q, side_i, att, rompu_brin == side_i)
+			_galet_etat(q, side_i, pose, rompu_brin == side_i)
 			if _gal_cable[q] == 1:
 				_gal_w[q] = float(_galets[q].sgn) * _gal_u[side_i] / pulley_radius
 				_gal_theta[q] = fposmod(_gal_theta[q] + _gal_w[q] * delta, TAU)
@@ -2127,8 +2134,8 @@ func update_galets(att_g: float, att_d: float, s_cam: float, delta: float,
 				Transform3D(loc.basis * Basis(Vector3.UP, _gal_theta[q]), loc.origin))
 
 
-func _galet_etat(q: int, side_i: int, att: float, rompu: bool) -> void:
-	var porte: int = 1 if (float(_galets[q].s) > att and not rompu) else 0
+func _galet_etat(q: int, side_i: int, pose: float, rompu: bool) -> void:
+	var porte: int = 1 if (float(_galets[q].s) > pose and not rompu) else 0
 	if porte == _gal_cable[q]:
 		return
 	if porte == 0:
@@ -2509,6 +2516,37 @@ func _build_cable() -> void:
 
 # Rupture : pas des anneaux du tube et posé du câble détendu.
 const CABLE_SUBDIV_M: float = 2.0
+# Tension du brin pour la flèche des portées (maillage fixe) : celle d'une
+# rame en bas de ligne (≈ 140 kN, jauge du pupitre au départ), plus le
+# poids du câble au-dessus (w·Δz) : ≈ 240 kN en haut.
+const TENSION_BAS_N: float = 140000.0
+var _alt_bas: float = NAN
+
+
+## Flèche du câble (m, sous la corde) à l'abscisse s : chaînette de la
+## portée entre les deux galets qui l'encadrent. Nulle sur les galets et
+## dans les portées des gares (le brin y file vers la salle des machines).
+func fleche(side_i: int, s: float) -> float:
+	if not _support_s.has(side_i):
+		var arr: PackedFloat64Array = PackedFloat64Array()
+		for v in _strand[side_i]:
+			arr.append(v.s)
+		_support_s[side_i] = arr
+	var sup: PackedFloat64Array = _support_s[side_i]
+	var k: int = sup.bsearch(s)
+	if k <= 1 or k >= sup.size() - 1:
+		return 0.0          # avant le 1er galet ou après le dernier
+	var s_a: float = sup[k - 1]
+	var s_b: float = sup[k]
+	var l: float = s_b - s_a
+	if l <= 0.0:
+		return 0.0
+	if is_nan(_alt_bas):
+		_alt_bas = tunnel.transform_at(0.0).origin.y
+	var w: float = PNConstants.CABLE_KG_M * 9.80665
+	var t: float = TENSION_BAS_N + w * maxf(tunnel.transform_at(s).origin.y - _alt_bas, 0.0)
+	var a: float = t / (w * cos(SlopeProfile.slope_angle_at(s)))
+	return maxf(a * (cosh(l / (2.0 * a)) - cosh((s - s_a - l * 0.5) / a)), 0.0)
 const SLACK_TOUCHDOWN_M: float = 1.5   # du sommet du galet à la longrine
 var _support_s: Dictionary = {}       # côté → abscisses des appuis (galets)
 
@@ -2576,19 +2614,26 @@ func _build_cable_segment(
 	# rupture, le câble doit pouvoir retomber sur la longrine entre les
 	# galets ; chaque anneau porte en UV2.x sa descente à « détente
 	# totale » (cf. _slack_drop et cable_shader.gdshader).
+	# Flèche de chaque portée (retour du 06/10/2026 : « fais le cosh dans
+	# chaque section de câble entre ses points d'appui ») : le câble pend
+	# en chaînette entre deux galets, perpendiculairement à la corde, de
+	# a(cosh(L/2a) − cosh((x − L/2)/a)) — 1,2 à 2 cm sur 14,5 m.
 	var rings: Array = []
 	for i in range(chain.size() - 1):
 		var n_sub: int = maxi(1, int(ceil((chain[i + 1].s - chain[i].s) / CABLE_SUBDIV_M)))
 		for j in range(n_sub):
 			var f: float = float(j) / float(n_sub)
 			var s_r: float = lerpf(chain[i].s, chain[i + 1].s, f)
-			rings.append({"s": s_r, "p": chain[i].p.lerp(chain[i + 1].p, f),
+			var u_r: Vector3 = ups[i].lerp(ups[i + 1], f).normalized()
+			var fl: float = fleche(side_i, s_r)
+			rings.append({"s": s_r, "p": chain[i].p.lerp(chain[i + 1].p, f) - u_r * fl,
 				"r": rights[i].lerp(rights[i + 1], f).normalized(),
-				"u": ups[i].lerp(ups[i + 1], f).normalized(),
-				"d": _slack_drop(side_i, s_r)})
+				"u": u_r,
+				"d": maxf(_slack_drop(side_i, s_r) - fl, 0.0)})
 	var last: int = chain.size() - 1
-	rings.append({"s": chain[last].s, "p": chain[last].p, "r": rights[last], "u": ups[last],
-		"d": _slack_drop(side_i, chain[last].s)})
+	var fl_l: float = fleche(side_i, chain[last].s)
+	rings.append({"s": chain[last].s, "p": chain[last].p - ups[last] * fl_l, "r": rights[last], "u": ups[last],
+		"d": maxf(_slack_drop(side_i, chain[last].s) - fl_l, 0.0)})
 
 	for i in range(rings.size() - 1):
 		var c0: Vector3 = rings[i].p
@@ -2732,20 +2777,64 @@ func update_cable_phase(s_driver: float, s_other: float = -1.0) -> void:
 const ATTACHE_DS: float = PNConstants.CAR_LEN_M * 0.5   # centre de la voiture amont
 const CULOT_DY: float = 0.12        # axe du culot au-dessus de l'axe du câble posé
 const CAISSE_Y: float = -1.16       # fond plat des voitures (TrainBodyBuilder.Y_CUT, monde)
-var _culots: Dictionary = {}        # brin → {culot, tirant, amorce}
+const CULOT_LONG: float = 0.27      # le câble sort par la pointe
+const AMORCE_ANNEAUX: int = 22
+var _culots: Dictionary = {}        # brin → {culot, tirant, amorce, mat}
+var _tension_n: float = PNConstants.T_NOMINAL_DAN * 10.0
+
+
+## Paramètre de la chaînette a = T / (w cos α) au culot (m), et distance
+## x0 = a·acosh(1 + h/a) à laquelle le câble quitterait une ligne d'appui
+## continue, tangentiellement, pour monter de h = CULOT_DY jusqu'au culot
+## (retour du 06/10/2026 : « respecter la courbure du câble en cosh, qu'il
+## se décolle du galet un peu avant l'attache et sans angle »). 17 à 25 m
+## selon la tension : audit_physique/chainette_attache.sage.
+func chainette(s_att: float) -> Vector2:
+	var w: float = PNConstants.CABLE_KG_M * 9.80665 * cos(SlopeProfile.slope_angle_at(s_att))
+	var a: float = maxf(_tension_n, 20000.0) / maxf(w, 1.0)
+	return Vector2(a, a * acosh(1.0 + CULOT_DY / a))
+
+
+## Premier galet que le câble touche en amont du culot. Les appuis sont
+## discrets : du culot, le câble décrit UNE chaînette jusqu'au galet R1 et
+## survole ceux d'avant. R1 est le premier galet (distance D, portée
+## suivante L) sur lequel la chaînette appuie : D·(D + L) ≥ 2·a·h (sinon le
+## câble, tiré vers le galet suivant, passe au-dessus). Renvoie l'indice
+## dans les sommets du brin, ou −1 (gare amont : plus de galet).
+func premier_appui(side_i: int, s_att: float, a: float) -> int:
+	var pts: Array = _strand.get(side_i, [])
+	for k in range(1, pts.size() - 1):
+		var d: float = float(pts[k].s) - s_att
+		if d <= 0.5:
+			continue
+		var l: float = float(pts[k + 1].s) - float(pts[k].s)
+		if d * (d + l) >= 2.0 * a * CULOT_DY:
+			return k
+	return -1
+
+
+## Chaînette entre deux appuis de hauteurs différentes : hauteur y(x) au-
+## dessus de la corde, de (0, h) à (D, 0), paramètre a (forme exacte en
+## cosh, sommet en x_m).
+static func chainette_y(x: float, d: float, h: float, a: float) -> float:
+	var sh: float = sinh(d / (2.0 * a))
+	var x_m: float = d * 0.5 + a * asinh(h / (2.0 * a * maxf(sh, 1e-9)))
+	return a * (cosh((x - x_m) / a) - cosh(x_m / a)) + h
 
 
 static func attache_s(s_rame: float) -> float:
 	return minf(s_rame + ATTACHE_DS, PNConstants.LENGTH - 0.5)
 
 
-## Abscisse où le câble posé commence : premier galet du brin en amont du
-## culot (la gare amont s'il n'y en a plus).
+## Abscisse où le câble se pose sur les galets : le premier galet touché
+## (premier_appui). En deçà, il est en l'air (tronçon libre dessiné par
+## _update_culots) et ne touche pas les galets qu'il survole.
 func coupe_brin(side_i: int, s_rame: float) -> float:
 	var att: float = attache_s(s_rame)
-	var ss: PackedFloat64Array = _gal_s_brin.get(side_i, PackedFloat64Array())
-	var k: int = ss.bsearch(att + 1e-3)
-	return ss[k] if k < ss.size() else PNConstants.LENGTH
+	var k: int = premier_appui(side_i, att, chainette(att).x)
+	if k < 0:
+		return PNConstants.LENGTH - 0.3
+	return float(_strand[side_i][k].s)
 
 
 func _build_culots() -> void:
@@ -2754,23 +2843,18 @@ func _build_culots() -> void:
 	var tirant: BoxMesh = BoxMesh.new()
 	tirant.size = Vector3(0.05, 1.0, 0.02)
 	tirant.material = mats["culot"]
-	var amorce: CylinderMesh = CylinderMesh.new()
-	amorce.top_radius = cable_radius
-	amorce.bottom_radius = cable_radius
-	amorce.height = 1.0
-	amorce.radial_segments = cable_segments
-	amorce.rings = 1
-	var cmat: StandardMaterial3D = StandardMaterial3D.new()
-	cmat.albedo_color = Color(0.20, 0.20, 0.21)
-	cmat.metallic = 0.8
-	cmat.roughness = 0.45
-	amorce.material = cmat
 	for side_i in [-1, 1]:
 		var d: Dictionary = {}
+		# tronçon libre : même shader que le câble (toronnage continu),
+		# matériau à part (pas de coupe), maillage refait à chaque image
+		var mat: ShaderMaterial = ShaderMaterial.new()
+		mat.shader = load("res://scripts/cable_shader.gdshader")
+		mat.set_shader_parameter("cut_below_s", -1.0e6)
+		d["mat"] = mat
 		for nom in ["culot", "tirant", "amorce"]:
 			var mi: MeshInstance3D = MeshInstance3D.new()
 			mi.name = "Culot%s_%s" % ["G" if side_i < 0 else "D", nom]
-			mi.mesh = {"culot": culot_mesh, "tirant": tirant, "amorce": amorce}[nom]
+			mi.mesh = {"culot": culot_mesh, "tirant": tirant, "amorce": ImmediateMesh.new()}[nom]
 			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 			add_child(mi)
 			d[nom] = mi
@@ -2784,19 +2868,36 @@ func _update_culots(s_rame_g: float, s_rame_d: float) -> void:
 	for side_i in [-1, 1]:
 		var s_r: float = s_rame_g if side_i < 0 else s_rame_d
 		var att: float = attache_s(s_r)
+		var a: float = chainette(att).x
+		var s_r1: float = coupe_brin(side_i, s_r)
+		var x0: float = maxf(s_r1 - att, 0.5)
+		var p_r1: Vector3 = strand_point(side_i, s_r1)
+		var p_att: Vector3 = strand_point(side_i, att)
+		var d: Dictionary = _culots[side_i]
+		var own: ShaderMaterial = cable_right_material if side_i > 0 else cable_left_material
+		var mat: ShaderMaterial = d["mat"]
+		if own != null:
+			mat.set_shader_parameter("cable_phase", own.get_shader_parameter("cable_phase"))
+		# points de la chaînette, du culot (x = 0) au décollage (x = x0)
+		var pts: Array = []
+		var xs: Array = []
+		for i in range(AMORCE_ANNEAUX + 1):
+			var x: float = lerpf(0.0, x0, float(i) / float(AMORCE_ANNEAUX))
+			var y: float = chainette_y(x, x0, CULOT_DY, a)
+			var s_x: float = att + x
+			var p: Vector3 = p_att.lerp(p_r1, x / x0) + tunnel.transform_at(s_x).basis.y * y
+			if _slack > 0.0 and not _rupture.is_empty():
+				p -= tunnel.transform_at(s_x).basis.y * (_slack_drop(side_i, s_x) * _slack)
+			pts.append(p)
+			xs.append(x)
 		var xf: Transform3D = tunnel.transform_at(att)
 		var up: Vector3 = xf.basis.y
-		var x: float = strand_local_at(side_i, att).x
-		var pos: Vector3 = xf.origin + xf.basis.x * x + up * (y_cable + CULOT_DY)
-		var s_c: float = coupe_brin(side_i, s_r)
-		var cible: Vector3 = strand_point(side_i, s_c)
-		if _slack > 0.0 and not _rupture.is_empty():
-			cible -= tunnel.transform_at(s_c).basis.y * (_slack_drop(side_i, s_c) * _slack)
-		var dirv: Vector3 = (cible - pos).normalized()
+		var pos: Vector3 = pts[0]
+		# culot dans l'axe du câble (tangente de la chaînette à son bout)
+		var dirv: Vector3 = ((pts[1] as Vector3) - pos).normalized()
 		var z: Vector3 = -dirv
 		var xb: Vector3 = up.cross(z).normalized()
 		var yb: Vector3 = z.cross(xb).normalized()
-		var d: Dictionary = _culots[side_i]
 		(d.culot as MeshInstance3D).transform = Transform3D(Basis(xb, yb, z), pos)
 		# chape d'attelage : de l'axe de la chape au fond de la caisse
 		var p_chape: Vector3 = pos - z * 0.085
@@ -2804,16 +2905,59 @@ func _update_culots(s_rame_g: float, s_rame_d: float) -> void:
 		(d.tirant as MeshInstance3D).transform = Transform3D(
 			Basis(xb, up, xb.cross(up).normalized()) * Basis.from_scale(Vector3(1.0, h, 1.0)),
 			p_chape + up * (h * 0.5))
-		# amorce : de la pointe du culot au premier galet
-		var pointe: Vector3 = pos + dirv * 0.27
-		var l: float = maxf((cible - pointe).length(), 0.01)
-		var ya: Vector3 = (cible - pointe) / l
-		var xa: Vector3 = ya.cross(up).normalized()
-		if xa.length() < 0.5:
-			xa = xf.basis.x
-		var za: Vector3 = xa.cross(ya).normalized()
-		(d.amorce as MeshInstance3D).transform = Transform3D(
-			Basis(xa, ya * l, za), (pointe + cible) * 0.5)
+		# tronçon libre : de la pointe du culot au décollage
+		var pointe_x: float = CULOT_LONG * 0.95
+		var debut: int = 0
+		while debut < xs.size() - 2 and float(xs[debut + 1]) < pointe_x:
+			debut += 1
+		pts[debut] = pos + dirv * pointe_x
+		xs[debut] = pointe_x
+		_tube_amorce(d.amorce as MeshInstance3D, mat, pts.slice(debut), xs.slice(debut), att, up)
+
+
+## Tube du tronçon libre (ImmediateMesh refait à chaque image) : UV comme
+## les tronçons du câble (UV.x autour, UV.y = 2 × abscisse) pour que les
+## torons défilent sans raccord au décollage.
+func _tube_amorce(mi: MeshInstance3D, mat: Material, pts: Array, xs: Array, att: float, up: Vector3) -> void:
+	var im: ImmediateMesh = mi.mesh
+	im.clear_surfaces()
+	if pts.size() < 2:
+		return
+	var ns: int = cable_segments
+	var anneaux: Array = []
+	for i in range(pts.size()):
+		var p0: Vector3 = pts[maxi(i - 1, 0)]
+		var p1: Vector3 = pts[mini(i + 1, pts.size() - 1)]
+		var t: Vector3 = (p1 - p0).normalized()
+		var bx: Vector3 = up.cross(t).normalized()
+		var by: Vector3 = t.cross(bx).normalized()
+		var anneau: Array = []
+		for j in range(ns + 1):
+			var ph: float = TAU * float(j) / float(ns)
+			var n: Vector3 = bx * cos(ph) + by * sin(ph)
+			anneau.append([(pts[i] as Vector3) + n * cable_radius, n,
+				Vector2(float(j) / float(ns), 2.0 * (att + float(xs[i])))])
+		anneaux.append(anneau)
+	im.surface_begin(Mesh.PRIMITIVE_TRIANGLES, mat)
+	for i in range(anneaux.size() - 1):
+		for j in range(ns):
+			var a0: Array = anneaux[i][j]
+			var a1: Array = anneaux[i + 1][j]
+			var b1: Array = anneaux[i + 1][j + 1]
+			var b0: Array = anneaux[i][j + 1]
+			for tri in [[a0, a1, b1], [a0, b1, b0]]:
+				var v0: Array = tri[0]
+				var v1: Array = tri[1]
+				var v2: Array = tri[2]
+				# faces avant dans le sens horaire (convention Godot)
+				var g: float = ((v1[0] as Vector3) - (v0[0] as Vector3)).cross(
+					(v2[0] as Vector3) - (v0[0] as Vector3)).dot((v0[1] as Vector3) + (v1[1] as Vector3) + (v2[1] as Vector3))
+				var ordre: Array = [v0, v1, v2] if g < 0.0 else [v0, v2, v1]
+				for v in ordre:
+					im.surface_set_normal(v[1])
+					im.surface_set_uv(v[2])
+					im.surface_add_vertex(v[0])
+	im.surface_end()
 
 
 ## Galets : abscisses des rames → culots de chaque brin, caméra, pas de
@@ -2822,12 +2966,13 @@ func update_galets_rames(s_driver: float, s_other: float, s_cam: float,
 		delta: float, rupture: bool = false) -> void:
 	if s_other < 0.0:
 		s_other = PNConstants.LENGTH - s_driver
-	var att_g: float = attache_s(s_other if driver_is_rame2 else s_driver)
-	var att_d: float = attache_s(s_driver if driver_is_rame2 else s_other)
+	var s_g: float = s_other if driver_is_rame2 else s_driver
+	var s_d: float = s_driver if driver_is_rame2 else s_other
 	var rompu: int = 0
 	if rupture:
 		rompu = 1 if driver_is_rame2 else -1
-	update_galets(att_g, att_d, s_cam, delta, rompu)
+	update_galets(attache_s(s_g), attache_s(s_d), s_cam, delta, rompu,
+		coupe_brin(-1, s_g) - 1e-3, coupe_brin(1, s_d) - 1e-3)
 
 
 # ---------------------------------------------------------------------------
@@ -2859,6 +3004,7 @@ func update_cable_rupture(rupture: bool, s_driver: float, direction: int,
 		tension_dan: float, delta: float, v_driver: float = 0.0) -> void:
 	if cable_left_material == null or cable_right_material == null:
 		return
+	_tension_n = maxf(tension_dan, 2000.0) * 10.0     # chaînette de l'attache
 	if not rupture:
 		_last_tension_dan = tension_dan   # tension juste AVANT la rupture
 		if not _rupture.is_empty():
