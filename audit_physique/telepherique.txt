@@ -7,12 +7,15 @@ Hauteur du pylône donnant 152 m de survol maximal :
   a =  5000 m  →  pylône de  12.8 m, pente max 40 %
   a =  8000 m  →  pylône de -12.5 m, pente max 33 %
 
-Avec aussi « pente maximale 55 % » : a = 2831 m (soit, pour un porteur Ø 50 mm de 13 kg/m, une tension d'environ 37 t)
+Pylône mesuré sur photo ≈ 30 m → avec le survol de 152 m : a = 3998 m
+  porteur 11 kg/m : tension ≈  44 t, pente avec cabine pleine au pylône ≈ 62 %
+  porteur 13 kg/m : tension ≈  52 t, pente avec cabine pleine au pylône ≈ 59 %
+  porteur 15 kg/m : tension ≈  60 t, pente avec cabine pleine au pylône ≈ 57 %
 
-Retenu (a = 2831 m) : pylône de 61 m, sommet à 3438 m d'altitude
-  survol maximal 152 m à 966 m de la gare aval
-  1re portée : flèche à mi-portée 82.1 m
-  2e portée : flèche à mi-portée 4.5 m
-  pente des porteurs au pylône : 55.0 % avant, 2.6 % après (déviation 27.3°)
-  pente maximale des porteurs 55 % (fiche : 55 % pour la ligne)
-  longueur développée 1721 m (fiche : 1 696 m)
+Retenu (a = 3998 m) : pylône de 30 m, sommet à 3406 m d'altitude
+  survol maximal 152 m à 850 m de la gare aval
+  1re portée : flèche à mi-portée 57.7 m
+  2e portée : flèche à mi-portée 3.2 m
+  pente des porteurs au pylône : 44.9 % avant, 14.1 % après (déviation 16.1°)
+  pente maximale des porteurs 45 % (fiche : 55 % pour la ligne)
+  longueur développée 1710 m (fiche : 1 696 m)
