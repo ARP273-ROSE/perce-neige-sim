@@ -26,7 +26,7 @@ extends Node3D
 @export var station_room_half_width: float = 4.90
 @export var station_room_half_height: float = 2.65
 @export var station_low_end: float = 52.0        # fin de la salle Val Claret
-@export var station_high_start: float = 3421.0   # début de la salle Grande Motte
+@export var station_high_start: float = 3461.52  # début de la salle Grande Motte (3421 + 40,52)
 @export var station_room_transition: float = 6.0 # fondu salle ↔ tube carré
 
 # Passing loop (boucle de croisement au milieu du tunnel)

@@ -31,12 +31,12 @@ static func miroir(s_: float) -> float:
 
 
 ## Compteur de distance du pupitre (fait de Kevin, 06/10/2026) : 0 m au
-## départ, 3 474 m à l'arrivée, quels que soient le sens et la rame — le
-## parcours d'arrêt à arrêt (STOP_S − START_S) ramené à LENGTH (même
-## calcul que distance_compteur du PC).
+## départ, 3 474 m à l'arrivée, quels que soient le sens et la rame — la
+## distance réellement parcourue depuis l'arrêt de départ (STOP_S −
+## START_S = PARCOURS ; même calcul que distance_compteur du PC).
 static func distance_compteur(s_: float, direction: int) -> float:
 	var raw: float = (s_ - START_S) if direction > 0 else (STOP_S - s_)
-	return clampf(raw * LENGTH / (STOP_S - START_S), 0.0, LENGTH)
+	return clampf(raw, 0.0, PARCOURS)
 
 
 static func safari_web() -> bool:
@@ -55,13 +55,20 @@ static func safari_web() -> bool:
 # Géométrie du funiculaire (specs réelles Von Roll / CFD 1993)
 # ---------------------------------------------------------------------------
 
-const LENGTH: float = 3474.0             # longueur le long de la pente (m)
+# Longueur de la voie, du butoir bas au butoir haut. Le PARCOURS d'un
+# trajet, d'arrêt à arrêt, fait 3 474 m (fait de Kevin, 06/10/2026 : « la
+# distance parcourue réelle de chaque trajet c'est 3 474 m ») : la voie
+# fait donc 40,52 m de plus — rallongée par deux tronçons neutres (pente
+# constante, ligne droite) de 20,26 m de part et d'autre de l'évitement,
+# à 1 571 m et à 1 853,5 m de l'ancien tracé (SlopeProfile).
+const PARCOURS: float = 3474.0           # trajet d'arrêt à arrêt (compteur du pupitre)
+const LENGTH: float = 3514.52            # voie le long de la pente (m) = START_S + PARCOURS + 17,96
 const ALT_LOW: float = 2111.0            # altitude Val Claret (m)
 const ALT_HIGH: float = 3032.0           # altitude Glacier (m)
 const DROP: float = 921.0                # dénivelé (m)
 
 const SQUARE_SECTION_LOW_END: float = 257.0    # transition carré→rond bas
-const SQUARE_SECTION_HIGH_START: float = 3420.0  # transition rond→carré haut
+const SQUARE_SECTION_HIGH_START: float = 3460.52  # transition rond→carré haut (3420 + 40,52)
 
 # Vitesse — régulateur Von Roll plafonné à 12 m/s
 const V_MAX: float = 12.0                # m/s (43.2 km/h)
@@ -151,17 +158,17 @@ const PLATFORM_LEN: float = 35.0
 # d'allongement »), comptés depuis la face des têtes en bois des butoirs
 # (stations_builder._build_bumper) : audit_physique/arrets_gares.sage.
 const BUTOIR_BAS_S: float = 2.06         # face du butoir bas (socle à 2,0 m)
-const BUTOIR_HAUT_S: float = 3473.54     # face du butoir haut (socle à LENGTH − 0,4)
+const BUTOIR_HAUT_S: float = 3514.06     # face du butoir haut (socle à LENGTH − 0,4)
 const JEU_BUTOIR_BAS: float = 4.5        # arrière de la rame ↔ butoir bas
 const JEU_BUTOIR_HAUT: float = 1.5       # nez de la rame ↔ butoir haut
 const START_S: float = 22.56             # BUTOIR_BAS_S + JEU_BUTOIR_BAS + TRAIN_HALF
-const STOP_S: float = 3456.04            # BUTOIR_HAUT_S − JEU_BUTOIR_HAUT − TRAIN_HALF
+const STOP_S: float = 3496.56            # BUTOIR_HAUT_S − JEU_BUTOIR_HAUT − TRAIN_HALF = START_S + PARCOURS
 # Les deux rames sont liées par le câble : l'autre rame est au MIROIR des
 # points d'arrêt, MIROIR_S − s — quand l'une est à STOP_S, l'autre est à
 # START_S. Le câble entre elles fait 2·LENGTH − MIROIR_S = 3 469,4 m :
 # 4,6 m de moins que la voie (avec LENGTH − s, la rame d'en face finissait
 # 1 m DANS le butoir bas quand on arrivait en haut).
-const MIROIR_S: float = 3478.6           # START_S + STOP_S
+const MIROIR_S: float = 3519.12          # START_S + STOP_S
 # Quais (fait de Kevin, 06/10/2026 : « en bas le quai se prolonge de 4 m
 # vers le haut après le haut de la rame ; en haut de 3 m après le bas de la
 # rame ») — rame arrêtée en START_S / STOP_S. Le galet n° 1 est juste après
@@ -169,10 +176,10 @@ const MIROIR_S: float = 3478.6           # START_S + STOP_S
 # haute est atteinte (SlopeProfile, track_builder.SUPPORT_S*).
 const QUAI_BAS_DEBUT_S: float = 3.0
 const QUAI_BAS_FIN_S: float = 42.56      # START_S + TRAIN_HALF + 4
-const QUAI_HAUT_DEBUT_S: float = 3437.04 # STOP_S − TRAIN_HALF − 3
-const QUAI_HAUT_FIN_S: float = 3473.0    # LENGTH − 1
+const QUAI_HAUT_DEBUT_S: float = 3477.56 # STOP_S − TRAIN_HALF − 3
+const QUAI_HAUT_FIN_S: float = 3513.52   # LENGTH − 1
 const CREEP_DIST: float = 55.0           # 20 + PLATFORM_LEN
-const CREEP_START_S: float = 3401.04     # STOP_S − CREEP_DIST
+const CREEP_START_S: float = 3441.56     # STOP_S − CREEP_DIST
 
 # Portes
 const DOOR_CLOSE_TIME: float = 3.0
@@ -187,8 +194,8 @@ const REBOUND_OMEGA: float = 2.40        # rad/s
 const REBOUND_ZETA: float = 0.10         # amortissement
 
 # Boucle de croisement — positions calibrées vidéo cockpit
-const PASSING_START: float = 1611.0
-const PASSING_END: float = 1813.0
+const PASSING_START: float = 1631.26    # 1611 + 20,26 (tronçon neutre aval)
+const PASSING_END: float = 1833.26      # 1813 + 20,26
 
 # ---------------------------------------------------------------------------
 # Mode de jeu

@@ -302,7 +302,10 @@ func _test_pannes() -> bool:
 		minutes += 1.0 / 3600.0
 		if fm.is_active():
 			triggers += 1
-			fm.clear_active()
+			# remise en service complète : une rupture de câble tirée au
+			# hasard ne se « lève » pas en ligne (04/10) — sans ça, elle
+			# restait active et se comptait à chaque image (80 753 fois)
+			fm.clear_active(true)
 			fm._cooldown = FaultManager.COOLDOWN_S
 	ok = _check("frequence des pannes", triggers >= 1 and triggers <= 12,
 		"%d incidents en 30 min (attendu 3-8)" % triggers) and ok

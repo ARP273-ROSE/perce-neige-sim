@@ -1,11 +1,14 @@
-faces des butoirs : bas 2.06000 m, haut 3473.540 m
-START_S = 22.5600   STOP_S = 3456.040   miroir START_S + STOP_S = 3478.60
+voie : 3514.520 m (ancienne 3 474), soit 40.52 m de plus : 2 × 20.26 m
+faces des butoirs : bas 2.06000 m, haut 3514.060 m
+START_S = 22.5600   STOP_S = 3496.560   miroir START_S + STOP_S = 3519.120
 rame en haut : nez à 1.50 m du butoir ; l'autre : arrière à 4.50 m du butoir bas
-avant : miroir LENGTH − s, PWA START_S 20 / STOP_S 3457 → l'autre rame à -1.06 m du butoir bas (dans le butoir)
-        PC START_S 26 / STOP_S 3448 : 9.54 m en haut, 7.94 m en bas
-câble entre les deux rames : 3469.40 m, soit 4.60 m de moins que la voie
-rame vide              en bas : T   30 →  129 kN, allongement du brin ≈ 2.20 m
-rame pleine (334 pax)  en bas : T   53 →  153 kN, allongement du brin ≈ 2.84 m
+galet n° 238 à 2303 × 1,51 = 3477.530 m, quai haut à 3477.560 m
+câble entre les deux rames : 3509.920 m
+rame vide              en bas : T   30 →  129 kN, allongement du brin ≈ 2.22 m
+rame pleine (334 pax)  en bas : T   53 →  153 kN, allongement du brin ≈ 2.87 m
 (l'écart de charge entre vide et pleine déplace la rame en bas de
  quelques décimètres : c'est l'affaissement d'embarquement, plus
  l'oscillation de ±0,3 m — d'où les 4 à 5 m de marge en bas)
+334 passagers à 75 kg (modèle)         : 0.57 m de recul (EA = 1,25e8 N)
+334 passagers à 85 kg (skieur équipé)  : 0.65 m de recul (EA = 1,25e8 N)
+EA qui donnerait 1,00 m avec 75 kg : 7.18e+07 N (57 % de 1,25e8 ; E = 57 GPa pour 1 250 mm²)

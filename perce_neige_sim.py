@@ -396,7 +396,14 @@ G = 9.80665                 # m/s^2
 # value 3491 m came from public sources but is the published nominal
 # length of the route ; the counter's zero reference is offset a few
 # metres inside the lower station, producing the difference.
-LENGTH = 3474.0             # slope length (m) — cockpit counter reference
+# Fait de Kevin (06/10/2026) : « la distance parcourue réelle de chaque
+# trajet c'est 3 474 m » — le PARCOURS d'arrêt à arrêt. La voie, d'un
+# butoir à l'autre, fait 40,52 m de plus : deux tronçons neutres (pente
+# constante, ligne droite) de 20,26 m insérés de part et d'autre de
+# l'évitement, à 1 571 m et à 1 853,5 m de l'ancien tracé (tables de
+# pente, de cap et de zones ci-dessous ; mêmes valeurs que la PWA).
+PARCOURS = 3474.0           # trajet d'arrêt à arrêt — compteur du pupitre
+LENGTH = 3514.52            # voie le long de la pente (m) = START_S + PARCOURS + 17,96
 # Square cut-and-cover sections at both ends of the tunnel. The middle
 # is bored with a TBM (round cross-section) ; the first ~257 m out of
 # Val Claret and the last ~54 m into Grande Motte are concrete-lined
@@ -404,7 +411,7 @@ LENGTH = 3474.0             # slope length (m) — cockpit counter reference
 # distance counter values t=2:25 (257 m outbound, tunnel becomes round)
 # and t=7:43 (tunnel returns to square, ≈ 54 m before platform stop).
 SQUARE_SECTION_LOW_END = 257.0
-SQUARE_SECTION_HIGH_START = 3420.0
+SQUARE_SECTION_HIGH_START = 3460.52     # 3420 + 40,52
 ALT_LOW = 2111.0            # lower station altitude (m)
 ALT_HIGH = 3032.0           # upper station altitude (m)
 DROP = ALT_HIGH - ALT_LOW   # 921 m
@@ -489,7 +496,7 @@ PLATFORM_LEN = 35.0             # platform slope length (m)
 # (constants.gd) : le PC s'arrêtait à 9,5 m en haut et 7,9 m en bas, la
 # PWA à 0,6 m et 1,9 m.
 BUTOIR_BAS_S = 2.06             # face du butoir bas (socle à 2,0 m)
-BUTOIR_HAUT_S = 3473.54         # face du butoir haut (socle à LENGTH − 0,4)
+BUTOIR_HAUT_S = round(LENGTH - 0.46, 2)   # face du butoir haut (socle à LENGTH − 0,4) : 3514,06
 JEU_BUTOIR_BAS = 4.5            # arrière de la rame ↔ butoir bas
 JEU_BUTOIR_HAUT = 1.5           # nez de la rame ↔ butoir haut
 START_S = round(BUTOIR_BAS_S + JEU_BUTOIR_BAS + TRAIN_HALF, 2)    # 22,56
@@ -508,9 +515,10 @@ def miroir(s: float) -> float:
 def distance_compteur(s: float, direction: int) -> float:
     """Compteur de distance du pupitre (fait de Kevin, 06/10/2026) : 0 m
     au départ, 3 474 m à l'arrivée, quels que soient le sens et la rame —
-    le parcours d'arrêt à arrêt (STOP_S − START_S) est ramené à LENGTH."""
+    la distance réellement parcourue depuis l'arrêt de départ (STOP_S −
+    START_S = PARCOURS)."""
     raw = (s - START_S) if direction > 0 else (STOP_S - s)
-    return max(0.0, min(LENGTH, raw * LENGTH / (STOP_S - START_S)))
+    return max(0.0, min(PARCOURS, raw))
 
 
 def vitesse_roues(st) -> float:
@@ -729,8 +737,8 @@ ROPE_MASS_KG = CABLE_KG_M * LENGTH
 # Positions calibrated from the real cockpit video : the loop entry is
 # at t=4:38 (175 s after departure) and exit at t=5:00 (197 s), which
 # at the cruise speed of 10.1 m/s places them at s=1601 m and s=1823 m.
-PASSING_START = 1611.0
-PASSING_END = 1813.0
+PASSING_START = 1631.26     # 1611 + 20,26 (tronçon neutre aval inséré)
+PASSING_END = 1833.26       # 1813 + 20,26
 
 # Slope profile : (slope distance in m, gradient as fraction).
 # Technical sources: "pente douce" at start, "montée plus raide" in middle,
@@ -757,16 +765,17 @@ SLOPE_PROFILE: list[tuple[float, float]] = [
     (510.0,  0.25),    # "la pente augmente" (t=2:50)
     (700.0,  0.28),
     (914.0,  0.295),   # max sustained gradient (t=3:30)
-    (2400.0, 0.295),
-    (3000.0, 0.29),
-    (3200.0, 0.28),
-    (3328.0, 0.27),    # "diminution de pente finale commence" (t=7:29)
-    (3380.0, 0.18),
-    (3436.76, 0.10),   # pente de la gare haute atteinte au galet n° 238, à
+    # (au-delà de 1 571 m et de 1 853,5 m : +20,26 m par tronçon neutre)
+    (2440.52, 0.295),
+    (3040.52, 0.29),
+    (3240.52, 0.28),
+    (3368.52, 0.27),   # "diminution de pente finale commence" (t=7:29)
+    (3420.52, 0.18),
+    (3477.53, 0.10),   # pente de la gare haute atteinte au galet n° 238, à
                        # l'entrée du quai (fait de Kevin, 06/10/2026 ; la
                        # vidéo la plaçait à 3420, où le tunnel redevient
                        # carré) — même table que SlopeProfile (PWA)
-    (3474.0, 0.06),    # Grande Motte platform (square tunnel)
+    (3514.52, 0.06),   # Grande Motte platform (square tunnel)
 ]
 
 # Horizontal route plan : (slope distance, bearing in degrees).
@@ -784,12 +793,12 @@ CURVE_PROFILE: list[tuple[float, float]] = [
     (1297.0, 155.0),   # straight lower section (t=0..4:08)
     (1420.0, 165.0),   # curve 1 midpoint — peak curvature
     (1541.0, 175.0),   # end of curve 1 (t=4:32, ≈ due S)
-    (1601.0, 175.0),   # entering passing loop (straight)
-    (1823.0, 175.0),   # exiting passing loop (straight)
-    (1884.0, 175.0),   # start of curve 2 (t=5:06)
-    (2125.0, 189.0),   # curve 2 midpoint — peak curvature
-    (2369.0, 203.0),   # end of curve 2 (t=5:54, SSW)
-    (3474.0, 203.0),   # straight into upper station
+    (1621.26, 175.0),  # entering passing loop (neutral 20.26 m inserted before)
+    (1843.26, 175.0),  # exiting passing loop (straight)
+    (1924.52, 175.0),  # start of curve 2 (neutral 20.26 m inserted before)
+    (2165.52, 189.0),  # curve 2 midpoint — peak curvature
+    (2409.52, 203.0),  # end of curve 2 (t=5:54, SSW)
+    (3514.52, 203.0),  # straight into upper station
 ]
 
 # Tunnel lighting zones — (start_m, end_m) of DARK sections identified from
@@ -800,11 +809,11 @@ TUNNEL_DARK_ZONES: list[tuple[float, float]] = [
     (318.0,   401.0),   # 83 m dark (brightness 45)
     (561.0,   745.0),   # 185 m major dark zone (brightness 50)
     (1408.0, 1465.0),   # 57 m semi-dark before passing loop
-    (1586.0, 1605.0),   # 19 m brief dark at passing loop entry
-    (2102.0, 2236.0),   # 134 m major dark zone (brightness 57)
-    (2746.0, 2784.0),   # 38 m dark (brightness 63)
-    (2981.0, 3109.0),   # 127 m major dark zone (brightness 47)
-    (3217.0, 3249.0),   # 32 m dark near upper station (brightness 39)
+    (1606.26, 1625.26),   # 19 m brief dark at passing loop entry
+    (2142.52, 2276.52),   # 134 m major dark zone (brightness 57)
+    (2786.52, 2824.52),   # 38 m dark (brightness 63)
+    (3021.52, 3149.52),   # 127 m major dark zone (brightness 47)
+    (3257.52, 3289.52),   # 32 m dark near upper station (brightness 39)
 ]
 
 # Tunnel cross-section transitions — (start_m, shape)
@@ -11242,7 +11251,8 @@ class GameWidget(QWidget):
                    int(Qt.AlignmentFlag.AlignRight), v_text)
         # Position
         alt = ALT_LOW + (tr.s / LENGTH) * DROP
-        pos_text = f"{tr.s:.0f}/{LENGTH:.0f} m  alt {alt:.0f} m"
+        pos_text = (f"{distance_compteur(tr.s, tr.direction):.0f}/{PARCOURS:.0f} m"
+                    f"  alt {alt:.0f} m")
         p.drawText(QRectF(vx + vw * 0.62, vy + 33, 200, 20),
                    int(Qt.AlignmentFlag.AlignRight), pos_text)
         # View mode label
@@ -13505,7 +13515,7 @@ class GameWidget(QWidget):
         else:
             alt_start = geom_at(STOP_S)[1]
             alt_end = geom_at(START_S)[1]
-        travel_total_m = LENGTH
+        travel_total_m = PARCOURS
         travel_done_m = distance_compteur(tr.s, tr.direction)
         alt_total = alt_end - alt_start               # +921 climb / −921 down
         alt_done = cabin_y_m - alt_start               # same sign as alt_total

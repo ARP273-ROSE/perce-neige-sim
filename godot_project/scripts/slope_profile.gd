@@ -17,15 +17,17 @@ const SLOPE_PROFILE: Array = [
 	[510.0,  0.25],    # "la pente augmente" (t=2:50)
 	[700.0,  0.28],
 	[914.0,  0.295],   # pente max soutenue (t=3:30)
-	[2400.0, 0.295],
-	[3000.0, 0.29],
-	[3200.0, 0.28],
-	[3328.0, 0.27],    # diminution pente finale commence (t=7:29)
-	[3380.0, 0.18],
-	[3436.76, 0.10],   # pente de la gare haute atteinte au galet n° 238, à
+	# (au-delà de 1 571 m et de 1 853,5 m : +20,26 m par tronçon neutre
+	# inséré de part et d'autre de l'évitement, cf. PNConstants.LENGTH)
+	[2440.52, 0.295],
+	[3040.52, 0.29],
+	[3240.52, 0.28],
+	[3368.52, 0.27],   # diminution pente finale commence (t=7:29)
+	[3420.52, 0.18],
+	[3477.53, 0.10],   # pente de la gare haute atteinte au galet n° 238, à
 	                   # l'entrée du quai (fait de Kevin, 06/10/2026 ; la
-	                   # vidéo la plaçait à 3420, où le tunnel redevient carré)
-	[3474.0, 0.06],    # Grande Motte plateforme
+	                   # vidéo la plaçait où le tunnel redevient carré)
+	[3514.52, 0.06],   # Grande Motte plateforme
 ]
 
 # ---------------------------------------------------------------------------
@@ -38,12 +40,12 @@ const CURVE_PROFILE: Array = [
 	[1297.0, 155.0],   # rectiligne section basse
 	[1420.0, 165.0],   # courbe 1 milieu — courbure max
 	[1541.0, 175.0],   # fin courbe 1 (due sud)
-	[1601.0, 175.0],   # entrée boucle croisement
-	[1823.0, 175.0],   # sortie boucle croisement
-	[1884.0, 175.0],   # début courbe 2
-	[2125.0, 189.0],   # courbe 2 milieu — courbure max
-	[2369.0, 203.0],   # fin courbe 2 (SSO)
-	[3474.0, 203.0],   # rectiligne jusqu'à station haute
+	[1621.26, 175.0],  # entrée boucle croisement (tronçon neutre de 20,26 m inséré avant)
+	[1843.26, 175.0],  # sortie boucle croisement
+	[1924.52, 175.0],  # début courbe 2 (tronçon neutre de 20,26 m inséré avant)
+	[2165.52, 189.0],  # courbe 2 milieu — courbure max
+	[2409.52, 203.0],  # fin courbe 2 (SSO)
+	[3514.52, 203.0],  # rectiligne jusqu'à station haute
 ]
 
 # ---------------------------------------------------------------------------
@@ -56,11 +58,11 @@ const TUNNEL_DARK_ZONES: Array = [
 	[318.0,   401.0],
 	[561.0,   745.0],   # 185 m zone sombre majeure
 	[1408.0, 1465.0],
-	[1586.0, 1605.0],
-	[2102.0, 2236.0],   # 134 m zone sombre majeure
-	[2746.0, 2784.0],
-	[2981.0, 3109.0],   # 127 m zone sombre majeure
-	[3217.0, 3249.0],
+	[1606.26, 1625.26],
+	[2142.52, 2276.52],   # 134 m zone sombre majeure
+	[2786.52, 2824.52],
+	[3021.52, 3149.52],   # 127 m zone sombre majeure
+	[3257.52, 3289.52],
 ]
 
 # ---------------------------------------------------------------------------
@@ -71,8 +73,8 @@ const TUNNEL_DARK_ZONES: Array = [
 const TUNNEL_SECTIONS: Array = [
 	[0.0,     "horseshoe"],
 	[257.0,   "circular"],
-	[3420.0,  "horseshoe"],
-	[3474.0,  "horseshoe"],
+	[3460.52, "horseshoe"],
+	[3514.52, "horseshoe"],
 ]
 
 # ---------------------------------------------------------------------------

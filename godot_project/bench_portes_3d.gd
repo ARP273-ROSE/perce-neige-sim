@@ -177,7 +177,7 @@ func _debarquement() -> bool:
 		if vide_vu and t > t_vide + 20.0:
 			break
 	var ok := _verif("compteur du pupitre à 3 474 m à l'arrivée (0 au départ)",
-		roundf(compteur) == PNConstants.LENGTH
+		roundf(compteur) == PNConstants.PARCOURS
 		and PNConstants.distance_compteur(PNConstants.START_S, 1) == 0.0,
 		"%.1f m" % compteur)
 	ok = _verif("arrivée en haut : portes ouvertes puis rame vidée", vide_vu,

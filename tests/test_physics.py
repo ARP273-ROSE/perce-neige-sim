@@ -481,11 +481,13 @@ def test_defi_consigne_0_tenue_a_l_arret():
 
 def test_compteur_de_distance_0_a_3474():
     # Fait de Kevin (06/10/2026) : le compteur du pupitre indique 0 m au
-    # départ et 3 474 m à l'arrivée, quels que soient le sens et la rame.
+    # départ et 3 474 m à l'arrivée, quels que soient le sens et la rame —
+    # c'est la distance réellement parcourue (voie rallongée, v1.15.65).
+    assert abs((pn.STOP_S - pn.START_S) - pn.PARCOURS) < 1e-9
     assert pn.distance_compteur(pn.START_S, +1) == 0.0
-    assert abs(pn.distance_compteur(pn.STOP_S, +1) - pn.LENGTH) < 1e-9
+    assert abs(pn.distance_compteur(pn.STOP_S, +1) - pn.PARCOURS) < 1e-9
     assert pn.distance_compteur(pn.STOP_S, -1) == 0.0
-    assert abs(pn.distance_compteur(pn.START_S, -1) - pn.LENGTH) < 1e-9
+    assert abs(pn.distance_compteur(pn.START_S, -1) - pn.PARCOURS) < 1e-9
     # un trajet réel s'arrête à 8 cm du repère : 3 474 m affichés
     for direction, s0 in ((1, pn.STOP_S - 400.0), (-1, pn.START_S + 400.0)):
         st, ph = _make(direction, s0, 120, 20)
