@@ -7,6 +7,40 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.15.59** — le câble pend en chaînette, sous la rame et entre les galets.
+- **« Sous la rame, le câble semble collé au sommet des galets et s'en
+  décolle au dernier moment ; il vaudrait mieux respecter la courbure
+  en cosh, qu'il se décolle du galet un peu avant l'attache et sans
+  angle »** :
+  - avant, le câble restait posé jusqu'au premier galet en amont du
+    culot, puis montait tout droit vers lui, avec un coude ;
+  - maintenant, du culot (12 cm au-dessus de la ligne des galets), il
+    décrit une chaînette (forme exacte en cosh) jusqu'au premier galet
+    qu'il touche vraiment, R1. La pente au culot est dans l'axe du culot.
+    Les galets d'avant sont survolés : ils sont libérés et ralentissent ;
+  - R1 est le premier galet, à la distance D, sur lequel la chaînette
+    appuie : D·(D + L) ≥ 2·a·h, avec a = T/(w cos α) entre 1 200 et
+    2 700 m selon la tension, et L la portée suivante. Il est à 17-30 m
+    du culot (`audit_physique/chainette_attache.sage` : 17 à 25 m pour un
+    appui continu). Sur R1, le galet dévie le câble d'environ 0,5°, autour
+    de 25 cm de rayon : invisible.
+- **« Le cosh dans chaque section de câble entre ses points d'appui »** :
+  chaque portée pend en chaînette entre deux galets, a(cosh(L/2a) −
+  cosh((x − L/2)/a)). La tension croît vers le haut avec le poids du
+  câble, d'environ 140 kN en bas à 240 kN en haut. La flèche fait 1,2 à
+  2 cm sur 14,5 m. Après une rupture, le câble retombe toujours jusqu'à
+  la longrine.
+- Profil réel du jeu (échelle verticale amplifiée) :
+  `audit_physique/profil_chainette.png`.
+- Salle des machines : le raccord du brin visait encore l'ancien dernier
+  galet du tunnel (−6,865 m). Depuis le recalage entre les traverses
+  (v1.15.56), ce galet est à −7,04 m ; le câble faisait un petit coude de
+  17 cm. C'est corrigé.
+- Vérifié : banc des galets (20 contrôles, dont R1, la chaînette, le
+  coude sur R1, la flèche et les galets survolés), bancs de la salle des
+  machines, rupture, aiguillage, 3D, Défi et portes ; vue dans l'axe du
+  câble sous la rame (`shot_galets.gd vue=chainette`).
+
 **v1.15.58** — passagers redessinés : de vrais skieurs.
 - **« Redesign complètement les passagers pour qu'ils soient bien
   réalistes, mes skieurs »** : les silhouettes en capsules sont

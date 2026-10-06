@@ -1,0 +1,15 @@
+T = 13000 daN, pente  8.3 % : a =   1209 m, décollage à x0 = 17.04 m, angle au culot 0.81°
+T = 13000 daN, pente 29.5 % : a =   1256 m, décollage à x0 = 17.37 m, angle au culot 0.79°
+T = 14000 daN, pente  8.3 % : a =   1302 m, décollage à x0 = 17.68 m, angle au culot 0.78°
+T = 14000 daN, pente 29.5 % : a =   1353 m, décollage à x0 = 18.02 m, angle au culot 0.76°
+T = 17000 daN, pente  8.3 % : a =   1581 m, décollage à x0 = 19.48 m, angle au culot 0.71°
+T = 17000 daN, pente 29.5 % : a =   1643 m, décollage à x0 = 19.86 m, angle au culot 0.69°
+T = 22500 daN, pente  8.3 % : a =   2093 m, décollage à x0 = 22.41 m, angle au culot 0.61°
+T = 22500 daN, pente 29.5 % : a =   2175 m, décollage à x0 = 22.85 m, angle au culot 0.60°
+T = 28000 daN, pente  8.3 % : a =   2605 m, décollage à x0 = 25.00 m, angle au culot 0.55°
+T = 28000 daN, pente 29.5 % : a =   2706 m, décollage à x0 = 25.49 m, angle au culot 0.54°
+à  3 m du culot : câble 9.1 cm au-dessus du galet
+à  7 m du culot : câble 5.8 cm au-dessus du galet
+à 10 m du culot : câble 3.8 cm au-dessus du galet
+à 14 m du culot : câble 1.8 cm au-dessus du galet
+écart x0 exact / sqrt(2ah) : 4.60e-06

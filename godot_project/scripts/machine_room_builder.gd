@@ -48,11 +48,12 @@ const LANE_R: float = 0.12           # brin de la rame 2 : sort du sommet de la 
 const S0: float = 0.20               # (ancien raccord de la sortie, gardé pour compat)
 # Brin de sortie : au-dessus du sommet de la roue aval, sur deux galets qui
 # l'encadrent (34 mm au-dessus des joues), puis descente à 1° jusqu'au
-# dernier galet du tunnel (s = 255,5 × 13,57 − 3474 = −6,865 m).
+# dernier galet du tunnel : 255,5 × 13,57 = 3 467,1 m, recalé entre deux
+# traverses (v1.15.56) à 2 296 × 1,51 = 3 466,96 m, soit −7,04 m.
 const EXIT_Y: float = -1.24
 const EXIT_ROLL_S: Array = [0.05, 1.85]
 const EXIT_ROLL_R: float = 0.10
-const S_LAST_TUNNEL_ROLLER: float = -6.865
+const S_LAST_TUNNEL_ROLLER: float = -7.04
 const EXIT_Y_END: float = Y_BRIN + (EXIT_Y - Y_BRIN) * (0.0 - S_LAST_TUNNEL_ROLLER) / (0.05 - S_LAST_TUNNEL_ROLLER)
 
 # --- Gare et salle ---------------------------------------------------------
