@@ -78,7 +78,7 @@ const TUNNEL_DARK_ZONES: Array = [
 const TUNNEL_SECTIONS: Array = [
 	[0.0,     "horseshoe"],
 	[257.0,   "circular"],
-	[3472.56, "horseshoe"],   # PNConstants.SQUARE_SECTION_HIGH_START
+	[3443.0,  "horseshoe"],   # PNConstants.SQUARE_SECTION_HIGH_START (vidéo de descente)
 	[3514.52, "horseshoe"],
 ]
 
