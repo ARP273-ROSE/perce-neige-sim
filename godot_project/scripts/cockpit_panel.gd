@@ -163,7 +163,7 @@ func _draw_speedometer(cx: float, cy: float) -> void:
 	# Lecture digitale : m/s dans le cadran (zone libre sous le moyeu),
 	# km/h SOUS le cadran — l'ancien placement à 0.78×R tombait sur les
 	# graduations du bas (retour d'essai 2026-07-13 : valeurs confondues).
-	_draw_text_center(Vector2(cx, cy + radius * 0.48), "%.1f m/s" % v_roues, 13, Color(0.55, 1.0, 0.65))
+	_draw_text_center(Vector2(cx, cy + radius * 0.48), "%.2f m/s" % v_roues, 13, Color(0.55, 1.0, 0.65))
 	_draw_text_center(Vector2(cx, cy + radius + 16.0), "%.0f km/h" % v_kmh, 11, Color(0.85, 0.88, 0.92))
 	# Label
 	_draw_text_center(Vector2(cx, cy - radius - 12.0), "VITESSE", 11, label_color)

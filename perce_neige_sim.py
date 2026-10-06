@@ -9581,8 +9581,8 @@ class GameWidget(QWidget):
                            view_y + (y_top_m - ym) * px_m)
 
         # grossissement des rames, du tunnel et des gares quand le zoom les
-        # rendrait illisibles (proportions gardées) : rame ≥ 120 px
-        k_ech = max(1.0, 120.0 / (TRAIN_LEN * px_m))
+        # rendrait illisibles (proportions gardées) : rame ≥ 160 px
+        k_ech = max(1.0, 160.0 / (TRAIN_LEN * px_m))
         x_vis0 = cam_x_m - 80.0
         x_vis1 = cam_x_m + cam_width_m + 80.0
         bas_vue = view_y + view_h + 4.0
@@ -9870,17 +9870,24 @@ class GameWidget(QWidget):
         p.setFont(_cached_font("Consolas", 10))
         grad_now = gradient_at(tr.s) * 100
         ang = math.degrees(math.atan(gradient_at(tr.s)))
+        # épaisseur de roche et de glace au-dessus de la rame (relief IGN)
+        roche = max(0.0, coupe["surface_a"](cabin_x_m) - cabin_y_m - 3.2)
         p.drawText(
             QRectF(view_x + view_w - 180, view_y + 4, 170, 18),
             int(Qt.AlignmentFlag.AlignRight),
             T(f"slope  {grad_now:4.1f}%  ({ang:4.1f}°)",
               f"pente  {grad_now:4.1f}%  ({ang:4.1f}°)"),
         )
+        p.drawText(
+            QRectF(view_x + view_w - 180, view_y + 22, 170, 18),
+            int(Qt.AlignmentFlag.AlignRight),
+            T(f"rock above  {roche:4.0f} m", f"au-dessus  {roche:4.0f} m"),
+        )
         # Zoom indicator (+/− or wheel to zoom, 0 to reset)
         p.setPen(_cached_pen(COLOR_TEXT_DIM))
         p.setFont(_cached_font("Consolas", 9))
         p.drawText(
-            QRectF(view_x + view_w - 180, view_y + 22, 170, 14),
+            QRectF(view_x + view_w - 180, view_y + 40, 170, 14),
             int(Qt.AlignmentFlag.AlignRight),
             T(f"zoom {1.0 / self._profile_zoom:4.2f}×  (+/− 0)",
               f"zoom {1.0 / self._profile_zoom:4.2f}×  (+/− 0)"),
@@ -13215,117 +13222,182 @@ class GameWidget(QWidget):
         b_mil = (b_bas + b_haut) / 2
         demi = CAR_LEN_M * 0.5 - 0.2
         nez = 1.7
+        # dessin d'après le modèle 3D (train_body_builder.gd) : caisse gris
+        # argent découpée en baies, hublots ovales à cadre sombre, trois
+        # portes vitrées par voiture, nez jaunes à pare-brise ovale
+        ouvertes = tr.doors_open if principale else False
+        en_mvt = principale and tr.doors_timer > 0.0
+        trait = max(1.0, 0.06 * m_px)
+
+        def ovale(a_c: float, b_c: float, la: float, hb: float, n: int = 14) -> QPolygonF:
+            return QPolygonF([q(a_c + la * 0.5 * math.cos(2 * math.pi * i / n),
+                                b_c + hb * 0.5 * math.sin(2 * math.pi * i / n)) for i in range(n)])
+
+        def rect_arrondi(a0_: float, a1_: float, b0_: float, b1_: float, r: float) -> QPolygonF:
+            pts = []
+            for ca, cb, ph0 in ((a1_ - r, b1_ - r, 0.0), (a0_ + r, b1_ - r, 0.5 * math.pi),
+                                (a0_ + r, b0_ + r, math.pi), (a1_ - r, b0_ + r, 1.5 * math.pi)):
+                for i in range(4):
+                    ph = ph0 + 0.5 * math.pi * i / 3
+                    pts.append(q(ca + r * math.cos(ph), cb + r * math.sin(ph)))
+            return QPolygonF(pts)
+
+        def passager(a_p: float, b_p: float, graine: int) -> None:
+            habit = (QColor(206, 62, 58), QColor(58, 112, 196), QColor(242, 172, 40),
+                     QColor(70, 160, 110), QColor(150, 80, 170))[graine % 5]
+            peau = (QColor(226, 186, 156), QColor(196, 146, 112), QColor(240, 206, 176))[graine % 3]
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(QBrush(habit))
+            p.drawPolygon(rect_arrondi(a_p - 0.24, a_p + 0.24, b_p - 0.45, b_p + 0.05, 0.12))
+            p.setBrush(QBrush(peau))
+            p.drawEllipse(q(a_p, b_p + 0.28), 0.15 * m_px, 0.15 * m_px)
+            p.setBrush(QBrush(habit.darker(130)))
+            p.drawEllipse(q(a_p, b_p + 0.38), 0.15 * m_px, 0.07 * m_px)    # bonnet
+
         for c_i, ac in enumerate((-CAR_LEN_M * 0.5, CAR_LEN_M * 0.5)):
             pax = pax_aval if c_i == 0 else pax_amont
             sens_ext = -1.0 if c_i == 0 else 1.0     # bout extérieur (cabine)
             a_ext = ac + sens_ext * demi
             a_int = ac - sens_ext * demi
-            # caisse : partie droite + nez arrondi côté cabine
-            corps = QPolygonF()
             a_droit = a_ext - sens_ext * nez
-            corps.append(q(a_int, b_bas + 0.15))
-            corps.append(q(a_int, b_haut - 0.15))
-            corps.append(q(a_droit, b_haut))
-            for i in range(1, 12):
-                ph = math.pi / 2 - math.pi * i / 12
-                corps.append(q(a_droit + sens_ext * nez * math.cos(ph), b_mil + 1.775 * math.sin(ph)))
-            corps.append(q(a_droit, b_bas))
-            grad = QLinearGradient(q(ac, b_haut), q(ac, b_bas))
-            grad.setColorAt(0.0, QColor(238, 241, 245))
-            grad.setColorAt(0.55, QColor(196, 202, 210))
-            grad.setColorAt(1.0, QColor(132, 138, 148))
-            p.setBrush(QBrush(grad))
-            p.setPen(_cached_pen(QColor(60, 64, 72), max(1.0, 0.08 * m_px)))
-            p.drawPolygon(corps)
-            # cabine jaune au bout extérieur, pare-brise
-            cab = QPolygonF()
-            a_cab = a_ext - sens_ext * (nez + 1.3)
-            cab.append(q(a_cab, b_bas))
-            cab.append(q(a_cab, b_haut))
-            cab.append(q(a_droit, b_haut))
-            for i in range(1, 12):
-                ph = math.pi / 2 - math.pi * i / 12
-                cab.append(q(a_droit + sens_ext * nez * math.cos(ph), b_mil + 1.775 * math.sin(ph)))
-            cab.append(q(a_droit, b_bas))
-            gj = QLinearGradient(q(ac, b_haut), q(ac, b_bas))
-            gj.setColorAt(0.0, QColor(252, 214, 70))
-            gj.setColorAt(1.0, QColor(196, 146, 18))
-            p.setBrush(QBrush(gj))
-            p.drawPolygon(cab)
-            vitre = QPolygonF()
-            for i in range(0, 9):
-                ph = math.pi * 0.42 - math.pi * 0.62 * i / 8
-                vitre.append(q(a_droit + sens_ext * (nez * 0.92) * math.cos(ph) - sens_ext * 0.05,
-                               b_mil + 0.30 + 1.40 * math.sin(ph)))
-            vitre.append(q(a_droit - sens_ext * 0.6, b_mil - 0.15))
-            vitre.append(q(a_droit - sens_ext * 0.6, b_mil + 1.45))
-            p.setBrush(QBrush(QColor(28, 40, 58)))
-            p.setPen(Qt.PenStyle.NoPen)
-            p.drawPolygon(vitre)
-            # soufflet entre les voitures
-            if c_i == 1:
-                p.setBrush(QBrush(QColor(44, 46, 52)))
-                p.drawPolygon(QPolygonF([q(-0.45, 0.2), q(-0.45, 2.9), q(0.45, 2.9), q(0.45, 0.2)]))
-            # baies et passagers
-            portes = [ac - 4.6, ac, ac + 4.6]
-            baies = [ac - 2.3, ac + 2.3, a_int + sens_ext * 1.35]
             remplissage = max(0.0, min(1.0, pax / max(1.0, PAX_MAX * 0.5)))
-            for i_b, ab in enumerate(baies):
-                bv = QPolygonF([q(ab - 0.8, 1.30), q(ab + 0.8, 1.30), q(ab + 0.8, 2.75), q(ab - 0.8, 2.75)])
-                p.setBrush(QBrush(QColor(36, 60, 92)))
-                p.setPen(_cached_pen(QColor(30, 32, 38), max(1.0, 0.07 * m_px)))
-                p.drawPolygon(bv)
-                n_t = int(round(remplissage * 3.0 + 0.2 * ((i_b + c_i) % 2)))
-                if m_px > 2.2:
-                    p.setPen(Qt.PenStyle.NoPen)
-                    for j in range(n_t):
-                        aj = ab - 0.5 + j * 0.5
-                        teinte = (QColor(222, 180, 150), QColor(196, 140, 110), QColor(240, 200, 170))[(j + i_b) % 3]
-                        habit = (QColor(200, 60, 60), QColor(60, 110, 190), QColor(240, 170, 40))[(j + c_i + i_b) % 3]
-                        p.setBrush(QBrush(habit))
-                        p.drawEllipse(q(aj, 1.60), 0.26 * m_px, 0.22 * m_px)
-                        p.setBrush(QBrush(teinte))
-                        p.drawEllipse(q(aj, 2.03), 0.17 * m_px, 0.17 * m_px)
-                # reflet
-                p.setPen(_cached_pen(QColor(255, 255, 255, 70), max(1.0, 0.06 * m_px)))
-                p.drawLine(q(ab - 0.6, 2.58), q(ab + 0.2, 2.58))
-            # portes : contour, état (vert ouvertes, ambre en mouvement)
-            ouvertes = tr.doors_open if principale else False
-            en_mvt = principale and tr.doors_timer > 0.0
-            for ap in portes:
-                if abs(ap - a_ext) < nez + 1.6:
-                    continue
-                pv = QPolygonF([q(ap - 0.62, 0.0), q(ap + 0.62, 0.0), q(ap + 0.62, 2.75), q(ap - 0.62, 2.75)])
-                p.setBrush(QBrush(QColor(24, 26, 30) if ouvertes else QColor(178, 184, 194)))
-                p.setPen(_cached_pen(QColor(70, 74, 82), max(1.0, 0.07 * m_px)))
-                p.drawPolygon(pv)
-                if not ouvertes:
-                    p.drawLine(q(ap, 0.05), q(ap, 2.7))
-                if ouvertes or en_mvt:
-                    p.setPen(Qt.PenStyle.NoPen)
-                    p.setBrush(QBrush(QColor(70, 230, 120) if ouvertes and not en_mvt else QColor(250, 180, 40)))
-                    p.drawEllipse(q(ap, 2.95), max(1.2, 0.18 * m_px), max(1.2, 0.18 * m_px))
-            # châssis et bogies
+            # châssis et bogies : DERRIÈRE la caisse cylindrique, qui les cache
+            # presque entièrement (le bas du tube descend entre les rails)
             p.setPen(Qt.PenStyle.NoPen)
-            p.setBrush(QBrush(QColor(52, 55, 62)))
+            p.setBrush(QBrush(QColor(42, 45, 52)))
             p.drawPolygon(QPolygonF([q(a_int, -0.38), q(a_ext - sens_ext * 0.6, -0.38),
                                      q(a_ext - sens_ext * 0.6, -0.08), q(a_int, -0.08)]))
             for ab in (ac - 5.2, ac + 5.2):
+                p.setBrush(QBrush(QColor(60, 64, 72)))
+                p.drawPolygon(QPolygonF([q(ab - 1.35, 0.15), q(ab + 1.35, 0.15), q(ab + 1.2, 0.55), q(ab - 1.2, 0.55)]))
                 for aw in (ab - 0.9, ab + 0.9):
-                    p.setBrush(QBrush(QColor(30, 32, 36)))
+                    p.setBrush(QBrush(QColor(26, 28, 32)))
                     p.drawEllipse(q(aw, 0.30), 0.30 * m_px, 0.30 * m_px)
-                    p.setBrush(QBrush(QColor(150, 152, 158)))
-                    p.drawEllipse(q(aw, 0.30), 0.10 * m_px, 0.10 * m_px)
+                    p.setBrush(QBrush(QColor(156, 158, 164)))
+                    p.drawEllipse(q(aw, 0.30), 0.11 * m_px, 0.11 * m_px)
+
+            def profil(a_debut: float) -> QPolygonF:
+                poly = QPolygonF()
+                poly.append(q(a_debut, b_bas + 0.12))
+                poly.append(q(a_debut, b_haut - 0.12))
+                poly.append(q(a_droit, b_haut))
+                for i in range(1, 14):
+                    ph = math.pi / 2 - math.pi * i / 14
+                    poly.append(q(a_droit + sens_ext * nez * math.cos(ph), b_mil + 1.775 * math.sin(ph)))
+                poly.append(q(a_droit, b_bas))
+                return poly
+            # caisse
+            grad = QLinearGradient(q(ac, b_haut), q(ac, b_bas))
+            grad.setColorAt(0.0, QColor(214, 219, 225))
+            grad.setColorAt(0.18, QColor(190, 196, 204))
+            grad.setColorAt(0.75, QColor(150, 156, 166))
+            grad.setColorAt(1.0, QColor(104, 110, 120))
+            p.setBrush(QBrush(grad))
+            p.setPen(_cached_pen(QColor(54, 58, 66), trait))
+            p.drawPolygon(profil(a_int))
+            # reflet de toit
+            p.setPen(_cached_pen(QColor(255, 255, 255, 90), max(1.0, 0.12 * m_px)))
+            p.drawLine(q(a_int + sens_ext * 0.3, b_haut - 0.35), q(a_droit, b_haut - 0.35))
+            # joints verticaux entre baies
+            p.setPen(_cached_pen(QColor(70, 74, 84, 150), max(1.0, 0.04 * m_px)))
+            for rel in (-6.6, -5.35, -3.85, -2.3, -0.75, 0.75, 2.3, 3.85, 5.35, 6.6):
+                a_j = ac + rel
+                if (a_j - a_droit) * sens_ext < -0.2:
+                    p.drawLine(q(a_j, b_bas + 0.25), q(a_j, b_haut - 0.2))
+            # bande de bas de caisse
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(QBrush(QColor(62, 66, 76)))
+            p.drawPolygon(QPolygonF([q(a_int, b_bas + 0.12), q(a_droit, b_bas + 0.02),
+                                     q(a_droit, b_bas + 0.40), q(a_int, b_bas + 0.40)]))
+            # nez jaune et pare-brise ovale
+            gj = QLinearGradient(q(ac, b_haut), q(ac, b_bas))
+            gj.setColorAt(0.0, QColor(252, 218, 80))
+            gj.setColorAt(0.6, QColor(226, 180, 30))
+            gj.setColorAt(1.0, QColor(170, 126, 12))
+            p.setBrush(QBrush(gj))
+            p.setPen(_cached_pen(QColor(120, 86, 10), trait))
+            p.drawPolygon(profil(a_droit - sens_ext * 0.55))
+            p.setBrush(QBrush(QColor(22, 32, 46)))
+            p.setPen(_cached_pen(QColor(40, 34, 20), trait))
+            p.drawPolygon(ovale(a_droit + sens_ext * 0.75, b_mil + 0.55, 1.15, 1.55))
+            p.setPen(_cached_pen(QColor(255, 255, 255, 80), max(1.0, 0.05 * m_px)))
+            p.drawLine(q(a_droit + sens_ext * 0.45, b_mil + 0.95), q(a_droit + sens_ext * 0.9, b_mil + 0.75))
+            # soufflet entre les voitures
+            if c_i == 1:
+                p.setPen(Qt.PenStyle.NoPen)
+                p.setBrush(QBrush(QColor(40, 42, 48)))
+                p.drawPolygon(QPolygonF([q(-0.45, 0.1), q(-0.45, 2.9), q(0.45, 2.9), q(0.45, 0.1)]))
+                p.setPen(_cached_pen(QColor(70, 72, 80), max(1.0, 0.04 * m_px)))
+                for k_s in range(-2, 3):
+                    p.drawLine(q(0.15 * k_s, 0.2), q(0.15 * k_s, 2.8))
+            # hublots ovales (passagers selon la charge)
+            graine = c_i * 17
+            for rel in (-6.0, -3.1, -1.5, 1.5, 3.1, 6.0, -7.15, 7.15):
+                a_w = ac + rel
+                if (a_w - a_droit) * sens_ext > -0.6 or abs(a_w - a_int) < 0.5:
+                    continue
+                p.setBrush(QBrush(QColor(30, 52, 70)))
+                p.setPen(_cached_pen(QColor(26, 28, 34), max(1.0, 0.1 * m_px)))
+                p.drawPolygon(ovale(a_w, 1.95, 0.72, 1.2))
+                graine += 1
+                if m_px > 2.0 and (graine * 7919) % 100 < remplissage * 100:
+                    p.save()
+                    clip = QPainterPath()
+                    clip.addPolygon(ovale(a_w, 1.95, 0.66, 1.12))
+                    p.setClipPath(clip, Qt.ClipOperation.IntersectClip)
+                    passager(a_w, 1.75, graine)
+                    p.restore()
+                p.setPen(_cached_pen(QColor(255, 255, 255, 70), max(1.0, 0.05 * m_px)))
+                p.drawLine(q(a_w - 0.2, 2.35), q(a_w + 0.05, 2.45))
+            # portes vitrées : 3 par voiture
+            for rel in (-4.6, 0.0, 4.6):
+                ap = ac + rel
+                if (ap - a_droit) * sens_ext > -0.9:
+                    continue
+                cadre = rect_arrondi(ap - 0.62, ap + 0.62, -0.05, 2.75, 0.18)
+                p.setBrush(QBrush(QColor(20, 22, 26) if ouvertes else QColor(168, 174, 184)))
+                p.setPen(_cached_pen(QColor(54, 58, 66), trait))
+                p.drawPolygon(cadre)
+                if not ouvertes:
+                    for vit in (rect_arrondi(ap - 0.55, ap - 0.06, 0.95, 2.6, 0.12),
+                                rect_arrondi(ap + 0.06, ap + 0.55, 0.95, 2.6, 0.12)):
+                        p.setBrush(QBrush(QColor(34, 58, 78)))
+                        p.setPen(_cached_pen(QColor(30, 32, 38), max(1.0, 0.05 * m_px)))
+                        p.drawPolygon(vit)
+                    if m_px > 2.0:
+                        n_p = int(round(remplissage * 2.4))
+                        p.save()
+                        clip = QPainterPath()
+                        clip.addPolygon(rect_arrondi(ap - 0.55, ap + 0.55, 0.95, 2.6, 0.12))
+                        p.setClipPath(clip, Qt.ClipOperation.IntersectClip)
+                        for j in range(n_p):
+                            passager(ap - 0.3 + j * 0.45, 1.75, graine + j * 3 + int(rel))
+                        p.restore()
+                    p.setPen(_cached_pen(QColor(54, 58, 66), trait))
+                    p.drawLine(q(ap, 0.0), q(ap, 2.7))
+                else:
+                    for j in range(int(round(remplissage * 2))):
+                        passager(ap - 0.2 + j * 0.4, 1.0, graine + j)
+                if ouvertes or en_mvt:
+                    p.setPen(Qt.PenStyle.NoPen)
+                    p.setBrush(QBrush(QColor(70, 230, 120) if ouvertes and not en_mvt else QColor(250, 180, 40)))
+                    p.drawEllipse(q(ap, 2.95), max(1.2, 0.16 * m_px), max(1.2, 0.16 * m_px))
+            # culot d'attache du câble sous le milieu de la voiture amont
+            if c_i == 1:
+                p.setBrush(QBrush(QColor(90, 92, 98)))
+                p.drawPolygon(QPolygonF([q(ac - 0.25, -0.05), q(ac + 0.4, 0.05), q(ac + 0.4, 0.25), q(ac - 0.25, 0.2)]))
             # phares au bout extérieur
             phare = q(a_ext - sens_ext * 0.35, 0.75)
             allume = principale and tr.lights_head
-            p.setBrush(QBrush(QColor(255, 250, 210) if allume else QColor(90, 88, 80)))
+            p.setPen(_cached_pen(QColor(40, 36, 20), max(1.0, 0.04 * m_px)))
+            p.setBrush(QBrush(QColor(255, 250, 210) if allume else QColor(110, 108, 96)))
             p.drawEllipse(phare, max(1.2, 0.2 * m_px), max(1.2, 0.2 * m_px))
             if allume and c_i == (1 if tr.direction > 0 else 0):
                 cone = QPolygonF([phare, q(a_ext + sens_ext * 30.0, 3.2), q(a_ext + sens_ext * 30.0, -0.7)])
                 gc = QLinearGradient(phare, q(a_ext + sens_ext * 30.0, 1.2))
                 gc.setColorAt(0.0, QColor(255, 248, 210, 120))
                 gc.setColorAt(1.0, QColor(255, 248, 210, 0))
+                p.setPen(Qt.PenStyle.NoPen)
                 p.setBrush(QBrush(gc))
                 p.drawPolygon(cone)
         # étiquette
@@ -13392,7 +13464,7 @@ class GameWidget(QWidget):
             value=abs(vitesse_roues(st)),
             maxv=15.0,
             label=f"m/s  ({abs(vitesse_roues(st)) * 3.6:4.1f} km/h)",
-            big_text=f"{abs(vitesse_roues(st)):4.1f}",
+            big_text=f"{abs(vitesse_roues(st)):5.2f}",   # 2 décimales (Kevin, 06/10/2026)
             warn=V_MAX,
             crit=V_MAX + 1.0,
         )
