@@ -62,14 +62,14 @@ func _initialize() -> void:
 	if not tripped:
 		print("  ECHEC cap_over jamais déclenché"); ok = false
 
-	# 3. abt_hold : la rame doit s'arrêter AVANT PASSING_START (1611)
+	# 3. abt_hold : la rame doit s'arrêter AVANT PASSING_START
 	ph = _make(1, 1300.0, 8.0)
 	ph.abt_hold = true
 	ph.speed_cap_external = 4.0
 	r = _run(ph, 240.0)
-	print("abt_hold : arrêt à s=%.0f v=%.2f (aiguillage à 1611)"
-		% [r["s"], r["v"]])
-	if r["s"] > 1611.0 - 5.0 or absf(r["v"]) > 0.5:
+	print("abt_hold : arrêt à s=%.0f v=%.2f (aiguillage à %.0f)"
+		% [r["s"], r["v"], PNConstants.PASSING_START])
+	if r["s"] > PNConstants.PASSING_START - 5.0 or absf(r["v"]) > 0.5:
 		print("  ECHEC abt_hold"); ok = false
 
 	# 4. Arrivée avec consigne BAISSÉE pendant l'approche (mode auto) :

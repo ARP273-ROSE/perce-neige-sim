@@ -328,7 +328,7 @@ func _draw_setpoint_panel(x: float, y: float, w: float, h: float) -> void:
 	var alt_cur: float = SlopeProfile.altitude_at(physics.s)
 	_draw_text(Vector2(x + 8, y + 70.0), "POSITION", 10, label_color)
 	_draw_text(Vector2(x + 8, y + 88.0), "%.0f / %.0f m" % [
-		PNConstants.distance_compteur(physics.s, physics.direction), PNConstants.LENGTH], 12, Color(0.85, 0.95, 1.0))
+		PNConstants.distance_compteur(physics.s, physics.direction), PNConstants.PARCOURS], 12, Color(0.85, 0.95, 1.0))
 	_draw_text(Vector2(x + 8, y + 106.0), "ALT %.0f m" % alt_cur, 11, Color(0.85, 0.95, 1.0))
 
 	# Slope (pente locale)
@@ -403,7 +403,7 @@ func _draw_slope_profile(x: float, y: float, w: float, h: float) -> void:
 		draw_circle(p_own, 5.0, Color(1, 1, 1), false, 1.0)
 		_draw_text(Vector2(p_own.x - 8.0, p_own.y - 8.0), own_lbl, 9, Color(1.0, 0.75, 0.35))
 		# Distance
-		_draw_text(Vector2(plot_x, y + h - 16.0), "%.0f / %.0f m" % [physics.s, PNConstants.LENGTH], 10, Color(0.85, 0.88, 0.92))
+		_draw_text(Vector2(plot_x, y + h - 16.0), "%.0f / %.0f m" % [PNConstants.distance_compteur(physics.s, physics.direction), PNConstants.PARCOURS], 10, Color(0.85, 0.88, 0.92))
 
 
 # Point (px) sur la courbe du mini-profil pour une fraction 0..1 de la ligne.
