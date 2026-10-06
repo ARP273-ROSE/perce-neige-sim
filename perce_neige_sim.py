@@ -59,6 +59,7 @@ from PyQt6.QtGui import (
     QPainter,
     QPainterPath,
     QPen,
+    QPixmap,
     QPolygonF,
     QRadialGradient,
     QTransform,
@@ -66,6 +67,7 @@ from PyQt6.QtGui import (
 )
 from PyQt6.QtWidgets import (
     QApplication,
+    QCheckBox,
     QDialog,
     QDialogButtonBox,
     QHBoxLayout,
@@ -9574,7 +9576,6 @@ class GameWidget(QWidget):
         y_mid = cabin_y_m + y_span * 0.10
         y_mid = max(ALT_LOW - 160.0 + y_span / 2, min(3760.0 - y_span / 2, y_mid))
         y_top_m = y_mid + y_span / 2
-        y_bot_m = y_mid - y_span / 2
         px_m = view_w / cam_width_m
 
         def world_to_screen(xm: float, ym: float) -> QPointF:
@@ -9586,46 +9587,19 @@ class GameWidget(QWidget):
         k_ech = max(1.0, 160.0 / (TRAIN_LEN * px_m))
         x_vis0 = cam_x_m - 80.0
         x_vis1 = cam_x_m + cam_width_m + 80.0
-        bas_vue = view_y + view_h + 4.0
 
-        # --- ciel
-        sky = QLinearGradient(0, view_y, 0, view_y + view_h)
-        sky.setColorAt(0.0, QColor(22, 52, 110))
-        sky.setColorAt(0.55, QColor(78, 128, 190))
-        sky.setColorAt(1.0, QColor(168, 198, 228))
-        p.fillRect(QRectF(view_x, view_y, view_w, view_h), QBrush(sky))
-        c_halo = QPointF(view_x + view_w * 0.84, view_y + view_h * 0.10)
-        r_halo = view_h * 0.55
-        halo = QRadialGradient(c_halo, r_halo)
-        halo.setColorAt(0.0, QColor(255, 248, 225, 120))
-        halo.setColorAt(1.0, QColor(255, 248, 225, 0))
-        p.fillRect(QRectF(c_halo.x() - r_halo, c_halo.y() - r_halo, 2 * r_halo, 2 * r_halo)
-                   .intersected(QRectF(view_x, view_y, view_w, view_h)), QBrush(halo))
-
-        def ligne_visible(pts: list) -> list:
-            out = [pt for pt in pts if x_vis0 - 400.0 <= pt[0] <= x_vis1 + 400.0]
-            if len(out) < 2:
-                return pts[:2]
-            pas_d = max(1, int(len(out) / (view_w / 3.0)))    # ≤ 1 point / 3 px
-            return out[::pas_d] if pas_d > 1 else out
-
-        # --- crêtes réelles à l'est, en deux plans (voile atmosphérique) ;
-        #     elles blanchissent avec l'altitude (sommets enneigés)
-        for cle, bas_c, haut_c in (("loin", QColor(140, 164, 204, 120), QColor(206, 220, 242, 135)),
-                                   ("mi", QColor(96, 116, 154, 215), QColor(200, 214, 236, 215))):
-            crete = ligne_visible(coupe[cle])
-            poly = QPolygonF()
-            poly.append(QPointF(world_to_screen(crete[0][0], 0).x(), bas_vue))
-            haut_pts = [world_to_screen(x, z) for x, z in crete]
-            for q in haut_pts:
-                poly.append(q)
-            poly.append(QPointF(haut_pts[-1].x(), bas_vue))
-            dg = QLinearGradient(0, world_to_screen(0, 3500.0).y(), 0, world_to_screen(0, 2700.0).y())
-            dg.setColorAt(0.0, haut_c)
-            dg.setColorAt(1.0, bas_c)
-            p.setPen(Qt.PenStyle.NoPen)
-            p.setBrush(QBrush(dg))
-            p.drawPolygon(poly)
+        # --- ciel (fixe à l'écran) : image en cache, refaite si la vue change
+        #     de taille
+        dpr = self.devicePixelRatioF() * self._ui_k()
+        cle_ciel = (int(view_w), int(view_h), round(dpr, 3))
+        if getattr(self, "_ciel_cache", (None,))[0] != cle_ciel:
+            pix = QPixmap(max(1, int(view_w * dpr)), max(1, int(view_h * dpr)))
+            pix.setDevicePixelRatio(dpr)
+            pc = QPainter(pix)
+            self._dessiner_ciel(pc, view_w, view_h)
+            pc.end()
+            self._ciel_cache = (cle_ciel, pix)
+        p.drawPixmap(QPointF(view_x, view_y), self._ciel_cache[1])
 
         # --- nuages légers, haut dans le ciel (dérive lente)
         derive = (time.monotonic() * 2.0) % 9000.0
@@ -9642,92 +9616,48 @@ class GameWidget(QWidget):
                 p.drawEllipse(QPointF(c.x() + rx * px_m * 0.3, c.y() + rz * px_m * 0.4),
                               rx * px_m * 0.6, rz * px_m * 0.6)
 
-        # --- coupe du massif : roche, strates, neige, glacier
-        # le terrain couvre toujours le tube (le MNT lisse les crêtes et le
-        # tube grossi doit rester sous la surface), et entoure la gare amont
-        couvert = 12.0 + 4.6 * k_ech
-        # … sauf en approchant de la gare amont, qui affleure le glacier (le
-        # haut de la gare est dehors, fait de Kevin)
-        x_gare_h = geom_at(QUAI_HAUT_DEBUT_S - 15.0)[0]
-        surf = []
-        for x, z in coupe["surface"]:
-            if 0.0 <= x <= H_MAX:
-                f_c = max(0.0, min(1.0, (x_gare_h - x) / 60.0))
-                z = max(z, coupe["voie"](x) + couvert * f_c)
-            surf.append((x, z))
-        surf = ligne_visible(surf)
-        pts_surf = [world_to_screen(x, z) for x, z in surf]
-        massif = QPolygonF()
-        massif.append(QPointF(pts_surf[0].x(), bas_vue))
-        for q in pts_surf:
-            massif.append(q)
-        massif.append(QPointF(pts_surf[-1].x(), bas_vue))
-        roche = QLinearGradient(0, view_y, 0, view_y + view_h)
-        roche.setColorAt(0.0, QColor(104, 94, 86))
-        roche.setColorAt(1.0, QColor(58, 52, 50))
-        p.setPen(Qt.PenStyle.NoPen)
-        p.setBrush(QBrush(roche))
-        p.drawPolygon(massif)
-        # strates : lignes parallèles à la surface, de plus en plus pâles
-        for prof, alpha in ((38.0, 70), (90.0, 55), (160.0, 45), (250.0, 35), (360.0, 28)):
-            p.setPen(_cached_pen(QColor(40, 34, 30, alpha), max(1.0, 1.6 * px_m)))
-            y0 = view_y + y_top_m * px_m
-            p.drawPolyline(QPolygonF([
-                QPointF(view_x + (x - cam_x_m) * px_m,
-                        y0 - (z - prof + 6.0 * math.sin(x * 0.011 + prof) + 3.0 * math.sin(x * 0.037)) * px_m)
-                for x, z in surf]))
-        # manteau neigeux (≥ 3 px) et glacier au-delà de la gare amont
-        ep_neige = max(3.0 / px_m, 2.5)
-        bande = QPolygonF()
-        for q in pts_surf:
-            bande.append(q)
-        for x, z in reversed(surf):
-            ep = ep_neige
-            if H_MAX + 30.0 < x < coupe["x_sommet"] - 120.0:
-                ep = max(ep_neige, 9.0)           # glacier de la Grande Motte
-            bande.append(world_to_screen(x, z - ep))
-        neige = QLinearGradient(0, view_y, 0, view_y + view_h)
-        neige.setColorAt(0.0, QColor(250, 252, 255))
-        neige.setColorAt(1.0, QColor(214, 226, 242))
-        p.setBrush(QBrush(neige))
-        p.drawPolygon(bande)
-        # glace du glacier sous la neige, de la gare au pied du sommet
-        glace = QPolygonF()
-        g_pts = [(x, z) for x, z in surf if H_MAX + 30.0 < x < coupe["x_sommet"] - 120.0]
-        if len(g_pts) >= 2:
-            for x, z in g_pts:
-                glace.append(world_to_screen(x, z - ep_neige))
-            for x, z in reversed(g_pts):
-                glace.append(world_to_screen(x, z - 9.0))
-            p.setBrush(QBrush(QColor(168, 214, 232)))
-            p.drawPolygon(glace)
-        p.setPen(_cached_pen(QColor(255, 255, 255), max(1.0, 1.2 * px_m)))
-        p.drawPolyline(QPolygonF(pts_surf))
-        # crevasses du glacier
-        p.setPen(_cached_pen(QColor(120, 160, 200, 150), max(1.0, 1.5 * px_m)))
-        x_c = H_MAX + 220.0
-        while x_c < coupe["x_sommet"] - 300.0:
-            if x_vis0 < x_c < x_vis1:
-                z_c = coupe["surface_a"](x_c)
-                p.drawLine(world_to_screen(x_c, z_c), world_to_screen(x_c + 6.0, z_c - 16.0))
-            x_c += 97.0 + 41.0 * math.sin(x_c)
+        # --- décor statique : image en cache avec 30 % de marge autour de la
+        #     vue, refaite seulement quand la caméra en sort ou que le zoom /
+        #     la taille changent (à 12 m/s et zoom 1 : une fois toutes les ~20 s)
+        marge_x, marge_y = view_w * 0.3, view_h * 0.3
+        cle_decor = (round(px_m, 6), round(k_ech, 6), int(view_w), int(view_h), round(dpr, 3))
+        dc = getattr(self, "_decor_cache", None)
+        ok = False
+        if dc is not None and dc[0] == cle_decor:
+            ox = view_x + (dc[1] - cam_x_m) * px_m
+            oy = view_y + (y_top_m - dc[2]) * px_m
+            ok = (ox <= view_x and oy <= view_y
+                  and ox + dc[4] >= view_x + view_w and oy + dc[5] >= view_y + view_h)
+        if not ok:
+            larg_c, haut_c = view_w + 2 * marge_x, view_h + 2 * marge_y
+            cam0 = cam_x_m - marge_x / px_m
+            ytop0 = y_top_m + marge_y / px_m
+            pix = QPixmap(max(1, int(larg_c * dpr)), max(1, int(haut_c * dpr)))
+            pix.setDevicePixelRatio(dpr)
+            pix.fill(QColor(0, 0, 0, 0))
+            pc = QPainter(pix)
+            pc.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+            pc.setRenderHint(QPainter.RenderHint.TextAntialiasing, True)
+            self._dessiner_decor(pc, coupe, 0.0, 0.0, larg_c, haut_c, cam0, ytop0,
+                                 px_m, k_ech, y_span)
+            pc.end()
+            self._decor_cache = (cle_decor, cam0, ytop0, pix, larg_c, haut_c)
+            self._decor_rendus = getattr(self, "_decor_rendus", 0) + 1
+            dc = self._decor_cache
+        p.drawPixmap(QPointF(view_x + (dc[1] - cam_x_m) * px_m,
+                             view_y + (y_top_m - dc[2]) * px_m), dc[3])
 
-        # --- repères d'altitude : traits fins derrière le tube ; les
-        #     valeurs sont dans la bande d'axe de gauche (dessinée plus bas)
-        p.setPen(_cached_pen(QColor(255, 255, 255, 40), 1, Qt.PenStyle.DotLine))
+        # repères d'altitude visibles (valeurs dans la bande d'axe, plus bas)
         pas_alt = 100 if y_span < 900 else 250
         alts_visibles = []
         for alt in range(2000, 3801, pas_alt):
             y_scr = view_y + (y_top_m - alt) * px_m
             if view_y + 14 < y_scr < view_y + view_h - 4:
-                p.drawLine(int(view_x + AXE_W), int(y_scr), int(view_x + view_w), int(y_scr))
                 alts_visibles.append((alt, y_scr))
 
-        # --- tunnel : tube Ø 3,9 m (grossi comme les rames), voie, néons ;
-        #     cotes de la 3D : rail à 1,24 m sous l'axe, voûte 3,19 m au-dessus
+        # tunnel : bornes et point le long de la voie (éléments animés)
         s_vis0 = max(0.0, s_at_x(x_vis0) - 5.0)
         s_vis1 = min(LENGTH, s_at_x(x_vis1) + 5.0)
-        n_t = max(8, min(int((s_vis1 - s_vis0) / 4.0), int(view_w / 5.0)))
 
         def le_long(s_: float, b: float) -> QPointF:
             """point à la hauteur b (m, grossie) au-dessus du rail en s"""
@@ -9739,104 +9669,7 @@ class GameWidget(QWidget):
             dl = math.hypot(x1 - x0, y1 - y0) or 1.0
             return world_to_screen(xm - (y1 - y0) / dl * b * k_ech, ym + (x1 - x0) / dl * b * k_ech)
 
-        cache_ech: dict = {}
-
-        def echantillons(s0: float, s1: float, n: int) -> list:
-            """(x écran, y écran, normale x, normale y en px par m grossi) des
-            n + 1 points de s0 à s1 — calculés une fois par image"""
-            cle = (s0, s1, n)
-            if cle not in cache_ech:
-                # un point de plus de chaque côté : normales par différences
-                # centrées sur les voisins (un seul geom_at par point)
-                pas_s = (s1 - s0) / n
-                g = [geom_at(min(LENGTH, max(0.0, s0 + pas_s * i))) for i in range(-1, n + 2)]
-                pts = []
-                for i in range(1, n + 2):
-                    (x0, y0), (xm, ym), (x1, y1) = g[i - 1], g[i], g[i + 1]
-                    dl = math.hypot(x1 - x0, y1 - y0) or 1.0
-                    f = k_ech * px_m / dl
-                    pts.append((view_x + (xm - cam_x_m) * px_m, view_y + (y_top_m - ym) * px_m,
-                                -(y1 - y0) * f, -(x1 - x0) * f))
-                cache_ech[cle] = pts
-            return cache_ech[cle]
-
-        def ligne_tube(b: float, s0: float, s1: float, n: int) -> QPolygonF:
-            return QPolygonF([QPointF(x + nx_ * b, y + ny_ * b)
-                              for x, y, nx_, ny_ in echantillons(s0, s1, n)])
-
-        def bande_tube(b0: float, b1: float, s0: float, s1: float, n: int) -> QPolygonF:
-            ech = echantillons(s0, s1, n)
-            poly = QPolygonF([QPointF(x + nx_ * b1, y + ny_ * b1) for x, y, nx_, ny_ in ech])
-            for x, y, nx_, ny_ in reversed(ech):
-                poly.append(QPointF(x + nx_ * b0, y + ny_ * b0))
-            return poly
-
-        if s_vis1 > s_vis0:
-            p.setPen(Qt.PenStyle.NoPen)
-            p.setBrush(QBrush(QColor(176, 170, 160)))
-            p.drawPolygon(bande_tube(-1.10, 3.55, s_vis0, s_vis1, n_t))
-            # évitement : chambre élargie (deux tubes côte à côte)
-            e0, e1 = max(s_vis0, PASSING_START), min(s_vis1, PASSING_END)
-            if e1 > e0:
-                p.setBrush(QBrush(QColor(150, 145, 138)))
-                p.drawPolygon(bande_tube(-1.45, 4.0, e0, e1,
-                                         max(4, min(int((e1 - e0) / 4.0), int(view_w / 10.0)))))
-            p.setBrush(QBrush(QColor(34, 36, 44)))
-            p.drawPolygon(bande_tube(-0.75, 3.20, s_vis0, s_vis1, n_t))
-            # néons allumés tous les 20 m (vidéo de descente ; visibles de près)
-            if px_m * k_ech > 1.2:
-                p.setPen(Qt.PenStyle.NoPen)
-                p.setBrush(QBrush(QColor(255, 246, 210, 210)))
-                s_n = math.ceil(s_vis0 / 20.0) * 20.0
-                while s_n < s_vis1:
-                    p.drawEllipse(le_long(s_n, 2.95), max(1.2, 0.35 * px_m * k_ech),
-                                  max(1.0, 0.18 * px_m * k_ech))
-                    s_n += 20.0
-            # dalle et rail
-            p.setPen(_cached_pen(QColor(120, 118, 112), max(1.0, 0.35 * px_m * k_ech)))
-            p.drawPolyline(ligne_tube(-0.2, s_vis0, s_vis1, n_t))
-            p.setPen(_cached_pen(QColor(196, 198, 204), max(1.0, 0.12 * px_m * k_ech)))
-            p.drawPolyline(ligne_tube(0.0, s_vis0, s_vis1, n_t))
-            # sortie de secours (galet 145, à droite en montant) : la galerie
-            # monte du tube à la surface, où elle débouche au bord de la
-            # piste rouge (fait de Kevin, 06/10/2026)
-            s_ss = 2112.0 + START_S + TRAIN_HALF
-            x_ss, _z = geom_at(s_ss)
-            if x_vis0 - 60.0 < x_ss < x_vis1 + 60.0:
-                x_sortie = x_ss + 18.0
-                z_sortie = max(z for x, z in surf if abs(x - x_sortie) < 12.0) \
-                    if any(abs(x - x_sortie) < 12.0 for x, _ in surf) \
-                    else coupe["surface_a"](x_sortie)
-                g0 = le_long(s_ss, 3.6)
-                g1 = world_to_screen(x_sortie, z_sortie - 1.5)
-                p.setPen(_cached_pen(QColor(150, 145, 138), max(3.0, 2.6 * px_m * k_ech)))
-                p.drawLine(g0, g1)
-                p.setPen(_cached_pen(QColor(40, 42, 50), max(1.5, 1.6 * px_m * k_ech)))
-                p.drawLine(g0, g1)
-                # piste rouge sur la neige, et l'édicule de sortie à son bord
-                p.setPen(_cached_pen(QColor(214, 40, 40, 210), max(2.0, 1.4 * px_m)))
-                x_p = x_sortie + 8.0
-                piste = [world_to_screen(x, z + 0.4) for x, z in surf if x_p <= x <= x_p + 160.0]
-                if len(piste) >= 2:
-                    p.drawPolyline(QPolygonF(piste))
-                pied = world_to_screen(x_sortie, z_sortie)
-                l_e = max(5.0, 3.0 * px_m * k_ech)
-                p.setBrush(QBrush(QColor(196, 194, 188)))
-                p.setPen(_cached_pen(QColor(60, 60, 66), 1))
-                p.drawRect(QRectF(pied.x() - l_e / 2, pied.y() - l_e * 0.9, l_e, l_e * 0.9))
-                p.setBrush(QBrush(QColor(40, 210, 110)))
-                p.setPen(Qt.PenStyle.NoPen)
-                p.drawRect(QRectF(pied.x() - l_e * 0.3, pied.y() - l_e * 0.8, l_e * 0.6, l_e * 0.25))
-                if px_m > 0.9:
-                    p.setFont(_cached_font("Segoe UI", 8))
-                    p.setPen(_cached_pen(QColor(225, 255, 235)))
-                    p.drawText(QPointF(pied.x() - 40, pied.y() - l_e - 20), T("emergency exit", "sortie de secours"))
-                    p.setPen(_cached_pen(QColor(255, 225, 225)))
-                    p.drawText(QPointF(pied.x() - 40, pied.y() - l_e - 7),
-                               T("edge of the red run", "bord de la piste rouge"))
-
-        # --- gares
-        self._draw_gare_aval(p, world_to_screen, le_long, px_m, k_ech)
+        # --- gare amont (roues animées) et téléphérique (cabines)
         self._draw_gare_amont(p, world_to_screen, le_long, px_m, k_ech)
         if coupe.get("tph"):
             self._draw_telepherique(p, world_to_screen, coupe["tph"], px_m, k_ech, x_vis0, x_vis1)
@@ -9852,33 +9685,6 @@ class GameWidget(QWidget):
                     p.setPen(_cached_pen(QColor(70, 72, 78), max(1.0, 0.18 * px_m * k_ech)))
                     p.drawPolyline(QPolygonF([le_long(s0c + (s1c - s0c) * i / n_c, 0.25)
                                               for i in range(n_c + 1)]))
-
-        # --- distance parcourue : bornes kilométriques JAUNES posées sur la
-        #     voie, au compteur du pupitre (0 au départ de Val Claret,
-        #     3 474 à l'arrivée ; nez de la rame montante) — retour de
-        #     Kevin : altitudes et distances, toutes deux « en m », se
-        #     confondaient
-        p.setFont(_cached_font("Segoe UI", 8, QFont.Weight.Bold))
-        fm_km = QFontMetricsF(p.font())
-        for d_c in list(range(0, int(PARCOURS), 250)) + [int(PARCOURS)]:
-            s_m = START_S + TRAIN_HALF + d_c
-            if not (s_vis0 - 50 <= s_m <= s_vis1 + 50):
-                continue
-            if d_c % 500 and px_m * k_ech < 1.0:
-                continue
-            pied = le_long(s_m, -0.9)
-            tete = le_long(s_m, -4.2)
-            p.setPen(_cached_pen(QColor(250, 205, 50), max(1.5, 0.15 * px_m * k_ech)))
-            p.drawLine(pied, tete)
-            txt = f"km {d_c / 1000:.3f}".replace(".", ",") if d_c == int(PARCOURS) \
-                else f"km {d_c / 1000:.2f}".rstrip("0").replace(".", ",").rstrip(",")
-            larg = fm_km.horizontalAdvance(txt) + 10
-            r = QRectF(tete.x() - larg / 2, tete.y(), larg, 15)
-            p.setBrush(QBrush(QColor(250, 205, 50, 235)))
-            p.setPen(_cached_pen(QColor(60, 44, 0), 1))
-            p.drawRoundedRect(r, 3, 3)
-            p.setPen(_cached_pen(QColor(40, 30, 0)))
-            p.drawText(r, int(Qt.AlignmentFlag.AlignCenter), txt)
 
         # --- les deux rames (l'autre d'abord, la nôtre par-dessus)
         nom_autre = "RAME 2" if tr.number == 1 else "RAME 1"
@@ -13096,6 +12902,286 @@ class GameWidget(QWidget):
         p.setPen(_cached_pen(COLOR_TEXT_DIM))
         p.drawText(QPointF(nx - 3, ny + 18), "N")
         p.restore()
+
+    def _dessiner_ciel(self, p: QPainter, view_w: float, view_h: float) -> None:
+        """Ciel de la vue en coupe (dégradé et halo du soleil), fixe à l'écran."""
+        view_x = view_y = 0.0
+        sky = QLinearGradient(0, view_y, 0, view_y + view_h)
+        sky.setColorAt(0.0, QColor(22, 52, 110))
+        sky.setColorAt(0.55, QColor(78, 128, 190))
+        sky.setColorAt(1.0, QColor(168, 198, 228))
+        p.fillRect(QRectF(view_x, view_y, view_w, view_h), QBrush(sky))
+        c_halo = QPointF(view_x + view_w * 0.84, view_y + view_h * 0.10)
+        r_halo = view_h * 0.55
+        halo = QRadialGradient(c_halo, r_halo)
+        halo.setColorAt(0.0, QColor(255, 248, 225, 120))
+        halo.setColorAt(1.0, QColor(255, 248, 225, 0))
+        p.fillRect(QRectF(c_halo.x() - r_halo, c_halo.y() - r_halo, 2 * r_halo, 2 * r_halo)
+                   .intersected(QRectF(view_x, view_y, view_w, view_h)), QBrush(halo))
+
+    def _dessiner_decor(self, p: QPainter, coupe: dict, view_x: float, view_y: float,
+                        view_w: float, view_h: float, cam_x_m: float, y_top_m: float,
+                        px_m: float, k_ech: float, y_span: float) -> None:
+        """Décor STATIQUE de la vue en coupe (crêtes, massif, neige, glacier,
+        repères d'altitude, tunnel, sortie de secours, gare aval, bornes
+        kilométriques) dans le repère (view_x, view_y, view_w, view_h).
+        Rendu une fois dans une image en cache plus grande que la vue
+        (_draw_world), puis réutilisé tant que la caméra reste dedans :
+        optimisation du 06/10/2026 (« un beau truc qui ne consomme pas
+        énormément de ressources »)."""
+
+        def world_to_screen(xm: float, ym: float) -> QPointF:
+            return QPointF(view_x + (xm - cam_x_m) * px_m,
+                           view_y + (y_top_m - ym) * px_m)
+
+        x_vis0 = cam_x_m - 80.0
+        x_vis1 = cam_x_m + view_w / px_m + 80.0
+        bas_vue = view_y + view_h + 4.0
+
+        def ligne_visible(pts: list) -> list:
+            out = [pt for pt in pts if x_vis0 - 400.0 <= pt[0] <= x_vis1 + 400.0]
+            if len(out) < 2:
+                return pts[:2]
+            pas_d = max(1, int(len(out) / (view_w / 3.0)))    # ≤ 1 point / 3 px
+            return out[::pas_d] if pas_d > 1 else out
+
+        # --- crêtes réelles à l'est, en deux plans (voile atmosphérique) ;
+        #     elles blanchissent avec l'altitude (sommets enneigés)
+        for cle, bas_c, haut_c in (("loin", QColor(140, 164, 204, 120), QColor(206, 220, 242, 135)),
+                                   ("mi", QColor(96, 116, 154, 215), QColor(200, 214, 236, 215))):
+            crete = ligne_visible(coupe[cle])
+            poly = QPolygonF()
+            poly.append(QPointF(world_to_screen(crete[0][0], 0).x(), bas_vue))
+            haut_pts = [world_to_screen(x, z) for x, z in crete]
+            for q in haut_pts:
+                poly.append(q)
+            poly.append(QPointF(haut_pts[-1].x(), bas_vue))
+            dg = QLinearGradient(0, world_to_screen(0, 3500.0).y(), 0, world_to_screen(0, 2700.0).y())
+            dg.setColorAt(0.0, haut_c)
+            dg.setColorAt(1.0, bas_c)
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(QBrush(dg))
+            p.drawPolygon(poly)
+
+        # --- coupe du massif : roche, strates, neige, glacier
+        # le terrain couvre toujours le tube (le MNT lisse les crêtes et le
+        # tube grossi doit rester sous la surface), et entoure la gare amont
+        couvert = 12.0 + 4.6 * k_ech
+        # … sauf en approchant de la gare amont, qui affleure le glacier (le
+        # haut de la gare est dehors, fait de Kevin)
+        x_gare_h = geom_at(QUAI_HAUT_DEBUT_S - 15.0)[0]
+        surf = []
+        for x, z in coupe["surface"]:
+            if 0.0 <= x <= H_MAX:
+                f_c = max(0.0, min(1.0, (x_gare_h - x) / 60.0))
+                z = max(z, coupe["voie"](x) + couvert * f_c)
+            surf.append((x, z))
+        surf = ligne_visible(surf)
+        pts_surf = [world_to_screen(x, z) for x, z in surf]
+        massif = QPolygonF()
+        massif.append(QPointF(pts_surf[0].x(), bas_vue))
+        for q in pts_surf:
+            massif.append(q)
+        massif.append(QPointF(pts_surf[-1].x(), bas_vue))
+        roche = QLinearGradient(0, view_y, 0, view_y + view_h)
+        roche.setColorAt(0.0, QColor(104, 94, 86))
+        roche.setColorAt(1.0, QColor(58, 52, 50))
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(QBrush(roche))
+        p.drawPolygon(massif)
+        # strates : lignes parallèles à la surface, de plus en plus pâles
+        for prof, alpha in ((38.0, 70), (90.0, 55), (160.0, 45), (250.0, 35), (360.0, 28)):
+            p.setPen(_cached_pen(QColor(40, 34, 30, alpha), max(1.0, 1.6 * px_m)))
+            y0 = view_y + y_top_m * px_m
+            p.drawPolyline(QPolygonF([
+                QPointF(view_x + (x - cam_x_m) * px_m,
+                        y0 - (z - prof + 6.0 * math.sin(x * 0.011 + prof) + 3.0 * math.sin(x * 0.037)) * px_m)
+                for x, z in surf]))
+        # manteau neigeux (≥ 3 px) et glacier au-delà de la gare amont
+        ep_neige = max(3.0 / px_m, 2.5)
+        bande = QPolygonF()
+        for q in pts_surf:
+            bande.append(q)
+        for x, z in reversed(surf):
+            ep = ep_neige
+            if H_MAX + 30.0 < x < coupe["x_sommet"] - 120.0:
+                ep = max(ep_neige, 9.0)           # glacier de la Grande Motte
+            bande.append(world_to_screen(x, z - ep))
+        neige = QLinearGradient(0, view_y, 0, view_y + view_h)
+        neige.setColorAt(0.0, QColor(250, 252, 255))
+        neige.setColorAt(1.0, QColor(214, 226, 242))
+        p.setBrush(QBrush(neige))
+        p.drawPolygon(bande)
+        # glace du glacier sous la neige, de la gare au pied du sommet
+        glace = QPolygonF()
+        g_pts = [(x, z) for x, z in surf if H_MAX + 30.0 < x < coupe["x_sommet"] - 120.0]
+        if len(g_pts) >= 2:
+            for x, z in g_pts:
+                glace.append(world_to_screen(x, z - ep_neige))
+            for x, z in reversed(g_pts):
+                glace.append(world_to_screen(x, z - 9.0))
+            p.setBrush(QBrush(QColor(168, 214, 232)))
+            p.drawPolygon(glace)
+        p.setPen(_cached_pen(QColor(255, 255, 255), max(1.0, 1.2 * px_m)))
+        p.drawPolyline(QPolygonF(pts_surf))
+        # crevasses du glacier
+        p.setPen(_cached_pen(QColor(120, 160, 200, 150), max(1.0, 1.5 * px_m)))
+        x_c = H_MAX + 220.0
+        while x_c < coupe["x_sommet"] - 300.0:
+            if x_vis0 < x_c < x_vis1:
+                z_c = coupe["surface_a"](x_c)
+                p.drawLine(world_to_screen(x_c, z_c), world_to_screen(x_c + 6.0, z_c - 16.0))
+            x_c += 97.0 + 41.0 * math.sin(x_c)
+
+        # --- repères d'altitude : traits fins derrière le tube ; les
+        #     valeurs sont dans la bande d'axe de gauche (dessinée plus bas)
+        p.setPen(_cached_pen(QColor(255, 255, 255, 40), 1, Qt.PenStyle.DotLine))
+        pas_alt = 100 if y_span < 900 else 250
+        for alt in range(2000, 3801, pas_alt):
+            y_scr = view_y + (y_top_m - alt) * px_m
+            p.drawLine(int(view_x), int(y_scr), int(view_x + view_w), int(y_scr))
+
+        # --- tunnel : tube Ø 3,9 m (grossi comme les rames), voie, néons ;
+        #     cotes de la 3D : rail à 1,24 m sous l'axe, voûte 3,19 m au-dessus
+        s_vis0 = max(0.0, s_at_x(x_vis0) - 5.0)
+        s_vis1 = min(LENGTH, s_at_x(x_vis1) + 5.0)
+        n_t = max(8, min(int((s_vis1 - s_vis0) / 4.0), int(view_w / 5.0)))
+
+        def le_long(s_: float, b: float) -> QPointF:
+            """point à la hauteur b (m, grossie) au-dessus du rail en s"""
+            xm, ym = geom_at(s_)
+            if b == 0.0:
+                return world_to_screen(xm, ym)
+            x1, y1 = geom_at(min(LENGTH, s_ + 1.0))
+            x0, y0 = geom_at(max(0.0, s_ - 1.0))
+            dl = math.hypot(x1 - x0, y1 - y0) or 1.0
+            return world_to_screen(xm - (y1 - y0) / dl * b * k_ech, ym + (x1 - x0) / dl * b * k_ech)
+
+        cache_ech: dict = {}
+
+        def echantillons(s0: float, s1: float, n: int) -> list:
+            """(x écran, y écran, normale x, normale y en px par m grossi) des
+            n + 1 points de s0 à s1 — calculés une fois par image"""
+            cle = (s0, s1, n)
+            if cle not in cache_ech:
+                # un point de plus de chaque côté : normales par différences
+                # centrées sur les voisins (un seul geom_at par point)
+                pas_s = (s1 - s0) / n
+                g = [geom_at(min(LENGTH, max(0.0, s0 + pas_s * i))) for i in range(-1, n + 2)]
+                pts = []
+                for i in range(1, n + 2):
+                    (x0, y0), (xm, ym), (x1, y1) = g[i - 1], g[i], g[i + 1]
+                    dl = math.hypot(x1 - x0, y1 - y0) or 1.0
+                    f = k_ech * px_m / dl
+                    pts.append((view_x + (xm - cam_x_m) * px_m, view_y + (y_top_m - ym) * px_m,
+                                -(y1 - y0) * f, -(x1 - x0) * f))
+                cache_ech[cle] = pts
+            return cache_ech[cle]
+
+        def ligne_tube(b: float, s0: float, s1: float, n: int) -> QPolygonF:
+            return QPolygonF([QPointF(x + nx_ * b, y + ny_ * b)
+                              for x, y, nx_, ny_ in echantillons(s0, s1, n)])
+
+        def bande_tube(b0: float, b1: float, s0: float, s1: float, n: int) -> QPolygonF:
+            ech = echantillons(s0, s1, n)
+            poly = QPolygonF([QPointF(x + nx_ * b1, y + ny_ * b1) for x, y, nx_, ny_ in ech])
+            for x, y, nx_, ny_ in reversed(ech):
+                poly.append(QPointF(x + nx_ * b0, y + ny_ * b0))
+            return poly
+
+        if s_vis1 > s_vis0:
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(QBrush(QColor(176, 170, 160)))
+            p.drawPolygon(bande_tube(-1.10, 3.55, s_vis0, s_vis1, n_t))
+            # évitement : chambre élargie (deux tubes côte à côte)
+            e0, e1 = max(s_vis0, PASSING_START), min(s_vis1, PASSING_END)
+            if e1 > e0:
+                p.setBrush(QBrush(QColor(150, 145, 138)))
+                p.drawPolygon(bande_tube(-1.45, 4.0, e0, e1,
+                                         max(4, min(int((e1 - e0) / 4.0), int(view_w / 10.0)))))
+            p.setBrush(QBrush(QColor(34, 36, 44)))
+            p.drawPolygon(bande_tube(-0.75, 3.20, s_vis0, s_vis1, n_t))
+            # néons allumés tous les 20 m (vidéo de descente ; visibles de près)
+            if px_m * k_ech > 1.2:
+                p.setPen(Qt.PenStyle.NoPen)
+                p.setBrush(QBrush(QColor(255, 246, 210, 210)))
+                s_n = math.ceil(s_vis0 / 20.0) * 20.0
+                while s_n < s_vis1:
+                    p.drawEllipse(le_long(s_n, 2.95), max(1.2, 0.35 * px_m * k_ech),
+                                  max(1.0, 0.18 * px_m * k_ech))
+                    s_n += 20.0
+            # dalle et rail
+            p.setPen(_cached_pen(QColor(120, 118, 112), max(1.0, 0.35 * px_m * k_ech)))
+            p.drawPolyline(ligne_tube(-0.2, s_vis0, s_vis1, n_t))
+            p.setPen(_cached_pen(QColor(196, 198, 204), max(1.0, 0.12 * px_m * k_ech)))
+            p.drawPolyline(ligne_tube(0.0, s_vis0, s_vis1, n_t))
+            # sortie de secours (galet 145, à droite en montant) : la galerie
+            # monte du tube à la surface, où elle débouche au bord de la
+            # piste rouge (fait de Kevin, 06/10/2026)
+            s_ss = 2112.0 + START_S + TRAIN_HALF
+            x_ss, _z = geom_at(s_ss)
+            if x_vis0 - 60.0 < x_ss < x_vis1 + 60.0:
+                x_sortie = x_ss + 18.0
+                z_sortie = max(z for x, z in surf if abs(x - x_sortie) < 12.0) \
+                    if any(abs(x - x_sortie) < 12.0 for x, _ in surf) \
+                    else coupe["surface_a"](x_sortie)
+                g0 = le_long(s_ss, 3.6)
+                g1 = world_to_screen(x_sortie, z_sortie - 1.5)
+                p.setPen(_cached_pen(QColor(150, 145, 138), max(3.0, 2.6 * px_m * k_ech)))
+                p.drawLine(g0, g1)
+                p.setPen(_cached_pen(QColor(40, 42, 50), max(1.5, 1.6 * px_m * k_ech)))
+                p.drawLine(g0, g1)
+                # piste rouge sur la neige, et l'édicule de sortie à son bord
+                p.setPen(_cached_pen(QColor(214, 40, 40, 210), max(2.0, 1.4 * px_m)))
+                x_p = x_sortie + 8.0
+                piste = [world_to_screen(x, z + 0.4) for x, z in surf if x_p <= x <= x_p + 160.0]
+                if len(piste) >= 2:
+                    p.drawPolyline(QPolygonF(piste))
+                pied = world_to_screen(x_sortie, z_sortie)
+                l_e = max(5.0, 3.0 * px_m * k_ech)
+                p.setBrush(QBrush(QColor(196, 194, 188)))
+                p.setPen(_cached_pen(QColor(60, 60, 66), 1))
+                p.drawRect(QRectF(pied.x() - l_e / 2, pied.y() - l_e * 0.9, l_e, l_e * 0.9))
+                p.setBrush(QBrush(QColor(40, 210, 110)))
+                p.setPen(Qt.PenStyle.NoPen)
+                p.drawRect(QRectF(pied.x() - l_e * 0.3, pied.y() - l_e * 0.8, l_e * 0.6, l_e * 0.25))
+                if px_m > 0.9:
+                    p.setFont(_cached_font("Segoe UI", 8))
+                    p.setPen(_cached_pen(QColor(225, 255, 235)))
+                    p.drawText(QPointF(pied.x() - 40, pied.y() - l_e - 20), T("emergency exit", "sortie de secours"))
+                    p.setPen(_cached_pen(QColor(255, 225, 225)))
+                    p.drawText(QPointF(pied.x() - 40, pied.y() - l_e - 7),
+                               T("edge of the red run", "bord de la piste rouge"))
+
+        # --- gare aval (statique)
+        self._draw_gare_aval(p, world_to_screen, le_long, px_m, k_ech)
+
+        # --- distance parcourue : bornes kilométriques JAUNES posées sur la
+        #     voie, au compteur du pupitre (0 au départ de Val Claret,
+        #     3 474 à l'arrivée ; nez de la rame montante) — retour de
+        #     Kevin : altitudes et distances, toutes deux « en m », se
+        #     confondaient
+        p.setFont(_cached_font("Segoe UI", 8, QFont.Weight.Bold))
+        fm_km = QFontMetricsF(p.font())
+        for d_c in list(range(0, int(PARCOURS), 250)) + [int(PARCOURS)]:
+            s_m = START_S + TRAIN_HALF + d_c
+            if not (s_vis0 - 50 <= s_m <= s_vis1 + 50):
+                continue
+            if d_c % 500 and px_m * k_ech < 1.0:
+                continue
+            pied = le_long(s_m, -0.9)
+            tete = le_long(s_m, -4.2)
+            p.setPen(_cached_pen(QColor(250, 205, 50), max(1.5, 0.15 * px_m * k_ech)))
+            p.drawLine(pied, tete)
+            txt = f"km {d_c / 1000:.3f}".replace(".", ",") if d_c == int(PARCOURS) \
+                else f"km {d_c / 1000:.2f}".rstrip("0").replace(".", ",").rstrip(",")
+            larg = fm_km.horizontalAdvance(txt) + 10
+            r = QRectF(tete.x() - larg / 2, tete.y(), larg, 15)
+            p.setBrush(QBrush(QColor(250, 205, 50, 235)))
+            p.setPen(_cached_pen(QColor(60, 44, 0), 1))
+            p.drawRoundedRect(r, 3, 3)
+            p.setPen(_cached_pen(QColor(40, 30, 0)))
+            p.drawText(r, int(Qt.AlignmentFlag.AlignCenter), txt)
 
     def _coupe_terrain(self) -> dict:
         """Coupe du terrain réel (profil_coupe.py, généré par

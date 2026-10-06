@@ -7,6 +7,47 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.15.77** — relief 3D réel du massif en vue extérieure, graphismes plus
+économes.
+- **« Prolonger le paysage 3D jusqu'au tunnel et jusqu'en bas, jusqu'au lac
+  de Tignes, et dans le rayon autour »** (vue extérieure de la PWA) :
+  - le massif réel est modélisé en 3D, sur 8,6 × 10,2 km, du sommet de la
+    Grande Motte au lac du Chevril. Le relief vient de l'IGN (RGE ALTI),
+    la texture de l'orthophotographie IGN (`tools_relief3d.py`) ;
+  - lacs, villages et sommets portent leur nom (OpenStreetMap) ;
+  - le tracé du tunnel est dessiné en surface (ruban orange) ;
+  - autour de la rame, la montagne s'ouvre comme une maquette découpée. Le
+    puits grandit avec le recul de la caméra : on y voit la rame dans son
+    tube, et le tunnel à sa vraie profondeur ;
+  - la caméra extérieure recule jusqu'à 6 km, et le brouillard du tunnel
+    s'efface avec le recul. Au-delà de 10 km, le panorama des montagnes
+    lointaines prend le relais ;
+  - en orbite rapprochée, la caméra est sous la montagne : la vue
+    habituelle du tunnel est inchangée.
+- **Optimisation selon la machine** (« un beau truc qui ne consomme pas
+  énormément de ressources ») :
+  - 3D : le relief est construit en tâche de fond. Sur PC, il est préparé
+    dans un fil parallèle ; dans la PWA (sans fils), par tranches de 3 ms
+    par image. Il ne coûte plus que 8 ms au démarrage, contre 216.
+  - Sa finesse suit la machine détectée : maille de 25 m et orthophoto de
+    2 048 px pour une bonne carte graphique ; maille de 50 m (quatre fois
+    moins de triangles) et 1 024 px sur iPad, carte intégrée modeste ou
+    rendu logiciel. Le panorama de la gare amont passe aussi à
+    demi-résolution sur ces machines (25 → 6 Mo de mémoire graphique).
+  - Version autonome : quand la fenêtre est réduite, la 3D tombe à
+    5 images/s ; en arrière-plan, à 20. Le réglage automatique de qualité
+    suspend alors ses mesures, pour ne pas baisser la qualité à tort.
+  - PC, vue en coupe : le décor (crêtes, massif, neige, glacier, tunnel,
+    gare aval, bornes) est rendu une fois dans une image en cache, avec
+    30 % de marge autour de la vue. Il n'est refait que quand la caméra en
+    sort, environ toutes les 20 s à 12 m/s. Le ciel a aussi son image en
+    cache. Temps de dessin par image : 12,4 → 6,2 ms au zoom normal,
+    13,5 → 7,1 ms au zoom large. L'image est identique.
+- Corrigé : la fenêtre « Signaler un problème » du PC plantait à
+  l'ouverture (`QCheckBox` non importé).
+- Vérifié : 99 tests PC, 12 bancs PWA, parité PC/PWA OK, rendus Vulkan et
+  web aux deux finesses.
+
 **v1.15.76** — roues de la machinerie lisibles à toute vitesse, pylône du
 téléphérique mesuré sur photo.
 - **« Les roues ne tournent pas à la bonne vitesse en fonction de la

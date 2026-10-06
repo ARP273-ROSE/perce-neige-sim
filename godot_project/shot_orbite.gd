@@ -17,7 +17,8 @@ var _plongee: bool = false      # caméra fixe plongeant sur le premier galet
 var _butoir: bool = false       # caméra de côté sur l'écart rame ↔ butoir
 var _vue: int = 1               # 1 extérieure, 2 salle des machines
 var _cadre: String = ""         # "quai" : bout de quai côté rame ; "fantome" : nez de l'autre rame
-var _m_cam: Vector3 = Vector3(NAN, 0.0, 0.0)   # salle des machines : yaw, pitch, dist
+var _m_cam: Vector3 = Vector3(NAN, 0.0, 0.0)
+var _cache: String = ""   # chemin d'un nœud à masquer (diagnostic), relatif à Main   # salle des machines : yaw, pitch, dist
 
 
 func _initialize() -> void:
@@ -41,6 +42,8 @@ func _initialize() -> void:
 		elif a.begins_with("mcam="):
 			var v: PackedStringArray = a.substr(5).split(",")
 			_m_cam = Vector3(float(v[0]), float(v[1]), float(v[2]))
+		elif a.begins_with("cache="):
+			_cache = a.substr(6)
 		elif a.begins_with("descente="):
 			_descente = float(a.substr(9))
 		elif not a.begins_with("--"):
@@ -162,6 +165,8 @@ func _tick() -> void:
 		print("ORBITE cadre %s à %.2f" % [_cadre, s_v])
 	if _f == 6 and _main.get("hud") != null:
 		_main.get("hud").visible = false
+	if _f >= 100 and _cache != "" and _main.get_node_or_null(_cache) != null:
+		(_main.get_node(_cache) as Node3D).visible = false
 	if _f == 120:
 		var img: Image = get_root().get_texture().get_image()
 		var nom := "%s_s%d_y%.2f_p%.2f.png" % [_prefix, int(_s), _yaw, _pitch]

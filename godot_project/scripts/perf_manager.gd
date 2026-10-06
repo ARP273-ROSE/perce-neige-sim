@@ -24,8 +24,19 @@ extends Node
 ##   6 cadence verrouillée à 30 i/s (régulière plutôt que 40-55 en dents de scie)
 ## Le rendu OpenGL (PWA, PC sans Vulkan) n'a ni SDFGI, ni brouillard
 ## volumétrique, ni SSR : il démarre au moins au cran 2.
+##
+## Économies hors de la vue (06/10/2026 : « un beau truc qui ne consomme pas
+## énormément de ressources ») : fenêtre réduite → 5 images/s, fenêtre en
+## arrière-plan → 20 images/s (version autonome ; la PWA, le navigateur s'en
+## charge ; la 3D embarquée dans le PC, c'est le programme PC qui la
+## pilote). Les mesures sont suspendues pendant ce temps.
+## `cran_courant` : lu par les constructeurs (relief, panorama) pour choisir
+## la taille des textures et la finesse des maillages.
 
 const CRAN_MAX: int = 6
+const IPS_REDUITE: int = 5
+const IPS_ARRIERE_PLAN: int = 20
+static var cran_courant: int = 0
 const FENETRE_S: float = 2.0
 const CHAUFFE_S: float = 6.0        # compilation des shaders, chargement
 const APRES_CHANGEMENT_S: float = 2.5
@@ -54,6 +65,8 @@ var _vp_rid: RID
 var _mesure_gpu: bool = false
 var _msaa_origine: int = Viewport.MSAA_4X   # réglage du projet (anti_aliasing/quality/msaa_3d)
 var dernier_bilan: String = ""
+var _retrait: int = 0                # 0 au premier plan, 1 arrière-plan, 2 réduite
+var _t_retrait: float = 0.0
 
 
 func setup(p_main: Node, p_env: Environment, p_mode: String) -> void:
@@ -187,7 +200,8 @@ func _appliquer(c: int, pourquoi: String) -> void:
 		_env.ssr_enabled = cran <= 1
 	if _env != null:
 		_env.glow_enabled = cran <= 4
-	Engine.max_fps = 30 if cran >= 6 else 0
+	cran_courant = cran
+	_appliquer_ips()
 	var vp: Viewport = main.get_viewport() if main != null else null
 	if vp != null:
 		if not _web:
@@ -209,6 +223,44 @@ func _appliquer(c: int, pourquoi: String) -> void:
 		(" — " + dernier_bilan) if dernier_bilan != "" else ""])
 
 
+## Plafond d'images par seconde : cran 6 (30 i/s) et retrait de la fenêtre.
+func _appliquer_ips() -> void:
+	var ips: int = 30 if cran >= 6 else 0
+	if _retrait == 2:
+		ips = IPS_REDUITE
+	elif _retrait == 1:
+		ips = IPS_ARRIERE_PLAN if ips == 0 else mini(ips, IPS_ARRIERE_PLAN)
+	Engine.max_fps = ips
+
+
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_APPLICATION_FOCUS_OUT or what == NOTIFICATION_APPLICATION_FOCUS_IN:
+		_verifier_retrait()
+
+
+## Fenêtre réduite / en arrière-plan (version autonome seulement).
+func _verifier_retrait() -> void:
+	if _web or main == null or bool(main.get("client_mode")) \
+			or DisplayServer.get_name() == "headless":
+		return
+	var r: int = 0
+	if DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_MINIMIZED:
+		r = 2
+	elif not DisplayServer.window_is_focused():
+		r = 1
+	if r == _retrait:
+		return
+	_retrait = r
+	_appliquer_ips()
+	# les images au ralenti ne sont pas des saccades : on reprend les
+	# mesures de zéro au retour
+	_durees.clear()
+	_t_fen = 0.0
+	_t_chauffe = maxf(_t_chauffe, APRES_CHANGEMENT_S)
+	_log("[Perf] fenêtre %s" % ["au premier plan", "en arrière-plan (%d i/s)" % IPS_ARRIERE_PLAN,
+		"réduite (%d i/s)" % IPS_REDUITE][r])
+
+
 # --- Mesure en direct -------------------------------------------------------
 
 func _process(_delta: float) -> void:
@@ -221,6 +273,12 @@ func _process(_delta: float) -> void:
 	var dt: float = float(t_us - _t_prec_us) / 1.0e6
 	_t_prec_us = t_us
 	_horloge += dt
+	_t_retrait += dt
+	if _t_retrait >= 1.0:
+		_t_retrait = 0.0
+		_verifier_retrait()
+	if _retrait != 0:
+		return
 	if _t_chauffe > 0.0:
 		_t_chauffe -= dt
 		return
