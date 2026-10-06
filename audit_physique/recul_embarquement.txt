@@ -1,0 +1,11 @@
+pente au quai bas 0.0875, câble de la rame en bas 3491.96 m, surtension rame pleine 21.42 kN
+  EA = 1.25e+08 N : recul de la rame pleine 0.598 m
+  EA = 7.5e+07 N : recul de la rame pleine 0.997 m
+  EA = 7e+07 N : recul de la rame pleine 1.068 m
+  EA pour 1,000 m exactement : 7.479e+07 N
+retenu : EA = 7,0e7 N → 1.07 m (« au moins un mètre »)
+
+                                                      EA = 1,25e8             EA = 7,0e7
+rame vide arrivée en bas                   T  5.97 s A 31.6 cm 17.5 s | T  7.98 s A 45.0 cm 26.3 s
+rame pleine arrivée en bas                 T  7.95 s A 45.0 cm 26.3 s | T 10.63 s A 45.0 cm 35.1 s
+contrepoids en bas (rame pleine en haut)   T  5.95 s A 45.0 cm 19.7 s | T  7.96 s A 45.0 cm 26.3 s
