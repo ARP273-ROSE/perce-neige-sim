@@ -135,7 +135,7 @@ func _draw() -> void:
 
 		# Distance restante en bas
 		var dist_text: String = "%.0f / %.0f m" % [
-			PNConstants.distance_compteur(physics.s, physics.direction), PNConstants.LENGTH]
+			PNConstants.distance_compteur(physics.s, physics.direction), PNConstants.PARCOURS]
 		_draw_label(Vector2(padding, map_size.y - padding + 2), dist_text, Color(0.95, 0.95, 0.95))
 
 

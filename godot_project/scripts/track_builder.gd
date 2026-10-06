@@ -58,10 +58,12 @@ extends Node3D
 # le n° 1 est au bout du quai aval, le n° 238 (dernier numéroté) au début du
 # quai amont, là où la pente de la gare haute est atteinte (SlopeProfile).
 # Quais raccourcis le 06/10 (PNConstants.QUAI_*) : [3, 42,56] et
-# [3437,04, 3473] → n° 1 à 29 traverses (43,79 m, 1,23 m après le quai),
-# n° 238 à 2 276 traverses (3 436,76 m, 0,28 m avant le quai).
+# [3477,56, 3513,52] → n° 1 à 29 traverses (43,79 m, 1,23 m après le
+# quai), n° 238 à 2 303 traverses (3 477,53 m, à l'entrée du quai). Voie
+# rallongée de 40,52 m (PNConstants.LENGTH) : toujours 238 supports, au
+# pas de 14,71 m au lieu de 14,54.
 const SUPPORT_S1: float = 43.79
-const SUPPORT_S_LAST: float = 3436.76
+const SUPPORT_S_LAST: float = 3477.53
 const SUPPORT_N: int = 238
 # Galet de ligne (RollerMesh, photo du reportage remontees-mecaniques.net,
 # audit_physique/galets_ligne.sage) : bande de roulement Ø 500 — le câble
@@ -218,12 +220,17 @@ func _station_list() -> Array:
 	out.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a.s < b.s)
 	for i in range(out.size()):
 		out[i]["num"] = i + 1
-	# gare amont : galets non numérotés
-	var n_total: int = int(PNConstants.LENGTH / guide_spacing)
-	for i in range(n_total):
-		var s: float = (float(i) + 0.5) * guide_spacing
-		if s > SUPPORT_S_LAST + 5.0:
-			out.append({"s": s, "sheave": false, "num": 0})
+	# gare amont : galets non numérotés, au pas de l'ancienne grille, comptés
+	# depuis le dernier galet du tunnel qui raccorde la salle des machines
+	# (à LENGTH + S_LAST_TUNNEL_ROLLER, entre deux traverses) — une grille
+	# absolue le perdait quand la voie a été rallongée (v1.15.65)
+	# (liste triée par abscisse : les sommets du câble lui sont indexés)
+	var gare: Array = []
+	var s_g: float = PNConstants.LENGTH + MachineRoomBuilder.S_LAST_TUNNEL_ROLLER
+	while s_g > SUPPORT_S_LAST + 5.0:
+		gare.push_front({"s": s_g, "sheave": false, "num": 0})
+		s_g -= guide_spacing
+	out.append_array(gare)
 	for st in out:
 		# Entre deux traverses, pas au droit d'une (retour du 05/10/2026 :
 		# « tu auras plus de place en largeur ») : les plots sont en

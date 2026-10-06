@@ -38,8 +38,9 @@ def main():
     # bords de l'évitement, pour la rame et pour l'autre rame au miroir
     # (MIROIR_S − s) — la traînée y bascule d'un coup : un décalage d'un
     # pas y vaut 200 kW sans que la physique diffère.
-    MIROIR_S = 3478.6
-    BORDS = (1611.0, 1813.0, MIROIR_S - 1813.0, MIROIR_S - 1611.0)
+    MIROIR_S = 3519.12
+    PASSING_START, PASSING_END = 1631.26, 1833.26   # voie de 3 514,52 m (v1.15.65)
+    BORDS = (PASSING_START, PASSING_END, MIROIR_S - PASSING_END, MIROIR_S - PASSING_START)
 
     def interp(pc, key, x):
         pts = sorted((q["s"], q[key], abs(q["v"])) for q in pc)

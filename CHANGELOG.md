@@ -7,6 +7,44 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.15.65** — chaque trajet fait vraiment 3 474 m : voie rallongée de
+40,52 m.
+- **« La distance parcourue réelle de chaque trajet, c'est 3 474 m »** :
+  la voie faisait 3 474 m d'un butoir à l'autre, si bien qu'entre les
+  deux points d'arrêt la rame ne parcourait que 3 433,48 m. La v1.15.64
+  ramenait seulement le compteur à 3 474.
+- **« Tu rallonges des sections neutres de part et d'autre de
+  l'évitement, où il n'y a ni changement de pente ni virage, et tu
+  ajustes la répartition des galets pour garder le même nombre »** :
+  - deux tronçons de 20,26 m sont insérés à 1 571 m (entre la fin de la
+    courbe 1 et l'entrée de l'évitement) et à 1 853,5 m (entre la sortie
+    de l'évitement et la courbe 2), à pente constante (29,5 %) et en ligne
+    droite. Tout ce qui est au-delà recule d'autant : tables de pente, de
+    cap, de zones sombres et de sections du tunnel, évitement (1 631,26 à
+    1 833,26 m, même longueur), salle de la gare haute, arrêts, quais,
+    butoirs. Le changement est fait sur PC et dans la PWA ;
+  - la voie fait 3 514,52 m (`LENGTH`), et le trajet d'arrêt à arrêt
+    3 474 m (`PARCOURS` = `STOP_S` − `START_S`). En haut, l'arrêt est à
+    3 496,56 m ; l'autre rame est au miroir 3 519,12 − s. Les rames se
+    croisent à 27 m en aval du centre de l'évitement, contre 25 m avant ;
+  - les galets restent 238, au pas de 14,71 m au lieu de 14,54. Le n° 238
+    est à 3 477,53 m, à l'entrée du quai haut, où la pente de la gare
+    (10 %) est atteinte. Les galets non numérotés de la gare haute sont
+    comptés depuis le bout de la voie : le dernier, qui raccorde la salle
+    des machines, est à −6,79 m au lieu de −7,04 ;
+  - le compteur du pupitre affiche la distance réellement parcourue, sans
+    mise à l'échelle.
+- Audit : `audit_physique/arrets_gares.sage` (voie, arrêts, galet 238,
+  et recul de la rame pleine à l'embarquement : 0,57 m avec 334 × 75 kg,
+  0,65 m avec 85 kg ; 1 m demanderait un câble de module 57 GPa).
+- Tests :
+  - deux bancs avaient en dur l'ancienne position de l'évitement et un
+    tirage de panne. Le planificateur pouvait tirer une rupture de câble,
+    qui ne se « lève » pas en ligne et se comptait alors à chaque image ;
+    il y a maintenant une remise en service complète entre deux pannes ;
+  - 12 bancs PWA, 95 tests PC ;
+  - parité PC/PWA OK (0,1 kW au 95e percentile).
+
 **v1.15.64** — garde-corps de haut de quai, compteur et indicateur de
 vitesse du pupitre, roues qui suivent la rame.
 - **« En haut des deux rames, en gare aval comme amont, des barrières le
