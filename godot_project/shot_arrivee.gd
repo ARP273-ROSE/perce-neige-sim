@@ -11,6 +11,7 @@ var _dir: int = -1
 var _cache: String = ""          # nom (méta) des pièces de la salle des machines à masquer
 var _sans_vol: bool = false      # sans brouillard volumétrique
 var _vue: int = 0                # 0 cabine, 2 salle des machines (avant la caméra libre)
+var _gros_plan: bool = false     # caméra cabine resserrée sur le pupitre
 var _cam: PackedFloat32Array = []  # caméra libre dans le repère de la salle des machines : s', x, y, cap°, site°, fov
 var _camt: PackedFloat32Array = [] # caméra libre dans le repère du tunnel : s, x, y, cap°, site°, fov
 
@@ -27,6 +28,8 @@ func _initialize() -> void:
 			_sans_vol = true
 		elif a.begins_with("vue="):
 			_vue = int(a.substr(4))
+		elif a == "pupitre":
+			_gros_plan = true
 		elif a.begins_with("camt="):
 			for v in a.substr(5).split(","):
 				_camt.append(float(v))
@@ -54,6 +57,10 @@ func _tick() -> void:
 		_main.get("hud").visible = false
 	if _f == 8 and _vue != 0:
 		_main.get("cabin").set_view(_vue)
+	if _f == 70 and _gros_plan:
+		var cf: Camera3D = _main.get("cabin").camera_fpv
+		cf.fov = 30.0
+		cf.rotate_object_local(Vector3.RIGHT, -0.62)
 	if _f == 70:
 		if _cache != "":
 			for c in _main.get("machine_room").get_children():

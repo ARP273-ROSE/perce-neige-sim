@@ -794,6 +794,9 @@ func _process(delta: float) -> void:
 		audio.machine_view = cabin.view_mode == Cabin.ViewMode.MACHINES
 	if _ext_light != null and cabin != null:
 		_ext_light.visible = cabin.view_mode == Cabin.ViewMode.EXTERIOR
+	# voyant « Alarmes » et bouton DÉFAUTS de l'écran du pupitre (PWA)
+	if fault_manager != null and physics != null and not client_mode:
+		physics.alarme_externe = fault_manager.is_active()
 	# relief 3D du massif : vue extérieure seulement, ouvert autour de la rame
 	if relief != null and cabin != null:
 		var ext: bool = cabin.view_mode == Cabin.ViewMode.EXTERIOR and relief.pret
