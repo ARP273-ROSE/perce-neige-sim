@@ -259,6 +259,10 @@ retenue comme référence.
   précision planimétrique 10 m ; bout amont à 3 029 m. Extraite le
   2026-10-06 dans `audit_physique/trace_ign_osm.json` : **référence du
   tracé en plan** (`audit_physique/trace_ign.sage`).
+- **IGN — RGE ALTI** (service d'altimétrie de la Géoplateforme,
+  `data.geopf.fr/altimetrie`, ressource `ign_rge_alti_wld`) — Licence
+  Ouverte Etalab 2.0 : relief au-dessus de la ligne dans la vue en coupe du
+  PC (`tools_profil_coupe.py`).
 - **OpenStreetMap** — © contributeurs OpenStreetMap, ODbL. Way
   « Funiculaire Perce-Neige » (24 nœuds ; premier tronçon rectiligne de
   1,5 km : tracé grossier, utilisé en contrôle seulement).

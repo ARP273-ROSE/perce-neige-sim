@@ -7,6 +7,33 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.15.74** — rames de la vue en coupe affinées, relief IGN, vitesse au
+centième.
+- **« Deux chiffres après la virgule dans l'affichage digital de la
+  vitesse »** : le cadran du pupitre affiche 10,37 m/s au lieu de 10,4,
+  sur PC et dans la PWA.
+- **« Tu peux vraiment affiner le design des rames dans la vue en
+  coupe »** : rames redessinées d'après le modèle 3D. Caisse gris argent
+  avec reflet de toit et joints entre les baies, bande de bas de caisse,
+  nez jaunes à pare-brise ovale, hublots ovales à cadre sombre, trois
+  portes vitrées par voiture, soufflet d'intercirculation, culot d'attache
+  du câble, bogies cachés derrière le tube comme en vrai. On voit les
+  passagers (habits, visages, bonnets) derrière les vitres selon la
+  charge. La rame fait au moins 160 px de long à l'écran.
+- **« C'est bizarre que dans la partie supérieure le relief au-dessus du
+  tunnel soit si plat et si près »** : c'est bien réel. Vérifié sur le
+  relief au mètre de l'IGN (RGE ALTI), il y a 150 à 190 m de roche
+  au-dessus de la voie entre 870 et 1 750 m, mais seulement 17 à 70 m sur
+  le dernier tiers. Le haut de la ligne passe sous la pente régulière du
+  glacier, presque parallèle à la voie, et la gare amont débouche à son
+  niveau (3 028 m). Vers 2 105 m il ne reste qu'une vingtaine de mètres :
+  c'est là qu'est la sortie de secours.
+- La coupe utilise maintenant le relief IGN RGE ALTI (service
+  d'altimétrie de la Géoplateforme). Les tuiles SRTM/EU-DEM étaient
+  lissées de ~10 m en moyenne, jusqu'à 59 m par endroits. L'épaisseur de
+  roche au-dessus de la rame s'affiche en haut à droite de la vue.
+- Vérifié : 99 tests PC.
+
 **v1.15.73** — calage sur la vidéo de descente, tunnel débouché sous la gare
 amont.
 - **« Entre les galets 213 et 214 tu as mis un truc qui ferme le tunnel »**
