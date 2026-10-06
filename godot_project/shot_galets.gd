@@ -56,7 +56,25 @@ func _tick() -> void:
 		cam.near = 0.02
 		get_root().add_child(cam)
 		var y_axe: float = tr._roller_axis_y()
-		if _vue == "chainette" or _vue == "chainette_loin":
+		if _vue == "chainette_dessus":
+			# vue plongeante sur le tronçon libre : culot → premier galet
+			# touché, galets survolés dessous (courbes, évitement)
+			var att3: float = TrackBuilder.attache_s(_s)
+			var s_r1: float = tr.coupe_brin(-1, _s)
+			var s_mid: float = (att3 + s_r1) * 0.5
+			var xm: Transform3D = tun.transform_at(s_mid)
+			var y_c3: float = tr._roller_axis_y() + tr.pulley_radius + tr.cable_radius
+			var lat3: float = tr.strand_local_at(-1, s_mid).x
+			var cible3: Vector3 = xm.origin + xm.basis.x * lat3 + xm.basis.y * y_c3
+			var pos3: Vector3 = cible3 + xm.basis.y * minf(0.55 * (s_r1 - att3) + 1.0, 2.6) + xm.basis.z * 0.5
+			cam.fov = 105.0
+			cam.look_at_from_position(pos3, cible3, -xm.basis.z)
+			print("GALETS culot %.1f, premier galet touché %.1f (%.1f m)" % [att3, s_r1, s_r1 - att3])
+			# la caisse de la rame cacherait tout : on la retire de la vue
+			var cab = _main.get("cabin")
+			if cab != null:
+				(cab as Node3D).visible = false
+		elif _vue == "chainette" or _vue == "chainette_loin":
 			# vue rasante dans la fosse, côté droit : le câble quitte les
 			# galets et remonte en chaînette jusqu'au culot
 			var att2: float = TrackBuilder.attache_s(_s)

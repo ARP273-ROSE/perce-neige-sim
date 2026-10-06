@@ -7,6 +7,39 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.15.60** — câble sous la rame : virages, évitement et arrivée en gare
+amont.
+- **« Vérifie la pose du câble à la descente, dans les virages et
+  l'évitement »** : le câble part toujours du culot vers l'amont, en
+  montée comme en descente. Mais dans la v1.15.59, son tronçon libre
+  suivait la corde droite du culot au premier galet touché. Balayage de
+  toute la ligne, dans les deux sens :
+  - en courbe (1 300 à 2 300 m), cette corde s'écartait jusqu'à 18 cm de
+    la gorge des galets qu'elle survolait, et passait dans leurs joues ;
+  - dans l'aiguillage, elle sautait 75 fois un galet de déviation ;
+  - en arrivant en gare amont, elle traversait de 2,5 cm le dernier
+    galet du tunnel ;
+  - sur une bosse du profil en long, la corde pouvait passer sous le
+    sommet d'un galet intermédiaire.
+- Le tronçon libre est maintenant découplé :
+  - **en hauteur**, c'est la chaînette jusqu'au premier galet sur lequel
+    elle appuie, à 10-26 m, et la courbe reste douce. La hauteur est
+    comptée au-dessus du sommet de chaque galet, profil en long compris.
+    Un galet qui dépasse de la chaînette devient l'appui, y compris en
+    arrivant en gare amont ;
+  - **sur le côté**, là où le câble passe bas au-dessus d'un galet (moins
+    de 7 cm, joues et rayon du câble), il est dans la gorge : le galet,
+    incliné en courbe, le guide par sa joue et le câble suit l'axe de la
+    gorge. Galets de déviation compris. Plus haut, il passe au-dessus
+    sans le toucher.
+  Résultat : 2 mm d'écart au plus avec l'axe des gorges survolées, aucun
+  galet traversé, galets de déviation suivis.
+- Tracés réels du jeu (courbe, évitement, courbe haute) :
+  `audit_physique/plan_chainette.png`.
+- Vérifié : 3 contrôles ajoutés au banc des galets, qui balaie toute la
+  ligne dans les deux sens. Bancs aiguillage, rupture, 3D, salle des
+  machines et Défi.
+
 **v1.15.59** — le câble pend en chaînette, sous la rame et entre les galets.
 - **« Sous la rame, le câble semble collé au sommet des galets et s'en
   décolle au dernier moment ; il vaudrait mieux respecter la courbure
