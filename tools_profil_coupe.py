@@ -7,6 +7,8 @@ cette vue-là on peut redesigner complètement les rames et le reste »).
 Les montagnes de l'ancienne vue étaient des sinusoïdes et le dessus du
 relief une ligne à 160 m au-dessus de la voie.
 
+- Terrain : RGE ALTI de l'IGN (service d'altimétrie de la Géoplateforme),
+  à défaut les Terrain Tiles.
 - Terrain au-dessus de la ligne : le tracé IGN BD TOPO
   (audit_physique/trace_ign_osm.json), échantillonné à fraction égale de sa
   longueur horizontale, le programme le cale sur sa propre longueur
@@ -23,6 +25,7 @@ Relief : tools_mnt.py (Terrain Tiles : SRTM, EU-DEM, GMTED).
 """
 import json
 import math
+import urllib.request
 
 import numpy as np
 
@@ -76,9 +79,27 @@ for j in range(1, int((d_s + APRES_SOMMET_M) / PAS) + 1):
     pts_amont.append((E[-1] + d * math.sin(math.radians(cap_s)), N[-1] + d * math.cos(math.radians(cap_s)), cap_s))
 
 
+def rge_alti(la, lo):
+    """altitudes IGN RGE ALTI (service d'altimétrie de la Géoplateforme,
+    Licence Ouverte) ; None si le service ne répond pas"""
+    out = []
+    try:
+        for a in range(0, len(la), 100):
+            url = ("https://data.geopf.fr/altimetrie/1.0/calcul/alti/rest/elevation.json?lon=%s&lat=%s"
+                   "&resource=ign_rge_alti_wld&zonly=true"
+                   % ("|".join("%.6f" % x for x in lo[a:a + 100]), "|".join("%.6f" % x for x in la[a:a + 100])))
+            out += json.load(urllib.request.urlopen(url, timeout=60))["elevations"]
+    except OSError:
+        return None
+    return np.array(out) if len(out) == len(la) and min(out) > 0 else None
+
+
 def surface(pts):
+    """terrain au-dessus des points : RGE ALTI de l'IGN (1-5 m), à défaut
+    les Terrain Tiles (SRTM / EU-DEM, ~30 m, plus lisses de ~10 m)"""
     la, lo = vers_latlon(np.array([p[0] for p in pts]), np.array([p[1] for p in pts]))
-    return altitude(la, lo, 14)
+    z = rge_alti(la, lo)
+    return z if z is not None else altitude(la, lo, 14)
 
 
 def cretes(pts, d0, d1, pas):
@@ -109,7 +130,8 @@ def lisser(v, n=2):
 mi = lisser(cretes(grossier, 800.0, 4000.0, 60.0))
 loin = lisser(cretes(grossier, 4000.0, 18000.0, 150.0))
 sortie = f'''"""Coupe du terrain le long du funiculaire — GÉNÉRÉ par tools_profil_coupe.py
-(relief réel : Terrain Tiles SRTM / EU-DEM / GMTED ; tracé IGN BD TOPO).
+(relief réel : IGN RGE ALTI au-dessus de la ligne, Terrain Tiles SRTM / EU-DEM
+pour les crêtes de fond ; tracé IGN BD TOPO).
 Ne pas éditer à la main : relancer l'outil."""
 
 # Terrain au-dessus de la ligne, à fraction égale f = i / N_LIGNE de la
