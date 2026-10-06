@@ -330,10 +330,13 @@ func _drivetest() -> void:
 	while not physics.trip_started:
 		await get_tree().create_timer(0.5).timeout
 	# --s=<m> : saute à cette abscisse (captures du tunnel en pleine ligne)
+	# --vue=1 : vue extérieure (mesure du coût des passagers, tous dessinés)
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--s="):
 			physics.s = float(a.substr(4))
 			physics.s_prev_step = physics.s
+		elif a.begins_with("--vue=") and cabin != null:
+			cabin.set_view(int(a.substr(6)))
 	print("[DriveTest] trip démarré — action_press(speed_up) 6 s")
 	Input.action_press("speed_up")
 	await get_tree().create_timer(6.0).timeout

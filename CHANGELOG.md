@@ -7,6 +7,45 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.15.58** — passagers redessinés : de vrais skieurs.
+- **« Redesign complètement les passagers pour qu'ils soient bien
+  réalistes, mes skieurs »** : les silhouettes en capsules sont
+  remplacées par des skieurs modélisés (`scripts/skieur_mesh.gd`), aux
+  proportions d'un adulte de 1,75 m :
+  - **corps** : veste et pantalon de ski bouffants. La veste a une
+    fermeture éclair, des poches et un col montant, parfois un
+    empiècement d'épaules d'une autre couleur. Le pantalon recouvre des
+    chaussures de ski rigides (coque, tige inclinée, boucles, strap).
+    Gants à manchette, visage ;
+  - **tête** : casque à oreillettes avec masque (écran miroir, monture,
+    sangle), ou bonnet à revers et pompon avec cheveux et lunettes de
+    soleil. Tour de cou porté sur le menton chez certains ;
+  - **sac à dos** pour un quart d'entre eux, bretelles posées sur la
+    veste ;
+  - **attitudes** : debout qui tient ses skis, mains libres, sur son
+    téléphone (tête penchée), enfant, et assis sur les perchoirs ;
+  - **matériel** : skis cintrés à spatules relevées, avec fixations,
+    freins, semelle noire et carres ; bâtons avec poignée, dragonne et
+    rondelle ; snowboard avec fixations à spoiler ;
+  - **couleurs** : chacun s'habille dans des palettes de vêtements de ski
+    actuels (`scripts/skieur.gdshader`). Veste unie ou bicolore, pantalon
+    souvent sombre, casque mat ou brillant, écran miroir orange, bleu,
+    argent… Peau, cheveux, gants et chaussures varient aussi. Les tailles
+    varient de ±6 %.
+- Les skieurs qui attendent dans les halls des gares (une boîte et une
+  sphère jusqu'ici) sont les mêmes : assis sur les bancs, ou debout
+  avec leurs skis ou leur surf.
+- Performance : deux niveaux de détail dans le même maillage. Les
+  passagers de la rame pilotée ne sont plus dessinés en vue cabine, où
+  ils sont derrière la caméra. PWA mesurée sur GPU : 3,0 à 3,7 ms par
+  image en vue cabine (au lieu de 3,4 à 4,2), 60 images/s en vue
+  extérieure. La première bascule en vue extérieure fige l'image environ
+  0,9 s, comme avant (compilation des shaders) ; les skieurs y ajoutent
+  environ 0,2 s.
+- Outils : `shot_skieurs.gd` (studio des attitudes), `shot_pax.gd` (vues
+  dans la rame et en orbite), arguments `--vue=1` et `--sans-pax` pour
+  les mesures. Bancs 3D, portes, rame et galets passent.
+
 **v1.15.57** — tunnel de nouveau éclairé dans la PWA.
 - **« Dans la PWA l'éclairage du tunnel n'est plus comme avant, c'est
   tout sombre »**, au moins dans la seconde moitié de la montée, en
