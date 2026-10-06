@@ -160,9 +160,9 @@ func _apply(d: Dictionary) -> void:
 		if not cr:
 			physics.ghost_locked_s = -1.0
 		elif d.has("ghost_s"):
-			physics.ghost_locked_s = _f(d, "ghost_s", PNConstants.LENGTH - physics.s)
+			physics.ghost_locked_s = _f(d, "ghost_s", PNConstants.miroir(physics.s))
 		elif physics.ghost_locked_s < 0.0:
-			physics.ghost_locked_s = PNConstants.LENGTH - physics.s
+			physics.ghost_locked_s = PNConstants.miroir(physics.s)
 	# Mute global relayé par le sim PC (touche N) : le viewer embarqué a
 	# son propre moteur audio — sans ce relais, couper le son côté PC
 	# laissait la 3D sonore. Bus Master muté/démuté, la lecture continue.

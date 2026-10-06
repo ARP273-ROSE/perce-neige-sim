@@ -2709,7 +2709,7 @@ func update_cable_visibility(s_driver: float, s_other: float = -1.0) -> void:
 	# `s_other` : position de l'autre rame — LENGTH − s_driver en marche,
 	# figée quand le câble a rompu (TrainPhysics.ghost_s_render).
 	if s_other < 0.0:
-		s_other = PNConstants.LENGTH - s_driver
+		s_other = PNConstants.miroir(s_driver)
 	# Où commence chaque brin visible (premier galet que touche le câble de
 	# LA rame qu'il tire) :
 	#   - rame 1 pilotée : brin gauche = sa rame, brin droit = la rame opposée.
@@ -2762,7 +2762,7 @@ func update_cable_phase(s_driver: float, s_other: float = -1.0) -> void:
 		return
 	# `s_other` : position de l'autre rame (figée si le câble a rompu).
 	if s_other < 0.0:
-		s_other = PNConstants.LENGTH - s_driver
+		s_other = PNConstants.miroir(s_driver)
 	# Le brin de LA rame pilotée doit apparaître FIXE dans le référentiel de
 	# la cabine (phase = s_driver) ; l'autre brin suit l'autre rame (phase =
 	# s_other − LENGTH, soit −s_driver en marche : il défile ; immobile
@@ -3251,7 +3251,7 @@ func _tube_amorce(mi: MeshInstance3D, mat: Material, pts: Array, xs: Array, att:
 func update_galets_rames(s_driver: float, s_other: float, s_cam: float,
 		delta: float, rupture: bool = false) -> void:
 	if s_other < 0.0:
-		s_other = PNConstants.LENGTH - s_driver
+		s_other = PNConstants.miroir(s_driver)
 	var s_g: float = s_other if driver_is_rame2 else s_driver
 	var s_d: float = s_driver if driver_is_rame2 else s_other
 	_s_cam_culots = s_cam

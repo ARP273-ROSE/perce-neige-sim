@@ -481,18 +481,28 @@ CAR_DIAM_M = 3.60               # cylindrical diameter
 
 # Platform / station geometry
 PLATFORM_LEN = 35.0             # platform slope length (m)
-# Positions of the train *centre* at rest in each station :
-# Real Von Roll / Perce-Neige procedure: the train stops with ≈ 10 m
-# clearance between the leading cabin nose and the concrete bumper
-# wall. Never docks flush — leaves room for cable slack, emergency
-# inspection, AND the visual perspective the driver expects (with
-# only 3 m eye setback from the nose, a 5 m clearance gave only 8 m
-# of forward view at arrival, collapsing the perspective). 10 m ≈
-# real sight distance seen in Perce-Neige cab videos at Grande Motte
-# and Val Claret termini (back wall visible a comfortable way off).
-BUMPER_CLEAR = 10.0
-START_S = TRAIN_HALF + BUMPER_CLEAR     # back of train 10 m past s=0
-STOP_S = LENGTH - TRAIN_HALF - BUMPER_CLEAR  # front 10 m before s=LENGTH
+# Positions du CENTRE de la rame à l'arrêt en gare (fait de Kevin,
+# 06/10/2026 : « en haut on s'arrête à 1,5 m du butoir ; en bas à 4 ou
+# 5 m, pour la marge d'oscillation et d'allongement »), comptées depuis la
+# face des têtes en bois des butoirs du viewer 3D (stations_builder) —
+# audit_physique/arrets_gares.sage. Mêmes valeurs que la PWA
+# (constants.gd) : le PC s'arrêtait à 9,5 m en haut et 7,9 m en bas, la
+# PWA à 0,6 m et 1,9 m.
+BUTOIR_BAS_S = 2.06             # face du butoir bas (socle à 2,0 m)
+BUTOIR_HAUT_S = 3473.54         # face du butoir haut (socle à LENGTH − 0,4)
+JEU_BUTOIR_BAS = 4.5            # arrière de la rame ↔ butoir bas
+JEU_BUTOIR_HAUT = 1.5           # nez de la rame ↔ butoir haut
+START_S = round(BUTOIR_BAS_S + JEU_BUTOIR_BAS + TRAIN_HALF, 2)    # 22,56
+STOP_S = round(BUTOIR_HAUT_S - JEU_BUTOIR_HAUT - TRAIN_HALF, 2)   # 3456,04
+# Les deux rames sont liées par le câble : l'autre rame est au MIROIR des
+# points d'arrêt — quand l'une est à STOP_S, l'autre est à START_S. Le
+# câble entre elles fait 2·LENGTH − MIROIR_S = 3 469,4 m.
+MIROIR_S = round(START_S + STOP_S, 2)                             # 3478,6
+
+
+def miroir(s: float) -> float:
+    """Position de l'autre rame quand celle-ci est à s (cf. MIROIR_S)."""
+    return MIROIR_S - s
 
 # Approach profile — the train decelerates to CREEP_V and maintains it
 # from CREEP_START up to STOP_S, entering the station quietly.
@@ -682,12 +692,12 @@ def aero_drag_side_n(s_pos: float, v: float) -> float:
 
 def aero_drag_n(s: float, v: float) -> float:
     """Traînée totale (N, ≥ 0) des DEUX rames, chacune dans son régime."""
-    return aero_drag_side_n(s, v) + aero_drag_side_n(LENGTH - s, v)
+    return aero_drag_side_n(s, v) + aero_drag_side_n(miroir(s), v)
 
 
 def rope_weight_force_n(s: float) -> float:
     """Poids propre du câble projeté sur +s : ρ·g·(z_rame − z_contrepoids)."""
-    return CABLE_KG_M * G * (geom_at(s)[1] - geom_at(LENGTH - s)[1])
+    return CABLE_KG_M * G * (geom_at(s)[1] - geom_at(miroir(s))[1])
 
 
 def _rope_rollers_n() -> float:
@@ -1108,7 +1118,7 @@ class GameState:
     pilot: str = "Pilote"
     train: Train = field(default_factory=Train)
     # Opposing train (counterweight — bound by cable, moves symmetrically)
-    ghost_s: float = LENGTH     # starts at top, comes down
+    ghost_s: float = STOP_S     # starts at top, comes down
     # Éclairage du tunnel (touche J) — demande du 2026-10-03 : « l'option
     # de couper tous les éclairages du tunnel ». Relayé à la vue 3D.
     tunnel_lights: bool = True
@@ -1296,7 +1306,7 @@ class Physics:
         theta = math.atan(g_slope)
         sint = math.sin(theta)
         cost = math.cos(theta)
-        theta_g = math.atan(gradient_at(LENGTH - tr.s))
+        theta_g = math.atan(gradient_at(miroir(tr.s)))
         sint_g = math.sin(theta_g)
         cost_g = math.cos(theta_g)
 
@@ -1692,16 +1702,16 @@ class Physics:
         clamp_lo = START_S - (1.2 if st.finished else 0.0) - st.sag_main
         clamp_hi = STOP_S + (1.2 if st.finished else 0.0)
         # En Défi, la rame qui ARRIVE TROP VITE doit visuellement rouler
-        # jusqu'au VRAI butoir (BUMPER_CLEAR = 10 m au-delà du repère
-        # d'arrêt) avant de percuter — sinon le crash se déclenchait au
-        # repère, 10 m avant le mur, et « le crash a lieu avant que la
-        # visu montre qu'on a tapé » (retour d'essai 2026-07-24). Hors
-        # arrivée normale (non finished), on repousse donc le point de
+        # jusqu'au VRAI butoir (nez ou arrière contre sa tête, JEU_BUTOIR_*
+        # au-delà du repère d'arrêt) avant de percuter — sinon le crash se
+        # déclenchait au repère, avant le mur, et « le crash a lieu avant
+        # que la visu montre qu'on a tapé » (retour d'essai 2026-07-24).
+        # Hors arrivée normale (non finished), on repousse donc le point de
         # collision au mur ; le repère STOP_S reste la cible du score de
         # précision.
         if st.run_mode == "challenge" and not st.finished:
-            clamp_hi = STOP_S + BUMPER_CLEAR
-            clamp_lo = START_S - BUMPER_CLEAR
+            clamp_hi = STOP_S + JEU_BUTOIR_HAUT
+            clamp_lo = START_S - JEU_BUTOIR_BAS
         # COLLISION EN BOUT DE VOIE : si la rame atteint le repère d'arrêt
         # à plus de CRASH_SPEED sans s'être arrêtée normalement, elle
         # percute le butoir. N'arrive QUE quand le filet d'auto-dock est
@@ -1821,7 +1831,7 @@ class Physics:
             sag_t_main = max(0.0, (m_up - st.sag_ref_m_main) * G * sint
                              * (LENGTH - st.sag_anchor_s) / CABLE_EA_N)
             sag_t_ghost = max(0.0, (m_down - st.sag_ref_m_ghost) * G * sint_g
-                              * st.sag_anchor_s / CABLE_EA_N)
+                              * (LENGTH - miroir(st.sag_anchor_s)) / CABLE_EA_N)
             rate = 0.03 * dt
             st.sag_main += max(-rate, min(rate, sag_t_main - st.sag_main))
             st.sag_ghost += max(-rate, min(rate, sag_t_ghost - st.sag_ghost))
@@ -1928,7 +1938,7 @@ class Physics:
         dyn2 = -k2 * st.el_x2 - 2.0 * REBOUND_ZETA * math.sqrt(k2 * m2e) * st.el_v2
         tr.tension_dan = max(
             _side_tension_n(m_up, tr.s, 0.0, tr.v) + dyn1,
-            _side_tension_n(m_down, LENGTH - tr.s, 0.0, -tr.v) + dyn2,
+            _side_tension_n(m_down, miroir(tr.s), 0.0, -tr.v) + dyn2,
         ) / 10.0
         # Apply persistent fault offsets so the gauge actually moves
         # when a cable surge or slack fault is announced.
@@ -2183,7 +2193,7 @@ class Physics:
         # pilotée a reculé de sag_main en s'allongeant, le contrepoids n'a
         # PAS avancé d'autant (tambour serré) ; et lui-même recule de son
         # propre affaissement dans sa gare.
-        base_ghost_s = LENGTH - (tr.s + st.sag_main) - st.sag_ghost
+        base_ghost_s = miroir(tr.s + st.sag_main) - st.sag_ghost
         if st.finished:
             # Le rebond après l'arrêt n'est plus une formule posée : c'est
             # l'oscillation élastique des rames (_elastic_step) quand le
@@ -2193,7 +2203,7 @@ class Physics:
         # Câble rompu : la rame opposée n'est plus couplée — son propre
         # parachute l'a clouée sur place, elle ne suit plus le miroir.
         if not tr.cable_rupture:
-            st.ghost_s = max(START_S, min(LENGTH - START_S, base_ghost_s))
+            st.ghost_s = max(START_S, min(STOP_S, base_ghost_s))
 
         if st.trip_started:
             st.trip_time += dt
@@ -2453,7 +2463,7 @@ class Physics:
         m_total_r = m_main_r + m_ghost_r + ROPE_MASS_KG
         g_slope_r = gradient_at(tr.s)
         theta_r = math.atan(g_slope_r)
-        theta_gr = math.atan(gradient_at(LENGTH - tr.s))
+        theta_gr = math.atan(gradient_at(miroir(tr.s)))
         # f_grav_s : net +s force on main from gravity imbalance — avec la
         # pente locale de CHAQUE rame, comme la physique. L'ancien
         # raccourci mono-pente (−dm·g·sinθ_main) se trompait de SIGNE dès
@@ -6025,6 +6035,7 @@ class AutoOps:
                 # la 3D voyait les portes s'ouvrir d'un coup, sans son,
                 # avant même l'arrêt complet (dry run du 2026-09-27).
                 self.w.begin_doors_open(tr)
+                self.w.debarquement()
                 self._set_phase(self.PHASE_DOORS_OPENING)
                 add_event(state, "ops",
                           "Auto : cable settled — doors open",
@@ -6041,7 +6052,9 @@ class AutoOps:
             # sens trop vite », 2026-09-27). Le demi-tour remet le chrono
             # du rebond à zéro : il ne doit venir qu'une fois l'oscillation
             # éteinte ET les passagers descendus.
-            if self.phase_t >= AUTO_ARRIVAL_DWELL_S:
+            if self.phase_t >= AUTO_ARRIVAL_DWELL_S and (
+                    self.w.passagers_descendus()
+                    or self.phase_t >= AUTO_SETTLE_MAX_S):
                 self.w.reverse_trip(silent=True)
                 self._begin_boarding(now)
                 add_event(state, "ops",
@@ -6675,8 +6688,8 @@ class GameWidget(QWidget):
                 "Portes ouvrir / fermer — uniquement à l'arrêt total",
             ),
             int(K.Key_A): (
-                "AUTO — trip autopilot : closes the doors, arms READY, gives START, holds 100 %, lets the stop envelope land the train ; off on arrival or as soon as you touch the setpoint or a brake",
-                "AUTO — pilote auto du voyage : ferme les portes, arme PRÊT, donne le DÉPART, tient 100 %, laisse l'enveloppe poser la rame ; s'efface à l'arrivée ou dès que vous touchez consigne ou freins",
+                "AUTO — trip autopilot : closes the doors once boarded, arms READY, gives START, holds 100 %, lets the stop envelope land the train, opens the doors once the cable has settled and lets the passengers off ; then hands back, or as soon as you touch the setpoint or a brake",
+                "AUTO — pilote auto du voyage : ferme les portes une fois l'embarquement fini, arme PRÊT, donne le DÉPART, tient 100 %, laisse l'enveloppe poser la rame, ouvre les portes une fois le câble stabilisé et laisse descendre les passagers ; puis rend la main, ou dès que vous touchez consigne ou freins",
             ),
             int(K.Key_N): (
                 "Mute / unmute on-board announcements and ambient sound",
@@ -6732,6 +6745,7 @@ class GameWidget(QWidget):
         self._ap_since = 0.0
         self._ap_cooldown = 0.0
         self._ap_armed_finished = False
+        self._ap_arrivee_t = 0.0
         self._cloud_offset = 0.0          # slow scroll for sky
         self._snowflakes: list[list[float]] = []   # [x, y, vy, size]
         for _ in range(60):
@@ -6883,17 +6897,17 @@ class GameWidget(QWidget):
         self._ap_cooldown = max(0.0, self._ap_cooldown - dt)
         if st.finished:
             # Engagé après une arrivée : on repart dans l'autre sens (V
-            # inverse le sens sans annonce) ; arrivé SOUS pilote auto : on
-            # rend la main, le conducteur décide du voyage suivant.
+            # inverse le sens sans annonce).
             if self._ap_armed_finished and self._ap_cooldown <= 0.0:
                 self._ap_armed_finished = False
                 self._virtual_key(Qt.Key.Key_V)
                 self._ap_cooldown = 1.5
                 return
             if not self._ap_armed_finished:
-                self._autopilot_disengage("arrived", "arrivée")
+                self._autopilot_arrivee(dt)
             return
         self._ap_armed_finished = False
+        self._ap_arrivee_t = 0.0
         if st.trip_started:
             tr.speed_cmd = 1.0
             return
@@ -6901,10 +6915,11 @@ class GameWidget(QWidget):
             return
         closing = bool(getattr(self.sounds, "_close_seq_active", False))
         if tr.doors_cmd or tr.doors_timer > 0.0 or closing:
-            # portes ouvertes : fermeture après un court temps d'arrêt ;
-            # portes en cours de fermeture : on attend la fin du clip
+            # portes ouvertes : fermeture une fois l'embarquement fini (et
+            # après un court temps d'arrêt) ; portes en cours de
+            # fermeture : on attend la fin du clip
             if (tr.doors_cmd and tr.doors_timer <= 0.0 and not closing
-                    and self._ap_since >= 2.0):
+                    and self._ap_since >= 2.0 and self.embarquement_fini()):
                 self._virtual_key(Qt.Key.Key_D)
                 self._ap_cooldown = 1.5
             return
@@ -6918,6 +6933,28 @@ class GameWidget(QWidget):
             tr.speed_cmd = 1.0
             self._virtual_key(Qt.Key.Key_Z)
             self._ap_cooldown = 3.0
+
+    def _autopilot_arrivee(self, dt: float) -> None:
+        """Arrivée sous pilote auto, comme en exploitation : on attend la
+        fin des oscillations du câble (mêmes critères que l'exploitation
+        automatique X : enveloppe < AUTO_SETTLE_M, 3 à 30 s), on ouvre les
+        portes (touche D : clip, vantaux, verrous), les passagers
+        descendent, PUIS on rend la main au conducteur (voyage suivant)."""
+        st = self.state
+        tr = st.train
+        self._ap_arrivee_t = getattr(self, "_ap_arrivee_t", 0.0) + dt
+        if not tr.doors_cmd:
+            settled = self.physics.rebound_envelope_m() < AUTO_SETTLE_M
+            if (self._ap_arrivee_t >= AUTO_SETTLE_MIN_S
+                    and (settled or self._ap_arrivee_t >= AUTO_SETTLE_MAX_S)
+                    and tr.doors_timer <= 0.0 and self._ap_cooldown <= 0.0):
+                self._virtual_key(Qt.Key.Key_D)
+                self._ap_cooldown = 1.5
+            return
+        if tr.doors_open and self.passagers_descendus():
+            self._autopilot_disengage(
+                "arrived — doors open, passengers off",
+                "arrivée — portes ouvertes, passagers descendus")
 
     def _advance_fault_phase(self, dt: float) -> None:
         """Drive the catastrophic fault state machine.
@@ -7048,7 +7085,7 @@ class GameWidget(QWidget):
         tr.direction = -tr.direction
         st.selected_direction = tr.direction
         # Ghost mirrors main position on the cable.
-        st.ghost_s = LENGTH - tr.s
+        st.ghost_s = miroir(tr.s)
         # Reset trip-state flags so the driver can re-run the ready /
         # buzzer / start sequence and head back. We deliberately KEEP
         # the current brake configuration (service brake, emergency
@@ -7238,7 +7275,7 @@ class GameWidget(QWidget):
         # voyage (le manuel décrit la procédure manuelle D → V → Z).
         tr.autopilot = False
         # Counterweight (ghost) starts at the opposite station.
-        st.ghost_s = LENGTH - tr.s
+        st.ghost_s = miroir(tr.s)
         # 🔴 Affaissement d'embarquement : il s'ancre dès que la rame est
         # immobilisée hors voyage (tambour ou portes), donc AUSSI après un
         # arrêt en tunnel sur panne catastrophique. Sans ce désarmement, le
@@ -7948,6 +7985,30 @@ class GameWidget(QWidget):
             "info",
         )
 
+    def debarquement(self) -> None:
+        """Arrivée en gare, portes ouvertes : les passagers des deux rames
+        descendent (cibles d'embarquement à 0 ; les effectifs y glissent à
+        BOARDING_PAX_PER_S). La nouvelle charge est posée au demi-tour
+        (reverse_trip). Retour du 06/10/2026 : « en mode auto, à l'arrivée,
+        il faut aller jusqu'à l'ouverture des portes et le débarquement des
+        passagers »."""
+        st = self.state
+        st.train.pax_car1_target = 0
+        st.train.pax_car2_target = 0
+        st.ghost_pax_target = 0
+
+    def passagers_descendus(self) -> bool:
+        st = self.state
+        return (st.train.pax_car1 == 0 and st.train.pax_car2 == 0
+                and st.ghost_pax == 0)
+
+    def embarquement_fini(self) -> bool:
+        st = self.state
+        tr = st.train
+        return (tr.pax_car1 == tr.pax_car1_target
+                and tr.pax_car2 == tr.pax_car2_target
+                and st.ghost_pax == st.ghost_pax_target)
+
     def begin_doors_open(self, tr) -> None:
         """Commande d'ouverture : clip de portes tout de suite, vantaux
         (visuel) à DOOR_MOTION_LEAD, interlock « ouvertes » à
@@ -8404,6 +8465,8 @@ class GameWidget(QWidget):
                 new_cmd = not tr.doors_cmd
                 if new_cmd:
                     self.begin_doors_open(tr)
+                    if st.finished and at_station:
+                        self.debarquement()
                     add_event(st, "doors",
                               "Opening doors", "Ouverture des portes",
                               "info")
@@ -8423,6 +8486,7 @@ class GameWidget(QWidget):
                 self._ap_since = 0.0
                 self._ap_cooldown = 0.0
                 self._ap_armed_finished = st.finished
+                self._ap_arrivee_t = 0.0
                 add_event(st, "auto",
                           "Autopilot ON — doors, READY, START, 100 %, stop",
                           "Pilote auto ON — portes, PRÊT, DÉPART, 100 %, arrêt",
@@ -10795,7 +10859,7 @@ class GameWidget(QWidget):
         # STOPPED centre position (not flush with the bumper). Train
         # spans ± TRAIN_HALF around START_S / STOP_S, and the platform
         # matches that span, so when the driver looks forward at
-        # departure there is still ~ BUMPER_CLEAR + a few m of platform
+        # departure there is still a few m of platform
         # visible ahead rather than a blank black tunnel.
         plat_centres_s = [
             START_S,                        # Val Claret (lower)
@@ -14459,8 +14523,8 @@ class GameWidget(QWidget):
                 ("C", T("cabin lights", "éclairage cabine")),
                 ("J", T("tunnel lighting on / off", "éclairage du tunnel on / off")),
                 ("K", T("horn (hold)", "klaxon (maintenir)")),
-                ("A", T("trip autopilot: doors, READY, START, 100 %, stop",
-                        "pilote auto du voyage : portes, PRÊT, DÉPART, 100 %, arrêt")),
+                ("A", T("trip autopilot: doors, READY, START, 100 %, stop, doors, passengers off",
+                        "pilote auto du voyage : portes, PRÊT, DÉPART, 100 %, arrêt, portes, descente")),
                 ("X", T("auto-operation on / off",
                         "exploitation automatique on / off")),
                 (T("Shift+X", "Maj+X"),

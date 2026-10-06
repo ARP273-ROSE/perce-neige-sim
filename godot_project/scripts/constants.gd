@@ -24,6 +24,12 @@ const BUILD_TAG: String = "dev"
 # (godot#116750) — le contournement documenté est le mode « Stream ».
 # Chrome/Android marche très bien en Sample → bascule à l'EXÉCUTION,
 # uniquement quand l'UA est un vrai Safari (WebKit sans Chrome/Android).
+## Position de l'autre rame quand celle-ci est à s (miroir des points
+## d'arrêt, cf. MIROIR_S).
+static func miroir(s_: float) -> float:
+	return MIROIR_S - s_
+
+
 static func safari_web() -> bool:
 	if not OS.has_feature("web"):
 		return false
@@ -131,12 +137,24 @@ const CAR_DIAM_M: float = 3.60
 
 # Plateformes / stations
 const PLATFORM_LEN: float = 35.0
-const BUMPER_CLEAR: float = 4.0          # marge cabine ↔ tampon en bas (réaliste)
-const START_S: float = 20.0              # TRAIN_HALF + BUMPER_CLEAR (= 16 + 4)
-# En haut, on s'arrête plus court (cabine 1m du tampon) — gare terminus serrée
-const STOP_S: float = 3457.0             # LENGTH − TRAIN_HALF − 1 → cabine_front = 3473 m
+# Points d'arrêt (fait de Kevin, 06/10/2026 : « en haut on s'arrête à
+# 1,5 m du butoir ; en bas à 4 ou 5 m, pour la marge d'oscillation et
+# d'allongement »), comptés depuis la face des têtes en bois des butoirs
+# (stations_builder._build_bumper) : audit_physique/arrets_gares.sage.
+const BUTOIR_BAS_S: float = 2.06         # face du butoir bas (socle à 2,0 m)
+const BUTOIR_HAUT_S: float = 3473.54     # face du butoir haut (socle à LENGTH − 0,4)
+const JEU_BUTOIR_BAS: float = 4.5        # arrière de la rame ↔ butoir bas
+const JEU_BUTOIR_HAUT: float = 1.5       # nez de la rame ↔ butoir haut
+const START_S: float = 22.56             # BUTOIR_BAS_S + JEU_BUTOIR_BAS + TRAIN_HALF
+const STOP_S: float = 3456.04            # BUTOIR_HAUT_S − JEU_BUTOIR_HAUT − TRAIN_HALF
+# Les deux rames sont liées par le câble : l'autre rame est au MIROIR des
+# points d'arrêt, MIROIR_S − s — quand l'une est à STOP_S, l'autre est à
+# START_S. Le câble entre elles fait 2·LENGTH − MIROIR_S = 3 469,4 m :
+# 4,6 m de moins que la voie (avec LENGTH − s, la rame d'en face finissait
+# 1 m DANS le butoir bas quand on arrivait en haut).
+const MIROIR_S: float = 3478.6           # START_S + STOP_S
 const CREEP_DIST: float = 55.0           # 20 + PLATFORM_LEN
-const CREEP_START_S: float = 3402.0      # STOP_S − CREEP_DIST
+const CREEP_START_S: float = 3401.04     # STOP_S − CREEP_DIST
 
 # Portes
 const DOOR_CLOSE_TIME: float = 3.0

@@ -1,0 +1,11 @@
+faces des butoirs : bas 2.06000 m, haut 3473.540 m
+START_S = 22.5600   STOP_S = 3456.040   miroir START_S + STOP_S = 3478.60
+rame en haut : nez à 1.50 m du butoir ; l'autre : arrière à 4.50 m du butoir bas
+avant : miroir LENGTH − s, PWA START_S 20 / STOP_S 3457 → l'autre rame à -1.06 m du butoir bas (dans le butoir)
+        PC START_S 26 / STOP_S 3448 : 9.54 m en haut, 7.94 m en bas
+câble entre les deux rames : 3469.40 m, soit 4.60 m de moins que la voie
+rame vide              en bas : T   30 →  129 kN, allongement du brin ≈ 2.20 m
+rame pleine (334 pax)  en bas : T   53 →  153 kN, allongement du brin ≈ 2.84 m
+(l'écart de charge entre vide et pleine déplace la rame en bas de
+ quelques décimètres : c'est l'affaissement d'embarquement, plus
+ l'oscillation de ±0,3 m — d'où les 4 à 5 m de marge en bas)

@@ -389,7 +389,7 @@ def test_affaissement_embarquement_gare_basse():
         assert attendu[0] <= recul <= attendu[1], \
             f"recul {recul*100:.1f} cm (dir={direction})"
         # le contrepoids, lui, n'a pas bougé
-        assert abs(st.ghost_s - (pn.LENGTH - s0)) < 0.02
+        assert abs(st.ghost_s - pn.miroir(s0)) < 0.02
 
 
 def test_ambiance_ne_se_coupe_pas_au_fluage():

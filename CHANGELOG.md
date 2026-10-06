@@ -7,6 +7,58 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.15.62** — arrêts calés sur les butoirs, bouton PORTES, débarquement à
+l'arrivée.
+- **« En haut on s'arrête à 1,5 m du butoir, en bas à 4 ou 5 m, pour la
+  marge d'oscillation et d'allongement »** (fait de Kevin) :
+  - **avant**, le PC s'arrêtait à 9,5 m du butoir en haut et à 7,9 m en
+    bas, la PWA à 0,6 m et à 1,9 m. Surtout, dans la PWA, la rame d'en
+    face était placée en miroir à 3 474 − s, alors que ses points
+    d'arrêt n'étaient pas symétriques. Quand on arrivait en haut, l'autre
+    rame finissait donc 1 m **dans** le butoir bas, et l'arrêt dépendait
+    de la rame et du sens ;
+  - **maintenant**, les points d'arrêt sont comptés depuis la face des
+    têtes en bois des butoirs : 1,5 m en haut (`STOP_S` = 3 456,04), 4,5 m
+    en bas (`START_S` = 22,56), et les mêmes sur PC et dans la PWA. La
+    rame d'en face est au miroir de ces deux arrêts : `MIROIR_S` = 3 478,6.
+    Le câble entre les deux rames fait donc 4,6 m de moins que la voie.
+    `audit_physique/arrets_gares.sage` donne l'allongement du brin de la
+    rame en bas : 2,2 m vide, 2,8 m pleine ;
+  - **mesuré** dans la PWA, l'arrêt se fait à 1,53 m en haut quelle que
+    soit la charge, et entre 4,1 et 4,7 m en bas selon l'oscillation et
+    l'affaissement d'embarquement. En Défi, la collision a lieu nez
+    contre la tête du butoir ; avant, elle était 3,5 m dans le mur en
+    haut.
+- **« Un bouton pour les portes dans la PWA »** : un bouton tactile
+  PORTES à gauche de PRÊT/DÉPART, vert quand les portes sont ouvertes (et
+  la touche D au clavier). Il reprend les mêmes verrous que la touche D
+  du PC : rame immobile, ouverture à quai seulement, aucun verrou en Défi.
+  - La fermeture joue la vraie séquence (annonce, buzzer, clip) sans
+    partir.
+  - PRÊT/DÉPART, portes déjà fermées, ne lance que le buzzer de quai.
+    Pendant une fermeture au bouton, il enchaîne directement sur le
+    départ.
+  - Un refus s'affiche dans le bandeau d'état.
+- **« En mode auto sur le PC, à l'arrivée, aller jusqu'à l'ouverture des
+  portes et le débarquement des passagers »** :
+  - le pilote auto (A) attend la fin des oscillations du câble (comme
+    l'exploitation automatique), ouvre les portes, laisse descendre tout
+    le monde, puis rend la main. Au départ, il ne ferme les portes
+    qu'une fois l'embarquement fini ;
+  - à l'ouverture des portes à l'arrivée, sur PC (touche D, X, A) comme
+    dans la PWA, les passagers des deux rames **descendent** d'abord,
+    environ 12 s pour 150 personnes par voiture. La nouvelle charge
+    monte ensuite, au demi-tour. Avant, les effectifs glissaient
+    directement de l'ancienne charge à la nouvelle ; l'exploitation
+    automatique attend maintenant que tout le monde soit descendu.
+- Tests :
+  - deux tests du PC avaient en dur l'ancien miroir et l'ancien pilote ;
+  - celui de la boucle de croisière échouait depuis le volume général de
+    la v1.15.56, car il lisait le niveau demandé et non celui envoyé à
+    Qt.
+  - Bancs de la PWA : 12 au vert, dont 10 nouveaux contrôles des portes.
+  - Parité PC/PWA : 0,1 kW au 95e percentile.
+
 **v1.15.61** — câble continu au galet de contact, décollage sans angle.
 - **« Au point de contact avec le galet, le câble semble s'interrompre »**.
   Deux causes :

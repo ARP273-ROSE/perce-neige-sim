@@ -31,12 +31,15 @@ def main():
     dossier = sys.argv[2]
     print(f"{'cas':22s} {'pts':>4s}  écarts p95/max : P, R (kW), T (daN) ; Δdurée")
     pire = 0.0
-    # Les deux codes n'ont pas le même repère d'arrêt (PC 26/3448 m, PWA
-    # 20/3457 m) : on interpole les séries PC à la position PWA, hors
+    # Les deux codes ont le même repère d'arrêt depuis la v1.15.62 (22,56 /
+    # 3 456,04 m, butoirs à 4,5 et 1,5 m) : on interpole quand même les
+    # séries PC à la position PWA (pas de temps différents), hors
     # accélération/approche (|v| ≥ 11,9 des deux côtés) et hors ±15 m des
-    # bords de l'évitement (la traînée y bascule d'un coup : un décalage
-    # d'un pas y vaut 200 kW sans que la physique diffère).
-    BORDS = (1611.0, 1813.0, 3474.0 - 1813.0, 3474.0 - 1611.0)
+    # bords de l'évitement, pour la rame et pour l'autre rame au miroir
+    # (MIROIR_S − s) — la traînée y bascule d'un coup : un décalage d'un
+    # pas y vaut 200 kW sans que la physique diffère.
+    MIROIR_S = 3478.6
+    BORDS = (1611.0, 1813.0, MIROIR_S - 1813.0, MIROIR_S - 1611.0)
 
     def interp(pc, key, x):
         pts = sorted((q["s"], q[key], abs(q["v"])) for q in pc)
