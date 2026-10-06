@@ -11,6 +11,7 @@ var _dir: int = -1
 var _cache: String = ""          # nom (méta) des pièces de la salle des machines à masquer
 var _sans_vol: bool = false      # sans brouillard volumétrique
 var _cam: PackedFloat32Array = []  # caméra libre dans le repère de la salle des machines : s', x, y, cap°, site°, fov
+var _camt: PackedFloat32Array = [] # caméra libre dans le repère du tunnel : s, x, y, cap°, site°, fov
 
 
 func _initialize() -> void:
@@ -23,6 +24,9 @@ func _initialize() -> void:
 			_cache = a.substr(6)
 		elif a == "sans_vol":
 			_sans_vol = true
+		elif a.begins_with("camt="):
+			for v in a.substr(5).split(","):
+				_camt.append(float(v))
 		elif a.begins_with("cam="):
 			for v in a.substr(4).split(","):
 				_cam.append(float(v))
@@ -53,6 +57,19 @@ func _tick() -> void:
 			var ext = _main.get("machine_room").get_node_or_null("Exterieur/" + _cache)
 			if ext != null:
 				ext.visible = false
+		if _camt.size() >= 6:
+			var tun = _main.get("tunnel")
+			var xt: Transform3D = tun.transform_at(_camt[0])
+			var ct := Camera3D.new()
+			ct.fov = _camt[5]
+			ct.near = 0.05
+			get_root().add_child(ct)
+			var pt: Vector3 = xt.origin + xt.basis.x * _camt[1] + xt.basis.y * _camt[2]
+			var cp: float = deg_to_rad(_camt[3])
+			var sp: float = deg_to_rad(_camt[4])
+			var dt: Vector3 = (-xt.basis.z * cos(cp) + xt.basis.x * sin(cp)) * cos(sp) + xt.basis.y * sin(sp)
+			ct.look_at_from_position(pt, pt + dt, xt.basis.y)
+			ct.current = true
 		if _cam.size() >= 6:
 			var mr = _main.get("machine_room")
 			var c := Camera3D.new()
