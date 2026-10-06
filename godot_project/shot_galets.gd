@@ -46,7 +46,7 @@ func _tick() -> void:
 		var s_nez: float = _s + PNConstants.TRAIN_HALF + 0.6
 		var s_sup: float = -1.0
 		for st in tr.station_list():
-			if _vue == "culot":
+			if _vue == "culot" or _vue.begins_with("chainette"):
 				break
 			if float(st.s) > s_nez + 1.0:
 				s_sup = st.s
@@ -56,7 +56,24 @@ func _tick() -> void:
 		cam.near = 0.02
 		get_root().add_child(cam)
 		var y_axe: float = tr._roller_axis_y()
-		if _vue == "culot":
+		if _vue == "chainette" or _vue == "chainette_loin":
+			# vue rasante dans la fosse, côté droit : le câble quitte les
+			# galets et remonte en chaînette jusqu'au culot
+			var att2: float = TrackBuilder.attache_s(_s)
+			# derrière le culot, sous la caisse, dans l'axe du câble
+			var xc: Transform3D = tun.transform_at(att2 - 0.7)
+			var xa2: Transform3D = tun.transform_at(att2 + (22.0 if _vue == "chainette" else 45.0))
+			var y_c: float = tr._roller_axis_y() + tr.pulley_radius + tr.cable_radius
+			var pos2: Vector3 = xc.origin + xc.basis.x * 0.02 + xc.basis.y * (y_c + 0.16)
+			var cible2: Vector3 = xa2.origin + xa2.basis.x * -0.12 + xa2.basis.y * (y_c - 0.02)
+			cam.fov = 50.0
+			cam.look_at_from_position(pos2, cible2, xc.basis.y)
+			var l2 := OmniLight3D.new()
+			l2.omni_range = 40.0
+			l2.light_energy = 2.5
+			get_root().add_child(l2)
+			l2.global_position = pos2 + xc.basis.y * 0.15
+		elif _vue == "culot":
 			var att: float = TrackBuilder.attache_s(_s)
 			var xf: Transform3D = tun.transform_at(att - 1.6)
 			var xa: Transform3D = tun.transform_at(att)
