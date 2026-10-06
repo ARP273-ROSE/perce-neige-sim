@@ -357,68 +357,65 @@ func _build_waiting_passengers(
 	origin: Vector3, right: Vector3, up: Vector3, fwd: Vector3,
 	L: float, y_floor: float, basis: Basis,
 ) -> void:
-	# 6 silhouettes en attente, certaines près des bancs (assises),
-	# d'autres debout dans le hall
-	var skin_mat: StandardMaterial3D = StandardMaterial3D.new()
-	skin_mat.albedo_color = Color(0.85, 0.70, 0.55)
-	skin_mat.roughness = 0.85
-
-	var coats: Array = [
-		Color(0.20, 0.30, 0.55),
-		Color(0.55, 0.20, 0.20),
-		Color(0.15, 0.40, 0.25),
-		Color(0.30, 0.30, 0.35),
-		Color(0.55, 0.40, 0.10),
-		Color(0.45, 0.10, 0.40),
-	]
-	# [x_local, z_local, sitting, color_idx]
+	# 6 skieurs en attente (SkieurMesh, 06/10/2026), certains assis sur les
+	# bancs (assise à 0,45 m), d'autres debout avec leur matériel
+	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
+	rng.seed = int(absf(origin.y) * 10.0) + 11
+	# [x_local, z_local, assis]
 	var people: Array = [
-		[-5.5, L * 0.28, true,  0],   # assis sur le 1er banc
-		[-5.5, L * 0.50, true,  1],   # assis sur le 2ème banc
-		[ 0.0, L * 0.30, false, 2],   # debout milieu
-		[ 2.5, L * 0.45, false, 3],   # debout milieu droite
-		[-2.0, L * 0.62, false, 4],   # debout milieu gauche
-		[ 4.0, L * 0.75, false, 5],   # debout sous la cage d'escalier
+		[-5.5, L * 0.28, true],
+		[-5.5, L * 0.50, true],
+		[ 0.0, L * 0.30, false],
+		[ 2.5, L * 0.45, false],
+		[-2.0, L * 0.62, false],
+		[ 4.0, L * 0.75, false],
 	]
+	var m: Dictionary = Cabin._skieurs_maillages()     # maillages partagés avec les rames
 	for p in people:
-		var x: float = p[0]
-		var z: float = p[1]
-		var sitting: bool = p[2]
-		var color: Color = coats[p[3]]
-		_emit_hall_passenger(origin, right, up, fwd, basis, skin_mat, color, x, z, y_floor, sitting)
+		var assis: bool = p[2]
+		var face: Vector3
+		if assis:
+			face = right      # le banc longe le mur gauche : on regarde le hall
+		else:
+			face = fwd.rotated(up.normalized(), rng.randf_range(-PI, PI))
+		var zb: Vector3 = (-face).normalized()
+		var xb: Vector3 = up.normalized().cross(zb).normalized()
+		var base: Transform3D = Transform3D(Basis(xb, up.normalized(), zb),
+			origin + right * float(p[0]) + up * y_floor + fwd * float(p[1]))
+		var pose: String = "assis"
+		var materiel: String = ""
+		if not assis:
+			var r: float = rng.randf()
+			pose = "skis" if r < 0.6 else ("libre" if r < 0.8 else "telephone")
+			if pose == "skis":
+				materiel = "surf" if rng.randf() < 0.25 else "skis"
+		var coiffe: String = "casque" if rng.randf() < 0.65 else "bonnet"
+		var graine: Color = Color(rng.randf(), rng.randf(), rng.randf(), 1.0)
+		_skieur_mm(m["p:%s:%s" % [pose, coiffe]], base, graine)
+		if rng.randf() < 0.3:
+			_skieur_mm(m["s:" + pose], base, graine)
+		var g: Color = Color(rng.randf(), rng.randf(), rng.randf(), 1.0)
+		if materiel == "skis":
+			_skieur_mm(m["g:skis"], base * Transform3D(Basis.IDENTITY, SkieurMesh.ANCRE_SKIS), g)
+			_skieur_mm(m["g:batons"], base * Transform3D(Basis.IDENTITY, SkieurMesh.ANCRE_BATONS), g)
+		elif materiel == "surf":
+			_skieur_mm(m["g:surf"], base * Transform3D(Basis.IDENTITY, SkieurMesh.ANCRE_SURF), g)
 
 
-func _emit_hall_passenger(
-	origin: Vector3, right: Vector3, up: Vector3, fwd: Vector3, basis: Basis,
-	skin_mat: StandardMaterial3D, coat_color: Color,
-	x_local: float, z_local: float, y_floor: float, sitting: bool,
-) -> void:
-	var coat_mat: StandardMaterial3D = StandardMaterial3D.new()
-	coat_mat.albedo_color = coat_color
-	coat_mat.roughness = 0.92
-
-	var torso_h: float = 0.55 if sitting else 0.78
-	var y_torso: float = (y_floor + 0.85) if sitting else (y_floor + 1.05)
-
-	var torso: MeshInstance3D = MeshInstance3D.new()
-	var torso_mesh: BoxMesh = BoxMesh.new()
-	torso_mesh.size = Vector3(0.45, torso_h, 0.30)
-	torso_mesh.material = coat_mat
-	torso.mesh = torso_mesh
-	torso.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	torso.position = origin + right * x_local + up * y_torso + fwd * z_local
-	torso.basis = basis
-	add_child(torso)
-
-	var head: MeshInstance3D = MeshInstance3D.new()
-	var head_mesh: SphereMesh = SphereMesh.new()
-	head_mesh.radius = 0.115
-	head_mesh.height = 0.23
-	head_mesh.material = skin_mat
-	head.mesh = head_mesh
-	head.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	head.position = origin + right * x_local + up * (y_torso + torso_h * 0.5 + 0.13) + fwd * z_local
-	add_child(head)
+## Un skieur (ou son matériel) : MultiMesh d'une instance, pour que le
+## shader lise ses graines de couleur (INSTANCE_CUSTOM).
+func _skieur_mm(mesh: Mesh, xf: Transform3D, graine: Color) -> void:
+	var mm: MultiMesh = MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.use_custom_data = true
+	mm.mesh = mesh
+	mm.instance_count = 1
+	mm.set_instance_transform(0, xf)
+	mm.set_instance_custom_data(0, graine)
+	var mi: MultiMeshInstance3D = MultiMeshInstance3D.new()
+	mi.multimesh = mm
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	add_child(mi)
 
 
 func _emit_label3d(pos: Vector3, text: String, font_size: int, color: Color, outline: int) -> void:
