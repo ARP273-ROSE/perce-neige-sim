@@ -4484,6 +4484,15 @@ class SoundSystem:
         # machines au gain donné par la 3D (distance), cf. _buzzer_a_jouer
         self.skieur_machinerie = 0.0
         self._mr_level = 1.0
+        # Musiques d'ambiance des gares (Kevin, 07/10/2026 : l'ouverture
+        # d'orchestre en attente gare du bas, la chanson du Toréador en gare
+        # du haut) : sons/musique/gare_basse.mp3 et gare_haute.mp3 — hors du
+        # dépôt public (enregistrements). Jouées en boucle quand le skieur
+        # est dans la gare (écoute 1 / 3), à bas niveau.
+        self._musique_gare = 0            # 0 aucune, 1 basse, 2 haute
+        self._musique_player = None
+        self._musique_audio = None
+        self._musique_chemin = None
         self._mr_present = None   # sons de la salle installés ? (cf. set_machine_room_view)
         self._machine_speed = None  # vitesse du câble à la poulie (None : celle de la rame)
         self._mr_idle = None
@@ -5299,6 +5308,37 @@ class SoundSystem:
         """Vitesse du câble à la poulie motrice (m/s, valeur absolue)."""
         self._machine_speed = float(v_cable)
 
+    def set_musique_gare(self, gare: int) -> None:
+        """Musique d'ambiance de la gare où l'on est (0 : aucune)."""
+        gare = int(gare)
+        if gare == self._musique_gare:
+            return
+        self._musique_gare = gare
+        if not self.enabled:
+            return
+        try:
+            if gare == 0:
+                if self._musique_player is not None:
+                    self._musique_player.stop()
+                return
+            nom = "gare_basse.mp3" if gare == 1 else "gare_haute.mp3"
+            chemin = self.project_dir / "sons" / "musique" / nom
+            if not chemin.exists():
+                return
+            if self._musique_player is None:
+                self._musique_player = QMediaPlayer()
+                self._musique_audio = _AudioOutput()
+                self._musique_audio.setVolume(0.22)
+                self._musique_player.setAudioOutput(self._musique_audio)
+                self._musique_player.setLoops(QMediaPlayer.Loops.Infinite)
+            if self._musique_chemin != str(chemin):
+                self._musique_player.setSource(QUrl.fromLocalFile(str(chemin)))
+                self._musique_chemin = str(chemin)
+            self._musique_audio.setMuted(self.muted)
+            self._musique_player.play()
+        except Exception:
+            pass
+
     def set_machine_room_view(self, active: bool) -> None:
         """Vue 3D « salle des machines » active (touche O, 3e vue) : le son
         de la cabine laisse la place à celui de la gare haute.
@@ -5667,7 +5707,7 @@ class SoundSystem:
         stoppait les players et vidait la file)."""
         m = self.muted
         for name in ("_audio", "_fx_audio", "_horn_audio", "_door_audio",
-                     "_cross_audio", "_mr_run_audio"):
+                     "_cross_audio", "_mr_run_audio", "_musique_audio"):
             out = getattr(self, name, None)
             if out is not None:
                 try:
@@ -7200,8 +7240,10 @@ class GameWidget(QWidget):
         elif m.get("skieur_conduire"):
             self._sortir_skieur(conduire=True)
         elif "touche" in m:
-            # J / C tapées dans la fenêtre 3D : c'est le PC qui tient ces états
-            k = {"J": Qt.Key.Key_J, "C": Qt.Key.Key_C}.get(str(m["touche"]))
+            # J / C / X tapées (ou bouton EXPLOIT. du skieur) dans la fenêtre
+            # 3D : c'est le PC qui tient ces états
+            k = {"J": Qt.Key.Key_J, "C": Qt.Key.Key_C,
+                 "X": Qt.Key.Key_X}.get(str(m["touche"]))
             if k is not None:
                 self._virtual_key(k)
         elif "skieur_etat" in m:
@@ -7268,6 +7310,7 @@ class GameWidget(QWidget):
         # quais de la gare haute : la machinerie, au gain donné par la 3D
         # (distance à la machinerie)
         self.sounds.skieur_machinerie = gain if (on and ecoute == 3) else 0.0
+        self.sounds.set_musique_gare((1 if ecoute == 1 else 2 if ecoute == 3 else 0) if on else 0)
         self.auto_ops.skieur_a_bord = on and dedans
         self.auto_ops.skieur_retenue = on and retenue
         # monté dans une rame à quai sans exploitation automatique : elle
@@ -8122,6 +8165,7 @@ class GameWidget(QWidget):
                 state_dict["skieur_vue"] = self._skieur_vue_n
                 state_dict["skieur_ski"] = self._skieur_ski_n
                 state_dict["skieur_evacuer"] = self._skieur_evac_n
+                state_dict["exploitation"] = bool(self.auto_ops.enabled)
                 self._godot_bridge.send_state(state_dict)
             self._autopilot_tick(dt)
             # PA + radio tunnel perdus : le lecteur d'annonces le sait
@@ -8761,8 +8805,8 @@ class GameWidget(QWidget):
                 self._skieur_vue_n += 1
             if k == Qt.Key.Key_E and not ev.isAutoRepeat():
                 self._skieur_ski_n += 1         # chausser / déchausser
-            if k == Qt.Key.Key_I and not ev.isAutoRepeat():
-                self._skieur_evac_n += 1        # issues de secours (rame arrêtée en tunnel)
+            if k == Qt.Key.Key_U and not ev.isAutoRepeat():
+                self._skieur_evac_n += 1        # issUes de secours (I est « inverser »)
             self._key_state.add(k)
             ev.accept()
             return
@@ -15744,8 +15788,8 @@ class GameWidget(QWidget):
                          "vue cabine : off → dessinée → 3D")),
                 ("O", T("3D view: cabin / ext. / machines",
                         "vue 3D : cabine / ext. / machines")),
-                ("F9", T("skier in the 3D view (ZQSD, Shift, V, E skis, I evacuate)",
-                         "skieur dans la vue 3D (ZQSD, Maj, V, E skis, I évacuer)")),
+                ("F9", T("skier in the 3D view (ZQSD, Shift, V, E skis, U evacuate)",
+                         "skieur dans la vue 3D (ZQSD, Maj, V, E skis, U évacuer)")),
             ]),
             (T("System", "Système"), [
                 ("P / Esc", T("pause / resume", "pause / reprise")),
@@ -15797,8 +15841,8 @@ class GameWidget(QWidget):
               "F9 skieur : marchez dans les gares (ZQSD/flèches, Maj pour courir, V 1re/3e pers.), montez, voyagez ; la ligne tourne seule et vous attend."),
             T("Skiing: outside on the snow, E puts the skis on. Q/D turn, Z pushes, S snowplough, Shift tuck; marked pistes, Kevin's ghost to beat down to Val Claret.",
               "Ski : dehors sur la neige, E pour chausser. Q/D tourner, Z pousser, S chasse-neige, Maj schuss ; pistes balisées, le fantôme de Kevin à battre jusqu'à Val Claret."),
-            T("Train stopped in the tunnel: I (or EVACUATE) removes the yellow emergency panels either side of the windshield; down onto the track, the right-hand service stairs lead to a station or to the mid-tunnel gallery and its piste.",
-              "Rame arrêtée en tunnel : I (ou ÉVACUER) enlève les panneaux jaunes d'issue de secours de part et d'autre du pare-brise ; sur la voie, l'escalier de droite ramène en gare ou à la galerie du milieu et sa piste."),
+            T("Train stopped in the tunnel: U (or EVACUATE) removes the yellow emergency panels either side of the windshield; down onto the track, the right-hand service stairs lead to a station or to the mid-tunnel gallery and its piste. The AUTO dashboard button (or the skier's EXPLOIT. button) still toggles auto-operation.",
+              "Rame arrêtée en tunnel : U (ou ÉVACUER) enlève les panneaux jaunes d'issue de secours de part et d'autre du pare-brise ; sur la voie, l'escalier de droite ramène en gare ou à la galerie du milieu et sa piste. Le bouton AUTO du tableau de bord (ou EXPLOIT. du skieur) commande toujours l'exploitation."),
             T("F4: 3D cabin view. On Linux Wayland the app switches to XWayland to embed it; PERCE_NEIGE_KEEP_WAYLAND=1 keeps Wayland (separate window).",
               "F4 : vue cabine 3D. Sous Linux Wayland l'application passe en XWayland pour l'intégrer ; PERCE_NEIGE_KEEP_WAYLAND=1 pour rester en Wayland (fenêtre séparée)."),
         ]

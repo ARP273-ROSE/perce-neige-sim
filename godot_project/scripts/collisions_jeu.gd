@@ -316,13 +316,35 @@ func _rame(c: Cabin) -> void:
 			# bancs et porte-skis, dans le repère de leur palier
 			var pal: Node3D = voiture.get_node_or_null("Amenagement%d_%d" % [idx + 1, k]) as Node3D
 			if pal != null:
-				var xp: Transform3D = Transform3D(pal.basis, pal.position)
+				# boîtes DROITES dans le repère de la voiture (le palier est
+				# incliné de la pente des gares) : une face qui surplombe de
+				# 5° n'est plus un mur le long duquel le corps glisse, et le
+				# skieur s'arrêtait net contre un porte-skis (07/10/2026)
+				var xp: Transform3D = Transform3D(Basis.IDENTITY, pal.position)
+				# bancs : l'assise (0,73-1,13 m) et le dossier, pas la lèvre
+				# avant ; porte-skis : 5 cm de moins de chaque côté que l'arceau.
+				# Kevin, 07/10/2026 : « bloqué par les derniers porte-skis, je
+				# ne peux pas accéder à l'avant » — le couloir entre porte-skis
+				# (0,41) et banc (0,70) ne faisait que 28 cm, la largeur du
+				# skieur ; il fait maintenant 39 cm
 				if TrainBodyBuilder.KINDS[k] == "win":
+					# bancs d'extrémité : 45 cm de moins vers le bout — sinon
+					# le banc et le pupitre (ou la calotte) se chevauchent de
+					# 20 cm le long de la voiture et l'on ne passe pas vers
+					# les issues de secours
+					var l_banc: float = TrainBodyBuilder.PANEL_L - 0.10
+					var dz_banc: float = 0.0
+					if idx == 0 and k == 0:
+						l_banc -= 0.45
+						dz_banc = 0.225
+					elif idx == c.car_count - 1 and k == 9:
+						l_banc -= 0.45
+						dz_banc = -0.225
 					for side in [-1.0, 1.0]:
-						_boite(voiture, Vector3(0.85, 0.50, TrainBodyBuilder.PANEL_L - 0.10),
-							xp * Transform3D(Basis.IDENTITY, Vector3(side * 1.12, 0.25, 0.0)))
+						_boite(voiture, Vector3(0.80, 0.50, l_banc),
+							xp * Transform3D(Basis.IDENTITY, Vector3(side * 1.13, 0.25, dz_banc)))
 				for xr in Cabin.racks_x(k):
-					_boite(voiture, Vector3(Cabin.RACK_L, 1.02, Cabin.RACK_P + Cabin.RACK_CRAN),
+					_boite(voiture, Vector3(Cabin.RACK_L - 0.14, 1.02, Cabin.RACK_P + Cabin.RACK_CRAN),
 						xp * Transform3D(Basis.IDENTITY, Vector3(xr, 0.51,
 							Cabin.RACK_DZ - Cabin.RACK_CRAN * 0.5)))
 		# paroi du tube en pans de 12°, du plafond au plancher ; au droit des
@@ -376,7 +398,10 @@ func _rame(c: Cabin) -> void:
 	if c.interior_root != null and not c._interior_cars.is_empty():
 		var v0: Node3D = c._interior_cars[0]
 		var z_l: float = -c.train_length * 0.5     # avant de la rame, repère de la rame
-		var dz: float = -(v0.position.z)
+		# (repère de la voiture 1 = repère de la rame décalé de v0.position.z :
+		# avec le signe inversé, pupitre et siège étaient posés 16 m derrière
+		# la voiture — ni l'un ni l'autre n'arrêtait personne)
+		var dz: float = v0.position.z
 		var seat: Node3D = c.interior_root.get_node_or_null("DriverSeatBase") as Node3D
 		var y_seat: float = seat.position.y if seat != null else -0.40
 		_boite(v0, Vector3(1.30, 0.70, 0.45), Transform3D(Basis.IDENTITY,

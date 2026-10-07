@@ -1312,7 +1312,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		if mode_skieur and event.keycode == KEY_X:
 			basculer_skieur_auto()
 			return
-		if mode_skieur and event.keycode == KEY_I:
+		if mode_skieur and event.keycode == KEY_U:     # U : issUe de secours (I = inverser le sens)
 			evacuer()
 			return
 		if mode_skieur and not (event.keycode in [KEY_F1, KEY_F2, KEY_F3, KEY_J, KEY_C]):
@@ -1509,6 +1509,19 @@ func basculer_skieur() -> void:
 		_entrer_skieur()
 
 
+## Exploitation automatique depuis le HUD du skieur (Kevin, 07/10/2026 :
+## « rajoute la possibilité d'activer / désactiver le mode auto même en mode
+## skieur ») : sur la version Web l'automate local, sur le PC la touche X du
+## PC (c'est lui qui tient l'exploitation).
+func basculer_exploitation(on: bool) -> void:
+	if client_mode:
+		if state_receiver != null and on != _exploitation_pc:
+			state_receiver.envoyer({"touche": "X"})
+		return
+	if auto_operator != null and auto_operator.enabled != on and run_mode == "normal":
+		auto_operator.toggle()
+
+
 ## AUTO du skieur (bouton AUTO, touche X) : la boucle complète toute seule.
 func basculer_skieur_auto() -> void:
 	if skieur == null or not mode_skieur or domaine == null:
@@ -1545,7 +1558,7 @@ func basculer_ski() -> void:
 ## ensuite de retourner en gare à pied ou de sortir par la sortie de
 ## secours au milieu »). Possible dans une rame ARRÊTÉE EN TUNNEL ; on passe
 ## par le trou, on descend sur la voie, l'escalier de service ramène en
-## gare ou à la galerie (bouton ÉVACUER, touche I).
+## gare ou à la galerie (bouton ÉVACUER, touche U — I est « inverser »).
 func evacuation_possible() -> bool:
 	if not mode_skieur or skieur == null or not skieur.actif or skieur.support == null:
 		return false
@@ -1768,6 +1781,7 @@ var _zones_gare: Array = [[0.0, -32.0, 46.0, 15.0],
 	[PNConstants.LENGTH, -50.0, MachineRoomBuilder.HALL_DEPTH + 0.3, 7.6]]
 var _gare_skieur: int = 0                 # mis à jour par _maj_skieur
 var _t_zone: float = 0.0                  # collisions à la demande (tunnel à pied)
+var _exploitation_pc: bool = false        # exploitation auto du PC (état reçu)
 var _gain_mach_envoye: float = -1.0       # dernier gain machinerie envoyé au PC
 
 
@@ -1889,6 +1903,7 @@ func _maj_skieur() -> void:
 			collisions.assurer_autour(skieur.global_position)
 	_maj_issues()
 	commandes_skieur.set_evacuation_possible(evacuation_possible())
+	commandes_skieur.set_exploitation(_exploitation_pc if client_mode else (auto_operator != null and auto_operator.enabled))
 	var retenue: bool = (not dedans and (skieur.support != null or en_gare)) \
 		or a_pied_tunnel or (skieur_auto != null and skieur_auto.descend())
 	# monté dans une rame à quai sans exploitation automatique : elle

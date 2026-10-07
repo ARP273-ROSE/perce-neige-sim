@@ -101,17 +101,19 @@ func _tick() -> void:
 		5:
 			if _t < 1.0:
 				return
-			_verif("quai du bas : souffle (écoute 1), buzzer du bas, pas de machinerie",
-				au.ecoute == 1 and au.gare_ecoute == 1 and au.gain_machinerie == 0.0 and au._sons_skieur.ecoute == 1,
-				"écoute %d, gare %d, gain %.2f" % [au.ecoute, au.gare_ecoute, au.gain_machinerie])
+			_verif("quai du bas : souffle (écoute 1), buzzer du bas, pas de machinerie, musique de la gare basse",
+				au.ecoute == 1 and au.gare_ecoute == 1 and au.gain_machinerie == 0.0 and au._sons_skieur.ecoute == 1
+					and au.musique_en_cours() == 1,
+				"écoute %d, gare %d, gain %.2f, musique %d" % [au.ecoute, au.gare_ecoute, au.gain_machinerie, au.musique_en_cours()])
 			var xh: Transform3D = tun.transform_at(PNConstants.LENGTH - 30.0)
 			_poser(xh.origin + xh.basis.x * -3.2 + Vector3(0.0, -0.9, 0.0))
 			_phase = 6
 		6:
 			if _t < 1.0:
 				return
-			_verif("quai du haut, loin : machinerie atténuée (écoute 3), buzzer du haut",
-				au.ecoute == 3 and au.gare_ecoute == 2 and au.gain_machinerie > 0.06 and au.gain_machinerie < 0.9,
+			_verif("quai du haut, loin : machinerie atténuée (écoute 3), buzzer du haut, musique de la gare haute",
+				au.ecoute == 3 and au.gare_ecoute == 2 and au.gain_machinerie > 0.06 and au.gain_machinerie < 0.9
+					and au.musique_en_cours() == 2,
 				"écoute %d, gare %d, gain %.3f (%.1f dB), d %.0f m" % [au.ecoute, au.gare_ecoute, au.gain_machinerie,
 					20.0 * log(maxf(au.gain_machinerie, 1e-4)) / log(10.0), _main.machine_room.distance_au_hall(_main.skieur.global_position)])
 			_gain_pres = au.gain_machinerie

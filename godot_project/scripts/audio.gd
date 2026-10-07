@@ -90,6 +90,16 @@ var gare_ecoute: int = 0
 # la machinerie » : gain (0-1) de la salle des machines sur les quais du
 # haut, posé par main.gd (vue salle des machines : 1).
 var gain_machinerie: float = 0.0
+# Musiques d'ambiance des gares (Kevin, 07/10/2026 : « l'ouverture
+# d'orchestre en musique d'ambiance pour l'attente gare du bas, la chanson
+# du Toréador dans la gare du haut ») : musique/gare_basse.mp3 et
+# gare_haute.mp3, HORS du dépôt public (enregistrements) — posés à côté de
+# la PWA par deploy_web.sh, chargés à la demande (14 Mo) la première fois
+# qu'on entre dans une gare ; en local, sons/musique/ du dépôt.
+const MUSIQUE_DB: float = -16.0
+var _musique: Array = [null, null]      # AudioStreamPlayer gare basse, gare haute
+var _musique_chargee: Array = [false, false]
+var _musique_en_cours: int = 0          # 0 aucune, 1 basse, 2 haute
 var _sons_skieur: SonsSkieur = null     # bouffées en gare, vent dehors
 
 
@@ -190,6 +200,7 @@ func _process(_delta: float) -> void:
 		return
 
 	_update_machine_room(_delta)
+	_update_musique(_delta)
 
 	# Sting de fin de service : armé par play_crash(), il tombe une fois le
 	# fracas retombé (sinon les deux se marchent dessus).
@@ -288,6 +299,64 @@ func _process(_delta: float) -> void:
 
 ## Son de la vue salle des machines : fondu cabine ↔ gare haute (τ 0,35 s),
 ## repos permanent, machinerie à la hauteur v/12 et au niveau (v/12)^0,42.
+## Musique de la gare où l'on est : 1 basse (écoute 1), 2 haute (écoute 3),
+## fondu de 1,5 s, boucle.
+func _update_musique(delta: float) -> void:
+	var voulue: int = 1 if ecoute == 1 else (2 if ecoute == 3 else 0)
+	if voulue != _musique_en_cours:
+		_musique_en_cours = voulue
+		if voulue > 0 and not _musique_chargee[voulue - 1]:
+			_charger_musique(voulue)
+	for k in range(2):
+		var p: AudioStreamPlayer = _musique[k]
+		if p == null or p.stream == null:
+			continue
+		var cible: float = MUSIQUE_DB if voulue == k + 1 else -80.0
+		if voulue == k + 1 and not p.playing:
+			p.volume_db = -80.0
+			p.play()
+		p.volume_db = move_toward(p.volume_db, cible, delta * 45.0)
+		if p.volume_db <= -79.0 and p.playing and voulue != k + 1:
+			p.stop()
+
+
+func _charger_musique(gare: int) -> void:
+	_musique_chargee[gare - 1] = true
+	var nom: String = "gare_basse.mp3" if gare == 1 else "gare_haute.mp3"
+	if OS.has_feature("web"):
+		var base: String = str(JavaScriptBridge.eval("location.href.replace(/[^/]*$/, '')"))
+		var req: HTTPRequest = HTTPRequest.new()
+		add_child(req)
+		req.request_completed.connect(func(_r: int, code: int, _h: PackedStringArray, body: PackedByteArray) -> void:
+			req.queue_free()
+			if code == 200 and body.size() > 1000:
+				_poser_musique(gare, body))
+		if req.request(base + "musique/" + nom) != OK:
+			req.queue_free()
+		return
+	var chemin: String = ProjectSettings.globalize_path("res://").path_join("../sons/musique/" + nom)
+	if FileAccess.file_exists(chemin):
+		_poser_musique(gare, FileAccess.get_file_as_bytes(chemin))
+
+
+func _poser_musique(gare: int, octets: PackedByteArray) -> void:
+	var st: AudioStreamMP3 = AudioStreamMP3.new()
+	st.data = octets
+	st.loop = true
+	var p: AudioStreamPlayer = AudioStreamPlayer.new()
+	p.stream = st
+	p.volume_db = -80.0
+	if PNConstants.safari_web():
+		p.playback_type = AudioServer.PLAYBACK_TYPE_STREAM
+	add_child(p)
+	_musique[gare - 1] = p
+
+
+## Musique en cours (bancs) : 0 aucune, 1 basse, 2 haute.
+func musique_en_cours() -> int:
+	return _musique_en_cours
+
+
 func _update_machine_room(delta: float) -> void:
 	var goal: float = 1.0 if machine_view else clampf(gain_machinerie, 0.0, 1.0)
 	_mr_mix += (goal - _mr_mix) * (1.0 - exp(-delta / 0.35))

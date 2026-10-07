@@ -61,11 +61,19 @@ func _tick() -> void:
 		1:
 			if _t < 8.0:
 				return
+			# (l'entrée en skieur relance l'exploitation automatique quand la
+			# rame est en ligne : ici elle doit rester arrêtée en tunnel)
+			if _main.auto_operator != null and _main.auto_operator.enabled:
+				_main.auto_operator.toggle()
 			var sk: SkieurJoueur = _main.skieur
 			var v0: Node3D = cab._interior_cars[0]
 			var car_len: float = cab.train_length / float(cab.car_count)
-			var zf: float = -car_len * 0.5
-			sk.global_position = v0.global_transform * Vector3(1.0, TrainBodyBuilder.Y_FLOOR + 0.3, zf + 2.3)
+			# au milieu de la voiture 1 (palier 5, le 2e à porte) : il devra
+			# slalomer entre les porte-skis jusqu'au poste (Kevin, 07/10/2026 :
+			# « bloqué par les derniers porte-skis, je ne peux pas accéder à
+			# l'avant »)
+			var zc5: float = cab._panel_center(0, 5) - (0.0 - 0.5) * car_len
+			sk.global_position = v0.global_transform * Vector3(0.0, TrainBodyBuilder.Y_FLOOR + 0.3, zc5)
 			sk.velocity = Vector3.ZERO
 			sk.support = v0
 			_phase = 2
@@ -91,8 +99,11 @@ func _tick() -> void:
 			_verif("les 4 D jaunes sont enlevés : maillages cachés, collisions désactivées",
 				cab.issues_retirees and cab._issues.size() == 4 and caches == 4 and desact == 4,
 				"%d panneaux, %d cachés, %d collisions désactivées" % [cab._issues.size(), caches, desact])
-			# chemin : devant le D droit, le trou (fond de calotte à zf + 0,45),
-			# la voie, puis l'escalier de service vers l'avant de la rame
+			# chemin : le slalom des porte-skis (couloir à droite aux paliers
+			# pairs, à gauche aux impairs ; le porte-skis est dans la moitié
+			# arrière du palier), le poste, le D droit, le trou (fond de
+			# calotte à zf + 0,45), la voie, puis l'escalier de service vers
+			# l'avant de la rame
 			var y: float = TrainBodyBuilder.Y_FLOOR + 0.3
 			var pf: Vector3 = v0.global_transform * Vector3(0.0, y, zf)
 			var s_av: float = ph.s
@@ -108,7 +119,11 @@ func _tick() -> void:
 			var sens: float = 1.0 if fwd.dot(-tun.transform_at(s_av).basis.z) > 0.0 else -1.0
 			# par l'issue droite (D de 0,98 à 1,62 m de l'axe), puis au-delà de
 			# la calotte, sur la voie
-			sk.chemin = [v0.global_transform * Vector3(1.30, y, zf + 1.4), v0.global_transform * Vector3(1.30, y, zf - 0.3)]
+			sk.chemin = []
+			for q in [[-0.55, 1.4], [-0.55, 0.9], [0.55, 0.9], [0.55, 0.6], [0.55, -0.3], [0.55, -0.5], [-0.55, -0.5], [-0.55, -0.9],
+					[-0.55, -1.9], [0.55, -1.9], [0.55, -2.3], [0.55, -3.3], [-0.55, -3.3], [-0.55, -4.5], [-0.55, -5.0], [1.0, -5.8]]:
+				sk.chemin.append(v0.global_transform * Vector3(q[0], y, q[1]))
+			sk.chemin.append_array([v0.global_transform * Vector3(1.15, y, zf + 1.4), v0.global_transform * Vector3(1.15, y, zf - 0.3)])
 			for ds in [3.0, 8.0, 16.0, 26.0]:
 				sk.chemin.append(track.point_passerelle(s_av + sens * ds))
 			_cible = sk.chemin[sk.chemin.size() - 1]
@@ -130,13 +145,13 @@ func _tick() -> void:
 			if sk.support == null:
 				_retenue_vue = _retenue_vue or (_main.auto_operator != null and _main.auto_operator.retenue)
 				_ecoute_vue = _ecoute_vue or _main.audio.ecoute == 4
-			if sk.chemin.is_empty() or _t > 60.0:
+			if sk.chemin.is_empty() or _t > 90.0:
 				var d: Vector3 = sk.global_position - _cible
 				var dh: float = Vector2(d.x, d.z).length()
 				var mur: String = "-"
 				if sk.get_slide_collision_count() > 0 and sk.get_last_slide_collision().get_collider():
 					mur = str(sk.get_last_slide_collision().get_collider().name)
-				_verif("par le trou, sur la voie, 26 m d'escalier de service vers l'avant",
+				_verif("slalom des porte-skis jusqu'au poste, par le trou, sur la voie, 26 m d'escalier de service vers l'avant",
 					sk.chemin.is_empty() and dh < 1.0 and absf(d.y) < 0.6 and sk.is_on_floor() and sk.support == null,
 					"%.0f s, reste %d points, %.2f m du but (dy %.2f), au sol %s, support %s, dernier contact %s" % [
 						_t, sk.chemin.size(), dh, d.y, sk.is_on_floor(), sk.support != null, mur])

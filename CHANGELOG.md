@@ -7,6 +7,33 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.18.2** — retours du troisième essai sur PC.
+- « En haut et en bas de la rame je suis bloqué par les derniers
+  porte-skis, je ne peux pas accéder à l'avant ni évacuer » → trois
+  causes. (1) La caisse penche avec la pente (16,7° à mi-tunnel) et les
+  porte-skis, fixés au plancher, penchent avec elle ; le skieur, lui,
+  était vertical dans le monde : son haut, décalé de 50 cm, accrochait le
+  haut des porte-skis — sa capsule prend maintenant l'inclinaison de la
+  voiture qui le porte. (2) Abordé presque de face, un mur arrêtait net
+  (Godot ne glisse pas sous 15° de la normale) : on glisse maintenant le
+  long de tout mur. (3) Collisions plus justes : bancs à leur assise (plus
+  la lèvre), porte-skis 7 cm plus étroits, bancs d'extrémité raccourcis,
+  pupitre et siège enfin à leur place (ils étaient posés 16 m derrière la
+  voiture). Le passage reste un slalom : le couloir libre est à droite aux
+  paliers pairs, à gauche aux impairs, comme dans la vraie rame.
+- « Ton menu d'aide dit que c'est la touche I mais elle est déjà
+  attribuée à Inverser le sens » → l'évacuation est sur **U** (issUe de
+  secours), partout (aide F1, manuel, README).
+- « Rajoute la possibilité d'activer / désactiver le mode auto même en
+  mode skieur » → bouton **EXPLOIT.** dans le HUD du skieur (Web :
+  l'automate local, aussi F3 ; PC : relayé au PC, comme son bouton AUTO),
+  état affiché dans les deux sens.
+- Musiques d'ambiance des gares (les fichiers de Kevin) : l'ouverture
+  d'orchestre en attente gare du bas, la chanson du Toréador en gare du
+  haut, en boucle à bas niveau quand le skieur y est (Web et PC).
+  Enregistrements hors du dépôt public : `sons/musique/` (ignoré) sur le
+  PC et le NAS, servis à côté de la PWA (`musique/`), chargés à la demande.
+
 **v1.18.1** — correctif de construction : les paquets Linux et macOS de la
 1.18.0 ne se construisaient pas (`wave` utilisé sans import dans l'écriture
 atomique des WAV — l'application plantait à la synthèse des sons au
@@ -99,7 +126,7 @@ cohérence), sortie de secours du tunnel jusqu'à la piste, skieur en AUTO.
   klaxon puis ça s'arrête ». En haut de chaque quai, la porte du
   garde-corps pivote quand on la pousse et sonne une fois (le klaxon) ;
   derrière, un palier et un escalier descendent au fond de la fosse.
-- **Issues de secours de la face** (bouton ÉVACUER, touche I — relayée par
+- **Issues de secours de la face** (bouton ÉVACUER, touche U — relayée par
   le PC) : « de part et d'autre de la vitre frontale, les parties jaunes
   cerclées de noir sont des issues de secours et ça s'en va en cas
   d'évacuation. Donc en cas d'arrêt dans le tunnel, rajoute la
