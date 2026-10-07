@@ -151,6 +151,7 @@ def test_skieur_f9_auto_attend_puis_ferme(fenetre):
     assert ao.enabled and ao.force_any_hours, "le funiculaire doit tourner tout seul"
     _step(win, clock, 0.2)
     assert pont.etats[-1]["skieur"] is True
+    assert pont.etats[-1]["skieur_ski"] == 0        # E (chausser) : compteur relayé
     # touches de marche transmises à la 3D (bits de skieur_joueur.gd)
     g._key_state.update({Qt.Key.Key_Z, Qt.Key.Key_Shift})
     assert g._skieur_touches() == 1 | 16

@@ -22,7 +22,11 @@ var _bouton_pos: Vector2 = Vector2.ZERO
 var _b_conduire: Button = null
 var _b_courir: Button = null
 var _b_vue: Button = null
+var _b_ski: Button = null
 var _boutons: Array = []
+var _info: Label = null                 # vitesse et piste, à ski
+var _msg: Label = null                  # message passager (refus, chrono)
+var _t_msg: float = 0.0
 
 
 func _ready() -> void:
@@ -52,7 +56,12 @@ func _ready() -> void:
 		if skieur != null:
 			skieur.conduite_demandee.emit())
 	col.add_child(_b_conduire)
-	_b_courir = _bouton("COURIR", "Courir (touche Maj)")
+	_b_ski = _bouton("CHAUSSER", "Chausser ou déchausser les skis, dehors sur la neige (touche E)")
+	_b_ski.pressed.connect(func() -> void:
+		if main != null:
+			main.basculer_ski())
+	col.add_child(_b_ski)
+	_b_courir = _bouton("COURIR", "Courir (touche Maj) ; à ski : schuss")
 	_b_courir.toggle_mode = true
 	_b_courir.toggled.connect(func(on: bool) -> void:
 		if skieur != null:
@@ -66,6 +75,22 @@ func _ready() -> void:
 		if main != null:
 			main.basculer_skieur())
 	col.add_child(b_q)
+	for k in range(2):
+		var l: Label = Label.new()
+		l.set_anchors_preset(Control.PRESET_CENTER_TOP if k == 0 else Control.PRESET_CENTER)
+		l.grow_horizontal = Control.GROW_DIRECTION_BOTH
+		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		l.offset_top = 18.0 if k == 0 else -120.0
+		l.add_theme_font_size_override("font_size", 26 if k == 0 else 30)
+		l.add_theme_color_override("font_color", Color(1, 1, 1))
+		l.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.85))
+		l.add_theme_constant_override("outline_size", 6)
+		l.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		_racine.add_child(l)
+		if k == 0:
+			_info = l
+		else:
+			_msg = l
 
 
 func _bouton(texte: String, aide: String) -> Button:
@@ -95,6 +120,34 @@ func basculer_vue() -> void:
 		return
 	skieur.premiere_personne = not skieur.premiere_personne
 	_b_vue.text = "3e PERS." if skieur.premiere_personne else "1re PERS."
+
+
+## Chaussé ou pas : libellés CHAUSSER / DÉCHAUSSER, COURIR / SCHUSS.
+func set_chausse(oui: bool) -> void:
+	_b_ski.text = "DÉCHAUSSER" if oui else "CHAUSSER"
+	_b_courir.text = "SCHUSS" if oui else "COURIR"
+	if not oui:
+		_info.text = ""
+
+
+## Ligne du haut, à ski : vitesse et piste.
+func set_info(t: String) -> void:
+	if _info != null and _info.text != t:
+		_info.text = t
+
+
+## Message au milieu de l'écran pendant `duree` secondes.
+func message(t: String, duree: float = 3.0) -> void:
+	if _msg != null:
+		_msg.text = t
+		_t_msg = duree
+
+
+func _process(delta: float) -> void:
+	if _t_msg > 0.0:
+		_t_msg -= delta
+		if _t_msg <= 0.0 and _msg != null:
+			_msg.text = ""
 
 
 ## Le bouton CONDUIRE n'apparaît qu'à côté du poste de pilotage.

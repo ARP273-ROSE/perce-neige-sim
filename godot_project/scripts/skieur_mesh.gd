@@ -326,6 +326,26 @@ static func squelette(pose: String) -> Dictionary:
 	return _squelette(pose)
 
 
+## Posture de glisse (skieur jouable chaussé, fantôme) : genoux fléchis,
+## buste plus bas, bras en avant, mains à hauteur des hanches pour tenir les
+## bâtons. Repère : avant = −z ; le dessous des chaussures à y = 0.
+static func squelette_glisse() -> Dictionary:
+	var s: Dictionary = _squelette("libre")
+	var bas: float = 0.10
+	for k in ["bassin", "tete", "epaule_g", "epaule_d"]:
+		s[k] = (s[k] as Vector3) + Vector3(0.0, -bas, 0.04)
+	s.ourlet = float(s.ourlet) - bas
+	s.haut_torse = float(s.haut_torse) - bas
+	for c in ["g", "d"]:
+		var sx: float = -1.0 if c == "g" else 1.0
+		s["hanche_" + c] = Vector3(sx * 0.09, 0.80, 0.06)
+		s["genou_" + c] = Vector3(sx * 0.10, 0.47, -0.13)
+		s["coude_" + c] = Vector3(sx * 0.25, 1.06, -0.10)
+		s["poignet_" + c] = Vector3(sx * 0.27, 0.93, -0.25)
+		s["main_" + c] = Vector3(sx * 0.27, 0.90, -0.31)
+	return s
+
+
 ## Passager sur un squelette donné (cf. squelette()).
 static func passager_squelette(s: Dictionary, pose: String, coiffe: String, mat: Material) -> ArrayMesh:
 	var b: Bati = Bati.new()
@@ -577,6 +597,71 @@ static func skis(mat: Material) -> ArrayMesh:
 		for sz in [-1.0, 1.0]:
 			_boite(b, Vector3(xo + sg * 0.012, 0.70, sz * 0.050), Vector3(0.006, 0.050, 0.008),
 				Basis(Vector3.RIGHT, sz * 0.25), P_SEMELLE, false)
+	return b.commit(mat)
+
+
+## Skis chaussés (le skieur jouable sur la neige) : deux skis à plat sous
+## les chaussures, spatule vers l'avant (−z), semelle à y = 0. Même profil
+## que skis() ; chaussure centrée à 0,80 m de la queue, entre la talonnière
+## (0,64 m) et la butée (0,965 m).
+const CENTRE_CHAUSSURE: float = 0.80
+static func skis_aux_pieds(mat: Material) -> ArrayMesh:
+	var b: Bati = Bati.new()
+	var prof: Array = [[0.0, 0.030], [0.025, 0.050], [0.08, 0.056], [0.30, 0.053], [0.60, 0.046],
+		[0.85, 0.0425], [1.10, 0.047], [1.35, 0.057], [1.48, 0.062], [1.57, 0.058], [1.64, 0.047],
+		[1.68, 0.030], [1.70, 0.012]]
+	var ep: float = 0.016
+	var zc: float = -0.05                 # milieu de la chaussure (repère du skieur)
+	b.lod = 2
+	for sx in [-1.0, 1.0]:
+		var xc: float = sx * 0.10
+		var g: Array = []
+		for e in prof:
+			var y: float = e[0]
+			var w: float = e[1]
+			var lev: float = 0.0
+			if y > 1.42:
+				lev = 0.075 * pow((y - 1.42) / 0.28, 2.0)
+			elif y < 0.12:
+				lev = 0.012 * pow((0.12 - y) / 0.12, 2.0)
+			var z: float = zc - (y - CENTRE_CHAUSSURE)
+			var dessus: int = P_SKI_MOTIF if (y > 1.10 and y < 1.36) or y < 0.10 else P_SKI
+			g.append([
+				b.pt(Vector3(xc - w, lev, z), Vector3.DOWN, P_SKI_SEMELLE),
+				b.pt(Vector3(xc + w, lev, z), Vector3.DOWN, P_SKI_SEMELLE),
+				b.pt(Vector3(xc - w, lev, z), Vector3.LEFT, P_BOUCLE),
+				b.pt(Vector3(xc - w, lev + ep, z), Vector3.LEFT, P_BOUCLE),
+				b.pt(Vector3(xc - w, lev + ep, z), Vector3.UP, dessus),
+				b.pt(Vector3(xc + w, lev + ep, z), Vector3.UP, dessus),
+				b.pt(Vector3(xc + w, lev + ep, z), Vector3.RIGHT, P_BOUCLE),
+				b.pt(Vector3(xc + w, lev, z), Vector3.RIGHT, P_BOUCLE)])
+		for r in range(g.size() - 1):
+			var l0: Array = g[r]
+			var l1: Array = g[r + 1]
+			for paire in [[0, 1], [2, 3], [4, 5], [6, 7]]:
+				b.quad(l0[paire[0]], l1[paire[0]], l1[paire[1]], l0[paire[1]])
+		# fixations : butée et talonnière
+		_boite(b, Vector3(xc, ep + 0.022, zc - (0.965 - CENTRE_CHAUSSURE)), Vector3(0.036, 0.022, 0.026),
+			Basis.IDENTITY, P_FIXATION)
+		_boite(b, Vector3(xc, ep + 0.028, zc - (0.64 - CENTRE_CHAUSSURE)), Vector3(0.034, 0.028, 0.032),
+			Basis.IDENTITY, P_FIXATION)
+	b.lod = 0
+	return b.commit(mat)
+
+
+## Un bâton seul, debout du pied (0, 0, 0) à la poignée (0, 1,15, 0) :
+## posé par le skieur jouable entre sa main et la neige.
+const LONG_BATON: float = 1.15
+static func baton(mat: Material) -> ArrayMesh:
+	var b: Bati = Bati.new()
+	var pied: Vector3 = Vector3.ZERO
+	var tete: Vector3 = Vector3(0.0, LONG_BATON, 0.0)
+	var d: Vector3 = Vector3.UP
+	_tube(b, [pied + d * 0.02, pied.lerp(tete, 0.5), tete - d * 0.12], [0.0055, 0.0085, 0.0095],
+		[0.0055, 0.0085, 0.0095], P_BATON, Vector3.RIGHT, true, false)
+	_tube(b, [tete - d * 0.14, tete - d * 0.06, tete], [0.015, 0.017, 0.016], [0.015, 0.017, 0.016],
+		P_POIGNEE, Vector3.RIGHT, false, true)
+	_bande(b, pied + d * 0.09, 0.042, 0.042, 0.0, TAU, 0.006, P_POIGNEE, Basis.IDENTITY)
 	return b.commit(mat)
 
 
