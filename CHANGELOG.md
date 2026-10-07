@@ -7,6 +7,13 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.15.83** — plus aucune silhouette jaune sur les rames.
+- « Enlève complètement cette silhouette jaune partout, ça laisse des
+  traces » : la silhouette des rames est supprimée en vue extérieure. Le
+  tunnel reste visible à travers le relief grâce à son trait ambre.
+- Vérifié : `bench_relief_3d` (aucun recouvrement sur les rames), 14 bancs
+  Godot, 99 tests PC, parité PWA.
+
 **v1.15.82** — rames vues à travers le relief seulement là où il les
 cache ; écran du pupitre agrandi et fluide.
 - **« En vue externe, la rame est devenue toute jaune »** : la silhouette

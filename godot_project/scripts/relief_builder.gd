@@ -22,7 +22,6 @@ extends Node3D
 ##    largeur constante à l'écran, en deux passes — plein là où il est à
 ##    découvert, à 45 % à travers la montagne ; interrompu à la place des
 ##    rames et effacé près de la caméra, où l'on voit le vrai tube ;
-##  - les rames se voient aussi à travers le relief (silhouette, Cabin) ;
 ##  - vu de dessous (caméra sous la voie, sous la montagne), le relief est
 ##    assombri ;
 ##  - les lieux nommés.
