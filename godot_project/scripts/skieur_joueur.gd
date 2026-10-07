@@ -162,7 +162,8 @@ func activer(position_depart: Vector3, regard: float) -> void:
 	velocity = Vector3.ZERO
 	cam_yaw = regard
 	_cap = regard
-	dernier_sol = position_depart
+	if dernier_sol == Vector3.ZERO:
+		dernier_sol = position_depart
 	support = null
 	actif = true
 	visible = true
@@ -312,8 +313,15 @@ func _monter_marche(pas: Vector3) -> bool:
 	# assez loin pour que le centre soit au-dessus de la marche
 	var av: Vector3 = pas.normalized() * maxf(pas.length(), RAYON + 0.06)
 	var xf_h: Transform3D = xf.translated(haut)
-	if test_move(xf_h, av):
+	var col_h: KinematicCollision3D = KinematicCollision3D.new()
+	if test_move(xf_h, av, col_h):
 		debug_marche = "bloqué en haut"
+		if OS.is_debug_build() and col_h.get_collider() != null:
+			var o: Object = col_h.get_collider()
+			var own: Object = (o as CollisionObject3D).shape_owner_get_owner(
+				(o as CollisionObject3D).shape_find_owner(col_h.get_collider_shape_index()))
+			debug_marche += " (%s, n %.2f, y %.2f)" % [(own as Node).name if own else "?",
+				col_h.get_normal().y, col_h.get_position().y - global_position.y]
 		return false
 	var xf_a: Transform3D = xf_h.translated(av)
 	var col: KinematicCollision3D = KinematicCollision3D.new()

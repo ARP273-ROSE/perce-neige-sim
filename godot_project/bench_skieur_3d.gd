@@ -9,6 +9,12 @@
 ##    baie automatique du mur de tête, jusque sur la terrasse.
 ## 4. Par la porte de la piste Génépy (bas du quai gauche) : le couloir, la
 ##    porte automatique, la neige remontée au seuil.
+## 5. AUTO : la rame attend le skieur resté sur le quai, part peu après
+##    qu'il est monté ; ce qu'on entend (gare / cabine) suit le skieur.
+## 6. Fosse de la gare basse : la tête passe sous les rails, et l'escalier
+##    du bout ramène au niveau du quai.
+## 7. Vue skieur quittée puis reprise en marche : il est toujours dans sa
+##    voiture ; départ d'en haut : à table sur la terrasse.
 extends SceneTree
 
 var _main: Node = null
@@ -132,6 +138,24 @@ func _tick() -> void:
 				_verif("en marche : emporté par la rame, toujours dans la voiture",
 					sk.support == v3 and _dans_voiture(sk, v3, car_len) and ph.s > PNConstants.START_S + 80.0,
 					"rame à %.0f m, support %s" % [ph.s, sk.support.name if sk.support else "aucun"])
+				_main.basculer_skieur()           # on quitte la vue skieur en marche…
+				_phase = 31
+				_t_phase = 0.0
+		31:
+			ph.speed_cmd = 1.0
+			if _t_phase > 4.0:
+				_main.basculer_skieur()       # … et on y revient 4 s plus loin
+				_phase = 32
+				_t_phase = 0.0
+		32:
+			ph.speed_cmd = 1.0
+			if _t_phase > 1.5:
+				var v32: Node3D = cab._interior_cars[1]
+				_verif("vue skieur quittée puis reprise en marche : toujours à sa place dans la voiture",
+					sk.support == v32 and _dans_voiture(sk, v32, car_len) and sk.is_on_floor(),
+					"rame à %.0f m, support %s" % [ph.s, sk.support.name if sk.support else "aucun"])
+				if _main.auto_operator.enabled:
+					_main.auto_operator.toggle()    # (rallumé en reprenant la vue skieur)
 				# rame posée en haut, portes ouvertes
 				_main._apply_scenario(true, false, "normal")
 				ph.v = 0.0
@@ -185,4 +209,77 @@ func _tick() -> void:
 				_verif("porte Génépy : couloir, porte automatique, neige au seuil",
 					sk.chemin.is_empty() and _ouv_max > 0.9 and lat < -9.0 and sk.is_on_floor() and sk.dehors(relief),
 					"%.0f s, porte %.2f, %.1f m de la voie, dehors %s" % [_t_phase, _ouv_max, lat, sk.dehors(relief)])
+				# automate : skieur sur le quai, rame à quai portes ouvertes
+				var xq: Transform3D = tun.transform_at(PNConstants.LENGTH - 8.0)
+				sk.global_position = xq.origin + xq.basis.x * -3.2 + Vector3(0.0, -0.9, 0.0)
+				sk.velocity = Vector3.ZERO
+				sk.chemin.clear()
+				if _main.auto_operator.enabled:
+					_main.auto_operator.toggle()
+				_main.auto_operator.toggle()          # automate neuf : rame à quai, portes ouvertes
+				_phase = 7
+				_t_phase = 0.0
+		7:
+			if _t_phase > 40.0:
+				_verif("AUTO : la rame attend le skieur resté sur le quai ; on entend la gare, pas la cabine",
+					not ph.trip_started and ph.doors_open and _main.audio.ecoute == 1,
+					"voyage %s, portes %s, écoute %d" % [ph.trip_started, ph.doors_open, _main.audio.ecoute])
+				_poser_dans_voiture(sk, 5)
+				_phase = 8
+				_t_phase = 0.0
+		8:
+			if ph.trip_started or _t_phase > 60.0:
+				_verif("AUTO : départ peu après la montée du skieur ; sons de cabine à bord",
+					ph.trip_started and _t_phase < 45.0 and _main.audio.ecoute == 0,
+					"départ %.0f s après la montée, écoute %d" % [_t_phase, _main.audio.ecoute])
+				_main.auto_operator.toggle()
+				ph.speed_cmd = 1.0
+				_phase = 85
+				_t_phase = 0.0
+		85:
+			# l'autre rame quitte la gare basse : la fosse se vide
+			ph.speed_cmd = 1.0
+			if PNConstants.MIROIR_S - ph.s > 70.0 or _t_phase > 60.0:
+				var xp: Transform3D = tun.transform_at(20.0)
+				sk.global_position = xp.origin + xp.basis.y * -3.0
+				sk.velocity = Vector3.ZERO
+				sk.support = null
+				_phase = 9
+				_t_phase = 0.0
+		9:
+			if _t_phase > 2.0 and sk.chemin.is_empty() and _phase == 9:
+				var xp2: Transform3D = tun.transform_at(20.0)
+				var tete: float = (sk.global_position - xp2.origin).dot(xp2.basis.y) + SkieurJoueur.TAILLE
+				_verif("fosse : la tête passe sous les rails", sk.is_on_floor()
+					and tete < StationsBuilder.RAIL_HEAD_Y, "tête à %.2f m, rails à %.2f m (repère de la voie)"
+					% [tete, StationsBuilder.RAIL_HEAD_Y])
+				var chem: Array = []
+				for e in [[6.0, 0.0], [5.6, 1.22], [4.6, 1.43], [0.75, 1.43], [0.75, 2.6]]:
+					var x6: Transform3D = tun.transform_at(e[0])
+					chem.append(x6.origin + x6.basis.x * e[1])
+				sk.chemin = chem
+				_phase = 10
+				_t_phase = 0.0
+		10:
+			if sk.chemin.is_empty() or _t_phase > 40.0:
+				var x7: Transform3D = tun.transform_at(0.75)
+				var h7: float = (sk.global_position - x7.origin).dot(x7.basis.y)
+				_verif("fosse : l'escalier remonte au niveau du quai", sk.chemin.is_empty()
+					and absf(h7 - (StationsBuilder.FLOOR_Y_LOCAL + 0.5)) < 0.15,
+					"%.0f s, pieds à %.2f m (quai à %.2f)" % [_t_phase, h7, StationsBuilder.FLOOR_Y_LOCAL + 0.5])
+				# départ d'en haut : à table sur la terrasse
+				_main.basculer_skieur()
+				_main._skieur_place = false
+				_main._depart_haut = true
+				_main.basculer_skieur()
+				_phase = 11
+				_t_phase = 0.0
+		11:
+			if _t_phase > 1.5:
+				var ga3: GareAmont = _main.station_halls.gare_amont
+				var table: Vector3 = ga3._p(GareAmont.TABLE_SKIEUR.x, GareAmont.TABLE_SKIEUR.y + 0.55, 0.0)
+				var dh: Vector3 = sk.global_position - table
+				_verif("départ d'en haut : à table sur la terrasse, devant les frites",
+					Vector2(dh.x, dh.z).length() < 1.6 and absf(dh.y) < 0.2 and sk.is_on_floor(),
+					"%.2f m de l'assiette, %.2f m sous le plancher" % [Vector2(dh.x, dh.z).length(), -dh.y])
 				_fin()

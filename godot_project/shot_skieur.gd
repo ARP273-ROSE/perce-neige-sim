@@ -55,6 +55,15 @@ func _tick() -> void:
 		_vue("genepy_dedans", pg_in, _yaw_vers(pg_in, xg.origin + xg.basis.x * -6.0), -0.15, 2.5)
 		var pg_out: Vector3 = xg.origin + xg.basis.x * -14.0 + Vector3(0, -1.0, 0)
 		_vue("genepy_dehors", pg_out, _yaw_vers(pg_out, xg.origin + xg.basis.x * -7.0), -0.10, 4.0)
+		var x14: Transform3D = tun.transform_at(14.0)
+		var pfq: Vector3 = x14.origin + x14.basis.x * 2.8 + x14.basis.y * -1.05
+		_vue("fosse_quai", pfq, _yaw_vers(pfq, tun.transform_at(2.0).origin), -0.45, 3.0)
+		var pfd: Vector3 = x14.origin + x14.basis.y * -3.5
+		_vue("fosse_dedans", pfd, _yaw_vers(pfd, tun.transform_at(2.0).origin + tun.transform_at(2.0).basis.x * 1.4), 0.05, 2.5)
+		if "--fosse" in OS.get_cmdline_user_args():
+			_vues = _vues.slice(_vues.size() - 2)
+			_main.physics.s = 1500.0
+			_main.physics.s_prev_step = 1500.0
 		return
 	var i: int = (_f - _t0) / 45
 	var j: int = (_f - _t0) % 45
@@ -62,7 +71,7 @@ func _tick() -> void:
 		quit(0)
 		return
 	var vu: Array = _vues[i]
-	if j == 0:
+	if j == 1:
 		sk.global_position = vu[1]
 		sk.velocity = Vector3.ZERO
 		sk.support = null
