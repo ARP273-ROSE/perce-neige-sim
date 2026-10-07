@@ -24,10 +24,8 @@ extends Node3D
 ##
 ## INCONNUS (valeurs du simulateur, pas des données) : la façade ouest et
 ## le mur nord (non photographiés, bardage bois supposé) ; la place exacte
-## des colonnes, bancs, écrans et du comptoir dans la salle ; le sens
-## d'ouverture des vantaux (deux vantaux qui s'écartent, supposé) ; le
-## rayon des petites arches (6,2 m, déduit du LiDAR) et l'écart entre
-## arches (2,35 m).
+## des colonnes, bancs, écrans et du comptoir dans la salle ; le rayon des
+## petites arches (6,2 m, déduit du LiDAR) et l'écart entre arches (2,35 m).
 
 const H_SOL: float = -1.10          # sol du hall sous l'axe du tunnel à s = 0
 const H_TOIT: float = 6.0           # dessus du toit (LiDAR 2115 m)
@@ -46,6 +44,8 @@ const AUVENT: Array = [Vector2(-13.87, 17.23), Vector2(-14.54, 19.69), Vector2(-
 const ARCHE_D: float = 10.1         # arche rouge : à 10,1 m devant la façade
 const ARCHE_DECALAGE: float = 0.84  # axe des arches décalé vers l'est
 const LARGEUR_ESCALIER: float = 11.5
+const Z_FIXE: float = 0.035         # panneau fixe des portes, côté salle
+const Z_VANTAIL: float = -0.035     # vantail mobile, en retrait côté quai
 const GIRON: float = 0.33
 
 var tunnel: TunnelBuilder = null
@@ -53,7 +53,7 @@ var _o: Vector3 = Vector3.ZERO      # origine (monde)
 var _e: Vector3 = Vector3.RIGHT     # est
 var _n: Vector3 = Vector3.FORWARD   # nord
 var _mats: Dictionary = {}
-var _vantaux: Array = []            # [nœud, position fermée, sens]
+var _vantaux: Array = []            # [nœud, x fermé, sens d'ouverture, z]
 var _ouverture: float = 0.0
 var _panneau: Array = []            # lignes du panneau des départs (Label3D)
 var _t_panneau: float = 0.0
@@ -91,6 +91,13 @@ func construire(t: TunnelBuilder) -> void:
 	# éclairée en vue extérieure par la lumière de jour de cette vue (qui
 	# n'éclaire que les rames et la voie)
 	Cabin.tag_layer(self, Cabin.LAYER_VOIE)
+
+
+## Course actuelle du vantail i depuis sa position fermée (m, signée : > 0
+## vers l'est).
+func course_vantail(i: int) -> float:
+	var v: Array = _vantaux[i]
+	return ((v[0] as Node3D).position - _p(float(v[1]), float(v[3]), 0.0)).dot(_e)
 
 
 ## Point local (x est, z nord, y au-dessus du sol du hall) → monde.
@@ -325,10 +332,17 @@ func _plafond() -> void:
 # --- cloison vitrée et portes coulissantes ------------------------------------
 
 ## Cloison entre la salle d'attente et le quai (photos 093457 / 093458 /
-## 093500) : menuiseries bleu marine ; deux jeux de portes coulissantes
-## automatiques à deux vantaux (≈ 1 m × 2,25 m, traverse vers 45 %), un au
+## 093500) : menuiseries bleu marine ; une porte coulissante automatique au
 ## pied de chaque quai ; vitrine fixe de 4 m face à la fosse ; bandeau rouge
 ## « ALTITUDE EXPERIENCES... » ; vitrage haut ; panneau des départs.
+## Chaque porte : UN SEUL vantail mobile qui coulisse vers le milieu de la
+## salle (Kevin, 07/10/2026 : « la porte de droite en regardant vers le haut
+## coulisse à gauche, celle du quai gauche à droite » ; vidéo YouTube
+## « [FUNI284] Funiculaire Perce-Neige | Tignes (montée) », chaîne
+## Transports câblés, 0:55-0:58). Sur les photos, la baie a deux
+## panneaux (≈ 1 m × 2,25 m, traverse vers 45 %) : le panneau côté milieu
+## est fixe, au nu de la salle ; le vantail mobile, côté extérieur et en
+## retrait côté quai, glisse derrière lui en ≈ 2 s.
 func _cloison() -> void:
 	var h_portes: float = 2.25
 	var y_bandeau: float = 2.45
@@ -351,20 +365,46 @@ func _cloison() -> void:
 		var xc: float = cote * 3.55
 		# dormant : linteau et imposte pleine jusqu'au bandeau
 		_boite("marine", 2.1, y_bandeau - h_portes, 0.20, xc, 0.0, (h_portes + y_bandeau) * 0.5)
-		for k in [-1.0, 1.0]:
-			var vantail: Node3D = Node3D.new()
-			vantail.name = "Vantail"
-			add_child(vantail)
-			var x0: float = xc + k * 0.525
-			vantail.position = _p(x0, 0.0, 0.0)
-			vantail.basis = _base()
-			_vantail(vantail, h_portes)
-			_vantaux.append([vantail, x0, k])
+		# panneau fixe côté milieu, au nu de la salle
+		var fixe: Node3D = Node3D.new()
+		fixe.name = "PanneauFixe"
+		add_child(fixe)
+		fixe.position = _p(xc - cote * 0.525, Z_FIXE, 0.0)
+		fixe.basis = _base()
+		_vantail(fixe, h_portes)
+		# vantail mobile côté extérieur, en retrait côté quai : il glisse
+		# vers le milieu, derrière le panneau fixe
+		var vantail: Node3D = Node3D.new()
+		vantail.name = "Vantail"
+		add_child(vantail)
+		var x0: float = xc + cote * 0.525
+		vantail.position = _p(x0, Z_VANTAIL, 0.0)
+		vantail.basis = _base()
+		_vantail(vantail, h_portes)
+		_vantaux.append([vantail, x0, -cote, Z_VANTAIL])
+		if cote < 0.0:
+			# affichette collée côté salle sur le vantail mobile de la porte
+			# ouest, vers son bord extérieur (photo 093500 : ≈ 0,30 × 0,28 m à
+			# 1,2 m ; vidéo FUNI284 : elle part avec le vantail)
+			var aff: MeshInstance3D = MeshInstance3D.new()
+			var carton: BoxMesh = BoxMesh.new()
+			carton.size = Vector3(0.30, 0.28, 0.002)
+			carton.material = _mats["blanc"]
+			aff.mesh = carton
+			aff.position = Vector3(-0.20, 1.18, -0.0075)
+			vantail.add_child(aff)
+			var txt: Label3D = Label3D.new()
+			txt.text = "PORTES AUTOMATIQUES\nInterdiction à toute personne\nétrangère au service\nd'en actionner l'ouverture\nAUTOMATIC DOORS\nunauthorized persons\nare strictly forbidden\nto operate the sliding doors"
+			txt.font_size = 24
+			txt.pixel_size = 0.0007
+			txt.modulate = Color(0.1, 0.1, 0.12)
+			txt.shaded = false
+			txt.double_sided = false
+			# le vantail regarde le quai (−Z local = la salle) : demi-tour
+			txt.transform = Transform3D(Basis(Vector3.UP, PI), Vector3(-0.20, 1.18, -0.0095))
+			vantail.add_child(txt)
 	# « 2 » peint sur le montant de la porte de droite (côté ouest, vu du hall)
 	_etiquette("2", _p(-4.55, 0.11, 1.9), 64, Color.WHITE, 0.004, _n)
-	# affichette (lue sur la photo 093500)
-	_etiquette("PORTES AUTOMATIQUES\nInterdiction à toute personne\nétrangère au service d'en\nactionner l'ouverture",
-		_p(-3.0, 0.03, 1.55), 24, Color(0.1, 0.1, 0.12), 0.0016, _n, Color.WHITE)
 	# bandeau rouge, texte côté hall
 	_boite("rouge_bandeau", 11.2, y_haut - y_bandeau, 0.16, 0.0, 0.02, (y_bandeau + y_haut) * 0.5, 0.0, "Bandeau")
 	_etiquette("ALTITUDE EXPERIENCES...", _p(0.0, 0.11, (y_bandeau + y_haut) * 0.5), 96, Color.WHITE, 0.0042, _n)
@@ -811,10 +851,11 @@ func mettre_a_jour(dt: float, ph: TrainPhysics) -> void:
 		return
 	var en_gare: bool = ph.s < PNConstants.START_S + 3.0 or PNConstants.miroir(ph.s) < PNConstants.START_S + 3.0
 	var embarquement: bool = en_gare and ph.doors_open and not ph.trip_started
-	_ouverture = move_toward(_ouverture, 1.0 if embarquement else 0.0, dt / 1.5)
+	# ≈ 2 s pour s'ouvrir ou se fermer (vidéo FUNI284, 0:55-0:57)
+	_ouverture = move_toward(_ouverture, 1.0 if embarquement else 0.0, dt / 2.0)
 	var course: float = 0.98 * smoothstep(0.0, 1.0, _ouverture)
 	for v in _vantaux:
-		(v[0] as Node3D).position = _p(float(v[1]) + float(v[2]) * course, 0.0, 0.0)
+		(v[0] as Node3D).position = _p(float(v[1]) + float(v[2]) * course, float(v[3]), 0.0)
 	_t_panneau -= dt
 	if _t_panneau > 0.0:
 		return

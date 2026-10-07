@@ -7,6 +7,23 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.15.90** — portes de la salle d'attente de Val Claret : un seul
+vantail, qui coulisse vers le milieu.
+- Kevin : « les portes de la salle du bas, c'est un seul battant qui
+  coulisse vers le milieu de la salle : la porte de droite en regardant
+  vers le haut coulisse à gauche, celle du quai gauche à droite », avec la
+  vidéo « [FUNI284] Funiculaire Perce-Neige | Tignes (montée) » (chaîne
+  Transports câblés, 0:55-0:58).
+- Chaque baie garde ses deux panneaux vitrés :
+  - le panneau côté milieu est fixe, au nu de la salle ;
+  - le vantail côté extérieur, en retrait côté quai, glisse derrière lui
+    en ≈ 2 s (1,5 s avant), comme sur la vidéo.
+- Avant : deux vantaux par porte qui s'écartaient (supposé).
+- L'affichette « PORTES AUTOMATIQUES / AUTOMATIC DOORS » est collée sur le
+  vantail mobile de la porte ouest (photo 093500, vidéo) et part avec lui.
+- Banc du pupitre : un vantail par porte, chacun vers le milieu, fermé
+  avant le départ (`GareAval.course_vantail`). SOURCES.md, ligne 24g.
+
 **v1.15.89** — plus de micro-coupures du son sur iPad ; bancs et paliers
 de niveau à quai.
 - **« En marche, sur la PWA de l'iPad, le son a des micro-coupures tout le

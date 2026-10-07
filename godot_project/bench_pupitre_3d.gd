@@ -180,15 +180,23 @@ func _tick() -> void:
 		ph.doors_open = true
 		for k in range(6):
 			ga.mettre_a_jour(0.5, ph)
-		var v0: Array = ga._vantaux[0]
-		var ouvert: float = absf((v0[0] as Node3D).position.distance_to(ga._p(float(v0[1]), 0.0, 0.0)))
+		# un seul vantail par porte, qui coulisse vers le MILIEU de la salle
+		# (Kevin, 07/10/2026) : celui de l'ouest (x < 0) vers l'est, celui de
+		# l'est vers l'ouest
+		var vers_milieu: bool = true
+		var ouvert: float = INF
+		for i in range(ga._vantaux.size()):
+			var c: float = ga.course_vantail(i)
+			ouvert = minf(ouvert, absf(c))
+			if signf(c) != -signf(float(ga._vantaux[i][1])):
+				vers_milieu = false
 		ph.trip_started = true
 		ph.doors_open = false
 		for k in range(6):
 			ga.mettre_a_jour(0.5, ph)
-		var ferme: float = absf((v0[0] as Node3D).position.distance_to(ga._p(float(v0[1]), 0.0, 0.0)))
-		_verif("gare aval : 4 vantaux, ouverts à l'embarquement, fermés au départ",
-			ga._vantaux.size() == 4 and ouvert > 0.9 and ferme < 0.01,
+		var ferme: float = absf(ga.course_vantail(0)) + absf(ga.course_vantail(1))
+		_verif("gare aval : un vantail par porte, vers le milieu, ouvert à l'embarquement, fermé au départ",
+			ga._vantaux.size() == 2 and vers_milieu and ouvert > 0.9 and ferme < 0.01,
 			"course %.2f m puis %.2f m" % [ouvert, ferme])
 		# vraie séquence (Kevin : « ferme-les avant le départ, ouvre-les
 		# après l'arrivée ») : rame à quai portes ouvertes → séquence de
@@ -202,7 +210,7 @@ func _tick() -> void:
 		ph2.trip_started = false
 		for k in range(8):
 			ga.mettre_a_jour(0.5, ph2)
-		var ouv0: float = (ga._vantaux[0][0] as Node3D).position.distance_to(ga._p(float(ga._vantaux[0][1]), 0.0, 0.0))
+		var ouv0: float = absf(ga.course_vantail(0))
 		ph2.request_depart()
 		var t_ferme: float = -1.0
 		var t_dep: float = -1.0
@@ -211,7 +219,7 @@ func _tick() -> void:
 			ph2.step(1.0 / 30.0)
 			ga.mettre_a_jour(1.0 / 30.0, ph2)
 			t += 1.0 / 30.0
-			var o: float = (ga._vantaux[0][0] as Node3D).position.distance_to(ga._p(float(ga._vantaux[0][1]), 0.0, 0.0))
+			var o: float = absf(ga.course_vantail(0))
 			if t_ferme < 0.0 and o < 0.01:
 				t_ferme = t
 			if ph2.trip_started:
