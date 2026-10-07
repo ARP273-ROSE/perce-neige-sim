@@ -101,5 +101,158 @@ func _initialize() -> void:
 	if v_min_creep < 0.55 or not ph.finished:
 		print("  ECHEC creux d'arrivée"); ok = false
 
+	ok = _effets_de_panne() and ok
+
 	print("BENCH_3D " + ("OK" if ok else "ECHEC"))
 	quit(0 if ok else 1)
+
+
+func _check(label: String, cond: bool, detail: String) -> bool:
+	print("%s %s — %s" % ["[OK]  " if cond else "[FAIL]", label, detail])
+	return cond
+
+
+# Audit fonctionnel 07/10/2026 : les effets de panne portés par la
+# physique (parité PC) — traction coupée, déclassement, jauge, survitesse.
+func _effets_de_panne() -> bool:
+	var ok := true
+	var dt := 1.0 / 60.0
+
+	# 5. Perte 400 V : urgence, puis PRÊT/DÉPART la relâche — la rame ne
+	# doit PAS repartir tant que la panne tient (traction coupée) ; levée,
+	# elle repart.
+	var fm := FaultManager.new()
+	var ph := _make(1, 1200.0, 8.0)
+	fm.physics = ph
+	fm.trigger("aux_power")
+	var t := 0.0
+	while t < 60.0 and absf(ph.v) > 0.02:
+		ph.step(dt); fm._process(dt); t += dt
+	ph.release_emergency()
+	ph.speed_cmd = 1.0
+	var s0: float = ph.s
+	for i in range(60 * 20):
+		ph.step(dt)
+	ok = _check("perte 400 V : urgence relâchée, la rame ne repart pas (traction coupée)",
+		ph.traction_coupee and absf(ph.v) < 0.05 and absf(ph.s - s0) < 0.5,
+		"v=%.3f derive=%.2f m" % [ph.v, ph.s - s0]) and ok
+	fm.clear_active()
+	for i in range(60 * 20):
+		ph.step(dt)
+	ok = _check("400 V rétabli : la rame repart", not ph.traction_coupee and absf(ph.v) > 1.0,
+		"v=%.2f" % ph.v) and ok
+
+	# 6. Surchauffe : puissance déclassée à 55 % (plafond 8 m/s à part)
+	ph = _make(1, 1200.0, 7.0)
+	fm.physics = ph
+	fm.trigger("thermal")
+	ok = _check("surchauffe : déclassement 55 %", is_equal_approx(ph.power_derate, 0.55),
+		"power_derate=%.2f" % ph.power_derate) and ok
+	fm.clear_active()
+	fm.trigger("motor_degraded")
+	ok = _check("2/3 moteurs : déclassement 67 %", absf(ph.power_derate - 2.0 / 3.0) < 1e-6,
+		"power_derate=%.3f" % ph.power_derate) and ok
+	# levée à l'ARRIVÉE (durée 0, non catastrophique) — avant, jamais levée
+	ph.finished = true
+	fm._process(dt)
+	ok = _check("2/3 moteurs : levée à l'arrivée", not fm.is_active(), "active=%s" % fm.is_active()) and ok
+
+	# 7. Pic de tension : la jauge monte de 6 500 daN
+	ph = _make(1, 1200.0, 8.0)
+	fm.physics = ph
+	for i in range(60 * 5):
+		ph.step(dt)
+	var t_avant: float = ph.tension_dan
+	fm.trigger("tension")
+	ph.step(dt)
+	ok = _check("pic de tension : jauge +6 500 daN", absf(ph.tension_dan - t_avant - 6500.0) < 300.0,
+		"%.0f → %.0f daN" % [t_avant, ph.tension_dan]) and ok
+	fm.clear_active()
+
+	# 8. Mou de câble : un coup de frein de service brutal déclenche
+	# l'interrupteur de mou → urgence
+	ph = _make(1, 1200.0, 10.0)
+	fm.physics = ph
+	fm.trigger("slack")
+	ph.manual_brake_held = true
+	for i in range(60 * 4):
+		ph.step(dt)
+	ok = _check("mou de câble + freinage brutal : interrupteur de mou → urgence", ph.emergency,
+		"urgence=%s" % ph.emergency) and ok
+	ph.manual_brake_held = false
+	fm.clear_active()
+
+	# 9. Défaut porte / inondation : OPÉRATIONNELS, pas d'arrêt d'urgence
+	ph = _make(1, 1200.0, 10.0)
+	fm.physics = ph
+	fm.trigger("door")
+	ph.step(dt)
+	ok = _check("défaut porte : on continue (pas d'urgence), départ verrouillé",
+		not ph.emergency and ph.panne_porte and is_equal_approx(fm.get_speed_cap(), PNConstants.V_MAX),
+		"urgence=%s cap=%.0f" % [ph.emergency, fm.get_speed_cap()]) and ok
+	fm.clear_active()
+	fm.trigger("flood_tunnel")
+	ok = _check("inondation : on continue au pas, plafond 4 m/s", not ph.emergency
+		and is_equal_approx(fm.get_speed_cap(), 4.0), "cap=%.1f" % fm.get_speed_cap()) and ok
+	fm.clear_active()
+
+	# 10. Pas d'empilement : une 2e panne manuelle est refusée
+	fm.trigger("wet_rail")
+	ok = _check("pas d'empilement de pannes", not fm.trigger("thermal") and fm.get_active_id() == "wet_rail",
+		fm.dernier_refus) and ok
+	fm.clear_active()
+
+	# 11. Catastrophe : LEVER refusé (R seulement), PRÊT/DÉPART refusé ;
+	# séquence incident → lumières → évacuation à l'arrêt
+	ph = _make(1, 1200.0, 10.0)
+	fm.physics = ph
+	fm.trigger("fire")
+	fm.clear_active()
+	ok = _check("feu : « lever » refusé sans R", fm.is_active() and fm.is_active_catastrophic(),
+		fm.dernier_refus) and ok
+	t = 0.0
+	while t < 120.0 and fm.get_phase() != "out_of_service":
+		ph.step(dt); fm._process(dt); t += dt
+	ok = _check("feu : à l'arrêt, incident → lumières baissées → évacuation, cabine vidée",
+		fm.get_phase() == "out_of_service" and not ph.lights_cabin and ph.pax() == 0
+			and not ph.trip_started, "phase=%s lumières=%s pax=%d t=%.0f s"
+			% [fm.get_phase(), ph.lights_cabin, ph.pax(), t]) and ok
+	ph.speed_cmd = 1.0
+	ok = _check("feu : PRÊT/DÉPART refusé", ph.request_depart() != "", "") and ok
+	fm.clear_active(true)
+	ok = _check("R : remise en service, lumières rallumées", not fm.is_active() and ph.lights_cabin, "") and ok
+
+	# 12. Survitesse hors Défi : +20 % → urgence + parachute 3,6 m/s²
+	ph = _make(-1, 2000.0, -14.5)
+	ph.pax_car1 = 167
+	ph.pax_car2 = 167
+	ph.ghost_pax = 0
+	var decel_pk := 0.0
+	var v_prev: float = ph.v
+	for i in range(60 * 30):
+		ph.step(dt)
+		decel_pk = maxf(decel_pk, (absf(v_prev) - absf(ph.v)) / dt)
+		v_prev = ph.v
+		if absf(ph.v) < 0.05:
+			break
+	ok = _check("survitesse +20 % hors Défi : parachute, arrêtée", ph.overspeed_level == 3
+		and ph.parachute_engaged and absf(ph.v) < 0.05 and decel_pk > 2.0,
+		"niveau=%d parachute=%s v=%.2f décél pic=%.2f" % [ph.overspeed_level, ph.parachute_engaged, ph.v, decel_pk]) and ok
+
+	# 13. Collision au butoir hors Défi (mode normal) : rame décrochée en
+	# descente, sans frein — elle dévale sur le butoir bas (en montée elle
+	# s'arrêterait et redescendrait)
+	ph = _make(-1, PNConstants.START_S + 60.0, -8.0)
+	ph.speed_cmd = 1.0
+	var crashes: Array = []      # (une lambda capture par valeur : tableau)
+	ph.crash_occurred.connect(func(kind: String, _v: float) -> void: crashes.append(kind))
+	ph.cable_rupture = true      # plus de retenue : elle file sur le butoir
+	ph.ghost_locked_s = 3000.0
+	for i in range(60 * 30):
+		ph.step(dt)
+		if ph.crashed:
+			break
+	ok = _check("butoir à pleine vitesse hors Défi : collision", crashes == ["buffer"] and ph.crashed,
+		"crash=%s kind=%s v=%.1f" % [ph.crashed, ph.crash_kind, ph.crash_speed_ms]) and ok
+	fm.free()
+	return ok

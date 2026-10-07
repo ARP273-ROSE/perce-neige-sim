@@ -61,6 +61,8 @@ def _log(msg: str) -> None:
         import tempfile
         from datetime import datetime
         logf = Path(tempfile.gettempdir()) / "perce_neige_update.log"
+        if logf.exists() and logf.stat().st_size > 1_000_000:
+            logf.write_text("")            # journal borné
         with open(logf, "a", encoding="utf-8") as f:
             f.write(f"[{datetime.now().isoformat(timespec='seconds')}] {msg}\n")
     except Exception:

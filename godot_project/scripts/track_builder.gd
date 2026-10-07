@@ -121,6 +121,9 @@ var driver_is_rame2: bool = false
 var _cable_phase_meters: float = 0.0
 # Réglettes de l'évitement : coupées avec l'éclairage du tunnel (touche J)
 var _loop_lamp_mat: StandardMaterial3D = null
+var _loop_lamp_mat_off: StandardMaterial3D = null
+var _loop_lamp_mesh: Mesh = null
+var _culot_cle: Dictionary = {}       # côté → (s rame, mou, rupture) du dernier tronçon libre
 
 
 func build(t: TunnelBuilder) -> void:
@@ -1370,6 +1373,12 @@ func _build_sleepers() -> void:
 @export var walkway_handrail: bool = false   # pas de rambarde sur le vrai escalier
 
 
+## Point monde sur l'escalier de service (passerelle), 35 cm au-dessus des
+## marches : chemins du skieur évacué (bancs, automate).
+func point_passerelle(s: float) -> Vector3:
+	return _walkway_frame(s).origin + Vector3.UP * 0.35
+
+
 func _walkway_frame(s: float) -> Transform3D:
 	# repère de pose : origine sur le bord, X = travers, Y = monde haut
 	var xf: Transform3D = tunnel.transform_at(s)
@@ -1397,7 +1406,8 @@ func _walkway_frame(s: float) -> Transform3D:
 const MM_CHUNK_M: float = 100.0
 
 
-func _mm_instance(mesh: Mesh, xforms: Array, name: String, range_end: float = 0.0) -> void:
+func _mm_instance(mesh: Mesh, xforms: Array, name: String, range_end: float = 0.0,
+		collision: bool = false) -> void:
 	var holder: Node3D = Node3D.new()
 	holder.name = name
 	add_child(holder)
@@ -1421,11 +1431,15 @@ func _mm_instance(mesh: Mesh, xforms: Array, name: String, range_end: float = 0.
 		mm.transform_format = MultiMesh.TRANSFORM_3D
 		mm.mesh = mesh
 		mm.instance_count = part.size()
+		var locaux: Array = []
 		for i in range(part.size()):
 			var local: Transform3D = part[i]
 			local.origin -= base
 			mm.set_instance_transform(i, local)
+			locaux.append(local)
 		var mmi: MultiMeshInstance3D = MultiMeshInstance3D.new()
+		if collision:
+			mmi.set_meta("instances", locaux)     # le skieur marche dessus (CollisionsJeu)
 		mmi.name = "%s_%d" % [name, ci]
 		mmi.multimesh = mm
 		mmi.position = base
@@ -1492,7 +1506,7 @@ func _build_walkway() -> void:
 			+ xf2.basis.y * (floor_y_local + slab_thickness + 0.08 + 1.0)
 		cables.append(cx)
 		s += walkway_post_s
-	_mm_instance(tread, treads, "WalkwayTreads", 300.0)
+	_mm_instance(tread, treads, "WalkwayTreads", 300.0, true)
 	_mm_instance(stringer, stringers, "WalkwayStringers", 400.0)
 	# Pas de rambarde (retour d'essai 2026-09-26) : potelets et câble
 	# main-courante calculés mais non posés, gardés pour un éventuel retour.
@@ -1568,6 +1582,11 @@ func _build_tunnel_details() -> void:
 	lamp_mat.emission_energy_multiplier = 3.0
 	lamp_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	_loop_lamp_mat = lamp_mat
+	# version éteinte prête d'avance : changer les propriétés d'un matériau
+	# compile une variante de nuanceur à chaud (à-coup en rendu web)
+	_loop_lamp_mat_off = StandardMaterial3D.new()
+	_loop_lamp_mat_off.albedo_color = Color(0.45, 0.47, 0.50)
+	_loop_lamp_mat_off.roughness = 0.6
 
 	# --- fines lignes circulaires (section circulaire, hors évitement) :
 	# arc qui s'arrête à la dalle (un tore complet traversait la fosse
@@ -1643,6 +1662,7 @@ func _build_tunnel_details() -> void:
 	var lamp: BoxMesh = BoxMesh.new()
 	lamp.size = Vector3(0.09, 0.09, 1.25)
 	lamp.material = lamp_mat
+	_loop_lamp_mesh = lamp
 	var lamps: Array = []
 	s = PNConstants.PASSING_START - 40.0
 	while s < PNConstants.PASSING_END + 40.0:
@@ -1773,6 +1793,9 @@ func _build_loop_rings(joint_mat: StandardMaterial3D) -> void:
 ## fantomatique dans le noir »).
 func set_loop_lamps(on: bool) -> void:
 	if _loop_lamp_mat == null:
+		return
+	if _loop_lamp_mesh != null and _loop_lamp_mat_off != null:
+		_loop_lamp_mesh.material = _loop_lamp_mat if on else _loop_lamp_mat_off
 		return
 	_loop_lamp_mat.emission_enabled = on
 	_loop_lamp_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED if on \
@@ -3203,6 +3226,15 @@ func _update_culots(s_rame_g: float, s_rame_d: float) -> void:
 			(d[nom] as MeshInstance3D).visible = not loin
 		if loin:
 			continue
+		var own0: ShaderMaterial = cable_right_material if side_i > 0 else cable_left_material
+		if own0 != null:
+			(d["mat"] as ShaderMaterial).set_shader_parameter("cable_phase", own0.get_shader_parameter("cable_phase"))
+		# rame immobile (à quai, oscillation sub-millimétrique) : le tronçon
+		# libre n'a pas changé, on ne le refait pas
+		var cle: Vector3 = Vector3(s_r, _slack, 0.0 if _rupture.is_empty() else 1.0)
+		if _culot_cle.has(side_i) and (_culot_cle[side_i] as Vector3).distance_to(cle) < 2e-4:
+			continue
+		_culot_cle[side_i] = cle
 		var prof: Dictionary = amorce_profil(side_i, s_r)
 		var att: float = prof.att
 		var x0: float = maxf(float(prof.s1) - att, 0.5)

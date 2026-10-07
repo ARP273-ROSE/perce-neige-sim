@@ -216,7 +216,7 @@ const CREEP_START_S: float = 3461.53     # STOP_S − CREEP_DIST
 const ANNONCE_ARRIVEE_D: float = 51.0
 
 # Portes
-const DOOR_CLOSE_TIME: float = 3.0
+const DOOR_CLOSE_TIME: float = 5.3        # vantaux : 1,3 s après le clip, butée à 5,3 s (PC idem ; non lue)
 const DOOR_OPEN_TIME: float = 2.0
 
 # Élasticité câble — rebond après arrêt
@@ -225,7 +225,7 @@ const REBOUND_MAIN_AMP: float = 0.22     # m (creep train principal)
 const REBOUND_TAU: float = 0.70          # s (constante temps)
 const REBOUND_OSC_AMP: float = 0.10      # m
 const REBOUND_OMEGA: float = 2.40        # rad/s
-const REBOUND_ZETA: float = 0.10         # amortissement
+const REBOUND_ZETA: float = 0.15         # amortissement (= TrainPhysics.REBOUND_ZETA, PC 0,15)
 
 # Boucle de croisement — positions calibrées vidéo cockpit
 const PASSING_START: float = 1631.26    # 1611 + 20,26 (tronçon neutre aval)

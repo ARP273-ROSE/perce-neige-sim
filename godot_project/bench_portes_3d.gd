@@ -1,6 +1,11 @@
 ## Banc portes (2026-09-27) : la séquence de départ de la PWA est en série
-## (annonce 7,5 s → buzzer 7 s → clip 7 s → buzzer de quai 8 s → traction)
-## et les vantaux partent 1,3 s après le début du clip.
+## (annonce 7,5 s → buzzer 7 s → clip 7 s → confirmation de l'autre rame
+## 2-4 s → buzzer de quai 8 s → traction) et les vantaux partent 1,3 s après
+## le début du clip.
+## Audit fonctionnel 07/10/2026 (parité PC) : l'autre rame confirme 2 à 4 s
+## après la fermeture (ghost_ready du PC) avant le buzzer — le banc lit le
+## délai tiré ; et PRÊT/DÉPART refuse une consigne à 0 (« la monter
+## d'abord »), les rames du banc partent donc consigne à 100 %.
 ##   godot --headless --path godot_project -s bench_portes_3d.gd
 extends SceneTree
 
@@ -13,12 +18,20 @@ func _initialize() -> void:
 	ph.door_leaves_open = true
 	ph.maint_brake = true
 	ph.trip_started = false
-	ph.request_depart()
+	ph.speed_cmd = 0.0
+	var refus: String = ph.request_depart()
+	var ok := _verif("PRÊT/DÉPART consigne à 0 : refusé (« la monter d'abord »)",
+		refus != "" and ph.announce_phase_remaining <= 0.0, refus)
+	ph.speed_cmd = 1.0
+	ok = _verif("PRÊT/DÉPART consigne à 100 % : séquence lancée", ph.request_depart() == ""
+		and ph.announce_phase_remaining > 0.0) and ok
 	var dt := 1.0 / 60.0
 	var t := 0.0
 	var t_doors := -1.0
 	var t_leaves := -1.0
 	var t_trip := -1.0
+	var conf := -1.0          # délai de confirmation de l'autre rame (tiré)
+	var pret_autre_avant := false
 	while t < 40.0 and t_trip < 0.0:
 		ph.step(dt)
 		t += dt
@@ -26,16 +39,24 @@ func _initialize() -> void:
 			t_doors = t
 		if t_leaves < 0.0 and not ph.door_leaves_open:
 			t_leaves = t
+		if conf < 0.0 and ph.confirmation_autre_remaining > 0.0:
+			conf = ph.confirmation_autre_remaining
+		if ph.confirmation_autre_remaining > 0.0 and ph.pret_autre_simule():
+			pret_autre_avant = true
 		if t_trip < 0.0 and ph.trip_started:
 			t_trip = t
-	print("interlock fermé à %.2f s, vantaux partis à %.2f s, traction à %.2f s"
-		% [t_doors, t_leaves, t_trip])
+	print("interlock fermé à %.2f s, vantaux partis à %.2f s, confirmation %.2f s, traction à %.2f s"
+		% [t_doors, t_leaves, conf, t_trip])
 	var att_doors := TrainPhysics.ANNOUNCE_PHASE_S
 	var att_leaves := att_doors + PNConstants.DOOR_BUZZER_S + PNConstants.DOOR_MOTION_LEAD
-	var att_trip := att_doors + TrainPhysics.DOOR_PHASE_S + 8.0
+	var att_trip := att_doors + TrainPhysics.DOOR_PHASE_S + conf + 8.0
 	print("attendu : %.2f / %.2f / %.2f" % [att_doors, att_leaves, att_trip])
-	var ok := absf(t_doors - att_doors) < 0.05 and absf(t_leaves - att_leaves) < 0.05 \
-		and absf(t_trip - att_trip) < 0.05
+	ok = ok and absf(t_doors - att_doors) < 0.05 and absf(t_leaves - att_leaves) < 0.05 \
+		and conf >= 2.0 and conf <= 4.0 and absf(t_trip - att_trip) < 0.05
+	ok = _verif("PRÊT AUTRE : éteint pendant la confirmation, allumé au buzzer",
+		not pret_autre_avant and ph.pret_autre_simule()) and ok
+	ok = _verif("la consigne n'a pas fondu pendant la séquence", ph.speed_cmd > 0.99,
+		"%.2f" % ph.speed_cmd) and ok
 	# réouverture à l'arrivée : les vantaux repartent 1,3 s après les portes
 	ph.doors_open = true
 	var t2 := 0.0
@@ -88,11 +109,13 @@ func _rame_a_quai() -> TrainPhysics:
 	ph.door_leaves_open = true
 	ph.maint_brake = true
 	ph.trip_started = false
+	ph.speed_cmd = 1.0        # PRÊT/DÉPART refuse une consigne à 0
 	return ph
 
 
 # Bouton PORTES de la PWA (06/10/2026) : fermeture sans départ, départ
-# portes fermées = buzzer seul, verrous en marche et hors station.
+# portes fermées = confirmation de l'autre rame puis buzzer seul, verrous
+# en marche et hors station.
 func _bouton_portes() -> bool:
 	var dt := 1.0 / 60.0
 	var ok := true
@@ -103,16 +126,24 @@ func _bouton_portes() -> bool:
 		ph.step(dt)
 		t += dt
 	ok = _verif("fermeture seule : portes fermées, rame à quai, pas de buzzer",
-		not ph.doors_open and not ph.trip_started and ph.departure_buzzer_remaining <= 0.0,
+		not ph.doors_open and not ph.trip_started and ph.departure_buzzer_remaining <= 0.0
+			and ph.confirmation_autre_remaining <= 0.0,
 		"portes %s, buzzer %.1f s" % [ph.doors_open, ph.departure_buzzer_remaining]) and ok
 	ph.request_depart()
-	ok = _verif("PRÊT/DÉPART portes fermées : buzzer de quai seul (8 s en bas)",
-		absf(ph.departure_buzzer_remaining - 8.0) < 1e-3 and ph.announce_phase_remaining <= 0.0) and ok
+	var conf: float = ph.confirmation_autre_remaining
+	ok = _verif("PRÊT/DÉPART portes fermées : l'autre rame confirme (2-4 s), pas d'annonce",
+		conf >= 2.0 and conf <= 4.0 and ph.departure_buzzer_remaining <= 0.0
+			and ph.announce_phase_remaining <= 0.0, "confirmation %.1f s" % conf) and ok
 	t = 0.0
-	while t < 9.0 and not ph.trip_started:
+	var t_buzzer := -1.0
+	while t < 13.0 and not ph.trip_started:
 		ph.step(dt)
 		t += dt
-	ok = _verif("départ à la fin du buzzer", ph.trip_started, "%.1f s" % t) and ok
+		if t_buzzer < 0.0 and ph.departure_buzzer_remaining > 0.0:
+			t_buzzer = t
+	ok = _verif("buzzer de quai seul (8 s en bas) à la confirmation, départ à sa fin",
+		ph.trip_started and absf(t_buzzer - conf) < 0.05 and absf(t - conf - 8.0) < 0.05,
+		"buzzer à %.1f s, départ à %.1f s" % [t_buzzer, t]) and ok
 	# en marche : verrou
 	ph.v = 3.0
 	ok = _verif("en marche : portes verrouillées", ph.toggle_doors() != "" and not ph.doors_open) and ok

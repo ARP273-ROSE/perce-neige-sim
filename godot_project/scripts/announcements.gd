@@ -38,10 +38,19 @@ const LANG_OFFSET: Dictionary = {"fr": 0, "en": 1, "it": 2, "de": 3, "es": 4}
 # Cooldown par groupe (s) — anti-spam si triggers répétés rapidement
 const COOLDOWN_S: float = 8.0
 
+# Annonces de QUAI (haut-parleurs des gares) : elles passent même quand la
+# sonorisation embarquée et la radio du tunnel sont perdues.
+const QUAI: Array = ["doors_close", "exit_left", "exit_upstream", "exit_downstream"]
+
 @export var volume_db: float = -8.0
 
 var lang: String = "fr"
 var muted: bool = false
+## Panne « PA + radio tunnel perdus » (comms_loss, posée par FaultManager) :
+## les annonces EN LIGNE sont bloquées, celles de quai passent. Audit du
+## 07/10/2026 : la panne n'empêchait rien (« zone Grande Motte » passait
+## quand même à 51 m de l'arrêt).
+var comms_loss: bool = false
 
 var _files_by_num: Dictionary = {}     # int → AudioStream
 var _queue: Array = []                 # AudioStream[]
@@ -143,6 +152,9 @@ func queue(group_key: String) -> void:
 	if not GROUPS.has(group_key):
 		push_warning("[Announcements] groupe inconnu : %s" % group_key)
 		return
+	if comms_loss and not group_key in QUAI:
+		print("[Announcements] %s bloquée — PA / radio tunnel perdus" % group_key)
+		return
 	var now: float = Time.get_ticks_msec() / 1000.0
 	if _cooldowns.has(group_key) and now < _cooldowns[group_key]:
 		return   # cooldown actif
@@ -159,6 +171,9 @@ func queue(group_key: String) -> void:
 # Vide la queue avant.
 func play_now(group_key: String) -> void:
 	if muted:
+		return
+	if comms_loss and GROUPS.has(group_key) and not group_key in QUAI:
+		print("[Announcements] %s bloquée — PA / radio tunnel perdus" % group_key)
 		return
 	stop_all()
 	var stream: AudioStream = _resolve_stream(group_key)

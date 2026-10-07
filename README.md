@@ -161,9 +161,9 @@ L'écran d'accueil (F1) reprend ces touches.
 |-------------------|-------------------------------------------------|
 | `↑` / `↓`         | Consigne de vitesse ± (% de 12 m/s)             |
 | `Espace` / `B`    | Frein de service (maintenir)                    |
-| `Maj`             | Arrêt d'urgence, 1,25 m/s² (maintenir)          |
+| `Maj`             | Arrêt d'urgence, frein poulie 1,25 m/s² (maintenir) |
 | `3`               | Arrêt électrique (verrouillé)                   |
-| `4`               | Arrêt d'urgence (verrouillé)                    |
+| `4`               | Arrêt d'urgence verrouillé (même frein poulie que `Maj`) |
 | `V`               | PRÊT                                            |
 | `Z`               | DÉPART : portes, buzzer, traction               |
 | `I`               | Inverser le sens (à l'arrêt)                    |
@@ -221,6 +221,8 @@ L'écran d'accueil (F1) reprend ces touches.
 | À ski : `Q` / `D`, `Z`, `S`, `Maj` | Tourner, pousser, chasse-neige, schuss |
 | Glisser dans la 3D, molette  | Regarder, rapprocher la caméra           |
 | CONDUIRE (près du poste)     | S'asseoir au poste : fin du skieur et de l'exploitation automatique |
+| AUTO (touche X)              | Le skieur fait la boucle tout seul : gare, rame, Génépy, trace n° 4 à ski, retour |
+| ÉVACUER (touche I)           | Rame arrêtée en tunnel : enlever les issues de secours de la face, descendre sur la voie, l'escalier de service ramène en gare ou à la galerie de secours |
 | `F9` ou QUITTER              | Revenir à la conduite (l'exploitation automatique continue) |
 
 Pendant ce temps, la rame est en exploitation automatique, 24 h/24 : elle

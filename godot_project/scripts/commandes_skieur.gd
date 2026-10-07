@@ -23,6 +23,8 @@ var _b_conduire: Button = null
 var _b_courir: Button = null
 var _b_vue: Button = null
 var _b_ski: Button = null
+var _b_auto: Button = null
+var _b_evac: Button = null
 var _boutons: Array = []
 var _info: Label = null                 # vitesse et piste, à ski
 var _msg: Label = null                  # message passager (refus, chrono)
@@ -56,11 +58,23 @@ func _ready() -> void:
 		if skieur != null:
 			skieur.conduite_demandee.emit())
 	col.add_child(_b_conduire)
+	_b_evac = _bouton("ÉVACUER", "Rame arrêtée en tunnel : enlever les issues de secours de la face et descendre sur la voie (touche I)")
+	_b_evac.visible = false
+	_b_evac.pressed.connect(func() -> void:
+		if main != null:
+			main.evacuer())
+	col.add_child(_b_evac)
 	_b_ski = _bouton("CHAUSSER", "Chausser ou déchausser les skis, dehors sur la neige (touche E)")
 	_b_ski.pressed.connect(func() -> void:
 		if main != null:
 			main.basculer_ski())
 	col.add_child(_b_ski)
+	_b_auto = _bouton("AUTO", "Il fait la boucle tout seul : gare, rame, terrasse, ski, retour (touche X)")
+	_b_auto.toggle_mode = true
+	_b_auto.toggled.connect(func(on: bool) -> void:
+		if main != null and (main.skieur_auto != null) != on:
+			main.basculer_skieur_auto())
+	col.add_child(_b_auto)
 	_b_courir = _bouton("COURIR", "Courir (touche Maj) ; à ski : schuss")
 	_b_courir.toggle_mode = true
 	_b_courir.toggled.connect(func(on: bool) -> void:
@@ -122,6 +136,12 @@ func basculer_vue() -> void:
 	_b_vue.text = "3e PERS." if skieur.premiere_personne else "1re PERS."
 
 
+## Bouton AUTO enfoncé ou non (sans rappeler main).
+func set_auto(on: bool) -> void:
+	if _b_auto != null and _b_auto.button_pressed != on:
+		_b_auto.set_pressed_no_signal(on)
+
+
 ## Chaussé ou pas : libellés CHAUSSER / DÉCHAUSSER, COURIR / SCHUSS.
 func set_chausse(oui: bool) -> void:
 	_b_ski.text = "DÉCHAUSSER" if oui else "CHAUSSER"
@@ -148,6 +168,12 @@ func _process(delta: float) -> void:
 		_t_msg -= delta
 		if _t_msg <= 0.0 and _msg != null:
 			_msg.text = ""
+
+
+## Le bouton ÉVACUER n'apparaît que dans une rame arrêtée en tunnel.
+func set_evacuation_possible(oui: bool) -> void:
+	if _b_evac != null and _b_evac.visible != oui:
+		_b_evac.visible = oui
 
 
 ## Le bouton CONDUIRE n'apparaît qu'à côté du poste de pilotage.
