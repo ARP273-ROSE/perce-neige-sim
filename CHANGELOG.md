@@ -7,6 +7,50 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.15.89** — plus de micro-coupures du son sur iPad ; bancs et paliers
+de niveau à quai.
+- **« En marche, sur la PWA de l'iPad, le son a des micro-coupures tout le
+  temps maintenant »**.
+  - Cause : sur l'iPad (Safari), le son est mixé sur le fil principal,
+    entre deux images, dans un tampon de 43 ms. Une image plus longue
+    vide le tampon et fait un trou.
+  - Les versions récentes avaient alourdi chaque image. Mesuré sur la
+    PWA réelle (Chromium sur le GPU du NAS, définition iPad, conduite
+    d'essai) : 6,46 ms par image en moyenne, contre 5,39 ms en v1.15.78.
+  - Deux postes :
+    - l'**écran Pro-face** du pupitre, redessiné en entier 30 fois par
+      seconde : ~170 appels de dessin à chaque fois ;
+    - les **66 pièces du pupitre**, jamais fusionnées : 66 appels par
+      image.
+  - Correctifs :
+    - l'écran est en deux couches. Le fond (cadres, libellés, voyants)
+      n'est redessiné que s'il change. Les valeurs (date, heure à la
+      seconde, vitesse, distance) se posent par-dessus, jusqu'à 30 fois
+      par seconde, en une dizaine d'appels ;
+    - les pièces fixes du pupitre sont fusionnées par matériau. Seules
+      les commandes (enfoncées, tournées, allumées) et l'écran restent à
+      part.
+  - En marche : 739 → 579 appels de dessin par image ; 5,28 ms par image
+    (p99 8,7 ms au lieu de 10,7).
+  - Tampon du son de la PWA porté de 50 à 100 ms
+    (`audio/driver/output_latency.web`). Une image lente jusqu'à ~85 ms
+    ne coupe plus le son ; le retard ajouté, ~45 ms, est imperceptible.
+- **« Tu as incliné les sièges dans le mauvais sens » ; « les bancs sont
+  horizontaux lorsque la pente du wagon est celle des gares »** (Kevin).
+  - Les paliers étaient construits pour la pente moyenne de la ligne
+    (26,5 %). À quai, ils penchaient donc de 10°, l'arrière en l'air.
+  - Paliers, bancs et porte-skis sont maintenant de niveau quand la
+    voiture est à la pente des gares : 8,57 %, moyenne des 4 voitures
+    rame arrêtée (`audit_physique/pente_paliers.sage`, écart à quai
+    ≤ 0,73°).
+  - En pleine ligne (30 %), l'avant est 11,8° plus haut. Les
+    contremarches font 12 cm.
+- Outils :
+  - `shot_bancs.gd` : vues des bancs depuis un palier, caméra de niveau ;
+  - `sonde_couts.gd` : appels de dessin, objets et triangles de chaque
+    branche de la scène, masquée à tour de rôle.
+- Vérifié : 14 bancs Godot ; performance mesurée sur la PWA exportée.
+
 **v1.15.88** — intérieur des voitures d'après les photos : paliers en
 caoutchouc, bancs bleus, porte-skis orange.
 - Kevin : « un palier au travers de chaque vitre, recouvert d'un matelas

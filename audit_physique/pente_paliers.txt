@@ -1,0 +1,8 @@
+pente retenue (moyenne des 4 voitures en gare) : 0.0857 = 8.57 %
+  voiture à 9.24 % : palier incliné de +0.38°
+  voiture à 8.68 % : palier incliné de +0.06°
+  voiture à 7.29 % : palier incliné de -0.73°
+  voiture à 9.06 % : palier incliné de +0.28°
+en pleine ligne (30,07 %) : palier incliné de +11.84° (avant plus haut)
+contremarche (pas 1.40 m) : 0.120 m ; relèvement STEP_LIFT : 0.060 m
+ancienne pente 26,5 % : bancs inclinés de -9.95° en gare (arrière plus haut)

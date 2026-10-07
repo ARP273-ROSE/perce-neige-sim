@@ -419,13 +419,21 @@ static func _mat_tapis() -> StandardMaterial3D:
 	return _tapis
 
 
-const FLOOR_GRADE: float = 0.265   # pente moyenne : les paliers sont horizontaux dessus
+# Pente de construction des paliers (et des bancs, des porte-skis posés
+# dessus) : celle des GARES. Fait de Kevin, 07/10/2026 : « les bancs sont
+# horizontaux lorsque la pente du wagon est celle des gares » — rame à
+# quai, tout est de niveau ; en pleine ligne (30 %), l'avant (amont) est
+# 11,8° plus haut. 8,57 % = moyenne des pentes des 4 voitures rame arrêtée
+# (audit_physique/pente_paliers.sage ; écart en gare ≤ 0,73°). Avant :
+# 26,5 %, la pente moyenne de la ligne, qui penchait les bancs de 10°
+# l'arrière en l'air à quai.
+const FLOOR_GRADE: float = 0.0857
 # Relèvement des paliers : le bord AVANT (bas) de chaque palier affleure le
-# plancher plat de la caisse (Y_FLOOR), le bord arrière est 37 cm plus
+# plancher plat de la caisse (Y_FLOOR), le bord arrière est 12 cm plus
 # haut, et la contremarche est entière. Sans lui, la moitié avant de chaque
 # palier passait SOUS le plancher et on ne voyait que des biseaux (retour
 # d'essai 2026-09-27 : « un plancher en escalier comme sur les photos »).
-const STEP_LIFT: float = (1.30 + 0.10) * 0.265 * 0.5   # (PANEL_L + RIB_W) · pente / 2
+const STEP_LIFT: float = (1.30 + 0.10) * FLOOR_GRADE * 0.5   # (PANEL_L + RIB_W) · pente / 2
 
 
 ## Centre (repère rame) du cerceau k de la voiture idx, et bornes de sa dalle.
@@ -474,7 +482,7 @@ func _build_stepped_floor(mat: StandardMaterial3D, z_front: float, z_rear: float
 			land.name = "Palier%d_%d" % [idx + 1, k]
 			_interior_cars[idx].add_child(land)
 			if k < 9:
-				# contremarche au joint (le palier arrière est 35 cm plus bas)
+				# contremarche au joint (le palier arrière est 12 cm plus bas)
 				var rz: float = zc + pitch * 0.5
 				var riser: MeshInstance3D = MeshInstance3D.new()
 				var rm: BoxMesh = BoxMesh.new()
