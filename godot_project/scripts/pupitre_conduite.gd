@@ -46,6 +46,9 @@ const X_ECRAN: float = -0.10           # centre du cadre de l'écran
 const X_PLAQUE: float = 0.21           # centre de la plaque à boutons
 const X_GAUCHE: float = -0.35          # centre de la plaque de gauche (coups-de-poing rouges)
 const PIXEL_ETIQUETTE: float = 0.00048  # plus gros qu'en vrai : lisible depuis le siège
+const NOMS_OUVERTURE: Array = ["ouverture_0", "ouverture_1"]   # (pas de "%d" % g chaque image)
+const NOMS_FERMETURE: Array = ["fermeture_0", "fermeture_1"]
+const NOMS_ROUGE: Array = ["rouge_1", "rouge_2"]
 const L_GAUCHE: float = 0.20
 const L_CADRE: float = 0.30
 const L_PLAQUE: float = 0.31
@@ -376,6 +379,7 @@ func mettre_a_jour(ph: TrainPhysics, dt: float, vehicule: int, ecran_visible: bo
 	# PRÊT : le conducteur a appuyé sur MONTÉE (séquence de départ lancée,
 	# ou rame partie)
 	var depart: bool = ph.trip_started or ph.departure_buzzer_remaining > 0.0 \
+		or ph.confirmation_autre_remaining > 0.0 \
 		or ((ph.announce_phase_remaining > 0.0 or ph.door_phase_remaining > 0.0)
 			and not ph._fermeture_seule)
 	var pret: bool = ph.pret_externe == 1 if ph.pret_externe >= 0 \
@@ -383,8 +387,8 @@ func mettre_a_jour(ph: TrainPhysics, dt: float, vehicule: int, ecran_visible: bo
 	# PORTES 1 à 6 = côté gauche en regardant vers le haut, 7 à 12 = droite
 	for g in range(2):
 		var cote: bool = ouvertes and (ph.portes_cotes & (1 << g)) != 0
-		_allumer("ouverture_%d" % g, en_marche and cote)
-		_allumer("fermeture_%d" % g, en_marche and not cote)
+		_allumer(NOMS_OUVERTURE[g], en_marche and cote)
+		_allumer(NOMS_FERMETURE[g], en_marche and not cote)
 	_allumer("pret", en_marche and pret)
 	_allumer("compartiment", en_marche and ph.lights_cabin)
 	_allumer("secours", en_marche)
@@ -398,7 +402,7 @@ func mettre_a_jour(ph: TrainPhysics, dt: float, vehicule: int, ecran_visible: bo
 		_cabine_bouton.rotation.y = -0.6 if ph.lights_cabin else 0.6
 	# coups-de-poing verrouillés enfoncés : URGENCE, ARRÊT ÉLEC
 	for k in range(2):
-		var c: Array = _commandes.get("rouge_%d" % (k + 1), [])
+		var c: Array = _commandes.get(NOMS_ROUGE[k], [])
 		if not c.is_empty():
 			var engage: bool = ph.emergency if k == 0 else ph.arret_elec
 			(c[1] as Node3D).position.y = (c[2] as float) - (0.006 if engage else 0.0)
@@ -427,7 +431,10 @@ func mettre_a_jour(ph: TrainPhysics, dt: float, vehicule: int, ecran_visible: bo
 	e.arret_elec = ph.arret_elec or ph.emergency
 	e.alarme = ph.alarme_externe or ph.speed_cap_external < PNConstants.V_MAX or ph.cable_rupture
 	e.pret_motrice = not ph.cable_rupture and not ph.emergency
-	e.pret_autre = ph.pret_autre_externe if ph.pret_externe >= 0 else not ph.cable_rupture
+	# PRÊT VÉHICULE de l'autre rame : confirmation simulée 2-4 s après la
+	# fermeture des portes (buzzer en cours ou rame partie) — avant, le
+	# voyant était allumé en permanence (audit 07/10/2026)
+	e.pret_autre = ph.pret_autre_externe if ph.pret_externe >= 0 else ph.pret_autre_simule()
 	e.marche = ph.trip_started and absf(ph.v) > 0.05
 	e.autorisation_portes = en_gare and not ph.trip_started
 	e.frein_voie_leve = not ph.cable_rupture and ph.overspeed_level < 3

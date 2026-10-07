@@ -80,11 +80,17 @@ datas = _collect_sons() + _collect_godot_bundled() + [
     ("logo.ico", "."),
     ("manuel_perce_neige.pdf", "."),
     ("godot_bridge.py", "."),
+    ("VERSION", "."),            # sans lui VERSION = "" → MAJ proposée à chaque lancement
 ]
+import os as _os
+if _os.path.exists("kit.json"):
+    datas.append(("kit.json", "."))
 
 hiddenimports = [
     "autoupdate",
     "bugreport",
+    "reporting",
+    "updater",
     "PyQt6.QtMultimedia",
     "godot_bridge",
     "profil_coupe",      # coupe du terrain réel de la vue profil (tools_profil_coupe.py)

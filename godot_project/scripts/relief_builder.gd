@@ -273,6 +273,11 @@ var _mat_trait: ShaderMaterial = null
 ## plafond de la salle)}. Le relief IGN maillé à 25 m traversait les bâtiments et les
 ## quais (« le relief rentre dans le bâtiment et les quais », 07/10/2026).
 var amenagements: Array = []
+## Callables appelés au fil principal juste avant les pièces fines, quand
+## hauteur() répond : chacun rend un aménagement (ou {}).
+var amenageurs: Array = []
+var _trait: Node3D = null
+var _trait_on: bool = true
 const PAS_PIECE: float = 2.0
 var _rects_pieces: Array = []
 var _pieces: Array = []               # [rect, nx, nz, hauteurs, masque] (bancs)
@@ -367,6 +372,10 @@ func _preparer(fin_us: int) -> void:
 			_tableaux[_k] = _tableaux_lointain(t) if t[4] else _tableaux_tuile(t)
 			_k += 1
 			if _k >= _tuiles.size():
+				# images de l'orthophoto préparées ici (fil de travail quand il
+				# y en a un) : au fil principal, l'envoi seul
+				_img_ortho = _image_ortho("res://textures/relief_ortho.jpg")
+				_img_loin = _image_ortho("res://textures/relief_lointain.jpg")
 				_etape = 2
 				_k = 0
 		if Time.get_ticks_usec() > fin_us:
@@ -478,7 +487,11 @@ func _tableaux_lointain(t: Array) -> Array:
 	return arr
 
 
-func _texture_ortho(chemin: String) -> ImageTexture:
+var _img_ortho: Image = null
+var _img_loin: Image = null
+
+
+func _image_ortho(chemin: String) -> Image:
 	var img: Image = (load(chemin) as Texture2D).get_image()
 	if img.is_compressed():
 		img.decompress()
@@ -486,7 +499,7 @@ func _texture_ortho(chemin: String) -> ImageTexture:
 		img.resize(_ortho_l, int(img.get_height() * float(_ortho_l) / img.get_width()),
 			Image.INTERPOLATE_LANCZOS)
 	img.generate_mipmaps()
-	return ImageTexture.create_from_image(img)
+	return img
 
 
 ## Fil principal : quelques tuiles par image, puis flancs, trait du
@@ -509,6 +522,12 @@ func _creer_maillages(fin_us: int) -> void:
 		_k += 1
 		if Time.get_ticks_usec() > fin_us:
 			return
+	# aménagements qui dépendent des altitudes (SortieSecours), avant les pièces
+	for c in amenageurs:
+		var am: Variant = (c as Callable).call()
+		if am is Dictionary and not (am as Dictionary).is_empty():
+			amenagements.append(am)
+	amenageurs.clear()
 	_build_pieces()
 	_build_flancs()
 	_build_trait()
@@ -520,11 +539,15 @@ func _creer_maillages(fin_us: int) -> void:
 
 
 func _materiaux() -> void:
-	_tex_ortho = _texture_ortho("res://textures/relief_ortho.jpg")
+	_tex_ortho = ImageTexture.create_from_image(_img_ortho if _img_ortho != null
+		else _image_ortho("res://textures/relief_ortho.jpg"))
 	_mat_terrain = _shader(SHADER_TERRAIN)
 	_mat_terrain.set_shader_parameter("ortho", _tex_ortho)
 	_mat_loin = _shader(SHADER_LOINTAIN)
-	_mat_loin.set_shader_parameter("ortho", _texture_ortho("res://textures/relief_lointain.jpg"))
+	_mat_loin.set_shader_parameter("ortho", ImageTexture.create_from_image(_img_loin if _img_loin != null
+		else _image_ortho("res://textures/relief_lointain.jpg")))
+	_img_ortho = null
+	_img_loin = null
 	_mat_loin.set_shader_parameter("bloc", Vector4(ReliefDonnees.X_OUEST, ReliefDonnees.Z_NORD,
 		ReliefDonnees.X_EST, ReliefDonnees.Z_SUD))
 	_hiver_mat(_mat_terrain, true)
@@ -729,12 +752,13 @@ func terrain_piece(x: float, z: float) -> Array:
 ## Trait ambre du tunnel et noms des lieux : en vue extérieure seulement
 ## (pas pour le skieur).
 func montrer_trait(on: bool) -> void:
-	var t: Node3D = get_node_or_null("TraitTunnel") as Node3D
-	if t != null and t.visible != on:
-		t.visible = on
-		for lab in get_children():
-			if lab is Label3D and lab.is_in_group("relief_lieux"):
-				(lab as Label3D).visible = on
+	if _trait == null or on == _trait_on:
+		return
+	_trait_on = on
+	_trait.visible = on
+	for lab in get_children():
+		if lab is Label3D and lab.is_in_group("relief_lieux"):
+			(lab as Label3D).visible = on
 
 
 ## Abscisses des deux rames : le trait du tunnel s'y interrompt.
@@ -791,6 +815,7 @@ func _build_trait() -> void:
 	st.set_material(_mat_trait)
 	var mi: MeshInstance3D = _instance(st.commit(), "TraitTunnel")
 	mi.extra_cull_margin = 50.0
+	_trait = mi
 
 
 ## Flancs du bloc détaillé (« jupe ») : de sa bordure jusqu'à Y_SOCLE, sous

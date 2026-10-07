@@ -1,0 +1,166 @@
+## Banc des issues de secours de la face (07/10/2026) : rame arrêtée en
+## tunnel, le skieur à bord enlève les D jaunes (ÉVACUER), passe par le trou,
+## descend sur la voie et suit l'escalier de service vers l'amont ; à quai,
+## pas d'évacuation, et les issues sont remises.
+##   godot --headless --fixed-fps 60 --path godot_project -s bench_issues_3d.gd -- --mode=normal
+extends SceneTree
+
+var _main: Node = null
+var _f: int = 0
+var _phase: int = 0
+var _t: float = 0.0
+var _ok: bool = true
+var _cible: Vector3 = Vector3.ZERO
+var _retenue_vue: bool = false
+var _ecoute_vue: bool = false
+var _t_trace: float = 0.0
+
+
+func _initialize() -> void:
+	_main = load("res://scenes/main.tscn").instantiate()
+	get_root().add_child(_main)
+	process_frame.connect(_tick)
+
+
+func _verif(label: String, cond: bool, detail: String = "") -> void:
+	print("%s %s%s" % ["[OK]  " if cond else "[ECHEC]", label, (" — " + detail) if detail != "" else ""])
+	_ok = _ok and cond
+
+
+func _fin() -> void:
+	print("BENCH_ISSUES " + ("OK" if _ok else "ECHEC"))
+	quit(0 if _ok else 1)
+
+
+func _tick() -> void:
+	_f += 1
+	_t += 1.0 / 60.0
+	var relief: ReliefBuilder = _main.get("relief")
+	if relief == null or not relief.pret:
+		if _f > 20000:
+			_verif("relief prêt", false)
+			_fin()
+		return
+	var ph: TrainPhysics = _main.physics
+	var cab: Cabin = _main.cabin
+	var tun: TunnelBuilder = _main.tunnel
+	var track: TrackBuilder = _main.track
+	match _phase:
+		0:
+			_main._apply_scenario(false, false, "normal")
+			if _main.auto_operator != null and _main.auto_operator.enabled:
+				_main.auto_operator.toggle()
+			ph.s = 1500.0
+			ph.s_prev_step = ph.s
+			ph.s_render = ph.s
+			ph.v = 0.0
+			ph.trip_started = false
+			_main.basculer_skieur()
+			_phase = 1
+			_t = 0.0
+		1:
+			if _t < 8.0:
+				return
+			var sk: SkieurJoueur = _main.skieur
+			var v0: Node3D = cab._interior_cars[0]
+			var car_len: float = cab.train_length / float(cab.car_count)
+			var zf: float = -car_len * 0.5
+			sk.global_position = v0.global_transform * Vector3(1.0, TrainBodyBuilder.Y_FLOOR + 0.3, zf + 2.3)
+			sk.velocity = Vector3.ZERO
+			sk.support = v0
+			_phase = 2
+			_t = 0.0
+		2:
+			if _t < 1.0:
+				return
+			var sk: SkieurJoueur = _main.skieur
+			var v0: Node3D = cab._interior_cars[0]
+			var car_len: float = cab.train_length / float(cab.car_count)
+			var zf: float = -car_len * 0.5
+			_verif("rame arrêtée en tunnel, skieur à bord : ÉVACUER possible", _main.evacuation_possible(),
+				"support %s, v %.2f, s %.0f" % [sk.support != null, ph.v, ph.s])
+			_main.evacuer()
+			var caches: int = 0
+			for e in cab._issues:
+				if not (e["node"] as MeshInstance3D).visible:
+					caches += 1
+			var desact: int = 0
+			for cs in _main.collisions.issues.get(cab, []):
+				if (cs as CollisionShape3D).disabled:
+					desact += 1
+			_verif("les 4 D jaunes sont enlevés : maillages cachés, collisions désactivées",
+				cab.issues_retirees and cab._issues.size() == 4 and caches == 4 and desact == 4,
+				"%d panneaux, %d cachés, %d collisions désactivées" % [cab._issues.size(), caches, desact])
+			# chemin : devant le D droit, le trou (fond de calotte à zf + 0,45),
+			# la voie, puis l'escalier de service vers l'avant de la rame
+			var y: float = TrainBodyBuilder.Y_FLOOR + 0.3
+			var pf: Vector3 = v0.global_transform * Vector3(0.0, y, zf)
+			var s_av: float = ph.s
+			var d_min: float = INF
+			var s: float = ph.s - 40.0
+			while s <= ph.s + 40.0:
+				var d: float = tun.transform_at(s).origin.distance_to(pf)
+				if d < d_min:
+					d_min = d
+					s_av = s
+				s += 0.5
+			var fwd: Vector3 = -v0.global_transform.basis.z
+			var sens: float = 1.0 if fwd.dot(-tun.transform_at(s_av).basis.z) > 0.0 else -1.0
+			# par l'issue droite (D de 0,98 à 1,62 m de l'axe), puis au-delà de
+			# la calotte, sur la voie
+			sk.chemin = [v0.global_transform * Vector3(1.30, y, zf + 1.4), v0.global_transform * Vector3(1.30, y, zf - 0.3)]
+			for ds in [3.0, 8.0, 16.0, 26.0]:
+				sk.chemin.append(track.point_passerelle(s_av + sens * ds))
+			_cible = sk.chemin[sk.chemin.size() - 1]
+			print("  avant de la rame à s %.1f, sens %+.0f ; zones de collision %d, triangles %d" % [s_av, sens, _main.collisions._zones.size(), _main.collisions.triangles])
+			_phase = 3
+			_t = 0.0
+			_t_trace = 0.0
+		3:
+			var sk: SkieurJoueur = _main.skieur
+			_t_trace += 1.0 / 60.0
+			if _t_trace >= 2.0 and _t > 40.0:      # trace des 20 dernières secondes, en cas d'échec
+				_t_trace = 0.0
+				var v0t: Node3D = cab._interior_cars[0]
+				var l: Vector3 = v0t.global_transform.affine_inverse() * sk.global_position
+				var mur: String = "-"
+				if sk.get_slide_collision_count() > 0 and sk.get_last_slide_collision().get_collider():
+					mur = str(sk.get_last_slide_collision().get_collider().name) + "/" + str(sk.get_last_slide_collision().get_collider_shape().name if sk.get_last_slide_collision().get_collider_shape() else "")
+				print("  t %3.0f : reste %d, voiture (%.2f, %.2f, %.2f), sol %s, support %s, contact %s" % [_t, sk.chemin.size(), l.x, l.y, l.z, sk.is_on_floor(), sk.support != null, mur])
+			if sk.support == null:
+				_retenue_vue = _retenue_vue or (_main.auto_operator != null and _main.auto_operator.retenue)
+				_ecoute_vue = _ecoute_vue or _main.audio.ecoute == 4
+			if sk.chemin.is_empty() or _t > 60.0:
+				var d: Vector3 = sk.global_position - _cible
+				var dh: float = Vector2(d.x, d.z).length()
+				var mur: String = "-"
+				if sk.get_slide_collision_count() > 0 and sk.get_last_slide_collision().get_collider():
+					mur = str(sk.get_last_slide_collision().get_collider().name)
+				_verif("par le trou, sur la voie, 26 m d'escalier de service vers l'avant",
+					sk.chemin.is_empty() and dh < 1.0 and absf(d.y) < 0.6 and sk.is_on_floor() and sk.support == null,
+					"%.0f s, reste %d points, %.2f m du but (dy %.2f), au sol %s, support %s, dernier contact %s" % [
+						_t, sk.chemin.size(), dh, d.y, sk.is_on_floor(), sk.support != null, mur])
+				_verif("à pied dans le tunnel : la rame est retenue, on entend le tunnel (écoute 4)",
+					_retenue_vue and _ecoute_vue, "retenue %s, écoute 4 %s" % [_retenue_vue, _ecoute_vue])
+				# retour à bord, rame à quai en bas : pas d'évacuation, issues remises
+				var v0: Node3D = cab._interior_cars[0]
+				var car_len: float = cab.train_length / float(cab.car_count)
+				ph.s = PNConstants.START_S
+				ph.s_prev_step = ph.s
+				ph.s_render = ph.s
+				ph.v = 0.0
+				ph.doors_open = true
+				sk.global_position = v0.global_transform * Vector3(0.0, TrainBodyBuilder.Y_FLOOR + 0.3, -car_len * 0.5 + 3.0)
+				sk.velocity = Vector3.ZERO
+				sk.support = v0
+				sk.chemin.clear()
+				_phase = 4
+				_t = 0.0
+		4:
+			if _t < 1.0:
+				return
+			_verif("à quai, portes ouvertes : pas d'évacuation possible, issues remises",
+				not _main.evacuation_possible() and not cab.issues_retirees
+					and (cab._issues[0]["node"] as MeshInstance3D).visible,
+				"possible %s, retirées %s" % [_main.evacuation_possible(), cab.issues_retirees])
+			_fin()

@@ -106,6 +106,10 @@ func _process(delta: float) -> void:
 		var wrecked: bool = (_main.fault_manager != null
 			and _main.fault_manager.is_active_catastrophic()
 			and absf(_main.physics.v) < 0.1 and not _main.physics.crashed)
+		# Collision hors Défi (butoir, autre rame — tous modes depuis
+		# l'audit du 07/10/2026) : pas d'écran de fin, le bouton suffit.
+		if _main.physics.crashed and mode != "challenge":
+			wrecked = true
 		_b_restart.visible = wrecked
 	if _b_auto != null and _main.auto_operator != null:
 		# DÉFI et PANNES se conduisent à la main : l'exploitation

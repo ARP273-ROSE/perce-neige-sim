@@ -1,0 +1,5 @@
+Débouché : lat 45.4345167 lon 6.9007222 → x = 135.95 m, z = 1933.54 m, y = 2655.89 m
+Depuis la chambre : 49.6 m à droite, -103.0 m le long du tunnel (− = vers le bas), -6.6 m plus bas
+Distance en plan : 114.3 m ; angle avec l'axe du tunnel : 25.7°
+Tronçon 2 : 110.4 m en plan, pente -4.7 % (-5.18 m de descente), cap -0.7°
+Pour main.gd / sortie_secours.gd : PORTAIL = Vector3(135.95, 2655.89, 1933.54)

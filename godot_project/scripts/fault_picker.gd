@@ -137,9 +137,7 @@ func _build() -> void:
 	b_rand.custom_minimum_size = Vector2(160, 54)
 	b_rand.alignment = HORIZONTAL_ALIGNMENT_CENTER
 	b_rand.pressed.connect(func() -> void:
-		if fault_manager != null:
-			fault_manager.trigger(FaultProfiles.weighted_pick())
-		_close())
+		_on_pick(FaultProfiles.weighted_pick()))
 	footer.add_child(b_rand)
 
 	var b_clear: Button = _mk_button(_t("LEVER", "CLEAR"),
@@ -149,6 +147,10 @@ func _build() -> void:
 	b_clear.pressed.connect(func() -> void:
 		if fault_manager != null:
 			fault_manager.clear_active()
+			# panne catastrophique : pas de levée d'un tap (R seulement)
+			if fault_manager.is_active() and fault_manager.dernier_refus != "":
+				_detail.text = fault_manager.dernier_refus
+				return
 		_close())
 	footer.add_child(b_clear)
 
@@ -201,8 +203,11 @@ func _process(_delta: float) -> void:
 
 
 func _on_pick(fault_id: String) -> void:
-	if fault_manager != null:
-		fault_manager.trigger(fault_id)
+	if fault_manager != null and not fault_manager.trigger(fault_id):
+		# une panne est déjà active : pas d'empilement (comme le dialogue
+		# F du PC), le motif reste affiché dans le sélecteur
+		_detail.text = fault_manager.dernier_refus
+		return
 	_close()
 
 

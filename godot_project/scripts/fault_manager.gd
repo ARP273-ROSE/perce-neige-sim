@@ -14,6 +14,15 @@ extends Node
 ##   fault_manager.trigger("wet_rail")
 ##   fault_manager.clear_active()
 ##   fault_manager.is_active() / get_active_id() / get_active_label()
+##
+## Audit fonctionnel du 07/10/2026 (parité PC) :
+##   - les EFFETS physiques sont portés par TrainPhysics (traction coupée,
+##     déclassement de puissance, décalages de la jauge de tension) ;
+##   - l'annonce d'une panne qui ARRÊTE la rame est différée à l'arrêt
+##     (|v| < 0,1), et une panne catastrophique enchaîne incident technique
+##     → lumières baissées → évacuation → hors service (cabine vidée) ;
+##   - une panne catastrophique ne se lève que par NOUVEAU VOYAGE (R) ;
+##   - une panne manuelle ne s'empile pas sur une panne active.
 
 enum Severity { ADVISORY, OPERATIONAL, STOPPING, CATASTROPHIC }
 
@@ -28,13 +37,18 @@ const FAULTS: Dictionary = {
 		"announcement": "minor_incident",
 		"duration": 30.0,
 	},
+	# Défaut capteur de porte : OPÉRATIONNEL comme le PC (:3534) — on
+	# continue jusqu'à la prochaine gare, le départ y est refusé tant que
+	# les portes n'ont pas été cyclées. Avant l'audit du 07/10/2026 : frein
+	# d'urgence 1,25 m/s² en plein tube pour un capteur. Pas d'annonce (le
+	# PC n'en joue pas), la panne est au tableau.
 	"door": {
-		"severity": Severity.STOPPING,
-		"speed_cap": 0.0,
-		"stops_train": true,
+		"severity": Severity.OPERATIONAL,
+		"speed_cap": 999.0,
+		"stops_train": false,
 		"label_fr": "Défaut porte",
 		"label_en": "Door fault",
-		"announcement": "tech_incident",
+		"announcement": "",
 		"duration": 25.0,
 	},
 	"thermal": {
@@ -71,7 +85,7 @@ const FAULTS: Dictionary = {
 		"label_fr": "Mode 2/3 moteurs — Von Roll",
 		"label_en": "2/3 motor mode — Von Roll redundancy",
 		"announcement": "tech_incident",
-		"duration": 0.0,   # reste jusqu'à fin du voyage
+		"duration": 0.0,   # reste jusqu'à la fin du voyage (levée à l'arrivée)
 	},
 	"slack": {
 		"severity": Severity.ADVISORY,
@@ -118,13 +132,15 @@ const FAULTS: Dictionary = {
 		"announcement": "evac",
 		"duration": 0.0,
 	},
+	# Inondation : OPÉRATIONNEL, plafond 4 m/s (PC :3684, :3975 et son
+	# propre profil « continuer doucement ») — avant, arrêt d'urgence.
 	"flood_tunnel": {
-		"severity": Severity.STOPPING,
-		"speed_cap": 0.0,
-		"stops_train": true,
+		"severity": Severity.OPERATIONAL,
+		"speed_cap": 4.0,
+		"stops_train": false,
 		"label_fr": "Inondation tunnel détectée",
 		"label_en": "Tunnel flood detected",
-		"announcement": "long_repair",
+		"announcement": "minor_incident",
 		"duration": 120.0,
 	},
 	"comms_loss": {
@@ -143,7 +159,7 @@ const FAULTS: Dictionary = {
 		"label_fr": "Anomalie aiguillage Abt",
 		"label_en": "Abt switch anomaly",
 		"announcement": "tech_incident",
-		"duration": 0.0,
+		"duration": 50.0,  # chrono du PC (:3998) — avant : jamais levée, l'auto s'y figeait
 	},
 	"fire_vent_fail": {
 		"severity": Severity.CATASTROPHIC,
@@ -169,6 +185,12 @@ const SEVERITY_COLOR: Dictionary = {
 	Severity.CATASTROPHIC: Color(1.0, 0.10, 0.10),
 }
 
+# Valeurs physiques des pannes, celles du PC (trigger_fault) :
+const TENSION_SPIKE_DAN: float = 6500.0   # pic de tension (PC :3826)
+const SLACK_DAN: float = 8000.0           # mou de câble (PC :3897)
+const THERMAL_DERATE: float = 0.55        # surchauffe : 55 % de puissance (PC :3845)
+const MOTOR_DEGRADED_DERATE: float = 2.0 / 3.0   # un groupe sur trois HS (PC :3881)
+
 var lang: String = "fr"
 var physics: TrainPhysics = null
 var announcements: Announcements = null
@@ -178,6 +200,22 @@ var _active_id: String = ""
 var _active_remaining: float = 0.0
 var _active_total_duration: float = 0.0
 var _pending_trip_delay: float = 0.0   # pressostat service_brake_fail (~3 s)
+## Dernier refus de trigger()/clear_active() (message pour le sélecteur).
+var dernier_refus: String = ""
+
+# --- Séquence d'incident (port de _advance_fault_phase du PC :7395-7503) --
+# Panne stoppante : l'annonce (« incident technique » / « allongement des
+# réparations ») attend que la rame soit IMMOBILISÉE — avant, « évacuation »
+# résonnait pendant les ~60 m de freinage. Panne catastrophique :
+#   active → (arrêt, voyage suspendu, tambour) incident technique
+#   → intervention_called → (5 s + fin d'annonce) lumières baissées
+#   → dim_announced → (3 s + fin d'annonce) évacuation
+#   → evacuating → (20 s + fin d'annonce) cabine vidée → out_of_service.
+var _phase: String = ""
+var _phase_t: float = 0.0
+var _annonce_differee: String = ""
+var _lumieres_baissees: bool = false
+var _prev_finished: bool = false
 
 # --- Planificateur du mode PANNES ----------------------------------------
 # Aléa INDÉPENDANT DU FRAMERATE (hazard exponentiel : P = λ·dt), calibré
@@ -247,6 +285,11 @@ func get_active_remaining() -> float:
 	return _active_remaining
 
 
+## Phase de la séquence d'incident catastrophique ("" hors catastrophe).
+func get_phase() -> String:
+	return _phase
+
+
 # Plafond de vitesse imposé par la panne courante (m/s).
 # Retourne PNConstants.V_MAX si pas de panne ou pas de cap.
 func get_speed_cap() -> float:
@@ -256,16 +299,32 @@ func get_speed_cap() -> float:
 	return minf(cap, PNConstants.V_MAX)
 
 
-# Déclenche une panne par son ID. Si une panne est déjà active, la remplace
-# (la nouvelle panne prend la priorité).
-func trigger(fault_id: String) -> void:
+func _t(fr: String, en: String) -> String:
+	return en if lang == "en" else fr
+
+
+# Déclenche une panne par son ID. Renvoie false (et pose `dernier_refus`)
+# si une panne est déjà active : comme le PC (dialogue F : « déjà une
+# panne active »), on ne l'empile pas — la remplacer effaçait ses effets
+# sans la lever.
+func trigger(fault_id: String) -> bool:
 	if not FAULTS.has(fault_id):
 		push_warning("[FaultManager] panne inconnue : %s" % fault_id)
-		return
+		return false
+	if _active_id != "":
+		dernier_refus = _t("Panne déjà active (%s) : la lever d'abord" % get_active_label(),
+			"A fault is already active (%s) : clear it first" % get_active_label())
+		print("[Fault] %s refusée — %s déjà active" % [fault_id, _active_id])
+		return false
+	dernier_refus = ""
 	_active_id = fault_id
 	var dur: float = FAULTS[fault_id]["duration"]
 	_active_total_duration = dur
 	_active_remaining = dur if dur > 0.0 else INF
+	_phase = ""
+	_phase_t = 0.0
+	_annonce_differee = ""
+	_prev_finished = physics.finished if physics != null else false
 
 	# Effet immédiat : si la panne arrête le train, déclenche le frein
 	# d'urgence RAMPÉ (décélération ~2,5 m/s², comme le vrai frein de
@@ -294,29 +353,67 @@ func trigger(fault_id: String) -> void:
 			physics.ghost_locked_s = PNConstants.miroir(physics.s)
 		elif fault_id == "service_brake_fail":
 			physics.service_brake_fail = 0.25
+		# Effets portés par la physique (audit 07/10/2026, valeurs du PC) :
+		match fault_id:
+			"aux_power", "parking_stuck":
+				# contacteur traction ouvert / tambour bloqué : aucune
+				# traction tant que la panne tient, urgence relâchée ou non
+				physics.traction_coupee = true
+			"thermal":
+				physics.power_derate = THERMAL_DERATE
+			"motor_degraded":
+				physics.power_derate = MOTOR_DEGRADED_DERATE
+			"tension":
+				physics.tension_fault_dan = TENSION_SPIKE_DAN
+			"slack":
+				physics.slack_fault_dan = SLACK_DAN
+			"door":
+				# départ refusé tant que les portes n'ont pas été cyclées
+				physics.panne_porte = true
+		if FAULTS[fault_id]["severity"] == Severity.CATASTROPHIC:
+			physics.panne_catastrophique = true
+	# PA + radio tunnel perdus : plus d'annonce en ligne (celles de quai
+	# passent) — posé AVANT l'annonce de la panne elle-même, muette aussi.
+	if announcements != null:
+		announcements.comms_loss = (fault_id == "comms_loss")
 
-	# Annonce vocale liée
+	# Annonce vocale liée. Panne stoppante : différée à l'ARRÊT de la rame
+	# (PC :8041-8050, pending_incident) ; catastrophique : séquence
+	# d'incident complète (phase « active ») ; sinon tout de suite.
 	var ann_key: String = FAULTS[fault_id]["announcement"]
-	if announcements != null and ann_key != "":
+	if FAULTS[fault_id]["severity"] == Severity.CATASTROPHIC:
+		_phase = "active"
+	elif FAULTS[fault_id]["stops_train"]:
+		_annonce_differee = ann_key
+	elif announcements != null and ann_key != "":
 		announcements.queue(ann_key)
 
 	print("[Fault] %s déclenchée (%s)" % [fault_id, get_active_severity_label()])
+	return true
 
 
 # Force la fin d'une panne (recovery manuelle ou catastrophique → R)
 func clear_active(force: bool = false) -> void:
 	if _active_id == "":
 		return
-	# Câble rompu : pas de « réparation » en pleine ligne (bouton LEVER, F2,
-	# changement de mode). Elle recouplait le câble et le contrepoids, figé
-	# dans le tunnel, sautait en miroir de la rame — en gare haute si elle
-	# avait glissé en bas (retour du 04/10). Comme au PC, seule une remise
-	# en service complète (NOUVEAU VOYAGE / R, force = true) relance tout.
-	if not force and physics != null and physics.cable_rupture:
-		print("[Fault] câble rompu : remise en service par un nouveau voyage (R)")
+	# Panne catastrophique (feu, désenfumage, frein de service, câble
+	# rompu) : pas de « réparation » d'un tap en pleine marche (bouton
+	# PANNE, F2, LEVER, changement de MODE). Elle relâchait l'urgence et le
+	# voyage continuait ; le câble recouplé sautait en miroir de la rame
+	# (retour du 04/10). Comme au PC, seule une remise en service complète
+	# (NOUVEAU VOYAGE / R, force = true) relance tout.
+	if not force and is_active_catastrophic():
+		dernier_refus = _t("Service terminé par %s : NOUVEAU VOYAGE (R)" % get_active_label(),
+			"Service ended by %s : NEW TRIP (R)" % get_active_label())
+		print("[Fault] %s : remise en service par un nouveau voyage (R)" % _active_id)
 		return
+	dernier_refus = ""
 	# Si stopping/catastrophic, libère le frein urgence (rampé + legacy)
 	if physics != null:
+		# 400 V rétabli / tambour libéré AVANT de relâcher l'urgence : le
+		# frein à manque de courant tient le tambour tant que la traction
+		# est coupée (release_emergency le lit)
+		physics.traction_coupee = false
 		physics.release_emergency()
 		physics.emergency_brake = false
 		physics.abt_hold = false
@@ -324,6 +421,19 @@ func clear_active(force: bool = false) -> void:
 		physics.cable_rupture = false
 		physics.service_brake_fail = 1.0
 		physics.ghost_locked_s = -1.0
+		physics.power_derate = 1.0
+		physics.tension_fault_dan = 0.0
+		physics.slack_fault_dan = 0.0
+		physics.panne_catastrophique = false
+		physics.panne_porte = false
+		if _lumieres_baissees:
+			physics.lights_cabin = true
+	if announcements != null:
+		announcements.comms_loss = false
+	_lumieres_baissees = false
+	_phase = ""
+	_phase_t = 0.0
+	_annonce_differee = ""
 	_pending_trip_delay = 0.0
 	_cooldown = COOLDOWN_S
 	print("[Fault] %s clearée" % _active_id)
@@ -356,14 +466,85 @@ func _process(delta: float) -> void:
 			physics.emergency = true
 			physics.speed_cmd = 0.0
 			print("[Fault] pressostat frein service — urgence automatique")
-	# Catastrophique : ne s'auto-clear jamais (intervention requise via R)
+	# Annonce d'une panne stoppante : à l'arrêt de la rame seulement.
+	if _annonce_differee != "" and physics != null and absf(physics.v) < 0.1:
+		if announcements != null:
+			announcements.queue(_annonce_differee)
+		_annonce_differee = ""
+	# Catastrophique : séquence d'incident, ne s'auto-clear jamais
+	# (intervention requise via R)
 	if FAULTS[_active_id]["severity"] == Severity.CATASTROPHIC:
+		_avancer_phase(delta)
 		return
+	# Panne « jusqu'à la fin du voyage » (durée 0, non catastrophique :
+	# mode 2/3 moteurs) : levée à l'arrivée, maintenance à quai — comme le
+	# PC (limp_done). Avant, rien ne la levait.
+	if _active_total_duration <= 0.0 and physics != null:
+		if physics.finished and not _prev_finished:
+			print("[Fault] %s levée à l'arrivée (maintenance à quai)" % _active_id)
+			clear_active()
+			return
+		_prev_finished = physics.finished
 	# Decremente le timer ; auto-clear quand atteint 0
 	if _active_total_duration > 0.0:
 		_active_remaining -= delta
 		if _active_remaining <= 0.0:
 			clear_active()
+
+
+func _annonce_en_cours() -> bool:
+	return announcements != null and announcements.is_announcing()
+
+
+# Séquence d'incident catastrophique (port de _advance_fault_phase du PC).
+func _avancer_phase(delta: float) -> void:
+	if physics == null:
+		return
+	_phase_t += delta
+	match _phase:
+		"active":
+			# Attendre l'arrêt COMPLET. Câble rompu, « arrêtée » veut dire
+			# TENUE par ses freins embarqués : une rame qui montait passe
+			# par v = 0 au sommet de sa course avant de redescendre.
+			var tenue: bool = not physics.cable_rupture or physics.emergency \
+				or physics.emergency_ramp > 0.0
+			if absf(physics.v) < 0.1 and _phase_t > 1.5 and tenue:
+				physics.trip_started = false       # voyage suspendu
+				physics.maint_brake = true
+				physics.speed_cmd = 0.0
+				physics.announce_phase_remaining = 0.0
+				physics.door_phase_remaining = 0.0
+				physics.confirmation_autre_remaining = 0.0
+				physics.departure_buzzer_remaining = 0.0
+				if announcements != null:
+					announcements.queue("tech_incident")
+				print("[Fault] demande d'intervention — service interrompu")
+				_phase = "intervention_called"
+				_phase_t = 0.0
+		"intervention_called":
+			if _phase_t > 5.0 and not _annonce_en_cours():
+				if announcements != null:
+					announcements.queue("dim_light")
+				physics.lights_cabin = false
+				_lumieres_baissees = true
+				print("[Fault] lumières cabine baissées — évacuation imminente")
+				_phase = "dim_announced"
+				_phase_t = 0.0
+		"dim_announced":
+			if _phase_t > 3.0 and not _annonce_en_cours():
+				if announcements != null:
+					announcements.queue("evac")
+				print("[Fault] annonce d'évacuation — les passagers sortent")
+				_phase = "evacuating"
+				_phase_t = 0.0
+		"evacuating":
+			if _phase_t > 20.0 and not _annonce_en_cours():
+				physics.evacuer()
+				print("[Fault] cabine vidée — hors service, R pour nouveau voyage")
+				_phase = "out_of_service"
+				_phase_t = 0.0
+		_:
+			pass
 
 
 # --- Planificateur automatique (mode PANNES) ------------------------------
