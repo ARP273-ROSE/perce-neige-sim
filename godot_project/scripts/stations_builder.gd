@@ -401,24 +401,44 @@ func _build_platform_barrier(s_start: float, s_end: float, s_nez: float, side: f
 		for h in BARRIERE_LISSES:
 			_tube(st, [travers.call(x_porte1, h), travers.call(x_mur, h)], BARRIERE_R_LISSE, 0.0)
 		# 3. la porte : cadre en tube cintré, traverse, plaque « réservé
-		#    au personnel »
+		#    au personnel » — un VANTAIL à part, qui pivote sur sa charnière
+		#    (côté mur) et sonne quand on le pousse (PortePersonnel, Kevin
+		#    07/10/2026)
 		var xg0: float = x_porte0 + side * 0.06
 		var xg1: float = x_porte1 - side * 0.06
-		_tube(st, [travers.call(xg0, 0.06), travers.call(xg0, BARRIERE_H - 0.04),
+		var stp: SurfaceTool = SurfaceTool.new()
+		stp.begin(Mesh.PRIMITIVE_TRIANGLES)
+		_tube(stp, [travers.call(xg0, 0.06), travers.call(xg0, BARRIERE_H - 0.04),
 			travers.call(xg1, BARRIERE_H - 0.04), travers.call(xg1, 0.06), travers.call(xg0, 0.06)],
 			BARRIERE_R_LISSE, 0.10)
-		_tube(st, [travers.call(xg0, 0.52), travers.call(xg1, 0.52)], BARRIERE_R_LISSE, 0.0)
+		_tube(stp, [travers.call(xg0, 0.52), travers.call(xg1, 0.52)], BARRIERE_R_LISSE, 0.0)
 		var lb: Basis = Basis(dr_b, Vector3.UP, dr_b.cross(Vector3.UP)).orthonormalized()
 		var cp: Vector3 = xf_b.origin + dr_b * ((x_porte0 + x_porte1) * 0.5)
 		var face: Vector3 = xf_b.basis.z      # vers le quai (l'aval)
+		var charniere: Vector3 = travers.call(x_porte1, 0.0)
+		var porte: PortePersonnel = PortePersonnel.new()
+		porte.name = "PortePersonnel_%s" % ("R" if side > 0.0 else "L")
+		porte.transform = Transform3D(lb, charniere)
+		racine.add_child(porte)
+		var vant: Node3D = Node3D.new()
+		vant.name = "Vantail"
+		porte.add_child(vant)
+		var inv_p: Transform3D = porte.global_transform.affine_inverse()
+		var tubes_p: MeshInstance3D = MeshInstance3D.new()
+		tubes_p.name = "TubesPorte"
+		stp.set_material(bleu)
+		tubes_p.mesh = stp.commit()
+		tubes_p.transform = inv_p
+		tubes_p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		vant.add_child(tubes_p)
 		var plaque_m: MeshInstance3D = MeshInstance3D.new()
 		var pm: BoxMesh = BoxMesh.new()
 		pm.size = Vector3(0.36, 0.17, 0.006)
 		pm.material = galva
 		plaque_m.mesh = pm
-		plaque_m.transform = Transform3D(lb, Vector3(cp.x, pied_b + 0.80, cp.z) + face * 0.025)
+		plaque_m.transform = inv_p * Transform3D(lb, Vector3(cp.x, pied_b + 0.80, cp.z) + face * 0.025)
 		plaque_m.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		racine.add_child(plaque_m)
+		vant.add_child(plaque_m)
 		var plaque: Label3D = Label3D.new()
 		plaque.text = "RÉSERVÉ AU\nPERSONNEL"
 		plaque.font_size = 40
@@ -430,8 +450,19 @@ func _build_platform_barrier(s_start: float, s_end: float, s_nez: float, side: f
 		if pb.z.dot(face) < 0.0:
 			pb.x = -pb.x
 			pb.z = -pb.z
-		plaque.transform = Transform3D(pb.orthonormalized(), Vector3(cp.x, pied_b + 0.80, cp.z) + face * 0.03)
-		racine.add_child(plaque)
+		plaque.transform = inv_p * Transform3D(pb.orthonormalized(), Vector3(cp.x, pied_b + 0.80, cp.z) + face * 0.03)
+		vant.add_child(plaque)
+		porte.poser(vant, -face)           # s'ouvre vers l'amont
+		# derrière la porte : palier du personnel jusqu'à l'escalier de la
+		# fosse (Kevin, 07/10/2026 : « un escalier pour descendre dans la
+		# fosse au niveau des portes en haut du quai »)
+		var beton_p: StandardMaterial3D = StandardMaterial3D.new()
+		beton_p.albedo_color = Color(0.40, 0.40, 0.39)
+		beton_p.roughness = 0.9
+		var y_pal: float = FLOOR_Y_LOCAL + platform_height
+		_box(Vector3(platform_width + platform_inner_x - 1.05, y_pal - FLOOR_Y_LOCAL, 1.25), beton_p,
+			s_b + 0.66, side * (platform_inner_x + platform_width + 1.05) * 0.5,
+			(y_pal + FLOOR_Y_LOCAL) * 0.5, "PalierPersonnel")
 
 	var mi: MeshInstance3D = MeshInstance3D.new()
 	mi.name = "Tubes"
@@ -613,10 +644,16 @@ func _build_pit(s0: float, s1: float, with_sheaves: bool) -> void:
 	var esc_giron: float = 0.29
 	var esc_s1: float = esc_s0 + esc_giron * esc_n
 	var longue: bool = length > 10.0
+	# escalier du haut (porte du personnel, Kevin 07/10/2026) : des deux
+	# côtés, du palier derrière la porte jusqu'au fond, vers l'aval
+	var esch_s1: float = s1 - 0.15
+	var esch_s0: float = esch_s1 - esc_giron * esc_n
 	for sx in [-1.5, 1.5]:
 		var morceaux: Array = [[s0, s1]]
 		if longue and sx > 0.0:
-			morceaux = [[s0, esc_s0 - 0.05], [esc_s1 + 0.05, s1]]
+			morceaux = [[s0, esc_s0 - 0.05], [esc_s1 + 0.05, esch_s0 - 0.05]]
+		elif longue:
+			morceaux = [[s0, esch_s0 - 0.05]]
 		for mo in morceaux:
 			var lm: float = float(mo[1]) - float(mo[0])
 			if lm <= 0.01:
@@ -644,6 +681,8 @@ func _build_pit(s0: float, s1: float, with_sheaves: bool) -> void:
 		# jusqu'au niveau du quai (on en sort de côté, sur le palier)
 		var y_quai: float = FLOOR_Y_LOCAL + platform_height
 		var haut_m: float = (y_quai - y_bottom) / esc_n
+		_box(Vector3(platform_inner_x + 0.1 - 1.0, 0.06, esc_s1 - esc_s0 + 0.3), grating,
+			(esc_s0 + esc_s1) * 0.5, (1.0 + platform_inner_x + 0.1) * 0.5, y_bottom + 0.03, "FondFosseEscalier")
 		for k in range(esc_n):
 			var y_d: float = y_bottom + haut_m * (k + 1)
 			var s_m: float = esc_s1 - esc_giron * (k + 0.5)
@@ -651,6 +690,23 @@ func _build_pit(s0: float, s1: float, with_sheaves: bool) -> void:
 				y_bottom + (y_d - y_bottom) * 0.5, "EscalierFosse")
 			_box(Vector3(esc_x1 - esc_x0, 0.03, 0.05), steel, s_m + esc_giron * 0.5 - 0.025,
 				(esc_x0 + esc_x1) * 0.5, y_d - 0.013, "NezMarcheFosse")
+		# escaliers du haut, des deux côtés : la marche la plus haute contre
+		# le palier du personnel (s1), descente vers l'aval
+		for sxe in [-1.0, 1.0]:
+			for k in range(esc_n):
+				var y_h: float = y_bottom + haut_m * (k + 1)
+				var s_h: float = esch_s1 - esc_giron * (esc_n - 0.5 - k)
+				_box(Vector3(esc_x1 - esc_x0, y_h - y_bottom, esc_giron), concrete, s_h, sxe * (esc_x0 + esc_x1) * 0.5,
+					y_bottom + (y_h - y_bottom) * 0.5, "EscalierFosseHaut")
+				_box(Vector3(esc_x1 - esc_x0, 0.03, 0.05), steel, s_h - esc_giron * 0.5 + 0.025,
+					sxe * (esc_x0 + esc_x1) * 0.5, y_h - 0.013, "NezMarcheFosseHaut")
+			# sol sous l'escalier jusque sous le quai (le rebord est coupé là)
+			_box(Vector3(platform_inner_x + 0.1 - 1.0, 0.06, s1 - esch_s0 + 0.3), grating,
+				(esch_s0 + s1 + 0.3) * 0.5, sxe * (1.0 + platform_inner_x + 0.1) * 0.5, y_bottom + 0.03, "FondFosseEscalier")
+			# palier de tête, entre la dernière marche et le palier du personnel
+			_box(Vector3(platform_inner_x + 0.1 - esc_x0, y_quai - y_bottom, s1 + 0.6 - esch_s1), concrete,
+				(esch_s1 + s1 + 0.6) * 0.5, sxe * (esc_x0 + platform_inner_x + 0.1) * 0.5,
+				(y_quai + y_bottom) * 0.5, "TeteEscalierFosse")
 	if with_sheaves:
 		# deux grandes poulies verticales (une par brin) + une petite
 		for k in range(2):

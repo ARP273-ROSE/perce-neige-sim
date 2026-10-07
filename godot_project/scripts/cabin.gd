@@ -49,6 +49,8 @@ var _car_roots: Array = []
 var _interior_cars: Array = []
 var _wheels: Array = []              # pivots de roues, tournés à v/R
 var _doors: Array = []               # vantaux coulissants {node, side, base}
+var _issues: Array = []              # panneaux d'issue de secours des calottes {node, car, cle}
+var issues_retirees: bool = false    # évacuation : les D jaunes sont enlevés
 var _door_frac: float = 0.0          # 0 fermé → 1 ouvert (côté le plus ouvert)
 var _door_frac_cote: Array[float] = [0.0, 0.0]   # gauche, droite en regardant vers le haut
 var _clock_label: Label3D = null     # tablette-horloge du montant gauche
@@ -184,6 +186,7 @@ func _build_mesh() -> void:
 	_car_roots = built["car_roots"]
 	_wheels = built["wheels"]
 	_doors = built["doors"]
+	_issues = built.get("issues", [])
 	for d in _doors:
 		d["base"] = (d["node"] as Node3D).position
 	# phares de la face AVANT (la cabine est retournée selon le sens de
@@ -251,6 +254,8 @@ func _merge_static_meshes() -> void:
 	keep.append_array(_rear_lamps)
 	for d in _doors:
 		keep.append(d["node"])
+	for e in _issues:
+		keep.append(e["node"])       # les issues de secours s'enlèvent : pas fusionnées
 	var roots: Array = []
 	roots.append_array(_car_roots)
 	roots.append_array(_interior_cars)
@@ -1469,7 +1474,7 @@ func _process(_delta: float) -> void:
 	# Pupitre : voyants, commandes et écran Pro-face (l'écran seulement en
 	# vue cabine — inutile de le redessiner quand on ne le voit pas)
 	if _pupitre != null and physics != null:
-		_pupitre.mettre_a_jour(physics, _delta, train_number, view_mode == ViewMode.FPV)
+		_pupitre.mettre_a_jour(physics, _delta, train_number, not is_ghost and view_mode == ViewMode.FPV)
 
 	# Tablette-horloge du montant gauche : l'heure réelle, comme en cabine
 	if _clock_label != null:
@@ -1487,6 +1492,9 @@ func _process(_delta: float) -> void:
 		_apply_wheel_types()
 	if not is_ghost:
 		_apply_cabin_lights(physics.lights_cabin)
+
+
+var _sway_prec: Vector2 = Vector2(INF, INF)
 
 
 func _animate_passengers(delta: float) -> void:
@@ -1514,6 +1522,10 @@ func _animate_passengers(delta: float) -> void:
 	# arrière (+X), virage à droite → têtes vers l'extérieur (−Z)
 	var pitch: float = clampf(-acc_long * 0.06, -0.20, 0.20)
 	var roll: float = clampf(-acc_lat * 0.05, -0.18, 0.18)
+	# rame posée ou en croisière : rien ne bouge, on ne repositionne pas
+	if absf(pitch - _sway_prec.x) < 1e-3 and absf(roll - _sway_prec.y) < 1e-3:
+		return
+	_sway_prec = Vector2(pitch, roll)
 	# les silhouettes se balancent autour de leurs pieds (origine du
 	# maillage) ; assis, moitié moins
 	var sway_s: Basis = Basis.from_euler(Vector3(pitch * 0.6, 0.0, roll * 0.6))
@@ -1581,6 +1593,15 @@ func _apply_wheel_types() -> void:
 ## le monde, l'ouverture aille vers le bas de la pente. +Z local = arrière
 ## de la caisse ; la caisse est retournée (PI autour de Y) quand la rame 1
 ## descend ou quand la rame 2 (ghost) monte — même prédicat que _xform_from.
+## Issues de secours de la face (Kevin, 07/10/2026) : les D jaunes de part
+## et d'autre du pare-brise s'enlèvent pour évacuer une rame arrêtée en
+## tunnel ; remis quand la rame est de nouveau à quai (main.gd).
+func retirer_issues(oui: bool) -> void:
+	issues_retirees = oui
+	for e in _issues:
+		(e["node"] as MeshInstance3D).visible = not oui
+
+
 static func door_slide_sign(direction: int, ghost: bool) -> float:
 	var flipped: bool = (direction > 0) if ghost else (direction < 0)
 	return -1.0 if flipped else 1.0

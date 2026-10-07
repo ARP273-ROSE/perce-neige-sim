@@ -21,6 +21,7 @@ Author : ARP273-ROSE (original TI-Basic FUNIC), PyQt6 port 2026.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import locale
 import math
@@ -200,10 +201,20 @@ APP_NAME = "Perce-Neige Simulator"
 _FONT_CACHE: dict = {}
 
 
+_FAMILLES = {
+    "Segoe UI": ["Segoe UI", "Noto Sans", "DejaVu Sans", "Helvetica Neue", "Helvetica", "Arial"],
+    "Consolas": ["Consolas", "DejaVu Sans Mono", "Noto Sans Mono", "Menlo", "Courier New"],
+}
+
+
 def _cached_font(*args) -> "QFont":
     font = _FONT_CACHE.get(args)
     if font is None:
         font = QFont(*args)
+        # Linux et macOS n'ont ni Segoe UI ni Consolas : des familles de
+        # repli aux métriques proches, plutôt que la substitution de Qt
+        if args and isinstance(args[0], str) and args[0] in _FAMILLES:
+            font.setFamilies(_FAMILLES[args[0]])
         _FONT_CACHE[args] = font
     return font
 
@@ -282,6 +293,26 @@ def _writable_dir() -> Path:
     return Path(__file__).resolve().parent
 
 
+@contextlib.contextmanager
+def _wav_atomique(chemin: Path):
+    """Écrit un WAV dans un fichier temporaire, posé d'un coup à la fin :
+    un fichier à moitié écrit (appli quittée pendant la synthèse, lecteur
+    qui arrive avant la fin) n'« existe » jamais à moitié."""
+    tmp = Path(str(chemin) + ".tmp")
+    w = wave.open(str(tmp), "wb")
+    try:
+        yield w
+    except BaseException:
+        w.close()
+        try:
+            tmp.unlink()
+        except OSError:
+            pass
+        raise
+    w.close()
+    os.replace(tmp, chemin)
+
+
 def _persistent_data_dir() -> Path:
     """Dossier de données utilisateur qui SURVIT aux mises à jour et
     fermetures du programme (base d'exploitation). L'exe étant remplacé
@@ -294,7 +325,16 @@ def _persistent_data_dir() -> Path:
     - Linux   : $XDG_DATA_HOME ou ~/.local/share/PerceNeigeSimulator
     - Source  : dossier projet (confort développeur, versionné hors git)
     """
-    if not getattr(sys, "frozen", False):
+    # Le paquet du kit (Python embarqué, pas de sys.frozen) vit dans app/,
+    # que le Setup efface à chaque passage ([InstallDelete]) : ses données
+    # vont aussi dans le profil, avec reprise de ce qui était à côté de lui.
+    kit = False
+    try:
+        import updater as _upd
+        kit = bool(_upd.is_packaged())
+    except Exception:
+        kit = False
+    if not getattr(sys, "frozen", False) and not kit:
         return Path(__file__).resolve().parent
     app = "PerceNeigeSimulator"
     try:
@@ -309,10 +349,28 @@ def _persistent_data_dir() -> Path:
                 Path.home() / ".local" / "share")
             d = Path(base) / app
         d.mkdir(parents=True, exist_ok=True)
+        if kit:
+            _reprendre_donnees_kit(d)
         return d
     except Exception:
         # Repli : à côté de l'exe (au moins ça marche, même si volatile).
         return _writable_dir()
+
+
+def _reprendre_donnees_kit(d: Path) -> None:
+    """Première fois : les données laissées à côté du programme (anciens
+    kits) sont copiées dans le profil, jamais écrasées."""
+    try:
+        src = Path(__file__).resolve().parent
+        for nom in ("exploitation.db", "reglages.json", "challenge_best.json",
+                    "reglages_rapports.json"):
+            a = src / nom
+            b = d / nom
+            if a.is_file() and not b.exists():
+                import shutil
+                shutil.copy2(a, b)
+    except Exception:
+        pass
 
 
 # Préférences de l'utilisateur (qualité 3D…), dans le dossier qui survit aux
@@ -3365,8 +3423,13 @@ def maybe_random_event(st: GameState, dt: float) -> None:
         # parking_stuck, aiguillage) ne s'effacent PAS au chrono : elles
         # se lèvent à l'ARRIVÉE en gare (maintenance à quai). Sinon la
         # panne disparaissait avant la fin du limp-home.
+        # Leur chrono est le délai de REPRISE DU SECOURS (400 V de secours,
+        # tambour réarmé…) : il ne court qu'une fois la rame immobilisée et
+        # sa fin n'efface pas la panne — c'est PRÊT (V) qui relance
+        # (_reprise_panne_possible). Audit fonctionnel 07/10/2026.
         if fault_recovery(st.panne_kind) == "nearest_station":
-            pass
+            if abs(tr.v) < 0.1 and tr.fault_timer > 0.0:
+                tr.fault_timer -= dt
         elif tr.fault_timer > 0.0:
             tr.fault_timer -= dt
             if tr.fault_timer <= 0.0:
@@ -3389,6 +3452,13 @@ def maybe_random_event(st: GameState, dt: float) -> None:
     # Manual mode : the scheduler is disabled and the driver uses the
     # F dialog to trigger faults on demand.
     if not st.panne_auto:
+        return
+
+    # Rien ne se tire à quai : une panne n'a d'intérêt qu'en ligne, quand
+    # le conducteur doit la gérer en roulant — comme la PWA. Audit
+    # fonctionnel 07/10/2026 : un « feu » tiré à quai portes ouvertes
+    # donnait urgence + évacuation en plein embarquement.
+    if not st.trip_started:
         return
 
     st.event_cooldown -= dt
@@ -4193,7 +4263,7 @@ def _generate_ambient_wavs(dest_dir: Path) -> dict[str, Path]:
             s = (prev * 6.0 + bass + mid) * env * 0.55
             s = max(-1.0, min(1.0, s))
             data += struct.pack("<h", int(s * 32767))
-        with wave.open(str(rumble), "wb") as w:
+        with _wav_atomique(rumble) as w:
             w.setnchannels(1)
             w.setsampwidth(2)
             w.setframerate(sample_rate)
@@ -4226,7 +4296,7 @@ def _generate_ambient_wavs(dest_dir: Path) -> dict[str, Path]:
                 s *= 0.5
                 s = max(-1.0, min(1.0, s))
                 data += struct.pack("<h", int(s * 32767))
-            with wave.open(str(motor_k), "wb") as w:
+            with _wav_atomique(motor_k) as w:
                 w.setnchannels(1)
                 w.setsampwidth(2)
                 w.setframerate(sample_rate)
@@ -4266,7 +4336,7 @@ def _generate_ambient_wavs(dest_dir: Path) -> dict[str, Path]:
             s *= env * 0.40
             s = max(-1.0, min(1.0, s))
             data += struct.pack("<h", int(s * 32767))
-        with wave.open(str(buzzer), "wb") as w:
+        with _wav_atomique(buzzer) as w:
             w.setnchannels(1)
             w.setsampwidth(2)
             w.setframerate(sample_rate)
@@ -4305,7 +4375,7 @@ def _generate_ambient_wavs(dest_dir: Path) -> dict[str, Path]:
             # Soft clip — keeps perceived loudness high without harsh clip
             s_h = _m.tanh(s_h * 0.55) * 0.80
             data_h += struct.pack("<h", int(s_h * 32767))
-        with wave.open(str(horn), "wb") as w:
+        with _wav_atomique(horn) as w:
             w.setnchannels(1)
             w.setsampwidth(2)
             w.setframerate(sample_rate)
@@ -4357,9 +4427,17 @@ class SoundSystem:
         "return_station":  (62, 66),
         "brake_noise":     (67, 71),
     }
+    # Annonces de QUAI (haut-parleurs des gares) : elles passent même quand
+    # la sonorisation embarquée et la radio du tunnel sont perdues.
+    QUAI_GROUPS = ("doors_close", "exit_left", "exit_upstream", "exit_downstream")
 
     def __init__(self, project_dir: Path) -> None:
         self.project_dir = project_dir
+        # Panne « PA + radio tunnel perdus » (tr.comms_loss, relayé chaque
+        # tick) : les annonces EN LIGNE sont bloquées, celles de quai
+        # passent. Audit fonctionnel 07/10/2026 : la panne n'empêchait
+        # rien (« zone Grande Motte » passait quand même).
+        self.comms_loss = False
         self.sons_dir = project_dir / "sons" / "Funiculaire perce neige"
         self.enabled = _QTMULTIMEDIA_OK and self.sons_dir.exists()
         self.muted = False
@@ -4401,6 +4479,10 @@ class SoundSystem:
         # cabine s'efface (τ 0,4 s) ; la 3D joue le quai et le dehors.
         self.skieur_dehors = False
         self._sk_mix = 0.0
+        # skieur à pied sur les quais de la gare haute : la salle des
+        # machines au gain donné par la 3D (distance), cf. _buzzer_a_jouer
+        self.skieur_machinerie = 0.0
+        self._mr_level = 1.0
         self._mr_present = None   # sons de la salle installés ? (cf. set_machine_room_view)
         self._machine_speed = None  # vitesse du câble à la poulie (None : celle de la rame)
         self._mr_idle = None
@@ -4443,6 +4525,7 @@ class SoundSystem:
             candidate = bundled_amb_dir / filename
             if candidate.exists():
                 self._ambient_wavs[key] = candidate
+        self._exist_cache: dict = {}
         self._wav_gen_thread = threading.Thread(
             target=_generate_ambient_wavs,
             args=(wav_dir,),
@@ -4599,6 +4682,8 @@ class SoundSystem:
         """
         if not self.enabled:
             return
+        if self.comms_loss and group not in self.QUAI_GROUPS:
+            return   # PA + radio tunnel perdus : seules les annonces de quai
         if self._cooldowns.get(group, 0.0) > 0:
             return
         f = self._pick(group, lang, strict=strict)
@@ -4950,6 +5035,21 @@ class SoundSystem:
         except Exception:
             return False
 
+    def _existe(self, p) -> bool:
+        """`p.exists()` sans aller sur le disque à chaque image : un chemin
+        vu existant le reste ; un absent n'est revu que pendant la synthèse
+        des WAV (ensuite il n'arrivera plus)."""
+        if p is None:
+            return False
+        r = self._exist_cache.get(p)
+        if r:
+            return True
+        if r is False and not self._wav_gen_thread.is_alive():
+            return False
+        ok = bool(p.exists())
+        self._exist_cache[p] = ok
+        return ok
+
     def update_ambient(self, speed: float, dt: float = 1.0 / 60.0) -> None:
         """Crossfade real-cabin ambient loops based on speed.
 
@@ -5009,7 +5109,7 @@ class SoundSystem:
         # Vue salle des machines : le son de la cabine s'efface, celui de la
         # gare haute prend le relais (fondu τ ≈ 0,35 s).
         a_mix = 1.0 - math.exp(-dt / 0.35)
-        mr_goal = 1.0 if self._mr_target else 0.0
+        mr_goal = self._mr_level if self._mr_target else 0.0
         self._mr_mix += (mr_goal - self._mr_mix) * a_mix
         if abs(mr_goal - self._mr_mix) < 0.002:
             self._mr_mix = mr_goal
@@ -5101,18 +5201,18 @@ class SoundSystem:
         slow_path = self._ambient_wavs.get("ambient_slow")
         cruise_path = self._ambient_wavs.get("ambient_cruise")
         # Legacy fallback if bundled extracts are missing
-        if not (slow_path and slow_path.exists()):
+        if not self._existe(slow_path):
             slow_path = self._ambient_wavs.get("ambient_real")
-        if not (slow_path and slow_path.exists()):
+        if not self._existe(slow_path):
             slow_path = self._ambient_wavs.get("rumble")
-        if not (cruise_path and cruise_path.exists()):
+        if not self._existe(cruise_path):
             cruise_path = slow_path
 
         moving = v_norm > 0.02
 
         # Start slow loop (l'arrêt est géré plus bas, APRÈS le fondu à zéro)
         if moving and not self._amb_playing:
-            if slow_path and slow_path.exists():
+            if self._existe(slow_path):
                 spath = str(slow_path)
                 if self._amb_loaded_path != spath:
                     self._amb_player.setSource(QUrl.fromLocalFile(spath))
@@ -5122,7 +5222,7 @@ class SoundSystem:
 
         # Start cruise loop
         if moving and not self._amb2_playing:
-            if cruise_path and cruise_path.exists():
+            if self._existe(cruise_path):
                 spath = str(cruise_path)
                 if self._amb2_loaded_path != spath:
                     self._amb2_player.setSource(QUrl.fromLocalFile(spath))
@@ -5207,7 +5307,10 @@ class SoundSystem:
         la mise à jour automatique ne livrait pas le dossier sons/, les
         fichiers ajoutés en 1.15.34 manquaient, et la cabine s'effaçait
         devant une salle des machines qui ne pouvait pas démarrer."""
-        self._mr_target = (bool(active) and self.enabled
+        # skieur sur les quais du haut : la même salle, au gain de la 3D
+        gain = float(getattr(self, "skieur_machinerie", 0.0) or 0.0)
+        self._mr_level = 1.0 if active else max(0.0, min(1.0, gain))
+        self._mr_target = ((bool(active) or gain > 0.0) and self.enabled
                            and self.machine_room_sounds_present())
 
     def machine_room_sounds_present(self) -> bool:
@@ -5280,7 +5383,7 @@ class SoundSystem:
         if not self._motor_ready:
             paths = [self._ambient_wavs.get(f"motor_{k}")
                      for k in range(MOTOR_BANKS)]
-            if not all(p is not None and p.exists() for p in paths):
+            if not all(self._existe(p) for p in paths):
                 return  # synthèse de fond pas finie — réessaie au tick suivant
             try:
                 for p in paths:
@@ -5401,7 +5504,7 @@ class SoundSystem:
             return
         key = "station_lower_real" if which == "lower" else "station_upper_real"
         path = self._ambient_wavs.get(key)
-        if path is None or not path.exists():
+        if not self._existe(path):
             self._station_target = 0.0
             return
         try:
@@ -5638,6 +5741,14 @@ class SoundSystem:
         self._player.play()
 
     def _on_status(self, status) -> None:
+        if status == QMediaPlayer.MediaStatus.InvalidMedia:
+            # mp3 indécodable (Windows N sans Media Feature Pack, GStreamer
+            # sans mp3) : sans EndOfMedia, PRÊT restait refusé pour toujours
+            if self._queue:
+                self._play_next()
+            else:
+                self._abort_close_sequence()
+            return
         if status == QMediaPlayer.MediaStatus.EndOfMedia:
             if self._queue:
                 self._play_next()
@@ -5697,6 +5808,7 @@ class AutoOps:
     PHASE_IDLE = "IDLE"
     PHASE_PRE_OPEN = "PRE_OPEN"
     PHASE_BOARDING = "BOARDING"
+    RETENUE_MAX_S = 45.0           # s — la rame n'attend pas un skieur sur le quai plus longtemps
     PHASE_CLOSING = "CLOSING"
     PHASE_READY_WAIT = "READY_WAIT"
     PHASE_DEPARTING = "DEPARTING"
@@ -5762,6 +5874,11 @@ class AutoOps:
         self.skieur_retenue = False
         self._skieur_vu = False     # vu sur le quai pendant cet arrêt
         self._skieur_a_bord_t = 0.0
+        # retenue plafonnée (Kevin, 07/10/2026 : « la séquence reste bloquée
+        # à embarquement 6 s… elle devrait se poursuivre toute seule ») :
+        # passé RETENUE_MAX_S d'attente à cet arrêt, la rame part
+        self._skieur_retenue_t = 0.0
+        self.skieur_embarque = False  # AUTO enclenché par un skieur déjà dedans
         # Init logger DB
         self._log = AutoOpsLogger()
         self._log.ensure_schema()
@@ -6013,7 +6130,9 @@ class AutoOps:
                 self.w.begin_doors_open(tr)
             if self.skieur_retenue:
                 self._skieur_vu = True
-                self.phase_t = min(self.phase_t, self.station_dwell_s - 6.0)
+                self._skieur_retenue_t += dt
+                if self._skieur_retenue_t < self.RETENUE_MAX_S:
+                    self.phase_t = min(self.phase_t, self.station_dwell_s - 6.0)
             self._skieur_a_bord_t = (self._skieur_a_bord_t + dt
                                      if self.skieur_a_bord else 0.0)
             if (self.skieur_a_bord and self._skieur_vu
@@ -6095,11 +6214,13 @@ class AutoOps:
                 at_station = ((tr.s <= START_S + 5.0)
                               or (tr.s >= STOP_S - 5.0))
                 if at_station:
-                    BUZZER_DURATION = 6.5 if at_upper else 8.0
+                    BUZZER_DURATION = 6.0 if at_upper else 8.0   # = durée des clips (PWA idem)
                     state.departure_buzzer_remaining = BUZZER_DURATION
-                    self.w.sounds.play_buzzer(upper_station=at_upper)
                 else:
                     state.departure_buzzer_remaining = 1.5
+                buz = self.w._buzzer_a_jouer(at_upper, at_station)
+                if buz is not None:
+                    self.w.sounds.play_buzzer(upper_station=buz)
                 self._leg_depart_ts = now
                 self._leg_depart_s = tr.s
                 self._leg_direction = tr.direction
@@ -6169,7 +6290,13 @@ class AutoOps:
             # vide en bas, 35 s pleine, 0 s en haut (mais le contrepoids en
             # bas impose alors ≈ 26 s). Bornes : 3 s mini (clip d'arrêt),
             # 45 s maxi (garde-fou).
-            settled = self.w.physics.rebound_envelope_m() < AUTO_SETTLE_M
+            # le rebond de CETTE rame seulement (Kevin, 07/10/2026 : « en
+            # haut les portes peuvent s'ouvrir après l'arrêt car il n'y a
+            # pas d'oscillation, alors qu'en bas il faut attendre ») : en
+            # haut le brin est court (millimètres) ; le contrepoids d'en bas
+            # oscille encore, ce sont SES portes qui attendent
+            env_propre, _env_ghost = self.w.physics.rebound_envelopes_m()
+            settled = env_propre < AUTO_SETTLE_M
             if self.phase_t >= AUTO_SETTLE_MIN_S and (
                     settled or self.phase_t >= AUTO_SETTLE_MAX_S):
                 # Ouverture PAR LA COMMANDE (clip sonore, vantaux à 1,3 s,
@@ -6228,7 +6355,12 @@ class AutoOps:
         if (at_top and tr.direction > 0) or (at_bottom and tr.direction < 0):
             self.w.reverse_trip(silent=True)
         self._set_phase(self.PHASE_BOARDING)
-        self._skieur_vu = False
+        # un skieur déjà dedans quand l'AUTO s'enclenche (il vient de monter)
+        # compte comme vu : la rame ferme et part ; déjà à bord à l'ARRIVÉE,
+        # l'arrêt dure comme d'habitude, il a le temps de descendre
+        self._skieur_vu = bool(self.skieur_embarque)
+        self.skieur_embarque = False
+        self._skieur_retenue_t = 0.0
         # Boarding must start with the cabin absolutely parked :
         # drum engaged, setpoint at 0, otherwise as soon as the doors
         # finish closing in CLOSING the regulator would see a live
@@ -6343,27 +6475,32 @@ class AutoOps:
         dist = abs(tr.s - self._leg_depart_s)
         duration = (now - self._leg_depart_ts).total_seconds()
         cruise = self.peak_cmd * V_MAX if self._leg_peak else self.offpeak_cmd * V_MAX
-        self._log.write_trip(
-            day=now.strftime("%Y-%m-%d"),
-            depart_ts=self._leg_depart_ts,
-            arrival_ts=now,
-            direction=self._leg_direction,
-            pax=self._leg_pax,
-            cruise_m_s=cruise,
-            distance_m=dist,
-            duration_s=duration,
-            incidents=self._leg_incidents,
-            peak=self._leg_peak,
-        )
         self.day_trips += 1
         self.day_pax += self._leg_pax
         self.day_distance_m += dist
-        self._log.upsert_daily(
-            day=now.strftime("%Y-%m-%d"),
-            trips=self.day_trips,
-            pax=self.day_pax,
-            distance_m=self.day_distance_m,
-        )
+        # base pleine, verrouillée ou abîmée : le trajet se termine quand
+        # même (sinon la même exception revenait à chaque tick)
+        try:
+            self._log.write_trip(
+                day=now.strftime("%Y-%m-%d"),
+                depart_ts=self._leg_depart_ts,
+                arrival_ts=now,
+                direction=self._leg_direction,
+                pax=self._leg_pax,
+                cruise_m_s=cruise,
+                distance_m=dist,
+                duration_s=duration,
+                incidents=self._leg_incidents,
+                peak=self._leg_peak,
+            )
+            self._log.upsert_daily(
+                day=now.strftime("%Y-%m-%d"),
+                trips=self.day_trips,
+                pax=self.day_pax,
+                distance_m=self.day_distance_m,
+            )
+        except Exception as e:
+            print(f"[AutoOps] journal d'exploitation non écrit : {e}")
 
     def _refresh_day_counters(self) -> None:
         now = datetime.now()
@@ -6566,63 +6703,81 @@ class DocsDownloadDialog(QDialog):
         lay.addWidget(close)
 
     def _download(self, filename: str) -> None:
-        import urllib.request, os
-        # Garde anti-réentrance : le processEvents() ci-dessous redonne la
-        # main à la boucle Qt — sans ce flag, un double-clic empilerait deux
-        # téléchargements imbriqués.
+        import urllib.request
+        # Un téléchargement à la fois : le fil de travail pose son résultat
+        # dans un dict qu'un QTimer relit (l'interface ne gèle plus pendant
+        # les 30 s d'un réseau absent ; avant : urlopen dans le fil Qt).
         if getattr(self, "_downloading", False):
             return
         self._downloading = True
         url = f"{self.REPO_BASE}/{filename}"
         downloads = Path.home() / "Downloads"
-        downloads.mkdir(exist_ok=True)
         dest = downloads / filename
         self._status.setText(
             (f"Téléchargement de {filename}…" if self._lang == "fr" else
              f"Downloading {filename}…")
         )
-        QApplication.processEvents()
-        try:
-            max_bytes = 50 * 1024 * 1024  # les PDF du repo font < 1 Mo
-            req = urllib.request.Request(
-                url, headers={"User-Agent": f"PerceNeige/{VERSION}"})
-            with urllib.request.urlopen(req, timeout=30) as resp:
-                total = int(resp.headers.get("Content-Length", "0") or 0)
-                if total > max_bytes:
-                    raise ValueError("file too large")
-                chunks, size = [], 0
-                while True:
-                    chunk = resp.read(256 * 1024)
-                    if not chunk:
-                        break
-                    size += len(chunk)
-                    if size > max_bytes:
+        resultat: dict = {}
+
+        def travail() -> None:
+            try:
+                downloads.mkdir(exist_ok=True)
+                max_bytes = 50 * 1024 * 1024  # les PDF du repo font < 1 Mo
+                req = urllib.request.Request(
+                    url, headers={"User-Agent": f"PerceNeige/{VERSION}"})
+                with urllib.request.urlopen(req, timeout=30) as resp:
+                    total = int(resp.headers.get("Content-Length", "0") or 0)
+                    if total > max_bytes:
                         raise ValueError("file too large")
-                    chunks.append(chunk)
-                data = b"".join(chunks)
-            if len(data) < 1024:
-                raise ValueError("file too small — check URL")
-            if filename.lower().endswith(".pdf") and not data.startswith(b"%PDF-"):
-                raise ValueError("not a PDF — unexpected content")
-            dest.write_bytes(data)
-            self._status.setText(
-                (f"✓ Enregistré : {dest}" if self._lang == "fr" else
-                 f"✓ Saved : {dest}")
-            )
-            # Open it in the default PDF viewer
-            if os.name == "nt":
-                os.startfile(str(dest))  # noqa: S606
-            else:
-                import subprocess
-                opener = "open" if sys.platform == "darwin" else "xdg-open"
-                subprocess.Popen([opener, str(dest)])  # noqa: S603
-        except Exception as e:
-            self._status.setText(
-                (f"✗ Échec : {e}" if self._lang == "fr" else
-                 f"✗ Failed : {e}")
-            )
-        finally:
+                    chunks, size = [], 0
+                    while True:
+                        chunk = resp.read(256 * 1024)
+                        if not chunk:
+                            break
+                        size += len(chunk)
+                        if size > max_bytes:
+                            raise ValueError("file too large")
+                        chunks.append(chunk)
+                    data = b"".join(chunks)
+                if len(data) < 1024:
+                    raise ValueError("file too small — check URL")
+                if filename.lower().endswith(".pdf") and not data.startswith(b"%PDF-"):
+                    raise ValueError("not a PDF — unexpected content")
+                dest.write_bytes(data)
+                resultat["ok"] = True
+            except Exception as e:
+                resultat["erreur"] = str(e)
+
+        threading.Thread(target=travail, name="docs-download", daemon=True).start()
+
+        def sonder() -> None:
+            if not resultat:
+                QTimer.singleShot(150, sonder)
+                return
             self._downloading = False
+            if resultat.get("ok"):
+                self._status.setText(
+                    (f"✓ Enregistré : {dest}" if self._lang == "fr" else
+                     f"✓ Saved : {dest}")
+                )
+                # Open it in the default PDF viewer
+                try:
+                    if os.name == "nt":
+                        os.startfile(str(dest))  # noqa: S606
+                    else:
+                        import subprocess
+                        opener = "open" if sys.platform == "darwin" else "xdg-open"
+                        subprocess.Popen([opener, str(dest)])  # noqa: S603
+                except Exception:
+                    pass
+            else:
+                e = resultat.get("erreur", "?")
+                self._status.setText(
+                    (f"✗ Échec : {e}" if self._lang == "fr" else
+                     f"✗ Failed : {e}")
+                )
+
+        QTimer.singleShot(150, sonder)
 
 
 class FaultPickerDialog(QDialog):
@@ -6811,16 +6966,16 @@ class GameWidget(QWidget):
                 "Frein de service (maintenu) — décélération 2.5 m/s²",
             ),
             int(K.Key_Shift): (
-                "Emergency brake (hold) — 5 m/s² rail brakes",
-                "Frein d'urgence (maintenu) — 5 m/s², freins de rail",
+                "Emergency brake (hold) — 1.25 m/s² pulley safety brake",
+                "Frein d'urgence (maintenu) — frein de sécurité poulie, 1,25 m/s²",
             ),
             int(K.Key_3): (
                 "Electric stop — latched service stop, full abnormal-stop protocol",
                 "Arrêt électrique — verrouillé, protocole d'arrêt anormal complet",
             ),
             int(K.Key_4): (
-                "Emergency stop (red mushroom) — latched rail brakes",
-                "Arrêt d'urgence (coup-de-poing) — freins de rail verrouillés",
+                "Emergency stop (red mushroom) — same pulley brake as Shift, latched",
+                "Arrêt d'urgence (coup-de-poing) — même frein poulie que Maj, verrouillé",
             ),
             int(K.Key_G): (
                 "Dead-man vigilance acknowledge — press before 20 s timeout",
@@ -7009,7 +7164,10 @@ class GameWidget(QWidget):
         self._skieur = False
         self._skieur_vue_n = 0                  # appuis sur V (1re / 3e pers.)
         self._skieur_ski_n = 0                  # appuis sur E (chausser)
-        self._skieur_etat = (False, False, 0)   # dedans, retenue, écoute
+        self._skieur_evac_n = 0                 # appuis sur I (évacuer)
+        # dedans, retenue, écoute (0 rame, 1 gare basse, 2 dehors, 3 gare
+        # haute, 4 tunnel à pied), gain de la machinerie entendu (gare haute)
+        self._skieur_etat = (False, False, 0, 0.0)
         self._skieur_heures = False             # force_any_hours avant
         self.new_trip(first=True)
 
@@ -7040,10 +7198,16 @@ class GameWidget(QWidget):
             self.basculer_skieur()
         elif m.get("skieur_conduire"):
             self._sortir_skieur(conduire=True)
+        elif "touche" in m:
+            # J / C tapées dans la fenêtre 3D : c'est le PC qui tient ces états
+            k = {"J": Qt.Key.Key_J, "C": Qt.Key.Key_C}.get(str(m["touche"]))
+            if k is not None:
+                self._virtual_key(k)
         elif "skieur_etat" in m:
             e = m["skieur_etat"]
-            if isinstance(e, list) and len(e) == 3:
-                self._skieur_etat = (bool(e[0]), bool(e[1]), int(e[2]))
+            if isinstance(e, list) and len(e) >= 3:
+                gain = float(e[3]) if len(e) > 3 else 0.0
+                self._skieur_etat = (bool(e[0]), bool(e[1]), int(e[2]), gain)
                 self._appliquer_etat_skieur()
 
     def _pupitre_3d(self, nom: str, enfonce: bool) -> None:
@@ -7097,11 +7261,40 @@ class GameWidget(QWidget):
         return bits
 
     def _appliquer_etat_skieur(self) -> None:
-        dedans, retenue, ecoute = self._skieur_etat
+        dedans, retenue, ecoute, gain = self._skieur_etat
         on = self._skieur
         self.sounds.skieur_dehors = on and ecoute != 0
+        # quais de la gare haute : la machinerie, au gain donné par la 3D
+        # (distance à la machinerie)
+        self.sounds.skieur_machinerie = gain if (on and ecoute == 3) else 0.0
         self.auto_ops.skieur_a_bord = on and dedans
         self.auto_ops.skieur_retenue = on and retenue
+        # monté dans une rame à quai sans exploitation automatique : elle
+        # reprend, ferme les portes dès qu'elle l'a vu dedans et part
+        ao = self.auto_ops
+        if (on and dedans and not ao.enabled and self.state.mode == MODE_RUN
+                and not self.state.trip_started):
+            ao.skieur_embarque = True
+            ao.toggle()
+
+    def _buzzer_a_jouer(self, at_upper: bool, at_station: bool):
+        """Quel buzzer de quai on entend au départ : None (aucun), True (gare
+        haute), False (gare basse). Kevin, 07/10/2026 : « les buzzers sonnent
+        leurs sons respectifs dans les gares du bas et du haut et on les
+        entend si on y est, même si ça redémarre au milieu du tunnel ; par
+        contre si on est dans la rame […] on n'entend pas les buzzers des
+        gares » ; « vue machinerie […] on entend le buzzer du haut »."""
+        if self._skieur:
+            ecoute = self._skieur_etat[2]
+            if ecoute == 3:
+                return True
+            if ecoute == 1:
+                return False
+            if ecoute in (2, 4):
+                return None
+        if self._machine_room_view_active():
+            return True
+        return at_upper if at_station else None
 
     def basculer_skieur(self) -> None:
         """F9 / bouton SKIEUR : on incarne un skieur dans la vue 3D (il
@@ -7125,11 +7318,21 @@ class GameWidget(QWidget):
         ao.force_any_hours = True
         if st.train.autopilot:
             self._autopilot_disengage("skier mode", "mode skieur")
+        # Kevin, 07/10/2026 : « le mode auto est forcé et se déclenche alors
+        # que je suis encore dehors, pas le temps d'embarquer » → une rame à
+        # quai, prête à l'embarquement, ATTEND qu'on monte ; l'exploitation
+        # s'enclenche quand on est dedans (_appliquer_etat_skieur). Sinon
+        # elle tourne, pour que la rame vienne.
+        tr = st.train
+        a_quai = (tr.s <= START_S + 5.0) or (tr.s >= STOP_S - 5.0)
         if not ao.enabled:
-            ao.toggle()
+            if not (a_quai and not st.trip_started):
+                ao.toggle()
+            elif not tr.doors_cmd and tr.doors_timer <= 0.0:
+                self._virtual_key(Qt.Key.Key_D)    # à quai, portes fermées : on les ouvre
         self._godot_view3d = 0
         self._skieur = True
-        self._skieur_etat = (False, False, 0)
+        self._skieur_etat = (False, False, 0, 0.0)
         self._key_state.clear()
         add_event(st, "skieur",
                   "Skier: ZQSD / arrows to walk, Shift to run, V 1st/3rd "
@@ -7150,7 +7353,7 @@ class GameWidget(QWidget):
         ao = self.auto_ops
         if conduire and ao.enabled:
             ao.toggle()
-            ao.force_any_hours = self._skieur_heures
+        ao.force_any_hours = self._skieur_heures      # 24/7 n'était que pour le skieur
         add_event(self.state, "skieur",
                   "Driver's seat" if conduire else "Skier mode off",
                   "Au poste de conduite" if conduire else "Fin du mode skieur",
@@ -7243,7 +7446,7 @@ class GameWidget(QWidget):
         tr = st.train
         self._ap_arrivee_t = getattr(self, "_ap_arrivee_t", 0.0) + dt
         if not tr.doors_cmd:
-            settled = self.physics.rebound_envelope_m() < AUTO_SETTLE_M
+            settled = self.physics.rebound_envelopes_m()[0] < AUTO_SETTLE_M   # cette rame seule
             if (self._ap_arrivee_t >= AUTO_SETTLE_MIN_S
                     and (settled or self._ap_arrivee_t >= AUTO_SETTLE_MAX_S)
                     and tr.doors_timer <= 0.0 and self._ap_cooldown <= 0.0):
@@ -7369,6 +7572,42 @@ class GameWidget(QWidget):
         #    start a brand-new trip (calls new_trip() which force-clears
         #    every fault flag).
 
+    def _reprise_panne_possible(self, st: "GameState") -> bool:
+        """Panne « stopping » (perte 400 V, tambour bloqué, aiguillage
+        Abt) : son chrono est le délai de REPRISE DU SECOURS (400 V de
+        secours, tambour réarmé, aiguillage verrouillé). Il ne court
+        qu'une fois la rame immobilisée (maybe_random_event) et sa fin
+        n'efface pas la panne — c'est PRÊT (V) qui relance, vers la gare
+        la plus proche sous le plafond limp (limp_home, posé par le bloc
+        pending_incident). Audit fonctionnel 07/10/2026 : V refusait
+        « panne en cours » tant que la panne était active, et elle ne se
+        levait qu'à l'arrivée en gare ou par R à quai — le chemin
+        « INVERSER (I) puis PRÊT + DÉPART » du journal n'existait pas
+        (seule l'exploitation auto le prenait, après 6 s)."""
+        tr = st.train
+        return (st.panne_active and not is_catastrophic(st.panne_kind)
+                and fault_recovery(st.panne_kind) == "nearest_station"
+                and abs(tr.v) < 0.1 and tr.fault_timer <= 0.0)
+
+    def _reprise_panne_stoppante(self, st: "GameState") -> None:
+        """Reprise du secours (même geste que _handle_auto_fault) : la
+        panne est levée pour rendre la traction possible (contacteur
+        refermé, tambour libéré), le plafond réduit du retour gare la plus
+        proche reste posé jusqu'à l'arrivée (limp_done). L'urgence engagée
+        par la panne reste au conducteur (Z la refuse tant qu'elle est
+        serrée)."""
+        tr = st.train
+        kind = st.panne_kind
+        clear_fault(st)
+        if st.limp_home:
+            tr.speed_fault_cap = st.limp_cap
+        add_event(st, "limp_resume",
+                  f"Backup restored after {kind} — READY armed"
+                  + (", limp to the nearest station" if st.limp_home else ""),
+                  f"Secours rétabli après {kind} — PRÊT armé"
+                  + (", retour gare la plus proche" if st.limp_home else ""),
+                  "info")
+
     def reverse_trip(self, silent: bool = False) -> None:
         """Flip the travel direction and re-arm the departure sequence in
         place — works both at a terminus (after arrival) AND mid-tunnel
@@ -7418,6 +7657,15 @@ class GameWidget(QWidget):
         st.finished = False
         st.rebound_timer = 0.0
         st.departure_buzzer_remaining = 0.0
+        # Mode Défi : le demi-tour ouvre une NOUVELLE étape notée — confort
+        # et fautes repartent de zéro, comme à R (new_trip) et comme la
+        # PWA (Challenge.reset_trip à chaque trip_started). Audit
+        # fonctionnel 07/10/2026 : la 2e étape héritait du jerk_sum et des
+        # drapeaux (« urgence utilisée ») de la 1re.
+        tr.jerk_sum = 0.0
+        st.challenge_emergency_used = False
+        st.challenge_fault_hit = False
+        st.challenge_unsafe = False
         # Doors : open ONLY when reversing at a terminus (passengers
         # can board). Reversing mid-tunnel keeps the doors shut — no
         # one is getting on in the tunnel, and opening them into a
@@ -7872,8 +8120,11 @@ class GameWidget(QWidget):
                 state_dict["skieur_touches"] = self._skieur_touches()
                 state_dict["skieur_vue"] = self._skieur_vue_n
                 state_dict["skieur_ski"] = self._skieur_ski_n
+                state_dict["skieur_evacuer"] = self._skieur_evac_n
                 self._godot_bridge.send_state(state_dict)
             self._autopilot_tick(dt)
+            # PA + radio tunnel perdus : le lecteur d'annonces le sait
+            self.sounds.comms_loss = bool(st.train.comms_loss)
             self._advance_fault_phase(dt)
             # Ghost driver ready countdown : once the main driver has
             # pressed READY, the other wagon's driver confirms after a
@@ -8439,6 +8690,7 @@ class GameWidget(QWidget):
         bridge = getattr(self, "_godot_bridge", None)
         return (getattr(self, "_cabin_view_state", 0) == 2
                 and int(getattr(self, "_godot_view3d", 0)) == 2
+                and not getattr(self, "_skieur", False)
                 and bridge is not None and bridge.is_running())
 
     def _diagnostic_son_tick(self, dt: float) -> None:
@@ -8508,6 +8760,8 @@ class GameWidget(QWidget):
                 self._skieur_vue_n += 1
             if k == Qt.Key.Key_E and not ev.isAutoRepeat():
                 self._skieur_ski_n += 1         # chausser / déchausser
+            if k == Qt.Key.Key_I and not ev.isAutoRepeat():
+                self._skieur_evac_n += 1        # issues de secours (rame arrêtée en tunnel)
             self._key_state.add(k)
             ev.accept()
             return
@@ -8689,6 +8943,12 @@ class GameWidget(QWidget):
         elif k == Qt.Key.Key_0 and not self._show_annmenu:
             # Reset zoom
             self._profile_zoom = 1.0
+        elif k == Qt.Key.Key_O and self._skieur:
+            # en skieur, la caméra est la sienne : changer de vue ne ferait
+            # que déplacer le SON (Kevin, 07/10/2026 : « un micmac de vues »)
+            add_event(st, "orbit",
+                      "3D view: leave skier mode first (F9)",
+                      "Vue 3D : quittez d'abord le mode skieur (F9)", "warn")
         elif k == Qt.Key.Key_O:
             # Vue extérieure orbitale du viewer 3D embarqué (F4×2) :
             # bascule FPV ↔ orbitale, streamée via le state dict. Angle
@@ -8865,9 +9125,13 @@ class GameWidget(QWidget):
                 # NE PAS engager maint_brake immédiatement (= v=0 = 20G).
                 # Le drum brake est engagé AUTO par la physique quand le
                 # train s'arrête (auto-park après emergency stop).
+                # Même organe que Maj (frein de sécurité sur la poulie
+                # motrice, A_BRAKE_EMERG_DRIVE = 1,25 m/s²), verrouillé :
+                # le message annonçait « freins rail 5 m/s² » que le
+                # modèle n'applique pas (audit fonctionnel 07/10/2026).
                 add_event(st, "eurg",
-                          "EMERGENCY STOP — rail brakes engaged (5 m/s²)",
-                          "ARRÊT D'URGENCE — freins rail engagés (5 m/s²)",
+                          "EMERGENCY STOP — pulley safety brake, latched (1.25 m/s²)",
+                          "ARRÊT D'URGENCE — frein de sécurité poulie, verrouillé (1,25 m/s²)",
                           "alarm")
                 self.sounds.play("brake_noise", lang=st.ann_lang, cooldown=30.0)
                 tr.ready = False
@@ -9013,9 +9277,16 @@ class GameWidget(QWidget):
                                  f"{st.panne_kind} — press R for new trip")
                     reason_fr = ("voyage terminé par "
                                  f"{st.panne_kind} — R pour nouveau voyage")
-                elif st.panne_active:
-                    reason_en = "fault active — clear it first"
-                    reason_fr = "panne en cours — à résoudre d'abord"
+                elif st.panne_active and not self._reprise_panne_possible(st):
+                    if (fault_recovery(st.panne_kind) == "nearest_station"
+                            and abs(tr.v) < 0.1):
+                        reason_en = ("fault active — backup feeder in "
+                                     f"{max(0.0, tr.fault_timer):.0f} s")
+                        reason_fr = ("panne en cours — reprise du secours "
+                                     f"dans {max(0.0, tr.fault_timer):.0f} s")
+                    else:
+                        reason_en = "fault active — clear it first"
+                        reason_fr = "panne en cours — à résoudre d'abord"
                 # Interlocks that apply AT A TERMINUS only. Mid-tunnel
                 # restart is an abnormal situation : the driver may
                 # pre-arm READY while the emergency brake is still on
@@ -9037,6 +9308,11 @@ class GameWidget(QWidget):
                     return
             tr.ready = not tr.ready
             if tr.ready:
+                # Panne stoppante immobilisée, secours repris : PRÊT lève
+                # la panne et garde le plafond du retour gare la plus
+                # proche (même geste que l'exploitation auto).
+                if st.panne_active and self._reprise_panne_possible(st):
+                    self._reprise_panne_stoppante(st)
                 st.ghost_ready = False
                 st.ghost_ready_timer = 0.0
                 st.ghost_ready_delay = random.uniform(2.0, 4.0)
@@ -9158,10 +9434,12 @@ class GameWidget(QWidget):
             # of the termini. Mid-tunnel restarts skip the buzzer.
             at_upper = tr.direction == -1
             at_station = (tr.s <= START_S + 5.0) or (tr.s >= STOP_S - 5.0)
+            buz = self._buzzer_a_jouer(at_upper, at_station)
+            if buz is not None:
+                self.sounds.play_buzzer(upper_station=buz)
             if at_station:
-                BUZZER_DURATION = 6.5 if at_upper else 8.0
+                BUZZER_DURATION = 6.0 if at_upper else 8.0   # = durée des clips (PWA idem)
                 st.departure_buzzer_remaining = BUZZER_DURATION
-                self.sounds.play_buzzer(upper_station=at_upper)
                 secs = int(BUZZER_DURATION)
                 add_event(st, "doors",
                           f"Buzzer — departure in {secs} s",
@@ -11598,6 +11876,9 @@ class GameWidget(QWidget):
         if self._godot_bridge is None:
             return
         import time
+        t_prec = getattr(self, "_godot_launch_thread", None)
+        if t_prec is not None and t_prec.is_alive():
+            return          # un lancement est en cours : pas de second viewer orphelin
         self._godot_launch_thread = threading.Thread(
             target=self._godot_bridge.start, daemon=True)
         self._godot_launch_thread.start()
@@ -15462,8 +15743,8 @@ class GameWidget(QWidget):
                          "vue cabine : off → dessinée → 3D")),
                 ("O", T("3D view: cabin / ext. / machines",
                         "vue 3D : cabine / ext. / machines")),
-                ("F9", T("skier in the 3D view (ZQSD, Shift, V, E skis)",
-                         "skieur dans la vue 3D (ZQSD, Maj, V, E skis)")),
+                ("F9", T("skier in the 3D view (ZQSD, Shift, V, E skis, I evacuate)",
+                         "skieur dans la vue 3D (ZQSD, Maj, V, E skis, I évacuer)")),
             ]),
             (T("System", "Système"), [
                 ("P / Esc", T("pause / resume", "pause / reprise")),
@@ -15515,6 +15796,8 @@ class GameWidget(QWidget):
               "F9 skieur : marchez dans les gares (ZQSD/flèches, Maj pour courir, V 1re/3e pers.), montez, voyagez ; la ligne tourne seule et vous attend."),
             T("Skiing: outside on the snow, E puts the skis on. Q/D turn, Z pushes, S snowplough, Shift tuck; marked pistes, Kevin's ghost to beat down to Val Claret.",
               "Ski : dehors sur la neige, E pour chausser. Q/D tourner, Z pousser, S chasse-neige, Maj schuss ; pistes balisées, le fantôme de Kevin à battre jusqu'à Val Claret."),
+            T("Train stopped in the tunnel: I (or EVACUATE) removes the yellow emergency panels either side of the windshield; down onto the track, the right-hand service stairs lead to a station or to the mid-tunnel gallery and its piste.",
+              "Rame arrêtée en tunnel : I (ou ÉVACUER) enlève les panneaux jaunes d'issue de secours de part et d'autre du pare-brise ; sur la voie, l'escalier de droite ramène en gare ou à la galerie du milieu et sa piste."),
             T("F4: 3D cabin view. On Linux Wayland the app switches to XWayland to embed it; PERCE_NEIGE_KEEP_WAYLAND=1 keeps Wayland (separate window).",
               "F4 : vue cabine 3D. Sous Linux Wayland l'application passe en XWayland pour l'intégrer ; PERCE_NEIGE_KEEP_WAYLAND=1 pour rester en Wayland (fenêtre séparée)."),
         ]
@@ -16250,6 +16533,12 @@ class MainWindow(QMainWindow):
                 self.game._godot_bridge.stop()
         except Exception:
             pass
+        # sons/ fait partie de l'archive : un mp3 ouvert par un lecteur
+        # ferait échouer son déplacement sous Windows (WinError 32)
+        try:
+            self.game.sounds.stop()
+        except Exception:
+            pass
         prog = QProgressDialog(
             self._tr("Downloading update…", "Téléchargement de la mise à jour…"),
             None, 0, 100, self)
@@ -16596,6 +16885,16 @@ def _demarrer_rapports():
     """Installe la remontee d'incidents et rend le module, ou None."""
     dossier = _writable_dir()
     trace_native = Path(dossier) / "_crash_natif.log"
+    # la trace du crash natif PRÉCÉDENT est relevée avant que faulthandler
+    # n'ouvre (et vide) le fichier — sinon elle était toujours vide
+    rep = None
+    try:
+        import reporting
+        reporting.init(dossier, application="perce-neige-sim", version=VERSION)
+        reporting.relever_crash_natif(trace_native)
+        rep = reporting
+    except Exception:
+        rep = None
     try:
         import faulthandler
         global _fichier_faulthandler
@@ -16604,18 +16903,25 @@ def _demarrer_rapports():
     except Exception:
         pass
     try:
-        import reporting
-        reporting.init(dossier, application="perce-neige-sim", version=VERSION)
-        reporting.relever_crash_natif(trace_native)
+        if rep is None:
+            return None
+        reporting = rep
         reporting.reprendre_file_en_fond()
 
         precedent = sys.excepthook
+        deja = {}            # (type, dernière ligne) → dernier envoi (s)
 
         def filet(type_exc, valeur, trace):
             import traceback as _tb
+            import time as _t
             try:
-                reporting.signaler_plantage(
-                    "".join(_tb.format_exception(type_exc, valeur, trace)))
+                texte = "".join(_tb.format_exception(type_exc, valeur, trace))
+                # une exception qui revient à chaque image (60 Hz) ne doit
+                # pas partir 60 fois par seconde : une fois par minute
+                cle = (type_exc.__name__, texte.strip().splitlines()[-1][:160])
+                if _t.monotonic() - deja.get(cle, -1e9) > 60.0:
+                    deja[cle] = _t.monotonic()
+                    reporting.signaler_plantage(texte)
             except Exception:
                 pass
             precedent(type_exc, valeur, trace)

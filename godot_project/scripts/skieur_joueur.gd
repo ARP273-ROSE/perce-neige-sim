@@ -20,6 +20,7 @@ extends CharacterBody3D
 ## Repère du corps : jamais tourné (le cap ne s'applique qu'à l'apparence).
 
 signal conduite_demandee
+signal chute                          # tombé (mur ou roche à vive allure)
 
 const RAYON: float = 0.14              # de profil : il passe entre deux porte-skis
 const TAILLE: float = 1.76
@@ -92,6 +93,21 @@ var _batons: MultiMeshInstance3D = null
 var _skis_pieds: Mesh = null
 var _skis_main: Mesh = null
 var _image_glisse: Mesh = null
+var _image_schuss: Mesh = null
+var _image_chasse: Mesh = null
+var _skis_pieds_v: Mesh = null           # chasse-neige : skis en V
+var _posture: int = 0                    # 0 glisse, 1 schuss, 2 chasse-neige
+## Chute (Kevin, 07/10/2026 : « si je vais dans les décors trop vite on peut
+## déchausser et s'exploser dans la neige, plus qu'à avoir une touche
+## rechausser ») : un mur (bâtiment, quai) à plus de V_CHUTE_MUR, la roche
+## (pente > 37°, là où la neige ne tient pas) à plus de V_CHUTE_ROCHE → à
+## terre CHUTE_S secondes, skis déchaussés ; E (CHAUSSER) pour repartir.
+const V_CHUTE_MUR: float = 6.0
+const V_CHUTE_ROCHE: float = 8.0
+const CHUTE_S: float = 2.5
+const Y_SKI: float = 0.10                # skis posés 10 cm au-dessus du sol calculé (sinon
+										 # les tuiles du relief, maillées autrement, les cachent)
+var _chute_t: float = 0.0
 
 
 func _init() -> void:
@@ -170,7 +186,10 @@ func _construire_apparence() -> void:
 	_skis.position = SkieurMesh.ANCRE_SKIS
 	# chaussé : posture de glisse, skis aux pieds, deux bâtons
 	_image_glisse = SkieurMesh.passager_squelette(SkieurMesh.squelette_glisse(), "libre", "casque", mat)
+	_image_schuss = SkieurMesh.passager_squelette(SkieurMesh.squelette_schuss(), "libre", "casque", mat)
+	_image_chasse = SkieurMesh.passager_squelette(SkieurMesh.squelette_chasse(), "libre", "casque", mat)
 	_skis_pieds = SkieurMesh.skis_aux_pieds(mat)
+	_skis_pieds_v = SkieurMesh.skis_aux_pieds(mat, deg_to_rad(22.0))
 	_batons = _mm(SkieurMesh.baton(mat), Color(0.55, 0.30, 0.80, 1.0))
 	_batons.multimesh.instance_count = 2
 	for k in range(2):
@@ -229,6 +248,9 @@ func desactiver() -> void:
 ## Chausser ou déchausser (bouton CHAUSSER, touche E) : renvoie la raison
 ## d'un refus, ou "".
 func basculer_ski() -> String:
+	if _chute_t > 0.0:
+		_chute_t = 0.0
+		_relever()
 	if chausse:
 		chausse = false
 		_v_ski = Vector3.ZERO
@@ -256,12 +278,49 @@ func vitesse_ski() -> float:
 
 
 func _apparence_ski() -> void:
+	_posture = 0
 	_corps.multimesh.mesh = _image_glisse if chausse else _images[0]
 	_corps.position.y = 0.045 if chausse else 0.0
 	_skis.multimesh.mesh = _skis_pieds if chausse else _skis_main
 	_skis.position = Vector3.ZERO if chausse else SkieurMesh.ANCRE_SKIS
 	_batons.visible = chausse
 	_visuel.rotation = Vector3(0.0, _cap, 0.0)
+	_visuel.position.y = Y_SKI if chausse else 0.0
+
+
+## Posture de glisse : 0 glisse, 1 schuss (recroquevillé), 2 chasse-neige
+## (skis en V).
+func _poser_posture(p: int) -> void:
+	if p == _posture:
+		return
+	_posture = p
+	_corps.multimesh.mesh = [_image_glisse, _image_schuss, _image_chasse][p]
+	_skis.multimesh.mesh = _skis_pieds_v if p == 2 else _skis_pieds
+	_batons.visible = p != 1             # en schuss, les bâtons sous les bras : cachés
+
+
+## Tombé : skis déchaussés, à terre sur le dos CHUTE_S secondes.
+func _chuter() -> void:
+	chausse = false
+	_v_ski = Vector3.ZERO
+	velocity = Vector3.ZERO
+	_penche = 0.0
+	dernier_sol = global_position
+	_chute_t = CHUTE_S
+	_apparence_ski()
+	_visuel.rotation = Vector3(-1.35, _cap, 0.25)
+	_visuel.position.y = 0.30
+	chute.emit()
+
+
+func _relever() -> void:
+	_visuel.rotation = Vector3(0.0, _cap, 0.0)
+	_visuel.position.y = 0.0
+
+
+## À terre ?
+func a_terre() -> bool:
+	return _chute_t > 0.0
 
 
 # --- entrées -----------------------------------------------------------------------
@@ -311,6 +370,12 @@ func _process(delta: float) -> void:
 		return
 	delta = minf(delta, 0.05)
 	_porter()
+	if _chute_t > 0.0:
+		_chute_t -= delta
+		if _chute_t <= 0.0:
+			_relever()
+		_camera()
+		return
 	var cmd: Vector2 = entree
 	var k: Vector2 = _clavier()
 	if k.length() > 0.0:
@@ -344,13 +409,34 @@ func _direction(cmd: Vector2) -> Vector3:
 	return (av * cmd.y + dr * cmd.x).limit_length(1.0)
 
 
+var _pt_prec: Vector3 = Vector3.ZERO     # dernier point atteint (pour reculer)
+var _prog_d: float = INF                 # meilleure distance au point visé
+var _prog_t: float = 0.0                 # temps sans progrès
+
+
 func _suivre_chemin() -> Vector3:
 	var cible: Vector3 = chemin[0]
 	var d: Vector3 = cible - global_position
 	d.y = 0.0
-	if d.length() < 0.35:
-		chemin.pop_front()
+	var dist: float = d.length()
+	if dist < 0.35:
+		_pt_prec = chemin.pop_front()
+		_prog_d = INF
+		_prog_t = 0.0
 		return Vector3.ZERO
+	# bloqué (un vantail qui s'ouvre, un coin) : après 2,5 s sans avancer,
+	# on recule au point précédent et l'on réessaie
+	if dist < _prog_d - 0.15:
+		_prog_d = dist
+		_prog_t = 0.0
+	else:
+		_prog_t += get_process_delta_time()
+		if _prog_t > 2.5 and _pt_prec != Vector3.ZERO:
+			chemin.push_front(_pt_prec)
+			_pt_prec = Vector3.ZERO
+			_prog_d = INF
+			_prog_t = 0.0
+			return Vector3.ZERO
 	return d.normalized()
 
 
@@ -405,8 +491,15 @@ var debug_marche: String = ""
 func _monter_marche(pas: Vector3) -> bool:
 	var xf: Transform3D = global_transform
 	var haut: Vector3 = Vector3.UP * MARCHE_MAX
-	if test_move(xf, haut):
+	var col_p: KinematicCollision3D = KinematicCollision3D.new()
+	if test_move(xf, haut, col_p):
 		debug_marche = "plafond"
+		if OS.is_debug_build() and col_p.get_collider() != null:
+			var op: Object = col_p.get_collider()
+			var ownp: Object = (op as CollisionObject3D).shape_owner_get_owner(
+				(op as CollisionObject3D).shape_find_owner(col_p.get_collider_shape_index()))
+			debug_marche += " (%s, y %.2f)" % [(ownp as Node).name if ownp else "?",
+				col_p.get_position().y - global_position.y]
 		return false
 	# assez loin pour que le centre soit au-dessus de la marche
 	var av: Vector3 = pas.normalized() * maxf(pas.length(), RAYON + 0.06)
@@ -498,6 +591,9 @@ func _glisser(delta: float, cmd: Vector2, schuss: bool) -> void:
 	var n: Vector3 = relief.normale_sol(p.x, p.z)
 	var v: Vector3 = _v_ski
 	var vit: float = v.length()
+	var vit0: float = vit
+	# posture : chasse-neige dès qu'on freine, schuss quand on file
+	_poser_posture(2 if (cmd.y < -0.2 and vit > 0.5) else (1 if (schuss and vit > 3.0) else 0))
 	# virage : les skis pivotent, d'autant moins vite qu'on va vite
 	var omega: float = minf(OMEGA_SKI, A_VIRAGE / maxf(vit, 0.1))
 	_cap_ski -= cmd.x * omega * delta
@@ -528,6 +624,11 @@ func _glisser(delta: float, cmd: Vector2, schuss: bool) -> void:
 	# déplacement à l'horizontale, arrêté par les murs, puis posé sur le sol
 	var dp: Vector3 = Vector3(v.x, 0.0, v.z) * delta
 	var mur: Vector3 = _mur_devant(p, dp)
+	# chute : un mur à vive allure, ou la roche (pente > 37°)
+	if (mur != Vector3.ZERO and vit0 > V_CHUTE_MUR and dp.dot(mur) < 0.0) \
+			or (n.y < 0.80 and vit0 > V_CHUTE_ROCHE):
+		_chuter()
+		return
 	if mur != Vector3.ZERO:
 		if dp.dot(mur) < 0.0:
 			dp -= mur * dp.dot(mur)

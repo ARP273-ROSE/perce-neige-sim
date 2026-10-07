@@ -60,6 +60,7 @@ class GodotBridge:
         # skieur. Sans lui, cliquer le pupitre de la 3D ne faisait que
         # montrer le geste (retour de Kevin du 07/10/2026).
         self._rsock: Optional[socket.socket] = None
+        self._xid: Optional[int] = None      # fenêtre X11 du viewer (Linux)
         # Posé par stop() : si un start() est encore en cours dans un autre
         # thread (grâce de spawn ~1,6 s), il verra le flag à sa sortie et
         # tuera lui-même le process au lieu de le laisser zombie en fenêtre
@@ -249,6 +250,12 @@ class GodotBridge:
         """
         import time
         try:
+            # journal borné : au-delà de 1 Mo, on repart de zéro
+            if self._logfile.exists() and self._logfile.stat().st_size > 1_000_000:
+                self._logfile.write_text("")
+        except OSError:
+            pass
+        try:
             logf = open(self._logfile, "ab")
         except OSError:
             logf = subprocess.DEVNULL
@@ -416,22 +423,40 @@ class GodotBridge:
                 self._log(f"[start] retour UDP {self.port + 1} indisponible : {e}")
         mode = "bundled" if self._bundled_binary_path() else "dev"
         print(f"[GodotBridge] Viewer 3D lancé ({mode}, PID={self._proc.pid}, UDP {self.port})")
+        # Linux : la fenêtre X11 est cherchée ICI, dans le fil de lancement
+        # (xdotool est un sous-processus ; appelé du fil Qt à 4 Hz, il
+        # saccadait tout le lancement) ; find_window_id_once() la relit.
+        if sys.platform.startswith("linux"):
+            self._xid = self.find_window_id(timeout_s=20.0)
         return True
 
     def stop(self) -> None:
         self._abort = True
+        self._xid = None
         if self._proc is not None:
+            proc = self._proc
+            self._proc = None
             try:
-                self._proc.terminate()
-                try:
-                    self._proc.wait(timeout=1.5)
-                except subprocess.TimeoutExpired:
-                    self._proc.kill()
-                    self._proc.wait(timeout=1.0)
+                proc.terminate()
             except Exception:
                 pass
+
+            # l'attente (jusqu'à 2,5 s si Godot ne répond pas à SIGTERM) se
+            # fait hors du fil de l'interface, qui ne gèle plus
+            def _achever() -> None:
+                try:
+                    proc.wait(timeout=1.5)
+                except subprocess.TimeoutExpired:
+                    try:
+                        proc.kill()
+                        proc.wait(timeout=1.0)
+                    except Exception:
+                        pass
+                except Exception:
+                    pass
+            import threading
+            threading.Thread(target=_achever, name="godot-stop", daemon=True).start()
             print(f"[GodotBridge] Godot arrêté")
-            self._proc = None
         if self._sock is not None:
             try:
                 self._sock.close()
@@ -533,19 +558,7 @@ class GodotBridge:
         if sys.platform.startswith("win"):
             return _enum_hwnd_for_pid(pid)
         if sys.platform.startswith("linux"):
-            if shutil.which("xdotool") is None:
-                return None
-            try:
-                out = subprocess.check_output(
-                    ["xdotool", "search", "--pid", str(pid),
-                     "--onlyvisible", "--name", "Perce-Neige"],
-                    stderr=subprocess.DEVNULL,
-                ).decode().strip()
-                if out:
-                    return int(out.splitlines()[-1])
-            except subprocess.CalledProcessError:
-                pass
-            return None
+            return self._xid          # trouvée par start(), dans son fil
         return None
 
     # ------------------------------------------------------------------ #

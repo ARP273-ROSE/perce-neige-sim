@@ -4,7 +4,9 @@ extends Node3D
 ## skieur capable de monter les escaliers des gares et de marcher à
 ## l'intérieur sans passer au travers du plancher, des murs, des portes ou
 ## du wagon »). Construites une seule fois, au premier passage en vue
-## skieur (rien ne coûte tant qu'on conduit).
+## skieur (rien ne coûte tant qu'on conduit), par petites tranches sur
+## plusieurs images (BUDGET_US) : les gros maillages en triangles
+## gelaient l'image une à plusieurs secondes sur iPad, son coupé.
 ##
 ##  - GARES : les VRAIS maillages (salles, quais en escalier, halls, salle
 ##    des machines, tunnel et voie près des gares), en triangles — ce qu'on voit
@@ -26,16 +28,27 @@ const R_PAROI: float = 1.64             # rayon intérieur du tube des voitures
 
 var pret: bool = false
 var triangles: int = 0
+const BUDGET_US: int = 7000
+var _taches: Array = []                 # Callables à exécuter, dans l'ordre
+var _t0: int = 0
 var _decor: StaticBody3D = null
 var _formes: Dictionary = {}            # Mesh → Shape3D (formes partagées)
 ## Nœuds dont le sous-arbre bouge : un corps à part, accroché à eux.
 var mobiles: Array = []
+var _main: Node = null
+var _zones: Array = []                  # AABB déjà couverts (gares, galerie, à la demande)
+var _deja: Dictionary = {}              # id de MeshInstance3D déjà en collision
+var _deja_mm: Dictionary = {}           # id de MultiMeshInstance3D → PackedByteArray des instances faites
+## Panneaux d'issue de secours des calottes : Cabin → CollisionShape3D[]
+## (désactivés à l'évacuation, cf. set_issues)
+var issues: Dictionary = {}
 
 
 ## Construit tout. `zones_terrain` : rectangles (Rect2 x, z) où poser le
 ## relief (le reste du massif n'a pas de sol).
-func construire(main: Node, zones_terrain: Array) -> void:
-	var t0: int = Time.get_ticks_msec()
+func construire(main: Node, zones_terrain: Array, synchrone: bool = false) -> void:
+	_t0 = Time.get_ticks_msec()
+	_main = main
 	_decor = StaticBody3D.new()
 	_decor.name = "Decor"
 	_decor.collision_layer = COUCHE_DECOR
@@ -48,22 +61,78 @@ func construire(main: Node, zones_terrain: Array) -> void:
 		var o: Vector3 = tun.transform_at(s).origin
 		zones.append(AABB(o - Vector3(DEMI_ZONE_GARE, 90.0, DEMI_ZONE_GARE),
 			Vector3(2.0 * DEMI_ZONE_GARE, 180.0, 2.0 * DEMI_ZONE_GARE)))
-	for nom in ["station_halls", "stations", "machine_room", "tunnel", "track"]:
+	var ss: Node = main.get("sortie_secours")
+	if ss != null and ss.get("pret"):
+		zones.append(ss.zone_aabb())
+	_zones = zones.duplicate()
+	for nom in ["station_halls", "stations", "machine_room", "tunnel", "track", "sortie_secours"]:
 		var racine: Node3D = main.get(nom) as Node3D
 		if racine != null:
 			_maillages(racine, zones)
 	for m in mobiles:
-		_corps_mobile(m as Node3D)
+		_taches.append(_corps_mobile.bind(m as Node3D))
 	for nom2 in ["cabin", "cabin_ghost"]:
 		var c: Cabin = main.get(nom2) as Cabin
 		if c != null:
-			_rame(c)
+			_taches.append(_rame.bind(c))
 	var relief: ReliefBuilder = main.get("relief")
 	if relief != null:
 		for z in zones_terrain:
-			_terrain(relief, z as Rect2)
-	pret = true
-	print("[Collisions] %d triangles de décor, %d ms" % [triangles, Time.get_ticks_msec() - t0])
+			_taches.append(_terrain.bind(relief, z as Rect2))
+	if synchrone or DisplayServer.get_name() == "headless":
+		_avancer(1 << 62)
+	else:
+		set_process(true)
+
+
+func _process(_delta: float) -> void:
+	_avancer(Time.get_ticks_usec() + BUDGET_US)
+
+
+## Exécute les tâches jusqu'à l'échéance ; prêt quand il n'en reste plus.
+func _avancer(fin_us: int) -> void:
+	while not _taches.is_empty():
+		var c: Callable = _taches.pop_front()
+		c.call()
+		if Time.get_ticks_usec() > fin_us:
+			return
+	set_process(false)
+	if not pret:
+		pret = true
+		print("[Collisions] %d triangles de décor, %d ms" % [triangles, Time.get_ticks_msec() - _t0])
+
+
+## Collisions à la demande autour d'un point — évacuation à pied dans le
+## tunnel (parois, voie, escalier de service) : une zone de ±80 m, par
+## tranches, dès que le point sort des zones déjà couvertes (à 40 m du bord).
+func assurer_autour(p: Vector3) -> void:
+	if _main == null:
+		return
+	for z in _zones:
+		# (une zone de moins de 80 m — la galerie de secours — ne se rétrécit
+		# pas : AABB.grow négatif y donnerait une taille négative)
+		var zi: AABB = (z as AABB).grow(-minf(40.0, 0.45 * (z as AABB).size[(z as AABB).size.min_axis_index()]))
+		if zi.has_point(p):
+			return
+	var zone: AABB = AABB(p - Vector3(80.0, 40.0, 80.0), Vector3(160.0, 80.0, 160.0))
+	_zones.append(zone)
+	for nom in ["tunnel", "track", "sortie_secours"]:
+		var racine: Node3D = _main.get(nom) as Node3D
+		if racine != null:
+			_maillages(racine, [zone])
+	if not _taches.is_empty():
+		if DisplayServer.get_name() == "headless":
+			_avancer(1 << 62)
+		else:
+			set_process(true)
+
+
+## Panneaux d'issue de secours d'une rame : retirés (plus de collision) ou
+## remis.
+func set_issues(c: Cabin, retirees: bool) -> void:
+	for cs in issues.get(c, []):
+		if is_instance_valid(cs):
+			(cs as CollisionShape3D).disabled = retirees
 
 
 # --- gares : maillages réels -----------------------------------------------------
@@ -79,12 +148,12 @@ func _maillages(racine: Node3D, zones: Array) -> void:
 		for c in n.get_children():
 			pile.append(c)
 		if n is MultiMeshInstance3D:
-			_multimesh(n as MultiMeshInstance3D, zones)
+			_taches.append(_multimesh.bind(n as MultiMeshInstance3D, zones))
 			continue
 		if not (n is MeshInstance3D):
 			continue
 		var mi: MeshInstance3D = n
-		if mi.mesh == null or mi.has_meta("sans_collision"):
+		if mi.mesh == null or mi.has_meta("sans_collision") or _deja.has(mi.get_instance_id()):
 			continue
 		var ab: AABB = mi.global_transform * mi.get_aabb()
 		if ab.size.length() > 600.0:
@@ -96,7 +165,9 @@ func _maillages(racine: Node3D, zones: Array) -> void:
 				break
 		if not dedans:
 			continue
-		_ajouter_forme(_decor, mi.mesh, mi.global_transform, mi.name)
+		_deja[mi.get_instance_id()] = true
+		_taches.append(_ajouter_forme.bind(_decor, mi.mesh, mi.global_transform,
+			"%s_%s" % [mi.get_parent().name if mi.get_parent() else "", mi.name]))
 
 
 ## Pièces répétées qui portent leurs positions en méta « instances » (les
@@ -110,7 +181,15 @@ func _multimesh(mmi: MultiMeshInstance3D, zones: Array) -> void:
 		return
 	var inst: Array = mmi.get_meta("instances")
 	var ab_m: AABB = mm.mesh.get_aabb()
+	var id: int = mmi.get_instance_id()
+	if not _deja_mm.has(id):
+		var faits: PackedByteArray = PackedByteArray()
+		faits.resize(inst.size())
+		_deja_mm[id] = faits
+	var deja: PackedByteArray = _deja_mm[id]
 	for i in range(inst.size()):
+		if deja[i] != 0:
+			continue
 		var xf: Transform3D = mmi.global_transform * (inst[i] as Transform3D)
 		var ab: AABB = xf * ab_m
 		var dedans: bool = false
@@ -120,6 +199,7 @@ func _multimesh(mmi: MultiMeshInstance3D, zones: Array) -> void:
 				break
 		if not dedans:
 			continue
+		deja[i] = 1
 		if mm.mesh is BoxMesh:
 			if not _formes.has(mm.mesh):
 				var b: BoxShape3D = BoxShape3D.new()
@@ -151,7 +231,7 @@ func _ajouter_forme(corps: CollisionObject3D, m: Mesh, xf: Transform3D, nom: Str
 	cs.shape = forme
 	cs.transform = xf
 	if nom != "":
-		cs.name = nom
+		cs.name = nom.replace("@", "").replace("/", "_").replace(":", "_")
 	corps.add_child(cs)
 
 
@@ -167,12 +247,23 @@ func _corps_mobile(n: Node3D) -> void:
 	for mi in n.find_children("*", "MeshInstance3D", true, false):
 		var m: MeshInstance3D = mi
 		if m.mesh != null:
-			_ajouter_forme(corps, m.mesh, inv * m.global_transform)
+			_ajouter_forme(corps, m.mesh, inv * m.global_transform, "Mobile_" + n.name + "_" + m.name)
 
 
 # --- rames : collisions simplifiées ---------------------------------------------
 
-func _boite(parent: Node3D, taille: Vector3, xf: Transform3D, couche: int = COUCHE_VEHICULE) -> void:
+## Paliers de quai des portes (3,66 m : jusqu'au bord du quai), actifs en
+## gare seulement — en tunnel, on descend de la porte sur la passerelle.
+var paliers_quai: Array = []
+
+
+func set_paliers_quai(en_gare: bool) -> void:
+	for cs in paliers_quai:
+		if is_instance_valid(cs) and (cs as CollisionShape3D).disabled == en_gare:
+			(cs as CollisionShape3D).disabled = not en_gare
+
+
+func _boite(parent: Node3D, taille: Vector3, xf: Transform3D, couche: int = COUCHE_VEHICULE) -> CollisionShape3D:
 	var corps: StaticBody3D = parent.get_node_or_null("CollisionRame") as StaticBody3D
 	if corps == null:
 		corps = StaticBody3D.new()
@@ -186,7 +277,9 @@ func _boite(parent: Node3D, taille: Vector3, xf: Transform3D, couche: int = COUC
 	var cs: CollisionShape3D = CollisionShape3D.new()
 	cs.shape = b
 	cs.transform = xf
+	cs.name = "Rame_%.2fx%.2fx%.2f" % [taille.x, taille.y, taille.z]
 	corps.add_child(cs)
+	return cs
 
 
 func _rame(c: Cabin) -> void:
@@ -208,10 +301,16 @@ func _rame(c: Cabin) -> void:
 			var zc: float = c._panel_center(idx, k) - z_c
 			var xf: Transform3D = Transform3D(Basis(Vector3.RIGHT, tilt), Vector3(0.0, y_palier, zc))
 			# au droit des portes, le seuil va jusqu'au bord du quai (1,85 m)
-			var larg: float = 3.66 if TrainBodyBuilder.KINDS[k] == "door" else 2.5
+			# au droit des portes, le plancher s'arrête au seuil (x 1,20) : en
+			# tunnel on en descend sur la passerelle (x 0,80-1,24), juste
+			# dessous ; en gare le palier de quai (3,66 m) couvre le vide
+			var larg: float = 2.4 if TrainBodyBuilder.KINDS[k] == "door" else 2.5
 			# 15 cm d'épaisseur : couvre la contremarche (12 cm) sans dépasser
 			# sous la caisse (on passe dessous, dans la fosse de la gare basse)
 			_boite(voiture, Vector3(larg, 0.15, pas + 0.02), xf * Transform3D(Basis.IDENTITY, Vector3(0.0, -0.05, 0.0)))
+			if TrainBodyBuilder.KINDS[k] == "door":
+				paliers_quai.append(_boite(voiture, Vector3(3.66, 0.15, pas + 0.02),
+					xf * Transform3D(Basis.IDENTITY, Vector3(0.0, -0.05, 0.0))))
 			if TrainBodyBuilder.KINDS[k] == "door":
 				portes.append([zc - TrainBodyBuilder.PANEL_L * 0.5, zc + TrainBodyBuilder.PANEL_L * 0.5])
 			# bancs et porte-skis, dans le repère de leur palier
@@ -241,22 +340,35 @@ func _rame(c: Cabin) -> void:
 				var base: Basis = Basis(Vector3.BACK, -side * tm)
 				var y_bas: float = TrainBodyBuilder.Y_CENTER + cos(tb) * R_PAROI
 				var sous_portes: bool = y_bas < y_haut_porte - 0.05
+				var trous: Array = portes if sous_portes else []
+				# issues de secours des calottes : les pans du bas (sous 60 cm)
+				# s'arrêtent 1,1 m avant les extrémités de rame, sinon le D
+				# (0,16 m de large au ras du plancher, rabattu sur ρ ≤ 1,62) est
+				# infranchissable pour la capsule (0,28 m)
+				if y_bas < TrainBodyBuilder.Y_FLOOR + 0.6:
+					trous = trous.duplicate()
+					if idx == 0:
+						trous.append([z0 - 0.1, z0 + 1.1])
+					if idx == c.car_count - 1:
+						trous.append([z1 - 1.1, z1 + 0.1])
 				var morceaux: Array = [[z0, z1]]
-				if sous_portes:
-					morceaux = _hors(z0, z1, portes)
+				if not trous.is_empty():
+					morceaux = _hors(z0, z1, trous)
 				for mo in morceaux:
 					var l: float = float(mo[1]) - float(mo[0])
 					if l < 0.02:
 						continue
 					_boite(voiture, Vector3(0.14, corde, l),
 						Transform3D(base, centre + Vector3(0.0, 0.0, (float(mo[0]) + float(mo[1])) * 0.5)))
-		# fonds : calotte à l'extrémité de rame, cloison à l'attelage
+		# fonds : calotte à l'extrémité de rame (avec ses deux issues de
+		# secours), cloison à l'attelage
 		for e in [-1.0, 1.0]:
 			var ze: float = (z0 - 0.05) if e < 0.0 else (z1 + 0.05)
-			if idx == 0 and e < 0.0:
-				ze = -car_len * 0.5 + 0.45       # devant le pupitre, sous le pare-brise
-			_boite(voiture, Vector3(3.4, 3.4, 0.10), Transform3D(Basis.IDENTITY,
-				Vector3(0.0, TrainBodyBuilder.Y_CENTER, ze)))
+			if (idx == 0 and e < 0.0) or (idx == c.car_count - 1 and e > 0.0):
+				_calotte(c, voiture, e * (car_len * 0.5 - 0.45))   # devant le pupitre, sous le pare-brise
+			else:
+				_boite(voiture, Vector3(3.4, 3.4, 0.10), Transform3D(Basis.IDENTITY,
+					Vector3(0.0, TrainBodyBuilder.Y_CENTER, ze)))
 		# plafond (on ne grimpe pas sur les porte-skis)
 		_boite(voiture, Vector3(2.6, 0.10, z1 - z0), Transform3D(Basis.IDENTITY,
 			Vector3(0.0, TrainBodyBuilder.Y_CENTER + R_PAROI - 0.10, (z0 + z1) * 0.5)))
@@ -293,6 +405,35 @@ func _rame(c: Cabin) -> void:
 		var corps_v: Node = vantail.get_node_or_null("CollisionRame")
 		if corps_v != null:
 			corps_v.set_meta("vehicule", voit)
+
+
+## Fond de calotte : plein au milieu et autour des deux issues de secours
+## (D jaunes de part et d'autre du pare-brise, x 0,98-1,62 m, du plancher
+## au haut du D) ; les panneaux des issues sont des formes à part, que
+## set_issues désactive à l'évacuation — on passe alors par le trou et l'on
+## descend sur la voie.
+func _calotte(c: Cabin, voiture: Node3D, ze: float) -> void:
+	var yc: float = TrainBodyBuilder.Y_CENTER
+	var x0: float = TrainBodyBuilder.DOOR_X0
+	var x1: float = TrainBodyBuilder.DOOR_RHO
+	var y_bas: float = TrainBodyBuilder.Y_FLOOR - 0.10
+	var y_haut: float = yc + TrainBodyBuilder._face_y(TrainBodyBuilder.DOOR_TOP_REAL)
+	# plancher du poste jusqu'au fond (les paliers s'arrêtent à 1,25 m de
+	# l'axe : devant les issues, à 0,98-1,62 m, on marchait sur rien)
+	_boite(voiture, Vector3(3.3, 0.15, 1.8), Transform3D(Basis.IDENTITY,
+		Vector3(0.0, TrainBodyBuilder.Y_FLOOR + Cabin.STEP_LIFT - 0.05, ze - signf(ze) * 0.9)))
+	_boite(voiture, Vector3(2.0 * x0, 3.4, 0.10), Transform3D(Basis.IDENTITY, Vector3(0.0, yc, ze)))
+	if not issues.has(c):
+		issues[c] = []
+	for side in [-1.0, 1.0]:
+		var xm: float = side * (x0 + x1) * 0.5
+		_boite(voiture, Vector3(0.40, 3.4, 0.10), Transform3D(Basis.IDENTITY, Vector3(side * (x1 + 0.20), yc, ze)))
+		_boite(voiture, Vector3(x1 - x0, yc + 1.7 - y_haut, 0.10),
+			Transform3D(Basis.IDENTITY, Vector3(xm, (y_haut + yc + 1.7) * 0.5, ze)))
+		_boite(voiture, Vector3(x1 - x0, y_bas - (yc - 1.7), 0.10),
+			Transform3D(Basis.IDENTITY, Vector3(xm, (y_bas + yc - 1.7) * 0.5, ze)))
+		(issues[c] as Array).append(_boite(voiture, Vector3(x1 - x0, y_haut - y_bas, 0.10),
+			Transform3D(Basis.IDENTITY, Vector3(xm, (y_bas + y_haut) * 0.5, ze))))
 
 
 ## Morceaux de [z0, z1] hors des intervalles `trous`.

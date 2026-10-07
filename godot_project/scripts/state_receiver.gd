@@ -33,6 +33,8 @@ var _retour: PacketPeerUDP = null
 var _last_skieur: int = -1
 var _last_skieur_vue: int = -1
 var _last_skieur_ski: int = -1
+var _last_skieur_evac: int = -1
+var _last_skieur_auto: int = -1
 var port: int = DEFAULT_PORT
 var physics: TrainPhysics = null
 var fault_manager: FaultManager = null
@@ -249,6 +251,18 @@ func _apply(d: Dictionary) -> void:
 		if _last_skieur_ski >= 0 and main != null and main.has_method("basculer_ski"):
 			main.basculer_ski()
 		_last_skieur_ski = ns
+	# issues de secours (touche I du PC en mode skieur) : compteur
+	var ne: int = _i(d, "skieur_evacuer", 0)
+	if ne != _last_skieur_evac:
+		if _last_skieur_evac >= 0 and main != null and main.has_method("evacuer"):
+			main.evacuer()
+		_last_skieur_evac = ne
+	# AUTO du skieur (touche X du PC en mode skieur) : compteur
+	var na: int = _i(d, "skieur_auto", 0)
+	if na != _last_skieur_auto:
+		if _last_skieur_auto >= 0 and main != null and main.has_method("basculer_skieur_auto"):
+			main.basculer_skieur_auto()
+		_last_skieur_auto = na
 	# 1re / 3e personne (touche V du PC en mode skieur) : compteur d'appuis
 	var nv: int = _i(d, "skieur_vue", 0)
 	if nv != _last_skieur_vue:

@@ -9,7 +9,12 @@ extends Node3D
 ## En descente, ils apparaissent sur le mur droit (même physique, vue miroir).
 
 @export var spacing_m: float = 10.0          # espacement des tubes (un sur deux allumé)
-@export var wall_offset: float = 1.4         # distance du centre du tunnel
+# À 1,40 m du centre, le néon était DANS le gabarit de la caisse (rayon
+# 1,72 : demi-largeur 1,57 m à 0,7 m au-dessus de l'axe) — « les néons et
+# les câbles défilent à l'intérieur de la cabine côté gauche en montant »
+# (Kevin, 07/10/2026, vue skieur). Sur la paroi (rayon 1,95 : 1,73 m à cette
+# hauteur), à 5 cm d'elle.
+@export var wall_offset: float = 1.68        # distance du centre du tunnel
 @export var height_offset: float = 0.9       # hauteur (plafond)
 @export var light_energy: float = 8.0
 @export var light_range: float = 23.0   # recouvre l'entraxe de 20 m des

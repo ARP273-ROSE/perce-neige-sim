@@ -60,6 +60,33 @@ var abt_hold: bool = false               # aiguillage Abt désaligné → arrêt
                                          # imposé AVANT l'évitement
 var cap_over_timer: float = 0.0          # s passées > plafond de panne + 1
                                          # sans décélération franche
+# --- Effets de panne portés par la physique (audit fonctionnel 07/10/2026,
+# parité PC) : posés et levés par FaultManager. Avant, « Perte 400 V » et
+# « Frein parking bloqué » n'engageaient que l'urgence : PRÊT/DÉPART la
+# relâchait et la rame repartait « sans 400 V » ; la surchauffe et le mode
+# 2/3 moteurs ne déclassaient rien ; le pic de tension et le mou n'avaient
+# aucun effet sur la jauge ni sur la chaîne de sécurité.
+var traction_coupee: bool = false        # contacteur ouvert / tambour bloqué :
+                                         # f_motor = f_regen = 0 (PC :1600-1606)
+var power_derate: float = 1.0            # déclassement de puissance : 0,55 en
+                                         # surchauffe, 2/3 sur un groupe HS (PC :1518)
+var tension_fault_dan: float = 0.0       # pic de tension ajouté à la jauge (PC :2124)
+var slack_fault_dan: float = 0.0         # mou de câble retiré de la jauge ; un
+                                         # freinage brutal déclenche l'interrupteur
+                                         # de mou → urgence (PC :2304)
+var panne_catastrophique: bool = false   # service terminé : PRÊT/DÉPART refusés,
+                                         # seul NOUVEAU VOYAGE (R) relance
+var panne_porte: bool = false            # défaut capteur de porte : départ refusé
+                                         # tant que les portes n'ont pas été
+                                         # cyclées (fermeture au bouton PORTES)
+var parachute_engaged: bool = false      # pinces Belleville sur rail (survitesse
+                                         # +20 %, 3,6 m/s²), levé avec l'urgence
+var depart_portes_ouvertes: bool = false # Défi : départ sauvage demandé portes
+                                         # ouvertes (buzzer seul, pas de fermeture)
+## Loi de charge imposée par l'exploitation automatique (charge selon
+## l'heure, port du PC) : Callable(direction) → [pax voiture 1, pax voiture
+## 2, pax contrepoids]. Invalide = tirage aléatoire de roll_pax.
+var loi_charge: Callable = Callable()
 var pax_car1: int = 0
 var pax_car2: int = 0
 var ghost_pax: int = 0                   # passagers wagon opposé
@@ -358,13 +385,21 @@ func step(dt: float) -> void:
 	elif door_phase_remaining > 0.0:
 		door_phase_remaining = maxf(0.0, door_phase_remaining - dt)
 		if door_phase_remaining <= 0.0:
+			# portes cyclées : le défaut capteur de porte libère le départ
+			panne_porte = false
 			if _fermeture_seule:
 				# fermeture commandée au bouton PORTES : la rame reste à
 				# quai, portes fermées, jusqu'au PRÊT/DÉPART
 				_fermeture_seule = false
 			else:
-				departure_buzzer_remaining = \
-					8.0 if s < PNConstants.LENGTH * 0.5 else 6.0
+				# Protocole PRÊT : portes fermées, le conducteur de l'AUTRE
+				# rame confirme 2 à 4 s plus tard (PC : ghost_ready_delay)
+				# — le buzzer ne part qu'à sa confirmation.
+				confirmation_autre_remaining = randf_range(2.0, 4.0)
+	elif confirmation_autre_remaining > 0.0:
+		confirmation_autre_remaining = maxf(0.0, confirmation_autre_remaining - dt)
+		if confirmation_autre_remaining <= 0.0:
+			departure_buzzer_remaining = _duree_buzzer()
 	elif departure_buzzer_remaining > 0.0:
 		departure_buzzer_remaining = maxf(0.0, departure_buzzer_remaining - dt)
 		if departure_buzzer_remaining <= 0.0:
@@ -450,7 +485,9 @@ func step(dt: float) -> void:
 
 	# --- Force moteur -----------------------------------------------------
 	var v_eff: float = maxf(absf(v), 0.8)
-	var p_eff: float = PNConstants.P_MAX
+	# Puissance disponible après déclassement de panne (surchauffe : 55 % ;
+	# un groupe de 800 kW sur trois HS : 67 %) — comme le PC (:1518).
+	var p_eff: float = PNConstants.P_MAX * power_derate
 
 	# Inrush DC au démarrage (~4.5× nominal pendant 1.2 s)
 	if absf(v) < 0.2 and throttle > 0.2 and inrush_timer <= 0.0:
@@ -501,6 +538,13 @@ func step(dt: float) -> void:
 	if emergency or emergency_ramp > 0.0 or manual_brake_held or brake > 0.05:
 		f_motor = 0.0
 
+	# Perte des auxiliaires 400 V (contacteur traction ouvert) ou tambour
+	# bloqué sur la poulie : aucune traction tant que la panne tient, même
+	# urgence relâchée — comme le PC (:1600-1606). Avant, PRÊT/DÉPART puis
+	# +VITESSE faisaient repartir la rame « sans 400 V ».
+	if traction_coupee:
+		f_motor = 0.0
+
 	# --- Gravité (déséquilibre cable) ------------------------------------
 	# Chaque rame avec SA pente locale (comme le sim Python) :
 	#   f_grav_s = −(m_main·sinθ_main − m_ghost·sinθ_ghost)·g
@@ -544,8 +588,10 @@ func step(dt: float) -> void:
 	if emergency_ramp > 0.0:
 		# Câble rompu : le frein poulie n'a plus de chemin de force — seules
 		# les pinces Belleville sur rail agissent (parachute, 3,6 m/s²),
-		# et la gravité les combat en pente : l'arrêt est long.
-		var a_full: float = 3.6 if cable_rupture else PNConstants.A_BRAKE_EMERGENCY
+		# et la gravité les combat en pente : l'arrêt est long. Le même
+		# parachute tombe en survitesse +20 % (cascade, tous modes).
+		var a_full: float = 3.6 if (cable_rupture or parachute_engaged) \
+			else PNConstants.A_BRAKE_EMERGENCY
 		a_brk = emergency_ramp * a_full
 	elif brake > 0.0:
 		# Le frein de service peut tomber à 15-25 % de son efficacité quand
@@ -572,7 +618,7 @@ func step(dt: float) -> void:
 	# Câble rompu : plus de chemin de force du tout.
 	var chaos_doors_ok: bool = challenge_mode and trip_started
 	var drive_off: bool = (doors_open and not chaos_doors_ok) \
-		or not trip_started or cable_rupture
+		or not trip_started or cable_rupture or traction_coupee
 	if drive_off or emergency or emergency_ramp > 0.0:
 		f_regen = 0.0
 	if cable_rupture:
@@ -632,7 +678,10 @@ func step(dt: float) -> void:
 	# immobilisé sous frein d'urgence → le tambour se réengage seul pour
 	# qu'il ne reparte pas sur la pente. (Relâché avec l'urgence par
 	# release_emergency si le voyage est en cours — reprise en tunnel.)
-	if emergency and absf(v) < 0.05 and not maint_brake:
+	# Frein à manque de courant : perte 400 V / tambour bloqué, la rame
+	# immobilisée reste tenue par le tambour tant que la panne tient (PC :
+	# « contacteur traction ouvert, frein tambour serré »).
+	if (emergency or traction_coupee) and absf(v) < 0.05 and not maint_brake:
 		maint_brake = true
 	# Ceinture + bretelles (verrou v1.12.6 du PC) : rame immobile HORS
 	# séquence de voyage et hors urgence → tambour réengagé (le drum ne se
@@ -723,7 +772,12 @@ func step(dt: float) -> void:
 	if turnaround_delay_remaining > 0.0:
 		turnaround_delay_remaining = maxf(0.0, turnaround_delay_remaining - dt)
 		var elapsed: float = TURNAROUND_DELAY_S - turnaround_delay_remaining
-		if elapsed >= TURNAROUND_MIN_S and rebound_envelope() < SETTLE_M:
+		# le rebond de CETTE rame seulement (Kevin, 07/10/2026 : « en haut
+		# les portes peuvent s'ouvrir après l'arrêt car il n'y a pas
+		# d'oscillation, alors qu'en bas il faut attendre ») : en haut le
+		# brin est court (millimètres), c'est le contrepoids d'en bas qui
+		# oscille encore — ses portes à lui attendent
+		if elapsed >= TURNAROUND_MIN_S and rebound_envelope_propre() < SETTLE_M:
 			turnaround_delay_remaining = 0.0   # câble stabilisé : on ouvre
 		if turnaround_delay_remaining <= 0.0:
 			_terminus_turnaround()
@@ -781,6 +835,35 @@ func step(dt: float) -> void:
 		elif v_abs2 > 1.10 * PNConstants.V_MAX and overspeed_level < 1:
 			overspeed_level = 1
 			print("[Chaos] SURVITESSE — aucun filet en Défi, freinez")
+	elif not challenge_mode and trip_started and not cable_rupture:
+		# Normal / Pannes : la cascade du PC (:2187-2250), latchée et
+		# cumulative. +10 % : urgence (frein poulie 1,25) ; +12 % : frein de
+		# secours, même organe ; +20 % : le déclencheur centrifuge engage le
+		# PARACHUTE (pinces Belleville sur rail, 3,6 m/s²), à plein tout de
+		# suite — il court-circuite la rampe. Avant l'audit du 07/10/2026,
+		# rien ne retenait une rame emballée hors Défi (urgence relâchée
+		# après une rupture de câble : elle dévalait sans parachute).
+		var v_abs3: float = absf(v)
+		if v_abs3 > 1.20 * PNConstants.V_MAX and overspeed_level < 3:
+			overspeed_level = 3
+			emergency = true
+			parachute_engaged = true
+			emergency_ramp = 1.0
+			speed_cmd = 0.0
+			throttle = 0.0
+			print("[Physics] FREIN PARACHUTE — déclenchement centrifuge (+20 %)")
+		elif v_abs3 > 1.12 * PNConstants.V_MAX and overspeed_level < 2:
+			overspeed_level = 2
+			emergency = true
+			speed_cmd = 0.0
+			throttle = 0.0
+			print("[Physics] SURVITESSE +12 % — frein de secours")
+		elif v_abs3 > 1.10 * PNConstants.V_MAX and overspeed_level < 1:
+			overspeed_level = 1
+			emergency = true
+			speed_cmd = 0.0
+			throttle = 0.0
+			print("[Physics] SURVITESSE +10 % — urgence automatique")
 
 	# Surveillance du plafond de panne (port du PC v1.12.21) : la rampe
 	# du régulateur (0,60 m/s²) doit ramener v sous le cap ; si v reste
@@ -833,7 +916,24 @@ func step(dt: float) -> void:
 		_side_tension_n(m_up, s, 0.0, v) + dyn1,
 		_side_tension_n(m_down, PNConstants.miroir(s), 0.0, -v) + dyn2,
 	) / 10.0
+	# Décalages de panne : la jauge bouge quand un pic de tension ou un mou
+	# est annoncé (PC :2124) — avant, « +6 500 daN » annoncé, jauge immobile.
+	tension_dan += tension_fault_dan - slack_fault_dan
 	tension_dan = maxf(tension_dan, 0.0)
+
+	# Chaînes de sécurité des défauts de câble (PC :2300-2325) : hors Défi,
+	# la surveillance ne laisse pas rouler un défaut. Interrupteur de mou :
+	# pendant un défaut de mou, un freinage brutal (> 1,5 m/s²) décharge le
+	# brin et le contact déclenche — c'est l'enjeu du « freiner doucement »
+	# de l'annonce. Surveillance de tension : pic au-delà du seuil rouge de
+	# la jauge (35 000 daN) → urgence.
+	if not emergency and trip_started and not challenge_mode:
+		if slack_fault_dan > 0.0 and absf(acc) > 1.5 and absf(v) > 1.0:
+			emergency = true
+			print("[Physics] interrupteur de mou du câble déclenché — urgence")
+		elif tension_fault_dan > 0.0 and tension_dan > PNConstants.T_RED_DAN:
+			emergency = true
+			print("[Physics] tension câble au-delà du seuil rouge — urgence")
 
 	# --- Puissance ------------------------------------------------------
 	# Traction : le moteur tire → puissance consommée. Régén :
@@ -863,21 +963,26 @@ func step(dt: float) -> void:
 		trip_time += dt
 
 
-# --- Collisions (mode Défi) ----------------------------------------------
+# --- Collisions -----------------------------------------------------------
 # Trois issues possibles, dans cet ordre de priorité :
-#   1. DÉRAILLEMENT — franchir l'évitement Abt à plus de 13,5 m/s (+12 %).
-#      Le max certifié étant 12 m/s, l'évitement se prend à pleine vitesse
-#      en exploitation normale : on ne déraille pas à 12,1 m/s.
+#   1. DÉRAILLEMENT (Défi seulement, comme le PC :1919) — franchir
+#      l'évitement Abt à plus de 13,5 m/s (+12 %). Le max certifié étant
+#      12 m/s, l'évitement se prend à pleine vitesse en exploitation
+#      normale : on ne déraille pas à 12,1 m/s.
 #   2. COLLISION AVEC L'AUTRE RAME — câble rompu : la rame 2, découplée, a
 #      freiné et s'est immobilisée. La vôtre la percute LÀ OÙ ELLE EST.
 #   3. BUTOIR — atteindre le bout de voie à plus de 1,5 m/s.
+# 2 et 3 valent dans TOUS les modes (PC :1900, :1930 — hit_end sans test de
+# mode) : avant l'audit du 07/10/2026, une rame emballée en mode Pannes
+# arrivait sur le butoir à n'importe quelle vitesse dans un amortisseur
+# silencieux de 2 m/s².
 func _check_crash(clamp_lo: float, clamp_hi: float) -> void:
-	if crashed or not challenge_mode or finished or not trip_started:
+	if crashed or finished or not trip_started:
 		return
 	var v_abs: float = absf(v)
 	var in_switch: bool = s >= PNConstants.PASSING_START \
 		and s <= PNConstants.PASSING_END
-	if in_switch and v_abs > SWITCH_DERAIL_V:
+	if challenge_mode and in_switch and v_abs > SWITCH_DERAIL_V:
 		_fire_crash("derail", v_abs)
 		return
 	if cable_rupture:
@@ -930,9 +1035,14 @@ func _regulator(
 	_g_slope: float,
 	theta: float,
 ) -> void:
-	# Si arrêt électrique ou emergency : couper moteur, laisser frein
-	if emergency or not trip_started:
+	# Urgence : la consigne s'efface (0,5/s). Hors voyage (séquence de
+	# départ, quai), elle est CONSERVÉE : comme le PC, la rame part à la
+	# consigne affichée dès la fin du buzzer. Avant (audit 07/10/2026), elle
+	# fondait pendant les ~30 s de la séquence → tambour lâché, régulateur
+	# en maintien, rame à quai tant qu'on ne tenait pas +VITESSE.
+	if emergency:
 		speed_cmd = maxf(0.0, speed_cmd - 0.5 * dt)
+	if emergency or not trip_started:
 		speed_cmd_eff = maxf(0.0, speed_cmd_eff - 0.5 * dt)
 		throttle = 0.0
 		regen_level = 0.0
@@ -1091,7 +1201,8 @@ func _regulator(
 	# la commande produisait 1,8 fois la force voulue au-dessus de ~8 m/s →
 	# dépassement de consigne au bouton + et freinage trop sec au bouton −
 	# (retour d'essai 2026-09-28, parité PC).
-	var p_reg: float = PNConstants.P_MAX * (CHAOS_MOTOR_OVERDRIVE if challenge_mode else 1.0)
+	var p_reg: float = PNConstants.P_MAX * power_derate \
+		* (CHAOS_MOTOR_OVERDRIVE if challenge_mode else 1.0)
 	var f_motor_max: float = minf(PNConstants.F_STALL, p_reg / v_eff)
 
 	var f_ff: float = -f_grav_travel + PNConstants.MU_ROLL * PNConstants.G \
@@ -1223,6 +1334,8 @@ func _terminus_turnaround() -> void:
 	announce_phase_remaining = 0.0
 	_fermeture_seule = false
 	departure_buzzer_remaining = 0.0
+	confirmation_autre_remaining = 0.0
+	depart_portes_ouvertes = false
 	door_phase_remaining = 0.0
 	direction = -direction
 	# Rotation passagers : tout le monde descend, puis une nouvelle charge
@@ -1245,7 +1358,13 @@ func _terminus_turnaround() -> void:
 # force la bascule immédiate (initialisation, bancs de test).
 func roll_pax(instant: bool = false) -> void:
 	var half: int = PNConstants.PAX_MAX / 2
-	if direction > 0:
+	if loi_charge.is_valid():
+		# exploitation automatique : charge selon l'heure (AutoOperator)
+		var r: Array = loi_charge.call(direction)
+		pax_t_car1 = int(r[0])
+		pax_t_car2 = int(r[1])
+		ghost_pax_t = int(r[2])
+	elif direction > 0:
 		pax_t_car1 = randi_range(90, half)
 		pax_t_car2 = randi_range(90, half)
 		ghost_pax_t = randi_range(0, 8) + randi_range(0, 8)
@@ -1272,6 +1391,20 @@ func debarquement() -> void:
 	pax_t_car2 = 0
 	ghost_pax_t = 0
 	_embarquement_apres_descente = true
+
+
+# Évacuation après une panne catastrophique (FaultManager, phase
+# « evacuating », comme le PC :7497-7503) : la cabine est vidée par le
+# passage de service, portes fermées — effectifs ET cibles à zéro, sans
+# nouvel embarquement.
+func evacuer() -> void:
+	pax_car1 = 0
+	pax_car2 = 0
+	pax_t_car1 = 0
+	pax_t_car2 = 0
+	_pax1_f = 0.0
+	_pax2_f = 0.0
+	_embarquement_apres_descente = false
 
 
 # Affaissement d'embarquement de la rame pilotée (m, signé le long de s :
@@ -1335,11 +1468,16 @@ func _elastic_step(dt: float, a_poulie: float, frein_voie: bool = false) -> void
 # contrepoids : √(x² + (x'/ω)²) — l'installation est stabilisée quand les
 # deux le sont (parité PC).
 func rebound_envelope() -> float:
-	var km1: Vector2 = _brin_k_m(s, mass_kg())
 	var km2: Vector2 = _brin_k_m(ghost_s_phys(), ghost_mass_kg())
-	var e1: float = Vector2(el_x1, el_v1 / sqrt(km1.x / km1.y)).length()
 	var e2: float = Vector2(el_x2, el_v2 / sqrt(km2.x / km2.y)).length()
-	return maxf(e1, e2)
+	return maxf(rebound_envelope_propre(), e2)
+
+
+# Amplitude résiduelle (m) de la rame pilotée seule : c'est elle qui décide
+# de l'ouverture de SES portes (en haut, le brin court ne bouge pas).
+func rebound_envelope_propre() -> float:
+	var km1: Vector2 = _brin_k_m(s, mass_kg())
+	return Vector2(el_x1, el_v1 / sqrt(km1.x / km1.y)).length()
 
 
 # Écart élastique de la rame pilotée (m, signé le long de la pente) : à
@@ -1380,6 +1518,23 @@ const DOOR_PHASE_S: float = PNConstants.DOOR_BUZZER_S + PNConstants.DOOR_CLIP_S 
 var announce_phase_remaining: float = 0.0
 var departure_buzzer_remaining: float = 0.0
 var door_phase_remaining: float = 0.0
+## Confirmation de l'AUTRE rame (PC : ghost_ready, 2 à 4 s après PRÊT) :
+## entre la fin de la fermeture des portes et le buzzer de départ. Le voyant
+## PRÊT VÉHICULE de l'autre rame s'allume à sa confirmation (pret_autre_simule).
+var confirmation_autre_remaining: float = 0.0
+
+
+## Durée du buzzer de quai : 8 s en gare basse, 6 s en gare haute (durées
+## des enregistrements réels).
+func _duree_buzzer() -> float:
+	return 8.0 if s < PNConstants.LENGTH * 0.5 else 6.0
+
+
+## Voyant « PRÊT VÉHICULE » de l'autre rame (PWA, pupitre) : son conducteur
+## a confirmé → le buzzer sonne ou la rame est partie. Avant l'audit du
+## 07/10/2026, il était allumé en permanence (`not cable_rupture`).
+func pret_autre_simule() -> bool:
+	return not cable_rupture and (departure_buzzer_remaining > 0.0 or trip_started)
 # Vantaux (ce que dessine cabin.gd) : ils ne bougent qu'avec le clip de
 # fermeture, 1,3 s après son début — pas au début de la phase portes.
 var door_leaves_open: bool = true
@@ -1398,31 +1553,58 @@ func at_station() -> bool:
 	return s <= PNConstants.START_S + 5.0 or s >= PNConstants.STOP_S - 5.0
 
 
-func request_depart() -> void:
+# Bouton PRÊT/DÉPART. Renvoie le message de refus à afficher ("" = accepté
+# ou séquence déjà en cours). Les verrous sont ceux du PC (V :9120-9140 et
+# Z :9221-9240) : arrêt électrique, voyage terminé par une panne
+# catastrophique (R), freins d'urgence engagés, défaut porte non cyclé,
+# consigne à 0 (« la monter d'abord »). Audit du 07/10/2026 : avant, DÉPART
+# était accepté urgence verrouillée (buzzer de quai pour rien, AUTO figé en
+# DEPARTING à jamais) et consigne à 0 (rame à quai après le buzzer).
+func request_depart() -> String:
 	if arret_elec:
-		return                     # relâcher d'abord l'arrêt électrique
+		return "Arrêt électrique engagé : le relâcher d'abord"
+	if panne_catastrophique:
+		return "Voyage terminé par la panne : NOUVEAU VOYAGE (R)"
+	if emergency or emergency_ramp > 0.0:
+		return "Freins d'urgence engagés : les relâcher d'abord"
+	if panne_porte:
+		return "Défaut porte : cycler les portes (PORTES) avant le départ"
+	if speed_cmd < 0.01:
+		return "Consigne de vitesse à 0 : la monter d'abord"
 	if (announce_phase_remaining > 0.0 or door_phase_remaining > 0.0) \
 			and _fermeture_seule:
-		# fermeture déjà lancée au bouton PORTES : elle enchaîne sur le
-		# buzzer de départ
+		# fermeture déjà lancée au bouton PORTES : elle enchaîne sur la
+		# confirmation de l'autre rame puis le buzzer de départ
 		_fermeture_seule = false
-		return
+		return ""
 	if trip_started or announce_phase_remaining > 0.0 \
 			or departure_buzzer_remaining > 0.0 \
+			or confirmation_autre_remaining > 0.0 \
 			or door_phase_remaining > 0.0:
-		return
+		return ""
 	if doors_open:
-		# Séquence complète : annonce → fermeture portes → buzzer.
+		if challenge_mode:
+			# DÉPART SAUVAGE (Défi, comme le PC Z :9203-9212 et :9259) :
+			# ni annonce ni fermeture, le buzzer seul et on part portes
+			# ouvertes — faute lourde notée par Challenge (unsafe).
+			depart_portes_ouvertes = true
+			departure_buzzer_remaining = _duree_buzzer()
+			print("[Physics] DÉPART SAUVAGE — portes ouvertes, ça embarque encore")
+			return ""
+		# Séquence complète : annonce → fermeture portes → confirmation de
+		# l'autre rame → buzzer.
 		announce_phase_remaining = ANNOUNCE_PHASE_S
 	elif at_station():
-		# portes déjà fermées (bouton PORTES) : buzzer de quai seul
-		departure_buzzer_remaining = 8.0 if s < PNConstants.LENGTH * 0.5 else 6.0
+		# portes déjà fermées (bouton PORTES) : l'autre rame confirme (2 à
+		# 4 s), puis buzzer de quai seul
+		confirmation_autre_remaining = randf_range(2.0, 4.0)
 	else:
 		# Reprise EN TUNNEL (après inversion de sens / arrêt anormal) :
 		# portes déjà fermées, pas de buzzer de quai — courte tempo
 		# silencieuse puis traction, comme le PC (« Resuming mid-tunnel —
 		# no buzzer », 1,5 s).
 		departure_buzzer_remaining = 1.5
+	return ""
 
 
 # Portes à la demande (bouton PORTES, touche D — port de la touche D du
@@ -1443,7 +1625,8 @@ func toggle_doors() -> String:
 	if absf(v) >= 0.2 and not chaos:
 		return "Portes verrouillées : rame en marche"
 	if announce_phase_remaining > 0.0 or door_phase_remaining > 0.0 \
-			or departure_buzzer_remaining > 0.0:
+			or departure_buzzer_remaining > 0.0 \
+			or confirmation_autre_remaining > 0.0:
 		return "Séquence de portes en cours"
 	if doors_open:
 		_fermeture_seule = true
@@ -1483,6 +1666,8 @@ func reverse_trip() -> bool:
 	announce_phase_remaining = 0.0
 	_fermeture_seule = false
 	departure_buzzer_remaining = 0.0
+	confirmation_autre_remaining = 0.0
+	depart_portes_ouvertes = false
 	door_phase_remaining = 0.0
 	# Portes : ouvertes UNIQUEMENT si on inverse à quai (embarquement,
 	# avec rotation passagers) ; en tunnel elles restent fermées — on
@@ -1497,7 +1682,11 @@ func reverse_trip() -> bool:
 func start_trip() -> void:
 	trip_started = true
 	maint_brake = false
-	doors_open = false
+	# Défi, départ sauvage : les portes RESTENT ouvertes (on roule portes
+	# ouvertes, Challenge le note) ; sinon la séquence les a fermées.
+	if not (challenge_mode and depart_portes_ouvertes):
+		doors_open = false
+	depart_portes_ouvertes = false
 	finished = false
 
 
@@ -1509,6 +1698,12 @@ func end_trip() -> void:
 func release_emergency() -> void:
 	emergency = false
 	emergency_ramp = 0.0
+	# La cascade de survitesse (latchée) se réarme avec l'urgence, comme le
+	# PC (reverse_trip / auto : overspeed_tripped = False) ; câble rompu,
+	# le niveau 3 reste acquis.
+	parachute_engaged = false
+	if not cable_rupture:
+		overspeed_level = 0
 	# Comme le PC (keyReleaseEvent Shift) : le tambour, réengagé par
 	# l'auto-park pendant l'arrêt d'urgence, est relâché AVEC l'urgence
 	# quand la rame est immobilisée EN VOIE (voyage en cours, portes
@@ -1516,8 +1711,10 @@ func release_emergency() -> void:
 	# repartir. Sans ça : tambour serré à vie après un arrêt d'urgence
 	# en tunnel, impossible de repartir (retour d'essai PWA 2026-07-12).
 	# À quai hors voyage, le tambour RESTE serré : c'est la séquence
-	# PRÊT/DÉPART (buzzer → start_trip) qui le lèvera.
-	if trip_started and not doors_open and absf(v) < 0.1:
+	# PRÊT/DÉPART (buzzer → start_trip) qui le lèvera. Traction coupée
+	# (perte 400 V, tambour bloqué) : il reste serré jusqu'à la levée de la
+	# panne (frein à manque de courant).
+	if trip_started and not doors_open and absf(v) < 0.1 and not traction_coupee:
 		maint_brake = false
 
 
@@ -1549,6 +1746,15 @@ func restart_after_crash() -> void:
 	abt_hold = false
 	speed_cap_external = INF
 	cap_over_timer = 0.0
+	# effets de panne (FaultManager.clear_active(true) les lève aussi)
+	traction_coupee = false
+	power_derate = 1.0
+	tension_fault_dan = 0.0
+	slack_fault_dan = 0.0
+	panne_catastrophique = false
+	panne_porte = false
+	parachute_engaged = false
+	lights_cabin = true
 	trip_started = false
 	finished = false
 	trip_time = 0.0
@@ -1559,6 +1765,8 @@ func restart_after_crash() -> void:
 	announce_phase_remaining = 0.0
 	_fermeture_seule = false
 	departure_buzzer_remaining = 0.0
+	confirmation_autre_remaining = 0.0
+	depart_portes_ouvertes = false
 	door_phase_remaining = 0.0
 	_sag_ref_m_main = -1.0
 	_sag_ref_m_ghost = -1.0

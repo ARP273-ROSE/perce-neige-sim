@@ -9,7 +9,11 @@ extends Node
 ## Sons de tools_sons_skieur.py. Utilisé par TrainAudio (PWA) et seul dans
 ## la vue 3D embarquée du PC, où le PC joue tous les sons de la rame.
 
-## 0 dans la rame, 1 en gare, 2 dehors — posé par main.gd
+## 0 dans la rame, 1 gare basse (quais, salle d'attente), 2 dehors, 3 gare
+## haute (là, c'est TrainAudio qui joue la machinerie), 4 à pied dans le
+## tunnel — posé par main.gd. Kevin, 07/10/2026 : « le bruit du souffle dans
+## le tunnel ne s'entend qu'en gare du bas sur les quais et dans la salle
+## d'attente […] et si on est dehors on entend l'air ».
 var ecoute: int = 0
 var physics: TrainPhysics = null
 var _souffle: AudioStreamPlayer = null
@@ -48,7 +52,8 @@ func _process(delta: float) -> void:
 		_vent.volume_db = move_toward(_vent.volume_db, cible, delta * 40.0)
 		if not dehors and _vent.volume_db <= -79.0 and _vent.playing:
 			_vent.stop()
-	if _souffle == null or _souffle.stream == null or ecoute != 1 or physics == null:
+	if _souffle == null or _souffle.stream == null or not (ecoute == 1 or ecoute == 4) \
+			or physics == null:
 		return
 	var v: float = absf(physics.v)
 	if v < 1.5:

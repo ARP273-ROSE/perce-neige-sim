@@ -335,7 +335,7 @@ def vider_file() -> int:
     l'application avant que l'envoi n'aboutisse. Cette reprise est donc le
     chemin normal, pas un cas dégradé.
     """
-    if _dossier is None or consentement() is not True:
+    if _dossier is None:
         return 0
 
     try:
@@ -343,11 +343,14 @@ def vider_file() -> int:
     except Exception:
         return 0
 
-    # Les plus vieux d'abord, mais on ne garde que les plus récents.
+    # Les plus vieux d'abord, mais on ne garde que les plus récents — même
+    # sans accord d'envoi (sinon la file grossissait sans fin)
     limite = time.time() - AGE_MAX
     for vieux in fichiers[:-FILE_MAX] if len(fichiers) > FILE_MAX else []:
         vieux.unlink(missing_ok=True)
     fichiers = sorted(_dossier.glob('*.json'))
+    if consentement() is not True:
+        return 0
 
     envoyes = 0
     for f in fichiers:

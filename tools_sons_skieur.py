@@ -8,9 +8,13 @@ j'entends le son comme si j'étais dedans, alors qu'en vrai en bas on
 n'entend rien, à part des souffles d'air réguliers / vent sifflements suivis
 de silences dus aux surpressions dans le tunnel ».
 
-Bouffée : bruit brun filtré 150-1500 Hz qui monte en 1,5 s, tient, et
-retombe en 3 s, avec un sifflement étroit qui glisse de 1 000 à 1 250 Hz.
-Vent : bruit rose 100-2 000 Hz, modulé lentement, raccordé en boucle.
+Bouffée : bruit rose filtré 300-3 000 Hz (plus de grave : Kevin, 07/10/2026,
+« le souffle du vent est trop grave, faut monter un peu pour que ça siffle
+un peu comme un fil ») qui monte en 1,5 s, tient, et retombe en 3 s, avec
+un sifflement de fil — deux bandes étroites, 1 500→1 900 Hz et son octave
+affaiblie — qui s'installe après le gros du souffle.
+Vent : bruit rose 180-2 500 Hz, modulé lentement, raccordé en boucle, avec
+un fil qui siffle faiblement.
 Pas d'enregistrement : aucune prise de son du quai n'existe dans le projet.
 """
 import wave
@@ -43,29 +47,49 @@ def ecrire(chemin, x, crete_db=-3.0):
 # --- bouffée d'air dans le tunnel ---------------------------------------------
 n = int(6.0 * SR)
 t = np.arange(n) / SR
-brun = np.cumsum(rng.standard_normal(n))
-brun -= np.convolve(brun, np.ones(2205) / 2205, mode="same")   # sans dérive
-souffle = bande(brun, 150.0, 1500.0)
+def rose(m):
+    """Bruit rose (−3 dB/octave) de m échantillons."""
+    Xr = np.fft.rfft(rng.standard_normal(m))
+    fr = np.fft.rfftfreq(m, 1.0 / SR)
+    Xr[1:] /= np.sqrt(fr[1:])
+    return np.fft.irfft(Xr, m)
+
+
+def fil(m, f0, f1, t_glisse=3.0, largeur=0.06):
+    """Sifflement de fil (son éolien) : bande étroite (±6 %) de bruit blanc
+    autour d'une fréquence qui glisse de f0 à f1, plus son octave à −10 dB."""
+    tt = np.arange(m) / SR
+    f_c = f0 + (f1 - f0) * np.clip(tt / t_glisse, 0, 1)
+    blanc = rng.standard_normal(m)
+    # le glissement se fait par morceaux de 100 ms (filtre FFT par tranche)
+    out = np.zeros(m)
+    pas = int(0.1 * SR)
+    for i in range(0, m, pas):
+        j = min(i + pas, m)
+        fc = float(f_c[(i + j) // 2])
+        tranche = blanc[max(0, i - pas):min(m, j + pas)]
+        y = bande(tranche, fc * (1 - largeur), fc * (1 + largeur), 0.5) \
+            + 0.32 * bande(tranche, 2 * fc * (1 - largeur), 2 * fc * (1 + largeur), 0.5)
+        out[i:j] = y[i - max(0, i - pas):i - max(0, i - pas) + (j - i)]
+    return out / np.max(np.abs(out))
+
+
+souffle = bande(rose(n), 300.0, 3000.0)
 souffle /= np.max(np.abs(souffle))
-# sifflement : bande étroite autour d'une fréquence qui glisse
-blanc = rng.standard_normal(n)
-f_c = 1000.0 + 250.0 * np.clip((t - 1.0) / 3.0, 0, 1)
-phase = 2 * np.pi * np.cumsum(f_c) / SR
-siffle = bande(blanc, 900.0, 1350.0) * (0.6 + 0.4 * np.sin(phase * 0.002))
-siffle /= np.max(np.abs(siffle))
+# sifflement de fil : il s'installe après le gros du souffle et glisse vers l'aigu
+siffle = fil(n, 1500.0, 1900.0)
 env = np.where(t < 1.5, (t / 1.5) ** 2,
                np.where(t < 3.0, 1.0, np.clip(1.0 - (t - 3.0) / 3.0, 0, 1) ** 1.5))
 env_s = np.where(t < 2.0, (t / 2.0) ** 3, np.clip(1.0 - (t - 2.0) / 3.5, 0, 1))
-ecrire("godot_project/sounds/souffle_tunnel.wav", (souffle + 0.22 * siffle * env_s) * env)
+ecrire("godot_project/sounds/souffle_tunnel.wav", (souffle + 0.45 * siffle * env_s) * env)
 
 # --- vent dehors, en boucle ------------------------------------------------------
 n2 = int(12.0 * SR)
 t2 = np.arange(n2) / SR
-X = np.fft.rfft(rng.standard_normal(n2))
-f2 = np.fft.rfftfreq(n2, 1.0 / SR)
-X[1:] /= np.sqrt(f2[1:])                         # bruit rose
-rose = np.fft.irfft(X, n2)
-vent = bande(rose, 100.0, 2000.0)
+vent = bande(rose(n2), 180.0, 2500.0)
+vent /= np.max(np.abs(vent))
+# un fil qui siffle faiblement, au gré des rafales
+vent += 0.18 * fil(n2, 1400.0, 1700.0, 12.0) * (0.5 + 0.5 * np.sin(2 * np.pi * t2 / 12.0 + 0.7))
 vent *= 0.65 + 0.35 * np.sin(2 * np.pi * t2 / 4.0) * np.sin(2 * np.pi * t2 / 12.0 + 0.7)
 # raccord de boucle : fondu enchaîné de 1 s entre la fin et le début
 k = SR

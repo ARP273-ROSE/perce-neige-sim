@@ -140,6 +140,30 @@ def test_pupitre_3d_eclairage_portes_klaxon(fenetre):
     assert Qt.Key.Key_Up not in g._mouse_hold
 
 
+def test_skieur_retenue_plafonnee(fenetre):
+    """Rame à quai sous exploitation AUTO : un skieur sur le quai la retient,
+    mais pas plus de RETENUE_MAX_S (Kevin, 07/10/2026 : « la séquence reste
+    bloquée à embarquement 6 s… elle devrait se poursuivre toute seule »)."""
+    win, clock = fenetre
+    g = _depart_a_quai(win, clock)
+    pont = _brancher(g)
+    ao = g.auto_ops
+    ao.force_any_hours = True
+    ao.toggle()
+    t = 0.0
+    while ao.phase != ao.PHASE_BOARDING and t < 120.0:
+        _step(win, clock, 1.0)
+        t += 1.0
+    assert ao.phase == ao.PHASE_BOARDING, ao.phase
+    g._skieur = True
+    pont.a_poster = [{"skieur_etat": [False, True, 1, 0.0]}]
+    _step(win, clock, 30.0)
+    assert ao.phase == ao.PHASE_BOARDING, "partie avant 30 s de retenue"
+    _step(win, clock, 30.0)
+    assert ao.phase != ao.PHASE_BOARDING, "retenue sans fin : elle devait partir après 45 s"
+    g._skieur = False
+
+
 def test_skieur_f9_auto_attend_puis_ferme(fenetre):
     win, clock = fenetre
     g = _depart_a_quai(win, clock)
@@ -148,7 +172,11 @@ def test_skieur_f9_auto_attend_puis_ferme(fenetre):
     g.keyPressEvent(QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_F9,
                               Qt.KeyboardModifier.NoModifier))
     assert g._skieur, "F9 n'a pas lancé le mode skieur"
-    assert ao.enabled and ao.force_any_hours, "le funiculaire doit tourner tout seul"
+    # rame à quai, prête à l'embarquement : l'AUTO n'est PAS forcé (Kevin,
+    # 07/10/2026 : « il se déclenche alors que je suis encore dehors, pas
+    # le temps d'embarquer ») ; les horaires sont levés quand même
+    assert not ao.enabled and ao.force_any_hours, "une rame à quai attend qu'on monte"
+    assert g.state.train.doors_cmd, "à quai, portes ouvertes pour monter"
     _step(win, clock, 0.2)
     assert pont.etats[-1]["skieur"] is True
     assert pont.etats[-1]["skieur_ski"] == 0        # E (chausser) : compteur relayé
@@ -156,21 +184,32 @@ def test_skieur_f9_auto_attend_puis_ferme(fenetre):
     g._key_state.update({Qt.Key.Key_Z, Qt.Key.Key_Shift})
     assert g._skieur_touches() == 1 | 16
     g._key_state.clear()
-    # embarquement : le skieur attend sur le quai → la rame l'attend
-    t = 0.0
-    while ao.phase != ao.PHASE_BOARDING and t < 120.0:
-        _step(win, clock, 1.0)
-        t += 1.0
-    assert ao.phase == ao.PHASE_BOARDING, ao.phase
+    # sur le quai, pas monté : la rame reste là, portes ouvertes
     pont.a_poster = [{"skieur_etat": [False, True, 1]}]
-    _step(win, clock, ao.station_dwell_s + 30.0)
-    assert ao.phase == ao.PHASE_BOARDING, "parti sans le skieur resté sur le quai"
+    _step(win, clock, 40.0)
+    assert not ao.enabled and g.state.train.doors_cmd and not g.state.trip_started, \
+        "partie sans le skieur resté sur le quai"
     assert g.sounds.skieur_dehors, "sur le quai : plus de son de cabine"
-    # il monte : fermeture des portes dès qu'il est dedans
+    # il monte : l'exploitation s'enclenche, portes fermées dès qu'il est dedans
     pont.a_poster = [{"skieur_etat": [True, False, 0]}]
-    _step(win, clock, 2.5)
-    assert ao.phase != ao.PHASE_BOARDING, "portes pas fermées alors qu'il est à bord"
+    _step(win, clock, 3.0)
+    assert ao.enabled, "monté dans la rame : l'exploitation doit reprendre"
+    assert ao.phase != ao.PHASE_BOARDING, "portes pas fermées alors qu'il est à bord (%s)" % ao.phase
     assert not g.sounds.skieur_dehors
+    # quais de la gare haute : la machinerie au gain de la 3D ; buzzer du
+    # haut même si la rame repart d'en bas ; silence depuis la rame en tunnel
+    pont.a_poster = [{"skieur_etat": [False, True, 3, 0.25]}]
+    _step(win, clock, 0.1)
+    assert abs(g.sounds.skieur_machinerie - 0.25) < 1e-6
+    assert g._buzzer_a_jouer(False, True) is True
+    pont.a_poster = [{"skieur_etat": [False, True, 1, 0.0]}]
+    _step(win, clock, 0.1)
+    assert g.sounds.skieur_machinerie == 0.0
+    assert g._buzzer_a_jouer(True, False) is False
+    pont.a_poster = [{"skieur_etat": [True, False, 0, 0.0]}]
+    _step(win, clock, 0.1)
+    assert g._buzzer_a_jouer(True, False) is None
+    assert g._buzzer_a_jouer(True, True) is True
     # CONDUIRE (au poste) : fin du mode skieur et de l'AUTO
     pont.a_poster = [{"skieur_conduire": True}]
     _step(win, clock, 0.1)

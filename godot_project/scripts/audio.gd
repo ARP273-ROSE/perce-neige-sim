@@ -77,6 +77,19 @@ var _cab_db: float = 0.0             # atténuation des sons de cabine (dB)
 # 2 : dehors (vent léger). Posé par main.gd.
 var ecoute: int = 0
 var _ecoute_mix: float = 0.0          # 0 cabine → 1 hors de la rame
+# Kevin, 07/10/2026 : « les buzzers sonnent leurs sons respectifs dans les
+# gares du bas et du haut et on les entend si on y est, même si ça
+# redémarre au milieu du tunnel ; par contre si on est dans la rame, en vue
+# extérieure ou à l'intérieur, on n'entend pas les buzzers des gares ».
+# Gare où se trouve l'auditeur : 0 aucune (dans une rame en tunnel, dehors),
+# 1 basse, 2 haute (quais du haut, vue salle des machines). Posé par main.gd
+# à chaque image ; dans une rame à quai, c'est la gare de cette rame.
+var gare_ecoute: int = 0
+# « quand on attend en gare du haut on entend strictement le même son que
+# celui de la vue machinerie, que tu modules en fonction de la distance à
+# la machinerie » : gain (0-1) de la salle des machines sur les quais du
+# haut, posé par main.gd (vue salle des machines : 1).
+var gain_machinerie: float = 0.0
 var _sons_skieur: SonsSkieur = null     # bouffées en gare, vent dehors
 
 
@@ -193,13 +206,13 @@ func _process(_delta: float) -> void:
 
 	# Buzzer de départ : déclenché au DÉBUT de la séquence (portes qui se
 	# ferment + buzzer 6-8 s, traction à la fin — cf. request_depart).
-	# Gares haut/bas ont des buzzers distincts. UNIQUEMENT À QUAI : les
-	# buzzers sont des haut-parleurs de quai — une reprise en plein tunnel
-	# (après inversion de sens) est silencieuse, comme sur le PC.
+	# Gares haut/bas ont des buzzers distincts : des haut-parleurs de quai,
+	# qu'on entend dans LEUR gare (quais, salle d'attente, vue salle des
+	# machines, rame à quai) — y compris quand la rame repart du milieu du
+	# tunnel —, jamais depuis une rame en tunnel ni dehors (gare_ecoute).
 	if physics.departure_buzzer_remaining > 0.0 and _prev_buzzer_remaining <= 0.0 \
-			and physics.at_station():
-		var at_upper: bool = physics.s > PNConstants.LENGTH * 0.5
-		var buz: AudioStreamPlayer = _player_buzzer if at_upper else _player_buzzer_low
+			and gare_ecoute > 0:
+		var buz: AudioStreamPlayer = _player_buzzer if gare_ecoute == 2 else _player_buzzer_low
 		if buz != null and buz.stream:
 			buz.play()
 	_prev_buzzer_remaining = physics.departure_buzzer_remaining
@@ -276,7 +289,7 @@ func _process(_delta: float) -> void:
 ## Son de la vue salle des machines : fondu cabine ↔ gare haute (τ 0,35 s),
 ## repos permanent, machinerie à la hauteur v/12 et au niveau (v/12)^0,42.
 func _update_machine_room(delta: float) -> void:
-	var goal: float = 1.0 if machine_view else 0.0
+	var goal: float = 1.0 if machine_view else clampf(gain_machinerie, 0.0, 1.0)
 	_mr_mix += (goal - _mr_mix) * (1.0 - exp(-delta / 0.35))
 	if absf(goal - _mr_mix) < 0.002:
 		_mr_mix = goal

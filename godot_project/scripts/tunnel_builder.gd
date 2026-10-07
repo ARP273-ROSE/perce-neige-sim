@@ -48,7 +48,10 @@ const _PG_S1: float = 3483.0
 
 # Câbles électriques de paroi (cf. _build_wall_cables)
 @export var wall_cable_radius: float = 0.022
-@export var wall_cable_x_local: float = -1.55    # contre la paroi gauche
+# Contre la paroi gauche : à 0,55 m au-dessus de l'axe, la paroi (rayon
+# 1,95) est à 1,87 m ; la caisse (rayon 1,72) s'arrête à 1,68 m. À −1,55 le
+# câble traversait la cabine (Kevin, 07/10/2026, vue skieur).
+@export var wall_cable_x_local: float = -1.84    # contre la paroi gauche
 @export var wall_cable_sample_m: float = 4.0
 @export var wall_cable_y1: float = 0.35
 @export var wall_cable_y2: float = 0.55
@@ -191,6 +194,10 @@ func _build() -> void:
 # descend au sol. Rien ne dépasse
 # de la paroi : le gabarit de la rame ne laisse que ~15 cm.
 const SORTIE_SECOURS_S: float = 2112.0 + 38.56
+## Ouvertures percées dans la paroi, [s0, s1, côté (+1 droite), y bas, y haut]
+## (repère du tunnel) : la galerie de secours (SortieSecours) part de la
+## chambre. Appliquées par _build_tunnel_chunk, découpées dans l'anneau.
+var ouvertures: Array = [[SORTIE_SECOURS_S - 1.25, SORTIE_SECOURS_S + 1.25, 1.0, -1.50, 1.15]]
 
 
 func _build_sortie_secours() -> void:
@@ -270,12 +277,11 @@ func _build_sortie_secours() -> void:
 	add_child(mi_r)
 	# 2. ouverture à droite, haute, depuis la passerelle : fond sombre et
 	#    bord clair de béton coffré
-	patch.call(s_c - 0.75, s_c + 0.75, -1.25, 1.35, 0.012, 1.0,
-		mat.call(Color(0.035, 0.035, 0.04)), "SortieSecours")
+	# (le fond de l'ouverture est la galerie elle-même : SortieSecours)
 	var bord: StandardMaterial3D = mat.call(Color(0.70, 0.70, 0.67))
-	patch.call(s_c - 0.85, s_c - 0.75, -1.25, 1.45, 0.016, 1.0, bord, "SortieSecoursCadre")
-	patch.call(s_c + 0.75, s_c + 0.85, -1.25, 1.45, 0.016, 1.0, bord, "SortieSecoursCadre")
-	patch.call(s_c - 0.85, s_c + 0.85, 1.35, 1.45, 0.016, 1.0, bord, "SortieSecoursCadre")
+	patch.call(s_c - 1.35, s_c - 1.25, -1.50, 1.25, 0.016, 1.0, bord, "SortieSecoursCadre")
+	patch.call(s_c + 1.25, s_c + 1.35, -1.50, 1.25, 0.016, 1.0, bord, "SortieSecoursCadre")
+	patch.call(s_c - 1.35, s_c + 1.35, 1.15, 1.25, 0.016, 1.0, bord, "SortieSecoursCadre")
 	# 3. panneau vert (bonhomme qui court : silhouette simplifiée) et
 	#    étiquette blanche, sur la paroi droite au-delà de l'ouverture
 	var xf_p: Transform3D = transform_at(s_c + 1.35)
@@ -596,6 +602,48 @@ func _build_tunnel_chunk(
 			if cur_cut:
 				cur_0.y = maxf(cur_0.y, y_cut)
 				cur_1.y = maxf(cur_1.y, y_cut)
+			# ouverture (galerie de secours) : l'anneau est découpé le long
+			# de s en trois parts ; dans celle de l'ouverture, seules les
+			# bandes hors de [y bas, y haut] sont gardées
+			var ouv: Array = _ouverture(s_prev, s_cur, prev_0, prev_1, cur_0, cur_1)
+			if not ouv.is_empty():
+				var parts: Array = [[s_prev, maxf(s_prev, ouv[0]), false],
+					[maxf(s_prev, ouv[0]), minf(s_cur, ouv[1]), true],
+					[minf(s_cur, ouv[1]), s_cur, false]]
+				for pa in parts:
+					if float(pa[1]) - float(pa[0]) < 1e-4:
+						continue
+					var ta: float = (float(pa[0]) - s_prev) / (s_cur - s_prev)
+					var tb: float = (float(pa[1]) - s_prev) / (s_cur - s_prev)
+					var bandes: Array = [Vector2(-1000.0, 1000.0)]
+					if pa[2]:
+						bandes = [Vector2(-1000.0, ouv[2]), Vector2(ouv[3], 1000.0)]
+					for bande in bandes:
+						var pa0: Array = _bande_y(prev_0, prev_1, bande)
+						var ca0: Array = _bande_y(cur_0, cur_1, bande)
+						if pa0.is_empty() or ca0.is_empty():
+							continue
+						var ctr_a: Vector3 = prev_center.lerp(cur_center, ta)
+						var ctr_b: Vector3 = prev_center.lerp(cur_center, tb)
+						var rt_a: Vector3 = prev_right.lerp(cur_right, ta)
+						var rt_b: Vector3 = prev_right.lerp(cur_right, tb)
+						var up_a: Vector3 = prev_up.lerp(cur_up, ta)
+						var up_b: Vector3 = prev_up.lerp(cur_up, tb)
+						var q0a: Vector2 = (pa0[0] as Vector2).lerp(ca0[0], ta)
+						var q1a: Vector2 = (pa0[1] as Vector2).lerp(ca0[1], ta)
+						var q0b: Vector2 = (pa0[0] as Vector2).lerp(ca0[0], tb)
+						var q1b: Vector2 = (pa0[1] as Vector2).lerp(ca0[1], tb)
+						var w0a: Vector3 = ctr_a + rt_a * q0a.x + up_a * q0a.y
+						var w1a: Vector3 = ctr_a + rt_a * q1a.x + up_a * q1a.y
+						var w0b: Vector3 = ctr_b + rt_b * q0b.x + up_b * q0b.y
+						var w1b: Vector3 = ctr_b + rt_b * q1b.x + up_b * q1b.y
+						st.set_uv(Vector2(float(k) / float(ring_segments), float(pa[0]) / 10.0)); st.add_vertex(w0a)
+						st.set_uv(Vector2(float(k) / float(ring_segments), float(pa[1]) / 10.0)); st.add_vertex(w0b)
+						st.set_uv(Vector2(float(k + 1) / float(ring_segments), float(pa[1]) / 10.0)); st.add_vertex(w1b)
+						st.set_uv(Vector2(float(k) / float(ring_segments), float(pa[0]) / 10.0)); st.add_vertex(w0a)
+						st.set_uv(Vector2(float(k + 1) / float(ring_segments), float(pa[1]) / 10.0)); st.add_vertex(w1b)
+						st.set_uv(Vector2(float(k + 1) / float(ring_segments), float(pa[0]) / 10.0)); st.add_vertex(w1a)
+				continue
 
 			var p_prev_0: Vector3 = prev_center + prev_right * prev_0.x + prev_up * prev_0.y
 			var p_prev_1: Vector3 = prev_center + prev_right * prev_1.x + prev_up * prev_1.y
@@ -622,6 +670,18 @@ func _build_tunnel_chunk(
 	mi.mesh = st.commit()
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(mi)
+
+
+## Ouverture qui touche l'anneau [s_prev, s_cur] sur ce segment du profil
+## (du côté de l'ouverture) : [s0, s1, y bas, y haut], ou [].
+func _ouverture(s_prev: float, s_cur: float, p0: Vector2, p1: Vector2, c0: Vector2, c1: Vector2) -> Array:
+	for o in ouvertures:
+		if s_cur <= float(o[0]) or s_prev >= float(o[1]):
+			continue
+		var cote: float = float(o[2])
+		if p0.x * cote > 0.0 and p1.x * cote > 0.0 and c0.x * cote > 0.0 and c1.x * cote > 0.0:
+			return [float(o[0]), float(o[1]), float(o[3]), float(o[4])]
+	return []
 
 
 ## Partie du segment a→b (profil d'anneau) dont le y est dans [bande.x,

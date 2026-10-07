@@ -208,6 +208,7 @@ func _tick() -> void:
 		ph2.door_leaves_open = true
 		ph2.maint_brake = true
 		ph2.trip_started = false
+		ph2.speed_cmd = 1.0     # PRÊT/DÉPART refuse une consigne à 0 (07/10/2026, parité PC)
 		for k in range(8):
 			ga.mettre_a_jour(0.5, ph2)
 		var ouv0: float = absf(ga.course_vantail(0))

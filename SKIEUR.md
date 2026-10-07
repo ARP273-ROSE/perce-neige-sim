@@ -90,15 +90,61 @@ piste. »
 Reste à voir : les remontées mécaniques (pas de télésiège : on remonte par le
 funiculaire), les sauts (il reste collé au sol), les chutes.
 
-### Étape 3 — finitions : à faire
+### Étape 3 — finitions (v1.18.0) : fait
 
-- **Sortie de secours du tunnel** (Kevin, 07/10/2026) :
-  - percer la galerie depuis le tunnel jusqu'à la piste ;
-  - débouché **circulaire comme le tunnel**, sur la piste, à 45°26′04,26″ N
-    6°54′02,60″ E, altitude 2 655,89 m (Google Earth) ;
-  - à cet endroit passent les pistes Double M et Face.
-- Mode AUTO du skieur : la boucle complète tout seul.
-- Redescendre en funiculaire, aller au poste de la rame d'en face.
+- **Sortie de secours du tunnel** (`sortie_secours.gd`) : la paroi percée à
+  la chambre du galet 145 (`TunnelBuilder.ouvertures`), galerie circulaire
+  jusqu'au portail sur la piste, à la position de Kevin (Google Earth
+  45°26′04,26″ N 6°54′02,60″ E ; relief du jeu à 2 643,5 m, Google Earth
+  2 655,89 m). Le sol suit le relief (`ReliefBuilder.amenageurs`, appelés
+  avant les pièces fines) ; remblai et aire sur le relief ; collisions de la
+  galerie et du relief au portail. On y va rame arrêtée à la chambre, portes
+  ouvertes (Défi, panne) : porte → passerelle → galerie. Banc
+  `bench_secours_3d.gd`, captures `shot_secours.gd`.
+- **Skieur en AUTO** (`skieur_auto.gd`, bouton AUTO / touche X) : la boucle
+  complète, étapes avec points de passage (ceux des bancs) ; la rame
+  l'attend (`SkieurAuto.descend()` → `retenue`). Banc
+  `bench_skieur_auto_3d.gd`.
+- Redescendre en funiculaire : il suffit de monter à bord en haut.
+- **Porte du personnel** (`porte_personnel.gd`) : en haut de chaque quai de
+  Val Claret, la porte du garde-corps pivote quand on la pousse et sonne
+  une fois (le klaxon) ; palier et escalier jusqu'au fond de la fosse
+  (`stations_builder.gd`, `_build_pit`).
+- **Issues de secours de la face** (bouton ÉVACUER, touche I ; PC : I
+  relayée par `skieur_evacuer`) : les quatre D jaunes sont des maillages à
+  part (`TrainBodyBuilder._build_cap`, clé « Av/Ar + G/D »), le fond de
+  calotte des collisions est percé à leur place (`CollisionsJeu._calotte`,
+  `set_issues`). Possible dans une rame arrêtée en tunnel
+  (`main.evacuation_possible`) ; collisions du tunnel, de la voie et de
+  l'escalier de service construites à la demande autour du marcheur
+  (`CollisionsJeu.assurer_autour`, ± 80 m) ; rame retenue tant qu'il est à
+  pied dans le tunnel (écoute 4) ; panneaux remis à quai portes ouvertes.
+  Banc `bench_issues_3d.gd`.
+- **Écoute selon l'endroit** (`main._gare_ecoute`, `_gain_machinerie`,
+  `TrainAudio.gare_ecoute` / `gain_machinerie`) : 0 rame, 1 gare basse
+  (souffle), 2 dehors (vent), 3 gare haute (machinerie à −6 dB par
+  doublement de la distance au-delà de 4 m, plancher −24 dB —
+  `audit_physique/son_gare_haute.sage`), 4 tunnel à pied (souffle). Les
+  buzzers de quai sonnent dans leur gare à chaque départ, même du milieu
+  du tunnel, jamais depuis une rame en tunnel. Banc `bench_ecoute_3d.gd`.
+- Souffle plus aigu, sifflement de fil (`tools_sons_skieur.py`).
+- **Retours du deuxième essai PC** (07/10/2026) : AUTO non forcé à
+  l'activation quand une rame est à quai (elle attend qu'on monte ;
+  `_entrer_skieur`, PC `basculer_skieur`) et enclenché à bord
+  (`_maj_skieur`, PC `_appliquer_etat_skieur` → `skieur_embarque`) ;
+  retenue plafonnée 45 s (`AutoOperator.RETENUE_MAX_S`, PC
+  `AutoOps.RETENUE_MAX_S`) ; vues verrouillées en skieur sur le PC ;
+  portes à la stabilisation de la rame seule (`rebound_envelope_propre`,
+  PC `rebound_envelopes_m()[0]`) ; portes du quai dès les portes cabine
+  ouvertes (`GareAval.mettre_a_jour`, `finished`) ; skis à +10 cm
+  (`Y_SKI`), postures schuss / chasse-neige (`SkieurMesh.squelette_schuss`,
+  `squelette_chasse`, `skis_aux_pieds(mat, 22°)`), chute
+  (`SkieurJoueur._chuter`, `V_CHUTE_MUR` 6, `V_CHUTE_ROCHE` 8, `CHUTE_S`
+  2,5) ; panneaux ronds nommés (`DomaineSkiable._construire_panneaux`,
+  tous les 250 m, Label3D) ; néons et câbles du tunnel sur la paroi.
+
+Reste : le poste de la rame d'en face (on ne conduit que la rame choisie au
+départ), les remontées mécaniques, sauts et chutes.
 
 ## Sources
 
@@ -107,6 +153,12 @@ funiculaire), les sauts (il reste collé au sol), les chutes.
 - Kevin, 07/10/2026 : sur le quai on n'entend que des souffles d'air et des
   silences ; la fosse assez profonde pour avoir la tête sous les rails ; la
   terrasse et l'assiette de frites ; le buzzer à 1:56 comme klaxon.
+- Kevin, 07/10/2026 : photo de l'issue de secours vue de l'intérieur (les D
+  jaunes cerclés de noir de part et d'autre du pare-brise, la paroi du
+  poste à gauche) ; l'escalier de service à droite en montant ; les règles
+  de ce qu'on entend (souffle en bas, machinerie en haut, air dehors,
+  buzzers dans leur gare) ; la porte du personnel qui sonne ; le souffle à
+  rendre plus aigu, « comme un fil ».
 - Vidéos YouTube :
   - « [FUNI284] Funiculaire Perce-Neige | Tignes (montée) », chaîne Transports
     câblés : portes de la salle du bas ;

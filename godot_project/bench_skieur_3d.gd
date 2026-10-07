@@ -239,9 +239,11 @@ func _tick() -> void:
 				_phase = 7
 				_t_phase = 0.0
 		7:
-			if _t_phase > 40.0:
-				_verif("AUTO : la rame attend le skieur resté sur le quai ; on entend la gare, pas la cabine",
-					not ph.trip_started and ph.doors_open and _main.audio.ecoute == 1,
+			# (20 s : la retenue est plafonnée à 45 s par arrêt, l'embrasure
+			# se teste ensuite dans le même arrêt)
+			if _t_phase > 20.0:
+				_verif("AUTO : la rame attend le skieur resté sur le quai ; on entend la gare haute (machinerie), pas la cabine",
+					not ph.trip_started and ph.doors_open and _main.audio.ecoute == 3,
 					"voyage %s, portes %s, écoute %d" % [ph.trip_started, ph.doors_open, _main.audio.ecoute])
 				# debout dans l'embrasure d'une porte : pas encore dedans
 				var r7: Array = _poser_dans_voiture(sk, 5)
@@ -301,6 +303,37 @@ func _tick() -> void:
 				_verif("fosse : l'escalier remonte au niveau du quai", sk.chemin.is_empty()
 					and absf(h7 - (StationsBuilder.FLOOR_Y_LOCAL + 0.5)) < 0.15,
 					"%.0f s, pieds à %.2f m (quai à %.2f)" % [_t_phase, h7, StationsBuilder.FLOOR_Y_LOCAL + 0.5])
+				_phase = 101
+				_t_phase = 0.0
+		101:
+			# porte du personnel en haut du quai droit → palier → escalier du
+			# haut de la fosse (Kevin, 07/10/2026)
+			if _t_phase < 0.5:
+				return
+			if _t_phase < 0.6:
+				var xq: Transform3D = tun.transform_at(41.0)
+				var y_q: float = StationsBuilder.FLOOR_Y_LOCAL + _main.stations.platform_height + 0.05
+				var xm: float = _main.stations.platform_inner_x + 0.06
+				var x_porte: float = (xm + _main.stations.platform_inner_x + _main.stations.platform_width - 0.05) * 0.5
+				sk.global_position = xq.origin + xq.basis.x * x_porte + xq.basis.y * y_q
+				sk.velocity = Vector3.ZERO
+				sk.support = null
+				sk.chemin = []
+				for e in [[42.0, x_porte], [43.3, x_porte], [43.3, 1.45], [42.6, 1.45], [38.0, 1.45]]:
+					var xe: Transform3D = tun.transform_at(e[0])
+					sk.chemin.append(xe.origin + xe.basis.x * e[1] + xe.basis.y * y_q)
+				_ouv_max = 0.0
+				return
+			var pp: PortePersonnel = _main.stations.get_node_or_null("Barriere_low_R/PortePersonnel_R")
+			if pp != null:
+				_ouv_max = maxf(_ouv_max, pp.ouverture())
+			if sk.chemin.is_empty() or _t_phase > 60.0:
+				var xf10: Transform3D = tun.transform_at(38.0)
+				var y_loc: float = (sk.global_position - xf10.origin).dot(xf10.basis.y)
+				var fond: float = StationsBuilder.FLOOR_Y_LOCAL - StationsBuilder.PIT_DEPTH
+				_verif("porte du personnel : elle s'ouvre en la poussant, sonne, et l'escalier descend dans la fosse",
+					sk.chemin.is_empty() and _ouv_max > 0.9 and pp != null and pp.sonneries >= 1 and absf(y_loc - fond) < 0.3,
+					"%.0f s, porte %.2f, sonneries %d, pieds à %.2f (fond %.2f)" % [_t_phase, _ouv_max, pp.sonneries if pp else -1, y_loc, fond])
 				# départ d'en haut : à table sur la terrasse
 				_main.basculer_skieur()
 				_main._skieur_place = false

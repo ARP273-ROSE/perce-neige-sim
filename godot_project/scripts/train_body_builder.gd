@@ -582,8 +582,14 @@ static func _emit_band(st: SurfaceTool, inner: PackedVector2Array, outer: Packed
 ## crénelage de la découpe, vitres lissées à fleur de tôle, liserés des
 ## portes de secours ; `backboard` pose un fond sombre derrière les vitres
 ## (rame 2 : pas d'intérieur modélisé).
+## `issues` (Dictionary, optionnel) : reçoit les panneaux d'issue de secours
+## — les deux D jaunes de part et d'autre du pare-brise — en maillages À
+## PART (clé « AvG », « AvD », « ArG », « ArD »), découpés dans la calotte
+## et dans sa doublure : ils s'enlèvent pour évacuer une rame arrêtée en
+## tunnel (Kevin, 07/10/2026 : « les parties jaunes cerclées de noir sont
+## des issues de secours et ça s'en va en cas d'évacuation »).
 static func _build_cap(mesh: ArrayMesh, mats: Dictionary, z_join: float, dir_z: float,
-		backboard: bool = false, inner: bool = false) -> void:
+		backboard: bool = false, inner: bool = false, issues = null) -> void:
 	var r_cap: float = R_BODY - (0.05 if inner else 0.0)
 	var l_cap: float = CAP_LEN - (0.05 if inner else 0.0)
 	var st_y: SurfaceTool = SurfaceTool.new()
@@ -596,6 +602,9 @@ static func _build_cap(mesh: ArrayMesh, mats: Dictionary, z_join: float, dir_z: 
 	var holes: Array = []
 	for w in windows:
 		holes.append(_offset_outline(w, 0.0))
+	var portes: Array = _face_doors() if issues != null else []
+	for door in portes:
+		holes.append(_offset_outline(door, -0.02))
 	var n_t: int = CAP_N_T
 	var n_th: int = int(360.0 / CAP_THETA_DEG)
 	var d_th: float = TAU / float(n_th)
@@ -661,6 +670,12 @@ static func _build_cap(mesh: ArrayMesh, mats: Dictionary, z_join: float, dir_z: 
 		for w in windows:
 			_emit_band(st_ri, _offset_outline(w, -GASKET_IN), _offset_outline(w, 0.11),
 				pt_in, n_in, -0.012)
+		# issues de secours, côté intérieur : bande de doublure qui couvre
+		# le crénelage de la découpe, liseré sombre, panneau à part
+		for door in portes:
+			_emit_band(st_y, _offset_outline(door, 0.0), _offset_outline(door, 0.13), pt_in, n_in, -0.004)
+			_emit_band(st_ri, _offset_outline(door, -0.012), _offset_outline(door, 0.012), pt_in, n_in, -0.010)
+			_issue_panneau(issues, dir_z, door, pt_in, n_in, -0.006, mats)
 		st_y.set_material(mats["lining"]); st_y.commit(mesh)
 		st_ri.set_material(mats["rubber"]); st_ri.commit(mesh)
 		return
@@ -676,6 +691,11 @@ static func _build_cap(mesh: ArrayMesh, mats: Dictionary, z_join: float, dir_z: 
 	for door in _face_doors():
 		_emit_band(st_r, _offset_outline(door, -0.012), _offset_outline(door, 0.012),
 			pt_fn, n_fn, 0.006)
+	# issues de secours : bande jaune qui couvre le crénelage de la découpe
+	# (une cellule, 0,10 × 0,075), panneau à part
+	for door in portes:
+		_emit_band(st_y, _offset_outline(door, 0.0), _offset_outline(door, 0.13), pt_fn, n_fn, 0.004)
+		_issue_panneau(issues, dir_z, door, pt_fn, n_fn, 0.004, mats)
 	# fond plat de la calotte
 	var xw: float = R_BODY * sin(_theta_cut())
 	var z_far: float = z_join + dir_z * CAP_LEN * 0.62
@@ -692,6 +712,23 @@ static func _build_cap(mesh: ArrayMesh, mats: Dictionary, z_join: float, dir_z: 
 	st_d.set_material(mats["dark"]); st_d.commit(mesh)
 	st_r.set_material(mats["rubber"]); st_r.commit(mesh)
 	st_g.set_material(mats["glass"]); st_g.commit(mesh)
+
+
+## Un panneau d'issue de secours (D jaune) : une face de plus au maillage
+## de la clé « Av/Ar » + « G/D » (créé au besoin).
+static func _issue_panneau(issues: Dictionary, dir_z: float, door: PackedVector2Array,
+		pt_fn: Callable, n_fn: Callable, lift: float, mats: Dictionary) -> void:
+	var cx: float = 0.0
+	for q in door:
+		cx += q.x
+	var cle: String = ("Av" if dir_z < 0.0 else "Ar") + ("D" if cx > 0.0 else "G")
+	if not issues.has(cle):
+		issues[cle] = ArrayMesh.new()
+	var st: SurfaceTool = SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	_emit_pane(st, _offset_outline(door, -0.012), pt_fn, n_fn, lift)
+	st.set_material(mats["yellow"])
+	st.commit(issues[cle])
 
 
 ## Point de la calotte pour une cible (x, y) du plan frontal : sert à poser
@@ -917,6 +954,7 @@ static func build_train(root: Node3D, train_length: float, car_count: int,
 	var wheels: Array = []
 	var car_roots: Array = []
 	var doors: Array = []
+	var issues: Array = []               # panneaux d'issue de secours {node, car, cle}
 	for i in range(car_count):
 		var z_c: float = (float(i) - (car_count - 1) * 0.5) * car_len
 		var car_root: Node3D = Node3D.new()
@@ -944,13 +982,14 @@ static func build_train(root: Node3D, train_length: float, car_count: int,
 			doors.append({"node": dm, "side": lf["side"]})
 		# indices des vitres de calotte (dernière surface posée par _build_cap)
 		var cap_glass: Array[int] = []
+		var issues_m: Dictionary = {}          # panneaux d'issue de secours
 		if is_first:
-			_build_cap(mesh, mats, z_a, -1.0, backboard)
+			_build_cap(mesh, mats, z_a, -1.0, backboard, false, issues_m)
 			cap_glass.append(mesh.get_surface_count() - 1)
 		else:
 			_build_end_disc(mesh, mats["rib"], z_a, -1.0, R_BODY)
 		if is_last:
-			_build_cap(mesh, mats, z_b, 1.0, backboard)
+			_build_cap(mesh, mats, z_b, 1.0, backboard, false, issues_m)
 			cap_glass.append(mesh.get_surface_count() - 1)
 		else:
 			_build_end_disc(mesh, mats["rib"], z_b, 1.0, R_BODY)
@@ -970,13 +1009,19 @@ static func build_train(root: Node3D, train_length: float, car_count: int,
 			var lining: ArrayMesh = ArrayMesh.new()
 			_build_tube(lining, mats, z_a, z_b, false, false, wells, [], true)
 			if is_first:
-				_build_cap(lining, mats, z_a, -1.0, false, true)
+				_build_cap(lining, mats, z_a, -1.0, false, true, issues_m)
 			if is_last:
-				_build_cap(lining, mats, z_b, 1.0, false, true)
+				_build_cap(lining, mats, z_b, 1.0, false, true, issues_m)
 			var lin: MeshInstance3D = MeshInstance3D.new()
 			lin.name = "Lining%d" % (i + 1)
 			lin.mesh = lining
 			car_root.add_child(lin)
+		for cle in issues_m:
+			var im: MeshInstance3D = MeshInstance3D.new()
+			im.name = "Issue" + cle
+			im.mesh = issues_m[cle]
+			car_root.add_child(im)
+			issues.append({"node": im, "car": i, "cle": cle})
 		if is_first:
 			front_lamps = _build_cap_fittings(car_root, mats, z_a, -1.0, true)
 		if is_last:
@@ -1005,5 +1050,5 @@ static func build_train(root: Node3D, train_length: float, car_count: int,
 			bellows.mesh = bm
 			bellows.name = "Soufflet"
 			car_root.add_child(bellows)
-	return {"car_roots": car_roots, "wheels": wheels, "doors": doors,
+	return {"car_roots": car_roots, "wheels": wheels, "doors": doors, "issues": issues,
 		"front_lamps": front_lamps, "rear_lamps": rear_lamps, "mats": mats}

@@ -17,6 +17,15 @@ const COULEURS: Array = [Color(0.10, 0.58, 0.22), Color(0.10, 0.33, 0.85),
 	Color(0.85, 0.12, 0.10), Color(0.06, 0.06, 0.07)]
 ## Un fantôme part quand le skieur chaussé bouge à moins de R_DEPART de son
 ## départ ; arrivée : à moins de R_ARRIVEE de la gare de Val Claret.
+## Panneaux ronds des bords de piste (Kevin, 07/10/2026 : « rajoute les
+## panneaux ronds des bords de piste de la couleur adéquate avec marqué
+## Tignes et le nom de la piste, sinon je suis perdu ») : un disque de la
+## couleur de la piste sur un poteau, à droite en descendant, au départ et
+## tous les PAS_PANNEAU mètres, « TIGNES » et le nom de la piste.
+const PAS_PANNEAU: float = 250.0
+const H_POTEAU: float = 2.2
+const R_DISQUE: float = 0.45
+var n_panneaux: int = 0
 const R_DEPART: float = 40.0
 const R_ARRIVEE: float = 200.0
 
@@ -76,6 +85,7 @@ func construire(r: ReliefBuilder) -> void:
 					(cases[cle] as Array).append(Transform3D(Basis.IDENTITY, Vector3(j.x, y + H_JALON * 0.5, j.y)))
 				u += PAS_JALON
 			reste = u - l
+	_construire_panneaux()
 	var mesh: CylinderMesh = CylinderMesh.new()
 	mesh.top_radius = 0.028
 	mesh.bottom_radius = 0.034
@@ -110,7 +120,112 @@ func construire(r: ReliefBuilder) -> void:
 	fantome.name = "Fantome"
 	fantome.relief = relief
 	add_child(fantome)
-	print("[Domaine] %d jalons, %d fantômes" % [n, FantomesDonnees.DESCENTES.size()])
+	print("[Domaine] %d jalons, %d panneaux, %d fantômes" % [n, n_panneaux, FantomesDonnees.DESCENTES.size()])
+
+
+## Panneaux ronds : poteaux et disques en MultiMesh par couleur, le texte en
+## Label3D (deux par panneau), visibles à 350 m.
+func _construire_panneaux() -> void:
+	var poteau: CylinderMesh = CylinderMesh.new()
+	poteau.top_radius = 0.035
+	poteau.bottom_radius = 0.04
+	poteau.height = H_POTEAU
+	poteau.radial_segments = 6
+	poteau.rings = 1
+	var disque: CylinderMesh = CylinderMesh.new()
+	disque.top_radius = R_DISQUE
+	disque.bottom_radius = R_DISQUE
+	disque.height = 0.035
+	disque.radial_segments = 28
+	disque.rings = 1
+	var m_pot: StandardMaterial3D = StandardMaterial3D.new()
+	m_pot.albedo_color = Color(0.35, 0.36, 0.38)
+	m_pot.roughness = 0.7
+	var par_couleur: Dictionary = {}          # couleur → [[xf poteau, xf disque], …]
+	var textes: Array = []                    # [position, normale, nom, couleur]
+	for ip in range(PistesDonnees.PISTES.size()):
+		var c: int = PistesDonnees.PISTES[ip][1]
+		var nom: String = PistesDonnees.PISTES[ip][0]
+		if c < 0 or nom == "":
+			continue
+		var pts: PackedVector2Array = _axes[ip]
+		var reste: float = 12.0
+		for i in range(pts.size() - 1):
+			var a: Vector2 = pts[i]
+			var b: Vector2 = pts[i + 1]
+			var l: float = a.distance_to(b)
+			if l < 1e-3:
+				continue
+			var t: Vector2 = (b - a) / l
+			var nrm: Vector2 = Vector2(-t.y, t.x)          # la droite en descendant
+			var u: float = reste
+			while u < l:
+				var q: Vector2 = a + t * u + nrm * (PistesDonnees.LARGEUR * 0.5 + 1.5)
+				if relief.dans_le_bloc(q.x, q.y):
+					var y: float = relief.hauteur_sol(q.x, q.y)
+					var pied: Vector3 = Vector3(q.x, y, q.y)
+					# le disque fait face au skieur qui descend (normale −t)
+					var nz: Vector3 = Vector3(-t.x, 0.0, -t.y)
+					var nx: Vector3 = Vector3.UP.cross(nz).normalized()
+					var base: Basis = Basis(nx, Vector3.UP, nz)
+					if not par_couleur.has(c):
+						par_couleur[c] = []
+					(par_couleur[c] as Array).append([
+						Transform3D(Basis.IDENTITY, pied + Vector3.UP * (H_POTEAU * 0.5)),
+						Transform3D(base * Basis(Vector3.RIGHT, PI * 0.5), pied + Vector3.UP * (H_POTEAU + R_DISQUE))])
+					textes.append([pied + Vector3.UP * (H_POTEAU + R_DISQUE), nz, nom, c])
+				u += PAS_PANNEAU
+			reste = u - l
+	for c in par_couleur:
+		var xs: Array = par_couleur[c]
+		for k in range(2):
+			var mm: MultiMesh = MultiMesh.new()
+			mm.transform_format = MultiMesh.TRANSFORM_3D
+			mm.mesh = poteau if k == 0 else disque
+			mm.instance_count = xs.size()
+			for i in range(xs.size()):
+				mm.set_instance_transform(i, xs[i][k])
+			var mi: MultiMeshInstance3D = MultiMeshInstance3D.new()
+			mi.name = "Panneaux%s" % ("Poteaux" if k == 0 else "Disques")
+			mi.multimesh = mm
+			if k == 0:
+				mi.material_override = m_pot
+			else:
+				var m: StandardMaterial3D = StandardMaterial3D.new()
+				m.albedo_color = COULEURS[c]
+				m.roughness = 0.55
+				mi.material_override = m
+			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			mi.visibility_range_end = 350.0
+			mi.layers = 1 | Cabin.LAYER_VOIE
+			add_child(mi)
+	var racine: Node3D = Node3D.new()
+	racine.name = "PanneauxTextes"
+	add_child(racine)
+	for e in textes:
+		var pos: Vector3 = e[0]
+		var nz: Vector3 = e[1]
+		var nx: Vector3 = Vector3.UP.cross(nz).normalized()
+		var nom: String = e[2]
+		for k in range(2):
+			var l: Label3D = Label3D.new()
+			l.text = "TIGNES" if k == 0 else nom.to_upper()
+			l.font_size = 48 if k == 0 else 72
+			# le nom tient dans le disque (0,78 m) quelle que soit sa longueur
+			var larg: float = float(maxi(nom.length(), 4)) * 0.58 * 72.0
+			l.pixel_size = 0.0022 if k == 0 else minf(0.0036, 0.78 / larg)
+			l.modulate = Color.WHITE
+			l.outline_modulate = Color(0.0, 0.0, 0.0, 0.85)
+			l.outline_size = 8
+			l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+			l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+			l.alpha_cut = Label3D.ALPHA_CUT_OPAQUE_PREPASS
+			l.visibility_range_end = 350.0
+			l.layers = 1 | Cabin.LAYER_VOIE
+			l.transform = Transform3D(Basis(nx, Vector3.UP, nz),
+				pos + nz * 0.025 + Vector3.UP * (0.22 if k == 0 else -0.08))
+			racine.add_child(l)
+		n_panneaux += 1
 
 
 ## Piste sous le skieur : [nom, couleur] ("", −1 hors piste). Recalculé

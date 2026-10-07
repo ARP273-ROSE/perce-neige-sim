@@ -300,6 +300,8 @@ func _status_text() -> String:
 
 
 func _status_core() -> String:
+	if physics.crashed:
+		return _t("COLLISION - new trip (R)", "COLLISION - nouveau voyage (R)")
 	if physics.cable_rupture:
 		return _t("CABLE SNAPPED - runaway", "CABLE ROMPU - emballement")
 	if physics.emergency or physics.emergency_brake:
@@ -317,33 +319,51 @@ func _status_core() -> String:
 	return _t("Descending to Val Claret", "Descente vers Val Claret")
 
 
+var _fault_cle: String = ""
+var _fault_rem_prec: int = -1
+
+
 func _update_fault_panel() -> void:
 	if fault_manager == null or not fault_manager.is_active():
 		_fault_panel.visible = false
 		return
 	_fault_panel.visible = true
-	var sev_color: Color = fault_manager.get_active_severity_color()
-	var style: StyleBoxFlat = _fault_panel.get_theme_stylebox("panel") as StyleBoxFlat
-	if style != null:
-		style.border_color = sev_color
-	_fault_severity_label.text = "[%s] %s" % [fault_manager.get_active_severity_label(), fault_manager.get_active_id().to_upper()]
-	_fault_severity_label.add_theme_color_override("font_color", sev_color)
-	_fault_label.text = fault_manager.get_active_label()
-	# Le mode d'emploi n'a de sens qu'en mode Pannes (conduite manuelle) —
-	# ailleurs, la panne reste un simple voyant.
-	var show_proc: bool = run_mode == "panne"
-	_fault_what_label.visible = show_proc
-	_fault_do_label.visible = show_proc
-	if show_proc:
-		_fault_what_label.text = fault_manager.get_active_what()
-		_fault_do_label.text = _t("ACTION : ", "ACTION : ") \
-			+ fault_manager.get_active_do()
-		_fault_panel.size = Vector2(680, 168)
-	else:
-		_fault_panel.size = Vector2(680, 64)
+	# textes, couleur et taille : seulement quand la panne ou le mode change
+	# (chaque image, le Label se remettait en forme et le panneau se redessinait)
+	var cle: String = fault_manager.get_active_id() + "|" + run_mode + "|" + lang
+	if cle != _fault_cle:
+		_fault_cle = cle
+		_fault_rem_prec = -1
+		var sev_color: Color = fault_manager.get_active_severity_color()
+		var style: StyleBoxFlat = _fault_panel.get_theme_stylebox("panel") as StyleBoxFlat
+		if style != null:
+			style.border_color = sev_color
+		_fault_severity_label.text = "[%s] %s" % [fault_manager.get_active_severity_label(), fault_manager.get_active_id().to_upper()]
+		_fault_severity_label.add_theme_color_override("font_color", sev_color)
+		_fault_label.text = fault_manager.get_active_label()
+		# Le mode d'emploi n'a de sens qu'en mode Pannes (conduite manuelle) —
+		# ailleurs, la panne reste un simple voyant.
+		var show_proc: bool = run_mode == "panne"
+		_fault_what_label.visible = show_proc
+		_fault_do_label.visible = show_proc
+		if show_proc:
+			_fault_what_label.text = fault_manager.get_active_what()
+			_fault_do_label.text = _t("ACTION : ", "ACTION : ") \
+				+ fault_manager.get_active_do()
+			_fault_panel.size = Vector2(680, 168)
+		else:
+			_fault_panel.size = Vector2(680, 64)
 	var rem: float = fault_manager.get_active_remaining()
-	if is_inf(rem) or rem <= 0.0:
+	var rem_i: int = -2 if (is_inf(rem) or rem <= 0.0) else int(ceil(rem))
+	if rem_i == _fault_rem_prec:
+		return
+	_fault_rem_prec = rem_i
+	if rem_i == -2 and not fault_manager.is_active_catastrophic():
+		# durée 0 non catastrophique (mode 2/3 moteurs) : maintenance à quai
+		_fault_timer_label.text = _t("Cleared on arrival at the station",
+			"Levée à l'arrivée en gare")
+	elif rem_i == -2:
 		_fault_timer_label.text = _t("Manual intervention required (R for new trip)",
 			"Intervention requise (R pour nouveau voyage)")
 	else:
-		_fault_timer_label.text = _t("Auto-clear in %.0fs", "Auto-clear dans %.0fs") % rem
+		_fault_timer_label.text = _t("Auto-clear in %ds", "Auto-clear dans %ds") % rem_i

@@ -7,6 +7,253 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.18.0** — audit complet (plantages, gels, fluidité, PC multiplateforme,
+cohérence), sortie de secours du tunnel jusqu'à la piste, skieur en AUTO.
+- Kevin : « fais un audit complet physique, anti crash, freeze,
+  adaptabilité, perfo, fonction PC multiplateforme, parallélisme,
+  fluidité, fonctionnalité, réalisme… et finis ce qui reste à faire :
+  sortie de secours, piste, skieur ».
+- **Audit** : trois passes de lecture du code (version Web/3D, application
+  PC, cohérence PC ↔ Web et réalisme), par zones. Aucun plantage franc
+  trouvé ; les défauts réels, tous corrigés :
+  - **Gels et à-coups (3D)** : la physique ne rattrape plus son retard en
+    rafale après des images longues (rame à 4×, buzzers décalés) ;
+    l'orthophoto du relief est préparée hors du fil principal ; les
+    collisions du skieur se construisent par tranches de 7 ms sur
+    quelques images au lieu d'une seule (gel d'une à plusieurs secondes
+    sur iPad, son coupé), avec « Préparation du décor… » ; les réglettes
+    de l'évitement ont deux matériaux prêts (un changement de matériau
+    compilait un nuanceur à chaud).
+  - **Coût par image (3D)** : l'écran Pro-face de la rame d'en face
+    (invisible) n'est plus recomposé 30 fois par seconde ; le tronçon
+    libre du câble au culot n'est refait que si la rame a bougé (à quai :
+    plus rien) ; le panneau de panne ne se remet en forme que si la panne
+    change ; les passagers ne sont repositionnés que si l'inclinaison a
+    changé ; plus de chaînes formatées ni de recherches de nœuds à chaque
+    image (pupitre, trait du tunnel, skieur).
+  - **Commandes** : entrer en skieur en tenant FREIN ou +VITESSE ne les
+    laisse plus « tenus » ; dans la vue 3D du PC, J et C passent au PC
+    (une bascule locale était écrasée au paquet suivant).
+  - **PC, pertes de données** : le programme installé par le Setup
+    gardait ses données (journal d'exploitation, réglages, meilleurs
+    scores) dans un dossier que le Setup efface à chaque passage ; elles
+    vivent maintenant dans le profil (reprise automatique des anciennes).
+    La trace d'un crash natif était vidée avant d'être lue : relevée
+    d'abord. Les WAV synthétisés sont écrits en entier puis posés (un
+    fichier tronqué n'« existait » plus à moitié).
+  - **PC, gels** : téléchargement des PDF (F6) hors du fil de
+    l'interface ; arrêt du viewer 3D sans attendre jusqu'à 2,5 s ;
+    recherche de la fenêtre X11 (Linux) dans le fil de lancement ; plus
+    d'appels disque à chaque image pour vérifier que les sons existent.
+  - **PC, robustesse** : un mp3 indécodable ne bloque plus PRÊT pour
+    toujours ; le journal SQLite n'est plus une exception à chaque tick si
+    la base est pleine ou verrouillée ; une exception qui revient à
+    chaque image n'est signalée qu'une fois par minute (60 rapports par
+    seconde avant) ; la file des rapports est purgée même sans accord
+    d'envoi ; un seul viewer 3D lancé à la fois ; les lecteurs audio sont
+    arrêtés avant la pose d'une mise à jour ; journaux bornés à 1 Mo.
+  - **PC, multiplateforme** : polices de repli sur Linux et macOS (Segoe
+    UI → Noto Sans, DejaVu Sans, Helvetica ; Consolas → DejaVu Sans Mono,
+    Menlo) ; le spec Windows embarque VERSION et kit.json (sinon mise à
+    jour proposée à chaque lancement).
+  - **Cohérence** : buzzer de départ en haut à 6,0 s des deux côtés (= le
+    clip ; le PC disait 6,5) ; horaires d'exploitation rétablis à toute
+    sortie du mode skieur ; constantes mortes de la version Web mises au
+    vrai (fermeture des portes 5,3 s, amortissement 0,15).
+- **Sortie de secours** (`scripts/sortie_secours.gd`) : « tu peux percer la
+  sortie de secours dans le tunnel, et sortir sur la piste ; sur la piste
+  la sortie est circulaire comme le tunnel, je t'ai mis sa position ».
+  - Le débouché est posé sur le relief du jeu à la position donnée
+    (45°26′04,26″ N 6°54′02,60″ E, `audit_physique/sortie_secours.sage`).
+    Google Earth y donne 2 655,89 m, le relief IGN du jeu 2 643,5 m : la
+    galerie descend donc de la chambre (sol à 2 661 m).
+  - La paroi est vraiment percée à la chambre du galet 145 (plus un fond
+    sombre). Galerie circulaire de 3 m, sol plat, 8 m perpendiculaires
+    puis tout droit vers le portail (114 m), le sol 4,3 m sous le relief
+    en rampe de 36 % au plus ; là où le relief ne couvre plus le tube, un
+    remblai ; lampes tous les 12 m ; mur de tête en béton percé d'un
+    cercle, aire plane devant.
+  - Pour y aller : rame arrêtée à la chambre, portes ouvertes (mode Défi
+    ou panne) ; de la porte on descend sur la passerelle (les paliers de
+    quai des portes ne sont actifs qu'en gare), puis l'ouverture. Dehors,
+    la trace n° 1 de Kevin passe à 88 m : on chausse et l'on descend.
+- **Skieur en AUTO** (bouton AUTO, touche X ; `scripts/skieur_auto.gd`) :
+  « il peut boucler la boucle et remonter ». La boucle entière toute
+  seule : place → salle → rame (il attend la rame à quai), trajet, sortie
+  par la porte Génépy, à pied jusqu'au départ de la trace n° 4 (au pied
+  de la gare), chausser, descente sur la trace, déchausser à Val Claret,
+  retour à la gare, et on recommence. La rame l'attend aussi quand il
+  descend à l'arrivée. Bloqué trop longtemps : reposé à l'étape suivante.
+  En haut, il descend par la porte où il est monté (les porte-skis barrent
+  l'allée : on ne traverse pas la voiture).
+- **Porte du personnel et escalier de la fosse** (gare basse,
+  `scripts/porte_personnel.gd`) : « faut un escalier pour descendre dans
+  la fosse dans la gare aval au niveau des portes en haut du quai réservé
+  personnel ; au moment où on pousse la porte ça sonne avec le son du
+  klaxon puis ça s'arrête ». En haut de chaque quai, la porte du
+  garde-corps pivote quand on la pousse et sonne une fois (le klaxon) ;
+  derrière, un palier et un escalier descendent au fond de la fosse.
+- **Issues de secours de la face** (bouton ÉVACUER, touche I — relayée par
+  le PC) : « de part et d'autre de la vitre frontale, les parties jaunes
+  cerclées de noir sont des issues de secours et ça s'en va en cas
+  d'évacuation. Donc en cas d'arrêt dans le tunnel, rajoute la
+  possibilité d'enlever ces parties, de marcher sur l'escalier en partie
+  droite du tunnel quand on regarde vers le haut et ensuite de retourner
+  en gare à pied ou de sortir par la sortie de secours au milieu ».
+  - Les quatre D jaunes (deux par calotte) sont des panneaux à part,
+    découpés dans la calotte et dans sa doublure, liseré noir conservé.
+  - Dans une rame **arrêtée en tunnel** seulement : les panneaux
+    s'effacent (maillages et collisions), on passe par le trou, on descend
+    sur la voie, l'escalier de service (à droite en montant) ramène en
+    gare ou à la galerie de secours. Les collisions du tunnel, de la voie
+    et de l'escalier se construisent au fur et à mesure autour du marcheur
+    (zones de ± 80 m) : rien n'est payé tant qu'on ne descend pas.
+  - Tant que quelqu'un est à pied dans le tunnel, la rame est retenue ;
+    les panneaux sont remis à l'arrêt suivant à quai, portes ouvertes.
+- **Ce qu'on entend, selon l'endroit** : « le bruit du souffle dans le
+  tunnel ne s'entend qu'en gare du bas sur les quais et dans la salle
+  d'attente ; quand on attend en gare du haut on entend strictement le
+  même son que celui de la vue machinerie, que tu modules en fonction de
+  la distance à la machinerie ; et si on est dehors on entend l'air. Vue
+  machinerie ou en gare du haut sur les quais, même si on pilote la rame
+  du bas on entend le buzzer du haut ; les buzzers sonnent leurs sons
+  respectifs dans les gares du bas et du haut et on les entend si on y
+  est, même si ça redémarre au milieu du tunnel ; par contre si on est
+  dans la rame, en vue extérieure ou à l'intérieur, on n'entend pas les
+  buzzers des gares ».
+  - Gare basse : les bouffées d'air et les silences. Gare haute : la
+    salle des machines, à −6 dB par doublement de la distance à la
+    machinerie au-delà de 4 m, plancher −24 dB
+    (`audit_physique/son_gare_haute.sage`). Dehors : le vent. À pied
+    dans le tunnel : les bouffées. Dans une rame : la cabine.
+  - Buzzers : celui de chaque gare sonne dans sa gare à chaque départ —
+    on l'entend des quais, de la salle d'attente, de la vue salle des
+    machines, d'une rame à quai — y compris quand la rame repart du
+    milieu du tunnel ; jamais d'une rame en tunnel ni dehors. Mêmes
+    règles sur le PC (le 4ᵉ champ de `skieur_etat` porte le gain de la
+    machinerie).
+- **Souffle plus aigu** (`tools_sons_skieur.py`) : « le souffle du vent
+  est trop grave, faut monter un peu pour que ça siffle un peu comme un
+  fil, plus de grave ». Bruit rose 300-3 000 Hz (au lieu de brun
+  150-1 500) et un sifflement de fil, deux bandes étroites qui glissent
+  de 1 500 à 1 900 Hz ; le vent de dehors monte aussi (180-2 500 Hz) avec
+  un fil qui siffle faiblement.
+- **Retours du deuxième essai sur PC** (v1.17.0) :
+  - « En vue skieur le mode auto est forcé et se déclenche alors que je
+    suis encore dehors, pas le temps d'embarquer » → une rame à quai,
+    prête à l'embarquement, n'est plus mise en exploitation automatique à
+    l'activation du skieur : elle attend qu'on monte (portes ouvertes au
+    besoin) ; l'exploitation s'enclenche quand on est dedans et part 1,5 s
+    plus tard. Si la rame est en ligne, l'exploitation tourne pour qu'elle
+    vienne. PC et Web.
+  - « La séquence reste bloquée à embarquement 6 s… elle devrait se
+    poursuivre toute seule » → la rame n'attend pas un skieur resté sur
+    le quai plus de 45 s : passé ce délai elle ferme et part. PC et Web.
+  - « Un micmac de vues : en skieur je peux changer de vue cockpit,
+    externe, machinerie, le son n'est plus cohérent » → sur le PC, O et
+    le bouton VUE sont refusés en skieur (message), et le son de la salle
+    des machines ne suit plus cette vue fantôme.
+  - « En haut les portes de la rame peuvent s'ouvrir après l'arrêt car il
+    n'y a pas d'oscillation, en bas il faut attendre » → l'ouverture des
+    portes attend la stabilisation de LA rame concernée, plus de
+    l'installation entière : en haut (brin court, millimètres) elles
+    s'ouvrent 3 s après l'arrêt ; en bas, à la fin du rebond. PC et Web.
+  - « Une fois les portes cabine ouvertes, les portes d'accès au quai
+    doivent s'ouvrir » → les portes coulissantes de la salle d'attente
+    s'ouvrent dès les portes de la rame ouvertes à quai (sur le PC, le
+    voyage restait « commencé » jusqu'au demi-tour de l'automate, bien
+    après).
+  - « Les skis sont cachés sous la neige ; le skieur devrait se mettre en
+    schuss ou en chasse-neige ; dans les décors trop vite on devrait
+    déchausser et s'exploser, plus qu'à rechausser » → skis posés 10 cm
+    au-dessus du sol calculé (les tuiles du relief, maillées autrement,
+    les cachaient) ; **postures** : recroquevillé en schuss (bâtons sous
+    les bras), jambes écartées et skis en V (22°) en chasse-neige ;
+    **chute** contre un mur à plus de 6 m/s ou sur la roche (pente > 37°)
+    à plus de 8 m/s : skis déchaussés, 2,5 s à terre, « Chute ! CHAUSSER
+    (E) pour rechausser ».
+  - « Rajoute les panneaux ronds des bords de piste de la couleur
+    adéquate avec Tignes et le nom de la piste, sinon je suis perdu » →
+    500 panneaux : un disque de la couleur de la piste sur un poteau, à
+    droite en descendant, au départ et tous les 250 m, « TIGNES » et le
+    nom en lettres blanches, face au skieur qui descend.
+  - « Les néons, les câbles et ce qui est accroché dans le tunnel défilent
+    à l'intérieur de la cabine côté gauche en montant » → ils étaient dans
+    le gabarit de la caisse (néons à 1,40 m de l'axe, câbles à 1,55 ;
+    la caisse fait 1,72 de rayon) : posés sur la paroi (1,68 et 1,84 m).
+- **Audit fonctionnel PC ↔ Web** (deuxième passe : pannes, départs,
+  exploitation automatique, manuel). Appliqué :
+  - **Pannes (Web)** : l'annonce d'une panne stoppante attend l'arrêt
+    (plus d'« évacuation » pendant le freinage) ; une panne
+    catastrophique enchaîne incident technique à l'arrêt → lumières
+    baissées → évacuation → cabine vidée (R rallume). « Défaut porte » et
+    « Inondation tunnel » ne stoppent plus la rame (plafond 4 m/s pour
+    l'inondation, comme le PC) ; le défaut porte verrouille le départ
+    tant que les portes n'ont pas été cyclées. Perte 400 V et tambour
+    bloqué coupent vraiment la traction (tambour tenu, la rame ne recule
+    pas). Surchauffe et moteur HS déclassent la puissance (0,55 et 2/3,
+    valeurs du PC) ; pic de tension (+6 500 daN) et mou (8 000 daN) se
+    voient sur la jauge, le mou déclenche l'urgence sous un coup de
+    frein, le seuil rouge 35 000 daN aussi (hors Défi). Aiguillage Abt :
+    50 s ; les pannes « jusqu'à la fin du voyage » sont levées à
+    l'arrivée. Une catastrophe ne se lève plus d'un tap (PANNE, F2,
+    LEVER, MODE) : seul NOUVEAU VOYAGE. Pas d'empilement de pannes.
+    « PA + radio perdus » bloque les annonces en ligne (PC et Web), pas
+    celles de quai.
+  - **Départs (Web)** : la consigne n'est plus effacée pendant la
+    séquence de départ (la rame part à la consigne affichée dès la fin
+    du buzzer) ; PRÊT/DÉPART refuse consigne à 0, urgence engagée ou
+    panne catastrophique, avec le message du PC ; confirmation simulée de
+    l'autre rame 2–4 s entre la fin de la fermeture et le buzzer, voyant
+    PRÊT VÉHICULE allumé au buzzer seulement. FREIN tenu abaisse la
+    consigne (0,8/s). Défi : PRÊT/DÉPART portes ouvertes part au buzzer
+    seul, portes ouvertes (départ « sauvage » enfin possible).
+  - **Survitesse et collisions (Web)** : cascade +10 % urgence, +12 %,
+    +20 % parachute 3,6 m/s² dans tous les modes ; collision butoir et
+    collision entre rames dans tous les modes (hors Défi : HUD
+    « COLLISION — nouveau voyage (R) » et bouton NOUVEAU VOYAGE) ; le
+    déraillement reste au Défi.
+  - **Exploitation automatique (Web)** : pointe 9–12 h / 14–16 h à
+    12 m/s, 10,3 m/s en creuse ; charge de passagers selon l'heure et la
+    saison, formule exacte du PC, contrepoids en sens inverse ; l'arrivée
+    est laissée à l'enveloppe du régulateur ; sur catastrophe l'AUTO se
+    désactive ; journal avec passagers, croisière, pointe.
+  - **PC** : touche 4 = « frein de sécurité poulie, verrouillé
+    (1,25 m/s²) » (plus de « 5 m/s² ») ; au demi-tour, confort et
+    drapeaux du Défi repartent de zéro ; après « Perte 400 V », « Tambour
+    bloqué » ou « Aiguillage Abt », le chrono ne court qu'à l'arrêt et
+    vaut « reprise du secours » : PRÊT lève la panne, DÉPART repart à
+    3 m/s jusqu'à la gare ; le planificateur ne tire plus de panne à
+    quai.
+  - **Manuel** (FR et EN) : consigne continue à la flèche haut (plus de
+    W ni de paliers) ; séquence PC D → PRÊT → 2–4 s → DÉPART, premier
+    PRÊT après l'arrivée = demi-tour ; portes sous 0,2 m/s, consigne
+    toujours réglable, 15 m/s en Défi, rampe 0,32 m/s² ; charges d'hiver
+    et d'été ; l'autre rame s'immobilise là où elle était à la rupture ;
+    encadré « Différences avec le PC » (ouverture et inversion
+    automatiques à l'arrivée, veille PC seulement) ; 4 = le même frein
+    que Maj, verrouillé.
+  - Laissé tel quel, à dessein : l'arrêt d'urgence commandé modélisé en
+    frein de voie (choix de la v1.15.52), la rame d'en face figée à la
+    rupture, l'arrêt anormal en tunnel de la version Web.
+- Vérifié :
+  - nouveaux bancs `bench_secours_3d.gd` (de la voiture à la piste par la
+    galerie, puis à ski jusqu'à Val Claret), `bench_skieur_auto_3d.gd`
+    (la boucle bouclée, 22 min), `bench_issues_3d.gd` (ÉVACUER : par le
+    trou, sur la voie, 26 m d'escalier ; refusé à quai, issues remises)
+    et `bench_ecoute_3d.gd` (12 points : écoute et buzzers selon
+    l'endroit) ; `bench_skieur_3d.gd` passe par la porte du personnel et
+    l'escalier de la fosse ;
+  - `bench_ski_3d.gd` : panneaux nommés, chute contre la façade de Val
+    Claret à 9 m/s puis E pour rechausser ; tests PC du skieur adaptés
+    (rame à quai qui attend, retenue plafonnée, portes du haut sans
+    attendre le contrepoids) ;
+  - `bench_pannes_3d.gd` : 13 cas de plus (effets des pannes) ;
+    `bench_portes_3d.gd` et `bench_pupitre_3d.gd` suivent la nouvelle
+    séquence de départ ;
+  - 20 bancs Godot, 104 tests PC ; rendus de la galerie, du portail, des
+    issues de secours et de la porte du personnel.
+
 **v1.17.0** — le ski : chausser en haut, descendre les pistes balisées
 jusqu'à Val Claret, contre le fantôme des descentes de Kevin (suivi :
 SKIEUR.md).

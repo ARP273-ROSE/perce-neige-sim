@@ -916,7 +916,11 @@ func mettre_a_jour(dt: float, ph: TrainPhysics) -> void:
 	if ph == null:
 		return
 	var en_gare: bool = ph.s < PNConstants.START_S + 3.0 or PNConstants.miroir(ph.s) < PNConstants.START_S + 3.0
-	var embarquement: bool = en_gare and ph.doors_open and not ph.trip_started
+	# dès que les portes de la rame sont ouvertes à quai — sur le PC,
+	# trip_started reste vrai jusqu'au demi-tour de l'automate, bien après
+	# l'ouverture (Kevin, 07/10/2026 : « une fois les portes cabine
+	# ouvertes, les portes d'accès au quai doivent s'ouvrir »)
+	var embarquement: bool = en_gare and ph.doors_open and (not ph.trip_started or ph.finished)
 	# ≈ 2 s pour s'ouvrir ou se fermer (vidéo FUNI284, 0:55-0:57)
 	_ouverture = move_toward(_ouverture, 1.0 if embarquement else 0.0, dt / 2.0)
 	var course: float = COURSE_VANTAIL * smoothstep(0.0, 1.0, _ouverture)

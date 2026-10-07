@@ -18,6 +18,7 @@ var _ok: bool = true
 var _v_max: float = 0.0
 var _ecart_max: float = 0.0
 var _nan: bool = false
+var _chausse5: bool = false
 var _resultat: String = ""
 
 
@@ -84,9 +85,9 @@ func _tick() -> void:
 			for c in dom.get_children():
 				if c is MultiMeshInstance3D:
 					jalons += (c as MultiMeshInstance3D).multimesh.instance_count
-			_verif("chaussé sur la neige, hiver, pistes balisées",
-				sk.chausse and relief._hiver > 0.99 and jalons > 500,
-				"chaussé %s, hiver %.1f, %d jalons" % [sk.chausse, relief._hiver, jalons])
+			_verif("chaussé sur la neige, hiver, pistes balisées, panneaux nommés",
+				sk.chausse and relief._hiver > 0.99 and jalons > 500 and dom.n_panneaux > 100,
+				"chaussé %s, hiver %.1f, %d jalons, %d panneaux" % [sk.chausse, relief._hiver, jalons, dom.n_panneaux])
 			sk.chemin = dom.chemin_descente(DESCENTE, 3)
 			sk.vitesse_pilote = 12.0
 			_phase = 3
@@ -123,4 +124,41 @@ func _tick() -> void:
 			if _t > 4.0:
 				_verif("déchaussé : il marche", not sk.chausse and sk.is_on_floor(),
 					"au sol %s" % sk.is_on_floor())
+				# chute : lancé à 9 m/s contre la façade de la gare de Val Claret
+				var ga: GareAval = _main.station_halls.gare_aval
+				var tv: Vector2 = (GareAval.FACADE_B - GareAval.FACADE_A).normalized()
+				var de: Vector2 = Vector2(-tv.y, tv.x)
+				var mil0: Vector2 = (GareAval.FACADE_A + GareAval.FACADE_B) * 0.5
+				if Geometry2D.is_point_in_polygon(mil0 + de, PackedVector2Array(GareAval.HALL)):
+					de = -de
+				# à 5 m du milieu : au milieu c'est la porte d'entrée automatique,
+				# qui s'ouvre devant lui (il entrait dans le hall en skiant)
+				mil0 += tv * 5.0
+				var p5: Vector3 = ga._p2(mil0 + de * 9.0)
+				sk.global_position = Vector3(p5.x, relief.hauteur_sol(p5.x, p5.z) + 0.05, p5.z)
+				sk.velocity = Vector3.ZERO
+				sk.support = null
+				sk.chemin.clear()
+				_main.basculer_ski()
+				var vers: Vector3 = (ga._p2(mil0) - p5)
+				vers.y = 0.0
+				vers = vers.normalized()
+				sk._cap_ski = atan2(-vers.x, -vers.z)
+				sk._cap = sk._cap_ski
+				sk._v_ski = vers * 9.0
+				_chausse5 = sk.chausse
+				_phase = 5
+				_t = 0.0
+		5:
+			if _t > 3.0 or sk.a_terre():
+				_verif("lancé contre la façade à 9 m/s : chute, skis déchaussés, à terre",
+					_chausse5 and not sk.chausse and sk.a_terre(),
+					"chaussé avant %s, après %s, à terre %s, %.1f s" % [_chausse5, sk.chausse, sk.a_terre(), _t])
+				_phase = 6
+				_t = 0.0
+		6:
+			if _t > 3.0:
+				var refus: String = sk.basculer_ski()
+				_verif("relevé, E rechausse", not sk.a_terre() and sk.chausse and refus == "",
+					"à terre %s, chaussé %s, %s" % [sk.a_terre(), sk.chausse, refus])
 				_fin()
