@@ -56,6 +56,10 @@ class GodotBridge:
         self._proc: Optional[subprocess.Popen] = None
         self._sock: Optional[socket.socket] = None
         self._addr = ("127.0.0.1", port)
+        # Retour de la vue 3D (port + 1) : boutons du pupitre 3D, mode
+        # skieur. Sans lui, cliquer le pupitre de la 3D ne faisait que
+        # montrer le geste (retour de Kevin du 07/10/2026).
+        self._rsock: Optional[socket.socket] = None
         # Posé par stop() : si un start() est encore en cours dans un autre
         # thread (grâce de spawn ~1,6 s), il verra le flag à sa sortie et
         # tuera lui-même le process au lieu de le laisser zombie en fenêtre
@@ -402,6 +406,14 @@ class GodotBridge:
         if self._sock is None:
             self._sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             self._sock.setblocking(False)
+        if self._rsock is None:
+            try:
+                rs = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                rs.bind(("127.0.0.1", self.port + 1))
+                rs.setblocking(False)
+                self._rsock = rs
+            except OSError as e:
+                self._log(f"[start] retour UDP {self.port + 1} indisponible : {e}")
         mode = "bundled" if self._bundled_binary_path() else "dev"
         print(f"[GodotBridge] Viewer 3D lancé ({mode}, PID={self._proc.pid}, UDP {self.port})")
         return True
@@ -426,6 +438,33 @@ class GodotBridge:
             except Exception:
                 pass
             self._sock = None
+        if self._rsock is not None:
+            try:
+                self._rsock.close()
+            except Exception:
+                pass
+            self._rsock = None
+
+    def poll_messages(self) -> list:
+        """Messages de la vue 3D (une ligne JSON par paquet, port + 1) :
+        {"pupitre": nom, "enfonce": bool}, {"skieur_basculer": true},
+        {"skieur_conduire": true}, {"skieur_etat": [dedans, retenue, écoute]}.
+        Non bloquant."""
+        out: list = []
+        if self._rsock is None:
+            return out
+        for _ in range(64):
+            try:
+                data, _src = self._rsock.recvfrom(4096)
+            except (BlockingIOError, OSError):
+                break
+            try:
+                d = json.loads(data.decode("utf-8").strip())
+            except (ValueError, UnicodeDecodeError):
+                continue
+            if isinstance(d, dict):
+                out.append(d)
+        return out
 
     def is_running(self) -> bool:
         if self._proc is None:

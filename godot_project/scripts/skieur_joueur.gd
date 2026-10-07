@@ -37,6 +37,9 @@ var actif: bool = false
 ## Commande de marche : x vers la droite, y vers l'avant (−1…1).
 var entree: Vector2 = Vector2.ZERO
 var course: bool = false
+## Touches de marche tenues dans le simulateur PC (vue 3D embarquée, le
+## clavier reste au PC) : 1 avant, 2 arrière, 4 gauche, 8 droite, 16 courir
+var touches_ext: int = 0
 var cam_yaw: float = 0.0
 var cam_pitch: float = -0.28
 var cam_dist: float = 3.2
@@ -212,6 +215,8 @@ func _clavier() -> Vector2:
 		v.x += 1.0
 	if Input.is_physical_key_pressed(KEY_A) or Input.is_physical_key_pressed(KEY_LEFT):
 		v.x -= 1.0
+	v += Vector2(float((touches_ext >> 3) & 1) - float((touches_ext >> 2) & 1),
+		float(touches_ext & 1) - float((touches_ext >> 1) & 1))
 	return v.limit_length(1.0)
 
 
@@ -226,7 +231,8 @@ func _process(delta: float) -> void:
 	var k: Vector2 = _clavier()
 	if k.length() > 0.0:
 		cmd = k
-	var vite: bool = course or Input.is_physical_key_pressed(KEY_SHIFT)
+	var vite: bool = course or Input.is_physical_key_pressed(KEY_SHIFT) \
+		or (touches_ext & 16) != 0
 	var dir: Vector3 = _direction(cmd)
 	if not chemin.is_empty():
 		dir = _suivre_chemin()

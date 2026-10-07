@@ -7,6 +7,44 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.16.3** — PC : les boutons du pupitre 3D agissent, et le mode skieur
+arrive sur le simulateur PC.
+- Kevin : « sur le PC, les boutons marchent mais il ne se passe rien
+  ensuite, le bouton éclairage cabine ne marche pas, alors que dans la PWA
+  ça fonctionne ; là je fais fermer les portes et rien ne se passe » ;
+  « comment je passe en mode skieur sur le PC ? ».
+- Cause : sur PC, la rame est pilotée par le simulateur et la vue 3D ne
+  fait que l'afficher. La liaison n'allait que du PC vers la 3D : un clic
+  sur le pupitre 3D montrait le geste, et le PC n'en savait rien.
+- **Retour de la 3D vers le PC** (UDP, port 7778) :
+  - chaque bouton du pupitre 3D appuie la touche du PC qui fait la même
+    chose, avec les mêmes verrous :
+    - PORTES 1 à 6 / 7 à 12 (ouverture, fermeture) → D ;
+    - ÉCLAIRAGE CABINE et COMPARTIMENT → C ;
+    - KLAXON → K (tenu) ;
+    - − VITE / + VITE → flèches (tenues) ;
+    - MONTÉE → PRÊT (V), puis DÉPART (Z) ;
+    - URGENCE → 4 ; ARRÊT ÉLEC → 3 ;
+  - en exploitation AUTO, la rame reste à l'automate, comme au clavier.
+- **Mode skieur sur PC** : touche **F9** ou bouton **SKIEUR**, en vue 3D
+  (F4).
+  - ZQSD / WASD ou flèches pour marcher, Maj pour courir, V pour la 1re /
+    3e personne, glisser dans la 3D pour regarder.
+  - Le funiculaire passe en exploitation AUTO, 24 h/24, avec la même
+    règle que la PWA : il attend le skieur resté en gare et ferme les
+    portes dès qu'il est dans la voiture.
+  - Hors de la rame, le son de la cabine s'efface ; la 3D joue les
+    bouffées d'air du quai et le vent dehors.
+  - CONDUIRE (près du poste) : fin du mode skieur et de l'AUTO. F9 ou
+    QUITTER : retour à la conduite, l'AUTO continue.
+- Vérifié :
+  - tests PC : 104, dont le pupitre 3D (éclairage, portes, klaxon,
+    vitesse) et le skieur (attente sur le quai, fermeture à bord,
+    CONDUIRE) ;
+  - vue 3D lancée en mode PC, pilotée par UDP : elle renvoie l'état du
+    skieur ;
+  - 15 bancs Godot.
+
 **v1.16.2** — en AUTO, les portes se ferment dès que le skieur est dans la
 voiture.
 - Kevin : « je veux qu'il ferme les portes de la rame une fois qu'il a

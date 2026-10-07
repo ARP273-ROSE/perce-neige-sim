@@ -4397,6 +4397,10 @@ class SoundSystem:
         # Vue « salle des machines » : 0 = son cabine, 1 = son de la salle
         self._mr_target = False
         self._mr_mix = 0.0
+        # Skieur sorti de la rame (mode skieur de la vue 3D) : le son de la
+        # cabine s'efface (τ 0,4 s) ; la 3D joue le quai et le dehors.
+        self.skieur_dehors = False
+        self._sk_mix = 0.0
         self._mr_present = None   # sons de la salle installés ? (cf. set_machine_room_view)
         self._machine_speed = None  # vitesse du câble à la poulie (None : celle de la rame)
         self._mr_idle = None
@@ -5010,6 +5014,13 @@ class SoundSystem:
         if abs(mr_goal - self._mr_mix) < 0.002:
             self._mr_mix = mr_goal
         cabine = 1.0 - self._mr_mix
+        # Kevin, 07/10/2026 : « sur le bord du quai, alors que le truc est
+        # parti, j'entends le son comme si j'étais dedans »
+        sk_goal = 1.0 if self.skieur_dehors else 0.0
+        self._sk_mix += (sk_goal - self._sk_mix) * (1.0 - math.exp(-dt / 0.4))
+        if abs(sk_goal - self._sk_mix) < 0.002:
+            self._sk_mix = sk_goal
+        cabine *= 1.0 - self._sk_mix
         overall *= cabine
         try:
             self._fx_audio.setVolume(0.70 * (cabine if self._fx_oneshot_active else 1.0))
@@ -5742,6 +5753,15 @@ class AutoOps:
         # Retour gare la plus proche (auto) : état du protocole limp-home.
         self._limp_armed = False    # départ de secours déjà lancé
         self._limp_dwell = 0.0      # temporisation de reprise à l'arrêt
+        # Skieur de la vue 3D (posé par GameWidget, message de la 3D) : en
+        # gare hors de la voiture, on l'attend ; monté pendant l'arrêt et
+        # passé la ligne des portes, on ferme 1,5 s plus tard (Kevin,
+        # 07/10/2026 : « qu'il ferme les portes une fois qu'il a détecté que
+        # j'étais à l'intérieur du funi ») — même règle que la PWA.
+        self.skieur_a_bord = False
+        self.skieur_retenue = False
+        self._skieur_vu = False     # vu sur le quai pendant cet arrêt
+        self._skieur_a_bord_t = 0.0
         # Init logger DB
         self._log = AutoOpsLogger()
         self._log.ensure_schema()
@@ -5991,6 +6011,14 @@ class AutoOps:
             # Ensure doors are open (they usually are at arrival).
             if not tr.doors_cmd:
                 self.w.begin_doors_open(tr)
+            if self.skieur_retenue:
+                self._skieur_vu = True
+                self.phase_t = min(self.phase_t, self.station_dwell_s - 6.0)
+            self._skieur_a_bord_t = (self._skieur_a_bord_t + dt
+                                     if self.skieur_a_bord else 0.0)
+            if (self.skieur_a_bord and self._skieur_vu
+                    and self._skieur_a_bord_t > 1.5):
+                self.phase_t = max(self.phase_t, self.station_dwell_s)
             if self.phase_t >= self.station_dwell_s:
                 # If it's past the last-ascent cutoff and we're at the
                 # lower terminus, end the day instead of sending another
@@ -6200,6 +6228,7 @@ class AutoOps:
         if (at_top and tr.direction > 0) or (at_bottom and tr.direction < 0):
             self.w.reverse_trip(silent=True)
         self._set_phase(self.PHASE_BOARDING)
+        self._skieur_vu = False
         # Boarding must start with the cabin absolutely parked :
         # drum engaged, setpoint at 0, otherwise as soon as the doors
         # finish closing in CLOSING the regulator would see a live
@@ -6699,10 +6728,26 @@ class GameWidget(QWidget):
         Qt.Key.Key_L, Qt.Key.Key_N, Qt.Key.Key_Backspace,
         Qt.Key.Key_F1, Qt.Key.Key_F2, Qt.Key.Key_F3,
         Qt.Key.Key_F4, Qt.Key.Key_F5, Qt.Key.Key_F6,
-        Qt.Key.Key_F7, Qt.Key.Key_F8, Qt.Key.Key_F11,
+        Qt.Key.Key_F7, Qt.Key.Key_F8, Qt.Key.Key_F9, Qt.Key.Key_F11,
         Qt.Key.Key_O,
         Qt.Key.Key_Plus, Qt.Key.Key_Equal, Qt.Key.Key_Minus,
     ))
+    # Mode skieur : le clavier fait marcher le skieur ; seules ces touches
+    # gardent leur rôle (menus, pause, son, langue, éclairages)
+    SKIEUR_GARDE = frozenset(int(k) for k in (
+        Qt.Key.Key_F1, Qt.Key.Key_F2, Qt.Key.Key_F3, Qt.Key.Key_F4,
+        Qt.Key.Key_F5, Qt.Key.Key_F6, Qt.Key.Key_F7, Qt.Key.Key_F8,
+        Qt.Key.Key_F9, Qt.Key.Key_F11, Qt.Key.Key_Escape, Qt.Key.Key_P,
+        Qt.Key.Key_N, Qt.Key.Key_L, Qt.Key.Key_J, Qt.Key.Key_C,
+    ))
+    # Bits des touches de marche envoyées à la 3D (skieur_joueur.gd)
+    SKIEUR_MARCHE = (
+        (1, (Qt.Key.Key_Z, Qt.Key.Key_W, Qt.Key.Key_Up)),
+        (2, (Qt.Key.Key_S, Qt.Key.Key_Down)),
+        (4, (Qt.Key.Key_Q, Qt.Key.Key_A, Qt.Key.Key_Left)),
+        (8, (Qt.Key.Key_D, Qt.Key.Key_Right)),
+        (16, (Qt.Key.Key_Shift,)),
+    )
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -6959,6 +7004,12 @@ class GameWidget(QWidget):
         # track the previous "any_action" state so only a rising edge
         # resets the dead-man timer. Holding a key does NOT qualify.
         self._prev_any_action: bool = False
+        # Mode skieur de la vue 3D (F9 / bouton SKIEUR, 07/10/2026) : on
+        # incarne un skieur dans la 3D ; le PC garde la rame (AUTO)
+        self._skieur = False
+        self._skieur_vue_n = 0                  # appuis sur V (1re / 3e pers.)
+        self._skieur_etat = (False, False, 0)   # dedans, retenue, écoute
+        self._skieur_heures = False             # force_any_hours avant
         self.new_trip(first=True)
 
     # ----- lifecycle -------------------------------------------------------
@@ -6971,6 +7022,138 @@ class GameWidget(QWidget):
         self.keyPressEvent(QKeyEvent(QEvent.Type.KeyPress, k,
                                      Qt.KeyboardModifier.NoModifier))
         self._key_state.discard(k)
+
+    # ----- retour de la vue 3D : pupitre, skieur (07/10/2026) ------------
+
+    # Boutons du pupitre de la cabine 3D (pupitre_conduite.gd) tenus tant
+    # qu'on appuie : klaxon, sélecteur −VITE / +VITE
+    _PUPITRE_TENUS = {"klaxon": Qt.Key.Key_K,
+                      "vite_plus": Qt.Key.Key_Up,
+                      "vite_moins": Qt.Key.Key_Down}
+
+    def _message_3d(self, m: dict) -> None:
+        """Message de la vue 3D embarquée (GodotBridge.poll_messages)."""
+        if "pupitre" in m:
+            self._pupitre_3d(str(m["pupitre"]), bool(m.get("enfonce", False)))
+        elif m.get("skieur_basculer"):
+            self.basculer_skieur()
+        elif m.get("skieur_conduire"):
+            self._sortir_skieur(conduire=True)
+        elif "skieur_etat" in m:
+            e = m["skieur_etat"]
+            if isinstance(e, list) and len(e) == 3:
+                self._skieur_etat = (bool(e[0]), bool(e[1]), int(e[2]))
+                self._appliquer_etat_skieur()
+
+    def _pupitre_3d(self, nom: str, enfonce: bool) -> None:
+        """Bouton du pupitre de la cabine 3D → la touche du PC qui fait la
+        même chose (mêmes verrous, mêmes annonces). Sans ce relais, la 3D
+        montrait le geste et rien ne suivait (Kevin, 07/10/2026 : « sur le
+        PC les boutons marchent mais il ne se passe rien ensuite »)."""
+        tr = self.state.train
+        qk = self._PUPITRE_TENUS.get(nom)
+        tenu = qk is not None
+        if not tenu:
+            if not enfonce:
+                return
+            if nom == "rouge_1":            # URGENCE : verrouillée, 2e appui relâche
+                qk = Qt.Key.Key_4
+            elif nom == "rouge_2":          # ARRÊT ÉLEC : idem
+                qk = Qt.Key.Key_3
+            elif nom == "montee":           # MONTÉE : PRÊT, puis DÉPART
+                qk = Qt.Key.Key_Z if tr.ready else Qt.Key.Key_V
+            elif nom.startswith("ouverture_"):
+                if tr.doors_cmd:
+                    return
+                qk = Qt.Key.Key_D
+            elif nom.startswith("fermeture_"):
+                if not tr.doors_cmd:
+                    return
+                qk = Qt.Key.Key_D
+            elif nom in ("cabine", "compartiment"):
+                qk = Qt.Key.Key_C
+            else:
+                return                      # geste seul (clé, écran, secours…)
+        if self.auto_ops.enabled and int(qk) not in self.AUTO_OPS_META_KEYS:
+            return                          # l'exploitation AUTO tient la rame
+        if tenu and enfonce:
+            self._mouse_hold.add(qk)
+            self._sim_press(qk)
+        elif tenu:
+            self._mouse_hold.discard(qk)
+            self._sim_release(qk)
+        else:
+            self._virtual_key(qk)
+
+    def _skieur_touches(self) -> int:
+        if not self._skieur:
+            return 0
+        tenues = {int(k) for k in self._key_state}
+        bits = 0
+        for bit, touches in self.SKIEUR_MARCHE:
+            if any(int(t) in tenues for t in touches):
+                bits |= bit
+        return bits
+
+    def _appliquer_etat_skieur(self) -> None:
+        dedans, retenue, ecoute = self._skieur_etat
+        on = self._skieur
+        self.sounds.skieur_dehors = on and ecoute != 0
+        self.auto_ops.skieur_a_bord = on and dedans
+        self.auto_ops.skieur_retenue = on and retenue
+
+    def basculer_skieur(self) -> None:
+        """F9 / bouton SKIEUR : on incarne un skieur dans la vue 3D (il
+        marche dans les gares, monte dans la rame, sort en haut). Comme dans
+        la PWA, le funiculaire tourne tout seul pendant ce temps (exploitation
+        AUTO, 24 h/24)."""
+        st = self.state
+        if self._skieur:
+            self._sortir_skieur()
+            return
+        bridge = self._godot_bridge
+        if (st.mode != MODE_RUN or bridge is None or not bridge.is_running()
+                or self._cabin_view_state != 2):
+            add_event(st, "skieur",
+                      "Skier: start a trip and switch to the 3D view (F4) first",
+                      "Skieur : lancez un voyage et passez en vue 3D (F4) d'abord",
+                      "warn")
+            return
+        ao = self.auto_ops
+        self._skieur_heures = ao.force_any_hours
+        ao.force_any_hours = True
+        if st.train.autopilot:
+            self._autopilot_disengage("skier mode", "mode skieur")
+        if not ao.enabled:
+            ao.toggle()
+        self._godot_view3d = 0
+        self._skieur = True
+        self._skieur_etat = (False, False, 0)
+        self._key_state.clear()
+        add_event(st, "skieur",
+                  "Skier: ZQSD / arrows to walk, Shift to run, V 1st/3rd "
+                  "person, drag in the 3D view to look — F9 to drive again",
+                  "Skieur : ZQSD / flèches pour marcher, Maj pour courir, V "
+                  "1re/3e personne, glisser dans la 3D pour regarder — F9 "
+                  "pour reprendre la conduite",
+                  "info")
+
+    def _sortir_skieur(self, conduire: bool = False) -> None:
+        """Fin du mode skieur. CONDUIRE (au poste de la rame) : l'exploitation
+        AUTO s'arrête, on reprend la conduite ; sinon elle continue."""
+        if not self._skieur:
+            return
+        self._skieur = False
+        self._key_state.clear()
+        self._appliquer_etat_skieur()
+        ao = self.auto_ops
+        if conduire and ao.enabled:
+            ao.toggle()
+            ao.force_any_hours = self._skieur_heures
+        add_event(self.state, "skieur",
+                  "Driver's seat" if conduire else "Skier mode off",
+                  "Au poste de conduite" if conduire else "Fin du mode skieur",
+                  "info")
 
     def _autopilot_disengage(self, why_en: str, why_fr: str) -> None:
         tr = self.state.train
@@ -7654,6 +7837,13 @@ class GameWidget(QWidget):
                 if self._godot_hb_acc >= 1.0:
                     self._godot_hb_acc = 0.0
                     self._godot_bridge.send_state({"hb": 1})
+            # retour de la 3D : boutons du pupitre, mode skieur
+            if _g_running:
+                for msg in self._godot_bridge.poll_messages():
+                    self._message_3d(msg)
+            # plus de vue 3D (F4, viewer fermé) : fin du mode skieur
+            if self._skieur and (not _g_running or self._cabin_view_state != 2):
+                self._sortir_skieur()
 
         if st.mode == MODE_RUN:
             self._apply_keys(dt)
@@ -7677,6 +7867,9 @@ class GameWidget(QWidget):
                 state_dict["view3d"] = vue3d
                 state_dict["ext_view"] = vue3d == 1
                 state_dict["qualite_3d"] = self._qualite_3d
+                state_dict["skieur"] = self._skieur
+                state_dict["skieur_touches"] = self._skieur_touches()
+                state_dict["skieur_vue"] = self._skieur_vue_n
                 self._godot_bridge.send_state(state_dict)
             self._autopilot_tick(dt)
             self._advance_fault_phase(dt)
@@ -8161,7 +8354,9 @@ class GameWidget(QWidget):
         if advance_door_timers(tr, dt):
             tr.ready = False
             st.ghost_ready = False
-        active = self._key_state | self._mouse_hold
+        # mode skieur : flèches, Maj… font marcher le skieur, pas la rame
+        active = (set(self._mouse_hold) if self._skieur
+                  else self._key_state | self._mouse_hold)
         up = Qt.Key.Key_Up in active
         down = Qt.Key.Key_Down in active
         brake_key = (Qt.Key.Key_Space in active) or (Qt.Key.Key_B in active)
@@ -8297,6 +8492,19 @@ class GameWidget(QWidget):
             return
         if k in (Qt.Key.Key_F7, Qt.Key.Key_F8):
             self.changer_volume(-0.1 if k == Qt.Key.Key_F7 else 0.1)
+            ev.accept()
+            return
+        if k == Qt.Key.Key_F9 and not ev.isAutoRepeat():
+            self.basculer_skieur()
+            ev.accept()
+            return
+        if self._skieur and ev.spontaneous() and int(k) not in self.SKIEUR_GARDE:
+            # le clavier fait marcher le skieur (ZQSD / WASD, flèches, Maj) ;
+            # V : 1re / 3e personne. Les clics du tableau de bord (touches
+            # simulées) gardent leur rôle.
+            if k == Qt.Key.Key_V and not ev.isAutoRepeat():
+                self._skieur_vue_n += 1
+            self._key_state.add(k)
             ev.accept()
             return
         self._key_state.add(k)
@@ -8968,6 +9176,8 @@ class GameWidget(QWidget):
     def keyReleaseEvent(self, ev: QKeyEvent) -> None:  # noqa: N802
         k = ev.key()
         self._key_state.discard(k)
+        if self._skieur and ev.spontaneous() and int(k) not in self.SKIEUR_GARDE:
+            return
         if k == Qt.Key.Key_Shift:
             # Shift is the hold-to-emergency override. Only clear emergency
             # if it wasn't latched via the dedicated button (4). The drum
@@ -14089,10 +14299,8 @@ class GameWidget(QWidget):
         #   0 sécurité   : arrêt électrique, urgence, veille
         #   1 éclairage  : phares, cabine, tunnel
         #   2 exploitation : portes, pilote auto, klaxon
-        #   3 vues       : vue 3D, cycle des vues 3D      (2 boutons larges)
+        #   3 vues       : vue 3D, cycle des vues 3D, skieur
         #   4 système    : son, aide                      (2 boutons larges)
-        btn_w2 = (3 * btn_w + gap) / 2.0
-        col1w = col0 + btn_w2 + gap
         row4 = btn_y + (btn_h + gap) * 4
         # Row 1 : éclairage
         self._draw_button(p, col0, row1, btn_w, btn_h,
@@ -14147,24 +14355,31 @@ class GameWidget(QWidget):
         self._hit_zones.append(
             (QRectF(col2, row2, btn_w, btn_h), int(Qt.Key.Key_K), True)
         )
-        # Row 3 : vues — vue cabine 3D (F4) et cycle des vues 3D (O) ; le
-        # libellé du cycle annonce la vue SUIVANTE
-        self._draw_button(p, col0, row3, btn_w2, btn_h,
+        # Row 3 : vues — vue cabine 3D (F4), cycle des vues 3D (O ; le
+        # libellé annonce la vue SUIVANTE), skieur dans la 3D (F9)
+        self._draw_button(p, col0, row3, btn_w, btn_h,
                           T("3D VIEW [F4]", "VUE 3D [F4]"),
                           self._cabin_view_state == 2, QColor(120, 200, 255),
                           QColor(10, 40, 70))
         self._hit_zones.append(
-            (QRectF(col0, row3, btn_w2, btn_h), int(Qt.Key.Key_F4), False)
+            (QRectF(col0, row3, btn_w, btn_h), int(Qt.Key.Key_F4), False)
         )
         vue3d = int(getattr(self, "_godot_view3d", 0))
-        self._draw_button(p, col1w, row3, btn_w2, btn_h,
+        self._draw_button(p, col1, row3, btn_w, btn_h,
                           (T("EXT. VIEW [O]", "VUE EXT. [O]"),
-                           T("MACHINE ROOM [O]", "VUE MACHINES [O]"),
+                           T("MACHINES [O]", "MACHINES [O]"),
                            T("CAB VIEW [O]", "VUE CABINE [O]"))[vue3d],
                           vue3d != 0,
                           QColor(170, 210, 255), QColor(20, 40, 70))
         self._hit_zones.append(
-            (QRectF(col1w, row3, btn_w2, btn_h), int(Qt.Key.Key_O), False)
+            (QRectF(col1, row3, btn_w, btn_h), int(Qt.Key.Key_O), False)
+        )
+        self._draw_button(p, col2, row3, btn_w, btn_h,
+                          T("SKIER [F9]", "SKIEUR [F9]"),
+                          self._skieur, QColor(150, 230, 200),
+                          QColor(10, 50, 40))
+        self._hit_zones.append(
+            (QRectF(col2, row3, btn_w, btn_h), int(Qt.Key.Key_F9), False)
         )
         # Row 4 : système — son, volume général (demande du 05/10 : « un
         # bouton à côté du son pour régler le volume général »), aide
@@ -15243,6 +15458,8 @@ class GameWidget(QWidget):
                          "vue cabine : off → dessinée → 3D")),
                 ("O", T("3D view: cabin / ext. / machines",
                         "vue 3D : cabine / ext. / machines")),
+                ("F9", T("skier in the 3D view (ZQSD, Shift, V)",
+                         "skieur dans la vue 3D (ZQSD, Maj, V)")),
             ]),
             (T("System", "Système"), [
                 ("P / Esc", T("pause / resume", "pause / reprise")),

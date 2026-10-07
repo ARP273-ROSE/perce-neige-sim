@@ -25,6 +25,13 @@ const LINK_WARN_S: float = 3.0
 const LINK_QUIT_S: float = 30.0
 
 var udp: PacketPeerUDP = null
+## Retour vers le PC (port + 1) : boutons du pupitre 3D, mode skieur. Sans
+## lui, un clic sur le pupitre de la vue 3D embarquée ne faisait que
+## montrer le geste (Kevin, 07/10/2026 : « sur le PC les boutons marchent
+## mais il ne se passe rien ensuite »).
+var _retour: PacketPeerUDP = null
+var _last_skieur: int = -1
+var _last_skieur_vue: int = -1
 var port: int = DEFAULT_PORT
 var physics: TrainPhysics = null
 var fault_manager: FaultManager = null
@@ -59,6 +66,14 @@ func _ready() -> void:
 		push_warning("[StateReceiver] Bind UDP %d échoué : %s" % [port, error_string(err)])
 		return
 	print("[StateReceiver] Écoute UDP localhost:%d (mode CLIENT — sim Python pilote)" % port)
+	_retour = PacketPeerUDP.new()
+	_retour.set_dest_address("127.0.0.1", port + 1)
+
+
+## Message au PC, une ligne JSON (lu par GodotBridge.poll_messages).
+func envoyer(d: Dictionary) -> void:
+	if _retour != null:
+		_retour.put_packet((JSON.stringify(d) + "\n").to_utf8_buffer())
 
 
 func set_physics(p: TrainPhysics) -> void:
@@ -206,7 +221,9 @@ func _apply(d: Dictionary) -> void:
 		var vm: int = clampi(int(d["view3d"]), 0, 2)
 		if vm != _last_view3d:
 			_last_view3d = vm
-			if cabin != null and cabin.view_mode != vm:
+			# (pas sous les pieds du skieur : il a sa propre caméra)
+			if cabin != null and cabin.view_mode != vm \
+					and not (main != null and main.get("mode_skieur") == true):
 				cabin.set_view(vm)
 	elif d.has("ext_view"):
 		var ev: bool = _b(d, "ext_view", false)
@@ -215,6 +232,23 @@ func _apply(d: Dictionary) -> void:
 			if cabin != null \
 					and (cabin.view_mode == Cabin.ViewMode.EXTERIOR) != ev:
 				cabin.set_view(Cabin.ViewMode.EXTERIOR if ev else Cabin.ViewMode.FPV)
+	# Skieur (touche F9 / bouton SKIEUR du PC) : le PC décide, appliqué SUR
+	# CHANGEMENT ; touches de marche tenues côté PC (bits : 1 avant, 2
+	# arrière, 4 gauche, 8 droite, 16 courir)
+	if d.has("skieur") and main != null and main.has_method("skieur_externe"):
+		var sk: int = 1 if _b(d, "skieur", false) else 0
+		if sk != _last_skieur:
+			_last_skieur = sk
+			main.skieur_externe(sk == 1)
+	if main != null and main.get("skieur") != null:
+		main.skieur.touches_ext = _i(d, "skieur_touches", 0)
+	# 1re / 3e personne (touche V du PC en mode skieur) : compteur d'appuis
+	var nv: int = _i(d, "skieur_vue", 0)
+	if nv != _last_skieur_vue:
+		if _last_skieur_vue >= 0 and main != null and main.get("commandes_skieur") != null \
+				and main.mode_skieur:
+			main.commandes_skieur.basculer_vue()
+		_last_skieur_vue = nv
 	# Panne active : déclenche localement pour effet visuel + son
 	if d.has("active_fault") and fault_manager != null and d["active_fault"] is String:
 		var fid: String = d["active_fault"]

@@ -76,6 +76,10 @@ var skieur: SkieurJoueur = null
 var collisions: CollisionsJeu = null
 var commandes_skieur: CommandesSkieur = null
 var mode_skieur: bool = false
+## vue 3D embarquée dans le PC : sons du quai et du dehors (le PC joue ceux
+## de la rame), dernier état du skieur envoyé au PC
+var sons_skieur: SonsSkieur = null
+var _skieur_etat_envoye: Array = []
 var _skieur_place: bool = false        # déjà posé une fois (on le retrouve où on l'a laissé)
 var _skieur_au_poste: bool = false     # assis au poste : la vue cabine est la sienne
 var _skieur_voiture: Node3D = null     # voiture où il était en quittant la vue skieur
@@ -1145,7 +1149,14 @@ func _commande_pupitre(nom: String, enfonce: bool) -> void:
 		_flash("Commutateur général : rame en marche")
 		return
 	cabin.pupitre_appuyer(nom, enfonce)
-	if client_mode or physics == null:
+	if client_mode:
+		# embarqué dans le PC : c'est le PC qui pilote la rame, on lui
+		# transmet l'appui (« sur le PC les boutons marchent mais il ne se
+		# passe rien ensuite », Kevin, 07/10/2026)
+		if state_receiver != null:
+			state_receiver.envoyer({"pupitre": nom, "enfonce": enfonce})
+		return
+	if physics == null:
 		return
 	if nom == "klaxon":
 		physics.horn = enfonce
@@ -1225,7 +1236,8 @@ func _unhandled_input(event: InputEvent) -> void:
 			return
 	# Pannes + auto-exploitation + inversion de sens
 	if event is InputEventKey and event.pressed and not event.echo:
-		if event.keycode == KEY_K:
+		# K dans la PWA ; F9 dans la vue 3D du PC (K y est le klaxon)
+		if event.keycode == (KEY_F9 if client_mode else KEY_K):
 			basculer_skieur()
 			return
 		if mode_skieur and not (event.keycode in [KEY_F1, KEY_F2, KEY_F3, KEY_J, KEY_C]):
@@ -1401,14 +1413,31 @@ func do_reverse() -> void:
 # wagon, qui peut marcher dans le wagon, voyager dans le funiculaire et
 # aller au poste de pilotage » (Kevin). Bouton SKIEUR, touche K.
 
-## Bascule conduite ↔ skieur.
+## Bascule conduite ↔ skieur. Dans la vue 3D du PC, c'est le PC qui décide
+## (touche F9, bouton SKIEUR) : on le lui demande.
 func basculer_skieur() -> void:
-	if client_mode or tunnel == null or cabin == null:
+	if client_mode:
+		if state_receiver != null:
+			state_receiver.envoyer({"skieur_basculer": true})
+		return
+	if tunnel == null or cabin == null:
 		return
 	if mode_skieur:
 		_sortir_skieur()
 	else:
 		_entrer_skieur()
+
+
+## Vue 3D du PC : le PC allume ou éteint le mode skieur (StateReceiver).
+func skieur_externe(on: bool) -> void:
+	if tunnel == null or cabin == null:
+		return
+	if on and not mode_skieur:
+		_entrer_skieur()
+		if not mode_skieur and state_receiver != null:
+			state_receiver._last_skieur = -1     # relief pas prêt : on réessaiera
+	elif not on and mode_skieur:
+		_sortir_skieur()
 
 
 func _entrer_skieur() -> void:
@@ -1442,6 +1471,8 @@ func _entrer_skieur() -> void:
 			else skieur.global_position
 		skieur.activer(p, cabin.global_transform.basis.get_euler().y)
 	elif not _skieur_place and station_halls != null and station_halls.gare_aval != null:
+		if client_mode:
+			_depart_haut = physics.s > PNConstants.LENGTH * 0.5   # rame du PC en haut
 		# départ d'en bas : sur la place ; d'en haut : à table sur la terrasse
 		var gare: Node = station_halls.gare_amont if _depart_haut and station_halls.gare_amont != null \
 			else station_halls.gare_aval
@@ -1459,6 +1490,12 @@ func _entrer_skieur() -> void:
 	else:
 		skieur.activer(skieur.global_position, skieur.cam_yaw)
 	_skieur_voiture = null
+	if client_mode and sons_skieur == null:
+		sons_skieur = SonsSkieur.new()
+		sons_skieur.name = "SonsSkieur"
+		add_child(sons_skieur)
+		sons_skieur.physics = physics
+	_skieur_etat_envoye = []
 	mode_skieur = true
 	cabin.set_view(Cabin.ViewMode.SKIEUR)
 	skieur.camera.make_current()
@@ -1483,7 +1520,10 @@ func _sortir_skieur() -> void:
 		auto_operator.a_bord = false
 	if audio != null:
 		audio.ecoute = 0
+	if sons_skieur != null:
+		sons_skieur.ecoute = 0
 	if skieur != null:
+		skieur.touches_ext = 0
 		skieur.desactiver()
 	if commandes_skieur != null:
 		commandes_skieur.visible = false
@@ -1503,6 +1543,9 @@ func _mode_skieur_ui(on: bool) -> void:
 func _skieur_conduit() -> void:
 	_skieur_au_poste = true
 	_sortir_skieur()
+	if client_mode and state_receiver != null:
+		# le PC sort du mode skieur et rend la conduite (fin de son AUTO)
+		state_receiver.envoyer({"skieur_conduire": true})
 	if auto_operator != null and auto_operator.enabled:
 		auto_operator.toggle()
 	_flash("Au poste de conduite — SKIEUR pour se lever")
@@ -1545,15 +1588,26 @@ func _maj_skieur() -> void:
 	# l'automate attend le skieur qui est en gare sans être monté, et ferme
 	# les portes dès qu'il est dedans — passé la ligne des portes : debout
 	# dans l'embrasure, il est encore « en gare »
+	var en_gare: bool = _skieur_en_gare()
+	var dedans: bool = false
+	if skieur.support != null:
+		var loc: Vector3 = skieur.support.global_transform.affine_inverse() * skieur.global_position
+		dedans = absf(loc.x) < SKIEUR_DEDANS_X
+	var retenue: bool = not dedans and (skieur.support != null or en_gare)
+	var ec: int = 0 if skieur.support != null else (1 if en_gare else 2)
 	if auto_operator != null:
-		var dedans: bool = false
-		if skieur.support != null:
-			var loc: Vector3 = skieur.support.global_transform.affine_inverse() * skieur.global_position
-			dedans = absf(loc.x) < SKIEUR_DEDANS_X
 		auto_operator.a_bord = dedans
-		auto_operator.retenue = not dedans and (skieur.support != null or _skieur_en_gare())
+		auto_operator.retenue = retenue
 	if audio != null:
-		audio.ecoute = 0 if skieur.support != null else (1 if _skieur_en_gare() else 2)
+		audio.ecoute = ec
+	if sons_skieur != null:
+		sons_skieur.ecoute = ec
+	if client_mode and state_receiver != null:
+		# même règle d'attente et de départ pour l'exploitation AUTO du PC
+		var etat: Array = [dedans, retenue, ec]
+		if etat != _skieur_etat_envoye:
+			_skieur_etat_envoye = etat
+			state_receiver.envoyer({"skieur_etat": etat})
 	# CONDUIRE : à côté du siège du poste de la rame pilotée
 	var pres: bool = false
 	if skieur.support != null and cabin.is_ancestor_of(skieur.support) and cabin.interior_root != null:
