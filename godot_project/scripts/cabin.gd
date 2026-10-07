@@ -1081,10 +1081,33 @@ func _couche_interieur() -> void:
 		vi.layers = (vi.layers & ~1) | LAYER_INTERIEUR | LAYER_RAME
 
 
-## Vue extérieure (07/10/2026) : la rame se voit À TRAVERS le relief — sa
-## coque est redessinée en silhouette jaune translucide, sans test de
-## profondeur (le relief reste opaque : on en voit les sommets).
-static var _mat_rx: StandardMaterial3D = null
+## Vue extérieure (07/10/2026) : la rame se voit À TRAVERS le relief —
+## sa coque est redessinée en silhouette jaune translucide, mais SEULEMENT
+## là où quelque chose la cache (comparaison avec la profondeur de la
+## scène) : à découvert, elle garde ses vraies couleurs (« la rame est
+## devenue toute jaune », iPad 07/10/2026).
+const SHADER_RAYONS_X: String = """shader_type spatial;
+render_mode unshaded, depth_test_disabled, depth_draw_never, cull_back, fog_disabled;
+uniform sampler2D profondeur : hint_depth_texture, filter_nearest, repeat_disable;
+uniform vec4 couleur : source_color = vec4(1.0, 0.86, 0.25, 0.30);
+void fragment() {
+	float d = texture(profondeur, SCREEN_UV).r;
+#if CURRENT_RENDERER == RENDERER_COMPATIBILITY
+	vec3 ndc = vec3(SCREEN_UV, d) * 2.0 - 1.0;
+#else
+	vec3 ndc = vec3(SCREEN_UV * 2.0 - 1.0, d);
+#endif
+	vec4 v = INV_PROJECTION_MATRIX * vec4(ndc, 1.0);
+	float scene = -v.z / v.w;
+	// à découvert (rien devant, à 0,5 m près) : pas de silhouette
+	if (-VERTEX.z <= scene + 0.5) {
+		discard;
+	}
+	ALBEDO = couleur.rgb;
+	ALPHA = couleur.a;
+}
+"""
+static var _mat_rx: ShaderMaterial = null
 var _rx_on: bool = false
 
 
@@ -1093,12 +1116,10 @@ func set_rayons_x(on: bool) -> void:
 		return
 	_rx_on = on
 	if _mat_rx == null:
-		_mat_rx = StandardMaterial3D.new()
-		_mat_rx.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-		_mat_rx.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-		_mat_rx.no_depth_test = true
-		_mat_rx.disable_fog = true
-		_mat_rx.albedo_color = Color(1.0, 0.86, 0.25, 0.22)
+		var sh: Shader = Shader.new()
+		sh.code = SHADER_RAYONS_X
+		_mat_rx = ShaderMaterial.new()
+		_mat_rx.shader = sh
 	for n in mesh_root.find_children("*", "GeometryInstance3D", true, false):
 		(n as GeometryInstance3D).material_overlay = _mat_rx if on else null
 
