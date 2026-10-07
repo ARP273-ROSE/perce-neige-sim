@@ -8,7 +8,7 @@ extends Node3D
 ##
 ## Un caisson gris sur le tube transversal, avec :
 ##   - à gauche, sur un cadre noir : l'écran tactile Pro-face (EcranProface,
-##     rendu en direct dans une texture, 4 fois par seconde) ;
+##     rendu en direct dans une texture, 30 fois par seconde) ;
 ##   - à droite, la plaque à boutons, disposée comme sur la photo :
 ##       PORTES 1 à 6 (côté gauche en regardant vers le haut) et PORTES
 ##       7 à 12 (côté droit) : OUVERTURE (blanc), FERMETURE (vert)
@@ -49,9 +49,12 @@ const L_GAUCHE: float = 0.20
 const L_CADRE: float = 0.30
 const L_PLAQUE: float = 0.31
 const P_FACE: float = 0.22             # profondeur de la face
-const ECRAN_L: float = 0.17           # dalle ≈ 7,7" (photo : ¾ de la largeur de la plaque)
-const ECRAN_H: float = 0.10
-const PERIODE_ECRAN: float = 0.25
+# dalle agrandie (Kevin, 07/10/2026 : « qu'il prenne quasi tout l'espace
+# noir ») : 0,272 × 0,161 m, au rapport 480 × 284 de l'écran Pro-face
+const ECRAN_L: float = 0.272
+const ECRAN_H: float = 0.161
+const Z_ECRAN: float = -0.012
+const PERIODE_ECRAN: float = 1.0 / 30.0   # rafraîchi 30 fois par seconde (fluidité des chiffres)
 
 var _face: Node3D = null
 var _sv: SubViewport = null
@@ -119,7 +122,7 @@ func construire(z_console: float, y_top: float, lumieres: Array,
 	_boite(plaque_mat, Vector3(L_PLAQUE, 0.006, P_FACE), Vector3(X_PLAQUE, 0.0, 0.0), _face)
 	_boite(plaque_mat, Vector3(L_GAUCHE, 0.006, P_FACE), Vector3(X_GAUCHE, 0.0, 0.0), _face)
 	_construire_ecran()
-	_etiquette("Pro-face", Vector2(X_ECRAN, 0.074), 26, Color(0.55, 0.56, 0.60))
+	_etiquette("Pro-face", Vector2(X_ECRAN, 0.088), 20, Color(0.55, 0.56, 0.60))
 	_construire_boutons(chrome, noir, filet)
 	_construire_gauche(chrome, noir, filet)
 	# éclairage doux de la face (fait partie de l'éclairage cabine)
@@ -137,7 +140,10 @@ func construire(z_console: float, y_top: float, lumieres: Array,
 
 func _construire_ecran() -> void:
 	_sv = SubViewport.new()
-	_sv.size = Vector2i(int(EcranProface.L), int(EcranProface.H))
+	# rendu à deux fois la résolution de l'écran : net une fois agrandi
+	_sv.size = Vector2i(int(EcranProface.L) * 2, int(EcranProface.H) * 2)
+	_sv.size_2d_override = Vector2i(int(EcranProface.L), int(EcranProface.H))
+	_sv.size_2d_override_stretch = true
 	_sv.transparent_bg = false
 	_sv.disable_3d = true
 	_sv.render_target_update_mode = SubViewport.UPDATE_ONCE
@@ -157,7 +163,7 @@ func _construire_ecran() -> void:
 	mi.mesh = q
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	# couché sur la face, haut de l'écran vers le pare-brise
-	mi.position = Vector3(X_ECRAN, 0.0035, -0.016)
+	mi.position = Vector3(X_ECRAN, 0.0035, Z_ECRAN)
 	mi.rotation = Vector3(-PI * 0.5, 0.0, 0.0)
 	_face.add_child(mi)
 
@@ -295,7 +301,7 @@ func commande_sous(cam: Camera3D, pos: Vector2) -> String:
 	if meilleur == "vite":
 		meilleur = "vite_moins" if q.x < (_commandes["vite"][0] as Vector2).x else "vite_plus"
 	if meilleur == "" and absf(q.x - X_ECRAN) < ECRAN_L * 0.5 \
-			and absf(q.y + 0.016) < ECRAN_H * 0.5:
+			and absf(q.y - Z_ECRAN) < ECRAN_H * 0.5:
 		meilleur = "ecran"
 	return meilleur
 

@@ -7,6 +7,23 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.15.82** — rames vues à travers le relief seulement là où il les
+cache ; écran du pupitre agrandi et fluide.
+- **« En vue externe, la rame est devenue toute jaune »** : la silhouette
+  jaune était dessinée par-dessus toute la coque, même à découvert.
+  - Elle compare maintenant sa profondeur à celle de la scène, en Vulkan
+    comme en Compatibility.
+  - Elle n'apparaît que sur les parties cachées par le relief ; à
+    découvert, la rame garde ses couleurs.
+- **Écran Pro-face** (« agrandis-le pour qu'il prenne quasi tout l'espace
+  noir, et augmente la fréquence de rafraîchissement ») :
+  - dalle de 0,272 × 0,161 m au lieu de 0,17 × 0,10, au rapport de
+    l'écran ;
+  - rendu à deux fois sa résolution, pour rester net ;
+  - rafraîchi 30 fois par seconde au lieu de 4.
+- Vérifié : 14 bancs Godot, 99 tests PC, parité PWA ; rendus Vulkan et
+  Compatibility.
+
 **v1.15.81** — inversion en gare silencieuse ; vue extérieure sans zone
 marron ; gares éclairées sur la PWA ; titres du pupitre dans la plaque.
 - **Inversion du sens** (« quand j'inverse en gare après un trajet normal,
