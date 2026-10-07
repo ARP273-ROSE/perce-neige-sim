@@ -85,11 +85,12 @@ func _draw() -> void:
 func _bandeau_haut() -> void:
 	draw_rect(Rect2(4, 4, L - 8, 36), C_BLEU)
 	# date et heure (fond sombre, chiffres jaunes)
-	var dt: Dictionary = Time.get_datetime_dict_from_system()
+	# heure LOCALE de l'appareil, à la seconde (PNConstants.heure_locale)
+	var dt: Dictionary = PNConstants.heure_locale()
 	draw_rect(Rect2(8, 7, 70, 30), Color(0.30, 0.30, 0.30))
 	_texte(Vector2(10, 19), "%02d/%02d/%04d" % [dt.day, dt.month, dt.year], 10, C_JAUNE, 66,
 		HORIZONTAL_ALIGNMENT_CENTER)
-	_texte(Vector2(10, 33), "%02d:%02d" % [dt.hour, dt.minute], 11, C_JAUNE, 66,
+	_texte(Vector2(10, 33), "%02d:%02d:%02d" % [dt.hour, dt.minute, dt.second], 11, C_JAUNE, 66,
 		HORIZONTAL_ALIGNMENT_CENTER)
 	# voyants d'état
 	var cases: Array = [["ARRÊT\nFREIN DE\nSERVICE", arret_frein_service, Color(0.95, 0.15, 0.15)],

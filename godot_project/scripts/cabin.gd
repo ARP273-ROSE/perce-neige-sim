@@ -1310,7 +1310,8 @@ func _process(_delta: float) -> void:
 		_clock_next -= _delta
 		if _clock_next <= 0.0:
 			_clock_next = 1.0
-			_clock_label.text = Time.get_time_string_from_system(false).substr(0, 5)
+			var hl: Dictionary = PNConstants.heure_locale()
+			_clock_label.text = "%02d:%02d" % [hl.hour, hl.minute]
 
 	# Animation des passagers selon dynamique
 	_animate_passengers(_delta)

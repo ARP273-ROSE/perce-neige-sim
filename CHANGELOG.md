@@ -7,6 +7,17 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.15.84** — l'écran du pupitre et l'horloge de la cabine à l'heure
+locale de l'appareil.
+- « Affiche la vraie date et heure que tu récupères du PC, de l'iPad ou
+  du téléphone, au lieu d'un truc figé » : dans le navigateur, l'heure
+  « système » de Godot est en UTC, d'où 2 h de retard en été.
+  - `PNConstants.heure_locale()` lit le décalage du fuseau dans le
+    navigateur, relu chaque minute pour suivre le passage à l'heure
+    d'hiver ; sur PC, c'est l'heure locale du système.
+  - L'écran Pro-face affiche la date et l'heure à la seconde ; la
+    tablette-horloge du montant gauche suit aussi.
+
 **v1.15.83** — plus aucune silhouette jaune sur les rames.
 - « Enlève complètement cette silhouette jaune partout, ça laisse des
   traces » : la silhouette des rames est supprimée en vue extérieure. Le
