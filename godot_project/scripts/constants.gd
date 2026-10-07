@@ -43,6 +43,27 @@ static func distance_compteur(s_: float, direction: int) -> float:
 	return clampf(raw, 0.0, PARCOURS)
 
 
+## Date et heure LOCALES de l'appareil (PC, iPad, téléphone). Dans le
+## navigateur, l'heure « système » de Godot est en UTC (2 h de retard en
+## été — « affiche la vraie date et heure, pas un truc figé », 07/10/2026) :
+## le décalage du fuseau est lu dans le navigateur (Date), relu chaque
+## minute (passage à l'heure d'hiver).
+static var _tz_min: int = 0
+static var _tz_lu_ms: int = -1000000
+
+
+static func heure_locale() -> Dictionary:
+	if not OS.has_feature("web"):
+		return Time.get_datetime_dict_from_system(false)
+	var now_ms: int = Time.get_ticks_msec()
+	if now_ms - _tz_lu_ms > 60000:
+		_tz_lu_ms = now_ms
+		var v: Variant = JavaScriptBridge.eval("-(new Date()).getTimezoneOffset()", true)
+		if v != null:
+			_tz_min = int(v)
+	return Time.get_datetime_dict_from_unix_time(int(Time.get_unix_time_from_system()) + _tz_min * 60)
+
+
 static func safari_web() -> bool:
 	if not OS.has_feature("web"):
 		return false
