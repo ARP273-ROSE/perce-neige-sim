@@ -32,6 +32,7 @@ import random
 import sys
 import threading
 import time
+import wave
 import weakref
 from dataclasses import dataclass, field
 from datetime import datetime, time as dtime

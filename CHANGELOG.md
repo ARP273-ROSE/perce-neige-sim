@@ -7,6 +7,12 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.18.1** — correctif de construction : les paquets Linux et macOS de la
+1.18.0 ne se construisaient pas (`wave` utilisé sans import dans l'écriture
+atomique des WAV — l'application plantait à la synthèse des sons au
+premier lancement ; les tests ne synthétisent pas de son). Import ajouté,
+synthèse vérifiée.
+
 **v1.18.0** — audit complet (plantages, gels, fluidité, PC multiplateforme,
 cohérence), sortie de secours du tunnel jusqu'à la piste, skieur en AUTO.
 - Kevin : « fais un audit complet physique, anti crash, freeze,
