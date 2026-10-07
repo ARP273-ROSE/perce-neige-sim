@@ -19,6 +19,7 @@ var _gp_plongee: float = 0.62
 var _gp_lacet: float = 0.0
 var _cam: PackedFloat32Array = []  # caméra libre dans le repère de la salle des machines : s', x, y, cap°, site°, fov
 var _camt: PackedFloat32Array = [] # caméra libre dans le repère du tunnel : s, x, y, cap°, site°, fov
+var _camw: PackedFloat32Array = [] # caméra libre en coordonnées monde : x, y, z, cible x, y, z, fov
 
 
 func _initialize() -> void:
@@ -45,6 +46,9 @@ func _initialize() -> void:
 			_gp_plongee = float(a.substr(8))
 		elif a.begins_with("lacet="):
 			_gp_lacet = float(a.substr(6))
+		elif a.begins_with("camw="):
+			for v in a.substr(5).split(","):
+				_camw.append(float(v))
 		elif a.begins_with("camt="):
 			for v in a.substr(5).split(","):
 				_camt.append(float(v))
@@ -88,6 +92,15 @@ func _tick() -> void:
 			var ext = _main.get("machine_room").get_node_or_null("Exterieur/" + _cache)
 			if ext != null:
 				ext.visible = false
+		if _camw.size() >= 7:
+			var cw := Camera3D.new()
+			cw.fov = _camw[6]
+			cw.near = 0.05
+			cw.far = 20000.0
+			get_root().add_child(cw)
+			cw.look_at_from_position(Vector3(_camw[0], _camw[1], _camw[2]),
+				Vector3(_camw[3], _camw[4], _camw[5]), Vector3.UP)
+			cw.current = true
 		if _camt.size() >= 6:
 			var tun = _main.get("tunnel")
 			var xt: Transform3D = tun.transform_at(_camt[0])

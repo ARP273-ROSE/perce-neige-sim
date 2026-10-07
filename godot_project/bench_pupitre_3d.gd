@@ -168,6 +168,29 @@ func _tick() -> void:
 		_main.do_reverse()
 		var annonce: bool = ann.is_announcing()
 		_verif("inversion à quai silencieuse, en plein tunnel annoncée", silence and annonce)
+	# gare aval : les portes coulissantes de la cloison s'ouvrent pendant
+	# l'embarquement, se referment au départ
+	var halls: StationHalls = _main.get("station_halls")
+	if halls != null and halls.gare_aval != null:
+		var ga: GareAval = halls.gare_aval
+		ph.s = PNConstants.START_S
+		ph.direction = 1
+		ph.v = 0.0
+		ph.trip_started = false
+		ph.doors_open = true
+		for k in range(6):
+			ga.mettre_a_jour(0.5, ph)
+		var v0: Array = ga._vantaux[0]
+		var ouvert: float = absf((v0[0] as Node3D).position.distance_to(ga._p(float(v0[1]), 0.0, 0.0)))
+		ph.trip_started = true
+		ph.doors_open = false
+		for k in range(6):
+			ga.mettre_a_jour(0.5, ph)
+		var ferme: float = absf((v0[0] as Node3D).position.distance_to(ga._p(float(v0[1]), 0.0, 0.0)))
+		_verif("gare aval : 4 vantaux, ouverts à l'embarquement, fermés au départ",
+			ga._vantaux.size() == 4 and ouvert > 0.9 and ferme < 0.01,
+			"course %.2f m puis %.2f m" % [ouvert, ferme])
+		_verif("gare aval : panneau des départs renseigné", (ga._panneau[1] as Label3D).text.contains("FUNICULA"))
 	print("BENCH_PUPITRE " + ("OK" if _ok else "ECHEC"))
 	quit(0 if _ok else 1)
 
