@@ -11,7 +11,7 @@ rendre compte d'où passe le tunnel.
 
 Sources (Géoplateforme IGN, Licence Ouverte Etalab 2.0) :
   * relief : RGE ALTI (couche WMS ELEVATION.ELEVATIONGRIDCOVERAGE.HIGHRES,
-    flottants 32 bits) ;
+    flottants 32 bits), téléchargé à 4 m et lu aux nœuds de la grille ;
   * texture : orthophotographie (ORTHOIMAGERY.ORTHOPHOTOS).
 
 Repère du jeu (SlopeProfile.build_path_points) : origine au pied de la voie
@@ -50,11 +50,48 @@ def wms(couche, fmt, w, h):
         return r.read()
 
 
-# --- altitudes : grille nx × nz, ligne 0 = NORD (haut de l'image WMS)
-brut = wms("ELEVATION.ELEVATIONGRIDCOVERAGE.HIGHRES", "image/x-bil;bits=32", nx, nz)
-h = np.frombuffer(brut, "<f4").reshape(nz, nx).astype(np.float64)
-if not np.isfinite(h).all() or h.min() < 500.0:
+# --- altitudes : grille nx × nz, ligne 0 = NORD
+# 🔴 07/10/2026 : demandé directement à 25 m, le WMS renvoie un relief
+# GROSSIER (rééchantillonné depuis un niveau de pyramide plus pauvre) —
+# 17 m d'écart quadratique avec l'altitude ponctuelle IGN, 51 m au pire
+# dans les barres rocheuses ; le tunnel « sortait » du relief avant la
+# gare amont alors qu'il est souterrain (audit_physique/
+# tunnel_amont_relief.sage). On télécharge donc à 4 m, par tuiles, et on
+# lit la valeur À CHAQUE NŒUD de la grille (centres de pixels alignés).
+FIN = 4.0
+fin_l = (LON1 - LON0) * M_LON
+fin_h = (LAT1 - LAT0) * M_LAT
+n_fx = int(round(fin_l / FIN)) + 1
+n_fz = int(round(fin_h / FIN)) + 1
+TUILE = 1024
+dlon = (LON1 - LON0) / (n_fx - 1)
+dlat = (LAT1 - LAT0) / (n_fz - 1)
+fin_g = np.full((n_fz, n_fx), np.nan)
+for i0 in range(0, n_fz, TUILE):
+    for j0 in range(0, n_fx, TUILE):
+        hh = min(TUILE, n_fz - i0)
+        ww = min(TUILE, n_fx - j0)
+        # pixels centrés sur les nœuds : bbox élargie d'un demi-pas
+        la_n = LAT1 - i0 * dlat + dlat / 2
+        la_s = LAT1 - (i0 + hh - 1) * dlat - dlat / 2
+        lo_o = LON0 + j0 * dlon - dlon / 2
+        lo_e = LON0 + (j0 + ww - 1) * dlon + dlon / 2
+        url = ("https://data.geopf.fr/wms-r?SERVICE=WMS&VERSION=1.3.0&REQUEST=GetMap&STYLES="
+               f"&LAYERS=ELEVATION.ELEVATIONGRIDCOVERAGE.HIGHRES&CRS=EPSG:4326&BBOX={la_s},{lo_o},{la_n},{lo_e}"
+               f"&WIDTH={ww}&HEIGHT={hh}&FORMAT=image/x-bil;bits=32")
+        with urllib.request.urlopen(url, timeout=300) as r:
+            fin_g[i0:i0 + hh, j0:j0 + ww] = np.frombuffer(r.read(), "<f4").reshape(hh, ww)
+if not np.isfinite(fin_g).all() or fin_g.min() < 500.0:
     raise SystemExit("relief IGN incomplet (valeurs absentes) : relancer plus tard")
+# valeur aux nœuds de la grille de 25 m (bilinéaire dans la grille fine)
+gi = np.linspace(0.0, n_fz - 1.0, nz)
+gj = np.linspace(0.0, n_fx - 1.0, nx)
+I0 = np.clip(np.floor(gi).astype(int), 0, n_fz - 2)
+J0 = np.clip(np.floor(gj).astype(int), 0, n_fx - 2)
+V = (gi - I0)[:, None]
+U = (gj - J0)[None, :]
+h = (fin_g[I0][:, J0] * (1 - U) * (1 - V) + fin_g[I0][:, J0 + 1] * U * (1 - V)
+     + fin_g[I0 + 1][:, J0] * (1 - U) * V + fin_g[I0 + 1][:, J0 + 1] * U * V)
 code = np.clip(np.round((h - H_BASE) * 10.0), 0, 65535).astype(np.uint32)
 rgb = np.zeros((nz, nx, 3), np.uint8)
 rgb[..., 0] = code >> 8

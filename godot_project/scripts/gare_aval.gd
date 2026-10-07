@@ -657,9 +657,7 @@ func _escalier() -> void:
 		var y_bas: float = -h_tot - 0.2
 		_boite("anthracite", LARGEUR_ESCALIER, y_dessus - y_bas, GIRON, p.x, p.y, (y_dessus + y_bas) * 0.5, rot)
 	var d_pied: float = ARCHE_D + 0.5 + GIRON * n_marches
-	# place (enrobé ; front de neige l'hiver)
-	var pp: Vector2 = mil + dehors * (d_pied + 6.0)
-	_boite("anthracite", 20.0, 1.5, 12.0, pp.x, pp.y, -h_tot - 0.75, rot, "Place")
+	# (la place elle-même est le terrain, aplani à son niveau : ReliefBuilder)
 	# garde-corps : 5 files le long de la volée
 	for f in [-5.5, -2.75, 0.0, 2.75, 5.5]:
 		var a3: Vector3 = _p2(mil + dehors * (ARCHE_D + 0.5) + t * f, 1.0)
