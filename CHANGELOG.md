@@ -7,6 +7,19 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.18.3** — retours du quatrième essai sur PC.
+- « En mode exploitation auto tu repasses tout seul en mode normal, sinon
+  ça fait n'importe quoi » → activer l'exploitation automatique (X, bouton
+  AUTO, EXPLOIT. du skieur, montée du skieur) ramène au mode NORMAL (le
+  Défi n'a plus de sécurités, le mode Pannes tire des pannes). PC et Web.
+- « La première fois qu'on active le skieur sur le PC ça prend plus de
+  10 s, on ne sait pas si ça marche, il n'y a pas de message » → le temps
+  de préparer le décor (collisions des gares, par tranches sans gel), le
+  bouton SKIEUR du PC affiche « décor 45 % (6 s) », le journal note le
+  début et « décor 3D prêt en N s » ; dans la vue 3D le message reste
+  affiché avec l'avancement. La vue 3D du PC construit deux fois plus par
+  image (14 ms au lieu de 7 : le PC dessine à part).
+
 **v1.18.2** — retours du troisième essai sur PC.
 - « En haut et en bas de la rame je suis bloqué par les derniers
   porte-skis, je ne peux pas accéder à l'avant ni évacuer » → trois
