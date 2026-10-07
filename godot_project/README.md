@@ -32,8 +32,11 @@ Présentation générale, vraie machine et commandes : `../README.md`. Manuel :
 - **Exploitation** : modes Normal, Défi, Pannes ; annonces ; exploitation
   automatique (`auto_operator.gd`).
 - **Skieur jouable** (`skieur_joueur.gd`, collisions dans
-  `collisions_jeu.gd`, portes automatiques dans `porte_auto.gd`) : suivi du
-  chantier dans `../SKIEUR.md`.
+  `collisions_jeu.gd`, portes automatiques dans `porte_auto.gd`) et **ski**
+  (glisse dans `skieur_joueur.gd`, pistes et jalons dans
+  `domaine_skiable.gd`, fantôme dans `fantome_ski.gd` ; données produites
+  par `../tools_pistes.py` et `../tools_fantomes.py`) : suivi dans
+  `../SKIEUR.md`.
 - **Réglage automatique** de la qualité selon la machine
   (`perf_manager.gd`).
 
@@ -47,7 +50,8 @@ départ, `D` portes, `I` inverser, `H` phares, `C` cabine, `J` tunnel,
 `V` / `O` vue, `M` mode, `F` choix de panne, `R` nouveau voyage (après un
 accident ou une panne grave), `F1` panne au hasard, `F2` effacer la panne,
 `F3` exploitation automatique, `K` skieur. En skieur : `ZQSD` (ou flèches),
-`Maj` pour courir, `V` 1re / 3e personne.
+`Maj` pour courir, `V` 1re / 3e personne, `E` chausser ; à ski, `Q` / `D`
+tourner, `Z` pousser, `S` chasse-neige, `Maj` schuss.
 
 ## Développer
 
@@ -63,9 +67,10 @@ accident ou une panne grave), `F1` panne au hasard, `F2` effacer la panne,
   godot --headless --path . -s bench_<nom>.gd -- --mode=normal
   ```
 
-  `bench_skieur_3d.gd` se lance avec `--fixed-fps 60`. Les 15 bancs :
-  aiguillage, auto, defi, galets, pannes, perf, portes, pupitre, relief,
-  rupture, salle_machines, skieur, son_salle, train_mesh, voyages.
+  `bench_skieur_3d.gd` et `bench_ski_3d.gd` se lancent avec
+  `--fixed-fps 60`. Les 16 bancs : aiguillage, auto, defi, galets, pannes,
+  perf, portes, pupitre, relief, rupture, salle_machines, ski, skieur,
+  son_salle, train_mesh, voyages.
 - **Captures** de contrôle : `shot_*.gd` (vues de la cabine, du pupitre,
   du skieur…).
 - **Publier la version Web** : `bash ../deploy_web.sh` (export Web, puis
