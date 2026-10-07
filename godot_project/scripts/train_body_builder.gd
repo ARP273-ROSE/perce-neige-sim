@@ -190,13 +190,16 @@ static func _theta_cut() -> float:
 
 
 # --- plan des panneaux ----------------------------------------------------
+## Nature de chaque cerceau d'une voiture, de l'avant vers l'arrière.
+const KINDS: Array = ["win", "win", "door", "win", "win", "door", "win", "door", "win", "win"]
+
 # Retourne une liste de colonnes [{z0, z1, kind}] couvrant [z_a, z_b] ;
 # kind ∈ blank | rib | win | door. Panneaux W D W D W D W entre anneaux.
 static func _columns(z_a: float, z_b: float) -> Array:
 	var cols: Array = []
 	# 10 cerceaux, 3 portes par face (source CFD), placées hors des
 	# échancrures de bogie : W W D W W D W D W W
-	var kinds: Array = ["win", "win", "door", "win", "win", "door", "win", "door", "win", "win"]
+	var kinds: Array = KINDS
 	var z: float = z_a
 	cols.append({"z0": z, "z1": z + END_BLANK, "kind": "blank"})
 	z += END_BLANK
