@@ -71,6 +71,13 @@ var quality_mode: String = "auto"   # auto (détection + direct) | high | medium
 var _ext_light: DirectionalLight3D = null   # vue extérieure seulement
 var _compat: bool = RenderingServer.get_current_rendering_method() == "gl_compatibility"
 var _env: Environment = null
+# Skieur jouable (07/10/2026) : construit au premier passage en vue skieur
+var skieur: SkieurJoueur = null
+var collisions: CollisionsJeu = null
+var commandes_skieur: CommandesSkieur = null
+var mode_skieur: bool = false
+var _skieur_place: bool = false        # déjà posé une fois (on le retrouve où on l'a laissé)
+var _skieur_au_poste: bool = false     # assis au poste : la vue cabine est la sienne
 const AMBIENT_ON: float = 0.40
 const AMBIENT_OFF: float = 0.0        # noir total : seuls phares, cabine et gares éclairent
 ## Halls de gare en rendu Compatibility (PWA), voir _process
@@ -876,9 +883,16 @@ func _process(delta: float) -> void:
 		physics.alarme_externe = fault_manager.is_active()
 	# relief 3D du massif (vue extérieure seulement), translucide le long
 	# du tunnel
+	# skieur : à l'air libre, c'est le jour (relief, ciel, soleil) ; dans
+	# une rame en plein tunnel, le relief ne sert à rien
+	var dehors: bool = mode_skieur and skieur != null and skieur.dehors(relief)
+	if _ext_light != null and dehors:
+		_ext_light.visible = true
 	if relief != null and cabin != null:
-		var ext: bool = cabin.view_mode == Cabin.ViewMode.EXTERIOR and relief.pret
-		relief.visible = ext
+		var vue_ext: bool = cabin.view_mode == Cabin.ViewMode.EXTERIOR
+		var ext: bool = (vue_ext or dehors) and relief.pret
+		relief.visible = (vue_ext or (mode_skieur and not _skieur_en_tunnel())) and relief.pret
+		relief.montrer_trait(vue_ext)
 		# le tunnel se voit à travers le relief opaque (trait ambre) ; plus
 		# de silhouette des rames (« enlève complètement cette silhouette
 		# jaune, ça laisse des traces », 07/10/2026)
@@ -887,7 +901,7 @@ func _process(delta: float) -> void:
 		# le brouillard du tunnel (≈ 250 m de visibilité) noierait tout au
 		# loin : en vue extérieure il s'éclaircit avec le recul de la caméra
 		if _env != null:
-			var k_f: float = clampf(15.0 / cabin.orbit_dist, 0.0, 1.0) if ext else 1.0
+			var k_f: float = (clampf(15.0 / cabin.orbit_dist, 0.0, 1.0) if vue_ext else 0.12) if ext else 1.0
 			_env.fog_density = 0.004 * k_f
 			_env.volumetric_fog_density = 0.008 * k_f if k_f > 0.3 else 0.0
 			_env.fog_sky_affect = 0.0 if ext else 0.5    # ciel bleu dehors
@@ -917,7 +931,7 @@ func _process(delta: float) -> void:
 	# monte quand la caméra cabine y entre.
 	if _env != null and cabin != null and physics != null and tunnel != null:
 		var amb: float = AMBIENT_ON if tunnel_lights_on else AMBIENT_OFF
-		if _compat and cabin.view_mode == Cabin.ViewMode.FPV:
+		if _compat and (cabin.view_mode == Cabin.ViewMode.FPV or cabin.view_mode == Cabin.ViewMode.SKIEUR):
 			var sr: float = physics.s_render
 			if sr > tunnel.station_high_start - 20.0 or sr < tunnel.station_low_end + 20.0:
 				amb = AMBIENT_GARE_WEB
@@ -930,7 +944,10 @@ func _process(delta: float) -> void:
 		var d_hall: float = machine_room.distance_au_hall(cam_e.global_position) \
 			if cam_e != null else INF
 		machine_room.set_exterieur_visible(cabin.view_mode != Cabin.ViewMode.EXTERIOR
+			and not mode_skieur
 			and (d_hall < 150.0 or (cabin.view_mode == Cabin.ViewMode.FPV and d_hall < 450.0)))
+	if mode_skieur:
+		_maj_skieur()
 	# numéros des supports : rétroréfléchissants dans les phares (vue cabine)
 	if track != null and cabin != null:
 		track.set_retro(cabin.head_glow() if cabin.view_mode == Cabin.ViewMode.FPV else 0.0)
@@ -1035,6 +1052,14 @@ func _update_announcement_triggers() -> void:
 
 
 func _handle_continuous_input(delta: float) -> void:
+	if mode_skieur:
+		# le clavier fait marcher le skieur (ZQSD, flèches, Maj) : rien de
+		# la conduite ; V bascule 1re / 3e personne
+		if Input.is_action_just_pressed("toggle_view") and commandes_skieur != null:
+			commandes_skieur.basculer_vue()
+		if Input.is_action_just_pressed("pause"):
+			_paused = not _paused
+		return
 	if Input.is_action_pressed("speed_up"):
 		physics.speed_cmd = clampf(physics.speed_cmd + speed_cmd_rate * delta, 0.0, 1.0)
 	if Input.is_action_pressed("speed_down"):
@@ -1196,6 +1221,11 @@ func _unhandled_input(event: InputEvent) -> void:
 			return
 	# Pannes + auto-exploitation + inversion de sens
 	if event is InputEventKey and event.pressed and not event.echo:
+		if event.keycode == KEY_K:
+			basculer_skieur()
+			return
+		if mode_skieur and not (event.keycode in [KEY_F1, KEY_F2, KEY_F3, KEY_J, KEY_C]):
+			return                # les lettres font marcher le skieur
 		if event.keycode == KEY_F1 and fault_manager != null:
 			fault_manager.trigger_random()
 		elif event.keycode == KEY_F2 and fault_manager != null:
@@ -1359,3 +1389,117 @@ func do_reverse() -> void:
 		challenge.result_ready.emit({"quip_only": true})
 	if auto_operator != null and auto_operator.enabled:
 		auto_operator._enter_initial_state()
+
+
+# --- Skieur jouable (07/10/2026) ---------------------------------------------------
+# « un skieur capable de monter les escaliers des gares et de marcher à
+# l'intérieur sans passer au travers du plancher, des murs, des portes ou du
+# wagon, qui peut marcher dans le wagon, voyager dans le funiculaire et
+# aller au poste de pilotage » (Kevin). Bouton SKIEUR, touche K.
+
+## Bascule conduite ↔ skieur.
+func basculer_skieur() -> void:
+	if client_mode or tunnel == null or cabin == null:
+		return
+	if mode_skieur:
+		_sortir_skieur()
+	else:
+		_entrer_skieur()
+
+
+func _entrer_skieur() -> void:
+	if relief == null or not relief.pret:
+		_flash("Le relief se prépare encore : réessayer dans un instant")
+		return
+	if collisions == null:
+		collisions = CollisionsJeu.new()
+		collisions.name = "Collisions"
+		add_child(collisions)
+		var zones: Array = []
+		for s in [0.0, PNConstants.LENGTH]:
+			var o: Vector3 = tunnel.transform_at(s).origin
+			zones.append(Rect2(o.x - 250.0, o.z - 250.0, 500.0, 500.0))
+		collisions.construire(self, zones)
+	if skieur == null:
+		skieur = SkieurJoueur.new()
+		skieur.name = "Skieur"
+		add_child(skieur)
+		skieur.conduite_demandee.connect(_skieur_conduit)
+		commandes_skieur = CommandesSkieur.new()
+		commandes_skieur.name = "CommandesSkieur"
+		commandes_skieur.skieur = skieur
+		commandes_skieur.main = self
+		add_child(commandes_skieur)
+	if _skieur_au_poste:
+		# il se lève du siège du conducteur
+		_skieur_au_poste = false
+		var seat: Node3D = cabin.interior_root.get_node_or_null("DriverSeatBase") as Node3D
+		var p: Vector3 = seat.global_position + seat.global_transform.basis.z * 0.7 if seat != null \
+			else skieur.global_position
+		skieur.activer(p, cabin.global_transform.basis.get_euler().y)
+	elif not _skieur_place and station_halls != null and station_halls.gare_aval != null:
+		var dep: Array = station_halls.gare_aval.point_depart()
+		skieur.activer(dep[0], dep[1])
+		skieur.refuge = dep[0]
+		_skieur_place = true
+	else:
+		skieur.activer(skieur.global_position, skieur.cam_yaw)
+	mode_skieur = true
+	cabin.set_view(Cabin.ViewMode.SKIEUR)
+	skieur.camera.make_current()
+	commandes_skieur.visible = true
+	# le funiculaire tourne tout seul pendant qu'on marche
+	if auto_operator != null and not auto_operator.enabled and run_mode == "normal":
+		auto_operator.toggle()
+	_mode_skieur_ui(true)
+	_flash("Skieur : joystick ou ZQSD pour marcher, glisser pour regarder")
+
+
+func _sortir_skieur() -> void:
+	mode_skieur = false
+	PorteAuto.presences = []
+	if skieur != null:
+		skieur.desactiver()
+	if commandes_skieur != null:
+		commandes_skieur.visible = false
+	cabin.set_view(Cabin.ViewMode.FPV)
+	_mode_skieur_ui(false)
+
+
+func _mode_skieur_ui(on: bool) -> void:
+	if hud != null and hud.has_method("set_mode_skieur"):
+		hud.set_mode_skieur(on)
+	var touch: Node = get_node_or_null("TouchControls")
+	if touch != null and touch.has_method("set_mode_skieur"):
+		touch.set_mode_skieur(on)
+
+
+## CONDUIRE : il s'assied au poste de la rame qu'il occupe.
+func _skieur_conduit() -> void:
+	_skieur_au_poste = true
+	_sortir_skieur()
+	if auto_operator != null and auto_operator.enabled:
+		auto_operator.toggle()
+	_flash("Au poste de conduite — SKIEUR pour se lever")
+
+
+## Le skieur est dans une rame en plein tunnel (loin des deux gares).
+func _skieur_en_tunnel() -> bool:
+	if skieur == null or skieur.support == null:
+		return false
+	var s_r: float = physics.s_render if cabin.is_ancestor_of(skieur.support) else physics.ghost_s_render()
+	return s_r > 80.0 and s_r < PNConstants.LENGTH - 80.0
+
+
+func _maj_skieur() -> void:
+	if skieur == null or commandes_skieur == null:
+		return
+	# portes automatiques : elles s'ouvrent devant le skieur
+	PorteAuto.presences = [skieur.global_position]
+	# CONDUIRE : à côté du siège du poste de la rame pilotée
+	var pres: bool = false
+	if skieur.support != null and cabin.is_ancestor_of(skieur.support) and cabin.interior_root != null:
+		var seat: Node3D = cabin.interior_root.get_node_or_null("DriverSeatBase") as Node3D
+		if seat != null:
+			pres = skieur.global_position.distance_to(seat.global_position) < 1.8
+	commandes_skieur.set_conduite_possible(pres)

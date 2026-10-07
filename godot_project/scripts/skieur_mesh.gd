@@ -317,8 +317,18 @@ static func materiau() -> ShaderMaterial:
 ## Passager complet, sans son sac ni son matériel (MultiMesh séparés).
 ## `coiffe` : "casque" (masque de ski) ou "bonnet" (lunettes, cheveux).
 static func passager(pose: String, coiffe: String, mat: Material) -> ArrayMesh:
+	return passager_squelette(_squelette(pose), pose, coiffe, mat)
+
+
+## Squelette d'une pose, à modifier avant passager_squelette() (le skieur
+## jouable : images de la marche, postures de ski).
+static func squelette(pose: String) -> Dictionary:
+	return _squelette(pose)
+
+
+## Passager sur un squelette donné (cf. squelette()).
+static func passager_squelette(s: Dictionary, pose: String, coiffe: String, mat: Material) -> ArrayMesh:
 	var b: Bati = Bati.new()
-	var s: Dictionary = _squelette(pose)
 	var k: float = s.k
 	var assis: bool = pose == "assis"
 	# -- jambes : chaussures de ski, pantalon bouffant par-dessus

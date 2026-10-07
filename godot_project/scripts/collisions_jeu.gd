@@ -1,0 +1,400 @@
+class_name CollisionsJeu
+extends Node3D
+## Collisions du skieur jouable (demande de Kevin du 07/10/2026 : « un
+## skieur capable de monter les escaliers des gares et de marcher à
+## l'intérieur sans passer au travers du plancher, des murs, des portes ou
+## du wagon »). Construites une seule fois, au premier passage en vue
+## skieur (rien ne coûte tant qu'on conduit).
+##
+##  - GARES : les VRAIS maillages (salles, quais en escalier, halls, salle
+##    des machines, tunnel et voie près des gares), en triangles — ce qu'on voit
+##    est ce qui arrête. Les pièces qui bougent (vantaux de la salle
+##    d'attente, portes automatiques) ont leur propre corps, accroché à
+##    elles.
+##  - RAMES : des collisions SIMPLIFIÉES dans le repère de chaque voiture
+##    (235 000 triangles par rame en vrai) : paroi du tube en pans, paliers,
+##    bancs, porte-skis, pupitre, fonds ; aux portes, un panneau accroché
+##    au vantail (il s'efface quand la porte s'ouvre).
+##  - RELIEF : triangles tirés des altitudes du jeu (ReliefBuilder.hauteur),
+##    fins près des gares (pièces de 2 m), sans les trous des bâtiments.
+
+const COUCHE_DECOR: int = 1
+const COUCHE_VEHICULE: int = 2
+const COUCHE_SKIEUR: int = 4
+const DEMI_ZONE_GARE: float = 160.0     # zone des gares (m) : maillages réels
+const R_PAROI: float = 1.64             # rayon intérieur du tube des voitures
+
+var pret: bool = false
+var triangles: int = 0
+var _decor: StaticBody3D = null
+var _formes: Dictionary = {}            # Mesh → Shape3D (formes partagées)
+## Nœuds dont le sous-arbre bouge : un corps à part, accroché à eux.
+var mobiles: Array = []
+
+
+## Construit tout. `zones_terrain` : rectangles (Rect2 x, z) où poser le
+## relief (le reste du massif n'a pas de sol).
+func construire(main: Node, zones_terrain: Array) -> void:
+	var t0: int = Time.get_ticks_msec()
+	_decor = StaticBody3D.new()
+	_decor.name = "Decor"
+	_decor.collision_layer = COUCHE_DECOR
+	_decor.collision_mask = 0
+	add_child(_decor)
+	mobiles = main.get_tree().get_nodes_in_group("collision_mobile")
+	var tun: TunnelBuilder = main.get("tunnel")
+	var zones: Array = []
+	for s in [0.0, PNConstants.LENGTH]:
+		var o: Vector3 = tun.transform_at(s).origin
+		zones.append(AABB(o - Vector3(DEMI_ZONE_GARE, 90.0, DEMI_ZONE_GARE),
+			Vector3(2.0 * DEMI_ZONE_GARE, 180.0, 2.0 * DEMI_ZONE_GARE)))
+	for nom in ["station_halls", "stations", "machine_room", "tunnel", "track"]:
+		var racine: Node3D = main.get(nom) as Node3D
+		if racine != null:
+			_maillages(racine, zones)
+	for m in mobiles:
+		_corps_mobile(m as Node3D)
+	for nom2 in ["cabin", "cabin_ghost"]:
+		var c: Cabin = main.get(nom2) as Cabin
+		if c != null:
+			_rame(c)
+	var relief: ReliefBuilder = main.get("relief")
+	if relief != null:
+		for z in zones_terrain:
+			_terrain(relief, z as Rect2)
+	pret = true
+	print("[Collisions] %d triangles de décor, %d ms" % [triangles, Time.get_ticks_msec() - t0])
+
+
+# --- gares : maillages réels -----------------------------------------------------
+
+func _maillages(racine: Node3D, zones: Array) -> void:
+	var pile: Array = [racine]
+	while not pile.is_empty():
+		var n: Node = pile.pop_back()
+		if n in mobiles:
+			continue
+		if n is Node3D and not (n as Node3D).visible and n != racine:
+			continue
+		for c in n.get_children():
+			pile.append(c)
+		if n is MultiMeshInstance3D:
+			_multimesh(n as MultiMeshInstance3D, zones)
+			continue
+		if not (n is MeshInstance3D):
+			continue
+		var mi: MeshInstance3D = n
+		if mi.mesh == null or mi.has_meta("sans_collision"):
+			continue
+		var ab: AABB = mi.global_transform * mi.get_aabb()
+		if ab.size.length() > 600.0:
+			continue              # panoramas, fonds lointains
+		var dedans: bool = false
+		for z in zones:
+			if (z as AABB).intersects(ab):
+				dedans = true
+				break
+		if not dedans:
+			continue
+		_ajouter_forme(_decor, mi.mesh, mi.global_transform, mi.name)
+
+
+## Pièces répétées qui portent leurs positions en méta « instances » (les
+## marches des quais) : une forme par instance (une boîte pour une
+## BoxMesh). Les autres MultiMesh (galets, numéros…) n'arrêtent personne.
+## (Le moteur sans affichage des bancs ne rend pas les positions d'un
+## MultiMesh : d'où la méta.)
+func _multimesh(mmi: MultiMeshInstance3D, zones: Array) -> void:
+	var mm: MultiMesh = mmi.multimesh
+	if mm == null or mm.mesh == null or not mmi.has_meta("instances"):
+		return
+	var inst: Array = mmi.get_meta("instances")
+	var ab_m: AABB = mm.mesh.get_aabb()
+	for i in range(inst.size()):
+		var xf: Transform3D = mmi.global_transform * (inst[i] as Transform3D)
+		var ab: AABB = xf * ab_m
+		var dedans: bool = false
+		for z in zones:
+			if (z as AABB).intersects(ab):
+				dedans = true
+				break
+		if not dedans:
+			continue
+		if mm.mesh is BoxMesh:
+			if not _formes.has(mm.mesh):
+				var b: BoxShape3D = BoxShape3D.new()
+				b.size = (mm.mesh as BoxMesh).size
+				_formes[mm.mesh] = b
+				triangles += 12
+			var cs: CollisionShape3D = CollisionShape3D.new()
+			cs.shape = _formes[mm.mesh]
+			cs.transform = xf
+			cs.name = mmi.name
+			_decor.add_child(cs)
+		else:
+			_ajouter_forme(_decor, mm.mesh, xf, mmi.name)
+
+
+func _ajouter_forme(corps: CollisionObject3D, m: Mesh, xf: Transform3D, nom: String = "") -> void:
+	if not _formes.has(m):
+		var f: ConcavePolygonShape3D = m.create_trimesh_shape() as ConcavePolygonShape3D
+		if f == null:
+			_formes[m] = null
+			return
+		f.backface_collision = true
+		_formes[m] = f
+		triangles += f.get_faces().size() / 3
+	var forme: Shape3D = _formes[m]
+	if forme == null:
+		return
+	var cs: CollisionShape3D = CollisionShape3D.new()
+	cs.shape = forme
+	cs.transform = xf
+	if nom != "":
+		cs.name = nom
+	corps.add_child(cs)
+
+
+## Corps accroché à un nœud qui bouge (vantail, porte automatique) : ses
+## maillages, dans son repère.
+func _corps_mobile(n: Node3D) -> void:
+	var corps: StaticBody3D = StaticBody3D.new()
+	corps.name = "CollisionMobile"
+	corps.collision_layer = COUCHE_DECOR
+	corps.collision_mask = 0
+	n.add_child(corps)
+	var inv: Transform3D = n.global_transform.affine_inverse()
+	for mi in n.find_children("*", "MeshInstance3D", true, false):
+		var m: MeshInstance3D = mi
+		if m.mesh != null:
+			_ajouter_forme(corps, m.mesh, inv * m.global_transform)
+
+
+# --- rames : collisions simplifiées ---------------------------------------------
+
+func _boite(parent: Node3D, taille: Vector3, xf: Transform3D, couche: int = COUCHE_VEHICULE) -> void:
+	var corps: StaticBody3D = parent.get_node_or_null("CollisionRame") as StaticBody3D
+	if corps == null:
+		corps = StaticBody3D.new()
+		corps.name = "CollisionRame"
+		corps.collision_layer = couche
+		corps.collision_mask = 0
+		corps.set_meta("vehicule", parent)
+		parent.add_child(corps)
+	var b: BoxShape3D = BoxShape3D.new()
+	b.size = taille
+	var cs: CollisionShape3D = CollisionShape3D.new()
+	cs.shape = b
+	cs.transform = xf
+	corps.add_child(cs)
+
+
+func _rame(c: Cabin) -> void:
+	var car_len: float = c.train_length / float(c.car_count)
+	var pas: float = TrainBodyBuilder.PANEL_L + TrainBodyBuilder.RIB_W
+	var tilt: float = -atan(Cabin.FLOOR_GRADE)
+	var y_palier: float = TrainBodyBuilder.Y_FLOOR + Cabin.STEP_LIFT
+	var y_haut_porte: float = TrainBodyBuilder.Y_CENTER \
+		+ TrainBodyBuilder.R_BODY * cos(deg_to_rad(TrainBodyBuilder.DOOR_TOP_T))
+	for idx in range(c.car_count):
+		var voiture: Node3D = c._interior_cars[idx]
+		voiture.set_meta("vehicule", voiture)
+		var z_c: float = (float(idx) - (c.car_count - 1) * 0.5) * car_len
+		var z0: float = -car_len * 0.5 + 0.30
+		var z1: float = car_len * 0.5 - 0.30
+		# paliers : boîtes épaisses (pas de jour sous les contremarches)
+		var portes: Array = []
+		for k in range(10):
+			var zc: float = c._panel_center(idx, k) - z_c
+			var xf: Transform3D = Transform3D(Basis(Vector3.RIGHT, tilt), Vector3(0.0, y_palier, zc))
+			# au droit des portes, le seuil va jusqu'au bord du quai (1,85 m)
+			var larg: float = 3.66 if TrainBodyBuilder.KINDS[k] == "door" else 2.5
+			_boite(voiture, Vector3(larg, 0.50, pas + 0.02), xf * Transform3D(Basis.IDENTITY, Vector3(0.0, -0.225, 0.0)))
+			if TrainBodyBuilder.KINDS[k] == "door":
+				portes.append([zc - TrainBodyBuilder.PANEL_L * 0.5, zc + TrainBodyBuilder.PANEL_L * 0.5])
+			# bancs et porte-skis, dans le repère de leur palier
+			var pal: Node3D = voiture.get_node_or_null("Amenagement%d_%d" % [idx + 1, k]) as Node3D
+			if pal != null:
+				var xp: Transform3D = Transform3D(pal.basis, pal.position)
+				if TrainBodyBuilder.KINDS[k] == "win":
+					for side in [-1.0, 1.0]:
+						_boite(voiture, Vector3(0.85, 0.50, TrainBodyBuilder.PANEL_L - 0.10),
+							xp * Transform3D(Basis.IDENTITY, Vector3(side * 1.12, 0.25, 0.0)))
+				for xr in Cabin.racks_x(k):
+					_boite(voiture, Vector3(Cabin.RACK_L, 1.02, Cabin.RACK_P + Cabin.RACK_CRAN),
+						xp * Transform3D(Basis.IDENTITY, Vector3(xr, 0.51,
+							Cabin.RACK_DZ - Cabin.RACK_CRAN * 0.5)))
+		# paroi du tube en pans de 12°, du plafond au plancher ; au droit des
+		# portes, ouverte sous le haut des vantaux (le vantail la ferme)
+		var th_sol: float = acos(clampf((TrainBodyBuilder.Y_FLOOR - TrainBodyBuilder.Y_CENTER) / R_PAROI, -1.0, 1.0))
+		var n_pans: int = int(ceil(th_sol / deg_to_rad(12.0)))
+		for side in [-1.0, 1.0]:
+			for i in range(n_pans):
+				var ta: float = th_sol * float(i) / n_pans
+				var tb: float = th_sol * float(i + 1) / n_pans
+				var tm: float = (ta + tb) * 0.5
+				var corde: float = 2.0 * R_PAROI * sin((tb - ta) * 0.5) + 0.06
+				var centre: Vector3 = Vector3(side * sin(tm) * (R_PAROI + 0.07),
+					TrainBodyBuilder.Y_CENTER + cos(tm) * (R_PAROI + 0.07), 0.0)
+				var base: Basis = Basis(Vector3.BACK, -side * tm)
+				var y_bas: float = TrainBodyBuilder.Y_CENTER + cos(tb) * R_PAROI
+				var sous_portes: bool = y_bas < y_haut_porte - 0.05
+				var morceaux: Array = [[z0, z1]]
+				if sous_portes:
+					morceaux = _hors(z0, z1, portes)
+				for mo in morceaux:
+					var l: float = float(mo[1]) - float(mo[0])
+					if l < 0.02:
+						continue
+					_boite(voiture, Vector3(0.14, corde, l),
+						Transform3D(base, centre + Vector3(0.0, 0.0, (float(mo[0]) + float(mo[1])) * 0.5)))
+		# fonds : calotte à l'extrémité de rame, cloison à l'attelage
+		for e in [-1.0, 1.0]:
+			var ze: float = (z0 - 0.05) if e < 0.0 else (z1 + 0.05)
+			if idx == 0 and e < 0.0:
+				ze = -car_len * 0.5 + 0.45       # devant le pupitre, sous le pare-brise
+			_boite(voiture, Vector3(3.4, 3.4, 0.10), Transform3D(Basis.IDENTITY,
+				Vector3(0.0, TrainBodyBuilder.Y_CENTER, ze)))
+		# plafond (on ne grimpe pas sur les porte-skis)
+		_boite(voiture, Vector3(2.6, 0.10, z1 - z0), Transform3D(Basis.IDENTITY,
+			Vector3(0.0, TrainBodyBuilder.Y_CENTER + R_PAROI - 0.10, (z0 + z1) * 0.5)))
+	# poste de conduite : pupitre et siège (voiture de tête)
+	if c.interior_root != null and not c._interior_cars.is_empty():
+		var v0: Node3D = c._interior_cars[0]
+		var z_l: float = -c.train_length * 0.5     # avant de la rame, repère de la rame
+		var dz: float = -(v0.position.z)
+		var seat: Node3D = c.interior_root.get_node_or_null("DriverSeatBase") as Node3D
+		var y_seat: float = seat.position.y if seat != null else -0.40
+		_boite(v0, Vector3(1.30, 0.70, 0.45), Transform3D(Basis.IDENTITY,
+			Vector3(0.0, y_seat + 0.15, z_l + 0.62 - dz)))
+		if seat != null:
+			_boite(v0, Vector3(0.55, 0.55, 0.55), Transform3D(Basis.IDENTITY,
+				Vector3(0.0, y_seat - 0.22, seat.position.z - dz)))
+	# vantaux des portes : un panneau par porte, accroché au vantail
+	var car_len2: float = car_len
+	for d in c._doors:
+		var vantail: Node3D = d["node"]
+		var voit: Node3D = vantail.get_parent() as Node3D
+		var idx2: int = c._car_roots.find(voit)
+		if idx2 < 0:
+			continue
+		var z_c2: float = (float(idx2) - (c.car_count - 1) * 0.5) * car_len2
+		var y_bas2: float = TrainBodyBuilder.Y_FLOOR
+		for k2 in range(10):
+			if TrainBodyBuilder.KINDS[k2] != "door":
+				continue
+			var zc2: float = c._panel_center(idx2, k2) - z_c2
+			var base_v: Vector3 = d["base"]
+			var x2: float = float(d["side"]) * (R_PAROI + 0.04) * 0.92
+			_boite(vantail, Vector3(0.10, y_haut_porte - y_bas2, TrainBodyBuilder.PANEL_L + 0.06),
+				Transform3D(Basis.IDENTITY, Vector3(x2, (y_bas2 + y_haut_porte) * 0.5, zc2) - base_v))
+		var corps_v: Node = vantail.get_node_or_null("CollisionRame")
+		if corps_v != null:
+			corps_v.set_meta("vehicule", voit)
+
+
+## Morceaux de [z0, z1] hors des intervalles `trous`.
+static func _hors(z0: float, z1: float, trous: Array) -> Array:
+	var out: Array = []
+	var a: float = z0
+	var tri: Array = trous.duplicate()
+	tri.sort_custom(func(p, q): return float(p[0]) < float(q[0]))
+	for t in tri:
+		if float(t[0]) > a:
+			out.append([a, minf(float(t[0]), z1)])
+		a = maxf(a, float(t[1]))
+	if a < z1:
+		out.append([a, z1])
+	return out
+
+
+# --- relief ------------------------------------------------------------------------
+
+## Sol du relief sur le rectangle `r` (x, z, largeur, profondeur) : les
+## triangles mêmes du bloc affiché (nœuds de sa grille, même diagonale),
+## sauf dans les pièces fines des gares, maillées à 2 m sans les trous des
+## bâtiments.
+func _terrain(relief: ReliefBuilder, r: Rect2) -> void:
+	var faces: PackedVector3Array = PackedVector3Array()
+	var pieces: Array = relief._rects_pieces
+	# bloc : nœuds de la grille (pas d'affichage _pas)
+	var dx: float = relief._dx * relief._pas
+	var dz: float = relief._dz * relief._pas
+	var j0: int = maxi(int(floor((r.position.x - ReliefDonnees.X_OUEST) / dx)), 0)
+	var j1: int = mini(int(ceil((r.end.x - ReliefDonnees.X_OUEST) / dx)), (ReliefDonnees.NX - 1) / relief._pas)
+	var i0: int = maxi(int(floor((r.position.y - ReliefDonnees.Z_NORD) / dz)), 0)
+	var i1: int = mini(int(ceil((r.end.y - ReliefDonnees.Z_NORD) / dz)), (ReliefDonnees.NZ - 1) / relief._pas)
+	var n: int = ReliefDonnees.NX
+	var p: int = relief._pas
+	for i in range(i0, i1):
+		for j in range(j0, j1):
+			var x0: float = ReliefDonnees.X_OUEST + j * dx
+			var z0: float = ReliefDonnees.Z_NORD + i * dz
+			var maille: Rect2 = Rect2(x0, z0, dx, dz)
+			var dans_piece: bool = false
+			for pc in pieces:
+				if (pc as Rect2).intersects(maille):
+					dans_piece = true     # recouverte par la pièce fine (ci-dessous)
+					break
+			if dans_piece:
+				continue
+			var pa: Vector3 = Vector3(x0, relief._h[(i * p) * n + j * p], z0)
+			var pb: Vector3 = Vector3(x0 + dx, relief._h[(i * p) * n + (j + 1) * p], z0)
+			var pc2: Vector3 = Vector3(x0, relief._h[((i + 1) * p) * n + j * p], z0 + dz)
+			var pd: Vector3 = Vector3(x0 + dx, relief._h[((i + 1) * p) * n + (j + 1) * p], z0 + dz)
+			# même découpe que les tuiles : (a, b, c) puis (b, d, c)
+			faces.append_array([pa, pb, pc2, pb, pd, pc2])
+	# pièces fines des gares (2 m), étendues aux mailles du bloc qu'elles
+	# touchent (hors de la pièce : les triangles du bloc, échantillonnés)
+	for pc3 in pieces:
+		var pr: Rect2 = pc3 as Rect2
+		if not pr.intersects(r):
+			continue
+		var gx0: float = ReliefDonnees.X_OUEST + floor((pr.position.x - ReliefDonnees.X_OUEST) / dx) * dx
+		var gx1: float = ReliefDonnees.X_OUEST + ceil((pr.end.x - ReliefDonnees.X_OUEST) / dx) * dx
+		var gz0: float = ReliefDonnees.Z_NORD + floor((pr.position.y - ReliefDonnees.Z_NORD) / dz) * dz
+		var gz1: float = ReliefDonnees.Z_NORD + ceil((pr.end.y - ReliefDonnees.Z_NORD) / dz) * dz
+		var rp: Rect2 = Rect2(gx0, gz0, gx1 - gx0, gz1 - gz0)
+		var pas: float = ReliefBuilder.PAS_PIECE
+		var nx: int = int(ceil(rp.size.x / pas))
+		var nz: int = int(ceil(rp.size.y / pas))
+		var h: PackedFloat32Array = PackedFloat32Array()
+		h.resize((nx + 1) * (nz + 1))
+		var trou: PackedByteArray = PackedByteArray()
+		trou.resize((nx + 1) * (nz + 1))
+		for jj in range(nz + 1):
+			for ii in range(nx + 1):
+				var x: float = rp.position.x + ii * pas
+				var z: float = rp.position.y + jj * pas
+				var tp: Array = relief.terrain_piece(x, z)
+				var hh: float = float(tp[0])
+				if is_nan(hh):
+					hh = relief._hauteur_tri(x, z)
+				h[jj * (nx + 1) + ii] = hh
+				trou[jj * (nx + 1) + ii] = 1 if bool(tp[1]) else 0
+		for jj in range(nz):
+			for ii in range(nx):
+				var a: int = jj * (nx + 1) + ii
+				var b: int = a + 1
+				var c3: int = a + nx + 1
+				var d: int = c3 + 1
+				var xa: float = rp.position.x + ii * pas
+				var za: float = rp.position.y + jj * pas
+				# maille retirée si son centre est dans un bâtiment (pas dès
+				# qu'un coin y touche : sinon 2 m de vide devant les portes)
+				if trou[a] + trou[b] + trou[c3] + trou[d] > 0 \
+						and bool(relief.terrain_piece(xa + pas * 0.5, za + pas * 0.5)[1]):
+					continue
+				faces.append_array([Vector3(xa, h[a], za), Vector3(xa + pas, h[b], za),
+					Vector3(xa, h[c3], za + pas), Vector3(xa + pas, h[b], za),
+					Vector3(xa + pas, h[d], za + pas), Vector3(xa, h[c3], za + pas)])
+	if faces.is_empty():
+		return
+	var f: ConcavePolygonShape3D = ConcavePolygonShape3D.new()
+	f.set_faces(faces)
+	f.backface_collision = true
+	var cs: CollisionShape3D = CollisionShape3D.new()
+	cs.name = "Relief"
+	cs.shape = f
+	_decor.add_child(cs)
+	triangles += faces.size() / 3

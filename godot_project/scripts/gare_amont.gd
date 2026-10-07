@@ -83,7 +83,9 @@ func construire(t: TunnelBuilder, mr: MachineRoomBuilder) -> void:
 	var top_quai: float = tunnel.transform_at(s_aval).origin.y + tunnel.station_room_half_height
 	_y_quai_toit = maxf(top_quai - _o.y + 0.5, 0.0)
 	_materiaux()
+	_calcul_porte_genepy()
 	_hall()
+	_porte_genepy()
 	_facade_tete()
 	_terrasse()
 	_annexes()
@@ -286,6 +288,104 @@ func _valider() -> void:
 		add_child(mi)
 
 
+# --- porte de la piste Génépy ------------------------------------------------------
+# Kevin, 07/10/2026 : « au niveau du bout en bas du quai gauche en regardant
+# vers le haut, il y a une porte pour sortir et faire la piste Génépy ; tu
+# me montes le terrain jusque-là et tu fais une ouverture de porte
+# automatique si quelqu'un se présente devant ». Le mur de la salle du quai
+# (StationsBuilder.PORTE_GENEPY) et le mur sud-est du bâtiment sont percés ;
+# un court passage en béton les relie ; dehors, une porte vitrée
+# automatique et la neige remontée au niveau du seuil (amenagement_relief).
+
+var _pg_d: Vector2 = Vector2.ZERO        # d des deux bords de la porte
+var _pg_y: float = 0.0                   # seuil, dans le repère du hall
+var porte_genepy: PorteAuto = null
+
+
+func _calcul_porte_genepy() -> void:
+	var pg: Vector2 = StationsBuilder.PORTE_GENEPY
+	var a: float = (tunnel.transform_at(pg.x).origin - _o).dot(_d)
+	var b: float = (tunnel.transform_at(pg.y).origin - _o).dot(_d)
+	_pg_d = Vector2(minf(a, b), maxf(a, b))
+	# seuil = dessus du quai (−1,10 sous l'axe de la voie)
+	var xc: Transform3D = tunnel.transform_at((pg.x + pg.y) * 0.5)
+	_pg_y = (xc.origin + xc.basis.y * -1.10).y - _o.y
+
+
+## Mur le long de d (x fixe), percé de la porte Génépy s'il la croise.
+func _mur_perce(m: String, x: float, d0: float, d1: float, y0: float, y1a: float, y1b: float) -> void:
+	var da: float = minf(d0, d1)
+	var db: float = maxf(d0, d1)
+	var ya: float = y1a if d0 < d1 else y1b      # haut du mur en da
+	var yb: float = y1b if d0 < d1 else y1a      # haut du mur en db
+	var haut := func(d: float) -> float: return lerpf(ya, yb, (d - da) / maxf(db - da, 0.001))
+	var t0: float = _pg_y
+	var t1: float = _pg_y + StationsBuilder.PORTE_GENEPY_H
+	if x > 0.0 or _pg_d.y <= da or _pg_d.x >= db or t1 <= y0 or t0 >= minf(ya, yb):
+		_mur(m, Vector2(x, d0), Vector2(x, d1), y0, y1a, y1b)
+		return
+	var pa: float = maxf(_pg_d.x, da)
+	var pb: float = minf(_pg_d.y, db)
+	if pa > da:
+		_mur(m, Vector2(x, da), Vector2(x, pa), y0, ya, haut.call(pa))
+	if pb < db:
+		_mur(m, Vector2(x, pb), Vector2(x, db), y0, haut.call(pb), yb)
+	if t0 > y0:
+		_mur(m, Vector2(x, pa), Vector2(x, pb), y0, t0, t0)
+	if t1 < minf(haut.call(pa), haut.call(pb)):
+		_quad(m, _p(x, pa, t1), _p(x, pb, t1), _p(x, pb, haut.call(pb)), _p(x, pa, haut.call(pa)))
+
+
+## Passage entre le mur de la salle (x = −4,9) et la façade (x = −7) et
+## porte automatique vitrée sur la façade.
+func _porte_genepy() -> void:
+	var dl: float = _pg_d.y - _pg_d.x
+	var dc: float = (_pg_d.x + _pg_d.y) * 0.5
+	var x_in: float = -tunnel.station_room_half_width
+	var x_out: float = -DEMI_HALL
+	var lx: float = absf(x_out - x_in) + 0.2
+	var xm: float = (x_in + x_out) * 0.5
+	var h: float = StationsBuilder.PORTE_GENEPY_H
+	_boite("beton", xm - 0.5, dc, _pg_y - 0.15, lx + 1.0, dl + 0.4, 0.30)  # sol, seuil 1 m dehors
+	_boite("beton", xm, dc, _pg_y + h + 0.15, lx, dl + 0.4, 0.30)          # plafond
+	for dd in [_pg_d.x - 0.1, _pg_d.y + 0.1]:
+		_boite("beton", xm, dd, _pg_y + h * 0.5, lx, 0.2, h + 0.6)         # joues
+	# encadrement bleu sur la façade
+	for dd2 in [_pg_d.x - 0.05, _pg_d.y + 0.05]:
+		_boite("bleu", x_out - 0.08, dd2, _pg_y + h * 0.5, 0.10, 0.10, h)
+	_boite("bleu", x_out - 0.08, dc, _pg_y + h + 0.05, 0.10, dl + 0.2, 0.10)
+	# porte vitrée automatique : un vantail qui glisse le long de la façade
+	porte_genepy = PorteAuto.new()
+	porte_genepy.name = "PorteGenepy"
+	add_child(porte_genepy)
+	porte_genepy.transform = Transform3D(Basis(_d, Vector3.UP, -_x), _p(x_out - 0.16, dc, _pg_y))
+	var v: Node3D = Node3D.new()
+	v.name = "VantailGenepy"
+	porte_genepy.add_child(v)
+	var verre: StandardMaterial3D = StandardMaterial3D.new()
+	verre.albedo_color = Color(0.55, 0.70, 0.78, 0.25)
+	verre.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	var cadre: StandardMaterial3D = StandardMaterial3D.new()
+	cadre.albedo_color = Color(0.10, 0.22, 0.52)
+	cadre.roughness = 0.5
+	for pt in [[verre, Vector3(dl - 0.08, h - 0.08, 0.02), Vector3(0.0, h * 0.5, 0.0)],
+			[cadre, Vector3(dl, 0.06, 0.05), Vector3(0.0, h - 0.03, 0.0)],
+			[cadre, Vector3(dl, 0.08, 0.05), Vector3(0.0, 0.04, 0.0)],
+			[cadre, Vector3(0.05, h, 0.05), Vector3(-dl * 0.5 + 0.025, h * 0.5, 0.0)],
+			[cadre, Vector3(0.05, h, 0.05), Vector3(dl * 0.5 - 0.025, h * 0.5, 0.0)]]:
+		var mi: MeshInstance3D = MeshInstance3D.new()
+		var bm: BoxMesh = BoxMesh.new()
+		bm.size = pt[1]
+		bm.material = pt[0]
+		mi.mesh = bm
+		mi.position = pt[2]
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		v.add_child(mi)
+	porte_genepy.ajouter_vantail(v, Vector3(dl * 0.98, 0.0, 0.0))
+	# panneau « piste Génépy » au-dessus de la porte, dehors
+	_texte("GÉNÉPY", _p(x_out - 0.14, dc, _pg_y + h + 0.45), 40, Color.WHITE, 0.0055, -_x)
+
+
 # --- hall des quais --------------------------------------------------------------
 
 ## Volume du hall (14 × 44,5 m dans l'axe de la voie) : toit monopente blanc
@@ -303,8 +403,8 @@ func _hall() -> void:
 		_quad("toit_blanc", _p(-DEMI_HALL - 0.3, d0, y0), _p(DEMI_HALL + 0.3, d0, y0),
 			_p(DEMI_HALL + 0.3, d1, y1), _p(-DEMI_HALL - 0.3, d1, y1))
 		# côté sud-est : béton jusqu'à −0,6 m, tôle blanche au-dessus
-		_mur("beton", Vector2(-DEMI_HALL, d0), Vector2(-DEMI_HALL, d1), H_BAS, -0.6, -0.6)
-		_mur("tole_blanche", Vector2(-DEMI_HALL, d0), Vector2(-DEMI_HALL, d1), -0.6, y0, y1)
+		_mur_perce("beton", -DEMI_HALL, d0, d1, H_BAS, -0.6, -0.6)
+		_mur_perce("tole_blanche", -DEMI_HALL, d0, d1, -0.6, y0, y1)
 		# côté nord-ouest
 		_mur("tole_blanche", Vector2(DEMI_HALL, d0), Vector2(DEMI_HALL, d1), H_BAS, y0, y1)
 	# bande de baies bleues sur deux rangs, côté sud-est, sous le toit
@@ -419,9 +519,10 @@ func _facade_tete() -> void:
 	# pierre entre les deux ouvertures
 	_mur("pierre", Vector2(-1.9, 0.05), Vector2(1.9, 0.05), -0.4, 3.1, 3.1)
 	# au-dessus des ouvertures
+	# (les portes vitrées automatiques sont juste derrière, dans le mur de
+	# la salle : MachineRoomBuilder ; plus de barre en travers du passage)
 	for ov in ouvertures:
 		_mur("bois_tete", Vector2(ov.x, 0.05), Vector2(ov.y, 0.05), h_ouv, 3.1, 3.1)
-		_boite("noir", (ov.x + ov.y) * 0.5, 0.02, h_ouv * 0.5, ov.y - ov.x, 0.06, 0.05)
 	# petit auvent entre les deux registres
 	_boite("brun", (x0 + x1) * 0.5, 0.45, 3.12, x1 - x0, 0.9, 0.08)
 	# registre haut
@@ -521,7 +622,7 @@ func _sens_interdit(c: Vector3, normale: Vector3, r: float) -> void:
 	pivot.add_child(barre)
 
 
-func _texte(t: String, pos: Vector3, taille: int, c: Color, px: float) -> void:
+func _texte(t: String, pos: Vector3, taille: int, c: Color, px: float, normale: Vector3 = Vector3.ZERO) -> void:
 	var l: Label3D = Label3D.new()
 	l.text = t
 	l.font_size = taille
@@ -530,7 +631,7 @@ func _texte(t: String, pos: Vector3, taille: int, c: Color, px: float) -> void:
 	l.outline_size = 0
 	l.shaded = false
 	l.double_sided = false
-	var z: Vector3 = _d
+	var z: Vector3 = _d if normale == Vector3.ZERO else normale
 	var x: Vector3 = Vector3.UP.cross(z).normalized()
 	l.transform = Transform3D(Basis(x, Vector3.UP, z), pos)
 	add_child(l)
@@ -733,6 +834,10 @@ func amenagement_relief() -> Dictionary:
 		"trous": [monde.call(hall), monde.call(ANNEXES), monde.call(TPH),
 			monde.call(rect.call(RESTO_A)), monde.call(rect.call(RESTO_B))],
 		"rabots": [[monde.call(TERRASSE), _o.y - 0.4, 3.0]],
+		# neige au niveau du seuil de la porte Génépy (Kevin : « tu me montes
+		# le terrain jusque-là »)
+		"remblais": [[monde.call(rect.call(Rect2(-DEMI_HALL - 9.0, _pg_d.x - 4.0, 8.8, _pg_d.y - _pg_d.x + 8.0))),
+			_o.y + _pg_y - 0.03, 14.0]],
 		# tunnel seulement, jusqu'au pignon aval, raccord court (Kevin,
 		# 07/10/2026 : « enlève le tas de neige côté est du bâtiment »)
 		"couloirs": [[3430.0, tunnel.station_high_start - 0.3, 3.0, 0.8, 4.0]],

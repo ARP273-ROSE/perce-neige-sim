@@ -235,6 +235,16 @@ static func redraw_at_15hz(c: CanvasItem, last_slot: int, phase: float) -> int:
 	return slot
 
 
+## Vue skieur : les instruments de conduite (colonne de droite) s'effacent.
+func set_mode_skieur(on: bool) -> void:
+	if _help_label != null:
+		_help_label.visible = not on and not DisplayServer.is_touchscreen_available()
+	for nom in ["CockpitPanelCache", "MachineRoomPanelCache"]:
+		var n: CanvasItem = get_node_or_null(nom) as CanvasItem
+		if n != null:
+			n.visible = not on
+
+
 func set_physics(p: TrainPhysics) -> void:
 	physics = p
 	if _cockpit != null:

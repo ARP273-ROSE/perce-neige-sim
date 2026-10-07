@@ -7,6 +7,57 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.16.0** — le skieur jouable, étape 1 : marcher dans les gares, prendre
+le funiculaire, sortir en haut (suivi : SKIEUR.md).
+- Kevin : « un skieur capable de monter les escaliers des gares et de
+  marcher à l'intérieur sans passer au travers du plancher, des murs, des
+  portes ou du wagon, qui peut marcher dans le wagon, voyager dans le
+  funiculaire et aller au poste de pilotage ».
+- **Bouton SKIEUR** (touche K) : on incarne un skieur, skis à la main.
+  - Vue de dos, ou à la 1re personne.
+  - Joystick à l'écran ; un doigt glissé ailleurs tourne la vue. Au
+    clavier : ZQSD / flèches, Maj pour courir, souris.
+  - CONDUIRE près du poste de la rame pilotée ; QUITTER pour revenir à la
+    conduite.
+  - Le funiculaire tourne en AUTO pendant qu'on marche.
+- **Collisions**, construites au premier passage (~170 000 triangles,
+  ~0,2 s) :
+  - gares : leurs vrais maillages, dont les marches des quais ;
+  - rames : collisions simplifiées (parois, paliers, bancs, porte-skis,
+    pupitre, seuils de porte), plus un panneau par porte qui suit son
+    vantail ;
+  - relief : les triangles du bloc, et la pièce fine de 2 m autour des
+    gares, sans les bâtiments.
+- **Le skieur** monte les marches (40 cm au plus) et glisse le long des
+  murs. Dans une voiture, il est emporté avec elle, y compris au
+  retournement de la rame en gare. S'il tombe dans un trou, il revient au
+  dernier sol sûr.
+- **Portes automatiques**, qui s'ouvrent quand on approche :
+  - entrée de la gare de Val Claret (les deux baies du milieu) ;
+  - baies du mur de tête en haut, vers la terrasse ;
+  - **porte de la piste Génépy** : « au bout en bas du quai gauche en
+    regardant vers le haut ; tu me montes le terrain jusque-là ». Le mur de
+    la salle du quai et le mur sud-est sont percés, un couloir les relie,
+    et la neige est remontée au niveau du seuil.
+- **Corrections trouvées en marchant** :
+  - une paroi de lames de bois courait derrière la façade vitrée de la
+    salle d'attente : de l'intérieur, on voyait du bois au lieu des
+    vitres ;
+  - palier ajouté entre la porte de la cloison et la première marche du
+    quai (3 m de vide) ;
+  - barre noire en travers des deux ouvertures de la façade de tête,
+    retirée.
+- Outils :
+  - `shot_skieur.gd` : vues du skieur aux endroits clés ;
+  - `bench_skieur_3d.gd` : banc à six étapes, de la place de Val Claret à la
+    neige de la Génépy.
+- À venir (SKIEUR.md) :
+  - la neige sur les pistes (OpenStreetMap) et la glisse jusqu'à Val
+    Claret ;
+  - le fantôme des descentes GPS de Kevin ;
+  - la sortie de secours du tunnel.
+- Vérifié : 15 bancs Godot, dont le nouveau.
+
 **v1.15.91** — portes de la salle d'attente : le vantail libère tout le
 passage.
 - Kevin : « c'est un seul vantail qui glisse complètement à gauche pour

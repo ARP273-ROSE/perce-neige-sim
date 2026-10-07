@@ -71,6 +71,11 @@ func _build_station_low() -> void:
 	# ou l'autre selon le sens d'arrivée).
 	_build_platform(s_plat_start, s_plat_end, true, +1.0)
 	_build_platform(s_plat_start, s_plat_end, true, -1.0)
+	# palier de plain-pied entre les portes de la salle d'attente (s = 0)
+	# et la première marche du quai : on y passait dans le vide (skieur
+	# jouable, 07/10/2026)
+	for sd0 in [-1.0, 1.0]:
+		_build_palier(0.0, s_plat_start, sd0)
 	# le garde-corps descend jusqu'au point le plus bas du nez : rame
 	# pleine, câble allongé (retour du 06/10/2026 : « la barrière doit
 	# descendre jusqu'au point bas de l'allongement du câble cabine pleine »)
@@ -224,6 +229,7 @@ func _build_platform(s_start: float, s_end: float, is_low: bool, side: float = 1
 	mm_bands.mesh = band_mesh
 	mm_bands.instance_count = n_treads if not is_low else 0
 
+	var xf_marches: Array = []       # pour les collisions (CollisionsJeu)
 	for i in range(n_treads):
 		var s_dn: float = s_start + float(i) * tread_depth          # bord aval
 		var s_up: float = minf(s_dn + tread_depth, s_end)           # bord amont
@@ -239,6 +245,7 @@ func _build_platform(s_start: float, s_end: float, is_low: bool, side: float = 1
 		var center: Vector3 = xf_mid.origin + xf_mid.basis.x * lat_center
 		center.y = top_y - tread_thickness * 0.5
 		mm_treads.set_instance_transform(i, Transform3D(level_basis, center))
+		xf_marches.append(Transform3D(level_basis, center))
 		# Nez : au bord AVAL de la marche, affleurant le dessus
 		var xf_dn: Transform3D = _xf_at(s_dn + 0.06)
 		var nose_c: Vector3 = xf_dn.origin + xf_dn.basis.x * lat_center
@@ -254,6 +261,7 @@ func _build_platform(s_start: float, s_end: float, is_low: bool, side: float = 1
 	mi_treads.name = "PlatformSteps_%s_%s" % [sta, side_name]
 	mi_treads.multimesh = mm_treads
 	mi_treads.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	mi_treads.set_meta("instances", xf_marches)
 	add_child(mi_treads)
 
 	var mi_noses: MultiMeshInstance3D = MultiMeshInstance3D.new()
@@ -679,7 +687,24 @@ func _build_room_dressing(s0: float, s1: float, _is_low: bool) -> void:
 	var wall_h: float = hh - FLOOR_Y_LOCAL
 	var y_wall: float = FLOOR_Y_LOCAL + wall_h * 0.5
 	for sx in [-1.0, 1.0]:
-		_box(Vector3(0.06, wall_h, length), navy, sc, sx * (hw - 0.04), y_wall, "ParoiGare")
+		var pg: Vector2 = PORTE_GENEPY
+		if _is_low or sx > 0.0 or pg.y < s0 or pg.x > s1:
+			_box(Vector3(0.06, wall_h, length), navy, sc, sx * (hw - 0.04), y_wall, "ParoiGare")
+			continue
+		# mur gauche de la gare haute : percé de la porte Génépy
+		var y_seuil: float = FLOOR_Y_LOCAL + platform_height
+		_box(Vector3(0.06, wall_h, pg.x - s0), navy, (s0 + pg.x) * 0.5, sx * (hw - 0.04), y_wall, "ParoiGare")
+		_box(Vector3(0.06, wall_h, s1 - pg.y), navy, (pg.y + s1) * 0.5, sx * (hw - 0.04), y_wall, "ParoiGare")
+		var y_linteau: float = y_seuil + PORTE_GENEPY_H
+		_box(Vector3(0.06, hh - y_linteau, pg.y - pg.x), navy, (pg.x + pg.y) * 0.5, sx * (hw - 0.04),
+			(hh + y_linteau) * 0.5, "ParoiGare")
+		_box(Vector3(0.06, y_seuil - FLOOR_Y_LOCAL, pg.y - pg.x), navy, (pg.x + pg.y) * 0.5,
+			sx * (hw - 0.04), (FLOOR_Y_LOCAL + y_seuil) * 0.5, "ParoiGare")
+		# encadrement : montants et linteau bleu marine foncé
+		for sp in [pg.x, pg.y]:
+			_box(Vector3(0.14, PORTE_GENEPY_H, 0.10), beam, sp, sx * (hw - 0.02), y_seuil + PORTE_GENEPY_H * 0.5, "CadrePorte")
+		_box(Vector3(0.14, 0.12, pg.y - pg.x + 0.10), beam, (pg.x + pg.y) * 0.5, sx * (hw - 0.02),
+			y_linteau + 0.06, "CadrePorte")
 	_box(Vector3(hw * 2.0, 0.06, length), ceil_m, sc, 0.0, hh - 0.04, "PlafondGare")
 	# poutres en travers (IPN sombres) et deux pannes en long
 	var s: float = s0 + 1.4
@@ -711,6 +736,12 @@ func _build_room_dressing(s0: float, s1: float, _is_low: bool) -> void:
 
 
 const KOMPAT: float = 2.5
+# Porte de la piste Génépy (Kevin, 07/10/2026 : « au bout en bas du quai
+# gauche en regardant vers le haut, il y a une porte pour sortir et faire
+# la piste Génépy ») : abscisses du passage dans le mur gauche de la salle
+# du quai haut (entre deux poteaux), hauteur depuis le dessus du quai.
+const PORTE_GENEPY: Vector2 = Vector2(3481.62, 3483.0)
+const PORTE_GENEPY_H: float = 2.25
 
 
 func _compat() -> bool:
