@@ -132,6 +132,13 @@ func _ready() -> void:
 	_build_station_halls()
 	_build_relief()
 	_build_machine_room()
+	if station_halls != null and machine_room != null:
+		station_halls.build_amont(machine_room)
+	# le relief s'écarte des gares (bâtiments, place, terrasse, quais)
+	if relief != null and station_halls != null:
+		for g in [station_halls.gare_aval, station_halls.gare_amont]:
+			if g != null:
+				relief.amenagements.append(g.amenagement_relief())
 	if _compat:
 		_remplissage_gares_web()
 	_build_lights()

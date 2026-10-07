@@ -6,12 +6,14 @@ extends Node3D
 ##   cloison vitrée et portes coulissantes vers le quai, façade « DESTINATION
 ##   GLACIER », arches, auvent, escalier (GareAval, refonte du 07/10/2026 ;
 ##   remplace le hall béton générique et sa cage d'escalier vers la surface).
-## - Grande Motte (s = LENGTH) : plus de hall depuis le 06/10/2026 — la gare
-##   se termine sur le mur vitré de la salle des machines, qui donne sur le
-##   glacier (MachineRoomBuilder).
+## - Grande Motte (s = LENGTH) : intérieur (quais, hall, mur de tête, salle
+##   des machines) = MachineRoomBuilder ; extérieur (hall, façade de tête,
+##   terrasse, restaurant, annexes, gare du téléphérique) = GareAmont
+##   (07/10/2026).
 
 var tunnel: TunnelBuilder = null
 var gare_aval: GareAval = null
+var gare_amont: GareAmont = null
 
 
 func build(t: TunnelBuilder) -> void:
@@ -20,6 +22,15 @@ func build(t: TunnelBuilder) -> void:
 	gare_aval.name = "GareAval"
 	add_child(gare_aval)
 	gare_aval.construire(t)
+
+
+## Extérieur de la gare amont (après la salle des machines, dont il prend
+## le repère).
+func build_amont(mr: MachineRoomBuilder) -> void:
+	gare_amont = GareAmont.new()
+	gare_amont.name = "GareAmont"
+	add_child(gare_amont)
+	gare_amont.construire(tunnel, mr)
 
 
 ## Portes coulissantes et panneau des départs de la gare aval.

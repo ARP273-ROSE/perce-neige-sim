@@ -7,6 +7,62 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.15.86** — le relief ne traverse plus les gares ; gare amont (Grande
+Motte) refaite d'après le réel.
+- **« Le relief rentre dans le bâtiment et les quais »** : le relief IGN
+  maillé à 25 m traversait le hall de Val Claret et la salle des quais.
+  Celle-ci n'avait que 0,3 à 0,9 m de terre au-dessus d'elle, et
+  dépassait même de 3,4 m plus haut.
+  - Autour de chaque gare, une pièce de terrain plus fine (maille de 2 m)
+    remplace le bloc. Elle s'y raccorde sans marche sur les mêmes
+    triangles, et :
+    - retire le terrain dans les bâtiments (masque à 25 cm) ;
+    - aplanit la place, l'escalier et l'auvent en bas ;
+    - rase le terrain sous la terrasse en haut ;
+    - recouvre les quais souterrains d'au moins 1,2 m.
+  - Les marches de l'escalier aval sont pleines jusqu'à la place.
+- **Gare amont** (« maintenant tu fais pareil pour le haut ») : nouveau
+  `GareAmont` (scripts/gare_amont.gd) pour l'extérieur, d'après l'IGN
+  (BD TOPO, LiDAR HD, orthophoto), les photos de Kevin, le reportage du
+  forum (2017) et Wikimedia Commons (2023) :
+  - **hall des quais** de 14 × 44,5 m dans l'axe de la voie, toit
+    monopente blanc :
+    - côté sud-est : socle béton, tôle nervurée blanche, bande de baies
+      bleues ;
+    - pignon aval à deux fenêtres bleues ;
+  - **façade de tête** (état 2017, seul photographié) :
+    - bardage bois en deux registres ;
+    - enseignes « TIGNES », « ALT 3032 M », « FUNICULAIRE / Glacier de la
+      Grande Motte » ;
+    - porte « DESCENTE », mur en pierre, sortie entre deux sens
+      interdits, fenêtre bleue d'angle ;
+  - **terrasse** sur pilotis au niveau du palier : caillebotis, garde-corps
+    noir, tables, transats, porte-skis, parasols ;
+  - **restaurant Le Panoramic** (chalet de bois brun, toits gris) et
+    annexes bleu nuit ;
+  - **gare aval du téléphérique de la Grande Motte**, à 107 m : bardage
+    gris, étage vitré, socle en pierre, « TELEPHERIQUE DE LA GRANDE
+    MOTTE », « GRANDE MOTTE » ;
+  - éclairage « plein jour » propre à ces matériaux (le jeu n'a pas de
+    soleil). Un maillage par matériau.
+- **Mur de tête du hall**, d'après les photos du 26/04/2026 :
+  - lames de bois ;
+  - **deux baies vitrées symétriques** sur la terrasse ;
+  - **kiosque à écran** (FUNICULAIRE · TP DE GRANDE MOTTE · TSD DE LA
+    VANOISE · TSD DES LANCHES) ;
+  - bandeau rouge « ALTITUDE EXPERIENCES ... » ;
+  - lettres rétroéclairées « DESTINATION / GLACIER » ;
+  - plafond sombre à spots, 5 m au-dessus du palier. Il remplace la
+    verrière et le mur entièrement vitré du 06/10, que les photos ne
+    montrent pas. Le tablier de neige est remplacé par la terrasse.
+- Relevé : SOURCES.md, ligne 24h. Signalé, non corrigé : entre s =
+  3 260 et 3 440 m, le relief IGN passe jusqu'à 19 m sous le tunnel du jeu.
+- Vérifié :
+  - `bench_relief_3d` : quais recouverts en bas et en haut, couverture
+    minimale 1,16 m ; terrain retiré dans les deux halls ;
+  - 14 bancs Godot, 99 tests PC, parité PWA ;
+  - rendus Vulkan et Compatibility.
+
 **v1.15.85** — gare aval (Val Claret) refaite d'après le réel.
 - « Refais complètement le design extérieur de la gare aval, à l'aide des
   vidéos, des photos, du forum, de Google Earth… et modélise la salle

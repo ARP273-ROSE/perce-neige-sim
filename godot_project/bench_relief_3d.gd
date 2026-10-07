@@ -80,6 +80,39 @@ func _tick() -> void:
 	_verif("trait du tunnel d'un bout à l'autre", ruban != null
 		and aabb.grow(1.0).has_point(a0) and aabb.grow(1.0).has_point(a1),
 		"boîte %s" % str(aabb))
+	# 4. gares : quais souterrains recouverts, terrain retiré des halls
+	var mini_cover: float = INF
+	var pire_s: float = 0.0
+	for s_q in [5.0, 15.0, 25.0, 35.0, 45.0, 3450.0, 3460.0, 3470.0, 3478.0]:
+		var xq: Transform3D = tun.transform_at(s_q)
+		var tp: Array = relief.terrain_piece(xq.origin.x, xq.origin.z)
+		var cover: float = float(tp[0]) - (xq.origin.y + tun.station_room_half_height)
+		if is_nan(cover):
+			cover = -99.0
+		if cover < mini_cover:
+			mini_cover = cover
+			pire_s = s_q
+	_verif("quais souterrains recouverts (bas et haut)", mini_cover >= 1.0,
+		"couverture minimale %.2f m (s = %.0f)" % [mini_cover, pire_s])
+	var halls: StationHalls = _main.get("station_halls")
+	var dedans: int = 0
+	var total: int = 0
+	for g in [halls.gare_aval, halls.gare_amont]:
+		var am: Dictionary = g.amenagement_relief()
+		var poly: PackedVector2Array = am["trous"][0]
+		var ctr: Vector2 = Vector2.ZERO
+		for v in poly:
+			ctr += v
+		ctr /= poly.size()
+		for k in range(poly.size()):
+			var q: Vector2 = ctr.lerp(poly[k], 0.85)
+			if not Geometry2D.is_point_in_polygon(q, poly):
+				continue                 # (emprise concave)
+			total += 1
+			if relief.terrain_piece(q.x, q.y)[1]:
+				dedans += 1
+	_verif("terrain retiré dans les halls des deux gares", dedans == total,
+		"%d points sur %d" % [dedans, total])
 	_fin()
 
 

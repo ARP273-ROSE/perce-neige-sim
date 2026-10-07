@@ -287,11 +287,16 @@ func _build_hall_end() -> void:
 
 
 # ---------------------------------------------------------------------------
-# Mur du fond (Kevin, 06/10/2026 : « des portes coulissantes avec baies
-# vitrées et vue sur les montagnes dont le sommet de la Grande Motte ») :
-# allège bois au ras du palier, baies vitrées sur toute la largeur, une
-# porte coulissante à deux vantaux en face de chaque palier, imposte bois
-# avec l'enseigne « DESTINATION GLACIER ».
+# Mur de tête, d'après les photos de Kevin du 26/04/2026 (095119, 095336,
+# 095443) — refonte du 07/10/2026 (« fais pareil pour le haut ») : lames de
+# bois verticales sur toute la largeur ; DEUX baies vitrées symétriques
+# (x = ±3 m) qui ouvrent de plain-pied sur la terrasse ; entre elles un
+# kiosque habillé de bois avec un grand écran (FUNICULAIRE · TP DE GRANDE
+# MOTTE · TSD DE LA VANOISE · TSD DES LANCHES) ; bandeau rouge « ALTITUDE
+# EXPERIENCES ... » ; grandes lettres rétroéclairées « DESTINATION /
+# GLACIER ». Plafond sombre à spots, 5 m au-dessus du palier (toit LiDAR
+# à 5,5 m) — il remplace la verrière du 06/10/2026, que les photos ne
+# montrent pas. Dehors : la terrasse (GareAmont).
 # ---------------------------------------------------------------------------
 
 ## Altitude MONDE du dessus du palier (= dernière marche des quais).
@@ -309,76 +314,104 @@ func _build_mur_vitre() -> void:
 	var s_m: float = HALL_DEPTH + 0.15
 	var y_seuil: float = _y_local(_y_palier_monde(), HALL_DEPTH)
 	var larg: float = HALL_HALF_W * 2.0 + 0.6
+	var y_plaf: float = y_seuil + 5.0
 	# allège bois sous le seuil (au centre, derrière la fosse)
 	_box(Vector3(larg, y_seuil - Y_HALL_FLOOR, 0.30), _mats["bois"], 0.0,
 		(Y_HALL_FLOOR + y_seuil) * 0.5, s_m, "MurFond")
-	# verrière : le plafond monte à VERRIERE_HAUT sur les derniers mètres,
-	# pour que le sommet de la Grande Motte (≈ 14° au-dessus de l'horizon,
-	# à 2,3 km) se voie déjà depuis la cabine, rame à quai
-	var h_l: float = VERRIERE_HAUT - Y_HALL_CEIL
+	# le plafond monte à 5 m au-dessus du palier sur les derniers mètres
+	var h_l: float = y_plaf - Y_HALL_CEIL
 	var l_l: float = HALL_DEPTH + 0.30 - VERRIERE_S0
 	for sx in [-1.0, 1.0]:
 		_box(Vector3(0.30, h_l, l_l), _mats["paroi_gare"], sx * (HALL_HALF_W + 0.15),
-			(Y_HALL_CEIL + VERRIERE_HAUT) * 0.5, VERRIERE_S0 + l_l * 0.5, "ParoiSalle")
+			(Y_HALL_CEIL + y_plaf) * 0.5, VERRIERE_S0 + l_l * 0.5, "ParoiSalle")
 	_box(Vector3(larg, h_l + 0.30, 0.30), _mats["plafond"], 0.0,
-		(Y_HALL_CEIL + VERRIERE_HAUT) * 0.5 + 0.15, VERRIERE_S0 - 0.15, "PlafondSalle")
-	# verre très clair, sans reflets : réfléchissant (SSR / SDFGI), il
-	# renvoyait le hall éclairé et délavait toute la vue sur le glacier
+		(Y_HALL_CEIL + y_plaf) * 0.5 + 0.15, VERRIERE_S0 - 0.15, "PlafondSalle")
+	var plaf: StandardMaterial3D = _mat("plafond_tete", Color(0.12, 0.13, 0.15), 0.8, 0.1)
+	_box(Vector3(larg, 0.20, l_l), plaf, 0.0, y_plaf + 0.10, VERRIERE_S0 + l_l * 0.5, "PlafondSalle")
+	for sv in [VERRIERE_S0 + 0.6, VERRIERE_S0 + 2.6, VERRIERE_S0 + 4.6, VERRIERE_S0 + 6.6]:
+		_box(Vector3(larg, 0.30, 0.18), _mats["poutre"], 0.0, y_plaf - 0.15, sv, "PoutreSalle")
+		for xs in [-3.5, -1.2, 1.2, 3.5]:
+			_box(Vector3(0.16, 0.03, 0.16), _mats["neon"], xs, y_plaf - 0.31, sv + 1.0, "PlafondSalle")
+	# mur de tête : lames de bois, percé de deux baies (x = ±3, 2,2 × 2,4 m)
+	var bois_t: StandardMaterial3D = _mat_lames_tete()
+	var h_b: float = 2.40
+	var demi_b: float = 1.10
+	var segs: Array = [Vector2(-larg * 0.5, -3.0 - demi_b), Vector2(-3.0 + demi_b, 3.0 - demi_b),
+		Vector2(3.0 + demi_b, larg * 0.5)]
+	for sg in segs:
+		_box(Vector3(sg.y - sg.x, h_b, 0.30), bois_t, (sg.x + sg.y) * 0.5, y_seuil + h_b * 0.5, s_m, "MurFond")
+	_box(Vector3(larg, y_plaf - y_seuil - h_b, 0.30), bois_t, 0.0, (y_seuil + h_b + y_plaf) * 0.5, s_m, "MurFond")
+	# baies vitrées : portes coulissantes à deux vantaux, cadres alu sombre
 	var verre: StandardMaterial3D = _mat("verre", Color(0.62, 0.78, 0.84, 0.07), 0.1, 0.0)
 	verre.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	verre.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	verre.disable_fog = true
 	var alu: StandardMaterial3D = _mat("alu", Color(0.20, 0.21, 0.23), 0.4, 0.7)
-	_box(Vector3(larg, 0.03, l_l), verre, 0.0, VERRIERE_HAUT + 0.02, VERRIERE_S0 + l_l * 0.5, "PlafondSalle")
-	for sv in [VERRIERE_S0 + 0.05, VERRIERE_S0 + 1.9, VERRIERE_S0 + 3.8, VERRIERE_S0 + 5.7, HALL_DEPTH - 0.05]:
-		_box(Vector3(larg, 0.14, 0.08), alu, 0.0, VERRIERE_HAUT - 0.05, sv, "PlafondSalle")
-	# baies vitrées sur toute la largeur et toute la hauteur
-	var h_v: float = VERRIERE_HAUT - y_seuil
-	var y_v: float = (VERRIERE_HAUT + y_seuil) * 0.5
-	_box(Vector3(HALL_HALF_W * 2.0, h_v, 0.02), verre, 0.0, y_v, HALL_DEPTH + 0.12, "Vitrage")
-	for xm in [-4.86, -4.25, -2.45, -1.25, 0.0, 1.25, 2.45, 4.25, 4.86]:
-		_box(Vector3(0.07, h_v, 0.14), alu, xm, y_v, HALL_DEPTH + 0.10, "Vitrage")
-	var h_p: float = 2.20
-	for yy in [y_seuil + 0.03, y_seuil + h_p, y_seuil + 4.4, VERRIERE_HAUT - 0.03]:
-		_box(Vector3(HALL_HALF_W * 2.0, 0.06, 0.14), alu, 0.0, yy, HALL_DEPTH + 0.10, "Vitrage")
-	# portes coulissantes face aux paliers : deux vantaux de 0,90 m,
-	# caisson du mécanisme, poignées, « SORTIE »
 	for d in [-1.0, 1.0]:
-		var xc: float = d * 3.35
-		_box(Vector3(1.84, 0.14, 0.12), alu, xc, y_seuil + h_p + 0.10, HALL_DEPTH - 0.02, "Vitrage")
-		for xv in [xc - 0.45, xc + 0.45]:
-			for xx in [xv - 0.42, xv + 0.42]:
-				_box(Vector3(0.05, h_p - 0.06, 0.06), alu, xx, y_seuil + h_p * 0.5, HALL_DEPTH + 0.06, "Vitrage")
-			for yy in [y_seuil + 0.08, y_seuil + h_p - 0.05]:
-				_box(Vector3(0.88, 0.07, 0.06), alu, xv, yy, HALL_DEPTH + 0.06, "Vitrage")
-		for xx in [xc - 0.09, xc + 0.09]:
-			_box(Vector3(0.03, 0.55, 0.05), _mats["acier"], xx, y_seuil + 1.05, HALL_DEPTH - 0.01, "Vitrage")
-		var sortie: Label3D = Label3D.new()
-		sortie.text = "SORTIE  EXIT"
-		sortie.font_size = 48
-		sortie.pixel_size = 0.004
-		sortie.modulate = Color(0.20, 0.95, 0.40)
-		sortie.outline_size = 0
-		sortie.shaded = false
-		sortie.set_meta("nom", "Vitrage")
-		add_child(sortie)
-		_place(sortie, xc, y_seuil + h_p + 0.10, HALL_DEPTH - 0.09)
-	# enseigne sur un panneau bois au-dessus des portes, au centre : sous
-	# la ligne de vue du sommet depuis la cabine
-	var y_e: float = y_seuil + h_p + 0.55
-	_box(Vector3(3.3, 0.84, 0.06), _mats["bois"], 0.0, y_e, HALL_DEPTH + 0.02, "Enseigne")
-	var sign_l: Label3D = Label3D.new()
-	sign_l.text = "DESTINATION\nGLACIER"
-	sign_l.font_size = 96
-	sign_l.pixel_size = 0.0040
-	sign_l.modulate = Color(1.0, 0.62, 0.12)
-	sign_l.outline_modulate = Color(0.5, 0.25, 0.02)
-	sign_l.outline_size = 8
-	sign_l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	sign_l.shaded = false
-	sign_l.set_meta("nom", "Enseigne")
-	add_child(sign_l)
-	_place(sign_l, 0.0, y_e, HALL_DEPTH - 0.02)
+		var xc: float = d * 3.0
+		_box(Vector3(demi_b * 2.0, h_b, 0.02), verre, xc, y_seuil + h_b * 0.5, s_m, "Vitrage")
+		for xx in [xc - demi_b + 0.04, xc, xc + demi_b - 0.04]:
+			_box(Vector3(0.06, h_b, 0.10), alu, xx, y_seuil + h_b * 0.5, s_m, "Vitrage")
+		for yy in [y_seuil + 0.05, y_seuil + h_b - 0.05]:
+			_box(Vector3(demi_b * 2.0, 0.08, 0.10), alu, xc, yy, s_m, "Vitrage")
+	# kiosque entre les baies, habillé de bois, grand écran paysage
+	_box(Vector3(1.9, 2.2, 0.55), bois_t, 0.0, y_seuil + 1.1, s_m - 0.42, "Enseigne")
+	_box(Vector3(1.72, 0.98, 0.04), _mats["sombre"], 0.0, y_seuil + 1.45, s_m - 0.71, "Enseigne")
+	var ecran: StandardMaterial3D = _mat("ecran_kiosque", Color(0.20, 0.35, 0.55), 0.4, 0.0)
+	ecran.emission_enabled = true
+	ecran.emission = Color(0.30, 0.48, 0.70)
+	ecran.emission_energy_multiplier = 0.8
+	_box(Vector3(1.62, 0.90, 0.02), ecran, 0.0, y_seuil + 1.45, s_m - 0.735, "Enseigne")
+	var lignes: Array = ["FUNICULAIRE", "TP DE GRANDE MOTTE", "TSD DE LA VANOISE", "TSD DES LANCHES"]
+	var vert: StandardMaterial3D = _mat("coche", Color(0.25, 0.85, 0.35), 0.5, 0.0)
+	vert.emission_enabled = true
+	vert.emission = Color(0.25, 0.85, 0.35)
+	for k in range(lignes.size()):
+		var y_l: float = y_seuil + 1.75 - k * 0.18
+		var lab: Label3D = _label_tete(lignes[k], 28, 0.0035, Color.WHITE)
+		lab.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+		_place(lab, -0.70, y_l, s_m - 0.76)
+		_box(Vector3(0.09, 0.09, 0.01), vert, 0.66, y_l, s_m - 0.75, "Enseigne")
+	# bandeau rouge « ALTITUDE EXPERIENCES ... » et sortie de secours
+	var rouge: StandardMaterial3D = _mat("rouge_bandeau", Color(0.71, 0.19, 0.24), 0.6, 0.0)
+	_box(Vector3(5.2, 0.42, 0.05), rouge, 0.0, y_seuil + 2.78, s_m - 0.18, "Enseigne")
+	_place(_label_tete("ALTITUDE EXPERIENCES ...", 64, 0.0042, Color.WHITE), 0.0, y_seuil + 2.78, s_m - 0.21)
+	_place(_label_tete("SORTIE  EXIT", 40, 0.004, Color(0.20, 0.95, 0.40)), 3.8, y_seuil + 2.78, s_m - 0.18)
+	# lettres rétroéclairées LED chaude
+	_place(_label_tete("DESTINATION", 150, 0.0042, Color(1.0, 0.70, 0.30)), 0.0, y_seuil + 4.40, s_m - 0.20)
+	_place(_label_tete("GLACIER", 240, 0.0042, Color(1.0, 0.70, 0.30)), 0.0, y_seuil + 3.65, s_m - 0.20)
+
+
+func _label_tete(t: String, taille: int, px: float, c: Color) -> Label3D:
+	var l: Label3D = Label3D.new()
+	l.text = t
+	l.font_size = taille
+	l.pixel_size = px
+	l.modulate = c
+	l.outline_size = 6 if c.r > 0.9 and c.g < 0.9 else 0
+	l.outline_modulate = Color(0.45, 0.22, 0.02)
+	l.shaded = false
+	l.set_meta("nom", "Enseigne")
+	add_child(l)
+	return l
+
+
+## Lames de bois verticales du mur de tête (comme la salle d'attente de la
+## gare aval : charte « Altitude Expériences »).
+func _mat_lames_tete() -> StandardMaterial3D:
+	var img: Image = Image.create(16, 2, false, Image.FORMAT_RGB8)
+	for i in range(16):
+		var c: Color = Color(0.77, 0.63, 0.42) if i < 11 else Color(0.23, 0.17, 0.11)
+		img.set_pixel(i, 0, c)
+		img.set_pixel(i, 1, c)
+	img.generate_mipmaps()
+	var m: StandardMaterial3D = _mat("lames_tete", Color.WHITE, 0.85, 0.0, true)
+	m.albedo_texture = ImageTexture.create_from_image(img)
+	m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+	m.uv1_triplanar = true
+	m.uv1_world_triplanar = true
+	m.uv1_scale = Vector3(1.0 / 0.06, 1.0, 1.0 / 0.06)
+	return m
 
 
 ## Dehors : le glacier au pied des baies (plan de neige) et le panorama
@@ -391,53 +424,8 @@ func _build_exterieur() -> void:
 	_exterieur.name = "Exterieur"
 	add_child(_exterieur)
 	var y_p: float = _y_palier_monde()
-	var droite: Vector3 = _xf.basis.x
-	# neige devant les portes : tablier horizontal au niveau du palier, de
-	# la couleur du bas du panorama, qui se fond dans le dôme sur ses bords
-	# (un grand plan opaque laissait une ligne d'horizon blanche et nette)
-	var neige: StandardMaterial3D = StandardMaterial3D.new()
-	neige.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	neige.vertex_color_use_as_albedo = true
-	neige.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	neige.disable_fog = true
-	neige.cull_mode = BaseMaterial3D.CULL_DISABLED
-	var c_neige: Color = Color(0.72, 0.77, 0.88)   # moyenne de la dernière ligne du panorama
-	if _rendu_web():
-		c_neige = Color(pow(c_neige.r, _GAMMA_WEB), pow(c_neige.g, _GAMMA_WEB), pow(c_neige.b, _GAMMA_WEB))
-	var st_n: SurfaceTool = SurfaceTool.new()
-	st_n.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var o_n: Vector3 = _to_world(Vector3(0.0, 0.0, HALL_DEPTH + 0.30))
-	o_n.y = y_p - 0.03
-	var avant_h: Vector3 = droite.cross(Vector3.UP).normalized() * -1.0
-	if avant_h.dot(-_xf.basis.z) < 0.0:
-		avant_h = -avant_h
-	var nx: int = 12
-	var nz: int = 8
-	var larg_n: float = 36.0
-	var prof_n: float = 16.0
-	var pt_n := func(i: int, j: int) -> void:
-		var u: float = float(i) / float(nx)
-		var w: float = float(j) / float(nz)
-		# opaque sur la première moitié (couvre le toit de la salle des
-		# machines, qui dépasse sous le dehors), fondu ensuite
-		var a_n: float = clampf(minf(u, 1.0 - u) * 3.2, 0.0, 1.0) * clampf((1.0 - w) * 2.0, 0.0, 1.0)
-		st_n.set_color(Color(c_neige.r, c_neige.g, c_neige.b, a_n))
-		st_n.add_vertex(o_n + droite * ((u - 0.5) * larg_n) + avant_h * (w * prof_n))
-	for i in range(nx):
-		for j in range(nz):
-			pt_n.call(i, j)
-			pt_n.call(i + 1, j)
-			pt_n.call(i + 1, j + 1)
-			pt_n.call(i, j)
-			pt_n.call(i + 1, j + 1)
-			pt_n.call(i, j + 1)
-	st_n.set_material(neige)
-	var mi_n: MeshInstance3D = MeshInstance3D.new()
-	mi_n.name = "Neige"
-	_neige = mi_n
-	mi_n.mesh = st_n.commit()
-	mi_n.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	_exterieur.add_child(mi_n)
+	# (plus de tablier de neige devant les baies : la terrasse de GareAmont
+	# est là, 07/10/2026)
 	# dôme du panorama : (cap, site) de chaque sommet → (u, v) de l'image
 	# Shader minimal : le rendu Compatibility (export web, iPad) assombrit
 	# nettement les tons moyens et sombres par rapport au Forward+
