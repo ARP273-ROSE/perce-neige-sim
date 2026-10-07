@@ -33,9 +33,17 @@ var enabled: bool = false
 ## Skieur jouable (07/10/2026, « la fermeture auto et le départ ont été
 ## déclenchés quand j'ai passé les portes du quai, j'ai loupé le départ ») :
 ## posé par main.gd. `retenue` : un skieur est en gare sans être monté, on
-## ne part pas ; `a_bord` : il vient de monter, on part 8 s plus tard.
+## ne part pas ; `a_bord` : il est dans la voiture, passé la ligne des
+## portes. Monté pendant l'arrêt, la séquence de départ (annonce →
+## fermeture des portes → buzzer) part dès qu'on l'a vu dedans (Kevin :
+## « qu'il ferme les portes une fois qu'il a détecté que j'étais à
+## l'intérieur du funi »). Déjà à bord à l'arrivée : arrêt habituel, il a
+## le temps de descendre.
 var retenue: bool = false
 var a_bord: bool = false
+const A_BORD_DELAI_S: float = 1.5     # dedans depuis 1,5 s : on y va
+var _vu_en_gare: bool = false         # vu sur le quai pendant cet arrêt
+var _a_bord_t: float = 0.0
 var state: State = State.IDLE
 var _state_timer: float = 0.0
 var _trip_count: int = 0
@@ -68,12 +76,14 @@ func _enter_initial_state() -> void:
 		return
 	if physics.doors_open:
 		state = State.WAITING_AT_STATION
+		_vu_en_gare = false
 	elif not physics.trip_started:
 		state = State.READY_TO_DEPART
 	elif absf(physics.v) > 0.5:
 		state = State.CRUISING
 	else:
 		state = State.WAITING_AT_STATION
+		_vu_en_gare = false
 	_state_timer = 0.0
 
 
@@ -100,10 +110,14 @@ func _process(delta: float) -> void:
 				or physics.door_phase_remaining > 0.0 \
 				or physics.departure_buzzer_remaining > 0.0 \
 				or physics.trip_started
+			if retenue:
+				_vu_en_gare = true
+			_a_bord_t = _a_bord_t + delta if a_bord else 0.0
 			if retenue and not seq_running:
 				_state_timer = minf(_state_timer, STATION_DWELL_S - 6.0)
-			elif a_bord and not seq_running:
-				_state_timer = maxf(_state_timer, STATION_DWELL_S - 8.0)
+			elif a_bord and _vu_en_gare and _a_bord_t > A_BORD_DELAI_S \
+					and not seq_running:
+				_state_timer = STATION_DWELL_S + 0.01
 			if _state_timer > STATION_DWELL_S or seq_running:
 				if not seq_running:
 					physics.request_depart()
@@ -175,6 +189,7 @@ func _process(delta: float) -> void:
 			# ouvertes. start_trip() remet finished à zéro au départ.)
 			if physics.doors_open:
 				state = State.WAITING_AT_STATION
+				_vu_en_gare = false
 				_state_timer = 0.0
 
 		_:

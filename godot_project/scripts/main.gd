@@ -1532,16 +1532,26 @@ func _skieur_en_tunnel() -> bool:
 	return s_r > 80.0 and s_r < PNConstants.LENGTH - 80.0
 
 
+## |x| dans le repère de la voiture sous lequel le skieur est « dedans » :
+## paroi du tube à 1,64 m, vantaux contre elle, capsule de 0,14 m
+const SKIEUR_DEDANS_X: float = 1.25
+
+
 func _maj_skieur() -> void:
 	if skieur == null or commandes_skieur == null:
 		return
 	# portes automatiques : elles s'ouvrent devant le skieur
 	PorteAuto.presences = [skieur.global_position]
-	# l'automate attend le skieur qui est en gare sans être monté, et part
-	# peu après qu'il est monté
+	# l'automate attend le skieur qui est en gare sans être monté, et ferme
+	# les portes dès qu'il est dedans — passé la ligne des portes : debout
+	# dans l'embrasure, il est encore « en gare »
 	if auto_operator != null:
-		auto_operator.a_bord = skieur.support != null
-		auto_operator.retenue = skieur.support == null and _skieur_en_gare()
+		var dedans: bool = false
+		if skieur.support != null:
+			var loc: Vector3 = skieur.support.global_transform.affine_inverse() * skieur.global_position
+			dedans = absf(loc.x) < SKIEUR_DEDANS_X
+		auto_operator.a_bord = dedans
+		auto_operator.retenue = not dedans and (skieur.support != null or _skieur_en_gare())
 	if audio != null:
 		audio.ecoute = 0 if skieur.support != null else (1 if _skieur_en_gare() else 2)
 	# CONDUIRE : à côté du siège du poste de la rame pilotée

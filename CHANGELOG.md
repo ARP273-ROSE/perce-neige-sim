@@ -7,6 +7,19 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.16.2** — en AUTO, les portes se ferment dès que le skieur est dans la
+voiture.
+- Kevin : « je veux qu'il ferme les portes de la rame une fois qu'il a
+  détecté que j'étais à l'intérieur du funi ».
+- Monté pendant l'arrêt et passé la ligne des portes, le skieur déclenche
+  la séquence de départ 1,5 s plus tard : annonce, fermeture des portes,
+  buzzer, départ (environ 30 s en tout).
+- Debout dans l'embrasure d'une porte, il compte encore comme « sur le
+  quai » : les portes restent ouvertes.
+- Déjà à bord à l'arrivée : arrêt habituel de 30 s, le temps de
+  descendre.
+- Vérifié : banc du skieur, 13 étapes (dont l'embrasure).
+
 **v1.16.1** — le skieur, retours du premier essai : départ manqué, son du
 quai, fosse, chute au retour, frites, klaxon.
 - **Départ manqué** : « la fermeture auto et le départ ont été déclenchés
