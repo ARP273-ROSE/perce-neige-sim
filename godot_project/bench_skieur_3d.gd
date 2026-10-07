@@ -9,8 +9,8 @@
 ##    baie automatique du mur de tête, jusque sur la terrasse.
 ## 4. Par la porte de la piste Génépy (bas du quai gauche) : le couloir, la
 ##    porte automatique, la neige remontée au seuil.
-## 5. AUTO : la rame attend le skieur resté sur le quai, part peu après
-##    qu'il est monté ; ce qu'on entend (gare / cabine) suit le skieur.
+## 5. AUTO : la rame attend le skieur resté sur le quai ou dans l'embrasure
+##    d'une porte, et ferme les portes dès qu'il est dedans ; ce qu'on entend (gare / cabine) suit le skieur.
 ## 6. Fosse de la gare basse : la tête passe sous les rails, et l'escalier
 ##    du bout ramène au niveau du quai.
 ## 7. Vue skieur quittée puis reprise en marche : il est toujours dans sa
@@ -25,6 +25,7 @@ var _t_phase: float = 0.0
 var _ok: bool = true
 var _ouv_max: float = 0.0
 var _t_depart: float = -1.0
+var _t_seq: float = -1.0
 
 
 func _initialize() -> void:
@@ -224,14 +225,29 @@ func _tick() -> void:
 				_verif("AUTO : la rame attend le skieur resté sur le quai ; on entend la gare, pas la cabine",
 					not ph.trip_started and ph.doors_open and _main.audio.ecoute == 1,
 					"voyage %s, portes %s, écoute %d" % [ph.trip_started, ph.doors_open, _main.audio.ecoute])
+				# debout dans l'embrasure d'une porte : pas encore dedans
+				var r7: Array = _poser_dans_voiture(sk, 5)
+				sk.global_position = (r7[0] as Node3D).global_transform * Vector3(1.55, r7[1], r7[2])
+				_phase = 75
+				_t_phase = 0.0
+		75:
+			if _t_phase > 12.0:
+				_verif("AUTO : skieur dans l'embrasure des portes, elles restent ouvertes",
+					ph.announce_phase_remaining <= 0.0 and ph.door_phase_remaining <= 0.0
+						and ph.doors_open and not ph.trip_started,
+					"annonce %.1f, portes %.1f, ouvertes %s" % [ph.announce_phase_remaining,
+						ph.door_phase_remaining, ph.doors_open])
 				_poser_dans_voiture(sk, 5)
+				_t_seq = -1.0
 				_phase = 8
 				_t_phase = 0.0
 		8:
+			if _t_seq < 0.0 and (ph.announce_phase_remaining > 0.0 or ph.door_phase_remaining > 0.0):
+				_t_seq = _t_phase
 			if ph.trip_started or _t_phase > 60.0:
-				_verif("AUTO : départ peu après la montée du skieur ; sons de cabine à bord",
-					ph.trip_started and _t_phase < 45.0 and _main.audio.ecoute == 0,
-					"départ %.0f s après la montée, écoute %d" % [_t_phase, _main.audio.ecoute])
+				_verif("AUTO : fermeture des portes dès que le skieur est dedans, puis départ ; sons de cabine",
+					ph.trip_started and _t_seq >= 0.0 and _t_seq < 3.0 and _main.audio.ecoute == 0,
+					"fermeture lancée %.1f s après la montée, départ à %.0f s, écoute %d" % [_t_seq, _t_phase, _main.audio.ecoute])
 				_main.auto_operator.toggle()
 				ph.speed_cmd = 1.0
 				_phase = 85
