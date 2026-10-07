@@ -190,6 +190,34 @@ func _tick() -> void:
 		_verif("gare aval : 4 vantaux, ouverts à l'embarquement, fermés au départ",
 			ga._vantaux.size() == 4 and ouvert > 0.9 and ferme < 0.01,
 			"course %.2f m puis %.2f m" % [ouvert, ferme])
+		# vraie séquence (Kevin : « ferme-les avant le départ, ouvre-les
+		# après l'arrivée ») : rame à quai portes ouvertes → séquence de
+		# départ → elles sont fermées AVANT que la traction ne parte
+		var ph2 := TrainPhysics.new()
+		ph2.direction = 1
+		ph2.s = PNConstants.START_S
+		ph2.doors_open = true
+		ph2.door_leaves_open = true
+		ph2.maint_brake = true
+		ph2.trip_started = false
+		for k in range(8):
+			ga.mettre_a_jour(0.5, ph2)
+		var ouv0: float = (ga._vantaux[0][0] as Node3D).position.distance_to(ga._p(float(ga._vantaux[0][1]), 0.0, 0.0))
+		ph2.request_depart()
+		var t_ferme: float = -1.0
+		var t_dep: float = -1.0
+		var t: float = 0.0
+		while t < 40.0 and t_dep < 0.0:
+			ph2.step(1.0 / 30.0)
+			ga.mettre_a_jour(1.0 / 30.0, ph2)
+			t += 1.0 / 30.0
+			var o: float = (ga._vantaux[0][0] as Node3D).position.distance_to(ga._p(float(ga._vantaux[0][1]), 0.0, 0.0))
+			if t_ferme < 0.0 and o < 0.01:
+				t_ferme = t
+			if ph2.trip_started:
+				t_dep = t
+		_verif("gare aval : portes de la salle fermées avant le départ", ouv0 > 0.9 and t_ferme > 0.0
+			and t_ferme < t_dep, "fermées à %.1f s, départ à %.1f s" % [t_ferme, t_dep])
 		_verif("gare aval : panneau des départs renseigné", (ga._panneau[1] as Label3D).text.contains("FUNICULA"))
 	print("BENCH_PUPITRE " + ("OK" if _ok else "ECHEC"))
 	quit(0 if _ok else 1)

@@ -184,9 +184,9 @@ var _mat_trait: ShaderMaterial = null
 ## (place, escalier : terrain aplani à y, raccordé sur `fondu` m),
 ## "rabots": [[PackedVector2Array, y, fondu]] (terrasse : terrain rasé
 ## au-dessous de y),
-## "couloirs": [[s0, s1, demi_largeur, couverture]] (quais souterrains :
-## terrain relevé à au moins `couverture` m au-dessus du plafond de la
-## salle)}. Le relief IGN maillé à 25 m traversait les bâtiments et les
+## "couloirs": [[s0, s1, demi_largeur, couverture, fondu = 10 m]] (quais
+## souterrains : terrain relevé à au moins `couverture` m au-dessus du
+## plafond de la salle)}. Le relief IGN maillé à 25 m traversait les bâtiments et les
 ## quais (« le relief rentre dans le bâtiment et les quais », 07/10/2026).
 var amenagements: Array = []
 const PAS_PIECE: float = 2.0
@@ -519,9 +519,13 @@ func _build_piece(am: Dictionary) -> void:
 							bp = e
 					var travers: float = sqrt(best)
 					var s_p: float = bp[0]
-					var w: float = (1.0 - smoothstep(c[2], c[2] + 10.0, travers)) \
-						* (1.0 - smoothstep(0.0, 10.0, maxf(c[0] - s_p, s_p - c[1])))
-					var cible: float = (bp[1] as Vector3).y + tunnel.station_room_half_height + c[3]
+					var fondu: float = c[4] if c.size() > 4 else 10.0
+					var w: float = (1.0 - smoothstep(c[2], c[2] + fondu, travers)) \
+						* (1.0 - smoothstep(0.0, fondu, maxf(c[0] - s_p, s_p - c[1])))
+					# au-dessus de la section à cet endroit (salle ou tube)
+					var s_c: float = clampf(s_p, 0.0, PNConstants.LENGTH)
+					var sect: float = maxf(tunnel.tunnel_radius, tunnel._horseshoe_dims_at(s_c).y)
+					var cible: float = (bp[1] as Vector3).y + sect + c[3]
 					h += maxf(cible - h, 0.0) * w
 				# place, escalier : aplanis
 				for pl in am.get("plats", []):

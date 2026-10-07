@@ -94,7 +94,9 @@ func _build_station_high() -> void:
 	# collé contre la fin du tunnel ; tête à PNConstants.BUTOIR_HAUT_S,
 	# nez de la rame arrêtée à 1,5 m
 	var s_bumper: float = PNConstants.LENGTH - 0.4
-	var s_plat_start: float = PNConstants.QUAI_HAUT_DEBUT_S
+	# les marches commencent au mur aval de la salle (bouche du tunnel)
+	var s_plat_start: float = maxf(PNConstants.QUAI_HAUT_DEBUT_S,
+		tunnel.station_high_start + tunnel.station_room_transition_haut + 0.05)
 	# La sortie est vers le HAUT (Kevin, 06/10/2026) : les marches du quai
 	# se prolongent dans le hall de la salle des machines jusqu'à un palier
 	# plat, de chaque côté de la fosse, devant les baies vitrées et les
@@ -111,7 +113,7 @@ func _build_station_high() -> void:
 		_build_platform_barrier(s_plat_start, s_palier, s_debut_barriere, sd, false, s_fond - 0.08)
 	# Pas de fosse en haut (retour d'essai 2026-09-26) : butoirs bleus seuls
 	_build_bumper(s_bumper, false)
-	_build_room_dressing(tunnel.station_high_start + tunnel.station_room_transition,
+	_build_room_dressing(tunnel.station_high_start + tunnel.station_room_transition_haut,
 		PNConstants.LENGTH - 0.3, false)
 	_build_ceiling_lights(s_plat_start, PNConstants.QUAI_HAUT_FIN_S)
 

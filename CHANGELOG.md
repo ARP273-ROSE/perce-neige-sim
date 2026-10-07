@@ -7,6 +7,48 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.15.87** — relief 3D juste ; bouche du tunnel en gare amont d'après
+les photos.
+- **« Normalement il est souterrain tout le temps, donc c'est une
+  imprécision de carte ? »** — Non : la carte IGN est juste, c'était
+  notre relief 3D (audit_physique/tunnel_amont_relief.sage).
+  - Selon l'altitude IGN ponctuelle (RGE ALTI), notre tunnel est
+    souterrain partout avant la gare amont : 21 m de roche à s = 3 210 m,
+    environ 1 m à s = 3 426 m. Le LiDAR 0,5 m concorde à 2-4 m près.
+  - Notre grille de 25 m était en moyenne 10,7 m trop basse le long de
+    la fin de ligne, jusqu'à 36 m dans les barres rocheuses. La cause :
+    demandé directement à 25 m, le service IGN renvoie un relief GROSSIER
+    (17 m d'écart quadratique, 51 m au pire). À 5 m l'écart tombe à
+    3,5 m, à 2 m à 0,8 m.
+  - `tools_relief3d.py` télécharge maintenant à 4 m, par tuiles, et lit
+    la valeur à chaque nœud. Écart le long de la fin de ligne : 1,6 m
+    (contre 14,4 m). Au pied de la voie : 2 108,3 m au lieu de 2 114,3 m,
+    ce qui colle au LiDAR de la gare aval.
+- **Bouche du tunnel en gare amont** (« le mur aval de la gare ferme
+  l'entrée du tunnel ») :
+  - la salle des quais commence maintenant AU PIGNON aval du bâtiment, par
+    un mur droit (`station_high_start` 3 478,82, fondu de 0,5 m en haut
+    au lieu de 6 m). Le pignon est percé de la bouche ; la queue de la
+    rame arrêtée y arrive, comme sur la photo 095520 ;
+  - côté quai, d'après les photos du forum (« un petit zoom sur la sortie
+    du tunnel ») :
+    - mur bleu nuit, ouverture rectangulaire bordée de cornières
+      galvanisées, linteau à l'axe + 1,55 m ;
+    - gros caisson en saillie jusqu'au plafond, avec **deux miroirs
+      convexes** tournés chacun vers un quai (Kevin : « ce sont des
+      miroirs pour surveiller les deux quais ») ;
+    - pilier à gauche, portillons blancs au pied des quais, sens
+      interdit à droite.
+- **« Enlève le tas de neige côté est du bâtiment »** : le relèvement du
+  terrain ne couvre plus que le tunnel, avant le pignon, avec un raccord
+  de 4 m. La façade sud-est est dégagée.
+- **Gare aval** : la dalle de la place, qui dépassait du terrain corrigé,
+  est retirée : la place est le terrain aplani. Les portes coulissantes de
+  la salle d'attente se ferment avant le départ et s'ouvrent après
+  l'arrivée : banc sur une vraie séquence (fermées 21 s avant la
+  traction).
+- Vérifié : 14 bancs Godot, 99 tests PC, parité PWA.
+
 **v1.15.86** — le relief ne traverse plus les gares ; gare amont (Grande
 Motte) refaite d'après le réel.
 - **« Le relief rentre dans le bâtiment et les quais »** : le relief IGN

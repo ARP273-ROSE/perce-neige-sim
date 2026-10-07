@@ -26,8 +26,15 @@ extends Node3D
 @export var station_room_half_width: float = 4.90
 @export var station_room_half_height: float = 2.65
 @export var station_low_end: float = 52.0        # fin de la salle Val Claret
-@export var station_high_start: float = 3473.56  # début de la salle Grande Motte : 4 m avant le quai (QUAI_HAUT_DEBUT_S − 4)
-@export var station_room_transition: float = 6.0 # fondu salle ↔ tube carré
+# Début de la salle Grande Motte : AU PIGNON AVAL du bâtiment de la gare
+# (GareAmont, 44,5 m sous le mur de tête), où le tunnel débouche dans un mur
+# droit par une bouche rectangulaire — photos FUNI-334 « un petit zoom sur
+# la sortie du tunnel » et 095520 (la queue de la rame arrêtée est à la
+# bouche) ; Kevin, 07/10/2026 : « le mur aval de la gare ferme l'entrée du
+# tunnel ». Avant : 3473,56 et un évasement de 6 m hors du bâtiment.
+@export var station_high_start: float = 3478.82
+@export var station_room_transition: float = 6.0 # fondu salle ↔ tube carré (gare aval)
+@export var station_room_transition_haut: float = 0.5  # gare amont : mur droit
 
 # Passing loop (boucle de croisement au milieu du tunnel)
 # Géométrie réelle aiguillage Abt : courbe sinusoïdale continue symétrique
@@ -763,10 +770,10 @@ func _station_room_blend_at(s: float) -> float:
 		return 1.0
 	if s < station_low_end:
 		return (station_low_end - s) / station_room_transition
-	if s >= station_high_start + station_room_transition:
+	if s >= station_high_start + station_room_transition_haut:
 		return 1.0
 	if s > station_high_start:
-		return (s - station_high_start) / station_room_transition
+		return (s - station_high_start) / station_room_transition_haut
 	return 0.0
 
 

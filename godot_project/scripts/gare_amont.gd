@@ -33,7 +33,7 @@ extends Node3D
 ## toit du téléphérique.
 
 const H_TOIT_TETE: float = 5.5        # toit au mur de tête au-dessus du palier (LiDAR)
-const LONG_HALL: float = 44.5
+const LONG_HALL_IGN: float = 44.5   # BD TOPO ; recalculé sur la salle du jeu (_long)
 const DEMI_HALL: float = 7.0
 const H_ANNEXES: float = 4.0          # 3034,7 m
 const H_BAS: float = -14.0            # bas des façades (sous le terrain)
@@ -57,6 +57,9 @@ var _o: Vector3 = Vector3.ZERO
 var _x: Vector3 = Vector3.RIGHT     # droite en regardant vers l'amont
 var _d: Vector3 = Vector3.FORWARD   # vers l'amont
 var _y_quai_toit: float = 1.1       # toit au bout aval (au-dessus de la salle des quais)
+## longueur du hall : du mur de tête au pignon aval, où commence la salle
+## des quais du jeu (TunnelBuilder.station_high_start) — 44,5 m sur l'IGN
+var _long: float = LONG_HALL_IGN
 var _st: Dictionary = {}            # matériau → SurfaceTool
 var _mats: Dictionary = {}
 
@@ -72,9 +75,11 @@ func construire(t: TunnelBuilder, mr: MachineRoomBuilder) -> void:
 	_d = _d.normalized()
 	_o = mr._to_world(Vector3(0.0, 0.0, MachineRoomBuilder.HALL_DEPTH + 0.30))
 	_o.y = mr._y_palier_monde()
+	_long = PNConstants.LENGTH + MachineRoomBuilder.HALL_DEPTH + 0.30 \
+		- (tunnel.station_high_start + tunnel.station_room_transition_haut)
 	# toit au bout aval : au moins 0,5 m au-dessus du plafond de la salle
 	# des quais du jeu
-	var s_aval: float = PNConstants.LENGTH + MachineRoomBuilder.HALL_DEPTH + 0.30 - LONG_HALL
+	var s_aval: float = PNConstants.LENGTH + MachineRoomBuilder.HALL_DEPTH + 0.30 - _long
 	var top_quai: float = tunnel.transform_at(s_aval).origin.y + tunnel.station_room_half_height
 	_y_quai_toit = maxf(top_quai - _o.y + 0.5, 0.0)
 	_materiaux()
@@ -97,7 +102,7 @@ func _p2(v: Vector2, y: float = 0.0) -> Vector3:
 
 
 func _y_toit(d: float) -> float:
-	return lerpf(H_TOIT_TETE, _y_quai_toit, clampf(-d / LONG_HALL, 0.0, 1.0))
+	return lerpf(H_TOIT_TETE, _y_quai_toit, clampf(-d / _long, 0.0, 1.0))
 
 
 # --- matériaux : soleil fixe propre à chaque matériau (le jeu n'a pas de
@@ -192,6 +197,8 @@ func _materiaux() -> void:
 	_mat("bleu", Color("2a4f8f"))
 	_mat("vitre", Color("3b4a5c"))
 	_mat("bleu_nuit", Color("232838"))
+	_mat("acier_bleu", Color("30426f"))
+	_mat("bleu_nuit_clair", Color("2c3248"))
 	_mat("toit_blanc", Color("e6e8ea"))
 	_mat("toit_gris", Color("6f7377"))
 	_mat("brun", Color("3a2a1e"))
@@ -267,8 +274,8 @@ func _valider() -> void:
 	for nom in _st:
 		var st: SurfaceTool = _st[nom]
 		var arr: Array = st.commit_to_arrays()
-		if (arr[Mesh.ARRAY_VERTEX] as PackedVector3Array).is_empty():
-			continue
+		if arr[Mesh.ARRAY_VERTEX] == null or (arr[Mesh.ARRAY_VERTEX] as PackedVector3Array).is_empty():
+			continue                     # matériau inutilisé
 		var mesh: ArrayMesh = ArrayMesh.new()
 		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
 		mesh.surface_set_material(0, _mats[nom])
@@ -288,8 +295,8 @@ func _valider() -> void:
 func _hall() -> void:
 	var n: int = 12
 	for i in range(n):
-		var d0: float = -LONG_HALL * i / n
-		var d1: float = -LONG_HALL * (i + 1) / n
+		var d0: float = -_long * i / n
+		var d1: float = -_long * (i + 1) / n
 		var y0: float = _y_toit(d0)
 		var y1: float = _y_toit(d1)
 		# toit (léger débord)
@@ -313,14 +320,80 @@ func _hall() -> void:
 		_boite("bleu", -DEMI_HALL - 0.06, d_b - 2.35, yt - 0.85, 0.06, 0.10, 1.75)
 		_boite("bleu", -DEMI_HALL - 0.06, d_b - 1.2, yt - 1.75, 0.06, 2.3, 0.08)
 		d_b -= 2.4
-	# bout aval : pignon blanc, deux fenêtres bleues
-	var y_av: float = _y_toit(-LONG_HALL)
-	_mur("tole_blanche", Vector2(-DEMI_HALL, -LONG_HALL), Vector2(DEMI_HALL, -LONG_HALL), H_BAS, y_av, y_av)
-	for x in [-3.0, 3.0]:
-		_boite("bleu", x, -LONG_HALL - 0.04, y_av - 2.6, 1.3, 0.06, 1.1)
-		_boite("vitre", x, -LONG_HALL - 0.07, y_av - 2.6, 1.1, 0.04, 0.9)
+	# bout aval : pignon blanc à deux fenêtres bleues, PERCÉ de la bouche
+	# du tunnel (Kevin, 07/10/2026 : « le mur aval de la gare ferme
+	# l'entrée du tunnel » ; photos 095520 et 095051 : le hall finit sur
+	# un mur bleu nuit, la bouche rectangulaire du tunnel encadrée d'un
+	# portique d'acier bleu, dans l'axe de la voie)
+	var y_av: float = _y_toit(-_long)
+	var b: Rect2 = _bouche()
+	var dg: float = -_long
+	var morceaux: Array = [
+		[Vector2(-DEMI_HALL, dg), Vector2(b.position.x, dg), H_BAS, y_av],          # à gauche
+		[Vector2(b.end.x, dg), Vector2(DEMI_HALL, dg), H_BAS, y_av],                 # à droite
+		[Vector2(b.position.x, dg), Vector2(b.end.x, dg), H_BAS, b.position.y],      # dessous
+		[Vector2(b.position.x, dg), Vector2(b.end.x, dg), b.end.y, y_av]]            # dessus
+	for mc in morceaux:
+		_mur("tole_blanche", mc[0], mc[1], mc[2], mc[3], mc[3])
+		# face côté quai, bleu nuit (photos)
+		_mur("bleu_nuit", mc[0] + Vector2(0, 0.35), mc[1] + Vector2(0, 0.35), maxf(mc[2], b.position.y - 0.5),
+			mc[3] - 0.05, mc[3] - 0.05)
+	# bouche du tunnel côté quai (photos du reportage FUNI-334, « un petit
+	# zoom sur la sortie du tunnel », envoyées par Kevin le 07/10/2026) :
+	#  - cornières galvanisées sur les deux tableaux de l'ouverture ;
+	#  - au-dessus, un gros caisson de béton en saillie (≈ 1,1 m de haut,
+	#    0,6 m de saillie), plus large que l'ouverture, portant deux
+	#    MIROIRS convexes qui surveillent chacun un quai (Kevin) ;
+	#  - un pilier en saillie à gauche (vu du quai, vers l'aval : côté
+	#    nord-ouest) jusqu'au caisson ;
+	#  - un portillon blanc au pied de chaque quai, celui de droite (sud-
+	#    est) avec un panneau sens interdit.
+	var dq: float = dg + 0.35
+	for xx in [b.position.x, b.end.x]:
+		_boite("galva", xx, dq + 0.06, (b.position.y + b.end.y) * 0.5, 0.08, 0.12, b.size.y)
+	# (vu du quai vers l'aval, la gauche est le nord-ouest : x > 0)
+	var cx0: float = b.position.x - 0.85
+	var cx1: float = b.end.x + 1.25
+	# caisson jusqu'au plafond de la salle (axe + 2,65 m)
+	var h_cais: float = tunnel.station_room_half_height - LINTEAU - 0.05
+	_boite("bleu_nuit_clair", (cx0 + cx1) * 0.5, dq + 0.30, b.end.y + h_cais * 0.5, cx1 - cx0, 0.60, h_cais)
+	for k in [-1.0, 1.0]:
+		var xx: float = b.position.x + 0.9 if k < 0.0 else b.end.x - 0.9
+		_miroir(_p(xx, dq + 0.62, b.end.y + h_cais * 0.5), k)
+	_boite("bleu_nuit_clair", cx1 - 0.55, dq + 0.25, (b.position.y - 0.3 + b.end.y) * 0.5,
+		1.1, 0.50, b.end.y - b.position.y + 0.3)
+	# portillons blancs au pied des quais (de part et d'autre de la bouche)
+	var y_q: float = b.end.y - LINTEAU - 0.6   # dessus de la première marche (axe − 0,6 m)
+	for cote in [-1.0, 1.0]:
+		var xg: float = (b.end.x + 0.55) if cote > 0.0 else (b.position.x - 1.9)
+		for xx in [xg, xg + 0.9]:
+			_boite("blanc", xx, dq + 0.9, y_q + 0.55, 0.05, 0.05, 1.1)
+		_boite("blanc", xg + 0.45, dq + 0.9, y_q + 1.08, 0.9, 0.05, 0.05)
+		_boite("blanc", xg + 0.45, dq + 0.9, y_q + 0.15, 0.9, 0.05, 0.05)
+		if cote < 0.0:                  # à droite vu du quai vers l'aval
+			_sens_interdit(_p(xg + 0.45, dq + 0.93, y_q + 0.62), _d, 0.16)
+	for x in [-5.2, 5.2]:
+		_boite("bleu", x, dg - 0.04, y_av - 1.9, 1.3, 0.06, 1.1)
+		_boite("vitre", x, dg - 0.07, y_av - 1.9, 1.1, 0.04, 0.9)
 	# rive de toit blanche le long de la tête
 	_boite("blanc", 1.05, 0.15, H_TOIT_TETE + 0.15, 17.9, 0.35, 0.35)
+
+
+## Bouche du tunnel dans le pignon aval (repère local : x, y) : la largeur
+## du tube carré (+ 5 cm), du dessous de la dalle jusqu'au linteau. Photo
+## « un petit zoom sur la sortie du tunnel » : ouverture ≈ 0,8 fois aussi
+## haute que large au-dessus de la dalle, caisson ≈ 1,1 m au-dessus, qui
+## monte jusqu'au plafond de la salle → linteau à l'axe + 1,55 m.
+const LINTEAU: float = 1.55
+
+
+func _bouche() -> Rect2:
+	var s_p: float = tunnel.station_high_start - 0.01          # encore le tube carré
+	var y_axe: float = tunnel.transform_at(s_p).origin.y - _o.y
+	var dims: Vector2 = tunnel._horseshoe_dims_at(s_p)
+	var r: float = maxf(tunnel.tunnel_radius, dims.x) + 0.05
+	var h: float = maxf(tunnel.tunnel_radius, dims.y) + 0.05
+	return Rect2(-r, y_axe - h, 2.0 * r, h + LINTEAU)
 
 
 # --- façade de tête (état 2017) ------------------------------------------------
@@ -368,8 +441,84 @@ func _facade_tete() -> void:
 	_texte("DESCENTE", _p(3.0, 0.18, 2.80), 48, Color.WHITE, 0.0060)
 	# panneaux sens interdit de part et d'autre de la sortie
 	for x in [-4.5, -1.5]:
-		_cylindre("rouge", x, 0.25, 1.45, 1.47, 0.22, 16)
-		_boite("blanc", x, 0.30, 1.46, 0.30, 0.02, 0.07)
+		_sens_interdit(_p(x, 0.12, 1.55), _d, 0.22)
+
+
+## Miroir convexe de surveillance (dôme chromé, cerclage noir), tourné vers
+## le quai de son côté et vers le bas.
+static var _mat_miroir: StandardMaterial3D = null
+
+
+func _miroir(c: Vector3, cote: float) -> void:
+	if _mat_miroir == null:
+		_mat_miroir = StandardMaterial3D.new()
+		_mat_miroir.albedo_color = Color(0.82, 0.84, 0.86)
+		_mat_miroir.metallic = 1.0
+		_mat_miroir.roughness = 0.06
+	var pivot: Node3D = Node3D.new()
+	pivot.name = "Miroir"
+	add_child(pivot)
+	# regarde vers l'amont (le quai), penché vers le bas et vers son quai
+	var vers: Vector3 = (_d + _x * (-cote) * 0.55 + Vector3.DOWN * 0.45).normalized()
+	pivot.transform = Transform3D(Basis.looking_at(-vers, Vector3.UP), c)
+	var dome: MeshInstance3D = MeshInstance3D.new()
+	var sp: SphereMesh = SphereMesh.new()
+	sp.radius = 0.24
+	sp.height = 0.16
+	sp.is_hemisphere = true
+	sp.material = _mat_miroir
+	dome.mesh = sp
+	dome.rotation = Vector3(PI * 0.5, 0.0, 0.0)      # bombé vers l'avant (+Z local)
+	dome.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	pivot.add_child(dome)
+	var cercle: MeshInstance3D = MeshInstance3D.new()
+	var to: TorusMesh = TorusMesh.new()
+	to.inner_radius = 0.235
+	to.outer_radius = 0.27
+	var noir: StandardMaterial3D = StandardMaterial3D.new()
+	noir.albedo_color = Color(0.05, 0.05, 0.06)
+	to.material = noir
+	cercle.mesh = to
+	cercle.rotation = Vector3(PI * 0.5, 0.0, 0.0)
+	pivot.add_child(cercle)
+
+
+## Panneau rond « sens interdit » (disque rouge, barre blanche) tourné vers
+## `normale`.
+static var _mat_rouge: StandardMaterial3D = null
+static var _mat_blanc: StandardMaterial3D = null
+
+
+func _sens_interdit(c: Vector3, normale: Vector3, r: float) -> void:
+	if _mat_rouge == null:
+		_mat_rouge = StandardMaterial3D.new()
+		_mat_rouge.albedo_color = Color(0.80, 0.08, 0.10)
+		_mat_rouge.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		_mat_blanc = StandardMaterial3D.new()
+		_mat_blanc.albedo_color = Color(0.97, 0.97, 0.97)
+		_mat_blanc.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	var pivot: Node3D = Node3D.new()
+	add_child(pivot)
+	var z: Vector3 = normale.normalized()
+	var x: Vector3 = Vector3.UP.cross(z).normalized()
+	pivot.transform = Transform3D(Basis(x, Vector3.UP, z), c)
+	var disque: MeshInstance3D = MeshInstance3D.new()
+	var cy: CylinderMesh = CylinderMesh.new()
+	cy.top_radius = r
+	cy.bottom_radius = r
+	cy.height = 0.02
+	cy.radial_segments = 24
+	cy.material = _mat_rouge
+	disque.mesh = cy
+	disque.rotation = Vector3(PI * 0.5, 0.0, 0.0)
+	pivot.add_child(disque)
+	var barre: MeshInstance3D = MeshInstance3D.new()
+	var bx: BoxMesh = BoxMesh.new()
+	bx.size = Vector3(r * 1.3, r * 0.32, 0.01)
+	bx.material = _mat_blanc
+	barre.mesh = bx
+	barre.position = Vector3(0.0, 0.0, 0.012)
+	pivot.add_child(barre)
 
 
 func _texte(t: String, pos: Vector3, taille: int, c: Color, px: float) -> void:
@@ -570,7 +719,7 @@ func amenagement_relief() -> Dictionary:
 	var rect := func(r: Rect2) -> Array:
 		return [r.position, Vector2(r.end.x, r.position.y), r.end, Vector2(r.position.x, r.end.y)]
 	var hall: Array = [Vector2(-DEMI_HALL - 0.2, 0.3), Vector2(DEMI_HALL + 0.2, 0.3),
-		Vector2(DEMI_HALL + 0.2, -LONG_HALL - 0.2), Vector2(-DEMI_HALL - 0.2, -LONG_HALL - 0.2)]
+		Vector2(DEMI_HALL + 0.2, -_long - 0.2), Vector2(-DEMI_HALL - 0.2, -_long - 0.2)]
 	var pts: PackedVector2Array = PackedVector2Array()
 	for e in [hall, TERRASSE, ANNEXES, TPH, rect.call(RESTO_A), rect.call(RESTO_B)]:
 		pts.append_array(monde.call(e))
@@ -584,5 +733,7 @@ func amenagement_relief() -> Dictionary:
 		"trous": [monde.call(hall), monde.call(ANNEXES), monde.call(TPH),
 			monde.call(rect.call(RESTO_A)), monde.call(rect.call(RESTO_B))],
 		"rabots": [[monde.call(TERRASSE), _o.y - 0.4, 3.0]],
-		"couloirs": [[3440.0, PNConstants.LENGTH + MachineRoomBuilder.HALL_DEPTH, 6.0, 1.2]],
+		# tunnel seulement, jusqu'au pignon aval, raccord court (Kevin,
+		# 07/10/2026 : « enlève le tas de neige côté est du bâtiment »)
+		"couloirs": [[3430.0, tunnel.station_high_start - 0.3, 3.0, 0.8, 4.0]],
 	}
