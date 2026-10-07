@@ -283,7 +283,7 @@ func _hall() -> void:
 		var ae: Vector2 = a + dehors * 0.25
 		var be: Vector2 = b + dehors * 0.25
 		if not facade:
-			_quad(st_ext, _p2(ae, -0.6), _p2(be, -0.6), _p2(be, H_TOIT), _p2(ae, H_TOIT))
+			_quad(st_ext, _p2(ae, -2.6), _p2(be, -2.6), _p2(be, H_TOIT), _p2(ae, H_TOIT))
 		# parement intérieur : lames de bois jusqu'à 2,7 m, enduit blanc au-dessus
 		_quad(st_bas, _p2(a, 0.0), _p2(b, 0.0), _p2(b, 2.7), _p2(a, 2.7))
 		_quad(st_haut, _p2(a, 2.7), _p2(b, 2.7), _p2(b, H_PLAFOND + 0.3), _p2(a, H_PLAFOND + 0.3))
@@ -653,7 +653,9 @@ func _escalier() -> void:
 		var d: float = ARCHE_D + 0.5 + GIRON * (k + 0.5)
 		var p: Vector2 = mil + dehors * d
 		var y_dessus: float = -haut * (k + 1)
-		_boite("anthracite", LARGEUR_ESCALIER, haut, GIRON, p.x, p.y, y_dessus + haut * 0.5, rot)
+		# marche massive jusqu'à la place (on ne voit pas dessous)
+		var y_bas: float = -h_tot - 0.2
+		_boite("anthracite", LARGEUR_ESCALIER, y_dessus - y_bas, GIRON, p.x, p.y, (y_dessus + y_bas) * 0.5, rot)
 	var d_pied: float = ARCHE_D + 0.5 + GIRON * n_marches
 	# place (enrobé ; front de neige l'hiver)
 	var pp: Vector2 = mil + dehors * (d_pied + 6.0)
@@ -728,6 +730,59 @@ func _skieur(mesh: Mesh, xf: Transform3D, graine: Color) -> void:
 	mi.multimesh = mm
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(mi)
+
+
+## Aménagement du relief autour de la gare (ReliefBuilder.amenagements) :
+## le terrain s'arrête aux murs du hall, s'aplanit sous l'auvent et le
+## palier (niveau d'entrée) et sur l'escalier et la place (niveau de la
+## place), et recouvre les quais souterrains d'au moins 1,2 m.
+func amenagement_relief() -> Dictionary:
+	var t: Vector2 = (FACADE_B - FACADE_A).normalized()
+	var dehors: Vector2 = Vector2(-t.y, t.x)
+	if Geometry2D.is_point_in_polygon((FACADE_A + FACADE_B) * 0.5 + dehors, PackedVector2Array(HALL)):
+		dehors = -dehors
+	var mil: Vector2 = (FACADE_A + FACADE_B) * 0.5 + t * ARCHE_DECALAGE
+	var y_place: float = H_PLACE_ABS - _o.y
+	var n_marches: int = clampi(int(round(-y_place / 0.17)), 3, 18)
+	var d_pied: float = ARCHE_D + 0.5 + GIRON * n_marches
+	var monde := func(pts: Array) -> PackedVector2Array:
+		var out: PackedVector2Array = PackedVector2Array()
+		for v in pts:
+			var w: Vector3 = _p2(v)
+			out.append(Vector2(w.x, w.z))
+		return out
+	var rect_l := func(c: Vector2, demi_t: float, d0: float, d1: float) -> Array:
+		return [c + t * demi_t + dehors * d0, c - t * demi_t + dehors * d0,
+			c - t * demi_t + dehors * d1, c + t * demi_t + dehors * d1]
+	# hall agrandi de 0,15 m : le terrain s'arrête derrière le bardage
+	var hall: Array = []
+	var centre: Vector2 = Vector2.ZERO
+	for v in HALL:
+		centre += v
+	centre /= HALL.size()
+	for v in HALL:
+		hall.append(v + (v - centre).normalized() * 0.15)
+	var entree: Array = rect_l.call(mil, LARGEUR_ESCALIER * 0.5 + 1.0, 0.0, ARCHE_D + 0.5)
+	var place: Array = rect_l.call(mil, 10.0, ARCHE_D + 0.5, d_pied + 12.0)
+	var pts: PackedVector2Array = PackedVector2Array()
+	for e in [monde.call(hall), monde.call(AUVENT), monde.call(place)]:
+		pts.append_array(e)
+	var axe0: Vector3 = tunnel.transform_at(0.0).origin
+	var axe1: Vector3 = tunnel.transform_at(70.0).origin
+	pts.append(Vector2(axe0.x, axe0.z))
+	pts.append(Vector2(axe1.x, axe1.z))
+	var bb: Rect2 = Rect2(pts[0], Vector2.ZERO)
+	for v in pts:
+		bb = bb.expand(v)
+	return {
+		"rect": bb.grow(18.0),
+		"trous": [monde.call(hall)],
+		# ordre : la place d'abord, l'entrée ensuite (elle l'emporte chez elle)
+		"plats": [[monde.call(place), _o.y + y_place - 0.03, 7.0],
+			[monde.call(AUVENT), _o.y - 0.03, 2.5],
+			[monde.call(entree), _o.y - 0.03, 2.5]],
+		"couloirs": [[0.0, 70.0, 6.0, 1.2]],
+	}
 
 
 ## Libellé posé à plat sur une surface de normale `normale` (lisible de ce

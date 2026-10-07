@@ -31,17 +31,36 @@ const CHUNK: int = 64                 # mailles par côté de tuile (frustum cul
 const GAMMA_WEB: float = 0.625        # rendu Compatibility : voir MachineRoomBuilder
 const Y_SOCLE: float = 1550.0
 const BRUME: Color = Color(0.50, 0.62, 0.78)   # linéaire (≈ 0,73 0,81 0,90 en sRGB)
-## Sol du bloc détaillé (opaque ; dessous assombri).
+## Sol du bloc détaillé (opaque ; dessous assombri). Deux usages :
+## - les tuiles du bloc (piece = 0) : percées aux emplacements des pièces
+##   fines des gares (`pieces`, rectangles x0, z0, x1, z1) ;
+## - les pièces fines elles-mêmes (piece = 1) : percées là où se trouvent
+##   les bâtiments (masque `trous`, posé sur leur rectangle `emprise`).
 const SHADER_TERRAIN: String = """shader_type spatial;
 render_mode unshaded, fog_disabled, cull_disabled;
 uniform sampler2D ortho : source_color, filter_linear_mipmap, repeat_disable;
+uniform sampler2D trous : filter_nearest, repeat_disable;
 uniform float gamma = 1.0;
 uniform vec3 brume = vec3(0.50, 0.62, 0.78);
+uniform vec4 pieces[4];
+uniform int n_pieces = 0;
+uniform float piece = 0.0;
+uniform vec4 emprise = vec4(0.0, 0.0, 1.0, 1.0);
 varying vec3 pw;
 void vertex() {
 	pw = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 }
 void fragment() {
+	if (piece < 0.5) {
+		for (int i = 0; i < n_pieces; i++) {
+			vec4 r = pieces[i];
+			if (pw.x > r.x && pw.x < r.z && pw.z > r.y && pw.z < r.w) {
+				discard;
+			}
+		}
+	} else if (texture(trous, (pw.xz - emprise.xy) / (emprise.zw - emprise.xy)).r > 0.5) {
+		discard;
+	}
 	vec3 c = texture(ortho, UV).rgb;
 	if (!FRONT_FACING) {
 		c *= 0.45;                     // dessous du relief (caméra sous la surface)
@@ -157,6 +176,22 @@ var _mat_terrain: ShaderMaterial = null
 var _mat_loin: ShaderMaterial = null
 var _tex_ortho: ImageTexture = null
 var _mat_trait: ShaderMaterial = null
+
+# --- aménagements des gares : pièces de terrain fines -------------------------
+## Posé par main.gd avant la fin de la construction : une entrée par gare,
+## {"rect": Rect2 (x, z, largeur, profondeur), "trous": [PackedVector2Array]
+## (bâtiments : terrain retiré), "plats": [[PackedVector2Array, y, fondu]]
+## (place, escalier : terrain aplani à y, raccordé sur `fondu` m),
+## "rabots": [[PackedVector2Array, y, fondu]] (terrasse : terrain rasé
+## au-dessous de y),
+## "couloirs": [[s0, s1, demi_largeur, couverture]] (quais souterrains :
+## terrain relevé à au moins `couverture` m au-dessus du plafond de la
+## salle)}. Le relief IGN maillé à 25 m traversait les bâtiments et les
+## quais (« le relief rentre dans le bâtiment et les quais », 07/10/2026).
+var amenagements: Array = []
+const PAS_PIECE: float = 2.0
+var _rects_pieces: Array = []
+var _pieces: Array = []               # [rect, nx, nz, hauteurs, masque] (bancs)
 
 
 func build(t: TunnelBuilder, cran: int = 0) -> void:
@@ -371,6 +406,7 @@ func _creer_maillages(fin_us: int) -> void:
 		_k += 1
 		if Time.get_ticks_usec() > fin_us:
 			return
+	_build_pieces()
 	_build_flancs()
 	_build_trait()
 	_build_lieux()
@@ -388,6 +424,183 @@ func _materiaux() -> void:
 	_mat_loin.set_shader_parameter("ortho", _texture_ortho("res://textures/relief_lointain.jpg"))
 	_mat_loin.set_shader_parameter("bloc", Vector4(ReliefDonnees.X_OUEST, ReliefDonnees.Z_NORD,
 		ReliefDonnees.X_EST, ReliefDonnees.Z_SUD))
+
+
+## Altitude sur les triangles du maillage du bloc (comme les tuiles) : les
+## pièces fines s'y raccordent sans marche.
+func _hauteur_tri(x: float, z: float) -> float:
+	var lim_x: int = ReliefDonnees.NX - 1
+	var lim_z: int = ReliefDonnees.NZ - 1
+	var fx: float = clampf((x - ReliefDonnees.X_OUEST) / _dx, 0.0, lim_x - 0.001) / _pas
+	var fz: float = clampf((z - ReliefDonnees.Z_NORD) / _dz, 0.0, lim_z - 0.001) / _pas
+	var j0: int = int(fx) * _pas
+	var i0: int = int(fz) * _pas
+	var wx: float = fx - int(fx)
+	var wz: float = fz - int(fz)
+	var j1: int = mini(j0 + _pas, lim_x)
+	var i1: int = mini(i0 + _pas, lim_z)
+	var n: int = ReliefDonnees.NX
+	var a: float = _h[i0 * n + j0]
+	var b: float = _h[i0 * n + j1]
+	var c: float = _h[i1 * n + j0]
+	var d: float = _h[i1 * n + j1]
+	# même découpe que les tuiles : (a, a+1, a+w) puis (a+1, a+w+1, a+w)
+	if wx + wz <= 1.0:
+		return a + (b - a) * wx + (c - a) * wz
+	return d + (c - d) * (1.0 - wx) + (b - d) * (1.0 - wz)
+
+
+## Distance d'un point à un polygone (0 dedans).
+static func _dist_poly(q: Vector2, poly: PackedVector2Array) -> float:
+	if Geometry2D.is_point_in_polygon(q, poly):
+		return 0.0
+	var d: float = INF
+	for i in range(poly.size()):
+		var a: Vector2 = poly[i]
+		var b: Vector2 = poly[(i + 1) % poly.size()]
+		d = minf(d, q.distance_to(Geometry2D.get_closest_point_to_segment(q, a, b)))
+	return d
+
+
+## Pièces de terrain fines (maille de 2 m) autour des gares.
+func _build_pieces() -> void:
+	_rects_pieces.clear()
+	for am in amenagements:
+		_build_piece(am)
+	var v: Array = []
+	for r in _rects_pieces:
+		v.append(Vector4(r.position.x, r.position.y, r.end.x, r.end.y))
+	while v.size() < 4:
+		v.append(Vector4.ZERO)
+	_mat_terrain.set_shader_parameter("pieces", v)
+	_mat_terrain.set_shader_parameter("n_pieces", mini(_rects_pieces.size(), 4))
+
+
+func _build_piece(am: Dictionary) -> void:
+	var r: Rect2 = am["rect"]
+	var nx: int = int(ceil(r.size.x / PAS_PIECE)) + 1
+	var nz: int = int(ceil(r.size.y / PAS_PIECE)) + 1
+	var lx: float = r.size.x / (nx - 1)
+	var lz: float = r.size.y / (nz - 1)
+	# axe des couloirs : points de la voie tous les 2 m
+	var axes: Array = []
+	for c in am.get("couloirs", []):
+		var pts: Array = []
+		var s: float = c[0] - 12.0
+		while s <= c[1] + 12.0:
+			var sc: float = clampf(s, 0.0, PNConstants.LENGTH)
+			var xf: Transform3D = tunnel.transform_at(sc)
+			var t: Vector3 = -xf.basis.z
+			var p: Vector3 = xf.origin + t * (s - sc)
+			pts.append([s, p])
+			s += 2.0
+		axes.append([c, pts])
+	var verts: PackedVector3Array = PackedVector3Array()
+	var uvs: PackedVector2Array = PackedVector2Array()
+	var idx: PackedInt32Array = PackedInt32Array()
+	for i in range(nz):
+		for j in range(nx):
+			var x: float = r.position.x + j * lx
+			var z: float = r.position.y + i * lz
+			var q: Vector2 = Vector2(x, z)
+			var h: float = _hauteur_tri(x, z)
+			# bords de la pièce : exactement le bloc (aucune marche)
+			var bord: bool = i == 0 or j == 0 or i == nz - 1 or j == nx - 1
+			if not bord:
+				# quais souterrains : relevé au-dessus du plafond de la salle
+				for ax in axes:
+					var c: Array = ax[0]
+					var best: float = INF
+					var bp: Array = []
+					for e in ax[1]:
+						var dd: float = q.distance_squared_to(Vector2(e[1].x, e[1].z))
+						if dd < best:
+							best = dd
+							bp = e
+					var travers: float = sqrt(best)
+					var s_p: float = bp[0]
+					var w: float = (1.0 - smoothstep(c[2], c[2] + 10.0, travers)) \
+						* (1.0 - smoothstep(0.0, 10.0, maxf(c[0] - s_p, s_p - c[1])))
+					var cible: float = (bp[1] as Vector3).y + tunnel.station_room_half_height + c[3]
+					h += maxf(cible - h, 0.0) * w
+				# place, escalier : aplanis
+				for pl in am.get("plats", []):
+					var d: float = _dist_poly(q, pl[0])
+					var w2: float = 1.0 - smoothstep(0.0, pl[2], d)
+					h = lerpf(h, pl[1], w2)
+				# terrasse sur pilotis : terrain rasé sous son niveau
+				for rb in am.get("rabots", []):
+					if h > rb[1]:
+						var w3: float = 1.0 - smoothstep(0.0, rb[2], _dist_poly(q, rb[0]))
+						h = lerpf(h, rb[1], w3)
+			verts.append(Vector3(x, h, z))
+			uvs.append(Vector2((x - ReliefDonnees.X_OUEST) / (ReliefDonnees.X_EST - ReliefDonnees.X_OUEST),
+				(z - ReliefDonnees.Z_NORD) / (ReliefDonnees.Z_SUD - ReliefDonnees.Z_NORD)))
+	for i in range(nz - 1):
+		for j in range(nx - 1):
+			var a: int = i * nx + j
+			idx.append_array(PackedInt32Array([a, a + 1, a + nx, a + 1, a + nx + 1, a + nx]))
+	var arr: Array = []
+	arr.resize(Mesh.ARRAY_MAX)
+	arr[Mesh.ARRAY_VERTEX] = verts
+	arr[Mesh.ARRAY_TEX_UV] = uvs
+	arr[Mesh.ARRAY_INDEX] = idx
+	var mesh: ArrayMesh = ArrayMesh.new()
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
+	# masque des bâtiments (0,25 m par pixel)
+	var mw: int = int(ceil(r.size.x * 4.0))
+	var mh: int = int(ceil(r.size.y * 4.0))
+	var img: Image = Image.create(mw, mh, false, Image.FORMAT_L8)
+	for poly in am.get("trous", []):
+		var bb: Rect2 = Rect2(poly[0], Vector2.ZERO)
+		for v in poly:
+			bb = bb.expand(v)
+		var i0: int = clampi(int((bb.position.y - r.position.y) * 4.0), 0, mh - 1)
+		var i1: int = clampi(int((bb.end.y - r.position.y) * 4.0) + 1, 0, mh - 1)
+		var j0: int = clampi(int((bb.position.x - r.position.x) * 4.0), 0, mw - 1)
+		var j1: int = clampi(int((bb.end.x - r.position.x) * 4.0) + 1, 0, mw - 1)
+		for i in range(i0, i1 + 1):
+			for j in range(j0, j1 + 1):
+				var q: Vector2 = r.position + Vector2((j + 0.5) / 4.0, (i + 0.5) / 4.0)
+				if Geometry2D.is_point_in_polygon(q, poly):
+					img.set_pixel(j, i, Color.WHITE)
+	var mat: ShaderMaterial = _shader(SHADER_TERRAIN)
+	mat.set_shader_parameter("ortho", _tex_ortho)
+	mat.set_shader_parameter("piece", 1.0)
+	mat.set_shader_parameter("trous", ImageTexture.create_from_image(img))
+	mat.set_shader_parameter("emprise", Vector4(r.position.x, r.position.y, r.end.x, r.end.y))
+	mesh.surface_set_material(0, mat)
+	_instance(mesh, "PieceGare")
+	_rects_pieces.append(r)
+	var hs: PackedFloat32Array = PackedFloat32Array()
+	for v in verts:
+		hs.append(v.y)
+	_pieces.append([r, nx, nz, hs, img])
+
+
+## Terrain affiché en (x, z) dans une pièce fine : [altitude, retiré (dans
+## un bâtiment)] ; [NAN, false] hors des pièces. Pour les bancs.
+func terrain_piece(x: float, z: float) -> Array:
+	for pc in _pieces:
+		var r: Rect2 = pc[0]
+		if not r.has_point(Vector2(x, z)):
+			continue
+		var nx: int = pc[1]
+		var nz: int = pc[2]
+		var fx: float = (x - r.position.x) / r.size.x * (nx - 1)
+		var fz: float = (z - r.position.y) / r.size.y * (nz - 1)
+		var j: int = clampi(int(fx), 0, nx - 2)
+		var i: int = clampi(int(fz), 0, nz - 2)
+		var u: float = fx - j
+		var v: float = fz - i
+		var hs: PackedFloat32Array = pc[3]
+		var h: float = lerpf(lerpf(hs[i * nx + j], hs[i * nx + j + 1], u),
+			lerpf(hs[(i + 1) * nx + j], hs[(i + 1) * nx + j + 1], u), v)
+		var img: Image = pc[4]
+		var mx: int = clampi(int((x - r.position.x) * 4.0), 0, img.get_width() - 1)
+		var mz: int = clampi(int((z - r.position.y) * 4.0), 0, img.get_height() - 1)
+		return [h, img.get_pixel(mx, mz).r > 0.5]
+	return [NAN, false]
 
 
 ## Abscisses des deux rames : le trait du tunnel s'y interrompt.
