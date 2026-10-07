@@ -69,9 +69,16 @@ var _client_s: float = NAN        # position rendue lissée en mode client
 var perf_manager: PerfManager = null
 var quality_mode: String = "auto"   # auto (détection + direct) | high | medium | low
 var _ext_light: DirectionalLight3D = null   # vue extérieure seulement
+var _compat: bool = RenderingServer.get_current_rendering_method() == "gl_compatibility"
 var _env: Environment = null
 const AMBIENT_ON: float = 0.40
 const AMBIENT_OFF: float = 0.0        # noir total : seuls phares, cabine et gares éclairent
+## Halls de gare en rendu Compatibility (PWA), voir _process
+const AMBIENT_GARE_WEB: float = 0.55
+const SOL_CIEL: Color = Color(0.55, 0.58, 0.62)    # sol du ciel physique (_build_environment)
+const SOL_ROCHE: Color = Color(0.20, 0.17, 0.14)
+var _ciel_web: ProceduralSkyMaterial = null
+var _ciel_physique: Material = null
 const FOG_LIGHT_ON: float = 1.0
 const FOG_LIGHT_OFF: float = 0.0      # le brouillard ne doit pas « éclairer » le fond
 
@@ -126,9 +133,10 @@ func _ready() -> void:
 	_build_station_halls()
 	_build_relief()
 	_build_machine_room()
+	if _compat:
+		_remplissage_gares_web()
 	_build_lights()
 	_build_cabin()
-	cabin.apres_orbite = _apres_orbite    # écorché du relief en vue extérieure
 
 	if client_mode:
 		# Démarre directement la trip pour que la cabine se positionne
@@ -148,7 +156,9 @@ func _ready() -> void:
 		# retour du 06/10/2026, « dans le navigateur du PC » il n'y avait
 		# aucun bouton) : boutons à l'écran qui émettent les mêmes actions
 		# que le clavier.
-		if DisplayServer.is_touchscreen_available() or OS.has_feature("web"):
+		# (--tactile : rendus de contrôle de la disposition iPad)
+		if DisplayServer.is_touchscreen_available() or OS.has_feature("web") \
+				or OS.get_cmdline_user_args().has("--tactile"):
 			var touch: TouchControls = TouchControls.new()
 			touch.name = "TouchControls"
 			touch.setup(self)   # accès direct AUTO/PANNE + reflet d'état
@@ -492,6 +502,40 @@ func restart_trip() -> void:
 	_welcome_played = false
 
 
+## PWA (rendu Compatibility) : ni éclairage indirect, 8 lampes au plus par
+## objet — les gares paraissaient dans le noir phares éteints (iPad,
+## 07/10/2026). Leurs matériaux reçoivent une luminosité propre (un quart
+## de leur couleur) : le hall s'éclaire sans surexposer la cabine, que des
+## néons plus forts noyaient.
+const REMPLISSAGE_GARE_WEB: float = 0.4
+
+
+func _remplissage_gares_web() -> void:
+	var vus: Dictionary = {}
+	for racine in [stations, station_halls, machine_room]:
+		if racine == null:
+			continue
+		for n in (racine as Node).find_children("*", "MeshInstance3D", true, false):
+			var mi: MeshInstance3D = n
+			var mats: Array = []
+			if mi.material_override != null:
+				mats.append(mi.material_override)
+			if mi.mesh != null:
+				for i in range(mi.mesh.get_surface_count()):
+					var m: Material = mi.get_surface_override_material(i)
+					mats.append(m if m != null else mi.mesh.surface_get_material(i))
+			for m in mats:
+				if not (m is StandardMaterial3D) or vus.has(m):
+					continue
+				vus[m] = true
+				var sm: StandardMaterial3D = m
+				if sm.emission_enabled or sm.shading_mode == BaseMaterial3D.SHADING_MODE_UNSHADED:
+					continue
+				sm.emission_enabled = true
+				sm.emission = sm.albedo_color * REMPLISSAGE_GARE_WEB
+				sm.emission_energy_multiplier = 1.0
+
+
 func _build_machine_room() -> void:
 	machine_room = MachineRoomBuilder.new()
 	machine_room.name = "MachineRoom"
@@ -507,22 +551,6 @@ func _build_track() -> void:
 	track.build(tunnel)
 	Cabin.tag_layer.call_deferred(track, Cabin.LAYER_VOIE)   # vue extérieure
 	print("[Track] rails/dalle/câble construits (longueur=%.0fm)" % PNConstants.LENGTH)
-
-
-## Vue extérieure, appelé par la cabine juste après le placement de la
-## caméra : ouvre l'écorché face à elle et la garde dans l'entaille (ou
-## au-dessus du relief en très grand recul).
-func _apres_orbite(cam: Camera3D) -> void:
-	if relief == null or not relief.pret or physics == null:
-		return
-	var c: Vector3 = cabin.global_position
-	var g: Vector3 = cam.global_position
-	var y_min: float = relief.y_min_camera(g)
-	if g.y < y_min:
-		g.y = y_min
-		cam.global_position = g
-		cam.look_at(c + Vector3(0.0, 2.0, 0.0), Vector3.UP)
-	relief.set_coupe(c, physics.s_render, g, cabin.train_length)
 
 
 func _build_relief() -> void:
@@ -569,7 +597,7 @@ func _build_environment() -> void:
 	sky_mat.mie_coefficient = 0.005
 	sky_mat.mie_color = Color(0.90, 0.95, 1.0)
 	sky_mat.mie_eccentricity = 0.80
-	sky_mat.ground_color = Color(0.55, 0.58, 0.62)
+	sky_mat.ground_color = SOL_CIEL
 	sky_mat.sun_disk_scale = 1.0
 	sky_mat.energy_multiplier = 1.0
 	sky.sky_material = sky_mat
@@ -814,14 +842,11 @@ func _process(delta: float) -> void:
 	# voyant « Alarmes » et bouton DÉFAUTS de l'écran du pupitre (PWA)
 	if fault_manager != null and physics != null and not client_mode:
 		physics.alarme_externe = fault_manager.is_active()
-	# relief 3D du massif (vue extérieure seulement), ouvert en écorché
-	# autour de la rame — l'entaille est posée par _apres_orbite(), juste
-	# après le placement de la caméra (cabin.gd)
+	# relief 3D du massif (vue extérieure seulement), translucide le long
+	# du tunnel
 	if relief != null and cabin != null:
 		var ext: bool = cabin.view_mode == Cabin.ViewMode.EXTERIOR and relief.pret
 		relief.visible = ext
-		if not ext:
-			relief.couper(false)
 		# le brouillard du tunnel (≈ 250 m de visibilité) noierait tout au
 		# loin : en vue extérieure il s'éclaircit avec le recul de la caméra
 		if _env != null:
@@ -829,12 +854,45 @@ func _process(delta: float) -> void:
 			_env.fog_density = 0.004 * k_f
 			_env.volumetric_fog_density = 0.008 * k_f if k_f > 0.3 else 0.0
 			_env.fog_sky_affect = 0.0 if ext else 0.5    # ciel bleu dehors
+			# sous l'horizon du ciel : brun roche en vue extérieure — à
+			# travers le sol translucide, ou caméra sous la montagne, on voit
+			# « la roche », pas un vide gris
+			if _env.sky != null and _env.sky.sky_material is PhysicalSkyMaterial:
+				(_env.sky.sky_material as PhysicalSkyMaterial).ground_color = \
+					SOL_ROCHE if ext else SOL_CIEL
+			# PWA (Compatibility) : le ciel physique y sort noir — en vue
+			# extérieure, un ciel procédural (dégradé bleu, horizon clair,
+			# roche sous l'horizon) prend sa place
+			if _compat and _env.sky != null:
+				if ext and _ciel_web == null:
+					_ciel_physique = _env.sky.sky_material
+					_ciel_web = ProceduralSkyMaterial.new()
+					_ciel_web.sky_top_color = Color(0.22, 0.42, 0.78)
+					_ciel_web.sky_horizon_color = Color(0.70, 0.78, 0.88)
+					_ciel_web.ground_horizon_color = Color(0.36, 0.31, 0.26)
+					_ciel_web.ground_bottom_color = SOL_ROCHE
+					_env.sky.sky_material = _ciel_web
+				elif not ext and _ciel_web != null:
+					_env.sky.sky_material = _ciel_physique
+					_ciel_web = null
 			# dehors il fait jour, même tunnel éteint
 			var ciel: float = 1.0 if (ext or tunnel_lights_on) else 0.0
 			if _env.background_energy_multiplier != ciel:
 				_env.background_energy_multiplier = ciel
 				if _env.sky != null and _env.sky.sky_material is PhysicalSkyMaterial:
 					(_env.sky.sky_material as PhysicalSkyMaterial).energy_multiplier = ciel
+	# Halls de gare en rendu Compatibility (PWA) : 8 lampes au plus par
+	# objet, les grands sols et murs du hall ne recevaient qu'une partie des
+	# néons (« la gare du haut semble dans le noir », iPad 07/10/2026, phares
+	# éteints) ; le PC, lui, a l'éclairage indirect. La lumière ambiante
+	# monte quand la caméra cabine y entre.
+	if _env != null and cabin != null and physics != null and tunnel != null:
+		var amb: float = AMBIENT_ON if tunnel_lights_on else AMBIENT_OFF
+		if _compat and cabin.view_mode == Cabin.ViewMode.FPV:
+			var sr: float = physics.s_render
+			if sr > tunnel.station_high_start - 20.0 or sr < tunnel.station_low_end + 20.0:
+				amb = AMBIENT_GARE_WEB
+		_env.ambient_light_energy = move_toward(_env.ambient_light_energy, amb, delta * 1.5)
 	if machine_room != null and cabin != null:
 		# panorama photographié depuis la gare : vu des baies de la gare et
 		# de la salle des machines seulement ; la vue extérieure a le relief
@@ -970,7 +1028,9 @@ func _handle_continuous_input(delta: float) -> void:
 		print("[Headlights] %s" % ["ON" if physics.lights_head else "OFF"])
 
 	if Input.is_action_just_pressed("ready_depart"):
-		if physics.emergency:
+		if physics.arret_elec:
+			_flash("Arrêt électrique engagé : le relâcher d'abord")
+		elif physics.emergency:
 			physics.release_emergency()
 			print("[Emergency released]")
 		elif not physics.trip_started:
@@ -1034,6 +1094,24 @@ func _commande_pupitre(nom: String, enfonce: bool) -> void:
 		if audio != null:
 			audio.set_horn(enfonce)
 		return
+	if nom == "rouge_1":
+		# URGENCE (gros coup-de-poing) : comme E-STOP ; un nouvel appui le
+		# déverrouille
+		if enfonce:
+			if physics.emergency:
+				physics.release_emergency()
+			else:
+				Input.action_press("emergency")
+		else:
+			Input.action_release("emergency")
+		return
+	if nom == "rouge_2":
+		# ARRÊT ÉLEC (petit coup-de-poing) : arrêt de service verrouillé,
+		# un nouvel appui le relâche
+		if enfonce:
+			physics.arret_elec = not physics.arret_elec
+			_flash("Arrêt électrique engagé" if physics.arret_elec else "Arrêt électrique relâché")
+		return
 	if nom.begins_with("vite_"):
 		# sélecteur −VITE/+VITE : comme les boutons de consigne, tant qu'on
 		# le tient
@@ -1049,6 +1127,9 @@ func _commande_pupitre(nom: String, enfonce: bool) -> void:
 		if enfonce and not cabin.pupitre_en_marche():
 			_flash("Commutateur général sur arrêt")
 			return
+		if enfonce and physics.arret_elec:
+			_flash("Arrêt électrique engagé : le relâcher d'abord")
+			return
 		if enfonce:
 			Input.action_press("ready_depart")
 		else:
@@ -1057,12 +1138,24 @@ func _commande_pupitre(nom: String, enfonce: bool) -> void:
 	if not enfonce:
 		return
 	match nom:
+		# PORTES 1 à 6 = côté gauche en regardant vers le haut (bit 0),
+		# 7 à 12 = côté droit (bit 1) — chaque groupe ne commande que son
+		# côté ; le dernier côté fermé lance la vraie séquence de fermeture
 		"ouverture_0", "ouverture_1":
+			var bit: int = 1 << int(nom.right(1))
 			if not physics.doors_open:
+				physics.portes_cotes = bit
 				toggle_doors()
+			elif physics.announce_phase_remaining <= 0.0 \
+					and physics.door_phase_remaining <= 0.0:
+				physics.portes_cotes |= bit
 		"fermeture_0", "fermeture_1":
-			if physics.doors_open:
-				toggle_doors()
+			var bit: int = 1 << int(nom.right(1))
+			if physics.doors_open and (physics.portes_cotes & bit) != 0:
+				if physics.portes_cotes == bit:
+					toggle_doors()
+				else:
+					physics.portes_cotes &= ~bit
 		"cabine", "compartiment":
 			toggle_cabin_lights()
 
