@@ -46,6 +46,11 @@ cp "$SIM_DIR"/build/web/* "$WEB_ROOT/"
 # En-têtes de cache : sans eux Cloudflare garde l'export 4 h et il faut
 # purger à la main après chaque déploiement (cf. commentaires du fichier).
 cp "$SIM_DIR/deploy_web.htaccess" "$WEB_ROOT/.htaccess"
+# musiques des gares (hors dépôt : sons/musique/ n'existe que sur le NAS et le PC)
+if ls "$SIM_DIR"/sons/musique/*.mp3 >/dev/null 2>&1; then
+    mkdir -p "$WEB_ROOT/musique"
+    cp "$SIM_DIR"/sons/musique/*.mp3 "$WEB_ROOT/musique/"
+fi
 chown -R 33:33 "$WEB_ROOT"
 
 echo "✓ Déployé. https://funiculaire.giff.re ($(du -sh "$WEB_ROOT" | cut -f1))"

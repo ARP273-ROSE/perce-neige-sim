@@ -222,7 +222,8 @@ L'écran d'accueil (F1) reprend ces touches.
 | Glisser dans la 3D, molette  | Regarder, rapprocher la caméra           |
 | CONDUIRE (près du poste)     | S'asseoir au poste : fin du skieur et de l'exploitation automatique |
 | AUTO (touche X)              | Le skieur fait la boucle tout seul : gare, rame, Génépy, trace n° 4 à ski, retour |
-| ÉVACUER (touche I)           | Rame arrêtée en tunnel : enlever les issues de secours de la face, descendre sur la voie, l'escalier de service ramène en gare ou à la galerie de secours |
+| EXPLOIT.                     | Exploitation automatique du funiculaire, marche / arrêt, même en skieur (Web : F3 ; PC : aussi le bouton AUTO du tableau de bord) |
+| ÉVACUER (touche U)           | Rame arrêtée en tunnel : enlever les issues de secours de la face, descendre sur la voie, l'escalier de service ramène en gare ou à la galerie de secours |
 | `F9` ou QUITTER              | Revenir à la conduite (l'exploitation automatique continue) |
 
 Pendant ce temps, la rame est en exploitation automatique, 24 h/24 : elle

@@ -88,3 +88,6 @@ installer_out/
 # Paquets Linux / macOS (packaging/build_linux.sh, build_macos.sh)
 dist_linux/
 dist_macos/
+
+# musiques d'ambiance des gares (enregistrements : pas dans le dépôt public)
+sons/musique/

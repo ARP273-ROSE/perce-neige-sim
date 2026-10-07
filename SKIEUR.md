@@ -110,8 +110,8 @@ funiculaire), les sauts (il reste collé au sol), les chutes.
   Val Claret, la porte du garde-corps pivote quand on la pousse et sonne
   une fois (le klaxon) ; palier et escalier jusqu'au fond de la fosse
   (`stations_builder.gd`, `_build_pit`).
-- **Issues de secours de la face** (bouton ÉVACUER, touche I ; PC : I
-  relayée par `skieur_evacuer`) : les quatre D jaunes sont des maillages à
+- **Issues de secours de la face** (bouton ÉVACUER, touche U — I est
+  « inverser » ; PC : U relayée par `skieur_evacuer`) : les quatre D jaunes sont des maillages à
   part (`TrainBodyBuilder._build_cap`, clé « Av/Ar + G/D »), le fond de
   calotte des collisions est percé à leur place (`CollisionsJeu._calotte`,
   `set_issues`). Possible dans une rame arrêtée en tunnel
@@ -128,6 +128,22 @@ funiculaire), les sauts (il reste collé au sol), les chutes.
   buzzers de quai sonnent dans leur gare à chaque départ, même du milieu
   du tunnel, jamais depuis une rame en tunnel. Banc `bench_ecoute_3d.gd`.
 - Souffle plus aigu, sifflement de fil (`tools_sons_skieur.py`).
+- **Retours du troisième essai PC** (07-08/10/2026) : couloir de la
+  voiture — capsule inclinée avec la voiture qui porte
+  (`SkieurJoueur._aligner_capsule`, `up_direction` = y de la voiture :
+  verticale dans le monde, elle accrochait le haut des porte-skis qui
+  penchent avec la caisse à 16,7°), glissement le long de tout mur
+  (`wall_min_slide_angle` 0, pas de côté kinématique), bancs à l'assise
+  (0,73-1,53), porte-skis 0,36 de large, bancs d'extrémité −0,45 m,
+  pupitre/siège replacés (signe de `dz`) ; le passage est un slalom
+  (couloir à droite aux paliers pairs, à gauche aux impairs, porte-skis
+  dans la moitié arrière du palier) ; touche
+  d'évacuation **U** ; bouton **EXPLOIT.** du HUD (exploitation auto, Web =
+  `auto_operator`, PC = touche X relayée, état `exploitation` reçu) ;
+  **musiques des gares** (`sons/musique/gare_basse.mp3` = ouverture
+  d'orchestre, `gare_haute.mp3` = Toréador ; HORS dépôt public, posées par
+  `deploy_web.sh` dans `musique/` de la PWA ; `TrainAudio._update_musique`
+  par écoute 1 / 3 ; PC `SoundSystem.set_musique_gare`).
 - **Retours du deuxième essai PC** (07/10/2026) : AUTO non forcé à
   l'activation quand une rame est à quai (elle attend qu'on monte ;
   `_entrer_skieur`, PC `basculer_skieur`) et enclenché à bord

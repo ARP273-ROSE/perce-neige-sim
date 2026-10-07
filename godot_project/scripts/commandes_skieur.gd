@@ -25,6 +25,7 @@ var _b_vue: Button = null
 var _b_ski: Button = null
 var _b_auto: Button = null
 var _b_evac: Button = null
+var _b_exploit: Button = null
 var _boutons: Array = []
 var _info: Label = null                 # vitesse et piste, à ski
 var _msg: Label = null                  # message passager (refus, chrono)
@@ -58,12 +59,18 @@ func _ready() -> void:
 		if skieur != null:
 			skieur.conduite_demandee.emit())
 	col.add_child(_b_conduire)
-	_b_evac = _bouton("ÉVACUER", "Rame arrêtée en tunnel : enlever les issues de secours de la face et descendre sur la voie (touche I)")
+	_b_evac = _bouton("ÉVACUER", "Rame arrêtée en tunnel : enlever les issues de secours de la face et descendre sur la voie (touche U)")
 	_b_evac.visible = false
 	_b_evac.pressed.connect(func() -> void:
 		if main != null:
 			main.evacuer())
 	col.add_child(_b_evac)
+	_b_exploit = _bouton("EXPLOIT.", "Exploitation automatique du funiculaire (marche / arrêt), même en skieur (Web : F3 ; PC : bouton AUTO du tableau de bord)")
+	_b_exploit.toggle_mode = true
+	_b_exploit.toggled.connect(func(on: bool) -> void:
+		if main != null:
+			main.basculer_exploitation(on))
+	col.add_child(_b_exploit)
 	_b_ski = _bouton("CHAUSSER", "Chausser ou déchausser les skis, dehors sur la neige (touche E)")
 	_b_ski.pressed.connect(func() -> void:
 		if main != null:
@@ -134,6 +141,12 @@ func basculer_vue() -> void:
 		return
 	skieur.premiere_personne = not skieur.premiere_personne
 	_b_vue.text = "3e PERS." if skieur.premiere_personne else "1re PERS."
+
+
+## Bouton EXPLOIT. enfoncé ou non (état de l'exploitation automatique).
+func set_exploitation(on: bool) -> void:
+	if _b_exploit != null and _b_exploit.button_pressed != on:
+		_b_exploit.set_pressed_no_signal(on)
 
 
 ## Bouton AUTO enfoncé ou non (sans rappeler main).
