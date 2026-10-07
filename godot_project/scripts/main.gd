@@ -872,10 +872,9 @@ func _process(delta: float) -> void:
 	if relief != null and cabin != null:
 		var ext: bool = cabin.view_mode == Cabin.ViewMode.EXTERIOR and relief.pret
 		relief.visible = ext
-		# le tunnel et les rames se voient à travers le relief opaque
-		cabin.set_rayons_x(ext)
-		if cabin_ghost != null:
-			cabin_ghost.set_rayons_x(ext)
+		# le tunnel se voit à travers le relief opaque (trait ambre) ; plus
+		# de silhouette des rames (« enlève complètement cette silhouette
+		# jaune, ça laisse des traces », 07/10/2026)
 		if ext and physics != null:
 			relief.set_rames(physics.s_render, physics.ghost_s_render())
 		# le brouillard du tunnel (≈ 250 m de visibilité) noierait tout au
