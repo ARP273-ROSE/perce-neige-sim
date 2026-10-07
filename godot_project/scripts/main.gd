@@ -584,7 +584,7 @@ func _build_station_halls() -> void:
 	station_halls.name = "StationHalls"
 	add_child(station_halls)
 	station_halls.build(tunnel)
-	print("[StationHalls] Hall Val Claret (concourse + sortie surface)")
+	print("[StationHalls] gare aval Val Claret (salle d'attente, cloison vitrée, façade 2018)")
 
 
 func _build_audio() -> void:
@@ -900,6 +900,9 @@ func _process(delta: float) -> void:
 			if _env.background_energy_multiplier != ciel:
 				_env.background_energy_multiplier = ciel
 				_energie_ciel(ciel)
+	# gare aval : portes coulissantes et panneau des départs
+	if station_halls != null and physics != null:
+		station_halls.mettre_a_jour(delta, physics)
 	# Halls de gare en rendu Compatibility (PWA) : 8 lampes au plus par
 	# objet, les grands sols et murs du hall ne recevaient qu'une partie des
 	# néons (« la gare du haut semble dans le noir », iPad 07/10/2026, phares

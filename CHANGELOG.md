@@ -7,6 +7,51 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.15.85** — gare aval (Val Claret) refaite d'après le réel.
+- « Refais complètement le design extérieur de la gare aval, à l'aide des
+  vidéos, des photos, du forum, de Google Earth… et modélise la salle
+  d'attente et les portes coulissantes vers le quai » :
+  - nouveau `GareAval` (scripts/gare_aval.gd), qui remplace le hall en béton
+    générique et sa cage d'escalier vers la surface ;
+  - état d'après le réaménagement de 2018 (ICM Architectures), relevé sur
+    l'IGN (BD TOPO, LiDAR HD, orthophoto 2024), les photos de Kevin du
+    26/04/2026 et celles de l'architecte.
+- **Extérieur** :
+  - bâtiment semi-enterré à toit en herbe, emprise et hauteur IGN ;
+  - façade en lames de bois « DESTINATION GLACIER », avec le bandeau rouge
+    « ECOLES DE SKI / ALTITUDE EXPERIENCES... / SORTIE » ;
+  - auvent sur deux poteaux, escalier métallique depuis la place, avec
+    garde-corps galvanisés en 5 files ;
+  - **arches** (Kevin : « rondes, pas ovales, un grand diamètre devant et
+    un plus petit derrière, alignées côté droit en regardant dans le sens
+    de la montée ») :
+    - la rouge et 3 en lamellé-collé, en **cercles** de rayon 7,76 m
+      (LiDAR : sommet à 2119,75 m, 12,8 m entre les pieds) ;
+    - 3 plus petites derrière (rayon 6,2 m) ;
+    - toutes tangentes à la même ligne côté droit, reliées par des pannes
+      noires.
+- **Salle d'attente** : plafond « origami » à facettes et LED, colonnes en
+  bois avec anneau lumineux, suspensions en étoile, murs en lames de bois,
+  sol bleu nuit, bancs, porte-skis, 3 écrans, comptoir, quelques skieurs.
+- **Cloison vers le quai** (photos 093457 à 093500) :
+  - menuiseries bleu marine ;
+  - **2 portes coulissantes automatiques à 2 vantaux**, au pied de chaque
+    quai. Elles s'ouvrent pendant l'embarquement en gare aval et se
+    referment au départ ;
+  - vitrine centrale face à la fosse, enrouleur incendie rouge, bandeau
+    « ALTITUDE EXPERIENCES... » et vitrage haut ;
+  - **panneau des départs vivant** : date et heure locales, FR / EN en
+    alternance, prochain départ ;
+  - balustrade courbe en lames de bois, affichette « PORTES
+    AUTOMATIQUES… », « 2 » sur le montant droit.
+- Fusionnée par matériau : 548 objets → 53 appels de dessin ; éclairée sur
+  la PWA comme les autres gares.
+- Vérifié :
+  - `bench_pupitre_3d` : 4 vantaux, ouverts à l'embarquement puis fermés
+    au départ ; panneau renseigné ;
+  - 14 bancs Godot, 99 tests PC, parité PWA ;
+  - rendus Vulkan et Compatibility.
+
 **v1.15.84** — l'écran du pupitre et l'horloge de la cabine à l'heure
 locale de l'appareil.
 - « Affiche la vraie date et heure que tu récupères du PC, de l'iPad ou
