@@ -182,6 +182,8 @@ var _mat_trait: ShaderMaterial = null
 ## {"rect": Rect2 (x, z, largeur, profondeur), "trous": [PackedVector2Array]
 ## (bâtiments : terrain retiré), "plats": [[PackedVector2Array, y, fondu]]
 ## (place, escalier : terrain aplani à y, raccordé sur `fondu` m),
+## "remblais": [[PackedVector2Array, y, fondu]] (devant une porte : terrain
+## remonté à y, jamais abaissé),
 ## "rabots": [[PackedVector2Array, y, fondu]] (terrasse : terrain rasé
 ## au-dessous de y),
 ## "couloirs": [[s0, s1, demi_largeur, couverture, fondu = 10 m]] (quais
@@ -532,6 +534,11 @@ func _build_piece(am: Dictionary) -> void:
 					var d: float = _dist_poly(q, pl[0])
 					var w2: float = 1.0 - smoothstep(0.0, pl[2], d)
 					h = lerpf(h, pl[1], w2)
+				# remblai (porte Génépy) : terrain remonté jusqu'au niveau,
+				# jamais abaissé (le tunnel reste couvert)
+				for rm in am.get("remblais", []):
+					var w4: float = 1.0 - smoothstep(0.0, rm[2], _dist_poly(q, rm[0]))
+					h = maxf(h, lerpf(h, rm[1], w4))
 				# terrasse sur pilotis : terrain rasé sous son niveau
 				for rb in am.get("rabots", []):
 					if h > rb[1]:
@@ -605,6 +612,17 @@ func terrain_piece(x: float, z: float) -> Array:
 		var mz: int = clampi(int((z - r.position.y) * 4.0), 0, img.get_height() - 1)
 		return [h, img.get_pixel(mx, mz).r > 0.5]
 	return [NAN, false]
+
+
+## Trait ambre du tunnel et noms des lieux : en vue extérieure seulement
+## (pas pour le skieur).
+func montrer_trait(on: bool) -> void:
+	var t: Node3D = get_node_or_null("TraitTunnel") as Node3D
+	if t != null and t.visible != on:
+		t.visible = on
+		for lab in get_children():
+			if lab is Label3D and lab.is_in_group("relief_lieux"):
+				(lab as Label3D).visible = on
 
 
 ## Abscisses des deux rames : le trait du tunnel s'y interrompt.
@@ -760,4 +778,5 @@ func _build_lieux() -> void:
 		lab.no_depth_test = true
 		lab.render_priority = 2
 		lab.position = Vector3(l[1], hauteur(l[1], l[2]) + 40.0, l[2])
+		lab.add_to_group("relief_lieux")
 		add_child(lab)

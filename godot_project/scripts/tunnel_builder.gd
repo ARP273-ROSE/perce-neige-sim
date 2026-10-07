@@ -34,6 +34,9 @@ extends Node3D
 # tunnel ». Avant : 3473,56 et un évasement de 6 m hors du bâtiment.
 @export var station_high_start: float = 3478.82
 @export var station_room_transition: float = 6.0 # fondu salle ↔ tube carré (gare aval)
+# anneau qui contient la porte de la piste Génépy (StationsBuilder.PORTE_GENEPY)
+const _PG_S0: float = 3480.0
+const _PG_S1: float = 3483.0
 @export var station_room_transition_haut: float = 0.5  # gare amont : mur droit
 
 # Passing loop (boucle de croisement au milieu du tunnel)
@@ -562,6 +565,28 @@ func _build_tunnel_chunk(
 				continue
 			if prev_cut and cur_cut and maxf(maxf(prev_0.y, prev_1.y), maxf(cur_0.y, cur_1.y)) <= y_cut + 0.01:
 				continue
+			# porte de la piste Génépy : le mur gauche de la salle du quai
+			# haut est ouvert sur l'anneau qui la contient, entre −1,45 et
+			# 1,55 m (l'habillage de la salle, StationsBuilder, ne laisse
+			# voir que la porte) : le pan de mur est gardé en deux bandes
+			if s_prev >= _PG_S0 - 0.01 and s_cur <= _PG_S1 + 0.01 \
+					and maxf(maxf(prev_0.x, prev_1.x), maxf(cur_0.x, cur_1.x)) < -station_room_half_width + 0.15:
+				for bande in [Vector2(-1000.0, -1.45), Vector2(1.55, 1000.0)]:
+					var pa: Array = _bande_y(prev_0, prev_1, bande)
+					var ca: Array = _bande_y(cur_0, cur_1, bande)
+					if pa.is_empty() or ca.is_empty():
+						continue
+					var q_p0: Vector3 = prev_center + prev_right * (pa[0] as Vector2).x + prev_up * (pa[0] as Vector2).y
+					var q_p1: Vector3 = prev_center + prev_right * (pa[1] as Vector2).x + prev_up * (pa[1] as Vector2).y
+					var q_c0: Vector3 = cur_center + cur_right * (ca[0] as Vector2).x + cur_up * (ca[0] as Vector2).y
+					var q_c1: Vector3 = cur_center + cur_right * (ca[1] as Vector2).x + cur_up * (ca[1] as Vector2).y
+					st.add_vertex(q_p0)
+					st.add_vertex(q_c0)
+					st.add_vertex(q_c1)
+					st.add_vertex(q_p0)
+					st.add_vertex(q_c1)
+					st.add_vertex(q_p1)
+				continue
 			if prev_cut:
 				prev_0.y = maxf(prev_0.y, y_cut)
 				prev_1.y = maxf(prev_1.y, y_cut)
@@ -594,6 +619,18 @@ func _build_tunnel_chunk(
 	mi.mesh = st.commit()
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(mi)
+
+
+## Partie du segment a→b (profil d'anneau) dont le y est dans [bande.x,
+## bande.y] : [a', b'] dans le même ordre, ou [] si vide.
+static func _bande_y(a: Vector2, b: Vector2, bande: Vector2) -> Array:
+	var ya: float = clampf(a.y, bande.x, bande.y)
+	var yb: float = clampf(b.y, bande.x, bande.y)
+	if absf(yb - ya) < 1e-4:
+		return []
+	var t0: float = 0.0 if absf(b.y - a.y) < 1e-6 else (ya - a.y) / (b.y - a.y)
+	var t1: float = 1.0 if absf(b.y - a.y) < 1e-6 else (yb - a.y) / (b.y - a.y)
+	return [a.lerp(b, t0), a.lerp(b, t1)]
 
 
 # Distance (depuis PASSING_START) à laquelle l'écartement des voies atteint

@@ -30,6 +30,9 @@ var _b_tunnel: Button = null         # éclairage du tunnel (enfoncé = allumé)
 var _b_lights: Button = null         # phares (enfoncé = allumés)
 var _b_cabin: Button = null          # éclairage cabine (enfoncé = allumé)
 var _b_doors: Button = null          # portes (enfoncé = ouvertes)
+var _b_skieur: Button = null         # skieur jouable (enfoncé = actif)
+var _col_gauche: Control = null      # colonnes de conduite (masquées en skieur)
+var _col_droite: Control = null
 
 # Libellé du bouton MODE selon le mode courant (sans accent : police par
 # défaut des exports mobiles).
@@ -179,6 +182,7 @@ func _build() -> void:
 	left.position = Vector2(14, -217)
 	left.add_theme_constant_override("separation", 18)
 	root.add_child(left)
+	_col_gauche = left
 
 	var b_up: Button = _mk_button("+\nVITESSE", "Augmenter la consigne (maintenir)", true)
 	b_up.custom_minimum_size = Vector2(132, 112)
@@ -199,6 +203,7 @@ func _build() -> void:
 	right.position = Vector2(-490, -180)
 	right.add_theme_constant_override("separation", 18)
 	root.add_child(right)
+	_col_droite = right
 
 	var b_brake: Button = _mk_button("FREIN", "Frein de service (maintenir)", true)
 	b_brake.custom_minimum_size = Vector2(132, 112)
@@ -330,6 +335,17 @@ func _build() -> void:
 	_bind_tap(b_view, "toggle_view")
 	top.add_child(b_view)
 
+	# SKIEUR (07/10/2026) : le skieur jouable — on marche dans les gares,
+	# on prend le funiculaire, on va au poste (touche K)
+	_b_skieur = _mk_button("SKIEUR", "Incarner un skieur (touche K) — enfoncé = actif")
+	_b_skieur.custom_minimum_size = Vector2(112, 56)
+	_b_skieur.toggle_mode = true
+	_b_skieur.pressed.connect(func() -> void:
+		if _main != null:
+			_main.basculer_skieur()
+			_b_skieur.set_pressed_no_signal(bool(_main.mode_skieur)))
+	top.add_child(_b_skieur)
+
 	# ANNONCES : ouvre/ferme le menu des annonces audio à diffuser à la
 	# demande (appel direct du système d'annonces, pas de synthèse clavier).
 	var b_ann: Button = _mk_button("ANNONCES", "Diffuser une annonce audio")
@@ -387,6 +403,18 @@ func _build() -> void:
 
 	# Menu des annonces (masqué par défaut, superposé au centre)
 	_build_announce_menu(root)
+
+
+## Vue skieur : les commandes de conduite s'effacent (le skieur a les
+## siennes, CommandesSkieur).
+func set_mode_skieur(on: bool) -> void:
+	for c in [_col_gauche, _col_droite]:
+		if c != null:
+			(c as Control).visible = not on
+	if _b_skieur != null:
+		_b_skieur.set_pressed_no_signal(on)
+	if on and _announce_menu != null:
+		_announce_menu.visible = false
 
 
 # ---------------------------------------------------------------------------

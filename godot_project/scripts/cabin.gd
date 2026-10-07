@@ -73,7 +73,9 @@ var head_energy: float = 12.0   # énergie du phare à plein feu (faisceau large
 @export var train_number: int = 1
 var _prev_v_for_acc: float = 0.0   # vitesse à la frame précédente pour calcul accel
 
-enum ViewMode { FPV, EXTERIOR, MACHINES }
+# SKIEUR : le skieur jouable a sa propre caméra (SkieurJoueur), posée par
+# main.gd ; la rame s'y voit comme de l'extérieur, passagers compris.
+enum ViewMode { FPV, EXTERIOR, MACHINES, SKIEUR }
 var view_mode: int = ViewMode.FPV
 # Vue « salle des machines » : caméra posée par main.gd dans la gare amont
 # (ne suit pas la rame). Null tant qu'elle n'existe pas → cycle à 2 vues.
@@ -365,8 +367,8 @@ func _build_floor_ceiling() -> void:
 	# caoutchouc classique ») : trous ronds en quinconce, pas de 4 cm.
 	var floor_mat: StandardMaterial3D = _mat_tapis()
 
-	# Plancher EN GRADINS (vidéo cabine f_001/f_002 : une marche de ~35 cm
-	# par cerceau, paliers horizontaux sur la pente moyenne de 26,5 %),
+	# Plancher EN GRADINS (vidéo cabine f_001/f_002 : une marche par
+	# cerceau ; paliers horizontaux à la pente des gares, FLOOR_GRADE),
 	# scindé par voiture pour suivre l'articulation.
 	_build_stepped_floor(floor_mat, z_front, z_rear)
 
@@ -1317,6 +1319,8 @@ func _apply_view_mode() -> void:
 			camera_ext.make_current()
 		ViewMode.MACHINES:
 			camera_machines.make_current()
+		ViewMode.SKIEUR:
+			pass                       # caméra du skieur (main.gd)
 	if machine_room != null:
 		machine_room.set_cutaway(view_mode == ViewMode.MACHINES)
 	# Parois du tunnel translucides en vue extérieure pour voir la rame
@@ -1338,7 +1342,7 @@ func set_view(mode: int) -> void:
 		return
 	view_mode = mode
 	_apply_view_mode()
-	print("[View] %s" % ["FPV cockpit", "EXTERIOR orbital", "salle des machines"][view_mode])
+	print("[View] %s" % ["FPV cockpit", "EXTERIOR orbital", "salle des machines", "skieur"][view_mode])
 
 
 func set_tunnel(t: TunnelBuilder) -> void:
