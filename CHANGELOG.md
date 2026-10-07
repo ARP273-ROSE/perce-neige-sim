@@ -7,6 +7,43 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.15.81** — inversion en gare silencieuse ; vue extérieure sans zone
+marron ; gares éclairées sur la PWA ; titres du pupitre dans la plaque.
+- **Inversion du sens** (« quand j'inverse en gare après un trajet normal,
+  j'ai l'annonce anormale ») : l'annonce « retour en gare » ne part plus
+  qu'en plein tunnel. Comme sur le PC, le demi-tour à quai est silencieux
+  et coupe l'annonce en cours.
+- **Vue extérieure** (« la zone marron qui entoure le trajet, c'est moche ;
+  on ne voit pas les sommets à côté et au-dessus ») :
+  - le relief redevient **opaque** partout : les sommets se voient ;
+  - c'est le tunnel qui se dessine à travers la montagne. Le trait ambre
+    a deux passes : plein à découvert, 45 % à travers le relief. Il est
+    interrompu à la place des rames et fin, même de près ;
+  - **les deux rames se voient à travers le relief**, en silhouette
+    jaune translucide ;
+  - caméra toujours libre sous la voie ; sous la montagne, le vide est
+    gris roche.
+- **« Il fait toujours nuit dans la gare du haut »** (PWA) :
+  - le ciel du rendu Compatibility sortait NOIR, à travers la verrière et
+    les baies. Un ciel procédural le remplace partout sur la PWA ;
+    l'ambiante reste à son niveau d'avant, donc le tunnel ne change pas ;
+  - les néons des gares sont 2,5 fois plus forts sur le web.
+    L'intérieur de la cabine passe sur sa propre couche de rendu, que ces
+    néons n'éclairent pas : le pupitre n'est plus surexposé ;
+  - mesures sans phares : hall du haut 36 → 67, gare du bas 75 ;
+    pupitre 118.
+- **Pupitre** : titres PORTES 1 à 6, PORTES 7 à 12 et ÉCLAIRAGE
+  redescendus dans la plaque (« ils sont dehors »). Les rangées sont
+  resserrées et la plaque gagne 5 mm.
+- **PWA** : le numéro de version s'affiche dans le titre en haut à gauche,
+  pour savoir quelle version tourne.
+- Vérifié :
+  - `bench_pupitre_3d` : inversion à quai silencieuse, annoncée en
+    tunnel ;
+  - `bench_relief_3d` : trait « rayons X », silhouettes des deux rames ;
+  - 14 bancs Godot, 99 tests PC, parité PWA ;
+  - rendus Vulkan et Compatibility.
+
 **v1.15.80** — vue extérieure en « rayons X » ; pupitre couché et
 complet ; instruments dans la colonne de droite ; gares éclairées sur la
 PWA.

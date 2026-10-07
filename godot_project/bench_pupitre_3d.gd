@@ -152,6 +152,22 @@ func _tick() -> void:
 	_main._pupitre_clic(pos_de.call("rouge_2"), false)
 	_verif("ARRÊT ÉLEC (petit) s'engage puis se relâche", elec and not ph.arret_elec)
 	_arret_elec_physique()
+	# inversion du sens : à quai, demi-tour normal et silencieux ; en plein
+	# tunnel, annonce « retour en gare » (comme le PC)
+	var ann: Node = _main.get("announcements")
+	if ann != null:
+		ph.arret_elec = false
+		ph.emergency = false
+		ph.s = PNConstants.STOP_S
+		ph.v = 0.0
+		ann.stop_all()
+		_main.do_reverse()
+		var silence: bool = not ann.is_announcing()
+		ph.s = 1500.0
+		ph.v = 0.0
+		_main.do_reverse()
+		var annonce: bool = ann.is_announcing()
+		_verif("inversion à quai silencieuse, en plein tunnel annoncée", silence and annonce)
 	print("BENCH_PUPITRE " + ("OK" if _ok else "ECHEC"))
 	quit(0 if _ok else 1)
 

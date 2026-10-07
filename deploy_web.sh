@@ -21,9 +21,14 @@ echo "→ Import des ressources…"
 # tourne pas sur une vieille copie du service worker.
 CONST_GD="$SIM_DIR/godot_project/scripts/constants.gd"
 BUILD_STAMP=$(date +"%Y-%m-%d %H:%M")
-restore_build_tag() { sed -i 's|^const BUILD_TAG: String = .*|const BUILD_TAG: String = "dev"|' "$CONST_GD"; }
+restore_build_tag() {
+    sed -i 's|^const BUILD_TAG: String = .*|const BUILD_TAG: String = "dev"|' "$CONST_GD"
+    sed -i 's|^const VERSION_APP: String = .*|const VERSION_APP: String = "dev"|' "$CONST_GD"
+}
 trap restore_build_tag EXIT
 sed -i "s|^const BUILD_TAG: String = .*|const BUILD_TAG: String = \"$BUILD_STAMP\"|" "$CONST_GD"
+# version affichée dans le titre du HUD
+sed -i "s|^const VERSION_APP: String = .*|const VERSION_APP: String = \"$(tr -d ' \r\n' < "$SIM_DIR/VERSION")\"|" "$CONST_GD"
 echo "→ Export Web…"
 mkdir -p "$SIM_DIR/build/web"
 "$GODOT" --headless --path "$SIM_DIR/godot_project" \

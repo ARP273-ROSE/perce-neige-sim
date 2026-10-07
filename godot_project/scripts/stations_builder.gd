@@ -708,7 +708,7 @@ func _build_room_dressing(s0: float, s1: float, _is_low: bool) -> void:
 		s += 8.4
 
 
-const KOMPAT: float = 2.0
+const KOMPAT: float = 2.5
 
 
 func _compat() -> bool:
@@ -730,9 +730,12 @@ func _build_ceiling_lights(s_start: float, s_end: float) -> void:
 		light.position = pos
 		light.light_color = Color(0.95, 0.97, 1.0)
 		# rendu Compatibility (PWA) : ni éclairage indirect ni plus de 8
-		# lampes par objet → néons plus forts (« la gare du haut semble
-		# dans le noir », iPad 07/10/2026)
+		# lampes par objet → néons 2,5 fois plus forts (« la gare du haut
+		# semble dans le noir », iPad 07/10/2026), sauf sur l'intérieur de
+		# la cabine (Cabin.MASQUE_GARE_WEB)
 		light.light_energy = 4.5 * (KOMPAT if _compat() else 1.0)
+		if _compat():
+			light.light_cull_mask = Cabin.MASQUE_GARE_WEB   # pas l'intérieur de la cabine
 		light.omni_range = 16.0
 		light.omni_attenuation = 1.4
 		light.shadow_enabled = false

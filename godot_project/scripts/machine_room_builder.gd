@@ -272,8 +272,12 @@ func _build_hall_end() -> void:
 	for s_pos in [3.0, 7.0]:
 		var light: OmniLight3D = OmniLight3D.new()
 		light.light_color = Color(0.95, 0.97, 1.0)
-		# PWA (Compatibility) : sans éclairage indirect, plus fort
-		light.light_energy = 3.0 * (2.0 if RenderingServer.get_current_rendering_method() == "gl_compatibility" else 1.0)
+		# PWA (Compatibility) : sans éclairage indirect, 2,5 fois plus fort,
+		# sauf sur l'intérieur de la cabine
+		var web: bool = RenderingServer.get_current_rendering_method() == "gl_compatibility"
+		light.light_energy = 3.0 * (2.5 if web else 1.0)
+		if web:
+			light.light_cull_mask = Cabin.MASQUE_GARE_WEB
 		light.omni_range = 10.0
 		light.shadow_enabled = false
 		add_child(light)
