@@ -30,6 +30,12 @@ var physics: TrainPhysics = null
 var fault_manager: FaultManager = null
 
 var enabled: bool = false
+## Skieur jouable (07/10/2026, « la fermeture auto et le départ ont été
+## déclenchés quand j'ai passé les portes du quai, j'ai loupé le départ ») :
+## posé par main.gd. `retenue` : un skieur est en gare sans être monté, on
+## ne part pas ; `a_bord` : il vient de monter, on part 8 s plus tard.
+var retenue: bool = false
+var a_bord: bool = false
 var state: State = State.IDLE
 var _state_timer: float = 0.0
 var _trip_count: int = 0
@@ -94,6 +100,10 @@ func _process(delta: float) -> void:
 				or physics.door_phase_remaining > 0.0 \
 				or physics.departure_buzzer_remaining > 0.0 \
 				or physics.trip_started
+			if retenue and not seq_running:
+				_state_timer = minf(_state_timer, STATION_DWELL_S - 6.0)
+			elif a_bord and not seq_running:
+				_state_timer = maxf(_state_timer, STATION_DWELL_S - 8.0)
 			if _state_timer > STATION_DWELL_S or seq_running:
 				if not seq_running:
 					physics.request_depart()
