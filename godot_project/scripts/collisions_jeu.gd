@@ -202,14 +202,16 @@ func _rame(c: Cabin) -> void:
 		var z_c: float = (float(idx) - (c.car_count - 1) * 0.5) * car_len
 		var z0: float = -car_len * 0.5 + 0.30
 		var z1: float = car_len * 0.5 - 0.30
-		# paliers : boîtes épaisses (pas de jour sous les contremarches)
+		# paliers (pas de jour sous les contremarches)
 		var portes: Array = []
 		for k in range(10):
 			var zc: float = c._panel_center(idx, k) - z_c
 			var xf: Transform3D = Transform3D(Basis(Vector3.RIGHT, tilt), Vector3(0.0, y_palier, zc))
 			# au droit des portes, le seuil va jusqu'au bord du quai (1,85 m)
 			var larg: float = 3.66 if TrainBodyBuilder.KINDS[k] == "door" else 2.5
-			_boite(voiture, Vector3(larg, 0.50, pas + 0.02), xf * Transform3D(Basis.IDENTITY, Vector3(0.0, -0.225, 0.0)))
+			# 15 cm d'épaisseur : couvre la contremarche (12 cm) sans dépasser
+			# sous la caisse (on passe dessous, dans la fosse de la gare basse)
+			_boite(voiture, Vector3(larg, 0.15, pas + 0.02), xf * Transform3D(Basis.IDENTITY, Vector3(0.0, -0.05, 0.0)))
 			if TrainBodyBuilder.KINDS[k] == "door":
 				portes.append([zc - TrainBodyBuilder.PANEL_L * 0.5, zc + TrainBodyBuilder.PANEL_L * 0.5])
 			# bancs et porte-skis, dans le repère de leur palier

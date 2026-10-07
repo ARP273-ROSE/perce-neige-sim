@@ -32,10 +32,13 @@ const FLOOR_Y_LOCAL: float = -1.60 # top dalle (cohérent avec track_builder : f
 const RAIL_HEAD_Y: float = -1.24   # table de roulement (dalle −1,60 + blochet 0,20 + rail 0,17 − 0,01)
 # Fosses (mêmes bornes que track_builder.pit_low_end / pit_high_start)
 const PIT_LOW_START: float = -4.0
-const PIT_LOW_END: float = 4.5
+const PIT_LOW_END: float = 43.0       # toute la longueur des quais (TrackBuilder.pit_low_end)
 const PIT_HIGH_START: float = PNConstants.LENGTH - 2.0
 const PIT_HIGH_END: float = PNConstants.LENGTH + 4.0
-const PIT_DEPTH: float = 1.0
+# fond à 2,31 m sous le champignon des rails : un adulte passe sous les
+# longrines qui portent les rails (Kevin, 07/10/2026 : « la fosse doit être
+# plus profonde pour que la tête soit sous les rails »)
+const PIT_DEPTH: float = 1.95
 
 
 func build(t: TunnelBuilder) -> void:
@@ -601,12 +604,53 @@ func _build_pit(s0: float, s1: float, with_sheaves: bool) -> void:
 	var sc: float = (s0 + s1) * 0.5
 	var y_bottom: float = FLOOR_Y_LOCAL - PIT_DEPTH
 	_box(Vector3(3.0, 0.06, length), grating, sc, 0.0, y_bottom + 0.03, "FondFosse")
+	# fosse longue (gare basse) : escalier côté salle, contre la paroi droite,
+	# en dehors des butoirs (x 0,70-1,00) ; paroi et rebord coupés à son droit
+	var esc_x0: float = 1.055
+	var esc_x1: float = 1.805
+	var esc_s0: float = 0.6
+	var esc_n: int = int(ceil(((FLOOR_Y_LOCAL + platform_height) - y_bottom) / 0.17))
+	var esc_giron: float = 0.29
+	var esc_s1: float = esc_s0 + esc_giron * esc_n
+	var longue: bool = length > 10.0
 	for sx in [-1.5, 1.5]:
-		_box(Vector3(0.16, PIT_DEPTH, length), concrete, sc, sx, y_bottom + PIT_DEPTH * 0.5, "ParoiFosse")
-		_box(Vector3(0.08, 0.06, length), steel, sc, sx - signf(sx) * 0.04, FLOOR_Y_LOCAL + 0.03, "CorniereFosse")
-	# rails sur poutres au-dessus de la fosse : deux longrines acier
+		var morceaux: Array = [[s0, s1]]
+		if longue and sx > 0.0:
+			morceaux = [[s0, esc_s0 - 0.05], [esc_s1 + 0.05, s1]]
+		for mo in morceaux:
+			var lm: float = float(mo[1]) - float(mo[0])
+			if lm <= 0.01:
+				continue
+			var cm_s: float = (float(mo[0]) + float(mo[1])) * 0.5
+			_box(Vector3(0.16, PIT_DEPTH, lm), concrete, cm_s, sx, y_bottom + PIT_DEPTH * 0.5, "ParoiFosse")
+			_box(Vector3(0.08, 0.06, lm), steel, cm_s, sx - signf(sx) * 0.04, FLOOR_Y_LOCAL + 0.03, "CorniereFosse")
+			if longue:
+				# rebord jusqu'au quai, de la paroi au bord du quai, au niveau du quai
+				_box(Vector3(platform_inner_x - 1.42, (FLOOR_Y_LOCAL + platform_height) - y_bottom, lm),
+					concrete, cm_s, signf(sx) * (1.42 + platform_inner_x) * 0.5,
+					(y_bottom + FLOOR_Y_LOCAL + platform_height) * 0.5, "RebordFosse")
+	# rails sur poutres au-dessus de la fosse : deux longrines acier,
+	# portées par des poteaux tous les 2,5 m
 	for sx in [-0.60, 0.60]:
 		_box(Vector3(0.12, 0.22, length), iron, sc, sx, RAIL_HEAD_Y - 0.28, "LongrineFosse")
+	if length > 10.0:
+		var h_pot: float = (RAIL_HEAD_Y - 0.39) - y_bottom
+		var sp: float = s0 + 1.25
+		while sp < s1 - 0.5:
+			for sx2 in [-0.60, 0.60]:
+				_box(Vector3(0.14, h_pot, 0.14), iron, sp, sx2, y_bottom + h_pot * 0.5, "PoteauFosse")
+			sp += 2.5
+		# escalier pour remonter : marches de 17 cm, montant vers la cloison
+		# jusqu'au niveau du quai (on en sort de côté, sur le palier)
+		var y_quai: float = FLOOR_Y_LOCAL + platform_height
+		var haut_m: float = (y_quai - y_bottom) / esc_n
+		for k in range(esc_n):
+			var y_d: float = y_bottom + haut_m * (k + 1)
+			var s_m: float = esc_s1 - esc_giron * (k + 0.5)
+			_box(Vector3(esc_x1 - esc_x0, y_d - y_bottom, esc_giron), concrete, s_m, (esc_x0 + esc_x1) * 0.5,
+				y_bottom + (y_d - y_bottom) * 0.5, "EscalierFosse")
+			_box(Vector3(esc_x1 - esc_x0, 0.03, 0.05), steel, s_m + esc_giron * 0.5 - 0.025,
+				(esc_x0 + esc_x1) * 0.5, y_d - 0.013, "NezMarcheFosse")
 	if with_sheaves:
 		# deux grandes poulies verticales (une par brin) + une petite
 		for k in range(2):

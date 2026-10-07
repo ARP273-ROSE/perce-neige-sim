@@ -486,13 +486,16 @@ func _build_tunnel_section(
 # dessine donc pas la paroi sous la dalle, là où la dalle existe.
 const FLOOR_CUT_Y: float = -1.60
 const SLAB_HALF_W: float = 1.60
-const SLAB_S0: float = 4.5          # TrackBuilder.pit_low_end
+const SLAB_S0: float = 43.0         # TrackBuilder.pit_low_end (fosse de la gare basse)
 
 
 func _sous_dalle(s: float, x: float, y: float) -> bool:
-	if y >= FLOOR_CUT_Y or s < SLAB_S0 + ring_spacing \
-			or s > PNConstants.LENGTH + MachineRoomBuilder.PIT_S0 - ring_spacing:
+	if y >= FLOOR_CUT_Y or s > PNConstants.LENGTH + MachineRoomBuilder.PIT_S0 - ring_spacing:
 		return false
+	if s < SLAB_S0 + ring_spacing:
+		# fosse de la gare basse (StationsBuilder._build_pit) : pas de faux
+		# plancher sous son ouverture
+		return absf(x) < 1.55
 	var hw: float = SLAB_HALF_W - 0.05
 	if s > PNConstants.PASSING_START and s < PNConstants.PASSING_END:
 		hw += absf(passing_loop_offset(s, 1.0))

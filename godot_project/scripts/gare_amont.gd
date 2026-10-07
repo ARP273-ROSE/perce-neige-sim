@@ -197,6 +197,8 @@ func _materiaux() -> void:
 		Vector2(0.20, 1.0))
 	_mat("pierre", Color("a3a19c"), _pierre(), Vector2(1.6, 1.0))
 	_mat("bleu", Color("2a4f8f"))
+	_mat("assiette", Color("f2f0ea"))
+	_mat("frites", Color("e3b04b"))
 	_mat("vitre", Color("3b4a5c"))
 	_mat("bleu_nuit", Color("232838"))
 	_mat("acier_bleu", Color("30426f"))
@@ -677,6 +679,7 @@ func _terrasse() -> void:
 		_boite("noir", mid.x, mid.y, 0.12, l, 0.05, 0.05, rot)
 		_boite("galva", mid.x, mid.y, 0.6, l, 0.015, 0.9, rot)
 	# tables et bancs, transats, porte-skis, parasols
+	_assiette_frites(TABLE_SKIEUR + Vector2(0.0, 0.55))
 	for t in [Vector2(4.0, 12.0), Vector2(4.0, 18.0), Vector2(9.0, 15.0), Vector2(6.0, 26.0),
 			Vector2(10.0, 32.0), Vector2(8.0, 39.0)]:
 		_boite("bois_resto", t.x, t.y, 0.75, 0.8, 2.0, 0.06)
@@ -810,6 +813,31 @@ func _texte_n(t: String, pos: Vector3, taille: int, c: Color, px: float, normale
 ## le hall, les annexes, le restaurant et la gare du téléphérique ; rasé
 ## sous la terrasse ; relevé au-dessus de la salle des quais et du tunnel
 ## qui y entre.
+## Table du skieur jouable sur la terrasse (Kevin, 07/10/2026 : au départ
+## d'en haut, « il devrait être en haut sur la terrasse avec une assiette de
+## frites »).
+const TABLE_SKIEUR: Vector2 = Vector2(4.0, 12.0)
+
+
+func _assiette_frites(c: Vector2) -> void:
+	_cylindre("assiette", c.x, c.y, 0.78, 0.795, 0.13, 16)
+	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
+	rng.seed = 3032
+	for i in range(16):
+		var a: float = rng.randf() * TAU
+		var r: float = rng.randf() * 0.07
+		_boite("frites", c.x + cos(a) * r, c.y + sin(a) * r, 0.81 + rng.randf() * 0.025,
+			0.012, 0.075, 0.012, rng.randf() * PI)
+
+
+## Départ du skieur jouable en partant d'en haut : à table, sur la terrasse,
+## devant son assiette de frites. [position monde, cap].
+func point_depart() -> Array:
+	var p: Vector3 = _p(TABLE_SKIEUR.x - 1.15, TABLE_SKIEUR.y + 0.55, 0.05)
+	var vers: Vector3 = _p(TABLE_SKIEUR.x, TABLE_SKIEUR.y + 0.55, 0.0) - p
+	return [p, atan2(-vers.x, -vers.z)]
+
+
 func amenagement_relief() -> Dictionary:
 	var monde := func(pts: Array) -> PackedVector2Array:
 		var out: PackedVector2Array = PackedVector2Array()

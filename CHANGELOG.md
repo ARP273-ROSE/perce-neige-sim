@@ -7,6 +7,50 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.16.1** — le skieur, retours du premier essai : départ manqué, son du
+quai, fosse, chute au retour, frites, klaxon.
+- **Départ manqué** : « la fermeture auto et le départ ont été déclenchés
+  quand j'ai passé les portes du quai, donc j'ai loupé le départ ».
+  - Tant que le skieur est entre la salle et la voiture, l'AUTO attend
+    (au moins 6 s de plus).
+  - Une fois monté, le départ vient 8 s plus tard au plus.
+- **Son sur le quai** : « j'entends le son comme si j'étais dedans, alors
+  qu'en vrai en bas on n'entend rien, à part des souffles d'air réguliers /
+  vent sifflements suivis de silences dus aux surpressions dans le
+  tunnel ».
+  - Hors de la voiture, le son de la cabine est coupé.
+  - En gare, rame en marche : une bouffée d'air toutes les 9 à 18 s, plus
+    forte quand la rame va vite, puis le silence.
+  - Dehors : un vent léger.
+  - Sons synthétisés (`tools_sons_skieur.py`) : aucune prise de son du
+    quai.
+- **Fosse de Val Claret** : « plus profonde pour que la tête soit sous les
+  rails, et un escalier pour remonter au bout ».
+  - 1,95 m sous le quai.
+  - Escalier de 15 marches côté droit, au bout de la fosse vers la
+    cloison, hors de l'axe des butoirs.
+  - Poteaux sous les longrines tous les 2,5 m.
+- **Chute au retour du poste** : « j'étais au milieu de tout le monde, j'ai
+  changé de vue pour aller au poste de pilotage, je suis revenu au skieur
+  et je suis tombé sous le tunnel ».
+  - Le skieur retrouve sa place dans la voiture, même si elle a roulé
+    entre-temps.
+  - Les paliers de collision de la voiture ne débordent plus sous la
+    caisse.
+- **Départ d'en haut** : « en sens descente, le skieur devrait être en haut
+  sur la terrasse avec une assiette de frites ». Il y est, à côté d'une
+  table, face à son assiette.
+- **Klaxon** : « le buzzer à 1:56, tu le récupères à un moment où il n'y a
+  pas de bruit de fond et tu t'en sers comme klaxon ».
+  - Une seconde du vrai buzzer de la rame (385,6 Hz), prise là où il sonne
+    seul, filtrée sur ses harmoniques et bouclée sans raccord
+    (`tools_klaxon.py`).
+  - Même son sur PC et PWA, au niveau de l'ancien.
+- Vérifié :
+  - banc du skieur, 12 étapes : AUTO retenu, chute au retour, fosse,
+    départ d'en haut ;
+  - 15 bancs Godot, 101 tests PC.
+
 **v1.16.0** — le skieur jouable, étape 1 : marcher dans les gares, prendre
 le funiculaire, sortir en haut (suivi : SKIEUR.md).
 - Kevin : « un skieur capable de monter les escaliers des gares et de

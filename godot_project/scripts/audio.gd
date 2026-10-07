@@ -68,6 +68,18 @@ var _player_mr_run: AudioStreamPlayer = null
 var _player_horn: AudioStreamPlayer = null
 var _mr_mix: float = 0.0
 var _cab_db: float = 0.0             # atténuation des sons de cabine (dB)
+# --- Skieur jouable (07/10/2026) : ce qu'on entend dépend d'où l'on est.
+# Kevin : « sur le bord du quai, alors que le truc est parti, j'entends le
+# son comme si j'étais dedans, alors qu'en vrai en bas on n'entend rien, à
+# part des souffles d'air réguliers / vent sifflements suivis de silences
+# dus aux surpressions dans le tunnel ». 0 : dans une rame (sons de cabine),
+# 1 : en gare (bouffées d'air quand une rame roule, silences entre elles),
+# 2 : dehors (vent léger). Posé par main.gd.
+var ecoute: int = 0
+var _ecoute_mix: float = 0.0          # 0 cabine → 1 hors de la rame
+var _player_souffle: AudioStreamPlayer = null
+var _player_vent_dehors: AudioStreamPlayer = null
+var _t_souffle: float = 4.0
 
 
 func _ready() -> void:
@@ -95,9 +107,14 @@ func _build_players() -> void:
 	# Salle des machines (gare haute)
 	_player_mr_idle = _create_player("res://sounds/salle_machines_repos.wav", -80.0, true)
 	_player_mr_run = _create_player("res://sounds/salle_machines_marche_12ms.wav", -80.0, true)
-	# Klaxon du pupitre (vue cabine) : même son que le PC (horn_v3, deux
-	# tons 220/277 Hz, boucle d'une seconde), tant que le bouton est tenu
-	_player_horn = _create_player("res://sounds/klaxon.wav", -8.0, true)
+	# Klaxon du pupitre (vue cabine) : le vrai buzzer de la rame, pris sur
+	# la vidéo de 2007 (tools_klaxon.py), même fichier que le PC ; boucle
+	# d'une seconde tant que le bouton est tenu. −15 dB : il est 6,7 dB(A)
+	# plus fort que l'ancien deux-tons synthétique à crête égale.
+	_player_horn = _create_player("res://sounds/klaxon.wav", -15.0, true)
+	# skieur : bouffées d'air en gare, vent dehors (tools_sons_skieur.py)
+	_player_souffle = _create_player("res://sounds/souffle_tunnel.wav", -10.0, false)
+	_player_vent_dehors = _create_player("res://sounds/vent_dehors.wav", -80.0, true)
 
 
 func _create_player(path: String, vol_db: float, loop: bool, bus: String = "Master") -> AudioStreamPlayer:
@@ -262,7 +279,13 @@ func _update_machine_room(delta: float) -> void:
 	_mr_mix += (goal - _mr_mix) * (1.0 - exp(-delta / 0.35))
 	if absf(goal - _mr_mix) < 0.002:
 		_mr_mix = goal
-	var cab: float = linear_to_db(maxf(1.0 - _mr_mix, 0.0001))
+	# hors de la rame (skieur sur le quai, dehors) : plus de son de cabine
+	var g_ec: float = 0.0 if ecoute == 0 else 1.0
+	_ecoute_mix += (g_ec - _ecoute_mix) * (1.0 - exp(-delta / 0.4))
+	if absf(g_ec - _ecoute_mix) < 0.002:
+		_ecoute_mix = g_ec
+	_maj_ecoute(delta)
+	var cab: float = linear_to_db(maxf((1.0 - _mr_mix) * (1.0 - _ecoute_mix), 0.0001))
 	if absf(cab - _cab_db) > 0.01:
 		_cab_db = cab
 		if _player_vent != null:
@@ -283,6 +306,32 @@ func _update_machine_room(delta: float) -> void:
 	_player_mr_run.pitch_scale = g.y
 	_player_mr_idle.volume_db = MR_BASE_DB + linear_to_db(maxf(_mr_mix, 0.0001))
 	_player_mr_run.volume_db = MR_BASE_DB + linear_to_db(maxf(_mr_mix * g.x, 0.0001))
+
+
+## Skieur hors de la rame : en gare, une bouffée d'air toutes les 9 à 18 s
+## tant qu'une rame roule (plus forte avec la vitesse), silence sinon ;
+## dehors, le vent.
+func _maj_ecoute(delta: float) -> void:
+	if _player_vent_dehors != null and _player_vent_dehors.stream != null:
+		var dehors: bool = ecoute == 2
+		if dehors and not _player_vent_dehors.playing:
+			_player_vent_dehors.play()
+		var cible: float = -16.0 if dehors else -80.0
+		_player_vent_dehors.volume_db = move_toward(_player_vent_dehors.volume_db, cible, delta * 40.0)
+		if not dehors and _player_vent_dehors.volume_db <= -79.0 and _player_vent_dehors.playing:
+			_player_vent_dehors.stop()
+	if _player_souffle == null or _player_souffle.stream == null or ecoute != 1:
+		return
+	var v: float = absf(physics.v)
+	if v < 1.5:
+		_t_souffle = maxf(_t_souffle, 2.0)
+		return
+	_t_souffle -= delta
+	if _t_souffle <= 0.0 and not _player_souffle.playing:
+		_player_souffle.volume_db = -22.0 + 14.0 * clampf(v / PNConstants.V_MAX, 0.0, 1.0)
+		_player_souffle.pitch_scale = randf_range(0.85, 1.12)
+		_player_souffle.play()
+		_t_souffle = randf_range(9.0, 18.0)
 
 
 ## (gain de la machinerie, pitch_scale) à la vitesse v — même loi que le PC

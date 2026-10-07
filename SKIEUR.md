@@ -42,6 +42,21 @@ piste. »
   - en haut toujours : voiture → bas du quai gauche → **porte Génépy** →
     couloir → neige remontée au niveau du seuil.
 
+### Retours du premier essai (v1.16.1) : faits
+
+- L'AUTO attend que le skieur ait passé les portes du quai ; une fois monté,
+  le départ vient vite.
+- Hors de la voiture, plus de son de cabine : en gare, des bouffées d'air
+  suivies de silences quand la rame roule ; dehors, du vent.
+- Fosse de Val Claret à 1,95 m sous le quai (tête sous les rails), escalier
+  au bout côté droit.
+- Retour au skieur après le poste de pilotage : il retrouve sa place dans la
+  voiture, au lieu de tomber dans le tunnel.
+- En sens descente, il part de la terrasse du haut, à côté d'une assiette de
+  frites.
+- Klaxon = le vrai buzzer de la rame (vidéo de 2007, 1:56).
+- Banc : 12 étapes.
+
 ### Étape 2 — le ski : à faire
 
 - Neige sur les pistes : tracés OpenStreetMap (161 tronçons autour de Tignes,
@@ -69,8 +84,12 @@ piste. »
 
 - Kevin, 07/10/2026 : la porte Génépy au bas du quai gauche (en regardant vers le
   haut), le terrain à remonter jusqu'à elle ; la sortie de secours (position).
+- Kevin, 07/10/2026 : sur le quai on n'entend que des souffles d'air et des
+  silences ; la fosse assez profonde pour avoir la tête sous les rails ; la
+  terrasse et l'assiette de frites ; le buzzer à 1:56 comme klaxon.
 - Vidéos YouTube :
   - « [FUNI284] Funiculaire Perce-Neige | Tignes (montée) », chaîne Transports
     câblés : portes de la salle du bas ;
-  - « funiculaire de la grande motte », 2007 : parcours complet, sortie du haut.
+  - « funiculaire de la grande motte », 2007 : parcours complet, sortie du haut,
+    buzzer de la rame (1:55,65-1:56,65) devenu le klaxon.
 - OpenStreetMap (ODbL) : pistes et remontées, requête Overpass du 07/10/2026.

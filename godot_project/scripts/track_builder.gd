@@ -1359,7 +1359,9 @@ func _build_sleepers() -> void:
 # Fosses de gare (photos 093522 / 094104 en bas, 095509 / 095443 en haut) :
 # la dalle et les blochets s'arrêtent, les rails passent sur la fosse.
 # Mêmes bornes dans stations_builder (PIT_LOW_END / PIT_HIGH_START).
-@export var pit_low_end: float = 4.5
+# fosse de la gare basse sur toute la longueur des quais (Kevin, 07/10/2026 :
+# « la fosse doit être plus profonde pour que la tête soit sous les rails »)
+@export var pit_low_end: float = 43.0
 @export var pit_high_start: float = PNConstants.LENGTH   # pas de fosse en haut
 @export var walkway_side: float = 1.0        # +1 = droite en montant (vidéo)
 @export var walkway_x: float = 1.02          # décalage latéral du milieu de l'escalier
@@ -1801,7 +1803,8 @@ func _build_cable_beam() -> void:
 	var fork_ds: float = _beam_fork_ds()
 	var s_fork_lo: float = PNConstants.PASSING_START + fork_ds
 	var s_fork_hi: float = PNConstants.PASSING_END - fork_ds
-	_build_cable_beam_section(mat, 0.0, s_fork_lo, 0.0, "CableBeamLow")
+	# (pas dans la fosse de la gare basse : elle y flottait à mi-hauteur)
+	_build_cable_beam_section(mat, pit_low_end, s_fork_lo, 0.0, "CableBeamLow")
 	_build_cable_beam_section(mat, s_fork_lo, s_fork_hi, -1.0, "CableBeamLoopL")
 	_build_cable_beam_section(mat, s_fork_lo, s_fork_hi, +1.0, "CableBeamLoopR")
 	_build_cable_beam_section(mat, s_fork_hi, PNConstants.LENGTH + MachineRoomBuilder.PIT_S0,

@@ -78,6 +78,9 @@ var commandes_skieur: CommandesSkieur = null
 var mode_skieur: bool = false
 var _skieur_place: bool = false        # déjà posé une fois (on le retrouve où on l'a laissé)
 var _skieur_au_poste: bool = false     # assis au poste : la vue cabine est la sienne
+var _skieur_voiture: Node3D = null     # voiture où il était en quittant la vue skieur
+var _skieur_local: Vector3 = Vector3.ZERO
+var _depart_haut: bool = false         # scénario parti d'en haut (sens descente)
 const AMBIENT_ON: float = 0.40
 const AMBIENT_OFF: float = 0.0        # noir total : seuls phares, cabine et gares éclairent
 ## Halls de gare en rendu Compatibility (PWA), voir _process
@@ -290,6 +293,7 @@ func _apply_scenario(from_top: bool, rame2: bool, mode: String = "normal") -> vo
 		physics.roll_pax()
 	apply_rame(rame2)
 	_scenario_rame2 = rame2
+	_depart_haut = from_top
 	print("[Scenario] depart %s, rame %d, mode %s" % [
 		"gare haute" if from_top else "gare basse", 2 if rame2 else 1, run_mode])
 
@@ -1438,12 +1442,23 @@ func _entrer_skieur() -> void:
 			else skieur.global_position
 		skieur.activer(p, cabin.global_transform.basis.get_euler().y)
 	elif not _skieur_place and station_halls != null and station_halls.gare_aval != null:
-		var dep: Array = station_halls.gare_aval.point_depart()
+		# départ d'en bas : sur la place ; d'en haut : à table sur la terrasse
+		var gare: Node = station_halls.gare_amont if _depart_haut and station_halls.gare_amont != null \
+			else station_halls.gare_aval
+		var dep: Array = gare.point_depart()
 		skieur.activer(dep[0], dep[1])
 		skieur.refuge = dep[0]
 		_skieur_place = true
+	elif _skieur_voiture != null and is_instance_valid(_skieur_voiture):
+		# il était dans une rame : on le repose à sa place dans la voiture,
+		# où qu'elle soit rendue (« je suis revenu au skieur et je suis tombé
+		# sous le tunnel », Kevin, 07/10/2026)
+		skieur.activer(_skieur_voiture.global_transform * _skieur_local, skieur.cam_yaw)
+		skieur.support = _skieur_voiture
+		skieur._support_xf = _skieur_voiture.global_transform
 	else:
 		skieur.activer(skieur.global_position, skieur.cam_yaw)
+	_skieur_voiture = null
 	mode_skieur = true
 	cabin.set_view(Cabin.ViewMode.SKIEUR)
 	skieur.camera.make_current()
@@ -1458,6 +1473,16 @@ func _entrer_skieur() -> void:
 func _sortir_skieur() -> void:
 	mode_skieur = false
 	PorteAuto.presences = []
+	# dans une rame : on retient sa place dans la voiture
+	_skieur_voiture = null
+	if skieur != null and skieur.support != null:
+		_skieur_voiture = skieur.support
+		_skieur_local = skieur.support.global_transform.affine_inverse() * skieur.global_position
+	if auto_operator != null:
+		auto_operator.retenue = false
+		auto_operator.a_bord = false
+	if audio != null:
+		audio.ecoute = 0
 	if skieur != null:
 		skieur.desactiver()
 	if commandes_skieur != null:
@@ -1483,6 +1508,22 @@ func _skieur_conduit() -> void:
 	_flash("Au poste de conduite — SKIEUR pour se lever")
 
 
+## Le skieur est dans une gare : salle, quais, couloirs (pas sur la place,
+## la terrasse ou la neige).
+func _skieur_en_gare() -> bool:
+	if skieur == null or tunnel == null:
+		return false
+	var p: Vector3 = skieur.global_position
+	for e in [[0.0, -32.0, 46.0, 15.0], [PNConstants.LENGTH, -50.0, MachineRoomBuilder.HALL_DEPTH + 0.3, 7.6]]:
+		var xf: Transform3D = tunnel.transform_at(e[0])
+		var rel: Vector3 = p - xf.origin
+		var le_long: float = rel.dot(-xf.basis.z)
+		if le_long > e[1] and le_long < e[2] and absf(rel.dot(xf.basis.x)) < e[3] \
+				and absf(rel.dot(xf.basis.y) - le_long * 0.08) < 9.0:
+			return not skieur.dehors(relief)
+	return false
+
+
 ## Le skieur est dans une rame en plein tunnel (loin des deux gares).
 func _skieur_en_tunnel() -> bool:
 	if skieur == null or skieur.support == null:
@@ -1496,6 +1537,13 @@ func _maj_skieur() -> void:
 		return
 	# portes automatiques : elles s'ouvrent devant le skieur
 	PorteAuto.presences = [skieur.global_position]
+	# l'automate attend le skieur qui est en gare sans être monté, et part
+	# peu après qu'il est monté
+	if auto_operator != null:
+		auto_operator.a_bord = skieur.support != null
+		auto_operator.retenue = skieur.support == null and _skieur_en_gare()
+	if audio != null:
+		audio.ecoute = 0 if skieur.support != null else (1 if _skieur_en_gare() else 2)
 	# CONDUIRE : à côté du siège du poste de la rame pilotée
 	var pres: bool = false
 	if skieur.support != null and cabin.is_ancestor_of(skieur.support) and cabin.interior_root != null:

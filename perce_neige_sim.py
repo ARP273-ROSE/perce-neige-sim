@@ -4272,7 +4272,8 @@ def _generate_ambient_wavs(dest_dir: Path) -> dict[str, Path]:
             w.setframerate(sample_rate)
             w.writeframes(bytes(data))
     out["buzzer"] = buzzer
-    # Horn WAV : industrial two-tone pneumatic funicular horn, seamless
+    # Horn WAV (repli : le PC prend sons/ambients/klaxon_buzzer.wav, le
+    # vrai buzzer de la rame) : industrial two-tone pneumatic horn, seamless
     # 1 s loop (no envelope so setLoops(Infinite) doesn't click). Two
     # dissonant fundamentals (220/277 Hz — a major third) with strong
     # sawtooth-like harmonic stack for brass bite, pressurised-air
@@ -4432,7 +4433,9 @@ class SoundSystem:
                               ("buzzer_real", "buzzer_upper.wav"),
                               ("buzzer_bas", "buzzer_lower.wav"),
                               ("salle_machines_marche", "salle_machines_marche_12ms.wav"),
-                              ("salle_machines_repos", "salle_machines_repos.wav")):
+                              ("salle_machines_repos", "salle_machines_repos.wav"),
+                              # klaxon = vrai buzzer de la rame (tools_klaxon.py)
+                              ("horn", "klaxon_buzzer.wav")):
             candidate = bundled_amb_dir / filename
             if candidate.exists():
                 self._ambient_wavs[key] = candidate
@@ -4483,7 +4486,9 @@ class SoundSystem:
             # Horn player (dedicated — loops while key held)
             self._horn_player = QMediaPlayer()
             self._horn_audio = _AudioOutput()
-            self._horn_audio.setVolume(0.70)
+            # buzzer réel : +6,7 dB(A) de plus que l'ancien deux-tons à
+            # crête égale → 0,70 × 10^(−6,7/20) ≈ 0,32 pour garder le niveau
+            self._horn_audio.setVolume(0.32)
             self._horn_player.setAudioOutput(self._horn_audio)
             self._horn_player.setLoops(QMediaPlayer.Loops.Infinite)
             # Horn source is set lazily on first play() so we don't
