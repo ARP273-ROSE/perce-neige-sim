@@ -124,7 +124,13 @@ matériel roulant. Détail dans `SOURCES.md`.
   marche dans les gares, monte les escaliers, prend la rame, va au poste,
   sort en haut sur la terrasse ou par la porte de la piste Génépy. Le
   funiculaire tourne tout seul, l'attend et ferme les portes quand il est à
-  bord. Le ski viendra ensuite : suivi dans `SKIEUR.md`.
+  bord.
+- **Ski** : dehors, il chausse (E) et descend jusqu'à Val Claret sur un
+  domaine en hiver : neige, relief ombré, pistes d'OpenStreetMap damées et
+  balisées de leur couleur. Glisse physique (pente, carres, neige, air,
+  chasse-neige, schuss), vitesse et nom de la piste à l'écran, et le fantôme
+  des vraies descentes de Kevin à battre. En bas, on remonte en funiculaire.
+  Suivi dans `SKIEUR.md`.
 - **Trois modes** : Normal ; Défi (trajet noté sur 100, butoir,
   déraillement, collision) ; Pannes (15 pannes issues d'incidents
   documentés : STRMTG RM5, Glória Lisbonne 2025, Kaprun 2000, Carmelit,
@@ -211,6 +217,8 @@ L'écran d'accueil (F1) reprend ces touches.
 | `Z` `Q` `S` `D` / flèches    | Marcher (W A S D aussi)                  |
 | `Maj`                        | Courir                                   |
 | `V`                          | 1re / 3e personne                        |
+| `E`                          | Chausser / déchausser (dehors, sur la neige) |
+| À ski : `Q` / `D`, `Z`, `S`, `Maj` | Tourner, pousser, chasse-neige, schuss |
 | Glisser dans la 3D, molette  | Regarder, rapprocher la caméra           |
 | CONDUIRE (près du poste)     | S'asseoir au poste : fin du skieur et de l'exploitation automatique |
 | `F9` ou QUITTER              | Revenir à la conduite (l'exploitation automatique continue) |
@@ -225,19 +233,21 @@ Sur tablette, tout passe par les boutons à l'écran : ± VITESSE, FREIN,
 URGENCE, PORTES, PRÊT / DÉPART, INVERSER, AUTO, PHARES, CABINE, TUNNEL,
 VUE, SKIEUR, ANNONCES, MODE, PANNE. En vue cabine, les boutons du pupitre
 3D se touchent du doigt. Le skieur se dirige au joystick (en bas à
-gauche) ; un doigt glissé ailleurs tourne la vue.
+gauche) ; un doigt glissé ailleurs tourne la vue ; CHAUSSER met les skis,
+puis le joystick tourne (gauche / droite), pousse (haut) ou freine en
+chasse-neige (bas), et SCHUSS accélère.
 
 Au clavier : `↑`/`↓` consigne, `Espace` frein, `Maj` urgence, `Entrée`
 départ, `D` portes, `I` inverser, `H` phares, `C` cabine, `J` tunnel,
 `V` ou `O` vue, `M` mode, `F` choix de panne, `R` nouveau voyage (après
 un accident ou une panne grave), `F3` exploitation automatique, `K`
-skieur (puis ZQSD, `Maj`, `V`).
+skieur (puis ZQSD, `Maj`, `V`, `E` pour chausser).
 
 ---
 
 ## Documentation
 
-- `manuel_perce_neige.pdf` : manuel utilisateur, FR/EN, 54 pages.
+- `manuel_perce_neige.pdf` : manuel utilisateur, FR/EN, 56 pages.
 - `guide_theorique.pdf` : formules, sources réglementaires, calibration audio.
 - `AUDIT_PHYSIQUE_VOYAGES.md`, `AUDIT_PHYSIQUE_PANNES.md` : audits du
   modèle physique, scripts SageMath et sorties dans `audit_physique/`.

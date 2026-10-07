@@ -47,8 +47,46 @@ uniform int n_pieces = 0;
 uniform float piece = 0.0;
 uniform vec4 emprise = vec4(0.0, 0.0, 1.0, 1.0);
 varying vec3 pw;
+uniform float hiver = 0.0;          // skieur : neige, relief ombré
+uniform sampler2D pistes : filter_linear, repeat_disable;
+uniform float avec_pistes = 0.0;
+uniform vec3 soleil = vec3(0.40, 0.78, 0.48);
+varying vec3 nw;
 void vertex() {
 	pw = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+	nw = (MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz;
+}
+// Hiver (skieur jouable) : neige partout sauf sur la roche raide (> ~45°)
+// et sous 1 800 m ; pistes damées (masque OSM) toujours enneigées ; relief
+// ombré par le soleil fixe des gares (même loi que GareAmont).
+float hache(vec2 p) {
+	return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+}
+float bruit(vec2 p) {
+	vec2 i = floor(p);
+	vec2 f = fract(p);
+	f = f * f * (3.0 - 2.0 * f);
+	return mix(mix(hache(i), hache(i + vec2(1.0, 0.0)), f.x),
+		mix(hache(i + vec2(0.0, 1.0)), hache(i + vec2(1.0, 1.0)), f.x), f.y);
+}
+vec3 en_hiver(vec3 c, vec2 uv, vec3 cam) {
+	vec3 n = normalize(nw);
+	float dam = avec_pistes > 0.5 ? texture(pistes, uv).r : 0.0;
+	float neige = smoothstep(0.62, 0.80, n.y) * smoothstep(1750.0, 1950.0, pw.y);
+	neige = max(neige, dam);
+	// ombrage marqué (la neige ne se lit que par ses ombres)
+	float l = 0.36 + 0.74 * max(dot(n, normalize(soleil)), 0.0);
+	// hors-piste : gris bleuté, avec le grain de la photo (bosses, rochers
+	// affleurants) ; piste damée : blanc net
+	float grain = dot(c, vec3(0.30, 0.59, 0.11));
+	vec3 poudre = vec3(0.74, 0.79, 0.88) * (0.74 + 0.36 * grain);
+	vec3 blanc = mix(poudre, vec3(0.97, 0.98, 1.0), dam);
+	// grain de la neige près de l'œil (sensation de vitesse), effacé au loin
+	vec2 q = mod(pw.xz, 1024.0);
+	float g = 0.5 * bruit(q * 0.5) + 0.3 * bruit(q * 2.0) + 0.2 * bruit(q * 0.07);
+	float pres = clamp(1.0 - distance(pw, cam) / 350.0, 0.0, 1.0);
+	blanc *= 1.0 + (g - 0.5) * 0.16 * pres;
+	return mix(c, mix(c * 0.80, blanc, neige) * l, hiver);
 }
 void fragment() {
 	if (piece < 0.5) {
@@ -62,6 +100,9 @@ void fragment() {
 		discard;
 	}
 	vec3 c = texture(ortho, UV).rgb;
+	if (hiver > 0.0) {
+		c = en_hiver(c, UV, CAMERA_POSITION_WORLD);
+	}
 	if (!FRONT_FACING) {
 		c *= 0.45;                     // dessous du relief (caméra sous la surface)
 	}
@@ -99,14 +140,55 @@ uniform vec4 bloc;                 // emprise du bloc détaillé (trou de l'anne
 uniform float gamma = 1.0;
 uniform vec3 brume = vec3(0.50, 0.62, 0.78);
 varying vec3 pw;
+uniform float hiver = 0.0;          // skieur : neige, relief ombré
+uniform sampler2D pistes : filter_linear, repeat_disable;
+uniform float avec_pistes = 0.0;
+uniform vec3 soleil = vec3(0.40, 0.78, 0.48);
+varying vec3 nw;
 void vertex() {
 	pw = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+	nw = (MODEL_MATRIX * vec4(NORMAL, 0.0)).xyz;
+}
+// Hiver (skieur jouable) : neige partout sauf sur la roche raide (> ~45°)
+// et sous 1 800 m ; pistes damées (masque OSM) toujours enneigées ; relief
+// ombré par le soleil fixe des gares (même loi que GareAmont).
+float hache(vec2 p) {
+	return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+}
+float bruit(vec2 p) {
+	vec2 i = floor(p);
+	vec2 f = fract(p);
+	f = f * f * (3.0 - 2.0 * f);
+	return mix(mix(hache(i), hache(i + vec2(1.0, 0.0)), f.x),
+		mix(hache(i + vec2(0.0, 1.0)), hache(i + vec2(1.0, 1.0)), f.x), f.y);
+}
+vec3 en_hiver(vec3 c, vec2 uv, vec3 cam) {
+	vec3 n = normalize(nw);
+	float dam = avec_pistes > 0.5 ? texture(pistes, uv).r : 0.0;
+	float neige = smoothstep(0.62, 0.80, n.y) * smoothstep(1750.0, 1950.0, pw.y);
+	neige = max(neige, dam);
+	// ombrage marqué (la neige ne se lit que par ses ombres)
+	float l = 0.36 + 0.74 * max(dot(n, normalize(soleil)), 0.0);
+	// hors-piste : gris bleuté, avec le grain de la photo (bosses, rochers
+	// affleurants) ; piste damée : blanc net
+	float grain = dot(c, vec3(0.30, 0.59, 0.11));
+	vec3 poudre = vec3(0.74, 0.79, 0.88) * (0.74 + 0.36 * grain);
+	vec3 blanc = mix(poudre, vec3(0.97, 0.98, 1.0), dam);
+	// grain de la neige près de l'œil (sensation de vitesse), effacé au loin
+	vec2 q = mod(pw.xz, 1024.0);
+	float g = 0.5 * bruit(q * 0.5) + 0.3 * bruit(q * 2.0) + 0.2 * bruit(q * 0.07);
+	float pres = clamp(1.0 - distance(pw, cam) / 350.0, 0.0, 1.0);
+	blanc *= 1.0 + (g - 0.5) * 0.16 * pres;
+	return mix(c, mix(c * 0.80, blanc, neige) * l, hiver);
 }
 void fragment() {
 	if (pw.x > bloc.x && pw.x < bloc.z && pw.z > bloc.y && pw.z < bloc.w) {
 		discard;
 	}
 	vec3 c = texture(ortho, UV).rgb;
+	if (hiver > 0.0) {
+		c = en_hiver(c, UV, CAMERA_POSITION_WORLD);
+	}
 	if (!FRONT_FACING) {
 		c *= 0.45;
 	}
@@ -329,11 +411,13 @@ func _tableaux_tuile(t: Array) -> Array:
 			break
 		j = mini(j + _pas, t[3])
 	var w: int = cols.size()
+	var normales: PackedVector3Array = PackedVector3Array()
 	for ii in lignes:
 		for jj in cols:
 			verts.append(Vector3(ReliefDonnees.X_OUEST + jj * _dx, _h[ii * nx + jj],
 				ReliefDonnees.Z_NORD + ii * _dz))
 			uvs.append(Vector2(float(jj) / (nx - 1), float(ii) / (nz - 1)))
+			normales.append(_normale_grille(_h, nx, nz, ii, jj, _dx, _dz))
 	for a_i in range(lignes.size() - 1):
 		for a_j in range(w - 1):
 			var a: int = a_i * w + a_j
@@ -341,9 +425,23 @@ func _tableaux_tuile(t: Array) -> Array:
 	var arr: Array = []
 	arr.resize(Mesh.ARRAY_MAX)
 	arr[Mesh.ARRAY_VERTEX] = verts
+	arr[Mesh.ARRAY_NORMAL] = normales
 	arr[Mesh.ARRAY_TEX_UV] = uvs
 	arr[Mesh.ARRAY_INDEX] = idx
 	return arr
+
+
+## Normale (lissée) d'un nœud de grille d'altitudes, par différences
+## centrées : ombrage du relief en hiver (skieur).
+static func _normale_grille(h: PackedFloat32Array, nx: int, nz: int, i: int, j: int,
+		dx: float, dz: float) -> Vector3:
+	var j0: int = maxi(j - 1, 0)
+	var j1: int = mini(j + 1, nx - 1)
+	var i0: int = maxi(i - 1, 0)
+	var i1: int = mini(i + 1, nz - 1)
+	var gx: float = (h[i * nx + j1] - h[i * nx + j0]) / (dx * (j1 - j0))
+	var gz: float = (h[i1 * nx + j] - h[i0 * nx + j]) / (dz * (i1 - i0))
+	return Vector3(-gx, 1.0, -gz).normalized()
 
 
 ## Tuile de l'anneau lointain : les carrés entièrement dans le bloc détaillé
@@ -355,11 +453,13 @@ func _tableaux_lointain(t: Array) -> Array:
 	var uvs: PackedVector2Array = PackedVector2Array()
 	var idx: PackedInt32Array = PackedInt32Array()
 	var w: int = t[3] - t[2] + 1
+	var normales: PackedVector3Array = PackedVector3Array()
 	for ii in range(t[0], t[1] + 1):
 		for jj in range(t[2], t[3] + 1):
 			verts.append(Vector3(ReliefLointainDonnees.X_OUEST + jj * pas, _hl[ii * n + jj],
 				ReliefLointainDonnees.Z_NORD + ii * pas))
 			uvs.append(Vector2(float(jj) / (n - 1), float(ii) / (n - 1)))
+			normales.append(_normale_grille(_hl, n, n, ii, jj, pas, pas))
 	for a_i in range(t[1] - t[0]):
 		for a_j in range(w - 1):
 			var x0: float = ReliefLointainDonnees.X_OUEST + (t[2] + a_j) * pas
@@ -372,6 +472,7 @@ func _tableaux_lointain(t: Array) -> Array:
 	var arr: Array = []
 	arr.resize(Mesh.ARRAY_MAX)
 	arr[Mesh.ARRAY_VERTEX] = verts
+	arr[Mesh.ARRAY_NORMAL] = normales
 	arr[Mesh.ARRAY_TEX_UV] = uvs
 	arr[Mesh.ARRAY_INDEX] = idx
 	return arr
@@ -426,6 +527,8 @@ func _materiaux() -> void:
 	_mat_loin.set_shader_parameter("ortho", _texture_ortho("res://textures/relief_lointain.jpg"))
 	_mat_loin.set_shader_parameter("bloc", Vector4(ReliefDonnees.X_OUEST, ReliefDonnees.Z_NORD,
 		ReliefDonnees.X_EST, ReliefDonnees.Z_SUD))
+	_hiver_mat(_mat_terrain, true)
+	_hiver_mat(_mat_loin, false)
 
 
 ## Altitude sur les triangles du maillage du bloc (comme les tuiles) : les
@@ -551,9 +654,17 @@ func _build_piece(am: Dictionary) -> void:
 		for j in range(nx - 1):
 			var a: int = i * nx + j
 			idx.append_array(PackedInt32Array([a, a + 1, a + nx, a + 1, a + nx + 1, a + nx]))
+	var hp: PackedFloat32Array = PackedFloat32Array()
+	for v in verts:
+		hp.append(v.y)
+	var normales: PackedVector3Array = PackedVector3Array()
+	for i in range(nz):
+		for j in range(nx):
+			normales.append(_normale_grille(hp, nx, nz, i, j, lx, lz))
 	var arr: Array = []
 	arr.resize(Mesh.ARRAY_MAX)
 	arr[Mesh.ARRAY_VERTEX] = verts
+	arr[Mesh.ARRAY_NORMAL] = normales
 	arr[Mesh.ARRAY_TEX_UV] = uvs
 	arr[Mesh.ARRAY_INDEX] = idx
 	var mesh: ArrayMesh = ArrayMesh.new()
@@ -580,6 +691,7 @@ func _build_piece(am: Dictionary) -> void:
 	mat.set_shader_parameter("piece", 1.0)
 	mat.set_shader_parameter("trous", ImageTexture.create_from_image(img))
 	mat.set_shader_parameter("emprise", Vector4(r.position.x, r.position.y, r.end.x, r.end.y))
+	_hiver_mat(mat, true)
 	mesh.surface_set_material(0, mat)
 	_instance(mesh, "PieceGare")
 	_rects_pieces.append(r)
@@ -718,6 +830,60 @@ func _build_flancs() -> void:
 				st.add_vertex(e[0])
 	st.set_material(mat)
 	_instance(st.commit(), "Flancs")
+
+
+# --- Hiver et sol du skieur (07/10/2026) -----------------------------------------
+
+var _mats_hiver: Array = []
+var _hiver: float = 0.0
+var _tex_pistes: Texture2D = null
+
+
+func _hiver_mat(m: ShaderMaterial, pistes_ok: bool) -> void:
+	if pistes_ok:
+		if _tex_pistes == null:
+			_tex_pistes = load("res://textures/pistes_masque.png") as Texture2D
+		m.set_shader_parameter("pistes", _tex_pistes)
+		m.set_shader_parameter("avec_pistes", 1.0)
+	m.set_shader_parameter("hiver", _hiver)
+	_mats_hiver.append(m)
+
+
+## Neige, relief ombré et pistes damées (skieur jouable) : 1 ; été
+## (photographie aérienne seule, vue extérieure) : 0.
+func set_hiver(f: float) -> void:
+	if absf(f - _hiver) < 0.001:
+		return
+	_hiver = f
+	for m in _mats_hiver:
+		(m as ShaderMaterial).set_shader_parameter("hiver", f)
+
+
+## Altitude du sol AFFICHÉ en (x, z) : la pièce fine d'une gare si l'on y
+## est (hors bâtiments), sinon les triangles du bloc — le skieur glisse
+## exactement sur ce qu'on voit.
+func hauteur_sol(x: float, z: float) -> float:
+	if _etape < 1:
+		return -INF
+	for pc in _pieces:
+		if (pc[0] as Rect2).has_point(Vector2(x, z)):
+			var tp: Array = terrain_piece(x, z)
+			if not is_nan(float(tp[0])):
+				return float(tp[0])
+	return _hauteur_tri(x, z)
+
+
+## Normale lissée du sol (différences centrées sur ± e mètres).
+func normale_sol(x: float, z: float, e: float = 3.0) -> Vector3:
+	var gx: float = (hauteur_sol(x + e, z) - hauteur_sol(x - e, z)) / (2.0 * e)
+	var gz: float = (hauteur_sol(x, z + e) - hauteur_sol(x, z - e)) / (2.0 * e)
+	return Vector3(-gx, 1.0, -gz).normalized()
+
+
+## Le point (x, z) est-il dans l'emprise du relief détaillé ?
+func dans_le_bloc(x: float, z: float, marge: float = 30.0) -> bool:
+	return x > ReliefDonnees.X_OUEST + marge and x < ReliefDonnees.X_EST - marge \
+		and z > ReliefDonnees.Z_NORD + marge and z < ReliefDonnees.Z_SUD - marge
 
 
 ## Altitude du terrain (m) au point (x, z) du repère du jeu, bilinéaire,

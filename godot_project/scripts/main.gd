@@ -79,6 +79,8 @@ var mode_skieur: bool = false
 ## vue 3D embarquée dans le PC : sons du quai et du dehors (le PC joue ceux
 ## de la rame), dernier état du skieur envoyé au PC
 var sons_skieur: SonsSkieur = null
+## pistes balisées, fantôme des descentes de Kevin (à ski)
+var domaine: DomaineSkiable = null
 var _skieur_etat_envoye: Array = []
 var _skieur_place: bool = false        # déjà posé une fois (on le retrouve où on l'a laissé)
 var _skieur_au_poste: bool = false     # assis au poste : la vue cabine est la sienne
@@ -91,7 +93,14 @@ const AMBIENT_OFF: float = 0.0        # noir total : seuls phares, cabine et gar
 const AMBIENT_GARE_WEB: float = 0.40
 const SOL_CIEL: Color = Color(0.55, 0.58, 0.62)    # sol du ciel physique (_build_environment)
 const SOL_ROCHE: Color = Color(0.17, 0.17, 0.18)
-var _sol_ext: bool = false
+## Skieur dehors : sous l'horizon du ciel, une brume claire (le bord du
+## relief lointain n'y laisse plus une bande noire) ; soleil des gares
+## (GareAmont.SOLEIL, comme l'ombrage du relief) ; ambiante forte (la neige
+## renvoie la lumière).
+const SOL_HIVER: Color = Color(0.78, 0.83, 0.90)
+const AMBIENT_DEHORS: float = 1.0
+var _sol_ext: int = 0                  # 0 ciel, 1 roche (vue extérieure), 2 hiver (skieur dehors)
+var _soleil_skieur: bool = false
 const FOG_LIGHT_ON: float = 1.0
 const FOG_LIGHT_OFF: float = 0.0      # le brouillard ne doit pas « éclairer » le fond
 
@@ -896,10 +905,18 @@ func _process(delta: float) -> void:
 	var dehors: bool = mode_skieur and skieur != null and skieur.dehors(relief)
 	if _ext_light != null and dehors:
 		_ext_light.visible = true
+	if _ext_light != null and dehors != _soleil_skieur:
+		_soleil_skieur = dehors
+		if dehors:
+			_ext_light.basis = Basis.looking_at(-GareAmont.SOLEIL.normalized(), Vector3.UP)
+		else:
+			_ext_light.rotation = Vector3(deg_to_rad(-40.0), deg_to_rad(160.0), 0.0)
 	if relief != null and cabin != null:
 		var vue_ext: bool = cabin.view_mode == Cabin.ViewMode.EXTERIOR
 		var ext: bool = (vue_ext or dehors) and relief.pret
 		relief.visible = (vue_ext or (mode_skieur and not _skieur_en_tunnel())) and relief.pret
+		if domaine != null:
+			domaine.visible = mode_skieur and relief.visible
 		relief.montrer_trait(vue_ext)
 		# le tunnel se voit à travers le relief opaque (trait ambre) ; plus
 		# de silhouette des rames (« enlève complètement cette silhouette
@@ -915,9 +932,10 @@ func _process(delta: float) -> void:
 			_env.fog_sky_affect = 0.0 if ext else 0.5    # ciel bleu dehors
 			# sous l'horizon du ciel : gris roche en vue extérieure (caméra
 			# sous la montagne : on voit « la roche », pas un vide clair)
-			if _env.sky != null and ext != _sol_ext:
-				_sol_ext = ext
-				var sol: Color = SOL_ROCHE if ext else SOL_CIEL
+			var etat_sol: int = (2 if dehors else 1) if ext else 0
+			if _env.sky != null and etat_sol != _sol_ext:
+				_sol_ext = etat_sol
+				var sol: Color = [SOL_CIEL, SOL_ROCHE, SOL_HIVER][etat_sol]
 				if _env.sky.sky_material is PhysicalSkyMaterial:
 					(_env.sky.sky_material as PhysicalSkyMaterial).ground_color = sol
 				elif _env.sky.sky_material is ProceduralSkyMaterial:
@@ -939,6 +957,8 @@ func _process(delta: float) -> void:
 	# monte quand la caméra cabine y entre.
 	if _env != null and cabin != null and physics != null and tunnel != null:
 		var amb: float = AMBIENT_ON if tunnel_lights_on else AMBIENT_OFF
+		if mode_skieur and skieur != null and _soleil_skieur:
+			amb = AMBIENT_DEHORS
 		if _compat and (cabin.view_mode == Cabin.ViewMode.FPV or cabin.view_mode == Cabin.ViewMode.SKIEUR):
 			var sr: float = physics.s_render
 			if sr > tunnel.station_high_start - 20.0 or sr < tunnel.station_low_end + 20.0:
@@ -1242,6 +1262,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		if event.keycode == (KEY_F9 if client_mode else KEY_K):
 			basculer_skieur()
 			return
+		if mode_skieur and event.keycode == KEY_E:
+			basculer_ski()
+			return
 		if mode_skieur and not (event.keycode in [KEY_F1, KEY_F2, KEY_F3, KEY_J, KEY_C]):
 			return                # les lettres font marcher le skieur
 		if event.keycode == KEY_F1 and fault_manager != null:
@@ -1430,6 +1453,20 @@ func basculer_skieur() -> void:
 		_entrer_skieur()
 
 
+## Chausser / déchausser (bouton CHAUSSER, touche E ; E du PC relayée).
+func basculer_ski() -> void:
+	if skieur == null or not mode_skieur:
+		return
+	var refus: String = skieur.basculer_ski()
+	commandes_skieur.set_chausse(skieur.chausse)
+	if refus != "":
+		commandes_skieur.message(refus)
+	elif skieur.chausse:
+		commandes_skieur.message("Joystick : tourner à gauche ou à droite, pousser vers le haut, chasse-neige vers le bas"
+			if DisplayServer.is_touchscreen_available() else
+			"Q / D pour tourner, Z pour pousser, S chasse-neige, Maj schuss", 4.0)
+
+
 ## Vue 3D du PC : le PC allume ou éteint le mode skieur (StateReceiver).
 func skieur_externe(on: bool) -> void:
 	if tunnel == null or cabin == null:
@@ -1459,6 +1496,7 @@ func _entrer_skieur() -> void:
 		skieur = SkieurJoueur.new()
 		skieur.name = "Skieur"
 		add_child(skieur)
+		skieur.relief = relief
 		skieur.conduite_demandee.connect(_skieur_conduit)
 		commandes_skieur = CommandesSkieur.new()
 		commandes_skieur.name = "CommandesSkieur"
@@ -1498,6 +1536,14 @@ func _entrer_skieur() -> void:
 		add_child(sons_skieur)
 		sons_skieur.physics = physics
 	_skieur_etat_envoye = []
+	# l'hiver : neige, relief ombré, pistes damées et balisées
+	if domaine == null:
+		domaine = DomaineSkiable.new()
+		domaine.name = "DomaineSkiable"
+		add_child(domaine)
+		domaine.construire(relief)
+	relief.set_hiver(1.0)
+	commandes_skieur.set_chausse(skieur.chausse)
 	mode_skieur = true
 	cabin.set_view(Cabin.ViewMode.SKIEUR)
 	skieur.camera.make_current()
@@ -1524,6 +1570,10 @@ func _sortir_skieur() -> void:
 		audio.ecoute = 0
 	if sons_skieur != null:
 		sons_skieur.ecoute = 0
+	if relief != null:
+		relief.set_hiver(0.0)
+	if domaine != null:
+		domaine.visible = false
 	if skieur != null:
 		skieur.touches_ext = 0
 		skieur.desactiver()
@@ -1590,6 +1640,20 @@ func _maj_skieur() -> void:
 	# l'automate attend le skieur qui est en gare sans être monté, et ferme
 	# les portes dès qu'il est dedans — passé la ligne des portes : debout
 	# dans l'embrasure, il est encore « en gare »
+	# à ski : vitesse, piste, course contre le fantôme
+	if skieur.chausse and domaine != null:
+		var dt: float = get_process_delta_time()
+		domaine.suivre(skieur, dt)
+		var pi: Array = domaine.piste_sous(skieur.global_position, dt)
+		var info: String = "%d km/h" % roundi(skieur.vitesse_ski() * 3.6)
+		if str(pi[0]) != "" or int(pi[1]) >= 0:
+			info += " · %s%s" % [pi[0], (" (%s)" % PistesDonnees.NOMS_COULEURS[pi[1]]) if int(pi[1]) >= 0 else ""]
+		if domaine.chrono >= 0.0:
+			info += " · %s" % DomaineSkiable._mmss(domaine.chrono)
+		commandes_skieur.set_info(info)
+		if domaine.resultat != "":
+			commandes_skieur.message(domaine.resultat, 8.0)
+			domaine.resultat = ""
 	var en_gare: bool = _skieur_en_gare()
 	var dedans: bool = false
 	if skieur.support != null:

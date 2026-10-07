@@ -66,6 +66,33 @@ var _corps: MultiMeshInstance3D = null
 var _skis: MultiMeshInstance3D = null
 var _images: Array = []                # maillages de la marche (+ debout en 0)
 
+# --- ski (Kevin, 07/10/2026 : « arrivé en haut, il est capable de skier sur
+# le décor pour redescendre ») -------------------------------------------------
+const MU_NEIGE: float = 0.05            # frottement ski / neige damée
+const MU_ARRET: float = 0.12            # immobile, il tient sur une pente douce (≈ 7°)
+const K_AIR: float = 0.0032             # traînée ½ρ·Cx·S / m, debout (1/m)
+const K_AIR_SCHUSS: float = 0.0018      # recroquevillé (schuss)
+const OMEGA_SKI: float = 1.8            # rad/s : pivot des skis à basse vitesse
+const A_VIRAGE: float = 6.5             # m/s² : accélération latérale d'un virage coupé
+const ADHERENCE: float = 5.0            # 1/s : la carre absorbe la vitesse en travers
+const DEC_CHASSE: float = 3.2           # m/s² : chasse-neige à fond
+const V_PAS: float = 3.0                # m/s : pas de patineur sur le plat (Kevin : 3-4 m/s au départ)
+const A_PAS: float = 2.0                # m/s² : poussée des bâtons
+const V_MAX_SKI: float = 30.0
+## Relief (posé par main.gd) : le sol de la glisse.
+var relief: ReliefBuilder = null
+var chausse: bool = false
+## Vitesse visée par le pilote (bancs, mode AUTO) en suivant `chemin` à ski.
+var vitesse_pilote: float = 12.0
+var _v_ski: Vector3 = Vector3.ZERO
+var _cap_ski: float = 0.0
+var _penche: float = 0.0
+var _vue_libre: float = 99.0            # s depuis le dernier glissé de la vue
+var _batons: MultiMeshInstance3D = null
+var _skis_pieds: Mesh = null
+var _skis_main: Mesh = null
+var _image_glisse: Mesh = null
+
 
 func _init() -> void:
 	collision_layer = CollisionsJeu.COUCHE_SKIEUR
@@ -138,8 +165,26 @@ func _construire_apparence() -> void:
 		_images.append(SkieurMesh.passager_squelette(_squelette_marche(TAU * i / N_IMAGES),
 			"skis", "casque", mat))
 	_corps = _mm(_images[0], graine)
-	_skis = _mm(SkieurMesh.skis(mat), Color(0.55, 0.30, 0.80, 1.0))
+	_skis_main = SkieurMesh.skis(mat)
+	_skis = _mm(_skis_main, Color(0.55, 0.30, 0.80, 1.0))
 	_skis.position = SkieurMesh.ANCRE_SKIS
+	# chaussé : posture de glisse, skis aux pieds, deux bâtons
+	_image_glisse = SkieurMesh.passager_squelette(SkieurMesh.squelette_glisse(), "libre", "casque", mat)
+	_skis_pieds = SkieurMesh.skis_aux_pieds(mat)
+	_batons = _mm(SkieurMesh.baton(mat), Color(0.55, 0.30, 0.80, 1.0))
+	_batons.multimesh.instance_count = 2
+	for k in range(2):
+		var sx: float = -1.0 if k == 0 else 1.0
+		var main_p: Vector3 = Vector3(sx * 0.27, 0.945, -0.31)
+		var pointe: Vector3 = Vector3(sx * 0.36, 0.0, 0.22)
+		var ax: Vector3 = main_p - pointe
+		var y: Vector3 = ax.normalized()
+		var x: Vector3 = (Vector3.RIGHT - y * y.x).normalized()
+		var z: Vector3 = x.cross(y)
+		_batons.multimesh.set_instance_transform(k, Transform3D(
+			Basis(x, y * (ax.length() / SkieurMesh.LONG_BATON), z), pointe))
+		_batons.multimesh.set_instance_custom_data(k, Color(0.55, 0.30, 0.80, 1.0))
+	_batons.visible = false
 
 
 ## Squelette de la marche à la phase `ph` : jambes en ciseaux, bras gauche
@@ -181,6 +226,44 @@ func desactiver() -> void:
 	chemin.clear()
 
 
+## Chausser ou déchausser (bouton CHAUSSER, touche E) : renvoie la raison
+## d'un refus, ou "".
+func basculer_ski() -> String:
+	if chausse:
+		chausse = false
+		_v_ski = Vector3.ZERO
+		velocity = Vector3.ZERO
+		_penche = 0.0
+		dernier_sol = global_position
+		_apparence_ski()
+		return ""
+	if relief == null or not relief.pret or support != null or not dehors(relief):
+		return "On chausse dehors, sur la neige"
+	if not relief.dans_le_bloc(global_position.x, global_position.z):
+		return "Hors du domaine"
+	chausse = true
+	chemin.clear()
+	_cap_ski = _cap
+	_v_ski = Vector3.ZERO
+	global_position.y = relief.hauteur_sol(global_position.x, global_position.z)
+	_apparence_ski()
+	return ""
+
+
+## Vitesse de glisse (m/s), 0 à pied.
+func vitesse_ski() -> float:
+	return _v_ski.length() if chausse else 0.0
+
+
+func _apparence_ski() -> void:
+	_corps.multimesh.mesh = _image_glisse if chausse else _images[0]
+	_corps.position.y = 0.045 if chausse else 0.0
+	_skis.multimesh.mesh = _skis_pieds if chausse else _skis_main
+	_skis.position = Vector3.ZERO if chausse else SkieurMesh.ANCRE_SKIS
+	_batons.visible = chausse
+	_visuel.rotation = Vector3(0.0, _cap, 0.0)
+
+
 # --- entrées -----------------------------------------------------------------------
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -201,6 +284,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 ## Rotation de la vue (glissé de souris ou de doigt, en pixels).
 func tourner_vue(d: Vector2) -> void:
+	_vue_libre = 0.0
 	cam_yaw -= d.x * 0.006
 	cam_pitch = clampf(cam_pitch - d.y * 0.005, -1.30, 0.75)
 
@@ -233,6 +317,14 @@ func _process(delta: float) -> void:
 		cmd = k
 	var vite: bool = course or Input.is_physical_key_pressed(KEY_SHIFT) \
 		or (touches_ext & 16) != 0
+	if chausse:
+		if not chemin.is_empty():
+			cmd = _pilote_ski()
+		_glisser(delta, cmd, vite)
+		_vue_libre += delta
+		_camera_ski(delta)
+		_camera()
+		return
 	var dir: Vector3 = _direction(cmd)
 	if not chemin.is_empty():
 		dir = _suivre_chemin()
@@ -392,6 +484,129 @@ func _trouver_support() -> void:
 		support = trouve
 		if support != null:
 			_support_xf = support.global_transform
+
+
+# --- glisse ---------------------------------------------------------------------------
+
+## Un pas de glisse. `cmd` : x virage (droite +), y + pousser / − chasse-neige.
+## Le skieur reste posé sur le sol affiché (ReliefBuilder.hauteur_sol) ; sa
+## vitesse est dans le plan de la pente : la pesanteur la tire vers le bas,
+## les carres absorbent ce qui part en travers des skis, la neige et l'air
+## la freinent.
+func _glisser(delta: float, cmd: Vector2, schuss: bool) -> void:
+	var p: Vector3 = global_position
+	var n: Vector3 = relief.normale_sol(p.x, p.z)
+	var v: Vector3 = _v_ski
+	var vit: float = v.length()
+	# virage : les skis pivotent, d'autant moins vite qu'on va vite
+	var omega: float = minf(OMEGA_SKI, A_VIRAGE / maxf(vit, 0.1))
+	_cap_ski -= cmd.x * omega * delta
+	var av_h: Vector3 = Vector3(-sin(_cap_ski), 0.0, -cos(_cap_ski))
+	var d: Vector3 = (av_h - n * av_h.dot(n)).normalized()
+	# pesanteur le long de la pente : g − (g·n) n
+	var g_t: Vector3 = Vector3.DOWN * G + n * (G * n.y)
+	v += g_t * delta
+	# carres : la vitesse en travers des skis est absorbée
+	var lat: Vector3 = v - d * v.dot(d)
+	v -= lat * minf(1.0, ADHERENCE * delta)
+	# neige et air ; chasse-neige
+	vit = v.length()
+	var dec: float = MU_NEIGE * G * n.y + (K_AIR_SCHUSS if schuss else K_AIR) * vit * vit
+	if cmd.y < -0.2:
+		dec += DEC_CHASSE * minf(1.0, -cmd.y)
+	if vit > 1e-3:
+		v *= maxf(0.0, vit - dec * delta) / vit
+	# immobile sur une pente douce : il tient
+	if v.length() < 0.3 and g_t.length() < MU_ARRET * G and cmd.y <= 0.2:
+		v = Vector3.ZERO
+	# pas de patineur, poussée des bâtons ; en montée, en canard, plus lent
+	var v_av: float = v.dot(d)
+	var v_pas: float = V_PAS * cmd.y * clampf(1.0 - 4.0 * d.y, 0.35, 1.0)
+	if cmd.y > 0.2 and v_av < v_pas:
+		v += d * minf(v_pas - v_av, A_PAS * delta)
+	v = v.limit_length(V_MAX_SKI)
+	# déplacement à l'horizontale, arrêté par les murs, puis posé sur le sol
+	var dp: Vector3 = Vector3(v.x, 0.0, v.z) * delta
+	var mur: Vector3 = _mur_devant(p, dp)
+	if mur != Vector3.ZERO:
+		if dp.dot(mur) < 0.0:
+			dp -= mur * dp.dot(mur)
+		if v.dot(mur) < 0.0:
+			v -= mur * v.dot(mur)
+	var q: Vector3 = p + dp
+	if not relief.dans_le_bloc(q.x, q.z):
+		q = p
+		v = Vector3.ZERO
+	q.y = relief.hauteur_sol(q.x, q.z)
+	global_position = q
+	# vitesse remise dans le plan de la pente d'arrivée
+	var n2: Vector3 = relief.normale_sol(q.x, q.z)
+	var m: float = v.length()
+	v -= n2 * v.dot(n2)
+	if v.length() > 1e-4:
+		v = v.normalized() * m
+	# penché dans le virage (accélération latérale v·ω)
+	var cible: float = clampf(-cmd.x * omega * m / G, -0.6, 0.6)
+	_penche = lerpf(_penche, cible, minf(1.0, delta * 6.0))
+	_v_ski = v
+	velocity = v
+	_cap = _cap_ski
+	_visuel.rotation = Vector3(0.0, _cap_ski, _penche)
+	_visuel.visible = not premiere_personne
+
+
+## Mur devant (bâtiment, quai, porte : collisions des gares) dans le sens
+## du déplacement : sa normale horizontale, ou ZERO.
+func _mur_devant(p: Vector3, dp: Vector3) -> Vector3:
+	var l: float = dp.length()
+	if l < 1e-5:
+		return Vector3.ZERO
+	var dir: Vector3 = dp / l
+	for h in [0.4, 1.2]:
+		var a: Vector3 = p + Vector3.UP * h
+		var rq: PhysicsRayQueryParameters3D = PhysicsRayQueryParameters3D.create(
+			a, a + dir * (l + RAYON + 0.15), CollisionsJeu.COUCHE_DECOR | CollisionsJeu.COUCHE_VEHICULE, [get_rid()])
+		var hit: Dictionary = get_world_3d().direct_space_state.intersect_ray(rq)
+		if not hit.is_empty() and absf((hit["normal"] as Vector3).y) < 0.5:
+			var nm: Vector3 = hit["normal"]
+			nm.y = 0.0
+			return nm.normalized()
+	return Vector3.ZERO
+
+
+## Caméra derrière les skis quand il file (sauf si l'on vient de tourner
+## la vue à la main).
+func _camera_ski(delta: float) -> void:
+	var vh: Vector3 = Vector3(_v_ski.x, 0.0, _v_ski.z)
+	if vh.length() > 2.0 and _vue_libre > 1.2:
+		cam_yaw = lerp_angle(cam_yaw, atan2(-vh.x, -vh.z), minf(1.0, delta * 2.2))
+		cam_pitch = lerpf(cam_pitch, -0.30, minf(1.0, delta * 1.5))
+	# jamais sous la pente derrière lui (le relief n'a de collisions
+	# qu'autour des gares)
+	if not premiere_personne:
+		var cp: Vector3 = camera.global_position
+		if cp.y < relief.hauteur_sol(cp.x, cp.z) + 0.7:
+			cam_pitch = maxf(cam_pitch - delta * 1.5, -1.2)
+
+
+## Pilote à ski (bancs, mode AUTO) : vise le point suivant de `chemin`,
+## ralentit avant de tourner.
+func _pilote_ski() -> Vector2:
+	var cible: Vector3 = chemin[0]
+	var vers: Vector3 = cible - global_position
+	vers.y = 0.0
+	if vers.length() < 14.0:
+		chemin.pop_front()
+		return Vector2.ZERO
+	var e: float = wrapf(atan2(-vers.x, -vers.z) - _cap_ski, -PI, PI)
+	var vit: float = _v_ski.length()
+	var v_but: float = lerpf(vitesse_pilote, 4.0, clampf(absf(e) / 1.2, 0.0, 1.0))
+	var y: float = 0.0
+	if vit > v_but:
+		y = -clampf((vit - v_but) / 3.0, 0.3, 1.0)
+	elif vit < 2.5:
+		y = 1.0
+	return Vector2(clampf(-e * 2.0, -1.0, 1.0), y)
 
 
 # --- apparence et caméra -----------------------------------------------------------

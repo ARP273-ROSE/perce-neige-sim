@@ -32,6 +32,7 @@ var udp: PacketPeerUDP = null
 var _retour: PacketPeerUDP = null
 var _last_skieur: int = -1
 var _last_skieur_vue: int = -1
+var _last_skieur_ski: int = -1
 var port: int = DEFAULT_PORT
 var physics: TrainPhysics = null
 var fault_manager: FaultManager = null
@@ -242,6 +243,12 @@ func _apply(d: Dictionary) -> void:
 			main.skieur_externe(sk == 1)
 	if main != null and main.get("skieur") != null:
 		main.skieur.touches_ext = _i(d, "skieur_touches", 0)
+	# chausser / déchausser (touche E du PC en mode skieur) : compteur
+	var ns: int = _i(d, "skieur_ski", 0)
+	if ns != _last_skieur_ski:
+		if _last_skieur_ski >= 0 and main != null and main.has_method("basculer_ski"):
+			main.basculer_ski()
+		_last_skieur_ski = ns
 	# 1re / 3e personne (touche V du PC en mode skieur) : compteur d'appuis
 	var nv: int = _i(d, "skieur_vue", 0)
 	if nv != _last_skieur_vue:

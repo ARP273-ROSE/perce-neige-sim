@@ -7008,6 +7008,7 @@ class GameWidget(QWidget):
         # incarne un skieur dans la 3D ; le PC garde la rame (AUTO)
         self._skieur = False
         self._skieur_vue_n = 0                  # appuis sur V (1re / 3e pers.)
+        self._skieur_ski_n = 0                  # appuis sur E (chausser)
         self._skieur_etat = (False, False, 0)   # dedans, retenue, écoute
         self._skieur_heures = False             # force_any_hours avant
         self.new_trip(first=True)
@@ -7870,6 +7871,7 @@ class GameWidget(QWidget):
                 state_dict["skieur"] = self._skieur
                 state_dict["skieur_touches"] = self._skieur_touches()
                 state_dict["skieur_vue"] = self._skieur_vue_n
+                state_dict["skieur_ski"] = self._skieur_ski_n
                 self._godot_bridge.send_state(state_dict)
             self._autopilot_tick(dt)
             self._advance_fault_phase(dt)
@@ -8504,6 +8506,8 @@ class GameWidget(QWidget):
             # simulées) gardent leur rôle.
             if k == Qt.Key.Key_V and not ev.isAutoRepeat():
                 self._skieur_vue_n += 1
+            if k == Qt.Key.Key_E and not ev.isAutoRepeat():
+                self._skieur_ski_n += 1         # chausser / déchausser
             self._key_state.add(k)
             ev.accept()
             return
@@ -15458,8 +15462,8 @@ class GameWidget(QWidget):
                          "vue cabine : off → dessinée → 3D")),
                 ("O", T("3D view: cabin / ext. / machines",
                         "vue 3D : cabine / ext. / machines")),
-                ("F9", T("skier in the 3D view (ZQSD, Shift, V)",
-                         "skieur dans la vue 3D (ZQSD, Maj, V)")),
+                ("F9", T("skier in the 3D view (ZQSD, Shift, V, E skis)",
+                         "skieur dans la vue 3D (ZQSD, Maj, V, E skis)")),
             ]),
             (T("System", "Système"), [
                 ("P / Esc", T("pause / resume", "pause / reprise")),
@@ -15509,6 +15513,8 @@ class GameWidget(QWidget):
               "Vue cabine 3D : cliquez les boutons du pupitre (portes, éclairage, klaxon, ±VITE, MONTÉE, arrêts) — ils agissent comme les touches."),
             T("F9 skier: walk the stations (ZQSD/arrows, Shift runs, V 1st/3rd person), board, ride; the line runs by itself and waits for you.",
               "F9 skieur : marchez dans les gares (ZQSD/flèches, Maj pour courir, V 1re/3e pers.), montez, voyagez ; la ligne tourne seule et vous attend."),
+            T("Skiing: outside on the snow, E puts the skis on. Q/D turn, Z pushes, S snowplough, Shift tuck; marked pistes, Kevin's ghost to beat down to Val Claret.",
+              "Ski : dehors sur la neige, E pour chausser. Q/D tourner, Z pousser, S chasse-neige, Maj schuss ; pistes balisées, le fantôme de Kevin à battre jusqu'à Val Claret."),
             T("F4: 3D cabin view. On Linux Wayland the app switches to XWayland to embed it; PERCE_NEIGE_KEEP_WAYLAND=1 keeps Wayland (separate window).",
               "F4 : vue cabine 3D. Sous Linux Wayland l'application passe en XWayland pour l'intégrer ; PERCE_NEIGE_KEEP_WAYLAND=1 pour rester en Wayland (fenêtre séparée)."),
         ]

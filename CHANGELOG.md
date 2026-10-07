@@ -7,6 +7,60 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.17.0** — le ski : chausser en haut, descendre les pistes balisées
+jusqu'à Val Claret, contre le fantôme des descentes de Kevin (suivi :
+SKIEUR.md).
+- Kevin : « arrivé en haut, il est capable de skier sur le décor pour
+  redescendre ; tu as les trajectoires de pistes sur les plans des pistes ;
+  tu me mets de la neige sur la piste » ; « tu as balisé les pistes ? » ;
+  « je t'ai mis mes trajectoires GPX, si jamais ça peut t'aider ».
+- **L'hiver** (en mode skieur) : la photographie aérienne de l'IGN est
+  d'été. Le relief passe sous la neige, sauf la roche des pentes de plus de
+  37° environ et les fonds sous 1 800 m.
+  - Relief ombré par le soleil des gares, pour lire les pentes.
+  - Pistes damées d'un blanc net, hors-piste gris bleuté, grain de neige
+    près de l'œil.
+  - Horizon clair, skieur éclairé par le soleil (il était à contre-jour).
+- **Pistes d'OpenStreetMap** (`tools_pistes.py`) : 248 tracés et 45
+  surfaces de piste sur toute l'emprise du relief ; les itinéraires
+  hors-piste ne sont ni damés ni balisés.
+  - Neige damée sur 30 m de large autour de l'axe des pistes.
+  - **5 667 jalons**, un de chaque côté tous les 40 m, de la couleur de la
+    piste (verte, bleue, rouge, noire).
+  - En haut de l'écran : vitesse et piste sous les skis (« 54 km/h ·
+    Double M (rouge) »).
+- **Chausser** : bouton CHAUSSER, touche E (aussi sur le PC), dehors sur la
+  neige. Refusé dans une gare ou une rame.
+- **La glisse**, posée exactement sur le relief affiché :
+  - la pesanteur le long de la pente ; les carres absorbent ce qui part en
+    travers des skis ;
+  - frottement de la neige damée (μ = 0,05), traînée de l'air (moindre en
+    schuss) ;
+  - virages d'autant plus larges que l'on va vite (6,5 m/s² au plus) ;
+  - chasse-neige, pas de patineur (3 m/s sur le plat), montée en canard ;
+  - arrêt par les murs des gares.
+  - Commandes : Q / D (ou joystick) pour tourner, Z pour pousser, S pour
+    le chasse-neige, Maj ou SCHUSS pour le schuss. La caméra se place
+    derrière les skis.
+- **Le fantôme de Kevin** (`tools_fantomes.py`) : ses 5 descentes réelles
+  du 26 au 28/04/2026, de la gare du glacier à Val Claret, de 4 min 45 à
+  10 min 15.
+  - Le dépôt n'en garde que les positions lissées, une par seconde, et le
+    temps relatif : ni date, ni heure, ni altitude GPS.
+  - Les traces qui montent d'abord au glacier partent du point le plus
+    proche de la gare après le haut.
+  - Le fantôme, un skieur bleu translucide, part quand on s'élance de son
+    point de départ. À l'arrivée, à 200 m de la gare de Val Claret :
+    « Arrivée : 9 min 04 s — fantôme 7 min 39 s (+85 s) ».
+- **La boucle** : en bas, on déchausse, on marche jusqu'à la gare, et
+  l'on remonte en funiculaire.
+- Vérifié :
+  - nouveau banc `bench_ski_3d.gd` : refus dans la rame ; hiver et
+    jalons ; descente complète sur la trace n° 4, toujours au sol, 54 km/h
+    au plus ; course contre le fantôme ; déchaussé, il marche ;
+  - 16 bancs Godot, 104 tests PC ;
+  - rendus `shot_ski.gd`.
+
 **v1.16.5** — documentation à jour de tout ce qui est arrivé depuis
 septembre : manuel, aide F1, menu Aide, README.
 - Kevin : « je pense que tu peux compléter manuel, menu aide, menu F1,

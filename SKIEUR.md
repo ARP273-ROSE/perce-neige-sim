@@ -62,18 +62,33 @@ piste. »
 - Escalier au bout de la terrasse du haut, jusqu'à la neige (v1.16.4).
 - Banc : 14 étapes.
 
-### Étape 2 — le ski : à faire
+### Étape 2 — le ski (v1.17.0) : fait
 
-- Neige sur les pistes : tracés OpenStreetMap (161 tronçons autour de Tignes,
-  dont Glacier, Double M, Leisse, Rimaye, Génépy, Face), en hiver sur le relief.
-- Ombrage du relief (normales) pour lire les pentes.
-- Glisse : chausser / déchausser, virages, chasse-neige, vitesse ; le relief
-  entier en collision sur la zone skiable.
-- Descente jusqu'à Val Claret, retour à pied dans la gare : la boucle.
-- **Fantôme** des descentes de Kevin : 5 descentes glacier → Val Claret sur ses
-  traces GPS des 26, 27 et 28/04/2026, de 7 à 12 minutes chacune. Dans le jeu :
-  positions et temps relatif seulement. Les traces brutes restent hors du
-  dépôt (privées), dans `Workspace/Personnel/GPS/2026-04_Tignes/`.
+- **Hiver** en mode skieur : neige sur le relief (roche au-dessus de ~37°,
+  rien sous 1 800 m), relief ombré, pistes damées, horizon clair
+  (`relief_builder.gd`, `en_hiver()` des shaders ; `set_hiver()`).
+- **Pistes** d'OpenStreetMap (`tools_pistes.py` → `textures/pistes_masque.png`
+  et `scripts/pistes_donnees.gd`) : 248 tracés, 45 surfaces ; jalons de la
+  couleur de la piste tous les 40 m (`domaine_skiable.gd`) ; vitesse et piste
+  sous les skis en haut de l'écran.
+- **Glisse** (`skieur_joueur.gd`, `_glisser`) : chausser / déchausser (E,
+  bouton CHAUSSER) dehors sur la neige ; posé sur le sol affiché
+  (`ReliefBuilder.hauteur_sol`) ; pesanteur, carres, neige, air, virages
+  limités à 6,5 m/s², chasse-neige, pas de patineur ; arrêt par les murs des
+  gares. Pilote à ski (`chemin`, `vitesse_pilote`) pour les bancs et le futur
+  mode AUTO.
+- **Fantôme** (`tools_fantomes.py` → `scripts/fantomes_donnees.gd`,
+  `fantome_ski.gd`) : 5 descentes réelles de Kevin (26-28/04/2026), de 4 min 45
+  à 10 min 15 ; il part quand on s'élance de son départ ; chrono à l'arrivée
+  (200 m de la gare de Val Claret). Dans le dépôt : positions lissées et temps
+  relatif seulement ; les traces brutes restent hors du dépôt (privées), dans
+  `Workspace/Personnel/GPS/2026-04_Tignes/`.
+- **La boucle** : en bas on déchausse, on marche jusqu'à la gare, on remonte en
+  funiculaire.
+- Banc `bench_ski_3d.gd` ; captures `shot_ski.gd`.
+
+Reste à voir : les remontées mécaniques (pas de télésiège : on remonte par le
+funiculaire), les sauts (il reste collé au sol), les chutes.
 
 ### Étape 3 — finitions : à faire
 
