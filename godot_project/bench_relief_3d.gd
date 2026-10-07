@@ -1,6 +1,6 @@
 ## Banc de la vue extérieure (07/10/2026) : le relief est affiché (opaque),
-## le tunnel et les deux rames se voient à travers lui, le trait du tunnel
-## va d'un bout à l'autre, et la caméra passe sous la voie.
+## le tunnel se voit à travers lui (trait ambre, d'un bout à l'autre), les
+## rames n'ont aucune silhouette, et la caméra passe sous la voie.
 ##   godot --headless --path godot_project -s bench_relief_3d.gd
 extends SceneTree
 
@@ -55,8 +55,8 @@ func _tick() -> void:
 	_verif("relief affiché en vue extérieure", relief.visible)
 	_verif("caméra sous la voie (site −0,8 rad)", cam.y < c.y - 20.0,
 		"caméra %.0f m sous la rame" % (c.y - cam.y))
-	# 2. tunnel et rames vus à travers le relief (opaque) : passe « rayons
-	# X » du trait sans test de profondeur, silhouette des deux rames
+	# 2. tunnel vu à travers le relief (opaque) : passe « rayons X » du
+	# trait sans test de profondeur ; pas de silhouette sur les rames
 	var tr_m: ShaderMaterial = null
 	var ruban0: MeshInstance3D = relief.get_node_or_null("TraitTunnel")
 	if ruban0 != null:
@@ -64,15 +64,14 @@ func _tick() -> void:
 	var rx: ShaderMaterial = tr_m.next_pass as ShaderMaterial if tr_m != null else null
 	_verif("trait du tunnel : passe à travers la montagne", rx != null
 		and rx.shader.code.contains("depth_test_disabled"))
-	var silhouettes: int = 0
+	var traces: int = 0
 	for cb in [cab, _main.get("cabin_ghost")]:
 		if cb == null:
 			continue
 		for n in (cb as Cabin).mesh_root.find_children("*", "GeometryInstance3D", true, false):
 			if (n as GeometryInstance3D).material_overlay != null:
-				silhouettes += 1
-				break
-	_verif("les deux rames se voient à travers le relief", silhouettes == 2)
+				traces += 1
+	_verif("aucune silhouette sur les rames (retirée le 07/10/2026)", traces == 0)
 	# 3. trait du tunnel de bout en bout
 	var ruban: MeshInstance3D = relief.get_node_or_null("TraitTunnel")
 	var aabb: AABB = ruban.get_aabb() if ruban != null else AABB()
