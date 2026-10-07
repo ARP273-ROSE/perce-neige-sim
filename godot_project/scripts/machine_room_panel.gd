@@ -13,6 +13,8 @@ extends Control
 ## câble, temps de trajet et passagers.
 
 @export var panel_width: float = 260.0
+const HAUT: float = 80.0
+const HAUTEUR: float = 372.0          # vue de la machinerie, moteurs, lectures
 @export var bg_color: Color = Color(0.06, 0.07, 0.10, 0.92)
 @export var bezel_color: Color = Color(0.45, 0.42, 0.35)
 @export var label_color: Color = Color(0.85, 0.88, 0.92)
@@ -29,16 +31,16 @@ var _redraw_slot: int = -1
 
 
 func _ready() -> void:
-	# Ancre à droite, en haut, jusqu'à ~80% de la hauteur (pour laisser place
-	# au cockpit panel en bas)
+	# Colonne de droite, en haut, à la hauteur de son contenu ; les
+	# instruments de conduite (CockpitPanel) suivent dessous (07/10/2026)
 	anchor_left = 1.0
 	anchor_top = 0.0
 	anchor_right = 1.0
-	anchor_bottom = 1.0
+	anchor_bottom = 0.0
 	offset_left = -panel_width
-	offset_top = 80.0
+	offset_top = HAUT
 	offset_right = 0.0
-	offset_bottom = -220.0   # laisse 200px pour le cockpit panel + 20px de marge
+	offset_bottom = HAUT + HAUTEUR
 
 
 func setup(p: TrainPhysics, fm: FaultManager) -> void:
@@ -76,7 +78,7 @@ func _draw() -> void:
 
 	# 2. Bloc des 3 groupes moteurs
 	var y_bank: float = room.end.y + 8.0
-	var bank_h: float = minf(130.0, maxf(90.0, h - y_bank - 70.0))
+	var bank_h: float = minf(130.0, maxf(90.0, h - y_bank - 90.0))
 	_draw_motor_bank(10.0, y_bank, w - 20.0, bank_h)
 
 	# 3. Lectures

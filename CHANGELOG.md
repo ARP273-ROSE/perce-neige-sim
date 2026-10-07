@@ -7,6 +7,73 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.15.80** — vue extérieure en « rayons X » ; pupitre couché et
+complet ; instruments dans la colonne de droite ; gares éclairées sur la
+PWA.
+- **Vue extérieure** (« au lieu d'un éclaté, diminue l'opacité du sol
+  autour du tunnel pour le voir au travers de la montagne et en entier ;
+  et je n'arrive plus à passer sous la voie ») :
+  - l'écorché est remplacé par un **couloir translucide**. Le sol est à
+    25 % d'opacité jusqu'à 120 m de l'axe du tunnel, en plan, et
+    redevient opaque à 450 m ;
+  - deux passes : opaque hors du couloir, translucide et sans profondeur
+    dedans. Le tunnel, les rames et les gares se voient à travers ;
+  - le **tunnel entier** est tracé d'un trait ambre, d'un bout à l'autre.
+    Sa largeur est constante à l'écran ; il s'efface près de la caméra,
+    où l'on voit le vrai tube ;
+  - **la caméra passe sous la voie** (site jusqu'à −1,2 rad) et sous la
+    montagne :
+    - le dessous du relief s'affiche assombri ;
+    - sous l'horizon, le « ciel » prend la couleur de la roche ;
+    - les flancs du bloc de relief ne se voient plus de l'intérieur ;
+  - PWA : le ciel physique sortait noir en rendu Compatibility. En vue
+    extérieure, un ciel procédural (dégradé bleu, roche sous l'horizon)
+    le remplace.
+- **Pupitre** :
+  - « trop étiré en hauteur, abaisse la limite haute » : face couchée à
+    28° (au lieu de perpendiculaire au regard), plus basse, recentrée.
+    Proportions proches du vrai, voie dégagée ;
+  - **PORTES 1 à 6 = côté gauche en regardant vers le haut, 7 à 12 =
+    côté droit** :
+    - chaque groupe n'ouvre et ne ferme que son côté, dans les deux sens
+      de marche ;
+    - le dernier côté fermé lance la vraie séquence (annonce, buzzer,
+      clip) ;
+    - l'arrivée en gare et le bouton PORTES ouvrent les deux ;
+  - **coups-de-poing** : le gros à gauche = URGENCE, le petit à droite =
+    ARRÊT ÉLEC. Ils restent enfoncés tant que l'arrêt dure, et un nouvel
+    appui les relâche ;
+  - **arrêt électrique** dans la PWA (port de `electric_stop` du PC) :
+    consigne ramenée à 0 sur la rampe régénérative de 0,45 m/s² (de
+    12 m/s : arrêt doux en 27 s, sans frein de voie), départ refusé tant
+    qu'il est engagé.
+- **Interface PWA** (« la planche de commande est masquée par le bandeau
+  du bas ; déplace-le à droite, vire ÉTATS ») :
+  - les instruments passent dans la colonne de droite, sous la salle des
+    machines : vitesse + E-STOP + puissance, tension câble, consigne,
+    profil de ligne ;
+  - le panneau ÉTATS est supprimé ;
+  - le profil ne dépasse plus 0,65 × sa largeur (« trop vertical, trop
+    déformé » sur iPad) ;
+  - sur un écran de 900 de haut, tout est réduit d'un même facteur ;
+  - PORTES et PRÊT/DÉPART descendent dans la colonne de gauche : au
+    centre, ils masquaient l'écran du pupitre.
+- **Gares dans le noir sur la PWA** (iPad, phares éteints) : le rendu
+  Compatibility n'a ni éclairage indirect ni plus de 8 lampes par objet.
+  - Les matériaux des gares reçoivent une luminosité propre (0,4 × leur
+    couleur), qui n'éclaire pas la cabine.
+  - Les néons des quais et du hall sont doublés.
+  - Une lumière ambiante plus forte s'applique quand la caméra cabine est
+    en gare.
+  - Hall du haut : luminosité moyenne 36 → 56 ; gare du bas : 68.
+- Vérifié :
+  - `bench_pupitre_3d` : portes par côté, rame montante et descendante ;
+    coups-de-poing ; arrêt électrique en ligne ; départ refusé ;
+  - `bench_relief_3d` : sol translucide à l'aplomb du tunnel de bout en
+    bout, opaque à 2 km ; trait du tunnel complet ; caméra sous la voie ;
+  - 14 bancs Godot, 99 tests PC, parité PWA ;
+  - rendus Vulkan et Compatibility, en 4:3 et 16:9.
+
 **v1.15.79** — vue extérieure refondue en écorché de la montagne ; pupitre
 redressé face au regard, commandes actionnables.
 - **Vue extérieure** (« 3 m après le départ du bas, ça passe à la vue

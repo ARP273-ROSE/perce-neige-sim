@@ -10,8 +10,8 @@ extends Node3D
 ##   - à gauche, sur un cadre noir : l'écran tactile Pro-face (EcranProface,
 ##     rendu en direct dans une texture, 4 fois par seconde) ;
 ##   - à droite, la plaque à boutons, disposée comme sur la photo :
-##       PORTES 1 à 6 : OUVERTURE (blanc), FERMETURE (vert)
-##       PORTES 7 à 12 : OUVERTURE (blanc), FERMETURE (vert)
+##       PORTES 1 à 6 (côté gauche en regardant vers le haut) et PORTES
+##       7 à 12 (côté droit) : OUVERTURE (blanc), FERMETURE (vert)
 ##       PRÊT (voyant vert) · MONTÉE · −VITE/+VITE · EN MARCHE (clé)
 ##       KLAXON        · ÉCLAIRAGE : CABINE (0/1), COMPARTIMENT, SECOURS
 ##     Deuxième rangée d'après Kevin (06/10/2026) : PRÊT n'est qu'un
@@ -26,18 +26,21 @@ extends Node3D
 ## sélecteur CABINE sur 0 ou 1, KLAXON enfoncé quand on klaxonne.
 ## Repère : celui de l'intérieur de la cabine (avant = −Z).
 ##
-## La face est PERPENDICULAIRE AU REGARD du conducteur (demande de Kevin du
-## 06/10/2026 : « incliner ce panneau pour être perpendiculaire à la ligne
-## du regard, même si ce n'est pas exact, pour que je puisse bien voir ») —
-## sur la rame elle est presque à plat ; ici redressée à ≈ 67°.
+## La face est redressée vers le conducteur (Kevin, 06/10/2026 : « incliner
+## ce panneau pour être perpendiculaire à la ligne du regard, même si ce
+## n'est pas exact, pour que je puisse bien voir ») — sur la rame elle est
+## presque à plat. Perpendiculaire au regard (≈ 62°), elle paraissait
+## « trop étirée en hauteur » et masquait la voie (07/10/2026) : elle est
+## couchée à INCLINAISON_MAX, plus bas, et reste lisible (≈ 35° du regard).
 ## Les commandes s'actionnent au clic ou au doigt en vue cabine (« et
 ## faudrait pouvoir appuyer sur ces boutons ») : commande_sous() trouve la
 ## commande visée, appuyer() l'enfonce ; main.gd fait l'action.
 
 const R_TUBE: float = 0.13
 const LONG_TUBE: float = 1.10
-const LEVEE: float = 0.04              # face redressée, posée devant le tube…
-const AVANCEE: float = 0.10            # … et avancée vers le conducteur : la voie reste dégagée
+const LEVEE: float = 0.005             # face posée devant le tube…
+const AVANCEE: float = 0.05            # … et avancée vers le conducteur : la voie reste dégagée
+const INCLINAISON_MAX: float = 0.49    # ≈ 28° : proportions et vue sur la voie
 const R_COMMANDE: float = 0.028        # rayon de la zone d'appui (doigt)
 const X_ECRAN: float = -0.10           # centre du cadre de l'écran
 const X_PLAQUE: float = 0.21           # centre de la plaque à boutons
@@ -76,8 +79,9 @@ func construire(z_console: float, y_top: float, lumieres: Array,
 	var z_face: float = z_console + AVANCEE
 	if oeil.z == INF:
 		oeil.z = z_console + 0.65
-	# normale de la face (0, cos a, sin a) dirigée vers l'œil
-	inclinaison = atan2(oeil.z - z_face, oeil.y - y_face)
+	# normale de la face (0, cos a, sin a) tournée vers l'œil, sans dépasser
+	# INCLINAISON_MAX
+	inclinaison = minf(atan2(oeil.z - z_face, oeil.y - y_face), INCLINAISON_MAX)
 	var gris: StandardMaterial3D = _mat(Color(0.70, 0.71, 0.72), 0.6, 0.1)
 	var plaque_mat: StandardMaterial3D = _mat(Color(0.62, 0.62, 0.59), 0.75, 0.0)   # gris clair mat (photo)
 	var noir: StandardMaterial3D = _mat(Color(0.07, 0.07, 0.08), 0.5, 0.2)
@@ -207,8 +211,9 @@ func _construire_boutons(chrome: StandardMaterial3D, noir: StandardMaterial3D,
 
 ## Plaque de gauche (photo 095119, ajout demandé par Kevin le 06/10/2026 :
 ## « à gauche de l'écran il y a les boutons rouges ») : dans un cadre, un
-## poussoir clair puis deux coups-de-poing rouges ; dessous à gauche, une
-## clé à étiquette rouge. Libellés illisibles sur la photo : sans texte.
+## poussoir clair puis deux coups-de-poing rouges — URGENCE (le gros, à
+## gauche) et ARRÊT ÉLEC (le petit, à droite) ; dessous à gauche, une clé à
+## étiquette rouge. Libellés illisibles sur la photo : sans texte.
 func _construire_gauche(chrome: StandardMaterial3D, noir: StandardMaterial3D,
 		filet: StandardMaterial3D) -> void:
 	var z_g: float = -0.030
@@ -218,9 +223,12 @@ func _construire_gauche(chrome: StandardMaterial3D, noir: StandardMaterial3D,
 	_sur_face(_cylindre(chrome, 0.0175, 0.008), Vector2(xs[0], z_g), 0.004)
 	_commande("clair", Vector2(xs[0], z_g), _sur_face(_cylindre(clair, 0.0140, 0.009), Vector2(xs[0], z_g), 0.006))
 	var rouge: StandardMaterial3D = _mat(Color(0.78, 0.07, 0.05), 0.4, 0.0)
+	# à gauche le plus gros = URGENCE, à droite le plus petit = ARRÊT ÉLEC
+	# (Kevin, 07/10/2026) ; verrouillés enfoncés tant que l'arrêt dure
 	for k in range(2):
 		var p: Vector2 = Vector2(xs[1 + k], z_g)
-		_sur_face(_cylindre(noir, 0.022, 0.010), p, 0.005)
+		var r_tete: float = 0.024 if k == 0 else 0.018
+		_sur_face(_cylindre(noir, r_tete + 0.002, 0.010), p, 0.005)
 		# champignon : tige et tête bombée
 		var tete: Node3D = Node3D.new()
 		_sur_face(tete, p, 0.010)
@@ -229,8 +237,8 @@ func _construire_gauche(chrome: StandardMaterial3D, noir: StandardMaterial3D,
 		tete.add_child(tige)
 		var dome: MeshInstance3D = MeshInstance3D.new()
 		var sp: SphereMesh = SphereMesh.new()
-		sp.radius = 0.021
-		sp.height = 0.020
+		sp.radius = r_tete
+		sp.height = r_tete * 0.95
 		sp.is_hemisphere = true
 		sp.radial_segments = 20
 		sp.rings = 6
@@ -313,7 +321,7 @@ func appuyer(nom: String, enfonce: bool) -> void:
 			if nom == "marche":
 				en_marche = n.rotation.y != 0.0
 				_t_ecran = 0.0
-	elif nom != "cabine":
+	elif nom != "cabine" and not nom.begins_with("rouge_"):
 		n.position.y = (c[2] as float) - (0.003 if enfonce else 0.0)
 
 
@@ -329,9 +337,11 @@ func mettre_a_jour(ph: TrainPhysics, dt: float, vehicule: int, ecran_visible: bo
 			and not ph._fermeture_seule)
 	var pret: bool = ph.pret_externe == 1 if ph.pret_externe >= 0 \
 		else (depart and not ph.emergency and not ph.cable_rupture)
+	# PORTES 1 à 6 = côté gauche en regardant vers le haut, 7 à 12 = droite
 	for g in range(2):
-		_allumer("ouverture_%d" % g, en_marche and ouvertes)
-		_allumer("fermeture_%d" % g, en_marche and not ouvertes)
+		var cote: bool = ouvertes and (ph.portes_cotes & (1 << g)) != 0
+		_allumer("ouverture_%d" % g, en_marche and cote)
+		_allumer("fermeture_%d" % g, en_marche and not cote)
 	_allumer("pret", en_marche and pret)
 	_allumer("compartiment", en_marche and ph.lights_cabin)
 	_allumer("secours", en_marche)
@@ -343,6 +353,12 @@ func mettre_a_jour(ph: TrainPhysics, dt: float, vehicule: int, ecran_visible: bo
 			_mat_ecran.albedo_color = Color.WHITE if en_marche else Color(0.02, 0.02, 0.025)
 	if _cabine_bouton != null:
 		_cabine_bouton.rotation.y = -0.6 if ph.lights_cabin else 0.6
+	# coups-de-poing verrouillés enfoncés : URGENCE, ARRÊT ÉLEC
+	for k in range(2):
+		var c: Array = _commandes.get("rouge_%d" % (k + 1), [])
+		if not c.is_empty():
+			var engage: bool = ph.emergency if k == 0 else ph.arret_elec
+			(c[1] as Node3D).position.y = (c[2] as float) - (0.006 if engage else 0.0)
 	if _klaxon != null:
 		_klaxon.position.y = 0.0025 if (ph.horn or _enfoncee == "klaxon") else 0.0055
 	if not ecran_visible or ecran == null:

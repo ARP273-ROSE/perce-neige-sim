@@ -1,13 +1,25 @@
 class_name CockpitPanel
 extends Control
-## Console cockpit Von Roll — bandeau bas de l'écran (1600×180).
-## Inspiré de la vraie console du FUNI284 (Tignes, vidéo cockpit HD) :
-##   - E-STOP rouge à champignon (gauche)
-##   - Speedometer analogique (cadran central-gauche)
-##   - Jauge tension câble horizontale avec seuils nominal/warning/breakage
-##   - Jauge puissance moteur verticale (kW)
-##   - Grille de 8 LEDs indicateurs (portes, phares, urgence, etc.)
-##   - Mini-profil de ligne (altitude vs distance) à droite
+## Instruments de conduite Von Roll — COLONNE DE DROITE, sous le panneau
+## de la salle des machines (07/10/2026 ; avant : bandeau en bas de
+## l'écran, 1600×200). Retour de Kevin sur iPad : « la planche de commande
+## est masquée par les données du bandeau inférieur, que tu peux déplacer
+## à droite ; tu peux virer le panneau ÉTATS pour que ça rentre ».
+## De haut en bas :
+##   - cadran de VITESSE, voyant E-STOP, jauge de PUISSANCE / RÉGEN ;
+##   - jauge de TENSION CÂBLE (seuils nominal / alerte, rupture hors échelle) ;
+##   - CONSIGNE, position, altitude, pente, panne en cours ;
+##   - mini-PROFIL DE LIGNE (altitude vs distance, les deux rames).
+## Sur un écran bas (900 de haut), tout est réduit d'un même facteur ; sur
+## un iPad, le profil prend la hauteur restante.
+
+const LARGEUR: float = 260.0
+const H_A: float = 160.0      # vitesse + puissance
+const H_B: float = 92.0       # tension
+const H_C: float = 100.0      # consigne
+const H_D_MIN: float = 120.0  # profil
+const H_D_MAX: float = 160.0  # ≈ 0,65 × sa largeur : pente lisible, pas étirée
+const ECART: float = 6.0
 
 @export var panel_height: float = 200.0
 @export var bg_color: Color = Color(0.08, 0.08, 0.10, 0.95)
@@ -23,15 +35,15 @@ var driver_is_rame2: bool = false
 
 
 func _ready() -> void:
-	# Le panel occupe toute la largeur en bas de l'écran
-	anchor_left = 0.0
-	anchor_top = 1.0
+	# colonne de droite, sous la salle des machines, jusqu'en bas
+	anchor_left = 1.0
+	anchor_top = 0.0
 	anchor_right = 1.0
 	anchor_bottom = 1.0
-	offset_left = 0.0
-	offset_top = -panel_height
+	offset_left = -LARGEUR
+	offset_top = MachineRoomPanel.HAUT + MachineRoomPanel.HAUTEUR + 8.0
 	offset_right = 0.0
-	offset_bottom = 0.0
+	offset_bottom = -8.0
 	# Construit la liste des points du profil pour le mini-graph altitude
 	_build_slope_profile_points()
 
@@ -77,64 +89,55 @@ func _draw() -> void:
 		return
 	var w: float = size.x
 	var h: float = size.y
-	# Fond + bezel métallique
-	draw_rect(Rect2(Vector2.ZERO, Vector2(w, h)), bg_color, true)
-	draw_rect(Rect2(Vector2.ZERO, Vector2(w, h)), bezel_color, false, 2.0)
-	# Ligne séparatrice du haut (bordure dorée style cockpit)
+	# Empilement vertical ; écran trop bas → tout réduit d'un même facteur.
+	# Le profil ne dépasse pas 0,55 × sa largeur (il s'étirait en hauteur
+	# sur iPad, « trop vertical, trop déformé ») : le panneau s'arrête là.
+	var fixe: float = ECART * 5.0 + H_A + H_B + H_C
+	var k: float = 1.0
+	var h_d: float = minf(h - fixe, H_D_MAX)
+	if h_d < H_D_MIN:
+		k = h / (fixe + H_D_MIN)
+		h_d = H_D_MIN
+	var h_tot: float = (fixe + h_d) * k
+	# Fond + bezel métallique, liseré doré en haut
+	draw_rect(Rect2(Vector2.ZERO, Vector2(w, h_tot)), bg_color, true)
+	draw_rect(Rect2(Vector2.ZERO, Vector2(w, h_tot)), bezel_color, false, 2.0)
 	draw_line(Vector2(0, 0), Vector2(w, 0), Color(0.95, 0.75, 0.20, 0.85), 2.5)
-
-	# Layout horizontal : zones successives
-	var pad: float = 14.0
-	var x: float = pad
-
-	# 1. E-STOP button (zone 90 px)
-	x = _draw_estop(x + 30.0, h * 0.5) + 30.0
-
-	# 2. Speedometer (zone 200 px)
-	_draw_speedometer(x + 100.0, h * 0.5)
-	x += 200.0
-
-	# 3. Tension gauge horizontale (zone 280 px)
-	_draw_tension_gauge(x + 10.0, pad, 270.0, h - 2.0 * pad)
-	x += 290.0
-
-	# 4. Power gauge verticale (zone 80 px)
-	_draw_power_gauge(x + 10.0, pad, 70.0, h - 2.0 * pad)
-	x += 90.0
-
-	# 5. Status LEDs grid 4×2 (zone 240 px)
-	_draw_status_leds(x + 10.0, pad, 220.0, h - 2.0 * pad)
-	x += 240.0
-
-	# 6. Setpoint + direction + altitude (zone 180 px)
-	_draw_setpoint_panel(x + 10.0, pad, 170.0, h - 2.0 * pad)
-	x += 190.0
-
-	# 7. Profil de ligne (zone restante, max 320 px)
-	var profile_w: float = clampf(w - x - pad, 200.0, 320.0)
-	_draw_slope_profile(x + 10.0, pad, profile_w, h - 2.0 * pad)
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2(k, k))
+	var lw: float = w / k                 # largeur dans le repère réduit
+	var y: float = ECART
+	# 1. vitesse, E-STOP, puissance
+	var g_w: float = 70.0
+	_draw_speedometer((lw - g_w - ECART) * 0.5 + 4.0, y + 86.0, 58.0)
+	_draw_estop(20.0, y + 18.0)
+	_draw_power_gauge(lw - g_w - ECART, y, g_w, H_A)
+	y += H_A + ECART
+	# 2. tension du câble
+	_draw_tension_gauge(ECART, y, lw - 2.0 * ECART, H_B)
+	y += H_B + ECART
+	# 3. consigne, position, pente
+	_draw_setpoint_panel(ECART, y, lw - 2.0 * ECART, H_C)
+	y += H_C + ECART
+	# 4. profil de ligne
+	_draw_slope_profile(ECART, y, lw - 2.0 * ECART, h_d)
+	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 
 # ---------------------------------------------------------------------------
 # Composants
 # ---------------------------------------------------------------------------
 
-func _draw_estop(cx: float, cy: float) -> float:
-	# Anneau jaune
-	draw_circle(Vector2(cx, cy), 26.0, Color(0.85, 0.78, 0.18))
-	# Champignon rouge — change de teinte si emergency engaged
+## Voyant E-STOP (champignon rouge, sombre quand l'urgence est engagée).
+func _draw_estop(cx: float, cy: float) -> void:
+	draw_circle(Vector2(cx, cy), 13.0, Color(0.85, 0.78, 0.18))
 	var active: bool = physics != null and physics.emergency_brake
 	var col: Color = Color(0.50, 0.15, 0.10) if active else Color(0.85, 0.20, 0.15)
-	draw_circle(Vector2(cx, cy), 22.0, col)
-	# Reflet brillant (cercle clair en haut-gauche)
-	draw_circle(Vector2(cx - 6, cy - 6), 8.0, Color(1.0, 0.55, 0.40, 0.55))
-	# Label sous le bouton
-	_draw_text_center(Vector2(cx, cy + 38), "E-STOP", 11, Color(0.85, 0.85, 0.85))
-	return cx + 30.0
+	draw_circle(Vector2(cx, cy), 10.5, col)
+	draw_circle(Vector2(cx - 3, cy - 3), 4.0, Color(1.0, 0.55, 0.40, 0.55))
+	_draw_text_center(Vector2(cx, cy + 24), "E-STOP", 8, Color(0.85, 0.85, 0.85))
 
 
-func _draw_speedometer(cx: float, cy: float) -> void:
-	var radius: float = 70.0
+func _draw_speedometer(cx: float, cy: float, radius: float = 70.0) -> void:
 	# Bezel extérieur
 	draw_circle(Vector2(cx, cy), radius + 3.0, Color(0.35, 0.32, 0.28))
 	# Cadran sombre
@@ -163,8 +166,10 @@ func _draw_speedometer(cx: float, cy: float) -> void:
 	# Lecture digitale : m/s dans le cadran (zone libre sous le moyeu),
 	# km/h SOUS le cadran — l'ancien placement à 0.78×R tombait sur les
 	# graduations du bas (retour d'essai 2026-07-13 : valeurs confondues).
-	_draw_text_center(Vector2(cx, cy + radius * 0.48), "%.2f m/s" % v_roues, 13, Color(0.55, 1.0, 0.65))
-	_draw_text_center(Vector2(cx, cy + radius + 16.0), "%.0f km/h" % v_kmh, 11, Color(0.85, 0.88, 0.92))
+	# (cadran compact de la colonne : la lecture passe dessous, elle
+	# chevauchait les chiffres 26 et 43)
+	_draw_text_center(Vector2(cx, cy + radius + 16.0), "%.2f m/s · %.0f km/h" % [v_roues, v_kmh],
+		11, Color(0.55, 1.0, 0.65))
 	# Label
 	_draw_text_center(Vector2(cx, cy - radius - 12.0), "VITESSE", 11, label_color)
 
@@ -186,8 +191,8 @@ func _draw_tension_gauge(x: float, y: float, w: float, h: float) -> void:
 	var t_warn: float = PNConstants.T_WARN_DAN
 	var t_red: float = PNConstants.T_RED_DAN
 	var t_cur: float = physics.tension_dan_disp
-	var bar_y: float = y + 30.0
-	var bar_h: float = 24.0
+	var bar_y: float = y + 26.0
+	var bar_h: float = 20.0
 	var bar_w: float = w - 12.0
 	var bar_x: float = x + 6.0
 	# Fond zones colorées (proportionnelles aux seuils)
@@ -215,12 +220,12 @@ func _draw_tension_gauge(x: float, y: float, w: float, h: float) -> void:
 		col = Color(1.0, 0.30, 0.25)
 	elif t_cur >= t_warn:
 		col = Color(1.0, 0.85, 0.30)
-	_draw_text(Vector2(bar_x, y + h - 38.0),
+	_draw_text(Vector2(bar_x, bar_y + bar_h + 20.0),
 		"%.0f daN" % t_cur, 14, col)
 	# Seuils en petit
-	_draw_text(Vector2(bar_x, y + h - 18.0),
-		"NOM %d · ALERTE %d · RUPTURE %d (hors échelle)" % [int(t_nom), int(t_warn), int(PNConstants.T_BREAK_DAN)],
-		9, Color(0.65, 0.70, 0.75))
+	_draw_text(Vector2(bar_x, y + h - 8.0),
+		"NOM %d · ALERTE %d · RUPT. %d" % [int(t_nom), int(t_warn), int(PNConstants.T_BREAK_DAN)],
+		8, Color(0.65, 0.70, 0.75))
 
 
 func _draw_power_gauge(x: float, y: float, w: float, h: float) -> void:
@@ -269,44 +274,6 @@ func _draw_power_gauge(x: float, y: float, w: float, h: float) -> void:
 	_draw_text_center(Vector2(x + w * 0.5, y + h - 8.0), "/ %d" % int(p_max), 9, Color(0.65, 0.70, 0.75))
 
 
-func _draw_status_leds(x: float, y: float, w: float, h: float) -> void:
-	draw_rect(Rect2(Vector2(x, y), Vector2(w, h)), Color(0.04, 0.05, 0.07), true)
-	draw_rect(Rect2(Vector2(x, y), Vector2(w, h)), bezel_color, false, 1.2)
-	_draw_text(Vector2(x + 8, y + 14), "ÉTATS", 11, label_color)
-
-	# 8 LEDs (4 colonnes × 2 lignes)
-	# Format : [label, état_actuel, couleur_quand_actif]
-	var leds: Array = []
-	if physics != null:
-		leds = [
-			["TRACT", physics.trip_started and absf(physics.v) > 0.1, Color(0.20, 0.85, 0.35)],
-			["PORTES", not physics.doors_open, Color(0.20, 0.85, 0.35)],
-			["PHARES", physics.lights_head, Color(1.0, 0.95, 0.40)],
-			["CABINE", physics.lights_cabin, Color(1.0, 0.95, 0.40)],
-			["FREIN P", physics.maint_brake, Color(1.0, 0.55, 0.10)],
-			["FREIN U", physics.emergency_brake or physics.emergency, Color(1.0, 0.20, 0.18)],
-			["DIR HAUT" if physics.direction > 0 else "DIR BAS", true, Color(0.30, 0.75, 1.0)],
-			["VOYAGE", physics.trip_started, Color(0.85, 0.75, 0.30)],
-		]
-	var led_size: float = 12.0
-	var spacing_x: float = (w - 16.0) / 4.0
-	var spacing_y: float = (h - 38.0) / 2.0
-	for i in range(8):
-		var col_i: int = i % 4
-		var row_i: int = i / 4
-		var lx: float = x + 12.0 + col_i * spacing_x
-		var ly: float = y + 30.0 + row_i * spacing_y + 8.0
-		var led: Array = leds[i]
-		var col: Color = led[2] if led[1] else Color(0.18, 0.18, 0.20)
-		# Cercle LED
-		draw_circle(Vector2(lx + led_size * 0.5, ly + led_size * 0.5), led_size * 0.5, col)
-		# Reflet brillant
-		if led[1]:
-			draw_circle(Vector2(lx + led_size * 0.4, ly + led_size * 0.4), led_size * 0.18, Color(1, 1, 1, 0.5))
-		# Label à droite
-		_draw_text(Vector2(lx + led_size + 6.0, ly + led_size - 1.0), led[0], 10, label_color)
-
-
 func _draw_setpoint_panel(x: float, y: float, w: float, h: float) -> void:
 	draw_rect(Rect2(Vector2(x, y), Vector2(w, h)), Color(0.04, 0.05, 0.07), true)
 	draw_rect(Rect2(Vector2(x, y), Vector2(w, h)), bezel_color, false, 1.2)
@@ -314,31 +281,28 @@ func _draw_setpoint_panel(x: float, y: float, w: float, h: float) -> void:
 
 	# Bar horizontale 0-100%
 	var bar_x: float = x + 8.0
-	var bar_y: float = y + 30.0
+	var bar_y: float = y + 22.0
 	var bar_w: float = w - 16.0
-	var bar_h: float = 18.0
+	var bar_h: float = 16.0
 	draw_rect(Rect2(Vector2(bar_x, bar_y), Vector2(bar_w, bar_h)), Color(0.10, 0.10, 0.12), true)
 	var pct: float = physics.speed_cmd if physics != null else 0.0
 	var fill_w: float = bar_w * pct
 	draw_rect(Rect2(Vector2(bar_x, bar_y), Vector2(fill_w, bar_h)), Color(0.20, 0.65, 1.0), true)
 	draw_rect(Rect2(Vector2(bar_x, bar_y), Vector2(bar_w, bar_h)), Color(0.85, 0.88, 0.92), false, 1.0)
-	_draw_text_center(Vector2(bar_x + bar_w * 0.5, bar_y + 14.0), "%d %%" % int(pct * 100.0), 11, Color(1, 1, 1))
+	_draw_text_center(Vector2(bar_x + bar_w * 0.5, bar_y + 12.5), "%d %%" % int(pct * 100.0), 11, Color(1, 1, 1))
 
-	# Distance / altitude
+	# Position, altitude, pente
 	var alt_cur: float = SlopeProfile.altitude_at(physics.s)
-	_draw_text(Vector2(x + 8, y + 70.0), "POSITION", 10, label_color)
-	_draw_text(Vector2(x + 8, y + 88.0), "%.0f / %.0f m" % [
-		PNConstants.distance_compteur(physics.s, physics.direction), PNConstants.PARCOURS], 12, Color(0.85, 0.95, 1.0))
-	_draw_text(Vector2(x + 8, y + 106.0), "ALT %.0f m" % alt_cur, 11, Color(0.85, 0.95, 1.0))
-
-	# Slope (pente locale)
 	var grad: float = SlopeProfile.gradient_at(physics.s)
-	_draw_text(Vector2(x + 8, y + 130.0), "PENTE %.1f %%" % (grad * 100.0), 11, Color(0.80, 0.85, 0.90))
+	_draw_text(Vector2(x + 8, y + 56.0), "POSITION  %.0f / %.0f m" % [
+		PNConstants.distance_compteur(physics.s, physics.direction), PNConstants.PARCOURS], 11, Color(0.85, 0.95, 1.0))
+	_draw_text(Vector2(x + 8, y + 74.0), "ALT %.0f m  ·  PENTE %.1f %%" % [alt_cur, grad * 100.0],
+		11, Color(0.80, 0.88, 0.95))
 
 	# Panne courante (si active)
 	if fault_manager != null and fault_manager.is_active():
 		var fid: String = fault_manager.get_active_id()
-		_draw_text(Vector2(x + 8, y + 150.0), "PANNE: " + fid.to_upper(), 10, fault_manager.get_active_severity_color())
+		_draw_text(Vector2(x + 8, y + 92.0), "PANNE: " + fid.to_upper(), 10, fault_manager.get_active_severity_color())
 
 
 func _draw_slope_profile(x: float, y: float, w: float, h: float) -> void:

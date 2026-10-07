@@ -47,6 +47,8 @@ var lights_head: bool = false
 # embarqué ; dans la PWA, le klaxon et l'arrêt électrique n'existent pas et
 # « prêt » se déduit des portes (pret_externe = −1).
 var horn: bool = false
+## Arrêt électrique verrouillé (PC : tr.electric_stop ; PWA : coup-de-poing
+## ARRÊT ÉLEC du pupitre) : consigne ramenée à 0 à 0,45 m/s², départ refusé.
 var arret_elec: bool = false
 var pret_externe: int = -1
 var pret_autre_externe: bool = true
@@ -385,6 +387,10 @@ func step(dt: float) -> void:
 			door_leaves_open = false
 	else:
 		door_leaves_open = false
+	# Côtés ouverts : tout fermé, la prochaine ouverture (arrivée, bouton
+	# PORTES) ouvre les deux ; le pupitre peut n'en ouvrir qu'un
+	if not doors_open and not door_leaves_open:
+		portes_cotes = 3
 
 	var m_up: float = mass_kg()
 	var m_down: float = ghost_mass_kg()
@@ -1006,6 +1012,12 @@ func _regulator(
 	# on percute le butoir — c'est tout l'intérêt du mode.
 	if challenge_mode:
 		ramp_down = 0.70
+	# Arrêt électrique (coup-de-poing ARRÊT ÉLEC du pupitre, port de
+	# tr.electric_stop du PC) : la consigne redescend à 0 sur la rampe
+	# régénérative du drive, 0,45 m/s² — arrêt doux, sans frein de voie
+	if arret_elec:
+		driver_target = 0.0
+		ramp_down = 0.45
 	# Feed-forward de la PENTE de consigne (port du PC v1.12.21) : sans
 	# lui, le P (k_a = 0,35) doit accumuler ~1,7 m/s d'erreur pour tenir
 	# une rampe de 0,6 — la rame traînait au-dessus du plafond et la
@@ -1051,6 +1063,11 @@ func _regulator(
 			var v_park: float = sqrt(2.0 * park_decel * maxf(dist_to_stop, 0.001))
 			target_v = minf(PNConstants.V_CREEP, v_park)
 			a_ff_env = -park_decel * clampf(v_travel / maxf(target_v, 0.05), 0.0, 1.2)
+	# arrêt électrique : même au ralenti d'entrée en gare, la consigne
+	# l'emporte (PC : « l'arrêt électrique est inopérant au ralenti »)
+	if arret_elec and not challenge_drive and speed_cmd_eff < target_v:
+		target_v = speed_cmd_eff
+		a_ff_env = a_cmd_ff
 
 	# Contrôleur unifié en FORCE (2026-07-13). L'entraînement calcule :
 	#   a_des  = accélération désirée (erreur de vitesse, bornée par la
@@ -1366,6 +1383,10 @@ var door_phase_remaining: float = 0.0
 # Vantaux (ce que dessine cabin.gd) : ils ne bougent qu'avec le clip de
 # fermeture, 1,3 s après son début — pas au début de la phase portes.
 var door_leaves_open: bool = true
+## Côtés concernés par l'ouverture : bit 0 = PORTES 1 à 6, à GAUCHE en
+## regardant vers le haut ; bit 1 = PORTES 7 à 12, à DROITE (Kevin,
+## 07/10/2026). 3 = les deux (arrivée en gare, bouton PORTES).
+var portes_cotes: int = 3
 var door_leaves_timer: float = 0.0
 var _doors_open_prev: bool = true
 
@@ -1378,6 +1399,8 @@ func at_station() -> bool:
 
 
 func request_depart() -> void:
+	if arret_elec:
+		return                     # relâcher d'abord l'arrêt électrique
 	if (announce_phase_remaining > 0.0 or door_phase_remaining > 0.0) \
 			and _fermeture_seule:
 		# fermeture déjà lancée au bouton PORTES : elle enchaîne sur le

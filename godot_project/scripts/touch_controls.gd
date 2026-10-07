@@ -172,9 +172,11 @@ func _build() -> void:
 	# --- Colonne GAUCHE : consigne de vitesse (maintien) -----------------
 	# (Libellés ASCII : les glyphes ▲▼ manquent de la police par défaut
 	# et s'affichaient en carrés sur Android.)
+	# (07/10/2026 : PORTES et PRÊT/DÉPART descendus dans cette colonne —
+	# au centre bas, ils masquaient l'écran du pupitre en vue cabine)
 	var left: VBoxContainer = VBoxContainer.new()
 	left.set_anchors_preset(Control.PRESET_CENTER_LEFT)
-	left.position = Vector2(14, -180)
+	left.position = Vector2(14, -217)
 	left.add_theme_constant_override("separation", 18)
 	root.add_child(left)
 
@@ -213,30 +215,26 @@ func _build() -> void:
 	_bind_tap(b_emerg, "emergency")
 	right.add_child(b_emerg)
 
-	# --- Centre bas : PRÊT / DÉPART (au-dessus du bandeau HUD) -----------
-	var b_go: Button = _mk_button("PRÊT / DÉPART",
-		"Fermer les portes et partir (relâche aussi l'urgence)", true)
-	b_go.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
-	b_go.custom_minimum_size = Vector2(250, 78)
-	b_go.position = Vector2(-125, -300)
-	_bind_tap(b_go, "ready_depart")
-	root.add_child(b_go)
-
-	# --- PORTES, à gauche de PRÊT/DÉPART (retour du 06/10/2026 : « un
-	# bouton pour les portes dans la PWA », comme la touche D du PC) :
-	# ouvre à quai, ferme (annonce → buzzer → clip) sans partir ;
-	# enfoncé = portes ouvertes. Refus (en marche, hors station) au HUD.
+	# --- PORTES puis PRÊT / DÉPART, sous la consigne (colonne gauche) ---
+	# PORTES (retour du 06/10/2026 : « un bouton pour les portes dans la
+	# PWA », comme la touche D du PC) : ouvre à quai, ferme (annonce →
+	# buzzer → clip) sans partir ; enfoncé = portes ouvertes. Refus (en
+	# marche, hors station) au HUD.
 	_b_doors = _mk_button("PORTES",
 		"Ouvrir / fermer les portes à l'arrêt (touche D) — enfoncé = ouvertes", true)
-	_b_doors.set_anchors_preset(Control.PRESET_CENTER_BOTTOM)
-	_b_doors.custom_minimum_size = Vector2(170, 78)
-	_b_doors.position = Vector2(-125 - 16 - 170, -300)
+	_b_doors.custom_minimum_size = Vector2(132, 78)
 	_b_doors.toggle_mode = true
 	_b_doors.pressed.connect(func() -> void:
 		if _main != null:
 			_main.toggle_doors()
 			_b_doors.set_pressed_no_signal(bool(_main.physics.doors_open)))
-	root.add_child(_b_doors)
+	left.add_child(_b_doors)
+
+	var b_go: Button = _mk_button("PRÊT /\nDÉPART",
+		"Fermer les portes et partir (relâche aussi l'urgence)", true)
+	b_go.custom_minimum_size = Vector2(132, 78)
+	_bind_tap(b_go, "ready_depart")
+	left.add_child(b_go)
 
 	# --- NOUVEAU VOYAGE (centre, caché ; visible après une catastrophe) ---
 	_b_restart = _mk_button("NOUVEAU\nVOYAGE",

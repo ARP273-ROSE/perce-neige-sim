@@ -43,7 +43,8 @@ var _car_roots: Array = []
 var _interior_cars: Array = []
 var _wheels: Array = []              # pivots de roues, tournés à v/R
 var _doors: Array = []               # vantaux coulissants {node, side, base}
-var _door_frac: float = 0.0          # 0 fermé → 1 ouvert (côté quai)
+var _door_frac: float = 0.0          # 0 fermé → 1 ouvert (côté le plus ouvert)
+var _door_frac_cote: Array[float] = [0.0, 0.0]   # gauche, droite en regardant vers le haut
 var _clock_label: Label3D = null     # tablette-horloge du montant gauche
 var _pupitre: PupitreConduite = null   # pupitre de conduite (écran, boutons, voyants)
 var _clock_next: float = 0.0
@@ -84,14 +85,13 @@ var _shake_mag: float = 0.0
 var orbit_yaw: float = atan2(3.0, 25.0)
 var orbit_pitch: float = asin(10.0 / 27.06)
 var orbit_dist: float = 27.06
-## Vue extérieure : appelé avec la caméra une fois la rame placée (main.gd :
-## écorché du relief, caméra gardée hors de la montagne).
-var apres_orbite: Callable = Callable()
 
 
 func orbit_rotate(dx: float, dy: float) -> void:
 	orbit_yaw -= dx * 0.006
-	orbit_pitch = clampf(orbit_pitch + dy * 0.006, -0.15, 1.35)
+	# jusqu'à −1,2 rad : on passe sous la voie (et sous la montagne, rendue
+	# translucide le long du tunnel en vue extérieure)
+	orbit_pitch = clampf(orbit_pitch + dy * 0.006, -1.2, 1.35)
 
 
 ## Recul jusqu'à 6 km pour voir le relief 3D du massif (06/10/2026) ; au-delà
@@ -1205,9 +1205,6 @@ func _process(_delta: float) -> void:
 
 	var xform: Transform3D = _xform_from(pos_cur, trajectory_tangent)
 	global_transform = xform
-	if not is_ghost and view_mode == ViewMode.EXTERIOR and apres_orbite.is_valid() \
-			and camera_ext != null:
-		apres_orbite.call(camera_ext)
 
 	# Articulation : chaque voiture sur la spline à SA propre abscisse.
 	# L'avant de la rame (−Z) pointe vers +s quand la rame 1 monte, vers −s
@@ -1261,13 +1258,21 @@ func _process(_delta: float) -> void:
 	# caisse étant retournée quand elle descend (_xform_from), « vers
 	# l'arrière » (+Z local) n'est le bas que dans un sens : on corrige le
 	# signe avec la même règle que le retournement.
-	var target: float = 1.0 if physics.door_leaves_open else 0.0
-	_door_frac = move_toward(_door_frac, target, _delta / PNConstants.DOOR_MOTION_S)
+	# Deux côtés (07/10/2026) : PORTES 1 à 6 à gauche en regardant vers le
+	# haut, 7 à 12 à droite ; physics.portes_cotes dit lesquels s'ouvrent.
+	# +Z·sgn pointe vers le bas de la pente → la gauche en regardant vers
+	# le haut est le côté x = −sgn de la caisse.
+	var sgn: float = door_slide_sign(physics.direction, is_ghost)
+	for c in range(2):
+		var ouvert: bool = physics.door_leaves_open and (physics.portes_cotes & (1 << c)) != 0
+		_door_frac_cote[c] = move_toward(_door_frac_cote[c], 1.0 if ouvert else 0.0,
+			_delta / PNConstants.DOOR_MOTION_S)
+	_door_frac = maxf(_door_frac_cote[0], _door_frac_cote[1])
 	if not _doors.is_empty():
-		var plug: float = clampf(_door_frac / 0.25, 0.0, 1.0)
-		var slide: float = clampf((_door_frac - 0.25) / 0.75, 0.0, 1.0)
-		var sgn: float = door_slide_sign(physics.direction, is_ghost)
 		for d in _doors:
+			var f: float = _door_frac_cote[0 if float(d["side"]) * sgn < 0.0 else 1]
+			var plug: float = clampf(f / 0.25, 0.0, 1.0)
+			var slide: float = clampf((f - 0.25) / 0.75, 0.0, 1.0)
 			var node: Node3D = d["node"]
 			var base: Vector3 = d["base"]
 			node.position = base + Vector3(d["side"] * TrainBodyBuilder.DOOR_PLUG * plug,

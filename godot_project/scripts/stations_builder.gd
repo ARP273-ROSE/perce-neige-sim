@@ -708,6 +708,13 @@ func _build_room_dressing(s0: float, s1: float, _is_low: bool) -> void:
 		s += 8.4
 
 
+const KOMPAT: float = 2.0
+
+
+func _compat() -> bool:
+	return RenderingServer.get_current_rendering_method() == "gl_compatibility"
+
+
 func _build_ceiling_lights(s_start: float, s_end: float) -> void:
 	# entre les poutres (tous les 2,8 m), tubes plus fins
 	var spacing: float = 2.8
@@ -722,7 +729,10 @@ func _build_ceiling_lights(s_start: float, s_end: float) -> void:
 		var light: OmniLight3D = OmniLight3D.new()
 		light.position = pos
 		light.light_color = Color(0.95, 0.97, 1.0)
-		light.light_energy = 4.5
+		# rendu Compatibility (PWA) : ni éclairage indirect ni plus de 8
+		# lampes par objet → néons plus forts (« la gare du haut semble
+		# dans le noir », iPad 07/10/2026)
+		light.light_energy = 4.5 * (KOMPAT if _compat() else 1.0)
 		light.omni_range = 16.0
 		light.omni_attenuation = 1.4
 		light.shadow_enabled = false
