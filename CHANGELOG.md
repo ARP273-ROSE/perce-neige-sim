@@ -7,6 +7,42 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.16.5** — documentation à jour de tout ce qui est arrivé depuis
+septembre : manuel, aide F1, menu Aide, README.
+- Kevin : « je pense que tu peux compléter manuel, menu aide, menu F1,
+  readme… avec tous les nouveaux ajouts qu'on a faits depuis ».
+- **Manuel** (`manuel_perce_neige.pdf`, FR et EN, 54 pages au lieu de
+  45) ; il s'arrêtait à la v1.15.34 :
+  - nouveautés d'octobre (v1.15.35 à v1.16.5) ;
+  - installation Windows (Setup), Linux, macOS et version Web ;
+  - tables des touches corrigées et complétées : ↑ / ↓ seuls (W est la
+    veille, S ne fait rien), PRÊT, DÉPART, inverser, veille, éclairage du
+    tunnel, Retour arrière, Début, F7 / F8, F9, F11, menus Aide et
+    Affichage ;
+  - nouvelles sections : les vues 3D et le pupitre (chaque bouton, son
+    rôle, sa touche), la version Web (boutons à l'écran), le skieur ;
+  - FAQ : passer en skieur, pupitre 3D sur PC, taille de la fenêtre, 3D
+    qui saccade ; mise à jour et rapports d'incident décrits comme ils
+    marchent aujourd'hui ;
+  - longueur : 3 474 m, comme le README et le compteur.
+- **Aide F1** : F9 (skieur) ; conseils sur le pupitre 3D cliquable et le
+  skieur.
+- **Correction** : l'aide F1 et le README annonçaient un arrêt d'urgence à
+  5 m/s². Le simulateur freine à 1,25 m/s² (arrêt d'urgence commandé) et
+  à 3,6 m/s² (parachute, sur survitesse ou rupture du câble) ; 5 m/s²
+  n'est que le plafond réglementaire. Le manuel le disait déjà.
+- **Menu Aide** : raccourcis (F1), manuel et guide PDF (F6), la vraie
+  machine (F3), skieur (F9), nouveautés (journal des versions en ligne),
+  puis mise à jour, signalement, à propos (avec le lien de la version
+  Web).
+- **README** : gares, relief, pupitre, skieur, sons ; commandes du skieur
+  et de la version Web. Le README de la version Web (`godot_project/`),
+  resté à la v0.1.0, est réécrit.
+- **Version Web** : K (skieur) dans la barre d'aide du clavier.
+- PC : clé EN MARCHE du pupitre 3D sur arrêt, la MONTÉE est refusée,
+  comme dans la PWA.
+- Vérifié : 104 tests PC, banc du pupitre, manuel compilé sans erreur.
+
 **v1.16.4** — pupitre : cadres et boîte ARRÊTS comme sur la photo ;
 escalier au bout de la terrasse du haut.
 - **Pupitre**, d'après la photo envoyée par Kevin :

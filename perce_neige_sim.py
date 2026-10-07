@@ -15482,8 +15482,8 @@ class GameWidget(QWidget):
                 (T("Wheel", "Molette"), T("side-view zoom", "zoom vue profil")),
                 ("L", T("language FR / EN", "langue FR / EN")),
                 (T("Help menu", "Menu Aide"),
-                 T("update, bug report, about",
-                   "mise à jour, signalement, à propos")),
+                 T("shortcuts, PDF, what's new, update, bug report",
+                   "raccourcis, PDF, nouveautés, mise à jour, signalement")),
             ]),
         ]
         tips = [
@@ -15491,8 +15491,8 @@ class GameWidget(QWidget):
               "Augmentez la consigne progressivement : l'accélération est plafonnée à ~1 m/s², le régulateur fait le reste."),
             T("The stop envelope brakes by itself to 1 m/s over the last 55 m — keep 100 % until then.",
               "L'enveloppe d'arrêt freine seule à 1 m/s sur les 55 derniers mètres — gardez 100 % jusque-là."),
-            T("[3] latched electric stop (motor off + service brake). [4] or Shift: rail brakes at 5 m/s², for real emergencies only.",
-              "[3] arrêt électrique verrouillé (moteur coupé + frein de service). [4] ou Maj : freins rail à 5 m/s², pour les vrais cas."),
+            T("[3] latched electric stop (motor off + service brake). [4] or Shift: emergency stop at 1.25 m/s² (standing passengers), for real emergencies only.",
+              "[3] arrêt électrique verrouillé (moteur coupé + frein de service). [4] ou Maj : arrêt d'urgence à 1,25 m/s² (passagers debout), pour les vrais cas."),
             T("Vigilance [W] is optional; once on, touch a control every 20 s or the train stops by itself.",
               "Veille [W] : optionnelle ; une fois activée, touchez une commande toutes les 20 s, sinon arrêt automatique."),
             T("Any latched stop in the tunnel (3, 4, vigilance, fault) suspends the trip: release, then READY [V] and START [Z].",
@@ -15505,6 +15505,10 @@ class GameWidget(QWidget):
               "Panne catastrophique (câble, feu, freins, désenfumage) : le voyage est terminé — attendez l'évacuation, puis R."),
             T("Hover the cockpit buttons: every control has a bilingual tooltip.",
               "Survolez les boutons du cockpit : chaque commande a son info-bulle bilingue."),
+            T("3D cab view: click the console buttons (doors, lights, horn, ±SPEED, MONTÉE, stops) — they act like the keys.",
+              "Vue cabine 3D : cliquez les boutons du pupitre (portes, éclairage, klaxon, ±VITE, MONTÉE, arrêts) — ils agissent comme les touches."),
+            T("F9 skier: walk the stations (ZQSD/arrows, Shift runs, V 1st/3rd person), board, ride; the line runs by itself and waits for you.",
+              "F9 skieur : marchez dans les gares (ZQSD/flèches, Maj pour courir, V 1re/3e pers.), montez, voyagez ; la ligne tourne seule et vous attend."),
             T("F4: 3D cabin view. On Linux Wayland the app switches to XWayland to embed it; PERCE_NEIGE_KEEP_WAYLAND=1 keeps Wayland (separate window).",
               "F4 : vue cabine 3D. Sous Linux Wayland l'application passe en XWayland pour l'intégrer ; PERCE_NEIGE_KEEP_WAYLAND=1 pour rester en Wayland (fenêtre séparée)."),
         ]
@@ -15989,6 +15993,28 @@ class MainWindow(QMainWindow):
     def _install_help_menu(self) -> None:
         bar = self.menuBar()
         menu = bar.addMenu(self._tr("&Help", "&Aide"))
+        # (Kevin, 07/10/2026 : « tu peux compléter manuel, menu aide, menu
+        # F1, readme avec tous les nouveaux ajouts »)
+        act_f1 = menu.addAction(
+            self._tr("Shortcuts and tips (F1)", "Raccourcis et conseils (F1)"))
+        act_f1.triggered.connect(lambda: self.game._virtual_key(Qt.Key.Key_F1))
+        act_pdf = menu.addAction(
+            self._tr("Manual and theory guide, PDF (F6)",
+                     "Manuel et guide théorique, PDF (F6)"))
+        act_pdf.triggered.connect(lambda: self.game._virtual_key(Qt.Key.Key_F6))
+        act_vraie = menu.addAction(
+            self._tr("The real machine (F3)", "La vraie machine (F3)"))
+        act_vraie.triggered.connect(lambda: self.game._virtual_key(Qt.Key.Key_F3))
+        act_skieur = menu.addAction(
+            self._tr("Skier in the 3D view (F9)", "Skieur dans la vue 3D (F9)"))
+        act_skieur.triggered.connect(lambda: self.game._virtual_key(Qt.Key.Key_F9))
+        act_log = menu.addAction(
+            self._tr("What's new (version history, online)",
+                     "Nouveautés (journal des versions, en ligne)"))
+        act_log.triggered.connect(lambda: QDesktopServices.openUrl(QUrl(
+            f"https://github.com/{autoupdate_mod_owner()}/"
+            f"{autoupdate_mod_repo()}/blob/main/CHANGELOG.md")))
+        menu.addSeparator()
         act_upd = menu.addAction(
             self._tr("Check for updates…", "Vérifier les mises à jour…"))
         act_upd.triggered.connect(self._manual_check_update)
@@ -16025,6 +16051,10 @@ class MainWindow(QMainWindow):
                 "Repository : ", "Dépôt : ")
             + "<a href='https://github.com/"
             + f"{autoupdate_mod_owner()}/{autoupdate_mod_repo()}'>GitHub</a>"
+            + "<br>"
+            + self._tr("Web version (tablet, phone): ",
+                       "Version Web (tablette, téléphone) : ")
+            + "<a href='https://funiculaire.giff.re'>funiculaire.giff.re</a>"
             + "<br>"
             + self._tr("License : MIT", "Licence : MIT"))
 

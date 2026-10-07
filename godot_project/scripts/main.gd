@@ -1152,8 +1152,10 @@ func _commande_pupitre(nom: String, enfonce: bool) -> void:
 	if client_mode:
 		# embarqué dans le PC : c'est le PC qui pilote la rame, on lui
 		# transmet l'appui (« sur le PC les boutons marchent mais il ne se
-		# passe rien ensuite », Kevin, 07/10/2026)
-		if state_receiver != null:
+		# passe rien ensuite », Kevin, 07/10/2026) ; clé EN MARCHE sur
+		# arrêt : MONTÉE refusée, comme dans la PWA
+		var refuse: bool = nom == "montee" and enfonce and not cabin.pupitre_en_marche()
+		if state_receiver != null and not refuse:
 			state_receiver.envoyer({"pupitre": nom, "enfonce": enfonce})
 		return
 	if physics == null:

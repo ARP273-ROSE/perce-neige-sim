@@ -1,123 +1,76 @@
 # Perce-Neige Simulator 3D
 
-**Port 3D du simulateur Perce-Neige vers Godot 4.** Rendu moderne avec éclairage global temps réel (SDFGI), brouillard volumétrique, shaders PBR. Conserve la physique exacte du funiculaire réel de Tignes (3 474 m, Von Roll / CFD 1993) portée depuis le projet Python PyQt6.
+Le projet Godot 4.6 du simulateur Perce-Neige. Il sert à deux choses :
 
-![Version](https://img.shields.io/badge/version-0.1.0-orange.svg)
-![Godot](https://img.shields.io/badge/Godot-4.6+-blue.svg)
-![License](https://img.shields.io/badge/license-MIT-green.svg)
-![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey.svg)
+- **la version Web** (PWA) : <https://funiculaire.giff.re>, tactile (iPad,
+  Android) ou à la souris, installable comme une application, utilisable
+  hors ligne ; c'est la 3D qui conduit, avec sa propre physique ;
+- **la vue cabine 3D du simulateur PC** (F4) : le même projet, exporté et
+  lancé en « mode client ». Le PC calcule la physique et envoie l'état à la
+  3D, qui l'affiche ; la 3D renvoie au PC les appuis sur le pupitre et
+  l'état du skieur.
 
----
-
-## État actuel — MVP Phase 1 + 2 + 3
-
-- ✅ Projet Godot 4.6.2 structuré et compilable
-- ✅ Physique Von Roll complète portée en GDScript (régulateur, freins, tension câble, contrepoids)
-- ✅ Tunnel procédural 3D — spline suivant le vrai profil de pente (8 % → 30 % → 6 %) et les courbes horizontales réelles
-- ✅ Cabine MVP (cylindres jaunes 2 voitures couplées) suivant la spline
-- ✅ Éclairage tunnel — néons muraux tous les 12 m, zones sombres respectées
-- ✅ Brouillard volumétrique + SDFGI (éclairage global temps réel)
-- ✅ Phares cabine + feux arrière + éclairage intérieur
-- ✅ HUD cockpit bilingue FR/EN (vitesse, consigne, tension, puissance, distance)
-- ✅ Audio cabine — ambient cruise + slow avec crossfade basé sur la vitesse
-
-## À faire dans les prochaines phases
-
-- ⏳ Extrémités horseshoe (tunnel carré) aux stations
-- ⏳ Modélisation Blender de la cabine Von Roll détaillée (avec cockpit intérieur)
-- ⏳ Rails + traverses + sabots guide-câble
-- ⏳ Sections squares/cut-and-cover aux extrémités (Val Claret / Grande Motte portails)
-- ⏳ Boucle de croisement double-bore
-- ⏳ Station upper avec salle des machines Panoramic
-- ⏳ Skybox extérieure (glacier Grande Motte, vallée Val Claret)
-- ⏳ Système de pannes porté depuis Python (15 types)
-- ⏳ Annonces multilingues (FR/EN/IT/DE/ES) depuis le projet Python
-- ⏳ Auto-exploitation mode
-- ⏳ Build standalone Windows/Linux/macOS
-- ⏳ Auto-update GitHub
+Présentation générale, vraie machine et commandes : `../README.md`. Manuel :
+`../manuel_perce_neige.pdf`. Journal des versions : `../CHANGELOG.md`.
 
 ---
 
-## Lancement
+## Ce qu'il y a dedans
 
-### 1. Ouvrir le projet
+- **Physique** portée du PC, même modèle (`train_physics.gd`) : régulateur
+  Von Roll, freins, câble élastique, contrepoids ; la parité avec le PC est
+  vérifiée par `../tests/parite_pwa.py`.
+- **Ligne** : tunnel aux sections réelles, évitement Abt avec ses
+  aiguillages, galets et supports numérotés, câble en chaînette, sortie de
+  secours ; gare de Val Claret (`gare_aval.gd`) et gare de la Grande Motte
+  avec sa terrasse et le téléphérique (`gare_amont.gd`), salle des machines.
+- **Relief** du massif d'après l'IGN (`relief_builder.gd`, données
+  produites par `../tools_relief3d.py`).
+- **Rames** d'après photos, intérieur, passagers en skieurs, **pupitre de
+  conduite** et son écran Pro-face (`pupitre_conduite.gd`,
+  `ecran_proface.gd`), cliquable.
+- **Exploitation** : modes Normal, Défi, Pannes ; annonces ; exploitation
+  automatique (`auto_operator.gd`).
+- **Skieur jouable** (`skieur_joueur.gd`, collisions dans
+  `collisions_jeu.gd`, portes automatiques dans `porte_auto.gd`) : suivi du
+  chantier dans `../SKIEUR.md`.
+- **Réglage automatique** de la qualité selon la machine
+  (`perf_manager.gd`).
 
-Godot 4.6.2 est installé dans `C:\Users\kevin\Documents\Godot\`. Pour lancer :
+## Commandes de la version Web
 
-1. **Double-cliquer** sur `C:\Users\kevin\Documents\Godot\Godot_v4.6.2-stable_win64.exe`
-2. Dans le **Project Manager** : cliquer **Import**
-3. Naviguer vers `C:\Users\kevin\Documents\GitHub\perce-neige-sim-3d\` et sélectionner `project.godot`
-4. Cliquer **Import & Edit**
+Boutons à l'écran : ± VITESSE, FREIN, URGENCE, PORTES, PRÊT / DÉPART,
+INVERSER, AUTO, PHARES, CABINE, TUNNEL, VUE, SKIEUR, ANNONCES, MODE, PANNE.
 
-Godot ouvre l'éditeur avec le projet chargé.
+Clavier : `↑`/`↓` consigne, `Espace` frein, `Maj` urgence, `Entrée`
+départ, `D` portes, `I` inverser, `H` phares, `C` cabine, `J` tunnel,
+`V` / `O` vue, `M` mode, `F` choix de panne, `R` nouveau voyage (après un
+accident ou une panne grave), `F1` panne au hasard, `F2` effacer la panne,
+`F3` exploitation automatique, `K` skieur. En skieur : `ZQSD` (ou flèches),
+`Maj` pour courir, `V` 1re / 3e personne.
 
-### 2. Lancer le jeu
+## Développer
 
-- Presser **F5** (ou cliquer le bouton ▶ en haut à droite)
-- Première fois : Godot demande la scène principale — elle est déjà configurée (`scenes/main.tscn`)
+- Ouvrir `project.godot` avec Godot 4.6 (rendu Forward+ sur PC ; la
+  version Web passe en Compatibility).
+- Mode client, comme dans le PC : `godot --path . -- --client
+  [--port=7777]`. L'état arrive en UDP sur ce port (une ligne JSON par
+  paquet, voir `state_receiver.gd`) ; les messages vers le PC partent sur
+  le port suivant.
+- **Bancs** (tous doivent finir sur `OK`) :
 
-Le tunnel met ~2-3 secondes à se générer (1158 rings × 20 segments = ~46k triangles).
+  ```
+  godot --headless --path . -s bench_<nom>.gd -- --mode=normal
+  ```
 
-### 3. Conduite
+  `bench_skieur_3d.gd` se lance avec `--fixed-fps 60`. Les 15 bancs :
+  aiguillage, auto, defi, galets, pannes, perf, portes, pupitre, relief,
+  rupture, salle_machines, skieur, son_salle, train_mesh, voyages.
+- **Captures** de contrôle : `shot_*.gd` (vues de la cabine, du pupitre,
+  du skieur…).
+- **Publier la version Web** : `bash ../deploy_web.sh` (export Web, puis
+  copie sur le serveur).
 
-| Touche | Action |
-|--------|--------|
-| **↑** / **W** | Augmenter la consigne de vitesse |
-| **↓** / **S** | Diminuer la consigne de vitesse |
-| **Entrée** | Prêt / Départ (démarre le voyage) |
-| **Espace** / **B** | Frein service |
-| **Shift** | Frein d'urgence |
-| **H** | Allumer / éteindre les phares |
-| **P** | Pause |
-| **V** | Changer de vue (à implémenter) |
+## Licence
 
-Au démarrage, le train est à Val Claret (s=26 m), portes ouvertes, prêt. Appuyer sur **Entrée** pour démarrer le trip, puis **↑** pour augmenter la consigne de vitesse. Le régulateur Von Roll prend en charge l'accélération et le freinage automatique en approche de Grande Motte.
-
----
-
-## Architecture
-
-```
-perce-neige-sim-3d/
-├── project.godot          # Config Godot
-├── icon.svg               # Icône projet
-├── scenes/
-│   └── main.tscn         # Scène principale (minimal wrapper)
-└── scripts/
-    ├── constants.gd      # PNConstants — specs funiculaire
-    ├── slope_profile.gd  # Profil gradient + courbes + sections
-    ├── train_physics.gd  # Physique Von Roll portée du Python
-    ├── tunnel_builder.gd # Génération mesh procédural du tunnel
-    ├── tunnel_lights.gd  # Néons muraux
-    ├── cabin.gd          # Cabine + phares + caméra FPV
-    ├── hud.gd            # HUD cockpit bilingue
-    ├── audio.gd          # Ambient loops avec crossfade
-    └── main.gd           # Orchestrateur
-```
-
-La physique tourne à **60 Hz fixe** (pas de couplage framerate). Le rendu tourne au framerate de l'écran. Jusqu'à 4 steps de rattrapage par frame en cas de hiccup.
-
----
-
-## Tests effectués
-
-- ✅ Compilation GDScript sans erreur sur Godot 4.6.2 stable Windows
-- ✅ Génération du tunnel réussit (spline de 3474 m, ~1160 rings)
-- ✅ Scène principale construite sans exception (`[PerceNeige3D] Ready.` en stdout)
-- ⏳ **Test visuel à faire par l'utilisateur** : ouvrir Godot, F5, vérifier le rendu
-
----
-
-## Pourquoi Godot 4 et pas UE5 ?
-
-- **Conserve 100 % de la logique du projet Python** (GDScript proche de Python)
-- Pas de royalties, pas de licence commerciale
-- Build exécutable ~50 Mo (vs ~500 Mo UE5)
-- Hot-reload instantané, itération rapide
-- SDFGI + brouillard volumétrique = rendu tunnel très convaincant sans les tracasseries Lumen/Nanite
-
----
-
-## License
-
-MIT. Auteur : ARP273-ROSE, 2026. Port 3D du Perce-Neige Simulator Python/PyQt6 (v1.9.1).
+MIT. Auteur : ARP273-ROSE.
