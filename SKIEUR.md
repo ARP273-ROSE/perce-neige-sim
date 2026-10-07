@@ -14,6 +14,9 @@ piste. »
 
 - **Bouton SKIEUR** (touche K) dans la barre du haut ; QUITTER pour revenir à la
   conduite. Le funiculaire passe en AUTO pendant qu'on marche.
+- **Sur le simulateur PC** (v1.16.3) : touche F9 ou bouton SKIEUR, en vue 3D
+  (F4). Le PC garde la rame (exploitation AUTO 24 h/24) ; la 3D lui renvoie
+  l'état du skieur (dans la voiture, sur le quai, dehors) par UDP (port 7778).
 - **Commandes** :
   - joystick à l'écran (bas gauche) ;
   - doigt glissé ailleurs pour tourner la vue ;
