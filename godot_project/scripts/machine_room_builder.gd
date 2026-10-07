@@ -349,11 +349,34 @@ func _build_mur_vitre() -> void:
 	var alu: StandardMaterial3D = _mat("alu", Color(0.20, 0.21, 0.23), 0.4, 0.7)
 	for d in [-1.0, 1.0]:
 		var xc: float = d * 3.0
-		_box(Vector3(demi_b * 2.0, h_b, 0.02), verre, xc, y_seuil + h_b * 0.5, s_m, "Vitrage")
-		for xx in [xc - demi_b + 0.04, xc, xc + demi_b - 0.04]:
+		for xx in [xc - demi_b + 0.04, xc + demi_b - 0.04]:
 			_box(Vector3(0.06, h_b, 0.10), alu, xx, y_seuil + h_b * 0.5, s_m, "Vitrage")
-		for yy in [y_seuil + 0.05, y_seuil + h_b - 0.05]:
-			_box(Vector3(demi_b * 2.0, 0.08, 0.10), alu, xc, yy, s_m, "Vitrage")
+		_box(Vector3(demi_b * 2.0, 0.08, 0.10), alu, xc, y_seuil + h_b - 0.05, s_m, "Vitrage")
+		# deux vantaux automatiques (skieur jouable, 07/10/2026) : ils
+		# s'écartent devant le bois du mur, côté salle, quand on approche
+		var porte: PorteAuto = PorteAuto.new()
+		porte.name = "PorteBaie"
+		add_child(porte)
+		porte.transform = _local_xf(xc, y_seuil, s_m)
+		for c in [-1.0, 1.0]:
+			var v: Node3D = Node3D.new()
+			v.name = "VantailBaie"
+			porte.add_child(v)
+			v.position = Vector3(c * demi_b * 0.5, 0.0, 0.13)
+			for pt in [[verre, Vector3(demi_b - 0.06, h_b - 0.10, 0.02), Vector3(0.0, h_b * 0.5, 0.0)],
+					[alu, Vector3(demi_b, 0.06, 0.05), Vector3(0.0, h_b - 0.03, 0.0)],
+					[alu, Vector3(demi_b, 0.08, 0.05), Vector3(0.0, 0.04, 0.0)],
+					[alu, Vector3(0.05, h_b, 0.05), Vector3(-demi_b * 0.5 + 0.025, h_b * 0.5, 0.0)],
+					[alu, Vector3(0.05, h_b, 0.05), Vector3(demi_b * 0.5 - 0.025, h_b * 0.5, 0.0)]]:
+				var mi: MeshInstance3D = MeshInstance3D.new()
+				var bm: BoxMesh = BoxMesh.new()
+				bm.size = pt[1]
+				bm.material = pt[0]
+				mi.mesh = bm
+				mi.position = pt[2]
+				mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+				v.add_child(mi)
+			porte.ajouter_vantail(v, Vector3(c * demi_b * 0.95, 0.0, 0.0))
 	# kiosque entre les baies, habillé de bois, grand écran paysage
 	_box(Vector3(1.9, 2.2, 0.55), bois_t, 0.0, y_seuil + 1.1, s_m - 0.42, "Enseigne")
 	_box(Vector3(1.72, 0.98, 0.04), _mats["sombre"], 0.0, y_seuil + 1.45, s_m - 0.71, "Enseigne")

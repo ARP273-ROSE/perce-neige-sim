@@ -292,6 +292,15 @@ func _hall() -> void:
 		if not facade:
 			_quad(st_ext, _p2(ae, -2.6), _p2(be, -2.6), _p2(be, H_TOIT), _p2(ae, H_TOIT))
 		# parement intérieur : lames de bois jusqu'à 2,7 m, enduit blanc au-dessus
+		if facade:
+			# façade vitrée : rien devant l'entrée (vitrages et porte), seuls
+			# les trumeaux pleins sont habillés (avant, une paroi de lames
+			# courait derrière les vitres et barrait l'entrée)
+			for seg in [[a, a + dir * 1.6], [b - dir * 1.6, b]]:
+				_quad(st_bas, _p2(seg[0], 0.0), _p2(seg[1], 0.0), _p2(seg[1], 2.7), _p2(seg[0], 2.7))
+				_quad(st_haut, _p2(seg[0], 2.7), _p2(seg[1], 2.7), _p2(seg[1], 3.0), _p2(seg[0], 3.0))
+			_quad(st_haut, _p2(a, 3.0), _p2(b, 3.0), _p2(b, H_PLAFOND + 0.3), _p2(a, H_PLAFOND + 0.3))
+			continue
 		_quad(st_bas, _p2(a, 0.0), _p2(b, 0.0), _p2(b, 2.7), _p2(a, 2.7))
 		_quad(st_haut, _p2(a, 2.7), _p2(b, 2.7), _p2(b, H_PLAFOND + 0.3), _p2(a, H_PLAFOND + 0.3))
 	for e in [[st_ext, "bardage", "BardageHall"], [st_bas, "lames_int", "LamesHall"],
@@ -380,6 +389,7 @@ func _cloison() -> void:
 			vitre.position = Vector3(demi * 0.525, 0.0, 0.0)
 			_vantail(vitre, h_portes)
 		_vantaux.append([vantail, xc, -cote, Z_VANTAIL])
+		vantail.add_to_group("collision_mobile")
 		if cote < 0.0:
 			# affichette collée côté salle sur le vantail mobile de la porte
 			# ouest, vers son bord extérieur (photo 093500 : ≈ 0,30 × 0,28 m à
@@ -421,6 +431,26 @@ func _cloison() -> void:
 		var lab: Label3D = _etiquette("", _p(-0.55, 0.35, y_haut + 0.42 + l[0]), l[1],
 			Color(0.95, 0.97, 1.0), 0.0016, _n)
 		_panneau.append(lab)
+
+
+## Vantail vitré simple (porte automatique) : vitre et cadre marine.
+func _vitre(v: Node3D, l: float, h: float, m_verre: String) -> void:
+	var parts: Array = [
+		[m_verre, Vector3(l - 0.08, h - 0.08, 0.02), Vector3(0, h * 0.5, 0)],
+		["marine", Vector3(l, 0.06, 0.05), Vector3(0, h - 0.03, 0)],
+		["marine", Vector3(l, 0.08, 0.05), Vector3(0, 0.04, 0)],
+		["marine", Vector3(0.05, h, 0.05), Vector3(-l * 0.5 + 0.025, h * 0.5, 0)],
+		["marine", Vector3(0.05, h, 0.05), Vector3(l * 0.5 - 0.025, h * 0.5, 0)],
+	]
+	for pt in parts:
+		var b: BoxMesh = BoxMesh.new()
+		b.size = pt[1]
+		b.material = _mats[pt[0]]
+		var mi: MeshInstance3D = MeshInstance3D.new()
+		mi.mesh = b
+		mi.position = pt[2]
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		v.add_child(mi)
 
 
 ## Un vantail : cadre marine, vitrage, traverse à 45 %.
@@ -547,13 +577,35 @@ func _facade() -> void:
 	st.generate_normals()
 	st.set_material(_mats["bardage"])
 	_instance(st.commit(), "FacadeEntree")
-	# entrée vitrée (portes et vitrages fixes)
+	# entrée vitrée : six baies ; les deux du milieu sont la porte
+	# automatique (deux vantaux qui s'effacent derrière les vitrages fixes,
+	# côté salle, quand on approche — skieur jouable, 07/10/2026)
 	var mil: Vector2 = (FACADE_A + FACADE_B) * 0.5 + dehors * 0.2
 	var rot: float = -atan2(t.y, t.x)
-	_boite("verre_fonce", l - 3.2, 2.9, 0.03, mil.x, mil.y, 1.45, rot, "EntreeVitree")
+	var lv: float = l - 3.2
+	var baie: float = lv / 6.0
+	for cote in [-1.0, 1.0]:
+		var fm: float = cote * (baie + lv * 0.5) * 0.5
+		_boite("verre_fonce", lv * 0.5 - baie, 2.9, 0.03, mil.x + t.x * fm, mil.y + t.y * fm, 1.45, rot,
+			"EntreeVitree")
 	for k in range(7):
-		var f: float = lerpf(-(l - 3.2) * 0.5, (l - 3.2) * 0.5, k / 6.0)
+		if k == 3:
+			continue                   # jonction des deux vantaux
+		var f: float = lerpf(-lv * 0.5, lv * 0.5, k / 6.0)
 		_boite("marine", 0.08, 2.9, 0.10, mil.x + t.x * f, mil.y + t.y * f, 1.45, rot)
+	var porte: PorteAuto = PorteAuto.new()
+	porte.name = "PorteEntree"
+	add_child(porte)
+	porte.transform = Transform3D(_base() * Basis(Vector3.UP, -rot), _p2(mil, 0.0))
+	var dedans: Vector3 = -(_e * dehors.x + _n * dehors.y)
+	var sz: float = signf(porte.transform.basis.z.dot(dedans))
+	for cote2 in [-1.0, 1.0]:
+		var v: Node3D = Node3D.new()
+		v.name = "VantailEntree"
+		porte.add_child(v)
+		v.position = Vector3(cote2 * baie * 0.5, 0.0, sz * 0.09)
+		_vitre(v, baie, 2.85, "verre_fonce")
+		porte.ajouter_vantail(v, Vector3(cote2 * baie * 0.97, 0.0, 0.0))
 	# bandeau rouge et inscriptions (vers l'extérieur)
 	var m3: Vector2 = (FACADE_A + FACADE_B) * 0.5 + dehors * 0.32
 	var nd: Vector3 = (_e * dehors.x + _n * dehors.y).normalized()
@@ -706,6 +758,22 @@ func _escalier() -> void:
 		for k in range(n_p):
 			var q: Vector3 = a3.lerp(b3, float(k) / (n_p - 1))
 			_barre("galva", q, q - Vector3(0, 1.0, 0), 0.045)
+
+
+## Départ du skieur jouable : sur la place, au pied de l'escalier, face à
+## la gare. [position monde, cap (rad, 0 = regard vers −Z)].
+func point_depart() -> Array:
+	var t: Vector2 = (FACADE_B - FACADE_A).normalized()
+	var dehors: Vector2 = Vector2(-t.y, t.x)
+	if Geometry2D.is_point_in_polygon((FACADE_A + FACADE_B) * 0.5 + dehors, PackedVector2Array(HALL)):
+		dehors = -dehors
+	var mil: Vector2 = (FACADE_A + FACADE_B) * 0.5 + t * ARCHE_DECALAGE
+	var h_tot: float = _o.y - H_PLACE_ABS
+	var n_marches: int = clampi(int(round(h_tot / 0.17)), 3, 18)
+	var d_pied: float = ARCHE_D + 0.5 + GIRON * n_marches
+	var pos: Vector3 = _p2(mil + dehors * (d_pied + 5.0), -h_tot + 0.3)
+	var vers: Vector3 = _p2(mil, 0.0) - pos
+	return [pos, atan2(-vers.x, -vers.z)]
 
 
 # --- éclairage, voyageurs, panneau ---------------------------------------------
