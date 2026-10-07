@@ -21,10 +21,10 @@ the interface switches to English with the `L` key.*
 
 ## Deux façons de jouer
 
-|                 | PC (Windows)                                                                                   | Web, tablette, téléphone                                               |
+|                 | PC (Windows, Linux, macOS)                                                                     | Web, tablette, téléphone                                               |
 |-----------------|------------------------------------------------------------------------------------------------|------------------------------------------------------------------------|
 | **Où**          | [Télécharger l'installeur](https://github.com/ARP273-ROSE/perce-neige-sim/releases/latest/download/PerceNeigeSimulator-Setup.exe) (lien permanent) | <https://funiculaire.giff.re>                                          |
-| **Quoi**        | Application PyQt6 : pupitre complet, vue de profil, vue cabine 3D intégrée, exploitation automatique, journal d'exploitation | Version 3D Godot 4, tactile (iPad, Android, PC), installable comme application, fonctionne hors ligne |
+| **Quoi**        | Application PyQt6 : pupitre complet, vue en coupe du terrain, vue cabine 3D intégrée (pupitre cliquable, skieur), exploitation automatique, journal d'exploitation | Version 3D Godot 4, tactile (iPad, Android, PC), installable comme application, fonctionne hors ligne ; skieur jouable |
 | **Mise à jour** | Automatique au démarrage                                                                       | Automatique                                                            |
 
 L'installeur s'installe dans le profil utilisateur, sans mot de passe
@@ -83,9 +83,12 @@ matériel roulant. Détail dans `SOURCES.md`.
 - **Physique** : pente variable (8 % en bas, 30 % au milieu, 6 % en haut,
   calée sur la vidéo de cabine), masse selon la charge, résistance au
   roulement et traînée, moteurs à enveloppe P = F·v avec régénération,
-  frein de service (2,5 m/s²) et freins de voie (5 m/s²), tension du câble
-  et fatigue cumulée, **câble élastique** (rebond à l'arrêt, affaissement à
-  l'embarquement), poids propre du câble, contrepoids = l'autre rame.
+  frein de service (2,5 m/s²), arrêt d'urgence (1,25 m/s²) et parachute
+  sur rail (3,6 m/s², sur survitesse ou rupture du câble), tension du câble
+  et fatigue cumulée, **câble élastique** en marche et à l'arrêt (rebond,
+  recul de plus d'un mètre de la rame pleine en gare basse), poids propre
+  du câble, contrepoids = l'autre rame. Chaque trajet fait 3 474 m au
+  compteur ; arrêts à 1,5 m du butoir en haut, 4 à 5 m en bas.
   Modèle audité et chiffré avec SageMath : `AUDIT_PHYSIQUE_VOYAGES.md`.
 - **Régulateur Von Roll** : consigne en % de 12 m/s, enveloppe d'approche
   programmée, rampement à 1 m/s, arrêt au repère, vigilance homme-mort.
@@ -97,11 +100,31 @@ matériel roulant. Détail dans `SOURCES.md`.
   câble file en ligne droite d'un galet au suivant, gares aux parois bleu
   nuit et caillebotis, salle des machines enterrée aux deux roues
   d'entraînement jaunes (la roue aval affleure entre les butoirs, sommets
-  des deux roues alignés sur la pente de la voie, câble en huit).
+  des deux roues alignés sur la pente de la voie, câble en huit). Galets de
+  ligne fidèles qui tournent, supports numérotés, câble en chaînette entre
+  les galets, sortie de secours dessinée d'après la vidéo de montée.
+- **Gares d'après le réel** : Val Claret dans son état de 2018 (place,
+  escalier, salle d'attente, portes coulissantes d'un seul vantail vers
+  les quais, fosse sous la voie) ; Grande Motte ouverte sur le glacier
+  (quais en escalier, mur de tête vitré, terrasse sur pilotis avec son
+  escalier, restaurant, téléphérique, porte de la piste Génépy).
+- **Relief réel** : le massif en 3D sur 8,6 × 10,2 km, de la Grande Motte
+  au lac du Chevril (IGN RGE ALTI et orthophotographie). Vue extérieure en
+  « rayons X » : le sol devient translucide autour du tunnel. Sur PC, la
+  vue de profil est une vraie coupe du terrain.
 - **Vue cabine 3D** (F4) : viewer Godot embarqué, rien à installer. Rames
   d'après photos (roues Abt à double boudin, phares halogènes, plaque,
-  passagers avec skis), vue extérieure et vue libre de la salle des
-  machines (O).
+  intérieur avec paliers, bancs et porte-skis, passagers en skieurs),
+  **pupitre de conduite** reproduit d'après photos, avec son écran Pro-face
+  vivant, et dont les boutons se cliquent (portes, éclairage, klaxon,
+  ± VITE, MONTÉE, URGENCE, ÉLECTRIQUE) ; vue extérieure et vue libre de la
+  salle des machines (O). La 3D se règle sur la machine (menu Affichage →
+  Qualité 3D).
+- **Skieur jouable** (F9 sur PC, SKIEUR / K dans la version Web) : il
+  marche dans les gares, monte les escaliers, prend la rame, va au poste,
+  sort en haut sur la terrasse ou par la porte de la piste Génépy. Le
+  funiculaire tourne tout seul, l'attend et ferme les portes quand il est à
+  bord. Le ski viendra ensuite : suivi dans `SKIEUR.md`.
 - **Trois modes** : Normal ; Défi (trajet noté sur 100, butoir,
   déraillement, collision) ; Pannes (15 pannes issues d'incidents
   documentés : STRMTG RM5, Glória Lisbonne 2025, Kaprun 2000, Carmelit,
@@ -112,11 +135,13 @@ matériel roulant. Détail dans `SOURCES.md`.
   l'arrivée, demi-tour ; journal SQLite consultable (F5). Maj+X = 24/7.
   La touche A confie un seul voyage au pilote automatique.
 - **Sons** : ambiance réelle de la cabine, buzzers, annonces authentiques en
-  cinq langues (console F2), sons d'accident synthétisés ; en vue salle des
-  machines, le son réel de la gare haute, dont la hauteur suit la vitesse du
-  câble.
+  cinq langues (console F2), klaxon = le vrai buzzer de la rame, sons
+  d'accident synthétisés ; en vue salle des machines, le son réel de la gare
+  haute, dont la hauteur suit la vitesse du câble ; hors de la rame, sur le
+  quai, des bouffées d'air puis le silence, et le vent dehors.
 - **Autour** : mise à jour automatique, rapports d'incident anonymes (avec
-  votre accord), téléchargement des PDF (F6), interface FR/EN.
+  votre accord), téléchargement des PDF (F6), interface FR/EN à l'échelle
+  de l'écran, plein écran (F11), volume général (F7 / F8).
 
 ---
 
@@ -130,7 +155,7 @@ L'écran d'accueil (F1) reprend ces touches.
 |-------------------|-------------------------------------------------|
 | `↑` / `↓`         | Consigne de vitesse ± (% de 12 m/s)             |
 | `Espace` / `B`    | Frein de service (maintenir)                    |
-| `Maj`             | Frein d'urgence, freins de voie (maintenir)     |
+| `Maj`             | Arrêt d'urgence, 1,25 m/s² (maintenir)          |
 | `3`               | Arrêt électrique (verrouillé)                   |
 | `4`               | Arrêt d'urgence (verrouillé)                    |
 | `V`               | PRÊT                                            |
@@ -153,8 +178,11 @@ L'écran d'accueil (F1) reprend ces touches.
 | `N`               | Silence annonces                                |
 | `Retour arrière`  | Couper l'annonce en cours                       |
 | `F2`              | Console des annonces                            |
+| `J`               | Éclairage du tunnel                             |
 | `F4`              | Vue cabine : profil → dessinée → 3D             |
 | `O`               | Vue 3D : cabine → extérieure → salle des machines (glisser, molette, clic droit) |
+| `F9`              | Skieur dans la vue 3D (voir plus bas)           |
+| Clic sur le pupitre 3D | Portes, éclairage, klaxon, ± VITE, MONTÉE, URGENCE, ÉLECTRIQUE : comme les touches |
 
 **Système**
 
@@ -169,15 +197,47 @@ L'écran d'accueil (F1) reprend ces touches.
 | `F3`              | La vraie machine, liens                         |
 | `F5`              | Journal d'exploitation                          |
 | `F6`              | Télécharger manuel et guide théorique (PDF)     |
+| `F7` / `F8`       | Volume général − / +                            |
+| `F11`             | Plein écran / fenêtre                           |
 | `+` / `−` / `0`   | Zoom de la vue de profil (ou molette)           |
 | `L`               | Langue FR / EN                                  |
-| Menu Aide         | Mise à jour, signaler un problème, à propos     |
+| Menu Aide         | Raccourcis (F1), PDF (F6), la vraie machine (F3), skieur (F9), nouveautés, mise à jour, signaler un problème, à propos |
+| Menu Affichage    | Qualité 3D, taille de l'interface, plein écran  |
+
+**Skieur** (F9 ou bouton SKIEUR, en vue 3D)
+
+| Touche                       | Action                                   |
+|------------------------------|------------------------------------------|
+| `Z` `Q` `S` `D` / flèches    | Marcher (W A S D aussi)                  |
+| `Maj`                        | Courir                                   |
+| `V`                          | 1re / 3e personne                        |
+| Glisser dans la 3D, molette  | Regarder, rapprocher la caméra           |
+| CONDUIRE (près du poste)     | S'asseoir au poste : fin du skieur et de l'exploitation automatique |
+| `F9` ou QUITTER              | Revenir à la conduite (l'exploitation automatique continue) |
+
+Pendant ce temps, la rame est en exploitation automatique, 24 h/24 : elle
+attend le skieur resté en gare et ferme les portes dès qu'il est dans la
+voiture.
+
+## Commandes (version Web)
+
+Sur tablette, tout passe par les boutons à l'écran : ± VITESSE, FREIN,
+URGENCE, PORTES, PRÊT / DÉPART, INVERSER, AUTO, PHARES, CABINE, TUNNEL,
+VUE, SKIEUR, ANNONCES, MODE, PANNE. En vue cabine, les boutons du pupitre
+3D se touchent du doigt. Le skieur se dirige au joystick (en bas à
+gauche) ; un doigt glissé ailleurs tourne la vue.
+
+Au clavier : `↑`/`↓` consigne, `Espace` frein, `Maj` urgence, `Entrée`
+départ, `D` portes, `I` inverser, `H` phares, `C` cabine, `J` tunnel,
+`V` ou `O` vue, `M` mode, `F` choix de panne, `R` nouveau voyage (après
+un accident ou une panne grave), `F3` exploitation automatique, `K`
+skieur (puis ZQSD, `Maj`, `V`).
 
 ---
 
 ## Documentation
 
-- `manuel_perce_neige.pdf` : manuel utilisateur, FR/EN, 45 pages.
+- `manuel_perce_neige.pdf` : manuel utilisateur, FR/EN, 54 pages.
 - `guide_theorique.pdf` : formules, sources réglementaires, calibration audio.
 - `AUDIT_PHYSIQUE_VOYAGES.md`, `AUDIT_PHYSIQUE_PANNES.md` : audits du
   modèle physique, scripts SageMath et sorties dans `audit_physique/`.
