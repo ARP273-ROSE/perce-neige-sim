@@ -12,6 +12,8 @@ var _cache: String = ""          # nom (méta) des pièces de la salle des machi
 var _sans_vol: bool = false      # sans brouillard volumétrique
 var _vue: int = 0                # 0 cabine, 2 salle des machines (avant la caméra libre)
 var _gros_plan: bool = false     # caméra cabine resserrée sur le pupitre
+var _hud: bool = false           # garder le HUD (contrôle de la disposition)
+var _phares: bool = true         # phares=0 : phares éteints
 var _gp_fov: float = 30.0
 var _gp_plongee: float = 0.62
 var _gp_lacet: float = 0.0
@@ -31,6 +33,10 @@ func _initialize() -> void:
 			_sans_vol = true
 		elif a.begins_with("vue="):
 			_vue = int(a.substr(4))
+		elif a == "hud":
+			_hud = true
+		elif a == "phares=0":
+			_phares = false
 		elif a == "pupitre":
 			_gros_plan = true
 		elif a.begins_with("fov="):
@@ -62,7 +68,10 @@ func _tick() -> void:
 		ph.s = _s
 		ph.s_prev_step = _s
 		ph.v = 0.0
-	if _f == 6 and _main.get("hud") != null:
+	if _f == 7 and not _phares:
+		ph.lights_head = false
+		_main.get("cabin").set_headlights(false)
+	if _f == 6 and _main.get("hud") != null and not _hud:
 		_main.get("hud").visible = false
 	if _f == 8 and _vue != 0:
 		_main.get("cabin").set_view(_vue)

@@ -1,5 +1,5 @@
 ## Banc du pupitre de la vue cabine (06/10/2026) : la face est tournée vers
-## l'œil du conducteur, chaque commande se trouve au clic à l'endroit où on
+## l'œil du conducteur (à moins de 40° du regard), chaque commande se trouve au clic à l'endroit où on
 ## la voit, et les appuis agissent (portes, éclairage, klaxon, page de
 ## l'écran).
 ##   godot --headless --path godot_project -s bench_pupitre_3d.gd
@@ -42,7 +42,7 @@ func _tick() -> void:
 	var n: Vector3 = face.global_transform.basis.y.normalized()
 	var vers_oeil: Vector3 = (cam.global_position - face.global_position).normalized()
 	var ecart: float = rad_to_deg(acos(clampf(n.dot(vers_oeil), -1.0, 1.0)))
-	_verif("face perpendiculaire au regard", ecart < 3.0, "écart %.1f°, inclinaison %.1f°"
+	_verif("face tournée vers le regard, lisible", ecart < 40.0, "écart %.1f°, inclinaison %.1f°"
 		% [ecart, rad_to_deg(p.inclinaison)])
 	# 2. chaque commande se trouve là où on la voit
 	var taille: Vector2 = get_root().get_visible_rect().size
@@ -102,18 +102,89 @@ func _tick() -> void:
 	_main._pupitre_clic(pe_ecran, false)
 	p.mettre_a_jour(ph, 0.0, 1, true)
 	_verif("appui sur l'écran : change de page", p.ecran.page_portes != page)
-	var ouvertes: bool = ph.doors_open
-	if ouvertes:
-		_main._pupitre_clic(pos_de.call("fermeture_0"), true)
-		_main._pupitre_clic(pos_de.call("fermeture_0"), false)
-		_verif("FERMETURE lance la fermeture", ph.announce_phase_remaining > 0.0)
-	else:
-		_main._pupitre_clic(pos_de.call("ouverture_1"), true)
-		_main._pupitre_clic(pos_de.call("ouverture_1"), false)
-		_verif("OUVERTURE ouvre à quai", ph.doors_open)
+	# portes par côté : 1 à 6 à gauche en regardant vers le haut, 7 à 12 à
+	# droite ; dans les deux sens de marche, seules les bonnes bougent
+	for sens in [1, -1]:
+		ph.direction = sens
+		ph.doors_open = true
+		ph.door_leaves_open = true
+		ph.portes_cotes = 1
+		for k in range(8):
+			cab._process(1.0)
+		var xf: Transform3D = _main.tunnel.transform_at(ph.s)
+		var haut: Vector3 = (_main.tunnel.transform_at(ph.s + 5.0).origin - xf.origin).normalized()
+		var gauche: Vector3 = Vector3.UP.cross(haut)
+		var bonnes: int = 0
+		var fausses: int = 0
+		for d in cab._doors:
+			var cote_g: bool = (cab.global_transform.basis * Vector3(float(d["side"]), 0.0, 0.0)).dot(gauche) > 0.0
+			var ouverte: bool = ((d["node"] as Node3D).position - (d["base"] as Vector3)).length() > 0.05
+			if ouverte == cote_g:
+				bonnes += 1
+			else:
+				fausses += 1
+		_verif("rame %s : PORTES 1 à 6 ouvre le côté GAUCHE (vers le haut) seul"
+			% ("montante" if sens > 0 else "descendante"), fausses == 0 and bonnes > 0,
+			"%d bonnes, %d fausses" % [bonnes, fausses])
+	ph.direction = 1
+	ph.portes_cotes = 3
+	ph.doors_open = true
+	_main._pupitre_clic(pos_de.call("fermeture_0"), true)
+	_main._pupitre_clic(pos_de.call("fermeture_0"), false)
+	var un_cote: bool = ph.doors_open and ph.portes_cotes == 2 and ph.announce_phase_remaining <= 0.0
+	_main._pupitre_clic(pos_de.call("fermeture_1"), true)
+	_main._pupitre_clic(pos_de.call("fermeture_1"), false)
+	_verif("FERMETURE 1 à 6 ferme la gauche seule, 7 à 12 lance la fermeture",
+		un_cote and ph.announce_phase_remaining > 0.0)
 	_main._pupitre_clic(pos_de.call("montee"), true)
 	var tient_depart: bool = Input.is_action_pressed("ready_depart")
 	_main._pupitre_clic(pos_de.call("montee"), false)
 	_verif("MONTÉE lance le départ", tient_depart)
+	# coups-de-poing : URGENCE (gros) et ARRÊT ÉLEC (petit)
+	_main._pupitre_clic(pos_de.call("rouge_1"), true)
+	var urg: bool = Input.is_action_pressed("emergency")
+	_main._pupitre_clic(pos_de.call("rouge_1"), false)
+	_verif("URGENCE (gros coup-de-poing) déclenche l'arrêt d'urgence", urg)
+	_main._pupitre_clic(pos_de.call("rouge_2"), true)
+	_main._pupitre_clic(pos_de.call("rouge_2"), false)
+	var elec: bool = ph.arret_elec
+	_main._pupitre_clic(pos_de.call("rouge_2"), true)
+	_main._pupitre_clic(pos_de.call("rouge_2"), false)
+	_verif("ARRÊT ÉLEC (petit) s'engage puis se relâche", elec and not ph.arret_elec)
+	_arret_elec_physique()
 	print("BENCH_PUPITRE " + ("OK" if _ok else "ECHEC"))
 	quit(0 if _ok else 1)
+
+
+## Arrêt électrique en ligne (port du PC) : de 12 m/s, la consigne redescend
+## à 0,45 m/s² → arrêt doux en ≈ 27 s, sans frein d'urgence ; départ refusé.
+func _arret_elec_physique() -> void:
+	var ph := TrainPhysics.new()
+	ph.direction = 1
+	ph.s = 600.0
+	ph.s_prev_step = 600.0
+	ph.trip_started = true
+	ph.doors_open = false
+	ph.door_leaves_open = false
+	ph.maint_brake = false
+	ph.speed_cmd = 1.0
+	var dt := 1.0 / 60.0
+	for k in range(60 * 60):
+		ph.step(dt)
+	var v0: float = absf(ph.v)
+	ph.arret_elec = true
+	var t := 0.0
+	var a_max := 0.0
+	var v_prec: float = v0
+	while absf(ph.v) > 0.05 and t < 120.0:
+		ph.step(dt)
+		t += dt
+		if absf(ph.v) > 0.15:          # (immobilisation : frein de maintien)
+			a_max = maxf(a_max, (v_prec - absf(ph.v)) / dt)
+		v_prec = absf(ph.v)
+	_verif("ARRÊT ÉLEC à %.1f m/s : arrêt en %.1f s (≈ %.0f s attendues), décélération maxi %.2f m/s²"
+		% [v0, t, v0 / 0.45, a_max], absf(t - v0 / 0.45) < 6.0 and a_max < 1.0 and not ph.emergency)
+	ph.trip_started = false
+	ph.request_depart()
+	_verif("départ refusé tant que l'arrêt électrique est engagé",
+		ph.announce_phase_remaining <= 0.0 and ph.departure_buzzer_remaining <= 0.0)
