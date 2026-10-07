@@ -156,6 +156,13 @@ func _charge_horaire(direction: int) -> Array:
 
 
 func toggle() -> void:
+	# Kevin, 08/10/2026 : « en mode exploitation auto tu repasses tout seul
+	# en mode normal, sinon ça fait n'importe quoi » — l'automate ne conduit
+	# qu'en mode normal (en Défi plus de sécurités, en Pannes le tirage)
+	if not enabled and get_parent() != null and get_parent().get("run_mode") != null \
+			and get_parent().get("run_mode") != "normal" and get_parent().has_method("set_run_mode"):
+		get_parent().set_run_mode("normal")
+		print("[AutoOp] retour au mode normal")
 	enabled = not enabled
 	var journal: Node = get_parent().get_node_or_null("ExploitationLog") \
 		if get_parent() != null else null

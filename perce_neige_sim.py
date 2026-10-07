@@ -5932,6 +5932,15 @@ class AutoOps:
         if self.enabled:
             self._refresh_day_counters()
             self.phase_t = 0.0
+            # Kevin, 08/10/2026 : « en mode exploitation auto tu repasses
+            # tout seul en mode normal, sinon ça fait n'importe quoi » —
+            # l'automate ne conduit qu'en mode normal (en Défi plus de
+            # sécurités, en Pannes le tirage de pannes).
+            if self.w.state.run_mode != "normal":
+                self.w.state.run_mode = "normal"
+                add_event(self.w.state, "ops",
+                          "Auto-operation: back to NORMAL mode",
+                          "Exploitation auto : retour au mode NORMAL", "info")
             # Auto-exploitation needs a live simulation : jump out of
             # the title / over / paused screens into MODE_RUN so the
             # physics, door timers and sound tick run. Also clear any
@@ -7206,6 +7215,7 @@ class GameWidget(QWidget):
         self._skieur_vue_n = 0                  # appuis sur V (1re / 3e pers.)
         self._skieur_ski_n = 0                  # appuis sur E (chausser)
         self._skieur_evac_n = 0                 # appuis sur I (évacuer)
+        self._skieur_prep_txt = ""              # préparation du décor 3D en cours (texte)
         # dedans, retenue, écoute (0 rame, 1 gare basse, 2 dehors, 3 gare
         # haute, 4 tunnel à pied), gain de la machinerie entendu (gare haute)
         self._skieur_etat = (False, False, 0, 0.0)
@@ -7246,6 +7256,21 @@ class GameWidget(QWidget):
                  "X": Qt.Key.Key_X}.get(str(m["touche"]))
             if k is not None:
                 self._virtual_key(k)
+        elif "skieur_prep" in m:
+            # préparation du décor 3D du skieur : texte d'avancement, puis
+            # "" avec la durée quand c'est prêt (Kevin, 08/10/2026 : « on ne
+            # sait pas si ça marche ou pas, il n'y a pas de message »)
+            txt = str(m.get("skieur_prep", ""))
+            if txt:
+                self._skieur_prep_txt = txt
+            else:
+                self._skieur_prep_txt = ""
+                ms = int(m.get("ms", -1) or -1)
+                if ms >= 0:
+                    add_event(self.state, "skieur",
+                              f"Skier: 3D scenery ready in {ms / 1000:.1f} s",
+                              f"Skieur : décor 3D prêt en {ms / 1000:.1f} s",
+                              "info")
         elif "skieur_etat" in m:
             e = m["skieur_etat"]
             if isinstance(e, list) and len(e) >= 3:
@@ -7377,6 +7402,7 @@ class GameWidget(QWidget):
         self._godot_view3d = 0
         self._skieur = True
         self._skieur_etat = (False, False, 0, 0.0)
+        self._skieur_prep_txt = T("preparing the 3D scenery…", "préparation du décor 3D…")
         self._key_state.clear()
         add_event(st, "skieur",
                   "Skier: ZQSD / arrows to walk, Shift to run, V 1st/3rd "
@@ -7392,6 +7418,7 @@ class GameWidget(QWidget):
         if not self._skieur:
             return
         self._skieur = False
+        self._skieur_prep_txt = ""
         self._key_state.clear()
         self._appliquer_etat_skieur()
         ao = self.auto_ops
@@ -14704,10 +14731,19 @@ class GameWidget(QWidget):
         self._hit_zones.append(
             (QRectF(col1, row3, btn_w, btn_h), int(Qt.Key.Key_O), False)
         )
+        prep = getattr(self, "_skieur_prep_txt", "")
         self._draw_button(p, col2, row3, btn_w, btn_h,
-                          T("SKIER [F9]", "SKIEUR [F9]"),
+                          (T("SKIER…", "SKIEUR…") if prep else T("SKIER [F9]", "SKIEUR [F9]")),
                           self._skieur, QColor(150, 230, 200),
                           QColor(10, 50, 40))
+        if prep:
+            # ligne d'avancement sous le bouton (« décor 45 % (6 s) »)
+            p.setPen(QColor(150, 230, 200))
+            f = p.font()
+            f.setPointSize(8)
+            p.setFont(f)
+            p.drawText(QRectF(col2 - 20, row3 + btn_h + 2, btn_w + 40, 14),
+                       Qt.AlignmentFlag.AlignCenter, prep.replace("Préparation du décor du skieur… ", ""))
         self._hit_zones.append(
             (QRectF(col2, row3, btn_w, btn_h), int(Qt.Key.Key_F9), False)
         )

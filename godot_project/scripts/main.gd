@@ -85,6 +85,16 @@ var domaine: DomaineSkiable = null
 ## la boucle toute seule (bouton AUTO du skieur, touche X)
 var skieur_auto: SkieurAuto = null
 var _skieur_en_attente: bool = false   # collisions en préparation : on entre dès qu'elles sont prêtes
+var _t_skieur_attente: int = 0         # début de l'attente (ms)
+var _t_skieur_prep_msg: float = 0.0    # dernier message d'avancement
+
+
+## Message d'attente du skieur : HUD 3D (persistant) et PC (relais).
+func _skieur_prep(texte: String, ms: int = -1) -> void:
+	if texte != "":
+		_flash(texte)
+	if client_mode and state_receiver != null:
+		state_receiver.envoyer({"skieur_prep": texte, "ms": ms})
 var _paliers_en_gare: bool = true
 var _skieur_etat_envoye: Array = []
 var _skieur_place: bool = false        # déjà posé une fois (on le retrouve où on l'a laissé)
@@ -1003,8 +1013,15 @@ func _process(delta: float) -> void:
 		machine_room.set_exterieur_visible(cabin.view_mode != Cabin.ViewMode.EXTERIOR
 			and not mode_skieur
 			and (d_hall < 150.0 or (cabin.view_mode == Cabin.ViewMode.FPV and d_hall < 450.0)))
-	if _skieur_en_attente and collisions != null and collisions.pret:
-		_entrer_skieur()
+	if _skieur_en_attente and collisions != null:
+		if collisions.pret:
+			_entrer_skieur()
+		else:
+			_t_skieur_prep_msg += delta
+			if _t_skieur_prep_msg >= 1.0:
+				_t_skieur_prep_msg = 0.0
+				_skieur_prep("Préparation du décor du skieur… %d %% (%d s)" % [
+					int(collisions.progres() * 100.0), (Time.get_ticks_msec() - _t_skieur_attente) / 1000])
 	if mode_skieur:
 		_maj_skieur()
 	# numéros des supports : rétroréfléchissants dans les phares (vue cabine)
@@ -1625,6 +1642,7 @@ func _entrer_skieur() -> void:
 	if collisions == null:
 		collisions = CollisionsJeu.new()
 		collisions.name = "Collisions"
+		collisions.budget_us = 14000 if client_mode else CollisionsJeu.BUDGET_US
 		add_child(collisions)
 		var zones: Array = []
 		for s in [0.0, PNConstants.LENGTH]:
@@ -1635,11 +1653,18 @@ func _entrer_skieur() -> void:
 		collisions.construire(self, zones)
 	if not collisions.pret:
 		# par tranches sur quelques images (pas de gel) : on entre dès que
-		# c'est prêt (_process)
+		# c'est prêt (_process) ; le message reste affiché, avec
+		# l'avancement, et le PC le reçoit (Kevin, 08/10/2026 : « on ne sait
+		# pas si ça marche ou pas, il n'y a pas de message »)
 		if not _skieur_en_attente:
 			_skieur_en_attente = true
-			_flash("Préparation du décor du skieur…")
+			_t_skieur_attente = Time.get_ticks_msec()
+			_skieur_prep("Préparation du décor du skieur…")
 		return
+	if _skieur_en_attente:
+		var ms: int = Time.get_ticks_msec() - _t_skieur_attente
+		print("[Skieur] décor prêt en %d ms" % ms)
+		_skieur_prep("", ms)
 	_skieur_en_attente = false
 	if skieur == null:
 		skieur = SkieurJoueur.new()

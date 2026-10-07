@@ -29,6 +29,8 @@ const R_PAROI: float = 1.64             # rayon intérieur du tube des voitures
 var pret: bool = false
 var triangles: int = 0
 const BUDGET_US: int = 7000
+var budget_us: int = BUDGET_US          # vue 3D du PC : 14 000 (le PC rend à part)
+var _n_taches: int = 0                  # pour la progression
 var _taches: Array = []                 # Callables à exécuter, dans l'ordre
 var _t0: int = 0
 var _decor: StaticBody3D = null
@@ -69,6 +71,7 @@ func construire(main: Node, zones_terrain: Array, synchrone: bool = false) -> vo
 		var racine: Node3D = main.get(nom) as Node3D
 		if racine != null:
 			_maillages(racine, zones)
+	_n_taches = 0
 	for m in mobiles:
 		_taches.append(_corps_mobile.bind(m as Node3D))
 	for nom2 in ["cabin", "cabin_ghost"]:
@@ -79,14 +82,22 @@ func construire(main: Node, zones_terrain: Array, synchrone: bool = false) -> vo
 	if relief != null:
 		for z in zones_terrain:
 			_taches.append(_terrain.bind(relief, z as Rect2))
+	_n_taches = _taches.size()
 	if synchrone or DisplayServer.get_name() == "headless":
 		_avancer(1 << 62)
 	else:
 		set_process(true)
 
 
+## Avancement de la construction (0-1).
+func progres() -> float:
+	if _n_taches <= 0:
+		return 1.0
+	return 1.0 - float(_taches.size()) / float(_n_taches)
+
+
 func _process(_delta: float) -> void:
-	_avancer(Time.get_ticks_usec() + BUDGET_US)
+	_avancer(Time.get_ticks_usec() + budget_us)
 
 
 ## Exécute les tâches jusqu'à l'échéance ; prêt quand il n'en reste plus.
