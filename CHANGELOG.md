@@ -7,6 +7,33 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.15.88** — intérieur des voitures d'après les photos : paliers en
+caoutchouc, bancs bleus, porte-skis orange.
+- Kevin : « un palier au travers de chaque vitre, recouvert d'un matelas
+  noir en caoutchouc ; sur chaque palier deux porte-skis orange, décalés
+  d'un palier sur deux ; le long des parois courbes sous les fenêtres, un
+  banc bleu clair sauf à la porte », puis « affine la forme des
+  porte-skis ». Photos FUNI-334 : « L'intérieur », « Les sièges »,
+  « Détail d'un couloir ».
+  - **Paliers** : tapis de caoutchouc noir alvéolé, trous ronds en
+    quinconce au pas de 4 cm.
+  - **Bancs** moulés bleu clair contre la paroi, sous chaque hublot :
+    assise à 0,45 m, lèvre avant arrondie, jupe en retrait, dossier
+    jusqu'au bas du hublot. Aucun au droit des portes : deux bancs pour
+    trois cerceaux de chaque côté, en escalier comme les paliers.
+  - **Porte-skis** en tube orange cintré (un maillage balayé par
+    porte-skis) :
+    - deux arceaux en ∩ à coins arrondis, reliés en haut ;
+    - pieds à décrochement en baïonnette vers mi-hauteur, embouts gris ;
+    - deux par palier, en quinconce d'un palier sur deux.
+  - Les rouges « sièges » génériques et les poteaux du milieu du couloir,
+    absents des photos, sont retirés. Les passagers assis sont sur les
+    bancs ; au droit des portes, ils sont debout ; personne n'est debout
+    dans les porte-skis.
+- Plan des cerceaux exposé (`TrainBodyBuilder.KINDS`). SOURCES.md, ligne
+  24i.
+- Vérifié : 14 bancs Godot (dont la rame), 99 tests PC, parité PWA.
+
 **v1.15.87** — relief 3D juste ; bouche du tunnel en gare amont d'après
 les photos.
 - **« Normalement il est souterrain tout le temps, donc c'est une

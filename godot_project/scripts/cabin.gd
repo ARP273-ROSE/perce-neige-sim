@@ -359,12 +359,11 @@ func _build_floor_ceiling() -> void:
 	# Sol cabine — plancher caillebotis sombre (matériau acier mat),
 	# bien plus contrasté que la dalle béton du tunnel pour qu'on
 	# distingue clairement "intérieur" vs "voie" depuis le siège.
-	var floor_mat: StandardMaterial3D = StandardMaterial3D.new()
-	floor_mat.albedo_color = Color(0.15, 0.15, 0.17)
-	floor_mat.roughness = 0.35
-	floor_mat.metallic = 0.6
-	floor_mat.metallic_specular = 0.4
-	floor_mat.uv1_scale = Vector3(8.0, 16.0, 1.0)
+	# Paliers couverts d'un tapis de caoutchouc noir alvéolé (photos FUNI-334
+	# « l'intérieur », « détail d'un couloir » ; Kevin, 07/10/2026 : « un
+	# palier au travers de chaque vitre, recouvert d'un matelas noir en
+	# caoutchouc classique ») : trous ronds en quinconce, pas de 4 cm.
+	var floor_mat: StandardMaterial3D = _mat_tapis()
 
 	# Plancher EN GRADINS (vidéo cabine f_001/f_002 : une marche de ~35 cm
 	# par cerceau, paliers horizontaux sur la pente moyenne de 26,5 %),
@@ -389,6 +388,35 @@ func _build_floor_ceiling() -> void:
 
 	var led_z_rear: float = train_length * 0.5 * 0.92
 	_add_interior_box(led_mat, 0.25, 0.04, 1.42, z_front_ceil, led_z_rear, "InteriorLEDStrip")
+
+
+## Tapis de caoutchouc alvéolé : fond noir, trous ronds en quinconce où
+## l'on devine le plancher brun-orangé.
+static var _tapis: StandardMaterial3D = null
+
+
+static func _mat_tapis() -> StandardMaterial3D:
+	if _tapis != null:
+		return _tapis
+	var n: int = 32
+	var img: Image = Image.create(n, n, false, Image.FORMAT_RGB8)
+	for y in range(n):
+		for x in range(n):
+			var c: Color = Color(0.045, 0.045, 0.05)
+			# deux trous par motif, en quinconce
+			for ctr in [Vector2(8, 8), Vector2(24, 24)]:
+				var d: Vector2 = Vector2(x + 0.5, y + 0.5) - ctr
+				if d.length() < 5.2:
+					c = Color(0.22, 0.10, 0.04).lerp(Color(0.02, 0.02, 0.02), clampf(d.length() / 5.2, 0.0, 1.0) * 0.5)
+			img.set_pixel(x, y, c)
+	img.generate_mipmaps()
+	_tapis = StandardMaterial3D.new()
+	_tapis.albedo_texture = ImageTexture.create_from_image(img)
+	_tapis.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+	_tapis.uv1_triplanar = true
+	_tapis.uv1_scale = Vector3(1.0, 1.0, 1.0) / 0.04
+	_tapis.roughness = 0.9
+	return _tapis
 
 
 const FLOOR_GRADE: float = 0.265   # pente moyenne : les paliers sont horizontaux dessus
@@ -493,29 +521,8 @@ func _build_handrails() -> void:
 			rail.rotation = Vector3(PI * 0.5, 0.0, 0.0)
 			_interior_cars[idx].add_child(rail)
 
-	# Poteaux verticaux : 6 dans chaque car (1 entre chaque paire de rangées)
-	# Positionnés au milieu de l'aisle (x=0)
-	var car_length: float = train_length / float(car_count)
-	for car_idx in range(car_count):
-		var car_center: float = (float(car_idx) - (car_count - 1) * 0.5) * car_length
-		var z_start: float = car_center - car_length * 0.5 + (5.5 if car_idx == 0 else 1.8)
-		var z_end: float = car_center + car_length * 0.5 - 1.8
-		var n_poles: int = 5
-		for pole_idx in range(n_poles):
-			var t: float = float(pole_idx) / float(n_poles - 1)
-			var z_pole: float = lerpf(z_start, z_end, t)
-			var pole: MeshInstance3D = MeshInstance3D.new()
-			var pole_mesh: CylinderMesh = CylinderMesh.new()
-			pole_mesh.top_radius = 0.020
-			pole_mesh.bottom_radius = 0.020
-			pole_mesh.height = 2.40
-			pole_mesh.radial_segments = 10
-			pole_mesh.material = rail_mat
-			pole.mesh = pole_mesh
-			pole.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-			var pp: Dictionary = _interior_parent(z_pole)
-			pole.position = Vector3(0.0, _floor_y_at(z_pole) + 1.15, pp["z"])
-			pp["node"].add_child(pole)
+	# (Plus de poteaux verticaux au milieu du couloir : les photos de
+	# l'intérieur n'en montrent pas, on s'y tient aux porte-skis — 07/10/2026)
 
 
 # ---------------------------------------------------------------------------
@@ -774,49 +781,188 @@ func _build_driver_seat() -> void:
 	interior_root.add_child(back)
 
 
+## Aménagement des paliers (photos FUNI-334 « l'intérieur », « les sièges,
+## disposés en escalier à cause de l'inclinaison » ; Kevin, 07/10/2026) :
+##  - le long des parois courbes, sous chaque hublot, un banc moulé bleu
+##    clair ; pas de banc au droit des portes → deux bancs pour trois
+##    cerceaux de chaque côté ;
+##  - sur chaque palier, deux porte-skis en tube orange, décalés d'un palier
+##    sur deux (en quinconce).
+## Chaque palier est horizontal : bancs et porte-skis sont posés dans son
+## repère (même inclinaison que la dalle).
+const BANC_BLEU: Color = Color(0.56, 0.72, 0.88)
+const ORANGE_RACK: Color = Color(1.0, 0.45, 0.05)
+const RACK_DZ: float = 0.48           # porte-skis vers l'arrière du palier
+const RACK_L: float = 0.50            # largeur (en travers)
+const RACK_P: float = 0.30            # profondeur
+const RACK_H: float = 1.00
+
+
+## Abscisses des deux porte-skis du palier k (quinconce).
+static func racks_x(k: int) -> Array:
+	return [-0.42, 0.16] if k % 2 == 0 else [-0.16, 0.42]
+
+
 func _build_passenger_seats() -> void:
-	# Sièges passagers : rangées de 2 sièges (1 par côté), aisle au milieu.
-	# 8 rangées par car, espacées de ~1.6m → couvre la zone passagers
-	var seat_mat: StandardMaterial3D = StandardMaterial3D.new()
-	seat_mat.albedo_color = Color(0.55, 0.10, 0.10)   # rouge sombre pour contraste
-	seat_mat.roughness = 0.90
-	seat_mat.metallic = 0.0
+	var bleu: StandardMaterial3D = StandardMaterial3D.new()
+	bleu.albedo_color = BANC_BLEU
+	bleu.roughness = 0.35
+	var orange: StandardMaterial3D = StandardMaterial3D.new()
+	orange.albedo_color = ORANGE_RACK
+	orange.roughness = 0.45
+	var gris: StandardMaterial3D = StandardMaterial3D.new()
+	gris.albedo_color = Color(0.55, 0.56, 0.58)
+	gris.metallic = 0.6
+	gris.roughness = 0.4
+	var tilt: float = -atan(FLOOR_GRADE)
+	var car_len: float = train_length / float(car_count)
+	for idx in range(car_count):
+		var z_c: float = (float(idx) - (car_count - 1) * 0.5) * car_len
+		for k in range(10):
+			if idx == 0 and k == 0:
+				continue                 # poste de conduite
+			var pal: Node3D = Node3D.new()
+			pal.name = "Amenagement%d_%d" % [idx + 1, k]
+			pal.position = Vector3(0.0, TrainBodyBuilder.Y_FLOOR + STEP_LIFT + 0.025, _panel_center(idx, k) - z_c)
+			pal.rotation = Vector3(tilt, 0.0, 0.0)
+			_interior_cars[idx].add_child(pal)
+			if TrainBodyBuilder.KINDS[k] == "win":
+				for side in [-1.0, 1.0]:
+					_banc(pal, side, bleu)
+			for xr in racks_x(k):
+				_porte_skis(pal, xr, orange, gris)
 
-	var car_length: float = train_length / float(car_count)
-	for car_idx in range(car_count):
-		var car_center: float = (float(car_idx) - (car_count - 1) * 0.5) * car_length
-		# Zone passagers : skip les 4m près du nez (cockpit) pour le car avant
-		var z_start: float = car_center - car_length * 0.5 + (4.5 if car_idx == 0 else 1.0)
-		var z_end: float = car_center + car_length * 0.5 - 1.0
-		var n_rows: int = 8
-		for row_idx in range(n_rows):
-			var t: float = float(row_idx) / float(n_rows - 1)
-			var z_row: float = lerpf(z_start, z_end, t)
-			for side in [-1.0, 1.0]:
-				_emit_seat(seat_mat, side * 0.85, z_row)
+
+func _piece(parent: Node3D, mesh: Mesh, pos: Vector3, rot: Vector3 = Vector3.ZERO) -> void:
+	var mi: MeshInstance3D = MeshInstance3D.new()
+	mi.mesh = mesh
+	mi.position = pos
+	mi.rotation = rot
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	parent.add_child(mi)
 
 
-func _emit_seat(mat: StandardMaterial3D, x: float, z: float) -> void:
-	# 1 siège : assise + dossier
-	var base: MeshInstance3D = MeshInstance3D.new()
-	var base_mesh: BoxMesh = BoxMesh.new()
-	base_mesh.size = Vector3(0.50, 0.08, 0.45)
-	base_mesh.material = mat
-	base.mesh = base_mesh
-	base.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	var ps: Dictionary = _interior_parent(z)
-	var fy: float = _floor_y_at(z)
-	base.position = Vector3(x, fy + 0.45, ps["z"])
-	ps["node"].add_child(base)
+func _cube(m: StandardMaterial3D, taille: Vector3) -> BoxMesh:
+	var b: BoxMesh = BoxMesh.new()
+	b.size = taille
+	b.material = m
+	return b
 
-	var back: MeshInstance3D = MeshInstance3D.new()
-	var back_mesh: BoxMesh = BoxMesh.new()
-	back_mesh.size = Vector3(0.50, 0.70, 0.08)
-	back_mesh.material = mat
-	back.mesh = back_mesh
-	back.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	back.position = Vector3(x, fy + 0.85, ps["z"] + 0.20)
-	ps["node"].add_child(back)
+
+func _tube(m: StandardMaterial3D, r: float, h: float) -> CylinderMesh:
+	var c: CylinderMesh = CylinderMesh.new()
+	c.top_radius = r
+	c.bottom_radius = r
+	c.height = h
+	c.radial_segments = 10
+	c.rings = 1
+	c.material = m
+	return c
+
+
+## Banc moulé bleu clair contre la paroi (assise à 0,45 m, lèvre avant
+## arrondie, jupe en retrait, dossier jusqu'au bas du hublot).
+func _banc(pal: Node3D, side: float, m: StandardMaterial3D) -> void:
+	var l: float = TrainBodyBuilder.PANEL_L - 0.12
+	_piece(pal, _cube(m, Vector3(0.40, 0.06, l)), Vector3(side * 0.93, 0.42, 0.0))
+	_piece(pal, _tube(m, 0.045, l), Vector3(side * 0.74, 0.415, 0.0), Vector3(PI * 0.5, 0.0, 0.0))
+	_piece(pal, _cube(m, Vector3(0.04, 0.38, l)), Vector3(side * 0.82, 0.20, 0.0))
+	_piece(pal, _cube(m, Vector3(0.05, 0.24, l)), Vector3(side * 1.15, 0.56, 0.0), Vector3(0.0, 0.0, side * 0.28))
+
+
+## Porte-skis en tube orange cintré (photos FUNI-334 « l'intérieur » de
+## face et « détail d'un couloir » de profil ; Kevin, 07/10/2026 : « affine
+## la forme des porte-skis ») : deux arceaux en ∩ à coins arrondis (avant
+## et arrière), reliés en haut par deux traverses ; chaque pied monte droit,
+## fait un décrochement en baïonnette vers mi-hauteur, puis remonte droit ;
+## embouts gris au sol.
+const RACK_CRAN_Y0: float = 0.42      # début du décrochement
+const RACK_CRAN_Y1: float = 0.62      # fin du décrochement
+const RACK_CRAN: float = 0.11         # décalage du décrochement (vers l'avant)
+const RACK_R_TUBE: float = 0.021
+const RACK_R_COIN: float = 0.09
+
+
+func _porte_skis(pal: Node3D, x: float, orange: StandardMaterial3D, gris: StandardMaterial3D) -> void:
+	var st: SurfaceTool = SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var x0: float = x - RACK_L * 0.5
+	var x1: float = x + RACK_L * 0.5
+	var zs: Array = [RACK_DZ - RACK_P * 0.5, RACK_DZ + RACK_P * 0.5]
+	for zb in zs:
+		var zt: float = zb - RACK_CRAN
+		# arceau en ∩ : pied gauche, traverse haute, pied droit
+		var pts: Array = [Vector3(x0, 0.08, zb), Vector3(x0, RACK_CRAN_Y0, zb),
+			Vector3(x0, RACK_CRAN_Y1, zt), Vector3(x0, RACK_H, zt), Vector3(x1, RACK_H, zt),
+			Vector3(x1, RACK_CRAN_Y1, zt), Vector3(x1, RACK_CRAN_Y0, zb), Vector3(x1, 0.08, zb)]
+		_tube_balaye(st, _arrondir(pts, RACK_R_COIN, 5), RACK_R_TUBE)
+		for xx in [x0, x1]:
+			_piece(pal, _tube(gris, RACK_R_TUBE * 1.2, 0.08), Vector3(xx, 0.04, zb))
+	# traverses reliant les deux arceaux en haut
+	for xx in [x0 + RACK_R_COIN, x1 - RACK_R_COIN]:
+		_tube_balaye(st, [Vector3(xx, RACK_H, zs[0] - RACK_CRAN), Vector3(xx, RACK_H, zs[1] - RACK_CRAN)],
+			RACK_R_TUBE)
+	st.generate_normals()
+	st.set_material(orange)
+	var mi: MeshInstance3D = MeshInstance3D.new()
+	mi.mesh = st.commit()
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	pal.add_child(mi)
+
+
+## Arrondit les coins d'une ligne brisée (rayon `r`, `n` points par arc).
+static func _arrondir(pts: Array, r: float, n: int) -> Array:
+	var out: Array = [pts[0]]
+	for i in range(1, pts.size() - 1):
+		var a: Vector3 = pts[i - 1]
+		var p: Vector3 = pts[i]
+		var b: Vector3 = pts[i + 1]
+		var da: Vector3 = (a - p).normalized()
+		var db: Vector3 = (b - p).normalized()
+		var ang: float = acos(clampf(da.dot(db), -1.0, 1.0))
+		if ang > PI - 0.01:
+			out.append(p)
+			continue
+		var t: float = minf(r / tan(ang * 0.5), minf(a.distance_to(p), b.distance_to(p)) * 0.45)
+		var p0: Vector3 = p + da * t
+		var p1: Vector3 = p + db * t
+		# Bézier quadratique p0 → p → p1 (assez proche de l'arc)
+		for k in range(n + 1):
+			var u: float = float(k) / n
+			out.append(p0.lerp(p, u).lerp(p.lerp(p1, u), u))
+	out.append(pts[pts.size() - 1])
+	return out
+
+
+## Tube de rayon r balayé le long d'une ligne (8 côtés, repère transporté).
+static func _tube_balaye(st: SurfaceTool, pts: Array, r: float) -> void:
+	var n_c: int = 8
+	var prec: Array = []
+	var ref: Vector3 = Vector3.RIGHT
+	for i in range(pts.size()):
+		var t: Vector3
+		if i == 0:
+			t = (pts[1] - pts[0]).normalized()
+		elif i == pts.size() - 1:
+			t = (pts[i] - pts[i - 1]).normalized()
+		else:
+			t = ((pts[i + 1] - pts[i]).normalized() + (pts[i] - pts[i - 1]).normalized()).normalized()
+		var u: Vector3 = (ref - t * ref.dot(t))
+		if u.length() < 1e-3:
+			u = Vector3.FORWARD - t * Vector3.FORWARD.dot(t)
+		u = u.normalized()
+		ref = u
+		var v: Vector3 = t.cross(u)
+		var anneau: Array = []
+		for k in range(n_c):
+			var a: float = TAU * k / n_c
+			anneau.append(pts[i] + (u * cos(a) + v * sin(a)) * r)
+		if not prec.is_empty():
+			for k in range(n_c):
+				var k2: int = (k + 1) % n_c
+				for q in [prec[k], anneau[k], anneau[k2], prec[k], anneau[k2], prec[k2]]:
+					st.add_vertex(q)
+		prec = anneau
 
 
 const PAX_PER_LANDING: int = 14      # 2 assis + 12 debout
@@ -872,11 +1018,19 @@ func _build_passengers() -> void:
 			# zone conducteur : pas de passagers dans le premier cerceau
 			if idx == 0 and k == 0:
 				continue
+			var banc: bool = TrainBodyBuilder.KINDS[k] == "win"
 			for sx in [-0.95, 0.95]:
-				slots.append({"x": sx, "z": zc, "sit": true})
+				# assis sur les bancs ; au droit des portes, debout
+				slots.append({"x": sx if banc else sx * 0.85, "z": zc, "sit": banc})
 			for xs in PAX_STAND_X:
 				for dz in PAX_STAND_DZ:
-					slots.append({"x": xs, "z": zc + dz, "sit": false})
+					# pas dans les porte-skis
+					var libre: bool = true
+					for xr in racks_x(k):
+						if absf(xs - xr) < RACK_L * 0.5 + 0.18 and absf(dz - RACK_DZ) < RACK_P * 0.5 + 0.20:
+							libre = false
+					if libre:
+						slots.append({"x": xs, "z": zc + dz, "sit": false})
 		# ordre d'apparition mélangé (un remplissage partiel est réparti)
 		for i in range(slots.size() - 1, 0, -1):
 			var j: int = rng.randi_range(0, i)
