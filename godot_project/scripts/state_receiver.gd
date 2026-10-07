@@ -257,6 +257,9 @@ func _apply(d: Dictionary) -> void:
 		if _last_skieur_evac >= 0 and main != null and main.has_method("evacuer"):
 			main.evacuer()
 		_last_skieur_evac = ne
+	# exploitation automatique du PC (bouton EXPLOIT. du skieur)
+	if main != null and d.has("exploitation"):
+		main.set("_exploitation_pc", _b(d, "exploitation", false))
 	# AUTO du skieur (touche X du PC en mode skieur) : compteur
 	var na: int = _i(d, "skieur_auto", 0)
 	if na != _last_skieur_auto:

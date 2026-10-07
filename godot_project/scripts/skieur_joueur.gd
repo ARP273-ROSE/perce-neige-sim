@@ -108,6 +108,7 @@ const CHUTE_S: float = 2.5
 const Y_SKI: float = 0.10                # skis posés 10 cm au-dessus du sol calculé (sinon
 										 # les tuiles du relief, maillées autrement, les cachent)
 var _chute_t: float = 0.0
+var _capsule: CollisionShape3D = null    # la forme, inclinée avec la voiture qui porte
 
 
 func _init() -> void:
@@ -115,6 +116,11 @@ func _init() -> void:
 	collision_mask = CollisionsJeu.COUCHE_DECOR | CollisionsJeu.COUCHE_VEHICULE
 	floor_max_angle = deg_to_rad(52.0)
 	floor_snap_length = MARCHE_MAX + 0.05
+	# on glisse le long d'un mur quel que soit l'angle d'attaque : à moins
+	# de 15° de la normale (défaut), le corps s'arrêtait net contre un
+	# porte-skis abordé presque de face et n'en sortait plus (07/10/2026)
+	wall_min_slide_angle = 0.0
+	floor_block_on_wall = false
 	floor_stop_on_slope = true
 	max_slides = 6
 	safe_margin = 0.02
@@ -127,6 +133,7 @@ func _ready() -> void:
 	cap.radius = RAYON
 	cap.height = TAILLE
 	cs.shape = cap
+	_capsule = cs
 	cs.position.y = TAILLE * 0.5
 	add_child(cs)
 	pivot = Node3D.new()
@@ -370,6 +377,7 @@ func _process(delta: float) -> void:
 		return
 	delta = minf(delta, 0.05)
 	_porter()
+	_aligner_capsule()
 	if _chute_t > 0.0:
 		_chute_t -= delta
 		if _chute_t <= 0.0:
@@ -456,7 +464,24 @@ func _marcher(delta: float, dir: Vector3, vite: bool) -> void:
 	fait.y = 0.0
 	var voulu: Vector3 = v_cible * delta
 	if voulu.length() > 1e-4 and fait.length() < voulu.length() * 0.5 and is_on_wall():
-		_monter_marche(voulu)
+		if not _monter_marche(voulu):
+			# pas une marche : on glisse le long du mur (porte-skis abordé
+			# presque de face, contremarche, chambranle) — move_and_slide
+			# s'arrêtait net quand le mur était presque perpendiculaire à la
+			# marche ; second passage avec la vitesse projetée sur le mur
+			var nm: Vector3 = get_wall_normal()
+			nm.y = 0.0
+			if nm.length() > 1e-4:
+				nm = nm.normalized()
+				var glisse: Vector3 = voulu - nm * voulu.dot(nm)
+				glisse.y = 0.0
+				# pas de côté kinématique (un move_and_slide de plus restait
+				# collé : déjà en contact, le balayage s'arrête à t = 0) ;
+				# l'essai se fait 2 cm au-dessus du sol, sinon le contact au
+				# sol compte déjà comme un obstacle
+				if glisse.length() > 1e-4 \
+						and not test_move(global_transform.translated(Vector3.UP * 0.02), glisse):
+					global_position += glisse
 	if is_on_floor():
 		_chute = 0.0
 		if support == null and get_floor_normal().y > 0.9:
@@ -556,6 +581,22 @@ func _porter() -> void:
 	else:
 		support = null
 	_support_xf = xf
+
+
+## Dans une voiture, la capsule prend l'INCLINAISON de la voiture, et le
+## « haut » de la marche aussi (08/10/2026) : à mi-tunnel la caisse penche de
+## 16,7° (pente 30 %) ; porte-skis et bancs, fixés au plancher, penchent avec
+## elle. Une capsule verticale dans le monde avait son haut décalé de 50 cm
+## vers le bas de la pente et accrochait le haut des porte-skis — « bloqué
+## par les derniers porte-skis, je ne peux pas accéder à l'avant ».
+func _aligner_capsule() -> void:
+	if _capsule == null:
+		return
+	var b: Basis = Basis.IDENTITY
+	if support != null and is_instance_valid(support):
+		b = support.global_transform.basis.orthonormalized()
+	_capsule.transform = Transform3D(b, b * Vector3(0.0, TAILLE * 0.5, 0.0))
+	up_direction = b.y.normalized()
 
 
 ## Le sol sous ses pieds (rayon vertical : immobile, il n'y a pas de
