@@ -50,6 +50,13 @@ var ralentisseur_leve: bool = true
 var portes_secours_fermees: bool = true
 var vitesse_reduite: bool = false
 var pupitre_avant: bool = true
+## Couches (performance PWA, 07/10/2026) : le FOND (cadres, libellés,
+## voyants) n'est redessiné que lorsqu'il change — un voyant, la page — et
+## les VALEURS (date et heure, vitesse, distance) jusqu'à 30 fois par
+## seconde par-dessus : ~170 appels de dessin à chaque rafraîchissement
+## devenaient une dizaine.
+enum Couche { TOUT, FOND, VALEURS }
+var couche: Couche = Couche.TOUT
 
 var _police: Font = null
 
@@ -71,7 +78,26 @@ func _voyant(c: Vector2, r: float, allume: bool, couleur: Color) -> void:
 		draw_circle(c + Vector2(-r * 0.3, -r * 0.3), r * 0.35, couleur.lightened(0.5))
 
 
+## Signature de ce que montre le fond : il est redessiné quand elle change.
+func signature_fond() -> String:
+	return "%d%d%d%d%d%d%d%d%d%d%d%d%d%d|%d" % [int(page_portes),
+		int(portes_ouvertes), int(arret_frein_service), int(arret_elec), int(alarme),
+		int(pret_motrice), int(pret_autre), int(marche), int(autorisation_portes),
+		int(frein_voie_leve), int(ralentisseur_leve), int(portes_secours_fermees),
+		int(vitesse_reduite), int(pupitre_avant), vehicule]
+
+
+## Signature des valeurs : date et heure à la seconde, vitesse, distance.
+func signature_valeurs() -> String:
+	var dt: Dictionary = PNConstants.heure_locale()
+	return "%02d%02d%04d%02d%02d%02d|%.2f|%d" % [dt.day, dt.month, dt.year, dt.hour,
+		dt.minute, dt.second, vitesse, int(round(distance))]
+
+
 func _draw() -> void:
+	if couche == Couche.VALEURS:
+		_valeurs()
+		return
 	draw_rect(Rect2(0, 0, L, H), C_BLEU)
 	draw_rect(Rect2(4, 4, L - 8, H - 8), C_FOND)
 	_bandeau_haut()
@@ -86,12 +112,7 @@ func _bandeau_haut() -> void:
 	draw_rect(Rect2(4, 4, L - 8, 36), C_BLEU)
 	# date et heure (fond sombre, chiffres jaunes)
 	# heure LOCALE de l'appareil, à la seconde (PNConstants.heure_locale)
-	var dt: Dictionary = PNConstants.heure_locale()
 	draw_rect(Rect2(8, 7, 70, 30), Color(0.30, 0.30, 0.30))
-	_texte(Vector2(10, 19), "%02d/%02d/%04d" % [dt.day, dt.month, dt.year], 10, C_JAUNE, 66,
-		HORIZONTAL_ALIGNMENT_CENTER)
-	_texte(Vector2(10, 33), "%02d:%02d:%02d" % [dt.hour, dt.minute, dt.second], 11, C_JAUNE, 66,
-		HORIZONTAL_ALIGNMENT_CENTER)
 	# voyants d'état
 	var cases: Array = [["ARRÊT\nFREIN DE\nSERVICE", arret_frein_service, Color(0.95, 0.15, 0.15)],
 		["ARRÊT\nÉLEC.", arret_elec, Color(0.95, 0.15, 0.15)],
@@ -192,15 +213,28 @@ func _bandeau_bas() -> void:
 	_texte(Vector2(8, y0 + 14), "VITESSE", 9, C_TEXTE, 60, HORIZONTAL_ALIGNMENT_CENTER)
 	_texte(Vector2(8, y0 + 25), "VÉHICULE", 9, C_TEXTE, 60, HORIZONTAL_ALIGNMENT_CENTER)
 	draw_rect(Rect2(72, y0 + 3, 96, 26), C_SOMBRE)
-	_texte(Vector2(74, y0 + 23), "%.2f" % vitesse, 17, C_JAUNE, 62, HORIZONTAL_ALIGNMENT_RIGHT)
 	_texte(Vector2(140, y0 + 23), "m/s", 9, C_JAUNE)
 	draw_rect(Rect2(174, y0 + 3, 66, 26), C_BLEU_F)
 	_texte(Vector2(174, y0 + 21), "DISTANCE", 9, C_TEXTE, 66, HORIZONTAL_ALIGNMENT_CENTER)
 	draw_rect(Rect2(244, y0 + 3, 96, 26), C_SOMBRE)
-	_texte(Vector2(246, y0 + 23), "%d" % int(round(distance)), 17, C_JAUNE, 72, HORIZONTAL_ALIGNMENT_RIGHT)
 	_texte(Vector2(322, y0 + 23), "m", 9, C_JAUNE)
+	if couche == Couche.TOUT:
+		_valeurs()
 	draw_rect(Rect2(346, y0 + 3, 90, 26), Color(0.95, 0.30, 0.25) if alarme else Color(0.92, 0.94, 0.97))
 	_texte(Vector2(346, y0 + 20), "DÉFAUTS", 9, C_TEXTE if alarme else C_GRIS, 90,
 		HORIZONTAL_ALIGNMENT_CENTER)
 	draw_rect(Rect2(440, y0 + 3, 32, 26), Color(0.40, 0.52, 0.66))
 	draw_rect(Rect2(448, y0 + 9, 16, 14), Color(0.95, 0.96, 0.98), false, 2.0)
+
+
+## Date et heure (heure LOCALE de l'appareil, à la seconde :
+## PNConstants.heure_locale), vitesse (m/s, au centième) et distance (m).
+func _valeurs() -> void:
+	var dt: Dictionary = PNConstants.heure_locale()
+	_texte(Vector2(10, 19), "%02d/%02d/%04d" % [dt.day, dt.month, dt.year], 10, C_JAUNE, 66,
+		HORIZONTAL_ALIGNMENT_CENTER)
+	_texte(Vector2(10, 33), "%02d:%02d:%02d" % [dt.hour, dt.minute, dt.second], 11, C_JAUNE, 66,
+		HORIZONTAL_ALIGNMENT_CENTER)
+	var y0: float = H - 36.0
+	_texte(Vector2(74, y0 + 23), "%.2f" % vitesse, 17, C_JAUNE, 62, HORIZONTAL_ALIGNMENT_RIGHT)
+	_texte(Vector2(246, y0 + 23), "%d" % int(round(distance)), 17, C_JAUNE, 72, HORIZONTAL_ALIGNMENT_RIGHT)

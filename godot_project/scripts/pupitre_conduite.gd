@@ -57,8 +57,12 @@ const Z_ECRAN: float = -0.012
 const PERIODE_ECRAN: float = 1.0 / 30.0   # rafraîchi 30 fois par seconde (fluidité des chiffres)
 
 var _face: Node3D = null
-var _sv: SubViewport = null
-var ecran: EcranProface = null
+var _sv: SubViewport = null            # écran composé : fond + valeurs
+var _sv_fond: SubViewport = null       # fond, redessiné quand il change
+var ecran: EcranProface = null         # le fond (porte l'état affiché)
+var _valeurs: EcranProface = null      # heure, vitesse, distance : 30 fois par seconde au plus
+var _sig_fond: String = ""
+var _sig_valeurs: String = ""
 var _t_ecran: float = 0.0
 var _voyants: Dictionary = {}          # nom → [matériau, couleur allumée]
 var _cabine_bouton: Node3D = null
@@ -136,20 +140,44 @@ func construire(z_console: float, y_top: float, lumieres: Array,
 	fill.light_volumetric_fog_energy = 0.0
 	add_child(fill)
 	lumieres.append(fill)
+	_fusionner()
+
+
+## Performance (PWA, 07/10/2026 : « sur l'iPad le son a des micro-coupures
+## tout le temps maintenant ») : sur la PWA le son est mixé sur le fil
+## principal, entre deux images ; une image trop longue fait un trou. Le
+## pupitre coûtait 88 appels de dessin par image (66 pièces + 22 libellés) :
+## les pièces fixes sont fusionnées par matériau ; seules les commandes (qui
+## s'enfoncent, tournent ou s'allument) et l'écran restent à part.
+func _fusionner() -> void:
+	var garder: Array = []
+	for nom in _commandes:
+		garder.append(_commandes[nom][1])
+	for mi in _face.get_children():
+		if mi is MeshInstance3D and (mi as MeshInstance3D).name == "EcranProface":
+			garder.append(mi)
+	MeshMerge.merge(self, garder, "PupitreFixe")
 
 
 func _construire_ecran() -> void:
-	_sv = SubViewport.new()
-	# rendu à deux fois la résolution de l'écran : net une fois agrandi
-	_sv.size = Vector2i(int(EcranProface.L) * 2, int(EcranProface.H) * 2)
-	_sv.size_2d_override = Vector2i(int(EcranProface.L), int(EcranProface.H))
-	_sv.size_2d_override_stretch = true
-	_sv.transparent_bg = false
-	_sv.disable_3d = true
-	_sv.render_target_update_mode = SubViewport.UPDATE_ONCE
-	add_child(_sv)
+	# rendu à deux fois la résolution de l'écran : net une fois agrandi.
+	# Deux couches (cf. EcranProface.Couche) : le fond n'est redessiné que
+	# lorsqu'il change, l'écran composé (fond + valeurs) quand une valeur
+	# change, 30 fois par seconde au plus.
+	_sv_fond = _nouvel_ecran()
 	ecran = EcranProface.new()
-	_sv.add_child(ecran)
+	ecran.couche = EcranProface.Couche.FOND
+	_sv_fond.add_child(ecran)
+	_sv = _nouvel_ecran()
+	var fond: TextureRect = TextureRect.new()
+	fond.texture = _sv_fond.get_texture()
+	fond.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	fond.stretch_mode = TextureRect.STRETCH_SCALE
+	fond.size = Vector2(EcranProface.L, EcranProface.H)
+	_sv.add_child(fond)
+	_valeurs = EcranProface.new()
+	_valeurs.couche = EcranProface.Couche.VALEURS
+	_sv.add_child(_valeurs)
 	var m: StandardMaterial3D = StandardMaterial3D.new()
 	m.albedo_texture = _sv.get_texture()
 	_mat_ecran = m
@@ -400,8 +428,31 @@ func mettre_a_jour(ph: TrainPhysics, dt: float, vehicule: int, ecran_visible: bo
 	e.ralentisseur_leve = true
 	e.portes_secours_fermees = true
 	e.vitesse_reduite = ph.speed_cap_external < PNConstants.V_MAX
-	e.queue_redraw()
-	_sv.render_target_update_mode = SubViewport.UPDATE_ONCE
+	var sig: String = e.signature_fond()
+	var change: bool = sig != _sig_fond
+	if change:
+		_sig_fond = sig
+		e.queue_redraw()
+		_sv_fond.render_target_update_mode = SubViewport.UPDATE_ONCE
+	_valeurs.vitesse = e.vitesse
+	_valeurs.distance = e.distance
+	var sig_v: String = _valeurs.signature_valeurs()
+	if change or sig_v != _sig_valeurs:
+		_sig_valeurs = sig_v
+		_valeurs.queue_redraw()
+		_sv.render_target_update_mode = SubViewport.UPDATE_ONCE
+
+
+func _nouvel_ecran() -> SubViewport:
+	var sv: SubViewport = SubViewport.new()
+	sv.size = Vector2i(int(EcranProface.L) * 2, int(EcranProface.H) * 2)
+	sv.size_2d_override = Vector2i(int(EcranProface.L), int(EcranProface.H))
+	sv.size_2d_override_stretch = true
+	sv.transparent_bg = false
+	sv.disable_3d = true
+	sv.render_target_update_mode = SubViewport.UPDATE_ONCE
+	add_child(sv)
+	return sv
 
 
 # --- éléments ---------------------------------------------------------------
