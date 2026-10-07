@@ -6,7 +6,8 @@
 ## 2. Par la porte de la cloison, le palier et le quai en escalier, il monte
 ##    dans la voiture ; la rame part : il est emporté, toujours dedans.
 ## 3. En haut (rame posée à quai) : de la voiture au quai, au palier, à la
-##    baie automatique du mur de tête, jusque sur la terrasse.
+##    baie automatique du mur de tête, jusque sur la terrasse ; puis
+##    l'escalier du bout de la terrasse, jusqu'à la neige.
 ## 4. Par la porte de la piste Génépy (bas du quai gauche) : le couloir, la
 ##    porte automatique, la neige remontée au seuil.
 ## 5. AUTO : la rame attend le skieur resté sur le quai ou dans l'embrasure
@@ -191,6 +192,23 @@ func _tick() -> void:
 				_verif("en haut : quai, palier, baie automatique, terrasse",
 					sk.chemin.is_empty() and _ouv_max > 0.9 and rel.dot(ga2._d) > 1.0 and absf(rel.y) < 0.4,
 					"%.0f s, baie %.2f, %.1f m sur la terrasse" % [_t_phase, _ouv_max, rel.dot(ga2._d)])
+				# escalier du bout de la terrasse, jusqu'à la neige
+				var ep: Array = ga2.escalier_points()
+				sk.global_position = ep[0]
+				sk.velocity = Vector3.ZERO
+				sk.chemin = [ep[1]]
+				_phase = 51
+				_t_phase = 0.0
+		51:
+			if sk.chemin.is_empty() or _t_phase > 30.0:
+				var ga3: GareAmont = _main.station_halls.gare_amont
+				var bas: float = ga3._o.y - GareAmont.ESC_HAUT
+				var sol: float = relief.hauteur(sk.global_position.x, sk.global_position.z)
+				_verif("terrasse : l'escalier du bout descend jusqu'à la neige",
+					sk.chemin.is_empty() and sk.is_on_floor() and absf(sk.global_position.y - bas) < 0.25
+						and absf(sk.global_position.y - sol) < 0.25 and sk.dehors(relief),
+					"%.0f s, %.2f m sous la terrasse, %.2f m au-dessus de la neige" % [_t_phase,
+						ga3._o.y - sk.global_position.y, sk.global_position.y - sol])
 				var r2: Array = _poser_dans_voiture(sk, 5)
 				var v5: Node3D = r2[0]
 				var sc: float = (StationsBuilder.PORTE_GENEPY.x + StationsBuilder.PORTE_GENEPY.y) * 0.5

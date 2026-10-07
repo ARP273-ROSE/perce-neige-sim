@@ -45,6 +45,7 @@ const R_COMMANDE: float = 0.028        # rayon de la zone d'appui (doigt)
 const X_ECRAN: float = -0.10           # centre du cadre de l'écran
 const X_PLAQUE: float = 0.21           # centre de la plaque à boutons
 const X_GAUCHE: float = -0.35          # centre de la plaque de gauche (coups-de-poing rouges)
+const PIXEL_ETIQUETTE: float = 0.00048  # plus gros qu'en vrai : lisible depuis le siège
 const L_GAUCHE: float = 0.20
 const L_CADRE: float = 0.30
 const L_PLAQUE: float = 0.31
@@ -247,20 +248,25 @@ func _construire_boutons(chrome: StandardMaterial3D, noir: StandardMaterial3D,
 
 
 ## Plaque de gauche (photo 095119, ajout demandé par Kevin le 06/10/2026 :
-## « à gauche de l'écran il y a les boutons rouges ») : dans un cadre, un
-## poussoir clair puis deux coups-de-poing rouges — URGENCE (le gros, à
-## gauche) et ARRÊT ÉLEC (le petit, à droite) ; dessous à gauche, une clé à
-## étiquette rouge. Libellés illisibles sur la photo : sans texte.
+## « à gauche de l'écran il y a les boutons rouges ») : cadre « ARRÊTS »,
+## deux coups-de-poing rouges — URGENCE (le gros, au milieu) et ÉLECTRIQUE
+## (le petit, à droite) — et, à gauche d'URGENCE, l'emplacement d'un bouton
+## qui n'est pas monté (obturateur gris) ; dessous à gauche, une clé à
+## étiquette rouge. Libellés : Kevin, 07/10/2026.
 func _construire_gauche(chrome: StandardMaterial3D, noir: StandardMaterial3D,
 		filet: StandardMaterial3D) -> void:
 	var z_g: float = -0.030
 	var xs: Array = [X_GAUCHE - 0.060, X_GAUCHE + 0.0, X_GAUCHE + 0.058]
-	_cadre(filet, xs[0] - 0.030, xs[2] + 0.034, z_g - 0.034, z_g + 0.032, "")
-	var clair: StandardMaterial3D = _mat(Color(0.80, 0.80, 0.76), 0.5, 0.0)
-	_sur_face(_cylindre(chrome, 0.0175, 0.008), Vector2(xs[0], z_g), 0.004)
-	_commande("clair", Vector2(xs[0], z_g), _sur_face(_cylindre(clair, 0.0140, 0.009), Vector2(xs[0], z_g), 0.006))
+	# libellés haut placés : les champignons les cacheraient depuis le siège
+	_cadre(filet, xs[0] - 0.030, xs[2] + 0.034, z_g - 0.064, z_g + 0.032, "ARRÊTS")
+	_etiquette("URGENCE", Vector2(xs[1], z_g - 0.047), 14, Color(0.06, 0.06, 0.07))
+	_etiquette("ÉLECTRIQUE", Vector2(xs[2] + 0.004, z_g - 0.047), 13, Color(0.06, 0.06, 0.07))
+	# emplacement vide : bague et obturateur à fleur, pas un bouton
+	var gris: StandardMaterial3D = _mat(Color(0.80, 0.80, 0.76), 0.95, 0.0)
+	_sur_face(_cylindre(chrome, 0.0175, 0.006), Vector2(xs[0], z_g), 0.003)
+	_sur_face(_cylindre(gris, 0.0140, 0.004), Vector2(xs[0], z_g), 0.004)
 	var rouge: StandardMaterial3D = _mat(Color(0.78, 0.07, 0.05), 0.4, 0.0)
-	# à gauche le plus gros = URGENCE, à droite le plus petit = ARRÊT ÉLEC
+	# au milieu le plus gros = URGENCE, à droite le plus petit = ÉLECTRIQUE
 	# (Kevin, 07/10/2026) ; verrouillés enfoncés tant que l'arrêt dure
 	for k in range(2):
 		var p: Vector2 = Vector2(xs[1 + k], z_g)
@@ -302,7 +308,7 @@ func _commande(nom: String, p: Vector2, n: Node3D) -> void:
 ## Commande sous le point d'écran `pos` vu par `cam` : "ouverture_0",
 ## "fermeture_1", "montee", "vite_moins", "vite_plus" (moitié gauche
 ## ou droite du sélecteur), "marche", "klaxon", "cabine",
-## "compartiment", "secours", "clair", "rouge_1", "rouge_2", "cle_gauche",
+## "compartiment", "secours", "rouge_1", "rouge_2", "cle_gauche",
 ## "ecran" ; "" si rien.
 func commande_sous(cam: Camera3D, pos: Vector2) -> String:
 	if _face == null or cam == null:
@@ -567,18 +573,24 @@ func _cle(chrome: StandardMaterial3D, noir: StandardMaterial3D, p: Vector2) -> N
 	return _sur_face(cle, p, 0.026)
 
 
-## Cadre de groupe gravé, libellé au milieu du côté haut.
+## Cadre de groupe gravé, libellé au milieu du côté haut : le trait s'y
+## interrompt (Kevin, 07/10/2026 : « le trait du cerclage s'interrompt pour
+## le titre du box »).
 func _cadre(filet: StandardMaterial3D, xa: float, xb: float, za: float, zb: float, titre: String) -> void:
 	var e: float = 0.0012
-	for z in [za, zb]:
-		_boite(filet, Vector3(xb - xa, 0.0008, e), Vector3((xa + xb) * 0.5, 0.0034, z), _face)
+	var cx: float = (xa + xb) * 0.5
+	var demi: float = 0.0
+	if titre != "":
+		var police: Font = ThemeDB.fallback_font
+		demi = police.get_string_size(titre, HORIZONTAL_ALIGNMENT_LEFT, -1, 18).x \
+			* PIXEL_ETIQUETTE * 0.5 + 0.004
+	for seg in [[xa, cx - demi], [cx + demi, xb]]:
+		_boite(filet, Vector3(seg[1] - seg[0], 0.0008, e), Vector3((seg[0] + seg[1]) * 0.5, 0.0034, za), _face)
+	_boite(filet, Vector3(xb - xa, 0.0008, e), Vector3(cx, 0.0034, zb), _face)
 	for x in [xa, xb]:
 		_boite(filet, Vector3(e, 0.0008, zb - za), Vector3(x, 0.0034, (za + zb) * 0.5), _face)
-	if titre == "":
-		return
-	var lab: Label3D = _etiquette(titre, Vector2((xa + xb) * 0.5, za), 18, Color(0.05, 0.05, 0.06))
-	lab.outline_size = 14
-	lab.outline_modulate = Color(0.62, 0.62, 0.59)
+	if titre != "":
+		_etiquette(titre, Vector2(cx, za), 18, Color(0.05, 0.05, 0.06))
 
 
 ## Libellé gravé, à plat sur la face, lisible depuis le siège.
@@ -586,7 +598,7 @@ func _etiquette(t: String, p: Vector2, taille: int, c: Color) -> Label3D:
 	var l: Label3D = Label3D.new()
 	l.text = t
 	l.font_size = taille
-	l.pixel_size = 0.00048   # plus gros qu'en vrai : lisible depuis le siège
+	l.pixel_size = PIXEL_ETIQUETTE
 	l.modulate = c
 	l.outline_size = 0
 	l.shaded = false

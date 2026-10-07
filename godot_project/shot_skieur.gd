@@ -60,8 +60,14 @@ func _tick() -> void:
 		_vue("fosse_quai", pfq, _yaw_vers(pfq, tun.transform_at(2.0).origin), -0.45, 3.0)
 		var pfd: Vector3 = x14.origin + x14.basis.y * -3.5
 		_vue("fosse_dedans", pfd, _yaw_vers(pfd, tun.transform_at(2.0).origin + tun.transform_at(2.0).basis.x * 1.4), 0.05, 2.5)
+		# escalier du bout de la terrasse : vu d'en bas, sur la neige
+		var ep: Array = (_main.station_halls.gare_amont as GareAmont).escalier_points()
+		var pe: Vector3 = (ep[1] as Vector3) + ((ep[1] as Vector3) - (ep[0] as Vector3)).normalized() * 3.0
+		_vue("escalier_terrasse", pe, _yaw_vers(pe, ep[0]), 0.10, 4.5)
+		if "--escalier" in OS.get_cmdline_user_args():
+			_vues = _vues.slice(_vues.size() - 1)
 		if "--fosse" in OS.get_cmdline_user_args():
-			_vues = _vues.slice(_vues.size() - 2)
+			_vues = _vues.slice(_vues.size() - 3, _vues.size() - 1)
 			_main.physics.s = 1500.0
 			_main.physics.s_prev_step = 1500.0
 		return

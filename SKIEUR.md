@@ -59,7 +59,8 @@ piste. »
 - En sens descente, il part de la terrasse du haut, à côté d'une assiette de
   frites.
 - Klaxon = le vrai buzzer de la rame (vidéo de 2007, 1:56).
-- Banc : 13 étapes.
+- Escalier au bout de la terrasse du haut, jusqu'à la neige (v1.16.4).
+- Banc : 14 étapes.
 
 ### Étape 2 — le ski : à faire
 

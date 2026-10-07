@@ -7,6 +7,30 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.16.4** — pupitre : cadres et boîte ARRÊTS comme sur la photo ;
+escalier au bout de la terrasse du haut.
+- **Pupitre**, d'après la photo envoyée par Kevin :
+  - « le trait du cerclage s'interrompt pour le titre du box » : le trait
+    du haut des cadres PORTES 1 à 6, PORTES 7 à 12 et ÉCLAIRAGE est coupé
+    à la largeur du titre ;
+  - à gauche, cadre **ARRÊTS** : le gros coup-de-poing au milieu,
+    **URGENCE** ; le petit à droite, **ÉLECTRIQUE** ; à gauche d'URGENCE,
+    l'emplacement d'un bouton qui n'est pas monté (obturateur gris, qui ne
+    s'appuie plus).
+  - Les deux libellés sont placés au haut du cadre : vus du siège, les
+    champignons les cachaient.
+- **Escalier de la terrasse** : « au bout de la terrasse au sud en haut,
+  faut un escalier pour rejoindre le sol ».
+  - Sur le petit côté de la pointe sud-ouest, là où la neige est la plus
+    proche du plancher : 2,85 m dessous, contre 4 à 11 m le long du grand
+    côté sud.
+  - 16 contremarches de 17,8 cm, giron de 29 cm, 1,4 m de large ; marches
+    en caillebotis, limons galvanisés, mains courantes noires ; le
+    garde-corps s'ouvre en haut ; la neige est mise à niveau au pied.
+- Vérifié :
+  - banc du skieur, 14 étapes : il descend l'escalier jusqu'à la neige ;
+  - 15 bancs Godot ; rendus du pupitre et de l'escalier.
+
 **v1.16.3** — PC : les boutons du pupitre 3D agissent, et le mode skieur
 arrive sur le simulateur PC.
 - Kevin : « sur le PC, les boutons marchent mais il ne se passe rien

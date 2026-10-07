@@ -40,6 +40,17 @@ const H_BAS: float = -14.0            # bas des façades (sous le terrain)
 const TERRASSE: Array = [Vector2(-7.7, 0.8), Vector2(-4.4, 5.1), Vector2(0.8, 44.2),
 	Vector2(23.0, 54.5), Vector2(27.1, 50.6), Vector2(14.3, 44.8), Vector2(13.4, 34.4),
 	Vector2(21.9, 28.6), Vector2(20.0, 8.8), Vector2(10.8, 4.8), Vector2(9.8, 0.7)]
+## Escalier du bout de la terrasse (Kevin, 07/10/2026 : « au bout de la
+## terrasse au sud en haut, faut un escalier pour rejoindre le sol ») : sur
+## le petit côté de la pointe sud-ouest (sommets 3 → 4 de TERRASSE), là où
+## la neige est la plus proche du plancher (2,85 m dessous sur le relief IGN,
+## 4 à 11 m le long du grand côté sud). Largeur, marches, giron : valeurs du
+## simulateur.
+const ESC_COTE: int = 3                 # côté TERRASSE[3] → TERRASSE[4]
+const ESC_LARG: float = 1.4
+const ESC_HAUT: float = 2.85
+const ESC_MARCHES: int = 16             # contremarches de 17,8 cm
+const ESC_GIRON: float = 0.29
 const TPH: Array = [Vector2(60.3, 102.0), Vector2(48.2, 106.5), Vector2(44.5, 87.8),
 	Vector2(56.0, 83.5)]
 const H_TPH_SOL: float = -5.4         # 3025,3 m (+ 0,6 m de recalage)
@@ -660,24 +671,23 @@ func _terrasse() -> void:
 				_boite("galva", x, d, -6.3, 0.22, 0.22, 12.0)
 			d += 5.0
 		x += 5.0
-	# garde-corps noir (sauf le long de la façade et du restaurant)
+	# garde-corps noir (sauf le long de la façade et du restaurant), ouvert
+	# en haut de l'escalier
 	for i in range(poly.size()):
 		var a: Vector2 = poly[i]
 		var b: Vector2 = poly[(i + 1) % poly.size()]
 		if a.y < 1.5 and b.y < 1.5:
 			continue                     # le long de la façade de tête
-		if a.x > 9.5 and b.x > 9.5:
+		if a.x > 9.5 and b.x > 9.5 and i != ESC_COTE:
 			continue                     # le long du restaurant
-		var l: float = a.distance_to(b)
-		var n_p: int = maxi(1, int(l / 2.0))
-		for k in range(n_p + 1):
-			var q: Vector2 = a.lerp(b, float(k) / n_p)
-			_boite("noir", q.x, q.y, 0.55, 0.06, 0.06, 1.1)
-		var mid: Vector2 = (a + b) * 0.5
-		var rot: float = atan2((b - a).y, (b - a).x)
-		_boite("noir", mid.x, mid.y, 1.08, l, 0.06, 0.06, rot)
-		_boite("noir", mid.x, mid.y, 0.12, l, 0.05, 0.05, rot)
-		_boite("galva", mid.x, mid.y, 0.6, l, 0.015, 0.9, rot)
+		if i == ESC_COTE:
+			var e: Array = _escalier_repere()
+			var demi: Vector2 = (e[1] as Vector2) * (ESC_LARG * 0.5 + 0.05)
+			_garde_corps(a, (e[0] as Vector2) - demi)
+			_garde_corps((e[0] as Vector2) + demi, b)
+		else:
+			_garde_corps(a, b)
+	_escalier()
 	# tables et bancs, transats, porte-skis, parasols
 	_assiette_frites(TABLE_SKIEUR + Vector2(0.0, 0.55))
 	for t in [Vector2(4.0, 12.0), Vector2(4.0, 18.0), Vector2(9.0, 15.0), Vector2(6.0, 26.0),
@@ -693,6 +703,83 @@ func _terrasse() -> void:
 		_boite("galva", -2.6, d + 0.6, 0.6, 0.6, 0.05, 0.5, 0.25)
 	for k in range(3):
 		_boite("blanc", 7.0, 2.5 + k * 2.2, 0.75, 0.10, 1.8, 1.5)
+
+
+func _garde_corps(a: Vector2, b: Vector2) -> void:
+	var l: float = a.distance_to(b)
+	var n_p: int = maxi(1, int(l / 2.0))
+	for k in range(n_p + 1):
+		var q: Vector2 = a.lerp(b, float(k) / n_p)
+		_boite("noir", q.x, q.y, 0.55, 0.06, 0.06, 1.1)
+	var mid: Vector2 = (a + b) * 0.5
+	var rot: float = atan2((b - a).y, (b - a).x)
+	_boite("noir", mid.x, mid.y, 1.08, l, 0.06, 0.06, rot)
+	_boite("noir", mid.x, mid.y, 0.12, l, 0.05, 0.05, rot)
+	_boite("galva", mid.x, mid.y, 0.6, l, 0.015, 0.9, rot)
+
+
+## Repère de l'escalier (local 2D) : [milieu du côté, le long du côté,
+## vers l'extérieur (où il descend)].
+func _escalier_repere() -> Array:
+	var a: Vector2 = TERRASSE[ESC_COTE]
+	var b: Vector2 = TERRASSE[(ESC_COTE + 1) % TERRASSE.size()]
+	var t: Vector2 = (b - a).normalized()
+	return [(a + b) * 0.5, t, Vector2(-t.y, t.x)]
+
+
+## Longueur au sol de la volée (du bord de la terrasse au pied).
+func escalier_course() -> float:
+	return (ESC_MARCHES - 1) * ESC_GIRON
+
+
+## Haut et pied de l'escalier de la terrasse (monde), pour le banc.
+func escalier_points() -> Array:
+	var e: Array = _escalier_repere()
+	var m: Vector2 = e[0]
+	var n: Vector2 = e[2]
+	return [_p2(m - n * 1.5, 0.05), _p2(m + n * (escalier_course() + 1.5), -ESC_HAUT + 0.05)]
+
+
+func _escalier() -> void:
+	var e: Array = _escalier_repere()
+	var m: Vector2 = e[0]
+	var t: Vector2 = e[1]
+	var n: Vector2 = e[2]
+	var rot: float = atan2(t.y, t.x)
+	var h: float = ESC_HAUT / ESC_MARCHES
+	# marches de caillebotis : la k-ième à k contremarches sous le plancher
+	for k in range(1, ESC_MARCHES):
+		var c: Vector2 = m + n * ((k - 0.5) * ESC_GIRON)
+		_boite("caillebotis", c.x, c.y, -k * h - 0.025, ESC_LARG, ESC_GIRON + 0.01, 0.05, rot)
+	var course: float = escalier_course()
+	for cote in [-1.0, 1.0]:
+		var lat: Vector2 = t * cote * (ESC_LARG * 0.5 + 0.03)
+		# limon galvanisé, du bord de la terrasse à la neige
+		_barre("galva", _p2(m + lat - n * 0.05, -0.17), _p2(m + lat + n * (course + 0.10), -ESC_HAUT + 0.10), 0.03, 0.30)
+		# main courante noire à 0,95 m au-dessus des nez de marche, poteaux
+		var lat_r: Vector2 = t * cote * (ESC_LARG * 0.5 + 0.06)
+		_barre("noir", _p2(m + lat_r, 0.95), _p2(m + lat_r + n * course, -ESC_HAUT + 0.95), 0.05, 0.05)
+		for k in [1, 6, 11, ESC_MARCHES - 1]:
+			var q: Vector2 = m + lat_r + n * ((k - 0.5) * ESC_GIRON)
+			var y_k: float = -k * h
+			_boite("noir", q.x, q.y, y_k + 0.47, 0.05, 0.05, 0.95)
+
+
+## Barre droite de section larg × haut entre deux points du monde (limons,
+## mains courantes inclinés) ; « haut » dans le plan vertical de la barre.
+func _barre(m: String, p0: Vector3, p1: Vector3, larg: float, haut: float) -> void:
+	var u: Vector3 = (p1 - p0).normalized()
+	var v: Vector3 = u.cross(Vector3.UP).normalized() * larg * 0.5
+	var w: Vector3 = v.cross(u).normalized() * haut * 0.5
+	var k: Array = []
+	for p in [p0, p1]:
+		for sv in [-1, 1]:
+			for sw in [-1, 1]:
+				k.append(p + v * sv + w * sw)
+	# k[i] : i = 4 bout + 2 sv' + sw'
+	var faces: Array = [[0, 1, 3, 2], [4, 6, 7, 5], [0, 4, 5, 1], [2, 3, 7, 6], [0, 2, 6, 4], [1, 5, 7, 3]]
+	for f in faces:
+		_quad(m, k[f[0]], k[f[1]], k[f[2]], k[f[3]])
 
 
 func _parasol(x: float, d: float) -> void:
@@ -838,6 +925,16 @@ func point_depart() -> Array:
 	return [p, atan2(-vers.x, -vers.z)]
 
 
+func _pied_escalier() -> Array:
+	var e: Array = _escalier_repere()
+	var m: Vector2 = e[0]
+	var t: Vector2 = e[1] * (ESC_LARG * 0.5 + 0.5)
+	var n: Vector2 = e[2]
+	var c0: Vector2 = m + n * (escalier_course() - 0.2)
+	var c1: Vector2 = m + n * (escalier_course() + 2.2)
+	return [c0 - t, c0 + t, c1 + t, c1 - t]
+
+
 func amenagement_relief() -> Dictionary:
 	var monde := func(pts: Array) -> PackedVector2Array:
 		var out: PackedVector2Array = PackedVector2Array()
@@ -862,6 +959,9 @@ func amenagement_relief() -> Dictionary:
 		"trous": [monde.call(hall), monde.call(ANNEXES), monde.call(TPH),
 			monde.call(rect.call(RESTO_A)), monde.call(rect.call(RESTO_B))],
 		"rabots": [[monde.call(TERRASSE), _o.y - 0.4, 3.0]],
+		# pied de l'escalier du bout de la terrasse : neige à la dernière
+		# contremarche
+		"plats": [[monde.call(_pied_escalier()), _o.y - ESC_HAUT, 2.0]],
 		# neige au niveau du seuil de la porte Génépy (Kevin : « tu me montes
 		# le terrain jusque-là »)
 		"remblais": [[monde.call(rect.call(Rect2(-DEMI_HALL - 9.0, _pg_d.x - 4.0, 8.8, _pg_d.y - _pg_d.x + 8.0))),
