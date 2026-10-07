@@ -7,6 +7,19 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.15.91** — portes de la salle d'attente : le vantail libère tout le
+passage.
+- Kevin : « c'est un seul vantail qui glisse complètement à gauche pour
+  laisser tout le passage, pas que la moitié ; vérifie la vidéo ».
+- La v1.15.90 gardait un panneau fixe côté milieu et ne faisait glisser
+  que la vitre extérieure. Or, sur la vidéo, les deux vitres sont dans un
+  même cadre et partent ensemble.
+- Chaque porte est maintenant un seul vantail de toute la baie (2,1 m).
+  Il glisse de 2,15 m vers le milieu de la salle, en retrait côté quai,
+  derrière le montant et la vitrine.
+- Banc du pupitre : passage entièrement libre (course > 2 m), vers le
+  milieu, fermé avant le départ.
+
 **v1.15.90** — portes de la salle d'attente de Val Claret : un seul
 vantail, qui coulisse vers le milieu.
 - Kevin : « les portes de la salle du bas, c'est un seul battant qui

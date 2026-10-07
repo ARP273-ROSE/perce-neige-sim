@@ -44,8 +44,8 @@ const AUVENT: Array = [Vector2(-13.87, 17.23), Vector2(-14.54, 19.69), Vector2(-
 const ARCHE_D: float = 10.1         # arche rouge : à 10,1 m devant la façade
 const ARCHE_DECALAGE: float = 0.84  # axe des arches décalé vers l'est
 const LARGEUR_ESCALIER: float = 11.5
-const Z_FIXE: float = 0.035         # panneau fixe des portes, côté salle
-const Z_VANTAIL: float = -0.035     # vantail mobile, en retrait côté quai
+const Z_VANTAIL: float = -0.16      # vantail, en retrait côté quai (passe derrière le montant)
+const COURSE_VANTAIL: float = 2.15  # toute la baie (2,1 m) : passage entièrement libre
 const GIRON: float = 0.33
 
 var tunnel: TunnelBuilder = null
@@ -335,14 +335,15 @@ func _plafond() -> void:
 ## 093500) : menuiseries bleu marine ; une porte coulissante automatique au
 ## pied de chaque quai ; vitrine fixe de 4 m face à la fosse ; bandeau rouge
 ## « ALTITUDE EXPERIENCES... » ; vitrage haut ; panneau des départs.
-## Chaque porte : UN SEUL vantail mobile qui coulisse vers le milieu de la
-## salle (Kevin, 07/10/2026 : « la porte de droite en regardant vers le haut
-## coulisse à gauche, celle du quai gauche à droite » ; vidéo YouTube
+## Chaque porte : UN SEUL vantail, de toute la largeur de la baie (deux
+## vitres de ≈ 1 m × 2,25 m dans un même cadre, traverse vers 45 %), qui
+## coulisse entièrement vers le milieu de la salle et libère tout le passage
+## (Kevin, 07/10/2026 : « la porte de droite en regardant vers le haut
+## coulisse à gauche, celle du quai gauche à droite », « un seul vantail qui
+## glisse complètement pour laisser tout le passage » ; vidéo YouTube
 ## « [FUNI284] Funiculaire Perce-Neige | Tignes (montée) », chaîne
-## Transports câblés, 0:55-0:58). Sur les photos, la baie a deux
-## panneaux (≈ 1 m × 2,25 m, traverse vers 45 %) : le panneau côté milieu
-## est fixe, au nu de la salle ; le vantail mobile, côté extérieur et en
-## retrait côté quai, glisse derrière lui en ≈ 2 s.
+## Transports câblés, 0:55-0:58 : ≈ 2 s). En retrait côté quai, il passe
+## derrière le montant et la vitrine.
 func _cloison() -> void:
 	var h_portes: float = 2.25
 	var y_bandeau: float = 2.45
@@ -365,23 +366,20 @@ func _cloison() -> void:
 		var xc: float = cote * 3.55
 		# dormant : linteau et imposte pleine jusqu'au bandeau
 		_boite("marine", 2.1, y_bandeau - h_portes, 0.20, xc, 0.0, (h_portes + y_bandeau) * 0.5)
-		# panneau fixe côté milieu, au nu de la salle
-		var fixe: Node3D = Node3D.new()
-		fixe.name = "PanneauFixe"
-		add_child(fixe)
-		fixe.position = _p(xc - cote * 0.525, Z_FIXE, 0.0)
-		fixe.basis = _base()
-		_vantail(fixe, h_portes)
-		# vantail mobile côté extérieur, en retrait côté quai : il glisse
-		# vers le milieu, derrière le panneau fixe
+		# UN SEUL vantail de toute la baie (deux vitres dans un même cadre),
+		# en retrait côté quai : il glisse en entier vers le milieu, derrière
+		# le montant et la vitrine, et libère tout le passage
 		var vantail: Node3D = Node3D.new()
 		vantail.name = "Vantail"
 		add_child(vantail)
-		var x0: float = xc + cote * 0.525
-		vantail.position = _p(x0, Z_VANTAIL, 0.0)
+		vantail.position = _p(xc, Z_VANTAIL, 0.0)
 		vantail.basis = _base()
-		_vantail(vantail, h_portes)
-		_vantaux.append([vantail, x0, -cote, Z_VANTAIL])
+		for demi in [-1.0, 1.0]:
+			var vitre: Node3D = Node3D.new()
+			vantail.add_child(vitre)
+			vitre.position = Vector3(demi * 0.525, 0.0, 0.0)
+			_vantail(vitre, h_portes)
+		_vantaux.append([vantail, xc, -cote, Z_VANTAIL])
 		if cote < 0.0:
 			# affichette collée côté salle sur le vantail mobile de la porte
 			# ouest, vers son bord extérieur (photo 093500 : ≈ 0,30 × 0,28 m à
@@ -391,7 +389,7 @@ func _cloison() -> void:
 			carton.size = Vector3(0.30, 0.28, 0.002)
 			carton.material = _mats["blanc"]
 			aff.mesh = carton
-			aff.position = Vector3(-0.20, 1.18, -0.0075)
+			aff.position = Vector3(-0.725, 1.18, -0.0075)
 			vantail.add_child(aff)
 			var txt: Label3D = Label3D.new()
 			txt.text = "PORTES AUTOMATIQUES\nInterdiction à toute personne\nétrangère au service\nd'en actionner l'ouverture\nAUTOMATIC DOORS\nunauthorized persons\nare strictly forbidden\nto operate the sliding doors"
@@ -401,7 +399,7 @@ func _cloison() -> void:
 			txt.shaded = false
 			txt.double_sided = false
 			# le vantail regarde le quai (−Z local = la salle) : demi-tour
-			txt.transform = Transform3D(Basis(Vector3.UP, PI), Vector3(-0.20, 1.18, -0.0095))
+			txt.transform = Transform3D(Basis(Vector3.UP, PI), Vector3(-0.725, 1.18, -0.0095))
 			vantail.add_child(txt)
 	# « 2 » peint sur le montant de la porte de droite (côté ouest, vu du hall)
 	_etiquette("2", _p(-4.55, 0.11, 1.9), 64, Color.WHITE, 0.004, _n)
@@ -853,7 +851,7 @@ func mettre_a_jour(dt: float, ph: TrainPhysics) -> void:
 	var embarquement: bool = en_gare and ph.doors_open and not ph.trip_started
 	# ≈ 2 s pour s'ouvrir ou se fermer (vidéo FUNI284, 0:55-0:57)
 	_ouverture = move_toward(_ouverture, 1.0 if embarquement else 0.0, dt / 2.0)
-	var course: float = 0.98 * smoothstep(0.0, 1.0, _ouverture)
+	var course: float = COURSE_VANTAIL * smoothstep(0.0, 1.0, _ouverture)
 	for v in _vantaux:
 		(v[0] as Node3D).position = _p(float(v[1]) + float(v[2]) * course, float(v[3]), 0.0)
 	_t_panneau -= dt

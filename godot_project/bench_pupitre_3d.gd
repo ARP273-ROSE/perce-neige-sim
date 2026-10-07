@@ -195,8 +195,8 @@ func _tick() -> void:
 		for k in range(6):
 			ga.mettre_a_jour(0.5, ph)
 		var ferme: float = absf(ga.course_vantail(0)) + absf(ga.course_vantail(1))
-		_verif("gare aval : un vantail par porte, vers le milieu, ouvert à l'embarquement, fermé au départ",
-			ga._vantaux.size() == 2 and vers_milieu and ouvert > 0.9 and ferme < 0.01,
+		_verif("gare aval : un vantail par porte, tout le passage libre vers le milieu à l'embarquement, fermé au départ",
+			ga._vantaux.size() == 2 and vers_milieu and ouvert > 2.0 and ferme < 0.01,
 			"course %.2f m puis %.2f m" % [ouvert, ferme])
 		# vraie séquence (Kevin : « ferme-les avant le départ, ouvre-les
 		# après l'arrivée ») : rame à quai portes ouvertes → séquence de
@@ -224,7 +224,7 @@ func _tick() -> void:
 				t_ferme = t
 			if ph2.trip_started:
 				t_dep = t
-		_verif("gare aval : portes de la salle fermées avant le départ", ouv0 > 0.9 and t_ferme > 0.0
+		_verif("gare aval : portes de la salle fermées avant le départ", ouv0 > 2.0 and t_ferme > 0.0
 			and t_ferme < t_dep, "fermées à %.1f s, départ à %.1f s" % [t_ferme, t_dep])
 		_verif("gare aval : panneau des départs renseigné", (ga._panneau[1] as Label3D).text.contains("FUNICULA"))
 	print("BENCH_PUPITRE " + ("OK" if _ok else "ECHEC"))
