@@ -44,8 +44,9 @@ piste. »
 
 ### Retours du premier essai (v1.16.1) : faits
 
-- L'AUTO attend que le skieur ait passé les portes du quai ; une fois monté,
-  le départ vient vite.
+- L'AUTO attend que le skieur ait passé les portes du quai ; une fois qu'il
+  est dans la voiture (passé la ligne des portes), il ferme les portes et
+  part (v1.16.2).
 - Hors de la voiture, plus de son de cabine : en gare, des bouffées d'air
   suivies de silences quand la rame roule ; dehors, du vent.
 - Fosse de Val Claret à 1,95 m sous le quai (tête sous les rails), escalier
@@ -55,7 +56,7 @@ piste. »
 - En sens descente, il part de la terrasse du haut, à côté d'une assiette de
   frites.
 - Klaxon = le vrai buzzer de la rame (vidéo de 2007, 1:56).
-- Banc : 12 étapes.
+- Banc : 13 étapes.
 
 ### Étape 2 — le ski : à faire
 
