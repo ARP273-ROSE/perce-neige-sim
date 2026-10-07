@@ -1,55 +1,41 @@
 class_name ReliefBuilder
 extends Node3D
-## Vue extérieure : le VRAI massif autour du funiculaire, rendu TRANSLUCIDE
-## le long du tunnel pour le voir en entier à travers la montagne.
+## Vue extérieure : le VRAI massif autour du funiculaire, et le tunnel vu
+## « aux rayons X » à travers la montagne.
 ##
-## Historique : 06/10/2026, un puits autour de la rame, affiché seulement
-## caméra au-dessus de la surface (« 3 m après le départ, la vue
-## panoramique du haut, statique, en lévitation »). 07/10, un écorché (la
-## montagne ouverte côté caméra) — Kevin : « au lieu d'un éclaté, diminue
-## l'opacité du sol autour du tunnel pour le voir au travers de la montagne
-## et en entier plutôt que juste une section ; et je n'arrive plus à passer
-## sous la voie ».
+## Historique : 06/10/2026, un puits autour de la rame (« 3 m après le
+## départ, la vue panoramique du haut, statique, en lévitation ») ; 07/10,
+## un écorché (« au lieu d'un éclaté, diminue l'opacité du sol autour du
+## tunnel pour le voir en entier ») ; puis un couloir de sol translucide —
+## mais à travers on voyait le vide sous la surface (« la zone marron qui
+## entoure le trajet, c'est moche, et on ne voit pas les sommets juste à
+## côté et au-dessus »).
 ##
-## Maintenant, en vue extérieure :
+## Maintenant le relief est OPAQUE (on voit les sommets) et c'est le tunnel
+## qui se dessine à travers lui :
 ##  - bloc détaillé : IGN RGE ALTI à 25 m + orthophoto IGN, 8,6 × 10,2 km, du
 ##    sommet de la Grande Motte au lac de Tignes (tools_relief3d.py) ;
 ##  - anneau lointain jusqu'à l'horizon : 44 × 44 km, maille 200 m, rotondité
 ##    de la Terre, orthophoto IGN, brume de distance
 ##    (tools_relief_lointain.py) ;
-##  - COULOIR TRANSLUCIDE : le sol est à 25 % d'opacité jusqu'à 120 m de
-##    l'axe du tunnel (en plan), puis redevient opaque à 450 m. Deux passes :
-##    opaque hors du couloir (écrit la profondeur), translucide dedans
-##    (sans profondeur) — le tunnel, les rames, les gares se voient à
-##    travers ; vu de dessous (caméra sous la voie), le relief est assombri ;
 ##  - le tunnel EN ENTIER : un trait ambre suit son axe de bout en bout, de
-##    largeur constante à l'écran, effacé près de la caméra où l'on voit le
-##    vrai tube ;
+##    largeur constante à l'écran, en deux passes — plein là où il est à
+##    découvert, à 45 % à travers la montagne ; interrompu à la place des
+##    rames et effacé près de la caméra, où l'on voit le vrai tube ;
+##  - les rames se voient aussi à travers le relief (silhouette, Cabin) ;
+##  - vu de dessous (caméra sous la voie, sous la montagne), le relief est
+##    assombri ;
 ##  - les lieux nommés.
-## N'existe qu'en vue extérieure (main.gd). Plus aucune contrainte sur la
-## caméra : elle passe sous la voie, sous la montagne.
+## N'existe qu'en vue extérieure (main.gd). Aucune contrainte sur la caméra.
 
 const CHUNK: int = 64                 # mailles par côté de tuile (frustum culling)
 const GAMMA_WEB: float = 0.625        # rendu Compatibility : voir MachineRoomBuilder
 const Y_SOCLE: float = 1550.0
 const BRUME: Color = Color(0.50, 0.62, 0.78)   # linéaire (≈ 0,73 0,81 0,90 en sRGB)
-# couloir translucide
-const COULOIR_PAS: float = 50.0       # maille de la carte des distances (m)
-const COULOIR_D_MAX: float = 800.0    # distance codée (m) : au-delà, opaque
-const COULOIR_IN: float = 120.0       # opacité minimale jusque-là…
-const COULOIR_OUT: float = 450.0      # … opaque au-delà
-const ALPHA_MIN: float = 0.25
-
-## Sol du bloc détaillé. %s : mode de rendu supplémentaire, %s : ALPHA.
+## Sol du bloc détaillé (opaque ; dessous assombri).
 const SHADER_TERRAIN: String = """shader_type spatial;
-render_mode unshaded, fog_disabled, cull_disabled%s;
+render_mode unshaded, fog_disabled, cull_disabled;
 uniform sampler2D ortho : source_color, filter_linear_mipmap, repeat_disable;
-uniform sampler2D couloir : filter_linear, repeat_disable;
-uniform float d_max = 800.0;
-uniform float w_in = 120.0;
-uniform float w_out = 450.0;
-uniform float alpha_min = 0.25;
-uniform float translucide = 0.0;   // passe : 0 opaque (hors couloir), 1 translucide (dedans)
 uniform float gamma = 1.0;
 uniform vec3 brume = vec3(0.50, 0.62, 0.78);
 varying vec3 pw;
@@ -57,17 +43,12 @@ void vertex() {
 	pw = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 }
 void fragment() {
-	float a = mix(alpha_min, 1.0, smoothstep(w_in, w_out, texture(couloir, UV).r * d_max));
-	if ((a < 0.995) != (translucide > 0.5)) {
-		discard;
-	}
 	vec3 c = texture(ortho, UV).rgb;
 	if (!FRONT_FACING) {
 		c *= 0.45;                     // dessous du relief (caméra sous la surface)
 	}
 	float d = distance(pw, CAMERA_POSITION_WORLD);
 	ALBEDO = pow(mix(c, brume, clamp(1.0 - exp(-d / 28000.0), 0.0, 0.7)), vec3(gamma));
-	%s
 }
 """
 ## Flancs du bloc détaillé : prolongent sa bordure (couleur de l'orthophoto
@@ -116,23 +97,29 @@ void fragment() {
 }
 """
 ## Trait du tunnel : ruban tourné vers la caméra le long de l'axe (sommets
-## posés sur l'axe, NORMAL = tangente, UV.x = côté), ≈ 3 px de large,
-## effacé à moins de 80-300 m de la caméra (on y voit le vrai tube).
+## posés sur l'axe, NORMAL = tangente, UV.x = côté, UV.y = abscisse s),
+## ≈ 3 px de large. Deux passes : %s = mode de rendu (la passe « rayons X »
+## ignore la profondeur), %s = opacité. Interrompu à la place des deux
+## rames (on y voit leur silhouette) et effacé à moins de 40-160 m de la
+## caméra (on y voit le vrai tube).
 const SHADER_TRAIT: String = """shader_type spatial;
-render_mode unshaded, fog_disabled, cull_disabled, depth_draw_never, world_vertex_coords;
-uniform vec4 couleur : source_color = vec4(1.0, 0.62, 0.15, 0.92);
+render_mode unshaded, fog_disabled, cull_disabled, depth_draw_never, world_vertex_coords%s;
+uniform vec4 couleur : source_color = vec4(1.0, 0.62, 0.15, 1.0);
 uniform float px_rad = 0.0022;     // demi-largeur ≈ distance × px_rad
+uniform float s_rame1 = -1000.0;
+uniform float s_rame2 = -1000.0;
 varying float fondu;
 void vertex() {
 	vec3 cam = CAMERA_POSITION_WORLD;
 	float d = distance(VERTEX, cam);
 	vec3 cote = normalize(cross(NORMAL, normalize(cam - VERTEX)));
-	VERTEX += cote * UV.x * max(1.2, d * px_rad);
-	fondu = smoothstep(80.0, 300.0, d);
+	VERTEX += cote * UV.x * max(0.12, d * px_rad);
+	fondu = smoothstep(40.0, 160.0, d)
+		* smoothstep(18.0, 26.0, min(abs(UV.y - s_rame1), abs(UV.y - s_rame2)));
 }
 void fragment() {
 	ALBEDO = couleur.rgb;
-	ALPHA = couleur.a * fondu;
+	ALPHA = %s * fondu;
 }
 """
 
@@ -149,8 +136,8 @@ var pret: bool = false
 #    chaque tuile, bloc détaillé puis anneau lointain) : sur PC dans un fil
 #    parallèle (WorkerThreadPool) ; dans la PWA, qui n'a pas de fils, par
 #    tranches de 3 ms par image sur le fil principal ;
-# 2. carte des distances au tunnel puis maillages (appels au moteur de
-#    rendu) : fil principal, par tranches.
+# 2. maillages (appels au moteur de rendu) : fil principal, quelques
+#    tuiles par image.
 # Aucun gel au démarrage ; le relief apparaît en vue extérieure dès qu'il
 # est prêt (≈ 1 s).
 # Résolution selon la machine (cran du PerfManager) : maille de 25 m et
@@ -170,12 +157,7 @@ var _tache: int = -1
 var _mat_terrain: ShaderMaterial = null
 var _mat_loin: ShaderMaterial = null
 var _tex_ortho: ImageTexture = null
-# carte des distances au tunnel (en plan), calculée par tranches
-var _cnx: int = 0
-var _cnz: int = 0
-var _cdist: PackedFloat32Array = PackedFloat32Array()
-var _axe: PackedVector3Array = PackedVector3Array()
-var _ck: int = -1                     # −1 : pas commencée ; = _axe.size() : finie
+var _mat_trait: ShaderMaterial = null
 
 
 func build(t: TunnelBuilder, cran: int = 0) -> void:
@@ -370,12 +352,9 @@ func _texture_ortho(chemin: String) -> ImageTexture:
 	return ImageTexture.create_from_image(img)
 
 
-## Fil principal : carte des distances au tunnel (par tranches), puis
-## quelques tuiles par image, puis flancs, trait du tunnel, lieux.
+## Fil principal : quelques tuiles par image, puis flancs, trait du
+## tunnel, lieux.
 func _creer_maillages(fin_us: int) -> void:
-	if _ck < _axe.size() or _ck < 0:
-		_avancer_couloir(fin_us)
-		return
 	if _mat_terrain == null:
 		_materiaux()
 		return
@@ -402,76 +381,22 @@ func _creer_maillages(fin_us: int) -> void:
 	print("[Relief] prêt")
 
 
-# --- couloir translucide -----------------------------------------------------
-
-## Carte des distances en plan à l'axe du tunnel, maille COULOIR_PAS, sur
-## l'emprise du bloc détaillé : chaque point de l'axe (tous les 20 m) ne met
-## à jour que les mailles à moins de COULOIR_D_MAX de lui.
-func _avancer_couloir(fin_us: int) -> void:
-	if _ck < 0:
-		_cnx = int(ceil((ReliefDonnees.X_EST - ReliefDonnees.X_OUEST) / COULOIR_PAS))
-		_cnz = int(ceil((ReliefDonnees.Z_SUD - ReliefDonnees.Z_NORD) / COULOIR_PAS))
-		_cdist.resize(_cnx * _cnz)
-		_cdist.fill(COULOIR_D_MAX)
-		var s: float = 0.0
-		while s <= PNConstants.LENGTH + 0.01:
-			_axe.append(tunnel.transform_at(minf(s, PNConstants.LENGTH)).origin)
-			s += 20.0
-		_ck = 0
-	var lx: float = (ReliefDonnees.X_EST - ReliefDonnees.X_OUEST) / _cnx
-	var lz: float = (ReliefDonnees.Z_SUD - ReliefDonnees.Z_NORD) / _cnz
-	var r: int = int(ceil(COULOIR_D_MAX / COULOIR_PAS))
-	while _ck < _axe.size():
-		var p: Vector3 = _axe[_ck]
-		var jc: int = int((p.x - ReliefDonnees.X_OUEST) / lx)
-		var ic: int = int((p.z - ReliefDonnees.Z_NORD) / lz)
-		for i in range(maxi(ic - r, 0), mini(ic + r + 1, _cnz)):
-			var zc: float = ReliefDonnees.Z_NORD + (i + 0.5) * lz - p.z
-			for j in range(maxi(jc - r, 0), mini(jc + r + 1, _cnx)):
-				var xc: float = ReliefDonnees.X_OUEST + (j + 0.5) * lx - p.x
-				var d: float = sqrt(xc * xc + zc * zc)
-				if d < _cdist[i * _cnx + j]:
-					_cdist[i * _cnx + j] = d
-		_ck += 1
-		if Time.get_ticks_usec() > fin_us:
-			return
-
-
-## Opacité du sol en (x, z) — comme le nuanceur (bancs).
-func opacite(x: float, z: float) -> float:
-	if _cdist.is_empty():
-		return 1.0
-	var j: int = clampi(int((x - ReliefDonnees.X_OUEST) / (ReliefDonnees.X_EST - ReliefDonnees.X_OUEST) * _cnx), 0, _cnx - 1)
-	var i: int = clampi(int((z - ReliefDonnees.Z_NORD) / (ReliefDonnees.Z_SUD - ReliefDonnees.Z_NORD) * _cnz), 0, _cnz - 1)
-	return lerpf(ALPHA_MIN, 1.0, smoothstep(COULOIR_IN, COULOIR_OUT, _cdist[i * _cnx + j]))
-
-
 func _materiaux() -> void:
-	var img: Image = Image.create(_cnx, _cnz, false, Image.FORMAT_L8)
-	for i in range(_cnz):
-		for j in range(_cnx):
-			var v: float = clampf(_cdist[i * _cnx + j] / COULOIR_D_MAX, 0.0, 1.0)
-			img.set_pixel(j, i, Color(v, v, v))
-	var tex_c: ImageTexture = ImageTexture.create_from_image(img)
 	_tex_ortho = _texture_ortho("res://textures/relief_ortho.jpg")
-	# passe opaque (hors du couloir, écrit la profondeur) + passe
-	# translucide (dans le couloir, sans profondeur)
-	_mat_terrain = _shader(SHADER_TERRAIN % ["", ""])
-	var trans: ShaderMaterial = _shader(SHADER_TERRAIN % [", depth_draw_never",
-		"ALPHA = a;"])
-	trans.set_shader_parameter("translucide", 1.0)
-	_mat_terrain.next_pass = trans
-	for m in [_mat_terrain, trans]:
-		m.set_shader_parameter("ortho", _tex_ortho)
-		m.set_shader_parameter("couloir", tex_c)
-		m.set_shader_parameter("d_max", COULOIR_D_MAX)
-		m.set_shader_parameter("w_in", COULOIR_IN)
-		m.set_shader_parameter("w_out", COULOIR_OUT)
-		m.set_shader_parameter("alpha_min", ALPHA_MIN)
+	_mat_terrain = _shader(SHADER_TERRAIN)
+	_mat_terrain.set_shader_parameter("ortho", _tex_ortho)
 	_mat_loin = _shader(SHADER_LOINTAIN)
 	_mat_loin.set_shader_parameter("ortho", _texture_ortho("res://textures/relief_lointain.jpg"))
 	_mat_loin.set_shader_parameter("bloc", Vector4(ReliefDonnees.X_OUEST, ReliefDonnees.Z_NORD,
 		ReliefDonnees.X_EST, ReliefDonnees.Z_SUD))
+
+
+## Abscisses des deux rames : le trait du tunnel s'y interrompt.
+func set_rames(s1: float, s2: float) -> void:
+	for m in [_mat_trait, _mat_trait.next_pass if _mat_trait != null else null]:
+		if m != null:
+			m.set_shader_parameter("s_rame1", s1)
+			m.set_shader_parameter("s_rame2", s2)
 
 
 func _shader(code: String) -> ShaderMaterial:
@@ -506,12 +431,18 @@ func _build_trait() -> void:
 	for k in range(pts.size() - 1):
 		var a: Vector3 = pts[k]
 		var b: Vector3 = pts[k + 1]
+		var sa: float = minf(k * 10.0, PNConstants.LENGTH)
+		var sb: float = minf((k + 1) * 10.0, PNConstants.LENGTH)
 		var t: Vector3 = (b - a).normalized()
-		for e in [[a, -1.0], [b, -1.0], [b, 1.0], [a, -1.0], [b, 1.0], [a, 1.0]]:
+		for e in [[a, -1.0, sa], [b, -1.0, sb], [b, 1.0, sb], [a, -1.0, sa], [b, 1.0, sb], [a, 1.0, sa]]:
 			st.set_normal(t)
-			st.set_uv(Vector2(e[1], 0.0))
+			st.set_uv(Vector2(e[1], e[2]))
 			st.add_vertex(e[0])
-	st.set_material(_shader(SHADER_TRAIT))
+	# plein là où il est à découvert, 45 % à travers la montagne
+	_mat_trait = _shader(SHADER_TRAIT % ["", "couleur.a"])
+	var rx: ShaderMaterial = _shader(SHADER_TRAIT % [", depth_test_disabled", "0.45"])
+	_mat_trait.next_pass = rx
+	st.set_material(_mat_trait)
 	var mi: MeshInstance3D = _instance(st.commit(), "TraitTunnel")
 	mi.extra_cull_margin = 50.0
 

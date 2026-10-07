@@ -79,7 +79,8 @@ func _build_ui() -> void:
 	top_panel.add_child(top_vbox)
 
 	var title: Label = Label.new()
-	title.text = "PERCE-NEIGE SIM 3D"
+	title.text = "PERCE-NEIGE SIM 3D" if PNConstants.VERSION_APP == "dev" \
+		else "PERCE-NEIGE SIM 3D · v" + PNConstants.VERSION_APP
 	title.add_theme_color_override("font_color", Color(1.0, 0.85, 0.30))
 	title.add_theme_font_size_override("font_size", 14)
 	top_vbox.add_child(title)

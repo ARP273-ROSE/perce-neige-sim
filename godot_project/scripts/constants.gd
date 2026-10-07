@@ -17,6 +17,10 @@ const G: float = 9.80665  # m/s²
 # dans le service worker (retour d'essai iPad 2026-08-21 : « pas de son de
 # crash » = c'était l'ancien build qui tournait).
 const BUILD_TAG: String = "dev"
+## Version de l'application (fichier VERSION), inscrite par deploy_web.sh le
+## temps de l'export Web, « dev » sinon — affichée dans le titre du HUD pour
+## savoir d'un coup d'œil quelle version tourne (captures iPad).
+const VERSION_APP: String = "dev"
 
 
 # Safari (iPad/iPhone/macOS) : la lecture audio « Sample » des exports web

@@ -30,6 +30,12 @@ const LAYER_RAME: int = 1 << 1
 # Couche de la voie (rails, longrines, câble) : éclairée, avec les rames,
 # par la seule lumière de la vue extérieure.
 const LAYER_VOIE: int = 1 << 2
+# Intérieur de la cabine, PWA seulement (Compatibility) : les néons des
+# gares, renforcés sur le web, ne l'éclairent pas (cf. _couche_interieur)
+const LAYER_INTERIEUR: int = 1 << 3
+## Masque des lampes de gare renforcées sur le web : tout sauf l'intérieur
+## (qui n'a ni la couche 1, ni ne doit être pris par LAYER_RAME).
+const MASQUE_GARE_WEB: int = 0xFFFFF & ~(LAYER_INTERIEUR | LAYER_RAME)
 var _front_lamps: Array = []         # feux ronds de la calotte avant
 var _rear_lamps: Array = []
 var _body_mats: Dictionary = {}
@@ -140,6 +146,7 @@ func _ready() -> void:
 		_apply_view_mode()
 		_tag_layer_rame(self)
 		_tag_layer_rame.call_deferred(self)
+		_couche_interieur.call_deferred()
 	else:
 		# Ghost : mesh toujours visible, pas de caméra. Ses PHARES, oui
 		# (retour de Kevin du 06/10/2026 : de la salle des machines on voit
@@ -148,6 +155,7 @@ func _ready() -> void:
 		# pilotée (physics.lights_head).
 		_build_headlight()
 		_tag_layer_rame.call_deferred(self)   # éclairée en vue extérieure
+		_couche_interieur.call_deferred()
 		# (Plus de lumière rouge au centre de la rame — retour du 03/10 :
 		# « enlève le feu rouge à l'arrière et le halo rouge qui va avec ».)
 		mesh_root.visible = true
@@ -1057,6 +1065,42 @@ func _attach_to_car(n: Node3D, idx: int, pos_rame: Vector3) -> void:
 	var z_c: float = (float(idx) - (car_count - 1) * 0.5) * car_len
 	n.position = pos_rame - Vector3(0.0, 0.0, z_c)
 	(_interior_cars[idx] as Node3D).add_child(n)
+
+
+## PWA (rendu Compatibility, ni éclairage indirect ni plus de 8 lampes par
+## objet) : les néons des gares y sont renforcés pour que les halls ne
+## paraissent plus « dans le noir » ; l'intérieur de la cabine passe sur sa
+## propre couche (sans la couche 1) pour qu'ils ne le surexposent pas — les
+## lumières de la cabine, du tunnel et les phares l'éclairent toujours.
+func _couche_interieur() -> void:
+	if interior_root == null \
+			or RenderingServer.get_current_rendering_method() != "gl_compatibility":
+		return
+	for n in interior_root.find_children("*", "VisualInstance3D", true, false):
+		var vi: VisualInstance3D = n
+		vi.layers = (vi.layers & ~1) | LAYER_INTERIEUR | LAYER_RAME
+
+
+## Vue extérieure (07/10/2026) : la rame se voit À TRAVERS le relief — sa
+## coque est redessinée en silhouette jaune translucide, sans test de
+## profondeur (le relief reste opaque : on en voit les sommets).
+static var _mat_rx: StandardMaterial3D = null
+var _rx_on: bool = false
+
+
+func set_rayons_x(on: bool) -> void:
+	if on == _rx_on or mesh_root == null:
+		return
+	_rx_on = on
+	if _mat_rx == null:
+		_mat_rx = StandardMaterial3D.new()
+		_mat_rx.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		_mat_rx.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		_mat_rx.no_depth_test = true
+		_mat_rx.disable_fog = true
+		_mat_rx.albedo_color = Color(1.0, 0.86, 0.25, 0.22)
+	for n in mesh_root.find_children("*", "GeometryInstance3D", true, false):
+		(n as GeometryInstance3D).material_overlay = _mat_rx if on else null
 
 
 ## Vue cabine : commande du pupitre sous le point d'écran `pos` ("" = aucune).

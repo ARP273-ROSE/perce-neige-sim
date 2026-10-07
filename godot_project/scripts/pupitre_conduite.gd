@@ -48,7 +48,7 @@ const X_GAUCHE: float = -0.35          # centre de la plaque de gauche (coups-de
 const L_GAUCHE: float = 0.20
 const L_CADRE: float = 0.30
 const L_PLAQUE: float = 0.31
-const P_FACE: float = 0.215            # profondeur de la face
+const P_FACE: float = 0.22             # profondeur de la face
 const ECRAN_L: float = 0.17           # dalle ≈ 7,7" (photo : ¾ de la largeur de la plaque)
 const ECRAN_H: float = 0.10
 const PERIODE_ECRAN: float = 0.25
@@ -166,47 +166,50 @@ func _construire_boutons(chrome: StandardMaterial3D, noir: StandardMaterial3D,
 		filet: StandardMaterial3D) -> void:
 	# grille : 4 colonnes, 3 rangées (z vers le conducteur)
 	var cols: Array = [X_PLAQUE - 0.105, X_PLAQUE - 0.040, X_PLAQUE + 0.035, X_PLAQUE + 0.100]
-	var rangs: Array = [-0.060, 0.004, 0.076]
+	# (07/10/2026 : titres PORTES et ÉCLAIRAGE redescendus dans la plaque —
+	# « ils sont dehors »)
+	var rangs: Array = [-0.059, -0.003, 0.066]
+	var lab_z: float = -0.0295            # libellés au-dessus des commandes
 	var c_blanc: Color = Color(1.0, 0.98, 0.92)
 	var c_vert: Color = Color(0.25, 1.0, 0.45)
 	# rangée 1 : portes
 	for g in range(2):
 		var xa: float = cols[2 * g]
 		var xb: float = cols[2 * g + 1]
-		_cadre(filet, xa - 0.03, xb + 0.03, rangs[0] - 0.048, rangs[0] + 0.026,
+		_cadre(filet, xa - 0.03, xb + 0.03, rangs[0] - 0.043, rangs[0] + 0.0215,
 			"PORTES 1 à 6" if g == 0 else "PORTES 7 à 12")
 		_lumineux(chrome, Vector2(xa, rangs[0]), "ouverture_%d" % g, c_blanc)
 		_lumineux(chrome, Vector2(xb, rangs[0]), "fermeture_%d" % g, c_vert)
-		_etiquette("OUVERTURE", Vector2(xa, rangs[0] - 0.032), 14, Color(0.06, 0.06, 0.07))
-		_etiquette("FERMETURE", Vector2(xb, rangs[0] - 0.032), 14, Color(0.06, 0.06, 0.07))
+		_etiquette("OUVERTURE", Vector2(xa, rangs[0] + lab_z), 14, Color(0.06, 0.06, 0.07))
+		_etiquette("FERMETURE", Vector2(xb, rangs[0] + lab_z), 14, Color(0.06, 0.06, 0.07))
 	# rangée 2 : PRÊT, bouton noir, sélecteur, commutateur à clé
 	_lumineux(chrome, Vector2(cols[0], rangs[1]), "pret", c_vert)
 	_commandes.erase("pret")              # voyant, pas un bouton
-	_etiquette("PRÊT", Vector2(cols[0], rangs[1] - 0.032), 16, Color(0.06, 0.06, 0.07))
+	_etiquette("PRÊT", Vector2(cols[0], rangs[1] + lab_z), 16, Color(0.06, 0.06, 0.07))
 	_commande("montee", Vector2(cols[1], rangs[1]), _poussoir_noir(chrome, noir, Vector2(cols[1], rangs[1])))
-	_etiquette("MONTÉE", Vector2(cols[1], rangs[1] - 0.032), 14, Color(0.06, 0.06, 0.07))
+	_etiquette("MONTÉE", Vector2(cols[1], rangs[1] + lab_z), 14, Color(0.06, 0.06, 0.07))
 	var sel: Node3D = _selecteur(chrome, noir, Vector2(cols[2], rangs[1]))
 	_commande("vite", Vector2(cols[2], rangs[1]), sel)
-	_etiquette("− VITE", Vector2(cols[2] - 0.021, rangs[1] - 0.027), 12, Color(0.06, 0.06, 0.07))
-	_etiquette("+ VITE", Vector2(cols[2] + 0.021, rangs[1] - 0.027), 12, Color(0.06, 0.06, 0.07))
+	_etiquette("− VITE", Vector2(cols[2] - 0.021, rangs[1] + lab_z), 12, Color(0.06, 0.06, 0.07))
+	_etiquette("+ VITE", Vector2(cols[2] + 0.021, rangs[1] + lab_z), 12, Color(0.06, 0.06, 0.07))
 	var cle: Node3D = _cle(chrome, noir, Vector2(cols[3], rangs[1]))
 	cle.rotation.y = PI * 0.5             # tournée : EN MARCHE
 	_commande("marche", Vector2(cols[3], rangs[1]), cle)
-	_etiquette("EN MARCHE", Vector2(cols[3], rangs[1] - 0.032), 13, Color(0.06, 0.06, 0.07))
+	_etiquette("EN MARCHE", Vector2(cols[3], rangs[1] + lab_z), 13, Color(0.06, 0.06, 0.07))
 	# rangée 3 : KLAXON, groupe ÉCLAIRAGE
 	_klaxon = _poussoir_noir(chrome, noir, Vector2(cols[0], rangs[2]))
 	_commande("klaxon", Vector2(cols[0], rangs[2]), _klaxon)
-	_etiquette("KLAXON", Vector2(cols[0], rangs[2] - 0.032), 15, Color(0.06, 0.06, 0.07))
-	_cadre(filet, cols[1] - 0.03, cols[3] + 0.03, rangs[2] - 0.046, rangs[2] + 0.026, "ÉCLAIRAGE")
+	_etiquette("KLAXON", Vector2(cols[0], rangs[2] + lab_z), 15, Color(0.06, 0.06, 0.07))
+	_cadre(filet, cols[1] - 0.03, cols[3] + 0.03, rangs[2] - 0.041, rangs[2] + 0.024, "ÉCLAIRAGE")
 	_cabine_bouton = _selecteur(chrome, noir, Vector2(cols[1], rangs[2]))
 	_commande("cabine", Vector2(cols[1], rangs[2]), _cabine_bouton)
-	_etiquette("CABINE", Vector2(cols[1], rangs[2] - 0.032), 14, Color(0.06, 0.06, 0.07))
+	_etiquette("CABINE", Vector2(cols[1], rangs[2] + lab_z), 14, Color(0.06, 0.06, 0.07))
 	_etiquette("0", Vector2(cols[1] - 0.017, rangs[2] - 0.012), 12, Color(0.06, 0.06, 0.07))
 	_etiquette("1", Vector2(cols[1] + 0.017, rangs[2] - 0.012), 12, Color(0.06, 0.06, 0.07))
 	_lumineux(chrome, Vector2(cols[2], rangs[2]), "compartiment", c_blanc)
-	_etiquette("COMPARTIMENT", Vector2(cols[2], rangs[2] - 0.032), 13, Color(0.06, 0.06, 0.07))
+	_etiquette("COMPARTIMENT", Vector2(cols[2], rangs[2] + lab_z), 13, Color(0.06, 0.06, 0.07))
 	_lumineux(chrome, Vector2(cols[3], rangs[2]), "secours", c_blanc)
-	_etiquette("SECOURS", Vector2(cols[3], rangs[2] - 0.032), 14, Color(0.06, 0.06, 0.07))
+	_etiquette("SECOURS", Vector2(cols[3], rangs[2] + lab_z), 14, Color(0.06, 0.06, 0.07))
 
 
 ## Plaque de gauche (photo 095119, ajout demandé par Kevin le 06/10/2026 :

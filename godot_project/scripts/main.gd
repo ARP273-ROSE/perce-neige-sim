@@ -74,11 +74,10 @@ var _env: Environment = null
 const AMBIENT_ON: float = 0.40
 const AMBIENT_OFF: float = 0.0        # noir total : seuls phares, cabine et gares éclairent
 ## Halls de gare en rendu Compatibility (PWA), voir _process
-const AMBIENT_GARE_WEB: float = 0.55
+const AMBIENT_GARE_WEB: float = 0.40
 const SOL_CIEL: Color = Color(0.55, 0.58, 0.62)    # sol du ciel physique (_build_environment)
-const SOL_ROCHE: Color = Color(0.20, 0.17, 0.14)
-var _ciel_web: ProceduralSkyMaterial = null
-var _ciel_physique: Material = null
+const SOL_ROCHE: Color = Color(0.17, 0.17, 0.18)
+var _sol_ext: bool = false
 const FOG_LIGHT_ON: float = 1.0
 const FOG_LIGHT_OFF: float = 0.0      # le brouillard ne doit pas « éclairer » le fond
 
@@ -215,9 +214,18 @@ func set_tunnel_lights(on: bool) -> void:
 		# reflets spéculaires du ciel (pare-brise, rails, parois lisses) :
 		# ciel à énergie nulle plutôt que source de reflets désactivée —
 		# même effet, sans changer les shaders à chaud (iPad, 05/10/2026)
-		if _env.sky != null and _env.sky.sky_material is PhysicalSkyMaterial:
-			(_env.sky.sky_material as PhysicalSkyMaterial).energy_multiplier = 1.0 if on else 0.0
+		_energie_ciel(1.0 if on else 0.0)
 	print("[Tunnel] éclairage %s" % ["allumé" if on else "coupé"])
+
+
+func _energie_ciel(e: float) -> void:
+	if _env == null or _env.sky == null:
+		return
+	if _env.sky.sky_material is PhysicalSkyMaterial:
+		(_env.sky.sky_material as PhysicalSkyMaterial).energy_multiplier = e
+	elif _env.sky.sky_material is ProceduralSkyMaterial:
+		(_env.sky.sky_material as ProceduralSkyMaterial).sky_energy_multiplier = e
+		(_env.sky.sky_material as ProceduralSkyMaterial).ground_energy_multiplier = e
 
 
 func toggle_tunnel_lights() -> void:
@@ -507,7 +515,7 @@ func restart_trip() -> void:
 ## 07/10/2026). Leurs matériaux reçoivent une luminosité propre (un quart
 ## de leur couleur) : le hall s'éclaire sans surexposer la cabine, que des
 ## néons plus forts noyaient.
-const REMPLISSAGE_GARE_WEB: float = 0.4
+const REMPLISSAGE_GARE_WEB: float = 0.3
 
 
 func _remplissage_gares_web() -> void:
@@ -601,6 +609,17 @@ func _build_environment() -> void:
 	sky_mat.sun_disk_scale = 1.0
 	sky_mat.energy_multiplier = 1.0
 	sky.sky_material = sky_mat
+	# PWA (rendu Compatibility) : le ciel physique y sort NOIR — vue
+	# extérieure, verrière et baies de la gare du haut (« il fait toujours
+	# nuit dans la gare du haut », 07/10/2026), lumière ambiante tirée du
+	# ciel. Un ciel procédural (dégradé bleu, horizon clair) le remplace.
+	if _compat:
+		var proc: ProceduralSkyMaterial = ProceduralSkyMaterial.new()
+		proc.sky_top_color = Color(0.22, 0.42, 0.78)
+		proc.sky_horizon_color = Color(0.70, 0.78, 0.88)
+		proc.ground_horizon_color = SOL_CIEL
+		proc.ground_bottom_color = SOL_CIEL
+		sky.sky_material = proc
 	env.sky = sky
 	env.background_mode = Environment.BG_SKY
 	env.background_energy_multiplier = 1.0
@@ -610,6 +629,12 @@ func _build_environment() -> void:
 	env.ambient_light_color = Color(0.45, 0.50, 0.60)
 	env.ambient_light_energy = AMBIENT_ON
 	env.ambient_light_sky_contribution = 0.3
+	# PWA : le ciel n'y éclairait pas (il sortait noir) et l'aspect du tunnel
+	# a été réglé ainsi ; avec le ciel procédural, l'ambiante reste tirée
+	# de la seule couleur, au même niveau (70 % : la part hors ciel)
+	if _compat:
+		env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
+		env.ambient_light_color = Color(0.45, 0.50, 0.60) * 0.7
 
 	# --- SDFGI (global illumination) -------------------------------------
 	# Le poste GPU le plus cher de tout le pipeline — coupé sous high.
@@ -847,6 +872,12 @@ func _process(delta: float) -> void:
 	if relief != null and cabin != null:
 		var ext: bool = cabin.view_mode == Cabin.ViewMode.EXTERIOR and relief.pret
 		relief.visible = ext
+		# le tunnel et les rames se voient à travers le relief opaque
+		cabin.set_rayons_x(ext)
+		if cabin_ghost != null:
+			cabin_ghost.set_rayons_x(ext)
+		if ext and physics != null:
+			relief.set_rames(physics.s_render, physics.ghost_s_render())
 		# le brouillard du tunnel (≈ 250 m de visibilité) noierait tout au
 		# loin : en vue extérieure il s'éclaircit avec le recul de la caméra
 		if _env != null:
@@ -854,33 +885,22 @@ func _process(delta: float) -> void:
 			_env.fog_density = 0.004 * k_f
 			_env.volumetric_fog_density = 0.008 * k_f if k_f > 0.3 else 0.0
 			_env.fog_sky_affect = 0.0 if ext else 0.5    # ciel bleu dehors
-			# sous l'horizon du ciel : brun roche en vue extérieure — à
-			# travers le sol translucide, ou caméra sous la montagne, on voit
-			# « la roche », pas un vide gris
-			if _env.sky != null and _env.sky.sky_material is PhysicalSkyMaterial:
-				(_env.sky.sky_material as PhysicalSkyMaterial).ground_color = \
-					SOL_ROCHE if ext else SOL_CIEL
-			# PWA (Compatibility) : le ciel physique y sort noir — en vue
-			# extérieure, un ciel procédural (dégradé bleu, horizon clair,
-			# roche sous l'horizon) prend sa place
-			if _compat and _env.sky != null:
-				if ext and _ciel_web == null:
-					_ciel_physique = _env.sky.sky_material
-					_ciel_web = ProceduralSkyMaterial.new()
-					_ciel_web.sky_top_color = Color(0.22, 0.42, 0.78)
-					_ciel_web.sky_horizon_color = Color(0.70, 0.78, 0.88)
-					_ciel_web.ground_horizon_color = Color(0.36, 0.31, 0.26)
-					_ciel_web.ground_bottom_color = SOL_ROCHE
-					_env.sky.sky_material = _ciel_web
-				elif not ext and _ciel_web != null:
-					_env.sky.sky_material = _ciel_physique
-					_ciel_web = null
+			# sous l'horizon du ciel : gris roche en vue extérieure (caméra
+			# sous la montagne : on voit « la roche », pas un vide clair)
+			if _env.sky != null and ext != _sol_ext:
+				_sol_ext = ext
+				var sol: Color = SOL_ROCHE if ext else SOL_CIEL
+				if _env.sky.sky_material is PhysicalSkyMaterial:
+					(_env.sky.sky_material as PhysicalSkyMaterial).ground_color = sol
+				elif _env.sky.sky_material is ProceduralSkyMaterial:
+					var ps: ProceduralSkyMaterial = _env.sky.sky_material
+					ps.ground_bottom_color = sol
+					ps.ground_horizon_color = sol
 			# dehors il fait jour, même tunnel éteint
 			var ciel: float = 1.0 if (ext or tunnel_lights_on) else 0.0
 			if _env.background_energy_multiplier != ciel:
 				_env.background_energy_multiplier = ciel
-				if _env.sky != null and _env.sky.sky_material is PhysicalSkyMaterial:
-					(_env.sky.sky_material as PhysicalSkyMaterial).energy_multiplier = ciel
+				_energie_ciel(ciel)
 	# Halls de gare en rendu Compatibility (PWA) : 8 lampes au plus par
 	# objet, les grands sols et murs du hall ne recevaient qu'une partie des
 	# néons (« la gare du haut semble dans le noir », iPad 07/10/2026, phares
@@ -1305,11 +1325,19 @@ func _flash(msg: String) -> void:
 func do_reverse() -> void:
 	if client_mode or physics == null:
 		return
+	var en_gare: bool = physics.at_station()
 	if not physics.reverse_trip():
 		print("[Reverse] refusé — rame pas à l'arrêt (v=%.2f m/s)" % physics.v)
 		return
+	# « Retour en gare » : SEULEMENT en plein tunnel (situation anormale),
+	# comme le PC (reverse_trip : « reversing at a terminus is the normal
+	# turnaround and silently flips the direction ») — retour de Kevin du
+	# 07/10/2026 : « quand j'inverse en gare après un trajet normal, j'ai
+	# l'annonce anormale »
 	if announcements != null:
-		announcements.play_now("return_station")
+		announcements.stop_all()
+		if not en_gare:
+			announcements.play_now("return_station")
 	if exploitation_log != null:
 		exploitation_log.end_trip(false)
 	# En Défi, le demi-tour vaut une remarque des passagers (port des
