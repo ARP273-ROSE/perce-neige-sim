@@ -48,6 +48,7 @@ var _body_mats: Dictionary = {}
 var _car_roots: Array = []
 var _interior_cars: Array = []
 var _wheels: Array = []              # pivots de roues, tournés à v/R
+var _bogies: Array = []              # châssis des bogies (cachés pour le skieur à bord)
 var _doors: Array = []               # vantaux coulissants {node, side, base}
 var _issues: Array = []              # panneaux d'issue de secours des calottes {node, car, cle}
 var issues_retirees: bool = false    # évacuation : les D jaunes sont enlevés
@@ -185,6 +186,7 @@ func _build_mesh() -> void:
 	_body_mats = built["mats"]
 	_car_roots = built["car_roots"]
 	_wheels = built["wheels"]
+	_bogies = built.get("bogies", [])
 	_doors = built["doors"]
 	_issues = built.get("issues", [])
 	for d in _doors:
@@ -250,6 +252,7 @@ func _merge_static_meshes() -> void:
 		return
 	var keep: Array = []
 	keep.append_array(_wheels)
+	keep.append_array(_bogies)
 	keep.append_array(_front_lamps)
 	keep.append_array(_rear_lamps)
 	for d in _doors:
@@ -273,8 +276,21 @@ func _merge_static_meshes() -> void:
 				variantes.append(v)
 				MeshMerge.merge(v as Node3D)
 		MeshMerge.merge(w as Node3D, variantes)
+	for b in _bogies:
+		MeshMerge.merge(b as Node3D)
 	print("[Cabin%s] maillages fixes fusionnés : %d surfaces restantes" % [
 		" ghost" if is_ghost else "", _count_surfaces(self)])
+
+
+## Le skieur à bord ne voit ni roues ni châssis de bogie : le plancher n'est
+## qu'à 13 cm du rail, ils dépasseraient dans la voiture (08/10/2026).
+func set_bogies_visibles(on: bool) -> void:
+	for w in _wheels:
+		if is_instance_valid(w):
+			(w as Node3D).visible = on
+	for b in _bogies:
+		if is_instance_valid(b):
+			(b as Node3D).visible = on
 
 
 static func _count_surfaces(n: Node) -> int:

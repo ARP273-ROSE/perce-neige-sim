@@ -151,14 +151,21 @@ func _tick() -> void:
 				_t = 0.0
 		5:
 			if _t > 3.0 or sk.a_terre():
-				_verif("lancé contre la façade à 9 m/s : chute, skis déchaussés, à terre",
-					_chausse5 and not sk.chausse and sk.a_terre(),
-					"chaussé avant %s, après %s, à terre %s, %.1f s" % [_chausse5, sk.chausse, sk.a_terre(), _t])
+				if SkieurJoueur.CHUTES_ACTIVES:
+					_verif("lancé contre la façade à 9 m/s : chute, skis déchaussés, à terre",
+						_chausse5 and not sk.chausse and sk.a_terre(),
+						"chaussé avant %s, après %s, à terre %s, %.1f s" % [_chausse5, sk.chausse, sk.a_terre(), _t])
+				else:
+					_verif("lancé contre la façade à 9 m/s : arrêté par le mur, toujours chaussé (chutes éteintes)",
+						_chausse5 and sk.chausse and not sk.a_terre() and sk.vitesse_ski() < 1.0,
+						"chaussé %s, à terre %s, v %.1f" % [sk.chausse, sk.a_terre(), sk.vitesse_ski()])
 				_phase = 6
 				_t = 0.0
 		6:
 			if _t > 3.0:
+				if sk.chausse:
+					sk.basculer_ski()
 				var refus: String = sk.basculer_ski()
-				_verif("relevé, E rechausse", not sk.a_terre() and sk.chausse and refus == "",
+				_verif("E rechausse", not sk.a_terre() and sk.chausse and refus == "",
 					"à terre %s, chaussé %s, %s" % [sk.a_terre(), sk.chausse, refus])
 				_fin()
