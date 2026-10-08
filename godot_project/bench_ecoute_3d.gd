@@ -35,6 +35,10 @@ func _poser(p: Vector3, support: Node3D = null) -> void:
 	sk.global_position = p
 	sk.velocity = Vector3.ZERO
 	sk.support = support
+	if support != null:
+		# sinon _porter applique l'écart entre l'ancien support (la voiture
+		# 1, quand la rame est téléportée sur le skieur) et le nouveau
+		sk._support_xf = support.global_transform
 	sk.chemin.clear()
 	_t = 0.0
 

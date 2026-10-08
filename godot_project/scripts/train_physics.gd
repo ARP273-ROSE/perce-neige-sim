@@ -53,6 +53,9 @@ var arret_elec: bool = false
 var pret_externe: int = -1
 var pret_autre_externe: bool = true
 var alarme_externe: bool = false
+var voie_occupee: bool = false           # skieur à pied sur la voie (tunnel,
+                                         # galerie) : rame IMMOBILISÉE, sans
+                                         # limite (08/10/2026)
 var maint_brake: bool = true             # frein parking (drum)
 var emergency_brake: bool = false        # frein urgence (panne grave)
 var speed_cap_external: float = INF      # plafond vitesse imposé par panne (m/s)
@@ -535,7 +538,7 @@ func step(dt: float) -> void:
 	# déclenché »). Le frein de service manuel (bouton FREIN maintenu) ne
 	# remet PAS la consigne à 0 → sans cette coupure, le régulateur
 	# continuait de commander du couple pendant que le conducteur freinait.
-	if emergency or emergency_ramp > 0.0 or manual_brake_held or brake > 0.05:
+	if emergency or emergency_ramp > 0.0 or manual_brake_held or voie_occupee or brake > 0.05:
 		f_motor = 0.0
 
 	# Perte des auxiliaires 400 V (contacteur traction ouvert) ou tambour
@@ -1225,13 +1228,13 @@ func _regulator(
 	# ne lâche (sinon recul de 2 cm au décollage en pente).
 	if trip_started and not _pretensioned:
 		_pretensioned = true
-		if f_ff > 0.0 and not manual_brake_held:
+		if f_ff > 0.0 and not manual_brake_held and not voie_occupee:
 			throttle = maxf(throttle, minf(1.0, f_ff / maxf(f_motor_max, 1.0)))
 	elif not trip_started:
 		_pretensioned = false
 	var chaos_hold: bool = challenge_mode
 	_reg_hold = not chaos_hold and target_v < 0.01 and v_travel < 0.4
-	if manual_brake_held:
+	if manual_brake_held or voie_occupee:
 		# Frein de service manuel prioritaire : le régulateur NE tire PAS
 		# contre lui. Couple coupé, frein plein tant que le bouton est tenu
 		# (sinon il abaissait `brake` et remontait le throttle → le moteur
@@ -1561,6 +1564,8 @@ func at_station() -> bool:
 # était accepté urgence verrouillée (buzzer de quai pour rien, AUTO figé en
 # DEPARTING à jamais) et consigne à 0 (rame à quai après le buzzer).
 func request_depart() -> String:
+	if voie_occupee:
+		return "Skieur sur la voie : rame immobilisée"
 	if arret_elec:
 		return "Arrêt électrique engagé : le relâcher d'abord"
 	if panne_catastrophique:

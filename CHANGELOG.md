@@ -7,6 +7,79 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.18.4** — « dès que je passe en mode skieur ça repasse en exploitation
+auto, du coup pendant l'évacuation le funi redémarre et m'écrase ; quand
+je change de mode skieur ou pas, tu restes en mode d'avant, exploitation
+auto ou pas ». Passer en skieur, ou en sortir, ne touche plus jamais à
+l'exploitation automatique (PC et Web) : elle reste comme elle était. Seul
+le mode AUTO du skieur (sa boucle) l'enclenche, puisqu'il en a besoin. À
+quai, portes fermées hors voyage, elles s'ouvrent pour monter. CONDUIRE
+(au poste) l'arrête toujours : on reprend la main.
+- « En marchant dans la cabine pendant le trajet je suis retourné au
+  poste de conduite, et en repassant en mode skieur à l'arrivée le skieur
+  est tout seul au milieu du tunnel » → on se relève du siège DANS la
+  voiture de tête, où qu'elle soit rendue (le nœud du siège, fusionné
+  avec l'intérieur, n'existait plus : on retombait sur l'ancienne
+  position) ; le bouton CONDUIRE se fonde sur la même position du poste.
+- « Je déchausse tout le temps, désactive ce truc » → les chutes sont
+  éteintes (le critère « roche, pente > 37° » tombait sur toute piste
+  raide) ; le code reste, `SkieurJoueur.CHUTES_ACTIVES`.
+- « La position schuss : la tête va en arrière au lieu d'en avant » →
+  tête et buste vers l'avant (le signe de l'axe était inversé).
+- « Je passe quasi partout au travers de la montagne, du coup il croit que
+  je suis dedans et m'empêche de chausser » → le relief n'avait de
+  collision qu'à 250 m des gares ; il en reçoit maintenant partout où l'on
+  marche (carrés de 400 m construits à la demande, comme le tunnel). Et si
+  l'on est tout de même sous la surface, CHAUSSER remonte sur la neige au
+  lieu de refuser (le refus ne vaut plus que dans un bâtiment ou une rame).
+- « Je n'entends aucune musique d'ambiance dans la salle du bas ou la gare
+  du haut » → sur le PC, les enregistrements n'étant ni dans le dépôt ni
+  dans les paquets (« mets les sons en local avec le programme PC »), ils
+  sont rapatriés une fois depuis le serveur de la PWA dans le profil
+  (`%APPDATA%\PerceNeigeSimulator\musique\`) — joués en direct la
+  première fois, en local ensuite ; `sons/musique/` à côté du programme est
+  lu en priorité ; le journal indique la source. (Cloudflare refuse l'agent
+  `Python-urllib` : le téléchargement se présente en `PerceNeigeSimulator/x`.)
+- « Le funi ne devrait pas pouvoir repartir une fois l'évacuation lancée ;
+  là il est reparti, je me suis pris l'autre rame en pleine tête » → tant
+  que le skieur est à pied sur la voie (tunnel, galerie), la rame est
+  **immobilisée sans limite** : le régulateur tient (`TrainPhysics.
+  voie_occupee`, PC `state.voie_occupee`), tout départ est refusé
+  (« Skieur sur la voie »), l'exploitation automatique attend (le plafond
+  de 45 s ne vaut que sur le quai). Messages « Skieur sur la voie : la
+  rame est immobilisée » / « Voie libre ». Et si une rame en marche
+  l'atteint quand même, il est percuté et renvoyé en gare — plus
+  « embarqué » par la caisse.
+- « Coincé entre les deux rails, faudrait pouvoir remonter sur l'escalier
+  à côté » → à pied hors des gares (tunnel, galerie, dehors), il se hisse
+  sur un rebord jusqu'à 1,25 m (`SkieurJoueur.GRIMPE_MAX`, `grimpe`) : du
+  fond de la fosse centrale (70 cm sous la dalle) il enjambe le rail (1,04 m
+  au-dessus du fond) et rejoint la dalle puis l'escalier de service. Dans
+  une rame et dans les gares, les marches restent à 40 cm. Et une chute
+  sans sol sûr connu ramène là où elle a commencé (avant : à l'origine du
+  monde, la gare basse).
+- « Qu'on ne voie plus les roues depuis l'intérieur de la rame » → le
+  plancher n'est qu'à 13 cm du rail : roues (⌀ 60 cm), essieux et boîtes
+  dépassaient dans la voiture. Le châssis de chaque bogie est un nœud à
+  part (`Bogie1…4`, fusionné seul) ; roues et bogies de la rame où le
+  skieur se trouve sont cachés (`Cabin.set_bogies_visibles`), rétablis
+  quand il en sort.
+- « Rendre le plancher et les cloisons étanches partout dans le wagon pour
+  ne pas passer dans une faille spatio-temporelle » → la fente trouvée :
+  au droit des portes, le palier s'arrête à 1,20 m de l'axe et le vantail
+  fermé est à 1,50 : en s'appuyant sur une porte fermée en tunnel, on
+  tombait sous la rame par 30 cm de vide (la largeur du skieur). Des seuils
+  en collision (1,18-1,64 m) existent portes fermées
+  (`CollisionsJeu.set_seuils`) ; portes ouvertes ils s'effacent (on descend
+  sur la passerelle ou le quai). Filet en plus : à bord, passé sous le
+  plancher pour toute autre raison, il y est reposé (`main._securite_skieur`).
+  Banc `bench_issues_3d.gd` : AUTO enclenché pendant qu'il est sur la voie →
+  rame immobile ; fosse entre les rails → il se hisse jusqu'à l'escalier.
+  Bancs adaptés : `bench_skieur_3d` demande lui-même le départ (la bascule
+  skieur n'enclenche plus l'AUTO) ; `bench_ecoute_3d` rafraîchit la
+  transformée du support quand il pose le skieur dans une voiture. Les six
+  bancs du skieur sont verts ; tests PC : 106.
+
 **v1.18.3** — retours du quatrième essai sur PC.
 - « En mode exploitation auto tu repasses tout seul en mode normal, sinon
   ça fait n'importe quoi » → activer l'exploitation automatique (X, bouton

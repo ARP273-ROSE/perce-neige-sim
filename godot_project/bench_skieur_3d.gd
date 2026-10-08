@@ -128,7 +128,12 @@ func _tick() -> void:
 			if sk.support != null and sk.chemin.is_empty() or _t_phase > 40.0:
 				_verif("embarquement : cloison, palier, quai en escalier, seuil, à bord", sk.support != null,
 					"%.1f s, support %s" % [_t_phase, sk.support.name if sk.support else "aucun"])
-				ph.request_depart()
+				# (depuis la 1.18.4, passer en skieur n'enclenche plus l'exploitation
+				# AUTO : le conducteur demande le départ, consigne montée d'abord)
+				ph.speed_cmd = 1.0
+				var refus: String = ph.request_depart()
+				if refus != "":
+					print("  départ refusé : %s" % refus)
 				_phase = 3
 				_t_phase = 0.0
 		3:
