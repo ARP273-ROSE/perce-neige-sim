@@ -18,6 +18,7 @@ const BTN_FONT := 22
 const BTN_FONT_BIG := 26
 
 var _main: Node = null          # référence à Main (AUTO / PANNE / état)
+var _b_loupe: Button = null     # loupe sur le pupitre (vue cabine)
 var _b_auto: Button = null
 var _drive_buttons: Array = []  # boutons de conduite, grisés quand AUTO actif
 var _sync_accum: float = 0.0
@@ -78,6 +79,10 @@ func _process(delta: float) -> void:
 	if _sync_accum < 0.25:
 		return
 	_sync_accum = 0.0
+	if _b_loupe != null and _main != null and _main.cabin != null:
+		var loupe_on: bool = _main.cabin.loupe_cible > 0.5
+		if _b_loupe.button_pressed != loupe_on:
+			_b_loupe.set_pressed_no_signal(loupe_on)
 	if _main == null:
 		return
 	# Reflet du mode courant (il peut être changé au clavier M, ou par le
@@ -339,6 +344,16 @@ func _build() -> void:
 	b_view.custom_minimum_size = Vector2(102, 56)
 	_bind_tap(b_view, "toggle_view")
 	top.add_child(b_view)
+
+	# LOUPE (08/10/2026) : zoom sur le pupitre et l'écran Pro-face en vue
+	# cabine (molette ou pincement font pareil)
+	_b_loupe = _mk_button("LOUPE", "Zoom sur le pupitre et l'écran Pro-face, en vue cabine (molette ou pincement)")
+	_b_loupe.custom_minimum_size = Vector2(102, 56)
+	_b_loupe.toggle_mode = true
+	_b_loupe.toggled.connect(func(on: bool) -> void:
+		if _main != null and _main.cabin != null:
+			_main.cabin.set_loupe(on))
+	top.add_child(_b_loupe)
 
 	# SKIEUR (07/10/2026) : le skieur jouable — on marche dans les gares,
 	# on prend le funiculaire, on va au poste (touche K)

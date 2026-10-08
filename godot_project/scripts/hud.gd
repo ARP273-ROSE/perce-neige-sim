@@ -96,7 +96,7 @@ func _build_ui() -> void:
 	_help_label.visible = not DisplayServer.is_touchscreen_available()
 	_help_label.text = _t(
 		"Up/Down Setpoint · Space Brake · Shift Emerg · Enter Depart · D Doors · I Reverse · H Headlights · C Cabin lights · J Tunnel lights · V View · M Mode · F Fault picker · R New trip · F1 Fault · F2 Clear · F3 Auto-op · K Skier",
-		"Haut/Bas Consigne · Espace Frein · Shift Urgence · Entrée Départ · D Portes · I Inverser · H Phares · C Éclairage cabine · J Éclairage tunnel · V Vue · M Mode · F Choisir panne · R Nouveau voyage · F1 Panne · F2 Clear · F3 Exploitation auto · K Skieur"
+		"Haut/Bas Consigne · Espace Frein · Shift Urgence · Entrée Départ · D Portes · I Inverser · H Phares · C Éclairage cabine · J Éclairage tunnel · V Vue · M Mode · F Choisir panne · R Nouveau voyage · F1 Panne · F2 Clear · F3 Exploitation auto · K Skieur · Molette Loupe pupitre"
 	)
 	# navigateur : les boutons à l'écran sont là aussi (main.gd) — la ligne
 	# passe sous le bouton MODE, au-dessus de la colonne VITESSE
