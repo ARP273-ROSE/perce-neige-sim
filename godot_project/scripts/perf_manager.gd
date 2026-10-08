@@ -212,7 +212,10 @@ func _appliquer(c: int, pourquoi: String) -> void:
 	var vp: Viewport = main.get_viewport() if main != null else null
 	if vp != null:
 		if not _web:
-			vp.msaa_3d = _msaa_origine if cran <= 2 else Viewport.MSAA_DISABLED
+			# MSAA ×4 garanti aux crans 0-2 (diagnostic du 08/10/2026 sur le
+			# PC du père : « crénelage net au réglage haute ») — on ne se fie
+			# plus à la valeur lue sur la fenêtre, on l'impose
+			vp.msaa_3d = maxi(_msaa_origine, Viewport.MSAA_4X) if cran <= 2 else Viewport.MSAA_DISABLED
 		var echelle: float = _echelle(cran)
 		if echelle < 0.999:
 			# FSR 2 (reconstruction temporelle) garde les textes nets ; FSR 1
@@ -230,15 +233,19 @@ func _appliquer(c: int, pourquoi: String) -> void:
 	_durees.clear()
 	_t_fen = 0.0
 	_bonnes = 0
-	_log("[Perf] cran %d/%d — %s (%s)%s" % [cran, CRAN_MAX, libelle(cran), pourquoi,
+	var aa: String = ""
+	if vp != null:
+		aa = [" ; MSAA –", " ; MSAA ×2", " ; MSAA ×4", " ; MSAA ×8"][clampi(vp.msaa_3d, 0, 3)] \
+			+ " ; rendu %d %%" % int(round(vp.scaling_3d_scale * 100.0))
+	_log("[Perf] cran %d/%d — %s (%s)%s%s" % [cran, CRAN_MAX, libelle(cran), pourquoi, aa,
 		(" — " + dernier_bilan) if dernier_bilan != "" else ""])
 	# le PC l'écrit dans son journal de bord (« c'est super pixélisé » :
 	# on veut savoir où en est la 3D)
 	if main != null:
 		var sr: Node = main.get("state_receiver") as Node
 		if sr != null and sr.has_method("envoyer"):
-			sr.envoyer({"perf": cran, "perf_max": CRAN_MAX, "perf_txt": "%s (%s)%s" % [
-				libelle(cran), pourquoi, (" — " + dernier_bilan) if dernier_bilan != "" else ""]})
+			sr.envoyer({"perf": cran, "perf_max": CRAN_MAX, "perf_txt": "%s (%s)%s%s" % [
+				libelle(cran), pourquoi, aa, (" — " + dernier_bilan) if dernier_bilan != "" else ""]})
 
 
 ## Échelle du rendu 3D au cran `c` : PC jamais sous 85 %, PWA comme mesuré.
