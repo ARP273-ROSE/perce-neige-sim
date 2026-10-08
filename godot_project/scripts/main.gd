@@ -323,6 +323,8 @@ func _apply_scenario(from_top: bool, rame2: bool, mode: String = "normal") -> vo
 	apply_rame(rame2)
 	_scenario_rame2 = rame2
 	_depart_haut = from_top
+	# consigne à 100 % dès le départ hors Défi (en Défi, c'est au conducteur)
+	physics.speed_cmd = 0.0 if physics.challenge_mode else 1.0
 	print("[Scenario] depart %s, rame %d, mode %s" % [
 		"gare haute" if from_top else "gare basse", 2 if rame2 else 1, run_mode])
 
@@ -1784,6 +1786,9 @@ func _sortir_skieur() -> void:
 		audio.ecoute = 0
 	if sons_skieur != null:
 		sons_skieur.ecoute = 0
+	if announcements != null:
+		announcements.set_ecoute_skieur(0)
+	_dans_tunnel = false
 	if relief != null:
 		relief.set_hiver(0.0)
 	if domaine != null:
@@ -1843,6 +1848,40 @@ func _securite_skieur() -> void:
 			r.set_bogies_visibles(false)
 
 
+## À moins de 4,5 m de l'axe du tunnel (balayage tous les 25 m puis au
+## mètre) ou de 3 m du sol de la galerie de secours.
+func _pres_du_tunnel(p: Vector3) -> bool:
+	if tunnel != null:
+		var best: float = INF
+		var sb: float = 0.0
+		var s: float = 0.0
+		while s <= PNConstants.LENGTH:
+			var d: float = tunnel.transform_at(s).origin.distance_squared_to(p)
+			if d < best:
+				best = d
+				sb = s
+			s += 25.0
+		s = maxf(0.0, sb - 25.0)
+		var s1: float = minf(PNConstants.LENGTH, sb + 25.0)
+		while s <= s1:
+			var d2: float = tunnel.transform_at(s).origin.distance_squared_to(p)
+			if d2 < best:
+				best = d2
+				sb = s
+			s += 1.0
+		# les 80 m aux deux bouts sont les gares (quais, salles, terrasse :
+		# « en sortant de la gare du haut, à la porte de la terrasse, il croit
+		# que je suis dans le tunnel », Kevin, 08/10/2026) : pas le tunnel
+		if best < 4.5 * 4.5 and sb > 80.0 and sb < PNConstants.LENGTH - 80.0:
+			return true
+	if sortie_secours != null and sortie_secours.pret and sortie_secours.sol.size() > 1:
+		for i in range(1, sortie_secours.sol.size()):
+			var q: Vector3 = Geometry3D.get_closest_point_to_segment(p, sortie_secours.sol[i - 1], sortie_secours.sol[i])
+			if q.distance_to(p) < 3.0:
+				return true
+	return false
+
+
 func _skieur_percute() -> void:
 	var ou: Vector3 = skieur.refuge if skieur.refuge != Vector3.ZERO else skieur.dernier_sol
 	if ou == Vector3.ZERO:
@@ -1891,6 +1930,8 @@ var _gare_skieur: int = 0                 # mis à jour par _maj_skieur
 var _t_zone: float = 0.0                  # collisions à la demande (tunnel à pied)
 var _exploitation_pc: bool = false        # exploitation auto du PC (état reçu)
 var _voie_occupee: bool = false           # skieur à pied sur la voie : rame immobilisée
+var _dans_tunnel: bool = false            # à moins de 4,5 m de l'axe du tunnel ou de 3 m de la galerie
+var _t_dans_tunnel: float = 9.0           # recalculé toutes les secondes (balayage de l'axe)
 var _bogies_caches: Cabin = null          # rame dont roues et bogies sont cachés (skieur à bord)
 var _gain_mach_envoye: float = -1.0       # dernier gain machinerie envoyé au PC
 
@@ -2009,8 +2050,20 @@ func _maj_skieur() -> void:
 		var loc: Vector3 = skieur.support.global_transform.affine_inverse() * skieur.global_position
 		dedans = absf(loc.x) < SKIEUR_DEDANS_X
 	# à pied dans le tunnel (évacuation) : la rame reste là tant qu'il n'a
-	# pas rejoint une gare ou la piste ; les collisions suivent ses pas
-	var a_pied_tunnel: bool = skieur.support == null and not en_gare and not skieur.dehors(relief)
+	# pas rejoint une gare ou la piste ; les collisions suivent ses pas.
+	# « Dans le tunnel » = à moins de 4,5 m de l'axe du tunnel ou de 3 m de
+	# la galerie de secours, À PIED — plus « sous la surface » : à ski, le
+	# relief traversé par endroits disait « dans le tunnel » et immobilisait
+	# le funi (Kevin, 08/10/2026 : « ce qui est faux »)
+	if skieur.support != null or skieur.chausse:
+		_dans_tunnel = false
+		_t_dans_tunnel = 9.0
+	else:
+		_t_dans_tunnel += get_process_delta_time()
+		if _t_dans_tunnel > 1.0:
+			_t_dans_tunnel = 0.0
+			_dans_tunnel = _pres_du_tunnel(skieur.global_position)
+	var a_pied_tunnel: bool = skieur.support == null and not skieur.chausse and not en_gare and _dans_tunnel
 	if skieur.support == null and collisions != null:
 		_t_zone += get_process_delta_time()
 		if _t_zone > 1.0:
@@ -2047,6 +2100,17 @@ func _maj_skieur() -> void:
 		audio.ecoute = ec
 	if sons_skieur != null:
 		sons_skieur.ecoute = ec
+	# la sono de la rame pilotée : dans cette rame, atténuée sur le quai de
+	# la gare où elle est, coupée ailleurs (dehors, tunnel, autre rame)
+	if announcements != null:
+		var gare_rame: int = 1 if physics.s <= PNConstants.START_S + 5.0 \
+			else (2 if physics.s >= PNConstants.STOP_S - 5.0 else 0)
+		var e_ann: int = 2
+		if skieur.support != null and cabin.is_ancestor_of(skieur.support):
+			e_ann = 0
+		elif skieur.support == null and ((ec == 1 and gare_rame == 1) or (ec == 3 and gare_rame == 2)):
+			e_ann = 1
+		announcements.set_ecoute_skieur(e_ann)
 	if client_mode and state_receiver != null:
 		# même règle d'attente et de départ pour l'exploitation AUTO du PC,
 		# et le gain de la machinerie (quais du haut), au 1/20 près

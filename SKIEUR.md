@@ -25,8 +25,8 @@ piste. »
 - **Collisions** (`scripts/collisions_jeu.gd`), construites au premier passage
   en vue skieur :
   - **gares** : les vrais maillages, dont les marches des quais ;
-  - **rames** : collisions simplifiées (paliers, parois, bancs, porte-skis,
-    pupitre, seuils de porte) ;
+  - **rames** : collisions simplifiées (paliers, parois, bancs, pupitre,
+    seuils de porte ; les porte-skis se traversent depuis la 1.18.5) ;
   - **portes** : vantaux mobiles ;
   - **relief** : triangles du bloc, pièces fines de 2 m autour des gares, trous
     des bâtiments.
@@ -94,14 +94,16 @@ funiculaire), les sauts (il reste collé au sol), les chutes.
 
 - **Sortie de secours du tunnel** (`sortie_secours.gd`) : la paroi percée à
   la chambre du galet 145 (`TunnelBuilder.ouvertures`), galerie circulaire
-  jusqu'au portail sur la piste, à la position de Kevin (Google Earth
-  45°26′04,26″ N 6°54′02,60″ E ; relief du jeu à 2 643,5 m, Google Earth
-  2 655,89 m). Le sol suit le relief (`ReliefBuilder.amenageurs`, appelés
-  avant les pièces fines) ; remblai et aire sur le relief ; collisions de la
-  galerie et du relief au portail. On y va rame arrêtée à la chambre, portes
+  DROITE, à 90° de la paroi droite, en rampe de 36 % jusqu'à ce que son sol
+  rejoigne la surface (~13 m : le relief n'est qu'à 11 m au-dessus et
+  descend vers la droite) — Kevin, 08/10/2026 : « ça part à 90° du tunnel
+  et ça monte direct dehors ». Portail = mur de tête percé d'un cercle là où
+  le sol émerge ; aire plane, remblai et trou (`ReliefBuilder.amenageurs`,
+  appelés avant les pièces fines) ; collisions de la galerie et du relief
+  au portail. On y va rame arrêtée à la chambre, portes
   ouvertes (Défi, panne) : porte → passerelle → galerie. Banc
   `bench_secours_3d.gd`, captures `shot_secours.gd`.
-- **Skieur en AUTO** (`skieur_auto.gd`, bouton AUTO / touche X) : la boucle
+- **Skieur en BOUCLE** (`skieur_auto.gd`, bouton BOUCLE — « AUTO » avant la 1.18.5 — / touche X) : la boucle
   complète, étapes avec points de passage (ceux des bancs) ; la rame
   l'attend (`SkieurAuto.descend()` → `retenue`). Banc
   `bench_skieur_auto_3d.gd`.
@@ -160,9 +162,10 @@ funiculaire), les sauts (il reste collé au sol), les chutes.
   penchent avec la caisse à 16,7°), glissement le long de tout mur
   (`wall_min_slide_angle` 0, pas de côté kinématique), bancs à l'assise
   (0,73-1,53), porte-skis 0,36 de large, bancs d'extrémité −0,45 m,
-  pupitre/siège replacés (signe de `dz`) ; le passage est un slalom
-  (couloir à droite aux paliers pairs, à gauche aux impairs, porte-skis
-  dans la moitié arrière du palier) ; touche
+  pupitre/siège replacés (signe de `dz`) ; le passage était un slalom
+  (couloir à droite aux paliers pairs, à gauche aux impairs) — depuis la
+  1.18.5 les porte-skis n'ont plus de collision (« c'est la galère de
+  marcher dans le funi ») ; touche
   d'évacuation **U** ; bouton **EXPLOIT.** du HUD (exploitation auto, Web =
   `auto_operator`, PC = touche X relayée, état `exploitation` reçu) ;
   **musiques des gares** (`sons/musique/gare_basse.mp3` = ouverture
@@ -182,7 +185,18 @@ funiculaire), les sauts (il reste collé au sol), les chutes.
   `squelette_chasse`, `skis_aux_pieds(mat, 22°)`), chute
   (`SkieurJoueur._chuter`, `V_CHUTE_MUR` 6, `V_CHUTE_ROCHE` 8, `CHUTE_S`
   2,5) ; panneaux ronds nommés (`DomaineSkiable._construire_panneaux`,
-  tous les 250 m, Label3D) ; néons et câbles du tunnel sur la paroi.
+  tous les 250 m, Label3D ; depuis la 1.18.5 poteau de 12 cm enfoncé de
+  1,2 m sous le sol calculé — le sol affiché s'en écarte et le panneau
+  « flottait » — et liseré blanc) ; néons et câbles du tunnel sur la paroi.
+- **1.18.5 (08/10/2026 soir)** : galerie de secours droite à 90°
+  (`sortie_secours.gd`, rabots du relief sous la dalle sur les 5 derniers
+  mètres : la pièce fine rentrait dans le tube) ; « dans le tunnel » =
+  `main._pres_du_tunnel` (4,5 m de l'axe, 3 m de la galerie), à pied —
+  plus `dehors()`, qui mentait à ski ; sono de la rame par
+  `Announcements.set_ecoute_skieur` (plein dans sa rame, −8 dB sur le quai
+  de sa gare, coupée ailleurs) ; pieds en chasse-neige (`_chaussure` avec
+  `lacet`, `s.chasse` du squelette) ; poignées/serrures sous le nœud
+  d'issue (`_build_cap_fittings(…, issues_nodes)`).
 
 Reste : le poste de la rame d'en face (on ne conduit que la rame choisie au
 départ), les remontées mécaniques, sauts et chutes.

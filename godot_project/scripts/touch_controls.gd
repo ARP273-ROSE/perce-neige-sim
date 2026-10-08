@@ -297,9 +297,10 @@ func _build() -> void:
 	# AUTO : appel DIRECT du jeu (pas de synthèse clavier — plus fiable
 	# sur web) ; vrai bouton à bascule, vert quand l'exploitation
 	# automatique est active.
-	_b_auto = _mk_button("AUTO",
-		"Exploitation automatique : embarquement ~30 s puis départ, " +
-		"trajets enchaînés. Vert = actif.")
+	_b_auto = _mk_button("EXPLOIT.",
+		"EXPLOITATION AUTO (F3) : tout le service — embarquement ~30 s puis " +
+		"départ, trajets enchaînés. Vert = actif. (Le PILOTE AUTO d'un seul " +
+		"voyage n'existe que sur le PC ; la BOUCLE est celle du skieur.)")
 	_b_auto.custom_minimum_size = Vector2(102, 56)
 	_b_auto.toggle_mode = true
 	_b_auto.toggled.connect(func(_on: bool) -> void:

@@ -24,6 +24,9 @@ const COULEURS: Array = [Color(0.10, 0.58, 0.22), Color(0.10, 0.33, 0.85),
 ## tous les PAS_PANNEAU mètres, « TIGNES » et le nom de la piste.
 const PAS_PANNEAU: float = 250.0
 const H_POTEAU: float = 2.2
+const ENFONCE: float = 1.2                # le poteau descend 1,2 m sous le sol calculé : le sol
+                                           # AFFICHÉ (maille 25 m) s'en écarte, et le panneau
+                                           # « flottait dans l'air » (Kevin, 08/10/2026)
 const R_DISQUE: float = 0.45
 var n_panneaux: int = 0
 const R_DEPART: float = 40.0
@@ -127,10 +130,10 @@ func construire(r: ReliefBuilder) -> void:
 ## Label3D (deux par panneau), visibles à 350 m.
 func _construire_panneaux() -> void:
 	var poteau: CylinderMesh = CylinderMesh.new()
-	poteau.top_radius = 0.035
-	poteau.bottom_radius = 0.04
-	poteau.height = H_POTEAU
-	poteau.radial_segments = 6
+	poteau.top_radius = 0.055
+	poteau.bottom_radius = 0.065
+	poteau.height = H_POTEAU + ENFONCE
+	poteau.radial_segments = 8
 	poteau.rings = 1
 	var disque: CylinderMesh = CylinderMesh.new()
 	disque.top_radius = R_DISQUE
@@ -138,6 +141,16 @@ func _construire_panneaux() -> void:
 	disque.height = 0.035
 	disque.radial_segments = 28
 	disque.rings = 1
+	# liseré blanc : un disque un peu plus grand, juste derrière
+	var cercle: CylinderMesh = CylinderMesh.new()
+	cercle.top_radius = R_DISQUE + 0.06
+	cercle.bottom_radius = R_DISQUE + 0.06
+	cercle.height = 0.03
+	cercle.radial_segments = 28
+	cercle.rings = 1
+	var m_cercle: StandardMaterial3D = StandardMaterial3D.new()
+	m_cercle.albedo_color = Color(0.96, 0.96, 0.94)
+	m_cercle.roughness = 0.5
 	var m_pot: StandardMaterial3D = StandardMaterial3D.new()
 	m_pot.albedo_color = Color(0.35, 0.36, 0.38)
 	m_pot.roughness = 0.7
@@ -171,25 +184,28 @@ func _construire_panneaux() -> void:
 					if not par_couleur.has(c):
 						par_couleur[c] = []
 					(par_couleur[c] as Array).append([
-						Transform3D(Basis.IDENTITY, pied + Vector3.UP * (H_POTEAU * 0.5)),
-						Transform3D(base * Basis(Vector3.RIGHT, PI * 0.5), pied + Vector3.UP * (H_POTEAU + R_DISQUE))])
+						Transform3D(Basis.IDENTITY, pied + Vector3.UP * ((H_POTEAU - ENFONCE) * 0.5)),
+						Transform3D(base * Basis(Vector3.RIGHT, PI * 0.5), pied + Vector3.UP * (H_POTEAU + R_DISQUE)),
+						Transform3D(base * Basis(Vector3.RIGHT, PI * 0.5), pied + Vector3.UP * (H_POTEAU + R_DISQUE) - nz * 0.012)])
 					textes.append([pied + Vector3.UP * (H_POTEAU + R_DISQUE), nz, nom, c])
 				u += PAS_PANNEAU
 			reste = u - l
 	for c in par_couleur:
 		var xs: Array = par_couleur[c]
-		for k in range(2):
+		for k in range(3):
 			var mm: MultiMesh = MultiMesh.new()
 			mm.transform_format = MultiMesh.TRANSFORM_3D
-			mm.mesh = poteau if k == 0 else disque
+			mm.mesh = [poteau, disque, cercle][k]
 			mm.instance_count = xs.size()
 			for i in range(xs.size()):
 				mm.set_instance_transform(i, xs[i][k])
 			var mi: MultiMeshInstance3D = MultiMeshInstance3D.new()
-			mi.name = "Panneaux%s" % ("Poteaux" if k == 0 else "Disques")
+			mi.name = "Panneaux%s" % ["Poteaux", "Disques", "Cercles"][k]
 			mi.multimesh = mm
 			if k == 0:
 				mi.material_override = m_pot
+			elif k == 2:
+				mi.material_override = m_cercle
 			else:
 				var m: StandardMaterial3D = StandardMaterial3D.new()
 				m.albedo_color = COULEURS[c]

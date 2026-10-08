@@ -824,7 +824,7 @@ static func _disc(parent: Node3D, mat: StandardMaterial3D, r: float, thick: floa
 ## Accessoires d'une extrémité : feux ronds, grille, bandeau du lettrage.
 ## Retourne les deux MeshInstance3D des feux (pour l'allumage).
 static func _build_cap_fittings(parent: Node3D, mats: Dictionary, z_join: float, dir_z: float,
-		is_front: bool) -> Array:
+		is_front: bool, issues_nodes: Dictionary = {}) -> Array:
 	var lamps: Array = []
 	# tampons ronds aux coins bas (photo 094104 : deux disques gris — ce ne
 	# sont pas des feux), à fleur de tôle
@@ -849,14 +849,19 @@ static func _build_cap_fittings(parent: Node3D, mats: Dictionary, z_join: float,
 		var lamp: MeshInstance3D = _disc(parent, mats["lamp_off"], 0.072, 0.02, pl1, true,
 			"Phare%s%s" % ["F" if is_front else "R", "L" if sx < 0.0 else "R"])
 		lamps.append(lamp)
-	# poignées des portes d'évacuation (petits rectangles sombres, photo)
+	# poignées des portes d'évacuation (petits rectangles sombres, photo) —
+	# accrochées au panneau d'issue (nœud « IssueAvG »…) quand il existe :
+	# elles s'en vont avec lui à l'évacuation (Kevin, 08/10/2026 : « il
+	# reste deux trucs noirs au milieu en lévitation »)
 	for sx in [-1.0, 1.0]:
+		var cle: String = ("Av" if dir_z < 0.0 else "Ar") + ("D" if sx > 0.0 else "G")
+		var porteur: Node3D = issues_nodes.get(cle, parent) as Node3D
 		var ph: Vector3 = cap_surface_point(sx * 1.22, Y_CENTER + _face_y(-0.30), z_join, dir_z)
 		ph.z += dir_z * 0.02
-		_box(parent, mats["dark"], Vector3(0.10, 0.05, 0.03), ph, "Poignee")
+		_box(porteur, mats["dark"], Vector3(0.10, 0.05, 0.03), ph, "Poignee")
 		var ph2: Vector3 = cap_surface_point(sx * 1.22, Y_CENTER + _face_y(0.15), z_join, dir_z)
 		ph2.z += dir_z * 0.02
-		_box(parent, mats["dark"], Vector3(0.10, 0.05, 0.03), ph2, "Serrure")
+		_box(porteur, mats["dark"], Vector3(0.10, 0.05, 0.03), ph2, "Serrure")
 	# lettrage « TIGNES » en lettres argentées sous le pare-brise (photos).
 	# Retour du 03/10 : « écris bien TIGNES, le haut des lettres du milieu
 	# est un peu mangé ». Le mot était UN panneau vertical posé devant le
@@ -1026,16 +1031,18 @@ static func build_train(root: Node3D, train_length: float, car_count: int,
 			lin.name = "Lining%d" % (i + 1)
 			lin.mesh = lining
 			car_root.add_child(lin)
+		var issues_nodes: Dictionary = {}
 		for cle in issues_m:
 			var im: MeshInstance3D = MeshInstance3D.new()
 			im.name = "Issue" + cle
 			im.mesh = issues_m[cle]
 			car_root.add_child(im)
 			issues.append({"node": im, "car": i, "cle": cle})
+			issues_nodes[cle] = im
 		if is_first:
-			front_lamps = _build_cap_fittings(car_root, mats, z_a, -1.0, true)
+			front_lamps = _build_cap_fittings(car_root, mats, z_a, -1.0, true, issues_nodes)
 		if is_last:
-			rear_lamps = _build_cap_fittings(car_root, mats, z_b, 1.0, false)
+			rear_lamps = _build_cap_fittings(car_root, mats, z_b, 1.0, false, issues_nodes)
 		wheels.append_array(_build_bogie(car_root, mats, wells[0], bogies))
 		wheels.append_array(_build_bogie(car_root, mats, wells[1], bogies))
 		# soufflet d'intercirculation entre les deux voitures

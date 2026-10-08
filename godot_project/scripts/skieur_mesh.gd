@@ -382,6 +382,9 @@ static func squelette_chasse() -> Dictionary:
 		s["coude_" + c] = Vector3(sx * 0.27, 1.02, 0.02)
 		s["poignet_" + c] = Vector3(sx * 0.31, 0.88, -0.10)
 		s["main_" + c] = Vector3(sx * 0.32, 0.84, -0.15)
+	# les pieds pivotent comme les skis (pointes rentrées, 22°) — Kevin,
+	# 08/10/2026 : « le chasse-neige, les skis le font mais pas les pieds »
+	s["chasse"] = deg_to_rad(22.0)
 	return s
 
 
@@ -396,7 +399,7 @@ static func passager_squelette(s: Dictionary, pose: String, coiffe: String, mat:
 		var ch: Vector3 = s["cheville_" + c]
 		var ge: Vector3 = s["genou_" + c]
 		var ha: Vector3 = s["hanche_" + c]
-		_chaussure(b, ch, sx, k)
+		_chaussure(b, ch, sx, k, sx * float(s.get("chasse", 0.0)))
 		var bas: Vector3 = ch + Vector3(0.0, 0.13 * k, -0.01 * k)
 		var mi_tibia: Vector3 = bas.lerp(ge, 0.5)
 		var mi_cuisse: Vector3 = ge.lerp(ha, 0.5) + Vector3(0.0, 0.0, -0.01 * k)
@@ -504,27 +507,34 @@ static func passager_squelette(s: Dictionary, pose: String, coiffe: String, mat:
 	return b.commit(mat)
 
 
-static func _chaussure(b: Bati, ch: Vector3, sx: float, k: float) -> void:
+## `lacet` : rotation (rad) de la chaussure autour de la verticale de la
+## cheville — pointe rentrée en chasse-neige, comme le ski.
+static func _chaussure(b: Bati, ch: Vector3, sx: float, k: float, lacet: float = 0.0) -> void:
 	var kk: float = maxf(k, 0.80)    # pointure : les chaussures d'enfant restent grosses
 	var z_pied: float = ch.z - 0.075 * kk
+	var rot: Basis = Basis(Vector3.UP, lacet)
+	var piv: Vector3 = Vector3(ch.x, 0.0, ch.z)
+	var tp: Callable = func(p: Vector3) -> Vector3:
+		return piv + rot * (p - piv)
 	# semelle, coque du pied, tige avec inclinaison vers l'avant
-	_boite(b, Vector3(ch.x, 0.016 * kk, z_pied), Vector3(0.056, 0.016, 0.158) * kk, Basis.IDENTITY, P_SEMELLE)
-	_ellipsoide(b, Vector3(ch.x, 0.066 * kk, z_pied - 0.01 * kk), Vector3(0.060, 0.052, 0.150) * kk,
-		Basis.IDENTITY, P_CHAUSSURE)
+	_boite(b, tp.call(Vector3(ch.x, 0.016 * kk, z_pied)), Vector3(0.056, 0.016, 0.158) * kk, rot, P_SEMELLE)
+	_ellipsoide(b, tp.call(Vector3(ch.x, 0.066 * kk, z_pied - 0.01 * kk)), Vector3(0.060, 0.052, 0.150) * kk,
+		rot, P_CHAUSSURE)
 	var bas: Vector3 = Vector3(ch.x, 0.05 * kk, ch.z + 0.012 * kk)
 	var haut: Vector3 = Vector3(ch.x, 0.335 * kk, ch.z - 0.035 * kk)
-	_tube(b, [bas, bas.lerp(haut, 0.5), haut], [0.064 * kk, 0.065 * kk, 0.068 * kk],
-		[0.080 * kk, 0.077 * kk, 0.078 * kk], P_CHAUSSURE, Vector3.RIGHT, true, true)
+	var lat: Vector3 = rot * Vector3.RIGHT
+	_tube(b, [tp.call(bas), tp.call(bas.lerp(haut, 0.5)), tp.call(haut)], [0.064 * kk, 0.065 * kk, 0.068 * kk],
+		[0.080 * kk, 0.077 * kk, 0.078 * kk], P_CHAUSSURE, lat, true, true)
 	# strap en haut, boucles côté extérieur
-	_tube(b, [haut - Vector3(0.0, 0.035, -0.006) * kk, haut + Vector3(0.0, 0.002, 0.0)],
-		[0.070 * kk, 0.071 * kk], [0.081 * kk, 0.082 * kk], P_SEMELLE)
+	_tube(b, [tp.call(haut - Vector3(0.0, 0.035, -0.006) * kk), tp.call(haut + Vector3(0.0, 0.002, 0.0))],
+		[0.070 * kk, 0.071 * kk], [0.081 * kk, 0.082 * kk], P_SEMELLE, lat)
 	for j in range(3):
 		var y: float = [0.10, 0.19, 0.27][j] * kk
 		var t: float = clampf((y - bas.y) / (haut.y - bas.y), 0.0, 1.0)
 		var p: Vector3 = bas.lerp(haut, t)
 		var zf: float = p.z - (0.083 if j > 0 else 0.07) * kk
-		_boite(b, Vector3(p.x + sx * 0.035 * kk, y, zf), Vector3(0.018, 0.007, 0.012) * kk,
-			Basis(Vector3.UP, sx * 0.6), P_BOUCLE, false)
+		_boite(b, tp.call(Vector3(p.x + sx * 0.035 * kk, y, zf)), Vector3(0.018, 0.007, 0.012) * kk,
+			rot * Basis(Vector3.UP, sx * 0.6), P_BOUCLE, false)
 
 
 static func _gant(b: Bati, po: Vector3, ma: Vector3, sx: float, k: float) -> void:

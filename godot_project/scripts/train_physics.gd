@@ -24,7 +24,9 @@ var v: float = 0.0                       # vitesse signée (m/s)
 var a: float = 0.0                       # dernière accel (m/s²)
 var direction: int = 1                   # +1 montée, -1 descente
 
-var speed_cmd: float = 0.0               # setpoint conducteur (0..1)
+var speed_cmd: float = 1.0               # setpoint conducteur (0..1) — 100 % à quai
+                                         # hors Défi (Kevin, 08/10/2026 : « la consigne
+                                         # est à 0 et du coup ça ne part jamais »)
 var speed_cmd_eff: float = 0.0           # setpoint effectif (slew-limited, m/s)
 var throttle: float = 0.0                # demande moteur interne (0..1)
 var brake: float = 0.0                   # frein service à FRICTION (0..1)
@@ -1334,6 +1336,7 @@ func _arrival_grab() -> void:
 # son de portes au 2e départ » (retour d'essai Android 2026-07).
 func _terminus_turnaround() -> void:
 	doors_open = true
+	speed_cmd = 0.0 if challenge_mode else 1.0     # prête pour le retour, comme le PC
 	announce_phase_remaining = 0.0
 	_fermeture_seule = false
 	departure_buzzer_remaining = 0.0

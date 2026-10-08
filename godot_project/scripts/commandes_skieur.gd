@@ -19,6 +19,7 @@ var _doigt_joy: int = -1
 var _doigt_vue: int = -1
 var _pos_vue: Vector2 = Vector2.ZERO
 var _bouton_pos: Vector2 = Vector2.ZERO
+var _pos_joy_defaut: Vector2 = Vector2.ZERO   # base du joystick au repos (bas à gauche)
 var _b_conduire: Button = null
 var _b_courir: Button = null
 var _b_vue: Button = null
@@ -65,7 +66,7 @@ func _ready() -> void:
 		if main != null:
 			main.evacuer())
 	col.add_child(_b_evac)
-	_b_exploit = _bouton("EXPLOIT.", "Exploitation automatique du funiculaire (marche / arrêt), même en skieur (Web : F3 ; PC : bouton AUTO du tableau de bord)")
+	_b_exploit = _bouton("EXPLOIT.", "EXPLOITATION AUTO : tout le service du funiculaire (embarquements, départs enchaînés), marche / arrêt, même en skieur (Web : F3 ou EXPLOIT. du tableau de bord ; PC : X)")
 	_b_exploit.toggle_mode = true
 	_b_exploit.toggled.connect(func(on: bool) -> void:
 		if main != null:
@@ -76,7 +77,7 @@ func _ready() -> void:
 		if main != null:
 			main.basculer_ski())
 	col.add_child(_b_ski)
-	_b_auto = _bouton("AUTO", "Il fait la boucle tout seul : gare, rame, terrasse, ski, retour (touche X)")
+	_b_auto = _bouton("BOUCLE", "BOUCLE : le skieur fait la boucle tout seul — gare, rame, terrasse, ski, retour (touche X) ; il enclenche l'exploitation auto pour son trajet")
 	_b_auto.toggle_mode = true
 	_b_auto.toggled.connect(func(on: bool) -> void:
 		if main != null and (main.skieur_auto != null) != on:
@@ -214,14 +215,27 @@ func _input(event: InputEvent) -> void:
 		return
 	if event is InputEventScreenTouch:
 		var t: InputEventScreenTouch = event
-		var r: Rect2 = _joy.get_global_rect().grow(60.0)
+		# comme dans les jeux (Kevin, 08/10/2026 : « ça fait tourner la vue
+		# en même temps, c'est le bazar ») : joystick FLOTTANT — il naît là
+		# où le pouce se pose dans la moitié gauche de l'écran ; tout doigt
+		# posé sur la moitié droite tourne la vue ; un doigt sur un bouton ne
+		# fait ni l'un ni l'autre
+		var moitie: float = get_viewport().get_visible_rect().size.x * 0.5
 		if t.pressed:
-			if _doigt_joy < 0 and r.has_point(t.position):
+			if _sur_un_bouton(t.position):
+				return
+			if _doigt_joy < 0 and t.position.x < moitie:
 				_doigt_joy = t.index
-				_centre = _joy.get_global_rect().get_center()
+				if _pos_joy_defaut == Vector2.ZERO:
+					_pos_joy_defaut = _joy.position
+				var ecran: Vector2 = get_viewport().get_visible_rect().size
+				var centre: Vector2 = Vector2(clampf(t.position.x, R_BASE, ecran.x - R_BASE),
+					clampf(t.position.y, R_BASE, ecran.y - R_BASE))
+				_joy.position = centre - Vector2(R_BASE, R_BASE) - _racine.global_position
+				_centre = centre
 				_maj_joy(t.position)
 				get_viewport().set_input_as_handled()
-			elif _doigt_vue < 0 and not _sur_un_bouton(t.position):
+			elif _doigt_vue < 0:
 				_doigt_vue = t.index
 				_pos_vue = t.position
 		else:
@@ -229,6 +243,8 @@ func _input(event: InputEvent) -> void:
 				_doigt_joy = -1
 				_bouton_pos = Vector2.ZERO
 				skieur.entree = Vector2.ZERO
+				if _pos_joy_defaut != Vector2.ZERO:
+					_joy.position = _pos_joy_defaut
 				_joy.queue_redraw()
 				get_viewport().set_input_as_handled()
 			elif t.index == _doigt_vue:

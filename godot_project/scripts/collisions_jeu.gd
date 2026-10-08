@@ -358,9 +358,12 @@ func _rame(c: Cabin) -> void:
 			if TrainBodyBuilder.KINDS[k] == "door":
 				paliers_quai.append(_boite(voiture, Vector3(3.66, 0.15, pas + 0.02),
 					xf * Transform3D(Basis.IDENTITY, Vector3(0.0, -0.05, 0.0))))
+				# (10 cm seulement, à 1,40-1,50 : la fente restante, 20 cm, ne
+				# laisse plus passer les 28 cm du skieur ; plus large, le seuil
+				# barrait la PASSERELLE à qui longe la rame arrêtée, 08/10/2026)
 				for side_s in [-1.0, 1.0]:
-					var seuil: CollisionShape3D = _boite(voiture, Vector3(0.46, 0.15, pas + 0.02),
-						xf * Transform3D(Basis.IDENTITY, Vector3(side_s * 1.41, -0.05, 0.0)))
+					var seuil: CollisionShape3D = _boite(voiture, Vector3(0.12, 0.15, pas + 0.02),
+						xf * Transform3D(Basis.IDENTITY, Vector3(side_s * 1.44, -0.05, 0.0)))
 					seuil.disabled = not _seuils_fermes
 					seuils.append(seuil)
 			if TrainBodyBuilder.KINDS[k] == "door":
@@ -395,10 +398,9 @@ func _rame(c: Cabin) -> void:
 					for side in [-1.0, 1.0]:
 						_boite(voiture, Vector3(0.80, 0.50, l_banc),
 							xp * Transform3D(Basis.IDENTITY, Vector3(side * 1.13, 0.25, dz_banc)))
-				for xr in Cabin.racks_x(k):
-					_boite(voiture, Vector3(Cabin.RACK_L - 0.14, 1.02, Cabin.RACK_P + Cabin.RACK_CRAN),
-						xp * Transform3D(Basis.IDENTITY, Vector3(xr, 0.51,
-							Cabin.RACK_DZ - Cabin.RACK_CRAN * 0.5)))
+				# porte-skis : PLUS de collision (Kevin, 08/10/2026 : « c'est la
+				# galère de marcher dans le funi, permets de passer au travers
+				# des porte-skis orange ») — on les traverse
 		# paroi du tube en pans de 12°, du plafond au plancher ; au droit des
 		# portes, ouverte sous le haut des vantaux (le vantail la ferme)
 		var th_sol: float = acos(clampf((TrainBodyBuilder.Y_FLOOR - TrainBodyBuilder.Y_CENTER) / R_PAROI, -1.0, 1.0))

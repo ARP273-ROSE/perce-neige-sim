@@ -50,8 +50,8 @@ func _tick() -> void:
 		var pp: Vector3 = ss.point_passerelle(_main.track) - tun.transform_at(TunnelBuilder.SORTIE_SECOURS_S).basis.z * 5.0
 		var ouv: Vector3 = ss.sol[0] + Vector3.UP * 1.0
 		_vues = [["passerelle", pp, _yaw_vers(pp, ouv), -0.05, 2.5],
-			["galerie", ss.sol[6] + Vector3.UP * 0.05, _yaw_vers(ss.sol[6], ss.sol[12]), -0.05, 3.0],
-			["portail_dedans", ss.sol[ss.sol.size() - 7] + Vector3.UP * 0.05, _yaw_vers(ss.sol[ss.sol.size() - 7], ss.portail), 0.0, 3.0],
+			["galerie", ss.sol[1] + Vector3.UP * 0.05, _yaw_vers(ss.sol[1], ss.sol[mini(3, ss.sol.size() - 1)]), -0.05, 3.0],
+			["portail_dedans", ss.sol[maxi(ss.sol.size() - 3, 0)] + Vector3.UP * 0.05, _yaw_vers(ss.sol[maxi(ss.sol.size() - 3, 0)], ss.portail), 0.0, 3.0],
 			["portail_dehors", ss.portail + ss._dir_fin * 16.0 + Vector3.UP * 0.05, _yaw_vers(ss.portail + ss._dir_fin * 16.0, ss.portail), 0.05, 5.0]]
 		_t0 = _f
 		return

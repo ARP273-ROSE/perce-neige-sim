@@ -128,7 +128,19 @@ if _QTMULTIMEDIA_OK:
         def setVolume(self, volume: float) -> None:  # noqa: N802
             self._v_req = float(volume)
             _SORTIES_AUDIO.add(self)
-            super().setVolume(self._v_req * _VOLUME_GENERAL[0])
+            super().setVolume(self._v_req * _VOLUME_GENERAL[0]
+                              * getattr(self, "facteur", 1.0))
+
+        def set_facteur(self, f: float) -> None:
+            """Gain par-dessus le niveau demandé, hors des fondus (skieur
+            hors de la rame : la sono de la rame s'efface — Kevin,
+            08/10/2026 : « dehors on entend quand même l'annonce de
+            fermeture des portes alors qu'on est loin »)."""
+            f = max(0.0, min(1.0, float(f)))
+            if abs(f - getattr(self, "facteur", 1.0)) < 1e-3:
+                return
+            self.facteur = f
+            self.setVolume(self.volume())
 
         def volume(self) -> float:  # noqa: D102
             return getattr(self, "_v_req", super().volume())
@@ -3561,7 +3573,7 @@ FAULT_PROFILES: dict[str, dict] = {
         "what_en": "Faulty door sensor : safety chain blocks restart until "
                    "the door sequence is cycled.",
         "do_fr": "S'arrêter à la prochaine station, ouvrir/refermer les "
-                 "portes (touche D), puis PRÊT (V) + DÉPART (Z).",
+                 "portes (touche D), puis PRÊT (V).",
         "do_en": "Stop at the next station, open/close the doors (D key), "
                  "then READY (V) + DEPART (Z).",
         "blocked_fr": "DÉPART tant que les portes ne sont pas cyclées.",
@@ -3639,7 +3651,7 @@ FAULT_PROFILES: dict[str, dict] = {
                    "drum brake clamped. Train will halt.",
         "do_fr": "L'urgence s'engage seule (frein à manque de courant). "
                  "Attendre la reprise du secours (≈ 25 s), relâcher "
-                 "l'urgence, puis PRÊT (V) + DÉPART (Z).",
+                 "l'urgence, puis PRÊT (V).",
         "do_en": "The emergency engages by itself (power-loss brake). "
                  "Wait for the backup feeder (≈ 25 s), release the "
                  "emergency, then READY (V) + DEPART (Z).",
@@ -3655,7 +3667,7 @@ FAULT_PROFILES: dict[str, dict] = {
         "what_en": "Parking (drum) brake refuses to release — the cabin "
                    "cannot move.",
         "do_fr": "Cycler l'arrêt d'urgence (Maj + 4) à l'arrêt complet, "
-                 "puis PRÊT (V) + DÉPART (Z).",
+                 "puis PRÊT (V).",
         "do_en": "Cycle the emergency stop (Shift + 4) at full stop, "
                  "then READY (V) + DEPART (Z).",
         "blocked_fr": "Toute traction tant que le tambour ne se libère pas.",
@@ -5144,6 +5156,9 @@ class SoundSystem:
         overall *= cabine
         try:
             self._fx_audio.setVolume(0.70 * (cabine if self._fx_oneshot_active else 1.0))
+            # annonces de la rame : s'effacent avec le son de cabine (skieur
+            # dehors, vue salle des machines)
+            self._audio.set_facteur(cabine)
         except Exception:
             pass
         # Duck ambient hard while the horn is sounding — update_ambient
@@ -6965,10 +6980,10 @@ class FaultPickerDialog(QDialog):
         lang = self._state.lang
         if lang == "fr":
             self._auto_btn.setText(
-                f"Auto-scheduler : {'ACTIVÉ' if on else 'OFF (manuel)'}")
+                f"Pannes aléatoires : {'ACTIVÉES' if on else 'OFF (manuel)'}")
         else:
             self._auto_btn.setText(
-                f"Auto-scheduler : {'ON' if on else 'OFF (manual)'}")
+                f"Random faults : {'ON' if on else 'OFF (manual)'}")
 
     def _toggle_auto(self) -> None:
         self._state.panne_auto = not self._state.panne_auto
@@ -7121,8 +7136,8 @@ class GameWidget(QWidget):
                 "Portes ouvrir / fermer — uniquement à l'arrêt total",
             ),
             int(K.Key_A): (
-                "AUTO — trip autopilot : closes the doors once boarded, arms READY, gives START, holds 100 %, lets the stop envelope land the train, opens the doors once the cable has settled and lets the passengers off ; then hands back, or as soon as you touch the setpoint or a brake",
-                "AUTO — pilote auto du voyage : ferme les portes une fois l'embarquement fini, arme PRÊT, donne le DÉPART, tient 100 %, laisse l'enveloppe poser la rame, ouvre les portes une fois le câble stabilisé et laisse descendre les passagers ; puis rend la main, ou dès que vous touchez consigne ou freins",
+                "AUTOPILOT (A) — ONE trip by itself: closes the doors once boarded, arms READY, holds 100 %, lets the stop envelope land the train, opens the doors once the cable has settled and lets the passengers off; then hands back, or as soon as you touch the setpoint or a brake. Not the automatic OPERATION (F3), which runs the whole service",
+                "PILOTE AUTO (A) — UN voyage tout seul : ferme les portes une fois l'embarquement fini, arme PRÊT, tient 100 %, laisse l'enveloppe poser la rame, ouvre les portes une fois le câble stabilisé et laisse descendre les passagers ; puis rend la main, ou dès que vous touchez consigne ou freins. Rien à voir avec l'EXPLOITATION AUTO (F3), qui fait tourner tout le service",
             ),
             int(K.Key_N): (
                 "Mute / unmute on-board announcements and ambient sound",
@@ -7141,12 +7156,12 @@ class GameWidget(QWidget):
                 "TUNNEL — couper / rallumer tout l'éclairage du tunnel (restent les phares, les gares et la salle des machines)",
             ),
             int(K.Key_V): (
-                "READY — latch own cabin ready; START authorises when both ready",
-                "PRÊT — verrouille la cabine prête ; DÉPART autorisé quand les deux prêtes",
+                "READY — latch own cabin ready; the start follows by itself once both cabins are ready",
+                "PRÊT — verrouille la cabine prête ; l'autre rame prête (2-4 s), le départ part tout seul",
             ),
             int(K.Key_Z): (
-                "START — fire departure buzzer and release parking drum",
-                "DÉPART — déclenche le buzzer et libère le frein de parking",
+                "FORCED START — without waiting (Challenge: doors open = reckless start)",
+                "DÉPART FORCÉ — sans attendre (Défi : portes ouvertes = départ sauvage)",
             ),
             int(K.Key_I): (
                 "Reverse direction — only at a full standstill",
@@ -7294,6 +7309,28 @@ class GameWidget(QWidget):
     # ----- lifecycle -------------------------------------------------------
 
     # ----- pilote automatique du voyage (touche A) ----------------------
+
+    def _depart_si_pret(self, st) -> None:
+        """Le départ sans bouton DÉPART (Kevin, 08/10/2026 : « dans la vraie
+        vie on met PRÊT et ça part quand tout est bon, comme pour la PWA ») :
+        PRÊT armé, l'autre rame prête, portes fermées et aucun verrou de
+        traction → le chemin de la touche Z, sans la touche. Un verrou
+        (urgence, arrêt électrique, veille, panne, consigne à 0) : on attend
+        qu'il soit levé, sans message répété. En AUTO ou sous pilote auto,
+        ce sont eux qui donnent le départ. Z reste le départ FORCÉ (Défi :
+        portes ouvertes = départ sauvage)."""
+        tr = st.train
+        if (not tr.ready or not st.ghost_ready or st.trip_started
+                or st.finished or st.departure_buzzer_remaining > 0.0
+                or self.auto_ops.enabled or tr.autopilot):
+            return
+        if tr.doors_open or tr.doors_timer > 0.0:
+            return
+        if (tr.emergency or tr.emergency_ramp > 0.0 or tr.electric_stop
+                or tr.dead_man_fault or st.panne_active
+                or tr.speed_cmd < 0.01):
+            return
+        self._virtual_key(Qt.Key.Key_Z)
 
     def _virtual_key(self, k) -> None:
         """Appuie une touche comme le conducteur : mêmes verrous, mêmes
@@ -7766,7 +7803,7 @@ class GameWidget(QWidget):
         "retour en gare" announcement for exactly this scenario.
 
         The train keeps its current slope position ``tr.s`` — no teleport.
-        The driver must press READY (V) then START (Z) to set off again.
+        The driver must press READY (V) to set off again (the start follows).
         """
         st = self.state
         tr = st.train
@@ -8289,6 +8326,9 @@ class GameWidget(QWidget):
                               "Second cabin reports ready",
                               "Autre rame prête",
                               "info")
+            # PRÊT suffit : les deux rames prêtes, portes fermées, aucun
+            # verrou → le départ part tout seul (Kevin, 08/10/2026)
+            self._depart_si_pret(st)
             # Pending mid-tunnel incident : engaged when the driver
             # pulled a latched stop (E-stop, emergency, vigilance loss)
             # while rolling. Wait for the cabin to fully come to rest,
@@ -14623,42 +14663,29 @@ class GameWidget(QWidget):
         # READY [V] — latches the "own cabin ready" flag. Colour changes
         # with the state machine: dim when idle, amber while waiting for
         # the other cabin, green once both cabins are ready.
-        if tr.ready and st.ghost_ready:
+        # Plus de bouton DÉPART (Kevin, 08/10/2026 : « dans la vraie vie on
+        # met PRÊT et ça part quand tout est bon, comme pour la PWA ») : le
+        # départ suit tout seul, l'autre rame prête — _depart_si_pret.
+        if st.trip_started:
+            ready_col = QColor(100, 160, 120)
+            ready_lbl = T("READY [V] — under way", "PRÊT [V] — en route")
+        elif tr.ready and st.ghost_ready:
             ready_col = QColor(80, 220, 120)
-            ready_lbl = T("READY [V] ✓✓", "PRÊT [V] ✓✓")
+            ready_lbl = T("READY [V] ✓✓ departing", "PRÊT [V] ✓✓ départ")
         elif tr.ready:
             ready_col = QColor(240, 200, 60)
-            ready_lbl = T("READY [V] …", "PRÊT [V] …")
+            ready_lbl = T("READY [V] … other cabin", "PRÊT [V] … autre rame")
         else:
             ready_col = QColor(140, 160, 190)
             ready_lbl = T("READY [V]", "PRÊT [V]")
         self._draw_touch_button(
-            p, QRectF(rect.x() + 20, dep_y, 170, dep_h),
+            p, QRectF(rect.x() + 20, dep_y, 350, dep_h),
             ready_lbl, ready_col, font_pt=10,
         )
         self._hit_zones.append(
-            (QRectF(rect.x() + 20, dep_y, 170, dep_h),
+            (QRectF(rect.x() + 20, dep_y, 350, dep_h),
              int(Qt.Key.Key_V), False)
         )
-        # START [Z] — greyed while the two-cabin handshake is incomplete
-        # or the trip already began, green and active once authorised.
-        start_enabled = (tr.ready and st.ghost_ready
-                         and not st.trip_started and not st.finished)
-        if start_enabled:
-            start_col = QColor(80, 220, 120)
-        elif st.trip_started:
-            start_col = QColor(100, 160, 120)
-        else:
-            start_col = QColor(90, 100, 120)
-        self._draw_touch_button(
-            p, QRectF(rect.x() + 200, dep_y, 170, dep_h),
-            T("START [Z]", "DÉPART [Z]"), start_col, font_pt=10,
-        )
-        if start_enabled:
-            self._hit_zones.append(
-                (QRectF(rect.x() + 200, dep_y, 170, dep_h),
-                 int(Qt.Key.Key_Z), False)
-            )
 
         # REVERSE [I] — appears whenever the train is at a full standstill
         # (|v| < 0.1 m/s), both at termini AND mid-tunnel after an
@@ -14777,7 +14804,7 @@ class GameWidget(QWidget):
             (QRectF(col0, row2, btn_w, btn_h), int(Qt.Key.Key_D), False)
         )
         self._draw_button(p, col1, row2, btn_w, btn_h,
-                          T("AUTO [A]", "AUTO [A]"),
+                          T("AUTOPILOT [A]", "PILOTE [A]"),
                           tr.autopilot, QColor(180, 140, 255),
                           QColor(30, 10, 60))
         self._hit_zones.append(
@@ -15874,10 +15901,10 @@ class GameWidget(QWidget):
                    "frein d'URGENCE — freins rail (maintenir)")),
                 ("3", T("electric stop, latched", "arrêt électrique, verrouillé")),
                 ("4", T("emergency stop, latched", "arrêt d'urgence, verrouillé")),
-                ("V", T("READY — cabin ready to depart",
-                        "PRÊT — cabine prête au départ")),
-                ("Z", T("START — doors, buzzer, traction",
-                        "DÉPART — portes, buzzer, traction")),
+                ("V", T("READY — cabin ready; start follows by itself",
+                        "PRÊT — cabine prête ; le départ suit tout seul")),
+                ("Z", T("forced START (Challenge)",
+                        "DÉPART forcé (Défi)")),
                 ("I", T("reverse direction (at standstill)",
                         "inverser le sens (à l'arrêt)")),
                 ("W", T("vigilance on / off", "veille on / off")),
@@ -15889,10 +15916,10 @@ class GameWidget(QWidget):
                 ("C", T("cabin lights", "éclairage cabine")),
                 ("J", T("tunnel lighting on / off", "éclairage du tunnel on / off")),
                 ("K", T("horn (hold)", "klaxon (maintenir)")),
-                ("A", T("trip autopilot: doors, READY, START, 100 %, stop, doors, passengers off",
-                        "pilote auto du voyage : portes, PRÊT, DÉPART, 100 %, arrêt, portes, descente")),
-                ("X", T("auto-operation on / off",
-                        "exploitation automatique on / off")),
+                ("A", T("AUTOPILOT — ONE trip by itself: doors, READY, 100 %, stop, doors, passengers off",
+                        "PILOTE AUTO — UN voyage tout seul : portes, PRÊT, 100 %, arrêt, portes, descente")),
+                ("X", T("AUTOMATIC OPERATION on / off — the whole service (boarding, departures one after another)",
+                        "EXPLOITATION AUTO on / off — tout le service (embarquements, départs enchaînés)")),
                 (T("Shift+X", "Maj+X"),
                  T("24/7: ignore opening hours", "24/7 : ignorer les horaires")),
                 ("N", T("mute / unmute", "couper / remettre le son")),

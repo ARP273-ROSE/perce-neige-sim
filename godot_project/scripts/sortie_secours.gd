@@ -1,31 +1,29 @@
 class_name SortieSecours
 extends Node3D
-## Sortie de secours du tunnel, de la chambre du galet 145 jusqu'à la
-## piste (Kevin, 07/10/2026 : « tu peux percer la sortie de secours dans le
-## tunnel, et sortir sur la piste ; sur la piste la sortie est circulaire
-## comme le tunnel, je t'ai mis sa position » — Google Earth : 45°26′04,26″ N
-## 6°54′02,60″ E, entre les pistes Double M et Face).
+## Sortie de secours du tunnel, de la chambre du galet 145 (Kevin,
+## 07/10/2026 : « tu peux percer la sortie de secours dans le tunnel ; la
+## sortie est circulaire comme le tunnel »).
 ##
-## Le débouché est posé sur le relief du jeu à cette position
-## (audit_physique/sortie_secours.sage : x 135,95, z 1 933,54). Google Earth
-## y donne 2 655,89 m, le relief IGN du jeu 2 643,5 m : la galerie DESCEND
-## donc de la chambre (sol à 2 661 m) vers le portail.
+## Tracé (Kevin, 08/10/2026 : « dans la vraie vie l'issue de secours part à
+## 90° du tunnel et monte direct dehors, c'est pas tout ton cirque ») : une
+## galerie DROITE, perpendiculaire à la paroi droite, en rampe de 36 %
+## (20°) jusqu'à ce que son sol rejoigne la surface — là, le portail. À la
+## chambre, le relief n'est qu'à 11 m au-dessus du sol et descend vers la
+## droite : la rampe débouche après ~13 m (mesuré au banc). L'ancienne
+## galerie (114 m, en descente, vers un point Google Earth entre Double M
+## et Face) est abandonnée.
 ##
-## Galerie (valeurs du simulateur, aucune donnée sur la vraie) : tube
-## circulaire de 3 m de diamètre, sol plat de 1,9 m, 8 m perpendiculaires à
-## la paroi droite puis tout droit vers le portail ; le sol suit le relief
-## 4,3 m dessous, en rampe de 36 % au plus, sans jamais remonter, jusqu'au
-## niveau du portail ; là où le relief ne couvre plus le tube (les derniers
-## 40 m, plats), un remblai le couvre (ReliefBuilder « remblais ») et
-## une aire plane le reçoit devant le portail (« plats »). Lampes tous les
-## 12 m. Portail : mur de tête en béton percé d'un cercle.
+## Tube circulaire de 3 m de diamètre, sol plat de 1,9 m ; là où le relief
+## ne couvre plus le tube (derniers mètres), un remblai le couvre
+## (ReliefBuilder « remblais ») et une aire plane reçoit le marcheur devant
+## le portail (« plats ») ; derrière le mur de tête, le relief est retiré
+## dans l'emprise du tube (« trous »). Lampes tous les 12 m. Portail : mur
+## de tête en béton percé d'un cercle.
 
-const PORTAIL_XZ: Vector2 = Vector2(135.95, 1933.54)
 const R_GAL: float = 1.50                 # rayon du tube
 const H_AXE: float = 1.15                 # axe à 1,15 m au-dessus du sol (sol plat de 1,93 m)
-const COUVERTURE: float = 4.30            # sol de la galerie sous le relief (tube 2,65 m + 1,65 m)
-const PENTE_MAX: float = 0.36
-const PERP: float = 8.0                   # premier tronçon, perpendiculaire à la paroi
+const PENTE: float = 0.36                 # rampe droite, 36 % (20°)
+const L_MAX: float = 160.0                # longueur maximale (garde-fou)
 const PAS: float = 2.0
 const PAS_LAMPE: float = 12.0
 const L_TETE: float = 5.0                 # mur de tête : largeur, hauteur, épaisseur
@@ -53,28 +51,31 @@ func construire(tun: TunnelBuilder, relief: ReliefBuilder) -> void:
 	var x_paroi: float = sqrt(_r_tunnel * _r_tunnel - Y_OUVERTURE * Y_OUVERTURE)
 	var f0: Vector3 = xf.origin + xf.basis.x * x_paroi + xf.basis.y * Y_OUVERTURE
 	var d1: Vector3 = Vector3(xf.basis.x.x, 0.0, xf.basis.x.z).normalized()
-	var p1: Vector3 = f0 + d1 * PERP
-	var y_port: float = relief.hauteur(PORTAIL_XZ.x, PORTAIL_XZ.y)
-	portail = Vector3(PORTAIL_XZ.x, y_port, PORTAIL_XZ.y)
-	var d2: Vector3 = Vector3(portail.x - p1.x, 0.0, portail.z - p1.z)
-	var l2: float = d2.length()
-	d2 /= l2
-	_dir_fin = d2
-	# sol : premier tronçon plat, puis descente contrainte par le relief
+	_dir_fin = d1
+	# sol : rampe droite à 90° de la paroi, 36 %, jusqu'à la surface
+	var surface := func(u: float) -> float:
+		var q: Vector3 = f0 + d1 * u
+		return relief.hauteur(q.x, q.z) - (f0.y + PENTE * u)
 	sol.clear()
 	sol.append(f0)
-	sol.append(p1)
-	var y: float = p1.y
-	var n: int = int(ceil(l2 / PAS))
-	for i in range(1, n + 1):
-		var u: float = minf(float(i) * PAS, l2)
-		var q: Vector3 = p1 + d2 * u
-		var reste: float = l2 - u
-		var cible: float = minf(y, relief.hauteur(q.x, q.z) - COUVERTURE)
-		cible = maxf(cible, y - PENTE_MAX * PAS)
-		cible = maxf(cible, y_port)
-		y = cible if reste > 0.01 else y_port
-		sol.append(Vector3(q.x, y, q.z))
+	var u: float = 0.0
+	while u + PAS < L_MAX and surface.call(u + PAS) > 0.0:
+		u += PAS
+		sol.append(f0 + d1 * u + Vector3.UP * (PENTE * u))
+	# le sol rejoint la surface entre u et u + PAS : dichotomie (1 cm)
+	var ua: float = u
+	var ub: float = minf(u + PAS, L_MAX)
+	for _k in range(20):
+		var um: float = (ua + ub) * 0.5
+		if surface.call(um) > 0.0:
+			ua = um
+		else:
+			ub = um
+	var u_port: float = (ua + ub) * 0.5
+	portail = f0 + d1 * u_port + Vector3.UP * (PENTE * u_port)
+	if u_port - u < 0.5 and sol.size() > 1:
+		sol.remove_at(sol.size() - 1)
+	sol.append(portail)
 	_construire_tube()
 	_construire_tete()
 	pret = true
@@ -286,9 +287,38 @@ func amenagement_relief(relief: ReliefBuilder) -> Dictionary:
 	var aire: PackedVector2Array = PackedVector2Array([
 		xz.call(portail - t * 0.5 - r * 8.0), xz.call(portail - t * 0.5 + r * 8.0),
 		xz.call(portail + t * 14.0 + r * 8.0), xz.call(portail + t * 14.0 - r * 8.0)])
-	var tranchee: PackedVector2Array = PackedVector2Array([
-		xz.call(portail - t * 4.5 - r * 1.7), xz.call(portail - t * 4.5 + r * 1.7),
-		xz.call(portail - t * 0.3 + r * 1.7), xz.call(portail - t * 0.3 - r * 1.7)])
+	# Là où le relief naturel passe sous le toit du tube (u_toit) jusqu'au
+	# mur de tête, le terrain est RETIRÉ dans l'emprise du tube (« trou »,
+	# cellules de la pièce fine dont le centre est dedans) et, au-delà,
+	# RABOTÉ 30 cm sous le plancher (mètre par mètre : le sol monte de 36
+	# cm/m). Toute surface continue qui va du dessus du toit au dessous du
+	# plancher traverse forcément le tube : un simple rabot faisait une
+	# falaise de terrain en travers de la galerie à 8,5 m (banc, 08/10/2026),
+	# et un simple trou laissait le dernier carreau (2 m) rentrer dans le
+	# tube ; le trou commence 2,5 m avant u_toit, hors de portée des carreaux
+	# voisins, et le rabot tient les nœuds des carreaux à cheval sur le mur
+	# sous le plancher.
+	var u_port: float = Vector2(portail.x - sol[0].x, portail.z - sol[0].z).length()
+	var u_toit: float = u_port
+	var uu: float = 0.0
+	while uu < u_port:
+		var qq: Vector3 = sol[0] + t * uu
+		if relief.hauteur(qq.x, qq.z) <= sol[0].y + PENTE * uu + H_AXE + R_GAL + 0.5:
+			u_toit = uu
+			break
+		uu += 0.25
+	var trou: PackedVector2Array = PackedVector2Array([
+		xz.call(sol[0] + t * maxf(0.0, u_toit - 2.5) - r * 2.4), xz.call(sol[0] + t * maxf(0.0, u_toit - 2.5) + r * 2.4),
+		xz.call(portail - t * 0.3 + r * 2.4), xz.call(portail - t * 0.3 - r * 2.4)])
+	var rabots: Array = []
+	var ur: float = maxf(0.0, u_toit - 1.0)
+	while ur < u_port - 0.05:
+		var ua: Vector3 = sol[0] + t * ur
+		var ub: Vector3 = sol[0] + t * minf(ur + 1.0, u_port)
+		var niveau: float = sol[0].y + PENTE * ur - 0.30
+		rabots.append([PackedVector2Array([xz.call(ua - r * 2.4), xz.call(ua + r * 2.4),
+			xz.call(ub + r * 2.4), xz.call(ub - r * 2.4)]), niveau, 0.8])
+		ur += 1.0
 	var remblais: Array = []
 	var i: int = 2
 	while i < sol.size() - 1:
@@ -317,7 +347,7 @@ func amenagement_relief(relief: ReliefBuilder) -> Dictionary:
 	var bb: Rect2 = Rect2(Vector2(portail.x, portail.z), Vector2.ZERO)
 	for p in sol:
 		bb = bb.expand(Vector2(p.x, p.z))
-	return {"rect": bb.grow(60.0), "trous": [tranchee], "plats": [[aire, portail.y - 0.05, 3.0]], "remblais": remblais}
+	return {"rect": bb.grow(60.0), "trous": [trou], "plats": [[aire, portail.y - 0.05, 3.0]], "remblais": remblais, "rabots": rabots}
 
 
 ## Zone des collisions : chambre et galerie.

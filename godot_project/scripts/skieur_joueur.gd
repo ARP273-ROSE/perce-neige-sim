@@ -411,7 +411,7 @@ func _process(delta: float) -> void:
 	if k.length() > 0.0:
 		cmd = k
 	var vite: bool = course or Input.is_physical_key_pressed(KEY_SHIFT) \
-		or (touches_ext & 16) != 0
+		or (touches_ext & 16) != 0 or entree.length() > 0.92     # joystick à fond : on court
 	if chausse:
 		if not chemin.is_empty():
 			cmd = _pilote_ski()
