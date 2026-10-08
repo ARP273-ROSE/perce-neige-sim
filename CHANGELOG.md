@@ -7,6 +7,83 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.18.5** — retours PC et Web du 08/10/2026 (soir).
+- « Dans la vraie vie l'issue de secours part à 90° du tunnel et monte
+  direct dehors, c'est pas tout ton cirque » → la galerie de secours est
+  refaite : droite, perpendiculaire à la paroi droite de la chambre du
+  galet 145, en rampe de 36 % jusqu'à ce que son sol rejoigne la surface
+  (le relief n'est qu'à 11 m au-dessus et descend vers la droite : elle
+  débouche après ~13 m). Même tube circulaire, même mur de tête percé d'un
+  cercle, aire plane devant le portail. L'ancienne galerie de 114 m en
+  descente vers un point Google Earth est abandonnée.
+- « Dans la PWA on ne peut pas sortir dehors à l'issue de secours, t'as mis
+  une merde par terre » → le portail est contrôlé au banc (sortie par la
+  galerie, puis à ski jusqu'à Val Claret) et à l'image.
+- « Dans la PWA, quand on n'est pas en mode auto la consigne de vitesse est
+  à 0 et du coup ça ne part jamais, mets-la à 100 % » → consigne à 100 %
+  dès le départ et après chaque demi-tour en gare (hors Défi, où le
+  conducteur la règle) ; PRÊT/DÉPART part donc sans toucher à +VITESSE.
+- « Dans le programme PC, enlève le bouton DÉPART du pupitre : dans la
+  vraie vie on met PRÊT et ça part quand tout est bon, comme pour la PWA »
+  → plus de bouton DÉPART ; PRÊT (V) armé, l'autre rame prête (2-4 s),
+  portes fermées et aucun verrou de traction (urgence, arrêt électrique,
+  veille, panne, consigne à 0) : le départ part tout seul (`_depart_si_pret`,
+  le chemin de la touche Z sans la touche). Le bouton PRÊT dit où l'on en
+  est (« … autre rame », « ✓✓ départ », « en route »). Z reste le départ
+  FORCÉ (Défi : portes ouvertes = départ sauvage). Pilote auto et
+  exploitation AUTO gardent leur propre séquence.
+- « Quand t'as ouvert les issues de secours il reste deux trucs noirs au
+  milieu en lévitation, qui étaient sur les portes avant » → poignée et
+  serrure de chaque D jaune étaient des boîtes fusionnées dans la caisse ;
+  elles sont maintenant accrochées au panneau d'issue et s'en vont avec lui.
+- « Le chasse-neige, les skis le font mais pas les pieds » → les chaussures
+  pivotent de 22° comme les skis (pointes rentrées), boucles comprises.
+- « Les panneaux avec le nom des pistes, c'est un truc qui flotte dans
+  l'air » → le poteau (12 cm, 8 pans) descend 1,2 m sous le sol calculé
+  (le sol affiché à 25 m de maille s'en écarte, d'où le panneau en l'air)
+  et le disque est cerclé de blanc.
+- « En mode skieur dehors on entend quand même l'annonce de fermeture des
+  portes alors qu'on est loin » → la sono de la rame s'entend dans cette
+  rame, atténuée (−8 dB) sur le quai de la gare où elle est, nulle part
+  ailleurs (Web : `Announcements.set_ecoute_skieur` ; PC : les annonces
+  suivent le fondu du son de cabine, `set_facteur`).
+- « À chaque fois que je skie et que ça passe au travers de la montagne,
+  le truc dit que je suis dans le tunnel et arrête le funi » → « dans le
+  tunnel » n'est plus « sous la surface » mais à moins de 4,5 m de l'axe
+  du tunnel ou de 3 m de la galerie, à pied (jamais à ski).
+- « C'est la galère de marcher dans le funi, permets de passer au travers
+  des porte-skis orange » → les porte-skis n'ont plus de collision.
+- « En sortant de la gare du haut, à la porte de la terrasse, il croit que
+  je suis dans le tunnel et arrête le funi » → les 80 m aux deux bouts de la
+  ligne (quais, salles, terrasse) ne comptent jamais comme « tunnel ».
+- Le seuil de porte de la 1.18.4 (1,18-1,64 m) barrait la PASSERELLE à qui
+  longeait une rame arrêtée : réduit à 10 cm (1,38-1,50), la fente restante
+  de 20 cm ne laisse plus passer les 28 cm du skieur.
+- Galerie de secours, au banc : le terrain naturel traverse forcément le
+  tube là où il passe du dessus du toit au dessous du plancher ; un rabot
+  seul faisait une falaise en travers de la galerie, un trou seul laissait
+  le dernier carreau de 2 m rentrer dans le tube. Désormais : trou dans
+  l'emprise du tube depuis 2,5 m avant le point où le relief passe sous le
+  toit, et rabot 30 cm sous le plancher au-delà. Banc `bench_secours_3d` :
+  sortie en 15 s, à ski jusqu'à Val Claret en 3 min.
+- « Pour la PWA, améliore ce joystick en mode skieur : ça fait tourner la
+  vue en même temps, c'est le bazar, fais comme ceux qui font des jeux » →
+  joystick **flottant** : il apparaît là où le pouce se pose dans la moitié
+  gauche de l'écran (plus de zone à viser), poussé à fond il fait courir ;
+  tout glissé sur la moitié droite tourne la vue ; un doigt sur un bouton
+  ne fait ni l'un ni l'autre.
+- « Les modes autos, c'est un bazar intergalactique » → trois automatismes,
+  trois noms, partout : **PILOTE AUTO** (PC, `A`, bouton PILOTE : un
+  voyage), **EXPLOITATION AUTO** (PC `X`, Web `F3` / bouton EXPLOIT., au
+  tableau de bord et dans la barre du skieur : tout le service) et
+  **BOUCLE** du skieur (`X`, bouton BOUCLE : il fait la boucle seul). Le
+  bouton de la PWA passe de AUTO à EXPLOIT., celui du skieur de AUTO à
+  BOUCLE, le pad du PC de AUTO à PILOTE ; l'« Auto-scheduler » du choix des
+  pannes s'appelle « Pannes aléatoires ». Tableau dans le README et le manuel.
+- Vérifié : les six bancs du skieur (secours, issues, ski, skieur, écoute,
+  boucle) verts sur le code final, tests PC 106, captures de contrôle du
+  portail, de la face évacuée et du ski.
+
 **v1.18.4** — « dès que je passe en mode skieur ça repasse en exploitation
 auto, du coup pendant l'évacuation le funi redémarre et m'écrase ; quand
 je change de mode skieur ou pas, tu restes en mode d'avant, exploitation

@@ -22,6 +22,7 @@ var _s_evac: float = 0.0
 var _s_av: float = 0.0
 var _sens: float = 1.0
 var _s_fosse: float = 0.0
+var _t_repos: float = -1.0
 
 
 func _initialize() -> void:
@@ -221,7 +222,9 @@ func _tick() -> void:
 				if sk.get_slide_collision_count() > 0 and sk.get_last_slide_collision().get_collider():
 					mur = str(sk.get_last_slide_collision().get_collider().name)
 				print("  fosse t %3.0f : local x %.2f y %.2f ds %.1f, sol %s, marche %s, contact %s, reste %d" % [_t, l.x, l.y, -l.z, sk.is_on_floor(), sk.debug_marche, mur, sk.chemin.size()])
-			if sk.chemin.is_empty() or _t > 30.0:
+			if sk.chemin.is_empty() and _t_repos < 0.0:
+				_t_repos = _t
+			if (_t_repos >= 0.0 and _t - _t_repos > 0.5) or _t > 30.0:
 				var d: Vector3 = sk.global_position - _cible
 				var dh: float = Vector2(d.x, d.z).length()
 				_verif("tombé dans la fosse entre les rails : il se hisse sur la dalle et rejoint l'escalier de service",
