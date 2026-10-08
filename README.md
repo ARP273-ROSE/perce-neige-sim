@@ -182,6 +182,7 @@ L'écran d'accueil (F1) reprend ces touches.
 | `4`               | Arrêt d'urgence verrouillé (même frein poulie que `Maj`) |
 | `V`               | PRÊT                                            |
 | `Z`               | DÉPART forcé (Défi) — en service, PRÊT suffit : le départ suit tout seul |
+| Molette (vue 3D)  | LOUPE sur le pupitre et l'écran Pro-face (vue cabine) |
 | `I`               | Inverser le sens (à l'arrêt)                    |
 | `W`               | Vigilance marche / arrêt                        |
 | `G`               | Acquitter la vigilance                          |

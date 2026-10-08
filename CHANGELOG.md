@@ -7,6 +7,18 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.18.7** — « Ton réglage ne change rien, c'est toujours aussi moche »
+(08/10/2026). Les captures agrandies le montrent : les textes du pupitre
+sont nets mais minuscules — en 1080p, à 78° de champ, l'écran Pro-face ne
+fait que 230 pixels de large (texture de 960), et le lissage finit de les
+noyer ; rien à voir avec les performances. Remède de jeu : la **LOUPE** sur
+le pupitre — molette ou pincement en vue cabine, bouton LOUPE au tactile :
+la caméra pivote vers l'écran Pro-face et le champ se resserre de 78° à
+32° en douceur (`Cabin.loupe`, trois crans de molette) ; on relit tout, on
+clique les boutons agrandis, et on revient d'un coup de molette. Vérifié
+par capture (`shot_loupe.gd`) : date, heure, « VOITURE AVAL », vitesse,
+distance et noms des boutons lisibles en 1080p. Tests PC 106, banc skieur.
+
 **v1.18.6** — « Sur le PC du père, avec tes calculs d'optimisation des
 perfs, c'est super pixélisé : on ne peut pas lire les noms des boutons ni
 les chiffres de l'écran du cockpit » (08/10/2026). L'adaptation en direct

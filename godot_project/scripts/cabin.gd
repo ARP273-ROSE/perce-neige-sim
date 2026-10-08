@@ -17,6 +17,15 @@ var mesh_root: Node3D = null         # coque extérieure (masquée en FPV)
 var interior_root: Node3D = null     # cockpit + sièges + passagers (toujours visibles)
 var headlight_front: SpotLight3D = null
 var camera_fpv: Camera3D = null
+## Loupe sur le pupitre (08/10/2026, Kevin : « on ne peut pas lire les noms
+## des boutons ni les chiffres de l'écran du cockpit ») : en 1080p l'écran
+## Pro-face ne fait que 230 pixels de large à 78° de champ. Molette ou
+## pincement en vue cabine, bouton LOUPE : la caméra pivote vers l'écran et
+## le champ se resserre (78° → 32°), en douceur ; 0 = vue normale.
+var loupe: float = 0.0
+var loupe_cible: float = 0.0
+var _cam_fpv_basis_base: Basis = Basis.IDENTITY
+var _ecran_loupe: Node3D = null
 var camera_ext: Camera3D = null
 var interior_light: OmniLight3D = null
 # Lumières du poste de conduite : suivent l'éclairage cabine (C). Éteint, il
@@ -1308,6 +1317,7 @@ func _build_camera() -> void:
 	# 39 cm en travers dans les courbes, 9 cm en hauteur) ; tout écart
 	# d'orientation était multiplié par ce bras de levier.
 	_attach_to_front_car(camera_fpv, Vector3(0.0, 0.85, -train_length * 0.5 + 1.1))
+	_cam_fpv_basis_base = camera_fpv.transform.basis
 
 	# Caméra extérieure — VRAIE orbitale autour de la rame (retour d'essai
 	# 2026-07-24 : « cette vue est fixe ») : yaw/pitch/distance pilotés au
@@ -1358,6 +1368,38 @@ func toggle_view() -> void:
 	set_view(((view_mode + 1) % n))
 
 
+## Loupe sur le pupitre : marche / arrêt (bouton LOUPE), par crans (molette).
+func set_loupe(on: bool) -> void:
+	loupe_cible = 1.0 if on else 0.0
+
+
+func loupe_molette(sens: int) -> void:
+	loupe_cible = clampf(loupe_cible + 0.34 * float(sens), 0.0, 1.0)
+
+
+func _update_loupe(delta: float) -> void:
+	if is_ghost or camera_fpv == null:
+		return
+	if view_mode != ViewMode.FPV:
+		loupe_cible = 0.0
+	if loupe == 0.0 and loupe_cible == 0.0:
+		return
+	loupe = move_toward(loupe, loupe_cible, delta * 3.0)
+	camera_fpv.fov = lerpf(78.0, 32.0, loupe)
+	if _ecran_loupe == null and _pupitre != null:
+		_ecran_loupe = _pupitre.find_child("EcranProface", true, false) as Node3D
+		if _ecran_loupe == null:
+			_ecran_loupe = _pupitre
+	var basis: Basis = _cam_fpv_basis_base
+	if _ecran_loupe != null and loupe > 0.0:
+		var parent: Node3D = camera_fpv.get_parent() as Node3D
+		var cible: Vector3 = parent.global_transform.affine_inverse() * _ecran_loupe.global_position
+		var dir: Vector3 = cible - camera_fpv.position
+		if dir.length() > 0.05:
+			basis = _cam_fpv_basis_base.slerp(Basis.looking_at(dir.normalized(), Vector3.UP), loupe)
+	camera_fpv.transform.basis = basis
+
+
 func set_view(mode: int) -> void:
 	if is_ghost:
 		return
@@ -1378,6 +1420,7 @@ func _process(_delta: float) -> void:
 	if tunnel == null or physics == null:
 		return
 	_update_shake(_delta)
+	_update_loupe(_delta)
 	# Caméra orbitale : suit la rame chaque frame en vue extérieure.
 	if not is_ghost and view_mode == ViewMode.EXTERIOR:
 		_update_orbit_camera()
