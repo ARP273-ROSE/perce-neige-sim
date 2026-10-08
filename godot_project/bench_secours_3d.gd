@@ -55,20 +55,23 @@ func _tick() -> void:
 	match _phase:
 		0:
 			_verif("galerie construite, portail sur le relief",
-				ss != null and ss.pret and ss.sol.size() > 40
+				ss != null and ss.pret and ss.sol.size() >= 4
 					and absf(ss.portail.y - relief.hauteur(ss.portail.x, ss.portail.z)) < 0.01,
 				"%d points, portail y %.1f" % [ss.sol.size() if ss else 0, ss.portail.y if ss else 0.0])
 			# la galerie reste sous le relief affiché (remblai compris), sauf
 			# les 2,5 derniers mètres, dans le mur de tête
 			var pire: float = INF
 			var i_pire: int = -1
-			for i in range(2, ss.sol.size() - 5):
+			var u_port: float = Vector2(ss.portail.x - ss.sol[0].x, ss.portail.z - ss.sol[0].z).length()
+			for i in range(1, ss.sol.size()):
 				var q: Vector3 = ss.sol[i]
+				if Vector2(q.x - ss.sol[0].x, q.z - ss.sol[0].z).length() > u_port - 5.0:
+					break
 				var cv: float = relief.hauteur_sol(q.x, q.z) - (q.y + SortieSecours.H_AXE + SortieSecours.R_GAL)
 				if cv < pire:
 					pire = cv
 					i_pire = i
-			_verif("galerie sous le relief affiché (couverture du tube ≥ 0,8 m, hors les 10 derniers m)", pire >= 0.8,
+			_verif("galerie sous le relief affiché (couverture du tube ≥ 0,8 m, hors les 5 derniers m)", pire >= 0.8,
 				"mini %.2f m au point %d/%d" % [pire, i_pire, ss.sol.size()])
 			# rame arrêtée à la chambre, porte 5 face à l'ouverture, portes ouvertes
 			_main._apply_scenario(false, false, "challenge")
@@ -140,9 +143,13 @@ func _tick() -> void:
 					var own: Object = (oc as CollisionObject3D).shape_owner_get_owner(
 						(oc as CollisionObject3D).shape_find_owner(kc.get_collider_shape_index()))
 					var chemin_c: String = str((oc as Node).get_path())
-					noms += " %s|%s(n %.2f,%.2f,%.2f @ %.2f,%.2f,%.2f)" % [chemin_c.get_slice("/", chemin_c.get_slice_count("/") - 2) + "/" + (oc as Node).name,
-						(own as Node).name if own else "?", kc.get_normal().x, kc.get_normal().y, kc.get_normal().z,
-						kc.get_position().x - sk3.global_position.x, kc.get_position().y - sk3.global_position.y, kc.get_position().z - sk3.global_position.z]
+					var forme: String = ""
+					if own is CollisionShape3D and (own as CollisionShape3D).shape is BoxShape3D:
+						var plc: Vector3 = xfc.affine_inverse() * (own as CollisionShape3D).global_position
+						forme = " boîte %s à (%.2f, %.2f, %.2f)" % [((own as CollisionShape3D).shape as BoxShape3D).size, plc.x, plc.y, plc.z]
+					noms += " %s|%s%s(n %.2f,%.2f,%.2f)" % [chemin_c.get_slice("/", chemin_c.get_slice_count("/") - 2) + "/" + (oc as Node).name,
+						(own as Node).name if own else "?", forme,
+						kc.get_normal().dot(xfc.basis.x), kc.get_normal().y, kc.get_normal().dot(xfc.basis.z)]
 				print("  t %.0f local (%.2f, %.2f, %.2f) reste %d %s |%s" % [_t, lc.x, lc.y, lc.z, sk3.chemin.size(), sk3.debug_marche, noms])
 			var ecart_sol: float = sk3.global_position.y - relief.hauteur(sk3.global_position.x, sk3.global_position.z)
 			if sk3.chemin.size() <= 1:

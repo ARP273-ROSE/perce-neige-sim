@@ -51,6 +51,11 @@ var muted: bool = false
 ## 07/10/2026 : la panne n'empêchait rien (« zone Grande Motte » passait
 ## quand même à 51 m de l'arrêt).
 var comms_loss: bool = false
+## Skieur (08/10/2026, « dehors on entend quand même l'annonce de fermeture
+## des portes alors qu'on est loin ») : la sono de la rame s'entend dans la
+## rame, atténuée sur le quai de la gare où elle est, nulle part ailleurs.
+## 0 : plein ; 1 : atténuée (−8 dB) ; 2 : coupée (stop + rien ne part).
+var ecoute_skieur: int = 0
 
 var _files_by_num: Dictionary = {}     # int → AudioStream
 var _queue: Array = []                 # AudioStream[]
@@ -138,6 +143,16 @@ func stop_all() -> void:
 		_player.stop()
 
 
+func set_ecoute_skieur(e: int) -> void:
+	if e == ecoute_skieur:
+		return
+	ecoute_skieur = e
+	if _player != null:
+		_player.volume_db = volume_db + (-8.0 if e == 1 else 0.0)
+	if e == 2:
+		stop_all()
+
+
 func set_muted(m: bool) -> void:
 	muted = m
 	if muted and _player.playing:
@@ -147,7 +162,7 @@ func set_muted(m: bool) -> void:
 # Met une annonce en queue. Respecte le cooldown par groupe pour éviter
 # le spam si plusieurs triggers simultanés.
 func queue(group_key: String) -> void:
-	if muted:
+	if muted or ecoute_skieur == 2:
 		return
 	if not GROUPS.has(group_key):
 		push_warning("[Announcements] groupe inconnu : %s" % group_key)
@@ -170,7 +185,7 @@ func queue(group_key: String) -> void:
 # Force la lecture d'un groupe SANS cooldown (pour menu manuel F2 par exemple).
 # Vide la queue avant.
 func play_now(group_key: String) -> void:
-	if muted:
+	if muted or ecoute_skieur == 2:
 		return
 	if comms_loss and GROUPS.has(group_key) and not group_key in QUAI:
 		print("[Announcements] %s bloquée — PA / radio tunnel perdus" % group_key)

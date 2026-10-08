@@ -52,6 +52,20 @@ ou l'app.
 
 ---
 
+## Les modes automatiques, en clair
+
+Trois automatismes, trois noms (depuis la 1.18.5 — « les modes autos,
+c'est un bazar intergalactique ») :
+
+| Mode | Où | Commande | Ce qu'il fait |
+|------|----|----------|---------------|
+| **Pilote auto** | PC | `A` / bouton PILOTE | **Un voyage** tout seul : portes, PRÊT, 100 %, arrivée, portes, passagers ; puis rend la main. |
+| **Exploitation auto** | PC et Web | PC : `X` ; Web : `F3` / bouton EXPLOIT. (tableau de bord et skieur) | **Tout le service** : embarquement, horaires, départs enchaînés, pannes du mode Pannes. Le skieur ne la change pas en apparaissant ; CONDUIRE l'arrête. |
+| **Boucle du skieur** | Web (et vue 3D du PC) | `X` / bouton BOUCLE | **Le skieur** fait la boucle seul (gare, rame, terrasse, ski, retour) ; il enclenche l'exploitation auto pour son trajet. |
+
+Conduire à la main = aucun des trois. En Défi et en Pannes, l'exploitation
+auto est sans objet (on conduit).
+
 ## La vraie machine
 
 Sources : Wikipédia (FR + EN), remontees-mecaniques.net, page CFD du
@@ -165,7 +179,7 @@ L'écran d'accueil (F1) reprend ces touches.
 | `3`               | Arrêt électrique (verrouillé)                   |
 | `4`               | Arrêt d'urgence verrouillé (même frein poulie que `Maj`) |
 | `V`               | PRÊT                                            |
-| `Z`               | DÉPART : portes, buzzer, traction               |
+| `Z`               | DÉPART forcé (Défi) — en service, PRÊT suffit : le départ suit tout seul |
 | `I`               | Inverser le sens (à l'arrêt)                    |
 | `W`               | Vigilance marche / arrêt                        |
 | `G`               | Acquitter la vigilance                          |
