@@ -702,6 +702,8 @@ REBOUND_GRAB_A = 0.35            # m/s² — force résiduelle relâchée quand 
 # d'essai 2026-09-27 : « en bas on n'a pas le temps de voir l'oscillation,
 # et il faut attendre la fin des oscillations avant d'ouvrir les portes ».
 AUTO_SETTLE_M = 0.02             # m — enveloppe résiduelle « rame stabilisée »
+# musiques d'ambiance des gares servies à côté de la PWA (hors dépôt)
+MUSIQUE_URL = "https://funiculaire.giff.re/musique/"
 AUTO_SETTLE_MIN_S = 3.0          # s — frein tambour serré, clip d'arrêt fini
 AUTO_SETTLE_MAX_S = 45.0         # s — garde-fou : ouverture forcée au-delà
                                  # (rame pleine en bas : 35 s avec EA 7e7)
@@ -1343,6 +1345,8 @@ class GameState:
     challenge_fault_hit: bool = False        # panne subie pendant le trajet
     challenge_unsafe: bool = False           # départ dangereux (portes
                                              # ouvertes / cabine pas prête)
+    voie_occupee: bool = False               # skieur à pied sur la voie (3D) :
+                                             # rame immobilisée (08/10/2026)
     manual_brake_held: bool = False          # frein de service tenu à la
                                              # main (Espace/clic) — prime
                                              # sur le régulateur
@@ -1614,7 +1618,8 @@ class Physics:
         # parachute), le frein de service manuel (Espace) et tout freinage
         # de service commandé significatif.
         if (tr.emergency or tr.emergency_ramp > 0.0
-                or self.state.manual_brake_held or tr.brake > 0.05):
+                or self.state.manual_brake_held or self.state.voie_occupee
+                or tr.brake > 0.05):
             f_motor = 0.0
 
         # --- Gravity imbalance ---------------------------------------------
@@ -2847,7 +2852,8 @@ class Physics:
         # 1,5/s et la rame reculait de 2 cm au décollage en pente.
         if self.state.trip_started and not self._pretensioned:
             self._pretensioned = True
-            if f_ff > 0.0 and not self.state.manual_brake_held:
+            if (f_ff > 0.0 and not self.state.manual_brake_held
+                    and not self.state.voie_occupee):
                 tr.throttle = max(tr.throttle,
                                   min(1.0, f_ff / max(f_motor_max, 1.0)))
         elif not self.state.trip_started:
@@ -2856,8 +2862,12 @@ class Physics:
         self._reg_hold = (not chaos_hold
                           and target_v < 0.01 and v_travel < 0.4)
         demand_regen = 0.0
-        if self.state.manual_brake_held:
+        if self.state.manual_brake_held or self.state.voie_occupee:
             # Frein de service manuel prioritaire : plein (2,5 m/s²) tant
+            # qu'on appuie — ou skieur à pied sur la voie (3D) : la rame
+            # est immobilisée tant qu'il n'a pas rejoint une gare ou la
+            # piste (Kevin, 08/10/2026 : « le funi ne devrait pas pouvoir
+            # repartir une fois l'évacuation lancée »).
             # qu'on appuie, moteur coupé — même en Défi il permet de
             # tenir/arrêter la rame.
             demand_throttle = 0.0
@@ -5308,6 +5318,49 @@ class SoundSystem:
         """Vitesse du câble à la poulie motrice (m/s, valeur absolue)."""
         self._machine_speed = float(v_cable)
 
+    def _musique_locale(self, nom: str):
+        """Fichier local de la musique `nom` (programme, puis profil), ou None."""
+        for d in (self.project_dir / "sons" / "musique", _persistent_data_dir() / "musique"):
+            try:
+                p = d / nom
+                if p.exists() and p.stat().st_size > 100_000:
+                    return p
+            except Exception:
+                pass
+        return None
+
+    def _telecharger_musique(self, nom: str) -> None:
+        """Rapatrie `nom` dans le profil (une fois, en tâche de fond)."""
+        en_cours = getattr(self, "_musique_telechargements", None)
+        if en_cours is None:
+            en_cours = self._musique_telechargements = set()
+        if nom in en_cours:
+            return
+        en_cours.add(nom)
+
+        def _travail() -> None:
+            try:
+                import shutil
+                import urllib.request
+                dest = _persistent_data_dir() / "musique"
+                dest.mkdir(parents=True, exist_ok=True)
+                tmp = dest / (nom + ".part")
+                # Cloudflare refuse l'agent « Python-urllib » (403) : on se
+                # présente sous le nom du simulateur
+                req = urllib.request.Request(
+                    MUSIQUE_URL + nom,
+                    headers={"User-Agent": "PerceNeigeSimulator/" + VERSION})
+                with urllib.request.urlopen(req, timeout=60) as r, open(tmp, "wb") as f:
+                    shutil.copyfileobj(r, f)
+                if tmp.stat().st_size > 100_000:
+                    tmp.replace(dest / nom)
+                else:
+                    tmp.unlink(missing_ok=True)
+            except Exception:
+                pass
+
+        threading.Thread(target=_travail, name="musique-" + nom, daemon=True).start()
+
     def set_musique_gare(self, gare: int) -> None:
         """Musique d'ambiance de la gare où l'on est (0 : aucune)."""
         gare = int(gare)
@@ -5322,18 +5375,29 @@ class SoundSystem:
                     self._musique_player.stop()
                 return
             nom = "gare_basse.mp3" if gare == 1 else "gare_haute.mp3"
-            chemin = self.project_dir / "sons" / "musique" / nom
-            if not chemin.exists():
-                return
+            # Les enregistrements ne sont ni dans le dépôt public ni dans les
+            # paquets (Kevin, 08/10/2026 : « mets les sons en local avec le
+            # programme PC ») : la première fois, on les joue depuis le
+            # serveur de la PWA en les TÉLÉCHARGEANT dans le profil ; ensuite
+            # ils sont locaux. sons/musique/ à côté du programme est lu en
+            # priorité.
+            chemin = self._musique_locale(nom)
+            if chemin is not None:
+                source = QUrl.fromLocalFile(str(chemin))
+                cle = str(chemin)
+            else:
+                source = QUrl(MUSIQUE_URL + nom)
+                cle = MUSIQUE_URL + nom
+                self._telecharger_musique(nom)
             if self._musique_player is None:
                 self._musique_player = QMediaPlayer()
                 self._musique_audio = _AudioOutput()
                 self._musique_audio.setVolume(0.22)
                 self._musique_player.setAudioOutput(self._musique_audio)
                 self._musique_player.setLoops(QMediaPlayer.Loops.Infinite)
-            if self._musique_chemin != str(chemin):
-                self._musique_player.setSource(QUrl.fromLocalFile(str(chemin)))
-                self._musique_chemin = str(chemin)
+            if self._musique_chemin != cle:
+                self._musique_player.setSource(source)
+                self._musique_chemin = cle
             self._musique_audio.setMuted(self.muted)
             self._musique_player.play()
         except Exception:
@@ -5913,6 +5977,7 @@ class AutoOps:
         # j'étais à l'intérieur du funi ») — même règle que la PWA.
         self.skieur_a_bord = False
         self.skieur_retenue = False
+        self.skieur_bloque = False  # à pied sur la voie : on ne part pas, sans limite
         self._skieur_vu = False     # vu sur le quai pendant cet arrêt
         self._skieur_a_bord_t = 0.0
         # retenue plafonnée (Kevin, 07/10/2026 : « la séquence reste bloquée
@@ -6178,6 +6243,10 @@ class AutoOps:
             # Ensure doors are open (they usually are at arrival).
             if not tr.doors_cmd:
                 self.w.begin_doors_open(tr)
+            if self.skieur_bloque:
+                # à pied sur la voie : on attend, sans le plafond du quai
+                self._skieur_vu = True
+                self.phase_t = min(self.phase_t, self.station_dwell_s - 6.0)
             if self.skieur_retenue:
                 self._skieur_vu = True
                 self._skieur_retenue_t += dt
@@ -7218,7 +7287,7 @@ class GameWidget(QWidget):
         self._skieur_prep_txt = ""              # préparation du décor 3D en cours (texte)
         # dedans, retenue, écoute (0 rame, 1 gare basse, 2 dehors, 3 gare
         # haute, 4 tunnel à pied), gain de la machinerie entendu (gare haute)
-        self._skieur_etat = (False, False, 0, 0.0)
+        self._skieur_etat = (False, False, 0, 0.0, False)
         self._skieur_heures = False             # force_any_hours avant
         self.new_trip(first=True)
 
@@ -7275,7 +7344,8 @@ class GameWidget(QWidget):
             e = m["skieur_etat"]
             if isinstance(e, list) and len(e) >= 3:
                 gain = float(e[3]) if len(e) > 3 else 0.0
-                self._skieur_etat = (bool(e[0]), bool(e[1]), int(e[2]), gain)
+                bloque = bool(e[4]) if len(e) > 4 else False
+                self._skieur_etat = (bool(e[0]), bool(e[1]), int(e[2]), gain, bloque)
                 self._appliquer_etat_skieur()
 
     def _pupitre_3d(self, nom: str, enfonce: bool) -> None:
@@ -7329,22 +7399,33 @@ class GameWidget(QWidget):
         return bits
 
     def _appliquer_etat_skieur(self) -> None:
-        dedans, retenue, ecoute, gain = self._skieur_etat
+        dedans, retenue, ecoute, gain, bloque = self._skieur_etat
         on = self._skieur
         self.sounds.skieur_dehors = on and ecoute != 0
         # quais de la gare haute : la machinerie, au gain donné par la 3D
         # (distance à la machinerie)
         self.sounds.skieur_machinerie = gain if (on and ecoute == 3) else 0.0
         self.sounds.set_musique_gare((1 if ecoute == 1 else 2 if ecoute == 3 else 0) if on else 0)
+        src = getattr(self.sounds, "_musique_chemin", None)
+        if src and src != getattr(self, "_musique_annoncee", None):
+            self._musique_annoncee = src
+            add_event(self.state, "skieur", f"Station music: {src}",
+                      f"Musique de la gare : {src}", "info")
         self.auto_ops.skieur_a_bord = on and dedans
         self.auto_ops.skieur_retenue = on and retenue
-        # monté dans une rame à quai sans exploitation automatique : elle
-        # reprend, ferme les portes dès qu'elle l'a vu dedans et part
-        ao = self.auto_ops
-        if (on and dedans and not ao.enabled and self.state.mode == MODE_RUN
-                and not self.state.trip_started):
-            ao.skieur_embarque = True
-            ao.toggle()
+        # à pied sur la voie (tunnel, galerie) : rame immobilisée, sans
+        # limite — régulateur tenu, exploitation en attente
+        self.auto_ops.skieur_bloque = on and bloque
+        if (on and bloque) != self.state.voie_occupee:
+            self.state.voie_occupee = on and bloque
+            if self.state.voie_occupee:
+                add_event(self.state, "skieur",
+                          "Skier on the track: train held",
+                          "Skieur sur la voie : rame immobilisée", "alarm")
+            else:
+                add_event(self.state, "skieur",
+                          "Track clear: the train may go",
+                          "Voie libre : la rame peut repartir", "info")
 
     def _buzzer_a_jouer(self, at_upper: bool, at_station: bool):
         """Quel buzzer de quai on entend au départ : None (aucun), True (gare
@@ -7387,21 +7468,19 @@ class GameWidget(QWidget):
         ao.force_any_hours = True
         if st.train.autopilot:
             self._autopilot_disengage("skier mode", "mode skieur")
-        # Kevin, 07/10/2026 : « le mode auto est forcé et se déclenche alors
-        # que je suis encore dehors, pas le temps d'embarquer » → une rame à
-        # quai, prête à l'embarquement, ATTEND qu'on monte ; l'exploitation
-        # s'enclenche quand on est dedans (_appliquer_etat_skieur). Sinon
-        # elle tourne, pour que la rame vienne.
+        # Passer en skieur NE TOUCHE PAS à l'exploitation : automatique ou
+        # non, on reste comme avant (Kevin, 08/10/2026 : « dès que je passe
+        # en mode skieur ça repasse en exploitation auto, du coup pendant
+        # l'évacuation le funi redémarre et m'écrase »). Seule aide : à quai
+        # portes fermées, hors voyage, on les ouvre pour monter.
         tr = st.train
         a_quai = (tr.s <= START_S + 5.0) or (tr.s >= STOP_S - 5.0)
-        if not ao.enabled:
-            if not (a_quai and not st.trip_started):
-                ao.toggle()
-            elif not tr.doors_cmd and tr.doors_timer <= 0.0:
-                self._virtual_key(Qt.Key.Key_D)    # à quai, portes fermées : on les ouvre
+        if (not ao.enabled and a_quai and not st.trip_started
+                and not tr.doors_cmd and tr.doors_timer <= 0.0):
+            self._virtual_key(Qt.Key.Key_D)
         self._godot_view3d = 0
         self._skieur = True
-        self._skieur_etat = (False, False, 0, 0.0)
+        self._skieur_etat = (False, False, 0, 0.0, False)
         self._skieur_prep_txt = T("preparing the 3D scenery…", "préparation du décor 3D…")
         self._key_state.clear()
         add_event(st, "skieur",
@@ -15878,7 +15957,7 @@ class GameWidget(QWidget):
             T("Skiing: outside on the snow, E puts the skis on. Q/D turn, Z pushes, S snowplough, Shift tuck; marked pistes, Kevin's ghost to beat down to Val Claret.",
               "Ski : dehors sur la neige, E pour chausser. Q/D tourner, Z pousser, S chasse-neige, Maj schuss ; pistes balisées, le fantôme de Kevin à battre jusqu'à Val Claret."),
             T("Train stopped in the tunnel: U (or EVACUATE) removes the yellow emergency panels either side of the windshield; down onto the track, the right-hand service stairs lead to a station or to the mid-tunnel gallery and its piste. The AUTO dashboard button (or the skier's EXPLOIT. button) still toggles auto-operation.",
-              "Rame arrêtée en tunnel : U (ou ÉVACUER) enlève les panneaux jaunes d'issue de secours de part et d'autre du pare-brise ; sur la voie, l'escalier de droite ramène en gare ou à la galerie du milieu et sa piste. Le bouton AUTO du tableau de bord (ou EXPLOIT. du skieur) commande toujours l'exploitation."),
+              "Rame arrêtée en tunnel : U (ou ÉVACUER) enlève les panneaux jaunes d'issue de secours de part et d'autre du pare-brise ; sur la voie, l'escalier de droite ramène en gare ou à la galerie du milieu et sa piste ; tant qu'il est à pied sur la voie, la rame est immobilisée. Le bouton AUTO du tableau de bord (ou EXPLOIT. du skieur) commande toujours l'exploitation."),
             T("F4: 3D cabin view. On Linux Wayland the app switches to XWayland to embed it; PERCE_NEIGE_KEEP_WAYLAND=1 keeps Wayland (separate window).",
               "F4 : vue cabine 3D. Sous Linux Wayland l'application passe en XWayland pour l'intégrer ; PERCE_NEIGE_KEEP_WAYLAND=1 pour rester en Wayland (fenêtre séparée)."),
         ]

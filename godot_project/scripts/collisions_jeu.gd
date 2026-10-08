@@ -39,6 +39,7 @@ var _formes: Dictionary = {}            # Mesh → Shape3D (formes partagées)
 var mobiles: Array = []
 var _main: Node = null
 var _zones: Array = []                  # AABB déjà couverts (gares, galerie, à la demande)
+var _zones_relief: Array = []           # Rect2 (x, z) du relief déjà en collision
 var _deja: Dictionary = {}              # id de MeshInstance3D déjà en collision
 var _deja_mm: Dictionary = {}           # id de MultiMeshInstance3D → PackedByteArray des instances faites
 ## Panneaux d'issue de secours des calottes : Cabin → CollisionShape3D[]
@@ -81,6 +82,7 @@ func construire(main: Node, zones_terrain: Array, synchrone: bool = false) -> vo
 	var relief: ReliefBuilder = main.get("relief")
 	if relief != null:
 		for z in zones_terrain:
+			_zones_relief.append(z as Rect2)
 			_taches.append(_terrain.bind(relief, z as Rect2))
 	_n_taches = _taches.size()
 	if synchrone or DisplayServer.get_name() == "headless":
@@ -119,6 +121,24 @@ func _avancer(fin_us: int) -> void:
 func assurer_autour(p: Vector3) -> void:
 	if _main == null:
 		return
+	# le relief, partout où l'on marche dehors (Kevin, 08/10/2026 : « je passe
+	# quasi partout au travers de la montagne ») : un carré de 400 m, dès
+	# qu'on arrive à 80 m du bord de ce qui est déjà couvert
+	var relief: ReliefBuilder = _main.get("relief")
+	if relief != null and relief.pret:
+		var couvert: bool = false
+		for r in _zones_relief:
+			if (r as Rect2).grow(-80.0).has_point(Vector2(p.x, p.z)):
+				couvert = true
+				break
+		if not couvert:
+			var r2: Rect2 = Rect2(p.x - 200.0, p.z - 200.0, 400.0, 400.0)
+			_zones_relief.append(r2)
+			_taches.append(_terrain.bind(relief, r2))
+			if DisplayServer.get_name() == "headless":
+				_avancer(1 << 62)
+			else:
+				set_process(true)
 	for z in _zones:
 		# (une zone de moins de 80 m — la galerie de secours — ne se rétrécit
 		# pas : AABB.grow négatif y donnerait une taille négative)
@@ -274,6 +294,22 @@ func set_paliers_quai(en_gare: bool) -> void:
 			(cs as CollisionShape3D).disabled = not en_gare
 
 
+## Seuils des portes (x 1,18-1,64) : en collision portes FERMÉES seulement.
+## Le vantail fermé est à 1,50 m de l'axe et le palier s'arrête à 1,20 :
+## en s'appuyant sur une porte fermée en tunnel, on tombait par la fente
+## (0,30 m, la largeur du skieur) sous la rame — « passer dans une faille
+## spatio-temporelle » (Kevin, 08/10/2026). Portes ouvertes, rien : de la
+## porte on descend sur la passerelle (sortie de secours) ou le quai.
+var seuils: Array = []
+var _seuils_fermes: bool = true
+
+
+func set_seuils(fermes: bool) -> void:
+	_seuils_fermes = fermes
+	for s in seuils:
+		(s as CollisionShape3D).disabled = not fermes
+
+
 func _boite(parent: Node3D, taille: Vector3, xf: Transform3D, couche: int = COUCHE_VEHICULE) -> CollisionShape3D:
 	var corps: StaticBody3D = parent.get_node_or_null("CollisionRame") as StaticBody3D
 	if corps == null:
@@ -322,6 +358,11 @@ func _rame(c: Cabin) -> void:
 			if TrainBodyBuilder.KINDS[k] == "door":
 				paliers_quai.append(_boite(voiture, Vector3(3.66, 0.15, pas + 0.02),
 					xf * Transform3D(Basis.IDENTITY, Vector3(0.0, -0.05, 0.0))))
+				for side_s in [-1.0, 1.0]:
+					var seuil: CollisionShape3D = _boite(voiture, Vector3(0.46, 0.15, pas + 0.02),
+						xf * Transform3D(Basis.IDENTITY, Vector3(side_s * 1.41, -0.05, 0.0)))
+					seuil.disabled = not _seuils_fermes
+					seuils.append(seuil)
 			if TrainBodyBuilder.KINDS[k] == "door":
 				portes.append([zc - TrainBodyBuilder.PANEL_L * 0.5, zc + TrainBodyBuilder.PANEL_L * 0.5])
 			# bancs et porte-skis, dans le repère de leur palier

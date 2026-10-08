@@ -96,6 +96,7 @@ func _skieur_prep(texte: String, ms: int = -1) -> void:
 	if client_mode and state_receiver != null:
 		state_receiver.envoyer({"skieur_prep": texte, "ms": ms})
 var _paliers_en_gare: bool = true
+var _seuils_fermes: int = -1            # seuils des portes en collision (portes fermées) ; -1 inconnu
 var _skieur_etat_envoye: Array = []
 var _skieur_place: bool = false        # déjà posé une fois (on le retrouve où on l'a laissé)
 var _skieur_au_poste: bool = false     # assis au poste : la vue cabine est la sienne
@@ -1544,6 +1545,13 @@ func basculer_skieur_auto() -> void:
 	if skieur == null or not mode_skieur or domaine == null:
 		return
 	if skieur_auto == null:
+		# la boucle a besoin du funiculaire en exploitation automatique :
+		# c'est le seul cas où le skieur l'enclenche lui-même
+		if client_mode:
+			if state_receiver != null and not _exploitation_pc:
+				state_receiver.envoyer({"touche": "X"})
+		elif auto_operator != null and not auto_operator.enabled:
+			auto_operator.toggle()
 		skieur_auto = SkieurAuto.new()
 		skieur_auto.demarrer(self)
 		commandes_skieur.message("AUTO : il fait la boucle tout seul (AUTO pour reprendre la main)", 4.0)
@@ -1681,12 +1689,16 @@ func _entrer_skieur() -> void:
 		commandes_skieur.main = self
 		add_child(commandes_skieur)
 	if _skieur_au_poste:
-		# il se lève du siège du conducteur
+		# il se lève du siège du conducteur — DANS la voiture de tête, où
+		# qu'elle soit rendue (Kevin, 08/10/2026 : « en repassant en mode
+		# skieur à l'arrivée, le skieur est tout seul au milieu du tunnel » :
+		# le nœud du siège, fusionné avec l'intérieur, n'existait plus et
+		# l'on retombait sur l'ancienne position monde)
 		_skieur_au_poste = false
-		var seat: Node3D = cabin.interior_root.get_node_or_null("DriverSeatBase") as Node3D
-		var p: Vector3 = seat.global_position + seat.global_transform.basis.z * 0.7 if seat != null \
-			else skieur.global_position
-		skieur.activer(p, cabin.global_transform.basis.get_euler().y)
+		skieur.activer(_position_poste(), cabin.global_transform.basis.get_euler().y)
+		if not cabin._interior_cars.is_empty():
+			skieur.support = cabin._interior_cars[0]
+			skieur._support_xf = skieur.support.global_transform
 	elif not _skieur_place and station_halls != null and station_halls.gare_aval != null:
 		if client_mode:
 			_depart_haut = physics.s > PNConstants.LENGTH * 0.5   # rame du PC en haut
@@ -1731,17 +1743,15 @@ func _entrer_skieur() -> void:
 	cabin.set_view(Cabin.ViewMode.SKIEUR)
 	skieur.camera.make_current()
 	commandes_skieur.visible = true
-	# le funiculaire tourne tout seul pendant qu'on marche — sauf si une
-	# rame est à quai, prête à l'embarquement : elle attend qu'on monte, et
-	# l'exploitation s'enclenche quand on est dedans (_maj_skieur). Kevin,
-	# 07/10/2026 : « le mode auto est forcé et se déclenche alors que je
-	# suis encore dehors, pas le temps d'embarquer »
-	if auto_operator != null and not auto_operator.enabled and run_mode == "normal" \
-			and not client_mode:
-		if not (physics.at_station() and not physics.trip_started):
-			auto_operator.toggle()
-		elif not physics.doors_open:
-			toggle_doors()                    # à quai, portes fermées : on les ouvre
+	# Passer en skieur NE TOUCHE PAS à l'exploitation : automatique ou non,
+	# on reste comme avant (Kevin, 08/10/2026 : « dès que je passe en mode
+	# skieur ça repasse en exploitation auto, du coup pendant l'évacuation
+	# le funi redémarre et m'écrase » ; auparavant, 07/10 : « le mode auto
+	# est forcé et se déclenche alors que je suis encore dehors »). Seule
+	# aide : à quai portes fermées, hors voyage, on les ouvre pour monter.
+	if not client_mode and physics.at_station() and not physics.trip_started \
+			and not physics.doors_open:
+		toggle_doors()
 	_mode_skieur_ui(true)
 	_flash("Skieur : joystick ou ZQSD pour marcher, glisser pour regarder")
 
@@ -1763,6 +1773,13 @@ func _sortir_skieur() -> void:
 	if auto_operator != null:
 		auto_operator.retenue = false
 		auto_operator.a_bord = false
+		auto_operator.bloque = false
+	_voie_occupee = false
+	if physics != null:
+		physics.voie_occupee = false
+	if _bogies_caches != null and is_instance_valid(_bogies_caches):
+		_bogies_caches.set_bogies_visibles(true)
+	_bogies_caches = null
 	if audio != null:
 		audio.ecoute = 0
 	if sons_skieur != null:
@@ -1788,6 +1805,56 @@ func _mode_skieur_ui(on: bool) -> void:
 		touch.set_mode_skieur(on)
 
 
+## Garde-fous du skieur (08/10/2026). (1) À pied, une rame EN MARCHE qui
+## l'atteint le percute : retour au refuge — pas « embarqué » par la caisse
+## (« je me suis pris l'autre rame en pleine tête, ça m'a fait monter à
+## bord »). (2) À bord, passé sous le plancher (fente, pénétration), il est
+## reposé dessus. (3) À bord, roues et châssis de bogie de SA rame sont
+## cachés : ils dépassent dans la voiture.
+func _securite_skieur() -> void:
+	if cabin == null or skieur == null:
+		return
+	var car_len: float = cabin.train_length / float(cabin.car_count)
+	if skieur.support == null:
+		if absf(physics.v) > 0.3:
+			for c in [cabin, cabin_ghost]:
+				if c == null:
+					continue
+				for car in c._car_roots:
+					var loc: Vector3 = (car as Node3D).global_transform.affine_inverse() * skieur.global_position
+					if absf(loc.x) < 1.70 and absf(loc.z) < car_len * 0.5 + 0.3 \
+							and loc.y > -2.8 and loc.y < 2.2:
+						_skieur_percute()
+						return
+	elif is_instance_valid(skieur.support):
+		var loc2: Vector3 = skieur.support.global_transform.affine_inverse() * skieur.global_position
+		if loc2.y < TrainBodyBuilder.Y_FLOOR - 0.10 and absf(loc2.x) < 1.15 \
+				and absf(loc2.z) < car_len * 0.5 - 0.7:
+			loc2.y = TrainBodyBuilder.Y_FLOOR + Cabin.STEP_LIFT + 0.12
+			skieur.global_position = skieur.support.global_transform * loc2
+			skieur.velocity = Vector3.ZERO
+			print("[Skieur] passé sous le plancher : reposé (x %.2f, z %.2f)" % [loc2.x, loc2.z])
+	var r: Cabin = _rame_du_skieur()
+	if r != _bogies_caches:
+		if _bogies_caches != null and is_instance_valid(_bogies_caches):
+			_bogies_caches.set_bogies_visibles(true)
+		_bogies_caches = r
+		if r != null:
+			r.set_bogies_visibles(false)
+
+
+func _skieur_percute() -> void:
+	var ou: Vector3 = skieur.refuge if skieur.refuge != Vector3.ZERO else skieur.dernier_sol
+	if ou == Vector3.ZERO:
+		return
+	skieur.global_position = ou + Vector3(0.0, 0.3, 0.0)
+	skieur.velocity = Vector3.ZERO
+	skieur.support = null
+	if commandes_skieur != null:
+		commandes_skieur.message("Percuté par la rame ! Retour en gare", 6.0)
+	print("[Skieur] percuté par une rame en marche (v %.1f m/s)" % physics.v)
+
+
 ## CONDUIRE : il s'assied au poste de la rame qu'il occupe.
 func _skieur_conduit() -> void:
 	_skieur_au_poste = true
@@ -1800,6 +1867,22 @@ func _skieur_conduit() -> void:
 	_flash("Au poste de conduite — SKIEUR pour se lever")
 
 
+## Devant le siège du conducteur, dans la voiture de tête de la rame
+## pilotée (le nœud du siège s'il existe encore, sinon 2,4 m derrière le
+## nez de la voiture, au milieu).
+func _position_poste() -> Vector3:
+	var seat: Node3D = null
+	if cabin.interior_root != null:
+		seat = cabin.interior_root.get_node_or_null("DriverSeatBase") as Node3D
+	if seat != null:
+		return seat.global_position + seat.global_transform.basis.z * 0.7
+	if cabin._interior_cars.is_empty():
+		return skieur.global_position
+	var v0: Node3D = cabin._interior_cars[0]
+	var car_len: float = cabin.train_length / float(cabin.car_count)
+	return v0.global_transform * Vector3(0.0, TrainBodyBuilder.Y_FLOOR + 0.3, -car_len * 0.5 + 2.4)
+
+
 ## Le skieur est dans une gare : salle, quais, couloirs (pas sur la place,
 ## la terrasse ou la neige). 0 : non, 1 : gare basse, 2 : gare haute.
 var _zones_gare: Array = [[0.0, -32.0, 46.0, 15.0],
@@ -1807,6 +1890,8 @@ var _zones_gare: Array = [[0.0, -32.0, 46.0, 15.0],
 var _gare_skieur: int = 0                 # mis à jour par _maj_skieur
 var _t_zone: float = 0.0                  # collisions à la demande (tunnel à pied)
 var _exploitation_pc: bool = false        # exploitation auto du PC (état reçu)
+var _voie_occupee: bool = false           # skieur à pied sur la voie : rame immobilisée
+var _bogies_caches: Cabin = null          # rame dont roues et bogies sont cachés (skieur à bord)
 var _gain_mach_envoye: float = -1.0       # dernier gain machinerie envoyé au PC
 
 
@@ -1895,6 +1980,11 @@ func _maj_skieur() -> void:
 		if rames_en_gare != _paliers_en_gare:
 			_paliers_en_gare = rames_en_gare
 			collisions.set_paliers_quai(rames_en_gare)
+		# seuils des portes : portes fermées seulement
+		var fermes: int = 0 if physics.doors_open else 1
+		if fermes != _seuils_fermes:
+			_seuils_fermes = fermes
+			collisions.set_seuils(fermes == 1)
 	# à ski : vitesse, piste, course contre le fantôme (texte à 5 Hz)
 	if skieur.chausse and domaine != null:
 		var dt: float = get_process_delta_time()
@@ -1921,22 +2011,30 @@ func _maj_skieur() -> void:
 	# à pied dans le tunnel (évacuation) : la rame reste là tant qu'il n'a
 	# pas rejoint une gare ou la piste ; les collisions suivent ses pas
 	var a_pied_tunnel: bool = skieur.support == null and not en_gare and not skieur.dehors(relief)
-	if a_pied_tunnel and collisions != null:
+	if skieur.support == null and collisions != null:
 		_t_zone += get_process_delta_time()
 		if _t_zone > 1.0:
 			_t_zone = 0.0
 			collisions.assurer_autour(skieur.global_position)
+	# à pied sur la voie (tunnel, galerie) : la rame est IMMOBILISÉE, sans
+	# limite de temps — l'exploitation automatique attend, tout départ est
+	# refusé, le régulateur tient (Kevin, 08/10/2026 : « le funi ne devrait
+	# pas pouvoir repartir une fois l'évacuation lancée ; il est reparti, je
+	# me suis pris l'autre rame en pleine tête »)
+	# hors des gares, à pied : il peut se hisser sur un rebord (GRIMPE_MAX)
+	skieur.grimpe = skieur.support == null and not en_gare
+	if a_pied_tunnel != _voie_occupee:
+		_voie_occupee = a_pied_tunnel
+		if not client_mode:
+			physics.voie_occupee = a_pied_tunnel
+		commandes_skieur.message("Skieur sur la voie : la rame est immobilisée" if a_pied_tunnel
+			else "Voie libre : la rame peut repartir", 4.0)
 	_maj_issues()
+	_securite_skieur()
 	commandes_skieur.set_evacuation_possible(evacuation_possible())
 	commandes_skieur.set_exploitation(_exploitation_pc if client_mode else (auto_operator != null and auto_operator.enabled))
 	var retenue: bool = (not dedans and (skieur.support != null or en_gare)) \
 		or a_pied_tunnel or (skieur_auto != null and skieur_auto.descend())
-	# monté dans une rame à quai sans exploitation automatique : elle
-	# reprend, ferme les portes dès qu'elle l'a vu dedans et part
-	if dedans and not client_mode and run_mode == "normal" and auto_operator != null \
-			and not auto_operator.enabled and physics.at_station() and not physics.trip_started:
-		auto_operator.toggle()
-		auto_operator._vu_en_gare = true
 	# ce qu'il entend : 0 rame, 1 gare basse, 2 dehors, 3 gare haute, 4 tunnel
 	var ec: int = 0
 	if skieur.support == null:
@@ -1944,6 +2042,7 @@ func _maj_skieur() -> void:
 	if auto_operator != null:
 		auto_operator.a_bord = dedans
 		auto_operator.retenue = retenue
+		auto_operator.bloque = a_pied_tunnel
 	if audio != null:
 		audio.ecoute = ec
 	if sons_skieur != null:
@@ -1952,15 +2051,12 @@ func _maj_skieur() -> void:
 		# même règle d'attente et de départ pour l'exploitation AUTO du PC,
 		# et le gain de la machinerie (quais du haut), au 1/20 près
 		var gm: float = snappedf(_gain_machinerie(), 0.05)
-		var etat: Array = [dedans, retenue, ec, gm]
+		var etat: Array = [dedans, retenue, ec, gm, a_pied_tunnel]
 		if etat != _skieur_etat_envoye:
 			_skieur_etat_envoye = etat
 			state_receiver.envoyer({"skieur_etat": etat})
 	# CONDUIRE : à côté du siège du poste de la rame pilotée
 	var pres: bool = false
-	if skieur.support != null and cabin.is_ancestor_of(skieur.support) and cabin.interior_root != null:
-		if _seat == null or not is_instance_valid(_seat) or _seat.get_parent() != cabin.interior_root:
-			_seat = cabin.interior_root.get_node_or_null("DriverSeatBase") as Node3D
-		if _seat != null:
-			pres = skieur.global_position.distance_to(_seat.global_position) < 1.8
+	if skieur.support != null and cabin.is_ancestor_of(skieur.support):
+		pres = skieur.global_position.distance_to(_position_poste()) < 1.8
 	commandes_skieur.set_conduite_possible(pres)

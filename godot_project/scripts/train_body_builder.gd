@@ -893,17 +893,26 @@ static func _build_cap_fittings(parent: Node3D, mats: Dictionary, z_join: float,
 ## Bogie : châssis, deux essieux, quatre roues sur PIVOTS (retournés par
 ## cabin.gd à v/R) avec moyeu clair et barre radiale sur la face externe —
 ## une roue lisse qui tourne ne se voit pas. Retourne les pivots.
-static func _build_bogie(parent: Node3D, mats: Dictionary, z_c: float) -> Array:
+static func _build_bogie(parent: Node3D, mats: Dictionary, z_c: float, bogies: Array = []) -> Array:
 	var pivots: Array = []
 	var y_axle: float = Y_RAIL_HEAD + WHEEL_R
+	# châssis (longerons, essieux, boîtes) sous un nœud à part, gardé hors
+	# de la fusion : le plancher n'est qu'à 13 cm du rail, roues (⌀ 60) et
+	# essieux dépassent DANS la voiture — le skieur à bord ne doit pas les
+	# voir (Kevin, 08/10/2026 : « qu'on ne voie plus les roues depuis
+	# l'intérieur de la rame ») : Cabin.set_bogies_visibles
+	var bogie: Node3D = Node3D.new()
+	bogie.name = "Bogie%d" % (bogies.size() + 1)
+	parent.add_child(bogie)
+	bogies.append(bogie)
 	# longerons du châssis, au-dessus des roues, entre les échancrures
 	for sx in [-0.95, 0.95]:
-		_box(parent, mats["dark"], Vector3(0.12, 0.16, 2.4), Vector3(sx, WELL_TOP - 0.10, z_c), "Longeron")
+		_box(bogie, mats["dark"], Vector3(0.12, 0.16, 2.4), Vector3(sx, WELL_TOP - 0.10, z_c), "Longeron")
 	for dz in [-0.85, 0.85]:
-		_box(parent, mats["dark"], Vector3(1.30, 0.07, 0.07), Vector3(0.0, y_axle, z_c + dz), "Essieu")
+		_box(bogie, mats["dark"], Vector3(1.30, 0.07, 0.07), Vector3(0.0, y_axle, z_c + dz), "Essieu")
 		# boîtes d'essieu
 		for sx in [-0.80, 0.80]:
-			_box(parent, mats["dark"], Vector3(0.14, 0.22, 0.26), Vector3(sx, y_axle + 0.02, z_c + dz), "Boite")
+			_box(bogie, mats["dark"], Vector3(0.14, 0.22, 0.26), Vector3(sx, y_axle + 0.02, z_c + dz), "Boite")
 		for sx in [-0.60, 0.60]:
 			var pivot: Node3D = Node3D.new()
 			pivot.name = "Roue"
@@ -952,6 +961,7 @@ static func build_train(root: Node3D, train_length: float, car_count: int,
 	var front_lamps: Array = []
 	var rear_lamps: Array = []
 	var wheels: Array = []
+	var bogies: Array = []
 	var car_roots: Array = []
 	var doors: Array = []
 	var issues: Array = []               # panneaux d'issue de secours {node, car, cle}
@@ -1026,8 +1036,8 @@ static func build_train(root: Node3D, train_length: float, car_count: int,
 			front_lamps = _build_cap_fittings(car_root, mats, z_a, -1.0, true)
 		if is_last:
 			rear_lamps = _build_cap_fittings(car_root, mats, z_b, 1.0, false)
-		wheels.append_array(_build_bogie(car_root, mats, wells[0]))
-		wheels.append_array(_build_bogie(car_root, mats, wells[1]))
+		wheels.append_array(_build_bogie(car_root, mats, wells[0], bogies))
+		wheels.append_array(_build_bogie(car_root, mats, wells[1], bogies))
 		# soufflet d'intercirculation entre les deux voitures
 		if not is_last:
 			var bellows: MeshInstance3D = MeshInstance3D.new()
@@ -1050,5 +1060,5 @@ static func build_train(root: Node3D, train_length: float, car_count: int,
 			bellows.mesh = bm
 			bellows.name = "Soufflet"
 			car_root.add_child(bellows)
-	return {"car_roots": car_roots, "wheels": wheels, "doors": doors, "issues": issues,
+	return {"car_roots": car_roots, "wheels": wheels, "bogies": bogies, "doors": doors, "issues": issues,
 		"front_lamps": front_lamps, "rear_lamps": rear_lamps, "mats": mats}

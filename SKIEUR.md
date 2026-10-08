@@ -117,9 +117,23 @@ funiculaire), les sauts (il reste collé au sol), les chutes.
   `set_issues`). Possible dans une rame arrêtée en tunnel
   (`main.evacuation_possible`) ; collisions du tunnel, de la voie et de
   l'escalier de service construites à la demande autour du marcheur
-  (`CollisionsJeu.assurer_autour`, ± 80 m) ; rame retenue tant qu'il est à
-  pied dans le tunnel (écoute 4) ; panneaux remis à quai portes ouvertes.
-  Banc `bench_issues_3d.gd`.
+  (`CollisionsJeu.assurer_autour`, ± 80 m) ; rame **immobilisée** tant
+  qu'il est à pied dans le tunnel ou la galerie (`TrainPhysics.voie_occupee`
+  → régulateur tenu + `request_depart` refusé ; `AutoOperator.bloque` sans
+  plafond ; PC `state.voie_occupee` + `AutoOps.skieur_bloque`, 5e champ de
+  `skieur_etat` ; écoute 4) ; panneaux remis à quai portes ouvertes.
+  Banc `bench_issues_3d.gd` (AUTO enclenché sur la voie → immobile ; fosse
+  → il se hisse).
+- **Garde-fous (08/10/2026)** : à pied hors des gares (`grimpe`, posé par
+  main), il se hisse sur un rebord jusqu'à 1,25 m (`SkieurJoueur.GRIMPE_MAX`,
+  2e essai de `_monter_marche`, sol admis dès normale 0,6 : du fond de la
+  fosse il enjambe le rail, à 1,04 m) ; seuils de porte en collision portes fermées
+  (`CollisionsJeu.set_seuils` — la fente palier 1,20 / vantail 1,50 faisait
+  tomber sous la rame) ; à bord, passé sous le plancher → reposé ; roues et
+  châssis de bogie de sa rame cachés (`Cabin.set_bogies_visibles`, nœuds
+  `Bogie1…4` hors fusion) ; une rame en marche qui l'atteint à pied le
+  percute (`_skieur_percute`, retour au refuge). Tout dans
+  `main._securite_skieur`.
 - **Écoute selon l'endroit** (`main._gare_ecoute`, `_gain_machinerie`,
   `TrainAudio.gare_ecoute` / `gain_machinerie`) : 0 rame, 1 gare basse
   (souffle), 2 dehors (vent), 3 gare haute (machinerie à −6 dB par
@@ -128,6 +142,17 @@ funiculaire), les sauts (il reste collé au sol), les chutes.
   buzzers de quai sonnent dans leur gare à chaque départ, même du milieu
   du tunnel, jamais depuis une rame en tunnel. Banc `bench_ecoute_3d.gd`.
 - Souffle plus aigu, sifflement de fil (`tools_sons_skieur.py`).
+- **08/10/2026, v1.18.4 (suite)** : chutes éteintes (`CHUTES_ACTIVES`) ;
+  tête du schuss vers l'avant (−z) ; relief en collision à la demande
+  partout où l'on marche (`CollisionsJeu.assurer_autour` → `_terrain` sur
+  400 m, `_zones_relief`) ; `basculer_ski` remonte sur la neige si l'on est
+  sous la surface (hors bâtiment).
+- **08/10/2026, v1.18.4** : la bascule skieur ne touche plus à
+  l'exploitation (ni à l'entrée, ni à la montée) ; seul `basculer_skieur_auto`
+  l'enclenche (Web : `auto_operator.toggle()`, PC : `touche X` relayée) ;
+  l'exploitation auto ramène au mode normal (v1.18.3) ; se relever du poste
+  = `_position_poste()` dans la voiture de tête (le nœud `DriverSeatBase`
+  est fusionné par `_merge_static_meshes`, `get_node_or_null` rend null).
 - **Retours du troisième essai PC** (07-08/10/2026) : couloir de la
   voiture — capsule inclinée avec la voiture qui porte
   (`SkieurJoueur._aligner_capsule`, `up_direction` = y de la voiture :

@@ -164,6 +164,38 @@ def test_skieur_retenue_plafonnee(fenetre):
     g._skieur = False
 
 
+def test_skieur_sur_la_voie_immobilise(fenetre):
+    """À pied sur la voie (évacuation, tunnel), la rame ne repart JAMAIS,
+    même sous exploitation AUTO (Kevin, 08/10/2026 : « le funi ne devrait pas
+    pouvoir repartir une fois l'évac lancée ; là il est reparti, je me suis
+    pris l'autre rame en pleine tête »)."""
+    win, clock = fenetre
+    g = _depart_a_quai(win, clock)
+    pont = _brancher(g)
+    ao = g.auto_ops
+    ao.force_any_hours = True
+    ao.toggle()
+    t = 0.0
+    while ao.phase != ao.PHASE_BOARDING and t < 120.0:
+        _step(win, clock, 1.0)
+        t += 1.0
+    assert ao.phase == ao.PHASE_BOARDING, ao.phase
+    g._skieur = True
+    pont.a_poster = [{"skieur_etat": [False, True, 4, 0.0, True]}]
+    _step(win, clock, 0.1)
+    assert g.state.voie_occupee and ao.skieur_bloque, "voie occupée non reçue"
+    _step(win, clock, 90.0)
+    assert ao.phase == ao.PHASE_BOARDING and not g.state.trip_started, \
+        "partie avec le skieur sur la voie (%s)" % ao.phase
+    # voie libre : elle repart au terme du dwell
+    pont.a_poster = [{"skieur_etat": [False, False, 1, 0.0, False]}]
+    _step(win, clock, ao.station_dwell_s + 5.0)
+    assert not g.state.voie_occupee
+    assert ao.phase != ao.PHASE_BOARDING, "voie libre : elle devait repartir (%s)" % ao.phase
+    g._skieur = False
+    g._appliquer_etat_skieur()
+
+
 def test_skieur_f9_auto_attend_puis_ferme(fenetre):
     win, clock = fenetre
     g = _depart_a_quai(win, clock)
@@ -190,12 +222,20 @@ def test_skieur_f9_auto_attend_puis_ferme(fenetre):
     assert not ao.enabled and g.state.train.doors_cmd and not g.state.trip_started, \
         "partie sans le skieur resté sur le quai"
     assert g.sounds.skieur_dehors, "sur le quai : plus de son de cabine"
-    # il monte : l'exploitation s'enclenche, portes fermées dès qu'il est dedans
+    # il monte : rien ne bouge tant que l'exploitation n'est pas lancée
+    # (Kevin, 08/10/2026 : « quand je change de mode skieur ou pas, tu
+    # restes en mode d'avant, exploitation auto ou pas »)
     pont.a_poster = [{"skieur_etat": [True, False, 0]}]
     _step(win, clock, 3.0)
-    assert ao.enabled, "monté dans la rame : l'exploitation doit reprendre"
-    assert ao.phase != ao.PHASE_BOARDING, "portes pas fermées alors qu'il est à bord (%s)" % ao.phase
+    assert not ao.enabled and not g.state.trip_started, "monté : l'exploitation ne doit pas s'enclencher toute seule"
     assert not g.sounds.skieur_dehors
+    # bouton EXPLOIT. du skieur (touche X relayée) : l'exploitation démarre,
+    # ferme les portes et part
+    pont.a_poster = [{"touche": "X"}]
+    _step(win, clock, 0.1)
+    assert ao.enabled, "EXPLOIT. n'a pas lancé l'exploitation"
+    _step(win, clock, ao.station_dwell_s + 5.0)
+    assert ao.phase != ao.PHASE_BOARDING, "pas partie après le dwell (%s)" % ao.phase
     # quais de la gare haute : la machinerie au gain de la 3D ; buzzer du
     # haut même si la rame repart d'en bas ; silence depuis la rame en tunnel
     pont.a_poster = [{"skieur_etat": [False, True, 3, 0.25]}]

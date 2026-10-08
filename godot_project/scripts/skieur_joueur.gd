@@ -25,6 +25,12 @@ signal chute                          # tombé (mur ou roche à vive allure)
 const RAYON: float = 0.14              # de profil : il passe entre deux porte-skis
 const TAILLE: float = 1.76
 const MARCHE_MAX: float = 0.40
+const GRIMPE_MAX: float = 1.25          # à pied hors des gares (`grimpe`) : on se
+                                        # hisse sur un rebord — fosse entre les
+                                        # rails : fond 70 cm sous la dalle, et le
+                                        # rail à enjamber est à 1,04 m du fond
+                                        # (Kevin, 08/10/2026 : « coincé entre les
+                                        # deux rails »)
 const V_MARCHE: float = 1.45
 const V_COURSE: float = 3.3
 const ACCEL: float = 7.0
@@ -52,6 +58,8 @@ var _cap: float = 0.0
 var _phase: float = 0.0
 var _chute: float = 0.0
 var dernier_sol: Vector3 = Vector3.ZERO
+var _depart_chute: Vector3 = Vector3.ZERO   # où la chute a commencé (repli si aucun sol sûr)
+var grimpe: bool = false                 # posé par main : à pied hors des gares (tunnel, galerie, dehors)
 var _sol_stable: float = 0.0           # temps passé sur un sol fixe
 var _chutes: Array = []                # instants des derniers rattrapages
 ## Où le reposer s'il tombe trois fois de suite (posé par main.gd).
@@ -105,6 +113,10 @@ var _posture: int = 0                    # 0 glisse, 1 schuss, 2 chasse-neige
 const V_CHUTE_MUR: float = 6.0
 const V_CHUTE_ROCHE: float = 8.0
 const CHUTE_S: float = 2.5
+## Kevin, 08/10/2026 : « je déchausse tout le temps, désactive ce truc » —
+## le critère « roche » (pente > 37°) tombait sur toute piste raide. Gardé,
+## éteint.
+const CHUTES_ACTIVES: bool = false
 const Y_SKI: float = 0.10                # skis posés 10 cm au-dessus du sol calculé (sinon
 										 # les tuiles du relief, maillées autrement, les cachent)
 var _chute_t: float = 0.0
@@ -266,10 +278,20 @@ func basculer_ski() -> String:
 		dernier_sol = global_position
 		_apparence_ski()
 		return ""
-	if relief == null or not relief.pret or support != null or not dehors(relief):
+	if relief == null or not relief.pret or support != null:
 		return "On chausse dehors, sur la neige"
 	if not relief.dans_le_bloc(global_position.x, global_position.z):
 		return "Hors du domaine"
+	if not dehors(relief):
+		# dans un bâtiment : non ; SOUS la surface (on a traversé la montagne
+		# à pied, là où le relief n'avait pas encore de collision) : on
+		# remonte sur la neige (Kevin, 08/10/2026 : « il croit que je suis
+		# dedans et m'empêche de chausser »)
+		var tp: Array = relief.terrain_piece(global_position.x, global_position.z)
+		if not is_nan(float(tp[0])) and bool(tp[1]):
+			return "On chausse dehors, sur la neige"
+		global_position.y = relief.hauteur_sol(global_position.x, global_position.z) + 0.05
+		velocity = Vector3.ZERO
 	chausse = true
 	chemin.clear()
 	_cap_ski = _cap
@@ -464,7 +486,8 @@ func _marcher(delta: float, dir: Vector3, vite: bool) -> void:
 	fait.y = 0.0
 	var voulu: Vector3 = v_cible * delta
 	if voulu.length() > 1e-4 and fait.length() < voulu.length() * 0.5 and is_on_wall():
-		if not _monter_marche(voulu):
+		if not _monter_marche(voulu) \
+				and not (grimpe and support == null and not chausse and _monter_marche(voulu, GRIMPE_MAX, 0.6)):
 			# pas une marche : on glisse le long du mur (porte-skis abordé
 			# presque de face, contremarche, chambranle) — move_and_slide
 			# s'arrêtait net quand le mur était presque perpendiculaire à la
@@ -492,6 +515,8 @@ func _marcher(delta: float, dir: Vector3, vite: bool) -> void:
 			_sol_stable = 0.0
 	else:
 		_sol_stable = 0.0
+		if _chute == 0.0:
+			_depart_chute = global_position
 		_chute += delta
 		if _chute > 2.5:
 			# tombé dans un trou (fosse, vide) : retour au dernier sol sûr ;
@@ -499,10 +524,13 @@ func _marcher(delta: float, dir: Vector3, vite: bool) -> void:
 			var t: float = Time.get_ticks_msec() / 1000.0
 			_chutes = _chutes.filter(func(x): return t - float(x) < 30.0)
 			_chutes.append(t)
-			var ou: Vector3 = dernier_sol
+			var ou: Vector3 = dernier_sol if dernier_sol != Vector3.ZERO else refuge
 			if _chutes.size() >= 3 and refuge != Vector3.ZERO:
 				ou = refuge
 				_chutes.clear()
+			if ou == Vector3.ZERO:
+				ou = _depart_chute      # ni sol sûr ni refuge : là où la chute a commencé
+				                        # (avant : l'origine du monde, la gare basse)
 			global_position = ou + Vector3(0.0, 0.3, 0.0)
 			velocity = Vector3.ZERO
 			support = null
@@ -513,9 +541,9 @@ func _marcher(delta: float, dir: Vector3, vite: bool) -> void:
 var debug_marche: String = ""
 
 
-func _monter_marche(pas: Vector3) -> bool:
+func _monter_marche(pas: Vector3, haut_max: float = MARCHE_MAX, plat_min: float = 0.9) -> bool:
 	var xf: Transform3D = global_transform
-	var haut: Vector3 = Vector3.UP * MARCHE_MAX
+	var haut: Vector3 = Vector3.UP * haut_max
 	var col_p: KinematicCollision3D = KinematicCollision3D.new()
 	if test_move(xf, haut, col_p):
 		debug_marche = "plafond"
@@ -541,7 +569,7 @@ func _monter_marche(pas: Vector3) -> bool:
 		return false
 	var xf_a: Transform3D = xf_h.translated(av)
 	var col: KinematicCollision3D = KinematicCollision3D.new()
-	if not test_move(xf_a, Vector3.DOWN * (MARCHE_MAX + 0.02), col):
+	if not test_move(xf_a, Vector3.DOWN * (haut_max + 0.02), col):
 		debug_marche = "rien dessous"
 		return false
 	# sol plat à l'aplomb du centre (pas une paroi de rame en pente, pas
@@ -550,7 +578,7 @@ func _monter_marche(pas: Vector3) -> bool:
 	var rq: PhysicsRayQueryParameters3D = PhysicsRayQueryParameters3D.create(
 		bas + Vector3.UP * 0.30, bas + Vector3.DOWN * 0.15, collision_mask, [get_rid()])
 	var hit: Dictionary = get_world_3d().direct_space_state.intersect_ray(rq)
-	if hit.is_empty() or (hit["normal"] as Vector3).y < 0.9:
+	if hit.is_empty() or (hit["normal"] as Vector3).y < plat_min:
 		debug_marche = "pas de sol plat"
 		return false
 	debug_marche = "ok"
@@ -665,9 +693,9 @@ func _glisser(delta: float, cmd: Vector2, schuss: bool) -> void:
 	# déplacement à l'horizontale, arrêté par les murs, puis posé sur le sol
 	var dp: Vector3 = Vector3(v.x, 0.0, v.z) * delta
 	var mur: Vector3 = _mur_devant(p, dp)
-	# chute : un mur à vive allure, ou la roche (pente > 37°)
-	if (mur != Vector3.ZERO and vit0 > V_CHUTE_MUR and dp.dot(mur) < 0.0) \
-			or (n.y < 0.80 and vit0 > V_CHUTE_ROCHE):
+	# chute : un mur à vive allure, ou la roche (pente > 37°) — éteint
+	if CHUTES_ACTIVES and ((mur != Vector3.ZERO and vit0 > V_CHUTE_MUR and dp.dot(mur) < 0.0) \
+			or (n.y < 0.80 and vit0 > V_CHUTE_ROCHE)):
 		_chuter()
 		return
 	if mur != Vector3.ZERO:

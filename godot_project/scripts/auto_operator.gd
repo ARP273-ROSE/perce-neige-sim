@@ -59,6 +59,7 @@ var enabled: bool = false
 ## le temps de descendre.
 var retenue: bool = false
 var a_bord: bool = false
+var bloque: bool = false     # à pied sur la voie : on ne part pas, sans limite (08/10/2026)
 const A_BORD_DELAI_S: float = 1.5     # dedans depuis 1,5 s : on y va
 ## Retenue plafonnée (Kevin, 07/10/2026 : « la séquence reste bloquée à
 ## embarquement 6 s et rien ne se passe, que je reste sur le quai… elle
@@ -260,7 +261,7 @@ func _process(delta: float) -> void:
 				_vu_en_gare = true
 				_retenue_t += delta
 			_a_bord_t = _a_bord_t + delta if a_bord else 0.0
-			if retenue and _retenue_t < RETENUE_MAX_S and not seq_running:
+			if (bloque or (retenue and _retenue_t < RETENUE_MAX_S)) and not seq_running:
 				_state_timer = minf(_state_timer, STATION_DWELL_S - 6.0)
 			elif a_bord and _vu_en_gare and _a_bord_t > A_BORD_DELAI_S \
 					and not seq_running:
@@ -286,7 +287,7 @@ func _process(delta: float) -> void:
 				physics.speed_cmd = consigne_croisiere()
 				state = State.DEPARTING
 				_state_timer = 0.0
-			elif not seq_running:
+			elif not seq_running and not bloque:
 				_demander_depart()
 
 		State.DEPARTING, State.CRUISING:

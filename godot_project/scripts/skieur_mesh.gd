@@ -353,8 +353,10 @@ static func squelette_schuss() -> Dictionary:
 	var s: Dictionary = _squelette("libre")
 	var bas: float = 0.32
 	for k in ["bassin", "epaule_g", "epaule_d"]:
-		s[k] = (s[k] as Vector3) + Vector3(0.0, -bas, 0.12)
-	s.tete = Vector3(0.0, 1.64 - bas - 0.10, 0.30)
+		s[k] = (s[k] as Vector3) + Vector3(0.0, -bas, -0.12)
+	# (l'avant est en −z : Kevin, 08/10/2026, « la tête va en arrière au lieu
+	# d'en avant »)
+	s.tete = Vector3(0.0, 1.64 - bas - 0.10, -0.30)
 	s.ourlet = float(s.ourlet) - bas
 	s.haut_torse = float(s.haut_torse) - bas
 	s.tangage = 0.75
