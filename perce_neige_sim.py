@@ -15925,6 +15925,8 @@ class GameWidget(QWidget):
                 ("C", T("cabin lights", "éclairage cabine")),
                 ("J", T("tunnel lighting on / off", "éclairage du tunnel on / off")),
                 ("K", T("horn (hold)", "klaxon (maintenir)")),
+                (T("Wheel (3D)", "Molette (3D)"), T("zoom on the console and the Pro-face screen, cab view",
+                                                    "loupe sur le pupitre et l'écran Pro-face, vue cabine")),
                 ("A", T("AUTOPILOT — ONE trip by itself: doors, READY, 100 %, stop, doors, passengers off",
                         "PILOTE AUTO — UN voyage tout seul : portes, PRÊT, 100 %, arrêt, portes, descente")),
                 ("X", T("AUTOMATIC OPERATION on / off — the whole service (boarding, departures one after another)",

@@ -1407,6 +1407,16 @@ func _input(event: InputEvent) -> void:
 		return
 	var mr_view: bool = cabin.view_mode == cabin.ViewMode.MACHINES \
 		and cabin.camera_machines != null
+	if cabin.view_mode == cabin.ViewMode.FPV and not mode_skieur:
+		# loupe sur le pupitre : molette ou pincement (cf. Cabin.loupe)
+		if event is InputEventMouseButton and event.pressed:
+			if event.button_index == MOUSE_BUTTON_WHEEL_UP:
+				cabin.loupe_molette(1)
+			elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
+				cabin.loupe_molette(-1)
+		elif event is InputEventMagnifyGesture:
+			cabin.loupe_molette(1 if event.factor > 1.0 else -1)
+		return
 	if cabin.view_mode != cabin.ViewMode.EXTERIOR and not mr_view:
 		return
 	if event is InputEventScreenDrag:
