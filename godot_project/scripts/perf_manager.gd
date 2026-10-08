@@ -14,14 +14,21 @@ extends Node
 ##    quand le pilote le donne. Saccades → on retire un effet ; marge
 ##    durable → on en remet un, sans retenter de sitôt un cran qui a échoué.
 ##
-## Crans (chacun = un état complet, on peut monter et descendre) :
-##   0 tout : SDFGI, brouillard volumétrique, SSR, MSAA (×4), rendu 100 %
+## Crans (chacun = un état complet, on peut monter et descendre).
+## PC (08/10/2026, Kevin : « sur le PC du père c'est super pixélisé, on ne
+## peut pas lire les noms des boutons ni les chiffres de l'écran du
+## cockpit ») : la RÉSOLUTION du rendu est le tout dernier recours, et
+## jamais sous 85 % — avant elle, on coupe les effets puis on verrouille la
+## cadence à 30 i/s, lisible :
+##   0 tout : SDFGI, brouillard volumétrique, SSR, MSAA (×4), halo, rendu 100 %
 ##   1 sans SDFGI (éclairage indirect)
 ##   2 + sans brouillard volumétrique ni SSR
-##   3 + sans MSAA, rendu 3D à 85 %
-##   4 rendu à 70 %
-##   5 rendu à 60 %, sans halo (glow)
-##   6 cadence verrouillée à 30 i/s (régulière plutôt que 40-55 en dents de scie)
+##   3 + sans MSAA
+##   4 + sans halo (glow)
+##   5 + cadence verrouillée à 30 i/s (régulière plutôt que 40-55 en dents de scie)
+##   6 + rendu 3D à 85 % (FSR 2 en Forward+, FSR 1 en Mobile, bilinéaire en OpenGL)
+## PWA (réglage mesuré sur iPad, v1.15.37, inchangé) :
+##   3 sans MSAA, rendu 85 % · 4 rendu 70 % · 5 rendu 60 %, sans halo · 6 30 i/s
 ## Le rendu OpenGL (PWA, PC sans Vulkan) n'a ni SDFGI, ni brouillard
 ## volumétrique, ni SSR : il démarre au moins au cran 2.
 ##
@@ -199,19 +206,23 @@ func _appliquer(c: int, pourquoi: String) -> void:
 		_env.volumetric_fog_enabled = cran <= 1
 		_env.ssr_enabled = cran <= 1
 	if _env != null:
-		_env.glow_enabled = cran <= 4
+		_env.glow_enabled = cran <= (4 if _web else 3)
 	cran_courant = cran
 	_appliquer_ips()
 	var vp: Viewport = main.get_viewport() if main != null else null
 	if vp != null:
 		if not _web:
 			vp.msaa_3d = _msaa_origine if cran <= 2 else Viewport.MSAA_DISABLED
-		var echelle: float = [1.0, 1.0, 1.0, 0.85, 0.7, 0.6, 0.6][cran]
-		if _web:
-			echelle = minf(echelle, 0.6)    # réglage mesuré sur iPad (v1.15.37)
+		var echelle: float = _echelle(cran)
 		if echelle < 0.999:
-			vp.scaling_3d_mode = Viewport.SCALING_3D_MODE_FSR if _rd \
-				else Viewport.SCALING_3D_MODE_BILINEAR
+			# FSR 2 (reconstruction temporelle) garde les textes nets ; FSR 1
+			# en Mobile ; bilinéaire en OpenGL
+			if RenderingServer.get_current_rendering_method() == "forward_plus":
+				vp.scaling_3d_mode = Viewport.SCALING_3D_MODE_FSR2
+			elif _rd:
+				vp.scaling_3d_mode = Viewport.SCALING_3D_MODE_FSR
+			else:
+				vp.scaling_3d_mode = Viewport.SCALING_3D_MODE_BILINEAR
 		else:
 			vp.scaling_3d_mode = Viewport.SCALING_3D_MODE_BILINEAR
 		vp.scaling_3d_scale = echelle
@@ -219,13 +230,37 @@ func _appliquer(c: int, pourquoi: String) -> void:
 	_durees.clear()
 	_t_fen = 0.0
 	_bonnes = 0
-	_log("[Perf] cran %d/%d (%s)%s" % [cran, CRAN_MAX, pourquoi,
+	_log("[Perf] cran %d/%d — %s (%s)%s" % [cran, CRAN_MAX, libelle(cran), pourquoi,
 		(" — " + dernier_bilan) if dernier_bilan != "" else ""])
+	# le PC l'écrit dans son journal de bord (« c'est super pixélisé » :
+	# on veut savoir où en est la 3D)
+	if main != null:
+		var sr: Node = main.get("state_receiver") as Node
+		if sr != null and sr.has_method("envoyer"):
+			sr.envoyer({"perf": cran, "perf_max": CRAN_MAX, "perf_txt": "%s (%s)%s" % [
+				libelle(cran), pourquoi, (" — " + dernier_bilan) if dernier_bilan != "" else ""]})
+
+
+## Échelle du rendu 3D au cran `c` : PC jamais sous 85 %, PWA comme mesuré.
+func _echelle(c: int) -> float:
+	if _web:
+		return [1.0, 1.0, 1.0, 0.85, 0.7, 0.6, 0.6][c]
+	return [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.85][c]
+
+
+## Ce que fait le cran `c`, en clair (journal, PC).
+func libelle(c: int) -> String:
+	if _web:
+		return ["tout", "sans éclairage indirect", "sans brouillard ni reflets",
+			"sans anti-crénelage, rendu 85 %", "rendu 70 %", "rendu 60 %, sans halo",
+			"30 i/s"][c]
+	return ["tout", "sans éclairage indirect", "sans brouillard ni reflets",
+		"sans anti-crénelage", "sans halo", "30 i/s", "rendu à 85 %"][c]
 
 
 ## Plafond d'images par seconde : cran 6 (30 i/s) et retrait de la fenêtre.
 func _appliquer_ips() -> void:
-	var ips: int = 30 if cran >= 6 else 0
+	var ips: int = 30 if cran >= (6 if _web else 5) else 0
 	if _retrait == 2:
 		ips = IPS_REDUITE
 	elif _retrait == 1:
@@ -295,7 +330,7 @@ func _evaluer() -> void:
 	var n: int = _durees.size()
 	if n < 10:
 		return
-	var cible_ips: float = 30.0 if cran >= 6 else minf(60.0, machine.get("hz", 60.0))
+	var cible_ips: float = 30.0 if cran >= (6 if _web else 5) else minf(60.0, machine.get("hz", 60.0))
 	var budget: float = 1.0 / cible_ips
 	var tri: PackedFloat32Array = _durees.duplicate()
 	tri.sort()

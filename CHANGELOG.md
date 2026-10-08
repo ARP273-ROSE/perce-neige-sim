@@ -7,6 +7,19 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.18.6** — « Sur le PC du père, avec tes calculs d'optimisation des
+perfs, c'est super pixélisé : on ne peut pas lire les noms des boutons ni
+les chiffres de l'écran du cockpit » (08/10/2026). L'adaptation en direct
+réduisait la résolution du rendu 3D dès le troisième cran (85, 70 puis
+60 %). Nouvel ordre : éclairage indirect, brouillard et reflets,
+anti-crénelage, halo, cadence verrouillée à 30 i/s, et seulement en
+dernier recours le rendu à 85 % — jamais moins sur PC. Sous Vulkan
+(Forward+) ce dernier cran passe en FSR 2, qui garde les textes nets. La
+PWA garde ses réglages mesurés sur iPad. Chaque changement de cran est
+écrit dans le journal de bord du PC (« Vue 3D : réglages graphiques 3/6 —
+sans anti-crénelage (saccades) — 48 i/s… »), et le menu Affichage →
+Qualité 3D permet toujours d'imposer haute, moyenne ou basse.
+
 **v1.18.5** — retours PC et Web du 08/10/2026 (soir).
 - « Dans la vraie vie l'issue de secours part à 90° du tunnel et monte
   direct dehors, c'est pas tout ton cirque » → la galerie de secours est

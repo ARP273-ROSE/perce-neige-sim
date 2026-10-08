@@ -133,7 +133,9 @@ matériel roulant. Détail dans `SOURCES.md`.
   vivant, et dont les boutons se cliquent (portes, éclairage, klaxon,
   ± VITE, MONTÉE, URGENCE, ÉLECTRIQUE) ; vue extérieure et vue libre de la
   salle des machines (O). La 3D se règle sur la machine (menu Affichage →
-  Qualité 3D).
+  Qualité 3D) : elle coupe d'abord les effets, puis verrouille 30 i/s, et
+  ne réduit le rendu qu'en dernier recours, à 85 % au plus bas — les
+  textes du pupitre restent lisibles.
 - **Skieur jouable** (F9 sur PC, SKIEUR / K dans la version Web) : il
   marche dans les gares, monte les escaliers, prend la rame, va au poste,
   sort en haut sur la terrasse ou par la porte de la piste Génépy. Le

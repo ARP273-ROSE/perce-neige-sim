@@ -7362,6 +7362,15 @@ class GameWidget(QWidget):
                  "X": Qt.Key.Key_X}.get(str(m["touche"]))
             if k is not None:
                 self._virtual_key(k)
+        elif "perf" in m:
+            # réglages graphiques de la 3D (PerfManager) : on sait où elle
+            # en est (Kevin, 08/10/2026 : « sur le PC du père c'est super
+            # pixélisé ») — la résolution n'est plus réduite qu'en dernier
+            # recours, à 85 % au plus bas
+            add_event(self.state, "perf",
+                      f"3D view: graphics level {m['perf']}/{m.get('perf_max', 6)} — {m.get('perf_txt', '')}",
+                      f"Vue 3D : réglages graphiques {m['perf']}/{m.get('perf_max', 6)} — {m.get('perf_txt', '')}",
+                      "info")
         elif "skieur_prep" in m:
             # préparation du décor 3D du skieur : texte d'avancement, puis
             # "" avec la durée quand c'est prêt (Kevin, 08/10/2026 : « on ne
