@@ -7,6 +7,15 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.18.8** — Diagnostic de la session distante sur le PC du père (Ryzen 7
+5700G, Vega intégrée, Acer 27″ 1080p) : rendu natif, pas d'étirement,
+textes de 3 à 5 pixels (d'où la LOUPE de la 1.18.7), mais aussi « crénelage
+net aux bords en biais au réglage haute ». Le MSAA ×4 est maintenant
+imposé aux crans 0-2 sur PC au lieu d'être relu sur la fenêtre, et chaque
+ligne « réglages graphiques » du journal dit l'anticrénelage et l'échelle
+réellement en service (« MSAA ×4 ; rendu 100 % ») : si le crénelage
+persiste, on le saura.
+
 **v1.18.7** — « Ton réglage ne change rien, c'est toujours aussi moche »
 (08/10/2026). Les captures agrandies le montrent : les textes du pupitre
 sont nets mais minuscules — en 1080p, à 78° de champ, l'écran Pro-face ne
