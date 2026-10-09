@@ -448,8 +448,27 @@ func _rame(c: Cabin) -> void:
 			if (idx == 0 and e < 0.0) or (idx == c.car_count - 1 and e > 0.0):
 				_calotte(c, voiture, e * (car_len * 0.5 - 0.45))   # devant le pupitre, sous le pare-brise
 			else:
-				_boite(voiture, Vector3(3.4, 3.4, 0.10), Transform3D(Basis.IDENTITY,
-					Vector3(0.0, TrainBodyBuilder.Y_CENTER, ze)))
+				# cloison d'attelage PERCÉE de la baie d'intercirculation : on
+				# passe d'une voiture à l'autre (09/10/2026)
+				var dl: float = TrainBodyBuilder.PASSAGE_DEMI_L
+				var y_bh: float = TrainBodyBuilder.Y_FLOOR + TrainBodyBuilder.PASSAGE_HAUT
+				var lat: float = 1.7 - dl
+				for sx in [-1.0, 1.0]:
+					_boite(voiture, Vector3(lat, 3.4, 0.10), Transform3D(Basis.IDENTITY,
+						Vector3(sx * (dl + lat * 0.5), TrainBodyBuilder.Y_CENTER, ze)))
+				var y_top: float = TrainBodyBuilder.Y_CENTER + 1.7
+				_boite(voiture, Vector3(2.0 * dl, y_top - y_bh, 0.10), Transform3D(Basis.IDENTITY,
+					Vector3(0.0, (y_bh + y_top) * 0.5, ze)))
+				# dans l'intervalle (côté arrière de la voiture) : plancher et
+				# parois du soufflet, sinon on tombait sur la voie
+				if e > 0.0:
+					var zg: float = car_len * 0.5
+					var lg: float = 2.0 * (car_len * 0.5 - z1) + 0.2
+					_boite(voiture, Vector3(2.0 * dl + 0.2, 0.12, lg), Transform3D(Basis.IDENTITY,
+						Vector3(0.0, TrainBodyBuilder.Y_FLOOR + Cabin.STEP_LIFT - 0.06, zg)))
+					for sx2 in [-1.0, 1.0]:
+						_boite(voiture, Vector3(0.10, 2.2, lg), Transform3D(Basis.IDENTITY,
+							Vector3(sx2 * (dl + 0.05), TrainBodyBuilder.Y_FLOOR + 1.1, zg)))
 		# plafond (on ne grimpe pas sur les porte-skis)
 		_boite(voiture, Vector3(2.6, 0.10, z1 - z0), Transform3D(Basis.IDENTITY,
 			Vector3(0.0, TrainBodyBuilder.Y_CENTER + R_PAROI - 0.10, (z0 + z1) * 0.5)))

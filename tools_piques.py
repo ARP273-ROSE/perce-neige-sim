@@ -33,7 +33,7 @@ def main() -> None:
     out = ["# FICHIER GÉNÉRÉ par tools_piques.py depuis piques_avis.py — ne pas modifier.",
            "class_name PNQuipsExtra", "extends Object", ""]
     for nom in ("CRASH", "CRASH_LENT", "CRASH_VIOLENT", "DERAIL", "CABIN", "REVERSE", "DOORS_OPEN",
-                "SKIEUR_HORS_PISTE", "SKIEUR_RATE", "SKIEUR_EVACUATION", "SKIEUR_VOIE"):
+                "SKIEUR_HORS_PISTE", "SKIEUR_RATE", "SKIEUR_EVACUATION", "SKIEUR_VOIE", "SKIEUR_SORTIE"):
         out.append(f"const {nom}: Array = [")
         for fr, en in getattr(pa, nom):
             out.append(f"\t[{_s(fr)},\n\t {_s(en)}],")
@@ -46,7 +46,7 @@ def main() -> None:
                        f"\t {_s(fr)},\n\t {_s(en)}],")
         out += ["]", ""]
     SORTIE.write_text("\n".join(out), encoding="utf-8")
-    print(f"écrit {SORTIE} ({sum(len(getattr(pa, n)) for n in ('CRASH','CRASH_LENT','CRASH_VIOLENT','DERAIL','CABIN','REVERSE','DOORS_OPEN','SKIEUR_HORS_PISTE','SKIEUR_RATE','SKIEUR_EVACUATION','SKIEUR_VOIE'))} piques, "
+    print(f"écrit {SORTIE} ({sum(len(getattr(pa, n)) for n in ('CRASH','CRASH_LENT','CRASH_VIOLENT','DERAIL','CABIN','REVERSE','DOORS_OPEN','SKIEUR_HORS_PISTE','SKIEUR_RATE','SKIEUR_EVACUATION','SKIEUR_VOIE','SKIEUR_SORTIE'))} piques, "
           f"{sum(len(v) for v in pa.REVIEWS.values())} avis)")
 
 

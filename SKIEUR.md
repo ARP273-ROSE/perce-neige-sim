@@ -215,6 +215,12 @@ funiculaire), les sauts (il reste collé au sol), les chutes.
   `POUSSEE_MAINS/POINTES`, `SkieurJoueur._poser_poussee`, posture 3, jouée
   quand `_pousse`) ; panneau des départs rouge (`GareAval.evacuation`,
   `hors_service_pc`).
+- **1.19.8 (09/10/2026 nuit)** : passage d'intercirculation
+  (`TrainBodyBuilder.PASSAGE_DEMI_L` / `PASSAGE_HAUT`,
+  `_build_end_disc_porte`, collisions de cloison percées + plancher et
+  parois du soufflet côté arrière de la voiture) ; `_securite_skieur`
+  rattache un skieur sans support mais dans une voiture (plus de faux
+  « percuté ») ; `CommandesSkieur.pique()` ; `DomaineSkiable.hors_piste()`.
 
 Reste : le poste de la rame d'en face (on ne conduit que la rame choisie au
 départ), les remontées mécaniques, sauts et chutes.
