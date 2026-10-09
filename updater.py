@@ -97,9 +97,8 @@ def _open(url):
         'User-Agent': 'updater-kit-windows',
         'Accept': 'application/vnd.github+json',
     })
-    from contexte_tls import contexte as _contexte_tls
-    ctx = _contexte_tls()
-    return urllib.request.urlopen(req, timeout=TIMEOUT, context=ctx)
+    from contexte_tls import urlopen as _urlopen_tls
+    return _urlopen_tls(req, timeout=TIMEOUT)
 
 
 def check(current_version):

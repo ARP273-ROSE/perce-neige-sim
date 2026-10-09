@@ -6,7 +6,7 @@ extends SceneTree
 func _initialize() -> void:
 	var ok: bool = true
 	for nom in ["CRASH", "CRASH_LENT", "CRASH_VIOLENT", "DERAIL", "CABIN", "REVERSE", "DOORS_OPEN",
-			"SKIEUR_HORS_PISTE", "SKIEUR_RATE", "SKIEUR_EVACUATION", "SKIEUR_VOIE", "SKIEUR_SORTIE",
+			"SKIEUR_HORS_PISTE", "SKIEUR_RATE", "SKIEUR_EVACUATION", "SKIEUR_VOIE", "SKIEUR_SORTIE", "DEPART_SAUVAGE", "OUVERTURE_EN_LIGNE", "SURVITESSE_LIGNE", "SURVITESSE_ARRIVEE",
 			"REVIEWS_GREAT", "REVIEWS_ROUGH", "REVIEWS_DISASTER"]:
 		var l: Array = PNQuips.liste(nom)
 		print("%s : %d" % [nom, l.size()])

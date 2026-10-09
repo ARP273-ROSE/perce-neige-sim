@@ -272,7 +272,11 @@ def _poster(charge: bytes) -> bool:
             'User-Agent': 'rapports-kit-windows',
         })
     try:
-        with urllib.request.urlopen(requete, timeout=DELAI) as r:
+        try:
+            from contexte_tls import urlopen as _ouvrir   # repli certifi (Windows)
+        except Exception:
+            _ouvrir = urllib.request.urlopen
+        with _ouvrir(requete, timeout=DELAI) as r:
             return 200 <= r.status < 300
     except urllib.error.HTTPError as e:
         # 4xx : le serveur a compris et refuse. Réessayer n'y changera rien,

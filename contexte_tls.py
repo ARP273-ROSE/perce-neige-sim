@@ -43,3 +43,40 @@ def contexte() -> ssl.SSLContext:
                 pass
     _ctx = ctx
     return ctx
+
+
+def contexte_certifi():
+    """Contexte qui ne fait confiance QU'AU magasin certifi embarqué, ou None.
+
+    retour d'utilisateur, 09/10/2026, sous Windows : « [SSL: CERTIFICATE_VERIFY_FAILED]
+    certificate verify failed: certificate has expired » sur le serveur de
+    la musique, dont toute la chaîne est pourtant valide (Let's Encrypt YE2
+    → Root YE → ISRG Root X2, jusqu'en 2028-2032) : le magasin de Windows
+    proposait un chemin passant par un certificat périmé. certifi contient
+    ISRG Root X2 : la vérification s'arrête sur une racine valide.
+    """
+    try:
+        import certifi
+        return ssl.create_default_context(cafile=certifi.where())
+    except Exception:
+        return None
+
+
+def urlopen(req, timeout: float = 30.0):
+    """urllib.request.urlopen avec le contexte du système, puis, si la
+    vérification du certificat échoue, avec le seul magasin certifi.
+    Jamais sans vérification."""
+    import urllib.error
+    import urllib.request
+    try:
+        return urllib.request.urlopen(req, timeout=timeout, context=contexte())
+    except urllib.error.URLError as e:
+        raison = getattr(e, "reason", e)
+        if not isinstance(raison, ssl.SSLCertVerificationError) \
+                and "CERTIFICATE_VERIFY_FAILED" not in str(e):
+            raise
+        ctx2 = contexte_certifi()
+        if ctx2 is None:
+            raise
+        return urllib.request.urlopen(req, timeout=timeout, context=ctx2)
+
