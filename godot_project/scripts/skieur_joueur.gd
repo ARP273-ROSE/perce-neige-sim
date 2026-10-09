@@ -312,6 +312,36 @@ func _apparence_ski() -> void:
 	_visuel.position.y = Y_SKI if chausse else 0.0
 
 
+## Claquement sec d'un pas en chaussures de ski (Kevin, 09/10/2026 : « quand
+## je marche sur les escaliers le long du quai sans les skis, rajoute un
+## claquement sec à chaque pas ») : sons de tools_sons_skieur.py, trois
+## variantes au hasard, hauteur légèrement variée, son POSITIONNEL (on
+## l'entend aussi en vue extérieure, plus faible au loin).
+var _pas: AudioStreamPlayer3D = null
+var _sons_pas: Array = []
+
+
+func _claquer() -> void:
+	if _pas == null:
+		for k in range(3):
+			var st: AudioStream = load("res://sounds/pas_chaussure_%d.wav" % (k + 1))
+			if st != null:
+				_sons_pas.append(st)
+		_pas = AudioStreamPlayer3D.new()
+		_pas.volume_db = -4.0
+		_pas.unit_size = 4.0
+		_pas.max_distance = 40.0
+		if PNConstants.safari_web():
+			_pas.playback_type = AudioServer.PLAYBACK_TYPE_STREAM
+		add_child(_pas)
+		_pas.position = Vector3(0.0, 0.1, 0.0)
+	if _sons_pas.is_empty():
+		return
+	_pas.stream = _sons_pas[randi() % _sons_pas.size()]
+	_pas.pitch_scale = randf_range(0.92, 1.08)
+	_pas.play()
+
+
 ## Posture de glisse : 0 glisse, 1 schuss (recroquevillé), 2 chasse-neige
 ## (skis en V).
 func _poser_posture(p: int) -> void:
@@ -849,7 +879,12 @@ func _animer(delta: float, dir: Vector3) -> void:
 	_visuel.rotation = Vector3(0.0, _cap, 0.0)
 	var image: int = 0
 	if vitesse > 0.15 and is_on_floor():
+		var demi_avant: int = int(_phase / PI)
 		_phase = fmod(_phase + delta * vitesse / 0.62 * PI, TAU)
+		# un pas à chaque demi-cycle : claquement des chaussures de ski sur
+		# un sol dur (quais, escaliers, rames, terrasse) — pas dans la neige
+		if int(_phase / PI) != demi_avant and not dehors(relief):
+			_claquer()
 		image = 1 + int(_phase / TAU * N_IMAGES) % N_IMAGES
 	else:
 		_phase = 0.0

@@ -934,6 +934,12 @@ func _process(delta: float) -> void:
 	var s_cam: float = physics.s_render
 	if cabin != null and cabin.view_mode == Cabin.ViewMode.MACHINES:
 		s_cam = PNConstants.LENGTH - 20.0
+	elif mode_skieur and skieur != null:
+		# là où est le SKIEUR : dans la rame d'en face, l'attache de son câble
+		# et le bout de câble jusqu'au premier galet restaient cachés (« trop
+		# loin » de la rame pilotée) — Kevin, 09/10/2026 : « le câble s'enlève
+		# avant la rame devant, dans la rame opposée à celle choisie »
+		s_cam = _s_du_skieur()
 	track.update_galets_rames(physics.s_render, physics.ghost_s_render(), s_cam,
 		delta, physics.cable_rupture)
 	# Son : vue salle des machines → ambiance de la gare haute ; gare de
@@ -1881,6 +1887,9 @@ func _securite_skieur() -> void:
 			skieur.velocity = Vector3.ZERO
 			print("[Skieur] passé sous le plancher : reposé (x %.2f, z %.2f)" % [loc2.x, loc2.z])
 	var r: Cabin = _rame_du_skieur()
+	for c2 in [cabin, cabin_ghost]:
+		if c2 != null:
+			c2.skieur_a_bord = mode_skieur and c2 == r
 	if r != _bogies_caches:
 		if _bogies_caches != null and is_instance_valid(_bogies_caches):
 			_bogies_caches.set_bogies_visibles(true)
@@ -1921,6 +1930,32 @@ func _pres_du_tunnel(p: Vector3) -> bool:
 			if q.distance_to(p) < 3.0:
 				return true
 	return false
+
+
+## Abscisse (le long de la ligne) du skieur, recalculée toutes les 0,5 s.
+var _s_skieur_cache: float = 0.0
+var _t_s_skieur: float = 9.0
+
+
+func _s_du_skieur() -> float:
+	var r: Cabin = _rame_du_skieur()
+	if r == cabin:
+		return physics.s_render
+	if r == cabin_ghost:
+		return physics.ghost_s_render()
+	_t_s_skieur += get_process_delta_time()
+	if _t_s_skieur > 0.5 and tunnel != null:
+		_t_s_skieur = 0.0
+		var p: Vector3 = skieur.global_position
+		var best: float = INF
+		var s: float = 0.0
+		while s <= PNConstants.LENGTH:
+			var d: float = tunnel.transform_at(s).origin.distance_squared_to(p)
+			if d < best:
+				best = d
+				_s_skieur_cache = s
+			s += 20.0
+	return _s_skieur_cache
 
 
 func _skieur_percute() -> void:

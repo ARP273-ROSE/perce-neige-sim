@@ -83,6 +83,7 @@ var _head_glow: float = 0.0     # phares halogènes : 0 éteint → 1 plein feu
 var _head_mat: StandardMaterial3D = null
 var head_energy: float = 12.0   # énergie du phare à plein feu (faisceau large depuis le 03/10)
 @export var train_number: int = 1
+var skieur_a_bord: bool = false        # posé par main : le skieur est dans cette rame
 var _prev_v_for_acc: float = 0.0   # vitesse à la frame précédente pour calcul accel
 
 # SKIEUR : le skieur jouable a sa propre caméra (SkieurJoueur), posée par
@@ -1533,7 +1534,11 @@ func _process(_delta: float) -> void:
 	# Pupitre : voyants, commandes et écran Pro-face (l'écran seulement en
 	# vue cabine — inutile de le redessiner quand on ne le voit pas)
 	if _pupitre != null and physics != null:
-		_pupitre.mettre_a_jour(physics, _delta, train_number, not is_ghost and view_mode == ViewMode.FPV)
+		# écran vivant aussi pour le skieur à bord de CETTE rame, pilotée ou
+		# d'en face (Kevin, 09/10/2026 : « en mode skieur, les données sur les
+		# écrans de conduite sont figées »)
+		_pupitre.mettre_a_jour(physics, _delta, train_number,
+			(not is_ghost and view_mode == ViewMode.FPV) or skieur_a_bord, is_ghost)
 
 	# Tablette-horloge du montant gauche : l'heure réelle, comme en cabine
 	if _clock_label != null:

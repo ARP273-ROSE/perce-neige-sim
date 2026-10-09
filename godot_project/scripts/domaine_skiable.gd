@@ -276,6 +276,9 @@ func _faces_panneaux(par_piste: Dictionary) -> void:
 		var f: PanneauPiste = PanneauPiste.new()
 		f.nom = String(par_piste[ip][0])
 		f.couleur = COULEURS[int(par_piste[ip][1])]
+		# la station de la piste (Kevin, 09/10/2026 : « sur le domaine de Val
+		# d'Isère, tu mets Val d'Isère sur tes panneaux, pas Tignes »)
+		f.station = "VAL D'ISÈRE" if StationsPistes.VAL_DISERE.has(int(ip)) else "TIGNES"
 		f.size = Vector2(px, px)
 		sv.add_child(f)
 		add_child(sv)

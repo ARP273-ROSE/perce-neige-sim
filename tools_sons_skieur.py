@@ -96,3 +96,22 @@ k = SR
 fondu = np.linspace(0, 1, k)
 vent[:k] = vent[:k] * fondu + vent[-k:] * (1 - fondu)
 ecrire("godot_project/sounds/vent_dehors.wav", vent[:-k], -6.0)
+
+# --- pas en chaussures de ski sur sol dur (09/10/2026) -----------------------------
+# Kevin : « quand je marche sur les escaliers le long du quai sans les skis,
+# rajoute un claquement sec à chaque pas, à cause des chaussures de ski ».
+# Coque plastique rigide qui frappe du béton / du métal : un clic très bref
+# (talon), une résonance de coque vers 1,1 et 3,2 kHz qui s'éteint en ~25 ms,
+# un petit choc sourd vers 160 Hz. Trois variantes, tirées au hasard.
+for k3 in range(3):
+    n3 = int(0.12 * SR)
+    t3 = np.arange(n3) / SR
+    clic = rng.standard_normal(n3) * np.exp(-t3 / 0.0025)
+    f1 = 1100.0 * (1.0 + 0.06 * (k3 - 1))
+    f2 = 3200.0 * (1.0 + 0.05 * (1 - k3))
+    coque = (np.sin(2 * np.pi * f1 * t3) * 0.6 + np.sin(2 * np.pi * f2 * t3 + 0.7) * 0.4) \
+        * np.exp(-t3 / 0.022)
+    choc = np.sin(2 * np.pi * 160.0 * t3) * np.exp(-t3 / 0.030) * 0.5
+    x3 = bande(clic, 800.0, 7000.0) * 1.2 + coque * 0.5 + choc
+    x3[: int(0.0005 * SR)] *= np.linspace(0, 1, int(0.0005 * SR))
+    ecrire("godot_project/sounds/pas_chaussure_%d.wav" % (k3 + 1), x3, -4.0)
