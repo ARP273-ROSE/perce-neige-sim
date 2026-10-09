@@ -466,7 +466,7 @@ func mettre_a_jour(ph: TrainPhysics, dt: float, vehicule: int, ecran_visible: bo
 
 func _nouvel_ecran() -> SubViewport:
 	var sv: SubViewport = SubViewport.new()
-	var k: int = 2 if OS.has_feature("web") else 4     # définition de l'écran (cf. SURECHANTILLON)
+	var k: int = 4     # définition de l'écran, PC et web (09/10/2026 : « pas visible sur la PWA »)
 	sv.size = Vector2i(int(EcranProface.L) * k, int(EcranProface.H) * k)
 	sv.size_2d_override = Vector2i(int(EcranProface.L), int(EcranProface.H))
 	sv.size_2d_override_stretch = true
