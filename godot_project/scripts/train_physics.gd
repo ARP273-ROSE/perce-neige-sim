@@ -156,6 +156,13 @@ const TURNAROUND_DELAY_S: float = 45.0   # garde-fou (rame pleine en bas : 35 s,
 const TURNAROUND_MIN_S: float = 3.0
 const SETTLE_M: float = 0.02
 var turnaround_delay_remaining: float = 0.0
+## Rame d'en face à l'arrivée (09/10/2026, Kevin : « dans la rame opposée,
+## l'ouverture des portes c'est le timing de l'autre rame ») : SES portes
+## s'ouvrent quand SON câble est stabilisé (en haut tout de suite, en bas
+## après le rebond), pas à l'heure de la rame pilotée.
+var _ghost_arrivee: bool = false
+var _ghost_ouvert: bool = false
+var _ghost_t_arr: float = 0.0
 
 # --- Affaissement d'embarquement (allongement élastique du brin) ---------
 # À quai, tambour serré en gare haute, la rame pend à son brin : chaque
@@ -773,6 +780,16 @@ func step(dt: float) -> void:
 			finished = true
 			_arrival_grab()
 
+	# rame d'en face : ouverture à la stabilisation de SON brin
+	if _ghost_arrivee:
+		_ghost_t_arr += dt
+		if not _ghost_ouvert:
+			var km2: Vector2 = _brin_k_m(ghost_s_phys(), ghost_mass_kg())
+			var e2: float = Vector2(el_x2, el_v2 / sqrt(km2.x / km2.y)).length()
+			if (_ghost_t_arr >= TURNAROUND_MIN_S and e2 < SETTLE_M) or _ghost_t_arr >= TURNAROUND_DELAY_S:
+				_ghost_ouvert = true
+		elif doors_open:
+			_ghost_arrivee = false        # les deux rames ont ouvert
 	# Temporisation d'arrivée → demi-tour (portes + inversion)
 	if turnaround_delay_remaining > 0.0:
 		turnaround_delay_remaining = maxf(0.0, turnaround_delay_remaining - dt)
@@ -1320,6 +1337,9 @@ func _regulator(
 # coupe la traction, déclenche le rebond élastique du câble (visible en
 # gare basse) et arme la temporisation avant l'ouverture des portes.
 func _arrival_grab() -> void:
+	_ghost_arrivee = true
+	_ghost_ouvert = false
+	_ghost_t_arr = 0.0
 	trip_started = false
 	maint_brake = true
 	speed_cmd = 0.0
@@ -1473,6 +1493,16 @@ func _elastic_step(dt: float, a_poulie: float, frein_voie: bool = false) -> void
 # Amplitude de l'oscillation élastique en cours (m), rame pilotée ET
 # contrepoids : √(x² + (x'/ω)²) — l'installation est stabilisée quand les
 # deux le sont (parité PC).
+## Portes (vantaux) de la rame d'en face : les siennes à l'arrivée, celles de
+## la rame pilotée le reste du temps (départ simultané).
+func ghost_doors_open() -> bool:
+	return _ghost_ouvert if _ghost_arrivee else doors_open
+
+
+func ghost_door_leaves_open() -> bool:
+	return _ghost_ouvert if _ghost_arrivee else door_leaves_open
+
+
 func rebound_envelope() -> float:
 	var km2: Vector2 = _brin_k_m(ghost_s_phys(), ghost_mass_kg())
 	var e2: float = Vector2(el_x2, el_v2 / sqrt(km2.x / km2.y)).length()

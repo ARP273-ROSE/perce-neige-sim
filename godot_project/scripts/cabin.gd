@@ -1517,7 +1517,8 @@ func _process(_delta: float) -> void:
 	# le haut est le côté x = −sgn de la caisse.
 	var sgn: float = door_slide_sign(physics.direction, is_ghost)
 	for c in range(2):
-		var ouvert: bool = physics.door_leaves_open and (physics.portes_cotes & (1 << c)) != 0
+		var feuilles: bool = physics.ghost_door_leaves_open() if is_ghost else physics.door_leaves_open
+		var ouvert: bool = feuilles and (physics.portes_cotes & (1 << c)) != 0
 		_door_frac_cote[c] = move_toward(_door_frac_cote[c], 1.0 if ouvert else 0.0,
 			_delta / PNConstants.DOOR_MOTION_S)
 	_door_frac = maxf(_door_frac_cote[0], _door_frac_cote[1])

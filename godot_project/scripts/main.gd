@@ -1835,6 +1835,8 @@ func _sortir_skieur(garder_boucle: bool = false) -> void:
 		sons_skieur.ecoute = 0
 	if announcements != null:
 		announcements.set_ecoute_skieur(0)
+	if audio != null:
+		audio.rame_en_face = false
 	if relief != null:
 		relief.set_hiver(0.0)
 	if domaine != null:
@@ -1890,6 +1892,8 @@ func _securite_skieur() -> void:
 	for c2 in [cabin, cabin_ghost]:
 		if c2 != null:
 			c2.skieur_a_bord = mode_skieur and c2 == r
+	if audio != null:
+		audio.rame_en_face = mode_skieur and r != null and r == cabin_ghost
 	if r != _bogies_caches:
 		if _bogies_caches != null and is_instance_valid(_bogies_caches):
 			_bogies_caches.set_bogies_visibles(true)
@@ -2196,7 +2200,8 @@ func _maj_skieur() -> void:
 		# même règle d'attente et de départ pour l'exploitation AUTO du PC,
 		# et le gain de la machinerie (quais du haut), au 1/20 près
 		var gm: float = snappedf(_gain_machinerie(), 0.05)
-		var etat: Array = [dedans, retenue, ec, gm, a_pied_tunnel, skieur_auto != null]
+		var etat: Array = [dedans, retenue, ec, gm, a_pied_tunnel, skieur_auto != null,
+			skieur.support != null and _rame_du_skieur() == cabin_ghost]
 		if etat != _skieur_etat_envoye:
 			_skieur_etat_envoye = etat
 			state_receiver.envoyer({"skieur_etat": etat})

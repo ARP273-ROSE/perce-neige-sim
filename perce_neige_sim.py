@@ -7446,6 +7446,7 @@ class GameWidget(QWidget):
                 gain = float(e[3]) if len(e) > 3 else 0.0
                 bloque = bool(e[4]) if len(e) > 4 else False
                 boucle = bool(e[5]) if len(e) > 5 else False
+                self._en_face = bool(e[6]) if len(e) > 6 else False
                 self._skieur_etat = (bool(e[0]), bool(e[1]), int(e[2]), gain, bloque, boucle)
                 self._appliquer_etat_skieur()
 
@@ -8298,9 +8299,16 @@ class GameWidget(QWidget):
         # rame opposée et la sortie tombent juste quelle que soit l'allure,
         # même si elle varie (ou s'annule) en cours de traversée.
         _tr_x = st.train
-        _s_front = _tr_x.s + TRAIN_HALF * _tr_x.direction
+        # skieur à bord de la rame d'en face : SON passage dans l'évitement
+        # (Kevin, 09/10/2026 : « les sons de l'évitement ont le timing de
+        # l'autre rame »)
+        _en_face = self._skieur and getattr(self, "_en_face", False)
+        _s_x = st.ghost_s if _en_face else _tr_x.s
+        _dir_x = -_tr_x.direction if _en_face else _tr_x.direction
+        _s_front = _s_x + TRAIN_HALF * _dir_x
         _prog = (_s_front - PASSING_START) / (PASSING_END - PASSING_START)
-        if _tr_x.direction < 0:
+        self._suivre_portes_en_face(st)
+        if _dir_x < 0:
             _prog = 1.0 - _prog
         in_loop = 0.0 <= _prog <= 1.0
         if in_loop and not self._crossing_triggered:
@@ -8374,6 +8382,8 @@ class GameWidget(QWidget):
                 state_dict["ext_view"] = vue3d == 1
                 state_dict["qualite_3d"] = self._qualite_3d
                 state_dict["skieur"] = self._skieur
+                if getattr(self, "_g_arr", False):
+                    state_dict["ghost_portes"] = bool(self._g_ouvert)
                 state_dict["skieur_touches"] = self._skieur_touches()
                 state_dict["skieur_vue"] = self._skieur_vue_n
                 state_dict["skieur_ski"] = self._skieur_ski_n
@@ -8839,7 +8849,39 @@ class GameWidget(QWidget):
         tr.doors_cmd = True
         tr.doors_timer = DOOR_OPEN_TIME
         tr.doors_visual_timer = DOOR_MOTION_LEAD
-        self.sounds.play_door_motion()
+        # skieur dans la rame d'en face pendant l'arrivée : c'est SA porte
+        # qu'il entend, à son heure (_suivre_portes_en_face)
+        if not (getattr(self, "_skieur", False) and getattr(self, "_en_face", False)
+                and getattr(self, "_g_arr", False)):
+            self.sounds.play_door_motion()
+
+    def _suivre_portes_en_face(self, st) -> None:
+        """Portes de la rame d'en face à l'arrivée (09/10/2026, Kevin : « dans
+        la rame opposée, l'ouverture des portes c'est le timing de l'autre
+        rame ») : elles s'ouvrent quand SON brin est stabilisé (enveloppe
+        < AUTO_SETTLE_M après AUTO_SETTLE_MIN_S, au plus AUTO_SETTLE_MAX_S).
+        Le son part à ce moment si le skieur y est ; la 3D reçoit l'état
+        (« ghost_portes ») pour animer ses vantaux."""
+        dt = 1.0 / 60.0
+        fin = bool(st.finished)
+        if fin and not getattr(self, "_g_fin_prec", False):
+            self._g_arr, self._g_t, self._g_ouvert = True, 0.0, False
+        self._g_fin_prec = fin
+        if not getattr(self, "_g_arr", False):
+            return
+        self._g_t += dt
+        if not self._g_ouvert:
+            try:
+                env2 = self.physics.rebound_envelopes_m()[1]
+            except Exception:
+                env2 = 0.0
+            if (self._g_t >= AUTO_SETTLE_MIN_S and env2 < AUTO_SETTLE_M) \
+                    or self._g_t >= AUTO_SETTLE_MAX_S:
+                self._g_ouvert = True
+                if self._skieur and getattr(self, "_en_face", False):
+                    self.sounds.play_door_motion()
+        elif st.train.doors_open:
+            self._g_arr = False
 
     def begin_doors_close(self, tr, lang: str, on_complete=None) -> None:
         """Commande de fermeture : annonce → buzzer → clip, en série. Les

@@ -33,6 +33,9 @@ var _doors_were_open: bool = false   # défaut "portes fermées" : en mode clien
                                       # transition open→close → jouait à tort le
                                       # buzzer + l'animation portes).
 var _first_update_consumed: bool = false
+## Skieur à bord de la rame d'en face (posé par main) : les portes et
+## l'évitement qu'il entend sont ceux de SA rame (09/10/2026)
+var rame_en_face: bool = false
 var _crossing_active: bool = false   # clip de croisement asservi en cours
 var _prev_buzzer_remaining: float = 0.0   # front montant du buzzer de départ
 # Le clip crossing.wav couvre le transit aiguillage → aiguillage complet
@@ -194,7 +197,7 @@ func _process(_delta: float) -> void:
 	# des transitions depuis les défauts du _ready et déclencheraient à tort
 	# les sons de fermeture portes / démarrage trip.
 	if not _first_update_consumed:
-		_doors_were_open = physics.doors_open
+		_doors_were_open = _portes_ouvertes()
 		_trip_was_started = physics.trip_started
 		_first_update_consumed = true
 		return
@@ -273,7 +276,8 @@ func _process(_delta: float) -> void:
 	# s'est tu — en série, comme sur l'enregistrement HD (1:08→1:15 buzzer,
 	# 1:15→1:22 fermeture ; retour d'essai 2026-09-27 : les deux jouaient
 	# ensemble). Les vantaux (cabin.gd) partent 1,3 s après le début du clip.
-	if not physics.doors_open and _doors_were_open:
+	var ouvertes: bool = _portes_ouvertes()
+	if not ouvertes and _doors_were_open:
 		if _player_door.stream:
 			_player_door.play()
 		_door_motion_delay = PNConstants.DOOR_BUZZER_S
@@ -282,10 +286,10 @@ func _process(_delta: float) -> void:
 		if _door_motion_delay <= 0.0 and _player_door_motion.stream:
 			_player_door_motion.play()
 	# Animation portes (ouverture)
-	if physics.doors_open and not _doors_were_open:
+	if ouvertes and not _doors_were_open:
 		if _player_door_motion.stream:
 			_player_door_motion.play()
-	_doors_were_open = physics.doors_open
+	_doors_were_open = ouvertes
 
 	# Son de croisement asservi à la GÉOMÉTRIE (port du servo Python) :
 	# le clip démarre quand le NEZ de la rame franchit l'aiguillage
@@ -407,13 +411,19 @@ static func machine_room_levels(v: float) -> Vector2:
 	return Vector2(g, clampf(v / PNConstants.V_MAX, MR_RATE_MIN, 1.0))
 
 
+func _portes_ouvertes() -> bool:
+	return physics.ghost_doors_open() if rame_en_face else physics.doors_open
+
+
 func _update_crossing_servo(delta: float) -> void:
 	if _player_crossing == null or _player_crossing.stream == null:
 		return
-	var s_front: float = physics.s + PNConstants.TRAIN_HALF * float(physics.direction)
+	var s_r: float = physics.ghost_s_render() if rame_en_face else physics.s
+	var dir_r: int = -physics.direction if rame_en_face else physics.direction
+	var s_front: float = s_r + PNConstants.TRAIN_HALF * float(dir_r)
 	var prog: float = (s_front - PNConstants.PASSING_START) \
 		/ (PNConstants.PASSING_END - PNConstants.PASSING_START)
-	if physics.direction < 0:
+	if dir_r < 0:
 		prog = 1.0 - prog
 	var in_loop: bool = prog >= 0.0 and prog <= 1.0
 	var v_abs: float = absf(physics.v)
