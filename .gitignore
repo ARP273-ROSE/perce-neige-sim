@@ -94,3 +94,6 @@ sons/musique/
 
 # sortie parasite d'un banc lancé avec --mode=normal
 godot_project/--*
+
+# réglages locaux de deploy_web.sh (chemins du serveur)
+deploy_web.local
