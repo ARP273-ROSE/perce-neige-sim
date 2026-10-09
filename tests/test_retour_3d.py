@@ -250,10 +250,12 @@ def test_skieur_f9_auto_attend_puis_ferme(fenetre):
     _step(win, clock, 0.1)
     assert g._buzzer_a_jouer(True, False) is None
     assert g._buzzer_a_jouer(True, True) is True
-    # CONDUIRE (au poste) : fin du mode skieur et de l'AUTO
+    # CONDUIRE (au poste) : fin du mode skieur ; l'exploitation auto reste
+    # comme elle était (09/10/2026)
+    avant = ao.enabled
     pont.a_poster = [{"skieur_conduire": True}]
     _step(win, clock, 0.1)
-    assert not g._skieur and not ao.enabled
+    assert not g._skieur and ao.enabled == avant
     assert pont.etats[-1]["skieur"] is False
 
 
@@ -296,10 +298,12 @@ def test_exploitation_lancee_en_skieur_puis_conduite(fenetre):
     pont.a_poster = [{"cle": "H", "enfonce": True}, {"cle": "H", "enfonce": False}]
     _step(win, clock, 0.1)
     assert tr.lights_head != avant
-    # X coupe l'exploitation auto
+    # X coupe l'exploitation auto ; à quai, la consigne revient à 100 %
     pont.a_poster = [{"cle": "X", "enfonce": True}, {"cle": "X", "enfonce": False}]
     _step(win, clock, 0.1)
     assert not g.auto_ops.enabled
+    if not g.state.trip_started:
+        assert tr.speed_cmd == 1.0, "« refus car la consigne était tombée à 0 »"
     # la conduite reste refusée tant que l'automate tient la ligne
     g.auto_ops.toggle()
     cmd = tr.speed_cmd

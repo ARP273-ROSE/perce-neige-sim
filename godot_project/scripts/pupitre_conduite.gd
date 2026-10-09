@@ -495,7 +495,7 @@ func _poser_textes(e: EcranProface) -> void:
 			l.double_sided = false
 			l.outline_size = 0
 			l.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
-			l.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+			l.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR   # MSDF : sans mipmaps (elles flouaient les petits textes : date, heure)
 			l.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 			l.render_priority = 1
 			_mi_ecran.add_child(l)
@@ -672,7 +672,7 @@ func _etiquette(t: String, p: Vector2, taille: int, c: Color) -> Label3D:
 	l.text = t
 	l.font_size = taille * SURECHANTILLON
 	l.pixel_size = PIXEL_ETIQUETTE / float(SURECHANTILLON)
-	l.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+	l.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR   # MSDF : sans mipmaps (elles flouaient les petits textes : date, heure)
 	l.modulate = c
 	l.outline_size = 0
 	l.shaded = false
