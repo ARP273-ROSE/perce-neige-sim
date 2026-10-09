@@ -258,6 +258,9 @@ func _apply(d: Dictionary) -> void:
 			main.evacuer()
 		_last_skieur_evac = ne
 	# exploitation automatique du PC (bouton EXPLOIT. du skieur)
+	# portes de la rame d'en face à l'arrivée, calées par le PC sur SON brin
+	physics._ghost_arrivee = d.has("ghost_portes")
+	physics._ghost_ouvert = _b(d, "ghost_portes", false)
 	if main != null and d.has("exploitation"):
 		main.set("_exploitation_pc", _b(d, "exploitation", false))
 	# AUTO du skieur (touche X du PC en mode skieur) : compteur
