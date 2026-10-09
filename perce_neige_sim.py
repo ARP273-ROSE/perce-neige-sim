@@ -2203,6 +2203,7 @@ class Physics:
                     "SURVITESSE — aucun filet en Défi. Freinez !",
                     "warn",
                 )
+                _pique_journal(st, SURVITESSE_LIGNE_QUIPS)
         elif v_abs > 1.20 * V_MAX and tr.overspeed_level < 3:
             tr.overspeed_level = 3
             tr.overspeed_tripped = True
@@ -2226,6 +2227,7 @@ class Physics:
                 "FREIN PARACHUTE ! déclenchement centrifuge mécanique (+20 %).",
                 "alarm",
             )
+            _pique_journal(st, SURVITESSE_LIGNE_QUIPS)
         elif v_abs > 1.12 * V_MAX and tr.overspeed_level < 2:
             tr.overspeed_level = 2
             tr.overspeed_tripped = True
@@ -2243,6 +2245,7 @@ class Physics:
                 "SURVITESSE +12 % ! frein de secours fermé automatiquement.",
                 "alarm",
             )
+            _pique_journal(st, SURVITESSE_LIGNE_QUIPS)
         elif v_abs > 1.10 * V_MAX and tr.overspeed_level < 1:
             tr.overspeed_level = 1
             tr.overspeed_tripped = True
@@ -2260,6 +2263,7 @@ class Physics:
                 "SURVITESSE ! frein de service + urgence engagés.",
                 "alarm",
             )
+            _pique_journal(st, SURVITESSE_LIGNE_QUIPS)
         # --- Chaînes de sécurité automatiques (audit physique 2026-07-23).
         # La surveillance réelle d'un funiculaire ne laisse JAMAIS rouler
         # un défaut grave : chaque chaîne ci-dessous déclenche l'arrêt
@@ -3332,11 +3336,19 @@ try:
     REVERSE_QUIPS = REVERSE_QUIPS + list(_pa.REVERSE)
     DOORS_OPEN_QUIPS = DOORS_OPEN_QUIPS + list(_pa.DOORS_OPEN)
     CRASH_LENT_QUIPS: list[tuple[str, str]] = list(_pa.CRASH_LENT)
+    DEPART_SAUVAGE_QUIPS: list[tuple[str, str]] = list(getattr(_pa, "DEPART_SAUVAGE", []))
+    OUVERTURE_EN_LIGNE_QUIPS: list[tuple[str, str]] = list(getattr(_pa, "OUVERTURE_EN_LIGNE", []))
+    SURVITESSE_LIGNE_QUIPS: list[tuple[str, str]] = list(getattr(_pa, "SURVITESSE_LIGNE", []))
+    SURVITESSE_ARRIVEE_QUIPS: list[tuple[str, str]] = list(getattr(_pa, "SURVITESSE_ARRIVEE", []))
     CRASH_VIOLENT_QUIPS: list[tuple[str, str]] = list(_pa.CRASH_VIOLENT)
     for _tier, _liste in _pa.REVIEWS.items():
         PAX_REVIEWS[_tier] = PAX_REVIEWS.get(_tier, []) + [
             (q, (vo or fr), fr, en) for (q, vo, fr, en) in _liste]
 except Exception:                   # banque absente : les listes de base suffisent
+    DEPART_SAUVAGE_QUIPS = []
+    OUVERTURE_EN_LIGNE_QUIPS = []
+    SURVITESSE_LIGNE_QUIPS = []
+    SURVITESSE_ARRIVEE_QUIPS = []
     CRASH_LENT_QUIPS = []
     CRASH_VIOLENT_QUIPS = []
 
@@ -3354,6 +3366,13 @@ def _tirer(liste: list):
     vus.append(i)
     del vus[:max(0, len(vus) - len(liste) // 2)]
     return liste[i]
+
+
+def _pique_journal(st: "GameState", liste: list) -> None:
+    """Une pique au journal (rouge), tirée sans répétition rapprochée."""
+    q = _tirer(liste)
+    if q:
+        add_event(st, "doors_quip", q[1], q[0], "alarm")
 
 
 def _trigger_crash(st: GameState, speed: float, kind: str = "buffer") -> None:
@@ -5419,9 +5438,8 @@ class SoundSystem:
                 req = urllib.request.Request(
                     MUSIQUE_URL + nom,
                     headers={"User-Agent": "PerceNeigeSimulator/" + VERSION})
-                from contexte_tls import contexte as _contexte_tls
-                ctx = _contexte_tls()
-                with urllib.request.urlopen(req, timeout=60, context=ctx) as r, open(tmp, "wb") as f:
+                from contexte_tls import urlopen as _urlopen_tls
+                with _urlopen_tls(req, timeout=60) as r, open(tmp, "wb") as f:
                     shutil.copyfileobj(r, f)
                 taille = tmp.stat().st_size
                 if taille > 100_000:
@@ -7133,6 +7151,9 @@ class GameWidget(QWidget):
         Qt.Key.Key_N, Qt.Key.Key_L, Qt.Key.Key_J, Qt.Key.Key_C,
         # X : exploitation auto, aussi en skieur (09/10/2026)
         Qt.Key.Key_X,
+        # R : nouveau voyage après un accident, sans quitter le skieur
+        # (retour d'utilisateur, 09/10/2026 : « la touche R est inopérante en mode skieur »)
+        Qt.Key.Key_R,
     ))
     # Bits des touches de marche envoyées à la 3D (skieur_joueur.gd)
     SKIEUR_MARCHE = (
@@ -7430,7 +7451,10 @@ class GameWidget(QWidget):
                 or st.finished or st.departure_buzzer_remaining > 0.0
                 or self.auto_ops.enabled or tr.autopilot):
             return
-        if tr.doors_open or tr.doors_timer > 0.0:
+        # Défi : PRÊT armé portes ouvertes = départ sauvage, comme Z (retour d'utilisateur,
+        # 09/10/2026 : « en mode défi on ne peut pas partir les portes
+        # ouvertes même si PRÊT est activé » — Z n'est plus sur le pupitre)
+        if (tr.doors_open or tr.doors_timer > 0.0) and st.run_mode != "challenge":
             return
         if (tr.emergency or tr.emergency_ramp > 0.0 or tr.electric_stop
                 or tr.dead_man_fault or st.panne_active
@@ -8654,6 +8678,18 @@ class GameWidget(QWidget):
             # Pique sarcastique une fois par trajet quand on ROULE portes
             # ouvertes en mode Défi (retour d'essai : commentaire au fait
             # de conduire portes ouvertes).
+            # Arrivée trop rapide : il faudrait plus de 0,9 m/s² pour
+            # s'arrêter au repère (retour d'utilisateur, 09/10/2026) — une
+            # pique par trajet
+            if (st.trip_started and not st.finished
+                    and not getattr(self, "_arrivee_quip_played", False)
+                    and 0.0 < dist_remain_welcome < 150.0
+                    and abs(tr_welcome.v) > 3.0
+                    and tr_welcome.v * tr_welcome.v > 2.0 * 0.9 * dist_remain_welcome):
+                _pique_journal(st, SURVITESSE_ARRIVEE_QUIPS)
+                self._arrivee_quip_played = True
+            if not st.trip_started:
+                self._arrivee_quip_played = False
             if (st.run_mode == "challenge" and not self._doors_quip_played
                     and tr_welcome.doors_open and abs(tr_welcome.v) > 3.0):
                 _dq = _tirer(DOORS_OPEN_QUIPS)
@@ -9428,6 +9464,11 @@ class GameWidget(QWidget):
                 new_cmd = not tr.doors_cmd
                 if new_cmd:
                     self.begin_doors_open(tr)
+                    # Défi : ouverture en pleine voie, en roulant — une pique
+                    if chaos_doors and abs(tr.v) >= 2.0 and not at_station \
+                            and OUVERTURE_EN_LIGNE_QUIPS:
+                        _q = _tirer(OUVERTURE_EN_LIGNE_QUIPS)
+                        add_event(st, "doors_quip", _q[1], _q[0], "alarm")
                     if st.finished and at_station:
                         self.debarquement()
                     add_event(st, "doors",
@@ -9757,6 +9798,11 @@ class GameWidget(QWidget):
                     m_fr = ("DÉPART SAUVAGE — portes encore ouvertes, ça "
                             "embarque !")
                 add_event(st, "dep_unsafe", m_en, m_fr, "alarm")
+                # pique (retour d'utilisateur, 09/10/2026 : « quelques petits commentaires
+                # sarcastiques adaptés à mes bêtises »)
+                if tr.doors_open and DEPART_SAUVAGE_QUIPS:
+                    _q = _tirer(DEPART_SAUVAGE_QUIPS)
+                    add_event(st, "doors_quip", _q[1], _q[0], "alarm")
             # Traction interlocks : don't fire the buzzer / doors chime
             # if the train physically can't accelerate once the buzzer
             # ends. Buzzing at the platform while the train stays put

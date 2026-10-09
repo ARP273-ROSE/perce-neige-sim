@@ -18,6 +18,25 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.19.9** — retours d'utilisateur du 09/10/2026 (nuit, suite).
+- **Musique sous Windows** : « certificate verify failed: certificate has
+  expired » alors que toute la chaîne du serveur est valide (Let's Encrypt
+  YE2 → Root YE → ISRG Root X2) — le magasin de Windows proposait un chemin
+  par un certificat périmé. Tous les téléchargements (musique, mises à jour,
+  rapports) réessaient avec le seul magasin certifi embarqué, jamais sans
+  vérification (`contexte_tls.urlopen`, `test_tls_repli.py`).
+- **R (nouveau voyage) en mode skieur**, au PC comme dans la vue 3D ; plus
+  besoin de quitter le skieur après un accident.
+- **Trait orange du tunnel et noms des lieux** : plus visibles en mode
+  skieur (vue extérieure de conduite seulement).
+- **Défi** : PRÊT armé portes ouvertes donne le départ sauvage (le bouton
+  DÉPART n'est plus sur le pupitre) ; ouverture des portes en pleine voie
+  confirmée (`test_defi_portes.py`).
+- **Nouvelles piques** : départ sauvage portes ouvertes, portes ouvertes en
+  pleine voie, survitesse en ligne (à chaque palier), arrivée trop rapide en
+  gare (s'il faut plus de 0,9 m/s² pour s'arrêter au repère, une fois par
+  trajet ; aucune à une arrivée normale, vérifié sous pilote automatique).
+
 **v1.19.8** — retours du 09/10/2026 (nuit).
 - **Passer d'une voiture à l'autre en marchant** (« sans passer par une
   faille spatio-temporelle ») : baie d'intercirculation de 0,90 × 2,00 m
