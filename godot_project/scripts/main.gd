@@ -857,7 +857,50 @@ func _build_hud() -> void:
 # Boucle principale — physique à pas fixe 60 Hz
 # ---------------------------------------------------------------------------
 
+var _dep_sauvage_prec: bool = false
+
+
+## Défi : pique au départ sauvage portes ouvertes (09/10/2026, « quelques
+## petits commentaires sarcastiques adaptés à mes bêtises »).
+func _pique_depart_sauvage() -> void:
+	if physics == null or client_mode:
+		return
+	var d: bool = physics.depart_portes_ouvertes
+	if d and not _dep_sauvage_prec:
+		_flash(PNQuips.pique("DEPART_SAUVAGE", challenge.lang if challenge != null else "fr"))
+	_dep_sauvage_prec = d
+
+
+var _survitesse_prec: int = 0
+var _arrivee_pique: bool = false
+
+
+## Survitesse en ligne (chaque nouveau palier) et arrivée trop rapide en gare
+## (il faudrait plus de 0,9 m/s² pour s'arrêter au repère) : une pique
+## (retour d'utilisateur, 09/10/2026).
+func _piques_survitesse() -> void:
+	if physics == null or client_mode:
+		return
+	var lang: String = challenge.lang if challenge != null else "fr"
+	if physics.overspeed_level > _survitesse_prec:
+		_flash(PNQuips.pique("SURVITESSE_LIGNE", lang))
+	_survitesse_prec = physics.overspeed_level
+	if not physics.trip_started:
+		_arrivee_pique = false
+		return
+	if physics.finished or _arrivee_pique:
+		return
+	var reste: float = (PNConstants.STOP_S - physics.s) if physics.direction > 0 \
+		else (physics.s - PNConstants.START_S)
+	var v: float = absf(physics.v)
+	if reste > 0.0 and reste < 150.0 and v > 3.0 and v * v > 2.0 * 0.9 * reste:
+		_arrivee_pique = true
+		_flash(PNQuips.pique("SURVITESSE_ARRIVEE", lang))
+
+
 func _process(delta: float) -> void:
+	_pique_depart_sauvage()
+	_piques_survitesse()
 	if _paused:
 		return
 
@@ -972,7 +1015,10 @@ func _process(delta: float) -> void:
 		relief.visible = (vue_ext or (mode_skieur and not _skieur_en_tunnel())) and relief.pret
 		if domaine != null:
 			domaine.visible = mode_skieur and relief.visible
-		relief.montrer_trait(vue_ext)
+		# trait du tunnel et noms des lieux : vue extérieure de conduite
+		# seulement — pas pour le skieur (retour d'utilisateur, 09/10/2026 : « en mode
+		# skieur on voit le trait orange du trajet du funi »)
+		relief.montrer_trait(vue_ext and not mode_skieur)
 		# le tunnel se voit à travers le relief opaque (trait ambre) ; plus
 		# de silhouette des rames (« enlève complètement cette silhouette
 		# jaune, ça laisse des traces », 07/10/2026)
@@ -1391,7 +1437,15 @@ func _unhandled_input(event: InputEvent) -> void:
 		if mode_skieur and event.keycode == KEY_U:     # U : issUe de secours (I = inverser le sens)
 			evacuer()
 			return
-		if mode_skieur and not (event.keycode in [KEY_F1, KEY_F2, KEY_F3, KEY_J, KEY_C]):
+		# R : nouveau voyage après un accident, aussi en skieur (retour d'utilisateur,
+		# 09/10/2026 : « il faut quitter le mode skieur pour appuyer dessus ») ;
+		# vue 3D du PC : c'est le PC qui relance
+		if mode_skieur and event.keycode == KEY_R and client_mode:
+			if state_receiver != null:
+				state_receiver.envoyer({"cle": "R", "enfonce": true})
+				state_receiver.envoyer({"cle": "R", "enfonce": false})
+			return
+		if mode_skieur and not (event.keycode in [KEY_F1, KEY_F2, KEY_F3, KEY_J, KEY_C, KEY_R]):
 			return                # les lettres font marcher le skieur
 		if event.keycode == KEY_F1 and fault_manager != null:
 			fault_manager.trigger_random()
@@ -1533,7 +1587,13 @@ func _view_zoom(mr_view: bool, factor: float) -> void:
 func toggle_doors() -> void:
 	if client_mode or physics == null:
 		return
+	var ouvrait: bool = not physics.doors_open
+	var v0: float = absf(physics.v)
 	var msg: String = physics.toggle_doors()
+	# Défi : ouverture en pleine voie, en roulant — une pique (09/10/2026)
+	if msg == "" and ouvrait and physics.doors_open and v0 >= 2.0 \
+			and physics.challenge_mode and not physics.at_station():
+		_flash(PNQuips.pique("OUVERTURE_EN_LIGNE", challenge.lang if challenge != null else "fr"))
 	if msg != "":
 		print("[Portes] " + msg)
 		_flash(msg)

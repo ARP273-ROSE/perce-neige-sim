@@ -533,3 +533,68 @@ SKIEUR_SORTIE = [
     ("Vous voilà sur la neige, sans remontée. Les skis, eux, sont ravis.",
      "There you are on the snow, without a lift. Your skis are delighted."),
 ]
+
+# Défi : départ sauvage portes ouvertes (09/10/2026)
+DEPART_SAUVAGE = [
+    ("Départ portes ouvertes : les derniers passagers montent… en courant.",
+     "Departing with the doors open: the last passengers are boarding… at a sprint."),
+    ("Le quai vous dit au revoir. Une partie des passagers aussi.",
+     "The platform waves goodbye. So do some of the passengers."),
+    ("Embarquement express : la rame part, le quai suit comme il peut.",
+     "Express boarding: the train leaves, the platform keeps up as best it can."),
+    ("Vous avez inventé le funiculaire sans attente. Et sans portes.",
+     "You've invented the funicular with no waiting. And no doors."),
+    ("Les consignes de sécurité ? On les lira à l'arrivée.",
+     "Safety instructions? We'll read them on arrival."),
+    ("Un skieur est resté à moitié sur le quai. L'autre moitié a un forfait.",
+     "One skier stayed half on the platform. The other half has a pass."),
+]
+
+# Défi : portes ouvertes en pleine voie, à vitesse (09/10/2026)
+OUVERTURE_EN_LIGNE = [
+    ("Portes ouvertes à pleine vitesse : le courant d'air du siècle.",
+     "Doors opened at full speed: the draught of the century."),
+    ("Ouvrir en plein tunnel ? Les parois du tunnel saluent les passagers.",
+     "Opening mid-tunnel? The tunnel walls wave hello to the passengers."),
+    ("Prochain arrêt : nulle part. Les portes sont pourtant ouvertes.",
+     "Next stop: nowhere. The doors are open anyway."),
+    ("Un bonnet vient de quitter la rame. Il ne reviendra pas.",
+     "A beanie just left the train. It won't be coming back."),
+    ("La roche défile à 12 m/s à 1 mètre des passagers. Ambiance garantie.",
+     "Rock rushing past at 12 m/s, one metre from the passengers. Atmosphere guaranteed."),
+    ("Vous cherchiez la sortie de secours ? Elle n'est pas ici.",
+     "Looking for the emergency exit? It isn't here."),
+]
+
+# Survitesse en ligne (09/10/2026, retour d'utilisateur : « des piques quand
+# je suis en survitesse en route ou à l'arrivée en gare »)
+SURVITESSE_LIGNE = [
+    ("12 m/s, c'est une limite. Pas un objectif à dépasser.",
+     "12 m/s is a limit. Not a target to beat."),
+    ("Le contrôle de survitesse vient de faire le travail du conducteur.",
+     "The overspeed trip just did the driver's job."),
+    ("Survitesse : les galets du tunnel chantent faux.",
+     "Overspeed: the tunnel rollers are singing out of tune."),
+    ("Les passagers comptent les mètres. Vous, apparemment, non.",
+     "The passengers are counting the metres. You, apparently, aren't."),
+    ("Un funiculaire, pas un TGV. Le Perce-Neige n'a pas de pantographe.",
+     "A funicular, not a bullet train. The Perce-Neige has no pantograph."),
+    ("Belle accélération. Le câble, lui, aurait préféré un préavis.",
+     "Nice acceleration. The cable would have liked some notice."),
+]
+
+# Arrivée en gare trop vite (il faut plus de 0,9 m/s² pour s'arrêter au repère)
+SURVITESSE_ARRIVEE = [
+    ("Le quai approche. Il approche même très vite.",
+     "The platform is approaching. Very quickly, in fact."),
+    ("À cette vitesse, l'arrêt au repère va être… sportif.",
+     "At this speed, stopping on the mark will be… athletic."),
+    ("Les passagers debout se cramponnent. Les assis aussi.",
+     "The standing passengers are holding on. So are the seated ones."),
+    ("Arrivée façon atterrissage court. Sans inverseurs de poussée.",
+     "Short-field landing style. Without thrust reversers."),
+    ("Le butoir vous regarde arriver avec inquiétude.",
+     "The buffer stop watches you coming, worried."),
+    ("Ralentir avant la gare : un usage ancien, mais qui a fait ses preuves.",
+     "Slowing down before the station: an old custom, but a proven one."),
+]
