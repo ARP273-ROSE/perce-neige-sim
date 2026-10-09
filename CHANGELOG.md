@@ -18,6 +18,16 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.19.10** — retour d'utilisateur du 09/10/2026 (photos de la porte).
+- **Porte de la piste Génépy** (gare haute, en bas à gauche) refaite
+  d'après les photos : volet roulant bleu à lames horizontales et trois
+  hublots ovales cerclés de noir, qui monte en s'enroulant au sommet de
+  l'ouverture (coffre côté passage) ; encadrement de tôle blanche en
+  retrait, palier en caillebotis devant (les marches d'un bon mètre
+  dessous sont enfouies l'hiver), boîtier « appuyer sur le bouton pour
+  ouvrir la porte » à droite, projecteur au-dessus ; plus large que haute
+  (2,40 m × 2,25 m, `StationsBuilder.PORTE_GENEPY`).
+
 **v1.19.9** — retours d'utilisateur du 09/10/2026 (nuit, suite).
 - **Musique sous Windows** : « certificate verify failed: certificate has
   expired » alors que toute la chaîne du serveur est valide (Let's Encrypt
