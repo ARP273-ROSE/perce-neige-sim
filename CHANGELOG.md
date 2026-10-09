@@ -7,6 +7,37 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.18.9** — « Même ici, ton panneau de conduite est pixélisé et pas net ;
+un truc vectoriel et plus précis ? Pourtant j'ai une config de la mort et
+ce n'est pas un jeu de l'espace » (09/10/2026, 32″ 4K). Exact, et ça ne
+dépend pas de la carte : les étiquettes du pupitre sont des textures
+rendues à 12-20 pixels de haut puis étirées sur 6-10 mm et filtrées en
+biais ; l'écran Pro-face était rendu en 960 pixels de large. Maintenant :
+étiquettes rendues 6 fois plus fin (même taille sur le pupitre), filtrage
+anisotrope, écran Pro-face rendu en 4× (1920 pixels ; 2× sur le web),
+filtrage anisotrope du projet à 8×. Coût nul en pratique.
+- Musiques des gares sur PC : « la première fois, tu mets que tu la
+  récupères mais elle ne se joue pas, il faut ressortir et rerentrer » → le
+  flux direct ne démarrait pas sur le PC ; on ne joue plus que le fichier
+  local, lancé automatiquement dès que le téléchargement est complet (le
+  journal dit « téléchargement de gare_basse.mp3 (jouée dès qu'elle est
+  là) », puis le chemin local). « Je suis sorti et rentré, toujours rien » :
+  l'échec du téléchargement était silencieux ; il est maintenant écrit dans
+  le journal (« Musique : téléchargement de … impossible — <raison> »),
+  avec le contexte TLS de la mise à jour automatique. Gare basse un peu
+  plus fort (0,30 au lieu de 0,22).
+- « Le mode boucle que j'active en skieur se désactive si je quitte le mode
+  skieur pour changer de vue, il ne faudrait pas » → la BOUCLE continue en
+  coulisse : en quittant la vue skieur, le skieur reste actif et visible
+  (on peut le regarder depuis la vue extérieure), les portes automatiques,
+  l'attente de l'exploitation et les garde-fous continuent ; seuls la vue,
+  le HUD et l'écoute reviennent à la cabine. En revenant, on le retrouve où
+  il en est. CONDUIRE ou BOUCLE à nouveau l'arrêtent. Sur le PC, la 3D
+  signale la boucle en coulisse (6e champ de `skieur_etat`) pour que
+  l'exploitation continue de l'attendre. Vérifié : les six bancs du skieur
+  verts, dont la boucle avec sortie puis retour de la vue en plein trajet ;
+  tests PC 106 ; captures 1440p du pupitre.
+
 **v1.18.8** — Diagnostic de la session distante sur le PC du père (Ryzen 7
 5700G, Vega intégrée, Acer 27″ 1080p) : rendu natif, pas d'étirement,
 textes de 3 à 5 pixels (d'où la LOUPE de la 1.18.7), mais aussi « crénelage
