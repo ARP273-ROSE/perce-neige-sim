@@ -208,19 +208,11 @@ func _construire_apparence() -> void:
 	_image_schuss = SkieurMesh.passager_squelette(SkieurMesh.squelette_schuss(), "libre", "casque", mat)
 	_image_chasse = SkieurMesh.passager_squelette(SkieurMesh.squelette_chasse(), "libre", "casque", mat)
 	_skis_pieds = SkieurMesh.skis_aux_pieds(mat)
-	_skis_pieds_v = SkieurMesh.skis_aux_pieds(mat, deg_to_rad(22.0))
+	_skis_pieds_v = SkieurMesh.skis_aux_pieds(mat, SkieurMesh.CHASSE_ANGLE)
 	_batons = _mm(SkieurMesh.baton(mat), Color(0.55, 0.30, 0.80, 1.0))
 	_batons.multimesh.instance_count = 2
+	_poser_batons(0)
 	for k in range(2):
-		var sx: float = -1.0 if k == 0 else 1.0
-		var main_p: Vector3 = Vector3(sx * 0.27, 0.945, -0.31)
-		var pointe: Vector3 = Vector3(sx * 0.36, 0.0, 0.22)
-		var ax: Vector3 = main_p - pointe
-		var y: Vector3 = ax.normalized()
-		var x: Vector3 = (Vector3.RIGHT - y * y.x).normalized()
-		var z: Vector3 = x.cross(y)
-		_batons.multimesh.set_instance_transform(k, Transform3D(
-			Basis(x, y * (ax.length() / SkieurMesh.LONG_BATON), z), pointe))
 		_batons.multimesh.set_instance_custom_data(k, Color(0.55, 0.30, 0.80, 1.0))
 	_batons.visible = false
 
@@ -325,7 +317,30 @@ func _poser_posture(p: int) -> void:
 	_posture = p
 	_corps.multimesh.mesh = [_image_glisse, _image_schuss, _image_chasse][p]
 	_skis.multimesh.mesh = _skis_pieds_v if p == 2 else _skis_pieds
-	_batons.visible = p != 1             # en schuss, les bâtons sous les bras : cachés
+	_poser_batons(p)
+
+
+## Bâtons selon la posture : en glisse et en chasse-neige plantés de part et
+## d'autre ; en SCHUSS, poignées dans les mains devant le visage, bâtons
+## serrés sous les bras, pointes vers l'arrière et un peu en l'air (Kevin,
+## 09/10/2026 : « en schuss les bâtons, c'est pas ça »).
+func _poser_batons(p: int) -> void:
+	for k in range(2):
+		var sx: float = -1.0 if k == 0 else 1.0
+		var main_p: Vector3 = Vector3(sx * 0.27, 0.945, -0.31)
+		var pointe: Vector3 = Vector3(sx * 0.36, 0.0, 0.22)
+		if p == 1:
+			main_p = Vector3(sx * 0.15, 0.70, -0.46)
+			pointe = Vector3(sx * 0.24, 0.86, 0.66)
+		elif p == 2:
+			main_p = Vector3(sx * 0.32, 0.84, -0.15)
+			pointe = Vector3(sx * 0.52, 0.0, 0.30)
+		var ax: Vector3 = main_p - pointe
+		var y: Vector3 = ax.normalized()
+		var x: Vector3 = (Vector3.RIGHT - y * y.x).normalized()
+		var z: Vector3 = x.cross(y)
+		_batons.multimesh.set_instance_transform(k, Transform3D(
+			Basis(x, y * (ax.length() / SkieurMesh.LONG_BATON), z), pointe))
 
 
 ## Tombé : skis déchaussés, à terre sur le dos CHUTE_S secondes.

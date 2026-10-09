@@ -376,15 +376,15 @@ static func squelette_chasse() -> Dictionary:
 	var s: Dictionary = squelette_glisse()
 	for c in ["g", "d"]:
 		var sx: float = -1.0 if c == "g" else 1.0
-		s["hanche_" + c] = Vector3(sx * 0.11, 0.80, 0.04)
-		s["genou_" + c] = Vector3(sx * 0.14, 0.48, -0.08)
-		s["cheville_" + c] = Vector3(sx * 0.17, 0.11, 0.03)
+		s["hanche_" + c] = Vector3(sx * 0.12, 0.80, 0.04)
+		s["genou_" + c] = Vector3(sx * 0.19, 0.47, -0.10)
+		s["cheville_" + c] = Vector3(sx * CHASSE_X, 0.11, 0.03)
 		s["coude_" + c] = Vector3(sx * 0.27, 1.02, 0.02)
 		s["poignet_" + c] = Vector3(sx * 0.31, 0.88, -0.10)
 		s["main_" + c] = Vector3(sx * 0.32, 0.84, -0.15)
 	# les pieds pivotent comme les skis (pointes rentrées, 22°) — Kevin,
 	# 08/10/2026 : « le chasse-neige, les skis le font mais pas les pieds »
-	s["chasse"] = deg_to_rad(22.0)
+	s["chasse"] = CHASSE_ANGLE
 	return s
 
 
@@ -654,6 +654,12 @@ static func skis(mat: Material) -> ArrayMesh:
 ## que skis() ; chaussure centrée à 0,80 m de la queue, entre la talonnière
 ## (0,64 m) et la butée (0,965 m).
 const CENTRE_CHAUSSURE: float = 0.80
+## Chasse-neige (09/10/2026, « les skis le font mais pas les pieds et les
+## jambes ») : chaque ski pivote autour de SA CHAUSSURE (avant : autour de
+## la spatule, ce qui écartait les skis de 34 cm de plus que les pieds) ;
+## pieds à ±0,30 m, spatules presque jointes, jambes en A, genoux rentrés.
+const CHASSE_ANGLE: float = 0.31          # rad (≈ 18°)
+const CHASSE_X: float = 0.30              # m, demi-écart des pieds
 ## `chasse` : angle (rad) du chasse-neige — chaque ski pivote autour de sa
 ## spatule, les talons s'écartent, les pieds sont plus larges.
 static func skis_aux_pieds(mat: Material, chasse: float = 0.0) -> ArrayMesh:
@@ -665,8 +671,8 @@ static func skis_aux_pieds(mat: Material, chasse: float = 0.0) -> ArrayMesh:
 	var zc: float = -0.05                 # milieu de la chaussure (repère du skieur)
 	b.lod = 2
 	for sx in [-1.0, 1.0]:
-		var xc: float = sx * (0.10 if chasse == 0.0 else 0.17)
-		var piv: Vector3 = Vector3(xc, 0.0, zc - (1.70 - CENTRE_CHAUSSURE))   # la spatule
+		var xc: float = sx * (0.10 if chasse == 0.0 else CHASSE_X)
+		var piv: Vector3 = Vector3(xc, 0.0, zc)        # la chaussure
 		var rot: Basis = Basis(Vector3.UP, sx * chasse)
 		var tourne: Callable = func(p: Vector3) -> Vector3:
 			return piv + rot * (p - piv)

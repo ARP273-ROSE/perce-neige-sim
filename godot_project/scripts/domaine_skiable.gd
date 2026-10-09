@@ -126,8 +126,9 @@ func construire(r: ReliefBuilder) -> void:
 	print("[Domaine] %d jalons, %d panneaux, %d fantômes" % [n, n_panneaux, FantomesDonnees.DESCENTES.size()])
 
 
-## Panneaux ronds : poteaux et disques en MultiMesh par couleur, le texte en
-## Label3D (deux par panneau), visibles à 350 m.
+## Panneaux ronds : poteaux et disques en MultiMesh par couleur ; face
+## dessinée par piste (PanneauPiste : nom en arc, TIGNES en arc) et numéro de
+## balise en Label3D ; visibles à 350 m.
 func _construire_panneaux() -> void:
 	var poteau: CylinderMesh = CylinderMesh.new()
 	poteau.top_radius = 0.055
@@ -155,12 +156,13 @@ func _construire_panneaux() -> void:
 	m_pot.albedo_color = Color(0.35, 0.36, 0.38)
 	m_pot.roughness = 0.7
 	var par_couleur: Dictionary = {}          # couleur → [[xf poteau, xf disque], …]
-	var textes: Array = []                    # [position, normale, nom, couleur]
+	var textes: Array = []                    # [position, normale, nom, couleur, n° de balise, piste]
 	for ip in range(PistesDonnees.PISTES.size()):
 		var c: int = PistesDonnees.PISTES[ip][1]
 		var nom: String = PistesDonnees.PISTES[ip][0]
 		if c < 0 or nom == "":
 			continue
+		var numero: int = 0
 		var pts: PackedVector2Array = _axes[ip]
 		var reste: float = 12.0
 		for i in range(pts.size() - 1):
@@ -187,7 +189,8 @@ func _construire_panneaux() -> void:
 						Transform3D(Basis.IDENTITY, pied + Vector3.UP * ((H_POTEAU - ENFONCE) * 0.5)),
 						Transform3D(base * Basis(Vector3.RIGHT, PI * 0.5), pied + Vector3.UP * (H_POTEAU + R_DISQUE)),
 						Transform3D(base * Basis(Vector3.RIGHT, PI * 0.5), pied + Vector3.UP * (H_POTEAU + R_DISQUE) - nz * 0.012)])
-					textes.append([pied + Vector3.UP * (H_POTEAU + R_DISQUE), nz, nom, c])
+					numero += 1
+					textes.append([pied + Vector3.UP * (H_POTEAU + R_DISQUE), nz, nom, c, numero, ip])
 				u += PAS_PANNEAU
 			reste = u - l
 	for c in par_couleur:
@@ -218,30 +221,94 @@ func _construire_panneaux() -> void:
 	var racine: Node3D = Node3D.new()
 	racine.name = "PanneauxTextes"
 	add_child(racine)
+	# faces : une texture par piste (nom en arc + TIGNES), posée en quad sur
+	# chaque panneau de la piste ; au centre, le numéro de balise (Label3D)
+	var par_piste: Dictionary = {}            # ip → [nom, couleur, [Transform3D…]]
 	for e in textes:
 		var pos: Vector3 = e[0]
 		var nz: Vector3 = e[1]
 		var nx: Vector3 = Vector3.UP.cross(nz).normalized()
-		var nom: String = e[2]
-		for k in range(2):
-			var l: Label3D = Label3D.new()
-			l.text = "TIGNES" if k == 0 else nom.to_upper()
-			l.font_size = 48 if k == 0 else 72
-			# le nom tient dans le disque (0,78 m) quelle que soit sa longueur
-			var larg: float = float(maxi(nom.length(), 4)) * 0.58 * 72.0
-			l.pixel_size = 0.0022 if k == 0 else minf(0.0036, 0.78 / larg)
-			l.modulate = Color.WHITE
-			l.outline_modulate = Color(0.0, 0.0, 0.0, 0.85)
-			l.outline_size = 8
-			l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-			l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-			l.alpha_cut = Label3D.ALPHA_CUT_OPAQUE_PREPASS
-			l.visibility_range_end = 350.0
-			l.layers = 1 | Cabin.LAYER_VOIE
-			l.transform = Transform3D(Basis(nx, Vector3.UP, nz),
-				pos + nz * 0.025 + Vector3.UP * (0.22 if k == 0 else -0.08))
-			racine.add_child(l)
+		var ip2: int = e[5]
+		if not par_piste.has(ip2):
+			par_piste[ip2] = [e[2], e[3], []]
+		(par_piste[ip2][2] as Array).append(Transform3D(Basis(nx, Vector3.UP, nz), pos + nz * 0.021))
+		var l: Label3D = Label3D.new()
+		l.text = str(e[4])
+		l.font_size = 160
+		l.pixel_size = 0.0028
+		l.modulate = Color.WHITE
+		l.outline_size = 0
+		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+		l.alpha_cut = Label3D.ALPHA_CUT_OPAQUE_PREPASS
+		l.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+		l.visibility_range_end = 350.0
+		l.layers = 1 | Cabin.LAYER_VOIE
+		l.transform = Transform3D(Basis(nx, Vector3.UP, nz), pos + nz * 0.026)
+		racine.add_child(l)
 		n_panneaux += 1
+	if DisplayServer.get_name() != "headless":
+		_faces_panneaux.call_deferred(par_piste)
+
+
+## Dessine les faces (une SubViewport par piste, rendue une fois, copiée en
+## texture puis libérée) et les pose en MultiMesh, une par piste.
+func _faces_panneaux(par_piste: Dictionary) -> void:
+	var px: int = 192 if OS.has_feature("web") else 256
+	var quad: QuadMesh = QuadMesh.new()
+	quad.size = Vector2(2.0 * (R_DISQUE + 0.06), 2.0 * (R_DISQUE + 0.06))
+	var lot: Array = []
+	for ip in par_piste:
+		var sv: SubViewport = SubViewport.new()
+		sv.size = Vector2i(px, px)
+		sv.transparent_bg = true
+		sv.disable_3d = true
+		sv.render_target_update_mode = SubViewport.UPDATE_ONCE
+		var f: PanneauPiste = PanneauPiste.new()
+		f.nom = String(par_piste[ip][0])
+		f.couleur = COULEURS[int(par_piste[ip][1])]
+		f.size = Vector2(px, px)
+		sv.add_child(f)
+		add_child(sv)
+		lot.append([ip, sv])
+		if lot.size() >= 24:
+			await _poser_faces(lot, par_piste, quad)
+			lot = []
+	if not lot.is_empty():
+		await _poser_faces(lot, par_piste, quad)
+
+
+func _poser_faces(lot: Array, par_piste: Dictionary, quad: QuadMesh) -> void:
+	await RenderingServer.frame_post_draw
+	await RenderingServer.frame_post_draw
+	for e in lot:
+		var sv: SubViewport = e[1]
+		var img: Image = sv.get_texture().get_image()
+		sv.queue_free()
+		if img == null or img.is_empty():
+			continue
+		img.generate_mipmaps()
+		var m: StandardMaterial3D = StandardMaterial3D.new()
+		m.albedo_texture = ImageTexture.create_from_image(img)
+		m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
+		m.alpha_scissor_threshold = 0.5
+		m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+		m.roughness = 0.5
+		var xs: Array = par_piste[e[0]][2]
+		var mm: MultiMesh = MultiMesh.new()
+		mm.transform_format = MultiMesh.TRANSFORM_3D
+		mm.mesh = quad
+		mm.instance_count = xs.size()
+		for i in range(xs.size()):
+			mm.set_instance_transform(i, xs[i])
+		var mi: MultiMeshInstance3D = MultiMeshInstance3D.new()
+		mi.name = "PanneauxFaces"
+		mi.multimesh = mm
+		mi.material_override = m
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		mi.visibility_range_end = 350.0
+		mi.layers = 1 | Cabin.LAYER_VOIE
+		add_child(mi)
 
 
 ## Piste sous le skieur : [nom, couleur] ("", −1 hors piste). Recalculé

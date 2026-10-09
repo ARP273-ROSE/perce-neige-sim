@@ -5153,6 +5153,7 @@ class SoundSystem:
         if abs(sk_goal - self._sk_mix) < 0.002:
             self._sk_mix = sk_goal
         cabine *= 1.0 - self._sk_mix
+        self._cabine_courant = cabine
         overall *= cabine
         try:
             self._fx_audio.setVolume(0.70 * (cabine if self._fx_oneshot_active else 1.0))
@@ -5694,8 +5695,13 @@ class SoundSystem:
             if self._fx_loaded_path != spath:
                 self._fx_player.setSource(QUrl.fromLocalFile(spath))
                 self._fx_loaded_path = spath
-            self._fx_player.play()
+            # son de CABINE : au niveau de la cabine dès la première image —
+            # le skieur dehors l'entendait un instant à plein volume (Kevin,
+            # 09/10/2026 : « quand la décélération passe 1,0 m/s, j'entends
+            # très brièvement l'ambiance de la rame au milieu de rien »)
+            self._fx_audio.setVolume(0.70 * getattr(self, "_cabine_courant", 1.0))
             self._fx_oneshot_active = True
+            self._fx_player.play()
         except Exception:
             pass
 
