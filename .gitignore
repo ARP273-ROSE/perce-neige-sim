@@ -91,3 +91,6 @@ dist_macos/
 
 # musiques d'ambiance des gares (enregistrements : pas dans le dépôt public)
 sons/musique/
+
+# sortie parasite d'un banc lancé avec --mode=normal
+godot_project/--*
