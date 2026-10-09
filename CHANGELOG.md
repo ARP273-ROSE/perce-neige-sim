@@ -7,6 +7,28 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.19.4** — retours du 09/10/2026 (après-midi).
+- « Quand je marche sur les escaliers le long du quai sans les skis, rajoute
+  un claquement sec à chaque pas, à cause des chaussures de ski » → un
+  claquement de coque plastique à chaque pas sur sol dur (quais, escaliers,
+  rames, terrasse, gares ; pas dans la neige) : trois variantes synthétisées
+  (`tools_sons_skieur.py` → `sounds/pas_chaussure_1..3.wav` : clic de talon,
+  résonance de coque 1,1 / 3,2 kHz, petit choc sourd), hauteur légèrement
+  variée, son positionnel.
+- « Si les pistes sont sur le domaine de Val d'Isère, tu mets Val d'Isère
+  sur tes panneaux, pas Tignes » → chaque piste prend la station du tronçon
+  OpenSkiMap le plus proche (`tools_stations_pistes.py` →
+  `stations_pistes.gd` : 198 pistes sur 420 à Val d'Isère — six noms
+  existent dans les deux stations : Face, Glacier, Génépy, Signal…).
+- « En mode skieur, les données sur les écrans de conduite sont figées » →
+  l'écran Pro-face n'était mis à jour qu'en vue cabine de la rame pilotée ;
+  il vit aussi quand le skieur est à bord, dans l'une ou l'autre rame (la
+  rame d'en face affiche SA distance).
+- « Le câble s'enlève avant la rame devant, quand on est en mode skieur dans
+  la rame opposée » → l'attache et le bout de câble jusqu'au premier galet
+  ne sont redessinés qu'à 250 m de la caméra, et cette caméra était toujours
+  la cabine pilotée : en skieur, c'est maintenant là où est le skieur.
+
 **v1.19.3** — « Les panneaux de piste, c'est décroissant vers le bas, et ça ne
 flotte pas en lévitation : sur les piquets de bord de piste, tous les 3
 piquets un panneau au sommet, décroissant vers la plaine » (09/10/2026). Les

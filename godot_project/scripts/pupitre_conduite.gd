@@ -387,7 +387,7 @@ func appuyer(nom: String, enfonce: bool) -> void:
 
 
 ## Met à jour voyants, commandes et écran depuis l'état de la rame.
-func mettre_a_jour(ph: TrainPhysics, dt: float, vehicule: int, ecran_visible: bool) -> void:
+func mettre_a_jour(ph: TrainPhysics, dt: float, vehicule: int, ecran_visible: bool, rame_en_face: bool = false) -> void:
 	if ph == null:
 		return
 	var ouvertes: bool = ph.door_leaves_open or ph.doors_open
@@ -431,7 +431,9 @@ func mettre_a_jour(ph: TrainPhysics, dt: float, vehicule: int, ecran_visible: bo
 	_t_ecran = PERIODE_ECRAN
 	var e: EcranProface = ecran
 	e.vitesse = absf(ph.vitesse_roues())
-	e.distance = PNConstants.distance_compteur(ph.s, ph.direction)
+	# rame d'en face : sa position et son sens à elle (miroir de la poulie)
+	e.distance = PNConstants.distance_compteur(ph.ghost_s_render(), -ph.direction) if rame_en_face \
+		else PNConstants.distance_compteur(ph.s, ph.direction)
 	e.vehicule = vehicule
 	var en_gare: bool = absf(ph.v) < 0.05 and (ph.s < PNConstants.START_S + 3.0
 		or ph.s > PNConstants.STOP_S - 3.0)
