@@ -29,8 +29,8 @@ from PIL import Image, ImageDraw, ImageFilter
 
 # emprise et repère : les mêmes que tools_relief3d.py
 LAT_O, LON_O = 45.45188591, 6.89898136
-LAT0, LAT1 = 45.395, 45.487
-LON0, LON1 = 6.838, 6.948
+LAT0, LAT1 = 45.375, 45.530                  # domaine Tignes – Val d'Isère : des Brévières au glacier du Pissaillas (+ marge), Kevin 09/10/2026
+LON0, LON1 = 6.820, 7.090
 M_LAT = 111320.0
 M_LON = 111320.0 * math.cos(math.radians(LAT_O))
 X_OUEST = (LON0 - LON_O) * M_LON

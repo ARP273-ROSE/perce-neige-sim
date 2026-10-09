@@ -1590,7 +1590,7 @@ func basculer_ski() -> void:
 	if refus != "":
 		commandes_skieur.message(refus)
 	elif skieur.chausse:
-		commandes_skieur.message("Joystick : tourner à gauche ou à droite, pousser vers le haut, chasse-neige vers le bas"
+		commandes_skieur.message("Joystick : pointez où aller (haut = tout droit), vers vous = chasse-neige ; glisser à droite de l'écran = regarder"
 			if DisplayServer.is_touchscreen_available() else
 			"Q / D pour tourner, Z pour pousser, S chasse-neige, Maj schuss", 4.0)
 
@@ -2142,7 +2142,10 @@ func _maj_skieur() -> void:
 		var gare_rame: int = 1 if physics.s <= PNConstants.START_S + 5.0 \
 			else (2 if physics.s >= PNConstants.STOP_S - 5.0 else 0)
 		var e_ann: int = 2
-		if skieur.support != null and cabin.is_ancestor_of(skieur.support):
+		# dans l'une OU l'autre rame : les deux ont leur sono, qui dit la même
+		# chose (Kevin, 09/10/2026 : « dans la rame non choisie pour piloter,
+		# pas d'annonces »)
+		if skieur.support != null and _rame_du_skieur() != null:
 			e_ann = 0
 		elif skieur.support == null and ((ec == 1 and gare_rame == 1) or (ec == 3 and gare_rame == 2)):
 			e_ann = 1

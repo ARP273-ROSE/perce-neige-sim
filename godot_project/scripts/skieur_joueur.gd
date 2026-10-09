@@ -97,6 +97,9 @@ var _v_ski: Vector3 = Vector3.ZERO
 var _cap_ski: float = 0.0
 var _penche: float = 0.0
 var _vue_libre: float = 99.0            # s depuis le dernier glissé de la vue
+var _ski_prog_d: float = INF          # pilote à ski : meilleure distance au point visé
+var _ski_prog_t: float = 0.0
+var _joy_vise: bool = false             # à ski, joystick tenu de côté : la caméra ne suit pas
 var _batons: MultiMeshInstance3D = null
 var _skis_pieds: Mesh = null
 var _skis_main: Mesh = null
@@ -428,8 +431,11 @@ func _process(delta: float) -> void:
 	var vite: bool = course or Input.is_physical_key_pressed(KEY_SHIFT) \
 		or (touches_ext & 16) != 0 or entree.length() > 0.92     # joystick à fond : on court
 	if chausse:
+		_joy_vise = false
 		if not chemin.is_empty():
 			cmd = _pilote_ski()
+		elif k.length() == 0.0 and entree.length() > 0.12:
+			cmd = _cmd_joystick_ski()
 		_glisser(delta, cmd, vite)
 		_vue_libre += delta
 		_camera_ski(delta)
@@ -763,7 +769,7 @@ func _mur_devant(p: Vector3, dp: Vector3) -> Vector3:
 ## la vue à la main).
 func _camera_ski(delta: float) -> void:
 	var vh: Vector3 = Vector3(_v_ski.x, 0.0, _v_ski.z)
-	if vh.length() > 2.0 and _vue_libre > 1.2:
+	if vh.length() > 2.0 and _vue_libre > 1.2 and not _joy_vise:
 		cam_yaw = lerp_angle(cam_yaw, atan2(-vh.x, -vh.z), minf(1.0, delta * 2.2))
 		cam_pitch = lerpf(cam_pitch, -0.30, minf(1.0, delta * 1.5))
 	# jamais sous la pente derrière lui (le relief n'a de collisions
@@ -774,6 +780,29 @@ func _camera_ski(delta: float) -> void:
 			cam_pitch = maxf(cam_pitch - delta * 1.5, -1.2)
 
 
+## Joystick à ski, comme dans les jeux (09/10/2026, Kevin : « refonds le
+## pilotage au joystick, c'est le binz ») : on POINTE le joystick là où l'on
+## veut aller, par rapport à l'écran — haut = tout droit dans l'axe de la
+## caméra, à droite = vers la droite de l'écran… Les skis tournent vers ce
+## cap (virage plus ou moins serré selon l'inclinaison du joystick) et la
+## caméra ne bouge pas tant qu'on vise de côté : on traverse la pente au
+## lieu de tourner en rond (avant : le joystick était un volant et la
+## caméra suivait, tenu à droite on faisait des cercles). Tiré vers soi :
+## chasse-neige. Poussé vers le haut à l'arrêt : on pousse sur les bâtons.
+func _cmd_joystick_ski() -> Vector2:
+	var a: float = atan2(entree.x, entree.y)          # 0 haut, + droite
+	var force: float = clampf((entree.length() - 0.12) / 0.88, 0.0, 1.0)
+	if absf(a) > 2.3:
+		return Vector2(0.0, -force)                   # vers soi : chasse-neige
+	var cap_voulu: float = cam_yaw - a
+	var e: float = wrapf(cap_voulu - _cap_ski, -PI, PI)
+	_joy_vise = absf(a) > 0.30
+	var y: float = 0.0
+	if _v_ski.length() < 3.0 and absf(a) < 0.8:
+		y = force                                     # à l'arrêt : pousser
+	return Vector2(clampf(-e * 2.2, -1.0, 1.0) * maxf(force, 0.35), y)
+
+
 ## Pilote à ski (bancs, mode AUTO) : vise le point suivant de `chemin`,
 ## ralentit avant de tourner.
 func _pilote_ski() -> Vector2:
@@ -782,7 +811,22 @@ func _pilote_ski() -> Vector2:
 	vers.y = 0.0
 	if vers.length() < 14.0:
 		chemin.pop_front()
+		_ski_prog_d = INF
+		_ski_prog_t = 0.0
 		return Vector2.ZERO
+	# pas de progrès vers ce point depuis 6 s (creux, point en contre-haut
+	# qu'on n'atteint pas en poussant) : on vise le suivant — sinon il
+	# oscillait sur place jusqu'à la fin du délai (09/10/2026, relief élargi)
+	if vers.length() < _ski_prog_d - 1.0:
+		_ski_prog_d = vers.length()
+		_ski_prog_t = 0.0
+	else:
+		_ski_prog_t += get_process_delta_time()
+		if _ski_prog_t > 6.0 and chemin.size() > 1:
+			chemin.pop_front()
+			_ski_prog_d = INF
+			_ski_prog_t = 0.0
+			return Vector2.ZERO
 	var e: float = wrapf(atan2(-vers.x, -vers.z) - _cap_ski, -PI, PI)
 	var vit: float = _v_ski.length()
 	var v_but: float = lerpf(vitesse_pilote, 4.0, clampf(absf(e) / 1.2, 0.0, 1.0))

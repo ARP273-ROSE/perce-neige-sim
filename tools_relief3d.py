@@ -28,11 +28,11 @@ import numpy as np
 from PIL import Image
 
 LAT_O, LON_O = 45.45188591, 6.89898136      # pied de la voie (IGN BD TOPO)
-LAT0, LAT1 = 45.395, 45.487                  # du sommet de la Grande Motte au lac de Tignes
-LON0, LON1 = 6.838, 6.948
+LAT0, LAT1 = 45.375, 45.530                  # domaine Tignes – Val d'Isère : des Brévières au glacier du Pissaillas (+ marge), Kevin 09/10/2026
+LON0, LON1 = 6.820, 7.090
 PAS_M = 25.0                                 # maille du relief
-ORTHO_L = 2048                               # largeur de l'orthophoto (px)
-H_BASE = 1700.0                              # altitude codée = H_BASE + valeur / 10
+ORTHO_L = 4096                               # largeur de l'orthophoto (px) — 5,1 m/px sur 21 km
+H_BASE = 1300.0                              # altitude codée = H_BASE + valeur / 10 (fonds de vallée à 1 411 m)
 M_LAT = 111320.0
 M_LON = 111320.0 * math.cos(math.radians(LAT_O))
 
@@ -81,8 +81,12 @@ for i0 in range(0, n_fz, TUILE):
                f"&WIDTH={ww}&HEIGHT={hh}&FORMAT=image/x-bil;bits=32")
         with urllib.request.urlopen(url, timeout=300) as r:
             fin_g[i0:i0 + hh, j0:j0 + ww] = np.frombuffer(r.read(), "<f4").reshape(hh, ww)
-if not np.isfinite(fin_g).all() or fin_g.min() < 500.0:
-    raise SystemExit("relief IGN incomplet (valeurs absentes) : relancer plus tard")
+# Au-delà de la frontière italienne (à l'est du Pissaillas, de la Tsanteleina)
+# le RGE ALTI n'a pas de valeurs : ces nœuds sont complétés plus bas par les
+# Terrain Tiles (tools_mnt : SRTM / EU-DEM), comme le relief lointain.
+fin_g[~np.isfinite(fin_g) | (fin_g < 500.0)] = np.nan
+if np.isnan(fin_g).mean() > 0.5:
+    raise SystemExit("relief IGN incomplet (plus de la moitié absente) : relancer plus tard")
 # valeur aux nœuds de la grille de 25 m (bilinéaire dans la grille fine)
 gi = np.linspace(0.0, n_fz - 1.0, nz)
 gj = np.linspace(0.0, n_fx - 1.0, nx)
@@ -92,6 +96,14 @@ V = (gi - I0)[:, None]
 U = (gj - J0)[None, :]
 h = (fin_g[I0][:, J0] * (1 - U) * (1 - V) + fin_g[I0][:, J0 + 1] * U * (1 - V)
      + fin_g[I0 + 1][:, J0] * (1 - U) * V + fin_g[I0 + 1][:, J0 + 1] * U * V)
+trous = ~np.isfinite(h)
+if trous.any():
+    import tools_mnt
+    la_n = LAT1 - np.arange(nz) * (LAT1 - LAT0) / (nz - 1)
+    lo_n = LON0 + np.arange(nx) * (LON1 - LON0) / (nx - 1)
+    LA, LO = np.meshgrid(la_n, lo_n, indexing="ij")
+    h[trous] = tools_mnt.altitude(LA[trous], LO[trous], 13)
+    print("hors RGE ALTI (Italie) : %d nœuds sur %d complétés par les Terrain Tiles" % (trous.sum(), h.size))
 code = np.clip(np.round((h - H_BASE) * 10.0), 0, 65535).astype(np.uint32)
 rgb = np.zeros((nz, nx, 3), np.uint8)
 rgb[..., 0] = code >> 8
@@ -117,6 +129,20 @@ LIEUX = [
     ("Lac du Chevril", 45.48211, 6.94246, 0),
     ("Grand Lac de Chardonet", 45.46568, 6.88303, 0),
     ("Aiguille Percée", 45.48351, 6.89017, 2748),
+    # domaine élargi (09/10/2026)
+    ("Les Brévières", 45.51061, 6.91914, 0),
+    ("Le Lavachet", 45.47084, 6.91342, 0),
+    ("Val d'Isère", 45.44956, 6.97874, 0),
+    ("La Daille", 45.46018, 6.96493, 0),
+    ("Le Fornet", 45.45032, 7.01106, 0),
+    ("Rocher de Bellevarde", 45.44519, 6.95110, 2826),
+    ("Tête du Solaise", 45.43167, 6.99320, 2551),
+    ("Col de l'Iseran", 45.41711, 7.03085, 2764),
+    ("Signal de l'Iseran", 45.43235, 7.04129, 3237),
+    ("Glacier du Pissaillas", 45.39800, 7.05500, 0),
+    ("Pointe de la Sana", 45.38507, 6.91745, 3435),
+    ("Aiguille de la Grande Sassière", 45.50500, 6.99984, 3747),
+    ("Tsanteleina", 45.47952, 7.04598, 3601),
 ]
 lieux_gd = "".join('\t["%s", %.1f, %.1f, %d],\n' % (n, (lo - LON_O) * M_LON, -(la - LAT_O) * M_LAT, a)
                    for n, la, lo, a in LIEUX)

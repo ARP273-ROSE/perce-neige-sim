@@ -104,8 +104,19 @@ func _tick() -> void:
 				_resultat = dom3.resultat
 			# (le message est consommé par main.gd : on le garde ici aussi)
 			if _f % 600 == 0:
-				print("  t %.0f  chrono %.1f  fantôme %s  v %.1f  d0 %.0f" % [_t, dom3.chrono,
-					dom3.fantome.actif if dom3.fantome != null else false, sk.vitesse_ski(), Vector2(p.x, p.z).length()])
+				var mur_d: String = "-"
+				var vd: Vector3 = Vector3(-sin(sk._cap_ski), 0, -cos(sk._cap_ski))
+				var m: Vector3 = sk._mur_devant(p, vd * 0.5)
+				if m != Vector3.ZERO:
+					var a2: Vector3 = p + Vector3.UP * 0.4
+					var rq2 := PhysicsRayQueryParameters3D.create(a2, a2 + vd * 1.0, CollisionsJeu.COUCHE_DECOR | CollisionsJeu.COUCHE_VEHICULE, [sk.get_rid()])
+					var h2: Dictionary = sk.get_world_3d().direct_space_state.intersect_ray(rq2)
+					if not h2.is_empty():
+						var o2: Object = h2["collider"]
+						var own2: Object = (o2 as CollisionObject3D).shape_owner_get_owner((o2 as CollisionObject3D).shape_find_owner(h2["shape"]))
+						mur_d = "%s n %s" % [(own2 as Node).name if own2 else "?", h2["normal"]]
+				print("  t %.0f  chrono %.1f  fantôme %s  v %.1f  d0 %.0f pos %s reste %d mur %s" % [_t, dom3.chrono,
+					dom3.fantome.actif if dom3.fantome != null else false, sk.vitesse_ski(), Vector2(p.x, p.z).length(), p, sk.chemin.size(), mur_d])
 			var arrive: bool = Vector2(p.x, p.z).length() < DomaineSkiable.R_ARRIVEE
 			if (sk.chemin.is_empty() and arrive) or _t > 1500.0 or _nan:
 				if _resultat == "":
@@ -157,8 +168,9 @@ func _tick() -> void:
 						"chaussé avant %s, après %s, à terre %s, %.1f s" % [_chausse5, sk.chausse, sk.a_terre(), _t])
 				else:
 					_verif("lancé contre la façade à 9 m/s : arrêté par le mur, toujours chaussé (chutes éteintes)",
-						_chausse5 and sk.chausse and not sk.a_terre() and sk.vitesse_ski() < 1.0,
-						"chaussé %s, à terre %s, v %.1f" % [sk.chausse, sk.a_terre(), sk.vitesse_ski()])
+						_chausse5 and sk.chausse and not sk.a_terre() and sk.vitesse_ski() < 2.0
+							and not Geometry2D.is_point_in_polygon(_local_aval(sk.global_position), PackedVector2Array(GareAval.HALL)),
+						"chaussé %s, à terre %s, v %.1f (il glisse le long du mur sur la pente)" % [sk.chausse, sk.a_terre(), sk.vitesse_ski()])
 				_phase = 6
 				_t = 0.0
 		6:
@@ -169,3 +181,13 @@ func _tick() -> void:
 				_verif("E rechausse", not sk.a_terre() and sk.chausse and refus == "",
 					"à terre %s, chaussé %s, %s" % [sk.a_terre(), sk.chausse, refus])
 				_fin()
+
+
+## Point monde → repère (x, d) de la gare aval (inverse de GareAval._p2).
+func _local_aval(p: Vector3) -> Vector2:
+	var ga: GareAval = _main.station_halls.gare_aval
+	var o: Vector3 = ga._p2(Vector2.ZERO)
+	var ex: Vector3 = ga._p2(Vector2(1, 0)) - o
+	var ed: Vector3 = ga._p2(Vector2(0, 1)) - o
+	var r: Vector3 = p - o
+	return Vector2(r.dot(ex) / ex.length_squared(), r.dot(ed) / ed.length_squared())

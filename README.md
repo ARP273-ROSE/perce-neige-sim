@@ -122,8 +122,10 @@ matériel roulant. Détail dans `SOURCES.md`.
   les quais, fosse sous la voie) ; Grande Motte ouverte sur le glacier
   (quais en escalier, mur de tête vitré, terrasse sur pilotis avec son
   escalier, restaurant, téléphérique, porte de la piste Génépy).
-- **Relief réel** : le massif en 3D sur 8,6 × 10,2 km, de la Grande Motte
-  au lac du Chevril (IGN RGE ALTI et orthophotographie). Vue extérieure en
+- **Relief réel** : tout le domaine Tignes – Val d'Isère en 3D sur
+  21 × 17 km, des Brévières au glacier du Pissaillas en passant par le
+  Fornet (IGN RGE ALTI et orthophotographie), avec ses 420 pistes nommées
+  (OpenStreetMap). Vue extérieure en
   « rayons X » : le sol devient translucide autour du tunnel. Sur PC, la
   vue de profil est une vraie coupe du terrain.
 - **Vue cabine 3D** (F4) : viewer Godot embarqué, rien à installer. Rames

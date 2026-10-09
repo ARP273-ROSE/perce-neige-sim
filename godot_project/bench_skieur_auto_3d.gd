@@ -42,6 +42,12 @@ func _tick() -> void:
 	_t += 1.0 / 60.0
 	if not _lance:
 		_lance = true
+		# --rame-en-haut : la rame pilotée part d'en haut, c'est la rame d'en
+		# face qui attend en bas (Kevin, 09/10/2026 : « si le skieur monte dans
+		# la rame non pilotée, la boucle ne marche pas »)
+		if "--rame-en-haut" in OS.get_cmdline_user_args():
+			_main._apply_scenario(true, false, "normal")
+			print("  rame pilotée en haut : le skieur prendra la rame d'en face")
 		_main.basculer_skieur()
 		_main.basculer_skieur_auto()
 		_verif("AUTO lancé", _main.skieur_auto != null)
@@ -76,7 +82,12 @@ func _tick() -> void:
 			_main.mode_skieur and _main.skieur_auto != null and sk.actif and sk.support != null,
 			"vue skieur %s, boucle %s, support %s" % [_main.mode_skieur, _main.skieur_auto != null,
 				sk.support.name if sk.support else "aucun"])
-	if sa.boucles >= 1 or _t > 1700.0:
+	# --rame-en-haut : on va jusqu'à la 2e montée (la rame d'en face doit
+	# avoir été prise au moins une fois en bas)
+	var fini: bool = sa.boucles >= 1
+	if "--rame-en-haut" in OS.get_cmdline_user_args():
+		fini = sa.boucles >= 1 and sa.etape == SkieurAuto.Etape.VERS_SORTIE
+	if fini or _t > 2600.0:
 		_verif("salle et rame atteintes", _vus.has(SkieurAuto.Etape.VERS_RAME) and _vus.has(SkieurAuto.Etape.A_BORD))
 		_verif("arrivé en haut, porte Génépy, à pied au départ de la trace", _vus.has(SkieurAuto.Etape.VERS_SORTIE) and _vus.has(SkieurAuto.Etape.VERS_DEPART))
 		_verif("chaussé et descendu à ski", _vus.get("ski_chausse", false) and _vus.has(SkieurAuto.Etape.VERS_GARE))

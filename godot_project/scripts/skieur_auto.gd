@@ -16,7 +16,7 @@ enum Etape { VERS_SALLE, VERS_RAME, A_BORD, VERS_SORTIE, VERS_DEPART, SKI, VERS_
 
 const DESCENTE: int = 3                  # trace n° 4 : part au pied de la gare du glacier
 const DELAI_MAX: Dictionary = {Etape.VERS_SALLE: 90.0, Etape.VERS_RAME: 120.0, Etape.A_BORD: 900.0,
-	Etape.VERS_SORTIE: 120.0, Etape.VERS_DEPART: 120.0, Etape.SKI: 1200.0, Etape.VERS_GARE: 180.0}
+	Etape.VERS_SORTIE: 180.0, Etape.VERS_DEPART: 300.0, Etape.SKI: 1200.0, Etape.VERS_GARE: 180.0}
 
 var main: Node = null
 var etape: int = Etape.VERS_SALLE
@@ -24,6 +24,33 @@ var t: float = 0.0
 var boucles: int = 0
 var _attente: bool = false                # attend la rame sur le palier
 var _compte: float = 0.0                  # vantaux : temps d'ouverture écoulé
+## La rame qu'il prend : celle qui est à quai en bas, pilotée OU d'en face
+## (09/10/2026, Kevin : « si j'ai choisi de piloter la rame 2 mais que le
+## skieur monte dans la 1, l'exploitation auto et la boucle ne marchent
+## pas ») — avant, seule la rame pilotée comptait.
+var _rame: Cabin = null
+
+
+func _s_de(c: Cabin) -> float:
+	return main.physics.s_render if c == main.cabin else main.physics.ghost_s_render()
+
+
+## Rame à quai en bas (gare_basse) ou en haut, ou null.
+func _rame_a(gare_basse: bool) -> Cabin:
+	for c in [main.cabin, main.cabin_ghost]:
+		if c == null:
+			continue
+		var sc: float = _s_de(c)
+		if (gare_basse and sc < PNConstants.START_S + 5.0) or (not gare_basse and sc > PNConstants.STOP_S - 5.0):
+			return c
+	return null
+
+
+func _rame_du_skieur() -> Cabin:
+	var r: Cabin = main._rame_du_skieur()
+	if r != null:
+		return r
+	return _rame if _rame != null else main.cabin
 
 
 func demarrer(m: Node) -> void:
@@ -62,9 +89,10 @@ func tick(delta: float) -> void:
 				_poser(Etape.VERS_RAME)
 		Etape.VERS_RAME:
 			# il attend sur le palier que la rame soit à quai, portes ouvertes
-			var a_quai: bool = ph.doors_open and ph.s < PNConstants.START_S + 5.0 and absf(ph.v) < 0.1
+			var a_quai: bool = ph.doors_open and _rame_a(true) != null and absf(ph.v) < 0.1
 			if _attente and a_quai:
 				_attente = false
+				_rame = _rame_a(true)
 				sk.chemin = _chemin_voiture()
 			elif sk.chemin.is_empty():
 				if sk.support != null:
@@ -76,8 +104,8 @@ func tick(delta: float) -> void:
 		Etape.A_BORD:
 			# à quai en haut, portes ouvertes : les vantaux mettent 4 s à
 			# s'ouvrir, on les laisse finir
-			if ph.doors_open and ph.door_leaves_open and ph.s > PNConstants.STOP_S - 5.0 \
-					and absf(ph.v) < 0.1 and sk.support != null:
+			if ph.doors_open and ph.door_leaves_open and sk.support != null \
+					and _s_de(_rame_du_skieur()) > PNConstants.STOP_S - 5.0 and absf(ph.v) < 0.1:
 				_compte += delta
 				if _compte > 6.0:
 					_poser(Etape.VERS_SORTIE)
@@ -109,7 +137,7 @@ func _poser(e: int) -> void:
 	_compte = 0.0
 	var sk: SkieurJoueur = main.skieur
 	var ga: GareAval = main.station_halls.gare_aval
-	var cab: Cabin = main.cabin
+	var cab: Cabin = _rame_du_skieur()
 	var tun: TunnelBuilder = main.tunnel
 	match e:
 		Etape.VERS_SALLE:
@@ -123,7 +151,8 @@ func _poser(e: int) -> void:
 				ga._p2(mil0 + de * 2.0), ga._p2(mil0 - de * 2.5), ga._p2(Vector2(-3.55, 6.0)), ga._p2(Vector2(-3.55, 2.0))]
 		Etape.VERS_RAME:
 			var ph: TrainPhysics = main.physics
-			if ph.doors_open and ph.s < PNConstants.START_S + 5.0 and absf(ph.v) < 0.1:
+			if ph.doors_open and _rame_a(true) != null and absf(ph.v) < 0.1:
+				_rame = _rame_a(true)
 				sk.chemin = _chemin_voiture()
 			else:
 				sk.chemin = [ga._p2(Vector2(-3.55, 2.0))]
@@ -164,6 +193,30 @@ func _poser(e: int) -> void:
 			var xg2: Transform3D = tun.transform_at(sc2)
 			var seuil: Vector3 = xg2.origin + xg2.basis.x * -12.0
 			sk.chemin = []
+			# parti de la TERRASSE (départ d'en haut) : par l'escalier du bout,
+			# jusqu'à la neige — tout droit, il butait contre le garde-corps et
+			# faisait des allers-retours deux minutes (09/10/2026)
+			var gh: GareAmont = main.station_halls.gare_amont
+			if gh != null:
+				var rel: Vector3 = q - gh._o
+				if absf(rel.y) < 1.5 and rel.length() < 60.0:
+					var ep: Array = gh.escalier_points()
+					# par le grand côté de la terrasse : tout droit de la table à
+					# l'escalier, on coupait l'échancrure sud et l'on tombait
+					# sous le plancher (sur pilotis)
+					# (x, d) dans le repère de la terrasse : on se lève de la table,
+					# on longe le bord ouest entre garde-corps et tables, puis le
+					# grand côté jusqu'à l'escalier
+					for v in [Vector2(1.6, 14.0), Vector2(1.8, 30.0), Vector2(3.5, 42.0),
+							Vector2(12.0, 48.0), Vector2(17.0, 49.5)]:
+						sk.chemin.append(gh._p2(v, 0.05))
+					sk.chemin.append_array([ep[0], ep[1]])
+					# puis à l'est du restaurant (emprise x 10-42 m), vers l'aval,
+					# jusqu'au départ de la trace : tout droit on butait sur le
+					# mur du chalet
+					for v2 in [Vector2(44.0, 52.0), Vector2(47.0, 20.0), Vector2(47.0, -20.0)]:
+						sk.chemin.append(gh._p2(v2, 0.0) * Vector3(1, 0, 1))
+					q = gh._p2(Vector2(47.0, -20.0))
 			if Vector2(q.x - seuil.x, q.z - seuil.z).length() < 6.0:
 				var aval: Vector3 = xg2.origin + xg2.basis.x * -5.0 + xg2.basis.z * 19.0
 				sk.chemin.append(Vector3(aval.x, 0.0, aval.z))
@@ -190,14 +243,20 @@ func _poser(e: int) -> void:
 
 func _chemin_voiture() -> Array:
 	var ga: GareAval = main.station_halls.gare_aval
-	var cab: Cabin = main.cabin
+	var cab: Cabin = _rame if _rame != null else main.cabin
 	var v: Node3D = cab._interior_cars[1]
 	var r: Array = _porte(7)
 	var xf: Transform3D = v.global_transform
 	var y: float = r[1]
 	var zc: float = r[2]
-	return [ga._p2(Vector2(-3.55, -1.6)), xf * Vector3(2.6, y, zc + 3.0), xf * Vector3(2.4, y, zc),
-		xf * Vector3(0.9, y, zc), xf * Vector3(0.3, y, zc)]
+	# côté du quai où il attend, dans le repère de CETTE voiture (la rame
+	# d'en face est tournée autrement)
+	var palier: Vector3 = ga._p2(Vector2(-3.55, -1.6))
+	var sx: float = signf((xf.affine_inverse() * palier).x)
+	if sx == 0.0:
+		sx = 1.0
+	return [palier, xf * Vector3(2.6 * sx, y, zc + 3.0), xf * Vector3(2.4 * sx, y, zc),
+		xf * Vector3(0.9 * sx, y, zc), xf * Vector3(0.3 * sx, y, zc)]
 
 
 ## Panneau de porte de la voiture 2 le plus proche du skieur (le long de la
@@ -218,7 +277,7 @@ func _porte_proche(v: Node3D) -> int:
 
 ## [voiture 2, y, z] de la porte au panneau k.
 func _porte(k: int) -> Array:
-	var cab: Cabin = main.cabin
+	var cab: Cabin = _rame_du_skieur() if main.skieur.support != null else (_rame if _rame != null else main.cabin)
 	var v: Node3D = cab._interior_cars[1]
 	var car_len: float = cab.train_length / float(cab.car_count)
 	var z_c: float = (1.0 - (cab.car_count - 1) * 0.5) * car_len
