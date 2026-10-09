@@ -3322,6 +3322,40 @@ DOORS_OPEN_QUIPS: list[tuple[str, str]] = [
 ]
 
 
+# Banque supplémentaire commune au PC et à la PWA (piques_avis.py, 09/10/2026 :
+# « augmente la liste […] pour ne pas avoir tout le temps les mêmes »).
+try:
+    import piques_avis as _pa
+    CRASH_QUIPS = CRASH_QUIPS + list(_pa.CRASH)
+    DERAIL_QUIPS = DERAIL_QUIPS + list(_pa.DERAIL)
+    CABIN_QUIPS = CABIN_QUIPS + list(_pa.CABIN)
+    REVERSE_QUIPS = REVERSE_QUIPS + list(_pa.REVERSE)
+    DOORS_OPEN_QUIPS = DOORS_OPEN_QUIPS + list(_pa.DOORS_OPEN)
+    CRASH_LENT_QUIPS: list[tuple[str, str]] = list(_pa.CRASH_LENT)
+    CRASH_VIOLENT_QUIPS: list[tuple[str, str]] = list(_pa.CRASH_VIOLENT)
+    for _tier, _liste in _pa.REVIEWS.items():
+        PAX_REVIEWS[_tier] = PAX_REVIEWS.get(_tier, []) + [
+            (q, (vo or fr), fr, en) for (q, vo, fr, en) in _liste]
+except Exception:                   # banque absente : les listes de base suffisent
+    CRASH_LENT_QUIPS = []
+    CRASH_VIOLENT_QUIPS = []
+
+# Tirage SANS répétition rapprochée : chaque liste garde la mémoire de ses
+# derniers tirages (la moitié de sa taille) et ne les ressort pas.
+_DERNIERS_TIRAGES: dict[int, list[int]] = {}
+
+
+def _tirer(liste: list):
+    if not liste:
+        return None
+    vus = _DERNIERS_TIRAGES.setdefault(id(liste), [])
+    libres = [i for i in range(len(liste)) if i not in vus] or list(range(len(liste)))
+    i = random.choice(libres)
+    vus.append(i)
+    del vus[:max(0, len(vus) - len(liste) // 2)]
+    return liste[i]
+
+
 def _trigger_crash(st: GameState, speed: float, kind: str = "buffer") -> None:
     """Game-over de conduite (mode Défi). `kind` ∈ {buffer, derail,
     cabin} : collision au butoir, déraillement à l'aiguillage, ou
@@ -3331,12 +3365,18 @@ def _trigger_crash(st: GameState, speed: float, kind: str = "buffer") -> None:
     st.crash_speed = speed
     st.crash_kind = kind
     quips = {"derail": DERAIL_QUIPS, "cabin": CABIN_QUIPS}.get(kind, CRASH_QUIPS)
-    quip = random.choice(quips)
+    # au butoir, la pique suit la vitesse du choc (une fois sur deux)
+    if kind == "buffer" and random.random() < 0.5:
+        if speed < 3.0 and CRASH_LENT_QUIPS:
+            quips = CRASH_LENT_QUIPS
+        elif speed > 8.0 and CRASH_VIOLENT_QUIPS:
+            quips = CRASH_VIOLENT_QUIPS
+    quip = _tirer(quips)
     st.crash_msg = quip[1] if LANG == "en" else quip[0]
     st.crash_derail = (kind == "derail")
     # Avis passager 1 étoile (circonstance = catastrophe), en langue
     # d'origine + traduction, stylé par nationalité.
-    rev = random.choice(PAX_REVIEWS["disaster"])
+    rev = _tirer(PAX_REVIEWS["disaster"])
     st.crash_review_who = rev[0]
     st.crash_review_native = rev[1]
     st.crash_review_txt = rev[3] if LANG == "en" else rev[2]
@@ -7074,6 +7114,9 @@ class GameWidget(QWidget):
         Qt.Key.Key_F7, Qt.Key.Key_F8, Qt.Key.Key_F9, Qt.Key.Key_F11,
         Qt.Key.Key_O,
         Qt.Key.Key_Plus, Qt.Key.Key_Equal, Qt.Key.Key_Minus,
+        # ni la conduite ni la rame : klaxon, phares, éclairages (Kevin,
+        # 09/10/2026 : « je ne peux ni klaxonner ni allumer des phares »)
+        Qt.Key.Key_K, Qt.Key.Key_H, Qt.Key.Key_J, Qt.Key.Key_C,
     ))
     # Mode skieur : le clavier fait marcher le skieur ; seules ces touches
     # gardent leur rôle (menus, pause, son, langue, éclairages)
@@ -7409,6 +7452,18 @@ class GameWidget(QWidget):
             self.basculer_skieur()
         elif m.get("skieur_conduire"):
             self._sortir_skieur(conduire=True)
+        elif "cle" in m:
+            # touche tapée dans la fenêtre 3D hors skieur (le clavier y est
+            # resté) : appui / relâché comme au clavier du PC
+            k = getattr(Qt.Key, "Key_" + str(m["cle"]), None)
+            if k is None:
+                return
+            if m.get("enfonce", False):
+                self._sim_press(k)
+                self._key_state.add(k)
+            else:
+                self._key_state.discard(k)
+                self._sim_release(k)
         elif "touche" in m:
             # J / C / X tapées (ou bouton EXPLOIT. du skieur) dans la fenêtre
             # 3D : c'est le PC qui tient ces états
@@ -7977,7 +8032,7 @@ class GameWidget(QWidget):
             # Pique sarcastique en mode Défi (retour d'essai : commentaire
             # sarcastique au demi-tour).
             if st.run_mode == "challenge":
-                _rq = random.choice(REVERSE_QUIPS)
+                _rq = _tirer(REVERSE_QUIPS)
                 add_event(st, "reverse_quip", _rq[1], _rq[0], "info")
         else:
             add_event(st, "reverse",
@@ -8586,7 +8641,7 @@ class GameWidget(QWidget):
             # de conduire portes ouvertes).
             if (st.run_mode == "challenge" and not self._doors_quip_played
                     and tr_welcome.doors_open and abs(tr_welcome.v) > 3.0):
-                _dq = random.choice(DOORS_OPEN_QUIPS)
+                _dq = _tirer(DOORS_OPEN_QUIPS)
                 add_event(st, "doors_quip", _dq[1], _dq[0], "alarm")
                 self._doors_quip_played = True
             # Freinage d'approche réel (real_brake_approach.wav, 20 s,
@@ -8789,7 +8844,7 @@ class GameWidget(QWidget):
         # Avis passager circonstancié : voyage nickel (great) ou brusque
         # (rough) selon le score.
         tier = "great" if score >= 80.0 else "rough"
-        rev = random.choice(PAX_REVIEWS[tier])
+        rev = _tirer(PAX_REVIEWS[tier])
         st.challenge_review_who = rev[0]
         st.challenge_review_native = rev[1]
         st.challenge_review_txt = rev[3] if LANG == "en" else rev[2]
@@ -16708,12 +16763,15 @@ class MainWindow(QMainWindow):
             return
         if info is None:
             if not silent:
+                err = getattr(autoupdate, "DERNIERE_ERREUR", "")
                 QMessageBox.warning(
                     self,
                     self._tr("Update check", "Mise à jour"),
                     self._tr(
-                        "Could not reach GitHub. Check your connection.",
-                        "Impossible de joindre GitHub. Vérifiez la connexion."))
+                        "Could not reach GitHub. Check your connection."
+                        + (f"\n\nError: {err}" if err else ""),
+                        "Impossible de joindre GitHub. Vérifiez la connexion."
+                        + (f"\n\nErreur : {err}" if err else "")))
             return
         if not autoupdate.is_newer(info.version, VERSION):
             if not silent:
@@ -16729,7 +16787,42 @@ class MainWindow(QMainWindow):
     def _prompt_update_dialog(self, info) -> None:
         """Ancien .exe PyInstaller : plus rien à échanger — on ouvre la
         page de la version, où l'installeur se télécharge une fois pour
-        toutes ; ensuite le programme se met à jour tout seul."""
+        toutes ; ensuite le programme se met à jour tout seul. Linux
+        (09/10/2026) : l'AppImage ou le dossier du .tar.gz se remplacent
+        tout seuls, comme Coupole."""
+        try:
+            import autoupdate
+            inst = autoupdate.installation_linux()
+        except Exception:
+            inst = None
+        if inst is not None:
+            msg = QMessageBox(self)
+            msg.setIcon(QMessageBox.Icon.Question)
+            msg.setWindowTitle(self._tr("Update available", "Mise à jour disponible"))
+            msg.setText(self._tr(
+                f"Version <b>{info.version}</b> is available.<br><br>"
+                "Install now? Your operations log and best scores are kept.",
+                f"La version <b>{info.version}</b> est disponible.<br><br>"
+                "Installer maintenant ? Le journal d'exploitation et les "
+                "meilleurs scores sont conservés."))
+            if info.body:
+                msg.setDetailedText(info.body[:4000])
+            btn_ok = msg.addButton(self._tr("Install", "Installer"),
+                                   QMessageBox.ButtonRole.AcceptRole)
+            msg.addButton(self._tr("Later", "Plus tard"),
+                          QMessageBox.ButtonRole.RejectRole)
+            msg.exec()
+            if msg.clickedButton() is not btn_ok:
+                return
+            relance = {}
+
+            def _appliquer(progress):
+                relance["exe"] = autoupdate.installer_linux(info, progress=progress)
+                return True
+
+            self._kit_install({"version": info.version}, appliquer=_appliquer,
+                              relancer=lambda: autoupdate.relancer_linux(relance["exe"]))
+            return
         msg = QMessageBox(self)
         msg.setIcon(QMessageBox.Icon.Information)
         msg.setWindowTitle(self._tr("Update available", "Mise à jour disponible"))
@@ -16807,12 +16900,15 @@ class MainWindow(QMainWindow):
             return
         self._kit_install(info)
 
-    def _kit_install(self, info) -> None:
+    def _kit_install(self, info, appliquer=None, relancer=None) -> None:
         """Télécharge et pose l'archive dans un fil de fond (elle embarque
         le viewer 3D, ~30 Mo : un téléchargement synchrone gèlerait
         l'interface), avec dialogue de progression. Le fil ne touche
         jamais Qt : il écrit dans un dict qu'un QTimer relit à 10 Hz."""
-        import updater
+        try:
+            import updater
+        except Exception:
+            updater = None              # Linux : l'installeur Windows n'est pas embarqué
         from PyQt6.QtWidgets import QProgressDialog
         # Le viewer 3D fait partie de l'archive : s'il tourne, son .exe est
         # verrouillé et la pose échouerait (WinError 32).
@@ -16845,8 +16941,11 @@ class MainWindow(QMainWindow):
 
         def _worker() -> None:
             try:
-                state["applied"] = bool(
-                    updater.download_and_apply(info, progress=_progress))
+                if appliquer is not None:
+                    state["applied"] = bool(appliquer(_progress))
+                else:
+                    state["applied"] = bool(
+                        updater.download_and_apply(info, progress=_progress))
             except Exception as e:
                 state["error"] = e
             finally:
@@ -16916,7 +17015,10 @@ class MainWindow(QMainWindow):
             # resterait à côté du nouveau.
             self.close()
             QApplication.processEvents()
-            updater.restart()
+            if relancer is not None:
+                relancer()
+            else:
+                updater.restart()
             os._exit(0)
 
         poll.timeout.connect(_on_poll)

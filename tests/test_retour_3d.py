@@ -264,3 +264,48 @@ def test_skieur_refuse_sans_vue_3d(fenetre):
     g._cabin_view_state = 0
     g.basculer_skieur()
     assert not g._skieur
+
+
+def test_exploitation_lancee_en_skieur_puis_conduite(fenetre):
+    """Kevin, 09/10/2026 : « quand l'exploitation auto a été déclenchée en
+    mode skieur et que je repasse en mode conduite, tout est figé, je ne
+    peux pas couper l'exploitation auto ni klaxonner ni allumer des phares »
+    — le clavier était resté dans la fenêtre 3D, qui ne passait que J et C,
+    et l'automate refusait klaxon et phares."""
+    win, clock = fenetre
+    g = _depart_a_quai(win, clock)
+    pont = _brancher(g)
+    tr = g.state.train
+    g.basculer_skieur()
+    assert g._skieur
+    pont.a_poster = [{"touche": "X"}]            # EXPLOIT. du HUD skieur
+    _step(win, clock, 0.2)
+    assert g.auto_ops.enabled
+    pont.a_poster = [{"skieur_basculer": True}]  # F9 dans la 3D : on conduit
+    _step(win, clock, 0.2)
+    assert not g._skieur and g.auto_ops.enabled
+    # klaxon tenu depuis la fenêtre 3D, sous exploitation auto
+    pont.a_poster = [{"cle": "K", "enfonce": True}]
+    _step(win, clock, 0.3)
+    assert tr.horn
+    pont.a_poster = [{"cle": "K", "enfonce": False}]
+    _step(win, clock, 0.1)
+    assert not tr.horn
+    # phares
+    avant = tr.lights_head
+    pont.a_poster = [{"cle": "H", "enfonce": True}, {"cle": "H", "enfonce": False}]
+    _step(win, clock, 0.1)
+    assert tr.lights_head != avant
+    # X coupe l'exploitation auto
+    pont.a_poster = [{"cle": "X", "enfonce": True}, {"cle": "X", "enfonce": False}]
+    _step(win, clock, 0.1)
+    assert not g.auto_ops.enabled
+    # la conduite reste refusée tant que l'automate tient la ligne
+    g.auto_ops.toggle()
+    cmd = tr.speed_cmd
+    pont.a_poster = [{"cle": "D", "enfonce": True}, {"cle": "D", "enfonce": False}]
+    portes = tr.doors_cmd
+    _step(win, clock, 0.1)
+    assert tr.doors_cmd == portes
+    g.auto_ops.toggle()
+    assert tr.speed_cmd >= 0.0 and cmd >= 0.0

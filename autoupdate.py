@@ -148,10 +148,20 @@ def _http_get_json(url: str) -> dict:
     return json.loads(payload.decode("utf-8"))
 
 
+# Dernière erreur réseau de check_latest_release : affichée à l'utilisateur
+# (Kevin, 09/10/2026, sous Manjaro : « il dit qu'il trouve pas GitHub » —
+# l'erreur réelle, certificat, DNS ou délai, était avalée).
+DERNIERE_ERREUR = ""
+
+
 def check_latest_release(owner: str, repo: str) -> Optional[ReleaseInfo]:
+    global DERNIERE_ERREUR
+    DERNIERE_ERREUR = ""
     try:
         data = _http_get_json(GITHUB_API.format(owner=owner, repo=repo))
-    except Exception:
+    except Exception as e:
+        DERNIERE_ERREUR = f"{type(e).__name__}: {e}"
+        _log(f"check_latest_release : {DERNIERE_ERREUR}")
         return None
     tag = str(data.get("tag_name", ""))
     if not tag:
@@ -594,3 +604,110 @@ class UpdateCheckThread(threading.Thread):
             self._cb(info)
         except Exception:
             pass
+
+
+# ---------------------------------------------------------------------------
+# Linux : l'AppImage ou le dossier du .tar.gz se remplacent tout seuls
+# (Kevin, 09/10/2026 : « la mise à jour auto sous Manjaro de Coupole ça marche
+# mais celle du funi ça marche pas ») — avant, on ouvrait seulement la page
+# de la version.
+# ---------------------------------------------------------------------------
+
+def installation_linux() -> Optional[tuple]:
+    """("appimage", chemin de l'AppImage) ou ("dossier", dossier du
+    programme) si ce programme Linux empaqueté peut se remplacer lui-même ;
+    None sinon (sources, dossier en lecture seule, autre système)."""
+    if not sys.platform.startswith("linux") or not is_frozen():
+        return None
+    appimage = os.environ.get("APPIMAGE", "")
+    if appimage and os.path.isfile(appimage):
+        p = Path(appimage)
+        if os.access(p.parent, os.W_OK) and os.access(p, os.W_OK):
+            return ("appimage", p)
+        return None
+    dossier = Path(sys.executable).resolve().parent
+    if os.access(dossier.parent, os.W_OK) and os.access(dossier, os.W_OK):
+        return ("dossier", dossier)
+    return None
+
+
+def _extraire_tar_sur(archive: Path, dest: Path) -> None:
+    import tarfile
+    base = dest.resolve()
+    with tarfile.open(archive, "r:gz") as tf:
+        for m in tf.getmembers():
+            cible = (dest / m.name).resolve()
+            if not str(cible).startswith(str(base)) or m.issym() and os.path.isabs(m.linkname):
+                raise RuntimeError(f"chemin refusé dans l'archive : {m.name}")
+            if m.isdev():
+                raise RuntimeError(f"entrée refusée dans l'archive : {m.name}")
+        if hasattr(tarfile, "data_filter"):
+            tf.extractall(dest, filter="data")
+        else:
+            tf.extractall(dest)
+
+
+def installer_linux(release: "ReleaseInfo",
+                    progress: Optional[Callable[[int, int], None]] = None) -> Path:
+    """Télécharge, vérifie (SHA256SUMS obligatoire) et met en place la
+    nouvelle version. Renvoie l'exécutable à relancer. L'ancienne version
+    reste en place si quoi que ce soit échoue."""
+    inst = installation_linux()
+    if inst is None:
+        raise RuntimeError("installation Linux non modifiable (dossier en lecture seule ?)")
+    genre, chemin = inst
+    suffixe = "-linux.AppImage" if genre == "appimage" else "-linux-x86_64.tar.gz"
+    asset = next((a for a in release.assets
+                  if a.name.startswith(APP_ASSET_PREFIX) and a.name.endswith(suffixe)), None)
+    if asset is None:
+        raise RuntimeError(f"la version {release.tag} ne publie pas de fichier « …{suffixe} »")
+    if genre == "appimage":
+        tmp = chemin.with_name("." + chemin.name + ".maj")
+        try:
+            _stream_download(asset.url, tmp, progress=progress)
+            if asset.size and tmp.stat().st_size != asset.size:
+                raise RuntimeError("taille téléchargée différente de la taille annoncée")
+            _verify_asset_sha256(release, asset, tmp)
+            tmp.chmod(0o755)
+            os.replace(tmp, chemin)          # le processus en cours garde l'ancien fichier ouvert
+        finally:
+            if tmp.exists():
+                tmp.unlink()
+        _log(f"AppImage remplacée par {asset.name} : {chemin}")
+        return chemin
+    # dossier PerceNeigeSimulator/ du .tar.gz
+    exe = Path(sys.executable).resolve()
+    tmpdir = Path(tempfile.mkdtemp(prefix=".pn_maj_", dir=str(chemin.parent)))
+    try:
+        archive = tmpdir / asset.name
+        _stream_download(asset.url, archive, progress=progress)
+        if asset.size and archive.stat().st_size != asset.size:
+            raise RuntimeError("taille téléchargée différente de la taille annoncée")
+        _verify_asset_sha256(release, asset, archive)
+        extrait = tmpdir / "contenu"
+        extrait.mkdir()
+        _extraire_tar_sur(archive, extrait)
+        entrees = [e for e in extrait.iterdir()]
+        neuf = entrees[0] if len(entrees) == 1 and entrees[0].is_dir() else extrait
+        if not (neuf / exe.name).is_file():
+            raise RuntimeError(f"archive incomplète : {exe.name} absent")
+        ancien = chemin.with_name(chemin.name + ".ancien")
+        if ancien.exists():
+            shutil.rmtree(ancien, ignore_errors=True)
+        os.rename(chemin, ancien)
+        try:
+            shutil.move(str(neuf), str(chemin))
+        except Exception:
+            os.rename(ancien, chemin)        # on remet l'ancienne version
+            raise
+        shutil.rmtree(ancien, ignore_errors=True)
+    finally:
+        shutil.rmtree(tmpdir, ignore_errors=True)
+    _log(f"dossier remplacé par {asset.name} : {chemin}")
+    return chemin / exe.name
+
+
+def relancer_linux(executable: Path) -> None:
+    subprocess.Popen([str(executable)], start_new_session=True, close_fds=True,
+                     stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                     stderr=subprocess.DEVNULL)

@@ -1240,6 +1240,28 @@ func _pupitre_clic(pos: Vector2, enfonce: bool) -> bool:
 	return true
 
 
+## Touches que la vue 3D embarquée passe au PC (tout sauf F9 = skieur et
+## O = vue, gérées ici) : lettres, chiffres, flèches, espace, F1–F8.
+func _relayer_touche_pc(event: InputEventKey) -> bool:
+	var kc: int = event.keycode
+	if kc == KEY_F9 or kc == KEY_O:
+		return false
+	var nom: String = ""
+	if (kc >= KEY_A and kc <= KEY_Z) or (kc >= KEY_0 and kc <= KEY_9):
+		nom = OS.get_keycode_string(kc)
+	elif kc >= KEY_F1 and kc <= KEY_F8:
+		nom = OS.get_keycode_string(kc)
+	else:
+		nom = {KEY_UP: "Up", KEY_DOWN: "Down", KEY_LEFT: "Left", KEY_RIGHT: "Right",
+			KEY_SPACE: "Space", KEY_SHIFT: "Shift", KEY_PLUS: "Plus",
+			KEY_MINUS: "Minus", KEY_EQUAL: "Equal"}.get(kc, "")
+	if nom == "":
+		return false
+	if state_receiver != null:
+		state_receiver.envoyer({"cle": nom, "enfonce": event.pressed})
+	return true
+
+
 ## Action d'une commande du pupitre. Embarqué dans le PC (client_mode), la
 ## rame est pilotée par le PC : seul le geste est montré.
 func _commande_pupitre(nom: String, enfonce: bool) -> void:
@@ -1335,6 +1357,16 @@ func _unhandled_input(event: InputEvent) -> void:
 		if _pupitre_clic(event.position, event.pressed):
 			get_viewport().set_input_as_handled()
 			return
+	# Vue 3D du PC, hors skieur : c'est le PC qui conduit. Le clavier reste
+	# souvent dans la fenêtre 3D (clic pour regarder en mode skieur) : toutes
+	# les touches de conduite lui sont passées, appui ET relâché (Kevin,
+	# 09/10/2026 : « je repasse en mode conduite en exploitation auto, tout
+	# est figé, je ne peux pas couper l'exploitation auto ni klaxonner ni
+	# allumer les phares » — seules J et C passaient).
+	if client_mode and not mode_skieur and event is InputEventKey and not event.echo \
+			and _relayer_touche_pc(event):
+		get_viewport().set_input_as_handled()
+		return
 	# Pannes + auto-exploitation + inversion de sens
 	if event is InputEventKey and event.pressed and not event.echo:
 		# K dans la PWA ; F9 dans la vue 3D du PC (K y est le klaxon)
@@ -1524,7 +1556,7 @@ func do_reverse() -> void:
 	# En Défi, le demi-tour vaut une remarque des passagers (port des
 	# REVERSE_QUIPS du PC) — affichée dans le bandeau de résultat.
 	if run_mode == "challenge" and challenge != null:
-		challenge.result_lines = [PNQuips.pick_quip(PNQuips.REVERSE, challenge.lang)]
+		challenge.result_lines = [PNQuips.pique("REVERSE", challenge.lang)]
 		challenge.last_score = -1.0
 		challenge.review = {}
 		challenge.result_t = 6.0
@@ -1648,6 +1680,51 @@ func evacuer() -> void:
 		collisions.assurer_autour(skieur.global_position)
 	if commandes_skieur != null:
 		commandes_skieur.message("Issues de secours retirées : par le trou, sur la voie ; l'escalier de droite ramène en gare ou à la galerie du milieu", 7.0)
+	_pique_skieur("SKIEUR_EVACUATION", 0.6, 8.0)
+
+
+## Une pique du mode skieur, si le moment s'y prête (cf. PIQUE_ECART).
+func _pique_skieur(nom: String, proba: float, delai: float = 0.0) -> void:
+	if not mode_skieur or skieur_auto != null or commandes_skieur == null:
+		return
+	if _pique_attente > 0.0 or not _pique_en_retard.is_empty() or randf() > proba:
+		return
+	_pique_attente = PIQUE_ECART
+	_pique_en_retard = [nom, delai]
+
+
+## Occasions de piques, chaque image : hors-piste prolongé, rame partie sans
+## lui alors qu'il attendait sur le quai, promenade sur la voie.
+func _piques_occasions(dt: float, en_gare: bool, a_pied_tunnel: bool) -> void:
+	_pique_attente = maxf(0.0, _pique_attente - dt)
+	if not _pique_en_retard.is_empty():
+		_pique_en_retard[1] = float(_pique_en_retard[1]) - dt
+		if float(_pique_en_retard[1]) <= 0.0:
+			commandes_skieur.message(PNQuips.pique(str(_pique_en_retard[0]), "fr"), 6.0)
+			_pique_en_retard = []
+	if not mode_skieur or skieur_auto != null or skieur == null:
+		return
+	# hors-piste : 12 s d'affilée à ski, hors de toute piste, en mouvement
+	if skieur.chausse and not _sur_piste and skieur.vitesse_ski() > 3.0:
+		_hors_piste_t += dt
+		if _hors_piste_t > 12.0:
+			_hors_piste_t = -60.0          # pas avant une minute de plus
+			_pique_skieur("SKIEUR_HORS_PISTE", 0.5)
+	elif _hors_piste_t > 0.0:
+		_hors_piste_t = 0.0
+	elif _hors_piste_t < 0.0:
+		_hors_piste_t = minf(0.0, _hors_piste_t + dt)
+	# funiculaire raté : il attendait à pied sur le quai (20 s au moins) et
+	# les rames partent sans lui
+	_en_gare_t = (_en_gare_t + dt) if (en_gare and skieur.support == null and not skieur.chausse) else 0.0
+	var a_quai: bool = physics != null and (physics.s <= PNConstants.START_S + 5.0
+		or physics.s >= PNConstants.STOP_S - 5.0)
+	if _rames_a_quai and not a_quai and _en_gare_t > 20.0:
+		_pique_skieur("SKIEUR_RATE", 0.6, 2.0)
+	_rames_a_quai = a_quai
+	# à pied sur la voie : une fois de temps en temps, après le message d'état
+	if a_pied_tunnel and randf() < dt / 90.0:
+		_pique_skieur("SKIEUR_VOIE", 0.5, 5.0)
 
 
 ## Issues remises quand la rame est de nouveau à quai, portes ouvertes
@@ -2049,6 +2126,17 @@ func _gain_machinerie() -> float:
 var _presence: Array = [Vector3.ZERO]
 var _seat: Node3D = null
 var _t_info: float = 1.0
+# Piques du mode skieur (Kevin, 09/10/2026 : hors-piste, funiculaire raté,
+# évacuation… « avec parcimonie, sinon on se lasse ») : au plus une toutes
+# les PIQUE_ECART secondes, jamais dans la première minute, et chaque
+# occasion n'en donne une qu'avec une certaine probabilité.
+const PIQUE_ECART: float = 240.0
+var _pique_attente: float = 60.0
+var _pique_en_retard: Array = []          # [nom, délai] : affichée après le message d'état
+var _sur_piste: bool = true
+var _hors_piste_t: float = 0.0
+var _rames_a_quai: bool = true
+var _en_gare_t: float = 0.0
 
 
 func _skieur_en_gare() -> bool:
@@ -2114,6 +2202,7 @@ func _maj_skieur() -> void:
 		if _t_info >= 0.2:
 			_t_info = 0.0
 			var pi: Array = domaine.piste_sous(skieur.global_position, 1.0)
+			_sur_piste = str(pi[0]) != "" or int(pi[1]) >= 0
 			var info: String = "%d km/h" % roundi(skieur.vitesse_ski() * 3.6)
 			if str(pi[0]) != "" or int(pi[1]) >= 0:
 				info += " · %s%s" % [pi[0], (" (%s)" % PistesDonnees.NOMS_COULEURS[pi[1]]) if int(pi[1]) >= 0 else ""]
@@ -2163,6 +2252,7 @@ func _maj_skieur() -> void:
 		commandes_skieur.message("Skieur sur la voie : la rame est immobilisée" if a_pied_tunnel
 			else "Voie libre : la rame peut repartir", 4.0)
 	_maj_issues()
+	_piques_occasions(get_process_delta_time(), en_gare, a_pied_tunnel)
 	_securite_skieur()
 	commandes_skieur.set_evacuation_possible(evacuation_possible())
 	commandes_skieur.set_exploitation(_exploitation_pc if client_mode else (auto_operator != null and auto_operator.enabled))

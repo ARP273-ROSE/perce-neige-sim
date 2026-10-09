@@ -43,7 +43,7 @@ func _tick() -> void:
 		var v: Node3D = cab._interior_cars[1]
 		var car_len: float = cab.train_length / float(cab.car_count)
 		var z_c: float = (1.0 - (cab.car_count - 1) * 0.5) * car_len
-		var zc: float = cab._panel_center(1, 5) - z_c - 0.35
+		var zc: float = cab._panel_center(1, 4) - z_c
 		var pv: Vector3 = v.global_transform * Vector3(0.0, TrainBodyBuilder.Y_FLOOR + 0.1, zc)
 		_vue("voiture", pv, _yaw_vers(pv, v.global_transform * Vector3(0.0, 0.0, zc - 5.0)), -0.20, 2.2)
 		var xh: Transform3D = tun.transform_at(PNConstants.LENGTH)

@@ -7,6 +7,40 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.19.6** — retours du 09/10/2026 (soir).
+- « Quand l'exploitation auto a été déclenchée en mode skieur et que je
+  repasse en mode conduite, tout est figé : je ne peux pas couper
+  l'exploitation auto, ni klaxonner, ni allumer les phares » → le clavier
+  restait dans la fenêtre 3D (clic pour regarder en mode skieur), qui ne
+  passait au PC que J et C. Toutes les touches de conduite y sont maintenant
+  relayées au PC (appui et relâché). Sous exploitation auto, klaxon (K),
+  phares (H), éclairages (J, C) restent permis ; la conduite reste verrouillée.
+- Rames : 18 fenêtres par côté et par voiture, une porte toutes les trois à
+  partir de la 2e en partant du haut (symétrique dans l'autre voiture), plus
+  de liseré jaune autour de la première fenêtre ; bancs et porte-skis
+  replacés. Hublots mesurés sur les photos du quai puis calés par
+  superposition (`audit_physique/hublots_photo.sage`,
+  `hublots_superposition.py`) : 43 cm de large, du plancher + 0,28 m à
+  + 1,68 m, super-ellipse aux flancs légèrement bombés, plus ronde en haut.
+  La tôle est découpée au contour exact (plus de crénelage par cases de
+  10 cm) : liseré noir fin et régulier.
+- « Les panneaux d'évac n'ont plus la même couleur et ne réagissent pas
+  pareil à l'éclairage » (iPad) → le rendu Web choisit ses lampes objet par
+  objet ; les D jaunes étaient des objets séparés. Ce sont maintenant des
+  surfaces de la caisse, masquées à l'évacuation.
+- Mise à jour automatique sous Linux : « celle de Coupole marche, celle du
+  funi dit qu'elle ne trouve pas GitHub » → l'erreur réseau réelle est
+  affichée, et l'AppImage (ou le dossier du .tar.gz) se remplace toute seule
+  après vérification SHA-256, puis relance — comme Coupole. ⚠ Une copie
+  antérieure doit être remplacée UNE fois à la main.
+- Piques et avis : banque commune PC/PWA (`piques_avis.py`, PWA générée par
+  `tools_piques.py`) : 92 piques et 60 avis de plus, piques selon la vitesse
+  du choc au butoir, tirage sans répétition rapprochée. En mode skieur,
+  piques rares (au plus une toutes les 4 min) : hors-piste prolongé,
+  funiculaire raté sur le quai, évacuation, promenade sur la voie.
+- Banc d'évacuation : il attend que la rame ait fini de s'affaisser sous la
+  charge avant d'aligner la porte (la rame glissait de 3 cm/s à l'image).
+
 **v1.19.5** — « En mode skieur, dans la rame opposée à celle choisie au
 départ, on entend les sons de l'autre rame : l'ouverture des portes, c'est le
 timing de l'autre rame, pareil pour les sons de l'évitement » (09/10/2026).

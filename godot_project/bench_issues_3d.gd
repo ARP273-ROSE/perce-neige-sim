@@ -99,7 +99,12 @@ func _tick() -> void:
 			_main.evacuer()
 			var caches: int = 0
 			for e in cab._issues:
-				if not (e["node"] as MeshInstance3D).visible:
+				# surfaces de la caisse masquées (plus d'objet à part, 09/10/2026)
+				var masque: bool = not (e["node"] as Node3D).visible and not (e["surfaces"] as Array).is_empty()
+				for si in e["surfaces"]:
+					if (e["caisse"] as MeshInstance3D).get_surface_override_material(int(si)) == null:
+						masque = false
+				if masque:
 					caches += 1
 			var desact: int = 0
 			for cs in _main.collisions.issues.get(cab, []):
@@ -249,7 +254,8 @@ func _tick() -> void:
 				return
 			_verif("à quai, portes ouvertes : pas d'évacuation possible, issues remises",
 				not _main.evacuation_possible() and not cab.issues_retirees
-					and (cab._issues[0]["node"] as MeshInstance3D).visible,
+					and (cab._issues[0]["node"] as Node3D).visible
+					and (cab._issues[0]["caisse"] as MeshInstance3D).get_surface_override_material(int(cab._issues[0]["surfaces"][0])) == null,
 				"possible %s, retirées %s" % [_main.evacuation_possible(), cab.issues_retirees])
 			# CONDUIRE au poste, la rame roule 1 km, retour en skieur : il se
 			# relève DANS la voiture de tête (Kevin, 08/10/2026 : « le skieur

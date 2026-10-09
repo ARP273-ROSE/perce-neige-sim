@@ -227,24 +227,77 @@ const REVIEWS_DISASTER: Array = [
 
 # --- Accès ----------------------------------------------------------------
 
-## Tire une pique au hasard dans une des listes ci-dessus (langue = "fr"/"en").
+## Liste complète : celle d'origine + la banque commune (pn_quips_extra.gd,
+## générée depuis piques_avis.py — 09/10/2026, « pour ne pas avoir tout le
+## temps les mêmes »). Noms : CRASH, CRASH_LENT, CRASH_VIOLENT, DERAIL,
+## CABIN, REVERSE, DOORS_OPEN, REVIEWS_GREAT, REVIEWS_ROUGH,
+## REVIEWS_DISASTER, SKIEUR_*.
+static var _listes: Dictionary = {}
+static func liste(nom: String) -> Array:
+	if _listes.has(nom):
+		return _listes[nom]
+	var l: Array = []
+	match nom:
+		"CRASH": l.append_array(CRASH)
+		"DERAIL": l.append_array(DERAIL)
+		"CABIN": l.append_array(CABIN)
+		"REVERSE": l.append_array(REVERSE)
+		"DOORS_OPEN": l.append_array(DOORS_OPEN)
+		"REVIEWS_GREAT": l.append_array(REVIEWS_GREAT)
+		"REVIEWS_ROUGH": l.append_array(REVIEWS_ROUGH)
+		"REVIEWS_DISASTER": l.append_array(REVIEWS_DISASTER)
+	var c: Dictionary = (load("res://scripts/pn_quips_extra.gd") as Script).get_script_constant_map()
+	if c.has(nom):
+		l.append_array(c[nom])
+	_listes[nom] = l
+	return l
+
+
+## Tirage sans répétition rapprochée : les derniers tirages (la moitié de la
+## liste) ne ressortent pas.
+static var _vus: Dictionary = {}
+static func _tirer(l: Array):
+	if l.is_empty():
+		return null
+	var cle: String = str(l[0][0]) + "#" + str(l.size())
+	var vus: Array = _vus.get(cle, [])
+	var libres: Array = []
+	for i in range(l.size()):
+		if not (i in vus):
+			libres.append(i)
+	if libres.is_empty():
+		libres = range(l.size())
+	var i: int = libres.pick_random()
+	vus.append(i)
+	while vus.size() > l.size() / 2:
+		vus.pop_front()
+	_vus[cle] = vus
+	return l[i]
+
+
+## Tire une pique au hasard dans une liste (langue = "fr"/"en").
 static func pick_quip(list: Array, lang: String) -> String:
-	if list.is_empty():
+	var q = _tirer(list)
+	if q == null:
 		return ""
-	var q: Array = list.pick_random()
 	return q[1] if lang == "en" else q[0]
+
+
+## Pique d'une liste nommée (cf. liste()).
+static func pique(nom: String, lang: String) -> String:
+	return pick_quip(liste(nom), lang)
 
 
 ## Tire un avis passager. `tier` ∈ {"great", "rough", "disaster"}.
 ## Retourne { "who": …, "native": …, "text": … } — `native` vide quand la
 ## VO n'est pas affichable avec la police embarquée.
 static func pick_review(tier: String, lang: String) -> Dictionary:
-	var pool: Array = REVIEWS_GREAT
+	var nom: String = "REVIEWS_GREAT"
 	if tier == "rough":
-		pool = REVIEWS_ROUGH
+		nom = "REVIEWS_ROUGH"
 	elif tier == "disaster":
-		pool = REVIEWS_DISASTER
-	var r: Array = pool.pick_random()
+		nom = "REVIEWS_DISASTER"
+	var r: Array = _tirer(liste(nom))
 	return {
 		"who": r[0],
 		"native": str(r[1]) if bool(r[2]) else "",

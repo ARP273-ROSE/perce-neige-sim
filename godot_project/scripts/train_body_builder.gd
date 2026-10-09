@@ -31,14 +31,22 @@ const GAP: float = 0.50             # jeu entre les deux voitures
 # vantaux uniques de la largeur d'un cerceau, avec un hublot plus étroit.
 const RIB_W: float = 0.10           # joint entre cerceaux
 const RIB_H: float = -0.03          # en creux
-const PANEL_L: float = 1.30         # longueur d'un cerceau (hublot ou porte)
+## 18 fenêtres par côté et par voiture, une porte toutes les trois fenêtres à
+## partir de la deuxième (Kevin, 09/10/2026, photos du quai : « ça s'ouvre à
+## partir de la deuxième fenêtre en partant du haut, une fenêtre sur 3 […]
+## je compte 18 fenêtres en tout par côté, par wagon » ; symétrique : dans la
+## voiture du bas, la porte la plus basse est à la 2e fenêtre en partant du
+## bas). Longueur d'un cerceau tirée de la voiture de 16 m :
+## 18 × (P + joint) + joint + 2 tôles d'extrémité + calotte (1 m) + ½ jeu.
+const N_PANNEAUX: int = 18
+const PANEL_L: float = (16.0 - 1.0 - 0.25 - 2.0 * 0.33 - 0.10 * 19.0) / 18.0   # ≈ 0,677 m
 const END_BLANK: float = 0.33       # tôle pleine aux extrémités du tube
 const WELL_TOP: float = -0.85       # échancrures de la jupe au droit des bogies (y local)
 const WELL_HALF: float = 1.05       # demi-longueur d'une échancrure
 const BOGIE_OFFSET: float = 2.0     # bogies à 2 m des extrémités (hors des portes)
 const DOOR_TOP_T: float = 54.0      # haut du vantail coulissant (angle depuis le sommet)
 const DOOR_PLUG: float = 0.08       # déboîtement du vantail (m) avant de glisser
-const DOOR_SLIDE: float = 1.20      # course de glissement (m)
+const DOOR_SLIDE: float = PANEL_L + RIB_W   # course : un panneau pile, le vantail ouvert recouvre la vitre voisine (Kevin, 09/10/2026)
 const WHEEL_R: float = 0.30
 const D_THETA_DEG: float = 2.5      # résolution angulaire du tube (découpes des hublots)
 const CAP_THETA_DEG: float = 2.0    # résolution angulaire de la calotte (découpes)
@@ -50,13 +58,21 @@ const COL_L: float = 0.10           # résolution longitudinale des panneaux vit
 # des portes sont plus étroits (0,60). Définis en (u le long du cerceau,
 # w = longueur d'arc depuis le sommet) ; découpe + joint caoutchouc +
 # vitre lissée, comme le pare-brise.
-const WIN_T0: float = 58.0          # angle depuis le sommet : haut du hublot (2,05 m du plancher)
-const WIN_T1: float = 108.5         # bas du hublot (0,6 m du plancher, dessus des assises)
-const WIN_W: float = 0.75           # largeur d'un hublot de panneau fixe
-const DOOR_WIN_W: float = 0.60      # largeur d'un hublot de porte
-const WIN_CORNER: float = 0.28      # rayon des arrondis
-const TUBE_GASKET_IN: float = 0.03
-const TUBE_GASKET_OUT: float = 0.11 # doit couvrir une cellule (0,10 × 0,075)
+# Hublots mesurés sur les photos de Kevin (09/10/2026, « tes vitres sont trop
+# larges, fais-les plus fines ») : audit_physique/hublots_photo.sage — du
+# plancher + 0,28 m au plancher + 1,68 m, hublot de porte identique aux
+# autres. Forme (même jour : « trop rectangulaire, plus arrondie au sommet et
+# à mi-hauteur dans la largeur, un peu trop large pour le panneau ») : une
+# super-ellipse aux flancs légèrement bombés, plus ronde en haut qu'en bas.
+const WIN_T0: float = 72.1          # angle depuis le sommet : haut du hublot (1,68 m du plancher)
+const WIN_T1: float = 120.4         # bas du hublot (0,28 m du plancher)
+const WIN_W: float = 0.43           # largeur d'un hublot (au plus large), calée par superposition à la photo
+const DOOR_WIN_W: float = 0.43      # hublot du vantail : le même
+const WIN_CORNER: float = 0.15      # (ancien contour arrondi, gardé pour la face)
+const WIN_N_HAUT: float = 3.0       # exposant de la super-ellipse, moitié haute (plus ronde)
+const WIN_N_BAS: float = 3.4        # moitié basse (plus carrée)
+const TUBE_GASKET_IN: float = 0.012
+const TUBE_GASKET_OUT: float = 0.026 # liseré noir fin et régulier : la tôle est découpée au contour exact
 # Face avant (photo 20260426_095511, 220 px/m) : la face réelle va de
 # l'apex (+1,78) au fond plat (−1,33), soit 3,1 m ; dans le jeu la voie est
 # plus haute dans le tube et la face n'a que 2,43 m (apex +1,72 → coupe
@@ -191,7 +207,7 @@ static func _theta_cut() -> float:
 
 # --- plan des panneaux ----------------------------------------------------
 ## Nature de chaque cerceau d'une voiture, de l'avant vers l'arrière.
-const KINDS: Array = ["win", "win", "door", "win", "win", "door", "win", "door", "win", "win"]
+const KINDS: Array = ["win", "door", "win", "win", "door", "win", "win", "door", "win", "win", "door", "win", "win", "door", "win", "win", "door", "win"]
 
 # Retourne une liste de colonnes [{z0, z1, kind}] couvrant [z_a, z_b] ;
 # kind ∈ blank | rib | win | door. Panneaux W D W D W D W entre anneaux.
@@ -227,8 +243,60 @@ static func _window_outline(plen: float, kind: String = "win") -> PackedVector2A
 	var w0: float = R_BODY * deg_to_rad(WIN_T0)
 	var w1: float = R_BODY * deg_to_rad(WIN_T1)
 	var width: float = DOOR_WIN_W if kind == "door" else WIN_W
-	var margin: float = (plen - width) * 0.5
-	return _rounded_outline(margin, plen - margin, w0, w1, WIN_CORNER, 99.0)
+	var a: float = width * 0.5
+	var b: float = (w1 - w0) * 0.5
+	var c: Vector2 = Vector2(plen * 0.5, (w0 + w1) * 0.5)
+	var pts: PackedVector2Array = PackedVector2Array()
+	var n: int = 96
+	for i in range(n):
+		var ang: float = TAU * float(i) / float(n)
+		var ca: float = cos(ang)
+		var sa: float = sin(ang)
+		# w croît vers le BAS (arc depuis le sommet) : sa < 0 = moitié haute
+		var ex: float = WIN_N_HAUT if sa < 0.0 else WIN_N_BAS
+		pts.append(c + Vector2(a * signf(ca) * pow(absf(ca), 2.0 / ex),
+			b * signf(sa) * pow(absf(sa), 2.0 / ex)))
+	return pts
+
+
+## Décalage d'un contour le long de ses normales (d > 0 vers l'extérieur) :
+## épaisseur constante, contrairement au décalage radial depuis le centre
+## (le liseré noir « pas régulier », 09/10/2026).
+static func _offset_normal(pts: PackedVector2Array, d: float) -> PackedVector2Array:
+	var n: int = pts.size()
+	var aire: float = 0.0
+	for i in range(n):
+		aire += pts[i].cross(pts[(i + 1) % n])
+	var sens: float = 1.0 if aire > 0.0 else -1.0
+	var out: PackedVector2Array = PackedVector2Array()
+	for i in range(n):
+		var e0: Vector2 = (pts[i] - pts[(i - 1 + n) % n]).normalized()
+		var e1: Vector2 = (pts[(i + 1) % n] - pts[i]).normalized()
+		var t: Vector2 = (e0 + e1).normalized()
+		var nor: Vector2 = Vector2(t.y, -t.x) * sens
+		out.append(pts[i] + nor * d)
+	return out
+
+
+## Tôle d'une bande angulaire [wa, wb] d'un panneau percé : rectangle moins
+## le hublot, triangulé au contour exact (plus de crénelage de cellules à
+## couvrir d'un gros joint).
+static func _bande_percee(st: SurfaceTool, plen: float, wa: float, wb: float,
+		hole: PackedVector2Array, z0c: float, sx: float, r: float) -> void:
+	var rect: PackedVector2Array = PackedVector2Array([Vector2(0.0, wa), Vector2(plen, wa),
+		Vector2(plen, wb), Vector2(0.0, wb)])
+	for poly in Geometry2D.clip_polygons(rect, hole):
+		var pp: PackedVector2Array = poly
+		var tris: PackedInt32Array = Geometry2D.triangulate_polygon(pp)
+		for k in range(0, tris.size(), 3):
+			var q: Array = [pp[tris[k]], pp[tris[k + 1]], pp[tris[k + 2]]]
+			var v: Array = []
+			var nn: Array = []
+			for qq in q:
+				var th: float = sx * (qq as Vector2).y / R_BODY
+				v.append(_tube_pt(th, r, z0c + (qq as Vector2).x))
+				nn.append(_tube_n(th))
+			_tri_out(st, v[0], v[1], v[2], nn[0], nn[1], nn[2])
 
 
 ## Point du tube pour (u, w) d'un panneau commençant à z0c, côté sx (±1).
@@ -272,7 +340,9 @@ static func _build_tube(mesh: ArrayMesh, mats: Dictionary, z_a: float, z_b: floa
 		var hole: PackedVector2Array = _window_outline(plen, kind) if glazed else PackedVector2Array()
 		# le jaune de la calotte déborde sur la tôle d'extrémité ET le premier
 		# cerceau, hublot compris (photo 095438)
-		var yellow_col: bool = ((ci <= 2 and yellow_a) or (ci >= cols.size() - 3 and yellow_b)) \
+		# (seulement la tôle d'extrémité : la première fenêtre n'est PAS
+		# cerclée de jaune — photos du quai, 09/10/2026)
+		var yellow_col: bool = ((ci <= 0 and yellow_a) or (ci >= cols.size() - 1 and yellow_b)) \
 			and kind != "rib"
 		# vantail coulissant : cellules sous DOOR_TOP_T, par côté, dans leurs
 		# propres surfaces (le haut du cerceau reste solidaire de la caisse)
@@ -287,13 +357,36 @@ static func _build_tube(mesh: ArrayMesh, mats: Dictionary, z_a: float, z_b: floa
 				str_.begin(Mesh.PRIMITIVE_TRIANGLES)
 				leaf_st[sx] = {"body": stb, "glass": stg, "rubber": str_}
 		var r: float = (R_BODY - 0.05) if inner else R_BODY + (RIB_H if kind == "rib" else 0.0)
-		var n_sub: int = int(ceil(plen / COL_L)) if glazed else 1
+		# bandes angulaires qui croisent le hublot : découpe exacte
+		var w_haut: float = R_BODY * deg_to_rad(WIN_T0) - 0.005
+		var w_bas: float = R_BODY * deg_to_rad(WIN_T1) + 0.005
+		var bande_percee: Dictionary = {}
+		if glazed:
+			for i in range(n_th):
+				var t0b: float = -th_cut + d_th * i
+				var t1b: float = t0b + d_th
+				if t0b * t1b < 0.0:
+					continue
+				var wa: float = R_BODY * minf(absf(t0b), absf(t1b))
+				var wb: float = R_BODY * maxf(absf(t0b), absf(t1b))
+				if wb <= w_haut or wa >= w_bas:
+					continue
+				bande_percee[i] = true
+				var tmb: float = 0.5 * (t0b + t1b)
+				var stb2: SurfaceTool = st_rib if kind == "rib" else (
+					st_door if kind == "door" else (st_yellow if yellow_col else st_body))
+				if inner:
+					stb2 = st_body
+				elif kind == "door" and absf(tmb) >= deg_to_rad(DOOR_TOP_T):
+					stb2 = leaf_st[signf(tmb)]["body"]
+				if inner and kind == "door" and absf(tmb) >= deg_to_rad(DOOR_TOP_T):
+					continue
+				_bande_percee(stb2, plen, wa, wb, hole, z0c, signf(tmb), r)
+		var n_sub: int = 1
 		var dz: float = plen / float(n_sub)
 		for j in range(n_sub):
 			var z0: float = z0c + dz * j
 			var z1: float = z0 + dz
-			var u0: float = z0 - z0c
-			var u1: float = z1 - z0c
 			for i in range(n_th):
 				var t0: float = -th_cut + d_th * i
 				var t1: float = t0 + d_th
@@ -304,16 +397,9 @@ static func _build_tube(mesh: ArrayMesh, mats: Dictionary, z_a: float, z_b: floa
 				# doublure : baie de porte ouverte (le vantail est une pièce à part)
 				if inner and kind == "door" and absf(tm) >= deg_to_rad(DOOR_TOP_T):
 					continue
-				# découpe du hublot : cellule dont un coin est dans le contour
-				if glazed:
-					var cut: bool = false
-					for corner in [Vector2(u0, R_BODY * absf(t0)), Vector2(u1, R_BODY * absf(t0)),
-							Vector2(u1, R_BODY * absf(t1)), Vector2(u0, R_BODY * absf(t1))]:
-						if Geometry2D.is_point_in_polygon(corner, hole):
-							cut = true
-							break
-					if cut:
-						continue
+				# bande qui croise le hublot : déjà posée au contour exact
+				if bande_percee.has(i):
+					continue
 				var st: SurfaceTool = st_rib if kind == "rib" else (
 					st_door if kind == "door" else (st_yellow if yellow_col else st_body))
 				if inner:
@@ -333,9 +419,9 @@ static func _build_tube(mesh: ArrayMesh, mats: Dictionary, z_a: float, z_b: floa
 					return _tube_uw_n(w, sx)
 				var st_r_: SurfaceTool = leaf_st[sx]["rubber"] if kind == "door" else st_rubber
 				var st_g_: SurfaceTool = leaf_st[sx]["glass"] if kind == "door" else st_glass
-				_emit_band(st_r_, _offset_outline(hole, -TUBE_GASKET_IN),
-					_offset_outline(hole, TUBE_GASKET_OUT), pt_fn, n_fn, 0.010)
-				_emit_pane(st_g_, _offset_outline(hole, -GLASS_INSET), pt_fn, n_fn, 0.016)
+				_emit_band(st_r_, _offset_normal(hole, -TUBE_GASKET_IN),
+					_offset_normal(hole, TUBE_GASKET_OUT), pt_fn, n_fn, 0.010)
+				_emit_pane(st_g_, _offset_normal(hole, -GLASS_INSET), pt_fn, n_fn, 0.016)
 		if kind == "door" and not inner:
 			for sx in [-1.0, 1.0]:
 				var lm: ArrayMesh = ArrayMesh.new()
@@ -363,8 +449,8 @@ static func _build_tube(mesh: ArrayMesh, mats: Dictionary, z_a: float, z_b: floa
 					return _tube_pt(sx * w / R_BODY, R_BODY - 0.05 + lift, z0c2 + u)
 				var n_i: Callable = func(_u: float, w: float) -> Vector3:
 					return _tube_uw_n(w, sx)
-				_emit_band(st_ri2, _offset_outline(hole2, -TUBE_GASKET_IN),
-					_offset_outline(hole2, 0.12), pt_i, n_i, -0.012)
+				_emit_band(st_ri2, _offset_normal(hole2, -TUBE_GASKET_IN),
+					_offset_normal(hole2, TUBE_GASKET_OUT), pt_i, n_i, -0.012)
 		st_body.set_material(mats["lining"]); st_body.commit(mesh)
 		st_ri2.set_material(mats["rubber"]); st_ri2.commit(mesh)
 		return
@@ -1031,13 +1117,26 @@ static func build_train(root: Node3D, train_length: float, car_count: int,
 			lin.name = "Lining%d" % (i + 1)
 			lin.mesh = lining
 			car_root.add_child(lin)
+		# Panneaux d'issue de secours : SURFACES de la caisse elle-même, plus
+		# un objet à part (Kevin, 09/10/2026, iPad : « les panneaux d'évac
+		# n'ont plus la même couleur et ne réagissent pas pareil à
+		# l'éclairage ») — le rendu Web choisit ses lampes PAR OBJET, le
+		# petit panneau séparé n'avait pas les mêmes que la grande caisse.
+		# Le nœud « Issue… » reste, vide : il porte poignées et liserés et
+		# s'efface avec eux ; cabin.gd masque les surfaces.
 		var issues_nodes: Dictionary = {}
 		for cle in issues_m:
-			var im: MeshInstance3D = MeshInstance3D.new()
+			var src: ArrayMesh = issues_m[cle]
+			var surfaces: Array = []
+			for si in range(src.get_surface_count()):
+				mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, src.surface_get_arrays(si))
+				var idx: int = mesh.get_surface_count() - 1
+				mesh.surface_set_material(idx, src.surface_get_material(si))
+				surfaces.append(idx)
+			var im: Node3D = Node3D.new()
 			im.name = "Issue" + cle
-			im.mesh = issues_m[cle]
 			car_root.add_child(im)
-			issues.append({"node": im, "car": i, "cle": cle})
+			issues.append({"node": im, "car": i, "cle": cle, "caisse": car, "surfaces": surfaces})
 			issues_nodes[cle] = im
 		if is_first:
 			front_lamps = _build_cap_fittings(car_root, mats, z_a, -1.0, true, issues_nodes)
