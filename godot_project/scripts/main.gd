@@ -1027,6 +1027,8 @@ func _process(delta: float) -> void:
 					int(collisions.progres() * 100.0), (Time.get_ticks_msec() - _t_skieur_attente) / 1000])
 	if mode_skieur:
 		_maj_skieur()
+	elif skieur_auto != null and skieur != null and skieur.actif:
+		_maj_skieur()        # BOUCLE en coulisse : le skieur vit, l'exploitation l'attend
 	# numéros des supports : rétroréfléchissants dans les phares (vue cabine)
 	if track != null and cabin != null:
 		track.set_retro(cabin.head_glow() if cabin.view_mode == Cabin.ViewMode.FPV else 0.0)
@@ -1534,7 +1536,10 @@ func basculer_skieur() -> void:
 	if tunnel == null or cabin == null:
 		return
 	if mode_skieur:
-		_sortir_skieur()
+		# la BOUCLE continue en coulisse quand on quitte la vue skieur pour
+		# changer de vue (Kevin, 09/10/2026 : « le mode boucle se désactive si
+		# je quitte le mode skieur afin de changer de vue, il ne faudrait pas »)
+		_sortir_skieur(skieur_auto != null)
 	else:
 		_entrer_skieur()
 
@@ -1700,7 +1705,14 @@ func _entrer_skieur() -> void:
 		commandes_skieur.skieur = skieur
 		commandes_skieur.main = self
 		add_child(commandes_skieur)
-	if _skieur_au_poste:
+	if skieur_auto != null and skieur.actif:
+		# la BOUCLE tournait en coulisse : on le retrouve où il en est
+		var sup: Node3D = skieur.support
+		skieur.activer(skieur.global_position, skieur.cam_yaw)
+		if sup != null and is_instance_valid(sup):
+			skieur.support = sup
+			skieur._support_xf = sup.global_transform
+	elif _skieur_au_poste:
 		# il se lève du siège du conducteur — DANS la voiture de tête, où
 		# qu'elle soit rendue (Kevin, 08/10/2026 : « en repassant en mode
 		# skieur à l'arrivée, le skieur est tout seul au milieu du tunnel » :
@@ -1768,27 +1780,36 @@ func _entrer_skieur() -> void:
 	_flash("Skieur : joystick ou ZQSD pour marcher, glisser pour regarder")
 
 
-func _sortir_skieur() -> void:
+## `garder_boucle` : la BOUCLE (skieur automatique) continue en coulisse —
+## le skieur reste actif et visible, portes automatiques, retenue de
+## l'exploitation et garde-fous compris ; seuls la vue, le HUD et l'écoute
+## reviennent à la cabine. On le retrouve où il en est en revenant.
+func _sortir_skieur(garder_boucle: bool = false) -> void:
 	mode_skieur = false
-	_maj_issues(true)
-	if skieur_auto != null:
-		skieur_auto.arreter()
-		skieur_auto = null
-		if commandes_skieur != null:
-			commandes_skieur.set_auto(false)
-	PorteAuto.presences = []
-	# dans une rame : on retient sa place dans la voiture
+	var boucle: bool = garder_boucle and skieur_auto != null and skieur != null
+	if not boucle:
+		_maj_issues(true)
+		if skieur_auto != null:
+			skieur_auto.arreter()
+			skieur_auto = null
+			if commandes_skieur != null:
+				commandes_skieur.set_auto(false)
+		PorteAuto.presences = []
+	# dans une rame : on retient sa place dans la voiture (pas en boucle : il
+	# bouge pendant qu'on regarde ailleurs)
 	_skieur_voiture = null
-	if skieur != null and skieur.support != null:
+	if not boucle and skieur != null and skieur.support != null:
 		_skieur_voiture = skieur.support
 		_skieur_local = skieur.support.global_transform.affine_inverse() * skieur.global_position
-	if auto_operator != null:
-		auto_operator.retenue = false
-		auto_operator.a_bord = false
-		auto_operator.bloque = false
-	_voie_occupee = false
-	if physics != null:
-		physics.voie_occupee = false
+	if not boucle:
+		if auto_operator != null:
+			auto_operator.retenue = false
+			auto_operator.a_bord = false
+			auto_operator.bloque = false
+		_voie_occupee = false
+		if physics != null:
+			physics.voie_occupee = false
+		_dans_tunnel = false
 	if _bogies_caches != null and is_instance_valid(_bogies_caches):
 		_bogies_caches.set_bogies_visibles(true)
 	_bogies_caches = null
@@ -1798,14 +1819,14 @@ func _sortir_skieur() -> void:
 		sons_skieur.ecoute = 0
 	if announcements != null:
 		announcements.set_ecoute_skieur(0)
-	_dans_tunnel = false
 	if relief != null:
 		relief.set_hiver(0.0)
 	if domaine != null:
 		domaine.visible = false
 	if skieur != null:
 		skieur.touches_ext = 0
-		skieur.desactiver()
+		if not boucle:
+			skieur.desactiver()
 	if commandes_skieur != null:
 		commandes_skieur.visible = false
 	cabin.set_view(Cabin.ViewMode.FPV)
@@ -2106,13 +2127,15 @@ func _maj_skieur() -> void:
 		auto_operator.a_bord = dedans
 		auto_operator.retenue = retenue
 		auto_operator.bloque = a_pied_tunnel
+	if not mode_skieur:
+		ec = 0           # boucle en coulisse : on écoute depuis la cabine
 	if audio != null:
 		audio.ecoute = ec
 	if sons_skieur != null:
 		sons_skieur.ecoute = ec
 	# la sono de la rame pilotée : dans cette rame, atténuée sur le quai de
 	# la gare où elle est, coupée ailleurs (dehors, tunnel, autre rame)
-	if announcements != null:
+	if announcements != null and mode_skieur:
 		var gare_rame: int = 1 if physics.s <= PNConstants.START_S + 5.0 \
 			else (2 if physics.s >= PNConstants.STOP_S - 5.0 else 0)
 		var e_ann: int = 2
@@ -2125,7 +2148,7 @@ func _maj_skieur() -> void:
 		# même règle d'attente et de départ pour l'exploitation AUTO du PC,
 		# et le gain de la machinerie (quais du haut), au 1/20 près
 		var gm: float = snappedf(_gain_machinerie(), 0.05)
-		var etat: Array = [dedans, retenue, ec, gm, a_pied_tunnel]
+		var etat: Array = [dedans, retenue, ec, gm, a_pied_tunnel, skieur_auto != null]
 		if etat != _skieur_etat_envoye:
 			_skieur_etat_envoye = etat
 			state_receiver.envoyer({"skieur_etat": etat})

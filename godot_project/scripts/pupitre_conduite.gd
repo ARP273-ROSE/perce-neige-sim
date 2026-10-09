@@ -46,6 +46,14 @@ const X_ECRAN: float = -0.10           # centre du cadre de l'écran
 const X_PLAQUE: float = 0.21           # centre de la plaque à boutons
 const X_GAUCHE: float = -0.35          # centre de la plaque de gauche (coups-de-poing rouges)
 const PIXEL_ETIQUETTE: float = 0.00048  # plus gros qu'en vrai : lisible depuis le siège
+## Textes du pupitre en haute définition (09/10/2026, Kevin : « ton panneau de
+## conduite est pixélisé et pas net, un truc vectoriel et plus précis ? ») :
+## une étiquette Label3D est une TEXTURE rendue à `font_size` pixels — 12 à
+## 20 px, étirés sur 6 à 10 mm, puis filtrés en biais : flou garanti, sur
+## n'importe quelle carte. On rend 6 fois plus fin (pixel_size 6 fois plus
+## petit : même taille sur le pupitre), filtrage anisotrope ; l'écran
+## Pro-face est rendu en 4× (2× sur le web). Coût nul en pratique.
+const SURECHANTILLON: int = 6
 const NOMS_OUVERTURE: Array = ["ouverture_0", "ouverture_1"]   # (pas de "%d" % g chaque image)
 const NOMS_FERMETURE: Array = ["fermeture_0", "fermeture_1"]
 const NOMS_ROUGE: Array = ["rouge_1", "rouge_2"]
@@ -186,7 +194,7 @@ func _construire_ecran() -> void:
 	m.albedo_texture = _sv.get_texture()
 	_mat_ecran = m
 	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
+	m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
 	var q: QuadMesh = QuadMesh.new()
 	q.size = Vector2(ECRAN_L, ECRAN_H)
 	q.material = m
@@ -458,7 +466,8 @@ func mettre_a_jour(ph: TrainPhysics, dt: float, vehicule: int, ecran_visible: bo
 
 func _nouvel_ecran() -> SubViewport:
 	var sv: SubViewport = SubViewport.new()
-	sv.size = Vector2i(int(EcranProface.L) * 2, int(EcranProface.H) * 2)
+	var k: int = 2 if OS.has_feature("web") else 4     # définition de l'écran (cf. SURECHANTILLON)
+	sv.size = Vector2i(int(EcranProface.L) * k, int(EcranProface.H) * k)
 	sv.size_2d_override = Vector2i(int(EcranProface.L), int(EcranProface.H))
 	sv.size_2d_override_stretch = true
 	sv.transparent_bg = false
@@ -604,8 +613,9 @@ func _cadre(filet: StandardMaterial3D, xa: float, xb: float, za: float, zb: floa
 func _etiquette(t: String, p: Vector2, taille: int, c: Color) -> Label3D:
 	var l: Label3D = Label3D.new()
 	l.text = t
-	l.font_size = taille
-	l.pixel_size = PIXEL_ETIQUETTE
+	l.font_size = taille * SURECHANTILLON
+	l.pixel_size = PIXEL_ETIQUETTE / float(SURECHANTILLON)
+	l.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
 	l.modulate = c
 	l.outline_size = 0
 	l.shaded = false

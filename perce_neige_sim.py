@@ -5344,8 +5344,19 @@ class SoundSystem:
                 pass
         return None
 
+    def prendre_messages(self) -> list:
+        """Messages pour le journal de bord (fils de fond : téléchargements)."""
+        m = getattr(self, "_messages", None)
+        if not m:
+            return []
+        out = list(m)
+        del m[:]
+        return out
+
     def _telecharger_musique(self, nom: str) -> None:
         """Rapatrie `nom` dans le profil (une fois, en tâche de fond)."""
+        if getattr(self, "_messages", None) is None:
+            self._messages = []
         en_cours = getattr(self, "_musique_telechargements", None)
         if en_cours is None:
             en_cours = self._musique_telechargements = set()
@@ -5356,23 +5367,38 @@ class SoundSystem:
         def _travail() -> None:
             try:
                 import shutil
+                import ssl
                 import urllib.request
                 dest = _persistent_data_dir() / "musique"
                 dest.mkdir(parents=True, exist_ok=True)
                 tmp = dest / (nom + ".part")
                 # Cloudflare refuse l'agent « Python-urllib » (403) : on se
-                # présente sous le nom du simulateur
+                # présente sous le nom du simulateur ; contexte TLS explicite
+                # comme la mise à jour automatique (updater._open)
                 req = urllib.request.Request(
                     MUSIQUE_URL + nom,
                     headers={"User-Agent": "PerceNeigeSimulator/" + VERSION})
-                with urllib.request.urlopen(req, timeout=60) as r, open(tmp, "wb") as f:
+                ctx = ssl.create_default_context()
+                with urllib.request.urlopen(req, timeout=60, context=ctx) as r, open(tmp, "wb") as f:
                     shutil.copyfileobj(r, f)
-                if tmp.stat().st_size > 100_000:
+                taille = tmp.stat().st_size
+                if taille > 100_000:
                     tmp.replace(dest / nom)
+                    self._messages.append((
+                        f"Music: {nom} downloaded ({taille / 1e6:.1f} MB) — plays as soon as needed",
+                        f"Musique : {nom} téléchargée ({taille / 1e6:.1f} Mo) — jouée dès que la gare le demande"))
                 else:
                     tmp.unlink(missing_ok=True)
-            except Exception:
-                pass
+                    self._messages.append((f"Music: {nom} download incomplete ({taille} bytes)",
+                                           f"Musique : téléchargement de {nom} incomplet ({taille} octets)"))
+            except Exception as e:       # journalisé : avant, l'échec était silencieux
+                self._messages.append((f"Music: cannot download {nom} — {e}",
+                                       f"Musique : téléchargement de {nom} impossible — {e}"))
+            finally:
+                try:
+                    self._musique_telechargements.discard(nom)
+                except Exception:
+                    pass
 
         threading.Thread(target=_travail, name="musique-" + nom, daemon=True).start()
 
@@ -5386,6 +5412,7 @@ class SoundSystem:
             return
         try:
             if gare == 0:
+                self._musique_attente = None
                 if self._musique_player is not None:
                     self._musique_player.stop()
                 return
@@ -5397,19 +5424,27 @@ class SoundSystem:
             # ils sont locaux. sons/musique/ à côté du programme est lu en
             # priorité.
             chemin = self._musique_locale(nom)
-            if chemin is not None:
-                source = QUrl.fromLocalFile(str(chemin))
-                cle = str(chemin)
-            else:
-                source = QUrl(MUSIQUE_URL + nom)
-                cle = MUSIQUE_URL + nom
+            if chemin is None:
+                # pas encore là : on télécharge, et tick() lance la musique
+                # dès que le fichier est complet (Kevin, 09/10/2026 : « tu mets
+                # que tu la récupères mais elle ne se joue pas, il faut
+                # ressortir et rerentrer » — le flux direct ne démarrait pas)
                 self._telecharger_musique(nom)
+                self._musique_attente = (gare, nom)
+                self._musique_chemin = f"téléchargement de {nom} (jouée dès qu'elle est là)"
+                if self._musique_player is not None:
+                    self._musique_player.stop()
+                return
+            self._musique_attente = None
+            source = QUrl.fromLocalFile(str(chemin))
+            cle = str(chemin)
             if self._musique_player is None:
                 self._musique_player = QMediaPlayer()
                 self._musique_audio = _AudioOutput()
-                self._musique_audio.setVolume(0.22)
                 self._musique_player.setAudioOutput(self._musique_audio)
                 self._musique_player.setLoops(QMediaPlayer.Loops.Infinite)
+            # gare basse un peu plus fort (Kevin, 09/10/2026)
+            self._musique_audio.setVolume(0.30 if gare == 1 else 0.22)
             if self._musique_chemin != cle:
                 self._musique_player.setSource(source)
                 self._musique_chemin = cle
@@ -5665,6 +5700,18 @@ class SoundSystem:
             pass
 
     def tick(self, dt: float) -> None:
+        # musique de gare en attente de téléchargement : on la lance dès que
+        # le fichier est complet (une vérification toutes les 0,5 s)
+        att = getattr(self, "_musique_attente", None)
+        if att is not None:
+            self._musique_poll = getattr(self, "_musique_poll", 0.0) + dt
+            if self._musique_poll >= 0.5:
+                self._musique_poll = 0.0
+                gare_att, nom_att = att
+                if self._musique_locale(nom_att) is not None:
+                    self._musique_attente = None
+                    self._musique_gare = -1
+                    self.set_musique_gare(gare_att)
         for k in list(self._cooldowns.keys()):
             self._cooldowns[k] = max(0.0, self._cooldowns[k] - dt)
         # sortie par défaut changée sans changement de la liste des
@@ -7302,7 +7349,7 @@ class GameWidget(QWidget):
         self._skieur_prep_txt = ""              # préparation du décor 3D en cours (texte)
         # dedans, retenue, écoute (0 rame, 1 gare basse, 2 dehors, 3 gare
         # haute, 4 tunnel à pied), gain de la machinerie entendu (gare haute)
-        self._skieur_etat = (False, False, 0, 0.0, False)
+        self._skieur_etat = (False, False, 0, 0.0, False, False)
         self._skieur_heures = False             # force_any_hours avant
         self.new_trip(first=True)
 
@@ -7391,7 +7438,8 @@ class GameWidget(QWidget):
             if isinstance(e, list) and len(e) >= 3:
                 gain = float(e[3]) if len(e) > 3 else 0.0
                 bloque = bool(e[4]) if len(e) > 4 else False
-                self._skieur_etat = (bool(e[0]), bool(e[1]), int(e[2]), gain, bloque)
+                boucle = bool(e[5]) if len(e) > 5 else False
+                self._skieur_etat = (bool(e[0]), bool(e[1]), int(e[2]), gain, bloque, boucle)
                 self._appliquer_etat_skieur()
 
     def _pupitre_3d(self, nom: str, enfonce: bool) -> None:
@@ -7445,8 +7493,12 @@ class GameWidget(QWidget):
         return bits
 
     def _appliquer_etat_skieur(self) -> None:
-        dedans, retenue, ecoute, gain, bloque = self._skieur_etat
+        dedans, retenue, ecoute, gain, bloque, boucle = self._skieur_etat
         on = self._skieur
+        # BOUCLE en coulisse (09/10/2026) : la vue skieur quittée pour changer
+        # de vue, le skieur automatique continue dans la 3D — l'exploitation
+        # l'attend toujours ; les sons, eux, sont ceux de la cabine
+        on_expl = on or boucle
         self.sounds.skieur_dehors = on and ecoute != 0
         # quais de la gare haute : la machinerie, au gain donné par la 3D
         # (distance à la machinerie)
@@ -7457,13 +7509,13 @@ class GameWidget(QWidget):
             self._musique_annoncee = src
             add_event(self.state, "skieur", f"Station music: {src}",
                       f"Musique de la gare : {src}", "info")
-        self.auto_ops.skieur_a_bord = on and dedans
-        self.auto_ops.skieur_retenue = on and retenue
+        self.auto_ops.skieur_a_bord = on_expl and dedans
+        self.auto_ops.skieur_retenue = on_expl and retenue
         # à pied sur la voie (tunnel, galerie) : rame immobilisée, sans
         # limite — régulateur tenu, exploitation en attente
-        self.auto_ops.skieur_bloque = on and bloque
-        if (on and bloque) != self.state.voie_occupee:
-            self.state.voie_occupee = on and bloque
+        self.auto_ops.skieur_bloque = on_expl and bloque
+        if (on_expl and bloque) != self.state.voie_occupee:
+            self.state.voie_occupee = on_expl and bloque
             if self.state.voie_occupee:
                 add_event(self.state, "skieur",
                           "Skier on the track: train held",
@@ -7526,7 +7578,7 @@ class GameWidget(QWidget):
             self._virtual_key(Qt.Key.Key_D)
         self._godot_view3d = 0
         self._skieur = True
-        self._skieur_etat = (False, False, 0, 0.0, False)
+        self._skieur_etat = (False, False, 0, 0.0, False, False)
         self._skieur_prep_txt = T("preparing the 3D scenery…", "préparation du décor 3D…")
         self._key_state.clear()
         add_event(st, "skieur",
@@ -8192,6 +8244,8 @@ class GameWidget(QWidget):
                 fl[3] = random.uniform(1.0, 2.6)
 
         self.sounds.tick(dt)
+        for m_en, m_fr in self.sounds.prendre_messages():
+            add_event(st, "musique", m_en, m_fr, "info")
         # Vue 3D « salle des machines » (O, 3e vue) : son de la gare haute
         self.sounds.set_machine_room_view(self._machine_room_view_active())
         # Ambient motor/rumble: fades with speed (dt → rampes indépendantes

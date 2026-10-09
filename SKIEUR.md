@@ -103,7 +103,7 @@ funiculaire), les sauts (il reste collé au sol), les chutes.
   au portail. On y va rame arrêtée à la chambre, portes
   ouvertes (Défi, panne) : porte → passerelle → galerie. Banc
   `bench_secours_3d.gd`, captures `shot_secours.gd`.
-- **Skieur en BOUCLE** (`skieur_auto.gd`, bouton BOUCLE — « AUTO » avant la 1.18.5 — / touche X) : la boucle
+- **Skieur en BOUCLE** (`skieur_auto.gd`, bouton BOUCLE — « AUTO » avant la 1.18.5 — / touche X ; depuis la 1.18.9 elle continue en coulisse quand on quitte la vue skieur : `_sortir_skieur(garder_boucle)`, `_maj_skieur` appelé hors vue, écoute forcée à 0, 6e champ `boucle` du relais) : la boucle
   complète, étapes avec points de passage (ceux des bancs) ; la rame
   l'attend (`SkieurAuto.descend()` → `retenue`). Banc
   `bench_skieur_auto_3d.gd`.

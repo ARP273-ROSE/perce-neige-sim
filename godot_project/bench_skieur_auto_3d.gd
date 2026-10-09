@@ -11,6 +11,8 @@ var _ok: bool = true
 var _lance: bool = false
 var _vus: Dictionary = {}
 var _etape_prec: int = -1
+var _t_sortie: float = -1.0
+var _bascule_faite: bool = false
 
 
 func _initialize() -> void:
@@ -57,6 +59,23 @@ func _tick() -> void:
 	var sk: SkieurJoueur = _main.skieur
 	if sa.etape == SkieurAuto.Etape.SKI and sk.chausse:
 		_vus["ski_chausse"] = true
+	# quitter la vue skieur (changer de vue) pendant la boucle : elle doit
+	# continuer en coulisse, et le retour le retrouve où il en est (Kevin,
+	# 09/10/2026 : « le mode boucle se désactive si je quitte le mode skieur »)
+	if not _bascule_faite and _t_sortie < 0.0 and sa.etape == SkieurAuto.Etape.A_BORD:
+		_main.basculer_skieur()
+		_t_sortie = _t
+		_verif("vue skieur quittée pendant la boucle : elle continue en coulisse, skieur actif et visible",
+			not _main.mode_skieur and _main.skieur_auto != null and sk.actif and sk.visible,
+			"vue skieur %s, boucle %s, actif %s" % [_main.mode_skieur, _main.skieur_auto != null, sk.actif])
+	elif _t_sortie >= 0.0 and _t - _t_sortie > 5.0:
+		_main.basculer_skieur()
+		_bascule_faite = true
+		_t_sortie = -1.0
+		_verif("retour en vue skieur : boucle toujours active, skieur à sa place à bord",
+			_main.mode_skieur and _main.skieur_auto != null and sk.actif and sk.support != null,
+			"vue skieur %s, boucle %s, support %s" % [_main.mode_skieur, _main.skieur_auto != null,
+				sk.support.name if sk.support else "aucun"])
 	if sa.boucles >= 1 or _t > 1700.0:
 		_verif("salle et rame atteintes", _vus.has(SkieurAuto.Etape.VERS_RAME) and _vus.has(SkieurAuto.Etape.A_BORD))
 		_verif("arrivé en haut, porte Génépy, à pied au départ de la trace", _vus.has(SkieurAuto.Etape.VERS_SORTIE) and _vus.has(SkieurAuto.Etape.VERS_DEPART))
