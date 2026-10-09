@@ -7,6 +7,16 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.19.3** — « Les panneaux de piste, c'est décroissant vers le bas, et ça ne
+flotte pas en lévitation : sur les piquets de bord de piste, tous les 3
+piquets un panneau au sommet, décroissant vers la plaine » (09/10/2026). Les
+panneaux ronds sont maintenant posés AU SOMMET d'un piquet de bord de piste
+sur trois (≈ 120 m), du côté droit en descendant, sans poteau à part ; leurs
+numéros DÉCROISSENT vers la plaine (le plus grand en haut, 1 en bas). Le sens
+d'un tracé OpenStreetMap n'étant pas garanti, la descente se lit à
+l'altitude de ses deux bouts. 1 669 panneaux sur le domaine ; capture de
+contrôle `shot_panneau.gd`.
+
 **v1.19.2** — textes en vectoriel, Manjaro, réglages graphiques (09/10/2026).
 - « Tout passer en vectoriel pour que ça gère tous les types d'affichage et
   de zoom » → tous les textes en 3D (étiquettes du pupitre, panneaux de

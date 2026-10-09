@@ -29,6 +29,7 @@ const ENFONCE: float = 1.2                # le poteau descend 1,2 m sous le sol 
                                            # « flottait dans l'air » (Kevin, 08/10/2026)
 const R_DISQUE: float = 0.45
 var n_panneaux: int = 0
+var _piquets: Dictionary = {}           # piste → [côté −, côté +] : [[pied, tangente de l'axe]…]
 const R_DEPART: float = 40.0
 const R_ARRIVEE: float = 200.0
 
@@ -82,6 +83,9 @@ func construire(r: ReliefBuilder) -> void:
 					if not relief.dans_le_bloc(j.x, j.y):
 						continue
 					var y: float = relief.hauteur_sol(j.x, j.y)
+					if not _piquets.has(ip):
+						_piquets[ip] = [[], []]
+					(_piquets[ip][0 if sg < 0.0 else 1] as Array).append([Vector3(j.x, y, j.y), t])
 					var cle: Vector3i = Vector3i(int(floor(j.x / CASE)), int(floor(j.y / CASE)), c)
 					if not cases.has(cle):
 						cases[cle] = []
@@ -157,45 +161,50 @@ func _construire_panneaux() -> void:
 	m_pot.roughness = 0.7
 	var par_couleur: Dictionary = {}          # couleur → [[xf poteau, xf disque], …]
 	var textes: Array = []                    # [position, normale, nom, couleur, n° de balise, piste]
-	for ip in range(PistesDonnees.PISTES.size()):
+	# Au SOMMET d'un piquet de bord de piste sur trois, du côté droit en
+	# descendant ; numéros DÉCROISSANTS vers la plaine (le plus grand en haut,
+	# 1 en bas) — Kevin, 09/10/2026 : « les panneaux c'est décroissant vers le
+	# bas, et ça ne flotte pas en lévitation : sur les piquets de bord de
+	# piste, tous les 3 piquets un panneau au sommet ». Le sens d'un tracé OSM
+	# n'est pas garanti : la descente se lit à l'altitude de ses deux bouts.
+	for ip in _piquets:
 		var c: int = PistesDonnees.PISTES[ip][1]
 		var nom: String = PistesDonnees.PISTES[ip][0]
 		if c < 0 or nom == "":
 			continue
-		var numero: int = 0
 		var pts: PackedVector2Array = _axes[ip]
-		var reste: float = 12.0
-		for i in range(pts.size() - 1):
-			var a: Vector2 = pts[i]
-			var b: Vector2 = pts[i + 1]
-			var l: float = a.distance_to(b)
-			if l < 1e-3:
-				continue
-			var t: Vector2 = (b - a) / l
-			var nrm: Vector2 = Vector2(-t.y, t.x)          # la droite en descendant
-			var u: float = reste
-			while u < l:
-				var q: Vector2 = a + t * u + nrm * (PistesDonnees.LARGEUR * 0.5 + 1.5)
-				if relief.dans_le_bloc(q.x, q.y):
-					var y: float = relief.hauteur_sol(q.x, q.y)
-					var pied: Vector3 = Vector3(q.x, y, q.y)
-					# le disque fait face au skieur qui descend (normale −t)
-					var nz: Vector3 = Vector3(-t.x, 0.0, -t.y)
-					var nx: Vector3 = Vector3.UP.cross(nz).normalized()
-					var base: Basis = Basis(nx, Vector3.UP, nz)
-					if not par_couleur.has(c):
-						par_couleur[c] = []
-					(par_couleur[c] as Array).append([
-						Transform3D(Basis.IDENTITY, pied + Vector3.UP * ((H_POTEAU - ENFONCE) * 0.5)),
-						Transform3D(base * Basis(Vector3.RIGHT, PI * 0.5), pied + Vector3.UP * (H_POTEAU + R_DISQUE)),
-						Transform3D(base * Basis(Vector3.RIGHT, PI * 0.5), pied + Vector3.UP * (H_POTEAU + R_DISQUE) - nz * 0.012)])
-					numero += 1
-					textes.append([pied + Vector3.UP * (H_POTEAU + R_DISQUE), nz, nom, c, numero, ip])
-				u += PAS_PANNEAU
-			reste = u - l
+		var h0: float = relief.hauteur_sol(pts[0].x, pts[0].y)
+		var h1: float = relief.hauteur_sol(pts[pts.size() - 1].x, pts[pts.size() - 1].y)
+		var descend: bool = h0 >= h1          # l'axe va-t-il vers le bas ?
+		# droite en descendant : nrm (+) si l'axe descend, sinon l'autre côté
+		var cote: Array = _piquets[ip][1 if descend else 0]
+		var ordre: Array = cote.duplicate()
+		if not descend:
+			ordre.reverse()
+		var choisis: Array = []
+		for k in range(ordre.size()):
+			if k % 3 == 1:
+				choisis.append(ordre[k])
+		var total: int = choisis.size()
+		for k in range(total):
+			var pied: Vector3 = choisis[k][0]
+			var t: Vector2 = choisis[k][1]
+			var t_desc: Vector2 = t if descend else -t
+			# le disque fait face au skieur qui descend (normale vers l'amont)
+			var nz: Vector3 = Vector3(-t_desc.x, 0.0, -t_desc.y)
+			var nx: Vector3 = Vector3.UP.cross(nz).normalized()
+			var base: Basis = Basis(nx, Vector3.UP, nz)
+			var centre: Vector3 = pied + Vector3.UP * (H_JALON + R_DISQUE * 0.85)
+			if not par_couleur.has(c):
+				par_couleur[c] = []
+			(par_couleur[c] as Array).append([
+				Transform3D(Basis.IDENTITY, pied + Vector3.UP * (H_JALON * 0.5)),
+				Transform3D(base * Basis(Vector3.RIGHT, PI * 0.5), centre),
+				Transform3D(base * Basis(Vector3.RIGHT, PI * 0.5), centre - nz * 0.012)])
+			textes.append([centre, nz, nom, c, total - k, ip])
 	for c in par_couleur:
 		var xs: Array = par_couleur[c]
-		for k in range(3):
+		for k in range(1, 3):        # le piquet de bord de piste sert de poteau
 			var mm: MultiMesh = MultiMesh.new()
 			mm.transform_format = MultiMesh.TRANSFORM_3D
 			mm.mesh = [poteau, disque, cercle][k]
