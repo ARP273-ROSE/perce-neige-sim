@@ -310,3 +310,6 @@ python perce_neige_sim.py
 ## Licence
 
 MIT. Auteur : ARP273-ROSE, original TI-Basic 2006, portage PyQt6 2026.
+
+Police des textes 3D : Liberation Sans (© Red Hat, Google — SIL Open Font
+License 1.1), dans `godot_project/fonts/` avec sa licence.

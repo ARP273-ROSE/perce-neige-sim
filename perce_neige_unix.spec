@@ -58,7 +58,7 @@ a = Analysis(
     pathex=[str(HERE)],
     binaries=[],
     datas=datas,
-    hiddenimports=["autoupdate", "bugreport", "reporting", "updater",
+    hiddenimports=["contexte_tls", "certifi", "autoupdate", "bugreport", "reporting", "updater",
                    "godot_bridge", "profil_coupe", "PyQt6.QtMultimedia"],
     hookspath=[],
     runtime_hooks=[],

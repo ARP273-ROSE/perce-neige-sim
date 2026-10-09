@@ -87,6 +87,7 @@ if _os.path.exists("kit.json"):
     datas.append(("kit.json", "."))
 
 hiddenimports = [
+    'contexte_tls', 'certifi',
     "autoupdate",
     "bugreport",
     "reporting",
