@@ -1,5 +1,5 @@
 ## Captures des postures du skieur à ski (09/10/2026) : glisse, schuss,
-## chasse-neige — de face et de profil.
+## chasse-neige, les 4 images de la poussée sur les bâtons — de dos et de profil.
 ##   xvfb-run godot --path godot_project --rendering-driver opengl3 \
 ##     --resolution 1024x768 -s shot_postures.gd -- --mode=normal préfixe
 extends SceneTree
@@ -42,7 +42,8 @@ func _tick() -> void:
 		_cam.make_current()
 		_t0 = _f
 		return
-	var vues: Array = [[0, "glisse"], [1, "schuss"], [2, "chasse"]]
+	var vues: Array = [[0, "glisse"], [1, "schuss"], [2, "chasse"],
+		[10, "poussee0"], [11, "poussee1"], [12, "poussee2"], [13, "poussee3"]]
 	var k: int = (_f - _t0) / 8
 	if k >= vues.size() * 2:
 		print("captures")
@@ -51,7 +52,10 @@ func _tick() -> void:
 	var v: Array = vues[k / 2]
 	var cote: bool = k % 2 == 1
 	if (_f - _t0) % 8 == 1:
-		sk._poser_posture(v[0])
+		if int(v[0]) >= 10:
+			sk._poser_poussee(int(v[0]) - 10)
+		else:
+			sk._poser_posture(v[0])
 		var o: Vector3 = sk._visuel.global_position + Vector3.UP * 0.8
 		var av: Vector3 = -sk._visuel.global_transform.basis.z
 		var dr: Vector3 = sk._visuel.global_transform.basis.x

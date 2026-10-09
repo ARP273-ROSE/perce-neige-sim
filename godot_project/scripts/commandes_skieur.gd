@@ -66,7 +66,7 @@ func _ready() -> void:
 		if main != null:
 			main.evacuer())
 	col.add_child(_b_evac)
-	_b_exploit = _bouton("EXPLOIT.", "EXPLOITATION AUTO : tout le service du funiculaire (embarquements, départs enchaînés), marche / arrêt, même en skieur (Web : F3 ou EXPLOIT. du tableau de bord ; PC : X)")
+	_b_exploit = _bouton("EXPLOIT.", "EXPLOITATION AUTO : tout le service du funiculaire (embarquements, départs enchaînés), marche / arrêt, même en skieur (touche X ; Web : aussi F3 ou EXPLOIT. du tableau de bord)")
 	_b_exploit.toggle_mode = true
 	_b_exploit.toggled.connect(func(on: bool) -> void:
 		if main != null:
@@ -77,7 +77,7 @@ func _ready() -> void:
 		if main != null:
 			main.basculer_ski())
 	col.add_child(_b_ski)
-	_b_auto = _bouton("BOUCLE", "BOUCLE : le skieur fait la boucle tout seul — gare, rame, terrasse, ski, retour (touche X) ; il enclenche l'exploitation auto pour son trajet")
+	_b_auto = _bouton("BOUCLE", "BOUCLE : le skieur fait la boucle tout seul — gare, rame, terrasse, ski, retour (touche B) ; il enclenche l'exploitation auto pour son trajet")
 	_b_auto.toggle_mode = true
 	_b_auto.toggled.connect(func(on: bool) -> void:
 		if main != null and (main.skieur_auto != null) != on:

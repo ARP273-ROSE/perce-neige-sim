@@ -754,10 +754,14 @@ func terrain_piece(x: float, z: float) -> Array:
 ## Trait ambre du tunnel et noms des lieux : en vue extérieure seulement
 ## (pas pour le skieur).
 func montrer_trait(on: bool) -> void:
-	if _trait == null or on == _trait_on:
+	if on == _trait_on:
 		return
 	_trait_on = on
-	_trait.visible = on
+	if _trait != null:
+		_trait.visible = on
+	# (09/10/2026 : les noms des lieux, dessinés par-dessus tout, se voyaient
+	# à travers les parois de la rame — ils naissaient visibles et n'étaient
+	# masqués qu'au premier passage en vue extérieure)
 	for lab in get_children():
 		if lab is Label3D and lab.is_in_group("relief_lieux"):
 			(lab as Label3D).visible = on
@@ -972,4 +976,5 @@ func _build_lieux() -> void:
 		lab.render_priority = 2
 		lab.position = Vector3(l[1], hauteur(l[1], l[2]) + 40.0, l[2])
 		lab.add_to_group("relief_lieux")
+		lab.visible = _trait_on          # vue extérieure seulement
 		add_child(lab)

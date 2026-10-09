@@ -263,6 +263,7 @@ func _apply(d: Dictionary) -> void:
 	physics._ghost_ouvert = _b(d, "ghost_portes", false)
 	if main != null and d.has("exploitation"):
 		main.set("_exploitation_pc", _b(d, "exploitation", false))
+		GareAval.hors_service_pc = _b(d, "hors_service", false)
 	# AUTO du skieur (touche X du PC en mode skieur) : compteur
 	var na: int = _i(d, "skieur_auto", 0)
 	if na != _last_skieur_auto:
