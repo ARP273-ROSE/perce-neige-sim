@@ -7,6 +7,37 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.19.2** — textes en vectoriel, Manjaro, réglages graphiques (09/10/2026).
+- « Tout passer en vectoriel pour que ça gère tous les types d'affichage et
+  de zoom » → tous les textes en 3D (étiquettes du pupitre, panneaux de
+  piste et numéros de balise, noms des lieux, plaques, horloge) utilisent une
+  police VECTORIELLE (Liberation Sans, SIL OFL 1.1, importée en MSDF —
+  champ de distance multicanal) : la forme des lettres est décrite, pas une
+  image figée, et le texte reste net à toutes les distances, dans la loupe et
+  sur tous les écrans. Les textes de l'écran Pro-face ne sont plus dessinés
+  dans son image : ils sont posés en textes 3D sur la dalle (l'image ne garde
+  que les formes, en 2×). Le suréchantillonnage ×6 des étiquettes devient
+  inutile. Seuls restent en pixels les photos (orthophoto IGN, textures) et
+  les arcs des panneaux ronds.
+- Manjaro (et toute distribution qui range ses certificats ailleurs que la
+  machine de construction) : « téléchargement impossible — CERTIFICATE_VERIFY_
+  FAILED » → nouveau `contexte_tls.py` : magasin par défaut, puis les
+  emplacements d'Arch/Manjaro, Fedora, openSUSE, Debian, puis certifi
+  (désormais embarqué). Sert au téléchargement des musiques ET à la mise à
+  jour automatique, qui échouait sans doute aussi sur ce PC.
+- « Manjaro est sur le PC de la mort et il n'y a pas les graphismes au max ? »
+  → le journal disait « réglages 2/6 (saccades) … GPU 2,1 ms » : les
+  saccades venaient du PROCESSEUR (chargement du décor du skieur,
+  téléchargement), la carte graphique avait une marge énorme. Quand le temps
+  GPU reste sous 40 % du budget d'une image, une saccade ne retire plus aucun
+  effet (« saccades processeur, effets gardés » dans le journal).
+- Pupitre du PC : « vire le bouton veille et aide, rajoute exploitation auto
+  X et mode M, et réorganise le panneau » → cinq rangées thématiques :
+  sécurité (ARRÊT ÉLEC., URGENCE, KLAXON), éclairage (PHARES, CABINE,
+  TUNNEL), exploitation (PORTES, PILOTE, EXPLOIT. [X]), vues (VUE 3D, VUE
+  EXT., SKIEUR), système (SON, volume, MODE [M] avec le mode en cours). La
+  veille et l'aide restent au clavier (G / W, F1).
+
 **v1.19.1** — « T'as augmenté la résolution du panneau de commande ? Parce
 que c'est pas visible sur la PWA » (09/10/2026). Sur la PWA, deux freins
 restaient : l'écran Pro-face n'était rendu qu'en 2× (contre 4× sur PC), et

@@ -11,7 +11,7 @@
     "perce_neige_sim.py",
     "godot_bridge.py",
     "bugreport.py",
-    "autoupdate.py",
+    "autoupdate.py", "contexte_tls.py",
     "reporting.py",
     "updater.py",
     "profil_coupe.py"
