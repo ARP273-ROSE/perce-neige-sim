@@ -7,6 +7,29 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.18.10** — retours du 09/10/2026.
+- BOUCLE : « une fois sorti de la gare supérieure, il ne fait que marcher,
+  demi-tour tout le temps, allers-retours sans fin, ne chausse jamais » →
+  hors de la vue skieur (boucle en coulisse), CHAUSSER était refusé : l'étape
+  SKI retombait sur « aller au départ de la trace », sans fin. Le fantôme n'y
+  était pour rien. Vérifié au banc : chaussé, descente skis dans le sens de
+  la marche.
+- Panneaux de bord de piste : « ça ressemble à ça en vrai » (photo
+  « Chamois 2 LES GRANDS MONTETS ») → face ronde de la couleur de la piste,
+  liseré blanc, NOM de la piste en arc en haut, TIGNES en arc en bas, numéro
+  de balise au centre (1, 2, 3… en descendant). Face dessinée une fois par
+  piste dans une texture (`PanneauPiste`).
+- Chasse-neige : « les skis le font mais pas les pieds et les jambes » → les
+  skis pivotaient autour de leur spatule et s'écartaient de 34 cm de plus que
+  les pieds ; ils pivotent maintenant autour des chaussures (18°), pieds à
+  ±30 cm, jambes en A, genoux rentrés.
+- Schuss : « les bâtons, c'est pas ça » → poignées dans les mains devant le
+  visage, bâtons serrés sous les bras, pointes vers l'arrière.
+- Son : « dehors, quand la décélération passe 1 m/s, j'entends très
+  brièvement l'ambiance de la rame » → le clip de freinage d'approche
+  démarrait à plein volume une image avant le fondu de cabine ; il part
+  maintenant directement au niveau de la cabine (nul pour un skieur dehors).
+
 **v1.18.9** — « Même ici, ton panneau de conduite est pixélisé et pas net ;
 un truc vectoriel et plus précis ? Pourtant j'ai une config de la mort et
 ce n'est pas un jeu de l'espace » (09/10/2026, 32″ 4K). Exact, et ça ne

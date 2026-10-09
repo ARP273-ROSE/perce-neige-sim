@@ -1580,7 +1580,10 @@ func basculer_skieur_auto() -> void:
 
 ## Chausser / déchausser (bouton CHAUSSER, touche E ; E du PC relayée).
 func basculer_ski() -> void:
-	if skieur == null or not mode_skieur:
+	# la BOUCLE en coulisse chausse aussi hors de la vue skieur (09/10/2026 :
+	# « il fait demi-tour tout le temps, allers-retours sans fin, ne chausse
+	# jamais » — refusé ici, l'étape SKI retombait sur VERS_DEPART)
+	if skieur == null or not (mode_skieur or skieur_auto != null):
 		return
 	var refus: String = skieur.basculer_ski()
 	commandes_skieur.set_chausse(skieur.chausse)
