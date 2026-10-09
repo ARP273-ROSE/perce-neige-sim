@@ -27,3 +27,9 @@ static func grasse() -> Font:
 static func equiper(l: Label3D) -> void:
 	if l.font == null:
 		l.font = reguliere()
+	# MSDF : filtrage linéaire SANS mipmaps — les mipmaps d'un champ de
+	# distance floutent les petits textes vus de loin (Kevin, 09/10/2026 :
+	# « date et heure floues sur l'écran Pro-face »)
+	if l.texture_filter == BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS \
+			or l.texture_filter == BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC:
+		l.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR

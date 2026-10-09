@@ -105,10 +105,16 @@ func _update() -> void:
 	# la caméra reste DANS la salle (et le hall au-dessus de la dalle) :
 	# on avance le long du rayon tant qu'on y est — sinon on se retrouvait
 	# dans le rocher ou sous les quais de la gare
-	var t: float = 0.0
-	var step: float = 0.05
-	while t + step <= dist and _inside(target + dir * (t + step)):
-		t += step
+	# Kevin, 09/10/2026 : « on se fait coincer par le plancher de la gare
+	# au-dessus de la salle des machines, le déplacement de la vue est
+	# fortement contraint ; affranchis-toi de ce plafond, les mouvements
+	# seront fluides » → plus de rayon raccourci au premier bord : l'œil
+	# GLISSE dans une seule boîte (sol de la salle → plafond du hall, la dalle
+	# et les quais se traversent ; la dalle s'efface au-dessus, cutaway « top »)
+	var eye0: Vector3 = _dans_boite(target + dir * dist)
+	var t: float = (eye0 - target).length()
+	if t > 0.001:
+		dir = (eye0 - target) / t
 	# … et ne finit jamais DANS une machine (armoire, moteur, réducteur) :
 	# on la ramène vers le centre jusqu'à en sortir. On garde la vue
 	# par-dessus les machines, contrairement à un arrêt au premier obstacle.
@@ -125,6 +131,21 @@ func _in_obstacle(p: Vector3, target: Vector3, obst: Array) -> bool:
 		if (bb as AABB).has_point(p) and not (bb as AABB).has_point(target):
 			return true
 	return false
+
+
+## Point ramené dans la boîte de la caméra : emprise de la salle en plan,
+## du sol de la salle au plafond du hall (repère de fin de ligne).
+func _dans_boite(p: Vector3) -> Vector3:
+	var f: Transform3D = room.frame()
+	var rel: Vector3 = p - f.origin
+	const M: float = 0.3
+	var x: float = clampf(rel.dot(f.basis.x), -(MachineRoomBuilder.ROOM_HALF_W - 0.8),
+		MachineRoomBuilder.ROOM_HALF_W - 0.8)
+	var y: float = clampf(rel.dot(f.basis.y), MachineRoomBuilder.ROOM_FLOOR + M,
+		MachineRoomBuilder.Y_HALL_CEIL - M)
+	var s: float = clampf(-rel.dot(f.basis.z), MachineRoomBuilder.ROOM_S0 + M,
+		MachineRoomBuilder.ROOM_S1 - M)
+	return f.origin + f.basis.x * x + f.basis.y * y - f.basis.z * s
 
 
 ## Volume où la caméra peut aller : salle des machines sous la dalle,

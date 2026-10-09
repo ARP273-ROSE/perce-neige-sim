@@ -405,22 +405,64 @@ func _build_floor_ceiling() -> void:
 
 	# Plafond cabine — surface plate visible quand on lève les yeux
 	var ceil_mat: StandardMaterial3D = StandardMaterial3D.new()
-	ceil_mat.albedo_color = Color(0.92, 0.90, 0.85)
+	ceil_mat.albedo_color = Color(0.80, 0.69, 0.53)      # beige des panneaux (photos)
+	# éclairé par les spots, il paraît clair sur les photos (il restait brun)
+	ceil_mat.emission_enabled = true
+	ceil_mat.emission = Color(0.80, 0.69, 0.53)
+	ceil_mat.emission_energy_multiplier = 0.25
 	ceil_mat.roughness = 0.70
 	ceil_mat.metallic = 0.15
 
 	_add_interior_box(ceil_mat, 2.40, 0.04, 1.45, z_front_ceil, z_rear, "InteriorCeiling")
 
-	# Bandeau LED plafond (lumineux) le long du milieu, donne le côté "métro moderne"
-	var led_mat: StandardMaterial3D = StandardMaterial3D.new()
-	led_mat.albedo_color = Color(0.98, 0.99, 1.0)
-	led_mat.emission_enabled = true
-	led_mat.emission = Color(0.92, 0.96, 1.0)
-	led_mat.emission_energy_multiplier = 1.6
-	led_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-
+	# Bandeau central du plafond : grille de ventilation gris foncé perforée
+	# sur toute la longueur, spots ronds encastrés (photos de l'intérieur,
+	# Kevin, 09/10/2026 — avant : un bandeau LED blanc continu)
+	var grille: StandardMaterial3D = _mat_grille_plafond()
 	var led_z_rear: float = train_length * 0.5 * 0.92
-	_add_interior_box(led_mat, 0.25, 0.04, 1.42, z_front_ceil, led_z_rear, "InteriorLEDStrip")
+	_add_interior_box(grille, 0.55, 0.04, 1.42, z_front_ceil, led_z_rear, "InteriorLEDStrip")
+	var spot_mat: StandardMaterial3D = StandardMaterial3D.new()
+	spot_mat.albedo_color = Color(1.0, 1.0, 0.97)
+	spot_mat.emission_enabled = true
+	spot_mat.emission = Color(1.0, 0.98, 0.92)
+	spot_mat.emission_energy_multiplier = 2.2
+	spot_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	var car_len2: float = train_length / float(car_count)
+	for idx in range(car_count):
+		var z_c2: float = (float(idx) - (car_count - 1) * 0.5) * car_len2
+		var z: float = maxf(z_front_ceil, z_c2 - car_len2 * 0.5) + 1.0
+		while z < minf(led_z_rear, z_c2 + car_len2 * 0.5) - 0.5:
+			var cy: CylinderMesh = CylinderMesh.new()
+			cy.top_radius = 0.07
+			cy.bottom_radius = 0.07
+			cy.height = 0.012
+			cy.radial_segments = 16
+			cy.material = spot_mat
+			var mi: MeshInstance3D = MeshInstance3D.new()
+			mi.mesh = cy
+			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			mi.position = Vector3(0.0, 1.395, z - z_c2)
+			_interior_cars[idx].add_child(mi)
+			z += 2.3
+
+
+## Grille perforée gris foncé du plafond (petits trous en quinconce).
+static func _mat_grille_plafond() -> StandardMaterial3D:
+	var n: int = 16
+	var img: Image = Image.create(n, n, true, Image.FORMAT_RGB8)
+	for y in range(n):
+		for x in range(n):
+			var trou: bool = (Vector2(x % 8, y % 8) - Vector2(4, 4)).length() < 1.6 \
+				or (Vector2((x + 4) % 8, (y + 4) % 8) - Vector2(4, 4)).length() < 1.6
+			img.set_pixel(x, y, Color(0.10, 0.10, 0.11) if trou else Color(0.33, 0.33, 0.34))
+	img.generate_mipmaps()
+	var m: StandardMaterial3D = StandardMaterial3D.new()
+	m.albedo_texture = ImageTexture.create_from_image(img)
+	m.uv1_scale = Vector3(14.0, 1.0, 400.0)
+	m.roughness = 0.8
+	m.metallic = 0.2
+	m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+	return m
 
 
 ## Tapis de caoutchouc alvéolé : fond noir, trous ronds en quinconce où
@@ -529,41 +571,57 @@ func _build_stepped_floor(mat: StandardMaterial3D, z_front: float, z_rear: float
 
 
 func _build_handrails() -> void:
-	# Mains courantes verticales (poteaux entre les rangées) + horizontales (au plafond)
-	var rail_mat: StandardMaterial3D = StandardMaterial3D.new()
-	rail_mat.albedo_color = Color(0.85, 0.85, 0.88)
-	rail_mat.roughness = 0.25
-	rail_mat.metallic = 0.85
-	rail_mat.metallic_specular = 0.95
-
-	# 2 mains courantes horizontales le long du plafond, à x=±0.35 (au-dessus
-	# de l'aisle). Elles s'arrêtent 0,6 m en retrait du front du plafond
-	# (zone conducteur = pas de main courante dans le vrai cockpit).
-	var rail_z_front: float = -train_length * 0.5 + 2.6
-	var rail_z_rear: float = train_length * 0.5 * 0.85
+	# Barres d'appui ORANGE au-dessus des vitres, sur la paroi, une par
+	# panneau vitré, tenues par deux pattes (photos de l'intérieur, Kevin,
+	# 09/10/2026). Plus de mains courantes chromées au plafond : les photos
+	# n'en montrent pas.
+	var orange: StandardMaterial3D = StandardMaterial3D.new()
+	orange.albedo_color = Color(0.95, 0.47, 0.10)
+	orange.roughness = 0.45
+	var th: float = deg_to_rad(TrainBodyBuilder.WIN_T0 - 5.0)
+	var r_barre: float = TrainBodyBuilder.R_BODY - 0.17
+	var r_patte: float = TrainBodyBuilder.R_BODY - 0.05
 	var car_len_r: float = train_length / float(car_count)
-	for side in [-1.0, 1.0]:
-		for idx in range(car_count):
-			var z_c: float = (float(idx) - (car_count - 1) * 0.5) * car_len_r
-			var za: float = maxf(rail_z_front, z_c - car_len_r * 0.5)
-			var zb: float = minf(rail_z_rear, z_c + car_len_r * 0.5)
-			if zb - za < 0.1:
+	for idx in range(car_count):
+		var z_c: float = (float(idx) - (car_count - 1) * 0.5) * car_len_r
+		for k in range(TrainBodyBuilder.N_PANNEAUX):
+			if TrainBodyBuilder.KINDS[k] != "win":
 				continue
-			var rail: MeshInstance3D = MeshInstance3D.new()
-			var rail_mesh: CylinderMesh = CylinderMesh.new()
-			rail_mesh.top_radius = 0.025
-			rail_mesh.bottom_radius = 0.025
-			rail_mesh.height = zb - za
-			rail_mesh.radial_segments = 10
-			rail_mesh.material = rail_mat
-			rail.mesh = rail_mesh
-			rail.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-			rail.position = Vector3(side * 0.35, 1.30, (za + zb) * 0.5 - z_c)
-			rail.rotation = Vector3(PI * 0.5, 0.0, 0.0)
-			_interior_cars[idx].add_child(rail)
-
-	# (Plus de poteaux verticaux au milieu du couloir : les photos de
-	# l'intérieur n'en montrent pas, on s'y tient aux porte-skis — 07/10/2026)
+			# pas dans le poste ni au fond de la voiture de queue
+			if (idx == 0 and k == 0) or (idx == car_count - 1 and k == TrainBodyBuilder.N_PANNEAUX - 1):
+				continue
+			var zc: float = _panel_center(idx, k) - z_c
+			var l: float = TrainBodyBuilder.PANEL_L * 0.72
+			for side in [-1.0, 1.0]:
+				var p: Vector3 = Vector3(side * r_barre * sin(th), TrainBodyBuilder.Y_CENTER + r_barre * cos(th), zc)
+				var barre: CylinderMesh = CylinderMesh.new()
+				barre.top_radius = 0.016
+				barre.bottom_radius = 0.016
+				barre.height = l
+				barre.radial_segments = 8
+				barre.material = orange
+				var mi: MeshInstance3D = MeshInstance3D.new()
+				mi.mesh = barre
+				mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+				mi.position = p
+				mi.rotation = Vector3(PI * 0.5, 0.0, 0.0)
+				_interior_cars[idx].add_child(mi)
+				for e in [-1.0, 1.0]:
+					var q: Vector3 = Vector3(side * r_patte * sin(th), TrainBodyBuilder.Y_CENTER + r_patte * cos(th), zc + e * l * 0.42)
+					var a: Vector3 = Vector3(p.x, p.y, q.z)
+					var patte: CylinderMesh = CylinderMesh.new()
+					patte.top_radius = 0.012
+					patte.bottom_radius = 0.012
+					patte.height = a.distance_to(q)
+					patte.radial_segments = 6
+					patte.material = orange
+					var pm: MeshInstance3D = MeshInstance3D.new()
+					pm.mesh = patte
+					pm.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+					var y_ax: Vector3 = (q - a).normalized()
+					var x_ax: Vector3 = y_ax.cross(Vector3.BACK).normalized()
+					pm.transform = Transform3D(Basis(x_ax, y_ax, x_ax.cross(y_ax)), (a + q) * 0.5)
+					_interior_cars[idx].add_child(pm)
 
 
 # ---------------------------------------------------------------------------

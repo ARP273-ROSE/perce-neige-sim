@@ -1004,6 +1004,8 @@ func _process(delta: float) -> void:
 				_energie_ciel(ciel)
 	# gare aval : portes coulissantes et panneau des départs
 	if station_halls != null and physics != null:
+		GareAval.evacuation = (cabin != null and cabin.issues_retirees) \
+			or (cabin_ghost != null and cabin_ghost.issues_retirees)
 		station_halls.mettre_a_jour(delta, physics)
 	# Halls de gare en rendu Compatibility (PWA) : 8 lampes au plus par
 	# objet, les grands sols et murs du hall ne recevaient qu'une partie des
@@ -1376,7 +1378,14 @@ func _unhandled_input(event: InputEvent) -> void:
 		if mode_skieur and event.keycode == KEY_E:
 			basculer_ski()
 			return
+		# X = exploitation auto partout, comme sur le PC ; B = BOUCLE du skieur
+		# (Kevin, 09/10/2026 : « il y a un problème entre la touche X et le
+		# bouton EXPLOIT. du mode skieur » — X lançait la boucle)
 		if mode_skieur and event.keycode == KEY_X:
+			var actif: bool = _exploitation_pc if client_mode else (auto_operator != null and auto_operator.enabled)
+			basculer_exploitation(not actif)
+			return
+		if mode_skieur and event.keycode == KEY_B:
 			basculer_skieur_auto()
 			return
 		if mode_skieur and event.keycode == KEY_U:     # U : issUe de secours (I = inverser le sens)
@@ -1680,7 +1689,7 @@ func evacuer() -> void:
 		collisions.assurer_autour(skieur.global_position)
 	if commandes_skieur != null:
 		commandes_skieur.message("Issues de secours retirées : par le trou, sur la voie ; l'escalier de droite ramène en gare ou à la galerie du milieu", 7.0)
-	_pique_skieur("SKIEUR_EVACUATION", 0.6, 8.0)
+	_pique_skieur("SKIEUR_EVACUATION", 0.7, 7.0)
 
 
 ## Une pique du mode skieur, si le moment s'y prête (cf. PIQUE_ECART).
@@ -1704,12 +1713,12 @@ func _piques_occasions(dt: float, en_gare: bool, a_pied_tunnel: bool) -> void:
 			_pique_en_retard = []
 	if not mode_skieur or skieur_auto != null or skieur == null:
 		return
-	# hors-piste : 12 s d'affilée à ski, hors de toute piste, en mouvement
+	# hors-piste : 4 s d'affilée à ski, hors de toute piste, en mouvement
 	if skieur.chausse and not _sur_piste and skieur.vitesse_ski() > 3.0:
 		_hors_piste_t += dt
-		if _hors_piste_t > 12.0:
-			_hors_piste_t = -60.0          # pas avant une minute de plus
-			_pique_skieur("SKIEUR_HORS_PISTE", 0.5)
+		if _hors_piste_t > 4.0:
+			_hors_piste_t = -30.0          # pas avant 30 s de plus
+			_pique_skieur("SKIEUR_HORS_PISTE", 0.7)
 	elif _hors_piste_t > 0.0:
 		_hors_piste_t = 0.0
 	elif _hors_piste_t < 0.0:
@@ -1720,11 +1729,11 @@ func _piques_occasions(dt: float, en_gare: bool, a_pied_tunnel: bool) -> void:
 	var a_quai: bool = physics != null and (physics.s <= PNConstants.START_S + 5.0
 		or physics.s >= PNConstants.STOP_S - 5.0)
 	if _rames_a_quai and not a_quai and _en_gare_t > 20.0:
-		_pique_skieur("SKIEUR_RATE", 0.6, 2.0)
+		_pique_skieur("SKIEUR_RATE", 0.7, 0.5)
 	_rames_a_quai = a_quai
 	# à pied sur la voie : une fois de temps en temps, après le message d'état
-	if a_pied_tunnel and randf() < dt / 90.0:
-		_pique_skieur("SKIEUR_VOIE", 0.5, 5.0)
+	if a_pied_tunnel and randf() < dt / 45.0:
+		_pique_skieur("SKIEUR_VOIE", 0.6, 4.5)
 
 
 ## Issues remises quand la rame est de nouveau à quai, portes ouvertes
@@ -2058,8 +2067,8 @@ func _skieur_conduit() -> void:
 	if client_mode and state_receiver != null:
 		# le PC sort du mode skieur et rend la conduite (fin de son AUTO)
 		state_receiver.envoyer({"skieur_conduire": true})
-	if auto_operator != null and auto_operator.enabled:
-		auto_operator.toggle()
+	# l'exploitation auto reste comme elle était (Kevin, 09/10/2026 : elle
+	# se coupait en passant au poste) — X / EXPLOIT. la coupe
 	_flash("Au poste de conduite — SKIEUR pour se lever")
 
 
@@ -2128,10 +2137,11 @@ var _seat: Node3D = null
 var _t_info: float = 1.0
 # Piques du mode skieur (Kevin, 09/10/2026 : hors-piste, funiculaire raté,
 # évacuation… « avec parcimonie, sinon on se lasse ») : au plus une toutes
-# les PIQUE_ECART secondes, jamais dans la première minute, et chaque
-# occasion n'en donne une qu'avec une certaine probabilité.
-const PIQUE_ECART: float = 240.0
-var _pique_attente: float = 60.0
+# les PIQUE_ECART secondes (« mes descentes font deux minutes […] une toutes
+# les 40 secondes c'est bon »), AU MOMENT de l'événement (« si c'est une
+# minute après ça ne sert à rien »), et pas à chaque occasion.
+const PIQUE_ECART: float = 40.0
+var _pique_attente: float = 10.0
 var _pique_en_retard: Array = []          # [nom, délai] : affichée après le message d'état
 var _sur_piste: bool = true
 var _hors_piste_t: float = 0.0

@@ -447,6 +447,14 @@ SKIEUR_HORS_PISTE = [
      "Avalanche beacon on? No? It's never on."),
     ("Bel itinéraire « bis ». Bis, comme « bis repetita : on vous cherche ».",
      "Nice alternative route. Alternative, as in 'we're out looking for you'."),
+    ("La dameuse est passée partout, sauf ici. Il y a peut-être une raison.",
+     "The groomer went everywhere except here. There may be a reason."),
+    ("Hors-piste : le genre d'endroit où l'on retrouve ses skis au printemps.",
+     "Off-piste: the kind of place where you find your skis again in spring."),
+    ("Vous suivez une trace ? C'est la vôtre.",
+     "Following a track? It's yours."),
+    ("Ici, pas de panneau, pas de piquet. Juste de l'audace et un peu d'inconscience.",
+     "No signs, no poles here. Just nerve and a little recklessness."),
 ]
 
 SKIEUR_RATE = [
@@ -456,12 +464,28 @@ SKIEUR_RATE = [
      "Next departure in a few minutes. Time to reflect on punctuality."),
     ("Raté. 334 places, et aucune pour vous.",
      "Missed it. 334 seats, none of them yours."),
-    ("Les portes se ferment toutes seules. Vous, vous traînez tout seul.",
-     "The doors close by themselves. You dawdle by yourself."),
+    ("Les portes se ferment automatiquement. Votre sens du timing, lui, est resté manuel.",
+     "The doors close automatically. Your sense of timing is still manual."),
     ("Vous regardez partir la rame comme on regarde partir un ferry : avec regret.",
      "Watching the train leave like watching a ferry leave: with regret."),
     ("Le buzzer, c'était pour vous. Ah, trop tard.",
      "The buzzer was for you. Ah, too late."),
+    ("Vous étiez sur le quai, la rame aussi. Puis seulement la rame. Puis personne.",
+     "You were on the platform, so was the train. Then only the train. Then nobody."),
+    ("Le funiculaire part à l'heure. C'est même sa grande spécialité.",
+     "The funicular leaves on time. It's actually its speciality."),
+    ("3,5 km de tunnel à attendre de l'autre côté de cette porte. Profitez du quai.",
+     "3.5 km of tunnel waiting behind that door. Enjoy the platform."),
+    ("Monter dedans, c'était l'étape importante.",
+     "Getting on board was the important step."),
+    ("Bonne nouvelle : la vue sur le quai est imprenable pendant les sept prochaines minutes.",
+     "Good news: the platform view is unbeatable for the next seven minutes."),
+    ("Le conducteur vous a vu. Il a fait semblant que non.",
+     "The driver saw you. He pretended he didn't."),
+    ("La prochaine rame sera exactement la même. Vous pourrez la rater aussi.",
+     "The next train will be exactly the same. You can miss that one too."),
+    ("Vous avez admiré le départ de près. Pour l'arrivée, il faudra être à bord.",
+     "You watched the departure up close. For the arrival you'll need to be on board."),
 ]
 
 SKIEUR_EVACUATION = [
@@ -475,6 +499,12 @@ SKIEUR_EVACUATION = [
      "Evacuating in ski boots. The firefighters are taking notes."),
     ("Issue de secours ouverte : vous venez d'entrer dans le cercle très fermé des évacués.",
      "Emergency exit open: you've just joined the very exclusive evacuees' club."),
+    ("L'escalier de secours compte beaucoup de marches. Elles sont toutes pour vous.",
+     "The escape stairs have a lot of steps. All of them are yours."),
+    ("Évacuer à pied un funiculaire : une expérience rare. On ne la souhaite à personne.",
+     "Evacuating a funicular on foot: a rare experience. Not one we'd wish on anyone."),
+    ("Rassurez-vous, la sortie est indiquée. Elle est juste un peu loin.",
+     "Don't worry, the exit is signposted. It's just a bit far."),
 ]
 
 SKIEUR_VOIE = [
@@ -484,4 +514,10 @@ SKIEUR_VOIE = [
      "The train is waiting for you. It has no choice, and it resents it."),
     ("Promenade dans le tunnel : la vue est la même partout, ne cherchez pas.",
      "A stroll through the tunnel: the view is the same everywhere, don't bother."),
+    ("Les rails sont pour les roues. Les chaussures de ski, c'est en option.",
+     "The rails are for wheels. Ski boots are optional."),
+    ("Pente de 30 %, à pied, en chaussures de ski : le cardio du jour est validé.",
+     "A 30 % slope, on foot, in ski boots: today's cardio is done."),
+    ("Chaque minute sur la voie, 334 passagers vous maudissent en silence.",
+     "Every minute on the track, 334 passengers curse you in silence."),
 ]

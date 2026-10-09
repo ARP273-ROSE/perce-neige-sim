@@ -34,3 +34,12 @@ print("rapport hauteur/largeur sur la photo : %.2f" % (R(545)/192))
 # la photo n°2 (hublots_superposition.py : python3 hublots_superposition.py
 # 72.1 120.4 0.43 3.0 3.4 853 → superpose.png ; la photo n'est pas versée au
 # dépôt).
+
+# 09/10/2026 soir (Kevin : « le milieu de la vitre doit correspondre à la
+# tangente verticale de la surface du panneau ») : même ouverture angulaire,
+# centrée sur 90° (la paroi y est verticale, à la hauteur de l'axe du tube).
+ouv = R(120.4) - R(72.1)
+T0n, T1n = 90 - ouv/2, 90 + ouv/2
+hauteur = lambda t: Y_CENTER + R_BODY*cos(t*pi/180) - Y_FLOOR
+print("RECENTRÉ : WIN_T0 %.2f deg (%.3f m du plancher), WIN_T1 %.2f deg (%.3f m), milieu %.3f m"
+      % (T0n, hauteur(T0n), T1n, hauteur(T1n), hauteur(R(90))))

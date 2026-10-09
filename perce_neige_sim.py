@@ -5485,8 +5485,9 @@ class SoundSystem:
                 self._musique_audio = _AudioOutput()
                 self._musique_player.setAudioOutput(self._musique_audio)
                 self._musique_player.setLoops(QMediaPlayer.Loops.Infinite)
-            # gare basse un peu plus fort (Kevin, 09/10/2026)
-            self._musique_audio.setVolume(0.30 if gare == 1 else 0.22)
+            # gare basse plus fort (Kevin, 09/10/2026, deux fois : « remonte un
+            # peu le volume de la musique d'ambiance gare du bas »)
+            self._musique_audio.setVolume(0.42 if gare == 1 else 0.22)
             if self._musique_chemin != cle:
                 self._musique_player.setSource(source)
                 self._musique_chemin = cle
@@ -6196,7 +6197,12 @@ class AutoOps:
                 state.ghost_ready_timer = 0.0
                 state.ghost_ready_delay = 0.0
                 state.departure_buzzer_remaining = 0.0
-                tr.speed_cmd = 0.0
+                # consigne rendue à 100 %, comme toujours à quai (Kevin,
+                # 09/10/2026 : « quand j'ai appuyé sur A j'ai eu un refus car
+                # la consigne de vitesse était tombée à 0 alors que c'est
+                # 100 % d'habitude ») — l'embarquement de l'automate la
+                # mettait à 0 ; le départ reste verrouillé par PRÊT/buzzer
+                tr.speed_cmd = 1.0
             self.phase = self.PHASE_IDLE
             self.phase_t = 0.0
             add_event(self.w.state, "ops",
@@ -7125,6 +7131,8 @@ class GameWidget(QWidget):
         Qt.Key.Key_F5, Qt.Key.Key_F6, Qt.Key.Key_F7, Qt.Key.Key_F8,
         Qt.Key.Key_F9, Qt.Key.Key_F11, Qt.Key.Key_Escape, Qt.Key.Key_P,
         Qt.Key.Key_N, Qt.Key.Key_L, Qt.Key.Key_J, Qt.Key.Key_C,
+        # X : exploitation auto, aussi en skieur (09/10/2026)
+        Qt.Key.Key_X,
     ))
     # Bits des touches de marche envoyées à la 3D (skieur_joueur.gd)
     SKIEUR_MARCHE = (
@@ -7396,6 +7404,7 @@ class GameWidget(QWidget):
         self._skieur_vue_n = 0                  # appuis sur V (1re / 3e pers.)
         self._skieur_ski_n = 0                  # appuis sur E (chausser)
         self._skieur_evac_n = 0                 # appuis sur I (évacuer)
+        self._skieur_boucle_n = 0               # appuis sur B (BOUCLE du skieur)
         self._skieur_prep_txt = ""              # préparation du décor 3D en cours (texte)
         # dedans, retenue, écoute (0 rame, 1 gare basse, 2 dehors, 3 gare
         # haute, 4 tunnel à pied), gain de la machinerie entendu (gare haute)
@@ -7646,15 +7655,16 @@ class GameWidget(QWidget):
         self._key_state.clear()
         add_event(st, "skieur",
                   "Skier: ZQSD / arrows to walk, Shift to run, V 1st/3rd "
-                  "person, drag in the 3D view to look — F9 to drive again",
+                  "person, X auto-operation, B skier loop, drag in the 3D "
+                  "view to look — F9 to drive again",
                   "Skieur : ZQSD / flèches pour marcher, Maj pour courir, V "
-                  "1re/3e personne, glisser dans la 3D pour regarder — F9 "
-                  "pour reprendre la conduite",
+                  "1re/3e personne, X exploitation auto, B boucle, glisser "
+                  "dans la 3D pour regarder — F9 pour reprendre la conduite",
                   "info")
 
     def _sortir_skieur(self, conduire: bool = False) -> None:
-        """Fin du mode skieur. CONDUIRE (au poste de la rame) : l'exploitation
-        AUTO s'arrête, on reprend la conduite ; sinon elle continue."""
+        """Fin du mode skieur, au poste (CONDUIRE) ou non : l'exploitation
+        AUTO reste comme elle était — X la coupe."""
         if not self._skieur:
             return
         self._skieur = False
@@ -7662,8 +7672,9 @@ class GameWidget(QWidget):
         self._key_state.clear()
         self._appliquer_etat_skieur()
         ao = self.auto_ops
-        if conduire and ao.enabled:
-            ao.toggle()
+        # CONDUIRE ne coupe plus l'exploitation auto (Kevin, 09/10/2026 :
+        # « quand je suis passé en mode conduite et que j'ai quitté le mode
+        # skieur, le mode exploitation auto X s'est désactivé ») : X la coupe
         ao.force_any_hours = self._skieur_heures      # 24/7 n'était que pour le skieur
         add_event(self.state, "skieur",
                   "Driver's seat" if conduire else "Skier mode off",
@@ -8443,7 +8454,11 @@ class GameWidget(QWidget):
                 state_dict["skieur_vue"] = self._skieur_vue_n
                 state_dict["skieur_ski"] = self._skieur_ski_n
                 state_dict["skieur_evacuer"] = self._skieur_evac_n
+                state_dict["skieur_auto"] = self._skieur_boucle_n
                 state_dict["exploitation"] = bool(self.auto_ops.enabled)
+                # panneau des départs de la gare aval en rouge « fermé »
+                state_dict["hors_service"] = bool(
+                    st.crashed or (st.panne_active and is_catastrophic(st.panne_kind)))
                 self._godot_bridge.send_state(state_dict)
             self._autopilot_tick(dt)
             # PA + radio tunnel perdus : le lecteur d'annonces le sait
@@ -9120,6 +9135,8 @@ class GameWidget(QWidget):
                 self._skieur_ski_n += 1         # chausser / déchausser
             if k == Qt.Key.Key_U and not ev.isAutoRepeat():
                 self._skieur_evac_n += 1        # issUes de secours (I est « inverser »)
+            if k == Qt.Key.Key_B and not ev.isAutoRepeat():
+                self._skieur_boucle_n += 1      # BOUCLE du skieur (X = exploitation)
             self._key_state.add(k)
             ev.accept()
             return

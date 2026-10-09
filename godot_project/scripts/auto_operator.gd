@@ -184,7 +184,11 @@ func toggle() -> void:
 		state = State.IDLE
 		# Ne touche plus aux contrôles, le driver reprend
 		if physics != null:
-			physics.speed_cmd = 0.0
+			# à quai, consigne rendue à 100 % (l'embarquement la met à 0 ;
+			# Kevin, 09/10/2026 : « refus car la consigne était tombée à
+			# 0 ») ; en ligne, on n'y touche pas (la rame ne s'arrête pas net)
+			if not physics.trip_started:
+				physics.speed_cmd = 1.0
 			physics.loi_charge = Callable()
 		if journal != null:
 			journal.set("auto_exploitation", false)

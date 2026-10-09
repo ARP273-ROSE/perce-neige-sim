@@ -370,6 +370,41 @@ static func squelette_schuss() -> Dictionary:
 	return s
 
 
+## Poussée simultanée sur les bâtons (Kevin, 09/10/2026 : « quand le skieur
+## pousse sur ses bâtons, tu peux l'animer, là tu mets du schuss ») : quatre
+## images d'un cycle — 0 bras levés devant, bâtons plantés ; 1 le buste
+## plonge, mains qui descendent ; 2 buste cassé, mains aux hanches ; 3 bras
+## tendus derrière, bâtons décollés. POUSSEE_MAINS donne la main (repère
+## skieur) image par image, POUSSEE_POINTES la pointe des bâtons.
+const POUSSEE_MAINS: Array = [Vector3(0.24, 1.18, -0.52), Vector3(0.24, 0.98, -0.30),
+	Vector3(0.24, 0.80, 0.02), Vector3(0.22, 0.78, 0.30)]
+const POUSSEE_POINTES: Array = [Vector3(0.30, 0.0, -0.10), Vector3(0.30, 0.0, 0.12),
+	Vector3(0.32, 0.0, 0.42), Vector3(0.30, 0.30, 0.85)]
+
+
+static func squelette_poussee(k: int) -> Dictionary:
+	var s: Dictionary = squelette_glisse()
+	var bas: float = [0.02, 0.10, 0.20, 0.14][k]
+	var avant: float = [0.00, -0.06, -0.14, -0.10][k]
+	for n in ["bassin", "epaule_g", "epaule_d"]:
+		s[n] = (s[n] as Vector3) + Vector3(0.0, -bas, avant)
+	s.tete = (s.tete as Vector3) + Vector3(0.0, -bas - 0.04 * k, avant * 1.6)
+	s.ourlet = float(s.ourlet) - bas
+	s.haut_torse = float(s.haut_torse) - bas
+	s.tangage = [0.10, 0.35, 0.65, 0.50][k]
+	for c in ["g", "d"]:
+		var sx: float = -1.0 if c == "g" else 1.0
+		var m: Vector3 = POUSSEE_MAINS[k]
+		var main: Vector3 = Vector3(sx * m.x, m.y, m.z)
+		var ep: Vector3 = s["epaule_" + c]
+		s["main_" + c] = main
+		s["poignet_" + c] = main + (ep - main).normalized() * 0.06
+		s["coude_" + c] = ep.lerp(main, 0.5) + Vector3(sx * 0.06, -0.04, 0.04)
+		s["genou_" + c] = (s["genou_" + c] as Vector3) + Vector3(0.0, -bas * 0.4, -bas * 0.5)
+		s["hanche_" + c] = (s["hanche_" + c] as Vector3) + Vector3(0.0, -bas * 0.8, 0.0)
+	return s
+
+
 ## Chasse-neige : jambes écartées, genoux rentrés, buste droit, bâtons
 ## derrière.
 static func squelette_chasse() -> Dictionary:

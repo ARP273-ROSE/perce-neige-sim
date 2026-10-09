@@ -7,6 +7,44 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.19.7** — retours du 09/10/2026 (soir, suite).
+- **Exploitation auto et mode skieur** : X = exploitation auto partout, y
+  compris en skieur (fenêtre 3D et PC) ; la BOUCLE du skieur passe sur B
+  (« il y a un problème entre la touche X et le bouton EXPLOIT. du mode
+  skieur »). CONDUIRE ne coupe plus l'exploitation auto (« quand je suis
+  passé en mode conduite, l'exploitation auto s'est désactivée ») ; quand on
+  la coupe à quai, la consigne revient à 100 % (« A refusé car la consigne
+  était tombée à 0 »).
+- **Rames** : milieu des vitres sur la tangente verticale de la paroi
+  (hauteur de l'axe du tube, `hublots_photo.sage`) ; face (pare-brise et
+  issues en D) relevée sur la photo frontale de Kevin et contrôlée par
+  superposition orthographique (`face_photo.sage`, `shot_face_ortho.gd`) :
+  pare-brise 1,36 × 1,92 m aux coins hauts très arrondis, D à bord intérieur
+  droit, arche haute près du pare-brise et flanc qui suit la caisse.
+- **Intérieur d'après les photos** : panneaux beige à fines lames au-dessus
+  des vitres, parois bleu-gris pâle autour, encadrements noirs épais, grille
+  de ventilation gris foncé au milieu du plafond avec spots ronds, barres
+  orange au-dessus des vitres (plus de rampes chromées au plafond).
+- **Écran Pro-face** : date et heure nettes — les textes MSDF étaient
+  filtrés avec mipmaps, ce qui floutait les plus petits ; filtrage linéaire
+  pour tous les textes 3D.
+- **Sons** : pas en chaussures de ski = vrai claquement (deux impacts de
+  bruit, plus aucune note) ; musique de la gare basse plus forte.
+- **Piques du skieur** : au plus une toutes les 40 s, au moment de
+  l'événement (hors-piste dès 4 s) ; plus de variantes (funiculaire raté,
+  hors-piste, évacuation, voie), sans répétition.
+- **Skieur** : poussée simultanée sur les bâtons animée (4 images, bâtons
+  plantés devant puis tendus derrière) au lieu du schuss.
+- **Salle des machines** : la caméra glisse dans une boîte unique du sol de
+  la salle au plafond du hall (plus de recul brutal contre le plancher de
+  la gare).
+- **Panneau des départs de la gare aval** : en rouge « FUNICULAIRE FERMÉ —
+  Incident technique grave — Aucun départ jusqu'à nouvel ordre » (et en
+  anglais) après une rupture de câble, une collision, une panne
+  catastrophique ou pendant une évacuation ; textes nets (même filtrage).
+- Noms des lieux du domaine : ils ne se dessinent plus qu'en vue extérieure
+  (ils pouvaient traverser les parois de la rame).
+
 **v1.19.6** — retours du 09/10/2026 (soir).
 - « Quand l'exploitation auto a été déclenchée en mode skieur et que je
   repasse en mode conduite, tout est figé : je ne peux pas couper
@@ -36,7 +74,7 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 - Piques et avis : banque commune PC/PWA (`piques_avis.py`, PWA générée par
   `tools_piques.py`) : 92 piques et 60 avis de plus, piques selon la vitesse
   du choc au butoir, tirage sans répétition rapprochée. En mode skieur,
-  piques rares (au plus une toutes les 4 min) : hors-piste prolongé,
+  piques rares (au plus une toutes les 4 min, 40 s depuis la 1.19.7) : hors-piste prolongé,
   funiculaire raté sur le quai, évacuation, promenade sur la voie.
 - Banc d'évacuation : il attend que la rame ait fini de s'affaisser sous la
   charge avant d'aligner la porte (la rame glissait de 3 cm/s à l'image).

@@ -57,6 +57,13 @@ var _vantaux: Array = []            # [nœud, x fermé, sens d'ouverture, z]
 var _ouverture: float = 0.0
 var _panneau: Array = []            # lignes du panneau des départs (Label3D)
 var _t_panneau: float = 0.0
+# Service interrompu pour de bon (Kevin, 09/10/2026 : « si mon wagon est
+# pété au milieu du tunnel par une casse câble, une évacuation ou tout autre
+# truc définitif, mets un message rouge du genre fermé, incident technique
+# grave ») : posé par main.gd (évacuation) ; câble rompu, collision et panne
+# catastrophique se lisent sur la physique.
+static var evacuation: bool = false
+static var hors_service_pc: bool = false     # vue 3D du PC : collision / panne catastrophique
 var _page: int = 0
 
 
@@ -939,7 +946,26 @@ func mettre_a_jour(dt: float, ph: TrainPhysics) -> void:
 		var s_bas: float = minf(ph.s, PNConstants.miroir(ph.s))
 		prochain = int(ceil(maxf(s_bas - PNConstants.START_S, 0.0) / 12.0 / 60.0)) + 1
 	var suivant: int = prochain + 20
-	if en:
+	var arret: bool = evacuation or hors_service_pc or ph.cable_rupture or ph.crashed \
+		or ph.panne_catastrophique
+	var blanc: Color = Color(0.95, 0.97, 1.0)
+	var rouge: Color = Color(1.0, 0.18, 0.12)
+	for k in range(1, 5):
+		_panneau[k].modulate = rouge if arret else blanc
+	if arret and en:
+		_panneau[0].text = "%02d/%02d/%02d   %d:%02d %s" % [hl.month, hl.day, int(hl.year) % 100,
+			(int(hl.hour) + 11) % 12 + 1, hl.minute, "AM" if hl.hour < 12 else "PM"]
+		_panneau[1].text = "FUNICULAR CLOSED"
+		_panneau[2].text = "Serious technical incident"
+		_panneau[3].text = "No departures until further notice"
+		_panneau[4].text = "Thank you for your understanding"
+	elif arret:
+		_panneau[0].text = "%02d/%02d/%02d   %d:%02d" % [hl.day, hl.month, int(hl.year) % 100, hl.hour, hl.minute]
+		_panneau[1].text = "FUNICULAIRE FERMÉ"
+		_panneau[2].text = "Incident technique grave"
+		_panneau[3].text = "Aucun départ jusqu'à nouvel ordre"
+		_panneau[4].text = "Merci de votre compréhension"
+	elif en:
 		_panneau[0].text = "%02d/%02d/%02d   %d:%02d %s" % [hl.month, hl.day, int(hl.year) % 100,
 			(int(hl.hour) + 11) % 12 + 1, hl.minute, "AM" if hl.hour < 12 else "PM"]
 		_panneau[1].text = "FUNICULAR-DEPARTURE STATION"

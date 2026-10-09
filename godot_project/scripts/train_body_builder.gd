@@ -64,8 +64,11 @@ const COL_L: float = 0.10           # résolution longitudinale des panneaux vit
 # autres. Forme (même jour : « trop rectangulaire, plus arrondie au sommet et
 # à mi-hauteur dans la largeur, un peu trop large pour le panneau ») : une
 # super-ellipse aux flancs légèrement bombés, plus ronde en haut qu'en bas.
-const WIN_T0: float = 72.1          # angle depuis le sommet : haut du hublot (1,68 m du plancher)
-const WIN_T1: float = 120.4         # bas du hublot (0,28 m du plancher)
+# Recentré le 09/10/2026 (soir) : « le milieu de la vitre doit correspondre
+# à la tangente verticale de la surface du panneau » → centré sur 90°, même
+# ouverture (hublots_photo.sage).
+const WIN_T0: float = 65.85         # angle depuis le sommet : haut du hublot (1,85 m du plancher)
+const WIN_T1: float = 114.15        # bas du hublot (0,45 m du plancher) ; milieu à 90° (1,15 m)
 const WIN_W: float = 0.43           # largeur d'un hublot (au plus large), calée par superposition à la photo
 const DOOR_WIN_W: float = 0.43      # hublot du vantail : le même
 const WIN_CORNER: float = 0.15      # (ancien contour arrondi, gardé pour la face)
@@ -84,19 +87,27 @@ const TUBE_GASKET_OUT: float = 0.026 # liseré noir fin et régulier : la tôle 
 #   (|x| ≥ 0,93 jusqu'au bord, +1,00 → −0,97) ; « TIGNES » sous le
 #   pare-brise (−0,84), grille (−1,20) et feux ronds (±1,0 ; −1,25) en bas.
 const FACE_SCALE: float = (R_BODY + (Y_CENTER - Y_CUT)) / 3.10   # 2,93 / 3,10
-const WS_HALF_W: float = 0.76    # 1,52 m (photo 094104 : 330 px sur une face de 3,44 m ; « un peu plus petit », 2026-09-27)
-const WS_TOP_REAL: float = 1.50
-const WS_BOT_REAL: float = -0.38
-const WS_CORNER: float = 0.20
-# Portes d'évacuation d'extrémité (photo 095511) : panneaux en D JAUNES
-# PLEINS de part et d'autre du pare-brise, liseré sombre, poignée ; bord
-# extérieur suivant la lisière. Pas de vitre (erreur de lecture corrigée
-# le 2026-09-26).
-const DOOR_X0: float = 0.98     # 1 cm entre le joint du pare-brise et celui de la porte
-const DOOR_RHO: float = 1.62
-const DOOR_TOP_REAL: float = 1.02
-const DOOR_BOT_REAL: float = -1.15
-const DOOR_CORNER: float = 0.24
+# Face relevée sur la photo frontale de Kevin (09/10/2026 : « la baie vitrée
+# est trop large devant le cockpit, superpose tes limites de vitre à une de
+# mes photos, pareil pour la forme des ouvertures d'évac ») —
+# audit_physique/face_photo.sage, contrôle visuel face_superposition.py.
+const WS_HALF_W: float = 0.68    # 1,36 m (1,52 avant)
+const WS_TOP_REAL: float = 1.475
+const WS_BOT_REAL: float = -0.555
+const WS_CORNER: float = 0.34    # coins du haut, très arrondis
+const WS_CORNER_BAS: float = 0.15
+# Portes d'évacuation d'extrémité : panneaux en D JAUNES PLEINS de part et
+# d'autre du pare-brise, liseré sombre, poignée. Bord intérieur droit ; en
+# haut une ARCHE dont le sommet est près du bord intérieur et qui redescend
+# vers le flanc ; flanc qui suit la caisse ; bas arrondi.
+const DOOR_X0: float = 0.82     # bord intérieur
+const DOOR_RHO: float = 1.57    # flanc (rayon depuis l'axe)
+const DOOR_TOP_REAL: float = 0.925
+const DOOR_BOT_REAL: float = -1.076
+const DOOR_CORNER: float = 0.13 # coins du bas
+const DOOR_APEX_X: float = 0.99 # sommet de l'arche
+const DOOR_ARC_Y: float = 0.70  # l'arche quitte le bord intérieur
+const DOOR_FLANC_Y: float = 0.40 # l'arche rejoint le flanc
 const GASKET_IN: float = 0.03       # joint caoutchouc : de −0,03 à +0,075
 const GASKET_OUT: float = 0.075
 const GLASS_INSET: float = 0.02
@@ -159,9 +170,38 @@ static func materials() -> Dictionary:
 		"buffer": buffer,
 		"lamp_on": lamp_on,
 		"letters": _mat(Color(0.92, 0.92, 0.94), 0.45, 0.30),
-		"lining": _mat(Color(0.82, 0.79, 0.72), 0.80, 0.05),     # habillage intérieur crème
+		# habillage intérieur d'après les photos de Kevin (09/10/2026) :
+		# parois bleu-gris pâle autour des vitres, panneaux beige à fines
+		# lames longitudinales au-dessus
+		"lining": _mat(Color(0.74, 0.79, 0.86), 0.75, 0.05),
+		"lining_haut": _mat_lames_beige(),
 		"windshield": windshield,
 	}
+
+
+## Panneaux beige du haut de l'habillage : fines lames le long de la
+## voiture (texture rayée, UV = longueur d'arc × abscisse).
+static func _mat_lames_beige() -> StandardMaterial3D:
+	var n: int = 64
+	var img: Image = Image.create(n, 4, true, Image.FORMAT_RGB8)
+	for x in range(n):
+		var ombre: bool = (x % 8) == 0
+		var c: Color = Color(0.80, 0.69, 0.53) if not ombre else Color(0.66, 0.56, 0.42)
+		for y in range(4):
+			img.set_pixel(x, y, c)
+	img.generate_mipmaps()
+	var m: StandardMaterial3D = _mat(Color(1, 1, 1), 0.70, 0.05)
+	m.albedo_texture = ImageTexture.create_from_image(img)
+	m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+	return m
+
+
+## Quad avec UV (habillage rayé).
+static func _quad_uv(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, d: Vector3,
+		na: Vector3, nb: Vector3, nc: Vector3, nd: Vector3,
+		ua: Vector2, ub: Vector2, uc: Vector2, ud: Vector2) -> void:
+	for t in [[a, na, ua], [c, nc, uc], [b, nb, ub], [a, na, ua], [d, nd, ud], [c, nc, uc]]:
+		st.set_normal(t[1]); st.set_uv(t[2]); st.add_vertex(t[0])
 
 
 # --- petits outils SurfaceTool ------------------------------------------
@@ -326,7 +366,8 @@ static func _build_tube(mesh: ArrayMesh, mats: Dictionary, z_a: float, z_b: floa
 	var st_dark: SurfaceTool = SurfaceTool.new()
 	var st_yellow: SurfaceTool = SurfaceTool.new()
 	var st_rubber: SurfaceTool = SurfaceTool.new()
-	for st in [st_body, st_door, st_rib, st_glass, st_seam, st_dark, st_yellow, st_rubber]:
+	var st_haut: SurfaceTool = SurfaceTool.new()      # habillage : panneaux beige du haut
+	for st in [st_body, st_door, st_rib, st_glass, st_seam, st_dark, st_yellow, st_rubber, st_haut]:
 		st.begin(Mesh.PRIMITIVE_TRIANGLES)
 
 	var cols: Array = _columns(z_a, z_b)
@@ -404,6 +445,15 @@ static func _build_tube(mesh: ArrayMesh, mats: Dictionary, z_a: float, z_b: floa
 					st_door if kind == "door" else (st_yellow if yellow_col else st_body))
 				if inner:
 					st = st_body
+					# au-dessus des vitres : panneaux beige à lames
+					if absf(tm) < deg_to_rad(WIN_T0 - 4.0):
+						var k_uv: float = R_BODY * 6.0
+						_quad_uv(st_haut, _tube_pt(t0, r, z1), _tube_pt(t1, r, z1),
+							_tube_pt(t1, r, z0), _tube_pt(t0, r, z0),
+							_tube_n(t0), _tube_n(t1), _tube_n(t1), _tube_n(t0),
+							Vector2(t0 * k_uv, z1), Vector2(t1 * k_uv, z1),
+							Vector2(t1 * k_uv, z0), Vector2(t0 * k_uv, z0))
+						continue
 				elif kind == "door" and absf(tm) >= deg_to_rad(DOOR_TOP_T):
 					st = leaf_st[signf(tm)]["body"]
 				# quad : (t0,z1) (t1,z1) (t1,z0) (t0,z0) → face vers l'extérieur
@@ -449,9 +499,11 @@ static func _build_tube(mesh: ArrayMesh, mats: Dictionary, z_a: float, z_b: floa
 					return _tube_pt(sx * w / R_BODY, R_BODY - 0.05 + lift, z0c2 + u)
 				var n_i: Callable = func(_u: float, w: float) -> Vector3:
 					return _tube_uw_n(w, sx)
+				# encadrement noir épais côté passagers (photos de l'intérieur)
 				_emit_band(st_ri2, _offset_normal(hole2, -TUBE_GASKET_IN),
-					_offset_normal(hole2, TUBE_GASKET_OUT), pt_i, n_i, -0.012)
+					_offset_normal(hole2, 0.055), pt_i, n_i, -0.012)
 		st_body.set_material(mats["lining"]); st_body.commit(mesh)
+		st_haut.set_material(mats["lining_haut"]); st_haut.commit(mesh)
 		st_ri2.set_material(mats["rubber"]); st_ri2.commit(mesh)
 		return
 	# Fond plat (châssis) entre les échancrures, et plafond des échancrures
@@ -568,16 +620,74 @@ static func _offset_outline(pts: PackedVector2Array, d: float) -> PackedVector2A
 
 ## La seule vitre de la face : le pare-brise.
 static func _face_windows() -> Array:
-	var ws: PackedVector2Array = _rounded_outline(-WS_HALF_W, WS_HALF_W,
-		_face_y(WS_BOT_REAL), _face_y(WS_TOP_REAL), WS_CORNER, 99.0)
+	var ws: PackedVector2Array = _outline_2r(-WS_HALF_W, WS_HALF_W,
+		_face_y(WS_BOT_REAL), _face_y(WS_TOP_REAL), WS_CORNER, WS_CORNER_BAS)
 	return [ws]
+
+
+## Rectangle aux coins du haut (r_h) et du bas (r_b) différents, sens
+## trigonométrique (comme _rounded_outline).
+static func _outline_2r(x0: float, x1: float, y0: float, y1: float, r_h: float,
+		r_b: float) -> PackedVector2Array:
+	var pts: PackedVector2Array = PackedVector2Array()
+	var cs: Array = [[Vector2(x1 - r_b, y0 + r_b), -PI * 0.5, r_b], [Vector2(x1 - r_h, y1 - r_h), 0.0, r_h],
+		[Vector2(x0 + r_h, y1 - r_h), PI * 0.5, r_h], [Vector2(x0 + r_b, y0 + r_b), PI, r_b]]
+	for k in range(4):
+		var c: Vector2 = cs[k][0]
+		var a0: float = cs[k][1]
+		var r: float = cs[k][2]
+		var prev: Array = cs[(k + 3) % 4]
+		var p_prev: Vector2 = (prev[0] as Vector2) + Vector2(cos(a0), sin(a0)) * float(prev[2])
+		var first: Vector2 = c + Vector2(cos(a0), sin(a0)) * r
+		for j in range(10):
+			pts.append(p_prev.lerp(first, float(j) / 10.0))
+		for j in range(13):
+			var a: float = a0 + (PI * 0.5) * float(j) / 12.0
+			pts.append(c + Vector2(cos(a), sin(a)) * r)
+	return pts
 
 
 ## Les deux portes d'évacuation en D (contours, côté droit puis miroir).
 static func _face_doors() -> Array:
-	var door_r: PackedVector2Array = _rounded_outline(DOOR_X0, DOOR_RHO + 0.05,
-		maxf(_face_y(DOOR_BOT_REAL), Y_CUT - Y_CENTER + 0.06), _face_y(DOOR_TOP_REAL),
-		DOOR_CORNER, DOOR_RHO)
+	var yb: float = maxf(_face_y(DOOR_BOT_REAL), Y_CUT - Y_CENTER + 0.06)
+	var yt: float = _face_y(DOOR_TOP_REAL)
+	var rb: float = DOOR_CORNER
+	var x_flanc: float = sqrt(DOOR_RHO * DOOR_RHO - DOOR_FLANC_Y * DOOR_FLANC_Y)
+	var door_r: PackedVector2Array = PackedVector2Array()
+	# coin bas intérieur
+	for j in range(9):
+		var a: float = PI + (PI * 0.5) * float(j) / 8.0
+		door_r.append(Vector2(DOOR_X0 + rb, yb + rb) + Vector2(cos(a), sin(a)) * rb)
+	# bas, jusqu'au flanc (coin extérieur arrondi : on rejoint le cercle un
+	# peu au-dessus du bas)
+	var a_bas: float = asin(clampf((yb + rb) / DOOR_RHO, -1.0, 1.0))
+	var x_bas: float = DOOR_RHO * cos(a_bas)
+	for j in range(1, 6):
+		door_r.append(Vector2(lerpf(DOOR_X0 + rb, x_bas - rb, float(j) / 5.0), yb))
+	for j in range(1, 6):
+		var t: float = float(j) / 6.0
+		var q: Vector2 = Vector2(x_bas - rb, yb).lerp(Vector2(x_bas, yb + rb), t)
+		door_r.append(q + Vector2(rb * 0.29, -rb * 0.29) * sin(PI * t))
+	# flanc : cercle de rayon DOOR_RHO jusqu'à l'arche
+	var a_haut: float = atan2(DOOR_FLANC_Y, x_flanc)
+	for j in range(0, 21):
+		var a: float = lerpf(a_bas, a_haut, float(j) / 20.0)
+		door_r.append(Vector2(cos(a), sin(a)) * DOOR_RHO)
+	# arche : du flanc au sommet (quart d'ellipse), puis du sommet au bord
+	# intérieur
+	var ga: float = x_flanc - DOOR_APEX_X
+	var gb: float = yt - DOOR_FLANC_Y
+	for j in range(1, 21):
+		var th: float = (PI * 0.5) * float(j) / 20.0
+		door_r.append(Vector2(DOOR_APEX_X + ga * cos(th), DOOR_FLANC_Y + gb * sin(th)))
+	var pa: float = DOOR_APEX_X - DOOR_X0
+	var pb: float = yt - DOOR_ARC_Y
+	for j in range(1, 11):
+		var th2: float = PI * 0.5 + (PI * 0.5) * float(j) / 10.0
+		door_r.append(Vector2(DOOR_APEX_X + pa * cos(th2), DOOR_ARC_Y + pb * sin(th2)))
+	# bord intérieur, qui redescend
+	for j in range(1, 10):
+		door_r.append(Vector2(DOOR_X0, lerpf(DOOR_ARC_Y, yb + rb, float(j) / 10.0)))
 	var door_l: PackedVector2Array = PackedVector2Array()
 	for i in range(door_r.size() - 1, -1, -1):
 		door_l.append(Vector2(-door_r[i].x, door_r[i].y))

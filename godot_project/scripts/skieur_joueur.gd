@@ -106,6 +106,10 @@ var _skis_main: Mesh = null
 var _image_glisse: Mesh = null
 var _image_schuss: Mesh = null
 var _image_chasse: Mesh = null
+var _images_poussee: Array = []          # cycle de poussée sur les bâtons (4 images)
+var _poussee_t: float = 0.0
+var _pousse: bool = false                # il pousse vraiment (relevé au pas précédent)
+var _image_poussee: int = -1
 var _skis_pieds_v: Mesh = null           # chasse-neige : skis en V
 var _posture: int = 0                    # 0 glisse, 1 schuss, 2 chasse-neige
 ## Chute (Kevin, 07/10/2026 : « si je vais dans les décors trop vite on peut
@@ -210,6 +214,8 @@ func _construire_apparence() -> void:
 	_image_glisse = SkieurMesh.passager_squelette(SkieurMesh.squelette_glisse(), "libre", "casque", mat)
 	_image_schuss = SkieurMesh.passager_squelette(SkieurMesh.squelette_schuss(), "libre", "casque", mat)
 	_image_chasse = SkieurMesh.passager_squelette(SkieurMesh.squelette_chasse(), "libre", "casque", mat)
+	for k in range(4):
+		_images_poussee.append(SkieurMesh.passager_squelette(SkieurMesh.squelette_poussee(k), "libre", "casque", mat))
 	_skis_pieds = SkieurMesh.skis_aux_pieds(mat)
 	_skis_pieds_v = SkieurMesh.skis_aux_pieds(mat, SkieurMesh.CHASSE_ANGLE)
 	_batons = _mm(SkieurMesh.baton(mat), Color(0.55, 0.30, 0.80, 1.0))
@@ -303,7 +309,9 @@ func vitesse_ski() -> float:
 
 func _apparence_ski() -> void:
 	_posture = 0
+	_image_poussee = -1
 	_corps.multimesh.mesh = _image_glisse if chausse else _images[0]
+	_poser_batons(0)
 	_corps.position.y = 0.045 if chausse else 0.0
 	_skis.multimesh.mesh = _skis_pieds if chausse else _skis_main
 	_skis.position = Vector3.ZERO if chausse else SkieurMesh.ANCRE_SKIS
@@ -348,9 +356,34 @@ func _poser_posture(p: int) -> void:
 	if p == _posture:
 		return
 	_posture = p
+	_image_poussee = -1
 	_corps.multimesh.mesh = [_image_glisse, _image_schuss, _image_chasse][p]
 	_skis.multimesh.mesh = _skis_pieds_v if p == 2 else _skis_pieds
 	_poser_batons(p)
+
+
+## Image k du cycle de poussée : corps et bâtons (posture 3).
+func _poser_poussee(k: int) -> void:
+	if _posture == 3 and k == _image_poussee:
+		return
+	_posture = 3
+	_image_poussee = k
+	_corps.multimesh.mesh = _images_poussee[k]
+	_skis.multimesh.mesh = _skis_pieds
+	for b in range(2):
+		var sx: float = -1.0 if b == 0 else 1.0
+		var m: Vector3 = SkieurMesh.POUSSEE_MAINS[k]
+		var t: Vector3 = SkieurMesh.POUSSEE_POINTES[k]
+		_poser_un_baton(b, Vector3(sx * m.x, m.y, m.z), Vector3(sx * t.x, t.y, t.z))
+
+
+func _poser_un_baton(k: int, main_p: Vector3, pointe: Vector3) -> void:
+	var ax: Vector3 = main_p - pointe
+	var y: Vector3 = ax.normalized()
+	var x: Vector3 = (Vector3.RIGHT - y * y.x).normalized()
+	var z: Vector3 = x.cross(y)
+	_batons.multimesh.set_instance_transform(k, Transform3D(
+		Basis(x, y * (ax.length() / SkieurMesh.LONG_BATON), z), pointe))
 
 
 ## Bâtons selon la posture : en glisse et en chasse-neige plantés de part et
@@ -712,8 +745,16 @@ func _glisser(delta: float, cmd: Vector2, schuss: bool) -> void:
 	var v: Vector3 = _v_ski
 	var vit: float = v.length()
 	var vit0: float = vit
-	# posture : chasse-neige dès qu'on freine, schuss quand on file
-	_poser_posture(2 if (cmd.y < -0.2 and vit > 0.5) else (1 if (schuss and vit > 3.0) else 0))
+	# posture : chasse-neige dès qu'on freine, poussée animée quand il pousse
+	# sur ses bâtons, schuss quand il file sans pousser
+	if cmd.y < -0.2 and vit > 0.5:
+		_poser_posture(2)
+	elif _pousse:
+		_poussee_t += delta
+		_poser_poussee(int(_poussee_t * 4.0 * 1.1) % 4)    # ~1,1 cycle par seconde
+	else:
+		_poussee_t = 0.0
+		_poser_posture(1 if (schuss and vit > 3.0) else 0)
 	# virage : les skis pivotent, d'autant moins vite qu'on va vite
 	var omega: float = minf(OMEGA_SKI, A_VIRAGE / maxf(vit, 0.1))
 	_cap_ski -= cmd.x * omega * delta
@@ -738,6 +779,7 @@ func _glisser(delta: float, cmd: Vector2, schuss: bool) -> void:
 	# pas de patineur, poussée des bâtons ; en montée, en canard, plus lent
 	var v_av: float = v.dot(d)
 	var v_pas: float = V_PAS * cmd.y * clampf(1.0 - 4.0 * d.y, 0.35, 1.0)
+	_pousse = cmd.y > 0.2 and v_av < v_pas + 0.3
 	if cmd.y > 0.2 and v_av < v_pas:
 		v += d * minf(v_pas - v_av, A_PAS * delta)
 	v = v.limit_length(V_MAX_SKI)

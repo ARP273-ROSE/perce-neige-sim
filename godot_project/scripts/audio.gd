@@ -100,6 +100,9 @@ var gain_machinerie: float = 0.0
 # la PWA par deploy_web.sh, chargés à la demande (14 Mo) la première fois
 # qu'on entre dans une gare ; en local, sons/musique/ du dépôt.
 const MUSIQUE_DB: float = -16.0
+# gare basse plus fort (Kevin, 09/10/2026 : « remonte un peu le volume de la
+# musique d'ambiance gare du bas »)
+const MUSIQUE_BASSE_DB: float = -11.0
 var _musique: Array = [null, null]      # AudioStreamPlayer gare basse, gare haute
 var _musique_chargee: Array = [false, false]
 var _musique_en_cours: int = 0          # 0 aucune, 1 basse, 2 haute
@@ -315,7 +318,7 @@ func _update_musique(delta: float) -> void:
 		var p: AudioStreamPlayer = _musique[k]
 		if p == null or p.stream == null:
 			continue
-		var cible: float = MUSIQUE_DB if voulue == k + 1 else -80.0
+		var cible: float = ((MUSIQUE_BASSE_DB if k == 0 else MUSIQUE_DB) if voulue == k + 1 else -80.0)
 		if voulue == k + 1 and not p.playing:
 			p.volume_db = -80.0
 			p.play()

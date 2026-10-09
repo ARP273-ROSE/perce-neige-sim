@@ -198,8 +198,8 @@ funiculaire), les sauts (il reste collé au sol), les chutes.
   `lacet`, `s.chasse` du squelette) ; poignées/serrures sous le nœud
   d'issue (`_build_cap_fittings(…, issues_nodes)`).
 - **1.19.6 (09/10/2026 soir)** : piques rares du skieur
-  (`main._piques_occasions`, `_pique_skieur`, `PIQUE_ECART` 240 s, rien la
-  première minute, jamais en BOUCLE) : hors-piste 12 s d'affilée
+  (`main._piques_occasions`, `_pique_skieur`, `PIQUE_ECART` 40 s depuis la 1.19.7,
+  pas dans les 10 premières secondes, jamais en BOUCLE) : hors-piste 4 s d'affilée
   (`_sur_piste` de `piste_sous`), rames parties pendant qu'il attendait
   20 s à pied sur le quai, évacuation, promenade sur la voie ; listes
   `SKIEUR_*` de `piques_avis.py` (→ `pn_quips_extra.gd` par
@@ -208,6 +208,13 @@ funiculaire), les sauts (il reste collé au sol), les chutes.
   poignées, `Cabin.retirer_issues` masque les surfaces. Baie de porte en
   collision : de joint à joint + 8 cm par côté. Clavier resté dans la 3D :
   `main._relayer_touche_pc` passe les touches au PC (`{"cle", "enfonce"}`).
+- **1.19.7 (09/10/2026 soir)** : X = exploitation auto en skieur aussi
+  (`main._unhandled_input`, PC `SKIEUR_GARDE`), BOUCLE sur B
+  (`_skieur_boucle_n` → `skieur_auto`) ; CONDUIRE garde l'exploitation ;
+  poussée sur les bâtons (`SkieurMesh.squelette_poussee(k)`,
+  `POUSSEE_MAINS/POINTES`, `SkieurJoueur._poser_poussee`, posture 3, jouée
+  quand `_pousse`) ; panneau des départs rouge (`GareAval.evacuation`,
+  `hors_service_pc`).
 
 Reste : le poste de la rame d'en face (on ne conduit que la rame choisie au
 départ), les remontées mécaniques, sauts et chutes.
