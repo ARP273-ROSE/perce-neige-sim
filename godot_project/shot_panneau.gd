@@ -7,6 +7,8 @@ var _f: int = 0
 var _t0: int = -1
 var _pre: String = "/tmp/panneau"
 var _cam: Camera3D = null
+var _centre: Vector3 = Vector3.ZERO
+var _nz: Vector3 = Vector3.FORWARD
 func _initialize() -> void:
 	for a in OS.get_cmdline_user_args():
 		if not a.begins_with("--"):
@@ -37,8 +39,12 @@ func _tick() -> void:
 		var xf: Transform3D = mm.get_instance_transform(0)
 		_cam = Camera3D.new()
 		get_root().add_child(_cam)
-		_cam.global_position = xf.origin + xf.basis.z * 2.2 + Vector3.UP * 0.1
+		var p1: Vector3 = xf.origin + xf.basis.z * 3.5 + xf.basis.x * -1.0
+		p1.y = relief.hauteur_sol(p1.x, p1.z) + 1.8
+		_cam.global_position = p1
 		_cam.look_at(xf.origin, Vector3.UP)
+		_centre = xf.origin
+		_nz = xf.basis.z
 		_cam.fov = 50.0
 		_cam.make_current()
 		_t0 = _f
@@ -46,9 +52,14 @@ func _tick() -> void:
 		return
 	if _f - _t0 == 4:
 		get_root().get_texture().get_image().save_png(_pre + "_proche.png")
-		_cam.global_position += (_cam.global_position - _cam.global_transform.origin)
-		var d: Vector3 = -_cam.global_transform.basis.z
-		_cam.global_position -= d * 10.0
+		# du bas de la piste, en regardant vers l'amont : on voit plusieurs
+		# panneaux à la suite, numéros croissants en montant
+		var p2: Vector3 = _centre + _nz * 30.0 + Vector3(_nz.z, 0, -_nz.x) * 6.0
+		p2.y = relief.hauteur_sol(p2.x, p2.z) + 2.5
+		_cam.global_position = p2
+		var cible: Vector3 = _centre - _nz * 120.0
+		cible.y = relief.hauteur_sol(cible.x, cible.z) + 1.5
+		_cam.look_at(cible, Vector3.UP)
 	if _f - _t0 == 8:
 		get_root().get_texture().get_image().save_png(_pre + "_loin.png")
 		print("captures")
