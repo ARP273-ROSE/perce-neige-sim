@@ -488,7 +488,14 @@ longueur « compteur » affichée.
 - Remontées-Mécaniques : **1 435 mm** (voie normale européenne).
 - Wikipedia EN : 1 200 mm (voie étroite).
 - Gabarit cabine 3,60 m cohérent avec 1 435 mm.
-- **Retenu : 1 435 mm** (source primaire).
+- ~~Retenu : 1 435 mm (source primaire).~~
+- **Mesure sur photo (09/10/2026, `audit_physique/ecartement_photo.sage`)** :
+  rame à quai vue de face (Wikimedia Commons, « 2017-01 Funiculaire Du
+  Perce-Neige Tignes 01.jpg »), étalon = les deux tampons du nez (±1,02 m) :
+  **1,13 m** à la profondeur du nez (280 px ; 1,435 m en donnerait 356,
+  1,200 m 298). La voie normale est exclue ; 1 435 mm est sans doute la
+  valeur générique de la voie ferrée standard (OSM, Remontées-Mécaniques).
+- **Retenu : 1 200 mm** (Wikipedia, et le simulateur depuis l'origine).
 
 ### 8.5 Date d'ouverture : 1989 vs 1993
 
