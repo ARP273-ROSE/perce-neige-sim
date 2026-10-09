@@ -82,4 +82,5 @@ pause={
 textures/vram_compression/import_etc2_astc=true
 limits/opengl/max_renderable_lights=128
 anti_aliasing/quality/msaa_3d=2
+textures/default_filters/anisotropic_filtering_level=3
 environment/defaults/default_clear_color=Color(0.02, 0.02, 0.04, 1)
