@@ -92,9 +92,13 @@ func setup(p_main: Node, p_env: Environment, p_mode: String) -> void:
 		RenderingServer.viewport_set_measure_render_time(_vp_rid, true)
 	machine = _detecter()
 	cran_min = 0 if _rd else 2
+	var plancher_web: int = 4  # PWA : départ au réglage bas (mesuré sur iPad)
 	if _web:
-		cran_min = 4          # PWA : réglage bas + rendu 60 % (mesuré sur iPad)
-	var depart: int = _cran_de_depart()
+		# la PWA DÉMARRE au cran 4 mais peut REMONTER jusqu'au rendu à 100 %
+		# (cran 2) si l'appareil a de la marge — avant, elle restait à 70 %
+		# au mieux et le pupitre était illisible (Kevin, 09/10/2026)
+		cran_min = 2
+	var depart: int = maxi(_cran_de_depart(), plancher_web) if (_web and mode == "auto") else _cran_de_depart()
 	# --cran=N : cran imposé, sans adaptation (captures de contrôle)
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--cran="):
