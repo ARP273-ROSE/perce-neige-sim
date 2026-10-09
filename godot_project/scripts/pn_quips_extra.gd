@@ -255,6 +255,17 @@ const SKIEUR_VOIE: Array = [
 	 "Every minute on the track, 334 passengers curse you in silence."],
 ]
 
+const SKIEUR_SORTIE: Array = [
+	["Sorti par la galerie de secours. La lumière du jour, ça se mérite.",
+	 "Out through the escape gallery. Daylight has to be earned."],
+	["Bienvenue dehors. Le funiculaire, lui, reste coincé dedans.",
+	 "Welcome outside. The funicular, meanwhile, is still stuck inside."],
+	["Évacuation réussie. Reste à expliquer ça au forfait journée.",
+	 "Evacuation complete. Now explain that to your day pass."],
+	["Vous voilà sur la neige, sans remontée. Les skis, eux, sont ravis.",
+	 "There you are on the snow, without a lift. Your skis are delighted."],
+]
+
 const REVIEWS_GREAT: Array = [
 	["[IT] Giulia, Milano", "Che classe! Partenza dolce, arrivo perfetto. Il mio espresso non si è mosso.", true,
 	 "Quelle classe ! Départ doux, arrivée parfaite. Mon espresso n'a pas bougé.",

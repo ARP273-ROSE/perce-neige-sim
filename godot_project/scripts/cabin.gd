@@ -402,6 +402,19 @@ func _build_floor_ceiling() -> void:
 	# cerceau ; paliers horizontaux à la pente des gares, FLOOR_GRADE),
 	# scindé par voiture pour suivre l'articulation.
 	_build_stepped_floor(floor_mat, z_front, z_rear)
+	# plancher du passage d'intercirculation, entre les deux voitures
+	# (09/10/2026 : on passe d'une voiture à l'autre en marchant)
+	var car_len_p: float = train_length / float(car_count)
+	for idx in range(car_count - 1):
+		var pl: BoxMesh = BoxMesh.new()
+		pl.size = Vector3(2.0 * TrainBodyBuilder.PASSAGE_DEMI_L + 0.2, 0.06, 0.8)
+		pl.material = _mat_tapis()
+		var pm: MeshInstance3D = MeshInstance3D.new()
+		pm.name = "PlancherPassage%d" % (idx + 1)
+		pm.mesh = pl
+		pm.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		pm.position = Vector3(0.0, TrainBodyBuilder.Y_FLOOR + STEP_LIFT - 0.03, car_len_p * 0.5)
+		_interior_cars[idx].add_child(pm)
 
 	# Plafond cabine — surface plate visible quand on lève les yeux
 	var ceil_mat: StandardMaterial3D = StandardMaterial3D.new()

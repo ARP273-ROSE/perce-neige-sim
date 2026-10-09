@@ -7,6 +7,24 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.19.8** — retours du 09/10/2026 (nuit).
+- **Passer d'une voiture à l'autre en marchant** (« sans passer par une
+  faille spatio-temporelle ») : baie d'intercirculation de 0,90 × 2,00 m
+  dans les cloisons d'attelage (visuel et collisions), plancher et parois
+  du soufflet dans l'intervalle. Arrivé à la cloison, le jeu le disait
+  « percuté par la rame » et le renvoyait en gare : un skieur sans support
+  mais DANS une voiture y est rattaché, ce n'est plus un choc
+  (`bench_passage_3d.gd`).
+- **Panneaux de piste** : un disque opaque texturé au lieu d'un carré
+  découpé par transparence — de loin, les mipmaps faisaient passer l'alpha
+  sous le seuil et le panneau devenait transparent.
+- **Issues de secours vues de l'intérieur** : gris-bleu comme l'habillage
+  (photos du poste), plus jaunes.
+- **Piques du skieur** : leur propre ligne à l'écran (les messages d'état
+  les effaçaient) ; hors-piste détecté plus strictement (bord de piste
+  + 1 m, au lieu de la marge de 6 m de l'affichage) ; évacuation toujours
+  saluée ; nouvelle pique à la sortie de la galerie de secours.
+
 **v1.19.7** — retours du 09/10/2026 (soir, suite).
 - **Exploitation auto et mode skieur** : X = exploitation auto partout, y
   compris en skieur (fenêtre 3D et PC) ; la BOUCLE du skieur passe sur B

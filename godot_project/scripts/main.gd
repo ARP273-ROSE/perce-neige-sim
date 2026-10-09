@@ -1689,7 +1689,7 @@ func evacuer() -> void:
 		collisions.assurer_autour(skieur.global_position)
 	if commandes_skieur != null:
 		commandes_skieur.message("Issues de secours retirées : par le trou, sur la voie ; l'escalier de droite ramène en gare ou à la galerie du milieu", 7.0)
-	_pique_skieur("SKIEUR_EVACUATION", 0.7, 7.0)
+	_pique_skieur("SKIEUR_EVACUATION", 1.0, 2.0)
 
 
 ## Une pique du mode skieur, si le moment s'y prête (cf. PIQUE_ECART).
@@ -1709,7 +1709,7 @@ func _piques_occasions(dt: float, en_gare: bool, a_pied_tunnel: bool) -> void:
 	if not _pique_en_retard.is_empty():
 		_pique_en_retard[1] = float(_pique_en_retard[1]) - dt
 		if float(_pique_en_retard[1]) <= 0.0:
-			commandes_skieur.message(PNQuips.pique(str(_pique_en_retard[0]), "fr"), 6.0)
+			commandes_skieur.pique(PNQuips.pique(str(_pique_en_retard[0]), "fr"), 7.0)
 			_pique_en_retard = []
 	if not mode_skieur or skieur_auto != null or skieur == null:
 		return
@@ -1960,10 +1960,23 @@ func _securite_skieur() -> void:
 			for c in [cabin, cabin_ghost]:
 				if c == null:
 					continue
-				for car in c._car_roots:
-					var loc: Vector3 = (car as Node3D).global_transform.affine_inverse() * skieur.global_position
+				for ci in range(c._car_roots.size()):
+					var car: Node3D = c._car_roots[ci]
+					var loc: Vector3 = car.global_transform.affine_inverse() * skieur.global_position
 					if absf(loc.x) < 1.70 and absf(loc.z) < car_len * 0.5 + 0.3 \
 							and loc.y > -2.8 and loc.y < 2.2:
+						# DEDANS (entre deux voitures, contre la cloison : le
+						# rayon sous ses pieds a pu manquer le plancher) : on le
+						# rattache à la voiture, ce n'est pas un choc (Kevin,
+						# 09/10/2026 : « arrivé à la cloison qui sépare les deux
+						# wagons, il me dit que je me suis fait percuter »)
+						if absf(loc.x) < 1.45 and loc.y > TrainBodyBuilder.Y_FLOOR - 0.45 \
+								and loc.y < TrainBodyBuilder.Y_CENTER + 1.4 \
+								and ci < c._interior_cars.size():
+							var v: Node3D = c._interior_cars[ci]
+							skieur.support = v
+							skieur._support_xf = v.global_transform
+							return
 						_skieur_percute()
 						return
 	elif is_instance_valid(skieur.support):
@@ -2212,7 +2225,7 @@ func _maj_skieur() -> void:
 		if _t_info >= 0.2:
 			_t_info = 0.0
 			var pi: Array = domaine.piste_sous(skieur.global_position, 1.0)
-			_sur_piste = str(pi[0]) != "" or int(pi[1]) >= 0
+			_sur_piste = not domaine.hors_piste(skieur.global_position)
 			var info: String = "%d km/h" % roundi(skieur.vitesse_ski() * 3.6)
 			if str(pi[0]) != "" or int(pi[1]) >= 0:
 				info += " · %s%s" % [pi[0], (" (%s)" % PistesDonnees.NOMS_COULEURS[pi[1]]) if int(pi[1]) >= 0 else ""]
@@ -2256,6 +2269,9 @@ func _maj_skieur() -> void:
 	# hors des gares, à pied : il peut se hisser sur un rebord (GRIMPE_MAX)
 	skieur.grimpe = skieur.support == null and not en_gare
 	if a_pied_tunnel != _voie_occupee:
+		# sorti du tunnel à pied, au grand air (galerie de secours) : une pique
+		if not a_pied_tunnel and skieur.support == null and not en_gare and skieur.dehors(relief):
+			_pique_skieur("SKIEUR_SORTIE", 1.0, 4.5)
 		_voie_occupee = a_pied_tunnel
 		if not client_mode:
 			physics.voie_occupee = a_pied_tunnel

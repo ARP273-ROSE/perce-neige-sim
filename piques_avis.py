@@ -521,3 +521,15 @@ SKIEUR_VOIE = [
     ("Chaque minute sur la voie, 334 passagers vous maudissent en silence.",
      "Every minute on the track, 334 passengers curse you in silence."),
 ]
+
+# sortie de la galerie de secours, au grand air (09/10/2026)
+SKIEUR_SORTIE = [
+    ("Sorti par la galerie de secours. La lumière du jour, ça se mérite.",
+     "Out through the escape gallery. Daylight has to be earned."),
+    ("Bienvenue dehors. Le funiculaire, lui, reste coincé dedans.",
+     "Welcome outside. The funicular, meanwhile, is still stuck inside."),
+    ("Évacuation réussie. Reste à expliquer ça au forfait journée.",
+     "Evacuation complete. Now explain that to your day pass."),
+    ("Vous voilà sur la neige, sans remontée. Les skis, eux, sont ravis.",
+     "There you are on the snow, without a lift. Your skis are delighted."),
+]

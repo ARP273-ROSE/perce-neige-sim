@@ -562,6 +562,42 @@ static func _build_end_disc(mesh: ArrayMesh, mat: StandardMaterial3D, z: float, 
 	st.commit(mesh)
 
 
+## Passage d'intercirculation (Kevin, 09/10/2026 : « fais en sorte qu'on
+## puisse passer d'un wagon à l'autre en marchant à l'intérieur de la rame
+## sans passer par une faille spatio-temporelle ») : baie de PASSAGE_DEMI_L
+## × 2 de large, du bas jusqu'à PASSAGE_HAUT au-dessus du plancher.
+const PASSAGE_DEMI_L: float = 0.45
+const PASSAGE_HAUT: float = 2.00
+
+
+## Disque de fin de tube percé de la baie d'intercirculation (attelage).
+static func _build_end_disc_porte(mesh: ArrayMesh, mat: StandardMaterial3D, z: float,
+		dir_z: float, r: float) -> void:
+	var y_cut_rel: float = maxf(Y_CUT - Y_CENTER, -r)
+	var bord: PackedVector2Array = PackedVector2Array()
+	for i in range(73):
+		var a: float = TAU * float(i) / 72.0
+		bord.append(Vector2(r * cos(a), maxf(r * sin(a), y_cut_rel)))
+	var y_haut: float = Y_FLOOR + PASSAGE_HAUT - Y_CENTER
+	var baie: PackedVector2Array = PackedVector2Array([
+		Vector2(-PASSAGE_DEMI_L, y_cut_rel - 0.2), Vector2(PASSAGE_DEMI_L, y_cut_rel - 0.2),
+		Vector2(PASSAGE_DEMI_L, y_haut), Vector2(-PASSAGE_DEMI_L, y_haut)])
+	var st: SurfaceTool = SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var n: Vector3 = Vector3(0.0, 0.0, dir_z)
+	for poly in Geometry2D.clip_polygons(bord, baie):
+		var pp: PackedVector2Array = poly
+		var tris: PackedInt32Array = Geometry2D.triangulate_polygon(pp)
+		for k in range(0, tris.size(), 3):
+			var v: Array = []
+			for j in range(3):
+				var q: Vector2 = pp[tris[k + j]]
+				v.append(Vector3(q.x, Y_CENTER + q.y, z))
+			_tri_out(st, v[0], v[1], v[2], n, n, n)
+	st.set_material(mat)
+	st.commit(mesh)
+
+
 # --- calotte bombée jaune ----------------------------------------------------
 
 ## Ordonnée réelle (relative à l'axe) → ordonnée jeu, comprimée depuis l'apex.
@@ -871,7 +907,9 @@ static func _build_cap(mesh: ArrayMesh, mats: Dictionary, z_join: float, dir_z: 
 		for door in portes:
 			_emit_band(st_y, _offset_outline(door, 0.0), _offset_outline(door, 0.13), pt_in, n_in, -0.004)
 			_emit_band(st_ri, _offset_outline(door, -0.012), _offset_outline(door, 0.012), pt_in, n_in, -0.010)
-			_issue_panneau(issues, dir_z, door, pt_in, n_in, -0.006, mats)
+			# côté passagers, le D est gris-bleu comme l'habillage, pas jaune
+			# (Kevin, 09/10/2026 ; photos du poste : panneau gris-bleu à persiennes)
+			_issue_panneau(issues, dir_z, door, pt_in, n_in, -0.006, mats, "lining")
 		st_y.set_material(mats["lining"]); st_y.commit(mesh)
 		st_ri.set_material(mats["rubber"]); st_ri.commit(mesh)
 		return
@@ -913,7 +951,7 @@ static func _build_cap(mesh: ArrayMesh, mats: Dictionary, z_join: float, dir_z: 
 ## Un panneau d'issue de secours (D jaune) : une face de plus au maillage
 ## de la clé « Av/Ar » + « G/D » (créé au besoin).
 static func _issue_panneau(issues: Dictionary, dir_z: float, door: PackedVector2Array,
-		pt_fn: Callable, n_fn: Callable, lift: float, mats: Dictionary) -> void:
+		pt_fn: Callable, n_fn: Callable, lift: float, mats: Dictionary, mat_nom: String = "yellow") -> void:
 	var cx: float = 0.0
 	for q in door:
 		cx += q.x
@@ -923,7 +961,7 @@ static func _issue_panneau(issues: Dictionary, dir_z: float, door: PackedVector2
 	var st: SurfaceTool = SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	_emit_pane(st, _offset_outline(door, -0.012), pt_fn, n_fn, lift)
-	st.set_material(mats["yellow"])
+	st.set_material(mats[mat_nom])
 	st.commit(issues[cle])
 
 
@@ -1198,12 +1236,12 @@ static func build_train(root: Node3D, train_length: float, car_count: int,
 			_build_cap(mesh, mats, z_a, -1.0, backboard, false, issues_m)
 			cap_glass.append(mesh.get_surface_count() - 1)
 		else:
-			_build_end_disc(mesh, mats["rib"], z_a, -1.0, R_BODY)
+			_build_end_disc_porte(mesh, mats["rib"], z_a, -1.0, R_BODY)
 		if is_last:
 			_build_cap(mesh, mats, z_b, 1.0, backboard, false, issues_m)
 			cap_glass.append(mesh.get_surface_count() - 1)
 		else:
-			_build_end_disc(mesh, mats["rib"], z_b, 1.0, R_BODY)
+			_build_end_disc_porte(mesh, mats["rib"], z_b, 1.0, R_BODY)
 		var car: MeshInstance3D = MeshInstance3D.new()
 		car.name = "Car%d" % (i + 1)
 		car.mesh = mesh
@@ -1258,7 +1296,7 @@ static func build_train(root: Node3D, train_length: float, car_count: int,
 		if not is_last:
 			var bellows: MeshInstance3D = MeshInstance3D.new()
 			var bm: ArrayMesh = ArrayMesh.new()
-			_build_end_disc(bm, mats["dark"], z_b + GAP * 0.5, 1.0, R_BODY - 0.35)
+			_build_end_disc_porte(bm, mats["dark"], z_b + GAP * 0.5, 1.0, R_BODY - 0.35)
 			var st: SurfaceTool = SurfaceTool.new()
 			st.begin(Mesh.PRIMITIVE_TRIANGLES)
 			var rb: float = R_BODY - 0.35

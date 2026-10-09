@@ -30,6 +30,8 @@ var _b_exploit: Button = null
 var _boutons: Array = []
 var _info: Label = null                 # vitesse et piste, à ski
 var _msg: Label = null                  # message passager (refus, chrono)
+var _pique: Label = null                # pique sarcastique : sa propre ligne, jamais écrasée
+var _t_pique: float = 0.0
 var _t_msg: float = 0.0
 
 
@@ -113,6 +115,21 @@ func _ready() -> void:
 			_info = l
 		else:
 			_msg = l
+	# ligne des piques, sous les messages (09/10/2026 : une seule pique vue
+	# pendant toute une descente — les messages d'état l'effaçaient)
+	_pique = Label.new()
+	_pique.set_anchors_preset(Control.PRESET_CENTER)
+	_pique.offset_left = -520.0
+	_pique.offset_right = 520.0
+	_pique.offset_top = -70.0
+	_pique.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_pique.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_pique.add_theme_font_size_override("font_size", 24)
+	_pique.add_theme_color_override("font_color", Color(1.0, 0.92, 0.55))
+	_pique.add_theme_color_override("font_outline_color", Color(0, 0, 0, 0.9))
+	_pique.add_theme_constant_override("outline_size", 6)
+	_pique.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_racine.add_child(_pique)
 
 
 func _bouton(texte: String, aide: String) -> Button:
@@ -177,7 +194,18 @@ func message(t: String, duree: float = 3.0) -> void:
 		_t_msg = duree
 
 
+## Pique sarcastique, sur sa propre ligne.
+func pique(t: String, duree: float = 6.0) -> void:
+	if _pique != null:
+		_pique.text = t
+		_t_pique = duree
+
+
 func _process(delta: float) -> void:
+	if _t_pique > 0.0:
+		_t_pique -= delta
+		if _t_pique <= 0.0 and _pique != null:
+			_pique.text = ""
 	if _t_msg > 0.0:
 		_t_msg -= delta
 		if _t_msg <= 0.0 and _msg != null:

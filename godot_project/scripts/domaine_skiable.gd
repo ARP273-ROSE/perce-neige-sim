@@ -260,12 +260,31 @@ func _construire_panneaux() -> void:
 		_faces_panneaux.call_deferred(par_piste)
 
 
+## Disque plat de rayon r face à +Z, UV de la texture carrée qui l'inscrit.
+static func _disque_texture(r: float) -> ArrayMesh:
+	var st: SurfaceTool = SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var n: int = 40
+	var rr: float = r * 0.995
+	for i in range(n):
+		var a0: float = TAU * float(i) / float(n)
+		var a1: float = TAU * float(i + 1) / float(n)
+		for p in [Vector2.ZERO, Vector2(cos(a1), sin(a1)) * rr, Vector2(cos(a0), sin(a0)) * rr]:
+			st.set_normal(Vector3.BACK)
+			st.set_uv(Vector2(0.5 + p.x / (2.0 * r), 0.5 - p.y / (2.0 * r)))
+			st.add_vertex(Vector3(p.x, p.y, 0.0))
+	return st.commit()
+
+
 ## Dessine les faces (une SubViewport par piste, rendue une fois, copiée en
 ## texture puis libérée) et les pose en MultiMesh, une par piste.
 func _faces_panneaux(par_piste: Dictionary) -> void:
 	var px: int = 192 if OS.has_feature("web") else 256
-	var quad: QuadMesh = QuadMesh.new()
-	quad.size = Vector2(2.0 * (R_DISQUE + 0.06), 2.0 * (R_DISQUE + 0.06))
+	# un DISQUE opaque, plus un carré découpé par transparence : de loin, les
+	# mipmaps moyennaient l'alpha sous le seuil et le panneau devenait
+	# transparent (Kevin, 09/10/2026 : « tes panneaux de piste ont tendance à
+	# devenir transparents, surtout vus de dos, mais de face aussi »)
+	var quad: ArrayMesh = _disque_texture(R_DISQUE + 0.06)
 	var lot: Array = []
 	for ip in par_piste:
 		var sv: SubViewport = SubViewport.new()
@@ -290,7 +309,7 @@ func _faces_panneaux(par_piste: Dictionary) -> void:
 		await _poser_faces(lot, par_piste, quad)
 
 
-func _poser_faces(lot: Array, par_piste: Dictionary, quad: QuadMesh) -> void:
+func _poser_faces(lot: Array, par_piste: Dictionary, quad: Mesh) -> void:
 	await RenderingServer.frame_post_draw
 	await RenderingServer.frame_post_draw
 	for e in lot:
@@ -302,8 +321,6 @@ func _poser_faces(lot: Array, par_piste: Dictionary, quad: QuadMesh) -> void:
 		img.generate_mipmaps()
 		var m: StandardMaterial3D = StandardMaterial3D.new()
 		m.albedo_texture = ImageTexture.create_from_image(img)
-		m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
-		m.alpha_scissor_threshold = 0.5
 		m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
 		m.roughness = 0.5
 		var xs: Array = par_piste[e[0]][2]
@@ -321,6 +338,22 @@ func _poser_faces(lot: Array, par_piste: Dictionary, quad: QuadMesh) -> void:
 		mi.visibility_range_end = 350.0
 		mi.layers = 1 | Cabin.LAYER_VOIE
 		add_child(mi)
+
+
+## Hors de toute piste (bord de piste + 1 m) : plus strict que piste_sous,
+## dont la marge de 6 m sert à l'affichage (09/10/2026 : en hors-piste
+## entre les pistes, le skieur passait pour « sur une piste »).
+func hors_piste(p: Vector3) -> bool:
+	var q: Vector2 = Vector2(p.x, p.z)
+	var lim: float = PistesDonnees.LARGEUR * 0.5 + 1.0
+	for k in range(_axes.size()):
+		if not (_cadres[k] as Rect2).has_point(q):
+			continue
+		var pts: PackedVector2Array = _axes[k]
+		for i in range(pts.size() - 1):
+			if Geometry2D.get_closest_point_to_segment(q, pts[i], pts[i + 1]).distance_to(q) < lim:
+				return false
+	return true
 
 
 ## Piste sous le skieur : [nom, couleur] ("", −1 hors piste). Recalculé
