@@ -260,7 +260,20 @@ func _input(event: InputEvent) -> void:
 
 
 func _maj_joy(p: Vector2) -> void:
-	var v: Vector2 = (p - _centre).limit_length(R_BASE)
-	_bouton_pos = v
-	skieur.entree = Vector2(v.x, -v.y) / R_BASE
+	# la base SUIT le pouce quand il dépasse le cercle (joystick « dynamique »
+	# des jeux mobiles) : on ne perd jamais le contrôle en glissant trop loin
+	var d: Vector2 = p - _centre
+	if d.length() > R_BASE:
+		_centre += d - d.limit_length(R_BASE)
+		_joy.position = _centre - Vector2(R_BASE, R_BASE) - _racine.global_position
+		d = p - _centre
+	_bouton_pos = d
+	var v: Vector2 = d / R_BASE
+	# zone morte de 12 %, puis réponse progressive
+	var n: float = v.length()
+	if n < 0.12:
+		skieur.entree = Vector2.ZERO
+	else:
+		var k: float = (n - 0.12) / 0.88
+		skieur.entree = Vector2(v.x, -v.y) / n * (0.12 + 0.88 * k)
 	_joy.queue_redraw()
