@@ -265,7 +265,7 @@ func _porte_proche(v: Node3D) -> int:
 	var z: float = (v.global_transform.affine_inverse() * main.skieur.global_position).z
 	var meilleur: int = 7
 	var d_min: float = INF
-	for k in range(10):
+	for k in range(TrainBodyBuilder.N_PANNEAUX):
 		if TrainBodyBuilder.KINDS[k] != "door":
 			continue
 		var d: float = absf(float(_porte(k)[2]) - z)
@@ -281,7 +281,7 @@ func _porte(k: int) -> Array:
 	var v: Node3D = cab._interior_cars[1]
 	var car_len: float = cab.train_length / float(cab.car_count)
 	var z_c: float = (1.0 - (cab.car_count - 1) * 0.5) * car_len
-	var zc: float = cab._panel_center(1, k) - z_c - (0.35 if k == 5 else 0.0)
+	var zc: float = cab._panel_center(1, k) - z_c
 	return [v, TrainBodyBuilder.Y_FLOOR + 0.3, zc]
 
 

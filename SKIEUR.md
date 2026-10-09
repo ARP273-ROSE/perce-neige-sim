@@ -197,6 +197,17 @@ funiculaire), les sauts (il reste collé au sol), les chutes.
   de sa gare, coupée ailleurs) ; pieds en chasse-neige (`_chaussure` avec
   `lacet`, `s.chasse` du squelette) ; poignées/serrures sous le nœud
   d'issue (`_build_cap_fittings(…, issues_nodes)`).
+- **1.19.6 (09/10/2026 soir)** : piques rares du skieur
+  (`main._piques_occasions`, `_pique_skieur`, `PIQUE_ECART` 240 s, rien la
+  première minute, jamais en BOUCLE) : hors-piste 12 s d'affilée
+  (`_sur_piste` de `piste_sous`), rames parties pendant qu'il attendait
+  20 s à pied sur le quai, évacuation, promenade sur la voie ; listes
+  `SKIEUR_*` de `piques_avis.py` (→ `pn_quips_extra.gd` par
+  `tools_piques.py`). Issues de secours : surfaces de la caisse (plus un
+  objet à part, lampes du rendu Web), nœud `Issue…` vide qui porte les
+  poignées, `Cabin.retirer_issues` masque les surfaces. Baie de porte en
+  collision : de joint à joint + 8 cm par côté. Clavier resté dans la 3D :
+  `main._relayer_touche_pc` passe les touches au PC (`{"cle", "enfonce"}`).
 
 Reste : le poste de la rame d'en face (on ne conduit que la rame choisie au
 départ), les remontées mécaniques, sauts et chutes.

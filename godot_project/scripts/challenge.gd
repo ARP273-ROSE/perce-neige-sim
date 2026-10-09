@@ -103,7 +103,7 @@ func _process(delta: float) -> void:
 			var now: float = float(Time.get_ticks_msec()) / 1000.0
 			if now - _doors_quip_t > 20.0:
 				_doors_quip_t = now
-				result_lines = [PNQuips.pick_quip(PNQuips.DOORS_OPEN, lang)]
+				result_lines = [PNQuips.pique("DOORS_OPEN", lang)]
 				result_t = 6.0
 				last_score = -1.0
 				review = {}
@@ -174,12 +174,18 @@ func _on_crash(kind: String, speed: float) -> void:
 	crash_active = true
 	crash_kind = kind
 	crash_speed = speed
-	var pool: Array = PNQuips.CRASH
+	var nom: String = "CRASH"
 	if kind == "derail":
-		pool = PNQuips.DERAIL
+		nom = "DERAIL"
 	elif kind == "cabin":
-		pool = PNQuips.CABIN
-	crash_msg = PNQuips.pick_quip(pool, lang)
+		nom = "CABIN"
+	elif randf() < 0.5:
+		# au butoir, la pique suit la vitesse du choc (une fois sur deux)
+		if speed < 3.0:
+			nom = "CRASH_LENT"
+		elif speed > 8.0:
+			nom = "CRASH_VIOLENT"
+	crash_msg = PNQuips.pique(nom, lang)
 	crash_review = PNQuips.pick_review("disaster", lang)
 	last_score = -1.0
 	result_t = 0.0

@@ -466,7 +466,7 @@ const FLOOR_GRADE: float = 0.0857
 # haut, et la contremarche est entière. Sans lui, la moitié avant de chaque
 # palier passait SOUS le plancher et on ne voyait que des biseaux (retour
 # d'essai 2026-09-27 : « un plancher en escalier comme sur les photos »).
-const STEP_LIFT: float = (1.30 + 0.10) * FLOOR_GRADE * 0.5   # (PANEL_L + RIB_W) · pente / 2
+const STEP_LIFT: float = (TrainBodyBuilder.PANEL_L + TrainBodyBuilder.RIB_W) * FLOOR_GRADE * 0.5   # (PANEL_L + RIB_W) · pente / 2
 
 
 ## Centre (repère rame) du cerceau k de la voiture idx, et bornes de sa dalle.
@@ -486,7 +486,7 @@ func _floor_y_at(z: float) -> float:
 	var car_len: float = train_length / float(car_count)
 	var idx: int = clampi(int(floor((z + train_length * 0.5) / car_len)), 0, car_count - 1)
 	var pitch: float = TrainBodyBuilder.PANEL_L + TrainBodyBuilder.RIB_W
-	var k: int = clampi(int(round((z - _panel_center(idx, 0)) / pitch)), 0, 9)
+	var k: int = clampi(int(round((z - _panel_center(idx, 0)) / pitch)), 0, TrainBodyBuilder.N_PANNEAUX - 1)
 	return TrainBodyBuilder.Y_FLOOR + STEP_LIFT + (z - _panel_center(idx, k)) * FLOOR_GRADE
 
 
@@ -500,7 +500,7 @@ func _build_stepped_floor(mat: StandardMaterial3D, z_front: float, z_rear: float
 	for idx in range(car_count):
 		var car_len: float = train_length / float(car_count)
 		var z_c: float = (float(idx) - (car_count - 1) * 0.5) * car_len
-		for k in range(10):
+		for k in range(TrainBodyBuilder.N_PANNEAUX):
 			var zc: float = _panel_center(idx, k)
 			if zc + pitch * 0.5 < z_front or zc - pitch * 0.5 > z_rear:
 				continue
@@ -514,7 +514,7 @@ func _build_stepped_floor(mat: StandardMaterial3D, z_front: float, z_rear: float
 			land.rotation = Vector3(tilt, 0.0, 0.0)
 			land.name = "Palier%d_%d" % [idx + 1, k]
 			_interior_cars[idx].add_child(land)
-			if k < 9:
+			if k < TrainBodyBuilder.N_PANNEAUX - 1:
 				# contremarche au joint (le palier arrière est 12 cm plus bas)
 				var rz: float = zc + pitch * 0.5
 				var riser: MeshInstance3D = MeshInstance3D.new()
@@ -833,7 +833,7 @@ func _build_driver_seat() -> void:
 ## repère (même inclinaison que la dalle).
 const BANC_BLEU: Color = Color(0.56, 0.72, 0.88)
 const ORANGE_RACK: Color = Color(1.0, 0.45, 0.05)
-const RACK_DZ: float = 0.48           # porte-skis vers l'arrière du palier
+const RACK_DZ: float = (TrainBodyBuilder.PANEL_L + TrainBodyBuilder.RIB_W) * 0.5 - 0.17   # porte-skis vers l'arrière du palier
 const RACK_L: float = 0.50            # largeur (en travers)
 const RACK_P: float = 0.30            # profondeur
 const RACK_H: float = 1.00
@@ -859,7 +859,7 @@ func _build_passenger_seats() -> void:
 	var car_len: float = train_length / float(car_count)
 	for idx in range(car_count):
 		var z_c: float = (float(idx) - (car_count - 1) * 0.5) * car_len
-		for k in range(10):
+		for k in range(TrainBodyBuilder.N_PANNEAUX):
 			if idx == 0 and k == 0:
 				continue                 # poste de conduite
 			var pal: Node3D = Node3D.new()
@@ -1008,7 +1008,7 @@ static func _tube_balaye(st: SurfaceTool, pts: Array, r: float) -> void:
 
 const PAX_PER_LANDING: int = 14      # 2 assis + 12 debout
 const PAX_STAND_X: Array = [-0.62, -0.21, 0.21, 0.62]
-const PAX_STAND_DZ: Array = [-0.45, 0.0, 0.45]
+const PAX_STAND_DZ: Array = [-0.22, 0.22]     # palier de 0,78 m (18 fenêtres par voiture)
 
 # Skieurs réalistes (SkieurMesh, 06/10/2026) : maillages construits une
 # seule fois pour les deux rames.
@@ -1054,7 +1054,7 @@ func _build_passengers() -> void:
 		var rng: RandomNumberGenerator = RandomNumberGenerator.new()
 		rng.seed = 1000 * (2 if is_ghost else 1) + idx * 17 + 3
 		var slots: Array = []
-		for k in range(10):
+		for k in range(TrainBodyBuilder.N_PANNEAUX):
 			var zc: float = _panel_center(idx, k)
 			# zone conducteur : pas de passagers dans le premier cerceau
 			if idx == 0 and k == 0:
@@ -1664,7 +1664,23 @@ func _apply_wheel_types() -> void:
 func retirer_issues(oui: bool) -> void:
 	issues_retirees = oui
 	for e in _issues:
-		(e["node"] as MeshInstance3D).visible = not oui
+		(e["node"] as Node3D).visible = not oui
+		var caisse: MeshInstance3D = e.get("caisse") as MeshInstance3D
+		if caisse == null or not is_instance_valid(caisse):
+			continue
+		for si in e.get("surfaces", []):
+			caisse.set_surface_override_material(int(si), _mat_invisible() if oui else null)
+
+
+## Matériau qui n'affiche rien : panneau d'issue retiré (surface de la caisse).
+static var _invisible: ShaderMaterial = null
+static func _mat_invisible() -> ShaderMaterial:
+	if _invisible == null:
+		var sh: Shader = Shader.new()
+		sh.code = "shader_type spatial;\nrender_mode unshaded, cull_disabled, shadows_disabled;\nvoid fragment() { discard; }\n"
+		_invisible = ShaderMaterial.new()
+		_invisible.shader = sh
+	return _invisible
 
 
 static func door_slide_sign(direction: int, ghost: bool) -> float:
