@@ -7,6 +7,18 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.19.5** — « En mode skieur, dans la rame opposée à celle choisie au
+départ, on entend les sons de l'autre rame : l'ouverture des portes, c'est le
+timing de l'autre rame, pareil pour les sons de l'évitement » (09/10/2026).
+- La rame d'en face a maintenant SES portes à l'arrivée : elles s'ouvrent
+  quand SON brin de câble est stabilisé (en haut presque tout de suite, en
+  bas après le rebond), plus à l'heure de la rame pilotée. Web :
+  `TrainPhysics.ghost_doors_open()` ; PC : `_suivre_portes_en_face`, état
+  relayé à la 3D (`ghost_portes`) pour les vantaux.
+- Skieur à bord de la rame d'en face : le son des portes part à l'ouverture
+  de SES portes, et le son de l'évitement suit SON passage (position et sens
+  de cette rame), sur le Web comme sur le PC (7e champ de `skieur_etat`).
+
 **v1.19.4** — retours du 09/10/2026 (après-midi).
 - « Quand je marche sur les escaliers le long du quai sans les skis, rajoute
   un claquement sec à chaque pas, à cause des chaussures de ski » → un
