@@ -349,8 +349,13 @@ func _mur_perce(m: String, x: float, d0: float, d1: float, y0: float, y1a: float
 		_quad(m, _p(x, pa, t1), _p(x, pb, t1), _p(x, pb, haut.call(pb)), _p(x, pa, haut.call(pa)))
 
 
-## Passage entre le mur de la salle (x = −4,9) et la façade (x = −7) et
-## porte automatique vitrée sur la façade.
+## Passage entre le mur de la salle (x = −4,9) et la façade (x = −7), et
+## la porte de la façade d'après les photos d'un retour d'utilisateur
+## (09/10/2026) : VOLET ROULANT bleu à lames horizontales et trois hublots
+## ovales cerclés de noir, qui monte en s'enroulant au sommet de l'ouverture ; posée en retrait dans un
+## encadrement de tôle blanche ; dehors, un palier en caillebotis (des
+## marches d'un bon mètre dessous, enfouies l'hiver sous la neige), à droite
+## un boîtier à bouton « appuyer pour ouvrir », au-dessus un projecteur.
 func _porte_genepy() -> void:
 	var dl: float = _pg_d.y - _pg_d.x
 	var dc: float = (_pg_d.x + _pg_d.y) * 0.5
@@ -359,44 +364,85 @@ func _porte_genepy() -> void:
 	var lx: float = absf(x_out - x_in) + 0.2
 	var xm: float = (x_in + x_out) * 0.5
 	var h: float = StationsBuilder.PORTE_GENEPY_H
-	_boite("beton", xm - 0.5, dc, _pg_y - 0.15, lx + 1.0, dl + 0.4, 0.30)  # sol, seuil 1 m dehors
-	_boite("beton", xm, dc, _pg_y + h + 0.15, lx, dl + 0.4, 0.30)          # plafond
+	_boite("beton", xm, dc, _pg_y - 0.15, lx, dl + 0.4, 0.30)                # sol du passage
+	_boite("beton", xm, dc, _pg_y + h + 0.15, lx, dl + 0.4, 0.30)            # plafond
 	for dd in [_pg_d.x - 0.1, _pg_d.y + 0.1]:
-		_boite("beton", xm, dd, _pg_y + h * 0.5, lx, 0.2, h + 0.6)         # joues
-	# encadrement bleu sur la façade
-	for dd2 in [_pg_d.x - 0.05, _pg_d.y + 0.05]:
-		_boite("bleu", x_out - 0.08, dd2, _pg_y + h * 0.5, 0.10, 0.10, h)
-	_boite("bleu", x_out - 0.08, dc, _pg_y + h + 0.05, 0.10, dl + 0.2, 0.10)
-	# porte vitrée automatique : un vantail qui glisse le long de la façade
+		_boite("beton", xm, dd, _pg_y + h * 0.5, lx, 0.2, h + 0.6)           # joues
+	# encadrement blanc en retrait (tableau de 0,30 m)
+	for dd2 in [_pg_d.x - 0.06, _pg_d.y + 0.06]:
+		_boite("tole_blanche", x_out - 0.02, dd2, _pg_y + h * 0.5, 0.34, 0.12, h + 0.10)
+	_boite("tole_blanche", x_out - 0.02, dc, _pg_y + h + 0.06, 0.34, dl + 0.24, 0.12)
+	# palier en caillebotis devant la porte, au niveau du seuil
+	_boite("caillebotis", x_out - 0.95, dc, _pg_y - 0.04, 1.7, dl + 0.9, 0.08)
+	# boîtier à bouton (à droite en regardant la porte) et projecteur au-dessus
+	var d_bt: float = _pg_d.x - 0.45
+	_boite("galva", x_out - 0.04, d_bt, _pg_y + 1.30, 0.06, 0.12, 0.16)
+	_boite("rouge", x_out - 0.075, d_bt, _pg_y + 1.30, 0.02, 0.05, 0.05)
+	_boite("blanc", x_out - 0.035, d_bt, _pg_y + 1.62, 0.02, 0.22, 0.26)
+	_texte("APPUYER SUR LE BOUTON\nPOUR OUVRIR LA PORTE\nPRESS THE BUTTON\nTO OPEN THE DOOR",
+		_p(x_out - 0.05, d_bt, _pg_y + 1.62), 18, Color(0.75, 0.10, 0.12), 0.0016, -_x)
+	_boite("noir", x_out - 0.12, _pg_d.x - 0.3, _pg_y + h + 0.95, 0.18, 0.34, 0.24)
+	_boite("galva", x_out - 0.06, _pg_d.x - 0.3, _pg_y + h + 1.1, 0.12, 0.06, 0.06)
+	# coffre du volet roulant, en haut de l'ouverture côté passage : le
+	# tablier s'y enroule (retour d'utilisateur, 09/10/2026 : « elle s'ouvre
+	# verticalement comme un volet roulant, en s'enroulant au sommet de
+	# l'ouverture ») — vu du dehors, il disparaît derrière le linteau
+	_boite("galva", x_out + 0.42, dc, _pg_y + h - 0.12, 0.50, dl + 0.30, 0.42)
+	# la porte : le tablier, qui monte et s'enroule dans le coffre
 	porte_genepy = PorteAuto.new()
 	porte_genepy.name = "PorteGenepy"
 	add_child(porte_genepy)
-	porte_genepy.transform = Transform3D(Basis(_d, Vector3.UP, -_x), _p(x_out - 0.16, dc, _pg_y))
+	porte_genepy.transform = Transform3D(Basis(_d, Vector3.UP, -_x), _p(x_out + 0.18, dc, _pg_y))
 	var v: Node3D = Node3D.new()
 	v.name = "VantailGenepy"
 	porte_genepy.add_child(v)
+	var bleu: StandardMaterial3D = StandardMaterial3D.new()
+	bleu.albedo_color = Color(0.09, 0.43, 0.82)
+	bleu.roughness = 0.45
+	var rainure: StandardMaterial3D = StandardMaterial3D.new()
+	rainure.albedo_color = Color(0.05, 0.28, 0.58)
+	var noir: StandardMaterial3D = StandardMaterial3D.new()
+	noir.albedo_color = Color(0.05, 0.05, 0.06)
+	noir.roughness = 0.6
 	var verre: StandardMaterial3D = StandardMaterial3D.new()
-	verre.albedo_color = Color(0.55, 0.70, 0.78, 0.25)
-	verre.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	var cadre: StandardMaterial3D = StandardMaterial3D.new()
-	cadre.albedo_color = Color(0.10, 0.22, 0.52)
-	cadre.roughness = 0.5
-	for pt in [[verre, Vector3(dl - 0.08, h - 0.08, 0.02), Vector3(0.0, h * 0.5, 0.0)],
-			[cadre, Vector3(dl, 0.06, 0.05), Vector3(0.0, h - 0.03, 0.0)],
-			[cadre, Vector3(dl, 0.08, 0.05), Vector3(0.0, 0.04, 0.0)],
-			[cadre, Vector3(0.05, h, 0.05), Vector3(-dl * 0.5 + 0.025, h * 0.5, 0.0)],
-			[cadre, Vector3(0.05, h, 0.05), Vector3(dl * 0.5 - 0.025, h * 0.5, 0.0)]]:
+	verre.albedo_color = Color(0.32, 0.36, 0.40)
+	verre.roughness = 0.15
+	verre.metallic = 0.3
+	var pieces: Array = [[bleu, Vector3(dl, h, 0.045), Vector3(0.0, h * 0.5, 0.0), Vector3.ONE]]
+	var y: float = 0.11
+	while y < h - 0.05:                              # rainures horizontales
+		pieces.append([rainure, Vector3(dl - 0.02, 0.008, 0.004), Vector3(0.0, y, 0.025), Vector3.ONE])
+		y += 0.11
+	# hublots ovales (cerclage noir, vitre sombre)
+	for k in [-1.0, 0.0, 1.0]:
+		var xo: float = k * dl * 0.30
+		var yo: float = h * 0.78
+		pieces.append([noir, Vector3(1, 1, 1), Vector3(xo, yo, 0.030), Vector3(0.40, 0.21, 0.022)])
+		pieces.append([verre, Vector3(1, 1, 1), Vector3(xo, yo, 0.036), Vector3(0.33, 0.15, 0.022)])
+	# poignée verticale et fente basse
+	pieces.append([noir, Vector3(0.03, 0.16, 0.02), Vector3(-dl * 0.40, h * 0.42, 0.035), Vector3.ONE])
+	pieces.append([noir, Vector3(0.12, 0.035, 0.015), Vector3(-dl * 0.40, 0.18, 0.03), Vector3.ONE])
+	for pt in pieces:
 		var mi: MeshInstance3D = MeshInstance3D.new()
-		var bm: BoxMesh = BoxMesh.new()
-		bm.size = pt[1]
-		bm.material = pt[0]
-		mi.mesh = bm
-		mi.position = pt[2]
+		if (pt[3] as Vector3) != Vector3.ONE:
+			# disque (cylindre couché face à la porte) étiré en ovale
+			var cy: CylinderMesh = CylinderMesh.new()
+			cy.top_radius = 0.5
+			cy.bottom_radius = 0.5
+			cy.height = 1.0
+			cy.radial_segments = 24
+			cy.material = pt[0]
+			mi.mesh = cy
+			mi.transform = Transform3D(Basis(Vector3.RIGHT, PI * 0.5).scaled(pt[3]), pt[2])
+		else:
+			var bm: BoxMesh = BoxMesh.new()
+			bm.size = pt[1]
+			bm.material = pt[0]
+			mi.mesh = bm
+			mi.position = pt[2]
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		v.add_child(mi)
-	porte_genepy.ajouter_vantail(v, Vector3(dl * 0.98, 0.0, 0.0))
-	# panneau « piste Génépy » au-dessus de la porte, dehors
-	_texte("GÉNÉPY", _p(x_out - 0.14, dc, _pg_y + h + 0.45), 40, Color.WHITE, 0.0055, -_x)
+	porte_genepy.ajouter_vantail(v, Vector3(0.0, h * 0.86, 0.0))
 
 
 # --- hall des quais --------------------------------------------------------------

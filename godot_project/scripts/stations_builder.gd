@@ -840,7 +840,7 @@ const KOMPAT: float = 2.5
 # gauche en regardant vers le haut, il y a une porte pour sortir et faire
 # la piste Génépy ») : abscisses du passage dans le mur gauche de la salle
 # du quai haut (entre deux poteaux), hauteur depuis le dessus du quai.
-const PORTE_GENEPY: Vector2 = Vector2(3481.62, 3483.0)
+const PORTE_GENEPY: Vector2 = Vector2(3480.6, 3483.0)   # 2,40 m : porte sectionnelle plus large que haute (photos, 09/10/2026)
 const PORTE_GENEPY_H: float = 2.25
 
 
