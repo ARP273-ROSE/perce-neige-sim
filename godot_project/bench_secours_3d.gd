@@ -7,6 +7,7 @@ extends SceneTree
 
 var _main: Node = null
 var _f: int = 0
+var _sag_prec: float = 1e9
 var _phase: int = 0
 var _t: float = 0.0
 var _ok: bool = true
@@ -87,12 +88,17 @@ func _tick() -> void:
 		1:
 			if _t < 0.5:
 				return
-			# recale s : la porte 5 au droit de la chambre
-			var r: Array = _porte(5)
+			# recale s : la porte du panneau 4 au droit de la chambre
+			var r: Array = _porte(4)
 			var porte: Vector3 = (r[0] as Node3D).global_transform * Vector3(2.4, r[1], r[2])
 			var xf: Transform3D = _main.tunnel.transform_at(TunnelBuilder.SORTIE_SECOURS_S)
 			var ecart: float = (porte - xf.origin).dot(-xf.basis.z)
-			if absf(ecart) > 0.05 and _t < 3.0:
+			# l'affaissement d'embarquement (la charge posée par le scénario)
+			# fait descendre la rame de ~3 cm/s : on attend qu'elle soit posée
+			var sag: float = ph.boarding_sag_offset()
+			var sag_bouge: bool = absf(sag - _sag_prec) > 1e-4
+			_sag_prec = sag
+			if (absf(ecart) > 0.05 or sag_bouge) and _t < 90.0:
 				ph.s -= ecart
 				ph.s_prev_step = ph.s
 				ph.s_render = ph.s
@@ -109,7 +115,7 @@ func _tick() -> void:
 			if _t < 6.0:
 				return                 # les vantaux s'ouvrent (clip de 4 s)
 			var sk: SkieurJoueur = _main.skieur
-			var r2: Array = _porte(5)
+			var r2: Array = _porte(4)
 			var v: Node3D = r2[0]
 			sk.global_position = v.global_transform * Vector3(0.0, r2[1], r2[2])
 			sk.velocity = Vector3.ZERO

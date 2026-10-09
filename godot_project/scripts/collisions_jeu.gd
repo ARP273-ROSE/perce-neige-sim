@@ -344,7 +344,7 @@ func _rame(c: Cabin) -> void:
 		var z1: float = car_len * 0.5 - 0.30
 		# paliers (pas de jour sous les contremarches)
 		var portes: Array = []
-		for k in range(10):
+		for k in range(TrainBodyBuilder.N_PANNEAUX):
 			var zc: float = c._panel_center(idx, k) - z_c
 			var xf: Transform3D = Transform3D(Basis(Vector3.RIGHT, tilt), Vector3(0.0, y_palier, zc))
 			# au droit des portes, le seuil va jusqu'au bord du quai (1,85 m)
@@ -367,7 +367,12 @@ func _rame(c: Cabin) -> void:
 					seuil.disabled = not _seuils_fermes
 					seuils.append(seuil)
 			if TrainBodyBuilder.KINDS[k] == "door":
-				portes.append([zc - TrainBodyBuilder.PANEL_L * 0.5, zc + TrainBodyBuilder.PANEL_L * 0.5])
+				# baie de joint à joint (le vantail emporte ses joints), plus
+				# 8 cm de tolérance de chaque côté : avec 18 panneaux la baie
+				# (0,78 m) ne laissait que 11 cm à la capsule (0,56 m), qui
+				# accrochait le montant en sortant sur la passerelle
+				var demi_baie: float = (TrainBodyBuilder.PANEL_L + TrainBodyBuilder.RIB_W) * 0.5 + 0.08
+				portes.append([zc - demi_baie, zc + demi_baie])
 			# bancs et porte-skis, dans le repère de leur palier
 			var pal: Node3D = voiture.get_node_or_null("Amenagement%d_%d" % [idx + 1, k]) as Node3D
 			if pal != null:
@@ -392,7 +397,7 @@ func _rame(c: Cabin) -> void:
 					if idx == 0 and k == 0:
 						l_banc -= 0.45
 						dz_banc = 0.225
-					elif idx == c.car_count - 1 and k == 9:
+					elif idx == c.car_count - 1 and k == TrainBodyBuilder.N_PANNEAUX - 1:
 						l_banc -= 0.45
 						dz_banc = -0.225
 					for side in [-1.0, 1.0]:
@@ -473,7 +478,7 @@ func _rame(c: Cabin) -> void:
 			continue
 		var z_c2: float = (float(idx2) - (c.car_count - 1) * 0.5) * car_len2
 		var y_bas2: float = TrainBodyBuilder.Y_FLOOR
-		for k2 in range(10):
+		for k2 in range(TrainBodyBuilder.N_PANNEAUX):
 			if TrainBodyBuilder.KINDS[k2] != "door":
 				continue
 			var zc2: float = c._panel_center(idx2, k2) - z_c2

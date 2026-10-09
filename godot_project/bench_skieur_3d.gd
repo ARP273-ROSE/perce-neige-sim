@@ -59,7 +59,7 @@ func _poser_dans_voiture(sk: SkieurJoueur, k: int) -> Array:
 	var v: Node3D = cab._interior_cars[1]
 	var car_len: float = cab.train_length / float(cab.car_count)
 	var z_c: float = (1.0 - (cab.car_count - 1) * 0.5) * car_len
-	var zc: float = cab._panel_center(1, k) - z_c - 0.35
+	var zc: float = cab._panel_center(1, k) - z_c
 	var y: float = TrainBodyBuilder.Y_FLOOR + 0.3
 	sk.global_position = v.global_transform * Vector3(0.0, y, zc)
 	sk.velocity = Vector3.ZERO
@@ -173,7 +173,7 @@ func _tick() -> void:
 				_t_phase = 0.0
 		4:
 			if _t_phase > 1.0:
-				var r: Array = _poser_dans_voiture(sk, 5)
+				var r: Array = _poser_dans_voiture(sk, 4)
 				var v4: Node3D = r[0]
 				var porte: Vector3 = v4.global_transform * Vector3(2.4, r[1], r[2])
 				var x0: Transform3D = tun.transform_at(PNConstants.LENGTH)
@@ -214,7 +214,7 @@ func _tick() -> void:
 						and absf(sk.global_position.y - sol) < 0.25 and sk.dehors(relief),
 					"%.0f s, %.2f m sous la terrasse, %.2f m au-dessus de la neige" % [_t_phase,
 						ga3._o.y - sk.global_position.y, sk.global_position.y - sol])
-				var r2: Array = _poser_dans_voiture(sk, 5)
+				var r2: Array = _poser_dans_voiture(sk, 4)
 				var v5: Node3D = r2[0]
 				var sc: float = (StationsBuilder.PORTE_GENEPY.x + StationsBuilder.PORTE_GENEPY.y) * 0.5
 				var xg: Transform3D = tun.transform_at(sc)
@@ -251,7 +251,7 @@ func _tick() -> void:
 					not ph.trip_started and ph.doors_open and _main.audio.ecoute == 3,
 					"voyage %s, portes %s, écoute %d" % [ph.trip_started, ph.doors_open, _main.audio.ecoute])
 				# debout dans l'embrasure d'une porte : pas encore dedans
-				var r7: Array = _poser_dans_voiture(sk, 5)
+				var r7: Array = _poser_dans_voiture(sk, 4)
 				sk.global_position = (r7[0] as Node3D).global_transform * Vector3(1.55, r7[1], r7[2])
 				_phase = 75
 				_t_phase = 0.0
@@ -262,7 +262,7 @@ func _tick() -> void:
 						and ph.doors_open and not ph.trip_started,
 					"annonce %.1f, portes %.1f, ouvertes %s" % [ph.announce_phase_remaining,
 						ph.door_phase_remaining, ph.doors_open])
-				_poser_dans_voiture(sk, 5)
+				_poser_dans_voiture(sk, 4)
 				_t_seq = -1.0
 				_phase = 8
 				_t_phase = 0.0
