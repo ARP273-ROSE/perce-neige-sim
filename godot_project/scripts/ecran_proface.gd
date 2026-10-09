@@ -59,6 +59,14 @@ enum Couche { TOUT, FOND, VALEURS }
 var couche: Couche = Couche.TOUT
 
 var _police: Font = null
+## Textes en VECTORIEL (09/10/2026) : au lieu d'être dessinés dans l'image de
+## l'écran, ils sont relevés ([position, texte, taille, couleur, largeur,
+## alignement]) et le pupitre les pose en Label3D (police MSDF) sur la dalle —
+## nets à toutes les distances et dans la loupe. Les formes restent dans
+## l'image.
+var textes_3d: bool = false
+var textes: Array = []
+signal textes_prets
 
 
 func _ready() -> void:
@@ -68,6 +76,9 @@ func _ready() -> void:
 
 func _texte(pos: Vector2, t: String, taille: int, c: Color, larg: float = -1.0,
 		align: HorizontalAlignment = HORIZONTAL_ALIGNMENT_LEFT) -> void:
+	if textes_3d:
+		textes.append([pos, t, taille, c, larg, align])
+		return
 	draw_string(_police, pos, t, align, larg, taille, c)
 
 
@@ -95,6 +106,13 @@ func signature_valeurs() -> String:
 
 
 func _draw() -> void:
+	textes.clear()
+	_dessiner()
+	if textes_3d:
+		textes_prets.emit()
+
+
+func _dessiner() -> void:
 	if couche == Couche.VALEURS:
 		_valeurs()
 		return

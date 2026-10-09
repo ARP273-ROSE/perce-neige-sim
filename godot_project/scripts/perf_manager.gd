@@ -359,6 +359,14 @@ func _evaluer() -> void:
 	if mode != "auto":
 		return
 	var mauvais: bool = ips < 0.83 * cible_ips or taux > 0.03 or p99 > 3.0 * budget
+	# Saccades venues du PROCESSEUR (chargement du décor du skieur,
+	# téléchargement, ramasse-miettes…) alors que la carte graphique a de la
+	# marge : retirer des effets n'y changerait rien (09/10/2026, Kevin sur
+	# son PC « de la mort » : « cran 2/6 (saccades) … GPU 2,1 ms »).
+	if mauvais and gpu_ms > 0.0 and gpu_ms < 0.40 * budget * 1000.0:
+		dernier_bilan += " — saccades processeur, effets gardés"
+		_bonnes = 0
+		return
 	if mauvais:
 		_bonnes = 0
 		if cran < CRAN_MAX:

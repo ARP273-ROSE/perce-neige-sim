@@ -140,7 +140,8 @@ def _http_get_json(url: str) -> dict:
             "Accept": "application/vnd.github+json",
         },
     )
-    ctx = ssl.create_default_context()
+    from contexte_tls import contexte as _contexte_tls
+    ctx = _contexte_tls()
     with urllib.request.urlopen(req, timeout=NETWORK_TIMEOUT,
                                 context=ctx) as resp:
         payload = resp.read(2 * 1024 * 1024)
@@ -237,7 +238,8 @@ def _stream_download(url: str, dest: Path,
                      max_bytes: int = MAX_DOWNLOAD_BYTES) -> None:
     req = urllib.request.Request(
         url, headers={"User-Agent": "perce-neige-sim-auto-update"})
-    ctx = ssl.create_default_context()
+    from contexte_tls import contexte as _contexte_tls
+    ctx = _contexte_tls()
     with urllib.request.urlopen(req, timeout=NETWORK_TIMEOUT,
                                 context=ctx) as resp:
         total = int(resp.headers.get("Content-Length", "0") or 0)

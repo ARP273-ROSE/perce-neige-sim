@@ -53,7 +53,7 @@ const PIXEL_ETIQUETTE: float = 0.00048  # plus gros qu'en vrai : lisible depuis 
 ## n'importe quelle carte. On rend 6 fois plus fin (pixel_size 6 fois plus
 ## petit : même taille sur le pupitre), filtrage anisotrope ; l'écran
 ## Pro-face est rendu en 4× (2× sur le web). Coût nul en pratique.
-const SURECHANTILLON: int = 6
+const SURECHANTILLON: int = 1      # inutile depuis la police vectorielle (PolicesJeu, MSDF)
 const NOMS_OUVERTURE: Array = ["ouverture_0", "ouverture_1"]   # (pas de "%d" % g chaque image)
 const NOMS_FERMETURE: Array = ["fermeture_0", "fermeture_1"]
 const NOMS_ROUGE: Array = ["rouge_1", "rouge_2"]
@@ -70,6 +70,8 @@ const PERIODE_ECRAN: float = 1.0 / 30.0   # rafraîchi 30 fois par seconde (flui
 
 var _face: Node3D = null
 var _sv: SubViewport = null            # écran composé : fond + valeurs
+var _mi_ecran: MeshInstance3D = null
+var _textes_3d: Dictionary = {}         # EcranProface → [Label3D…]
 var _sv_fond: SubViewport = null       # fond, redessiné quand il change
 var ecran: EcranProface = null         # le fond (porte l'état affiché)
 var _valeurs: EcranProface = null      # heure, vitesse, distance : 30 fois par seconde au plus
@@ -206,6 +208,11 @@ func _construire_ecran() -> void:
 	mi.position = Vector3(X_ECRAN, 0.0035, Z_ECRAN)
 	mi.rotation = Vector3(-PI * 0.5, 0.0, 0.0)
 	_face.add_child(mi)
+	# textes de l'écran en vectoriel, posés sur la dalle (cf. EcranProface)
+	_mi_ecran = mi
+	for e2 in [ecran, _valeurs]:
+		(e2 as EcranProface).textes_3d = true
+		(e2 as EcranProface).textes_prets.connect(_poser_textes.bind(e2))
 
 
 func _construire_boutons(chrome: StandardMaterial3D, noir: StandardMaterial3D,
@@ -464,9 +471,57 @@ func mettre_a_jour(ph: TrainPhysics, dt: float, vehicule: int, ecran_visible: bo
 		_sv.render_target_update_mode = SubViewport.UPDATE_ONCE
 
 
+## Textes relevés par une couche de l'écran → Label3D vectoriels sur la
+## dalle (repère du quad : x vers la droite, y vers le haut, +z = face).
+func _poser_textes(e: EcranProface) -> void:
+	if _mi_ecran == null:
+		return
+	if not _textes_3d.has(e):
+		_textes_3d[e] = []
+	var pool: Array = _textes_3d[e]
+	var police: Font = PolicesJeu.reguliere()
+	var m_px: float = ECRAN_L / EcranProface.L
+	for i in range(e.textes.size()):
+		var t: Array = e.textes[i]
+		var l: Label3D = null
+		if i < pool.size():
+			l = pool[i]
+		else:
+			l = Label3D.new()
+			l.font = police
+			l.shaded = false
+			l.double_sided = false
+			l.outline_size = 0
+			l.vertical_alignment = VERTICAL_ALIGNMENT_BOTTOM
+			l.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+			l.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			l.render_priority = 1
+			_mi_ecran.add_child(l)
+			pool.append(l)
+		var pos: Vector2 = t[0]
+		var taille: int = t[2]
+		var larg: float = t[4]
+		var align: int = t[5]
+		var x: float = pos.x
+		if larg > 0.0 and align == HORIZONTAL_ALIGNMENT_CENTER:
+			x += larg * 0.5
+		elif larg > 0.0 and align == HORIZONTAL_ALIGNMENT_RIGHT:
+			x += larg
+		var y: float = pos.y + police.get_descent(taille)
+		l.text = t[1]
+		l.font_size = taille
+		l.pixel_size = m_px
+		l.modulate = t[3]
+		l.horizontal_alignment = align
+		l.position = Vector3(x * m_px - ECRAN_L * 0.5, ECRAN_H * 0.5 - y * m_px, 0.0004)
+		l.visible = true
+	for j in range(e.textes.size(), pool.size()):
+		(pool[j] as Label3D).visible = false
+
+
 func _nouvel_ecran() -> SubViewport:
 	var sv: SubViewport = SubViewport.new()
-	var k: int = 4     # définition de l'écran, PC et web (09/10/2026 : « pas visible sur la PWA »)
+	var k: int = 2     # formes seules : les textes de l'écran sont en vectoriel (Label3D MSDF)
 	sv.size = Vector2i(int(EcranProface.L) * k, int(EcranProface.H) * k)
 	sv.size_2d_override = Vector2i(int(EcranProface.L), int(EcranProface.H))
 	sv.size_2d_override_stretch = true

@@ -5379,7 +5379,8 @@ class SoundSystem:
                 req = urllib.request.Request(
                     MUSIQUE_URL + nom,
                     headers={"User-Agent": "PerceNeigeSimulator/" + VERSION})
-                ctx = ssl.create_default_context()
+                from contexte_tls import contexte as _contexte_tls
+                ctx = _contexte_tls()
                 with urllib.request.urlopen(req, timeout=60, context=ctx) as r, open(tmp, "wb") as f:
                     shutil.copyfileobj(r, f)
                 taille = tmp.stat().st_size
@@ -14789,7 +14790,7 @@ class GameWidget(QWidget):
         row1 = btn_y + btn_h + gap
         row2 = btn_y + (btn_h + gap) * 2
         row3 = btn_y + (btn_h + gap) * 3
-        # Row 0 : safety stops + vigilance
+        # Row 0 : sécurité (arrêt électrique, urgence, klaxon)
         self._draw_button(p, col0, row0, btn_w, btn_h,
                           T("ELEC. STOP [3]", "ARRÊT ÉLEC. [3]"),
                           tr.electric_stop, QColor(255, 190, 40),
@@ -14804,35 +14805,24 @@ class GameWidget(QWidget):
         self._hit_zones.append(
             (QRectF(col1, row0, btn_w, btn_h), int(Qt.Key.Key_4), False)
         )
-        if st.vigilance_enabled:
-            dm_warn = tr.dead_man_timer > 12.0 or tr.dead_man_fault
-            blink = int(self._board_animation * 3) % 2 == 0
-            dm_on = tr.dead_man_fault or (dm_warn and blink)
-            self._draw_button(p, col2, row0, btn_w, btn_h,
-                              T("VIGIL. [G]", "VEILLE [G]"),
-                              dm_on, QColor(255, 80, 80) if tr.dead_man_fault
-                              else QColor(240, 180, 40),
-                              QColor(40, 20, 0))
-            self._hit_zones.append(
-                (QRectF(col2, row0, btn_w, btn_h), int(Qt.Key.Key_G), False)
-            )
-        else:
-            # Vigilance off — show a dim inactive button
-            self._draw_button(p, col2, row0, btn_w, btn_h,
-                              T("VIGIL. OFF [W]", "VEILLE OFF [W]"),
-                              False, QColor(80, 80, 80),
-                              QColor(40, 40, 40))
-            self._hit_zones.append(
-                (QRectF(col2, row0, btn_w, btn_h), int(Qt.Key.Key_W), False)
-            )
+        # Rangée 0 : sécurité — klaxon à côté des arrêts (Kevin, 09/10/2026 :
+        # « vire le bouton veille et aide, rajoute exploitation auto X et mode
+        # M, et réorganise le panneau ») ; la veille reste au clavier (G / W)
+        self._draw_button(p, col2, row0, btn_w, btn_h,
+                          T("HORN [K]", "KLAXON [K]"),
+                          tr.horn, QColor(120, 200, 255),
+                          QColor(10, 30, 70))
+        self._hit_zones.append(
+            (QRectF(col2, row0, btn_w, btn_h), int(Qt.Key.Key_K), True)
+        )
         # Rangées THÉMATIQUES (demande du 2026-10-03 : « mets tout ce qui se
         # rapporte aux lumières ensemble, fais un tri des boutons pour que
         # tout soit cohérent ») :
-        #   0 sécurité   : arrêt électrique, urgence, veille
+        #   0 sécurité   : arrêt électrique, urgence, klaxon
         #   1 éclairage  : phares, cabine, tunnel
-        #   2 exploitation : portes, pilote auto, klaxon
+        #   2 exploitation : portes, pilote auto, exploitation auto
         #   3 vues       : vue 3D, cycle des vues 3D, skieur
-        #   4 système    : son, aide                      (2 boutons larges)
+        #   4 système    : son, volume, mode (normal / défi / pannes)
         row4 = btn_y + (btn_h + gap) * 4
         # Row 1 : éclairage
         self._draw_button(p, col0, row1, btn_w, btn_h,
@@ -14856,7 +14846,7 @@ class GameWidget(QWidget):
         self._hit_zones.append(
             (QRectF(col2, row1, btn_w, btn_h), int(Qt.Key.Key_J), False)
         )
-        # Row 2 : exploitation (portes, pilote auto du voyage, klaxon)
+        # Row 2 : exploitation (portes, pilote auto du voyage, exploitation auto)
         if tr.doors_timer > 0.0:
             doors_lbl = T("DOORS ...", "PORTES ...")
             doors_on = True
@@ -14880,12 +14870,11 @@ class GameWidget(QWidget):
             (QRectF(col1, row2, btn_w, btn_h), int(Qt.Key.Key_A), False)
         )
         self._draw_button(p, col2, row2, btn_w, btn_h,
-                          T("HORN [K]", "KLAXON [K]"),
-                          tr.horn, QColor(120, 200, 255),
-                          QColor(10, 30, 70))
-        # Horn is hold-type.
+                          T("AUTO OPS [X]", "EXPLOIT. [X]"),
+                          self.auto_ops.enabled, QColor(120, 230, 140),
+                          QColor(10, 50, 20))
         self._hit_zones.append(
-            (QRectF(col2, row2, btn_w, btn_h), int(Qt.Key.Key_K), True)
+            (QRectF(col2, row2, btn_w, btn_h), int(Qt.Key.Key_X), False)
         )
         # Row 3 : vues — vue cabine 3D (F4), cycle des vues 3D (O ; le
         # libellé annonce la vue SUIVANTE), skieur dans la 3D (F9)
@@ -14932,12 +14921,14 @@ class GameWidget(QWidget):
             (QRectF(col0, row4, btn_w, btn_h), int(Qt.Key.Key_N), False)
         )
         self._draw_volume(p, QRectF(col1, row4, btn_w, btn_h))
+        mode_txt = {"normal": T("NORMAL", "NORMAL"), "challenge": T("CHALLENGE", "DÉFI"),
+                    "panne": T("FAULTS", "PANNES")}.get(st.run_mode, st.run_mode.upper())
         self._draw_button(p, col2, row4, btn_w, btn_h,
-                          T("HELP [F1]", "AIDE [F1]"),
-                          self._show_help, QColor(230, 230, 200),
-                          QColor(50, 50, 40))
+                          T("MODE [M] ", "MODE [M] ") + mode_txt,
+                          st.run_mode != "normal", QColor(240, 180, 90),
+                          QColor(60, 35, 10))
         self._hit_zones.append(
-            (QRectF(col2, row4, btn_w, btn_h), int(Qt.Key.Key_F1), False)
+            (QRectF(col2, row4, btn_w, btn_h), int(Qt.Key.Key_M), False)
         )
 
         # Info block (compact, left column of rows below the buttons).

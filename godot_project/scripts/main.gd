@@ -125,6 +125,13 @@ var speed_cmd_rate: float = 0.4    # variation par seconde du setpoint
 
 
 func _ready() -> void:
+	# tous les textes en 3D en police VECTORIELLE (PolicesJeu, MSDF) : ceux
+	# déjà là et tous ceux créés ensuite (09/10/2026)
+	get_tree().node_added.connect(func(nd: Node) -> void:
+		if nd is Label3D:
+			PolicesJeu.equiper(nd as Label3D))
+	for l in get_tree().root.find_children("*", "Label3D", true, false):
+		PolicesJeu.equiper(l as Label3D)
 	# Détection du mode CLIENT (Godot piloté par le sim Python via UDP)
 	for arg in OS.get_cmdline_user_args():
 		if arg == "--client":
