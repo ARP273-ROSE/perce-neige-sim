@@ -7,6 +7,16 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.19.1** — « T'as augmenté la résolution du panneau de commande ? Parce
+que c'est pas visible sur la PWA » (09/10/2026). Sur la PWA, deux freins
+restaient : l'écran Pro-face n'était rendu qu'en 2× (contre 4× sur PC), et
+la 3D ne pouvait jamais remonter au-dessus de 70 % de rendu (cran 4
+plancher, réglage mesuré sur iPad). Maintenant l'écran est en 4× partout, et
+la PWA démarre toujours au réglage prudent mais REMONTE jusqu'au rendu à
+100 % quand l'appareil a de la marge (mesurée en direct ; elle redescend
+seule à la moindre saccade). Le bouton LOUPE (vue cabine) reste là pour lire
+l'écran en grand.
+
 **v1.19.0** — le domaine Tignes – Val d'Isère (09/10/2026).
 - **Carte élargie** : « faire la zone de jeu qui couvre tout, de Tignes les
   Brévières au glacier du Pissaillas en passant par le Fornet, plus une
