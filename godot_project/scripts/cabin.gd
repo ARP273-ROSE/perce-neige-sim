@@ -17,7 +17,7 @@ var mesh_root: Node3D = null         # coque extérieure (masquée en FPV)
 var interior_root: Node3D = null     # cockpit + sièges + passagers (toujours visibles)
 var headlight_front: SpotLight3D = null
 var camera_fpv: Camera3D = null
-## Loupe sur le pupitre (08/10/2026, Kevin : « on ne peut pas lire les noms
+## Loupe sur le pupitre (08/10/2026, retour d'utilisateur : « on ne peut pas lire les noms
 ## des boutons ni les chiffres de l'écran du cockpit ») : en 1080p l'écran
 ## Pro-face ne fait que 230 pixels de large à 78° de champ. Molette ou
 ## pincement en vue cabine, bouton LOUPE : la caméra pivote vers l'écran et
@@ -164,7 +164,7 @@ func _ready() -> void:
 		_couche_interieur.call_deferred()
 	else:
 		# Ghost : mesh toujours visible, pas de caméra. Ses PHARES, oui
-		# (retour de Kevin du 06/10/2026 : de la salle des machines on voit
+		# (retour d'un utilisateur du 06/10/2026 : de la salle des machines on voit
 		# le faisceau de la rame qui arrive, quelle qu'elle soit, éclairer
 		# peu à peu les parois du tunnel) — même interrupteur que la rame
 		# pilotée (physics.lights_head).
@@ -393,7 +393,7 @@ func _build_floor_ceiling() -> void:
 	# bien plus contrasté que la dalle béton du tunnel pour qu'on
 	# distingue clairement "intérieur" vs "voie" depuis le siège.
 	# Paliers couverts d'un tapis de caoutchouc noir alvéolé (photos FUNI-334
-	# « l'intérieur », « détail d'un couloir » ; Kevin, 07/10/2026 : « un
+	# « l'intérieur », « détail d'un couloir » ; retour d'utilisateur, 07/10/2026 : « un
 	# palier au travers de chaque vitre, recouvert d'un matelas noir en
 	# caoutchouc classique ») : trous ronds en quinconce, pas de 4 cm.
 	var floor_mat: StandardMaterial3D = _mat_tapis()
@@ -430,7 +430,7 @@ func _build_floor_ceiling() -> void:
 
 	# Bandeau central du plafond : grille de ventilation gris foncé perforée
 	# sur toute la longueur, spots ronds encastrés (photos de l'intérieur,
-	# Kevin, 09/10/2026 — avant : un bandeau LED blanc continu)
+	# Retour d'utilisateur, 09/10/2026 — avant : un bandeau LED blanc continu)
 	var grille: StandardMaterial3D = _mat_grille_plafond()
 	var led_z_rear: float = train_length * 0.5 * 0.92
 	_add_interior_box(grille, 0.55, 0.04, 1.42, z_front_ceil, led_z_rear, "InteriorLEDStrip")
@@ -508,7 +508,7 @@ static func _mat_tapis() -> StandardMaterial3D:
 
 
 # Pente de construction des paliers (et des bancs, des porte-skis posés
-# dessus) : celle des GARES. Fait de Kevin, 07/10/2026 : « les bancs sont
+# dessus) : celle des GARES. Fait d'un utilisateur, 07/10/2026 : « les bancs sont
 # horizontaux lorsque la pente du wagon est celle des gares » — rame à
 # quai, tout est de niveau ; en pleine ligne (30 %), l'avant (amont) est
 # 11,8° plus haut. 8,57 % = moyenne des pentes des 4 voitures rame arrêtée
@@ -585,7 +585,7 @@ func _build_stepped_floor(mat: StandardMaterial3D, z_front: float, z_rear: float
 
 func _build_handrails() -> void:
 	# Barres d'appui ORANGE au-dessus des vitres, sur la paroi, une par
-	# panneau vitré, tenues par deux pattes (photos de l'intérieur, Kevin,
+	# panneau vitré, tenues par deux pattes (photos de l'intérieur, retour d'utilisateur,
 	# 09/10/2026). Plus de mains courantes chromées au plafond : les photos
 	# n'en montrent pas.
 	var orange: StandardMaterial3D = StandardMaterial3D.new()
@@ -647,7 +647,7 @@ func _build_handrails() -> void:
 # ---------------------------------------------------------------------------
 
 func _build_console_pupitre() -> void:
-	# Pupitre reproduit d'après les photos de Kevin et la vidéo de 2013
+	# Pupitre reproduit d'après les photos d'un utilisateur et la vidéo de 2013
 	# (PupitreConduite : caisson, écran Pro-face vivant, plaque à boutons
 	# aux vrais libellés, voyants suivant l'état de la rame) — 06/10/2026.
 	var z_console: float = -train_length * 0.5 + 0.45   # tube contre la doublure sous le pare-brise (z_face ≈ −15,9)
@@ -894,7 +894,7 @@ func _build_driver_seat() -> void:
 
 
 ## Aménagement des paliers (photos FUNI-334 « l'intérieur », « les sièges,
-## disposés en escalier à cause de l'inclinaison » ; Kevin, 07/10/2026) :
+## disposés en escalier à cause de l'inclinaison » ; retour d'utilisateur, 07/10/2026) :
 ##  - le long des parois courbes, sous chaque hublot, un banc moulé bleu
 ##    clair ; pas de banc au droit des portes → deux bancs pour trois
 ##    cerceaux de chaque côté ;
@@ -983,7 +983,7 @@ func _banc(pal: Node3D, side: float, m: StandardMaterial3D) -> void:
 
 
 ## Porte-skis en tube orange cintré (photos FUNI-334 « l'intérieur » de
-## face et « détail d'un couloir » de profil ; Kevin, 07/10/2026 : « affine
+## face et « détail d'un couloir » de profil ; retour d'utilisateur, 07/10/2026 : « affine
 ## la forme des porte-skis ») : deux arceaux en ∩ à coins arrondis (avant
 ## et arrière), reliés en haut par deux traverses ; chaque pied monte droit,
 ## fait un décrochement en baïonnette vers mi-hauteur, puis remonte droit ;
@@ -1607,7 +1607,7 @@ func _process(_delta: float) -> void:
 	# vue cabine — inutile de le redessiner quand on ne le voit pas)
 	if _pupitre != null and physics != null:
 		# écran vivant aussi pour le skieur à bord de CETTE rame, pilotée ou
-		# d'en face (Kevin, 09/10/2026 : « en mode skieur, les données sur les
+		# d'en face (retour d'utilisateur, 09/10/2026 : « en mode skieur, les données sur les
 		# écrans de conduite sont figées »)
 		_pupitre.mettre_a_jour(physics, _delta, train_number,
 			(not is_ghost and view_mode == ViewMode.FPV) or skieur_a_bord, is_ghost)
@@ -1729,7 +1729,7 @@ func _apply_wheel_types() -> void:
 ## le monde, l'ouverture aille vers le bas de la pente. +Z local = arrière
 ## de la caisse ; la caisse est retournée (PI autour de Y) quand la rame 1
 ## descend ou quand la rame 2 (ghost) monte — même prédicat que _xform_from.
-## Issues de secours de la face (Kevin, 07/10/2026) : les D jaunes de part
+## Issues de secours de la face (retour d'utilisateur, 07/10/2026) : les D jaunes de part
 ## et d'autre du pare-brise s'enlèvent pour évacuer une rame arrêtée en
 ## tunnel ; remis quand la rame est de nouveau à quai (main.gd).
 func retirer_issues(oui: bool) -> void:

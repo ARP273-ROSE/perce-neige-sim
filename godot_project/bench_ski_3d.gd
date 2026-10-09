@@ -1,6 +1,6 @@
 ## Banc du ski (07/10/2026) : le skieur chausse en haut, sur la neige au pied
 ## de la gare du glacier, et descend jusqu'à Val Claret en suivant la
-## trace d'une descente réelle de Kevin (pilote à ski) ; le fantôme de
+## trace d'une descente réelle d'un utilisateur (pilote à ski) ; le fantôme de
 ## cette descente part avec lui.
 ##   godot --headless --fixed-fps 60 --path godot_project -s bench_ski_3d.gd -- --mode=normal
 ## Vérifie : refus de chausser dans la rame ; hiver, pistes balisées ; à ski,

@@ -1,4 +1,4 @@
-# Vue plongeante sur la voie depuis le nez (comme les photos de Kevin du
+# Vue plongeante sur la voie depuis le nez (comme les photos d'un utilisateur du
 # 26/04/2026) : caméra cabine inclinée, poste de conduite masqué.
 #   xvfb-run -a godot --path godot_project --rendering-driver opengl3 \
 #     --resolution 1376x1032 -s shot_voie.gd -- [s=1000] [incl=28] [noir] préfixe

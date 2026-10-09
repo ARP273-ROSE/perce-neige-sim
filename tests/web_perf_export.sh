@@ -7,7 +7,7 @@ SIM="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 OUT="$1"; shift
 ARGS='"--","--drivetest"'
 for a in "$@"; do ARGS="$ARGS,\"$a\""; done
-GODOT="${GODOT_BIN:-/root/godot/godot}"
+GODOT="${GODOT_BIN:-godot}"
 "$GODOT" --headless --path "$SIM/godot_project" --import >/dev/null 2>&1 || true
 "$GODOT" --headless --path "$SIM/godot_project" --export-release "Web" 2>&1 | grep -viE "fontconfig|get_system_font" | tail -1
 python3 "$SIM/web_patch.py" "$SIM/build/web/index.js"

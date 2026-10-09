@@ -1,7 +1,7 @@
 # Archive locale des sources — Perce-Neige Simulator
 
 Snapshots HTML des pages web utilisées pour calibrer le simulateur.
-Téléchargés le **2026-04-14** via `curl` depuis `C:\Users\kevin\Documents\GitHub\perce-neige-sim`.
+Téléchargés le **2026-04-14** via `curl` depuis le dossier du dépôt.
 
 Le but : avoir une copie locale stable même si les pages originales disparaissent ou sont modifiées. Chaque ligne donne l'URL d'origine, le fichier local, et ce qu'on tire de la source.
 

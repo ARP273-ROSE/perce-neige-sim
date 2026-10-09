@@ -1,10 +1,10 @@
 # Élasticité du câble tracteur du Perce-Neige — ordres de grandeur pour un
-# modèle dynamique (question de Kevin du 04/10/2026 : « reproduire la
+# modèle dynamique (question d'un utilisateur du 04/10/2026 : « reproduire la
 # physique de l'élasticité du câble en fonction de la longueur déroulée,
 # de la masse de la rame et des variations de vitesse »).
 # Constantes = celles du simulateur (perce_neige_sim.py).
 R = RealField(60)
-EA   = R(7.0e7)       # N   raideur EFFECTIVE (câble + machinerie), calée le 06/10/2026 sur le recul observé par Kevin (≥ 1 m rame pleine en bas) : recul_embarquement.sage
+EA   = R(7.0e7)       # N   raideur EFFECTIVE (câble + machinerie), calée le 06/10/2026 sur le recul observé par un utilisateur (≥ 1 m rame pleine en bas) : recul_embarquement.sage
 rho  = R(11)          # kg/m masse linéique
 m_vide  = R(32300 + 75)            # rame vide + conducteur
 m_plein = R(32300 + 335*75)        # 334 passagers + conducteur

@@ -43,7 +43,7 @@ func _tick() -> void:
 	if not _lance:
 		_lance = true
 		# --rame-en-haut : la rame pilotée part d'en haut, c'est la rame d'en
-		# face qui attend en bas (Kevin, 09/10/2026 : « si le skieur monte dans
+		# face qui attend en bas (retour d'utilisateur, 09/10/2026 : « si le skieur monte dans
 		# la rame non pilotée, la boucle ne marche pas »)
 		if "--rame-en-haut" in OS.get_cmdline_user_args():
 			_main._apply_scenario(true, false, "normal")
@@ -66,7 +66,7 @@ func _tick() -> void:
 	if sa.etape == SkieurAuto.Etape.SKI and sk.chausse:
 		_vus["ski_chausse"] = true
 	# quitter la vue skieur (changer de vue) pendant la boucle : elle doit
-	# continuer en coulisse, et le retour le retrouve où il en est (Kevin,
+	# continuer en coulisse, et le retour le retrouve où il en est (retour d'utilisateur,
 	# 09/10/2026 : « le mode boucle se désactive si je quitte le mode skieur »)
 	if not _bascule_faite and _t_sortie < 0.0 and sa.etape == SkieurAuto.Etape.A_BORD:
 		_main.basculer_skieur()

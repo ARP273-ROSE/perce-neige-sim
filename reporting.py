@@ -1,4 +1,4 @@
-"""Rapports d'incident — module commun aux applications de Kevin.
+"""Rapports d'incident — module commun aux applications ARP273-ROSE.
 
 L'application est installée sur des postes que personne ne peut examiner : si
 elle plante, gèle ou refuse de démarrer, il n'existe aucun moyen de le savoir

@@ -2,8 +2,8 @@ class_name DomaineSkiable
 extends Node3D
 ## Le domaine skiable du skieur jouable (07/10/2026) : jalons des pistes
 ## d'OpenStreetMap (PistesDonnees), nom de la piste où l'on est, et le
-## fantôme des descentes de Kevin (FantomesDonnees).
-## Kevin : « tu as balisé les pistes ? » ; « je t'ai mis mes trajectoires
+## fantôme des descentes d'un utilisateur (FantomesDonnees).
+## Retour d'utilisateur : « tu as balisé les pistes ? » ; « je t'ai mis mes trajectoires
 ## GPX, si jamais ça peut t'aider ».
 ##
 ## Jalons : un de chaque côté de la piste tous les PAS_JALON mètres, de la
@@ -17,7 +17,7 @@ const COULEURS: Array = [Color(0.10, 0.58, 0.22), Color(0.10, 0.33, 0.85),
 	Color(0.85, 0.12, 0.10), Color(0.06, 0.06, 0.07)]
 ## Un fantôme part quand le skieur chaussé bouge à moins de R_DEPART de son
 ## départ ; arrivée : à moins de R_ARRIVEE de la gare de Val Claret.
-## Panneaux ronds des bords de piste (Kevin, 07/10/2026 : « rajoute les
+## Panneaux ronds des bords de piste (retour d'utilisateur, 07/10/2026 : « rajoute les
 ## panneaux ronds des bords de piste de la couleur adéquate avec marqué
 ## Tignes et le nom de la piste, sinon je suis perdu ») : un disque de la
 ## couleur de la piste sur un poteau, à droite en descendant, au départ et
@@ -26,7 +26,7 @@ const PAS_PANNEAU: float = 250.0
 const H_POTEAU: float = 2.2
 const ENFONCE: float = 1.2                # le poteau descend 1,2 m sous le sol calculé : le sol
                                            # AFFICHÉ (maille 25 m) s'en écarte, et le panneau
-                                           # « flottait dans l'air » (Kevin, 08/10/2026)
+                                           # « flottait dans l'air » (retour d'utilisateur, 08/10/2026)
 const R_DISQUE: float = 0.45
 var n_panneaux: int = 0
 var _piquets: Dictionary = {}           # piste → [côté −, côté +] : [[pied, tangente de l'axe]…]
@@ -163,7 +163,7 @@ func _construire_panneaux() -> void:
 	var textes: Array = []                    # [position, normale, nom, couleur, n° de balise, piste]
 	# Au SOMMET d'un piquet de bord de piste sur trois, du côté droit en
 	# descendant ; numéros DÉCROISSANTS vers la plaine (le plus grand en haut,
-	# 1 en bas) — Kevin, 09/10/2026 : « les panneaux c'est décroissant vers le
+	# 1 en bas) — retour d'utilisateur, 09/10/2026 : « les panneaux c'est décroissant vers le
 	# bas, et ça ne flotte pas en lévitation : sur les piquets de bord de
 	# piste, tous les 3 piquets un panneau au sommet ». Le sens d'un tracé OSM
 	# n'est pas garanti : la descente se lit à l'altitude de ses deux bouts.
@@ -282,7 +282,7 @@ func _faces_panneaux(par_piste: Dictionary) -> void:
 	var px: int = 192 if OS.has_feature("web") else 256
 	# un DISQUE opaque, plus un carré découpé par transparence : de loin, les
 	# mipmaps moyennaient l'alpha sous le seuil et le panneau devenait
-	# transparent (Kevin, 09/10/2026 : « tes panneaux de piste ont tendance à
+	# transparent (retour d'utilisateur, 09/10/2026 : « tes panneaux de piste ont tendance à
 	# devenir transparents, surtout vus de dos, mais de face aussi »)
 	var quad: ArrayMesh = _disque_texture(R_DISQUE + 0.06)
 	var lot: Array = []
@@ -295,7 +295,7 @@ func _faces_panneaux(par_piste: Dictionary) -> void:
 		var f: PanneauPiste = PanneauPiste.new()
 		f.nom = String(par_piste[ip][0])
 		f.couleur = COULEURS[int(par_piste[ip][1])]
-		# la station de la piste (Kevin, 09/10/2026 : « sur le domaine de Val
+		# la station de la piste (retour d'utilisateur, 09/10/2026 : « sur le domaine de Val
 		# d'Isère, tu mets Val d'Isère sur tes panneaux, pas Tignes »)
 		f.station = "VAL D'ISÈRE" if StationsPistes.VAL_DISERE.has(int(ip)) else "TIGNES"
 		f.size = Vector2(px, px)

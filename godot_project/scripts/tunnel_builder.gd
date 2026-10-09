@@ -30,7 +30,7 @@ extends Node3D
 # (GareAmont, 44,5 m sous le mur de tête), où le tunnel débouche dans un mur
 # droit par une bouche rectangulaire — photos FUNI-334 « un petit zoom sur
 # la sortie du tunnel » et 095520 (la queue de la rame arrêtée est à la
-# bouche) ; Kevin, 07/10/2026 : « le mur aval de la gare ferme l'entrée du
+# bouche) ; retour d'utilisateur, 07/10/2026 : « le mur aval de la gare ferme l'entrée du
 # tunnel ». Avant : 3473,56 et un évasement de 6 m hors du bâtiment.
 @export var station_high_start: float = 3478.82
 @export var station_room_transition: float = 6.0 # fondu salle ↔ tube carré (gare aval)
@@ -50,7 +50,7 @@ const _PG_S1: float = 3483.0
 @export var wall_cable_radius: float = 0.022
 # Contre la paroi gauche : à 0,55 m au-dessus de l'axe, la paroi (rayon
 # 1,95) est à 1,87 m ; la caisse (rayon 1,72) s'arrête à 1,68 m. À −1,55 le
-# câble traversait la cabine (Kevin, 07/10/2026, vue skieur).
+# câble traversait la cabine (retour d'utilisateur, 07/10/2026, vue skieur).
 @export var wall_cable_x_local: float = -1.84    # contre la paroi gauche
 @export var wall_cable_sample_m: float = 4.0
 @export var wall_cable_y1: float = 0.35
@@ -182,7 +182,7 @@ func _build() -> void:
 		_draw_debug_path()
 
 
-# Sortie de secours (fait de Kevin, 06/10/2026, vidéo de montée :
+# Sortie de secours (fait d'un utilisateur, 06/10/2026, vidéo de montée :
 # « l'unique sortie de secours est sur la droite dans le sens montée, au
 # niveau du galet 145, à 2 112 m » au compteur, soit s = 2 112 + 38,56).
 # Dessin d'après la vidéo 20260426_094649.mp4, 0:54-0:55 : le tube
@@ -330,7 +330,7 @@ func _build_sortie_secours() -> void:
 	var b_g: Basis = Basis(-xf_g.basis.z, h_g, n_g).orthonormalized()
 	boite.call(Vector3(0.26, 0.36, 0.13), mat.call(Color(0.90, 0.90, 0.88)), b_g,
 		pt.call(s_c - 3.2, qg), "SortieSecoursCoffret")
-	# boîtier orange à côté du coffret (pas un gyrophare : retour de Kevin)
+	# boîtier orange à côté du coffret (pas un gyrophare : retour d'un utilisateur)
 	var qo: Vector2 = paroi.call(0.10, 0.07, -1.0)
 	boite.call(Vector3(0.14, 0.22, 0.11), mat.call(Color(0.95, 0.40, 0.08)), b_g,
 		pt.call(s_c - 3.55, qo), "SortieSecoursBoitierOrange")
@@ -372,7 +372,7 @@ func _build_wall_cables() -> void:
 		# un tube continu de 3,4 km ne se fait jamais culler).
 		# Seulement dans le TUBE : dans les salles des gares la paroi du
 		# tube n'existe plus et les câbles flottaient en l'air au milieu
-		# de la gare (retour de Kevin du 06/10/2026, gare du bas).
+		# de la gare (retour d'un utilisateur du 06/10/2026, gare du bas).
 		var c_start: float = station_low_end
 		var chunk_i: int = 0
 		while c_start < station_high_start - 0.001:

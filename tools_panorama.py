@@ -2,7 +2,7 @@
 3 032 m), calculé sur le RELIEF RÉEL — régénérable :
     python3 tools_panorama.py  →  godot_project/textures/panorama_glacier.png
 
-Retour de Kevin du 06/10/2026 : « des portes coulissantes avec baies
+Retour d'un utilisateur du 06/10/2026 : « des portes coulissantes avec baies
 vitrées et vue sur les montagnes dont le sommet de la Grande Motte ».
 
 Relief : Terrain Tiles (Mapzen, AWS Open Data, encodage « terrarium ») —

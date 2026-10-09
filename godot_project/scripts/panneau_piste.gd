@@ -1,7 +1,7 @@
 class_name PanneauPiste
 extends Control
 ## Face d'un panneau rond de bord de piste, dessinée une fois dans une
-## texture (09/10/2026, Kevin : « les panneaux des bords de piste sont nuls,
+## texture (09/10/2026, retour d'utilisateur : « les panneaux des bords de piste sont nuls,
 ## ça ressemble à ça en vrai » — photo d'un panneau « Chamois 2 LES GRANDS
 ## MONTETS ») : disque de la couleur de la piste, liseré blanc, NOM de la
 ## piste en arc en haut, nom de la station en arc en bas (lettres

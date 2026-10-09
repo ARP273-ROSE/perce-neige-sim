@@ -1,5 +1,5 @@
 # Décollage du câble au premier galet, jeu dans la gorge, poulie de
-# déviation (v1.15.61, 06/10/2026). Retour de Kevin : « au point de contact
+# déviation (v1.15.61, 06/10/2026). Retour d'un utilisateur : « au point de contact
 # avec le galet le câble semble s'interrompre, et le décollement est
 # toujours brusque avec un angle ».
 #

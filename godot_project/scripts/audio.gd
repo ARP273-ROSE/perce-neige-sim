@@ -50,7 +50,7 @@ const CROSSING_FADE_S: float = 0.7
 var _crossing_fade: float = 0.0      # 0..1 (gain linéaire du fondu)
 var _crossing_fading_out: bool = false
 
-# --- Vue « salle des machines » (2026-09-30, demande de Kevin) -------------
+# --- Vue « salle des machines » (2026-09-30, demande d'un utilisateur) -------------
 # Enregistrement réel de la gare haute (vidéo « [FUNI284] Funiculaire du
 # Perce-Neige | Tignes (marche complète à 12 m/s) », caméra fixe sur la roue
 # aval, août 2013) : la salle au repos + la machinerie à 12 m/s, dont la
@@ -72,7 +72,7 @@ var _player_horn: AudioStreamPlayer = null
 var _mr_mix: float = 0.0
 var _cab_db: float = 0.0             # atténuation des sons de cabine (dB)
 # --- Skieur jouable (07/10/2026) : ce qu'on entend dépend d'où l'on est.
-# Kevin : « sur le bord du quai, alors que le truc est parti, j'entends le
+# Retour d'utilisateur : « sur le bord du quai, alors que le truc est parti, j'entends le
 # son comme si j'étais dedans, alors qu'en vrai en bas on n'entend rien, à
 # part des souffles d'air réguliers / vent sifflements suivis de silences
 # dus aux surpressions dans le tunnel ». 0 : dans une rame (sons de cabine),
@@ -80,7 +80,7 @@ var _cab_db: float = 0.0             # atténuation des sons de cabine (dB)
 # 2 : dehors (vent léger). Posé par main.gd.
 var ecoute: int = 0
 var _ecoute_mix: float = 0.0          # 0 cabine → 1 hors de la rame
-# Kevin, 07/10/2026 : « les buzzers sonnent leurs sons respectifs dans les
+# Retour d'utilisateur, 07/10/2026 : « les buzzers sonnent leurs sons respectifs dans les
 # gares du bas et du haut et on les entend si on y est, même si ça
 # redémarre au milieu du tunnel ; par contre si on est dans la rame, en vue
 # extérieure ou à l'intérieur, on n'entend pas les buzzers des gares ».
@@ -93,14 +93,14 @@ var gare_ecoute: int = 0
 # la machinerie » : gain (0-1) de la salle des machines sur les quais du
 # haut, posé par main.gd (vue salle des machines : 1).
 var gain_machinerie: float = 0.0
-# Musiques d'ambiance des gares (Kevin, 07/10/2026 : « l'ouverture
+# Musiques d'ambiance des gares (retour d'utilisateur, 07/10/2026 : « l'ouverture
 # d'orchestre en musique d'ambiance pour l'attente gare du bas, la chanson
 # du Toréador dans la gare du haut ») : musique/gare_basse.mp3 et
 # gare_haute.mp3, HORS du dépôt public (enregistrements) — posés à côté de
 # la PWA par deploy_web.sh, chargés à la demande (14 Mo) la première fois
 # qu'on entre dans une gare ; en local, sons/musique/ du dépôt.
 const MUSIQUE_DB: float = -16.0
-# gare basse plus fort (Kevin, 09/10/2026 : « remonte un peu le volume de la
+# gare basse plus fort (retour d'utilisateur, 09/10/2026 : « remonte un peu le volume de la
 # musique d'ambiance gare du bas »)
 const MUSIQUE_BASSE_DB: float = -11.0
 var _musique: Array = [null, null]      # AudioStreamPlayer gare basse, gare haute

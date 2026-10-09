@@ -1,5 +1,5 @@
 """Mesures sur la vidéo de DESCENTE en cabine, pour caler le simulateur —
-demande de Kevin (06/10/2026) : « la descente est effectuée à 12 m/s donc tu
+demande d'un utilisateur (06/10/2026) : « la descente est effectuée à 12 m/s donc tu
 peux calibrer des trucs […] accélérations, espacement […] en fonction de la
 position ».
 

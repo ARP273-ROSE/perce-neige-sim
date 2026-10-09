@@ -1,4 +1,4 @@
-# Face de la rame relevée sur la photo frontale de Kevin (09/10/2026,
+# Face de la rame relevée sur la photo frontale d'un utilisateur (09/10/2026,
 # « superpose tes limites de vitre à une de mes photos, pareil pour la forme
 # des ouvertures d'évac »). Pixels lus sur la photo 2000 × 1500, recadrée de
 # (350, 150) : relevés en coordonnées du recadrage.

@@ -1,4 +1,4 @@
-# Points d'arrêt en gare (v1.15.62, 06/10/2026). Fait de Kevin (témoin) :
+# Points d'arrêt en gare (v1.15.62, 06/10/2026). Fait d'un utilisateur (témoin) :
 # « en haut on s'arrête proche du butoir, à 1,5 m, mais en bas ça
 # correspond à environ 4 ou 5 m du butoir du bas pour avoir de la marge
 # d'oscillation et d'allongement ».
@@ -7,7 +7,7 @@
 # (stations_builder._build_bumper) : têtes en bois de 0,32 m, centrées à
 # 0,10 m du socle, côté ligne.
 R = QQ
-# Voie rallongée (v1.15.65, fait de Kevin : « la distance parcourue réelle
+# Voie rallongée (v1.15.65, fait d'un utilisateur : « la distance parcourue réelle
 # de chaque trajet c'est 3 474 m ») : PARCOURS d'arrêt à arrêt = 3 474 m,
 # deux tronçons neutres de 20,26 m insérés de part et d'autre de
 # l'évitement (pente constante, ligne droite).
@@ -54,7 +54,7 @@ print("(l'écart de charge entre vide et pleine déplace la rame en bas de")
 print(" quelques décimètres : c'est l'affaissement d'embarquement, plus")
 print(" l'oscillation de ±0,3 m — d'où les 4 à 5 m de marge en bas)")
 
-# Recul de la rame pleine pendant l'embarquement (retour de Kevin : « je
+# Recul de la rame pleine pendant l'embarquement (retour d'un utilisateur : « je
 # pense qu'en vrai la rame recule d'au moins un mètre quand elle est
 # pleine ») : δ = Δm·g·sin θ·L / EA, L = câble de la rame en bas à la
 # poulie motrice.

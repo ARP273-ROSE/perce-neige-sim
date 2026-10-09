@@ -36,7 +36,7 @@ const PIT_LOW_END: float = 43.0       # toute la longueur des quais (TrackBuilde
 const PIT_HIGH_START: float = PNConstants.LENGTH - 2.0
 const PIT_HIGH_END: float = PNConstants.LENGTH + 4.0
 # fond à 2,31 m sous le champignon des rails : un adulte passe sous les
-# longrines qui portent les rails (Kevin, 07/10/2026 : « la fosse doit être
+# longrines qui portent les rails (retour d'utilisateur, 07/10/2026 : « la fosse doit être
 # plus profonde pour que la tête soit sous les rails »)
 const PIT_DEPTH: float = 1.95
 
@@ -105,7 +105,7 @@ func _build_station_high() -> void:
 	# les marches commencent au mur aval de la salle (bouche du tunnel)
 	var s_plat_start: float = maxf(PNConstants.QUAI_HAUT_DEBUT_S,
 		tunnel.station_high_start + tunnel.station_room_transition_haut + 0.05)
-	# La sortie est vers le HAUT (Kevin, 06/10/2026) : les marches du quai
+	# La sortie est vers le HAUT (retour d'utilisateur, 06/10/2026) : les marches du quai
 	# se prolongent dans le hall de la salle des machines jusqu'à un palier
 	# plat, de chaque côté de la fosse, devant les baies vitrées et les
 	# portes coulissantes du mur du fond (MachineRoomBuilder). Le garde-corps
@@ -281,7 +281,7 @@ func _build_platform(s_start: float, s_end: float, is_low: bool, side: float = 1
 
 
 
-## Garde-corps du haut de quai (faits de Kevin, 06/10/2026, vidéo
+## Garde-corps du haut de quai (faits d'un utilisateur, 06/10/2026, vidéo
 ## d'arrivée en gare haute et photos 095443 / 095511) : en haut de la rame,
 ## dans les deux gares, une barrière longe la voie depuis le nez de la rame
 ## arrêtée. En BAS elle tourne ensuite à angle droit pour fermer le quai,
@@ -402,7 +402,7 @@ func _build_platform_barrier(s_start: float, s_end: float, s_nez: float, side: f
 			_tube(st, [travers.call(x_porte1, h), travers.call(x_mur, h)], BARRIERE_R_LISSE, 0.0)
 		# 3. la porte : cadre en tube cintré, traverse, plaque « réservé
 		#    au personnel » — un VANTAIL à part, qui pivote sur sa charnière
-		#    (côté mur) et sonne quand on le pousse (PortePersonnel, Kevin
+		#    (côté mur) et sonne quand on le pousse (PortePersonnel, l'utilisateur
 		#    07/10/2026)
 		var xg0: float = x_porte0 + side * 0.06
 		var xg1: float = x_porte1 - side * 0.06
@@ -454,7 +454,7 @@ func _build_platform_barrier(s_start: float, s_end: float, s_nez: float, side: f
 		vant.add_child(plaque)
 		porte.poser(vant, -face)           # s'ouvre vers l'amont
 		# derrière la porte : palier du personnel jusqu'à l'escalier de la
-		# fosse (Kevin, 07/10/2026 : « un escalier pour descendre dans la
+		# fosse (retour d'utilisateur, 07/10/2026 : « un escalier pour descendre dans la
 		# fosse au niveau des portes en haut du quai »)
 		var beton_p: StandardMaterial3D = StandardMaterial3D.new()
 		beton_p.albedo_color = Color(0.40, 0.40, 0.39)
@@ -644,7 +644,7 @@ func _build_pit(s0: float, s1: float, with_sheaves: bool) -> void:
 	var esc_giron: float = 0.29
 	var esc_s1: float = esc_s0 + esc_giron * esc_n
 	var longue: bool = length > 10.0
-	# escalier du haut (porte du personnel, Kevin 07/10/2026) : des deux
+	# escalier du haut (porte du personnel, retour d'utilisateur 07/10/2026) : des deux
 	# côtés, du palier derrière la porte jusqu'au fond, vers l'aval
 	var esch_s1: float = s1 - 0.15
 	var esch_s0: float = esch_s1 - esc_giron * esc_n
@@ -836,7 +836,7 @@ func _build_room_dressing(s0: float, s1: float, _is_low: bool) -> void:
 
 
 const KOMPAT: float = 2.5
-# Porte de la piste Génépy (Kevin, 07/10/2026 : « au bout en bas du quai
+# Porte de la piste Génépy (retour d'utilisateur, 07/10/2026 : « au bout en bas du quai
 # gauche en regardant vers le haut, il y a une porte pour sortir et faire
 # la piste Génépy ») : abscisses du passage dans le mur gauche de la salle
 # du quai haut (entre deux poteaux), hauteur depuis le dessus du quai.

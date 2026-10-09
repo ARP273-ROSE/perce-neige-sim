@@ -1,5 +1,5 @@
 # Recul de la rame pleine pendant l'embarquement en gare basse — calage de
-# la raideur du câble (v1.15.66, 06/10/2026). Fait de Kevin (témoin, « je
+# la raideur du câble (v1.15.66, 06/10/2026). Fait d'un utilisateur (témoin, « je
 # suis sûr du mètre ») : la rame pleine recule d'AU MOINS 1 m en gare basse.
 # Aucune donnée constructeur (Fatzer ne publie pas le module de ses câbles
 # à torons) : EA est donc la raideur EFFECTIVE de toute la chaîne (câble,

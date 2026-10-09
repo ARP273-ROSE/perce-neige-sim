@@ -1,5 +1,5 @@
 """Banque SUPPLÉMENTAIRE de piques sarcastiques et d'avis passagers
-(Kevin, 09/10/2026 : « augmente la liste de tes commentaires sarcastiques
+(retour d'utilisateur, 09/10/2026 : « augmente la liste de tes commentaires sarcastiques
 adaptés aux circonstances, et les avis des passagers aussi, pour grossir la
 base et ne pas avoir tout le temps les mêmes »).
 
@@ -426,7 +426,7 @@ REVIEWS = {
     ],
 }
 
-# --- Mode skieur (Kevin, 09/10/2026 : « si je fais du hors-piste, ou que je
+# --- Mode skieur (retour d'utilisateur, 09/10/2026 : « si je fais du hors-piste, ou que je
 # loupe le funiculaire, ou que j'évacue… avec parcimonie, sinon on se
 # lasse »). Tirées au plus une fois toutes les quelques minutes. ----------
 

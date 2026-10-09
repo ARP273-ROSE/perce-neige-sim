@@ -1,5 +1,5 @@
 # Le câble entre les galets et le culot (v1.15.59, 06/10/2026).
-# Retour de Kevin : « le câble semble collé au sommet des galets et s'en
+# Retour d'un utilisateur : « le câble semble collé au sommet des galets et s'en
 # décolle au dernier moment ; il vaudrait mieux respecter la courbure en
 # cosh, qu'il se décolle du galet un peu avant l'attache et sans angle ».
 #

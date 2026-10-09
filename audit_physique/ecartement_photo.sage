@@ -1,5 +1,5 @@
 # Écartement de la voie du Perce-Neige mesuré sur photo (09/10/2026).
-# Kevin : « essaie de mesurer sur une photo l'écart des rails ; 1435 c'est la
+# Retour d'utilisateur : « essaie de mesurer sur une photo l'écart des rails ; 1435 c'est la
 # voie standard, OSM l'a peut-être mis génériquement ».
 # Photo : Wikimedia Commons « 2017-01 Funiculaire Du Perce-Neige Tignes 01.jpg »
 # (1920 × 1280), rame à quai vue de face, voie visible sous le nez.

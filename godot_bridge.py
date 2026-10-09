@@ -58,7 +58,7 @@ class GodotBridge:
         self._addr = ("127.0.0.1", port)
         # Retour de la vue 3D (port + 1) : boutons du pupitre 3D, mode
         # skieur. Sans lui, cliquer le pupitre de la 3D ne faisait que
-        # montrer le geste (retour de Kevin du 07/10/2026).
+        # montrer le geste (retour d'un utilisateur du 07/10/2026).
         self._rsock: Optional[socket.socket] = None
         self._xid: Optional[int] = None      # fenêtre X11 du viewer (Linux)
         # Posé par stop() : si un start() est encore en cours dans un autre

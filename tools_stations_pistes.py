@@ -1,7 +1,7 @@
 """Station (Tignes / Val d'Isère) de chaque piste du jeu — régénérable :
     python3 tools_stations_pistes.py
       → godot_project/scripts/stations_pistes.gd
-Kevin, 09/10/2026 : « si les pistes sont sur le domaine de Val d'Isère, tu
+Retour d'utilisateur, 09/10/2026 : « si les pistes sont sur le domaine de Val d'Isère, tu
 mets Val d'Isère sur tes panneaux, pas Tignes ». Six noms existent dans les
 deux stations (Face, Glacier, Génépy, Signal…) : chaque tracé du jeu prend
 la station du tronçon OpenSkiMap le plus proche (milieu du tracé), d'après
@@ -15,7 +15,7 @@ import sys
 LAT_O, LON_O = 45.45188591, 6.89898136
 M_LAT = 111320.0
 M_LON = 111320.0 * math.cos(math.radians(LAT_O))
-SOURCE = sys.argv[1] if len(sys.argv) > 1 else "/workspace/_docs/Tignes-ValDisere-Domaine/pistes.json"
+SOURCE = sys.argv[1] if len(sys.argv) > 1 else "pistes.json"
 
 d = json.load(open(SOURCE, encoding="utf-8"))
 ref = []                                    # (x, z, secteur)

@@ -3,12 +3,12 @@
       → godot_project/sounds/souffle_tunnel.wav  (une bouffée d'air, ~6 s)
       → godot_project/sounds/vent_dehors.wav     (vent léger, boucle de 12 s)
 
-Kevin, 07/10/2026 : « sur le bord du quai, alors que le truc est parti,
+Retour d'utilisateur, 07/10/2026 : « sur le bord du quai, alors que le truc est parti,
 j'entends le son comme si j'étais dedans, alors qu'en vrai en bas on
 n'entend rien, à part des souffles d'air réguliers / vent sifflements suivis
 de silences dus aux surpressions dans le tunnel ».
 
-Bouffée : bruit rose filtré 300-3 000 Hz (plus de grave : Kevin, 07/10/2026,
+Bouffée : bruit rose filtré 300-3 000 Hz (plus de grave : retour d'utilisateur, 07/10/2026,
 « le souffle du vent est trop grave, faut monter un peu pour que ça siffle
 un peu comme un fil ») qui monte en 1,5 s, tient, et retombe en 3 s, avec
 un sifflement de fil — deux bandes étroites, 1 500→1 900 Hz et son octave
@@ -98,7 +98,7 @@ vent[:k] = vent[:k] * fondu + vent[-k:] * (1 - fondu)
 ecrire("godot_project/sounds/vent_dehors.wav", vent[:-k], -6.0)
 
 # --- pas en chaussures de ski sur sol dur (09/10/2026) -----------------------------
-# Kevin : « quand je marche sur les escaliers le long du quai sans les skis,
+# Retour d'utilisateur : « quand je marche sur les escaliers le long du quai sans les skis,
 # rajoute un claquement sec à chaque pas, à cause des chaussures de ski ».
 # Coque plastique rigide qui frappe du béton / du métal. 09/10/2026 (soir) :
 # « c'est débile tes notes de xylophone pour les pas, faut un claquement » —

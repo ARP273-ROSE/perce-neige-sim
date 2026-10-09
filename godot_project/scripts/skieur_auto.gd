@@ -1,9 +1,9 @@
 class_name SkieurAuto
 extends RefCounted
-## Le skieur en mode AUTO (Kevin, 07/10/2026 : « il peut boucler la boucle
+## Le skieur en mode AUTO (retour d'utilisateur, 07/10/2026 : « il peut boucler la boucle
 ## et remonter ») : la boucle complète tout seul — de la place de Val
 ## Claret à la rame, le trajet, la sortie en haut par la porte de la piste
-## Génépy, à pied jusqu'au départ d'une vraie descente de Kevin (au pied de
+## Génépy, à pied jusqu'au départ d'une vraie descente d'un utilisateur (au pied de
 ## la gare), chausser, la descente sur sa trace, déchausser à Val Claret,
 ## retour à la gare, et on recommence.
 ##
@@ -25,7 +25,7 @@ var boucles: int = 0
 var _attente: bool = false                # attend la rame sur le palier
 var _compte: float = 0.0                  # vantaux : temps d'ouverture écoulé
 ## La rame qu'il prend : celle qui est à quai en bas, pilotée OU d'en face
-## (09/10/2026, Kevin : « si j'ai choisi de piloter la rame 2 mais que le
+## (09/10/2026, retour d'utilisateur : « si j'ai choisi de piloter la rame 2 mais que le
 ## skieur monte dans la 1, l'exploitation auto et la boucle ne marchent
 ## pas ») — avant, seule la rame pilotée comptait.
 var _rame: Cabin = null

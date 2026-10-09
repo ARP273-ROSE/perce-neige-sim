@@ -1,5 +1,5 @@
 # Pente de construction des paliers et des bancs des voitures (07/10/2026).
-# Fait de Kevin : « les bancs sont horizontaux lorsque la pente du wagon est
+# Fait d'un utilisateur : « les bancs sont horizontaux lorsque la pente du wagon est
 # celle des gares ». Pentes des voitures rame arrêtée (sonde Godot, axe de
 # chaque voiture, rame à START_S puis STOP_S) :
 #   gare basse : voiture 1  9,24 %, voiture 2  8,68 %

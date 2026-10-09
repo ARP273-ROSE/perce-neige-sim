@@ -188,7 +188,7 @@ def test_entree_en_gare_a_075():
 
 
 def test_rampement_atteint_au_galet_238():
-    # Fait de Kevin (06/10/2026) : « la vitesse de 0,7 m/s est atteinte
+    # Fait d'un utilisateur (06/10/2026) : « la vitesse de 0,7 m/s est atteinte
     # quand on arrive au galet 238 et pas avant » — nez de la rame
     # MONTANTE au galet n° 238 (entrée du quai haut), que l'on conduise la
     # montante ou la descendante (les deux rames sont liées au câble).
@@ -212,7 +212,7 @@ def test_rampement_atteint_au_galet_238():
 
 
 def test_annonce_arrivee_finit_avant_l_arret():
-    # Retour de Kevin (06/10/2026) : l'annonce d'arrivée en haut (54,24 s)
+    # Retour d'un utilisateur (06/10/2026) : l'annonce d'arrivée en haut (54,24 s)
     # était coupée par l'arrêt. Déclenchée à ANNONCE_ARRIVEE_D de l'arrêt,
     # elle doit finir avant, rame pleine ou vide (enveloppes 0,25 / 0,30).
     for pax, gpax in ((150, 0), (0, 150)):
@@ -255,7 +255,7 @@ def _rebond(direction, s0):
 def test_rebond_gare_basse_visible():
     amp, final = _rebond(-1, pn.START_S + 60.0)
     # câble effectif plus souple depuis le 06/10/2026 (EA 7e7, recul de la
-    # rame pleine ≥ 1 m observé par Kevin) : le rebond en bas atteint ~50 cm
+    # rame pleine ≥ 1 m observé par un utilisateur) : le rebond en bas atteint ~50 cm
     assert 0.05 < amp < 0.80, f"rebond bas {amp*100:.0f} cm hors [5, 80]"
     assert final < 0.06, f"ne revient pas au point d'arrêt ({final*100:.0f} cm)"
 
@@ -415,7 +415,7 @@ def test_trainee_chute_dans_l_evitement():
 def test_affaissement_embarquement_gare_basse():
     # Port de la PWA : à quai en bas, chaque passager allonge le brin de
     # ~3,2 mm (L ≈ 3,49 km) → ~1,07 m pour 334 pax, rame qui recule
-    # « doucement » — fait de Kevin, témoin : « au moins un mètre » (EA
+    # « doucement » — fait d'un utilisateur, témoin : « au moins un mètre » (EA
     # effectif calé, audit_physique/recul_embarquement.sage). En haut
     # (L ≈ 26 m) : rien de visible.
     for direction, s0, attendu in ((1, pn.START_S, (1.0, 1.2)),
@@ -526,7 +526,7 @@ def test_defi_consigne_0_tenue_a_l_arret():
 
 
 def test_compteur_de_distance_0_a_3474():
-    # Fait de Kevin (06/10/2026) : le compteur du pupitre indique 0 m au
+    # Fait d'un utilisateur (06/10/2026) : le compteur du pupitre indique 0 m au
     # départ et 3 474 m à l'arrivée, quels que soient le sens et la rame —
     # c'est la distance réellement parcourue (voie rallongée, v1.15.65).
     assert abs((pn.STOP_S - pn.START_S) - pn.PARCOURS) < 1e-9

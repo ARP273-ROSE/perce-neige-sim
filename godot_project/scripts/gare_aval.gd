@@ -1,7 +1,7 @@
 class_name GareAval
 extends Node3D
 ## Gare AVAL (Val Claret) telle que réaménagée en 2018 (STGM, architecte ICM
-## Architectures) — refonte du 07/10/2026 à la demande de Kevin : « refais
+## Architectures) — refonte du 07/10/2026 à la demande d'un utilisateur : « refais
 ## complet le design extérieur de la gare aval […] et si tu arrives à
 ## interpréter les photos de la salle d'attente et des portes coulissantes
 ## entre celle-ci et le quai, tu la modélises ».
@@ -11,7 +11,7 @@ extends Node3D
 ##    403 m², 6,4 m ; bâtiment 2729829 = arches et auvent d'entrée) ; LiDAR
 ##    HD IGN (toit plat à 2115 m, sommet de l'arche rouge à 2119,75 m) ;
 ##    orthophoto IGN du 23/08/2024 (toit en herbe, arches) ;
-##  - photos de Kevin du 26/04/2026 (093457 à 093522 : salle d'attente,
+##  - photos d'un utilisateur du 26/04/2026 (093457 à 093522 : salle d'attente,
 ##    cloison vitrée, portes, balustrade, panneau des départs) ;
 ##  - photos d'ICM Architectures (façade « DESTINATION GLACIER », arches,
 ##    escalier, 2018) ; vidéo de descente de 2013 (fosse, vue du quai).
@@ -57,7 +57,7 @@ var _vantaux: Array = []            # [nœud, x fermé, sens d'ouverture, z]
 var _ouverture: float = 0.0
 var _panneau: Array = []            # lignes du panneau des départs (Label3D)
 var _t_panneau: float = 0.0
-# Service interrompu pour de bon (Kevin, 09/10/2026 : « si mon wagon est
+# Service interrompu pour de bon (retour d'utilisateur, 09/10/2026 : « si mon wagon est
 # pété au milieu du tunnel par une casse câble, une évacuation ou tout autre
 # truc définitif, mets un message rouge du genre fermé, incident technique
 # grave ») : posé par main.gd (évacuation) ; câble rompu, collision et panne
@@ -354,7 +354,7 @@ func _plafond() -> void:
 ## Chaque porte : UN SEUL vantail, de toute la largeur de la baie (deux
 ## vitres de ≈ 1 m × 2,25 m dans un même cadre, traverse vers 45 %), qui
 ## coulisse entièrement vers le milieu de la salle et libère tout le passage
-## (Kevin, 07/10/2026 : « la porte de droite en regardant vers le haut
+## (retour d'utilisateur, 07/10/2026 : « la porte de droite en regardant vers le haut
 ## coulisse à gauche, celle du quai gauche à droite », « un seul vantail qui
 ## glisse complètement pour laisser tout le passage » ; vidéo YouTube
 ## « [FUNI284] Funiculaire Perce-Neige | Tignes (montée) », chaîne
@@ -638,7 +638,7 @@ func _auvent() -> void:
 		_cylindre("gris_poteau", 0.15, 3.0, _p2(p), 16)
 
 
-## Arches (photo ICM 4995, vue de côté ICM 5074, LiDAR, et Kevin le
+## Arches (photo ICM 4995, vue de côté ICM 5074, LiDAR, et l'utilisateur le
 ## 07/10/2026 : « elles sont rondes et pas ovales, il y a un grand diamètre
 ## devant et un plus petit derrière, alignés côté droit en regardant dans
 ## le sens de la montée ») : des CERCLES dont le centre est au-dessus du
@@ -925,7 +925,7 @@ func mettre_a_jour(dt: float, ph: TrainPhysics) -> void:
 	var en_gare: bool = ph.s < PNConstants.START_S + 3.0 or PNConstants.miroir(ph.s) < PNConstants.START_S + 3.0
 	# dès que les portes de la rame sont ouvertes à quai — sur le PC,
 	# trip_started reste vrai jusqu'au demi-tour de l'automate, bien après
-	# l'ouverture (Kevin, 07/10/2026 : « une fois les portes cabine
+	# l'ouverture (retour d'utilisateur, 07/10/2026 : « une fois les portes cabine
 	# ouvertes, les portes d'accès au quai doivent s'ouvrir »)
 	var embarquement: bool = en_gare and ph.doors_open and (not ph.trip_started or ph.finished)
 	# ≈ 2 s pour s'ouvrir ou se fermer (vidéo FUNI284, 0:55-0:57)

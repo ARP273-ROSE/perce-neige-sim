@@ -78,7 +78,7 @@ func _tick() -> void:
 			var v0: Node3D = cab._interior_cars[0]
 			var car_len: float = cab.train_length / float(cab.car_count)
 			# au milieu de la voiture 1 (palier 5, le 2e à porte) : il devra
-			# slalomer entre les porte-skis jusqu'au poste (Kevin, 07/10/2026 :
+			# slalomer entre les porte-skis jusqu'au poste (retour d'utilisateur, 07/10/2026 :
 			# « bloqué par les derniers porte-skis, je ne peux pas accéder à
 			# l'avant »)
 			var zc5: float = cab._panel_center(0, 5) - (0.0 - 0.5) * car_len
@@ -163,7 +163,7 @@ func _tick() -> void:
 				_retenue_vue = _retenue_vue or (_main.auto_operator != null and _main.auto_operator.retenue)
 				_ecoute_vue = _ecoute_vue or _main.audio.ecoute == 4
 				# à pied sur la voie : on enclenche l'exploitation AUTO — elle
-				# ne doit PAS faire repartir la rame (Kevin, 08/10/2026 : « il
+				# ne doit PAS faire repartir la rame (retour d'utilisateur, 08/10/2026 : « il
 				# est reparti, je me suis pris l'autre rame en pleine tête »)
 				if not _auto_lance and _main.auto_operator != null and _t > 1.0:
 					_auto_lance = true
@@ -194,7 +194,7 @@ func _tick() -> void:
 		10:
 			# tombé dans la fosse centrale entre les rails (70 cm sous la
 			# dalle, plots de 89 cm) : il doit pouvoir se hisser sur la dalle
-			# et rejoindre l'escalier (Kevin, 08/10/2026 : « coincé entre les
+			# et rejoindre l'escalier (retour d'utilisateur, 08/10/2026 : « coincé entre les
 			# deux rails, faudrait pouvoir remonter sur l'escalier à côté »)
 			var sk: SkieurJoueur = _main.skieur
 			# 10 m devant la rame (pas dessous : son plancher interdit de se
@@ -258,7 +258,7 @@ func _tick() -> void:
 					and (cab._issues[0]["caisse"] as MeshInstance3D).get_surface_override_material(int(cab._issues[0]["surfaces"][0])) == null,
 				"possible %s, retirées %s" % [_main.evacuation_possible(), cab.issues_retirees])
 			# CONDUIRE au poste, la rame roule 1 km, retour en skieur : il se
-			# relève DANS la voiture de tête (Kevin, 08/10/2026 : « le skieur
+			# relève DANS la voiture de tête (retour d'utilisateur, 08/10/2026 : « le skieur
 			# est tout seul au milieu du tunnel »)
 			var sk4: SkieurJoueur = _main.skieur
 			sk4.global_position = _main._position_poste()

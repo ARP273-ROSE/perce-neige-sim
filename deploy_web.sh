@@ -1,16 +1,19 @@
 #!/usr/bin/env bash
-# Exporte le simulateur en Web (WASM) et le déploie sur le NAS gypaete
+# Exporte le simulateur en Web (WASM) et le déploie sur le serveur web
 # derrière le conteneur web-pwa → https://funiculaire.giff.re (PWA iPad).
 #
-# Prérequis (déjà installés sur le NAS) :
-#   - Godot 4.6.1 : /root/godot/godot
+# Prérequis :
+#   - Godot 4.6.1 (GODOT_BIN, sinon « godot » du PATH)
+#   - WEB_ROOT : dossier servi ; réglages locaux facultatifs dans deploy_web.local (non versé)
 #   - templates web : ~/.local/share/godot/export_templates/4.6.1.stable/
 # Le variant "nothreads" est utilisé → aucun en-tête COOP/COEP requis.
 set -euo pipefail
 
-GODOT="${GODOT_BIN:-/root/godot/godot}"
 SIM_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-WEB_ROOT="/mnt/apps_pool/Web/funiculaire"
+# shellcheck disable=SC1091
+[ -f "$SIM_DIR/deploy_web.local" ] && . "$SIM_DIR/deploy_web.local"
+GODOT="${GODOT_BIN:-godot}"
+WEB_ROOT="${WEB_ROOT:-/srv/www/funiculaire}"
 
 echo "→ Import des ressources…"
 "$GODOT" --headless --path "$SIM_DIR/godot_project" --import >/dev/null 2>&1 || true

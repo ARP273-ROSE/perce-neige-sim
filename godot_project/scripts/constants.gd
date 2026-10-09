@@ -34,7 +34,7 @@ static func miroir(s_: float) -> float:
 	return MIROIR_S - s_
 
 
-## Compteur de distance du pupitre (fait de Kevin, 06/10/2026) : 0 m au
+## Compteur de distance du pupitre (fait d'un utilisateur, 06/10/2026) : 0 m au
 ## départ, 3 474 m à l'arrivée, quels que soient le sens et la rame — la
 ## distance réellement parcourue depuis l'arrêt de départ (STOP_S −
 ## START_S = PARCOURS ; même calcul que distance_compteur du PC).
@@ -81,7 +81,7 @@ static func safari_web() -> bool:
 # ---------------------------------------------------------------------------
 
 # Longueur de la voie, du butoir bas au butoir haut. Le PARCOURS d'un
-# trajet, d'arrêt à arrêt, fait 3 474 m (fait de Kevin, 06/10/2026 : « la
+# trajet, d'arrêt à arrêt, fait 3 474 m (fait d'un utilisateur, 06/10/2026 : « la
 # distance parcourue réelle de chaque trajet c'est 3 474 m ») : la voie
 # fait donc 40,52 m de plus — rallongée par deux tronçons neutres (pente
 # constante, ligne droite) de 20,26 m de part et d'autre de l'évitement,
@@ -181,7 +181,7 @@ const CAR_DIAM_M: float = 3.60
 
 # Plateformes / stations
 const PLATFORM_LEN: float = 35.0
-# Points d'arrêt (fait de Kevin, 06/10/2026 : « en haut on s'arrête à
+# Points d'arrêt (fait d'un utilisateur, 06/10/2026 : « en haut on s'arrête à
 # 1,5 m du butoir ; en bas à 4 ou 5 m, pour la marge d'oscillation et
 # d'allongement »), comptés depuis la face des têtes en bois des butoirs
 # (stations_builder._build_bumper) : audit_physique/arrets_gares.sage.
@@ -197,7 +197,7 @@ const STOP_S: float = 3496.56            # BUTOIR_HAUT_S − JEU_BUTOIR_HAUT −
 # 4,6 m de moins que la voie (avec LENGTH − s, la rame d'en face finissait
 # 1 m DANS le butoir bas quand on arrivait en haut).
 const MIROIR_S: float = 3519.12          # START_S + STOP_S
-# Quais (fait de Kevin, 06/10/2026 : « en bas le quai se prolonge de 4 m
+# Quais (fait d'un utilisateur, 06/10/2026 : « en bas le quai se prolonge de 4 m
 # vers le haut après le haut de la rame ; en haut de 3 m après le bas de la
 # rame ») — rame arrêtée en START_S / STOP_S. Le galet n° 1 est juste après
 # le quai bas, le n° 238 à l'entrée du quai haut, où la pente de la gare
@@ -207,7 +207,7 @@ const QUAI_BAS_FIN_S: float = 42.56      # START_S + TRAIN_HALF + 4
 const QUAI_HAUT_DEBUT_S: float = 3477.56 # STOP_S − TRAIN_HALF − 3
 const QUAI_HAUT_FIN_S: float = 3513.52   # LENGTH − 1
 # Vitesse d'approche V_CREEP atteinte quand le nez de la rame montante
-# arrive au galet n° 238 (entrée du quai haut), PAS AVANT (fait de Kevin,
+# arrive au galet n° 238 (entrée du quai haut), PAS AVANT (fait d'un utilisateur,
 # 06/10/2026) : la rame descendante entre alors au quai bas.
 const CREEP_DIST: float = 35.03          # STOP_S − (galet 238 = 3477.53 − TRAIN_HALF)
 const CREEP_START_S: float = 3461.53     # STOP_S − CREEP_DIST

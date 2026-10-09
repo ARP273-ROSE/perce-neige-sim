@@ -1,6 +1,6 @@
 class_name PolicesJeu
 extends RefCounted
-## Police VECTORIELLE de tous les textes en 3D (09/10/2026, Kevin : « tout
+## Police VECTORIELLE de tous les textes en 3D (09/10/2026, retour d'utilisateur : « tout
 ## passer en vectoriel pour que ça gère tous les types d'affichage et de
 ## zoom ») : Liberation Sans (SIL Open Font License 1.1, fonts/) importée en
 ## MSDF (champ de distance multicanal) — la forme des lettres est décrite,
@@ -28,7 +28,7 @@ static func equiper(l: Label3D) -> void:
 	if l.font == null:
 		l.font = reguliere()
 	# MSDF : filtrage linéaire SANS mipmaps — les mipmaps d'un champ de
-	# distance floutent les petits textes vus de loin (Kevin, 09/10/2026 :
+	# distance floutent les petits textes vus de loin (retour d'utilisateur, 09/10/2026 :
 	# « date et heure floues sur l'écran Pro-face »)
 	if l.texture_filter == BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS \
 			or l.texture_filter == BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC:

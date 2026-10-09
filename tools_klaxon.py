@@ -3,7 +3,7 @@
       → godot_project/sounds/klaxon.wav     (PWA, boucle tant qu'on tient)
       → sons/ambients/klaxon_buzzer.wav      (PC, même fichier)
 
-Kevin, 07/10/2026 : « le buzzer à 1:56 [de la vidéo] qui dure 3 secondes
+Retour d'utilisateur, 07/10/2026 : « le buzzer à 1:56 [de la vidéo] qui dure 3 secondes
 environ, tu le récupères à un moment où il n'y a pas d'autre bruit de fond
 et tu t'en sers comme son de klaxon ».
 

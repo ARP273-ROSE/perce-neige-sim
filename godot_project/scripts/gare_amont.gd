@@ -1,7 +1,7 @@
 class_name GareAmont
 extends Node3D
 ## EXTÉRIEUR de la gare AMONT (Grande Motte, 3032 m) et de ses abords —
-## demande de Kevin du 07/10/2026 (« maintenant tu fais pareil pour le
+## demande d'un utilisateur du 07/10/2026 (« maintenant tu fais pareil pour le
 ## haut », après la refonte de la gare aval). L'intérieur (quais, hall,
 ## salle des machines) reste MachineRoomBuilder.
 ##
@@ -11,7 +11,7 @@ extends Node3D
 ##    527642) ; LiDAR HD du 11/09/2022 (toit monopente 3036,2 → 3030,1 m,
 ##    terrasse à 3030,7 m, annexes à 3034,7 m, restaurant à 3035-3037,7 m) ;
 ##    orthophoto IGN du 23/08/2024 ;
-##  - photos de Kevin du 26/04/2026 (hall, mur de tête) ;
+##  - photos d'un utilisateur du 26/04/2026 (hall, mur de tête) ;
 ##  - reportage FUNI-334 de remontees-mecaniques.net (≤ 2017 : façade de
 ##    tête « TIGNES · ALT 3032 M · FUNICULAIRE / Glacier de la Grande
 ##    Motte · DESCENTE », côté sud-est blanc à baies bleues, terrasse sur
@@ -40,7 +40,7 @@ const H_BAS: float = -14.0            # bas des façades (sous le terrain)
 const TERRASSE: Array = [Vector2(-7.7, 0.8), Vector2(-4.4, 5.1), Vector2(0.8, 44.2),
 	Vector2(23.0, 54.5), Vector2(27.1, 50.6), Vector2(14.3, 44.8), Vector2(13.4, 34.4),
 	Vector2(21.9, 28.6), Vector2(20.0, 8.8), Vector2(10.8, 4.8), Vector2(9.8, 0.7)]
-## Escalier du bout de la terrasse (Kevin, 07/10/2026 : « au bout de la
+## Escalier du bout de la terrasse (retour d'utilisateur, 07/10/2026 : « au bout de la
 ## terrasse au sud en haut, faut un escalier pour rejoindre le sol ») : sur
 ## le petit côté de la pointe sud-ouest (sommets 3 → 4 de TERRASSE), là où
 ## la neige est la plus proche du plancher (2,85 m dessous sur le relief IGN,
@@ -302,7 +302,7 @@ func _valider() -> void:
 
 
 # --- porte de la piste Génépy ------------------------------------------------------
-# Kevin, 07/10/2026 : « au niveau du bout en bas du quai gauche en regardant
+# Retour d'utilisateur, 07/10/2026 : « au niveau du bout en bas du quai gauche en regardant
 # vers le haut, il y a une porte pour sortir et faire la piste Génépy ; tu
 # me montes le terrain jusque-là et tu fais une ouverture de porte
 # automatique si quelqu'un se présente devant ». Le mur de la salle du quai
@@ -434,7 +434,7 @@ func _hall() -> void:
 		_boite("bleu", -DEMI_HALL - 0.06, d_b - 1.2, yt - 1.75, 0.06, 2.3, 0.08)
 		d_b -= 2.4
 	# bout aval : pignon blanc à deux fenêtres bleues, PERCÉ de la bouche
-	# du tunnel (Kevin, 07/10/2026 : « le mur aval de la gare ferme
+	# du tunnel (retour d'utilisateur, 07/10/2026 : « le mur aval de la gare ferme
 	# l'entrée du tunnel » ; photos 095520 et 095051 : le hall finit sur
 	# un mur bleu nuit, la bouche rectangulaire du tunnel encadrée d'un
 	# portique d'acier bleu, dans l'axe de la voie)
@@ -452,11 +452,11 @@ func _hall() -> void:
 		_mur("bleu_nuit", mc[0] + Vector2(0, 0.35), mc[1] + Vector2(0, 0.35), maxf(mc[2], b.position.y - 0.5),
 			mc[3] - 0.05, mc[3] - 0.05)
 	# bouche du tunnel côté quai (photos du reportage FUNI-334, « un petit
-	# zoom sur la sortie du tunnel », envoyées par Kevin le 07/10/2026) :
+	# zoom sur la sortie du tunnel », envoyées par un utilisateur le 07/10/2026) :
 	#  - cornières galvanisées sur les deux tableaux de l'ouverture ;
 	#  - au-dessus, un gros caisson de béton en saillie (≈ 1,1 m de haut,
 	#    0,6 m de saillie), plus large que l'ouverture, portant deux
-	#    MIROIRS convexes qui surveillent chacun un quai (Kevin) ;
+	#    MIROIRS convexes qui surveillent chacun un quai (retour d'utilisateur) ;
 	#  - un pilier en saillie à gauche (vu du quai, vers l'aval : côté
 	#    nord-ouest) jusqu'au caisson ;
 	#  - un portillon blanc au pied de chaque quai, celui de droite (sud-
@@ -900,7 +900,7 @@ func _texte_n(t: String, pos: Vector3, taille: int, c: Color, px: float, normale
 ## le hall, les annexes, le restaurant et la gare du téléphérique ; rasé
 ## sous la terrasse ; relevé au-dessus de la salle des quais et du tunnel
 ## qui y entre.
-## Table du skieur jouable sur la terrasse (Kevin, 07/10/2026 : au départ
+## Table du skieur jouable sur la terrasse (retour d'utilisateur, 07/10/2026 : au départ
 ## d'en haut, « il devrait être en haut sur la terrasse avec une assiette de
 ## frites »).
 const TABLE_SKIEUR: Vector2 = Vector2(4.0, 12.0)
@@ -962,11 +962,11 @@ func amenagement_relief() -> Dictionary:
 		# pied de l'escalier du bout de la terrasse : neige à la dernière
 		# contremarche
 		"plats": [[monde.call(_pied_escalier()), _o.y - ESC_HAUT, 2.0]],
-		# neige au niveau du seuil de la porte Génépy (Kevin : « tu me montes
+		# neige au niveau du seuil de la porte Génépy (retour d'utilisateur : « tu me montes
 		# le terrain jusque-là »)
 		"remblais": [[monde.call(rect.call(Rect2(-DEMI_HALL - 9.0, _pg_d.x - 4.0, 8.8, _pg_d.y - _pg_d.x + 8.0))),
 			_o.y + _pg_y - 0.03, 14.0]],
-		# tunnel seulement, jusqu'au pignon aval, raccord court (Kevin,
+		# tunnel seulement, jusqu'au pignon aval, raccord court (retour d'utilisateur,
 		# 07/10/2026 : « enlève le tas de neige côté est du bâtiment »)
 		"couloirs": [[3430.0, tunnel.station_high_start - 0.3, 3.0, 0.8, 4.0]],
 	}

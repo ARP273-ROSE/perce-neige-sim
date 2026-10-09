@@ -5,6 +5,17 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## Non publié — 9 octobre 2026
+
+- Retrait des mentions personnelles : les retours d'essai sont désormais
+  cités comme « retour d'utilisateur » ; éditeur de l'installeur et en-tête
+  de `reporting.py` : ARP273-ROSE ; le fantôme du skieur s'appelle
+  « Fantôme — descente n » ; scripts de déploiement sans chemin de serveur
+  (`GODOT_BIN`, `WEB_ROOT`, fichier local `deploy_web.local` non versé).
+  Manuel et audit des voyages recompilés.
+- Garde-fou `tests/test_confidentialite.py` (fichiers, texte et métadonnées
+  des PDF, PNG, chaînes des binaires), lancé par la CI.
+
 ## v1.13 → v1.15 (septembre 2026)
 
 **v1.19.8** — retours du 09/10/2026 (nuit).
@@ -35,7 +46,7 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
   était tombée à 0 »).
 - **Rames** : milieu des vitres sur la tangente verticale de la paroi
   (hauteur de l'axe du tube, `hublots_photo.sage`) ; face (pare-brise et
-  issues en D) relevée sur la photo frontale de Kevin et contrôlée par
+  issues en D) relevée sur la photo frontale d'un utilisateur et contrôlée par
   superposition orthographique (`face_photo.sage`, `shot_face_ortho.gd`) :
   pare-brise 1,36 × 1,92 m aux coins hauts très arrondis, D à bord intérieur
   droit, arche haute près du pare-brise et flanc qui suit la caisse.
@@ -497,7 +508,7 @@ quai, portes fermées hors voyage, elles s'ouvrent pour monter. CONDUIRE
   mode skieur » → bouton **EXPLOIT.** dans le HUD du skieur (Web :
   l'automate local, aussi F3 ; PC : relayé au PC, comme son bouton AUTO),
   état affiché dans les deux sens.
-- Musiques d'ambiance des gares (les fichiers de Kevin) : l'ouverture
+- Musiques d'ambiance des gares (les fichiers d'un utilisateur) : l'ouverture
   d'orchestre en attente gare du bas, la chanson du Toréador en gare du
   haut, en boucle à bas niveau quand le skieur y est (Web et PC).
   Enregistrements hors du dépôt public : `sons/musique/` (ignoré) sur le
@@ -511,7 +522,7 @@ synthèse vérifiée.
 
 **v1.18.0** — audit complet (plantages, gels, fluidité, PC multiplateforme,
 cohérence), sortie de secours du tunnel jusqu'à la piste, skieur en AUTO.
-- Kevin : « fais un audit complet physique, anti crash, freeze,
+- Retour d'utilisateur : « fais un audit complet physique, anti crash, freeze,
   adaptabilité, perfo, fonction PC multiplateforme, parallélisme,
   fluidité, fonctionnalité, réalisme… et finis ce qui reste à faire :
   sortie de secours, piste, skieur ».
@@ -578,7 +589,7 @@ cohérence), sortie de secours du tunnel jusqu'à la piste, skieur en AUTO.
   - Pour y aller : rame arrêtée à la chambre, portes ouvertes (mode Défi
     ou panne) ; de la porte on descend sur la passerelle (les paliers de
     quai des portes ne sont actifs qu'en gare), puis l'ouverture. Dehors,
-    la trace n° 1 de Kevin passe à 88 m : on chausse et l'on descend.
+    la trace n° 1 d'un utilisateur passe à 88 m : on chausse et l'on descend.
 - **Skieur en AUTO** (bouton AUTO, touche X ; `scripts/skieur_auto.gd`) :
   « il peut boucler la boucle et remonter ». La boucle entière toute
   seule : place → salle → rame (il attend la rame à quai), trajet, sortie
@@ -757,9 +768,9 @@ cohérence), sortie de secours du tunnel jusqu'à la piste, skieur en AUTO.
     issues de secours et de la porte du personnel.
 
 **v1.17.0** — le ski : chausser en haut, descendre les pistes balisées
-jusqu'à Val Claret, contre le fantôme des descentes de Kevin (suivi :
+jusqu'à Val Claret, contre le fantôme des descentes d'un utilisateur (suivi :
 SKIEUR.md).
-- Kevin : « arrivé en haut, il est capable de skier sur le décor pour
+- Retour d'utilisateur : « arrivé en haut, il est capable de skier sur le décor pour
   redescendre ; tu as les trajectoires de pistes sur les plans des pistes ;
   tu me mets de la neige sur la piste » ; « tu as balisé les pistes ? » ;
   « je t'ai mis mes trajectoires GPX, si jamais ça peut t'aider ».
@@ -791,7 +802,7 @@ SKIEUR.md).
   - Commandes : Q / D (ou joystick) pour tourner, Z pour pousser, S pour
     le chasse-neige, Maj ou SCHUSS pour le schuss. La caméra se place
     derrière les skis.
-- **Le fantôme de Kevin** (`tools_fantomes.py`) : ses 5 descentes réelles
+- **Le fantôme** (`tools_fantomes.py`) : ses 5 descentes réelles
   du 26 au 28/04/2026, de la gare du glacier à Val Claret, de 4 min 45 à
   10 min 15.
   - Le dépôt n'en garde que les positions lissées, une par seconde, et le
@@ -812,7 +823,7 @@ SKIEUR.md).
 
 **v1.16.5** — documentation à jour de tout ce qui est arrivé depuis
 septembre : manuel, aide F1, menu Aide, README.
-- Kevin : « je pense que tu peux compléter manuel, menu aide, menu F1,
+- Retour d'utilisateur : « je pense que tu peux compléter manuel, menu aide, menu F1,
   readme… avec tous les nouveaux ajouts qu'on a faits depuis ».
 - **Manuel** (`manuel_perce_neige.pdf`, FR et EN, 54 pages au lieu de
   45) ; il s'arrêtait à la v1.15.34 :
@@ -848,7 +859,7 @@ septembre : manuel, aide F1, menu Aide, README.
 
 **v1.16.4** — pupitre : cadres et boîte ARRÊTS comme sur la photo ;
 escalier au bout de la terrasse du haut.
-- **Pupitre**, d'après la photo envoyée par Kevin :
+- **Pupitre**, d'après la photo envoyée par un utilisateur :
   - « le trait du cerclage s'interrompt pour le titre du box » : le trait
     du haut des cadres PORTES 1 à 6, PORTES 7 à 12 et ÉCLAIRAGE est coupé
     à la largeur du titre ;
@@ -872,7 +883,7 @@ escalier au bout de la terrasse du haut.
 
 **v1.16.3** — PC : les boutons du pupitre 3D agissent, et le mode skieur
 arrive sur le simulateur PC.
-- Kevin : « sur le PC, les boutons marchent mais il ne se passe rien
+- Retour d'utilisateur : « sur le PC, les boutons marchent mais il ne se passe rien
   ensuite, le bouton éclairage cabine ne marche pas, alors que dans la PWA
   ça fonctionne ; là je fais fermer les portes et rien ne se passe » ;
   « comment je passe en mode skieur sur le PC ? ».
@@ -910,7 +921,7 @@ arrive sur le simulateur PC.
 
 **v1.16.2** — en AUTO, les portes se ferment dès que le skieur est dans la
 voiture.
-- Kevin : « je veux qu'il ferme les portes de la rame une fois qu'il a
+- Retour d'utilisateur : « je veux qu'il ferme les portes de la rame une fois qu'il a
   détecté que j'étais à l'intérieur du funi ».
 - Monté pendant l'arrêt et passé la ligne des portes, le skieur déclenche
   la séquence de départ 1,5 s plus tard : annonce, fermeture des portes,
@@ -967,7 +978,7 @@ quai, fosse, chute au retour, frites, klaxon.
 
 **v1.16.0** — le skieur jouable, étape 1 : marcher dans les gares, prendre
 le funiculaire, sortir en haut (suivi : SKIEUR.md).
-- Kevin : « un skieur capable de monter les escaliers des gares et de
+- Retour d'utilisateur : « un skieur capable de monter les escaliers des gares et de
   marcher à l'intérieur sans passer au travers du plancher, des murs, des
   portes ou du wagon, qui peut marcher dans le wagon, voyager dans le
   funiculaire et aller au poste de pilotage ».
@@ -1012,13 +1023,13 @@ le funiculaire, sortir en haut (suivi : SKIEUR.md).
 - À venir (SKIEUR.md) :
   - la neige sur les pistes (OpenStreetMap) et la glisse jusqu'à Val
     Claret ;
-  - le fantôme des descentes GPS de Kevin ;
+  - le fantôme des descentes GPS d'un utilisateur ;
   - la sortie de secours du tunnel.
 - Vérifié : 15 bancs Godot, dont le nouveau.
 
 **v1.15.91** — portes de la salle d'attente : le vantail libère tout le
 passage.
-- Kevin : « c'est un seul vantail qui glisse complètement à gauche pour
+- Retour d'utilisateur : « c'est un seul vantail qui glisse complètement à gauche pour
   laisser tout le passage, pas que la moitié ; vérifie la vidéo ».
 - La v1.15.90 gardait un panneau fixe côté milieu et ne faisait glisser
   que la vitre extérieure. Or, sur la vidéo, les deux vitres sont dans un
@@ -1031,7 +1042,7 @@ passage.
 
 **v1.15.90** — portes de la salle d'attente de Val Claret : un seul
 vantail, qui coulisse vers le milieu.
-- Kevin : « les portes de la salle du bas, c'est un seul battant qui
+- Retour d'utilisateur : « les portes de la salle du bas, c'est un seul battant qui
   coulisse vers le milieu de la salle : la porte de droite en regardant
   vers le haut coulisse à gauche, celle du quai gauche à droite », avec la
   vidéo « [FUNI284] Funiculaire Perce-Neige | Tignes (montée) » (chaîne
@@ -1075,7 +1086,7 @@ de niveau à quai.
     (`audio/driver/output_latency.web`). Une image lente jusqu'à ~85 ms
     ne coupe plus le son ; le retard ajouté, ~45 ms, est imperceptible.
 - **« Tu as incliné les sièges dans le mauvais sens » ; « les bancs sont
-  horizontaux lorsque la pente du wagon est celle des gares »** (Kevin).
+  horizontaux lorsque la pente du wagon est celle des gares »** (retour d'utilisateur).
   - Les paliers étaient construits pour la pente moyenne de la ligne
     (26,5 %). À quai, ils penchaient donc de 10°, l'arrière en l'air.
   - Paliers, bancs et porte-skis sont maintenant de niveau quand la
@@ -1092,7 +1103,7 @@ de niveau à quai.
 
 **v1.15.88** — intérieur des voitures d'après les photos : paliers en
 caoutchouc, bancs bleus, porte-skis orange.
-- Kevin : « un palier au travers de chaque vitre, recouvert d'un matelas
+- Retour d'utilisateur : « un palier au travers de chaque vitre, recouvert d'un matelas
   noir en caoutchouc ; sur chaque palier deux porte-skis orange, décalés
   d'un palier sur deux ; le long des parois courbes sous les fenêtres, un
   banc bleu clair sauf à la porte », puis « affine la forme des
@@ -1145,7 +1156,7 @@ les photos.
     - mur bleu nuit, ouverture rectangulaire bordée de cornières
       galvanisées, linteau à l'axe + 1,55 m ;
     - gros caisson en saillie jusqu'au plafond, avec **deux miroirs
-      convexes** tournés chacun vers un quai (Kevin : « ce sont des
+      convexes** tournés chacun vers un quai (retour d'utilisateur : « ce sont des
       miroirs pour surveiller les deux quais ») ;
     - pilier à gauche, portillons blancs au pied des quais, sens
       interdit à droite.
@@ -1175,7 +1186,7 @@ Motte) refaite d'après le réel.
   - Les marches de l'escalier aval sont pleines jusqu'à la place.
 - **Gare amont** (« maintenant tu fais pareil pour le haut ») : nouveau
   `GareAmont` (scripts/gare_amont.gd) pour l'extérieur, d'après l'IGN
-  (BD TOPO, LiDAR HD, orthophoto), les photos de Kevin, le reportage du
+  (BD TOPO, LiDAR HD, orthophoto), les photos d'un utilisateur, le reportage du
   forum (2017) et Wikimedia Commons (2023) :
   - **hall des quais** de 14 × 44,5 m dans l'axe de la voie, toit
     monopente blanc :
@@ -1222,7 +1233,7 @@ Motte) refaite d'après le réel.
   - nouveau `GareAval` (scripts/gare_aval.gd), qui remplace le hall en béton
     générique et sa cage d'escalier vers la surface ;
   - état d'après le réaménagement de 2018 (ICM Architectures), relevé sur
-    l'IGN (BD TOPO, LiDAR HD, orthophoto 2024), les photos de Kevin du
+    l'IGN (BD TOPO, LiDAR HD, orthophoto 2024), les photos d'un utilisateur du
     26/04/2026 et celles de l'architecte.
 - **Extérieur** :
   - bâtiment semi-enterré à toit en herbe, emprise et hauteur IGN ;
@@ -1230,7 +1241,7 @@ Motte) refaite d'après le réel.
     « ECOLES DE SKI / ALTITUDE EXPERIENCES... / SORTIE » ;
   - auvent sur deux poteaux, escalier métallique depuis la place, avec
     garde-corps galvanisés en 5 files ;
-  - **arches** (Kevin : « rondes, pas ovales, un grand diamètre devant et
+  - **arches** (retour d'utilisateur : « rondes, pas ovales, un grand diamètre devant et
     un plus petit derrière, alignées côté droit en regardant dans le sens
     de la montée ») :
     - la rouge et 3 en lamellé-collé, en **cercles** de rayon 7,76 m
@@ -1436,7 +1447,7 @@ redressé face au regard, commandes actionnables.
   - « faudrait pouvoir appuyer sur ces boutons » : au clic ou au doigt,
     en vue cabine. Les boutons de l'écran passent avant :
     - OUVERTURE et FERMETURE commandent les portes ;
-    - **MONTÉE** (le bouton noir, réponse de Kevin) lance le départ ; le
+    - **MONTÉE** (le bouton noir, réponse d'un utilisateur) lance le départ ; le
       voyant **PRÊT** s'allume alors, et ce n'est plus un bouton ;
     - **−VITE / +VITE** : sélecteur à rappel, vertical au repos ; tenu à
       gauche ou à droite, il baisse ou monte la consigne de vitesse ;
@@ -1465,7 +1476,7 @@ redressé face au regard, commandes actionnables.
 Pro-face vivant.
 - **« Le poste de conduite avec les commandes, les boutons et l'écran
   fidèles »** : le pupitre de la cabine 3D (PWA et vue 3D du PC) est
-  refait d'après les photos de Kevin du 26/04/2026 (094300, 094305,
+  refait d'après les photos d'un utilisateur du 26/04/2026 (094300, 094305,
   094308, 094402) et la vidéo de descente de 2013.
   - Caisson gris sur le tube transversal. À gauche, l'écran tactile
     Pro-face sur son cadre noir ; à droite, la plaque à boutons disposée
@@ -1657,7 +1668,7 @@ amont.
   passage du tunnel. En vue cabine, il n'est affiché qu'à moins de 450 m
   de la gare.
 - **Calage sur la descente en cabine** (vidéo « Transports câblés » de
-  2013, 12 m/s), demandé par Kevin
+  2013, 12 m/s), demandé par un utilisateur
   (`tools_calage_descente.py`, `audit_physique/calage_descente.sage`) :
   - **néons** : en croisière, un néon allumé passe toutes les 1,630 s, à
     0,026 s près sur 56 intervalles. Ils sont donc allumés tous les 20 m :
@@ -1717,7 +1728,7 @@ amont.
 - **Tunnel** à ses cotes (Ø 3,9 m, rail à 1,24 m sous l'axe), avec la
   chambre de l'évitement, les néons (un sur deux) et la voie.
 - **Sortie de secours** au galet 145 : la galerie monte jusqu'à la surface
-  et débouche au bord de la piste rouge (fait de Kevin). C'est là que le
+  et débouche au bord de la piste rouge (fait d'un utilisateur). C'est là que le
   tube passe le plus près de la surface.
 - **Gares** : Val Claret (hall béton, bandeau « ALTITUDE EXPERIENCE »,
   quai) et Grande Motte (hall bleu nuit, verrière qui sort sur le glacier,
@@ -1767,12 +1778,12 @@ toutes les vues.
   - en face, sur la paroi gauche, juste avant l'anneau et sous les câbles :
     un boîtier orange, un coffret blanc et sa gaine jusqu'au sol.
 - La porte plaquée et le grand panneau « SORTIE DE SECOURS » de la 1.15.68
-  sont retirés. **Pas de gyrophare** (retour de Kevin) : l'objet orange est
+  sont retirés. **Pas de gyrophare** (retour d'un utilisateur) : l'objet orange est
   un boîtier, pas un feu.
 
 **v1.15.68** — courbes, galets et sortie de secours aux positions lues au
 compteur de la cabine.
-- **Relevés de Kevin dans la vidéo de montée** (compteur 0 au départ, nez
+- **Relevés d'un utilisateur dans la vidéo de montée** (compteur 0 au départ, nez
   de la rame montante à s = compteur + 38,56 m) :
   - premier et dernier galet incliné de chaque courbe : n° 81 à 1 274 m et
     n° 98 à 1 510 m, puis n° 126 à 1 857 m et n° 163 à 2 351 m ;
@@ -1803,7 +1814,7 @@ compteur de la cabine.
 
 **v1.15.67** — gare amont ouverte sur le glacier, tracé vérifié sur l'IGN,
 approche au galet 238.
-- **Gare amont refaite (retours de Kevin) : « la sortie est vers le
+- **Gare amont refaite (retours d'un utilisateur) : « la sortie est vers le
   haut »**. Les marches des quais se prolongent dans le hall de la salle
   des machines jusqu'à un palier plat, de chaque côté de la fosse des
   roues. Le mur du fond devient une façade vitrée sur toute la largeur,
@@ -1986,7 +1997,7 @@ dans le navigateur du PC.
 **v1.15.62** — arrêts calés sur les butoirs, bouton PORTES, débarquement à
 l'arrivée.
 - **« En haut on s'arrête à 1,5 m du butoir, en bas à 4 ou 5 m, pour la
-  marge d'oscillation et d'allongement »** (fait de Kevin) :
+  marge d'oscillation et d'allongement »** (fait d'un utilisateur) :
   - **avant**, le PC s'arrêtait à 9,5 m du butoir en haut et à 7,9 m en
     bas, la PWA à 0,6 m et à 1,9 m. Surtout, dans la PWA, la rame d'en
     face était placée en miroir à 3 474 − s, alors que ses points
@@ -2524,7 +2535,7 @@ supports numérotés réfléchissants.
   vidéo, ils défilent à 5,25 Hz à 7,95 m/s.
 - **Supports de galets** : cadres en acier galvanisé blanc qui enjambent
   la fosse (traverse sous les galets, pieds jusqu'au fond).
-  - Positions (faits de Kevin) : aucun support en gare aval ; le n° 1
+  - Positions (faits d'un utilisateur) : aucun support en gare aval ; le n° 1
     est au bout du quai aval, le n° 238 (dernier numéroté) au début du
     quai amont, soit 238 supports au pas de 14,54 m, plus ceux de
     l'aiguillage. La gare amont garde trois supports non numérotés.
@@ -2535,7 +2546,7 @@ supports numérotés réfléchissants.
     dans les virages à droite.
   - En descendant : numéros impairs (237 → 1), même règle vue de la rame
     descendante.
-- **Le pas est vérifié sur la vidéo** (question de Kevin : « la vitesse
+- **Le pas est vérifié sur la vidéo** (question d'un utilisateur : « la vitesse
   de croisière de 10,1 m/s corrobore-t-elle cet écartement ? ») :
   - l'écran du pupitre indique 1 910 m à 30 s et 2 387 m à 90 s, soit
     7,95 m/s (il affiche 7,9 m/s) : ce jour-là, la croisière était de
@@ -2705,7 +2716,7 @@ séquence auto corrigée.
   arrière).
 
 **v1.15.42** — le simulateur PC pour Linux et macOS.
-- Demande de Kevin : « sur GitHub, tu peux me builder les exécutables pour
+- Demande d'un utilisateur : « sur GitHub, tu peux me builder les exécutables pour
   Linux toutes distributions et Mac ? » Chaque release publie désormais,
   à côté de l'installeur Windows :
   - `PerceNeigeSimulator-X-linux.AppImage`, avec en secours la même
@@ -2751,7 +2762,7 @@ séquence auto corrigée.
 
 **v1.15.41** — rupture : le câble se détend aussi dans la salle des
 machines, et le tronçon de la rame la suit.
-- Retour de Kevin sur la 1.15.40 : « il reste tendu dans la salle des
+- Retour d'un utilisateur sur la 1.15.40 : « il reste tendu dans la salle des
   machines, et le bout cassé attaché à la rame emballée devrait avancer
   avec elle, alors que là tout reste à l'arrêt ».
 - **Salle des machines** : le câble autour des roues avait sa propre
@@ -2779,7 +2790,7 @@ machines, et le tronçon de la rame la suit.
 
 **v1.15.40** — rupture du câble : il casse, se détend, la machinerie
 s'arrête.
-- Retour de Kevin : « quand le câble casse, il doit se détendre, casser
+- Retour d'un utilisateur : « quand le câble casse, il doit se détendre, casser
   quelque part et la machinerie doit s'arrêter, là elle s'emballe ». Les
   roues de la salle des machines, le panneau du HUD et le son de la
   machinerie suivaient la vitesse de la rame pilotée, câble rompu ou non.
@@ -2932,7 +2943,7 @@ sens, cabine dézoomée.
   compte maintenant aussi les appels de dessin, les objets et le HUD.
 
 **v1.15.36** — le son revient dans la PWA sur Android.
-- Retour de Kevin : « 0 son sur la PWA sur Android ». Reproduit dans
+- Retour d'un utilisateur : « 0 son sur la PWA sur Android ». Reproduit dans
   Chromium, avec l'agent utilisateur d'Android et la sortie son enregistrée
   sur un serveur audio virtuel. La 1.15.35 donnait un silence numérique
   total, la 1.15.33 jouait normalement (ambiance −44 dB, buzzer −23 dB).
@@ -2982,7 +2993,7 @@ sens, cabine dézoomée.
   surface des triangles, que rien ne traverse la roue. Il détecte bien
   l'ancien défaut.
 - Frein de roue : les étriers entraient dans la jante. Une première
-  correction avait ajouté un disque déporté, mais Kevin a précisé que c'est
+  correction avait ajouté un disque déporté, mais l'utilisateur a précisé que c'est
   « une bande métallique sur laquelle les freins appuient, pas une
   excroissance ». La photo DSCN3579 le confirme. La joue extérieure de
   chaque roue est donc une bande d'acier affleurante. Deux étriers à vérin
@@ -2992,7 +3003,7 @@ sens, cabine dézoomée.
   et de la roue aval a été contrôlé.
 
 **v1.15.34** — son de la salle des machines, fin du silence d'ambiance PC.
-- Demande de Kevin : le son de la vue salle des machines doit venir de la
+- Demande d'un utilisateur : le son de la vue salle des machines doit venir de la
   vidéo « [FUNI284] Funiculaire du Perce-Neige, Tignes (marche complète à
   12 m/s) ». Elle a été filmée en août 2013, caméra fixe en gare haute sur
   la roue aval, et publiée par la chaîne « Transports câblés ». Sa machinerie
@@ -3011,7 +3022,7 @@ sens, cabine dézoomée.
   serveur son : dès qu'un QSoundEffect joue à volume EXACTEMENT nul, tous
   les autres deviennent muets (−140 dB). Sous 1 m/s, la boucle de croisière
   jouait à volume 0 jusqu'à son arrêt à 0,2 m/s. Les rapports de diagnostic
-  du PC de Kevin l'affichaient déjà : « croisière : joue, volume 0 » à
+  du PC d'un utilisateur l'affichaient déjà : « croisière : joue, volume 0 » à
   0,74 m/s. Tous les QSoundEffect passent par une sous-classe qui garde un
   plancher de 0,0001, soit −80 dB, inaudible. La correction de la 1.15.30
   reste valable : elle atténue selon le niveau réel du clip de freinage.
@@ -3027,7 +3038,7 @@ sens, cabine dézoomée.
   - 53 tests, dont la non-régression du volume nul.
 
 **v1.15.33** — parcours du câble dans la salle des machines, câble animé.
-- Parcours décrit par Kevin, appliqué tel quel. Les deux roues sont
+- Parcours décrit par un utilisateur, appliqué tel quel. Les deux roues sont
   ALIGNÉES latéralement, chacune avec une gorge gauche et une gorge droite,
   aux mêmes x que les deux brins de la voie. Vu vers l'amont :
   1. Le câble de la rame 1 entre sur le haut de la roue aval, gorge gauche.
@@ -3064,7 +3075,7 @@ sens, cabine dézoomée.
 remontée.
 - Retour d'essai sur le rendu de la 1.15.31 : les deux lacunes entourées
   étaient « à améliorer au vu des photos ». Les gros plans d'Hakone et de
-  la photo de Kevin montrent que les deux bouts de rail sont PLIÉS pour
+  la photo d'un utilisateur montrent que les deux bouts de rail sont PLIÉS pour
   courir côte à côte, parallèlement au câble, qui file droit dans le couloir
   entre eux. Dans la 1.15.31, les bouts suivaient la ligne de la roue et le
   câble les coupait en biais. Désormais, chaque bout arrive par un coude
@@ -3072,7 +3083,7 @@ remontée.
   1 m de chevauchement. Les bouts sont coupés francs avec un chanfrein,
   posés sur des plaques d'appui boulonnées, et une tôle de glissement sombre
   court sous le câble d'un coude à l'autre, 12 mm sous lui.
-- Salle des machines, demande de Kevin : « remonter la roue motrice amont
+- Salle des machines, demande d'un utilisateur : « remonter la roue motrice amont
   pour que la pente entre le sommet de la roue amont et celui de la roue
   aval soit celle de la voie en gare amont ». La roue amont est remontée
   d'1 m : les deux sommets sont alignés sur la pente de la voie. Le brin de
@@ -3114,7 +3125,7 @@ remontée.
   49 tests aussi.
 
 **v1.15.30** — ambiance PC : fin du « silence » sous 1 m/s en décélération.
-- Les deux rapports de diagnostic arrivés du PC de Kevin le 30/09 (Windows 10,
+- Les deux rapports de diagnostic arrivés du PC d'un utilisateur le 30/09 (Windows 10,
   Qt 6.11) ont tranché : les boucles d'ambiance jouaient bien (Qt : en
   lecture, aucune relance du chien de garde), mais à 0,136 de volume, soit
   plancher de fluage 0,45 × atténuation sous le clip de freinage réel 0,55
@@ -3134,7 +3145,7 @@ remontée.
 
 **v1.15.29** — aiguillage Abt dessiné, câble tendu entre les galets, vue
 salle des machines.
-- Demande de Kevin, photo d'un aiguillage Abt de funiculaire à l'appui (« ce
+- Demande d'un utilisateur, photo d'un aiguillage Abt de funiculaire à l'appui (« ce
   n'est pas celui du funiculaire mais le principe est le même ») :
   l'intérieur des deux aiguillages de l'évitement est dessiné. Rails
   extérieurs continus ; chaque rail intérieur naît 9 m après la fourche,
@@ -3156,13 +3167,13 @@ salle des machines.
   des galets en courbe découle de l'effort (tension contre poids : 73 à 78°
   requis, plafonnée à 32° pour que les deux galets d'une paire ne se
   touchent pas).
-- Nouvelle vue 3D, demande de Kevin : la **salle des machines**, caméra fixe
+- Nouvelle vue 3D, demande d'un utilisateur : la **salle des machines**, caméra fixe
   par rapport à la gare amont (elle ne suit pas le train), qui tourne dans
   tous les sens autour des deux roues, zoome, et se déplace (clic droit, ou
   deux doigts). Elle reste dans la salle et le hall, recule si elle finirait
   dans une machine, et efface la dalle quand on passe au-dessus. La touche
   `O` et le bouton VUE font le tour cabine → extérieure → salle des machines.
-- Les 16 photos de visite de Kevin n'ont pas donné l'écart entre les deux
+- Les 16 photos de visite d'un utilisateur n'ont pas donné l'écart entre les deux
   roues, car aucune ne les montre ensemble. La plaque du réducteur confirme
   la vitesse maxi : 55 tr/min × π × 4,16 m = 11,98 m/s. Le secours
   hydraulique entraîne le câble à 2,0 ou 1,3 m/s. Le pupitre donne les
@@ -3174,7 +3185,7 @@ salle des machines.
   `shot_salle_machines.gd` sous Xvfb + Mesa), tous les autres bancs, 46 tests.
 
 **v1.15.28** — carter rouge fixe autour des roues, ouvertures plus arrondies.
-- Précision de Kevin : « le truc rouge autour de la poulie ne tourne pas, il
+- Précision d'un utilisateur : « le truc rouge autour de la poulie ne tourne pas, il
   protège le câble ; le câble doit être dedans, et il faut l'interrompre pour
   laisser sortir le câble ». Le rouge est désormais un **carter fixe** (tôle
   extérieure et deux flasques, sur deux pieds) qui coiffe la jante ; la roue,
@@ -3209,7 +3220,7 @@ salle des machines.
   garnies de rouge, piste de frein et étriers rouge et turquoise sur bâti vert,
   comme sur les photos du reportage remontees-mecaniques.net.
 - **La roue aval affleure au niveau de la voie entre les deux bras bleus des
-  butoirs** (précision de Kevin). Son sommet est à −1,30 m, sous la table de
+  butoirs** (précision d'un utilisateur). Son sommet est à −1,30 m, sous la table de
   roulement, et elle sort de la dalle de s = −0,14 à 2,04 m, les bras allant
   de −0,25 à 2,15 m. La roue amont est sous la dalle.
 - **Passage du câble** : le brin gauche de la voie se pose sur le sommet de la

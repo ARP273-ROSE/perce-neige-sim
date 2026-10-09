@@ -1,6 +1,6 @@
 # Rupture du câble tracteur — ce que montre la 3D (2026-10-01)
 # ---------------------------------------------------------------------------
-# Retour de Kevin : « quand le câble casse, il doit se détendre, casser
+# Retour d'un utilisateur : « quand le câble casse, il doit se détendre, casser
 # quelque part et la machinerie doit s'arrêter, là elle s'emballe ».
 # Données du simulateur : EA = 1,25·10⁸ N (rebond élastique, TrainPhysics),
 # 11 kg/m, ligne 3 474 m ; géométrie de track_builder (plancher −1,85,

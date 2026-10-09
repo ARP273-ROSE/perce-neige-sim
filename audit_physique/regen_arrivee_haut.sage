@@ -1,4 +1,4 @@
-# Question de Kevin (2026-09-27) : « quand une rame pleine arrive en haut,
+# Question d'un utilisateur (2026-09-27) : « quand une rame pleine arrive en haut,
 # pendant la décélération et l'entrée en gare, il y a marqué régénération —
 # je ne suis pas sûr ». Bilan des forces à l'arrivée en haut, rame pleine en
 # montée, contrepoids vide en bas, avec le modèle complet de l'audit.

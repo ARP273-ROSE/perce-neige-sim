@@ -2,7 +2,7 @@ class_name CockpitPanel
 extends Control
 ## Instruments de conduite Von Roll — COLONNE DE DROITE, sous le panneau
 ## de la salle des machines (07/10/2026 ; avant : bandeau en bas de
-## l'écran, 1600×200). Retour de Kevin sur iPad : « la planche de commande
+## l'écran, 1600×200). Retour d'un utilisateur sur iPad : « la planche de commande
 ## est masquée par les données du bandeau inférieur, que tu peux déplacer
 ## à droite ; tu peux virer le panneau ÉTATS pour que ça rentre ».
 ## De haut en bas :

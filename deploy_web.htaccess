@@ -1,5 +1,5 @@
 # Funiculaire Perce-Neige — export Godot Web servi par le conteneur web-pwa.
-# Copié en .htaccess dans /mnt/apps_pool/Web/funiculaire par deploy_web.sh.
+# Copié en .htaccess dans le dossier servi (WEB_ROOT) par deploy_web.sh.
 
 Options -Indexes
 

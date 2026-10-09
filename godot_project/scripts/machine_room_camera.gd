@@ -105,7 +105,7 @@ func _update() -> void:
 	# la caméra reste DANS la salle (et le hall au-dessus de la dalle) :
 	# on avance le long du rayon tant qu'on y est — sinon on se retrouvait
 	# dans le rocher ou sous les quais de la gare
-	# Kevin, 09/10/2026 : « on se fait coincer par le plancher de la gare
+	# Retour d'utilisateur, 09/10/2026 : « on se fait coincer par le plancher de la gare
 	# au-dessus de la salle des machines, le déplacement de la vue est
 	# fortement contraint ; affranchis-toi de ce plafond, les mouvements
 	# seront fluides » → plus de rayon raccourci au premier bord : l'œil

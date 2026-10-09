@@ -1,6 +1,6 @@
 # Salle des machines de la gare amont — géométrie du câble
 # ---------------------------------------------------------------------------
-# 2026-09-29, révisée le 30/09/2026 d'après les indications de Kevin :
+# 2026-09-29, révisée le 30/09/2026 d'après les indications d'un utilisateur :
 #   - roue amont remontée : sommets des deux roues alignés sur la pente de la
 #     voie en gare amont (repère local = celui de la voie : même cote y) ;
 #   - les deux roues ALIGNÉES latéralement, deux gorges chacune (gauche et

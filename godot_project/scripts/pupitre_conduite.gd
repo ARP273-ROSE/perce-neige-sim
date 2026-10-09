@@ -1,6 +1,6 @@
 class_name PupitreConduite
 extends Node3D
-## Pupitre de conduite de la cabine, reproduit d'après les photos de Kevin
+## Pupitre de conduite de la cabine, reproduit d'après les photos d'un utilisateur
 ## du 26/04/2026 (094300, 094305, 094308, 094402) et la vidéo de descente de
 ## 2013 — demande du 06/10/2026 : « reproduire fidèlement le poste de
 ## commande avec les bons boutons, les bons noms et l'écran LCD qui marche
@@ -14,7 +14,7 @@ extends Node3D
 ##       7 à 12 (côté droit) : OUVERTURE (blanc), FERMETURE (vert)
 ##       PRÊT (voyant vert) · MONTÉE · −VITE/+VITE · EN MARCHE (clé)
 ##       KLAXON        · ÉCLAIRAGE : CABINE (0/1), COMPARTIMENT, SECOURS
-##     Deuxième rangée d'après Kevin (06/10/2026) : PRÊT n'est qu'un
+##     Deuxième rangée d'après l'utilisateur (06/10/2026) : PRÊT n'est qu'un
 ##     voyant ; il s'allume quand on appuie sur MONTÉE (« ça veut dire qu'on
 ##     est prêt ») ; le sélecteur −VITE/+VITE revient seul à la verticale
 ##     et, tenu à gauche ou à droite, baisse ou monte la consigne de
@@ -26,7 +26,7 @@ extends Node3D
 ## sélecteur CABINE sur 0 ou 1, KLAXON enfoncé quand on klaxonne.
 ## Repère : celui de l'intérieur de la cabine (avant = −Z).
 ##
-## La face est redressée vers le conducteur (Kevin, 06/10/2026 : « incliner
+## La face est redressée vers le conducteur (retour d'utilisateur, 06/10/2026 : « incliner
 ## ce panneau pour être perpendiculaire à la ligne du regard, même si ce
 ## n'est pas exact, pour que je puisse bien voir ») — sur la rame elle est
 ## presque à plat. Perpendiculaire au regard (≈ 62°), elle paraissait
@@ -46,7 +46,7 @@ const X_ECRAN: float = -0.10           # centre du cadre de l'écran
 const X_PLAQUE: float = 0.21           # centre de la plaque à boutons
 const X_GAUCHE: float = -0.35          # centre de la plaque de gauche (coups-de-poing rouges)
 const PIXEL_ETIQUETTE: float = 0.00048  # plus gros qu'en vrai : lisible depuis le siège
-## Textes du pupitre en haute définition (09/10/2026, Kevin : « ton panneau de
+## Textes du pupitre en haute définition (09/10/2026, retour d'utilisateur : « ton panneau de
 ## conduite est pixélisé et pas net, un truc vectoriel et plus précis ? ») :
 ## une étiquette Label3D est une TEXTURE rendue à `font_size` pixels — 12 à
 ## 20 px, étirés sur 6 à 10 mm, puis filtrés en biais : flou garanti, sur
@@ -61,7 +61,7 @@ const L_GAUCHE: float = 0.20
 const L_CADRE: float = 0.30
 const L_PLAQUE: float = 0.31
 const P_FACE: float = 0.22             # profondeur de la face
-# dalle agrandie (Kevin, 07/10/2026 : « qu'il prenne quasi tout l'espace
+# dalle agrandie (retour d'utilisateur, 07/10/2026 : « qu'il prenne quasi tout l'espace
 # noir ») : 0,272 × 0,161 m, au rapport 480 × 284 de l'écran Pro-face
 const ECRAN_L: float = 0.272
 const ECRAN_H: float = 0.161
@@ -265,12 +265,12 @@ func _construire_boutons(chrome: StandardMaterial3D, noir: StandardMaterial3D,
 	_etiquette("SECOURS", Vector2(cols[3], rangs[2] + lab_z), 14, Color(0.06, 0.06, 0.07))
 
 
-## Plaque de gauche (photo 095119, ajout demandé par Kevin le 06/10/2026 :
+## Plaque de gauche (photo 095119, ajout demandé par un utilisateur le 06/10/2026 :
 ## « à gauche de l'écran il y a les boutons rouges ») : cadre « ARRÊTS »,
 ## deux coups-de-poing rouges — URGENCE (le gros, au milieu) et ÉLECTRIQUE
 ## (le petit, à droite) — et, à gauche d'URGENCE, l'emplacement d'un bouton
 ## qui n'est pas monté (obturateur gris) ; dessous à gauche, une clé à
-## étiquette rouge. Libellés : Kevin, 07/10/2026.
+## étiquette rouge. Libellés : retour d'utilisateur, 07/10/2026.
 func _construire_gauche(chrome: StandardMaterial3D, noir: StandardMaterial3D,
 		filet: StandardMaterial3D) -> void:
 	var z_g: float = -0.030
@@ -285,7 +285,7 @@ func _construire_gauche(chrome: StandardMaterial3D, noir: StandardMaterial3D,
 	_sur_face(_cylindre(gris, 0.0140, 0.004), Vector2(xs[0], z_g), 0.004)
 	var rouge: StandardMaterial3D = _mat(Color(0.78, 0.07, 0.05), 0.4, 0.0)
 	# au milieu le plus gros = URGENCE, à droite le plus petit = ÉLECTRIQUE
-	# (Kevin, 07/10/2026) ; verrouillés enfoncés tant que l'arrêt dure
+	# (retour d'utilisateur, 07/10/2026) ; verrouillés enfoncés tant que l'arrêt dure
 	for k in range(2):
 		var p: Vector2 = Vector2(xs[1 + k], z_g)
 		var r_tete: float = 0.024 if k == 0 else 0.018
@@ -647,7 +647,7 @@ func _cle(chrome: StandardMaterial3D, noir: StandardMaterial3D, p: Vector2) -> N
 
 
 ## Cadre de groupe gravé, libellé au milieu du côté haut : le trait s'y
-## interrompt (Kevin, 07/10/2026 : « le trait du cerclage s'interrompt pour
+## interrompt (retour d'utilisateur, 07/10/2026 : « le trait du cerclage s'interrompt pour
 ## le titre du box »).
 func _cadre(filet: StandardMaterial3D, xa: float, xb: float, za: float, zb: float, titre: String) -> void:
 	var e: float = 0.0012

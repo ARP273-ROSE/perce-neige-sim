@@ -1,4 +1,4 @@
-# Banc de la rupture du câble (2026-10-01) — retour de Kevin : « quand le
+# Banc de la rupture du câble (2026-10-01) — retour d'un utilisateur : « quand le
 # câble casse, il doit se détendre, casser quelque part et la machinerie
 # doit s'arrêter, là elle s'emballe ». Vraie scène, pas fixe de 1/60 s,
 # rame lancée en montée à 10 m/s :

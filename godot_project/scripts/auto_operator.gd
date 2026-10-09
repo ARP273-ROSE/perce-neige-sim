@@ -53,7 +53,7 @@ var enabled: bool = false
 ## posé par main.gd. `retenue` : un skieur est en gare sans être monté, on
 ## ne part pas ; `a_bord` : il est dans la voiture, passé la ligne des
 ## portes. Monté pendant l'arrêt, la séquence de départ (annonce →
-## fermeture des portes → buzzer) part dès qu'on l'a vu dedans (Kevin :
+## fermeture des portes → buzzer) part dès qu'on l'a vu dedans (retour d'utilisateur :
 ## « qu'il ferme les portes une fois qu'il a détecté que j'étais à
 ## l'intérieur du funi »). Déjà à bord à l'arrivée : arrêt habituel, il a
 ## le temps de descendre.
@@ -61,7 +61,7 @@ var retenue: bool = false
 var a_bord: bool = false
 var bloque: bool = false     # à pied sur la voie : on ne part pas, sans limite (08/10/2026)
 const A_BORD_DELAI_S: float = 1.5     # dedans depuis 1,5 s : on y va
-## Retenue plafonnée (Kevin, 07/10/2026 : « la séquence reste bloquée à
+## Retenue plafonnée (retour d'utilisateur, 07/10/2026 : « la séquence reste bloquée à
 ## embarquement 6 s et rien ne se passe, que je reste sur le quai… elle
 ## devrait se poursuivre toute seule ») : passé RETENUE_MAX_S d'attente à
 ## cet arrêt, la rame part, skieur sur le quai ou pas.
@@ -157,7 +157,7 @@ func _charge_horaire(direction: int) -> Array:
 
 
 func toggle() -> void:
-	# Kevin, 08/10/2026 : « en mode exploitation auto tu repasses tout seul
+	# Retour d'utilisateur, 08/10/2026 : « en mode exploitation auto tu repasses tout seul
 	# en mode normal, sinon ça fait n'importe quoi » — l'automate ne conduit
 	# qu'en mode normal (en Défi plus de sécurités, en Pannes le tirage)
 	if not enabled and get_parent() != null and get_parent().get("run_mode") != null \
@@ -185,7 +185,7 @@ func toggle() -> void:
 		# Ne touche plus aux contrôles, le driver reprend
 		if physics != null:
 			# à quai, consigne rendue à 100 % (l'embarquement la met à 0 ;
-			# Kevin, 09/10/2026 : « refus car la consigne était tombée à
+			# Retour d'utilisateur, 09/10/2026 : « refus car la consigne était tombée à
 			# 0 ») ; en ligne, on n'y touche pas (la rame ne s'arrête pas net)
 			if not physics.trip_started:
 				physics.speed_cmd = 1.0

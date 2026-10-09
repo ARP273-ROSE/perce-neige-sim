@@ -1,7 +1,7 @@
 class_name PerfManager
 extends Node
 ## Réglages graphiques selon la machine, puis ajustés EN DIRECT pour rester
-## fluide (demande de Kevin du 04/10/2026 : « détecter la config du PC —
+## fluide (demande d'un utilisateur du 04/10/2026 : « détecter la config du PC —
 ## CPU, cœurs, GPU, RAM — et adapter les réglages pour que ça reste fluide »,
 ## « détecter les saccades en direct pour t'adapter en live »).
 ##
@@ -15,7 +15,7 @@ extends Node
 ##    durable → on en remet un, sans retenter de sitôt un cran qui a échoué.
 ##
 ## Crans (chacun = un état complet, on peut monter et descendre).
-## PC (08/10/2026, Kevin : « sur le PC du père c'est super pixélisé, on ne
+## PC (08/10/2026, retour d'utilisateur : « sur le PC du père c'est super pixélisé, on ne
 ## peut pas lire les noms des boutons ni les chiffres de l'écran du
 ## cockpit ») : la RÉSOLUTION du rendu est le tout dernier recours, et
 ## jamais sous 85 % — avant elle, on coupe les effets puis on verrouille la
@@ -96,7 +96,7 @@ func setup(p_main: Node, p_env: Environment, p_mode: String) -> void:
 	if _web:
 		# la PWA DÉMARRE au cran 4 mais peut REMONTER jusqu'au rendu à 100 %
 		# (cran 2) si l'appareil a de la marge — avant, elle restait à 70 %
-		# au mieux et le pupitre était illisible (Kevin, 09/10/2026)
+		# au mieux et le pupitre était illisible (retour d'utilisateur, 09/10/2026)
 		cran_min = 2
 	var depart: int = maxi(_cran_de_depart(), plancher_web) if (_web and mode == "auto") else _cran_de_depart()
 	# --cran=N : cran imposé, sans adaptation (captures de contrôle)
@@ -361,7 +361,7 @@ func _evaluer() -> void:
 	var mauvais: bool = ips < 0.83 * cible_ips or taux > 0.03 or p99 > 3.0 * budget
 	# Saccades venues du PROCESSEUR (chargement du décor du skieur,
 	# téléchargement, ramasse-miettes…) alors que la carte graphique a de la
-	# marge : retirer des effets n'y changerait rien (09/10/2026, Kevin sur
+	# marge : retirer des effets n'y changerait rien (09/10/2026, l'utilisateur sur
 	# son PC « de la mort » : « cran 2/6 (saccades) … GPU 2,1 ms »).
 	if mauvais and gpu_ms > 0.0 and gpu_ms < 0.40 * budget * 1000.0:
 		dernier_bilan += " — saccades processeur, effets gardés"

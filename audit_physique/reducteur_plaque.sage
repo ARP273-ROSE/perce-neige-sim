@@ -1,4 +1,4 @@
-# Plaque du réducteur de la salle des machines (photo de Kevin, 30/09/2026)
+# Plaque du réducteur de la salle des machines (photo d'un utilisateur, 30/09/2026)
 # ---------------------------------------------------------------------------
 # « Changement de la vitesse seulement en arrêt », 1990, type A.KFW 560/W3/S,
 # huile DIN 51517 CLP 220 (ou 320, flou). Levier à deux positions :

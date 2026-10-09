@@ -1,7 +1,7 @@
 class_name EcranProface
 extends Control
 ## Écran tactile du pupitre de conduite (terminal Pro-face), reproduit
-## d'après la photo de Kevin 20260426_094305 (page « VOITURE AVAL ») et la
+## d'après la photo d'un utilisateur 20260426_094305 (page « VOITURE AVAL ») et la
 ## vidéo de descente de 2013 (page « CONDUITE VÉHICULE 1 ») — demande du
 ## 06/10/2026 : « reproduire fidèlement le poste de commande, les bons
 ## boutons, les bons noms, et l'écran LCD qui marche et affiche les bonnes

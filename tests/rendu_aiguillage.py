@@ -2,7 +2,7 @@
 godot_project/bench_aiguillage_3d.gd (repère local de la fourche : x, y, s).
 
 Trois vues : plan de l'aiguillage, vue en perspective depuis la voie unique
-en regardant vers l'amont (comme la photo d'aiguillage de Kevin), gros plan
+en regardant vers l'amont (comme la photo d'aiguillage d'un utilisateur), gros plan
 d'une fenêtre où le câble opposé passe sous la tête du rail intérieur.
 
     python tests/rendu_aiguillage.py aiguillage.txt sortie.png

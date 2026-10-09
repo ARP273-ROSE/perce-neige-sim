@@ -2,7 +2,7 @@
 (perce_neige_sim.py, « vue en coupe ») — relief RÉEL, régénérable :
     python3 tools_profil_coupe.py  →  profil_coupe.py
 
-Demande de Kevin du 06/10/2026 : refonte complète de la vue profil (« dans
+Demande d'un utilisateur du 06/10/2026 : refonte complète de la vue profil (« dans
 cette vue-là on peut redesigner complètement les rames et le reste »).
 Les montagnes de l'ancienne vue étaient des sinusoïdes et le dessus du
 relief une ligne à 160 m au-dessus de la voie.

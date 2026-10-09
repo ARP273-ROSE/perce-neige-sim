@@ -133,7 +133,7 @@ if _QTMULTIMEDIA_OK:
 
         def set_facteur(self, f: float) -> None:
             """Gain par-dessus le niveau demandé, hors des fondus (skieur
-            hors de la rame : la sono de la rame s'efface — Kevin,
+            hors de la rame : la sono de la rame s'efface — retour d'utilisateur,
             08/10/2026 : « dehors on entend quand même l'annonce de
             fermeture des portes alors qu'on est loin »)."""
             f = max(0.0, min(1.0, float(f)))
@@ -475,7 +475,7 @@ G = 9.80665                 # m/s^2
 # value 3491 m came from public sources but is the published nominal
 # length of the route ; the counter's zero reference is offset a few
 # metres inside the lower station, producing the difference.
-# Fait de Kevin (06/10/2026) : « la distance parcourue réelle de chaque
+# Fait d'un utilisateur (06/10/2026) : « la distance parcourue réelle de chaque
 # trajet c'est 3 474 m » — le PARCOURS d'arrêt à arrêt. La voie, d'un
 # butoir à l'autre, fait 40,52 m de plus : deux tronçons neutres (pente
 # constante, ligne droite) de 20,26 m insérés de part et d'autre de
@@ -567,7 +567,7 @@ CAR_DIAM_M = 3.60               # cylindrical diameter
 
 # Platform / station geometry
 PLATFORM_LEN = 35.0             # platform slope length (m)
-# Positions du CENTRE de la rame à l'arrêt en gare (fait de Kevin,
+# Positions du CENTRE de la rame à l'arrêt en gare (fait d'un utilisateur,
 # 06/10/2026 : « en haut on s'arrête à 1,5 m du butoir ; en bas à 4 ou
 # 5 m, pour la marge d'oscillation et d'allongement »), comptées depuis la
 # face des têtes en bois des butoirs du viewer 3D (stations_builder) —
@@ -592,7 +592,7 @@ def miroir(s: float) -> float:
 
 
 def distance_compteur(s: float, direction: int) -> float:
-    """Compteur de distance du pupitre (fait de Kevin, 06/10/2026) : 0 m
+    """Compteur de distance du pupitre (fait d'un utilisateur, 06/10/2026) : 0 m
     au départ, 3 474 m à l'arrivée, quels que soient le sens et la rame —
     la distance réellement parcourue depuis l'arrêt de départ (STOP_S −
     START_S = PARCOURS)."""
@@ -602,7 +602,7 @@ def distance_compteur(s: float, direction: int) -> float:
 
 def vitesse_roues(st) -> float:
     """Vitesse de la rame elle-même, celle des roues que lit l'indicateur
-    de vitesse du pupitre (fait de Kevin, 06/10/2026) : la poulie plus
+    de vitesse du pupitre (fait d'un utilisateur, 06/10/2026) : la poulie plus
     l'oscillation élastique de la rame au bout de son brin — elle s'écarte
     de la vitesse de la machinerie dans les régimes transitoires."""
     return st.train.v + st.el_v1
@@ -614,7 +614,7 @@ CREEP_V = 0.75                  # creep speed on platform approach (m/s)
                                 # 2026-07 par l'exploitant) : l'entrée en
                                 # gare se fait à ~0,75 m/s, pas 0,3-0,5.
 # CREEP_V reached when the up-going train's nose reaches roller no. 238
-# (upper platform entry, s = 3477.53), NOT BEFORE (Kevin, 06/10/2026) ; the
+# (upper platform entry, s = 3477.53), NOT BEFORE (retour d'utilisateur, 06/10/2026) ; the
 # down-going train then enters the lower platform. Same as PNConstants.
 GALET_238_S = 3477.53
 CREEP_DIST = STOP_S - (GALET_238_S - TRAIN_HALF)   # 35.03 m, centre-position
@@ -697,7 +697,7 @@ def advance_door_timers(tr, dt: float) -> bool:
 # EA EFFECTIF (06/10/2026) : pas de donnée constructeur (Fatzer ne publie
 # pas le module de ses câbles à torons) ; raideur de toute la chaîne
 # (câble, tassement, poulies, machinerie) calée sur l'observation de
-# Kevin, témoin : la rame PLEINE recule d'au moins 1 m pendant
+# Retour d'utilisateur, témoin : la rame PLEINE recule d'au moins 1 m pendant
 # l'embarquement en gare basse → 1,07 m avec 7,0e7 N (1,25e8, soit 1250 mm²
 # à 100 GPa, n'en donnait que 0,60). audit_physique/recul_embarquement.sage.
 CABLE_EA_N = 7.0e7               # N — raideur longitudinale effective EA
@@ -869,7 +869,7 @@ SLOPE_PROFILE: list[tuple[float, float]] = [
     (3368.52, 0.27),   # "diminution de pente finale commence" (t=7:29)
     (3420.52, 0.18),
     (3477.53, 0.10),   # pente de la gare haute atteinte au galet n° 238, à
-                       # l'entrée du quai (fait de Kevin, 06/10/2026 ; la
+                       # l'entrée du quai (fait d'un utilisateur, 06/10/2026 ; la
                        # vidéo la plaçait à 3420, où le tunnel redevient
                        # carré) — même table que SlopeProfile (PWA)
     (3514.52, 0.06),   # Grande Motte platform (square tunnel)
@@ -879,7 +879,7 @@ SLOPE_PROFILE: list[tuple[float, float]] = [
 # Stations (IGN BD TOPO) : Val Claret 45.45189°N 6.89898°E → Grande Motte
 # 45.42352°N 6.89146°E (3029 m). Two right curves separated by a straight
 # section through the passing loop. Curve positions : first and last tilted
-# roller, read on the cab distance counter by Kevin (06/10/2026 ;
+# roller, read on the cab distance counter by a user (06/10/2026 ;
 # s = counter + 38.56, nose of the up-going train) ; angles and bearings :
 # fitted on the IGN line (audit_physique/trace_ign.sage : mean gap 2.5 m,
 # max 10 m, IGN accuracy 10 m). Net heading change 44.4° right.
@@ -975,7 +975,7 @@ _SLOPE_M = _pchip_slopes(SLOPE_PROFILE)
 def gradient_at(s: float) -> float:
     """Gradient at slope distance s — monotone cubic (PCHIP) through
     SLOPE_PROFILE : the slope AND its rate of change are continuous, as on
-    the real line (Kevin, 06/10/2026 : the slope variation before the upper
+    the real line (retour d'utilisateur, 06/10/2026 : the slope variation before the upper
     station was not continuous). Same curve as SlopeProfile (PWA)."""
     t = SLOPE_PROFILE
     if s <= t[0][0]:
@@ -2480,7 +2480,7 @@ class Physics:
                         "info")
 
     # --- Élasticité du câble en marche (2026-10-04) ---------------------
-    # Question de Kevin : « reproduire la physique de l'élasticité du câble
+    # Question d'un utilisateur : « reproduire la physique de l'élasticité du câble
     # en fonction de la longueur déroulée, de la masse de la rame et des
     # variations de vitesse » ; observé en vrai : « la rame oscille déjà au
     # ralenti quand elle rentre, et quand elle part du bas elle oscille
@@ -2878,7 +2878,7 @@ class Physics:
             # Frein de service manuel prioritaire : plein (2,5 m/s²) tant
             # qu'on appuie — ou skieur à pied sur la voie (3D) : la rame
             # est immobilisée tant qu'il n'a pas rejoint une gare ou la
-            # piste (Kevin, 08/10/2026 : « le funi ne devrait pas pouvoir
+            # piste (retour d'utilisateur, 08/10/2026 : « le funi ne devrait pas pouvoir
             # repartir une fois l'évacuation lancée »).
             # qu'on appuie, moteur coupé — même en Défi il permet de
             # tenir/arrêter la rame.
@@ -4139,8 +4139,8 @@ MOTOR_F_BANKS = [172, 178, 184, 190, 196, 202]   # Hz, entiers → boucles 2 s s
 
 
 # Atténuation de l'ambiance sous un clip réel (démarrage moteur, freinage
-# d'approche) — 2026-09-30. Les rapports « diagnostic_son » du PC de Kevin
-# (FAKARAVA, Windows 10, 30/09) ont tranché le « silence sous 1 m/s » : les
+# d'approche) — 2026-09-30. Les rapports « diagnostic_son » du PC d'un utilisateur
+# (un PC sous Windows 10, 30/09) ont tranché le « silence sous 1 m/s » : les
 # boucles jouaient bien, mais à 0,136 = plancher de fluage 0,45 × atténuation
 # sous le clip 0,55 × atténuation sous l'annonce 0,55, pendant que le clip de
 # freinage, lui, est quasi muet après sa 4e seconde (−29 dBFS contre −12 pour
@@ -4187,7 +4187,7 @@ def _fx_duck_strength(env_db: list, pos_ms: float) -> float:
     return max(0.0, min(1.0, (env_db[i] + 30.0) / 10.0))
 
 
-# Son de la vue « salle des machines » (2026-09-30, demande de Kevin) :
+# Son de la vue « salle des machines » (2026-09-30, demande d'un utilisateur) :
 # enregistrement réel de la gare haute, vidéo « [FUNI284] Funiculaire du
 # Perce-Neige | Tignes (marche complète à 12 m/s) », caméra fixe sur la roue
 # aval (août 2013). Deux boucles : la salle au repos, et la machinerie à
@@ -4546,7 +4546,7 @@ class SoundSystem:
         # machines au gain donné par la 3D (distance), cf. _buzzer_a_jouer
         self.skieur_machinerie = 0.0
         self._mr_level = 1.0
-        # Musiques d'ambiance des gares (Kevin, 07/10/2026 : l'ouverture
+        # Musiques d'ambiance des gares (retour d'utilisateur, 07/10/2026 : l'ouverture
         # d'orchestre en attente gare du bas, la chanson du Toréador en gare
         # du haut) : sons/musique/gare_basse.mp3 et gare_haute.mp3 — hors du
         # dépôt public (enregistrements). Jouées en boucle quand le skieur
@@ -5186,7 +5186,7 @@ class SoundSystem:
         if abs(mr_goal - self._mr_mix) < 0.002:
             self._mr_mix = mr_goal
         cabine = 1.0 - self._mr_mix
-        # Kevin, 07/10/2026 : « sur le bord du quai, alors que le truc est
+        # Retour d'utilisateur, 07/10/2026 : « sur le bord du quai, alors que le truc est
         # parti, j'entends le son comme si j'étais dedans »
         sk_goal = 1.0 if self.skieur_dehors else 0.0
         self._sk_mix += (sk_goal - self._sk_mix) * (1.0 - math.exp(-dt / 0.4))
@@ -5460,7 +5460,7 @@ class SoundSystem:
                 return
             nom = "gare_basse.mp3" if gare == 1 else "gare_haute.mp3"
             # Les enregistrements ne sont ni dans le dépôt public ni dans les
-            # paquets (Kevin, 08/10/2026 : « mets les sons en local avec le
+            # paquets (retour d'utilisateur, 08/10/2026 : « mets les sons en local avec le
             # programme PC ») : la première fois, on les joue depuis le
             # serveur de la PWA en les TÉLÉCHARGEANT dans le profil ; ensuite
             # ils sont locaux. sons/musique/ à côté du programme est lu en
@@ -5468,7 +5468,7 @@ class SoundSystem:
             chemin = self._musique_locale(nom)
             if chemin is None:
                 # pas encore là : on télécharge, et tick() lance la musique
-                # dès que le fichier est complet (Kevin, 09/10/2026 : « tu mets
+                # dès que le fichier est complet (retour d'utilisateur, 09/10/2026 : « tu mets
                 # que tu la récupères mais elle ne se joue pas, il faut
                 # ressortir et rerentrer » — le flux direct ne démarrait pas)
                 self._telecharger_musique(nom)
@@ -5485,7 +5485,7 @@ class SoundSystem:
                 self._musique_audio = _AudioOutput()
                 self._musique_player.setAudioOutput(self._musique_audio)
                 self._musique_player.setLoops(QMediaPlayer.Loops.Infinite)
-            # gare basse plus fort (Kevin, 09/10/2026, deux fois : « remonte un
+            # gare basse plus fort (retour d'utilisateur, 09/10/2026, deux fois : « remonte un
             # peu le volume de la musique d'ambiance gare du bas »)
             self._musique_audio.setVolume(0.42 if gare == 1 else 0.22)
             if self._musique_chemin != cle:
@@ -5738,7 +5738,7 @@ class SoundSystem:
                 self._fx_player.setSource(QUrl.fromLocalFile(spath))
                 self._fx_loaded_path = spath
             # son de CABINE : au niveau de la cabine dès la première image —
-            # le skieur dehors l'entendait un instant à plein volume (Kevin,
+            # le skieur dehors l'entendait un instant à plein volume (retour d'utilisateur,
             # 09/10/2026 : « quand la décélération passe 1,0 m/s, j'entends
             # très brièvement l'ambiance de la rame au milieu de rien »)
             self._fx_audio.setVolume(0.70 * getattr(self, "_cabine_courant", 1.0))
@@ -6082,7 +6082,7 @@ class AutoOps:
         self._limp_dwell = 0.0      # temporisation de reprise à l'arrêt
         # Skieur de la vue 3D (posé par GameWidget, message de la 3D) : en
         # gare hors de la voiture, on l'attend ; monté pendant l'arrêt et
-        # passé la ligne des portes, on ferme 1,5 s plus tard (Kevin,
+        # passé la ligne des portes, on ferme 1,5 s plus tard (retour d'utilisateur,
         # 07/10/2026 : « qu'il ferme les portes une fois qu'il a détecté que
         # j'étais à l'intérieur du funi ») — même règle que la PWA.
         self.skieur_a_bord = False
@@ -6090,7 +6090,7 @@ class AutoOps:
         self.skieur_bloque = False  # à pied sur la voie : on ne part pas, sans limite
         self._skieur_vu = False     # vu sur le quai pendant cet arrêt
         self._skieur_a_bord_t = 0.0
-        # retenue plafonnée (Kevin, 07/10/2026 : « la séquence reste bloquée
+        # retenue plafonnée (retour d'utilisateur, 07/10/2026 : « la séquence reste bloquée
         # à embarquement 6 s… elle devrait se poursuivre toute seule ») :
         # passé RETENUE_MAX_S d'attente à cet arrêt, la rame part
         self._skieur_retenue_t = 0.0
@@ -6107,7 +6107,7 @@ class AutoOps:
         if self.enabled:
             self._refresh_day_counters()
             self.phase_t = 0.0
-            # Kevin, 08/10/2026 : « en mode exploitation auto tu repasses
+            # Retour d'utilisateur, 08/10/2026 : « en mode exploitation auto tu repasses
             # tout seul en mode normal, sinon ça fait n'importe quoi » —
             # l'automate ne conduit qu'en mode normal (en Défi plus de
             # sécurités, en Pannes le tirage de pannes).
@@ -6197,7 +6197,7 @@ class AutoOps:
                 state.ghost_ready_timer = 0.0
                 state.ghost_ready_delay = 0.0
                 state.departure_buzzer_remaining = 0.0
-                # consigne rendue à 100 %, comme toujours à quai (Kevin,
+                # consigne rendue à 100 %, comme toujours à quai (retour d'utilisateur,
                 # 09/10/2026 : « quand j'ai appuyé sur A j'ai eu un refus car
                 # la consigne de vitesse était tombée à 0 alors que c'est
                 # 100 % d'habitude ») — l'embarquement de l'automate la
@@ -6524,7 +6524,7 @@ class AutoOps:
             # vide en bas, 35 s pleine, 0 s en haut (mais le contrepoids en
             # bas impose alors ≈ 26 s). Bornes : 3 s mini (clip d'arrêt),
             # 45 s maxi (garde-fou).
-            # le rebond de CETTE rame seulement (Kevin, 07/10/2026 : « en
+            # le rebond de CETTE rame seulement (retour d'utilisateur, 07/10/2026 : « en
             # haut les portes peuvent s'ouvrir après l'arrêt car il n'y a
             # pas d'oscillation, alors qu'en bas il faut attendre ») : en
             # haut le brin est court (millimètres) ; le contrepoids d'en bas
@@ -7120,7 +7120,7 @@ class GameWidget(QWidget):
         Qt.Key.Key_F7, Qt.Key.Key_F8, Qt.Key.Key_F9, Qt.Key.Key_F11,
         Qt.Key.Key_O,
         Qt.Key.Key_Plus, Qt.Key.Key_Equal, Qt.Key.Key_Minus,
-        # ni la conduite ni la rame : klaxon, phares, éclairages (Kevin,
+        # ni la conduite ni la rame : klaxon, phares, éclairages (retour d'utilisateur,
         # 09/10/2026 : « je ne peux ni klaxonner ni allumer des phares »)
         Qt.Key.Key_K, Qt.Key.Key_H, Qt.Key.Key_J, Qt.Key.Key_C,
     ))
@@ -7417,7 +7417,7 @@ class GameWidget(QWidget):
     # ----- pilote automatique du voyage (touche A) ----------------------
 
     def _depart_si_pret(self, st) -> None:
-        """Le départ sans bouton DÉPART (Kevin, 08/10/2026 : « dans la vraie
+        """Le départ sans bouton DÉPART (retour d'utilisateur, 08/10/2026 : « dans la vraie
         vie on met PRÊT et ça part quand tout est bon, comme pour la PWA ») :
         PRÊT armé, l'autre rame prête, portes fermées et aucun verrou de
         traction → le chemin de la touche Z, sans la touche. Un verrou
@@ -7482,7 +7482,7 @@ class GameWidget(QWidget):
                 self._virtual_key(k)
         elif "perf" in m:
             # réglages graphiques de la 3D (PerfManager) : on sait où elle
-            # en est (Kevin, 08/10/2026 : « sur le PC du père c'est super
+            # en est (retour d'utilisateur, 08/10/2026 : « sur le PC du père c'est super
             # pixélisé ») — la résolution n'est plus réduite qu'en dernier
             # recours, à 85 % au plus bas
             add_event(self.state, "perf",
@@ -7491,7 +7491,7 @@ class GameWidget(QWidget):
                       "info")
         elif "skieur_prep" in m:
             # préparation du décor 3D du skieur : texte d'avancement, puis
-            # "" avec la durée quand c'est prêt (Kevin, 08/10/2026 : « on ne
+            # "" avec la durée quand c'est prêt (retour d'utilisateur, 08/10/2026 : « on ne
             # sait pas si ça marche ou pas, il n'y a pas de message »)
             txt = str(m.get("skieur_prep", ""))
             if txt:
@@ -7517,7 +7517,7 @@ class GameWidget(QWidget):
     def _pupitre_3d(self, nom: str, enfonce: bool) -> None:
         """Bouton du pupitre de la cabine 3D → la touche du PC qui fait la
         même chose (mêmes verrous, mêmes annonces). Sans ce relais, la 3D
-        montrait le geste et rien ne suivait (Kevin, 07/10/2026 : « sur le
+        montrait le geste et rien ne suivait (retour d'utilisateur, 07/10/2026 : « sur le
         PC les boutons marchent mais il ne se passe rien ensuite »)."""
         tr = self.state.train
         qk = self._PUPITRE_TENUS.get(nom)
@@ -7599,7 +7599,7 @@ class GameWidget(QWidget):
 
     def _buzzer_a_jouer(self, at_upper: bool, at_station: bool):
         """Quel buzzer de quai on entend au départ : None (aucun), True (gare
-        haute), False (gare basse). Kevin, 07/10/2026 : « les buzzers sonnent
+        haute), False (gare basse). retour d'utilisateur, 07/10/2026 : « les buzzers sonnent
         leurs sons respectifs dans les gares du bas et du haut et on les
         entend si on y est, même si ça redémarre au milieu du tunnel ; par
         contre si on est dans la rame […] on n'entend pas les buzzers des
@@ -7639,7 +7639,7 @@ class GameWidget(QWidget):
         if st.train.autopilot:
             self._autopilot_disengage("skier mode", "mode skieur")
         # Passer en skieur NE TOUCHE PAS à l'exploitation : automatique ou
-        # non, on reste comme avant (Kevin, 08/10/2026 : « dès que je passe
+        # non, on reste comme avant (retour d'utilisateur, 08/10/2026 : « dès que je passe
         # en mode skieur ça repasse en exploitation auto, du coup pendant
         # l'évacuation le funi redémarre et m'écrase »). Seule aide : à quai
         # portes fermées, hors voyage, on les ouvre pour monter.
@@ -7672,7 +7672,7 @@ class GameWidget(QWidget):
         self._key_state.clear()
         self._appliquer_etat_skieur()
         ao = self.auto_ops
-        # CONDUIRE ne coupe plus l'exploitation auto (Kevin, 09/10/2026 :
+        # CONDUIRE ne coupe plus l'exploitation auto (retour d'utilisateur, 09/10/2026 :
         # « quand je suis passé en mode conduite et que j'ai quitté le mode
         # skieur, le mode exploitation auto X s'est désactivé ») : X la coupe
         ao.force_any_hours = self._skieur_heures      # 24/7 n'était que pour le skieur
@@ -8366,7 +8366,7 @@ class GameWidget(QWidget):
         # même si elle varie (ou s'annule) en cours de traversée.
         _tr_x = st.train
         # skieur à bord de la rame d'en face : SON passage dans l'évitement
-        # (Kevin, 09/10/2026 : « les sons de l'évitement ont le timing de
+        # (retour d'utilisateur, 09/10/2026 : « les sons de l'évitement ont le timing de
         # l'autre rame »)
         _en_face = self._skieur and getattr(self, "_en_face", False)
         _s_x = st.ghost_s if _en_face else _tr_x.s
@@ -8477,7 +8477,7 @@ class GameWidget(QWidget):
                               "Autre rame prête",
                               "info")
             # PRÊT suffit : les deux rames prêtes, portes fermées, aucun
-            # verrou → le départ part tout seul (Kevin, 08/10/2026)
+            # verrou → le départ part tout seul (retour d'utilisateur, 08/10/2026)
             self._depart_si_pret(st)
             # Pending mid-tunnel incident : engaged when the driver
             # pulled a latched stop (E-stop, emergency, vigilance loss)
@@ -8629,7 +8629,7 @@ class GameWidget(QWidget):
             # LA bonne annonce (message réel multilingue de la cabine) —
             # le charabia « please do not leave… » signalé plus tôt venait
             # d'une AUTRE source (ambiance de quai contaminée, corrigée en
-            # v1.12.18/27), pas d'ici : réactivée à la demande de Kevin
+            # v1.12.18/27), pas d'ici : réactivée à la demande d'un utilisateur
             # (2026-07-24). Diffusable aussi via le menu ANNONCES.
             # En Normal/Auto : attendre le fluage (|v| < 1) pour que le
             # message tombe quand les passagers peuvent sortir. En DÉFI :
@@ -8926,7 +8926,7 @@ class GameWidget(QWidget):
             self.sounds.play_door_motion()
 
     def _suivre_portes_en_face(self, st) -> None:
-        """Portes de la rame d'en face à l'arrivée (09/10/2026, Kevin : « dans
+        """Portes de la rame d'en face à l'arrivée (09/10/2026, retour d'utilisateur : « dans
         la rame opposée, l'ouverture des portes c'est le timing de l'autre
         rame ») : elles s'ouvrent quand SON brin est stabilisé (enveloppe
         < AUTO_SETTLE_M après AUTO_SETTLE_MIN_S, au plus AUTO_SETTLE_MAX_S).
@@ -9320,7 +9320,7 @@ class GameWidget(QWidget):
             self._profile_zoom = 1.0
         elif k == Qt.Key.Key_O and self._skieur:
             # en skieur, la caméra est la sienne : changer de vue ne ferait
-            # que déplacer le SON (Kevin, 07/10/2026 : « un micmac de vues »)
+            # que déplacer le SON (retour d'utilisateur, 07/10/2026 : « un micmac de vues »)
             add_event(st, "orbit",
                       "3D view: leave skier mode first (F9)",
                       "Vue 3D : quittez d'abord le mode skieur (F9)", "warn")
@@ -10431,7 +10431,7 @@ class GameWidget(QWidget):
         view_w = rect.width() - 20
 
         AXE_W = 66.0                    # bande d'axe des altitudes, à gauche
-        # === Vue en COUPE (refonte du 06/10/2026, demande de Kevin) ========
+        # === Vue en COUPE (refonte du 06/10/2026, demande d'un utilisateur) ========
         # Le terrain est le relief RÉEL au-dessus de la ligne (profil_coupe.py,
         # tiré du MNT par tools_profil_coupe.py), prolongé vers le lac en aval
         # et jusqu'au sommet de la Grande Motte en amont ; derrière, les crêtes
@@ -13843,7 +13843,7 @@ class GameWidget(QWidget):
         # tube grossi doit rester sous la surface), et entoure la gare amont
         couvert = 12.0 + 4.6 * k_ech
         # … sauf en approchant de la gare amont, qui affleure le glacier (le
-        # haut de la gare est dehors, fait de Kevin)
+        # haut de la gare est dehors, fait d'un utilisateur)
         x_gare_h = geom_at(QUAI_HAUT_DEBUT_S - 15.0)[0]
         surf = []
         for x, z in coupe["surface"]:
@@ -13992,7 +13992,7 @@ class GameWidget(QWidget):
             p.drawPolyline(ligne_tube(0.0, s_vis0, s_vis1, n_t))
             # sortie de secours (galet 145, à droite en montant) : la galerie
             # monte du tube à la surface, où elle débouche au bord de la
-            # piste rouge (fait de Kevin, 06/10/2026)
+            # piste rouge (fait d'un utilisateur, 06/10/2026)
             s_ss = 2112.0 + START_S + TRAIN_HALF
             x_ss, _z = geom_at(s_ss)
             if x_vis0 - 60.0 < x_ss < x_vis1 + 60.0:
@@ -14034,7 +14034,7 @@ class GameWidget(QWidget):
         # --- distance parcourue : bornes kilométriques JAUNES posées sur la
         #     voie, au compteur du pupitre (0 au départ de Val Claret,
         #     3 474 à l'arrivée ; nez de la rame montante) — retour de
-        #     Kevin : altitudes et distances, toutes deux « en m », se
+        #     Retour d'utilisateur : altitudes et distances, toutes deux « en m », se
         #     confondaient
         p.setFont(_cached_font("Segoe UI", 8, QFont.Weight.Bold))
         fm_km = QFontMetricsF(p.font())
@@ -14250,7 +14250,7 @@ class GameWidget(QWidget):
         # brin de la RAME 1 entre au sommet de la roue aval : quand elle
         # monte (vitesse machinerie > 0), le sommet de la roue aval part
         # vers la salle → sens horaire à l'écran.
-        # 🔴 Retour de Kevin (06/10/2026) : « les roues ne tournent pas à la
+        # 🔴 Retour d'un utilisateur (06/10/2026) : « les roues ne tournent pas à la
         # bonne vitesse ni dans le bon sens ». À 12 m/s une roue de 4,16 m
         # tourne de 5,8 rad/s ; avec 12 ouvertures espacées de 30° et une
         # vue redessinée 20 à 30 fois par seconde, le pas apparent (12 à
@@ -14328,7 +14328,7 @@ class GameWidget(QWidget):
     def _draw_telepherique(self, p: QPainter, w2s, t: dict, px_m: float, k: float,
                            x_vis0: float, x_vis1: float) -> None:
         """Téléphérique de la Grande Motte, qui part dans la foulée du
-        funiculaire (demande de Kevin, 06/10/2026) : bicâble à va-et-vient
+        funiculaire (demande d'un utilisateur, 06/10/2026) : bicâble à va-et-vient
         Von Roll 1975, gare aval 3 034 m, un pylône en treillis, gare amont
         3 456 m ; porteurs en chaînette (cosh) ; deux cabines de 115 + 1
         places qui se croisent, 5 min de trajet à 10 m/s (5,2 m/s au pylône).
@@ -14712,7 +14712,7 @@ class GameWidget(QWidget):
             value=abs(vitesse_roues(st)),
             maxv=15.0,
             label=f"m/s  ({abs(vitesse_roues(st)) * 3.6:4.1f} km/h)",
-            big_text=f"{abs(vitesse_roues(st)):5.2f}",   # 2 décimales (Kevin, 06/10/2026)
+            big_text=f"{abs(vitesse_roues(st)):5.2f}",   # 2 décimales (retour d'utilisateur, 06/10/2026)
             warn=V_MAX,
             crit=V_MAX + 1.0,
         )
@@ -14847,7 +14847,7 @@ class GameWidget(QWidget):
         # READY [V] — latches the "own cabin ready" flag. Colour changes
         # with the state machine: dim when idle, amber while waiting for
         # the other cabin, green once both cabins are ready.
-        # Plus de bouton DÉPART (Kevin, 08/10/2026 : « dans la vraie vie on
+        # Plus de bouton DÉPART (retour d'utilisateur, 08/10/2026 : « dans la vraie vie on
         # met PRÊT et ça part quand tout est bon, comme pour la PWA ») : le
         # départ suit tout seul, l'autre rame prête — _depart_si_pret.
         if st.trip_started:
@@ -14919,7 +14919,7 @@ class GameWidget(QWidget):
         self._hit_zones.append(
             (QRectF(col1, row0, btn_w, btn_h), int(Qt.Key.Key_4), False)
         )
-        # Rangée 0 : sécurité — klaxon à côté des arrêts (Kevin, 09/10/2026 :
+        # Rangée 0 : sécurité — klaxon à côté des arrêts (retour d'utilisateur, 09/10/2026 :
         # « vire le bouton veille et aide, rajoute exploitation auto X et mode
         # M, et réorganise le panneau ») ; la veille reste au clavier (G / W)
         self._draw_button(p, col2, row0, btn_w, btn_h,
@@ -16157,8 +16157,8 @@ class GameWidget(QWidget):
               "Vue cabine 3D : cliquez les boutons du pupitre (portes, éclairage, klaxon, ±VITE, MONTÉE, arrêts) — ils agissent comme les touches."),
             T("F9 skier: walk the stations (ZQSD/arrows, Shift runs, V 1st/3rd person), board, ride; the line runs by itself and waits for you.",
               "F9 skieur : marchez dans les gares (ZQSD/flèches, Maj pour courir, V 1re/3e pers.), montez, voyagez ; la ligne tourne seule et vous attend."),
-            T("Skiing: outside on the snow, E puts the skis on. Q/D turn, Z pushes, S snowplough, Shift tuck; marked pistes, Kevin's ghost to beat down to Val Claret.",
-              "Ski : dehors sur la neige, E pour chausser. Q/D tourner, Z pousser, S chasse-neige, Maj schuss ; pistes balisées, le fantôme de Kevin à battre jusqu'à Val Claret."),
+            T("Skiing: outside on the snow, E puts the skis on. Q/D turn, Z pushes, S snowplough, Shift tuck; marked pistes, the ghost to beat down to Val Claret.",
+              "Ski : dehors sur la neige, E pour chausser. Q/D tourner, Z pousser, S chasse-neige, Maj schuss ; pistes balisées, le fantôme à battre jusqu'à Val Claret."),
             T("Train stopped in the tunnel: U (or EVACUATE) removes the yellow emergency panels either side of the windshield; down onto the track, the right-hand service stairs lead to a station or to the mid-tunnel gallery and its piste. The AUTO dashboard button (or the skier's EXPLOIT. button) still toggles auto-operation.",
               "Rame arrêtée en tunnel : U (ou ÉVACUER) enlève les panneaux jaunes d'issue de secours de part et d'autre du pare-brise ; sur la voie, l'escalier de droite ramène en gare ou à la galerie du milieu et sa piste ; tant qu'il est à pied sur la voie, la rame est immobilisée. Le bouton AUTO du tableau de bord (ou EXPLOIT. du skieur) commande toujours l'exploitation."),
             T("F4: 3D cabin view. On Linux Wayland the app switches to XWayland to embed it; PERCE_NEIGE_KEEP_WAYLAND=1 keeps Wayland (separate window).",
@@ -16645,7 +16645,7 @@ class MainWindow(QMainWindow):
     def _install_help_menu(self) -> None:
         bar = self.menuBar()
         menu = bar.addMenu(self._tr("&Help", "&Aide"))
-        # (Kevin, 07/10/2026 : « tu peux compléter manuel, menu aide, menu
+        # (retour d'utilisateur, 07/10/2026 : « tu peux compléter manuel, menu aide, menu
         # F1, readme avec tous les nouveaux ajouts »)
         act_f1 = menu.addAction(
             self._tr("Shortcuts and tips (F1)", "Raccourcis et conseils (F1)"))

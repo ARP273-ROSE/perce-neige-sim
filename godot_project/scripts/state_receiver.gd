@@ -27,7 +27,7 @@ const LINK_QUIT_S: float = 30.0
 var udp: PacketPeerUDP = null
 ## Retour vers le PC (port + 1) : boutons du pupitre 3D, mode skieur. Sans
 ## lui, un clic sur le pupitre de la vue 3D embarquée ne faisait que
-## montrer le geste (Kevin, 07/10/2026 : « sur le PC les boutons marchent
+## montrer le geste (retour d'utilisateur, 07/10/2026 : « sur le PC les boutons marchent
 ## mais il ne se passe rien ensuite »).
 var _retour: PacketPeerUDP = null
 var _last_skieur: int = -1

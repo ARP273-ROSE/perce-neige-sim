@@ -1,6 +1,6 @@
 class_name SkieurJoueur
 extends CharacterBody3D
-## Le skieur jouable (demande de Kevin du 07/10/2026 : « un skieur capable
+## Le skieur jouable (demande d'un utilisateur du 07/10/2026 : « un skieur capable
 ## de monter les escaliers des gares et de marcher à l'intérieur sans passer
 ## au travers du plancher, des murs, des portes ou du wagon, qui peut
 ## marcher dans le wagon, voyager dans le funiculaire et aller au poste de
@@ -29,7 +29,7 @@ const GRIMPE_MAX: float = 1.25          # à pied hors des gares (`grimpe`) : on
                                         # hisse sur un rebord — fosse entre les
                                         # rails : fond 70 cm sous la dalle, et le
                                         # rail à enjamber est à 1,04 m du fond
-                                        # (Kevin, 08/10/2026 : « coincé entre les
+                                        # (retour d'utilisateur, 08/10/2026 : « coincé entre les
                                         # deux rails »)
 const V_MARCHE: float = 1.45
 const V_COURSE: float = 3.3
@@ -75,7 +75,7 @@ var _corps: MultiMeshInstance3D = null
 var _skis: MultiMeshInstance3D = null
 var _images: Array = []                # maillages de la marche (+ debout en 0)
 
-# --- ski (Kevin, 07/10/2026 : « arrivé en haut, il est capable de skier sur
+# --- ski (retour d'utilisateur, 07/10/2026 : « arrivé en haut, il est capable de skier sur
 # le décor pour redescendre ») -------------------------------------------------
 const MU_NEIGE: float = 0.05            # frottement ski / neige damée
 const MU_ARRET: float = 0.12            # immobile, il tient sur une pente douce (≈ 7°)
@@ -85,7 +85,7 @@ const OMEGA_SKI: float = 1.8            # rad/s : pivot des skis à basse vitess
 const A_VIRAGE: float = 6.5             # m/s² : accélération latérale d'un virage coupé
 const ADHERENCE: float = 5.0            # 1/s : la carre absorbe la vitesse en travers
 const DEC_CHASSE: float = 3.2           # m/s² : chasse-neige à fond
-const V_PAS: float = 3.0                # m/s : pas de patineur sur le plat (Kevin : 3-4 m/s au départ)
+const V_PAS: float = 3.0                # m/s : pas de patineur sur le plat (retour d'utilisateur : 3-4 m/s au départ)
 const A_PAS: float = 2.0                # m/s² : poussée des bâtons
 const V_MAX_SKI: float = 30.0
 ## Relief (posé par main.gd) : le sol de la glisse.
@@ -112,7 +112,7 @@ var _pousse: bool = false                # il pousse vraiment (relevé au pas pr
 var _image_poussee: int = -1
 var _skis_pieds_v: Mesh = null           # chasse-neige : skis en V
 var _posture: int = 0                    # 0 glisse, 1 schuss, 2 chasse-neige
-## Chute (Kevin, 07/10/2026 : « si je vais dans les décors trop vite on peut
+## Chute (retour d'utilisateur, 07/10/2026 : « si je vais dans les décors trop vite on peut
 ## déchausser et s'exploser dans la neige, plus qu'à avoir une touche
 ## rechausser ») : un mur (bâtiment, quai) à plus de V_CHUTE_MUR, la roche
 ## (pente > 37°, là où la neige ne tient pas) à plus de V_CHUTE_ROCHE → à
@@ -120,7 +120,7 @@ var _posture: int = 0                    # 0 glisse, 1 schuss, 2 chasse-neige
 const V_CHUTE_MUR: float = 6.0
 const V_CHUTE_ROCHE: float = 8.0
 const CHUTE_S: float = 2.5
-## Kevin, 08/10/2026 : « je déchausse tout le temps, désactive ce truc » —
+## Retour d'utilisateur, 08/10/2026 : « je déchausse tout le temps, désactive ce truc » —
 ## le critère « roche » (pente > 37°) tombait sur toute piste raide. Gardé,
 ## éteint.
 const CHUTES_ACTIVES: bool = false
@@ -286,7 +286,7 @@ func basculer_ski() -> String:
 	if not dehors(relief):
 		# dans un bâtiment : non ; SOUS la surface (on a traversé la montagne
 		# à pied, là où le relief n'avait pas encore de collision) : on
-		# remonte sur la neige (Kevin, 08/10/2026 : « il croit que je suis
+		# remonte sur la neige (retour d'utilisateur, 08/10/2026 : « il croit que je suis
 		# dedans et m'empêche de chausser »)
 		var tp: Array = relief.terrain_piece(global_position.x, global_position.z)
 		if not is_nan(float(tp[0])) and bool(tp[1]):
@@ -320,7 +320,7 @@ func _apparence_ski() -> void:
 	_visuel.position.y = Y_SKI if chausse else 0.0
 
 
-## Claquement sec d'un pas en chaussures de ski (Kevin, 09/10/2026 : « quand
+## Claquement sec d'un pas en chaussures de ski (retour d'utilisateur, 09/10/2026 : « quand
 ## je marche sur les escaliers le long du quai sans les skis, rajoute un
 ## claquement sec à chaque pas ») : sons de tools_sons_skieur.py, trois
 ## variantes au hasard, hauteur légèrement variée, son POSITIONNEL (on
@@ -388,7 +388,7 @@ func _poser_un_baton(k: int, main_p: Vector3, pointe: Vector3) -> void:
 
 ## Bâtons selon la posture : en glisse et en chasse-neige plantés de part et
 ## d'autre ; en SCHUSS, poignées dans les mains devant le visage, bâtons
-## serrés sous les bras, pointes vers l'arrière et un peu en l'air (Kevin,
+## serrés sous les bras, pointes vers l'arrière et un peu en l'air (retour d'utilisateur,
 ## 09/10/2026 : « en schuss les bâtons, c'est pas ça »).
 func _poser_batons(p: int) -> void:
 	for k in range(2):
@@ -852,7 +852,7 @@ func _camera_ski(delta: float) -> void:
 			cam_pitch = maxf(cam_pitch - delta * 1.5, -1.2)
 
 
-## Joystick à ski, comme dans les jeux (09/10/2026, Kevin : « refonds le
+## Joystick à ski, comme dans les jeux (09/10/2026, retour d'utilisateur : « refonds le
 ## pilotage au joystick, c'est le binz ») : on POINTE le joystick là où l'on
 ## veut aller, par rapport à l'écran — haut = tout droit dans l'axe de la
 ## caméra, à droite = vers la droite de l'écran… Les skis tournent vers ce

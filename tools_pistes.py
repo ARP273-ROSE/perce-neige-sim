@@ -5,7 +5,7 @@
                                                     relief_ortho.jpg)
       → godot_project/scripts/pistes_donnees.gd    (tracés, noms, couleurs)
 
-Demande de Kevin (07/10/2026) : « tu me mets de la neige sur la piste, ça
+Demande d'un utilisateur (07/10/2026) : « tu me mets de la neige sur la piste, ça
 m'évitera d'abîmer mes skis » ; « tu as balisé les pistes ? ».
 
 Source : OpenStreetMap (© contributeurs OpenStreetMap, licence ODbL),
@@ -29,7 +29,7 @@ from PIL import Image, ImageDraw, ImageFilter
 
 # emprise et repère : les mêmes que tools_relief3d.py
 LAT_O, LON_O = 45.45188591, 6.89898136
-LAT0, LAT1 = 45.375, 45.530                  # domaine Tignes – Val d'Isère : des Brévières au glacier du Pissaillas (+ marge), Kevin 09/10/2026
+LAT0, LAT1 = 45.375, 45.530                  # domaine Tignes – Val d'Isère : des Brévières au glacier du Pissaillas (+ marge), retour d'utilisateur 09/10/2026
 LON0, LON1 = 6.820, 7.090
 M_LAT = 111320.0
 M_LON = 111320.0 * math.cos(math.radians(LAT_O))

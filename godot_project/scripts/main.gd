@@ -80,7 +80,7 @@ var mode_skieur: bool = false
 ## vue 3D embarquée dans le PC : sons du quai et du dehors (le PC joue ceux
 ## de la rame), dernier état du skieur envoyé au PC
 var sons_skieur: SonsSkieur = null
-## pistes balisées, fantôme des descentes de Kevin (à ski)
+## pistes balisées, fantôme des descentes d'un utilisateur (à ski)
 var domaine: DomaineSkiable = null
 ## la boucle toute seule (bouton AUTO du skieur, touche X)
 var skieur_auto: SkieurAuto = null
@@ -219,7 +219,7 @@ func _ready() -> void:
 		# geste utilisateur + audioSession 'playback' anti-mode-silencieux
 		# iPad) est géré par le hook JS injecté via html/head_include du
 		# preset d'export — plus de voile ni de bip de test (retirés à la
-		# demande de Kevin, essai iPad 2026-07-12).
+		# demande d'un utilisateur, essai iPad 2026-07-12).
 		if "--autotest" in OS.get_cmdline_user_args():
 			auto_operator.enabled = true
 			auto_operator._enter_initial_state()
@@ -937,7 +937,7 @@ func _process(delta: float) -> void:
 	elif mode_skieur and skieur != null:
 		# là où est le SKIEUR : dans la rame d'en face, l'attache de son câble
 		# et le bout de câble jusqu'au premier galet restaient cachés (« trop
-		# loin » de la rame pilotée) — Kevin, 09/10/2026 : « le câble s'enlève
+		# loin » de la rame pilotée) — retour d'utilisateur, 09/10/2026 : « le câble s'enlève
 		# avant la rame devant, dans la rame opposée à celle choisie »
 		s_cam = _s_du_skieur()
 	track.update_galets_rames(physics.s_render, physics.ghost_s_render(), s_cam,
@@ -1102,7 +1102,7 @@ func _update_announcement_triggers() -> void:
 	# Portes viennent de s'ouvrir → annonce "sortie des passagers" (arrivée gare).
 	# DÉSACTIVÉ (retour d'essai 2026-07-12) : les portes ne s'ouvrent qu'au
 	# demi-tour automatique du terminus, donc cette annonce partait
-	# systématiquement « juste après le demi-tour » — Kevin l'entendait comme
+	# systématiquement « juste après le demi-tour » — l'utilisateur l'entendait comme
 	# une annonce de panne intempestive. Elle reste diffusable À LA DEMANDE
 	# via le bouton ANNONCES (menu tactile). Repasser AUTO_EXIT_ANNOUNCE à
 	# true pour restaurer le comportement automatique.
@@ -1123,7 +1123,7 @@ func _update_announcement_triggers() -> void:
 	# (montée, à ANNONCE_ARRIVEE_D m de l'arrêt), une fois par trajet.
 	# Retour d'essai Android 2026-07 : l'ancienne version la jouait à
 	# l'allumage à quai puis TOUTES LES 30 s → annonce fantôme au boot.
-	# RÉACTIVÉE (Kevin 2026-07-24) : c'est LA bonne annonce d'accueil ; le
+	# RÉACTIVÉE (retour d'utilisateur 2026-07-24) : c'est LA bonne annonce d'accueil ; le
 	# charabia « please do not leave… » venait d'une autre source
 	# (ambiance de quai contaminée, corrigée) — approche finale gare haute,
 	# une fois par trajet. Diffusable aussi via le bouton ANNONCES.
@@ -1275,7 +1275,7 @@ func _commande_pupitre(nom: String, enfonce: bool) -> void:
 	if client_mode:
 		# embarqué dans le PC : c'est le PC qui pilote la rame, on lui
 		# transmet l'appui (« sur le PC les boutons marchent mais il ne se
-		# passe rien ensuite », Kevin, 07/10/2026) ; clé EN MARCHE sur
+		# passe rien ensuite », retour d'utilisateur, 07/10/2026) ; clé EN MARCHE sur
 		# arrêt : MONTÉE refusée, comme dans la PWA
 		var refuse: bool = nom == "montee" and enfonce and not cabin.pupitre_en_marche()
 		if state_receiver != null and not refuse:
@@ -1361,7 +1361,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			return
 	# Vue 3D du PC, hors skieur : c'est le PC qui conduit. Le clavier reste
 	# souvent dans la fenêtre 3D (clic pour regarder en mode skieur) : toutes
-	# les touches de conduite lui sont passées, appui ET relâché (Kevin,
+	# les touches de conduite lui sont passées, appui ET relâché (retour d'utilisateur,
 	# 09/10/2026 : « je repasse en mode conduite en exploitation auto, tout
 	# est figé, je ne peux pas couper l'exploitation auto ni klaxonner ni
 	# allumer les phares » — seules J et C passaient).
@@ -1379,7 +1379,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			basculer_ski()
 			return
 		# X = exploitation auto partout, comme sur le PC ; B = BOUCLE du skieur
-		# (Kevin, 09/10/2026 : « il y a un problème entre la touche X et le
+		# (retour d'utilisateur, 09/10/2026 : « il y a un problème entre la touche X et le
 		# bouton EXPLOIT. du mode skieur » — X lançait la boucle)
 		if mode_skieur and event.keycode == KEY_X:
 			var actif: bool = _exploitation_pc if client_mode else (auto_operator != null and auto_operator.enabled)
@@ -1553,7 +1553,7 @@ func do_reverse() -> void:
 		return
 	# « Retour en gare » : SEULEMENT en plein tunnel (situation anormale),
 	# comme le PC (reverse_trip : « reversing at a terminus is the normal
-	# turnaround and silently flips the direction ») — retour de Kevin du
+	# turnaround and silently flips the direction ») — retour d'un utilisateur du
 	# 07/10/2026 : « quand j'inverse en gare après un trajet normal, j'ai
 	# l'annonce anormale »
 	if announcements != null:
@@ -1578,7 +1578,7 @@ func do_reverse() -> void:
 # « un skieur capable de monter les escaliers des gares et de marcher à
 # l'intérieur sans passer au travers du plancher, des murs, des portes ou du
 # wagon, qui peut marcher dans le wagon, voyager dans le funiculaire et
-# aller au poste de pilotage » (Kevin). Bouton SKIEUR, touche K.
+# aller au poste de pilotage » (retour d'utilisateur). Bouton SKIEUR, touche K.
 
 ## Bascule conduite ↔ skieur. Dans la vue 3D du PC, c'est le PC qui décide
 ## (touche F9, bouton SKIEUR) : on le lui demande.
@@ -1591,14 +1591,14 @@ func basculer_skieur() -> void:
 		return
 	if mode_skieur:
 		# la BOUCLE continue en coulisse quand on quitte la vue skieur pour
-		# changer de vue (Kevin, 09/10/2026 : « le mode boucle se désactive si
+		# changer de vue (retour d'utilisateur, 09/10/2026 : « le mode boucle se désactive si
 		# je quitte le mode skieur afin de changer de vue, il ne faudrait pas »)
 		_sortir_skieur(skieur_auto != null)
 	else:
 		_entrer_skieur()
 
 
-## Exploitation automatique depuis le HUD du skieur (Kevin, 07/10/2026 :
+## Exploitation automatique depuis le HUD du skieur (retour d'utilisateur, 07/10/2026 :
 ## « rajoute la possibilité d'activer / désactiver le mode auto même en mode
 ## skieur ») : sur la version Web l'automate local, sur le PC la touche X du
 ## PC (c'est lui qui tient l'exploitation).
@@ -1649,7 +1649,7 @@ func basculer_ski() -> void:
 			"Q / D pour tourner, Z pour pousser, S chasse-neige, Maj schuss", 4.0)
 
 
-## Issues de secours de la face (Kevin, 07/10/2026 : « de part et d'autre
+## Issues de secours de la face (retour d'utilisateur, 07/10/2026 : « de part et d'autre
 ## de la vitre frontale, les parties jaunes cerclées de noir sont des issues
 ## de secours et ça s'en va en cas d'évacuation. Donc en cas d'arrêt dans le
 ## tunnel, rajoute la possibilité d'enlever ces parties, de marcher sur
@@ -1781,7 +1781,7 @@ func _entrer_skieur() -> void:
 	if not collisions.pret:
 		# par tranches sur quelques images (pas de gel) : on entre dès que
 		# c'est prêt (_process) ; le message reste affiché, avec
-		# l'avancement, et le PC le reçoit (Kevin, 08/10/2026 : « on ne sait
+		# l'avancement, et le PC le reçoit (retour d'utilisateur, 08/10/2026 : « on ne sait
 		# pas si ça marche ou pas, il n'y a pas de message »)
 		if not _skieur_en_attente:
 			_skieur_en_attente = true
@@ -1816,7 +1816,7 @@ func _entrer_skieur() -> void:
 			skieur._support_xf = sup.global_transform
 	elif _skieur_au_poste:
 		# il se lève du siège du conducteur — DANS la voiture de tête, où
-		# qu'elle soit rendue (Kevin, 08/10/2026 : « en repassant en mode
+		# qu'elle soit rendue (retour d'utilisateur, 08/10/2026 : « en repassant en mode
 		# skieur à l'arrivée, le skieur est tout seul au milieu du tunnel » :
 		# le nœud du siège, fusionné avec l'intérieur, n'existait plus et
 		# l'on retombait sur l'ancienne position monde)
@@ -1838,7 +1838,7 @@ func _entrer_skieur() -> void:
 	elif _skieur_voiture != null and is_instance_valid(_skieur_voiture):
 		# il était dans une rame : on le repose à sa place dans la voiture,
 		# où qu'elle soit rendue (« je suis revenu au skieur et je suis tombé
-		# sous le tunnel », Kevin, 07/10/2026)
+		# sous le tunnel », retour d'utilisateur, 07/10/2026)
 		skieur.activer(_skieur_voiture.global_transform * _skieur_local, skieur.cam_yaw)
 		skieur.support = _skieur_voiture
 		skieur._support_xf = _skieur_voiture.global_transform
@@ -1870,7 +1870,7 @@ func _entrer_skieur() -> void:
 	skieur.camera.make_current()
 	commandes_skieur.visible = true
 	# Passer en skieur NE TOUCHE PAS à l'exploitation : automatique ou non,
-	# on reste comme avant (Kevin, 08/10/2026 : « dès que je passe en mode
+	# on reste comme avant (retour d'utilisateur, 08/10/2026 : « dès que je passe en mode
 	# skieur ça repasse en exploitation auto, du coup pendant l'évacuation
 	# le funi redémarre et m'écrase » ; auparavant, 07/10 : « le mode auto
 	# est forcé et se déclenche alors que je suis encore dehors »). Seule
@@ -1967,7 +1967,7 @@ func _securite_skieur() -> void:
 							and loc.y > -2.8 and loc.y < 2.2:
 						# DEDANS (entre deux voitures, contre la cloison : le
 						# rayon sous ses pieds a pu manquer le plancher) : on le
-						# rattache à la voiture, ce n'est pas un choc (Kevin,
+						# rattache à la voiture, ce n'est pas un choc (retour d'utilisateur,
 						# 09/10/2026 : « arrivé à la cloison qui sépare les deux
 						# wagons, il me dit que je me suis fait percuter »)
 						if absf(loc.x) < 1.45 and loc.y > TrainBodyBuilder.Y_FLOOR - 0.45 \
@@ -2024,7 +2024,7 @@ func _pres_du_tunnel(p: Vector3) -> bool:
 			s += 1.0
 		# les 80 m aux deux bouts sont les gares (quais, salles, terrasse :
 		# « en sortant de la gare du haut, à la porte de la terrasse, il croit
-		# que je suis dans le tunnel », Kevin, 08/10/2026) : pas le tunnel
+		# que je suis dans le tunnel », retour d'utilisateur, 08/10/2026) : pas le tunnel
 		if best < 4.5 * 4.5 and sb > 80.0 and sb < PNConstants.LENGTH - 80.0:
 			return true
 	if sortie_secours != null and sortie_secours.pret and sortie_secours.sol.size() > 1:
@@ -2080,7 +2080,7 @@ func _skieur_conduit() -> void:
 	if client_mode and state_receiver != null:
 		# le PC sort du mode skieur et rend la conduite (fin de son AUTO)
 		state_receiver.envoyer({"skieur_conduire": true})
-	# l'exploitation auto reste comme elle était (Kevin, 09/10/2026 : elle
+	# l'exploitation auto reste comme elle était (retour d'utilisateur, 09/10/2026 : elle
 	# se coupait en passant au poste) — X / EXPLOIT. la coupe
 	_flash("Au poste de conduite — SKIEUR pour se lever")
 
@@ -2148,7 +2148,7 @@ func _gain_machinerie() -> float:
 var _presence: Array = [Vector3.ZERO]
 var _seat: Node3D = null
 var _t_info: float = 1.0
-# Piques du mode skieur (Kevin, 09/10/2026 : hors-piste, funiculaire raté,
+# Piques du mode skieur (retour d'utilisateur, 09/10/2026 : hors-piste, funiculaire raté,
 # évacuation… « avec parcimonie, sinon on se lasse ») : au plus une toutes
 # les PIQUE_ECART secondes (« mes descentes font deux minutes […] une toutes
 # les 40 secondes c'est bon »), AU MOMENT de l'événement (« si c'est une
@@ -2246,7 +2246,7 @@ func _maj_skieur() -> void:
 	# « Dans le tunnel » = à moins de 4,5 m de l'axe du tunnel ou de 3 m de
 	# la galerie de secours, À PIED — plus « sous la surface » : à ski, le
 	# relief traversé par endroits disait « dans le tunnel » et immobilisait
-	# le funi (Kevin, 08/10/2026 : « ce qui est faux »)
+	# le funi (retour d'utilisateur, 08/10/2026 : « ce qui est faux »)
 	if skieur.support != null or skieur.chausse:
 		_dans_tunnel = false
 		_t_dans_tunnel = 9.0
@@ -2263,7 +2263,7 @@ func _maj_skieur() -> void:
 			collisions.assurer_autour(skieur.global_position)
 	# à pied sur la voie (tunnel, galerie) : la rame est IMMOBILISÉE, sans
 	# limite de temps — l'exploitation automatique attend, tout départ est
-	# refusé, le régulateur tient (Kevin, 08/10/2026 : « le funi ne devrait
+	# refusé, le régulateur tient (retour d'utilisateur, 08/10/2026 : « le funi ne devrait
 	# pas pouvoir repartir une fois l'évacuation lancée ; il est reparti, je
 	# me suis pris l'autre rame en pleine tête »)
 	# hors des gares, à pied : il peut se hisser sur un rebord (GRIMPE_MAX)
@@ -2305,7 +2305,7 @@ func _maj_skieur() -> void:
 			else (2 if physics.s >= PNConstants.STOP_S - 5.0 else 0)
 		var e_ann: int = 2
 		# dans l'une OU l'autre rame : les deux ont leur sono, qui dit la même
-		# chose (Kevin, 09/10/2026 : « dans la rame non choisie pour piloter,
+		# chose (retour d'utilisateur, 09/10/2026 : « dans la rame non choisie pour piloter,
 		# pas d'annonces »)
 		if skieur.support != null and _rame_du_skieur() != null:
 			e_ann = 0

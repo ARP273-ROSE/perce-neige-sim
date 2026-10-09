@@ -3,10 +3,10 @@ requestAnimationFrame (la boucle Godot y tourne), en conduite d'essai.
 usage : web_perf.py URL durée_s sortie.json [capture.png]
 
 Chaîne complète (2026-09-30) :
-  1. tests/web_perf_export.sh /mnt/apps_pool/pylab/pn_tests/web_x [--masquer=hud,…]
+  1. tests/web_perf_export.sh <travail>/pn_tests/web_x [--masquer=hud,…]
   2. conteneur à GPU (python-lab n'a pas /dev/dri) :
      docker run -d --name pn-gpu --device /dev/dri --group-add 44 --group-add 107 -u 0 \
-       -v /mnt/apps_pool/pylab:/home/jovyan/work --entrypoint sleep \
+       -v <travail>:/home/jovyan/work --entrypoint sleep \
        quay.io/jupyter/scipy-notebook:latest infinity
      + apt-get install des bibliothèques Playwright et de Mesa (libgl1-mesa-dri
        libegl1 mesa-vulkan-drivers libvulkan1), puis un http.server sur 8767

@@ -1,5 +1,5 @@
 ## Capture de contrôle : la rame à quai vue du quai, portes ouvertes (comme
-## les photos de Kevin du 09/10/2026 : 18 fenêtres par voiture, une porte
+## les photos d'un utilisateur du 09/10/2026 : 18 fenêtres par voiture, une porte
 ## toutes les trois fenêtres à partir de la deuxième).
 extends SceneTree
 var _main: Node = null

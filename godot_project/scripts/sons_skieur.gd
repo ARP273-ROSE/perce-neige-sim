@@ -1,6 +1,6 @@
 class_name SonsSkieur
 extends Node
-## Ce qu'entend le skieur sorti de la rame (07/10/2026, Kevin : « en vrai en
+## Ce qu'entend le skieur sorti de la rame (07/10/2026, retour d'utilisateur : « en vrai en
 ## bas on n'entend rien, à part des souffles d'air réguliers / vent
 ## sifflements suivis de silences dus aux surpressions dans le tunnel ») :
 ##   - en gare, rame en marche : une bouffée d'air toutes les 9 à 18 s, plus
@@ -11,7 +11,7 @@ extends Node
 
 ## 0 dans la rame, 1 gare basse (quais, salle d'attente), 2 dehors, 3 gare
 ## haute (là, c'est TrainAudio qui joue la machinerie), 4 à pied dans le
-## tunnel — posé par main.gd. Kevin, 07/10/2026 : « le bruit du souffle dans
+## tunnel — posé par main.gd. retour d'utilisateur, 07/10/2026 : « le bruit du souffle dans
 ## le tunnel ne s'entend qu'en gare du bas sur les quais et dans la salle
 ## d'attente […] et si on est dehors on entend l'air ».
 var ecoute: int = 0

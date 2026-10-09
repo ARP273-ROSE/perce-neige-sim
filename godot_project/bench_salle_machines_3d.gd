@@ -167,7 +167,7 @@ func _suite() -> void:
 							intrus[String(mi.name)] = intrus.get(String(mi.name), 0) + 1
 	ok = _check("rien ne traverse la roue aval", intrus.is_empty(), str(intrus)) and ok
 	var g: Dictionary = mr._geometry()
-	# sommets des deux roues alignés sur la pente de la voie (Kevin, 30/09) :
+	# sommets des deux roues alignés sur la pente de la voie (retour d'utilisateur, 30/09) :
 	# le repère local suit la voie, donc même cote
 	var dy: float = MachineRoomBuilder.B_Y - MachineRoomBuilder.A_Y
 	var pente: float = rad_to_deg(atan2(dy, MachineRoomBuilder.B_S - MachineRoomBuilder.A_S))

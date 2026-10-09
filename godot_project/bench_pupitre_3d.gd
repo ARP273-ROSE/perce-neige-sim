@@ -181,7 +181,7 @@ func _tick() -> void:
 		for k in range(6):
 			ga.mettre_a_jour(0.5, ph)
 		# un seul vantail par porte, qui coulisse vers le MILIEU de la salle
-		# (Kevin, 07/10/2026) : celui de l'ouest (x < 0) vers l'est, celui de
+		# (retour d'utilisateur, 07/10/2026) : celui de l'ouest (x < 0) vers l'est, celui de
 		# l'est vers l'ouest
 		var vers_milieu: bool = true
 		var ouvert: float = INF
@@ -198,7 +198,7 @@ func _tick() -> void:
 		_verif("gare aval : un vantail par porte, tout le passage libre vers le milieu à l'embarquement, fermé au départ",
 			ga._vantaux.size() == 2 and vers_milieu and ouvert > 2.0 and ferme < 0.01,
 			"course %.2f m puis %.2f m" % [ouvert, ferme])
-		# vraie séquence (Kevin : « ferme-les avant le départ, ouvre-les
+		# vraie séquence (retour d'utilisateur : « ferme-les avant le départ, ouvre-les
 		# après l'arrivée ») : rame à quai portes ouvertes → séquence de
 		# départ → elles sont fermées AVANT que la traction ne parte
 		var ph2 := TrainPhysics.new()

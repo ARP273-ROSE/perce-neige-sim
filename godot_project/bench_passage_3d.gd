@@ -1,4 +1,4 @@
-## Banc du passage d'intercirculation (09/10/2026, Kevin : « fais en sorte
+## Banc du passage d'intercirculation (09/10/2026, retour d'utilisateur : « fais en sorte
 ## qu'on puisse passer d'un wagon à l'autre en marchant à l'intérieur de la
 ## rame sans passer par une faille spatio-temporelle » ; avant, arrivé à la
 ## cloison, le jeu le disait « percuté par la rame » et le renvoyait en bas).

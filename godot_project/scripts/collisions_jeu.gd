@@ -1,6 +1,6 @@
 class_name CollisionsJeu
 extends Node3D
-## Collisions du skieur jouable (demande de Kevin du 07/10/2026 : « un
+## Collisions du skieur jouable (demande d'un utilisateur du 07/10/2026 : « un
 ## skieur capable de monter les escaliers des gares et de marcher à
 ## l'intérieur sans passer au travers du plancher, des murs, des portes ou
 ## du wagon »). Construites une seule fois, au premier passage en vue
@@ -121,7 +121,7 @@ func _avancer(fin_us: int) -> void:
 func assurer_autour(p: Vector3) -> void:
 	if _main == null:
 		return
-	# le relief, partout où l'on marche dehors (Kevin, 08/10/2026 : « je passe
+	# le relief, partout où l'on marche dehors (retour d'utilisateur, 08/10/2026 : « je passe
 	# quasi partout au travers de la montagne ») : un carré de 400 m, dès
 	# qu'on arrive à 80 m du bord de ce qui est déjà couvert
 	var relief: ReliefBuilder = _main.get("relief")
@@ -298,7 +298,7 @@ func set_paliers_quai(en_gare: bool) -> void:
 ## Le vantail fermé est à 1,50 m de l'axe et le palier s'arrête à 1,20 :
 ## en s'appuyant sur une porte fermée en tunnel, on tombait par la fente
 ## (0,30 m, la largeur du skieur) sous la rame — « passer dans une faille
-## spatio-temporelle » (Kevin, 08/10/2026). Portes ouvertes, rien : de la
+## spatio-temporelle » (retour d'utilisateur, 08/10/2026). Portes ouvertes, rien : de la
 ## porte on descend sur la passerelle (sortie de secours) ou le quai.
 var seuils: Array = []
 var _seuils_fermes: bool = true
@@ -383,7 +383,7 @@ func _rame(c: Cabin) -> void:
 				var xp: Transform3D = Transform3D(Basis.IDENTITY, pal.position)
 				# bancs : l'assise (0,73-1,13 m) et le dossier, pas la lèvre
 				# avant ; porte-skis : 5 cm de moins de chaque côté que l'arceau.
-				# Kevin, 07/10/2026 : « bloqué par les derniers porte-skis, je
+				# Retour d'utilisateur, 07/10/2026 : « bloqué par les derniers porte-skis, je
 				# ne peux pas accéder à l'avant » — le couloir entre porte-skis
 				# (0,41) et banc (0,70) ne faisait que 28 cm, la largeur du
 				# skieur ; il fait maintenant 39 cm
@@ -403,7 +403,7 @@ func _rame(c: Cabin) -> void:
 					for side in [-1.0, 1.0]:
 						_boite(voiture, Vector3(0.80, 0.50, l_banc),
 							xp * Transform3D(Basis.IDENTITY, Vector3(side * 1.13, 0.25, dz_banc)))
-				# porte-skis : PLUS de collision (Kevin, 08/10/2026 : « c'est la
+				# porte-skis : PLUS de collision (retour d'utilisateur, 08/10/2026 : « c'est la
 				# galère de marcher dans le funi, permets de passer au travers
 				# des porte-skis orange ») — on les traverse
 		# paroi du tube en pans de 12°, du plafond au plancher ; au droit des

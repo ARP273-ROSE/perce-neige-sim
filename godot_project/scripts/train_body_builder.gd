@@ -32,7 +32,7 @@ const GAP: float = 0.50             # jeu entre les deux voitures
 const RIB_W: float = 0.10           # joint entre cerceaux
 const RIB_H: float = -0.03          # en creux
 ## 18 fenêtres par côté et par voiture, une porte toutes les trois fenêtres à
-## partir de la deuxième (Kevin, 09/10/2026, photos du quai : « ça s'ouvre à
+## partir de la deuxième (retour d'utilisateur, 09/10/2026, photos du quai : « ça s'ouvre à
 ## partir de la deuxième fenêtre en partant du haut, une fenêtre sur 3 […]
 ## je compte 18 fenêtres en tout par côté, par wagon » ; symétrique : dans la
 ## voiture du bas, la porte la plus basse est à la 2e fenêtre en partant du
@@ -46,7 +46,7 @@ const WELL_HALF: float = 1.05       # demi-longueur d'une échancrure
 const BOGIE_OFFSET: float = 2.0     # bogies à 2 m des extrémités (hors des portes)
 const DOOR_TOP_T: float = 54.0      # haut du vantail coulissant (angle depuis le sommet)
 const DOOR_PLUG: float = 0.08       # déboîtement du vantail (m) avant de glisser
-const DOOR_SLIDE: float = PANEL_L + RIB_W   # course : un panneau pile, le vantail ouvert recouvre la vitre voisine (Kevin, 09/10/2026)
+const DOOR_SLIDE: float = PANEL_L + RIB_W   # course : un panneau pile, le vantail ouvert recouvre la vitre voisine (retour d'utilisateur, 09/10/2026)
 const WHEEL_R: float = 0.30
 const D_THETA_DEG: float = 2.5      # résolution angulaire du tube (découpes des hublots)
 const CAP_THETA_DEG: float = 2.0    # résolution angulaire de la calotte (découpes)
@@ -58,7 +58,7 @@ const COL_L: float = 0.10           # résolution longitudinale des panneaux vit
 # des portes sont plus étroits (0,60). Définis en (u le long du cerceau,
 # w = longueur d'arc depuis le sommet) ; découpe + joint caoutchouc +
 # vitre lissée, comme le pare-brise.
-# Hublots mesurés sur les photos de Kevin (09/10/2026, « tes vitres sont trop
+# Hublots mesurés sur les photos d'un utilisateur (09/10/2026, « tes vitres sont trop
 # larges, fais-les plus fines ») : audit_physique/hublots_photo.sage — du
 # plancher + 0,28 m au plancher + 1,68 m, hublot de porte identique aux
 # autres. Forme (même jour : « trop rectangulaire, plus arrondie au sommet et
@@ -87,7 +87,7 @@ const TUBE_GASKET_OUT: float = 0.026 # liseré noir fin et régulier : la tôle 
 #   (|x| ≥ 0,93 jusqu'au bord, +1,00 → −0,97) ; « TIGNES » sous le
 #   pare-brise (−0,84), grille (−1,20) et feux ronds (±1,0 ; −1,25) en bas.
 const FACE_SCALE: float = (R_BODY + (Y_CENTER - Y_CUT)) / 3.10   # 2,93 / 3,10
-# Face relevée sur la photo frontale de Kevin (09/10/2026 : « la baie vitrée
+# Face relevée sur la photo frontale d'un utilisateur (09/10/2026 : « la baie vitrée
 # est trop large devant le cockpit, superpose tes limites de vitre à une de
 # mes photos, pareil pour la forme des ouvertures d'évac ») —
 # audit_physique/face_photo.sage, contrôle visuel face_superposition.py.
@@ -170,7 +170,7 @@ static func materials() -> Dictionary:
 		"buffer": buffer,
 		"lamp_on": lamp_on,
 		"letters": _mat(Color(0.92, 0.92, 0.94), 0.45, 0.30),
-		# habillage intérieur d'après les photos de Kevin (09/10/2026) :
+		# habillage intérieur d'après les photos d'un utilisateur (09/10/2026) :
 		# parois bleu-gris pâle autour des vitres, panneaux beige à fines
 		# lames longitudinales au-dessus
 		"lining": _mat(Color(0.74, 0.79, 0.86), 0.75, 0.05),
@@ -562,7 +562,7 @@ static func _build_end_disc(mesh: ArrayMesh, mat: StandardMaterial3D, z: float, 
 	st.commit(mesh)
 
 
-## Passage d'intercirculation (Kevin, 09/10/2026 : « fais en sorte qu'on
+## Passage d'intercirculation (retour d'utilisateur, 09/10/2026 : « fais en sorte qu'on
 ## puisse passer d'un wagon à l'autre en marchant à l'intérieur de la rame
 ## sans passer par une faille spatio-temporelle ») : baie de PASSAGE_DEMI_L
 ## × 2 de large, du bas jusqu'à PASSAGE_HAUT au-dessus du plancher.
@@ -818,7 +818,7 @@ static func _emit_band(st: SurfaceTool, inner: PackedVector2Array, outer: Packed
 ## — les deux D jaunes de part et d'autre du pare-brise — en maillages À
 ## PART (clé « AvG », « AvD », « ArG », « ArD »), découpés dans la calotte
 ## et dans sa doublure : ils s'enlèvent pour évacuer une rame arrêtée en
-## tunnel (Kevin, 07/10/2026 : « les parties jaunes cerclées de noir sont
+## tunnel (retour d'utilisateur, 07/10/2026 : « les parties jaunes cerclées de noir sont
 ## des issues de secours et ça s'en va en cas d'évacuation »).
 static func _build_cap(mesh: ArrayMesh, mats: Dictionary, z_join: float, dir_z: float,
 		backboard: bool = false, inner: bool = false, issues = null) -> void:
@@ -908,7 +908,7 @@ static func _build_cap(mesh: ArrayMesh, mats: Dictionary, z_join: float, dir_z: 
 			_emit_band(st_y, _offset_outline(door, 0.0), _offset_outline(door, 0.13), pt_in, n_in, -0.004)
 			_emit_band(st_ri, _offset_outline(door, -0.012), _offset_outline(door, 0.012), pt_in, n_in, -0.010)
 			# côté passagers, le D est gris-bleu comme l'habillage, pas jaune
-			# (Kevin, 09/10/2026 ; photos du poste : panneau gris-bleu à persiennes)
+			# (retour d'utilisateur, 09/10/2026 ; photos du poste : panneau gris-bleu à persiennes)
 			_issue_panneau(issues, dir_z, door, pt_in, n_in, -0.006, mats, "lining")
 		st_y.set_material(mats["lining"]); st_y.commit(mesh)
 		st_ri.set_material(mats["rubber"]); st_ri.commit(mesh)
@@ -1085,7 +1085,7 @@ static func _build_cap_fittings(parent: Node3D, mats: Dictionary, z_join: float,
 		lamps.append(lamp)
 	# poignées des portes d'évacuation (petits rectangles sombres, photo) —
 	# accrochées au panneau d'issue (nœud « IssueAvG »…) quand il existe :
-	# elles s'en vont avec lui à l'évacuation (Kevin, 08/10/2026 : « il
+	# elles s'en vont avec lui à l'évacuation (retour d'utilisateur, 08/10/2026 : « il
 	# reste deux trucs noirs au milieu en lévitation »)
 	for sx in [-1.0, 1.0]:
 		var cle: String = ("Av" if dir_z < 0.0 else "Ar") + ("D" if sx > 0.0 else "G")
@@ -1138,7 +1138,7 @@ static func _build_bogie(parent: Node3D, mats: Dictionary, z_c: float, bogies: A
 	# châssis (longerons, essieux, boîtes) sous un nœud à part, gardé hors
 	# de la fusion : le plancher n'est qu'à 13 cm du rail, roues (⌀ 60) et
 	# essieux dépassent DANS la voiture — le skieur à bord ne doit pas les
-	# voir (Kevin, 08/10/2026 : « qu'on ne voie plus les roues depuis
+	# voir (retour d'utilisateur, 08/10/2026 : « qu'on ne voie plus les roues depuis
 	# l'intérieur de la rame ») : Cabin.set_bogies_visibles
 	var bogie: Node3D = Node3D.new()
 	bogie.name = "Bogie%d" % (bogies.size() + 1)
@@ -1266,7 +1266,7 @@ static func build_train(root: Node3D, train_length: float, car_count: int,
 			lin.mesh = lining
 			car_root.add_child(lin)
 		# Panneaux d'issue de secours : SURFACES de la caisse elle-même, plus
-		# un objet à part (Kevin, 09/10/2026, iPad : « les panneaux d'évac
+		# un objet à part (retour d'utilisateur, 09/10/2026, iPad : « les panneaux d'évac
 		# n'ont plus la même couleur et ne réagissent pas pareil à
 		# l'éclairage ») — le rendu Web choisit ses lampes PAR OBJET, le
 		# petit panneau séparé n'avait pas les mêmes que la grande caisse.

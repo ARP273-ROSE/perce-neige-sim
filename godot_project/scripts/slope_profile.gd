@@ -25,7 +25,7 @@ const SLOPE_PROFILE: Array = [
 	[3368.52, 0.27],   # diminution pente finale commence (t=7:29)
 	[3420.52, 0.18],
 	[3477.53, 0.10],   # pente de la gare haute atteinte au galet n° 238, à
-	                   # l'entrée du quai (fait de Kevin, 06/10/2026 ; la
+	                   # l'entrée du quai (fait d'un utilisateur, 06/10/2026 ; la
 	                   # vidéo la plaçait où le tunnel redevient carré)
 	[3514.52, 0.06],   # Grande Motte plateforme
 ]
@@ -34,7 +34,7 @@ const SLOPE_PROFILE: Array = [
 # Plan horizontal : (distance, bearing degrés — 0 = Nord, 90 = Est)
 # Gares (IGN BD TOPO) : Val Claret 45,45189 °N 6,89898 °E → Grande Motte
 # 45,42352 °N 6,89146 °E (3 029 m). Positions des courbes : premier et
-# dernier galet incliné, relevés au compteur de la cabine par Kevin
+# dernier galet incliné, relevés au compteur de la cabine par un utilisateur
 # (06/10/2026 ; s = compteur + 38,56, nez de la rame montante) ; angles et
 # caps : ajustés sur le tracé IGN (audit_physique/trace_ign.sage : écart
 # moyen 2,5 m, max 10 m, précision IGN 10 m).
@@ -125,7 +125,7 @@ static func interp_smooth(table: Array, s: float) -> float:
 # Interpolation cubique MONOTONE (Fritsch-Carlson, « PCHIP ») : la valeur ET
 # sa dérivée sont continues, sans dépassement entre deux points de la
 # table. Pour la pente : sa VARIATION est continue, comme dans la réalité
-# (retour de Kevin du 06/10/2026, entrée en gare haute). Le lissage par
+# (retour d'un utilisateur du 06/10/2026, entrée en gare haute). Le lissage par
 # intervalle (interp_smooth) annulait la variation à chaque point de la
 # table, l'interpolation linéaire la faisait changer par paliers.
 static var _pchip_m: Dictionary = {}

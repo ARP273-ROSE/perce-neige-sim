@@ -1,6 +1,6 @@
 # Quand déclencher l'annonce d'arrivée en gare haute (fichier 11, « Le
 # funiculaire vous emmène en zone Grande Motte ») pour qu'elle se termine
-# AVANT l'arrêt — retour de Kevin du 06/10/2026 : « comme le quai est plus
+# AVANT l'arrêt — retour d'un utilisateur du 06/10/2026 : « comme le quai est plus
 # court, l'annonce d'arrivée en haut se déclenche trop tard et est coupée
 # par l'arrêt en haut, mets-la plus tôt, calcule quand c'est bon ».
 #

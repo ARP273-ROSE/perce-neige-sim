@@ -5,7 +5,7 @@ la PWA — régénérable :
       → godot_project/textures/relief_ortho.jpg      (orthophoto)
       → godot_project/scripts/relief_donnees.gd      (emprise, repère)
 
-Demande de Kevin (06/10/2026) : « prolonger [le paysage 3D] jusqu'au tunnel
+Demande d'un utilisateur (06/10/2026) : « prolonger [le paysage 3D] jusqu'au tunnel
 et jusqu'en bas, jusqu'au lac de Tignes, et dans le rayon autour », pour se
 rendre compte d'où passe le tunnel.
 
@@ -28,7 +28,7 @@ import numpy as np
 from PIL import Image
 
 LAT_O, LON_O = 45.45188591, 6.89898136      # pied de la voie (IGN BD TOPO)
-LAT0, LAT1 = 45.375, 45.530                  # domaine Tignes – Val d'Isère : des Brévières au glacier du Pissaillas (+ marge), Kevin 09/10/2026
+LAT0, LAT1 = 45.375, 45.530                  # domaine Tignes – Val d'Isère : des Brévières au glacier du Pissaillas (+ marge), retour d'utilisateur 09/10/2026
 LON0, LON1 = 6.820, 7.090
 PAS_M = 25.0                                 # maille du relief
 ORTHO_L = 4096                               # largeur de l'orthophoto (px) — 5,1 m/px sur 21 km

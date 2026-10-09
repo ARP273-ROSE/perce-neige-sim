@@ -1,4 +1,4 @@
-# Banc des galets de ligne (05/10/2026) — demande de Kevin : « leur bonne
+# Banc des galets de ligne (05/10/2026) — demande d'un utilisateur : « leur bonne
 # vitesse de rotation en fonction de la vitesse du câble, et leur
 # ralentissement progressif une fois que le câble est parti ; le câble
 # s'accroche au milieu de la voiture amont de chaque rame ».

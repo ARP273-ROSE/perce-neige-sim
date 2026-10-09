@@ -1,7 +1,7 @@
 """Retour de la vue 3D vers le PC (07/10/2026) : boutons du pupitre 3D et
 mode skieur.
 
-Kevin : « sur le PC, les boutons marchent mais il ne se passe rien ensuite,
+Retour d'utilisateur : « sur le PC, les boutons marchent mais il ne se passe rien ensuite,
 le bouton éclairage cabine ne marche pas, alors que dans la PWA ça
 fonctionne ; là je fais fermer les portes et rien ne se passe » ; « comment
 je passe en mode skieur sur le PC ? ».
@@ -142,7 +142,7 @@ def test_pupitre_3d_eclairage_portes_klaxon(fenetre):
 
 def test_skieur_retenue_plafonnee(fenetre):
     """Rame à quai sous exploitation AUTO : un skieur sur le quai la retient,
-    mais pas plus de RETENUE_MAX_S (Kevin, 07/10/2026 : « la séquence reste
+    mais pas plus de RETENUE_MAX_S (retour d'utilisateur, 07/10/2026 : « la séquence reste
     bloquée à embarquement 6 s… elle devrait se poursuivre toute seule »)."""
     win, clock = fenetre
     g = _depart_a_quai(win, clock)
@@ -166,7 +166,7 @@ def test_skieur_retenue_plafonnee(fenetre):
 
 def test_skieur_sur_la_voie_immobilise(fenetre):
     """À pied sur la voie (évacuation, tunnel), la rame ne repart JAMAIS,
-    même sous exploitation AUTO (Kevin, 08/10/2026 : « le funi ne devrait pas
+    même sous exploitation AUTO (retour d'utilisateur, 08/10/2026 : « le funi ne devrait pas
     pouvoir repartir une fois l'évac lancée ; là il est reparti, je me suis
     pris l'autre rame en pleine tête »)."""
     win, clock = fenetre
@@ -204,7 +204,7 @@ def test_skieur_f9_auto_attend_puis_ferme(fenetre):
     g.keyPressEvent(QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_F9,
                               Qt.KeyboardModifier.NoModifier))
     assert g._skieur, "F9 n'a pas lancé le mode skieur"
-    # rame à quai, prête à l'embarquement : l'AUTO n'est PAS forcé (Kevin,
+    # rame à quai, prête à l'embarquement : l'AUTO n'est PAS forcé (retour d'utilisateur,
     # 07/10/2026 : « il se déclenche alors que je suis encore dehors, pas
     # le temps d'embarquer ») ; les horaires sont levés quand même
     assert not ao.enabled and ao.force_any_hours, "une rame à quai attend qu'on monte"
@@ -223,7 +223,7 @@ def test_skieur_f9_auto_attend_puis_ferme(fenetre):
         "partie sans le skieur resté sur le quai"
     assert g.sounds.skieur_dehors, "sur le quai : plus de son de cabine"
     # il monte : rien ne bouge tant que l'exploitation n'est pas lancée
-    # (Kevin, 08/10/2026 : « quand je change de mode skieur ou pas, tu
+    # (retour d'utilisateur, 08/10/2026 : « quand je change de mode skieur ou pas, tu
     # restes en mode d'avant, exploitation auto ou pas »)
     pont.a_poster = [{"skieur_etat": [True, False, 0]}]
     _step(win, clock, 3.0)
@@ -269,7 +269,7 @@ def test_skieur_refuse_sans_vue_3d(fenetre):
 
 
 def test_exploitation_lancee_en_skieur_puis_conduite(fenetre):
-    """Kevin, 09/10/2026 : « quand l'exploitation auto a été déclenchée en
+    """Retour d'utilisateur, 09/10/2026 : « quand l'exploitation auto a été déclenchée en
     mode skieur et que je repasse en mode conduite, tout est figé, je ne
     peux pas couper l'exploitation auto ni klaxonner ni allumer des phares »
     — le clavier était resté dans la fenêtre 3D, qui ne passait que J et C,

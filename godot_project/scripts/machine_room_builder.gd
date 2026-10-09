@@ -7,7 +7,7 @@ extends Node3D
 ##     gorges garnies de rouge, freins à étriers sur bâti vert (photos du
 ##     reportage RM.net, « Freins sur la poulie motrice ») ;
 ##   - la roue AVAL affleure au niveau de la voie, entre les deux bras bleus des
-##     butoirs de la gare amont (Kevin, 2026-09-29) ; tout le reste est sous
+##     butoirs de la gare amont (retour d'utilisateur, 2026-09-29) ; tout le reste est sous
 ##     terre (« on ne voit que le sommet de la grosse roue aval », 2026-09-27) ;
 ##   - 3 moteurs à courant continu 800 kW BLEUS (Sicme Motori), chacun par un
 ##     arbre sous carter grillagé jaune vers un réducteur JAUNE ; centrale
@@ -16,7 +16,7 @@ extends Node3D
 ##     « Funicular ») : roue à deux gorges, demi-tour, retour par une seconde
 ##     roue, second tour dans l'autre gorge — adhérence doublée.
 ##
-## Tracé du câble (parcours décrit par Kevin le 30/09/2026, aucun plan
+## Tracé du câble (parcours décrit par un utilisateur le 30/09/2026, aucun plan
 ## publié) — vérifié par SageMath dans audit_physique/salle_machines_cable.sage.
 ## Roues ALIGNÉES latéralement, gorges gauche (x = −0,12) et droite (+0,12)
 ## aux x des brins de la voie. Vu vers l'amont : le brin de la rame 1 entre
@@ -26,7 +26,7 @@ extends Node3D
 ## sort en haut ; passe sur deux galets AU-DESSUS du sommet de la roue aval
 ## (entre les butoirs bleus) et file vers la rame 2. Enroulement 773°.
 ## Les sommets des deux roues sont alignés sur la pente de la voie en gare
-## amont (Kevin, 30/09/2026) : la roue amont dépasse de 30 cm du sol du hall
+## amont (retour d'utilisateur, 30/09/2026) : la roue amont dépasse de 30 cm du sol du hall
 ## derrière les butoirs, dans la fosse, sous garde-corps.
 ##
 ## Repère local : celui de tunnel.transform_at(LENGTH) — x à droite, y en haut,
@@ -287,7 +287,7 @@ func _build_hall_end() -> void:
 
 
 # ---------------------------------------------------------------------------
-# Mur de tête, d'après les photos de Kevin du 26/04/2026 (095119, 095336,
+# Mur de tête, d'après les photos d'un utilisateur du 26/04/2026 (095119, 095336,
 # 095443) — refonte du 07/10/2026 (« fais pareil pour le haut ») : lames de
 # bois verticales sur toute la largeur ; DEUX baies vitrées symétriques
 # (x = ±3 m) qui ouvrent de plain-pied sur la terrasse ; entre elles un
@@ -489,7 +489,7 @@ void fragment() {
 	sites.append_array([45.0, 60.0, 75.0, 88.0])
 	var n_u: int = 240
 	# Le tunnel descend de la gare et TRAVERSE le dôme à DOME_R du centre :
-	# la sphère y faisait un disque qui bouchait le tunnel (retour de Kevin
+	# la sphère y faisait un disque qui bouchait le tunnel (retour d'un utilisateur
 	# du 06/10/2026, « entre les galets 213 et 214 tu as mis un truc qui
 	# ferme le tunnel »). On ouvre le dôme autour de ce point de passage.
 	var trou: Vector3 = Vector3.ZERO
@@ -551,7 +551,7 @@ func _rendu_web() -> bool:
 
 
 ## Dehors visible en vue cabine, et en vue extérieure / salle des machines
-## quand la caméra est près de la gare amont (retour de Kevin du 06/10/2026 :
+## quand la caméra est près de la gare amont (retour d'un utilisateur du 06/10/2026 :
 ## « en vue ext et vue salle des machines on ne voit pas dehors le paysage »).
 func set_exterieur_visible(v: bool) -> void:
 	if _exterieur != null:
@@ -633,7 +633,7 @@ func _wheel_x_range(grooves: Array) -> Vector2:
 ## très arrondis, étroites au moyeu, larges côté jante), piste de frein en
 ## acier sombre sous la jante. Le ROUGE est un CARTER FIXE qui coiffe la
 ## jante et protège le câble : il ne tourne pas, le câble court dedans, et il
-## est ouvert là où le câble entre et sort (Kevin, 2026-09-29).
+## est ouvert là où le câble entre et sort (retour d'utilisateur, 2026-09-29).
 const WEB_T: float = 0.10            # épaisseur du voile
 const RIM_IN: float = R - 0.30       # intérieur de la jante rouge
 const N_OPEN: int = 12               # ouvertures du voile

@@ -1,7 +1,7 @@
 class_name PortePersonnel
 extends Node3D
 ## Porte « réservé au personnel » du garde-corps, en haut des quais de Val
-## Claret (Kevin, 07/10/2026 : « au moment où on pousse la porte, ça sonne
+## Claret (retour d'utilisateur, 07/10/2026 : « au moment où on pousse la porte, ça sonne
 ## avec le son du klaxon puis ça s'arrête »). Le vantail pivote sur sa
 ## charnière quand quelqu'un (PorteAuto.presences) s'approche à moins de
 ## RAYON ; la sonnerie — le son du klaxon, une fois — retentit à chaque

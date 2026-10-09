@@ -1,6 +1,6 @@
 # Le skieur jouable — suivi du chantier
 
-Demande de Kevin du 07/10/2026 : « un skieur capable de monter les escaliers
+Demande d'un utilisateur du 07/10/2026 : « un skieur capable de monter les escaliers
 des gares et de marcher à l'intérieur sans passer au travers du plancher, des
 murs, des portes ou du wagon, qui peut marcher dans le wagon, voyager dans le
 funiculaire et aller au poste de pilotage. Arrivé en haut, il est capable de
@@ -78,7 +78,7 @@ piste. »
   gares. Pilote à ski (`chemin`, `vitesse_pilote`) pour les bancs et le futur
   mode AUTO.
 - **Fantôme** (`tools_fantomes.py` → `scripts/fantomes_donnees.gd`,
-  `fantome_ski.gd`) : 5 descentes réelles de Kevin (26-28/04/2026), de 4 min 45
+  `fantome_ski.gd`) : 5 descentes réelles d'un utilisateur (26-28/04/2026), de 4 min 45
   à 10 min 15 ; il part quand on s'élance de son départ ; chrono à l'arrivée
   (200 m de la gare de Val Claret). Dans le dépôt : positions lissées et temps
   relatif seulement ; les traces brutes restent hors du dépôt (privées), dans
@@ -96,7 +96,7 @@ funiculaire), les sauts (il reste collé au sol), les chutes.
   la chambre du galet 145 (`TunnelBuilder.ouvertures`), galerie circulaire
   DROITE, à 90° de la paroi droite, en rampe de 36 % jusqu'à ce que son sol
   rejoigne la surface (~13 m : le relief n'est qu'à 11 m au-dessus et
-  descend vers la droite) — Kevin, 08/10/2026 : « ça part à 90° du tunnel
+  descend vers la droite) — retour d'utilisateur, 08/10/2026 : « ça part à 90° du tunnel
   et ça monte direct dehors ». Portail = mur de tête percé d'un cercle là où
   le sol émerge ; aire plane, remblai et trou (`ReliefBuilder.amenageurs`,
   appelés avant les pièces fines) ; collisions de la galerie et du relief
@@ -227,12 +227,12 @@ départ), les remontées mécaniques, sauts et chutes.
 
 ## Sources
 
-- Kevin, 07/10/2026 : la porte Génépy au bas du quai gauche (en regardant vers le
+- Retour d'utilisateur, 07/10/2026 : la porte Génépy au bas du quai gauche (en regardant vers le
   haut), le terrain à remonter jusqu'à elle ; la sortie de secours (position).
-- Kevin, 07/10/2026 : sur le quai on n'entend que des souffles d'air et des
+- Retour d'utilisateur, 07/10/2026 : sur le quai on n'entend que des souffles d'air et des
   silences ; la fosse assez profonde pour avoir la tête sous les rails ; la
   terrasse et l'assiette de frites ; le buzzer à 1:56 comme klaxon.
-- Kevin, 07/10/2026 : photo de l'issue de secours vue de l'intérieur (les D
+- Retour d'utilisateur, 07/10/2026 : photo de l'issue de secours vue de l'intérieur (les D
   jaunes cerclés de noir de part et d'autre du pare-brise, la paroi du
   poste à gauche) ; l'escalier de service à droite en montant ; les règles
   de ce qu'on entend (souffle en bas, machinerie en haut, air dehors,

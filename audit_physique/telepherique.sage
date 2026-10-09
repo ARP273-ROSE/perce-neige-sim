@@ -1,5 +1,5 @@
 # Téléphérique de la Grande Motte dans la vue en coupe du PC (06/10/2026) —
-# demande de Kevin : « représenter dans la vue en coupe le profil avec pylône,
+# demande d'un utilisateur : « représenter dans la vue en coupe le profil avec pylône,
 # les deux gares et les câbles avec la courbe cosh du téléphérique de la
 # Grande Motte, qui part dans la foulée du funi ».
 #

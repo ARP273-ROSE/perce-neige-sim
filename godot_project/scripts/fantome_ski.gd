@@ -1,6 +1,6 @@
 class_name FantomeSki
 extends Node3D
-## Fantôme d'une descente réelle de Kevin (FantomesDonnees) : un skieur
+## Fantôme d'une descente réelle d'un utilisateur (FantomesDonnees) : un skieur
 ## translucide qui refait la trace, seconde par seconde, posé sur le
 ## relief. Il part quand le skieur chaussé passe à son départ
 ## (DomaineSkiable.suivre).
@@ -53,7 +53,7 @@ func demarrer(k: int) -> void:
 	t = 0.0
 	actif = true
 	visible = true
-	_nom.text = "Fantôme de Kevin — descente %d" % (k + 1)
+	_nom.text = "Fantôme — descente %d" % (k + 1)
 	set_process(true)
 	_placer()
 

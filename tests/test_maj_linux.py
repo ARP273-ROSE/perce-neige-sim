@@ -1,6 +1,6 @@
 """Mise à jour automatique sous Linux (09/10/2026).
 
-Kevin, sous Manjaro : « la mise à jour auto de Coupole ça marche mais celle
+Retour d'utilisateur, sous Manjaro : « la mise à jour auto de Coupole ça marche mais celle
 du funi ça marche pas, il dit qu'il trouve pas GitHub ». L'erreur réseau
 réelle était avalée, et une AppImage ou un dossier .tar.gz ne savaient
 qu'ouvrir la page de la version. On simule ici le téléchargement : la pièce

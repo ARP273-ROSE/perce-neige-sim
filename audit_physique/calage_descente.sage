@@ -1,5 +1,5 @@
 # Calage du simulateur sur la vidéo de DESCENTE en cabine (06/10/2026) —
-# demande de Kevin : « la descente est effectuée à 12 m/s donc tu peux
+# demande d'un utilisateur : « la descente est effectuée à 12 m/s donc tu peux
 # calibrer des trucs […] accélérations, espacement […] en fonction de la
 # position ».
 #

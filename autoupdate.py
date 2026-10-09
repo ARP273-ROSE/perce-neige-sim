@@ -149,7 +149,7 @@ def _http_get_json(url: str) -> dict:
 
 
 # Dernière erreur réseau de check_latest_release : affichée à l'utilisateur
-# (Kevin, 09/10/2026, sous Manjaro : « il dit qu'il trouve pas GitHub » —
+# (retour d'utilisateur, 09/10/2026, sous Manjaro : « il dit qu'il trouve pas GitHub » —
 # l'erreur réelle, certificat, DNS ou délai, était avalée).
 DERNIERE_ERREUR = ""
 
@@ -432,7 +432,7 @@ def _install_frozen(release: ReleaseInfo,
         # Staging FIXE (jamais de composition « .new.new.exe ») puis
         # installation sous un nom VERSIONNÉ, clair et stable, à côté de
         # l'ancien (« PerceNeigeSimulator_v1.12.33.exe ») — demandé par
-        # Kevin (2026-07-24). L'ancien exe est supprimé APRÈS l'install.
+        # Un utilisateur (2026-07-24). L'ancien exe est supprimé APRÈS l'install.
         staged = current.parent / "_pn_update_staged.exe"
         try:
             if staged.exists():
@@ -608,7 +608,7 @@ class UpdateCheckThread(threading.Thread):
 
 # ---------------------------------------------------------------------------
 # Linux : l'AppImage ou le dossier du .tar.gz se remplacent tout seuls
-# (Kevin, 09/10/2026 : « la mise à jour auto sous Manjaro de Coupole ça marche
+# (retour d'utilisateur, 09/10/2026 : « la mise à jour auto sous Manjaro de Coupole ça marche
 # mais celle du funi ça marche pas ») — avant, on ouvrait seulement la page
 # de la version.
 # ---------------------------------------------------------------------------

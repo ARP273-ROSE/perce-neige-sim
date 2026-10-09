@@ -41,7 +41,7 @@
 #ifndef Entry
   #define Entry "app.py"
 #endif
-#define AppPublisher "Kevin"
+#define AppPublisher "ARP273-ROSE"
 
 [Setup]
 AppId={#AppId}

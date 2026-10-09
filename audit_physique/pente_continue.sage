@@ -1,4 +1,4 @@
-# Variation CONTINUE de la pente (retour de Kevin du 06/10/2026 : « la
+# Variation CONTINUE de la pente (retour d'un utilisateur du 06/10/2026 : « la
 # variation de la pente en haut avant l'entrée en gare n'est pas continue
 # alors qu'elle l'est dans la réalité »).
 #

@@ -2,7 +2,7 @@
 # du Perce-Neige | Tignes (marche complète à 12 m/s) », chaîne YouTube
 # « Transports câblés », id CTrkgn4mvyE, filmée en août 2013 en « version
 # statique en G2 » (caméra fixe en gare haute, sur la roue aval entre les
-# butoirs bleus). Demande de Kevin du 30/09/2026.
+# butoirs bleus). Demande d'un utilisateur du 30/09/2026.
 #
 # Données : son_salle_machines_suivi.csv — suivi de la raie tonale de la
 # machinerie (pic 40-240 Hz, fenêtres de 0,74 s tous les 0,25 s) et niveau

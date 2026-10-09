@@ -1,6 +1,6 @@
 """Superpose les contours de la face du modèle (pare-brise, portes
-d'évacuation en D, silhouette) sur la photo de face 20260426_095511 de Kevin
-(sons/photos/, non versée au dépôt) — Kevin, 09/10/2026 : « la baie vitrée
+d'évacuation en D, silhouette) sur la photo de face 20260426_095511 d'un utilisateur
+(sons/photos/, non versée au dépôt) — retour d'utilisateur, 09/10/2026 : « la baie vitrée
 est trop large devant le cockpit, superpose tes limites de vitre à une de
 mes photos, pareil pour la forme des ouvertures d'évac ».
 

@@ -1,6 +1,6 @@
 """Contexte TLS qui marche sur toutes les machines (09/10/2026).
 
-Kevin, sous Manjaro : « Musique : téléchargement impossible — [SSL:
+Retour d'utilisateur, sous Manjaro : « Musique : téléchargement impossible — [SSL:
 CERTIFICATE_VERIFY_FAILED] unable to get local issuer certificate ». Le
 Python EMBARQUÉ des paquets (PyInstaller, AppImage) cherche les certificats
 racine là où ils étaient sur la machine de construction (Ubuntu de la CI) ;

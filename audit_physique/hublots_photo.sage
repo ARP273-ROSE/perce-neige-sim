@@ -1,4 +1,4 @@
-# Hublots de la rame mesurés sur les photos de Kevin (09/10/2026, gare haute).
+# Hublots de la rame mesurés sur les photos d'un utilisateur (09/10/2026, gare haute).
 # Relevés en pixels sur la photo n°2 (2000x1500), panneau-porte coulissé, vu
 # presque de face ; recoupés sur la photo n°1 (même cadrage, même rapports).
 # Références du modèle : pas d'un panneau = PANEL_L + RIB_W ; baie de porte
@@ -35,7 +35,7 @@ print("rapport hauteur/largeur sur la photo : %.2f" % (R(545)/192))
 # 72.1 120.4 0.43 3.0 3.4 853 → superpose.png ; la photo n'est pas versée au
 # dépôt).
 
-# 09/10/2026 soir (Kevin : « le milieu de la vitre doit correspondre à la
+# 09/10/2026 soir (retour d'utilisateur : « le milieu de la vitre doit correspondre à la
 # tangente verticale de la surface du panneau ») : même ouverture angulaire,
 # centrée sur 90° (la paroi y est verticale, à la hauteur de l'axe du tube).
 ouv = R(120.4) - R(72.1)

@@ -1,6 +1,6 @@
 class_name SkieurMesh
 extends RefCounted
-## Skieurs réalistes (demande de Kevin du 06/10/2026 : « redesign
+## Skieurs réalistes (demande d'un utilisateur du 06/10/2026 : « redesign
 ## complètement les passagers pour qu'ils soient bien réalistes, mes
 ## skieurs »). Maillages procéduraux : formes organiques (tubes à section
 ## elliptique, ellipsoïdes), proportions d'un adulte de 1,75 m, tenue de
@@ -346,7 +346,7 @@ static func squelette_glisse() -> Dictionary:
 	return s
 
 
-## Schuss (Kevin, 07/10/2026 : « ça serait bien que le skieur se mette
+## Schuss (retour d'utilisateur, 07/10/2026 : « ça serait bien que le skieur se mette
 ## effectivement en mode schuss ou chasse-neige ») : recroquevillé, bassin
 ## 30 cm plus bas, genoux pliés en avant, buste penché, mains devant.
 static func squelette_schuss() -> Dictionary:
@@ -354,7 +354,7 @@ static func squelette_schuss() -> Dictionary:
 	var bas: float = 0.32
 	for k in ["bassin", "epaule_g", "epaule_d"]:
 		s[k] = (s[k] as Vector3) + Vector3(0.0, -bas, -0.12)
-	# (l'avant est en −z : Kevin, 08/10/2026, « la tête va en arrière au lieu
+	# (l'avant est en −z : retour d'utilisateur, 08/10/2026, « la tête va en arrière au lieu
 	# d'en avant »)
 	s.tete = Vector3(0.0, 1.64 - bas - 0.10, -0.30)
 	s.ourlet = float(s.ourlet) - bas
@@ -370,7 +370,7 @@ static func squelette_schuss() -> Dictionary:
 	return s
 
 
-## Poussée simultanée sur les bâtons (Kevin, 09/10/2026 : « quand le skieur
+## Poussée simultanée sur les bâtons (retour d'utilisateur, 09/10/2026 : « quand le skieur
 ## pousse sur ses bâtons, tu peux l'animer, là tu mets du schuss ») : quatre
 ## images d'un cycle — 0 bras levés devant, bâtons plantés ; 1 le buste
 ## plonge, mains qui descendent ; 2 buste cassé, mains aux hanches ; 3 bras
@@ -417,7 +417,7 @@ static func squelette_chasse() -> Dictionary:
 		s["coude_" + c] = Vector3(sx * 0.27, 1.02, 0.02)
 		s["poignet_" + c] = Vector3(sx * 0.31, 0.88, -0.10)
 		s["main_" + c] = Vector3(sx * 0.32, 0.84, -0.15)
-	# les pieds pivotent comme les skis (pointes rentrées, 22°) — Kevin,
+	# les pieds pivotent comme les skis (pointes rentrées, 22°) — retour d'utilisateur,
 	# 08/10/2026 : « le chasse-neige, les skis le font mais pas les pieds »
 	s["chasse"] = CHASSE_ANGLE
 	return s

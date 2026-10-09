@@ -1,6 +1,6 @@
 # Tracé en plan du simulateur confronté à l'IGN et à OpenStreetMap (06/10/2026)
 #
-# Demande de Kevin : « vérifie ton tracé avec OpenStreetMap de bas en haut
+# Demande d'un utilisateur : « vérifie ton tracé avec OpenStreetMap de bas en haut
 # sur toute la ligne ».
 #
 # Données (trace_ign_osm.json, extraites le 06/10/2026) :
@@ -98,7 +98,7 @@ print()
 # 1) le tracé actuel
 d_actuel = resume("tracé d'avant (20° + 28°)", CAP)
 
-# 2) positions des courbes RELEVÉES AU COMPTEUR par Kevin dans la vidéo
+# 2) positions des courbes RELEVÉES AU COMPTEUR par un utilisateur dans la vidéo
 #    cabine (06/10/2026) : premier / dernier galet incliné de chaque courbe,
 #    au passage du nez de la rame montante. Compteur 0 au départ (nez à
 #    START_S + TRAIN_HALF = 38,56 m) → s = compteur + 38,56.
@@ -122,7 +122,7 @@ def obj_angles(x):
 
 fa = minimize(obj_angles, [20.0, 28.0], method='Nelder-Mead', options={'xatol': 0.05, 'fatol': 0.01})
 d1, d2 = fa.x
-d_angles = resume("positions Kevin, angles ajustés %.1f° + %.1f°" % (d1, d2), table_angles(d1, d2))
+d_angles = resume("positions retour d'utilisateur, angles ajustés %.1f° + %.1f°" % (d1, d2), table_angles(d1, d2))
 fv = minimize(lambda x: (ecarts(table_angles(x[0], x[1], 1297.0, 1541.0, 1924.52, 2409.52), IGN)[0][::5] ** 2).mean(),
               [16.5, 28.3], method='Nelder-Mead', options={'xatol': 0.05, 'fatol': 0.01})
 resume("(positions chronométrées, angles ajustés %.1f° + %.1f°)" % tuple(fv.x),
@@ -154,5 +154,5 @@ print("Rotation d'ensemble qui superpose le tracé ajusté à l'IGN : %+.1f° �
 _, rot0 = ecarts(CAP, IGN)
 print("(tracé d'avant : rotation %+.1f°)" % np.degrees(rot0))
 print("Précision planimétrique annoncée par l'IGN : 10 m.")
-print("Retenu : positions relevées par Kevin, courbe 1 [%.2f ; %.2f] = %.1f°, courbe 2 [%.2f ; %.2f] = %.1f°, total %.1f°"
+print("Retenu : positions relevées par un utilisateur, courbe 1 [%.2f ; %.2f] = %.1f°, courbe 2 [%.2f ; %.2f] = %.1f°, total %.1f°"
       % (S1A, S1B, d1, S2A, S2B, d2, d1 + d2))

@@ -25,7 +25,7 @@ var a: float = 0.0                       # dernière accel (m/s²)
 var direction: int = 1                   # +1 montée, -1 descente
 
 var speed_cmd: float = 1.0               # setpoint conducteur (0..1) — 100 % à quai
-                                         # hors Défi (Kevin, 08/10/2026 : « la consigne
+                                         # hors Défi (retour d'utilisateur, 08/10/2026 : « la consigne
                                          # est à 0 et du coup ça ne part jamais »)
 var speed_cmd_eff: float = 0.0           # setpoint effectif (slew-limited, m/s)
 var throttle: float = 0.0                # demande moteur interne (0..1)
@@ -131,11 +131,11 @@ var _pretensioned: bool = false          # couple statique posé au décollage
 #     m·x'' = −k·x − c·x' − m·a_poulie,   c = 2ζ√(k·m),
 # m = rame + 1/3 de son brin. En bas (3,4 km) T ≈ 7 à 8,7 s et 58 cm de
 # retard à 0,30 m/s² ; en haut (25 m) quelques mm (audit_physique/
-# elasticite_cable.sage). Retour de Kevin du 04/10 : « la rame oscille déjà
+# elasticite_cable.sage). Retour d'un utilisateur du 04/10 : « la rame oscille déjà
 # au ralenti quand elle rentre, et quand elle part du bas elle oscille
 # aussi à l'accélération ». Le rebond après l'arrêt en découle.
 # raideur EFFECTIVE (câble + machinerie), calée sur le recul observé par
-# Kevin (≥ 1 m rame pleine en bas : 1,07 m) — même valeur que le PC,
+# Un utilisateur (≥ 1 m rame pleine en bas : 1,07 m) — même valeur que le PC,
 # audit_physique/recul_embarquement.sage
 const CABLE_EA_N: float = 7.0e7
 const REBOUND_ZETA: float = 0.15
@@ -156,7 +156,7 @@ const TURNAROUND_DELAY_S: float = 45.0   # garde-fou (rame pleine en bas : 35 s,
 const TURNAROUND_MIN_S: float = 3.0
 const SETTLE_M: float = 0.02
 var turnaround_delay_remaining: float = 0.0
-## Rame d'en face à l'arrivée (09/10/2026, Kevin : « dans la rame opposée,
+## Rame d'en face à l'arrivée (09/10/2026, retour d'utilisateur : « dans la rame opposée,
 ## l'ouverture des portes c'est le timing de l'autre rame ») : SES portes
 ## s'ouvrent quand SON câble est stabilisé (en haut tout de suite, en bas
 ## après le rebond), pas à l'heure de la rame pilotée.
@@ -794,7 +794,7 @@ func step(dt: float) -> void:
 	if turnaround_delay_remaining > 0.0:
 		turnaround_delay_remaining = maxf(0.0, turnaround_delay_remaining - dt)
 		var elapsed: float = TURNAROUND_DELAY_S - turnaround_delay_remaining
-		# le rebond de CETTE rame seulement (Kevin, 07/10/2026 : « en haut
+		# le rebond de CETTE rame seulement (retour d'utilisateur, 07/10/2026 : « en haut
 		# les portes peuvent s'ouvrir après l'arrêt car il n'y a pas
 		# d'oscillation, alors qu'en bas il faut attendre ») : en haut le
 		# brin est court (millimètres), c'est le contrepoids d'en bas qui
@@ -1525,7 +1525,7 @@ func rebound_offset() -> float:
 # Recul maximal d'une rame à quai à l'abscisse s quand elle passe de vide à
 # pleine (PAX_MAX) : allongement du brin Δm·g·sin θ·(LENGTH − s)/EA, la loi
 # même de l'affaissement d'embarquement. En gare basse : 1,07 m (fait de
-# Kevin : « au moins un mètre ») ; en haut : quelques millimètres.
+# Retour d'utilisateur : « au moins un mètre ») ; en haut : quelques millimètres.
 static func recul_embarquement_max(s_: float) -> float:
 	var sin_t: float = sin(atan(SlopeProfile.gradient_phys_at(s_)))
 	return float(PNConstants.PAX_MAX) * PNConstants.PAX_KG * PNConstants.G * sin_t \
@@ -1533,7 +1533,7 @@ static func recul_embarquement_max(s_: float) -> float:
 
 
 # Vitesse de la rame elle-même, celle des roues que lit l'indicateur de
-# vitesse du pupitre (fait de Kevin, 06/10/2026) : la poulie plus
+# vitesse du pupitre (fait d'un utilisateur, 06/10/2026) : la poulie plus
 # l'oscillation élastique de la rame au bout de son brin — elle s'écarte de
 # la vitesse de la machinerie dans les régimes transitoires.
 func vitesse_roues() -> float:
@@ -1575,7 +1575,7 @@ func pret_autre_simule() -> bool:
 # fermeture, 1,3 s après son début — pas au début de la phase portes.
 var door_leaves_open: bool = true
 ## Côtés concernés par l'ouverture : bit 0 = PORTES 1 à 6, à GAUCHE en
-## regardant vers le haut ; bit 1 = PORTES 7 à 12, à DROITE (Kevin,
+## regardant vers le haut ; bit 1 = PORTES 7 à 12, à DROITE (retour d'utilisateur,
 ## 07/10/2026). 3 = les deux (arrivée en gare, bouton PORTES).
 var portes_cotes: int = 3
 var door_leaves_timer: float = 0.0

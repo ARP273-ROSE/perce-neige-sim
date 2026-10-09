@@ -312,7 +312,7 @@ func _tick() -> void:
 				_t_phase = 0.0
 		101:
 			# porte du personnel en haut du quai droit → palier → escalier du
-			# haut de la fosse (Kevin, 07/10/2026)
+			# haut de la fosse (retour d'utilisateur, 07/10/2026)
 			if _t_phase < 0.5:
 				return
 			if _t_phase < 0.6:

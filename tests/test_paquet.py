@@ -1,6 +1,6 @@
 """Le paquet Windows (kit.json) embarque tous les modules locaux du programme.
 
-Retour de Kevin (06/10/2026) : la 1.15.71 ne démarrait plus du tout sur PC
+Retour d'un utilisateur (06/10/2026) : la 1.15.71 ne démarrait plus du tout sur PC
 après la mise à jour — `perce_neige_sim.py` importait le nouveau module
 `profil_coupe.py`, absent de la liste « modules » du kit : l'import échouait
 au lancement, sans aucun message (application fenêtrée).

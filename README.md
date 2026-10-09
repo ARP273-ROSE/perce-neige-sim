@@ -147,7 +147,7 @@ matériel roulant. Détail dans `SOURCES.md`.
   domaine en hiver : neige, relief ombré, pistes d'OpenStreetMap damées et
   balisées de leur couleur. Glisse physique (pente, carres, neige, air,
   chasse-neige, schuss), vitesse et nom de la piste à l'écran, et le fantôme
-  des vraies descentes de Kevin à battre. En bas, on remonte en funiculaire.
+  des vraies descentes d'un utilisateur à battre. En bas, on remonte en funiculaire.
   Suivi dans `SKIEUR.md`.
 - **Trois modes** : Normal ; Défi (trajet noté sur 100, butoir,
   déraillement, collision) ; Pannes (15 pannes issues d'incidents

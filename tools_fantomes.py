@@ -1,9 +1,9 @@
-"""Fantômes du skieur jouable : les descentes réelles de Kevin, de la gare
+"""Fantômes du skieur jouable : les descentes réelles d'un utilisateur, de la gare
 du glacier à Val Claret — régénérable :
     python3 tools_fantomes.py DOSSIER_DES_GPX
       → godot_project/scripts/fantomes_donnees.gd
 
-Kevin, 07/10/2026 : « je t'ai mis mes trajectoires GPX dans le coin, si
+Retour d'utilisateur, 07/10/2026 : « je t'ai mis mes trajectoires GPX dans le coin, si
 jamais ça peut t'aider ».
 
 Les traces brutes restent HORS du dépôt (privées). On n'en garde que les
@@ -126,7 +126,7 @@ for k, d in enumerate(tout):
 with open("godot_project/scripts/fantomes_donnees.gd", "w", encoding="utf-8") as f:
     f.write(f'''class_name FantomesDonnees
 extends RefCounted
-## GÉNÉRÉ par tools_fantomes.py — descentes réelles de Kevin (GPS), de la
+## GÉNÉRÉ par tools_fantomes.py — descentes réelles d'un utilisateur (GPS), de la
 ## gare du glacier à Val Claret. Ne pas éditer à la main.
 ##
 ## Positions lissées dans le repère du jeu (x vers l'est, z vers le sud),

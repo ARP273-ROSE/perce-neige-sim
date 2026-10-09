@@ -12,7 +12,7 @@ extends Node3D
 # À 1,40 m du centre, le néon était DANS le gabarit de la caisse (rayon
 # 1,72 : demi-largeur 1,57 m à 0,7 m au-dessus de l'axe) — « les néons et
 # les câbles défilent à l'intérieur de la cabine côté gauche en montant »
-# (Kevin, 07/10/2026, vue skieur). Sur la paroi (rayon 1,95 : 1,73 m à cette
+# (retour d'utilisateur, 07/10/2026, vue skieur). Sur la paroi (rayon 1,95 : 1,73 m à cette
 # hauteur), à 5 cm d'elle.
 @export var wall_offset: float = 1.68        # distance du centre du tunnel
 @export var height_offset: float = 0.9       # hauteur (plafond)
@@ -118,7 +118,7 @@ const LIGHT_FADE_M: float = 60.0
 ## `s_web` : rame autour de laquelle allumer les lampes en web (la rame
 ## pilotée, ou en vue salle des machines celle qui approche de la gare).
 ##
-## Allumage PAR ZONE (retour de Kevin du 06/10/2026 : « le tunnel vu de la
+## Allumage PAR ZONE (retour d'un utilisateur du 06/10/2026 : « le tunnel vu de la
 ## machinerie, s'il est allumé, ne s'allume que progressivement à
 ## l'approche de la rame ») : un tube ne s'allume que dans la zone éclairée
 ## autour d'une rame, tube après tube quand elle avance.

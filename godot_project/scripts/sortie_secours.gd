@@ -1,10 +1,10 @@
 class_name SortieSecours
 extends Node3D
-## Sortie de secours du tunnel, de la chambre du galet 145 (Kevin,
+## Sortie de secours du tunnel, de la chambre du galet 145 (retour d'utilisateur,
 ## 07/10/2026 : « tu peux percer la sortie de secours dans le tunnel ; la
 ## sortie est circulaire comme le tunnel »).
 ##
-## Tracé (Kevin, 08/10/2026 : « dans la vraie vie l'issue de secours part à
+## Tracé (retour d'utilisateur, 08/10/2026 : « dans la vraie vie l'issue de secours part à
 ## 90° du tunnel et monte direct dehors, c'est pas tout ton cirque ») : une
 ## galerie DROITE, perpendiculaire à la paroi droite, en rampe de 36 %
 ## (20°) jusqu'à ce que son sol rejoigne la surface — là, le portail. À la

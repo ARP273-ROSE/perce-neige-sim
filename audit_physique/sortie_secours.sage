@@ -1,4 +1,4 @@
-# Sortie de secours du tunnel : débouché sur la piste donné par Kevin
+# Sortie de secours du tunnel : débouché sur la piste donné par un utilisateur
 # (Google Earth, 07/10/2026) : 45°26'04,26" N, 6°54'02,60" E, 2 655,89 m,
 # entre les pistes Double M et Face. Chambre de la sortie dans le tunnel :
 # s = 2 150,56 (galet 145, vidéo de montée), repère relevé par la sonde Godot.

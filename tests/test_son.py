@@ -144,7 +144,7 @@ def test_diagnostic_envoye_a_la_deceleration_sous_1_ms(fenetre, monkeypatch):
     assert len(envois) == 1
 
 
-# --- 2026-09-30 : les rapports du PC de Kevin ont tranché -----------------
+# --- 2026-09-30 : les rapports du PC d'un utilisateur ont tranché -----------------
 # Boucles bien en lecture (Qt : Ready, isPlaying) mais à 0,136 : plancher de
 # fluage 0,45 × atténuation sous le clip de freinage 0,55 × annonce 0,55,
 # alors que le clip, à 14-16 s, est quasi muet (−29 dBFS).
@@ -164,7 +164,7 @@ def test_enveloppe_du_clip_de_freinage():
 def test_attenuation_suit_le_niveau_du_clip():
     env = pn._wav_envelope_db(str(FREIN))
     assert pn._fx_duck_strength(env, 1000.0) == pytest.approx(1.0)
-    # position relevée sur le PC de Kevin (15 975 ms) : plus d'atténuation
+    # position relevée sur le PC d'un utilisateur (15 975 ms) : plus d'atténuation
     assert pn._fx_duck_strength(env, 15975.0) < 0.25
     # enveloppe absente (fichier illisible) : comportement d'avant
     assert pn._fx_duck_strength([], 15975.0) == 1.0

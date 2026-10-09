@@ -1,5 +1,5 @@
 # Son de la salle des machines entendu sur les quais de la gare haute
-# (Kevin, 07/10/2026 : « quand on attend en gare du haut on entend
+# (retour d'utilisateur, 07/10/2026 : « quand on attend en gare du haut on entend
 # strictement le même son que celui de la vue machinerie, que tu modules en
 # fonction de la distance à la machinerie »).
 #

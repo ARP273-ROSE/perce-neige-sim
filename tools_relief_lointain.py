@@ -8,7 +8,7 @@
 Pourquoi : le bloc détaillé (tools_relief3d.py, maille 25 m) s'arrête à
 5 km de la ligne ; au-delà, il n'y avait que le panorama photographié depuis
 la gare du haut, une image fixe à 10 km — vu d'ailleurs que la gare, c'était
-« la vue panoramique du haut, statique, en lévitation » (Kevin). Cet anneau
+« la vue panoramique du haut, statique, en lévitation » (retour d'utilisateur). Cet anneau
 de 44 × 44 km, maille 200 m, prolonge le vrai relief jusqu'à l'horizon.
 
 Sources :

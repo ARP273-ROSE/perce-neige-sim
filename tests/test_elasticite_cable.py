@@ -1,6 +1,6 @@
 """Élasticité du câble en marche — retour d'essai du 2026-10-04.
 
-Kevin : « la rame oscille déjà au ralenti quand elle rentre, pas juste
+Retour d'utilisateur : « la rame oscille déjà au ralenti quand elle rentre, pas juste
 après l'arrêt, et quand elle part du bas elle oscille aussi à
 l'accélération ». Le mouvement intégré (tr.s) est celui du câble à la
 poulie ; chaque rame s'en écarte élastiquement (st.el_x1 / el_x2), avec une

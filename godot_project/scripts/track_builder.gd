@@ -48,13 +48,13 @@ extends Node3D
 @export var cable_beam_height: float = 0.06   # longrine basse : le câble doit rester au niveau des blochets
 
 @export var guide_spacing: float = 13.57     # ancienne grille (3474 m / 256 paires, CFD) : gare haute seulement
-# Fosse centrale (vidéo de Kevin du 26/04/2026, vue plongeante depuis le nez,
+# Fosse centrale (vidéo d'un utilisateur du 26/04/2026, vue plongeante depuis le nez,
 # et retour d'essai du 03/10 : « le plancher entre les traverses au milieu
 # de la voie, faudrait le baisser de 70 cm ») : les rails sont sur de hauts
 # plots béton, le fond entre et autour des deux rangées de plots est 70 cm
 # sous l'ancienne dalle ; les supports de galets enjambent la fosse.
 @export var trench_depth: float = 0.70
-# Supports numérotés (faits de Kevin, 03/10) : AUCUN support en gare aval,
+# Supports numérotés (faits d'un utilisateur, 03/10) : AUCUN support en gare aval,
 # le n° 1 est au bout du quai aval, le n° 238 (dernier numéroté) au début du
 # quai amont, là où la pente de la gare haute est atteinte (SlopeProfile).
 # Quais raccourcis le 06/10 (PNConstants.QUAI_*) : [3, 42,56] et
@@ -154,7 +154,7 @@ func build(t: TunnelBuilder) -> void:
 # (audit_physique/aiguillage_abt_cable.sage).
 #
 # Aiguillage Abt (principe d'après une photo d'aiguillage de funiculaire
-# à ciel ouvert envoyée par Kevin + dossier remontees-mecaniques.net) :
+# à ciel ouvert envoyée par un utilisateur + dossier remontees-mecaniques.net) :
 #   - rails extérieurs continus (roues à double boudin) ;
 #   - chaque rail intérieur naît contre le rail extérieur opposé, après la
 #     lacune du boudin de l'autre rame : nez en rampe 9 m après la fourche ;
@@ -193,7 +193,7 @@ func _in_abt_zone(s: float) -> bool:
 		or (s > PNConstants.PASSING_END - ABT_ZONE and s < PNConstants.PASSING_END + 5.0)
 
 
-# Galets REPÈRES relevés par Kevin au compteur de la cabine, dans la vidéo
+# Galets REPÈRES relevés par un utilisateur au compteur de la cabine, dans la vidéo
 # de montée (06/10/2026) : numéro → abscisse du nez de la rame montante
 # (s = compteur + START_S + TRAIN_HALF = compteur + 38,56). Premier et
 # dernier galet incliné de chaque courbe, sortie de secours au n° 145,
@@ -423,7 +423,7 @@ func _loop_ds_for_offset(dv: float) -> float:
 #   B. le tronçon suivant croise l'autre rail intérieur sur le cœur en X,
 #      court tout l'évitement et finit de même à l'autre bout.
 # À la lacune (retour d'essai du 30/09, gros plans d'Hakone et de la photo
-# de Kevin) : les deux bouts sont PLIÉS pour courir PARALLÈLEMENT AU CÂBLE,
+# d'un utilisateur) : les deux bouts sont PLIÉS pour courir PARALLÈLEMENT AU CÂBLE,
 # côte à côte, à ±8 cm de lui, sur 1 m de chevauchement ; chacun y arrive
 # par un coude franc depuis la ligne de la roue. Le câble file droit dans le
 # couloir, sur une tôle de glissement ; les bouts reposent sur des plaques.
@@ -1362,7 +1362,7 @@ func _build_sleepers() -> void:
 # Fosses de gare (photos 093522 / 094104 en bas, 095509 / 095443 en haut) :
 # la dalle et les blochets s'arrêtent, les rails passent sur la fosse.
 # Mêmes bornes dans stations_builder (PIT_LOW_END / PIT_HIGH_START).
-# fosse de la gare basse sur toute la longueur des quais (Kevin, 07/10/2026 :
+# fosse de la gare basse sur toute la longueur des quais (retour d'utilisateur, 07/10/2026 :
 # « la fosse doit être plus profonde pour que la tête soit sous les rails »)
 @export var pit_low_end: float = 43.0
 @export var pit_high_start: float = PNConstants.LENGTH   # pas de fosse en haut
@@ -1524,7 +1524,7 @@ func _build_walkway() -> void:
 	s = 12.0
 	while s < PNConstants.LENGTH - 12.0:
 		# pas dans les salles des gares : le boîtier y flottait loin de
-		# tout mur (retour de Kevin du 06/10/2026, gare du bas)
+		# tout mur (retour d'un utilisateur du 06/10/2026, gare du bas)
 		if s < tunnel.station_low_end + 1.0 or s > tunnel.station_high_start - 1.0:
 			s += 24.0
 			continue
@@ -2245,7 +2245,7 @@ func galets_count() -> int:
 	return _galets.size()
 
 
-# --- Numéros des supports (faits de Kevin, 03/10/2026) ----------------
+# --- Numéros des supports (faits d'un utilisateur, 03/10/2026) ----------------
 # Peints en BLANC rétroréfléchissant : invisibles dans le noir, ils
 # s'allument dans les phares. En montant, un support sur deux porte un
 # numéro PAIR (2 → 238), sur la face tournée vers la rame montante, à
@@ -2405,7 +2405,7 @@ func _build_support_numbers(plaques: Array) -> void:
 
 
 # Lacunes de l'aiguillage : plaques d'appui sombres sous les bouts de rail
-# (photo de Kevin : une plaque boulonnée sous chaque extrémité) et tôle de
+# (photo d'un utilisateur : une plaque boulonnée sous chaque extrémité) et tôle de
 # glissement sous le câble dans le couloir (photo d'Hakone). La tôle
 # affleure à 12 mm sous le câble : il y glisse s'il décolle des galets.
 func _build_abt_plates() -> void:
@@ -2864,7 +2864,7 @@ func update_cable_phase(s_driver: float, s_other: float = -1.0) -> void:
 
 
 # ---------------------------------------------------------------------------
-# Attache du câble (05/10/2026, fait de Kevin) : le câble s'accroche au
+# Attache du câble (05/10/2026, fait d'un utilisateur) : le câble s'accroche au
 # MILIEU DE LA VOITURE AMONT de chaque rame, par un culot (cône coulé sur
 # son extrémité, « attaches culot » de la fiche technique) tenu sous la
 # caisse par une chape. Le culot est au-dessus des joues des galets — sinon

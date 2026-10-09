@@ -243,7 +243,7 @@ func _input(event: InputEvent) -> void:
 		return
 	if event is InputEventScreenTouch:
 		var t: InputEventScreenTouch = event
-		# comme dans les jeux (Kevin, 08/10/2026 : « ça fait tourner la vue
+		# comme dans les jeux (retour d'utilisateur, 08/10/2026 : « ça fait tourner la vue
 		# en même temps, c'est le bazar ») : joystick FLOTTANT — il naît là
 		# où le pouce se pose dans la moitié gauche de l'écran ; tout doigt
 		# posé sur la moitié droite tourne la vue ; un doigt sur un bouton ne
