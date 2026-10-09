@@ -35,7 +35,7 @@ func _tick() -> void:
 			quit(1)
 		return
 	if _cam == null:
-		var mm: MultiMesh = (faces[min(3, faces.size() - 1)] as MultiMeshInstance3D).multimesh
+		var mm: MultiMesh = (faces[0] as MultiMeshInstance3D).multimesh
 		var xf: Transform3D = mm.get_instance_transform(0)
 		_cam = Camera3D.new()
 		get_root().add_child(_cam)
