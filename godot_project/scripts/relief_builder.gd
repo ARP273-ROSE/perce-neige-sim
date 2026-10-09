@@ -286,7 +286,9 @@ var _pieces: Array = []               # [rect, nx, nz, hauteurs, masque] (bancs)
 func build(t: TunnelBuilder, cran: int = 0) -> void:
 	tunnel = t
 	_pas = 1 if cran <= 2 else 2
-	_ortho_l = 2048 if cran <= 2 else 1024
+	# 21 km d'emprise depuis le 09/10/2026 (Tignes – Val d'Isère) : 4096 px =
+	# 5,1 m/px sur une bonne machine ; 2048 px (10 m/px) sinon et sur le web
+	_ortho_l = 4096 if cran <= 2 else 2048
 	_octets = _octets_png("res://textures/relief_hauteurs.png")
 	_octets_loin = _octets_png("res://textures/relief_lointain_hauteurs.png")
 	_h.resize(ReliefDonnees.NX * ReliefDonnees.NZ)

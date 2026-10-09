@@ -7,6 +7,49 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.19.0** — le domaine Tignes – Val d'Isère (09/10/2026).
+- **Carte élargie** : « faire la zone de jeu qui couvre tout, de Tignes les
+  Brévières au glacier du Pissaillas en passant par le Fornet, plus une
+  marge autour pour le paysage ». Le relief détaillé (IGN RGE ALTI, maille
+  25 m) passe de 8,6 × 10,2 km à **21,1 × 17,3 km** (45,375–45,530 °N,
+  6,820–7,090 °E) ; au-delà de la frontière italienne, où l'IGN n'a pas de
+  valeurs (2 392 nœuds sur 583 204, autour de la Tsanteleina), le relief
+  vient des Terrain Tiles (SRTM / EU-DEM). Fonds de vallée à 1 411 m :
+  l'altitude codée part désormais de 1 300 m. Orthophoto IGN 4096 px
+  (5,1 m/px) sur PC, 2048 px sur le web. Lieux nommés ajoutés : les
+  Brévières, le Lavachet, Val d'Isère, la Daille, le Fornet, Rocher de
+  Bellevarde, Tête du Solaise, col et signal de l'Iseran, glacier du
+  Pissaillas, Pointe de la Sana, Grande Sassière, Tsanteleina.
+- **Toutes les pistes du domaine** (OpenStreetMap, comme OpenSkiMap) :
+  420 tracés et 63 surfaces damées, avec leurs noms et leurs couleurs,
+  jalons et panneaux ronds sur chacune.
+- La collecte des remontées mécaniques (Lumiplan, OSM, reportages, départs,
+  arrivées, pylônes) est faite à part, hors du programme, pour la suite.
+- Rame d'en face : « si j'ai choisi de piloter la rame 2 mais que le skieur
+  monte dans la 1, l'exploitation auto et la boucle ne marchent pas, et les
+  annonces ne s'entendent pas » → la BOUCLE prend la rame qui est à quai en
+  bas, pilotée ou non (côté du quai calculé dans le repère de CETTE
+  voiture), et en descend en haut ; la sono s'entend dans les deux rames.
+  Banc `bench_skieur_auto_3d --rame-en-haut` : départ de la terrasse, rame
+  d'en face prise en bas, montée, sortie Génépy.
+- BOUCLE partie de la terrasse : elle coupait l'échancrure de la terrasse et
+  tombait sous le plancher, puis butait sur le chalet (allers-retours deux
+  minutes) → le long du bord ouest entre garde-corps et tables, l'escalier
+  du bout, puis à l'est du restaurant jusqu'au départ de la trace.
+- **Joystick de la PWA refondu**, comme dans les jeux : à ski, on POINTE le
+  joystick là où l'on veut aller par rapport à l'écran (haut = tout droit
+  dans l'axe de la caméra) et la caméra ne bouge pas tant qu'on vise de
+  côté — avant, le joystick était un volant et la caméra suivait : tenu à
+  droite, on tournait en rond ; tiré vers soi = chasse-neige ; à l'arrêt,
+  poussé vers le haut = on pousse sur les bâtons. Base « dynamique » qui
+  suit le pouce au-delà du cercle, zone morte de 12 %.
+- Pilote à ski (boucle, bancs) : sur le relief rééchantillonné, un point de
+  passage en contre-haut le laissait osciller dans un creux jusqu'à la fin
+  du délai → sans progrès pendant 6 s, il vise le point suivant.
+- Vérifié : six bancs du skieur verts sur la carte élargie, plus la boucle
+  « rame d'en face » (`--rame-en-haut`) ; vue d'ensemble du domaine
+  (`shot_domaine.gd`).
+
 **v1.18.10** — retours du 09/10/2026.
 - BOUCLE : « une fois sorti de la gare supérieure, il ne fait que marcher,
   demi-tour tout le temps, allers-retours sans fin, ne chausse jamais » →
