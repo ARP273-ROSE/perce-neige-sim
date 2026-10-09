@@ -1,6 +1,6 @@
 class_name FantomesDonnees
 extends RefCounted
-## GÉNÉRÉ par tools_fantomes.py — descentes réelles de ARP273-ROSE (GPS), de la
+## GÉNÉRÉ par tools_fantomes.py — descentes réelles d'un utilisateur (GPS), de la
 ## gare du glacier à Val Claret. Ne pas éditer à la main.
 ##
 ## Positions lissées dans le repère du jeu (x vers l'est, z vers le sud),
