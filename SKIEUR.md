@@ -184,7 +184,7 @@ funiculaire), les sauts (il reste collé au sol), les chutes.
   (`Y_SKI`), postures schuss / chasse-neige (`SkieurMesh.squelette_schuss`,
   `squelette_chasse`, `skis_aux_pieds(mat, 22°)`), chute
   (`SkieurJoueur._chuter`, `V_CHUTE_MUR` 6, `V_CHUTE_ROCHE` 8, `CHUTE_S`
-  2,5) ; panneaux ronds nommés (`DomaineSkiable._construire_panneaux`,
+  2,5) ; panneaux ronds nommés (`DomaineSkiable._construire_panneaux` ; depuis la 1.18.10 face `PanneauPiste` : nom en arc, TIGNES en arc, n° de balise au centre ;
   tous les 250 m, Label3D ; depuis la 1.18.5 poteau de 12 cm enfoncé de
   1,2 m sous le sol calculé — le sol affiché s'en écarte et le panneau
   « flottait » — et liseré blanc) ; néons et câbles du tunnel sur la paroi.
