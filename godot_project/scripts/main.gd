@@ -1435,6 +1435,11 @@ func _unhandled_input(event: InputEvent) -> void:
 		if mode_skieur and event.keycode == KEY_B:
 			basculer_skieur_auto()
 			return
+		# zoom de la carte des pistes (à ski)
+		if mode_skieur and commandes_skieur != null and commandes_skieur.carte != null \
+				and commandes_skieur.carte.visible and event.keycode in [KEY_PLUS, KEY_KP_ADD, KEY_EQUAL, KEY_MINUS, KEY_KP_SUBTRACT]:
+			commandes_skieur.carte.zoomer(1.4 if event.keycode in [KEY_PLUS, KEY_KP_ADD, KEY_EQUAL] else 1.0 / 1.4)
+			return
 		if mode_skieur and event.keycode == KEY_U:     # U : issUe de secours (I = inverser le sens)
 			evacuer()
 			return
@@ -2265,6 +2270,13 @@ const SKIEUR_DEDANS_X: float = 1.25
 func _maj_skieur() -> void:
 	if skieur == null or commandes_skieur == null:
 		return
+	# carte des pistes : ses données dès que le domaine existe
+	var carte: CartePistes = commandes_skieur.carte
+	if carte != null and carte.domaine == null and domaine != null:
+		carte.domaine = domaine
+		carte.skieur = skieur
+		if tunnel != null:
+			carte.gares = [tunnel.transform_at(0.0).origin, tunnel.transform_at(PNConstants.LENGTH).origin]
 	# portes automatiques : elles s'ouvrent devant le skieur
 	_presence[0] = skieur.global_position
 	PorteAuto.presences = _presence

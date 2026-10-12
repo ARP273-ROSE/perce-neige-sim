@@ -6425,6 +6425,12 @@ class AutoOps:
             if (self.skieur_a_bord and self._skieur_vu
                     and self._skieur_a_bord_t > 1.5):
                 self.phase_t = max(self.phase_t, self.station_dwell_s)
+            # la rame d'en face n'ouvre qu'à la stabilisation de SON brin
+            # (jusqu'à 45 s en bas) : on ne repart pas avant qu'elle ait
+            # ouvert, sinon ses voyageurs ne montent jamais (retour d'utilisateur,
+            # 11/10/2026 : « le skieur n'arrive pas à monter à bord »)
+            if getattr(self.w, "_g_arr", False) and not getattr(self.w, "_g_ouvert", False):
+                self.phase_t = min(self.phase_t, self.station_dwell_s - 8.0)
             if self.phase_t >= self.station_dwell_s:
                 # If it's past the last-ascent cutoff and we're at the
                 # lower terminus, end the day instead of sending another

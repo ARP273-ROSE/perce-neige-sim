@@ -33,6 +33,10 @@ var _msg: Label = null                  # message passager (refus, chrono)
 var _pique: Label = null                # pique sarcastique : sa propre ligne, jamais écrasée
 var _t_pique: float = 0.0
 var _t_msg: float = 0.0
+var carte: CartePistes = null           # carte des pistes (à ski)
+var _carte_masquee: bool = false
+var _chausse: bool = false
+var _b_carte: Button = null
 
 
 func _ready() -> void:
@@ -74,6 +78,21 @@ func _ready() -> void:
 		if main != null:
 			main.basculer_exploitation(on))
 	col.add_child(_b_exploit)
+	# carte des pistes en surimpression (à ski), en haut à droite
+	carte = CartePistes.new()
+	carte.name = "CartePistes"
+	carte.set_anchors_preset(Control.PRESET_TOP_RIGHT)
+	carte.position = Vector2(-CartePistes.TAILLE.x - 16.0, 96.0)
+	carte.visible = false
+	_racine.add_child(carte)
+	_b_carte = _bouton("CARTE", "Carte des pistes autour de soi, à ski : + / − ou molette pour zoomer")
+	_b_carte.toggle_mode = true
+	_b_carte.button_pressed = true
+	_b_carte.visible = false
+	_b_carte.toggled.connect(func(on: bool) -> void:
+		_carte_masquee = not on
+		_maj_carte())
+	col.add_child(_b_carte)
 	_b_ski = _bouton("CHAUSSER", "Chausser ou déchausser les skis, dehors sur la neige (touche E)")
 	_b_ski.pressed.connect(func() -> void:
 		if main != null:
@@ -175,10 +194,19 @@ func set_auto(on: bool) -> void:
 
 ## Chaussé ou pas : libellés CHAUSSER / DÉCHAUSSER, COURIR / SCHUSS.
 func set_chausse(oui: bool) -> void:
+	_chausse = oui
+	_maj_carte()
 	_b_ski.text = "DÉCHAUSSER" if oui else "CHAUSSER"
 	_b_courir.text = "SCHUSS" if oui else "COURIR"
 	if not oui:
 		_info.text = ""
+
+
+func _maj_carte() -> void:
+	if carte != null:
+		carte.visible = _chausse and not _carte_masquee
+	if _b_carte != null:
+		_b_carte.visible = _chausse
 
 
 ## Ligne du haut, à ski : vitesse et piste.

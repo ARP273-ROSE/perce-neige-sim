@@ -44,6 +44,14 @@ var actif: bool = false
 ## Commande de marche : x vers la droite, y vers l'avant (−1…1).
 var entree: Vector2 = Vector2.ZERO
 var course: bool = false
+## Course du pilote (mode BOUCLE) en suivant `chemin` : il court quand
+## l'embarquement est ouvert (retour d'utilisateur, 11/10/2026 : « il ne court pas s'il
+## est en retard »).
+var course_auto: bool = false
+## Assis sur un banc (mode BOUCLE, en attendant la rame).
+var assis: bool = false
+const RECUL_ASSIS: float = 0.42          # pieds devant le banc, bassin au-dessus de l'assise
+var _image_assise: Mesh = null
 ## Touches de marche tenues dans le simulateur PC (vue 3D embarquée, le
 ## clavier reste au PC) : 1 avant, 2 arrière, 4 gauche, 8 droite, 16 courir
 var touches_ext: int = 0
@@ -252,6 +260,7 @@ func activer(position_depart: Vector3, regard: float) -> void:
 	if dernier_sol == Vector3.ZERO:
 		dernier_sol = position_depart
 	support = null
+	lever()
 	actif = true
 	visible = true
 	set_process(true)
@@ -271,7 +280,8 @@ func desactiver(rester_visible: bool = false) -> void:
 
 ## Chausser ou déchausser (bouton CHAUSSER, touche E) : renvoie la raison
 ## d'un refus, ou "".
-func basculer_ski() -> String:
+func basculer_ski(forcer: bool = false) -> String:
+	lever()
 	if _chute_t > 0.0:
 		_chute_t = 0.0
 		_relever()
@@ -287,7 +297,7 @@ func basculer_ski() -> String:
 		return "On chausse dehors, sur la neige"
 	if not relief.dans_le_bloc(global_position.x, global_position.z):
 		return "Hors du domaine"
-	if not dehors(relief):
+	if not forcer and not dehors(relief):
 		# dans un bâtiment : non ; SOUS la surface (on a traversé la montagne
 		# à pied, là où le relief n'avait pas encore de collision) : on
 		# remonte sur la neige (retour d'utilisateur, 08/10/2026 : « il croit que je suis
@@ -304,6 +314,31 @@ func basculer_ski() -> String:
 	global_position.y = relief.hauteur_sol(global_position.x, global_position.z)
 	_apparence_ski()
 	return ""
+
+
+## S'asseoir sur un banc (mode BOUCLE) : debout devant l'assise, regard
+## `cap` ; le corps recule au-dessus du banc, skis posés (cachés).
+func asseoir(cap: float) -> void:
+	if chausse or assis:
+		return
+	if _image_assise == null:
+		_image_assise = SkieurMesh.passager("assis", "casque", SkieurMesh.materiau())
+	assis = true
+	_cap = cap
+	velocity = Vector3.ZERO
+	_corps.multimesh.mesh = _image_assise
+	_skis.visible = false
+	_visuel.rotation = Vector3(0.0, cap, 0.0)
+	_visuel.position = Vector3(sin(cap), 0.0, cos(cap)) * RECUL_ASSIS
+
+
+func lever() -> void:
+	if not assis:
+		return
+	assis = false
+	_skis.visible = true
+	_visuel.position = Vector3(0.0, Y_SKI if chausse else 0.0, 0.0)
+	_corps.multimesh.mesh = _image_glisse if chausse else _images[0]
 
 
 ## Vitesse de glisse (m/s), 0 à pied.
@@ -508,10 +543,16 @@ func _process(delta: float) -> void:
 		_camera_ski(delta)
 		_camera()
 		return
+	if assis:
+		if chemin.is_empty() and cmd.length() < 0.08:
+			velocity = Vector3.ZERO
+			_camera()
+			return
+		lever()
 	var dir: Vector3 = _direction(cmd)
 	if not chemin.is_empty():
 		dir = _suivre_chemin()
-		vite = false
+		vite = course_auto
 	_marcher(delta, dir, vite)
 	_trouver_support()
 	_animer(delta, dir)
@@ -528,6 +569,9 @@ func _direction(cmd: Vector2) -> Vector3:
 
 
 var _pt_prec: Vector3 = Vector3.ZERO     # dernier point atteint (pour reculer)
+## Rayon où un point de `chemin` est atteint (serré pour entrer dans une
+## porte de rame : la baie ne laisse que 11 cm de chaque côté)
+var tolerance_chemin: float = 0.35
 var _prog_d: float = INF                 # meilleure distance au point visé
 var _prog_t: float = 0.0                 # temps sans progrès
 
@@ -537,7 +581,7 @@ func _suivre_chemin() -> Vector3:
 	var d: Vector3 = cible - global_position
 	d.y = 0.0
 	var dist: float = d.length()
-	if dist < 0.35:
+	if dist < tolerance_chemin:
 		_pt_prec = chemin.pop_front()
 		_prog_d = INF
 		_prog_t = 0.0
