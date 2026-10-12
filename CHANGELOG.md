@@ -18,6 +18,16 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.19.19** — retour d'utilisateur du 12/10/2026 : « sur la PWA la consigne est
+repassée à 0 % par défaut ».
+- À l'arrivée en gare, la consigne tombait à 0 % jusqu'au demi-tour (la
+  stabilisation du câble : jusqu'à 45 s en gare basse). Hors Défi, elle
+  reste à 100 % dès l'arrivée — sans effet tant que le voyage n'est pas
+  lancé, le frein tambour tient la rame. En Défi, toujours 0 % : c'est au
+  conducteur.
+- Vérifié : trajet complet sans exploitation auto (consigne à 100 %
+  avant, pendant et après l'arrivée), bancs 3D.
+
 **v1.19.18** — retour d'utilisateur du 12/10/2026 (« change les marches si tu veux » ;
 les barrières restent bleues, c'est plus joli).
 - **Marches du quai comme sur les photos** (095433, 095438, 095511) :

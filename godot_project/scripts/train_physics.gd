@@ -1348,7 +1348,11 @@ func _arrival_grab() -> void:
 	_ghost_t_arr = 0.0
 	trip_started = false
 	maint_brake = true
-	speed_cmd = 0.0
+	# consigne : 0 en Défi (au conducteur) ; sinon 100 % dès l'arrivée —
+	# elle n'a pas d'effet hors voyage (le tambour tient la rame), et on la
+	# voyait à 0 % jusqu'au demi-tour, jusqu'à 45 s en gare basse (retour d'utilisateur,
+	# 12/10/2026 : « la consigne est repassée à 0 % par défaut »)
+	speed_cmd = 0.0 if challenge_mode else 1.0
 	speed_cmd_eff = 0.0
 	turnaround_delay_remaining = TURNAROUND_DELAY_S
 	print("[Physics] arrivée s=%.0f — frein tambour serré, portes à la stabilisation du câble (< %.0f cm, %.0f s maxi)"
