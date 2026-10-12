@@ -8,18 +8,22 @@ var _main: Node = null
 var _f: int = 0
 var _prefix: String = "/tmp/bancs"
 var _s: float = 1500.0
+var _dir: int = 0
 var _cam: Camera3D = null
 const VUES: Array = [
 	# [nom, position locale au palier, cible locale]
 	["travers", Vector3(-0.6, 1.5, -0.2), Vector3(1.0, 0.5, 0.0)],
 	["long", Vector3(0.3, 1.6, -2.0), Vector3(0.0, 0.5, 4.0)],
 	["profil", Vector3(-0.9, 0.9, 0.0), Vector3(1.5, 0.45, 0.0)],
+	["escalier", Vector3(0.0, 1.3, -3.5), Vector3(0.0, 0.0, 3.0)],
 ]
 
 
 func _initialize() -> void:
 	for a in OS.get_cmdline_user_args():
-		if a.begins_with("s="):
+		if a.begins_with("dir="):
+			_dir = int(a.substr(4))
+		elif a.begins_with("s="):
 			_s = float(a.substr(2))
 		elif not a.begins_with("--"):
 			_prefix = a
@@ -37,6 +41,8 @@ func _tick() -> void:
 	ph.s = _s
 	ph.s_prev_step = _s
 	ph.v = 0.0
+	if _dir != 0:
+		ph.direction = _dir
 	var hud = _main.get("hud")
 	if hud != null:
 		hud.visible = false
@@ -46,7 +52,8 @@ func _tick() -> void:
 	if i >= VUES.size():
 		quit(0)
 		return
-	var pal: Node3D = cab.find_child("Amenagement1_4", true, false)
+	# le jeu de gradins du sens courant de la caisse (12/10/2026)
+	var pal: Node3D = (cab._gradins[0][cab.sens_gradins] as Node3D).find_child("Amenagement1_4", true, false)
 	if _cam == null:
 		_cam = Camera3D.new()
 		_cam.fov = 70.0

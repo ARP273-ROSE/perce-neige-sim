@@ -125,6 +125,14 @@ funiculaire), les sauts (il reste collé au sol), les chutes.
   quai suit les portes de la rame qui est EN BAS. Banc
   `bench_boucle_salle_3d.gd` (salle, rame en ligne : banc, course, à bord,
   zéro déblocage ; `--pistes` : parti chaussé d'une piste).
+- **Gradins de la rame** (1.19.14) : deux jeux par voiture
+  (`Cabin._gradins[idx][±1]`, `sens_gradins`, `sens_voulu()` d'après
+  `door_slide_sign`) — la caisse retournée de 180° inversait l'inclinaison
+  des paliers ; `_appliquer_sens` bascule la visibilité, recale les
+  voyageurs (`_floor_y_at(z, sens)`) et émet `gradins_bascules`, que
+  `CollisionsJeu._gradin/_maj_forme` suit (paliers, paliers de quai,
+  seuils). Les bancs (collisions droites) ne dépendent que du centre du
+  palier.
 - **Carte des pistes** (`carte_pistes.gd`, bouton CARTE skis aux pieds) :
   surimpression 340 px semi-transparente, nord en haut, centrée sur le
   skieur ; tracés `DomaineSkiable._axes` dans leur couleur, noms au-delà de
