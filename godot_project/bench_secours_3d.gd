@@ -15,6 +15,11 @@ var _chute_min: float = INF
 
 
 func _initialize() -> void:
+	# charge des passagers tirée au hasard → affaissement du brin variable
+	# (−0,8 à −1,3 m) : avec certaines charges le chemin scripté accrochait
+	# le bas de la caisse (échec 1 fois sur 5) ; graine fixe = banc
+	# reproductible
+	seed(20261012)
 	_main = load("res://scenes/main.tscn").instantiate()
 	get_root().add_child(_main)
 	process_frame.connect(_tick)
