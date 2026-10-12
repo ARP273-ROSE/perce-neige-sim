@@ -18,6 +18,46 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.19.21** — retours d'utilisateur du 12/10/2026 (troisième lot).
+- **BOUCLE à ski, refaite** :
+  - il chausse dès la neige (sortie de la porte Génépy ou bas de
+    l'escalier de la terrasse) au lieu de marcher jusqu'au départ d'une
+    trace fantôme ;
+  - pilote EXPERT : virages coupés jusqu'à 1,6 g, carres qui tiennent,
+    vitesse choisie d'après les courbes à venir jusqu'à ~100 km/h,
+    freinage en dérapage, posture de glisse inclinée ou de schuss —
+    jamais le chasse-neige ; il vise un point à une distance qui croît
+    avec la vitesse ;
+  - il suit les PISTES balisées : itinéraire calculé sur le réseau des
+    pistes (axes reliés entre eux, montées très pénalisées, Dijkstra) — les
+    traces GPS réelles sortent de nos pistes de 34 à 58 % du temps ;
+  - il skie jusqu'au pied de l'escalier de la gare de Val Claret, ralentit
+    pour s'y arrêter, déchausse et court au lieu de marcher à 2 km/h.
+  - Banc `bench_ski_expert_3d.gd` : maxi 102 km/h, moyenne 73 km/h,
+    descente 3 min 10, 4 % du temps hors piste (53 % avant), jamais en
+    chasse-neige, déchaussé à 12 m de la gare.
+- **Annonce d'accueil en haut** : elle passait seulement quand la rame
+  pilotée montait — passager de la rame d'en face qui montait, on ne
+  l'entendait pas. Elle part pour la rame qui monte (et pas pour le
+  skieur qui descend dans l'autre).
+- **Carte des pistes** : le vrai tracé du funiculaire (courbe, jusqu'à
+  522 m de la ligne droite) au lieu d'un trait entre les gares, et les deux
+  rames en direct.
+- **Panneau des départs de Val Claret** : vraie attente — trajet restant
+  (d/v + 81 s de freinage et d'approche), 70 s de l'arrivée en haut au
+  départ, 95 s en bas, attente de l'automate et séquence de départ ;
+  « Départ imminent » sous 45 s, « Embarquement » quand c'est le
+  conducteur qui décide. Prédit à moins de 2 s du départ réel.
+- **Skieur coincé contre la rame sur le quai** : trois causes.
+  (1) Les pans de collision de la coque étaient posés de travers (des
+  ailettes radiales qui dépassaient jusqu'à 1,88 m de l'axe) → coque
+  tangente. (2) Les marches du quai (7 cm) se montaient en soulevant le
+  skieur de 40 cm : contre la rame, sa tête heurtait le flanc bombé de la
+  caisse → rampe lisse de collision sous les marches (hors de l'escalier
+  de la fosse). (3) Porte fermée en retrait et plus étroite que la baie →
+  au nu de la caisse, sur toute la baie. Aide au contournement des angles.
+  Banc `bench_quai_3d.gd` : 9 m en 8 s le long de la rame (1,4 m avant).
+
 **v1.19.20** — retour d'utilisateur du 12/10/2026 : « mode normal, impossible
 d'appuyer sur PRÊT car consigne à 0 ».
 - Changer de mode ne touchait pas à la consigne : revenu du Défi (0 %),

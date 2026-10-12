@@ -105,6 +105,18 @@ var _v_ski: Vector3 = Vector3.ZERO
 var _cap_ski: float = 0.0
 var _penche: float = 0.0
 var _vue_libre: float = 99.0            # s depuis le dernier glissé de la vue
+## Pilote EXPERT (BOUCLE) : il carve « comme Odermatt » au lieu du
+## chasse-neige à 40 km/h d'une première étoile (retour d'utilisateur, 12/10/2026) —
+## virages coupés jusqu'à 1,6 g, carres qui tiennent, vitesse choisie sur
+## les courbes à venir jusqu'à ~100 km/h, freinage en dérapage, posture de
+## glisse inclinée ou de schuss, jamais le chasse-neige.
+var pilote_expert: bool = false
+const A_VIRAGE_EXPERT: float = 16.0      # m/s² (1,6 g, virage coupé de géant)
+const ADHERENCE_EXPERT: float = 9.0
+const DEC_DERAPAGE: float = 4.5          # m/s² : freinage en dérapage contrôlé
+const V_EXPERT: float = 27.5             # m/s (≈ 100 km/h)
+const A_PLAN: float = 11.0               # m/s² : latérale visée en préparant un virage
+var _pilote_schuss: bool = false
 var _ski_prog_d: float = INF          # pilote à ski : meilleure distance au point visé
 var _ski_prog_t: float = 0.0
 var _joy_vise: bool = false             # (conservé pour compatibilité, plus utilisé)
@@ -572,7 +584,11 @@ func _process(delta: float) -> void:
 		or (touches_ext & 16) != 0 or entree.length() > 0.92     # joystick à fond : on court
 	if chausse:
 		if not chemin.is_empty():
-			cmd = _pilote_ski()
+			if pilote_expert:
+				cmd = _pilote_expert()
+				vite = _pilote_schuss
+			else:
+				cmd = _pilote_ski()
 		elif k.length() == 0.0 and entree.length() > 0.12:
 			cmd = _cmd_joystick_ski()
 		_glisser(delta, cmd, vite)
@@ -661,6 +677,61 @@ func _suivre_chemin() -> Vector3:
 	return d.normalized()
 
 
+## Aide au contournement (retour d'utilisateur, 12/10/2026 : « quand le skieur sur
+## le quai marche trop près du funi, il reste coincé contre ») : bloqué de
+## face contre un angle (bout d'un pan de caisse au bord d'une baie de
+## porte, chambranle, poteau), le glissement le long du mur ne donne rien —
+## on essaie la marche voulue tournée de ±30°, ±50°, ±75°, et l'on prend la
+## première direction libre, de préférence celle qui s'écarte de l'obstacle.
+func _contourner(voulu: Vector3, nm: Vector3) -> void:
+	# d'abord ressortir du renfoncement : 2 cm le long des normales de
+	# contact (au bord d'une baie de porte ouverte, le bout du pan d'un côté,
+	# le fond de la baie de l'autre : leur somme pointe vers le quai)
+	var sortie: Vector3 = Vector3.ZERO
+	for i in range(get_slide_collision_count()):
+		var nk: Vector3 = get_slide_collision(i).get_normal()
+		nk.y = 0.0
+		sortie += nk
+	var vn: Vector3 = Vector3(voulu.x, 0.0, voulu.z).normalized()
+	if sortie.length() > 1e-3:
+		sortie = sortie.normalized()
+		if sortie.dot(vn) < -0.7:
+			# obstacle pile en face (bout d'un pan au bord d'une baie) : on
+			# s'écarte de 3 cm du côté OPPOSÉ à la poussée latérale — c'est
+			# elle qui l'avait fait entrer de 3 cm dans l'embrasure
+			var lat: Vector3 = vn - sortie * vn.dot(sortie)
+			var cote: Vector3 = Vector3(-vn.z, 0.0, vn.x)
+			if lat.length() > 1e-3 and lat.dot(cote) > 0.0:
+				cote = -cote
+			elif lat.length() <= 1e-3:
+				cote = cote if not test_move(global_transform.translated(Vector3.UP * 0.02), cote * 0.05) else -cote
+			if not test_move(global_transform.translated(Vector3.UP * 0.02), cote * 0.03):
+				global_position += cote * 0.03
+				return
+		elif not test_move(global_transform.translated(Vector3.UP * 0.02), sortie * 0.02):
+			global_position += sortie * 0.02
+	var depart: Transform3D = global_transform.translated(Vector3.UP * 0.02)
+	for a in [0.52, 0.87, 1.31]:
+		var meilleur: Vector3 = Vector3.ZERO
+		var score: float = -INF
+		for sg in [1.0, -1.0]:
+			var c: Vector3 = voulu.rotated(Vector3.UP, a * sg)
+			if test_move(depart, c):
+				continue
+			var sc: float = c.normalized().dot(nm)
+			if sc > score:
+				score = sc
+				meilleur = c
+		if meilleur != Vector3.ZERO:
+			global_position += meilleur
+			return
+
+
+var _pos_marche_prec: Vector3 = Vector3.ZERO
+var _avance_moy: float = 0.0
+var _marche_t: float = 0.0
+
+
 func _marcher(delta: float, dir: Vector3, vite: bool) -> void:
 	var v_cible: Vector3 = dir * (V_COURSE if vite else V_MARCHE)
 	var vh: Vector3 = Vector3(velocity.x, 0.0, velocity.z).move_toward(v_cible, ACCEL * delta)
@@ -676,8 +747,28 @@ func _marcher(delta: float, dir: Vector3, vite: bool) -> void:
 	var fait: Vector3 = global_position - avant
 	fait.y = 0.0
 	var voulu: Vector3 = v_cible * delta
+	# progression NETTE dans la direction voulue (moyenne sur ~0,3 s) : contre
+	# un angle, il avançait de 2 cm puis était repoussé de 2 cm, image après
+	# image — immobile sans jamais paraître bloqué
+	if voulu.length() > 1e-4:
+		var net: Vector3 = global_position - _pos_marche_prec
+		net.y = 0.0
+		_avance_moy = lerpf(_avance_moy, net.dot(voulu.normalized()) / maxf(delta, 1e-3), minf(1.0, delta * 4.0))
+		if _avance_moy < 0.25 * v_cible.length() and is_on_wall() and _marche_t > 0.4:
+			var nw: Vector3 = get_wall_normal()
+			nw.y = 0.0
+			_contourner(voulu, nw.normalized() if nw.length() > 1e-4 else Vector3.ZERO)
+		_marche_t += delta
+	else:
+		_avance_moy = 0.0
+		_marche_t = 0.0
+	_pos_marche_prec = global_position
 	if voulu.length() > 1e-4 and fait.length() < voulu.length() * 0.5 and is_on_wall():
-		if not _monter_marche(voulu) \
+		# marche montée par le haut (40 cm) ; si la tête cogne, au plus juste
+		# (15 cm : les marches du quai font 7 cm) — contre la rame, soulevé de
+		# 40 cm, il heurtait le flanc bombé de la caisse au-dessus du quai et
+		# restait coincé devant chaque marche (retour d'utilisateur, 12/10/2026)
+		if not _monter_marche(voulu) and not _monter_marche(voulu, 0.15) \
 				and not (grimpe and support == null and not chausse and _monter_marche(voulu, GRIMPE_MAX, 0.6)):
 			# pas une marche : on glisse le long du mur (porte-skis abordé
 			# presque de face, contremarche, chambranle) — move_and_slide
@@ -693,9 +784,14 @@ func _marcher(delta: float, dir: Vector3, vite: bool) -> void:
 				# collé : déjà en contact, le balayage s'arrête à t = 0) ;
 				# l'essai se fait 2 cm au-dessus du sol, sinon le contact au
 				# sol compte déjà comme un obstacle
-				if glisse.length() > 1e-4 \
+				# glissement qui n'avance presque pas (mur de face : il ne
+				# reste que la poussée de côté, qui l'enfonçait dans le
+				# renfoncement d'une porte) → contournement
+				if glisse.length() >= voulu.length() * 0.5 \
 						and not test_move(global_transform.translated(Vector3.UP * 0.02), glisse):
 					global_position += glisse
+				else:
+					_contourner(voulu, nm)
 	if is_on_floor():
 		_chute = 0.0
 		if support == null and get_floor_normal().y > 0.9:
@@ -854,7 +950,8 @@ func _glisser(delta: float, cmd: Vector2, schuss: bool) -> void:
 	var vit0: float = vit
 	# posture : chasse-neige dès qu'on freine, poussée animée quand il pousse
 	# sur ses bâtons, schuss quand il file sans pousser
-	if cmd.y < -0.2 and vit > 0.5:
+	var expert: bool = pilote_expert and not chemin.is_empty()
+	if cmd.y < -0.2 and vit > 0.5 and not expert:
 		_poser_posture(2)
 	elif _pousse:
 		_poussee_t += delta
@@ -863,7 +960,7 @@ func _glisser(delta: float, cmd: Vector2, schuss: bool) -> void:
 		_poussee_t = 0.0
 		_poser_posture(1 if (schuss and vit > 3.0) else 0)
 	# virage : les skis pivotent, d'autant moins vite qu'on va vite
-	var omega: float = minf(OMEGA_SKI, A_VIRAGE / maxf(vit, 0.1))
+	var omega: float = minf(OMEGA_SKI, (A_VIRAGE_EXPERT if expert else A_VIRAGE) / maxf(vit, 0.1))
 	_cap_ski -= cmd.x * omega * delta
 	var av_h: Vector3 = Vector3(-sin(_cap_ski), 0.0, -cos(_cap_ski))
 	var d: Vector3 = (av_h - n * av_h.dot(n)).normalized()
@@ -872,12 +969,12 @@ func _glisser(delta: float, cmd: Vector2, schuss: bool) -> void:
 	v += g_t * delta
 	# carres : la vitesse en travers des skis est absorbée
 	var lat: Vector3 = v - d * v.dot(d)
-	v -= lat * minf(1.0, ADHERENCE * delta)
+	v -= lat * minf(1.0, (ADHERENCE_EXPERT if expert else ADHERENCE) * delta)
 	# neige et air ; chasse-neige
 	vit = v.length()
 	var dec: float = MU_NEIGE * G * n.y + (K_AIR_SCHUSS if schuss else K_AIR) * vit * vit
 	if cmd.y < -0.2:
-		dec += DEC_CHASSE * minf(1.0, -cmd.y)
+		dec += (DEC_DERAPAGE if expert else DEC_CHASSE) * minf(1.0, -cmd.y)
 	if vit > 1e-3:
 		v *= maxf(0.0, vit - dec * delta) / vit
 	# immobile sur une pente douce : il tient
@@ -916,7 +1013,9 @@ func _glisser(delta: float, cmd: Vector2, schuss: bool) -> void:
 	if v.length() > 1e-4:
 		v = v.normalized() * m
 	# penché dans le virage (accélération latérale v·ω)
-	var cible: float = clampf(-cmd.x * omega * m / G, -0.6, 0.6)
+	# (expert : angulation jusqu'à ~57°, comme en géant)
+	var lim_p: float = 1.0 if expert else 0.6
+	var cible: float = clampf(-cmd.x * omega * m / G, -lim_p, lim_p)
 	_penche = lerpf(_penche, cible, minf(1.0, delta * 6.0))
 	_v_ski = v
 	velocity = v
@@ -997,6 +1096,90 @@ func _cmd_joystick_ski() -> Vector2:
 
 ## Pilote à ski (bancs, mode AUTO) : vise le point suivant de `chemin`,
 ## ralentit avant de tourner.
+func _pilote_expert() -> Vector2:
+	var p: Vector3 = global_position
+	var vit: float = _v_ski.length()
+	# points dépassés : à moins de 4 m, ou quand le suivant est plus proche
+	while chemin.size() > 1:
+		var d0: float = Vector2(chemin[0].x - p.x, chemin[0].z - p.z).length()
+		var d1: float = Vector2(chemin[1].x - p.x, chemin[1].z - p.z).length()
+		if d0 < 4.0 or d1 < d0:
+			chemin.pop_front()
+			_ski_prog_d = INF
+			_ski_prog_t = 0.0
+		else:
+			break
+	if chemin.size() == 1 and Vector2(chemin[0].x - p.x, chemin[0].z - p.z).length() < 4.0:
+		chemin.pop_front()
+		_pilote_schuss = false
+		return Vector2.ZERO
+	# pas de progrès depuis 6 s (creux, contre-pente) : point suivant
+	var d_vise: float = Vector2(chemin[0].x - p.x, chemin[0].z - p.z).length()
+	if d_vise < _ski_prog_d - 1.0:
+		_ski_prog_d = d_vise
+		_ski_prog_t = 0.0
+	else:
+		_ski_prog_t += get_process_delta_time()
+		if _ski_prog_t > 6.0 and chemin.size() > 1:
+			chemin.pop_front()
+			_ski_prog_d = INF
+			_ski_prog_t = 0.0
+	# point visé à une distance qui croît avec la vitesse (poursuite pure)
+	var l_vise: float = clampf(0.7 * vit + 6.0, 7.0, 28.0)
+	var cible: Vector2 = Vector2(chemin[0].x, chemin[0].z)
+	var acc: float = Vector2(p.x, p.z).distance_to(cible)
+	var i: int = 0
+	while acc < l_vise and i + 1 < chemin.size():
+		var a2: Vector2 = Vector2(chemin[i].x, chemin[i].z)
+		var b2: Vector2 = Vector2(chemin[i + 1].x, chemin[i + 1].z)
+		var seg: float = a2.distance_to(b2)
+		if acc + seg >= l_vise:
+			cible = a2.lerp(b2, (l_vise - acc) / maxf(seg, 1e-3))
+			acc = l_vise
+			break
+		acc += seg
+		cible = b2
+		i += 1
+	var vers: Vector2 = cible - Vector2(p.x, p.z)
+	var e: float = wrapf(atan2(-vers.x, -vers.y) - _cap_ski, -PI, PI)
+	# vitesse permise par les courbes à venir (sur 90 m) : rayon local R,
+	# v² ≤ A_PLAN·R, et le freinage possible d'ici là (v² ≤ v_lim² + 2·a·d)
+	var v_lim: float = V_EXPERT
+	var d_cum: float = 0.0
+	var j: int = 0
+	while j + 2 < chemin.size() and d_cum < 90.0:
+		var q0: Vector2 = Vector2(chemin[j].x, chemin[j].z)
+		var q1: Vector2 = Vector2(chemin[j + 1].x, chemin[j + 1].z)
+		var q2: Vector2 = Vector2(chemin[j + 2].x, chemin[j + 2].z)
+		var l1: float = q0.distance_to(q1)
+		var l2: float = q1.distance_to(q2)
+		d_cum += l1
+		if l1 > 0.5 and l2 > 0.5:
+			var dth: float = absf(wrapf((q2 - q1).angle() - (q1 - q0).angle(), -PI, PI))
+			if dth > 0.01:
+				var r_loc: float = (l1 + l2) * 0.5 / dth
+				var v_loc: float = sqrt(A_PLAN * r_loc + 2.0 * DEC_DERAPAGE * 0.6 * d_cum)
+				v_lim = minf(v_lim, v_loc)
+		j += 1
+	# fin du tracé (pied de la gare) : arrêt en douceur, pas à 80 km/h
+	var d_reste: float = Vector2(p.x, p.z).distance_to(Vector2(chemin[0].x, chemin[0].z))
+	for jj in range(chemin.size() - 1):
+		d_reste += Vector2(chemin[jj].x, chemin[jj].z).distance_to(Vector2(chemin[jj + 1].x, chemin[jj + 1].z))
+		if d_reste > 200.0:
+			break
+	if d_reste <= 200.0:
+		v_lim = minf(v_lim, sqrt(2.0 * DEC_DERAPAGE * 0.6 * d_reste) + 1.5)
+	# en virage serré (on tourne fort maintenant) : on ralentit aussi
+	v_lim = minf(v_lim, lerpf(V_EXPERT, 9.0, clampf((absf(e) - 0.25) / 0.9, 0.0, 1.0)))
+	var y: float = 0.0
+	if vit > v_lim + 0.5:
+		y = -clampf((vit - v_lim) / 4.0, 0.3, 1.0)
+	elif vit < 3.0:
+		y = 1.0
+	_pilote_schuss = vit < v_lim - 2.0 and absf(e) < 0.12 and vit > 6.0
+	return Vector2(clampf(-e * 2.6, -1.0, 1.0), y)
+
+
 func _pilote_ski() -> Vector2:
 	var cible: Vector3 = chemin[0]
 	var vers: Vector3 = cible - global_position

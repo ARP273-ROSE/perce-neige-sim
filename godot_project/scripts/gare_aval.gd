@@ -65,6 +65,60 @@ var _t_panneau: float = 0.0
 static var evacuation: bool = false
 static var hors_service_pc: bool = false     # vue 3D du PC : collision / panne catastrophique
 var _page: int = 0
+## Exploitation automatique (posée par main.gd) : sans elle, pas d'heure de
+## départ à annoncer quand la rame est à quai (c'est le conducteur qui part)
+var auto_op: AutoOperator = null
+var _t_depuis_arrivee: float = 0.0
+var _fini_prec: bool = false
+
+# Durées mesurées en exploitation auto (sonde du 12/10/2026, croisière
+# 10,3 m/s) : trajet 417 s ; il reste d/v + 81 s quand la rame croise
+# (freinage à 0,3 m/s² puis approche à 0,72 m/s sur les 35 derniers m) ;
+# de l'arrivée au départ suivant 70 s en haut, 95 s en bas (le câble y met
+# plus longtemps à se stabiliser) ; d'une rame à quai au départ 63 s
+# (attente 30 s + séquence).
+const ETA_ARRIVEE_AU_DEPART: float = 70.0
+const ETA_ARRIVEE_EN_BAS: float = 95.0
+const ETA_SEQUENCE: float = 33.0
+const ETA_DEC: float = 0.30
+const ETA_APPROCHE_V: float = 0.72
+
+
+## Secondes restantes avant l'arrivée d'une rame en marche.
+static func temps_restant(d: float, v: float, v_c: float) -> float:
+	var dist_app: float = PNConstants.CREEP_DIST
+	if d <= dist_app:
+		return d / ETA_APPROCHE_V
+	v_c = maxf(v_c, 1.0)
+	var d_dec: float = dist_app + (v_c * v_c - ETA_APPROCHE_V * ETA_APPROCHE_V) / (2.0 * ETA_DEC)
+	if d <= d_dec:
+		return (absf(v) - ETA_APPROCHE_V) / ETA_DEC + dist_app / ETA_APPROCHE_V
+	return (d - d_dec) / v_c + (v_c - ETA_APPROCHE_V) / ETA_DEC + dist_app / ETA_APPROCHE_V
+
+
+## Secondes avant le prochain départ de Val Claret (les deux rames partent
+## ensemble), ou −1 si on ne peut pas le dire (rame à quai sans exploitation
+## automatique : c'est le conducteur qui donne le départ).
+func eta_depart(ph: TrainPhysics) -> float:
+	var seq: bool = ph.announce_phase_remaining > 0.0 or ph.door_phase_remaining > 0.0 \
+		or ph.confirmation_autre_remaining > 0.0 or ph.departure_buzzer_remaining > 0.0
+	if ph.trip_started:
+		var d: float = (PNConstants.STOP_S - ph.s) if ph.direction > 0 else (ph.s - PNConstants.START_S)
+		var v_c: float = ph.speed_cmd * PNConstants.V_MAX
+		if ph.departure_buzzer_remaining > 0.0 or absf(ph.v) < 0.05 and d > PNConstants.LENGTH - 100.0:
+			return 0.0                           # buzzer, la rame démarre
+		return temps_restant(maxf(d, 0.0), ph.v, v_c) \
+			+ (ETA_ARRIVEE_AU_DEPART if ph.direction > 0 else ETA_ARRIVEE_EN_BAS)
+	if seq:
+		return ph.departure_buzzer_remaining + ph.confirmation_autre_remaining \
+			+ ph.door_phase_remaining + ph.announce_phase_remaining
+	if auto_op == null or not auto_op.enabled:
+		return -1.0
+	if ph.finished:
+		var apres: float = ETA_ARRIVEE_AU_DEPART if ph.s > PNConstants.LENGTH * 0.5 else ETA_ARRIVEE_EN_BAS
+		return maxf(5.0, apres - _t_depuis_arrivee)
+	# à quai, embarquement : reste de l'attente de l'automate + la séquence
+	return maxf(0.0, AutoOperator.STATION_DWELL_S - auto_op._state_timer) + ETA_SEQUENCE
 
 
 func construire(t: TunnelBuilder) -> void:
@@ -933,6 +987,10 @@ func mettre_a_jour(dt: float, ph: TrainPhysics) -> void:
 	var embarquement: bool = en_gare and portes_bas and (not ph.trip_started or ph.finished)
 	# ≈ 2 s pour s'ouvrir ou se fermer (vidéo FUNI284, 0:55-0:57)
 	_ouverture = move_toward(_ouverture, 1.0 if embarquement else 0.0, dt / 2.0)
+	if ph.finished and not _fini_prec:
+		_t_depuis_arrivee = 0.0
+	_t_depuis_arrivee += dt
+	_fini_prec = ph.finished
 	var course: float = COURSE_VANTAIL * smoothstep(0.0, 1.0, _ouverture)
 	for v in _vantaux:
 		(v[0] as Node3D).position = _p(float(v[1]) + float(v[2]) * course, float(v[3]), 0.0)
@@ -942,13 +1000,18 @@ func mettre_a_jour(dt: float, ph: TrainPhysics) -> void:
 	_t_panneau = 1.0
 	var hl: Dictionary = PNConstants.heure_locale()
 	var en: bool = (int(hl.second) / 5) % 2 == 1
-	# prochain départ : à quai → départ imminent ; sinon temps pour revenir
-	# (distance restante à 12 m/s + une minute) — estimation du simulateur
-	var prochain: int = 0
-	if not en_gare or ph.trip_started:
-		var s_bas: float = minf(ph.s, PNConstants.miroir(ph.s))
-		prochain = int(ceil(maxf(s_bas - PNConstants.START_S, 0.0) / 12.0 / 60.0)) + 1
-	var suivant: int = prochain + 20
+	# prochain départ : la vraie attente (retour d'utilisateur, 12/10/2026 : « mets
+	# une vraie ETA, tu mets 2 min tout le temps et 0 ») — trajet restant,
+	# arrivée, attente à quai et séquence de départ (eta_depart) ; le suivant
+	# un cycle plus tard (trajet 417 s + 70 s)
+	var eta: float = eta_depart(ph)
+	var cycle: float = 417.0 * (10.3 / maxf(ph.speed_cmd * PNConstants.V_MAX, 6.0)) \
+		+ (ETA_ARRIVEE_AU_DEPART + ETA_ARRIVEE_EN_BAS) * 0.5
+	var prochain_fr: String = "Embarquement" if eta < 0.0 else ("Départ imminent" if eta < 45.0 \
+		else "Prochain départ   %d min" % int(ceil(eta / 60.0)))
+	var prochain_en: String = "Now boarding" if eta < 0.0 else ("Departing now" if eta < 45.0 \
+		else "Coming departure   %d min" % int(ceil(eta / 60.0)))
+	var suivant: int = int(ceil((maxf(eta, 0.0) + cycle) / 60.0))
 	var arret: bool = evacuation or hors_service_pc or ph.cable_rupture or ph.crashed \
 		or ph.panne_catastrophique
 	var blanc: Color = Color(0.95, 0.97, 1.0)
@@ -973,11 +1036,11 @@ func mettre_a_jour(dt: float, ph: TrainPhysics) -> void:
 			(int(hl.hour) + 11) % 12 + 1, hl.minute, "AM" if hl.hour < 12 else "PM"]
 		_panneau[1].text = "FUNICULAR-DEPARTURE STATION"
 		_panneau[2].text = "Welcome"
-		_panneau[3].text = "Coming departure   %d min" % prochain
+		_panneau[3].text = prochain_en
 		_panneau[4].text = "Next departure   %d min" % suivant
 	else:
 		_panneau[0].text = "%02d/%02d/%02d   %d:%02d" % [hl.day, hl.month, int(hl.year) % 100, hl.hour, hl.minute]
 		_panneau[1].text = "FUNICULAIRE-GARE DE DÉPART"
 		_panneau[2].text = "Bienvenue"
-		_panneau[3].text = "Prochain départ   %d min" % prochain
+		_panneau[3].text = prochain_fr
 		_panneau[4].text = "Départ suivant   %d min" % suivant

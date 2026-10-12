@@ -1057,6 +1057,8 @@ func _process(delta: float) -> void:
 	if station_halls != null and physics != null:
 		GareAval.evacuation = (cabin != null and cabin.issues_retirees) \
 			or (cabin_ghost != null and cabin_ghost.issues_retirees)
+		if station_halls.gare_aval != null and station_halls.gare_aval.auto_op == null:
+			station_halls.gare_aval.auto_op = auto_operator
 		station_halls.mettre_a_jour(delta, physics)
 	# Halls de gare en rendu Compatibility (PWA) : 8 lampes au plus par
 	# objet, les grands sols et murs du hall ne recevaient qu'une partie des
@@ -1181,9 +1183,19 @@ func _update_announcement_triggers() -> void:
 	# 🔴 06/10/2026 : 54,24 s d'annonce, rampement réduit à 35 m (≈ 49 s) →
 	# coupée par l'arrêt ; déclenchée à ANNONCE_ARRIVEE_D de l'arrêt quelle
 	# que soit la vitesse, elle finit 3 s avant (annonce_arrivee.sage).
-	var d_arret: float = PNConstants.STOP_S - physics.s
-	if (physics.trip_started and not _welcome_played
-			and physics.direction > 0
+	# … sur la rame qui MONTE, pilotée ou d'en face (retour d'utilisateur, 12/10/2026 :
+	# « quand il est passager, on n'entend pas l'annonce d'accueil à
+	# l'arrivée en haut » — dans la rame d'en face qui montait, elle ne
+	# partait jamais) ; pas pour le skieur qui descend dans l'autre
+	var s_montante: float = physics.s if physics.direction > 0 else physics.ghost_s_render()
+	var d_arret: float = PNConstants.STOP_S - s_montante
+	var skieur_descend: bool = mode_skieur and skieur != null and skieur.support != null \
+		and _rame_du_skieur() != null \
+		and _rame_du_skieur() != (cabin if physics.direction > 0 else cabin_ghost)
+	# (en conduite, seulement dans la rame pilotée qui monte)
+	var ecoute_montante: bool = physics.direction > 0 or (mode_skieur and skieur != null
+		and skieur.support != null and _rame_du_skieur() == cabin_ghost)
+	if (physics.trip_started and not _welcome_played and not skieur_descend and ecoute_montante
 			and d_arret > 0.0 and d_arret <= PNConstants.ANNONCE_ARRIVEE_D):
 		announcements.queue("welcome")
 		_welcome_played = true
@@ -2288,6 +2300,17 @@ func _maj_skieur() -> void:
 		carte.skieur = skieur
 		if tunnel != null:
 			carte.gares = [tunnel.transform_at(0.0).origin, tunnel.transform_at(PNConstants.LENGTH).origin]
+			# vrai tracé du tunnel (tous les 25 m) et rames en direct
+			var trace: PackedVector2Array = PackedVector2Array()
+			var s_t: float = 0.0
+			while s_t < PNConstants.LENGTH:
+				var o_t: Vector3 = tunnel.transform_at(s_t).origin
+				trace.append(Vector2(o_t.x, o_t.z))
+				s_t += 25.0
+			var o_f: Vector3 = tunnel.transform_at(PNConstants.LENGTH).origin
+			trace.append(Vector2(o_f.x, o_f.z))
+			carte.trace_funi = trace
+			carte.main = self
 	# portes automatiques : elles s'ouvrent devant le skieur
 	_presence[0] = skieur.global_position
 	PorteAuto.presences = _presence

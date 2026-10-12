@@ -300,7 +300,9 @@ func _build_platform(s_start: float, s_end: float, is_low: bool, side: float = 1
 	mm_bands.mesh = band_mesh
 	mm_bands.instance_count = n_treads if not is_low else 0
 
-	var xf_marches: Array = []       # pour les collisions (CollisionsJeu)
+	var xf_marches: Array = []       # (dessin des marches)
+	var xf_marches_col: Array = []   # marches gardées en collision (au droit de l'escalier de la fosse)
+	var xf_rampe: Array = []         # collisions : une rampe, pas des marches
 	for i in range(n_treads):
 		var s_dn: float = bornes[i]                                  # bord aval
 		var s_up: float = bornes[i + 1]                              # bord amont
@@ -332,6 +334,22 @@ func _build_platform(s_start: float, s_end: float, is_low: bool, side: float = 1
 			var cb: Vector3 = xf_b.origin + xf_b.basis.x * lat_m
 			cb.y = top_y - tread_thickness * 0.5
 			xf_marches.append(Transform3D(level_basis, cb))
+		# rampe de collision dans la pente de la voie, dessus au niveau de la
+		# marche en son milieu (±3,5 cm aux bouts) : en escalier, chaque
+		# contremarche de 7 cm se montait en soulevant le skieur, et contre
+		# la rame sa tête heurtait le flanc bombé de la caisse — coincé
+		# devant chaque marche (retour d'utilisateur, 12/10/2026 : « quand le skieur sur
+		# le quai marche trop près du funi, il reste coincé contre »)
+		# (au droit de l'escalier de la fosse, gare basse, les marches restent :
+		# l'escalier qui descend dans la fosse passe sous leur bord)
+		if is_low and _sur_escalier_fosse(s_dn, s_up, side):
+			for xm in xf_marches.slice(xf_marches.size() - n_sub):
+				xf_marches_col.append(xm)
+		else:
+			var xf_r: Transform3D = _xf_at(s_mid)
+			var c_r: Vector3 = xf_r.origin + xf_r.basis.x * lat_m
+			c_r.y = top_y
+			xf_rampe.append([Transform3D(xf_r.basis, c_r - xf_r.basis.y * 0.15), s_up - s_dn])
 		# Nez : au bord AVAL de la marche, affleurant le dessus
 		var xf_dn: Transform3D = _xf_at(s_dn + 0.06)
 		var nose_c: Vector3 = xf_dn.origin + xf_dn.basis.x * lat_center
@@ -352,8 +370,21 @@ func _build_platform(s_start: float, s_end: float, is_low: bool, side: float = 1
 	mi_treads.name = "PlatformSteps_%s_%s" % [sta, side_name]
 	mi_treads.multimesh = mm_treads
 	mi_treads.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	mi_treads.set_meta("instances", xf_marches)
+	if not xf_marches_col.is_empty():
+		mi_treads.set_meta("instances", xf_marches_col)
 	add_child(mi_treads)
+	var rampe: StaticBody3D = StaticBody3D.new()
+	rampe.name = "RampeQuai_%s_%s" % [sta, side_name]
+	rampe.collision_layer = CollisionsJeu.COUCHE_DECOR
+	rampe.collision_mask = 0
+	add_child(rampe)
+	for rr in xf_rampe:
+		var cs_r: CollisionShape3D = CollisionShape3D.new()
+		var bx: BoxShape3D = BoxShape3D.new()
+		bx.size = Vector3(platform_width, 0.30, float(rr[1]) + 0.04)
+		cs_r.shape = bx
+		cs_r.transform = rr[0]
+		rampe.add_child(cs_r)
 
 	var mi_noses: MultiMeshInstance3D = MultiMeshInstance3D.new()
 	mi_noses.name = "PlatformNoses_%s_%s" % [sta, side_name]

@@ -63,6 +63,7 @@ func _rame_du_skieur() -> Cabin:
 func demarrer(m: Node) -> void:
 	main = m
 	var sk: SkieurJoueur = main.skieur
+	sk.pilote_expert = true
 	# d'où l'on part : dans une rame, dans la gare d'en bas (salle ou quai),
 	# en haut (gare ou dehors), ou sur les pistes (retour d'utilisateur, 11/10/2026 : « il ne
 	# chausse jamais dans la neige, il marche on ne sait vers où » ; « dans la
@@ -95,6 +96,7 @@ func descend() -> bool:
 func arreter() -> void:
 	if main != null and main.skieur != null:
 		main.skieur.chemin.clear()
+		main.skieur.pilote_expert = false
 		main.skieur.course_auto = false
 		main.skieur.lever()
 
@@ -204,11 +206,27 @@ func tick(delta: float) -> void:
 			if sk.chemin.is_empty():
 				_poser(Etape.VERS_DEPART)
 		Etape.VERS_DEPART:
+			# il chausse dès la neige, au sortir de la porte Génépy ou au bas
+			# de l'escalier de la terrasse (retour d'utilisateur, 12/10/2026 : « il chausse
+			# très tard, il marche jusqu'à retrouver un fantôme ») ; il gagne
+			# le départ de la trace à ski
+			if not sk.chausse and sk.support == null and sk.dehors(main.relief) \
+					and main._gare_du_skieur() == 0 and not _sur_terrasse(sk.global_position):
+				var reste: Array = sk.chemin.duplicate()
+				main.basculer_ski()
+				if sk.chausse:
+					sk.chemin = _densifier(reste, 3.0)
 			if sk.chemin.is_empty():
 				_poser(Etape.SKI)
 		Etape.SKI:
+			# au pied de la gare : il déchausse et court au guichet ; arrêté
+			# 4 s sur le plat (plus de pente) près de Val Claret : pareil
+			# (avant : il s'arrêtait 400 m avant et marchait à 2 km/h)
 			var q: Vector2 = Vector2(sk.global_position.x, sk.global_position.z)
-			if sk.chemin.is_empty() or (q.length() < DomaineSkiable.R_ARRIVEE and sk.chemin.size() <= 2):
+			var dep: Vector3 = main.station_halls.gare_aval.point_depart()[0]
+			var d_gare: float = q.distance_to(Vector2(dep.x, dep.z))
+			_compte = _compte + delta if (sk.vitesse_ski() < 0.8 and d_gare < 500.0) else 0.0
+			if sk.chemin.is_empty() or d_gare < 12.0 or _compte > 4.0:
 				_poser(Etape.VERS_GARE)
 		Etape.VERS_GARE:
 			if sk.chemin.is_empty():
@@ -216,6 +234,36 @@ func tick(delta: float) -> void:
 				_poser(Etape.VERS_SALLE)
 	if t > DELAI_MAX[etape]:
 		_debloquer()
+
+
+## Chemin rendu dense (un point tous les `pas` m, au sol du relief) : le
+## pilote expert vise un point à distance donnée le long du tracé.
+func _densifier(pts: Array, pas: float) -> Array:
+	var out: Array = []
+	if pts.is_empty():
+		return out
+	var rel: ReliefBuilder = main.relief
+	for k in range(pts.size()):
+		var a: Vector3 = pts[k]
+		if k == 0:
+			out.append(Vector3(a.x, rel.hauteur_sol(a.x, a.z), a.z))
+			continue
+		var b0: Vector3 = pts[k - 1]
+		var l: float = Vector2(a.x - b0.x, a.z - b0.z).length()
+		var n: int = maxi(1, int(ceil(l / pas)))
+		for i in range(1, n + 1):
+			var q: Vector3 = b0.lerp(a, float(i) / float(n))
+			out.append(Vector3(q.x, rel.hauteur_sol(q.x, q.z), q.z))
+	return out
+
+
+## Sur la terrasse de la gare haute (ou son escalier) : on n'y chausse pas.
+func _sur_terrasse(p: Vector3) -> bool:
+	var gh: GareAmont = main.station_halls.gare_amont
+	if gh == null:
+		return false
+	var rel: Vector3 = p - gh._o
+	return rel.y > -1.5 and rel.length() < 65.0
 
 
 func ga_point(v: Vector2) -> Vector3:
@@ -346,6 +394,7 @@ func _poser(e: int) -> void:
 			var m: Vector3 = (q + Vector3(p0.x, 0.0, p0.y)) * 0.5
 			sk.chemin.append_array([Vector3(m.x, 0.0, m.z), Vector3(p0.x, 0.0, p0.y)])
 		Etape.SKI:
+			sk.pilote_expert = true
 			if not sk.chausse:
 				main.basculer_ski()
 			if not sk.chausse and sk.support == null:
@@ -365,12 +414,45 @@ func _poser(e: int) -> void:
 			var d: Vector2 = pts[mini(i0 + 8, pts.size() - 1)] - pts[i0]
 			sk._cap_ski = atan2(-d.x, -d.y)
 			sk.vitesse_pilote = 11.0
-			sk.chemin = main.domaine.chemin_descente(DESCENTE, 3).slice(i0 / 3)
+			# la trace complète (tous ses points, densifiée à 3 m), puis jusqu'au
+			# pied de l'escalier de la gare de Val Claret
+			# itinéraire sur les PISTES balisées, de là où il est jusqu'au pied
+			# de la gare de Val Claret (les traces GPS réelles sortent de nos
+			# pistes de 34 à 58 % du temps) ; à défaut, la trace
+			var dom: DomaineSkiable = main.domaine
+			var dep_v: Vector3 = ga.point_depart()[0]
+			var pos_sk: Vector3 = sk.global_position
+			var t_it: int = Time.get_ticks_msec()
+			var route: PackedVector2Array = dom.itineraire(Vector2(pos_sk.x, pos_sk.z), Vector2(dep_v.x, dep_v.z))
+			print("[SkieurAuto] itinéraire sur les pistes : %d points, %d ms" % [route.size(), Time.get_ticks_msec() - t_it])
+			var trace: Array = []
+			if route.size() >= 2:
+				trace.append(Vector3(pos_sk.x, 0.0, pos_sk.z))
+				for q in route:
+					trace.append(Vector3(q.x, 0.0, q.y))
+			else:
+				trace = main.domaine.chemin_descente(DESCENTE, 1).slice(i0)
+				for k in range(trace.size()):
+					var tp: Vector3 = trace[k]
+					var sp: Vector2 = dom.sur_piste(Vector2(tp.x, tp.z), 80.0)
+					trace[k] = Vector3(sp.x, 0.0, sp.y)
+			for _passe in range(2):
+				var lisse: Array = trace.duplicate()
+				for k in range(2, trace.size() - 2):
+					var acc: Vector3 = Vector3.ZERO
+					for m in range(-2, 3):
+						acc += trace[k + m]
+					lisse[k] = acc / 5.0
+				trace = lisse
+			var dep_g: Vector3 = ga.point_depart()[0]
+			trace.append(Vector3(dep_g.x, 0.0, dep_g.z))
+			sk.chemin = _densifier(trace, 3.0)
 		Etape.VERS_GARE:
 			if sk.chausse:
 				main.basculer_ski()
 			var dep: Array = ga.point_depart()
 			sk.chemin = [dep[0]]
+			sk.course_auto = true            # en courant, pas à 2 km/h
 
 
 func _chemin_voiture() -> Array:

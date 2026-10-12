@@ -439,7 +439,12 @@ func _rame(c: Cabin) -> void:
 					var l: float = float(mo[1]) - float(mo[0])
 					if l < 0.02:
 						continue
-					_boite(voiture, Vector3(0.14, corde, l),
+					# pan TANGENT au tube (largeur = corde, épaisseur 0,14 dans
+					# le rayon) — jusqu'au 12/10/2026 les deux étaient inversés :
+					# des ailettes radiales qui dépassaient de la caisse jusqu'à
+					# 1,88 m de l'axe, où le skieur qui longeait la rame
+					# s'accrochait au bord de chaque baie
+					_boite(voiture, Vector3(corde, 0.14, l),
 						Transform3D(base, centre + Vector3(0.0, 0.0, (float(mo[0]) + float(mo[1])) * 0.5)))
 		# fonds : calotte à l'extrémité de rame (avec ses deux issues de
 		# secours), cloison à l'attelage
@@ -506,8 +511,16 @@ func _rame(c: Cabin) -> void:
 				continue
 			var zc2: float = c._panel_center(idx2, k2) - z_c2
 			var base_v: Vector3 = d["base"]
-			var x2: float = float(d["side"]) * (R_PAROI + 0.04) * 0.92
-			_boite(vantail, Vector3(0.10, y_haut_porte - y_bas2, TrainBodyBuilder.PANEL_L + 0.06),
+			# au nu de la caisse (face extérieure des pans à R + 0,14) : 0,18 m
+			# en retrait, la porte fermée faisait un renfoncement où le skieur
+			# qui longeait la rame sur le quai se coinçait (retour d'utilisateur,
+			# 12/10/2026)
+			var x2: float = float(d["side"]) * (R_PAROI + 0.09)
+			# toute la baie de collision (joint à joint + 8 cm de chaque côté) :
+			# au pas du panneau seul, il restait une fente de 10 cm de chaque
+			# côté où la tête du skieur qui longeait la rame se coinçait
+			_boite(vantail, Vector3(0.10, y_haut_porte - y_bas2,
+				TrainBodyBuilder.PANEL_L + TrainBodyBuilder.RIB_W + 0.18),
 				Transform3D(Basis.IDENTITY, Vector3(x2, (y_bas2 + y_haut_porte) * 0.5, zc2) - base_v))
 		var corps_v: Node = vantail.get_node_or_null("CollisionRame")
 		if corps_v != null:
