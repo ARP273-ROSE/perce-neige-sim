@@ -15,6 +15,21 @@ var physics: TrainPhysics = null
 # Noeuds internes
 var mesh_root: Node3D = null         # coque extérieure (masquée en FPV)
 var interior_root: Node3D = null     # cockpit + sièges + passagers (toujours visibles)
+## Poste de conduite ARRIÈRE (calotte arrière de la dernière voiture) : le
+## funiculaire fait un va-et-vient, la rame ne se retourne pas — elle
+## repart dans l'autre sens, conduite depuis le poste de tête (retour
+## d'utilisateur, 12/10/2026 : « c'est un va-et-vient, la rame ne se retourne pas,
+## un poste de conduite de chaque côté »). Même contenu que l'avant, tourné
+## de 180° (la rame est symétrique). Les deux pupitres sont sous tension
+## et affichent en permanence ; caméra et phares vont au poste de tête.
+var interior_root_ar: Node3D = null
+var _pupitres: Array = []            # [avant, arrière]
+var _horloges: Array = []
+var poste_ar: bool = false           # on conduit depuis le poste arrière (descente)
+var _poste_pose: bool = false
+var _pos_cam_fpv: Vector3 = Vector3.ZERO     # caméra du poste avant, repère de la rame
+var _basis_cam_fpv: Basis = Basis.IDENTITY
+var _miroir_poste: bool = false      # construction du poste arrière en cours
 var headlight_front: SpotLight3D = null
 var camera_fpv: Camera3D = null
 ## Loupe sur le pupitre (08/10/2026, retour d'utilisateur : « on ne peut pas lire les noms
@@ -74,16 +89,6 @@ var _clock_next: float = 0.0
 # ghost_pax pour la rame d'en face) — retour d'essai 2026-09-27.
 var _pax_slots: Array = []      # par voiture : Array de {x, z, sit, gear, side}
 var _pax_mm: Array = []         # par voiture : {torso, head, ski, pole, board}
-## Gradins du plancher (dalles, contremarches, bancs, porte-skis), un jeu
-## par sens de la caisse : [voiture] → {1: nœud, -1: nœud}. La rame est
-## retournée de 180° quand elle descend (rame d'en face : quand la pilotée
-## monte) ; avec un seul jeu, l'inclinaison des paliers s'ajoutait alors à
-## la pente au lieu de la compenser — 16 à 18 % au lieu de l'horizontale
-## (retour d'utilisateur, 12/10/2026 : « les marches du funiculaire sont
-## horizontales à la pente des quais comme les marches des quais »).
-var _gradins: Array = []
-var sens_gradins: int = 1
-signal gradins_bascules(sens: int)
 var _pax_base: Array = []       # par voiture : {torso: [Transform3D], head: [Transform3D]}
 var _pax_gear_prefix: Array = []   # par voiture : {ski: [int], pole: [int], board: [int]}
 var _pax_shown: Array = []      # par voiture : nombre affiché
@@ -211,9 +216,8 @@ func _build_mesh() -> void:
 	_issues = built.get("issues", [])
 	for d in _doors:
 		d["base"] = (d["node"] as Node3D).position
-	# phares de la face AVANT (la cabine est retournée selon le sens de
-	# marche : « avant » = tête de train) ; ceux de l'arrière restent des
-	# lentilles froides
+	# phares du poste de TÊTE (avant à la montée, arrière à la descente :
+	# _poser_poste) ; ceux de l'autre bout restent des lentilles froides
 	_head_mat = (_body_mats["lamp_off"] as StandardMaterial3D).duplicate()
 	_head_mat.emission_enabled = true
 	for l in _front_lamps:
@@ -256,6 +260,8 @@ func _build_mesh() -> void:
 		pile.append_array(_pax_noeuds)
 		if interior_root != null:
 			pile.append(interior_root)
+		if interior_root_ar != null:
+			pile.append(interior_root_ar)
 		while not pile.is_empty():
 			var nd: Node = pile.pop_back()
 			pile.append_array(nd.get_children())
@@ -279,16 +285,18 @@ func _merge_static_meshes() -> void:
 		keep.append(d["node"])
 	for e in _issues:
 		keep.append(e["node"])       # les issues de secours s'enlèvent : pas fusionnées
-	# gradins : un jeu par sens, fusionnés chacun à part (on en montre un)
-	for d in _gradins:
-		for k in d:
-			keep.append(d[k])
-			MeshMerge.merge(d[k] as Node3D)
+	# tablettes-horloges : la fusion libérait la tablette et l'heure qu'elle
+	# porte (Label3D enfant)
+	for h in _horloges:
+		if h != null and (h as Node).get_parent() != null:
+			keep.append((h as Node).get_parent())
 	var roots: Array = []
 	roots.append_array(_car_roots)
 	roots.append_array(_interior_cars)
 	if interior_root != null:
 		roots.append(interior_root)
+	if interior_root_ar != null:
+		roots.append(interior_root_ar)
 	for r in roots:
 		MeshMerge.merge(r as Node3D, keep)
 	# roues : chaque pivot tourne d'un bloc ; ses deux variantes (boudin
@@ -384,6 +392,28 @@ func _build_interior() -> void:
 	_build_cockpit_extras()      # coups-de-poing, étiquettes, horloge, panneau latéral
 	_build_cctv_monitor()        # petit moniteur 4 caméras plafond gauche
 	_build_driver_seat()
+	_pupitres = [_pupitre]
+	_horloges = [_clock_label]
+	# poste arrière : le même, construit dans un repère tourné de 180° autour
+	# du centre de la rame, porté par la dernière voiture
+	var der: Node3D = _interior_cars[car_count - 1]
+	interior_root_ar = Node3D.new()
+	interior_root_ar.name = "InteriorAr"
+	interior_root_ar.transform = Transform3D(Basis(Vector3.UP, PI), Vector3(0.0, 0.0, -der.position.z))
+	der.add_child(interior_root_ar)
+	var avant: Node3D = interior_root
+	interior_root = interior_root_ar
+	_miroir_poste = true
+	_build_console_pupitre()
+	_build_cockpit_extras()
+	_build_cctv_monitor()
+	_build_driver_seat()
+	_miroir_poste = false
+	interior_root = avant
+	_pupitres.append(_pupitre)
+	_horloges.append(_clock_label)
+	_pupitre = _pupitres[0]
+	_clock_label = _horloges[0]
 	_build_passenger_seats()
 	if not "--sans-pax" in OS.get_cmdline_user_args():     # diagnostic de performance
 		_build_passengers()
@@ -402,7 +432,7 @@ func _build_floor_ceiling() -> void:
 	# plafond qui avance moins vers l'avant au-dessus de nous ») —
 	# 0,4 m devant la caméra seulement, simple casquette.
 	var z_front_ceil: float = -train_length * 0.5 + 1.0   # la calotte se referme à z_join à |x| = 1,2
-	var z_rear: float = train_length * 0.5 * 0.97
+	var z_rear: float = -z_front                          # symétrique : poste arrière
 
 	# Sol cabine — plancher caillebotis sombre (matériau acier mat),
 	# bien plus contrasté que la dalle béton du tunnel pour qu'on
@@ -441,13 +471,13 @@ func _build_floor_ceiling() -> void:
 	ceil_mat.roughness = 0.70
 	ceil_mat.metallic = 0.15
 
-	_add_interior_box(ceil_mat, 2.40, 0.04, 1.45, z_front_ceil, z_rear, "InteriorCeiling")
+	_add_interior_box(ceil_mat, 2.40, 0.04, 1.45, z_front_ceil, -z_front_ceil, "InteriorCeiling")
 
 	# Bandeau central du plafond : grille de ventilation gris foncé perforée
 	# sur toute la longueur, spots ronds encastrés (photos de l'intérieur,
 	# Retour d'utilisateur, 09/10/2026 — avant : un bandeau LED blanc continu)
 	var grille: StandardMaterial3D = _mat_grille_plafond()
-	var led_z_rear: float = train_length * 0.5 * 0.92
+	var led_z_rear: float = -z_front_ceil
 	_add_interior_box(grille, 0.55, 0.04, 1.42, z_front_ceil, led_z_rear, "InteriorLEDStrip")
 	var spot_mat: StandardMaterial3D = StandardMaterial3D.new()
 	spot_mat.albedo_color = Color(1.0, 1.0, 0.97)
@@ -552,72 +582,17 @@ func _panel_center(idx: int, k: int) -> float:
 ## Hauteur du plancher (repère rame) à l'abscisse z : palier du cerceau
 ## contenant z, horizontal sur la pente moyenne (monte vers l'arrière +Z
 ## dans le repère de la voiture, qui a le nez en l'air).
-func _floor_y_at(z: float, sens: int = 0) -> float:
-	if sens == 0:
-		sens = sens_gradins
+func _floor_y_at(z: float) -> float:
 	var car_len: float = train_length / float(car_count)
 	var idx: int = clampi(int(floor((z + train_length * 0.5) / car_len)), 0, car_count - 1)
 	var pitch: float = TrainBodyBuilder.PANEL_L + TrainBodyBuilder.RIB_W
 	var k: int = clampi(int(round((z - _panel_center(idx, 0)) / pitch)), 0, TrainBodyBuilder.N_PANNEAUX - 1)
-	return TrainBodyBuilder.Y_FLOOR + STEP_LIFT + float(sens) * (z - _panel_center(idx, k)) * FLOOR_GRADE
-
-
-## Sens des gradins voulu : +1 caisse nez vers l'amont (+Z de la voiture
-## vers l'aval), −1 retournée.
-func sens_voulu() -> int:
-	return 1 if door_slide_sign(physics.direction, is_ghost) > 0.0 else -1
-
-
-## Nœud des gradins de la voiture idx pour un sens (créé à la demande).
-func _noeud_gradins(idx: int, sens: int) -> Node3D:
-	while _gradins.size() <= idx:
-		_gradins.append({})
-	var d: Dictionary = _gradins[idx]
-	if not d.has(sens):
-		var n: Node3D = Node3D.new()
-		n.name = "Gradins%d_%s" % [idx + 1, "M" if sens > 0 else "D"]
-		n.visible = sens == sens_gradins
-		_interior_cars[idx].add_child(n)
-		d[sens] = n
-	return d[sens]
-
-
-## Bascule les gradins (et les voyageurs posés dessus) sur le sens voulu.
-func _appliquer_sens(sens: int) -> void:
-	if sens == sens_gradins:
-		return
-	var avant: int = sens_gradins
-	sens_gradins = sens
-	for d in _gradins:
-		for k in d:
-			(d[k] as Node3D).visible = int(k) == sens
-	var car_len: float = train_length / float(car_count)
-	for idx in range(_pax_mm.size()):
-		var z_c: float = (float(idx) - (car_count - 1) * 0.5) * car_len
-		for kind in _pax_mm[idx]:
-			var mm: MultiMesh = (_pax_mm[idx][kind] as MultiMeshInstance3D).multimesh
-			var bases: Array = _pax_base[idx].get(kind, [])
-			for i in range(mm.instance_count):
-				var t: Transform3D = mm.get_instance_transform(i)
-				var z: float = t.origin.z + z_c
-				var dy: float = _floor_y_at(z, sens) - _floor_y_at(z, avant)
-				t.origin.y += dy
-				mm.set_instance_transform(i, t)
-				if i < bases.size():
-					var tb: Transform3D = bases[i]
-					tb.origin.y += dy
-					bases[i] = tb
-	gradins_bascules.emit(sens)
+	return TrainBodyBuilder.Y_FLOOR + STEP_LIFT + (z - _panel_center(idx, k)) * FLOOR_GRADE
 
 
 func _build_stepped_floor(mat: StandardMaterial3D, z_front: float, z_rear: float) -> void:
-	for sens in [1, -1]:
-		_build_stepped_floor_sens(mat, z_front, z_rear, sens)
-
-
-func _build_stepped_floor_sens(mat: StandardMaterial3D, z_front: float, z_rear: float, sens: int) -> void:
 	var pitch: float = TrainBodyBuilder.PANEL_L + TrainBodyBuilder.RIB_W
-	var tilt: float = -atan(FLOOR_GRADE) * float(sens)
+	var tilt: float = -atan(FLOOR_GRADE)
 	var riser_mat: StandardMaterial3D = StandardMaterial3D.new()
 	riser_mat.albedo_color = Color(0.55, 0.55, 0.57)   # nez de marche alu
 	riser_mat.roughness = 0.4
@@ -638,7 +613,7 @@ func _build_stepped_floor_sens(mat: StandardMaterial3D, z_front: float, z_rear: 
 			land.position = Vector3(0.0, TrainBodyBuilder.Y_FLOOR + STEP_LIFT, zc - z_c)
 			land.rotation = Vector3(tilt, 0.0, 0.0)
 			land.name = "Palier%d_%d" % [idx + 1, k]
-			_noeud_gradins(idx, sens).add_child(land)
+			_interior_cars[idx].add_child(land)
 			if k < TrainBodyBuilder.N_PANNEAUX - 1:
 				# contremarche au joint (le palier arrière est 12 cm plus bas)
 				var rz: float = zc + pitch * 0.5
@@ -650,7 +625,7 @@ func _build_stepped_floor_sens(mat: StandardMaterial3D, z_front: float, z_rear: 
 				riser.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 				riser.position = Vector3(0.0, TrainBodyBuilder.Y_FLOOR + STEP_LIFT, rz - z_c)
 				riser.rotation = Vector3(tilt, 0.0, 0.0)
-				_noeud_gradins(idx, sens).add_child(riser)
+				_interior_cars[idx].add_child(riser)
 
 
 func _build_handrails() -> void:
@@ -948,7 +923,10 @@ func _build_driver_seat() -> void:
 	base_mesh.material = seat_mat
 	base.mesh = base_mesh
 	base.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	base.position = Vector3(0.0, _floor_y_at(z_seat) + 0.50, z_seat)
+	# (poste arrière : le plancher sous le siège est celui de l'abscisse
+	# opposée, les paliers montant toujours vers l'amont)
+	var y_sol: float = _floor_y_at(-z_seat if _miroir_poste else z_seat)
+	base.position = Vector3(0.0, y_sol + 0.50, z_seat)
 	interior_root.add_child(base)
 
 	# Dossier
@@ -959,7 +937,7 @@ func _build_driver_seat() -> void:
 	back_mesh.material = seat_mat
 	back.mesh = back_mesh
 	back.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	back.position = Vector3(0.0, _floor_y_at(z_seat) + 0.95, z_seat + 0.30)
+	back.position = Vector3(0.0, y_sol + 0.95, z_seat + 0.30)
 	interior_root.add_child(back)
 
 
@@ -996,24 +974,23 @@ func _build_passenger_seats() -> void:
 	gris.albedo_color = Color(0.55, 0.56, 0.58)
 	gris.metallic = 0.6
 	gris.roughness = 0.4
+	var tilt: float = -atan(FLOOR_GRADE)
 	var car_len: float = train_length / float(car_count)
-	for sens in [1, -1]:
-		var tilt: float = -atan(FLOOR_GRADE) * float(sens)
-		for idx in range(car_count):
-			var z_c: float = (float(idx) - (car_count - 1) * 0.5) * car_len
-			for k in range(TrainBodyBuilder.N_PANNEAUX):
-				if idx == 0 and k == 0:
-					continue                 # poste de conduite
-				var pal: Node3D = Node3D.new()
-				pal.name = "Amenagement%d_%d" % [idx + 1, k]
-				pal.position = Vector3(0.0, TrainBodyBuilder.Y_FLOOR + STEP_LIFT + 0.025, _panel_center(idx, k) - z_c)
-				pal.rotation = Vector3(tilt, 0.0, 0.0)
-				_noeud_gradins(idx, sens).add_child(pal)
-				if TrainBodyBuilder.KINDS[k] == "win":
-					for side in [-1.0, 1.0]:
-						_banc(pal, side, bleu)
-				for xr in racks_x(k):
-					_porte_skis(pal, xr, orange, gris)
+	for idx in range(car_count):
+		var z_c: float = (float(idx) - (car_count - 1) * 0.5) * car_len
+		for k in range(TrainBodyBuilder.N_PANNEAUX):
+			if (idx == 0 and k == 0) or (idx == car_count - 1 and k == TrainBodyBuilder.N_PANNEAUX - 1):
+				continue                 # poste de conduite
+			var pal: Node3D = Node3D.new()
+			pal.name = "Amenagement%d_%d" % [idx + 1, k]
+			pal.position = Vector3(0.0, TrainBodyBuilder.Y_FLOOR + STEP_LIFT + 0.025, _panel_center(idx, k) - z_c)
+			pal.rotation = Vector3(tilt, 0.0, 0.0)
+			_interior_cars[idx].add_child(pal)
+			if TrainBodyBuilder.KINDS[k] == "win":
+				for side in [-1.0, 1.0]:
+					_banc(pal, side, bleu)
+			for xr in racks_x(k):
+				_porte_skis(pal, xr, orange, gris)
 
 
 func _piece(parent: Node3D, mesh: Mesh, pos: Vector3, rot: Vector3 = Vector3.ZERO) -> void:
@@ -1199,7 +1176,7 @@ func _build_passengers() -> void:
 		for k in range(TrainBodyBuilder.N_PANNEAUX):
 			var zc: float = _panel_center(idx, k)
 			# zone conducteur : pas de passagers dans le premier cerceau
-			if idx == 0 and k == 0:
+			if (idx == 0 and k == 0) or (idx == car_count - 1 and k == TrainBodyBuilder.N_PANNEAUX - 1):
 				continue
 			var banc: bool = TrainBodyBuilder.KINDS[k] == "win"
 			for sx in [-0.95, 0.95]:
@@ -1413,7 +1390,10 @@ func _couche_interieur() -> void:
 	if interior_root == null \
 			or RenderingServer.get_current_rendering_method() != "gl_compatibility":
 		return
-	for n in interior_root.find_children("*", "VisualInstance3D", true, false):
+	var noeuds: Array = interior_root.find_children("*", "VisualInstance3D", true, false)
+	if interior_root_ar != null:
+		noeuds.append_array(interior_root_ar.find_children("*", "VisualInstance3D", true, false))
+	for n in noeuds:
 		var vi: VisualInstance3D = n
 		vi.layers = (vi.layers & ~1) | LAYER_INTERIEUR | LAYER_RAME
 
@@ -1433,6 +1413,55 @@ func pupitre_en_marche() -> bool:
 func pupitre_appuyer(nom: String, enfonce: bool) -> void:
 	if _pupitre != null:
 		_pupitre.appuyer(nom, enfonce)
+
+
+## Poste de tête : l'avant quand la rame monte, l'arrière quand elle descend
+## (rame d'en face : l'inverse de la pilotée).
+func poste_voulu_ar() -> bool:
+	return (physics.direction > 0) if is_ghost else (physics.direction < 0)
+
+
+## Caméra du conducteur, phare et feux au poste de tête ; le pupitre de ce
+## poste reçoit les commandes.
+func _poser_poste() -> void:
+	var ar: bool = poste_voulu_ar()
+	if _poste_pose and ar == poste_ar:
+		return
+	_poste_pose = true
+	poste_ar = ar
+	if _pupitres.size() == 2:
+		_pupitre = _pupitres[1 if ar else 0]
+		_clock_label = _horloges[1 if ar else 0]
+	_ecran_loupe = null
+	var racine: Node3D = interior_root_ar if ar else interior_root
+	var voiture: Node3D = _interior_cars[car_count - 1 if ar else 0] if not _interior_cars.is_empty() else null
+	if voiture == null or racine == null:
+		return
+	# racine du poste dans le repère de sa voiture (avant : simple décalage)
+	var xf_r: Transform3D = racine.transform
+	if camera_fpv != null:
+		var cur: bool = camera_fpv.current
+		if camera_fpv.get_parent() != voiture:
+			camera_fpv.get_parent().remove_child(camera_fpv)
+			voiture.add_child(camera_fpv)
+		camera_fpv.transform = xf_r * Transform3D(_basis_cam_fpv, _pos_cam_fpv)
+		_cam_fpv_basis_base = camera_fpv.transform.basis
+		if cur:
+			camera_fpv.make_current()
+	if headlight_front != null:
+		if headlight_front.get_parent() != voiture:
+			headlight_front.get_parent().remove_child(headlight_front)
+			voiture.add_child(headlight_front)
+		headlight_front.transform = xf_r * Transform3D(Basis.from_euler(Vector3(deg_to_rad(-2.0), 0.0, 0.0)),
+			Vector3(0.0, 0.70, -train_length * 0.5 + 0.3))
+	# feux : allumés au poste de tête, lentilles froides à l'autre bout
+	var tete: Array = _rear_lamps if ar else _front_lamps
+	var queue: Array = _front_lamps if ar else _rear_lamps
+	for l in tete:
+		(l as MeshInstance3D).set_surface_override_material(0,
+			_body_mats["lamp_on"] if is_ghost else _head_mat)
+	for l in queue:
+		(l as MeshInstance3D).set_surface_override_material(0, null)
 
 
 func _attach_to_front_car(n: Node3D, pos_rame: Vector3) -> void:
@@ -1461,6 +1490,8 @@ func _build_camera() -> void:
 	# d'orientation était multiplié par ce bras de levier.
 	_attach_to_front_car(camera_fpv, Vector3(0.0, 0.85, -train_length * 0.5 + 1.1))
 	_cam_fpv_basis_base = camera_fpv.transform.basis
+	_pos_cam_fpv = Vector3(0.0, 0.85, -train_length * 0.5 + 1.1)
+	_basis_cam_fpv = camera_fpv.transform.basis
 
 	# Caméra extérieure — VRAIE orbitale autour de la rame (retour d'essai
 	# 2026-07-24 : « cette vue est fixe ») : yaw/pitch/distance pilotés au
@@ -1562,7 +1593,7 @@ func set_physics(p: TrainPhysics) -> void:
 func _process(_delta: float) -> void:
 	if tunnel == null or physics == null:
 		return
-	_appliquer_sens(sens_voulu())
+	_poser_poste()
 	_update_shake(_delta)
 	_update_loupe(_delta)
 	# Caméra orbitale : suit la rame chaque frame en vue extérieure.
@@ -1603,9 +1634,8 @@ func _process(_delta: float) -> void:
 	global_transform = xform
 
 	# Articulation : chaque voiture sur la spline à SA propre abscisse.
-	# L'avant de la rame (−Z) pointe vers +s quand la rame 1 monte, vers −s
-	# quand le ghost « monte » (il est retourné).
-	var travel_sign: float = float(physics.direction) * (-1.0 if is_ghost else 1.0)
+	# L'avant de la rame (−Z, voiture 1) pointe toujours vers l'amont (+s).
+	var travel_sign: float = 1.0     # voiture 1 toujours en amont (va-et-vient)
 	var car_len: float = train_length / float(car_count)
 	for idx in range(_car_roots.size()):
 		var z_c: float = (float(idx) - (car_count - 1) * 0.5) * car_len
@@ -1650,10 +1680,8 @@ func _process(_delta: float) -> void:
 	# état visuel envoyé par le PC), pas de doors_open (l'interlock).
 	# Sens du glissement : TOUJOURS vers le BAS de la pente à l'ouverture,
 	# vers le HAUT à la fermeture (retour d'essai 2026-09-27 : « la porte
-	# s'ouvre en se déplaçant vers le bas et se ferme vers le haut »). La
-	# caisse étant retournée quand elle descend (_xform_from), « vers
-	# l'arrière » (+Z local) n'est le bas que dans un sens : on corrige le
-	# signe avec la même règle que le retournement.
+	# s'ouvre en se déplaçant vers le bas et se ferme vers le haut ») :
+	# +Z local = l'aval, la caisse ne se retournant jamais.
 	# Deux côtés (07/10/2026) : PORTES 1 à 6 à gauche en regardant vers le
 	# haut, 7 à 12 à droite ; physics.portes_cotes dit lesquels s'ouvrent.
 	# +Z·sgn pointe vers le bas de la pente → la gauche en regardant vers
@@ -1677,20 +1705,23 @@ func _process(_delta: float) -> void:
 
 	# Pupitre : voyants, commandes et écran Pro-face (l'écran seulement en
 	# vue cabine — inutile de le redessiner quand on ne le voit pas)
-	if _pupitre != null and physics != null:
+	if physics != null:
 		# écran vivant aussi pour le skieur à bord de CETTE rame, pilotée ou
 		# d'en face (retour d'utilisateur, 09/10/2026 : « en mode skieur, les données sur les
-		# écrans de conduite sont figées »)
-		_pupitre.mettre_a_jour(physics, _delta, train_number,
-			(not is_ghost and view_mode == ViewMode.FPV) or skieur_a_bord, is_ghost)
+		# écrans de conduite sont figées ») ; les DEUX postes affichent en
+		# permanence (retour d'utilisateur, 12/10/2026)
+		for pu in _pupitres:
+			(pu as PupitreConduite).mettre_a_jour(physics, _delta, train_number,
+				(not is_ghost and view_mode == ViewMode.FPV) or skieur_a_bord, is_ghost)
 
 	# Tablette-horloge du montant gauche : l'heure réelle, comme en cabine
-	if _clock_label != null:
+	if not _horloges.is_empty():
 		_clock_next -= _delta
 		if _clock_next <= 0.0:
 			_clock_next = 1.0
 			var hl: Dictionary = PNConstants.heure_locale()
-			_clock_label.text = "%02d:%02d" % [hl.hour, hl.minute]
+			for h in _horloges:
+				(h as Label3D).text = "%02d:%02d" % [hl.hour, hl.minute]
 
 	# Animation des passagers selon dynamique
 	_animate_passengers(_delta)
@@ -1779,9 +1810,7 @@ func _animate_headlights(delta: float) -> void:
 func _apply_wheel_types() -> void:
 	if _wheels.is_empty():
 		return
-	var flipped: bool = false
-	if physics != null:
-		flipped = (physics.direction > 0) if is_ghost else (physics.direction < 0)
+	var flipped: bool = false        # caisse jamais retournée (va-et-vient)
 	_wheel_dir_applied = (physics.direction if physics != null else 0)
 	for w in _wheels:
 		var pivot: Node3D = w as Node3D
@@ -1826,9 +1855,8 @@ static func _mat_invisible() -> ShaderMaterial:
 	return _invisible
 
 
-static func door_slide_sign(direction: int, ghost: bool) -> float:
-	var flipped: bool = (direction > 0) if ghost else (direction < 0)
-	return -1.0 if flipped else 1.0
+static func door_slide_sign(_direction: int, _ghost: bool) -> float:
+	return 1.0          # caisse jamais retournée : vers l'arrière = vers l'aval
 
 
 func set_train_number(n: int) -> void:
@@ -1854,12 +1882,8 @@ func _xform_from(pos: Vector3, tangent: Vector3) -> Transform3D:
 	var xform: Transform3D = Transform3D()
 	xform.basis = Basis(right, up, -tangent)
 	xform.origin = pos + up * (-0.15)
-	if is_ghost:
-		if physics.direction > 0:
-			xform.basis = xform.basis.rotated(xform.basis.y, PI)
-	else:
-		if physics.direction < 0:
-			xform.basis = xform.basis.rotated(xform.basis.y, PI)
+	# va-et-vient : la caisse garde toujours le nez (voiture 1) vers l'amont
+	# — avant le 12/10/2026 elle était retournée de 180° pour descendre
 	return xform
 
 

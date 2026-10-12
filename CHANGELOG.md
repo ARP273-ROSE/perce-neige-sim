@@ -18,6 +18,29 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.19.15** — retour d'utilisateur du 12/10/2026 : « c'est un va-et-vient, la
+rame ne se retourne pas, elle repart dans l'autre sens ; un poste de
+conduite de chaque côté », « les deux postes sont actifs et affichent en
+permanence ».
+- **Plus de demi-tour** : la caisse garde toujours la voiture 1 vers
+  l'amont. Avant, la rame (et celle d'en face) pivotait de 180° pour
+  descendre — c'était la vraie cause des marches penchées de la 1.19.14,
+  dont le double jeu de gradins est retiré.
+- **Poste de conduite arrière** dans la calotte de la voiture 2 : pupitre,
+  siège, horloge, moniteur, comme à l'avant (rame symétrique). Les deux
+  pupitres sont sous tension et affichent en permanence ; chacun sa clé.
+- **Poste de tête** : caméra du conducteur, projecteur et phares passent
+  au poste arrière à la descente, à l'avant à la montée ; les commandes
+  cliquées vont au pupitre de tête ; CONDUIRE (skieur) mène au poste de
+  tête. Les feux de l'autre bout restent éteints.
+- Pas de passagers ni de bancs dans le poste arrière ; collisions du
+  pupitre et du siège aux deux bouts ; plancher et plafond symétriques.
+- 🔴 La fusion des maillages libérait la tablette de l'horloge du poste et
+  l'heure qu'elle porte : tablettes gardées à part.
+- Vérifié : sonde (nez vers l'amont, paliers à ±1,3 % de l'horizontale
+  dans les deux sens, caméra et phare vers l'aval à la descente), captures
+  `shot_postes.gd`, tous les bancs 3D.
+
 **v1.19.14** — retour d'utilisateur du 12/10/2026.
 - **Marches de la rame horizontales dans les deux sens** : la rame est
   retournée de 180° quand elle descend (et la rame d'en face quand la

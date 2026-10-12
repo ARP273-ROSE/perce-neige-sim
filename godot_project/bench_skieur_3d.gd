@@ -218,7 +218,12 @@ func _tick() -> void:
 				var v5: Node3D = r2[0]
 				var sc: float = (StationsBuilder.PORTE_GENEPY.x + StationsBuilder.PORTE_GENEPY.y) * 0.5
 				var xg: Transform3D = tun.transform_at(sc)
-				sk.chemin = [v5.global_transform * Vector3(0.9, r2[1], r2[2]), v5.global_transform * Vector3(2.4, r2[1], r2[2])]
+				# côté gauche de la voie (quai de la porte Génépy), lu sur la
+				# géométrie : la rame ne se retourne plus (va-et-vient, 12/10/2026)
+				var x0: Transform3D = tun.transform_at(PNConstants.LENGTH)
+				var dr: Vector3 = v5.global_transform * Vector3(2.4, r2[1], r2[2])
+				var xp: float = -2.4 if (dr - x0.origin).dot(x0.basis.x) > 0.0 else 2.4
+				sk.chemin = [v5.global_transform * Vector3(0.9 * signf(xp), r2[1], r2[2]), v5.global_transform * Vector3(xp, r2[1], r2[2])]
 				for la in [-3.0, -4.4, -6.0, -7.8, -12.0]:
 					sk.chemin.append(xg.origin + xg.basis.x * la)
 				_ouv_max = 0.0

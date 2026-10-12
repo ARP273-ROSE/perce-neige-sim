@@ -1889,7 +1889,8 @@ func _entrer_skieur() -> void:
 		_skieur_au_poste = false
 		skieur.activer(_position_poste(), cabin.global_transform.basis.get_euler().y)
 		if not cabin._interior_cars.is_empty():
-			skieur.support = cabin._interior_cars[0]
+			# voiture du poste de tête (va-et-vient : arrière à la descente)
+			skieur.support = cabin._interior_cars[cabin.car_count - 1 if cabin.poste_ar else 0]
 			skieur._support_xf = skieur.support.global_transform
 	elif not _skieur_place and station_halls != null and station_halls.gare_aval != null:
 		if client_mode:
@@ -2156,15 +2157,21 @@ func _skieur_conduit() -> void:
 ## pilotée (le nœud du siège s'il existe encore, sinon 2,4 m derrière le
 ## nez de la voiture, au milieu).
 func _position_poste() -> Vector3:
+	# poste de TÊTE : l'avant à la montée, l'arrière à la descente (la rame
+	# fait un va-et-vient, elle ne se retourne pas)
+	var racine: Node3D = cabin.interior_root_ar if cabin.poste_ar else cabin.interior_root
 	var seat: Node3D = null
-	if cabin.interior_root != null:
-		seat = cabin.interior_root.get_node_or_null("DriverSeatBase") as Node3D
+	if racine != null:
+		seat = racine.get_node_or_null("DriverSeatBase") as Node3D
 	if seat != null:
 		return seat.global_position + seat.global_transform.basis.z * 0.7
 	if cabin._interior_cars.is_empty():
 		return skieur.global_position
-	var v0: Node3D = cabin._interior_cars[0]
 	var car_len: float = cabin.train_length / float(cabin.car_count)
+	if cabin.poste_ar:
+		var vd: Node3D = cabin._interior_cars[cabin.car_count - 1]
+		return vd.global_transform * Vector3(0.0, TrainBodyBuilder.Y_FLOOR + 0.3, car_len * 0.5 - 2.4)
+	var v0: Node3D = cabin._interior_cars[0]
 	return v0.global_transform * Vector3(0.0, TrainBodyBuilder.Y_FLOOR + 0.3, -car_len * 0.5 + 2.4)
 
 
