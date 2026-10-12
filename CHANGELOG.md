@@ -18,6 +18,17 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.19.22** — rapports de gel du 12/10/2026 (poste Windows).
+- **Gels de 10 s au lancement de la vue 3D (Windows)** : la fenêtre Godot,
+  enfant d'un autre processus, lie sa file de messages à celle du sim ;
+  pendant son chargement, `SetParent` puis `ShowWindow` attendaient
+  qu'elle réponde (piles remontées par la vigie). Désormais la fenêtre 3D
+  n'est embarquée qu'une fois Godot réactif (trois réponses à WM_NULL en
+  moins de 50 ms, échéance repoussée jusqu'à 90 s tant qu'elle charge),
+  et les appels qui la visent sont asynchrones (`ShowWindowAsync`,
+  `SetWindowPos` + `SWP_ASYNCWINDOWPOS`). Le gel signalé pendant la
+  fenêtre « mise à jour disponible » avait la même cause.
+
 **v1.19.21** — retours d'utilisateur du 12/10/2026 (troisième lot).
 - **BOUCLE à ski, refaite** :
   - il chausse dès la neige (sortie de la porte Génépy ou bas de
