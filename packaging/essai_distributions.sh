@@ -14,7 +14,7 @@ declare -A PREP=(
   [debian:12]="apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq libgl1 libegl1 libfontconfig1 libx11-6 libx11-xcb1 libxkbcommon0 libxkbcommon-x11-0 libdbus-1-3 libpulse0 xvfb >/dev/null"
   [fedora:41]="dnf install -y -q mesa-libGL mesa-libEGL fontconfig libX11 libX11-xcb libxkbcommon-x11 dbus-libs pulseaudio-libs xorg-x11-server-Xvfb >/dev/null"
   [archlinux:latest]="pacman -Sy --noconfirm --quiet mesa fontconfig libx11 libxkbcommon-x11 dbus libpulse xorg-server-xvfb >/dev/null"
-  [opensuse/tumbleweed]="zypper -q -n install Mesa-libGL1 Mesa-libEGL1 fontconfig libX11-6 libX11-xcb1 libxkbcommon-x11-0 libdbus-1-3 libpulse0 xvfb-run xorg-x11-server-Xvfb >/dev/null"
+  [opensuse/tumbleweed]="zypper -q -n --gpg-auto-import-keys refresh >/dev/null && zypper -q -n install Mesa-libGL1 Mesa-libEGL1 fontconfig libX11-6 libX11-xcb1 libxkbcommon-x11-0 libdbus-1-3 libpulse0 xvfb-run xorg-x11-server-Xvfb >/dev/null"
 )
 ok=0; ko=0
 for img in "${!PREP[@]}"; do
