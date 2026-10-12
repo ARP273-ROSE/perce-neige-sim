@@ -52,6 +52,7 @@ var horn: bool = false
 ## Arrêt électrique verrouillé (PC : tr.electric_stop ; PWA : coup-de-poing
 ## ARRÊT ÉLEC du pupitre) : consigne ramenée à 0 à 0,45 m/s², départ refusé.
 var arret_elec: bool = false
+var bouton_urgence_pc: int = -1         # vue 3D du PC : champignon URGENCE (−1 : suit emergency)
 var pret_externe: int = -1
 var pret_autre_externe: bool = true
 var alarme_externe: bool = false
@@ -790,6 +791,11 @@ func step(dt: float) -> void:
 				_ghost_ouvert = true
 		elif doors_open:
 			_ghost_arrivee = false        # les deux rames ont ouvert
+		# reparti sans avoir ouvert les portes de la rame pilotée : la rame
+		# d'en face suit de nouveau la pilotée (retour d'utilisateur,
+		# 11/10/2026 : « j'ai vu descendre la rame opposée portes ouvertes »)
+		if trip_started and _ghost_arrivee:
+			_ghost_arrivee = false
 	# Temporisation d'arrivée → demi-tour (portes + inversion)
 	if turnaround_delay_remaining > 0.0:
 		turnaround_delay_remaining = maxf(0.0, turnaround_delay_remaining - dt)

@@ -119,7 +119,7 @@ func construire(r: ReliefBuilder) -> void:
 		mi.multimesh = mm
 		mi.material_override = mats[(cle as Vector3i).z]
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		mi.visibility_range_end = 900.0
+		mi.visibility_range_end = 900.0   # jalons : lots par case de terrain, portée mesurée à leur centre
 		mi.layers = 1 | Cabin.LAYER_VOIE
 		add_child(mi)
 		n += xs.size()
@@ -224,7 +224,7 @@ func _construire_panneaux() -> void:
 				m.roughness = 0.55
 				mi.material_override = m
 			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-			mi.visibility_range_end = 350.0
+			mi.visibility_range_end = 0.0   # (MultiMesh : la portée se mesure au CENTRE du lot, à l'échelle du domaine — les panneaux disparaissaient par moments, 11/10/2026)
 			mi.layers = 1 | Cabin.LAYER_VOIE
 			add_child(mi)
 	var racine: Node3D = Node3D.new()
@@ -335,7 +335,7 @@ func _poser_faces(lot: Array, par_piste: Dictionary, quad: Mesh) -> void:
 		mi.multimesh = mm
 		mi.material_override = m
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		mi.visibility_range_end = 350.0
+		mi.visibility_range_end = 0.0   # (MultiMesh : la portée se mesure au CENTRE du lot, à l'échelle du domaine — les panneaux disparaissaient par moments, 11/10/2026)
 		mi.layers = 1 | Cabin.LAYER_VOIE
 		add_child(mi)
 

@@ -213,9 +213,10 @@ def test_skieur_f9_auto_attend_puis_ferme(fenetre):
     assert pont.etats[-1]["skieur"] is True
     assert pont.etats[-1]["skieur_ski"] == 0        # E (chausser) : compteur relayé
     # touches de marche transmises à la 3D (bits de skieur_joueur.gd)
-    g._key_state.update({Qt.Key.Key_Z, Qt.Key.Key_Shift})
+    # (vraies touches du clavier seulement, depuis le 11/10/2026)
+    g._touches_skieur = {Qt.Key.Key_Z, Qt.Key.Key_Shift}
     assert g._skieur_touches() == 1 | 16
-    g._key_state.clear()
+    g._touches_skieur = set()
     # sur le quai, pas monté : la rame reste là, portes ouvertes
     pont.a_poster = [{"skieur_etat": [False, True, 1]}]
     _step(win, clock, 40.0)
@@ -313,3 +314,20 @@ def test_exploitation_lancee_en_skieur_puis_conduite(fenetre):
     assert tr.doors_cmd == portes
     g.auto_ops.toggle()
     assert tr.speed_cmd >= 0.0 and cmd >= 0.0
+
+
+def test_clic_pupitre_ne_fait_pas_marcher_le_skieur(fenetre):
+    """Retour d'utilisateur, 11/10/2026 : « quand je clique sur A sur le
+    programme du PC, le skieur a tendance à avancer tout seul » — un appui
+    simulé (clic du pupitre, automate) ne doit jamais compter comme une touche
+    de marche tenue."""
+    win, clock = fenetre
+    g = _depart_a_quai(win, clock)
+    _brancher(g)
+    g.basculer_skieur()
+    assert g._skieur
+    for k in (Qt.Key.Key_A, Qt.Key.Key_D, Qt.Key.Key_Z):
+        g._sim_press(k)
+    g._virtual_key(Qt.Key.Key_D)
+    assert g._skieur_touches() == 0
+    g._sortir_skieur()

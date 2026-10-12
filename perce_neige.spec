@@ -81,6 +81,7 @@ datas = _collect_sons() + _collect_godot_bundled() + [
     ("manuel_perce_neige.pdf", "."),
     ("godot_bridge.py", "."),
     ("VERSION", "."),            # sans lui VERSION = "" → MAJ proposée à chaque lancement
+    ("racines_isrg.pem", "."),   # repli TLS (contexte_tls)
 ]
 import os as _os
 if _os.path.exists("kit.json"):

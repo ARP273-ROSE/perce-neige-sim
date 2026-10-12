@@ -543,7 +543,11 @@ func _hall() -> void:
 ## « un petit zoom sur la sortie du tunnel » : ouverture ≈ 0,8 fois aussi
 ## haute que large au-dessus de la dalle, caisson ≈ 1,1 m au-dessus, qui
 ## monte jusqu'au plafond de la salle → linteau à l'axe + 1,55 m.
-const LINTEAU: float = 1.55
+## Remonté le 11/10/2026 (retour d'utilisateur : « l'entrée du tunnel sous les
+## miroirs est trop basse, le funi rentre dedans en haut ») : le sommet de
+## la caisse est à l'axe + 1,77 m (axe du tube + 0,05, rayon 1,72) → linteau
+## à l'axe + 1,95 m ; le caisson des miroirs garde le haut, jusqu'au plafond.
+const LINTEAU: float = 1.95
 
 
 func _bouche() -> Rect2:

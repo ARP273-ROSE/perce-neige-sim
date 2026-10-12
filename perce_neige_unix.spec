@@ -49,7 +49,7 @@ datas = _collect_sons() + _collect_viewer_linux() + [
     (str(HERE / f), ".") for f in (
         "VERSION", "kit.json", "logo.png", "logo_64.png", "logo.ico",
         "manuel_perce_neige.pdf", "guide_theorique.pdf", "challenge_best.json",
-        "README.md")
+        "README.md", "racines_isrg.pem")
     if (HERE / f).is_file()
 ]
 

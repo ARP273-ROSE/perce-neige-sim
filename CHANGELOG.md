@@ -18,6 +18,33 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.19.11** — retours d'utilisateur du 11/10/2026 (premier lot).
+- **Son sous Linux** (ambiance OK, mais ni portes, ni buzzer, ni annonces,
+  ni musiques de gare) : le diagnostic envoyé par le PC montrait ces
+  lecteurs « en lecture » sur le périphérique « (défaut) », nul — Windows le
+  prend pour la sortie par défaut, Linux ne joue rien dessus. Chaque sortie
+  audio reçoit maintenant la sortie système dès sa création.
+- **Musique sous Windows** (certificat) : le repli TLS charge des racines
+  ISRG X1/X2 embarquées (`racines_isrg.pem`), sans dépendre de certifi.
+- **Le skieur ne marche plus tout seul** : un clic sur un bouton du pupitre
+  PC (A, D…) ou un appui de l'automate restait compté comme touche de marche
+  tenue. Seules les vraies touches du clavier font marcher le skieur ; elles
+  se relâchent si la fenêtre perd le clavier.
+- **Défi** : ouvrir les portes en roulant ne serre plus le frein de
+  stationnement du PC (la rame continue, comme sur la PWA).
+- **Rame d'en face** : elle ne repart plus portes ouvertes quand la rame
+  pilotée repart sans avoir ouvert les siennes (PC et PWA).
+- **Champignons du pupitre 3D** (vue 3D du PC) : URGENCE et ARRÊT ÉLEC
+  s'enfoncent chacun pour leur compte.
+- **Trait orange du tunnel** : construit en tâche de fond, il naissait
+  visible même déjà masqué (skieur) ; il naît maintenant masqué.
+- **Gare haute** : la bouche du tunnel sous les miroirs était trop basse
+  (linteau à l'axe + 1,55 m, sommet de la caisse à + 1,77 m) : linteau à
+  + 1,95 m, le caisson des miroirs garde le haut jusqu'au plafond.
+- **Panneaux de piste** : disques et faces étaient regroupés à l'échelle du
+  domaine, avec une portée d'affichage mesurée au centre du groupe — ils
+  disparaissaient par moments, et de dos. Plus de portée sur ces groupes.
+
 **v1.19.10** — retour d'utilisateur du 09/10/2026 (photos de la porte).
 - **Porte de la piste Génépy** (gare haute, en bas à gauche) refaite
   d'après les photos : volet roulant bleu à lames horizontales et trois

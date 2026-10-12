@@ -419,7 +419,8 @@ func mettre_a_jour(ph: TrainPhysics, dt: float, vehicule: int, ecran_visible: bo
 	for k in range(2):
 		var c: Array = _commandes.get(NOMS_ROUGE[k], [])
 		if not c.is_empty():
-			var engage: bool = ph.emergency if k == 0 else ph.arret_elec
+			var urg: bool = ph.emergency if ph.bouton_urgence_pc < 0 else ph.bouton_urgence_pc == 1
+			var engage: bool = urg if k == 0 else ph.arret_elec
 			(c[1] as Node3D).position.y = (c[2] as float) - (0.006 if engage else 0.0)
 	if _klaxon != null:
 		_klaxon.position.y = 0.0025 if (ph.horn or _enfoncee == "klaxon") else 0.0055
