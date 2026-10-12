@@ -130,3 +130,37 @@ def test_defi_ouverture_en_croisiere_la_rame_continue(fenetre):
     _key(win, Qt.Key.Key_D)
     _step(win, clock, 10.0)
     assert abs(tr.v) > 0.6 * v0, "la rame s'arrête quand on ouvre les portes en roulant"
+
+
+def test_pret_remonte_la_consigne_hors_defi(fenetre):
+    """Mode normal, consigne à 0 (après un Défi, une urgence) : PRÊT la remonte
+    à 100 % et lance le départ ; en Défi, refus « la monter d'abord »
+    (retour d'utilisateur, 12/10/2026 : « impossible d'appuyer sur PRÊT car
+    consigne à 0 »)."""
+    win, clock = fenetre
+    g = win.game
+    st = g.state
+    if g.auto_ops.enabled:
+        g.auto_ops.toggle()
+    st.run_mode = "challenge"
+    g.new_trip()
+    st.mode = pn.MODE_RUN
+    tr = st.train
+    _step(win, clock, 1.0)
+    tr.speed_cmd = 0.0
+    _key(win, Qt.Key.Key_V)
+    _step(win, clock, 1.0)
+    assert tr.speed_cmd == 0.0 and not st.trip_started, "en Défi, la consigne reste au conducteur"
+    st.run_mode = "normal"
+    g.new_trip()
+    st.mode = pn.MODE_RUN
+    _step(win, clock, 1.0)
+    if tr.doors_open or tr.doors_cmd:        # procédure : portes (D), puis PRÊT (V)
+        _key(win, Qt.Key.Key_D)
+        _step(win, clock, 15.0)
+    tr.speed_cmd = 0.0
+    _key(win, Qt.Key.Key_V)
+    _step(win, clock, 8.0)
+    assert tr.speed_cmd == 1.0, "PRÊT doit remonter la consigne à 100 % en mode normal"
+    _step(win, clock, 40.0)
+    assert st.trip_started, "le départ doit partir"

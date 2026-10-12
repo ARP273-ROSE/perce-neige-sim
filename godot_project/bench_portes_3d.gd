@@ -19,9 +19,24 @@ func _initialize() -> void:
 	ph.maint_brake = true
 	ph.trip_started = false
 	ph.speed_cmd = 0.0
+	# Défi : consigne à 0 → refus (au conducteur de la monter)
+	ph.challenge_mode = true
 	var refus: String = ph.request_depart()
-	var ok := _verif("PRÊT/DÉPART consigne à 0 : refusé (« la monter d'abord »)",
+	var ok := _verif("Défi, PRÊT/DÉPART consigne à 0 : refusé (« la monter d'abord »)",
 		refus != "" and ph.announce_phase_remaining <= 0.0, refus)
+	ph.challenge_mode = false
+	# Normal : PRÊT remonte la consigne à 100 % (retour d'utilisateur, 12/10/2026) —
+	# vérifié sur une rame à part, la suite du banc garde sa séquence
+	var ph_n := TrainPhysics.new()
+	ph_n.direction = 1
+	ph_n.s = PNConstants.START_S
+	ph_n.doors_open = true
+	ph_n.door_leaves_open = true
+	ph_n.maint_brake = true
+	ph_n.speed_cmd = 0.0
+	var r_n: String = ph_n.request_depart()
+	ok = _verif("Normal, PRÊT/DÉPART consigne à 0 : consigne remontée à 100 %, séquence lancée",
+		r_n == "" and ph_n.speed_cmd == 1.0, "%s, consigne %.2f" % [r_n, ph_n.speed_cmd]) and ok
 	ph.speed_cmd = 1.0
 	ok = _verif("PRÊT/DÉPART consigne à 100 % : séquence lancée", ph.request_depart() == ""
 		and ph.announce_phase_remaining > 0.0) and ok

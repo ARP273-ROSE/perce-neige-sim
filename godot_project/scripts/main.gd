@@ -354,6 +354,10 @@ func set_run_mode(mode: String) -> void:
 	run_mode = mode
 	if physics != null:
 		physics.challenge_mode = (mode == "challenge")
+		# à quai, hors voyage : consigne du mode (100 % en Normal et en
+		# Pannes, 0 en Défi) — en revenant du Défi, elle restait à 0
+		if not physics.trip_started and absf(physics.v) < 0.1:
+			physics.speed_cmd = 0.0 if mode == "challenge" else 1.0
 	if fault_manager != null:
 		fault_manager.scheduler_enabled = (mode == "panne")
 		# Changer de mode remet la ligne en ordre de marche.

@@ -18,6 +18,18 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.19.20** — retour d'utilisateur du 12/10/2026 : « mode normal, impossible
+d'appuyer sur PRÊT car consigne à 0 ».
+- Changer de mode ne touchait pas à la consigne : revenu du Défi (0 %),
+  on restait à 0 en Normal ; une urgence ou un arrêt électrique la
+  ramènent aussi à 0. Désormais, en Normal et en Pannes, PRÊT remonte la
+  consigne à 100 % au lieu de refuser, et passer en Normal / Pannes à
+  quai la remet à 100 % (0 % en passant en Défi). En Défi, refus
+  inchangé : c'est au conducteur. PWA et PC.
+- Vérifié : sonde (Défi → Normal → PRÊT → Défi), test PC
+  `test_pret_remonte_la_consigne_hors_defi` (qui échoue sans le
+  correctif), tests PC 123, bancs 3D.
+
 **v1.19.19** — retour d'utilisateur du 12/10/2026 : « sur la PWA la consigne est
 repassée à 0 % par défaut ».
 - À l'arrivée en gare, la consigne tombait à 0 % jusqu'au demi-tour (la

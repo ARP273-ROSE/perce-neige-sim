@@ -7498,9 +7498,15 @@ class GameWidget(QWidget):
         if (tr.doors_open or tr.doors_timer > 0.0) and st.run_mode != "challenge":
             return
         if (tr.emergency or tr.emergency_ramp > 0.0 or tr.electric_stop
-                or tr.dead_man_fault or st.panne_active
-                or tr.speed_cmd < 0.01):
+                or tr.dead_man_fault or st.panne_active):
             return
+        if tr.speed_cmd < 0.01:
+            # Normal / Pannes : PRÊT remonte la consigne à 100 % (retour d'utilisateur,
+            # 12/10/2026 : « impossible d'appuyer sur PRÊT car consigne à
+            # 0 ») ; en Défi, on attend que le conducteur la monte
+            if st.run_mode == "challenge":
+                return
+            tr.speed_cmd = 1.0
         self._virtual_key(Qt.Key.Key_Z)
 
     def _virtual_key(self, k) -> None:
@@ -9891,8 +9897,14 @@ class GameWidget(QWidget):
                 reason_en = "fault active — clear it first"
                 reason_fr = "panne en cours — à résoudre d'abord"
             elif tr.speed_cmd < 0.01:
-                reason_en = "speed setpoint at 0 — dial it up first"
-                reason_fr = "consigne de vitesse à 0 — la monter d'abord"
+                if st.run_mode == "challenge":
+                    reason_en = "speed setpoint at 0 — dial it up first"
+                    reason_fr = "consigne de vitesse à 0 — la monter d'abord"
+                else:
+                    # Normal / Pannes : PRÊT remonte la consigne à 100 %
+                    # (retour d'utilisateur, 12/10/2026 : « impossible d'appuyer
+                    # sur PRÊT car consigne à 0 ») ; en Défi, au conducteur
+                    tr.speed_cmd = 1.0
             if reason_en:
                 add_event(st, "dep",
                           f"Cannot start — {reason_en}",
