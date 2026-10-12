@@ -17,6 +17,7 @@ var _joy: Control = null
 var _centre: Vector2 = Vector2.ZERO
 var _doigt_joy: int = -1
 var _doigt_vue: int = -1
+var _doigts: Dictionary = {}             # doigts posés (index)
 var _pos_vue: Vector2 = Vector2.ZERO
 var _bouton_pos: Vector2 = Vector2.ZERO
 var _pos_joy_defaut: Vector2 = Vector2.ZERO   # base du joystick au repos (bas à gauche)
@@ -269,8 +270,17 @@ func _sur_un_bouton(p: Vector2) -> bool:
 func _input(event: InputEvent) -> void:
 	if skieur == null or not skieur.actif or not visible:
 		return
+	if event is InputEventScreenTouch or event is InputEventScreenDrag:
+		# le skieur ignore la « souris » tant qu'un doigt est posé (iPad :
+		# le pouce du joystick arrivait aussi en souris et tournait la vue)
+		skieur.tactile_t = Time.get_ticks_msec() / 1000.0
 	if event is InputEventScreenTouch:
 		var t: InputEventScreenTouch = event
+		if t.pressed:
+			_doigts[t.index] = true
+		else:
+			_doigts.erase(t.index)
+		skieur.doigts = _doigts.size()
 		# comme dans les jeux (retour d'utilisateur, 08/10/2026 : « ça fait tourner la vue
 		# en même temps, c'est le bazar ») : joystick FLOTTANT — il naît là
 		# où le pouce se pose dans la moitié gauche de l'écran ; tout doigt

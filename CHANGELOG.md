@@ -18,6 +18,39 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.19.16** — retour d'utilisateur du 12/10/2026 : « c'est infernal de diriger le
+skieur, avec en plus une vue qui bouge à chaque mouvement de joystick ou de
+virage ; fais des recherches et des tests d'ergonomie ».
+- 🔴 **Cause principale (iPad)** : le glissé du pouce du JOYSTICK arrivait
+  aussi en « souris » (Safari en tire des événements souris) et tournait la
+  vue : pouce vers l'avant = caméra par terre en 3e personne, regard au ciel
+  en 1re ; à ski, la vue tournait sous le pouce à chaque correction.
+  Désormais, tant qu'un doigt touche l'écran (et 0,6 s après), la souris est
+  ignorée ; seul un doigt posé hors du joystick tourne la vue. Reproduit au
+  banc (vue levée de 30°), corrigé (0°).
+- **Regard vers le haut borné** : 14° en 3e personne (au-delà la caméra
+  rase le sol), 35° en 1re ; en marchant, l'horizon revient doucement 3 s
+  après qu'on a tourné la vue.
+- **Autre cause** : à ski, le joystick visait un cap par rapport à la caméra, et
+  la caméra suivait la trajectoire — chaque virage déplaçait la cible du
+  pouce (on poursuivait une cible mobile) ; au clavier, la caméra tournait
+  à près de 90 °/s (p95) à chaque virage ; à pied, tourner la vue sans
+  lâcher le pouce faisait dévier la marche de 90°.
+- **Repère du pouce figé** (pratique classique des caméras à la troisième
+  personne) : la direction du joystick ou des touches se lit dans la vue
+  du moment où l'on pose le pouce et le reste tant qu'on tient ; relâché
+  0,2 s, il reprend la vue courante. À pied et à ski, PWA et PC.
+- **Caméra de poursuite à ski** : derrière les skis (le cap commandé, pas
+  la trajectoire), ressort critique, au plus 50 °/s, immobile à l'arrêt,
+  suspendue 2 s après une rotation de la vue à la main ; relèvement contre
+  le relief lissé (il pompait par à-coups).
+- **Banc d'ergonomie** `bench_ergonomie_3d.gd` (joueur simulé) — avant →
+  après : visée de 15° tenue : erreur 22° → 0° ; clavier : vue p95 89 →
+  50 °/s, maxi 120 → 50 °/s ; à pied, vue tournée pouce tenu : marche
+  déviée de 90° → 0° ; slalom au pouce : erreur 0°, vue p95 20 °/s ; iPad,
+  pouce du joystick vers l'avant (tactile + souris de Safari) : vue levée
+  de 30° → 0°, il avance.
+
 **v1.19.15** — retour d'utilisateur du 12/10/2026 : « c'est un va-et-vient, la
 rame ne se retourne pas, elle repart dans l'autre sens ; un poste de
 conduite de chaque côté », « les deux postes sont actifs et affichent en

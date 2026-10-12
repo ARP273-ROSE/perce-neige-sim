@@ -125,6 +125,20 @@ funiculaire), les sauts (il reste collé au sol), les chutes.
   quai suit les portes de la rame qui est EN BAS. Banc
   `bench_boucle_salle_3d.gd` (salle, rame en ligne : banc, course, à bord,
   zéro déblocage ; `--pistes` : parti chaussé d'une piste).
+- **Commandes et vue** (1.19.16) : repère du pouce figé
+  (`SkieurJoueur._maj_pouce`, `_ref_pouce`, `_pouce_tenu`, relâché après
+  0,2 s) lu par `_direction` (à pied) et `_cmd_joystick_ski` ; caméra de
+  poursuite `_camera_ski` = ressort critique sur `_cap_ski` (`CAM_OMEGA`
+  1,6 s⁻¹, `CAM_V_MAX` 50 °/s, `VUE_MAIN_PAUSE` 2 s, rien sous 1,5 m/s),
+  `_pitch_sol` lissé avec hystérésis. 🔴 iPad : la souris que Safari tire
+  du toucher tournait la vue avec le pouce du joystick → `doigts` /
+  `tactile_t` (posés par CommandesSkieur) : souris ignorée tant qu'un doigt
+  touche et 0,6 s après ; tangage borné `PITCH_MIN` / `_pitch_max()` (0,25
+  en 3e personne, 0,60 en 1re), horizon rappelé en marchant. Au banc, les
+  événements injectés sont en coordonnées de FENÊTRE (`get_final_transform`). Banc `bench_ergonomie_3d.gd`
+  (`--mesure` pour comparer sans juger). Sources : J. Nesky, « 50 Game
+  Camera Mistakes » (GDC 2014) ; E. Martel, « Tips and Tricks for a Robust
+  Third-Person Camera System » (Game AI Pro, ch. 47).
 - **Va-et-vient** (1.19.15) : la caisse ne pivote plus (`_xform_from`,
   `travel_sign` = 1, `door_slide_sign` = 1, roues Abt sans inversion) ;
   poste arrière `Cabin.interior_root_ar` (même construction que l'avant
