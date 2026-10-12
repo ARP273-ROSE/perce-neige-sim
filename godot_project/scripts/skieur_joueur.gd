@@ -107,7 +107,33 @@ var _penche: float = 0.0
 var _vue_libre: float = 99.0            # s depuis le dernier glissé de la vue
 var _ski_prog_d: float = INF          # pilote à ski : meilleure distance au point visé
 var _ski_prog_t: float = 0.0
-var _joy_vise: bool = false             # à ski, joystick tenu de côté : la caméra ne suit pas
+var _joy_vise: bool = false             # (conservé pour compatibilité, plus utilisé)
+## Repère du pouce (retour d'utilisateur, 12/10/2026 : « c'est infernal de diriger le
+## skieur avec une vue qui bouge à chaque mouvement de joystick ou de
+## virage ») : la direction du joystick ou des touches se lit dans le repère
+## de la vue AU MOMENT où l'on pose le pouce, et ce repère reste FIGÉ tant
+## qu'on ne le relâche pas (règle classique des caméras à la troisième
+## personne : garder la matrice de la vue précédente tant que l'entrée est
+## tenue). Avant, la caméra qui suivait les skis déplaçait la cible du
+## pouce : on poursuivait une cible mobile, la vue tournait, le cap aussi.
+var _ref_pouce: float = 0.0
+var _pouce_tenu: bool = false
+var _pouce_lache_t: float = 0.0
+## Écran tactile : doigts posés (CommandesSkieur) et dernier contact. Tant
+## qu'un doigt touche l'écran (et 0,6 s après), les événements « souris »
+## sont ignorés : sur iPad, le glissé du pouce du joystick arrivait AUSSI en
+## souris et tournait la vue — pouce vers l'avant = caméra par terre en
+## 3e personne, regard au ciel en 1re (retour d'utilisateur, 12/10/2026).
+var doigts: int = 0
+var tactile_t: float = -10.0
+## Caméra de poursuite à ski : ressort critique sur le cap des skis, vitesse
+## de rotation bornée (pas de tournis), suspendue quand on tourne la vue à
+## la main.
+var _cam_v: float = 0.0                 # rad/s
+const CAM_OMEGA: float = 1.6            # raideur du ressort (s⁻¹) : ~2 s pour se replacer
+const CAM_V_MAX: float = deg_to_rad(50.0)
+const VUE_MAIN_PAUSE: float = 2.0       # s sans suivi après une rotation à la main
+var _pitch_sol: float = 0.0             # relèvement lissé contre le relief
 var _batons: MultiMeshInstance3D = null
 var _skis_pieds: Mesh = null
 var _skis_main: Mesh = null
@@ -481,6 +507,8 @@ func _unhandled_input(event: InputEvent) -> void:
 	# doigt par CommandesSkieur, sinon le joystick la ferait tourner aussi
 	if event is InputEventMouse and event.device == InputEvent.DEVICE_ID_EMULATION:
 		return
+	if event is InputEventMouse and (doigts > 0 or Time.get_ticks_msec() / 1000.0 - tactile_t < 0.6):
+		return
 	if event is InputEventMouseMotion and (event.button_mask & (MOUSE_BUTTON_MASK_LEFT | MOUSE_BUTTON_MASK_RIGHT)) != 0:
 		tourner_vue(event.relative)
 	elif event is InputEventMouseButton and event.pressed:
@@ -493,8 +521,17 @@ func _unhandled_input(event: InputEvent) -> void:
 ## Rotation de la vue (glissé de souris ou de doigt, en pixels).
 func tourner_vue(d: Vector2) -> void:
 	_vue_libre = 0.0
+	_cam_v = 0.0
 	cam_yaw -= d.x * 0.006
-	cam_pitch = clampf(cam_pitch - d.y * 0.005, -1.30, 0.75)
+	cam_pitch = clampf(cam_pitch - d.y * 0.005, PITCH_MIN, _pitch_max())
+
+
+## Regard vers le haut borné : en 3e personne, au-delà de ~14° la caméra
+## passe sous les épaules et rase le sol (« la caméra se retrouve par
+## terre ») ; en 1re personne, 35° suffisent.
+const PITCH_MIN: float = -1.20
+func _pitch_max() -> float:
+	return 0.60 if premiere_personne else 0.25
 
 
 func _clavier() -> Vector2:
@@ -530,10 +567,10 @@ func _process(delta: float) -> void:
 	var k: Vector2 = _clavier()
 	if k.length() > 0.0:
 		cmd = k
+	_maj_pouce(delta, cmd)
 	var vite: bool = course or Input.is_physical_key_pressed(KEY_SHIFT) \
 		or (touches_ext & 16) != 0 or entree.length() > 0.92     # joystick à fond : on court
 	if chausse:
-		_joy_vise = false
 		if not chemin.is_empty():
 			cmd = _pilote_ski()
 		elif k.length() == 0.0 and entree.length() > 0.12:
@@ -550,6 +587,11 @@ func _process(delta: float) -> void:
 			return
 		lever()
 	var dir: Vector3 = _direction(cmd)
+	# horizon : en marchant, la vue revient doucement à l'horizontale 3 s
+	# après qu'on l'a tournée à la main
+	_vue_libre += delta
+	if cmd.length() > 0.08 and _vue_libre > 3.0:
+		cam_pitch = move_toward(cam_pitch, -0.10 if premiere_personne else -0.28, delta * 0.35)
 	if not chemin.is_empty():
 		dir = _suivre_chemin()
 		vite = course_auto
@@ -559,12 +601,29 @@ func _process(delta: float) -> void:
 	_camera()
 
 
-## Direction voulue (monde, horizontale) d'après la commande et la vue.
+## Repère du pouce : pris sur la vue quand on pose le pouce (ou qu'on
+## appuie sur une touche), figé tant qu'on tient, relâché après 0,2 s sans
+## entrée.
+func _maj_pouce(delta: float, cmd: Vector2) -> void:
+	if cmd.length() > 0.08:
+		if not _pouce_tenu:
+			_ref_pouce = cam_yaw
+			_pouce_tenu = true
+		_pouce_lache_t = 0.0
+	elif _pouce_tenu:
+		_pouce_lache_t += delta
+		if _pouce_lache_t > 0.2:
+			_pouce_tenu = false
+
+
+## Direction voulue (monde, horizontale) d'après la commande et la vue —
+## celle du moment où l'on a posé le pouce (_maj_pouce).
 func _direction(cmd: Vector2) -> Vector3:
 	if cmd.length() < 0.08:
 		return Vector3.ZERO
-	var av: Vector3 = Vector3(-sin(cam_yaw), 0.0, -cos(cam_yaw))
-	var dr: Vector3 = Vector3(cos(cam_yaw), 0.0, -sin(cam_yaw))
+	var y: float = _ref_pouce if _pouce_tenu else cam_yaw
+	var av: Vector3 = Vector3(-sin(y), 0.0, -cos(y))
+	var dr: Vector3 = Vector3(cos(y), 0.0, -sin(y))
 	return (av * cmd.y + dr * cmd.x).limit_length(1.0)
 
 
@@ -885,19 +944,33 @@ func _mur_devant(p: Vector3, dp: Vector3) -> Vector3:
 	return Vector3.ZERO
 
 
-## Caméra derrière les skis quand il file (sauf si l'on vient de tourner
-## la vue à la main).
+## Caméra de poursuite à ski : derrière les SKIS (le cap que l'on commande,
+## pas la trajectoire qui dérape), par un ressort critique dont la vitesse
+## de rotation est bornée à 50 °/s ; suspendue 2 s après une rotation de la
+## vue à la main (« toujours honorer l'intention du joueur »), et sous 1,5 m/s
+## (à l'arrêt, la vue ne bouge pas). Le relèvement contre le relief est
+## lissé (avant : par à-coups).
 func _camera_ski(delta: float) -> void:
 	var vh: Vector3 = Vector3(_v_ski.x, 0.0, _v_ski.z)
-	if vh.length() > 2.0 and _vue_libre > 1.2 and not _joy_vise:
-		cam_yaw = lerp_angle(cam_yaw, atan2(-vh.x, -vh.z), minf(1.0, delta * 2.2))
-		cam_pitch = lerpf(cam_pitch, -0.30, minf(1.0, delta * 1.5))
+	if vh.length() > 1.5 and _vue_libre > VUE_MAIN_PAUSE:
+		var e: float = wrapf(_cap_ski - cam_yaw, -PI, PI)
+		_cam_v += (CAM_OMEGA * CAM_OMEGA * e - 2.0 * CAM_OMEGA * _cam_v) * delta
+		_cam_v = clampf(_cam_v, -CAM_V_MAX, CAM_V_MAX)
+		cam_yaw += _cam_v * delta
+		cam_pitch = lerpf(cam_pitch, -0.30, minf(1.0, delta * 0.8))
+	else:
+		_cam_v = move_toward(_cam_v, 0.0, CAM_V_MAX * delta * 4.0)
+		cam_yaw += _cam_v * delta
 	# jamais sous la pente derrière lui (le relief n'a de collisions
-	# qu'autour des gares)
+	# qu'autour des gares) : on relève doucement, on redescend plus doucement
+	# encore, avec une marge (sinon ça pompe)
 	if not premiere_personne:
 		var cp: Vector3 = camera.global_position
-		if cp.y < relief.hauteur_sol(cp.x, cp.z) + 0.7:
-			cam_pitch = maxf(cam_pitch - delta * 1.5, -1.2)
+		var marge: float = cp.y - (relief.hauteur_sol(cp.x, cp.z) + 0.7)
+		if marge < 0.0:
+			_pitch_sol = minf(_pitch_sol + delta * 0.9, 0.8)
+		elif marge > 0.6:
+			_pitch_sol = maxf(_pitch_sol - delta * 0.3, 0.0)
 
 
 ## Joystick à ski, comme dans les jeux (09/10/2026, retour d'utilisateur : « refonds le
@@ -914,9 +987,8 @@ func _cmd_joystick_ski() -> Vector2:
 	var force: float = clampf((entree.length() - 0.12) / 0.88, 0.0, 1.0)
 	if absf(a) > 2.3:
 		return Vector2(0.0, -force)                   # vers soi : chasse-neige
-	var cap_voulu: float = cam_yaw - a
+	var cap_voulu: float = (_ref_pouce if _pouce_tenu else cam_yaw) - a
 	var e: float = wrapf(cap_voulu - _cap_ski, -PI, PI)
-	_joy_vise = absf(a) > 0.30
 	var y: float = 0.0
 	if _v_ski.length() < 3.0 and absf(a) < 0.8:
 		y = force                                     # à l'arrêt : pousser
@@ -986,7 +1058,8 @@ func _animer(delta: float, dir: Vector3) -> void:
 
 
 func _camera() -> void:
-	pivot.rotation = Vector3(cam_pitch, cam_yaw, 0.0)
+	cam_pitch = clampf(cam_pitch, PITCH_MIN, _pitch_max())
+	pivot.rotation = Vector3(clampf(cam_pitch - _pitch_sol, PITCH_MIN, _pitch_max()), cam_yaw, 0.0)
 	bras.spring_length = 0.0 if premiere_personne else cam_dist
 	pivot.position.y = Y_YEUX if premiere_personne else Y_YEUX - 0.05
 
