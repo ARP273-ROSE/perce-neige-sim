@@ -125,14 +125,14 @@ funiculaire), les sauts (il reste collé au sol), les chutes.
   quai suit les portes de la rame qui est EN BAS. Banc
   `bench_boucle_salle_3d.gd` (salle, rame en ligne : banc, course, à bord,
   zéro déblocage ; `--pistes` : parti chaussé d'une piste).
-- **Gradins de la rame** (1.19.14) : deux jeux par voiture
-  (`Cabin._gradins[idx][±1]`, `sens_gradins`, `sens_voulu()` d'après
-  `door_slide_sign`) — la caisse retournée de 180° inversait l'inclinaison
-  des paliers ; `_appliquer_sens` bascule la visibilité, recale les
-  voyageurs (`_floor_y_at(z, sens)`) et émet `gradins_bascules`, que
-  `CollisionsJeu._gradin/_maj_forme` suit (paliers, paliers de quai,
-  seuils). Les bancs (collisions droites) ne dépendent que du centre du
-  palier.
+- **Va-et-vient** (1.19.15) : la caisse ne pivote plus (`_xform_from`,
+  `travel_sign` = 1, `door_slide_sign` = 1, roues Abt sans inversion) ;
+  poste arrière `Cabin.interior_root_ar` (même construction que l'avant
+  dans un repère tourné de 180°, porté par la dernière voiture),
+  `_pupitres`/`_horloges` (les deux mis à jour), `poste_voulu_ar()` /
+  `_poser_poste()` déplacent caméra FPV, projecteur et feux ;
+  `main._position_poste()` et CONDUIRE suivent `poste_ar`. Les gradins à
+  double jeu de la 1.19.14 sont retirés (la cause était le retournement).
 - **Carte des pistes** (`carte_pistes.gd`, bouton CARTE skis aux pieds) :
   surimpression 340 px semi-transparente, nord en haut, centrée sur le
   skieur ; tracés `DomaineSkiable._axes` dans leur couleur, noms au-delà de

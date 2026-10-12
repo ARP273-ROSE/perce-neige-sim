@@ -287,8 +287,8 @@ func _poser(e: int) -> void:
 			var r: Array = _porte(_porte_proche(v))
 			var sc: float = (StationsBuilder.PORTE_GENEPY.x + StationsBuilder.PORTE_GENEPY.y) * 0.5
 			var xg: Transform3D = tun.transform_at(sc)
-			# la porte du côté gauche de la voie (la rame n'est retournée qu'au
-			# départ : ce côté est +x ou −x dans le repère de la voiture)
+			# la porte du côté gauche de la voie (+x ou −x dans le repère de
+			# la voiture, lu sur la géométrie)
 			var x0: Transform3D = tun.transform_at(PNConstants.LENGTH)
 			var droite: Vector3 = v.global_transform * Vector3(2.4, r[1], r[2])
 			var xp: float = -2.4 if (droite - x0.origin).dot(x0.basis.x) > 0.0 else 2.4

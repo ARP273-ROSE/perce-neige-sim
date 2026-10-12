@@ -128,6 +128,9 @@ func _tick() -> void:
 			"%d bonnes, %d fausses" % [bonnes, fausses])
 	ph.direction = 1
 	ph.portes_cotes = 3
+	# va-et-vient (12/10/2026) : en descente, caméra et commandes étaient au
+	# poste arrière ; une image pour revenir au poste avant
+	cab._process(0.0)
 	ph.doors_open = true
 	_main._pupitre_clic(pos_de.call("fermeture_0"), true)
 	_main._pupitre_clic(pos_de.call("fermeture_0"), false)
