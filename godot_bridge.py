@@ -637,6 +637,11 @@ def physics_to_state_dict(tr, st=None) -> dict:
         # (codeur) ; chaque rame s'en écarte de el_x1 / el_x2 (m, le long
         # de SA voie, + = vers la gare haute).
         "el_x1": float(getattr(st, "el_x1", 0.0)) if st is not None else 0.0,
+        # vitesse élastique de la rame : l'écran Pro-face de la 3D affiche
+        # v + el_v1 comme le pupitre du PC (retour d'utilisateur, 11/10/2026 : « les
+        # vitesses de l'écran Pro-face ne sont pas rigoureusement celles du
+        # pupitre » — la 3D n'avait pas el_v1)
+        "el_v1": float(getattr(st, "el_v1", 0.0)) if st is not None else 0.0,
         "el_x2": float(getattr(st, "el_x2", 0.0)) if st is not None else 0.0,
         "v": float(getattr(tr, "v", 0.0)),
         "direction": int(getattr(tr, "direction", 1)),

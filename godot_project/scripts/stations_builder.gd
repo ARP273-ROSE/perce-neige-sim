@@ -14,8 +14,14 @@ extends Node3D
 # une volée de marches-paliers horizontales de 3 m de large longe le train
 # de chaque côté, la contremarche de chaque marche découlant de la pente
 # locale de la voie. Nez de marche contrastés (alu en bas, rouges en haut).
-@export var platform_width: float = 3.00       # largeur quai latéral (bord extérieur ≈ au mur de salle)
-@export var platform_inner_x: float = 1.85     # distance depuis centre tunnel au bord intérieur (hors gabarit cabine ∅3.6m)
+# Bord du quai avancé le 11/10/2026 (retour d'utilisateur : « le bord du quai est
+# trop loin du seuil des portes […] le moins d'espace vide possible entre le
+# quai et la rame ») : 1,85 → 1,40 m de l'axe. Au niveau du plancher, la
+# caisse est à 1,28 m (le reste du ventre passe AU-DESSUS du quai) et le
+# vantail déboîté à ~1,31 m ; quai élargi d'autant pour garder son bord
+# extérieur au mur.
+@export var platform_width: float = 3.45       # largeur quai latéral (bord extérieur ≈ au mur de salle)
+@export var platform_inner_x: float = 1.40     # distance depuis centre tunnel au bord intérieur
 @export var platform_height: float = 0.50      # hauteur quai vs dalle : quai à −1,10 = plancher cabine
 @export var tread_depth: float = 0.95          # profondeur d'une marche-palier
 @export var tread_thickness: float = 0.55      # épaisseur du bloc (descend sous la marche suivante)
@@ -39,6 +45,9 @@ const PIT_HIGH_END: float = PNConstants.LENGTH + 4.0
 # longrines qui portent les rails (retour d'utilisateur, 07/10/2026 : « la fosse doit être
 # plus profonde pour que la tête soit sous les rails »)
 const PIT_DEPTH: float = 1.95
+# Bord du quai au droit de la fosse et de ses escaliers (gare basse) : 1,85 m,
+# l'ancien bord — le quai avancé à 1,40 (11/10/2026) couvrait leur haut
+const BORD_FOSSE: float = 1.85
 
 
 func build(t: TunnelBuilder) -> void:
@@ -78,7 +87,7 @@ func _build_station_low() -> void:
 	# et la première marche du quai : on y passait dans le vide (skieur
 	# jouable, 07/10/2026)
 	for sd0 in [-1.0, 1.0]:
-		_build_palier(0.0, s_plat_start, sd0)
+		_build_palier(0.0, s_plat_start, sd0, BORD_FOSSE)   # au-dessus de l'escalier de la fosse
 	# le garde-corps descend jusqu'au point le plus bas du nez : rame
 	# pleine, câble allongé (retour du 06/10/2026 : « la barrière doit
 	# descendre jusqu'au point bas de l'allongement du câble cabine pleine »)
@@ -128,14 +137,15 @@ func _build_station_high() -> void:
 
 ## Palier plat en haut des marches (dessus = dessus de la dernière marche),
 ## jusqu'au mur du fond du hall.
-func _build_palier(s0: float, s1: float, side: float) -> void:
+func _build_palier(s0: float, s1: float, side: float, bord: float = -1.0) -> void:
 	var y_quai: float = FLOOR_Y_LOCAL + platform_height
 	var xf0: Transform3D = _xf_at(s0)
 	var y_top: float = (xf0.origin + xf0.basis.y * y_quai).y
 	var xm: Transform3D = _xf_at((s0 + s1) * 0.5)
 	var dr: Vector3 = xm.basis.x
 	var lb: Basis = Basis(dr, Vector3.UP, dr.cross(Vector3.UP)).orthonormalized()
-	var lat: float = side * (platform_inner_x + platform_width * 0.5)
+	var b_in: float = bord if bord > 0.0 else platform_inner_x
+	var lat: float = side * (b_in + platform_width * 0.5)
 	var mat: StandardMaterial3D = StandardMaterial3D.new()
 	mat.albedo_color = Color(0.13, 0.13, 0.14)
 	mat.roughness = 0.9
@@ -172,6 +182,56 @@ func _build_palier(s0: float, s1: float, side: float) -> void:
 # Plateforme béton + bande jaune
 # ---------------------------------------------------------------------------
 
+## La marche [s_dn, s_up] du quai `side` surplombe-t-elle un escalier de la
+## fosse de la gare basse ? (mêmes cotes que _build_pit)
+func _sur_escalier_fosse(s_dn: float, s_up: float, side: float) -> bool:
+	var esc_n: int = int(ceil(((FLOOR_Y_LOCAL + platform_height) - (FLOOR_Y_LOCAL - PIT_DEPTH)) / 0.17))
+	var esc_s0: float = 0.6
+	var esc_s1: float = esc_s0 + 0.29 * esc_n
+	var esch_s1: float = PIT_LOW_END - 0.15
+	var esch_s0: float = esch_s1 - 0.29 * esc_n
+	if side > 0.0 and s_up > esc_s0 - 0.2 and s_dn < esc_s1 + 0.2:
+		return true
+	return s_up > esch_s0 - 0.2 and s_dn < esch_s1 + 0.6
+
+
+## Bords des marches du quai entre s_start et s_end : aux joints des panneaux
+## de la rame arrêtée en gare (rame symétrique : même grille dans les deux
+## sens), tread_depth au-delà de la rame. Liste croissante, bornes comprises.
+func _bornes_marches(s_start: float, s_end: float, is_low: bool) -> Array:
+	var s_c: float = PNConstants.START_S if is_low else PNConstants.STOP_S
+	var car_len: float = PNConstants.TRAIN_HALF          # 2 voitures de 16 m
+	var pas: float = TrainBodyBuilder.PANEL_L + TrainBodyBuilder.RIB_W
+	var joints: Array = []
+	for idx in range(2):
+		var z_c: float = (float(idx) - 0.5) * car_len
+		var z_a: float = -car_len * 0.5 + (TrainBodyBuilder.CAP_LEN if idx == 0 else TrainBodyBuilder.GAP * 0.5)
+		var z0: float = z_c + z_a + TrainBodyBuilder.END_BLANK + TrainBodyBuilder.RIB_W * 0.5
+		for k in range(TrainBodyBuilder.N_PANNEAUX + 1):
+			joints.append(s_c - (z0 + pas * float(k)))
+	joints.sort()
+	var b: Array = [s_start]
+	var s: float = s_start
+	var j0: float = joints[0]
+	var j1: float = joints[joints.size() - 1]
+	# avant la rame : pas d'un panneau, raccordé au premier joint
+	if j0 > s_start:
+		var n0: int = maxi(0, int(floor((j0 - s_start) / pas)))
+		for i in range(n0, 0, -1):
+			var x: float = j0 - pas * float(i)
+			if x > s + 0.3:
+				b.append(x)
+	for j in joints:
+		if j > b[b.size() - 1] + 0.3 and j < s_end - 0.3:
+			b.append(j)
+	s = b[b.size() - 1]
+	while s + pas < s_end - 0.3:
+		s += pas
+		b.append(s)
+	b.append(s_end)
+	return b
+
+
 func _build_platform(s_start: float, s_end: float, is_low: bool, side: float = 1.0) -> void:
 	# Quai EN ESCALIER (photos 20260426_094104 / 095119) : volée de
 	# marches-paliers HORIZONTALES le long du train. Le dessus de chaque
@@ -206,9 +266,16 @@ func _build_platform(s_start: float, s_end: float, is_low: bool, side: float = 1
 	var y_top_local: float = FLOOR_Y_LOCAL + platform_height
 
 	# --- Marches (MultiMesh) ---------------------------------------------
-	var n_treads: int = maxi(1, int(ceil((s_end - s_start) / tread_depth)))
+	# Calées sur les PANNEAUX de la rame arrêtée (retour d'utilisateur, 11/10/2026 :
+	# « ajuster la largeur et la position des marches pour qu'elles
+	# s'alignent avec les portes quand le funi est arrêté, en haut et en
+	# bas ») : une marche par panneau, joint de marche au droit du joint
+	# entre deux panneaux — chaque porte a sa marche, à son niveau.
+	var bornes: Array = _bornes_marches(s_start, s_end, is_low)
+	var n_treads: int = bornes.size() - 1
+	var pas_m: float = TrainBodyBuilder.PANEL_L + TrainBodyBuilder.RIB_W
 	var tread_mesh: BoxMesh = BoxMesh.new()
-	tread_mesh.size = Vector3(platform_width, tread_thickness, tread_depth)
+	tread_mesh.size = Vector3(platform_width, tread_thickness, pas_m)
 	tread_mesh.material = tread_mat
 
 	var nose_mesh: BoxMesh = BoxMesh.new()
@@ -218,7 +285,6 @@ func _build_platform(s_start: float, s_end: float, is_low: bool, side: float = 1
 	var mm_treads: MultiMesh = MultiMesh.new()
 	mm_treads.transform_format = MultiMesh.TRANSFORM_3D
 	mm_treads.mesh = tread_mesh
-	mm_treads.instance_count = n_treads
 
 	var mm_noses: MultiMesh = MultiMesh.new()
 	mm_noses.transform_format = MultiMesh.TRANSFORM_3D
@@ -234,8 +300,8 @@ func _build_platform(s_start: float, s_end: float, is_low: bool, side: float = 1
 
 	var xf_marches: Array = []       # pour les collisions (CollisionsJeu)
 	for i in range(n_treads):
-		var s_dn: float = s_start + float(i) * tread_depth          # bord aval
-		var s_up: float = minf(s_dn + tread_depth, s_end)           # bord amont
+		var s_dn: float = bornes[i]                                  # bord aval
+		var s_up: float = bornes[i + 1]                              # bord amont
 		var s_mid: float = (s_dn + s_up) * 0.5
 		var xf_up: Transform3D = _xf_at(s_up)
 		var xf_mid: Transform3D = _xf_at(s_mid)
@@ -245,10 +311,25 @@ func _build_platform(s_start: float, s_end: float, is_low: bool, side: float = 1
 		var right_h: Vector3 = xf_mid.basis.x
 		var level_basis: Basis = Basis(
 			right_h, Vector3.UP, right_h.cross(Vector3.UP)).orthonormalized()
-		var center: Vector3 = xf_mid.origin + xf_mid.basis.x * lat_center
+		# au droit des escaliers de la fosse (gare basse), le quai garde son
+		# ancien bord à 1,85 m : sinon il couvrait le haut des escaliers
+		var lat_m: float = lat_center
+		if is_low and _sur_escalier_fosse(s_dn, s_up, side):
+			lat_m = lat_center + side * (1.85 - platform_inner_x)
+		var center: Vector3 = xf_mid.origin + xf_mid.basis.x * lat_m
 		center.y = top_y - tread_thickness * 0.5
-		mm_treads.set_instance_transform(i, Transform3D(level_basis, center))
-		xf_marches.append(Transform3D(level_basis, center))
+		# une marche plus longue qu'un panneau (entre les voitures, aux
+		# bouts) : plusieurs blocs au même niveau, qui se recouvrent
+		var n_sub: int = maxi(1, int(ceil((s_up - s_dn) / pas_m - 0.001)))
+		for j in range(n_sub):
+			var u: float = 0.5 if n_sub == 1 else float(j) / float(n_sub - 1)
+			var s_b: float = lerpf(s_dn + pas_m * 0.5, s_up - pas_m * 0.5, u)
+			if n_sub == 1:
+				s_b = s_mid
+			var xf_b: Transform3D = _xf_at(s_b)
+			var cb: Vector3 = xf_b.origin + xf_b.basis.x * lat_m
+			cb.y = top_y - tread_thickness * 0.5
+			xf_marches.append(Transform3D(level_basis, cb))
 		# Nez : au bord AVAL de la marche, affleurant le dessus
 		var xf_dn: Transform3D = _xf_at(s_dn + 0.06)
 		var nose_c: Vector3 = xf_dn.origin + xf_dn.basis.x * lat_center
@@ -260,6 +341,9 @@ func _build_platform(s_start: float, s_end: float, is_low: bool, side: float = 1
 			band_c.y = top_y - 0.004
 			mm_bands.set_instance_transform(i, Transform3D(level_basis, band_c))
 
+	mm_treads.instance_count = xf_marches.size()
+	for i2 in range(xf_marches.size()):
+		mm_treads.set_instance_transform(i2, xf_marches[i2])
 	var mi_treads: MultiMeshInstance3D = MultiMeshInstance3D.new()
 	mi_treads.name = "PlatformSteps_%s_%s" % [sta, side_name]
 	mi_treads.multimesh = mm_treads
@@ -301,6 +385,7 @@ const BARRIERE_COUDE: float = 0.16      # rayon de cintrage des angles
 
 func _build_platform_barrier(s_start: float, s_end: float, s_nez: float, side: float,
 		is_low: bool, s_fin: float = -1.0) -> void:
+	var bornes_b: Array = _bornes_marches(s_start, s_end, is_low)
 	var bleu: StandardMaterial3D = StandardMaterial3D.new()
 	bleu.albedo_color = Color(0.10, 0.30, 0.64)
 	bleu.roughness = 0.4
@@ -329,8 +414,11 @@ func _build_platform_barrier(s_start: float, s_end: float, s_nez: float, side: f
 	var dessus := func(s_: float) -> float:
 		if palier and s_ >= s_end:
 			return y_palier
-		var i: int = clampi(int(floor((s_ - s_start) / tread_depth)), 0, 100000)
-		var s_up: float = minf(s_start + float(i + 1) * tread_depth, s_end)
+		var s_up: float = s_end
+		for bb in bornes_b:
+			if float(bb) > s_:
+				s_up = float(bb)
+				break
 		var xf_up: Transform3D = _xf_at(s_up)
 		return (xf_up.origin + xf_up.basis.y * y_quai).y
 	# point à la hauteur h au-dessus de la ligne des marches (ou du palier)
@@ -663,9 +751,10 @@ func _build_pit(s0: float, s1: float, with_sheaves: bool) -> void:
 			_box(Vector3(0.08, 0.06, lm), steel, cm_s, sx - signf(sx) * 0.04, FLOOR_Y_LOCAL + 0.03, "CorniereFosse")
 			if longue:
 				# rebord jusqu'au quai, de la paroi au bord du quai, au niveau du quai
-				_box(Vector3(platform_inner_x - 1.42, (FLOOR_Y_LOCAL + platform_height) - y_bottom, lm),
-					concrete, cm_s, signf(sx) * (1.42 + platform_inner_x) * 0.5,
-					(y_bottom + FLOOR_Y_LOCAL + platform_height) * 0.5, "RebordFosse")
+				if BORD_FOSSE - 1.42 > 0.02:
+					_box(Vector3(BORD_FOSSE - 1.42, (FLOOR_Y_LOCAL + platform_height) - y_bottom, lm),
+						concrete, cm_s, signf(sx) * (1.42 + BORD_FOSSE) * 0.5,
+						(y_bottom + FLOOR_Y_LOCAL + platform_height) * 0.5, "RebordFosse")
 	# rails sur poutres au-dessus de la fosse : deux longrines acier,
 	# portées par des poteaux tous les 2,5 m
 	for sx in [-0.60, 0.60]:
@@ -681,8 +770,8 @@ func _build_pit(s0: float, s1: float, with_sheaves: bool) -> void:
 		# jusqu'au niveau du quai (on en sort de côté, sur le palier)
 		var y_quai: float = FLOOR_Y_LOCAL + platform_height
 		var haut_m: float = (y_quai - y_bottom) / esc_n
-		_box(Vector3(platform_inner_x + 0.1 - 1.0, 0.06, esc_s1 - esc_s0 + 0.3), grating,
-			(esc_s0 + esc_s1) * 0.5, (1.0 + platform_inner_x + 0.1) * 0.5, y_bottom + 0.03, "FondFosseEscalier")
+		_box(Vector3(BORD_FOSSE + 0.1 - 1.0, 0.06, esc_s1 - esc_s0 + 0.3), grating,
+			(esc_s0 + esc_s1) * 0.5, (1.0 + BORD_FOSSE + 0.1) * 0.5, y_bottom + 0.03, "FondFosseEscalier")
 		for k in range(esc_n):
 			var y_d: float = y_bottom + haut_m * (k + 1)
 			var s_m: float = esc_s1 - esc_giron * (k + 0.5)
@@ -701,11 +790,11 @@ func _build_pit(s0: float, s1: float, with_sheaves: bool) -> void:
 				_box(Vector3(esc_x1 - esc_x0, 0.03, 0.05), steel, s_h - esc_giron * 0.5 + 0.025,
 					sxe * (esc_x0 + esc_x1) * 0.5, y_h - 0.013, "NezMarcheFosseHaut")
 			# sol sous l'escalier jusque sous le quai (le rebord est coupé là)
-			_box(Vector3(platform_inner_x + 0.1 - 1.0, 0.06, s1 - esch_s0 + 0.3), grating,
-				(esch_s0 + s1 + 0.3) * 0.5, sxe * (1.0 + platform_inner_x + 0.1) * 0.5, y_bottom + 0.03, "FondFosseEscalier")
+			_box(Vector3(BORD_FOSSE + 0.1 - 1.0, 0.06, s1 - esch_s0 + 0.3), grating,
+				(esch_s0 + s1 + 0.3) * 0.5, sxe * (1.0 + BORD_FOSSE + 0.1) * 0.5, y_bottom + 0.03, "FondFosseEscalier")
 			# palier de tête, entre la dernière marche et le palier du personnel
-			_box(Vector3(platform_inner_x + 0.1 - esc_x0, y_quai - y_bottom, s1 + 0.6 - esch_s1), concrete,
-				(esch_s1 + s1 + 0.6) * 0.5, sxe * (esc_x0 + platform_inner_x + 0.1) * 0.5,
+			_box(Vector3(BORD_FOSSE + 0.1 - esc_x0, y_quai - y_bottom, s1 + 0.6 - esch_s1), concrete,
+				(esch_s1 + s1 + 0.6) * 0.5, sxe * (esc_x0 + BORD_FOSSE + 0.1) * 0.5,
 				(y_quai + y_bottom) * 0.5, "TeteEscalierFosse")
 	if with_sheaves:
 		# deux grandes poulies verticales (une par brin) + une petite

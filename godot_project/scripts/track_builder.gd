@@ -2834,7 +2834,7 @@ func update_cable_visibility(s_driver: float, s_other: float = -1.0) -> void:
 # Pour le brin droite, on fait l'opposé : cable_phase(droite) = −s_rame1.
 # (La phase absolue s'annule pour rame 1 sur le brin gauche, et le brin droite
 # défile au double du s_rame1 relatif.)
-func update_cable_phase(s_driver: float, s_other: float = -1.0) -> void:
+func update_cable_phase(s_driver: float, s_other: float = -1.0, s_poulie_r: float = -1.0) -> void:
 	if cable_left_material == null or cable_right_material == null:
 		return
 	# `s_other` : position de l'autre rame (figée si le câble a rompu).
@@ -2859,6 +2859,18 @@ func update_cable_phase(s_driver: float, s_other: float = -1.0) -> void:
 	var s_right: float = coupe_brin(1, s_driver if driver_is_rame2 else s_other)
 	cable_left_material.set_shader_parameter("cut_below_s", s_left)
 	cable_right_material.set_shader_parameter("cut_below_s", s_right)
+	# élasticité : à la poulie, le brin ne suit que la machinerie (sans
+	# l'écart élastique de sa rame) ; écart entier à l'attache
+	var effile: bool = s_poulie_r >= 0.0
+	var own_p: float = s_poulie_r
+	var other_p: float = PNConstants.miroir(s_poulie_r) - PNConstants.LENGTH
+	for e in [[cable_left_material, other_p if driver_is_rame2 else own_p, s_left],
+			[cable_right_material, own_p if driver_is_rame2 else other_p, s_right]]:
+		var m: ShaderMaterial = e[0]
+		m.set_shader_parameter("effile", effile)
+		m.set_shader_parameter("phase_poulie", e[1])
+		m.set_shader_parameter("s_attache", e[2])
+		m.set_shader_parameter("s_poulie", PNConstants.LENGTH)
 	_update_culots(s_other if driver_is_rame2 else s_driver,
 		s_driver if driver_is_rame2 else s_other)
 

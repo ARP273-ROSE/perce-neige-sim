@@ -258,9 +258,13 @@ func activer(position_depart: Vector3, regard: float) -> void:
 	camera.make_current()
 
 
-func desactiver() -> void:
+func desactiver(rester_visible: bool = false) -> void:
 	actif = false
-	visible = false
+	# à pied (sur le quai, dans la gare, dehors), il reste où on l'a laissé,
+	# visible (retour d'utilisateur, 11/10/2026 : « mon skieur attend la rame au bord
+	# du quai ; quand je quitte le mode skieur pour la conduire, il a
+	# disparu ») ; à bord, il se fond dans les passagers
+	visible = rester_visible and support == null
 	set_process(false)
 	chemin.clear()
 

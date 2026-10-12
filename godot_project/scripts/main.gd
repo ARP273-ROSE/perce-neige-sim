@@ -968,7 +968,8 @@ func _process(delta: float) -> void:
 	track.update_cable_visibility(physics.s_render, physics.ghost_s_render())
 	# Animation des torons (brin gauche = fixe par rapport à rame 1,
 	# brin droite = défile à 2×v en référentiel rame 1)
-	track.update_cable_phase(physics.s_render, physics.ghost_s_render())
+	track.update_cable_phase(physics.s_render, physics.ghost_s_render(),
+		-1.0 if physics.cable_rupture else physics.s_poulie_render)
 	# Câble rompu : brèche, bouts rétractés, câble retombé sur la longrine
 	track.update_cable_rupture(physics.cable_rupture, physics.s_render,
 		physics.direction, physics.tension_dan, delta, physics.v)
@@ -1983,6 +1984,7 @@ func _sortir_skieur(garder_boucle: bool = false) -> void:
 		announcements.set_ecoute_skieur(0)
 	if audio != null:
 		audio.rame_en_face = false
+		audio.quai_rame = false
 	if relief != null:
 		relief.set_hiver(0.0)
 	if domaine != null:
@@ -1990,7 +1992,7 @@ func _sortir_skieur(garder_boucle: bool = false) -> void:
 	if skieur != null:
 		skieur.touches_ext = 0
 		if not boucle:
-			skieur.desactiver()
+			skieur.desactiver(true)
 	if commandes_skieur != null:
 		commandes_skieur.visible = false
 	cabin.set_view(Cabin.ViewMode.FPV)
@@ -2200,11 +2202,17 @@ func _gare_ecoute() -> int:
 ## haute : −6 dB par doublement de la distance à la machinerie au-delà de
 ## 4 m, plancher −24 dB (audit_physique/son_gare_haute.sage).
 func _gain_machinerie() -> float:
+	# gare réverbérante : −3 dB par doublement au-delà de 6 m, plancher
+	# −15 dB ; couloir et sortie de la porte Génépy : −6 dB de plus, jusqu'à
+	# 45 m (retour d'utilisateur, 11/10/2026 ; audit_physique/son_gare_haute.sage)
 	if not (mode_skieur and skieur != null and skieur.actif and skieur.support == null) \
-			or _gare_skieur != 2 or machine_room == null:
+			or machine_room == null:
 		return 0.0
 	var d: float = machine_room.distance_au_hall(skieur.global_position)
-	return clampf(4.0 / maxf(d, 4.0), 0.063, 1.0)
+	var g: float = clampf(sqrt(6.0 / maxf(d, 6.0)), 0.178, 1.0)
+	if _gare_skieur == 2:
+		return g
+	return g * 0.501 if d < 45.0 else 0.0
 var _presence: Array = [Vector3.ZERO]
 var _seat: Node3D = null
 var _t_info: float = 1.0
@@ -2369,9 +2377,11 @@ func _maj_skieur() -> void:
 		# pas d'annonces »)
 		if skieur.support != null and _rame_du_skieur() != null:
 			e_ann = 0
-		elif skieur.support == null and ((ec == 1 and gare_rame == 1) or (ec == 3 and gare_rame == 2)):
-			e_ann = 1
+		elif skieur.support == null and (ec == 1 or ec == 3) and gare_rame != 0:
+			e_ann = 1            # sur le quai, une rame à quai (l'une ou l'autre)
 		announcements.set_ecoute_skieur(e_ann)
+		if audio != null:
+			audio.quai_rame = skieur.support == null and (ec == 1 or ec == 3) and gare_rame != 0
 	if client_mode and state_receiver != null:
 		# même règle d'attente et de départ pour l'exploitation AUTO du PC,
 		# et le gain de la machinerie (quais du haut), au 1/20 près

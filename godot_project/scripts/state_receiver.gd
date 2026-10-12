@@ -140,6 +140,7 @@ func _apply(d: Dictionary) -> void:
 		main.perf_manager.set_mode(str(d["qualite_3d"]))
 	# élasticité du câble (sim PC ≥ 1.15.51) : écarts des rames à la poulie
 	physics.el_x1 = _f(d, "el_x1", 0.0)
+	physics.el_v1 = _f(d, "el_v1", 0.0)
 	physics.el_x2 = _f(d, "el_x2", 0.0)
 	physics.v = _f(d, "v", physics.v)
 	physics.direction = _i(d, "direction", physics.direction)
