@@ -18,6 +18,24 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.19.17** — retour d'utilisateur du 12/10/2026 (capture iPad, gare haute).
+- **Garde-corps bleu hors de la rame** : depuis que le bord du quai a été
+  avancé à 1,40 m de l'axe (1.19.12), la barrière posée au bord entrait
+  dans la calotte (rayon 1,72 m). Elle reste à 1,91 m de l'axe, comme
+  avant, dans les deux gares.
+- **Bouche du tunnel de la gare haute remontée** : garde mesurée au
+  passage de la rame 0,16 m → linteau à l'axe + 2,25 m, garde 0,46 m ; le
+  caisson des miroirs garde 0,35 m.
+- **Plafond de la gare haute remonté** comme sur les photos du quai
+  (095433 à 095520) : à l'axe + 3,80 m — 2 m au-dessus de la rame au lieu
+  de 0,9 m —, juste sous la charpente du toit du bâtiment (LiDAR : dessus
+  du toit à l'axe + 4,25 m côté tête) ; sous-face sombre bleu nuit,
+  poutres et poteaux en acier bleu, néons en bandes claires. La dalle du
+  plafond suit la voie par tronçons (d'un seul tenant, elle passait
+  au-dessus de la voûte aux deux bouts).
+- Vérifié : sonde de garde, captures `shot_quai_haut.gd` comparées à la
+  photo 095520, bancs 3D.
+
 **v1.19.16** — retour d'utilisateur du 12/10/2026 : « c'est infernal de diriger le
 skieur, avec en plus une vue qui bouge à chaque mouvement de joystick ou de
 virage ; fais des recherches et des tests d'ergonomie ».

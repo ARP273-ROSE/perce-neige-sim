@@ -25,6 +25,13 @@ extends Node3D
 # Murs calés sur des quais de 3 m : inner 1,85 + 3,00 + 5 cm de jeu.
 @export var station_room_half_width: float = 4.90
 @export var station_room_half_height: float = 2.65
+## Gare haute : plafond bien plus haut que la rame, poutres et caissons
+## sombres loin au-dessus (photos du quai 095433 à 095520 ; retour d'utilisateur,
+## 12/10/2026 : « remonte le plafond de la gare du haut pour que ça
+## ressemble aux photos ») — à l'axe + 3,80 m, soit ~4,9 m au-dessus du quai
+## et 2 m au-dessus de la rame (avant : 0,9 m). Plus haut, il traverse le
+## toit du bâtiment (LiDAR : dessus du toit à l'axe + 4,25 m côté tête).
+@export var station_room_half_height_haut: float = 3.80
 @export var station_low_end: float = 52.0        # fin de la salle Val Claret
 # Début de la salle Grande Motte : AU PIGNON AVAL du bâtiment de la gare
 # (GareAmont, 44,5 m sous le mur de tête), où le tunnel débouche dans un mur
@@ -885,7 +892,12 @@ func _horseshoe_dims_at(s: float) -> Vector2:
 		return Vector2(horseshoe_half_width, horseshoe_half_height)
 	return Vector2(
 		lerpf(horseshoe_half_width, station_room_half_width, k),
-		lerpf(horseshoe_half_height, station_room_half_height, k))
+		lerpf(horseshoe_half_height, demi_hauteur_salle(s), k))
+
+
+## Demi-hauteur de la salle de gare à l'abscisse s (gare basse ou haute).
+func demi_hauteur_salle(s: float) -> float:
+	return station_room_half_height_haut if s > PNConstants.LENGTH * 0.5 else station_room_half_height
 
 
 func _horseshoe_blend_at(s: float) -> float:
