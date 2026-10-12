@@ -22,6 +22,7 @@ var main: Node = null
 var etape: int = Etape.VERS_SALLE
 var t: float = 0.0
 var boucles: int = 0
+var debloquages: int = 0                  # étapes trop longues (bancs)
 var _attente: bool = false                # attend la rame sur le palier
 var _compte: float = 0.0                  # vantaux : temps d'ouverture écoulé
 ## La rame qu'il prend : celle qui est à quai en bas, pilotée OU d'en face
@@ -29,6 +30,12 @@ var _compte: float = 0.0                  # vantaux : temps d'ouverture écoulé
 ## skieur monte dans la 1, l'exploitation auto et la boucle ne marchent
 ## pas ») — avant, seule la rame pilotée comptait.
 var _rame: Cabin = null
+var _loc: Array = []                      # points d'embarquement, repère voiture
+var _voiture: Node3D = null
+var _banc: bool = false                   # file vers le banc (rame pas à quai)
+## Banc de la salle d'attente face aux portes du quai (GareAval._mobilier :
+## poutre de 1,9 m à (0 ; 12,5)) : il s'assoit devant, côté quai.
+const BANC: Vector2 = Vector2(-0.4, 12.05)
 
 
 func _s_de(c: Cabin) -> float:
@@ -56,17 +63,28 @@ func _rame_du_skieur() -> Cabin:
 func demarrer(m: Node) -> void:
 	main = m
 	var sk: SkieurJoueur = main.skieur
-	if sk.chausse:
-		main.basculer_ski()
-	# d'où l'on part : en haut (dans la rame ou dehors) ou en bas
+	# d'où l'on part : dans une rame, dans la gare d'en bas (salle ou quai),
+	# en haut (gare ou dehors), ou sur les pistes (retour d'utilisateur, 11/10/2026 : « il ne
+	# chausse jamais dans la neige, il marche on ne sait vers où » ; « dans la
+	# salle d'attente du bas, il ressort devant la gare et rerentre »)
 	var p: Vector3 = sk.global_position
 	var xf_h: Transform3D = main.tunnel.transform_at(PNConstants.LENGTH)
+	var en_bas: bool = _dans_gare_basse(p)
+	var sur_neige: bool = sk.support == null and not en_bas and sk.dehors(main.relief)
+	var e: int = Etape.VERS_SALLE
 	if sk.support != null:
-		_poser(Etape.A_BORD)
-	elif p.distance_to(xf_h.origin) < 400.0:
-		_poser(Etape.VERS_SORTIE if main._skieur_en_gare() else Etape.VERS_DEPART)
-	else:
-		_poser(Etape.VERS_SALLE)
+		e = Etape.A_BORD
+	elif en_bas:
+		e = Etape.VERS_RAME
+	elif main._skieur_en_gare() and p.distance_to(xf_h.origin) < 400.0:
+		e = Etape.VERS_SORTIE
+	elif p.distance_to(xf_h.origin) < 150.0:
+		e = Etape.VERS_DEPART       # terrasse, abords de la gare du glacier
+	elif sur_neige and _i_aval(p) >= 0:
+		e = Etape.SKI               # sur les pistes : il chausse et descend
+	if sk.chausse and e != Etape.SKI:
+		main.basculer_ski()
+	_poser(e)
 
 
 ## Il veut descendre de la rame à quai : l'automate l'attend.
@@ -77,6 +95,63 @@ func descend() -> bool:
 func arreter() -> void:
 	if main != null and main.skieur != null:
 		main.skieur.chemin.clear()
+		main.skieur.course_auto = false
+		main.skieur.lever()
+
+
+## Point (x est, z nord) dans le repère de la gare basse.
+func _local_aval(p: Vector3) -> Vector2:
+	var ga: GareAval = main.station_halls.gare_aval
+	var r: Vector3 = p - ga._o
+	return Vector2(r.dot(ga._e), r.dot(ga._n))
+
+
+## Dans la salle d'attente, ou sur le quai / le palier sous la cloison.
+func _dans_gare_basse(p: Vector3) -> bool:
+	var ga: GareAval = main.station_halls.gare_aval
+	var q: Vector2 = _local_aval(p)
+	var h: float = p.y - ga._o.y
+	if Geometry2D.is_point_in_polygon(q, PackedVector2Array(GareAval.HALL)) and h > -2.0 and h < 4.0:
+		return true
+	return _sur_quai_bas(p)
+
+
+## Sur le quai d'en bas (sous la cloison, le long de la rame).
+func _sur_quai_bas(p: Vector3) -> bool:
+	var ga: GareAval = main.station_halls.gare_aval
+	var q: Vector2 = _local_aval(p)
+	return q.y < 0.3 and q.y > -60.0 and absf(q.x) < 8.0 and absf(p.y - ga._o.y) < 12.0 \
+		and main._gare_du_skieur() == 1
+
+
+## Embarquement ouvert en bas : rame à quai, arrêtée, portes de la rame et
+## porte du quai ouvertes (sur le PC, la rame peut ouvrir ses portes avant
+## que la cloison ne s'ouvre : il se cognait à la porte fermée et faisait
+## des allers-retours devant).
+func _embarquement() -> bool:
+	var ph: TrainPhysics = main.physics
+	var ga: GareAval = main.station_halls.gare_aval
+	var r: Cabin = _rame_a(true)
+	if r == null or absf(ph.v) > 0.1 or ga._ouverture < 0.9:
+		return false
+	return ph.ghost_door_leaves_open() if r == main.cabin_ghost else ph.door_leaves_open
+
+
+## Premier point de la descente, en aval du skieur et le plus proche
+## (parti des pistes : il chausse et rejoint la trace), ou −1.
+func _i_aval(p: Vector3) -> int:
+	var pts: PackedVector2Array = FantomesDonnees.points(DESCENTE)
+	var meilleur: int = -1
+	var d_min: float = 400.0
+	for i in range(0, pts.size() - 20, 3):
+		var h: float = main.relief.hauteur_sol(pts[i].x, pts[i].y)
+		if h > p.y - 3.0:
+			continue
+		var d: float = Vector2(p.x, p.z).distance_to(pts[i])
+		if d < d_min:
+			d_min = d
+			meilleur = i
+	return meilleur
 
 
 func tick(delta: float) -> void:
@@ -85,20 +160,34 @@ func tick(delta: float) -> void:
 	t += delta
 	match etape:
 		Etape.VERS_SALLE:
-			if sk.chemin.is_empty():
+			sk.course_auto = _embarquement()
+			if sk.chemin.is_empty() or (_dans_gare_basse(sk.global_position) and sk.chemin.size() <= 2):
 				_poser(Etape.VERS_RAME)
 		Etape.VERS_RAME:
-			# il attend sur le palier que la rame soit à quai, portes ouvertes
-			var a_quai: bool = ph.doors_open and _rame_a(true) != null and absf(ph.v) < 0.1
-			if _attente and a_quai:
+			if not _attente:
+				_suivre_voiture()
+			# il attend assis sur un banc (ou sur le quai s'il y est déjà) que
+			# la rame soit à quai, portes ouvertes ; il y court
+			if _attente and _embarquement():
 				_attente = false
 				_rame = _rame_a(true)
+				sk.lever()
+				sk.course_auto = true
 				sk.chemin = _chemin_voiture()
+				if not _sur_quai_bas(sk.global_position):
+					sk.chemin.push_front(ga_point(Vector2(-3.55, 2.0)))
+			elif not _attente and sk.support == null and sk.course_auto and not _embarquement():
+				# embarquement fini sans lui (portes refermées, rame partie,
+				# ou rattrapé loin après une chute) : il attend la suivante
+				# — avant, il se cognait à la porte du quai fermée
+				_poser(Etape.VERS_RAME if _dans_gare_basse(sk.global_position) else Etape.VERS_SALLE)
 			elif sk.chemin.is_empty():
 				if sk.support != null:
 					_poser(Etape.A_BORD)
 				elif not _attente:
 					_attente = true
+				elif not sk.assis and _banc and not _sur_quai_bas(sk.global_position):
+					sk.asseoir(_cap_banc())
 			if _attente and t > DELAI_MAX[Etape.VERS_RAME]:
 				t = 0.0               # la rame met du temps : on attend encore
 		Etape.A_BORD:
@@ -129,13 +218,30 @@ func tick(delta: float) -> void:
 		_debloquer()
 
 
+func ga_point(v: Vector2) -> Vector3:
+	return main.station_halls.gare_aval._p2(v)
+
+
+## Regard vers le quai (−nord), assis sur le banc.
+func _cap_banc() -> float:
+	var n: Vector3 = main.station_halls.gare_aval._n
+	return atan2(n.x, n.z)
+
+
 ## Points de passage de l'étape, comme le banc du skieur.
 func _poser(e: int) -> void:
 	etape = e
 	t = 0.0
 	_attente = false
+	_banc = false
 	_compte = 0.0
 	var sk: SkieurJoueur = main.skieur
+	sk.course_auto = false
+	sk.tolerance_chemin = 0.35
+	_loc = []
+	_voiture = null
+	if e != Etape.VERS_RAME:
+		sk.lever()
 	var ga: GareAval = main.station_halls.gare_aval
 	var cab: Cabin = _rame_du_skieur()
 	var tun: TunnelBuilder = main.tunnel
@@ -149,14 +255,28 @@ func _poser(e: int) -> void:
 			var mil0: Vector2 = (GareAval.FACADE_A + GareAval.FACADE_B) * 0.5
 			sk.chemin = [ga._p2(mil + de * 16.0 + tv * 1.4), ga._p2(mil + de * 9.0 + tv * 1.4),
 				ga._p2(mil0 + de * 2.0), ga._p2(mil0 - de * 2.5), ga._p2(Vector2(-3.55, 6.0)), ga._p2(Vector2(-3.55, 2.0))]
+			# déjà sur la place, au pied de l'escalier : on ne repasse pas
+			# par le point le plus loin
+			var q0: Vector2 = Vector2(sk.global_position.x, sk.global_position.z)
+			while sk.chemin.size() > 4 and q0.distance_to(Vector2(sk.chemin[1].x, sk.chemin[1].z)) \
+					< q0.distance_to(Vector2(sk.chemin[0].x, sk.chemin[0].z)):
+				sk.chemin.pop_front()
 		Etape.VERS_RAME:
-			var ph: TrainPhysics = main.physics
-			if ph.doors_open and _rame_a(true) != null and absf(ph.v) < 0.1:
+			var quai: bool = _sur_quai_bas(sk.global_position)
+			if _embarquement():
 				_rame = _rame_a(true)
+				sk.course_auto = true
 				sk.chemin = _chemin_voiture()
-			else:
-				sk.chemin = [ga._p2(Vector2(-3.55, 2.0))]
+				if not quai:
+					sk.chemin.push_front(ga._p2(Vector2(-3.55, 2.0)))
+			elif quai:
+				sk.chemin.clear()          # sur le quai : il attend là
 				_attente = true
+			else:
+				# porte du quai fermée : on va s'asseoir sur le banc
+				sk.chemin = [ga._p2(BANC)]
+				_attente = true
+				_banc = true
 		Etape.A_BORD:
 			sk.chemin.clear()
 		Etape.VERS_SORTIE:
@@ -175,7 +295,9 @@ func _poser(e: int) -> void:
 			# d'abord l'allée centrale jusqu'au droit de la porte (les bancs
 			# des panneaux à fenêtre bordent l'allée à 0,70 m de l'axe), puis
 			# l'embrasure, le quai, la porte Génépy
-			sk.chemin = [v.global_transform * Vector3(0.9 * signf(xp), r[1], r[2]), v.global_transform * Vector3(xp, r[1], r[2])]
+			sk.chemin = []
+			if sk.support != null:
+				sk.chemin = [v.global_transform * Vector3(0.9 * signf(xp), r[1], r[2]), v.global_transform * Vector3(xp, r[1], r[2])]
 			for la in [-3.0, -4.4, -6.0, -7.8, -12.0]:
 				sk.chemin.append(xg.origin + xg.basis.x * la)
 		Etape.VERS_DEPART:
@@ -226,14 +348,24 @@ func _poser(e: int) -> void:
 		Etape.SKI:
 			if not sk.chausse:
 				main.basculer_ski()
+			if not sk.chausse and sk.support == null:
+				# refusé (un bout de relief pris pour un toit) : sur la neige
+				# de la trace, il chausse quand même — avant, il retournait à
+				# pied au départ et recommençait sans fin
+				sk.basculer_ski(true)
+				main.commandes_skieur.set_chausse(sk.chausse)
 			if not sk.chausse:
 				_poser(Etape.VERS_DEPART)
 				return
 			var pts: PackedVector2Array = FantomesDonnees.points(DESCENTE)
-			var d: Vector2 = pts[8] - pts[0]
+			# du point de la trace le plus proche en aval (au départ : 0)
+			var i0: int = _i_aval(sk.global_position + Vector3.UP * 3.5)
+			if i0 < 0 or Vector2(sk.global_position.x, sk.global_position.z).distance_to(pts[0]) < 30.0:
+				i0 = 0
+			var d: Vector2 = pts[mini(i0 + 8, pts.size() - 1)] - pts[i0]
 			sk._cap_ski = atan2(-d.x, -d.y)
 			sk.vitesse_pilote = 11.0
-			sk.chemin = main.domaine.chemin_descente(DESCENTE, 3)
+			sk.chemin = main.domaine.chemin_descente(DESCENTE, 3).slice(i0 / 3)
 		Etape.VERS_GARE:
 			if sk.chausse:
 				main.basculer_ski()
@@ -255,8 +387,33 @@ func _chemin_voiture() -> Array:
 	var sx: float = signf((xf.affine_inverse() * palier).x)
 	if sx == 0.0:
 		sx = 1.0
-	return [palier, xf * Vector3(2.6 * sx, y, zc + 3.0), xf * Vector3(2.4 * sx, y, zc),
-		xf * Vector3(0.9 * sx, y, zc), xf * Vector3(0.3 * sx, y, zc)]
+	# dans l'axe de la porte avant d'entrer : la baie des 18 panneaux ne
+	# laisse que 11 cm de chaque côté de la capsule, et un point visé à
+	# 35 cm près le faisait buter contre le montant
+	# (points serrés à 12 cm : SkieurJoueur.tolerance_chemin)
+	main.skieur.tolerance_chemin = 0.12
+	# points dans le repère de la voiture, recalés à chaque image
+	# (_suivre_voiture) : en gare basse la rame recule jusqu'à 1 m pendant
+	# l'embarquement (le brin s'allonge sous la charge) et les points figés
+	# au monde tombaient sur le montant de la porte
+	_loc = [Vector3(2.9 * sx, y, zc + 3.0), Vector3(2.9 * sx, y, zc + 0.8), Vector3(2.9 * sx, y, zc),
+		Vector3(2.0 * sx, y, zc), Vector3(0.9 * sx, y, zc), Vector3(0.3 * sx, y, zc)]
+	_voiture = v
+	var r2: Array = [palier]
+	for l in _loc:
+		r2.append(xf * l)
+	return r2
+
+
+## Recale sur la voiture les points du chemin d'embarquement qui restent.
+func _suivre_voiture() -> void:
+	if _voiture == null or not is_instance_valid(_voiture) or _loc.is_empty():
+		return
+	var ch: Array = main.skieur.chemin
+	var n: int = mini(ch.size(), _loc.size())
+	var xf: Transform3D = _voiture.global_transform
+	for i in range(n):
+		ch[ch.size() - n + i] = xf * _loc[_loc.size() - n + i]
 
 
 ## Panneau de porte de la voiture 2 le plus proche du skieur (le long de la
@@ -289,6 +446,7 @@ func _porte(k: int) -> Array:
 func _debloquer() -> void:
 	var sk: SkieurJoueur = main.skieur
 	print("[SkieurAuto] étape %d trop longue : on repose le skieur" % etape)
+	debloquages += 1
 	match etape:
 		Etape.VERS_SALLE, Etape.VERS_GARE:
 			var ga: GareAval = main.station_halls.gare_aval

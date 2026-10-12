@@ -270,6 +270,12 @@ func _process(delta: float) -> void:
 			elif a_bord and _vu_en_gare and _a_bord_t > A_BORD_DELAI_S \
 					and not seq_running:
 				_state_timer = STATION_DWELL_S + 0.01
+			# la rame d'en face n'ouvre qu'à la stabilisation de SON brin
+			# (jusqu'à 45 s en bas) : on ne repart pas avant qu'elle ait
+			# ouvert, sinon personne n'y monte (retour d'utilisateur, 11/10/2026 : « le
+			# skieur n'arrive pas à monter à bord »)
+			if not physics.ghost_doors_open() and not seq_running:
+				_state_timer = minf(_state_timer, STATION_DWELL_S - 8.0)
 			if _state_timer > STATION_DWELL_S or seq_running:
 				if not seq_running:
 					_demander_depart()

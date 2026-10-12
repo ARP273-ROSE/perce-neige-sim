@@ -107,6 +107,29 @@ funiculaire), les sauts (il reste collé au sol), les chutes.
   complète, étapes avec points de passage (ceux des bancs) ; la rame
   l'attend (`SkieurAuto.descend()` → `retenue`). Banc
   `bench_skieur_auto_3d.gd`.
+  1.19.13 (retour d'utilisateur, 11/10/2026) : départ selon l'endroit (`demarrer` : rame,
+  gare basse — salle ou quai, `_dans_gare_basse` —, gare haute, abords,
+  pistes → SKI depuis le point de trace en aval le plus proche, `_i_aval`) ;
+  attente ASSIS sur le banc (0 ; 12,5) tant que l'embarquement n'est pas
+  ouvert (`_embarquement` : rame en bas arrêtée, SES vantaux ouverts —
+  `ghost_door_leaves_open` pour la rame d'en face —, porte du quai ouverte) ;
+  il y court (`SkieurJoueur.course_auto`, avant le suivi de chemin ne
+  courait jamais) ; points d'embarquement dans le repère de la voiture,
+  recalés à chaque image (`_suivre_voiture` : la rame recule jusqu'à 1 m
+  sous la charge) et serrés à 12 cm (`tolerance_chemin`) ; embarquement
+  manqué → retour au banc ; sortie en haut par la rame seulement s'il est
+  à bord ; chaussage forcé sur la trace (`basculer_ski(true)`).
+  `SkieurJoueur.asseoir/lever` (pose « assis » des passagers). Exploitation
+  auto (PWA et PC) : pas de départ avant que la rame d'en face ait ouvert
+  (elle attend la stabilisation de son brin, jusqu'à 45 s) ; la porte du
+  quai suit les portes de la rame qui est EN BAS. Banc
+  `bench_boucle_salle_3d.gd` (salle, rame en ligne : banc, course, à bord,
+  zéro déblocage ; `--pistes` : parti chaussé d'une piste).
+- **Carte des pistes** (`carte_pistes.gd`, bouton CARTE skis aux pieds) :
+  surimpression 340 px semi-transparente, nord en haut, centrée sur le
+  skieur ; tracés `DomaineSkiable._axes` dans leur couleur, noms au-delà de
+  70 px, gares + tracé, échelle ; zoom 0,02-1,6 px/m (boutons, molette,
+  pincement, touches +/−/=).
 - Redescendre en funiculaire : il suffit de monter à bord en haut.
 - **Porte du personnel** (`porte_personnel.gd`) : en haut de chaque quai de
   Val Claret, la porte du garde-corps pivote quand on la pousse et sonne

@@ -18,6 +18,34 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.19.13** — retours d'utilisateur du 11/10/2026 (troisième lot).
+- **Carte des pistes** : bouton CARTE quand on a chaussé ; plan
+  semi-transparent centré sur le skieur, nord en haut — pistes dans leur
+  couleur avec leur nom, gares et tracé du funiculaire, échelle ; zoom par
+  boutons, molette, pincement ou touches +/−.
+- **BOUCLE du skieur** refaite :
+  - lancée dans la salle d'attente (ou sur le quai), il y reste — il ne
+    ressort plus sur la place pour rentrer ;
+  - porte du quai fermée : il s'assoit sur un banc et attend, au lieu de
+    faire des allers-retours devant la porte ;
+  - il **court** à la rame dès que l'embarquement s'ouvre ;
+  - il monte à bord : les points visés suivent la voiture, qui recule
+    jusqu'à 1 m en gare basse pendant l'embarquement (ils tombaient sur le
+    montant de la porte) ;
+  - embarquement manqué : retour au banc ;
+  - lancée sur les pistes : il chausse et descend ; en haut il chausse
+    même là où le relief semblait « couvert » (il repartait à pied sans
+    fin) ; parti de la gare haute hors rame, il ne file plus vers une rame
+    lointaine.
+- **Exploitation auto** (PWA et PC) : la rame d'en face n'ouvre qu'à la
+  stabilisation de son brin (jusqu'à 45 s en bas) ; l'automate repartait
+  parfois avant — ses portes ne s'ouvraient jamais. Il attend désormais
+  qu'elle ait ouvert. La porte du quai de Val Claret suit les portes de la
+  rame qui est en bas.
+- Vérifié : banc `bench_boucle_salle_3d` (départ de la salle, rame en
+  ligne : assis, court, monte au premier passage, aucun déblocage ;
+  `--pistes`), tous les bancs 3D, tests PC.
+
 **v1.19.12** — retours d'utilisateur du 11/10/2026 (deuxième lot).
 - **Quai au ras de la rame** : bord avancé de 1,85 à 1,40 m de l'axe — au
   niveau du plancher la caisse est à 1,28 m, le ventre passe au-dessus du
