@@ -1618,7 +1618,13 @@ func request_depart() -> String:
 	if panne_porte:
 		return "Défaut porte : cycler les portes (PORTES) avant le départ"
 	if speed_cmd < 0.01:
-		return "Consigne de vitesse à 0 : la monter d'abord"
+		# Normal / Pannes : PRÊT remonte la consigne à 100 % (retour d'utilisateur,
+		# 12/10/2026 : « mode normal, impossible d'appuyer sur PRÊT car
+		# consigne à 0 » — après un passage par le Défi, une urgence ou un
+		# arrêt électrique, elle restait à 0) ; en Défi, c'est au conducteur
+		if challenge_mode:
+			return "Consigne de vitesse à 0 : la monter d'abord"
+		speed_cmd = 1.0
 	if (announce_phase_remaining > 0.0 or door_phase_remaining > 0.0) \
 			and _fermeture_seule:
 		# fermeture déjà lancée au bouton PORTES : elle enchaîne sur la
