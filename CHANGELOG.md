@@ -18,6 +18,19 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.19.14** — retour d'utilisateur du 12/10/2026.
+- **Marches de la rame horizontales dans les deux sens** : la rame est
+  retournée de 180° quand elle descend (et la rame d'en face quand la
+  pilotée monte) ; ses paliers, inclinés pour compenser la pente des gares,
+  penchaient alors du double — 16 à 18 % au lieu de l'horizontale. Deux
+  jeux de gradins (dalles, contremarches, bancs, porte-skis, collisions),
+  celui du sens courant affiché ; les voyageurs suivent. Mesuré : paliers à
+  ±1,3 % de l'horizontale dans les quatre cas (rame pilotée et d'en face,
+  montée et descente), comme les marches du quai — même pas (un palier par
+  panneau) et mêmes joints que les marches du quai, calées sur les portes
+  depuis la 1.19.12.
+- Vérifié : sonde de pente des paliers, tous les bancs 3D.
+
 **v1.19.13** — retours d'utilisateur du 11/10/2026 (troisième lot).
 - **Carte des pistes** : bouton CARTE quand on a chaussé ; plan
   semi-transparent centré sur le skieur, nord en haut — pistes dans leur

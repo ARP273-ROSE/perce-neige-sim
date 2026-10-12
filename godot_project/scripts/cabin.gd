@@ -74,6 +74,16 @@ var _clock_next: float = 0.0
 # ghost_pax pour la rame d'en face) — retour d'essai 2026-09-27.
 var _pax_slots: Array = []      # par voiture : Array de {x, z, sit, gear, side}
 var _pax_mm: Array = []         # par voiture : {torso, head, ski, pole, board}
+## Gradins du plancher (dalles, contremarches, bancs, porte-skis), un jeu
+## par sens de la caisse : [voiture] → {1: nœud, -1: nœud}. La rame est
+## retournée de 180° quand elle descend (rame d'en face : quand la pilotée
+## monte) ; avec un seul jeu, l'inclinaison des paliers s'ajoutait alors à
+## la pente au lieu de la compenser — 16 à 18 % au lieu de l'horizontale
+## (retour d'utilisateur, 12/10/2026 : « les marches du funiculaire sont
+## horizontales à la pente des quais comme les marches des quais »).
+var _gradins: Array = []
+var sens_gradins: int = 1
+signal gradins_bascules(sens: int)
 var _pax_base: Array = []       # par voiture : {torso: [Transform3D], head: [Transform3D]}
 var _pax_gear_prefix: Array = []   # par voiture : {ski: [int], pole: [int], board: [int]}
 var _pax_shown: Array = []      # par voiture : nombre affiché
@@ -269,6 +279,11 @@ func _merge_static_meshes() -> void:
 		keep.append(d["node"])
 	for e in _issues:
 		keep.append(e["node"])       # les issues de secours s'enlèvent : pas fusionnées
+	# gradins : un jeu par sens, fusionnés chacun à part (on en montre un)
+	for d in _gradins:
+		for k in d:
+			keep.append(d[k])
+			MeshMerge.merge(d[k] as Node3D)
 	var roots: Array = []
 	roots.append_array(_car_roots)
 	roots.append_array(_interior_cars)
@@ -537,17 +552,72 @@ func _panel_center(idx: int, k: int) -> float:
 ## Hauteur du plancher (repère rame) à l'abscisse z : palier du cerceau
 ## contenant z, horizontal sur la pente moyenne (monte vers l'arrière +Z
 ## dans le repère de la voiture, qui a le nez en l'air).
-func _floor_y_at(z: float) -> float:
+func _floor_y_at(z: float, sens: int = 0) -> float:
+	if sens == 0:
+		sens = sens_gradins
 	var car_len: float = train_length / float(car_count)
 	var idx: int = clampi(int(floor((z + train_length * 0.5) / car_len)), 0, car_count - 1)
 	var pitch: float = TrainBodyBuilder.PANEL_L + TrainBodyBuilder.RIB_W
 	var k: int = clampi(int(round((z - _panel_center(idx, 0)) / pitch)), 0, TrainBodyBuilder.N_PANNEAUX - 1)
-	return TrainBodyBuilder.Y_FLOOR + STEP_LIFT + (z - _panel_center(idx, k)) * FLOOR_GRADE
+	return TrainBodyBuilder.Y_FLOOR + STEP_LIFT + float(sens) * (z - _panel_center(idx, k)) * FLOOR_GRADE
+
+
+## Sens des gradins voulu : +1 caisse nez vers l'amont (+Z de la voiture
+## vers l'aval), −1 retournée.
+func sens_voulu() -> int:
+	return 1 if door_slide_sign(physics.direction, is_ghost) > 0.0 else -1
+
+
+## Nœud des gradins de la voiture idx pour un sens (créé à la demande).
+func _noeud_gradins(idx: int, sens: int) -> Node3D:
+	while _gradins.size() <= idx:
+		_gradins.append({})
+	var d: Dictionary = _gradins[idx]
+	if not d.has(sens):
+		var n: Node3D = Node3D.new()
+		n.name = "Gradins%d_%s" % [idx + 1, "M" if sens > 0 else "D"]
+		n.visible = sens == sens_gradins
+		_interior_cars[idx].add_child(n)
+		d[sens] = n
+	return d[sens]
+
+
+## Bascule les gradins (et les voyageurs posés dessus) sur le sens voulu.
+func _appliquer_sens(sens: int) -> void:
+	if sens == sens_gradins:
+		return
+	var avant: int = sens_gradins
+	sens_gradins = sens
+	for d in _gradins:
+		for k in d:
+			(d[k] as Node3D).visible = int(k) == sens
+	var car_len: float = train_length / float(car_count)
+	for idx in range(_pax_mm.size()):
+		var z_c: float = (float(idx) - (car_count - 1) * 0.5) * car_len
+		for kind in _pax_mm[idx]:
+			var mm: MultiMesh = (_pax_mm[idx][kind] as MultiMeshInstance3D).multimesh
+			var bases: Array = _pax_base[idx].get(kind, [])
+			for i in range(mm.instance_count):
+				var t: Transform3D = mm.get_instance_transform(i)
+				var z: float = t.origin.z + z_c
+				var dy: float = _floor_y_at(z, sens) - _floor_y_at(z, avant)
+				t.origin.y += dy
+				mm.set_instance_transform(i, t)
+				if i < bases.size():
+					var tb: Transform3D = bases[i]
+					tb.origin.y += dy
+					bases[i] = tb
+	gradins_bascules.emit(sens)
 
 
 func _build_stepped_floor(mat: StandardMaterial3D, z_front: float, z_rear: float) -> void:
+	for sens in [1, -1]:
+		_build_stepped_floor_sens(mat, z_front, z_rear, sens)
+
+
+func _build_stepped_floor_sens(mat: StandardMaterial3D, z_front: float, z_rear: float, sens: int) -> void:
 	var pitch: float = TrainBodyBuilder.PANEL_L + TrainBodyBuilder.RIB_W
-	var tilt: float = -atan(FLOOR_GRADE)
+	var tilt: float = -atan(FLOOR_GRADE) * float(sens)
 	var riser_mat: StandardMaterial3D = StandardMaterial3D.new()
 	riser_mat.albedo_color = Color(0.55, 0.55, 0.57)   # nez de marche alu
 	riser_mat.roughness = 0.4
@@ -568,7 +638,7 @@ func _build_stepped_floor(mat: StandardMaterial3D, z_front: float, z_rear: float
 			land.position = Vector3(0.0, TrainBodyBuilder.Y_FLOOR + STEP_LIFT, zc - z_c)
 			land.rotation = Vector3(tilt, 0.0, 0.0)
 			land.name = "Palier%d_%d" % [idx + 1, k]
-			_interior_cars[idx].add_child(land)
+			_noeud_gradins(idx, sens).add_child(land)
 			if k < TrainBodyBuilder.N_PANNEAUX - 1:
 				# contremarche au joint (le palier arrière est 12 cm plus bas)
 				var rz: float = zc + pitch * 0.5
@@ -580,7 +650,7 @@ func _build_stepped_floor(mat: StandardMaterial3D, z_front: float, z_rear: float
 				riser.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 				riser.position = Vector3(0.0, TrainBodyBuilder.Y_FLOOR + STEP_LIFT, rz - z_c)
 				riser.rotation = Vector3(tilt, 0.0, 0.0)
-				_interior_cars[idx].add_child(riser)
+				_noeud_gradins(idx, sens).add_child(riser)
 
 
 func _build_handrails() -> void:
@@ -926,23 +996,24 @@ func _build_passenger_seats() -> void:
 	gris.albedo_color = Color(0.55, 0.56, 0.58)
 	gris.metallic = 0.6
 	gris.roughness = 0.4
-	var tilt: float = -atan(FLOOR_GRADE)
 	var car_len: float = train_length / float(car_count)
-	for idx in range(car_count):
-		var z_c: float = (float(idx) - (car_count - 1) * 0.5) * car_len
-		for k in range(TrainBodyBuilder.N_PANNEAUX):
-			if idx == 0 and k == 0:
-				continue                 # poste de conduite
-			var pal: Node3D = Node3D.new()
-			pal.name = "Amenagement%d_%d" % [idx + 1, k]
-			pal.position = Vector3(0.0, TrainBodyBuilder.Y_FLOOR + STEP_LIFT + 0.025, _panel_center(idx, k) - z_c)
-			pal.rotation = Vector3(tilt, 0.0, 0.0)
-			_interior_cars[idx].add_child(pal)
-			if TrainBodyBuilder.KINDS[k] == "win":
-				for side in [-1.0, 1.0]:
-					_banc(pal, side, bleu)
-			for xr in racks_x(k):
-				_porte_skis(pal, xr, orange, gris)
+	for sens in [1, -1]:
+		var tilt: float = -atan(FLOOR_GRADE) * float(sens)
+		for idx in range(car_count):
+			var z_c: float = (float(idx) - (car_count - 1) * 0.5) * car_len
+			for k in range(TrainBodyBuilder.N_PANNEAUX):
+				if idx == 0 and k == 0:
+					continue                 # poste de conduite
+				var pal: Node3D = Node3D.new()
+				pal.name = "Amenagement%d_%d" % [idx + 1, k]
+				pal.position = Vector3(0.0, TrainBodyBuilder.Y_FLOOR + STEP_LIFT + 0.025, _panel_center(idx, k) - z_c)
+				pal.rotation = Vector3(tilt, 0.0, 0.0)
+				_noeud_gradins(idx, sens).add_child(pal)
+				if TrainBodyBuilder.KINDS[k] == "win":
+					for side in [-1.0, 1.0]:
+						_banc(pal, side, bleu)
+				for xr in racks_x(k):
+					_porte_skis(pal, xr, orange, gris)
 
 
 func _piece(parent: Node3D, mesh: Mesh, pos: Vector3, rot: Vector3 = Vector3.ZERO) -> void:
@@ -1491,6 +1562,7 @@ func set_physics(p: TrainPhysics) -> void:
 func _process(_delta: float) -> void:
 	if tunnel == null or physics == null:
 		return
+	_appliquer_sens(sens_voulu())
 	_update_shake(_delta)
 	_update_loupe(_delta)
 	# Caméra orbitale : suit la rame chaque frame en vue extérieure.

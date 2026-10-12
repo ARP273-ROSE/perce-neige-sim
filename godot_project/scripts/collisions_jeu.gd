@@ -288,10 +288,45 @@ func _corps_mobile(n: Node3D) -> void:
 var paliers_quai: Array = []
 
 
+var _en_gare_quai: bool = true
+## Formes des gradins : CollisionShape3D → [Cabin, sens]
+var _gradins: Dictionary = {}
+
+
 func set_paliers_quai(en_gare: bool) -> void:
+	_en_gare_quai = en_gare
 	for cs in paliers_quai:
-		if is_instance_valid(cs) and (cs as CollisionShape3D).disabled == en_gare:
-			(cs as CollisionShape3D).disabled = not en_gare
+		if is_instance_valid(cs):
+			_maj_forme(cs)
+
+
+## Forme d'un gradin de rame : rangée avec son sens, active si c'est celui
+## de la caisse (et, pour les paliers de quai et les seuils, selon la gare
+## et les portes).
+func _gradin(c: Cabin, sens: int, cs: CollisionShape3D, sorte: int = 0) -> CollisionShape3D:
+	_gradins[cs] = [c, sens, sorte]
+	if not c.gradins_bascules.is_connected(_gradins_bascules):
+		c.gradins_bascules.connect(_gradins_bascules.bind(c))
+	_maj_forme(cs)
+	return cs
+
+
+func _maj_forme(cs: CollisionShape3D) -> void:
+	var g: Array = _gradins.get(cs, [])
+	var actif: bool = g.is_empty() or (g[0] as Cabin).sens_gradins == int(g[1])
+	var sorte: int = int(g[2]) if not g.is_empty() else 0
+	if sorte == 1:
+		actif = actif and _en_gare_quai
+	elif sorte == 2:
+		actif = actif and _seuils_fermes
+	if cs.disabled == actif:
+		cs.disabled = not actif
+
+
+func _gradins_bascules(_sens: int, c: Cabin) -> void:
+	for cs in _gradins:
+		if is_instance_valid(cs) and _gradins[cs][0] == c:
+			_maj_forme(cs)
 
 
 ## Seuils des portes (x 1,18-1,64) : en collision portes FERMÉES seulement.
@@ -307,7 +342,7 @@ var _seuils_fermes: bool = true
 func set_seuils(fermes: bool) -> void:
 	_seuils_fermes = fermes
 	for s in seuils:
-		(s as CollisionShape3D).disabled = not fermes
+		_maj_forme(s as CollisionShape3D)
 
 
 func _boite(parent: Node3D, taille: Vector3, xf: Transform3D, couche: int = COUCHE_VEHICULE) -> CollisionShape3D:
@@ -346,26 +381,28 @@ func _rame(c: Cabin) -> void:
 		var portes: Array = []
 		for k in range(TrainBodyBuilder.N_PANNEAUX):
 			var zc: float = c._panel_center(idx, k) - z_c
-			var xf: Transform3D = Transform3D(Basis(Vector3.RIGHT, tilt), Vector3(0.0, y_palier, zc))
-			# au droit des portes, le seuil va jusqu'au bord du quai (1,85 m)
-			# au droit des portes, le plancher s'arrête au seuil (x 1,20) : en
-			# tunnel on en descend sur la passerelle (x 0,80-1,24), juste
-			# dessous ; en gare le palier de quai (3,66 m) couvre le vide
-			var larg: float = 2.4 if TrainBodyBuilder.KINDS[k] == "door" else 2.5
-			# 15 cm d'épaisseur : couvre la contremarche (12 cm) sans dépasser
-			# sous la caisse (on passe dessous, dans la fosse de la gare basse)
-			_boite(voiture, Vector3(larg, 0.15, pas + 0.02), xf * Transform3D(Basis.IDENTITY, Vector3(0.0, -0.05, 0.0)))
-			if TrainBodyBuilder.KINDS[k] == "door":
-				paliers_quai.append(_boite(voiture, Vector3(3.66, 0.15, pas + 0.02),
+			# un jeu de paliers par sens de la caisse (Cabin.sens_gradins) :
+			# seul celui du sens courant est actif
+			for sens in [1, -1]:
+				var xf: Transform3D = Transform3D(Basis(Vector3.RIGHT, tilt * float(sens)), Vector3(0.0, y_palier, zc))
+				# au droit des portes, le plancher s'arrête au seuil (x 1,20) : en
+				# tunnel on en descend sur la passerelle (x 0,80-1,24), juste
+				# dessous ; en gare le palier de quai (3,66 m) couvre le vide
+				var larg: float = 2.4 if TrainBodyBuilder.KINDS[k] == "door" else 2.5
+				# 15 cm d'épaisseur : couvre la contremarche (12 cm) sans dépasser
+				# sous la caisse (on passe dessous, dans la fosse de la gare basse)
+				_gradin(c, sens, _boite(voiture, Vector3(larg, 0.15, pas + 0.02),
 					xf * Transform3D(Basis.IDENTITY, Vector3(0.0, -0.05, 0.0))))
-				# (10 cm seulement, à 1,40-1,50 : la fente restante, 20 cm, ne
-				# laisse plus passer les 28 cm du skieur ; plus large, le seuil
-				# barrait la PASSERELLE à qui longe la rame arrêtée, 08/10/2026)
-				for side_s in [-1.0, 1.0]:
-					var seuil: CollisionShape3D = _boite(voiture, Vector3(0.12, 0.15, pas + 0.02),
-						xf * Transform3D(Basis.IDENTITY, Vector3(side_s * 1.44, -0.05, 0.0)))
-					seuil.disabled = not _seuils_fermes
-					seuils.append(seuil)
+				if TrainBodyBuilder.KINDS[k] == "door":
+					paliers_quai.append(_gradin(c, sens, _boite(voiture, Vector3(3.66, 0.15, pas + 0.02),
+						xf * Transform3D(Basis.IDENTITY, Vector3(0.0, -0.05, 0.0))), 1))
+					# (10 cm seulement, à 1,40-1,50 : la fente restante, 20 cm, ne
+					# laisse plus passer les 28 cm du skieur ; plus large, le seuil
+					# barrait la PASSERELLE à qui longe la rame arrêtée, 08/10/2026)
+					for side_s in [-1.0, 1.0]:
+						var seuil: CollisionShape3D = _gradin(c, sens, _boite(voiture, Vector3(0.12, 0.15, pas + 0.02),
+							xf * Transform3D(Basis.IDENTITY, Vector3(side_s * 1.44, -0.05, 0.0))), 2)
+						seuils.append(seuil)
 			if TrainBodyBuilder.KINDS[k] == "door":
 				# baie de joint à joint (le vantail emporte ses joints), plus
 				# 8 cm de tolérance de chaque côté : avec 18 panneaux la baie
@@ -374,7 +411,7 @@ func _rame(c: Cabin) -> void:
 				var demi_baie: float = (TrainBodyBuilder.PANEL_L + TrainBodyBuilder.RIB_W) * 0.5 + 0.08
 				portes.append([zc - demi_baie, zc + demi_baie])
 			# bancs et porte-skis, dans le repère de leur palier
-			var pal: Node3D = voiture.get_node_or_null("Amenagement%d_%d" % [idx + 1, k]) as Node3D
+			var pal: Node3D = voiture.find_child("Amenagement%d_%d" % [idx + 1, k], true, false) as Node3D
 			if pal != null:
 				# boîtes DROITES dans le repère de la voiture (le palier est
 				# incliné de la pente des gares) : une face qui surplombe de
