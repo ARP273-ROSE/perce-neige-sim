@@ -125,6 +125,20 @@ funiculaire), les sauts (il reste collé au sol), les chutes.
   quai suit les portes de la rame qui est EN BAS. Banc
   `bench_boucle_salle_3d.gd` (salle, rame en ligne : banc, course, à bord,
   zéro déblocage ; `--pistes` : parti chaussé d'une piste).
+- **BOUCLE à ski, expert** (1.19.21) : `SkieurJoueur.pilote_expert`
+  (`_pilote_expert` : poursuite pure, visée 0,7·v + 6 m ; vitesse limitée
+  par les courbes à 90 m, v² ≤ A_PLAN·R + 2·a·d, et l'arrêt en fin de
+  tracé ; `A_VIRAGE_EXPERT` 16 m/s², `ADHERENCE_EXPERT`, `DEC_DERAPAGE`,
+  angulation 1 rad, jamais la posture 2) ; itinéraire
+  `DomaineSkiable.itineraire` (Dijkstra sur les axes de pistes, ≤ 20 m,
+  liaisons < 35 m, montée ×25 ; 48 ms) ; chaussé dès la neige en
+  VERS_DEPART (`_sur_terrasse`) ; `_densifier` (3 m) ; fin : pied de
+  l'escalier de Val Claret, puis course (`course_auto`). Banc
+  `bench_ski_expert_3d.gd`. **Quai** : coque de collision des voitures
+  en pans TANGENTS (ils étaient radiaux), rampe `RampeQuai_*` sous les
+  marches (sauf au droit de l'escalier de la fosse), porte fermée au nu de
+  la caisse sur toute la baie, `_contourner` (progression nette) ; banc
+  `bench_quai_3d.gd`.
 - **Commandes et vue** (1.19.16) : repère du pouce figé
   (`SkieurJoueur._maj_pouce`, `_ref_pouce`, `_pouce_tenu`, relâché après
   0,2 s) lu par `_direction` (à pied) et `_cmd_joystick_ski` ; caméra de

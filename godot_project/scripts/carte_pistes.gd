@@ -16,6 +16,11 @@ const NOM_MIN_PX: float = 70.0           # tracé assez long à l'écran pour po
 var domaine: DomaineSkiable = null
 var skieur: SkieurJoueur = null
 var gares: Array = []                    # [Vector3 gare basse, Vector3 gare haute]
+## Tracé réel du funiculaire (x, z tous les 25 m, posé par main.gd) — avant :
+## une ligne droite entre les gares (retour d'utilisateur, 12/10/2026) — et les rames
+## en direct, lues sur main (cabin, cabin_ghost)
+var trace_funi: PackedVector2Array = PackedVector2Array()
+var main: Node = null
 var echelle: float = 0.18
 var _t: float = 0.0
 var _police: Font = null
@@ -104,10 +109,33 @@ func _draw() -> void:
 		var gp: Vector2 = _carte(Vector2((g as Vector3).x, (g as Vector3).z), c, o)
 		draw_rect(Rect2(gp - Vector2(6, 6), Vector2(12, 12)), Color(1.0, 0.85, 0.1, 0.95))
 		draw_rect(Rect2(gp - Vector2(6, 6), Vector2(12, 12)), Color(0, 0, 0, 0.9), false, 1.5)
-	if gares.size() == 2:
+	if trace_funi.size() >= 2:
+		# en souterrain : tireté noir et jaune le long du vrai tracé
+		var pts_e: PackedVector2Array = PackedVector2Array()
+		for q in trace_funi:
+			pts_e.append(_carte(q, c, o))
+		draw_polyline(pts_e, Color(0.05, 0.05, 0.05, 0.85), 4.0, true)
+		for i in range(pts_e.size() - 1):
+			if (i / 2) % 2 == 0:
+				draw_line(pts_e[i], pts_e[i + 1], Color(1.0, 0.85, 0.1, 0.95), 2.5, true)
+	elif gares.size() == 2:
 		var a: Vector2 = _carte(Vector2(gares[0].x, gares[0].z), c, o)
 		var b: Vector2 = _carte(Vector2(gares[1].x, gares[1].z), c, o)
 		draw_dashed_line(a, b, Color(1.0, 0.85, 0.1, 0.8), 2.0, 8.0)
+	# les deux rames, en direct
+	if main != null:
+		for r in [[main.get("cabin"), "1"], [main.get("cabin_ghost"), "2"]]:
+			var cab: Node3D = r[0]
+			if cab == null:
+				continue
+			var num: String = str((cab as Cabin).train_number) if cab is Cabin else r[1]
+			var gp: Vector3 = cab.global_position
+			var rp: Vector2 = _carte(Vector2(gp.x, gp.z), c, o)
+			if not Rect2(Vector2.ZERO, TAILLE).grow(-4.0).has_point(rp):
+				continue
+			draw_circle(rp, 7.5, Color(0.0, 0.0, 0.0, 0.9))
+			draw_circle(rp, 6.0, Color(1.0, 0.85, 0.1, 1.0))
+			draw_string(_police, rp + Vector2(-3.5, 4.5), num, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0, 0, 0))
 	# noms par-dessus les tracés
 	for n in noms:
 		var pos: Vector2 = n[1]

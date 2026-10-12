@@ -356,6 +356,161 @@ func hors_piste(p: Vector3) -> bool:
 	return true
 
 
+## Point ramené SUR la piste la plus proche (à moins de r_max) : gardé tel
+## quel s'il y est déjà, sinon rentré à 4 m du bord (retour d'utilisateur, 12/10/2026 :
+## le skieur de la BOUCLE suivait une trace GPS hors de nos pistes la moitié
+## du temps — « il est toujours dans le décor »). Sans piste proche : q.
+func sur_piste(q: Vector2, r_max: float = 80.0) -> Vector2:
+	var best_d: float = INF
+	var best: Vector2 = q
+	for k in range(_axes.size()):
+		if not (_cadres[k] as Rect2).grow(r_max).has_point(q):
+			continue
+		var pts: PackedVector2Array = _axes[k]
+		for i in range(pts.size() - 1):
+			var c: Vector2 = Geometry2D.get_closest_point_to_segment(q, pts[i], pts[i + 1])
+			var d: float = c.distance_to(q)
+			if d < best_d:
+				best_d = d
+				best = c
+	if best_d > r_max:
+		return q
+	var lim: float = PistesDonnees.LARGEUR * 0.5 - 4.0
+	if best_d <= lim:
+		return q
+	return best + (q - best).limit_length(lim)
+
+
+## Itinéraire À SKI sur le réseau des pistes balisées, de `depart` à
+## `arrivee` (retour d'utilisateur, 12/10/2026 : le skieur de la BOUCLE « ne sait même
+## pas suivre une piste, il est toujours dans le décor » — les traces GPS
+## réelles sortent de nos pistes de 34 à 58 % du temps). Graphe : les points
+## des axes (tous les ≤ 20 m), reliés le long de chaque piste et, d'une piste
+## à l'autre, quand ils sont à moins de 35 m ; coût = longueur, ×25 en
+## montée (on ne remonte pas une piste) ; Dijkstra. Renvoie les points
+## (x, z), vide si aucun chemin.
+func itineraire(depart: Vector2, arrivee: Vector2) -> PackedVector2Array:
+	var pos: PackedVector2Array = PackedVector2Array()
+	var haut: PackedFloat32Array = PackedFloat32Array()
+	var voisins: Array = []
+	for k in range(_axes.size()):
+		var pts: PackedVector2Array = _axes[k]
+		var prec: int = -1
+		for i in range(pts.size()):
+			var sous: Array = [pts[0]]
+			if i > 0:
+				sous = []
+				var segs: int = maxi(1, int(ceil(pts[i - 1].distance_to(pts[i]) / 20.0)))
+				for j in range(1, segs + 1):
+					sous.append(pts[i - 1].lerp(pts[i], float(j) / segs))
+			for q in sous:
+				pos.append(q)
+				haut.append(relief.hauteur(q.x, q.y) if relief != null else 0.0)
+				voisins.append([])
+				var n: int = pos.size() - 1
+				if prec >= 0:
+					voisins[prec].append(n)
+					voisins[n].append(prec)
+				prec = n
+	# liaisons entre pistes (grille de 35 m)
+	var grille: Dictionary = {}
+	for n in range(pos.size()):
+		var c: Vector2i = Vector2i(floori(pos[n].x / 35.0), floori(pos[n].y / 35.0))
+		if not grille.has(c):
+			grille[c] = []
+		grille[c].append(n)
+	for n in range(pos.size()):
+		var c: Vector2i = Vector2i(floori(pos[n].x / 35.0), floori(pos[n].y / 35.0))
+		for dx in [-1, 0, 1]:
+			for dz in [-1, 0, 1]:
+				for m in grille.get(c + Vector2i(dx, dz), []):
+					if m > n and pos[m].distance_to(pos[n]) < 35.0 and not m in voisins[n]:
+						voisins[n].append(m)
+						voisins[m].append(n)
+	# extrémités : les nœuds les plus proches
+	var i_dep: int = -1
+	var i_arr: int = -1
+	var d_dep: float = INF
+	var d_arr: float = INF
+	for n in range(pos.size()):
+		var a1: float = pos[n].distance_to(depart)
+		if a1 < d_dep:
+			d_dep = a1
+			i_dep = n
+		var a2: float = pos[n].distance_to(arrivee)
+		if a2 < d_arr:
+			d_arr = a2
+			i_arr = n
+	if i_dep < 0 or i_arr < 0:
+		return PackedVector2Array()
+	# Dijkstra (tas binaire)
+	var dist: PackedFloat32Array = PackedFloat32Array()
+	dist.resize(pos.size())
+	dist.fill(INF)
+	var prec_n: PackedInt32Array = PackedInt32Array()
+	prec_n.resize(pos.size())
+	prec_n.fill(-1)
+	dist[i_dep] = 0.0
+	var tas: Array = [[0.0, i_dep]]
+	while not tas.is_empty():
+		var top: Array = _tas_pop(tas)
+		var u: int = top[1]
+		if float(top[0]) > dist[u]:
+			continue
+		if u == i_arr:
+			break
+		for w in voisins[u]:
+			var l: float = pos[u].distance_to(pos[w])
+			var monte: float = haut[w] - haut[u]
+			var cout: float = l * (25.0 if monte > 1.5 else 1.0) + maxf(monte, 0.0) * 4.0
+			if dist[u] + cout < dist[w]:
+				dist[w] = dist[u] + cout
+				prec_n[w] = u
+				_tas_push(tas, [dist[w], w])
+	if prec_n[i_arr] < 0 and i_arr != i_dep:
+		return PackedVector2Array()
+	var chemin_r: PackedVector2Array = PackedVector2Array()
+	var x: int = i_arr
+	while x >= 0:
+		chemin_r.append(pos[x])
+		x = prec_n[x]
+	chemin_r.reverse()
+	return chemin_r
+
+
+static func _tas_push(t: Array, e: Array) -> void:
+	t.append(e)
+	var i: int = t.size() - 1
+	while i > 0:
+		var p: int = (i - 1) / 2
+		if float(t[p][0]) <= float(e[0]):
+			break
+		t[i] = t[p]
+		i = p
+	t[i] = e
+
+
+static func _tas_pop(t: Array) -> Array:
+	var top: Array = t[0]
+	var last: Array = t.pop_back()
+	if t.is_empty():
+		return top
+	var i: int = 0
+	var n: int = t.size()
+	while true:
+		var l: int = 2 * i + 1
+		if l >= n:
+			break
+		var r: int = l + 1
+		var c: int = l if (r >= n or float(t[l][0]) <= float(t[r][0])) else r
+		if float(t[c][0]) >= float(last[0]):
+			break
+		t[i] = t[c]
+		i = c
+	t[i] = last
+	return top
+
+
 ## Piste sous le skieur : [nom, couleur] ("", −1 hors piste). Recalculé
 ## deux fois par seconde.
 func piste_sous(p: Vector3, delta: float) -> Array:
