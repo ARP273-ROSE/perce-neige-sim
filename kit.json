@@ -25,7 +25,8 @@
     "README.md",
     "manuel_perce_neige.pdf",
     "guide_theorique.pdf",
-    "challenge_best.json"
+    "challenge_best.json",
+    "racines_isrg.pem"
   ],
   "copies": [
     {

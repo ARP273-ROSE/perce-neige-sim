@@ -64,6 +64,7 @@ def test_defi_depart_portes_ouvertes_puis_ouverture_en_ligne(fenetre):
         _key(win, Qt.Key.Key_D)
         _step(win, clock, 12.0)
     assert tr.doors_open
+    tr.speed_cmd = 11.0 / 15.0
     _key(win, Qt.Key.Key_V)            # PRÊT, portes ouvertes
     _step(win, clock, 40.0)
     assert st.trip_started, "PRÊT armé portes ouvertes : départ sauvage attendu"
@@ -76,6 +77,11 @@ def test_defi_depart_portes_ouvertes_puis_ouverture_en_ligne(fenetre):
     _key(win, Qt.Key.Key_D)
     _step(win, clock, 0.5)
     assert tr.doors_cmd, "ouverture en pleine voie refusée en Défi"
+    # … et la rame CONTINUE, portes ouvertes (retour d'utilisateur, 11/10/2026 :
+    # « quand j'ouvre les portes en roulant, ça marche mais le funi s'arrête »)
+    v_avant = abs(tr.v)
+    _step(win, clock, 10.0)
+    assert abs(tr.v) > 0.6 * v_avant, f"la rame s'arrête portes ouvertes : {abs(tr.v):.1f} m/s"
 
 
 def test_arrivee_normale_sans_pique_de_survitesse(fenetre):
@@ -100,3 +106,27 @@ def test_arrivee_normale_sans_pique_de_survitesse(fenetre):
             break
     assert st.finished, "le voyage du pilote auto n'est pas arrivé"
     assert not (vus & textes), f"pique d'arrivée à tort : {vus & textes}"
+
+
+def test_defi_ouverture_en_croisiere_la_rame_continue(fenetre):
+    win, clock = fenetre
+    g = win.game
+    st = g.state
+    if g.auto_ops.enabled:
+        g.auto_ops.toggle()
+    g.new_trip()
+    st.mode = pn.MODE_RUN
+    st.run_mode = "challenge"
+    tr = st.train
+    _step(win, clock, 1.0)
+    if tr.doors_cmd:
+        _key(win, Qt.Key.Key_D)
+        _step(win, clock, 15.0)
+    tr.speed_cmd = 11.0 / 15.0          # en Défi la consigne va jusqu'à 15 m/s
+    _key(win, Qt.Key.Key_V)
+    _step(win, clock, 90.0)
+    assert st.trip_started and abs(tr.v) > 8.0
+    v0 = abs(tr.v)
+    _key(win, Qt.Key.Key_D)
+    _step(win, clock, 10.0)
+    assert abs(tr.v) > 0.6 * v0, "la rame s'arrête quand on ouvre les portes en roulant"

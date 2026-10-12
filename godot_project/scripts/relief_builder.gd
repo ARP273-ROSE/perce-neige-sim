@@ -821,6 +821,10 @@ func _build_trait() -> void:
 	st.set_material(_mat_trait)
 	var mi: MeshInstance3D = _instance(st.commit(), "TraitTunnel")
 	mi.extra_cull_margin = 50.0
+	# construit en tâche de fond : s'il a déjà été masqué (skieur, vue
+	# cabine), il doit NAÎTRE masqué (retour d'utilisateur, 11/10/2026 : « en
+	# mode skieur, j'ai toujours le tracé orange du funi »)
+	mi.visible = _trait_on
 	_trait = mi
 
 

@@ -45,6 +45,19 @@ def contexte() -> ssl.SSLContext:
     return ctx
 
 
+def _racines_embarquees():
+    """Chemin de racines_isrg.pem (à côté du module, ou dans le paquet
+    PyInstaller), ou None."""
+    import sys
+    from pathlib import Path
+    for base in (Path(__file__).resolve().parent, Path(getattr(sys, "_MEIPASS", "")),
+                 Path(sys.executable).resolve().parent):
+        f = base / "racines_isrg.pem"
+        if f.is_file():
+            return str(f)
+    return None
+
+
 def contexte_certifi():
     """Contexte qui ne fait confiance QU'AU magasin certifi embarqué, ou None.
 
@@ -55,11 +68,25 @@ def contexte_certifi():
     proposait un chemin passant par un certificat périmé. certifi contient
     ISRG Root X2 : la vérification s'arrête sur une racine valide.
     """
+    ctx = None
     try:
         import certifi
-        return ssl.create_default_context(cafile=certifi.where())
+        ctx = ssl.create_default_context(cafile=certifi.where())
     except Exception:
-        return None
+        ctx = None
+    # Racines ISRG X1/X2 embarquées par le programme lui-même : le repli ne
+    # dépend plus de certifi (absent du paquet Windows ? retour d'utilisateur,
+    # 11/10/2026 : « la musique sous Windows, toujours le certificat »)
+    f = _racines_embarquees()
+    if f:
+        try:
+            if ctx is None:
+                ctx = ssl.create_default_context(cafile=f)
+            else:
+                ctx.load_verify_locations(cafile=f)
+        except Exception:
+            pass
+    return ctx
 
 
 def urlopen(req, timeout: float = 30.0):

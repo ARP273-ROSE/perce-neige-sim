@@ -166,6 +166,8 @@ func _apply(d: Dictionary) -> void:
 	# pupitre (écran Pro-face, voyants) — sim PC ≥ 1.15.78
 	physics.horn = _b(d, "horn", false)
 	physics.arret_elec = _b(d, "arret_elec", false)
+	if d.has("urgence"):
+		physics.bouton_urgence_pc = 1 if _b(d, "urgence", false) else 0
 	if d.has("ready"):
 		physics.pret_externe = 1 if _b(d, "ready", false) else 0
 		physics.pret_autre_externe = _b(d, "ghost_ready", true)

@@ -675,6 +675,10 @@ def physics_to_state_dict(tr, st=None) -> dict:
         # Pupitre de la cabine 3D (écran Pro-face, voyants ; 06/10/2026)
         "horn": bool(getattr(tr, "horn", False)),
         "arret_elec": bool(getattr(tr, "electric_stop", False)),
+        # champignon URGENCE seul (« emergency » ci-dessus inclut l'arrêt
+        # électrique pour le freinage : les DEUX champignons s'enfonçaient
+        # au clic d'un seul — retour d'utilisateur, 11/10/2026)
+        "urgence": bool(getattr(tr, "emergency", False)),
         "ready": bool(getattr(tr, "ready", False)),
         "ghost_ready": bool(getattr(st, "ghost_ready", True)) if st is not None else True,
         "maint_brake": bool(getattr(tr, "maint_brake", False)),

@@ -109,6 +109,17 @@ if _QTMULTIMEDIA_OK:
 
         VOLUME_MIN = 1e-4
 
+        def __init__(self, *args, **kwargs) -> None:
+            super().__init__(*args, **kwargs)
+            # sortie explicite dès la création (cf. _AudioOutput, 11/10/2026)
+            try:
+                from PyQt6.QtMultimedia import QMediaDevices
+                dev = QMediaDevices.defaultAudioOutput()
+                if not dev.isNull():
+                    self.setAudioDevice(dev)
+            except Exception:
+                pass
+
         def setVolume(self, volume: float) -> None:  # noqa: N802
             self._v_req = float(volume)
             _SORTIES_AUDIO.add(self)
@@ -124,6 +135,23 @@ if _QTMULTIMEDIA_OK:
         annonces) ; le gain général s'applique par-dessus, et volume() rend
         le niveau DEMANDÉ : les fondus qui lisent puis réécrivent le volume
         ne cumulent pas le gain d'une image à l'autre."""
+
+        def __init__(self, *args, **kwargs) -> None:
+            super().__init__(*args, **kwargs)
+            # Sortie EXPLICITE dès la création (retour d'utilisateur,
+            # 11/10/2026, sous Manjaro : ambiance OK mais ni portes, ni
+            # buzzer, ni annonces, ni musique — le diagnostic montrait ces
+            # lecteurs « en lecture » sur le périphérique « (défaut) », nul :
+            # Windows le prend pour la sortie par défaut, Linux ne joue rien
+            # dessus). Les lecteurs créés après le démarrage échappaient à
+            # suivre_sortie_par_defaut().
+            try:
+                from PyQt6.QtMultimedia import QMediaDevices
+                dev = QMediaDevices.defaultAudioOutput()
+                if not dev.isNull():
+                    self.setDevice(dev)
+            except Exception:
+                pass
 
         def setVolume(self, volume: float) -> None:  # noqa: N802
             self._v_req = float(volume)
@@ -1991,7 +2019,12 @@ class Physics:
         # (retour d'essai 2026-09-28, Défi : « elle ralentit et s'arrête
         # alors qu'on n'a serré aucun frein, elle devrait repartir dans
         # l'autre sens »).
-        parked = (tr.maint_brake or tr.doors_open) and not tr.cable_rupture
+        # Défi, voyage lancé : des portes ouvertes ne clouent plus la rame
+        # (comme la PWA : retour d'utilisateur, 11/10/2026 : « quand j'ouvre les
+        # portes en roulant, ça marche mais le funi s'arrête »)
+        portes_clouent = tr.doors_open and not (st.run_mode == "challenge"
+                                                and st.trip_started)
+        parked = (tr.maint_brake or portes_clouent) and not tr.cable_rupture
         if parked:
             # Serrage PROGRESSIF du résiduel (≤ 8 cm/s au grab d'arrivée) :
             # v décroît à 1,2 m/s² au lieu d'être coupée net — la gravité
@@ -7581,7 +7614,11 @@ class GameWidget(QWidget):
     def _skieur_touches(self) -> int:
         if not self._skieur:
             return 0
-        tenues = {int(k) for k in self._key_state}
+        # SEULEMENT les vraies touches du clavier (retour d'utilisateur,
+        # 11/10/2026 : « quand je clique sur A le skieur avance tout seul ;
+        # quand les portes se sont fermées, il marchait tout seul ») — un clic
+        # du pupitre (A, D…) ou un appui de l'automate restait dans _key_state
+        tenues = {int(k) for k in getattr(self, "_touches_skieur", set())}
         bits = 0
         for bit, touches in self.SKIEUR_MARCHE:
             if any(int(t) in tenues for t in touches):
@@ -7677,6 +7714,7 @@ class GameWidget(QWidget):
         self._skieur_etat = (False, False, 0, 0.0, False, False)
         self._skieur_prep_txt = T("preparing the 3D scenery…", "préparation du décor 3D…")
         self._key_state.clear()
+        self._touches_skieur = set()
         add_event(st, "skieur",
                   "Skier: ZQSD / arrows to walk, Shift to run, V 1st/3rd "
                   "person, X auto-operation, B skier loop, drag in the 3D "
@@ -7694,6 +7732,7 @@ class GameWidget(QWidget):
         self._skieur = False
         self._skieur_prep_txt = ""
         self._key_state.clear()
+        self._touches_skieur = set()
         self._appliquer_etat_skieur()
         ao = self.auto_ops
         # CONDUIRE ne coupe plus l'exploitation auto (retour d'utilisateur, 09/10/2026 :
@@ -8975,6 +9014,13 @@ class GameWidget(QWidget):
         self._g_fin_prec = fin
         if not getattr(self, "_g_arr", False):
             return
+        # reparti sans avoir ouvert les portes de la rame pilotée : la rame
+        # d'en face la suit de nouveau (retour d'utilisateur, 11/10/2026 :
+        # « j'ai vu descendre la rame opposée avec les portes toutes ouvertes »)
+        if st.trip_started and not fin:
+            self._g_arr = False
+            self._g_ouvert = False
+            return
         self._g_t += dt
         if not self._g_ouvert:
             try:
@@ -9174,6 +9220,9 @@ class GameWidget(QWidget):
             if k == Qt.Key.Key_B and not ev.isAutoRepeat():
                 self._skieur_boucle_n += 1      # BOUCLE du skieur (X = exploitation)
             self._key_state.add(k)
+            if not hasattr(self, "_touches_skieur"):
+                self._touches_skieur = set()
+            self._touches_skieur.add(k)
             ev.accept()
             return
         self._key_state.add(k)
@@ -9876,9 +9925,17 @@ class GameWidget(QWidget):
                           "Reprise en tunnel — pas de buzzer",
                           "info")
 
+    def focusOutEvent(self, ev) -> None:  # noqa: N802
+        # le clavier part ailleurs (fenêtre 3D, autre programme) : les
+        # relâchements n'arriveront pas ici — le skieur s'arrête
+        self._touches_skieur = set()
+        super().focusOutEvent(ev)
+
     def keyReleaseEvent(self, ev: QKeyEvent) -> None:  # noqa: N802
         k = ev.key()
         self._key_state.discard(k)
+        if ev.spontaneous() and hasattr(self, "_touches_skieur"):
+            self._touches_skieur.discard(k)
         if self._skieur and ev.spontaneous() and int(k) not in self.SKIEUR_GARDE:
             return
         if k == Qt.Key.Key_Shift:
@@ -9995,6 +10052,9 @@ class GameWidget(QWidget):
                 if hold:
                     self._mouse_hold.add(qk)
                 self._sim_press(qk)
+                if not hold:
+                    # bouton simple : appui ponctuel, jamais « tenu »
+                    self._key_state.discard(qk)
                 ev.accept()
                 return
 

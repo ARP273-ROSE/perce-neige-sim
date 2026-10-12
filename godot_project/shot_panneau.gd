@@ -62,5 +62,12 @@ func _tick() -> void:
 		_cam.look_at(cible, Vector3.UP)
 	if _f - _t0 == 8:
 		get_root().get_texture().get_image().save_png(_pre + "_loin.png")
+		# de DOS (11/10/2026 : « vus de derrière, ils sont transparents »)
+		var p3: Vector3 = _centre - _nz * 3.5 + Vector3(_nz.z, 0, -_nz.x) * 0.8
+		p3.y = relief.hauteur_sol(p3.x, p3.z) + 1.8
+		_cam.global_position = p3
+		_cam.look_at(_centre, Vector3.UP)
+	if _f - _t0 == 12:
+		get_root().get_texture().get_image().save_png(_pre + "_dos.png")
 		print("captures")
 		quit(0)
