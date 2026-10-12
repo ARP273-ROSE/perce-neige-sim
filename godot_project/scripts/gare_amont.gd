@@ -91,7 +91,7 @@ func construire(t: TunnelBuilder, mr: MachineRoomBuilder) -> void:
 	# toit au bout aval : au moins 0,5 m au-dessus du plafond de la salle
 	# des quais du jeu
 	var s_aval: float = PNConstants.LENGTH + MachineRoomBuilder.HALL_DEPTH + 0.30 - _long
-	var top_quai: float = tunnel.transform_at(s_aval).origin.y + tunnel.station_room_half_height
+	var top_quai: float = tunnel.transform_at(s_aval).origin.y + tunnel.station_room_half_height_haut
 	_y_quai_toit = maxf(top_quai - _o.y + 0.5, 0.0)
 	_materiaux()
 	_calcul_porte_genepy()
@@ -514,7 +514,7 @@ func _hall() -> void:
 	var cx0: float = b.position.x - 0.85
 	var cx1: float = b.end.x + 1.25
 	# caisson jusqu'au plafond de la salle (axe + 2,65 m)
-	var h_cais: float = tunnel.station_room_half_height - LINTEAU - 0.05
+	var h_cais: float = tunnel.station_room_half_height_haut - LINTEAU - 0.05
 	_boite("bleu_nuit_clair", (cx0 + cx1) * 0.5, dq + 0.30, b.end.y + h_cais * 0.5, cx1 - cx0, 0.60, h_cais)
 	for k in [-1.0, 1.0]:
 		var xx: float = b.position.x + 0.9 if k < 0.0 else b.end.x - 0.9
@@ -547,7 +547,10 @@ func _hall() -> void:
 ## miroirs est trop basse, le funi rentre dedans en haut ») : le sommet de
 ## la caisse est à l'axe + 1,77 m (axe du tube + 0,05, rayon 1,72) → linteau
 ## à l'axe + 1,95 m ; le caisson des miroirs garde le haut, jusqu'au plafond.
-const LINTEAU: float = 1.95
+## Remonté encore le 12/10/2026 (« ça passe au mm ») : garde mesurée de
+## 0,16 m au passage de la rame → linteau à l'axe + 2,25 m (≈ 0,46 m de
+## garde ; le caisson garde 0,35 m).
+const LINTEAU: float = 2.25
 
 
 func _bouche() -> Rect2:

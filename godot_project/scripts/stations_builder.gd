@@ -402,7 +402,11 @@ func _build_platform_barrier(s_start: float, s_end: float, s_nez: float, side: f
 	var st: SurfaceTool = SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var y_quai: float = FLOOR_Y_LOCAL + platform_height
-	var x_voie: float = side * (platform_inner_x + 0.06)
+	# hors gabarit de la caisse (rayon 1,72 m) : depuis que le bord du quai
+	# est à 1,40 m (1.19.12), la barrière posée au bord entrait dans la rame
+	# (retour d'utilisateur, 12/10/2026 : « le funi rentre dedans ») — elle reste à
+	# 1,91 m de l'axe, comme avant
+	var x_voie: float = side * (maxf(platform_inner_x, BORD_FOSSE) + 0.06)
 	var x_mur: float = side * (platform_inner_x + platform_width - 0.05)
 	# en haut : la barrière continue à plat sur le palier jusqu'à s_fin
 	var palier: bool = s_fin > s_end
@@ -858,8 +862,10 @@ func _mkmat(col: Color, rough: float, metal: float) -> StandardMaterial3D:
 
 func _build_room_dressing(s0: float, s1: float, _is_low: bool) -> void:
 	var navy: StandardMaterial3D = _mkmat(NAVY, 0.85, 0.0)
-	var ceil_m: StandardMaterial3D = _mkmat(CEIL_COL, 0.75, 0.0)
-	var beam: StandardMaterial3D = _mkmat(BEAM_COL, 0.45, 0.5)
+	# gare haute (photos 095433 à 095520) : sous-face sombre bleu nuit,
+	# charpente et poteaux en acier bleu, les néons en bandes claires
+	var ceil_m: StandardMaterial3D = _mkmat(CEIL_COL if _is_low else Color(0.09, 0.11, 0.17), 0.75, 0.0)
+	var beam: StandardMaterial3D = _mkmat(BEAM_COL if _is_low else Color(0.13, 0.24, 0.46), 0.45, 0.5)
 	# en vue extérieure, l'habillage devient translucide comme le tunnel
 	for m in [navy, ceil_m, beam]:
 		tunnel.extra_see_through.append(m)
@@ -870,9 +876,9 @@ func _build_room_dressing(s0: float, s1: float, _is_low: bool) -> void:
 	blue_lamp.emission_energy_multiplier = 3.0
 	blue_lamp.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	var hw: float = tunnel.station_room_half_width
-	var hh: float = tunnel.station_room_half_height
 	var length: float = s1 - s0
 	var sc: float = (s0 + s1) * 0.5
+	var hh: float = tunnel.demi_hauteur_salle(sc)
 	var wall_h: float = hh - FLOOR_Y_LOCAL
 	var y_wall: float = FLOOR_Y_LOCAL + wall_h * 0.5
 	for sx in [-1.0, 1.0]:
@@ -894,7 +900,14 @@ func _build_room_dressing(s0: float, s1: float, _is_low: bool) -> void:
 			_box(Vector3(0.14, PORTE_GENEPY_H, 0.10), beam, sp, sx * (hw - 0.02), y_seuil + PORTE_GENEPY_H * 0.5, "CadrePorte")
 		_box(Vector3(0.14, 0.12, pg.y - pg.x + 0.10), beam, (pg.x + pg.y) * 0.5, sx * (hw - 0.02),
 			y_linteau + 0.06, "CadrePorte")
-	_box(Vector3(hw * 2.0, 0.06, length), ceil_m, sc, 0.0, hh - 0.04, "PlafondGare")
+	# en tronçons de ~3 m qui suivent la voie : d'un seul tenant (36 m en
+	# haut), la dalle droite sortait au-dessus de la voûte du tunnel aux
+	# deux bouts (courbe verticale) et l'on voyait la voûte claire
+	var n_pl: int = maxi(1, int(ceil(length / 3.0)))
+	for ip in range(n_pl):
+		var sp0: float = s0 + length * float(ip) / n_pl
+		var sp1: float = s0 + length * float(ip + 1) / n_pl
+		_box(Vector3(hw * 2.0, 0.06, sp1 - sp0 + 0.05), ceil_m, (sp0 + sp1) * 0.5, 0.0, hh - 0.04, "PlafondGare")
 	# poutres en travers (IPN sombres) et deux pannes en long
 	var s: float = s0 + 1.4
 	while s < s1 - 0.5:
@@ -942,7 +955,7 @@ func _build_ceiling_lights(s_start: float, s_end: float) -> void:
 	var spacing: float = 2.8
 	# Néons collés au plafond de la SALLE élargie (2,65 m), pas à l'ancienne
 	# hauteur de tube (1,85 m) où ils flotteraient en plein milieu.
-	var y_neon: float = tunnel.station_room_half_height - 0.25
+	var y_neon: float = tunnel.demi_hauteur_salle(s_start) - 0.25
 	var s: float = s_start
 	while s < s_end:
 		var xform: Transform3D = tunnel.transform_at(s)
