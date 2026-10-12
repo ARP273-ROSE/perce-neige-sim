@@ -241,11 +241,13 @@ func _build_platform(s_start: float, s_end: float, is_low: bool, side: float = 1
 	var side_name: String = "R" if side > 0.0 else "L"
 	var sta: String = "low" if is_low else "high"
 
-	# Marches en CAILLEBOTIS NOIR antidérapant (photos 095433 / 095511 :
-	# le dessus des paliers est sombre), nez en tôle damier alu ; en gare
-	# haute une BANDE ROUGE court derrière le nez (photo 095438).
+	# Marches en revêtement GRIS FONCÉ antidérapant (photos 095433 / 095438 /
+	# 095511), nez en tôle damier alu ; en gare haute une BANDE ROUGE de
+	# 0,30 m court le long du BORD du quai, côté rame, sur chaque marche
+	# (photo 095438 — avant : en travers de toute la marche, derrière le nez,
+	# ce qui rayait le quai de rouge ; retour d'utilisateur, 12/10/2026)
 	var tread_mat: StandardMaterial3D = StandardMaterial3D.new()
-	tread_mat.albedo_color = Color(0.13, 0.13, 0.14)
+	tread_mat.albedo_color = Color(0.20, 0.20, 0.21)
 	tread_mat.roughness = 0.9
 	tread_mat.metallic = 0.15
 
@@ -291,7 +293,7 @@ func _build_platform(s_start: float, s_end: float, is_low: bool, side: float = 1
 	mm_noses.mesh = nose_mesh
 	mm_noses.instance_count = n_treads
 	var band_mesh: BoxMesh = BoxMesh.new()
-	band_mesh.size = Vector3(platform_width, 0.012, 0.26)
+	band_mesh.size = Vector3(0.30, 0.012, 1.0)      # allongée à la marche (échelle en z)
 	band_mesh.material = band_mat
 	var mm_bands: MultiMesh = MultiMesh.new()
 	mm_bands.transform_format = MultiMesh.TRANSFORM_3D
@@ -336,10 +338,12 @@ func _build_platform(s_start: float, s_end: float, is_low: bool, side: float = 1
 		nose_c.y = top_y - 0.017
 		mm_noses.set_instance_transform(i, Transform3D(level_basis, nose_c))
 		if not is_low:
-			var xf_bd: Transform3D = _xf_at(s_dn + 0.25)
-			var band_c: Vector3 = xf_bd.origin + xf_bd.basis.x * lat_center
+			# du nez (0,12 m) au bord amont, le long du bord côté voie
+			var l_band: float = maxf(s_up - s_dn - 0.14, 0.05)
+			var xf_bd: Transform3D = _xf_at(s_dn + 0.12 + l_band * 0.5)
+			var band_c: Vector3 = xf_bd.origin + xf_bd.basis.x * side * (platform_inner_x + 0.17)
 			band_c.y = top_y - 0.004
-			mm_bands.set_instance_transform(i, Transform3D(level_basis, band_c))
+			mm_bands.set_instance_transform(i, Transform3D(level_basis.scaled_local(Vector3(1.0, 1.0, l_band)), band_c))
 
 	mm_treads.instance_count = xf_marches.size()
 	for i2 in range(xf_marches.size()):
