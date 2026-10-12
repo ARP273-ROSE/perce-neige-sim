@@ -40,3 +40,24 @@ assert gain(64) == plancher and gain(120) == plancher
 # un quai de la gare haute : 10 à 60 m de la bouche → de −8 dB à −24 dB
 print("\nquais du haut (10–60 m) : de %.1f à %.1f dB" % (db(gain(10)), db(gain(60))))
 print("OK")
+
+# --- 11/10/2026 (retour d'utilisateur : « en gare du haut le bruit de la
+# machinerie diminue trop vite, et à la sortie Génépy on ne l'entend pas du
+# tout ») : la gare est un volume RÉVERBÉRANT — le champ diffus soutient le
+# niveau, la décroissance est bien plus lente qu'en champ libre. Nouvelle loi :
+# −3 dB par doublement au-delà de d0 = 6 m (intensité en 1/d), plancher
+# −15 dB ; dans le couloir de la porte Génépy et dehors devant elle (< 45 m
+# de la bouche du hall), la même loi atténuée de 6 dB par la paroi.
+d0n = 6.0
+plancher_n = 10^(-15.0 / 20)
+def gain_n(d, dehors=False):
+    if dehors and d >= 45:
+        return 0
+    g = min(max((d0n / max(d, d0n))^0.5, plancher_n), 1.0)
+    return g * (10^(-6.0 / 20) if dehors else 1)
+print("\nnouvelle loi : plancher %.3f" % plancher_n.n())
+for d in [4, 6, 12, 24, 48, 96]:
+    g = gain_n(d); gd = gain_n(d, True)
+    print(" %3.0f m  quai %.3f (%5.1f dB)   couloir/dehors %.3f (%s)" % (d, g.n(), db(g),
+          gd if gd == 0 else gd.n(), "—" if gd == 0 else "%5.1f dB" % db(gd)))
+assert abs(db(gain_n(12)) - (-3.01)) < 0.05 and abs(db(gain_n(24)) - (-6.02)) < 0.05

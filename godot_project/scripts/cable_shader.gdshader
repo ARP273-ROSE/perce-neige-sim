@@ -15,6 +15,16 @@ uniform float metallic_value : hint_range(0.0, 1.0) = 0.95;
 // Phase animée : offset accumulé en mètres le long du câble. Mis à jour par GDScript
 // depuis l'extérieur — chaque brin a sa propre phase (opposée en signe).
 uniform float cable_phase = 0.0;
+// Élasticité du brin (retour d'utilisateur, 11/10/2026 : « quand la rame du bas
+// oscille, le mouvement du câble est le même jusqu'à la poulie motrice,
+// alors qu'un élastique bouge d'autant plus qu'on est loin de l'accroche ») :
+// la phase passe de cable_phase à l'attache de la rame (s_attache) à
+// phase_poulie au sommet (s_poulie), linéairement. phase_poulie = cable_phase
+// tant qu'elle n'est pas renseignée (effilement nul).
+uniform bool effile = false;
+uniform float phase_poulie = 0.0;
+uniform float s_attache = 0.0;
+uniform float s_poulie = 3514.52;
 
 // Paramètres géométriques du toronnage
 uniform float strand_pitch = 0.45;   // 1 tour complet tous les 45 cm
@@ -52,6 +62,14 @@ uniform float phase_upper = 0.0;
 uniform float slack_wave_amp = 0.035;
 uniform float slack_wave_len = 7.3;
 
+float phase_brin(float s) {
+	if (!effile) {
+		return cable_phase;
+	}
+	float w = clamp((s_poulie - s) / max(s_poulie - s_attache, 1.0), 0.0, 1.0);
+	return mix(phase_poulie, cable_phase, w);
+}
+
 void vertex() {
 	if (slack > 0.0) {
 		vec3 down = normalize((inverse(MODEL_MATRIX) * vec4(0.0, -1.0, 0.0, 0.0)).xyz);
@@ -60,7 +78,7 @@ void vertex() {
 		// les ondulations appartiennent au câble : prises en abscisse
 		// MATIÈRE (s − phase), elles avancent avec le tronçon que sa rame
 		// entraîne et restent en place sur un tronçon immobile
-		float ph_v = (gap_hi > gap_lo && s >= gap_hi) ? phase_upper : cable_phase;
+		float ph_v = (gap_hi > gap_lo && s >= gap_hi) ? phase_upper : phase_brin(s);
 		float s_mat = s - ph_v;
 		float onde = sin(6.2831853 * s_mat / slack_wave_len) * 0.7
 			+ sin(6.2831853 * s_mat / (slack_wave_len * 2.7) + 1.3) * 0.3;
@@ -87,7 +105,7 @@ void fragment() {
 		discard;
 	}
 	// Distance le long du câble en mètres, animée par cable_phase
-	float ph = (broken && s_geom >= gap_hi) ? phase_upper : cable_phase;
+	float ph = (broken && s_geom >= gap_hi) ? phase_upper : phase_brin(s_geom);
 	float s_meters = s_geom - ph;
 
 	// Position angulaire le long de l'hélice : combinaison de l'angle autour du

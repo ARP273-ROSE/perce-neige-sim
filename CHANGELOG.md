@@ -18,6 +18,28 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.19.12** — retours d'utilisateur du 11/10/2026 (deuxième lot).
+- **Quai au ras de la rame** : bord avancé de 1,85 à 1,40 m de l'axe — au
+  niveau du plancher la caisse est à 1,28 m, le ventre passe au-dessus du
+  quai ; plus de grand vide au seuil des portes. Au droit de la fosse de la
+  gare basse et de ses escaliers, le bord reste à 1,85 m (`BORD_FOSSE`).
+- **Marches calées sur les portes** : une marche par panneau, joint de
+  marche au droit du joint entre deux panneaux de la rame arrêtée (rame
+  symétrique : même grille en haut et en bas) — chaque porte a sa marche.
+- **Sons depuis le quai** : sur le quai d'une gare où une rame est à quai,
+  on entend ses bruits, ses portes et sa sono, atténués (PC et PWA).
+- **Machinerie de la gare haute** : décroissance de gare réverbérante,
+  −3 dB par doublement au-delà de 6 m, plancher −15 dB ; audible aussi
+  dans le couloir et devant la porte Génépy (−6 dB, jusqu'à 45 m) —
+  `audit_physique/son_gare_haute.sage`.
+- **Skieur laissé sur le quai** : en quittant le mode skieur, il reste
+  visible là où on l'a laissé (à pied) ; à bord, il se fond dans les
+  passagers.
+- **Câble élastique** : l'oscillation de la rame se propage le long de son
+  brin en s'amortissant — entière à l'attache, nulle à la poulie motrice.
+- **Écran Pro-face** (vue 3D du PC) : même vitesse que le pupitre (vitesse
+  des roues = machinerie + oscillation élastique, désormais transmise).
+
 **v1.19.11** — retours d'utilisateur du 11/10/2026 (premier lot).
 - **Son sous Linux** (ambiance OK, mais ni portes, ni buzzer, ni annonces,
   ni musiques de gare) : le diagnostic envoyé par le PC montrait ces

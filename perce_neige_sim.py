@@ -4593,6 +4593,7 @@ class SoundSystem:
         # Skieur sorti de la rame (mode skieur de la vue 3D) : le son de la
         # cabine s'efface (τ 0,4 s) ; la 3D joue le quai et le dehors.
         self.skieur_dehors = False
+        self.skieur_quai = False             # sur le quai, rame à quai : cabine atténuée
         self._sk_mix = 0.0
         # skieur à pied sur les quais de la gare haute : la salle des
         # machines au gain donné par la 3D (distance), cf. _buzzer_a_jouer
@@ -5240,7 +5241,8 @@ class SoundSystem:
         cabine = 1.0 - self._mr_mix
         # Retour d'utilisateur, 07/10/2026 : « sur le bord du quai, alors que le truc est
         # parti, j'entends le son comme si j'étais dedans »
-        sk_goal = 1.0 if self.skieur_dehors else 0.0
+        sk_goal = (0.55 if getattr(self, "skieur_quai", False) else 1.0) \
+            if self.skieur_dehors else 0.0
         self._sk_mix += (sk_goal - self._sk_mix) * (1.0 - math.exp(-dt / 0.4))
         if abs(sk_goal - self._sk_mix) < 0.002:
             self._sk_mix = sk_goal
@@ -7633,9 +7635,16 @@ class GameWidget(QWidget):
         # l'attend toujours ; les sons, eux, sont ceux de la cabine
         on_expl = on or boucle
         self.sounds.skieur_dehors = on and ecoute != 0
+        # sur le quai d'une gare, une rame à quai : on l'entend, atténuée
+        # (retour d'utilisateur, 11/10/2026 : « dehors de la rame mais encore le
+        # long du quai, on doit entendre les annonces, les bruits et les portes »)
+        tr_q = self.state.train
+        a_quai = (tr_q.s <= START_S + 5.0) or (tr_q.s >= STOP_S - 5.0)
+        self.sounds.skieur_quai = on and ecoute in (1, 3) and a_quai and not dedans
         # quais de la gare haute : la machinerie, au gain donné par la 3D
         # (distance à la machinerie)
-        self.sounds.skieur_machinerie = gain if (on and ecoute == 3) else 0.0
+        # gare haute, ou couloir / sortie Génépy (gain déjà atténué par la 3D)
+        self.sounds.skieur_machinerie = gain if (on and ecoute in (2, 3)) else 0.0
         self.sounds.set_musique_gare((1 if ecoute == 1 else 2 if ecoute == 3 else 0) if on else 0)
         src = getattr(self.sounds, "_musique_chemin", None)
         if src and src != getattr(self, "_musique_annoncee", None):

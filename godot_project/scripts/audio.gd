@@ -80,6 +80,7 @@ var _cab_db: float = 0.0             # atténuation des sons de cabine (dB)
 # 2 : dehors (vent léger). Posé par main.gd.
 var ecoute: int = 0
 var _ecoute_mix: float = 0.0          # 0 cabine → 1 hors de la rame
+var quai_rame: bool = false           # skieur sur le quai d'une gare où une rame est à quai
 # Retour d'utilisateur, 07/10/2026 : « les buzzers sonnent leurs sons respectifs dans les
 # gares du bas et du haut et on les entend si on y est, même si ça
 # redémarre au milieu du tunnel ; par contre si on est dans la rame, en vue
@@ -369,8 +370,11 @@ func _update_machine_room(delta: float) -> void:
 	_mr_mix += (goal - _mr_mix) * (1.0 - exp(-delta / 0.35))
 	if absf(goal - _mr_mix) < 0.002:
 		_mr_mix = goal
-	# hors de la rame (skieur sur le quai, dehors) : plus de son de cabine
-	var g_ec: float = 0.0 if ecoute == 0 else 1.0
+	# hors de la rame : plus de son de cabine, SAUF sur le quai le long d'une
+	# rame à quai, où l'on entend ses bruits, ses portes et sa sono, atténués
+	# (retour d'utilisateur, 11/10/2026 : « dehors de la rame mais encore le long du
+	# quai, on doit entendre les annonces, les bruits et les portes »)
+	var g_ec: float = 0.0 if ecoute == 0 else (0.45 if quai_rame else 1.0)
 	_ecoute_mix += (g_ec - _ecoute_mix) * (1.0 - exp(-delta / 0.4))
 	if absf(g_ec - _ecoute_mix) < 0.002:
 		_ecoute_mix = g_ec
