@@ -18,6 +18,15 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.19.18** — retour d'utilisateur du 12/10/2026 (« change les marches si tu veux » ;
+les barrières restent bleues, c'est plus joli).
+- **Marches du quai comme sur les photos** (095433, 095438, 095511) :
+  revêtement gris foncé, nez en tôle damier alu ; en gare haute, la bande
+  rouge de 0,30 m court le long du bord du quai côté rame sur chaque
+  marche — avant, elle traversait toute la marche derrière le nez et
+  rayait le quai de rouge.
+- Vérifié : capture `shot_quai_haut.gd` comparée à la photo 095438, bancs.
+
 **v1.19.17** — retour d'utilisateur du 12/10/2026 (capture iPad, gare haute).
 - **Garde-corps bleu hors de la rame** : depuis que le bord du quai a été
   avancé à 1,40 m de l'axe (1.19.12), la barrière posée au bord entrait
