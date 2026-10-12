@@ -12421,6 +12421,22 @@ class GameWidget(QWidget):
                      and self._godot_launch_thread.is_alive())
         if self._godot_bridge.is_running():
             xid = self._godot_bridge.find_window_id_once()
+            # Windows : on n'embarque la fenêtre 3D qu'une fois Godot
+            # RÉACTIF (trois réponses de suite en moins de 50 ms) — enfant
+            # d'un autre processus, elle lie sa file de messages à la nôtre :
+            # pendant le chargement de la 3D, SetParent/ShowWindow figeaient
+            # l'interface 10 s (rapports de gel du 12/10/2026)
+            if xid and sys.platform == "win32" and not self._win32_reactif(int(xid)):
+                self._godot_reactif_n = 0
+                xid = None
+                # elle existe mais charge encore : on patiente (90 s au plus)
+                t0 = getattr(self, "_godot_launch_t0", time.monotonic())
+                self._godot_embed_deadline = min(
+                    max(self._godot_embed_deadline, time.monotonic() + 3.0), t0 + 90.0)
+            elif xid and sys.platform == "win32":
+                self._godot_reactif_n = getattr(self, "_godot_reactif_n", 0) + 1
+                if self._godot_reactif_n < 3:
+                    xid = None
             if xid:
                 self._godot_embed_timer.stop()
                 self._godot_log("fenêtre 3D trouvée après %.1f s" % (
@@ -12644,6 +12660,21 @@ class GameWidget(QWidget):
         return {0: "unaware", 1: "system", 2: "per-monitor"}.get(int(val),
                                                                  str(val))
 
+    def _win32_reactif(self, hwnd: int) -> bool:
+        """La fenêtre `hwnd` (processus Godot) traite-t-elle ses messages ?
+        WM_NULL avec délai de 50 ms, abandon si elle est figée."""
+        try:
+            import ctypes
+            from ctypes import wintypes
+            res = wintypes.DWORD(0)
+            SMTO_ABORTIFHUNG = 0x0002
+            ok = ctypes.windll.user32.SendMessageTimeoutW(
+                wintypes.HWND(hwnd), 0x0000, 0, 0, SMTO_ABORTIFHUNG, 50,
+                ctypes.byref(res))
+            return bool(ok)
+        except Exception:
+            return True
+
     def _embed_win32_child(self, hwnd: int) -> None:
         """Reparente la fenêtre Godot (`hwnd`) en fenêtre ENFANT (WS_CHILD) de
         la fenêtre principale Qt via l'API Win32 SetParent. Une vraie fenêtre
@@ -12692,7 +12723,10 @@ class GameWidget(QWidget):
                               % ctypes.get_last_error())
             self._godot_child_hwnd = hwnd
             self._reposition_godot_embed()
-            user32.ShowWindow(hwnd, 5)  # SW_SHOW
+            # asynchrone : la fenêtre appartient au processus Godot ; un
+            # ShowWindow synchrone attend qu'il traite le message (gel du
+            # sim de 10 s pendant son chargement — rapports du 12/10/2026)
+            user32.ShowWindowAsync(hwnd, 5)  # SW_SHOW
             self._godot_log("fenêtre 3D embarquée (WS_CHILD) — OK")
             # La fenêtre vient d'être MONTRÉE : si un overlay est ouvert à
             # cet instant (écran titre au lancement, F1…), le masquage doit
@@ -12754,10 +12788,12 @@ class GameWidget(QWidget):
             try:
                 import ctypes
                 dpr = self.devicePixelRatioF()
-                ctypes.windll.user32.MoveWindow(
-                    self._godot_child_hwnd,
+                # SWP_ASYNCWINDOWPOS (0x4000) | SWP_NOZORDER (0x4) |
+                # SWP_NOACTIVATE (0x10) : sans attendre le processus Godot
+                ctypes.windll.user32.SetWindowPos(
+                    self._godot_child_hwnd, None,
                     int(x * dpr), int(y * dpr),
-                    int(ww * dpr), int(hh * dpr), True)
+                    int(ww * dpr), int(hh * dpr), 0x4000 | 0x4 | 0x10)
             except Exception:
                 pass
             return
@@ -12795,7 +12831,7 @@ class GameWidget(QWidget):
             try:
                 import ctypes
                 # 0 = SW_HIDE, 5 = SW_SHOW
-                ctypes.windll.user32.ShowWindow(
+                ctypes.windll.user32.ShowWindowAsync(
                     self._godot_child_hwnd, 0 if want_hidden else 5)
             except Exception:
                 pass
