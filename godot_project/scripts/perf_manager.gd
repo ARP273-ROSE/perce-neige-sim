@@ -78,6 +78,10 @@ var _t_retrait: float = 0.0
 
 func setup(p_main: Node, p_env: Environment, p_mode: String) -> void:
 	main = p_main
+	# plafond passé au lancement (--max-fps, vue embarquée sous XWayland
+	# sans V-Sync : 13/10/2026) — gardé : sans lui, la carte calculerait des
+	# centaines d'images pour rien
+	_ips_base = Engine.max_fps
 	_env = p_env
 	mode = p_mode if p_mode in ["auto", "high", "medium", "low"] else "auto"
 	_web = OS.has_feature("web")
@@ -270,8 +274,13 @@ func libelle(c: int) -> String:
 
 
 ## Plafond d'images par seconde : cran 6 (30 i/s) et retrait de la fenêtre.
+var _ips_base: int = 0
+
+
 func _appliquer_ips() -> void:
 	var ips: int = 30 if cran >= (6 if _web else 5) else 0
+	if _ips_base > 0:
+		ips = _ips_base if ips == 0 else mini(ips, _ips_base)
 	if _retrait == 2:
 		ips = IPS_REDUITE
 	elif _retrait == 1:

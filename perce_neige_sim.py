@@ -16413,8 +16413,8 @@ class GameWidget(QWidget):
               "Ski : dehors sur la neige, E pour chausser. Q/D tourner, Z pousser, S chasse-neige, Maj schuss ; pistes balisées, le fantôme à battre jusqu'à Val Claret."),
             T("Train stopped in the tunnel: U (or EVACUATE) removes the yellow emergency panels either side of the windshield; down onto the track, the right-hand service stairs lead to a station or to the mid-tunnel gallery and its piste. The AUTO dashboard button (or the skier's EXPLOIT. button) still toggles auto-operation.",
               "Rame arrêtée en tunnel : U (ou ÉVACUER) enlève les panneaux jaunes d'issue de secours de part et d'autre du pare-brise ; sur la voie, l'escalier de droite ramène en gare ou à la galerie du milieu et sa piste ; tant qu'il est à pied sur la voie, la rame est immobilisée. Le bouton AUTO du tableau de bord (ou EXPLOIT. du skieur) commande toujours l'exploitation."),
-            T("F4: 3D cabin view. On Linux Wayland the app switches to XWayland to embed it; PERCE_NEIGE_KEEP_WAYLAND=1 keeps Wayland (separate window) — the default with the NVIDIA driver.",
-              "F4 : vue cabine 3D. Sous Linux Wayland l'application passe en XWayland pour l'intégrer ; PERCE_NEIGE_KEEP_WAYLAND=1 pour rester en Wayland (fenêtre séparée) — par défaut avec le pilote NVIDIA."),
+            T("F4: 3D cabin view. On Linux Wayland the app switches to XWayland to embed it; PERCE_NEIGE_KEEP_WAYLAND=1 keeps Wayland (separate window).",
+              "F4 : vue cabine 3D. Sous Linux Wayland l'application passe en XWayland pour l'intégrer ; PERCE_NEIGE_KEEP_WAYLAND=1 pour rester en Wayland (fenêtre séparée)."),
         ]
 
         # --- mesure d'abord : la boîte prend la hauteur de son contenu
@@ -17525,23 +17525,14 @@ def _force_x11_if_wayland() -> None:
     KDE/Wayland: xcb+x11 reparents, every other combination does not).
 
     Set PERCE_NEIGE_KEEP_WAYLAND=1 to keep the native Wayland backend and
-    accept a detached 3D window. With the proprietary NVIDIA driver this is
-    the DEFAULT (embedding under XWayland is unusable there, see below);
-    PERCE_NEIGE_EMBED=1 forces the embed anyway.
+    accept a detached 3D window. Embedded under XWayland, the viewer runs
+    without V-Sync and capped at 60 fps (GodotBridge._platform_engine_args):
+    with V-Sync, the presentation of the reparented window stalled the GPU
+    at 100 % (KDE Wayland + NVIDIA, 13/10/2026).
     """
     if not sys.platform.startswith("linux"):
         return
     if os.environ.get("PERCE_NEIGE_KEEP_WAYLAND"):
-        return
-    # Pilote NVIDIA propriétaire : la 3D embarquée sous XWayland est
-    # inutilisable (13/10/2026, KDE Wayland, RTX 5070 Ti, pilote 610) — en
-    # Vulkan, la présentation de la fenêtre reparentée sature la carte à
-    # 100 % (1 i/s, tout le bureau rame, même vue cachée) ; en OpenGL, la
-    # fenêtre 3D recouvre le pupitre et un son parasite apparaît. Fenêtre
-    # séparée en Wayland natif : 60 i/s, carte à 10-25 %. On garde donc
-    # Wayland ; PERCE_NEIGE_EMBED=1 force l'ancien embarquement.
-    if (os.path.exists("/proc/driver/nvidia/version")
-            and not os.environ.get("PERCE_NEIGE_EMBED")):
         return
     if os.environ.get("QT_QPA_PLATFORM"):
         return                                  # explicit choice wins (incl. offscreen)

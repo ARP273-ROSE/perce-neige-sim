@@ -164,6 +164,12 @@ class GodotBridge:
         """
         if not sys.platform.startswith("linux"):
             return []
+        if os.environ.get("QT_QPA_PLATFORM") == "xcb" and os.environ.get("WAYLAND_DISPLAY"):
+            # embarquée sous XWayland : sans V-Sync, plafonnée à 60 i/s — la
+            # présentation synchronisée d'une fenêtre reparentée y attend
+            # sans fin (KDE Wayland + NVIDIA, 13/10/2026 : carte saturée à
+            # 100 %, 1 i/s, bureau qui rame ; sans V-Sync : fluide, 14 %)
+            return ["--display-driver", "x11", "--disable-vsync", "--max-fps", "60"]
         if (os.environ.get("QT_QPA_PLATFORM") == "xcb"
                 or not os.environ.get("WAYLAND_DISPLAY")):
             return ["--display-driver", "x11"]
