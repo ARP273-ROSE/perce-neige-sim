@@ -2054,10 +2054,23 @@ func _securite_skieur() -> void:
 						# rattache à la voiture, ce n'est pas un choc (retour d'utilisateur,
 						# 09/10/2026 : « arrivé à la cloison qui sépare les deux
 						# wagons, il me dit que je me suis fait percuter »)
-						if absf(loc.x) < 1.45 and loc.y > TrainBodyBuilder.Y_FLOOR - 0.45 \
+						# Portes fermées, il est forcément DANS la caisse (jusqu'au
+						# vantail, 1,68 m) : glissé un peu sous le plancher par une
+						# fente, on le repose dedans au lieu de le « percuter » et
+						# de l'envoyer en gare (retour d'utilisateur, 13/10/2026)
+						var fermees: bool = not (physics.door_leaves_open if c == cabin
+							else physics.ghost_doors_open())
+						if (absf(loc.x) < 1.45 or fermees) and loc.y > TrainBodyBuilder.Y_FLOOR - 0.6 \
 								and loc.y < TrainBodyBuilder.Y_CENTER + 1.4 \
 								and ci < c._interior_cars.size():
 							var v: Node3D = c._interior_cars[ci]
+							if loc.y < TrainBodyBuilder.Y_FLOOR - 0.10:
+								var lv: Vector3 = v.global_transform.affine_inverse() * skieur.global_position
+								lv.x = clampf(lv.x, -1.35, 1.35)
+								lv.y = TrainBodyBuilder.Y_FLOOR + Cabin.STEP_LIFT + 0.12
+								skieur.global_position = v.global_transform * lv
+								skieur.velocity = Vector3.ZERO
+								print("[Skieur] glissé sous le plancher, portes fermées : reposé dans la voiture")
 							skieur.support = v
 							skieur._support_xf = v.global_transform
 							return
@@ -2065,8 +2078,15 @@ func _securite_skieur() -> void:
 						return
 	elif is_instance_valid(skieur.support):
 		var loc2: Vector3 = skieur.support.global_transform.affine_inverse() * skieur.global_position
-		if loc2.y < TrainBodyBuilder.Y_FLOOR - 0.10 and absf(loc2.x) < 1.15 \
-				and absf(loc2.z) < car_len * 0.5 - 0.7:
+		# portes fermées, jusqu'au vantail (1,68 m) : sinon on tombait par la
+		# baie d'une porte, sous la rame, sur le quai (13/10/2026)
+		var r_sup: Cabin = cabin if cabin != null and cabin._interior_cars.has(skieur.support) else cabin_ghost
+		var x_max: float = 1.15
+		if r_sup != null and not (physics.door_leaves_open if r_sup == cabin else physics.ghost_doors_open()):
+			x_max = 1.70
+		if loc2.y < TrainBodyBuilder.Y_FLOOR - 0.10 and loc2.y > TrainBodyBuilder.Y_FLOOR - 1.0 \
+				and absf(loc2.x) < x_max and absf(loc2.z) < car_len * 0.5 - 0.3:
+			loc2.x = clampf(loc2.x, -1.35, 1.35)
 			loc2.y = TrainBodyBuilder.Y_FLOOR + Cabin.STEP_LIFT + 0.12
 			skieur.global_position = skieur.support.global_transform * loc2
 			skieur.velocity = Vector3.ZERO

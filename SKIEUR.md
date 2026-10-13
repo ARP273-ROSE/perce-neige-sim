@@ -190,7 +190,12 @@ funiculaire), les sauts (il reste collé au sol), les chutes.
   2e essai de `_monter_marche`, sol admis dès normale 0,6 : du fond de la
   fosse il enjambe le rail, à 1,04 m) ; seuils de porte en collision portes fermées
   (`CollisionsJeu.set_seuils` — la fente palier 1,20 / vantail 1,50 faisait
-  tomber sous la rame) ; à bord, passé sous le plancher → reposé ; roues et
+  tomber sous la rame ; depuis la 1.19.27 le seuil va d'un tenant de 1,20 au
+  vantail fermé, 1,68, sur toute la baie) ; à bord, passé sous le plancher →
+  reposé (portes fermées : jusqu'au vantail, et jamais « percuté » dans sa
+  caisse ; la voiture sous ses pieds reste son support même si le rayon
+  touche la rampe du quai) ; pans bas devant les issues fermés hors
+  évacuation (`pans_issues`) ; roues et
   châssis de bogie de sa rame cachés (`Cabin.set_bogies_visibles`, nœuds
   `Bogie1…4` hors fusion) ; une rame en marche qui l'atteint à pied le
   percute (`_skieur_percute`, retour au refuge). Tout dans
