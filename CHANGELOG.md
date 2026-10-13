@@ -18,6 +18,32 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.19.27** — retour d'utilisateur du 13/10/2026 : « le gars est passé à
+travers la cloison du funi de l'intérieur vers l'extérieur alors que les
+portes n'étaient pas ouvertes, et il est coincé dans le quai ».
+- Cause : des trous dans le plancher de collision des voitures. Le skieur y
+  tombait sous la rame, puis il était soit repris par le rattrapage de chute
+  (posé sur le dernier sol fixe, le quai), soit « percuté » et renvoyé en
+  gare. Sonde : skieur qui marche au hasard dans la rame en fin de trajet et
+  à l'arrivée, portes fermées → sorti de la caisse 12 fois sur 16 avant,
+  0 à 1 fois sur 16 après.
+- Seuil des portes fermées d'un seul tenant, du bord du plancher (1,20 m)
+  au vantail (1,68 m), sur toute la baie. Avant, il restait deux fentes de
+  18 cm (plancher-seuil, et seuil-vantail depuis que le vantail est au nu de
+  la caisse en 1.19.21), plus 8 cm sans sol à chaque bout de baie.
+- Plancher des bouts de voiture côté soufflet : il manquait 38 cm entre le
+  dernier palier et la cloison.
+- Pans bas des flancs, devant les issues de secours de la face : fermés hors
+  évacuation, ôtés avec les D (`pans_issues`).
+- Au droit d'une porte, le rayon sous les pieds touchait la rampe du quai,
+  qui est au niveau du plancher, et le skieur perdait la rame comme support.
+  La voiture juste sous ses pieds reste maintenant son support tant qu'il
+  est dans sa caisse.
+- Filet de sécurité : portes fermées, un skieur glissé sous le plancher
+  jusqu'au vantail est reposé dans la voiture au lieu d'être « percuté ».
+- Vérifié : bancs quai, skieur, issues, passage, portes, secours, skieur_auto
+  et boucle_salle.
+
 **v1.19.26** — rapports de gel d'un poste Windows 11 : 4 gels de 10 à 14 s
 en 24 h, encore présents en 1.19.22, la pile du fil graphique arrêtée dans
 `app.exec()` — blocage dans du code natif, que la pile Python ne montre pas.

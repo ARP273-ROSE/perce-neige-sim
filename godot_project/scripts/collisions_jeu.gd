@@ -160,8 +160,12 @@ func assurer_autour(p: Vector3) -> void:
 
 ## Panneaux d'issue de secours d'une rame : retirés (plus de collision) ou
 ## remis.
+## Pans bas des flancs, devant les issues : fermés hors évacuation
+var pans_issues: Dictionary = {}
+
+
 func set_issues(c: Cabin, retirees: bool) -> void:
-	for cs in issues.get(c, []):
+	for cs in issues.get(c, []) + pans_issues.get(c, []):
 		if is_instance_valid(cs):
 			(cs as CollisionShape3D).disabled = retirees
 
@@ -294,7 +298,7 @@ func set_paliers_quai(en_gare: bool) -> void:
 			(cs as CollisionShape3D).disabled = not en_gare
 
 
-## Seuils des portes (x 1,18-1,64) : en collision portes FERMÉES seulement.
+## Seuils des portes (x 1,18-1,70) : en collision portes FERMÉES seulement.
 ## Le vantail fermé est à 1,50 m de l'axe et le palier s'arrête à 1,20 :
 ## en s'appuyant sur une porte fermée en tunnel, on tombait par la fente
 ## (0,30 m, la largeur du skieur) sous la rame — « passer dans une faille
@@ -358,11 +362,18 @@ func _rame(c: Cabin) -> void:
 			if TrainBodyBuilder.KINDS[k] == "door":
 				paliers_quai.append(_boite(voiture, Vector3(3.66, 0.15, pas + 0.02),
 					xf * Transform3D(Basis.IDENTITY, Vector3(0.0, -0.05, 0.0))))
-				# (10 cm seulement, à 1,40-1,50 : la fente restante, 20 cm, ne
-				# laisse plus passer les 28 cm du skieur ; plus large, le seuil
-				# barrait la PASSERELLE à qui longe la rame arrêtée, 08/10/2026)
+				# d'un tenant du bord du plancher (1,20 m) à la face intérieure
+				# du vantail fermé (1,68 m) : le seuil d'origine (1,38-1,50)
+				# laissait deux fentes de 18 cm (plancher-seuil, et seuil-vantail
+				# depuis que le vantail est au nu de la caisse, 12/10/2026) où
+				# le skieur tombait sous la rame, puis le rattrapage de chute le
+				# reposait sur le quai — « passé à travers la cloison, portes
+				# fermées » (retour d'utilisateur, 13/10/2026). Il ne dépasse
+				# pas de la caisse : la passerelle reste libre
 				for side_s in [-1.0, 1.0]:
-					var seuil: CollisionShape3D = _boite(voiture, Vector3(0.12, 0.15, pas + 0.02),
+					# … et sur toute la longueur de la baie (± 8 cm de tolérance),
+					# sinon on tombait au bout du seuil, au bord de la baie
+					var seuil: CollisionShape3D = _boite(voiture, Vector3(0.52, 0.15, pas + 0.18),
 						xf * Transform3D(Basis.IDENTITY, Vector3(side_s * 1.44, -0.05, 0.0)))
 					seuil.disabled = not _seuils_fermes
 					seuils.append(seuil)
@@ -435,6 +446,20 @@ func _rame(c: Cabin) -> void:
 				var morceaux: Array = [[z0, z1]]
 				if not trous.is_empty():
 					morceaux = _hors(z0, z1, trous)
+				# … mais FERMÉS hors évacuation : pans à part, ôtés avec les D
+				# par set_issues — on sortait par là de la rame, en gare,
+				# portes fermées (13/10/2026)
+				if y_bas < TrainBodyBuilder.Y_FLOOR + 0.6 and (idx == 0 or idx == c.car_count - 1):
+					if not pans_issues.has(c):
+						pans_issues[c] = []
+					var bouts: Array = []
+					if idx == 0:
+						bouts.append([z0, z0 + 1.1])
+					if idx == c.car_count - 1:
+						bouts.append([z1 - 1.1, z1])
+					for bo in bouts:
+						(pans_issues[c] as Array).append(_boite(voiture, Vector3(corde, 0.14, float(bo[1]) - float(bo[0])),
+							Transform3D(base, centre + Vector3(0.0, 0.0, (float(bo[0]) + float(bo[1])) * 0.5))))
 				for mo in morceaux:
 					var l: float = float(mo[1]) - float(mo[0])
 					if l < 0.02:
@@ -464,6 +489,11 @@ func _rame(c: Cabin) -> void:
 				var y_top: float = TrainBodyBuilder.Y_CENTER + 1.7
 				_boite(voiture, Vector3(2.0 * dl, y_top - y_bh, 0.10), Transform3D(Basis.IDENTITY,
 					Vector3(0.0, (y_bh + y_top) * 0.5, ze)))
+				# plancher du bout de voiture, du dernier palier (38 cm avant
+				# la cloison) à la cloison : on y tombait sous la rame
+				var y_pal: float = TrainBodyBuilder.Y_FLOOR + Cabin.STEP_LIFT
+				_boite(voiture, Vector3(2.5, 0.15, 0.60), Transform3D(Basis(Vector3.RIGHT, tilt),
+					Vector3(0.0, y_pal - 0.05, ze - e * 0.30)))
 				# dans l'intervalle (côté arrière de la voiture) : plancher et
 				# parois du soufflet, sinon on tombait sur la voie
 				if e > 0.0:

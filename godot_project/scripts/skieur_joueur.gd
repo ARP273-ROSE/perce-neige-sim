@@ -929,6 +929,21 @@ func _trouver_support() -> void:
 	var o: Object = hit["collider"]
 	if o != null and o is Node and (o as Node).has_meta("vehicule"):
 		trouve = (o as Node).get_meta("vehicule") as Node3D
+	else:
+		# le quai est au niveau du plancher de la rame : dans la baie d'une
+		# porte, le rayon touchait la rampe du quai un peu au-dessus du
+		# seuil → plus de support, la rame repartait sans lui ou le
+		# « percutait » (retour d'utilisateur, 13/10/2026 : « passé à travers
+		# la cloison, portes fermées, coincé dans le quai »). Une voiture
+		# juste sous ses pieds, et lui dans sa caisse, reste son support
+		rq.collision_mask = CollisionsJeu.COUCHE_VEHICULE
+		var hv: Dictionary = get_world_3d().direct_space_state.intersect_ray(rq)
+		if not hv.is_empty() and (hv["position"] as Vector3).y > (hit["position"] as Vector3).y - 0.15:
+			var ov: Object = hv["collider"]
+			if ov != null and ov is Node and (ov as Node).has_meta("vehicule"):
+				var vv: Node3D = (ov as Node).get_meta("vehicule") as Node3D
+				if absf((vv.global_transform.affine_inverse() * p).x) < 1.70:
+					trouve = vv
 	if trouve != support:
 		support = trouve
 		if support != null:
