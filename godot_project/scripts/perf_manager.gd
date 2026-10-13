@@ -327,6 +327,11 @@ func _process(_delta: float) -> void:
 		return
 	var dt: float = float(t_us - _t_prec_us) / 1.0e6
 	_t_prec_us = t_us
+	# image de plus d'une seconde : la 3D a calé. Embarquée sous Windows, sa
+	# fenêtre est l'enfant de celle du simulateur, qui peut caler avec elle →
+	# on l'écrit, heure comprise, pour la croiser avec les rapports de gel
+	if dt > 1.0:
+		_log("[Gel3D] image de %.1f s, finie à %s" % [dt, Time.get_time_string_from_system()])
 	_horloge += dt
 	_t_retrait += dt
 	if _t_retrait >= 1.0:

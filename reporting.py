@@ -481,6 +481,10 @@ class Vigie:
         # ainsi remontes d'un poste sain : « fin du gel apres 23 573 s »,
         # soit exactement les six heures et demie d'allumage de l'ordinateur.
         self._avertissement_sans_battement = False
+        # Fonction facultative appelée DEPUIS LA VIGIE au début d'un gel :
+        # renvoie un dict de contexte (fenêtre 3D réactive ?, fin du journal…)
+        # — la pile Python seule ne dit rien quand le blocage est natif.
+        self.contexte = None
 
     def battre(self) -> None:
         """À appeler depuis le fil graphique, à intervalle régulier."""
@@ -520,10 +524,16 @@ class Vigie:
             if retard >= self.seuil and not self._signale:
                 self._signale = True
                 self._debut_gel = self._dernier
+                ctx = {}
+                if self.contexte is not None:
+                    try:
+                        ctx = {'contexte': self.contexte()}
+                    except Exception as e:
+                        ctx = {'contexte': {'erreur': repr(e)[:200]}}
                 try:
                     envoyer('gel', resume=f"interface figée depuis {retard:.0f} s",
                             retard_s=round(retard, 1), phase='debut',
-                            piles=self._piles())
+                            piles=self._piles(), **ctx)
                 except Exception:
                     log.warning("Rapport de gel impossible", exc_info=True)
 

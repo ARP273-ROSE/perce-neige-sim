@@ -9285,6 +9285,50 @@ class GameWidget(QWidget):
                     "deceleration_sous_1_ms",
                     getattr(self, "_diag_releves", []) + [snd.diagnostic(v_abs)])
 
+    def _contexte_gel(self) -> dict:
+        """Contexte joint au rapport de gel — appelé depuis le fil de la
+        VIGIE pendant que l'interface est figée : aucun appel Qt, seulement
+        des lectures d'attributs et de l'API Win32 avec délai. La pile du fil
+        graphique ne montre que `app.exec()` quand le blocage est natif ;
+        on veut savoir si la fenêtre 3D (autre processus, enfant de la
+        nôtre) était elle-même figée à ce moment-là."""
+        ctx = {"mode": str(getattr(self.state, "run_mode", "")),
+               "vue_cabine": getattr(self, "_cabin_view_state", None),
+               "vue_3d_cachee": bool(getattr(self, "_godot_embed_hidden", False))}
+        hwnd = getattr(self, "_godot_child_hwnd", None)
+        ctx["fenetre_3d_embarquee"] = bool(hwnd)
+        if hwnd and sys.platform == "win32":
+            try:
+                import ctypes
+                from ctypes import wintypes
+                u = ctypes.windll.user32
+                res = wintypes.DWORD(0)
+                t0 = time.monotonic()
+                ok = u.SendMessageTimeoutW(wintypes.HWND(hwnd), 0x0000, 0, 0,
+                                           0x0002, 1000, ctypes.byref(res))
+                ctx["fenetre_3d_reactive"] = bool(ok)
+                ctx["fenetre_3d_reponse_ms"] = round((time.monotonic() - t0) * 1000)
+                ctx["fenetre_3d_figee_windows"] = bool(
+                    u.IsHungAppWindow(wintypes.HWND(hwnd)))
+                fg = u.GetForegroundWindow()
+                ctx["premier_plan"] = ("3d" if fg == hwnd else
+                                       "sim" if fg == u.GetAncestor(wintypes.HWND(
+                                           getattr(self, "_godot_parent_hwnd", 0) or 0), 2)
+                                       else "autre")
+            except Exception as e:
+                ctx["erreur_win32"] = repr(e)[:200]
+        try:
+            import reporting
+            chemin = self._godot_bridge.logfile
+            with open(chemin, "rb") as f:
+                f.seek(0, 2)
+                f.seek(max(0, f.tell() - 6000))
+                lignes = f.read().decode("utf-8", "replace").splitlines()[1:]
+            ctx["journal_3d"] = reporting.anonymiser("\n".join(lignes[-30:]))[-3000:]
+        except Exception:
+            pass
+        return ctx
+
     def _envoyer_diag_son(self, motif: str, releves: list) -> None:
         try:
             import reporting
@@ -12788,6 +12832,7 @@ class GameWidget(QWidget):
             WS_EX_APPWINDOW = 0x00040000
             WS_EX_TOOLWINDOW = 0x00000080
             parent = int(self.winId())
+            self._godot_parent_hwnd = parent
             self._godot_log(
                 "SetParent hwnd=0x%X (dpi=%s) → parent=0x%X (dpi=%s)" % (
                     hwnd, self._win32_dpi_awareness(user32, hwnd),
@@ -17677,6 +17722,7 @@ def main() -> None:
     if rapports is not None:
         try:
             vigie = rapports.Vigie(seuil=10.0, periode=2.0)
+            vigie.contexte = win.game._contexte_gel
             vigie.demarrer()
             minuteur = QTimer(win)
             minuteur.timeout.connect(vigie.battre)
