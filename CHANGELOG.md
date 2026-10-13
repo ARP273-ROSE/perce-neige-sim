@@ -18,6 +18,19 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.19.25** — retour d'utilisateur du 13/10/2026 : « réintègre-moi la vue 3D dans le
+logiciel ».
+- La vue 3D est de nouveau EMBARQUÉE sous Wayland (XWayland), pilote
+  NVIDIA compris : la cause du 1 i/s était le V-Sync — la présentation
+  synchronisée de la fenêtre reparentée attendait sans fin, carte saturée
+  à 100 %. Embarquée sous XWayland, la 3D tourne désormais sans V-Sync,
+  plafonnée à 60 i/s (`--disable-vsync --max-fps 60`) : essai sur le PC
+  de l'utilisateur, fluide, pupitre visible, son normal, carte à ~14 %.
+- Le gestionnaire de performances respecte ce plafond (il le remettait à
+  « illimité » au démarrage).
+- La fenêtre séparée par défaut de la 1.19.24 est retirée ;
+  `PERCE_NEIGE_KEEP_WAYLAND=1` la garde au choix.
+
 **v1.19.24** — mesures faites sur le PC Manjaro de l'utilisateur, 13/10/2026 (KDE Wayland,
 RTX 5070 Ti, pilote NVIDIA 610) : « 1 image/s, ça fait ramer tout le PC ».
 - Cause : la vue 3D EMBARQUÉE sous XWayland. Seule, la 3D tient 60 i/s
