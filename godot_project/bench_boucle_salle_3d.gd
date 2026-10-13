@@ -20,6 +20,9 @@ var _couru: bool = false
 var _t_assis: float = -1.0
 var _pistes: bool = false
 var _attend_depart: bool = false
+var _levers: int = 0
+var _d_banc: float = -1.0
+var _etait_assis: bool = false
 
 
 func _initialize() -> void:
@@ -143,7 +146,11 @@ func _tick() -> void:
 			ph2.doors_open, ga._ouverture, ph2.trip_started, ph2.finished])
 	if q.y > 22.0:
 		_sorti = true
+	if _etait_assis and not sk.assis:
+		_levers += 1
+	_etait_assis = sk.assis
 	if sk.assis and not _assis:
+		_d_banc = q.distance_to(SkieurAuto.BANC)
 		_assis = true
 		_t_assis = _t
 		print("  %s : assis sur le banc (%.1f ; %.1f)" % [DomaineSkiable._mmss(_t), q.x, q.y])
@@ -152,6 +159,11 @@ func _tick() -> void:
 	if sa.etape == SkieurAuto.Etape.A_BORD or _t > 1400.0:
 		_verif("resté dans la salle (pas ressorti sur la place)", not _sorti)
 		_verif("assis sur un banc pendant que la rame est en ligne", _assis)
+		# retour d'utilisateur, 13/10/2026 : « il n'arrive pas à s'asseoir sur le
+		# banc, il rentre dedans et repart » — assis pile devant la planche,
+		# et il ne se relève qu'une fois, pour la rame
+		_verif("assis SUR la planche (calé devant le banc)", _d_banc >= 0.0 and _d_banc < 0.15, "%.2f m du point" % _d_banc)
+		_verif("relevé une seule fois avant de monter", _levers <= 1, "%d" % _levers)
 		_verif("couru à la rame à l'ouverture du quai", _couru)
 		_verif("monté à bord", sa.etape == SkieurAuto.Etape.A_BORD and sk.support != null, DomaineSkiable._mmss(_t))
 		_verif("aucun déblocage", sa.debloquages == 0, "%d" % sa.debloquages)

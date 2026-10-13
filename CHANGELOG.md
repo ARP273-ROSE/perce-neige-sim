@@ -18,6 +18,16 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.19.28** — retour d'utilisateur du 13/10/2026 (capture) : « en BOUCLE, il
+n'arrive pas à s'asseoir sur le banc quand il rentre dans la gare, il rentre
+dedans et repart ».
+- Le chemin tient le skieur pour arrivé à 35 cm du point devant le banc ;
+  arrêté plus en avant, il s'asseyait dans le vide devant la planche, à
+  moitié dedans. Il est maintenant calé pile au point avant de s'asseoir :
+  bassin au milieu de la planche.
+- Banc `bench_boucle_salle_3d` : assis à moins de 15 cm du point et relevé
+  une seule fois avant de monter (pour la rame).
+
 **v1.19.27** — retour d'utilisateur du 13/10/2026 : « le gars est passé à
 travers la cloison du funi de l'intérieur vers l'extérieur alors que les
 portes n'étaient pas ouvertes, et il est coincé dans le quai ».

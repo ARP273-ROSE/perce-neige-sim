@@ -189,6 +189,15 @@ func tick(delta: float) -> void:
 				elif not _attente:
 					_attente = true
 				elif not sk.assis and _banc and not _sur_quai_bas(sk.global_position):
+					# calé pile devant le banc : le chemin s'arrête à 35 cm du
+					# point, et il s'asseyait dans le vide devant la planche
+					# (retour d'utilisateur, 13/10/2026 : « il n'arrive pas à
+					# s'asseoir sur le banc, il rentre dedans »)
+					var cible: Vector3 = main.station_halls.gare_aval._p2(BANC)
+					var q: Vector3 = sk.global_position
+					if Vector2(q.x - cible.x, q.z - cible.z).length() < 1.2:
+						sk.global_position = Vector3(cible.x, q.y, cible.z)
+						sk.velocity = Vector3.ZERO
 					sk.asseoir(_cap_banc())
 			if _attente and t > DELAI_MAX[Etape.VERS_RAME]:
 				t = 0.0               # la rame met du temps : on attend encore
