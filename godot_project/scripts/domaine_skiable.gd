@@ -389,6 +389,20 @@ func sur_piste(q: Vector2, r_max: float = 80.0) -> Vector2:
 ## à l'autre, quand ils sont à moins de 35 m ; coût = longueur, ×25 en
 ## montée (on ne remonte pas une piste) ; Dijkstra. Renvoie les points
 ## (x, z), vide si aucun chemin.
+## Zones à éviter : [centre, axe (unitaire), demi-longueur le long de l'axe,
+## demi-largeur] (emprise de la gare du haut, posée par main).
+var zones_interdites: Array = []
+
+
+func _interdit(q: Vector2) -> bool:
+	for z in zones_interdites:
+		var d: Vector2 = q - (z[0] as Vector2)
+		var ax: Vector2 = z[1]
+		if absf(d.dot(ax)) < float(z[2]) and absf(d.dot(Vector2(-ax.y, ax.x))) < float(z[3]):
+			return true
+	return false
+
+
 func itineraire(depart: Vector2, arrivee: Vector2) -> PackedVector2Array:
 	var pos: PackedVector2Array = PackedVector2Array()
 	var haut: PackedFloat32Array = PackedFloat32Array()
@@ -404,6 +418,9 @@ func itineraire(depart: Vector2, arrivee: Vector2) -> PackedVector2Array:
 				for j in range(1, segs + 1):
 					sous.append(pts[i - 1].lerp(pts[i], float(j) / segs))
 			for q in sous:
+				if _interdit(q):
+					prec = -1         # la piste est coupée dans l'emprise
+					continue
 				pos.append(q)
 				haut.append(relief.hauteur(q.x, q.y) if relief != null else 0.0)
 				voisins.append([])
@@ -424,7 +441,8 @@ func itineraire(depart: Vector2, arrivee: Vector2) -> PackedVector2Array:
 		for dx in [-1, 0, 1]:
 			for dz in [-1, 0, 1]:
 				for m in grille.get(c + Vector2i(dx, dz), []):
-					if m > n and pos[m].distance_to(pos[n]) < 35.0 and not m in voisins[n]:
+					if m > n and pos[m].distance_to(pos[n]) < 35.0 and not m in voisins[n] \
+							and not _interdit((pos[m] + pos[n]) * 0.5):
 						voisins[n].append(m)
 						voisins[m].append(n)
 	# extrémités : les nœuds les plus proches
