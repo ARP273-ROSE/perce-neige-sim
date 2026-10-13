@@ -28,6 +28,7 @@ var _compte: float = 0.0                  # vantaux : temps d'ouverture écoulé
 var _plante: float = 0.0                  # à ski, à l'arrêt loin de la gare (s)
 var _a_pied: float = 0.0                  # déchaussé pour se sortir d'un creux (s restantes)
 var _reste_ski: Array = []                # fin de l'itinéraire à ski, à finir à pied
+var _par_restaurant: bool = false         # ancien chemin terrasse → départ de la trace
 ## La rame qu'il prend : celle qui est à quai en bas, pilotée OU d'en face
 ## (09/10/2026, retour d'utilisateur : « si j'ai choisi de piloter la rame 2 mais que le
 ## skieur monte dans la 1, l'exploitation auto et la boucle ne marchent
@@ -437,6 +438,13 @@ func _poser(e: int) -> void:
 							Vector2(12.0, 48.0), Vector2(17.0, 49.5)]:
 						sk.chemin.append(gh._p2(v, 0.05))
 					sk.chemin.append_array([ep[0], ep[1]])
+					# au pied de l'escalier, il chausse et prend la piste devant
+					# lui (itinéraire de l'étape SKI depuis là) — avant, il
+					# contournait le restaurant à pied jusqu'au départ de la
+					# trace et, chaussé trop tôt, partait à reculons dans un
+					# creux (retour d'utilisateur, 13/10/2026)
+					if not _par_restaurant:
+						return
 					# puis à l'est du restaurant (emprise x 10-42 m), vers l'aval,
 					# jusqu'au départ de la trace : tout droit on butait sur le
 					# mur du chalet
@@ -515,7 +523,11 @@ func _poser(e: int) -> void:
 			# arrêté avant la fin de son itinéraire (plat) : il le finit à pied
 			# — tout droit vers la gare, il butait (arrivée par une autre
 			# piste depuis la porte Génépy, 13/10/2026)
-			sk.chemin = _densifier(_reste_ski, 3.0) if _reste_ski.size() > 1 else []
+			# (seulement s'il est au début de ce reste : rattrapé ailleurs après
+			# une chute, il refaisait à pied tout l'itinéraire)
+			var pres: bool = _reste_ski.size() > 1 and Vector2(sk.global_position.x - (_reste_ski[0] as Vector3).x,
+				sk.global_position.z - (_reste_ski[0] as Vector3).z).length() < 30.0
+			sk.chemin = _densifier(_reste_ski, 3.0) if pres else []
 			_reste_ski = []
 			if not sk.chemin.is_empty():
 				sk.tolerance_chemin = 1.5

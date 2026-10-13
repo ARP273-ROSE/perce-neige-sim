@@ -18,6 +18,23 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.19.30** — retour d'utilisateur du 13/10/2026 : « en haut, skieur activé sur la
+terrasse, je le mets en BOUCLE : il prend l'escalier, chausse et part en
+marche arrière dans un trou d'où il ne sort pas ».
+- Au pied de l'escalier de la terrasse, il chausse et prend la piste
+  devant lui (itinéraire calculé de là). Avant, il chaussait puis tentait de
+  contourner le restaurant à ski, en remontée.
+- Le « trou » est l'emprise de la gare du haut : le relief y est évidé sous
+  le bâtiment, et les pistes, Rabotch comprise, commencent dedans.
+  L'itinéraire à ski évite désormais cette emprise
+  (`DomaineSkiable.zones_interdites`, posée par main ; nœuds et liaisons).
+  Avant, il y tombait trois fois et finissait rattrapé à la gare d'en bas.
+- La fin d'itinéraire à pied (1.19.29) ne sert plus que s'il est au début
+  de ce reste. Rattrapé ailleurs, il refaisait tout le parcours à pied.
+- Vérifié : sonde terrasse (descente continue jusqu'à 90 km/h, sans arrêt),
+  bancs skieur_auto (boucle en 11 min 59 s), ski_expert, boucle_salle
+  (± --pistes).
+
 **v1.19.29** — retours d'utilisateur du 13/10/2026 (BOUCLE) : « il pédale dans la
 choucroute infiniment » (sur Rabotch, à 0 km/h) ; « en sortant par la porte
 Génépy, il ne peut pas continuer tout droit sur une des pistes devant lui

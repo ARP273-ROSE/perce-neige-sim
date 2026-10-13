@@ -1946,6 +1946,12 @@ func _entrer_skieur() -> void:
 		domaine.name = "DomaineSkiable"
 		add_child(domaine)
 		domaine.construire(relief)
+		# emprise de la gare du haut (relief évidé sous le bâtiment) : les
+		# itinéraires à ski l'évitent — la BOUCLE partie de la terrasse y
+		# tombait (retour d'utilisateur, 13/10/2026)
+		var xh: Transform3D = tunnel.transform_at(PNConstants.LENGTH)
+		var ax: Vector2 = Vector2(-xh.basis.z.x, -xh.basis.z.z).normalized()
+		domaine.zones_interdites = [[Vector2(xh.origin.x, xh.origin.z), ax, 55.0, 32.0]]
 	relief.set_hiver(1.0)
 	commandes_skieur.set_chausse(skieur.chausse)
 	mode_skieur = true
