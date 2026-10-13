@@ -18,6 +18,21 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.19.26** — rapports de gel d'un poste Windows 11 : 4 gels de 10 à 14 s
+en 24 h, encore présents en 1.19.22, la pile du fil graphique arrêtée dans
+`app.exec()` — blocage dans du code natif, que la pile Python ne montre pas.
+Version de diagnostic : elle ne corrige pas encore le gel, elle dit d'où il vient.
+- Le rapport de gel joint désormais un contexte relevé par la vigie elle-même
+  (`Vigie.contexte`, `GameWidget._contexte_gel`) : mode, vue, fenêtre 3D
+  embarquée ou non, sa réponse à WM_NULL (délai 1 s) et `IsHungAppWindow`,
+  fenêtre au premier plan, et les 30 dernières lignes du journal de la 3D.
+  Hypothèse à confirmer : la fenêtre 3D, enfant d'un autre processus, lie
+  sa file de messages à celle du simulateur — quand la 3D cale, le
+  simulateur cale avec elle.
+- La 3D note dans son journal chacune de ses images de plus d'une seconde,
+  avec l'heure (`[Gel3D]`), pour croiser avec l'horodatage des rapports.
+- Vérifié : tests PC 125 (nouveau `test_vigie_gel.py`).
+
 **v1.19.25** — retour d'utilisateur du 13/10/2026 : « réintègre-moi la vue 3D dans le
 logiciel ».
 - La vue 3D est de nouveau EMBARQUÉE sous Wayland (XWayland), pilote
