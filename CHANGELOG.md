@@ -18,6 +18,18 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.19.23** — retour d'utilisateur du 13/10/2026 : « toujours pas de son autre que
+l'ambiance sous Manjaro : pas de buzzer, de portes, d'annonces, de klaxon ».
+- Tous ces sons passent par des lecteurs QMediaPlayer (l'ambiance, elle,
+  par QSoundEffect). Avant chaque son ponctuel, le lecteur est remis sur
+  la sortie par défaut du système s'il n'y est pas (le dernier diagnostic
+  reçu de Manjaro, en 1.19.10, montrait des lecteurs sur une sortie vide).
+- Diagnostic son enrichi et envoyé aussi 3 s après le premier son
+  ponctuel de la session : pour chaque lecteur, état, statut, erreur,
+  sortie réelle et son identifiant ; les sorties vues par Qt ; le backend
+  audio. Banc sur le NAS : PulseAudio puis PipeWire 1.6.2 avec sortie
+  virtuelle — buzzer, annonce, portes et ambiance enregistrés.
+
 **v1.19.22** — rapports de gel du 12/10/2026 (poste Windows).
 - **Gels de 10 s au lancement de la vue 3D (Windows)** : la fenêtre Godot,
   enfant d'un autre processus, lie sa file de messages à celle du sim ;

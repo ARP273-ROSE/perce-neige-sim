@@ -4785,6 +4785,7 @@ class SoundSystem:
         # son se partageait entre les deux.
         self._sortie_id = None
         self._sortie_t = 0.0
+        self._premier_ponctuel_t = -1.0      # s depuis le premier son ponctuel (diagnostic)
         self._media_devices = None
         if self.enabled:
             try:
@@ -4888,6 +4889,7 @@ class SoundSystem:
         if self._seq_motion_path is not None and steps[0] == self._seq_motion_path:
             _fire_motion()          # ni annonce ni buzzer : le clip ouvre
         self._player.setSource(QUrl.fromLocalFile(str(steps[0])))
+        self._sur_sortie(self._player)
         self._player.play()
 
     def play_bilingual(self, group: str, cooldown: float = 30.0) -> None:
@@ -4933,6 +4935,7 @@ class SoundSystem:
             self._fx_player.setSource(QUrl.fromLocalFile(spath))
             self._fx_loaded_path = spath
         self._fx_player.setLoops(1)
+        self._sur_sortie(self._fx_player)
         self._fx_player.play()
 
     def play_door_buzzer(self) -> None:
@@ -4950,6 +4953,7 @@ class SoundSystem:
             self._door_player.setSource(QUrl.fromLocalFile(spath))
             self._door_loaded_path = spath
         self._door_player.setLoops(1)
+        self._sur_sortie(self._door_player)
         self._door_player.play()
 
     def play_door_motion(self) -> None:
@@ -4967,6 +4971,7 @@ class SoundSystem:
             self._door_player.setSource(QUrl.fromLocalFile(spath))
             self._door_loaded_path = spath
         self._door_player.setLoops(1)
+        self._sur_sortie(self._door_player)
         self._door_player.play()
 
     # Le clip de croisement (enregistrement cabine réel) couvre EXACTEMENT
@@ -5010,6 +5015,7 @@ class SoundSystem:
             pass
         self._cross_player.mediaStatusChanged.connect(
             self._on_crossing_status)
+        self._sur_sortie(self._cross_player)
         self._cross_player.play()
 
     def update_crossing(self, progress: float, speed_mps: float) -> None:
@@ -5029,6 +5035,7 @@ class SoundSystem:
                 return
             if (self._cross_player.playbackState()
                     != QMediaPlayer.PlaybackState.PlayingState):
+                self._sur_sortie(self._cross_player)
                 self._cross_player.play()
             rate = max(0.35, min(1.7, speed_mps / self.CROSSING_REF_SPEED))
             if abs(rate - self._cross_player.playbackRate()) > 0.03:
@@ -5071,6 +5078,7 @@ class SoundSystem:
             if self._fx_loaded_path != spath:
                 self._fx_player.setSource(QUrl.fromLocalFile(spath))
                 self._fx_loaded_path = spath
+            self._sur_sortie(self._fx_player)
             self._fx_player.play()
             # Ducke les boucles d'ambiance pendant le clip (il contient
             # déjà la montée moteur réelle) — relâché en fondu à sa fin.
@@ -5109,6 +5117,7 @@ class SoundSystem:
             self._fx_audio.setVolume(self._pre_duck_fx * 0.30)
         except Exception:
             pass
+        self._sur_sortie(self._horn_player)
         self._horn_player.play()
 
     def stop_horn(self) -> None:
@@ -5545,6 +5554,7 @@ class SoundSystem:
                 self._musique_player.setSource(source)
                 self._musique_chemin = cle
             self._musique_audio.setMuted(self.muted)
+            self._sur_sortie(self._musique_player)
             self._musique_player.play()
         except Exception:
             pass
@@ -5736,6 +5746,46 @@ class SoundSystem:
                     "position_ms": int(pl.position())}
             except Exception:
                 pass
+        # Lecteurs QMediaPlayer, en détail (13/10/2026 : sous Manjaro, ni
+        # buzzer, ni portes, ni annonces, ni klaxon — tous des QMediaPlayer —
+        # quand l'ambiance, en QSoundEffect, passe) : état, statut, erreur,
+        # sortie RÉELLE de chacun, et ce que Qt voit comme sorties
+        lecteurs = {}
+        for nom in ("_player", "_fx_player", "_horn_player", "_door_player",
+                    "_cross_player", "_mr_run", "_musique_player"):
+            pl = getattr(self, nom, None)
+            if pl is None:
+                continue
+            try:
+                ao = pl.audioOutput()
+                dev = ao.device() if ao is not None else None
+                lecteurs[nom.strip("_")] = {
+                    "etat": str(pl.playbackState()).split(".")[-1],
+                    "statut": str(pl.mediaStatus()).split(".")[-1],
+                    "erreur": str(pl.error()).split(".")[-1],
+                    "erreur_texte": pl.errorString()[:160],
+                    "a_du_son": bool(pl.hasAudio()),
+                    "source": Path(pl.source().toLocalFile()).name,
+                    "position_ms": int(pl.position()),
+                    "sortie": (dev.description() or "(vide)") if dev is not None else "(aucune)",
+                    "sortie_id": bytes(dev.id()).decode("utf-8", "replace")[:80] if dev is not None else "",
+                    "sortie_nulle": bool(dev.isNull()) if dev is not None else True,
+                    "volume": round(float(ao.volume()), 3) if ao is not None else None,
+                    "muet": bool(ao.isMuted()) if ao is not None else None,
+                }
+            except Exception as e:  # noqa: BLE001
+                lecteurs[nom.strip("_")] = {"exception": str(e)[:160]}
+        d["lecteurs"] = lecteurs
+        d["sorties_reprises"] = int(getattr(self, "_sorties_reprises", 0))
+        try:
+            from PyQt6.QtMultimedia import QMediaDevices
+            d["sorties_qt"] = [
+                {"nom": x.description(), "id": bytes(x.id()).decode("utf-8", "replace")[:80],
+                 "defaut": bool(x.isDefault())} for x in QMediaDevices.audioOutputs()]
+            d["backend_audio"] = os.environ.get("QT_AUDIO_BACKEND", "(auto)")
+            d["backend_media"] = os.environ.get("QT_MEDIA_BACKEND", "(auto)")
+        except Exception:
+            pass
         slow = self._ambient_wavs.get("ambient_slow")
         d["fichier_lente"] = {"nom": getattr(slow, "name", None),
                               "existe": bool(slow and slow.exists())}
@@ -5796,6 +5846,7 @@ class SoundSystem:
             # très brièvement l'ambiance de la rame au milieu de rien »)
             self._fx_audio.setVolume(0.70 * getattr(self, "_cabine_courant", 1.0))
             self._fx_oneshot_active = True
+            self._sur_sortie(self._fx_player)
             self._fx_player.play()
         except Exception:
             pass
@@ -5818,6 +5869,8 @@ class SoundSystem:
         # sortie par défaut changée sans changement de la liste des
         # périphériques (choix dans les réglages du système) : contrôle
         # toutes les 2 s, en plus du signal audioOutputsChanged
+        if getattr(self, "_premier_ponctuel_t", -1.0) >= 0.0:
+            self._premier_ponctuel_t += dt
         self._sortie_t = getattr(self, "_sortie_t", 0.0) + dt
         if self._sortie_t >= 2.0:
             self._sortie_t = 0.0
@@ -5856,6 +5909,26 @@ class SoundSystem:
                         o.play()
             except Exception:
                 pass
+
+    def _sur_sortie(self, lecteur) -> None:
+        """Avant un son ponctuel : le lecteur sur la sortie par défaut du
+        système, s'il n'y est pas (13/10/2026, Manjaro : buzzer, portes,
+        annonces et klaxon muets alors que l'ambiance passe — des lecteurs
+        restés sur une sortie vide). Marque aussi le premier son ponctuel
+        pour le diagnostic."""
+        if self._premier_ponctuel_t < 0.0:
+            self._premier_ponctuel_t = 0.0
+        try:
+            from PyQt6.QtMultimedia import QMediaDevices
+            dev = QMediaDevices.defaultAudioOutput()
+            ao = lecteur.audioOutput()
+            if ao is None or dev.isNull():
+                return
+            if ao.device().isNull() or bytes(ao.device().id()) != bytes(dev.id()):
+                ao.setDevice(dev)
+                self._sorties_reprises = getattr(self, "_sorties_reprises", 0) + 1
+        except Exception:
+            pass
 
     def peripheriques_utilises(self) -> list:
         """Noms des sorties réellement utilisées (diagnostic) : une seule
@@ -6006,6 +6079,7 @@ class SoundSystem:
             self._seq_on_motion = None
             cb()
         self._player.setSource(QUrl.fromLocalFile(str(nxt)))
+        self._sur_sortie(self._player)
         self._player.play()
 
     def _on_status(self, status) -> None:
@@ -9189,6 +9263,11 @@ class GameWidget(QWidget):
                 and "relance" not in envoye):
             envoye.add("relance")
             self._envoyer_diag_son("boucle_relancee", [snd.diagnostic(v_abs)])
+        # 3 s après le premier son ponctuel (buzzer, portes, annonce,
+        # klaxon) : un relevé, une fois par session (13/10/2026)
+        if ("ponctuel" not in envoye and getattr(snd, "_premier_ponctuel_t", -1.0) >= 3.0):
+            envoye.add("ponctuel")
+            self._envoyer_diag_son("premier_son_ponctuel", [snd.diagnostic(v_abs)])
         if ("decel" not in envoye and st.trip_started and not st.finished
                 and v_prev >= 1.0 and v_abs < 1.0
                 and getattr(self, "_diag_t", 0.0) <= 0.0):
