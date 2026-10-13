@@ -18,6 +18,28 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.19.29** — retours d'utilisateur du 13/10/2026 (BOUCLE) : « il pédale dans la
+choucroute infiniment » (sur Rabotch, à 0 km/h) ; « en sortant par la porte
+Génépy, il ne peut pas continuer tout droit sur une des pistes devant lui
+au lieu de revenir par-dessus la butte ? ».
+- Cause du sur-place : lancée à moins de 150 m de la gare du glacier, la
+  BOUCLE l'envoyait au départ de la trace, qui est parfois plus haut. Il
+  rechaussait aussitôt et tentait de remonter à ski, ce qui est impossible.
+  Lancée sur la neige sous le départ, elle descend directement
+  (`_sous_depart`). Planté 6 s skis aux pieds en allant au départ, il
+  déchausse et finit à pied. Planté 8 s en descente loin de la gare (creux,
+  contre-pente), il déchausse, marche 6 s le long de son itinéraire et
+  rechausse. Sonde : 15 départs le long de Rabotch et 20 autour de la gare
+  du glacier, arrêt maximal 8 s (avant : planté sans fin à 44 m de la gare).
+- Sorti par la porte Génépy, il chausse au pied de la porte et prend la
+  piste devant lui (itinéraire calculé de là). Avant, il repassait la butte
+  au-dessus du tunnel pour gagner le départ de la trace.
+- Arrêté sur le plat avant la fin de son itinéraire, il le finit à pied
+  jusqu'à la gare au lieu d'y aller tout droit (il butait 3 min, révélé par
+  le nouveau chemin).
+- Vérifié : bancs skieur_auto (boucle bouclée en 12 min), ski_expert,
+  boucle_salle (± --pistes), skieur.
+
 **v1.19.28** — retour d'utilisateur du 13/10/2026 (capture) : « en BOUCLE, il
 n'arrive pas à s'asseoir sur le banc quand il rentre dans la gare, il rentre
 dedans et repart ».
