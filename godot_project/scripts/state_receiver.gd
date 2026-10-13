@@ -138,6 +138,13 @@ func _apply(d: Dictionary) -> void:
 	# qualité 3D choisie au PC (menu Affichage) : auto / high / medium / low
 	if d.has("qualite_3d") and main != null and main.get("perf_manager") != null:
 		main.perf_manager.set_mode(str(d["qualite_3d"]))
+	# vue 3D masquée par le PC (F4 vers la vue dessinée, aide, pause…) : on
+	# ne dessine plus rien — sous Manjaro/XWayland la 3D cachée occupait
+	# la carte graphique à 100 % et faisait ramer tout le bureau (13/10/2026)
+	if d.has("vue_3d_cachee"):
+		var cachee: bool = bool(d["vue_3d_cachee"])
+		if RenderingServer.render_loop_enabled == cachee:
+			RenderingServer.render_loop_enabled = not cachee
 	# élasticité du câble (sim PC ≥ 1.15.51) : écarts des rames à la poulie
 	physics.el_x1 = _f(d, "el_x1", 0.0)
 	physics.el_v1 = _f(d, "el_v1", 0.0)
