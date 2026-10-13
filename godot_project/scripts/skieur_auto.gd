@@ -25,6 +25,9 @@ var boucles: int = 0
 var debloquages: int = 0                  # étapes trop longues (bancs)
 var _attente: bool = false                # attend la rame sur le palier
 var _compte: float = 0.0                  # vantaux : temps d'ouverture écoulé
+var _plante: float = 0.0                  # à ski, à l'arrêt loin de la gare (s)
+var _a_pied: float = 0.0                  # déchaussé pour se sortir d'un creux (s restantes)
+var _reste_ski: Array = []                # fin de l'itinéraire à ski, à finir à pied
 ## La rame qu'il prend : celle qui est à quai en bas, pilotée OU d'en face
 ## (09/10/2026, retour d'utilisateur : « si j'ai choisi de piloter la rame 2 mais que le
 ## skieur monte dans la 1, l'exploitation auto et la boucle ne marchent
@@ -79,13 +82,22 @@ func demarrer(m: Node) -> void:
 		e = Etape.VERS_RAME
 	elif main._skieur_en_gare() and p.distance_to(xf_h.origin) < 400.0:
 		e = Etape.VERS_SORTIE
-	elif p.distance_to(xf_h.origin) < 150.0:
+	elif p.distance_to(xf_h.origin) < 150.0 and not (sur_neige and _sous_depart(p)):
 		e = Etape.VERS_DEPART       # terrasse, abords de la gare du glacier
 	elif sur_neige and _i_aval(p) >= 0:
 		e = Etape.SKI               # sur les pistes : il chausse et descend
 	if sk.chausse and e != Etape.SKI:
 		main.basculer_ski()
 	_poser(e)
+
+
+## Déjà sur la neige SOUS le départ de la trace : il descend d'ici. Avant,
+## à moins de 150 m de la gare du glacier, il remontait au départ — skis
+## aux pieds, à 0 km/h, en poussant sur les bâtons sans fin (retour d'utilisateur,
+## 13/10/2026, sur Rabotch : « il pédale dans la choucroute infiniment »).
+func _sous_depart(p: Vector3) -> bool:
+	var p0: Vector2 = FantomesDonnees.points(DESCENTE)[0]
+	return _i_aval(p) >= 0 and p.y < main.relief.hauteur_sol(p0.x, p0.y) - 2.0
 
 
 ## Il veut descendre de la rame à quai : l'automate l'attend.
@@ -219,7 +231,18 @@ func tick(delta: float) -> void:
 			# de l'escalier de la terrasse (retour d'utilisateur, 12/10/2026 : « il chausse
 			# très tard, il marche jusqu'à retrouver un fantôme ») ; il gagne
 			# le départ de la trace à ski
-			if not sk.chausse and sk.support == null and sk.dehors(main.relief) \
+			# planté skis aux pieds (le chemin du départ remonte un peu) : il
+			# déchausse et finit à pied (retour d'utilisateur, 13/10/2026 : « il pédale
+			# dans la choucroute infiniment »)
+			_plante = _plante + delta if (sk.chausse and sk.vitesse_ski() < 0.6 and t > 3.0) else 0.0
+			if _plante > 6.0:
+				_plante = 0.0
+				var reste0: Array = sk.chemin.duplicate()
+				main.basculer_ski()
+				if not sk.chausse:
+					sk.chemin = reste0
+					_a_pied = 1.0e9       # à pied jusqu'au départ
+			if not sk.chausse and sk.support == null and sk.dehors(main.relief) and _a_pied <= 0.0 \
 					and main._gare_du_skieur() == 0 and not _sur_terrasse(sk.global_position):
 				var reste: Array = sk.chemin.duplicate()
 				main.basculer_ski()
@@ -235,7 +258,29 @@ func tick(delta: float) -> void:
 			var dep: Vector3 = main.station_halls.gare_aval.point_depart()[0]
 			var d_gare: float = q.distance_to(Vector2(dep.x, dep.z))
 			_compte = _compte + delta if (sk.vitesse_ski() < 0.8 and d_gare < 500.0) else 0.0
+			# planté loin de la gare (creux, contre-pente : à ski on ne remonte
+			# pas) : il déchausse, marche 6 s le long de son itinéraire, rechausse
+			_plante = _plante + delta if (sk.chausse and sk.vitesse_ski() < 0.6 and d_gare >= 500.0) else 0.0
+			if _plante > 8.0:
+				_plante = 0.0
+				var reste: Array = sk.chemin.duplicate()
+				main.basculer_ski()
+				if not sk.chausse:
+					sk.chemin = _densifier(reste, 3.0)
+					sk.tolerance_chemin = 1.5
+					_a_pied = 6.0
+			elif _a_pied > 0.0:
+				_a_pied -= delta
+				if _a_pied <= 0.0 and not sk.chausse and sk.dehors(main.relief):
+					var reste2: Array = sk.chemin.duplicate()
+					main.basculer_ski()
+					if sk.chausse:
+						sk.chemin = reste2
+						sk.tolerance_chemin = 0.35
+				elif _a_pied <= 0.0:
+					_a_pied = 1.0
 			if sk.chemin.is_empty() or d_gare < 12.0 or _compte > 4.0:
+				_reste_ski = sk.chemin.duplicate()
 				_poser(Etape.VERS_GARE)
 		Etape.VERS_GARE:
 			if sk.chemin.is_empty():
@@ -292,6 +337,8 @@ func _poser(e: int) -> void:
 	_attente = false
 	_banc = false
 	_compte = 0.0
+	_plante = 0.0
+	_a_pied = 0.0
 	var sk: SkieurJoueur = main.skieur
 	sk.course_auto = false
 	sk.tolerance_chemin = 0.35
@@ -399,7 +446,12 @@ func _poser(e: int) -> void:
 			if Vector2(q.x - seuil.x, q.z - seuil.z).length() < 6.0:
 				var aval: Vector3 = xg2.origin + xg2.basis.x * -5.0 + xg2.basis.z * 19.0
 				sk.chemin.append(Vector3(aval.x, 0.0, aval.z))
-				q = aval
+				# sorti par la porte Génépy : il chausse là et prend la piste
+				# devant lui (itinéraire de l'étape SKI depuis ce point), au
+				# lieu de repasser la butte au-dessus du tunnel pour gagner le
+				# départ de la trace, de l'autre côté de la voie (retour d'utilisateur,
+				# 13/10/2026)
+				return
 			var m: Vector3 = (q + Vector3(p0.x, 0.0, p0.y)) * 0.5
 			sk.chemin.append_array([Vector3(m.x, 0.0, m.z), Vector3(p0.x, 0.0, p0.y)])
 		Etape.SKI:
@@ -460,7 +512,14 @@ func _poser(e: int) -> void:
 			if sk.chausse:
 				main.basculer_ski()
 			var dep: Array = ga.point_depart()
-			sk.chemin = [dep[0]]
+			# arrêté avant la fin de son itinéraire (plat) : il le finit à pied
+			# — tout droit vers la gare, il butait (arrivée par une autre
+			# piste depuis la porte Génépy, 13/10/2026)
+			sk.chemin = _densifier(_reste_ski, 3.0) if _reste_ski.size() > 1 else []
+			_reste_ski = []
+			if not sk.chemin.is_empty():
+				sk.tolerance_chemin = 1.5
+			sk.chemin.append(dep[0])
 			sk.course_auto = true            # en courant, pas à 2 km/h
 
 

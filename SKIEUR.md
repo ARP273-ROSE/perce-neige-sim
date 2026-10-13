@@ -43,7 +43,9 @@ piste. »
   - le trajet, emporté par la rame ;
   - en haut : voiture → quai → palier → baie automatique → terrasse ;
   - en haut toujours : voiture → bas du quai gauche → **porte Génépy** →
-    couloir → neige remontée au niveau du seuil.
+    couloir → neige remontée au niveau du seuil. En BOUCLE (v1.19.29), il
+    chausse au pied de la porte et prend la piste devant lui ; planté skis
+    aux pieds (contre-pente), il déchausse, marche un peu et rechausse.
 
 ### Retours du premier essai (v1.16.1) : faits
 
