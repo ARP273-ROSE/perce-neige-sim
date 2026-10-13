@@ -18,6 +18,22 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.19.24** — mesures faites sur le PC Manjaro de l'utilisateur, 13/10/2026 (KDE Wayland,
+RTX 5070 Ti, pilote NVIDIA 610) : « 1 image/s, ça fait ramer tout le PC ».
+- Cause : la vue 3D EMBARQUÉE sous XWayland. Seule, la 3D tient 60 i/s
+  (carte à 10 %) en Wayland, X11, Vulkan ou OpenGL ; embarquée en Vulkan,
+  la carte est saturée à 100 % pour 73 W (une attente à chaque image, pas
+  du calcul) et tout le bureau rame, même vue cachée ; embarquée en
+  OpenGL, la fenêtre 3D recouvre le pupitre et un son parasite apparaît.
+- Avec le pilote NVIDIA sous Wayland, la vue 3D s'ouvre désormais en
+  fenêtre séparée, en Wayland natif (60 i/s, carte à 20 %) ;
+  `PERCE_NEIGE_EMBED=1` force l'ancien embarquement.
+- Vue 3D cachée par le PC (F4, aide, pause) : la 3D cesse de dessiner.
+- Son muet sous Manjaro (même jour) : ce n'était pas le simulateur —
+  WirePlumber avait mémorisé le flux « Perce-Neige Simulator » coupé
+  (`~/.local/state/wireplumber/stream-properties`) ; réglé chez
+  l'utilisateur.
+
 **v1.19.23** — retour d'utilisateur du 13/10/2026 : « toujours pas de son autre que
 l'ambiance sous Manjaro : pas de buzzer, de portes, d'annonces, de klaxon ».
 - Tous ces sons passent par des lecteurs QMediaPlayer (l'ambiance, elle,
