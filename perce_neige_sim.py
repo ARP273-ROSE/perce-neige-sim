@@ -242,9 +242,14 @@ APP_NAME = "Perce-Neige Simulator"
 _FONT_CACHE: dict = {}
 
 
+# Style figé (standard des applications, 14/10/2026) : Selawik (métriques de
+# Segoe UI) et Cascadia Mono, libres (OFL), sont EMBARQUÉES (dossier polices/,
+# chargées par _appliquer_style_fige) : Windows garde ses Segoe UI et
+# Consolas, macOS et Linux ont partout les mêmes polices au lieu de celles
+# que le système voulait bien substituer.
 _FAMILLES = {
-    "Segoe UI": ["Segoe UI", "Noto Sans", "DejaVu Sans", "Helvetica Neue", "Helvetica", "Arial"],
-    "Consolas": ["Consolas", "DejaVu Sans Mono", "Noto Sans Mono", "Menlo", "Courier New"],
+    "Segoe UI": ["Segoe UI", "Selawik", "Noto Sans", "DejaVu Sans", "Helvetica Neue", "Helvetica", "Arial"],
+    "Consolas": ["Consolas", "Cascadia Mono", "DejaVu Sans Mono", "Noto Sans Mono", "Menlo", "Courier New"],
 }
 
 
@@ -305,6 +310,10 @@ def _writable_dir() -> Path:
     downloaded 3D viewer, temp WAVs).
 
     - Frozen .exe : next to the executable
+    - Paquet du kit (Python embarqué, Windows/macOS/Linux) : le dossier de
+      données du profil (_persistent_data_dir) — JAMAIS app/, que le Setup
+      efface et que la mise à jour remplace : l'accord d'envoi des rapports
+      et la file d'attente y étaient perdus à chaque réinstallation.
     - Source      : project directory
 
     NB : en mode exe ce dossier est REMPLACÉ à chaque mise à jour auto
@@ -317,6 +326,8 @@ def _writable_dir() -> Path:
     (~/.cache, ~/Library/Caches), sans passer par _persistent_data_dir()
     qui se replie lui-même ici.
     """
+    if _paquet_du_kit():
+        return _persistent_data_dir()
     if getattr(sys, "frozen", False):
         if sys.platform.startswith("win"):
             return Path(sys.executable).resolve().parent
@@ -332,6 +343,15 @@ def _writable_dir() -> Path:
         except OSError:
             return Path(tempfile.gettempdir())
     return Path(__file__).resolve().parent
+
+
+def _paquet_du_kit() -> bool:
+    """Vrai dans le paquet du kit (Python embarqué à côté de app/)."""
+    try:
+        import updater as _upd
+        return bool(_upd.is_packaged())
+    except Exception:
+        return False
 
 
 @contextlib.contextmanager
@@ -369,12 +389,7 @@ def _persistent_data_dir() -> Path:
     # Le paquet du kit (Python embarqué, pas de sys.frozen) vit dans app/,
     # que le Setup efface à chaque passage ([InstallDelete]) : ses données
     # vont aussi dans le profil, avec reprise de ce qui était à côté de lui.
-    kit = False
-    try:
-        import updater as _upd
-        kit = bool(_upd.is_packaged())
-    except Exception:
-        kit = False
+    kit = _paquet_du_kit()
     if not getattr(sys, "frozen", False) and not kit:
         return Path(__file__).resolve().parent
     app = "PerceNeigeSimulator"
@@ -395,21 +410,83 @@ def _persistent_data_dir() -> Path:
         return d
     except Exception:
         # Repli : à côté de l'exe (au moins ça marche, même si volatile).
-        return _writable_dir()
+        return Path(__file__).resolve().parent if kit else _writable_dir()
+
+
+#: Ce que les anciennes versions du paquet écrivaient dans app/ (le dossier
+#: d'installation) : base d'exploitation, réglages, record du défi, accord et
+#: file des rapports, trace du dernier crash natif, rapports de plantage.
+DONNEES_DANS_APP = ("exploitation.db", "exploitation.db-journal",
+                    "exploitation.db-wal", "exploitation.db-shm",
+                    "reglages.json", "challenge_best.json",
+                    "reglages_rapports.json", "_crash_natif.log",
+                    "_rapports", "crash_reports")
+_donnees_reprises = False
+
+
+def _deplacer(a: Path, b: Path, essais: int = 3) -> bool:
+    """Renomme a en b (même volume) ou copie puis efface ; réessaie si le
+    fichier est tenu (Windows : autre copie du programme encore ouverte)."""
+    import shutil
+    for i in range(essais):
+        try:
+            if a.is_dir() and b.is_dir():
+                # fusion : seuls les éléments absents passent, rien n'est écrasé
+                for e in list(a.iterdir()):
+                    if not (b / e.name).exists():
+                        shutil.move(str(e), str(b / e.name))
+                if not any(a.iterdir()):
+                    a.rmdir()
+                return not a.exists()
+            shutil.move(str(a), str(b))
+            return True
+        except OSError:
+            time.sleep(0.2 * (i + 1))
+    return False
 
 
 def _reprendre_donnees_kit(d: Path) -> None:
-    """Première fois : les données laissées à côté du programme (anciens
-    kits) sont copiées dans le profil, jamais écrasées."""
+    """Les données laissées dans app/ par les anciennes versions sont
+    DÉPLACÉES vers le profil (une fois par lancement ; rien n'est perdu) :
+    - absentes du profil : renommées (copiées si le fichier est tenu, le
+      déplacement est retenté au lancement suivant) ;
+    - présentes des deux côtés : identiques, la copie d'app/ est retirée ;
+      différentes, celle d'app/ est rangée à côté sous « .ancien »."""
+    global _donnees_reprises
+    if _donnees_reprises:
+        return
+    _donnees_reprises = True
     try:
+        import filecmp
+        import shutil
         src = Path(__file__).resolve().parent
-        for nom in ("exploitation.db", "reglages.json", "challenge_best.json",
-                    "reglages_rapports.json"):
+        if src.resolve() == d.resolve():
+            return
+        for nom in DONNEES_DANS_APP:
             a = src / nom
+            if not a.exists():
+                continue
             b = d / nom
-            if a.is_file() and not b.exists():
-                import shutil
-                shutil.copy2(a, b)
+            try:
+                if not b.exists():
+                    if not _deplacer(a, b):
+                        if a.is_dir():
+                            shutil.copytree(a, b)
+                        else:
+                            shutil.copy2(a, b)
+                elif a.is_dir():
+                    _deplacer(a, b)
+                elif filecmp.cmp(a, b, shallow=False):
+                    a.unlink()
+                else:
+                    ancien = d / (nom + ".ancien")
+                    n = 2
+                    while ancien.exists():
+                        ancien = d / f"{nom}.ancien{n}"
+                        n += 1
+                    _deplacer(a, ancien)
+            except Exception:
+                pass
     except Exception:
         pass
 
@@ -470,6 +547,15 @@ def _ecrire_prefs(maj: dict) -> None:
 # ---------------------------------------------------------------------------
 
 def _detect_lang() -> str:
+    """Langue de l'interface : celle choisie par l'utilisateur (touche L,
+    menu Affichage → Langue), retenue dans les réglages ; à défaut, au
+    premier lancement, celle du système."""
+    try:
+        choix = _lire_prefs().get("langue")
+        if choix in ("fr", "en"):
+            return choix
+    except Exception:
+        pass
     try:
         # Python 3.11+ : getlocale() au lieu de getdefaultlocale() (deprecated)
         lang = (locale.getlocale()[0] or "").lower()
@@ -7014,6 +7100,23 @@ class AutoOpsLogger:
             pass
 
 
+def ouvrir_document(quoi: str, langue: str) -> bool:
+    """Ouvre un PDF livré avec le programme : « manuel » (manuel-fr.pdf ou
+    manuel-en.pdf selon la langue de l'interface, repli sur l'autre) ou
+    « guide » (guide_theorique.pdf). Faux s'il manque."""
+    base = _resource_path("")
+    try:
+        if quoi == "manuel":
+            import interface_kit
+            return interface_kit.ouvrir_manuel([base], langue, nom="manuel-{langue}.pdf")
+        chemin = base / "guide_theorique.pdf"
+        if chemin.is_file():
+            return bool(QDesktopServices.openUrl(QUrl.fromLocalFile(str(chemin))))
+    except Exception:
+        pass
+    return False
+
+
 class DocsDownloadDialog(QDialog):
     """Downloads manuel_perce_neige.pdf and guide_theorique.pdf from the
     GitHub repo into the user's Downloads folder (or opens them if already
@@ -7022,8 +7125,10 @@ class DocsDownloadDialog(QDialog):
 
     REPO_BASE = "https://github.com/ARP273-ROSE/perce-neige-sim/raw/main"
     DOCS = [
-        ("manuel_perce_neige.pdf",
-         "Manuel utilisateur", "User manual"),
+        ("manuel-fr.pdf",
+         "Manuel du conducteur (français)", "Driver's manual (French)"),
+        ("manuel-en.pdf",
+         "Manuel du conducteur (anglais)", "Driver's manual (English)"),
         ("guide_theorique.pdf",
          "Guide théorique (formules + sources)", "Theory guide (formulas + sources)"),
     ]
@@ -7125,7 +7230,7 @@ class DocsDownloadDialog(QDialog):
             if resultat.get("ok"):
                 self._status.setText(
                     (f"✓ Enregistré : {dest}" if self._lang == "fr" else
-                     f"✓ Saved : {dest}")
+                     f"✓ Saved: {dest}")
                 )
                 # Open it in the default PDF viewer
                 try:
@@ -7141,7 +7246,7 @@ class DocsDownloadDialog(QDialog):
                 e = resultat.get("erreur", "?")
                 self._status.setText(
                     (f"✗ Échec : {e}" if self._lang == "fr" else
-                     f"✗ Failed : {e}")
+                     f"✗ Failed: {e}")
                 )
 
         QTimer.singleShot(150, sonder)
@@ -7156,7 +7261,7 @@ class FaultPickerDialog(QDialog):
         super().__init__(parent)
         self._state = state
         lang = state.lang
-        self.setWindowTitle("Pannes / Faults")
+        self.setWindowTitle("Pannes" if lang == "fr" else "Faults")
         self.setModal(True)
         self.setMinimumWidth(420)
 
@@ -7424,7 +7529,7 @@ class GameWidget(QWidget):
         # every frame burned noticeable CPU in paintEvent. These static
         # ones are built once and reused.
         self._pen_version = QPen(COLOR_TEXT_DIM)
-        self._font_version = QFont("Consolas", 9)
+        self._font_version = _cached_font("Consolas", 9)
         self._cached_bg_grad: tuple[int, QLinearGradient] | None = None
         self._pulley_angle = 0.0          # radians — animated drive pulley
         self._machine_v = 0.0             # vitesse du câble à la poulie (m/s, sens rame 1)
@@ -7640,7 +7745,13 @@ class GameWidget(QWidget):
             # sait pas si ça marche ou pas, il n'y a pas de message »)
             txt = str(m.get("skieur_prep", ""))
             if txt:
-                self._skieur_prep_txt = txt
+                # le viewer l'écrit en français (« Préparation du décor du
+                # skieur… 45 % (6 s) ») : on n'en garde que l'avancement,
+                # le libellé est celui de la langue de l'interface
+                avance = txt.split("…", 1)[1].strip() if "…" in txt else ""
+                self._skieur_prep_txt = (
+                    T("preparing the 3D scenery…", "préparation du décor 3D…")
+                    + (" " + avance if avance else ""))
             else:
                 self._skieur_prep_txt = ""
                 ms = int(m.get("ms", -1) or -1)
@@ -9236,6 +9347,11 @@ class GameWidget(QWidget):
         dlg.exec()
 
     def _open_docs_download(self) -> None:
+        """F6 : le manuel PDF livré avec le programme, dans la langue de
+        l'interface (manuel-fr.pdf / manuel-en.pdf) ; à défaut (copie
+        incomplète), la boîte qui télécharge les documents depuis GitHub."""
+        if ouvrir_document("manuel", self.state.lang):
+            return
         dlg = DocsDownloadDialog(self.state.lang, self)
         dlg.exec()
 
@@ -9584,6 +9700,11 @@ class GameWidget(QWidget):
             global LANG
             LANG = "en" if LANG == "fr" else "fr"
             st.lang = LANG
+            # choix retenu d'un lancement à l'autre, menus retraduits
+            _ecrire_prefs({"langue": LANG})
+            fen = self.window()
+            if hasattr(fen, "installer_menus"):
+                fen.installer_menus()
         elif k == Qt.Key.Key_P:
             if st.mode == MODE_RUN:
                 st.mode = MODE_PAUSED
@@ -12625,7 +12746,7 @@ class GameWidget(QWidget):
         self._viewer_dl_offered = True
         fr = (LANG == "fr")
         ret = QMessageBox.question(
-            self, "Viewer 3D",
+            self, "Vue 3D" if fr else "3D viewer",
             ("Le viewer 3D n'est pas installé (binaire absent de "
              "bundled_godot/, et Godot n'est pas sur cette machine).\n\n"
              "Le télécharger depuis la dernière release GitHub "
@@ -12642,7 +12763,7 @@ class GameWidget(QWidget):
         prog = QProgressDialog(
             "Téléchargement du viewer 3D…" if fr else "Downloading 3D viewer…",
             None, 0, 100, self)
-        prog.setWindowTitle("Viewer 3D")
+        prog.setWindowTitle("Vue 3D" if fr else "3D viewer")
         prog.setWindowModality(Qt.WindowModality.WindowModal)
         prog.setCancelButton(None)
         prog.setMinimumDuration(0)
@@ -12672,7 +12793,7 @@ class GameWidget(QWidget):
                 prog.close()
                 if state["error"] is not None:
                     QMessageBox.warning(
-                        self, "Viewer 3D",
+                        self, "Vue 3D" if fr else "3D viewer",
                         (f"Échec du téléchargement : {state['error']}") if fr
                         else (f"Download failed: {state['error']}"))
                     # Re-autoriser une nouvelle tentative plus tard
@@ -15318,7 +15439,8 @@ class GameWidget(QWidget):
             f.setPointSize(8)
             p.setFont(f)
             p.drawText(QRectF(col2 - 20, row3 + btn_h + 2, btn_w + 40, 14),
-                       Qt.AlignmentFlag.AlignCenter, prep.replace("Préparation du décor du skieur… ", ""))
+                       Qt.AlignmentFlag.AlignCenter,
+                       prep.split("…", 1)[1].strip() if "…" in prep else prep)
         self._hit_zones.append(
             (QRectF(col2, row3, btn_w, btn_h), int(Qt.Key.Key_F9), False)
         )
@@ -16640,7 +16762,7 @@ class GameWidget(QWidget):
         self._draw_wrapped(p, intro,
                            QRectF(box.x() + 30, box.y() + 80,
                                   box.width() - 60, 60),
-                           QFont("Segoe UI", 10))
+                           _cached_font("Segoe UI", 10))
 
         # Two columns of specs
         col_y = box.y() + 148
@@ -16725,7 +16847,7 @@ class GameWidget(QWidget):
                        int(Qt.AlignmentFlag.AlignLeft), s)
 
         p.setPen(_cached_pen(COLOR_TEXT_DIM))
-        footer_font = QFont("Segoe UI", 9)
+        footer_font = QFont(_cached_font("Segoe UI", 9))
         footer_font.setItalic(True)
         p.setFont(footer_font)
         p.drawText(QRectF(box.x(), box.y() + box_h - 26, box.width(), 18),
@@ -16779,15 +16901,8 @@ class MainWindow(QMainWindow):
         ico = _resource_path("logo.ico")
         if ico.exists():
             self.setWindowIcon(QIcon(str(ico)))
-        # Help menu — auto-update + bug report entries
-        try:
-            self._install_display_menu()
-        except Exception:
-            pass
-        try:
-            self._install_help_menu()
-        except Exception:
-            pass
+        # Menus Affichage et Aide (mise à jour, signalement, manuel)
+        self.installer_menus()
         # Background update check, 3 s after launch
         QTimer.singleShot(3000, self._bg_check_update)
         # (l'offre de ticket GitHub au lancement est retirée : le plantage est
@@ -16862,6 +16977,24 @@ class MainWindow(QMainWindow):
     def _tr(self, en: str, fr: str) -> str:
         return fr if self._lang() == "fr" else en
 
+    def installer_menus(self) -> None:
+        """(Re)construit la barre de menus dans la langue de l'interface :
+        appelée au démarrage et à chaque changement de langue (touche L),
+        sans quoi les menus restaient dans la langue du lancement."""
+        self.menuBar().clear()
+        try:
+            self._install_display_menu()
+        except Exception:
+            pass
+        try:
+            self._install_help_menu()
+        except Exception:
+            pass
+
+    def _choisir_langue(self, langue: str) -> None:
+        if self._lang() != langue:
+            self.game._virtual_key(Qt.Key.Key_L)
+
     def _install_display_menu(self) -> None:
         """Affichage → Qualité 3D : automatique (détection de la machine +
         ajustement en direct contre les saccades), ou forcée."""
@@ -16901,6 +17034,17 @@ class MainWindow(QMainWindow):
             act.setChecked(abs(self.game._taille_ui - f) < 1e-6)
             groupe_t.addAction(act)
             act.triggered.connect(lambda _on=False, f=f: self._choisir_taille_ui(f))
+        # Langue de l'interface (aussi touche L) : chaque langue est
+        # nommée dans sa propre langue
+        sous_l = menu.addMenu(self._tr("Language", "Langue"))
+        groupe_l = QActionGroup(self)
+        groupe_l.setExclusive(True)
+        for code, nom in (("en", "English"), ("fr", "Français")):
+            act = sous_l.addAction(nom)
+            act.setCheckable(True)
+            act.setChecked(self._lang() == code)
+            groupe_l.addAction(act)
+            act.triggered.connect(lambda _on=False, c=code: self._choisir_langue(c))
         menu.addSeparator()
         self._act_plein = menu.addAction(self._tr("Full screen", "Plein écran"))
         self._act_plein.setCheckable(True)
@@ -16948,9 +17092,14 @@ class MainWindow(QMainWindow):
             self._tr("Shortcuts and tips (F1)", "Raccourcis et conseils (F1)"))
         act_f1.triggered.connect(lambda: self.game._virtual_key(Qt.Key.Key_F1))
         act_pdf = menu.addAction(
-            self._tr("Manual and theory guide, PDF (F6)",
-                     "Manuel et guide théorique, PDF (F6)"))
+            self._tr("Driver's manual, PDF (F6)", "Manuel du conducteur, PDF (F6)"))
         act_pdf.triggered.connect(lambda: self.game._virtual_key(Qt.Key.Key_F6))
+        act_guide = menu.addAction(
+            self._tr("Theory guide, PDF (formulas and sources)",
+                     "Guide théorique, PDF (formules et sources)"))
+        act_guide.triggered.connect(
+            lambda: ouvrir_document("guide", self._lang())
+            or DocsDownloadDialog(self._lang(), self).exec())
         act_vraie = menu.addAction(
             self._tr("The real machine (F3)", "La vraie machine (F3)"))
         act_vraie.triggered.connect(lambda: self.game._virtual_key(Qt.Key.Key_F3))
@@ -16988,16 +17137,24 @@ class MainWindow(QMainWindow):
         act_about.triggered.connect(self._show_about)
 
     def _show_about(self) -> None:
-        QMessageBox.about(
-            self,
-            self._tr("About", "À propos"),
+        # le logo du programme (tiré de logo.svg, comme les icônes et le
+        # manuel), et non l'icône générique de la boîte
+        boite = QMessageBox(self)
+        boite.setWindowTitle(self._tr("About", "À propos"))
+        logo = QPixmap(str(_resource_path("logo.png")))
+        if not logo.isNull():
+            boite.setIconPixmap(logo.scaled(
+                112, 112, Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation))
+        boite.setTextFormat(Qt.TextFormat.RichText)
+        boite.setText(
             f"<b>{APP_NAME}</b> v{VERSION}<br>"
             + self._tr(
                 "Accurate simulator of the Tignes underground funicular.",
                 "Simulateur fidèle du funiculaire souterrain de Tignes.")
             + "<br><br>"
             + self._tr(
-                "Repository : ", "Dépôt : ")
+                "Repository: ", "Dépôt : ")
             + "<a href='https://github.com/"
             + f"{autoupdate_mod_owner()}/{autoupdate_mod_repo()}'>GitHub</a>"
             + "<br>"
@@ -17005,7 +17162,8 @@ class MainWindow(QMainWindow):
                        "Version Web (tablette, téléphone) : ")
             + "<a href='https://funiculaire.giff.re'>funiculaire.giff.re</a>"
             + "<br>"
-            + self._tr("License : MIT", "Licence : MIT"))
+            + self._tr("License: MIT", "Licence : MIT"))
+        boite.exec()
 
     # ------------------------------------------------------------------
     # Mise à jour — trois cas selon la façon dont le programme tourne :
@@ -17192,7 +17350,8 @@ class MainWindow(QMainWindow):
                         f"Vous utilisez déjà la dernière version (v{VERSION}) "
                         "— ou GitHub est injoignable."))
             return
-        taille = f" ({info['size'] / 1e6:.0f} Mo)" if info.get("size") else ""
+        taille = (f" ({info['size'] / 1e6:.0f} " + self._tr("MB", "Mo") + ")"
+                  if info.get("size") else "")
         msg = QMessageBox(self)
         msg.setIcon(QMessageBox.Icon.Question)
         msg.setWindowTitle(self._tr("Update available", "Mise à jour disponible"))
@@ -17203,6 +17362,13 @@ class MainWindow(QMainWindow):
             "Installer maintenant ? Le journal d'exploitation et les "
             "meilleurs scores sont conservés."))
         notes = (info.get("notes") or "").strip()
+        try:
+            import updater
+            # seule la section de la langue de l'interface (« ## Francais »,
+            # « ## English ») des notes de la version
+            notes = updater.notes_dans_la_langue(notes, self._lang()).strip()
+        except Exception:
+            pass
         if notes:
             msg.setDetailedText(notes[:4000])
         btn_ok = msg.addButton(self._tr("Install", "Installer"),
@@ -17346,7 +17512,9 @@ class MainWindow(QMainWindow):
         try:
             import autoupdate
         except Exception:
-            QMessageBox.warning(self, "Update", "autoupdate module missing")
+            QMessageBox.warning(self, self._tr("Update", "Mise à jour"),
+                                self._tr("autoupdate module missing",
+                                         "module autoupdate absent"))
             return
         if not autoupdate.is_frozen():
             QMessageBox.information(
@@ -17676,10 +17844,90 @@ def _demander_accord_rapports(win, rapports) -> None:
         pass
 
 
+#: Palette COMPLÈTE de l'interface Qt (menus, boîtes de dialogue, journal,
+#: infobulles) : le bleu nuit du pupitre, sur les trois systèmes, quel que
+#: soit le thème clair ou sombre choisi dans le système.
+COULEURS_INTERFACE = {
+    "fenetre": "#161c28", "texte": "#dce6f5", "base": "#0e1420",
+    "base_alt": "#141b29", "bouton": "#1f2938", "texte_bouton": "#dce6f5",
+    "selection": "#2f6496", "texte_selection": "#ffffff", "lien": "#78b4f0",
+    "infobulle": "#1a2230", "texte_infobulle": "#dce6f5",
+    "desactive": "#6c7a8e", "clair": "#2a3446", "moyen": "#3a475c",
+    "sombre": "#0a0e16",
+}
+FEUILLE_INTERFACE = (
+    "QToolTip { color: #dce6f5; background-color: #1a2230;"
+    " border: 1px solid #5082b4; padding: 3px; }"
+)
+
+
+def _appliquer_style_fige(app) -> None:
+    """Style FIGÉ (standard des applications) : Fusion, palette complète,
+    polices embarquées, feuille de style — identiques sous Windows, macOS et
+    Linux, indépendants du thème, des polices et de l'accentuation du
+    système. L'essentiel de l'écran est peint par le programme lui-même
+    (pupitre, vues) : ceci règle tout le reste. Les boîtes de fichiers du
+    kit (boîte Qt complète sous Linux) sont posées par la même occasion ;
+    le simulateur n'ouvre ni n'enregistre aujourd'hui aucun fichier."""
+    try:
+        import interface_kit
+        interface_kit.appliquer_style(app, COULEURS_INTERFACE,
+                                      feuille=FEUILLE_INTERFACE, sombre=True)
+        interface_kit.charger_polices(_resource_path("polices"))
+        interface_kit.installer_dialogues_fichiers()
+    except Exception:
+        app.setStyle("Fusion")
+    police = QFont()
+    police.setFamilies(_FAMILLES["Segoe UI"])
+    police.setPointSizeF(9.0)
+    app.setFont(police)
+
+
+def _verifier() -> int:
+    """--check : le programme et ses dépendances se chargent, le style figé
+    s'applique et le viewer 3D de ce système est présent et s'exécute.
+    Lancé par la construction des paquets (Windows, macOS, Linux) avec
+    l'interpréteur embarqué ; aucune fenêtre, rien d'écrit."""
+    os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
+    try:
+        app = QApplication.instance() or QApplication(sys.argv[:1])
+        _appliquer_style_fige(app)
+        # avec une feuille de style, Qt enveloppe Fusion (QStyleSheetStyle) :
+        # on vérifie donc la palette imposée et la feuille
+        from PyQt6.QtGui import QPalette
+        fond = app.palette().color(QPalette.ColorRole.Window).name()
+        assert fond == COULEURS_INTERFACE["fenetre"], f"palette du système : {fond}"
+        assert app.styleSheet(), "feuille de style absente"
+        import reporting  # noqa: F401
+        import updater
+        import godot_bridge
+        from PyQt6.QtGui import QFontDatabase
+        manque = [f for f in ("Selawik", "Cascadia Mono")
+                  if f not in QFontDatabase.families()]
+        assert not manque, f"polices embarquées absentes : {manque}"
+        if updater.is_packaged():
+            pont = godot_bridge.GodotBridge(bundled_dir=_resource_path("bundled_godot"))
+            binaire = pont._bundled_binary_path()
+            assert binaire is not None, "viewer 3D absent du paquet"
+            import subprocess
+            r = subprocess.run([str(binaire), "--headless", "--version"],
+                               capture_output=True, text=True, timeout=120)
+            assert r.returncode == 0, f"viewer 3D : code {r.returncode} {r.stderr[-300:]}"
+            print(f"viewer 3D : {binaire.name} {r.stdout.strip()}")
+    except Exception as exc:
+        print(f"{APP_NAME} : ECHEC / FAILED -- {type(exc).__name__}: {exc}")
+        return 1
+    print(f"{APP_NAME} {VERSION} : OK")
+    return 0
+
+
 def main() -> None:
+    if "--check" in sys.argv[1:]:
+        sys.exit(_verifier())
     _force_x11_if_wayland()
     app = QApplication(sys.argv)
     app.setApplicationName(APP_NAME)
+    _appliquer_style_fige(app)
     # Verrou nommé lu par l'installeur Inno (AppMutex) : installer
     # par-dessus une application ouverte ne remplacerait pas les fichiers
     # en cours d'utilisation, et se terminerait pourtant en annonçant

@@ -96,8 +96,15 @@ class GodotBridge:
                         cand = exes[0]
                         break
         else:  # linux + autres unix
-            cand = self.bundled_dir / "perce_neige_3d.x86_64"
-        return cand if cand.is_file() else None
+            import platform
+            arm = platform.machine().lower() in ("aarch64", "arm64")
+            cand = self.bundled_dir / ("perce_neige_3d.arm64" if arm
+                                       else "perce_neige_3d.x86_64")
+        if not cand.is_file():
+            return None
+        if not sys.platform.startswith("win"):
+            _rendre_lancable(cand)
+        return cand
 
     @staticmethod
     def _find_godot_executable() -> Optional[str]:
@@ -585,6 +592,27 @@ class GodotBridge:
             self._sock.sendto(payload, self._addr)
         except (BlockingIOError, OSError):
             # Buffer plein ou socket fermé : on ignore (next frame réessaiera)
+            pass
+
+
+def _rendre_lancable(binaire: Path) -> None:
+    """Le viewer doit pouvoir s'exécuter : droit d'exécution (perdu par un
+    artefact ou une archive extraite sans ses attributs) et, sous macOS, sans
+    l'attribut de quarantaine hérité du .dmg téléchargé — l'application
+    Godot imbriquée n'est signée qu'ad hoc, Gatekeeper refuserait de la
+    lancer depuis le programme. Best effort : rien ne casse si c'est refusé."""
+    try:
+        mode = binaire.stat().st_mode
+        if not mode & 0o100:
+            binaire.chmod(mode | 0o755)
+    except OSError:
+        pass
+    if sys.platform == "darwin":
+        app = next((p for p in binaire.parents if p.suffix == ".app"), None)
+        try:
+            subprocess.run(["xattr", "-dr", "com.apple.quarantine",
+                            str(app or binaire)], capture_output=True, timeout=20)
+        except Exception:
             pass
 
 

@@ -69,8 +69,15 @@ def app_dir():
 
 
 def is_packaged():
-    """Vrai si l'on tourne depuis le paquet autonome (python embarque a cote)."""
-    return (app_dir().parent / 'python' / 'python.exe').exists()
+    """Vrai si l'on tourne depuis le paquet autonome (python embarque a cote).
+
+    Windows : python/python.exe ; macOS et Linux : python/bin/python3. Ne
+    tester que python.exe faisait croire aux paquets macOS et Linux qu'ils
+    tournaient depuis les sources : aucune mise a jour n'y etait jamais
+    recherchee au demarrage.
+    """
+    python = app_dir().parent / 'python'
+    return (python / 'python.exe').exists() or (python / 'bin' / 'python3').exists()
 
 
 # Seuls ces hotes peuvent livrer du code. L'adresse vient deja d'une reponse
@@ -97,8 +104,73 @@ def _open(url):
         'User-Agent': 'updater-kit-windows',
         'Accept': 'application/vnd.github+json',
     })
-    from contexte_tls import urlopen as _urlopen_tls
-    return _urlopen_tls(req, timeout=TIMEOUT)
+    try:
+        # Cascade de certificats commune (magasin du systeme, racines de la
+        # distribution, puis certifi et kit.json « racines_tls ») : voir
+        # reporting.ouvrir_url. Le module accompagne toujours celui-ci.
+        from reporting import ouvrir_url
+    except Exception:
+        ouvrir_url = None
+    if ouvrir_url is not None:
+        return ouvrir_url(req, timeout=TIMEOUT)
+    ctx = ssl.create_default_context()
+    return urllib.request.urlopen(req, timeout=TIMEOUT, context=ctx)
+
+
+def plateforme() -> str:
+    """'windows', 'macos' ou 'linux' — le suffixe des archives publiees."""
+    if sys.platform.startswith('win'):
+        return 'windows'
+    if sys.platform == 'darwin':
+        return 'macos'
+    return 'linux'
+
+
+def architecture() -> str:
+    """'arm64' ou 'x86_64' : le suffixe des paquets et archives publies."""
+    import platform
+    machine = platform.machine().lower()
+    return 'arm64' if machine in ('arm64', 'aarch64') else 'x86_64'
+
+
+# Archives propres a un systeme (kit.json « archive_par_systeme ») : quand
+# app/ embarque des binaires (un moteur 3D exporte, par exemple), chaque
+# systeme publie la sienne sous ce prefixe DISTINCT de PREFIXE_ARCHIVE :
+#     <nom_technique>-maj-<systeme>-<architecture>-<version>.zip
+# Distinct, parce que les updaters deja installes prennent la PREMIERE
+# archive « -app-*.zip » de la Release : une archive Linux nommee « -app- »
+# pouvait passer avant celle de Windows et remplacer le moteur 3D d'un poste
+# Windows par celui de Linux. L'archive « -app- » reste celle de Windows.
+PREFIXE_SYSTEME = (_kit().get('nom_technique') or 'app') + '-maj-'
+
+
+SECTIONS = {'en': 'English', 'fr': 'Francais', 'nl': 'Nederlands'}
+
+
+def notes_dans_la_langue(corps: str, langue: str) -> str:
+    """Extrait la section de la langue demandee dans les notes de version.
+
+    Les notes publiees portent les trois langues, chacune sous un titre de
+    niveau 2. Sans ce tri, un utilisateur neerlandais lisait les trois d'un
+    coup — et avant que les notes ne soient traduites, il lisait du francais.
+    Si le decoupage echoue, on rend le texte entier : mieux vaut trop que
+    rien.
+    """
+    if not corps:
+        return corps
+    titres = {nom: lang for lang, nom in SECTIONS.items()}
+    blocs, courant, lignes = {}, None, []
+    for ligne in corps.splitlines():
+        nu = ligne.strip()
+        if nu.startswith('## ') and nu[3:].strip() in titres:
+            if courant:
+                blocs[courant] = '\n'.join(lignes).strip()
+            courant, lignes = titres[nu[3:].strip()], []
+        elif courant:
+            lignes.append(ligne)
+    if courant:
+        blocs[courant] = '\n'.join(lignes).strip()
+    return blocs.get(langue) or blocs.get('en') or corps
 
 
 def check(current_version):
@@ -123,15 +195,57 @@ def check(current_version):
     if not tag or not is_newer(tag, current_version):
         return None
 
-    # On cherche l'archive de mise a jour applicative, pas l'installeur complet.
+    # On cherche l'archive applicative, jamais l'installeur complet.
+    # Si la Release en publie une par systeme, on prend celle du notre : poser
+    # une archive Windows sur un macOS remplacerait l'application par des
+    # binaires inutilisables. Si elle n'en publie qu'une, sans suffixe, elle
+    # convient a tous — elle ne contient que du Python pur.
+    plate = plateforme()
+    if _kit().get('archive_par_systeme'):
+        propres = [a for a in data.get('assets', [])
+                   if (a.get('name') or '').lower().endswith('.zip')
+                   and (a.get('name') or '').lower().startswith(PREFIXE_SYSTEME)]
+        for motif in (f'{PREFIXE_SYSTEME}{plate}-{architecture()}-',
+                      f'{PREFIXE_SYSTEME}{plate}-'):
+            choix = [a for a in propres if (a.get('name') or '').lower().startswith(motif)]
+            if choix:
+                return {
+                    'version': tag,
+                    'url': choix[0]['browser_download_url'],
+                    'size': choix[0].get('size', 0),
+                    'notes': data.get('body') or '',
+                }
+        if plate != 'windows':
+            # L'archive commune est celle de Windows : la poser ici
+            # remplacerait les binaires de ce systeme par ceux d'un autre.
+            log.info("Version %s publiee, mais sans archive pour %s-%s",
+                     tag, plate, architecture())
+            return None
+    candidates = [
+        a for a in data.get('assets', [])
+        if (a.get('name') or '').lower().startswith(PREFIXE_ARCHIVE)
+        and (a.get('name') or '').lower().endswith('.zip')
+    ]
     asset = None
-    for a in data.get('assets', []):
-        name = (a.get('name') or '').lower()
-        if name.startswith(PREFIXE_ARCHIVE) and name.endswith('.zip'):
+    for a in candidates:
+        if f'-{plate}.' in (a.get('name') or '').lower():
             asset = a
             break
     if asset is None:
-        log.info("Version %s publiee, mais sans archive de mise a jour", tag)
+        # Une archive sans suffixe convient a tout le monde : elle ne contient
+        # que le dossier `app/`, c'est-a-dire du Python pur. Les dependances
+        # compilees vivent dans `python/`, que la mise a jour ne touche pas.
+        # C'est aussi ce que publiaient les versions anterieures.
+        sans_suffixe = [
+            a for a in candidates
+            if not any(f'-{p}.' in (a.get('name') or '').lower()
+                       for p in ('windows', 'macos', 'linux'))
+        ]
+        if sans_suffixe:
+            asset = sans_suffixe[0]
+    if asset is None:
+        log.info("Version %s publiee, mais sans archive de mise a jour pour %s",
+                 tag, plate)
         return None
 
     return {
@@ -176,6 +290,17 @@ def download_and_apply(update, progress=None):
                 if not str(dest).startswith(str(extracted.resolve())):
                     raise RuntimeError(f"Archive suspecte : {member}")
             z.extractall(extracted)
+            # zipfile ne restitue pas le bit d'execution. Sous Windows cela
+            # n'a aucune importance ; ailleurs, le lanceur et l'interpreteur
+            # embarque ressortent non executables et l'application ne demarre
+            # plus apres sa premiere mise a jour.
+            if os.name != 'nt':
+                for info in z.infolist():
+                    mode = info.external_attr >> 16
+                    if mode & 0o111:
+                        chemin = extracted / info.filename
+                        if chemin.exists():
+                            chemin.chmod(chemin.stat().st_mode | 0o111)
 
         # Certaines archives contiennent un dossier racine unique.
         entries = [p for p in extracted.iterdir()]

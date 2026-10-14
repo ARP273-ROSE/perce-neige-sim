@@ -11,9 +11,12 @@
     "perce_neige_sim.py",
     "godot_bridge.py",
     "bugreport.py",
-    "autoupdate.py", "contexte_tls.py", "piques_avis.py",
+    "autoupdate.py",
+    "contexte_tls.py",
+    "piques_avis.py",
     "reporting.py",
     "updater.py",
+    "interface_kit.py",
     "profil_coupe.py"
   ],
   "paquets": [],
@@ -23,10 +26,11 @@
     "logo.png",
     "logo_64.png",
     "README.md",
-    "manuel_perce_neige.pdf",
+    "manuel-fr.pdf",
+    "manuel-en.pdf",
     "guide_theorique.pdf",
-    "challenge_best.json",
-    "racines_isrg.pem"
+    "racines_isrg.pem",
+    "polices"
   ],
   "copies": [
     {
@@ -42,8 +46,44 @@
       "de": "bundled_godot",
       "vers": "bundled_godot",
       "motifs": [
-        "**/*.exe"
+        "perce_neige_3d.exe"
+      ],
+      "systemes": [
+        "windows"
       ]
+    },
+    {
+      "de": "bundled_godot",
+      "vers": "bundled_godot",
+      "motifs": [
+        "perce_neige_3d.x86_64"
+      ],
+      "systemes": [
+        "linux-x86_64"
+      ],
+      "executable": true
+    },
+    {
+      "de": "bundled_godot",
+      "vers": "bundled_godot",
+      "motifs": [
+        "perce_neige_3d.arm64"
+      ],
+      "systemes": [
+        "linux-arm64"
+      ],
+      "executable": true
+    },
+    {
+      "de": "bundled_godot",
+      "vers": "bundled_godot",
+      "motifs": [
+        "perce_neige_3d_macos.zip"
+      ],
+      "systemes": [
+        "macos"
+      ],
+      "decompresser": true
     }
   ],
   "requirements": "requirements.txt",
@@ -59,5 +99,21 @@
     "perce_neige_sim",
     "profil_coupe"
   ],
-  "exclus_de_la_maj": []
+  "exclus_de_la_maj": [],
+  "racines_tls": "racines_isrg.pem",
+  "archive_par_systeme": true,
+  "passerelle_pyinstaller": true,
+  "icone_png": "logo.png",
+  "icone_grande": "logo_1024.png",
+  "icone_icns": "logo.icns",
+  "nom_affiche_fr": "Simulateur Perce-Neige",
+  "nom_affiche_en": "Perce-Neige Simulator",
+  "description_fr": "Simulateur du funiculaire souterrain Perce-Neige de Tignes",
+  "description_en": "Simulator of the Perce-Neige underground funicular in Tignes",
+  "categories_linux": "Game;Simulation;",
+  "tests_ci": [
+    "tests"
+  ],
+  "journal_technique": "CHANGELOG.md",
+  "langue_principale": "fr"
 }

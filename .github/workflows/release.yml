@@ -1,0 +1,775 @@
+name: Publier une version (Windows, macOS, Linux)
+
+# Gabarit commun du kit, etendu a macOS et Linux sur le modele de MountMonitor
+# et d'Anticythere3D 1.3.0. Pose par `poser_le_kit.py --multiplateforme` sous
+# le nom .github/workflows/release.yml ; il exige build_unix.py a la racine.
+# Rien ici n'est propre a une application : tout ce qui varie est lu dans
+# kit.json. Pousser un tag « v1.2.3 » suffit : l'installeur Windows, l'image
+# disque macOS (Apple Silicon et Intel), l'archive Linux (x86_64 et ARM64) et
+# l'archive de mise a jour sont construits, puis publies dans UNE Release.
+#
+# Les trois systemes partagent la meme structure de paquet — python/ a cote de
+# app/ — si bien que la mise a jour automatique (updater.py) y est identique :
+# elle ne remplace que app/, du Python pur. L'archive *-app-*.zip est donc
+# COMMUNE aux trois systemes.
+#
+# DEPOT DE CONSTRUCTION SEPARE (option --depot-de-construction de
+# poser_le_kit.py) : quand le code vit dans un depot PRIVE sans minutes de
+# compilation, ce meme fichier est pose dans le depot PUBLIC de distribution,
+# avec DEPOT_SOURCE renseigne ci-dessous et une planification. Il y lit le
+# code par une cle de deploiement en lecture seule (secret SOURCE_DEPLOY_KEY),
+# construit le tag le plus recent qui n'a pas encore de Release, et publie
+# dans son propre depot. Vide (cas ordinaire), tout se passe dans ce depot.
+env:
+  DEPOT_SOURCE: ''
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version a construire (sans le v), ex. 1.2.3"
+        required: false
+      ref:
+        description: "Commit, branche ou tag a construire (par defaut : le tag vX.Y.Z en depot de construction separe, la branche choisie sinon)"
+        required: false
+      brouillon:
+        description: "Publier en BROUILLON (invisible pour la mise a jour automatique tant qu'il n'est pas publie)"
+        type: boolean
+        default: false
+  # Appelable depuis un autre workflow du depot. C'est indispensable quand une
+  # CI cree elle-meme le tag : GitHub ne declenche aucun workflow sur un
+  # evenement produit par le jeton d'un workflow (protection anti-boucle), si
+  # bien que le tag arrivait sans que rien ne construise le paquet.
+  workflow_call:
+    inputs:
+      version:
+        description: "Version a construire (sans le v)"
+        required: true
+        type: string
+      ref:
+        description: "Commit ou tag a construire. Indispensable quand la CI
+          appelante vient de pousser un commit de version : sans lui, le job
+          reprend le commit declencheur, plus ancien d'une version."
+        required: false
+        type: string
+  # @PLANIFICATION@
+
+permissions:
+  contents: write
+
+# @CONCURRENCE@
+
+jobs:
+  # Quoi construire, et depuis ou.
+  #
+  # Un projet dont le paquet depend d'un artefact produit en amont (un moteur
+  # 3D exporte, par exemple) ne peut pas etre construit par le simple push du
+  # tag : l'artefact n'existe pas encore. Dans ce cas seul l'appel depuis le
+  # workflow amont construit, et le declenchement par tag s'efface sans
+  # echouer — un echec rouge sur chaque version serait du bruit.
+  decider:
+    runs-on: ubuntu-latest
+    outputs:
+      construire: ${{ steps.choix.outputs.construire }}
+      version: ${{ steps.choix.outputs.version }}
+      ref: ${{ steps.choix.outputs.ref }}
+      depot: ${{ steps.choix.outputs.depot }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ env.DEPOT_SOURCE || github.repository }}
+          ssh-key: ${{ env.DEPOT_SOURCE != '' && secrets.SOURCE_DEPLOY_KEY || '' }}
+          fetch-depth: 0
+      - id: choix
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          DEPOT="${DEPOT_SOURCE:-$GITHUB_REPOSITORY}"
+          echo "depot=$DEPOT" >> "$GITHUB_OUTPUT"
+          V="${{ inputs.version }}"
+          REF="${{ inputs.ref }}"
+          if [ -n "$DEPOT_SOURCE" ]; then
+            # Depot de construction separe : sans version demandee (planification),
+            # on prend le tag le plus recent du depot de code qui n'a encore
+            # aucune Release ICI — brouillons compris, pour ne jamais publier
+            # deux fois une version en cours de verification.
+            if [ -z "$V" ]; then
+              DERNIER=$(git tag -l 'v*' --sort=-v:refname | head -1)
+              if [ -z "$DERNIER" ]; then
+                echo "construire=false" >> "$GITHUB_OUTPUT"; echo "Aucun tag."; exit 0
+              fi
+              if gh release list -R "$GITHUB_REPOSITORY" --limit 200 --json tagName \
+                   --jq '.[].tagName' | grep -qx "$DERNIER"; then
+                echo "construire=false" >> "$GITHUB_OUTPUT"
+                echo "Deja publiee (ou en brouillon) : $DERNIER"; exit 0
+              fi
+              V="$DERNIER"
+            fi
+            V="${V#v}"
+            [ -n "$REF" ] || REF="v$V"
+          else
+            ARTEFACT=$(python3 -c "import json;print(json.load(open('kit.json')).get('artefact_prealable',''))")
+            # On ne peut pas se fier a github.event_name : dans un workflow
+            # appele, il vaut toujours l'evenement d'origine (« push »), et la
+            # condition ecartait justement le cas legitime. C'est la presence
+            # d'une version en entree qui distingue un appel d'un
+            # declenchement par tag.
+            if [ -n "$ARTEFACT" ] && [ -z "$V" ]; then
+              echo "construire=false" >> "$GITHUB_OUTPUT"
+              echo "Paquet construit par le workflow amont (artefact $ARTEFACT) : rien a faire ici."
+              exit 0
+            fi
+            [ -n "$V" ] || V="$GITHUB_REF_NAME"
+            # Un appelant peut transmettre « v1.2.3 » (github.ref_name) aussi
+            # bien que « 1.2.3 » : on normalise plutot que de compter sur lui.
+            V="${V#v}"
+            [ -n "$REF" ] || REF="$GITHUB_REF"
+          fi
+          echo "construire=true" >> "$GITHUB_OUTPUT"
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          echo "ref=$REF" >> "$GITHUB_OUTPUT"
+          echo "A construire : $V ($DEPOT @ $REF)"
+
+  # Les essais du depot (kit.json « tests_ci » : cibles pytest), sous Linux,
+  # interface comprise (Xvfb). Un echec arrete la publication. Sans la cle, le
+  # job s'acheve aussitot : rien ne change pour les projets qui testent
+  # ailleurs (tests.yml du depot).
+  tests:
+    needs: decider
+    if: needs.decider.outputs.construire == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ needs.decider.outputs.depot }}
+          ssh-key: ${{ env.DEPOT_SOURCE != '' && secrets.SOURCE_DEPLOY_KEY || '' }}
+          ref: ${{ needs.decider.outputs.ref }}
+      - name: Lire kit.json
+        id: kit
+        shell: bash
+        run: |
+          python3 -c "import json;print('cibles=' + ' '.join(json.load(open('kit.json')).get('tests_ci') or []))" >> "$GITHUB_OUTPUT"
+          # les dependances de l'APPLICATION (kit.json « requirements ») : un
+          # requirements.txt de developpement peut contenir des outils sans
+          # roue precompilee, inutiles aux essais
+          python3 -c "import json;print('requirements=' + (json.load(open('kit.json')).get('requirements') or 'requirements.txt'))" >> "$GITHUB_OUTPUT"
+      - name: Python
+        if: steps.kit.outputs.cibles != ''
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Dependances
+        if: steps.kit.outputs.cibles != ''
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq xvfb poppler-utils libegl1 libgl1 libxkbcommon-x11-0 \
+            libdbus-1-3 libfontconfig1 libxcb-icccm4 libxcb-image0 libxcb-keysyms1 \
+            libxcb-randr0 libxcb-render-util0 libxcb-shape0 libxcb-xinerama0 libxcb-cursor0 \
+            libxcb-xkb1 libpulse0 libasound2t64 \
+            libnss3 libxcomposite1 libxdamage1 libxrandr2 libxtst6 libxkbfile1 libxshmfence1 libgbm1 libminizip1
+          pip install -q pytest -r "${{ steps.kit.outputs.requirements }}"
+      - name: Essais
+        if: steps.kit.outputs.cibles != ''
+        env:
+          QT_QPA_PLATFORM: xcb
+        run: xvfb-run -a -s "-screen 0 1920x1080x24" python -m pytest -q ${{ steps.kit.outputs.cibles }}
+
+  # Windows. Python « embeddable » + Inno Setup.
+  build:
+    needs: decider
+    if: needs.decider.outputs.construire == 'true'
+    runs-on: windows-latest
+
+    steps:
+      - name: Recuperer le depot
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ needs.decider.outputs.depot }}
+          ssh-key: ${{ env.DEPOT_SOURCE != '' && secrets.SOURCE_DEPLOY_KEY || '' }}
+          ref: ${{ needs.decider.outputs.ref }}
+
+      - name: Lire kit.json
+        id: kit
+        shell: bash
+        run: |
+          python - <<'PY' >> "$GITHUB_OUTPUT"
+          import json, pathlib
+          k = json.loads(pathlib.Path('kit.json').read_text(encoding='utf-8'))
+          exclus = k.get('exclus_de_la_maj') or []
+          print('exclus_de_la_maj=' + ' '.join(exclus))
+          # Controles statiques lances avant la construction ; par defaut les
+          # trois historiques du kit, ceux qui existent dans le depot.
+          controles = k.get('controles') or ['verifier_symboles.py', 'verifier_signaux.py',
+                                             'verifier_installeur.py']
+          print('controles=' + ' '.join(controles))
+          print('controles_paquet=' + ' '.join(k.get('controles_paquet') or []))
+          print('proteges=' + ' '.join(k.get('fichiers_proteges') or []))
+          for cle in ('nom_technique', 'nom_fichier', 'nom_affiche',
+                      'depot_distribution', 'point_entree', 'icone', 'appid',
+                      'fichier_version', 'artefact_prealable', 'artefact_dossier',
+                      'journal_technique', 'journal_public', 'journal_public_en'):
+              print(f"{cle}={k.get(cle, '')}")
+          PY
+
+      - name: Determiner la version
+        id: version
+        shell: bash
+        run: |
+          V="${{ needs.decider.outputs.version }}"
+          echo "value=$V" >> "$GITHUB_OUTPUT"
+          echo "Version : $V"
+
+      - name: Verifier que la version declaree concorde avec le tag
+        shell: bash
+        run: |
+          FICHIER=$(tr -d ' \r\n' < "${{ steps.kit.outputs.fichier_version }}")
+          TAG="${{ steps.version.outputs.value }}"
+          if [ "$FICHIER" != "$TAG" ]; then
+            echo "::error::Le depot annonce la version '$FICHIER' mais le tag dit '$TAG'."
+            echo "Mettez la version a jour avant de poser le tag, sinon"
+            echo "l'application proposera sans fin une mise a jour deja installee."
+            exit 1
+          fi
+
+      # Journaux des versions (facultatifs, declares dans kit.json) : la
+      # publication s'arrete si l'un d'eux ne parle pas de la version. Le
+      # journal public, ecrit a la main pour un lecteur qui n'est pas
+      # developpeur, vit dans le depot de distribution ; il fournit aussi le
+      # texte « Ce qui change » des notes de la Release.
+      - name: Verifier les journaux des versions
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          V="${{ steps.version.outputs.value }}"
+          MINEURE="${V%.*}"
+          TECH="${{ steps.kit.outputs.journal_technique }}"
+          if [ -n "$TECH" ]; then
+            if ! grep -qE "^## \[?$V\]?( |$)" "$TECH"; then
+              echo "::error::$TECH ne parle pas de la version $V."; exit 1
+            fi
+            echo "$TECH : $V decrite."
+          fi
+          for J in "${{ steps.kit.outputs.journal_public }}" "${{ steps.kit.outputs.journal_public_en }}"; do
+            [ -n "$J" ] || continue
+            # Par l'API, pas raw.githubusercontent.com : ce dernier sert une
+            # copie en cache jusqu'a 5 minutes, et un journal pousse juste
+            # avant le lancement y etait encore absent (publication refusee).
+            URL="https://api.github.com/repos/${{ steps.kit.outputs.depot_distribution }}/contents/$J"
+            if ! curl -fsSL -H "Accept: application/vnd.github.raw" \
+                 -H "Authorization: Bearer $GH_TOKEN" "$URL" -o journal_public.md; then
+              echo "::error::Journal public illisible : $URL"; exit 1
+            fi
+            if ! grep -qE "^## ($V|$MINEURE)( |$)" journal_public.md; then
+              echo "::error::Le journal public $J ne parle ni de $V ni de $MINEURE."
+              exit 1
+            fi
+            echo "Journal public $J : $V decrite."
+          done
+          rm -f journal_public.md
+
+      # Certains projets ont besoin d'un binaire produit par un job precedent
+      # (un moteur 3D exporte, par exemple). kit.json le nomme ; les autres
+      # projets sautent cette etape.
+      - name: Recuperer l'artefact prealable
+        if: ${{ steps.kit.outputs.artefact_prealable != '' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ steps.kit.outputs.artefact_prealable }}
+          path: ${{ steps.kit.outputs.artefact_dossier }}
+
+      - name: Installer Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # Controles statiques, quand le depot les embarque. Ils sont facultatifs
+      # par construction : un projet qui ne les a pas passe outre sans echouer.
+      # Chacun attrape un defaut qui, autrement, ne se voit que chez
+      # l'utilisateur — un nom jamais importe, un signal Qt qui recopie sa
+      # charge, un installeur qui ne sait pas que l'application tourne.
+      - name: Controles statiques
+        shell: bash
+        run: |
+          for controle in ${{ steps.kit.outputs.controles }}; do
+            if [ -f "$controle" ]; then
+              echo "--- $controle"
+              python "$controle"
+            fi
+          done
+
+      - name: Construire le paquet autonome
+        shell: bash
+        run: python build_package.py --out "$RUNNER_TEMP/build"
+
+      - name: Verifier que le paquet demarre
+        shell: bash
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          PKG="$RUNNER_TEMP/build/${{ steps.kit.outputs.nom_fichier }}"
+          "$PKG/python/python.exe" -c "
+          import sys, json, pathlib
+          sys.path.insert(0, r'$PKG/app')
+          from PyQt6.QtCore import QCoreApplication, Qt
+          from PyQt6.QtWidgets import QApplication
+          # exige par QtWebEngine AVANT la creation de l'application (sans
+          # effet pour les autres) : sinon son import echoue ici
+          QCoreApplication.setAttribute(Qt.ApplicationAttribute.AA_ShareOpenGLContexts)
+          app = QApplication(sys.argv)
+          import reporting, updater
+          kit = json.loads(pathlib.Path(r'$PKG/app/kit.json').read_text(encoding='utf-8'))
+          # Modules que l'application doit pouvoir importer : c'est le seul
+          # moyen de repérer ici une dependance oubliee dans le paquet, qui
+          # ne se verrait sinon qu'au premier lancement chez l'utilisateur.
+          for module in kit.get('verification_import', []):
+              __import__(module)
+              print('  import OK :', module)
+          attendue = '${{ steps.version.outputs.value }}'
+          vue = pathlib.Path(r'$PKG/app/' + kit['fichier_version']).read_text(encoding='utf-8').strip()
+          if vue != attendue:
+              raise SystemExit(
+                  'Le paquet s annonce en version ' + repr(vue)
+                  + ' alors que le tag dit ' + attendue
+                  + ' : il proposerait sans fin une mise a jour deja installee.')
+          assert updater.is_packaged(), 'paquet non reconnu par la mise a jour'
+          print('paquet fonctionnel, version', vue)
+          "
+
+      # Controles joues SUR LE PAQUET CONSTRUIT, avec son propre Python
+      # (kit.json « controles_paquet ») : copies dans app/, lances depuis
+      # app/, puis retires — ils n'ont rien a faire chez l'utilisateur.
+      - name: Controles sur le paquet construit
+        if: ${{ steps.kit.outputs.controles_paquet != '' }}
+        shell: bash
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          PKG="$RUNNER_TEMP/build/${{ steps.kit.outputs.nom_fichier }}"
+          for controle in ${{ steps.kit.outputs.controles_paquet }}; do
+            echo "--- $controle"
+            cp "$controle" "$PKG/app/"
+            (cd "$PKG/app" && "$PKG/python/python.exe" "$(basename "$controle")")
+            rm -f "$PKG/app/$(basename "$controle")"
+          done
+
+      - name: Preparer l'archive de mise a jour
+        shell: bash
+        run: |
+          # Seuls les fichiers applicatifs : quelques centaines de kilo-octets,
+          # contre plusieurs centaines de megaoctets pour le paquet complet.
+          # C'est ce que telecharge l'application quand elle se met a jour.
+          # On travaille sur une COPIE : l'installeur est compile depuis le
+          # paquet, et retirer des fichiers dans le paquet lui-meme livrerait
+          # une application amputee de ses donnees.
+          rm -rf "$RUNNER_TEMP/maj"
+          cp -r "$RUNNER_TEMP/build/${{ steps.kit.outputs.nom_fichier }}/app" "$RUNNER_TEMP/maj"
+          cd "$RUNNER_TEMP/maj"
+          find . -name '__pycache__' -type d -prune -exec rm -rf {} +
+          # Donnees volumineuses qui ne bougent pas d'une version a l'autre
+          # (sons, moteur 3D...). Les laisser ferait retelecharger des
+          # centaines de megaoctets a chaque correction d'une ligne de code.
+          # Quand elles changent, c'est l'installeur complet qu'il faut.
+          for DOSSIER in ${{ steps.kit.outputs.exclus_de_la_maj }}; do
+            echo "  exclu de l'archive : $DOSSIER"
+            rm -rf "$DOSSIER"
+          done
+          # Ce qui appartient a l'utilisateur ne part JAMAIS dans l'archive : un
+          # dossier « backups » vide, cree dans app/ par la verification du
+          # paquet, remplacait chez l'utilisateur ses sauvegardes par un
+          # dossier vide a chaque mise a jour (MusicOtheque jusqu'a la 3.21).
+          for PROTEGE in ${{ steps.kit.outputs.proteges }}; do
+            if [ -e "$PROTEGE" ]; then
+              echo "  donnee utilisateur retiree de l'archive : $PROTEGE"
+              rm -rf "$PROTEGE"
+            fi
+          done
+          NOM="${{ steps.kit.outputs.nom_technique }}-app-${{ steps.version.outputs.value }}.zip"
+          7z a -tzip "$GITHUB_WORKSPACE/$NOM" ./* > /dev/null
+          ls -lh "$GITHUB_WORKSPACE/$NOM"
+
+      - name: Installer Inno Setup
+        run: choco install innosetup --no-progress -y
+
+      - name: Compiler l'installeur
+        # PowerShell et non bash : Git Bash (MSYS) reecrit tout argument
+        # commencant par « / » en chemin Windows, si bien qu'ISCC recevait
+        # « C:/Program Files/Git/DAppVersion=... » et repondait
+        # « You may not specify more than one script filename ».
+        shell: pwsh
+        run: |
+          & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" `
+            "/DAppVersion=${{ steps.version.outputs.value }}" `
+            "/DSourceDir=$env:RUNNER_TEMP\build\${{ steps.kit.outputs.nom_fichier }}" `
+            "/DAppName=${{ steps.kit.outputs.nom_fichier }}" `
+            "/DAppDisplayName=${{ steps.kit.outputs.nom_affiche }}" `
+            "/DAppId=${{ steps.kit.outputs.appid }}" `
+            "/DIconFile=${{ steps.kit.outputs.icone }}" `
+            "/DEntry=${{ steps.kit.outputs.point_entree }}" `
+            installer.iss
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          # Copie sous un nom STABLE : l'adresse
+          # .../releases/latest/download/<Nom>-Setup.exe pointe alors toujours
+          # vers la derniere version — un lien permanent a partager, sans
+          # numero a mettre a jour (demande du 2026-09-27).
+          Copy-Item "installer_out/${{ steps.kit.outputs.nom_fichier }}-Setup-${{ steps.version.outputs.value }}.exe" `
+            "installer_out/${{ steps.kit.outputs.nom_fichier }}-Setup.exe"
+          Get-ChildItem installer_out
+
+      - name: Deposer les artefacts Windows
+        uses: actions/upload-artifact@v4
+        with:
+          name: paquet-windows
+          path: |
+            installer_out/${{ steps.kit.outputs.nom_fichier }}-Setup-${{ steps.version.outputs.value }}.exe
+            installer_out/${{ steps.kit.outputs.nom_fichier }}-Setup.exe
+            ${{ steps.kit.outputs.nom_technique }}-app-${{ steps.version.outputs.value }}.zip
+          if-no-files-found: error
+
+  # ──────────────────────────────────────────────────────────────────────
+  # macOS et Linux. Meme structure de paquet que Windows — python/ et app/ —
+  # pour que la mise a jour automatique fonctionne a l'identique partout.
+  # ──────────────────────────────────────────────────────────────────────
+  build-unix:
+    needs: decider
+    if: needs.decider.outputs.construire == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # macos-latest est un Mac Apple Silicon : n'y construire qu'un seul
+          # paquet livrerait un .dmg arm64 qu'un Mac Intel ne peut pas ouvrir.
+          - os: macos-latest
+            plateforme: macos
+            arch: arm64
+          - os: macos-15-intel
+            plateforme: macos
+            arch: x86_64
+          - os: ubuntu-latest
+            plateforme: linux
+            arch: x86_64
+          - os: ubuntu-24.04-arm
+            plateforme: linux
+            arch: arm64
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - name: Recuperer le depot
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ needs.decider.outputs.depot }}
+          ssh-key: ${{ env.DEPOT_SOURCE != '' && secrets.SOURCE_DEPLOY_KEY || '' }}
+          ref: ${{ needs.decider.outputs.ref }}
+
+      - name: Lire kit.json
+        id: kit
+        shell: bash
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          k = json.load(open('kit.json'))
+          for cle in ('nom_technique', 'nom_fichier', 'nom_affiche',
+                      'depot_distribution', 'fichier_version',
+                      'artefact_prealable', 'artefact_dossier'):
+              print(f"{cle}={k.get(cle, '')}")
+          PY
+
+      - name: Determiner la version
+        id: version
+        shell: bash
+        run: echo "value=${{ needs.decider.outputs.version }}" >> "$GITHUB_OUTPUT"
+
+      - name: Verifier que la version declaree concorde avec le tag
+        shell: bash
+        run: |
+          FICHIER=$(tr -d ' \r\n' < "${{ steps.kit.outputs.fichier_version }}")
+          TAG="${{ steps.version.outputs.value }}"
+          if [ "$FICHIER" != "$TAG" ]; then
+            echo "::error::Le depot annonce '$FICHIER' mais le tag dit '$TAG'."
+            exit 1
+          fi
+
+      # Le binaire produit en amont (moteur 3D exporte pour chaque systeme)
+      # sert aussi aux paquets macOS et Linux : kit.json « copies », avec
+      # « systemes », dit lequel va dans quel paquet.
+      - name: Recuperer l'artefact prealable
+        if: ${{ steps.kit.outputs.artefact_prealable != '' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ steps.kit.outputs.artefact_prealable }}
+          path: ${{ steps.kit.outputs.artefact_dossier }}
+
+      - name: Python de construction
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      # PyQt6 a besoin de ces bibliotheques pour seulement s'importer sur un
+      # runner Linux sans serveur graphique ; sans elles, la verification
+      # d'import du paquet echoue alors que le paquet est bon. binutils
+      # fournit strip, qui retire les symboles de debogage de libpython.
+      - name: Dependances systeme (Linux)
+        if: matrix.plateforme == 'linux'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            libegl1 libgl1 libxkbcommon-x11-0 libdbus-1-3 libfontconfig1 \
+            libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 \
+            libxcb-render-util0 libxcb-shape0 libxcb-xinerama0 libxcb-cursor0 \
+            libxcb-xkb1 libpulse0 libasound2t64 binutils \
+            libnss3 libxcomposite1 libxdamage1 libxrandr2 libxtst6 libxkbfile1 \
+            libxshmfence1 libgbm1 libminizip1 || \
+          sudo apt-get install -y -qq \
+            libegl1 libgl1 libxkbcommon-x11-0 libdbus-1-3 libfontconfig1 \
+            libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 \
+            libxcb-render-util0 libxcb-shape0 libxcb-xinerama0 libxcb-cursor0 \
+            libxcb-xkb1 binutils
+
+      - name: Construire le paquet
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: python3 build_unix.py --version ${{ steps.version.outputs.value }}
+
+      # Le paquet construit doit DEMARRER avec son propre interpreteur :
+      # dependances presentes, Qt capable de s'initialiser.
+      - name: Verifier que le paquet demarre (Linux)
+        if: matrix.plateforme == 'linux'
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: dist/${{ steps.kit.outputs.nom_fichier }}/${{ steps.kit.outputs.nom_fichier }}.sh --check
+
+      - name: Verifier que le paquet demarre (macOS)
+        if: matrix.plateforme == 'macos'
+        run: |
+          NOM="${{ steps.kit.outputs.nom_fichier }}"
+          "dist/$NOM.app/Contents/MacOS/$NOM" --check
+
+      - name: Image disque (macOS)
+        if: matrix.plateforme == 'macos'
+        run: |
+          NOM="${{ steps.kit.outputs.nom_fichier }}"
+          VER="${{ steps.version.outputs.value }}"
+          mkdir -p dmg_src
+          cp -R "dist/$NOM.app" dmg_src/
+          ln -s /Applications dmg_src/Applications
+          hdiutil create -volname "$NOM $VER" -srcfolder dmg_src \
+            -ov -format UDZO "$NOM-$VER-macos-${{ matrix.arch }}.dmg"
+          ls -lh "$NOM-$VER-macos-${{ matrix.arch }}.dmg"
+
+      - name: Deposer les artefacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: paquet-${{ matrix.plateforme }}-${{ matrix.arch }}
+          # *-maj-*.zip : archive de mise a jour propre a ce systeme (kit.json
+          # « archive_par_systeme ») ; *-linux.AppImage : passerelle des
+          # anciens paquets PyInstaller (« passerelle_pyinstaller »)
+          path: |
+            *.dmg
+            *-linux-*.tar.gz
+            *-maj-*.zip
+            *-linux.AppImage
+          if-no-files-found: error
+
+  # ──────────────────────────────────────────────────────────────────────
+  # Une seule Release, une fois tous les paquets construits.
+  # ──────────────────────────────────────────────────────────────────────
+  publier:
+    needs: [decider, tests, build, build-unix]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ needs.decider.outputs.depot }}
+          ssh-key: ${{ env.DEPOT_SOURCE != '' && secrets.SOURCE_DEPLOY_KEY || '' }}
+          ref: ${{ needs.decider.outputs.ref }}
+
+      - name: Lire kit.json
+        id: kit
+        shell: bash
+        run: |
+          python3 - <<'PY' >> "$GITHUB_OUTPUT"
+          import json
+          k = json.load(open('kit.json'))
+          for cle in ('nom_technique', 'nom_fichier', 'nom_affiche', 'depot_distribution'):
+              print(f"{cle}={k.get(cle, '')}")
+          PY
+
+      - name: Determiner la version
+        id: version
+        shell: bash
+        run: echo "value=${{ needs.decider.outputs.version }}" >> "$GITHUB_OUTPUT"
+
+      - name: Rassembler les artefacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artefacts
+
+      - name: Mettre a plat
+        shell: bash
+        run: |
+          mkdir -p publication
+          find artefacts -type f -exec cp {} publication/ \;
+          # Copies SANS numero de version des images macOS et archives Linux
+          # (l'installeur Windows a deja la sienne) : leurs liens
+          # « releases/latest/download/<Nom>-macos-arm64.dmg » restent valables
+          # d'une version a l'autre. L'archive de mise a jour n'est pas
+          # dupliquee : l'updater la reconnait a son prefixe.
+          V="${{ steps.version.outputs.value }}"
+          N="${{ steps.kit.outputs.nom_fichier }}"
+          (cd publication && for f in "$N-$V-"*.dmg "$N-$V-"*.tar.gz; do
+             [ -f "$f" ] || continue
+             cp "$f" "$(echo "$f" | sed -e "s/^$N-$V-/$N-/")"
+           done)
+          # Empreintes de tous les fichiers publies : de quoi verifier un
+          # telechargement a la main, et ce qu'exigeaient les mises a jour
+          # des anciens paquets (refus sans SHA256SUMS).
+          (cd publication && sha256sum * > SHA256SUMS && cat SHA256SUMS)
+          ls -lh publication
+
+      # Notes de la Release : une section par langue (« ## English »,
+      # « ## Francais ») ; l'application n'affiche que celle de son interface
+      # (updater.notes_dans_la_langue). kit.json « langue_principale » met sa
+      # langue en tete : une ancienne version de l'application, qui affiche
+      # le debut des notes tel quel, montre alors la bonne langue. Les
+      # journaux publics declares dans kit.json fournissent « Ce qui change ».
+      - name: Rediger les notes
+        shell: bash
+        env:
+          VERSION: ${{ steps.version.outputs.value }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import json, os, re, urllib.request
+          k = json.load(open('kit.json', encoding='utf-8'))
+          V = os.environ['VERSION']
+          nom, depot = k['nom_fichier'], k['depot_distribution']
+          fichiers = [
+              ('Windows', f'{nom}-Setup-{V}.exe'),
+              ('macOS Apple Silicon', f'{nom}-{V}-macos-arm64.dmg'),
+              ('macOS Intel', f'{nom}-{V}-macos-x86_64.dmg'),
+              ('Linux x86_64', f'{nom}-{V}-linux-x86_64.tar.gz'),
+              ('Linux ARM64', f'{nom}-{V}-linux-arm64.tar.gz'),
+          ]
+
+          def journal(cle):
+              chemin = k.get(cle) or ''
+              if not chemin:
+                  return ''
+              # par l'API (sans cache), comme la verification des journaux
+              url = f'https://api.github.com/repos/{depot}/contents/{chemin}'
+              req = urllib.request.Request(url, headers={
+                  'Accept': 'application/vnd.github.raw',
+                  'Authorization': 'Bearer ' + os.environ.get('GH_TOKEN', '')})
+              try:
+                  texte = urllib.request.urlopen(req, timeout=30).read().decode('utf-8')
+              except Exception as e:
+                  print('journal illisible', url, e)
+                  return ''
+              mineure = V.rsplit('.', 1)[0]
+              bloc = re.search(r'^## (?:%s|%s)\b.*?(?=^## |^---|\Z)' % (re.escape(V), re.escape(mineure)),
+                               texte, re.M | re.S)
+              if not bloc:
+                  return ''
+              lignes = bloc.group(0).strip().splitlines()
+              # le titre de la version devient un titre de niveau 3 : un « ## »
+              # serait pris pour une nouvelle section de langue
+              return '\n'.join(['#' + l if l.startswith('## ') else l for l in lignes])
+
+          tableau = {
+              'en': '| System | File |\n|---|---|\n' + '\n'.join(f'| **{s}** | `{f}` |' for s, f in fichiers),
+              'fr': '| Systeme | Fichier |\n|---|---|\n' + '\n'.join(
+                  f'| **{s}** | `{f}` |' for s, f in fichiers),
+          }
+          lien = f'https://github.com/{depot}/releases/latest/download/{nom}-Setup.exe'
+          sections = {
+              'en': ('English', journal('journal_public_en'), '### What is new', f"""### Download
+
+          {tableau['en']}
+
+          Permanent link to the latest Windows installer:
+          {lien}
+
+          No administrator password is asked for: everything installs into
+          your own user profile.
+
+          **Windows** may show "Windows protected your PC" on first launch
+          because the installer is unsigned. Click **More info**, then **Run
+          anyway**. It appears only once.
+
+          **macOS**: open the `.dmg` matching your Mac and drag the application
+          into Applications. The application is unsigned: the first time,
+          **right-click** it, choose **Open**, and confirm (if macOS still
+          refuses: System Settings > Privacy & Security > **Open Anyway**).
+
+          **Linux**: unpack the archive and run `./installer.sh`. It installs
+          into `~/.local/share` and adds the menu entry, without sudo.
+
+          ### Updating
+
+          If the application is already installed, download nothing: it finds
+          this version at startup and offers to install it, on all three
+          systems. The `*-app-*.zip` archive exists for that automatic update
+          and is not meant to be installed by hand.
+          """),
+              'fr': ('Francais', journal('journal_public'), '### Ce qui change', f"""### Telechargement
+
+          {tableau['fr']}
+
+          Lien permanent vers le dernier installeur Windows :
+          {lien}
+
+          Aucun mot de passe administrateur n'est demande : l'installation se
+          fait dans votre profil utilisateur.
+
+          **Windows** peut afficher « Windows a protege votre ordinateur » au
+          premier lancement, parce que l'installeur n'est pas signe. Cliquez
+          sur **Informations complementaires** puis **Executer quand meme**.
+          Cet avertissement n'apparait qu'une fois.
+
+          **macOS** : ouvrez le `.dmg` qui correspond a votre Mac et glissez
+          l'application dans Applications. Elle n'est pas signee : la premiere
+          fois, faites un **clic droit** dessus, puis **Ouvrir**, et confirmez
+          (si macOS refuse encore : Reglages Systeme > Confidentialite et
+          securite > **Ouvrir quand meme**).
+
+          **Linux** : decompressez l'archive et lancez `./installer.sh`. Il
+          installe dans `~/.local/share` et ajoute l'entree de menu, sans sudo.
+
+          ### Mise a jour
+
+          Si l'application est deja installee, ne telechargez rien : elle
+          detecte cette version au demarrage et propose de l'installer, sur
+          les trois systemes. L'archive `*-app-*.zip` est destinee a cette
+          mise a jour automatique et ne s'installe pas a la main.
+          """),
+          }
+          ordre = ['en', 'fr']
+          if k.get('langue_principale') == 'fr':
+              ordre = ['fr', 'en']
+          morceaux = []
+          for lg in ordre:
+              titre, nouveau, entete, corps = sections[lg]
+              morceaux.append(f'## {titre}\n')
+              if nouveau:
+                  morceaux.append(f'{entete}\n\n{nouveau}\n')
+              # le gabarit est indente dans ce fichier : on retire l'indentation
+              morceaux.append('\n'.join(l[10:] if l.startswith(' ' * 10) else l
+                                        for l in corps.splitlines()).strip() + '\n')
+          open('notes.md', 'w', encoding='utf-8').write('\n'.join(morceaux))
+          PY
+          cat notes.md
+
+      - name: Publier la Release
+        uses: softprops/action-gh-release@v2
+        with:
+          repository: ${{ steps.kit.outputs.depot_distribution }}
+          token: ${{ secrets.RELEASE_TOKEN || github.token }}
+          name: ${{ steps.kit.outputs.nom_affiche }} ${{ steps.version.outputs.value }}
+          tag_name: v${{ steps.version.outputs.value }}
+          draft: ${{ inputs.brouillon == true }}
+          files: publication/*
+          body_path: notes.md
