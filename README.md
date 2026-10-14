@@ -14,8 +14,13 @@ construit de 1989 à 1991, ouvert le 14 avril 1993), avec les vrais sons et
 les vraies annonces de la cabine. Descendant lointain d'un programme TI-84
 de 2006.
 
-*English : the user manual `manuel_perce_neige.pdf` is bilingual (FR/EN) and
-the interface switches to English with the `L` key.*
+*English: the interface follows the system language at first launch and
+switches with the `L` key or **Display → Language** (the choice is kept);
+the driver's manual exists in English (`manuel-en.pdf`, **Help → Driver's
+manual**). Downloads: Windows installer, macOS `.dmg` (Apple Silicon and
+Intel) and Linux `.tar.gz` (x86_64 and ARM64) on the
+[latest release page](https://github.com/ARP273-ROSE/perce-neige-sim/releases/latest);
+all three update themselves.*
 
 ---
 
@@ -33,22 +38,24 @@ protégé votre ordinateur » (installeur non signé) : *Informations
 complémentaires* puis *Exécuter quand même*. Les mises à jour suivantes ne
 le déclenchent plus.
 
-**Linux et macOS** — sur la [page de la dernière version](https://github.com/ARP273-ROSE/perce-neige-sim/releases/latest) :
+**macOS et Linux** — sur la [page de la dernière version](https://github.com/ARP273-ROSE/perce-neige-sim/releases/latest) :
 
-- Linux : `PerceNeigeSimulator-…-linux.AppImage`, à rendre exécutable puis
-  lancer. Fonctionne sur les distributions encore suivies (glibc ≥ 2.34 :
-  Ubuntu ≥ 22.04, Debian ≥ 12, Fedora, RHEL ≥ 9, Mint ≥ 21, Arch,
-  openSUSE…) ; essayée à chaque version sur six d'entre elles. L'archive
-  `…-linux-x86_64.tar.gz` contient le même programme sans AppImage.
-- macOS : `…-macos-apple-silicon.dmg` (M1 et suivants) ou
-  `…-macos-intel.dmg`, à glisser dans Applications. L'application n'est
-  pas signée par un développeur Apple : au premier lancement, clic droit →
-  *Ouvrir* (ou Réglages Système → Confidentialité et sécurité → *Ouvrir
-  quand même*).
+- macOS : `PerceNeigeSimulator-macos-arm64.dmg` (Apple Silicon, M1 et
+  suivants) ou `PerceNeigeSimulator-macos-x86_64.dmg` (Mac Intel), à glisser
+  dans Applications. L'application n'est pas signée par un développeur
+  Apple : au premier lancement, clic droit → *Ouvrir* (ou Réglages Système →
+  Confidentialité et sécurité → *Ouvrir quand même*).
+- Linux : `PerceNeigeSimulator-linux-x86_64.tar.gz` (ou `…-linux-arm64.tar.gz`),
+  à décompresser, puis `./installer.sh` : installation dans
+  `~/.local/share`, sans `sudo`, avec l'entrée du menu des applications.
+  Une ancienne AppImage (jusqu'à la 1.19) passe d'elle-même au nouveau
+  paquet à sa prochaine mise à jour.
 
-La vue cabine 3D est incluse partout. Sous Linux et macOS, l'application
-signale les nouvelles versions au démarrage ; on remplace alors l'AppImage
-ou l'app.
+La vue cabine 3D est incluse partout. **Sur les trois systèmes, le
+programme se met à jour tout seul** : au démarrage, il propose la nouvelle
+version, télécharge l'archive de son système et redémarre. Le journal
+d'exploitation, les records et les réglages vivent dans le profil de
+l'utilisateur et survivent aux mises à jour comme aux réinstallations.
 
 ---
 
@@ -221,7 +228,7 @@ L'écran d'accueil (F1) reprend ces touches.
 | `F1`              | Aide                                            |
 | `F3`              | La vraie machine, liens                         |
 | `F5`              | Journal d'exploitation                          |
-| `F6`              | Télécharger manuel et guide théorique (PDF)     |
+| `F6`              | Manuel du conducteur (PDF, dans la langue de l'interface) |
 | `F7` / `F8`       | Volume général − / +                            |
 | `F11`             | Plein écran / fenêtre                           |
 | `+` / `−` / `0`   | Zoom de la vue de profil (ou molette)           |
@@ -269,7 +276,8 @@ skieur (puis ZQSD, `Maj`, `V`, `E` pour chausser).
 
 ## Documentation
 
-- `manuel_perce_neige.pdf` : manuel utilisateur, FR/EN, 56 pages.
+- `manuel-fr.pdf` / `manuel-en.pdf` : manuel du conducteur, en français et
+  en anglais (menu **Aide → Manuel du conducteur**, touche F6).
 - `guide_theorique.pdf` : formules, sources réglementaires, calibration audio.
 - `AUDIT_PHYSIQUE_VOYAGES.md`, `AUDIT_PHYSIQUE_PANNES.md` : audits du
   modèle physique, scripts SageMath et sorties dans `audit_physique/`.

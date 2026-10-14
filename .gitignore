@@ -97,3 +97,11 @@ godot_project/--*
 
 # réglages locaux de deploy_web.sh (chemins du serveur)
 deploy_web.local
+
+# paquets du kit : archives par système et passerelle des anciens paquets Linux
+*-maj-*.zip
+*-linux.AppImage
+manuel-*.aux
+manuel-*.log
+manuel-*.out
+manuel-*.toc

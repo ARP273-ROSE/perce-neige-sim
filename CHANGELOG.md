@@ -5,6 +5,49 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.20.0 — 14 octobre 2026
+
+Passage au standard commun des applications (kit `_kit_windows`).
+
+- **Trois systèmes, une seule chaîne de publication** : installeur Windows,
+  `.dmg` macOS (Apple Silicon et Intel), `.tar.gz` Linux (x86_64 et, nouveau,
+  ARM64, avec son viewer 3D exporté pour ARM64), tous construits par le
+  workflow commun `release.yml` (appelé par `build.yml` après l'export du
+  viewer). Fin de PyInstaller : `.spec`, `packaging/` et AppImage retirés.
+- **Mise à jour automatique sur les trois systèmes** : archive de mise à
+  jour PROPRE à chaque système (`perce-neige-sim-maj-<système>-<arch>-X.zip`,
+  avec le viewer 3D du système) ; l'archive `perce-neige-sim-app-X.zip` reste
+  celle de Windows, que les paquets Windows déjà installés (Setup 1.15.3 à
+  1.19.30) prennent toujours. Anciens paquets Linux : la mise à jour d'un
+  dossier `.tar.gz` y trouve son lanceur `PerceNeigeSimulator` ; une
+  AppImage reçoit `…-linux.AppImage`, une passerelle qui installe le paquet
+  dans le profil puis le lance. `SHA256SUMS` publié à chaque version.
+- **Données hors du dossier d'installation** : accord et file des rapports,
+  trace du dernier crash natif, rapports de plantage vont dans le profil ;
+  ce que les versions précédentes avaient laissé dans `app/` y est
+  DÉPLACÉ au premier démarrage (renommage, réessai si le fichier est tenu,
+  rien d'écrasé : une version différente est gardée en `.ancien`).
+- **Bilingue complet** : langue choisie retenue d'un lancement à l'autre
+  (touche L, nouveau menu Affichage → Langue), menus retraduits aussitôt ;
+  derniers textes en dur traduits (fenêtre des pannes, vue 3D, préparation
+  du décor du skieur) ; notes de version affichées dans la langue de
+  l'interface. Test `tests/test_textes_en_dur.py`.
+- **Style figé** : Fusion, palette bleu nuit complète et polices embarquées
+  (Selawik, aux métriques de Segoe UI, et Cascadia Mono, licences OFL dans
+  `polices/`) : même rendu sous Windows, macOS et Linux, quel que soit le
+  thème du système.
+- **Manuel** : un PDF par langue (`manuel-fr.pdf`, `manuel-en.pdf`), ouvert
+  depuis Aide → Manuel du conducteur ou F6 dans la langue de l'interface,
+  sections installation et mise à jour réécrites pour les trois systèmes.
+- **Logo** : une seule source vectorielle, `logo.svg` (`make_logo.py`), d'où
+  sortent l'icône Windows, l'icône macOS, les PNG Linux, les icônes Web et
+  le logo de la fenêtre « À propos » et du manuel.
+- Certificats : la cascade TLS (magasin du système, racines des
+  distributions, puis certifi et les racines ISRG embarquées) est désormais
+  celle du kit commun (`reporting.ouvrir_url`), que `contexte_tls.py` reprend.
+- `--check` : le programme, son style, ses polices et le viewer 3D de son
+  système sont vérifiés dans chaque paquet construit.
+
 ## Non publié — 9 octobre 2026
 
 - Retrait des mentions personnelles : les retours d'essai sont désormais

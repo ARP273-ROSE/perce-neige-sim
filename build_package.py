@@ -203,7 +203,16 @@ def step_app():
     # Copies selectives : un dossier de donnees contient souvent bien plus que
     # ce qu'il faut livrer. Celui des sons de ce projet pese plusieurs
     # gigaoctets, dont seule une poignee de fichiers sert a l'application.
+    # « systemes » (facultatif) : la regle ne vaut que pour ces systemes
+    # (« windows », « macos », « linux », « linux-arm64 »...) — les binaires
+    # d'un moteur exporte pour chaque systeme, par exemple. « decompresser » :
+    # une archive .zip retenue est deployee a sa place au lieu d'etre copiee
+    # (l'application macOS d'un moteur, que l'artefact transporte zippee).
     for regle in COPIES:
+        systemes = regle.get('systemes') or []
+        if systemes and not any(s in ('windows', 'windows-x86_64') for s in systemes):
+            log(f"{regle['de']} : regle reservee a {', '.join(systemes)}")
+            continue
         source = ROOT / regle['de']
         cible = app / regle.get('vers', regle['de'])
         retenus = 0
@@ -213,7 +222,15 @@ def step_app():
                     continue
                 destination = cible / fichier.relative_to(source)
                 destination.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copy2(fichier, destination)
+                if regle.get('decompresser') and fichier.suffix.lower() == '.zip':
+                    with zipfile.ZipFile(fichier) as z:
+                        for membre in z.namelist():
+                            dest = (destination.parent / membre).resolve()
+                            if not str(dest).startswith(str(destination.parent.resolve())):
+                                raise RuntimeError(f'Archive suspecte : {membre}')
+                        z.extractall(destination.parent)
+                else:
+                    shutil.copy2(fichier, destination)
                 retenus += 1
         log(f"{regle['de']} : {retenus} fichier(s) retenu(s)")
 
@@ -381,7 +398,13 @@ def main():
         ('Dependances', lambda: step_deps(globals()['_exe'])),
         ('Application', step_app),
         ('Binaires', (lambda: log('ignore')) if args.skip_binaires else step_binaires),
-        ('Elagage', (lambda: log('ignore')) if args.no_prune else step_prune),
+        # kit.json « qt_elaguer » : false pour une application qui se sert de
+        # modules Qt que l'elagage retire (QtWebEngine et ses dependances
+        # Qml/Quick/WebChannel/Positioning : une liseuse EPUB, par exemple).
+        # Sans cela le paquet Windows perdait la fonction en silence, alors
+        # que les paquets macOS et Linux, jamais elagues, la gardaient.
+        ('Elagage', (lambda: log('ignore'))
+         if args.no_prune or KIT.get('qt_elaguer', True) is False else step_prune),
         ('Lanceurs', step_launcher),
         ('Pre-compilation', step_precompile),
     ]

@@ -1,4 +1,4 @@
-name: Build and release
+name: Viewer 3D et paquets
 
 on:
   push:
@@ -61,6 +61,14 @@ jobs:
           ls -lh bundled_godot/
           test -f bundled_godot/perce_neige_3d.x86_64 || (echo "ERROR: export Linux échoué (binaire absent)"; exit 1)
 
+      # Linux ARM64 (14/10/2026) : le paquet Linux ARM64 du kit a son viewer
+      - name: Export Linux arm64 viewer
+        run: |
+          set -e
+          ~/godot/godot --headless --path godot_project --export-release "Linux arm64" || true
+          ls -lh bundled_godot/
+          test -f bundled_godot/perce_neige_3d.arm64 || (echo "ERROR: export Linux arm64 échoué (binaire absent)"; exit 1)
+
       - name: Export Windows x86_64 viewer
         run: |
           set -e
@@ -87,178 +95,23 @@ jobs:
           retention-days: 7
 
   # --------------------------------------------------------------------- #
-  # Job 2 : Windows build avec viewer Godot embarqué
+  # Job 2 : paquets du kit commun (_kit_windows), sur les trois systèmes —
+  # installeur Windows, .dmg macOS (Apple Silicon, Intel), .tar.gz Linux
+  # (x86_64, ARM64), archives de mise à jour par système, passerelle des
+  # anciens paquets Linux, SHA256SUMS — publiés dans UNE Release par
+  # release.yml (gabarit du kit, identique d'une application à l'autre).
+  # Il attend godot-export : chaque paquet reçoit le viewer 3D de son
+  # système par l'artefact « godot-viewers » (kit.json « copies »).
+  # Le tag déclenche aussi release.yml directement : il s'efface alors
+  # (artefact_prealable) et seul cet appel construit.
   # --------------------------------------------------------------------- #
-  # Paquet Windows du kit : il remplace l'executable PyInstaller ci-dessus.
-  # Il embarque la distribution officielle de Python, que Defender ne met pas
-  # en quarantaine, et se met a jour par archive ZIP — donc sans faire
-  # reapparaitre l'avertissement SmartScreen a chaque version.
-  #
-  # Il attend godot-export : le viewer 3D lui arrive par artefact, comme au
-  # job PyInstaller.
-  paquet-windows:
+  paquets:
     needs: godot-export
     if: startsWith(github.ref, 'refs/tags/')
-    uses: ./.github/workflows/release-windows.yml
+    uses: ./.github/workflows/release.yml
     with:
       version: ${{ github.ref_name }}
+      ref: ${{ github.ref }}
+    secrets: inherit
     permissions:
       contents: write
-
-
-  # --------------------------------------------------------------------- #
-  # Linux et macOS (demande du 2026-10-03) — PyInstaller en dossier
-  # autonome, viewer 3D embarqué. Mêmes scripts qu'en local :
-  # packaging/build_linux.sh et packaging/build_macos.sh.
-  # --------------------------------------------------------------------- #
-  build-linux:
-    needs: godot-export
-    runs-on: ubuntu-latest
-    # glibc 2.34 : plancher des roues PyQt6 ≥ 6.10 → Ubuntu ≥ 22.04,
-    # Debian ≥ 12, Fedora, RHEL ≥ 9, Arch, openSUSE…
-    container: almalinux:9
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Download Godot viewers
-        uses: actions/download-artifact@v4
-        with:
-          name: godot-viewers
-          path: bundled_godot
-
-      - name: Construire l'AppImage et l'archive
-        run: bash packaging/build_linux.sh
-
-      - name: Upload Linux packages
-        uses: actions/upload-artifact@v4
-        with:
-          name: paquet-linux
-          path: |
-            dist_linux/*.AppImage
-            dist_linux/*.tar.gz
-          retention-days: 7
-
-  # L'AppImage lancée sur six distributions, comme sur un poste de bureau
-  # (sans libxcb-cursor, absente d'une Ubuntu de base).
-  essai-linux:
-    needs: build-linux
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Download Linux packages
-        uses: actions/download-artifact@v4
-        with:
-          name: paquet-linux
-          path: dist_linux
-
-      - name: Essai sur six distributions
-        run: |
-          chmod +x dist_linux/*.AppImage
-          bash packaging/essai_distributions.sh dist_linux/*.AppImage
-
-  build-macos:
-    needs: godot-export
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - runner: macos-15          # Apple Silicon (M1…)
-            archi: apple-silicon
-          - runner: macos-15-intel    # dernier runner Intel, jusqu'en août 2027
-            archi: intel
-    runs-on: ${{ matrix.runner }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Download Godot viewers
-        uses: actions/download-artifact@v4
-        with:
-          name: godot-viewers
-          path: bundled_godot
-
-      - name: Construire l'application et le .dmg
-        run: bash packaging/build_macos.sh ${{ matrix.archi }}
-
-      - name: Upload macOS package
-        uses: actions/upload-artifact@v4
-        with:
-          name: paquet-macos-${{ matrix.archi }}
-          path: dist_macos/*.dmg
-          retention-days: 7
-
-      - name: Upload capture d'écran
-        uses: actions/upload-artifact@v4
-        with:
-          name: capture-macos-${{ matrix.archi }}
-          path: dist_macos/*.png
-          retention-days: 7
-          if-no-files-found: ignore
-
-  # Ajoute les paquets Linux et macOS à la release créée par le paquet
-  # Windows (d'où l'attente de paquet-windows), avec leurs empreintes.
-  publier-unix:
-    needs: [paquet-windows, essai-linux, build-macos]
-    if: ${{ always() && startsWith(github.ref, 'refs/tags/') && needs.essai-linux.result == 'success' && needs.paquet-windows.result == 'success' }}
-    runs-on: ubuntu-latest
-    steps:
-      - name: Download packages
-        uses: actions/download-artifact@v4
-        with:
-          pattern: paquet-*
-          merge-multiple: true
-          path: paquets
-
-      - name: Empreintes SHA-256
-        run: |
-          cd paquets
-          ls -lh
-          sha256sum * > SHA256SUMS
-          cat SHA256SUMS
-
-      - name: Ajouter à la release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ github.ref_name }}
-          append_body: true
-          fail_on_unmatched_files: false
-          files: |
-            paquets/*.AppImage
-            paquets/*.tar.gz
-            paquets/*.dmg
-            paquets/SHA256SUMS
-          body: |
-
-            ## Linux
-
-            Téléchargez **PerceNeigeSimulator-…-linux.AppImage**, rendez-le
-            exécutable (clic droit → Propriétés → « Autoriser l'exécution »,
-            ou `chmod +x` dans un terminal) et lancez-le. Il fonctionne sur
-            les distributions encore suivies : Ubuntu 22.04 et plus, Debian 12
-            et plus, Fedora, RHEL/Alma/Rocky 9 et plus, Mint 21 et plus, Arch,
-            openSUSE… L'archive `…-linux-x86_64.tar.gz` contient le même
-            programme, sans AppImage : décompressez-la et lancez
-            `PerceNeigeSimulator`.
-
-            ## macOS
-
-            - Mac Apple Silicon (M1, M2, M3, M4…) : **…-macos-apple-silicon.dmg**
-            - Mac Intel : **…-macos-intel.dmg**
-
-            Ouvrez le .dmg et glissez **Perce-Neige Simulator** dans
-            Applications. L'application n'est pas signée par un développeur
-            Apple : au premier lancement, faites clic droit → **Ouvrir**, ou
-            Réglages Système → Confidentialité et sécurité → **Ouvrir quand
-            même**. Si macOS la dit « endommagée », tapez dans le Terminal :
-            `xattr -dr com.apple.quarantine "/Applications/Perce-Neige Simulator.app"`
-
-            Sous Linux et macOS, l'application signale les nouvelles versions
-            au démarrage ; il suffit alors de remplacer l'AppImage ou l'app.

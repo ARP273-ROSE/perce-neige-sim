@@ -81,7 +81,8 @@ UPDATE_WHITELIST = {
     "logo.png",
     "logo.ico",
     "logo_64.png",
-    "manuel_perce_neige.pdf",
+    "manuel-fr.pdf",
+    "manuel-en.pdf",
 }
 
 # Platform → expected asset name suffix (matches our GitHub Actions build)

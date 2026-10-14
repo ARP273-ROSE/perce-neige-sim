@@ -99,5 +99,5 @@ esac
 
 echo ""
 echo "✓ Viewer 3D exporté dans $BUNDLED_DIR/"
-echo "  PyInstaller (perce_neige.spec) embarquera automatiquement le binaire"
+echo "  Le paquet du kit (build_package.py, build_unix.py) embarquera automatiquement le binaire"
 echo "  de la plateforme courante dans la distribution finale du sim Python."

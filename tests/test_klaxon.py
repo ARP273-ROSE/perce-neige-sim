@@ -2,7 +2,11 @@
 import wave
 from pathlib import Path
 
-import numpy as np
+import pytest
+
+# numpy ne fait pas partie du paquet (requirements.txt) : les essais de la
+# publication (kit.json « tests_ci ») tournent sans lui
+np = pytest.importorskip("numpy")
 
 RACINE = Path(__file__).resolve().parent.parent
 PC = RACINE / "sons" / "ambients" / "klaxon_buzzer.wav"
