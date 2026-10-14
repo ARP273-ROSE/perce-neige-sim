@@ -15,8 +15,9 @@ Two modes
 
 Security
 --------
-- Max download size : 200 MB (protects against zip bombs / oversized
-  binaries)
+- No fixed download size cap (the 200 MB cap of versions up to 1.19.30
+  refused real releases that grew past it): every download is checked
+  against the size announced by the GitHub API and against SHA256SUMS
 - Binary integrity : frozen-mode assets are verified against the
   ``SHA256SUMS`` file published in the same release (mandatory --- a
   release without checksums is refused). Size must also match the
@@ -49,7 +50,10 @@ from typing import Callable, Optional
 
 
 GITHUB_API = "https://api.github.com/repos/{owner}/{repo}/releases/latest"
-MAX_DOWNLOAD_BYTES = 200 * 1024 * 1024  # 200 MB
+# Aucun plafond fixe : l'intégrité se juge à la taille annoncée par l'API et à
+# SHA256SUMS. (Le plafond de 200 Mo des versions <= 1.19.30 reste gravé dans
+# les installations Linux de cette époque : leur passerelle doit rester dessous.)
+MAX_DOWNLOAD_BYTES = None
 NETWORK_TIMEOUT = 15.0
 
 
@@ -244,13 +248,13 @@ def _pick_binary_asset(release: ReleaseInfo) -> Optional[ReleaseAsset]:
 
 def _stream_download(url: str, dest: Path,
                      progress: Optional[Callable[[int, int], None]] = None,
-                     max_bytes: int = MAX_DOWNLOAD_BYTES) -> None:
+                     max_bytes: Optional[int] = MAX_DOWNLOAD_BYTES) -> None:
     req = urllib.request.Request(
         url, headers={"User-Agent": "perce-neige-sim-auto-update"})
     from contexte_tls import urlopen as _urlopen_tls
     with _urlopen_tls(req, timeout=NETWORK_TIMEOUT) as resp:
         total = int(resp.headers.get("Content-Length", "0") or 0)
-        if total and total > max_bytes:
+        if max_bytes and total and total > max_bytes:
             raise ValueError(f"download too large: {total} bytes")
         downloaded = 0
         with open(dest, "wb") as out:
@@ -259,7 +263,7 @@ def _stream_download(url: str, dest: Path,
                 if not chunk:
                     break
                 downloaded += len(chunk)
-                if downloaded > max_bytes:
+                if max_bytes and downloaded > max_bytes:
                     raise ValueError("download exceeded max size")
                 out.write(chunk)
                 if progress is not None:

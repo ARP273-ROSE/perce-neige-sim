@@ -47,6 +47,14 @@ Passage au standard commun des applications (kit `_kit_windows`).
   celle du kit commun (`reporting.ouvrir_url`), que `contexte_tls.py` reprend.
 - `--check` : le programme, son style, ses polices et le viewer 3D de son
   système sont vérifiés dans chaque paquet construit.
+- **Plus de plafond de taille aux téléchargements de mise à jour** (200 Mo
+  jusqu'à la 1.19.30) : une archive se juge à la taille annoncée par GitHub et
+  à `SHA256SUMS`, dans `updater.py` (kit) comme dans `autoupdate.py` (viewer).
+  Les installations Linux 1.19.x gardent leur ancien plafond : le paquet de
+  migration qu'elles téléchargent reste en dessous.
+- Publication possible en brouillon : `gh workflow run build.yml -f
+  version=X.Y.Z -f brouillon=true`, puis `gh release edit vX.Y.Z
+  --draft=false --latest` une fois la Release vérifiée.
 
 ## Non publié — 9 octobre 2026
 
