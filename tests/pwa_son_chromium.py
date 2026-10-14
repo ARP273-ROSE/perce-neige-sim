@@ -1,11 +1,12 @@
 """Ouvre la PWA dans Chromium (sortie son PulseAudio), capture l'écran,
 clique aux positions données, appuie sur des touches ; l'enregistrement
 du son est fait à part (parec)."""
-import sys, time, json
+import json, os, sys, tempfile, time
 from playwright.sync_api import sync_playwright
 URL = sys.argv[1]
 ACTIONS = json.loads(sys.argv[2]) if len(sys.argv) > 2 else []
-OUT = "/home/jovyan/work/pn_tests/_scratch/web_shot"
+# préfixe des captures : PN_CAPTURES, sinon le dossier temporaire du système
+OUT = os.environ.get("PN_CAPTURES") or os.path.join(tempfile.gettempdir(), "pn_web_shot")
 with sync_playwright() as p:
     b = p.chromium.launch(headless=True, ignore_default_args=["--mute-audio"],
         args=["--autoplay-policy=no-user-gesture-required", "--use-angle=swiftshader",

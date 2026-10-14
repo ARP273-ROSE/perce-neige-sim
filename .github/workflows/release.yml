@@ -55,6 +55,12 @@ on:
           reprend le commit declencheur, plus ancien d'une version."
         required: false
         type: string
+      brouillon:
+        description: "Publier en BROUILLON (le workflow appelant le demande quand des
+          installations dependent de la mise a jour automatique)"
+        required: false
+        type: boolean
+        default: false
   # @PLANIFICATION@
 
 permissions:

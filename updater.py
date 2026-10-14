@@ -209,12 +209,7 @@ def check(current_version):
                       f'{PREFIXE_SYSTEME}{plate}-'):
             choix = [a for a in propres if (a.get('name') or '').lower().startswith(motif)]
             if choix:
-                return {
-                    'version': tag,
-                    'url': choix[0]['browser_download_url'],
-                    'size': choix[0].get('size', 0),
-                    'notes': data.get('body') or '',
-                }
+                return _decrire(tag, choix[0], data)
         if plate != 'windows':
             # L'archive commune est celle de Windows : la poser ici
             # remplacerait les binaires de ce systeme par ceux d'un autre.
@@ -248,12 +243,46 @@ def check(current_version):
                  tag, plate)
         return None
 
+    return _decrire(tag, asset, data)
+
+
+def _decrire(tag, asset, data):
+    """La mise a jour retenue, avec de quoi verifier son integrite : taille
+    annoncee par l'API et, si la Release le publie, le fichier SHA256SUMS."""
+    sommes = [a for a in data.get('assets', []) if (a.get('name') or '') == 'SHA256SUMS']
     return {
         'version': tag,
         'url': asset['browser_download_url'],
+        'nom': asset.get('name') or '',
         'size': asset.get('size', 0),
+        'sha256sums_url': sommes[0]['browser_download_url'] if sommes else '',
         'notes': data.get('body') or '',
     }
+
+
+def verifier_integrite(update, archive, taille):
+    """Aucun plafond de taille fixe : une archive se juge a ce qu'annonce la
+    Release (taille de l'API GitHub, empreinte de SHA256SUMS), pas a un seuil
+    grave dans le code — un plafond finit toujours par refuser une vraie
+    version plus grosse, sans recours pour une installation deja posee."""
+    attendu = int(update.get('size') or 0)
+    if attendu and taille != attendu:
+        raise RuntimeError(f"Archive tronquee : {taille} octets recus sur {attendu}")
+    if not update.get('sha256sums_url') or not update.get('nom'):
+        return                       # Release sans SHA256SUMS (anciennes versions)
+    import hashlib
+    with _open(update['sha256sums_url']) as r:
+        sommes = r.read(1 << 20).decode('utf-8', 'replace')
+    ligne = [l.split() for l in sommes.splitlines()
+             if l.split() and l.split()[-1].lstrip('*') == update['nom']]
+    if not ligne:
+        return
+    h = hashlib.sha256()
+    with open(archive, 'rb') as f:
+        for bloc in iter(lambda: f.read(1 << 20), b''):
+            h.update(bloc)
+    if h.hexdigest().lower() != ligne[0][0].lower():
+        raise RuntimeError("Empreinte SHA-256 differente de SHA256SUMS : archive refusee")
 
 
 def download_and_apply(update, progress=None):
@@ -281,6 +310,7 @@ def download_and_apply(update, progress=None):
                 done += len(chunk)
                 if progress:
                     progress(done, total)
+        verifier_integrite(update, archive, done)
 
         extracted = tmpdir / 'contenu'
         with zipfile.ZipFile(archive) as z:

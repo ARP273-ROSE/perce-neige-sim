@@ -4,7 +4,19 @@ on:
   push:
     tags:
       - "v*"
+  # Lancement à la main : « version » (sans le v) construit et publie depuis la
+  # branche choisie ; « brouillon » garde la Release invisible pour la mise à
+  # jour automatique des installations existantes tant qu'elle n'est pas
+  # vérifiée (gh release edit vX.Y.Z --draft=false --latest).
   workflow_dispatch:
+    inputs:
+      version:
+        description: "Version à construire et publier (sans le v), ex. 1.20.0"
+        required: false
+      brouillon:
+        description: "Publier en BROUILLON"
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -107,11 +119,12 @@ jobs:
   # --------------------------------------------------------------------- #
   paquets:
     needs: godot-export
-    if: startsWith(github.ref, 'refs/tags/')
+    if: startsWith(github.ref, 'refs/tags/') || inputs.version != ''
     uses: ./.github/workflows/release.yml
     with:
-      version: ${{ github.ref_name }}
-      ref: ${{ github.ref }}
+      version: ${{ inputs.version || github.ref_name }}
+      ref: ${{ inputs.version && github.sha || github.ref }}
+      brouillon: ${{ inputs.brouillon == true }}
     secrets: inherit
     permissions:
       contents: write
