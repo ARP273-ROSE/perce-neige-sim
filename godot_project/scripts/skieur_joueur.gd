@@ -579,7 +579,13 @@ func _process(delta: float) -> void:
 	var k: Vector2 = _clavier()
 	if k.length() > 0.0:
 		cmd = k
-	_maj_pouce(delta, cmd)
+	# repère figé pour le JOYSTICK tactile seulement : au clavier, Z avance
+	# là où regarde la vue et la souris dirige, comme dans tous les jeux PC
+	# — figé aussi au clavier, le skieur gardait l'ancienne direction quand
+	# on tournait la vue à la souris en marchant (retour d'utilisateur, 15/10/2026 :
+	# « sur le programme PC, c'est la galère entre les touches, la souris
+	# et la vue, le skieur ne va pas où il faut »)
+	_maj_pouce(delta, entree if k.length() == 0.0 else Vector2.ZERO)
 	var vite: bool = course or Input.is_physical_key_pressed(KEY_SHIFT) \
 		or (touches_ext & 16) != 0 or entree.length() > 0.92     # joystick à fond : on court
 	if chausse:

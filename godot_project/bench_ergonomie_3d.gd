@@ -60,7 +60,7 @@ func _doigt(pos_vue: Vector2, appuye: bool, glisse_vue: Vector2 = Vector2.ZERO) 
 		m.button_mask = MOUSE_BUTTON_MASK_LEFT
 		Input.parse_input_event(m)
 
-const SCENARIOS: Array = ["visee_15", "visee_90", "slalom", "clavier", "pied_vue", "pied_tactile"]
+const SCENARIOS: Array = ["visee_15", "visee_90", "slalom", "clavier", "pied_vue", "pied_tactile", "pied_clavier_souris"]
 
 
 func _initialize() -> void:
@@ -191,6 +191,16 @@ func _tick() -> void:
 			elif _t_sc < 3.6:
 				_doigt(base - Vector2(0.0, 80.0), false)
 			duree = 4.0
+		"pied_clavier_souris":
+			# PC : Z tenu, la souris tourne la vue de 90° en 1 s — il doit
+			# aller là où l'on regarde (retour d'utilisateur, 15/10/2026)
+			sk.touches_ext = 1
+			if _t_sc > 2.0 and _t_sc < 3.0:
+				sk.tourner_vue(Vector2(-deg_to_rad(90.0) / 0.006 * dt, 0.0))
+			var v2: Vector3 = Vector3(sk.velocity.x, 0.0, sk.velocity.z)
+			if v2.length() > 0.5:
+				_dir_marche.append(atan2(-v2.x, -v2.z))
+			duree = 5.0
 		"pied_vue":
 			# pouce en haut, et l'autre doigt tourne la vue de 90° en 1 s
 			sk.entree = Vector2(0.0, 0.9)
@@ -233,6 +243,12 @@ func _tick() -> void:
 			_verif("iPad : pouce du joystick vers l'avant — il avance, la vue ne bouge pas",
 				av > 2.0 and absf(sk.cam_pitch - _pitch0) < 0.02,
 				"avancé de %.1f m, vue levée de %.0f°" % [av, rad_to_deg(sk.cam_pitch - _pitch0)])
+		"pied_clavier_souris":
+			var dm2: float = 0.0
+			if _dir_marche.size() > 2:
+				dm2 = rad_to_deg(absf(wrapf(_dir_marche[_dir_marche.size() - 1] - _dir_marche[0], -PI, PI)))
+			_verif("PC : Z tenu, vue tournée de 90° à la souris — il suit la vue", absf(dm2 - 90.0) < 15.0,
+				"cap de marche changé de %.0f°" % dm2)
 		"pied_vue":
 			var dm: float = 0.0
 			if _dir_marche.size() > 2:

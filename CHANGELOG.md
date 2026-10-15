@@ -69,6 +69,19 @@ Passage au standard commun des applications (kit `_kit_windows`).
 
 ## v1.13 → v1.15 (septembre 2026)
 
+**v1.19.31** — retour d'utilisateur du 15/10/2026 : « ça marche mieux sur la PWA pour
+diriger le skieur, mais du coup moins bien sur le programme PC : c'est la
+galère entre les touches, la souris et la vue, le skieur ne va pas où il
+faut ».
+- Le repère figé de la 1.19.16 (direction lue sur la vue au moment où l'on
+  pose le pouce, gardée tant qu'on tient) est réservé au joystick tactile.
+  Il s'appliquait aussi au clavier : Z tenu, la vue tournée à la souris,
+  le skieur gardait l'ancienne direction. Au clavier, Z avance maintenant
+  là où regarde la vue et la souris dirige, comme dans les jeux PC.
+- Banc `bench_ergonomie_3d` : nouveau cas « PC : Z tenu, vue tournée de 90°
+  à la souris — il suit la vue » (90°) ; les cas du joystick restent
+  inchangés (cap gardé).
+
 **v1.19.30** — retour d'utilisateur du 13/10/2026 : « en haut, skieur activé sur la
 terrasse, je le mets en BOUCLE : il prend l'escalier, chausse et part en
 marche arrière dans un trou d'où il ne sort pas ».
