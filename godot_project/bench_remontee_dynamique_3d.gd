@@ -137,6 +137,20 @@ func _initialize() -> void:
 		_verif("lanceur : pneus au-dessus de la pince, vitesses différentes selon leur place",
 			lg._pneus.size() > 40 and v_max > lg.vitesse * 0.95 and v_min < lg.v_embarquement * 1.05,
 			"%d pneus, de %.2f à %.2f m/s en surface" % [lg._pneus.size(), v_min, v_max])
+		# 7. rail de gare au même niveau partout (poulie comprise) ; poulie du câble
+		# plus petite que la voie (les pinces débrayées passent autour)
+		var y_min: float = INF
+		var y_max: float = -INF
+		var sz0: float = lg.s_gare(true, 0.0)
+		var x3: float = 0.0
+		while x3 < lg.longueur_zone(true):
+			var yy: float = (lg.point(sz0 + x3)[0] as Vector3).y
+			y_min = minf(y_min, yy)
+			y_max = maxf(y_max, yy)
+			x3 += 0.5
+		_verif("gare : rail au même niveau autour de la poulie ; poulie plus petite que la voie",
+			y_max - y_min < 0.02 and lg.rayon_poulie() < lg.voie * 0.5 - 0.3,
+			"écart de niveau %.3f m ; poulie Ø %.2f m pour une voie de %.2f m" % [y_max - y_min, 2.0 * lg.rayon_poulie(), lg.voie])
 		# 3. galets : une pince au droit d'un pylône
 		var q: Array = lg._pyl[3]
 		var py: PyloneRemontee = q[0]

@@ -294,7 +294,17 @@ func point(s: float) -> Array:
 ## Pour passer au-dessus des portillons fermés, les sièges contournent la
 ## poulie 0,85 m plus haut et « plongent » à hauteur d'assise juste après
 ## eux (retour d'utilisateur, 22/10/2026).
-const PLONGEE: float = 0.85
+## (plus de « plongée » : le rail reste au même niveau sur toute la gare,
+## poulie comprise — retour d'utilisateur, 22/10/2026)
+const PLONGEE: float = 0.0
+## Le câble tourne sur une poulie un peu plus petite que la voie : rentré par
+## les galets de déviation, il laisse passer les pinces débrayées autour.
+const RETRAIT_POULIE: float = 0.45
+const Z_DEVIATION: float = 2.5
+
+
+func rayon_poulie() -> float:
+	return voie * 0.5 - RETRAIT_POULIE
 
 
 func x_arret(l: float) -> float:
@@ -306,7 +316,7 @@ func x_portillons(l: float) -> float:
 
 
 func _plongee(s: float) -> float:
-	if famille.begins_with("cabine") or famille.begins_with("perche"):
+	if PLONGEE == 0.0 or famille.begins_with("cabine") or famille.begins_with("perche"):
 		return 0.0
 	var z: Array = zone(s)
 	if z[0] == "ligne":
@@ -379,8 +389,8 @@ func _gare(aval: bool) -> void:
 	g.position = Vector3(0, y0, 0)
 	add_child(g)
 	var dz: float = zc - znez
-	var zm: float = (zc + znez) * 0.5 + signf(dz) * 1.5
-	var long_g: float = absf(dz) + voie * 0.5 + 3.5
+	var zm: float = (zc + znez) * 0.5 + signf(dz) * 4.0
+	var long_g: float = absf(dz) + voie * 0.5 + 3.5 + 5.0      # + aire d'attente derrière la poulie
 	# dalle et quais
 	RemonteeKit.boite_en(g, Vector3(voie + 4.0, 0.4, long_g), Vector3(0, -0.2, zm), "beton")
 	# charpente : quatre poteaux, deux longerons, toiture
@@ -392,7 +402,17 @@ func _gare(aval: bool) -> void:
 	RemonteeKit.boite_en(g, Vector3(voie + 4.2, 0.12, long_g + 0.6), Vector3(0, H_CABLE_GARE + 2.5, zm), "peinture_anthracite")
 	# poulie de demi-tour (motrice en amont, retour-tension en aval)
 	var R: float = voie * 0.5
-	_poulie(g, Vector3(0, H_CABLE_GARE, zc), R, aval)
+	_poulie(g, Vector3(0, H_CABLE_GARE, zc), rayon_poulie(), aval)
+	# galets de déviation (axe vertical) : ils rentrent le câble de la voie
+	# de ligne au diamètre de la poulie, juste après le nez de la gare
+	for sx in [-1.0, 1.0]:
+		for k in range(3):
+			var zd: float = znez + signf(dz) * (Z_DEVIATION + 0.7 * k)
+			var xd: float = sx * (lerpf(R, rayon_poulie(), (Z_DEVIATION + 0.7 * k - 2.0) / (Z_DEVIATION + 1.4 - 2.0)) - 0.21 - PyloneRemontee.R_CABLE)
+			RemonteeKit.galet(g, Vector3(xd, H_CABLE_GARE, zd), 0.21)
+			(g.get_child(g.get_child_count() - 1) as Node3D).transform.basis = Basis(Vector3.FORWARD, 0.0).scaled(Vector3.ONE * 0.21 / RollerMesh.R_BANDE)
+			RemonteeKit.boite_en(g, Vector3(0.22, 0.04, 0.30), Vector3(xd, H_CABLE_GARE + 0.16, zd), "galva_pylone")
+			RemonteeKit.boite_en(g, Vector3(0.10, 1.4, 0.10), Vector3(xd, H_CABLE_GARE + 0.86, zd), "galva_pylone")
 	# came d'ouverture / de fermeture des pinces, au nez de la gare
 	for sx in [-1.0, 1.0]:
 		RemonteeKit.poutre(g, Vector3(sx * (R + 0.40), H_CABLE_GARE + 0.40, znez), Vector3(sx * (R + 0.44), H_CABLE_GARE + 0.30, znez + signf(dz) * 3.0), 0.06, 0.05, "jaune_securite")
@@ -443,8 +463,8 @@ func _collisions_fixes() -> void:
 		var zc: float = L_GARE if aval else -L - L_GARE
 		var znez: float = 0.0 if aval else -L
 		var dz: float = zc - znez
-		var zm: float = (zc + znez) * 0.5 + signf(dz) * 1.5
-		var long_g: float = absf(dz) + voie * 0.5 + 3.5
+		var zm: float = (zc + znez) * 0.5 + signf(dz) * 4.0
+		var long_g: float = absf(dz) + voie * 0.5 + 3.5 + 5.0      # + aire d'attente derrière la poulie
 		boite.call(Vector3(voie + 4.0, 0.4, long_g), Vector3(0, y0 - 0.2, zm))
 		for sx in [-1.0, 1.0]:
 			for k in [-1.0, 1.0]:
@@ -495,14 +515,26 @@ var _portillons_gares: Array = []      # [aval, [vantaux], [formes de collision]
 
 ## Portillons à travers la voie d'embarquement, un vantail par paire de
 ## places, pivotant sur un poteau ; ligne d'arrêt jaune devant.
+## Position des portillons (repère de la ligne, au sol) : dans l'axe du
+## brin de départ, DERRIÈRE la poulie, à 2 m au-delà de l'extrémité
+## extérieure du siège qui fait demi-tour (retour d'utilisateur, 22/10/2026) — on
+## y attend hors du passage des sièges, puis on traverse jusqu'à l'arrêt.
+func position_portillons(aval: bool) -> Vector3:
+	var L: float = longueur_h()
+	var zc: float = L_GARE if aval else -L - L_GARE
+	var places: int = VehiculeRemontee.DESCRIPTIONS.get(famille, ["", 6, ""])[1]
+	var W: float = 0.50 * places + 0.20
+	var recul: float = voie * 0.5 + W * 0.5 + 2.0
+	return Vector3(_x_brin(aval), terrain(0.0 if aval else L), zc + (recul if aval else -recul))
+
+
 func _portillons(aval: bool) -> void:
 	var l: float = longueur_zone(aval)
-	var a: Array = _point_cable(s_gare(aval, x_portillons(l)))
-	var p: Vector3 = a[0]
-	var dirh: Vector3 = a[1]
-	dirh.y = 0.0
-	dirh = dirh.normalized()
-	var y0: float = terrain(0.0 if aval else longueur_h())
+	var q0: Vector3 = position_portillons(aval)
+	var p: Vector3 = q0
+	# face à la ligne d'arrêt (vers le nez de la gare)
+	var dirh: Vector3 = Vector3(0, 0, -1) if aval else Vector3(0, 0, 1)
+	var y0: float = q0.y
 	var g: Node3D = Node3D.new()
 	g.name = "Portillons" + ("Aval" if aval else "Amont")
 	g.transform = Transform3D(Basis.looking_at(dirh, Vector3.UP), Vector3(p.x, y0, p.z))
@@ -551,7 +583,9 @@ func _maj_portillons(delta: float) -> void:
 	for pg in _portillons_gares:
 		var aval: bool = pg[0]
 		var l: float = longueur_zone(aval)
-		var xa: float = x_arret(l)
+		# ouverts quand un siège termine son demi-tour (il est alors passé
+		# devant eux) : on traverse derrière lui jusqu'à la ligne d'arrêt
+		var xa: float = L_GARE + PI * voie * 0.5
 		pg[3] = float(pg[3]) + delta
 		for e in _vehicules:
 			var z: Array = zone(e[1])
@@ -560,7 +594,8 @@ func _maj_portillons(delta: float) -> void:
 				if x >= xa and x - vitesse_en(e[1]) * delta < xa:
 					pg[3] = 0.0
 		var t: float = pg[3]
-		var ouv: float = clampf(minf((t - 0.3) / 0.5, (3.0 - t) / 0.5), 0.0, 1.0)
+		var ouv: float = clampf(minf((t - 0.3) / 0.5, (3.5 - t) / 0.5), 0.0, 1.0)
+
 		for v in pg[1]:
 			(v as Node3D).rotation.y = -1.45 * ouv
 		for cs in pg[2]:
@@ -862,10 +897,29 @@ func _batterie_gare(aval: bool) -> void:
 
 func _cable() -> void:
 	# câble de la boucle (en gare il suit la poulie, en ligne la flèche)
+	# en gare, le câble quitte la voie des véhicules : rentré après le nez
+	# (galets de déviation), il contourne la plus petite poulie
 	var pts: PackedVector3Array = PackedVector3Array()
+	var L: float = longueur_h()
+	var R: float = voie * 0.5
+	var Rp: float = rayon_poulie()
 	for p in _boucle:
-		pts.append(p)
-	pts.append(_boucle[0])
+		var q: Vector3 = p
+		for st in [[0.0, L_GARE], [-L, -L - L_GARE]]:
+			var znez: float = st[0]
+			var zc: float = st[1]
+			var dz: float = zc - znez
+			var u: float = (q.z - znez) / dz
+			if u > 0.0 and absf(q.z - znez) <= absf(dz) + 0.01:
+				var f: float = smoothstep(2.0, Z_DEVIATION + 1.4, absf(q.z - znez))
+				q.x = signf(q.x) * lerpf(R, Rp, f) if absf(q.x) > 0.01 else q.x
+			elif u > 1.0:
+				var r: Vector3 = Vector3(q.x, 0, q.z - zc)
+				if r.length() > 0.01:
+					r = r.normalized() * Rp
+					q = Vector3(r.x, q.y, zc + r.z)
+		pts.append(q)
+	pts.append(pts[0])
 	var c: Node3D = Node3D.new()
 	c.name = "Cable"
 	add_child(c)
