@@ -37,6 +37,7 @@ const COULEURS: Dictionary = {
 	"moyeu": [Color(0.74, 0.75, 0.76), 0.30, 0.85],            # jante alu
 	"moyeu_rouge": [Color(0.70, 0.12, 0.12), 0.45, 0.30],
 	"plaque_bleue": [Color(0.06, 0.30, 0.68), 0.5, 0.1],
+	"jaune_poulie": [Color(0.93, 0.68, 0.06), 0.45, 0.25],      # poulie de demi-tour (photo Commons)
 	# pince D-Line (photos Commons, maquettes Doppelmayr Wolfurt / Valiserabahn)
 	"alu_pince": [Color(0.72, 0.73, 0.74), 0.38, 0.80],
 	"ressort_gris": [Color(0.62, 0.64, 0.67), 0.45, 0.55],
@@ -188,16 +189,26 @@ static func arc(c: Vector3, u: Vector3, v: Vector3, r: float, a0: float, a1: flo
 
 ## Galet de balancier (garniture caoutchouc sur jante acier) d'axe X local,
 ## rayon extérieur `r`, largeur `l`, centré en `c`.
-static func galet(parent: Node3D, c: Vector3, r: float = 0.21, l: float = 0.085, moyeu: String = "acier",
-		garniture: String = "caoutchouc") -> void:
-	var b: Basis = Basis(Vector3.FORWARD, PI * 0.5)          # axe Y du cylindre → axe X
-	# garniture (avec sa gorge sombre au milieu), jante, flasques, axe
-	cylindre(parent, r, r, l * 0.30, Transform3D(b, c + Vector3(l * 0.22, 0, 0)), garniture, 22)
-	cylindre(parent, r, r, l * 0.30, Transform3D(b, c - Vector3(l * 0.22, 0, 0)), garniture, 22)
-	cylindre(parent, r - 0.012, r - 0.012, l * 0.16, Transform3D(b, c), "acier_noir", 22)
-	cylindre(parent, r * 0.84, r * 0.84, l * 1.02, Transform3D(b, c), moyeu, 18)
-	cylindre(parent, r * 0.55, r * 0.55, l * 1.10, Transform3D(b, c), "moyeu", 14)
-	cylindre(parent, r * 0.16, r * 0.16, l * 1.6, Transform3D(b, c), "acier_noir", 10)
+static var _galet_mesh: ArrayMesh = null
+
+
+## Galet : EXACTEMENT celui du funiculaire (RollerMesh : joues évasées en
+## alliage, bande de roulement caoutchouc au fond de la gorge, moyeu à bras),
+## mis à l'échelle en gardant ses proportions (retour d'utilisateur, 22/10/2026) —
+## `r` est le rayon au fond de la gorge, là où appuie le câble, comme
+## RollerMesh.R_BANDE ; l'axe du câble est donc à r + rayon du câble de l'axe
+## du galet. Axe du galet selon X local, centre en `c`.
+static func galet(parent: Node3D, c: Vector3, r: float = 0.21, _l: float = 0.0, _moyeu: String = "",
+		_garniture: String = "") -> void:
+	if _galet_mesh == null:
+		_galet_mesh = RollerMesh.build_galet(false)
+	var k: float = r / RollerMesh.R_BANDE
+	var mi: MeshInstance3D = MeshInstance3D.new()
+	mi.mesh = _galet_mesh
+	mi.name = "Galet"
+	# axe Y du maillage → X local, mise à l'échelle uniforme
+	mi.transform = Transform3D(Basis(Vector3.FORWARD, PI * 0.5).scaled(Vector3(k, k, k)), c)
+	parent.add_child(mi)
 
 
 ## Ressort hélicoïdal d'axe `axe` (unitaire), de longueur `l`.

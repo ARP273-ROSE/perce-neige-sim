@@ -139,7 +139,7 @@ func _tick() -> void:
 			if _t >= 1.0 and _t < 1.0 + 1.0 / 60.0:
 				_verif("télécabine : à bord, la cabine le porte", sk.support == _lg._corps[_cab][0],
 					"support %s" % [sk.support])
-			if _t > 120.0:
+			if _t > 240.0:
 				var corps2: Node3D = _lg._corps[_cab][0]
 				var loc: Vector3 = corps2.global_transform.affine_inverse() * sk.global_position
 				_verif("télécabine : emporté à bord (pas passé à travers)", absf(loc.x) < 1.0 and absf(loc.z) < 1.0

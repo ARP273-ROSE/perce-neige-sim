@@ -66,6 +66,14 @@ func construire() -> void:
 	if style == "teleski":
 		_construire_teleski()
 		return
+	if style == "gare":
+		# batterie de galets au nez d'une gare : le câble y passe de
+		# l'horizontale de la gare à la pente de la ligne (retour d'utilisateur,
+		# 22/10/2026 : « un angle entre la gare et le câble, et pas de
+		# galets pour changer la pente »)
+		for montee in [true, false]:
+			_train(montee)
+		return
 	var h: float = hauteur
 	var r1: float = 0.40                              # rayon en tête
 	var r0: float = r1 + 0.05 + h * 0.003             # léger fruit vers le pied
@@ -237,9 +245,11 @@ func _train(montee: bool) -> void:
 			RemonteeKit.galet(piv, Vector3(0, -s * 0.11, za - zp), R_GALET, 0.10, "moyeu", "garniture")
 			if zb != za:
 				RemonteeKit.galet(piv, Vector3(0, -s * 0.11, zb - zp), R_GALET, 0.10, "moyeu", "garniture")
-			for sx in [-0.068, 0.068]:
-				RemonteeKit.poutre(piv, Vector3(sx, -s * 0.11, za - zp + 0.14), Vector3(sx, -s * 0.11, zb - zp - 0.14), 0.014, 0.12, "galva_patine")
-			RemonteeKit.cylindre(piv, 0.035, 0.035, 0.20, Transform3D(Basis(Vector3.FORWARD, PI * 0.5), Vector3.ZERO), "acier_noir", 8)
+			# flasques de part et d'autre des joues (comme les fourches du funiculaire)
+			var fy: float = RollerMesh.FLASQUE_Y * R_GALET / RollerMesh.R_BANDE
+			for sx in [-fy, fy]:
+				RemonteeKit.poutre(piv, Vector3(sx, -s * 0.11, za - zp + 0.14), Vector3(sx, -s * 0.11, zb - zp - 0.14), 0.016, 0.13, "galva_patine")
+			RemonteeKit.cylindre(piv, 0.035, 0.035, 0.26, Transform3D(Basis(Vector3.FORWARD, PI * 0.5), Vector3.ZERO), "acier_noir", 8)
 			mobiles.append(piv)
 			(_paires[montee] as Array).append([piv, base_pos, base_rot, za, zb, s])
 			pivots.append(zp)
@@ -248,14 +258,24 @@ func _train(montee: bool) -> void:
 		# ramasse-câbles : plaques échancrées à l'extérieur, entre les galets
 		for k in range(0, zs.size() - 1, 2):
 			var zm: float = (float(zs[k]) + float(zs[k + 1])) * 0.5
-			RemonteeKit.boite_en(tete, Vector3(0.012, 0.30, 0.10), Vector3(ext * 0.11, y_axe + s * 0.02, zm), "galva_patine")
-			RemonteeKit.boite_en(tete, Vector3(0.10, 0.012, 0.10), Vector3(ext * 0.16, y_axe - s * 0.13, zm), "galva_patine")
+			RemonteeKit.boite_en(tete, Vector3(0.012, 0.30, 0.10), Vector3(ext * 0.15, y_axe + s * 0.02, zm), "galva_patine")
+			RemonteeKit.boite_en(tete, Vector3(0.10, 0.012, 0.10), Vector3(ext * 0.20, y_axe - s * 0.13, zm), "galva_patine")
 	# console : de la traverse au pivot de la poutre maîtresse (support)
 	var y_trav: float = hauteur - hauteur_cable()           # dessus de traverse, repère de la tête
 	if not dessous.is_empty():
 		var y_piv: float = -dy - 0.36
 		RemonteeKit.boite_en(tete, Vector3(0.22, absf(y_trav - y_piv), 0.30), Vector3(-ext * 0.02, (y_trav + y_piv) * 0.5, 0), "galva_pylone")
 		RemonteeKit.cylindre(tete, 0.07, 0.07, 0.36, Transform3D(Basis(Vector3.FORWARD, PI * 0.5), Vector3(0, y_piv, 0)), "acier_noir", 12)
+	if style == "gare":
+		# accroché à la charpente de la gare : suspente jusqu'au portique
+		# (compression) ou console jusqu'au sol (support)
+		if not dessus.is_empty():
+			RemonteeKit.boite_en(tete, Vector3(0.16, 1.55 - dy - 0.42, 0.24), Vector3(0, (1.55 + dy + 0.42) * 0.5, 0), "galva_pylone")
+			RemonteeKit.boite_en(tete, Vector3(0.40, 0.12, 0.40), Vector3(0, 1.62, 0), "galva_pylone")
+		if not dessous.is_empty():
+			var h_sol: float = hauteur_cable()
+			RemonteeKit.boite_en(tete, Vector3(0.22, h_sol - dy - 0.36, 0.30), Vector3(0, -(h_sol + dy + 0.36) * 0.5, 0), "galva_pylone")
+		return
 	# portique de levage : deux jambes inclinées et une poutre haute avec œil
 	var hp: float = 1.25 if dessus.is_empty() else 1.55
 	var demi: float = maxf(0.7, L * 0.5 + 0.25)
