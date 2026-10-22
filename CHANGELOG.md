@@ -5,6 +5,29 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.22.4 — 22 octobre 2026
+
+**Remontées : rail de gare à plat, poulie plus petite, portillons à leur place.** Retours
+d'utilisateur du 22/10/2026 :
+- « pourquoi au TS le rail remonte autour de la poulie ? il reste au même niveau, et le
+  diamètre de la roue qui fait faire demi-tour au câble est un peu plus petit pour ne pas
+  gêner » ;
+- « le portillon est plus loin, il n'est pas sous les sièges » ;
+- « [les portillons] sont dans la gare aval, dans l'axe de la ligne qui monte, 2 m en
+  retrait de l'extrémité extérieure du siège qui fait demi-tour ».
+
+Ce qui change :
+- Plus de « plongée » des sièges : le rail des pinces débrayées reste au même niveau sur
+  toute la gare, poulie comprise (écart mesuré 0 mm).
+- La poulie a un rayon de 0,45 m de moins que la demi-voie (Ø 5,10 m pour une voie de
+  6 m). Le câble est rentré juste après le nez de la gare par des galets de déviation à
+  axe vertical, et les pinces débrayées passent autour sur leur rail sans la toucher.
+- Portillons : dans l'axe du brin de départ, derrière la poulie, à 2 m au-delà de
+  l'extrémité extérieure du siège qui tourne. Ils s'ouvrent quand un siège termine son
+  demi-tour ; on traverse derrière lui jusqu'à la ligne d'arrêt. La dalle de la gare est
+  prolongée sous l'aire d'attente.
+- Bancs remontee_dynamique (rail à niveau, poulie) et embarquement verts.
+
 ## 1.22.3 — 22 octobre 2026
 
 **Remontées : gares et galets.** Retours d'utilisateur du 22/10/2026 :
