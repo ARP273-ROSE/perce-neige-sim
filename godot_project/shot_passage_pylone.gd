@@ -62,8 +62,9 @@ func _initialize() -> void:
 				dm = q
 				best = s
 			s += 0.25
-		_ligne._vehicules[k][1] = best
+		_ligne._vehicules[k][1] = best + (0.35 if k == 0 else 0.0)
 		_ligne._placer(k)
+	_ligne._galets()
 	_cam = Camera3D.new()
 	_cam.fov = 50
 	racine.add_child(_cam)
@@ -71,7 +72,8 @@ func _initialize() -> void:
 	var yc: float = _ligne.y_cable(d)
 	_vues = [["face", o + Vector3(0, yc - o.y - 1.0, 10.0), o + Vector3(0, yc - o.y - 1.0, 0)],
 		["cote", o + Vector3(_ligne._x_brin(true) * 2.2, yc - o.y + 0.5, 3.5), o + Vector3(_ligne._x_brin(true), yc - o.y - 0.6, 0)],
-		["dessus", o + Vector3(0.5, yc - o.y + 6.0, 6.0), o + Vector3(0, yc - o.y, 0)]]
+		["dessus", o + Vector3(0.5, yc - o.y + 6.0, 6.0), o + Vector3(0, yc - o.y, 0)],
+		["galets", o + Vector3(_ligne._x_brin(true) * 1.55, yc - o.y + 0.25, 1.3), o + Vector3(_ligne._x_brin(true), yc - o.y, 0)]]
 	process_frame.connect(_tick)
 
 

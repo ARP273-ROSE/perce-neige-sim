@@ -30,6 +30,24 @@ var _bulle: Node3D
 var _portes: Array = []        # [nœud, position fermée, déplacement à l'ouverture]
 var places: int = 6
 var cabine: bool = false
+## Partie SUSPENDUE (suspente + siège / caisse) : un pendule articulé sous la
+## pince, en `pivot` (repère du véhicule). Balancement longitudinal (φ) et
+## transversal (ψ) entretenu par les accélérations de la pince — freinage et
+## lancement en gare, changements de pente aux pylônes, demi-tour sur la
+## poulie — et amorti selon la masse (articulation, air).
+var pivot: Vector3 = Vector3.ZERO
+var masse: float = 650.0
+var longueur_pendule: float = 2.6
+var _susp: Node3D = null
+var _pince: Node3D = null
+var phi: float = 0.0
+var psi: float = 0.0
+var _dphi: float = 0.0
+var _dpsi: float = 0.0
+var _p_prec: Vector3 = Vector3.ZERO
+var _v_prec: Vector3 = Vector3.ZERO
+var _a_f: Vector3 = Vector3.ZERO
+var _n_mes: int = 0
 
 const DESCRIPTIONS: Dictionary = {
 	"siege_doppelmayr_e98_6": ["Doppelmayr / Études de Transports E98, 6 places", 6, "doppelmayr"],
@@ -83,6 +101,29 @@ func construire() -> void:
 			_cabine()
 		else:
 			_siege()
+	# partie suspendue sous le pivot
+	_pince = get_node_or_null("Pince") as Node3D
+	_susp = Node3D.new()
+	_susp.name = "Suspendu"
+	_susp.position = pivot
+	var enfants: Array = get_children()
+	add_child(_susp)
+	for c in enfants:
+		if c == _pince or not (c is Node3D):
+			continue
+		remove_child(c)
+		_susp.add_child(c)
+		(c as Node3D).position -= pivot
+	# masse à vide (pince comprise) et longueur du pendule jusqu'au centre de gravité
+	if cabine or famille == "cabine_3s" or famille == "cabine_tph":
+		masse = 850.0 if cabine else (2950.0 if famille == "cabine_3s" else 9000.0)
+		longueur_pendule = 2.3 if cabine else 3.5
+	elif famille.begins_with("perche"):
+		masse = 25.0
+		longueur_pendule = 1.6
+	else:
+		masse = 95.0 * places + 80.0
+		longueur_pendule = _haut_suspente() + 0.75
 	ouvrir_pince(0.0)
 	garde_corps(1.0)
 	bulle(1.0)
@@ -101,7 +142,9 @@ func _fusionner() -> void:
 		garder.append(r)
 	for p in _portes:
 		garder.append(p[0])
-	MeshMerge.merge(self, garder, "Vehicule")
+	if _pince != null:
+		MeshMerge.merge(_pince, garder, "Pince")
+	MeshMerge.merge(_susp, garder, "Vehicule")
 	for n in garder:
 		MeshMerge.merge(n, [], "Piece")
 
@@ -142,9 +185,11 @@ func _pince_debrayable() -> void:
 	for k in [-1.0, 0.0, 1.0]:
 		RemonteeKit.boite_en(p, Vector3(0.14, 0.012, 0.03), Vector3(0.0, 0.092, k * L * 0.33), corps_m)
 	# gaines coniques noires aux deux bouts (guident le câble à l'entrée des pneus)
+	# … qui s'amincissent jusqu'à ZÉRO au bout (rayon du câble) : la pince
+	# passe ainsi sous les galets de compression et sur les supports sans choc
 	for sz in [-1.0, 1.0]:
-		RemonteeKit.cylindre(p, 0.045, 0.028, 0.34, Transform3D(Basis(Vector3.RIGHT, -sz * PI * 0.5), Vector3(0, 0.025, sz * (L * 0.5 + 0.17))),
-			"noir_mat", 12)
+		RemonteeKit.cylindre(p, 0.055, 0.0245, 0.34, Transform3D(Basis(Vector3.RIGHT, -sz * PI * 0.5), Vector3(0, 0.0, sz * (L * 0.5 + 0.17))),
+			"noir_mat", 14)
 	# mâchoire MOBILE (côté extérieur), pivot parallèle au câble
 	_machoire = Node3D.new()
 	_machoire.name = "MachoireMobile"
@@ -231,6 +276,75 @@ static func hauteur_cable_gare(fam: String) -> float:
 	return hs + 0.12 + 0.98 - 0.045 + 0.48
 
 
+## Point du repère du véhicule (au repos) porté par la partie suspendue,
+## en coordonnées monde (suit le balancement).
+func vers_monde(p: Vector3) -> Vector3:
+	if _susp == null:
+		return global_transform * p
+	return _susp.global_transform * (p - pivot)
+
+
+## La pince suit la pente du câble (rad, > 0 : le câble monte vers −Z).
+func inclinaison(a: float) -> void:
+	if _pince != null:
+		_pince.rotation.x = a
+
+
+## Remet le pendule au repos (véhicule posé, nouvelle ligne).
+func pendule_repos() -> void:
+	phi = 0.0
+	psi = 0.0
+	_dphi = 0.0
+	_dpsi = 0.0
+	_n_mes = 0
+	if _susp != null:
+		_susp.rotation = Vector3.ZERO
+
+
+## Un pas du pendule. L'accélération de la pince est mesurée sur sa
+## trajectoire (dérivée seconde de la position, lissée) ; dans le repère du
+## véhicule : φ'' = −(g'/L) sin φ − (a_avant/L) cos φ − 2ζω₀ φ', idem en
+## travers ; g' = g + accélération verticale. Amortissement réduit ζ ∝ 1/masse
+## (le frottement de l'articulation et l'air pèsent moins sur un véhicule
+## lourd) ; `en_gare` : véhicule guidé, fortement amorti.
+func balancer(dt: float, en_gare: bool) -> void:
+	if _susp == null:
+		return
+	# repère de la LIGNE (parent) : immobile, et tourné seulement autour de
+	# la verticale — la gravité y reste selon −Y
+	var p: Vector3 = position
+	if dt <= 0.0 or _n_mes == 0:
+		_p_prec = p
+		_n_mes = 1
+		return
+	var v: Vector3 = (p - _p_prec) / dt
+	_p_prec = p
+	if _n_mes == 1:
+		_v_prec = v
+		_n_mes = 2
+		return
+	var a: Vector3 = ((v - _v_prec) / dt).limit_length(25.0)
+	_v_prec = v
+	_a_f = _a_f.lerp(a, minf(1.0, dt * 15.0))
+	var la: Vector3 = transform.basis.inverse() * _a_f
+	var g2: float = 9.81 + _a_f.y
+	var L: float = longueur_pendule
+	var w0: float = sqrt(9.81 / L)
+	var zeta: float = 0.7 if en_gare else clampf(90.0 / masse, 0.03, 0.30)
+	var n: int = maxi(1, int(ceil(dt / 0.008)))
+	var h: float = dt / n
+	for k in range(n):
+		var ddphi: float = -(g2 / L) * sin(phi) - (-la.z / L) * cos(phi) - 2.0 * zeta * w0 * _dphi
+		var ddpsi: float = -(g2 / L) * sin(psi) - (la.x / L) * cos(psi) - 2.0 * zeta * w0 * _dpsi
+		_dphi += ddphi * h
+		_dpsi += ddpsi * h
+		phi += _dphi * h
+		psi += _dpsi * h
+	phi = clampf(phi, -0.6, 0.6)
+	psi = clampf(psi, -0.6, 0.6)
+	_susp.rotation = Vector3(phi, 0.0, psi)
+
+
 ## Où poser le skieur assis (repère du véhicule) : origine aux pieds, 0,42 m
 ## devant le bassin (convention de SkieurJoueur.asseoir), tourné vers −Z.
 ## Siège : place `i` ; cabine : banquette arrière, face à l'amont.
@@ -293,6 +407,7 @@ func _siege() -> void:
 	# attache sous le bras de la pince (débrayable) ou sous la monopince (fixe)
 	var x_att: float = 0.30 if not fixe else x0 + 0.10
 	var y_att: float = 0.14 if not fixe else 0.02
+	pivot = Vector3(x_att, y_att, 0)
 	pts.append(Vector3(x_att, y_att, 0))
 	pts.append(Vector3(0.46, y_att - 0.04, 0))
 	pts.append(Vector3(0.52, -0.25, 0))
@@ -438,6 +553,7 @@ func bulle(t: float) -> void:
 # --- cabines -------------------------------------------------------------------------
 
 func _cabine() -> void:
+	pivot = Vector3(0.30, 0.14, 0)
 	var sus_m: String = "acier_noir" if famille != "cabine_omega4" else "galva"
 	var hs: float = 1.15
 	# suspente rigide : de la pince au milieu du toit

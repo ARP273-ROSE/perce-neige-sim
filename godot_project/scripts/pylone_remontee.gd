@@ -26,6 +26,14 @@ extends Node3D
 @export var sens_montee_droite: bool = true
 var compo_montee: Array = [[8, "S"]]
 var compo_descente: Array = [[8, "S"]]
+## Déviation du câble au pylône (rad) : pente côté aval − pente côté amont
+## (> 0 : ligne convexe, en support). Les paires de galets se posent sur
+## l'arc du câble (tangentes et hauteurs) au lieu d'une ligne droite.
+var deviation: float = 0.0
+## Paires de galets mobiles (à garder hors de la fusion des maillages) ; par
+## brin : [nœud, position de repos, rotation de repos, z galet aval, z galet amont, s]
+var mobiles: Array = []
+var _paires: Dictionary = {true: [], false: []}
 
 const R_GALET: float = 0.21                # Ø 420 mm, la norme des débrayables
 const PAS_GALET: float = 0.52              # entraxe de deux galets d'un même balancier
@@ -210,9 +218,33 @@ func _train(montee: bool) -> void:
 		if zs.is_empty():
 			continue
 		var y_axe: float = s * dy
-		for k in range(zs.size()):
-			RemonteeKit.galet(tete, Vector3(0, y_axe, zs[k]), R_GALET, 0.10, "moyeu", "garniture")
-		_palonniers(tete, zs, y_axe, s)
+		# paires de galets : chacune pivote sur son axe de palonnier, posée
+		# sur l'arc du câble (courbure κ = déviation / longueur du train)
+		var kappa: float = deviation / maxf(L, 0.5)
+		var pivots: Array = []
+		var k2: int = 0
+		while k2 < zs.size():
+			var za: float = zs[k2]
+			var zb: float = zs[mini(k2 + 1, zs.size() - 1)]
+			var zp: float = (za + zb) * 0.5
+			var piv: Node3D = Node3D.new()
+			piv.name = "Paire%s%d" % ["S" if s < 0.0 else "C", k2 / 2]
+			var base_pos: Vector3 = Vector3(0, y_axe + s * 0.11 - kappa * zp * zp * 0.5, zp)
+			var base_rot: float = kappa * zp
+			piv.position = base_pos
+			piv.rotation.x = base_rot
+			tete.add_child(piv)
+			RemonteeKit.galet(piv, Vector3(0, -s * 0.11, za - zp), R_GALET, 0.10, "moyeu", "garniture")
+			if zb != za:
+				RemonteeKit.galet(piv, Vector3(0, -s * 0.11, zb - zp), R_GALET, 0.10, "moyeu", "garniture")
+			for sx in [-0.068, 0.068]:
+				RemonteeKit.poutre(piv, Vector3(sx, -s * 0.11, za - zp + 0.14), Vector3(sx, -s * 0.11, zb - zp - 0.14), 0.014, 0.12, "galva_patine")
+			RemonteeKit.cylindre(piv, 0.035, 0.035, 0.20, Transform3D(Basis(Vector3.FORWARD, PI * 0.5), Vector3.ZERO), "acier_noir", 8)
+			mobiles.append(piv)
+			(_paires[montee] as Array).append([piv, base_pos, base_rot, za, zb, s])
+			pivots.append(zp)
+			k2 += 2
+		_palonniers(tete, pivots, y_axe, s)
 		# ramasse-câbles : plaques échancrées à l'extérieur, entre les galets
 		for k in range(0, zs.size() - 1, 2):
 			var zm: float = (float(zs[k]) + float(zs[k + 1])) * 0.5
@@ -242,21 +274,10 @@ func _train(montee: bool) -> void:
 	RemonteeKit.boite_en(self, Vector3(0.95, 0.035, lc), Vector3(x - ext * 0.62, hauteur + 0.02, 0), "caillebotis")
 
 
-## Palonniers : flasques par paires de galets (axes), puis niveaux supérieurs
-## (2, 4, 8 paires…), poutre maîtresse ; `s` = −1 pour un train support (la
-## structure est sous les axes), +1 pour une compression (au-dessus).
-func _palonniers(tete: Node3D, zs: Array, y_axe: float, s: float) -> void:
-	var niveaux: Array = []     # pivots (z) du niveau courant
-	var k: int = 0
-	while k < zs.size():
-		var za: float = zs[k]
-		var zb: float = zs[mini(k + 1, zs.size() - 1)]
-		for sx in [-0.068, 0.068]:
-			RemonteeKit.poutre(tete, Vector3(sx, y_axe, za + 0.14), Vector3(sx, y_axe, zb - 0.14), 0.014, 0.12, "galva_patine")
-		var zp: float = (za + zb) * 0.5
-		RemonteeKit.cylindre(tete, 0.035, 0.035, 0.20, Transform3D(Basis(Vector3.FORWARD, PI * 0.5), Vector3(0, y_axe + s * 0.11, zp)), "acier_noir", 8)
-		niveaux.append(zp)
-		k += 2
+## Palonniers au-dessus des paires (2, 4, 8 paires…), jusqu'à la poutre
+## maîtresse ; `s` = −1 pour un train support (structure sous les axes), +1
+## pour une compression (au-dessus). `niveaux` : z des pivots des paires.
+func _palonniers(tete: Node3D, niveaux: Array, y_axe: float, s: float) -> void:
 	var y: float = y_axe + s * 0.11
 	while niveaux.size() > 1:
 		var suivants: Array = []
@@ -272,9 +293,44 @@ func _palonniers(tete: Node3D, zs: Array, y_axe: float, s: float) -> void:
 			suivants.append(zp2)
 			j += 2
 		niveaux = suivants
-	# poutre maîtresse jusqu'au pivot de la console / du portique
 	var y_piv: float = s * (R_GALET + R_CABLE + 0.36)
 	RemonteeKit.boite_en(tete, Vector3(0.20, absf(y_piv - y) + 0.06, 0.24), Vector3(0, (y_piv + y) * 0.5, niveaux[0]), "galva_pylone")
+
+
+# --- passage d'une pince --------------------------------------------------------
+
+## Surépaisseur de la pince sur le câble à la distance u de son centre : le
+## corps (0,03 m) puis les gaines noires qui s'amincissent jusqu'à ZÉRO à
+## leur bout — c'est ce qui fait monter (compression) ou descendre (support)
+## les galets en douceur.
+static func surepaisseur(u: float) -> float:
+	var a: float = absf(u)
+	if a < 0.31:
+		return 0.03
+	if a < 0.65:
+		return 0.03 * (0.65 - a) / 0.34
+	return 0.0
+
+
+## Une pince passe à la position u (le long du train, +z vers l'aval) sur le
+## brin montée ou descente : chaque paire se déplace et bascule selon la
+## surépaisseur sous ses deux galets.
+func passage(montee: bool, u: float) -> void:
+	for e in _paires[montee]:
+		var sgn: float = e[5]
+		var da: float = surepaisseur(float(e[3]) - u)
+		var db: float = surepaisseur(float(e[4]) - u)
+		var n: Node3D = e[0]
+		n.position = (e[1] as Vector3) + Vector3(0, sgn * (da + db) * 0.5, 0)
+		var dz: float = float(e[3]) - float(e[4])
+		n.rotation.x = float(e[2]) - (sgn * (da - db) / dz if dz > 0.01 else 0.0)
+
+
+## Plus de pince sur le brin : les paires reviennent au repos.
+func repos(montee: bool) -> void:
+	for e in _paires[montee]:
+		(e[0] as Node3D).position = e[1]
+		(e[0] as Node3D).rotation.x = e[2]
 
 
 ## Plaque bleue du numéro (comme sur les lignes Doppelmayr) et panneaux de

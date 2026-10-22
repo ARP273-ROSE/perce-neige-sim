@@ -5,6 +5,42 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.22.2 — 22 octobre 2026
+
+**Remontées : galets mobiles, gaines effilées, lanceur sans à-coup, balancement.** Retour
+d'utilisateur du 22/10/2026 : « les galets mobiles en fonction de la courbe du câble et
+du passage siège ou cabine ; de part et d'autre de la pince, les supports noirs dont
+l'épaisseur diminue jusqu'à 0 au bout, pour passer sous les galets de compression ;
+l'accélération et la décélération continues et régulières, transition douce sur toute la
+longueur du lanceur ; la cabine ou le siège qui se balance et s'amortit en fonction de
+sa masse et des variations de vitesse et/ou de pente ».
+- **Galets mobiles** (`PyloneRemontee.passage` / `repos`) :
+  - chaque paire de galets pivote sur son axe de palonnier ;
+  - au repos, les paires épousent l'arc du câble (courbure = déviation au pylône /
+    longueur du train) ;
+  - au passage d'une pince, chaque paire descend (support) ou monte (compression) selon
+    la surépaisseur sous ses deux galets, puis revient au repos (30 mm au maximum).
+- **Gaines de la pince** : coniques, de 55 mm jusqu'au diamètre du câble au bout (épaisseur
+  nulle), centrées sur le câble.
+- **Lanceur** : 18 m. La vitesse suit une courbe « smootherstep » sur l'énergie cinétique,
+  avec une accélération nulle à l'entrée et à la sortie, continue entre les deux.
+  - Mesuré : 1,53 m/s² au plus (siège), 1,39 (cabine), saut d'accélération inférieur à
+    0,025 m/s² par image.
+  - Gares rallongées en conséquence (24 m du nez à la poulie).
+- **Balancement** (`VehiculeRemontee.balancer`) : la partie suspendue est un pendule
+  articulé sous la pince, longitudinal et transversal.
+  - Moteur : l'accélération mesurée de la pince (lanceur, pente qui change aux pylônes,
+    demi-tour sur la poulie).
+  - Amortissement : réduit, proportionnel à 1/masse (siège 650 kg à vide, avec passagers
+    sur le brin montée ; cabine 850 kg) ; fortement amorti en gare, où le véhicule est
+    guidé.
+  - La pince suit la pente du câble ; le corps de collision et le skieur assis suivent
+    le balancement.
+  - Mesuré : siège 7,6° à la sortie du lanceur puis 0,5° après 20 s ; cabine 6,1° puis
+    0,6°.
+- **Banc `bench_remontee_dynamique_3d.gd`** (lanceur, balancement, galets) ; bancs
+  embarquement, aller_remontee, skieur, quai et ergonomie verts.
+
 ## 1.22.1 — 22 octobre 2026
 
 **Design, élément par élément : le pylône et la pince.** Retour d'utilisateur du
