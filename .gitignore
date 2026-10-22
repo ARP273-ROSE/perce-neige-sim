@@ -105,3 +105,4 @@ manuel-*.aux
 manuel-*.log
 manuel-*.out
 manuel-*.toc
+_shots_tmp/

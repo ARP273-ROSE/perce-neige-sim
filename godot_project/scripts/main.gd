@@ -82,6 +82,7 @@ var mode_skieur: bool = false
 var sons_skieur: SonsSkieur = null
 ## pistes balisées, fantôme des descentes d'un utilisateur (à ski)
 var domaine: DomaineSkiable = null
+var remontees: RemonteesDomaine = null    # remontées mécaniques posées sur le domaine
 ## la boucle toute seule (bouton AUTO du skieur, touche X)
 var skieur_auto: SkieurAuto = null
 var _skieur_en_attente: bool = false   # collisions en préparation : on entre dès qu'elles sont prêtes
@@ -1952,6 +1953,13 @@ func _entrer_skieur() -> void:
 		var xh: Transform3D = tunnel.transform_at(PNConstants.LENGTH)
 		var ax: Vector2 = Vector2(-xh.basis.z.x, -xh.basis.z.z).normalized()
 		domaine.zones_interdites = [[Vector2(xh.origin.x, xh.origin.z), ax, 55.0, 32.0]]
+	# remontées mécaniques du domaine (échantillon : lignes exportées du
+	# dossier des remontées, à leur place réelle)
+	if remontees == null:
+		remontees = RemonteesDomaine.new()
+		remontees.name = "Remontees"
+		add_child(remontees)
+		remontees.construire(relief)
 	relief.set_hiver(1.0)
 	commandes_skieur.set_chausse(skieur.chausse)
 	mode_skieur = true

@@ -5,6 +5,39 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.21.0 — 22 octobre 2026
+
+**Remontées mécaniques : l'échantillon.** Retour d'utilisateur du 22/10/2026 : « continuer à développer les
+remontées du domaine : un modèle de pylône très réaliste à adapter partout, un modèle de
+siège et de cabine par constructeur avec pince débrayable réaliste et fonctionnelle,
+garde-corps et bulle pour les sièges, portes de cabines qui marchent ; un échantillon de
+chaque, qu'on peut ensuite mettre partout ». Voir `REMONTEES.md`.
+- Modèles : pylône paramétrable aux balanciers réels (`pylone_remontee.gd`, styles
+  débrayable et téléski), pylône en treillis du 3S et du téléphérique (`pylone_treillis.gd`),
+  véhicules par famille de constructeur (`vehicule_remontee.gd`) :
+  - sièges : Doppelmayr E98 4/6, à bulle, Poma OCR et Arceau, Garaventa SK6, Bartholet,
+    Leitner, sièges fixes ;
+  - cabines : Omega IV, Diamond EVO, Symphony, 3S, téléphérique ;
+  - perches : à enrouleur, en T, à assiette.
+- Pièces animées : pince débrayable (mâchoire, levier de came, ressorts comprimés),
+  garde-corps, bulle, portes coulissantes des cabines, corde de l'enrouleur.
+- Ligne complète (`ligne_remontee.gd`) : gares avec poulie, rail, pneus et came ; câble en
+  boucle avec sa flèche ; hauteur des pylônes calculée pour garder le câble à au moins
+  6,5 m du terrain. Les véhicules débrayent en gare, freinent à 1 m/s, contournent la
+  poulie, sont relancés et rembrayent. Assise à 0,48 m du quai, plancher des cabines au
+  niveau du quai.
+- Dans le jeu (`remontees_domaine.gd`, `remontees_donnees.gd` généré), en vue skieur, à leur
+  place réelle sur le relief :
+  - TSD6 Marmottes Express (Bartholet, 11 pylônes, 66 sièges) ;
+  - TCD10 des Boisses (Omega IV, 11 pylônes, 12 cabines : 26 sont parties aux Brévières).
+  Véhicules visibles jusqu'à 700 m ; une ligne lointaine (> 2,5 km) s'arrête.
+- Contrôle : `shot_vitrine_remontees.gd`, `shot_ligne_remontee.gd`,
+  `shot_remontees_jeu.gd` ; bancs skieur, ski_expert, ergonomie et quai verts avec les
+  remontées.
+- Reprend la 1.19.31, publiée pour la PWA seulement (sa construction a buté sur le format
+  du journal du nouveau standard) : au clavier, le skieur avance là où regarde la vue ; le
+  repère figé est réservé au joystick tactile.
+
 ## 1.20.0 — 14 octobre 2026
 
 Passage au standard commun des applications (kit `_kit_windows`).
