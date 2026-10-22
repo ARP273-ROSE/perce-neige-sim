@@ -50,6 +50,16 @@ func zoomer(f: float) -> void:
 
 
 func _gui_input(ev: InputEvent) -> void:
+	# « aller à » : un toucher ou un clic sur une remontée dépose le skieur au
+	# pied de sa gare aval (retour d'utilisateur, 22/10/2026)
+	if (ev is InputEventScreenTouch and ev.pressed) or \
+			(ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_LEFT):
+		var lg: LigneRemontee = remontee_sous(ev.position)
+		if lg != null and main != null and main.has_method("aller_a_remontee"):
+			main.aller_a_remontee(lg)
+			queue_redraw()
+			accept_event()
+			return
 	if ev is InputEventMouseButton and ev.pressed:
 		if ev.button_index == MOUSE_BUTTON_WHEEL_UP:
 			zoomer(1.15)
@@ -69,6 +79,41 @@ func _process(delta: float) -> void:
 	if _t <= 0.0:
 		_t = 0.2
 		queue_redraw()
+
+
+## Remontées posées dans le monde : [ligne, aval (x, z), amont (x, z)].
+func _remontees() -> Array:
+	var out: Array = []
+	if main == null:
+		return out
+	var rm: Node = main.get("remontees")
+	if rm == null:
+		return out
+	for e in rm.get("lignes"):
+		var lg: LigneRemontee = e[0]
+		var xf: Transform3D = lg.global_transform
+		var b: Vector3 = xf * Vector3(0, 0, -lg.longueur_h())
+		out.append([lg, Vector2(xf.origin.x, xf.origin.z), Vector2(b.x, b.z)])
+	return out
+
+
+## La remontée sous le point `pos` de la carte (à 18 px près), ou null.
+func remontee_sous(pos: Vector2) -> LigneRemontee:
+	if skieur == null:
+		return null
+	var c: Vector2 = Vector2(skieur.global_position.x, skieur.global_position.z)
+	var o: Vector2 = TAILLE * 0.5
+	var best: LigneRemontee = null
+	var d_min: float = 18.0
+	for r in _remontees():
+		var a: Vector2 = _carte(r[1], c, o)
+		var b: Vector2 = _carte(r[2], c, o)
+		var d: float = Geometry2D.get_closest_point_to_segment(pos, a, b).distance_to(pos)
+		d = minf(d, a.distance_to(pos) - 6.0)
+		if d < d_min:
+			d_min = d
+			best = r[0]
+	return best
 
 
 func _carte(q: Vector2, c: Vector2, o: Vector2) -> Vector2:
@@ -104,6 +149,18 @@ func _draw() -> void:
 		var nom: String = PistesDonnees.PISTES[k][0]
 		if nom != "" and long_px > NOM_MIN_PX:
 			noms.append([nom, ecran[ecran.size() / 2], col])
+	# remontées posées : trait noir, gare aval en rouge, nom ; un toucher dessus
+	# y emmène le skieur
+	for r in _remontees():
+		var a: Vector2 = _carte(r[1], c, o)
+		var b: Vector2 = _carte(r[2], c, o)
+		draw_line(a, b, Color(1, 1, 1, 0.8), 4.5, true)
+		draw_line(a, b, Color(0.08, 0.08, 0.10, 0.95), 2.5, true)
+		draw_circle(a, 6.5, Color(1, 1, 1, 0.95))
+		draw_circle(a, 5.0, Color(0.78, 0.06, 0.18, 1.0))
+		draw_circle(b, 3.5, Color(0.08, 0.08, 0.10, 0.95))
+		if Rect2(Vector2.ZERO, TAILLE).has_point(a):
+			noms.append([(r[0] as LigneRemontee).nom_ligne + " »", a + Vector2(0, -12), Color(1, 1, 1)])
 	# gares du funiculaire
 	for g in gares:
 		var gp: Vector2 = _carte(Vector2((g as Vector3).x, (g as Vector3).z), c, o)

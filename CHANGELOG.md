@@ -5,6 +5,24 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.21.1 — 22 octobre 2026
+
+**Aller à une remontée depuis la carte.** Retour d'utilisateur du 22/10/2026 : « mais j'y
+vais comment, à ces deux remontées de démo ? ». Elles sont à 3,2 et 5 km de Val Claret,
+sans rien pour y monter.
+- La carte des pistes montre les remontées posées : un trait noir, la gare aval en rouge
+  et le nom. Un toucher ou un clic dessus dépose le skieur sur la neige à côté de la gare
+  aval, tourné vers l'amont (`main.aller_a_remontee`). La BOUCLE s'arrête si elle
+  tournait.
+- La carte s'ouvre aussi à pied : le bouton CARTE est toujours là, et à pied la carte ne
+  s'affiche que si on la demande.
+- Les collisions du relief sont construites autour du point d'arrivée, et le « dernier sol
+  sûr » est mis à jour. Sinon, le rattrapage de chute renvoyait le skieur à Val Claret 3 s
+  plus tard.
+- Banc `bench_aller_remontee_3d.gd` : à pied, carte ouverte et dézoomée, un toucher sur
+  chaque remontée. Le skieur est déposé à 10 m de la gare aval et reste debout sur la
+  neige.
+
 ## 1.21.0 — 22 octobre 2026
 
 **Remontées mécaniques : l'échantillon.** Retour d'utilisateur du 22/10/2026 : « continuer à développer les

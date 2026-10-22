@@ -36,6 +36,9 @@ var _t_pique: float = 0.0
 var _t_msg: float = 0.0
 var carte: CartePistes = null           # carte des pistes (à ski)
 var _carte_masquee: bool = false
+## À pied : la carte n'est montrée que si on la demande (bouton CARTE) — elle
+## sert à rejoindre une remontée (« aller à », retour d'utilisateur, 22/10/2026)
+var _carte_a_pied: bool = false
 var _chausse: bool = false
 var _b_carte: Button = null
 
@@ -86,12 +89,15 @@ func _ready() -> void:
 	carte.position = Vector2(-CartePistes.TAILLE.x - 16.0, 96.0)
 	carte.visible = false
 	_racine.add_child(carte)
-	_b_carte = _bouton("CARTE", "Carte des pistes autour de soi, à ski : + / − ou molette pour zoomer")
+	_b_carte = _bouton("CARTE", "Carte des pistes autour de soi : + / − ou molette pour zoomer ; toucher une remontée pour y aller")
 	_b_carte.toggle_mode = true
 	_b_carte.button_pressed = true
 	_b_carte.visible = false
 	_b_carte.toggled.connect(func(on: bool) -> void:
-		_carte_masquee = not on
+		if _chausse:
+			_carte_masquee = not on
+		else:
+			_carte_a_pied = on
 		_maj_carte())
 	col.add_child(_b_carte)
 	_b_ski = _bouton("CHAUSSER", "Chausser ou déchausser les skis, dehors sur la neige (touche E)")
@@ -205,9 +211,10 @@ func set_chausse(oui: bool) -> void:
 
 func _maj_carte() -> void:
 	if carte != null:
-		carte.visible = _chausse and not _carte_masquee
+		carte.visible = (_chausse and not _carte_masquee) or (not _chausse and _carte_a_pied)
 	if _b_carte != null:
-		_b_carte.visible = _chausse
+		_b_carte.visible = true
+		_b_carte.set_pressed_no_signal(carte != null and carte.visible)
 
 
 ## Ligne du haut, à ski : vitesse et piste.
