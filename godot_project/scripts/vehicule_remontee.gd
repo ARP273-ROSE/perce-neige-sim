@@ -369,9 +369,10 @@ func balancer(dt: float, en_gare: bool) -> void:
 func place_assise(i: int = -1, avant: bool = false) -> Vector3:
 	if cabine:
 		var hs: float = 1.15
-		var y_banc: float = -hs - 0.10 - 2.25 + 0.62
-		var xi: float = clampf(float(i if i >= 0 else 2) - 2.0, -2.0, 2.0) * 0.36
-		return Vector3(xi, y_banc - 0.45, -(0.70 - 0.42) if avant else 0.70 - 0.42)
+		var y_banc: float = -hs - 0.10 - 2.25 + 0.15 + 0.46
+		var xi: float = clampf(float(i if i >= 0 else 2) - 2.0, -2.0, 2.0) * 0.46
+		var zs: float = BANC_Z + 0.04 - 0.42
+		return Vector3(xi, y_banc - 0.45, -zs if avant else zs)
 	var W: float = _largeur_siege()
 	var k: int = i if i >= 0 else maxi(0, places / 2 - 1)
 	var cx: float = -W * 0.5 + 0.10 + 0.50 * (k + 0.5)
@@ -390,14 +391,14 @@ func formes_collision(cote_ext: float) -> Array:
 	if cabine:
 		var hs: float = 1.15
 		var yb: float = -hs - 0.10 - 2.25
-		f.append([Vector3(1.9, 0.14, 2.0), Vector3(0, yb + 0.07, 0), false])            # plancher
-		f.append([Vector3(1.9, 0.10, 2.0), Vector3(0, -hs - 0.15, 0), false])           # toit
-		f.append([Vector3(1.9, 2.2, 0.06), Vector3(0, yb + 1.15, -0.97), false])        # face avant
-		f.append([Vector3(1.9, 2.2, 0.06), Vector3(0, yb + 1.15, 0.97), false])         # face arrière
-		f.append([Vector3(0.06, 2.2, 2.0), Vector3(-cote_ext * 0.92, yb + 1.15, 0), false])  # côté plein
-		f.append([Vector3(0.06, 2.2, 2.0), Vector3(cote_ext * 0.92, yb + 1.15, 0), true])    # côté portes
-		f.append([Vector3(1.6, 0.45, 0.42), Vector3(0, yb + 0.40, 0.70), false])        # banquettes
-		f.append([Vector3(1.6, 0.45, 0.42), Vector3(0, yb + 0.40, -0.70), false])
+		f.append([Vector3(2.3, 0.15, 1.5), Vector3(0, yb + 0.075, 0), false])           # plancher
+		f.append([Vector3(2.0, 0.10, 1.0), Vector3(0, -hs - 0.15, 0), false])           # toit
+		f.append([Vector3(2.3, 2.2, 0.06), Vector3(0, yb + 1.15, -0.80), false])        # face avant
+		f.append([Vector3(2.3, 2.2, 0.06), Vector3(0, yb + 1.15, 0.80), false])         # face arrière
+		f.append([Vector3(0.06, 2.2, 1.6), Vector3(-cote_ext * 1.17, yb + 1.15, 0), false])  # côté plein
+		f.append([Vector3(0.06, 2.2, 1.6), Vector3(cote_ext * 1.17, yb + 1.15, 0), true])    # côté portes
+		f.append([Vector3(2.2, 0.45, 0.40), Vector3(0, yb + 0.37, BANC_Z), false])      # banquettes
+		f.append([Vector3(2.2, 0.45, 0.40), Vector3(0, yb + 0.37, -BANC_Z), false])
 		return f
 	var W: float = _largeur_siege()
 	var y_s: float = -_haut_suspente() - 0.12 - 0.98
@@ -582,110 +583,124 @@ func _cabine() -> void:
 	pivot = Vector3(0.30, 0.14, 0)
 	var sus_m: String = "acier_noir" if famille != "cabine_omega4" else "galva"
 	var hs: float = 1.15
-	# suspente cintrée : de la pince, elle s'écarte vers l'extérieur puis
-	# revient en arc au-dessus du milieu du toit (forme en « Ω » renversé)
+	# suspente (plans CWA de l'Omega V, Wikimedia Commons) : de la pince elle
+	# descend à l'extérieur, se cintre vers l'intérieur et finit en poutre
+	# horizontale posée sur le toit par deux pieds
 	var arc: PackedVector3Array = PackedVector3Array()
 	var p0: Vector3 = Vector3(0.30, 0.14, 0)
-	var p1: Vector3 = Vector3(0.78, 0.10, 0)
-	var p2: Vector3 = Vector3(0.62, -0.95, 0)
-	var p3: Vector3 = Vector3(0.0, -hs + 0.02, 0)
+	var p1: Vector3 = Vector3(0.66, -0.10, 0)
+	var p2: Vector3 = Vector3(0.70, -hs + 0.05, 0)
+	var p3: Vector3 = Vector3(0.22, -hs + 0.10, 0)
 	for k in range(17):
 		var t: float = float(k) / 16.0
 		var u: float = 1.0 - t
 		arc.append(p0 * u * u * u + p1 * 3.0 * u * u * t + p2 * 3.0 * u * t * t + p3 * t * t * t)
 	RemonteeKit.tube(self, arc, 0.058, sus_m, 12)
-	# rotule de toit : palier, carénage conique, platine
-	RemonteeKit.cylindre(self, 0.11, 0.11, 0.16, Transform3D(Basis(Vector3.FORWARD, PI * 0.5), Vector3(0, -hs, 0)), sus_m, 16)
-	RemonteeKit.cylindre(self, 0.30, 0.13, 0.12, Transform3D(Basis.IDENTITY, Vector3(0, -hs - 0.06, 0)), "noir_mat", 24)
+	RemonteeKit.poutre(self, Vector3(0.26, -hs + 0.10, 0), Vector3(-0.42, -hs + 0.12, 0), 0.12, 0.07, sus_m)
+	for xp in [-0.30, 0.14]:
+		RemonteeKit.boite_en(self, Vector3(0.07, 0.20, 0.10), Vector3(xp, -hs + 0.0, 0), sus_m)
 	var cab: Node3D = Node3D.new()
 	cab.name = "Caisse"
 	cab.position = Vector3(0, -hs - 0.10, 0)
 	add_child(cab)
-	var H: float = 2.25
+	var H: float = _CAB_H
 	var mailles: Dictionary = _maillage_cabine(famille)
-	var coque: MeshInstance3D = MeshInstance3D.new()
-	coque.name = "Coque"
-	coque.mesh = mailles["coque"]
-	cab.add_child(coque)
-	var vitres: MeshInstance3D = MeshInstance3D.new()
-	vitres.name = "Vitrage"
-	vitres.mesh = mailles["vitres"]
-	cab.add_child(vitres)
-	# portes : deux vantaux qui suivent le galbe, coulissant vers l'extérieur
-	# par-dessus les panneaux fixes
+	for cle in ["coque", "vitres"]:
+		var mi: MeshInstance3D = MeshInstance3D.new()
+		mi.name = cle.capitalize()
+		mi.mesh = mailles[cle]
+		cab.add_child(mi)
+	# portes : deux vantaux découpés dans la face en œuf, qui coulissent
+	# vers l'extérieur par-dessus les panneaux fixes
 	for sz in [-1.0, 1.0]:
 		var v: Node3D = Node3D.new()
 		v.name = "Vantail%s" % ("Avant" if sz < 0 else "Arriere")
 		cab.add_child(v)
 		for cle in ["porte_coque", "porte_vitre"]:
-			var mi: MeshInstance3D = MeshInstance3D.new()
-			mi.mesh = mailles[cle + ("_p" if sz > 0 else "_m")]
-			v.add_child(mi)
+			var mi2: MeshInstance3D = MeshInstance3D.new()
+			mi2.mesh = mailles[cle + ("_p" if sz > 0 else "_m")]
+			v.add_child(mi2)
 		# poignée verticale près de la jonction des vantaux
-		RemonteeKit.barre(v, Vector3(1.02, -H + 1.00, sz * 0.10), Vector3(1.02, -H + 1.35, sz * 0.10), 0.014, "acier", 8)
-		_portes.append([v, Vector3.ZERO, Vector3(0.05, 0, sz * PORTE_DEMI)])
-	# intérieur : plancher strié, banquettes rembourrées face à face, plafonnier
-	RemonteeKit.boite_en(cab, Vector3(1.62, 0.03, 1.72), Vector3(0, -H + 0.155, 0), "noir_mat")
-	for k in range(-5, 6):
-		RemonteeKit.boite_en(cab, Vector3(1.50, 0.012, 0.02), Vector3(0, -H + 0.175, k * 0.14), "acier")
+		RemonteeKit.barre(v, Vector3(1.28, -H + 0.95, sz * 0.07), Vector3(1.28, -H + 1.45, sz * 0.07), 0.016, "acier", 8)
+		_portes.append([v, Vector3.ZERO, Vector3(0.06, 0, sz * PORTE_DEMI)])
+	# tampons de caoutchouc aux quatre angles, à hauteur du bas des vitres
+	for sx in [-1.0, 1.0]:
+		for sz2 in [-1.0, 1.0]:
+			var tp: Vector3 = Vector3(sx * 1.24, -1.12, sz2 * 0.66)
+			RemonteeKit.coussin(cab, Vector3(0.10, 0.42, 0.16), Transform3D(Basis.IDENTITY, tp), "noir_mat", 0.045)
+	# intérieur : plancher, deux banquettes de 5 places (46 cm) face à face,
+	# dossiers contre les faces longues, plafonnier
+	var yp: float = -H + 0.15
+	# (le fond se resserre : plancher et pieds de banquettes restent dans la coque)
+	RemonteeKit.boite_en(cab, Vector3(2.00, 0.03, 0.95), Vector3(0, yp + 0.005, 0), "noir_mat")
+	for k in range(-3, 4):
+		RemonteeKit.boite_en(cab, Vector3(1.90, 0.012, 0.02), Vector3(0, yp + 0.025, k * 0.14), "acier")
 	var sieges: String = "assise_grise" if famille != "cabine_diamond" else "assise_noire"
 	for sz in [-1.0, 1.0]:
-		var zb: float = sz * 0.70
-		RemonteeKit.boite_en(cab, Vector3(1.58, 0.36, 0.34), Vector3(0, -H + 0.33, zb + sz * 0.04), "noir_mat")
-		RemonteeKit.boite_en(cab, Vector3(1.60, 0.10, 0.44), Vector3(0, -H + 0.56, zb), sieges)
-		RemonteeKit.cylindre(cab, 0.05, 0.05, 1.60, Transform3D(Basis(Vector3.FORWARD, PI * 0.5), Vector3(0, -H + 0.56, zb - sz * 0.22)), sieges, 10)
-		# dossier incliné, en deux coussins, et appui-tête
-		var dos: Transform3D = Transform3D(Basis(Vector3.RIGHT, sz * 0.12), Vector3(0, -H + 0.88, sz * 0.92))
-		RemonteeKit.boite(cab, Vector3(1.60, 0.50, 0.08), dos, sieges)
-		RemonteeKit.boite_en(cab, Vector3(1.60, 0.04, 0.10), Vector3(0, -H + 1.15, sz * 0.94), "noir_mat")
-	RemonteeKit.boite_en(cab, Vector3(1.10, 0.02, 0.50), Vector3(0, -0.20, 0), "blanc_plaque")
-	# grilles d'aération sur le toit, de part et d'autre de la rotule
-	for sz in [-1.0, 1.0]:
-		RemonteeKit.boite_en(cab, Vector3(0.56, 0.035, 0.15), Vector3(0, -0.015, sz * 0.40), "noir_mat")
+		var zb: float = sz * BANC_Z
+		RemonteeKit.boite_en(cab, Vector3(2.00, 0.34, 0.20), Vector3(0, yp + 0.18, sz * 0.40), "noir_mat")
+		for i in range(5):
+			var xi: float = (i - 2) * 0.46
+			RemonteeKit.coussin(cab, Vector3(0.44, 0.09, 0.42), Transform3D(Basis(Vector3.RIGHT, -sz * 0.06), Vector3(xi, yp + 0.41, zb)), sieges, 0.035)
+			RemonteeKit.coussin(cab, Vector3(0.44, 0.50, 0.07), Transform3D(Basis(Vector3.RIGHT, sz * 0.12), Vector3(xi, yp + 0.76, sz * (BANC_Z + 0.22))), sieges, 0.03)
+	RemonteeKit.boite_en(cab, Vector3(1.20, 0.02, 0.50), Vector3(0, -0.22, 0), "blanc_plaque")
 	if famille == "cabine_diamond":
 		# porte-skis extérieurs sur la face opposée aux portes : deux paniers
 		for sz in [-1.0, 1.0]:
-			var zp: float = sz * 0.62
+			var zp: float = sz * 0.45
 			for yk in [-H + 0.62, -H + 1.62]:
-				RemonteeKit.boite_en(cab, Vector3(0.20, 0.06, 0.34), Vector3(-1.08, yk, zp), "acier_noir")
-			for dz in [-0.15, 0.15]:
-				RemonteeKit.barre(cab, Vector3(-1.17, -H + 0.62, zp + dz), Vector3(-1.17, -H + 1.62, zp + dz), 0.015, "acier_noir", 6)
+				RemonteeKit.boite_en(cab, Vector3(0.20, 0.06, 0.30), Vector3(-1.36, yk, zp), "acier_noir")
+			for dz in [-0.12, 0.12]:
+				RemonteeKit.barre(cab, Vector3(-1.45, -H + 0.62, zp + dz), Vector3(-1.45, -H + 1.62, zp + dz), 0.015, "acier_noir", 6)
 
 
-## Profil de la caisse, du fond au toit : [y, demi-largeur (x), demi-longueur
-## (z), rayon des angles, matériau de la bande jusqu'à l'anneau suivant].
-## Fond en baignoire, flancs bombés, vitrage en bandeau qui rentre vers le
-## toit, toit en dôme (photos de cabines CWA Omega IV, Sigma).
+## Caisse d'après les plans CWA de l'Omega V (Wikimedia Commons, CC BY-SA) et
+## des photos de cabines (Méribel, Orelle) : 2,46 m en travers du câble
+## (banquettes de 5 places de 46 cm), 1,68 m dans le sens du câble, 2,25 m
+## de haut ; face des portes en œuf, faces longues en trapèze arrondi ;
+## grand vitrage de 0,30 à 1,35 m sous le toit ; porte de 0,90 m.
 const PORTE_DEMI: float = 0.45          # demi-largeur de la baie de porte
 const _CAB_H: float = 2.25
+const BANC_Z: float = 0.50              # milieu des assises (de part et d'autre)
 
 
+## Anneaux du toit au fond : [profondeur sous le toit, demi-largeur x
+## (travers du câble), demi-longueur z (sens du câble), bande jusqu'à
+## l'anneau suivant]. Les demi-dimensions sont lues sur les plans.
 static func _profil_cabine(fam: String) -> Array:
-	var H: float = _CAB_H
-	var yv0: float = -H + (0.62 if fam == "cabine_symphony" else 0.84)   # bas des vitres
-	var yv1: float = -0.40                                               # haut des vitres
-	var r_f: float = 0.40 if fam != "cabine_diamond" else 0.26           # rayon des angles
-	return [
-		[-H, 0.70, 0.75, r_f * 0.7, "caisse"],
-		[-H + 0.05, 0.82, 0.87, r_f * 0.85, "caisse"],
-		[-H + 0.15, 0.89, 0.94, r_f * 0.95, "caisse"],
-		[-H + 0.32, 0.93, 0.98, r_f, "caisse"],
-		[-H + 0.46, 0.95, 1.00, r_f, "joint"],          # bourrelet pare-chocs
-		[-H + 0.52, 0.95, 1.00, r_f, "caisse"],
-		[yv0 - 0.03, 0.95, 1.00, r_f, "joint"],
-		[yv0, 0.95, 1.00, r_f, "vitre"],
-		[yv1 - 0.03, 0.925, 0.975, r_f * 0.97, "joint"],
-		[yv1, 0.92, 0.97, r_f * 0.96, "caisse"],
-		[-0.24, 0.89, 0.94, r_f * 0.93, "toit"],
-		[-0.12, 0.83, 0.88, r_f * 0.86, "toit"],
-		[-0.04, 0.72, 0.77, r_f * 0.76, "toit"],
-		[0.0, 0.56, 0.61, r_f * 0.62, ""],
+	var anneaux: Array = []
+	var cotes: Array = [
+		# d,    a,    b,    bande
+		[0.00, 0.80, 0.40, "toit"],
+		[0.07, 0.90, 0.45, "liseré"],
+		[0.13, 0.97, 0.48, "cadre"],
+		[0.19, 1.00, 0.50, "vitre"],
+		[0.30, 1.06, 0.58, "cadre"],
+		[0.34, 1.08, 0.61, "vitre"],
+		[0.60, 1.14, 0.70, "vitre"],
+		[0.97, 1.19, 0.84, "vitre"],
+		[1.33, 1.23, 0.84, "cadre"],
+		[1.38, 1.23, 0.84, "caisse"],
+		[1.66, 1.20, 0.80, "caisse"],
+		[1.84, 1.16, 0.70, "caisse"],
+		[1.97, 1.12, 0.62, "caisse"],
+		[2.13, 1.06, 0.49, "caisse"],
+		[2.25, 0.98, 0.41, ""],
 	]
+	if fam == "cabine_diamond" or fam == "cabine_symphony":
+		# Sigma : vitrage plus bas (photos de Méribel)
+		cotes[9][3] = "vitre"
+		cotes[10][3] = "cadre"
+	for c in cotes:
+		var a: float = c[1]
+		var b: float = c[2]
+		anneaux.append([-float(c[0]), a, b, minf(0.34, b * 0.55), c[3]])
+	return anneaux
 
 
 ## Points du contour (rectangle à coins arrondis), toujours dans le même
 ## ordre : [point, côté X+ ?, abscisse réduite s sur le côté X+ (−1…1),
-## milieu d'un angle ?].
+## arête (milieu d'un angle) ?].
 static func _contour(a: float, b: float, r: float) -> Array:
 	var out: Array = []
 	# subdivisions fines aux bords de la baie de porte (s = ±0,75) et au
@@ -694,7 +709,6 @@ static func _contour(a: float, b: float, r: float) -> Array:
 	var nc: int = 8
 	var ca: Array = [[1.0, 1.0, 0.0], [-1.0, 1.0, PI * 0.5], [-1.0, -1.0, PI], [1.0, -1.0, PI * 1.5]]
 	for c in range(4):
-		# côté avant le coin c
 		for sv in cotes:
 			var p: Vector3
 			match c:
@@ -711,24 +725,28 @@ static func _contour(a: float, b: float, r: float) -> Array:
 		var cz: float = ca[c][1] * (b - r)
 		for k in range(nc):
 			var th: float = ca[c][2] + PI * 0.5 * float(k) / nc
-			out.append([Vector3(cx + r * cos(th), 0, cz + r * sin(th)), false, 0.0, k == 4])
+			out.append([Vector3(cx + r * cos(th), 0, cz + r * sin(th)), false, 0.0, k == 3 or k == 4])
 	return out
 
 
 static var _cache_cabines: Dictionary = {}
 
 
+## Couleurs : caisse (bas), cadre (pourtour noir), toit, liseré.
 static func _mat_cabine(nom: String, fam: String) -> Material:
 	var cle: String = nom + "|" + fam
 	if _cache_cabines.has(cle):
 		return _cache_cabines[cle]
 	var base: String = nom
-	if nom == "caisse":
-		base = {"cabine_diamond": "cabine_noire", "cabine_symphony": "cabine_blanche"}.get(fam, "cabine_rouge")
-	elif nom == "toit":
-		base = "cabine_blanche" if fam == "cabine_omega4" else ("cabine_noire" if fam == "cabine_symphony" else "cabine_noire")
-	elif nom == "montant":
-		base = "noir_mat"
+	match nom:
+		"caisse":
+			base = {"cabine_diamond": "cabine_noire", "cabine_symphony": "cabine_blanche"}.get(fam, "cabine_rouge")
+		"liseré":
+			base = {"cabine_diamond": "acier", "cabine_symphony": "cabine_bleue"}.get(fam, "cabine_rouge")
+		"toit", "cadre":
+			base = "cabine_noire"
+		"vitre":
+			base = "vitre_teintee"
 	var m: Material = RemonteeKit.mat(base)
 	if nom != "vitre":
 		# double face : on voit l'intérieur de la caisse à travers les vitres
@@ -745,12 +763,13 @@ static func _maillage_cabine(fam: String) -> Dictionary:
 	if _cache_cabines.has(fam):
 		return _cache_cabines[fam]
 	var prof: Array = _profil_cabine(fam)
-	var y_bas_porte: float = -_CAB_H + 0.15
+	var H: float = _CAB_H
+	var y_haut_porte: float = -0.19
+	var y_bas_porte: float = -H + 0.12
 	var anneaux: Array = []
 	for r in prof:
 		anneaux.append(_contour(r[1], r[2], r[3]))
 	var n: int = anneaux[0].size()
-	# surfaces : [opaques par matériau], vitres à part (transparentes)
 	var st: Dictionary = {}
 	var st_porte: Dictionary = {1.0: {}, -1.0: {}}
 	var quad = func(dico: Dictionary, mat: String, q: Array, dx: float) -> void:
@@ -763,6 +782,7 @@ static func _maillage_cabine(fam: String) -> Dictionary:
 		var d: Vector3 = Vector3(dx, 0, 0)
 		for v in [q[0], q[1], q[2], q[0], q[2], q[3]]:
 			s1.add_vertex(v + d)
+	# le fond est redécoupé : anneau supplémentaire au plancher pour la porte
 	for i in range(prof.size() - 1):
 		var mat_bande: String = prof[i][4]
 		var y0: float = prof[i][0]
@@ -776,24 +796,24 @@ static func _maillage_cabine(fam: String) -> Dictionary:
 			var q: Array = [(a0[0] as Vector3) + Vector3(0, y0, 0), (b0[0] as Vector3) + Vector3(0, y1, 0),
 				(b1[0] as Vector3) + Vector3(0, y1, 0), (a1[0] as Vector3) + Vector3(0, y0, 0)]
 			var mat: String = mat_bande
-			# montants d'angle dans la bande vitrée
-			if mat == "vitre" and a0[3]:
-				mat = "montant"
-			# baie de porte : côté X+, |s| < 0,75, du plancher au haut des vitres
+			# arêtes verticales : le cadre fait le tour de la caisse
+			if mat == "vitre" and a0[3] and a1[3]:
+				mat = "cadre"
+			# baie de porte : face X+ (en œuf), |s| < 0,75, du plancher au haut des vitres
 			var s_mid: float = (float(a0[2]) + float(a1[2])) * 0.5
-			var dans_baie: bool = a0[1] and a1[1] and absf(s_mid) < 0.75 and y0 >= y_bas_porte - 0.01 \
-				and y1 <= prof[9][0] + 0.001
+			var dans_baie: bool = a0[1] and a1[1] and absf(s_mid) < 0.75 and y0 <= y_haut_porte + 0.001 \
+				and y1 >= y_bas_porte - 0.001
 			if dans_baie:
 				var cote: float = 1.0 if s_mid > 0.0 else -1.0
-				var mp: String = mat
-				# montants des vantaux : bord de baie et jonction centrale
-				if mp == "vitre" and (absf(s_mid) > 0.70 or absf(s_mid) < 0.06):
-					mp = "montant"
+				var mp: String = "vitre" if y1 > -H + 0.45 else "cadre"
+				# montants des vantaux : bords de la baie et jonction centrale
+				if absf(s_mid) > 0.70 or absf(s_mid) < 0.06:
+					mp = "cadre"
 				quad.call(st_porte[cote], mp, q, 0.03)
 				continue
 			quad.call(st, mat, q, 0.0)
 	# fond et toit fermés en éventail
-	for bout in [[0, -1.0, "caisse"], [prof.size() - 1, 1.0, "toit"]]:
+	for bout in [[0, 1.0, "toit"], [prof.size() - 1, -1.0, "caisse"]]:
 		var i3: int = bout[0]
 		var y3: float = prof[i3][0]
 		var c: Vector3 = Vector3(0, y3 + 0.03 * float(bout[1]), 0)

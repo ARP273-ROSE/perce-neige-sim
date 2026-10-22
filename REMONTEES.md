@@ -89,13 +89,15 @@ passer le toit des cabines.
 
 ### Design des cabines et des sièges (1.22.7)
 
-- **Cabine** (`VehiculeRemontee._maillage_cabine`) : la caisse est un maillage lissé, anneau par anneau,
-  d'après le profil `_profil_cabine` : rectangle à coins arrondis, fond en baignoire, flancs bombés,
-  bourrelet pare-chocs, vitrage en bandeau entre deux joints noirs, montants d'angle fins, toit en
-  dôme (blanc sur l'Omega IV), grilles d'aération. Les deux vantaux sont découpés dans la même
-  surface et coulissent par-dessus les panneaux fixes. Intérieur : plancher strié, banquettes
-  rembourrées, plafonnier. Suspente cintrée avec rotule de toit. Les maillages sont partagés par
-  famille ; les matériaux de caisse sont double face, pour voir l'intérieur à travers les vitres.
+- **Cabine** (`VehiculeRemontee._maillage_cabine`, 1.22.8) : cotes relevées sur les plans CWA de
+  l'Omega V (Wikimedia Commons, CC BY-SA, utilisateur Ryse93) et sur des photos de cabines
+  (Méribel, Orelle) : 2,46 m en travers du câble (deux banquettes de 5 places de 46 cm, face à face),
+  1,68 m dans le sens du câble, 2,25 m de haut. La face des portes est en œuf, les faces longues en
+  trapèze arrondi (`_profil_cabine` : demi-largeur et demi-longueur par anneau). Grand vitrage teinté
+  de 0,30 à 1,35 m sous le toit, petite vitre haute, cadre noir sur les arêtes, liseré de couleur
+  sous le toit, tampons de caoutchouc aux angles, porte de 0,90 m en deux vantaux découpés dans la
+  coque. Suspente cintrée terminée par une poutre posée sur le toit par deux pieds. Maillages
+  partagés par famille ; matériaux de caisse double face (on voit l'intérieur à travers les vitres).
 - **Siège** : coussins d'assise et de dossier rembourrés (`RemonteeKit.coussin`, boîte aux arêtes
   arrondies, maillage partagé, environ 300 triangles), sur un bac d'assise et une coque de dossier
   pleine largeur, avec des accoudoirs garnis et des attaches du dossier sous l'arceau. Garnitures

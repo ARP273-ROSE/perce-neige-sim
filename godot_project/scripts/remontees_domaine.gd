@@ -242,7 +242,7 @@ func _entrer_cabine(lg: LigneRemontee, p: Vector3) -> bool:
 		var v: VehiculeRemontee = lg.vehicule(i)
 		var loc: Vector3 = v.global_transform.affine_inverse() * p
 		var y_pl: float = v.place_assise(0).y
-		if absf(loc.x) > 0.95 or absf(loc.z) > 1.0 or loc.y < y_pl - 0.4 or loc.y > y_pl + 1.6:
+		if absf(loc.x) > 1.15 or absf(loc.z) > 0.80 or loc.y < y_pl - 0.4 or loc.y > y_pl + 1.6:
 			continue
 		# la cabine roule vers son −Z : en montant (gare aval), la banquette
 		# arrière regarde l'amont ; en descendant, la banquette avant
