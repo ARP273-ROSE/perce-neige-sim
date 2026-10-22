@@ -5,6 +5,26 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.22.9 — 23 octobre 2026
+
+**Remontées : siège du Marmottes Express refait d'après la vraie ligne.** Retour d'utilisateur du
+23/10/2026 : « même chose en profondeur pour les sièges ».
+- Références :
+  - photos du TSD6 Marmottes Express (BMF, 2008) dans le reportage de remontees-mecaniques.net,
+    consultées comme référence visuelle (aucune image reprise dans le dépôt) ;
+  - photos de télésièges débrayables sur Wikimedia Commons (garage de Villard-Corrençon, Pla del
+    Mir).
+- Siège BMF :
+  - poutre de tête en treillis sur toute la largeur, avec la plaque du numéro, où tombe la
+    suspente ;
+  - gros cadres tubulaires derrière le dossier, cintrés en grand rayon sous l'assise ;
+  - dossier bas et peu incliné, la particularité des sièges BMF ;
+  - six coussins noirs sur un grand carénage aluminium.
+- Pince BMF : un seul gros ressort rouge par bout, comme sur les photos, au lieu de deux ressorts
+  jaunes.
+- Vérifié : bancs embarquement et remontee_dynamique ; studio `shot_sieges.gd` (vues de face, de
+  dessous, pince).
+
 ## 1.22.8 — 23 octobre 2026
 
 **Remontées : cabine refaite d'après les plans CWA.** Retour d'utilisateur du 23/10/2026 : « on y est

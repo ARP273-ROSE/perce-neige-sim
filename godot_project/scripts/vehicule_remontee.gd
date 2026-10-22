@@ -166,7 +166,10 @@ func _fusionner() -> void:
 func _couleur_ressorts() -> String:
 	match constructeur():
 		"bartholet":
-			return "jaune_ressort"       # « deux ressorts jaunes » (K3)
+			# pince BMF du Marmottes Express (2008) : un gros ressort rouge à
+			# chaque bout (photos de la ligne) ; les K3 Bartholet récentes ont
+			# deux ressorts jaunes
+			return "rouge_ressort"
 		"garaventa":
 			return "bleu_ressort"        # « deux ressorts bleus » (AK 460)
 		"poma":
@@ -213,17 +216,22 @@ func _pince_debrayable() -> void:
 	RemonteeKit.boite_en(p, Vector3(0.16, 0.06, 0.46), Vector3(0.28, 0.19, 0), corps_m)
 	# paquets de ressorts : deux ressorts côte à côte à chaque bout, axe vers le haut
 	var rc: String = _couleur_ressorts()
-	if rc == "rouge_ressort":
+	var bmf: bool = constructeur() == "bartholet"
+	if rc == "rouge_ressort" and not bmf:
 		rc = "ressort_gris"          # Doppelmayr récents : ressorts gris (rouges = ET/A108 anciens)
 	# (ressorts plus courts : la plaque de friction, au-dessus, reste au plus
 	# près du câble, et les pneus du lanceur aussi — retour d'utilisateur, 22/10/2026)
 	var l_r: float = Y_PLAQUE - 0.022 - 0.025 - 0.22
 	for sz in [-1.0, 1.0]:
-		for sx in [-0.045, 0.045]:
+		for sx in ([0.0] if bmf else [-0.045, 0.045]):
 			var r: Node3D = Node3D.new()
 			r.position = Vector3(0.28 + sx, 0.22, sz * 0.15)
 			p.add_child(r)
-			RemonteeKit.ressort(r, Vector3.ZERO, Vector3.UP, l_r, 0.042, 0.011, 5, rc)
+			if bmf:
+				# un seul gros ressort à genouillère, spires serrées
+				RemonteeKit.ressort(r, Vector3.ZERO, Vector3.UP, l_r, 0.062, 0.014, 9, rc)
+			else:
+				RemonteeKit.ressort(r, Vector3.ZERO, Vector3.UP, l_r, 0.042, 0.011, 5, rc)
 			_ressorts.append(r)
 		# coupelle haute des ressorts
 		RemonteeKit.boite_en(p, Vector3(0.16, 0.025, 0.10), Vector3(0.28, 0.22 + l_r + 0.012, sz * 0.15), corps_m)
@@ -416,6 +424,9 @@ func _haut_suspente() -> float:
 
 
 func _siege() -> void:
+	if famille == "siege_bartholet_6":
+		_siege_bmf()
+		return
 	var fixe: bool = constructeur() == "fixe"
 	var x0: float = 0.10 if not fixe else 0.07     # attache de la suspente sous la pince
 	var hs: float = _haut_suspente()
@@ -480,6 +491,83 @@ func _siege() -> void:
 	_garde_corps(siege, W, sus_m)
 	if famille.ends_with("_bulle"):
 		_bulle_siege(siege, W)
+
+
+## Siège BMF 6 places du Marmottes Express, d'après les photos de la ligne
+## (reportage remontees-mecaniques.net, 2011) : la suspente se cintre et
+## tombe au milieu d'une POUTRE DE TÊTE en treillis qui court sur toute la
+## largeur (numéro du siège dessus) ; à chaque bout, un gros cadre tubulaire
+## descend derrière le dossier et se cintre en grand rayon sous l'assise ;
+## dossier bas et peu incliné (« un angle du dossier et de l'assise moins
+## incliné », la marque BMF) ; six coussins noirs sur un grand carénage
+## aluminium sous l'assise. Mêmes cotes d'assise que les autres sièges.
+func _siege_bmf() -> void:
+	var hs: float = _haut_suspente()
+	var m_alu: String = "alu_pince"
+	var x_att: float = 0.30
+	var y_att: float = 0.14
+	pivot = Vector3(x_att, y_att, 0)
+	var pts: PackedVector3Array = PackedVector3Array()
+	pts.append(Vector3(x_att, y_att, 0))
+	pts.append(Vector3(0.44, y_att - 0.06, 0))
+	pts.append(Vector3(0.50, -0.30, 0))
+	pts.append(Vector3(0.50, -hs + 0.75, 0))
+	for p in RemonteeKit.arc(Vector3(0.12, -hs + 0.75, 0), Vector3.RIGHT, Vector3.DOWN, 0.38, 0.0, PI * 0.5, 8):
+		pts.append(p)
+	pts.append(Vector3(0.02, -hs + 0.12, 0.0))
+	RemonteeKit.tube(self, pts, 0.05, m_alu, 12)
+	var siege: Node3D = Node3D.new()
+	siege.name = "Siege"
+	siege.position = Vector3(0.0, -hs - 0.12, 0)
+	add_child(siege)
+	var W: float = _largeur_siege()
+	var xb: float = W * 0.5 + 0.03
+	# poutre de tête en treillis : deux membrures, diagonales devant et derrière
+	var yb0: float = 0.05
+	var yb1: float = 0.21
+	var zb: float = 0.18
+	for y in [yb0, yb1]:
+		RemonteeKit.boite_en(siege, Vector3(2.0 * xb, 0.04, 0.17), Vector3(0, y, zb), m_alu)
+	for dz in [-0.075, 0.075]:
+		var x: float = -xb
+		var monte: bool = true
+		while x < xb - 0.01:
+			var x2: float = minf(x + 0.24, xb)
+			RemonteeKit.poutre(siege, Vector3(x, yb0 if monte else yb1, zb + dz), Vector3(x2, yb1 if monte else yb0, zb + dz), 0.035, 0.012, m_alu, Vector3.BACK)
+			monte = not monte
+			x = x2
+	for sx in [-1.0, 1.0]:
+		RemonteeKit.boite_en(siege, Vector3(0.03, yb1 - yb0 + 0.04, 0.17), Vector3(sx * xb, (yb0 + yb1) * 0.5, zb), m_alu)
+	# plaque du numéro au milieu de la poutre, et attache de la suspente
+	RemonteeKit.boite_en(siege, Vector3(0.20, 0.10, 0.01), Vector3(0.0, (yb0 + yb1) * 0.5, zb - 0.09), "blanc_plaque")
+	RemonteeKit.boite_en(siege, Vector3(0.16, 0.08, 0.20), Vector3(0.0, yb1 + 0.05, zb), m_alu)
+	# cadres latéraux : du bout de la poutre, derrière le dossier, puis cintrés sous l'assise
+	for sx in [-1.0, 1.0]:
+		var x: float = sx * xb
+		var cad: PackedVector3Array = PackedVector3Array([Vector3(x, yb1, zb), Vector3(x, -0.20, 0.27), Vector3(x, -0.66, 0.29)])
+		for p in RemonteeKit.arc(Vector3(x, -0.66, 0.02), Vector3.BACK, Vector3.DOWN, 0.27, 0.0, PI * 0.5, 8):
+			cad.append(p)
+		cad.append(Vector3(x, -0.93, -0.32))
+		RemonteeKit.tube(siege, cad, 0.042, m_alu, 10)
+	# carénage aluminium sous l'assise, lèvre avant plus sombre
+	var t_assise: Basis = Basis(Vector3.RIGHT, 0.06)
+	RemonteeKit.coussin(siege, Vector3(2.0 * xb - 0.02, 0.12, 0.58), Transform3D(t_assise, Vector3(0, -1.08, -0.05)), m_alu, 0.045)
+	RemonteeKit.coussin(siege, Vector3(2.0 * xb - 0.06, 0.05, 0.05), Transform3D(t_assise, Vector3(0, -1.06, -0.35)), "noir_mat", 0.02)
+	# six coussins d'assise et un dossier bas, peu incliné, sur sa coque
+	var dossier_h: float = 0.48
+	var t_dos: Basis = Basis(Vector3.RIGHT, -0.10)
+	var y_dos: float = -0.98 + dossier_h * 0.5 + 0.07
+	RemonteeKit.coussin(siege, Vector3(W - 0.02, dossier_h + 0.06, 0.05), Transform3D(t_dos, Vector3(0, y_dos, 0.245)), "coque_siege", 0.022)
+	for i in range(places):
+		var cx: float = -W * 0.5 + 0.10 + 0.50 * (i + 0.5)
+		var a: MeshInstance3D = RemonteeKit.coussin(siege, Vector3(0.48, 0.085, 0.48),
+			Transform3D(t_assise, Vector3(cx, -0.975, -0.08)), "assise_noire", 0.035)
+		a.name = "Assise%d" % i
+		RemonteeKit.coussin(siege, Vector3(0.48, dossier_h, 0.08), Transform3D(t_dos, Vector3(cx, y_dos, 0.20)), "assise_noire", 0.035)
+	# attaches du dossier sous la poutre
+	for sx in [-1.0, 1.0]:
+		RemonteeKit.barre(siege, Vector3(sx * W * 0.25, yb0, zb), Vector3(sx * W * 0.25, y_dos + dossier_h * 0.5, 0.25), 0.028, m_alu, 8)
+	_garde_corps(siege, W, m_alu)
 
 
 func _couleurs_assise() -> Array:
