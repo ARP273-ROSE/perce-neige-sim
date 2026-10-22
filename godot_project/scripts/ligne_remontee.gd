@@ -66,7 +66,30 @@ func longueur_h() -> float:
 	return profil[profil.size() - 1].x
 
 
+## Construction progressive (jeu, surtout la PWA) : on rend la main au
+## moteur dès que l'image a consommé `budget_ms` — avant, les deux lignes se
+## construisaient d'un bloc (2 s ici, beaucoup plus sur iPad) au premier
+## passage en vue skieur, et l'écran restait figé (retour d'utilisateur, 23/10/2026).
+## Hors progressif (bancs, captures) : tout d'un bloc, comme avant.
+var progressif: bool = false
+var budget_ms: float = 6.0
+var pret: bool = false
+var _t_tranche: int = 0
+signal construite
+
+
+func _pause() -> void:
+	if not progressif:
+		return
+	if Time.get_ticks_usec() - _t_tranche > int(budget_ms * 1000.0):
+		await get_tree().process_frame
+		_t_tranche = Time.get_ticks_usec()
+
+
 func construire() -> void:
+	pret = false
+	_t_tranche = Time.get_ticks_usec()
+	set_process(false)
 	for c in get_children():
 		c.queue_free()
 	_vehicules.clear()
@@ -80,12 +103,15 @@ func construire() -> void:
 	v_embarquement = 0.25 if famille.begins_with("cabine") else 1.0
 	_calculer_tetes()
 	_gare(true)
+	await _pause()
 	_gare(false)
-	_poser_pylones()
+	await _pause()
+	await _poser_pylones()
 	_construire_boucle()
 	_cable()
-	_lanceurs()
-	_peupler()
+	await _pause()
+	await _lanceurs()
+	await _peupler()
 	if not (famille.begins_with("cabine") or famille.begins_with("perche")):
 		_portillons(true)
 		_portillons(false)
@@ -93,6 +119,10 @@ func construire() -> void:
 		_collisions_fixes()
 		for i in range(_vehicules.size()):
 			_corps_vehicule(i)
+			await _pause()
+	pret = true
+	set_process(true)
+	construite.emit()
 
 
 # --- géométrie du câble ---------------------------------------------------------
@@ -827,6 +857,7 @@ func _lanceurs() -> void:
 			MeshMerge.merge(pn, [], "Pneu")
 			_pneus.append([pn, s2, base, 0.0])
 			x += 0.62
+			await _pause()
 
 
 func _tourner_pneus(delta: float) -> void:
@@ -860,6 +891,7 @@ func _poser_pylones() -> void:
 		for m in py.mobiles:
 			MeshMerge.merge(m, [], "Paire")
 		_pyl.append([py, d])
+		await _pause()
 	# batteries de galets aux nez des gares (le câble y change de pente)
 	for aval in [true, false]:
 		_batterie_gare(aval)
@@ -938,6 +970,7 @@ func _peupler() -> void:
 		if t >= prochain:
 			_ajouter_vehicule(s)
 			prochain += dt_v
+			await _pause()
 		var v: float = vitesse_en(s)
 		s += v * 0.05
 		t += 0.05
@@ -963,6 +996,8 @@ var _pyl_touches: Dictionary = {}
 
 
 func _process(delta: float) -> void:
+	if not pret:
+		return
 	_maj_portillons(delta)
 	_dt = delta
 	for i in range(_vehicules.size()):

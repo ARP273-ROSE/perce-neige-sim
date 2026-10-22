@@ -14,6 +14,7 @@ const M_LAT: float = 111320.0
 const VEHICULES_JUSQUA: float = 700.0
 const PYLONES_JUSQUA: float = 3000.0
 const ACTIVE_JUSQUA: float = 2500.0
+const DETAILS_JUSQUA: float = 250.0
 
 var relief: ReliefBuilder = null
 var skieur: SkieurJoueur = null
@@ -77,11 +78,14 @@ func _poser(D: Dictionary) -> void:
 	var fwd: Vector3 = Vector3(dirh.x, 0.0, dirh.y)
 	lg.transform = Transform3D(Basis.looking_at(fwd, Vector3.UP), Vector3(a.x, h0, a.y))
 	lg.avec_collisions = true
+	lg.progressif = true
+	lg.set_process(false)
 	add_child(lg)
-	lg.construire()
-	_portees(lg)
-	# éclairées par la lumière de jour des vues extérieures (comme les gares)
-	Cabin.tag_layer(lg, Cabin.LAYER_VOIE)
+	# construite plus tard, quand le skieur approche (_construire_proches)
+	lg.construite.connect(func() -> void:
+		_portees(lg)
+		Cabin.tag_layer(lg, Cabin.LAYER_VOIE)
+		_en_cours = null)
 	var m: Vector2 = (a + b) * 0.5
 	lignes.append([lg, Vector3(m.x, relief.hauteur_sol(m.x, m.y), m.y)])
 
@@ -90,6 +94,10 @@ func _poser(D: Dictionary) -> void:
 func _portees(lg: LigneRemontee) -> void:
 	for c in lg.get_children():
 		var portee: float = VEHICULES_JUSQUA if c is VehiculeRemontee else PYLONES_JUSQUA
+		# pneus, rails et portillons des gares : détails de près seulement
+		if not (c is VehiculeRemontee or c is PyloneRemontee) and not String(c.name).begins_with("Gare") \
+				and String(c.name) != "Cable" and not (c is StaticBody3D):
+			portee = DETAILS_JUSQUA
 		var pile: Array = [c]
 		while not pile.is_empty():
 			var n: Node = pile.pop_back()
@@ -105,7 +113,34 @@ func _ready() -> void:
 	process_priority = 50
 
 
+## Construction à la demande : la ligne non construite la plus proche du
+## skieur (à moins de CONSTRUIRE_JUSQUA m), une à la fois, par tranches.
+const CONSTRUIRE_JUSQUA: float = 2000.0
+var _en_cours: LigneRemontee = null
+
+
+func _construire_proches() -> void:
+	if _en_cours != null or skieur == null or not skieur.actif:
+		return
+	var p: Vector3 = skieur.global_position
+	var best: LigneRemontee = null
+	var d_best: float = INF
+	for e in lignes:
+		var lg: LigneRemontee = e[0]
+		if lg.pret or lg.get_meta("lancee", false):
+			continue
+		var d: float = p.distance_to(e[1]) - lg.longueur_h() * 0.5
+		if d < CONSTRUIRE_JUSQUA and d < d_best:
+			d_best = d
+			best = lg
+	if best != null:
+		_en_cours = best
+		best.set_meta("lancee", true)
+		best.construire()
+
+
 func _process(delta: float) -> void:
+	_construire_proches()
 	_embarquement()
 	_t_lod -= delta
 	if _t_lod > 0.0:
@@ -122,7 +157,8 @@ func _process(delta: float) -> void:
 		p = cam.global_position
 	for e in lignes:
 		var lg: LigneRemontee = e[0]
-		lg.set_process(p.distance_to(e[1]) < ACTIVE_JUSQUA + lg.longueur_h() * 0.5)
+		if lg.pret:
+			lg.set_process(p.distance_to(e[1]) < ACTIVE_JUSQUA + lg.longueur_h() * 0.5)
 
 
 # --- monter à bord d'un télésiège -----------------------------------------------------
@@ -143,7 +179,7 @@ func _embarquement() -> void:
 	var p: Vector3 = skieur.global_position
 	for e in lignes:
 		var lg: LigneRemontee = e[0]
-		if lg.famille.begins_with("cabine") or lg.famille.begins_with("perche") or not lg.is_processing():
+		if not lg.pret or lg.famille.begins_with("cabine") or lg.famille.begins_with("perche") or not lg.is_processing():
 			continue
 		for aval in [true, false]:
 			var q: Vector3 = lg.global_transform * lg.point_embarquement(aval)

@@ -83,6 +83,7 @@ var sons_skieur: SonsSkieur = null
 ## pistes balisées, fantôme des descentes d'un utilisateur (à ski)
 var domaine: DomaineSkiable = null
 var remontees: RemonteesDomaine = null    # remontées mécaniques posées sur le domaine
+var _skiertest: int = 0                    # --skiertest : 1 = attendre le relief, 2 = fait
 ## la boucle toute seule (bouton AUTO du skieur, touche X)
 var skieur_auto: SkieurAuto = null
 var _skieur_en_attente: bool = false   # collisions en préparation : on entre dès qu'elles sont prêtes
@@ -227,6 +228,10 @@ func _ready() -> void:
 			print("[Autotest] auto-exploitation forcée ON")
 		elif "--drivetest" in OS.get_cmdline_user_args():
 			_drivetest()
+		elif "--skiertest" in OS.get_cmdline_user_args():
+			# banc de fluidité de la PWA : vue skieur, puis au pied d'une remontée
+			_apply_scenario(false, false, "normal")
+			_skiertest = 1
 		elif _cmdline_mode() != "":
 			# --mode=normal|challenge|panne : démarrage direct dans un mode
 			# donné, sans passer par le sélecteur (bancs headless).
@@ -904,6 +909,12 @@ func _piques_survitesse() -> void:
 
 
 func _process(delta: float) -> void:
+	if _skiertest == 1 and relief != null and relief.pret and not client_mode:
+		_skiertest = 2
+		basculer_skieur()
+		if remontees != null and not remontees.lignes.is_empty():
+			aller_a_remontee(remontees.lignes[remontees.lignes.size() - 1][0])
+		print("[Skiertest] skieur au pied de la remontée")
 	_pique_depart_sauvage()
 	_piques_survitesse()
 	if _paused:
