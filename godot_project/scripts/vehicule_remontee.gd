@@ -75,8 +75,14 @@ const DESCRIPTIONS: Dictionary = {
 }
 
 
+var _construit: bool = false
+
+
+## Construit à l'entrée dans l'arbre seulement si personne ne l'a fait : un
+## appel explicite à construire() juste après add_child() le refaisait (tout
+## en double, et des pièces effacées restaient dans les listes).
 func _ready() -> void:
-	if get_child_count() == 0:
+	if not _construit:
 		construire()
 
 
@@ -85,7 +91,9 @@ func constructeur() -> String:
 
 
 func construire() -> void:
+	_construit = true
 	for c in get_children():
+		remove_child(c)
 		c.queue_free()
 	_ressorts.clear()
 	_portes.clear()

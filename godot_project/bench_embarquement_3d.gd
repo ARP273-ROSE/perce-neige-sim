@@ -65,12 +65,19 @@ func _tick() -> void:
 			_lg = _ligne("tsd6_marmottes_express")
 			_main.aller_a_remontee(_lg)
 			_main.collisions.assurer_autour(_lg.global_transform.origin)
+			_phase = 10
+		10:
+			if not _lg.pret:
+				return            # construite à l'arrivée du skieur, par tranches
 			var q: Vector3 = _lg.global_transform * _lg.point_embarquement(true)
 			sk.activer(q + Vector3(0, 0.1, 0), 0.0)
 			sk.dernier_sol = q
 			_phase = 1
 			_t = 0.0
 		1:
+			if not _lg.pret:
+				_t = 0.0
+				return
 			for pg in _lg._portillons_gares:
 				if pg[0] and (pg[2][0] as CollisionShape3D).disabled:
 					_portillons_vus_ouverts = true
@@ -108,6 +115,8 @@ func _tick() -> void:
 				_phase = 4
 				_t = 0.0
 		4:
+			if not _lg.pret:
+				return            # construite à l'approche du skieur, par tranches
 			# une cabine en gare aval, portes ouvertes : on y entre à pied
 			var porte_ouverte: bool = false
 			for i in range(_lg._vehicules.size()):

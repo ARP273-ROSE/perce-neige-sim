@@ -5,6 +5,35 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.22.5 — 22 octobre 2026
+
+**PWA : plus de blocage au premier passage en vue skieur.** Retour d'utilisateur (iPad)
+du 23/10/2026 : « bloqué sur cette vue en chargeant pour la première fois le mode
+skieur ».
+- Cause : les deux remontées de démonstration se construisaient d'un bloc au premier
+  passage en vue skieur : 2,9 s sur le NAS, beaucoup plus sur iPad, avec 6 500 objets à
+  afficher. Chaque pylône et chaque véhicule était en outre construit DEUX fois (à
+  l'entrée dans la scène, puis par l'appel explicite), et des paires de galets effacées
+  restaient dans les listes.
+- Correction :
+  - une ligne n'est construite que quand le skieur arrive à moins de 2 km, une à la
+    fois ;
+  - la construction est étalée sur plusieurs images (`LigneRemontee.progressif`, environ
+    6 ms par image) ;
+  - pylônes et véhicules ne se construisent plus qu'une fois ;
+  - pneus, rails et portillons ne sont affichés qu'à moins de 250 m.
+- Mesuré :
+  - entrée en vue skieur à Val Claret : 0,4 s au lieu de 2,9 s, aucune ligne construite
+    tant qu'on en est loin, image la plus longue 7,6 ms sur 10 s ;
+  - au pied d'une remontée : construite en 1,4 s, image la plus longue 34 ms.
+- Mode `--skiertest` (vue skieur au pied d'une remontée), pour mesurer la fluidité de la
+  PWA.
+- Bancs : embarquement (attend la construction), aller_remontee, remontee_dynamique,
+  ski_expert, boucle_salle et quai verts.
+  - `bench_skieur` (porte du personnel, escalier de la fosse) est instable d'un passage
+    à l'autre, déjà en 1.22.4 : il dépend du découpage dans le temps des collisions de
+    la gare basse.
+
 ## 1.22.4 — 22 octobre 2026
 
 **Remontées : rail de gare à plat, poulie plus petite, portillons à leur place.** Retours

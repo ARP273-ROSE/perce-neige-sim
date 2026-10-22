@@ -41,8 +41,14 @@ const R_CABLE: float = 0.0235              # Ø 47 mm (Tufs)
 const DESSUS_TRAVERSE_CABLE: float = 0.95  # du dessus de la traverse à l'axe du câble
 
 
+var _construit: bool = false
+
+
+## Construit à l'entrée dans l'arbre seulement si personne ne l'a fait : un
+## appel explicite à construire() juste après add_child() le refaisait (tout
+## en double, et des pièces effacées restaient dans les listes).
 func _ready() -> void:
-	if get_child_count() == 0:
+	if not _construit:
 		construire()
 
 
@@ -61,8 +67,12 @@ func _x_brin(montee: bool) -> float:
 
 
 func construire() -> void:
+	_construit = true
 	for c in get_children():
+		remove_child(c)
 		c.queue_free()
+	mobiles.clear()
+	_paires = {true: [], false: []}
 	if style == "teleski":
 		_construire_teleski()
 		return
