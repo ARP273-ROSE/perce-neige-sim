@@ -1715,6 +1715,33 @@ func basculer_skieur_auto() -> void:
 	commandes_skieur.set_auto(skieur_auto != null)
 
 
+## « Aller à » depuis la carte des pistes (retour d'utilisateur, 22/10/2026 : « mais
+## j'y vais comment, à ces deux remontées de démo ? ») : le skieur est posé
+## sur la neige à côté de la gare aval de la ligne, tourné vers l'amont.
+func aller_a_remontee(lg: LigneRemontee) -> void:
+	if skieur == null or not mode_skieur or lg == null:
+		return
+	if skieur_auto != null:
+		skieur_auto.arreter()
+		skieur_auto = null
+		commandes_skieur.set_auto(false)
+	var xf: Transform3D = lg.global_transform
+	var cote: float = signf(lg._x_brin(true))
+	var p: Vector3 = xf * Vector3(cote * (lg.voie * 0.5 + 5.5), 0.0, 6.0)
+	p.y = relief.hauteur_sol(p.x, p.z) + 0.1
+	var amont: Vector3 = -xf.basis.z
+	# collisions du relief autour du point d'arrivée (elles se construisent à
+	# la demande), et sol « sûr » mis à jour : sinon le rattrapage de chute le
+	# renvoyait 3 s plus tard à son ancien dernier sol
+	if collisions != null:
+		collisions.assurer_autour(p)
+	skieur.activer(p, atan2(-amont.x, -amont.z))
+	skieur.support = null
+	skieur.refuge = p
+	skieur.dernier_sol = p
+	commandes_skieur.message("Au pied de : %s" % lg.nom_ligne, 4.0)
+
+
 ## Chausser / déchausser (bouton CHAUSSER, touche E ; E du PC relayée).
 func basculer_ski() -> void:
 	# la BOUCLE en coulisse chausse aussi hors de la vue skieur (09/10/2026 :
