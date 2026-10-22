@@ -178,7 +178,7 @@ func _suivre_siege() -> void:
 	var lg: LigneRemontee = a_bord[0]
 	var i: int = a_bord[1]
 	var v: VehiculeRemontee = lg.vehicule(i)
-	skieur.global_position = v.global_transform * v.place_assise(a_bord[2])
+	skieur.global_position = v.vers_monde(v.place_assise(a_bord[2]))
 	skieur.velocity = Vector3.ZERO
 	var cap: float = _cap(v)
 	skieur._visuel.rotation = Vector3(0.0, cap, 0.0)
@@ -191,7 +191,7 @@ func _suivre_siege() -> void:
 		# hors du couloir des sièges (2,2 m à l'extérieur) : le siège continue,
 		# remonte et contourne la poulie — posé devant lui, le skieur était
 		# rattrapé, porté par l'assise et rassis pour la descente
-		var loc: Vector3 = lg.global_transform.affine_inverse() * (v.global_transform * v.place_assise(a_bord[2]))
+		var loc: Vector3 = lg.global_transform.affine_inverse() * v.vers_monde(v.place_assise(a_bord[2]))
 		loc.x = signf(loc.x if absf(loc.x) > 0.5 else 1.0) * (lg.voie * 0.5 + 2.2)
 		var pos: Vector3 = lg.global_transform * loc
 		pos.y = y_quai + 0.15

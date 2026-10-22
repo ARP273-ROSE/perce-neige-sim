@@ -94,5 +94,11 @@ Depuis la 1.22.0 :
 - suspente toujours à l'extérieur de la boucle, avec des véhicules en miroir sur les lignes
   qui montent à gauche.
 
+Depuis la 1.22.2 :
+- galets mobiles qui suivent la courbe du câble et le passage des pinces ;
+- gaines de pince effilées jusqu'à zéro ;
+- lanceur à accélération continue (18 m) ;
+- balancement pendulaire amorti selon la masse (`bench_remontee_dynamique_3d.gd`).
+
 Reste à faire : poser toutes les lignes du domaine, des
 gares plus détaillées, le téléski en ligne complète, le 3S et le téléphérique en ligne complète.

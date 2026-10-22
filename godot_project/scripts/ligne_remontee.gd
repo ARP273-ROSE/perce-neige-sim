@@ -32,8 +32,8 @@ var nom_ligne: String = ""
 
 var H_CABLE_GARE: float = 3.9        # câble au-dessus du quai (selon le véhicule)
 const GARDE: float = 6.5              # câble ≥ terrain + GARDE en ligne
-const L_GARE: float = 16.0            # du nez de gare à l'axe de la poulie
-const L_FREIN: float = 11.0           # zone de freinage / d'accélération
+const L_GARE: float = 24.0            # du nez de gare à l'axe de la poulie
+const L_FREIN: float = 18.0           # longueur du lanceur (freinage / accélération)
 ## Chaînette : y = a·cosh((x − x0)/a) + c entre deux appuis, a = H / w
 ## (tension horizontale / poids linéique). Câble Ø 47 mm ≈ 8,6 kg/m ;
 ## véhicules (et passagers sur le brin montée) répartis à l'espacement.
@@ -70,6 +70,8 @@ func construire() -> void:
 	for c in get_children():
 		c.queue_free()
 	_vehicules.clear()
+	_pyl.clear()
+	_pyl_touches.clear()
 	H_CABLE_GARE = VehiculeRemontee.hauteur_cable_gare(famille)
 	_calculer_tetes()
 	_gare(true)
@@ -305,11 +307,17 @@ func vitesse_en(s: float) -> float:
 	var z: Array = zone(s)
 	if z[0] == "ligne":
 		return vitesse
+	# sur toute la longueur du lanceur, la vitesse suit une courbe « smootherstep »
+	# (6t⁵ − 15t⁴ + 10t³) : dérivée nulle aux deux bouts, donc accélération
+	# nulle à l'entrée et à la sortie, continue et régulière entre les deux —
+	# pas d'à-coup à l'entrée du lanceur ni à l'embrayage (retour d'utilisateur, 22/10/2026)
 	var x: float = z[1]
 	var l: float = z[2]
-	var a: float = (vitesse * vitesse - v_embarquement * v_embarquement) / (2.0 * L_FREIN)
-	var depuis_bord: float = minf(x, l - x)
-	return sqrt(minf(vitesse * vitesse, v_embarquement * v_embarquement + 2.0 * a * maxf(depuis_bord, 0.0)))
+	# (profil sur l'énergie cinétique v² : la décélération est la plus forte
+	# au milieu du lanceur, pas près de l'entrée où la vitesse est grande)
+	var t: float = clampf(minf(x, l - x) / L_FREIN, 0.0, 1.0)
+	var lisse: float = t * t * t * (t * (t * 6.0 - 15.0) + 10.0)
+	return sqrt(vitesse * vitesse - (vitesse * vitesse - v_embarquement * v_embarquement) * lisse)
 
 
 # --- gares, pylônes, câble ----------------------------------------------------------
@@ -602,11 +610,16 @@ func _poser_pylones() -> void:
 		py.compo_descente = p.get("descente", [[8, "S"]])
 		var e: float = 4.0
 		py.pente = atan2(y_cable(d + e) - y_cable(d - e), 2.0 * e)
+		# déviation : pente côté aval − pente côté amont (> 0 : convexe)
+		py.deviation = atan2(y_cable(d) - y_cable(d - e), e) - atan2(y_cable(d + e) - y_cable(d), e)
 		py.position = Vector3(0, t, -d)
 		py.name = "P%d" % (i + 1)
 		add_child(py)
 		py.construire()
-		MeshMerge.merge(py, [], "Pylone")
+		MeshMerge.merge(py, py.mobiles, "Pylone")
+		for m in py.mobiles:
+			MeshMerge.merge(m, [], "Paire")
+		_pyl.append([py, d])
 
 
 func _cable() -> void:
@@ -652,12 +665,43 @@ func nombre_vehicules() -> int:
 	return _vehicules.size()
 
 
+var _dt: float = 0.0
+var _pyl: Array = []            # [PyloneRemontee, d]
+var _pyl_touches: Dictionary = {}
+
+
 func _process(delta: float) -> void:
 	_maj_portillons(delta)
+	_dt = delta
 	for i in range(_vehicules.size()):
 		var s: float = _vehicules[i][1]
 		_vehicules[i][1] = fposmod(s + vitesse_en(s) * delta, longueur_boucle)
 		_placer(i)
+	_dt = 0.0
+	_galets()
+
+
+## Galets mobiles : la pince qui passe sur un train de galets fait descendre
+## (support) ou monter (compression) chaque paire selon sa surépaisseur.
+func _galets() -> void:
+	var touches: Dictionary = {}
+	var xm: float = _x_brin(true)
+	for e in _vehicules:
+		var s: float = e[1]
+		if zone(s)[0] != "ligne":
+			continue
+		var p: Vector3 = _point_cable(s)[0]
+		var d: float = -p.z
+		var montee: bool = signf(p.x) == signf(xm)
+		for q in _pyl:
+			var u: float = float(q[1]) - d
+			if absf(u) < 6.0:
+				(q[0] as PyloneRemontee).passage(montee, u)
+				touches[[q[0], montee]] = true
+	for k in _pyl_touches:
+		if not touches.has(k):
+			(k[0] as PyloneRemontee).repos(k[1])
+	_pyl_touches = touches
 
 
 func _placer(i: int) -> void:
@@ -673,13 +717,28 @@ func _placer(i: int) -> void:
 	# véhicule si la ligne monte à droite, à gauche sinon (véhicule en
 	# miroir) — avant, sur les lignes « Gauche » (Boisses, Marmottes), elle
 	# passait côté pylône, dans les balanciers (retour d'utilisateur, 22/10/2026)
-	if i < _corps.size() and _corps[i] != null:
-		(_corps[i][0] as Node3D).transform = Transform3D(b, pt[0])
+	var bv: Basis = b
 	if not sens_droite:
-		b = b * Basis.from_scale(Vector3(-1, 1, 1))
-	v.transform = Transform3D(b, pt[0])
-	# pièces animées selon la place dans la gare
+		bv = b * Basis.from_scale(Vector3(-1, 1, 1))
+	v.transform = Transform3D(bv, pt[0])
 	var z: Array = zone(s)
+	# la pince suit la pente du câble ; la partie suspendue balance
+	var d3: Vector3 = pt[1]
+	v.inclinaison(atan2(d3.y, Vector2(d3.x, d3.z).length()))
+	var montee_v: bool = signf((pt[0] as Vector3).x) == signf(_x_brin(true))
+	var charge: float = 80.0 * v.places * 0.7 if (montee_v and not v.cabine) else 0.0
+	if _dt > 0.0:
+		var m0: float = v.masse
+		v.masse = m0 + charge
+		v.balancer(_dt, z[0] != "ligne")
+		v.masse = m0
+	# corps de collision (base directe) : suit aussi le balancement
+	if i < _corps.size() and _corps[i] != null:
+		var sx: float = 1.0 if sens_droite else -1.0
+		var pv: Vector3 = Vector3(v.pivot.x * sx, v.pivot.y, v.pivot.z)
+		var bal: Transform3D = Transform3D(Basis.from_euler(Vector3(v.phi, 0.0, v.psi * sx)), pv) * Transform3D(Basis.IDENTITY, -pv)
+		(_corps[i][0] as Node3D).transform = Transform3D(b, pt[0]) * bal
+	# pièces animées selon la place dans la gare
 	var ouverture: float = 0.0
 	var gc: float = 1.0
 	if z[0] != "ligne":
