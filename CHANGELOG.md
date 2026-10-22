@@ -5,6 +5,36 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.22.1 — 22 octobre 2026
+
+**Design, élément par élément : le pylône et la pince.** Retour d'utilisateur du
+22/10/2026 : « pour le design, tu prends chaque élément un par un et tu le designes à
+mort, puis tu passes au suivant ».
+
+Pylône (`pylone_remontee.gd`), refait d'après des photos de lignes Doppelmayr
+(Wikimedia Commons, Bürserberg 2024) :
+- fût galvanisé brut, plus fin ;
+- échelle droite avec rail antichute ;
+- chaise de tête et traverse en deux poutres en I avec entretoises et jambes de force ;
+- caillebotis et garde-corps ;
+- trains de galets : galets par paires entre flasques boulonnées, palonniers
+  articulés jusqu'à la poutre maîtresse et son pivot ; console sur la traverse en
+  support, pendus au portique en compression ;
+- galets à garniture claire et jante alu ; ramasse-câbles échancrés ;
+- portique de levage avec œil ;
+- plaque bleue du numéro et panneau de consigne.
+
+Pince débrayable, refaite d'après les maquettes à l'échelle 1 des pinces Doppelmayr
+D-Line (Commons) :
+- corps alu qui enserre le câble, gaines noires coniques aux deux bouts ;
+- deux paquets de ressorts (gris chez Doppelmayr, jaunes chez Bartholet, bleus chez
+  Garaventa) ;
+- levier et son galet de came, galets de roulement en polyuréthane, galet de guidage ;
+- plaque de friction noire crantée avec le numéro du véhicule.
+- En gare, le rail et les pneus sont recalés sous les galets et contre la plaque.
+
+Bancs embarquement, aller_remontee et skieur verts.
+
 ## 1.22.0 — 22 octobre 2026
 
 **Remontées : monter à bord, collisions, câble en chaînette.** Retours d'utilisateur du

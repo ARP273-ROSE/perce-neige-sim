@@ -345,18 +345,20 @@ func _gare(aval: bool) -> void:
 	RemonteeKit.cylindre(g, 0.45, 0.45, 1.6, Transform3D(Basis.IDENTITY, Vector3(0, H_CABLE_GARE + 0.9, zc)), "peinture_gris", 20)
 	RemonteeKit.boite_en(g, Vector3(2.2, 1.0, 2.6), Vector3(0, H_CABLE_GARE + 1.9, zc), "peinture_gris")
 	# rail des véhicules débrayés : le long des deux voies et autour de la poulie
-	var y_rail: float = H_CABLE_GARE + 0.20 + 0.07 + 0.04          # contact des galets de roulement
+	# rail sous les galets de roulement de la pince (x +0,25, y +0,11, r 0,065)
+	var y_rail: float = H_CABLE_GARE + 0.11 - 0.065 - 0.06
 	for sx in [-1.0, 1.0]:
-		var x_rail: float = sx * (R + 0.30)
+		var x_rail: float = sx * (R + 0.25)
 		RemonteeKit.poutre(g, Vector3(x_rail, y_rail, znez - signf(dz) * 1.0), Vector3(x_rail, y_rail, zc), 0.08, 0.12, "acier")
 		# rangée de pneus (freinage / lancement), sous la plaque de friction
 		var z: float = znez + signf(dz) * 1.5
 		while absf(z - znez) < absf(dz) - 0.8:
-			RemonteeKit.cylindre(g, 0.21, 0.21, 0.16, Transform3D(Basis.IDENTITY, Vector3(sx * (R + 0.36 + 0.21), H_CABLE_GARE, z)), "caoutchouc", 14)
+			# pneus contre la plaque de friction (x +0,37, y +0,20), axe vertical
+			RemonteeKit.cylindre(g, 0.21, 0.21, 0.14, Transform3D(Basis.IDENTITY, Vector3(sx * (R + 0.39 + 0.21), H_CABLE_GARE + 0.20, z)), "caoutchouc", 16)
 			z += signf(dz) * 0.62
 		# came d'ouverture / de fermeture des pinces, au nez de la gare
 		RemonteeKit.poutre(g, Vector3(sx * (R + 0.42), H_CABLE_GARE + 0.40, znez), Vector3(sx * (R + 0.46), H_CABLE_GARE + 0.30, znez + signf(dz) * 3.0), 0.06, 0.05, "jaune_securite")
-	var pts: PackedVector3Array = RemonteeKit.arc(Vector3(0, y_rail, zc), Vector3.RIGHT, Vector3.BACK * signf(dz), R + 0.30, 0.0, PI, 24)
+	var pts: PackedVector3Array = RemonteeKit.arc(Vector3(0, y_rail, zc), Vector3.RIGHT, Vector3.BACK * signf(dz), R + 0.25, 0.0, PI, 24)
 	RemonteeKit.tube(g, pts, 0.06, "acier", 6)
 	# portique d'entrée (l'arche que l'on voit depuis la ligne)
 	for sx in [-1.0, 1.0]:
@@ -393,7 +395,7 @@ func _collisions_fixes() -> void:
 		boite.call(Vector3(2.4, 0.7, 2.4), Vector3(0, t - 0.15, -d))
 		var cs2: CollisionShape3D = CollisionShape3D.new()
 		var cy: CylinderShape3D = CylinderShape3D.new()
-		cy.radius = 0.55 + h * 0.012
+		cy.radius = 0.45 + h * 0.003
 		cy.height = h
 		cs2.shape = cy
 		cs2.position = Vector3(0, t + h * 0.5, -d)
