@@ -540,6 +540,15 @@ func _siege_bmf() -> void:
 		RemonteeKit.boite_en(siege, Vector3(0.03, yb1 - yb0 + 0.04, 0.17), Vector3(sx * xb, (yb0 + yb1) * 0.5, zb), m_alu)
 	# plaque du numéro au milieu de la poutre, et attache de la suspente
 	RemonteeKit.boite_en(siege, Vector3(0.20, 0.10, 0.01), Vector3(0.0, (yb0 + yb1) * 0.5, zb - 0.09), "blanc_plaque")
+	var num: Label3D = Label3D.new()
+	num.text = str(randi() % 81 + 1)          # 81 sièges sur la ligne
+	num.font_size = 64
+	num.pixel_size = 0.0018
+	num.modulate = Color(0.05, 0.05, 0.06)
+	num.outline_size = 0
+	num.position = Vector3(0.0, (yb0 + yb1) * 0.5, zb - 0.097)
+	num.rotation.y = PI
+	siege.add_child(num)
 	RemonteeKit.boite_en(siege, Vector3(0.16, 0.08, 0.20), Vector3(0.0, yb1 + 0.05, zb), m_alu)
 	# cadres latéraux : du bout de la poutre, derrière le dossier, puis cintrés sous l'assise
 	for sx in [-1.0, 1.0]:
@@ -600,6 +609,9 @@ func _garde_corps(siege: Node3D, W: float, m: String) -> void:
 	var ventre: Vector3 = Vector3(0, -0.73, -0.75)
 	var pied: Vector3 = Vector3(0, -1.50, -0.62)
 	var xe: float = W * 0.5 - 0.06
+	if famille == "siege_bartholet_6":
+		_garde_corps_bmf(W, m, ventre, xe)
+		return
 	for sx in [-1.0, 1.0]:
 		RemonteeKit.tube(_gc, PackedVector3Array([Vector3(sx * xe, 0, 0), Vector3(sx * xe, -0.20, -0.42),
 			Vector3(sx * xe, ventre.y, ventre.z)]), 0.022, m, 8)
@@ -614,6 +626,28 @@ func _garde_corps(siege: Node3D, W: float, m: String) -> void:
 		for i in range(places):
 			var cx: float = -W * 0.5 + 0.10 + 0.50 * (i + 0.5)
 			RemonteeKit.barre(_gc, Vector3(cx, ventre.y, ventre.z), Vector3(cx, ventre.y - 0.30, ventre.z + 0.05), 0.016, m, 6)
+
+
+## Garde-corps BMF (photos du Marmottes Express) : barre ventrale tenue par
+## deux bras, trois cadres en V (un pour deux places) qui descendent vers un
+## repose-pieds juste sous l'avant de l'assise, un patin par place.
+func _garde_corps_bmf(W: float, m: String, ventre: Vector3, xe: float) -> void:
+	# repose-pieds : 0,22 m sous l'assise, juste devant son nez (repère du pivot)
+	var pied: Vector3 = Vector3(0, -1.30, -0.80)
+	for sx in [-1.0, 1.0]:
+		RemonteeKit.tube(_gc, PackedVector3Array([Vector3(sx * xe, 0, 0), Vector3(sx * xe, -0.22, -0.40),
+			Vector3(sx * xe, ventre.y, ventre.z)]), 0.026, m, 8)
+	RemonteeKit.barre(_gc, Vector3(-xe, ventre.y, ventre.z), Vector3(xe, ventre.y, ventre.z), 0.03, m, 10)
+	var paires: int = places / 2
+	for k in range(paires):
+		var cx: float = -W * 0.5 + 0.10 + 1.0 * (k + 0.5)
+		var bas: Vector3 = Vector3(cx, pied.y + 0.02, pied.z)
+		for dx in [-0.24, 0.24]:
+			RemonteeKit.barre(_gc, Vector3(cx + dx, ventre.y, ventre.z), bas, 0.018, m, 6)
+	RemonteeKit.poutre(_gc, Vector3(-W * 0.5 + 0.12, pied.y, pied.z), Vector3(W * 0.5 - 0.12, pied.y, pied.z), 0.07, 0.035, m)
+	for i in range(places):
+		var cx2: float = -W * 0.5 + 0.10 + 0.50 * (i + 0.5)
+		RemonteeKit.boite_en(_gc, Vector3(0.36, 0.025, 0.17), Vector3(cx2, pied.y + 0.03, pied.z + 0.02), "caoutchouc")
 
 
 ## 0 : relevé (au-dessus des têtes) ; 1 : baissé.

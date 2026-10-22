@@ -103,7 +103,11 @@ passer le toit des cabines.
   poutre de tête en treillis sur toute la largeur, avec plaque du numéro, où tombe la suspente
   cintrée ; gros cadres tubulaires derrière le dossier, cintrés sous l'assise ; dossier bas et peu
   incliné (la particularité BMF citée par le reportage) ; six coussins noirs sur un carénage
-  aluminium ; pince à un gros ressort rouge par bout.
+  aluminium ; pince à un gros ressort rouge par bout. Garde-corps BMF (1.22.10) : barre ventrale,
+  trois cadres en V (un pour deux places) jusqu'au repose-pieds placé juste sous le nez de
+  l'assise, un patin par place ; numéro du siège sur la poutre. Recoupé avec deux modèles
+  d'impression 3D de sièges Doppelmayr D-Line (Printables), étudiés pour la structure (poutre de
+  tête porteuse, cadres cintrés, un repose-pieds par place) et non repris dans le dépôt.
 - **Siège** (autres familles) : coussins d'assise et de dossier rembourrés (`RemonteeKit.coussin`, boîte aux arêtes
   arrondies, maillage partagé, environ 300 triangles), sur un bac d'assise et une coque de dossier
   pleine largeur, avec des accoudoirs garnis et des attaches du dossier sous l'arceau. Garnitures
