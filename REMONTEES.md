@@ -48,8 +48,8 @@ Pièces animées, pilotées par `ligne_remontee.gd` selon la place du véhicule 
 
 - **pince débrayable** : `ouvrir_pince(t)`. La mâchoire mobile s'écarte, le levier bascule sur la came
   et les ressorts se compriment. Couleur des ressorts : jaunes chez Bartholet, bleus chez Garaventa.
-- **garde-corps** : `garde_corps(t)`. Il est relevé en gare, puis baissé une dizaine de secondes après
-  la sortie, et relevé avant l'arrivée.
+- **garde-corps** : `garde_corps(t)`. Automatique : relevé à la fin du freinage en gare, baissé au
+  début du lanceur de départ (1.22.6).
 - **bulle** : `bulle(t)`. Elle se ferme en ligne et se relève en gare.
 - **portes des cabines** : `portes(t)`. Elles glissent sur les panneaux fixes et ne s'ouvrent qu'à
   vitesse d'embarquement.
@@ -65,10 +65,19 @@ véhicules se resserrent en gare, comme sur une vraie ligne, et l'intervalle en 
 Le câble en gare est placé pour que l'assise arrive à 0,48 m du quai, et le plancher des cabines au
 niveau du quai.
 
+Au nez, la batterie de galets est posée côté ligne, centrée là où se croisent l'horizontale de la gare
+et la pente de la ligne ; le câble y suit un raccord parabolique, qui est l'arc des galets
+(`LigneRemontee._preparer_nez`, 1.22.6). Chaque gare est posée au plus haut du terrain sous son
+emprise, sur un socle (`RemonteesDomaine._poser`).
+
 ### Hauteur des pylônes
 
 Aucune source ouverte ne la donne. Elle est calculée pour que le câble chargé reste partout à au moins
 6,5 m au-dessus du terrain, flèche parabolique comprise entre les têtes (`LigneRemontee.GARDE`).
+Cette garde décroît dans les 40 m qui précèdent une gare, jusqu'à la hauteur du câble au quai : sans
+cela, le dernier pylône du Marmottes Express montait à la butée de 32 m. Sur les télécabines, la
+traverse est remontée au pivot du train support (0,62 m sous le câble au lieu de 0,95 m) pour laisser
+passer le toit des cabines.
 
 ## Contrôle visuel
 
@@ -87,8 +96,8 @@ Les véhicules sont visibles jusqu'à 700 m, les pylônes et le câble jusqu'à 
 milieu est à plus de 2,5 km de la caméra ne fait plus avancer ses véhicules.
 
 Depuis la 1.22.0 :
-- on monte à bord : à pied dans les cabines, et sur les sièges par les portillons et la
-  ligne d'arrêt (`RemonteesDomaine._embarquement`) ;
+- on monte à bord : à pied dans les cabines (assis d'office face à l'amont depuis la 1.22.6),
+  et sur les sièges par les portillons et la ligne d'arrêt (`RemonteesDomaine._embarquement`) ;
 - collisions des pylônes, des gares et des véhicules ;
 - câble en chaînette (`LigneRemontee.chainette`) ;
 - suspente toujours à l'extérieur de la boucle, avec des véhicules en miroir sur les lignes

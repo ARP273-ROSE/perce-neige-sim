@@ -46,6 +46,7 @@ var _cumul: PackedFloat32Array = PackedFloat32Array()
 var _zones: Array = []          # [s0, s1, "gare_aval"/"gare_amont"] sur la boucle
 var _vehicules: Array = []      # [VehiculeRemontee, s]
 var _tetes: Array = []          # hauteur (absolue locale) de la tête de chaque pylône
+var _h_nez: Array = [0.0, 0.0]  # demi-longueur de la batterie de galets au nez [aval, amont]
 var longueur_boucle: float = 0.0
 
 
@@ -102,6 +103,7 @@ func construire() -> void:
 	# (retour d'utilisateur, 22/10/2026)
 	v_embarquement = 0.25 if famille.begins_with("cabine") else 1.0
 	_calculer_tetes()
+	_preparer_nez()
 	_gare(true)
 	await _pause()
 	_gare(false)
@@ -129,11 +131,13 @@ func construire() -> void:
 
 func _points_appui() -> Array:
 	# [d, y] des points d'appui du câble : gare aval, têtes, gare amont
-	var pts: Array = [[0.0, terrain(0.0) + H_CABLE_GARE]]
+	# (la gare est prolongée jusqu'au milieu de la batterie du nez : c'est
+	# là que se croisent l'horizontale de la gare et la pente de la ligne)
+	var pts: Array = [[_h_nez[0], terrain(0.0) + H_CABLE_GARE]]
 	for i in range(pylones.size()):
 		pts.append([float(pylones[i]["d"]), _tetes[i]])
 	var L: float = longueur_h()
-	pts.append([L, terrain(L) + H_CABLE_GARE])
+	pts.append([L - _h_nez[1], terrain(L) + H_CABLE_GARE])
 	return pts
 
 
@@ -180,7 +184,11 @@ func _calculer_tetes() -> void:
 				var d: float = lerpf(a[0], b[0], u)
 				# brin montée (chargé) : la flèche la plus forte
 				var yc: float = chainette(d, a[0], a[1], b[0], b[1], _a_montee)
-				pire = maxf(pire, terrain(d) + GARDE - yc)
+				# garde pleine en ligne, réduite près des gares où le câble
+				# rejoint la hauteur du quai (sinon le dernier pylône était
+				# relevé jusqu'à la butée de 32 m — retour d'utilisateur, 23/10/2026)
+				var g: float = lerpf(H_CABLE_GARE - 0.5, GARDE, smoothstep(0.0, 40.0, minf(d, longueur_h() - d)))
+				pire = maxf(pire, terrain(d) + g - yc)
 			if pire > 0.05:
 				# on relève la ou les têtes de la portée (pas les gares)
 				if i > 0:
@@ -236,8 +244,55 @@ func _compression(p: Dictionary) -> bool:
 	return n_c > n_s
 
 
-## Hauteur du câble (chaînette) à la distance d, brin montée ou descente.
+## Batteries de galets des nez de gare : le câble passe de l'horizontale
+## de la gare à la pente de la ligne en suivant l'arc des galets (avant, il
+## faisait un angle au nez et traversait les galets — retour d'utilisateur,
+## 22/10/2026). La batterie compte 2 galets par 2° de déviation (4 à 16) ;
+## l'horizontale de la gare et la ligne se croisent en son milieu.
+func _preparer_nez() -> void:
+	_h_nez = [0.0, 0.0]
+	var L: float = longueur_h()
+	var e: float = 6.0
+	var p_a: float = atan2(y_cable(e) - y_cable(0.0), e)
+	var p_b: float = atan2(y_cable(L) - y_cable(L - e), e)
+	_h_nez = [_demi_batterie(p_a), _demi_batterie(p_b)]
+
+
+func _galets_batterie(dev: float) -> int:
+	return clampi(2 * int(ceil(rad_to_deg(absf(dev)) / 2.0)), 4, 16)
+
+
+func _demi_batterie(dev: float) -> float:
+	if absf(dev) < deg_to_rad(0.8):
+		return 0.0
+	return (_galets_batterie(dev) - 1) * PyloneRemontee.PAS_GALET * 0.5
+
+
+## Pente (m/m) de la ligne en quittant la gare (aval ou amont), au
+## croisement avec l'horizontale de la gare.
+func _pente_nez(aval: bool, montee: bool) -> float:
+	var L: float = longueur_h()
+	if aval:
+		return (_y_chainette(_h_nez[0] + 0.5, montee) - (terrain(0.0) + H_CABLE_GARE)) / 0.5
+	return (_y_chainette(L - _h_nez[1] - 0.5, montee) - (terrain(L) + H_CABLE_GARE)) / 0.5
+
+
+## Hauteur du câble (chaînette) à la distance d, brin montée ou descente ;
+## aux nez, raccord parabolique sur 2 h (l'arc de la batterie de galets).
 func y_cable(d: float, montee: bool = true) -> float:
+	var L: float = longueur_h()
+	var h: float = _h_nez[0]
+	if h > 0.0 and d < 2.0 * h:
+		var dd: float = maxf(d, 0.0)
+		return terrain(0.0) + H_CABLE_GARE + _pente_nez(true, montee) * dd * dd / (4.0 * h)
+	h = _h_nez[1]
+	if h > 0.0 and L - d < 2.0 * h:
+		var t: float = maxf(L - d, 0.0)
+		return terrain(L) + H_CABLE_GARE + _pente_nez(false, montee) * t * t / (4.0 * h)
+	return _y_chainette(d, montee)
+
+
+func _y_chainette(d: float, montee: bool = true) -> float:
 	var pts: Array = _points_appui()
 	for i in range(pts.size() - 1):
 		var a: Array = pts[i]
@@ -274,10 +329,10 @@ func _construire_boucle() -> void:
 	_ajouter(Vector3(xm, ya, 0.0))
 	_zones.append([s0, _longueur(), "gare_aval"])
 	# 2. brin montée
-	var d: float = 3.0
+	var d: float = _pas_ligne(0.0)
 	while d < L:
 		_ajouter(Vector3(xm, y_cable(d), -d))
-		d += 3.0
+		d += _pas_ligne(d)
 	_ajouter(Vector3(xm, yb, -L))
 	# 3. gare amont
 	var s1: float = _longueur()
@@ -289,11 +344,17 @@ func _construire_boucle() -> void:
 	_ajouter(Vector3(xd, yb, -L))
 	_zones.append([s1, _longueur(), "gare_amont"])
 	# 4. brin descente, jusqu'au nez de la gare aval (le point de départ)
-	d = L - 3.0
+	d = L - _pas_ligne(L)
 	while d > 0.0:
 		_ajouter(Vector3(xd, y_cable(d, false), -d))
-		d -= 3.0
-	longueur_boucle = _longueur() + Vector3(xd, y_cable(1.5, false), -1.5).distance_to(Vector3(xd, ya, 0.0))
+		d -= _pas_ligne(d)
+	longueur_boucle = _longueur() + _boucle[_boucle.size() - 1].distance_to(_boucle[0])
+
+
+## Pas d'échantillonnage du câble en ligne : fin dans les raccords des nez.
+func _pas_ligne(d: float) -> float:
+	var L: float = longueur_h()
+	return 0.5 if d < 2.0 * _h_nez[0] + 1.0 or d > L - 2.0 * _h_nez[1] - 1.0 else 3.0
 
 
 func _ajouter(p: Vector3) -> void:
@@ -422,7 +483,9 @@ func _gare(aval: bool) -> void:
 	var zm: float = (zc + znez) * 0.5 + signf(dz) * 4.0
 	var long_g: float = absf(dz) + voie * 0.5 + 3.5 + 5.0      # + aire d'attente derrière la poulie
 	# dalle et quais
-	RemonteeKit.boite_en(g, Vector3(voie + 4.0, 0.4, long_g), Vector3(0, -0.2, zm), "beton")
+	# dalle sur socle : la gare est posée au plus haut du terrain sous son
+	# emprise, le socle descend jusqu'au sol là où il est plus bas
+	RemonteeKit.boite_en(g, Vector3(voie + 8.0, 6.4, long_g), Vector3(0, -3.2, zm), "beton")
 	# charpente : quatre poteaux, deux longerons, toiture
 	for sx in [-1.0, 1.0]:
 		for k in [-1.0, 1.0]:
@@ -438,7 +501,7 @@ func _gare(aval: bool) -> void:
 	for sx in [-1.0, 1.0]:
 		for k in range(3):
 			var zd: float = znez + signf(dz) * (Z_DEVIATION + 0.7 * k)
-			var xd: float = sx * (lerpf(R, rayon_poulie(), (Z_DEVIATION + 0.7 * k - 2.0) / (Z_DEVIATION + 1.4 - 2.0)) - 0.21 - PyloneRemontee.R_CABLE)
+			var xd: float = sx * (_x_rentre(Z_DEVIATION + 0.7 * k) - 0.21 - PyloneRemontee.R_CABLE)
 			RemonteeKit.galet(g, Vector3(xd, H_CABLE_GARE, zd), 0.21)
 			(g.get_child(g.get_child_count() - 1) as Node3D).transform.basis = Basis(Vector3.FORWARD, 0.0).scaled(Vector3.ONE * 0.21 / RollerMesh.R_BANDE)
 			RemonteeKit.boite_en(g, Vector3(0.22, 0.04, 0.30), Vector3(xd, H_CABLE_GARE + 0.16, zd), "galva_pylone")
@@ -477,7 +540,7 @@ func _collisions_fixes() -> void:
 	for i in range(pylones.size()):
 		var d: float = float(pylones[i]["d"])
 		var t: float = terrain(d)
-		var h: float = _tetes[i] - t - PyloneRemontee.DESSUS_TRAVERSE_CABLE
+		var h: float = _tetes[i] - t - _dessus_traverse()
 		boite.call(Vector3(2.4, 0.7, 2.4), Vector3(0, t - 0.15, -d))
 		var cs2: CollisionShape3D = CollisionShape3D.new()
 		var cy: CylinderShape3D = CylinderShape3D.new()
@@ -495,7 +558,7 @@ func _collisions_fixes() -> void:
 		var dz: float = zc - znez
 		var zm: float = (zc + znez) * 0.5 + signf(dz) * 4.0
 		var long_g: float = absf(dz) + voie * 0.5 + 3.5 + 5.0      # + aire d'attente derrière la poulie
-		boite.call(Vector3(voie + 4.0, 0.4, long_g), Vector3(0, y0 - 0.2, zm))
+		boite.call(Vector3(voie + 8.0, 6.4, long_g), Vector3(0, y0 - 3.2, zm))
 		for sx in [-1.0, 1.0]:
 			for k in [-1.0, 1.0]:
 				boite.call(Vector3(0.30, H_CABLE_GARE + 2.4, 0.30),
@@ -668,6 +731,11 @@ func arrivee(i: int) -> Array:
 	if x > L_FREIN and x < L_FREIN + 2.0:
 		return [z[0] == "gare_aval"]
 	return []
+
+
+## Gare où se trouve le véhicule i : "gare_aval", "gare_amont" ou "ligne".
+func zone_vehicule(i: int) -> String:
+	return zone(_vehicules[i][1])[0]
 
 
 func vehicule(i: int) -> VehiculeRemontee:
@@ -867,6 +935,10 @@ func _tourner_pneus(delta: float) -> void:
 		(e[0] as Node3D).transform.basis = (e[2] as Basis) * Basis(Vector3.UP, e[3])
 
 
+func _dessus_traverse() -> float:
+	return PyloneRemontee.DESSUS_TRAVERSE_CABINE if famille.begins_with("cabine") else PyloneRemontee.DESSUS_TRAVERSE_CABLE
+
+
 func _poser_pylones() -> void:
 	for i in range(pylones.size()):
 		var p: Dictionary = pylones[i]
@@ -876,7 +948,8 @@ func _poser_pylones() -> void:
 		py.numero = i + 1
 		py.voie = voie
 		py.sens_montee_droite = sens_droite
-		py.hauteur = _tetes[i] - t - PyloneRemontee.DESSUS_TRAVERSE_CABLE
+		py.dessus_traverse = _dessus_traverse()
+		py.hauteur = _tetes[i] - t - py.dessus_traverse
 		py.compo_montee = p.get("montee", [[8, "S"]])
 		py.compo_descente = p.get("descente", [[8, "S"]])
 		var e: float = 4.0
@@ -899,20 +972,24 @@ func _poser_pylones() -> void:
 
 func _batterie_gare(aval: bool) -> void:
 	var L: float = longueur_h()
-	var d: float = 0.0 if aval else L
-	var e: float = 6.0
-	var pente_ligne: float = atan2(y_cable(e) - y_cable(0.0), e) if aval else atan2(y_cable(L) - y_cable(L - e), e)
+	var h: float = _h_nez[0] if aval else _h_nez[1]
+	if h <= 0.0:
+		return
+	# au milieu de la batterie : le raccord y a la moitié de la pente de la
+	# ligne, et passe h·q/4 au-dessus de l'horizontale de la gare
+	var d: float = h if aval else L - h
+	var q: float = _pente_nez(aval, true)
+	var y_c: float = terrain(0.0 if aval else L) + H_CABLE_GARE + q * h * 0.25
+	var pente_ligne: float = atan(q) if aval else -atan(q)      # > 0 : monte vers −Z
 	# déviation = pente aval − pente amont ; la gare est horizontale
 	var dev: float = -pente_ligne if aval else pente_ligne
-	if absf(dev) < deg_to_rad(0.8):
-		return
 	var nat: String = "C" if dev < 0.0 else "S"
-	var n: int = clampi(2 * int(ceil(rad_to_deg(absf(dev)) / 2.0)), 4, 16)
+	var n: int = _galets_batterie(dev)
 	var py: PyloneRemontee = PyloneRemontee.new()
 	py.style = "gare"
 	py.voie = voie
 	py.sens_montee_droite = sens_droite
-	py.hauteur = H_CABLE_GARE - PyloneRemontee.DESSUS_TRAVERSE_CABLE
+	py.hauteur = y_c - terrain(d) - PyloneRemontee.DESSUS_TRAVERSE_CABLE
 	py.compo_montee = [[n, nat]]
 	py.compo_descente = [[n, nat]]
 	py.pente = pente_ligne * 0.5
@@ -927,15 +1004,31 @@ func _batterie_gare(aval: bool) -> void:
 	_pyl.append([py, d])
 
 
+## Demi-écartement du câble à `dz` m du nez, en gare : de la voie de ligne
+## au diamètre de la poulie (les galets de déviation suivent la même courbe).
+func _x_rentre(dz: float) -> float:
+	return lerpf(voie * 0.5, rayon_poulie(), smoothstep(2.0, Z_DEVIATION + 1.4, dz))
+
+
 func _cable() -> void:
 	# câble de la boucle (en gare il suit la poulie, en ligne la flèche)
 	# en gare, le câble quitte la voie des véhicules : rentré après le nez
 	# (galets de déviation), il contourne la plus petite poulie
 	var pts: PackedVector3Array = PackedVector3Array()
 	var L: float = longueur_h()
-	var R: float = voie * 0.5
 	var Rp: float = rayon_poulie()
-	for p in _boucle:
+	# les tronçons droits des gares (deux points seulement) sont redécoupés
+	# pour que le câble suive la courbe des galets de déviation
+	var source: PackedVector3Array = PackedVector3Array()
+	for i in range(_boucle.size()):
+		var a: Vector3 = _boucle[i]
+		var b: Vector3 = _boucle[(i + 1) % _boucle.size()]
+		source.append(a)
+		if absf(a.y - b.y) < 1e-4 and absf(a.x - b.x) < 1e-4 and a.distance_to(b) > 1.0:
+			var nb: int = int(ceil(a.distance_to(b) / 0.5))
+			for k in range(1, nb):
+				source.append(a.lerp(b, float(k) / nb))
+	for p in source:
 		var q: Vector3 = p
 		for st in [[0.0, L_GARE], [-L, -L - L_GARE]]:
 			var znez: float = st[0]
@@ -943,8 +1036,7 @@ func _cable() -> void:
 			var dz: float = zc - znez
 			var u: float = (q.z - znez) / dz
 			if u > 0.0 and absf(q.z - znez) <= absf(dz) + 0.01:
-				var f: float = smoothstep(2.0, Z_DEVIATION + 1.4, absf(q.z - znez))
-				q.x = signf(q.x) * lerpf(R, Rp, f) if absf(q.x) > 0.01 else q.x
+				q.x = signf(q.x) * _x_rentre(absf(q.z - znez)) if absf(q.x) > 0.01 else q.x
 			elif u > 1.0:
 				var r: Vector3 = Vector3(q.x, 0, q.z - zc)
 				if r.length() > 0.01:
@@ -1073,12 +1165,9 @@ func _placer(i: int) -> void:
 		var x: float = z[1]
 		var l: float = z[2]
 		ouverture = clampf(minf(x, l - x) / 1.2, 0.0, 1.0)            # pince : 1,2 m pour s'ouvrir
-		gc = 0.0
-	else:
-		# garde-corps : baissé ~10 s après la sortie, relevé 25 m avant l'arrivée
-		var d_sortie: float = _distance_depuis_sortie(s)
-		var d_entree: float = _distance_avant_entree(s)
-		gc = clampf((d_sortie - 40.0) / 15.0, 0.0, 1.0) * clampf((d_entree - 20.0) / 10.0, 0.0, 1.0)
+		# garde-corps automatique : relevé à la fin de la décélération, baissé
+		# au début du lanceur d'accélération (retour d'utilisateur, 23/10/2026)
+		gc = 1.0 - clampf((x - (L_FREIN - 2.0)) / 2.0, 0.0, 1.0) * clampf((l - L_FREIN - x) / 2.0, 0.0, 1.0)
 	v.ouvrir_pince(ouverture)
 	v.garde_corps(gc)
 	v.bulle(gc)
@@ -1092,17 +1181,3 @@ func _placer(i: int) -> void:
 		if i < _corps.size() and _corps[i] != null:
 			for cs in _corps[i][1]:
 				(cs as CollisionShape3D).disabled = porte > 0.5
-
-
-func _distance_depuis_sortie(s: float) -> float:
-	var best: float = INF
-	for z in _zones:
-		best = minf(best, fposmod(s - float(z[1]), longueur_boucle))
-	return best
-
-
-func _distance_avant_entree(s: float) -> float:
-	var best: float = INF
-	for z in _zones:
-		best = minf(best, fposmod(float(z[0]) - s, longueur_boucle))
-	return best

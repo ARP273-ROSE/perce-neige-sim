@@ -39,6 +39,11 @@ const R_GALET: float = 0.21                # Ø 420 mm, la norme des débrayable
 const PAS_GALET: float = 0.52              # entraxe de deux galets d'un même balancier
 const R_CABLE: float = 0.0235              # Ø 47 mm (Tufs)
 const DESSUS_TRAVERSE_CABLE: float = 0.95  # du dessus de la traverse à l'axe du câble
+## Télécabines : traverse remontée au pivot du train support — à 0,95 m,
+## elle était à hauteur du toit et les cabines passaient au travers
+## (retour d'utilisateur, 22/10/2026).
+const DESSUS_TRAVERSE_CABINE: float = 0.62
+var dessus_traverse: float = DESSUS_TRAVERSE_CABLE
 
 
 var _construit: bool = false
@@ -53,7 +58,7 @@ func _ready() -> void:
 
 
 func hauteur_cable() -> float:
-	return hauteur + DESSUS_TRAVERSE_CABLE
+	return hauteur + dessus_traverse
 
 
 ## Position (locale) de l'axe du câble au droit du pylône, côté montée ou descente.

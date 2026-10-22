@@ -6,8 +6,8 @@
 ##  1. télésiège (Marmottes Express) : portillons qui s'ouvrent, skieur à la
 ##     ligne d'arrêt → assis par le siège suivant → emporté → levé sur le
 ##     quai d'arrivée ;
-##  2. télécabine (Boisses) : entré à pied, portes ouvertes → emporté par la
-##     cabine (support = son corps de collision) jusqu'en haut.
+##  2. télécabine (Boisses) : entré à pied, portes ouvertes → assis d'office
+##     face à l'amont, emporté, levé sur le quai d'arrivée.
 ##   godot --headless --fixed-fps 60 --path godot_project -s bench_embarquement_3d.gd -- --mode=normal
 extends SceneTree
 
@@ -21,6 +21,7 @@ var _lg: LigneRemontee = null
 var _portillons_vus_ouverts: bool = false
 var _y0: float = 0.0
 var _cab: int = -1
+var _cab_ligne: float = -1.0
 
 
 func _initialize() -> void:
@@ -127,7 +128,7 @@ func _tick() -> void:
 						_cab = i
 						porte_ouverte = true
 						break
-			if porte_ouverte:
+			if porte_ouverte and rm._repos <= 0.0:
 				var corps: Node3D = _lg._corps[_cab][0]
 				var dedans: Vector3 = corps.global_transform * Vector3(0, -1.15 - 0.10 - 2.25 + 0.20, 0)
 				sk.activer(dedans, 0.0)
@@ -146,11 +147,28 @@ func _tick() -> void:
 				_fin()
 		5:
 			if _t >= 1.0 and _t < 1.0 + 1.0 / 60.0:
-				_verif("télécabine : à bord, la cabine le porte", sk.support == _lg._corps[_cab][0],
-					"support %s" % [sk.support])
-			if _t > 240.0:
+				_verif("télécabine : assis d'office sur la banquette", not rm.a_bord.is_empty() and sk.assis
+					and rm.a_bord[0] == _lg, "a_bord %s" % [rm.a_bord])
+				if rm.a_bord.is_empty():
+					_fin()
+					return
+			if _cab_ligne < 0.0 and rm.a_bord.size() > 0 and _lg.zone_vehicule(_cab) == "ligne":
+				_cab_ligne = _t
+			if _cab_ligne > 0.0 and _t > _cab_ligne + 30.0 and _t < _cab_ligne + 30.0 + 1.0 / 60.0:
+				# en ligne (en gare, la cabine tourne autour de la poulie)
+				var f: Vector3 = -sk._visuel.global_transform.basis.z
+				var amont: Vector3 = -_lg.global_transform.basis.z
+				_verif("télécabine : face à l'amont", f.dot(amont) > 0.9, "cos = %.2f" % f.dot(amont))
 				var corps2: Node3D = _lg._corps[_cab][0]
 				var loc: Vector3 = corps2.global_transform.affine_inverse() * sk.global_position
-				_verif("télécabine : emporté à bord (pas passé à travers)", absf(loc.x) < 1.0 and absf(loc.z) < 1.0
-					and sk.global_position.y > _y0 + 150.0, "repère cabine (%.2f ; %.2f ; %.2f), +%.0f m" % [loc.x, loc.y, loc.z, sk.global_position.y - _y0])
+				_verif("télécabine : emporté à bord (pas passé à travers)", sk.embarque and absf(loc.x) < 1.0 and absf(loc.z) < 1.0
+					and sk.global_position.y > _y0 + 20.0, "repère cabine (%.2f ; %.2f ; %.2f), +%.0f m" % [loc.x, loc.y, loc.z, sk.global_position.y - _y0])
+			if _t > 1.5 and rm.a_bord.is_empty():
+				var haut: Vector3 = _lg.global_transform * Vector3(0, _lg.terrain(_lg.longueur_h()), -_lg.longueur_h())
+				var d: float = Vector2(sk.global_position.x - haut.x, sk.global_position.z - haut.z).length()
+				_verif("télécabine : levé sur le quai d'arrivée", not sk.embarque and d < 40.0
+					and sk.global_position.y > _y0 + 150.0, "%.0f s de trajet, %.1f m de la gare amont" % [_t, d])
+				_fin()
+			elif _t > 600.0:
+				_verif("télécabine : levé sur le quai d'arrivée", false, "toujours à bord après 600 s")
 				_fin()

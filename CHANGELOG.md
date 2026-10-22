@@ -5,6 +5,35 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.22.6 — 23 octobre 2026
+
+**Remontées : cabine, nez de gare, pylônes, garde-corps.** Retours d'utilisateur (iPad, v1.22.5)
+des 22 et 23/10/2026.
+- Télécabine : « dès que la cabine quitte la gare je passe au travers ». Le skieur entré dans
+  une cabine à quai est maintenant assis d'office sur la banquette, face à l'amont, et porté par
+  la cabine comme sur un siège. Il se lève sur le quai d'arrivée, skis rangés pendant le trajet.
+- « Le câble passe au milieu des galets » au nez des gares. Le câble y faisait un angle alors que
+  la batterie suit un arc. La batterie est désormais centrée côté ligne, là où se croisent
+  l'horizontale de la gare et la pente de la ligne, et le câble suit le même arc (raccord
+  parabolique). Les galets de déviation en gare suivent la même courbe que le câble.
+- « La cabine rentre dans un bout du pylône trop bas » : sur les télécabines, la traverse est
+  remontée de 0,33 m, au pivot du train support. Elle passe environ 30 cm au-dessus du toit.
+- Marmottes Express : « le dernier pylône est immense » (32 m, la butée). La garde au sol de
+  6,5 m était exigée jusqu'au nez de la gare, où le câble redescend à hauteur du quai. Elle
+  décroît maintenant sur les 40 derniers mètres, et le pylône fait 9 m.
+- « La gare du haut est sous terre » : le versant monte en travers. Chaque gare est posée au plus
+  haut du terrain sous son emprise, sur un socle ; la dalle est élargie pour que le skieur qui se
+  lève à l'arrivée reste dessus.
+- « Mes skis disparaissent sur le TS » : assis chaussé, les skis restent aux pieds.
+- Garde-corps automatique : relevé à la fin du freinage en gare, baissé au début du lanceur de
+  départ (avant : relevé dans toute la gare et baissé 40 m après la sortie).
+- Vérifié :
+  - banc d'embarquement : télésiège, puis télécabine (assis, face à l'amont, emporté, levé en
+    haut) ;
+  - bancs aller_remontee, remontee_dynamique et quai ;
+  - captures du passage d'une cabine au pylône, des batteries des nez, de la gare amont et du
+    dernier pylône des Marmottes, du skieur assis avec ses skis.
+
 ## 1.22.5 — 22 octobre 2026
 
 **PWA : plus de blocage au premier passage en vue skieur.** Retour d'utilisateur (iPad)
