@@ -30,6 +30,18 @@ const COULEURS: Dictionary = {
 	"cabine_blanche": [Color(0.92, 0.93, 0.94), 0.35, 0.30],
 	"cabine_bleue": [Color(0.08, 0.28, 0.62), 0.35, 0.35],
 	"joint": [Color(0.04, 0.04, 0.04), 0.9, 0.0],
+	# d'après photos de lignes Doppelmayr (Commons, Bürserberg 2024) :
+	"galva_pylone": [Color(0.66, 0.68, 0.69), 0.55, 0.75],     # acier galvanisé brut, mat
+	"galva_patine": [Color(0.55, 0.53, 0.48), 0.75, 0.55],     # flasques ternies, rouille légère
+	"garniture": [Color(0.80, 0.78, 0.70), 0.70, 0.0],         # garniture de galet claire
+	"moyeu": [Color(0.74, 0.75, 0.76), 0.30, 0.85],            # jante alu
+	"moyeu_rouge": [Color(0.70, 0.12, 0.12), 0.45, 0.30],
+	"plaque_bleue": [Color(0.06, 0.30, 0.68), 0.5, 0.1],
+	# pince D-Line (photos Commons, maquettes Doppelmayr Wolfurt / Valiserabahn)
+	"alu_pince": [Color(0.72, 0.73, 0.74), 0.38, 0.80],
+	"ressort_gris": [Color(0.62, 0.64, 0.67), 0.45, 0.55],
+	"polyurethane": [Color(0.93, 0.91, 0.84), 0.55, 0.0],
+	"noir_mat": [Color(0.05, 0.05, 0.06), 0.80, 0.10],
 }
 
 
@@ -176,11 +188,16 @@ static func arc(c: Vector3, u: Vector3, v: Vector3, r: float, a0: float, a1: flo
 
 ## Galet de balancier (garniture caoutchouc sur jante acier) d'axe X local,
 ## rayon extérieur `r`, largeur `l`, centré en `c`.
-static func galet(parent: Node3D, c: Vector3, r: float = 0.21, l: float = 0.085) -> void:
+static func galet(parent: Node3D, c: Vector3, r: float = 0.21, l: float = 0.085, moyeu: String = "acier",
+		garniture: String = "caoutchouc") -> void:
 	var b: Basis = Basis(Vector3.FORWARD, PI * 0.5)          # axe Y du cylindre → axe X
-	cylindre(parent, r, r, l * 0.62, Transform3D(b, c), "caoutchouc", 20)
-	cylindre(parent, r * 0.80, r * 0.80, l, Transform3D(b, c), "acier", 16)
-	cylindre(parent, r * 0.22, r * 0.22, l * 1.5, Transform3D(b, c), "acier_noir", 10)
+	# garniture (avec sa gorge sombre au milieu), jante, flasques, axe
+	cylindre(parent, r, r, l * 0.30, Transform3D(b, c + Vector3(l * 0.22, 0, 0)), garniture, 22)
+	cylindre(parent, r, r, l * 0.30, Transform3D(b, c - Vector3(l * 0.22, 0, 0)), garniture, 22)
+	cylindre(parent, r - 0.012, r - 0.012, l * 0.16, Transform3D(b, c), "acier_noir", 22)
+	cylindre(parent, r * 0.84, r * 0.84, l * 1.02, Transform3D(b, c), moyeu, 18)
+	cylindre(parent, r * 0.55, r * 0.55, l * 1.10, Transform3D(b, c), "moyeu", 14)
+	cylindre(parent, r * 0.16, r * 0.16, l * 1.6, Transform3D(b, c), "acier_noir", 10)
 
 
 ## Ressort hélicoïdal d'axe `axe` (unitaire), de longueur `l`.

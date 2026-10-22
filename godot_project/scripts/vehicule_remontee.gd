@@ -120,44 +120,81 @@ func _couleur_ressorts() -> String:
 			return "rouge_ressort"
 
 
+## Pince débrayable, d'après les pinces Doppelmayr D-Line et A108 (photos de
+## maquettes à l'échelle 1) : un corps en aluminium coulé qui enserre le câble
+## par-dessus, prolongé aux deux bouts par des gaines noires coniques ; deux
+## paquets de gros ressorts hélicoïdaux (un à chaque bout, deux ressorts
+## côte à côte) qui serrent les mâchoires ; le bras du levier d'ouverture et
+## son galet ; deux galets de roulement en polyuréthane blanc (rail de gare),
+## un galet de guidage ; la longue plaque de friction noire crantée sur
+## laquelle appuient les pneus de la gare. La suspente part du côté
+## extérieur (X+). Couleurs des ressorts selon le constructeur.
 func _pince_debrayable() -> void:
 	var p: Node3D = Node3D.new()
 	p.name = "Pince"
 	add_child(p)
-	var corps_m: String = "acier_noir" if constructeur() == "poma" else "galva"
-	# corps de pince : au-dessus du câble, décalé vers l'extérieur (X+)
-	RemonteeKit.boite_en(p, Vector3(0.20, 0.16, 0.62), Vector3(0.10, 0.10, 0), corps_m)
-	# mâchoire FIXE (côté intérieur, x < 0) sur toute la longueur
-	RemonteeKit.boite_en(p, Vector3(0.05, 0.10, 0.50), Vector3(-0.045, 0.0, 0), "acier")
-	# mâchoire MOBILE : pivote autour d'un axe parallèle au câble
+	var poma: bool = constructeur() == "poma"
+	var corps_m: String = "acier_noir" if poma else "alu_pince"
+	var L: float = 0.62                                   # longueur du corps le long du câble
+	# corps : selle qui chevauche le câble, flancs, nervures
+	RemonteeKit.boite_en(p, Vector3(0.13, 0.07, L), Vector3(0.0, 0.055, 0), corps_m)
+	RemonteeKit.boite_en(p, Vector3(0.035, 0.11, L * 0.92), Vector3(-0.055, 0.0, 0), corps_m)   # mâchoire fixe
+	for k in [-1.0, 0.0, 1.0]:
+		RemonteeKit.boite_en(p, Vector3(0.14, 0.012, 0.03), Vector3(0.0, 0.092, k * L * 0.33), corps_m)
+	# gaines coniques noires aux deux bouts (guident le câble à l'entrée des pneus)
+	for sz in [-1.0, 1.0]:
+		RemonteeKit.cylindre(p, 0.045, 0.028, 0.34, Transform3D(Basis(Vector3.RIGHT, -sz * PI * 0.5), Vector3(0, 0.025, sz * (L * 0.5 + 0.17))),
+			"noir_mat", 12)
+	# mâchoire MOBILE (côté extérieur), pivot parallèle au câble
 	_machoire = Node3D.new()
 	_machoire.name = "MachoireMobile"
-	_machoire.position = Vector3(0.10, 0.06, 0)
+	_machoire.position = Vector3(0.07, 0.07, 0)
 	p.add_child(_machoire)
-	RemonteeKit.boite_en(_machoire, Vector3(0.05, 0.12, 0.50), Vector3(-0.055, -0.08, 0), "acier")
-	# ressorts : deux paquets le long du câble, dans un carter ouvert
+	RemonteeKit.boite_en(_machoire, Vector3(0.035, 0.12, L * 0.92), Vector3(-0.018, -0.075, 0), corps_m)
+	# bras porteur : du corps vers l'extérieur et le haut, où sont les ressorts
+	RemonteeKit.poutre(p, Vector3(0.05, 0.07, 0), Vector3(0.24, 0.20, 0), 0.10, 0.07, corps_m, Vector3.BACK)
+	RemonteeKit.boite_en(p, Vector3(0.16, 0.08, 0.46), Vector3(0.28, 0.22, 0), corps_m)
+	# paquets de ressorts : deux ressorts côte à côte à chaque bout, axe vers le haut
 	var rc: String = _couleur_ressorts()
+	if rc == "rouge_ressort":
+		rc = "ressort_gris"          # Doppelmayr récents : ressorts gris (rouges = ET/A108 anciens)
 	for sz in [-1.0, 1.0]:
-		var r: Node3D = Node3D.new()
-		r.position = Vector3(0.21, 0.13, sz * 0.05)
-		p.add_child(r)
-		RemonteeKit.ressort(r, Vector3.ZERO, Vector3(0, 0, sz), _ressort_l0, 0.045, 0.011, 6, rc)
-		_ressorts.append(r)
-		RemonteeKit.boite_en(p, Vector3(0.12, 0.02, 0.06), Vector3(0.21, 0.13, sz * (0.05 + _ressort_l0 + 0.02)), corps_m)
-	# levier de commande et son galet de came (en haut, extérieur)
+		for sx in [-0.045, 0.045]:
+			var r: Node3D = Node3D.new()
+			r.position = Vector3(0.28 + sx, 0.26, sz * 0.15)
+			p.add_child(r)
+			RemonteeKit.ressort(r, Vector3.ZERO, Vector3.UP, _ressort_l0 * 0.75, 0.042, 0.011, 7, rc)
+			_ressorts.append(r)
+		# coupelle haute des ressorts
+		RemonteeKit.boite_en(p, Vector3(0.16, 0.025, 0.10), Vector3(0.28, 0.26 + _ressort_l0 * 0.75 + 0.012, sz * 0.15), corps_m)
+	# levier d'ouverture et son galet (attaqué par la came de gare)
 	_levier = Node3D.new()
 	_levier.name = "Levier"
-	_levier.position = Vector3(0.20, 0.20, 0.0)
+	_levier.position = Vector3(0.28, 0.24, 0)
 	p.add_child(_levier)
-	RemonteeKit.poutre(_levier, Vector3.ZERO, Vector3(0.22, 0.12, 0), 0.05, 0.04, corps_m)
-	RemonteeKit.cylindre(_levier, 0.045, 0.045, 0.04, Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3(0.24, 0.13, 0)), "caoutchouc", 12)
-	# galets de roulement (rail de gare) : deux, en tête et en queue
+	RemonteeKit.poutre(_levier, Vector3.ZERO, Vector3(0.10, 0.20, 0), 0.06, 0.05, corps_m, Vector3.BACK)
+	RemonteeKit.cylindre(_levier, 0.055, 0.055, 0.05, Transform3D(Basis(Vector3.FORWARD, PI * 0.5), Vector3(0.12, 0.22, 0)), "polyurethane", 16)
+	# galets de roulement (rail de gare), en tête et en queue, axe en travers
 	for sz in [-1.0, 1.0]:
-		RemonteeKit.galet(p, Vector3(0.30, 0.20, sz * 0.24), 0.07, 0.05)
-	# plaque de friction (entraînement par les pneus de la gare)
-	RemonteeKit.boite_en(p, Vector3(0.012, 0.16, 0.70), Vector3(0.36, 0.0, 0), "acier")
-	# galet de guidage
-	RemonteeKit.cylindre(p, 0.05, 0.05, 0.05, Transform3D(Basis.IDENTITY, Vector3(0.30, -0.06, 0)), "caoutchouc", 12)
+		RemonteeKit.cylindre(p, 0.016, 0.016, 0.12, Transform3D(Basis(Vector3.FORWARD, PI * 0.5), Vector3(0.20, 0.11, sz * 0.24)), "acier_noir", 8)
+		RemonteeKit.cylindre(p, 0.065, 0.065, 0.055, Transform3D(Basis(Vector3.FORWARD, PI * 0.5), Vector3(0.25, 0.11, sz * 0.24)), "polyurethane", 18)
+	# galet de guidage (sous le bras, axe vertical)
+	RemonteeKit.cylindre(p, 0.05, 0.05, 0.05, Transform3D(Basis.IDENTITY, Vector3(0.20, -0.02, 0)), "polyurethane", 16)
+	# plaque de friction crantée (entraînement par les pneus de la gare)
+	RemonteeKit.boite_en(p, Vector3(0.015, 0.12, 0.80), Vector3(0.37, 0.20, 0), "noir_mat")
+	var z: float = -0.38
+	while z <= 0.38:
+		RemonteeKit.boite_en(p, Vector3(0.02, 0.10, 0.012), Vector3(0.38, 0.20, z), "noir_mat")
+		z += 0.04
+	# numéro du véhicule sur la plaque (3 chiffres blancs)
+	var lab: Label3D = Label3D.new()
+	lab.text = "%03d" % (randi() % 120 + 1)
+	lab.font_size = 48
+	lab.pixel_size = 0.0018
+	lab.position = Vector3(0.39, 0.20, 0.25)
+	lab.rotation.y = PI * 0.5
+	lab.modulate = Color(1, 1, 1)
+	p.add_child(lab)
 
 
 func _pince_fixe() -> void:
@@ -175,11 +212,11 @@ func _pince_fixe() -> void:
 ## 0 : serrée sur le câble ; 1 : ouverte (en gare, levier poussé par la came).
 func ouvrir_pince(t: float) -> void:
 	if _machoire != null:
-		_machoire.rotation.z = -0.55 * clampf(t, 0.0, 1.0)
+		_machoire.rotation.z = -0.45 * clampf(t, 0.0, 1.0)
 	if _levier != null:
-		_levier.rotation.z = 0.65 * clampf(t, 0.0, 1.0)
+		_levier.rotation.z = -0.55 * clampf(t, 0.0, 1.0)
 	for r in _ressorts:
-		(r as Node3D).scale = Vector3(1, 1, 1.0 - 0.28 * clampf(t, 0.0, 1.0))
+		(r as Node3D).scale = Vector3(1, 1.0 - 0.22 * clampf(t, 0.0, 1.0), 1)
 
 
 # --- suspente et siège -------------------------------------------------------------
@@ -253,9 +290,12 @@ func _siege() -> void:
 	# suspente : sort de la pince vers l'extérieur, descend, puis revient au
 	# droit du câble au-dessus du dossier (le véhicule pend sous le câble)
 	var pts: PackedVector3Array = PackedVector3Array()
-	pts.append(Vector3(x0 + 0.10, 0.02, 0))
-	pts.append(Vector3(0.42, -0.05, 0))
-	pts.append(Vector3(0.50, -0.30, 0))
+	# attache sous le bras de la pince (débrayable) ou sous la monopince (fixe)
+	var x_att: float = 0.30 if not fixe else x0 + 0.10
+	var y_att: float = 0.14 if not fixe else 0.02
+	pts.append(Vector3(x_att, y_att, 0))
+	pts.append(Vector3(0.46, y_att - 0.04, 0))
+	pts.append(Vector3(0.52, -0.25, 0))
 	pts.append(Vector3(0.50, -hs + 0.70, 0))
 	for p in RemonteeKit.arc(Vector3(0.10, -hs + 0.70, 0), Vector3.RIGHT, Vector3.DOWN, 0.40, 0.0, PI * 0.5, 8):
 		pts.append(p)
@@ -401,7 +441,7 @@ func _cabine() -> void:
 	var sus_m: String = "acier_noir" if famille != "cabine_omega4" else "galva"
 	var hs: float = 1.15
 	# suspente rigide : de la pince au milieu du toit
-	RemonteeKit.tube(self, PackedVector3Array([Vector3(0.18, 0.02, 0), Vector3(0.55, -0.10, 0),
+	RemonteeKit.tube(self, PackedVector3Array([Vector3(0.30, 0.14, 0), Vector3(0.55, 0.08, 0),
 		Vector3(0.62, -0.45, 0), Vector3(0.10, -hs + 0.05, 0)]), 0.055, sus_m, 10)
 	RemonteeKit.boite_en(self, Vector3(0.50, 0.10, 0.50), Vector3(0.0, -hs, 0), sus_m)
 	var cab: Node3D = Node3D.new()
