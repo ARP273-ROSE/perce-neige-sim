@@ -73,12 +73,18 @@ func construire() -> void:
 	_pyl.clear()
 	_pyl_touches.clear()
 	H_CABLE_GARE = VehiculeRemontee.hauteur_cable_gare(famille)
+	# vitesse d'embarquement : 1 m/s aux sièges, 0,25 m/s aux cabines (on y
+	# entre à pied) — les véhicules se resserrent d'autant dans la partie
+	# lente : au moins deux dans le demi-tour, d'autres dans les lanceurs
+	# (retour d'utilisateur, 22/10/2026)
+	v_embarquement = 0.25 if famille.begins_with("cabine") else 1.0
 	_calculer_tetes()
 	_gare(true)
 	_gare(false)
 	_poser_pylones()
 	_construire_boucle()
 	_cable()
+	_lanceurs()
 	_peupler()
 	if not (famille.begins_with("cabine") or famille.begins_with("perche")):
 		_portillons(true)
@@ -157,6 +163,47 @@ func _calculer_tetes() -> void:
 	for i in range(_tetes.size()):
 		var t: float = terrain(float(pylones[i]["d"]))
 		_tetes[i] = clampf(_tetes[i], t + 6.5, t + 32.0)
+	# pylônes de COMPRESSION (balancier côté montée en C) : le câble doit y
+	# passer SOUS les galets, la ligne y est concave — tête abaissée sous la
+	# corde de ses voisins (sinon le câble décollerait des galets)
+	for it2 in range(30):
+		var bouge: bool = false
+		var pts2: Array = _points_appui()
+		for i in range(pylones.size()):
+			if not _compression(pylones[i]):
+				continue
+			var a: Array = pts2[i]
+			var b: Array = pts2[i + 2]
+			var d: float = float(pylones[i]["d"])
+			var corde: float = lerpf(a[1], b[1], (d - a[0]) / maxf(b[0] - a[0], 0.01))
+			var t2: float = terrain(d) + 6.5
+			if corde - 0.8 < t2:
+				# le terrain empêche d'abaisser la tête : on relève la corde en
+				# remontant le voisin amont (ou aval, au dernier pylône)
+				var manque: float = t2 + 0.8 - corde
+				if i + 1 < pylones.size():
+					_tetes[i + 1] += manque * (b[0] - a[0]) / maxf(d - a[0], 0.01)
+				elif i > 0:
+					_tetes[i - 1] += manque * (b[0] - a[0]) / maxf(b[0] - d, 0.01)
+				bouge = true
+				continue
+			if _tetes[i] > corde - 0.8 + 0.05:
+				_tetes[i] = corde - 0.8
+				bouge = true
+		if not bouge:
+			break
+
+
+func _compression(p: Dictionary) -> bool:
+	var n_c: int = 0
+	var n_s: int = 0
+	for g in p.get("montee", []):
+		var n: int = int(g[0]) if g[0] != null else 2
+		if String(g[1]) == "C":
+			n_c += n
+		elif String(g[1]) == "S":
+			n_s += n
+	return n_c > n_s
 
 
 ## Hauteur du câble (chaînette) à la distance d, brin montée ou descente.
@@ -343,31 +390,12 @@ func _gare(aval: bool) -> void:
 				Vector3(sx * (voie * 0.5 + 1.6), (H_CABLE_GARE + 2.4) * 0.5, zm + k * long_g * 0.35), "peinture_gris")
 		RemonteeKit.boite_en(g, Vector3(0.35, 0.6, long_g), Vector3(sx * (voie * 0.5 + 1.6), H_CABLE_GARE + 2.1, zm), "peinture_gris")
 	RemonteeKit.boite_en(g, Vector3(voie + 4.2, 0.12, long_g + 0.6), Vector3(0, H_CABLE_GARE + 2.5, zm), "peinture_anthracite")
-	# poulie horizontale (motrice en amont, retour-tension en aval) et son bâti
+	# poulie de demi-tour (motrice en amont, retour-tension en aval)
 	var R: float = voie * 0.5
-	RemonteeKit.cylindre(g, R + 0.05, R + 0.05, 0.25, Transform3D(Basis.IDENTITY, Vector3(0, H_CABLE_GARE, zc)), "acier", 48)
-	RemonteeKit.cylindre(g, R - 0.35, R - 0.35, 0.28, Transform3D(Basis.IDENTITY, Vector3(0, H_CABLE_GARE, zc)), "peinture_anthracite", 48)
-	for k in range(6):
-		var a: float = TAU * k / 6.0
-		RemonteeKit.poutre(g, Vector3(0, H_CABLE_GARE, zc), Vector3(cos(a) * (R - 0.3), H_CABLE_GARE, zc + sin(a) * (R - 0.3)), 0.12, 0.20, "acier")
-	RemonteeKit.cylindre(g, 0.45, 0.45, 1.6, Transform3D(Basis.IDENTITY, Vector3(0, H_CABLE_GARE + 0.9, zc)), "peinture_gris", 20)
-	RemonteeKit.boite_en(g, Vector3(2.2, 1.0, 2.6), Vector3(0, H_CABLE_GARE + 1.9, zc), "peinture_gris")
-	# rail des véhicules débrayés : le long des deux voies et autour de la poulie
-	# rail sous les galets de roulement de la pince (x +0,25, y +0,11, r 0,065)
-	var y_rail: float = H_CABLE_GARE + 0.11 - 0.065 - 0.06
+	_poulie(g, Vector3(0, H_CABLE_GARE, zc), R, aval)
+	# came d'ouverture / de fermeture des pinces, au nez de la gare
 	for sx in [-1.0, 1.0]:
-		var x_rail: float = sx * (R + 0.25)
-		RemonteeKit.poutre(g, Vector3(x_rail, y_rail, znez - signf(dz) * 1.0), Vector3(x_rail, y_rail, zc), 0.08, 0.12, "acier")
-		# rangée de pneus (freinage / lancement), sous la plaque de friction
-		var z: float = znez + signf(dz) * 1.5
-		while absf(z - znez) < absf(dz) - 0.8:
-			# pneus contre la plaque de friction (x +0,37, y +0,20), axe vertical
-			RemonteeKit.cylindre(g, 0.21, 0.21, 0.14, Transform3D(Basis.IDENTITY, Vector3(sx * (R + 0.39 + 0.21), H_CABLE_GARE + 0.20, z)), "caoutchouc", 16)
-			z += signf(dz) * 0.62
-		# came d'ouverture / de fermeture des pinces, au nez de la gare
-		RemonteeKit.poutre(g, Vector3(sx * (R + 0.42), H_CABLE_GARE + 0.40, znez), Vector3(sx * (R + 0.46), H_CABLE_GARE + 0.30, znez + signf(dz) * 3.0), 0.06, 0.05, "jaune_securite")
-	var pts: PackedVector3Array = RemonteeKit.arc(Vector3(0, y_rail, zc), Vector3.RIGHT, Vector3.BACK * signf(dz), R + 0.25, 0.0, PI, 24)
-	RemonteeKit.tube(g, pts, 0.06, "acier", 6)
+		RemonteeKit.poutre(g, Vector3(sx * (R + 0.40), H_CABLE_GARE + 0.40, znez), Vector3(sx * (R + 0.44), H_CABLE_GARE + 0.30, znez + signf(dz) * 3.0), 0.06, 0.05, "jaune_securite")
 	# portique d'entrée (l'arche que l'on voit depuis la ligne)
 	for sx in [-1.0, 1.0]:
 		RemonteeKit.boite_en(g, Vector3(0.25, H_CABLE_GARE + 1.6, 0.25), Vector3(sx * (voie * 0.5 + 1.0), (H_CABLE_GARE + 1.6) * 0.5, znez), "peinture_gris")
@@ -596,6 +624,183 @@ func point_debarquement(aval: bool) -> Vector3:
 	return Vector3(x + signf(x) * 1.6, terrain(0.0 if aval else L) + 0.05, z)
 
 
+## Poulie de demi-tour, d'après photo (Wikimedia Commons, « Chairlift
+## bullwheel ») : grande roue horizontale, jante en U garnie de caoutchouc
+## au fond de la gorge (le câble y repose), huit rayons en caisson avec
+## leurs semelles, anneau raidisseur, gros moyeu sur arbre vertical ; au-
+## dessus, le bâti (réducteur et moteur en amont, chariot de tension en aval).
+func _poulie(g: Node3D, c: Vector3, R: float, aval: bool) -> void:
+	if not VehiculeRemontee.DESCRIPTIONS.get(famille, ["", 6, ""])[2] == "fixe":
+		_poulie_debrayable(g, c, R, aval)
+		return
+	var m: String = "jaune_poulie"
+	var n: int = 48
+	# gorge garnie (là où passe le câble) et ailes de la jante
+	RemonteeKit.tube(g, RemonteeKit.arc(c, Vector3.RIGHT, Vector3.BACK, R + 0.03, 0.0, TAU, n), 0.045, "caoutchouc", 8)
+	for dy in [-0.11, 0.11]:
+		RemonteeKit.tube(g, RemonteeKit.arc(c + Vector3(0, dy, 0), Vector3.RIGHT, Vector3.BACK, R + 0.07, 0.0, TAU, n), 0.025, m, 6)
+	for k in range(n):
+		var a0: float = TAU * k / n
+		var a1: float = TAU * (k + 1) / n
+		var p0: Vector3 = c + Vector3(cos(a0), 0, sin(a0)) * (R + 0.12)
+		var p1: Vector3 = c + Vector3(cos(a1), 0, sin(a1)) * (R + 0.12)
+		RemonteeKit.poutre(g, p0, p1, 0.02, 0.24, m)                                   # âme de la jante
+	# huit rayons en caisson : semelles haute et basse, deux âmes, trous d'allègement
+	for k in range(8):
+		var a: float = TAU * (k + 0.5) / 8.0
+		var d3: Vector3 = Vector3(cos(a), 0, sin(a))
+		var t3: Vector3 = Vector3(-sin(a), 0, cos(a))
+		var p_in: Vector3 = c + d3 * 0.48
+		var p_out: Vector3 = c + d3 * (R + 0.10)
+		for dy in [-0.16, 0.16]:
+			RemonteeKit.poutre(g, p_in + Vector3(0, dy, 0), p_out + Vector3(0, dy * 0.6, 0), 0.24, 0.02, m)
+		for sx in [-0.10, 0.10]:
+			RemonteeKit.poutre(g, p_in + t3 * sx, p_out + t3 * sx * 0.8, 0.015, 0.30, m, t3)
+		for f in [0.35, 0.55, 0.75]:
+			RemonteeKit.cylindre(g, 0.06, 0.06, 0.24, Transform3D(Basis(d3, PI * 0.5), c + d3 * (0.48 + (R - 0.38) * f)),
+				"acier_noir", 10)
+	# anneau raidisseur à mi-rayon
+	RemonteeKit.tube(g, RemonteeKit.arc(c, Vector3.RIGHT, Vector3.BACK, R * 0.55, 0.0, TAU, 32), 0.05, m, 6)
+	# moyeu, arbre et bâti
+	RemonteeKit.cylindre(g, 0.48, 0.48, 0.50, Transform3D(Basis.IDENTITY, c), m, 24)
+	RemonteeKit.cylindre(g, 0.20, 0.20, 0.30, Transform3D(Basis.IDENTITY, c + Vector3(0, 0.38, 0)), "acier", 16)
+	RemonteeKit.cylindre(g, 0.55, 0.55, 0.20, Transform3D(Basis.IDENTITY, c + Vector3(0, 0.62, 0)), "galva_pylone", 24)
+	RemonteeKit.boite_en(g, Vector3(2.0, 0.9, 2.2), c + Vector3(0, 1.17, 0), "galva_pylone")
+	if aval:
+		# chariot de tension : glissières et vérin vers l'arrière de la gare
+		for sx in [-0.8, 0.8]:
+			RemonteeKit.poutre(g, c + Vector3(sx, 1.65, -1.8), c + Vector3(sx, 1.65, 2.6), 0.18, 0.22, "galva_pylone")
+		RemonteeKit.cylindre(g, 0.09, 0.09, 1.6, Transform3D(Basis(Vector3.RIGHT, PI * 0.5), c + Vector3(0, 1.30, 1.9)), "acier", 12)
+	else:
+		# réducteur et moteur
+		RemonteeKit.boite_en(g, Vector3(1.4, 1.0, 1.4), c + Vector3(0, 2.1, 0), "peinture_anthracite")
+		RemonteeKit.cylindre(g, 0.45, 0.45, 1.6, Transform3D(Basis(Vector3.FORWARD, PI * 0.5), c + Vector3(1.4, 2.1, 0)), "peinture_anthracite", 20)
+
+
+## Poulie d'une gare DÉBRAYABLE (retour d'utilisateur, 22/10/2026 : la roue à rayons
+## « c'est pour un TS à pince fixe ») : disque plein en deux flasques soudées
+## avec trous d'allègement, jante à gorge garnie, gros moyeu, enfermée sous
+## la charpente de la gare sur son bâti (chariot de tension en aval,
+## réducteur et moteur en amont) — les pinces débrayées passent en dehors,
+## sur le rail.
+func _poulie_debrayable(g: Node3D, c: Vector3, R: float, aval: bool) -> void:
+	var m: String = "peinture_anthracite"
+	RemonteeKit.tube(g, RemonteeKit.arc(c, Vector3.RIGHT, Vector3.BACK, R + 0.03, 0.0, TAU, 56), 0.045, "caoutchouc", 8)
+	for dy in [-0.10, 0.10]:
+		RemonteeKit.tube(g, RemonteeKit.arc(c + Vector3(0, dy, 0), Vector3.RIGHT, Vector3.BACK, R + 0.07, 0.0, TAU, 56), 0.025, m, 6)
+		RemonteeKit.cylindre(g, R, R - 0.25, 0.02, Transform3D(Basis.IDENTITY, c + Vector3(0, dy * 1.4, 0)), m, 56)
+	# trous d'allègement (deux couronnes), vus comme des disques sombres sur les flasques
+	for couronne in [[0.62, 10, 0.32], [0.36, 6, 0.20]]:
+		for k in range(int(couronne[1])):
+			var a: float = TAU * (k + 0.5) / float(couronne[1])
+			var q: Vector3 = c + Vector3(cos(a), 0, sin(a)) * R * float(couronne[0])
+			for dy2 in [-0.155, 0.155]:
+				RemonteeKit.cylindre(g, couronne[2], couronne[2], 0.006, Transform3D(Basis.IDENTITY, q + Vector3(0, dy2, 0)), "noir_mat", 18)
+	RemonteeKit.cylindre(g, 0.50, 0.50, 0.46, Transform3D(Basis.IDENTITY, c), m, 24)
+	for k in range(12):
+		var a2: float = TAU * k / 12.0
+		RemonteeKit.cylindre(g, 0.025, 0.025, 0.50, Transform3D(Basis.IDENTITY, c + Vector3(cos(a2), 0, sin(a2)) * 0.40), "acier", 6)
+	RemonteeKit.cylindre(g, 0.20, 0.20, 0.30, Transform3D(Basis.IDENTITY, c + Vector3(0, 0.38, 0)), "acier", 16)
+	RemonteeKit.boite_en(g, Vector3(1.8, 0.7, 2.0), c + Vector3(0, 0.88, 0), "galva_pylone")
+	if aval:
+		for sx in [-0.8, 0.8]:
+			RemonteeKit.poutre(g, c + Vector3(sx, 1.30, -1.6), c + Vector3(sx, 1.30, 2.6), 0.18, 0.22, "galva_pylone")
+		RemonteeKit.cylindre(g, 0.09, 0.09, 1.6, Transform3D(Basis(Vector3.RIGHT, PI * 0.5), c + Vector3(0, 1.0, 1.9)), "acier", 12)
+	else:
+		RemonteeKit.boite_en(g, Vector3(1.4, 0.9, 1.4), c + Vector3(0, 1.68, 0), "peinture_anthracite")
+		RemonteeKit.cylindre(g, 0.42, 0.42, 1.5, Transform3D(Basis(Vector3.FORWARD, PI * 0.5), c + Vector3(1.3, 1.68, 0)), "peinture_anthracite", 20)
+
+
+# --- lanceurs : rail et pneus -----------------------------------------------------
+
+var _pneus: Array = []      # [nœud, abscisse sur la boucle, base au repos, angle]
+const R_PNEU: float = 0.21
+
+
+## Dehors de la boucle (horizontal) à l'abscisse s : en ligne droite le
+## côté du brin, sur la poulie la direction radiale.
+func _dehors(s: float) -> Vector3:
+	var p: Vector3 = _point_cable(s)[0]
+	var L: float = longueur_h()
+	for z in [[L_GARE, true], [-L - L_GARE, false]]:
+		var zc: float = z[0]
+		var dans_tour: bool = (p.z > zc) if z[1] else (p.z < zc)
+		if dans_tour and absf(p.z - zc) < voie:
+			var r: Vector3 = Vector3(p.x, 0, p.z - zc)
+			if r.length() > 0.01:
+				return r.normalized()
+	return Vector3(signf(p.x) if p.x != 0.0 else 1.0, 0, 0)
+
+
+## Rail des pinces débrayées et lanceur de pneus au-dessus, sur toute la
+## zone de gare (lanceurs, demi-tour, partie lente). Chaque pneu tourne à
+## la vitesse du véhicule à SA position : rapides à l'entrée, lents au
+## milieu, rapides à la sortie (retour d'utilisateur, 22/10/2026).
+func _lanceurs() -> void:
+	_pneus.clear()
+	if famille.begins_with("perche"):
+		return
+	var y_rail: float = 0.11 - 0.065 - 0.035
+	for aval in [true, false]:
+		var s0: float = s_gare(aval, 0.0)
+		var l: float = longueur_zone(aval)
+		var rail: PackedVector3Array = PackedVector3Array()
+		var poutre_haut: PackedVector3Array = PackedVector3Array()
+		var x: float = -1.0
+		while x <= l + 1.0:
+			var s: float = s0 + x
+			var p: Vector3 = point(s)[0]
+			var o: Vector3 = _dehors(s)
+			rail.append(p + o * 0.25 + Vector3(0, y_rail, 0))
+			poutre_haut.append(p + o * VehiculeRemontee.X_PLAQUE + Vector3(0, VehiculeRemontee.Y_PLAQUE + 2.0 * R_PNEU + 0.16, 0))
+			x += 0.5
+		var r_node: Node3D = Node3D.new()
+		r_node.name = "Rail" + ("Aval" if aval else "Amont")
+		add_child(r_node)
+		RemonteeKit.tube(r_node, rail, 0.045, "acier", 6)
+		RemonteeKit.tube(r_node, poutre_haut, 0.07, "galva_pylone", 6)
+		# suspentes du lanceur à la charpente, tous les 3 m
+		var k: int = 0
+		while k < poutre_haut.size():
+			RemonteeKit.barre(r_node, poutre_haut[k], poutre_haut[k] + Vector3(0, 1.6, 0), 0.035, "galva_pylone", 6)
+			k += 6
+		MeshMerge.merge(r_node, [], "Rail")
+		# pneus au pas de 0,62 m
+		x = 0.3
+		while x < l - 0.3:
+			var s2: float = s0 + x
+			var pt: Array = point(s2)
+			var p2: Vector3 = pt[0]
+			var o2: Vector3 = _dehors(s2)
+			var t2: Vector3 = (pt[1] as Vector3)
+			t2.y = 0.0
+			t2 = t2.normalized()
+			var c: Vector3 = p2 + o2 * VehiculeRemontee.X_PLAQUE + Vector3(0, VehiculeRemontee.Y_PLAQUE + R_PNEU, 0)
+			# axe du pneu = dehors (horizontal, en travers) ; il tourne dans le plan vertical de la marche
+			var base: Basis = Basis(t2, o2, t2.cross(o2)).orthonormalized()
+			var pn: Node3D = Node3D.new()
+			pn.transform = Transform3D(base, c)
+			add_child(pn)
+			RemonteeKit.cylindre(pn, R_PNEU, R_PNEU, 0.14, Transform3D.IDENTITY, "caoutchouc", 18)
+			RemonteeKit.cylindre(pn, 0.12, 0.12, 0.16, Transform3D.IDENTITY, "galva_pylone", 12)
+			for b in range(5):
+				var a2: float = TAU * b / 5.0
+				RemonteeKit.cylindre(pn, 0.012, 0.012, 0.17, Transform3D(Basis.IDENTITY, Vector3(cos(a2) * 0.08, 0, sin(a2) * 0.08)), "acier_noir", 6)
+			# fourche : deux flasques jusqu'à la poutre haute
+			for sy in [-0.09, 0.09]:
+				RemonteeKit.poutre(self, c + o2 * sy, c + o2 * sy + Vector3(0, R_PNEU + 0.16, 0), 0.05, 0.012, "galva_pylone", o2)
+			MeshMerge.merge(pn, [], "Pneu")
+			_pneus.append([pn, s2, base, 0.0])
+			x += 0.62
+
+
+func _tourner_pneus(delta: float) -> void:
+	for e in _pneus:
+		var w: float = vitesse_en(e[1]) / R_PNEU
+		e[3] = fposmod(float(e[3]) + w * delta, TAU)
+		(e[0] as Node3D).transform.basis = (e[2] as Basis) * Basis(Vector3.UP, e[3])
+
+
 func _poser_pylones() -> void:
 	for i in range(pylones.size()):
 		var p: Dictionary = pylones[i]
@@ -620,6 +825,39 @@ func _poser_pylones() -> void:
 		for m in py.mobiles:
 			MeshMerge.merge(m, [], "Paire")
 		_pyl.append([py, d])
+	# batteries de galets aux nez des gares (le câble y change de pente)
+	for aval in [true, false]:
+		_batterie_gare(aval)
+
+
+func _batterie_gare(aval: bool) -> void:
+	var L: float = longueur_h()
+	var d: float = 0.0 if aval else L
+	var e: float = 6.0
+	var pente_ligne: float = atan2(y_cable(e) - y_cable(0.0), e) if aval else atan2(y_cable(L) - y_cable(L - e), e)
+	# déviation = pente aval − pente amont ; la gare est horizontale
+	var dev: float = -pente_ligne if aval else pente_ligne
+	if absf(dev) < deg_to_rad(0.8):
+		return
+	var nat: String = "C" if dev < 0.0 else "S"
+	var n: int = clampi(2 * int(ceil(rad_to_deg(absf(dev)) / 2.0)), 4, 16)
+	var py: PyloneRemontee = PyloneRemontee.new()
+	py.style = "gare"
+	py.voie = voie
+	py.sens_montee_droite = sens_droite
+	py.hauteur = H_CABLE_GARE - PyloneRemontee.DESSUS_TRAVERSE_CABLE
+	py.compo_montee = [[n, nat]]
+	py.compo_descente = [[n, nat]]
+	py.pente = pente_ligne * 0.5
+	py.deviation = dev
+	py.position = Vector3(0, terrain(d), -d)
+	py.name = "Batterie%s" % ("Aval" if aval else "Amont")
+	add_child(py)
+	py.construire()
+	MeshMerge.merge(py, py.mobiles, "Batterie")
+	for m in py.mobiles:
+		MeshMerge.merge(m, [], "Paire")
+	_pyl.append([py, d])
 
 
 func _cable() -> void:
@@ -679,6 +917,7 @@ func _process(delta: float) -> void:
 		_placer(i)
 	_dt = 0.0
 	_galets()
+	_tourner_pneus(delta)
 
 
 ## Galets mobiles : la pince qui passe sur un train de galets fait descendre
@@ -688,9 +927,9 @@ func _galets() -> void:
 	var xm: float = _x_brin(true)
 	for e in _vehicules:
 		var s: float = e[1]
-		if zone(s)[0] != "ligne":
-			continue
 		var p: Vector3 = _point_cable(s)[0]
+		if absf(absf(p.x) - voie * 0.5) > 0.3:
+			continue                  # sur la poulie : loin des batteries
 		var d: float = -p.z
 		var montee: bool = signf(p.x) == signf(xm)
 		for q in _pyl:

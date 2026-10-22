@@ -30,6 +30,10 @@ var _bulle: Node3D
 var _portes: Array = []        # [nœud, position fermée, déplacement à l'ouverture]
 var places: int = 6
 var cabine: bool = false
+## Dessus de la plaque de friction de la pince débrayable, au-dessus de
+## l'axe du câble (les pneus du lanceur y appuient), et son décalage latéral.
+const Y_PLAQUE: float = 0.40
+const X_PLAQUE: float = 0.28
 ## Partie SUSPENDUE (suspente + siège / caisse) : un pendule articulé sous la
 ## pince, en `pivot` (repère du véhicule). Balancement longitudinal (φ) et
 ## transversal (ψ) entretenu par les accélérations de la pince — freinage et
@@ -198,45 +202,50 @@ func _pince_debrayable() -> void:
 	RemonteeKit.boite_en(_machoire, Vector3(0.035, 0.12, L * 0.92), Vector3(-0.018, -0.075, 0), corps_m)
 	# bras porteur : du corps vers l'extérieur et le haut, où sont les ressorts
 	RemonteeKit.poutre(p, Vector3(0.05, 0.07, 0), Vector3(0.24, 0.20, 0), 0.10, 0.07, corps_m, Vector3.BACK)
-	RemonteeKit.boite_en(p, Vector3(0.16, 0.08, 0.46), Vector3(0.28, 0.22, 0), corps_m)
+	RemonteeKit.boite_en(p, Vector3(0.16, 0.06, 0.46), Vector3(0.28, 0.19, 0), corps_m)
 	# paquets de ressorts : deux ressorts côte à côte à chaque bout, axe vers le haut
 	var rc: String = _couleur_ressorts()
 	if rc == "rouge_ressort":
 		rc = "ressort_gris"          # Doppelmayr récents : ressorts gris (rouges = ET/A108 anciens)
+	# (ressorts plus courts : la plaque de friction, au-dessus, reste au plus
+	# près du câble, et les pneus du lanceur aussi — retour d'utilisateur, 22/10/2026)
+	var l_r: float = Y_PLAQUE - 0.022 - 0.025 - 0.22
 	for sz in [-1.0, 1.0]:
 		for sx in [-0.045, 0.045]:
 			var r: Node3D = Node3D.new()
-			r.position = Vector3(0.28 + sx, 0.26, sz * 0.15)
+			r.position = Vector3(0.28 + sx, 0.22, sz * 0.15)
 			p.add_child(r)
-			RemonteeKit.ressort(r, Vector3.ZERO, Vector3.UP, _ressort_l0 * 0.75, 0.042, 0.011, 7, rc)
+			RemonteeKit.ressort(r, Vector3.ZERO, Vector3.UP, l_r, 0.042, 0.011, 5, rc)
 			_ressorts.append(r)
 		# coupelle haute des ressorts
-		RemonteeKit.boite_en(p, Vector3(0.16, 0.025, 0.10), Vector3(0.28, 0.26 + _ressort_l0 * 0.75 + 0.012, sz * 0.15), corps_m)
+		RemonteeKit.boite_en(p, Vector3(0.16, 0.025, 0.10), Vector3(0.28, 0.22 + l_r + 0.012, sz * 0.15), corps_m)
 	# levier d'ouverture et son galet (attaqué par la came de gare)
 	_levier = Node3D.new()
 	_levier.name = "Levier"
-	_levier.position = Vector3(0.28, 0.24, 0)
+	_levier.position = Vector3(0.36, 0.20, 0)
 	p.add_child(_levier)
-	RemonteeKit.poutre(_levier, Vector3.ZERO, Vector3(0.10, 0.20, 0), 0.06, 0.05, corps_m, Vector3.BACK)
-	RemonteeKit.cylindre(_levier, 0.055, 0.055, 0.05, Transform3D(Basis(Vector3.FORWARD, PI * 0.5), Vector3(0.12, 0.22, 0)), "polyurethane", 16)
+	RemonteeKit.poutre(_levier, Vector3.ZERO, Vector3(0.12, 0.06, 0), 0.06, 0.05, corps_m, Vector3.BACK)
+	RemonteeKit.cylindre(_levier, 0.055, 0.055, 0.05, Transform3D(Basis(Vector3.FORWARD, PI * 0.5), Vector3(0.14, 0.07, 0)), "polyurethane", 16)
 	# galets de roulement (rail de gare), en tête et en queue, axe en travers
 	for sz in [-1.0, 1.0]:
 		RemonteeKit.cylindre(p, 0.016, 0.016, 0.12, Transform3D(Basis(Vector3.FORWARD, PI * 0.5), Vector3(0.20, 0.11, sz * 0.24)), "acier_noir", 8)
 		RemonteeKit.cylindre(p, 0.065, 0.065, 0.055, Transform3D(Basis(Vector3.FORWARD, PI * 0.5), Vector3(0.25, 0.11, sz * 0.24)), "polyurethane", 18)
 	# galet de guidage (sous le bras, axe vertical)
 	RemonteeKit.cylindre(p, 0.05, 0.05, 0.05, Transform3D(Basis.IDENTITY, Vector3(0.20, -0.02, 0)), "polyurethane", 16)
-	# plaque de friction crantée (entraînement par les pneus de la gare)
-	RemonteeKit.boite_en(p, Vector3(0.015, 0.12, 0.80), Vector3(0.37, 0.20, 0), "noir_mat")
-	var z: float = -0.38
-	while z <= 0.38:
-		RemonteeKit.boite_en(p, Vector3(0.02, 0.10, 0.012), Vector3(0.38, 0.20, z), "noir_mat")
+	# plaque de friction crantée, À PLAT sur le dessus (posée sur les coupelles
+	# des ressorts) : les pneus du lanceur, au-dessus, appuient dessus et
+	# entraînent la pince pendant qu'elle roule sur le rail (retour d'utilisateur, 22/10/2026)
+	RemonteeKit.boite_en(p, Vector3(0.17, 0.022, 0.84), Vector3(0.28, Y_PLAQUE - 0.011, 0), "noir_mat")
+	var z: float = -0.40
+	while z <= 0.40:
+		RemonteeKit.boite_en(p, Vector3(0.15, 0.008, 0.014), Vector3(0.28, Y_PLAQUE + 0.004, z), "noir_mat")
 		z += 0.04
-	# numéro du véhicule sur la plaque (3 chiffres blancs)
+	# numéro du véhicule sur la tranche de la plaque
 	var lab: Label3D = Label3D.new()
 	lab.text = "%03d" % (randi() % 120 + 1)
-	lab.font_size = 48
-	lab.pixel_size = 0.0018
-	lab.position = Vector3(0.39, 0.20, 0.25)
+	lab.font_size = 40
+	lab.pixel_size = 0.0016
+	lab.position = Vector3(0.37, Y_PLAQUE - 0.011, 0.25)
 	lab.rotation.y = PI * 0.5
 	lab.modulate = Color(1, 1, 1)
 	p.add_child(lab)

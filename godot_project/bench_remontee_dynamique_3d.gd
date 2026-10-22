@@ -98,6 +98,45 @@ func _initialize() -> void:
 		print("  balancement : %.1f° à la sortie du lanceur, %.2f° 20 s plus tard (masse %.0f kg)" % [rad_to_deg(amp), rad_to_deg(a2), v0.masse])
 		_verif("balancement : le véhicule balance à la sortie du lanceur, puis s'amortit", amp > deg_to_rad(0.8) and a2 < a1 * 0.7,
 			"%.1f° → %.2f°" % [rad_to_deg(a1), rad_to_deg(a2)])
+		# 4. gares : véhicules dans la partie lente (entre les deux lanceurs)
+		var lente: int = 0
+		var lanceurs: int = 0
+		for e in lg._vehicules:
+			var z: Array = lg.zone(e[1])
+			if z[0] == "gare_aval":
+				var xx: float = z[1]
+				if xx > LigneRemontee.L_FREIN and xx < float(z[2]) - LigneRemontee.L_FREIN:
+					lente += 1
+				else:
+					lanceurs += 1
+		_verif("gare : au moins deux véhicules dans la partie lente (et dans les lanceurs pour le télésiège)", lente >= 2 and (lanceurs >= 1 or lg.famille.begins_with("cabine")),
+			"%d dans la partie lente, %d dans les lanceurs (embarquement %.2f m/s)" % [lente, lanceurs, lg.v_embarquement])
+		# 5. pente : batteries de galets aux nez des gares, et ligne concave aux
+		# pylônes de compression
+		var batt: int = 0
+		for q2 in lg._pyl:
+			if (q2[0] as PyloneRemontee).style == "gare":
+				batt += 1
+		var conc_ok: int = 0
+		var conc_n: int = 0
+		for k2 in range(lg.pylones.size()):
+			if lg._compression(lg.pylones[k2]):
+				conc_n += 1
+				var py2: PyloneRemontee = lg._pyl[k2][0]
+				if py2.deviation < 0.0:
+					conc_ok += 1
+		_verif("pente : batteries de galets aux nez des gares ; câble concave aux pylônes de compression",
+			batt >= 1 and conc_ok == conc_n, "%d batterie(s), %d/%d compressions concaves" % [batt, conc_ok, conc_n])
+		# 6. lanceur de pneus : chaque pneu tourne à la vitesse du véhicule à sa place
+		var v_min: float = INF
+		var v_max: float = 0.0
+		for e2 in lg._pneus:
+			var vp: float = lg.vitesse_en(e2[1])
+			v_min = minf(v_min, vp)
+			v_max = maxf(v_max, vp)
+		_verif("lanceur : pneus au-dessus de la pince, vitesses différentes selon leur place",
+			lg._pneus.size() > 40 and v_max > lg.vitesse * 0.95 and v_min < lg.v_embarquement * 1.05,
+			"%d pneus, de %.2f à %.2f m/s en surface" % [lg._pneus.size(), v_min, v_max])
 		# 3. galets : une pince au droit d'un pylône
 		var q: Array = lg._pyl[3]
 		var py: PyloneRemontee = q[0]

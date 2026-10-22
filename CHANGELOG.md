@@ -5,6 +5,54 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.22.3 — 22 octobre 2026
+
+**Remontées : gares et galets.** Retours d'utilisateur du 22/10/2026 :
+- « pour les Boisses, il y a un angle entre la gare et le câble, et pas de pylône de
+  compression pour changer la pente » ;
+- « tes galets, c'est strictement les mêmes que le funiculaire, tu ajustes juste le
+  diamètre en gardant les proportions, et pareil pour les contacts galets-câble » ;
+- « au moins 2 véhicules dans la partie lente du demi-tour, plus ceux qui arrivent et
+  partent dans les lanceurs » ;
+- « une vraie grosse poulie de demi-tour » ; « ça, c'est pour un TS à pince fixe » ;
+- « les pneus des lanceurs tournent chacun à une vitesse différente selon leur position ;
+  ils sont verticaux et au-dessus de la pince ; la pince roule sur le rail, propulsée
+  par les pneus au-dessus » ; « descends les pneus ».
+
+Ce qui change :
+- **Galets** : ce sont ceux du funiculaire (`RollerMesh` : joues évasées, bande de
+  roulement au fond de la gorge, moyeu à bras), mis à l'échelle sans changer leurs
+  proportions. Le rayon au fond de la gorge est celui où appuie le câble, comme au
+  funiculaire. Les flasques des paires sont écartées comme les fourches du funiculaire.
+- **Changements de pente** :
+  - batteries de galets au nez de chaque gare : le câble y passe de l'horizontale de la
+    gare à la pente de la ligne (compression si la ligne monte en sortant, support
+    sinon ; nombre de galets selon l'angle) ;
+  - pylônes de compression (balancier en C côté montée) toujours placés sous la corde
+    de leurs voisins (câble concave). Si le terrain empêche d'abaisser la tête, le
+    voisin est relevé.
+- **Embarquement aux cabines à 0,25 m/s** : les véhicules se resserrent dans la partie
+  lente (2 cabines au moins aux Boisses, 3 sièges plus 2 dans les lanceurs aux
+  Marmottes). Les Boisses tournent réellement avec peu de cabines : 12 cabines,
+  835 p/h, 225 m d'espacement selon la fiche, depuis que 26 cabines sont parties aux
+  Brévières. Le débit retenu à l'export est la médiane des sources, sauf si la fiche
+  donne l'espacement.
+- **Poulie de demi-tour** :
+  - gare débrayable : disque plein en deux flasques avec trous d'allègement, jante à
+    gorge garnie, gros moyeu, bâti avec chariot de tension (aval) ou réducteur et
+    moteur (amont) ;
+  - télésiège à pince fixe : la grande roue jaune à huit rayons en caisson, d'après
+    photo (Commons).
+- **Lanceurs** : rail sous les galets de roulement de la pince et, au-dessus, une rangée
+  de pneus verticaux (axe en travers, au pas de 0,62 m) qui appuient sur la plaque de
+  friction, désormais à plat sur le dessus de la pince.
+  - Chaque pneu tourne à la vitesse du véhicule à SA place : de 5,5 m/s à l'entrée
+    jusqu'à 1 m/s au milieu (0,25 aux cabines).
+  - Ressorts de pince raccourcis : la plaque, et donc les pneus, sont descendus à
+    0,40 m au-dessus du câble.
+- Bancs : remontee_dynamique (pneus, gares, pentes), embarquement (trajet en cabine
+  porté à 240 s : embarquement plus lent), aller_remontee, skieur.
+
 ## 1.22.2 — 22 octobre 2026
 
 **Remontées : galets mobiles, gaines effilées, lanceur sans à-coup, balancement.** Retour
