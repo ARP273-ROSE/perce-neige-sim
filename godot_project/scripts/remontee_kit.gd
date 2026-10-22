@@ -19,9 +19,10 @@ const COULEURS: Dictionary = {
 	"rouge_ressort": [Color(0.72, 0.10, 0.08), 0.5, 0.3],
 	"jaune_ressort": [Color(0.92, 0.78, 0.10), 0.5, 0.3],
 	"bleu_ressort": [Color(0.12, 0.30, 0.72), 0.5, 0.3],
-	"assise_bleue": [Color(0.10, 0.24, 0.55), 0.8, 0.0],
-	"assise_noire": [Color(0.06, 0.06, 0.07), 0.8, 0.0],
-	"assise_grise": [Color(0.33, 0.34, 0.36), 0.85, 0.0],
+	"assise_bleue": [Color(0.10, 0.26, 0.58), 0.62, 0.0],
+	"assise_noire": [Color(0.13, 0.13, 0.15), 0.62, 0.0],          # garniture synthétique, pas un aplat noir
+	"assise_grise": [Color(0.36, 0.37, 0.40), 0.70, 0.0],
+	"coque_siege": [Color(0.22, 0.23, 0.25), 0.45, 0.15],      # coque plastique du dossier, bac d'assise
 	"cable": [Color(0.30, 0.30, 0.30), 0.40, 0.85],
 	"caillebotis": [Color(0.55, 0.57, 0.58), 0.6, 0.7],
 	"blanc_plaque": [Color(0.94, 0.94, 0.92), 0.6, 0.0],
@@ -209,6 +210,70 @@ static func galet(parent: Node3D, c: Vector3, r: float = 0.21, _l: float = 0.0, 
 	# axe Y du maillage → X local, mise à l'échelle uniforme
 	mi.transform = Transform3D(Basis(Vector3.FORWARD, PI * 0.5).scaled(Vector3(k, k, k)), c)
 	parent.add_child(mi)
+
+
+## Coussin : boîte aux arêtes arrondies (rayon r), taille `taille`, centrée
+## en `xf`. Maillage partagé par (taille, r) ; un pas d'arrondi par arête
+## (normales lissées) pour rester léger : des dizaines de sièges à l'écran.
+static var _coussins: Dictionary = {}
+
+
+static func coussin(parent: Node3D, taille: Vector3, xf: Transform3D, m: String, r: float = 0.04) -> MeshInstance3D:
+	var cle: String = "%.3f|%.3f|%.3f|%.3f" % [taille.x, taille.y, taille.z, r]
+	if not _coussins.has(cle):
+		_coussins[cle] = _maillage_coussin(taille * 0.5, minf(r, minf(taille.x, minf(taille.y, taille.z)) * 0.5 - 0.001))
+	var mesh: ArrayMesh = _coussins[cle]
+	var mi: MeshInstance3D = MeshInstance3D.new()
+	mi.mesh = mesh
+	mi.material_override = mat(m)
+	mi.name = m
+	mi.transform = xf
+	parent.add_child(mi)
+	return mi
+
+
+static func _maillage_coussin(h: Vector3, r: float) -> ArrayMesh:
+	# abscisses d'une face : bord, un pas sur l'arrondi, intérieur, symétrique
+	var axe = func(hh: float) -> Array:
+		var out: Array = [-hh, -hh + r * (1.0 - cos(PI / 4.0)), -hh + r]
+		var o2: Array = out.duplicate()
+		o2.reverse()
+		for v in o2:
+			out.append(-float(v))
+		return out
+	var st: SurfaceTool = SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var inner: Vector3 = h - Vector3(r, r, r)
+	# six faces : (axe normal, signe)
+	for f in [[0, 1.0], [0, -1.0], [1, 1.0], [1, -1.0], [2, 1.0], [2, -1.0]]:
+		var n: int = f[0]
+		var sg: float = f[1]
+		var u_ax: int = (n + 1) % 3
+		var v_ax: int = (n + 2) % 3
+		var us: Array = axe.call(h[u_ax])
+		var vs: Array = axe.call(h[v_ax])
+		var grille: Array = []
+		for u in us:
+			var ligne: Array = []
+			for v in vs:
+				var q: Vector3 = Vector3.ZERO
+				q[n] = sg * h[n]
+				q[u_ax] = u
+				q[v_ax] = v
+				var c: Vector3 = q.clamp(-inner, inner)
+				var d: Vector3 = (q - c).normalized()
+				ligne.append([c + d * r, d])
+			grille.append(ligne)
+		for i in range(us.size() - 1):
+			for j in range(vs.size() - 1):
+				var quad: Array = [grille[i][j], grille[i + 1][j], grille[i + 1][j + 1], grille[i][j + 1]]
+				var tri: Array = [quad[0], quad[1], quad[2], quad[0], quad[2], quad[3]]
+				if sg > 0.0:          # Godot : faces avant dans le sens horaire
+					tri = [quad[0], quad[2], quad[1], quad[0], quad[3], quad[2]]
+				for p in tri:
+					st.set_normal(p[1])
+					st.add_vertex(p[0])
+	return st.commit()
 
 
 ## Ressort hélicoïdal d'axe `axe` (unitaire), de longueur `l`.

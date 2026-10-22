@@ -85,6 +85,21 @@ passer le toit des cabines.
   fermées, garde-corps, bulle, portes, téléski, 3S, téléphérique).
 - `shot_ligne_remontee.gd <clé>` : une ligne complète sur son profil réel.
 - `shot_remontees_jeu.gd` : les lignes posées dans le jeu.
+- `shot_cabines.gd` / `shot_sieges.gd` : studio des cabines (portes ouvertes, intérieur) et des sièges.
+
+### Design des cabines et des sièges (1.22.7)
+
+- **Cabine** (`VehiculeRemontee._maillage_cabine`) : la caisse est un maillage lissé, anneau par anneau,
+  d'après le profil `_profil_cabine` : rectangle à coins arrondis, fond en baignoire, flancs bombés,
+  bourrelet pare-chocs, vitrage en bandeau entre deux joints noirs, montants d'angle fins, toit en
+  dôme (blanc sur l'Omega IV), grilles d'aération. Les deux vantaux sont découpés dans la même
+  surface et coulissent par-dessus les panneaux fixes. Intérieur : plancher strié, banquettes
+  rembourrées, plafonnier. Suspente cintrée avec rotule de toit. Les maillages sont partagés par
+  famille ; les matériaux de caisse sont double face, pour voir l'intérieur à travers les vitres.
+- **Siège** : coussins d'assise et de dossier rembourrés (`RemonteeKit.coussin`, boîte aux arêtes
+  arrondies, maillage partagé, environ 300 triangles), sur un bac d'assise et une coque de dossier
+  pleine largeur, avec des accoudoirs garnis et des attaches du dossier sous l'arceau. Garnitures
+  satinées : le noir n'est plus un aplat.
 
 ## Dans le jeu (v1.21.0)
 
