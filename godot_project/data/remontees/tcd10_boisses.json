@@ -10,6 +10,7 @@
  "espacement": 225.75,
  "voie": 6.1,
  "sens_droite": false,
+ "diametre_cable": 47.0,
  "famille": "cabine_omega4",
  "aval": [
   45.4981344,

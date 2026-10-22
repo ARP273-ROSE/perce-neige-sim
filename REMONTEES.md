@@ -86,5 +86,13 @@ tableau des balanciers concordent pylône par pylône. Elles se construisent au 
 Les véhicules sont visibles jusqu'à 700 m, les pylônes et le câble jusqu'à 3 km. Une ligne dont le
 milieu est à plus de 2,5 km de la caméra ne fait plus avancer ses véhicules.
 
-Reste à faire : poser toutes les lignes du domaine, les collisions du skieur, monter à bord, des
+Depuis la 1.22.0 :
+- on monte à bord : à pied dans les cabines, et sur les sièges par les portillons et la
+  ligne d'arrêt (`RemonteesDomaine._embarquement`) ;
+- collisions des pylônes, des gares et des véhicules ;
+- câble en chaînette (`LigneRemontee.chainette`) ;
+- suspente toujours à l'extérieur de la boucle, avec des véhicules en miroir sur les lignes
+  qui montent à gauche.
+
+Reste à faire : poser toutes les lignes du domaine, des
 gares plus détaillées, le téléski en ligne complète, le 3S et le téléphérique en ligne complète.

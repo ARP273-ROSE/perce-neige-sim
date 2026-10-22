@@ -105,7 +105,10 @@ func construire() -> void:
 	RemonteeKit.boite_en(self, Vector3(1.6, 0.05, 1.6), Vector3(0, y_tete - 0.55, 0), "caillebotis")
 	_garde_corps_carre(Vector3(0, y_tete - 0.55, 0), 1.6, 1.6, "galva")
 	# --- traverse caisson, perpendiculaire à la ligne
-	var lt: float = voie + 1.3
+	# la traverse s'arrête au droit du câble (+ 15 cm) : au-delà passent la
+	# pince et la suspente, à l'extérieur du train de galets — elle dépassait
+	# de 65 cm, en plein dans leur chemin (vu le 22/10/2026)
+	var lt: float = voie + 0.30
 	RemonteeKit.boite_en(self, Vector3(lt, 0.55, 0.50), Vector3(0, h - 0.275, 0), peint)
 	# goussets fût / traverse
 	for s in [-1.0, 1.0]:

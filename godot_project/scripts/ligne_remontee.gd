@@ -34,7 +34,12 @@ var H_CABLE_GARE: float = 3.9        # câble au-dessus du quai (selon le véhic
 const GARDE: float = 6.5              # câble ≥ terrain + GARDE en ligne
 const L_GARE: float = 16.0            # du nez de gare à l'axe de la poulie
 const L_FREIN: float = 11.0           # zone de freinage / d'accélération
-const K_FLECHE: float = 5.6e-5        # flèche = K × portée² (câble Ø 47, ~300 kN)
+## Chaînette : y = a·cosh((x − x0)/a) + c entre deux appuis, a = H / w
+## (tension horizontale / poids linéique). Câble Ø 47 mm ≈ 8,6 kg/m ;
+## véhicules (et passagers sur le brin montée) répartis à l'espacement.
+var diametre_cable: float = 47.0      # mm
+var _a_montee: float = 800.0          # paramètre de chaînette (m), brin chargé
+var _a_descente: float = 1200.0       # brin à vide
 
 var _boucle: PackedVector3Array = PackedVector3Array()   # chemin des véhicules
 var _cumul: PackedFloat32Array = PackedFloat32Array()
@@ -73,6 +78,13 @@ func construire() -> void:
 	_construire_boucle()
 	_cable()
 	_peupler()
+	if not (famille.begins_with("cabine") or famille.begins_with("perche")):
+		_portillons(true)
+		_portillons(false)
+	if avec_collisions:
+		_collisions_fixes()
+		for i in range(_vehicules.size()):
+			_corps_vehicule(i)
 
 
 # --- géométrie du câble ---------------------------------------------------------
@@ -87,7 +99,34 @@ func _points_appui() -> Array:
 	return pts
 
 
+## Paramètres de chaînette des deux brins. Tension horizontale ~300 kN pour
+## un câble de 47 mm, à l'échelle de la section ; poids : câble + véhicules
+## (+ 80 kg par place sur le brin montée), répartis à l'espacement.
+func _parametres_chainette() -> void:
+	var g: float = 9.81
+	var w_cable: float = 0.0039 * diametre_cable * diametre_cable * g      # N/m
+	var cab: bool = famille.begins_with("cabine")
+	var places: int = VehiculeRemontee.DESCRIPTIONS.get(famille, ["", 6, ""])[1]
+	var m_v: float = (850.0 if cab else 95.0 * places + 80.0)              # kg à vide, pince comprise
+	var e: float = maxf(espacement, 8.0)
+	var w_desc: float = w_cable + m_v * g / e
+	var w_mont: float = w_desc + 80.0 * places * g / e
+	var H: float = 300000.0 * pow(diametre_cable / 47.0, 2.0)
+	_a_montee = H / w_mont
+	_a_descente = H / w_desc
+
+
+## Hauteur de la chaînette de paramètre a passant par (x1, y1) et (x2, y2), en x.
+static func chainette(x: float, x1: float, y1: float, x2: float, y2: float, a: float) -> float:
+	var L: float = maxf(x2 - x1, 0.01)
+	var sh: float = sinh(L / (2.0 * a))
+	var xm: float = (x1 + x2) * 0.5 - a * asinh((y2 - y1) / (2.0 * a * maxf(sh, 1e-9)))
+	var c: float = y1 - a * cosh((x1 - xm) / a)
+	return a * cosh((x - xm) / a) + c
+
+
 func _calculer_tetes() -> void:
+	_parametres_chainette()
 	_tetes.clear()
 	for p in pylones:
 		_tetes.append(terrain(float(p["d"])) + 9.0)
@@ -97,13 +136,12 @@ func _calculer_tetes() -> void:
 		for i in range(pts.size() - 1):
 			var a: Array = pts[i]
 			var b: Array = pts[i + 1]
-			var portee: float = b[0] - a[0]
-			var f: float = K_FLECHE * portee * portee
 			var pire: float = 0.0
 			for k in range(1, 20):
 				var u: float = float(k) / 20.0
 				var d: float = lerpf(a[0], b[0], u)
-				var yc: float = lerpf(a[1], b[1], u) - 4.0 * f * u * (1.0 - u)
+				# brin montée (chargé) : la flèche la plus forte
+				var yc: float = chainette(d, a[0], a[1], b[0], b[1], _a_montee)
 				pire = maxf(pire, terrain(d) + GARDE - yc)
 			if pire > 0.05:
 				# on relève la ou les têtes de la portée (pas les gares)
@@ -119,16 +157,14 @@ func _calculer_tetes() -> void:
 		_tetes[i] = clampf(_tetes[i], t + 6.5, t + 32.0)
 
 
-## Hauteur du câble (avant flèche) à la distance d.
-func y_cable(d: float) -> float:
+## Hauteur du câble (chaînette) à la distance d, brin montée ou descente.
+func y_cable(d: float, montee: bool = true) -> float:
 	var pts: Array = _points_appui()
 	for i in range(pts.size() - 1):
 		var a: Array = pts[i]
 		var b: Array = pts[i + 1]
 		if d <= b[0] or i == pts.size() - 2:
-			var portee: float = maxf(b[0] - a[0], 0.01)
-			var u: float = clampf((d - a[0]) / portee, 0.0, 1.0)
-			return lerpf(a[1], b[1], u) - 4.0 * K_FLECHE * portee * portee * u * (1.0 - u)
+			return chainette(clampf(d, a[0], b[0]), a[0], a[1], b[0], b[1], _a_montee if montee else _a_descente)
 	return 0.0
 
 
@@ -176,9 +212,9 @@ func _construire_boucle() -> void:
 	# 4. brin descente, jusqu'au nez de la gare aval (le point de départ)
 	d = L - 3.0
 	while d > 0.0:
-		_ajouter(Vector3(xd, y_cable(d), -d))
+		_ajouter(Vector3(xd, y_cable(d, false), -d))
 		d -= 3.0
-	longueur_boucle = _longueur() + Vector3(xd, y_cable(1.5), -1.5).distance_to(Vector3(xd, ya, 0.0))
+	longueur_boucle = _longueur() + Vector3(xd, y_cable(1.5, false), -1.5).distance_to(Vector3(xd, ya, 0.0))
 
 
 func _ajouter(p: Vector3) -> void:
@@ -193,8 +229,47 @@ func _longueur() -> float:
 	return _cumul[_cumul.size() - 1] if _cumul.size() > 0 else 0.0
 
 
-## Point et direction (horizontale) de la boucle à l'abscisse s.
+## Point et direction (horizontale) de la boucle à l'abscisse s, pour un
+## véhicule : le câble lui-même ne plonge pas (voir `_plongee`).
 func point(s: float) -> Array:
+	var r: Array = _point_cable(s)
+	var dy: float = _plongee(s)
+	if dy != 0.0:
+		r[0] = (r[0] as Vector3) + Vector3(0, dy, 0)
+	return r
+
+
+## Embarquement des télésièges, comme dans les vraies gares : on attend
+## derrière les PORTILLONS, ils s'ouvrent après le passage d'un siège, on
+## avance jusqu'à la LIGNE D'ARRÊT et le siège suivant arrive par derrière.
+## Pour passer au-dessus des portillons fermés, les sièges contournent la
+## poulie 0,85 m plus haut et « plongent » à hauteur d'assise juste après
+## eux (retour d'utilisateur, 22/10/2026).
+const PLONGEE: float = 0.85
+
+
+func x_arret(l: float) -> float:
+	return l - L_FREIN - 2.0          # ligne d'arrêt, encore à vitesse d'embarquement
+
+
+func x_portillons(l: float) -> float:
+	return x_arret(l) - 2.2
+
+
+func _plongee(s: float) -> float:
+	if famille.begins_with("cabine") or famille.begins_with("perche"):
+		return 0.0
+	var z: Array = zone(s)
+	if z[0] == "ligne":
+		return 0.0
+	var x: float = z[1]
+	var l: float = z[2]
+	var monte: float = smoothstep(L_FREIN + 2.0, L_FREIN + 4.5, x)        # après le débarquement
+	var descend: float = 1.0 - smoothstep(x_portillons(l) + 0.4, x_arret(l) - 0.5, x)
+	return PLONGEE * monte * descend
+
+
+func _point_cable(s: float) -> Array:
 	s = fposmod(s, longueur_boucle)
 	var n: int = _boucle.size()
 	if s >= _cumul[n - 1]:
@@ -293,6 +368,224 @@ func _gare(aval: bool) -> void:
 	MeshMerge.merge(g, [], "Gare")
 
 
+## Collisions fixes : pylônes (massif, fût, traverse) et gares (dalle,
+## poteaux, bâti de poulie) ; les véhicules portent la leur.
+var avec_collisions: bool = false
+
+
+func _collisions_fixes() -> void:
+	var corps: StaticBody3D = StaticBody3D.new()
+	corps.name = "CollisionsLigne"
+	corps.collision_layer = CollisionsJeu.COUCHE_DECOR
+	corps.collision_mask = 0
+	add_child(corps)
+	var boite := func(taille: Vector3, centre: Vector3) -> void:
+		var cs: CollisionShape3D = CollisionShape3D.new()
+		var b: BoxShape3D = BoxShape3D.new()
+		b.size = taille
+		cs.shape = b
+		cs.position = centre
+		corps.add_child(cs)
+	for i in range(pylones.size()):
+		var d: float = float(pylones[i]["d"])
+		var t: float = terrain(d)
+		var h: float = _tetes[i] - t - PyloneRemontee.DESSUS_TRAVERSE_CABLE
+		boite.call(Vector3(2.4, 0.7, 2.4), Vector3(0, t - 0.15, -d))
+		var cs2: CollisionShape3D = CollisionShape3D.new()
+		var cy: CylinderShape3D = CylinderShape3D.new()
+		cy.radius = 0.55 + h * 0.012
+		cy.height = h
+		cs2.shape = cy
+		cs2.position = Vector3(0, t + h * 0.5, -d)
+		corps.add_child(cs2)
+		boite.call(Vector3(voie + 0.30, 0.55, 0.5), Vector3(0, t + h - 0.275, -d))
+	var L: float = longueur_h()
+	for aval in [true, false]:
+		var y0: float = terrain(0.0 if aval else L)
+		var zc: float = L_GARE if aval else -L - L_GARE
+		var znez: float = 0.0 if aval else -L
+		var dz: float = zc - znez
+		var zm: float = (zc + znez) * 0.5 + signf(dz) * 1.5
+		var long_g: float = absf(dz) + voie * 0.5 + 3.5
+		boite.call(Vector3(voie + 4.0, 0.4, long_g), Vector3(0, y0 - 0.2, zm))
+		for sx in [-1.0, 1.0]:
+			for k in [-1.0, 1.0]:
+				boite.call(Vector3(0.30, H_CABLE_GARE + 2.4, 0.30),
+					Vector3(sx * (voie * 0.5 + 1.6), y0 + (H_CABLE_GARE + 2.4) * 0.5, zm + k * long_g * 0.35))
+		boite.call(Vector3(2.2, 1.0, 2.6), Vector3(0, y0 + H_CABLE_GARE + 1.9, zc))
+
+
+## Corps de collision d'un véhicule : À PART du véhicule (qui peut être en
+## miroir, ce que la physique ne supporte pas), posé à chaque image avec une
+## base directe. C'est lui que le skieur prend pour support (meta « vehicule ») :
+## dans une cabine, il est emporté comme dans une rame du funiculaire.
+var _corps: Array = []          # par véhicule : [StaticBody3D, [CollisionShape3D des portes]]
+
+
+func _corps_vehicule(i: int) -> void:
+	var v: VehiculeRemontee = _vehicules[i][0]
+	var formes: Array = v.formes_collision(1.0 if sens_droite else -1.0)
+	if formes.is_empty():
+		_corps.append(null)
+		return
+	var corps: StaticBody3D = StaticBody3D.new()
+	corps.name = "Corps_%d" % i
+	corps.collision_layer = CollisionsJeu.COUCHE_VEHICULE
+	corps.collision_mask = 0
+	corps.set_meta("vehicule", corps)
+	add_child(corps)
+	var portes: Array = []
+	for f in formes:
+		var cs: CollisionShape3D = CollisionShape3D.new()
+		var b: BoxShape3D = BoxShape3D.new()
+		b.size = f[0]
+		cs.shape = b
+		cs.position = f[1]
+		corps.add_child(cs)
+		if f[2]:
+			portes.append(cs)
+	while _corps.size() < i:
+		_corps.append(null)
+	_corps.append([corps, portes])
+	_placer(i)
+
+
+# --- portillons ---------------------------------------------------------------------
+
+var _portillons_gares: Array = []      # [aval, [vantaux], [formes de collision], t depuis passage, x précédent]
+
+
+## Portillons à travers la voie d'embarquement, un vantail par paire de
+## places, pivotant sur un poteau ; ligne d'arrêt jaune devant.
+func _portillons(aval: bool) -> void:
+	var l: float = longueur_zone(aval)
+	var a: Array = _point_cable(s_gare(aval, x_portillons(l)))
+	var p: Vector3 = a[0]
+	var dirh: Vector3 = a[1]
+	dirh.y = 0.0
+	dirh = dirh.normalized()
+	var y0: float = terrain(0.0 if aval else longueur_h())
+	var g: Node3D = Node3D.new()
+	g.name = "Portillons" + ("Aval" if aval else "Amont")
+	g.transform = Transform3D(Basis.looking_at(dirh, Vector3.UP), Vector3(p.x, y0, p.z))
+	add_child(g)
+	var places: int = VehiculeRemontee.DESCRIPTIONS.get(famille, ["", 6, ""])[1]
+	var W: float = 0.50 * places + 0.20
+	var n: int = maxi(1, places / 2)
+	var lv: float = W / n
+	var vantaux: Array = []
+	var formes: Array = []
+	var corps: StaticBody3D = StaticBody3D.new()
+	corps.collision_layer = CollisionsJeu.COUCHE_DECOR
+	corps.collision_mask = 0
+	g.add_child(corps)
+	for k in range(n + 1):
+		var x: float = -W * 0.5 + k * lv
+		RemonteeKit.cylindre(g, 0.04, 0.04, 1.05, Transform3D(Basis.IDENTITY, Vector3(x, 0.525, 0)), "acier", 8)
+	for k in range(n):
+		var x0: float = -W * 0.5 + k * lv
+		var v: Node3D = Node3D.new()
+		v.position = Vector3(x0 + 0.05, 0, 0)
+		g.add_child(v)
+		RemonteeKit.boite_en(v, Vector3(lv - 0.12, 0.05, 0.04), Vector3((lv - 0.12) * 0.5, 0.95, 0), "jaune_securite")
+		RemonteeKit.boite_en(v, Vector3(lv - 0.12, 0.05, 0.04), Vector3((lv - 0.12) * 0.5, 0.55, 0), "jaune_securite")
+		RemonteeKit.boite_en(v, Vector3(0.04, 0.45, 0.04), Vector3(lv - 0.14, 0.75, 0), "jaune_securite")
+		vantaux.append(v)
+		var cs: CollisionShape3D = CollisionShape3D.new()
+		var b: BoxShape3D = BoxShape3D.new()
+		b.size = Vector3(lv - 0.10, 1.0, 0.08)
+		cs.shape = b
+		cs.position = Vector3(x0 + lv * 0.5, 0.5, 0)
+		corps.add_child(cs)
+		formes.append(cs)
+	# ligne d'arrêt (jaune) au sol
+	var q: Vector3 = point_embarquement(aval)
+	var ls: Node3D = Node3D.new()
+	ls.transform = Transform3D(Basis.looking_at(dirh, Vector3.UP), Vector3(q.x, y0 + 0.01, q.z))
+	add_child(ls)
+	RemonteeKit.boite_en(ls, Vector3(W, 0.02, 0.12), Vector3.ZERO, "jaune_securite")
+	RemonteeKit.boite_en(ls, Vector3(W, 0.02, 0.05), Vector3(0, 0, 0.25), "joint")
+	_portillons_gares.append([aval, vantaux, formes, 99.0, 0.0])
+
+
+## Ouverts 0,3 à 3 s après le passage d'un siège à la ligne d'arrêt.
+func _maj_portillons(delta: float) -> void:
+	for pg in _portillons_gares:
+		var aval: bool = pg[0]
+		var l: float = longueur_zone(aval)
+		var xa: float = x_arret(l)
+		pg[3] = float(pg[3]) + delta
+		for e in _vehicules:
+			var z: Array = zone(e[1])
+			if z[0] == ("gare_aval" if aval else "gare_amont"):
+				var x: float = z[1]
+				if x >= xa and x - vitesse_en(e[1]) * delta < xa:
+					pg[3] = 0.0
+		var t: float = pg[3]
+		var ouv: float = clampf(minf((t - 0.3) / 0.5, (3.0 - t) / 0.5), 0.0, 1.0)
+		for v in pg[1]:
+			(v as Node3D).rotation.y = -1.45 * ouv
+		for cs in pg[2]:
+			(cs as CollisionShape3D).disabled = ouv > 0.5
+
+
+# --- embarquement ------------------------------------------------------------------
+
+## Le véhicule (indice) qui passe au point d'embarquement de la gare (aval
+## ou amont), juste après le demi-tour, encore à vitesse d'embarquement.
+func vehicule_a_embarquer(aval: bool) -> int:
+	var nom: String = "gare_aval" if aval else "gare_amont"
+	for i in range(_vehicules.size()):
+		var z: Array = zone(_vehicules[i][1])
+		if z[0] == nom:
+			var x: float = z[1]
+			var l: float = z[2]
+			if x > x_arret(l) - 1.4 and x < x_arret(l) + 0.6:
+				return i
+	return -1
+
+
+## Abscisse (boucle) d'un point de la gare : x depuis l'entrée de sa zone.
+func s_gare(aval: bool, x: float) -> float:
+	var z: Array = _zones[0] if aval else _zones[1]
+	return float(z[0]) + x
+
+
+func longueur_zone(aval: bool) -> float:
+	var z: Array = _zones[0] if aval else _zones[1]
+	return float(z[1]) - float(z[0])
+
+
+## Le véhicule i vient d'arriver en gare (après le freinage) : [gare aval ?] ou [].
+func arrivee(i: int) -> Array:
+	var z: Array = zone(_vehicules[i][1])
+	if z[0] == "ligne":
+		return []
+	var x: float = z[1]
+	if x > L_FREIN and x < L_FREIN + 2.0:
+		return [z[0] == "gare_aval"]
+	return []
+
+
+func vehicule(i: int) -> VehiculeRemontee:
+	return _vehicules[i][0]
+
+
+## Point (local) de la ligne d'arrêt : sur le quai, au droit du passage
+## des véhicules, là où l'on attend le siège.
+func point_embarquement(aval: bool) -> Vector3:
+	var p: Vector3 = _point_cable(s_gare(aval, x_arret(longueur_zone(aval))))[0]
+	return Vector3(p.x, terrain(0.0 if aval else longueur_h()) + 0.05, p.z)
+
+
+## Point (local) de débarquement : sur le quai, à côté du véhicule arrêté.
+func point_debarquement(aval: bool) -> Vector3:
+	var L: float = longueur_h()
+	var x: float = _x_brin(not aval)
+	var z: float = (L_FREIN + 1.0) if aval else (-L - L_FREIN - 1.0)
+	return Vector3(x + signf(x) * 1.6, terrain(0.0 if aval else L) + 0.05, z)
+
+
 func _poser_pylones() -> void:
 	for i in range(pylones.size()):
 		var p: Dictionary = pylones[i]
@@ -358,6 +651,7 @@ func nombre_vehicules() -> int:
 
 
 func _process(delta: float) -> void:
+	_maj_portillons(delta)
 	for i in range(_vehicules.size()):
 		var s: float = _vehicules[i][1]
 		_vehicules[i][1] = fposmod(s + vitesse_en(s) * delta, longueur_boucle)
@@ -372,7 +666,16 @@ func _placer(i: int) -> void:
 	dirh.y = 0.0
 	if dirh.length() < 0.001:
 		dirh = Vector3.FORWARD
-	v.transform = Transform3D(Basis.looking_at(dirh.normalized(), Vector3.UP), pt[0])
+	var b: Basis = Basis.looking_at(dirh.normalized(), Vector3.UP)
+	# la suspente est toujours à l'EXTÉRIEUR de la boucle : à droite du
+	# véhicule si la ligne monte à droite, à gauche sinon (véhicule en
+	# miroir) — avant, sur les lignes « Gauche » (Boisses, Marmottes), elle
+	# passait côté pylône, dans les balanciers (retour d'utilisateur, 22/10/2026)
+	if i < _corps.size() and _corps[i] != null:
+		(_corps[i][0] as Node3D).transform = Transform3D(b, pt[0])
+	if not sens_droite:
+		b = b * Basis.from_scale(Vector3(-1, 1, 1))
+	v.transform = Transform3D(b, pt[0])
 	# pièces animées selon la place dans la gare
 	var z: Array = zone(s)
 	var ouverture: float = 0.0
@@ -397,6 +700,9 @@ func _placer(i: int) -> void:
 			var l2: float = z[2]
 			porte = clampf((minf(x2, l2 - x2) - L_FREIN) / 2.0, 0.0, 1.0)
 		v.portes(porte)
+		if i < _corps.size() and _corps[i] != null:
+			for cs in _corps[i][1]:
+				(cs as CollisionShape3D).disabled = porte > 0.5
 
 
 func _distance_depuis_sortie(s: float) -> float:

@@ -5,6 +5,55 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.22.0 — 22 octobre 2026
+
+**Remontées : monter à bord, collisions, câble en chaînette.** Retours d'utilisateur du
+22/10/2026 :
+- « j'ai pas réussi à monter dedans et je suis passé à travers tout » ;
+- « les pinces sont vers l'intérieur » (sur les cabines) ;
+- « faut faire un cosh pour le câble » ;
+- « on monte en marchant comme le funi » ;
+- « pour les sièges, l'embarquement avec les portillons : on avance jusqu'au stop et ça
+  s'assoit tout seul quand le siège arrive ».
+
+Ce qui change :
+- **Suspente du bon côté** : elle est toujours à l'extérieur de la boucle. Les deux lignes
+  de démonstration montent à gauche (fiches : « Sens de montée : Gauche ») ; leurs
+  véhicules étaient construits pour une ligne qui monte à droite, la suspente passait donc
+  côté pylône, dans les balanciers. Ils sont maintenant mis en miroir sur ces lignes.
+- **Câble en chaînette** (cosinus hyperbolique) :
+  - paramètre = tension horizontale / poids linéique ;
+  - poids : câble (diamètre réel exporté), véhicules et passagers répartis à
+    l'espacement ;
+  - tension : environ 300 kN pour 47 mm ;
+  - le brin montée, chargé, a plus de flèche que le brin descente ;
+  - la hauteur des pylônes est calculée sur cette courbe.
+- **Traverse des pylônes** : elle s'arrête au droit du câble (+ 15 cm). Elle dépassait de
+  65 cm, en plein dans le chemin de la pince et de la suspente.
+- **Collisions** : massif, fût et traverse des pylônes ; dalle, poteaux et bâti des gares ;
+  pour chaque véhicule, un corps de collision à part (le véhicule peut être en miroir, ce
+  que la physique ne supporte pas) : assise et dossier d'un siège, plancher, toit et
+  parois d'une cabine. La paroi côté portes est active portes fermées.
+- **Télécabine** : on y entre à pied, portes ouvertes. Le corps de collision porte le
+  skieur comme une rame du funiculaire, et on ressort à pied à l'arrivée.
+- **Télésiège** :
+  - on attend derrière les **portillons** jaunes, qui s'ouvrent après le passage de
+    chaque siège ;
+  - on avance jusqu'à la **ligne d'arrêt**, et le siège qui arrive par derrière nous
+    assoit tout seul, skis aux pieds ou non ;
+  - le siège contourne la poulie 0,85 m plus haut et « plonge » à hauteur d'assise après
+    les portillons ;
+  - à l'arrivée, on se lève hors du couloir des sièges ; pas de nouvel embarquement
+    pendant 6 s.
+- **Économie** : la distance des lignes se mesure depuis le skieur (sa caméra le suit).
+  En test, la caméra courante restait au funiculaire et la ligne des Boisses était arrêtée.
+- **Banc `bench_embarquement_3d.gd`** :
+  - Marmottes Express : portillons ouverts, assis après 6,4 s à la ligne d'arrêt, 236 s
+    de trajet (+306 m), debout à l'arrivée ;
+  - Boisses : entré dans une cabine, porté par elle et emporté de 224 m sans passer à
+    travers.
+- Autres bancs verts : aller_remontee, skieur, quai, ski_expert, boucle_salle, ergonomie.
+
 ## 1.21.1 — 22 octobre 2026
 
 **Aller à une remontée depuis la carte.** Retour d'utilisateur du 22/10/2026 : « mais j'y

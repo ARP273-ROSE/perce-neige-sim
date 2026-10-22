@@ -194,6 +194,49 @@ static func hauteur_cable_gare(fam: String) -> float:
 	return hs + 0.12 + 0.98 - 0.045 + 0.48
 
 
+## Où poser le skieur assis (repère du véhicule) : origine aux pieds, 0,42 m
+## devant le bassin (convention de SkieurJoueur.asseoir), tourné vers −Z.
+## Siège : place `i` ; cabine : banquette arrière, face à l'amont.
+func place_assise(i: int = -1) -> Vector3:
+	if cabine:
+		var hs: float = 1.15
+		var y_banc: float = -hs - 0.10 - 2.25 + 0.62
+		var xi: float = clampf(float(i if i >= 0 else 2) - 2.0, -2.0, 2.0) * 0.36
+		return Vector3(xi, y_banc - 0.45, 0.70 - 0.42)
+	var W: float = _largeur_siege()
+	var k: int = i if i >= 0 else maxi(0, places / 2 - 1)
+	var cx: float = -W * 0.5 + 0.10 + 0.50 * (k + 0.5)
+	var y_assise: float = -_haut_suspente() - 0.12 - 0.98 + 0.045
+	return Vector3(cx, y_assise - 0.45, -0.42)
+
+
+## Formes de collision (repère NON MIROIR du véhicule, extérieur de la
+## boucle du côté `cote_ext` = ±1 en x) : assise et dossier d'un siège ;
+## plancher, toit et parois d'une cabine, la paroi côté portes à part (on
+## l'active portes fermées). [[taille, centre, est_porte]…]
+func formes_collision(cote_ext: float) -> Array:
+	var f: Array = []
+	if famille.begins_with("perche") or famille == "cabine_3s" or famille == "cabine_tph":
+		return f
+	if cabine:
+		var hs: float = 1.15
+		var yb: float = -hs - 0.10 - 2.25
+		f.append([Vector3(1.9, 0.14, 2.0), Vector3(0, yb + 0.07, 0), false])            # plancher
+		f.append([Vector3(1.9, 0.10, 2.0), Vector3(0, -hs - 0.15, 0), false])           # toit
+		f.append([Vector3(1.9, 2.2, 0.06), Vector3(0, yb + 1.15, -0.97), false])        # face avant
+		f.append([Vector3(1.9, 2.2, 0.06), Vector3(0, yb + 1.15, 0.97), false])         # face arrière
+		f.append([Vector3(0.06, 2.2, 2.0), Vector3(-cote_ext * 0.92, yb + 1.15, 0), false])  # côté plein
+		f.append([Vector3(0.06, 2.2, 2.0), Vector3(cote_ext * 0.92, yb + 1.15, 0), true])    # côté portes
+		f.append([Vector3(1.6, 0.45, 0.42), Vector3(0, yb + 0.40, 0.70), false])        # banquettes
+		f.append([Vector3(1.6, 0.45, 0.42), Vector3(0, yb + 0.40, -0.70), false])
+		return f
+	var W: float = _largeur_siege()
+	var y_s: float = -_haut_suspente() - 0.12 - 0.98
+	f.append([Vector3(W, 0.12, 0.50), Vector3(0, y_s, -0.08), false])
+	f.append([Vector3(W, 0.60, 0.08), Vector3(0, y_s + 0.36, 0.22), false])
+	return f
+
+
 func _largeur_siege() -> float:
 	return 0.50 * places + 0.20
 
