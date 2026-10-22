@@ -365,12 +365,13 @@ func balancer(dt: float, en_gare: bool) -> void:
 ## Où poser le skieur assis (repère du véhicule) : origine aux pieds, 0,42 m
 ## devant le bassin (convention de SkieurJoueur.asseoir), tourné vers −Z.
 ## Siège : place `i` ; cabine : banquette arrière, face à l'amont.
-func place_assise(i: int = -1) -> Vector3:
+## `avant` : banquette avant d'une cabine, face à l'arrière (+Z).
+func place_assise(i: int = -1, avant: bool = false) -> Vector3:
 	if cabine:
 		var hs: float = 1.15
 		var y_banc: float = -hs - 0.10 - 2.25 + 0.62
 		var xi: float = clampf(float(i if i >= 0 else 2) - 2.0, -2.0, 2.0) * 0.36
-		return Vector3(xi, y_banc - 0.45, 0.70 - 0.42)
+		return Vector3(xi, y_banc - 0.45, -(0.70 - 0.42) if avant else 0.70 - 0.42)
 	var W: float = _largeur_siege()
 	var k: int = i if i >= 0 else maxi(0, places / 2 - 1)
 	var cx: float = -W * 0.5 + 0.10 + 0.50 * (k + 0.5)

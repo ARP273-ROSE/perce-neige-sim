@@ -368,7 +368,12 @@ func asseoir(cap: float, skis_aux_pieds: bool = false) -> void:
 	_cap = cap
 	velocity = Vector3.ZERO
 	_corps.multimesh.mesh = _image_assise
-	_skis.visible = false
+	# au télésiège, chaussé : skis aux pieds, sous les pieds pendants (ils
+	# disparaissaient — retour d'utilisateur, 23/10/2026) ; sinon posés
+	_skis.visible = chausse
+	if chausse:
+		_skis.multimesh.mesh = _skis_pieds
+		_skis.position = Vector3(0.0, 0.0, -RECUL_ASSIS)
 	_visuel.rotation = Vector3(0.0, cap, 0.0)
 	_visuel.position = Vector3(sin(cap), 0.0, cos(cap)) * RECUL_ASSIS
 

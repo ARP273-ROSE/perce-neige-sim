@@ -56,6 +56,22 @@ func _poser(D: Dictionary) -> void:
 		prof.append(Vector2(d, relief.hauteur_sol(p.x, p.y) - h0))
 		d += 10.0
 	prof.append(Vector2(L, relief.hauteur_sol(b.x, b.y) - h0))
+	# chaque gare au plus haut du terrain sous son emprise (quai, poulie,
+	# largeur) : sur un versant, la gare amont était enterrée côté pente
+	# (retour d'utilisateur, 23/10/2026)
+	var lat: Vector2 = Vector2(-dirh.y, dirh.x)
+	var demi: float = float(D["voie"]) * 0.5 + 4.0
+	var long_g: float = LigneRemontee.L_GARE + float(D["voie"]) * 0.5 + 12.0
+	for bout in [[0, a, -1.0], [prof.size() - 1, b, 1.0]]:
+		var o: Vector2 = bout[1]
+		var haut: float = prof[bout[0]].y
+		var t: float = -2.0
+		while t <= long_g:
+			for x in [-demi, 0.0, demi]:
+				var q2: Vector2 = o + dirh * (t * float(bout[2])) + lat * x
+				haut = maxf(haut, relief.hauteur_sol(q2.x, q2.y) - h0)
+			t += 3.0
+		prof[bout[0]] = Vector2(prof[bout[0]].x, haut)
 	var lg: LigneRemontee = LigneRemontee.new()
 	lg.name = String(D["cle"])
 	lg.profil = prof
@@ -165,8 +181,10 @@ func _process(delta: float) -> void:
 
 ## Le siège arrivant par derrière « ramasse » le skieur qui attend à la ligne
 ## d'arrêt : il s'assoit tout seul, se laisse emporter, et se lève à la
-## gare d'arrivée. Dans une cabine on entre à pied, portes ouvertes : le
-## corps de collision de la cabine le porte (comme une rame du funiculaire).
+## gare d'arrivée. Dans une cabine on entre à pied, portes ouvertes, et
+## l'on est assis d'office sur la banquette face à l'amont, porté par la
+## cabine comme sur un siège : en physique, le skieur passait au travers du
+## plancher dès que la cabine quittait la gare (retour d'utilisateur, 22/10/2026).
 func _embarquement() -> void:
 	if skieur == null or not skieur.actif:
 		return
@@ -179,7 +197,11 @@ func _embarquement() -> void:
 	var p: Vector3 = skieur.global_position
 	for e in lignes:
 		var lg: LigneRemontee = e[0]
-		if not lg.pret or lg.famille.begins_with("cabine") or lg.famille.begins_with("perche") or not lg.is_processing():
+		if not lg.pret or lg.famille.begins_with("perche") or not lg.is_processing():
+			continue
+		if lg.famille.begins_with("cabine"):
+			if _entrer_cabine(lg, p):
+				return
 			continue
 		for aval in [true, false]:
 			var q: Vector3 = lg.global_transform * lg.point_embarquement(aval)
@@ -196,7 +218,7 @@ func _embarquement() -> void:
 			if absf(loc.x) < W * 0.5 + 0.15 and loc.z > place0.z - 0.6 and loc.z < place0.z + 0.35 \
 					and absf(loc.y - place0.y) < 1.2:
 				var k: int = clampi(int(floor((absf(loc.x) * signf(loc.x) + W * 0.5 - 0.10) / 0.50)), 0, v.places - 1)
-				a_bord = [lg, i, k, aval]
+				a_bord = [lg, i, k, aval, false]
 				skieur.support = null
 				skieur.embarque = true
 				skieur.asseoir(_cap(v), true)
@@ -205,18 +227,45 @@ func _embarquement() -> void:
 				return
 
 
-func _cap(v: Node3D) -> float:
+func _cap(v: Node3D, avant: bool = false) -> float:
 	var f: Vector3 = -v.global_transform.basis.z
-	return atan2(-f.x, -f.z)
+	return atan2(-f.x, -f.z) + (PI if avant else 0.0)
+
+
+## Skieur entré dans une cabine en gare : assis sur la banquette d'où l'on
+## regarde vers l'amont, à la place la plus proche.
+func _entrer_cabine(lg: LigneRemontee, p: Vector3) -> bool:
+	for i in range(lg.nombre_vehicules()):
+		var zn: String = lg.zone_vehicule(i)
+		if zn == "ligne":
+			continue
+		var v: VehiculeRemontee = lg.vehicule(i)
+		var loc: Vector3 = v.global_transform.affine_inverse() * p
+		var y_pl: float = v.place_assise(0).y
+		if absf(loc.x) > 0.95 or absf(loc.z) > 1.0 or loc.y < y_pl - 0.4 or loc.y > y_pl + 1.6:
+			continue
+		# la cabine roule vers son −Z : en montant (gare aval), la banquette
+		# arrière regarde l'amont ; en descendant, la banquette avant
+		var avant: bool = zn == "gare_amont"
+		var k: int = clampi(int(round(loc.x / 0.36)) + 2, 0, 4)
+		a_bord = [lg, i, k, zn == "gare_aval", avant]
+		skieur.support = null
+		skieur.embarque = true
+		skieur.asseoir(_cap(v, avant), true)
+		skieur._skis.visible = false        # skis à la main, rangés dans la cabine
+		_suivre_siege()
+		message.emit("Assis — %s" % lg.nom_ligne)
+		return true
+	return false
 
 
 func _suivre_siege() -> void:
 	var lg: LigneRemontee = a_bord[0]
 	var i: int = a_bord[1]
 	var v: VehiculeRemontee = lg.vehicule(i)
-	skieur.global_position = v.vers_monde(v.place_assise(a_bord[2]))
+	skieur.global_position = v.vers_monde(v.place_assise(a_bord[2], a_bord[4]))
 	skieur.velocity = Vector3.ZERO
-	var cap: float = _cap(v)
+	var cap: float = _cap(v, a_bord[4])
 	skieur._visuel.rotation = Vector3(0.0, cap, 0.0)
 	skieur._visuel.position = Vector3(sin(cap), 0.0, cos(cap)) * SkieurJoueur.RECUL_ASSIS
 	# arrivée à l'autre gare : il se lève sur la rampe, devant le siège
@@ -227,7 +276,7 @@ func _suivre_siege() -> void:
 		# hors du couloir des sièges (2,2 m à l'extérieur) : le siège continue,
 		# remonte et contourne la poulie — posé devant lui, le skieur était
 		# rattrapé, porté par l'assise et rassis pour la descente
-		var loc: Vector3 = lg.global_transform.affine_inverse() * v.vers_monde(v.place_assise(a_bord[2]))
+		var loc: Vector3 = lg.global_transform.affine_inverse() * v.vers_monde(v.place_assise(a_bord[2], a_bord[4]))
 		loc.x = signf(loc.x if absf(loc.x) > 0.5 else 1.0) * (lg.voie * 0.5 + 2.2)
 		var pos: Vector3 = lg.global_transform * loc
 		pos.y = y_quai + 0.15

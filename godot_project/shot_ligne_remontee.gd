@@ -84,6 +84,13 @@ func _initialize() -> void:
 		["en_ligne", Vector3(10, _ligne.y_cable(d3 + 40) - 2, -d3 - 40), Vector3(3, _ligne.y_cable(d3 + 10) - 2, -d3 - 10)],
 		["gare_amont", Vector3(-16, _ligne.terrain(L) + 10, -L + 10), Vector3(0, _ligne.terrain(L) + 4, -L - 14)],
 	]
+	# batteries des nez : vues de côté, à hauteur du câble
+	var ha: float = _ligne._h_nez[0]
+	var hb: float = _ligne._h_nez[1]
+	var xb: float = _ligne.voie * 0.5
+	_vues.append(["batterie_aval", Vector3(-xb - 7.0, _ligne.y_cable(ha) + 0.8, -ha), Vector3(-xb, _ligne.y_cable(ha), -ha)])
+	_vues.append(["batterie_aval_bis", Vector3(xb + 7.0, _ligne.y_cable(ha) + 0.8, -ha), Vector3(xb, _ligne.y_cable(ha), -ha)])
+	_vues.append(["batterie_amont", Vector3(-xb - 7.0, _ligne.y_cable(L - hb) + 0.8, -L + hb), Vector3(-xb, _ligne.y_cable(L - hb), -L + hb)])
 	process_frame.connect(_tick)
 
 
