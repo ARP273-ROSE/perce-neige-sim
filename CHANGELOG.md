@@ -5,6 +5,26 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.22.8 — 23 octobre 2026
+
+**Remontées : cabine refaite d'après les plans CWA.** Retour d'utilisateur du 23/10/2026 : « on y est
+pas encore pour les cabines, prends des photos des modèles ».
+- Références : plans de l'Omega V (vues de face et de côté, Wikimedia Commons, CC BY-SA) et photos
+  de cabines à Méribel et Orelle. Aucun fichier 3D libre d'Omega n'a été trouvé : les plans
+  servent de cotes.
+- Proportions réelles : 2,46 m en travers du câble, 1,68 m dans le sens du câble, 2,25 m de haut.
+  Les deux banquettes de 5 places de 46 cm se font face. La cabine précédente faisait 1,90 × 2,00 m,
+  à peu près carrée.
+- Forme : face des portes en œuf (étroite au toit et au fond), faces longues en trapèze arrondi.
+- Vitrage :
+  - grand vitrage gris teinté de 0,30 à 1,35 m sous le toit, plus bas sur les Sigma ;
+  - cadre noir sur les arêtes, liseré de couleur sous le toit, tampons de caoutchouc aux angles.
+- Porte de 0,90 m en deux vantaux qui suivent la forme en œuf ; poignées.
+- Suspente terminée par une poutre posée sur le toit par deux pieds.
+- Assise d'office, collisions et entrée dans la cabine recalées sur les nouvelles cotes.
+- Vérifié : banc embarquement (assis, face à l'amont, emporté, levé en haut), passage au pylône,
+  studio `shot_cabines.gd`.
+
 ## 1.22.7 — 23 octobre 2026
 
 **Remontées : nouveau design de la cabine et du siège.** Retour d'utilisateur du 23/10/2026 :

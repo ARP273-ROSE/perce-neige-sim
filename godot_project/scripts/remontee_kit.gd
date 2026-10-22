@@ -58,6 +58,12 @@ static func mat(nom: String) -> StandardMaterial3D:
 		m.roughness = 0.05
 		m.metallic = 0.4
 		m.cull_mode = BaseMaterial3D.CULL_DISABLED
+	elif nom == "vitre_teintee":
+		m.albedo_color = Color(0.20, 0.21, 0.23, 0.55)  # polycarbonate gris (Omega)
+		m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		m.roughness = 0.04
+		m.metallic = 0.5
+		m.cull_mode = BaseMaterial3D.CULL_DISABLED
 	elif nom == "bulle":
 		m.albedo_color = Color(0.62, 0.45, 0.25, 0.42)    # polycarbonate fumé orangé
 		m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA

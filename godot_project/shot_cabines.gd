@@ -58,9 +58,9 @@ func _initialize() -> void:
 	_vues = [
 		["chauffe", Vector3(-4.5, 4.2, 5.5), Vector3(1.5, 3.0, 0)],
 		["trois_quarts", Vector3(-4.5, 4.2, 5.5), Vector3(1.5, 3.0, 0)],
-		["omega_portes", Vector3(0.6, 3.2, 4.2), Vector3(0, 2.9, 0)],
+		["omega_portes", Vector3(2.5, 3.0, -4.5), Vector3(0, 2.6, 0)],
 		["omega_dos", Vector3(-2.5, 3.6, -4.0), Vector3(0, 3.0, 0)],
-		["interieur", Vector3(0.0, 3.0, 1.6), Vector3(0, 2.3, -0.5)],
+		["interieur", Vector3(0.0, 3.0, -1.9), Vector3(0.0, 2.1, 0.6)],
 		["dessus", Vector3(2.0, 9.0, 4.0), Vector3(4.5, 4.0, 0)],
 	]
 	process_frame.connect(_tick)
