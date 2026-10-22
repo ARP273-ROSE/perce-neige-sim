@@ -5,6 +5,25 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.22.10 — 23 octobre 2026
+
+**Remontées : garde-corps du siège BMF d'après les photos, numéro des sièges.** Retour d'utilisateur
+du 23/10/2026 : « on peut grandement améliorer, cherche photos encore et impression 3D ».
+- Références :
+  - photos du Marmottes Express (gros plans, garde-corps baissé et en gare) ;
+  - deux modèles d'impression 3D de sièges Doppelmayr D-Line trouvés sur Printables, étudiés pour
+    la structure (poutre de tête porteuse, cadres cintrés, un repose-pieds par place). Ils ne sont
+    pas repris dans le dépôt.
+- Garde-corps BMF :
+  - barre ventrale tenue par deux bras ;
+  - trois cadres en V, un pour deux places, qui descendent au repose-pieds ;
+  - repose-pieds juste sous le nez de l'assise, avec un patin de caoutchouc par place.
+  Avant, il y avait six tenons en piquets et un repose-pieds 50 cm trop bas.
+- Numéro du siège lisible sur la plaque de la poutre de tête (81 sièges sur la ligne).
+- La 1.22.9 n'a pas été publiée : un téléchargement a expiré sur le constructeur macOS de la CI.
+  Cette version la remplace.
+- Vérifié : banc embarquement ; studio `shot_sieges.gd` (garde-corps relevé et baissé).
+
 ## 1.22.9 — 23 octobre 2026
 
 **Remontées : siège du Marmottes Express refait d'après la vraie ligne.** Retour d'utilisateur du
