@@ -5,6 +5,26 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.22.7 — 23 octobre 2026
+
+**Remontées : nouveau design de la cabine et du siège.** Retour d'utilisateur du 23/10/2026 :
+« fais-moi un beau design de cabine puis de siège ».
+- Cabine (Omega IV, Diamond, Symphony) : caisse lissée au lieu de boîtes :
+  - rectangle à coins arrondis, fond en baignoire, flancs bombés, bourrelet pare-chocs ;
+  - vitrage panoramique en bandeau, joints noirs, montants d'angle fins ;
+  - toit en dôme (blanc sur l'Omega IV) avec grilles d'aération ;
+  - portes à deux vantaux qui suivent le galbe et coulissent par-dessus les panneaux fixes,
+    avec poignées ;
+  - intérieur : plancher strié, banquettes rembourrées, plafonnier ;
+  - suspente cintrée avec rotule de toit.
+  Les maillages sont partagés par famille.
+- Siège : coussins d'assise et de dossier rembourrés aux arêtes arrondies, place par place, sur un
+  bac d'assise et une coque de dossier, accoudoirs garnis, attaches du dossier sous l'arceau.
+  Garniture satinée : sur iPad, les sièges noirs apparaissaient en aplat noir.
+- Studios de captures `shot_cabines.gd` et `shot_sieges.gd`.
+- Vérifié : bancs embarquement (télésiège et télécabine), remontee_dynamique et aller_remontee ;
+  captures des trois cabines (portes ouvertes, intérieur) et de quatre sièges.
+
 ## 1.22.6 — 23 octobre 2026
 
 **Remontées : cabine, nez de gare, pylônes, garde-corps.** Retours d'utilisateur (iPad, v1.22.5)
