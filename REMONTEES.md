@@ -98,7 +98,13 @@ passer le toit des cabines.
   sous le toit, tampons de caoutchouc aux angles, porte de 0,90 m en deux vantaux découpés dans la
   coque. Suspente cintrée terminée par une poutre posée sur le toit par deux pieds. Maillages
   partagés par famille ; matériaux de caisse double face (on voit l'intérieur à travers les vitres).
-- **Siège** : coussins d'assise et de dossier rembourrés (`RemonteeKit.coussin`, boîte aux arêtes
+- **Siège BMF du Marmottes Express** (`VehiculeRemontee._siege_bmf`, 1.22.9), d'après les photos de la
+  ligne (reportage remontees-mecaniques.net, 2011, consulté comme référence, aucune image reprise) :
+  poutre de tête en treillis sur toute la largeur, avec plaque du numéro, où tombe la suspente
+  cintrée ; gros cadres tubulaires derrière le dossier, cintrés sous l'assise ; dossier bas et peu
+  incliné (la particularité BMF citée par le reportage) ; six coussins noirs sur un carénage
+  aluminium ; pince à un gros ressort rouge par bout.
+- **Siège** (autres familles) : coussins d'assise et de dossier rembourrés (`RemonteeKit.coussin`, boîte aux arêtes
   arrondies, maillage partagé, environ 300 triangles), sur un bac d'assise et une coque de dossier
   pleine largeur, avec des accoudoirs garnis et des attaches du dossier sous l'arceau. Garnitures
   satinées : le noir n'est plus un aplat.
