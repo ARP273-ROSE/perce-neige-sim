@@ -10,6 +10,7 @@
  "espacement": 39.6,
  "voie": 6.0,
  "sens_droite": false,
+ "diametre_cable": 46.0,
  "famille": "siege_bartholet_6",
  "aval": [
   45.4517741,

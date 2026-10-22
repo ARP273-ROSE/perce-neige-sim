@@ -1987,6 +1987,8 @@ func _entrer_skieur() -> void:
 		remontees.name = "Remontees"
 		add_child(remontees)
 		remontees.construire(relief)
+		remontees.skieur = skieur
+		remontees.message.connect(func(t: String) -> void: commandes_skieur.message(t, 3.0))
 	relief.set_hiver(1.0)
 	commandes_skieur.set_chausse(skieur.chausse)
 	mode_skieur = true

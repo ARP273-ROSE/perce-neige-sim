@@ -50,6 +50,9 @@ var course: bool = false
 var course_auto: bool = false
 ## Assis sur un banc (mode BOUCLE, en attendant la rame).
 var assis: bool = false
+## À bord d'une remontée (siège ou cabine) : posé chaque image par
+## RemonteesDomaine, il ne marche ni ne glisse (retour d'utilisateur, 22/10/2026)
+var embarque: bool = false
 const RECUL_ASSIS: float = 0.42          # pieds devant le banc, bassin au-dessus de l'assise
 var _image_assise: Mesh = null
 ## Touches de marche tenues dans le simulateur PC (vue 3D embarquée, le
@@ -356,8 +359,8 @@ func basculer_ski(forcer: bool = false) -> String:
 
 ## S'asseoir sur un banc (mode BOUCLE) : debout devant l'assise, regard
 ## `cap` ; le corps recule au-dessus du banc, skis posés (cachés).
-func asseoir(cap: float) -> void:
-	if chausse or assis:
+func asseoir(cap: float, skis_aux_pieds: bool = false) -> void:
+	if assis or (chausse and not skis_aux_pieds):
 		return
 	if _image_assise == null:
 		_image_assise = SkieurMesh.passager("assis", "casque", SkieurMesh.materiau())
@@ -376,7 +379,10 @@ func lever() -> void:
 	assis = false
 	_skis.visible = true
 	_visuel.position = Vector3(0.0, Y_SKI if chausse else 0.0, 0.0)
+	_visuel.rotation = Vector3.ZERO
 	_corps.multimesh.mesh = _image_glisse if chausse else _images[0]
+	if chausse:
+		_apparence_ski()
 
 
 ## Vitesse de glisse (m/s), 0 à pied.
@@ -569,6 +575,10 @@ func _process(delta: float) -> void:
 	delta = minf(delta, 0.05)
 	_porter()
 	_aligner_capsule()
+	if embarque:
+		velocity = Vector3.ZERO
+		_camera()
+		return
 	if _chute_t > 0.0:
 		_chute_t -= delta
 		if _chute_t <= 0.0:

@@ -58,6 +58,8 @@ func _initialize() -> void:
 	_ligne.espacement = float(D["espacement"])
 	_ligne.famille = String(D["famille"])
 	_ligne.sens_droite = bool(D["sens_droite"])
+	if D.has("diametre_cable"):
+		_ligne.diametre_cable = float(D["diametre_cable"])
 	racine.add_child(_ligne)
 	_ligne.construire()
 	print("LIGNE %s : %d véhicules, boucle %.0f m" % [D["nom"], _ligne.nombre_vehicules(), _ligne.longueur_boucle])
@@ -74,6 +76,7 @@ func _initialize() -> void:
 		["vue_generale", Vector3(-L * 0.55, _ligne.terrain(L * 0.5) + L * 0.25, -L * 0.45), Vector3(0, _ligne.terrain(L * 0.5), -L * 0.5)],
 		["gare_aval", Vector3(-14, 9, 8), Vector3(0, 4, 8)],
 		["gare_aval_quai", Vector3(9, 2.0, -3), Vector3(0, 3.5, 12)],
+		["portillons", Vector3(-7.0, 2.2, 6.0), Vector3(-3.0, 0.8, 14.0)],
 		["pylone", Vector3(-12, y3 + 10, -d3 + 14), Vector3(0, y3 + 12, -d3)],
 		["en_ligne", Vector3(10, _ligne.y_cable(d3 + 40) - 2, -d3 - 40), Vector3(3, _ligne.y_cable(d3 + 10) - 2, -d3 - 10)],
 		["gare_amont", Vector3(-16, _ligne.terrain(L) + 10, -L + 10), Vector3(0, _ligne.terrain(L) + 4, -L - 14)],

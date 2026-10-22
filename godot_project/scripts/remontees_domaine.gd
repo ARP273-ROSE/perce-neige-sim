@@ -16,8 +16,13 @@ const PYLONES_JUSQUA: float = 3000.0
 const ACTIVE_JUSQUA: float = 2500.0
 
 var relief: ReliefBuilder = null
+var skieur: SkieurJoueur = null
 var lignes: Array = []          # [LigneRemontee, milieu monde]
 var _t_lod: float = 0.0
+## À bord d'un siège : [ligne, indice du véhicule, place, gare de départ aval ?]
+var a_bord: Array = []
+var _repos: float = 0.0          # pas de nouvel embarquement juste après un débarquement
+signal message(texte: String)
 
 
 static func monde(lat: float, lon: float) -> Vector2:
@@ -66,10 +71,12 @@ func _poser(D: Dictionary) -> void:
 	lg.espacement = float(D["espacement"])
 	lg.famille = String(D["famille"])
 	lg.sens_droite = bool(D["sens_droite"])
+	lg.diametre_cable = float(D.get("diametre_cable", 47.0))
 	lg.nom_ligne = String(D["nom"])
 	# repère : origine au sol de la gare aval, −Z local vers l'amont
 	var fwd: Vector3 = Vector3(dirh.x, 0.0, dirh.y)
 	lg.transform = Transform3D(Basis.looking_at(fwd, Vector3.UP), Vector3(a.x, h0, a.y))
+	lg.avec_collisions = true
 	add_child(lg)
 	lg.construire()
 	_portees(lg)
@@ -93,15 +100,106 @@ func _portees(lg: LigneRemontee) -> void:
 				pile.append(k)
 
 
+func _ready() -> void:
+	# après les lignes (véhicules déjà déplacés), avant le skieur (priorité 100)
+	process_priority = 50
+
+
 func _process(delta: float) -> void:
+	_embarquement()
 	_t_lod -= delta
 	if _t_lod > 0.0:
 		return
 	_t_lod = 0.5
-	var cam: Camera3D = get_viewport().get_camera_3d()
-	if cam == null:
-		return
-	var p: Vector3 = cam.global_position
+	# distance au skieur quand il est là (sa caméra le suit), sinon à la caméra
+	var p: Vector3
+	if skieur != null and skieur.actif:
+		p = skieur.global_position
+	else:
+		var cam: Camera3D = get_viewport().get_camera_3d()
+		if cam == null:
+			return
+		p = cam.global_position
 	for e in lignes:
 		var lg: LigneRemontee = e[0]
 		lg.set_process(p.distance_to(e[1]) < ACTIVE_JUSQUA + lg.longueur_h() * 0.5)
+
+
+# --- monter à bord d'un télésiège -----------------------------------------------------
+
+## Le siège arrivant par derrière « ramasse » le skieur qui attend à la ligne
+## d'arrêt : il s'assoit tout seul, se laisse emporter, et se lève à la
+## gare d'arrivée. Dans une cabine on entre à pied, portes ouvertes : le
+## corps de collision de la cabine le porte (comme une rame du funiculaire).
+func _embarquement() -> void:
+	if skieur == null or not skieur.actif:
+		return
+	if not a_bord.is_empty():
+		_suivre_siege()
+		return
+	_repos = maxf(0.0, _repos - get_process_delta_time())
+	if _repos > 0.0:
+		return
+	var p: Vector3 = skieur.global_position
+	for e in lignes:
+		var lg: LigneRemontee = e[0]
+		if lg.famille.begins_with("cabine") or lg.famille.begins_with("perche") or not lg.is_processing():
+			continue
+		for aval in [true, false]:
+			var q: Vector3 = lg.global_transform * lg.point_embarquement(aval)
+			if p.distance_to(q) > 6.0:
+				continue
+			var i: int = lg.vehicule_a_embarquer(aval)
+			if i < 0:
+				continue
+			var v: VehiculeRemontee = lg.vehicule(i)
+			var loc: Vector3 = v.global_transform.affine_inverse() * p
+			var place0: Vector3 = v.place_assise(0)
+			var W: float = 0.50 * v.places + 0.20
+			# le siège arrive par derrière : le skieur est devant l'assise
+			if absf(loc.x) < W * 0.5 + 0.15 and loc.z > place0.z - 0.6 and loc.z < place0.z + 0.35 \
+					and absf(loc.y - place0.y) < 1.2:
+				var k: int = clampi(int(floor((absf(loc.x) * signf(loc.x) + W * 0.5 - 0.10) / 0.50)), 0, v.places - 1)
+				a_bord = [lg, i, k, aval]
+				skieur.support = null
+				skieur.embarque = true
+				skieur.asseoir(_cap(v), true)
+				_suivre_siege()
+				message.emit("Assis — %s" % lg.nom_ligne)
+				return
+
+
+func _cap(v: Node3D) -> float:
+	var f: Vector3 = -v.global_transform.basis.z
+	return atan2(-f.x, -f.z)
+
+
+func _suivre_siege() -> void:
+	var lg: LigneRemontee = a_bord[0]
+	var i: int = a_bord[1]
+	var v: VehiculeRemontee = lg.vehicule(i)
+	skieur.global_position = v.global_transform * v.place_assise(a_bord[2])
+	skieur.velocity = Vector3.ZERO
+	var cap: float = _cap(v)
+	skieur._visuel.rotation = Vector3(0.0, cap, 0.0)
+	skieur._visuel.position = Vector3(sin(cap), 0.0, cos(cap)) * SkieurJoueur.RECUL_ASSIS
+	# arrivée à l'autre gare : il se lève sur la rampe, devant le siège
+	var arr: Array = lg.arrivee(i)
+	if not arr.is_empty() and bool(arr[0]) != bool(a_bord[3]):
+		var aval_arr: bool = arr[0]
+		var y_quai: float = (lg.global_transform * Vector3(0, lg.terrain(0.0 if aval_arr else lg.longueur_h()), 0)).y
+		# hors du couloir des sièges (2,2 m à l'extérieur) : le siège continue,
+		# remonte et contourne la poulie — posé devant lui, le skieur était
+		# rattrapé, porté par l'assise et rassis pour la descente
+		var loc: Vector3 = lg.global_transform.affine_inverse() * (v.global_transform * v.place_assise(a_bord[2]))
+		loc.x = signf(loc.x if absf(loc.x) > 0.5 else 1.0) * (lg.voie * 0.5 + 2.2)
+		var pos: Vector3 = lg.global_transform * loc
+		pos.y = y_quai + 0.15
+		skieur.embarque = false
+		skieur.lever()
+		skieur.global_position = pos
+		skieur.dernier_sol = pos
+		skieur.support = null
+		message.emit("Arrivé — %s" % lg.nom_ligne)
+		a_bord = []
+		_repos = 6.0
