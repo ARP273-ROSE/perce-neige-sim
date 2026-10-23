@@ -5,6 +5,24 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.22.12 — 23 octobre 2026
+
+**Remontées : poutre de tête et garde-corps du siège BMF.** Retour d'utilisateur du 23/10/2026 :
+« le treillis qui fait la structure en haut, tu peux revoir sa forme ; le garde-corps est trop
+grand ; les repose-skis sont tenus par un bout de métal, pas deux ».
+- Poutre de tête, d'après les gros plans de la ligne :
+  - une seule tôle verticale au lieu d'un treillis en caisson ;
+  - pleine au milieu (suspente, plaque du numéro) et aux deux bouts, ajourée de triangles entre
+    les deux ;
+  - posée sur un longeron inférieur en caisson ; les cadres latéraux en tube rond sortent
+    horizontalement sous ses bouts (avec un collier), puis plongent en grand rayon.
+- Garde-corps compact :
+  - bras plus courts au-dessus des accoudoirs, barre ventrale plus près du ventre ;
+  - trois repose-skis en T, un pour deux places, chacun tenu par une seule tige ; les cadres en V
+    sont supprimés ;
+  - relevé, il se range devant la poutre de tête.
+- Vérifié : banc embarquement ; studio `shot_sieges.gd` (face, profil relevé et baissé).
+
 ## 1.22.11 — 23 octobre 2026
 
 **Remontées : axe du garde-corps BMF.** Retour d'utilisateur du 23/10/2026 : « le garde-corps est

@@ -100,13 +100,14 @@ passer le toit des cabines.
   partagés par famille ; matériaux de caisse double face (on voit l'intérieur à travers les vitres).
 - **Siège BMF du Marmottes Express** (`VehiculeRemontee._siege_bmf`, 1.22.9), d'après les photos de la
   ligne (reportage remontees-mecaniques.net, 2011, consulté comme référence, aucune image reprise) :
-  poutre de tête en treillis sur toute la largeur, avec plaque du numéro, où tombe la suspente
-  cintrée ; gros cadres tubulaires derrière le dossier, cintrés sous l'assise ; dossier bas et peu
+  poutre de tête : une tôle verticale pleine au milieu (suspente, plaque du numéro) et aux bouts,
+  ajourée de triangles entre les deux, sur un longeron en caisson (1.22.12) ; les cadres latéraux en
+  tube rond sortent horizontalement sous ses bouts ; gros cadres tubulaires derrière le dossier, cintrés sous l'assise ; dossier bas et peu
   incliné (la particularité BMF citée par le reportage) ; six coussins noirs sur un carénage
   aluminium ; pince à un gros ressort rouge par bout. Garde-corps BMF (1.22.10, axe corrigé en 1.22.11) : axe juste au-dessus du dossier, en arrière,
-  basculement vers le haut ; barre ventrale,
-  trois cadres en V (un pour deux places) jusqu'au repose-pieds placé juste sous le nez de
-  l'assise, un patin par place ; numéro du siège sur la poutre. Recoupé avec deux modèles
+  basculement vers le haut ; garde-corps
+  compact (1.22.12), trois repose-pieds en T (un pour deux places), chacun tenu par une seule
+  tige ; numéro du siège sur la poutre. Recoupé avec deux modèles
   d'impression 3D de sièges Doppelmayr D-Line (Printables), étudiés pour la structure (poutre de
   tête porteuse, cadres cintrés, un repose-pieds par place) et non repris dans le dépôt.
 - **Siège** (autres familles) : coussins d'assise et de dossier rembourrés (`RemonteeKit.coussin`, boîte aux arêtes

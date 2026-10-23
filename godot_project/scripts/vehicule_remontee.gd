@@ -523,42 +523,66 @@ func _siege_bmf() -> void:
 	add_child(siege)
 	var W: float = _largeur_siege()
 	var xb: float = W * 0.5 + 0.03
-	# poutre de tête en treillis : deux membrures, diagonales devant et derrière
+	# poutre de tête (gros plans de la ligne) : UNE tôle verticale, pleine au
+	# milieu (attache de la suspente, plaque du numéro) et aux deux bouts,
+	# ajourée de triangles entre les deux ; posée sur un longeron inférieur
+	# en caisson, sous lequel sortent les cadres latéraux
 	var yb0: float = 0.05
 	var yb1: float = 0.21
 	var zb: float = 0.18
-	for y in [yb0, yb1]:
-		RemonteeKit.boite_en(siege, Vector3(2.0 * xb, 0.04, 0.17), Vector3(0, y, zb), m_alu)
-	for dz in [-0.075, 0.075]:
-		var x: float = -xb
-		var monte: bool = true
-		while x < xb - 0.01:
-			var x2: float = minf(x + 0.24, xb)
-			RemonteeKit.poutre(siege, Vector3(x, yb0 if monte else yb1, zb + dz), Vector3(x2, yb1 if monte else yb0, zb + dz), 0.035, 0.012, m_alu, Vector3.BACK)
-			monte = not monte
-			x = x2
+	var ep: float = 0.022
+	var hp: float = yb1 - yb0
+	var plein_c: float = 0.36                   # demi-largeur pleine au milieu
+	var plein_b: float = 0.30                   # longueur pleine à chaque bout
+	RemonteeKit.boite_en(siege, Vector3(2.0 * plein_c, hp, ep), Vector3(0, (yb0 + yb1) * 0.5, zb), m_alu)
 	for sx in [-1.0, 1.0]:
-		RemonteeKit.boite_en(siege, Vector3(0.03, yb1 - yb0 + 0.04, 0.17), Vector3(sx * xb, (yb0 + yb1) * 0.5, zb), m_alu)
-	# plaque du numéro au milieu de la poutre, et attache de la suspente
-	RemonteeKit.boite_en(siege, Vector3(0.20, 0.10, 0.01), Vector3(0.0, (yb0 + yb1) * 0.5, zb - 0.09), "blanc_plaque")
+		RemonteeKit.boite_en(siege, Vector3(plein_b, hp, ep), Vector3(sx * (xb - plein_b * 0.5), (yb0 + yb1) * 0.5, zb), m_alu)
+		# zone ajourée : membrures haute et basse, diagonales en zigzag
+		var xa: float = plein_c
+		var xz: float = xb - plein_b
+		for y in [yb1 - 0.02, yb0 + 0.02]:
+			RemonteeKit.boite_en(siege, Vector3(xz - xa, 0.04, ep), Vector3(sx * (xa + xz) * 0.5, y, zb), m_alu)
+		var nd: int = 5
+		for k in range(nd):
+			var x0: float = lerpf(xa, xz, float(k) / nd)
+			var x1: float = lerpf(xa, xz, float(k + 1) / nd)
+			var haut: bool = k % 2 == 0
+			RemonteeKit.poutre(siege, Vector3(sx * x0, yb0 + 0.02 if haut else yb1 - 0.02, zb), Vector3(sx * x1, yb1 - 0.02 if haut else yb0 + 0.02, zb),
+				0.045, ep, m_alu, Vector3.BACK)
+		# boulons des chapes de bout
+		for dy in [-0.04, 0.04]:
+			RemonteeKit.cylindre(siege, 0.012, 0.012, 0.05, Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3(sx * (xb - 0.10), (yb0 + yb1) * 0.5 + dy, zb)), "acier", 6)
+	# longeron inférieur en caisson, sur toute la largeur
+	RemonteeKit.boite_en(siege, Vector3(2.0 * xb - 0.10, 0.06, 0.12), Vector3(0, yb0 - 0.03, zb + 0.01), m_alu)
+	# plaque du numéro au milieu de la tôle, et attache de la suspente
+	RemonteeKit.boite_en(siege, Vector3(0.20, 0.10, 0.01), Vector3(0.0, (yb0 + yb1) * 0.5, zb - ep * 0.5 - 0.006), "blanc_plaque")
 	var num: Label3D = Label3D.new()
 	num.text = str(randi() % 81 + 1)          # 81 sièges sur la ligne
 	num.font_size = 64
 	num.pixel_size = 0.0018
 	num.modulate = Color(0.05, 0.05, 0.06)
 	num.outline_size = 0
-	num.position = Vector3(0.0, (yb0 + yb1) * 0.5, zb - 0.097)
+	num.position = Vector3(0.0, (yb0 + yb1) * 0.5, zb - ep * 0.5 - 0.013)
 	num.rotation.y = PI
 	siege.add_child(num)
-	RemonteeKit.boite_en(siege, Vector3(0.16, 0.08, 0.20), Vector3(0.0, yb1 + 0.05, zb), m_alu)
-	# cadres latéraux : du bout de la poutre, derrière le dossier, puis cintrés sous l'assise
+	RemonteeKit.boite_en(siege, Vector3(0.16, 0.08, 0.10), Vector3(0.0, yb1 + 0.04, zb), m_alu)
+	# cadres latéraux en tube rond : ils sortent horizontalement sous le bout
+	# de la poutre, plongent en grand rayon derrière le dossier, puis se
+	# cintrent sous l'assise
 	for sx in [-1.0, 1.0]:
 		var x: float = sx * xb
-		var cad: PackedVector3Array = PackedVector3Array([Vector3(x, yb1, zb), Vector3(x, -0.20, 0.27), Vector3(x, -0.66, 0.29)])
+		var yc: float = yb0 - 0.09
+		var cad: PackedVector3Array = PackedVector3Array([Vector3(sx * (xb - 0.42), yc, zb)])
+		for p in RemonteeKit.arc(Vector3(sx * (xb - 0.16), yc - 0.16, zb), Vector3.UP, Vector3.RIGHT * sx, 0.16, 0.0, PI * 0.5, 6):
+			cad.append(p)
+		cad.append(Vector3(x, -0.20, 0.25))
+		cad.append(Vector3(x, -0.66, 0.29))
 		for p in RemonteeKit.arc(Vector3(x, -0.66, 0.02), Vector3.BACK, Vector3.DOWN, 0.27, 0.0, PI * 0.5, 8):
 			cad.append(p)
 		cad.append(Vector3(x, -0.93, -0.32))
 		RemonteeKit.tube(siege, cad, 0.042, m_alu, 10)
+		# collier qui serre le cadre sous le longeron
+		RemonteeKit.boite_en(siege, Vector3(0.10, 0.07, 0.12), Vector3(sx * (xb - 0.36), yc + 0.02, zb), m_alu)
 	# carénage aluminium sous l'assise, lèvre avant plus sombre
 	var t_assise: Basis = Basis(Vector3.RIGHT, 0.06)
 	RemonteeKit.coussin(siege, Vector3(2.0 * xb - 0.02, 0.12, 0.58), Transform3D(t_assise, Vector3(0, -1.08, -0.05)), m_alu, 0.045)
@@ -630,38 +654,35 @@ func _garde_corps(siege: Node3D, W: float, m: String) -> void:
 
 
 ## Garde-corps BMF : son axe est juste au-dessus du dossier, en arrière, et
-## il bascule vers le haut (retour d'utilisateur, 23/10/2026) ; barre ventrale
-## tenue par deux bras qui passent au-dessus des accoudoirs, trois cadres en
-## V (un pour deux places) jusqu'au repose-pieds placé sous le nez de
-## l'assise, un patin par place.
+## il bascule vers le haut (retour d'utilisateur, 23/10/2026). Compact : bras
+## courts au-dessus des accoudoirs, barre ventrale près du ventre ; trois
+## repose-pieds (un pour deux places), chacun tenu par UNE seule tige
+## (gros plans de la ligne) et terminé par un patin en T.
 func _garde_corps_bmf(siege: Node3D, W: float, m: String, xe: float) -> void:
 	# axe : au ras du haut du dossier (siège : y −0,43), derrière lui
-	var axe: Vector3 = Vector3(0, -0.36, 0.33)
+	var axe: Vector3 = Vector3(0, -0.40, 0.31)
 	_gc.position = axe
-	_gc_releve = 1.85
+	_gc_releve = 1.40
 	for sx in [-1.0, 1.0]:
 		# chape de l'axe sur la coque du dossier
-		RemonteeKit.boite_en(siege, Vector3(0.06, 0.12, 0.10), axe + Vector3(sx * (xe + 0.02), -0.02, -0.02), m)
-		RemonteeKit.cylindre(siege, 0.035, 0.035, 0.08, Transform3D(Basis(Vector3.FORWARD, PI * 0.5), axe + Vector3(sx * (xe + 0.02), 0, 0)), "acier_noir", 10)
-	# repère de l'axe : barre ventrale à hauteur du ventre devant les passagers,
-	# repose-pieds 0,22 m sous l'assise, juste devant son nez
-	var ventre: Vector3 = Vector3(0, -0.30, -0.86)
-	var pied: Vector3 = Vector3(0, -0.84, -0.98)
+		RemonteeKit.boite_en(siege, Vector3(0.06, 0.10, 0.09), axe + Vector3(sx * (xe + 0.02), -0.02, -0.02), m)
+		RemonteeKit.cylindre(siege, 0.03, 0.03, 0.08, Transform3D(Basis(Vector3.FORWARD, PI * 0.5), axe + Vector3(sx * (xe + 0.02), 0, 0)), "acier_noir", 10)
+	# repère de l'axe : barre ventrale 0,34 m au-dessus de l'assise, 0,32 m
+	# devant son milieu ; patins 0,17 m sous l'assise, juste devant son nez
+	var ventre: Vector3 = Vector3(0, -0.24, -0.71)
+	var pied: Vector3 = Vector3(0, -0.75, -0.87)
 	for sx in [-1.0, 1.0]:
-		RemonteeKit.tube(_gc, PackedVector3Array([Vector3(sx * xe, 0, 0), Vector3(sx * xe, 0.04, -0.30),
-			Vector3(sx * xe, -0.10, -0.62), Vector3(sx * xe, ventre.y, ventre.z)]), 0.026, m, 8)
-	RemonteeKit.barre(_gc, Vector3(-xe, 0, 0), Vector3(xe, 0, 0), 0.03, m, 10)       # tube d'axe
-	RemonteeKit.barre(_gc, Vector3(-xe, ventre.y, ventre.z), Vector3(xe, ventre.y, ventre.z), 0.03, m, 10)
-	var paires: int = places / 2
-	for k in range(paires):
+		RemonteeKit.tube(_gc, PackedVector3Array([Vector3(sx * xe, 0, 0), Vector3(sx * xe, 0.02, -0.28),
+			Vector3(sx * xe, -0.10, -0.56), Vector3(sx * xe, ventre.y, ventre.z)]), 0.022, m, 8)
+	RemonteeKit.barre(_gc, Vector3(-xe, ventre.y, ventre.z), Vector3(xe, ventre.y, ventre.z), 0.026, m, 10)
+	for k in range(places / 2):
 		var cx: float = -W * 0.5 + 0.10 + 1.0 * (k + 0.5)
-		var bas: Vector3 = Vector3(cx, pied.y + 0.02, pied.z)
-		for dx in [-0.24, 0.24]:
-			RemonteeKit.barre(_gc, Vector3(cx + dx, ventre.y, ventre.z), bas, 0.018, m, 6)
-	RemonteeKit.poutre(_gc, Vector3(-W * 0.5 + 0.12, pied.y, pied.z), Vector3(W * 0.5 - 0.12, pied.y, pied.z), 0.07, 0.035, m)
-	for i in range(places):
-		var cx2: float = -W * 0.5 + 0.10 + 0.50 * (i + 0.5)
-		RemonteeKit.boite_en(_gc, Vector3(0.36, 0.025, 0.17), Vector3(cx2, pied.y + 0.03, pied.z + 0.02), "caoutchouc")
+		# une seule tige, légèrement coudée, de la barre au repose-pieds
+		RemonteeKit.tube(_gc, PackedVector3Array([Vector3(cx, ventre.y, ventre.z), Vector3(cx, (ventre.y + pied.y) * 0.5, ventre.z - 0.10),
+			Vector3(cx, pied.y, pied.z)]), 0.017, m, 6)
+		# patin en T : traverse et semelle caoutchouc, pour deux paires de skis
+		RemonteeKit.poutre(_gc, Vector3(cx - 0.40, pied.y, pied.z), Vector3(cx + 0.40, pied.y, pied.z), 0.05, 0.025, m)
+		RemonteeKit.boite_en(_gc, Vector3(0.78, 0.02, 0.13), Vector3(cx, pied.y + 0.02, pied.z + 0.01), "caoutchouc")
 
 
 ## 0 : relevé (au-dessus des têtes) ; 1 : baissé.
