@@ -5,6 +5,46 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.22.16 — 23 octobre 2026
+
+**Remontées : arrivée en glissant, rail d'ouverture des pinces, câble à torons ; panneaux et
+affichage.** Retours d'utilisateur (iPad, v1.22.14) du 23/10/2026.
+- Arrivée au télésiège (« je passe sous la gare au lieu de me lever et glisser avec la petite
+  descente ») :
+  - à ski, le skieur ne suivait que le relief : debout sur une plate-forme de gare, il retombait
+    sous elle. Le sol à ski est maintenant le relief ou, plus haut (0,6 m au plus), une
+    plate-forme de gare : quai, talus, rampes ;
+  - chaussé, il se lève à sa place et glisse en avant vers l'extérieur ;
+  - côté arrivée, le quai s'arrête 1,6 m après le couloir des sièges et descend en pente douce
+    (1 pour 6), hors du chemin du siège ;
+  - mesuré : 7,9 m parcourus en 3 s, 0,6 m de descente, sur la plate-forme de la gare.
+- Assis chaussé (« je suis debout ») : les skis pendaient 27 cm sous le repose-pieds et
+  allongeaient les jambes. Le repose-pieds est maintenant à hauteur des pieds et les skis
+  reposent dessus.
+- Numéro fantôme : la pince portait un autre numéro que le siège (104 sur le siège 54). Un seul
+  numéro par véhicule désormais.
+- Rail d'ouverture des pinces : un fer plat au-dessus du galet du levier, sur toute la gare. Il
+  descend en rampe sur les 2,5 premiers mètres : il appuie sur le levier, comprime les ressorts et
+  ouvre la mâchoire, et la pince lâche le câble au début de la décélération. Il remonte de même à
+  la sortie. Galet et rail restent alignés à 3,4 cm près.
+- Gaines de la pince : demi-cônes ouverts par-dessous, évasés vers l'extérieur, de même
+  longueur.
+- Câble tracteur : le câble à torons du funiculaire, au diamètre de la ligne ; ses torons défilent
+  à la vitesse du câble. Les câbles porteurs (3S, téléphérique) restent lisses et immobiles.
+- Panneaux de piste (« on voit le numéro, pas le nom de la piste ni la station ; le bleu paraît
+  noir ») :
+  - face non ombrée, comme le numéro : le bleu reste bleu à contre-jour ;
+  - nom de la piste en capitales et station plus grands, cernés d'un trait sombre ;
+  - numéro un peu plus petit pour leur laisser la place.
+- Vue skieur : vitesse et altitude toujours affichées, à pied, à ski et en remontée. En remontée,
+  le nom de la remontée remplace celui de la piste.
+- Sens des lignes : les véhicules d'une ligne qui monte à gauche sont la copie symétrique de ceux
+  de droite ; les chiffres sont à l'endroit depuis la 1.22.15. Gares, portillons et cabine du
+  conducteur suivent déjà le sens de la ligne.
+- Vérifié : bancs embarquement (chaussé : levé, glissade, sol de gare), remontee_dynamique,
+  aller_remontee, quai, skieur et ski_expert ; relevé galet / rail ; studios des sièges et des
+  panneaux.
+
 ## 1.22.15 — 23 octobre 2026
 
 **Remontées : la poulie tourne, numéros à l'endroit.** Retour d'utilisateur (iPad, v1.22.14) du

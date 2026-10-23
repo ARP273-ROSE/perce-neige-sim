@@ -22,6 +22,7 @@ var _portillons_vus_ouverts: bool = false
 var _y0: float = 0.0
 var _cab: int = -1
 var _cab_ligne: float = -1.0
+var _p_lever: Vector3 = Vector3.ZERO
 
 
 func _initialize() -> void:
@@ -72,6 +73,8 @@ func _tick() -> void:
 				return            # construite à l'arrivée du skieur, par tranches
 			var q: Vector3 = _lg.global_transform * _lg.point_embarquement(true)
 			sk.activer(q + Vector3(0, 0.1, 0), 0.0)
+			# chaussé, comme un skieur (le cas qui passait sous la gare)
+			sk.basculer_ski(true)
 			sk.dernier_sol = q
 			_phase = 1
 			_t = 0.0
@@ -107,10 +110,17 @@ func _tick() -> void:
 				_verif("télésiège : emporté puis levé sur le quai d'arrivée", false, "toujours assis après 400 s")
 				_fin()
 		3:
+			if _t < 1.0 / 60.0 + 0.001:
+				_p_lever = sk.global_position
 			if _t > 3.0:
-				var sol: float = _main.relief.hauteur_sol(sk.global_position.x, sk.global_position.z)
-				_verif("télésiège : debout à l'arrivée (pas de chute)", sk.is_on_floor() or absf(sk.global_position.y - sol) < 1.5,
-					"au sol %s" % sk.is_on_floor())
+				var gs: Array = sk._sol_ski(sk.global_position.x, sk.global_position.z, sk.global_position.y)
+				var quai: float = (_lg.global_transform * Vector3(0, _lg.terrain(_lg.longueur_h()), 0)).y
+				var d: float = Vector2(sk.global_position.x - _p_lever.x, sk.global_position.z - _p_lever.z).length()
+				_verif("télésiège : levé chaussé, il glisse hors du couloir sur la pente de débarquement",
+					sk.chausse and absf(sk.global_position.y - float(gs[0])) < 0.05 and d > 2.0
+					and sk.global_position.y > quai - 3.0,
+					"%.1f m parcourus en 3 s, %.2f m sous le quai, sol de gare %s" % [d, quai - sk.global_position.y,
+					float(gs[0]) > _main.relief.hauteur_sol(sk.global_position.x, sk.global_position.z) + 0.05])
 				_lg = _ligne("tcd10_boisses")
 				_main.aller_a_remontee(_lg)
 				_phase = 4

@@ -980,7 +980,7 @@ func _trouver_support() -> void:
 ## la freinent.
 func _glisser(delta: float, cmd: Vector2, schuss: bool) -> void:
 	var p: Vector3 = global_position
-	var n: Vector3 = relief.normale_sol(p.x, p.z)
+	var n: Vector3 = _sol_ski(p.x, p.z, p.y)[1]
 	var v: Vector3 = _v_ski
 	var vit: float = v.length()
 	var vit0: float = vit
@@ -1040,10 +1040,11 @@ func _glisser(delta: float, cmd: Vector2, schuss: bool) -> void:
 	if not relief.dans_le_bloc(q.x, q.z):
 		q = p
 		v = Vector3.ZERO
-	q.y = relief.hauteur_sol(q.x, q.z)
+	var sol: Array = _sol_ski(q.x, q.z, p.y)
+	q.y = sol[0]
 	global_position = q
 	# vitesse remise dans le plan de la pente d'arrivée
-	var n2: Vector3 = relief.normale_sol(q.x, q.z)
+	var n2: Vector3 = sol[1]
 	var m: float = v.length()
 	v -= n2 * v.dot(n2)
 	if v.length() > 1e-4:
@@ -1058,6 +1059,25 @@ func _glisser(delta: float, cmd: Vector2, schuss: bool) -> void:
 	_cap = _cap_ski
 	_visuel.rotation = Vector3(0.0, _cap_ski, _penche)
 	_visuel.visible = not premiere_personne
+
+
+## Sol sous les skis en (x, z) : [hauteur, normale]. Le relief, ou plus
+## haut une plate-forme de gare (quai, talus, rampe : collisions du décor)
+## sur laquelle on glisse — avant, à ski, seul le relief comptait et le
+## skieur qui se levait du télésiège passait sous la gare (retour
+## d'utilisateur, 23/10/2026). `y_ref` : hauteur actuelle (on ne monte pas
+## sur un toit : la plate-forme doit être à moins de 0,6 m au-dessus).
+func _sol_ski(x: float, z: float, y_ref: float) -> Array:
+	var h: float = relief.hauteur_sol(x, z)
+	var n: Vector3 = relief.normale_sol(x, z)
+	var haut: float = maxf(y_ref, h) + 0.6
+	if haut > h + 0.05:
+		var rq: PhysicsRayQueryParameters3D = PhysicsRayQueryParameters3D.create(
+			Vector3(x, haut, z), Vector3(x, h, z), CollisionsJeu.COUCHE_DECOR, [get_rid()])
+		var hit: Dictionary = get_world_3d().direct_space_state.intersect_ray(rq)
+		if not hit.is_empty() and (hit["normal"] as Vector3).y > 0.6:
+			return [(hit["position"] as Vector3).y, (hit["normal"] as Vector3).normalized()]
+	return [h, n]
 
 
 ## Mur devant (bâtiment, quai, porte : collisions des gares) dans le sens

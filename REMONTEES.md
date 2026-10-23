@@ -81,6 +81,18 @@ Depuis la 1.22.13, la gare suit les photos des gares BMF du Marmottes Express
 
 Les portillons s'ouvrent vers l'avant, vers la ligne d'arrêt.
 
+Depuis la 1.22.16 :
+- câble tracteur : le shader à torons du câble du funiculaire, pas mis à l'échelle du diamètre de
+  la ligne, torons qui défilent à la vitesse du câble (`RemonteeKit.materiau_cable_tracteur`) ; les
+  câbles porteurs (3S, téléphérique) restent lisses et immobiles ;
+- rail d'ouverture des pinces (`_rail_ouverture`) : il descend sur le galet du levier sur les
+  2,5 premiers mètres de la gare (`ouverture_pince`), comprime les ressorts et ouvre la mâchoire,
+  puis remonte à la sortie ;
+- gaines de la pince en demi-cônes ouverts par-dessous, évasés vers l'extérieur ;
+- télésiège : côté arrivée, le quai s'arrête 1,6 m après le couloir et descend à 1 pour 6
+  (`_bords_quai`) ; le skieur chaussé se lève à sa place et glisse dessus ;
+- à ski, le sol est le relief ou, plus haut, une plate-forme de gare (`SkieurJoueur._sol_ski`).
+
 La poulie tourne à la vitesse du câble en ligne, à son rayon de gorge, dans le sens de la boucle
 (1.22.15) : la roue est un nœud à part, l'arbre et le bâti restent fixes. Les numéros (pince et
 plaque du siège) sont des étiquettes d'un seul côté, une par face, contre-inversées sur les
