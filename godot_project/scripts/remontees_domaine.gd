@@ -72,9 +72,31 @@ func _poser(D: Dictionary) -> void:
 				haut = maxf(haut, relief.hauteur_sol(q2.x, q2.y) - h0)
 			t += 3.0
 		prof[bout[0]] = Vector2(prof[bout[0]].x, haut)
+	# rampe d'accès derrière chaque gare (côté portillons) : jusqu'où faut-il
+	# aller, en descendant de 10 %, pour retrouver la piste ?
+	var bq: float = LigneRemontee.L_GARE + float(D["voie"]) * 0.25 + 8.25
+	var rampes: Array = [0.0, 0.0]
+	# (télésièges seulement : on monte en cabine à pied, sans portillons ;
+	# 40 m au plus, au-delà le terrain plonge trop pour qu'on y arrive)
+	for k in (range(2) if String(D["famille"]).begins_with("siege") else []):
+		var o2: Vector2 = a if k == 0 else b
+		var dirb: Vector2 = -dirh if k == 0 else dirh
+		var y_q: float = prof[0 if k == 0 else prof.size() - 1].y
+		var t2: float = 0.0
+		while t2 < 40.0:
+			# sur toute la largeur de la rampe : le terrain le plus bas décide
+			var bas: float = INF
+			for xl in [-demi, -demi * 0.5, 0.0, demi * 0.5, demi]:
+				var q3: Vector2 = o2 + dirb * (bq + t2) + lat * xl
+				bas = minf(bas, relief.hauteur_sol(q3.x, q3.y) - h0)
+			if bas >= y_q - LigneRemontee.PENTE_RAMPE * t2:
+				break
+			t2 += 1.0
+		rampes[k] = t2
 	var lg: LigneRemontee = LigneRemontee.new()
 	lg.name = String(D["cle"])
 	lg.profil = prof
+	lg.rampes = rampes
 	# distances des pylônes ramenées à la longueur gare-à-gare du monde
 	var Ld: float = float(D["profil"][D["profil"].size() - 1][0])
 	var py: Array = []
