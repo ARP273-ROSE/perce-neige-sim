@@ -81,6 +81,16 @@ Depuis la 1.22.13, la gare suit les photos des gares BMF du Marmottes Express
 
 Les portillons s'ouvrent vers l'avant, vers la ligne d'arrêt.
 
+Depuis la 1.22.22 :
+- terrassement des gares (`LigneRemontee._terrassement`) : dessus du quai et de la rampe d'accès,
+  et un talus le long de chaque bord qui descend jusqu'au terrain réel (`sol_local`, relief
+  affiché, échantillonné tous les 50 cm) ; même surface pour le maillage et la collision
+  (polygone concave) ; la descente de débarquement est douce sur 4 m, puis talus normal ;
+- télécabine à pied : chaussé, on déchausse en entrant et les skis vont au porte-skis du vantail
+  (`VehiculeRemontee.porte_skis`) ; en haut, on se lève à l'ouverture des portes et l'on sort en
+  marchant, porté par la cabine tant qu'on y est ;
+- télésiège chaussé : on chausse au portillon ; en remontée, chausser et déchausser sont refusés.
+
 Depuis la 1.22.16 :
 - câble tracteur : le shader à torons du câble du funiculaire, pas mis à l'échelle du diamètre de
   la ligne, torons qui défilent à la vitesse du câble (`RemonteeKit.materiau_cable_tracteur`) ; les

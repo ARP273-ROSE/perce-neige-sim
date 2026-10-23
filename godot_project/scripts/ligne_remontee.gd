@@ -89,6 +89,7 @@ func _pause() -> void:
 
 func construire() -> void:
 	_poulies.clear()
+	_terrassements.clear()
 	pret = false
 	_t_tranche = Time.get_ticks_usec()
 	set_process(false)
@@ -488,15 +489,12 @@ func _gare(aval: bool) -> void:
 	var zm: float = (zc + znez) * 0.5 + signf(dz) * 4.0
 	var long_g: float = absf(dz) + voie * 0.5 + 3.5 + 5.0      # + aire d'attente derrière la poulie
 	# dalle et quais
-	# plate-forme : la gare est posée au plus haut du terrain sous son
-	# emprise ; un talus de neige damée descend en pente douce jusqu'au sol
-	# là où il est plus bas (un socle de béton faisait un bloc sombre)
-	g.add_child(_talus(_points_talus(aval, long_g, Vector3(0, 0, zm)), Vector3(0, -1.0, zm)))
-	# rampe d'accès côté portillons : la piste arrive à niveau du quai
-	var lr: float = float(rampes[0 if aval else 1])
-	if lr > 0.5:
-		var pr: PackedVector3Array = _points_rampe(aval, lr)
-		g.add_child(_talus(pr, (pr[0] + pr[2]) * 0.5 + Vector3(0, -1.0, 0)))
+	# plate-forme : quai (et rampe d'accès côté portillons) sur un
+	# terrassement de neige damée dont chaque talus descend jusqu'au terrain
+	# réel (retour d'utilisateur, 23/10/2026 : « le soubassement de toutes tes
+	# gares, c'est n'importe quoi » — des troncs de pyramide de 6,4 m de
+	# profondeur fixe, qui sortaient en surplomb quand le terrain plongeait)
+	g.add_child(_mesh_terrassement(_terrassement(aval), y0))
 	# carénage en gélule sur colonnes, cabine du conducteur (photos des
 	# gares BMF du Marmottes Express, retour d'utilisateur, 23/10/2026)
 	_capot(g, znez, zc, aval)
@@ -536,7 +534,6 @@ func _gare(aval: bool) -> void:
 
 # --- plate-forme de gare -----------------------------------------------------------
 
-const H_TALUS: float = 6.4          # profondeur du talus (jusque sous le terrain)
 const PENTE_RAMPE: float = 0.10     # rampe d'accès côté portillons (10 %)
 ## Longueur de la rampe d'accès derrière chaque gare [aval, amont] : posée
 ## par RemonteesDomaine d'après le relief, pour que la piste arrive à
@@ -550,32 +547,13 @@ func bout_quai() -> float:
 	return (L_GARE * 0.5 + 4.0) + long_g * 0.5
 
 
-## Sommets de la rampe (repère de la gare, dessus du quai à y = 0), même
-## ordre que le talus : dessus (4), puis base (4).
-func _points_rampe(aval: bool, lr: float) -> PackedVector3Array:
-	var sg: float = 1.0 if aval else -1.0
-	var znez: float = 0.0 if aval else -longueur_h()
-	var ze: float = znez + sg * bout_quai()
-	var zf: float = ze + sg * lr
-	var bq: Array = _bords_quai(aval)
-	var xg: float = bq[0]
-	var xd: float = bq[1]
-	var yf: float = -lr * PENTE_RAMPE
-	var e: float = H_TALUS * PENTE_TALUS
-	var eg: float = H_TALUS * float(bq[2])
-	var ed: float = H_TALUS * float(bq[3])
-	var pts: PackedVector3Array = PackedVector3Array([
-		Vector3(-xg, 0.0, ze), Vector3(xd, 0.0, ze), Vector3(xd, yf, zf), Vector3(-xg, yf, zf),
-		Vector3(-xg - eg, -H_TALUS, ze), Vector3(xd + ed, -H_TALUS, ze), Vector3(xd + ed, yf - H_TALUS, zf + sg * e), Vector3(-xg - eg, yf - H_TALUS, zf + sg * e)])
-	return pts
-
-
 ## Bords du quai : [demi-largeur à gauche (x−), à droite (x+), pente du
 ## talus à gauche, à droite (base / hauteur)]. Télésiège : côté ARRIVÉE, le
 ## quai s'arrête 1,6 m après le couloir des sièges et descend en pente douce
 ## (1 pour 6) : le skieur qui se lève glisse dessus, hors du chemin du siège
 ## (retour d'utilisateur, 23/10/2026).
 const PENTE_DEBARQUEMENT: float = 6.0
+const L_DESCENTE: float = 4.0         # longueur de la descente de débarquement (m)
 
 
 func _bords_quai(aval: bool) -> Array:
@@ -589,46 +567,136 @@ func _bords_quai(aval: bool) -> Array:
 const PENTE_TALUS: float = 1.6      # base / hauteur (environ 32°)
 
 
-## Sommets du talus (tronc de pyramide) : dessus de longueur `lz` centré
-## en `c`, bords latéraux et pentes selon _bords_quai.
-func _points_talus(aval: bool, lz: float, c: Vector3) -> PackedVector3Array:
+## Sol réel sous un point (x, z) du repère de la ligne : posé par
+## RemonteesDomaine (relief affiché) ; à défaut, le profil sous l'axe.
+var sol_local: Callable = Callable()
+var _terrassements: Dictionary = {}
+
+
+func _sol(x: float, z: float) -> float:
+	if sol_local.is_valid():
+		return float(sol_local.call(x, z))
+	return terrain(clampf(-z, 0.0, longueur_h()))
+
+
+## Terrassement d'une gare (triangles, repère de la ligne) : dessus du quai
+## et de la rampe d'accès, puis un talus le long de chaque bord, qui
+## descend selon sa pente jusqu'à rencontrer le terrain (échantillonné tous
+## les 50 cm) et s'y enfonce de 40 cm. Mis en cache : sert au maillage et
+## à la collision.
+func _terrassement(aval: bool) -> PackedVector3Array:
+	if _terrassements.has(aval):
+		return _terrassements[aval]
+	var L: float = longueur_h()
+	var y0: float = terrain(0.0 if aval else L)
+	var zc: float = L_GARE if aval else -L - L_GARE
+	var znez: float = 0.0 if aval else -L
+	var dz: float = zc - znez
+	var zm: float = (zc + znez) * 0.5 + signf(dz) * 4.0
+	var long_g: float = absf(dz) + voie * 0.5 + 3.5 + 5.0
+	var sgr: float = signf(dz)                         # vers l'arrière de la gare
+	var z_av: float = zm - sgr * long_g * 0.5
+	var z_ar: float = zm + sgr * long_g * 0.5
+	var lr: float = float(rampes[0 if aval else 1])
 	var bq: Array = _bords_quai(aval)
-	var pts: PackedVector3Array = PackedVector3Array()
-	for bas in [false, true]:
-		var y: float = -H_TALUS if bas else 0.0
-		var xg: float = float(bq[0]) + (H_TALUS * float(bq[2]) if bas else 0.0)
-		var xd: float = float(bq[1]) + (H_TALUS * float(bq[3]) if bas else 0.0)
-		var hz: float = lz * 0.5 + (H_TALUS * PENTE_TALUS if bas else 0.0)
-		for q in [Vector2(-xg, -hz), Vector2(xd, -hz), Vector2(xd, hz), Vector2(-xg, hz)]:
-			pts.append(c + Vector3(q.x, y, q.y))
-	return pts
+	var xg: float = -float(bq[0])
+	var xd: float = float(bq[1])
+	# abscisses le long de la gare, de l'avant au bout de la rampe
+	var zs: Array = []
+	var n_q: int = int(ceil(long_g))
+	for k in range(n_q + 1):
+		zs.append(z_av + sgr * long_g * float(k) / n_q)
+	if lr > 0.5:
+		var n_r: int = int(ceil(lr))
+		for k in range(1, n_r + 1):
+			zs.append(z_ar + sgr * lr * float(k) / n_r)
+	var haut := func(z: float) -> float:
+		var au_dela: float = (z - z_ar) * sgr
+		return y0 - maxf(au_dela, 0.0) * PENTE_RAMPE
+	# pente douce (débarquement) sur L_DESCENTE m au plus, puis talus normal :
+	# sinon, sur un terrain plus raide qu'elle, elle ne le rejoignait jamais
+	var pied := func(p: Vector3, n: Vector3, pente: float) -> Vector3:
+		var l_douce: float = L_DESCENTE if pente > PENTE_TALUS else 0.0
+		var t: float = 0.0
+		var y: float = p.y
+		while t < 60.0:
+			var q: Vector3 = p + n * t
+			y = p.y - minf(t, l_douce) / pente - maxf(t - l_douce, 0.0) / PENTE_TALUS
+			var g: float = _sol(q.x, q.z)
+			if y <= g:
+				return Vector3(q.x, g - 0.4, q.z)
+			t += 0.5
+		var q2: Vector3 = p + n * t
+		return Vector3(q2.x, y, q2.z)
+	var tri: PackedVector3Array = PackedVector3Array()
+	var quad := func(a: Vector3, b: Vector3, c: Vector3, d: Vector3) -> void:
+		tri.append_array(PackedVector3Array([a, b, c, a, c, d]))
+	# dessus
+	for k in range(zs.size() - 1):
+		var z0: float = zs[k]
+		var z1: float = zs[k + 1]
+		quad.call(Vector3(xg, haut.call(z0), z0), Vector3(xd, haut.call(z0), z0), Vector3(xd, haut.call(z1), z1), Vector3(xg, haut.call(z1), z1))
+	# talus latéraux
+	var bords: Array = [[xg, Vector3.LEFT, float(bq[2])], [xd, Vector3.RIGHT, float(bq[3])]]
+	var pieds_cote: Array = []
+	for bd in bords:
+		var pts: Array = []
+		for z in zs:
+			var p: Vector3 = Vector3(bd[0], haut.call(z), z)
+			pts.append([p, pied.call(p, bd[1], bd[2])])
+		for k in range(pts.size() - 1):
+			quad.call(pts[k][0], pts[k + 1][0], pts[k + 1][1], pts[k][1])
+		pieds_cote.append(pts)
+	# talus des deux bouts (avant, bout de la rampe), et coins
+	for bout in [[0, -sgr], [zs.size() - 1, sgr]]:
+		var z: float = zs[bout[0]]
+		var n: Vector3 = Vector3(0, 0, bout[1])
+		var nx: int = int(ceil(xd - xg))
+		var pts2: Array = []
+		for k in range(nx + 1):
+			var p: Vector3 = Vector3(lerpf(xg, xd, float(k) / nx), haut.call(z), z)
+			pts2.append([p, pied.call(p, n, PENTE_TALUS)])
+		for k in range(pts2.size() - 1):
+			quad.call(pts2[k][0], pts2[k + 1][0], pts2[k + 1][1], pts2[k][1])
+		# coins : du sommet aux pieds des deux talus voisins
+		var g0: Array = pieds_cote[0][bout[0]]
+		var d0: Array = pieds_cote[1][bout[0]]
+		tri.append_array(PackedVector3Array([pts2[0][0], pts2[0][1], g0[1]]))
+		tri.append_array(PackedVector3Array([pts2[pts2.size() - 1][0], pts2[pts2.size() - 1][1], d0[1]]))
+	_terrassements[aval] = tri
+	return tri
 
 
-## Talus de neige damée (ou rampe) : dessus, quatre flancs en pente ; `p`
-## = dessus (4) puis base (4), `c` = un point intérieur.
-func _talus(p: PackedVector3Array, c: Vector3) -> MeshInstance3D:
+## Maillage du terrassement (neige damée, double face, normales vers le
+## haut et l'extérieur), dans le repère de la gare (posée à y0).
+func _mesh_terrassement(tri: PackedVector3Array, y0: float) -> MeshInstance3D:
 	var st: SurfaceTool = SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var faces: Array = [[0, 1, 2, 3]]
-	for k in range(4):
-		faces.append([k, k + 4, (k + 1) % 4 + 4, (k + 1) % 4])
-	for fc in faces:
-		var a: Vector3 = p[fc[0]]
-		var b: Vector3 = p[fc[1]]
-		var cc: Vector3 = p[fc[2]]
-		var d: Vector3 = p[fc[3]]
-		var n: Vector3 = (b - a).cross(cc - a).normalized()
-		if n.y < -0.01 or (absf(n.y) <= 0.01 and n.dot(a - c) < 0.0):
+	var c: Vector3 = Vector3.ZERO
+	for p in tri:
+		c += p
+	c /= maxf(tri.size(), 1)
+	for k in range(0, tri.size(), 3):
+		var a: Vector3 = tri[k]
+		var b: Vector3 = tri[k + 1]
+		var d: Vector3 = tri[k + 2]
+		var n: Vector3 = (b - a).cross(d - a).normalized()
+		var m: Vector3 = (a + b + d) / 3.0
+		var ref: Vector3 = Vector3.UP + Vector3(m.x - c.x, 0, m.z - c.z).normalized() * 0.5
+		if n.dot(ref) < 0.0:
 			n = -n
-		for v in [a, b, cc, a, cc, d]:
+		# Godot : face avant dans le sens HORAIRE vue de la normale — sinon la
+		# face est vue de dos et sa normale retournée (talus noirs)
+		var ordre: Array = [a, b, d] if (b - a).cross(d - a).dot(n) < 0.0 else [a, d, b]
+		for v in ordre:
 			st.set_normal(n)
-			st.add_vertex(v)
+			st.add_vertex(v - Vector3(0, y0, 0))
 	var mi: MeshInstance3D = MeshInstance3D.new()
-	mi.name = "Talus"
-	var m: StandardMaterial3D = (RemonteeKit.mat("neige_damee") as StandardMaterial3D).duplicate()
-	m.cull_mode = BaseMaterial3D.CULL_DISABLED
+	mi.name = "Terrassement"
+	var m2: StandardMaterial3D = (RemonteeKit.mat("neige_damee") as StandardMaterial3D).duplicate()
+	m2.cull_mode = BaseMaterial3D.CULL_DISABLED
 	mi.mesh = st.commit()
-	mi.material_override = m
+	mi.material_override = m2
 	return mi
 
 
@@ -851,20 +919,11 @@ func _collisions_fixes() -> void:
 		var zm: float = (zc + znez) * 0.5 + signf(dz) * 4.0
 		var long_g: float = absf(dz) + voie * 0.5 + 3.5 + 5.0      # + aire d'attente derrière la poulie
 		var tal: CollisionShape3D = CollisionShape3D.new()
-		var cv: ConvexPolygonShape3D = ConvexPolygonShape3D.new()
-		cv.points = _points_talus(aval, long_g, Vector3(0, y0, zm))
-		tal.shape = cv
+		var cc: ConcavePolygonShape3D = ConcavePolygonShape3D.new()
+		cc.set_faces(_terrassement(aval))
+		cc.backface_collision = true
+		tal.shape = cc
 		corps.add_child(tal)
-		var lr: float = float(rampes[0 if aval else 1])
-		if lr > 0.5:
-			var ram: CollisionShape3D = CollisionShape3D.new()
-			var cv2: ConvexPolygonShape3D = ConvexPolygonShape3D.new()
-			var pr: PackedVector3Array = _points_rampe(aval, lr)
-			for k in range(pr.size()):
-				pr[k] += Vector3(0, y0, 0)
-			cv2.points = pr
-			ram.shape = cv2
-			corps.add_child(ram)
 		# colonnes du carénage et cabine du conducteur
 		boite.call(Vector3(1.0, H_CABLE_GARE, 1.0), Vector3(0, y0 + H_CABLE_GARE * 0.5, zc))
 		boite.call(Vector3(1.0, H_CABLE_GARE + Y_CAPOT, 1.0), Vector3(0, y0 + (H_CABLE_GARE + Y_CAPOT) * 0.5, (znez + zc) * 0.5 - signf(dz) * 1.0))

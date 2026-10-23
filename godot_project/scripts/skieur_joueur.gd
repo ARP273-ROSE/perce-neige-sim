@@ -323,6 +323,10 @@ func desactiver(rester_visible: bool = false) -> void:
 ## Chausser ou déchausser (bouton CHAUSSER, touche E) : renvoie la raison
 ## d'un refus, ou "".
 func basculer_ski(forcer: bool = false) -> String:
+	# assis en remontée : on ne chausse ni ne déchausse (il se retrouvait
+	# debout sur le siège — retour d'utilisateur, 23/10/2026)
+	if embarque:
+		return "Pas pendant la remontée"
 	lever()
 	if _chute_t > 0.0:
 		_chute_t = 0.0

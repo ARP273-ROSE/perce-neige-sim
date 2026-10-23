@@ -5,6 +5,38 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.22.22 — 23 octobre 2026
+
+**Remontées : terrassement des gares, télécabine à pied, télésiège chaussé.** Retours
+d'utilisateur du 23/10/2026 : « tu me lèves à l'ouverture des portes et je sors en marchant ; tu
+m'empêches de monter dans une cabine chaussé et tu mets les skis dans le porte-skis accroché à
+l'extérieur des portes ; et inversement, le TS je dois le prendre chaussé ; si une fois assis je
+chausse et déchausse, le skieur se retrouve debout » ; « le soubassement de toutes tes gares,
+c'est n'importe quoi ».
+- Soubassement des gares :
+  - c'étaient des troncs de pyramide de 6,4 m de profondeur fixe : quand le terrain plongeait, ils
+    sortaient en surplomb, comme la grande dalle sous la gare amont des Marmottes ;
+  - c'est maintenant un terrassement : le dessus du quai et de la rampe d'accès, et, le long de
+    chaque bord, un talus qui descend jusqu'au terrain réel (relief affiché, échantillonné tous
+    les 50 cm) et s'y enfonce de 40 cm ;
+  - la descente de débarquement des télésièges est douce sur 4 m, puis rejoint le talus normal ;
+  - la collision suit exactement la même surface.
+- Télécabine :
+  - elle se prend à pied : chaussé, on déchausse en entrant et les skis vont au porte-skis, sur le
+    vantail de la porte, à l'extérieur ;
+  - en haut, on se lève à l'ouverture des portes, debout dans la cabine qui vous porte, et l'on
+    sort en marchant ; les skis sont rendus, à la main.
+- Télésiège : il se prend chaussé ; arrivé à pied au portillon, on chausse.
+- En remontée, chausser et déchausser sont refusés (« Pas pendant la remontée ») : le skieur se
+  retrouvait debout sur le siège.
+- Aller à une remontée par la carte : une fois la gare construite, le skieur est posé sur son quai
+  (aux Boisses, il se retrouvait dans le remblai de la gare aval).
+- Vérifié :
+  - bancs embarquement (télésiège chaussé ; télécabine : assis, emporté, levé portes ouvertes,
+    debout et porté par la cabine 4 s plus tard), aller_remontee, quai, skieur et
+    remontee_dynamique ;
+  - captures en jeu des quatre gares ; studio du porte-skis.
+
 ## 1.22.21 — 23 octobre 2026
 
 **Télécabine : demi-tour fluide, sortie portes ouvertes, numéros.** Retour d'utilisateur du
