@@ -376,7 +376,9 @@ func balancer(dt: float, en_gare: bool) -> void:
 		return
 	var a: Vector3 = ((v - _v_prec) / dt).limit_length(25.0)
 	_v_prec = v
-	_a_f = _a_f.lerp(a, minf(1.0, dt * 15.0))
+	# accélération lissée — davantage en gare : la boucle y est un polygone,
+	# chaque sommet de l'arc de la poulie donnait une secousse au balancier
+	_a_f = _a_f.lerp(a, minf(1.0, dt * (3.0 if en_gare else 15.0)))
 	var la: Vector3 = transform.basis.inverse() * _a_f
 	var g2: float = 9.81 + _a_f.y
 	var L: float = longueur_pendule
@@ -824,6 +826,14 @@ func _cabine() -> void:
 			RemonteeKit.coussin(cab, Vector3(0.44, 0.09, 0.42), Transform3D(Basis(Vector3.RIGHT, -sz * 0.06), Vector3(xi, yp + 0.41, zb)), sieges, 0.035)
 			RemonteeKit.coussin(cab, Vector3(0.44, 0.50, 0.07), Transform3D(Basis(Vector3.RIGHT, sz * 0.12), Vector3(xi, yp + 0.76, sz * (BANC_Z + 0.22))), sieges, 0.03)
 	RemonteeKit.boite_en(cab, Vector3(1.20, 0.02, 0.50), Vector3(0, -0.22, 0), "blanc_plaque")
+	# numéro de la cabine (le même que sur la pince), en blanc dans le cadre
+	# noir sous le toit, sur les quatre faces (retour d'utilisateur, 23/10/2026 :
+	# « pas de numéro sur les cabines »)
+	var no: String = "%02d" % numero
+	# (cadre noir entre le toit et le haut des vitres, au-dessus des portes)
+	for f in [[Vector3(0, -0.16, 0.515), 0.0], [Vector3(0, -0.16, -0.515), PI], [Vector3(1.005, -0.16, 0.0), PI * 0.5],
+			[Vector3(-1.005, -0.16, 0.0), -PI * 0.5]]:
+		_numero(cab, no, f[0], f[1], 56, 0.0018, Color(1, 1, 1))
 	if famille == "cabine_diamond":
 		# porte-skis extérieurs sur la face opposée aux portes : deux paniers
 		for sz in [-1.0, 1.0]:

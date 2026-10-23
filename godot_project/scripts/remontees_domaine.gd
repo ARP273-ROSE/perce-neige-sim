@@ -290,8 +290,10 @@ func _suivre_siege() -> void:
 	var cap: float = _cap(v, a_bord[4])
 	skieur._visuel.rotation = Vector3(0.0, cap, 0.0)
 	skieur._visuel.position = Vector3(sin(cap), 0.0, cos(cap)) * SkieurJoueur.RECUL_ASSIS
-	# arrivée à l'autre gare : il se lève sur la rampe, devant le siège
-	var arr: Array = lg.arrivee(i)
+	# arrivée à l'autre gare : il se lève sur la rampe, devant le siège ;
+	# en cabine, seulement portes ouvertes (il était éjecté avant —
+	# retour d'utilisateur, 23/10/2026)
+	var arr: Array = lg.arrivee(i) if not v.cabine else lg.arrivee_cabine(i)
 	if not arr.is_empty() and bool(arr[0]) != bool(a_bord[3]):
 		var aval_arr: bool = arr[0]
 		var y_quai: float = (lg.global_transform * Vector3(0, lg.terrain(0.0 if aval_arr else lg.longueur_h()), 0)).y
