@@ -447,12 +447,12 @@ func formes_collision(cote_ext: float) -> Array:
 		return f
 	if famille == "cabine_tph":
 		var yt: float = -H_SUSP_TPH - 0.08 - 2.70 + 0.12
-		f.append([Vector3(3.0, 0.15, 6.4), Vector3(0, yt - 0.075, 0), false])
-		f.append([Vector3(3.0, 0.10, 6.4), Vector3(0, -H_SUSP_TPH - 0.12, 0), false])
-		f.append([Vector3(3.0, 2.5, 0.06), Vector3(0, yt + 1.25, -3.19), false])
-		f.append([Vector3(3.0, 2.5, 0.06), Vector3(0, yt + 1.25, 3.19), false])
-		f.append([Vector3(0.06, 2.5, 6.4), Vector3(-cote_ext * 1.49, yt + 1.25, 0), false])
-		f.append([Vector3(0.06, 2.5, 6.4), Vector3(cote_ext * 1.49, yt + 1.25, 0), true])
+		f.append([Vector3(3.0, 0.15, 5.6), Vector3(0, yt - 0.075, 0), false])
+		f.append([Vector3(3.0, 0.10, 5.6), Vector3(0, -H_SUSP_TPH - 0.12, 0), false])
+		f.append([Vector3(3.0, 2.5, 0.06), Vector3(0, yt + 1.25, -2.79), false])
+		f.append([Vector3(3.0, 2.5, 0.06), Vector3(0, yt + 1.25, 2.79), false])
+		f.append([Vector3(0.06, 2.5, 5.6), Vector3(-cote_ext * 1.51, yt + 1.25, 0), false])
+		f.append([Vector3(0.06, 2.5, 5.6), Vector3(cote_ext * 1.51, yt + 1.25, 0), true])
 		return f
 	if famille == "cabine_3s":
 		var yb: float = -H_SUSP_3S - 0.08 - 2.55 + 0.20
@@ -963,13 +963,12 @@ func _cabine_zeta() -> void:
 	var q1: Vector3 = Vector3(0.95, 0.40, 0)
 	var q2: Vector3 = Vector3(0.95, -hs + 0.30, 0)
 	var q3: Vector3 = Vector3(0.0, -hs + 0.05, 0)
-	var prec: Vector3 = q0
-	for k in range(1, 15):
-		var t: float = float(k) / 14.0
+	var arc_z: PackedVector3Array = PackedVector3Array()
+	for k in range(21):
+		var t: float = float(k) / 20.0
 		var u: float = 1.0 - t
-		var p: Vector3 = q0 * u * u * u + q1 * 3.0 * u * u * t + q2 * 3.0 * u * t * t + q3 * t * t * t
-		RemonteeKit.poutre(self, prec, p, 0.20, 0.30, gris, Vector3.FORWARD)
-		prec = p
+		arc_z.append(q0 * u * u * u + q1 * 3.0 * u * u * t + q2 * 3.0 * u * t * t + q3 * t * t * t)
+	RemonteeKit.caisson(self, arc_z, 0.22, 0.30, 0.30, gris, Vector3.BACK)
 	RemonteeKit.boite_en(self, Vector3(0.50, 0.12, 0.70), Vector3(0, -hs - 0.02, 0), gris)
 	# caisse
 	var cab: Node3D = Node3D.new()
@@ -1019,7 +1018,7 @@ func _cabine_zeta() -> void:
 ## en deux bogies sur le câble porteur, attaches du tracteur aux deux bouts ;
 ## grande suspente pleine en coin ; cabine de 115 + 1 places (6,4 × 3,0 m),
 ## poste du conducteur à l'avant, barres de maintien, portes au milieu.
-const H_SUSP_TPH: float = 3.6
+const H_SUSP_TPH: float = 4.6
 
 
 func _cabine_tph() -> void:
@@ -1029,39 +1028,34 @@ func _cabine_tph() -> void:
 	add_child(ch)
 	var gris: String = "galva_pylone"
 	var rg: float = 0.22
-	# chariot : longeron, deux bogies de 4 galets sur le porteur
-	RemonteeKit.boite_en(ch, Vector3(0.36, 0.30, 4.4), Vector3(0, 0.55, 0), gris)
+	# chariot : poutre-caisson, deux bogies de 4 galets (2 balanciers de 2)
+	# sur le porteur, joues latérales, attaches du tracteur aux deux bouts
+	RemonteeKit.boite_en(ch, Vector3(0.44, 0.34, 4.6), Vector3(0, 0.62, 0), gris)
 	for bz in [-1.0, 1.0]:
-		RemonteeKit.boite_en(ch, Vector3(0.30, 0.22, 1.9), Vector3(0, rg + 0.12, bz * 1.15), gris)
+		var zb: float = bz * 1.20
+		for sx in [-1.0, 1.0]:
+			RemonteeKit.boite_en(ch, Vector3(0.03, 0.44, 2.0), Vector3(sx * 0.16, rg + 0.10, zb), "galva_patine")
 		for k in range(4):
-			RemonteeKit.galet(ch, Vector3(0, rg + PyloneRemontee.R_CABLE, bz * 1.15 + (k - 1.5) * 0.48), rg)
-		RemonteeKit.cylindre(ch, 0.05, 0.05, 0.40, Transform3D(Basis(Vector3.FORWARD, PI * 0.5), Vector3(0, 0.45, bz * 1.15)), "acier", 10)
-		# attache du tracteur (sous le porteur, en bout de chariot)
-		RemonteeKit.boite_en(ch, Vector3(0.20, 0.50, 0.30), Vector3(0, 0.05, bz * 2.25), gris)
-	RemonteeKit.boite_en(ch, Vector3(0.05, 0.10, 0.12), Vector3(0.20, 0.75, 1.8), "cabine_rouge")       # feu
-	# suspente : coin plein, étroit sous le chariot, large au toit
+			RemonteeKit.galet(ch, Vector3(0, rg + PyloneRemontee.R_CABLE, zb + (k - 1.5) * 0.48), rg)
+		RemonteeKit.cylindre(ch, 0.06, 0.06, 0.46, Transform3D(Basis(Vector3.FORWARD, PI * 0.5), Vector3(0, 0.50, zb)), "acier_noir", 10)
+		RemonteeKit.boite_en(ch, Vector3(0.24, 0.55, 0.34), Vector3(0, 0.08, bz * 2.35), gris)
+		RemonteeKit.cylindre(ch, 0.08, 0.08, 0.30, Transform3D(Basis(Vector3.FORWARD, PI * 0.5), Vector3(0, -0.15, bz * 2.35)), "acier", 10)
+	RemonteeKit.boite_en(ch, Vector3(0.05, 0.10, 0.12), Vector3(0.24, 0.84, 2.0), "cabine_rouge")       # feu
+	# suspente (photos) : grand bras gris en caisson qui monte d'un côté du
+	# toit et se recourbe au-dessus du centre de la cabine jusqu'au chariot
 	var hs: float = H_SUSP_TPH
-	var st: SurfaceTool = SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var ep: float = 0.16
-	var haut: Array = [Vector3(0, 0.40, -0.55), Vector3(0, 0.40, 0.55)]
-	var bas: Array = [Vector3(0, -hs + 0.05, -1.6), Vector3(0, -hs + 0.05, 1.6)]
-	var quad := func(a: Vector3, b: Vector3, c: Vector3, d: Vector3) -> void:
-		for v in [a, b, c, a, c, d]:
-			st.add_vertex(v)
-	for sx in [-1.0, 1.0]:
-		var o: Vector3 = Vector3(sx * ep, 0, 0)
-		quad.call(haut[0] + o, haut[1] + o, bas[1] + o * 2.0, bas[0] + o * 2.0)
-	quad.call(haut[0] + Vector3(-ep, 0, 0), haut[0] + Vector3(ep, 0, 0), bas[0] + Vector3(2.0 * ep, 0, 0), bas[0] + Vector3(-2.0 * ep, 0, 0))
-	quad.call(haut[1] + Vector3(ep, 0, 0), haut[1] + Vector3(-ep, 0, 0), bas[1] + Vector3(-2.0 * ep, 0, 0), bas[1] + Vector3(2.0 * ep, 0, 0))
-	st.generate_normals()
-	var mi: MeshInstance3D = MeshInstance3D.new()
-	mi.mesh = st.commit()
-	var m: StandardMaterial3D = (RemonteeKit.mat("acier") as StandardMaterial3D).duplicate()
-	m.cull_mode = BaseMaterial3D.CULL_DISABLED
-	mi.material_override = m
-	add_child(mi)
-	RemonteeKit.boite_en(self, Vector3(0.8, 0.12, 3.4), Vector3(0, -hs - 0.02, 0), "galva_pylone")
+	var p0: Vector3 = Vector3(0.0, 0.40, 0)
+	var p1: Vector3 = Vector3(1.55, 0.30, 0)
+	var p2: Vector3 = Vector3(1.10, -hs + 0.9, 0)
+	var p3: Vector3 = Vector3(1.05, -hs + 0.05, 0)
+	var arc_t: PackedVector3Array = PackedVector3Array()
+	for k in range(25):
+		var t: float = float(k) / 24.0
+		var u: float = 1.0 - t
+		arc_t.append(p0 * u * u * u + p1 * 3.0 * u * u * t + p2 * 3.0 * u * t * t + p3 * t * t * t)
+	# caisson qui s'élargit vers le toit (photos)
+	RemonteeKit.caisson(self, arc_t, 0.40, 0.55, 1.1, "acier", Vector3.BACK)
+	RemonteeKit.boite_en(self, Vector3(0.9, 0.14, 1.6), Vector3(1.05, -hs - 0.02, 0), gris)
 	# caisse
 	var cab: Node3D = Node3D.new()
 	cab.name = "Caisse"
@@ -1080,27 +1074,44 @@ func _cabine_tph() -> void:
 			var m2: MeshInstance3D = MeshInstance3D.new()
 			m2.mesh = mailles[cle2 + ("_p" if sz > 0 else "_m")]
 			v.add_child(m2)
-		_portes.append([v, Vector3.ZERO, Vector3(0.06, 0, sz * 0.80)])
+		_portes.append([v, Vector3.ZERO, Vector3(0.06, 0, sz * 0.75)])
+	# meneaux des grandes vitres (trois en façade, cinq sur les côtés)
+	for sz2 in [-1.0, 1.0]:
+		for xm in [-0.5, 0.5]:
+			RemonteeKit.boite_en(cab, Vector3(0.06, 1.35, 0.04), Vector3(xm, -0.95, sz2 * 2.80), "cabine_blanche")
+	for sx2 in [-1.0, 1.0]:
+		for k2 in range(-2, 3):
+			if sx2 > 0.0 and absf(k2) < 1:
+				continue          # baie de la porte
+			RemonteeKit.boite_en(cab, Vector3(0.04, 1.35, 0.06), Vector3(sx2 * 1.52, -0.95, k2 * 0.95), "cabine_blanche")
+	# toit : plate-forme de service, garde-corps, trappe
+	for sx3 in [-1.0, 1.0]:
+		RemonteeKit.barre(cab, Vector3(sx3 * 1.30, 0.55, -2.55), Vector3(sx3 * 1.30, 0.55, 2.55), 0.025, "galva", 6)
+		for k3 in range(6):
+			var zz: float = -2.55 + k3 * 1.02
+			RemonteeKit.barre(cab, Vector3(sx3 * 1.30, 0.0, zz), Vector3(sx3 * 1.30, 0.55, zz), 0.02, "galva", 6)
+	RemonteeKit.boite_en(cab, Vector3(0.8, 0.06, 0.8), Vector3(-0.5, 0.03, -1.6), "galva_pylone")
 	# intérieur : plancher, poste du conducteur à l'avant, barres de maintien
 	var yp: float = -H + 0.12
-	RemonteeKit.boite_en(cab, Vector3(2.85, 0.03, 6.2), Vector3(0, yp, 0), "noir_mat")
-	RemonteeKit.boite_en(cab, Vector3(1.2, 1.0, 0.6), Vector3(-0.6, yp + 0.5, -2.75), "peinture_anthracite")
-	RemonteeKit.boite_en(cab, Vector3(1.1, 0.04, 0.5), Vector3(-0.6, yp + 1.02, -2.75), "noir_mat")
+	RemonteeKit.boite_en(cab, Vector3(2.85, 0.03, 5.4), Vector3(0, yp, 0), "noir_mat")
+	RemonteeKit.boite_en(cab, Vector3(1.2, 1.0, 0.6), Vector3(-0.6, yp + 0.5, -2.35), "peinture_anthracite")
+	RemonteeKit.boite_en(cab, Vector3(1.1, 0.04, 0.5), Vector3(-0.6, yp + 1.02, -2.35), "noir_mat")
 	for k in range(5):
-		var z: float = -2.0 + k * 1.0
+		var z: float = -1.8 + k * 0.9
 		RemonteeKit.barre(cab, Vector3(-1.2, -0.45, z), Vector3(1.2, -0.45, z), 0.02, "acier", 6)
 		RemonteeKit.barre(cab, Vector3(0, yp, z), Vector3(0, -0.45, z), 0.025, "acier", 6)
-	# inscription sur les flancs (photo : « CAPITALE DU SKI D'ÉTÉ »)
-	for sx in [-1.0, 1.0]:
+	# inscription sous les vitres, sur les quatre faces (photos)
+	for f in [[Vector3(0, -2.05, 2.815), 0.0, 1.0], [Vector3(0, -2.05, -2.815), PI, 1.0], [Vector3(1.535, -2.05, -1.2), PI * 0.5, 0.8],
+			[Vector3(-1.535, -2.05, 0.0), -PI * 0.5, 1.0]]:
 		var l: Label3D = Label3D.new()
-		l.text = "TIGNES · GRANDE MOTTE"
-		l.font_size = 96
-		l.pixel_size = 0.004
-		l.modulate = Color(0.08, 0.28, 0.62)
+		l.text = "CAPITALE DU SKI D'ÉTÉ"
+		l.font_size = 80
+		l.pixel_size = 0.0032 * float(f[2])
+		l.modulate = Color(0.75, 0.10, 0.12)
 		l.outline_size = 0
 		l.double_sided = false
-		l.position = Vector3(sx * 1.515, -1.75, 0.6 if sx > 0 else 0.0)
-		l.rotation.y = sx * PI * 0.5
+		l.position = f[0]
+		l.rotation.y = f[1]
 		if miroir:
 			l.scale = Vector3(-1, 1, 1)
 		cab.add_child(l)
@@ -1135,17 +1146,19 @@ static func _profil_cabine(fam: String) -> Array:
 		# grande caisse rectangulaire à angles peu arrondis, toit bleu, bandeau
 		# de vitres sombres en haut, caisse blanche à liseré bleu, fond
 		# légèrement rentré
+		# (photos Commons « 2017-01 Grande Motte Tignes ») : caisse blanche presque
+		# parallélépipédique, toit plat blanc, très grand vitrage bleuté sur
+		# toute la hauteur utile, soubassement blanc portant l'inscription
 		for c in [
-			[0.00, 1.35, 3.05, 0.22, "toit"],
-			[0.10, 1.47, 3.17, 0.26, "toit"],
-			[0.22, 1.50, 3.20, 0.27, "cadre"],
-			[0.28, 1.50, 3.20, 0.27, "vitre"],
-			[1.18, 1.50, 3.20, 0.27, "cadre"],
-			[1.24, 1.50, 3.20, 0.27, "caisse"],
-			[2.30, 1.50, 3.20, 0.27, "liseré"],
-			[2.40, 1.49, 3.19, 0.27, "caisse"],
-			[2.62, 1.40, 3.08, 0.25, "jupe"],
-			[2.70, 1.30, 2.98, 0.22, ""],
+			[0.00, 1.42, 2.70, 0.12, "toit"],
+			[0.08, 1.50, 2.78, 0.16, "caisse"],
+			[0.22, 1.52, 2.80, 0.16, "cadre"],
+			[0.27, 1.52, 2.80, 0.16, "vitre"],
+			[1.62, 1.52, 2.80, 0.16, "cadre"],
+			[1.68, 1.52, 2.80, 0.16, "caisse"],
+			[2.42, 1.50, 2.78, 0.16, "jupe"],
+			[2.62, 1.40, 2.68, 0.14, "jupe"],
+			[2.70, 1.30, 2.58, 0.12, ""],
 		]:
 			anneaux.append([-float(c[0]), c[1], c[2], c[3], c[4]])
 		return anneaux
@@ -1247,11 +1260,11 @@ static func _mat_cabine(nom: String, fam: String) -> Material:
 		"liseré":
 			base = {"cabine_diamond": "acier", "cabine_symphony": "cabine_bleue", "cabine_3s": "cabine_noire", "cabine_tph": "cabine_bleue"}.get(fam, "cabine_rouge")
 		"toit":
-			base = "cabine_bleue" if fam == "cabine_tph" else "cabine_noire"
+			base = "cabine_blanche" if fam == "cabine_tph" else "cabine_noire"
 		"cadre":
 			base = "cabine_noire"
 		"vitre":
-			base = "vitre_teintee"
+			base = "vitre_bleue" if fam == "cabine_tph" else "vitre_teintee"
 	var m: Material = RemonteeKit.mat(base)
 	if nom != "vitre":
 		# double face : on voit l'intérieur de la caisse à travers les vitres
