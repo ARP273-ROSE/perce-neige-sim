@@ -74,7 +74,7 @@ func arrivee_cabine(i: int) -> Array:
 
 
 func demi_interieur() -> Vector2:
-	return Vector2(1.45, 3.10)
+	return Vector2(1.45, 2.70)
 
 
 func construire() -> void:

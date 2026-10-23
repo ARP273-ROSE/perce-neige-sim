@@ -5,6 +5,26 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.25.1 — 23 octobre 2026
+
+**Remontées : cabine et suspente du téléphérique refaites, suspentes lisses.** Retour d'utilisateur
+du 23/10/2026 : « il faut améliorer grandement le design de la cabine, de sa structure porteuse, du
+pylône ».
+- Cabine du téléphérique de la Grande Motte, d'après les photos Wikimedia Commons (« 2017-01 Grande
+  Motte Tignes », 2017) et le reportage :
+  - caisse blanche presque parallélépipédique de 5,6 × 3,0 m, toit plat blanc ;
+  - très grand vitrage bleuté sur toute la hauteur utile, meneaux blancs ;
+  - soubassement blanc portant l'inscription « CAPITALE DU SKI D'ÉTÉ » sur les quatre faces ;
+  - plate-forme de service sur le toit, avec garde-corps et trappe.
+- Structure porteuse :
+  - grande suspente en caisson lisse, qui monte d'un côté du toit en s'élargissant et se recourbe
+    au-dessus du centre de la cabine jusqu'au chariot, comme sur les photos ;
+  - chariot en poutre-caisson, deux bogies de 4 galets entre joues latérales, attaches du
+    tracteur aux deux bouts.
+- Suspentes du 3S : même caisson lisse, au lieu de tronçons de poutre en escalier
+  (`RemonteeKit.caisson`).
+- Vérifié : bancs tph, 3s, embarquement et aller_remontee ; studio `shot_3s.gd`.
+
 ## 1.25.0 — 23 octobre 2026
 
 **Remontées : le téléphérique de la Grande Motte (va-et-vient).** Retour d'utilisateur du

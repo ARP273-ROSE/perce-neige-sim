@@ -61,6 +61,12 @@ static func mat(nom: String) -> StandardMaterial3D:
 		m.roughness = 0.05
 		m.metallic = 0.4
 		m.cull_mode = BaseMaterial3D.CULL_DISABLED
+	elif nom == "vitre_bleue":
+		m.albedo_color = Color(0.10, 0.42, 0.62, 0.62)   # vitrage bleuté (Grande Motte)
+		m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		m.roughness = 0.04
+		m.metallic = 0.5
+		m.cull_mode = BaseMaterial3D.CULL_DISABLED
 	elif nom == "vitre_teintee":
 		m.albedo_color = Color(0.20, 0.21, 0.23, 0.55)  # polycarbonate gris (Omega)
 		m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
@@ -306,6 +312,56 @@ static func _maillage_coussin(h: Vector3, r: float) -> ArrayMesh:
 					st.set_normal(p[1])
 					st.add_vertex(p[0])
 	return st.commit()
+
+
+## Caisson lisse : section rectangulaire balayée le long de `pts` (dans un
+## plan vertical) ; largeur (dans le plan de la courbe) de l0 à l1,
+## épaisseur e hors du plan (selon `hors`). Pour les suspentes en caisson.
+static func caisson(parent: Node3D, pts: PackedVector3Array, l0: float, l1: float, e: float, m: String,
+		hors: Vector3 = Vector3.FORWARD) -> MeshInstance3D:
+	var n: int = pts.size()
+	if n < 2:
+		return null
+	var st: SurfaceTool = SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	st.set_smooth_group(-1)
+	var anneaux: Array = []
+	for i in range(n):
+		var t: Vector3 = (pts[mini(i + 1, n - 1)] - pts[maxi(i - 1, 0)]).normalized()
+		var lat: Vector3 = hors.cross(t).normalized()          # dans le plan de la courbe
+		var w: float = lerpf(l0, l1, float(i) / (n - 1)) * 0.5
+		var c: Vector3 = pts[i]
+		anneaux.append([c + lat * w + hors * e * 0.5, c - lat * w + hors * e * 0.5,
+			c - lat * w - hors * e * 0.5, c + lat * w - hors * e * 0.5])
+	for i in range(n - 1):
+		for k in range(4):
+			var a0: Vector3 = anneaux[i][k]
+			var a1: Vector3 = anneaux[i][(k + 1) % 4]
+			var b0: Vector3 = anneaux[i + 1][k]
+			var b1: Vector3 = anneaux[i + 1][(k + 1) % 4]
+			var nrm: Vector3 = (b0 - a0).cross(a1 - a0).normalized()
+			var ordre: Array = [a0, b0, b1, a0, b1, a1]
+			if nrm.dot((a0 + a1) * 0.5 - pts[i]) < 0.0:
+				nrm = -nrm
+				ordre = [a0, b1, b0, a0, a1, b1]
+			# Godot : face avant dans le sens horaire vue de la normale
+			if (ordre[1] - ordre[0]).cross(ordre[2] - ordre[0]).dot(nrm) > 0.0:
+				ordre = [ordre[0], ordre[2], ordre[1], ordre[3], ordre[5], ordre[4]]
+			for v in ordre:
+				st.set_normal(nrm)
+				st.add_vertex(v)
+	# bouts
+	for bout in [0, n - 1]:
+		var r: Array = anneaux[bout]
+		var nb: Vector3 = (pts[bout] - pts[1 if bout == 0 else n - 2]).normalized()
+		for v in [r[0], r[1], r[2], r[0], r[2], r[3]]:
+			st.set_normal(nb)
+			st.add_vertex(v)
+	var mesh: ArrayMesh = st.commit()
+	var mt: StandardMaterial3D = (mat(m) as StandardMaterial3D).duplicate()
+	mt.cull_mode = BaseMaterial3D.CULL_DISABLED
+	mesh.surface_set_material(0, mt)
+	return _mi(parent, mesh, Transform3D.IDENTITY, m)
 
 
 ## Demi-cône ouvert par-dessous (gouttière évasée) d'axe a → b, rayon r0

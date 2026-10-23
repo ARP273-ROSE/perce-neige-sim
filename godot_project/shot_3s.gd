@@ -60,6 +60,20 @@ func _initialize() -> void:
 		c3.construire()
 		if k == 1:
 			c3.portes(1.0)
+	# téléphérique (va-et-vient) : un porteur, une cabine
+	var yt: float = 9.0
+	RemonteeKit.barre(racine, Vector3(30, yt, 60), Vector3(30, yt, -60), 0.025, "cable", 8)
+	var ct: VehiculeRemontee = VehiculeRemontee.new()
+	ct.famille = "cabine_tph"
+	ct.position = Vector3(30, yt, 0)
+	racine.add_child(ct)
+	ct.construire()
+	var ct2: VehiculeRemontee = VehiculeRemontee.new()
+	ct2.famille = "cabine_tph"
+	ct2.position = Vector3(42, yt, 0)
+	racine.add_child(ct2)
+	ct2.construire()
+	ct2.portes(1.0)
 	_cam = Camera3D.new()
 	_cam.fov = 45
 	racine.add_child(_cam)
@@ -72,6 +86,10 @@ func _initialize() -> void:
 		["portes", Vector3(xc + 6.5, yp - 2.8, 18.0), Vector3(xc, yp - 3.0, 18)],
 		["chariot", Vector3(xc + 2.0, yp + 0.8, 7.2), Vector3(xc, yp, 9)],
 		["chariot_dessous", Vector3(xc + 1.2, yp - 1.6, 7.5), Vector3(xc, yp, 9)],
+		["tph_34", Vector3(38, 6.5, 13), Vector3(30, 5.0, 0)],
+		["tph_face", Vector3(30, 4.5, 14), Vector3(30, 5.0, 0)],
+		["tph_portes", Vector3(52, 3.5, 6), Vector3(42, 2.5, 0)],
+		["tph_chariot", Vector3(33.5, 10.5, 3.5), Vector3(30, 9.2, 0)],
 		["pylone", Vector3(24, 14, -26), Vector3(0, 16, 0)],
 		["tete_pylone", Vector3(10, yp + 3.0, -9), Vector3(0, yp, 0)],
 	]
