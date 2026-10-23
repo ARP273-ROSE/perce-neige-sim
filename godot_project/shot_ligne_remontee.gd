@@ -76,7 +76,7 @@ func _initialize() -> void:
 		["vue_generale", Vector3(-L * 0.55, _ligne.terrain(L * 0.5) + L * 0.25, -L * 0.45), Vector3(0, _ligne.terrain(L * 0.5), -L * 0.5)],
 		["gare_aval", Vector3(-14, 9, 8), Vector3(0, 4, 8)],
 		["gare_aval_quai", Vector3(9, 2.0, -3), Vector3(0, 3.5, 12)],
-		["portillons", Vector3(9.0, 4.5, 40.0), Vector3(-1.0, 1.0, 22.0)],
+		["portillons", Vector3(9.0, 4.5, 40.0), Vector3(-1.0, 1.0, 22.0)], ["entree", Vector3(_ligne._x_brin(true) + 2.0, 1.7, 52.0), Vector3(_ligne._x_brin(true), 1.4, 36.0)],
 		["poulie", Vector3(-4.5, 3.0, 17.0), Vector3(0, 4.2, 25.0)],
 		["pneus", Vector3(5.5, 3.6, 5.0), Vector3(3.0, 4.4, 9.0)],
 		["nez_gare", Vector3(-10.0, 4.0, -9.0), Vector3(0, 4.5, 0.0)],

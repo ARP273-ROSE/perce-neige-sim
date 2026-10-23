@@ -1148,17 +1148,25 @@ func _portillons(aval: bool) -> void:
 	corps.collision_layer = CollisionsJeu.COUCHE_DECOR
 	corps.collision_mask = 0
 	g.add_child(corps)
+	# bornes de contrôle (photos : Palafour, Paquis) : piliers gris arrondis
+	# avec lecteur de forfait et petit écran, une par couloir, et une en bout
 	for k in range(n + 1):
 		var x: float = -W * 0.5 + k * lv
-		RemonteeKit.cylindre(g, 0.04, 0.04, 1.05, Transform3D(Basis.IDENTITY, Vector3(x, 0.525, 0)), "acier", 8)
+		RemonteeKit.coussin(g, Vector3(0.22, 1.10, 0.36), Transform3D(Basis.IDENTITY, Vector3(x, 0.55, 0.12)), "alu_pince", 0.10)
+		RemonteeKit.boite_en(g, Vector3(0.20, 0.12, 0.012), Vector3(x, 0.92, -0.065), "noir_mat")
+		RemonteeKit.boite_en(g, Vector3(0.12, 0.06, 0.006), Vector3(x, 0.93, -0.073), "vitre_bleue")
+		RemonteeKit.boite_en(g, Vector3(0.10, 0.10, 0.012), Vector3(x, 0.70, -0.065), "cabine_rouge")
 	for k in range(n):
 		var x0: float = -W * 0.5 + k * lv
 		var v: Node3D = Node3D.new()
-		v.position = Vector3(x0 + 0.05, 0, 0)
+		v.position = Vector3(x0 + 0.12, 0, 0)
 		g.add_child(v)
-		RemonteeKit.boite_en(v, Vector3(lv - 0.12, 0.05, 0.04), Vector3((lv - 0.12) * 0.5, 0.95, 0), "jaune_securite")
-		RemonteeKit.boite_en(v, Vector3(lv - 0.12, 0.05, 0.04), Vector3((lv - 0.12) * 0.5, 0.55, 0), "jaune_securite")
-		RemonteeKit.boite_en(v, Vector3(0.04, 0.45, 0.04), Vector3(lv - 0.14, 0.75, 0), "jaune_securite")
+		# vantail : cadre en tube inox, deux lisses et un montant
+		var lb: float = lv - 0.26
+		RemonteeKit.barre(v, Vector3(0, 0.95, 0), Vector3(lb, 0.95, 0), 0.022, "acier", 8)
+		RemonteeKit.barre(v, Vector3(0, 0.55, 0), Vector3(lb, 0.55, 0), 0.018, "acier", 8)
+		RemonteeKit.barre(v, Vector3(lb, 0.55, 0), Vector3(lb, 0.95, 0), 0.018, "acier", 8)
+		RemonteeKit.boite_en(v, Vector3(0.05, 0.08, 0.05), Vector3(lb, 0.95, 0), "jaune_securite")
 		vantaux.append(v)
 		var cs: CollisionShape3D = CollisionShape3D.new()
 		var b: BoxShape3D = BoxShape3D.new()
@@ -1167,6 +1175,26 @@ func _portillons(aval: bool) -> void:
 		cs.position = Vector3(x0 + lv * 0.5, 0.5, 0)
 		corps.add_child(cs)
 		formes.append(cs)
+	# portique d'entrée en bois au nom de la ligne, 3 m derrière les
+	# portillons (photo de Palafour)
+	var ent: Node3D = Node3D.new()
+	ent.position = Vector3(0, 0, 3.0)
+	g.add_child(ent)
+	var la: float = W * 0.5 + 0.9
+	for sx in [-1.0, 1.0]:
+		RemonteeKit.boite_en(ent, Vector3(0.22, 3.2, 0.22), Vector3(sx * la, 1.6, 0), "toit_bardeaux")
+	RemonteeKit.boite_en(ent, Vector3(2.0 * la + 0.6, 0.20, 0.30), Vector3(0, 3.25, 0), "toit_bardeaux")
+	RemonteeKit.boite_en(ent, Vector3(2.0 * la - 0.4, 0.55, 0.05), Vector3(0, 2.85, 0), "blanc_plaque")
+	if nom_ligne != "":
+		var lab: Label3D = Label3D.new()
+		lab.text = nom_ligne.to_upper()
+		lab.font_size = 96
+		lab.pixel_size = 0.0035
+		lab.modulate = Color(0.06, 0.22, 0.55)
+		lab.outline_size = 0
+		lab.double_sided = false
+		lab.position = Vector3(0, 2.85, 0.03)        # face au skieur qui arrive
+		ent.add_child(lab)
 	# ligne d'arrêt (jaune) au sol
 	var q: Vector3 = point_embarquement(aval)
 	var ls: Node3D = Node3D.new()
@@ -1537,7 +1565,28 @@ func _lanceurs() -> void:
 			await _pause()
 
 
+## Détails de gare visibles (posé par RemonteesDomaine : moins de 250 m).
+var details_visibles: bool = true
+## Point de vue (repère de la ligne) pour le niveau de détail des véhicules.
+var point_vue: Vector3 = Vector3.ZERO
+var vue_active: bool = false
+var _tour: int = 0
+var _corps_proche: bool = true
+## Corps de collision des véhicules à jour (posé par RemonteesDomaine : ligne
+## à moins de 120 m) ; sinon ils sont retirés de la physique.
+var collisions_actives: bool = true:
+	set(v):
+		if v == collisions_actives:
+			return
+		collisions_actives = v
+		for c in _corps:
+			if c != null:
+				(c[0] as StaticBody3D).collision_layer = CollisionsJeu.COUCHE_VEHICULE if v else 0
+
+
 func _tourner_pneus(delta: float) -> void:
+	if not details_visibles:
+		return
 	for e in _pneus:
 		var w: float = vitesse_en(e[1]) * regime() / R_PNEU
 		e[3] = fposmod(float(e[3]) + w * delta, TAU)
@@ -1829,8 +1878,30 @@ var _pyl: Array = []            # [PyloneRemontee, d]
 var _pyl_touches: Dictionary = {}
 
 
+## Niveau de détail (posé par RemonteesDomaine) : mise à jour une image sur
+## `pas_lod`, avec le temps cumulé — les lignes lointaines coûtent moins.
+var pas_lod: int = 1
+var _lod_k: int = 0
+var _lod_acc: float = 0.0
+
+
+## Temps à simuler cette image, ou −1 : on saute (niveau de détail).
+func _tic_lod(delta: float) -> float:
+	_lod_acc += delta
+	_lod_k += 1
+	if _lod_k < pas_lod:
+		return -1.0
+	_lod_k = 0
+	var d: float = minf(_lod_acc, 0.25)
+	_lod_acc = 0.0
+	return d
+
+
 func _process(delta: float) -> void:
 	if not pret:
+		return
+	delta = _tic_lod(delta)
+	if delta < 0.0:
 		return
 	_regler_vitesse(delta)
 	_maj_portillons(delta)
@@ -1839,7 +1910,26 @@ func _process(delta: float) -> void:
 		var s: float = _vehicules[i][1]
 		_vehicules[i][1] = fposmod(s + vitesse_en(s) * regime() * delta, longueur_boucle)
 	_charges_ponctuelles()
+	# niveau de détail par véhicule (point de vue posé par le domaine) :
+	# invisible au-delà de 700 m → pas déplacé ; 250 à 700 m → une image sur
+	# quatre, sans balancement ; près → chaque image
+	_tour = (_tour + 1) % 4
 	for i in range(_vehicules.size()):
+		_corps_proche = true
+		if vue_active:
+			var q: Vector3 = _point_cable(_vehicules[i][1])[0]
+			var d2: float = Vector2(q.x - point_vue.x, q.z - point_vue.z).length_squared()
+			_corps_proche = d2 < 60.0 * 60.0
+			if d2 > 700.0 * 700.0:
+				continue
+			if d2 > 250.0 * 250.0:
+				if (i + _tour) % 4 != 0:
+					continue
+				var dt0: float = _dt
+				_dt = 0.0
+				_placer(i)
+				_dt = dt0
+				continue
 		_placer(i)
 	_dt = 0.0
 	_galets()
@@ -1905,6 +1995,15 @@ func _charges_ponctuelles() -> void:
 		if l.size() < 64:
 			l.append(Vector2(-p.z, _poids_vehicule(montee) / _tension))
 	_charges = listes
+	# par portée : chaque véhicule ne tient compte que des charges de la
+	# sienne (avant : toutes les charges du brin, pour chaque véhicule)
+	_charges_portee = [{}, {}]
+	for k3 in range(2):
+		for c in listes[k3]:
+			var ip: int = _portee_de((c as Vector2).x)
+			if not _charges_portee[k3].has(ip):
+				_charges_portee[k3][ip] = []
+			_charges_portee[k3][ip].append(c)
 	for k in range(2):
 		var packs: Array = []
 		var l2: Array = listes[k]
@@ -1917,21 +2016,30 @@ func _charges_ponctuelles() -> void:
 			m.set_shader_parameter("n_charges_m" if k == 0 else "n_charges_d", l2.size())
 
 
+var _charges_portee: Array = [{}, {}]
+
+
+## Indice de la portée (entre deux appuis) qui contient d, ou −1.
+func _portee_de(d: float) -> int:
+	for i in range(_n_appuis - 1):
+		if d >= _appuis[i] and d <= _appuis[i + 1]:
+			return i
+	return -1
+
+
 ## Flèche locale (m, vers le bas) en d sur un brin : même calcul que le shader.
 func _fleche(d: float, montee: bool) -> float:
 	var n: int = _n_appuis
 	if n < 2 or d <= _appuis[0] or d >= _appuis[n - 1]:
 		return 0.0
-	var x1: float = _appuis[0]
-	var x2: float = _appuis[n - 1]
-	for i in range(n - 1):
-		if d >= _appuis[i] and d <= _appuis[i + 1]:
-			x1 = _appuis[i]
-			x2 = _appuis[i + 1]
-			break
+	var ip: int = _portee_de(d)
+	if ip < 0:
+		return 0.0
+	var x1: float = _appuis[ip]
+	var x2: float = _appuis[ip + 1]
 	var l: float = maxf(x2 - x1, 0.01)
 	var f: float = -float(_w_veh[0 if montee else 1]) * (d - x1) * (x2 - d) * 0.5
-	for c in _charges[0 if montee else 1]:
+	for c in _charges_portee[0 if montee else 1].get(ip, []):
 		var a: float = (c as Vector2).x
 		if a <= x1 or a >= x2:
 			continue
@@ -2102,8 +2210,10 @@ func _placer(i: int) -> void:
 		v.masse = m0 + charge
 		v.balancer(_dt, z[0] != "ligne")
 		v.masse = m0
-	# corps de collision (base directe) : suit aussi le balancement
-	if i < _corps.size() and _corps[i] != null:
+	# corps de collision (base directe) : suit aussi le balancement — sur les
+	# lignes proches seulement (déplacer des centaines de corps à chaque
+	# image coûtait plus que tout le reste)
+	if collisions_actives and _corps_proche and i < _corps.size() and _corps[i] != null:
 		var sx: float = 1.0 if sens_droite else -1.0
 		var pv: Vector3 = Vector3(v.pivot.x * sx, v.pivot.y, v.pivot.z)
 		var bal: Transform3D = Transform3D(Basis.from_euler(Vector3(v.phi, 0.0, v.psi * sx)), pv) * Transform3D(Basis.IDENTITY, -pv)

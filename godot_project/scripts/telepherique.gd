@@ -132,6 +132,9 @@ func _maj_positions() -> void:
 func _process(delta: float) -> void:
 	if not pret:
 		return
+	delta = _tic_lod(delta)
+	if delta < 0.0:
+		return
 	_dt = delta
 	var a: float = _x_quai(true)
 	var b: float = _x_quai(false)
@@ -210,7 +213,7 @@ func _placer(i: int) -> void:
 	if _phase == "quai" and zone_vehicule(i) != "ligne":
 		porte = clampf(minf(T_QUAI - _t_quai, _t_quai) / 1.5, 0.0, 1.0)
 	v.portes(porte)
-	if i < _corps.size() and _corps[i] != null:
+	if collisions_actives and i < _corps.size() and _corps[i] != null:
 		var pv: Vector3 = v.pivot
 		var bal: Transform3D = Transform3D(Basis.from_euler(Vector3(v.phi, 0.0, v.psi)), pv) * Transform3D(Basis.IDENTITY, -pv)
 		(_corps[i][0] as Node3D).transform = Transform3D(b, p) * bal

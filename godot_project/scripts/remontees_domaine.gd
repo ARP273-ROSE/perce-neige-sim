@@ -188,7 +188,7 @@ func _process(delta: float) -> void:
 	_t_lod -= delta
 	if _t_lod > 0.0:
 		return
-	_t_lod = 0.5
+	_t_lod = 0.25
 	# distance au skieur quand il est là (sa caméra le suit), sinon à la caméra
 	var p: Vector3
 	if skieur != null and skieur.actif:
@@ -198,10 +198,33 @@ func _process(delta: float) -> void:
 		if cam == null:
 			return
 		p = cam.global_position
+	# niveau de détail par ligne, selon la distance à la LIGNE (segment
+	# gare aval – gare amont) : véhicules invisibles au-delà de
+	# VEHICULES_JUSQUA → ligne figée ; au-delà de 300 m, une image sur
+	# trois ; la ligne où l'on est assis, toujours à pleine cadence
 	for e in lignes:
 		var lg: LigneRemontee = e[0]
-		if lg.pret:
-			lg.set_process(p.distance_to(e[1]) < ACTIVE_JUSQUA + lg.longueur_h() * 0.5)
+		if not lg.pret:
+			continue
+		var d: float = _distance_ligne(lg, p)
+		var a_bord_ici: bool = not a_bord.is_empty() and a_bord[0] == lg
+		lg.set_process(a_bord_ici or d < VEHICULES_JUSQUA + 50.0)
+		lg.pas_lod = 1 if (a_bord_ici or d < 150.0) else (2 if d < 300.0 else 4)
+		lg.details_visibles = d < DETAILS_JUSQUA + 50.0
+		lg.collisions_actives = a_bord_ici or d < 120.0
+		lg.point_vue = lg.global_transform.affine_inverse() * p
+		lg.vue_active = not a_bord_ici
+
+
+## Distance horizontale de p à l'axe de la ligne (segment entre les nez).
+func _distance_ligne(lg: LigneRemontee, p: Vector3) -> float:
+	var xf: Transform3D = lg.global_transform
+	var a: Vector3 = xf.origin
+	var b: Vector3 = xf * Vector3(0, 0, -lg.longueur_h())
+	var ab: Vector2 = Vector2(b.x - a.x, b.z - a.z)
+	var ap: Vector2 = Vector2(p.x - a.x, p.z - a.z)
+	var t: float = clampf(ap.dot(ab) / maxf(ab.length_squared(), 1.0), 0.0, 1.0)
+	return (ap - ab * t).length()
 
 
 # --- monter à bord d'un télésiège -----------------------------------------------------
