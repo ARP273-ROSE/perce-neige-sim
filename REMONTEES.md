@@ -75,6 +75,9 @@ Depuis la 1.22.13, la gare suit les photos des gares BMF du Marmottes Express
 - cabine du conducteur en pierre, toit à deux pans, à côté du quai d'embarquement ;
 - plate-forme posée sur un talus de neige damée (`_talus`, collision comprise) au lieu d'un socle
   de béton.
+- côté portillons (télésièges), une rampe de neige damée à 10 % part du bout du quai et rejoint la
+  piste (1.22.14) ; sa longueur (40 m au plus) est mesurée sur le relief par
+  `RemonteesDomaine._poser`, sur toute la largeur de la rampe.
 
 Les portillons s'ouvrent vers l'avant, vers la ligne d'arrêt.
 

@@ -486,7 +486,12 @@ func _gare(aval: bool) -> void:
 	# plate-forme : la gare est posée au plus haut du terrain sous son
 	# emprise ; un talus de neige damée descend en pente douce jusqu'au sol
 	# là où il est plus bas (un socle de béton faisait un bloc sombre)
-	g.add_child(_talus(Vector2(voie + 10.0, long_g), Vector3(0, 0, zm)))
+	g.add_child(_talus(_points_talus(Vector2(voie + 10.0, long_g), Vector3(0, 0, zm)), Vector3(0, 0, zm)))
+	# rampe d'accès côté portillons : la piste arrive à niveau du quai
+	var lr: float = float(rampes[0 if aval else 1])
+	if lr > 0.5:
+		var pr: PackedVector3Array = _points_rampe(aval, lr)
+		g.add_child(_talus(pr, (pr[0] + pr[2]) * 0.5 + Vector3(0, -1.0, 0)))
 	# carénage en gélule sur colonnes, cabine du conducteur (photos des
 	# gares BMF du Marmottes Express, retour d'utilisateur, 23/10/2026)
 	_capot(g, znez, zc, aval)
@@ -516,6 +521,33 @@ func _gare(aval: bool) -> void:
 # --- plate-forme de gare -----------------------------------------------------------
 
 const H_TALUS: float = 6.4          # profondeur du talus (jusque sous le terrain)
+const PENTE_RAMPE: float = 0.10     # rampe d'accès côté portillons (10 %)
+## Longueur de la rampe d'accès derrière chaque gare [aval, amont] : posée
+## par RemonteesDomaine d'après le relief, pour que la piste arrive à
+## niveau du quai côté portillons (retour d'utilisateur, 23/10/2026).
+var rampes: Array = [0.0, 0.0]
+
+
+## Distance du nez de la gare au bout du quai, côté portillons.
+func bout_quai() -> float:
+	var long_g: float = L_GARE + voie * 0.5 + 8.5
+	return (L_GARE * 0.5 + 4.0) + long_g * 0.5
+
+
+## Sommets de la rampe (repère de la gare, dessus du quai à y = 0), même
+## ordre que le talus : dessus (4), puis base (4).
+func _points_rampe(aval: bool, lr: float) -> PackedVector3Array:
+	var sg: float = 1.0 if aval else -1.0
+	var znez: float = 0.0 if aval else -longueur_h()
+	var ze: float = znez + sg * bout_quai()
+	var zf: float = ze + sg * lr
+	var hw: float = (voie + 10.0) * 0.5
+	var yf: float = -lr * PENTE_RAMPE
+	var e: float = H_TALUS * PENTE_TALUS
+	var pts: PackedVector3Array = PackedVector3Array([
+		Vector3(-hw, 0.0, ze), Vector3(hw, 0.0, ze), Vector3(hw, yf, zf), Vector3(-hw, yf, zf),
+		Vector3(-hw - e, -H_TALUS, ze), Vector3(hw + e, -H_TALUS, ze), Vector3(hw + e, yf - H_TALUS, zf + sg * e), Vector3(-hw - e, yf - H_TALUS, zf + sg * e)])
+	return pts
 const PENTE_TALUS: float = 1.6      # base / hauteur (environ 32°)
 
 
@@ -530,9 +562,9 @@ func _points_talus(taille: Vector2, c: Vector3) -> PackedVector3Array:
 	return pts
 
 
-## Talus de neige damée : dessus plat (quai), quatre flancs en pente.
-func _talus(taille: Vector2, c: Vector3) -> MeshInstance3D:
-	var p: PackedVector3Array = _points_talus(taille, c)
+## Talus de neige damée (ou rampe) : dessus, quatre flancs en pente ; `p`
+## = dessus (4) puis base (4), `c` = un point intérieur.
+func _talus(p: PackedVector3Array, c: Vector3) -> MeshInstance3D:
 	var st: SurfaceTool = SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var faces: Array = [[0, 1, 2, 3]]
@@ -781,6 +813,16 @@ func _collisions_fixes() -> void:
 		cv.points = _points_talus(Vector2(voie + 10.0, long_g), Vector3(0, y0, zm))
 		tal.shape = cv
 		corps.add_child(tal)
+		var lr: float = float(rampes[0 if aval else 1])
+		if lr > 0.5:
+			var ram: CollisionShape3D = CollisionShape3D.new()
+			var cv2: ConvexPolygonShape3D = ConvexPolygonShape3D.new()
+			var pr: PackedVector3Array = _points_rampe(aval, lr)
+			for k in range(pr.size()):
+				pr[k] += Vector3(0, y0, 0)
+			cv2.points = pr
+			ram.shape = cv2
+			corps.add_child(ram)
 		# colonnes du carénage et cabine du conducteur
 		boite.call(Vector3(1.0, H_CABLE_GARE, 1.0), Vector3(0, y0 + H_CABLE_GARE * 0.5, zc))
 		boite.call(Vector3(1.0, H_CABLE_GARE + Y_CAPOT, 1.0), Vector3(0, y0 + (H_CABLE_GARE + Y_CAPOT) * 0.5, (znez + zc) * 0.5 - signf(dz) * 1.0))

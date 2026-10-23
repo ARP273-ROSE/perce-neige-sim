@@ -5,6 +5,24 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.22.14 — 23 octobre 2026
+
+**Remontées : arrivée de plain-pied côté portillons.** Retour d'utilisateur du 23/10/2026 : « pour
+l'arrivée en gare côté portillons, il faut que ce soit level avec la piste ».
+- La gare est posée au plus haut du terrain sous son emprise : côté portillons, le quai dominait
+  la piste et il fallait monter un talus.
+- Une rampe de neige damée à 10 % part désormais du bout du quai, côté portillons, et rejoint la
+  piste :
+  - sa longueur est mesurée sur le relief, sur toute la largeur de la rampe (le terrain le plus
+    bas décide), 40 m au plus ;
+  - sa collision suit la pente ;
+  - télésièges seulement : en télécabine on entre à pied, sans portillons.
+- Marmottes Express, gare aval : rampe de 24 m. De la piste aux portillons, le sol ne fait plus
+  de marche (16 cm au plus par demi-mètre, la pente de la piste elle-même).
+- Neige damée éclaircie, du ton de la piste.
+- Vérifié : bancs embarquement et quai ; relevé du sol au rayon tous les 50 cm, de la piste aux
+  portillons, aux deux gares.
+
 ## 1.22.13 — 23 octobre 2026
 
 **Remontées : gares refaites d'après les gares BMF, portillons.** Retour d'utilisateur du
