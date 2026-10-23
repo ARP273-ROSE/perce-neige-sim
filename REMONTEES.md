@@ -81,6 +81,17 @@ Depuis la 1.22.13, la gare suit les photos des gares BMF du Marmottes Express
 
 Les portillons s'ouvrent vers l'avant, vers la ligne d'arrêt.
 
+Depuis la 1.25.0 — le téléphérique de la Grande Motte (`Telepherique`, classe fille de
+`LigneRemontee`) :
+- va-et-vient : deux cabines, une par voie, reliées par le tracteur ; quai 45 s portes ouvertes,
+  départ à 0,6 m/s², 10 m/s, freinage anticipé pour passer le pylône à 5,2 m/s (fiche technique),
+  arrivée en douceur ; le poste de commande s'y applique ;
+- un porteur lisse par voie (H = 0,9 MN), qui fléchit sous la cabine ; tracteur à torons 0,45 m
+  dessous ; 8 cavaliers par voie ;
+- gares : quai de béton sur remblai, portique en A au-dessus des baies ; aval : bâtiment à bardage
+  gris, escalier ; amont : tambours d'ancrage inclinés, poste de vigie ;
+- on y monte à pied et l'on voyage debout ; banc `bench_tph_3d.gd`.
+
 Depuis la 1.24.0 — le 3S de l'Olympique (`LigneRemontee.tricable()`), d'après le reportage
 remontees-mecaniques.net (fiche technique, 184 photos consultées comme référence) :
 - cabine CWA Zeta 30 places (`VehiculeRemontee._cabine_zeta`) : 2,76 × 2,66 × 2,55 m, angles très

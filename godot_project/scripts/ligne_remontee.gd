@@ -229,7 +229,7 @@ func _calculer_tetes() -> void:
 			break
 	for i in range(_tetes.size()):
 		var t: float = terrain(float(pylones[i]["d"]))
-		_tetes[i] = clampf(_tetes[i], t + 6.5, t + (90.0 if tricable() else 32.0))
+		_tetes[i] = clampf(_tetes[i], t + 6.5, t + (90.0 if tricable() or vaetvient() else 32.0))
 	# pylônes de COMPRESSION (balancier côté montée en C) : le câble doit y
 	# passer SOUS les galets, la ligne y est concave — tête abaissée sous la
 	# corde de ses voisins (sinon le câble décollerait des galets)
@@ -280,7 +280,7 @@ func _compression(p: Dictionary) -> bool:
 ## l'horizontale de la gare et la ligne se croisent en son milieu.
 func _preparer_nez() -> void:
 	_h_nez = [0.0, 0.0]
-	if tricable():
+	if tricable() or vaetvient():
 		return
 	var L: float = longueur_h()
 	var e: float = 6.0
@@ -1550,6 +1550,16 @@ func tricable() -> bool:
 	return famille == "cabine_3s"
 
 
+## Téléphérique va-et-vient (classe Telepherique).
+func vaetvient() -> bool:
+	return false
+
+
+## Demi-dimensions intérieures (travers, long) d'une cabine, pour y entrer.
+func demi_interieur() -> Vector2:
+	return Vector2(1.30, 1.25) if tricable() else Vector2(1.15, 0.80)
+
+
 func _dessus_traverse() -> float:
 	return PyloneRemontee.DESSUS_TRAVERSE_CABINE if famille.begins_with("cabine") else PyloneRemontee.DESSUS_TRAVERSE_CABLE
 
@@ -2013,6 +2023,8 @@ func _poser_pylones_treillis() -> void:
 		py.numero = i + 1
 		py.voie = voie
 		py.ecart_porteurs = VehiculeRemontee.E_PORTEURS_3S
+		if vaetvient():
+			py.porteurs_par_voie = 1
 		# sabots : 7 m, plus longs sur un pylône à grande déviation (le P3
 		# de l'Olympique porte 40 galets par voie)
 		var n_g: int = int((p.get("montee", [[6, "S"]])[0] as Array)[0])

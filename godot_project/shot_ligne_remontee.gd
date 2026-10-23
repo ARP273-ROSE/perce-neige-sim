@@ -47,7 +47,7 @@ func _initialize() -> void:
 	soleil.shadow_enabled = true
 	soleil.directional_shadow_max_distance = 300
 	racine.add_child(soleil)
-	_ligne = LigneRemontee.new()
+	_ligne = Telepherique.new() if String(D["famille"]) == "cabine_tph" else LigneRemontee.new()
 	var prof: PackedVector2Array = PackedVector2Array()
 	for p in D["profil"]:
 		prof.append(Vector2(float(p[0]), float(p[1])))

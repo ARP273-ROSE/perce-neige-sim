@@ -93,7 +93,7 @@ func _poser(D: Dictionary) -> void:
 				break
 			t2 += 1.0
 		rampes[k] = t2
-	var lg: LigneRemontee = LigneRemontee.new()
+	var lg: LigneRemontee = Telepherique.new() if String(D["famille"]) == "cabine_tph" else LigneRemontee.new()
 	lg.name = String(D["cle"])
 	lg.profil = prof
 	lg.rampes = rampes
@@ -294,13 +294,15 @@ func _entrer_cabine(lg: LigneRemontee, p: Vector3) -> bool:
 		var v: VehiculeRemontee = lg.vehicule(i)
 		var loc: Vector3 = v.global_transform.affine_inverse() * p
 		var y_pl: float = v.place_assise(0).y
-		var lim: Vector2 = Vector2(1.30, 1.25) if lg.tricable() else Vector2(1.15, 0.80)
+		var lim: Vector2 = lg.demi_interieur()
 		if absf(loc.x) > lim.x or absf(loc.z) > lim.y or loc.y < y_pl - 0.4 or loc.y > y_pl + 1.6:
 			continue
 		# la cabine roule vers son −Z : en montant (gare aval), la banquette
 		# arrière regarde l'amont ; en descendant, la banquette avant
 		var avant: bool = zn == "gare_amont"
 		var k: int = clampi(int(round(loc.x / 0.40 + 2.5)), 0, 5) if lg.tricable() else clampi(int(round(loc.x / 0.46)) + 2, 0, 4)
+		if lg.vaetvient():
+			k = clampi(int(round(loc.z / 1.0)) + 2, 0, 4)
 		# on monte en cabine à pied : chaussé, on déchausse et les skis vont
 		# au porte-skis, sur les vantaux des portes (retour d'utilisateur, 23/10/2026)
 		var skis: bool = skieur.chausse
@@ -310,7 +312,10 @@ func _entrer_cabine(lg: LigneRemontee, p: Vector3) -> bool:
 		a_bord = [lg, i, k, zn == "gare_aval", avant]
 		skieur.support = null
 		skieur.embarque = true
-		skieur.asseoir(_cap(v, avant), true)
+		if not lg.vaetvient():
+			skieur.asseoir(_cap(v, avant), true)
+		else:
+			skieur.velocity = Vector3.ZERO          # debout, à la barre
 		skieur._skis.visible = false        # skis au porte-skis, ou à ses pieds
 		_suivre_siege()
 		message.emit(("Skis au porte-skis — assis — %s" if skis else "Assis — %s") % lg.nom_ligne)
@@ -326,7 +331,7 @@ func _suivre_siege() -> void:
 	skieur.velocity = Vector3.ZERO
 	var cap: float = _cap(v, a_bord[4])
 	skieur._visuel.rotation = Vector3(0.0, cap, 0.0)
-	skieur._visuel.position = Vector3(sin(cap), 0.0, cos(cap)) * SkieurJoueur.RECUL_ASSIS
+	skieur._visuel.position = Vector3(sin(cap), 0.0, cos(cap)) * SkieurJoueur.RECUL_ASSIS if skieur.assis else Vector3.ZERO
 	# arrivée à l'autre gare : il se lève sur la rampe, devant le siège ;
 	# en cabine, seulement portes ouvertes (il était éjecté avant —
 	# retour d'utilisateur, 23/10/2026)

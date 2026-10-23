@@ -2495,8 +2495,10 @@ func _maj_skieur() -> void:
 			else:
 				var pi: Array = domaine.piste_sous(skieur.global_position, 1.0)
 				_sur_piste = not domaine.hors_piste(skieur.global_position)
-				if str(pi[0]) != "" or int(pi[1]) >= 0:
+				if str(pi[0]) != "":
 					info += " · %s%s" % [pi[0], (" (%s)" % PistesDonnees.NOMS_COULEURS[pi[1]]) if int(pi[1]) >= 0 else ""]
+				elif int(pi[1]) >= 0:
+					info += " · piste %s" % PistesDonnees.NOMS_COULEURS[pi[1]]
 			if skieur.chausse and domaine.chrono >= 0.0:
 				info += " · %s" % DomaineSkiable._mmss(domaine.chrono)
 			commandes_skieur.set_info(info)
