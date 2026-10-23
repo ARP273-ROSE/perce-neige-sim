@@ -26,6 +26,9 @@ var _levier: Node3D
 var _ressorts: Array = []
 var _ressort_l0: float = 0.32
 var _gc: Node3D
+## Véhicule posé en miroir sur sa ligne (ligne qui monte à gauche) : les
+## numéros sont contre-inversés pour rester lisibles.
+var miroir: bool = false
 var _gc_releve: float = 2.40     # angle du garde-corps relevé (rad)
 var _bulle: Node3D
 var _portes: Array = []        # [nœud, position fermée, déplacement à l'ouverture]
@@ -258,14 +261,27 @@ func _pince_debrayable() -> void:
 		RemonteeKit.boite_en(p, Vector3(0.15, 0.008, 0.014), Vector3(0.28, Y_PLAQUE + 0.004, z), "noir_mat")
 		z += 0.04
 	# numéro du véhicule sur la tranche de la plaque
+	_numero(p, "%03d" % (randi() % 120 + 1), Vector3(0.37, Y_PLAQUE - 0.011, 0.25), PI * 0.5, 40, 0.0016, Color(1, 1, 1))
+
+
+## Numéro lisible À L'ENDROIT : une étiquette d'un seul côté (vue de dos,
+## elle s'effaçait en miroir — retour d'utilisateur, 23/10/2026), contre-
+## inversée sur les véhicules en miroir ; `rot` oriente sa face (autour de Y).
+func _numero(parent: Node3D, texte: String, pos: Vector3, rot: float, taille: int, px: float, coul: Color) -> void:
 	var lab: Label3D = Label3D.new()
-	lab.text = "%03d" % (randi() % 120 + 1)
-	lab.font_size = 40
-	lab.pixel_size = 0.0016
-	lab.position = Vector3(0.37, Y_PLAQUE - 0.011, 0.25)
-	lab.rotation.y = PI * 0.5
-	lab.modulate = Color(1, 1, 1)
-	p.add_child(lab)
+	lab.text = texte
+	lab.font_size = taille
+	lab.pixel_size = px
+	lab.modulate = coul
+	lab.outline_size = 0
+	lab.double_sided = false
+	lab.position = pos
+	lab.rotation.y = rot
+	if miroir:
+		# le miroir du véhicule (x → −x) garde la face au bon endroit mais
+		# inverse le texte : une seconde symétrie en x le remet à l'endroit
+		lab.scale = Vector3(-1, 1, 1)
+	parent.add_child(lab)
 
 
 func _pince_fixe() -> void:
@@ -556,15 +572,11 @@ func _siege_bmf() -> void:
 	RemonteeKit.boite_en(siege, Vector3(2.0 * xb - 0.10, 0.06, 0.12), Vector3(0, yb0 - 0.03, zb + 0.01), m_alu)
 	# plaque du numéro au milieu de la tôle, et attache de la suspente
 	RemonteeKit.boite_en(siege, Vector3(0.20, 0.10, 0.01), Vector3(0.0, (yb0 + yb1) * 0.5, zb - ep * 0.5 - 0.006), "blanc_plaque")
-	var num: Label3D = Label3D.new()
-	num.text = str(randi() % 81 + 1)          # 81 sièges sur la ligne
-	num.font_size = 64
-	num.pixel_size = 0.0018
-	num.modulate = Color(0.05, 0.05, 0.06)
-	num.outline_size = 0
-	num.position = Vector3(0.0, (yb0 + yb1) * 0.5, zb - ep * 0.5 - 0.013)
-	num.rotation.y = PI
-	siege.add_child(num)
+	# (81 sièges sur la ligne) ; plaque des deux côtés de la tôle
+	var no: String = str(randi() % 81 + 1)
+	RemonteeKit.boite_en(siege, Vector3(0.20, 0.10, 0.01), Vector3(0.0, (yb0 + yb1) * 0.5, zb + ep * 0.5 + 0.006), "blanc_plaque")
+	_numero(siege, no, Vector3(0.0, (yb0 + yb1) * 0.5, zb - ep * 0.5 - 0.013), PI, 64, 0.0018, Color(0.05, 0.05, 0.06))
+	_numero(siege, no, Vector3(0.0, (yb0 + yb1) * 0.5, zb + ep * 0.5 + 0.013), 0.0, 64, 0.0018, Color(0.05, 0.05, 0.06))
 	RemonteeKit.boite_en(siege, Vector3(0.16, 0.08, 0.10), Vector3(0.0, yb1 + 0.04, zb), m_alu)
 	# cadres latéraux en tube rond : ils sortent horizontalement sous le bout
 	# de la poutre, plongent en grand rayon derrière le dossier, puis se

@@ -44,8 +44,11 @@ func _initialize() -> void:
 	for i in range(fams.size()):
 		var v: VehiculeRemontee = VehiculeRemontee.new()
 		v.famille = fams[i]
+		v.miroir = i == 1
 		v.position = Vector3(i * 5.0, y_c, 0)
 		v.rotation.y = PI * 0.5
+		if v.miroir:
+			v.transform.basis = v.transform.basis * Basis.from_scale(Vector3(-1, 1, 1))
 		racine.add_child(v)
 		v.construire()
 		v.garde_corps(0.0 if i % 2 == 0 else 1.0)
@@ -62,6 +65,10 @@ func _initialize() -> void:
 		["bmf_face", Vector3(-4.2, 2.9, 1.2), Vector3(0, 2.7, 0)],
 		["bmf_dessous", Vector3(-3.0, 1.2, 2.2), Vector3(0, 3.0, 0)],
 		["bmf_pince", Vector3(-1.0, 5.9, 1.2), Vector3(0, 5.6, 0.3)],
+		["num_dos_miroir", Vector3(7.0, 3.3, 0.0), Vector3(5.0, 3.15, 0)],
+		["num_face_miroir", Vector3(3.0, 3.3, 0.0), Vector3(5.0, 3.15, 0)],
+		["num_dos", Vector3(2.0, 3.3, 0.0), Vector3(0.0, 3.15, 0)],
+		["num_face", Vector3(-2.0, 3.3, 0.0), Vector3(0.0, 3.15, 0)],
 		["bmf_baisse_dessous", Vector3(3.6, 1.6, 2.6), Vector3(5.0, 3.0, 0)],
 		["bmf_baisse_face", Vector3(1.2, 2.9, 0.8), Vector3(5.0, 2.6, 0)],
 		["bmf_profil_releve", Vector3(0.0, 3.0, -6.0), Vector3(0.0, 3.0, 0)],
