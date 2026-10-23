@@ -88,7 +88,8 @@ Depuis la 1.22.16 :
 - rail d'ouverture des pinces (`_rail_ouverture`) : il descend sur le galet du levier sur les
   2,5 premiers mètres de la gare (`ouverture_pince`), comprime les ressorts et ouvre la mâchoire,
   puis remonte à la sortie ;
-- gaines de la pince en demi-cônes ouverts par-dessous, évasés vers l'extérieur ;
+- gaines de la pince en demi-cônes ouverts par-dessous, grand diamètre contre la pince et pointe
+  vers l'extérieur (1.22.17) ;
 - télésiège : côté arrivée, le quai s'arrête 1,6 m après le couloir et descend à 1 pour 6
   (`_bords_quai`) ; le skieur chaussé se lève à sa place et glisse dessus ;
 - à ski, le sol est le relief ou, plus haut, une plate-forme de gare (`SkieurJoueur._sol_ski`).

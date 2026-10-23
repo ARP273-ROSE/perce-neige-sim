@@ -5,6 +5,15 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.22.17 — 23 octobre 2026
+
+**Remontées : gaines de pince retournées.** Retour d'utilisateur du 23/10/2026 : « chaque gaine,
+une rotation horizontale de 180° pour que ce soit le grand diamètre du demi-cône qui soit accroché
+à la pince, et ça passera bien mieux sous les pylônes ».
+- Les deux demi-cônes ont maintenant leur grand diamètre (55 mm) contre la pince et leur pointe
+  (24,5 mm, le câble) vers l'extérieur ; longueur et ouverture par-dessous inchangées.
+- Vérifié : bancs embarquement et remontee_dynamique ; studio de la pince.
+
 ## 1.22.16 — 23 octobre 2026
 
 **Remontées : arrivée en glissant, rail d'ouverture des pinces, câble à torons ; panneaux et
