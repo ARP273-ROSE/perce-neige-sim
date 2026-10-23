@@ -513,50 +513,13 @@ func _siege() -> void:
 	pts.append(Vector3(0.50, -hs + 0.70, 0))
 	for p in RemonteeKit.arc(Vector3(0.10, -hs + 0.70, 0), Vector3.RIGHT, Vector3.DOWN, 0.40, 0.0, PI * 0.5, 8):
 		pts.append(p)
-	RemonteeKit.tube(self, pts, 0.045, sus_m, 10)
+	RemonteeKit.tube(self, pts, 0.05 if not fixe else 0.045, sus_m, 12)
 	var siege: Node3D = Node3D.new()
 	siege.name = "Siege"
 	siege.position = Vector3(0.0, -hs - 0.12, 0)
 	add_child(siege)
 	var W: float = _largeur_siege()
-	# arceau supérieur (barre transversale qui porte le siège)
-	RemonteeKit.barre(siege, Vector3(-W * 0.5, 0.10, 0.20), Vector3(W * 0.5, 0.10, 0.20), 0.04, sus_m, 10)
-	RemonteeKit.barre(siege, Vector3(0.10, 0.10, 0.20), Vector3(0.10, 0.40, 0.20), 0.045, sus_m, 10)
-	# montants latéraux
-	for sx in [-1.0, 1.0]:
-		var x: float = sx * W * 0.5
-		# montant : de l'arceau au bord de l'assise, en suivant le dossier
-		RemonteeKit.tube(siege, PackedVector3Array([Vector3(x, 0.10, 0.20), Vector3(x, -0.30, 0.26),
-			Vector3(x, -0.92, 0.20), Vector3(x, -0.98, 0.10), Vector3(x, -1.02, -0.30)]), 0.03, sus_m, 8)
-	# assise et dossier rembourrés, place par place (couleurs selon la
-	# famille), sur un bac d'assise et une coque de dossier qui courent sur
-	# toute la largeur (retour d'utilisateur, 23/10/2026 : « un beau design de siège »)
-	var assises: Array = _couleurs_assise()
-	var dossier_h: float = 0.42 if famille == "siege_poma_ocr6" else 0.62
-	var t_assise: Basis = Basis(Vector3.RIGHT, 0.10)
-	var t_dos: Basis = Basis(Vector3.RIGHT, -0.18)
-	var y_dos: float = -0.98 + dossier_h * 0.5 + 0.06
-	RemonteeKit.coussin(siege, Vector3(W - 0.02, 0.05, 0.52), Transform3D(t_assise, Vector3(0, -1.035, -0.07)), "coque_siege", 0.02)
-	RemonteeKit.coussin(siege, Vector3(W - 0.02, dossier_h + 0.08, 0.05), Transform3D(t_dos, Vector3(0, y_dos, 0.255)), "coque_siege", 0.022)
-	for i in range(places):
-		var cx: float = -W * 0.5 + 0.10 + 0.50 * (i + 0.5)
-		var m: String = assises[i % assises.size()]
-		var a: MeshInstance3D = RemonteeKit.coussin(siege, Vector3(0.47, 0.085, 0.48),
-			Transform3D(t_assise, Vector3(cx, -0.975, -0.08)), m, 0.035)
-		a.name = "Assise%d" % i
-		RemonteeKit.coussin(siege, Vector3(0.47, dossier_h, 0.08), Transform3D(t_dos, Vector3(cx, y_dos, 0.20)), m, 0.035)
-	# attaches du dossier sous l'arceau
-	var y_haut_dos: float = -0.98 + dossier_h + 0.08
-	for sx in [-1.0, 1.0]:
-		var xs: float = sx * W * 0.25
-		RemonteeKit.barre(siege, Vector3(xs, 0.10, 0.20), Vector3(xs, y_haut_dos, 0.21 + (y_haut_dos + 0.98) * 0.18), 0.03, sus_m, 8)
-	# poutre sous l'assise et accoudoirs garnis aux deux bouts
-	RemonteeKit.poutre(siege, Vector3(-W * 0.5 + 0.05, -1.10, 0.02), Vector3(W * 0.5 - 0.05, -1.10, 0.02), 0.07, 0.09, sus_m)
-	for sx in [-1.0, 1.0]:
-		var xa: float = sx * (W * 0.5 - 0.02)
-		RemonteeKit.barre(siege, Vector3(xa, -0.70, 0.18), Vector3(xa, -0.70, -0.25), 0.022, sus_m, 8)
-		RemonteeKit.barre(siege, Vector3(xa, -0.70, -0.25), Vector3(xa, -0.98, -0.28), 0.022, sus_m, 8)
-		RemonteeKit.coussin(siege, Vector3(0.07, 0.045, 0.40), Transform3D(Basis.IDENTITY, Vector3(xa, -0.67, -0.04)), "coque_siege", 0.02)
+	_ossature_moderne(siege, W, sus_m)
 	_garde_corps(siege, W, sus_m)
 	if famille.ends_with("_bulle"):
 		_bulle_siege(siege, W)
@@ -668,6 +631,78 @@ func _siege_bmf() -> void:
 	_garde_corps(siege, W, m_alu)
 
 
+## Ossature des sièges débrayables et fixes récents, d'après les photos des
+## lignes du domaine (reportages remontees-mecaniques.net : Palafour
+## Doppelmayr, Marais Poma OCR, Laisinant Garaventa SK6, Almes GMM) :
+## - poutre de tête en caisson sur toute la largeur, plaque du numéro ;
+## - à chaque bout, un cadre latéral en boucle arrondie : il descend
+##   derrière le dossier, passe sous l'assise, remonte à l'avant jusqu'à
+##   l'accoudoir, qui revient vers l'arrière ;
+## - assise rembourrée sur un carénage aluminium à grosse lèvre arrondie
+##   (Doppelmayr, Garaventa), dossier en coques individuelles ajourées
+##   (Doppelmayr) ou pleines, plus haut sur les sièges fixes ;
+## - repose-pieds sur le garde-corps (voir _garde_corps).
+func _ossature_moderne(siege: Node3D, W: float, m: String) -> void:
+	var c: String = constructeur()
+	var fixe: bool = c == "fixe"
+	var xb: float = W * 0.5 + 0.03
+	# poutre de tête : caisson, plaque du numéro au milieu
+	var yh: float = 0.10
+	var zh: float = 0.20
+	RemonteeKit.coussin(siege, Vector3(2.0 * xb, 0.12, 0.16), Transform3D(Basis.IDENTITY, Vector3(0, yh, zh)), m, 0.03)
+	RemonteeKit.boite_en(siege, Vector3(0.16, 0.30, 0.14), Vector3(0.10, yh + 0.18, zh), m)
+	RemonteeKit.boite_en(siege, Vector3(0.18, 0.09, 0.01), Vector3(0.0, yh, zh - 0.085), "blanc_plaque")
+	_numero(siege, str(numero), Vector3(0.0, yh, zh - 0.092), PI, 52, 0.0016, Color(0.05, 0.05, 0.06))
+	_numero(siege, str(numero), Vector3(0.0, yh, zh + 0.092), 0.0, 52, 0.0016, Color(0.05, 0.05, 0.06))
+	# cadres latéraux en boucle arrondie
+	var r: float = 0.14
+	for sx in [-1.0, 1.0]:
+		var x: float = sx * xb
+		var boucle: PackedVector3Array = PackedVector3Array([Vector3(x, yh, zh)])
+		var y_bas: float = -1.07
+		var z_ar: float = 0.27
+		var z_av: float = -0.36
+		var y_acc: float = -0.66
+		boucle.append(Vector3(x, -0.25, z_ar))
+		for p in RemonteeKit.arc(Vector3(x, y_bas + r, z_ar - r), Vector3.BACK, Vector3.DOWN, r, 0.0, PI * 0.5, 5):
+			boucle.append(p)
+		for p in RemonteeKit.arc(Vector3(x, y_bas + r, z_av + r), Vector3.DOWN, Vector3.FORWARD, r, 0.0, PI * 0.5, 5):
+			boucle.append(p)
+		for p in RemonteeKit.arc(Vector3(x, y_acc - r, z_av + r), Vector3.FORWARD, Vector3.UP, r, 0.0, PI * 0.5, 5):
+			boucle.append(p)
+		boucle.append(Vector3(x, y_acc, 0.10))
+		boucle.append(Vector3(x, y_acc + 0.02, z_ar - 0.02))
+		RemonteeKit.tube(siege, boucle, 0.032, m, 10)
+		RemonteeKit.coussin(siege, Vector3(0.07, 0.045, 0.34), Transform3D(Basis.IDENTITY, Vector3(x - sx * 0.01, y_acc + 0.04, -0.07)), "coque_siege", 0.02)
+	# assise : coussins sur un bac, lèvre avant arrondie (carénage alu)
+	var assises: Array = _couleurs_assise()
+	var t_assise: Basis = Basis(Vector3.RIGHT, 0.08)
+	RemonteeKit.coussin(siege, Vector3(W, 0.07, 0.52), Transform3D(t_assise, Vector3(0, -1.04, -0.06)), "alu_pince" if not fixe else m, 0.03)
+	if c in ["doppelmayr", "garaventa"]:
+		RemonteeKit.cylindre(siege, 0.075, 0.075, W, Transform3D(Basis(Vector3.FORWARD, PI * 0.5), Vector3(0, -1.03, -0.33)), "alu_pince", 18)
+	var dossier_h: float = 0.42 if famille == "siege_poma_ocr6" else (0.70 if fixe else 0.56)
+	var t_dos: Basis = Basis(Vector3.RIGHT, -0.16)
+	var y_dos: float = -0.98 + dossier_h * 0.5 + 0.07
+	for i in range(places):
+		var cx: float = -W * 0.5 + 0.10 + 0.50 * (i + 0.5)
+		var mc: String = assises[i % assises.size()]
+		var a: MeshInstance3D = RemonteeKit.coussin(siege, Vector3(0.47, 0.08, 0.46),
+			Transform3D(t_assise, Vector3(cx, -0.975, -0.08)), mc, 0.035)
+		a.name = "Assise%d" % i
+		if c == "doppelmayr":
+			# coque de dossier individuelle, ajourée (deux jours ovales)
+			RemonteeKit.coussin(siege, Vector3(0.46, dossier_h, 0.06), Transform3D(t_dos, Vector3(cx, y_dos, 0.21)), "noir_mat", 0.04)
+			RemonteeKit.coussin(siege, Vector3(0.40, dossier_h * 0.55, 0.05), Transform3D(t_dos, Vector3(cx, y_dos - dossier_h * 0.18, 0.18)), mc, 0.03)
+			for dz in [-0.11, 0.11]:
+				RemonteeKit.cylindre(siege, 0.05, 0.05, 0.065, Transform3D(t_dos * Basis(Vector3.RIGHT, PI * 0.5), Vector3(cx + dz, y_dos + dossier_h * 0.28, 0.215)), "joint", 12)
+		else:
+			RemonteeKit.coussin(siege, Vector3(0.47, dossier_h, 0.07), Transform3D(t_dos, Vector3(cx, y_dos, 0.20)),
+				"cabine_blanche" if fixe else mc, 0.03)
+	# attaches du dossier sous la poutre de tête
+	for sx2 in [-1.0, 1.0]:
+		RemonteeKit.barre(siege, Vector3(sx2 * W * 0.25, yh, zh), Vector3(sx2 * W * 0.25, y_dos + dossier_h * 0.5, 0.26), 0.022, m, 8)
+
+
 func _couleurs_assise() -> Array:
 	match famille:
 		"siege_poma_ocr6":
@@ -679,7 +714,7 @@ func _couleurs_assise() -> Array:
 		"siege_doppelmayr_e98_6":
 			return ["assise_noire", "assise_bleue"]
 		"siege_fixe_4", "siege_fixe_3":
-			return ["assise_grise"]
+			return ["assise_bleue"]          # dossiers blancs (Almes)
 		_:
 			return ["assise_noire"]
 
