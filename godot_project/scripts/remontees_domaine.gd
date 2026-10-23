@@ -60,7 +60,7 @@ func _poser(D: Dictionary) -> void:
 	# largeur) : sur un versant, la gare amont était enterrée côté pente
 	# (retour d'utilisateur, 23/10/2026)
 	var lat: Vector2 = Vector2(-dirh.y, dirh.x)
-	var demi: float = float(D["voie"]) * 0.5 + 4.0
+	var demi: float = float(D["voie"]) * 0.5 + 5.0
 	var long_g: float = LigneRemontee.L_GARE + float(D["voie"]) * 0.5 + 12.0
 	for bout in [[0, a, -1.0], [prof.size() - 1, b, 1.0]]:
 		var o: Vector2 = bout[1]

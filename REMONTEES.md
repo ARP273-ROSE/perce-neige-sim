@@ -65,6 +65,19 @@ véhicules se resserrent en gare, comme sur une vraie ligne, et l'intervalle en 
 Le câble en gare est placé pour que l'assise arrive à 0,48 m du quai, et le plancher des cabines au
 niveau du quai.
 
+Depuis la 1.22.13, la gare suit les photos des gares BMF du Marmottes Express
+(`LigneRemontee._capot`) :
+- carénage blanc en gélule (profil en superellipse), du nez de la gare jusqu'au-delà de la poulie ;
+- bout arrondi en plan, garni d'une grande verrière sombre à montants blancs ;
+- hublots et bandeau du nom de la ligne sur les flancs ;
+- dessous plat percé de la fente où passent les suspentes ;
+- deux colonnes rondes évasées en tête, l'une sous la poulie, l'autre au milieu du quai ;
+- cabine du conducteur en pierre, toit à deux pans, à côté du quai d'embarquement ;
+- plate-forme posée sur un talus de neige damée (`_talus`, collision comprise) au lieu d'un socle
+  de béton.
+
+Les portillons s'ouvrent vers l'avant, vers la ligne d'arrêt.
+
 Au nez, la batterie de galets est posée côté ligne, centrée là où se croisent l'horizontale de la gare
 et la pente de la ligne ; le câble y suit un raccord parabolique, qui est l'arc des galets
 (`LigneRemontee._preparer_nez`, 1.22.6). Chaque gare est posée au plus haut du terrain sous son

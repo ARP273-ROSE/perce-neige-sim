@@ -5,6 +5,24 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.22.13 — 23 octobre 2026
+
+**Remontées : gares refaites d'après les gares BMF, portillons.** Retour d'utilisateur du
+23/10/2026 : « tu peux t'attaquer aux gares, et les portillons s'ouvrent dans l'autre sens, vers
+l'avant ».
+- Portillons : ils s'ouvrent maintenant vers l'avant, vers la ligne d'arrêt.
+- Gares, d'après les photos des deux gares du Marmottes Express (reportage
+  remontees-mecaniques.net, consulté comme référence) :
+  - carénage blanc en gélule au lieu de la charpente à quatre poteaux et toit plat ;
+  - bout arrondi côté poulie avec une grande verrière sombre ;
+  - hublots et bandeau au nom de la ligne sur les flancs ;
+  - dessous plat avec la fente des suspentes ; les suspentes du lanceur s'y accrochent ;
+  - deux colonnes rondes évasées, sous la poulie et au milieu du quai ;
+  - cabine du conducteur en pierre à côté du quai d'embarquement.
+- Plate-forme : le socle de béton, qui faisait un gros bloc sombre sur les versants, devient un
+  talus de neige damée en pente douce. Sa collision suit la pente.
+- Vérifié : bancs embarquement, aller_remontee et quai ; captures en jeu des quatre gares.
+
 ## 1.22.12 — 23 octobre 2026
 
 **Remontées : poutre de tête et garde-corps du siège BMF.** Retour d'utilisateur du 23/10/2026 :

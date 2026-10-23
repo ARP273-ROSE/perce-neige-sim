@@ -44,6 +44,9 @@ const COULEURS: Dictionary = {
 	"ressort_gris": [Color(0.62, 0.64, 0.67), 0.45, 0.55],
 	"polyurethane": [Color(0.93, 0.91, 0.84), 0.55, 0.0],
 	"noir_mat": [Color(0.05, 0.05, 0.06), 0.80, 0.10],
+	"pierre": [Color(0.52, 0.50, 0.46), 0.95, 0.0],
+	"neige_damee": [Color(0.90, 0.92, 0.95), 0.88, 0.0],            # moellons des cabines de conducteur
+	"toit_bardeaux": [Color(0.24, 0.23, 0.22), 0.9, 0.0],
 }
 
 
