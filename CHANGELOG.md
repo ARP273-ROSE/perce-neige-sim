@@ -5,6 +5,16 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.22.18 — 23 octobre 2026
+
+**Remontées : gaines sur toutes les pinces.** Retour d'utilisateur du 23/10/2026 : « c'est parfait
+pour les gaines, fais-le pour toutes les pinces, fixes et débrayables ».
+- Pinces débrayables (sièges et cabines de tous les constructeurs) : elles ont toutes les demi-cônes
+  retournés de la 1.22.17, la pince étant commune.
+- Pince fixe (télésièges à pince fixe) : mêmes demi-cônes ouverts par-dessous, grand diamètre
+  contre la pince (50 mm), pointe au diamètre du câble, à sa taille (26 cm).
+- Vérifié : banc embarquement ; studio des sièges (pince fixe).
+
 ## 1.22.17 — 23 octobre 2026
 
 **Remontées : gaines de pince retournées.** Retour d'utilisateur du 23/10/2026 : « chaque gaine,
