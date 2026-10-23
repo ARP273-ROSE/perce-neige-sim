@@ -81,6 +81,22 @@ Depuis la 1.22.13, la gare suit les photos des gares BMF du Marmottes Express
 
 Les portillons s'ouvrent vers l'avant, vers la ligne d'arrêt.
 
+Depuis la 1.24.0 — le 3S de l'Olympique (`LigneRemontee.tricable()`), d'après le reportage
+remontees-mecaniques.net (fiche technique, 184 photos consultées comme référence) :
+- cabine CWA Zeta 30 places (`VehiculeRemontee._cabine_zeta`) : 2,76 × 2,66 × 2,55 m, angles très
+  arrondis, grand vitrage, bandeau noir, jupe de tôle perforée, portes coulissantes, 2 × 6 places
+  rouge et gris face à face, barres de maintien ; suspente en caisson coudée ; chariot de 2×4
+  galets sur balanciers bleus (fixe, nœud « Pince »), pince du tracteur au milieu ;
+- deux porteurs lisses de 57 mm par voie (ancrages fixes, H = 1,5 MN), qui fléchissent sous chaque
+  cabine (2 950 kg à vide, 5 350 kg pleine) ; tracteur à torons de 52,5 mm, 0,42 m sous eux ;
+  10 cavaliers par voie, serrés sur les porteurs, portant le tracteur sur un galet ;
+- pylônes en treillis (`PyloneTreillis`) : fût à quatre membrures, tête en caisson treillis, à
+  chaque voie un long sabot en porte-à-faux incliné sur la pente et cintré selon la déviation
+  (plus long au P3 : 40 galets), passerelles et garde-corps, galets du tracteur ;
+- gares : bâtiment de pierre et verre, toit sombre, bandeau noir au nom de la ligne, charpente
+  rouge qui porte rails et lanceurs (`_gare_3s`, `_charpente_3s`) ;
+- banc `bench_3s_3d.gd`.
+
 Depuis la 1.23.0 — poste de commande (`PosteRemontee`, `LigneRemontee.etat`) :
 - états `marche`, `arret_normal` (frein de service, 0,4 m/s²), `arret`, `urgence` (frein de poulie,
   1,5 m/s², à réarmer une fois arrêtée) ; démarrage à 0,25 m/s² ;

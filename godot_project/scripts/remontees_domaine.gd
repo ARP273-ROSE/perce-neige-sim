@@ -294,12 +294,13 @@ func _entrer_cabine(lg: LigneRemontee, p: Vector3) -> bool:
 		var v: VehiculeRemontee = lg.vehicule(i)
 		var loc: Vector3 = v.global_transform.affine_inverse() * p
 		var y_pl: float = v.place_assise(0).y
-		if absf(loc.x) > 1.15 or absf(loc.z) > 0.80 or loc.y < y_pl - 0.4 or loc.y > y_pl + 1.6:
+		var lim: Vector2 = Vector2(1.30, 1.25) if lg.tricable() else Vector2(1.15, 0.80)
+		if absf(loc.x) > lim.x or absf(loc.z) > lim.y or loc.y < y_pl - 0.4 or loc.y > y_pl + 1.6:
 			continue
 		# la cabine roule vers son −Z : en montant (gare aval), la banquette
 		# arrière regarde l'amont ; en descendant, la banquette avant
 		var avant: bool = zn == "gare_amont"
-		var k: int = clampi(int(round(loc.x / 0.46)) + 2, 0, 4)
+		var k: int = clampi(int(round(loc.x / 0.40 + 2.5)), 0, 5) if lg.tricable() else clampi(int(round(loc.x / 0.46)) + 2, 0, 4)
 		# on monte en cabine à pied : chaussé, on déchausse et les skis vont
 		# au porte-skis, sur les vantaux des portes (retour d'utilisateur, 23/10/2026)
 		var skis: bool = skieur.chausse

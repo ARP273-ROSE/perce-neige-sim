@@ -5,6 +5,40 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.24.0 — 23 octobre 2026
+
+**Remontées : le 3S de l'Olympique (Val d'Isère).** Retour d'utilisateur du 23/10/2026 : « le 3S,
+qui est un gros morceau… tu cherches des photos, des reportages, tu modélises tout ».
+- Références : la fiche technique et les 184 photos du reportage de remontees-mecaniques.net
+  (consultées comme référence, aucune image reprise).
+- Ligne : 1 979 m, de 1 835 à 2 688 m, à 7,5 m/s, 3 pylônes, voie de 10 m. Elle est posée à sa place
+  au pied de la Face de Bellevarde, se construit à l'approche et figure sur la carte.
+- Cabines CWA Zeta de 30 places :
+  - angles très arrondis, grand vitrage panoramique, bandeau noir, jupe de tôle perforée ;
+  - portes coulissantes ; deux banquettes de 6 places, rouge et gris, face à face ;
+  - suspente en caisson gris anthracite, coudée ;
+  - chariot de 2×4 galets sur balanciers bleus, qui roule sur les deux porteurs ; seules la
+    suspente et la cabine balancent ;
+  - numéro (1 à 24) sur les quatre faces et sur le chariot.
+- Câbles :
+  - deux porteurs lisses et immobiles par voie, qui fléchissent sous chaque cabine ;
+  - le tracteur à torons, 0,42 m sous eux, qui défile ;
+  - 10 cavaliers par voie, serrés sur les porteurs, qui portent le tracteur sur un galet
+    (retour d'utilisateur : « des trucs fixés régulièrement aux câbles porteurs qui portent le
+    tracteur avec un galet »).
+- Pylônes en treillis : fût à quatre membrures, tête en caisson treillis ; à chaque voie, un long
+  sabot en porte-à-faux, incliné sur la pente et cintré selon la déviation (plus long au P3,
+  40 galets), avec passerelle et garde-corps.
+- Gares : bâtiment de pierre et de verre, toit sombre, bandeau noir « Téléphérique de l'Olympique » ;
+  dedans, la charpente rouge qui porte rails et lanceurs.
+- On y monte à pied comme dans une télécabine (assis d'office, skis au porte-skis si chaussé) ;
+  le poste de commande s'y applique.
+- Exporteur des fiches : la vitesse de la fiche technique est prise en compte, et un espacement
+  donné en secondes est converti en mètres.
+- Vérifié : nouveau banc 3s (ligne construite, 30 cabines dont 20 en ligne, assis d'office,
+  emporté de 860 m jusqu'en haut, sorti portes ouvertes) ; bancs embarquement, aller_remontee
+  (les trois lignes), poste_remontee, quai, remontee_dynamique et skieur ; captures en jeu.
+
 ## 1.23.0 — 23 octobre 2026
 
 **Remontées : poste de commande par remontée ; funiculaire allégé quand on est loin.** Retour
