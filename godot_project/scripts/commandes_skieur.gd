@@ -12,6 +12,9 @@ const R_BOUTON: float = 40.0
 
 var skieur: SkieurJoueur = null
 var main: Node = null
+var poste: PosteRemontee = null
+var _b_poste: Button = null
+var _t_poste: float = 0.0
 var _racine: Control = null
 var _joy: Control = null
 var _centre: Vector2 = Vector2.ZERO
@@ -117,6 +120,19 @@ func _ready() -> void:
 		if skieur != null:
 			skieur.course = on)
 	col.add_child(_b_courir)
+	# poste de commande de la remontée où l'on est (ou de la plus proche)
+	_b_poste = _bouton("POSTE", "Poste de commande de la remontée : marche, arrêt, arrêt d'urgence, vitesse")
+	_b_poste.toggle_mode = true
+	_b_poste.visible = false
+	_b_poste.toggled.connect(func(on: bool) -> void:
+		poste.visible = on)
+	col.add_child(_b_poste)
+	poste = PosteRemontee.new()
+	poste.name = "PosteRemontee"
+	poste.set_anchors_preset(Control.PRESET_TOP_LEFT)
+	poste.position = Vector2(16.0, 140.0)
+	poste.visible = false
+	_racine.add_child(poste)
 	_b_vue = _bouton("1re PERS.", "Vue à la première ou à la troisième personne (touche V)")
 	_b_vue.pressed.connect(basculer_vue)
 	col.add_child(_b_vue)
@@ -252,6 +268,18 @@ func pique(t: String, duree: float = 6.0) -> void:
 
 
 func _process(delta: float) -> void:
+	# poste de remontée : la remontée où l'on est, ou la plus proche (à
+	# moins de 400 m d'une gare) ; le pupitre suit quand on en change
+	_t_poste -= delta
+	if _t_poste <= 0.0 and _b_poste != null and main != null and skieur != null:
+		_t_poste = 0.5
+		var rm: RemonteesDomaine = main.get("remontees")
+		var lg: LigneRemontee = rm.ligne_courante(skieur.global_position) if rm != null else null
+		_b_poste.visible = lg != null
+		poste.ligne = lg
+		if lg == null and poste.visible:
+			poste.visible = false
+			_b_poste.set_pressed_no_signal(false)
 	if _t_pique > 0.0:
 		_t_pique -= delta
 		if _t_pique <= 0.0 and _pique != null:

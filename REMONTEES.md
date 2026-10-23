@@ -81,6 +81,16 @@ Depuis la 1.22.13, la gare suit les photos des gares BMF du Marmottes Express
 
 Les portillons s'ouvrent vers l'avant, vers la ligne d'arrêt.
 
+Depuis la 1.23.0 — poste de commande (`PosteRemontee`, `LigneRemontee.etat`) :
+- états `marche`, `arret_normal` (frein de service, 0,4 m/s²), `arret`, `urgence` (frein de poulie,
+  1,5 m/s², à réarmer une fois arrêtée) ; démarrage à 0,25 m/s² ;
+- référence de vitesse : petite 40 %, moyenne 70 %, grande 100 % (par défaut) ;
+- tout le mouvement suit `vitesse_reelle` (`regime()`) : véhicules, pneus, poulies, torons du
+  câble, portillons ; le balancier réagit aux freinages ;
+- puissance au câble : surpoids du brin montée × dénivelé × vitesse, plus 10 % de pertes ;
+- le pupitre suit la remontée où l'on est, sinon la plus proche (400 m) ;
+- banc `bench_poste_remontee_3d.gd`.
+
 Depuis la 1.22.23 :
 - poids ponctuel des véhicules : en ligne, chaque véhicule abaisse le câble de la flèche d'un câble
   tendu (tension H) sous une charge ponctuelle, entre ses deux appuis, moins la charge moyenne déjà

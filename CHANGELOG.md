@@ -5,6 +5,35 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.23.0 — 23 octobre 2026
+
+**Remontées : poste de commande par remontée ; funiculaire allégé quand on est loin.** Retour
+d'utilisateur du 23/10/2026 : « pour l'instant toute l'app est centrée sur le funi avec son poste de
+conduite ; il faudrait un poste de conduite spécifique à chaque remontée, qui change quand on en
+change, avec des arrêts et redémarrages possibles, réglage petite, moyenne, grande vitesse, avec
+grande vitesse par défaut… renseigne-toi. Faire tourner le funi avec le minimum de ressources quand
+on en est loin. »
+- Poste de commande, d'après les pupitres réels (vitesse du câble, puissance, freins, marche,
+  arrêt, arrêt d'urgence, réarmement, référence de vitesse) :
+  - bouton POSTE en vue skieur, près d'une remontée ou à bord ; le pupitre suit la remontée où
+    l'on est, sinon la plus proche ;
+  - affichage : vitesse du câble, jauge, état, consigne, puissance au câble (kW), freins de
+    service et de poulie ;
+  - référence de vitesse PETITE (40 %), MOYENNE (70 %), GRANDE (100 %, par défaut) ;
+  - DÉMARRER (0,25 m/s²), ARRÊT sur le frein de service (0,4 m/s², 14 s au Marmottes Express),
+    ARRÊT D'URGENCE sur le frein de poulie (1,5 m/s² : les sièges balancent), RÉARMER une fois la
+    ligne arrêtée ;
+  - tout suit la vitesse réelle du câble : véhicules, pneus, poulies, torons, portillons.
+- Funiculaire, quand le skieur est à l'air libre à plus de 900 m des deux gares : tunnel, voie,
+  éclairage du tunnel, machinerie et rames (souterrains, invisibles de là) sont masqués et leur
+  animation suspendue, soit environ 2 700 objets et 190 lumières de moins à afficher. La physique
+  des rames continue ; tout réapparaît en s'approchant.
+- Vérifié :
+  - nouveau banc poste_remontee : grande vitesse par défaut, arrêt à 0,40 m/s², immobile à
+    l'arrêt, petite vitesse à 40 %, retour à grande vitesse, réarmement refusé en mouvement, arrêt
+    d'urgence avec balancement de 0,29 rad, réarmement à l'arrêt, pupitre qui passe aux Boisses ;
+  - bancs aller_remontee, embarquement, quai, boucle_salle, skieur, passage, issues et secours.
+
 ## 1.22.23 — 23 octobre 2026
 
 **Remontées : poids ponctuel des véhicules sur le câble, déviation convexe, caméra en cabine.**

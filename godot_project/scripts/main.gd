@@ -964,6 +964,52 @@ func _process(delta: float) -> void:
 		physics.s_poulie_render = _client_s
 		physics.s_render = _client_s + physics.el_x1
 
+	# Skieur loin du funiculaire : tunnel, voie, éclairage, machinerie et
+	# rames (souterrains, invisibles de là) sont masqués, leur animation
+	# suspendue ; la physique des rames continue (retour d'utilisateur, 23/10/2026)
+	_t_funi_loin += delta
+	if _t_funi_loin >= 1.0:
+		_t_funi_loin = 0.0
+		_regler_funi_loin()
+	if _funi_loin:
+		pass
+	else:
+		_maj_funiculaire(delta)
+	if audio != null and cabin != null:
+		audio.machine_view = cabin.view_mode == Cabin.ViewMode.MACHINES
+		audio.gare_ecoute = _gare_ecoute()
+		audio.gain_machinerie = _gain_machinerie()
+	_suite_process(delta)
+
+
+var _t_funi_loin: float = 0.0
+var _funi_loin: bool = false
+const FUNI_LOIN: float = 900.0          # m des deux gares du funiculaire
+
+
+## Le skieur (vue skieur, à l'air libre) est-il à plus de FUNI_LOIN m des
+## deux gares ? On masque alors tout ce qui est sous terre.
+func _regler_funi_loin() -> void:
+	var loin: bool = false
+	if mode_skieur and skieur != null and skieur.actif and skieur.support == null and not _dans_tunnel \
+			and tunnel != null and cabin != null and cabin.view_mode == Cabin.ViewMode.SKIEUR:
+		var p: Vector3 = skieur.global_position
+		var a: Vector3 = tunnel.transform_at(0.0).origin
+		var b: Vector3 = tunnel.transform_at(PNConstants.LENGTH).origin
+		loin = Vector2(p.x - a.x, p.z - a.z).length() > FUNI_LOIN and Vector2(p.x - b.x, p.z - b.z).length() > FUNI_LOIN
+	if loin == _funi_loin:
+		return
+	_funi_loin = loin
+	for n in [tunnel, track, lights, machine_room, cabin, cabin_ghost]:
+		if n != null:
+			(n as Node3D).visible = not loin
+	if machine_room != null:
+		machine_room.set_process(not loin)
+	print("[Funiculaire] %s" % ("loin : souterrain masqué, animation suspendue" if loin else "proche : affiché"))
+
+
+## Mises à jour visuelles du funiculaire (lumières, câble, galets).
+func _maj_funiculaire(delta: float) -> void:
 	# Culling des lumières du tunnel à 2 Hz (les ~230 OmniLight3D pèsent
 	# sur le clustering Forward+ et le fog volumétrique même hors champ)
 	_light_cull_accum += delta
@@ -1002,12 +1048,10 @@ func _process(delta: float) -> void:
 		s_cam = _s_du_skieur()
 	track.update_galets_rames(physics.s_render, physics.ghost_s_render(), s_cam,
 		delta, physics.cable_rupture)
-	# Son : vue salle des machines → ambiance de la gare haute ; gare de
-	# l'auditeur (buzzers) et machinerie sur les quais du haut (skieur)
-	if audio != null and cabin != null:
-		audio.machine_view = cabin.view_mode == Cabin.ViewMode.MACHINES
-		audio.gare_ecoute = _gare_ecoute()
-		audio.gain_machinerie = _gain_machinerie()
+
+
+## Suite de _process (après le funiculaire).
+func _suite_process(delta: float) -> void:
 	if _ext_light != null and cabin != null:
 		_ext_light.visible = cabin.view_mode == Cabin.ViewMode.EXTERIOR
 	# voyant « Alarmes » et bouton DÉFAUTS de l'écran du pupitre (PWA)
@@ -2444,7 +2488,7 @@ func _maj_skieur() -> void:
 			var ligne: LigneRemontee = null
 			if remontees != null and not remontees.a_bord.is_empty():
 				ligne = remontees.a_bord[0]
-				v_ms = ligne.vitesse_en(ligne._vehicules[int(remontees.a_bord[1])][1])
+				v_ms = ligne.vitesse_en(ligne._vehicules[int(remontees.a_bord[1])][1]) * ligne.regime()
 			var info: String = "%d km/h · %d m" % [roundi(v_ms * 3.6), roundi(skieur.global_position.y)]
 			if ligne != null:
 				info += " · %s" % ligne.nom_ligne
