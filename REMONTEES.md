@@ -81,6 +81,11 @@ Depuis la 1.22.13, la gare suit les photos des gares BMF du Marmottes Express
 
 Les portillons s'ouvrent vers l'avant, vers la ligne d'arrêt.
 
+La poulie tourne à la vitesse du câble en ligne, à son rayon de gorge, dans le sens de la boucle
+(1.22.15) : la roue est un nœud à part, l'arbre et le bâti restent fixes. Les numéros (pince et
+plaque du siège) sont des étiquettes d'un seul côté, une par face, contre-inversées sur les
+véhicules en miroir (`VehiculeRemontee._numero`) : lisibles à l'endroit de partout.
+
 Au nez, la batterie de galets est posée côté ligne, centrée là où se croisent l'horizontale de la gare
 et la pente de la ligne ; le câble y suit un raccord parabolique, qui est l'arc des galets
 (`LigneRemontee._preparer_nez`, 1.22.6). Chaque gare est posée au plus haut du terrain sous son

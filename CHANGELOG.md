@@ -5,6 +5,27 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.22.15 — 23 octobre 2026
+
+**Remontées : la poulie tourne, numéros à l'endroit.** Retour d'utilisateur (iPad, v1.22.14) du
+23/10/2026 : « il faut faire tourner la grande poulie à la bonne vitesse du câble en ligne, et les
+chiffres des numéros de siège, c'est toujours lisible, écrit à l'endroit ».
+- Poulie :
+  - elle tourne à la vitesse du câble en ligne, à son rayon de gorge : 5,5 m/s, soit 2,16 rad/s
+    sur la poulie de 2,55 m des Marmottes ;
+  - elle tourne dans le sens de la boucle, aux deux gares ;
+  - seule la roue tourne : l'arbre, le bâti, le moteur et le chariot de tension restent fixes.
+- Numéros des sièges et des pinces :
+  - vu de dos, le numéro s'affichait en miroir (« 54 » écrit à l'envers) : chaque face a
+    maintenant sa propre étiquette, lisible d'un seul côté ;
+  - sur les lignes qui montent à gauche, le véhicule est posé en miroir : ses étiquettes sont
+    contre-inversées ;
+  - la plaque du numéro est posée des deux côtés de la poutre de tête.
+- Vérifié :
+  - relevé de la poulie sur 1 s : 5,50 m/s au rayon de gorge, dans le sens du câble ;
+  - studio : numéros lisibles de face et de dos, siège normal et en miroir ;
+  - bancs embarquement, remontee_dynamique et aller_remontee.
+
 ## 1.22.14 — 23 octobre 2026
 
 **Remontées : arrivée de plain-pied côté portillons.** Retour d'utilisateur du 23/10/2026 : « pour

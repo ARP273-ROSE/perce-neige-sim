@@ -88,6 +88,7 @@ func _pause() -> void:
 
 
 func construire() -> void:
+	_poulies.clear()
 	pret = false
 	_t_tranche = Time.get_ticks_usec()
 	set_process(false)
@@ -498,7 +499,21 @@ func _gare(aval: bool) -> void:
 	_cabine_conducteur(g, znez, dz, aval)
 	# poulie de demi-tour (motrice en amont, retour-tension en aval)
 	var R: float = voie * 0.5
-	_poulie(g, Vector3(0, H_CABLE_GARE, zc), rayon_poulie(), aval)
+	# la roue tourne (nœud à part) ; arbre et bâti restent dans la gare
+	var cp: Vector3 = Vector3(0, H_CABLE_GARE, zc)
+	var roue: Node3D = Node3D.new()
+	roue.name = "Poulie"
+	roue.position = cp
+	g.add_child(roue)
+	_poulie(roue, Vector3.ZERO, rayon_poulie(), aval)
+	var fixes: Array = roue.get_children().slice(_coupe_poulie)
+	for n in fixes:
+		roue.remove_child(n)
+		g.add_child(n)
+		(n as Node3D).position += cp
+	MeshMerge.merge(roue, [], "Roue")
+	# vitesse du câble en ligne, au rayon de la gorge ; sens de la boucle
+	_poulies.append([roue, signf(_x_brin(true)) * vitesse / rayon_poulie()])
 	# galets de déviation (axe vertical) : ils rentrent le câble de la voie
 	# de ligne au diamètre de la poulie, juste après le nez de la gare
 	for sx in [-1.0, 1.0]:
@@ -515,7 +530,7 @@ func _gare(aval: bool) -> void:
 	# ligne d'embarquement (bande jaune) côté montée en aval, côté descente en amont
 	var xb: float = _x_brin(aval)
 	RemonteeKit.boite_en(g, Vector3(voie * 0.5 + 0.8, 0.02, 0.12), Vector3(xb * 0.6, 0.01, znez + signf(dz) * (L_FREIN + 2.5)), "jaune_securite")
-	MeshMerge.merge(g, [], "Gare")
+	MeshMerge.merge(g, [g.get_node("Poulie")], "Gare")
 
 
 # --- plate-forme de gare -----------------------------------------------------------
@@ -1028,6 +1043,10 @@ func point_debarquement(aval: bool) -> Vector3:
 ## au fond de la gorge (le câble y repose), huit rayons en caisson avec
 ## leurs semelles, anneau raidisseur, gros moyeu sur arbre vertical ; au-
 ## dessus, le bâti (réducteur et moteur en amont, chariot de tension en aval).
+var _coupe_poulie: int = 0
+var _poulies: Array = []        # [roue, vitesse angulaire (rad/s)]
+
+
 func _poulie(g: Node3D, c: Vector3, R: float, aval: bool) -> void:
 	if not VehiculeRemontee.DESCRIPTIONS.get(famille, ["", 6, ""])[2] == "fixe":
 		_poulie_debrayable(g, c, R, aval)
@@ -1062,6 +1081,7 @@ func _poulie(g: Node3D, c: Vector3, R: float, aval: bool) -> void:
 	RemonteeKit.tube(g, RemonteeKit.arc(c, Vector3.RIGHT, Vector3.BACK, R * 0.55, 0.0, TAU, 32), 0.05, m, 6)
 	# moyeu, arbre et bâti
 	RemonteeKit.cylindre(g, 0.48, 0.48, 0.50, Transform3D(Basis.IDENTITY, c), m, 24)
+	_coupe_poulie = g.get_child_count()          # la suite (arbre, bâti) ne tourne pas
 	RemonteeKit.cylindre(g, 0.20, 0.20, 0.30, Transform3D(Basis.IDENTITY, c + Vector3(0, 0.38, 0)), "acier", 16)
 	RemonteeKit.cylindre(g, 0.55, 0.55, 0.20, Transform3D(Basis.IDENTITY, c + Vector3(0, 0.62, 0)), "galva_pylone", 24)
 	RemonteeKit.boite_en(g, Vector3(2.0, 0.9, 2.2), c + Vector3(0, 1.17, 0), "galva_pylone")
@@ -1099,6 +1119,7 @@ func _poulie_debrayable(g: Node3D, c: Vector3, R: float, aval: bool) -> void:
 	for k in range(12):
 		var a2: float = TAU * k / 12.0
 		RemonteeKit.cylindre(g, 0.025, 0.025, 0.50, Transform3D(Basis.IDENTITY, c + Vector3(cos(a2), 0, sin(a2)) * 0.40), "acier", 6)
+	_coupe_poulie = g.get_child_count()          # la suite (arbre, bâti) ne tourne pas
 	RemonteeKit.cylindre(g, 0.20, 0.20, 0.30, Transform3D(Basis.IDENTITY, c + Vector3(0, 0.38, 0)), "acier", 16)
 	RemonteeKit.boite_en(g, Vector3(1.8, 0.7, 2.0), c + Vector3(0, 0.88, 0), "galva_pylone")
 	if aval:
@@ -1339,6 +1360,7 @@ func _peupler() -> void:
 func _ajouter_vehicule(s: float) -> void:
 	var v: VehiculeRemontee = VehiculeRemontee.new()
 	v.famille = famille
+	v.miroir = not sens_droite
 	add_child(v)
 	v.construire()
 	_vehicules.append([v, s])
@@ -1366,6 +1388,8 @@ func _process(delta: float) -> void:
 	_dt = 0.0
 	_galets()
 	_tourner_pneus(delta)
+	for pl in _poulies:
+		(pl[0] as Node3D).rotation.y = fposmod((pl[0] as Node3D).rotation.y + float(pl[1]) * delta, TAU)
 
 
 ## Galets mobiles : la pince qui passe sur un train de galets fait descendre
