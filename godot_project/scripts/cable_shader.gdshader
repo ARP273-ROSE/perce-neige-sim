@@ -36,6 +36,8 @@ uniform float trough_sharpness : hint_range(0.5, 8.0) = 2.2;  // netteté des cr
 // v_uv = i * seg_len / n_steps / 0.5, donc UV.y ≈ 2 × (distance_en_m).
 // Facteur de conversion UV → m :
 uniform float uv_y_to_meters = 0.5;
+// Câble lisse (porteurs des 3S et téléphériques) : clos, sans torons.
+uniform bool lisse = false;
 
 // Coupe du brin au fragment près : le câble n'existe qu'ENTRE la rame qu'il
 // tire (attache culot, s = cut_below_s) et la poulie motrice en haut. Le
@@ -179,6 +181,9 @@ void fragment() {
 	float sine = 0.5 - 0.5 * cos(stripe * 6.28318530718);
 	float lum = pow(sine, 1.0 / trough_sharpness);
 
+	if (lisse) {
+		lum = 0.55;
+	}
 	ALBEDO = mix(albedo_trough, albedo_crest, lum);
 	ROUGHNESS = roughness_value;
 	METALLIC = metallic_value;

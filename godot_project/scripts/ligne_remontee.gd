@@ -89,6 +89,7 @@ func _pause() -> void:
 
 func construire() -> void:
 	_poulies.clear()
+	_mat_porteurs = null
 	_terrassements.clear()
 	pret = false
 	_t_tranche = Time.get_ticks_usec()
@@ -112,6 +113,9 @@ func construire() -> void:
 	await _pause()
 	await _poser_pylones()
 	_construire_boucle()
+	if tricable():
+		_charpente_3s(true)
+		_charpente_3s(false)
 	_cable()
 	await _pause()
 	await _lanceurs()
@@ -153,15 +157,34 @@ func _points_appui() -> Array:
 func _parametres_chainette() -> void:
 	var g: float = 9.81
 	var w_cable: float = 0.0039 * diametre_cable * diametre_cable * g      # N/m
-	var cab: bool = famille.begins_with("cabine")
 	var places: int = VehiculeRemontee.DESCRIPTIONS.get(famille, ["", 6, ""])[1]
-	var m_v: float = (850.0 if cab else 95.0 * places + 80.0)              # kg à vide, pince comprise
+	var m_v: float = masse_vehicule()                                      # kg à vide, pince comprise
 	var e: float = maxf(espacement, 8.0)
 	var w_desc: float = w_cable + m_v * g / e
 	var w_mont: float = w_desc + 80.0 * places * g / e
-	var H: float = 300000.0 * pow(diametre_cable / 47.0, 2.0)
+	var H: float = tension_h()
+	if tricable():
+		# les véhicules roulent sur les porteurs (57 mm, 2 par voie)
+		w_desc = 2.0 * 0.0039 * 57.0 * 57.0 * g + m_v * g / e
+		w_mont = w_desc + 80.0 * places * g / e
 	_a_montee = H / w_mont
 	_a_descente = H / w_desc
+
+
+## Masse d'un véhicule à vide (kg), pince ou chariot compris.
+func masse_vehicule() -> float:
+	if tricable():
+		return 2950.0                       # Zeta du 3S (fiche technique)
+	var places: int = VehiculeRemontee.DESCRIPTIONS.get(famille, ["", 6, ""])[1]
+	return 850.0 if famille.begins_with("cabine") else 95.0 * places + 80.0
+
+
+## Tension horizontale (N) du câble qui porte les véhicules : le tracteur,
+## ou au 3S les deux porteurs d'une voie (ancrages fixes, ~75 t chacun).
+func tension_h() -> float:
+	if tricable():
+		return 1500000.0
+	return 300000.0 * pow(diametre_cable / 47.0, 2.0)
 
 
 ## Hauteur de la chaînette de paramètre a passant par (x1, y1) et (x2, y2), en x.
@@ -206,7 +229,7 @@ func _calculer_tetes() -> void:
 			break
 	for i in range(_tetes.size()):
 		var t: float = terrain(float(pylones[i]["d"]))
-		_tetes[i] = clampf(_tetes[i], t + 6.5, t + 32.0)
+		_tetes[i] = clampf(_tetes[i], t + 6.5, t + (90.0 if tricable() else 32.0))
 	# pylônes de COMPRESSION (balancier côté montée en C) : le câble doit y
 	# passer SOUS les galets, la ligne y est concave — tête abaissée sous la
 	# corde de ses voisins (sinon le câble décollerait des galets)
@@ -257,6 +280,8 @@ func _compression(p: Dictionary) -> bool:
 ## l'horizontale de la gare et la ligne se croisent en son milieu.
 func _preparer_nez() -> void:
 	_h_nez = [0.0, 0.0]
+	if tricable():
+		return
 	var L: float = longueur_h()
 	var e: float = 6.0
 	var p_a: float = atan2(y_cable(e) - y_cable(0.0), e)
@@ -497,8 +522,11 @@ func _gare(aval: bool) -> void:
 	g.add_child(_mesh_terrassement(_terrassement(aval), y0))
 	# carénage en gélule sur colonnes, cabine du conducteur (photos des
 	# gares BMF du Marmottes Express, retour d'utilisateur, 23/10/2026)
-	_capot(g, znez, zc, aval)
-	_cabine_conducteur(g, znez, dz, aval)
+	if tricable():
+		_gare_3s(g, znez, zc, aval)
+	else:
+		_capot(g, znez, zc, aval)
+		_cabine_conducteur(g, znez, dz, aval)
 	# poulie de demi-tour (motrice en amont, retour-tension en aval)
 	var R: float = voie * 0.5
 	# la roue tourne (nœud à part) ; arbre et bâti restent dans la gare
@@ -856,6 +884,108 @@ func _capot(g: Node3D, znez: float, zc: float, aval: bool) -> void:
 		RemonteeKit.cylindre(g, 0.50, 0.95, 0.8, Transform3D(Basis.IDENTITY, Vector3(0, hcol - 0.4, zcol)), "blanc_plaque", 24)
 
 
+## Gare du 3S de l'Olympique (photos des deux gares, reportage
+## remontees-mecaniques.net) : grand bâtiment rectangulaire, soubassement et
+## piliers d'angle en pierre, grandes verrières sur les côtés et au fond,
+## toit sombre débordant, bandeau noir au nom de la ligne ; ouvert côté
+## ligne au-dessus des cabines ; dedans, la charpente rouge qui porte les
+## rails et les lanceurs autour de la poulie.
+func _emprise_3s(aval: bool) -> Array:
+	var L: float = longueur_h()
+	var znez: float = 0.0 if aval else -L
+	var sg: float = 1.0 if aval else -1.0
+	var zc: float = znez + sg * L_GARE
+	var z_av: float = znez - sg * 1.0
+	var z_ar: float = zc + sg * (voie * 0.5 + 3.0)
+	var hx: float = voie * 0.5 + 3.4
+	var hr: float = H_CABLE_GARE + 3.4
+	return [hx, z_av, z_ar, hr, sg]
+
+
+func _gare_3s(g: Node3D, znez: float, zc: float, aval: bool) -> void:
+	var e: Array = _emprise_3s(aval)
+	var hx: float = e[0]
+	var z_av: float = e[1]
+	var z_ar: float = e[2]
+	var hr: float = e[3]
+	var sg: float = e[4]
+	var zm: float = (z_av + z_ar) * 0.5
+	var lz: float = absf(z_ar - z_av)
+	# toit débordant, bandeau noir, enseigne
+	RemonteeKit.boite_en(g, Vector3(2.0 * hx + 1.6, 0.35, lz + 1.6), Vector3(0, hr + 0.175, zm), "peinture_anthracite")
+	RemonteeKit.boite_en(g, Vector3(2.0 * hx + 1.7, 0.9, 0.12), Vector3(0, hr - 0.45, z_av - sg * 0.86), "cabine_noire")
+	for sx in [-1.0, 1.0]:
+		RemonteeKit.boite_en(g, Vector3(0.12, 0.9, lz + 1.7), Vector3(sx * (hx + 0.86), hr - 0.45, zm), "cabine_noire")
+	if nom_ligne != "":
+		var lab: Label3D = Label3D.new()
+		lab.text = "Téléphérique de l'Olympique" if nom_ligne.find("Olympique") >= 0 else nom_ligne
+		lab.font_size = 140
+		lab.pixel_size = 0.0045
+		lab.modulate = Color(1, 1, 1)
+		lab.outline_size = 0
+		lab.position = Vector3(0, hr - 0.45, z_av - sg * 0.93)
+		lab.rotation.y = 0.0 if sg < 0.0 else PI
+		g.add_child(lab)
+	# piliers d'angle et trumeaux en pierre, soubassement en pierre,
+	# verrières entre eux (côtés et fond) ; ouvert côté ligne
+	var piliers: Array = []
+	for sx in [-1.0, 1.0]:
+		var n_p: int = int(ceil(lz / 7.0))
+		for k in range(n_p + 1):
+			piliers.append(Vector3(sx * hx, 0, lerpf(z_av, z_ar, float(k) / n_p)))
+	for k in range(1, 4):
+		piliers.append(Vector3(lerpf(-hx, hx, float(k) / 4.0), 0, z_ar))
+	for p in piliers:
+		RemonteeKit.boite_en(g, Vector3(1.1, hr, 1.1), p + Vector3(0, hr * 0.5, 0), "pierre")
+	for sx in [-1.0, 1.0]:
+		RemonteeKit.boite_en(g, Vector3(0.5, 1.0, lz), Vector3(sx * hx, 0.5, zm), "pierre")
+		RemonteeKit.boite_en(g, Vector3(0.06, hr - 1.0, lz), Vector3(sx * hx, 1.0 + (hr - 1.0) * 0.5, zm), "vitre_teintee")
+		var n_m: int = int(lz / 1.8)
+		for k in range(n_m + 1):
+			var zz: float = lerpf(z_av, z_ar, float(k) / n_m)
+			RemonteeKit.boite_en(g, Vector3(0.10, hr - 1.0, 0.08), Vector3(sx * hx, 1.0 + (hr - 1.0) * 0.5, zz), "noir_mat")
+		RemonteeKit.boite_en(g, Vector3(0.10, 0.10, lz), Vector3(sx * hx, 1.0 + (hr - 1.0) * 0.5, zm), "noir_mat")
+	RemonteeKit.boite_en(g, Vector3(2.0 * hx, 1.0, 0.5), Vector3(0, 0.5, z_ar), "pierre")
+	RemonteeKit.boite_en(g, Vector3(2.0 * hx, hr - 1.0, 0.06), Vector3(0, 1.0 + (hr - 1.0) * 0.5, z_ar), "vitre_teintee")
+	# fronton côté ligne, au-dessus du passage des cabines
+	var h_pass: float = H_CABLE_GARE + 1.6
+	RemonteeKit.boite_en(g, Vector3(2.0 * hx, hr - h_pass, 0.5), Vector3(0, h_pass + (hr - h_pass) * 0.5, z_av), "pierre")
+	# poteaux rouges de la poulie et du milieu de la gare
+	var rouge: String = "cabine_rouge"
+	for zz2 in [zc, (znez + zc) * 0.5]:
+		RemonteeKit.boite_en(g, Vector3(0.9, H_CABLE_GARE - 0.4, 0.9), Vector3(0, (H_CABLE_GARE - 0.4) * 0.5, zz2), rouge)
+
+
+## Charpente rouge du 3S : poutres-caissons autour de la boucle (elles
+## portent les rails et les lanceurs), poteaux jusqu'au toit — après la
+## boucle, qu'elles suivent.
+func _charpente_3s(aval: bool) -> void:
+	var g: Node3D = Node3D.new()
+	g.name = "Charpente" + ("Aval" if aval else "Amont")
+	g.position = Vector3(0, terrain(0.0 if aval else longueur_h()), 0)
+	add_child(g)
+	var hr: float = _emprise_3s(aval)[3]
+	var rouge: String = "cabine_rouge"
+	for dx in [-1.1, 1.1]:
+		var pts: PackedVector3Array = PackedVector3Array()
+		var s0: float = s_gare(aval, -1.0)
+		var l: float = longueur_zone(aval)
+		var x: float = 0.0
+		while x <= l + 2.0:
+			var s1: float = s0 + x
+			var p: Vector3 = _point_cable(s1)[0]
+			var o: Vector3 = _dehors(s1)
+			pts.append(p + o * dx + Vector3(0, Y_CAPOT + 0.15 - terrain(0.0 if aval else longueur_h()), 0))
+			x += 1.0
+		for k in range(pts.size() - 1):
+			RemonteeKit.poutre(g, pts[k], pts[k + 1], 0.35, 0.55, rouge)
+		var k2: int = 0
+		while k2 < pts.size():
+			RemonteeKit.poutre(g, pts[k2], Vector3(pts[k2].x, hr, pts[k2].z), 0.22, 0.22, rouge)
+			k2 += 6
+	MeshMerge.merge(g, [], "Charpente")
+
+
 ## Cabine du conducteur en pierre (photos des deux gares) : à côté du quai
 ## d'embarquement, côté extérieur, toit à deux pans en bardeaux sombres.
 func _cabine_conducteur(g: Node3D, znez: float, dz: float, aval: bool) -> void:
@@ -902,6 +1032,10 @@ func _collisions_fixes() -> void:
 		var d: float = float(pylones[i]["d"])
 		var t: float = terrain(d)
 		var h: float = _tetes[i] - t - _dessus_traverse()
+		if tricable():
+			h = _tetes[i] - t - 3.0
+			boite.call(Vector3(clampf(h * 0.22, 4.0, 12.0), h, clampf(h * 0.22, 4.0, 12.0) * 0.6), Vector3(0, t + h * 0.5, -d))
+			continue
 		boite.call(Vector3(2.4, 0.7, 2.4), Vector3(0, t - 0.15, -d))
 		var cs2: CollisionShape3D = CollisionShape3D.new()
 		var cy: CylinderShape3D = CylinderShape3D.new()
@@ -925,6 +1059,12 @@ func _collisions_fixes() -> void:
 		cc.backface_collision = true
 		tal.shape = cc
 		corps.add_child(tal)
+		if tricable():
+			boite.call(Vector3(0.9, H_CABLE_GARE, 0.9), Vector3(0, y0 + H_CABLE_GARE * 0.5, zc))
+			boite.call(Vector3(0.9, H_CABLE_GARE, 0.9), Vector3(0, y0 + H_CABLE_GARE * 0.5, (znez + zc) * 0.5))
+			# (murs bas et verrières sans collision : on sort de la gare à pied
+			# par les côtés, comme par les passerelles réelles)
+			continue
 		# colonnes du carénage et cabine du conducteur
 		boite.call(Vector3(1.0, H_CABLE_GARE, 1.0), Vector3(0, y0 + H_CABLE_GARE * 0.5, zc))
 		boite.call(Vector3(1.0, H_CABLE_GARE + Y_CAPOT, 1.0), Vector3(0, y0 + (H_CABLE_GARE + Y_CAPOT) * 0.5, (znez + zc) * 0.5 - signf(dz) * 1.0))
@@ -1316,11 +1456,26 @@ func _rail_ouverture(aval: bool) -> void:
 	MeshMerge.merge(r_node, [], "Rail")
 
 
+## Appui des pneus du lanceur (repère du véhicule : dehors, haut) : la
+## plaque de friction de la pince ; au 3S, le dessus du chariot.
+func _x_plaque() -> float:
+	return 0.0 if tricable() else VehiculeRemontee.X_PLAQUE
+
+
+func _y_plaque() -> float:
+	return 0.46 if tricable() else VehiculeRemontee.Y_PLAQUE
+
+
 func _lanceurs() -> void:
 	_pneus.clear()
 	if famille.begins_with("perche"):
 		return
 	var y_rail: float = 0.11 - 0.065 - 0.035
+	var x_rail: float = 0.25
+	if tricable():
+		# rail sous les galets de gare du chariot (de part et d'autre)
+		y_rail = 0.36 - 0.09 - 0.045
+		x_rail = 0.62
 	for aval in [true, false]:
 		var s0: float = s_gare(aval, 0.0)
 		var l: float = longueur_zone(aval)
@@ -1331,18 +1486,24 @@ func _lanceurs() -> void:
 			var s: float = s0 + x
 			var p: Vector3 = point(s)[0]
 			var o: Vector3 = _dehors(s)
-			rail.append(p + o * 0.25 + Vector3(0, y_rail, 0))
-			poutre_haut.append(p + o * VehiculeRemontee.X_PLAQUE + Vector3(0, VehiculeRemontee.Y_PLAQUE + 2.0 * R_PNEU + 0.16, 0))
+			rail.append(p + o * x_rail + Vector3(0, y_rail, 0))
+			poutre_haut.append(p + o * _x_plaque() + Vector3(0, _y_plaque() + 2.0 * R_PNEU + 0.16, 0))
 			x += 0.5
 		var r_node: Node3D = Node3D.new()
 		r_node.name = "Rail" + ("Aval" if aval else "Amont")
 		add_child(r_node)
 		RemonteeKit.tube(r_node, rail, 0.045, "acier", 6)
+		if tricable():
+			var rail2: PackedVector3Array = PackedVector3Array()
+			for q in range(rail.size()):
+				var s3: float = s0 - 1.0 + 0.5 * q
+				rail2.append(rail[q] - _dehors(s3) * 2.0 * x_rail)
+			RemonteeKit.tube(r_node, rail2, 0.045, "acier", 6)
 		RemonteeKit.tube(r_node, poutre_haut, 0.07, "galva_pylone", 6)
 		# suspentes du lanceur à la charpente, tous les 3 m
 		var k: int = 0
 		while k < poutre_haut.size():
-			var l_s: float = Y_CAPOT - (VehiculeRemontee.Y_PLAQUE + 2.0 * R_PNEU + 0.16)
+			var l_s: float = Y_CAPOT - (_y_plaque() + 2.0 * R_PNEU + 0.16)
 			RemonteeKit.barre(r_node, poutre_haut[k], poutre_haut[k] + Vector3(0, l_s, 0), 0.035, "galva_pylone", 6)
 			k += 6
 		MeshMerge.merge(r_node, [], "Rail")
@@ -1356,7 +1517,7 @@ func _lanceurs() -> void:
 			var t2: Vector3 = (pt[1] as Vector3)
 			t2.y = 0.0
 			t2 = t2.normalized()
-			var c: Vector3 = p2 + o2 * VehiculeRemontee.X_PLAQUE + Vector3(0, VehiculeRemontee.Y_PLAQUE + R_PNEU, 0)
+			var c: Vector3 = p2 + o2 * _x_plaque() + Vector3(0, _y_plaque() + R_PNEU, 0)
 			# axe du pneu = dehors (horizontal, en travers) ; il tourne dans le plan vertical de la marche
 			var base: Basis = Basis(t2, o2, t2.cross(o2)).orthonormalized()
 			var pn: Node3D = Node3D.new()
@@ -1383,11 +1544,20 @@ func _tourner_pneus(delta: float) -> void:
 		(e[0] as Node3D).transform.basis = (e[2] as Basis) * Basis(Vector3.UP, e[3])
 
 
+## Tricâble (3S) : pylônes en treillis, deux porteurs par voie, le
+## véhicule roule sur les porteurs, le tracteur passe dessous.
+func tricable() -> bool:
+	return famille == "cabine_3s"
+
+
 func _dessus_traverse() -> float:
 	return PyloneRemontee.DESSUS_TRAVERSE_CABINE if famille.begins_with("cabine") else PyloneRemontee.DESSUS_TRAVERSE_CABLE
 
 
 func _poser_pylones() -> void:
+	if tricable():
+		await _poser_pylones_treillis()
+		return
 	for i in range(pylones.size()):
 		var p: Dictionary = pylones[i]
 		var d: float = float(p["d"])
@@ -1419,6 +1589,8 @@ func _poser_pylones() -> void:
 
 
 func _batterie_gare(aval: bool) -> void:
+	if tricable():
+		return
 	var L: float = longueur_h()
 	var h: float = _h_nez[0] if aval else _h_nez[1]
 	if h <= 0.0:
@@ -1538,8 +1710,75 @@ func _cable() -> void:
 	add_child(c)
 	# câble à torons du funiculaire, au diamètre de la ligne, qui défile
 	_mat_cable = RemonteeKit.materiau_cable_tracteur(diametre_cable)
+	if tricable():
+		# 3S : le tracteur passe sous les porteurs (la boucle suit le chariot)
+		for k in range(pts.size()):
+			pts[k] += Vector3(0, VehiculeRemontee.Y_TRACTEUR_3S, 0)
+		_porteurs(c)
+		_cavaliers(c)
 	_preparer_charges()
 	RemonteeKit.tube(c, pts, diametre_cable * 0.0005, "cable", 8, _mat_cable)
+
+
+## Câbles porteurs du 3S : deux par voie, lisses et immobiles (retour
+## d'utilisateur, 23/10/2026 : « un câble lisse immobile »), du nez d'une gare à
+## l'autre, sur le profil de la ligne ; ils fléchissent sous chaque véhicule
+## par le même calcul que le tracteur (shader du câble, sans torons).
+var _mat_porteurs: ShaderMaterial = null
+
+
+## Cavaliers du 3S (fiche : 2×10) : pièces serrées sur les deux porteurs
+## d'une voie, à intervalles réguliers entre les pylônes, qui soutiennent le
+## tracteur sur un galet (retour d'utilisateur, 23/10/2026). Le chariot roule
+## par-dessus. Ils suivent la flèche moyenne des porteurs.
+const N_CAVALIERS: int = 10
+
+
+func _cavaliers(parent: Node3D) -> void:
+	var L: float = longueur_h()
+	var appuis: Array = [0.0]
+	for p in pylones:
+		appuis.append(float(p["d"]))
+	appuis.append(L)
+	for montee in [true, false]:
+		var x0: float = _x_brin(montee)
+		var e: float = VehiculeRemontee.E_PORTEURS_3S * 0.5
+		for k in range(N_CAVALIERS):
+			var d: float = L * (k + 0.5) / N_CAVALIERS
+			var proche: bool = false
+			for a in appuis:
+				if absf(d - float(a)) < 25.0:
+					proche = true
+			if proche:
+				d += 30.0
+			var y: float = y_cable(d, montee)
+			var c: Node3D = Node3D.new()
+			c.position = Vector3(x0, y, -d)
+			c.rotation.x = atan2(y_cable(d + 2.0, montee) - y_cable(d - 2.0, montee), 4.0)
+			parent.add_child(c)
+			# deux mâchoires serrées sur les porteurs, traverse et bras
+			for sx in [-1.0, 1.0]:
+				RemonteeKit.boite_en(c, Vector3(0.10, 0.12, 0.34), Vector3(sx * e, 0.0, 0), "galva_pylone")
+				RemonteeKit.poutre(c, Vector3(sx * e, -0.05, 0), Vector3(sx * 0.10, VehiculeRemontee.Y_TRACTEUR_3S - 0.05, 0), 0.06, 0.06, "galva_pylone")
+			RemonteeKit.boite_en(c, Vector3(0.24, 0.05, 0.30), Vector3(0, VehiculeRemontee.Y_TRACTEUR_3S - 0.08, 0), "galva_pylone")
+			# galet du tracteur, sous lui (axe en travers)
+			RemonteeKit.galet(c, Vector3(0, VehiculeRemontee.Y_TRACTEUR_3S - 0.03 - 0.12, 0), 0.12)
+
+
+func _porteurs(parent: Node3D) -> void:
+	_mat_porteurs = RemonteeKit.materiau_cable_tracteur(57.0)
+	_mat_porteurs.set_shader_parameter("lisse", true)
+	var L: float = longueur_h()
+	for montee in [true, false]:
+		var x0: float = _x_brin(montee)
+		for k in [-0.5, 0.5]:
+			var pts: PackedVector3Array = PackedVector3Array()
+			var d: float = 0.0
+			while d < L:
+				pts.append(Vector3(x0 + k * VehiculeRemontee.E_PORTEURS_3S, y_cable(d, montee), -d))
+				d += 0.5 if d < 30.0 or d > L - 30.0 else 4.0
+			pts.append(Vector3(x0 + k * VehiculeRemontee.E_PORTEURS_3S, y_cable(L, montee), -L))
+			RemonteeKit.tube(parent, pts, 0.0285, "cable", 8, _mat_porteurs)
 
 
 func _peupler() -> void:
@@ -1611,7 +1850,7 @@ func _preparer_charges() -> void:
 	for p in _points_appui():
 		_appuis.append(float(p[0]))
 	_n_appuis = mini(_appuis.size(), 48)
-	_tension = 300000.0 * pow(diametre_cable / 47.0, 2.0)
+	_tension = tension_h()
 	var e: float = maxf(espacement, 8.0)
 	_w_veh = [_poids_vehicule(true) / e / _tension, _poids_vehicule(false) / e / _tension]
 	var packs: Array = []
@@ -1621,20 +1860,23 @@ func _preparer_charges() -> void:
 			var j: int = k * 4 + c
 			q[c] = _appuis[j] if j < _n_appuis else 0.0
 		packs.append(q)
-	_mat_cable.set_shader_parameter("appuis", PackedVector4Array(packs))
-	_mat_cable.set_shader_parameter("n_appuis", _n_appuis)
-	_mat_cable.set_shader_parameter("signe_montee", signf(_x_brin(true)))
-	_mat_cable.set_shader_parameter("w_m", _w_veh[0])
-	_mat_cable.set_shader_parameter("w_d", _w_veh[1])
+	for m in _mats_charges():
+		m.set_shader_parameter("appuis", PackedVector4Array(packs))
+		m.set_shader_parameter("n_appuis", _n_appuis)
+		m.set_shader_parameter("signe_montee", signf(_x_brin(true)))
+		m.set_shader_parameter("w_m", _w_veh[0])
+		m.set_shader_parameter("w_d", _w_veh[1])
+
+
+func _mats_charges() -> Array:
+	return [_mat_cable] if _mat_porteurs == null else [_mat_cable, _mat_porteurs]
 
 
 ## Poids d'un véhicule (N), passagers compris en montée — mêmes charges
 ## que la chaînette (_parametres_chainette).
 func _poids_vehicule(montee: bool) -> float:
-	var cab: bool = famille.begins_with("cabine")
 	var places: int = VehiculeRemontee.DESCRIPTIONS.get(famille, ["", 6, ""])[1]
-	var m_v: float = (850.0 if cab else 95.0 * places + 80.0)
-	return (m_v + (80.0 * places if montee else 0.0)) * 9.81
+	return (masse_vehicule() + (80.0 * places if montee else 0.0)) * 9.81
 
 
 ## Charges du moment : chaque véhicule en ligne, sur son brin.
@@ -1660,8 +1902,9 @@ func _charges_ponctuelles() -> void:
 			var a: Vector2 = l2[j * 2] if j * 2 < l2.size() else Vector2.ZERO
 			var b: Vector2 = l2[j * 2 + 1] if j * 2 + 1 < l2.size() else Vector2.ZERO
 			packs.append(Vector4(a.x, a.y, b.x, b.y))
-		_mat_cable.set_shader_parameter("charges_m" if k == 0 else "charges_d", PackedVector4Array(packs))
-		_mat_cable.set_shader_parameter("n_charges_m" if k == 0 else "n_charges_d", l2.size())
+		for m in _mats_charges():
+			m.set_shader_parameter("charges_m" if k == 0 else "charges_d", PackedVector4Array(packs))
+			m.set_shader_parameter("n_charges_m" if k == 0 else "n_charges_d", l2.size())
 
 
 ## Flèche locale (m, vers le bas) en d sur un brin : même calcul que le shader.
@@ -1761,7 +2004,34 @@ func puissance_kw() -> float:
 
 ## Galets mobiles : la pince qui passe sur un train de galets fait descendre
 ## (support) ou monter (compression) chaque paire selon sa surépaisseur.
+func _poser_pylones_treillis() -> void:
+	for i in range(pylones.size()):
+		var p: Dictionary = pylones[i]
+		var d: float = float(p["d"])
+		var t: float = terrain(d)
+		var py: PyloneTreillis = PyloneTreillis.new()
+		py.numero = i + 1
+		py.voie = voie
+		py.ecart_porteurs = VehiculeRemontee.E_PORTEURS_3S
+		# sabots : 7 m, plus longs sur un pylône à grande déviation (le P3
+		# de l'Olympique porte 40 galets par voie)
+		var n_g: int = int((p.get("montee", [[6, "S"]])[0] as Array)[0])
+		py.l_sabot = clampf(n_g * 0.45, 7.0, 22.0)
+		py.hauteur = _tetes[i] - t - (py.hauteur_porteurs() - py.hauteur)
+		py.position = Vector3(0, t, -d)
+		var e: float = 6.0
+		py.pente = atan2(y_cable(d + e) - y_cable(d - e), 2.0 * e)
+		py.deviation = atan2(y_cable(d) - y_cable(d - e), e) - atan2(y_cable(d + e) - y_cable(d), e)
+		py.name = "P%d" % (i + 1)
+		add_child(py)
+		py.construire()
+		MeshMerge.merge(py, [], "Pylone")
+		await _pause()
+
+
 func _galets() -> void:
+	if tricable():
+		return
 	var touches: Dictionary = {}
 	var xm: float = _x_brin(true)
 	for e in _vehicules:
