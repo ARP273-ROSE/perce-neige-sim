@@ -5,6 +5,28 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.22.23 — 23 octobre 2026
+
+**Remontées : poids ponctuel des véhicules sur le câble, déviation convexe, caméra en cabine.**
+Retour d'utilisateur du 23/10/2026.
+- « Pour la courbe du câble en cosh, c'est très bien, mais il faut tenir compte du poids ponctuel et
+  local de chaque siège et cabine » :
+  - en ligne, chaque véhicule abaisse le câble de la flèche d'un câble tendu sous une charge
+    ponctuelle, entre ses deux appuis (nez des gares, têtes de pylônes) ;
+  - on retranche la charge moyenne déjà comprise dans la chaînette : l'allure moyenne ne change
+    pas, le câble fait un coude sous chaque véhicule, et le coude se déplace avec lui ;
+  - le câble est plié dans son shader (appuis et charges transmis à chaque image) ; chaque
+    véhicule est abaissé de la même flèche et reste sur le câble ;
+  - mesuré : jusqu'à 1,41 m sous une cabine pleine des Boisses, 0,50 m sous un siège des Marmottes.
+- « Les galets qui redirigent le câble vers les poulies devraient lui faire faire un truc convexe,
+  pas concave » : le câble entrait en S, et sa seconde courbure était concave contre des galets du
+  mauvais côté. Il arrive maintenant droit, s'enroule sur les galets de déviation côté intérieur
+  (convexe), puis file en ligne droite, tangente à la poulie (tangente commune aux deux cercles).
+- « Portes fermées, je suis enfermé dans la cabine en vue 3e personne » : en remontée, la caméra de
+  dos traverse les parois du véhicule ; dans le funiculaire, elle reste dans la rame.
+- Vérifié : bancs embarquement, remontee_dynamique, aller_remontee et quai ; relevé des flèches ;
+  vues rapprochées d'une cabine et d'un siège en pleine portée.
+
 ## 1.22.22 — 23 octobre 2026
 
 **Remontées : terrassement des gares, télécabine à pied, télésiège chaussé.** Retours

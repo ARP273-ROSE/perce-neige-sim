@@ -81,6 +81,15 @@ Depuis la 1.22.13, la gare suit les photos des gares BMF du Marmottes Express
 
 Les portillons s'ouvrent vers l'avant, vers la ligne d'arrêt.
 
+Depuis la 1.22.23 :
+- poids ponctuel des véhicules : en ligne, chaque véhicule abaisse le câble de la flèche d'un câble
+  tendu (tension H) sous une charge ponctuelle, entre ses deux appuis, moins la charge moyenne déjà
+  dans la chaînette ; calculée dans le shader du câble (`fleche_points`, appuis et charges passés à
+  chaque image) et par `LigneRemontee._fleche` pour les véhicules ;
+- déviation en gare : le câble arrive droit, s'enroule sur les galets de déviation côté intérieur
+  (convexe), file en ligne droite tangente à la poulie (`_tangente_deviation`) ;
+- en remontée, la caméra de dos traverse les parois du véhicule.
+
 Depuis la 1.22.22 :
 - terrassement des gares (`LigneRemontee._terrassement`) : dessus du quai et de la rampe d'accès,
   et un talus le long de chaque bord qui descend jusqu'au terrain réel (`sol_local`, relief

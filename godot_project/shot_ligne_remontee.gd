@@ -88,6 +88,8 @@ func _initialize() -> void:
 	var ha: float = _ligne._h_nez[0]
 	var hb: float = _ligne._h_nez[1]
 	var xb: float = _ligne.voie * 0.5
+	_vues.append(["deviation", Vector3(xb + 0.6, _ligne.H_CABLE_GARE + 2.2, 3.4), Vector3(xb - 0.3, _ligne.H_CABLE_GARE, 3.2)])
+	_vues.append(["deviation_large", Vector3(xb - 1.0, _ligne.H_CABLE_GARE + 9.0, 12.0), Vector3(xb - 0.6, _ligne.H_CABLE_GARE, 12.0)])
 	_vues.append(["batterie_aval", Vector3(-xb - 7.0, _ligne.y_cable(ha) + 0.8, -ha), Vector3(-xb, _ligne.y_cable(ha), -ha)])
 	_vues.append(["batterie_aval_bis", Vector3(xb + 7.0, _ligne.y_cable(ha) + 0.8, -ha), Vector3(xb, _ligne.y_cable(ha), -ha)])
 	_vues.append(["batterie_amont", Vector3(-xb - 7.0, _ligne.y_cable(L - hb) + 0.8, -L + hb), Vector3(-xb, _ligne.y_cable(L - hb), -L + hb)])

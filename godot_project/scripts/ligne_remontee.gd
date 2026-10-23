@@ -521,7 +521,8 @@ func _gare(aval: bool) -> void:
 	for sx in [-1.0, 1.0]:
 		for k in range(3):
 			var zd: float = znez + signf(dz) * (Z_DEVIATION + 0.7 * k)
-			var xd: float = sx * (_x_rentre(Z_DEVIATION + 0.7 * k) - 0.21 - PyloneRemontee.R_CABLE)
+			# sous le câble, côté intérieur : là où il s'enroule (convexe)
+			var xd: float = sx * (_x_rentre(Z_DEVIATION + 0.7 * k) - 0.21 - diametre_cable * 0.0005)
 			RemonteeKit.galet(g, Vector3(xd, H_CABLE_GARE, zd), 0.21)
 			(g.get_child(g.get_child_count() - 1) as Node3D).transform.basis = Basis(Vector3.FORWARD, 0.0).scaled(Vector3.ONE * 0.21 / RollerMesh.R_BANDE)
 			RemonteeKit.boite_en(g, Vector3(0.22, 0.04, 0.30), Vector3(xd, H_CABLE_GARE + 0.16, zd), "galva_pylone")
@@ -1143,6 +1144,12 @@ func point_debarquement(aval: bool) -> Vector3:
 ## dessus, le bâti (réducteur et moteur en amont, chariot de tension en aval).
 var _coupe_poulie: int = 0
 var _mat_cable: ShaderMaterial = null
+# poids ponctuels sur le câble (voir cable_shader : fleche_points)
+var _n_appuis: int = 0
+var _appuis: PackedFloat32Array = PackedFloat32Array()
+var _charges: Array = [[], []]        # [montée, descente] : Vector2(d, P/H)
+var _w_veh: Array = [0.0, 0.0]        # charge répartie des véhicules / H (1/m)
+var _tension: float = 300000.0        # tension horizontale H (N)
 var _phase_cable: float = 0.0
 var _poulies: Array = []        # [roue, vitesse angulaire (rad/s)]
 
@@ -1448,7 +1455,48 @@ func _batterie_gare(aval: bool) -> void:
 ## Demi-écartement du câble à `dz` m du nez, en gare : de la voie de ligne
 ## au diamètre de la poulie (les galets de déviation suivent la même courbe).
 func _x_rentre(dz: float) -> float:
-	return lerpf(voie * 0.5, rayon_poulie(), smoothstep(2.0, Z_DEVIATION + 1.4, dz))
+	# le câble arrive droit (voie de ligne), s'enroule sur les galets de
+	# déviation (côté INTÉRIEUR : convexe), file en ligne droite et arrive
+	# tangent à la poulie (convexe aussi) — la tangente commune aux deux
+	# cercles (retour d'utilisateur, 23/10/2026 : la courbe en S faisait le câble
+	# concave contre des galets du mauvais côté)
+	var t: Array = _tangente_deviation()
+	var R: float = voie * 0.5
+	var cA: Vector2 = t[0]
+	var TA: Vector2 = t[2]
+	var TB: Vector2 = t[3]
+	if dz <= cA.x:
+		return R
+	if dz <= TA.x:
+		return cA.y + sqrt(maxf(R_DEVIATION * R_DEVIATION - (dz - cA.x) * (dz - cA.x), 0.0))
+	if dz <= TB.x:
+		return lerpf(TA.y, TB.y, (dz - TA.x) / maxf(TB.x - TA.x, 1e-4))
+	var Rp: float = rayon_poulie()
+	return sqrt(maxf(Rp * Rp - (dz - L_GARE) * (dz - L_GARE), 0.0))
+
+
+## Rayon de l'enroulement du câble sur la batterie de galets de déviation.
+const R_DEVIATION: float = 1.5
+
+
+## Géométrie de la déviation en gare, dans le plan (u = distance au nez,
+## w = demi-écartement) : [centre A des galets, centre B de la poulie,
+## point de départ TA sur A, point d'arrivée TB sur B] — tangente
+## extérieure commune aux deux cercles, tous deux côté intérieur du câble.
+func _tangente_deviation() -> Array:
+	var R: float = voie * 0.5
+	var Rp: float = rayon_poulie()
+	var cA: Vector2 = Vector2(Z_DEVIATION, R - R_DEVIATION)
+	var cB: Vector2 = Vector2(L_GARE, 0.0)
+	var d: Vector2 = cB - cA
+	var D: float = d.length()
+	var dn: Vector2 = d / D
+	var perp: Vector2 = Vector2(-dn.y, dn.x)
+	if perp.y < 0.0:
+		perp = -perp
+	var cphi: float = clampf((R_DEVIATION - Rp) / D, -1.0, 1.0)
+	var n: Vector2 = dn * cphi + perp * sqrt(1.0 - cphi * cphi)
+	return [cA, cB, cA + n * R_DEVIATION, cB + n * Rp]
 
 
 func _cable() -> void:
@@ -1490,6 +1538,7 @@ func _cable() -> void:
 	add_child(c)
 	# câble à torons du funiculaire, au diamètre de la ligne, qui défile
 	_mat_cable = RemonteeKit.materiau_cable_tracteur(diametre_cable)
+	_preparer_charges()
 	RemonteeKit.tube(c, pts, diametre_cable * 0.0005, "cable", 8, _mat_cable)
 
 
@@ -1539,6 +1588,8 @@ func _process(delta: float) -> void:
 	for i in range(_vehicules.size()):
 		var s: float = _vehicules[i][1]
 		_vehicules[i][1] = fposmod(s + vitesse_en(s) * delta, longueur_boucle)
+	_charges_ponctuelles()
+	for i in range(_vehicules.size()):
 		_placer(i)
 	_dt = 0.0
 	_galets()
@@ -1549,6 +1600,89 @@ func _process(delta: float) -> void:
 		_mat_cable.set_shader_parameter("cable_phase", _phase_cable)
 	for pl in _poulies:
 		(pl[0] as Node3D).rotation.y = fposmod((pl[0] as Node3D).rotation.y + float(pl[1]) * delta, TAU)
+
+
+## Appuis du câble (nez des gares, têtes de pylônes) et charges moyennes,
+## pour la flèche locale sous chaque véhicule (retour d'utilisateur, 23/10/2026 :
+## « tenir compte du poids ponctuel et local de chaque siège et cabine »).
+func _preparer_charges() -> void:
+	_appuis = PackedFloat32Array()
+	for p in _points_appui():
+		_appuis.append(float(p[0]))
+	_n_appuis = mini(_appuis.size(), 48)
+	_tension = 300000.0 * pow(diametre_cable / 47.0, 2.0)
+	var e: float = maxf(espacement, 8.0)
+	_w_veh = [_poids_vehicule(true) / e / _tension, _poids_vehicule(false) / e / _tension]
+	var packs: Array = []
+	for k in range(12):
+		var q: Vector4 = Vector4.ZERO
+		for c in range(4):
+			var j: int = k * 4 + c
+			q[c] = _appuis[j] if j < _n_appuis else 0.0
+		packs.append(q)
+	_mat_cable.set_shader_parameter("appuis", PackedVector4Array(packs))
+	_mat_cable.set_shader_parameter("n_appuis", _n_appuis)
+	_mat_cable.set_shader_parameter("signe_montee", signf(_x_brin(true)))
+	_mat_cable.set_shader_parameter("w_m", _w_veh[0])
+	_mat_cable.set_shader_parameter("w_d", _w_veh[1])
+
+
+## Poids d'un véhicule (N), passagers compris en montée — mêmes charges
+## que la chaînette (_parametres_chainette).
+func _poids_vehicule(montee: bool) -> float:
+	var cab: bool = famille.begins_with("cabine")
+	var places: int = VehiculeRemontee.DESCRIPTIONS.get(famille, ["", 6, ""])[1]
+	var m_v: float = (850.0 if cab else 95.0 * places + 80.0)
+	return (m_v + (80.0 * places if montee else 0.0)) * 9.81
+
+
+## Charges du moment : chaque véhicule en ligne, sur son brin.
+func _charges_ponctuelles() -> void:
+	if _mat_cable == null or _n_appuis < 2:
+		return
+	var xm: float = signf(_x_brin(true))
+	var listes: Array = [[], []]
+	for e in _vehicules:
+		var s: float = e[1]
+		if zone(s)[0] != "ligne":
+			continue
+		var p: Vector3 = _point_cable(s)[0]
+		var montee: bool = signf(p.x) == xm
+		var l: Array = listes[0 if montee else 1]
+		if l.size() < 64:
+			l.append(Vector2(-p.z, _poids_vehicule(montee) / _tension))
+	_charges = listes
+	for k in range(2):
+		var packs: Array = []
+		var l2: Array = listes[k]
+		for j in range(32):
+			var a: Vector2 = l2[j * 2] if j * 2 < l2.size() else Vector2.ZERO
+			var b: Vector2 = l2[j * 2 + 1] if j * 2 + 1 < l2.size() else Vector2.ZERO
+			packs.append(Vector4(a.x, a.y, b.x, b.y))
+		_mat_cable.set_shader_parameter("charges_m" if k == 0 else "charges_d", PackedVector4Array(packs))
+		_mat_cable.set_shader_parameter("n_charges_m" if k == 0 else "n_charges_d", l2.size())
+
+
+## Flèche locale (m, vers le bas) en d sur un brin : même calcul que le shader.
+func _fleche(d: float, montee: bool) -> float:
+	var n: int = _n_appuis
+	if n < 2 or d <= _appuis[0] or d >= _appuis[n - 1]:
+		return 0.0
+	var x1: float = _appuis[0]
+	var x2: float = _appuis[n - 1]
+	for i in range(n - 1):
+		if d >= _appuis[i] and d <= _appuis[i + 1]:
+			x1 = _appuis[i]
+			x2 = _appuis[i + 1]
+			break
+	var l: float = maxf(x2 - x1, 0.01)
+	var f: float = -float(_w_veh[0 if montee else 1]) * (d - x1) * (x2 - d) * 0.5
+	for c in _charges[0 if montee else 1]:
+		var a: float = (c as Vector2).x
+		if a <= x1 or a >= x2:
+			continue
+		f += (c as Vector2).y * ((d - x1) * (x2 - a) if d < a else (a - x1) * (x2 - d)) / l
+	return f
 
 
 ## Galets mobiles : la pince qui passe sur un train de galets fait descendre
@@ -1578,6 +1712,10 @@ func _placer(i: int) -> void:
 	var v: VehiculeRemontee = _vehicules[i][0]
 	var s: float = _vehicules[i][1]
 	var pt: Array = point(s)
+	# en ligne : la flèche locale sous le poids des véhicules de la portée
+	if _n_appuis >= 2 and zone(s)[0] == "ligne":
+		var p0: Vector3 = pt[0]
+		pt[0] = p0 - Vector3(0, _fleche(-p0.z, signf(p0.x) == signf(_x_brin(true))), 0)
 	# cap : corde de 3 m centrée sur le véhicule — sur l'arc de la poulie
 	# c'est la tangente exacte, et elle tourne continûment ; la direction du
 	# segment de la boucle (polygone de 24 côtés autour de la poulie) faisait
