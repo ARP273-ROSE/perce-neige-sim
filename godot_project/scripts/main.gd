@@ -1738,7 +1738,7 @@ func aller_a_remontee(lg: LigneRemontee) -> void:
 		commandes_skieur.set_auto(false)
 	var xf: Transform3D = lg.global_transform
 	var cote: float = signf(lg._x_brin(true))
-	var p: Vector3 = xf * Vector3(cote * (lg.voie * 0.5 + 5.5), 0.0, 6.0)
+	var p: Vector3 = xf * Vector3(cote * (lg.voie * 0.5 + 3.5), 0.0, 6.0)
 	p.y = relief.hauteur_sol(p.x, p.z) + 0.1
 	var amont: Vector3 = -xf.basis.z
 	# collisions du relief autour du point d'arrivée (elles se construisent à
@@ -1751,6 +1751,31 @@ func aller_a_remontee(lg: LigneRemontee) -> void:
 	skieur.refuge = p
 	skieur.dernier_sol = p
 	commandes_skieur.message("Au pied de : %s" % lg.nom_ligne, 4.0)
+	# la gare se construit à l'approche : une fois prête, il est posé sur son
+	# quai (le terrassement domine souvent le relief — il était dedans)
+	_depose_remontee = lg
+
+
+var _depose_remontee: LigneRemontee = null
+
+
+## Après aller_a_remontee : la ligne prête, le skieur passe sur la surface
+## de la gare (quai, talus) s'il était sous elle.
+func _poser_sur_gare() -> void:
+	var lg: LigneRemontee = _depose_remontee
+	if lg == null or not is_instance_valid(lg) or not lg.pret or skieur == null:
+		return
+	_depose_remontee = null
+	var p: Vector3 = skieur.global_position
+	var rq: PhysicsRayQueryParameters3D = PhysicsRayQueryParameters3D.create(
+		p + Vector3(0, 40, 0), p + Vector3(0, -2, 0), CollisionsJeu.COUCHE_DECOR)
+	var hit: Dictionary = get_world_3d().direct_space_state.intersect_ray(rq)
+	if not hit.is_empty() and (hit["position"] as Vector3).y > p.y - 0.05:
+		var q: Vector3 = (hit["position"] as Vector3) + Vector3(0, 0.1, 0)
+		skieur.global_position = q
+		skieur.velocity = Vector3.ZERO
+		skieur.refuge = q
+		skieur.dernier_sol = q
 
 
 ## Chausser / déchausser (bouton CHAUSSER, touche E ; E du PC relayée).
@@ -2434,6 +2459,8 @@ func _maj_skieur() -> void:
 		if domaine.resultat != "":
 			commandes_skieur.message(domaine.resultat, 8.0)
 			domaine.resultat = ""
+	if _depose_remontee != null:
+		_poser_sur_gare()
 	_gare_skieur = _gare_du_skieur()
 	var en_gare: bool = _gare_skieur > 0
 	var dedans: bool = false

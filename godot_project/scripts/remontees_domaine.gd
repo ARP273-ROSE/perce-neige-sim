@@ -97,6 +97,11 @@ func _poser(D: Dictionary) -> void:
 	lg.name = String(D["cle"])
 	lg.profil = prof
 	lg.rampes = rampes
+	# sol réel sous la gare (terrassements) : relief affiché, repère de la ligne
+	var xf0: Transform3D = Transform3D(Basis.looking_at(Vector3(dirh.x, 0.0, dirh.y), Vector3.UP), Vector3(a.x, h0, a.y))
+	lg.sol_local = func(x: float, z: float) -> float:
+		var w: Vector3 = xf0 * Vector3(x, 0.0, z)
+		return relief.hauteur_sol(w.x, w.z) - h0
 	# distances des pylônes ramenées à la longueur gare-à-gare du monde
 	var Ld: float = float(D["profil"][D["profil"].size() - 1][0])
 	var py: Array = []
@@ -240,6 +245,10 @@ func _embarquement() -> void:
 			if absf(loc.x) < W * 0.5 + 0.15 and loc.z > place0.z - 0.6 and loc.z < place0.z + 0.35 \
 					and absf(loc.y - place0.y) < 1.2:
 				var k: int = clampi(int(floor((absf(loc.x) * signf(loc.x) + W * 0.5 - 0.10) / 0.50)), 0, v.places - 1)
+				# le télésiège se prend chaussé (retour d'utilisateur, 23/10/2026) :
+				# à pied, on chausse au portillon
+				if not skieur.chausse:
+					skieur.basculer_ski(true)
 				a_bord = [lg, i, k, aval, false]
 				skieur.support = null
 				skieur.embarque = true
@@ -269,14 +278,20 @@ func _entrer_cabine(lg: LigneRemontee, p: Vector3) -> bool:
 		# la cabine roule vers son −Z : en montant (gare aval), la banquette
 		# arrière regarde l'amont ; en descendant, la banquette avant
 		var avant: bool = zn == "gare_amont"
-		var k: int = clampi(int(round(loc.x / 0.36)) + 2, 0, 4)
+		var k: int = clampi(int(round(loc.x / 0.46)) + 2, 0, 4)
+		# on monte en cabine à pied : chaussé, on déchausse et les skis vont
+		# au porte-skis, sur les vantaux des portes (retour d'utilisateur, 23/10/2026)
+		var skis: bool = skieur.chausse
+		if skis:
+			skieur.basculer_ski()
+		v.porte_skis(skis)
 		a_bord = [lg, i, k, zn == "gare_aval", avant]
 		skieur.support = null
 		skieur.embarque = true
 		skieur.asseoir(_cap(v, avant), true)
-		skieur._skis.visible = false        # skis à la main, rangés dans la cabine
+		skieur._skis.visible = false        # skis au porte-skis, ou à ses pieds
 		_suivre_siege()
-		message.emit("Assis — %s" % lg.nom_ligne)
+		message.emit(("Skis au porte-skis — assis — %s" if skis else "Assis — %s") % lg.nom_ligne)
 		return true
 	return false
 
@@ -302,6 +317,21 @@ func _suivre_siege() -> void:
 		# rattrapé, porté par l'assise et rassis pour la descente
 		var loc: Vector3 = lg.global_transform.affine_inverse() * v.vers_monde(v.place_assise(a_bord[2], a_bord[4]))
 		var cote: float = signf(lg._x_brin(not aval_arr))        # extérieur du brin d'arrivée
+		if v.cabine:
+			# portes ouvertes : il se lève dans la cabine et sort à pied
+			# (retour d'utilisateur, 23/10/2026) ; skis rendus, à la main
+			v.porte_skis(false)
+			skieur.embarque = false
+			skieur.lever()
+			var pied: Vector3 = v.vers_monde(v.place_assise(a_bord[2], a_bord[4])) + Vector3(0, 0.05, 0)
+			skieur.global_position = pied
+			skieur.dernier_sol = pied
+			skieur.support = null
+			skieur._skis.visible = true
+			message.emit("Portes ouvertes — %s" % lg.nom_ligne)
+			a_bord = []
+			_repos = 8.0          # le temps de sortir avant d'être rassis
+			return
 		var glisse: bool = skieur.chausse and not v.cabine
 		if not glisse:
 			loc.x = cote * (lg.voie * 0.5 + 2.2)

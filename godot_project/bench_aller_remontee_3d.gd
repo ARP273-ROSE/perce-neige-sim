@@ -63,7 +63,13 @@ func _tick() -> void:
 	if _t > 3.0:
 		var d: float = Vector2(sk.global_position.x - _lg.global_transform.origin.x,
 			sk.global_position.z - _lg.global_transform.origin.z).length()
+		# sol : le relief, ou la surface de la gare (quai, talus) au-dessus
 		var sol: float = _main.relief.hauteur_sol(sk.global_position.x, sk.global_position.z)
+		var rq: PhysicsRayQueryParameters3D = PhysicsRayQueryParameters3D.create(
+			sk.global_position + Vector3(0, 3, 0), sk.global_position + Vector3(0, -3, 0), CollisionsJeu.COUCHE_DECOR)
+		var hit: Dictionary = _main.get_world_3d().direct_space_state.intersect_ray(rq)
+		if not hit.is_empty():
+			sol = maxf(sol, (hit["position"] as Vector3).y)
 		_verif("touché %s : déposé au pied de la gare aval, debout sur la neige" % _lg.nom_ligne,
 			d < 15.0 and absf(sk.global_position.y - sol) < 1.0 and sk.is_on_floor(),
 			"%.1f m de la gare, %.2f m au-dessus du sol, au sol %s" % [d, sk.global_position.y - sol, sk.is_on_floor()])

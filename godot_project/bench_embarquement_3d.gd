@@ -23,6 +23,7 @@ var _y0: float = 0.0
 var _cab: int = -1
 var _cab_ligne: float = -1.0
 var _p_lever: Vector3 = Vector3.ZERO
+var _quai_haut: float = 0.0
 
 
 func _initialize() -> void:
@@ -178,6 +179,14 @@ func _tick() -> void:
 				var d: float = Vector2(sk.global_position.x - haut.x, sk.global_position.z - haut.z).length()
 				_verif("télécabine : levé sur le quai d'arrivée", not sk.embarque and d < 40.0
 					and sk.global_position.y > _y0 + 150.0, "%.0f s de trajet, %.1f m de la gare amont" % [_t, d])
+				_quai_haut = (_lg.global_transform * Vector3(0, _lg.terrain(_lg.longueur_h()), 0)).y
+				_phase = 6
+				_t = 0.0
+		6:
+			# debout dans la cabine, portes ouvertes : il n'est pas tombé
+			if _t > 4.0:
+				_verif("télécabine : debout à pied après l'ouverture des portes, pas tombé", not sk.embarque and not sk.chausse
+					and sk.global_position.y > _quai_haut - 0.5, "%.2f m au-dessus du quai, support %s" % [sk.global_position.y - _quai_haut, sk.support])
 				_fin()
 			elif _t > 600.0:
 				_verif("télécabine : levé sur le quai d'arrivée", false, "toujours à bord après 600 s")

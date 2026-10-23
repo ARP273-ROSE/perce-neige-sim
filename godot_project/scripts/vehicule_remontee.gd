@@ -29,6 +29,7 @@ var _gc: Node3D
 ## Véhicule posé en miroir sur sa ligne (ligne qui monte à gauche) : les
 ## numéros sont contre-inversés pour rester lisibles.
 var miroir: bool = false
+var _skis_ranges: Array = []    # skis au porte-skis des cabines (un par vantail)
 var numero: int = 0
 var _gc_releve: float = 2.40     # angle du garde-corps relevé (rad)
 var _bulle: Node3D
@@ -102,6 +103,7 @@ func construire() -> void:
 		c.queue_free()
 	_ressorts.clear()
 	_portes.clear()
+	_skis_ranges.clear()
 	places = DESCRIPTIONS.get(famille, ["", 6, ""])[1]
 	# un seul numéro par véhicule, sur la pince comme sur le siège (la pince
 	# en portait un autre — retour d'utilisateur, 23/10/2026 : « numéro fantôme »)
@@ -167,7 +169,9 @@ func _fusionner() -> void:
 		MeshMerge.merge(_pince, garder, "Pince")
 	MeshMerge.merge(_susp, garder, "Vehicule")
 	for n in garder:
-		MeshMerge.merge(n, [], "Piece")
+		MeshMerge.merge(n, _skis_ranges, "Piece")      # skis rangés : affichés à la demande
+	for n in _skis_ranges:
+		MeshMerge.merge(n, [], "Skis")
 
 
 # --- pinces ---------------------------------------------------------------------
@@ -804,6 +808,20 @@ func _cabine() -> void:
 			v.add_child(mi2)
 		# poignée verticale près de la jonction des vantaux
 		RemonteeKit.barre(v, Vector3(1.28, -H + 0.95, sz * 0.07), Vector3(1.28, -H + 1.45, sz * 0.07), 0.016, "acier", 8)
+		# porte-skis sur le vantail, à l'extérieur : deux berceaux en U et
+		# la paire de skis du passager quand il l'y a rangée
+		var zr: float = sz * 0.28
+		for yk in [-H + 0.55, -H + 1.45]:
+			RemonteeKit.boite_en(v, Vector3(0.14, 0.04, 0.22), Vector3(1.34, yk, zr), "acier_noir")
+			for dz in [-0.10, 0.10]:
+				RemonteeKit.boite_en(v, Vector3(0.02, 0.10, 0.02), Vector3(1.40, yk + 0.05, zr + dz), "acier_noir")
+		var sk: Node3D = Node3D.new()
+		sk.name = "SkisRanges"
+		sk.visible = false
+		v.add_child(sk)
+		for dz2 in [-0.04, 0.04]:
+			RemonteeKit.boite_en(sk, Vector3(0.03, 1.55, 0.075), Vector3(1.38, -H + 1.0, zr + dz2), "assise_bleue")
+		_skis_ranges.append(sk)
 		_portes.append([v, Vector3.ZERO, Vector3(0.06, 0, sz * PORTE_DEMI)])
 	# tampons de caoutchouc aux quatre angles, à hauteur du bas des vitres
 	for sx in [-1.0, 1.0]:
@@ -1036,6 +1054,12 @@ static func _assembler(dico: Dictionary, fam: String, vitres: bool) -> ArrayMesh
 		copie.commit(mesh)
 		mesh.surface_set_material(mesh.get_surface_count() - 1, _mat_cabine(mat, fam))
 	return mesh
+
+
+## Skis du passager au porte-skis (cabines) : affichés sur le premier vantail.
+func porte_skis(oui: bool) -> void:
+	for k in range(_skis_ranges.size()):
+		(_skis_ranges[k] as Node3D).visible = oui and k == 0
 
 
 func portes(t: float) -> void:

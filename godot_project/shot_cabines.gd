@@ -51,6 +51,7 @@ func _initialize() -> void:
 		v.construire()
 		if i == 0:
 			v.portes(1.0)
+		v.porte_skis(true)
 	_cam = Camera3D.new()
 	_cam.fov = 45
 	racine.add_child(_cam)
