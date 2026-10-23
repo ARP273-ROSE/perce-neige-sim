@@ -258,6 +258,27 @@ func _embarquement() -> void:
 				return
 
 
+## Remontée « courante » pour le poste de commande : celle où l'on est
+## assis, sinon celle dont une gare est la plus proche, à moins de 400 m.
+func ligne_courante(p: Vector3) -> LigneRemontee:
+	if not a_bord.is_empty():
+		return a_bord[0]
+	var best: LigneRemontee = null
+	var dm: float = 400.0
+	for e in lignes:
+		var lg: LigneRemontee = e[0]
+		if not lg.pret:
+			continue
+		var xf: Transform3D = lg.global_transform
+		for d in [0.0, lg.longueur_h()]:
+			var g: Vector3 = xf * Vector3(0, lg.terrain(d), -d)
+			var dd: float = g.distance_to(p)
+			if dd < dm:
+				dm = dd
+				best = lg
+	return best
+
+
 func _cap(v: Node3D, avant: bool = false) -> float:
 	var f: Vector3 = -v.global_transform.basis.z
 	return atan2(-f.x, -f.z) + (PI if avant else 0.0)

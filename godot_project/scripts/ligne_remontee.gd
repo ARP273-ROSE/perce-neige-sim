@@ -1050,7 +1050,7 @@ func _maj_portillons(delta: float) -> void:
 			var z: Array = zone(e[1])
 			if z[0] == ("gare_aval" if aval else "gare_amont"):
 				var x: float = z[1]
-				if x >= xa and x - vitesse_en(e[1]) * delta < xa:
+				if x >= xa and x - vitesse_en(e[1]) * regime() * delta < xa:
 					pg[3] = 0.0
 		var t: float = pg[3]
 		var ouv: float = clampf(minf((t - 0.3) / 0.5, (3.5 - t) / 0.5), 0.0, 1.0)
@@ -1378,7 +1378,7 @@ func _lanceurs() -> void:
 
 func _tourner_pneus(delta: float) -> void:
 	for e in _pneus:
-		var w: float = vitesse_en(e[1]) / R_PNEU
+		var w: float = vitesse_en(e[1]) * regime() / R_PNEU
 		e[3] = fposmod(float(e[3]) + w * delta, TAU)
 		(e[0] as Node3D).transform.basis = (e[2] as Basis) * Basis(Vector3.UP, e[3])
 
@@ -1583,11 +1583,12 @@ var _pyl_touches: Dictionary = {}
 func _process(delta: float) -> void:
 	if not pret:
 		return
+	_regler_vitesse(delta)
 	_maj_portillons(delta)
 	_dt = delta
 	for i in range(_vehicules.size()):
 		var s: float = _vehicules[i][1]
-		_vehicules[i][1] = fposmod(s + vitesse_en(s) * delta, longueur_boucle)
+		_vehicules[i][1] = fposmod(s + vitesse_en(s) * regime() * delta, longueur_boucle)
 	_charges_ponctuelles()
 	for i in range(_vehicules.size()):
 		_placer(i)
@@ -1596,10 +1597,10 @@ func _process(delta: float) -> void:
 	_tourner_pneus(delta)
 	if _mat_cable != null:
 		var pas: float = 0.45 * diametre_cable / 52.0
-		_phase_cable = fposmod(_phase_cable + vitesse * delta, pas)
+		_phase_cable = fposmod(_phase_cable + vitesse_reelle * delta, pas)
 		_mat_cable.set_shader_parameter("cable_phase", _phase_cable)
 	for pl in _poulies:
-		(pl[0] as Node3D).rotation.y = fposmod((pl[0] as Node3D).rotation.y + float(pl[1]) * delta, TAU)
+		(pl[0] as Node3D).rotation.y = fposmod((pl[0] as Node3D).rotation.y + float(pl[1]) * regime() * delta, TAU)
 
 
 ## Appuis du câble (nez des gares, têtes de pylônes) et charges moyennes,
@@ -1683,6 +1684,79 @@ func _fleche(d: float, montee: bool) -> float:
 			continue
 		f += (c as Vector2).y * ((d - x1) * (x2 - a) if d < a else (a - x1) * (x2 - d)) / l
 	return f
+
+
+# --- exploitation : poste de commande ------------------------------------------------
+## Pupitre (retour d'utilisateur, 23/10/2026 : « un poste de conduite spécifique à
+## chaque remontée, arrêts et redémarrages, petite, moyenne, grande vitesse,
+## grande par défaut ») : comme sur un pupitre réel, marche / arrêt sur le
+## frein de service, arrêt d'urgence sur le frein de poulie (à réarmer),
+## référence de vitesse. Tout le mouvement suit la vitesse du câble.
+const CRANS: Array = [0.4, 0.7, 1.0]          # petite, moyenne, grande vitesse
+const NOMS_CRANS: Array = ["PETITE", "MOYENNE", "GRANDE"]
+const A_DEMARRAGE: float = 0.25                # m/s²
+const A_ARRET: float = 0.4                     # frein de service
+const A_URGENCE: float = 1.5                   # frein de poulie
+var etat: String = "marche"                    # marche, arret_normal, arret, urgence
+var cran: int = 2
+var vitesse_reelle: float = -1.0               # m/s au câble (-1 : pas encore réglée)
+
+
+func regime() -> float:
+	return vitesse_reelle / maxf(vitesse, 0.01) if vitesse_reelle >= 0.0 else 1.0
+
+
+func _regler_vitesse(delta: float) -> void:
+	if vitesse_reelle < 0.0:
+		vitesse_reelle = vitesse * CRANS[cran]
+	var cible: float = vitesse * CRANS[cran] if etat == "marche" else 0.0
+	var a: float = A_DEMARRAGE if cible > vitesse_reelle else (A_URGENCE if etat == "urgence" else A_ARRET)
+	vitesse_reelle = move_toward(vitesse_reelle, cible, a * delta)
+	if etat == "arret_normal" and vitesse_reelle <= 0.0:
+		etat = "arret"
+
+
+func demarrer() -> void:
+	if etat == "arret" or etat == "arret_normal":
+		etat = "marche"
+
+
+func arreter() -> void:
+	if etat == "marche":
+		etat = "arret_normal"
+
+
+func arret_urgence() -> void:
+	etat = "urgence"
+
+
+## Après un arrêt d'urgence : seulement une fois la ligne arrêtée.
+func rearmer() -> bool:
+	if etat == "urgence" and vitesse_reelle <= 0.0:
+		etat = "arret"
+		return true
+	return false
+
+
+func regler_cran(k: int) -> void:
+	cran = clampi(k, 0, CRANS.size() - 1)
+
+
+## Puissance mécanique au câble (kW) : remonter le surpoids du brin montée
+## (véhicules et passagers) à la vitesse du câble, plus les pertes (un
+## dixième de la puissance nominale à pleine vitesse).
+func puissance_kw() -> float:
+	var L: float = longueur_h()
+	var dh: float = terrain(L) - terrain(0.0)
+	var long_c: float = sqrt(L * L + dh * dh)
+	var pm: float = 0.0
+	var pd: float = 0.0
+	for c in _charges[0]:
+		pm += (c as Vector2).y * _tension
+	for c in _charges[1]:
+		pd += (c as Vector2).y * _tension
+	var p_nom: float = (_poids_vehicule(true) - _poids_vehicule(false)) * (long_c / maxf(espacement, 8.0)) * dh / long_c * vitesse
+	return ((pm - pd) * dh / long_c * vitesse_reelle + 0.1 * p_nom * regime()) / 1000.0
 
 
 ## Galets mobiles : la pince qui passe sur un train de galets fait descendre
