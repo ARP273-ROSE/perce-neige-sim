@@ -5,6 +5,15 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.22.19 — 23 octobre 2026
+
+**Vue skieur : bandeau vitesse et altitude lisible.** Retour d'utilisateur (capture iPad) du
+23/10/2026 : le bandeau « 20 km/h · 2453 m · TSD6 Marmottes Express » s'affichait par-dessus la barre
+de boutons du haut et se mélangeait à leurs libellés.
+- Le bandeau descend sous la barre de boutons et s'affiche sur un fond sombre arrondi,
+  semi-transparent. Il disparaît quand il n'y a rien à afficher.
+- Vérifié : capture de la vue skieur.
+
 ## 1.22.18 — 23 octobre 2026
 
 **Remontées : gaines sur toutes les pinces.** Retour d'utilisateur du 23/10/2026 : « c'est parfait

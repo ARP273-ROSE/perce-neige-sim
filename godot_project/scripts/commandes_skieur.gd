@@ -138,6 +138,18 @@ func _ready() -> void:
 		l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		_racine.add_child(l)
 		if k == 0:
+			# sous la barre de boutons du haut (elle descend à ~66) et sur un
+			# fond sombre : il passait par-dessus les boutons, illisible
+			# (retour d'utilisateur, 23/10/2026)
+			l.offset_top = 76.0
+			var fond: StyleBoxFlat = StyleBoxFlat.new()
+			fond.bg_color = Color(0.05, 0.07, 0.10, 0.55)
+			fond.set_corner_radius_all(10)
+			fond.content_margin_left = 14.0
+			fond.content_margin_right = 14.0
+			fond.content_margin_top = 4.0
+			fond.content_margin_bottom = 4.0
+			l.add_theme_stylebox_override("normal", fond)
 			_info = l
 		else:
 			_msg = l
@@ -207,6 +219,7 @@ func set_chausse(oui: bool) -> void:
 	_b_courir.text = "SCHUSS" if oui else "COURIR"
 	if not oui:
 		_info.text = ""
+		_info.visible = false
 
 
 func _maj_carte() -> void:
@@ -221,6 +234,7 @@ func _maj_carte() -> void:
 func set_info(t: String) -> void:
 	if _info != null and _info.text != t:
 		_info.text = t
+		_info.visible = t != ""        # pas de fond vide
 
 
 ## Message au milieu de l'écran pendant `duree` secondes.
