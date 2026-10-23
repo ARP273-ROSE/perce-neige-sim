@@ -1307,6 +1307,11 @@ func _camera() -> void:
 	cam_pitch = clampf(cam_pitch, PITCH_MIN, _pitch_max())
 	pivot.rotation = Vector3(clampf(cam_pitch - _pitch_sol, PITCH_MIN, _pitch_max()), cam_yaw, 0.0)
 	bras.spring_length = 0.0 if premiere_personne else cam_dist
+	# en remontée, la caméra de dos passe à travers le véhicule (vitré) :
+	# arrêtée par ses parois, elle restait enfermée dans la cabine portes
+	# fermées (retour d'utilisateur, 23/10/2026) ; dans le funiculaire, elle reste
+	# dans la rame
+	bras.collision_mask = CollisionsJeu.COUCHE_DECOR if embarque else (CollisionsJeu.COUCHE_DECOR | CollisionsJeu.COUCHE_VEHICULE)
 	pivot.position.y = Y_YEUX if premiere_personne else Y_YEUX - 0.05
 	pivot.position.x = 0.0
 	pivot.position.z = 0.0

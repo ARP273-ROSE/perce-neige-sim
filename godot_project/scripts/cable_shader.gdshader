@@ -62,6 +62,62 @@ uniform float phase_upper = 0.0;
 uniform float slack_wave_amp = 0.035;
 uniform float slack_wave_len = 7.3;
 
+// Remontées mécaniques : flèche due au POIDS PONCTUEL de chaque véhicule
+// (retour d'utilisateur, 23/10/2026). Câble tendu (tension horizontale H)
+// entre deux appuis x1 < x2 : une charge P en a l'abaisse de
+// (P/H)·(x−x1)(x2−a)/(x2−x1) avant a, symétriquement après. On retranche la
+// charge moyenne répartie (w/H)·(x−x1)(x2−x)/2, déjà dans la chaînette.
+// Abscisse : d = −VERTEX.z (distance horizontale au nez aval), brin selon
+// le signe de VERTEX.x. Inactif (le funiculaire) tant que n_appuis < 2.
+uniform int n_appuis = 0;
+uniform vec4 appuis[12];          // d des appuis, 4 par vec4, croissants
+uniform float signe_montee = 1.0; // signe de x du brin montée
+uniform int n_charges_m = 0;
+uniform vec4 charges_m[32];       // (d, P/H) × 2 par vec4, brin montée
+uniform int n_charges_d = 0;
+uniform vec4 charges_d[32];       // brin descente
+uniform float w_m = 0.0;          // charge répartie / H (1/m), brin montée
+uniform float w_d = 0.0;
+
+float appui(int i) {
+	vec4 v = appuis[i / 4];
+	int k = i - (i / 4) * 4;
+	return k == 0 ? v.x : (k == 1 ? v.y : (k == 2 ? v.z : v.w));
+}
+
+float fleche_points(float d, bool montee) {
+	if (n_appuis < 2) {
+		return 0.0;
+	}
+	float x1 = appui(0);
+	float x2 = appui(n_appuis - 1);
+	if (d <= x1 || d >= x2) {
+		return 0.0;
+	}
+	for (int i = 0; i < n_appuis - 1; i++) {
+		float a0 = appui(i);
+		float a1 = appui(i + 1);
+		if (d >= a0 && d <= a1) {
+			x1 = a0;
+			x2 = a1;
+			break;
+		}
+	}
+	float l = max(x2 - x1, 0.01);
+	float f = -(montee ? w_m : w_d) * (d - x1) * (x2 - d) * 0.5;
+	int n = montee ? n_charges_m : n_charges_d;
+	for (int j = 0; j < n; j++) {
+		vec4 c = montee ? charges_m[j / 2] : charges_d[j / 2];
+		vec2 q = (j - (j / 2) * 2) == 0 ? c.xy : c.zw;
+		float a = q.x;
+		if (a <= x1 || a >= x2) {
+			continue;
+		}
+		f += q.y * (d < a ? (d - x1) * (x2 - a) : (a - x1) * (x2 - d)) / l;
+	}
+	return f;
+}
+
 float phase_brin(float s) {
 	if (!effile) {
 		return cable_phase;
@@ -91,6 +147,10 @@ void vertex() {
 		}
 		VERTEX += down * (UV2.x * slack)
 			+ droite * (amp * onde * UV2.y * slack);
+	}
+	if (n_appuis >= 2) {
+		bool montee = sign(VERTEX.x) == signe_montee;
+		VERTEX.y -= fleche_points(-VERTEX.z, montee);
 	}
 }
 
