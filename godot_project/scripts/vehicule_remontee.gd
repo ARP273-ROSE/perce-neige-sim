@@ -208,12 +208,12 @@ func _pince_debrayable() -> void:
 	RemonteeKit.boite_en(p, Vector3(0.035, 0.11, L * 0.92), Vector3(-0.055, 0.0, 0), corps_m)   # mâchoire fixe
 	for k in [-1.0, 0.0, 1.0]:
 		RemonteeKit.boite_en(p, Vector3(0.14, 0.012, 0.03), Vector3(0.0, 0.092, k * L * 0.33), corps_m)
-	# gaines noires aux deux bouts : demi-cônes ouverts par-dessous, évasés
-	# vers l'extérieur (retour d'utilisateur, 23/10/2026 : « inverse la pente du
-	# cône, garde la même longueur, enlève la moitié inférieure ») ; ils
-	# coiffent le câble à l'entrée de la pince
+	# gaines noires aux deux bouts : demi-cônes ouverts par-dessous, le
+	# GRAND diamètre accroché à la pince et la pointe vers l'extérieur
+	# (retours d'utilisateur, 23/10/2026) — la pince passe mieux sous les
+	# galets de compression des pylônes
 	for sz in [-1.0, 1.0]:
-		RemonteeKit.demi_cone(p, Vector3(0, 0, sz * L * 0.5), Vector3(0, 0, sz * (L * 0.5 + 0.34)), 0.0245, 0.055, "noir_mat", 12)
+		RemonteeKit.demi_cone(p, Vector3(0, 0, sz * L * 0.5), Vector3(0, 0, sz * (L * 0.5 + 0.34)), 0.055, 0.0245, "noir_mat", 12)
 	# mâchoire MOBILE (côté extérieur), pivot parallèle au câble
 	_machoire = Node3D.new()
 	_machoire.name = "MachoireMobile"
