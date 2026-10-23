@@ -483,16 +483,14 @@ func _gare(aval: bool) -> void:
 	var zm: float = (zc + znez) * 0.5 + signf(dz) * 4.0
 	var long_g: float = absf(dz) + voie * 0.5 + 3.5 + 5.0      # + aire d'attente derrière la poulie
 	# dalle et quais
-	# dalle sur socle : la gare est posée au plus haut du terrain sous son
-	# emprise, le socle descend jusqu'au sol là où il est plus bas
-	RemonteeKit.boite_en(g, Vector3(voie + 8.0, 6.4, long_g), Vector3(0, -3.2, zm), "beton")
-	# charpente : quatre poteaux, deux longerons, toiture
-	for sx in [-1.0, 1.0]:
-		for k in [-1.0, 1.0]:
-			RemonteeKit.boite_en(g, Vector3(0.30, H_CABLE_GARE + 2.4, 0.30),
-				Vector3(sx * (voie * 0.5 + 1.6), (H_CABLE_GARE + 2.4) * 0.5, zm + k * long_g * 0.35), "peinture_gris")
-		RemonteeKit.boite_en(g, Vector3(0.35, 0.6, long_g), Vector3(sx * (voie * 0.5 + 1.6), H_CABLE_GARE + 2.1, zm), "peinture_gris")
-	RemonteeKit.boite_en(g, Vector3(voie + 4.2, 0.12, long_g + 0.6), Vector3(0, H_CABLE_GARE + 2.5, zm), "peinture_anthracite")
+	# plate-forme : la gare est posée au plus haut du terrain sous son
+	# emprise ; un talus de neige damée descend en pente douce jusqu'au sol
+	# là où il est plus bas (un socle de béton faisait un bloc sombre)
+	g.add_child(_talus(Vector2(voie + 10.0, long_g), Vector3(0, 0, zm)))
+	# carénage en gélule sur colonnes, cabine du conducteur (photos des
+	# gares BMF du Marmottes Express, retour d'utilisateur, 23/10/2026)
+	_capot(g, znez, zc, aval)
+	_cabine_conducteur(g, znez, dz, aval)
 	# poulie de demi-tour (motrice en amont, retour-tension en aval)
 	var R: float = voie * 0.5
 	_poulie(g, Vector3(0, H_CABLE_GARE, zc), rayon_poulie(), aval)
@@ -509,14 +507,234 @@ func _gare(aval: bool) -> void:
 	# came d'ouverture / de fermeture des pinces, au nez de la gare
 	for sx in [-1.0, 1.0]:
 		RemonteeKit.poutre(g, Vector3(sx * (R + 0.40), H_CABLE_GARE + 0.40, znez), Vector3(sx * (R + 0.44), H_CABLE_GARE + 0.30, znez + signf(dz) * 3.0), 0.06, 0.05, "jaune_securite")
-	# portique d'entrée (l'arche que l'on voit depuis la ligne)
-	for sx in [-1.0, 1.0]:
-		RemonteeKit.boite_en(g, Vector3(0.25, H_CABLE_GARE + 1.6, 0.25), Vector3(sx * (voie * 0.5 + 1.0), (H_CABLE_GARE + 1.6) * 0.5, znez), "peinture_gris")
-	RemonteeKit.boite_en(g, Vector3(voie + 2.4, 0.4, 0.4), Vector3(0, H_CABLE_GARE + 1.6, znez), "peinture_gris")
 	# ligne d'embarquement (bande jaune) côté montée en aval, côté descente en amont
 	var xb: float = _x_brin(aval)
 	RemonteeKit.boite_en(g, Vector3(voie * 0.5 + 0.8, 0.02, 0.12), Vector3(xb * 0.6, 0.01, znez + signf(dz) * (L_FREIN + 2.5)), "jaune_securite")
 	MeshMerge.merge(g, [], "Gare")
+
+
+# --- plate-forme de gare -----------------------------------------------------------
+
+const H_TALUS: float = 6.4          # profondeur du talus (jusque sous le terrain)
+const PENTE_TALUS: float = 1.6      # base / hauteur (environ 32°)
+
+
+## Sommets du talus (tronc de pyramide) : dessus `taille` centré en `c`.
+func _points_talus(taille: Vector2, c: Vector3) -> PackedVector3Array:
+	var pts: PackedVector3Array = PackedVector3Array()
+	for niv in [[0.0, 0.0], [-H_TALUS, H_TALUS * PENTE_TALUS]]:
+		var hx: float = taille.x * 0.5 + float(niv[1])
+		var hz: float = taille.y * 0.5 + float(niv[1])
+		for q in [Vector2(-hx, -hz), Vector2(hx, -hz), Vector2(hx, hz), Vector2(-hx, hz)]:
+			pts.append(c + Vector3(q.x, float(niv[0]), q.y))
+	return pts
+
+
+## Talus de neige damée : dessus plat (quai), quatre flancs en pente.
+func _talus(taille: Vector2, c: Vector3) -> MeshInstance3D:
+	var p: PackedVector3Array = _points_talus(taille, c)
+	var st: SurfaceTool = SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var faces: Array = [[0, 1, 2, 3]]
+	for k in range(4):
+		faces.append([k, k + 4, (k + 1) % 4 + 4, (k + 1) % 4])
+	for fc in faces:
+		var a: Vector3 = p[fc[0]]
+		var b: Vector3 = p[fc[1]]
+		var cc: Vector3 = p[fc[2]]
+		var d: Vector3 = p[fc[3]]
+		var n: Vector3 = (b - a).cross(cc - a).normalized()
+		if n.y < -0.01 or (absf(n.y) <= 0.01 and n.dot(a - c) < 0.0):
+			n = -n
+		for v in [a, b, cc, a, cc, d]:
+			st.set_normal(n)
+			st.add_vertex(v)
+	var mi: MeshInstance3D = MeshInstance3D.new()
+	mi.name = "Talus"
+	var m: StandardMaterial3D = (RemonteeKit.mat("neige_damee") as StandardMaterial3D).duplicate()
+	m.cull_mode = BaseMaterial3D.CULL_DISABLED
+	mi.mesh = st.commit()
+	mi.material_override = m
+	return mi
+
+
+# --- carénage de gare ------------------------------------------------------------
+
+## Dessous du carénage au-dessus du câble (au-dessus de la poutre des pneus).
+const Y_CAPOT: float = 1.25
+const H_CAPOT: float = 2.9          # du dessous au faîte
+const D_CAPOT: float = 1.35         # débord du carénage au-delà de la voie des véhicules
+
+
+## Profil du carénage : [r, h] du bas extérieur au faîte (superellipse :
+## flancs presque droits, toit bombé, comme une gélule).
+func _profil_capot(Ro: float) -> Array:
+	var out: Array = []
+	var n: int = 14
+	for i in range(n + 1):
+		var a: float = PI * 0.5 * float(i) / n
+		var c: float = pow(cos(a), 2.0 / 3.2)
+		var sn: float = pow(sin(a), 2.0 / 3.2)
+		out.append([Ro * c, H_CAPOT * sn])
+	return out
+
+
+static var _mats_capot: Dictionary = {}
+
+
+func _mat_capot(nom: String) -> Material:
+	if _mats_capot.has(nom):
+		return _mats_capot[nom]
+	var m: StandardMaterial3D = (RemonteeKit.mat(nom) as StandardMaterial3D).duplicate()
+	m.cull_mode = BaseMaterial3D.CULL_DISABLED
+	_mats_capot[nom] = m
+	return m
+
+
+## Carénage BMF : coque blanche en gélule du nez de la gare jusqu'au-delà de
+## la poulie, bout arrondi (en plan) vitré de grandes vitres sombres, flancs
+## percés de hublots, nom de la ligne ; dessous plat avec la fente où
+## passent les suspentes ; posé sur deux colonnes rondes, l'une sous la
+## poulie (arbre vertical), l'autre au milieu du quai.
+func _capot(g: Node3D, znez: float, zc: float, aval: bool) -> void:
+	var sg: float = signf(zc - znez)
+	var R: float = voie * 0.5
+	var Ro: float = R + D_CAPOT
+	var y0: float = H_CABLE_GARE + Y_CAPOT
+	var z0: float = znez - sg * 0.6
+	var prof: Array = _profil_capot(Ro)
+	var st: Dictionary = {}
+	var quad := func(mat: String, q: Array) -> void:
+		if not st.has(mat):
+			var s0: SurfaceTool = SurfaceTool.new()
+			s0.begin(Mesh.PRIMITIVE_TRIANGLES)
+			s0.set_smooth_group(0)
+			st[mat] = s0
+		var s1: SurfaceTool = st[mat]
+		for v in [q[0], q[1], q[2], q[0], q[2], q[3]]:
+			s1.add_vertex(v)
+	var h_vitre0: float = 0.18
+	var h_vitre1: float = H_CAPOT * 0.74
+	# partie droite : la section balayée de z0 à zc, flancs blancs
+	for sx in [-1.0, 1.0]:
+		for i in range(prof.size() - 1):
+			var a: Array = prof[i]
+			var b: Array = prof[i + 1]
+			quad.call("blanc_plaque", [Vector3(sx * a[0], y0 + a[1], z0), Vector3(sx * b[0], y0 + b[1], z0),
+				Vector3(sx * b[0], y0 + b[1], zc), Vector3(sx * a[0], y0 + a[1], zc)])
+	# bout arrondi : le profil tourne de 180° autour de l'axe de la poulie ;
+	# grande verrière sombre sur la bande centrale
+	var nphi: int = 28
+	for k in range(nphi):
+		var p0: float = PI * float(k) / nphi
+		var p1: float = PI * float(k + 1) / nphi
+		for i in range(prof.size() - 1):
+			var a2: Array = prof[i]
+			var b2: Array = prof[i + 1]
+			var pt := func(r: float, h: float, phi: float) -> Vector3:
+				return Vector3(r * cos(phi), y0 + h, zc + sg * r * sin(phi))
+			var hm: float = (float(a2[1]) + float(b2[1])) * 0.5
+			var mat: String = "vitre_teintee" if hm > h_vitre0 and hm < h_vitre1 and k > 1 and k < nphi - 2 else "blanc_plaque"
+			quad.call(mat, [pt.call(a2[0], a2[1], p0), pt.call(b2[0], b2[1], p0), pt.call(b2[0], b2[1], p1), pt.call(a2[0], a2[1], p1)])
+	# dessous : bord extérieur (au-delà de la fente des suspentes) et
+	# plafond intérieur ; la fente suit la boucle des véhicules
+	var r_in: float = R - 0.55
+	var r_out: float = R + 0.60
+	for sx in [-1.0, 1.0]:
+		quad.call("blanc_plaque", [Vector3(sx * r_out, y0, z0), Vector3(sx * Ro, y0, z0), Vector3(sx * Ro, y0, zc), Vector3(sx * r_out, y0, zc)])
+	quad.call("blanc_plaque", [Vector3(-r_in, y0, z0), Vector3(r_in, y0, z0), Vector3(r_in, y0, zc), Vector3(-r_in, y0, zc)])
+	for k in range(nphi):
+		var p0b: float = PI * float(k) / nphi
+		var p1b: float = PI * float(k + 1) / nphi
+		var c0: Vector3 = Vector3(cos(p0b), 0, sg * sin(p0b))
+		var c1: Vector3 = Vector3(cos(p1b), 0, sg * sin(p1b))
+		var o: Vector3 = Vector3(0, y0, zc)
+		quad.call("blanc_plaque", [o + c0 * r_out, o + c0 * Ro, o + c1 * Ro, o + c1 * r_out])
+		quad.call("blanc_plaque", [o, o + c0 * r_in, o + c1 * r_in, o])
+	var mesh: ArrayMesh = ArrayMesh.new()
+	for mat in st.keys():
+		var s2: SurfaceTool = st[mat]
+		s2.index()
+		s2.generate_normals()
+		s2.commit(mesh)
+		mesh.surface_set_material(mesh.get_surface_count() - 1, _mat_capot(mat))
+	var mi: MeshInstance3D = MeshInstance3D.new()
+	mi.name = "Capot"
+	mi.mesh = mesh
+	g.add_child(mi)
+	# montants de la verrière, lisse basse et bandeau sous le toit
+	var r_at := func(h: float) -> float:
+		for i in range(prof.size() - 1):
+			if h <= float(prof[i + 1][1]):
+				var t: float = (h - float(prof[i][1])) / maxf(float(prof[i + 1][1]) - float(prof[i][1]), 0.001)
+				return lerpf(float(prof[i][0]), float(prof[i + 1][0]), t)
+		return 0.0
+	for k in range(8):
+		var phi: float = PI * (0.08 + 0.84 * float(k) / 7.0)
+		var pts: PackedVector3Array = PackedVector3Array()
+		for j in range(7):
+			var h: float = lerpf(h_vitre0, h_vitre1, float(j) / 6.0)
+			var r: float = r_at.call(h) + 0.02
+			pts.append(Vector3(r * cos(phi), y0 + h, zc + sg * r * sin(phi)))
+		RemonteeKit.tube(g, pts, 0.035, "blanc_plaque", 6)
+	# hublots sombres et bandeau du nom le long des flancs
+	var hh: float = 1.55
+	var rh: float = r_at.call(hh)
+	var lz: float = absf(zc - z0)
+	var n_h: int = int(lz / 3.2)
+	for sx in [-1.0, 1.0]:
+		for k in range(n_h):
+			var zh: float = z0 + sg * (2.0 + 3.2 * k)
+			RemonteeKit.boite_en(g, Vector3(0.04, 0.42, 0.95), Vector3(sx * (rh + 0.005), y0 + hh, zh), "noir_mat")
+		var rb: float = r_at.call(0.55)
+		RemonteeKit.boite_en(g, Vector3(0.03, 0.30, lz * 0.55), Vector3(sx * (rb + 0.01), y0 + 0.55, (z0 + zc) * 0.5), "plaque_bleue")
+		if nom_ligne == "":
+			continue
+		var lab: Label3D = Label3D.new()
+		lab.text = nom_ligne.to_upper()
+		lab.font_size = 96
+		lab.pixel_size = 0.0028
+		lab.modulate = Color(1, 1, 1)
+		lab.outline_size = 0
+		lab.position = Vector3(sx * (rb + 0.03), y0 + 0.55, (z0 + zc) * 0.5)
+		lab.rotation.y = sx * PI * 0.5           # lisible de l'extérieur
+		g.add_child(lab)
+	# bord de l'ouverture côté ligne : un cadre qui suit le profil
+	var cadre: PackedVector3Array = PackedVector3Array()
+	for i in range(prof.size()):
+		cadre.append(Vector3(float(prof[i][0]), y0 + float(prof[i][1]), z0))
+	for i in range(prof.size() - 2, -1, -1):
+		cadre.append(Vector3(-float(prof[i][0]), y0 + float(prof[i][1]), z0))
+	RemonteeKit.tube(g, cadre, 0.06, "blanc_plaque", 6)
+	# colonnes rondes évasées en tête : sous la poulie, et au milieu du quai
+	for zcol in [zc, (znez + zc) * 0.5 - sg * 1.0]:
+		var hcol: float = (H_CABLE_GARE - 0.35) if zcol == zc else y0
+		RemonteeKit.cylindre(g, 0.50, 0.50, hcol - 0.8, Transform3D(Basis.IDENTITY, Vector3(0, (hcol - 0.8) * 0.5, zcol)), "blanc_plaque", 24)
+		RemonteeKit.cylindre(g, 0.50, 0.95, 0.8, Transform3D(Basis.IDENTITY, Vector3(0, hcol - 0.4, zcol)), "blanc_plaque", 24)
+
+
+## Cabine du conducteur en pierre (photos des deux gares) : à côté du quai
+## d'embarquement, côté extérieur, toit à deux pans en bardeaux sombres.
+func _cabine_conducteur(g: Node3D, znez: float, dz: float, aval: bool) -> void:
+	var sg: float = signf(dz)
+	var xb: float = signf(_x_brin(aval))
+	var c: Vector3 = _pos_cabine_conducteur(aval) - Vector3(0, 0, 0)
+	c.y = 0.0
+	RemonteeKit.boite_en(g, Vector3(3.0, 2.5, 3.6), c + Vector3(0, 1.25, 0), "pierre")
+	for sz in [-1.0, 1.0]:
+		var pan: Transform3D = Transform3D(Basis(Vector3.FORWARD, -xb * sz * 0.0) * Basis(Vector3.BACK, sz * 0.48), c + Vector3(sz * 0.80, 2.88, 0))
+		RemonteeKit.boite(g, Vector3(1.95, 0.10, 4.0), pan, "toit_bardeaux")
+	# grande vitre côté quai, porte côté aval
+	RemonteeKit.boite_en(g, Vector3(0.05, 1.0, 2.2), c + Vector3(-xb * 1.52, 1.45, 0), "vitre_teintee")
+	RemonteeKit.boite_en(g, Vector3(0.9, 2.0, 0.05), c + Vector3(0, 1.0, sg * -1.82), "peinture_anthracite")
+
+
+func _pos_cabine_conducteur(aval: bool) -> Vector3:
+	var L: float = longueur_h()
+	var znez: float = 0.0 if aval else -L
+	var sg: float = 1.0 if aval else -1.0
+	var xb: float = signf(_x_brin(aval))
+	return Vector3(xb * (voie * 0.5 + D_CAPOT + 1.8), terrain(0.0 if aval else L), znez + sg * (L_FREIN + 3.0))
 
 
 ## Collisions fixes : pylônes (massif, fût, traverse) et gares (dalle,
@@ -558,11 +776,15 @@ func _collisions_fixes() -> void:
 		var dz: float = zc - znez
 		var zm: float = (zc + znez) * 0.5 + signf(dz) * 4.0
 		var long_g: float = absf(dz) + voie * 0.5 + 3.5 + 5.0      # + aire d'attente derrière la poulie
-		boite.call(Vector3(voie + 8.0, 6.4, long_g), Vector3(0, y0 - 3.2, zm))
-		for sx in [-1.0, 1.0]:
-			for k in [-1.0, 1.0]:
-				boite.call(Vector3(0.30, H_CABLE_GARE + 2.4, 0.30),
-					Vector3(sx * (voie * 0.5 + 1.6), y0 + (H_CABLE_GARE + 2.4) * 0.5, zm + k * long_g * 0.35))
+		var tal: CollisionShape3D = CollisionShape3D.new()
+		var cv: ConvexPolygonShape3D = ConvexPolygonShape3D.new()
+		cv.points = _points_talus(Vector2(voie + 10.0, long_g), Vector3(0, y0, zm))
+		tal.shape = cv
+		corps.add_child(tal)
+		# colonnes du carénage et cabine du conducteur
+		boite.call(Vector3(1.0, H_CABLE_GARE, 1.0), Vector3(0, y0 + H_CABLE_GARE * 0.5, zc))
+		boite.call(Vector3(1.0, H_CABLE_GARE + Y_CAPOT, 1.0), Vector3(0, y0 + (H_CABLE_GARE + Y_CAPOT) * 0.5, (znez + zc) * 0.5 - signf(dz) * 1.0))
+		boite.call(Vector3(3.0, 2.5, 3.6), _pos_cabine_conducteur(aval) + Vector3(0, 1.25, 0))
 		boite.call(Vector3(2.2, 1.0, 2.6), Vector3(0, y0 + H_CABLE_GARE + 1.9, zc))
 
 
@@ -689,8 +911,10 @@ func _maj_portillons(delta: float) -> void:
 		var t: float = pg[3]
 		var ouv: float = clampf(minf((t - 0.3) / 0.5, (3.5 - t) / 0.5), 0.0, 1.0)
 
+		# ils s'ouvrent vers l'avant, vers la ligne d'arrêt (retour
+		# d'utilisateur, 23/10/2026) : le repère regarde le nez de la gare (−Z)
 		for v in pg[1]:
-			(v as Node3D).rotation.y = -1.45 * ouv
+			(v as Node3D).rotation.y = 1.45 * ouv
 		for cs in pg[2]:
 			(cs as CollisionShape3D).disabled = ouv > 0.5
 
@@ -895,7 +1119,8 @@ func _lanceurs() -> void:
 		# suspentes du lanceur à la charpente, tous les 3 m
 		var k: int = 0
 		while k < poutre_haut.size():
-			RemonteeKit.barre(r_node, poutre_haut[k], poutre_haut[k] + Vector3(0, 1.6, 0), 0.035, "galva_pylone", 6)
+			var l_s: float = Y_CAPOT - (VehiculeRemontee.Y_PLAQUE + 2.0 * R_PNEU + 0.16)
+			RemonteeKit.barre(r_node, poutre_haut[k], poutre_haut[k] + Vector3(0, l_s, 0), 0.035, "galva_pylone", 6)
 			k += 6
 		MeshMerge.merge(r_node, [], "Rail")
 		# pneus au pas de 0,62 m
