@@ -5,6 +5,16 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.22.11 — 23 octobre 2026
+
+**Remontées : axe du garde-corps BMF.** Retour d'utilisateur du 23/10/2026 : « le garde-corps est
+fixé juste au-dessus du dossier du siège et derrière, et il bascule vers le haut ».
+- L'axe du garde-corps est maintenant au ras du haut du dossier, en arrière, sur deux chapes
+  boulonnées à la coque. Il était sur la poutre de tête, 50 cm plus haut.
+- Baissé, les bras passent au-dessus des accoudoirs jusqu'à la barre ventrale. Relevé, il bascule
+  vers le haut, au-dessus du dossier (angle de relevage propre au BMF).
+- Vérifié : banc embarquement ; profils relevé et baissé dans le studio `shot_sieges.gd`.
+
 ## 1.22.10 — 23 octobre 2026
 
 **Remontées : garde-corps du siège BMF d'après les photos, numéro des sièges.** Retour d'utilisateur

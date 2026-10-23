@@ -64,6 +64,8 @@ func _initialize() -> void:
 		["bmf_pince", Vector3(-1.0, 5.9, 1.2), Vector3(0, 5.6, 0.3)],
 		["bmf_baisse_dessous", Vector3(3.6, 1.6, 2.6), Vector3(5.0, 3.0, 0)],
 		["bmf_baisse_face", Vector3(1.2, 2.9, 0.8), Vector3(5.0, 2.6, 0)],
+		["bmf_profil_releve", Vector3(0.0, 3.0, -6.0), Vector3(0.0, 3.0, 0)],
+		["bmf_profil_baisse", Vector3(5.0, 3.0, -6.0), Vector3(5.0, 3.0, 0)],
 		["rangee", Vector3(-5.0, 3.5, 9.0), Vector3(7.5, 2.4, 0)],
 	]
 	process_frame.connect(_tick)
