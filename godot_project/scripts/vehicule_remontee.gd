@@ -295,6 +295,10 @@ func _pince_fixe() -> void:
 	add_child(p)
 	# monopince fixe : un corps serré par boulons, pas de galets de roulement
 	RemonteeKit.boite_en(p, Vector3(0.16, 0.14, 0.32), Vector3(0.07, 0.05, 0), "galva")
+	# gaines comme sur les débrayables : demi-cônes ouverts par-dessous,
+	# grand diamètre contre la pince (retour d'utilisateur, 23/10/2026)
+	for sz in [-1.0, 1.0]:
+		RemonteeKit.demi_cone(p, Vector3(0, 0, sz * 0.16), Vector3(0, 0, sz * (0.16 + 0.26)), 0.05, 0.0245, "noir_mat", 12)
 	for sz in [-0.10, 0.0, 0.10]:
 		RemonteeKit.cylindre(p, 0.018, 0.018, 0.20, Transform3D(Basis(Vector3.FORWARD, PI * 0.5), Vector3(0.07, -0.01, sz)), "acier", 6)
 	_machoire = Node3D.new()

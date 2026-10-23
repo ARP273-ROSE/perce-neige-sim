@@ -38,7 +38,7 @@ func _initialize() -> void:
 	pm.material = mn
 	neige.mesh = pm
 	racine.add_child(neige)
-	var fams: Array = ["siege_bartholet_6", "siege_bartholet_6", "siege_poma_ocr6", "siege_doppelmayr_e98_4_bulle"]
+	var fams: Array = ["siege_bartholet_6", "siege_bartholet_6", "siege_fixe_4", "siege_doppelmayr_e98_4_bulle"]
 	var y_c: float = 5.5
 	RemonteeKit.barre(racine, Vector3(-6, y_c, 0), Vector3(22, y_c, 0), PyloneRemontee.R_CABLE, "cable", 8)
 	for i in range(fams.size()):
@@ -73,6 +73,7 @@ func _initialize() -> void:
 		["bmf_baisse_face", Vector3(1.2, 2.9, 0.8), Vector3(5.0, 2.6, 0)],
 		["bmf_profil_releve", Vector3(0.0, 3.0, -6.0), Vector3(0.0, 3.0, 0)],
 		["bmf_profil_baisse", Vector3(5.0, 3.0, -6.0), Vector3(5.0, 3.0, 0)],
+		["fixe_pince", Vector3(9.0, 5.9, 1.2), Vector3(10.0, 5.6, 0.2)],
 		["rangee", Vector3(-5.0, 3.5, 9.0), Vector3(7.5, 2.4, 0)],
 	]
 	process_frame.connect(_tick)
