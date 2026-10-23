@@ -2405,19 +2405,30 @@ func _maj_skieur() -> void:
 		if fermes != _seuils_fermes:
 			_seuils_fermes = fermes
 			collisions.set_seuils(fermes == 1)
-	# à ski : vitesse, piste, course contre le fantôme (texte à 5 Hz)
-	if skieur.chausse and domaine != null:
+	# vue skieur : vitesse et altitude TOUJOURS (à pied, à ski, en remontée),
+	# puis la remontée où l'on est, sinon la piste, et la course contre le
+	# fantôme (texte à 5 Hz) — retour d'utilisateur, 23/10/2026
+	if skieur.actif and domaine != null:
 		var dt: float = get_process_delta_time()
-		domaine.suivre(skieur, dt)
+		if skieur.chausse:
+			domaine.suivre(skieur, dt)
 		_t_info += dt
 		if _t_info >= 0.2:
 			_t_info = 0.0
-			var pi: Array = domaine.piste_sous(skieur.global_position, 1.0)
-			_sur_piste = not domaine.hors_piste(skieur.global_position)
-			var info: String = "%d km/h" % roundi(skieur.vitesse_ski() * 3.6)
-			if str(pi[0]) != "" or int(pi[1]) >= 0:
-				info += " · %s%s" % [pi[0], (" (%s)" % PistesDonnees.NOMS_COULEURS[pi[1]]) if int(pi[1]) >= 0 else ""]
-			if domaine.chrono >= 0.0:
+			var v_ms: float = skieur.vitesse_ski() if skieur.chausse else Vector2(skieur.velocity.x, skieur.velocity.z).length()
+			var ligne: LigneRemontee = null
+			if remontees != null and not remontees.a_bord.is_empty():
+				ligne = remontees.a_bord[0]
+				v_ms = ligne.vitesse_en(ligne._vehicules[int(remontees.a_bord[1])][1])
+			var info: String = "%d km/h · %d m" % [roundi(v_ms * 3.6), roundi(skieur.global_position.y)]
+			if ligne != null:
+				info += " · %s" % ligne.nom_ligne
+			else:
+				var pi: Array = domaine.piste_sous(skieur.global_position, 1.0)
+				_sur_piste = not domaine.hors_piste(skieur.global_position)
+				if str(pi[0]) != "" or int(pi[1]) >= 0:
+					info += " · %s%s" % [pi[0], (" (%s)" % PistesDonnees.NOMS_COULEURS[pi[1]]) if int(pi[1]) >= 0 else ""]
+			if skieur.chausse and domaine.chrono >= 0.0:
 				info += " · %s" % DomaineSkiable._mmss(domaine.chrono)
 			commandes_skieur.set_info(info)
 		if domaine.resultat != "":

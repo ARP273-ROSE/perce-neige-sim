@@ -114,6 +114,10 @@ func construire() -> void:
 	_cable()
 	await _pause()
 	await _lanceurs()
+	if not famille.begins_with("perche") and VehiculeRemontee.DESCRIPTIONS.get(famille, ["", 6, ""])[2] != "fixe" \
+			and famille != "cabine_3s" and famille != "cabine_tph":
+		_rail_ouverture(true)
+		_rail_ouverture(false)
 	await _peupler()
 	if not (famille.begins_with("cabine") or famille.begins_with("perche")):
 		_portillons(true)
@@ -487,7 +491,7 @@ func _gare(aval: bool) -> void:
 	# plate-forme : la gare est posée au plus haut du terrain sous son
 	# emprise ; un talus de neige damée descend en pente douce jusqu'au sol
 	# là où il est plus bas (un socle de béton faisait un bloc sombre)
-	g.add_child(_talus(_points_talus(Vector2(voie + 10.0, long_g), Vector3(0, 0, zm)), Vector3(0, 0, zm)))
+	g.add_child(_talus(_points_talus(aval, long_g, Vector3(0, 0, zm)), Vector3(0, -1.0, zm)))
 	# rampe d'accès côté portillons : la piste arrive à niveau du quai
 	var lr: float = float(rampes[0 if aval else 1])
 	if lr > 0.5:
@@ -524,9 +528,6 @@ func _gare(aval: bool) -> void:
 			(g.get_child(g.get_child_count() - 1) as Node3D).transform.basis = Basis(Vector3.FORWARD, 0.0).scaled(Vector3.ONE * 0.21 / RollerMesh.R_BANDE)
 			RemonteeKit.boite_en(g, Vector3(0.22, 0.04, 0.30), Vector3(xd, H_CABLE_GARE + 0.16, zd), "galva_pylone")
 			RemonteeKit.boite_en(g, Vector3(0.10, 1.4, 0.10), Vector3(xd, H_CABLE_GARE + 0.86, zd), "galva_pylone")
-	# came d'ouverture / de fermeture des pinces, au nez de la gare
-	for sx in [-1.0, 1.0]:
-		RemonteeKit.poutre(g, Vector3(sx * (R + 0.40), H_CABLE_GARE + 0.40, znez), Vector3(sx * (R + 0.44), H_CABLE_GARE + 0.30, znez + signf(dz) * 3.0), 0.06, 0.05, "jaune_securite")
 	# ligne d'embarquement (bande jaune) côté montée en aval, côté descente en amont
 	var xb: float = _x_brin(aval)
 	RemonteeKit.boite_en(g, Vector3(voie * 0.5 + 0.8, 0.02, 0.12), Vector3(xb * 0.6, 0.01, znez + signf(dz) * (L_FREIN + 2.5)), "jaune_securite")
@@ -556,24 +557,50 @@ func _points_rampe(aval: bool, lr: float) -> PackedVector3Array:
 	var znez: float = 0.0 if aval else -longueur_h()
 	var ze: float = znez + sg * bout_quai()
 	var zf: float = ze + sg * lr
-	var hw: float = (voie + 10.0) * 0.5
+	var bq: Array = _bords_quai(aval)
+	var xg: float = bq[0]
+	var xd: float = bq[1]
 	var yf: float = -lr * PENTE_RAMPE
 	var e: float = H_TALUS * PENTE_TALUS
+	var eg: float = H_TALUS * float(bq[2])
+	var ed: float = H_TALUS * float(bq[3])
 	var pts: PackedVector3Array = PackedVector3Array([
-		Vector3(-hw, 0.0, ze), Vector3(hw, 0.0, ze), Vector3(hw, yf, zf), Vector3(-hw, yf, zf),
-		Vector3(-hw - e, -H_TALUS, ze), Vector3(hw + e, -H_TALUS, ze), Vector3(hw + e, yf - H_TALUS, zf + sg * e), Vector3(-hw - e, yf - H_TALUS, zf + sg * e)])
+		Vector3(-xg, 0.0, ze), Vector3(xd, 0.0, ze), Vector3(xd, yf, zf), Vector3(-xg, yf, zf),
+		Vector3(-xg - eg, -H_TALUS, ze), Vector3(xd + ed, -H_TALUS, ze), Vector3(xd + ed, yf - H_TALUS, zf + sg * e), Vector3(-xg - eg, yf - H_TALUS, zf + sg * e)])
 	return pts
+
+
+## Bords du quai : [demi-largeur à gauche (x−), à droite (x+), pente du
+## talus à gauche, à droite (base / hauteur)]. Télésiège : côté ARRIVÉE, le
+## quai s'arrête 1,6 m après le couloir des sièges et descend en pente douce
+## (1 pour 6) : le skieur qui se lève glisse dessus, hors du chemin du siège
+## (retour d'utilisateur, 23/10/2026).
+const PENTE_DEBARQUEMENT: float = 6.0
+
+
+func _bords_quai(aval: bool) -> Array:
+	var hw: float = (voie + 10.0) * 0.5
+	var bq: Array = [hw, hw, PENTE_TALUS, PENTE_TALUS]
+	if famille.begins_with("siege"):
+		var cote: int = 1 if _x_brin(not aval) > 0.0 else 0
+		bq[cote] = voie * 0.5 + 1.6
+		bq[cote + 2] = PENTE_DEBARQUEMENT
+	return bq
 const PENTE_TALUS: float = 1.6      # base / hauteur (environ 32°)
 
 
-## Sommets du talus (tronc de pyramide) : dessus `taille` centré en `c`.
-func _points_talus(taille: Vector2, c: Vector3) -> PackedVector3Array:
+## Sommets du talus (tronc de pyramide) : dessus de longueur `lz` centré
+## en `c`, bords latéraux et pentes selon _bords_quai.
+func _points_talus(aval: bool, lz: float, c: Vector3) -> PackedVector3Array:
+	var bq: Array = _bords_quai(aval)
 	var pts: PackedVector3Array = PackedVector3Array()
-	for niv in [[0.0, 0.0], [-H_TALUS, H_TALUS * PENTE_TALUS]]:
-		var hx: float = taille.x * 0.5 + float(niv[1])
-		var hz: float = taille.y * 0.5 + float(niv[1])
-		for q in [Vector2(-hx, -hz), Vector2(hx, -hz), Vector2(hx, hz), Vector2(-hx, hz)]:
-			pts.append(c + Vector3(q.x, float(niv[0]), q.y))
+	for bas in [false, true]:
+		var y: float = -H_TALUS if bas else 0.0
+		var xg: float = float(bq[0]) + (H_TALUS * float(bq[2]) if bas else 0.0)
+		var xd: float = float(bq[1]) + (H_TALUS * float(bq[3]) if bas else 0.0)
+		var hz: float = lz * 0.5 + (H_TALUS * PENTE_TALUS if bas else 0.0)
+		for q in [Vector2(-xg, -hz), Vector2(xd, -hz), Vector2(xd, hz), Vector2(-xg, hz)]:
+			pts.append(c + Vector3(q.x, y, q.y))
 	return pts
 
 
@@ -825,7 +852,7 @@ func _collisions_fixes() -> void:
 		var long_g: float = absf(dz) + voie * 0.5 + 3.5 + 5.0      # + aire d'attente derrière la poulie
 		var tal: CollisionShape3D = CollisionShape3D.new()
 		var cv: ConvexPolygonShape3D = ConvexPolygonShape3D.new()
-		cv.points = _points_talus(Vector2(voie + 10.0, long_g), Vector3(0, y0, zm))
+		cv.points = _points_talus(aval, long_g, Vector3(0, y0, zm))
 		tal.shape = cv
 		corps.add_child(tal)
 		var lr: float = float(rampes[0 if aval else 1])
@@ -1044,6 +1071,8 @@ func point_debarquement(aval: bool) -> Vector3:
 ## leurs semelles, anneau raidisseur, gros moyeu sur arbre vertical ; au-
 ## dessus, le bâti (réducteur et moteur en amont, chariot de tension en aval).
 var _coupe_poulie: int = 0
+var _mat_cable: ShaderMaterial = null
+var _phase_cable: float = 0.0
 var _poulies: Array = []        # [roue, vitesse angulaire (rad/s)]
 
 
@@ -1156,6 +1185,59 @@ func _dehors(s: float) -> Vector3:
 ## zone de gare (lanceurs, demi-tour, partie lente). Chaque pneu tourne à
 ## la vitesse du véhicule à SA position : rapides à l'entrée, lents au
 ## milieu, rapides à la sortie (retour d'utilisateur, 22/10/2026).
+## Ouverture de la pince à x m de l'entrée d'une zone de gare de longueur
+## l : le rail d'ouverture appuie progressivement sur le galet du levier
+## sur les L_OUVERTURE premiers mètres (la pince lâche le câble au début de
+## la décélération), et le relâche de même à la sortie.
+const L_OUVERTURE: float = 2.5
+
+
+func ouverture_pince(x: float, l: float) -> float:
+	return smoothstep(0.0, L_OUVERTURE, minf(x, l - x))
+
+
+## Centre du galet du levier dans le repère de la pince (x vers l'extérieur
+## de la boucle, y vers le haut) pour une ouverture t — même géométrie que
+## VehiculeRemontee._levier : pivot (0,36 ; 0,20), galet à (0,14 ; 0,07),
+## rotation −0,55 rad quand la pince est ouverte.
+static func galet_levier(t: float) -> Vector2:
+	var a: float = -0.55 * t
+	var g: Vector2 = Vector2(0.14, 0.07)
+	return Vector2(0.36, 0.20) + Vector2(g.x * cos(a) - g.y * sin(a), g.x * sin(a) + g.y * cos(a))
+
+
+## Rail d'ouverture des pinces (retour d'utilisateur, 23/10/2026) : un fer plat
+## au-dessus du galet du levier, sur toute la zone de gare ; il descend
+## en rampe à l'entrée (il appuie sur le levier, comprime les ressorts et
+## ouvre la mâchoire) et remonte à la sortie. Suspendu au carénage.
+func _rail_ouverture(aval: bool) -> void:
+	var s0: float = s_gare(aval, 0.0)
+	var l: float = longueur_zone(aval)
+	var r_node: Node3D = Node3D.new()
+	r_node.name = "RailOuverture" + ("Aval" if aval else "Amont")
+	add_child(r_node)
+	var pts: PackedVector3Array = PackedVector3Array()
+	var x: float = -0.8
+	while x <= l + 0.8:
+		var s: float = s0 + x
+		var p: Vector3 = point(s)[0]
+		var o: Vector3 = _dehors(s)
+		var gl: Vector2 = galet_levier(ouverture_pince(clampf(x, 0.0, l), l))
+		# au-dessus du galet (rayon 0,055) ; un peu plus haut avant/après la
+		# zone, là où le galet arrive et repart sans toucher
+		var lev: float = 0.03 * (1.0 - clampf(minf(x, l - x) / 0.8 + 1.0, 0.0, 1.0))
+		pts.append(p + o * gl.x + Vector3(0, gl.y + 0.055 + 0.012 + lev, 0))
+		var dans_rampe: bool = minf(x, l - x) < L_OUVERTURE + 0.5
+		x += 0.2 if dans_rampe else 1.0
+	# fer plat : deux tubes fins côte à côte, comme une semelle
+	RemonteeKit.tube(r_node, pts, 0.022, "acier", 6)
+	var k: int = 0
+	while k < pts.size():
+		RemonteeKit.barre(r_node, pts[k], Vector3(pts[k].x, terrain(0.0 if aval else longueur_h()) + H_CABLE_GARE + Y_CAPOT, pts[k].z), 0.018, "galva_pylone", 6)
+		k += 8
+	MeshMerge.merge(r_node, [], "Rail")
+
+
 func _lanceurs() -> void:
 	_pneus.clear()
 	if famille.begins_with("perche"):
@@ -1335,7 +1417,9 @@ func _cable() -> void:
 	var c: Node3D = Node3D.new()
 	c.name = "Cable"
 	add_child(c)
-	RemonteeKit.tube(c, pts, PyloneRemontee.R_CABLE, "cable", 6)
+	# câble à torons du funiculaire, au diamètre de la ligne, qui défile
+	_mat_cable = RemonteeKit.materiau_cable_tracteur(diametre_cable)
+	RemonteeKit.tube(c, pts, diametre_cable * 0.0005, "cable", 8, _mat_cable)
 
 
 func _peupler() -> void:
@@ -1388,6 +1472,10 @@ func _process(delta: float) -> void:
 	_dt = 0.0
 	_galets()
 	_tourner_pneus(delta)
+	if _mat_cable != null:
+		var pas: float = 0.45 * diametre_cable / 52.0
+		_phase_cable = fposmod(_phase_cable + vitesse * delta, pas)
+		_mat_cable.set_shader_parameter("cable_phase", _phase_cable)
 	for pl in _poulies:
 		(pl[0] as Node3D).rotation.y = fposmod((pl[0] as Node3D).rotation.y + float(pl[1]) * delta, TAU)
 
@@ -1455,7 +1543,7 @@ func _placer(i: int) -> void:
 	if z[0] != "ligne":
 		var x: float = z[1]
 		var l: float = z[2]
-		ouverture = clampf(minf(x, l - x) / 1.2, 0.0, 1.0)            # pince : 1,2 m pour s'ouvrir
+		ouverture = ouverture_pince(x, l)
 		# garde-corps automatique : relevé à la fin de la décélération, baissé
 		# au début du lanceur d'accélération (retour d'utilisateur, 23/10/2026)
 		gc = 1.0 - clampf((x - (L_FREIN - 2.0)) / 2.0, 0.0, 1.0) * clampf((l - L_FREIN - x) / 2.0, 0.0, 1.0)

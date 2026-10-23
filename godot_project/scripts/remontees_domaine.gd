@@ -299,14 +299,32 @@ func _suivre_siege() -> void:
 		# remonte et contourne la poulie — posé devant lui, le skieur était
 		# rattrapé, porté par l'assise et rassis pour la descente
 		var loc: Vector3 = lg.global_transform.affine_inverse() * v.vers_monde(v.place_assise(a_bord[2], a_bord[4]))
-		loc.x = signf(loc.x if absf(loc.x) > 0.5 else 1.0) * (lg.voie * 0.5 + 2.2)
+		var cote: float = signf(lg._x_brin(not aval_arr))        # extérieur du brin d'arrivée
+		var glisse: bool = skieur.chausse and not v.cabine
+		if not glisse:
+			loc.x = cote * (lg.voie * 0.5 + 2.2)
 		var pos: Vector3 = lg.global_transform * loc
-		pos.y = y_quai + 0.15
+		pos.y = y_quai + (0.02 if glisse else 0.15)
 		skieur.embarque = false
 		skieur.lever()
 		skieur.global_position = pos
 		skieur.dernier_sol = pos
 		skieur.support = null
+		if glisse:
+			# chaussé : il se lève à sa place et glisse en avant vers
+			# l'extérieur, sur la pente de débarquement, pendant que le
+			# siège continue et tourne autour de la poulie (retour
+			# d'utilisateur, 23/10/2026 : « se lever du siège et glisser
+			# doucement avec la petite descente qui va bien »)
+			var avant: Vector3 = -v.global_transform.basis.z
+			avant.y = 0.0
+			avant = avant.normalized()
+			var dehors: Vector3 = lg.global_transform.basis.x * cote
+			var vit: Vector3 = avant * 2.2 + dehors * 1.6
+			skieur._v_ski = vit
+			skieur._cap_ski = atan2(-vit.x, -vit.z)
+			skieur._cap = skieur._cap_ski
+			skieur.cam_yaw = skieur._cap_ski
 		message.emit("Arrivé — %s" % lg.nom_ligne)
 		a_bord = []
 		_repos = 6.0

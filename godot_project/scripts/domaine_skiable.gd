@@ -244,7 +244,7 @@ func _construire_panneaux() -> void:
 		var l: Label3D = Label3D.new()
 		l.text = str(e[4])
 		l.font_size = 160
-		l.pixel_size = 0.0028
+		l.pixel_size = 0.0021          # (plus petit : place pour le nom et la station)
 		l.modulate = Color.WHITE
 		l.outline_size = 0
 		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
@@ -322,7 +322,9 @@ func _poser_faces(lot: Array, par_piste: Dictionary, quad: Mesh) -> void:
 		var m: StandardMaterial3D = StandardMaterial3D.new()
 		m.albedo_texture = ImageTexture.create_from_image(img)
 		m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
-		m.roughness = 0.5
+		# face réfléchissante, non ombrée comme le numéro : à contre-jour, le
+		# bleu virait au noir et le nom disparaissait (retour d'utilisateur, 23/10/2026)
+		m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 		var xs: Array = par_piste[e[0]][2]
 		var mm: MultiMesh = MultiMesh.new()
 		mm.transform_format = MultiMesh.TRANSFORM_3D

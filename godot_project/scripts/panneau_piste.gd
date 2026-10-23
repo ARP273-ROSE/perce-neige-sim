@@ -21,14 +21,18 @@ func _draw() -> void:
 	draw_circle(c, r * 0.955, couleur)
 	var police: Font = ThemeDB.fallback_font
 	var blanc: Color = Color(1, 1, 1)
-	_arc(police, nom, c, r * 0.74, true, blanc, int(t * 0.15), deg_to_rad(160.0))
-	_arc(police, station, c, r * 0.76, false, blanc, int(t * 0.11), deg_to_rad(120.0))
+	# lettres plus grandes et cernées d'un contour sombre : lisibles de loin
+	# (retour d'utilisateur, 23/10/2026 : « on voit bien le numéro, pas du tout le nom
+	# de la piste ni celui de la station »)
+	var contour: Color = couleur.darkened(0.55)
+	_arc(police, nom.to_upper(), c, r * 0.70, true, blanc, int(t * 0.19), deg_to_rad(170.0), contour)
+	_arc(police, station, c, r * 0.72, false, blanc, int(t * 0.15), deg_to_rad(130.0), contour)
 
 
 ## Texte en arc : en haut, lettres tête vers l'extérieur ; en bas, tête vers
 ## le centre — toujours lisible de gauche à droite.
 func _arc(police: Font, texte: String, c: Vector2, rayon: float, haut: bool, col: Color,
-		taille: int, ouverture_max: float) -> void:
+		taille: int, ouverture_max: float, contour: Color = Color(0, 0, 0, 0)) -> void:
 	if texte == "":
 		return
 	var fs: int = taille
@@ -46,6 +50,8 @@ func _arc(police: Font, texte: String, c: Vector2, rayon: float, haut: bool, col
 		var p: Vector2 = c + Vector2(cos(am), sin(am)) * rayon
 		var rot: float = am + (PI * 0.5 if haut else -PI * 0.5)
 		draw_set_transform(p, rot, Vector2.ONE)
+		if contour.a > 0.0:
+			draw_char_outline(police, Vector2(-w * 0.5, asc * 0.38), ch, fs, maxi(2, fs / 9), contour)
 		draw_char(police, Vector2(-w * 0.5, asc * 0.38), ch, fs, col)
 		a += sens * w / rayon
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)

@@ -29,6 +29,7 @@ var _gc: Node3D
 ## Véhicule posé en miroir sur sa ligne (ligne qui monte à gauche) : les
 ## numéros sont contre-inversés pour rester lisibles.
 var miroir: bool = false
+var numero: int = 0
 var _gc_releve: float = 2.40     # angle du garde-corps relevé (rad)
 var _bulle: Node3D
 var _portes: Array = []        # [nœud, position fermée, déplacement à l'ouverture]
@@ -102,6 +103,10 @@ func construire() -> void:
 	_ressorts.clear()
 	_portes.clear()
 	places = DESCRIPTIONS.get(famille, ["", 6, ""])[1]
+	# un seul numéro par véhicule, sur la pince comme sur le siège (la pince
+	# en portait un autre — retour d'utilisateur, 23/10/2026 : « numéro fantôme »)
+	if numero <= 0:
+		numero = randi() % (81 if famille == "siege_bartholet_6" else 120) + 1
 	cabine = famille.begins_with("cabine")
 	var fixe: bool = constructeur() == "fixe"
 	if famille.begins_with("perche"):
@@ -203,12 +208,12 @@ func _pince_debrayable() -> void:
 	RemonteeKit.boite_en(p, Vector3(0.035, 0.11, L * 0.92), Vector3(-0.055, 0.0, 0), corps_m)   # mâchoire fixe
 	for k in [-1.0, 0.0, 1.0]:
 		RemonteeKit.boite_en(p, Vector3(0.14, 0.012, 0.03), Vector3(0.0, 0.092, k * L * 0.33), corps_m)
-	# gaines coniques noires aux deux bouts (guident le câble à l'entrée des pneus)
-	# … qui s'amincissent jusqu'à ZÉRO au bout (rayon du câble) : la pince
-	# passe ainsi sous les galets de compression et sur les supports sans choc
+	# gaines noires aux deux bouts : demi-cônes ouverts par-dessous, évasés
+	# vers l'extérieur (retour d'utilisateur, 23/10/2026 : « inverse la pente du
+	# cône, garde la même longueur, enlève la moitié inférieure ») ; ils
+	# coiffent le câble à l'entrée de la pince
 	for sz in [-1.0, 1.0]:
-		RemonteeKit.cylindre(p, 0.055, 0.0245, 0.34, Transform3D(Basis(Vector3.RIGHT, -sz * PI * 0.5), Vector3(0, 0.0, sz * (L * 0.5 + 0.17))),
-			"noir_mat", 14)
+		RemonteeKit.demi_cone(p, Vector3(0, 0, sz * L * 0.5), Vector3(0, 0, sz * (L * 0.5 + 0.34)), 0.0245, 0.055, "noir_mat", 12)
 	# mâchoire MOBILE (côté extérieur), pivot parallèle au câble
 	_machoire = Node3D.new()
 	_machoire.name = "MachoireMobile"
@@ -261,7 +266,7 @@ func _pince_debrayable() -> void:
 		RemonteeKit.boite_en(p, Vector3(0.15, 0.008, 0.014), Vector3(0.28, Y_PLAQUE + 0.004, z), "noir_mat")
 		z += 0.04
 	# numéro du véhicule sur la tranche de la plaque
-	_numero(p, "%03d" % (randi() % 120 + 1), Vector3(0.37, Y_PLAQUE - 0.011, 0.25), PI * 0.5, 40, 0.0016, Color(1, 1, 1))
+	_numero(p, "%03d" % numero, Vector3(0.37, Y_PLAQUE - 0.011, 0.25), PI * 0.5, 40, 0.0016, Color(1, 1, 1))
 
 
 ## Numéro lisible À L'ENDROIT : une étiquette d'un seul côté (vue de dos,
@@ -573,7 +578,7 @@ func _siege_bmf() -> void:
 	# plaque du numéro au milieu de la tôle, et attache de la suspente
 	RemonteeKit.boite_en(siege, Vector3(0.20, 0.10, 0.01), Vector3(0.0, (yb0 + yb1) * 0.5, zb - ep * 0.5 - 0.006), "blanc_plaque")
 	# (81 sièges sur la ligne) ; plaque des deux côtés de la tôle
-	var no: String = str(randi() % 81 + 1)
+	var no: String = str(numero)
 	RemonteeKit.boite_en(siege, Vector3(0.20, 0.10, 0.01), Vector3(0.0, (yb0 + yb1) * 0.5, zb + ep * 0.5 + 0.006), "blanc_plaque")
 	_numero(siege, no, Vector3(0.0, (yb0 + yb1) * 0.5, zb - ep * 0.5 - 0.013), PI, 64, 0.0018, Color(0.05, 0.05, 0.06))
 	_numero(siege, no, Vector3(0.0, (yb0 + yb1) * 0.5, zb + ep * 0.5 + 0.013), 0.0, 64, 0.0018, Color(0.05, 0.05, 0.06))
@@ -682,7 +687,9 @@ func _garde_corps_bmf(siege: Node3D, W: float, m: String, xe: float) -> void:
 	# repère de l'axe : barre ventrale 0,34 m au-dessus de l'assise, 0,32 m
 	# devant son milieu ; patins 0,17 m sous l'assise, juste devant son nez
 	var ventre: Vector3 = Vector3(0, -0.24, -0.71)
-	var pied: Vector3 = Vector3(0, -0.75, -0.87)
+	# repose-skis au niveau des pieds du passager assis (0,45 m sous
+	# l'assise) : les skis reposent dessus au lieu de pendre dessous
+	var pied: Vector3 = Vector3(0, -1.06, -0.80)
 	for sx in [-1.0, 1.0]:
 		RemonteeKit.tube(_gc, PackedVector3Array([Vector3(sx * xe, 0, 0), Vector3(sx * xe, 0.02, -0.28),
 			Vector3(sx * xe, -0.10, -0.56), Vector3(sx * xe, ventre.y, ventre.z)]), 0.022, m, 8)

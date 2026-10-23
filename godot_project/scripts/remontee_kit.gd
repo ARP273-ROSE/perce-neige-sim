@@ -144,7 +144,11 @@ static func poutre(parent: Node3D, a: Vector3, b: Vector3, w: float, e: float, m
 
 
 ## Tube cintré : section circulaire de rayon r balayée le long de `pts`.
-static func tube(parent: Node3D, pts: PackedVector3Array, r: float, m: String, seg: int = 10) -> MeshInstance3D:
+## `matiere` : matériau imposé (câble à torons) ; le tube reçoit alors les
+## UV du shader des câbles du funiculaire : UV.x = tour autour du câble,
+## UV.y = 2 × abscisse (m).
+static func tube(parent: Node3D, pts: PackedVector3Array, r: float, m: String, seg: int = 10,
+		matiere: Material = null) -> MeshInstance3D:
 	if pts.size() < 2:
 		return null
 	var st: SurfaceTool = SurfaceTool.new()
@@ -172,20 +176,39 @@ static func tube(parent: Node3D, pts: PackedVector3Array, r: float, m: String, s
 		for k in range(seg + 1):
 			var ang: float = TAU * float(k) / seg
 			var nrm: Vector3 = x * cos(ang) + y * sin(ang)
-			a.append([pts[i] + nrm * r, nrm])
+			a.append([pts[i] + nrm * r, nrm, float(k) / seg])
 		anneaux.append(a)
+	var absc: float = 0.0
 	for i in range(n - 1):
+		var v0: float = absc * 2.0
+		absc += pts[i].distance_to(pts[i + 1])
+		var v1: float = absc * 2.0
 		for k in range(seg):
 			var p00: Array = anneaux[i][k]
 			var p01: Array = anneaux[i][k + 1]
 			var p10: Array = anneaux[i + 1][k]
 			var p11: Array = anneaux[i + 1][k + 1]
-			for p in [p00, p10, p11, p00, p11, p01]:
+			for q in [[p00, v0], [p10, v1], [p11, v1], [p00, v0], [p11, v1], [p01, v0]]:
+				var p: Array = q[0]
 				st.set_normal(p[1])
+				st.set_uv(Vector2(p[2], q[1]))
 				st.add_vertex(p[0])
 	var mesh: ArrayMesh = st.commit()
-	mesh.surface_set_material(0, mat(m))
+	mesh.surface_set_material(0, matiere if matiere != null else mat(m))
 	return _mi(parent, mesh, Transform3D.IDENTITY, m)
+
+
+## Câble tracteur : le shader à torons du câble du funiculaire (Fatzer 52 mm,
+## 6 torons, pas 0,45 m), pas mis à l'échelle du diamètre (mm) ; sa phase
+## (`cable_phase`, m) fait défiler les torons à la vitesse du câble (retour
+## d'utilisateur, 23/10/2026 : « le câble tracteur est le même que celui du funi »).
+static func materiau_cable_tracteur(diametre_mm: float) -> ShaderMaterial:
+	var m: ShaderMaterial = ShaderMaterial.new()
+	m.shader = load("res://scripts/cable_shader.gdshader")
+	m.set_shader_parameter("cut_below_s", -1.0)
+	m.set_shader_parameter("cable_phase", 0.0)
+	m.set_shader_parameter("strand_pitch", 0.45 * diametre_mm / 52.0)
+	return m
 
 
 ## Arc de cercle (pour tube) : centre c, dans le plan (u, v), de a0 à a1.
@@ -283,6 +306,34 @@ static func _maillage_coussin(h: Vector3, r: float) -> ArrayMesh:
 					st.set_normal(p[1])
 					st.add_vertex(p[0])
 	return st.commit()
+
+
+## Demi-cône ouvert par-dessous (gouttière évasée) d'axe a → b, rayon r0
+## en a et r1 en b ; seule la moitié haute (+Y) est tracée, double face.
+static func demi_cone(parent: Node3D, a: Vector3, b: Vector3, r0: float, r1: float, m: String, seg: int = 10) -> MeshInstance3D:
+	var ax: Vector3 = (b - a).normalized()
+	var x: Vector3 = Vector3.UP.cross(ax).normalized()
+	if x.length() < 0.01:
+		x = Vector3.RIGHT
+	var y: Vector3 = ax.cross(x).normalized()
+	if y.y < 0.0:
+		y = -y
+		x = -x
+	var st: SurfaceTool = SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for k in range(seg):
+		var t0: float = PI * float(k) / seg
+		var t1: float = PI * float(k + 1) / seg
+		var d0: Vector3 = x * cos(t0) + y * sin(t0)
+		var d1: Vector3 = x * cos(t1) + y * sin(t1)
+		for q in [[a + d0 * r0, d0], [b + d0 * r1, d0], [b + d1 * r1, d1], [a + d0 * r0, d0], [b + d1 * r1, d1], [a + d1 * r0, d1]]:
+			st.set_normal(q[1])
+			st.add_vertex(q[0])
+	var mesh: ArrayMesh = st.commit()
+	var mt: StandardMaterial3D = (mat(m) as StandardMaterial3D).duplicate()
+	mt.cull_mode = BaseMaterial3D.CULL_DISABLED
+	mesh.surface_set_material(0, mt)
+	return _mi(parent, mesh, Transform3D.IDENTITY, m)
 
 
 ## Ressort hélicoïdal d'axe `axe` (unitaire), de longueur `l`.
