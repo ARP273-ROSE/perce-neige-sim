@@ -53,6 +53,7 @@ var assis: bool = false
 ## À bord d'une remontée (siège ou cabine) : posé chaque image par
 ## RemonteesDomaine, il ne marche ni ne glisse (retour d'utilisateur, 22/10/2026)
 var embarque: bool = false
+const Y_YEUX_ASSIS: float = 1.25          # yeux du passager assis, au-dessus des pieds
 const RECUL_ASSIS: float = 0.42          # pieds devant le banc, bassin au-dessus de l'assise
 var _image_assise: Mesh = null
 ## Touches de marche tenues dans le simulateur PC (vue 3D embarquée, le
@@ -366,6 +367,8 @@ func asseoir(cap: float, skis_aux_pieds: bool = false) -> void:
 		_image_assise = SkieurMesh.passager("assis", "casque", SkieurMesh.materiau())
 	assis = true
 	_cap = cap
+	cam_yaw = cap                  # la vue face à la marche, une fois assis
+	cam_pitch = 0.10               # regard vers l'amont (la pente remplissait l'écran)
 	velocity = Vector3.ZERO
 	_corps.multimesh.mesh = _image_assise
 	# au télésiège, chaussé : skis aux pieds, sous les pieds pendants (ils
@@ -1301,6 +1304,18 @@ func _camera() -> void:
 	pivot.rotation = Vector3(clampf(cam_pitch - _pitch_sol, PITCH_MIN, _pitch_max()), cam_yaw, 0.0)
 	bras.spring_length = 0.0 if premiere_personne else cam_dist
 	pivot.position.y = Y_YEUX if premiere_personne else Y_YEUX - 0.05
+	pivot.position.x = 0.0
+	pivot.position.z = 0.0
+	if premiere_personne:
+		# on ne se voit pas soi-même, à pied, à ski ou en remontée (retour
+		# d'utilisateur, 23/10/2026 : « à la première personne sur le TS je me vois »)
+		_visuel.visible = false
+		if assis:
+			# yeux du passager assis : au-dessus du bassin (en arrière des
+			# pieds), à 1,25 m au-dessus des pieds
+			pivot.position = Vector3(_visuel.position.x * 0.9, Y_YEUX_ASSIS, _visuel.position.z * 0.9)
+	elif not _visuel.visible and _chute_t <= 0.0:
+		_visuel.visible = true
 
 
 ## Le skieur est-il à l'air libre (ni dans une gare, ni dans le tunnel) ?

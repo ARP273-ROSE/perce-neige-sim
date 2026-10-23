@@ -5,6 +5,17 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.22.20 — 23 octobre 2026
+
+**Vue skieur : première personne sur le télésiège.** Retour d'utilisateur (capture iPad) du
+23/10/2026 : « à la première personne sur le TS, je me vois quand même ».
+- En première personne, le corps est masqué partout : à pied, à ski et en remontée. Avant, il
+  n'était masqué qu'en marchant et en glissant.
+- Assis, la vue est aux yeux du passager : 1,25 m au-dessus des pieds, au-dessus du bassin. Avant,
+  elle était à hauteur d'un skieur debout, au droit des pieds, donc dans la tête du personnage.
+- En s'asseyant, la vue se tourne face à la marche, le regard légèrement relevé vers l'amont.
+- Vérifié : banc embarquement ; capture en première personne sur le Marmottes Express.
+
 ## 1.22.19 — 23 octobre 2026
 
 **Vue skieur : bandeau vitesse et altitude lisible.** Retour d'utilisateur (capture iPad) du
