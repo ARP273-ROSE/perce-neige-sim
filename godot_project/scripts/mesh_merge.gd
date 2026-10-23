@@ -20,7 +20,10 @@ const _ATTRS: Array = [Mesh.ARRAY_NORMAL, Mesh.ARRAY_TANGENT, Mesh.ARRAY_COLOR,
 
 
 ## Fusionne sous `root`. Renvoie le nombre de surfaces retirées.
-static func merge(root: Node3D, keep: Array = [], name_prefix: String = "Fusion") -> int:
+## `une_instance` : toutes les surfaces (même ombre, même portée) dans UN
+## seul MeshInstance3D à plusieurs surfaces — pour les objets qui bougent à
+## chaque image (véhicules des remontées : des milliers d'instances).
+static func merge(root: Node3D, keep: Array = [], name_prefix: String = "Fusion", une_instance: bool = false) -> int:
 	var groups: Dictionary = {}     # clé → {mat, st, n, shadow}
 	var done: Dictionary = {}       # MeshInstance3D → nb de surfaces fusionnées
 	var stack: Array = [[root, Transform3D.IDENTITY]]
@@ -41,9 +44,23 @@ static func merge(root: Node3D, keep: Array = [], name_prefix: String = "Fusion"
 				stack.append([c, cxf])
 	var removed: int = 0
 	var k: int = 0
+	var multi: Dictionary = {}      # (ombre, portée) → [ArrayMesh, g]
 	for key in groups:
 		var g: Dictionary = groups[key]
 		var st: SurfaceTool = g["st"]
+		if une_instance:
+			var cle: String = "%d|%f" % [g["shadow"], g["range"]]
+			if not multi.has(cle):
+				multi[cle] = [ArrayMesh.new(), g]
+			var am: ArrayMesh = multi[cle][0]
+			var n0: int = am.get_surface_count()
+			st.commit(am)
+			if am.get_surface_count() > n0:
+				am.surface_set_material(n0, g["mat"])
+				removed += g["n"] - 1
+				for src in g["src"]:
+					done[src] = int(done.get(src, 0)) + 1
+			continue
 		var mesh: ArrayMesh = st.commit()
 		if mesh == null or mesh.get_surface_count() == 0:
 			continue
@@ -58,6 +75,18 @@ static func merge(root: Node3D, keep: Array = [], name_prefix: String = "Fusion"
 		removed += g["n"] - 1
 		for src in g["src"]:
 			done[src] = int(done.get(src, 0)) + 1
+	for cle2 in multi:
+		var am2: ArrayMesh = multi[cle2][0]
+		if am2.get_surface_count() == 0:
+			continue
+		var g2: Dictionary = multi[cle2][1]
+		var mi2: MeshInstance3D = MeshInstance3D.new()
+		mi2.name = "%s%d" % [name_prefix, k]
+		mi2.mesh = am2
+		mi2.cast_shadow = g2["shadow"]
+		mi2.visibility_range_end = g2["range"]
+		root.add_child(mi2)
+		k += 1
 	# retire les sources : un objet n'est collecté que si TOUTES ses
 	# surfaces sont fusionnables (cf. _collect), il est donc entièrement repris
 	for mi_any in done.keys():

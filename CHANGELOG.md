@@ -5,6 +5,39 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.27.0 — 24 octobre 2026
+
+**Remontées : tout le domaine posé (48 lignes), allègement, accès des télésièges.** Retour
+d'utilisateur du 23/10/2026 : « go » pour poser les autres lignes, et « améliore grandement tes
+designs ».
+- 48 remontées posées à leur place, avec leurs pylônes, leurs balanciers et leurs véhicules :
+  - tous les télésièges débrayables et fixes, toutes les télécabines ;
+  - le 3S de l'Olympique, les téléphériques de la Grande Motte et du Fornet ;
+  - les téléskis attendent leur mécanique d'embarquement.
+- Nouveau banc toutes_lignes : on va au pied de chaque ligne, elle se construit, véhicules en
+  place, skieur debout ; les 48 passent.
+- Allègement (des centaines de véhicules en mouvement autour de Val d'Isère) :
+  - mesuré au pied de Solaise, cinq lignes actives : de 25 ms à 8 ms par image pour les
+    remontées ;
+  - une ligne dont les véhicules sont hors de vue (plus de 750 m) est figée ; plus loin que 150 m,
+    mise à jour une image sur deux ou sur quatre ;
+  - par véhicule : pas déplacé au-delà de 700 m (invisible), une image sur quatre entre 250 et
+    700 m ;
+  - corps de collision mis à jour seulement près du skieur ; pneus des lanceurs animés seulement
+    à moins de 250 m ; animations recalculées seulement si elles changent ; flèche du câble
+    calculée portée par portée ;
+  - numéros des véhicules en maillages de texte fusionnés au lieu d'étiquettes ; chaque véhicule
+    fusionné en une seule instance à plusieurs surfaces (11 instances par siège Doppelmayr au lieu
+    de 29) ;
+  - banc toutes_lignes : 21 lignes avec une image de plus de 40 ms au lieu de 47.
+- Accès des télésièges, d'après les photos de Palafour et du Paquis : bornes de contrôle grises
+  arrondies avec lecteur de forfait et écran, vantaux en tube inox, portique d'entrée en bois au nom
+  de la ligne.
+- Exporteur : un espacement de moins de 4 s entre véhicules est rejeté (on repart du débit) ; la
+  TSD4 des Pyramides avait 8 m entre sièges.
+- Vérifié : bancs toutes_lignes, embarquement, tph, 3s, poste_remontee, remontee_dynamique, quai
+  et skieur.
+
 ## 1.26.0 — 23 octobre 2026
 
 **Remontées : pylône du téléphérique, sièges des autres constructeurs.** Suite du retour

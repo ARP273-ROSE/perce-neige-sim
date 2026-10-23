@@ -81,6 +81,20 @@ Depuis la 1.22.13, la gare suit les photos des gares BMF du Marmottes Express
 
 Les portillons s'ouvrent vers l'avant, vers la ligne d'arrêt.
 
+Depuis la 1.27.0 — tout le domaine :
+- 48 lignes posées (tous les télésièges, télécabines, le 3S, les téléphériques de la Grande Motte et
+  du Fornet ; les téléskis attendent leur embarquement) ; banc `bench_toutes_lignes_3d.gd` ;
+- niveaux de détail : une ligne à plus de 750 m est figée, une image sur deux de 150 à 300 m, une sur
+  quatre au-delà ; par véhicule : pas déplacé au-delà de 700 m, une image sur quatre de 250 à 700 m ;
+  corps de collision à jour seulement à moins de 60 m (et sur les lignes à moins de 120 m) ; pneus
+  des lanceurs à moins de 250 m ; animations (pince, garde-corps, portes) recalculées seulement si
+  elles changent ; flèche calculée portée par portée ;
+- numéros en `TextMesh` fusionnés, véhicules fusionnés en une instance multi-surfaces (`MeshMerge`
+  `une_instance`) : 11 instances par siège Doppelmayr au lieu de 29 ;
+- accès des télésièges : bornes de contrôle grises avec lecteur et écran, vantaux en tube inox,
+  portique d'entrée en bois au nom de la ligne ;
+- exporteur : un espacement de moins de 4 s est rejeté (on repart du débit).
+
 Depuis la 1.26.0 :
 - pylône du téléphérique (`PyloneTreillis.va_et_vient`) : fût carré élancé, évasement en tête jusqu'à
   la voie, poutre de tête en caissons, un sabot par voie, portique de levage, plate-forme, échelle ;

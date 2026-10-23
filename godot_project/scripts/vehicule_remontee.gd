@@ -29,7 +29,8 @@ var _gc: Node3D
 ## Véhicule posé en miroir sur sa ligne (ligne qui monte à gauche) : les
 ## numéros sont contre-inversés pour rester lisibles.
 var miroir: bool = false
-var _skis_ranges: Array = []    # skis au porte-skis des cabines (un par vantail)
+var _skis_ranges: Array = []
+var _etat_anim: PackedFloat32Array = PackedFloat32Array([-1.0, -1.0, -1.0, -1.0])   # pince, garde-corps, bulle, portes    # skis au porte-skis des cabines (un par vantail)
 var numero: int = 0
 var _gc_releve: float = 2.40     # angle du garde-corps relevé (rad)
 var _bulle: Node3D
@@ -104,6 +105,7 @@ func construire() -> void:
 	_ressorts.clear()
 	_portes.clear()
 	_skis_ranges.clear()
+	_etat_anim = PackedFloat32Array([-1.0, -1.0, -1.0, -1.0])
 	places = DESCRIPTIONS.get(famille, ["", 6, ""])[1]
 	# un seul numéro par véhicule, sur la pince comme sur le siège (la pince
 	# en portait un autre — retour d'utilisateur, 23/10/2026 : « numéro fantôme »)
@@ -166,12 +168,12 @@ func _fusionner() -> void:
 	for p in _portes:
 		garder.append(p[0])
 	if _pince != null:
-		MeshMerge.merge(_pince, garder, "Pince")
-	MeshMerge.merge(_susp, garder, "Vehicule")
+		MeshMerge.merge(_pince, garder, "Pince", true)
+	MeshMerge.merge(_susp, garder, "Vehicule", true)
 	for n in garder:
-		MeshMerge.merge(n, _skis_ranges, "Piece")      # skis rangés : affichés à la demande
+		MeshMerge.merge(n, _skis_ranges, "Piece", true)      # skis rangés : affichés à la demande
 	for n in _skis_ranges:
-		MeshMerge.merge(n, [], "Skis")
+		MeshMerge.merge(n, [], "Skis", true)
 
 
 # --- pinces ---------------------------------------------------------------------
@@ -277,20 +279,43 @@ func _pince_debrayable() -> void:
 ## elle s'effaçait en miroir — retour d'utilisateur, 23/10/2026), contre-
 ## inversée sur les véhicules en miroir ; `rot` oriente sa face (autour de Y).
 func _numero(parent: Node3D, texte: String, pos: Vector3, rot: float, taille: int, px: float, coul: Color) -> void:
-	var lab: Label3D = Label3D.new()
-	lab.text = texte
-	lab.font_size = taille
-	lab.pixel_size = px
-	lab.modulate = coul
-	lab.outline_size = 0
-	lab.double_sided = false
-	lab.position = pos
-	lab.rotation.y = rot
+	# maillage de texte (TextMesh), partagé par texte et taille, fusionné avec
+	# le véhicule : des centaines de Label3D qui bougent coûtaient ~25 ms par
+	# image au pied de Solaise
+	var cle: String = "%s|%d|%.4f" % [texte, taille, px]
+	if not _textes.has(cle):
+		var tm: TextMesh = TextMesh.new()
+		tm.text = texte
+		tm.font_size = taille
+		tm.pixel_size = px
+		tm.depth = 0.0
+		tm.curve_step = 2.0
+		_textes[cle] = tm
+	var mi: MeshInstance3D = MeshInstance3D.new()
+	mi.mesh = _textes[cle]
+	mi.material_override = _mat_texte(coul)
+	mi.position = pos
+	mi.rotation.y = rot
 	if miroir:
 		# le miroir du véhicule (x → −x) garde la face au bon endroit mais
 		# inverse le texte : une seconde symétrie en x le remet à l'endroit
-		lab.scale = Vector3(-1, 1, 1)
-	parent.add_child(lab)
+		mi.scale = Vector3(-1, 1, 1)
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	parent.add_child(mi)
+
+
+static var _textes: Dictionary = {}
+static var _mats_texte: Dictionary = {}
+
+
+static func _mat_texte(c: Color) -> StandardMaterial3D:
+	var k: String = c.to_html()
+	if not _mats_texte.has(k):
+		var m: StandardMaterial3D = StandardMaterial3D.new()
+		m.albedo_color = c
+		m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		_mats_texte[k] = m
+	return _mats_texte[k]
 
 
 func _pince_fixe() -> void:
@@ -311,6 +336,10 @@ func _pince_fixe() -> void:
 
 ## 0 : serrée sur le câble ; 1 : ouverte (en gare, levier poussé par la came).
 func ouvrir_pince(t: float) -> void:
+	# (rien à faire si rien ne bouge : des centaines de véhicules par image)
+	if t == _etat_anim[0]:
+		return
+	_etat_anim[0] = t
 	if _machoire != null:
 		_machoire.rotation.z = -0.45 * clampf(t, 0.0, 1.0)
 	if _levier != null:
@@ -788,6 +817,9 @@ func _garde_corps_bmf(siege: Node3D, W: float, m: String, xe: float) -> void:
 
 ## 0 : relevé (au-dessus des têtes) ; 1 : baissé.
 func garde_corps(t: float) -> void:
+	if t == _etat_anim[1]:
+		return
+	_etat_anim[1] = t
 	if _gc != null:
 		_gc.rotation.x = lerpf(_gc_releve, 0.0, clampf(t, 0.0, 1.0))
 
@@ -831,6 +863,9 @@ func _bulle_siege(siege: Node3D, W: float) -> void:
 
 ## 0 : ouverte (relevée sur le dossier) ; 1 : fermée devant les passagers.
 func bulle(t: float) -> void:
+	if t == _etat_anim[2]:
+		return
+	_etat_anim[2] = t
 	if _bulle != null:
 		_bulle.rotation.x = lerpf(2.1, 0.0, clampf(t, 0.0, 1.0))
 
@@ -1140,6 +1175,7 @@ func _cabine_tph() -> void:
 			[Vector3(-1.535, -2.05, 0.0), -PI * 0.5, 1.0]]:
 		var l: Label3D = Label3D.new()
 		l.text = "CAPITALE DU SKI D'ÉTÉ"
+		l.visibility_range_end = 120.0
 		l.font_size = 80
 		l.pixel_size = 0.0032 * float(f[2])
 		l.modulate = Color(0.75, 0.10, 0.12)
@@ -1408,6 +1444,9 @@ func porte_skis(oui: bool) -> void:
 
 
 func portes(t: float) -> void:
+	if t == _etat_anim[3]:
+		return
+	_etat_anim[3] = t
 	for p in _portes:
 		(p[0] as Node3D).position = (p[1] as Vector3) + (p[2] as Vector3) * clampf(t, 0.0, 1.0)
 
