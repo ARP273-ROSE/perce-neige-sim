@@ -5,6 +5,30 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.22.21 — 23 octobre 2026
+
+**Télécabine : demi-tour fluide, sortie portes ouvertes, numéros.** Retour d'utilisateur du
+23/10/2026 : « mêmes problèmes de première personne et de numéro fantôme sur la pince, pas de
+numéro sur les cabines ; je suis éjecté de la cabine en haut avant même que les portes s'ouvrent ;
+lors du demi-tour en gare, les variations angulaires sont en saccades pour la cabine ».
+- Demi-tour en gare :
+  - le véhicule prenait le cap du segment de la boucle où il se trouvait ; autour de la poulie, la
+    boucle est un polygone de 24 côtés, d'où un cran de 7,5° à chaque sommet, bien visible sur
+    une cabine de 2,46 m ;
+  - le cap suit maintenant la corde de 3 m centrée sur le véhicule, qui est la tangente exacte sur
+    l'arc de la poulie ;
+  - en gare, l'accélération qui fait balancer le véhicule est davantage lissée ;
+  - mesuré sur un demi-tour des Boisses (4 218 images) : à-coup maximal du cap de 0,0002 rad, au
+    lieu d'un cran de 0,13 rad à chaque sommet.
+- Sortie de cabine : on sort seulement une fois les portes ouvertes, 2,3 à 5 m après le freinage.
+  Avant, on était déposé sur le quai dès la fin du freinage, portes encore fermées.
+- Numéros : chaque cabine porte son numéro, le même que sur sa pince, en blanc dans le cadre noir
+  sous le toit, sur les quatre faces (au-dessus des portes côté portes).
+- Première personne en cabine : couverte par la correction de la 1.22.20 (corps masqué, vue aux
+  yeux du passager assis) ; vérifiée par une capture à bord.
+- Vérifié : bancs embarquement, remontee_dynamique et aller_remontee ; relevé du cap et du roulis
+  pendant un demi-tour ; captures à bord et de l'extérieur.
+
 ## 1.22.20 — 23 octobre 2026
 
 **Vue skieur : première personne sur le télésiège.** Retour d'utilisateur (capture iPad) du

@@ -1046,6 +1046,18 @@ func zone_vehicule(i: int) -> String:
 	return zone(_vehicules[i][1])[0]
 
 
+## Cabine i arrivée en gare et portes OUVERTES (elles s'ouvrent sur les
+## 2 m qui suivent le freinage) : [gare aval ?] ou [].
+func arrivee_cabine(i: int) -> Array:
+	var z: Array = zone(_vehicules[i][1])
+	if z[0] == "ligne":
+		return []
+	var x: float = z[1]
+	if x > L_FREIN + 2.3 and x < L_FREIN + 5.0:
+		return [z[0] == "gare_aval"]
+	return []
+
+
 func vehicule(i: int) -> VehiculeRemontee:
 	return _vehicules[i][0]
 
@@ -1507,7 +1519,11 @@ func _placer(i: int) -> void:
 	var v: VehiculeRemontee = _vehicules[i][0]
 	var s: float = _vehicules[i][1]
 	var pt: Array = point(s)
-	var dirh: Vector3 = pt[1]
+	# cap : corde de 3 m centrée sur le véhicule — sur l'arc de la poulie
+	# c'est la tangente exacte, et elle tourne continûment ; la direction du
+	# segment de la boucle (polygone de 24 côtés autour de la poulie) faisait
+	# tourner la cabine par crans de 7,5° (retour d'utilisateur, 23/10/2026)
+	var dirh: Vector3 = (point(s + 1.5)[0] as Vector3) - (point(s - 1.5)[0] as Vector3)
 	dirh.y = 0.0
 	if dirh.length() < 0.001:
 		dirh = Vector3.FORWARD
