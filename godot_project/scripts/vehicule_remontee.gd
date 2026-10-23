@@ -26,6 +26,7 @@ var _levier: Node3D
 var _ressorts: Array = []
 var _ressort_l0: float = 0.32
 var _gc: Node3D
+var _gc_releve: float = 2.40     # angle du garde-corps relevé (rad)
 var _bulle: Node3D
 var _portes: Array = []        # [nœud, position fermée, déplacement à l'ouverture]
 var places: int = 6
@@ -610,7 +611,7 @@ func _garde_corps(siege: Node3D, W: float, m: String) -> void:
 	var pied: Vector3 = Vector3(0, -1.50, -0.62)
 	var xe: float = W * 0.5 - 0.06
 	if famille == "siege_bartholet_6":
-		_garde_corps_bmf(W, m, ventre, xe)
+		_garde_corps_bmf(siege, W, m, xe)
 		return
 	for sx in [-1.0, 1.0]:
 		RemonteeKit.tube(_gc, PackedVector3Array([Vector3(sx * xe, 0, 0), Vector3(sx * xe, -0.20, -0.42),
@@ -628,15 +629,28 @@ func _garde_corps(siege: Node3D, W: float, m: String) -> void:
 			RemonteeKit.barre(_gc, Vector3(cx, ventre.y, ventre.z), Vector3(cx, ventre.y - 0.30, ventre.z + 0.05), 0.016, m, 6)
 
 
-## Garde-corps BMF (photos du Marmottes Express) : barre ventrale tenue par
-## deux bras, trois cadres en V (un pour deux places) qui descendent vers un
-## repose-pieds juste sous l'avant de l'assise, un patin par place.
-func _garde_corps_bmf(W: float, m: String, ventre: Vector3, xe: float) -> void:
-	# repose-pieds : 0,22 m sous l'assise, juste devant son nez (repère du pivot)
-	var pied: Vector3 = Vector3(0, -1.30, -0.80)
+## Garde-corps BMF : son axe est juste au-dessus du dossier, en arrière, et
+## il bascule vers le haut (retour d'utilisateur, 23/10/2026) ; barre ventrale
+## tenue par deux bras qui passent au-dessus des accoudoirs, trois cadres en
+## V (un pour deux places) jusqu'au repose-pieds placé sous le nez de
+## l'assise, un patin par place.
+func _garde_corps_bmf(siege: Node3D, W: float, m: String, xe: float) -> void:
+	# axe : au ras du haut du dossier (siège : y −0,43), derrière lui
+	var axe: Vector3 = Vector3(0, -0.36, 0.33)
+	_gc.position = axe
+	_gc_releve = 1.85
 	for sx in [-1.0, 1.0]:
-		RemonteeKit.tube(_gc, PackedVector3Array([Vector3(sx * xe, 0, 0), Vector3(sx * xe, -0.22, -0.40),
-			Vector3(sx * xe, ventre.y, ventre.z)]), 0.026, m, 8)
+		# chape de l'axe sur la coque du dossier
+		RemonteeKit.boite_en(siege, Vector3(0.06, 0.12, 0.10), axe + Vector3(sx * (xe + 0.02), -0.02, -0.02), m)
+		RemonteeKit.cylindre(siege, 0.035, 0.035, 0.08, Transform3D(Basis(Vector3.FORWARD, PI * 0.5), axe + Vector3(sx * (xe + 0.02), 0, 0)), "acier_noir", 10)
+	# repère de l'axe : barre ventrale à hauteur du ventre devant les passagers,
+	# repose-pieds 0,22 m sous l'assise, juste devant son nez
+	var ventre: Vector3 = Vector3(0, -0.30, -0.86)
+	var pied: Vector3 = Vector3(0, -0.84, -0.98)
+	for sx in [-1.0, 1.0]:
+		RemonteeKit.tube(_gc, PackedVector3Array([Vector3(sx * xe, 0, 0), Vector3(sx * xe, 0.04, -0.30),
+			Vector3(sx * xe, -0.10, -0.62), Vector3(sx * xe, ventre.y, ventre.z)]), 0.026, m, 8)
+	RemonteeKit.barre(_gc, Vector3(-xe, 0, 0), Vector3(xe, 0, 0), 0.03, m, 10)       # tube d'axe
 	RemonteeKit.barre(_gc, Vector3(-xe, ventre.y, ventre.z), Vector3(xe, ventre.y, ventre.z), 0.03, m, 10)
 	var paires: int = places / 2
 	for k in range(paires):
@@ -653,7 +667,7 @@ func _garde_corps_bmf(W: float, m: String, ventre: Vector3, xe: float) -> void:
 ## 0 : relevé (au-dessus des têtes) ; 1 : baissé.
 func garde_corps(t: float) -> void:
 	if _gc != null:
-		_gc.rotation.x = lerpf(2.40, 0.0, clampf(t, 0.0, 1.0))
+		_gc.rotation.x = lerpf(_gc_releve, 0.0, clampf(t, 0.0, 1.0))
 
 
 ## Bulle (Lanches) : coque de polycarbonate en quart de cylindre, pivotant
