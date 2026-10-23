@@ -5,6 +5,31 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.25.0 — 23 octobre 2026
+
+**Remontées : le téléphérique de la Grande Motte (va-et-vient).** Retour d'utilisateur du
+23/10/2026 : « tu peux t'attaquer au TPH de la Grande Motte ».
+- Références : la fiche technique et les 47 photos du reportage de remontees-mecaniques.net
+  (consultées comme référence).
+- Ligne : 1 649 m, de 3 034 à 3 456 m, un pylône en treillis, 8 cavaliers par voie, jusqu'à
+  152 m de survol.
+- Fonctionnement en va-et-vient (nouvelle classe `Telepherique`) :
+  - deux cabines de 115 + 1 places, une par voie, qui se croisent à mi-ligne ;
+  - quai de 45 s portes ouvertes, départ, 10 m/s, freinage anticipé pour passer le pylône à
+    5,2 m/s comme sur la fiche, arrivée en douceur ;
+  - le poste de commande s'y applique (marche, arrêt, arrêt d'urgence, vitesses).
+- Câbles : un porteur lisse par voie, qui fléchit sous la cabine ; le tracteur à torons dessous.
+- Cabine (Swoboda 1993, photos) : grande caisse blanche, toit bleu, bandeau de vitres, poste du
+  conducteur, barres de maintien ; chariot de 8 galets en deux bogies, suspente en coin. On y monte
+  à pied et l'on voyage debout. Le design sera repris en détail dans la version suivante.
+- Gares : quai de béton sur remblai, portique en A au-dessus des baies ; en bas, bâtiment à bardage
+  gris ; en haut, tambours d'ancrage des porteurs et poste de vigie.
+- Bandeau de la vue skieur : « piste bleue » quand la piste n'a pas de nom (il affichait
+  « (bleue) » seul).
+- Vérifié : nouveau banc tph (deux cabines, à bord debout, 10 m/s en ligne et 5,20 m/s au pylône,
+  424 m de montée, sortie portes ouvertes) ; bancs 3s, embarquement, aller_remontee (les quatre
+  lignes), poste_remontee, quai, remontee_dynamique, skieur et boucle_salle.
+
 ## 1.24.0 — 23 octobre 2026
 
 **Remontées : le 3S de l'Olympique (Val d'Isère).** Retour d'utilisateur du 23/10/2026 : « le 3S,
