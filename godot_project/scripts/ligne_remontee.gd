@@ -2025,10 +2025,12 @@ func _poser_pylones_treillis() -> void:
 		py.ecart_porteurs = VehiculeRemontee.E_PORTEURS_3S
 		if vaetvient():
 			py.porteurs_par_voie = 1
+			py.va_et_vient = true
+			py.l_sabot = 6.0
 		# sabots : 7 m, plus longs sur un pylône à grande déviation (le P3
 		# de l'Olympique porte 40 galets par voie)
 		var n_g: int = int((p.get("montee", [[6, "S"]])[0] as Array)[0])
-		py.l_sabot = clampf(n_g * 0.45, 7.0, 22.0)
+		py.l_sabot = 6.0 if vaetvient() else clampf(n_g * 0.45, 7.0, 22.0)
 		py.hauteur = _tetes[i] - t - (py.hauteur_porteurs() - py.hauteur)
 		py.position = Vector3(0, t, -d)
 		var e: float = 6.0

@@ -81,6 +81,15 @@ Depuis la 1.22.13, la gare suit les photos des gares BMF du Marmottes Express
 
 Les portillons s'ouvrent vers l'avant, vers la ligne d'arrêt.
 
+Depuis la 1.26.0 :
+- pylône du téléphérique (`PyloneTreillis.va_et_vient`) : fût carré élancé, évasement en tête jusqu'à
+  la voie, poutre de tête en caissons, un sabot par voie, portique de levage, plate-forme, échelle ;
+- sièges débrayables et fixes des autres constructeurs (`VehiculeRemontee._ossature_moderne`),
+  d'après les photos des lignes du domaine (Palafour, Marais, Laisinant, Almes) : poutre de tête
+  en caisson numérotée, cadres latéraux en boucle arrondie avec accoudoir, assise rembourrée sur
+  bac, lèvre avant en carénage alu (Doppelmayr, Garaventa), dossiers en coques ajourées
+  (Doppelmayr) ou pleins (blancs sur les fixes).
+
 Depuis la 1.25.0 — le téléphérique de la Grande Motte (`Telepherique`, classe fille de
 `LigneRemontee`) :
 - va-et-vient : deux cabines, une par voie, reliées par le tracteur ; quai 45 s portes ouvertes,

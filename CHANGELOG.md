@@ -5,6 +5,29 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.26.0 — 23 octobre 2026
+
+**Remontées : pylône du téléphérique, sièges des autres constructeurs.** Suite du retour
+d'utilisateur du 23/10/2026 (« le design spécifique des autres types de sièges », « la structure
+porteuse du pylône »).
+- Pylône du téléphérique de la Grande Motte, d'après les photos : fût carré élancé (la base ne fait
+  plus que 15 % de la hauteur), évasement en tête jusqu'à la voie, poutre de tête en caissons, un
+  sabot court par voie avec ses galets de tracteur, portique de levage au-dessus des sabots,
+  plate-forme, garde-corps et échelle.
+- Sièges Doppelmayr (E98, D-Line), Poma (OCR, Arceau), Garaventa (SK6), Leitner et à pince fixe,
+  d'après les photos des lignes du domaine (reportages remontees-mecaniques.net : Palafour,
+  Marais, Laisinant, Almes) :
+  - poutre de tête en caisson sur toute la largeur, plaque du numéro des deux côtés ;
+  - cadres latéraux en boucle arrondie : ils descendent derrière le dossier, passent sous
+    l'assise, remontent à l'avant jusqu'à l'accoudoir garni ;
+  - assise rembourrée sur un bac, lèvre avant en carénage aluminium chez Doppelmayr et
+    Garaventa ;
+  - dossiers en coques individuelles ajourées chez Doppelmayr, pleins ailleurs, hauts et blancs
+    sur les sièges fixes, bas sur les Poma OCR.
+- Ces sièges serviront aux autres lignes du domaine (10 lignes en Doppelmayr 6 places).
+- Vérifié : bancs embarquement, remontee_dynamique, tph, 3s et aller_remontee ; studios des sièges
+  et de la ligne du téléphérique.
+
 ## 1.25.1 — 23 octobre 2026
 
 **Remontées : cabine et suspente du téléphérique refaites, suspentes lisses.** Retour d'utilisateur

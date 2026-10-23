@@ -38,13 +38,13 @@ func _initialize() -> void:
 	pm.material = mn
 	neige.mesh = pm
 	racine.add_child(neige)
-	var fams: Array = ["siege_bartholet_6", "siege_bartholet_6", "siege_fixe_4", "siege_doppelmayr_e98_4_bulle"]
+	var fams: Array = ["siege_doppelmayr_e98_6", "siege_poma_ocr6", "siege_garaventa_sk6", "siege_fixe_4"]
 	var y_c: float = 5.5
 	RemonteeKit.barre(racine, Vector3(-6, y_c, 0), Vector3(22, y_c, 0), PyloneRemontee.R_CABLE, "cable", 8)
 	for i in range(fams.size()):
 		var v: VehiculeRemontee = VehiculeRemontee.new()
 		v.famille = fams[i]
-		v.miroir = i == 1
+		v.miroir = false
 		v.position = Vector3(i * 5.0, y_c, 0)
 		v.rotation.y = PI * 0.5
 		if v.miroir:
@@ -74,6 +74,10 @@ func _initialize() -> void:
 		["bmf_profil_releve", Vector3(0.0, 3.0, -6.0), Vector3(0.0, 3.0, 0)],
 		["bmf_profil_baisse", Vector3(5.0, 3.0, -6.0), Vector3(5.0, 3.0, 0)],
 		["fixe_pince", Vector3(9.0, 5.9, 1.2), Vector3(10.0, 5.6, 0.2)],
+		["m0", Vector3(-2.6, 3.4, 3.6), Vector3(0, 2.9, 0)],
+		["m1", Vector3(2.4, 3.4, 3.6), Vector3(5, 2.9, 0)],
+		["m2", Vector3(7.4, 3.4, 3.6), Vector3(10, 2.9, 0)],
+		["m3", Vector3(12.4, 3.4, 3.6), Vector3(15, 2.9, 0)],
 		["rangee", Vector3(-5.0, 3.5, 9.0), Vector3(7.5, 2.4, 0)],
 	]
 	process_frame.connect(_tick)
