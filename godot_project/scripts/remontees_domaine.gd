@@ -86,6 +86,8 @@ func _jumeler() -> void:
 func _poser(D: Dictionary) -> void:
 	var a: Vector2 = monde(float(D["aval"][0]), float(D["aval"][1]))
 	var b: Vector2 = monde(float(D["amont"][0]), float(D["amont"][1]))
+	var a0: Vector2 = a                       # gares des données (avant tout report)
+	var b0: Vector2 = b
 	# téléphérique de la Grande Motte : il part de sa gare existante, à côté
 	# de la gare du funiculaire (le point OSM est 24 m plus au sud ; une
 	# seconde gare y était construite — retour d'utilisateur, 24/10/2026)
@@ -181,12 +183,23 @@ func _poser(D: Dictionary) -> void:
 	lg.sol_local = func(x: float, z: float) -> float:
 		var w: Vector3 = xf0 * Vector3(x, 0.0, z)
 		return relief.hauteur_sol(w.x, w.z) - h0
-	# distances des pylônes ramenées à la longueur gare-à-gare du monde
+	# pylônes : à leur place au sol (distance des données ramenée à la longueur
+	# gare-à-gare des données), puis projetés sur la ligne posée. Avant, la
+	# distance était mise à l'échelle de la ligne posée : quand une gare était
+	# reportée (Fresse avancé de 24 m à l'intermédiaire, Bollin raccourci, le
+	# téléphérique sur sa gare existante), chaque pylône glissait jusqu'à 24 m
+	# de sa place, sur un terrain d'une autre altitude (retour d'utilisateur,
+	# 25/10/2026 : « t'es sûr que le 13e pylône de Fresse, l'altitude est la bonne ? »)
 	var Ld: float = float(D["profil"][D["profil"].size() - 1][0])
+	var L0: float = (b0 - a0).length()
+	var u0: Vector2 = (b0 - a0) / maxf(L0, 1.0)
 	var py: Array = []
 	for p in D["pylones"]:
 		var q: Dictionary = (p as Dictionary).duplicate()
-		q["d"] = float(p["d"]) * L / maxf(Ld, 1.0)
+		var w: Vector2 = a0 + u0 * (float(p["d"]) * L0 / maxf(Ld, 1.0))
+		q["d"] = (w - a).dot(dirh)
+		if float(q["d"]) < 5.0 or float(q["d"]) > L - 5.0:
+			continue                    # tombé dans une gare reportée
 		py.append(q)
 	lg.pylones = py
 	lg.voie = float(D["voie"])
