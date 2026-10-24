@@ -1,0 +1,117 @@
+{
+ "cle": "tke_grande_parei",
+ "nom": "TKE de la Grande Paréi",
+ "type": "téléski à enrouleurs (perches)",
+ "constructeur": "GMM",
+ "annee": 2019,
+ "station": "Tignes",
+ "quartier": "Les Brévières",
+ "vitesse": 2.0,
+ "places": 1,
+ "debit": 800.0,
+ "espacement": 8.5,
+ "voie": 2.5,
+ "sens_droite": false,
+ "diametre_cable": 16.0,
+ "famille": "perche_enrouleur",
+ "aval": [
+  45.506407,
+  6.9204284
+ ],
+ "amont": [
+  45.5053404,
+  6.9200146
+ ],
+ "altitude_aval": 1560.0,
+ "profil": [
+  [
+   0.0,
+   0.0
+  ],
+  [
+   10.8,
+   0.7
+  ],
+  [
+   21.6,
+   1.2
+  ],
+  [
+   32.4,
+   1.7
+  ],
+  [
+   42.7,
+   2.0
+  ],
+  [
+   53.1,
+   2.3
+  ],
+  [
+   63.5,
+   2.8
+  ],
+  [
+   73.9,
+   3.2
+  ],
+  [
+   84.3,
+   4.4
+  ],
+  [
+   94.7,
+   5.8
+  ],
+  [
+   108.5,
+   5.7
+  ],
+  [
+   122.3,
+   13.7
+  ]
+ ],
+ "pylones": [
+  {
+   "d": 32.5,
+   "montee": [
+    [
+     2,
+     "S"
+    ]
+   ],
+   "descente": [
+    [
+     2,
+     "S"
+    ]
+   ]
+  },
+  {
+   "d": 95.2,
+   "montee": [
+    [
+     2,
+     "S"
+    ],
+    [
+     2,
+     "C"
+    ]
+   ],
+   "descente": [
+    [
+     2,
+     "S"
+    ],
+    [
+     2,
+     "C"
+    ]
+   ]
+  }
+ ],
+ "balanciers": "remontees-mecaniques.net"
+}

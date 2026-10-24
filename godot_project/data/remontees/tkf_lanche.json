@@ -1,0 +1,149 @@
+{
+ "cle": "tkf_lanche",
+ "nom": "TKF Lanche I-II",
+ "type": "téléski fixe (×2)",
+ "constructeur": "MONTAVAL (constructeur appartenant Val d'Isère)",
+ "annee": 1986,
+ "station": "Val d'Isère",
+ "quartier": "La Daille",
+ "vitesse": 2.0,
+ "places": 1,
+ "debit": 600.0,
+ "espacement": 12.0,
+ "voie": 2.6,
+ "sens_droite": true,
+ "diametre_cable": 47.0,
+ "famille": "perche_enrouleur",
+ "aval": [
+  45.4590246,
+  6.9648457
+ ],
+ "amont": [
+  45.4575272,
+  6.9631626
+ ],
+ "altitude_aval": 1797.9,
+ "profil": [
+  [
+   0.0,
+   0.0
+  ],
+  [
+   10.1,
+   -0.1
+  ],
+  [
+   20.1,
+   1.2
+  ],
+  [
+   30.2,
+   2.5
+  ],
+  [
+   40.3,
+   4.6
+  ],
+  [
+   50.3,
+   6.1
+  ],
+  [
+   60.4,
+   7.6
+  ],
+  [
+   70.5,
+   9.8
+  ],
+  [
+   80.5,
+   11.5
+  ],
+  [
+   90.6,
+   13.0
+  ],
+  [
+   100.7,
+   15.4
+  ],
+  [
+   110.7,
+   17.4
+  ],
+  [
+   120.8,
+   19.5
+  ],
+  [
+   130.9,
+   22.1
+  ],
+  [
+   140.9,
+   24.3
+  ],
+  [
+   151.0,
+   25.9
+  ],
+  [
+   161.1,
+   28.4
+  ],
+  [
+   171.1,
+   31.8
+  ],
+  [
+   181.2,
+   33.6
+  ],
+  [
+   191.3,
+   37.2
+  ],
+  [
+   201.3,
+   41.0
+  ],
+  [
+   211.4,
+   42.3
+  ]
+ ],
+ "pylones": [
+  {
+   "d": 70.5,
+   "montee": [
+    [
+     4,
+     "S"
+    ]
+   ],
+   "descente": [
+    [
+     4,
+     "S"
+    ]
+   ]
+  },
+  {
+   "d": 140.9,
+   "montee": [
+    [
+     4,
+     "S"
+    ]
+   ],
+   "descente": [
+    [
+     4,
+     "S"
+    ]
+   ]
+  }
+ ],
+ "balanciers": "remontees-mecaniques.net"
+}

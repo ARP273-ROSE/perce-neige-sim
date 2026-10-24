@@ -1077,6 +1077,16 @@ func _glisser(delta: float, cmd: Vector2, schuss: bool) -> void:
 func _sol_ski(x: float, z: float, y_ref: float) -> Array:
 	var h: float = relief.hauteur_sol(x, z)
 	var n: Vector3 = relief.normale_sol(x, z)
+	# le relief passe au-dessus des skis (tunnel de piste) : s'il y a un sol
+	# du décor juste dessous, c'est lui — on ne grimpe pas sur la montagne
+	# (le relief monte de quelques dizaines de cm par image à la tête du
+	# tunnel : un seuil sur l'écart ne suffisait pas)
+	if h > y_ref + 0.05:
+		var rq0: PhysicsRayQueryParameters3D = PhysicsRayQueryParameters3D.create(
+			Vector3(x, y_ref + 0.6, z), Vector3(x, y_ref - 1.5, z), CollisionsJeu.COUCHE_DECOR, [get_rid()])
+		var hit0: Dictionary = get_world_3d().direct_space_state.intersect_ray(rq0)
+		if not hit0.is_empty() and (hit0["normal"] as Vector3).y > 0.6 and h > (hit0["position"] as Vector3).y + 0.3:
+			return [(hit0["position"] as Vector3).y, (hit0["normal"] as Vector3).normalized()]
 	var haut: float = maxf(y_ref, h) + 0.6
 	if haut > h + 0.05:
 		var rq: PhysicsRayQueryParameters3D = PhysicsRayQueryParameters3D.create(
@@ -1126,7 +1136,8 @@ func _camera_ski(delta: float) -> void:
 	# jamais sous la pente derrière lui (le relief n'a de collisions
 	# qu'autour des gares) : on relève doucement, on redescend plus doucement
 	# encore, avec une marge (sinon ça pompe)
-	if not premiere_personne:
+	var sous_terre: bool = relief.hauteur_sol(global_position.x, global_position.z) > global_position.y + 1.0
+	if not premiere_personne and not sous_terre:
 		var cp: Vector3 = camera.global_position
 		var marge: float = cp.y - (relief.hauteur_sol(cp.x, cp.z) + 0.7)
 		if marge < 0.0:

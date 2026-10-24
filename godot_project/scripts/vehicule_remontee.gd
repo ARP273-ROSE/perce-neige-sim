@@ -360,6 +360,8 @@ static func hauteur_cable_gare(fam: String) -> float:
 		return H_SUSP_3S + 0.08 + 2.55 - 0.20
 	if fam.begins_with("cabine"):
 		return 1.15 + 0.10 + 2.25 - 0.07 + 0.02
+	if fam.begins_with("perche"):
+		return 4.2          # rondelle à ~2,4 m du sol, perche rentrée
 	var pl: int = DESCRIPTIONS.get(fam, ["", 6, ""])[1]
 	var hs: float = 2.35 if pl >= 6 else 2.05
 	return hs + 0.12 + 0.98 - 0.045 + 0.48
@@ -1488,8 +1490,17 @@ func _perche() -> void:
 	add_child(_perche_tige)
 	RemonteeKit.barre(_perche_tige, Vector3(0, 0, 0), Vector3(0, -1.10, 0), 0.02, "jaune_securite", 8)
 	if famille == "perche_tbar":
-		RemonteeKit.barre(_perche_tige, Vector3(-0.50, -1.10, 0), Vector3(0.50, -1.10, 0), 0.03, "jaune_securite", 8)
-		RemonteeKit.cylindre(_perche_tige, 0.035, 0.035, 1.0, Transform3D(Basis(Vector3.FORWARD, PI * 0.5), Vector3(0, -1.10, 0)), "caoutchouc", 10)
+		# archet biplace (Montet) : barre cintrée en arc, les deux bouts plus
+		# bas que le milieu, garnis de caoutchouc là où l'on s'appuie
+		var arc: PackedVector3Array = PackedVector3Array()
+		for k in range(13):
+			var u: float = lerpf(-1.0, 1.0, float(k) / 12.0)
+			arc.append(Vector3(u * 0.52, -1.08 - 0.10 * u * u, 0))
+		RemonteeKit.tube(_perche_tige, arc, 0.028, "jaune_securite", 8)
+		for sx in [-1.0, 1.0]:
+			var a: Vector3 = Vector3(sx * 0.20, -1.08 - 0.10 * 0.15, 0)
+			var b: Vector3 = Vector3(sx * 0.50, -1.08 - 0.10 * 0.92, 0)
+			RemonteeKit.barre(_perche_tige, a, b, 0.04, "caoutchouc", 10)
 	else:
 		RemonteeKit.cylindre(_perche_tige, 0.12, 0.12, 0.05, Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3(0, -1.12, 0)), "assise_noire", 18)
 	deroule(0.0)
@@ -1497,10 +1508,22 @@ func _perche() -> void:
 
 ## Enrouleur : 0 = corde rentrée (perche contre le boîtier), 1 = déroulée
 ## (skieur tracté, perche ~4 m sous le câble).
+## Perche tirée jusqu'à `d` m sous la pince (rondelle ou barre au niveau
+## des hanches du skieur tracté) ; d = 0 : perche au repos.
+func longueur_perche(d: float) -> void:
+	if _perche_tige == null:
+		return
+	if famille == "perche_debrayable":
+		var k: float = clampf(d / 3.45, 0.35, 1.6) if d > 0.0 else 1.0
+		_perche_tige.scale = Vector3(1, k, 1)
+		return
+	deroule(0.0 if d <= 0.0 else (d - 0.45 - 1.12 - 0.25) / (3.6 - 0.25))
+
+
 func deroule(t: float) -> void:
 	if _corde == null:
 		return
-	var l: float = lerpf(0.25, 3.6, clampf(t, 0.0, 1.0))
+	var l: float = lerpf(0.25, 3.6, clampf(t, 0.0, 1.6))
 	_corde.scale = Vector3(1, l, 1)
 	_perche_tige.position = Vector3(0, -0.45 - l, 0)
 
