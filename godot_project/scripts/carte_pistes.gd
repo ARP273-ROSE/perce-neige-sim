@@ -98,22 +98,39 @@ func _remontees() -> Array:
 
 
 ## La remontée sous le point `pos` de la carte (à 18 px près), ou null.
+## Plusieurs remontées sous le doigt (gares voisines, téléskis jumeaux, carte
+## dézoomée) : un nouveau toucher au même endroit passe à la suivante —
+## sinon le petit téléski au pied d'une grande ligne était inaccessible.
+var _dernier_toucher: Vector2 = Vector2(-999, -999)
+var _rang_toucher: int = 0
+
+
 func remontee_sous(pos: Vector2) -> LigneRemontee:
 	if skieur == null:
 		return null
 	var c: Vector2 = Vector2(skieur.global_position.x, skieur.global_position.z)
 	var o: Vector2 = TAILLE * 0.5
-	var best: LigneRemontee = null
-	var d_min: float = 18.0
+	var cands: Array = []
 	for r in _remontees():
 		var a: Vector2 = _carte(r[1], c, o)
 		var b: Vector2 = _carte(r[2], c, o)
 		var d: float = Geometry2D.get_closest_point_to_segment(pos, a, b).distance_to(pos)
 		d = minf(d, a.distance_to(pos) - 6.0)
-		if d < d_min:
-			d_min = d
-			best = r[0]
-	return best
+		if d < 18.0:
+			cands.append([d, r[0]])
+	if cands.is_empty():
+		_dernier_toucher = Vector2(-999, -999)
+		return null
+	cands.sort_custom(func(x: Array, y: Array) -> bool: return float(x[0]) < float(y[0]))
+	# même endroit : la suivante parmi celles qui sont sous le doigt (à 12 px
+	# près de la meilleure)
+	var proches: Array = cands.filter(func(x: Array) -> bool: return float(x[0]) < float(cands[0][0]) + 12.0)
+	if pos.distance_to(_dernier_toucher) < 12.0 and proches.size() > 1:
+		_rang_toucher = (_rang_toucher + 1) % proches.size()
+	else:
+		_rang_toucher = 0
+	_dernier_toucher = pos
+	return proches[_rang_toucher][1]
 
 
 func _carte(q: Vector2, c: Vector2, o: Vector2) -> Vector2:

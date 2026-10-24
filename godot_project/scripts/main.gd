@@ -19,6 +19,7 @@ var station_halls: StationHalls = null
 var relief: ReliefBuilder = null
 var machine_room: MachineRoomBuilder = null
 var sortie_secours: SortieSecours = null
+var tunnel_piste: TunnelPiste = null
 var lights: TunnelLights = null
 var cabin: Cabin = null
 var cabin_ghost: Cabin = null
@@ -635,6 +636,7 @@ func _build_relief() -> void:
 	relief.name = "Relief"
 	add_child(relief)
 	relief.amenageurs.append(_amenagement_sortie_secours)
+	relief.amenageurs.append(_amenagement_tunnel_piste)
 	relief.build(tunnel, perf_manager.cran if perf_manager != null else 0)
 	print("[Relief] massif 3D IGN (RGE ALTI + orthophoto) du lac de Tignes à la Grande Motte : lancé en %d ms"
 		% (Time.get_ticks_msec() - t0))
@@ -653,6 +655,16 @@ func _amenagement_sortie_secours() -> Dictionary:
 	Cabin.tag_layer.call_deferred(sortie_secours, Cabin.LAYER_VOIE)
 	print("[SortieSecours] galerie de %d points, portail à %.1f m" % [sortie_secours.sol.size(), sortie_secours.portail.y])
 	return sortie_secours.amenagement_relief(relief)
+
+
+## Tunnel de la piste noire du Tunnel (Pissaillas) : percé dans le relief.
+func _amenagement_tunnel_piste() -> Dictionary:
+	if tunnel_piste != null or relief == null:
+		return {}
+	tunnel_piste = TunnelPiste.new()
+	tunnel_piste.name = "TunnelPiste"
+	add_child(tunnel_piste)
+	return tunnel_piste.amenagement_relief(relief)
 
 
 func _build_stations() -> void:
@@ -1780,9 +1792,16 @@ func aller_a_remontee(lg: LigneRemontee) -> void:
 		skieur_auto.arreter()
 		skieur_auto = null
 		commandes_skieur.set_auto(false)
+	# tiré par une perche ou assis : on descend d'abord (sinon la perche le
+	# gardait — banc du 24/10/2026)
+	if remontees != null:
+		remontees.quitter()
 	var xf: Transform3D = lg.global_transform
 	var cote: float = signf(lg._x_brin(true))
-	var p: Vector3 = xf * Vector3(cote * (lg.voie * 0.5 + 3.5), 0.0, 6.0)
+	# (téléski : plus à l'écart de la trace, sinon la perche suivante
+	# l'emmène aussitôt déposé)
+	var ecart: float = 7.0 if lg.teleski() else 3.5
+	var p: Vector3 = xf * Vector3(cote * (lg.voie * 0.5 + ecart), 0.0, 6.0)
 	p.y = relief.hauteur_sol(p.x, p.z) + 0.1
 	var amont: Vector3 = -xf.basis.z
 	# collisions du relief autour du point d'arrivée (elles se construisent à

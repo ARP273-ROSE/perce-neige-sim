@@ -38,7 +38,29 @@ var debit: float = 0.0                # personnes / heure
 
 var H_CABLE_GARE: float = 3.9        # câble au-dessus du quai (selon le véhicule)
 const GARDE: float = 6.5              # câble ≥ terrain + GARDE en ligne
-const L_GARE: float = 24.0            # du nez de gare à l'axe de la poulie
+const L_GARE: float = 24.0            # du nez de gare à l'axe de la poulie (débrayable)
+## Télésiège à pinces FIXES : pas de lanceurs ni de pneus, les sièges font
+## le tour de la poulie à la vitesse de la ligne ; la gare se réduit au nez
+## et à la poulie (retour d'utilisateur, 24/10/2026 : « TSF ça veut dire
+## télésiège fixe, pas débrayable, pas de lanceur »).
+const L_GARE_FIXE: float = 8.0
+const L_GARE_TELESKI: float = 5.0
+var l_gare: float = L_GARE
+
+
+static func l_gare_pour(fam: String) -> float:
+	if fam.begins_with("perche"):
+		return L_GARE_TELESKI
+	return L_GARE_FIXE if fam.begins_with("siege_fixe") else L_GARE
+
+
+## Pinces fixes : télésièges fixes et téléskis (perches toujours sur le câble).
+func fixe() -> bool:
+	return famille.begins_with("siege_fixe") or teleski()
+
+
+func teleski() -> bool:
+	return famille.begins_with("perche")
 const L_FREIN: float = 18.0           # longueur du lanceur (freinage / accélération)
 ## Chaînette : y = a·cosh((x − x0)/a) + c entre deux appuis, a = H / w
 ## (tension horizontale / poids linéique). Câble Ø 47 mm ≈ 8,6 kg/m ;
@@ -111,6 +133,9 @@ func construire() -> void:
 	# lente : au moins deux dans le demi-tour, d'autres dans les lanceurs
 	# (retour d'utilisateur, 22/10/2026)
 	v_embarquement = 0.25 if famille.begins_with("cabine") else 1.0
+	l_gare = l_gare_pour(famille)
+	if fixe():
+		v_embarquement = vitesse
 	_calculer_tetes()
 	_preparer_nez()
 	_gare(true)
@@ -357,12 +382,12 @@ func _construire_boucle() -> void:
 	# 1. gare aval : du nez de gare (brin descente) autour de la poulie au nez (brin montée)
 	var s0: float = 0.0
 	_ajouter(Vector3(xd, ya, 0.0))
-	_ajouter(Vector3(xd, ya, L_GARE))
+	_ajouter(Vector3(xd, ya, l_gare))
 	for k in range(1, 24):
 		var a: float = PI * float(k) / 24.0
 		# demi-tour par l'arrière de la gare (+Z), de xd vers xm
-		_ajouter(Vector3(-cos(a) * R * signf(xm), ya, L_GARE + sin(a) * R))
-	_ajouter(Vector3(xm, ya, L_GARE))
+		_ajouter(Vector3(-cos(a) * R * signf(xm), ya, l_gare + sin(a) * R))
+	_ajouter(Vector3(xm, ya, l_gare))
 	_ajouter(Vector3(xm, ya, 0.0))
 	_zones.append([s0, _longueur(), "gare_aval"])
 	# 2. brin montée
@@ -373,11 +398,11 @@ func _construire_boucle() -> void:
 	_ajouter(Vector3(xm, yb, -L))
 	# 3. gare amont
 	var s1: float = _longueur()
-	_ajouter(Vector3(xm, yb, -L - L_GARE))
+	_ajouter(Vector3(xm, yb, -L - l_gare))
 	for k in range(1, 24):
 		var a2: float = PI * float(k) / 24.0
-		_ajouter(Vector3(cos(a2) * R * signf(xm), yb, -L - L_GARE - sin(a2) * R))
-	_ajouter(Vector3(xd, yb, -L - L_GARE))
+		_ajouter(Vector3(cos(a2) * R * signf(xm), yb, -L - l_gare - sin(a2) * R))
+	_ajouter(Vector3(xd, yb, -L - l_gare))
 	_ajouter(Vector3(xd, yb, -L))
 	_zones.append([s1, _longueur(), "gare_amont"])
 	# 4. brin descente, jusqu'au nez de la gare aval (le point de départ)
@@ -432,11 +457,20 @@ const Z_DEVIATION: float = 2.5
 
 
 func rayon_poulie() -> float:
+	if fixe():
+		return voie * 0.5           # le câble porte les sièges : poulie = voie
 	return voie * 0.5 - RETRAIT_POULIE
 
 
 func x_arret(l: float) -> float:
+	if fixe():
+		return l_gare + PI * voie * 0.5 + 1.0   # juste après le demi-tour
 	return l - L_FREIN - 2.0          # ligne d'arrêt, encore à vitesse d'embarquement
+
+
+## Abscisse (dans la zone de gare) où l'on se lève du siège.
+func x_debarquement() -> float:
+	return l_gare - 3.0 if fixe() else L_FREIN + 1.0
 
 
 func x_portillons(l: float) -> float:
@@ -490,7 +524,7 @@ func zone(s: float) -> Array:
 ## accélération avant la sortie.
 func vitesse_en(s: float) -> float:
 	var z: Array = zone(s)
-	if z[0] == "ligne":
+	if z[0] == "ligne" or fixe():
 		return vitesse
 	# sur toute la longueur du lanceur, la vitesse suit une courbe « smootherstep »
 	# (6t⁵ − 15t⁴ + 10t³) : dérivée nulle aux deux bouts, donc accélération
@@ -512,7 +546,7 @@ func _gare(aval: bool) -> void:
 	g.name = "GareAval" if aval else "GareAmont"
 	var L: float = longueur_h()
 	var y0: float = terrain(0.0 if aval else L)
-	var zc: float = L_GARE if aval else -L - L_GARE     # axe de la poulie
+	var zc: float = l_gare if aval else -L - l_gare     # axe de la poulie
 	var znez: float = 0.0 if aval else -L
 	g.position = Vector3(0, y0, 0)
 	add_child(g)
@@ -535,8 +569,12 @@ func _gare(aval: bool) -> void:
 		_cabine_conducteur(g, znez, dz, aval)
 	else:
 		# carénage du constructeur (Doppelmayr, Poma, Garaventa, fixes…)
-		GareCarenage.new(self).construire(g, znez, zc, style_gare())
-		_cabine_conducteur(g, znez, dz, aval)
+		var gc: GareCarenage = GareCarenage.new(self)
+		gc.construire(g, znez, zc, style_gare())
+		if famille.begins_with("cabine"):
+			gc.batiment(g, aval)          # le bâtiment de la gare remplace la cabine du conducteur
+		else:
+			_cabine_conducteur(g, znez, dz, aval)
 	# poulie de demi-tour (motrice en amont, retour-tension en aval)
 	var R: float = voie * 0.5
 	# la roue tourne (nœud à part) ; arbre et bâti restent dans la gare
@@ -556,7 +594,7 @@ func _gare(aval: bool) -> void:
 	_poulies.append([roue, signf(_x_brin(true)) * vitesse / rayon_poulie()])
 	# galets de déviation (axe vertical) : ils rentrent le câble de la voie
 	# de ligne au diamètre de la poulie, juste après le nez de la gare
-	for sx in [-1.0, 1.0]:
+	for sx in ([] if fixe() else [-1.0, 1.0]):
 		for k in range(3):
 			var zd: float = znez + signf(dz) * (Z_DEVIATION + 0.7 * k)
 			# sous le câble, côté intérieur : là où il s'enroule (convexe)
@@ -567,7 +605,8 @@ func _gare(aval: bool) -> void:
 			RemonteeKit.boite_en(g, Vector3(0.10, 1.4, 0.10), Vector3(xd, H_CABLE_GARE + 0.86, zd), "galva_pylone")
 	# ligne d'embarquement (bande jaune) côté montée en aval, côté descente en amont
 	var xb: float = _x_brin(aval)
-	RemonteeKit.boite_en(g, Vector3(voie * 0.5 + 0.8, 0.02, 0.12), Vector3(xb * 0.6, 0.01, znez + signf(dz) * (L_FREIN + 2.5)), "jaune_securite")
+	var l_th: float = 2.0 * l_gare + PI * voie * 0.5
+	RemonteeKit.boite_en(g, Vector3(voie * 0.5 + 0.8, 0.02, 0.12), Vector3(xb * 0.6, 0.01, znez + signf(dz) * (l_th - x_arret(l_th) + 0.5)), "jaune_securite")
 	MeshMerge.merge(g, [g.get_node("Poulie")], "Gare")
 
 
@@ -582,8 +621,8 @@ var rampes: Array = [0.0, 0.0]
 
 ## Distance du nez de la gare au bout du quai, côté portillons.
 func bout_quai() -> float:
-	var long_g: float = L_GARE + voie * 0.5 + 8.5
-	return (L_GARE * 0.5 + 4.0) + long_g * 0.5
+	var long_g: float = l_gare + voie * 0.5 + 8.5
+	return (l_gare * 0.5 + 4.0) + long_g * 0.5
 
 
 ## Bords du quai : [demi-largeur à gauche (x−), à droite (x+), pente du
@@ -628,7 +667,7 @@ func _terrassement(aval: bool) -> PackedVector3Array:
 		return _terrassements[aval]
 	var L: float = longueur_h()
 	var y0: float = terrain(0.0 if aval else L)
-	var zc: float = L_GARE if aval else -L - L_GARE
+	var zc: float = l_gare if aval else -L - l_gare
 	var znez: float = 0.0 if aval else -L
 	var dz: float = zc - znez
 	var zm: float = (zc + znez) * 0.5 + signf(dz) * 4.0
@@ -921,7 +960,7 @@ func _emprise_3s(aval: bool) -> Array:
 	var L: float = longueur_h()
 	var znez: float = 0.0 if aval else -L
 	var sg: float = 1.0 if aval else -1.0
-	var zc: float = znez + sg * L_GARE
+	var zc: float = znez + sg * l_gare
 	var z_av: float = znez - sg * 1.0
 	var z_ar: float = zc + sg * (voie * 0.5 + 3.0)
 	var hx: float = voie * 0.5 + 3.4
@@ -1034,7 +1073,7 @@ func _pos_cabine_conducteur(aval: bool) -> Vector3:
 	var znez: float = 0.0 if aval else -L
 	var sg: float = 1.0 if aval else -1.0
 	var xb: float = signf(_x_brin(aval))
-	return Vector3(xb * (voie * 0.5 + D_CAPOT + 1.8), terrain(0.0 if aval else L), znez + sg * (L_FREIN + 3.0))
+	return Vector3(xb * (voie * 0.5 + D_CAPOT + 1.8), terrain(0.0 if aval else L), znez + sg * (minf(L_FREIN, l_gare * 0.4) + 3.0))
 
 
 ## Collisions fixes : pylônes (massif, fût, traverse) et gares (dalle,
@@ -1075,7 +1114,7 @@ func _collisions_fixes() -> void:
 	var L: float = longueur_h()
 	for aval in [true, false]:
 		var y0: float = terrain(0.0 if aval else L)
-		var zc: float = L_GARE if aval else -L - L_GARE
+		var zc: float = l_gare if aval else -L - l_gare
 		var znez: float = 0.0 if aval else -L
 		var dz: float = zc - znez
 		var zm: float = (zc + znez) * 0.5 + signf(dz) * 4.0
@@ -1092,11 +1131,19 @@ func _collisions_fixes() -> void:
 			# (murs bas et verrières sans collision : on sort de la gare à pied
 			# par les côtés, comme par les passerelles réelles)
 			continue
-		# colonnes du carénage et cabine du conducteur
-		boite.call(Vector3(1.0, H_CABLE_GARE, 1.0), Vector3(0, y0 + H_CABLE_GARE * 0.5, zc))
-		boite.call(Vector3(1.0, H_CABLE_GARE + Y_CAPOT, 1.0), Vector3(0, y0 + (H_CABLE_GARE + Y_CAPOT) * 0.5, GareCarenage.z_colonne(znez, zc)))
-		boite.call(Vector3(3.0, 2.5, 3.6), _pos_cabine_conducteur(aval) + Vector3(0, 1.25, 0))
-		boite.call(Vector3(2.2, 1.0, 2.6), Vector3(0, y0 + H_CABLE_GARE + 1.9, zc))
+		# colonnes du carénage et cabine du conducteur (téléski : portique
+		# hors de la trace, pas de colonne)
+		if not teleski():
+			boite.call(Vector3(1.0, H_CABLE_GARE, 1.0), Vector3(0, y0 + H_CABLE_GARE * 0.5, zc))
+			boite.call(Vector3(1.0, H_CABLE_GARE + Y_CAPOT, 1.0), Vector3(0, y0 + (H_CABLE_GARE + Y_CAPOT) * 0.5, GareCarenage.z_colonne(znez, zc)))
+		if famille.begins_with("cabine") and style_gare() != "bmf":
+			var e: Array = GareCarenage.emprise_batiment(self, aval)
+			var t: Vector3 = e[1]
+			boite.call(Vector3(t.x, t.y + 4.0, t.z), (e[0] as Vector3) + Vector3(0, y0 + (t.y - 4.0) * 0.5, 0))
+		else:
+			boite.call(Vector3(3.0, 2.5, 3.6), _pos_cabine_conducteur(aval) + Vector3(0, 1.25, 0))
+		if not teleski():
+			boite.call(Vector3(2.2, 1.0, 2.6), Vector3(0, y0 + H_CABLE_GARE + 1.9, zc))
 
 
 ## Corps de collision d'un véhicule : À PART du véhicule (qui peut être en
@@ -1147,7 +1194,7 @@ var _portillons_gares: Array = []      # [aval, [vantaux], [formes de collision]
 ## y attend hors du passage des sièges, puis on traverse jusqu'à l'arrêt.
 func position_portillons(aval: bool) -> Vector3:
 	var L: float = longueur_h()
-	var zc: float = L_GARE if aval else -L - L_GARE
+	var zc: float = l_gare if aval else -L - l_gare
 	var places: int = VehiculeRemontee.DESCRIPTIONS.get(famille, ["", 6, ""])[1]
 	var W: float = 0.50 * places + 0.20
 	var recul: float = voie * 0.5 + W * 0.5 + 2.0
@@ -1239,7 +1286,7 @@ func _maj_portillons(delta: float) -> void:
 		var l: float = longueur_zone(aval)
 		# ouverts quand un siège termine son demi-tour (il est alors passé
 		# devant eux) : on traverse derrière lui jusqu'à la ligne d'arrêt
-		var xa: float = L_GARE + PI * voie * 0.5
+		var xa: float = l_gare + PI * voie * 0.5
 		pg[3] = float(pg[3]) + delta
 		for e in _vehicules:
 			var z: Array = zone(e[1])
@@ -1291,7 +1338,8 @@ func arrivee(i: int) -> Array:
 	if z[0] == "ligne":
 		return []
 	var x: float = z[1]
-	if x > L_FREIN and x < L_FREIN + 2.0:
+	var xd: float = x_debarquement()
+	if x > xd - 1.0 and x < xd + 1.0:
 		return [z[0] == "gare_aval"]
 	return []
 
@@ -1328,7 +1376,7 @@ func point_embarquement(aval: bool) -> Vector3:
 func point_debarquement(aval: bool) -> Vector3:
 	var L: float = longueur_h()
 	var x: float = _x_brin(not aval)
-	var z: float = (L_FREIN + 1.0) if aval else (-L - L_FREIN - 1.0)
+	var z: float = x_debarquement() if aval else (-L - x_debarquement())
 	return Vector3(x + signf(x) * 1.6, terrain(0.0 if aval else L) + 0.05, z)
 
 
@@ -1444,7 +1492,7 @@ const R_PNEU: float = 0.21
 func _dehors(s: float) -> Vector3:
 	var p: Vector3 = _point_cable(s)[0]
 	var L: float = longueur_h()
-	for z in [[L_GARE, true], [-L - L_GARE, false]]:
+	for z in [[l_gare, true], [-L - l_gare, false]]:
 		var zc: float = z[0]
 		var dans_tour: bool = (p.z > zc) if z[1] else (p.z < zc)
 		if dans_tour and absf(p.z - zc) < voie:
@@ -1466,6 +1514,8 @@ const L_OUVERTURE: float = 2.5
 
 
 func ouverture_pince(x: float, l: float) -> float:
+	if fixe():
+		return 0.0
 	return smoothstep(0.0, L_OUVERTURE, minf(x, l - x))
 
 
@@ -1523,7 +1573,7 @@ func _y_plaque() -> float:
 
 func _lanceurs() -> void:
 	_pneus.clear()
-	if famille.begins_with("perche"):
+	if famille.begins_with("perche") or fixe():
 		return
 	var y_rail: float = 0.11 - 0.065 - 0.035
 	var x_rail: float = 0.25
@@ -1718,6 +1768,8 @@ func _x_rentre(dz: float) -> float:
 	# tangent à la poulie (convexe aussi) — la tangente commune aux deux
 	# cercles (retour d'utilisateur, 23/10/2026 : la courbe en S faisait le câble
 	# concave contre des galets du mauvais côté)
+	if fixe():
+		return voie * 0.5
 	var t: Array = _tangente_deviation()
 	var R: float = voie * 0.5
 	var cA: Vector2 = t[0]
@@ -1730,7 +1782,7 @@ func _x_rentre(dz: float) -> float:
 	if dz <= TB.x:
 		return lerpf(TA.y, TB.y, (dz - TA.x) / maxf(TB.x - TA.x, 1e-4))
 	var Rp: float = rayon_poulie()
-	return sqrt(maxf(Rp * Rp - (dz - L_GARE) * (dz - L_GARE), 0.0))
+	return sqrt(maxf(Rp * Rp - (dz - l_gare) * (dz - l_gare), 0.0))
 
 
 ## Rayon de l'enroulement du câble sur la batterie de galets de déviation.
@@ -1745,7 +1797,7 @@ func _tangente_deviation() -> Array:
 	var R: float = voie * 0.5
 	var Rp: float = rayon_poulie()
 	var cA: Vector2 = Vector2(Z_DEVIATION, R - R_DEVIATION)
-	var cB: Vector2 = Vector2(L_GARE, 0.0)
+	var cB: Vector2 = Vector2(l_gare, 0.0)
 	var d: Vector2 = cB - cA
 	var D: float = d.length()
 	var dn: Vector2 = d / D
@@ -1777,7 +1829,7 @@ func _cable() -> void:
 				source.append(a.lerp(b, float(k) / nb))
 	for p in source:
 		var q: Vector3 = p
-		for st in [[0.0, L_GARE], [-L, -L - L_GARE]]:
+		for st in [[0.0, l_gare], [-L, -L - l_gare]]:
 			var znez: float = st[0]
 			var zc: float = st[1]
 			var dz: float = zc - znez
@@ -2254,7 +2306,10 @@ func _placer(i: int) -> void:
 		ouverture = ouverture_pince(x, l)
 		# garde-corps automatique : relevé à la fin de la décélération, baissé
 		# au début du lanceur d'accélération (retour d'utilisateur, 23/10/2026)
-		gc = 1.0 - clampf((x - (L_FREIN - 2.0)) / 2.0, 0.0, 1.0) * clampf((l - L_FREIN - x) / 2.0, 0.0, 1.0)
+		# (fixe : relevé avant le débarquement, baissé après l'embarquement)
+		var x_haut: float = x_debarquement() - 3.0 if fixe() else L_FREIN - 2.0
+		var x_bas: float = x_arret(l) + 2.0 if fixe() else l - L_FREIN
+		gc = 1.0 - clampf((x - x_haut) / 2.0, 0.0, 1.0) * clampf((x_bas - x) / 2.0, 0.0, 1.0)
 	v.ouvrir_pince(ouverture)
 	v.garde_corps(gc)
 	v.bulle(gc)

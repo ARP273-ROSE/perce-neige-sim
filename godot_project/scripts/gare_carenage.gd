@@ -18,6 +18,11 @@ extends RefCounted
 ##     Val d'Isère, liseré rouge) ;
 ##   garaventa : Glacier, Laisinant, Leissières — fût arrondi à bandeau de
 ##     vitres, grand dôme à facettes au-dessus de la poulie, liseré rouge ;
+##   leitner : Leitner récent (Aiguille Percée) — caisse blanche en
+##     baignoire, flancs évasés vers le haut, couverture noire bombée à
+##     nervures, grand nom bleu sur le flanc ;
+##   teleski : poulie horizontale sur un portique galvanisé, motoréducteur
+##     sous capot gris à la gare motrice ;
 ##   fixe : télésièges à pinces fixes (Montaval, Skirail, GMM…) — poulie à
 ##     l'air sur un bâti d'acier noir, petit local blanc de la motrice.
 ## La gare BMF (Marmottes, Fontaine Froide) reste celle de LigneRemontee._capot.
@@ -32,6 +37,8 @@ func _init(ligne: LigneRemontee) -> void:
 
 
 static func style_pour(constructeur: String, annee: int, famille: String) -> String:
+	if famille.begins_with("perche"):
+		return "teleski"
 	if famille.begins_with("siege_fixe"):
 		return "fixe"
 	var c: String = constructeur.to_lower()
@@ -40,13 +47,13 @@ static func style_pour(constructeur: String, annee: int, famille: String) -> Str
 	if c.find("garaventa") >= 0:
 		return "garaventa"
 	if c.find("doppelmayr") >= 0:
-		if annee >= 2015:
-			return "doppelmayr_dline"
+		if annee >= 2015 and not famille.begins_with("cabine"):
+			return "doppelmayr_dline"      # (la télécabine de Solaise garde l'UNI-G)
 		return "doppelmayr_unig" if annee >= 2000 else "doppelmayr_uni"
 	if c.find("poma") >= 0 or c.find("ingelo") >= 0 or c.find("ingélo") >= 0 or c.find("fatzer") >= 0:
 		return "poma_moderne" if annee >= 2010 else "poma_classique"
 	if c.find("leitner") >= 0:
-		return "poma_moderne" if annee >= 2010 else "doppelmayr_uni"
+		return "leitner" if annee >= 2010 else "doppelmayr_uni"
 	return "bmf"
 
 
@@ -221,6 +228,12 @@ func _val() -> bool:
 	return lg.station.find("Val") >= 0
 
 
+## Panneaux clairs du carénage : bardage de mélèze aux télécabines de
+## Tignes (Tovière, Brévières), plaques blanches ailleurs.
+func _coque() -> String:
+	return "bois_meleze" if lg.famille.begins_with("cabine") and not _val() else "blanc_plaque"
+
+
 # --- construction ------------------------------------------------------------------
 
 func construire(g: Node3D, znez: float, zc: float, style: String) -> void:
@@ -237,8 +250,12 @@ func construire(g: Node3D, znez: float, zc: float, style: String) -> void:
 			_poma_moderne(g, znez, zc)
 		"garaventa":
 			_garaventa(g, znez, zc)
+		"leitner":
+			_leitner(g, znez, zc)
 		"fixe":
 			_fixe(g, znez, zc)
+		"teleski":
+			_teleski(g, znez, zc)
 
 
 ## Doppelmayr UNI-G (photos de Palafour) : caisse rectangulaire aux bouts
@@ -257,12 +274,13 @@ func _unig(g: Node3D, znez: float, zc: float) -> void:
 	prof.append_array(_voute(Ro, h1, ht, 2.6))
 	var jonc: String = "rouge_val" if _val() else "bleu_doppelmayr"
 	var toit: String = "toit_noir" if _val() else "toit_bleu_nuit"
+	var coque: String = _coque()
 	var mat := func(h: float) -> String:
-		return "blanc_plaque" if h < h1 else toit
+		return coque if h < h1 else toit
 	_balayer(prof, y0, z0, z_ar, mat)
-	_face(prof, y0, z0, func(_h: float) -> String: return "blanc_plaque")
-	_face(prof, y0, z_ar, func(_h: float) -> String: return "blanc_plaque")
-	_dessous(y0, z0, zc, sg, R, Ro, z_ar, "blanc_plaque")
+	_face(prof, y0, z0, func(_h: float) -> String: return coque)
+	_face(prof, y0, z_ar, func(_h: float) -> String: return coque)
+	_dessous(y0, z0, zc, sg, R, Ro, z_ar, coque)
 	_valider(g, "Capot")
 	# joncs de l'arc aux deux bouts, filet le long des flancs
 	for z in [z0, z_ar]:
@@ -448,7 +466,7 @@ func _poma_moderne(g: Node3D, znez: float, zc: float) -> void:
 	var ht: float = 2.75
 	var prof: Array = [[Ro, 0.0], [Ro, hb]]
 	prof.append_array(_voute(Ro, hb, ht, 2.1))
-	var bandeau: String = "toit_noir" if _val() else "blanc_plaque"
+	var bandeau: String = "toit_noir" if _val() else _coque()
 	var mat := func(h: float) -> String:
 		return bandeau if h < hb else "toit_noir"
 	_balayer(prof, y0, z0, zc, mat)
@@ -535,6 +553,151 @@ func _garaventa(g: Node3D, znez: float, zc: float) -> void:
 		_nom(g, "Val d'Isère" if _val() else lg.station, Vector3(sx * (Rd + 0.04), y0 + 0.40, zc), sx * PI * 0.5, Color(0.70, 0.08, 0.10))
 	_poteau(g, zc, lg.H_CABLE_GARE - 0.35, "blanc_plaque", true, 0.60)
 	_poteau(g, z_colonne(znez, zc), y0, "blanc_plaque", true, 0.45)
+
+
+## Leitner récent (photos de l'Aiguille Percée) : caisse blanche « en
+## baignoire » aux flancs évasés vers le haut et aux bouts arrondis,
+## couverture noire bombée à nervures qui déborde à peine, joints
+## verticaux des panneaux, grand nom bleu sur le flanc ; poteau gris.
+func _leitner(g: Node3D, znez: float, zc: float) -> void:
+	var sg: float = signf(zc - znez)
+	var R: float = lg.voie * 0.5
+	var Ro: float = R + LigneRemontee.D_CAPOT
+	var y0: float = lg.H_CABLE_GARE + LigneRemontee.Y_CAPOT
+	var z0: float = znez - sg * 0.6
+	var hb: float = 1.45
+	var prof: Array = [[Ro - 0.35, 0.0], [Ro - 0.05, 0.25], [Ro + 0.30, hb], [Ro + 0.18, hb + 0.08]]
+	prof.append_array(_voute(Ro + 0.18, hb + 0.08, 2.85, 2.4, 10))
+	var mat := func(h: float) -> String:
+		return "blanc_plaque" if h < hb + 0.04 else "toit_noir"
+	var mat2 := func(h: float, _phi: float) -> String: return mat.call(h)
+	# nez arrondi aussi : un quart de tour à chaque coin, face plane entre les deux
+	var rc: float = 1.6
+	var zf: float = z0 + sg * rc
+	var prof_c: Array = []
+	for p in prof:
+		prof_c.append([maxf(float(p[0]) - (Ro - rc), 0.0), p[1]])
+	_balayer(prof, y0, zf, zc, mat)
+	_tourner(prof, y0, zc, sg, 0.0, PI, 30, mat2)
+	for sx in [-1.0, 1.0]:
+		var ox2: float = sx * (Ro - rc)
+		for k in range(8):
+			var q0: float = PI * 0.5 * float(k) / 8
+			var q1: float = PI * 0.5 * float(k + 1) / 8
+			for i in range(prof_c.size() - 1):
+				var a3: Array = prof_c[i]
+				var b3: Array = prof_c[i + 1]
+				var m3: String = mat.call((float(a3[1]) + float(b3[1])) * 0.5)
+				var pt3 := func(r: float, h: float, phi: float) -> Vector3:
+					return Vector3(ox2 + sx * r * cos(phi), y0 + h, zf - sg * r * sin(phi))
+				_quad(m3, pt3.call(a3[0], a3[1], q0), pt3.call(b3[0], b3[1], q0), pt3.call(b3[0], b3[1], q1), pt3.call(a3[0], a3[1], q1))
+	for i in range(prof_c.size() - 1):
+		var a4: Array = prof_c[i]
+		var b4: Array = prof_c[i + 1]
+		var x4: float = Ro - rc
+		_quad(mat.call((float(a4[1]) + float(b4[1])) * 0.5), Vector3(-x4, y0 + a4[1], zf - sg * float(a4[0])), Vector3(x4, y0 + a4[1], zf - sg * float(a4[0])),
+			Vector3(x4, y0 + b4[1], zf - sg * float(b4[0])), Vector3(-x4, y0 + b4[1], zf - sg * float(b4[0])))
+	_dessous(y0, zf - sg * (rc - 0.35), zc, sg, R, Ro - 0.35, zc, "blanc_plaque")
+	_valider(g, "Capot")
+	# nervures de la couverture : arcs en travers, tous les 1,6 m
+	var n_n: int = int(absf(zc - zf) / 1.6)
+	var voute: Array = prof.slice(3)
+	for k in range(n_n + 1):
+		var z: float = zf + sg * 1.6 * k
+		var pts: PackedVector3Array = PackedVector3Array()
+		for p in voute:
+			pts.append(Vector3(float(p[0]) + 0.03, y0 + float(p[1]) + 0.03, z))
+		for i in range(voute.size() - 2, -1, -1):
+			pts.append(Vector3(-float(voute[i][0]) - 0.03, y0 + float(voute[i][1]) + 0.03, z))
+		RemonteeKit.tube(g, pts, 0.035, "acier_noir", 5)
+	# joints verticaux des panneaux blancs
+	for sx in [-1.0, 1.0]:
+		for k in range(1, int(absf(zc - zf) / 2.4) + 1):
+			var zj: float = zf + sg * 2.4 * k
+			RemonteeKit.barre(g, Vector3(sx * (Ro - 0.33), y0 + 0.02, zj), Vector3(sx * (Ro + 0.31), y0 + hb - 0.02, zj), 0.012, "peinture_gris", 4)
+	_noms_flancs(g, Ro + 0.12, y0 + 0.75, (zf + zc) * 0.5, Color(0.16, 0.24, 0.62))
+	_poteau(g, zc, lg.H_CABLE_GARE - 0.35, "galva", true, 0.50)
+	_poteau(g, z_colonne(znez, zc), y0, "galva", true, 0.42)
+
+
+## Bâtiment d'une gare de télécabine (photos de la Daille, de Tovière, de
+## Solaise, des Brévières) : à côté du quai, côté embarquement, un chalet
+## à soubassement de pierre et étage bardé de mélèze, grandes baies sur le
+## quai, toit à deux pans couvert de lauzes sombres ; les fondations
+## descendent dans le talus.
+static func emprise_batiment(lg: LigneRemontee, aval: bool) -> Array:
+	var L: float = lg.longueur_h()
+	var znez: float = 0.0 if aval else -L
+	var sg: float = 1.0 if aval else -1.0
+	var xb: float = signf(lg._x_brin(aval))
+	var w: float = 7.5
+	var x: float = xb * (lg.voie * 0.5 + LigneRemontee.D_CAPOT + 1.2 + w * 0.5)
+	var z0: float = znez + sg * 3.0
+	var z1: float = znez + sg * (lg.l_gare - 1.0)
+	# [centre au sol, taille (x, y, z), côté du quai]
+	return [Vector3(x, 0.0, (z0 + z1) * 0.5), Vector3(w, 6.2, absf(z1 - z0)), xb]
+
+
+func batiment(g: Node3D, aval: bool) -> void:
+	var e: Array = emprise_batiment(lg, aval)
+	var c: Vector3 = e[0]
+	var t: Vector3 = e[1]
+	var xb: float = e[2]
+	var h0: float = 3.4                     # soubassement de pierre
+	RemonteeKit.boite_en(g, Vector3(t.x, h0 + 4.0, t.z), c + Vector3(0, (h0 - 4.0) * 0.5, 0), "pierre")
+	RemonteeKit.boite_en(g, Vector3(t.x - 0.2, t.y - h0, t.z - 0.2), c + Vector3(0, h0 + (t.y - h0) * 0.5, 0), "bois_meleze")
+	# toit à deux pans (faîtage dans la longueur), débord de 0,8 m
+	var pente: float = 0.45
+	var demi: float = t.x * 0.5 + 0.8
+	var lp: float = demi / cos(pente)
+	for sx in [-1.0, 1.0]:
+		var b: Basis = Basis(Vector3.BACK, -sx * pente)
+		RemonteeKit.boite(g, Vector3(lp, 0.22, t.z + 1.6), Transform3D(b, c + Vector3(sx * demi * 0.5, t.y + demi * tan(pente) * 0.5, 0)), "toit_bardeaux")
+	# pignons en bois
+	for sz in [-1.0, 1.0]:
+		var zp: float = c.z + sz * t.z * 0.5
+		var pts: PackedVector3Array = PackedVector3Array()
+		var hp: float = demi * tan(pente)
+		for k in range(7):
+			var u: float = float(k) / 6.0
+			var x: float = lerpf(-t.x * 0.5, t.x * 0.5, u)
+			var y: float = t.y + hp * (1.0 - absf(x) / demi) - 0.1
+			RemonteeKit.boite_en(g, Vector3(t.x / 6.0, maxf(y - t.y, 0.05), 0.12), Vector3(c.x + x, t.y + maxf(y - t.y, 0.05) * 0.5, zp), "bois_meleze")
+	# baies vitrées côté quai (rez-de-chaussée) et fenêtres de l'étage
+	var xf: float = c.x - xb * (t.x * 0.5 + 0.02)
+	var n: int = int(t.z / 3.0)
+	for k in range(n):
+		var z: float = c.z - t.z * 0.5 + 1.5 + 3.0 * k
+		RemonteeKit.boite_en(g, Vector3(0.05, 2.3, 2.3), Vector3(xf, 1.35, z), "vitrage_sombre")
+		RemonteeKit.boite_en(g, Vector3(0.05, 1.1, 1.3), Vector3(xf + xb * 0.1, h0 + 1.3, z), "vitrage_sombre")
+	# porte vers les portillons et nom de la ligne au-dessus
+	var zr: float = c.z + signf(c.z - (0.0 if aval else -lg.longueur_h())) * (t.z * 0.5 + 0.02)
+	RemonteeKit.boite_en(g, Vector3(2.2, 2.5, 0.05), Vector3(c.x, 1.25, zr), "vitrage_sombre")
+	_nom(g, lg.nom_court(), Vector3(c.x, h0 + 0.6, zr + signf(zr - c.z) * 0.03), 0.0 if zr > c.z else PI, Color(0.95, 0.95, 0.95), 0.0035)
+
+
+## Téléski : la poulie à l'air, portée par un portique galvanisé (deux
+## jambes en A et une traverse), le motoréducteur sous un capot gris au-dessus
+## de la poulie ; protections en mousse au pied des jambes.
+func _teleski(g: Node3D, znez: float, zc: float) -> void:
+	var sg: float = signf(zc - znez)
+	var R: float = lg.voie * 0.5
+	var yb: float = lg.H_CABLE_GARE + 0.55
+	# traverse en caisson au-dessus de la poulie, en long
+	RemonteeKit.boite_en(g, Vector3(0.40, 0.45, R * 2.0 + 1.6), Vector3(0, yb, zc), "galva")
+	# jambes en A, en dehors de la boucle des perches
+	for sz in [-1.0, 1.0]:
+		var top: Vector3 = Vector3(0, yb, zc + sz * (R + 0.6))
+		for sx in [-1.0, 1.0]:
+			var pied: Vector3 = Vector3(sx * 1.6, 0.0, zc + sz * (R + 1.4))
+			RemonteeKit.poutre(g, pied, top, 0.18, 0.18, "galva")
+			RemonteeKit.cylindre(g, 0.22, 0.22, 1.6, Transform3D(Basis.IDENTITY, pied + Vector3(0, 0.8, 0)), "mousse_rouge", 12)
+	# axe de la poulie et capot du motoréducteur
+	RemonteeKit.cylindre(g, 0.12, 0.12, 0.6, Transform3D(Basis.IDENTITY, Vector3(0, lg.H_CABLE_GARE + 0.2, zc)), "acier", 12)
+	RemonteeKit.boite_en(g, Vector3(1.2, 0.9, 1.5), Vector3(0, yb + 0.68, zc), "peinture_gris")
+	RemonteeKit.boite_en(g, Vector3(1.3, 0.06, 1.6), Vector3(0, yb + 1.15, zc), "acier_noir")
+	if lg.nom_court() != "":
+		_nom(g, lg.nom_court(), Vector3(0, yb + 0.70, zc - sg * 0.77), 0.0 if sg < 0.0 else PI, Color(0.15, 0.15, 0.17), 0.0018)
 
 
 ## Télésiège à pinces fixes (photos du Grand Pré) : pas de carénage sur la

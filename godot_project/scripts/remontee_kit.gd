@@ -54,6 +54,8 @@ const COULEURS: Dictionary = {
 	"toit_noir": [Color(0.05, 0.05, 0.06), 0.30, 0.40],        # voûte Poma / Ingélo
 	"rouge_val": [Color(0.74, 0.07, 0.09), 0.45, 0.15],        # liseré Val d'Isère
 	"mousse_rouge": [Color(0.82, 0.14, 0.08), 0.85, 0.0],      # protections des poteaux
+	"bois_meleze": [Color(0.56, 0.36, 0.19), 0.80, 0.0],       # bardage des gares de télécabine
+	"crepi": [Color(0.86, 0.84, 0.79), 0.95, 0.0],
 }
 
 

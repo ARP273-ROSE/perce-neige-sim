@@ -55,10 +55,15 @@ func _tick() -> void:
 		var c: Vector2 = Vector2(sk.global_position.x, sk.global_position.z)
 		var a3: Vector3 = _lg.global_transform.origin
 		var pos: Vector2 = carte._carte(Vector2(a3.x, a3.z), c, CartePistes.TAILLE * 0.5)
-		var ev: InputEventScreenTouch = InputEventScreenTouch.new()
-		ev.pressed = true
-		ev.position = pos
-		carte._gui_input(ev)
+		# gares voisines sous le doigt : on touche de nouveau au même endroit
+		# jusqu'à tomber sur la bonne (8 fois au plus)
+		for k in range(8):
+			var ev: InputEventScreenTouch = InputEventScreenTouch.new()
+			ev.pressed = true
+			ev.position = pos
+			carte._gui_input(ev)
+			if _main._depose_remontee == _lg:
+				break
 	_t += 1.0 / 60.0
 	if _t > 3.0:
 		var d: float = Vector2(sk.global_position.x - _lg.global_transform.origin.x,

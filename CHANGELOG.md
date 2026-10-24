@@ -5,6 +5,52 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.29.0 — 24 octobre 2026
+
+**Remontées : téléskis, tunnel de la piste du Tunnel, télésièges fixes sans lanceurs, gares
+Leitner, bâtiments des télécabines.** Retours d'utilisateur du 24/10/2026 : « fais les 3 » (gares Leitner, bâtiment des
+télécabines, téléskis), « TSF ça veut dire télésiège fixe, pas débrayable, pas de lanceur » et
+« sur le glacier du Pissaillas il reste un seul téléski, à pince fixe, à enrouleur, biplace, type
+pioche ou archet ».
+
+- **Télésièges fixes** : plus de lanceurs, de pneus ni de galets de déviation ; les sièges font
+  le tour de la poulie à la vitesse de la ligne (poulie au diamètre de la voie) ; gare réduite
+  au nez et à la poulie (8 m au lieu de 24) ; on embarque juste après le demi-tour, on se lève
+  avant la poulie ; garde-corps relevé et baissé à ces deux points.
+- **Téléskis** : les 18 téléskis du domaine posés (perches à enrouleur, perches rigides des
+  TKD, archets des biplaces — barre cintrée, bouts garnis de caoutchouc, comme au TKE2 du
+  Montet, seul téléski du glacier du Pissaillas ; pylônes estimés tous les 70 m quand ils ne sont pas
+  relevés ; une perche toutes les 4 à 10 s). Gare : poulie à l'air sur un portique galvanisé,
+  motoréducteur sous capot. **On les prend** : chaussé, au départ juste après la poulie, la
+  perche qui passe emmène le skieur, skis sur la trace, la corde se déroulant jusqu'à lui ; en
+  haut il lâche la perche avant la poulie et repart à ski. Nouveau banc `bench_teleski_3d`.
+- **TKD du 3000 et tunnel de la piste noire du Tunnel** (retours d'utilisateur du 24/10/2026 : « le
+  téléski qui va à la piste noire du Tunnel, avec un tunnel dans la montagne » ; « ben creuse ») :
+  le TKD du 3000 (Ingélo/Montagner, 2018), écarté à tort comme historique, est rétabli (18
+  téléskis). Le tunnel (`TunnelPiste`, tracé OpenStreetMap) traverse l'arête d'ouest en est sur
+  63 m : têtes de béton là où l'arête couvre la voûte, tranchées d'accès rabotées, relief retiré
+  au-dessus du tube près des têtes, voûte en plein cintre éclairée, sol en collision. À ski, le
+  sol d'un tunnel l'emporte sur le relief qui passe au-dessus des skis (le skieur grimpait sur
+  l'arête). Nouveau banc `bench_tunnel_piste_3d`.
+- Téléski : la perche se prend chaussé (à pied, on passe à côté) ; « aller à une remontée »
+  depuis la carte fait d'abord lâcher la perche ou se lever du siège (tracté, le skieur restait
+  accroché) ; dépôt au pied d'un téléski 7 m à l'écart de la trace.
+- Carte : plusieurs remontées sous le doigt (gares voisines, téléskis jumeaux, carte dézoomée) —
+  toucher de nouveau au même endroit passe à la suivante ; les petits téléskis au pied des
+  grandes lignes étaient impossibles à choisir.
+- Construction à l'approche : la ligne la plus proche est choisie par la distance à son tracé
+  (avant : au milieu, moins la demi-longueur — les longues lignes voisines passaient avant le
+  petit téléski au pied duquel on est).
+- **Gare Leitner** (photos de l'Aiguille Percée) : caisse blanche en baignoire aux flancs évasés
+  et aux bouts arrondis, couverture noire bombée à nervures, grand nom bleu.
+- **Télécabines** : bâtiment de gare à côté du quai (soubassement de pierre, étage en mélèze,
+  baies vitrées sur le quai, toit à deux pans) à la place de la cabine du conducteur ;
+  carénages bardés de mélèze aux télécabines de Tignes (Tovière, Brévières) ; Solaise garde
+  l'UNI-G (le D-Line est réservé aux télésièges récents).
+- Vérifié : bancs teleski, tunnel_piste, toutes_lignes (66 lignes), aller_remontee, passage,
+  boucle_salle, embarquement, aller_remontee, remontee_dynamique, quai,
+  skieur, poste_remontee, 3s, tph ; captures au studio comparées aux photos.
+
 ## 1.28.0 — 24 octobre 2026
 
 **Remontées : gares par constructeur, portiques d'information, portillons STOP.** Retour
