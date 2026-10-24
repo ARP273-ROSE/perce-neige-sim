@@ -911,11 +911,11 @@ func _telepherique() -> void:
 		# porte côté funiculaire (face 2) — le téléphérique part d'ici
 		# (retour d'utilisateur, 24/10/2026 : « on avait déjà mis la gare de départ
 		# au bon endroit »)
-		var ouv: Array = [0.0, 0.0, 0.0]
-		if i == 0:
-			ouv = [0.10, 0.90, H_TPH_SOL + 11.0]
-		elif i == 2:
-			ouv = [0.42, 0.58, H_TPH_SOL + 3.0]
+		# portes à l'étage (niveau du quai du téléphérique) : côté ligne vers la
+		# tête en acier, côté funiculaire vers le grand escalier extérieur
+		var ouv: Array = [0.0, 0.0, 0.0, 0.0]
+		if i == 0 or i == 2:
+			ouv = [0.42, 0.58, H_TPH_SOL + TphGrandeMotte.H_QUAI_AVAL + 2.6, H_TPH_SOL + TphGrandeMotte.H_QUAI_AVAL]
 		_mur_ouvert("pierre", a, b, H_TPH_SOL - 2.0, H_TPH_SOL + 1.5, H_TPH_SOL + 1.5, ouv)
 		_mur_ouvert("tph_gris", a, b, H_TPH_SOL + 1.5, ya, yb, ouv)
 	_quad("toit_gris", _p2(p[0], H_TPH_TOIT), _p2(p[1], H_TPH_TOIT), _p2(p[2], h_bas), _p2(p[3], h_bas))
@@ -956,29 +956,12 @@ func _mur_ouvert(m: String, a: Vector2, b: Vector2, y0: float, y1a: float, y1b: 
 	var tb: float = lerpf(y1a, y1b, u1)
 	_mur(m, a, pa, y0, y1a, ta)
 	_mur(m, pb, b, y0, tb, y1b)
-	var h0: float = H_TPH_SOL
+	var h0: float = float(ouv[3]) if ouv.size() > 3 else H_TPH_SOL
 	var h1: float = float(ouv[2])
 	if y0 < h0:
 		_mur(m, pa, pb, y0, minf(h0, ta), minf(h0, tb))
 	if ta > h1 or tb > h1:
 		_mur(m, pa, pb, maxf(h1, y0), maxf(ta, h1), maxf(tb, h1))
-
-
-## Aire devant la porte du téléphérique (face 2, côté funiculaire), en
-## coordonnées locales (x, d) : 5 m de large, 7 m de profondeur.
-func _devant_porte_tph() -> Array:
-	var a: Vector2 = TPH[2]
-	var b: Vector2 = TPH[3]
-	var m: Vector2 = (a + b) * 0.5
-	var t: Vector2 = (b - a).normalized()
-	var c: Vector2 = Vector2.ZERO
-	for v in TPH:
-		c += v
-	c /= 4.0
-	var n: Vector2 = Vector2(-t.y, t.x)
-	if n.dot(m - c) < 0.0:
-		n = -n
-	return [m - t * 2.5, m + t * 2.5, m + t * 2.5 + n * 7.0, m - t * 2.5 + n * 7.0]
 
 
 ## Départ du téléphérique : milieu de la grande baie (face 0), au sol, la
@@ -993,7 +976,10 @@ func tph_quai() -> Dictionary:
 	var nez: Vector3 = (a + b) * 0.5
 	var dir: Vector3 = nez - c
 	dir.y = 0.0
-	return {"nez": nez, "dir": dir.normalized(), "profondeur": 2.0 * dir.length()}
+	var coins: Array = []
+	for v2 in TPH:
+		coins.append(_p2(v2, H_TPH_SOL))
+	return {"nez": nez, "dir": dir.normalized(), "profondeur": 2.0 * dir.length(), "coins": coins}
 
 
 func _texte_n(t: String, pos: Vector3, taille: int, c: Color, px: float, normale: Vector3) -> void:
@@ -1074,9 +1060,7 @@ func amenagement_relief() -> Dictionary:
 		"rect": bb.grow(18.0),
 		"trous": [monde.call(hall), monde.call(ANNEXES), monde.call(TPH),
 			monde.call(rect.call(RESTO_A)), monde.call(rect.call(RESTO_B))],
-		"rabots": [[monde.call(TERRASSE), _o.y - 0.4, 3.0],
-			# devant la porte du téléphérique (côté funiculaire) : neige au seuil
-			[monde.call(_devant_porte_tph()), _o.y + H_TPH_SOL - 0.03, 3.0]],
+		"rabots": [[monde.call(TERRASSE), _o.y - 0.4, 3.0]],
 		# pied de l'escalier du bout de la terrasse : neige à la dernière
 		# contremarche
 		"plats": [[monde.call(_pied_escalier()), _o.y - ESC_HAUT, 2.0]],

@@ -92,7 +92,9 @@ func _poser(D: Dictionary) -> void:
 	var quai_tph: Dictionary = {}
 	if String(D["cle"]) == "tph_grande_motte" and gare_amont != null:
 		quai_tph = gare_amont.tph_quai()
-		a = Vector2((quai_tph["nez"] as Vector3).x, (quai_tph["nez"] as Vector3).z)
+		var face: Vector2 = Vector2((quai_tph["nez"] as Vector3).x, (quai_tph["nez"] as Vector3).z)
+		var sortie: Vector2 = (b - face).normalized()
+		a = face + sortie * TphGrandeMotte.Z_NEZ          # nez : avant du quai de la tête en acier
 	var dirh: Vector2 = b - a
 	var L: float = dirh.length()
 	if L < 10.0:
@@ -157,10 +159,20 @@ func _poser(D: Dictionary) -> void:
 			t2 += 1.0
 		rampes[k] = t2
 	if not quai_tph.is_empty():
-		prof[0] = Vector2(0.0, 0.0)            # le quai : le sol du bâtiment
+		# quais à leur niveau réel : l'étage du bâtiment à l'aval, le
+		# caillebotis au-dessus du sommet à l'amont
+		prof[0] = Vector2(0.0, TphGrandeMotte.H_QUAI_AVAL)
+		prof[prof.size() - 1] = prof[prof.size() - 1] + Vector2(0.0, TphGrandeMotte.H_QUAI_AMONT)
 	var lg: LigneRemontee = Telepherique.new() if String(D["famille"]) == "cabine_tph" else LigneRemontee.new()
 	if not quai_tph.is_empty():
 		(lg as Telepherique).gare_aval_existante = true
+		# coins du bâtiment dans le repère de la ligne (origine au nez, −Z vers l'amont)
+		var xf_l: Transform3D = Transform3D(Basis.looking_at(Vector3(dirh.x, 0.0, dirh.y), Vector3.UP), Vector3(a.x, h0, a.y)).affine_inverse()
+		var coins: PackedVector2Array = PackedVector2Array()
+		for w in quai_tph["coins"]:
+			var l3: Vector3 = xf_l * (w as Vector3)
+			coins.append(Vector2(l3.x, l3.z))
+		(lg as Telepherique).emprise_batiment = coins
 	lg.name = String(D["cle"])
 	lg.profil = prof
 	lg.rampes = rampes

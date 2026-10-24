@@ -98,8 +98,8 @@ func construire() -> void:
 	_calculer_tetes()
 	_preparer_nez()
 	for aval in [true, false]:
-		if aval and gare_aval_existante:
-			_quai_existant()
+		if gare_aval_existante:
+			_gares_grande_motte(aval)
 		else:
 			_gare_tph(aval)
 		await _pause()
@@ -293,9 +293,12 @@ func _cables_tph() -> void:
 			cv.position = Vector3(x0, y_cable(dc, montee), -dc)
 			cv.rotation.x = atan2(y_cable(dc + 2.0, montee) - y_cable(dc - 2.0, montee), 4.0)
 			c.add_child(cv)
-			RemonteeKit.boite_en(cv, Vector3(0.12, 0.14, 0.40), Vector3(0, 0.0, 0), "galva_pylone")
-			RemonteeKit.poutre(cv, Vector3(0.10, -0.05, 0), Vector3(0.10, -0.55, 0), 0.06, 0.06, "galva_pylone")
-			RemonteeKit.boite_en(cv, Vector3(0.24, 0.05, 0.30), Vector3(0.02, -0.55, 0), "galva_pylone")
+			# cavalier (photo du reportage) : sabot serré sur le porteur, deux bras
+			# en V qui descendent de part et d'autre, galet du tracteur à la pointe
+			RemonteeKit.boite_en(cv, Vector3(0.16, 0.16, 0.55), Vector3(0, 0.02, 0), "galva_pylone")
+			for sz in [-1.0, 1.0]:
+				RemonteeKit.poutre(cv, Vector3(0.0, -0.05, sz * 0.22), Vector3(0.0, -0.62, 0.0), 0.05, 0.08, "galva_pylone")
+			RemonteeKit.cylindre(cv, 0.035, 0.035, 0.22, Transform3D(Basis(Vector3.FORWARD, PI * 0.5), Vector3(0, -0.60, 0)), "acier_noir", 8)
 			RemonteeKit.galet(cv, Vector3(0, -0.45 - 0.02 - 0.12, 0), 0.12)
 	_preparer_charges()
 
@@ -359,15 +362,57 @@ func _gare_tph(aval: bool) -> void:
 	MeshMerge.merge(g, [], "Gare")
 
 
-## Quai de béton dans la gare existante : de la baie (nez) au fond du bâtiment.
-func _quai_existant() -> void:
+## Gares de la Grande Motte (TphGrandeMotte, d'après les photos) : à l'aval,
+## la tête en acier contre le bâtiment existant, le plancher de l'étage et
+## l'escalier extérieur côté funiculaire ; à l'amont, la gare ouverte.
+## Le profil place le quai (terrain(0), terrain(L)) à son niveau réel.
+var emprise_batiment: PackedVector2Array = PackedVector2Array()   # coins (x, z) du bâtiment, repère de la ligne
+
+
+func _gares_grande_motte(aval: bool) -> void:
+	var L: float = longueur_h()
 	var g: Node3D = Node3D.new()
-	g.name = "GareAval"
+	g.name = "GareAval" if aval else "GareAmont"
+	var y_q: float = terrain(0.0 if aval else L)
+	# repère de la gare : z = 0 à la façade du bâtiment (aval), au nez (amont)
+	var z_g: float = TphGrandeMotte.Z_NEZ if aval else -L
+	g.position = Vector3(0, y_q, z_g)
 	add_child(g)
-	RemonteeKit.boite_en(g, Vector3(11.0, 0.3, 17.0), Vector3(0, -0.15, 8.6), "beton")
-	# galets de déviation du tracteur, sous la baie
-	for sx in [-1.0, 1.0]:
-		RemonteeKit.galet(g, Vector3(sx * voie * 0.5, H_CABLE_GARE - 0.70, 1.0), 0.25)
+	var sol := func(x: float, z: float) -> float:
+		return _sol(x, z + z_g) - y_q
+	if aval:
+		TphGrandeMotte.tete_aval(self, g, H_CABLE_GARE, sol)
+		# plancher de l'étage dans le bâtiment, au niveau du quai
+		if emprise_batiment.size() == 4:
+			var c: Vector2 = Vector2.ZERO
+			var emp: PackedVector2Array = PackedVector2Array()
+			for v0 in emprise_batiment:
+				emp.append(v0 - Vector2(0.0, z_g))      # repère de la gare
+			for v in emp:
+				c += v
+			c /= 4.0
+			var poly: PackedVector2Array = PackedVector2Array()
+			for v2 in emp:
+				poly.append(c + (v2 - c) * 0.96)
+			var idx: PackedInt32Array = Geometry2D.triangulate_polygon(poly)
+			var st: SurfaceTool = SurfaceTool.new()
+			st.begin(Mesh.PRIMITIVE_TRIANGLES)
+			for k in range(idx.size()):
+				var q: Vector2 = poly[idx[k]]
+				st.set_normal(Vector3.UP)
+				st.add_vertex(Vector3(q.x, -0.02, q.y))
+			var mi: MeshInstance3D = MeshInstance3D.new()
+			mi.mesh = st.commit()
+			mi.material_override = RemonteeKit.mat("beton")
+			g.add_child(mi)
+			# escalier extérieur : de la porte de la façade côté funiculaire
+			var a: Vector2 = emp[2]
+			var b: Vector2 = emp[3]
+			var m: Vector2 = (a + b) * 0.5
+			var dehors: Vector2 = (m - c).normalized()
+			TphGrandeMotte.escalier_salle(g, Vector3(m.x, 0.0, m.y), Vector3(dehors.x, 0, dehors.y), sol)
+	else:
+		TphGrandeMotte.gare_amont(self, g, H_CABLE_GARE, sol)
 	MeshMerge.merge(g, [], "Gare")
 
 
@@ -407,8 +452,8 @@ func _collisions_tph() -> void:
 		var sg: float = 1.0 if aval else -1.0
 		var z0: float = 0.0 if aval else -L
 		var y0: float = terrain(0.0 if aval else L)
-		if aval and gare_aval_existante:
-			boite.call(Vector3(11.0, 0.6, 17.0), Vector3(0, -0.3, 8.6))
+		if gare_aval_existante:
+			_collisions_grande_motte(corps, aval)
 			continue
 		boite.call(Vector3(2.0 * hx, 6.0, lq), Vector3(0, y0 - 3.0, z0 + sg * lq * 0.5))
 	for i in range(pylones.size()):
@@ -416,6 +461,71 @@ func _collisions_tph() -> void:
 		var t: float = terrain(d)
 		var h: float = _tetes[i] - t - 3.0
 		boite.call(Vector3(clampf(h * 0.22, 4.0, 12.0), h, clampf(h * 0.22, 4.0, 12.0) * 0.6), Vector3(0, t + h * 0.5, -d))
+
+
+## Collisions des gares de la Grande Motte : quais (bandes), plancher de
+## l'étage, rampes à la place des escaliers.
+func _collisions_grande_motte(corps: StaticBody3D, aval: bool) -> void:
+	var L: float = longueur_h()
+	var y_q: float = terrain(0.0 if aval else L)
+	var z_g: float = TphGrandeMotte.Z_NEZ if aval else -L
+	var boite := func(taille: Vector3, centre: Vector3, b: Basis = Basis.IDENTITY) -> void:
+		var cs: CollisionShape3D = CollisionShape3D.new()
+		var bx: BoxShape3D = BoxShape3D.new()
+		bx.size = taille
+		cs.shape = bx
+		cs.transform = Transform3D(b, centre + Vector3(0, y_q, z_g))
+		corps.add_child(cs)
+	var xv: float = voie * 0.5
+	var bi: float = xv - 1.95
+	var be: float = xv + 1.95
+	var W: float = be + (1.6 if aval else 1.4)
+	var zf: float = (-2.2 - TphGrandeMotte.L_BAIE) if aval else (-TphGrandeMotte.L_BAIE - 1.0)
+	var z0: float = 0.0
+	if aval:
+		boite.call(Vector3(2.0 * W, 0.4, 2.2), Vector3(0, -0.2, -1.1))
+		z0 = -2.2
+	boite.call(Vector3(2.0 * bi, 0.4, absf(zf - z0)), Vector3(0, -0.2, (z0 + zf) * 0.5))
+	for s in [-1.0, 1.0]:
+		boite.call(Vector3(W - be, 0.4, absf(zf - z0)), Vector3(s * (be + W) * 0.5, -0.2, (z0 + zf) * 0.5))
+	if aval:
+		# escaliers latéraux : rampes de 7,5 m vers la neige
+		for s2 in [-1.0, 1.0]:
+			var x: float = s2 * (W + 0.75)
+			var yb: float = _sol(x, -8.7 + z_g) - y_q
+			var pente: float = atan2(-yb, 7.5)
+			boite.call(Vector3(1.3, 0.2, sqrt(7.5 * 7.5 + yb * yb)), Vector3(x, yb * 0.5, -1.2 - 3.75), Basis(Vector3.RIGHT, -pente))
+		if emprise_batiment.size() == 4:
+			var emp: PackedVector2Array = PackedVector2Array()
+			for v0 in emprise_batiment:
+				emp.append(v0 - Vector2(0.0, z_g))
+			var c: Vector2 = Vector2.ZERO
+			for v in emp:
+				c += v
+			c /= 4.0
+			var a: Vector2 = emp[2]
+			var b2: Vector2 = emp[3]
+			var m: Vector2 = (a + b2) * 0.5
+			var dehors: Vector2 = (m - c).normalized()
+			var long_b: float = (emp[1] - emp[2]).length()
+			var larg_b: float = (emp[0] - emp[1]).length()
+			var rot: Basis = Basis(Vector3.UP, atan2(dehors.x, dehors.y))
+			boite.call(Vector3(larg_b - 0.6, 0.4, long_b - 0.6), Vector3(c.x, -0.2, c.y), rot)
+			# escalier extérieur, le long de la façade (comme TphGrandeMotte.escalier_salle)
+			var lat: Vector2 = Vector2(dehors.y, -dehors.x)
+			var palier: Vector2 = m + dehors * 1.4
+			var depart: Vector2 = palier + lat * 1.5
+			var y_bas: float = _sol(depart.x + lat.x * 8.0, depart.y + lat.y * 8.0 + z_g) - y_q
+			var lg2: float = maxf(absf(y_bas) / 0.62, 2.0)
+			var bas2: Vector2 = depart + lat * lg2
+			var yb2: float = _sol(bas2.x, bas2.y + z_g) - y_q
+			var pente2: float = atan2(-yb2, lg2)
+			var cen: Vector2 = (depart + bas2) * 0.5
+			var rot2: Basis = Basis(Vector3.UP, atan2(lat.x, lat.y))
+			boite.call(Vector3(2.2, 0.2, sqrt(lg2 * lg2 + yb2 * yb2)), Vector3(cen.x, yb2 * 0.5, cen.y), rot2 * Basis(Vector3.RIGHT, pente2))
+			boite.call(Vector3(3.0, 0.2, 2.6), Vector3(palier.x, -0.1, palier.y), rot)
+	else:
+		boite.call(Vector3(2.0 * W, 0.4, 2.4), Vector3(0, -0.2, zf - 1.2))
 
 
 ## Puissance au câble (kW) : la cabine qui monte contre celle qui descend

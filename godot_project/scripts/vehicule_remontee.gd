@@ -1156,6 +1156,21 @@ func _cabine_tph() -> void:
 			m2.mesh = mailles[cle2 + ("_p" if sz > 0 else "_m")]
 			v.add_child(m2)
 		_portes.append([v, Vector3.ZERO, Vector3(0.06, 0, sz * 0.75)])
+	# deux cabines différentes (fiche RM.net) : la n° 1 Swoboda 1993, toit et
+	# liseré bleus, vitrage bleuté ; la n° 2 CWA Varos 2003, liseré gris
+	# argent, vitrage sombre
+	if numero == 2:
+		for mc2 in cab.get_children():
+			if mc2 is MeshInstance3D and (mc2 as MeshInstance3D).mesh != null:
+				var mm: Mesh = (mc2 as MeshInstance3D).mesh
+				for k in range(mm.get_surface_count()):
+					var ma: Material = mm.surface_get_material(k)
+					if ma == null:
+						continue
+					if ma.resource_name == "remontee_cabine_bleue":
+						(mc2 as MeshInstance3D).set_surface_override_material(k, RemonteeKit.mat("peinture_gris"))
+					elif ma.resource_name == "remontee_vitre_bleue":
+						(mc2 as MeshInstance3D).set_surface_override_material(k, RemonteeKit.mat("vitre_teintee"))
 	# meneaux des grandes vitres (trois en façade, cinq sur les côtés)
 	for sz2 in [-1.0, 1.0]:
 		for xm in [-0.5, 0.5]:
