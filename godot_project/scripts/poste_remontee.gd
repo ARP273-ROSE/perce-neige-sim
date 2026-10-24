@@ -85,6 +85,10 @@ func _ready() -> void:
 			ligne.rearmer())
 
 
+static func _fini(x: float) -> float:
+	return clampf(x, -1e7, 1e7) if is_finite(x) else 0.0
+
+
 func _texte(parent: Control, taille: int, couleur: Color, retour: bool = false) -> Label:
 	var l: Label = Label.new()
 	l.add_theme_font_size_override("font_size", taille)
@@ -123,7 +127,9 @@ func _process(_delta: float) -> void:
 	_titre.text = "Poste — %s" % ligne.nom_ligne
 	var desc: Array = VehiculeRemontee.DESCRIPTIONS.get(ligne.famille, ["", 0, ""])
 	_sous_titre.text = "%s · %.1f m/s nominal · %d véhicules" % [desc[0], ligne.vitesse, ligne.nombre_vehicules()]
-	var v: float = maxf(ligne.vitesse_reelle, 0.0)
+	# (une valeur non finie convertie en entier fait planter la version web :
+	# tout est borné avant affichage)
+	var v: float = _fini(maxf(ligne.vitesse_reelle, 0.0))
 	_vitesse.text = "%.1f m/s" % v
 	_jauge.value = v / maxf(ligne.vitesse, 0.01)
 	var etats: Dictionary = {"marche": ["EN MARCHE", Color(0.55, 1.0, 0.65)],
@@ -134,7 +140,7 @@ func _process(_delta: float) -> void:
 	_etat.text = e[0]
 	_etat.add_theme_color_override("font_color", e[1])
 	_puissance.text = "Consigne %s (%.1f m/s)\n%d kW au câble" % [LigneRemontee.NOMS_CRANS[ligne.cran],
-		ligne.vitesse * LigneRemontee.CRANS[ligne.cran], roundi(ligne.puissance_kw())]
+		ligne.vitesse * LigneRemontee.CRANS[ligne.cran], roundi(_fini(ligne.puissance_kw()))]
 	var fs: bool = ligne.etat != "marche" and v <= 0.0
 	var fp: bool = ligne.etat == "urgence"
 	_freins.text = "Frein de service : %s · Frein de poulie : %s" % ["SERRÉ" if fs or ligne.etat == "arret_normal" else "desserré",

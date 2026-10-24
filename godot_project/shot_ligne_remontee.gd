@@ -62,6 +62,7 @@ func _initialize() -> void:
 	_ligne.constructeur = String(D.get("constructeur", ""))
 	_ligne.annee = int(str(D.get("annee", "0")))
 	_ligne.station = String(D.get("station", ""))
+	_ligne.balanciers_estimes = String(D.get("balanciers", "")) == "estimés"
 	_ligne.quartier = String(D.get("quartier", ""))
 	_ligne.altitude_aval = float(D.get("altitude_aval", 0.0))
 	_ligne.debit = float(D.get("debit", 0.0))

@@ -13,6 +13,9 @@ extends LigneRemontee
 ## au-delà de L dans la gare amont).
 
 const D_QUAI: float = 7.0              # du nez de gare au centre de la cabine à quai
+## Gare aval déjà bâtie (Grande Motte : bâtiment de la gare du funiculaire) :
+## seul un quai est posé dedans.
+var gare_aval_existante: bool = false
 const T_QUAI: float = 45.0             # attente à quai (embarquement), s
 const V_PYLONE: float = 5.2            # vitesse au passage du pylône (fiche)
 const A_ROUTE: float = 0.6             # accélération / freinage de service (m/s²)
@@ -95,7 +98,10 @@ func construire() -> void:
 	_calculer_tetes()
 	_preparer_nez()
 	for aval in [true, false]:
-		_gare_tph(aval)
+		if aval and gare_aval_existante:
+			_quai_existant()
+		else:
+			_gare_tph(aval)
 		await _pause()
 	await _poser_pylones_treillis()
 	_cables_tph()
@@ -353,6 +359,18 @@ func _gare_tph(aval: bool) -> void:
 	MeshMerge.merge(g, [], "Gare")
 
 
+## Quai de béton dans la gare existante : de la baie (nez) au fond du bâtiment.
+func _quai_existant() -> void:
+	var g: Node3D = Node3D.new()
+	g.name = "GareAval"
+	add_child(g)
+	RemonteeKit.boite_en(g, Vector3(11.0, 0.3, 17.0), Vector3(0, -0.15, 8.6), "beton")
+	# galets de déviation du tracteur, sous la baie
+	for sx in [-1.0, 1.0]:
+		RemonteeKit.galet(g, Vector3(sx * voie * 0.5, H_CABLE_GARE - 0.70, 1.0), 0.25)
+	MeshMerge.merge(g, [], "Gare")
+
+
 ## Profondeur du terrain le plus bas sous le quai (m sous la dalle).
 func _profondeur_quai(aval: bool) -> float:
 	var L: float = longueur_h()
@@ -389,6 +407,9 @@ func _collisions_tph() -> void:
 		var sg: float = 1.0 if aval else -1.0
 		var z0: float = 0.0 if aval else -L
 		var y0: float = terrain(0.0 if aval else L)
+		if aval and gare_aval_existante:
+			boite.call(Vector3(11.0, 0.6, 17.0), Vector3(0, -0.3, 8.6))
+			continue
 		boite.call(Vector3(2.0 * hx, 6.0, lq), Vector3(0, y0 - 3.0, z0 + sg * lq * 0.5))
 	for i in range(pylones.size()):
 		var d: float = float(pylones[i]["d"])

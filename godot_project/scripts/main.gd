@@ -1788,6 +1788,9 @@ func basculer_skieur_auto() -> void:
 func aller_a_remontee(lg: LigneRemontee) -> void:
 	if skieur == null or not mode_skieur or lg == null:
 		return
+	# tronçon haut d'un appareil jumelé (Fresse) : on embarque en bas (Bollin)
+	if lg.role == "haut" and lg.jumelee != null:
+		lg = lg.jumelee
 	if skieur_auto != null:
 		skieur_auto.arreter()
 		skieur_auto = null
@@ -2085,6 +2088,8 @@ func _entrer_skieur() -> void:
 		remontees = RemonteesDomaine.new()
 		remontees.name = "Remontees"
 		add_child(remontees)
+		if station_halls != null:
+			remontees.gare_amont = station_halls.gare_amont
 		remontees.construire(relief)
 		remontees.skieur = skieur
 		remontees.message.connect(func(t: String) -> void: commandes_skieur.message(t, 3.0))

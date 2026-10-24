@@ -11,18 +11,25 @@ extends Node3D
 const LAT_O: float = 45.45188591       # origine du monde : pied de la voie du funiculaire
 const LON_O: float = 6.89898136        # (mêmes constantes que tools_relief3d.py)
 const M_LAT: float = 111320.0
-const VEHICULES_JUSQUA: float = 700.0
+## (PWA : distances réduites — l'arrivée à Val Claret, au milieu de dizaines de
+## lignes, saccadait sur iPad ; retour d'utilisateur, 24/10/2026)
+var VEHICULES_JUSQUA: float = 450.0 if OS.has_feature("web") else 700.0
 const PYLONES_JUSQUA: float = 3000.0
 const ACTIVE_JUSQUA: float = 2500.0
-const DETAILS_JUSQUA: float = 250.0
+var DETAILS_JUSQUA: float = 180.0 if OS.has_feature("web") else 250.0
 
 var relief: ReliefBuilder = null
+## Gare amont du funiculaire : la gare de départ du téléphérique de la Grande
+## Motte y existe déjà (bâtiment BD TOPO) — posé par main.gd.
+var gare_amont: GareAmont = null
 var skieur: SkieurJoueur = null
 var lignes: Array = []          # [LigneRemontee, milieu monde]
 var _t_lod: float = 0.0
 ## À bord d'un siège : [ligne, indice du véhicule, place, gare de départ aval ?]
 var a_bord: Array = []
 var _repos: float = 0.0          # pas de nouvel embarquement juste après un débarquement
+var _sous_terre: bool = false    # caméra sous terre (funiculaire) : remontées cachées
+var _f_lod: float = 0.6 if OS.has_feature("web") else 1.0     # distances du niveau de détail
 signal message(texte: String)
 
 
@@ -35,18 +42,74 @@ func construire(r: ReliefBuilder) -> void:
 	relief = r
 	for D in RemonteesDonnees.LIGNES:
 		_poser(D)
+	_jumeler()
 	print("[Remontees] %d lignes posées" % lignes.size())
+
+
+## Tronçons jumelés : [bas, haut]. Bollin–Fresse dans sa configuration
+## d'avant 2019 (aiguillage à la gare intermédiaire, double embarquement en
+## bas — retour d'utilisateur, 24/10/2026 : « je veux l'ancienne config »).
+const JUMELAGES: Array = [["tsd6_bollin", "tsd6_fresse"]]
+## Gare intermédiaire : un seul bâtiment coudé au point OSM commun aux deux
+## tronçons ; le nez de Bollin est reculé, celui de Fresse avancé, d'une
+## longueur de gare — les deux poulies sont au coude (retour d'utilisateur,
+## 24/10/2026 : « un seul bâtiment avec un angle au milieu »).
+const L_INTERMEDIAIRE: float = LigneRemontee.L_GARE
+
+
+func _ligne_nommee(cle: String) -> LigneRemontee:
+	for e in lignes:
+		if (e[0] as Node).name == cle:
+			return e[0]
+	return null
+
+
+func _jumeler() -> void:
+	for j in JUMELAGES:
+		var bas: LigneRemontee = _ligne_nommee(j[0])
+		var haut: LigneRemontee = _ligne_nommee(j[1])
+		if bas == null or haut == null:
+			continue
+		bas.jumelee = haut
+		haut.jumelee = bas
+		bas.role = "bas"
+		haut.role = "haut"
+		# même siège, même pas : un siège sur deux de Bollin monte à Fresse
+		haut.vitesse = bas.vitesse
+		haut.voie = bas.voie
+		bas.periode_imposee = bas.espacement / bas.vitesse
+		haut.periode_imposee = 2.0 * bas.periode_imposee
+		haut.espacement = haut.periode_imposee * haut.vitesse
+		haut.rampes = [0.0, haut.rampes[1]]
 
 
 func _poser(D: Dictionary) -> void:
 	var a: Vector2 = monde(float(D["aval"][0]), float(D["aval"][1]))
 	var b: Vector2 = monde(float(D["amont"][0]), float(D["amont"][1]))
+	# téléphérique de la Grande Motte : il part de sa gare existante, à côté
+	# de la gare du funiculaire (le point OSM est 24 m plus au sud ; une
+	# seconde gare y était construite — retour d'utilisateur, 24/10/2026)
+	var quai_tph: Dictionary = {}
+	if String(D["cle"]) == "tph_grande_motte" and gare_amont != null:
+		quai_tph = gare_amont.tph_quai()
+		a = Vector2((quai_tph["nez"] as Vector3).x, (quai_tph["nez"] as Vector3).z)
 	var dirh: Vector2 = b - a
 	var L: float = dirh.length()
 	if L < 10.0:
 		return
 	dirh /= L
+	for j in JUMELAGES:
+		if String(D["cle"]) == j[1]:
+			# tronçon haut : son nez au bout de la gare intermédiaire
+			a += dirh * L_INTERMEDIAIRE
+			L -= L_INTERMEDIAIRE
+		elif String(D["cle"]) == j[0]:
+			# tronçon bas : son nez au début de la gare intermédiaire
+			b -= dirh * L_INTERMEDIAIRE
+			L -= L_INTERMEDIAIRE
 	var h0: float = relief.hauteur_sol(a.x, a.y)
+	if not quai_tph.is_empty():
+		h0 = (quai_tph["nez"] as Vector3).y
 	# profil sous l'axe, pris sur le relief AFFICHÉ (pas l'IGN) : pylônes et
 	# gares posés sur le sol que l'on voit
 	var prof: PackedVector2Array = PackedVector2Array()
@@ -93,7 +156,11 @@ func _poser(D: Dictionary) -> void:
 				break
 			t2 += 1.0
 		rampes[k] = t2
+	if not quai_tph.is_empty():
+		prof[0] = Vector2(0.0, 0.0)            # le quai : le sol du bâtiment
 	var lg: LigneRemontee = Telepherique.new() if String(D["famille"]) == "cabine_tph" else LigneRemontee.new()
+	if not quai_tph.is_empty():
+		(lg as Telepherique).gare_aval_existante = true
 	lg.name = String(D["cle"])
 	lg.profil = prof
 	lg.rampes = rampes
@@ -120,6 +187,7 @@ func _poser(D: Dictionary) -> void:
 	lg.constructeur = String(D.get("constructeur", ""))
 	lg.annee = int(str(D.get("annee", "0")))
 	lg.station = String(D.get("station", ""))
+	lg.balanciers_estimes = String(D.get("balanciers", "")) == "estimés"
 	lg.quartier = String(D.get("quartier", ""))
 	lg.altitude_aval = float(D.get("altitude_aval", 0.0))
 	lg.debit = float(D.get("debit", 0.0))
@@ -128,6 +196,8 @@ func _poser(D: Dictionary) -> void:
 	lg.transform = Transform3D(Basis.looking_at(fwd, Vector3.UP), Vector3(a.x, h0, a.y))
 	lg.avec_collisions = true
 	lg.progressif = true
+	if OS.has_feature("web"):
+		lg.budget_ms = 2.5                # construction plus étalée sur iPad
 	lg.set_process(false)
 	add_child(lg)
 	# construite plus tard, quand le skieur approche (_construire_proches)
@@ -164,12 +234,15 @@ func _ready() -> void:
 
 ## Construction à la demande : la ligne non construite la plus proche du
 ## skieur (à moins de CONSTRUIRE_JUSQUA m), une à la fois, par tranches.
-const CONSTRUIRE_JUSQUA: float = 2000.0
+var CONSTRUIRE_JUSQUA: float = 1200.0 if OS.has_feature("web") else 2000.0
+## Au-delà, une ligne construite est démontée (mémoire) ; écart avec la
+## distance de construction pour ne pas battre.
+var DEMOLIR_AU_DELA: float = 2200.0 if OS.has_feature("web") else 3500.0
 var _en_cours: LigneRemontee = null
 
 
 func _construire_proches() -> void:
-	if _en_cours != null or skieur == null or not skieur.actif:
+	if _en_cours != null or skieur == null or not skieur.actif or _sous_terre:
 		return
 	var p: Vector3 = skieur.global_position
 	var best: LigneRemontee = null
@@ -196,7 +269,20 @@ func _construire_proches() -> void:
 		best.construire()
 
 
+var _poubelle: Array = []
+
+
+## Lignes démontées : leurs nœuds libérés par paquets, 1,5 ms par image au plus.
+func _vider_poubelle() -> void:
+	var t0: int = Time.get_ticks_usec()
+	while not _poubelle.is_empty() and Time.get_ticks_usec() - t0 < 1500:
+		var n: Node = _poubelle.pop_back()
+		if is_instance_valid(n):
+			n.free()
+
+
 func _process(delta: float) -> void:
+	_vider_poubelle()
 	_construire_proches()
 	_embarquement()
 	_t_lod -= delta
@@ -212,18 +298,46 @@ func _process(delta: float) -> void:
 		if cam == null:
 			return
 		p = cam.global_position
+	# sous terre (trajet en funiculaire, galerie) : rien des remontées n'est
+	# visible — tout est caché et figé (le défilement du tunnel n'était pas
+	# fluide sur la PWA, retour d'utilisateur, 24/10/2026)
+	_sous_terre = relief != null and p.y < relief.hauteur_sol(p.x, p.z) - 6.0 and a_bord.is_empty()
+	if _sous_terre:
+		if visible:
+			visible = false
+			for e in lignes:
+				(e[0] as LigneRemontee).set_process(false)
+		return
+	visible = true
 	# niveau de détail par ligne, selon la distance à la LIGNE (segment
 	# gare aval – gare amont) : véhicules invisibles au-delà de
 	# VEHICULES_JUSQUA → ligne figée ; au-delà de 300 m, une image sur
 	# trois ; la ligne où l'on est assis, toujours à pleine cadence
 	for e in lignes:
 		var lg: LigneRemontee = e[0]
+		if lg.pret and lg != _en_cours and (a_bord.is_empty() or (a_bord[0] != lg and a_bord[0] != lg.jumelee)) \
+				and _distance_ligne(lg, p) > DEMOLIR_AU_DELA \
+				and (lg.jumelee == null or _distance_ligne(lg.jumelee, p) > DEMOLIR_AU_DELA):
+			lg.demolir(_poubelle)
+			lg.set_meta("lancee", false)
+			continue
 		if not lg.roule:
 			continue
 		var d: float = _distance_ligne(lg, p)
 		var a_bord_ici: bool = not a_bord.is_empty() and a_bord[0] == lg
+		# tronçons jumelés : ils tournent ensemble, au même pas (sinon les
+		# sièges qui passent de l'un à l'autre se décalent)
+		var jm: LigneRemontee = lg.jumelee
+		if jm != null and jm.roule:
+			d = minf(d, _distance_ligne(jm, p))
+			a_bord_ici = a_bord_ici or (not a_bord.is_empty() and a_bord[0] == jm)
+			if lg.role == "haut" and not lg._synchro:
+				lg.synchroniser()
+		elif jm != null:
+			lg.set_process(false)          # il attend son jumeau
+			continue
 		lg.set_process(a_bord_ici or d < VEHICULES_JUSQUA + 50.0)
-		lg.pas_lod = 1 if (a_bord_ici or d < 150.0) else (2 if d < 300.0 else 4)
+		lg.pas_lod = 1 if (a_bord_ici or d < 150.0 * _f_lod) else (2 if d < 300.0 * _f_lod else 4)
 		lg.details_visibles = d < DETAILS_JUSQUA + 50.0
 		lg.collisions_actives = a_bord_ici or d < 120.0
 		lg.point_vue = lg.global_transform.affine_inverse() * p
@@ -295,7 +409,8 @@ func _embarquement() -> void:
 				skieur.embarque = true
 				skieur.asseoir(_cap(v), true)
 				_suivre_siege()
-				message.emit("Assis — %s" % lg.nom_ligne)
+				var dest: String = lg.jumelee.nom_ligne if (aval and lg.role == "bas" and lg.traverse(i)) else lg.nom_ligne
+				message.emit("Assis — %s" % dest)
 				return
 
 
@@ -362,6 +477,34 @@ func _entrer_cabine(lg: LigneRemontee, p: Vector3) -> bool:
 		message.emit(("Skis au porte-skis — assis — %s" if skis else "Assis — %s") % lg.nom_ligne)
 		return true
 	return false
+
+
+## Assis dans un siège de Fresse sur le tronçon de Bollin : à la sortie de la
+## gare intermédiaire, il continue dans le siège du tronçon haut qui en sort
+## au même instant, au même endroit (les deux tronçons sont calés).
+func _relais_jumele() -> void:
+	var lg: LigneRemontee = a_bord[0]
+	var i: int = a_bord[1]
+	if lg.role != "bas" or not lg.traverse(i) or lg.jumelee == null:
+		return
+	var s: float = lg._vehicules[i][1]
+	var fin: float = float(lg._zones[1][1])
+	var x: float = fposmod(s - fin, lg.longueur_boucle)
+	if x > 6.0:
+		return                         # pas encore sorti de l'intermédiaire
+	var h: LigneRemontee = lg.jumelee
+	var sortie: float = float(h._zones[0][1])
+	var best: int = -1
+	var dmin: float = 8.0
+	for j in range(h._vehicules.size()):
+		var dx: float = fposmod(float(h._vehicules[j][1]) - sortie, h.longueur_boucle)
+		if dx < dmin:
+			dmin = dx
+			best = j
+	if best < 0:
+		return
+	a_bord = [h, best, a_bord[2], a_bord[3], a_bord[4]]
+	h._placer(best)
 
 
 ## Quitter la remontée (aller à une autre depuis la carte) : on lâche la
@@ -454,6 +597,7 @@ func _suivre_siege() -> void:
 	if a_bord.size() > 5:
 		_suivre_perche()
 		return
+	_relais_jumele()
 	var lg: LigneRemontee = a_bord[0]
 	var i: int = a_bord[1]
 	var v: VehiculeRemontee = lg.vehicule(i)

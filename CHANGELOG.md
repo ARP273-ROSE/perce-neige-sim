@@ -5,6 +5,45 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.30.0 — 24 octobre 2026
+
+**Bollin–Fresse dans sa configuration d'avant 2019, pylônes vérifiés, un portillon par place,
+mêmes sièges partout, mémoire et fluidité sur iPad.** Retours d'utilisateur du 24/10/2026.
+
+- **Bollin–Fresse** (« je veux l'ancienne config ») : deux tronçons jumelés, chacun son câble et
+  sa poulie ; un siège sur deux de Bollin est un siège de Fresse. Gare du bas deux fois plus
+  large : double contour (Bollin à gauche, Fresse à droite), deux files, deux groupes de
+  portillons qui s'ouvrent chacun pour ses sièges, un seul lanceur ; un portique « Bollin –
+  Fresse » sur les deux files, un panneau par file. Gare intermédiaire : un seul bâtiment coudé,
+  les deux poulies au coude ; les sièges de Bollin y font demi-tour, ceux de Fresse filent du
+  lanceur de Bollin à celui de Fresse par l'aiguillage et le virage, garde-corps baissé (et de
+  même à la descente). Les deux tronçons ont la même vitesse, Fresse le double de la période,
+  chaque boucle un nombre entier de périodes (pair sur Bollin), les sièges du haut recalés sur
+  ceux du bas : à la sortie de l'intermédiaire, un siège de chaque tronçon échange sa place au
+  même instant. Assis dans un siège de Fresse, on traverse l'intermédiaire et l'on arrive en
+  haut ; dans un siège de Bollin, on descend à l'intermédiaire. Banc `bench_bollin_fresse_3d`.
+- **Pylônes de nez des télésièges** : un fût central et une traverse portent les deux trains de
+  galets, comme en ligne (avant : un poteau sous chaque train, que les sièges traversaient).
+- **Vérification physique des pylônes** : un pylône porteur doit faire un angle saillant, flèche
+  des portées comprise (le brin descente, moins chargé, décide) — sinon le câble décollerait des
+  galets ; trop bas, il est relevé. Balanciers estimés (pas de relevé RM.net, Bollin par
+  exemple) : compression là où la ligne est creuse, support là où elle est saillante.
+- **Un portillon par place**, par paires (une borne tous les deux vantaux, l'un pivote à gauche,
+  l'autre à droite).
+- **Mêmes sièges partout** : celui mis au point sur le Marmottes Express (assise, dossier,
+  poutre de tête, garde-corps) ; seules les couleurs, le nombre de places et la bulle des
+  Lanches changent.
+- **Téléphérique de la Grande Motte** : il part de la gare existante (bâtiment de la gare du
+  funiculaire) au lieu d'une seconde gare construite au point OSM ; porte côté funiculaire, seuil
+  dégagé, quai intérieur. (Refonte complète du téléphérique à suivre.)
+- **Mémoire (iPad)** : une ligne à plus de 2,2 km (3,5 km sur PC) est démontée et se reconstruit
+  à l'approche — la PWA était tuée et rechargée après une longue montée (Fresse) ; le poste borne
+  les valeurs qu'il affiche.
+- **Fluidité (PWA)** : sous terre (trajet en funiculaire), les remontées sont cachées et figées ;
+  construction à 1,2 km au lieu de 2, véhicules à 450 m au lieu de 700, construction plus étalée
+  (2,5 ms par image), niveaux de détail plus serrés.
+- Vérifié : tous les bancs des remontées, du skieur et du funiculaire.
+
 ## 1.29.1 — 24 octobre 2026
 
 **Téléskis en virage, vrais pylônes de téléski, lignes qui roulent tout de suite.** Retours

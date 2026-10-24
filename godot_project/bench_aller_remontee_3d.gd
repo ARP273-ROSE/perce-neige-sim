@@ -62,8 +62,11 @@ func _tick() -> void:
 			ev.pressed = true
 			ev.position = pos
 			carte._gui_input(ev)
-			if _main._depose_remontee == _lg:
+			if _main._depose_remontee == _lg or (_lg.role == "haut" and _main._depose_remontee == _lg.jumelee):
 				break
+		# (Fresse : on est déposé au départ de Bollin, où l'on embarque)
+		if _lg.role == "haut" and _lg.jumelee != null:
+			_lg = _lg.jumelee
 	_t += 1.0 / 60.0
 	if _t > 3.0:
 		var d: float = Vector2(sk.global_position.x - _lg.global_transform.origin.x,

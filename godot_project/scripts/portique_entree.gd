@@ -114,7 +114,7 @@ static func _val(ent: Node3D, lg: LigneRemontee, la: float, specs: String) -> vo
 	# pictogramme du télésiège, nom, caractéristiques
 	RemonteeKit.cylindre(ent, 0.17, 0.17, 0.02, Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3(-lb * 0.5 + 0.35, yb + 0.12, 0.21)), "noir_mat", 20)
 	RemonteeKit.cylindre(ent, 0.14, 0.14, 0.022, Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3(-lb * 0.5 + 0.35, yb + 0.12, 0.21)), "blanc_plaque", 20)
-	_txt(ent, lg.nom_court(), Vector3(-lb * 0.5 + 0.62, yb + 0.12, 0.215), 0.0062, Color(0.20, 0.21, 0.24), HORIZONTAL_ALIGNMENT_LEFT, 0.0, lb - 2.0)
+	_txt(ent, lg.titre(), Vector3(-lb * 0.5 + 0.62, yb + 0.12, 0.215), 0.0062, Color(0.20, 0.21, 0.24), HORIZONTAL_ALIGNMENT_LEFT, 0.0, lb - 2.0)
 	_txt(ent, specs, Vector3(-lb * 0.5 + 0.62, yb - 0.17, 0.215), 0.0010, Color(0.30, 0.31, 0.34), HORIZONTAL_ALIGNMENT_LEFT, 0.0, lb - 2.0)
 	# horaires
 	var xh: float = lb * 0.5 - 0.42
@@ -145,7 +145,7 @@ static func _tignes(ent: Node3D, lg: LigneRemontee, la: float, alt0: int, alt1: 
 	_pendule(ent, Vector3(x0 + 1.25, yb - 0.20, z + 0.015), 0.0024, Color(1.0, 0.18, 0.12))
 	# pictogramme et nom en grand
 	RemonteeKit.boite_en(ent, Vector3(0.40, 0.40, 0.02), Vector3(x0 + 1.95, yb + 0.03, z), "blanc_plaque")
-	_txt(ent, lg.nom_court().to_upper(), Vector3(x0 + 2.25, yb + 0.03, z + 0.005), 0.0055, Color(0.97, 0.97, 0.97), HORIZONTAL_ALIGNMENT_LEFT, 0.0, lb - 2.4)
+	_txt(ent, lg.titre().to_upper(), Vector3(x0 + 2.25, yb + 0.03, z + 0.005), 0.0055, Color(0.97, 0.97, 0.97), HORIZONTAL_ALIGNMENT_LEFT, 0.0, lb - 2.4)
 	_txt(ent, "➜  " + lg.quartier.to_upper(), Vector3(0, yb - 0.55, 0.055), 0.0016, Color(0.95, 0.95, 0.95))
 	# totem à droite : maîtrisez votre vitesse, plan des pistes
 	var xt: float = la + 0.75

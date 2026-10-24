@@ -121,6 +121,35 @@ func _pause() -> void:
 		_t_tranche = Time.get_ticks_usec()
 
 
+## Démontage d'une ligne loin du skieur (mémoire de l'iPad : la PWA était
+## tuée et rechargée après une longue remontée — retour d'utilisateur,
+## 24/10/2026) ; elle se reconstruit à l'approche.
+## Les nœuds sont rendus à `poubelle` (cachés, détachés plus tard par petits
+## paquets : tout libérer d'un coup figeait l'image).
+func demolir(poubelle: Array) -> void:
+	set_process(false)
+	pret = false
+	roule = false
+	for c in get_children():
+		if c is Node3D:
+			(c as Node3D).visible = false
+		if c is CollisionObject3D:
+			(c as CollisionObject3D).collision_layer = 0
+		c.process_mode = Node.PROCESS_MODE_DISABLED
+		poubelle.append(c)
+	_vehicules.clear()
+	_corps.clear()
+	_pyl.clear()
+	_pyl_touches.clear()
+	_poulies.clear()
+	_pneus.clear()
+	_portillons_gares.clear()
+	_terrassements.clear()
+	_synchro = false
+	if jumelee != null:
+		jumelee._synchro = false
+
+
 func construire() -> void:
 	_poulies.clear()
 	_mat_porteurs = null
@@ -130,10 +159,17 @@ func construire() -> void:
 	_t_tranche = Time.get_ticks_usec()
 	set_process(false)
 	for c in get_children():
-		c.queue_free()
+		if c.process_mode != Node.PROCESS_MODE_DISABLED:     # (déjà à la poubelle du domaine)
+			c.queue_free()
 	_vehicules.clear()
 	_pyl.clear()
 	_pyl_touches.clear()
+	_corps.clear()
+	_portillons_gares.clear()
+	_pneus.clear()
+	_synchro = false
+	if jumelee != null:
+		jumelee._synchro = false
 	H_CABLE_GARE = VehiculeRemontee.hauteur_cable_gare(famille)
 	# vitesse d'embarquement : 1 m/s aux sièges, 0,25 m/s aux cabines (on y
 	# entre à pied) — les véhicules se resserrent d'autant dans la partie
@@ -161,12 +197,20 @@ func construire() -> void:
 			and famille != "cabine_3s" and famille != "cabine_tph":
 		_rail_ouverture(true)
 		_rail_ouverture(false)
+	_caler_periode()
+	if jumelee != null:
+		_construire_table()
 	await _peupler()
 	roule = true
 	set_process(true)
 	if not (famille.begins_with("cabine") or famille.begins_with("perche")):
-		_portillons(true)
+		# (Fresse, jumelé : on n'embarque pas à l'intermédiaire, les sièges
+		# arrivent pleins de Bollin)
+		if role != "haut":
+			_portillons(true)
 		_portillons(false)
+		if role == "bas":
+			_double_embarquement()
 	if avec_collisions:
 		_collisions_fixes()
 		for i in range(_vehicules.size()):
@@ -270,6 +314,8 @@ func _calculer_tetes() -> void:
 	for i in range(_tetes.size()):
 		var t: float = terrain(float(pylones[i]["d"]))
 		_tetes[i] = clampf(_tetes[i], t + 6.5, t + (90.0 if tricable() or vaetvient() else 32.0))
+	if balanciers_estimes:
+		_choisir_balanciers()
 	# pylônes de COMPRESSION (balancier côté montée en C) : le câble doit y
 	# passer SOUS les galets, la ligne y est concave — tête abaissée sous la
 	# corde de ses voisins (sinon le câble décollerait des galets)
@@ -296,6 +342,80 @@ func _calculer_tetes() -> void:
 				continue
 			if _tetes[i] > corde - 0.8 + 0.05:
 				_tetes[i] = corde - 0.8
+				bouge = true
+		if not bouge:
+			break
+	_porteurs_convexes()
+
+
+## Pylônes PORTEURS (galets sous le câble) : la ligne doit y faire un angle
+## saillant, flèche des portées comprise — sinon le câble décollerait des
+## galets et on le tirerait artificiellement vers le bas (retour d'utilisateur,
+## 24/10/2026 : « sur Bollin, pylônes 5 et 6, des galets en mode porteur avec le
+## câble qui passe au-dessus »). Le pylône trop bas est relevé jusqu'à une
+## déviation d'au moins 0,3°.
+const DEVIATION_MIN: float = 0.005
+
+
+func deviation_pylone(i: int, montee: bool = true) -> float:
+	var d: float = float(pylones[i]["d"])
+	var e: float = 3.0
+	var y0: float = _y_chainette(d - e, montee)
+	var y1: float = _y_chainette(d, montee)
+	var y2: float = _y_chainette(d + e, montee)
+	return atan2(y1 - y0, e) - atan2(y2 - y1, e)
+
+
+## Balanciers estimés (pas de relevé remontees-mecaniques.net) : la nature
+## de chaque pylône suit la géométrie — compression là où la ligne est
+## creuse (il faudrait sinon relever le pylône de plus de 3 m), support là
+## où elle est saillante.
+var balanciers_estimes: bool = false
+
+
+func _choisir_balanciers() -> void:
+	if tricable() or vaetvient() or teleski():
+		return
+	var pts: Array = _points_appui()
+	for i in range(pylones.size()):
+		var dev: float = minf(deviation_pylone(i, true), deviation_pylone(i, false))
+		var d: float = float(pylones[i]["d"])
+		var a: float = maxf(d - float(pts[i][0]), 1.0)
+		var b: float = maxf(float(pts[i + 2][0]) - d, 1.0)
+		var releve: float = (DEVIATION_MIN * 1.2 - dev) / (1.0 / a + 1.0 / b)
+		var p: Dictionary = (pylones[i] as Dictionary).duplicate()
+		var n: int = 0
+		for g in p.get("montee", [[8, "S"]]):
+			n += int(g[0]) if g[0] != null else 2
+		if releve > 3.0:
+			p["montee"] = [[n, "C"]]
+			p["descente"] = [[n, "C"]]
+		elif dev > 0.0:
+			p["montee"] = [[n, "S"]]
+			p["descente"] = [[n, "S"]]
+		pylones[i] = p
+
+
+func _porteurs_convexes() -> void:
+	if tricable() or vaetvient():
+		return
+	for it in range(40):
+		var bouge: bool = false
+		var pts: Array = _points_appui()
+		for i in range(pylones.size()):
+			if _compression(pylones[i]):
+				continue
+			# (le brin descente, moins chargé, a moins de flèche : il décolle le premier)
+			var dev: float = minf(deviation_pylone(i, true), deviation_pylone(i, false))
+			if dev >= DEVIATION_MIN:
+				continue
+			var d: float = float(pylones[i]["d"])
+			var a: float = maxf(d - float(pts[i][0]), 1.0)
+			var b: float = maxf(float(pts[i + 2][0]) - d, 1.0)
+			var t: float = terrain(d)
+			var h: float = minf(_tetes[i] + (DEVIATION_MIN * 1.2 - dev) / (1.0 / a + 1.0 / b), t + 32.0)
+			if h > _tetes[i] + 0.01:
+				_tetes[i] = h
 				bouge = true
 		if not bouge:
 			break
@@ -378,6 +498,188 @@ func _x_brin(montee: bool) -> float:
 
 
 # --- boucle des véhicules ----------------------------------------------------------
+
+# --- tronçons jumelés (Bollin–Fresse, configuration d'avant 2019) -----------------
+## Deux tronçons, chacun son câble, et un siège sur deux qui passe de l'un à
+## l'autre par un aiguillage à la gare intermédiaire (remontees-mecaniques.net :
+## « un siège sur deux de Bollin monte à Fresse ») ; en bas, double contour :
+## une file et une zone d'embarquement par destination (retour d'utilisateur,
+## 24/10/2026 : « je veux l'ancienne config »).
+## Rendu : les sièges impairs du tronçon bas sont ceux de Fresse. En gare
+## intermédiaire, ils filent tout droit du nez de Bollin au nez de Fresse
+## (montée) au lieu de faire le tour de la poulie ; les sièges du tronçon
+## haut, en gare aval, filent du nez de Fresse au nez de Bollin (descente).
+## À la sortie de gare, un siège de Bollin et un siège de Fresse, identiques,
+## échangent leur place au même instant : les deux tronçons sont calés pour
+## que leurs sorties coïncident (même période, `synchroniser`).
+var jumelee: LigneRemontee = null
+var role: String = ""                 # "bas" (Bollin) ou "haut" (Fresse)
+const DECAL_CONTOUR: float = 3.6      # contour extérieur du double embarquement
+var periode_imposee: float = 0.0      # s entre deux sièges, imposée par le jumelage
+var _tab_s: PackedFloat32Array = PackedFloat32Array()   # s tous les 0,05 s (régime 1)
+var _synchro: bool = false
+
+
+## Gare aval du tronçon bas : élargie du contour extérieur (double
+## embarquement : « deux fois plus large que les autres »).
+func elargissement(aval: bool) -> float:
+	return DECAL_CONTOUR if (jumelee != null and role == "bas" and aval) else 0.0
+
+
+## Le siège i passe d'un tronçon à l'autre (siège de Fresse).
+func traverse(i: int) -> bool:
+	if jumelee == null:
+		return false
+	return role == "haut" or i % 2 == 1
+
+
+## Siège i sur le contour extérieur du double embarquement (gare aval de
+## Bollin) : Fresse à droite, Bollin à gauche, face à la ligne (retour
+## d'utilisateur, 24/10/2026), le contour extérieur étant du côté du brin montée.
+func contour_exterieur(i: int) -> bool:
+	if jumelee == null or role != "bas":
+		return false
+	return traverse(i) == sens_droite
+
+
+## Temps de parcours de la boucle à la vitesse v (régime 1).
+func _temps_boucle(v: float) -> float:
+	var v0: float = vitesse
+	vitesse = v
+	var s2: float = 0.0
+	var t: float = 0.0
+	while s2 < longueur_boucle and t < 7200.0:
+		s2 += vitesse_en(s2) * 0.05
+		t += 0.05
+	vitesse = v0
+	return t
+
+
+## Vitesse retouchée (quelques %) pour que la boucle dure un nombre entier
+## de périodes (pair au tronçon bas : les sièges y alternent Bollin/Fresse).
+func _caler_periode() -> void:
+	if periode_imposee <= 0.0:
+		return
+	var T: float = _temps_boucle(vitesse)
+	var n: int = maxi(2, int(round(T / periode_imposee)))
+	if role == "bas" and n % 2 == 1:
+		n += 1
+	var cible: float = n * periode_imposee
+	var lo: float = vitesse * 0.8
+	var hi: float = vitesse * 1.25
+	for k in range(24):
+		var m: float = (lo + hi) * 0.5
+		if _temps_boucle(m) > cible:
+			lo = m
+		else:
+			hi = m
+	vitesse = (lo + hi) * 0.5
+	espacement = periode_imposee * vitesse
+
+
+func _construire_table() -> void:
+	_tab_s = PackedFloat32Array()
+	var s2: float = 0.0
+	while s2 < longueur_boucle:
+		_tab_s.append(s2)
+		s2 += vitesse_en(s2) * 0.05
+	_tab_s.append(longueur_boucle)
+
+
+func _t_de_s(s2: float) -> float:
+	s2 = fposmod(s2, longueur_boucle)
+	var lo: int = 0
+	var hi: int = _tab_s.size() - 1
+	while hi - lo > 1:
+		var m: int = (lo + hi) / 2
+		if _tab_s[m] <= s2:
+			lo = m
+		else:
+			hi = m
+	var u: float = (s2 - _tab_s[lo]) / maxf(_tab_s[hi] - _tab_s[lo], 1e-4)
+	return (lo + u) * 0.05
+
+
+func _s_de_t(t: float) -> float:
+	var T: float = (_tab_s.size() - 1) * 0.05
+	t = fposmod(t, T)
+	var k: int = int(t / 0.05)
+	var u: float = (t - k * 0.05) / 0.05
+	return lerpf(_tab_s[k], _tab_s[mini(k + 1, _tab_s.size() - 1)], u)
+
+
+## Tronçon haut : ses sièges recalés pour sortir de la gare intermédiaire
+## au même instant que les sièges de Fresse du tronçon bas.
+func synchroniser() -> void:
+	var b: LigneRemontee = jumelee
+	if b == null or role != "haut" or b._tab_s.is_empty() or _tab_s.is_empty():
+		return
+	var T_b: float = (b._tab_s.size() - 1) * 0.05
+	var t_sortie_b: float = b._t_de_s(float(b._zones[1][1]))
+	var tau: float = INF
+	for i in range(1, b._vehicules.size(), 2):
+		tau = minf(tau, fposmod(t_sortie_b - b._t_de_s(b._vehicules[i][1]), T_b))
+	var t_sortie: float = _t_de_s(float(_zones[0][1]))
+	for k in range(_vehicules.size()):
+		# siège k : sort de la gare aval dans tau + k·période (passé : négatif)
+		_vehicules[k][1] = _s_de_t(t_sortie - (tau + k * periode_imposee))
+	_synchro = true
+
+
+## Traversée de l'intermédiaire (repère de cette ligne) : [départ, point de
+## contrôle, arrivée] d'une courbe de Bézier — droit dans l'axe du lanceur
+## d'arrivée, virage par l'aiguillage au coude du bâtiment, droit dans
+## l'axe du lanceur de départ.
+func _nez_traversee(montee: bool) -> Array:
+	var b: LigneRemontee = jumelee
+	var xf: Transform3D = global_transform.affine_inverse() * b.global_transform
+	var p0: Vector3
+	var p2: Vector3
+	var d0: Vector3
+	var d2: Vector3
+	if role == "bas":
+		# montée : nez amont de Bollin → nez aval de Fresse (côté montée)
+		p0 = _point_cable(float(_zones[1][0]))[0]
+		p2 = xf * (b._point_cable(float(b._zones[0][1]))[0] as Vector3)
+		d0 = Vector3(0, 0, -1)
+		d2 = xf.basis * Vector3(0, 0, -1)
+	else:
+		# haut, descente : nez aval de Fresse (descente) → nez amont de Bollin (descente)
+		p0 = _point_cable(float(_zones[0][0]))[0]
+		p2 = xf * (b._point_cable(float(b._zones[1][1]))[0] as Vector3)
+		d0 = Vector3(0, 0, 1)
+		d2 = xf.basis * Vector3(0, 0, 1)
+	# point de contrôle : croisement des deux axes (dans le plan)
+	var a2: Vector2 = Vector2(p0.x, p0.z)
+	var u2: Vector2 = Vector2(d0.x, d0.z).normalized()
+	var c2: Vector2 = Vector2(p2.x, p2.z)
+	var v2: Vector2 = Vector2(d2.x, d2.z).normalized()
+	var den: float = u2.cross(v2)
+	var c: Vector3 = (p0 + p2) * 0.5
+	if absf(den) > 0.02:
+		var t: float = (c2 - a2).cross(v2) / den
+		var q: Vector2 = a2 + u2 * t
+		c = Vector3(q.x, (p0.y + p2.y) * 0.5, q.y)
+	return [p0, c, p2]
+
+
+## Position (repère de la ligne) du véhicule i à l'abscisse s, jumelage compris.
+func _pos_vehicule(i: int, s2: float) -> Vector3:
+	var p: Vector3 = point(s2)[0]
+	if jumelee == null or not is_instance_valid(jumelee) or not jumelee.roule:
+		return p
+	var z: Array = zone(s2)
+	if role == "bas" and z[0] == "gare_aval" and contour_exterieur(i):
+		var x: float = z[1]
+		var l: float = z[2]
+		var w: float = smoothstep(L_FREIN * 0.5, L_FREIN, x) * (1.0 - smoothstep(l - L_FREIN, l - L_FREIN * 0.5, x))
+		return p + _dehors(s2) * (DECAL_CONTOUR * w)
+	if traverse(i) and ((role == "bas" and z[0] == "gare_amont") or (role == "haut" and z[0] == "gare_aval")):
+		var nz: Array = _nez_traversee(role == "bas")
+		var u: float = float(z[1]) / maxf(float(z[2]), 0.01)
+		return (nz[0] as Vector3) * ((1.0 - u) * (1.0 - u)) + (nz[1] as Vector3) * (2.0 * u * (1.0 - u)) + (nz[2] as Vector3) * (u * u)
+	return p
+
 
 ## Téléski en virage (TKD du 3000) : décalage latéral du brin MONTÉE au droit
 ## de d (interpolé entre les pylônes de virage, nul aux gares) ; la descente
@@ -600,6 +902,7 @@ func _gare(aval: bool) -> void:
 	else:
 		# carénage du constructeur (Doppelmayr, Poma, Garaventa, fixes…)
 		var gc: GareCarenage = GareCarenage.new(self)
+		gc.elarg = elargissement(aval)
 		gc.construire(g, znez, zc, style_gare())
 		if famille.begins_with("cabine"):
 			gc.batiment(g, aval)          # le bâtiment de la gare remplace la cabine du conducteur
@@ -665,7 +968,7 @@ const L_DESCENTE: float = 4.0         # longueur de la descente de débarquement
 
 
 func _bords_quai(aval: bool) -> Array:
-	var hw: float = (voie + 10.0) * 0.5
+	var hw: float = (voie + 10.0) * 0.5 + elargissement(aval)
 	var bq: Array = [hw, hw, PENTE_TALUS, PENTE_TALUS]
 	if famille.begins_with("siege"):
 		var cote: int = 1 if _x_brin(not aval) > 0.0 else 0
@@ -974,6 +1277,13 @@ func nom_court() -> String:
 	return t.strip_edges()
 
 
+## Nom affiché au portique d'entrée (Bollin–Fresse jumelés : les deux).
+func titre() -> String:
+	if role == "bas" and jumelee != null:
+		return "%s – %s" % [nom_court(), jumelee.nom_court()]
+	return nom_court()
+
+
 ## Famille de carénage des gares, d'après le constructeur et l'année
 ## (photos des gares du domaine, reportages remontees-mecaniques.net).
 func style_gare() -> String:
@@ -1103,7 +1413,7 @@ func _pos_cabine_conducteur(aval: bool) -> Vector3:
 	var znez: float = 0.0 if aval else -L
 	var sg: float = 1.0 if aval else -1.0
 	var xb: float = signf(_x_brin(aval))
-	return Vector3(xb * (voie * 0.5 + D_CAPOT + 1.8), terrain(0.0 if aval else L), znez + sg * (minf(L_FREIN, l_gare * 0.4) + 3.0))
+	return Vector3(xb * (voie * 0.5 + D_CAPOT + 1.8 + elargissement(aval)), terrain(0.0 if aval else L), znez + sg * (minf(L_FREIN, l_gare * 0.4) + 3.0))
 
 
 ## Collisions fixes : pylônes (massif, fût, traverse) et gares (dalle,
@@ -1257,8 +1567,11 @@ func _portillons(aval: bool) -> void:
 	add_child(g)
 	var places: int = VehiculeRemontee.DESCRIPTIONS.get(famille, ["", 6, ""])[1]
 	var W: float = 0.50 * places + 0.20
-	var n: int = maxi(1, places / 2)
-	var lv: float = W / n
+	# un portillon par place (retour d'utilisateur, 24/10/2026), par paires : une
+	# borne tous les deux vantaux, l'un pivote à gauche, l'autre à droite
+	var n: int = maxi(1, places)
+	var nb: int = int(ceil(n / 2.0))
+	var lb2: float = W / nb                       # largeur d'une paire
 	var vantaux: Array = []
 	var formes: Array = []
 	var corps: StaticBody3D = StaticBody3D.new()
@@ -1266,31 +1579,40 @@ func _portillons(aval: bool) -> void:
 	corps.collision_mask = 0
 	g.add_child(corps)
 	# bornes de contrôle (photos : Palafour, Paquis) : piliers gris arrondis
-	# avec lecteur de forfait et petit écran, une par couloir, et une en bout
-	for k in range(n + 1):
-		var x: float = -W * 0.5 + k * lv
+	# avec lecteur de forfait et petit écran
+	for k in range(nb + 1):
+		var x: float = -W * 0.5 + k * lb2
 		RemonteeKit.coussin(g, Vector3(0.22, 1.10, 0.36), Transform3D(Basis.IDENTITY, Vector3(x, 0.55, 0.12)), "alu_pince", 0.10)
 		RemonteeKit.boite_en(g, Vector3(0.20, 0.12, 0.012), Vector3(x, 0.92, -0.065), "noir_mat")
 		RemonteeKit.boite_en(g, Vector3(0.12, 0.06, 0.006), Vector3(x, 0.93, -0.073), "vitre_bleue")
 		RemonteeKit.boite_en(g, Vector3(0.10, 0.10, 0.012), Vector3(x, 0.70, -0.065), "cabine_rouge")
 	for k in range(n):
-		var x0: float = -W * 0.5 + k * lv
+		var paire: int = k / 2
+		var droite: bool = k % 2 == 1
+		var xg: float = -W * 0.5 + paire * lb2
+		var lv: float = (lb2 - 0.26) * (0.5 if (paire < n / 2) else 1.0)
 		var v: Node3D = Node3D.new()
-		v.position = Vector3(x0 + 0.12, 0, 0)
+		var sens: float = 1.0
+		if droite:
+			v.position = Vector3(xg + lb2 - 0.12, 0, 0)
+			sens = -1.0
+		else:
+			v.position = Vector3(xg + 0.12, 0, 0)
+		v.set_meta("sens", sens)
 		g.add_child(v)
 		# vantail : cadre en tube inox, deux lisses et un montant
-		var lb: float = lv - 0.26
+		var lb: float = lv * sens
 		RemonteeKit.barre(v, Vector3(0, 0.95, 0), Vector3(lb, 0.95, 0), 0.022, "acier", 8)
 		RemonteeKit.barre(v, Vector3(0, 0.55, 0), Vector3(lb, 0.55, 0), 0.018, "acier", 8)
 		RemonteeKit.barre(v, Vector3(lb, 0.55, 0), Vector3(lb, 0.95, 0), 0.018, "acier", 8)
 		RemonteeKit.boite_en(v, Vector3(0.05, 0.08, 0.05), Vector3(lb, 0.95, 0), "jaune_securite")
 		# plaque rouge « STOP » au milieu du vantail (photo de la Datcha)
-		RemonteeKit.boite_en(v, Vector3(0.36, 0.15, 0.02), Vector3(lb * 0.5, 0.75, 0), "rouge_val")
+		RemonteeKit.boite_en(v, Vector3(minf(0.36, absf(lb) - 0.04), 0.15, 0.02), Vector3(lb * 0.5, 0.75, 0), "rouge_val")
 		for sz in [-1.0, 1.0]:
 			var stop: Label3D = Label3D.new()
 			stop.text = "STOP"
 			stop.font_size = 64
-			stop.pixel_size = 0.0016
+			stop.pixel_size = 0.0013
 			stop.outline_size = 0
 			stop.double_sided = false
 			stop.position = Vector3(lb * 0.5, 0.75, sz * 0.012)
@@ -1299,9 +1621,9 @@ func _portillons(aval: bool) -> void:
 		vantaux.append(v)
 		var cs: CollisionShape3D = CollisionShape3D.new()
 		var b: BoxShape3D = BoxShape3D.new()
-		b.size = Vector3(lv - 0.10, 1.0, 0.08)
+		b.size = Vector3(absf(lb) + 0.05, 1.0, 0.08)
 		cs.shape = b
-		cs.position = Vector3(x0 + lv * 0.5, 0.5, 0)
+		cs.position = v.position + Vector3(lb * 0.5, 0.5, 0)
 		corps.add_child(cs)
 		formes.append(cs)
 	# portique d'information à l'entrée de la file, 3 m derrière les
@@ -1322,6 +1644,60 @@ func _portillons(aval: bool) -> void:
 	_portillons_gares.append([aval, vantaux, formes, 99.0, 0.0])
 
 
+## Double embarquement de Bollin–Fresse : un second groupe de portillons et
+## sa ligne d'arrêt sur le contour extérieur ; un seul portique, élargi sur
+## les deux files, avec un panneau bleu par destination au-dessus de chacune.
+func _double_embarquement() -> void:
+	var g0: Node3D = get_node_or_null("PortillonsAval")
+	var n0: int = get_child_count()
+	_portillons(true)
+	var dh: Vector3 = _dehors(s_gare(true, x_arret(longueur_zone(true)))) * DECAL_CONTOUR
+	for k in range(n0, get_child_count()):
+		var c: Node3D = get_child(k)
+		c.position += dh
+		var po: Node = c.get_node_or_null("Portique")
+		if po != null:
+			po.queue_free()
+	# parité des groupes : intérieur (le premier groupe aval) et extérieur (le dernier)
+	for pg in _portillons_gares:
+		if pg[0] and pg.size() == 5:
+			pg.append(0)
+			break
+	(_portillons_gares[_portillons_gares.size() - 1] as Array).append(1)
+	if g0 == null:
+		return
+	# portique : recentré entre les deux files et élargi
+	var ancien: Node = g0.get_node_or_null("Portique")
+	if ancien != null:
+		ancien.queue_free()
+	var places: int = VehiculeRemontee.DESCRIPTIONS.get(famille, ["", 6, ""])[1]
+	var W: float = 0.50 * places + 0.20
+	var ent: Node3D = Node3D.new()
+	ent.name = "Portique"
+	add_child(ent)
+	ent.transform = g0.transform * Transform3D(Basis.IDENTITY, Vector3(0, 0, 3.0))
+	ent.position += dh * 0.5
+	PortiqueEntree.construire(ent, self, W * 0.5 + 0.9 + DECAL_CONTOUR * 0.5)
+	# panneaux des files (repère du portique : +Z vers le skieur qui arrive)
+	var dl: Vector3 = ent.basis.inverse() * (dh * 0.5)
+	var ext: String = jumelee.nom_court() if sens_droite else nom_court()
+	var int_: String = nom_court() if sens_droite else jumelee.nom_court()
+	for e in [[-dl, int_], [dl, ext]]:
+		var c2: Vector3 = (e[0] as Vector3) + Vector3(0, 2.25, 0.05)
+		RemonteeKit.boite_en(ent, Vector3(W * 0.8, 0.55, 0.06), c2, "plaque_bleue")
+		for sx in [-1.0, 1.0]:
+			RemonteeKit.barre(ent, c2 + Vector3(sx * W * 0.3, 0.27, 0), c2 + Vector3(sx * W * 0.3, 0.95, 0), 0.015, "acier", 5)
+		var lab: Label3D = Label3D.new()
+		lab.text = "↑ " + String(e[1]).to_upper()
+		lab.font_size = 96
+		lab.pixel_size = 0.0034
+		lab.modulate = Color(1, 1, 1)
+		lab.outline_size = 0
+		lab.double_sided = false
+		lab.position = c2 + Vector3(0, 0, 0.04)
+		ent.add_child(lab)
+
+
 ## Ouverts 0,3 à 3 s après le passage d'un siège à la ligne d'arrêt.
 func _maj_portillons(delta: float) -> void:
 	for pg in _portillons_gares:
@@ -1331,7 +1707,11 @@ func _maj_portillons(delta: float) -> void:
 		# devant eux) : on traverse derrière lui jusqu'à la ligne d'arrêt
 		var xa: float = l_gare + PI * voie * 0.5
 		pg[3] = float(pg[3]) + delta
-		for e in _vehicules:
+		var parite: int = int(pg[5]) if pg.size() > 5 else -1
+		for iv in range(_vehicules.size()):
+			var e: Array = _vehicules[iv]
+			if parite >= 0 and int(contour_exterieur(iv)) != parite:
+				continue
 			var z: Array = zone(e[1])
 			if z[0] == ("gare_aval" if aval else "gare_amont"):
 				var x: float = z[1]
@@ -1343,7 +1723,7 @@ func _maj_portillons(delta: float) -> void:
 		# ils s'ouvrent vers l'avant, vers la ligne d'arrêt (retour
 		# d'utilisateur, 23/10/2026) : le repère regarde le nez de la gare (−Z)
 		for v in pg[1]:
-			(v as Node3D).rotation.y = 1.45 * ouv
+			(v as Node3D).rotation.y = 1.45 * ouv * float((v as Node3D).get_meta("sens", 1.0))
 		for cs in pg[2]:
 			(cs as CollisionShape3D).disabled = ouv > 0.5
 
@@ -1353,6 +1733,8 @@ func _maj_portillons(delta: float) -> void:
 ## Le véhicule (indice) qui passe au point d'embarquement de la gare (aval
 ## ou amont), juste après le demi-tour, encore à vitesse d'embarquement.
 func vehicule_a_embarquer(aval: bool) -> int:
+	if role == "haut" and aval:
+		return -1
 	var nom: String = "gare_aval" if aval else "gare_amont"
 	for i in range(_vehicules.size()):
 		var z: Array = zone(_vehicules[i][1])
@@ -1382,6 +1764,8 @@ func arrivee(i: int) -> Array:
 		return []
 	var x: float = z[1]
 	var xd: float = x_debarquement()
+	if traverse(i) and ((role == "bas" and z[0] == "gare_amont") or (role == "haut" and z[0] == "gare_aval")):
+		return []             # il traverse l'intermédiaire : on reste assis
 	if x > xd - 1.0 and x < xd + 1.0:
 		return [z[0] == "gare_aval"]
 	return []
@@ -2037,8 +2421,11 @@ func _peupler() -> void:
 	var t: float = 0.0
 	var prochain: float = 0.0
 	var garde: int = 0
+	var t_fin: float = INF
+	if periode_imposee > 0.0:
+		t_fin = _temps_boucle(vitesse) - dt_v * 0.5
 	while s < longueur_boucle and garde < 200000:
-		if t >= prochain:
+		if t >= prochain and prochain < t_fin:
 			_ajouter_vehicule(s)
 			prochain += dt_v
 			await _pause()
@@ -2367,6 +2754,8 @@ func _placer(i: int) -> void:
 	var v: VehiculeRemontee = _vehicules[i][0]
 	var s: float = _vehicules[i][1]
 	var pt: Array = point(s)
+	if jumelee != null:
+		pt[0] = _pos_vehicule(i, s)
 	# en ligne : la flèche locale sous le poids des véhicules de la portée
 	if _n_appuis >= 2 and zone(s)[0] == "ligne":
 		var p0: Vector3 = pt[0]
@@ -2376,6 +2765,8 @@ func _placer(i: int) -> void:
 	# segment de la boucle (polygone de 24 côtés autour de la poulie) faisait
 	# tourner la cabine par crans de 7,5° (retour d'utilisateur, 23/10/2026)
 	var dirh: Vector3 = (point(s + 1.5)[0] as Vector3) - (point(s - 1.5)[0] as Vector3)
+	if jumelee != null:
+		dirh = _pos_vehicule(i, s + 1.5) - _pos_vehicule(i, s - 1.5)
 	dirh.y = 0.0
 	if dirh.length() < 0.001:
 		dirh = Vector3.FORWARD
@@ -2420,6 +2811,8 @@ func _placer(i: int) -> void:
 		var x_haut: float = x_debarquement() - 3.0 if fixe() else L_FREIN - 2.0
 		var x_bas: float = x_arret(l) + 2.0 if fixe() else l - L_FREIN
 		gc = 1.0 - clampf((x - x_haut) / 2.0, 0.0, 1.0) * clampf((x_bas - x) / 2.0, 0.0, 1.0)
+		if traverse(i) and ((role == "bas" and z[0] == "gare_amont") or (role == "haut" and z[0] == "gare_aval")):
+			gc = 1.0              # il traverse la gare intermédiaire sans s'arrêter
 	v.ouvrir_pince(ouverture)
 	v.garde_corps(gc)
 	v.bulle(gc)
