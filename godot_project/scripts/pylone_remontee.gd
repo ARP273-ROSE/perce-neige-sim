@@ -93,6 +93,16 @@ func construire() -> void:
 		# l'horizontale de la gare à la pente de la ligne (retour d'utilisateur,
 		# 22/10/2026 : « un angle entre la gare et le câble, et pas de
 		# galets pour changer la pente »)
+		# pylône de nez : comme en ligne, un fût central et une traverse qui
+		# porte les deux trains (avant : un poteau sous chaque train, dans le
+		# passage des sièges — retour d'utilisateur, 24/10/2026)
+		var porte: bool = false
+		for c in compo_montee + compo_descente:
+			porte = porte or String(c[1]) != "C"
+		if porte:
+			_massif(0.40)
+			RemonteeKit.cylindre(self, 0.36, 0.32, hauteur - 0.4, Transform3D(Basis.IDENTITY, Vector3(0, (hauteur - 0.4) * 0.5, 0)), "peinture_gris", 18)
+			RemonteeKit.boite_en(self, Vector3(voie + 0.55, 0.40, 0.42), Vector3(0, hauteur - 0.20, 0), "peinture_gris")
 		for montee in [true, false]:
 			_train(montee)
 		return
@@ -294,9 +304,6 @@ func _train(montee: bool) -> void:
 		if not dessus.is_empty():
 			RemonteeKit.boite_en(tete, Vector3(0.16, 1.55 - dy - 0.42, 0.24), Vector3(0, (1.55 + dy + 0.42) * 0.5, 0), "galva_pylone")
 			RemonteeKit.boite_en(tete, Vector3(0.40, 0.12, 0.40), Vector3(0, 1.62, 0), "galva_pylone")
-		if not dessous.is_empty():
-			var h_sol: float = hauteur_cable()
-			RemonteeKit.boite_en(tete, Vector3(0.22, h_sol - dy - 0.36, 0.30), Vector3(0, -(h_sol + dy + 0.36) * 0.5, 0), "galva_pylone")
 		return
 	# portique de levage : deux jambes inclinées et une poutre haute avec œil
 	var hp: float = 1.25 if dessus.is_empty() else 1.55

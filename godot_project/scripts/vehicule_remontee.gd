@@ -524,8 +524,14 @@ func _haut_suspente() -> float:
 
 
 func _siege() -> void:
-	if famille == "siege_bartholet_6":
+	# un seul siège pour toutes les lignes : celui mis au point sur le
+	# Marmottes Express (« le but de faire les tests sur Marmottes c'est
+	# d'utiliser les mêmes sièges partout » — retour d'utilisateur, 24/10/2026) ;
+	# seules les couleurs, le nombre de places et la bulle changent
+	if famille.begins_with("siege"):
 		_siege_bmf()
+		if famille.ends_with("_bulle"):
+			_bulle_siege(get_node("Siege"), _largeur_siege())
 		return
 	var fixe: bool = constructeur() == "fixe"
 	var x0: float = 0.10 if not fixe else 0.07     # attache de la suspente sous la pince
@@ -567,8 +573,9 @@ func _siege() -> void:
 func _siege_bmf() -> void:
 	var hs: float = _haut_suspente()
 	var m_alu: String = "alu_pince"
-	var x_att: float = 0.30
-	var y_att: float = 0.14
+	var fixe: bool = constructeur() == "fixe"
+	var x_att: float = 0.30 if not fixe else 0.17      # bras de la pince, ou monopince
+	var y_att: float = 0.14 if not fixe else 0.02
 	pivot = Vector3(x_att, y_att, 0)
 	var pts: PackedVector3Array = PackedVector3Array()
 	pts.append(Vector3(x_att, y_att, 0))
@@ -650,12 +657,14 @@ func _siege_bmf() -> void:
 	var t_dos: Basis = Basis(Vector3.RIGHT, -0.10)
 	var y_dos: float = -0.98 + dossier_h * 0.5 + 0.07
 	RemonteeKit.coussin(siege, Vector3(W - 0.02, dossier_h + 0.06, 0.05), Transform3D(t_dos, Vector3(0, y_dos, 0.245)), "coque_siege", 0.022)
+	var couleurs: Array = _couleurs_assise()
 	for i in range(places):
 		var cx: float = -W * 0.5 + 0.10 + 0.50 * (i + 0.5)
+		var coul: String = couleurs[i % couleurs.size()]
 		var a: MeshInstance3D = RemonteeKit.coussin(siege, Vector3(0.48, 0.085, 0.48),
-			Transform3D(t_assise, Vector3(cx, -0.975, -0.08)), "assise_noire", 0.035)
+			Transform3D(t_assise, Vector3(cx, -0.975, -0.08)), coul, 0.035)
 		a.name = "Assise%d" % i
-		RemonteeKit.coussin(siege, Vector3(0.48, dossier_h, 0.08), Transform3D(t_dos, Vector3(cx, y_dos, 0.20)), "assise_noire", 0.035)
+		RemonteeKit.coussin(siege, Vector3(0.48, dossier_h, 0.08), Transform3D(t_dos, Vector3(cx, y_dos, 0.20)), coul, 0.035)
 	# attaches du dossier sous la poutre
 	for sx in [-1.0, 1.0]:
 		RemonteeKit.barre(siege, Vector3(sx * W * 0.25, yb0, zb), Vector3(sx * W * 0.25, y_dos + dossier_h * 0.5, 0.25), 0.028, m_alu, 8)
@@ -764,7 +773,7 @@ func _garde_corps(siege: Node3D, W: float, m: String) -> void:
 	var ventre: Vector3 = Vector3(0, -0.73, -0.75)
 	var pied: Vector3 = Vector3(0, -1.50, -0.62)
 	var xe: float = W * 0.5 - 0.06
-	if famille == "siege_bartholet_6":
+	if famille.begins_with("siege"):
 		_garde_corps_bmf(siege, W, m, xe)
 		return
 	for sx in [-1.0, 1.0]:

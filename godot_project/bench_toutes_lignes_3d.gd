@@ -46,7 +46,12 @@ func _tick() -> void:
 				for b in _bilan:
 					if float(b[2]) > 40.0:
 						lents += 1
-				print("BILAN %d lignes, %d avec une image > 40 ms" % [_bilan.size(), lents])
+				var construites: int = 0
+				for e in lignes:
+					if (e[0] as LigneRemontee).pret:
+						construites += 1
+				print("BILAN %d lignes, %d avec une image > 40 ms ; à la fin %d construites, mémoire %.0f Mo" % [_bilan.size(), lents,
+					construites, OS.get_static_memory_usage() / 1048576.0])
 				print("BENCH_TOUTES_LIGNES " + ("OK" if _ok else "ECHEC"))
 				quit(0 if _ok else 1)
 				return

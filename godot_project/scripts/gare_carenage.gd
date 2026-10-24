@@ -30,6 +30,9 @@ extends RefCounted
 
 var lg: LigneRemontee
 var _st: Dictionary = {}          # [matériau, plat] → SurfaceTool
+## Élargissement du carénage (double embarquement de Bollin) : les sièges du
+## contour extérieur passent jusqu'à elarg m plus loin de l'axe.
+var elarg: float = 0.0
 
 
 func _init(ligne: LigneRemontee) -> void:
@@ -121,7 +124,7 @@ func _face(prof: Array, y0: float, z: float, mat: Callable) -> void:
 ## véhicules (droite le long du quai, demi-cercle autour de la poulie).
 func _dessous(y0: float, z0: float, zc: float, sg: float, R: float, Ro: float, z_ar: float, mat: String) -> void:
 	var r_in: float = R - 0.55
-	var r_out: float = R + 0.60
+	var r_out: float = R + 0.60 + elarg          # fente : les deux contours
 	for sx in [-1.0, 1.0]:
 		_quad(mat, Vector3(sx * r_out, y0, z0), Vector3(sx * Ro, y0, z0), Vector3(sx * Ro, y0, zc), Vector3(sx * r_out, y0, zc), true)
 	_quad(mat, Vector3(-r_in, y0, z0), Vector3(r_in, y0, z0), Vector3(r_in, y0, zc), Vector3(-r_in, y0, zc), true)
@@ -264,7 +267,7 @@ func construire(g: Node3D, znez: float, zc: float, style: String) -> void:
 func _unig(g: Node3D, znez: float, zc: float) -> void:
 	var sg: float = signf(zc - znez)
 	var R: float = lg.voie * 0.5
-	var Ro: float = R + LigneRemontee.D_CAPOT
+	var Ro: float = R + LigneRemontee.D_CAPOT + elarg
 	var y0: float = lg.H_CABLE_GARE + LigneRemontee.Y_CAPOT
 	var z0: float = znez - sg * 1.2
 	var z_ar: float = zc + sg * (Ro + 0.2)
@@ -318,7 +321,7 @@ func _unig(g: Node3D, znez: float, zc: float) -> void:
 func _dline(g: Node3D, znez: float, zc: float) -> void:
 	var sg: float = signf(zc - znez)
 	var R: float = lg.voie * 0.5
-	var Ro: float = R + LigneRemontee.D_CAPOT
+	var Ro: float = R + LigneRemontee.D_CAPOT + elarg
 	var y0: float = lg.H_CABLE_GARE + LigneRemontee.Y_CAPOT
 	var z0: float = znez - sg * 0.6
 	var hb: float = 1.0
@@ -363,7 +366,7 @@ func _dline(g: Node3D, znez: float, zc: float) -> void:
 func _uni(g: Node3D, znez: float, zc: float) -> void:
 	var sg: float = signf(zc - znez)
 	var R: float = lg.voie * 0.5
-	var Ro: float = R + LigneRemontee.D_CAPOT
+	var Ro: float = R + LigneRemontee.D_CAPOT + elarg
 	var y0: float = lg.H_CABLE_GARE + LigneRemontee.Y_CAPOT
 	var z0: float = znez - sg * 0.6
 	var prof: Array = [[Ro, 0.0], [Ro, 0.55], [Ro - 0.20, 0.75], [Ro * 0.80, 2.05]]
@@ -399,7 +402,7 @@ func _uni(g: Node3D, znez: float, zc: float) -> void:
 func _poma_classique(g: Node3D, znez: float, zc: float) -> void:
 	var sg: float = signf(zc - znez)
 	var R: float = lg.voie * 0.5
-	var Ro: float = R + LigneRemontee.D_CAPOT
+	var Ro: float = R + LigneRemontee.D_CAPOT + elarg
 	var y0: float = lg.H_CABLE_GARE + LigneRemontee.Y_CAPOT
 	var z0: float = znez - sg * 0.6
 	var z_ar: float = zc + sg * (Ro + 0.2)
@@ -459,7 +462,7 @@ func _poma_classique(g: Node3D, znez: float, zc: float) -> void:
 func _poma_moderne(g: Node3D, znez: float, zc: float) -> void:
 	var sg: float = signf(zc - znez)
 	var R: float = lg.voie * 0.5
-	var Ro: float = R + LigneRemontee.D_CAPOT
+	var Ro: float = R + LigneRemontee.D_CAPOT + elarg
 	var y0: float = lg.H_CABLE_GARE + LigneRemontee.Y_CAPOT
 	var z0: float = znez - sg * 0.6
 	var hb: float = 1.40
@@ -509,7 +512,7 @@ func _poma_moderne(g: Node3D, znez: float, zc: float) -> void:
 func _garaventa(g: Node3D, znez: float, zc: float) -> void:
 	var sg: float = signf(zc - znez)
 	var R: float = lg.voie * 0.5
-	var Ro: float = R + LigneRemontee.D_CAPOT
+	var Ro: float = R + LigneRemontee.D_CAPOT + elarg
 	var y0: float = lg.H_CABLE_GARE + LigneRemontee.Y_CAPOT
 	var z0: float = znez - sg * 0.6
 	var prof: Array = [[Ro, 0.0], [Ro, 0.5]]
@@ -562,7 +565,7 @@ func _garaventa(g: Node3D, znez: float, zc: float) -> void:
 func _leitner(g: Node3D, znez: float, zc: float) -> void:
 	var sg: float = signf(zc - znez)
 	var R: float = lg.voie * 0.5
-	var Ro: float = R + LigneRemontee.D_CAPOT
+	var Ro: float = R + LigneRemontee.D_CAPOT + elarg
 	var y0: float = lg.H_CABLE_GARE + LigneRemontee.Y_CAPOT
 	var z0: float = znez - sg * 0.6
 	var hb: float = 1.45
