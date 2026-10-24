@@ -4,6 +4,8 @@
  "type": "télésiège fixe 4 places",
  "constructeur": "Montaval",
  "annee": 1997,
+ "station": "Val d'Isère",
+ "quartier": "Village",
  "vitesse": 2.3,
  "places": 4,
  "debit": 2400.0,

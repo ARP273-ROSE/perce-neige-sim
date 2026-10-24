@@ -4,6 +4,8 @@
  "type": "télécabine débrayable 10 places",
  "constructeur": "Doppelmayr",
  "annee": 2013,
+ "station": "Tignes",
+ "quartier": "Tovière",
  "vitesse": 6.0,
  "places": 10,
  "debit": 3300.0,

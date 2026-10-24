@@ -117,6 +117,12 @@ func _poser(D: Dictionary) -> void:
 	lg.sens_droite = bool(D["sens_droite"])
 	lg.diametre_cable = float(D.get("diametre_cable", 47.0))
 	lg.nom_ligne = String(D["nom"])
+	lg.constructeur = String(D.get("constructeur", ""))
+	lg.annee = int(str(D.get("annee", "0")))
+	lg.station = String(D.get("station", ""))
+	lg.quartier = String(D.get("quartier", ""))
+	lg.altitude_aval = float(D.get("altitude_aval", 0.0))
+	lg.debit = float(D.get("debit", 0.0))
 	# repère : origine au sol de la gare aval, −Z local vers l'amont
 	var fwd: Vector3 = Vector3(dirh.x, 0.0, dirh.y)
 	lg.transform = Transform3D(Basis.looking_at(fwd, Vector3.UP), Vector3(a.x, h0, a.y))

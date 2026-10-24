@@ -4,6 +4,8 @@
  "type": "télésiège fixe 4 places",
  "constructeur": "Ingélo",
  "annee": 2015,
+ "station": "Tignes",
+ "quartier": "Tignes le Lac",
  "vitesse": 1.3,
  "places": 4,
  "debit": 1500.0,

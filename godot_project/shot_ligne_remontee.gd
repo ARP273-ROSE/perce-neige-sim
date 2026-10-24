@@ -58,6 +58,13 @@ func _initialize() -> void:
 	_ligne.espacement = float(D["espacement"])
 	_ligne.famille = String(D["famille"])
 	_ligne.sens_droite = bool(D["sens_droite"])
+	_ligne.nom_ligne = String(D["nom"])
+	_ligne.constructeur = String(D.get("constructeur", ""))
+	_ligne.annee = int(str(D.get("annee", "0")))
+	_ligne.station = String(D.get("station", ""))
+	_ligne.quartier = String(D.get("quartier", ""))
+	_ligne.altitude_aval = float(D.get("altitude_aval", 0.0))
+	_ligne.debit = float(D.get("debit", 0.0))
 	if D.has("diametre_cable"):
 		_ligne.diametre_cable = float(D["diametre_cable"])
 	racine.add_child(_ligne)
@@ -75,6 +82,11 @@ func _initialize() -> void:
 	_vues = [
 		["vue_generale", Vector3(-L * 0.55, _ligne.terrain(L * 0.5) + L * 0.25, -L * 0.45), Vector3(0, _ligne.terrain(L * 0.5), -L * 0.5)],
 		["gare_aval", Vector3(-14, 9, 8), Vector3(0, 4, 8)],
+		["gare_3q", Vector3(-26, 6, 36), Vector3(0, 5, 12)],
+		["gare_face", Vector3(-6, 6, -24), Vector3(0, 5, 10)],
+		["gare_arriere", Vector3(-12, 7, 52), Vector3(0, 5, 22)],
+		["portique", _ligne.position_portillons(true) + Vector3(0.5, 1.8, 10.0), _ligne.position_portillons(true) + Vector3(0, 2.3, 3.0)],
+		["portillons_stop", _ligne.position_portillons(true) + Vector3(1.0, 1.4, -3.0), _ligne.position_portillons(true) + Vector3(0, 0.7, 0.0)],
 		["gare_aval_quai", Vector3(9, 2.0, -3), Vector3(0, 3.5, 12)],
 		["portillons", Vector3(9.0, 4.5, 40.0), Vector3(-1.0, 1.0, 22.0)], ["entree", Vector3(_ligne._x_brin(true) + 2.0, 1.7, 52.0), Vector3(_ligne._x_brin(true), 1.4, 36.0)],
 		["poulie", Vector3(-4.5, 3.0, 17.0), Vector3(0, 4.2, 25.0)],

@@ -4,6 +4,8 @@
  "type": "télésiège débrayable 6 places",
  "constructeur": "DOPPELMAYR",
  "annee": 1998,
+ "station": "Tignes",
+ "quartier": "Le Lavachet",
  "vitesse": 5.0,
  "places": 6,
  "debit": 2400.0,

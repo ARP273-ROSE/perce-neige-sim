@@ -4,6 +4,8 @@
  "type": "télésiège fixe 4 places",
  "constructeur": "SKIRAIL",
  "annee": 1997,
+ "station": "Tignes",
+ "quartier": "Palafour",
  "vitesse": 2.3,
  "places": 4,
  "debit": 2400.0,

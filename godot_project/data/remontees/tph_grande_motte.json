@@ -4,6 +4,8 @@
  "type": "téléphérique va-et-vient",
  "constructeur": "Von Roll",
  "annee": 1975,
+ "station": "Tignes",
+ "quartier": "Grande Motte",
  "vitesse": 10.0,
  "places": 115,
  "debit": 1100.0,

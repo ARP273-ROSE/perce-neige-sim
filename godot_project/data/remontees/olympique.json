@@ -4,6 +4,8 @@
  "type": "téléphérique 3S / télécabine tricâble 30 places",
  "constructeur": "Doppelmayr",
  "annee": "2002",
+ "station": "Val d'Isère",
+ "quartier": "Bellevarde",
  "vitesse": 7.5,
  "places": 30,
  "debit": 3750.0,

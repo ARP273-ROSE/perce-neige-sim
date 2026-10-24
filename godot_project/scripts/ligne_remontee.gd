@@ -29,6 +29,12 @@ var famille: String = "siege_doppelmayr_e98_6"
 var espacement: float = 47.25
 var sens_droite: bool = true
 var nom_ligne: String = ""
+var constructeur: String = ""
+var annee: int = 0
+var station: String = ""              # « Tignes » ou « Val d'Isère » : livrée des gares
+var quartier: String = ""             # secteur du domaine (portique d'entrée)
+var altitude_aval: float = 0.0
+var debit: float = 0.0                # personnes / heure
 
 var H_CABLE_GARE: float = 3.9        # câble au-dessus du quai (selon le véhicule)
 const GARDE: float = 6.5              # câble ≥ terrain + GARDE en ligne
@@ -524,8 +530,12 @@ func _gare(aval: bool) -> void:
 	# gares BMF du Marmottes Express, retour d'utilisateur, 23/10/2026)
 	if tricable():
 		_gare_3s(g, znez, zc, aval)
-	else:
+	elif style_gare() == "bmf":
 		_capot(g, znez, zc, aval)
+		_cabine_conducteur(g, znez, dz, aval)
+	else:
+		# carénage du constructeur (Doppelmayr, Poma, Garaventa, fixes…)
+		GareCarenage.new(self).construire(g, znez, zc, style_gare())
 		_cabine_conducteur(g, znez, dz, aval)
 	# poulie de demi-tour (motrice en amont, retour-tension en aval)
 	var R: float = voie * 0.5
@@ -884,6 +894,23 @@ func _capot(g: Node3D, znez: float, zc: float, aval: bool) -> void:
 		RemonteeKit.cylindre(g, 0.50, 0.95, 0.8, Transform3D(Basis.IDENTITY, Vector3(0, hcol - 0.4, zcol)), "blanc_plaque", 24)
 
 
+## Nom de la ligne sans le type (« TSD6 du Glacier (Glacier Express) » →
+## « Glacier ») : celui des portiques et des carénages.
+func nom_court() -> String:
+	var re: RegEx = RegEx.create_from_string("^(TS|TC|TK|TPH)[A-Z0-9]*\\s+(de la |de l'|de l’|des |du |de )?")
+	var t: String = re.sub(nom_ligne, "")
+	var p: int = t.find(" (")
+	if p > 0:
+		t = t.substr(0, p)
+	return t.strip_edges()
+
+
+## Famille de carénage des gares, d'après le constructeur et l'année
+## (photos des gares du domaine, reportages remontees-mecaniques.net).
+func style_gare() -> String:
+	return GareCarenage.style_pour(constructeur, annee, famille)
+
+
 ## Gare du 3S de l'Olympique (photos des deux gares, reportage
 ## remontees-mecaniques.net) : grand bâtiment rectangulaire, soubassement et
 ## piliers d'angle en pierre, grandes verrières sur les côtés et au fond,
@@ -1067,7 +1094,7 @@ func _collisions_fixes() -> void:
 			continue
 		# colonnes du carénage et cabine du conducteur
 		boite.call(Vector3(1.0, H_CABLE_GARE, 1.0), Vector3(0, y0 + H_CABLE_GARE * 0.5, zc))
-		boite.call(Vector3(1.0, H_CABLE_GARE + Y_CAPOT, 1.0), Vector3(0, y0 + (H_CABLE_GARE + Y_CAPOT) * 0.5, (znez + zc) * 0.5 - signf(dz) * 1.0))
+		boite.call(Vector3(1.0, H_CABLE_GARE + Y_CAPOT, 1.0), Vector3(0, y0 + (H_CABLE_GARE + Y_CAPOT) * 0.5, GareCarenage.z_colonne(znez, zc)))
 		boite.call(Vector3(3.0, 2.5, 3.6), _pos_cabine_conducteur(aval) + Vector3(0, 1.25, 0))
 		boite.call(Vector3(2.2, 1.0, 2.6), Vector3(0, y0 + H_CABLE_GARE + 1.9, zc))
 
@@ -1167,6 +1194,18 @@ func _portillons(aval: bool) -> void:
 		RemonteeKit.barre(v, Vector3(0, 0.55, 0), Vector3(lb, 0.55, 0), 0.018, "acier", 8)
 		RemonteeKit.barre(v, Vector3(lb, 0.55, 0), Vector3(lb, 0.95, 0), 0.018, "acier", 8)
 		RemonteeKit.boite_en(v, Vector3(0.05, 0.08, 0.05), Vector3(lb, 0.95, 0), "jaune_securite")
+		# plaque rouge « STOP » au milieu du vantail (photo de la Datcha)
+		RemonteeKit.boite_en(v, Vector3(0.36, 0.15, 0.02), Vector3(lb * 0.5, 0.75, 0), "rouge_val")
+		for sz in [-1.0, 1.0]:
+			var stop: Label3D = Label3D.new()
+			stop.text = "STOP"
+			stop.font_size = 64
+			stop.pixel_size = 0.0016
+			stop.outline_size = 0
+			stop.double_sided = false
+			stop.position = Vector3(lb * 0.5, 0.75, sz * 0.012)
+			stop.rotation.y = 0.0 if sz > 0.0 else PI
+			v.add_child(stop)
 		vantaux.append(v)
 		var cs: CollisionShape3D = CollisionShape3D.new()
 		var b: BoxShape3D = BoxShape3D.new()
@@ -1175,26 +1214,14 @@ func _portillons(aval: bool) -> void:
 		cs.position = Vector3(x0 + lv * 0.5, 0.5, 0)
 		corps.add_child(cs)
 		formes.append(cs)
-	# portique d'entrée en bois au nom de la ligne, 3 m derrière les
-	# portillons (photo de Palafour)
+	# portique d'information à l'entrée de la file, 3 m derrière les
+	# portillons (photos de la Madeleine, de la Fontaine Froide et de
+	# l'Aiguille Percée : voir PortiqueEntree)
 	var ent: Node3D = Node3D.new()
+	ent.name = "Portique"
 	ent.position = Vector3(0, 0, 3.0)
 	g.add_child(ent)
-	var la: float = W * 0.5 + 0.9
-	for sx in [-1.0, 1.0]:
-		RemonteeKit.boite_en(ent, Vector3(0.22, 3.2, 0.22), Vector3(sx * la, 1.6, 0), "toit_bardeaux")
-	RemonteeKit.boite_en(ent, Vector3(2.0 * la + 0.6, 0.20, 0.30), Vector3(0, 3.25, 0), "toit_bardeaux")
-	RemonteeKit.boite_en(ent, Vector3(2.0 * la - 0.4, 0.55, 0.05), Vector3(0, 2.85, 0), "blanc_plaque")
-	if nom_ligne != "":
-		var lab: Label3D = Label3D.new()
-		lab.text = nom_ligne.to_upper()
-		lab.font_size = 96
-		lab.pixel_size = 0.0035
-		lab.modulate = Color(0.06, 0.22, 0.55)
-		lab.outline_size = 0
-		lab.double_sided = false
-		lab.position = Vector3(0, 2.85, 0.03)        # face au skieur qui arrive
-		ent.add_child(lab)
+	PortiqueEntree.construire(ent, self, W * 0.5 + 0.9)
 	# ligne d'arrêt (jaune) au sol
 	var q: Vector3 = point_embarquement(aval)
 	var ls: Node3D = Node3D.new()

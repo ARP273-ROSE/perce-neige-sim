@@ -4,6 +4,8 @@
  "type": "télécabine débrayable 10 places",
  "constructeur": "DOPPELMAYR",
  "annee": 2010,
+ "station": "Tignes",
+ "quartier": "Les Boisses",
  "vitesse": 5.25,
  "places": 8,
  "debit": 3000.0,

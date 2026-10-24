@@ -4,6 +4,8 @@
  "type": "télésiège fixe 4 places",
  "constructeur": "Gimar Montaz-Mautino (GMM)",
  "annee": 2016,
+ "station": "Tignes",
+ "quartier": "Tignes le Lac",
  "vitesse": 2.1,
  "places": 4,
  "debit": 2100.0,

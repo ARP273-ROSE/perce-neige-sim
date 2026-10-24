@@ -47,6 +47,13 @@ const COULEURS: Dictionary = {
 	"pierre": [Color(0.52, 0.50, 0.46), 0.95, 0.0],            # moellons des cabines de conducteur
 	"neige_damee": [Color(0.96, 0.97, 0.99), 0.92, 0.0],       # talus et rampes des gares
 	"toit_bardeaux": [Color(0.24, 0.23, 0.22), 0.9, 0.0],
+	# carénages de gare par constructeur (photos des reportages, voir GareCarenage)
+	"vitrage_sombre": [Color(0.09, 0.11, 0.14), 0.12, 0.35],   # vitres vues de jour, opaques
+	"toit_bleu_nuit": [Color(0.07, 0.10, 0.20), 0.35, 0.45],   # toit nervuré UNI-G (Tignes)
+	"bleu_doppelmayr": [Color(0.10, 0.24, 0.62), 0.45, 0.15],
+	"toit_noir": [Color(0.05, 0.05, 0.06), 0.30, 0.40],        # voûte Poma / Ingélo
+	"rouge_val": [Color(0.74, 0.07, 0.09), 0.45, 0.15],        # liseré Val d'Isère
+	"mousse_rouge": [Color(0.82, 0.14, 0.08), 0.85, 0.0],      # protections des poteaux
 }
 
 

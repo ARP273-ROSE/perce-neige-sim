@@ -4,6 +4,8 @@
  "type": "télécabine débrayable 10 places",
  "constructeur": "Poma/Ingélo",
  "annee": 2024,
+ "station": "Val d'Isère",
+ "quartier": "Le Fornet",
  "vitesse": 7.0,
  "places": 10,
  "debit": 3000.0,

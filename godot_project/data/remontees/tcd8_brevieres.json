@@ -4,6 +4,8 @@
  "type": "télécabine débrayable 8 places",
  "constructeur": "Fatzer",
  "annee": 2018,
+ "station": "Tignes",
+ "quartier": "Les Brévières",
  "vitesse": 6.0,
  "places": 8,
  "debit": 2400.0,

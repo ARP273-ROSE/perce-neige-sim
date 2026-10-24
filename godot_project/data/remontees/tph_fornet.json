@@ -4,6 +4,8 @@
  "type": "téléphérique va-et-vient",
  "constructeur": "Von Roll",
  "annee": 1973,
+ "station": "Val d'Isère",
+ "quartier": "Le Fornet",
  "vitesse": 10.0,
  "places": 80,
  "debit": 1000.0,

@@ -4,6 +4,8 @@
  "type": "télésiège débrayable 4 places",
  "constructeur": "Doppelmayr",
  "annee": 1993,
+ "station": "Tignes",
+ "quartier": "Grande Motte",
  "vitesse": 4.5,
  "places": 4,
  "debit": 2000.0,

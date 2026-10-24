@@ -4,6 +4,8 @@
  "type": "télésiège débrayable 6 places (tronçon inférieur Bollin–Fresse)",
  "constructeur": "DOPPELMAYR",
  "annee": 1997,
+ "station": "Tignes",
+ "quartier": "Val Claret",
  "vitesse": 4.6,
  "places": 6,
  "debit": 3600.0,
