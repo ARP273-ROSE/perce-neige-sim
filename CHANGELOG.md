@@ -5,6 +5,19 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.31.1 — 24 octobre 2026
+
+**Téléphérique : la charpente des gares porte les câbles.** Retour d'utilisateur du 24/10/2026 :
+« la structure métallique au-dessus du câble en gare sert à porter le câble en gare, mets-la
+sous le câble ».
+
+- Aux deux gares, sous chaque porteur, une poutre en treillis de la façade (ou des sabots) au
+  fond, avec un rail-sabot en tête sur lequel repose le câble ; poteaux plantés sur le quai du
+  côté opposé à la suspente des cabines, une seule entretoise côté façade (devant, les
+  suspentes passent). La charpente qui passait au-dessus du câble est supprimée ; la flèche de
+  levage part du toit du bâtiment.
+- Vérifié : banc tph.
+
 ## 1.31.0 — 24 octobre 2026
 
 **Téléphérique de la Grande Motte refait de zéro**, d'après la fiche et les photos du reportage
