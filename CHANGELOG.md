@@ -5,6 +5,25 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.33.0 — 25 octobre 2026
+
+**Hauteur des câbles calée sur des traces GPS réelles ; Bollin–Fresse séparés au coude.**
+Retours d'utilisateur du 25/10/2026 : « cale tous les pylônes sur les GPS », « Bollin et Fresse,
+les deux poulies sont collées ».
+
+- **Hauteurs mesurées** : sur 25 télésièges et télécabines, des montées enregistrées (altitude
+  barométrique, recalée sur les quais de départ et d'arrivée) donnent la hauteur du siège
+  au-dessus du sol tous les 20 m. Elle est exportée sans la trace elle-même (champ `gps` : distance,
+  hauteur) et sert de garde au sol là où elle existe. Les porteurs dont les deux portées ont de la
+  marge sont ensuite abaissés pour ne pas dépasser la réalité. Écart jeu − mesure : médiane
+  ramenée de +2…+14 m à +1…+3 m sur la plupart des lignes ; minimum autour de −1/−3 m (il était
+  vers −18 m). Exceptions : Tovière, Lanches, Leissières (câble encore trop bas par endroits) ;
+  Leissières, Merles et Tommeuses restent trop hautes en médiane (pylônes reconstitués).
+- **Bollin–Fresse** : chaque tronçon a sa vitesse (Bollin 4,6 m/s, Fresse 5 m/s) ; les deux
+  poulies sont à 7 m de part et d'autre du coude, reliées par un rail de traversée ; le contour
+  extérieur rejoint l'autre tronçon avant le lanceur.
+- **TKE2 Montet** : archet remis dans le bon sens.
+
 ## 1.32.0 — 25 octobre 2026
 
 **Pylônes : place, nombre, balanciers et hauteurs vérifiés sur tout le domaine.** Retours

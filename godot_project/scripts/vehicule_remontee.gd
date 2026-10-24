@@ -1514,16 +1514,17 @@ func _perche() -> void:
 	add_child(_perche_tige)
 	RemonteeKit.barre(_perche_tige, Vector3(0, 0, 0), Vector3(0, -1.10, 0), 0.02, "jaune_securite", 8)
 	if famille == "perche_tbar":
-		# archet biplace (Montet) : barre cintrée en arc, les deux bouts plus
-		# bas que le milieu, garnis de caoutchouc là où l'on s'appuie
+		# archet biplace (Montet) : barre cintrée en arc, le milieu plus bas
+		# que les bouts (retour d'utilisateur, 25/10/2026 : « inverser la courbure de
+		# l'archet »), garnie de caoutchouc là où l'on s'appuie
 		var arc: PackedVector3Array = PackedVector3Array()
 		for k in range(13):
 			var u: float = lerpf(-1.0, 1.0, float(k) / 12.0)
-			arc.append(Vector3(u * 0.52, -1.08 - 0.10 * u * u, 0))
+			arc.append(Vector3(u * 0.52, -1.18 + 0.10 * u * u, 0))
 		RemonteeKit.tube(_perche_tige, arc, 0.028, "jaune_securite", 8)
 		for sx in [-1.0, 1.0]:
-			var a: Vector3 = Vector3(sx * 0.20, -1.08 - 0.10 * 0.15, 0)
-			var b: Vector3 = Vector3(sx * 0.50, -1.08 - 0.10 * 0.92, 0)
+			var a: Vector3 = Vector3(sx * 0.20, -1.18 + 0.10 * 0.15, 0)
+			var b: Vector3 = Vector3(sx * 0.50, -1.18 + 0.10 * 0.92, 0)
 			RemonteeKit.barre(_perche_tige, a, b, 0.04, "caoutchouc", 10)
 	else:
 		RemonteeKit.cylindre(_perche_tige, 0.12, 0.12, 0.05, Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3(0, -1.12, 0)), "assise_noire", 18)
