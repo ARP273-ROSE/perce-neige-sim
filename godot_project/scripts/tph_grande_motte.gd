@@ -165,22 +165,38 @@ static func tete_aval(lg: LigneRemontee, g: Node3D, hc: float, sol: Callable) ->
 				pts.append(Vector3(x + s5 * (0.75 + 1.6 * t * t), hc - 2.6 + 0.4 * t, zl + 0.6 - 6.5 * t))
 			RemonteeKit.tube(g, pts, 0.10, M, 8)
 			RemonteeKit.poutre(g, pts[0], Vector3(x + s5 * 2.6, hc * 0.45, zl), 0.10, 0.10, M)
-	# charpente en treillis au-dessus des baies, de la façade au portique, et
-	# flèche de levage qui s'avance vers la ligne
-	var yt: float = hc + 1.6
-	for s6 in [-1.0, 1.0]:
-		_treillis(g, Vector3(s6 * (xv + 1.2), yt, 0.0), Vector3(s6 * (xv + 1.2), yt, zf - 0.4), 1.8)
-		_treillis(g, Vector3(s6 * (xv - 1.2), yt, 0.0), Vector3(s6 * (xv - 1.2), yt, zf - 0.4), 1.8)
-	for z3 in [0.0, -5.0, zf - 0.4]:
-		_treillis(g, Vector3(-xv - 1.2, yt, z3), Vector3(xv + 1.2, yt, z3), 1.8)
-	for x3 in [-xv - 1.2, xv + 1.2]:
-		RemonteeKit.poutre(g, Vector3(x3, 0.0, -5.0), Vector3(x3, yt, -5.0), 0.30, 0.30, M)
-	var b0: Vector3 = Vector3(-xv - 1.2, yt + 1.8, zf - 0.4)
-	var b1: Vector3 = Vector3(-xv - 0.6, yt + 5.5, zf - 9.0)
+	# charpente qui PORTE les porteurs en gare (photos, retour d'utilisateur du
+	# 24/10/2026 : « la structure métallique sert à porter le câble en gare, mets-la
+	# sous le câble ») : sous chaque porteur, une poutre en treillis de la
+	# façade au portique en Λ, le câble posé sur un rail-sabot en tête ; elle
+	# repose sur des poteaux plantés du côté opposé à la suspente des cabines
+	# (la suspente sort du chariot côté +X et descend à 1,1-1,55 m du câble)
+	_poutres_porteurs(g, xv, hc, 0.0, zf - 0.4, [-2.4, zf * 0.5 - 1.0, zf + 0.4])
+	# entretoise côté façade seulement (devant, les suspentes passent)
+	_treillis(g, Vector3(-xv, hc - 2.35, 0.0), Vector3(xv, hc - 2.35, 0.0), 1.8)
+	# flèche de levage, au-dessus du bâtiment, qui s'avance vers la ligne
+	var b0: Vector3 = Vector3(-xv - 0.5, hc + 3.0, 0.0)
+	var b1: Vector3 = Vector3(-xv - 0.3, hc + 6.5, zf - 6.0)
+	RemonteeKit.poutre(g, Vector3(-xv - 0.5, 0.0, 0.3), b0, 0.30, 0.30, M)
 	_treillis(g, b0, b1, 0.9)
 	RemonteeKit.cylindre(g, 0.35, 0.35, 0.12, Transform3D(Basis(Vector3.FORWARD, PI * 0.5), b1 + Vector3(0, 0.9, 0)), "acier_noir", 16)
-	# caillebotis de service sur la charpente
-	RemonteeKit.boite_en(g, Vector3(2.0 * xv + 2.4, 0.05, 1.2), Vector3(0, yt + 1.82, -2.5), "caillebotis")
+
+
+## Poutres qui portent les porteurs en gare : sous chaque porteur, une poutre
+## en treillis de z0 à z1, rail-sabot en tête ; poteaux (posés sur le quai, y
+## = 0) du côté −X du câble — la suspente des cabines sort côté +X.
+static func _poutres_porteurs(g: Node3D, xv: float, hc: float, z0: float, z1: float, zs_poteaux: Array) -> void:
+	var h_tr: float = 1.8
+	var y_tr: float = hc - 0.55 - h_tr          # membrure basse
+	for s in [-1.0, 1.0]:
+		var x: float = s * xv
+		_treillis(g, Vector3(x, y_tr, z0), Vector3(x, y_tr, z1), h_tr)
+		RemonteeKit.boite_en(g, Vector3(0.30, 0.18, absf(z1 - z0)), Vector3(x, hc - 0.55 + 0.09, (z0 + z1) * 0.5), "acier_noir")
+		var xp: float = x - 2.0
+		for z in zs_poteaux:
+			RemonteeKit.poutre(g, Vector3(xp, 0.0, z), Vector3(xp, y_tr + h_tr, z), 0.30, 0.30, M)
+			RemonteeKit.poutre(g, Vector3(xp, y_tr, z), Vector3(x, y_tr, z), 0.22, 0.30, M)
+			RemonteeKit.poutre(g, Vector3(xp, y_tr - 1.2, z), Vector3(x, y_tr, z), 0.12, 0.12, M)
 
 
 ## Escalier extérieur côté funiculaire (photo : grand escalier à rampes bleues
@@ -240,6 +256,8 @@ static func gare_amont(lg: LigneRemontee, g: Node3D, hc: float, sol: Callable) -
 		for dx in [-1.6, 1.6]:
 			RemonteeKit.poutre(g, Vector3(x + dx, y_sol, 0.6), Vector3(x, hc - 0.55, 0.6), 0.35, 0.35, M)
 		_sabot(g, x, hc, 0.6, 4.0)
+	# poutres qui portent les porteurs au-dessus du quai, des sabots au fond
+	_poutres_porteurs(g, xv, hc, 0.6, zf, [-1.0, zf * 0.5, zf + 0.6])
 	# portique de retour du tracteur : deux tours en A (pieds écartés dans
 	# l'axe), poutre de tête, une grande poulie verticale par voie en tête
 	var zp: float = zf - 1.2
@@ -279,7 +297,6 @@ static func gare_amont(lg: LigneRemontee, g: Node3D, hc: float, sol: Callable) -
 			RemonteeKit.cylindre(g, 3.05 - 0.0, 3.05, 0.08, Transform3D(b, c2 + b.y * (-0.3 + 0.15 * k3)), "cable", 40)
 		RemonteeKit.cylindre(g, 0.5, 0.5, 1.1, Transform3D(b, c2), "acier", 16)
 		# le porteur quitte le sabot, file au-dessus du quai et s'enroule
-		RemonteeKit.barre(g, Vector3(s6 * xv, hc, 0.6), Vector3(s6 * xv, hc, zf), 0.03, "cable", 6)
 		RemonteeKit.barre(g, Vector3(s6 * xv, hc, zf), c2 + b * Vector3(0, 0.4, 3.0), 0.03, "cable", 6)
 	# poste de vigie sous les tambours
 	var pv: Vector3 = Vector3(0, float(sol.call(0.0, zt + 3.5)), zt + 3.5)
