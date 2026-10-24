@@ -5,6 +5,31 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.32.0 — 25 octobre 2026
+
+**Pylônes : place, nombre, balanciers et hauteurs vérifiés sur tout le domaine.** Retours
+d'utilisateur du 25/10/2026 : « t'es sûr que le 13e pylône de Fresse, l'altitude est la bonne ? »,
+puis « vérifie toutes les altitudes partout ».
+
+- **Pylônes à leur place** : quand une gare est reportée (Fresse avancé à la gare intermédiaire,
+  Bollin raccourci, téléphérique sur sa gare existante), chaque pylône garde sa position au sol
+  et est projeté sur la ligne posée (avant, sa distance était mise à l'échelle : il glissait
+  jusqu'à 24 m, sur un terrain d'une autre altitude).
+- **Pylônes manquants reconstitués** : 28 lignes ont moins de pylônes positionnés dans
+  OpenStreetMap que le relevé remontees-mecaniques.net n'en compte (Fresse 17 sur 19, Lanches 22
+  sur 27, Leissières 7 sur 14…). Les manquants sont intercalés là où le terrain s'accorde à leur
+  balancier (compression dans un creux, support sur une bosse) avec des portées régulières, et
+  les vrais balanciers sont attachés à tous (marqués « reconstitue » dans les données). Bollin
+  et Fresse reçoivent leurs balanciers relevés (reportage commun aux deux tronçons).
+- **Hauteurs des pylônes** : garde au sol du câble chargé, compressions en creux et porteurs
+  saillants sont ajustés ensemble jusqu'à tenir tous les trois (abaisser une compression faisait
+  raser le sol à la portée voisine) ; les pylônes de compression peuvent descendre à 4 m (ceux
+  de sortie de gare sont bas).
+- **Relevé des altitudes** (relief du jeu contre l'IGN aux pylônes, gares contre les altitudes
+  déclarées) : pylônes à ±9 m au plus (relief du jeu lissé), gares à ±10 m sauf conflits entre
+  sources (TK Slalom et Snow Park, TKF Lanche, Bellevarde).
+- Vérifié : tous les bancs des remontées.
+
 ## 1.31.1 — 24 octobre 2026
 
 **Téléphérique : la charpente des gares porte les câbles.** Retour d'utilisateur du 24/10/2026 :

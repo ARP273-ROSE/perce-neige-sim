@@ -403,7 +403,7 @@
  ],
  "pylones": [
   {
-   "d": 126.0,
+   "d": 69.3,
    "montee": [
     [
      12,
@@ -414,6 +414,22 @@
     [
      12,
      "C"
+    ]
+   ],
+   "reconstitue": true
+  },
+  {
+   "d": 126.0,
+   "montee": [
+    [
+     4,
+     "SC"
+    ]
+   ],
+   "descente": [
+    [
+     4,
+     "SC"
     ]
    ]
   },
@@ -436,21 +452,6 @@
    "d": 300.6,
    "montee": [
     [
-     4,
-     "SC"
-    ]
-   ],
-   "descente": [
-    [
-     4,
-     "SC"
-    ]
-   ]
-  },
-  {
-   "d": 316.9,
-   "montee": [
-    [
      8,
      "S"
     ]
@@ -458,6 +459,21 @@
    "descente": [
     [
      8,
+     "S"
+    ]
+   ]
+  },
+  {
+   "d": 316.9,
+   "montee": [
+    [
+     12,
+     "S"
+    ]
+   ],
+   "descente": [
+    [
+     12,
      "S"
     ]
    ]
@@ -478,7 +494,7 @@
    ]
   },
   {
-   "d": 710.2,
+   "d": 486.9,
    "montee": [
     [
      12,
@@ -488,12 +504,60 @@
    "descente": [
     [
      12,
+     "S"
+    ]
+   ],
+   "reconstitue": true
+  },
+  {
+   "d": 561.4,
+   "montee": [
+    [
+     12,
+     "S"
+    ]
+   ],
+   "descente": [
+    [
+     12,
+     "S"
+    ]
+   ],
+   "reconstitue": true
+  },
+  {
+   "d": 635.8,
+   "montee": [
+    [
+     14,
+     "C"
+    ]
+   ],
+   "descente": [
+    [
+     14,
+     "C"
+    ]
+   ],
+   "reconstitue": true
+  },
+  {
+   "d": 710.2,
+   "montee": [
+    [
+     8,
+     "S"
+    ]
+   ],
+   "descente": [
+    [
+     8,
      "S"
     ]
    ]
   },
   {
-   "d": 881.8,
+   "d": 767.4,
    "montee": [
     [
      12,
@@ -505,7 +569,55 @@
      12,
      "S"
     ]
+   ],
+   "reconstitue": true
+  },
+  {
+   "d": 824.6,
+   "montee": [
+    [
+     8,
+     "C"
+    ]
+   ],
+   "descente": [
+    [
+     8,
+     "C"
+    ]
+   ],
+   "reconstitue": true
+  },
+  {
+   "d": 881.8,
+   "montee": [
+    [
+     6,
+     "S"
+    ]
+   ],
+   "descente": [
+    [
+     6,
+     "S"
+    ]
    ]
+  },
+  {
+   "d": 927.7,
+   "montee": [
+    [
+     14,
+     "C"
+    ]
+   ],
+   "descente": [
+    [
+     14,
+     "C"
+    ]
+   ],
+   "reconstitue": true
   }
  ],
  "balanciers": "remontees-mecaniques.net"

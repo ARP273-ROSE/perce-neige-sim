@@ -285,6 +285,64 @@ func _calculer_tetes() -> void:
 	_tetes.clear()
 	for p in pylones:
 		_tetes.append(terrain(float(p["d"])) + 9.0)
+	_garde_au_sol()
+	for i in range(_tetes.size()):
+		var t: float = terrain(float(pylones[i]["d"]))
+		_tetes[i] = clampf(_tetes[i], t + 6.5, t + (90.0 if tricable() or vaetvient() else 32.0))
+		if _compression(pylones[i]):
+			_tetes[i] = minf(_tetes[i], t + 6.5)       # point de départ bas pour l'ajustement
+	if balanciers_estimes:
+		_choisir_balanciers()
+	# pylônes de COMPRESSION (balancier côté montée en C) : le câble doit y
+	# passer SOUS les galets, la ligne y est concave — tête abaissée sous la
+	# corde de ses voisins (sinon le câble décollerait des galets)
+	for it2 in range(30):
+		var bouge: bool = false
+		var pts2: Array = _points_appui()
+		for i in range(pylones.size()):
+			if not _compression(pylones[i]):
+				continue
+			var a: Array = pts2[i]
+			var b: Array = pts2[i + 2]
+			var d: float = float(pylones[i]["d"])
+			var corde: float = lerpf(a[1], b[1], (d - a[0]) / maxf(b[0] - a[0], 0.01))
+			# (pylône de compression : tête à 4 m au moins — ceux de sortie de
+			# gare sont bas, sinon la ligne y restait saillante)
+			var t2: float = terrain(d) + 4.0
+			if corde - 0.8 < t2:
+				# le terrain empêche d'abaisser la tête : on relève la corde en
+				# remontant le voisin amont (ou aval, au dernier pylône)
+				var manque: float = t2 + 0.8 - corde
+				if i + 1 < pylones.size():
+					_tetes[i + 1] += manque * (b[0] - a[0]) / maxf(d - a[0], 0.01)
+				elif i > 0:
+					_tetes[i - 1] += manque * (b[0] - a[0]) / maxf(b[0] - d, 0.01)
+				bouge = true
+				continue
+			if _tetes[i] > corde - 0.8 + 0.05:
+				_tetes[i] = corde - 0.8
+				bouge = true
+		if not bouge:
+			break
+	_porteurs_convexes()
+	# garde au sol, compressions et porteurs s'influencent : on boucle jusqu'à
+	# ce que les trois tiennent ensemble (abaisser une compression faisait
+	# raser le sol au câble chargé de la portée voisine)
+	for passe in range(6):
+		if not _garde_au_sol(true):
+			break
+		_porteurs_convexes()
+	for i3 in range(_tetes.size()):
+		var t3: float = terrain(float(pylones[i3]["d"]))
+		_tetes[i3] = minf(_tetes[i3], t3 + (90.0 if tricable() or vaetvient() else 36.0))
+
+
+## Garde au sol du brin montée chargé : la ou les têtes de chaque portée
+## trop basse sont relevées (pas les gares). `proteger_c` : une tête de
+## compression n'est pas relevée (sa ligne doit rester creuse), c'est
+## l'autre bout de la portée qui l'est. Renvoie vrai si une tête a bougé.
+func _garde_au_sol(proteger_c: bool = false) -> bool:
+	var a_bouge: bool = false
 	for it in range(80):
 		var pts: Array = _points_appui()
 		var change: bool = false
@@ -303,49 +361,25 @@ func _calculer_tetes() -> void:
 				var g: float = lerpf(H_CABLE_GARE - 0.5, GARDE, smoothstep(0.0, 40.0, minf(d, longueur_h() - d)))
 				pire = maxf(pire, terrain(d) + g - yc)
 			if pire > 0.05:
-				# on relève la ou les têtes de la portée (pas les gares)
-				if i > 0:
-					_tetes[i - 1] += pire * (0.6 if i < pts.size() - 2 else 1.0)
-				if i < pts.size() - 2:
-					_tetes[i] += pire * (0.6 if i > 0 else 1.0)
+				var ga: bool = i > 0
+				var dr: bool = i < pts.size() - 2
+				if proteger_c:
+					var ca: bool = ga and _compression(pylones[i - 1])
+					var cd: bool = dr and _compression(pylones[i])
+					if ca and dr and not cd:
+						ga = false
+					elif cd and ga and not ca:
+						dr = false
+				var f: float = 0.6 if (ga and dr) else 1.0
+				if ga:
+					_tetes[i - 1] += pire * f
+				if dr:
+					_tetes[i] += pire * f
 				change = true
+				a_bouge = true
 		if not change:
 			break
-	for i in range(_tetes.size()):
-		var t: float = terrain(float(pylones[i]["d"]))
-		_tetes[i] = clampf(_tetes[i], t + 6.5, t + (90.0 if tricable() or vaetvient() else 32.0))
-	if balanciers_estimes:
-		_choisir_balanciers()
-	# pylônes de COMPRESSION (balancier côté montée en C) : le câble doit y
-	# passer SOUS les galets, la ligne y est concave — tête abaissée sous la
-	# corde de ses voisins (sinon le câble décollerait des galets)
-	for it2 in range(30):
-		var bouge: bool = false
-		var pts2: Array = _points_appui()
-		for i in range(pylones.size()):
-			if not _compression(pylones[i]):
-				continue
-			var a: Array = pts2[i]
-			var b: Array = pts2[i + 2]
-			var d: float = float(pylones[i]["d"])
-			var corde: float = lerpf(a[1], b[1], (d - a[0]) / maxf(b[0] - a[0], 0.01))
-			var t2: float = terrain(d) + 6.5
-			if corde - 0.8 < t2:
-				# le terrain empêche d'abaisser la tête : on relève la corde en
-				# remontant le voisin amont (ou aval, au dernier pylône)
-				var manque: float = t2 + 0.8 - corde
-				if i + 1 < pylones.size():
-					_tetes[i + 1] += manque * (b[0] - a[0]) / maxf(d - a[0], 0.01)
-				elif i > 0:
-					_tetes[i - 1] += manque * (b[0] - a[0]) / maxf(b[0] - d, 0.01)
-				bouge = true
-				continue
-			if _tetes[i] > corde - 0.8 + 0.05:
-				_tetes[i] = corde - 0.8
-				bouge = true
-		if not bouge:
-			break
-	_porteurs_convexes()
+	return a_bouge
 
 
 ## Pylônes PORTEURS (galets sous le câble) : la ligne doit y faire un angle
