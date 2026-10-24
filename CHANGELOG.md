@@ -5,6 +5,29 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.29.1 — 24 octobre 2026
+
+**Téléskis en virage, vrais pylônes de téléski, lignes qui roulent tout de suite.** Retours
+d'utilisateur du 24/10/2026 : « la ligne de descente des perches du TK 3000 n'est pas la même que
+celle de la montée, elle est plus directe et coupe le virage — tu sais faire des pylônes de
+virage de TK ? » ; « quand le skieur est devant le funi, Bollin fonctionne mais Lanches est
+arrêté ».
+
+- **TKD du 3000 en virage** : le brin montée suit le tracé réel (pylônes de l'OpenStreetMap,
+  jusqu'à 39 m à côté de la droite gare–gare), la descente va droit. Pylônes de virage : potence
+  d'un seul côté, galets à axe vertical côté corde (le câble tiré veut couper le virage) ; la
+  descente a ses propres potences.
+- **Pylônes de téléski** : tous les téléskis ont enfin leur pylône (fût fin, échelons, potence en
+  T, petits trains de galets) au lieu de celui des télésièges.
+- **Lignes figées pendant leur construction** : les véhicules roulent dès qu'ils sont posés,
+  avant les corps de collision posés par tranches (une longue ligne restait arrêtée de longues
+  secondes sur iPad).
+- Bollin–Fresse : configuration actuelle conservée (depuis 2019, tout le monde débarque à la gare
+  intermédiaire et rembarque pour Fresse ; l'aiguillage et le double embarquement d'avant ne
+  servent plus, remontees-mecaniques.net).
+- Vérifié : bancs teleski (Legettaz et TKD du 3000 en virage), toutes_lignes (66), embarquement,
+  aller_remontee, remontee_dynamique, quai, skieur, poste_remontee, 3s, tph, tunnel_piste.
+
 ## 1.29.0 — 24 octobre 2026
 
 **Remontées : téléskis, tunnel de la piste du Tunnel, télésièges fixes sans lanceurs, gares

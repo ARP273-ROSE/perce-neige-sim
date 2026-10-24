@@ -114,6 +114,7 @@ func construire() -> void:
 		for i in range(2):
 			_corps_vehicule(i)
 	pret = true
+	roule = true
 	set_process(true)
 	construite.emit()
 

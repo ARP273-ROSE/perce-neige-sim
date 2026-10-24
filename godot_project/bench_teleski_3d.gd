@@ -17,10 +17,13 @@ var _y0: float = 0.0
 var _au_sol: bool = true
 var _ecart_max: float = 0.0
 var _perche_ok: bool = false
-const CLE: String = "tke_legettaz"
+var CLE: String = "tke_legettaz"     # autre ligne : -- cle (ex. tkd_3000, en virage)
 
 
 func _initialize() -> void:
+	for a in OS.get_cmdline_user_args():
+		if not a.begins_with("--"):
+			CLE = a
 	_main = load("res://scenes/main.tscn").instantiate()
 	get_root().add_child(_main)
 	process_frame.connect(_tick)
@@ -99,7 +102,8 @@ func _tick() -> void:
 					_ecart_max = maxf(_ecart_max, e2)
 				# perche déroulée jusqu'au skieur
 				var v: VehiculeRemontee = _lg.vehicule(rm.a_bord[1])
-				if v._corde != null and v._corde.scale.y > 1.0:
+				# enrouleur : la corde se déroule ; TKD : la perche télescopique s'allonge
+				if (v._corde != null and v._corde.scale.y > 1.0) or (v._corde == null and v._perche_tige != null and absf(v._perche_tige.scale.y - 1.0) > 0.05):
 					_perche_ok = true
 			else:
 				var haut: Vector3 = _lg.global_transform * Vector3(0, _lg.terrain(_lg.longueur_h()), -_lg.longueur_h())

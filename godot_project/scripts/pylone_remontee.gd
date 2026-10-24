@@ -22,7 +22,14 @@ extends Node3D
 @export var voie: float = 6.1              # entraxe des deux brins (m)
 @export var numero: int = 1
 @export var pente: float = 0.0             # pente moyenne du câble au pylône (rad, > 0 : monte vers −Z)
-@export var style: String = "doppelmayr"   # doppelmayr | poma | fixe
+@export var style: String = "doppelmayr"   # doppelmayr | poma | fixe | teleski | gare
+## Téléski : 0 = potence en T (les deux brins) ; 1 = montée seule ; −1 =
+## descente seule (virage : les deux brins ont chacun leur potence).
+var cote: int = 0
+## Virage du brin montée (rad) et côté de la corde (±1 en x local) : galets
+## horizontaux de ce côté-là.
+var virage: float = 0.0
+var cote_corde: float = 0.0
 @export var sens_montee_droite: bool = true
 var compo_montee: Array = [[8, "S"]]
 var compo_descente: Array = [[8, "S"]]
@@ -400,9 +407,31 @@ func _construire_teleski() -> void:
 	while y < h - 0.4:
 		RemonteeKit.barre(self, Vector3(-0.2, y, 0.17), Vector3(0.2, y, 0.17), 0.012, "galva", 5)
 		y += 0.32
-	RemonteeKit.boite_en(self, Vector3(voie + 0.5, 0.22, 0.22), Vector3(0, h - 0.11, 0), "galva")
+	if cote == 0:
+		RemonteeKit.boite_en(self, Vector3(voie + 0.5, 0.22, 0.22), Vector3(0, h - 0.11, 0), "galva")
+	else:
+		# potence d'un seul côté, du fût au brin porté
+		var xb: float = _x_brin(cote == 1)
+		RemonteeKit.boite_en(self, Vector3(absf(xb) + 0.35, 0.22, 0.22), Vector3(xb * 0.5 + signf(xb) * 0.1, h - 0.11, 0), "galva")
 	for montee in [true, false]:
+		if cote != 0 and montee != (cote == 1):
+			continue
 		var x: float = _x_brin(montee)
+		if montee and virage > 0.02 and cote_corde != 0.0:
+			# virage : galets à axe vertical côté corde, sur un arc ; le câble
+			# s'appuie contre eux à la hauteur de la ligne
+			var nv: int = clampi(int(virage / 0.04) + 2, 3, 10)
+			var lv: float = (nv - 1) * 0.36
+			var yv: float = h + dessus_traverse
+			for k in range(nv):
+				var z: float = lv * 0.5 - k * 0.36
+				var c: Vector3 = Vector3(x + cote_corde * (0.14 + 0.03), yv, z)
+				RemonteeKit.galet(self, c, 0.14, 0.06)
+				var g: MeshInstance3D = get_child(get_child_count() - 1)
+				g.transform.basis = Basis.IDENTITY.scaled(Vector3.ONE * 0.14 / RollerMesh.R_BANDE)
+			RemonteeKit.boite_en(self, Vector3(0.10, 0.10, lv + 0.3), Vector3(x + cote_corde * 0.17, yv + 0.20, 0), "galva")
+			RemonteeKit.boite_en(self, Vector3(0.10, yv + 0.25 - h, 0.10), Vector3(x + cote_corde * 0.17, h + (yv + 0.25 - h) * 0.5, 0), "galva")
+			continue
 		var compo: Array = compo_montee if montee else compo_descente
 		var n: int = 0
 		var dessus: bool = false
