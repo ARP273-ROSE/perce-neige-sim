@@ -1813,6 +1813,10 @@ func aller_a_remontee(lg: LigneRemontee) -> void:
 	if collisions != null:
 		collisions.assurer_autour(p)
 	skieur.activer(p, atan2(-amont.x, -amont.z))
+	# déposé à pied, skis à l'épaule : chaussé sur une pente, il glissait
+	# loin de la gare (on rechausse d'office au portillon ou au tapis du téléski)
+	if skieur.chausse:
+		skieur.basculer_ski()
 	skieur.support = null
 	skieur.refuge = p
 	skieur.dernier_sol = p

@@ -5,6 +5,35 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.34.0 — 25 octobre 2026
+
+**Téléskis refaits : deux familles, une vraie prise de perche, des pylônes en potence.**
+Retours d'utilisateur du 25/10/2026 : « téléskis impossibles à prendre — à ski on traverse le
+socle, à pied rien ne se passe », « deux familles, débrayables avec garage des perches, pinces
+fixes à enrouleur, refaire tout le système, pylônes compris ». Références : photos libres de
+Wikimedia Commons (gares Poma, enrouleurs, portiques en treillis).
+
+- **Prendre une perche** : on entre dans le couloir de départ, à pied ou à ski (à pied, on
+  chausse d'office) ; le skieur glisse jusqu'au tapis vert et attend la perche, qui l'emmène
+  skis sur la trace. Après un trajet en remontée, la dépose depuis la carte se fait à pied
+  (chaussé, il glissait loin de la gare).
+- **Plus de quai ni de socle** aux téléskis : la gare est posée sur la neige.
+- **Débrayables (TKD, Poma)** : mât rond sous la poulie, potence au-dessus du départ et
+  MAGASIN — les perches qui redescendent se débrayent juste après le nez, glissent en file sur le
+  rail autour de la poulie, et le lanceur en envoie une dès que le skieur est en place ;
+  contrepoids de tension pendu au bout de la gare aval ; en amont, plate-forme et anneau de
+  guidage autour de la poulie.
+- **Pinces fixes à enrouleur et perches en T** : portique en treillis (vert chez Doppelmayr),
+  boîtier à tambour tenu sur le câble par un étrier en C, perche orange à rondelle ou barre en T.
+- **Abords** : couloir entre filets bleus, portillon, panneaux « DÉPART » et « LÂCHEZ LA
+  PERCHE », cabane du perchman.
+- **Pylônes en potence** : fût hors de la trace (côté descente), bras au-dessus des deux brins
+  avec jambe de force, trains de galets pendus dessous.
+- **Hauteur du câble** : ~6 m aux pylônes (il passait à 12 m, la perche n'atteignait pas le
+  skieur), jamais moins de 3,4 m au-dessus de la trace, 9 m au plus aux pylônes ; là où les
+  pylônes sont estimés et le câble touchait encore (cassure de pente sous une gare sur un
+  replat : Signal, Combe Folle, Col du Palet), un pylône est intercalé.
+
 ## 1.33.0 — 25 octobre 2026
 
 **Hauteur des câbles calée sur des traces GPS réelles ; Bollin–Fresse séparés au coude.**

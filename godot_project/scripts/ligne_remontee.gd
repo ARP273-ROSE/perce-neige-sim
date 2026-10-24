@@ -45,10 +45,15 @@ const L_GARE: float = 24.0            # du nez de gare à l'axe de la poulie (d�
 ## télésiège fixe, pas débrayable, pas de lanceur »).
 const L_GARE_FIXE: float = 8.0
 const L_GARE_TELESKI: float = 5.0
+## TKD : le magasin des perches fait le tour de la poulie, du point de
+## débrayage (brin descente) au lanceur (brin montée) — ~30 perches.
+const L_GARE_TKD: float = 9.0
 var l_gare: float = L_GARE
 
 
 static func l_gare_pour(fam: String) -> float:
+	if fam == "perche_debrayable":
+		return L_GARE_TKD
 	if fam.begins_with("perche"):
 		return L_GARE_TELESKI
 	return L_GARE_FIXE if fam.begins_with("siege_fixe") else L_GARE
@@ -167,6 +172,8 @@ func construire() -> void:
 	_corps.clear()
 	_portillons_gares.clear()
 	_pneus.clear()
+	_au_magasin = PackedFloat32Array()
+	_a_lancer = false
 	_synchro = false
 	_trav_pts = PackedVector3Array()
 	if jumelee != null:
@@ -185,6 +192,8 @@ func construire() -> void:
 		v_embarquement = vitesse
 	_calculer_tetes()
 	_preparer_nez()
+	if teleski():
+		_construire_boucle()       # (le magasin et le départ se posent dessus)
 	_gare(true)
 	await _pause()
 	_gare(false)
@@ -288,6 +297,9 @@ static func chainette(x: float, x1: float, y1: float, x2: float, y2: float, a: f
 func _calculer_tetes() -> void:
 	_parametres_chainette()
 	_tetes.clear()
+	if teleski():
+		_tetes_teleski()
+		return
 	for p in pylones:
 		_tetes.append(terrain(float(p["d"])) + 9.0)
 	_garde_au_sol()
@@ -341,6 +353,68 @@ func _calculer_tetes() -> void:
 	for i3 in range(_tetes.size()):
 		var t3: float = terrain(float(pylones[i3]["d"]))
 		_tetes[i3] = minf(_tetes[i3], t3 + (90.0 if tricable() or vaetvient() else 36.0))
+
+
+## Téléski : câble à ~6 m aux pylônes, jamais à moins de 3,8 m de la trace
+## (les perches qui redescendent ne doivent pas traîner dans la neige) ni à
+## plus de 9 m aux pylônes (la perche n'atteindrait plus le skieur) —
+## retour d'utilisateur, 25/10/2026 : le câble passait à 12 m.
+const H_TELESKI: float = 6.0
+const GARDE_TELESKI: float = 3.8
+
+
+func _tetes_teleski() -> void:
+	for ajout in range(4):
+		_tetes.clear()
+		for p in pylones:
+			_tetes.append(terrain(float(p["d"])) + H_TELESKI)
+		for it in range(15):
+			var bouge: bool = false
+			var pts: Array = _points_appui()
+			for k in range(pts.size() - 1):
+				var r: Array = _pire_portee_teleski(pts[k], pts[k + 1])
+				if r[0] > 0.05:
+					for i in [k - 1, k]:
+						if i >= 0 and i < _tetes.size():
+							_tetes[i] = minf(_tetes[i] + r[0] + 0.1, terrain(float(pylones[i]["d"])) + 9.0)
+					bouge = true
+			if not bouge:
+				break
+		# pylônes ESTIMÉS (pas de position relevée) : là où le câble touche
+		# encore — une cassure de pente sous une gare sur un replat —, on
+		# intercale le pylône qui y serait (Signal, Combe Folle, Col du Palet)
+		if not balanciers_estimes:
+			break
+		var pts2: Array = _points_appui()
+		var pire: Array = [0.3, 0.0]
+		for k in range(pts2.size() - 1):
+			var r2: Array = _pire_portee_teleski(pts2[k], pts2[k + 1])
+			if r2[0] > pire[0]:
+				pire = r2
+		if pire[1] <= 0.0:
+			break
+		var nv: Dictionary = {"d": pire[1], "montee": [[4, "S"]], "descente": [[4, "S"]], "reconstitue": true}
+		var j: int = 0
+		while j < pylones.size() and float(pylones[j]["d"]) < pire[1]:
+			j += 1
+		pylones.insert(j, nv)
+	for i in range(_tetes.size()):
+		var t: float = terrain(float(pylones[i]["d"]))
+		_tetes[i] = clampf(_tetes[i], t + 4.5, t + 9.0)
+
+
+## [enfoncement maxi du câble chargé sous la garde, d où il a lieu] sur une
+## portée de téléski entre deux appuis [d, y].
+func _pire_portee_teleski(a: Array, b: Array) -> Array:
+	var pire: float = 0.0
+	var dp: float = 0.0
+	for j in range(1, 16):
+		var d: float = lerpf(a[0], b[0], float(j) / 16.0)
+		var e: float = terrain(d) + GARDE_TELESKI - chainette(d, a[0], a[1], b[0], b[1], _a_montee)
+		if e > pire:
+			pire = e
+			dp = d
+	return [pire, dp]
 
 
 ## Hauteur exigée du câble chargé au-dessus du sol en d : la mesure GPS où
@@ -547,7 +621,7 @@ func _compression(p: Dictionary) -> bool:
 ## l'horizontale de la gare et la ligne se croisent en son milieu.
 func _preparer_nez() -> void:
 	_h_nez = [0.0, 0.0]
-	if tricable() or vaetvient():
+	if tricable() or vaetvient() or teleski():
 		return
 	var L: float = longueur_h()
 	var e: float = 6.0
@@ -1106,11 +1180,15 @@ func _gare(aval: bool) -> void:
 	# réel (retour d'utilisateur, 23/10/2026 : « le soubassement de toutes tes
 	# gares, c'est n'importe quoi » — des troncs de pyramide de 6,4 m de
 	# profondeur fixe, qui sortaient en surplomb quand le terrain plongeait)
-	g.add_child(_mesh_terrassement(_terrassement(aval), y0))
+	# (téléski : pas de quai, la gare est posée sur la neige)
+	if not teleski():
+		g.add_child(_mesh_terrassement(_terrassement(aval), y0))
 	# carénage en gélule sur colonnes, cabine du conducteur (photos des
 	# gares BMF du Marmottes Express, retour d'utilisateur, 23/10/2026)
 	if tricable():
 		_gare_3s(g, znez, zc, aval)
+	elif teleski():
+		TeleskiGare.new(self).construire(g, aval, znez, zc)
 	elif style_gare() == "bmf":
 		_capot(g, znez, zc, aval)
 		_cabine_conducteur(g, znez, dz, aval)
@@ -1152,6 +1230,9 @@ func _gare(aval: bool) -> void:
 			RemonteeKit.boite_en(g, Vector3(0.22, 0.04, 0.30), Vector3(xd, H_CABLE_GARE + 0.16, zd), "galva_pylone")
 			RemonteeKit.boite_en(g, Vector3(0.10, 1.4, 0.10), Vector3(xd, H_CABLE_GARE + 0.86, zd), "galva_pylone")
 	# ligne d'embarquement (bande jaune) côté montée en aval, côté descente en amont
+	if teleski():
+		MeshMerge.merge(g, [g.get_node("Poulie")], "Gare")
+		return
 	var xb: float = _x_brin(aval)
 	var l_th: float = 2.0 * l_gare + PI * voie * 0.5
 	RemonteeKit.boite_en(g, Vector3(voie * 0.5 + 0.8, 0.02, 0.12), Vector3(xb * 0.6, 0.01, znez + signf(dz) * (l_th - x_arret(l_th) + 0.5)), "jaune_securite")
@@ -1660,7 +1741,7 @@ func _collisions_fixes() -> void:
 			cy1.radius = 0.22
 			cy1.height = py.hauteur
 			cs1.shape = cy1
-			cs1.position = py.position + Vector3(0, py.hauteur * 0.5, 0)
+			cs1.position = py.position + Vector3(py.x_fut, py.hauteur * 0.5, 0)
 			corps.add_child(cs1)
 	for i in range(0 if teleski() else pylones.size()):
 		var d: float = float(pylones[i]["d"])
@@ -1687,6 +1768,10 @@ func _collisions_fixes() -> void:
 		var dz: float = zc - znez
 		var zm: float = (zc + znez) * 0.5 + signf(dz) * 4.0
 		var long_g: float = absf(dz) + voie * 0.5 + 3.5 + 5.0      # + aire d'attente derrière la poulie
+		if teleski():
+			for e in TeleskiGare.new(self).collisions(aval):
+				boite.call(e[0], e[1])
+			continue
 		var tal: CollisionShape3D = CollisionShape3D.new()
 		var cc: ConcavePolygonShape3D = ConcavePolygonShape3D.new()
 		cc.set_faces(_terrassement(aval))
@@ -1950,6 +2035,18 @@ func _maj_portillons(delta: float) -> void:
 func vehicule_a_embarquer(aval: bool) -> int:
 	if role == "haut" and aval:
 		return -1
+	if teleski():
+		# la perche qui passe au lanceur (TKD) ou au droit du tapis
+		if not aval:
+			return -1
+		var sl: float = s_lancement()
+		for i in range(_vehicules.size()):
+			if not _au_magasin.is_empty() and _au_magasin[i] >= 0.0:
+				continue
+			var ds: float = fposmod(float(_vehicules[i][1]) - sl, longueur_boucle)
+			if ds < 0.7:
+				return i
+		return -1
 	var nom: String = "gare_aval" if aval else "gare_amont"
 	for i in range(_vehicules.size()):
 		var z: Array = zone(_vehicules[i][1])
@@ -1959,6 +2056,80 @@ func vehicule_a_embarquer(aval: bool) -> int:
 			if x > x_arret(l) - 1.4 and x < x_arret(l) + 0.6:
 				return i
 	return -1
+
+
+# --- téléskis : départ, magasin des TKD ---------------------------------------------
+
+## Point de débrayage des TKD (abscisse de boucle) : juste après le nez de la
+## gare aval, sur le brin descente.
+const S_DEBRAYAGE: float = 1.0
+var _au_magasin: PackedFloat32Array = PackedFloat32Array()   # par perche : abscisse sur le rail, −1 sur le câble
+var _a_lancer: bool = false
+
+
+## Abscisse (boucle) du lanceur des TKD, et du passage des perches au droit
+## du tapis de départ des téléskis à enrouleurs : 1 m après la poulie.
+func s_lancement() -> float:
+	return s_gare(true, x_arret(longueur_zone(true)))
+
+
+## Où le skieur attend la perche (repère de la ligne, sur la neige) : 0,6 m
+## derrière le lanceur, sous la perche qui en part.
+func point_depart_teleski() -> Vector3:
+	var sl: float = s_lancement()
+	var p: Vector3 = _point_cable(sl)[0]
+	if famille == "perche_debrayable":
+		p += _dehors(sl) * TeleskiGare.DECAL_RAIL
+	p.z += 0.6
+	p.y = _sol(p.x, p.z) + 0.02
+	return p
+
+
+## Le skieur est au tapis : le perchman (le lanceur) envoie la perche suivante.
+func lancer_perche() -> void:
+	_a_lancer = true
+
+
+## Perches au magasin : chacune glisse vers sa place dans la file, la
+## première au lanceur ; une perche demandée part quand la voie est libre.
+func _maj_magasin(delta: float) -> void:
+	var file: Array = []
+	for i in range(_vehicules.size()):
+		if _au_magasin[i] >= 0.0:
+			file.append(i)
+	file.sort_custom(func(a: int, b: int) -> bool: return _au_magasin[a] > _au_magasin[b])
+	var sl: float = s_lancement()
+	for k in range(file.size()):
+		var i: int = file[k]
+		var cible: float = maxf(sl - k * TeleskiGare.PAS_MAGASIN, S_DEBRAYAGE)
+		var s2: float = move_toward(_au_magasin[i], cible, 1.2 * delta)
+		_au_magasin[i] = s2
+		_vehicules[i][1] = s2
+	if not _a_lancer or file.is_empty() or regime() < 0.3:
+		return
+	var i0: int = file[0]
+	if absf(_au_magasin[i0] - sl) > 0.05:
+		return
+	for j in range(_vehicules.size()):
+		if _au_magasin[j] < 0.0 and fposmod(float(_vehicules[j][1]) - sl, longueur_boucle) < 4.0:
+			return
+	_au_magasin[i0] = -1.0
+	_vehicules[i0][1] = sl
+	_a_lancer = false
+
+
+## TKD au départ : le magasin presque plein, quelques perches qui
+## redescendent (lancées par les skieurs précédents).
+func _peupler_magasin() -> void:
+	var sl: float = s_lancement()
+	var cap: int = int((sl - S_DEBRAYAGE) / TeleskiGare.PAS_MAGASIN)
+	var n_desc: int = mini(int(longueur_h() / (espacement * 3.0)), cap / 2)
+	for k in range(cap - n_desc):
+		_ajouter_vehicule(sl - k * TeleskiGare.PAS_MAGASIN, true)
+	var s_a: float = float(_zones[1][1]) + 5.0
+	for k in range(n_desc):
+		_ajouter_vehicule(lerpf(s_a, longueur_boucle - 5.0, (k + 0.5) / n_desc))
+		await _pause()
 
 
 ## Abscisse (boucle) d'un point de la gare : x depuis l'entrée de sa zone.
@@ -2010,6 +2181,8 @@ func vehicule(i: int) -> VehiculeRemontee:
 ## Point (local) de la ligne d'arrêt : sur le quai, au droit du passage
 ## des véhicules, là où l'on attend le siège.
 func point_embarquement(aval: bool) -> Vector3:
+	if teleski() and aval:
+		return point_depart_teleski()
 	var p: Vector3 = _point_cable(s_gare(aval, x_arret(longueur_zone(aval))))[0]
 	return Vector3(p.x, terrain(0.0 if aval else longueur_h()) + 0.05, p.z)
 
@@ -2393,7 +2566,7 @@ func _poser_pylones_teleski() -> void:
 			var py: PyloneRemontee = PyloneRemontee.new()
 			py.style = "teleski"
 			py.numero = i + 1
-			py.dessus_traverse = 0.5
+			py.dessus_traverse = -PyloneRemontee.DESSUS_BRAS_TELESKI
 			py.cote = cote
 			py.compo_montee = p.get("montee", [[4, "S"]])
 			py.compo_descente = p.get("descente", [[4, "S"]])
@@ -2429,8 +2602,8 @@ func _poser_pylones_teleski() -> void:
 			MeshMerge.merge(py, [], "Pylone")
 			_pyl.append([py, d])
 		await _pause()
-	for aval in [true, false]:
-		_batterie_gare(aval)
+	# (pas de batterie de nez : au téléski, le câble va droit de la poulie
+	# au premier pylône)
 
 
 func _batterie_gare(aval: bool) -> void:
@@ -2629,6 +2802,9 @@ func _porteurs(parent: Node3D) -> void:
 
 
 func _peupler() -> void:
+	if famille == "perche_debrayable":
+		await _peupler_magasin()
+		return
 	# un véhicule toutes les `espacement / vitesse` secondes : on parcourt la
 	# boucle avec le profil de vitesse et l'on en dépose un à chaque intervalle
 	var dt_v: float = espacement / vitesse
@@ -2650,7 +2826,9 @@ func _peupler() -> void:
 		garde += 1
 
 
-func _ajouter_vehicule(s: float) -> void:
+func _ajouter_vehicule(s: float, magasin: bool = false) -> void:
+	if famille == "perche_debrayable":
+		_au_magasin.append(s if magasin else -1.0)
 	var v: VehiculeRemontee = VehiculeRemontee.new()
 	v.famille = famille
 	v.miroir = not sens_droite
@@ -2697,9 +2875,21 @@ func _process(delta: float) -> void:
 	_regler_vitesse(delta)
 	_maj_portillons(delta)
 	_dt = delta
+	var tkd: bool = not _au_magasin.is_empty()
 	for i in range(_vehicules.size()):
+		if tkd and _au_magasin[i] >= 0.0:
+			continue
 		var s: float = _vehicules[i][1]
-		_vehicules[i][1] = fposmod(s + vitesse_en(s) * regime() * delta, longueur_boucle)
+		var ds: float = vitesse_en(s) * regime() * delta
+		# TKD : la perche qui redescend se débraye juste après le nez de la
+		# gare aval et glisse sur le rail du magasin
+		if tkd and fposmod(S_DEBRAYAGE - s, longueur_boucle) <= ds:
+			_au_magasin[i] = S_DEBRAYAGE
+			_vehicules[i][1] = S_DEBRAYAGE
+			continue
+		_vehicules[i][1] = fposmod(s + ds, longueur_boucle)
+	if tkd:
+		_maj_magasin(delta)
 	_charges_ponctuelles()
 	# niveau de détail par véhicule (point de vue posé par le domaine) :
 	# invisible au-delà de 700 m → pas déplacé ; 250 à 700 m → une image sur
@@ -2993,6 +3183,9 @@ func _placer(i: int) -> void:
 	var bv: Basis = b
 	if not sens_droite:
 		bv = b * Basis.from_scale(Vector3(-1, 1, 1))
+	var au_rail: bool = not _au_magasin.is_empty() and _au_magasin[i] >= 0.0
+	if au_rail:
+		pt[0] = TeleskiGare.new(self).rail_local(s) + Vector3(0, 0.10, 0)
 	v.transform = Transform3D(bv, pt[0])
 	var z: Array = zone(s)
 	# la pince suit la pente du câble ; la partie suspendue balance
