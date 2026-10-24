@@ -218,7 +218,7 @@ func _process(delta: float) -> void:
 	# trois ; la ligne où l'on est assis, toujours à pleine cadence
 	for e in lignes:
 		var lg: LigneRemontee = e[0]
-		if not lg.pret:
+		if not lg.roule:
 			continue
 		var d: float = _distance_ligne(lg, p)
 		var a_bord_ici: bool = not a_bord.is_empty() and a_bord[0] == lg

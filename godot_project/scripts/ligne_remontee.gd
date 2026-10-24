@@ -103,6 +103,12 @@ func longueur_h() -> float:
 var progressif: bool = false
 var budget_ms: float = 6.0
 var pret: bool = false
+## Les véhicules roulent dès qu'ils sont posés, avant la fin de la
+## construction (corps de collision, un par véhicule, posés par tranches) :
+## sur iPad une longue ligne restait figée de longues secondes devant le
+## skieur (retour d'utilisateur, 24/10/2026 : « Bollin fonctionne mais Lanches
+## est arrêté »).
+var roule: bool = false
 var _t_tranche: int = 0
 signal construite
 
@@ -120,6 +126,7 @@ func construire() -> void:
 	_mat_porteurs = null
 	_terrassements.clear()
 	pret = false
+	roule = false
 	_t_tranche = Time.get_ticks_usec()
 	set_process(false)
 	for c in get_children():
@@ -155,6 +162,8 @@ func construire() -> void:
 		_rail_ouverture(true)
 		_rail_ouverture(false)
 	await _peupler()
+	roule = true
+	set_process(true)
 	if not (famille.begins_with("cabine") or famille.begins_with("perche")):
 		_portillons(true)
 		_portillons(false)
@@ -370,6 +379,27 @@ func _x_brin(montee: bool) -> float:
 
 # --- boucle des véhicules ----------------------------------------------------------
 
+## Téléski en virage (TKD du 3000) : décalage latéral du brin MONTÉE au droit
+## de d (interpolé entre les pylônes de virage, nul aux gares) ; la descente
+## va droit, elle coupe le virage (retour d'utilisateur, 24/10/2026).
+func decalage_montee(d: float) -> float:
+	if not teleski():
+		return 0.0
+	var L: float = longueur_h()
+	var d0: float = 0.0
+	var x0: float = 0.0
+	for p in pylones:
+		if not (p as Dictionary).has("x"):
+			return 0.0
+		var d1: float = float(p["d"])
+		var x1: float = float(p["x"])
+		if d <= d1:
+			return lerpf(x0, x1, clampf((d - d0) / maxf(d1 - d0, 0.01), 0.0, 1.0))
+		d0 = d1
+		x0 = x1
+	return lerpf(x0, 0.0, clampf((d - d0) / maxf(L - d0, 0.01), 0.0, 1.0))
+
+
 func _construire_boucle() -> void:
 	_boucle = PackedVector3Array()
 	_zones.clear()
@@ -393,7 +423,7 @@ func _construire_boucle() -> void:
 	# 2. brin montée
 	var d: float = _pas_ligne(0.0)
 	while d < L:
-		_ajouter(Vector3(xm, y_cable(d), -d))
+		_ajouter(Vector3(xm + decalage_montee(d), y_cable(d), -d))
 		d += _pas_ligne(d)
 	_ajouter(Vector3(xm, yb, -L))
 	# 3. gare amont
@@ -1094,7 +1124,20 @@ func _collisions_fixes() -> void:
 		cs.shape = b
 		cs.position = centre
 		corps.add_child(cs)
-	for i in range(pylones.size()):
+	if teleski():
+		# fûts des potences, là où elles sont (virage : à côté de l'axe)
+		for q in _pyl:
+			var py: PyloneRemontee = q[0]
+			if py.style != "teleski":
+				continue
+			var cs1: CollisionShape3D = CollisionShape3D.new()
+			var cy1: CylinderShape3D = CylinderShape3D.new()
+			cy1.radius = 0.22
+			cy1.height = py.hauteur
+			cs1.shape = cy1
+			cs1.position = py.position + Vector3(0, py.hauteur * 0.5, 0)
+			corps.add_child(cs1)
+	for i in range(0 if teleski() else pylones.size()):
 		var d: float = float(pylones[i]["d"])
 		var t: float = terrain(d)
 		var h: float = _tetes[i] - t - _dessus_traverse()
@@ -1694,6 +1737,9 @@ func _poser_pylones() -> void:
 	if tricable():
 		await _poser_pylones_treillis()
 		return
+	if teleski():
+		await _poser_pylones_teleski()
+		return
 	for i in range(pylones.size()):
 		var p: Dictionary = pylones[i]
 		var d: float = float(p["d"])
@@ -1720,6 +1766,70 @@ func _poser_pylones() -> void:
 		_pyl.append([py, d])
 		await _pause()
 	# batteries de galets aux nez des gares (le câble y change de pente)
+	for aval in [true, false]:
+		_batterie_gare(aval)
+
+
+## Pylônes de téléski : fût fin et potence en T portant les deux brins ; en
+## virage (brin montée décalé de plus de 2 m), deux potences d'un seul côté,
+## celle de la montée garnie de galets horizontaux côté corde (le câble
+## tiré veut couper le virage), celle de la descente droite.
+func _poser_pylones_teleski() -> void:
+	var xm: float = _x_brin(true)
+	var xd: float = _x_brin(false)
+	var L: float = longueur_h()
+	for i in range(pylones.size()):
+		var p: Dictionary = pylones[i]
+		var d: float = float(p["d"])
+		var dx: float = float(p.get("x", 0.0))
+		var y_c: float = _tetes[i]
+		var postes: Array = []          # [x du câble montée, x du câble descente, côté]
+		if absf(dx) < 2.0:
+			postes.append([xm + dx, xd, 0])
+		else:
+			postes.append([xm + dx, 0.0, 1])
+			postes.append([0.0, xd, -1])
+		for po in postes:
+			var cote: int = po[2]
+			var py: PyloneRemontee = PyloneRemontee.new()
+			py.style = "teleski"
+			py.numero = i + 1
+			py.dessus_traverse = 0.5
+			py.cote = cote
+			py.compo_montee = p.get("montee", [[4, "S"]])
+			py.compo_descente = p.get("descente", [[4, "S"]])
+			var xc: float
+			if cote == 0:
+				xc = (float(po[0]) + float(po[1])) * 0.5
+				py.voie = absf(float(po[0]) - float(po[1]))
+				py.sens_montee_droite = float(po[0]) > float(po[1])
+			else:
+				# potence d'un côté : le fût 0,9 m à l'extérieur du brin
+				var xb: float = float(po[0]) if cote == 1 else float(po[1])
+				var autre: float = xd if cote == 1 else xm + dx
+				var dehors: float = signf(xb - autre)
+				xc = xb + dehors * 0.9
+				py.voie = 1.8
+				# le brin porté est du côté opposé au fût (local x = −dehors·0,9)
+				py.sens_montee_droite = (dehors < 0.0) if cote == 1 else (dehors > 0.0)
+				if cote == 1:
+					# virage : la corde passe du côté où le brin revient vers la droite
+					var dp: float = float(pylones[i - 1]["d"]) if i > 0 else 0.0
+					var xp: float = float(pylones[i - 1].get("x", 0.0)) if i > 0 else 0.0
+					var dn: float = float(pylones[i + 1]["d"]) if i < pylones.size() - 1 else L
+					var xn: float = float(pylones[i + 1].get("x", 0.0)) if i < pylones.size() - 1 else 0.0
+					var corde: float = lerpf(xp, xn, (d - dp) / maxf(dn - dp, 0.01))
+					py.virage = absf(atan2(dx - xp, d - dp) - atan2(xn - dx, dn - d))
+					py.cote_corde = signf(corde - dx)
+			var t: float = float(sol_local.call(xc, -d)) if sol_local.is_valid() else terrain(d)
+			py.hauteur = y_c - t - py.dessus_traverse
+			py.position = Vector3(xc, t, -d)
+			py.name = "P%d%s" % [i + 1, "" if cote == 0 else ("m" if cote == 1 else "d")]
+			add_child(py)
+			py.construire()
+			MeshMerge.merge(py, [], "Pylone")
+			_pyl.append([py, d])
+		await _pause()
 	for aval in [true, false]:
 		_batterie_gare(aval)
 
@@ -1977,7 +2087,7 @@ func _tic_lod(delta: float) -> float:
 
 
 func _process(delta: float) -> void:
-	if not pret:
+	if not roule:
 		return
 	delta = _tic_lod(delta)
 	if delta < 0.0:

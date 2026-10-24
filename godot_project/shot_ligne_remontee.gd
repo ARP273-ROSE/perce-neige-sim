@@ -81,6 +81,7 @@ func _initialize() -> void:
 	var y3: float = _ligne.terrain(d3)
 	_vues = [
 		["vue_generale", Vector3(-L * 0.55, _ligne.terrain(L * 0.5) + L * 0.25, -L * 0.45), Vector3(0, _ligne.terrain(L * 0.5), -L * 0.5)],
+		["dessus", Vector3(-1.0, _ligne.terrain(L * 0.5) + L * 0.75, -L * 0.5), Vector3(0, _ligne.terrain(L * 0.5), -L * 0.5)],
 		["gare_aval", Vector3(-14, 9, 8), Vector3(0, 4, 8)],
 		["gare_3q", Vector3(-26, 6, 36), Vector3(0, 5, 12)],
 		["gare_face", Vector3(-6, 6, -24), Vector3(0, 5, 10)],
