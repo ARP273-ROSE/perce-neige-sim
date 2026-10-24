@@ -1500,8 +1500,10 @@ func _perche() -> void:
 		RemonteeKit.cylindre(_perche_tige, 0.035, 0.035, 0.30, Transform3D(Basis.IDENTITY, Vector3(0, -1.65, 0)), "acier_noir", 10)
 		RemonteeKit.cylindre(_perche_tige, 0.13, 0.13, 0.05, Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3(0, -3.45, 0)), "jaune_securite", 18)
 		return
-	# enrouleur : boîtier + tambour + pince fixe
-	RemonteeKit.boite_en(self, Vector3(0.12, 0.10, 0.26), Vector3(0, 0.03, 0), "galva")
+	# enrouleur : pince fixe sur le câble, étrier en C qui le contourne par
+	# l'extérieur (photo Commons « Tellerliftbügel »), boîtier à tambour
+	RemonteeKit.boite_en(self, Vector3(0.12, 0.10, 0.26), Vector3(0, 0.08, 0), "galva")
+	RemonteeKit.tube(self, RemonteeKit.arc(Vector3(0, 0.0, 0), Vector3.RIGHT, Vector3.UP, 0.13, -PI * 0.5, PI * 0.5, 10), 0.025, "acier_noir", 6)
 	RemonteeKit.boite_en(self, Vector3(0.30, 0.42, 0.34), Vector3(0, -0.24, 0), "peinture_gris")
 	RemonteeKit.cylindre(self, 0.15, 0.15, 0.32, Transform3D(Basis(Vector3.FORWARD, PI * 0.5), Vector3(0, -0.24, 0)), "acier_noir", 18)
 	_corde = Node3D.new()
@@ -1512,7 +1514,7 @@ func _perche() -> void:
 	_perche_tige = Node3D.new()
 	_perche_tige.name = "Perche"
 	add_child(_perche_tige)
-	RemonteeKit.barre(_perche_tige, Vector3(0, 0, 0), Vector3(0, -1.10, 0), 0.02, "jaune_securite", 8)
+	RemonteeKit.barre(_perche_tige, Vector3(0, 0, 0), Vector3(0, -1.10, 0), 0.02, "jaune_securite" if famille == "perche_tbar" else "orange_perche", 8)
 	if famille == "perche_tbar":
 		# archet biplace (Montet) : barre cintrée en arc, le milieu plus bas
 		# que les bouts (retour d'utilisateur, 25/10/2026 : « inverser la courbure de
@@ -1539,7 +1541,7 @@ func longueur_perche(d: float) -> void:
 	if _perche_tige == null:
 		return
 	if famille == "perche_debrayable":
-		var k: float = clampf(d / 3.45, 0.35, 1.6) if d > 0.0 else 1.0
+		var k: float = clampf(d / 3.45, 0.35, 2.4) if d > 0.0 else 1.0
 		_perche_tige.scale = Vector3(1, k, 1)
 		return
 	deroule(0.0 if d <= 0.0 else (d - 0.45 - 1.12 - 0.25) / (3.6 - 0.25))

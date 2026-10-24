@@ -398,6 +398,9 @@ func _embarquement() -> void:
 	if not a_bord.is_empty():
 		_suivre_siege()
 		return
+	if _attente_tk != null:
+		_attendre_perche()
+		return
 	_repos = maxf(0.0, _repos - get_process_delta_time())
 	if _repos > 0.0:
 		return
@@ -539,6 +542,11 @@ func _relais_jumele() -> void:
 ## Quitter la remontée (aller à une autre depuis la carte) : on lâche la
 ## perche ou l'on se lève du siège sur place.
 func quitter() -> void:
+	if _attente_tk != null:
+		_attente_tk = null
+		if skieur != null:
+			skieur.embarque = false
+		_repos = 3.0
 	if a_bord.is_empty():
 		return
 	var lg: LigneRemontee = a_bord[0]
@@ -552,29 +560,73 @@ func quitter() -> void:
 	_repos = 3.0
 
 
-## Téléski : chaussé, on attend au départ, juste après la poulie ; la
-## perche qui passe à hauteur du skieur l'emmène (on ne s'assoit pas : on
-## est tracté, skis sur la trace).
+## Téléski : on entre dans le couloir de départ (à pied, on chausse
+## d'office, comme au télésiège), on glisse jusqu'au tapis et l'on attend
+## la perche — au TKD, le lanceur l'envoie dès qu'on est en place ; aux
+## enrouleurs, on prend la suivante qui passe (retour d'utilisateur,
+## 25/10/2026 : « impossible d'en prendre un, à pied rien ne se passe »).
+var _attente_tk: LigneRemontee = null
+var _t_attente: float = 0.0
+const RAYON_DEPART: float = 3.5
+
+
 func _prendre_perche(lg: LigneRemontee, p: Vector3) -> bool:
-	# la perche se prend chaussé (à pied, on passe à côté sans être emmené)
-	if not skieur.chausse:
-		return false
 	var q: Vector3 = lg.global_transform * lg.point_embarquement(true)
-	if Vector2(p.x - q.x, p.z - q.z).length() > 3.0:
+	if Vector2(p.x - q.x, p.z - q.z).length() > RAYON_DEPART or absf(p.y - q.y) > 3.0:
 		return false
-	var i: int = lg.vehicule_a_embarquer(true)
-	if i < 0:
+	if lg.regime() < 0.3:
 		return false
-	var v: VehiculeRemontee = lg.vehicule(i)
-	var loc: Vector3 = v.global_transform.affine_inverse() * p
-	if absf(loc.x) > 1.3 or absf(loc.z) > 1.2:
-		return false
-	a_bord = [lg, i, 0, true, false, "perche"]
+	if not skieur.chausse:
+		skieur.basculer_ski(true)
 	skieur.support = null
 	skieur.embarque = true
-	_suivre_perche()
-	message.emit("Perche prise — %s" % lg.nom_ligne)
+	skieur.velocity = Vector3.ZERO
+	skieur._v_ski = Vector3.ZERO
+	_attente_tk = lg
+	_t_attente = 0.0
+	message.emit("Départ — %s : attendez la perche" % lg.nom_ligne)
 	return true
+
+
+func _attendre_perche() -> void:
+	var lg: LigneRemontee = _attente_tk
+	var dt: float = get_process_delta_time()
+	if not is_instance_valid(lg) or not lg.roule:
+		_attente_tk = null
+		skieur.embarque = false
+		return
+	_t_attente += dt
+	var q: Vector3 = lg.global_transform * lg.point_embarquement(true)
+	var p: Vector3 = skieur.global_position
+	var h: Vector2 = Vector2(p.x, p.z).move_toward(Vector2(q.x, q.z), 2.5 * dt)
+	var y: float = q.y
+	if relief != null:
+		y = relief.hauteur_sol(h.x, h.y) + 0.02
+	p = Vector3(h.x, y, h.y)
+	skieur.global_position = p
+	skieur.dernier_sol = p
+	skieur.velocity = Vector3.ZERO
+	skieur._v_ski = Vector3.ZERO
+	var f: Vector3 = lg.global_transform.basis * Vector3(0, 0, -1)
+	var cap: float = atan2(-f.x, -f.z)
+	skieur._visuel.rotation = Vector3(0.0, cap, 0.0)
+	skieur._cap = cap
+	skieur._cap_ski = cap
+	var en_place: bool = Vector2(p.x - q.x, p.z - q.z).length() < 0.3
+	if en_place:
+		lg.lancer_perche()
+		var i: int = lg.vehicule_a_embarquer(true)
+		if i >= 0:
+			_attente_tk = null
+			a_bord = [lg, i, 0, true, false, "perche"]
+			_suivre_perche()
+			message.emit("Perche prise — %s" % lg.nom_ligne)
+			return
+	if _t_attente > 90.0:
+		_attente_tk = null
+		skieur.embarque = false
+		_repos = 5.0
+		message.emit("Pas de perche — %s est-il en marche ?" % lg.nom_ligne)
 
 
 func _suivre_perche() -> void:
@@ -593,10 +645,8 @@ func _suivre_perche() -> void:
 	var y: float = (lg.global_transform * Vector3(loc.x, yl, loc.z)).y
 	if relief != null:
 		# en ligne, le relief sous les skis ; aux gares, le quai s'il est plus haut
-		var dl: float = -loc.z
-		var en_gare: bool = dl < lg.l_gare + 10.0 or dl > lg.longueur_h() - lg.l_gare - 10.0
-		var ys: float = relief.hauteur_sol(pos.x, pos.z)
-		y = maxf(y, ys) if en_gare else ys
+		# (pas de quai aux téléskis : la neige partout)
+		y = relief.hauteur_sol(pos.x, pos.z)
 	pos.y = y + 0.02
 	skieur.global_position = pos
 	skieur.dernier_sol = pos

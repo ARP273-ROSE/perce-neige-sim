@@ -404,22 +404,43 @@ func _plaques(r0: float, r1: float, y_tete: float) -> void:
 	RemonteeKit.cylindre(self, 0.15, 0.15, 0.01, Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3(-0.05, y2 + 0.03, r2 + 0.02)), "plaque_bleue", 20)
 
 
-## Pylône de téléski : fût tubulaire fin, échelons soudés, potence en T
-## portant un petit train de galets de chaque côté (voie ~2,5 m).
+## Pylône de téléski en potence (photos Commons « Plan du Jeu POMA ») : fût
+## tubulaire HORS de la trace, côté descente, bras horizontal au-dessus des
+## deux brins avec sa jambe de force en triangle, trains de galets pendus
+## sous le bras ; le câble roule sur les galets. Virage : potence d'un seul
+## côté (cote ≠ 0). `hauteur` : du sol au dessus du bras.
+var x_fut: float = 0.0          # position du fût (repère du pylône)
+const DESSUS_BRAS_TELESKI: float = 0.75   # bras au-dessus du câble
+
+
 func _construire_teleski() -> void:
 	var h: float = hauteur
-	RemonteeKit.boite_en(self, Vector3(1.2, 0.5, 1.2), Vector3(0, -0.1, 0), "beton")
-	RemonteeKit.cylindre(self, 0.20, 0.15, h, Transform3D(Basis.IDENTITY, Vector3(0, h * 0.5, 0)), "galva", 14)
+	var yc: float = h - DESSUS_BRAS_TELESKI        # câble
+	if cote == 0:
+		var xd: float = _x_brin(false)
+		x_fut = xd + signf(xd) * 0.9
+	else:
+		x_fut = 0.0
+	RemonteeKit.boite_en(self, Vector3(1.0, 0.5, 1.0), Vector3(x_fut, -0.1, 0), "beton")
+	RemonteeKit.cylindre(self, 0.17, 0.13, h, Transform3D(Basis.IDENTITY, Vector3(x_fut, h * 0.5, 0)), "galva", 14)
 	var y: float = 2.2
 	while y < h - 0.4:
-		RemonteeKit.barre(self, Vector3(-0.2, y, 0.17), Vector3(0.2, y, 0.17), 0.012, "galva", 5)
+		RemonteeKit.barre(self, Vector3(x_fut - 0.18, y, 0.15), Vector3(x_fut + 0.18, y, 0.15), 0.012, "galva", 5)
 		y += 0.32
-	if cote == 0:
-		RemonteeKit.boite_en(self, Vector3(voie + 0.5, 0.22, 0.22), Vector3(0, h - 0.11, 0), "galva")
-	else:
-		# potence d'un seul côté, du fût au brin porté
-		var xb: float = _x_brin(cote == 1)
-		RemonteeKit.boite_en(self, Vector3(absf(xb) + 0.35, 0.22, 0.22), Vector3(xb * 0.5 + signf(xb) * 0.1, h - 0.11, 0), "galva")
+	# bras jusqu'au-delà du brin le plus loin, jambe de force en triangle
+	var xs: Array = []
+	for montee in [true, false]:
+		if cote == 0 or montee == (cote == 1):
+			xs.append(_x_brin(montee))
+	var x_loin: float = x_fut
+	for x in xs:
+		if absf(x - x_fut) > absf(x_loin - x_fut):
+			x_loin = x
+	var bout: float = x_loin + signf(x_loin - x_fut) * 0.25
+	RemonteeKit.boite_en(self, Vector3(absf(bout - x_fut) + 0.15, 0.16, 0.16), Vector3((bout + x_fut) * 0.5, h - 0.08, 0), "galva")
+	var lb: float = absf(bout - x_fut)
+	RemonteeKit.poutre(self, Vector3(x_fut, h - 0.2 - lb * 0.75, 0), Vector3(lerpf(x_fut, bout, 0.8), h - 0.16, 0), 0.08, 0.08, "galva")
+	RemonteeKit.poutre(self, Vector3(lerpf(x_fut, bout, 0.4), h - 0.16, 0), Vector3(x_fut, h - 0.2 - lb * 0.75 * 0.5, 0), 0.06, 0.06, "galva")
 	for montee in [true, false]:
 		if cote != 0 and montee != (cote == 1):
 			continue
@@ -447,14 +468,19 @@ func _construire_teleski() -> void:
 			dessus = dessus or String(g[1]) == "C"
 		n = maxi(n, 2)
 		var Lt: float = (n - 1) * 0.36
+		var yc2: float = h - DESSUS_BRAS_TELESKI
+		# galets sous le câble (support) ; en compression, au-dessus
+		var yg: float = yc2 + (0.14 if dessus else -0.14)
 		for k in range(n):
-			RemonteeKit.galet(self, Vector3(x, h + 0.35 + (0.30 if dessus else 0.0), Lt * 0.5 - k * 0.36), 0.14, 0.06)
-		RemonteeKit.boite_en(self, Vector3(0.10, 0.10, Lt + 0.3), Vector3(x, h + 0.12, 0), "galva")
-		RemonteeKit.boite_en(self, Vector3(0.10, 0.26, 0.10), Vector3(x, h + 0.05, 0), "galva")
+			RemonteeKit.galet(self, Vector3(x, yg, Lt * 0.5 - k * 0.36), 0.14, 0.06)
+		# flasques du train et suspente côté intérieur, jusqu'au bras
+		var xi: float = x - signf(x - x_fut) * 0.12 if absf(x - x_fut) > 0.01 else x + 0.12
+		RemonteeKit.boite_en(self, Vector3(0.04, 0.22, Lt + 0.3), Vector3(xi, yg, 0), "galva")
+		RemonteeKit.boite_en(self, Vector3(0.08, h - 0.16 - (yg - 0.1), 0.10), Vector3(xi, (h - 0.16 + yg - 0.1) * 0.5, 0), "galva")
 	var lab: Label3D = Label3D.new()
 	lab.text = str(numero)
 	lab.font_size = 64
 	lab.pixel_size = 0.003
 	lab.modulate = Color(0.05, 0.05, 0.05)
-	lab.position = Vector3(0, minf(3.0, h * 0.5), 0.21)
+	lab.position = Vector3(x_fut, minf(3.0, h * 0.5), 0.18)
 	add_child(lab)

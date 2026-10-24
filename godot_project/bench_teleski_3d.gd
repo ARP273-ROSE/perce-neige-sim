@@ -68,23 +68,28 @@ func _tick() -> void:
 		1:
 			if not _lg.pret:
 				return
-			_verif("téléski : gare courte, sans lanceurs", _lg.fixe() and _lg.l_gare < 8.0 and _lg._pneus.is_empty(),
+			_verif("téléski : gare courte, sans lanceurs ni quai", _lg.fixe() and _lg.l_gare < 10.0 and _lg._pneus.is_empty()
+				and _lg.find_child("Terrassement", true, false) == null,
 				"gare %.1f m, %d pneus" % [_lg.l_gare, _lg._pneus.size()])
-			var q: Vector3 = _lg.global_transform * _lg.point_embarquement(true)
+			if _lg.famille == "perche_debrayable":
+				var n_mag: int = 0
+				for k in range(_lg._au_magasin.size()):
+					if _lg._au_magasin[k] >= 0.0:
+						n_mag += 1
+				_verif("TKD : perches rangées au magasin", n_mag >= 15, "%d au magasin" % n_mag)
+			# à PIED, 2,5 m derrière le tapis de départ (retour d'utilisateur,
+			# 25/10/2026 : « à pied rien ne se passe »)
+			var q: Vector3 = _lg.global_transform * (_lg.point_embarquement(true) + Vector3(0, 0, 2.5))
+			q.y = _main.relief.hauteur_sol(q.x, q.z)
 			sk.activer(q + Vector3(0, 0.1, 0), 0.0)
-			sk.basculer_ski(true)
+			if sk.chausse:
+				sk.basculer_ski(false)
 			sk.dernier_sol = q
 			_phase = 2
 			_t = 0.0
 		2:
-			# il attend sur place, en chasse-neige (sinon il glisse du départ)
-			if rm.a_bord.is_empty():
-				var qa: Vector3 = _lg.global_transform * _lg.point_embarquement(true)
-				sk.global_position = Vector3(qa.x, sk.global_position.y, qa.z)
-				sk._v_ski = Vector3.ZERO
-				sk.velocity = Vector3.ZERO
 			if not rm.a_bord.is_empty():
-				_verif("téléski : perche prise au départ", sk.embarque and not sk.assis and rm.a_bord.size() > 5,
+				_verif("téléski : arrivé à pied, chaussé d'office, perche prise au tapis", sk.chausse and sk.embarque and not sk.assis and rm.a_bord.size() > 5,
 					"%.1f s d'attente" % _t)
 				_y0 = sk.global_position.y
 				_phase = 3

@@ -21,7 +21,7 @@ extends RefCounted
 ##   leitner : Leitner récent (Aiguille Percée) — caisse blanche en
 ##     baignoire, flancs évasés vers le haut, couverture noire bombée à
 ##     nervures, grand nom bleu sur le flanc ;
-##   teleski : poulie horizontale sur un portique galvanisé, motoréducteur
+##   teleski : construit par TeleskiGare (mât Poma ou portique en treillis)
 ##     sous capot gris à la gare motrice ;
 ##   fixe : télésièges à pinces fixes (Montaval, Skirail, GMM…) — poulie à
 ##     l'air sur un bâti d'acier noir, petit local blanc de la motrice.
@@ -257,8 +257,6 @@ func construire(g: Node3D, znez: float, zc: float, style: String) -> void:
 			_leitner(g, znez, zc)
 		"fixe":
 			_fixe(g, znez, zc)
-		"teleski":
-			_teleski(g, znez, zc)
 
 
 ## Doppelmayr UNI-G (photos de Palafour) : caisse rectangulaire aux bouts
@@ -677,30 +675,6 @@ func batiment(g: Node3D, aval: bool) -> void:
 	var zr: float = c.z + signf(c.z - (0.0 if aval else -lg.longueur_h())) * (t.z * 0.5 + 0.02)
 	RemonteeKit.boite_en(g, Vector3(2.2, 2.5, 0.05), Vector3(c.x, 1.25, zr), "vitrage_sombre")
 	_nom(g, lg.nom_court(), Vector3(c.x, h0 + 0.6, zr + signf(zr - c.z) * 0.03), 0.0 if zr > c.z else PI, Color(0.95, 0.95, 0.95), 0.0035)
-
-
-## Téléski : la poulie à l'air, portée par un portique galvanisé (deux
-## jambes en A et une traverse), le motoréducteur sous un capot gris au-dessus
-## de la poulie ; protections en mousse au pied des jambes.
-func _teleski(g: Node3D, znez: float, zc: float) -> void:
-	var sg: float = signf(zc - znez)
-	var R: float = lg.voie * 0.5
-	var yb: float = lg.H_CABLE_GARE + 0.55
-	# traverse en caisson au-dessus de la poulie, en long
-	RemonteeKit.boite_en(g, Vector3(0.40, 0.45, R * 2.0 + 1.6), Vector3(0, yb, zc), "galva")
-	# jambes en A, en dehors de la boucle des perches
-	for sz in [-1.0, 1.0]:
-		var top: Vector3 = Vector3(0, yb, zc + sz * (R + 0.6))
-		for sx in [-1.0, 1.0]:
-			var pied: Vector3 = Vector3(sx * 1.6, 0.0, zc + sz * (R + 1.4))
-			RemonteeKit.poutre(g, pied, top, 0.18, 0.18, "galva")
-			RemonteeKit.cylindre(g, 0.22, 0.22, 1.6, Transform3D(Basis.IDENTITY, pied + Vector3(0, 0.8, 0)), "mousse_rouge", 12)
-	# axe de la poulie et capot du motoréducteur
-	RemonteeKit.cylindre(g, 0.12, 0.12, 0.6, Transform3D(Basis.IDENTITY, Vector3(0, lg.H_CABLE_GARE + 0.2, zc)), "acier", 12)
-	RemonteeKit.boite_en(g, Vector3(1.2, 0.9, 1.5), Vector3(0, yb + 0.68, zc), "peinture_gris")
-	RemonteeKit.boite_en(g, Vector3(1.3, 0.06, 1.6), Vector3(0, yb + 1.15, zc), "acier_noir")
-	if lg.nom_court() != "":
-		_nom(g, lg.nom_court(), Vector3(0, yb + 0.70, zc - sg * 0.77), 0.0 if sg < 0.0 else PI, Color(0.15, 0.15, 0.17), 0.0018)
 
 
 ## Télésiège à pinces fixes (photos du Grand Pré) : pas de carénage sur la

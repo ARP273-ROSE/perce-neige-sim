@@ -56,6 +56,13 @@ const COULEURS: Dictionary = {
 	"mousse_rouge": [Color(0.82, 0.14, 0.08), 0.85, 0.0],      # protections des poteaux
 	"bois_meleze": [Color(0.56, 0.36, 0.19), 0.80, 0.0],       # bardage des gares de télécabine
 	"crepi": [Color(0.86, 0.84, 0.79), 0.95, 0.0],
+	# téléskis (photos Commons : Poma, Doppelmayr, enrouleurs)
+	"orange_perche": [Color(0.95, 0.40, 0.06), 0.55, 0.05],
+	"vert_treillis": [Color(0.08, 0.36, 0.30), 0.55, 0.30],     # portiques Doppelmayr
+	"filet_bleu": [Color(0.12, 0.34, 0.82), 0.85, 0.0],
+	"mousse_jaune": [Color(0.92, 0.88, 0.22), 0.85, 0.0],
+	"bois_vert": [Color(0.24, 0.40, 0.33), 0.85, 0.0],          # cabane du perchman
+	"tapis_vert": [Color(0.16, 0.42, 0.20), 0.90, 0.0],
 }
 
 
