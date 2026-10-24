@@ -5,6 +5,28 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.31.0 — 24 octobre 2026
+
+**Téléphérique de la Grande Motte refait de zéro**, d'après la fiche et les photos du reportage
+remontees-mecaniques.net (retour d'utilisateur du 24/10/2026 : « reprends-le de zéro, refais tout
+le design consciencieusement »). Bicâble va-et-vient Von Roll 1975, 1 696 m, un pylône, 8
+cavaliers par voie, deux cabines de 115 + 1 places.
+
+- **Gare aval** (`TphGrandeMotte`) : le bâtiment existant de la gare du funiculaire, étage vitré
+  au niveau du quai (portes côté ligne et côté funiculaire, plancher), grand escalier extérieur le
+  long de la façade côté funiculaire ; côté ligne, la tête en acier sur poteaux : quai surélevé en
+  caillebotis, deux baies où accostent les cabines, escaliers métalliques vers la neige, un
+  portique en Λ par voie portant le sabot du porteur et la poulie de déviation du tracteur,
+  cornes de guidage de la suspente, charpente en treillis et flèche de levage. La ligne part de
+  l'avant du quai ; la seconde gare construite au point OSM est supprimée.
+- **Gare amont** : ouverte au sommet — quai en caillebotis sur poteaux, chevalets des sabots,
+  portique de retour du tracteur (deux tours en A, poulies en tête), tambours d'ancrage des
+  porteurs côte à côte sur un rampant incliné, câble enroulé, poste de vigie.
+- **Cavaliers** en V (sabot sur le porteur, galet du tracteur à la pointe).
+- **Deux cabines différentes** : la Swoboda de 1993 (liseré bleu, vitrage bleuté) et la CWA Varos
+  de 2003 (liseré gris, vitrage sombre).
+- Vérifié : bancs tph, embarquement, aller_remontee.
+
 ## 1.30.0 — 24 octobre 2026
 
 **Bollin–Fresse dans sa configuration d'avant 2019, pylônes vérifiés, un portillon par place,

@@ -22,6 +22,9 @@ extends RefCounted
 const H_QUAI_AVAL: float = 5.5        # quai au-dessus du sol du bâtiment (étage vitré)
 const H_QUAI_AMONT: float = 1.6       # quai au-dessus du sommet
 const L_BAIE: float = 10.4            # longueur des baies d'accostage
+## Du bâtiment au nez de la ligne (avant du quai, portiques en Λ) : la ligne
+## part de là, les cabines accostent derrière, dans les baies.
+const Z_NEZ: float = 2.2 + L_BAIE + 0.4
 const M: String = "galva_pylone"
 
 
@@ -180,20 +183,27 @@ static func tete_aval(lg: LigneRemontee, g: Node3D, hc: float, sol: Callable) ->
 	RemonteeKit.boite_en(g, Vector3(2.0 * xv + 2.4, 0.05, 1.2), Vector3(0, yt + 1.82, -2.5), "caillebotis")
 
 
-## Escalier extérieur côté funiculaire, de la porte de l'étage (palier) au
-## sol, perpendiculaire à la façade. `porte` : seuil (repère de g), `dehors` :
-## direction horizontale vers l'extérieur.
+## Escalier extérieur côté funiculaire (photo : grand escalier à rampes bleues
+## le long de la façade, palier devant la porte de l'étage). `porte` : seuil
+## (repère de g), `dehors` : direction horizontale vers l'extérieur ; il
+## descend le long de la façade.
 static func escalier_salle(g: Node3D, porte: Vector3, dehors: Vector3, sol: Callable) -> void:
 	var lat: Vector3 = Vector3(dehors.z, 0, -dehors.x).normalized()
-	var palier: Vector3 = porte + dehors * 1.2
-	RemonteeKit.boite_en(g, Vector3(2.6, 0.08, 2.4), palier + Vector3.DOWN * 0.04, "caillebotis")
-	var long: float = absf(porte.y - float(sol.call(palier.x, palier.z))) / 0.62
-	var bas: Vector3 = palier + dehors * (1.2 + long)
+	var palier: Vector3 = porte + dehors * 1.4
+	RemonteeKit.boite_en(g, Vector3(3.0, 0.08, 2.6), palier + Vector3.DOWN * 0.04, "caillebotis")
+	_garde_corps(g, palier + dehors * 1.3 - lat * 1.5, palier + dehors * 1.3 + lat * 1.5)
+	var depart: Vector3 = palier + lat * 1.5
+	var y_bas: float = float(sol.call(depart.x + lat.x * 8.0, depart.z + lat.z * 8.0))
+	var long: float = maxf(absf(porte.y - y_bas) / 0.62, 2.0)
+	var bas: Vector3 = depart + lat * long
 	bas.y = float(sol.call(bas.x, bas.z)) + 0.05
-	_escalier(g, palier + dehors * 1.2, bas, 2.4)
+	_escalier(g, depart, bas, 2.2)
+	for k in range(3):
+		var p: Vector3 = depart.lerp(bas, float(k) / 3.0) + dehors * 1.0
+		_poteau(g, p.x, p.z, float(sol.call(p.x, p.z)), p.y - 0.15, 0.16)
 	for s in [-1.0, 1.0]:
-		var p: Vector3 = palier + lat * (s * 1.3)
-		_poteau(g, p.x, p.z, float(sol.call(p.x, p.z)), porte.y - 0.1, 0.18)
+		var p2: Vector3 = palier + lat * (s * 1.4) + dehors * 1.1
+		_poteau(g, p2.x, p2.z, float(sol.call(p2.x, p2.z)), porte.y - 0.1, 0.18)
 
 
 # --- gare amont --------------------------------------------------------------------
@@ -205,9 +215,9 @@ static func gare_amont(lg: LigneRemontee, g: Node3D, hc: float, sol: Callable) -
 	var be: float = xv + 1.95
 	var W: float = be + 1.4
 	var zf: float = -L_BAIE - 1.0         # fond des baies
-	# massif de béton, au niveau du sommet, sous le quai et les tambours
+	# (pas de massif d'un bloc : sur la pente du sommet il sortait de la neige ;
+	# poteaux, chevalets et rampant ont chacun leur semelle)
 	var y_sol: float = float(sol.call(0.0, -10.0))
-	RemonteeKit.boite_en(g, Vector3(2.0 * W + 2.0, 3.0, 26.0), Vector3(0, y_sol - 1.4, -12.0), "beton")
 	# quai en caillebotis sur poteaux
 	_plancher(g, -bi, bi, 0.0, zf, 0.0)
 	for s in [-1.0, 1.0]:
@@ -258,11 +268,12 @@ static func gare_amont(lg: LigneRemontee, g: Node3D, hc: float, sol: Callable) -
 	# tambours d'ancrage des porteurs : côte à côte, inclinés à 35° sur un
 	# rampant de béton, le porteur enroulé de plusieurs tours
 	var zt: float = zf - 9.0
-	var yt: float = y_sol + 2.4
-	RemonteeKit.boite(g, Vector3(2.0 * xv + 7.0, 0.8, 9.0), Transform3D(Basis(Vector3.RIGHT, -0.61), Vector3(0, yt - 1.6, zt)), "beton")
+	var yt: float = minf(float(sol.call(-xv, zt)), float(sol.call(xv, zt))) + 2.6
+	var b_r: Basis = Basis(Vector3.RIGHT, 0.61)
+	RemonteeKit.boite(g, Vector3(2.0 * xv + 7.0, 3.0, 9.0), Transform3D(b_r, Vector3(0, yt, zt) - b_r.y * 2.7), "beton")
 	for s6 in [-1.0, 1.0]:
 		var c2: Vector3 = Vector3(s6 * xv, yt, zt)
-		var b: Basis = Basis(Vector3.RIGHT, -0.61)
+		var b: Basis = Basis(Vector3.RIGHT, 0.61)
 		RemonteeKit.cylindre(g, 3.0, 3.0, 0.9, Transform3D(b, c2), "peinture_anthracite", 40)
 		for k3 in range(5):
 			RemonteeKit.cylindre(g, 3.05 - 0.0, 3.05, 0.08, Transform3D(b, c2 + b.y * (-0.3 + 0.15 * k3)), "cable", 40)
@@ -271,7 +282,7 @@ static func gare_amont(lg: LigneRemontee, g: Node3D, hc: float, sol: Callable) -
 		RemonteeKit.barre(g, Vector3(s6 * xv, hc, 0.6), Vector3(s6 * xv, hc, zf), 0.03, "cable", 6)
 		RemonteeKit.barre(g, Vector3(s6 * xv, hc, zf), c2 + b * Vector3(0, 0.4, 3.0), 0.03, "cable", 6)
 	# poste de vigie sous les tambours
-	var pv: Vector3 = Vector3(0, y_sol, zt + 3.5)
+	var pv: Vector3 = Vector3(0, float(sol.call(0.0, zt + 3.5)), zt + 3.5)
 	RemonteeKit.boite_en(g, Vector3(3.2, 2.6, 2.8), pv + Vector3(0, 1.3, 0), "blanc_plaque")
 	RemonteeKit.boite_en(g, Vector3(3.25, 1.0, 2.85), pv + Vector3(0, 1.7, 0), "vitrage_sombre")
 	RemonteeKit.boite_en(g, Vector3(3.5, 0.15, 3.1), pv + Vector3(0, 2.68, 0), "peinture_anthracite")
