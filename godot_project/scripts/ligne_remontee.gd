@@ -168,8 +168,10 @@ func construire() -> void:
 	_portillons_gares.clear()
 	_pneus.clear()
 	_synchro = false
+	_trav_pts = PackedVector3Array()
 	if jumelee != null:
 		jumelee._synchro = false
+		jumelee._trav_pts = PackedVector3Array()
 	H_CABLE_GARE = VehiculeRemontee.hauteur_cable_gare(famille)
 	# vitesse d'embarquement : 1 m/s aux sièges, 0,25 m/s aux cabines (on y
 	# entre à pied) — les véhicules se resserrent d'autant dans la partie
@@ -177,6 +179,8 @@ func construire() -> void:
 	# (retour d'utilisateur, 22/10/2026)
 	v_embarquement = 0.25 if famille.begins_with("cabine") else 1.0
 	l_gare = l_gare_pour(famille)
+	if jumelee != null and role == "bas":
+		l_gare += ALLONGE_BAS            # double embarquement, puis le lanceur plus loin
 	if fixe():
 		v_embarquement = vitesse
 	_calculer_tetes()
@@ -211,6 +215,7 @@ func construire() -> void:
 		_portillons(false)
 		if role == "bas":
 			_double_embarquement()
+			_rail_contour()
 	if avec_collisions:
 		_collisions_fixes()
 		for i in range(_vehicules.size()):
@@ -332,9 +337,78 @@ func _calculer_tetes() -> void:
 		if not _garde_au_sol(true):
 			break
 		_porteurs_convexes()
+	_ajuster_aux_mesures()
 	for i3 in range(_tetes.size()):
 		var t3: float = terrain(float(pylones[i3]["d"]))
 		_tetes[i3] = minf(_tetes[i3], t3 + (90.0 if tricable() or vaetvient() else 36.0))
+
+
+## Hauteur exigée du câble chargé au-dessus du sol en d : la mesure GPS où
+## elle existe, sinon la garde réglementaire (réduite près des gares).
+func _garde_exigee(d: float) -> float:
+	var gm: float = _garde_mesuree(d)
+	if gm > 0.0:
+		return gm
+	return lerpf(H_CABLE_GARE - 0.5, GARDE, smoothstep(0.0, 40.0, minf(d, longueur_h() - d)))
+
+
+## Les têtes relevées pour la garde dépassaient la réalité (jusqu'à +14 m en
+## médiane sur les traces GPS) : chaque pylône PORTEUR dont les deux portées
+## ont de la marge est abaissé, tant que la ligne y reste saillante.
+func _ajuster_aux_mesures() -> void:
+	if hauteurs_mesurees.is_empty() or tricable() or vaetvient() or teleski():
+		return
+	for it in range(25):
+		var bouge: bool = false
+		for i in range(pylones.size()):
+			if _compression(pylones[i]):
+				continue
+			var pts: Array = _points_appui()
+			var marge: float = INF
+			for sp in [[pts[i], pts[i + 1]], [pts[i + 1], pts[i + 2]]]:
+				var a: Array = sp[0]
+				var b: Array = sp[1]
+				for k in range(1, 16):
+					var d: float = lerpf(a[0], b[0], float(k) / 16.0)
+					var yc: float = chainette(d, a[0], a[1], b[0], b[1], _a_montee)
+					marge = minf(marge, yc - terrain(d) - _garde_exigee(d))
+			if marge < 0.8:
+				continue
+			var t: float = terrain(float(pylones[i]["d"]))
+			var h0: float = _tetes[i]
+			_tetes[i] = maxf(h0 - (marge - 0.5) * 0.6, t + 6.0)
+			if minf(deviation_pylone(i, true), deviation_pylone(i, false)) < DEVIATION_MIN:
+				_tetes[i] = h0
+			elif _tetes[i] < h0 - 0.05:
+				bouge = true
+		if not bouge:
+			break
+
+
+## Hauteur du skieur au-dessus du sol mesurée sur les traces GPS (montre
+## barométrique, gps_hauteurs.py du dossier) : (d, hauteur), tranches de 20 m.
+## Le câble doit être au moins aussi haut qu'en vrai — les pylônes étaient
+## trop petits, le câble rentrait dans le sol (retour d'utilisateur, 25/10/2026).
+var hauteurs_mesurees: PackedVector2Array = PackedVector2Array()
+
+
+## Garde exigée par la mesure en d (0 hors des mesures) : hauteur mesurée du
+## skieur + hauteur du câble au-dessus de lui, moins 1 m de marge (bruit).
+func _garde_mesuree(d: float) -> float:
+	var n: int = hauteurs_mesurees.size()
+	if n == 0:
+		return 0.0
+	if d < hauteurs_mesurees[0].x or d > hauteurs_mesurees[n - 1].x:
+		return 0.0
+	for k in range(n - 1):
+		var a: Vector2 = hauteurs_mesurees[k]
+		var b: Vector2 = hauteurs_mesurees[k + 1]
+		if d >= a.x and d <= b.x:
+			if b.x - a.x > 45.0:
+				return 0.0                  # trou dans les mesures
+			var h: float = lerpf(a.y, b.y, (d - a.x) / maxf(b.x - a.x, 0.1))
+			return h + (H_CABLE_GARE - 0.6) - 1.0
+	return 0.0
 
 
 ## Garde au sol du brin montée chargé : la ou les têtes de chaque portée
@@ -358,8 +432,7 @@ func _garde_au_sol(proteger_c: bool = false) -> bool:
 				# garde pleine en ligne, réduite près des gares où le câble
 				# rejoint la hauteur du quai (sinon le dernier pylône était
 				# relevé jusqu'à la butée de 32 m — retour d'utilisateur, 23/10/2026)
-				var g: float = lerpf(H_CABLE_GARE - 0.5, GARDE, smoothstep(0.0, 40.0, minf(d, longueur_h() - d)))
-				pire = maxf(pire, terrain(d) + g - yc)
+				pire = maxf(pire, terrain(d) + _garde_exigee(d) - yc)
 			if pire > 0.05:
 				var ga: bool = i > 0
 				var dr: bool = i < pts.size() - 2
@@ -549,6 +622,11 @@ func _x_brin(montee: bool) -> float:
 var jumelee: LigneRemontee = null
 var role: String = ""                 # "bas" (Bollin) ou "haut" (Fresse)
 const DECAL_CONTOUR: float = 3.6      # contour extérieur du double embarquement
+## Gares de Bollin allongées : après les deux zones d'embarquement, le contour
+## extérieur rejoint l'autre sur son rail, puis un seul lanceur (retour
+## d'utilisateur, 25/10/2026 : « mettre le lanceur plus loin et un rail qui ramène
+## les sièges de Fresse au début du lanceur »).
+const ALLONGE_BAS: float = 12.0
 var periode_imposee: float = 0.0      # s entre deux sièges, imposée par le jumelage
 var _tab_s: PackedFloat32Array = PackedFloat32Array()   # s tous les 0,05 s (régime 1)
 var _synchro: bool = false
@@ -557,7 +635,11 @@ var _synchro: bool = false
 ## Gare aval du tronçon bas : élargie du contour extérieur (double
 ## embarquement : « deux fois plus large que les autres »).
 func elargissement(aval: bool) -> float:
-	return DECAL_CONTOUR if (jumelee != null and role == "bas" and aval) else 0.0
+	# (bas : double contour en aval, rail extérieur de la traversée en amont ;
+	# haut : rail extérieur en aval)
+	if jumelee == null:
+		return 0.0
+	return DECAL_CONTOUR if (role == "bas" or aval) else 0.0
 
 
 ## Le siège i passe d'un tronçon à l'autre (siège de Fresse).
@@ -658,43 +740,143 @@ func synchroniser() -> void:
 		# siège k : sort de la gare aval dans tau + k·période (passé : négatif)
 		_vehicules[k][1] = _s_de_t(t_sortie - (tau + k * periode_imposee))
 	_synchro = true
+	rail_traversee()
+	b.rail_traversee()
 
 
-## Traversée de l'intermédiaire (repère de cette ligne) : [départ, point de
-## contrôle, arrivée] d'une courbe de Bézier — droit dans l'axe du lanceur
-## d'arrivée, virage par l'aiguillage au coude du bâtiment, droit dans
-## l'axe du lanceur de départ.
-func _nez_traversee(montee: bool) -> Array:
+## Rail du contour extérieur (gare du bas de Bollin) : les sièges de Fresse
+## y roulent, pince ouverte, de l'écart à la jonction avant le lanceur.
+func _rail_contour() -> void:
+	var s0: float = s_gare(true, 0.0)
+	var l: float = longueur_zone(true)
+	var pts: PackedVector3Array = PackedVector3Array()
+	var x: float = 0.0
+	while x <= l:
+		var w: float = _w_contour(x, l)
+		if w > 0.002:
+			var s2: float = s0 + x
+			var o: Vector3 = _dehors(s2)
+			pts.append(point(s2)[0] + o * (DECAL_CONTOUR * w + 0.25) + Vector3(0, 0.01, 0))
+		elif pts.size() > 2:
+			break
+		x += 0.5
+	if pts.size() > 2:
+		var n: Node3D = Node3D.new()
+		n.name = "RailContour"
+		add_child(n)
+		RemonteeKit.tube(n, pts, 0.045, "acier", 6)
+		# suspentes du rail au carénage
+		for k in range(0, pts.size(), 10):
+			RemonteeKit.barre(n, pts[k], pts[k] + Vector3(0, Y_CAPOT + 0.9, 0), 0.03, "acier", 5)
+
+
+## Rail de la traversée de l'intermédiaire (posé quand les deux tronçons
+## sont construits : il dépend de la géométrie des deux).
+func rail_traversee() -> void:
+	if get_node_or_null("RailTraversee") != null:
+		return
+	_construire_traversee()
+	var n: Node3D = Node3D.new()
+	n.name = "RailTraversee"
+	add_child(n)
+	var pts: PackedVector3Array = PackedVector3Array()
+	for p in _trav_pts:
+		pts.append(p + Vector3(0, 0.01, 0))
+	RemonteeKit.tube(n, pts, 0.045, "acier", 6)
+	for k in range(0, pts.size(), 3):
+		RemonteeKit.barre(n, pts[k], pts[k] + Vector3(0, Y_CAPOT + 0.9, 0), 0.03, "acier", 5)
+
+
+## Contour extérieur de la gare du bas : il s'écarte après le freinage,
+## rejoint l'autre contour après la zone d'embarquement, avant le lanceur.
+func _w_contour(x: float, l: float) -> float:
+	var xa: float = x_arret(l)
+	return smoothstep(L_FREIN * 0.5, L_FREIN, x) * (1.0 - smoothstep(xa + 2.0, xa + 9.0, x))
+
+
+## Traversée de l'intermédiaire par les sièges de Fresse (repère de cette
+## ligne), d'après la description de la gare (retour d'utilisateur, 25/10/2026) :
+## lanceur qui ralentit, rail extérieur qui longe la poulie de demi-tour de
+## son tronçon (chaque poulie dans sa partie de gare), virage au coude du
+## bâtiment, rail extérieur le long de la poulie de l'autre tronçon, lanceur
+## de départ. Montée (tronçon bas) : nez de Bollin → nez de Fresse ;
+## descente (tronçon haut) : nez de Fresse → nez de Bollin.
+var _trav_pts: PackedVector3Array = PackedVector3Array()
+var _trav_cum: PackedFloat32Array = PackedFloat32Array()
+
+
+func _construire_traversee() -> void:
 	var b: LigneRemontee = jumelee
 	var xf: Transform3D = global_transform.affine_inverse() * b.global_transform
-	var p0: Vector3
-	var p2: Vector3
-	var d0: Vector3
-	var d2: Vector3
+	var D: float = DECAL_CONTOUR
+	var debut: Array = []                 # points de ce tronçon, du nez vers le coude
+	var fin: Array = []                   # points de l'autre, du coude vers son nez
+	var L: float = longueur_h()
+	var Lb: float = b.longueur_h()
 	if role == "bas":
-		# montée : nez amont de Bollin → nez aval de Fresse (côté montée)
-		p0 = _point_cable(float(_zones[1][0]))[0]
-		p2 = xf * (b._point_cable(float(b._zones[0][1]))[0] as Vector3)
-		d0 = Vector3(0, 0, -1)
-		d2 = xf.basis * Vector3(0, 0, -1)
+		var xm: float = _x_brin(true)
+		var sx: float = signf(xm)
+		var y: float = terrain(L) + H_CABLE_GARE
+		var zc: float = -L - l_gare
+		var R: float = voie * 0.5
+		debut = [Vector3(xm, y, -L), Vector3(xm + sx * D, y, -L - L_FREIN), Vector3(xm + sx * D, y, zc - R - 2.0)]
+		var xmf: float = b._x_brin(true)
+		var sf: float = signf(xmf)
+		var yf: float = b.terrain(0.0) + b.H_CABLE_GARE
+		var Rf: float = b.voie * 0.5
+		fin = [Vector3(xmf + sf * D, yf, b.l_gare + Rf + 2.0), Vector3(xmf + sf * D, yf, L_FREIN), Vector3(xmf, yf, 0.0)]
 	else:
-		# haut, descente : nez aval de Fresse (descente) → nez amont de Bollin (descente)
-		p0 = _point_cable(float(_zones[0][0]))[0]
-		p2 = xf * (b._point_cable(float(b._zones[1][1]))[0] as Vector3)
-		d0 = Vector3(0, 0, 1)
-		d2 = xf.basis * Vector3(0, 0, 1)
-	# point de contrôle : croisement des deux axes (dans le plan)
-	var a2: Vector2 = Vector2(p0.x, p0.z)
+		var xd: float = _x_brin(false)
+		var sd: float = signf(xd)
+		var y2: float = terrain(0.0) + H_CABLE_GARE
+		var R2: float = voie * 0.5
+		debut = [Vector3(xd, y2, 0.0), Vector3(xd + sd * D, y2, L_FREIN), Vector3(xd + sd * D, y2, l_gare + R2 + 2.0)]
+		var xdb: float = b._x_brin(false)
+		var sdb: float = signf(xdb)
+		var yb: float = b.terrain(Lb) + b.H_CABLE_GARE
+		var Rb: float = b.voie * 0.5
+		var zcb: float = -Lb - b.l_gare
+		fin = [Vector3(xdb + sdb * D, yb, zcb - Rb - 2.0), Vector3(xdb + sdb * D, yb, -Lb - L_FREIN), Vector3(xdb, yb, -Lb)]
+	var pts: Array = debut.duplicate()
+	var fin_l: Array = []
+	for q in fin:
+		fin_l.append(xf * (q as Vector3))
+	# virage : Bézier entre la sortie du rail de ce tronçon et l'entrée de
+	# l'autre, point de contrôle au croisement des deux axes
+	var p2: Vector3 = debut[2]
+	var d0: Vector3 = (debut[2] as Vector3) - (debut[1] as Vector3)
+	var q2: Vector3 = fin_l[0]
+	var d2: Vector3 = (fin_l[1] as Vector3) - (fin_l[0] as Vector3)
+	var a2: Vector2 = Vector2(p2.x, p2.z)
 	var u2: Vector2 = Vector2(d0.x, d0.z).normalized()
-	var c2: Vector2 = Vector2(p2.x, p2.z)
+	var c2: Vector2 = Vector2(q2.x, q2.z)
 	var v2: Vector2 = Vector2(d2.x, d2.z).normalized()
+	var c: Vector3 = (p2 + q2) * 0.5
 	var den: float = u2.cross(v2)
-	var c: Vector3 = (p0 + p2) * 0.5
 	if absf(den) > 0.02:
 		var t: float = (c2 - a2).cross(v2) / den
-		var q: Vector2 = a2 + u2 * t
-		c = Vector3(q.x, (p0.y + p2.y) * 0.5, q.y)
-	return [p0, c, p2]
+		if t > 0.0:
+			var q: Vector2 = a2 + u2 * t
+			c = Vector3(q.x, (p2.y + q2.y) * 0.5, q.y)
+	for k in range(1, 12):
+		var u: float = float(k) / 12.0
+		pts.append(p2 * ((1.0 - u) * (1.0 - u)) + c * (2.0 * u * (1.0 - u)) + q2 * (u * u))
+	pts.append_array(fin_l)
+	_trav_pts = PackedVector3Array(pts)
+	_trav_cum = PackedFloat32Array([0.0])
+	for k2 in range(1, _trav_pts.size()):
+		_trav_cum.append(_trav_cum[k2 - 1] + _trav_pts[k2].distance_to(_trav_pts[k2 - 1]))
+
+
+func _sur_traversee(u: float) -> Vector3:
+	if _trav_pts.size() < 2:
+		_construire_traversee()
+	var cible: float = clampf(u, 0.0, 1.0) * _trav_cum[_trav_cum.size() - 1]
+	for k in range(1, _trav_pts.size()):
+		if cible <= _trav_cum[k]:
+			var t: float = (cible - _trav_cum[k - 1]) / maxf(_trav_cum[k] - _trav_cum[k - 1], 1e-4)
+			return _trav_pts[k - 1].lerp(_trav_pts[k], t)
+	return _trav_pts[_trav_pts.size() - 1]
 
 
 ## Position (repère de la ligne) du véhicule i à l'abscisse s, jumelage compris.
@@ -706,12 +888,9 @@ func _pos_vehicule(i: int, s2: float) -> Vector3:
 	if role == "bas" and z[0] == "gare_aval" and contour_exterieur(i):
 		var x: float = z[1]
 		var l: float = z[2]
-		var w: float = smoothstep(L_FREIN * 0.5, L_FREIN, x) * (1.0 - smoothstep(l - L_FREIN, l - L_FREIN * 0.5, x))
-		return p + _dehors(s2) * (DECAL_CONTOUR * w)
+		return p + _dehors(s2) * (DECAL_CONTOUR * _w_contour(x, l))
 	if traverse(i) and ((role == "bas" and z[0] == "gare_amont") or (role == "haut" and z[0] == "gare_aval")):
-		var nz: Array = _nez_traversee(role == "bas")
-		var u: float = float(z[1]) / maxf(float(z[2]), 0.01)
-		return (nz[0] as Vector3) * ((1.0 - u) * (1.0 - u)) + (nz[1] as Vector3) * (2.0 * u * (1.0 - u)) + (nz[2] as Vector3) * (u * u)
+		return _sur_traversee(float(z[1]) / maxf(float(z[2]), 0.01))
 	return p
 
 
@@ -831,6 +1010,8 @@ func rayon_poulie() -> float:
 func x_arret(l: float) -> float:
 	if fixe():
 		return l_gare + PI * voie * 0.5 + 1.0   # juste après le demi-tour
+	if jumelee != null and role == "bas":
+		return l - L_FREIN - 2.0 - ALLONGE_BAS
 	return l - L_FREIN - 2.0          # ligne d'arrêt, encore à vitesse d'embarquement
 
 

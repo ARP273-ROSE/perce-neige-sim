@@ -50,11 +50,6 @@ func construire(r: ReliefBuilder) -> void:
 ## d'avant 2019 (aiguillage à la gare intermédiaire, double embarquement en
 ## bas — retour d'utilisateur, 24/10/2026 : « je veux l'ancienne config »).
 const JUMELAGES: Array = [["tsd6_bollin", "tsd6_fresse"]]
-## Gare intermédiaire : un seul bâtiment coudé au point OSM commun aux deux
-## tronçons ; le nez de Bollin est reculé, celui de Fresse avancé, d'une
-## longueur de gare — les deux poulies sont au coude (retour d'utilisateur,
-## 24/10/2026 : « un seul bâtiment avec un angle au milieu »).
-const L_INTERMEDIAIRE: float = LigneRemontee.L_GARE
 
 
 func _ligne_nommee(cle: String) -> LigneRemontee:
@@ -74,8 +69,8 @@ func _jumeler() -> void:
 		haut.jumelee = bas
 		bas.role = "bas"
 		haut.role = "haut"
-		# même siège, même pas : un siège sur deux de Bollin monte à Fresse
-		haut.vitesse = bas.vitesse
+		# un siège sur deux de Bollin monte à Fresse : Fresse au double de la
+		# période ; chaque tronçon garde sa vitesse (4,6 et 5 m/s, fiche RM.net)
 		haut.voie = bas.voie
 		bas.periode_imposee = bas.espacement / bas.vitesse
 		haut.periode_imposee = 2.0 * bas.periode_imposee
@@ -103,14 +98,15 @@ func _poser(D: Dictionary) -> void:
 		return
 	dirh /= L
 	for j in JUMELAGES:
+		# gare intermédiaire : chaque tronçon a sa partie, sa poulie à 7 m du coude
 		if String(D["cle"]) == j[1]:
-			# tronçon haut : son nez au bout de la gare intermédiaire
-			a += dirh * L_INTERMEDIAIRE
-			L -= L_INTERMEDIAIRE
+			var lh: float = LigneRemontee.L_GARE + 7.0
+			a += dirh * lh
+			L -= lh
 		elif String(D["cle"]) == j[0]:
-			# tronçon bas : son nez au début de la gare intermédiaire
-			b -= dirh * L_INTERMEDIAIRE
-			L -= L_INTERMEDIAIRE
+			var lb: float = LigneRemontee.L_GARE + LigneRemontee.ALLONGE_BAS + 7.0
+			b -= dirh * lb
+			L -= lb
 	var h0: float = relief.hauteur_sol(a.x, a.y)
 	if not quai_tph.is_empty():
 		h0 = (quai_tph["nez"] as Vector3).y
@@ -202,6 +198,14 @@ func _poser(D: Dictionary) -> void:
 			continue                    # tombé dans une gare reportée
 		py.append(q)
 	lg.pylones = py
+	# hauteurs mesurées (traces GPS) : même projection que les pylônes
+	var hm: PackedVector2Array = PackedVector2Array()
+	for g in D.get("gps", []):
+		var wg: Vector2 = a0 + u0 * float(g[0])
+		var dg: float = (wg - a).dot(dirh)
+		if dg > 0.0 and dg < L:
+			hm.append(Vector2(dg, float(g[1])))
+	lg.hauteurs_mesurees = hm
 	lg.voie = float(D["voie"])
 	lg.vitesse = float(D["vitesse"])
 	lg.espacement = float(D["espacement"])
