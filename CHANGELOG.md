@@ -5,6 +5,33 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.28.0 — 24 octobre 2026
+
+**Remontées : gares par constructeur, portiques d'information, portillons STOP.** Retour
+d'utilisateur du 24/10/2026 : « attaque » (gares différenciées par constructeur), puis
+« regarde une photo des portillons stop, et une photo des arches rectangulaires […] où il y a les
+infos de la remontée, le nom et les horaires d'ouverture et une pendule ».
+
+- **Carénages par constructeur et par époque** (`GareCarenage`, d'après les photos des gares du
+  domaine) : Doppelmayr UNI-G (front en arc bordé d'un jonc, voûte sombre, ailerons, échelle),
+  Doppelmayr D-Line (dôme vitré sur bandeau noir, liseré rouge), Doppelmayr des années 1990
+  (capot à pans coupés, jupe grise, bout arrondi vitré), Poma classique (lanterne vitrée en
+  berceau, entonnoir sous la poulie, poteaux carrés), Poma / Ingélo récent (voûte noire, grande
+  verrière au bout), Garaventa (dôme à facettes, liseré rouge), télésièges fixes (poulie à
+  l'air, bâti noir, local blanc de la motrice). Le Marmottes et la Fontaine Froide gardent la
+  gare BMF. Livrée selon la station : bleu à Tignes, noir et rouge à Val d'Isère ; mousse
+  rouge au pied des poteaux.
+- **Portique d'information** à l'entrée de la file (`PortiqueEntree`) : à Val d'Isère, poteau
+  noir au nom du secteur, poteau rouge avec pendule lumineuse et plan des pistes, bandeau blanc
+  au nom de la ligne avec altitudes, débit, vitesse et horaires ; à Tignes, bandeau noir
+  (altitudes, horaires, pendule rouge, nom en grand) et totem « maîtrisez votre vitesse ». La
+  pendule donne l'heure de l'appareil ; les horaires sont indicatifs.
+- **Portillons** : plaque rouge « STOP » sur chaque vantail.
+- Données exportées : station, secteur, altitude et débit de chaque ligne ; nom court (sans le
+  type) sur les carénages et les portiques.
+- Vérifié : bancs toutes_lignes (48 OK), embarquement, aller_remontee, remontee_dynamique, quai,
+  skieur, poste_remontee, 3s, tph ; captures au studio des huit familles comparées aux photos.
+
 ## 1.27.0 — 24 octobre 2026
 
 **Remontées : tout le domaine posé (48 lignes), allègement, accès des télésièges.** Retour

@@ -4,6 +4,8 @@
  "type": "télécabine débrayable 10 places",
  "constructeur": "Poma",
  "annee": 2018,
+ "station": "Val d'Isère",
+ "quartier": "La Daille",
  "vitesse": 6.0,
  "places": 10,
  "debit": 2500.0,

@@ -4,6 +4,8 @@
  "type": "télésiège débrayable 6 places",
  "constructeur": "Poma",
  "annee": 2024,
+ "station": "Tignes",
+ "quartier": "Aiguille Percée",
  "vitesse": 5.5,
  "places": 6,
  "debit": 2020.0,

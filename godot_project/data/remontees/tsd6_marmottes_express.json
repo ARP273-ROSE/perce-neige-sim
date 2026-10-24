@@ -4,6 +4,8 @@
  "type": "télésiège débrayable 6 places",
  "constructeur": "consortium BMF - Montaval",
  "annee": 2007,
+ "station": "Val d'Isère",
+ "quartier": "Bellevarde",
  "vitesse": 5.5,
  "places": 6,
  "debit": 3600.0,

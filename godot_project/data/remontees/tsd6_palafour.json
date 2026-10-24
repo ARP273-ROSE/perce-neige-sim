@@ -4,6 +4,8 @@
  "type": "télésiège débrayable 6 places",
  "constructeur": "Doppelmayr",
  "annee": 2006,
+ "station": "Tignes",
+ "quartier": "Palafour",
  "vitesse": 5.0,
  "places": 6,
  "debit": 3600.0,

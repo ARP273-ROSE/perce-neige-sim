@@ -4,6 +4,8 @@
  "type": "télésiège fixe 4 places",
  "constructeur": "Montaval",
  "annee": 2000,
+ "station": "Val d'Isère",
+ "quartier": "Pissaillas",
  "vitesse": 2.1,
  "places": 4,
  "debit": 2200.0,

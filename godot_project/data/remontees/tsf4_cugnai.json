@@ -4,6 +4,8 @@
  "type": "télésiège fixe 4 places",
  "constructeur": "MONTAVAL",
  "annee": 2006,
+ "station": "Val d'Isère",
+ "quartier": "Solaise",
  "vitesse": 2.3,
  "places": 4,
  "debit": 1200.0,

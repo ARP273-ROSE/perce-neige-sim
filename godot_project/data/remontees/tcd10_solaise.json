@@ -4,6 +4,8 @@
  "type": "télécabine débrayable 10 places",
  "constructeur": "Doppelmayr",
  "annee": "2016",
+ "station": "Val d'Isère",
+ "quartier": "Solaise",
  "vitesse": 6.0,
  "places": 10,
  "debit": 3600.0,

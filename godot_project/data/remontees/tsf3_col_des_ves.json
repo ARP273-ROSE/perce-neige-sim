@@ -4,6 +4,8 @@
  "type": "télésiège fixe 3 places",
  "constructeur": "Poma",
  "annee": 1981,
+ "station": "Tignes",
+ "quartier": "Val Claret",
  "vitesse": 2.3,
  "places": 3,
  "debit": 1350.0,

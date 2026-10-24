@@ -4,6 +4,8 @@
  "type": "télésiège fixe 3 places",
  "constructeur": "LIFTENGINEERING",
  "annee": 1982,
+ "station": "Val d'Isère",
+ "quartier": "Bellevarde",
  "vitesse": 2.5,
  "places": 3,
  "debit": 1800.0,

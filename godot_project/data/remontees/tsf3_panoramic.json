@@ -4,6 +4,8 @@
  "type": "télésiège fixe 3 places",
  "constructeur": "Poma",
  "annee": 1976,
+ "station": "Tignes",
+ "quartier": "Grande Motte",
  "vitesse": 1.5,
  "places": 3,
  "debit": 1350.0,
