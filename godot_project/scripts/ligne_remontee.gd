@@ -482,6 +482,8 @@ func _ajuster_aux_mesures() -> void:
 ## Le câble doit être au moins aussi haut qu'en vrai — les pylônes étaient
 ## trop petits, le câble rentrait dans le sol (retour d'utilisateur, 25/10/2026).
 var hauteurs_mesurees: PackedVector2Array = PackedVector2Array()
+## Ruisseaux (OpenStreetMap) qui passent sous la ligne : abscisses d (m).
+var ruisseaux: PackedFloat32Array = PackedFloat32Array()
 
 
 ## Garde exigée par la mesure en d (0 hors des mesures) : hauteur mesurée du
@@ -3370,7 +3372,10 @@ func _fleche(d: float, montee: bool) -> float:
 ## référence de vitesse. Tout le mouvement suit la vitesse du câble.
 const CRANS: Array = [0.4, 0.7, 1.0]          # petite, moyenne, grande vitesse
 const NOMS_CRANS: Array = ["PETITE", "MOYENNE", "GRANDE"]
-const A_DEMARRAGE: float = 0.25                # m/s²
+## Démarrage lent : environ 50 s de l'arrêt à la vitesse nominale (vidéo d'un TSD
+## qui redémarre en ligne : « quasi une minute pour accélérer à fond »,
+## retour d'utilisateur, 25/10/2026) — était 0,25 m/s² (20 s).
+const T_DEMARRAGE: float = 50.0
 const A_ARRET: float = 0.4                     # frein de service
 const A_URGENCE: float = 1.5                   # frein de poulie
 var etat: String = "marche"                    # marche, arret_normal, arret, urgence
@@ -3386,7 +3391,7 @@ func _regler_vitesse(delta: float) -> void:
 	if vitesse_reelle < 0.0:
 		vitesse_reelle = vitesse * CRANS[cran]
 	var cible: float = vitesse * CRANS[cran] if etat == "marche" else 0.0
-	var a: float = A_DEMARRAGE if cible > vitesse_reelle else (A_URGENCE if etat == "urgence" else A_ARRET)
+	var a: float = vitesse / T_DEMARRAGE if cible > vitesse_reelle else (A_URGENCE if etat == "urgence" else A_ARRET)
 	vitesse_reelle = move_toward(vitesse_reelle, cible, a * delta)
 	if etat == "arret_normal" and vitesse_reelle <= 0.0:
 		etat = "arret"

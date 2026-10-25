@@ -9,7 +9,7 @@
  "vitesse": 5.0,
  "places": 6,
  "debit": 2468.0,
- "espacement": 55.8,
+ "espacement": 36.0,
  "voie": 6.1,
  "sens_droite": false,
  "diametre_cable": 45.0,
@@ -967,5 +967,6 @@
    1270.0,
    1.1
   ]
- ]
+ ],
+ "ruisseaux": []
 }

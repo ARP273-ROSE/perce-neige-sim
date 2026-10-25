@@ -9,7 +9,7 @@
  "vitesse": 5.25,
  "places": 8,
  "debit": 3000.0,
- "espacement": 225.75,
+ "espacement": 63.0,
  "voie": 6.1,
  "sens_droite": false,
  "diametre_cable": 47.0,

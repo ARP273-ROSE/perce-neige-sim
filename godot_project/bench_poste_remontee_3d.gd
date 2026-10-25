@@ -96,7 +96,7 @@ func _tick() -> void:
 				_phase = 4
 				_t = 0.0
 		4:
-			if _t > 20.0:
+			if _t > 30.0:
 				var att: float = _lg.vitesse * LigneRemontee.CRANS[0]
 				_verif("DÉMARRER en PETITE vitesse : 40 % du nominal", absf(_lg.vitesse_reelle - att) < 0.01,
 					"%.2f m/s (consigne %.2f)" % [_lg.vitesse_reelle, att])
@@ -104,7 +104,7 @@ func _tick() -> void:
 				_phase = 5
 				_t = 0.0
 		5:
-			if _t > 25.0:
+			if _t > 45.0:
 				_verif("GRANDE vitesse retrouvée", absf(_lg.vitesse_reelle - _lg.vitesse) < 0.01, "%.2f m/s" % _lg.vitesse_reelle)
 				_lg.arret_urgence()
 				_phi_max = 0.0

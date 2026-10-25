@@ -5,6 +5,38 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.43.0 — 25 octobre 2026
+
+**Vrais sons pour toutes les familles de remontées ; téléskis à enrouleur refaits ; données
+corrigées.** Prises choisies par un utilisateur dans des vidéos de remontées (enregistrées depuis
+la cabine, le siège ou la perche), avec l'accord de leur auteur ; `tools_sons_reels.py`.
+
+- **Télécabines** (Saulire Express 2) : gare, lanceurs au départ et à l'arrivée, ligne ; un passage
+  par type de pylône — porteur, compression (avec l'approche où la cabine vibre de plus en plus),
+  les deux, deux compressions rapprochées ; l'ambiance monte de 5 dB dans les 2 s avant chaque
+  pylône. **Boisses** : ses propres prises, repérées à l'image dans une vidéo de la ligne.
+- **Télésièges débrayables** (Altiport) : gare de départ et d'arrivée, portillons et tapis roulant,
+  embarquement et lanceur, pylônes, ligne sans vent, arrêt en ligne puis silence de la ligne
+  arrêtée, redémarrage, entrée en gare, débarquement.
+- **Télésièges à pinces fixes** (les Souffles) : motrice, arrivée sans moteur, embarquement, arrêt
+  normal et redémarrage au klaxon, pylônes porteur et compression, ligne presque silencieuse.
+- **Ruisseaux** : sous dix télésièges, un ruisseau cartographié (OpenStreetMap) s'entend à
+  l'approche et s'éteint 40 m après.
+- **Téléskis** : débrayables (Tête de Torraz) et à enrouleur (TKE2 du Montet) séparés — gare, départ,
+  ligne, pylônes porteur et compression, lâcher et retour de la perche, arrivée.
+- **Téléphériques** (Fornet) : quai où la cabine arrive et freine, ligne, croisement des cabines,
+  approche de la gare du haut.
+- **Forfait** : bip de validation sous le portique d'entrée de toutes les remontées.
+- **Démarrage lent** : environ 50 s de l'arrêt à la vitesse nominale (vidéo d'un TSD qui redémarre
+  en ligne), au lieu de 20 s.
+- **Téléskis à enrouleur** (vidéo du Montet) : le skieur est tracté 2,2 m derrière la pince, corde et
+  perche EN BIAIS du câble jusqu'à lui, archet sous les fesses (il était presque sous le câble,
+  perche verticale, archet devant lui) ; gare refaite — deux colonnes-caissons, poutre portant la
+  poulie, plate-forme à garde-corps, local blanc de la motrice, mousses rouges.
+- **Données** : espacement à pleine charge quand la fiche donne les deux (Boisses : 63 m, une
+  cabine toutes les 12 s au lieu de 13 cabines en tout ; Merles, Tufs) ; plus aucun pylône au
+  téléphérique du Fornet, qui n'en a pas (une seule portée).
+
 ## 1.42.0 — 25 octobre 2026
 
 **L'Olympique avec de vrais sons.** Prises tirées d'une vidéo d'un 3S Doppelmayr de la même
