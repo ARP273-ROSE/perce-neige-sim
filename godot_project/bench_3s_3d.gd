@@ -10,6 +10,7 @@ var _f: int = 0
 var _t0: int = 0
 var _ok: bool = true
 var _phase: int = 0
+var _sons_vus: Dictionary = {}
 var _t: float = 0.0
 var _lg: LigneRemontee = null
 var _y0: float = 0.0
@@ -89,11 +90,21 @@ func _tick() -> void:
 				_verif("3S : une cabine à quai, portes ouvertes", false)
 				_fin()
 		3:
+			# sons réels du 3S : on note ce qui a été joué pendant le trajet
+			var so: SonsRemontees = rm.sons
+			if so != null and so._coup3s.playing and so._coup3s.stream != null:
+				for nom in ["3s_lanceur_acc", "3s_pylone", "3s_lanceur_dec"]:
+					if so._coup3s.stream == so._sons[nom]:
+						_sons_vus[nom] = true
+			if so != null and so._ligne.playing and so._ligne.stream == so._sons["3s_ligne"]:
+				_sons_vus["3s_ligne"] = true
 			if _t > 1.0 and _t < 1.0 + 1.0 / 60.0:
 				_verif("3S : assis d'office dans la Zeta", not rm.a_bord.is_empty() and sk.assis and rm.a_bord[0] == _lg)
 			if _t > 1.5 and rm.a_bord.is_empty():
 				var haut: Vector3 = _lg.global_transform * Vector3(0, _lg.terrain(_lg.longueur_h()), -_lg.longueur_h())
 				var d: float = Vector2(sk.global_position.x - haut.x, sk.global_position.z - haut.z).length()
+				_verif("3S : sons réels — accélération, ligne, pylône, freinage",
+					_sons_vus.size() == 4, str(_sons_vus.keys()))
 				_verif("3S : emporté jusqu'en haut, sorti portes ouvertes", not sk.embarque and d < 40.0
 					and sk.global_position.y > _y0 + 700.0, "%.0f s de trajet, %.1f m de la gare amont, +%.0f m" % [_t, d, sk.global_position.y - _y0])
 				_fin()

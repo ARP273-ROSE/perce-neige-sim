@@ -5,6 +5,22 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.42.0 — 25 octobre 2026
+
+**L'Olympique avec de vrais sons.** Prises tirées d'une vidéo d'un 3S Doppelmayr de la même
+génération (téléphérique des Prodains, Avoriaz), enregistrée depuis l'intérieur d'une cabine —
+extraits choisis par un utilisateur, avec l'accord de l'auteur de la vidéo (`tools_sons_reels.py`).
+
+- **Ambiances** : gare aval portes ouvertes, gare motrice (amont) portes fermées, en ligne ;
+  elles se fondent l'une dans l'autre quand la cabine change de zone. De l'extérieur, les gares du
+  3S s'entendent avec la même prise.
+- **Lanceurs** : freinage joué en entrant en gare, accélération au début du lanceur de sortie ;
+  l'ambiance s'efface pendant ce temps.
+- **Pylônes** : la prise du passage démarre 1,6 s avant chaque pylône, à la vitesse du moment,
+  pour que ses chocs tombent au droit du pylône.
+- Banc du 3S : vérifie que les quatre prises (accélération, ligne, pylône, freinage) sont jouées
+  pendant le trajet.
+
 ## 1.41.0 — 25 octobre 2026
 
 **Les remontées s'entendent ; le tunnel de la piste du Tunnel refait.** Retour d'utilisateur du 25/10/2026 : « le bruit du trajet sur un
