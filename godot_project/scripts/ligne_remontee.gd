@@ -304,13 +304,17 @@ func _calculer_tetes() -> void:
 	if teleski():
 		_tetes_teleski()
 		return
+	# lignes relevées au GPS : chaque tête part de la hauteur MESURÉE du câble
+	# au droit du pylône (siège mesuré + suspente) ; sinon 9 m
 	for p in pylones:
-		_tetes.append(terrain(float(p["d"])) + 9.0)
+		var dp: float = float(p["d"])
+		var gm: float = _garde_mesuree(dp)
+		_tetes.append(terrain(dp) + (maxf(gm + 1.0, 6.5) if gm > 0.0 else 9.0))
 	_garde_au_sol()
 	for i in range(_tetes.size()):
 		var t: float = terrain(float(pylones[i]["d"]))
 		_tetes[i] = clampf(_tetes[i], t + 6.5, t + (90.0 if tricable() or vaetvient() else 32.0))
-		if _compression(pylones[i]):
+		if _compression(pylones[i]) and hauteurs_mesurees.is_empty():
 			_tetes[i] = minf(_tetes[i], t + 6.5)       # point de départ bas pour l'ajustement
 	if balanciers_estimes:
 		_choisir_balanciers()
@@ -331,8 +335,14 @@ func _calculer_tetes() -> void:
 			# gare sont bas, sinon la ligne y restait saillante)
 			var t2: float = terrain(d) + 4.0
 			if corde - 0.8 < t2:
-				# le terrain empêche d'abaisser la tête : on relève la corde en
-				# remontant le voisin amont (ou aval, au dernier pylône)
+				# le terrain empêche d'abaisser la tête. Ligne relevée au GPS : la
+				# compression reste plus faible (relever les voisins les faisait
+				# monter en cascade jusqu'au plafond de 36 m, 20 à 30 m au-dessus
+				# des mesures — Merles, Tommeuses, Leissières, retour d'utilisateur
+				# du 25/10/2026) ; sinon on relève la corde par le voisin
+				if not hauteurs_mesurees.is_empty():
+					_tetes[i] = maxf(minf(_tetes[i], corde - 0.8), t2)
+					continue
 				var manque: float = t2 + 0.8 - corde
 				if i + 1 < pylones.size():
 					_tetes[i + 1] += manque * (b[0] - a[0]) / maxf(d - a[0], 0.01)
@@ -602,7 +612,14 @@ func _porteurs_convexes() -> void:
 			var a: float = maxf(d - float(pts[i][0]), 1.0)
 			var b: float = maxf(float(pts[i + 2][0]) - d, 1.0)
 			var t: float = terrain(d)
-			var h: float = minf(_tetes[i] + (DEVIATION_MIN * 1.2 - dev) / (1.0 / a + 1.0 / b), t + 32.0)
+			# ligne relevée au GPS : pas plus de 4 m au-dessus du câble mesuré
+			# (dans un creux, rester convexe demandait 30 m : c'est en réalité un
+			# pylône à compression — le câble y frôle les galets)
+			var plafond: float = t + 32.0
+			var gm2: float = _garde_mesuree(d)
+			if gm2 > 0.0:
+				plafond = minf(plafond, t + gm2 + 1.0 + 4.0)
+			var h: float = minf(_tetes[i] + (DEVIATION_MIN * 1.2 - dev) / (1.0 / a + 1.0 / b), plafond)
 			if h > _tetes[i] + 0.01:
 				_tetes[i] = h
 				bouge = true
@@ -1928,7 +1945,7 @@ func _collisions_fixes() -> void:
 		cs2.shape = cy
 		cs2.position = Vector3(0, t + h * 0.5, -d)
 		corps.add_child(cs2)
-		boite.call(Vector3(voie + 0.30, 0.55, 0.5), Vector3(0, t + h - 0.275, -d))
+		boite.call(Vector3(voie - 2.0 * PyloneRemontee.RETRAIT_TRAVERSE + 0.06, 0.55, 0.5), Vector3(0, t + h - 0.275, -d))
 	var L: float = longueur_h()
 	for aval in [true, false]:
 		var y0: float = terrain(0.0 if aval else L)
