@@ -43,6 +43,7 @@ func construire(r: ReliefBuilder) -> void:
 	for D in RemonteesDonnees.LIGNES:
 		_poser(D)
 	_jumeler()
+	_croisements()
 	print("[Remontees] %d lignes posées" % lignes.size())
 
 
@@ -57,6 +58,59 @@ func _ligne_nommee(cle: String) -> LigneRemontee:
 		if (e[0] as Node).name == cle:
 			return e[0]
 	return null
+
+
+## Gares avancées le long de leur axe (m) : le TCD10 du Vallon de l'Iseran part
+## APRÈS l'arrivée du téléphérique du Fornet — les deux gares se
+## confondaient (retour d'utilisateur, 25/10/2026 ; traces GPS : on descend du
+## Fornet 2 m après le nez OSM du Vallon, on embarque au Vallon 22 à 36 m plus
+## loin ; la gare du Fornet déborde de 26 m de son nez, celle du Vallon de 34 m
+## derrière le sien).
+const AVANCES_AVAL: Dictionary = {"tcd10_vallon_iseran": 42.0}
+## Croisements [dessus, dessous] : un pylône à deux étages au point de
+## croisement, la ligne du dessous plafonnée, celle du dessus au moins
+## ECART_CROISEMENT m plus haut (retour d'utilisateur, 25/10/2026 : « Pyramides
+## passe au-dessus du Vallon, pylône à deux étages au croisement »).
+const CROISEMENTS: Array = [["tsd4_pyramides", "tcd10_vallon_iseran"]]
+const H_MAX_DESSOUS: float = 12.0
+const ECART_CROISEMENT: float = 7.0
+
+
+func _croisements() -> void:
+	for c in CROISEMENTS:
+		var hi: LigneRemontee = _ligne_nommee(c[0])
+		var lo: LigneRemontee = _ligne_nommee(c[1])
+		if hi == null or lo == null:
+			continue
+		var a1: Vector2 = Vector2(hi.transform.origin.x, hi.transform.origin.z)
+		var d1: Vector2 = Vector2(-hi.transform.basis.z.x, -hi.transform.basis.z.z).normalized()
+		var a2: Vector2 = Vector2(lo.transform.origin.x, lo.transform.origin.z)
+		var d2: Vector2 = Vector2(-lo.transform.basis.z.x, -lo.transform.basis.z.z).normalized()
+		var den: float = d1.x * d2.y - d1.y * d2.x
+		if absf(den) < 0.01:
+			continue
+		var w: Vector2 = a2 - a1
+		var t: float = (w.x * d2.y - w.y * d2.x) / den
+		var u: float = (w.x * d1.y - w.y * d1.x) / den
+		if t < 20.0 or t > hi.longueur_h() - 20.0 or u < 20.0 or u > lo.longueur_h() - 20.0:
+			continue
+		_pylone_impose(lo, u, 0.0, H_MAX_DESSOUS)
+		_pylone_impose(hi, t, H_MAX_DESSOUS + ECART_CROISEMENT, 999.0)
+
+
+## Pylône imposé à d (porteur), hauteur de câble au-dessus du sol bornée ;
+## les pylônes à moins de 25 m sont retirés.
+func _pylone_impose(lg: LigneRemontee, d: float, h_min: float, h_max: float) -> void:
+	var py: Array = []
+	for p in lg.pylones:
+		if absf(float(p["d"]) - d) >= 25.0:
+			py.append(p)
+	var n: Dictionary = {"d": d, "montee": [[8, "S"]], "descente": [[8, "S"]], "h_min": h_min, "h_max": h_max, "croisement": true}
+	var j: int = 0
+	while j < py.size() and float(py[j]["d"]) < d:
+		j += 1
+	py.insert(j, n)
+	lg.pylones = py
 
 
 func _jumeler() -> void:
@@ -107,6 +161,10 @@ func _poser(D: Dictionary) -> void:
 			var lb: float = LigneRemontee.L_GARE + LigneRemontee.ALLONGE_BAS + 7.0
 			b -= dirh * lb
 			L -= lb
+	var av: float = float(AVANCES_AVAL.get(String(D["cle"]), 0.0))
+	if av > 0.0:
+		a += dirh * av
+		L -= av
 	var h0: float = relief.hauteur_sol(a.x, a.y)
 	if not quai_tph.is_empty():
 		h0 = (quai_tph["nez"] as Vector3).y

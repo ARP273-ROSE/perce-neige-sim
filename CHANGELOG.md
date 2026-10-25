@@ -5,6 +5,28 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.36.0 — 25 octobre 2026
+
+**Gares qui se chevauchaient, croisement à deux étages, embarquement en haut des Leissières,
+talus des gares adoucis.** Retours d'utilisateur du 25/10/2026 (lots A et E).
+
+- **Fornet → Vallon de l'Iseran** : la gare du TCD10 du Vallon se confondait avec l'arrivée du
+  téléphérique du Fornet ; elle part maintenant APRÈS lui, 42 m plus loin sur son axe (d'après des
+  traces GPS : on descend du Fornet au nez de la gare OSM du Vallon, on embarque au Vallon 22 à
+  36 m plus loin).
+- **Pyramides × Vallon** : au point de croisement, chaque ligne a son pylône au même endroit — le
+  Vallon en bas (câble à 12 m au plus), les Pyramides au moins 7 m au-dessus : un pylône à deux
+  étages ; les sièges des Pyramides passent au-dessus des cabines.
+- **Embarquer en haut (Leissières, qui se prend dans les deux sens)** : chausser posait le skieur
+  sur le relief, SOUS un quai surélevé, et le siège passait au-dessus de lui. On chausse sur le sol
+  réel sous les pieds, quai compris. Nouveau banc `bench_descente_3d` (embarquement à l'amont,
+  descente, levé à l'aval).
+- **Lanches près de la Vanoise** : mesurés contre le relief, les quais et les talus de la Vanoise
+  construits, les sièges passent à 2,4 m au moins au-dessus du sol (réglé par le recalage GPS de
+  la 1.33).
+- **Talus des gares** : pente douce (≈ 16°) au lieu de 32°, raccordée à la neige — les gares ne
+  sont plus posées sur des troncs de pyramide.
+
 ## 1.35.0 — 25 octobre 2026
 
 **L'Olympique (3S) : salles des machines, quais, cabines, pylônes ; galets et rebonds sur toutes
