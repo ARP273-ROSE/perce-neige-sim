@@ -320,8 +320,13 @@ func quais(aval: bool) -> PackedVector3Array:
 	var zc: float = _zc(aval)
 	var sg: float = _sg(aval)
 	var ext_prec: Array = []
-	var x: float = 0.0
-	while x <= l + 0.01:
+	# quai seulement le long de la partie lente, autour du demi-tour (vidéos :
+	# il commence après le freinage et s'arrête avant le lanceur ; plancher
+	# bas le long des lanceurs, côté ligne)
+	var xa: float = LigneRemontee.L_FREIN - 2.0
+	var xb: float = l - LigneRemontee.L_FREIN + 2.0
+	var x: float = xa
+	while x <= xb + 0.01:
 		var s: float = s0 + x
 		var p: Vector3 = lg._point_cable(s)[0]
 		var o: Vector3 = lg._dehors(s)
@@ -378,4 +383,5 @@ func maillage_quais(g: Node3D, aval: bool) -> void:
 			var p: Vector3 = lg._point_cable(s0 + x)[0] + lg._dehors(s0 + x) * (sgn * DEMI_TRANCHEE)
 			pts.append(Vector3(p.x, yq - 0.12, p.z))
 			x += 0.5
+		pts = pts.slice(int((LigneRemontee.L_FREIN - 2.0) / 0.5), int((l - LigneRemontee.L_FREIN + 2.0) / 0.5) + 1)
 		RemonteeKit.tube(g, pts, 0.13, "jaune_securite", 4)

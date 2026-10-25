@@ -456,13 +456,16 @@ func _plaques(r0: float, r1: float, y_tete: float) -> void:
 ## sous le bras ; le câble roule sur les galets. Virage : potence d'un seul
 ## côté (cote ≠ 0). `hauteur` : du sol au dessus du bras.
 var x_fut: float = 0.0          # position du fût (repère du pylône)
+## Pylône en T (fût entre les deux brins, traverse des deux côtés) : téléskis
+## autres que Poma (vidéos des Montets et du Col du Palet) ; sinon potence.
+var en_t: bool = false
 const DESSUS_BRAS_TELESKI: float = 0.75   # bras au-dessus du câble
 
 
 func _construire_teleski() -> void:
 	var h: float = hauteur
 	var yc: float = h - DESSUS_BRAS_TELESKI        # câble
-	if cote == 0:
+	if cote == 0 and not en_t:
 		var xd: float = _x_brin(false)
 		x_fut = xd + signf(xd) * 0.9
 	else:
@@ -482,11 +485,20 @@ func _construire_teleski() -> void:
 	for x in xs:
 		if absf(x - x_fut) > absf(x_loin - x_fut):
 			x_loin = x
-	var bout: float = x_loin + signf(x_loin - x_fut) * 0.25
-	RemonteeKit.boite_en(self, Vector3(absf(bout - x_fut) + 0.15, 0.16, 0.16), Vector3((bout + x_fut) * 0.5, h - 0.08, 0), "galva")
-	var lb: float = absf(bout - x_fut)
-	RemonteeKit.poutre(self, Vector3(x_fut, h - 0.2 - lb * 0.75, 0), Vector3(lerpf(x_fut, bout, 0.8), h - 0.16, 0), 0.08, 0.08, "galva")
-	RemonteeKit.poutre(self, Vector3(lerpf(x_fut, bout, 0.4), h - 0.16, 0), Vector3(x_fut, h - 0.2 - lb * 0.75 * 0.5, 0), 0.06, 0.06, "galva")
+	# mousse de protection au pied du fût (vidéos de la ligne)
+	RemonteeKit.cylindre(self, 0.26, 0.26, 1.8, Transform3D(Basis.IDENTITY, Vector3(x_fut, 0.9, 0)), "mousse_rouge", 14)
+	if cote == 0 and en_t:
+		# traverse en T, des deux côtés du fût, au-delà des deux brins
+		var xt: float = voie * 0.5 + 0.25
+		RemonteeKit.boite_en(self, Vector3(2.0 * xt, 0.16, 0.16), Vector3(0, h - 0.08, 0), "galva")
+		for sx in [-1.0, 1.0]:
+			RemonteeKit.poutre(self, Vector3(0, h - 1.0, 0), Vector3(sx * xt * 0.6, h - 0.16, 0), 0.06, 0.06, "galva")
+	else:
+		var bout: float = x_loin + signf(x_loin - x_fut) * 0.25
+		RemonteeKit.boite_en(self, Vector3(absf(bout - x_fut) + 0.15, 0.16, 0.16), Vector3((bout + x_fut) * 0.5, h - 0.08, 0), "galva")
+		var lb: float = absf(bout - x_fut)
+		RemonteeKit.poutre(self, Vector3(x_fut, h - 0.2 - lb * 0.75, 0), Vector3(lerpf(x_fut, bout, 0.8), h - 0.16, 0), 0.08, 0.08, "galva")
+		RemonteeKit.poutre(self, Vector3(lerpf(x_fut, bout, 0.4), h - 0.16, 0), Vector3(x_fut, h - 0.2 - lb * 0.75 * 0.5, 0), 0.06, 0.06, "galva")
 	for montee in [true, false]:
 		if cote != 0 and montee != (cote == 1):
 			continue

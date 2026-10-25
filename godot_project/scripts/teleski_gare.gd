@@ -20,7 +20,7 @@ extends RefCounted
 
 var lg: LigneRemontee
 
-const PAS_MAGASIN: float = 0.45       # entraxe des perches au magasin (m)
+const PAS_MAGASIN: float = 0.25       # entraxe des perches au magasin : un rideau (vidéos)
 const DECAL_RAIL: float = 0.32        # rail du magasin : à l'extérieur du câble
 const BAISSE_RAIL: float = 0.20       # … et un peu plus bas
 

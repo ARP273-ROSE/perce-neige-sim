@@ -1836,18 +1836,37 @@ func _gare_3s(g: Node3D, znez: float, zc: float, aval: bool) -> void:
 	if not aval:
 		RemonteeKit.cylindre(g, 1.12, 1.12, 2.0, Transform3D(Basis.IDENTITY, Vector3(0, 1.0, zc)), "peinture_anthracite", 32)
 	RemonteeKit.boite_en(g, Vector3(0.9, H_CABLE_GARE - 0.4, 0.9), Vector3(0, (H_CABLE_GARE - 0.4) * 0.5, (znez + zc) * 0.5), "cabine_rouge")
-	# portique de sortie en acier devant le nez (sabots des porteurs)
-	var zs: float = znez - sg * 4.0
-	var dq: float = 4.0
+	# sabots de nez (vidéos de la ligne) : de chaque côté, un long caisson
+	# gris sort du bâtiment en porte-à-faux sous les porteurs et suit leur
+	# arrondi jusqu'à la ligne ; au bout, de grandes béquilles inclinées
+	# posées au sol devant la gare, entretoisées entre les deux voies
+	# (retour d'utilisateur, 25/10/2026 : « faut faire les supports métalliques
+	# qui permettent l'arrondi du câble à l'entrée des gares »)
+	var L3: float = longueur_h()
+	var d_bout: float = NEZ_3S + 1.0
+	var ext: Array = []
 	for sx3 in [-1.0, 1.0]:
 		var xb: float = sx3 * voie * 0.5
-		var yb: float = y_cable(dq if aval else longueur_h() - dq) - g.position.y - 0.45
-		var ysol: float = _sol(xb + sx3 * 1.4, zs) - g.position.y
-		for sz3 in [-1.0, 1.0]:
-			RemonteeKit.poutre(g, Vector3(xb + sx3 * 1.4, ysol, zs + sz3 * 1.6), Vector3(xb + sx3 * 0.5, yb, zs), 0.26, 0.26, "galva_pylone")
-		RemonteeKit.poutre(g, Vector3(xb - sx3 * 0.9, ysol, zs), Vector3(xb - sx3 * 0.4, yb, zs), 0.24, 0.24, "galva_pylone")
-		RemonteeKit.boite_en(g, Vector3(1.4, 0.35, 3.4), Vector3(xb, yb, zs), "galva_pylone")
-	RemonteeKit.poutre(g, Vector3(-voie * 0.5, y_cable(dq if aval else longueur_h() - dq) - g.position.y - 0.6, zs), Vector3(voie * 0.5, y_cable(dq if aval else longueur_h() - dq) - g.position.y - 0.6, zs), 0.3, 0.4, "galva_pylone")
+		var montee3: bool = sx3 == signf(_x_brin(true))
+		var pts: Array = []
+		for k3 in range(15):
+			var dd: float = lerpf(-6.0, d_bout, float(k3) / 14.0)      # depuis le nez, vers la ligne
+			var dl: float = dd if aval else L3 - dd
+			var yc: float = y_cable(clampf(dl, 0.0, L3), montee3) if dd > 0.0 else terrain(0.0 if aval else L3) + H_CABLE_GARE
+			pts.append(Vector3(xb, yc - g.position.y - 0.55, -dl))
+		for k4 in range(pts.size() - 1):
+			RemonteeKit.poutre(g, pts[k4], pts[k4 + 1], 0.9, 0.8, "peinture_gris")
+		ext.append(pts[pts.size() - 1])
+		# béquilles en V depuis le sol, au bout et au milieu du porte-à-faux
+		for p4 in [pts[pts.size() - 1], pts[pts.size() - 4]]:
+			var zp4: float = (p4 as Vector3).z + sg * 3.0
+			for dx4 in [-1.6, 1.6]:
+				var xs: float = xb + dx4
+				var ys4: float = _sol(xs, zp4) - g.position.y
+				RemonteeKit.poutre(g, Vector3(xs, ys4, zp4), (p4 as Vector3) - Vector3(0, 0.4, 0), 0.28, 0.28, "galva_pylone")
+				RemonteeKit.boite_en(g, Vector3(0.9, 0.5, 0.9), Vector3(xs, ys4 - 0.1, zp4), "beton")
+	# entretoise entre les deux voies, au bout
+	RemonteeKit.poutre(g, (ext[0] as Vector3) - Vector3(0, 0.45, 0), (ext[1] as Vector3) - Vector3(0, 0.45, 0), 0.35, 0.5, "galva_pylone")
 
 
 ## Pignon triangulaire (x0..x1 à la base y, sommet + h au milieu), plan z.
@@ -2835,6 +2854,7 @@ func _poser_pylones_teleski() -> void:
 			py.numero = i + 1
 			py.dessus_traverse = -PyloneRemontee.DESSUS_BRAS_TELESKI
 			py.cote = cote
+			py.en_t = not constructeur.to_lower().contains("poma")
 			py.compo_montee = p.get("montee", [[4, "S"]])
 			py.compo_descente = p.get("descente", [[4, "S"]])
 			var xc: float

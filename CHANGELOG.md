@@ -5,6 +5,25 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.39.0 — 25 octobre 2026
+
+**Olympique : supports de l'arrondi des câbles et quai d'embarquement ; téléskis d'après les
+vidéos de la ligne.** Retours d'utilisateur du 25/10/2026.
+
+- **Sabots de nez de l'Olympique** (« faut faire les supports métalliques qui permettent
+  l'arrondi du câble à l'entrée des gares ») : de chaque côté, un long caisson gris sort du
+  bâtiment en porte-à-faux sous les porteurs et suit leur arrondi jusqu'à la ligne, porté au bout
+  par des béquilles en V posées devant la gare, entretoisées entre les deux voies (remplace le
+  portique de sortie).
+- **Quai d'embarquement de l'Olympique** : seulement le long de la partie lente, autour du
+  demi-tour (il commence après le freinage et s'arrête avant le lanceur) ; plancher bas le long
+  des lanceurs.
+- **Pylônes de téléski en T** (fût entre les deux brins, traverse des deux côtés) pour les
+  téléskis qui ne sont pas des Poma — les Poma gardent leur potence ; mousse de protection rouge
+  au pied de tous les fûts.
+- **Perches en T** : manche orange, barre noire. **Magasin des TKD** : perches serrées en rideau
+  (entraxe 25 cm).
+
 ## 1.38.0 — 25 octobre 2026
 
 **Les gares de l'Olympique d'après des vidéos de la ligne.**
