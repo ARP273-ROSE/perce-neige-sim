@@ -5,6 +5,21 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.37.0 — 25 octobre 2026
+
+**Galets en porte-à-faux sur les pylônes des télésièges et télécabines ; pylônes recalés sur les
+mesures là où ils montaient au plafond.** Retours d'utilisateur du 25/10/2026.
+
+- **Tête des pylônes** (« les galets sont à l'extérieur des pylônes ; raccourcir la structure pour
+  les dégager », photo Commons d'un TSD prise dans l'axe) : la traverse s'arrête 45 cm en dedans
+  des câbles, platine en bout ; chaque train de galets pend au-delà, sous une console en équerre.
+- **Hauteurs (fin du lot B)** : sur les lignes relevées au GPS, chaque tête part de la hauteur
+  mesurée du câble ; une compression que le relief empêche d'abaisser reste plus faible au lieu
+  de faire monter ses voisins en cascade, et un porteur ne dépasse plus la mesure de plus de 4 m
+  pour rester convexe. Merles et Tommeuses : écart jeu − mesure ramené de +20…+30 m à 0…+5 m sur
+  presque toute la ligne ; Leissières de même, sauf autour de sa compression du km 0,63 (sièges
+  mesurés à 17 m du sol de part et d'autre).
+
 ## 1.36.0 — 25 octobre 2026
 
 **Gares qui se chevauchaient, croisement à deux étages, embarquement en haut des Leissières,
