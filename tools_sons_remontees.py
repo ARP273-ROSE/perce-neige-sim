@@ -29,6 +29,7 @@ Coups :
   galet_support     choc grave d'une pince sur un galet porteur (dessous)
   galet_compression choc plus sec, métallique (galets au-dessus)
   arret_urgence     claquement du frein de poulie, câble qui vibre
+  file_huees        la file d'attente qui hue le resquilleur
 """
 import os
 import wave
@@ -156,3 +157,75 @@ x = choc(n4, 95.0, 0.25, 1.0)
 x += choc(n4, 700.0, 0.05, 1.0) * 0.6
 x += np.sin(2 * np.pi * 2.1 * t4) * bande(rose(n4), 60, 250) * np.exp(-t4 / 1.2) * 1.5   # câble qui balance
 ecrire("arret_urgence", x)
+
+
+# --- huées de la file d'attente ---------------------------------------------------------
+# « whouuu » de la file qu'on vient de griller au portique (retour d'utilisateur,
+# 25/10/2026) : 26 voix sur la voyelle [u], qui montent puis retombent, deux
+# sifflets, la rumeur de la foule. Tirage à part : les sons ci-dessus ne bougent pas.
+from scipy.signal import lfilter
+
+rng_h = np.random.default_rng(20261025)
+
+
+def resonateur(x, f, bw):
+    r = np.exp(-np.pi * bw / SR)
+    a = [1.0, -2 * r * np.cos(2 * np.pi * f / SR), r * r]
+    return lfilter([1.0 - r], a, x)
+
+
+def voix(duree, f0, monte, femme):
+    """Un « whouuu » : souffle à l'attaque, voyelle [u] qui monte puis tombe."""
+    m = int(duree * SR)
+    t = np.arange(m) / SR
+    u = t / duree
+    # contour : attaque montante, longue descente (hou-ou-ou)
+    cont = np.where(u < 0.15, 1.0 + monte * u / 0.15, 1.0 + monte - (monte + 0.25) * (u - 0.15) / 0.85)
+    vib = 1.0 + 0.012 * np.sin(2 * np.pi * rng_h.uniform(4.5, 6.5) * t + rng_h.uniform(0, 6))
+    f = f0 * cont * vib
+    ph = 2 * np.pi * np.cumsum(f) / SR
+    # source glottale : dents de scie adoucies
+    src = sum(np.sin(k * ph) / k ** 1.3 for k in range(1, 28) if k * f0 * 1.6 < SR / 2)
+    src += 0.25 * rng_h.standard_normal(m)                    # souffle dans la voix
+    k = 1.15 if femme else 1.0
+    y = resonateur(src, 320 * k, 80) + 0.5 * resonateur(src, 800 * k, 100) + 0.08 * resonateur(src, 2300 * k, 160)
+    # « wh » : souffle seul les 120 premières ms
+    souffle = bande(rng_h.standard_normal(m), 300, 1500) * np.exp(-t / 0.08)
+    env = np.minimum(1, t / 0.18) * np.minimum(1, (duree - t) / 0.5) ** 1.5
+    return (y / (np.max(np.abs(y)) + 1e-9) + 0.4 * souffle / (np.max(np.abs(souffle)) + 1e-9)) * env
+
+
+def huees():
+    D = 3.6
+    m = int(D * SR)
+    x = np.zeros(m)
+    for _ in range(26):
+        femme = rng_h.random() < 0.4
+        f0 = rng_h.uniform(170, 260) if femme else rng_h.uniform(95, 150)
+        d = rng_h.uniform(1.6, 2.7)
+        t0 = rng_h.uniform(0.0, 0.55) + rng_h.exponential(0.12)
+        v = voix(d, f0, rng_h.uniform(0.15, 0.45), femme) * rng_h.uniform(0.4, 1.0)
+        i0 = int(t0 * SR)
+        n = min(len(v), m - i0)
+        x[i0:i0 + n] += v[:n]
+    # un sifflet ou deux, une rumeur de foule
+    for _ in range(2):
+        t0 = rng_h.uniform(0.3, 1.0)
+        d = rng_h.uniform(0.7, 1.1)
+        n = int(d * SR)
+        tt = np.arange(n) / SR
+        fs = rng_h.uniform(1900, 2600) * (1 + 0.15 * np.sin(np.pi * tt / d)) - 400 * tt
+        sif = np.sin(2 * np.pi * np.cumsum(fs) / SR) * np.minimum(1, tt / 0.05) * np.minimum(1, (d - tt) / 0.15)
+        i0 = int(t0 * SR)
+        x[i0:i0 + n] += 0.12 * sif
+    t = np.arange(m) / SR
+    x += 0.18 * bande(rose(m), 150, 2500) * np.minimum(1, t / 0.3) * np.minimum(1, (D - t) / 1.0)
+    # léger espace : deux échos courts (la gare, la neige)
+    y = x.copy()
+    for dl, g in [(0.045, 0.25), (0.11, 0.15)]:
+        k = int(dl * SR)
+        y[k:] += g * x[:-k]
+    return bande(y, 80, 6000)
+
+
+ecrire("file_huees", huees(), -4.0)

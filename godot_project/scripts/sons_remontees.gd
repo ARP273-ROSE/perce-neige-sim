@@ -56,7 +56,7 @@ func _ready() -> void:
 			"tkd_gare", "tkd_ligne", "tkd_depart", "tkd_lacher", "tkd_pyl_s", "tkd_pyl_c",
 			"tsf_motrice", "tsf_arrivee", "tsf_ligne", "tsf_arret", "tsf_redemarrage", "tsf_embarquement", "tsf_pyl_s", "tsf_pyl_c",
 			"tsf_ruisseau",
-			"tsd_forfait", "tsd_gare", "tsd_portillons", "tsd_embarquement", "tsd_pyl_cc", "tsd_pyl_s", "tsd_ligne", "tsd_arret", "tsd_arrete", "tsd_redemarrage", "tsd_arrivee", "tsd_debarquement", "tsd_gare_haut", "boisses_gare", "boisses_lanceur_acc", "boisses_ligne", "boisses_pyl_s", "boisses_lanceur_dec",
+			"tsd_forfait", "tsd_gare", "tsd_portillons", "tsd_embarquement", "tsd_pyl_cc", "tsd_pyl_s", "tsd_ligne", "tsd_arret", "tsd_arrete", "tsd_redemarrage", "tsd_arrivee", "tsd_debarquement", "tsd_gare_haut", "boisses_gare", "boisses_lanceur_acc", "boisses_ligne", "boisses_pyl_s", "boisses_lanceur_dec", "file_huees",
 			"tke_gare", "tke_depart", "tke_ligne", "tke_pyl_s", "tke_pyl_c", "tke_arrivee",
 			"tph_quai", "tph_ligne", "tph_croisement", "tph_arrivee"]:
 		var st: AudioStream = load(DOSSIER + nom + ".wav")

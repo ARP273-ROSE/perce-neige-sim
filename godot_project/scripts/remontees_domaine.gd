@@ -31,6 +31,8 @@ var _repos: float = 0.0          # pas de nouvel embarquement juste après un d�
 var _sous_terre: bool = false    # caméra sous terre (funiculaire) : remontées cachées
 var _f_lod: float = 0.6 if OS.has_feature("web") else 1.0     # distances du niveau de détail
 signal message(texte: String)
+## Pique sarcastique (PiquesRemontees) : événement, remontée.
+signal pique(evt: String, lg: LigneRemontee)
 
 
 static func monde(lat: float, lon: float) -> Vector2:
@@ -466,9 +468,107 @@ func _distance_ligne(lg: LigneRemontee, p: Vector3) -> float:
 ## l'on est assis d'office sur la banquette face à l'amont, porté par la
 ## cabine comme sur un siège : en physique, le skieur passait au travers du
 ## plancher dès que la cabine quittait la gare (retour d'utilisateur, 22/10/2026).
+## Piques (retour d'utilisateur, 25/10/2026) : forfait validé sous le portique,
+## dépose depuis la carte (pas de pique pour ce qu'on n'a pas choisi), siège ou
+## cabine qui part sans lui.
+var _t: float = 0.0
+var _valide: Dictionary = {}       # id de la ligne → instant du passage sous le portique
+var _t_depose: float = -1000.0     # dernier saut de position (dépose depuis la carte)
+var _p_prec: Vector3 = Vector3.INF
+var _guet: Array = []              # [ligne, véhicule] qui peut partir sans lui
+var _t_loupe: float = -1000.0
+var _etat_bord: String = "marche"
+
+
+## Remontées qui se prennent dans les deux sens : pas de pique « à la descente »
+## (retour d'utilisateur, 25/10/2026).
+const DEUX_SENS: Array = ["tsd6_leissieres"]
+
+
+func _piquer(evt: String, lg: LigneRemontee) -> void:
+	if not is_instance_valid(lg):
+		return
+	if evt == "DESCENTE" and String(lg.name) in DEUX_SENS:
+		return
+	# resquille : la file d'attente proteste (« whouuu »)
+	if evt == "FRAUDE" and sons != null:
+		sons._coup(lg, "file_huees")
+	pique.emit(evt, lg)
+
+
+func _depose_recente() -> bool:
+	return _t - _t_depose < 120.0
+
+
+func _portiques(lg: LigneRemontee) -> Array:
+	var l: Array = lg.get_meta("portiques", [])
+	for n in l:
+		if not is_instance_valid(n):
+			l = []
+			break
+	if l.is_empty() and float(lg.get_meta("t_portiques", -10.0)) < _t - 5.0:
+		lg.set_meta("t_portiques", _t)
+		l = lg.find_children("Portique", "Node3D", true, false)
+		lg.set_meta("portiques", l)
+	return l
+
+
+## Fraude : l'embarquement a un portique et il n'est pas passé dessous.
+func _fraude(lg: LigneRemontee, aval: bool) -> bool:
+	if _depose_recente() or _t - float(_valide.get(lg.get_instance_id(), -1000.0)) < 90.0:
+		return false
+	var q: Vector3 = lg.global_transform * lg.point_embarquement(aval)
+	for n in _portiques(lg):
+		if (n as Node3D).global_position.distance_to(q) < 25.0:
+			return true
+	return false
+
+
+func _surveiller_approche(p: Vector3) -> void:
+	if _p_prec != Vector3.INF and p.distance_to(_p_prec) > 8.0:
+		_t_depose = _t
+	_p_prec = p
+	for e in lignes:
+		var lg: LigneRemontee = e[0]
+		if not lg.pret or not lg.is_processing():
+			continue
+		for n in _portiques(lg):
+			var c: Vector3 = (n as Node3D).global_position
+			if Vector2(p.x - c.x, p.z - c.z).length() < 1.8 and absf(p.y - c.y) < 3.0:
+				_valide[lg.get_instance_id()] = _t
+	# siège ou cabine guetté : parti sans lui
+	if not _guet.is_empty():
+		var lg: LigneRemontee = _guet[0]
+		if not is_instance_valid(lg) or not lg.pret or int(_guet[1]) >= lg.nombre_vehicules():
+			_guet = []
+		elif lg.famille.begins_with("cabine") or lg.tricable() or lg.vaetvient():
+			var v: VehiculeRemontee = lg.vehicule(_guet[1])
+			if v.global_position.distance_to(p) > 8.0:
+				_guet = []
+			elif lg.zone_vehicule(_guet[1]) == "ligne":
+				_loupe(lg)
+		elif lg.vehicule_a_embarquer(_guet[2]) != int(_guet[1]):
+			var q: Vector3 = lg.global_transform * lg.point_embarquement(_guet[2])
+			if p.distance_to(q) < 2.5:
+				_loupe(lg)
+			_guet = []
+
+
+func _loupe(lg: LigneRemontee) -> void:
+	_guet = []
+	if _t - _t_loupe > 25.0 and lg.regime() > 0.3:
+		_t_loupe = _t
+		_piquer("LOUPE", lg)
+
+
 func _embarquement() -> void:
 	if skieur == null or not skieur.actif:
 		return
+	_t += get_process_delta_time()
+	if a_bord.is_empty() and _attente_tk == null:
+		_surveiller_approche(skieur.global_position)
+	else:
+		_p_prec = skieur.global_position
 	if not a_bord.is_empty():
 		_suivre_siege()
 		return
@@ -498,6 +598,8 @@ func _embarquement() -> void:
 			var i: int = lg.vehicule_a_embarquer(aval)
 			if i < 0:
 				continue
+			if p.distance_to(q) < 2.5 and (_guet.is_empty() or _guet[0] != lg):
+				_guet = [lg, i, aval]
 			var v: VehiculeRemontee = lg.vehicule(i)
 			var loc: Vector3 = v.global_transform.affine_inverse() * p
 			var place0: Vector3 = v.place_assise(0)
@@ -508,15 +610,24 @@ func _embarquement() -> void:
 				var k: int = clampi(int(floor((absf(loc.x) * signf(loc.x) + W * 0.5 - 0.10) / 0.50)), 0, v.places - 1)
 				# le télésiège se prend chaussé (retour d'utilisateur, 23/10/2026) :
 				# à pied, on chausse au portillon
+				var evt: String = "FRAUDE" if _fraude(lg, aval) else ""
 				if not skieur.chausse:
 					skieur.basculer_ski(true)
+					if evt == "" and not _depose_recente():
+						evt = "PIETON"
+				if evt == "" and not aval:
+					evt = "DESCENTE"
+				_guet = []
 				a_bord = [lg, i, k, aval, false]
+				_etat_bord = lg.etat
 				skieur.support = null
 				skieur.embarque = true
 				skieur.asseoir(_cap(v), true)
 				_suivre_siege()
 				var dest: String = lg.jumelee.nom_ligne if (aval and lg.role == "bas" and lg.traverse(i)) else lg.nom_ligne
 				message.emit("Assis — %s" % dest)
+				if evt != "":
+					_piquer(evt, lg)
 				return
 
 
@@ -558,6 +669,9 @@ func _entrer_cabine(lg: LigneRemontee, p: Vector3) -> bool:
 		var y_pl: float = v.place_assise(0).y
 		var lim: Vector2 = lg.demi_interieur()
 		if absf(loc.x) > lim.x or absf(loc.z) > lim.y or loc.y < y_pl - 0.4 or loc.y > y_pl + 1.6:
+			if _guet.is_empty() and Vector2(loc.x, loc.z).length() < maxf(lim.x, lim.y) + 2.5 \
+					and absf(loc.y - y_pl) < 2.0 and lg.regime() > 0.3:
+				_guet = [lg, i, zn == "gare_aval"]
 			continue
 		# la cabine roule vers son −Z : en montant (gare aval), la banquette
 		# arrière regarde l'amont ; en descendant, la banquette avant
@@ -568,6 +682,9 @@ func _entrer_cabine(lg: LigneRemontee, p: Vector3) -> bool:
 		# on monte en cabine à pied : chaussé, on déchausse et les skis vont
 		# au porte-skis, sur les vantaux des portes (retour d'utilisateur, 23/10/2026)
 		var skis: bool = skieur.chausse
+		_guet = []
+		_etat_bord = lg.etat
+		var evt: String = "CHAUSSE" if skis else ("DESCENTE" if zn == "gare_amont" and not lg.vaetvient() else "")
 		if skis:
 			skieur.basculer_ski()
 		v.porte_skis(skis)
@@ -581,6 +698,8 @@ func _entrer_cabine(lg: LigneRemontee, p: Vector3) -> bool:
 		skieur._skis.visible = false        # skis au porte-skis, ou à ses pieds
 		_suivre_siege()
 		message.emit(("Skis au porte-skis — assis — %s" if skis else "Assis — %s") % lg.nom_ligne)
+		if evt != "":
+			_piquer(evt, lg)
 		return true
 	return false
 
@@ -624,6 +743,8 @@ func quitter() -> void:
 	if a_bord.is_empty():
 		return
 	var lg: LigneRemontee = a_bord[0]
+	if is_instance_valid(lg) and lg.zone_vehicule(a_bord[1]) == "ligne":
+		_piquer("SAUT", lg)
 	if a_bord.size() > 5:
 		lg.vehicule(a_bord[1]).longueur_perche(0.0)
 	if skieur != null:
@@ -652,6 +773,8 @@ func _prendre_perche(lg: LigneRemontee, p: Vector3) -> bool:
 		return false
 	if not skieur.chausse:
 		skieur.basculer_ski(true)
+		if not _depose_recente():
+			_piquer("PIETON", lg)
 	skieur.support = null
 	skieur.embarque = true
 	skieur.velocity = Vector3.ZERO
@@ -693,6 +816,7 @@ func _attendre_perche() -> void:
 		if i >= 0:
 			_attente_tk = null
 			a_bord = [lg, i, 0, true, false, "perche"]
+			_etat_bord = lg.etat
 			_suivre_perche()
 			message.emit("Perche prise — %s" % lg.nom_ligne)
 			return
@@ -761,11 +885,18 @@ func _suivre_perche() -> void:
 		skieur._cap = skieur._cap_ski
 		skieur.cam_yaw = skieur._cap_ski
 		message.emit("Perche lâchée — %s" % lg.nom_ligne)
+		if randf() < 0.33:
+			_piquer("ARRIVEE", lg)
 		a_bord = []
 		_repos = 4.0
 
 
 func _suivre_siege() -> void:
+	var lg0: LigneRemontee = a_bord[0]
+	if is_instance_valid(lg0):
+		if lg0.etat != "marche" and _etat_bord == "marche" and lg0.zone_vehicule(a_bord[1]) == "ligne":
+			_piquer("ARRET", lg0)
+		_etat_bord = lg0.etat
 	if a_bord.size() > 5:
 		_suivre_perche()
 		return
@@ -802,6 +933,9 @@ func _suivre_siege() -> void:
 			skieur.support = null
 			skieur._skis.visible = true
 			message.emit("Portes ouvertes — %s" % lg.nom_ligne)
+			_t_loupe = _t          # en sortant, les cabines qui repartent ne sont pas « loupées »
+			if randf() < 0.33:
+				_piquer("ARRIVEE", lg)
 			a_bord = []
 			_repos = 8.0          # le temps de sortir avant d'être rassis
 			return
@@ -831,5 +965,8 @@ func _suivre_siege() -> void:
 			skieur._cap = skieur._cap_ski
 			skieur.cam_yaw = skieur._cap_ski
 		message.emit("Arrivé — %s" % lg.nom_ligne)
+		_t_loupe = _t
+		if randf() < 0.33:
+			_piquer("ARRIVEE", lg)
 		a_bord = []
 		_repos = 6.0
