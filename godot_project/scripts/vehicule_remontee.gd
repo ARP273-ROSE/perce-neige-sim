@@ -1629,7 +1629,7 @@ func _perche() -> void:
 	_perche_tige = Node3D.new()
 	_perche_tige.name = "Perche"
 	add_child(_perche_tige)
-	RemonteeKit.barre(_perche_tige, Vector3(0, 0, 0), Vector3(0, -1.10, 0), 0.02, "jaune_securite" if famille == "perche_tbar" else "orange_perche", 8)
+	RemonteeKit.barre(_perche_tige, Vector3(0, 0, 0), Vector3(0, -1.10, 0), 0.02, "orange_perche", 8)
 	if famille == "perche_tbar":
 		# archet biplace (Montet) : barre cintrée en arc, le milieu plus bas
 		# que les bouts (retour d'utilisateur, 25/10/2026 : « inverser la courbure de
@@ -1638,7 +1638,7 @@ func _perche() -> void:
 		for k in range(13):
 			var u: float = lerpf(-1.0, 1.0, float(k) / 12.0)
 			arc.append(Vector3(u * 0.52, -1.18 + 0.10 * u * u, 0))
-		RemonteeKit.tube(_perche_tige, arc, 0.028, "jaune_securite", 8)
+		RemonteeKit.tube(_perche_tige, arc, 0.028, "noir_mat", 8)     # barre noire, manche orange (vidéo des Montets)
 		for sx in [-1.0, 1.0]:
 			var a: Vector3 = Vector3(sx * 0.20, -1.18 + 0.10 * 0.15, 0)
 			var b: Vector3 = Vector3(sx * 0.50, -1.18 + 0.10 * 0.92, 0)
