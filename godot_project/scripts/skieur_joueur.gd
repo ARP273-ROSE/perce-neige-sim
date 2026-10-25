@@ -357,7 +357,10 @@ func basculer_ski(forcer: bool = false) -> String:
 	chemin.clear()
 	_cap_ski = _cap
 	_v_ski = Vector3.ZERO
-	global_position.y = relief.hauteur_sol(global_position.x, global_position.z)
+	# le sol sous les pieds, quai de gare compris : sur le relief, on passait
+	# SOUS un quai surélevé et le siège ne nous prenait plus (Leissières en
+	# haut — retour d'utilisateur, 25/10/2026)
+	global_position.y = float(_sol_ski(global_position.x, global_position.z, global_position.y)[0])
 	_apparence_ski()
 	return ""
 

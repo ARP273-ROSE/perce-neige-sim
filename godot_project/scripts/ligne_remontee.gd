@@ -357,6 +357,10 @@ func _calculer_tetes() -> void:
 	for i3 in range(_tetes.size()):
 		var t3: float = terrain(float(pylones[i3]["d"]))
 		_tetes[i3] = minf(_tetes[i3], t3 + (90.0 if tricable() or vaetvient() else 36.0))
+		# croisement : pylône à deux étages (RemonteesDomaine._croisements)
+		var p3: Dictionary = pylones[i3]
+		if p3.has("h_min") or p3.has("h_max"):
+			_tetes[i3] = clampf(_tetes[i3], t3 + float(p3.get("h_min", 0.0)), t3 + float(p3.get("h_max", 999.0)))
 
 
 ## Téléski : câble à ~6 m aux pylônes, jamais à moins de 3,8 m de la trace
@@ -1338,7 +1342,10 @@ func _bords_quai(aval: bool) -> Array:
 		bq[cote] = voie * 0.5 + 1.6
 		bq[cote + 2] = PENTE_DEBARQUEMENT
 	return bq
-const PENTE_TALUS: float = 1.6      # base / hauteur (environ 32°)
+## Talus de neige damée raccordé en pente douce (environ 16°) : à 32°, les
+## gares semblaient posées sur des troncs de pyramide (retour d'utilisateur,
+## 25/10/2026 : « les plates-formes des gares, c'est pas comme ça en vrai »).
+const PENTE_TALUS: float = 3.5      # base / hauteur
 
 
 ## Sol réel sous un point (x, z) du repère de la ligne : posé par
