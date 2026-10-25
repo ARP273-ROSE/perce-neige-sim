@@ -42,7 +42,7 @@ uniform sampler2D ortho : source_color, filter_linear_mipmap, repeat_disable;
 uniform sampler2D trous : filter_nearest, repeat_disable;
 uniform float gamma = 1.0;
 uniform vec3 brume = vec3(0.50, 0.62, 0.78);
-uniform vec4 pieces[4];
+uniform vec4 pieces[8];
 uniform int n_pieces = 0;
 uniform float piece = 0.0;
 uniform vec4 emprise = vec4(0.0, 0.0, 1.0, 1.0);
@@ -597,13 +597,36 @@ func _build_pieces() -> void:
 	_rects_pieces.clear()
 	for am in amenagements:
 		_build_piece(am)
+	_poser_trous()
+
+
+## Trous du relief : pièces fines des gares (remplacées par leur maillage
+## fin) et fosses ouvertes (`percer` : rien dessous, la remontée y dessine
+## sa fosse — contrepoids et motrice de l'Olympique). 8 au plus.
+var _fosses: Dictionary = {}          # clé → Rect2
+
+
+func percer(cle: String, r: Rect2) -> void:
+	_fosses[cle] = r
+	_poser_trous()
+
+
+func reboucher(cle: String) -> void:
+	if _fosses.erase(cle):
+		_poser_trous()
+
+
+func _poser_trous() -> void:
+	if _mat_terrain == null:
+		return
 	var v: Array = []
-	for r in _rects_pieces:
+	for r in _rects_pieces + _fosses.values():
 		v.append(Vector4(r.position.x, r.position.y, r.end.x, r.end.y))
-	while v.size() < 4:
+	var n: int = mini(v.size(), 8)
+	while v.size() < 8:
 		v.append(Vector4.ZERO)
-	_mat_terrain.set_shader_parameter("pieces", v)
-	_mat_terrain.set_shader_parameter("n_pieces", mini(_rects_pieces.size(), 4))
+	_mat_terrain.set_shader_parameter("pieces", v.slice(0, 8))
+	_mat_terrain.set_shader_parameter("n_pieces", n)
 
 
 func _build_piece(am: Dictionary) -> void:

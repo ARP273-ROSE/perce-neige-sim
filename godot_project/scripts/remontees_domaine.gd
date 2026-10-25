@@ -176,6 +176,7 @@ func _poser(D: Dictionary) -> void:
 	lg.rampes = rampes
 	# sol réel sous la gare (terrassements) : relief affiché, repère de la ligne
 	var xf0: Transform3D = Transform3D(Basis.looking_at(Vector3(dirh.x, 0.0, dirh.y), Vector3.UP), Vector3(a.x, h0, a.y))
+	lg.relief_trous = relief
 	lg.sol_local = func(x: float, z: float) -> float:
 		var w: Vector3 = xf0 * Vector3(x, 0.0, z)
 		return relief.hauteur_sol(w.x, w.z) - h0

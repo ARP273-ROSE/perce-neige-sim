@@ -370,16 +370,49 @@ func passage(montee: bool, u: float) -> void:
 		var da: float = surepaisseur(float(e[3]) - u)
 		var db: float = surepaisseur(float(e[4]) - u)
 		var n: Node3D = e[0]
-		n.position = (e[1] as Vector3) + Vector3(0, sgn * (da + db) * 0.5, 0)
+		var b: Array = _base_paire(e)
+		n.position = (b[0] as Vector3) + Vector3(0, sgn * (da + db) * 0.5, 0)
 		var dz: float = float(e[3]) - float(e[4])
-		n.rotation.x = float(e[2]) - (sgn * (da - db) / dz if dz > 0.01 else 0.0)
+		n.rotation.x = float(b[1]) - (sgn * (da - db) / dz if dz > 0.01 else 0.0)
 
 
 ## Plus de pince sur le brin : les paires reviennent au repos.
 func repos(montee: bool) -> void:
 	for e in _paires[montee]:
-		(e[0] as Node3D).position = e[1]
-		(e[0] as Node3D).rotation.x = e[2]
+		var b: Array = _base_paire(e)
+		(e[0] as Node3D).position = b[0]
+		(e[0] as Node3D).rotation.x = b[1]
+
+
+## Paires calées sur le câble TEL QU'IL EST AFFICHÉ (flèche sous les
+## véhicules, onde aux arrêts) : le câble rentrait dans les galets aux bouts
+## des balanciers (retour d'utilisateur, 25/10/2026). `cable` : z local du
+## train → hauteur du câble au-dessus de l'axe de la tête (repère du monde,
+## m). Posé par la ligne, à chaque image près du point de vue.
+var _cales: Dictionary = {}           # paire (Node3D) → [position, rotation]
+
+
+func caler(montee: bool, cable: Callable) -> void:
+	var tete: Node3D = get_node_or_null("TeteMontee" if montee else "TeteDescente")
+	if tete == null:
+		return
+	var cp: float = cos(tete.rotation.x)
+	var sp: float = sin(tete.rotation.x)
+	for e in _paires[montee]:
+		var n: Node3D = e[0]
+		var z: float = (e[1] as Vector3).z
+		var sgn: float = e[5]
+		# hauteur et pente du câble au droit de la paire, dans le repère de la tête
+		var y0: float = float(cable.call(z))
+		var y1: float = float(cable.call(z + 0.26))
+		var y2: float = float(cable.call(z - 0.26))
+		var y_loc: float = (y0 + z * sp) / maxf(cp, 0.2)
+		var pente_loc: float = atan2(y2 - y1, 0.52) - tete.rotation.x
+		_cales[n] = [Vector3(0, y_loc + sgn * (R_GALET + R_CABLE + 0.11), z), pente_loc]
+
+
+func _base_paire(e: Array) -> Array:
+	return _cales.get(e[0], [e[1], e[2]])
 
 
 ## Plaque bleue du numéro (comme sur les lignes Doppelmayr) et panneaux de
