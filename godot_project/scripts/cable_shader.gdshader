@@ -78,6 +78,9 @@ uniform int n_charges_m = 0;
 uniform vec4 charges_m[32];       // (d, P/H) × 2 par vec4, brin montée
 uniform int n_charges_d = 0;
 uniform vec4 charges_d[32];       // brin descente
+uniform float onde_amp = 0.0;     // arrêt : onde de portée amortie (LigneRemontee._onde)
+uniform float onde_t = 0.0;
+uniform float onde_c = 88.0;
 uniform float w_m = 0.0;          // charge répartie / H (1/m), brin montée
 uniform float w_d = 0.0;
 
@@ -116,6 +119,10 @@ float fleche_points(float d, bool montee) {
 			continue;
 		}
 		f += q.y * (d < a ? (d - x1) * (x2 - a) : (a - x1) * (x2 - d)) / l;
+	}
+	if (onde_amp > 0.0) {
+		float w = 3.14159265 * onde_c / l;
+		f += onde_amp * (montee ? 1.0 : 0.5) * sin(w * onde_t + (montee ? 0.0 : 1.5708)) * sin(3.14159265 * (d - x1) / l);
 	}
 	return f;
 }

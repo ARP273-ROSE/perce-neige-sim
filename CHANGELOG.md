@@ -5,6 +5,46 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.35.0 — 25 octobre 2026
+
+**L'Olympique (3S) : salles des machines, quais, cabines, pylônes ; galets et rebonds sur toutes
+les lignes.** Retours d'utilisateur du 25/10/2026 (lots A, C et F). Références : photos libres de
+Wikimedia Commons (l'Olympique vue de la Tête du Solaise et de la Tête de l'Arollay), fiche
+technique publique (motrice amont, deux moteurs à courant continu de 887 kW, poulies Ø 4,80 m,
+tension aval par contrepoids), description d'un usager pour la disposition des renvois.
+
+- **Câbles raccordés** (« regarde l'angle du câble à la sortie du pylône, pareil aux entrées en
+  gare ») : les chaînettes se coupaient en pointe ; le porteur se couche maintenant sur toute la
+  longueur du sabot cintré (raccord tangent, sans flèche sur le sabot) et entre en gare tangent
+  au rail sur 12 m. Sabots cintrés de toute la déviation.
+- **Livrée Val d'Isère** sur les cabines des télécabines de Val d'Isère et du 3S (photo d'une
+  cabine de l'Olympique) : aigle héraldique et nom sous les vitres. Plus de numéros sur les
+  pinces ni sur les chariots (ils flottaient à côté).
+- **Tension (aval)**, derrière la salle d'embarquement : le tracteur file derrière le
+  demi-tour, monte au sommet d'une poulie rouge verticale (Ø 3 m, juste sous le plafond) qui le
+  renvoie vers le bas, les deux poulies du chariot
+  de contrepoids (plan tourné de 90°) le font passer sur l'autre voie, une seconde poulie rouge le
+  remet à l'horizontale. Le bloc pend dans une fosse ouverte (le relief y est percé), garde-corps.
+- **Motrice (amont)**, derrière la salle d'embarquement : deux poulies de renvoi inclinées (vers
+  45° vers l'intérieur) font plonger le câble ; les brins se croisent et s'enroulent sur plus de 180° autour de la poulie
+  motrice horizontale, sous le plancher, avec réducteur et moteurs. Toutes les poulies tournent à
+  la vitesse du câble. Plus de poulie au demi-tour : les cabines y tournent sur leur rail.
+- **Gares** : salle arrière bardée derrière une cloison ; quais à 25 cm, au niveau du plancher
+  des cabines, qui passent dans une tranchée (leur jupe traversait le sol) ; une porte de 3 m dans
+  chaque mur latéral, murs, fond et cloison pleins pour la collision.
+- **Cabines** agrandies de 12 % (≈ 3,1 × 3,0 × 2,8 m ; 30 places dont 24 assises), intérieur et
+  collisions à la même échelle.
+- **Pylônes** : la tête (caisson) reste entre les deux files de cabines, les sabots sont portés par
+  des consoles au-dessus du toit des cabines (elles passaient au travers), fûts plus massifs ; le
+  pylône de crête est fait de trois tours accolées sous de longs sabots cintrés.
+- **Chariots** : leurs galets tournent en roulant sur les porteurs. **Cavaliers** recalés à chaque
+  image sur les porteurs affichés (flèche sous les cabines), le tracteur sur leur galet.
+- **Galets des télésièges et télécabines** : chaque paire se cale sur le câble tel qu'affiché
+  (flèche sous les véhicules) ; il rentrait dans les galets au bout des balanciers.
+- **Arrêts** : à l'arrêt d'urgence (un peu à l'arrêt normal), une onde amortie parcourt chaque
+  portée — fréquence propre de la portée, amortie en ~5 s — : sièges et cabines rebondissent avec
+  le câble (pas au 3S ni aux téléphériques).
+
 ## 1.34.0 — 25 octobre 2026
 
 **Téléskis refaits : deux familles, une vraie prise de perche, des pylônes en potence.**

@@ -24,11 +24,25 @@ extends Node3D
 var _machoire: Node3D
 var _levier: Node3D
 var _ressorts: Array = []
+var _galets_roul: Array = []      # galets du chariot du 3S (axe local X)
+const R_GALET_CHARIOT: float = 0.17
+
+
+## Le chariot a avancé de `ds` m sur les porteurs : ses galets tournent.
+func rouler(ds: float) -> void:
+	if _galets_roul.is_empty() or ds == 0.0:
+		return
+	for g in _galets_roul:
+		(g as Node3D).rotate_object_local(Vector3.RIGHT, -ds / R_GALET_CHARIOT)
 var _ressort_l0: float = 0.32
 var _gc: Node3D
 ## Véhicule posé en miroir sur sa ligne (ligne qui monte à gauche) : les
 ## numéros sont contre-inversés pour rester lisibles.
 var miroir: bool = false
+## Livrée de la station (« Val d'Isère » : aigle et nom sur les caisses des
+## télécabines et du 3S — photo d'une cabine de l'Olympique, retour d'utilisateur,
+## 25/10/2026). Posée par la ligne.
+var livree: String = ""
 var _skis_ranges: Array = []
 var _etat_anim: PackedFloat32Array = PackedFloat32Array([-1.0, -1.0, -1.0, -1.0])   # pince, garde-corps, bulle, portes    # skis au porte-skis des cabines (un par vantail)
 var numero: int = 0
@@ -103,6 +117,7 @@ func construire() -> void:
 		remove_child(c)
 		c.queue_free()
 	_ressorts.clear()
+	_galets_roul.clear()
 	_portes.clear()
 	_skis_ranges.clear()
 	_etat_anim = PackedFloat32Array([-1.0, -1.0, -1.0, -1.0])
@@ -165,6 +180,8 @@ func _fusionner() -> void:
 			garder.append(n)
 	for r in _ressorts:
 		garder.append(r)
+	for g in _galets_roul:
+		garder.append(g)
 	for p in _portes:
 		garder.append(p[0])
 	if _pince != null:
@@ -271,8 +288,8 @@ func _pince_debrayable() -> void:
 	while z <= 0.40:
 		RemonteeKit.boite_en(p, Vector3(0.15, 0.008, 0.014), Vector3(0.28, Y_PLAQUE + 0.004, z), "noir_mat")
 		z += 0.04
-	# numéro du véhicule sur la tranche de la plaque
-	_numero(p, "%03d" % numero, Vector3(0.37, Y_PLAQUE - 0.011, 0.25), PI * 0.5, 40, 0.0016, Color(1, 1, 1))
+	# (plus de numéro sur la plaque : vus de loin, ces petits textes flottaient
+	# à côté des pinces — retour d'utilisateur, 25/10/2026 : « numéros fantômes »)
 
 
 ## Numéro lisible À L'ENDROIT : une étiquette d'un seul côté (vue de dos,
@@ -302,6 +319,90 @@ func _numero(parent: Node3D, texte: String, pos: Vector3, rot: float, taille: in
 		mi.scale = Vector3(-1, 1, 1)
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	parent.add_child(mi)
+
+
+## Aigle héraldique (silhouette générique, ailes déployées) et nom de la
+## station sur la caisse : face opposée aux portes et faces avant/arrière,
+## au milieu du panneau sous les vitres.
+static var _tex_aigle: ImageTexture = null
+
+
+static func _aigle() -> ImageTexture:
+	if _tex_aigle != null:
+		return _tex_aigle
+	var n: int = 128
+	var img: Image = Image.create(n, n, false, Image.FORMAT_RGBA8)
+	img.fill(Color(0, 0, 0, 0))
+	# polygones en coordonnées 0..1 (y vers le bas), symétriques
+	var formes: Array = []
+	var aile: PackedVector2Array = PackedVector2Array([Vector2(0.50, 0.30), Vector2(0.38, 0.22), Vector2(0.20, 0.12),
+		Vector2(0.04, 0.10), Vector2(0.10, 0.20), Vector2(0.03, 0.24), Vector2(0.11, 0.32), Vector2(0.05, 0.38),
+		Vector2(0.15, 0.44), Vector2(0.10, 0.50), Vector2(0.22, 0.54), Vector2(0.20, 0.60), Vector2(0.34, 0.60), Vector2(0.50, 0.55)])
+	formes.append(aile)
+	var miroir_aile: PackedVector2Array = PackedVector2Array()
+	for q in aile:
+		miroir_aile.append(Vector2(1.0 - q.x, q.y))
+	formes.append(miroir_aile)
+	# corps, tête et bec, queue en éventail, serres
+	formes.append(PackedVector2Array([Vector2(0.44, 0.24), Vector2(0.56, 0.24), Vector2(0.58, 0.56), Vector2(0.50, 0.64), Vector2(0.42, 0.56)]))
+	formes.append(PackedVector2Array([Vector2(0.45, 0.12), Vector2(0.53, 0.10), Vector2(0.60, 0.14), Vector2(0.56, 0.17), Vector2(0.55, 0.24), Vector2(0.45, 0.24)]))
+	formes.append(PackedVector2Array([Vector2(0.44, 0.60), Vector2(0.56, 0.60), Vector2(0.64, 0.84), Vector2(0.56, 0.80), Vector2(0.50, 0.88), Vector2(0.44, 0.80), Vector2(0.36, 0.84)]))
+	for sx in [-1.0, 1.0]:
+		var x0: float = 0.5 + sx * 0.07
+		formes.append(PackedVector2Array([Vector2(x0, 0.58), Vector2(x0 + sx * 0.10, 0.70), Vector2(x0 + sx * 0.14, 0.69), Vector2(x0 + sx * 0.05, 0.57)]))
+	for j in range(n):
+		for i in range(n):
+			var q2: Vector2 = Vector2((i + 0.5) / n, (j + 0.5) / n)
+			for f in formes:
+				if Geometry2D.is_point_in_polygon(q2, f):
+					img.set_pixel(i, j, Color(0.05, 0.05, 0.06, 1.0))
+					break
+	img.generate_mipmaps()
+	_tex_aigle = ImageTexture.create_from_image(img)
+	return _tex_aigle
+
+
+## Panneau sous les vitres : [demi-largeur x, demi-longueur z, y] (repère de la caisse).
+static func _dims_panneau(fam: String, H: float) -> Array:
+	var a: float = 0.0
+	var b: float = 0.0
+	var y: float = -H * 0.70
+	for r in _profil_cabine(fam):
+		a = maxf(a, float(r[1]))
+		b = maxf(b, float(r[2]))
+		if String(r[4]) == "caisse":
+			y = float(r[0]) - 0.30
+	return [a, b, y]
+
+
+func _logo_station(cab: Node3D, a: float, b: float, y: float, face_portes: float) -> void:
+	if livree != "Val d'Isère":
+		return
+	var t: float = clampf(a * 0.35, 0.30, 0.55)          # côté de l'aigle
+	var m: StandardMaterial3D = StandardMaterial3D.new()
+	m.albedo_texture = _aigle()
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
+	m.alpha_scissor_threshold = 0.5
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.cull_mode = BaseMaterial3D.CULL_BACK
+	var q: QuadMesh = QuadMesh.new()
+	q.size = Vector2(t, t)
+	# face sans portes (x opposé) : aigle et nom côte à côte
+	var fx: float = -face_portes
+	var rot: float = fx * PI * 0.5
+	var ai: MeshInstance3D = MeshInstance3D.new()
+	ai.mesh = q
+	ai.material_override = m
+	ai.position = Vector3(fx * (a + 0.012), y, -fx * b * 0.42)
+	ai.rotation.y = rot
+	if miroir:
+		ai.scale = Vector3(-1, 1, 1)
+	ai.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	cab.add_child(ai)
+	_numero(cab, "Val d'Isère", Vector3(fx * (a + 0.012), y - 0.02, fx * b * 0.16), rot, 64, t * 0.0062, Color(0.05, 0.05, 0.06))
+	# faces avant et arrière : le nom
+	for sz in [-1.0, 1.0]:
+		_numero(cab, "Val d'Isère", Vector3(0, y, sz * (b + 0.012)), 0.0 if sz > 0.0 else PI, 64, t * 0.0055, Color(0.05, 0.05, 0.06))
 
 
 static var _textes: Dictionary = {}
@@ -357,7 +458,9 @@ static func hauteur_cable_gare(fam: String) -> float:
 		return H_SUSP_TPH + 0.08 + 2.70 - 0.12
 	if fam == "cabine_3s":
 		# chariot → plancher de la Zeta (suspente, caisse, plancher à 0,20 m)
-		return H_SUSP_3S + 0.08 + 2.55 - 0.20
+		# (+ quai de 25 cm : les cabines passent dans une tranchée, le quai est
+		# au niveau de leur plancher — retour d'utilisateur, 25/10/2026)
+		return H_SUSP_3S + 0.08 + 2.80 - 0.22 + Machinerie3S.H_QUAI
 	if fam.begins_with("cabine"):
 		return 1.15 + 0.10 + 2.25 - 0.07 + 0.02
 	if fam.begins_with("perche"):
@@ -451,9 +554,9 @@ func place_assise(i: int = -1, avant: bool = false) -> Vector3:
 	if famille == "cabine_3s":
 		# banquettes de 6 places face à face (z = ±0,95), plancher 0,20 m
 		# au-dessus du bas de la caisse
-		var yp: float = -H_SUSP_3S - 0.08 - 2.55 + 0.20
-		var xi: float = (clampf(float(i if i >= 0 else 2), 0.0, 5.0) - 2.5) * 0.40
-		var zs: float = 0.95 - 0.42
+		var yp: float = -H_SUSP_3S - 0.08 - 2.80 + 0.22
+		var xi: float = (clampf(float(i if i >= 0 else 2), 0.0, 5.0) - 2.5) * 0.45
+		var zs: float = 1.06 - 0.42
 		return Vector3(xi, yp + 0.44 + 0.045 - 0.45, -zs if avant else zs)
 	if cabine:
 		var hs: float = 1.15
@@ -486,15 +589,15 @@ func formes_collision(cote_ext: float) -> Array:
 		f.append([Vector3(0.06, 2.5, 5.6), Vector3(cote_ext * 1.51, yt + 1.25, 0), true])
 		return f
 	if famille == "cabine_3s":
-		var yb: float = -H_SUSP_3S - 0.08 - 2.55 + 0.20
-		f.append([Vector3(2.6, 0.15, 2.5), Vector3(0, yb - 0.075, 0), false])           # plancher
-		f.append([Vector3(2.6, 0.10, 2.5), Vector3(0, -H_SUSP_3S - 0.10, 0), false])    # toit
-		f.append([Vector3(2.6, 2.2, 0.06), Vector3(0, yb + 1.1, -1.29), false])
-		f.append([Vector3(2.6, 2.2, 0.06), Vector3(0, yb + 1.1, 1.29), false])
-		f.append([Vector3(0.06, 2.2, 2.5), Vector3(-cote_ext * 1.34, yb + 1.1, 0), false])
-		f.append([Vector3(0.06, 2.2, 2.5), Vector3(cote_ext * 1.34, yb + 1.1, 0), true])     # côté portes
-		f.append([Vector3(2.4, 0.42, 0.40), Vector3(0, yb + 0.21, 0.97), false])
-		f.append([Vector3(2.4, 0.42, 0.40), Vector3(0, yb + 0.21, -0.97), false])
+		var yb: float = -H_SUSP_3S - 0.08 - 2.80 + 0.22
+		f.append([Vector3(2.9, 0.15, 2.8), Vector3(0, yb - 0.075, 0), false])           # plancher
+		f.append([Vector3(2.9, 0.10, 2.8), Vector3(0, -H_SUSP_3S - 0.10, 0), false])    # toit
+		f.append([Vector3(2.9, 2.45, 0.06), Vector3(0, yb + 1.22, -1.44), false])
+		f.append([Vector3(2.9, 2.45, 0.06), Vector3(0, yb + 1.22, 1.44), false])
+		f.append([Vector3(0.06, 2.45, 2.8), Vector3(-cote_ext * 1.50, yb + 1.22, 0), false])
+		f.append([Vector3(0.06, 2.45, 2.8), Vector3(cote_ext * 1.50, yb + 1.22, 0), true])     # côté portes
+		f.append([Vector3(2.7, 0.42, 0.40), Vector3(0, yb + 0.21, 1.09), false])
+		f.append([Vector3(2.7, 0.42, 0.40), Vector3(0, yb + 0.21, -1.09), false])
 		return f
 	if cabine:
 		var hs: float = 1.15
@@ -914,6 +1017,8 @@ func _cabine() -> void:
 		mi.name = cle.capitalize()
 		mi.mesh = mailles[cle]
 		cab.add_child(mi)
+	var dp: Array = _dims_panneau(famille, H)
+	_logo_station(cab, dp[0], dp[1], dp[2], 1.0)
 	# portes : deux vantaux découpés dans la face en œuf, qui coulissent
 	# vers l'extérieur par-dessus les panneaux fixes
 	for sz in [-1.0, 1.0]:
@@ -1014,7 +1119,14 @@ func _cabine_zeta() -> void:
 			RemonteeKit.boite_en(ch, Vector3(0.05, 0.10, pas + 0.18), piv + Vector3(sx * 0.10, 0.02, 0), "bleu_ressort")
 			RemonteeKit.boite_en(ch, Vector3(0.05, 0.10, pas + 0.18), piv + Vector3(-sx * 0.10, 0.02, 0), "bleu_ressort")
 			for gz in [-0.5, 0.5]:
-				RemonteeKit.galet(ch, Vector3(x, rg + PyloneRemontee.R_CABLE, bz * pas + gz * pas), rg)
+				# chaque galet sur son axe : il tourne en roulant sur le porteur
+				# (retour d'utilisateur, 25/10/2026)
+				var gn: Node3D = Node3D.new()
+				gn.name = "GaletChariot"
+				gn.position = Vector3(x, rg + PyloneRemontee.R_CABLE, bz * pas + gz * pas)
+				ch.add_child(gn)
+				RemonteeKit.galet(gn, Vector3.ZERO, rg)
+				_galets_roul.append(gn)
 			RemonteeKit.cylindre(ch, 0.03, 0.03, 0.26, Transform3D(Basis(Vector3.FORWARD, PI * 0.5), piv), "acier", 8)
 			# étiquette rouge (contrôle des galets, photos)
 			RemonteeKit.boite_en(ch, Vector3(0.012, 0.07, 0.10), piv + Vector3(sx * 0.13, 0.10, 0), "cabine_rouge")
@@ -1034,7 +1146,6 @@ func _cabine_zeta() -> void:
 	for sx in [-1.0, 1.0]:
 		for sz in [-0.7, 0.7]:
 			RemonteeKit.cylindre(ch, 0.09, 0.09, 0.07, Transform3D(Basis(Vector3.FORWARD, PI * 0.5), Vector3(sx * 0.62, 0.36, sz)), "polyurethane", 16)
-	_numero(ch, "%02d" % numero, Vector3(0.0, 0.36, 1.005), 0.0, 48, 0.0018, Color(1, 1, 1))
 	# suspente : caisson rectangulaire coudé, du chariot (au-dessus de
 	# l'axe) au toit — elle s'écarte vers l'extérieur pour laisser passer les
 	# porteurs, puis revient au-dessus du centre de la cabine
@@ -1063,6 +1174,8 @@ func _cabine_zeta() -> void:
 		mi.name = cle.capitalize()
 		mi.mesh = mailles[cle]
 		cab.add_child(mi)
+	var dp: Array = _dims_panneau(famille, H)
+	_logo_station(cab, dp[0], dp[1], dp[2], 1.0)
 	for sz in [-1.0, 1.0]:
 		var v: Node3D = Node3D.new()
 		v.name = "Vantail%s" % ("Avant" if sz < 0 else "Arriere")
@@ -1074,14 +1187,14 @@ func _cabine_zeta() -> void:
 		_portes.append([v, Vector3.ZERO, Vector3(0.06, 0, sz * 0.62)])
 	# intérieur : 24 places sur des banquettes rouge et gris le long des
 	# parois, barres de maintien (photo de l'intérieur)
-	var yp: float = -H + 0.20
-	RemonteeKit.boite_en(cab, Vector3(2.30, 0.03, 2.20), Vector3(0, yp, 0), "noir_mat")
+	var yp: float = -H + 0.22
+	RemonteeKit.boite_en(cab, Vector3(2.60, 0.03, 2.50), Vector3(0, yp, 0), "noir_mat")
 	for sz in [-1.0, 1.0]:
 		for i in range(6):
-			var xi: float = (i - 2.5) * 0.40
-			RemonteeKit.coussin(cab, Vector3(0.38, 0.09, 0.42), Transform3D(Basis.IDENTITY, Vector3(xi, yp + 0.44, sz * 0.95)), "cabine_rouge" if i % 2 == 0 else "assise_grise", 0.035)
-			RemonteeKit.coussin(cab, Vector3(0.38, 0.48, 0.07), Transform3D(Basis(Vector3.RIGHT, sz * 0.10), Vector3(xi, yp + 0.78, sz * 1.18)), "cabine_rouge" if i % 2 == 0 else "assise_grise", 0.03)
-		RemonteeKit.boite_en(cab, Vector3(2.30, 0.40, 0.36), Vector3(0, yp + 0.20, sz * 0.97), "noir_mat")
+			var xi: float = (i - 2.5) * 0.45
+			RemonteeKit.coussin(cab, Vector3(0.42, 0.09, 0.44), Transform3D(Basis.IDENTITY, Vector3(xi, yp + 0.44, sz * 1.06)), "cabine_rouge" if i % 2 == 0 else "assise_grise", 0.035)
+			RemonteeKit.coussin(cab, Vector3(0.42, 0.50, 0.07), Transform3D(Basis(Vector3.RIGHT, sz * 0.10), Vector3(xi, yp + 0.80, sz * 1.31)), "cabine_rouge" if i % 2 == 0 else "assise_grise", 0.03)
+		RemonteeKit.boite_en(cab, Vector3(2.60, 0.40, 0.38), Vector3(0, yp + 0.20, sz * 1.08), "noir_mat")
 	for sx in [-0.5, 0.5]:
 		RemonteeKit.barre(cab, Vector3(sx, yp, 0.30), Vector3(sx, -0.30, 0.30), 0.02, "acier", 8)
 		RemonteeKit.barre(cab, Vector3(sx, yp, -0.30), Vector3(sx, -0.30, -0.30), 0.02, "acier", 8)
@@ -1089,8 +1202,8 @@ func _cabine_zeta() -> void:
 	RemonteeKit.barre(cab, Vector3(-0.5, -0.30, -0.30), Vector3(0.5, -0.30, -0.30), 0.02, "acier", 8)
 	# numéro dans le cadre noir, sur les quatre faces
 	var no: String = "%d" % numero
-	for f in [[Vector3(0, -0.10, 1.30), 0.0], [Vector3(0, -0.10, -1.30), PI], [Vector3(1.35, -0.10, 0.5), PI * 0.5],
-			[Vector3(-1.35, -0.10, 0.0), -PI * 0.5]]:
+	for f in [[Vector3(0, -0.11, 1.46), 0.0], [Vector3(0, -0.11, -1.46), PI], [Vector3(1.52, -0.11, 0.55), PI * 0.5],
+			[Vector3(-1.52, -0.11, 0.0), -PI * 0.5]]:
 		_numero(cab, no, f[0], f[1], 56, 0.0020, Color(1, 1, 1))
 
 
@@ -1228,7 +1341,7 @@ const BANC_Z: float = 0.50              # milieu des assises (de part et d'autre
 ## (travers du câble), demi-longueur z (sens du câble), bande jusqu'à
 ## l'anneau suivant]. Les demi-dimensions sont lues sur les plans.
 static func _h_cab(fam: String) -> float:
-	return {"cabine_3s": 2.55, "cabine_tph": 2.70}.get(fam, _CAB_H)
+	return {"cabine_3s": 2.80, "cabine_tph": 2.70}.get(fam, _CAB_H)
 
 
 ## Demi-largeur réduite de la baie de porte sur le côté X+ (−1…1 du côté).
@@ -1260,23 +1373,25 @@ static func _profil_cabine(fam: String) -> Array:
 			anneaux.append([-float(c[0]), c[1], c[2], c[3], c[4]])
 		return anneaux
 	if fam == "cabine_3s":
-		# CWA Zeta du 3S de l'Olympique (photos de la ligne) : caisse presque
+		# CWA Zeta du 3S de l'Olympique (photos de la ligne), agrandie de 12 %
+		# (retour d'utilisateur, 25/10/2026 : « cabines trop petites » ; 30 places dont
+		# 24 assises ≈ 7,5 m² de plancher) : caisse presque
 		# carrée aux angles très arrondis, toit plat noir, grand vitrage
 		# panoramique de 1,1 m, bandeau blanc (logo), jupe inclinée en tôle
 		# perforée blanche qui se resserre sous le plancher
 		for c in [
 			# d,    a,    b,    r,    bande
-			[0.00, 1.10, 1.05, 0.40, "toit"],
-			[0.05, 1.28, 1.23, 0.50, "toit"],
-			[0.14, 1.34, 1.29, 0.52, "cadre"],
-			[0.22, 1.36, 1.31, 0.52, "vitre"],
-			[0.80, 1.38, 1.33, 0.52, "vitre"],
-			[1.36, 1.38, 1.33, 0.52, "cadre"],
-			[1.42, 1.38, 1.33, 0.52, "caisse"],
-			[2.02, 1.36, 1.31, 0.52, "liseré"],
-			[2.06, 1.35, 1.30, 0.52, "jupe"],
-			[2.40, 1.26, 1.02, 0.45, "jupe"],
-			[2.55, 1.16, 0.88, 0.40, ""],
+			[0.00, 1.23, 1.18, 0.45, "toit"],
+			[0.06, 1.43, 1.38, 0.56, "toit"],
+			[0.15, 1.50, 1.44, 0.58, "cadre"],
+			[0.24, 1.52, 1.47, 0.58, "vitre"],
+			[0.88, 1.55, 1.49, 0.58, "vitre"],
+			[1.50, 1.55, 1.49, 0.58, "cadre"],
+			[1.56, 1.55, 1.49, 0.58, "caisse"],
+			[2.22, 1.52, 1.47, 0.58, "liseré"],
+			[2.27, 1.51, 1.46, 0.58, "jupe"],
+			[2.64, 1.41, 1.14, 0.50, "jupe"],
+			[2.81, 1.30, 0.99, 0.45, ""],
 		]:
 			anneaux.append([-float(c[0]), c[1], c[2], c[3], c[4]])
 		return anneaux
