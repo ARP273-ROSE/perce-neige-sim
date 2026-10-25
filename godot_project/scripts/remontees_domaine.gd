@@ -38,8 +38,16 @@ static func monde(lat: float, lon: float) -> Vector2:
 	return Vector2((lon - LON_O) * m_lon, -(lat - LAT_O) * M_LAT)
 
 
+var sons: SonsRemontees = null
+
+
 func construire(r: ReliefBuilder) -> void:
 	relief = r
+	# sons des remontées (gares, à bord, lanceurs, pylônes, arrêts)
+	sons = SonsRemontees.new()
+	sons.name = "Sons"
+	sons.domaine = self
+	add_child(sons)
 	for D in RemonteesDonnees.LIGNES:
 		_poser(D)
 	_jumeler()
@@ -714,15 +722,27 @@ func _suivre_perche() -> void:
 	skieur._visuel.rotation = Vector3(0.0, cap, 0.0)
 	skieur._cap = cap
 	v.longueur_perche(pc.y - (y + 0.85))
-	# en haut, on lâche la perche avant la poulie et l'on s'écarte de la trace
+	# en haut, on lâche la perche avant la poulie et l'on s'écarte en
+	# traversée lente, sans élan vers l'avant : lancé à 2 m/s vers l'avant, au
+	# 3000 il passait la crête et dévalait dans le vallon de l'Iseran sans
+	# pouvoir prendre le tunnel (retour d'utilisateur, 25/10/2026) ; lâché à
+	# l'arrêt plus bas, il repartait en arrière dans la pente
 	var arr: Array = lg.arrivee(i)
 	if not arr.is_empty() and not bool(arr[0]):
 		v.longueur_perche(0.0)
 		skieur.embarque = false
 		var avant: Vector3 = -arriere
 		var dehors: Vector3 = lg.global_transform.basis.x * signf(lg._x_brin(true))
-		var vit: Vector3 = avant * 2.0 + dehors * 1.5
-		skieur._v_ski = vit
+		# à l'arrêt, skis EN TRAVERS de la pente (les carres le retiennent),
+		# tournés du côté de la sortie ; chasse-neige tant qu'il ne commande rien
+		var ns: Vector3 = relief.normale_sol(skieur.global_position.x, skieur.global_position.z) if relief != null else Vector3.UP
+		var chute: Vector3 = Vector3(ns.x, 0.0, ns.z)
+		var vit: Vector3 = dehors
+		if chute.length() > 0.05:
+			var trav: Vector3 = Vector3(-chute.z, 0.0, chute.x).normalized()
+			vit = trav if trav.dot(dehors) >= 0.0 else -trav
+		skieur._v_ski = Vector3.ZERO
+		skieur.frein_auto = 4.0
 		skieur._cap_ski = atan2(-vit.x, -vit.z)
 		skieur._cap = skieur._cap_ski
 		skieur.cam_yaw = skieur._cap_ski

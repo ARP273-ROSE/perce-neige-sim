@@ -68,7 +68,9 @@ func _tick() -> void:
 		if _lg.role == "haut" and _lg.jumelee != null:
 			_lg = _lg.jumelee
 	_t += 1.0 / 60.0
-	if _t > 3.0:
+	# (6 s : la collision du relief autour du point d'arrivée se construit
+	# en tâche de fond, par morceaux — à 3 s elle manquait parfois)
+	if _t > 6.0:
 		var d: float = Vector2(sk.global_position.x - _lg.global_transform.origin.x,
 			sk.global_position.z - _lg.global_transform.origin.z).length()
 		# sol : le relief, ou la surface de la gare (quai, talus) au-dessus
@@ -79,7 +81,7 @@ func _tick() -> void:
 		if not hit.is_empty():
 			sol = maxf(sol, (hit["position"] as Vector3).y)
 		_verif("touché %s : déposé au pied de la gare aval, debout sur la neige" % _lg.nom_ligne,
-			d < 15.0 and absf(sk.global_position.y - sol) < 1.0 and sk.is_on_floor(),
+			d < (20.0 if _lg.teleski() else 15.0) and absf(sk.global_position.y - sol) < 1.0 and sk.is_on_floor(),
 			"%.1f m de la gare, %.2f m au-dessus du sol, au sol %s" % [d, sk.global_position.y - sol, sk.is_on_floor()])
 		_t = 0.0
 		_i += 1

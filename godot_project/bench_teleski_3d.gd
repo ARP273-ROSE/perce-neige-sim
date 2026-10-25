@@ -123,6 +123,14 @@ func _tick() -> void:
 				_verif("téléski : perche lâchée en haut", false, "toujours tracté après 400 s")
 				_fin()
 		4:
-			if _t > 3.0:
+			if _t > 6.0:
 				_verif("téléski : repart à ski, chaussé, debout", sk.chausse and not sk.embarque and sk.actif)
+				# lâché au pas sur l'arrivée : il ne dévale pas l'autre versant
+				# (au 3000, il passait la crête — retour d'utilisateur, 25/10/2026)
+				var L2: float = _lg.longueur_h()
+				var haut2: Vector3 = _lg.global_transform * Vector3(0, _lg.terrain(L2), -L2)
+				haut2.y = _main.relief.hauteur_sol(haut2.x, haut2.z)        # sol réel au nez de la gare
+				var d2: float = Vector2(sk.global_position.x - haut2.x, sk.global_position.z - haut2.z).length()
+				_verif("téléski : reste sur l'arrivée après le lâcher", d2 < 30.0 and sk.global_position.y > haut2.y - 6.0,
+					"%.1f m de la gare amont, %.1f m sous elle après 6 s" % [d2, haut2.y - sk.global_position.y])
 				_fin()
