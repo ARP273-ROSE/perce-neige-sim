@@ -1730,11 +1730,33 @@ func _gare_3s(g: Node3D, znez: float, zc: float, aval: bool) -> void:
 	var sg: float = e[4]
 	var zm: float = (z_av + z_ar) * 0.5
 	var lz: float = absf(z_ar - z_av)
-	# toit débordant, bandeau noir, enseigne
-	RemonteeKit.boite_en(g, Vector3(2.0 * hx + 1.6, 0.35, lz + 1.6), Vector3(0, hr + 0.175, zm), "peinture_anthracite")
-	RemonteeKit.boite_en(g, Vector3(2.0 * hx + 1.7, 0.9, 0.12), Vector3(0, hr - 0.45, z_av - sg * 0.86), "cabine_noire")
-	for sx in [-1.0, 1.0]:
-		RemonteeKit.boite_en(g, Vector3(0.12, 0.9, lz + 1.7), Vector3(sx * (hx + 0.86), hr - 0.45, zm), "cabine_noire")
+	# (vidéos de la ligne) — aval : chalet à deux
+	# pignons, pierre en bas, bardage bois en haut, toits bruns ; amont :
+	# volume sombre à toit plat couvert de panneaux solaires
+	if aval:
+		for sx in [-1.0, 1.0]:
+			RemonteeKit.boite_en(g, Vector3(0.14, 2.0, lz + 0.2), Vector3(sx * (hx + 0.07), hr - 1.0, zm), "bois_fonce")
+		RemonteeKit.boite_en(g, Vector3(2.0 * hx, 2.0, 0.14), Vector3(0, hr - 1.0, z_av - sg * 0.07), "bois_fonce")
+		var pente_t: float = deg_to_rad(28.0)
+		var hp: float = (hx * 0.5 + 0.8) * tan(pente_t)
+		for c in [-0.5, 0.5]:
+			var xc: float = c * hx                       # faîtage de chaque chalet
+			for side in [-1.0, 1.0]:
+				var w: float = (hx * 0.5 + 0.9) / cos(pente_t)
+				var ctr: Vector3 = Vector3(xc + side * (hx * 0.5 + 0.9) * 0.5, hr + hp * 0.5, zm)
+				RemonteeKit.boite(g, Vector3(w, 0.22, lz + 1.8), Transform3D(Basis(Vector3.BACK, -side * pente_t), ctr), "toit_brun")
+			for zg in [z_av - sg * 0.05, z_ar + sg * 0.05]:
+				_pignon(g, xc - hx * 0.5, xc + hx * 0.5, hr, hp, zg, "bois_fonce")
+	else:
+		RemonteeKit.boite_en(g, Vector3(2.0 * hx + 1.6, 0.35, lz + 1.6), Vector3(0, hr + 0.175, zm), "peinture_anthracite")
+		RemonteeKit.boite_en(g, Vector3(2.0 * hx + 1.7, 0.9, 0.12), Vector3(0, hr - 0.45, z_av - sg * 0.86), "cabine_noire")
+		for sx in [-1.0, 1.0]:
+			RemonteeKit.boite_en(g, Vector3(0.12, 0.9, lz + 1.7), Vector3(sx * (hx + 0.86), hr - 0.45, zm), "cabine_noire")
+		# panneaux solaires en sheds sur le toit
+		var nz: int = int(lz / 2.6)
+		for k in range(nz):
+			var zk: float = lerpf(z_av, z_ar, (k + 0.5) / nz)
+			RemonteeKit.boite(g, Vector3(2.0 * hx - 1.0, 0.05, 1.9), Transform3D(Basis(Vector3.RIGHT, -sg * 0.45), Vector3(0, hr + 0.75, zk)), "panneau_solaire")
 	if nom_ligne != "":
 		var lab: Label3D = Label3D.new()
 		lab.text = "Téléphérique de l'Olympique" if nom_ligne.find("Olympique") >= 0 else nom_ligne
@@ -1807,10 +1829,42 @@ func _gare_3s(g: Node3D, znez: float, zc: float, aval: bool) -> void:
 	# fronton côté ligne, au-dessus du passage des cabines
 	var h_pass: float = H_CABLE_GARE + 1.6
 	RemonteeKit.boite_en(g, Vector3(2.0 * hx, hr - h_pass, 0.5), Vector3(0, h_pass + (hr - h_pass) * 0.5, z_av), "pierre")
-	# poteaux rouges de la poulie et du milieu de la gare
-	var rouge: String = "cabine_rouge"
-	for zz2 in [zc, (znez + zc) * 0.5]:
-		RemonteeKit.boite_en(g, Vector3(0.9, H_CABLE_GARE - 0.4, 0.9), Vector3(0, (H_CABLE_GARE - 0.4) * 0.5, zz2), rouge)
+	# gros pilier rond au centre du demi-tour, sous l'anneau rouge (vidéos :
+	# anthracite en bas, blanc à bande grise en haut)
+	var hpil: float = Y_CAPOT + H_CABLE_GARE + 0.2
+	RemonteeKit.cylindre(g, 1.1, 1.1, hpil, Transform3D(Basis.IDENTITY, Vector3(0, hpil * 0.5, zc)), "peinture_anthracite" if aval else "blanc_plaque", 32)
+	if not aval:
+		RemonteeKit.cylindre(g, 1.12, 1.12, 2.0, Transform3D(Basis.IDENTITY, Vector3(0, 1.0, zc)), "peinture_anthracite", 32)
+	RemonteeKit.boite_en(g, Vector3(0.9, H_CABLE_GARE - 0.4, 0.9), Vector3(0, (H_CABLE_GARE - 0.4) * 0.5, (znez + zc) * 0.5), "cabine_rouge")
+	# portique de sortie en acier devant le nez (sabots des porteurs)
+	var zs: float = znez - sg * 4.0
+	var dq: float = 4.0
+	for sx3 in [-1.0, 1.0]:
+		var xb: float = sx3 * voie * 0.5
+		var yb: float = y_cable(dq if aval else longueur_h() - dq) - g.position.y - 0.45
+		var ysol: float = _sol(xb + sx3 * 1.4, zs) - g.position.y
+		for sz3 in [-1.0, 1.0]:
+			RemonteeKit.poutre(g, Vector3(xb + sx3 * 1.4, ysol, zs + sz3 * 1.6), Vector3(xb + sx3 * 0.5, yb, zs), 0.26, 0.26, "galva_pylone")
+		RemonteeKit.poutre(g, Vector3(xb - sx3 * 0.9, ysol, zs), Vector3(xb - sx3 * 0.4, yb, zs), 0.24, 0.24, "galva_pylone")
+		RemonteeKit.boite_en(g, Vector3(1.4, 0.35, 3.4), Vector3(xb, yb, zs), "galva_pylone")
+	RemonteeKit.poutre(g, Vector3(-voie * 0.5, y_cable(dq if aval else longueur_h() - dq) - g.position.y - 0.6, zs), Vector3(voie * 0.5, y_cable(dq if aval else longueur_h() - dq) - g.position.y - 0.6, zs), 0.3, 0.4, "galva_pylone")
+
+
+## Pignon triangulaire (x0..x1 à la base y, sommet + h au milieu), plan z.
+func _pignon(g: Node3D, x0: float, x1: float, y: float, h: float, z: float, m: String) -> void:
+	var st: SurfaceTool = SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var a: Vector3 = Vector3(x0, y, z)
+	var b: Vector3 = Vector3(x1, y, z)
+	var c: Vector3 = Vector3((x0 + x1) * 0.5, y + h, z)
+	for tri in [[a, b, c, Vector3.BACK], [a, c, b, Vector3.FORWARD]]:
+		for k in range(3):
+			st.set_normal(tri[3])
+			st.add_vertex(tri[k])
+	var mi: MeshInstance3D = MeshInstance3D.new()
+	mi.mesh = st.commit()
+	mi.material_override = RemonteeKit.mat(m)
+	g.add_child(mi)
 
 
 ## Fosses de l'Olympique (contrepoids, motrice) : le relief y est percé tant

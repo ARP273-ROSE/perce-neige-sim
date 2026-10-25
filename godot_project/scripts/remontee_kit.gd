@@ -63,6 +63,10 @@ const COULEURS: Dictionary = {
 	"mousse_jaune": [Color(0.92, 0.88, 0.22), 0.85, 0.0],
 	"bois_vert": [Color(0.24, 0.40, 0.33), 0.85, 0.0],          # cabane du perchman
 	"tapis_vert": [Color(0.16, 0.42, 0.20), 0.90, 0.0],
+	# gares de l'Olympique (vidéos de la ligne) : chalet aval, gare amont
+	"toit_brun": [Color(0.30, 0.22, 0.17), 0.85, 0.0],
+	"bois_fonce": [Color(0.36, 0.22, 0.14), 0.85, 0.0],
+	"panneau_solaire": [Color(0.08, 0.10, 0.16), 0.25, 0.6],
 }
 
 
@@ -82,6 +86,12 @@ static func mat(nom: String) -> StandardMaterial3D:
 		m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 		m.roughness = 0.04
 		m.metallic = 0.5
+		m.cull_mode = BaseMaterial3D.CULL_DISABLED
+	elif nom == "vitre_bleu_clair":
+		m.albedo_color = Color(0.42, 0.66, 0.80, 0.50)   # vitrage bleuté clair (Olympique, vidéos)
+		m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		m.roughness = 0.04
+		m.metallic = 0.4
 		m.cull_mode = BaseMaterial3D.CULL_DISABLED
 	elif nom == "vitre_teintee":
 		m.albedo_color = Color(0.20, 0.21, 0.23, 0.55)  # polycarbonate gris (Omega)

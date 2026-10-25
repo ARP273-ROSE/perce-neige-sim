@@ -1476,7 +1476,7 @@ static func _mat_cabine(nom: String, fam: String) -> Material:
 		"cadre":
 			base = "cabine_noire"
 		"vitre":
-			base = "vitre_bleue" if fam == "cabine_tph" else "vitre_teintee"
+			base = {"cabine_tph": "vitre_bleue", "cabine_3s": "vitre_bleu_clair"}.get(fam, "vitre_teintee")
 	var m: Material = RemonteeKit.mat(base)
 	if nom != "vitre":
 		# double face : on voit l'intérieur de la caisse à travers les vitres

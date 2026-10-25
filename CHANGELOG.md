@@ -5,6 +5,18 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.38.0 — 25 octobre 2026
+
+**Les gares de l'Olympique d'après des vidéos de la ligne.**
+
+- **Gare aval** : chalet à deux pignons — toits bruns à deux pans, pignons et bandeau en bois
+  foncé au-dessus des verrières, piliers et soubassement en pierre.
+- **Gare amont** : toit plat sombre couvert de panneaux solaires en sheds.
+- **Demi-tour** : un gros pilier rond sous l'anneau rouge (anthracite en bas, blanc à bande grise
+  en haut) remplace le poteau rouge.
+- **Portique de sortie** en acier devant chaque nez de gare, sous les porteurs.
+- **Cabines** : vitrage bleuté clair.
+
 ## 1.37.0 — 25 octobre 2026
 
 **Galets en porte-à-faux sur les pylônes des télésièges et télécabines ; pylônes recalés sur les
