@@ -5,6 +5,21 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.40.0 — 25 octobre 2026
+
+**Gare de départ des téléskis débrayables refaite de zéro** (retour d'utilisateur, 25/10/2026),
+d'après des vidéos des départs du Chardonnet, du Col du Palet, de la Combe Folle, du 3000, du
+Signal et du Pays Désert.
+
+- **Tour en treillis** galvanisé (au lieu d'un mât rond) : la poulie horizontale est au
+  sommet, sous une plate-forme à garde-corps qui porte le moteur, le réducteur et l'armoire ;
+  échelle à crinoline côté arrière.
+- **Magasin en hélice** autour de la tour : les perches débrayées sur le brin descente
+  rejoignent un rail qui fait un tour et demi en descendant, perches pendues serrées en rideau,
+  jusqu'au lanceur sur le brin montée ; bras de suspension depuis le haut de la tour.
+- **Départ** : feu vert / rouge et coup-de-poing d'arrêt sur un poteau au bord de la trace.
+- Pas de contrepoids au départ (le moteur est sur la tour).
+
 ## 1.39.0 — 25 octobre 2026
 
 **Olympique : supports de l'arrondi des câbles et quai d'embarquement ; téléskis d'après les
