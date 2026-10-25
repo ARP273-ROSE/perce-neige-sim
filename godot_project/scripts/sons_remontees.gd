@@ -26,6 +26,13 @@ var _lanceur: AudioStreamPlayer = null
 var _coups: Array = []                 # AudioStreamPlayer (à bord), en tourniquet
 var _coups3d: Array = []               # AudioStreamPlayer3D (pylône proche)
 var _arret: AudioStreamPlayer = null
+## 3S : prises réelles depuis une cabine (tools_sons_reels.py) — ambiance de gare
+## portes ouvertes, gare motrice portes fermées, ligne ; lanceurs et pylônes en
+## coups uniques.
+var _coup3s: AudioStreamPlayer = null
+var _zone3s: String = ""
+var _x3s_prec: float = -1.0
+var _pyl3s: Dictionary = {}
 var _sons: Dictionary = {}
 var _t_gares: float = 0.0
 var _file: Array = []                  # chocs à venir : [t, son, 3D ?, position, volume, hauteur]
@@ -37,9 +44,11 @@ var _proche: Array = []                # [ligne, pylône, d, {i véhicule → d 
 
 func _ready() -> void:
 	for nom in ["gare_debrayable", "gare_fixe", "lanceur", "ligne_siege", "ligne_cabine", "ligne_3s", "teleski",
-			"galet_support", "galet_compression", "arret_urgence"]:
+			"galet_support", "galet_compression", "arret_urgence",
+			"3s_gare", "3s_ligne", "3s_motrice", "3s_lanceur_acc", "3s_lanceur_dec", "3s_pylone"]:
 		var st: AudioStream = load(DOSSIER + nom + ".wav")
-		if st is AudioStreamWAV and not nom.begins_with("galet") and nom != "arret_urgence":
+		if st is AudioStreamWAV and nom in ["gare_debrayable", "gare_fixe", "lanceur", "ligne_siege", "ligne_cabine",
+				"ligne_3s", "teleski", "3s_gare", "3s_ligne", "3s_motrice"]:
 			var w: AudioStreamWAV = (st as AudioStreamWAV).duplicate()
 			w.loop_mode = AudioStreamWAV.LOOP_FORWARD
 			w.loop_begin = 0
@@ -59,6 +68,7 @@ func _ready() -> void:
 	_lanceur.stream = _sons["lanceur"]
 	_arret = _joueur()
 	_arret.stream = _sons["arret_urgence"]
+	_coup3s = _joueur()
 	for k in range(8):
 		_coups.append(_joueur())
 	for k in range(6):
@@ -133,6 +143,8 @@ func _choisir_gares(sk: Vector3) -> void:
 			continue
 		var lg2: LigneRemontee = cand[k][1]
 		var son: String = "gare_fixe" if (lg2.fixe() or lg2.vaetvient()) else "gare_debrayable"
+		if lg2.tricable():
+			son = "3s_gare"
 		if p3.stream != _sons[son]:
 			p3.stream = _sons[son]
 		p3.global_position = cand[k][2]
@@ -182,6 +194,8 @@ func _a_bord(delta: float) -> void:
 		if _lanceur.volume_db <= -59.0:
 			_lanceur.stop()
 		_d_prec = NAN
+		_zone3s = ""
+		_x3s_prec = -1.0
 		return
 	var lg: LigneRemontee = ab[0]
 	var i: int = ab[1]
@@ -191,6 +205,9 @@ func _a_bord(delta: float) -> void:
 	var z: Array = lg.zone(s)
 	var v: float = lg.vitesse_en(s) * lg.regime()
 	var vr: float = clampf(v / maxf(lg.vitesse, 0.1), 0.0, 1.2)
+	if lg.tricable():
+		_a_bord_3s(delta, lg, s, z, v)
+		return
 	var son: String = _son_ligne(lg)
 	if _ligne.stream != _sons[son]:
 		_ligne.stream = _sons[son]
@@ -227,6 +244,67 @@ func _a_bord(delta: float) -> void:
 			if (_d_prec - dp) * (d - dp) <= 0.0 and d != _d_prec:
 				_salve(lg, q[0], montee, absf(v), false, Vector3.ZERO)
 	_d_prec = d if z[0] == "ligne" else NAN
+
+
+## 3S, à bord : ambiance de la zone (gare portes ouvertes en aval, gare
+## motrice portes fermées en amont, ligne), fondue à chaque changement ;
+## freinage au lanceur en entrant en gare, accélération en en sortant ;
+## passage de pylône joué pour que ses chocs (1,5–2,9 s dans la prise)
+## tombent au droit du pylône.
+func _a_bord_3s(delta: float, lg: LigneRemontee, s: float, z: Array, v: float) -> void:
+	_lanceur.volume_db = move_toward(_lanceur.volume_db, -60.0, delta * 60.0)
+	var zone: String = "ligne"
+	if z[0] == "gare_aval":
+		zone = "gare"
+	elif z[0] == "gare_amont":
+		zone = "motrice"
+	# coups : freinage en entrant en gare, accélération au début du lanceur de sortie
+	var x: float = z[1] if z[0] != "ligne" else -1.0
+	var l: float = z[2] if z[0] != "ligne" else 0.0
+	if _zone3s == "ligne" and zone != "ligne":
+		_coup(lg, "3s_lanceur_dec")
+	if x >= 0.0 and _x3s_prec >= 0.0 and _x3s_prec < l - LigneRemontee.L_FREIN - 1.0 and x >= l - LigneRemontee.L_FREIN - 1.0:
+		_coup(lg, "3s_lanceur_acc")
+	_x3s_prec = x
+	_zone3s = zone
+	# boucle d'ambiance : changement de prise en fondu ; abaissée pendant les coups
+	var son: String = "3s_" + zone
+	var cible: float = -4.0
+	if _coup3s.playing:
+		cible = -18.0
+	if lg.regime() < 0.02 and zone == "ligne":
+		cible = -24.0                         # arrêté en ligne : le vent, la cabine qui grince
+	if _ligne.stream != _sons[son]:
+		_ligne.volume_db = move_toward(_ligne.volume_db, -50.0, delta * 80.0)
+		if _ligne.volume_db <= -49.0 or not _ligne.playing:
+			_ligne.stream = _sons[son]
+			_ligne.play(randf() * 3.0)
+	elif not _ligne.playing:
+		_ligne.volume_db = -50.0
+		_ligne.play(randf() * 3.0)
+	else:
+		_ligne.volume_db = move_toward(_ligne.volume_db, cible, delta * 20.0)
+	_ligne.pitch_scale = 1.0
+	# pylônes : la prise démarre 1,6 s avant le pylône (à la vitesse du moment)
+	if zone != "ligne" or v < 0.5:
+		return
+	var p: Vector3 = lg.point(s)[0]
+	var d: float = -p.z
+	var monte: bool = signf(p.x) == signf(lg._x_brin(true))
+	for q in lg.pylones:
+		var dp: float = float(q["d"])
+		var ecart: float = (dp - d) if monte else (d - dp)
+		var cle: String = "%s_%d" % [lg.name, int(dp)]
+		if ecart > 0.0 and ecart / v < 1.6:
+			if not _pyl3s.has(cle) or _t - float(_pyl3s[cle]) > 20.0:
+				_pyl3s[cle] = _t
+				_coup(lg, "3s_pylone")
+
+
+func _coup(_lg: LigneRemontee, nom: String) -> void:
+	_coup3s.stream = _sons[nom]
+	_coup3s.volume_db = 0.0
+	_coup3s.play()
 
 
 ## Salve de chocs au passage d'un balancier : un par galet, au pas des galets.
