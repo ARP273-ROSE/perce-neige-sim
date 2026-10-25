@@ -63,6 +63,7 @@ const COULEURS: Dictionary = {
 	"mousse_jaune": [Color(0.92, 0.88, 0.22), 0.85, 0.0],
 	"bois_vert": [Color(0.24, 0.40, 0.33), 0.85, 0.0],          # cabane du perchman
 	"tapis_vert": [Color(0.16, 0.42, 0.20), 0.90, 0.0],
+	"feu_vert": [Color(0.10, 0.85, 0.25), 0.30, 0.0],
 	# gares de l'Olympique (vidéos de la ligne) : chalet aval, gare amont
 	"toit_brun": [Color(0.30, 0.22, 0.17), 0.85, 0.0],
 	"bois_fonce": [Color(0.36, 0.22, 0.14), 0.85, 0.0],

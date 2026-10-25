@@ -47,7 +47,7 @@ const L_GARE_FIXE: float = 8.0
 const L_GARE_TELESKI: float = 5.0
 ## TKD : le magasin des perches fait le tour de la poulie, du point de
 ## débrayage (brin descente) au lanceur (brin montée) — ~30 perches.
-const L_GARE_TKD: float = 9.0
+const L_GARE_TKD: float = 7.0
 var l_gare: float = L_GARE
 
 
@@ -2363,8 +2363,6 @@ func s_lancement() -> float:
 func point_depart_teleski() -> Vector3:
 	var sl: float = s_lancement()
 	var p: Vector3 = _point_cable(sl)[0]
-	if famille == "perche_debrayable":
-		p += _dehors(sl) * TeleskiGare.DECAL_RAIL
 	p.z += 0.6
 	p.y = _sol(p.x, p.z) + 0.02
 	return p
@@ -2407,7 +2405,7 @@ func _maj_magasin(delta: float) -> void:
 ## redescendent (lancées par les skieurs précédents).
 func _peupler_magasin() -> void:
 	var sl: float = s_lancement()
-	var cap: int = int((sl - S_DEBRAYAGE) / TeleskiGare.PAS_MAGASIN)
+	var cap: int = mini(int((sl - S_DEBRAYAGE) / TeleskiGare.PAS_MAGASIN), 40)
 	var n_desc: int = mini(int(longueur_h() / (espacement * 3.0)), cap / 2)
 	for k in range(cap - n_desc):
 		_ajouter_vehicule(sl - k * TeleskiGare.PAS_MAGASIN, true)
