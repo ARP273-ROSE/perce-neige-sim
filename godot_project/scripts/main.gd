@@ -1805,6 +1805,12 @@ func aller_a_remontee(lg: LigneRemontee) -> void:
 	# l'emmène aussitôt déposé)
 	var ecart: float = 7.0 if lg.teleski() else 3.5
 	var p: Vector3 = xf * Vector3(cote * (lg.voie * 0.5 + ecart), 0.0, 6.0)
+	if lg.teleski():
+		# téléski : au bout du couloir de départ, derrière le tapis (à côté de
+		# la gare, on tombait dans la tour du téléski voisin — Signal 1 et 2)
+		var qd: Vector3 = lg.point_depart_teleski() if not lg._zones.is_empty() \
+			else Vector3(lg._x_brin(true), 0.0, LigneRemontee.l_gare_pour(lg.famille))
+		p = xf * Vector3(qd.x, 0.0, qd.z + 11.0)
 	p.y = relief.hauteur_sol(p.x, p.z) + 0.1
 	var amont: Vector3 = -xf.basis.z
 	# collisions du relief autour du point d'arrivée (elles se construisent à
@@ -1832,15 +1838,30 @@ var _depose_remontee: LigneRemontee = null
 ## Après aller_a_remontee : la ligne prête, le skieur passe sur la surface
 ## de la gare (quai, talus) s'il était sous elle.
 func _poser_sur_gare() -> void:
+	# quelques secondes après la dépose, les lignes VOISINES se construisent
+	# à leur tour (talus d'une gare d'arrivée à côté du départ des Signal) :
+	# pris dedans, le skieur ne touchait plus le sol — on le remonte dessus
+	if _t_depose > 0.0 and skieur != null:
+		_t_depose -= get_process_delta_time()
+		if skieur.support == null and not skieur.embarque:
+			_remonter_skieur()
 	var lg: LigneRemontee = _depose_remontee
 	if lg == null or not is_instance_valid(lg) or not lg.pret or skieur == null:
 		return
 	_depose_remontee = null
+	_t_depose = 10.0
+	_remonter_skieur()
+
+
+var _t_depose: float = 0.0
+
+
+func _remonter_skieur() -> void:
 	var p: Vector3 = skieur.global_position
 	var rq: PhysicsRayQueryParameters3D = PhysicsRayQueryParameters3D.create(
 		p + Vector3(0, 40, 0), p + Vector3(0, -2, 0), CollisionsJeu.COUCHE_DECOR)
 	var hit: Dictionary = get_world_3d().direct_space_state.intersect_ray(rq)
-	if not hit.is_empty() and (hit["position"] as Vector3).y > p.y - 0.05:
+	if not hit.is_empty() and (hit["position"] as Vector3).y > p.y + (0.15 if _depose_remontee == null else -0.05):
 		var q: Vector3 = (hit["position"] as Vector3) + Vector3(0, 0.1, 0)
 		skieur.global_position = q
 		skieur.velocity = Vector3.ZERO
@@ -2533,7 +2554,7 @@ func _maj_skieur() -> void:
 		if domaine.resultat != "":
 			commandes_skieur.message(domaine.resultat, 8.0)
 			domaine.resultat = ""
-	if _depose_remontee != null:
+	if _depose_remontee != null or _t_depose > 0.0:
 		_poser_sur_gare()
 	_gare_skieur = _gare_du_skieur()
 	var en_gare: bool = _gare_skieur > 0

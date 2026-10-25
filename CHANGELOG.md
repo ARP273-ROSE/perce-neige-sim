@@ -5,6 +5,46 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.41.0 — 25 octobre 2026
+
+**Les remontées s'entendent ; le tunnel de la piste du Tunnel refait.** Retour d'utilisateur du 25/10/2026 : « le bruit du trajet sur un
+télésiège, à l'intérieur d'une TC, du TPH, du 3S ; le bruit autour des gares et quand on le prend ;
+l'accélération et la décélération du lanceur ; le passage sur un pylône selon la vitesse, le nombre
+de galets, porteur ou compression, pas le même son en télésiège et en TC ; l'arrêt ; le son de la
+gare qui monte quand on s'approche et diminue quand on s'éloigne ».
+
+- **Gares** : son positionné de chaque gare proche (les quatre plus proches dans 220 m) :
+  réducteur, moteur, pneus des lanceurs et pinces pour les débrayables ; poulie et moteur pour les
+  pinces fixes et les téléphériques. Il monte en s'approchant, baisse en s'éloignant, descend au
+  ralenti et se tait à l'arrêt.
+- **À bord** : vent du télésiège, intérieur de télécabine, roulement grave d'une grande cabine
+  (3S, téléphérique), frottement d'un téléski ; la force suit la vitesse, le vent est abrité en gare.
+- **Lanceur** : ronflement des pneus dont la hauteur suit la vitesse du véhicule, au freinage
+  comme au départ.
+- **Pylônes** : à chaque balancier franchi, un choc par galet, espacés du pas des galets à la
+  vitesse du câble ; grave sur un porteur, sec en compression ; étouffé et plus grave en cabine. À
+  pied ou à ski près d'un pylône, on entend passer les autres véhicules.
+- **Arrêt d'urgence** : claquement du frein de poulie et câble qui vibre.
+- **Tunnel de la piste du Tunnel refait** d'après une vidéo de la piste : un tube étroit et rond
+  (≈ 3,2 m) au lieu d'un tunnel routier de 5 m, cerclé d'acier rouillé tous les 80 cm, tôles
+  ondulées près des bouches, roche nue au milieu ; entrée en haut (bouche est, à l'arrivée du TKD
+  du 3000) par un cadre d'acier à deux portes ouvertes ; sortie en bas (bouche ouest) dans une
+  tranchée de neige, sous une bâche orange tendue sur les dernières cerces ; éclairage faible.
+- **Lâcher de la perche** (retour d'utilisateur, 25/10/2026 : « le TKD du 3000 lâche le skieur trop
+  loin, il passe la crête et se pète la gueule dans la vallée de l'Iseran sans pouvoir passer le
+  tunnel ») : plus d'élan de 2 m/s vers l'avant ; le skieur s'arrête, skis en travers de la pente
+  (les carres le retiennent), tourné du côté de la sortie, en chasse-neige tant qu'on ne commande
+  rien. Au 3000, il reste sur l'arrivée, à côté de l'entrée du tunnel. Banc des téléskis : il doit
+  rester dans les 30 m de l'arrivée, pas plus de 6 m plus bas.
+- **Dépose au pied d'un téléski** : au bout du couloir de départ (à côté de la gare, on tombait
+  dans la tour du téléski voisin aux Signal) ; pendant 10 s après une dépose, le skieur est remonté
+  sur ce qui se construit sous lui (talus de la gare d'arrivée des Pyramides, au départ des Signal).
+- Banc `aller_remontee` : attente portée à 6 s (la collision du relief se construit en tâche de
+  fond ; à 3 s elle manquait parfois).
+- Sons synthétisés (`tools_sons_remontees.py`), calés sur l'analyse de vidéos de lignes du
+  domaine (raie du réducteur vers 290 Hz, souffle en ligne 250–1 000 Hz) ; ils seront remplacés
+  par des prises réelles. Nouveau banc `bench_sons_remontees_3d`.
+
 ## 1.40.0 — 25 octobre 2026
 
 **Gare de départ des téléskis débrayables refaite de zéro** (retour d'utilisateur, 25/10/2026),

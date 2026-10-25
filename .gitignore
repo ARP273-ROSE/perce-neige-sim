@@ -21,6 +21,7 @@ sons/photo_*.jpg
 !sons/ambients/*.wav
 # …and the Godot viewer sound assets (embedded in the exported binary)
 !godot_project/sounds/*.wav
+!godot_project/sounds/remontees/*.wav
 
 # Temp/debug scripts
 _probe.py

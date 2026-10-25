@@ -988,7 +988,18 @@ func _trouver_support() -> void:
 ## vitesse est dans le plan de la pente : la pesanteur la tire vers le bas,
 ## les carres absorbent ce qui part en travers des skis, la neige et l'air
 ## la freinent.
+## Chasse-neige automatique (s) : posé à l'arrêt au lâcher d'une perche, il
+## tient sur la pente tant que le joueur ne commande rien.
+var frein_auto: float = 0.0
+
+
 func _glisser(delta: float, cmd: Vector2, schuss: bool) -> void:
+	if frein_auto > 0.0:
+		frein_auto -= delta
+		if cmd.length() < 0.1:
+			cmd = Vector2(0.0, -1.0)
+		else:
+			frein_auto = 0.0
 	var p: Vector3 = global_position
 	var n: Vector3 = _sol_ski(p.x, p.z, p.y)[1]
 	var v: Vector3 = _v_ski
