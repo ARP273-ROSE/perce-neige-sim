@@ -5,6 +5,35 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.44.0 — 25 octobre 2026
+
+**Piques des remontées : la station a son mot à dire.** Retour d'utilisateur, 25/10/2026 : « une
+grosse liste de messages sarcastiques adaptés à chaque type de remontée […] une bonne base pour ne
+pas avoir tout le temps les mêmes ». `PiquesRemontees` (`scripts/piques_remontees.gd`) : 159
+piques, en français et en anglais, sur leur propre ligne d'affichage.
+
+- **Huit situations**, chacune avec une liste commune et des listes par famille (télésiège,
+  télécabine, téléski, téléphérique et 3S) :
+  - arrêt en pleine ligne : la vue, le siège qui grince, et les raisons qu'on devine — un ski
+    perdu au départ, une chute au débarquement, un garde-corps resté levé, un snowboarder qui a
+    pris la perche à l'envers ;
+  - portique contourné, forfait non validé : la file qu'on vient de griller **hue** (« whouuu »,
+    nouveau son `file_huees`, synthétisé par `tools_sons_remontees.py`), et la mamie au bonnet
+    à pompon le dit en savoyard, traduction comprise (« Taborniau ! », « Eh, bobet ! ») ;
+  - monter chaussé en cabine, arriver à pied au télésiège ou au téléski ;
+  - siège ou cabine loupé (il est passé, vous êtes resté) ;
+  - quitter la remontée en pleine ligne ;
+  - reprendre une remontée vers le bas (sauf les Leissières, qui se prennent dans les deux sens) ;
+  - et, une fois sur trois, un mot à l'arrivée.
+- **Pas de redite** : les deux tiers des dernières piques d'une liste ne ressortent pas, même
+  d'une partie à l'autre (`user://piques_remontees.json`).
+- **Pas de pique injuste** : déposé au pied d'une remontée depuis la carte, on n'a choisi ni
+  l'endroit ni d'être à pied — ni « fraude » ni « à pied » pendant deux minutes ; en sortant
+  d'une cabine, celles qui repartent ne sont pas « loupées ».
+- Banc `bench_piques_remontees` : la banque (deux langues, chaque situation pour chaque
+  famille, pas de redite récente), puis au jeu — portique contourné à la Madeleine (pique,
+  affichage, huées), siège quitté en ligne, Leissières prises à l'amont sans pique.
+
 ## 1.43.0 — 25 octobre 2026
 
 **Vrais sons pour toutes les familles de remontées ; téléskis à enrouleur refaits ; données

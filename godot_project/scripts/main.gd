@@ -2118,6 +2118,8 @@ func _entrer_skieur() -> void:
 		remontees.construire(relief)
 		remontees.skieur = skieur
 		remontees.message.connect(func(t: String) -> void: commandes_skieur.message(t, 3.0))
+		remontees.pique.connect(func(evt: String, lg: LigneRemontee) -> void:
+			commandes_skieur.pique(PiquesRemontees.pique(evt, lg, challenge.lang if challenge != null else "fr")))
 	relief.set_hiver(1.0)
 	commandes_skieur.set_chausse(skieur.chausse)
 	mode_skieur = true
