@@ -7,6 +7,8 @@ l'auteur des vidéos. Régénérables à partir de la piste audio de chaque vid�
     python3 tools_sons_reels.py tsf piste_tsf.wav   → godot_project/sounds/remontees/tsf_*.wav
     python3 tools_sons_reels.py tsd piste_tsd.wav   → godot_project/sounds/remontees/tsd_*.wav
     python3 tools_sons_reels.py boisses piste.wav   → godot_project/sounds/remontees/boisses_*.wav
+    python3 tools_sons_reels.py tke piste_tke.wav   → godot_project/sounds/remontees/tke_*.wav
+    python3 tools_sons_reels.py tph piste_tph.wav   → godot_project/sounds/remontees/tph_*.wav
 
 3s — un 3S Doppelmayr de la même génération que l'Olympique (téléphérique des
 Prodains, Avoriaz) :
@@ -67,6 +69,18 @@ boisses — la télécabine des Boisses elle-même (passages repérés à l'imag
   boisses_ligne       0:38–0:48   en ligne                              (boucle)
   boisses_pyl_s       2:52,5–2:56 pylône (choc vers 1,9 s)
   boisses_lanceur_dec 4:28–4:40   arrivée, lanceur
+tke — un téléski à enrouleurs, perches en T (TKE2 du Montet, Val d'Isère), pour les TKE :
+  tke_gare         0:00–0:23   gare de départ, moteur                   (boucle)
+  tke_depart       1:08–1:22   prise de la perche, départ ; le son de la gare s'éloigne
+  tke_ligne        1:38–1:44   en ligne, avant un pylône                (boucle)
+  tke_pyl_s        1:45–1:48   pylône porteur
+  tke_pyl_c        2:51–2:54   pylône de compression (et une perche qui redescend)
+  tke_arrivee      5:49–5:55   arrivée
+tph — le téléphérique du Fornet (vue avant), pour les téléphériques :
+  tph_quai         0:00–0:28   sur le quai, la cabine arrive et freine  (boucle)
+  tph_ligne        0:57–1:06   en ligne (le passage où l'on parle le moins) (boucle)
+  tph_croisement   1:36–1:48   les deux cabines se croisent
+  tph_arrivee      2:21–2:30   approche de la gare du haut
 Les niveaux relatifs d'un même profil sont conservés (un seul gain par profil).
 """
 import os
@@ -135,6 +149,20 @@ PROFILS = {
         ("boisses_ligne", 38.0, 48.0, True),
         ("boisses_pyl_s", 172.5, 176.0, False),
         ("boisses_lanceur_dec", 268.0, 280.0, False),
+    ],
+    "tke": [
+        ("tke_gare", 0.0, 23.0, True),
+        ("tke_depart", 68.0, 82.0, False),
+        ("tke_ligne", 98.0, 104.0, True),
+        ("tke_pyl_s", 105.0, 108.0, False),
+        ("tke_pyl_c", 171.0, 175.0, False),
+        ("tke_arrivee", 349.0, 355.0, False),
+    ],
+    "tph": [
+        ("tph_quai", 0.0, 28.0, True),
+        ("tph_ligne", 57.0, 66.0, True),
+        ("tph_croisement", 96.0, 108.0, False),
+        ("tph_arrivee", 141.0, 150.0, False),
     ],
 }
 SORTIE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "godot_project", "sounds", "remontees")

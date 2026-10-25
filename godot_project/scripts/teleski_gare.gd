@@ -41,7 +41,7 @@ func construire(g: Node3D, aval: bool, znez: float, zc: float) -> void:
 			_mat_poma(g, aval, zc)
 			_anneau_guidage(g, zc)
 	else:
-		_portique(g, aval, zc)
+		_gare_enrouleurs(g, aval, zc)
 	_tension_ou_motrice(g, aval, zc)
 	if aval:
 		_depart(g, znez, zc)
@@ -218,6 +218,56 @@ func _anneau_guidage(g: Node3D, zc: float) -> void:
 		RemonteeKit.barre(g, c + u * (R + 0.55), Vector3(0, H + 0.6, zc) + u * 0.9, 0.03, "galva", 6)
 
 
+## Gare d'un téléski à enrouleurs (vidéo du TKE2 du Montet) : deux colonnes-
+## caissons en acier de part et d'autre de la poulie, une poutre en travers
+## qui la porte, une plate-forme à garde-corps au-dessus ; en aval, le local
+## blanc de la motrice sur la plate-forme ; mousses rouges au pied, échelle.
+func _gare_enrouleurs(g: Node3D, aval: bool, zc: float) -> void:
+	var H: float = lg.H_CABLE_GARE
+	var R: float = lg.voie * 0.5
+	var xc: float = R + 0.9
+	var yb: float = H + 0.55                          # dessous de la poutre
+	for sx in [-1.0, 1.0]:
+		var y0: float = _gy(g, sx * xc, zc)
+		RemonteeKit.boite_en(g, Vector3(0.9, 0.5, 0.9), Vector3(sx * xc, y0 - 0.1, zc), "beton")
+		RemonteeKit.boite_en(g, Vector3(0.42, yb + 0.5 - y0, 0.42), Vector3(sx * xc, (yb + 0.5 + y0) * 0.5, zc), "galva")
+		RemonteeKit.boite_en(g, Vector3(0.62, 1.9, 0.62), Vector3(sx * xc, y0 + 0.95, zc), "mousse_rouge")
+		# échelle sur la colonne côté extérieur
+		var xe: float = sx * (xc + 0.32)
+		for dz in [-0.22, 0.22]:
+			RemonteeKit.barre(g, Vector3(xe, y0 + 2.0, zc + dz), Vector3(xe, yb + 1.6, zc + dz), 0.018, "galva", 5)
+		var y2: float = y0 + 2.2
+		while y2 < yb + 1.5:
+			RemonteeKit.barre(g, Vector3(xe, y2, zc - 0.22), Vector3(xe, y2, zc + 0.22), 0.014, "galva", 4)
+			y2 += 0.3
+	# poutre en travers, palier de la poulie dessous
+	RemonteeKit.boite_en(g, Vector3(2.0 * xc + 0.5, 0.5, 0.6), Vector3(0, yb + 0.25, zc), "galva")
+	RemonteeKit.boite_en(g, Vector3(0.7, H + 0.55 - (H + 0.15), 0.7), Vector3(0, (yb + H + 0.15) * 0.5, zc), "acier_noir")
+	# plate-forme et garde-corps
+	var yp: float = yb + 0.55
+	var lx: float = 2.0 * xc + 1.4
+	var lz: float = 3.6
+	RemonteeKit.boite_en(g, Vector3(lx, 0.06, lz), Vector3(0, yp, zc), "caillebotis")
+	for c in [[Vector3(-lx * 0.5, 0, -lz * 0.5), Vector3(lx * 0.5, 0, -lz * 0.5)], [Vector3(lx * 0.5, 0, -lz * 0.5), Vector3(lx * 0.5, 0, lz * 0.5)],
+			[Vector3(lx * 0.5, 0, lz * 0.5), Vector3(-lx * 0.5, 0, lz * 0.5)], [Vector3(-lx * 0.5, 0, lz * 0.5), Vector3(-lx * 0.5, 0, -lz * 0.5)]]:
+		var a: Vector3 = (c[0] as Vector3) + Vector3(0, yp, zc)
+		var b: Vector3 = (c[1] as Vector3) + Vector3(0, yp, zc)
+		RemonteeKit.barre(g, a + Vector3(0, 1.05, 0), b + Vector3(0, 1.05, 0), 0.025, "galva", 6)
+		RemonteeKit.barre(g, a + Vector3(0, 0.55, 0), b + Vector3(0, 0.55, 0), 0.02, "galva", 6)
+		var n: int = maxi(1, int(a.distance_to(b) / 1.2))
+		for k in range(n + 1):
+			var q: Vector3 = a.lerp(b, float(k) / n)
+			RemonteeKit.barre(g, q, q + Vector3(0, 1.05, 0), 0.022, "galva", 5)
+	if aval:
+		# local de la motrice : caisse blanche, vitres sombres, toit plat
+		var c2: Vector3 = Vector3(0, yp, zc + 0.3)
+		RemonteeKit.boite_en(g, Vector3(2.4, 2.1, 2.4), c2 + Vector3(0, 1.05, 0), "blanc_plaque")
+		RemonteeKit.boite_en(g, Vector3(2.6, 0.12, 2.6), c2 + Vector3(0, 2.16, 0), "peinture_anthracite")
+		for sx2 in [-1.0, 1.0]:
+			RemonteeKit.boite_en(g, Vector3(0.03, 0.8, 1.6), c2 + Vector3(sx2 * 1.215, 1.35, 0), "vitrage_sombre")
+		RemonteeKit.boite_en(g, Vector3(1.6, 0.8, 0.03), c2 + Vector3(0, 1.35, -1.215), "vitrage_sombre")
+
+
 ## Portique en treillis (enrouleurs) : poutre en long au-dessus de la poulie,
 ## deux jambes en A à chaque bout, hors de la boucle des perches.
 func _portique(g: Node3D, aval: bool, zc: float) -> void:
@@ -257,8 +307,8 @@ func _poutre_treillis(g: Node3D, a: Vector3, b: Vector3, h: float, m: String, pl
 ## Aval : contrepoids de tension pendu à une poulie verticale au bout de
 ## la gare ; amont : motoréducteur sur la tête (posé par la poulie).
 func _tension_ou_motrice(g: Node3D, aval: bool, zc: float) -> void:
-	if not aval or lg.famille == "perche_debrayable":
-		return
+	if true:
+		return       # (motrice en aval, tension en amont : pas de contrepoids au départ)
 	var H: float = lg.H_CABLE_GARE
 	var R: float = lg.voie * 0.5
 	var zt: float = zc + R + 1.3
@@ -384,10 +434,9 @@ func collisions(aval: bool) -> Array:
 		var lt: float = 2.0 if aval else 0.84           # tour du départ, mât à l'arrivée
 		r.append([Vector3(lt, H - ys + y0, lt), Vector3(0, (ys + y0 + H) * 0.5, zc)])
 	else:
-		for z in [zc - (R + 1.2), zc + (R + 1.2)]:
-			for sx in [-1.0, 1.0]:
-				var ys2: float = lg._sol(sx * (R + 1.0), z)
-				r.append([Vector3(0.6, 1.8, 0.6), Vector3(sx * (R + 0.9), ys2 + 0.9, z)])
+		for sx in [-1.0, 1.0]:
+			var ys2: float = lg._sol(sx * (R + 0.9), zc)
+			r.append([Vector3(0.62, 2.4, 0.62), Vector3(sx * (R + 0.9), ys2 + 1.2, zc)])
 	var c: Vector3
 	var xb: float = lg._x_brin(true)
 	if aval:

@@ -1607,9 +1607,12 @@ func _perche() -> void:
 		# douille auto-coinçante + perche télescopique
 		RemonteeKit.boite_en(self, Vector3(0.10, 0.12, 0.22), Vector3(0, 0.02, 0), "galva")
 		RemonteeKit.cylindre(self, 0.03, 0.03, 0.10, Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3(0, 0.10, 0.06)), "caoutchouc", 10)
+		_bras = Node3D.new()
+		_bras.name = "Bras"
+		add_child(_bras)
 		_perche_tige = Node3D.new()
 		_perche_tige.name = "Perche"
-		add_child(_perche_tige)
+		_bras.add_child(_perche_tige)
 		RemonteeKit.barre(_perche_tige, Vector3(0, -0.05, 0), Vector3(0, -1.7, 0), 0.026, "acier", 8)
 		RemonteeKit.barre(_perche_tige, Vector3(0, -1.7, 0), Vector3(0, -3.4, 0), 0.020, "galva", 8)
 		RemonteeKit.cylindre(_perche_tige, 0.035, 0.035, 0.30, Transform3D(Basis.IDENTITY, Vector3(0, -1.65, 0)), "acier_noir", 10)
@@ -1621,14 +1624,20 @@ func _perche() -> void:
 	RemonteeKit.tube(self, RemonteeKit.arc(Vector3(0, 0.0, 0), Vector3.RIGHT, Vector3.UP, 0.13, -PI * 0.5, PI * 0.5, 10), 0.025, "acier_noir", 6)
 	RemonteeKit.boite_en(self, Vector3(0.30, 0.42, 0.34), Vector3(0, -0.24, 0), "peinture_gris")
 	RemonteeKit.cylindre(self, 0.15, 0.15, 0.32, Transform3D(Basis(Vector3.FORWARD, PI * 0.5), Vector3(0, -0.24, 0)), "acier_noir", 18)
+	# la corde et la perche pendent d'un bras articulé sous le tambour : tiré,
+	# il s'incline vers le skieur, loin derrière la pince (vidéo du Montet :
+	# corde et perche en biais, archet sous les fesses)
+	_bras = Node3D.new()
+	_bras.name = "Bras"
+	_bras.position = Vector3(0, -0.45, 0)
+	add_child(_bras)
 	_corde = Node3D.new()
 	_corde.name = "Corde"
-	_corde.position = Vector3(0, -0.45, 0)
-	add_child(_corde)
+	_bras.add_child(_corde)
 	RemonteeKit.barre(_corde, Vector3.ZERO, Vector3(0, -1.0, 0), 0.008, "acier_noir", 6)
 	_perche_tige = Node3D.new()
 	_perche_tige.name = "Perche"
-	add_child(_perche_tige)
+	_bras.add_child(_perche_tige)
 	RemonteeKit.barre(_perche_tige, Vector3(0, 0, 0), Vector3(0, -1.10, 0), 0.02, "orange_perche", 8)
 	if famille == "perche_tbar":
 		# archet biplace (Montet) : barre cintrée en arc, le milieu plus bas
@@ -1655,6 +1664,8 @@ func _perche() -> void:
 func longueur_perche(d: float) -> void:
 	if _perche_tige == null:
 		return
+	if d <= 0.0 and _bras != null:
+		_bras.rotation = Vector3.ZERO
 	if famille == "perche_debrayable":
 		var k: float = clampf(d / 3.45, 0.35, 2.4) if d > 0.0 else 1.0
 		_perche_tige.scale = Vector3(1, k, 1)
@@ -1667,7 +1678,28 @@ func deroule(t: float) -> void:
 		return
 	var l: float = lerpf(0.25, 3.6, clampf(t, 0.0, 1.6))
 	_corde.scale = Vector3(1, l, 1)
-	_perche_tige.position = Vector3(0, -0.45 - l, 0)
+	_perche_tige.position = Vector3(0, -l, 0)
+
+
+## Perche tendue vers `cible` (repère du véhicule) : la rondelle ou l'archet
+## y arrive, corde et perche dans l'axe pince → cible.
+var _bras: Node3D = null
+
+
+func tendre_perche(cible: Vector3) -> void:
+	if _bras == null:
+		return
+	var v: Vector3 = cible - _bras.position
+	var dist: float = v.length()
+	if dist < 0.1:
+		return
+	_bras.rotation = Vector3(-atan2(v.z, -v.y), 0.0, 0.0)
+	if famille == "perche_debrayable":
+		_perche_tige.scale = Vector3(1, clampf(dist / 3.45, 0.35, 2.4), 1)
+	else:
+		var l: float = clampf(dist - 1.15, 0.25, 6.0)
+		_corde.scale = Vector3(1, l, 1)
+		_perche_tige.position = Vector3(0, -l, 0)
 
 
 # --- grandes cabines : 3S et téléphérique -----------------------------------------

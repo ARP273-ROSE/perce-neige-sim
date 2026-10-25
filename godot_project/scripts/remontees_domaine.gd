@@ -273,6 +273,13 @@ func _poser(D: Dictionary) -> void:
 		if dg > 0.0 and dg < L:
 			hm.append(Vector2(dg, float(g[1])))
 	lg.hauteurs_mesurees = hm
+	var ru: PackedFloat32Array = PackedFloat32Array()
+	for dr in D.get("ruisseaux", []):
+		var wr: Vector2 = a0 + u0 * (float(dr) * L0 / maxf(Ld, 1.0))
+		var drl: float = (wr - a).dot(dirh)
+		if drl > 0.0 and drl < L:
+			ru.append(drl)
+	lg.ruisseaux = ru
 	lg.voie = float(D["voie"])
 	lg.vitesse = float(D["vitesse"])
 	lg.espacement = float(D["espacement"])
@@ -696,6 +703,9 @@ func _attendre_perche() -> void:
 		message.emit("Pas de perche — %s est-il en marche ?" % lg.nom_ligne)
 
 
+const RECUL_PERCHE: float = 2.2
+
+
 func _suivre_perche() -> void:
 	var lg: LigneRemontee = a_bord[0]
 	var i: int = a_bord[1]
@@ -706,7 +716,10 @@ func _suivre_perche() -> void:
 	arriere = arriere.normalized()
 	# les skis sur la trace, 0,6 m derrière la pince : sol sous l'axe de la
 	# ligne (profil du relief, quais des gares compris)
-	var pos: Vector3 = pc + arriere * 0.6
+	# 2,2 m derrière la pince : corde et perche en biais jusqu'à lui (vidéo
+	# du Montet, retour d'utilisateur, 25/10/2026 — il était presque sous le câble,
+	# perche verticale et archet devant lui)
+	var pos: Vector3 = pc + arriere * RECUL_PERCHE
 	var loc: Vector3 = lg.global_transform.affine_inverse() * pos
 	var yl: float = lg.terrain(clampf(-loc.z, 0.0, lg.longueur_h()))
 	var y: float = (lg.global_transform * Vector3(loc.x, yl, loc.z)).y
@@ -721,7 +734,8 @@ func _suivre_perche() -> void:
 	var cap: float = _cap(v)
 	skieur._visuel.rotation = Vector3(0.0, cap, 0.0)
 	skieur._cap = cap
-	v.longueur_perche(pc.y - (y + 0.85))
+	# archet sous les fesses, rondelle entre les jambes
+	v.tendre_perche(v.to_local(pos + Vector3.UP * (0.62 if lg.famille == "perche_tbar" else 0.72)))
 	# en haut, on lâche la perche avant la poulie et l'on s'écarte en
 	# traversée lente, sans élan vers l'avant : lancé à 2 m/s vers l'avant, au
 	# 3000 il passait la crête et dévalait dans le vallon de l'Iseran sans

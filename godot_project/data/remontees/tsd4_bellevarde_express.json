@@ -542,5 +542,8 @@
   }
  ],
  "balanciers": "remontees-mecaniques.net",
- "gps": []
+ "gps": [],
+ "ruisseaux": [
+  43.5
+ ]
 }

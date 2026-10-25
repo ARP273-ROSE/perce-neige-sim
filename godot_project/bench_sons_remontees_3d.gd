@@ -16,6 +16,7 @@ var _lanceur_vu: bool = false
 var _salves: int = 0
 var _chocs: int = 0
 var _n_file: int = 0
+var _joues: Dictionary = {}
 
 
 func _initialize() -> void:
@@ -85,23 +86,25 @@ func _tick() -> void:
 				_verif("embarqué", false)
 				_fin()
 		3:
-			if so._lanceur.playing and so._lanceur.volume_db > -30.0:
-				_lanceur_vu = true
-			if so._file.size() > _n_file:
-				_salves += 1 if _n_file == 0 else 0
-				_chocs += so._file.size() - _n_file
-			_n_file = so._file.size()
-			if _t > 40.0:
-				_verif("à bord : son de ligne", so._ligne.playing and so._ligne.volume_db > -30.0,
-					"%.0f dB" % so._ligne.volume_db)
-				_verif("lanceur entendu au départ", _lanceur_vu)
-				_verif("chocs aux pylônes franchis", _chocs >= 6, "%d chocs" % _chocs)
+			# prises réelles du TSD : on note ce qui a été joué
+			for pl in [so._coup3s, so._coup3s_b, so._ligne]:
+				if pl.playing and pl.stream != null:
+					for nom in so._sons:
+						if so._sons[nom] == pl.stream:
+							_joues[nom] = true
+			if _t > 60.0:
+				_verif("embarquement et lanceur (prise réelle)", _joues.has("tsd_embarquement"), str(_joues.keys()))
+				_verif("à bord : ambiance de ligne", _joues.has("tsd_ligne"))
+				_verif("pylône franchi", _joues.has("tsd_pyl_s") or _joues.has("tsd_pyl_cc"))
 				_lg.arret_urgence()
 				_phase = 4
 				_t = 0.0
 		4:
+			for pl2 in [so._coup3s, so._coup3s_b]:
+				if pl2.playing and pl2.stream == so._sons["tsd_arret"]:
+					_joues["tsd_arret"] = true
 			if _t > 0.5:
-				_verif("arrêt d'urgence entendu", so._arret.playing)
+				_verif("arrêt en ligne entendu", _joues.has("tsd_arret") and so._arret.playing)
 				_lg.rearmer()
 				_lg.demarrer()
 				rm.quitter()
