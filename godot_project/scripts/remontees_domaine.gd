@@ -97,6 +97,11 @@ func _ligne_nommee(cle: String) -> LigneRemontee:
 ## loin ; la gare du Fornet déborde de 26 m de son nez, celle du Vallon de 34 m
 ## derrière le sien).
 const AVANCES_AVAL: Dictionary = {"tcd10_vallon_iseran": 42.0}
+## Gares amont reculées vers l'aval (m) : la gare du haut de Fontaine Froide
+## était dans le bâtiment de l'Olympique à Bellevarde (retour d'utilisateur,
+## 27/10/2026 ; emprises : 3S x 4059-4103 / z 983-1009, Fontaine Froide
+## z 987-1020).
+const RECULS_AMONT: Dictionary = {"tsd6_fontaine_froide": 28.0}
 ## Croisements [dessus, dessous] : un pylône à deux étages au point de
 ## croisement, la ligne du dessous plafonnée, celle du dessus au moins
 ## ECART_CROISEMENT m plus haut (retour d'utilisateur, 25/10/2026 : « Pyramides
@@ -195,6 +200,10 @@ func _poser(D: Dictionary) -> void:
 	if av > 0.0:
 		a += dirh * av
 		L -= av
+	var rc: float = float(RECULS_AMONT.get(String(D["cle"]), 0.0))
+	if rc > 0.0:
+		b -= dirh * rc
+		L -= rc
 	var h0: float = relief.hauteur_sol(a.x, a.y)
 	if not quai_tph.is_empty():
 		h0 = (quai_tph["nez"] as Vector3).y
@@ -210,9 +219,14 @@ func _poser(D: Dictionary) -> void:
 	# chaque gare au plus haut du terrain sous son emprise (quai, poulie,
 	# largeur) : sur un versant, la gare amont était enterrée côté pente
 	# (retour d'utilisateur, 23/10/2026)
+	# (sous le QUAI et la poulie seulement : en comptant aussi 12 m d'aire
+	# d'attente derrière et 5 m de chaque côté, une gare sur un versant était
+	# perchée sur des terrassements immenses — retour d'utilisateur, 27/10/2026 :
+	# « terrassements surdimensionnés »)
 	var lat: Vector2 = Vector2(-dirh.y, dirh.x)
-	var demi: float = float(D["voie"]) * 0.5 + 5.0
-	var long_g: float = LigneRemontee.l_gare_pour(String(D["famille"])) + float(D["voie"]) * 0.5 + 12.0
+	var demi: float = float(D["voie"]) * 0.5 + 1.5
+	var long_g: float = LigneRemontee.l_gare_pour(String(D["famille"])) + 2.0
+	var demi_r: float = float(D["voie"]) * 0.5 + 5.0
 	for bout in [[0, a, -1.0], [prof.size() - 1, b, 1.0]]:
 		var o: Vector2 = bout[1]
 		var haut: float = prof[bout[0]].y
@@ -237,7 +251,7 @@ func _poser(D: Dictionary) -> void:
 		while t2 < 40.0:
 			# sur toute la largeur de la rampe : le terrain le plus bas décide
 			var bas: float = INF
-			for xl in [-demi, -demi * 0.5, 0.0, demi * 0.5, demi]:
+			for xl in [-demi_r, -demi_r * 0.5, 0.0, demi_r * 0.5, demi_r]:
 				var q3: Vector2 = o2 + dirb * (bq + t2) + lat * xl
 				bas = minf(bas, relief.hauteur_sol(q3.x, q3.y) - h0)
 			if bas >= y_q - LigneRemontee.PENTE_RAMPE * t2:

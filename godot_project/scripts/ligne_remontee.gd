@@ -207,6 +207,11 @@ func construire() -> void:
 	# lente : au moins deux dans le demi-tour, d'autres dans les lanceurs
 	# (retour d'utilisateur, 22/10/2026)
 	v_embarquement = 0.25 if famille.begins_with("cabine") else 1.0
+	if famille == "cabine_3s":
+		# 30 places, 5 m de long : à 0,25 m/s elles se suivaient à moins de
+		# leur longueur et se rentraient dedans en gare (retour d'utilisateur,
+		# 27/10/2026)
+		v_embarquement = V_EMBARQUEMENT_3S
 	l_gare = l_gare_pour(famille)
 	if jumelee != null and role == "bas":
 		l_gare += ALLONGE_BAS            # double embarquement, puis le lanceur plus loin
@@ -1433,6 +1438,10 @@ func _sol(x: float, z: float) -> float:
 ## descend selon sa pente jusqu'à rencontrer le terrain (échantillonné tous
 ## les 50 cm) et s'y enfonce de 40 cm. Mis en cache : sert au maillage et
 ## à la collision.
+## Longueur horizontale maximale d'un talus (au-delà : mur jusqu'au sol).
+const TALUS_MAX: float = 20.0
+
+
 func _terrassement(aval: bool) -> PackedVector3Array:
 	if _terrassements.has(aval):
 		return _terrassements[aval]
@@ -1474,15 +1483,18 @@ func _terrassement(aval: bool) -> PackedVector3Array:
 		var l_douce: float = L_DESCENTE if pente > PENTE_TALUS else 0.0
 		var t: float = 0.0
 		var y: float = p.y
-		while t < 60.0:
+		while t < TALUS_MAX + l_douce:
 			var q: Vector3 = p + n * t
 			y = p.y - minf(t, l_douce) / pente - maxf(t - l_douce, 0.0) / PENTE_TALUS
 			var g: float = _sol(q.x, q.z)
 			if y <= g:
 				return Vector3(q.x, g - 0.4, q.z)
 			t += 0.5
+		# le terrain tombe plus vite que le talus : au lieu d'un plateau de
+		# 60 m en porte-à-faux au-dessus de la pente (retour d'utilisateur,
+		# 27/10/2026 : « terrassements surdimensionnés »), un mur raide jusqu'au sol
 		var q2: Vector3 = p + n * t
-		return Vector3(q2.x, y, q2.z)
+		return Vector3(q2.x, _sol(q2.x, q2.z) - 0.4, q2.z)
 	var tri: PackedVector3Array = PackedVector3Array()
 	var quad := func(a: Vector3, b: Vector3, c: Vector3, d: Vector3) -> void:
 		tri.append_array(PackedVector3Array([a, b, c, a, c, d]))
@@ -1910,14 +1922,20 @@ func _gare_3s(g: Node3D, znez: float, zc: float, aval: bool) -> void:
 		for k4 in range(pts.size() - 1):
 			RemonteeKit.poutre(g, pts[k4], pts[k4 + 1], 0.9, 0.8, "peinture_gris")
 		ext.append(pts[pts.size() - 1])
-		# béquilles en V depuis le sol, au bout et au milieu du porte-à-faux
+		# béquilles depuis le sol ENTRE les deux voies (retour d'utilisateur,
+		# 27/10/2026 : posées de part et d'autre de chaque voie, on les
+		# traversait en cabine et à pied), au bout et au milieu du porte-à-faux :
+		# un pied côté intérieur, incliné vers le caisson
 		for p4 in [pts[pts.size() - 1], pts[pts.size() - 4]]:
 			var zp4: float = (p4 as Vector3).z + sg * 3.0
-			for dx4 in [-1.6, 1.6]:
-				var xs: float = xb + dx4
-				var ys4: float = _sol(xs, zp4) - g.position.y
-				RemonteeKit.poutre(g, Vector3(xs, ys4, zp4), (p4 as Vector3) - Vector3(0, 0.4, 0), 0.28, 0.28, "galva_pylone")
-				RemonteeKit.boite_en(g, Vector3(0.9, 0.5, 0.9), Vector3(xs, ys4 - 0.1, zp4), "beton")
+			# poteau droit hors du gabarit des cabines (2 m de l'axe de la voie),
+			# bras horizontal sous le caisson
+			var xs: float = xb - sx3 * minf(voie * 0.5 - 0.6, 2.0)
+			var ys4: float = _sol(xs, zp4) - g.position.y
+			var y_bras: float = (p4 as Vector3).y - 0.45
+			RemonteeKit.poutre(g, Vector3(xs, ys4, zp4), Vector3(xs, y_bras, zp4), 0.32, 0.32, "galva_pylone")
+			RemonteeKit.poutre(g, Vector3(xs, y_bras, zp4), Vector3(xb, y_bras, zp4), 0.28, 0.28, "galva_pylone")
+			RemonteeKit.boite_en(g, Vector3(0.9, 0.5, 0.9), Vector3(xs, ys4 - 0.1, zp4), "beton")
 	# entretoise entre les deux voies, au bout
 	RemonteeKit.poutre(g, (ext[0] as Vector3) - Vector3(0, 0.45, 0), (ext[1] as Vector3) - Vector3(0, 0.45, 0), 0.35, 0.5, "galva_pylone")
 
@@ -2833,6 +2851,7 @@ func _tourner_pneus(delta: float) -> void:
 		(e[0] as Node3D).transform.basis = (e[2] as Basis) * Basis(Vector3.UP, e[3])
 
 
+const V_EMBARQUEMENT_3S: float = 0.5
 ## Tricâble (3S) : pylônes en treillis, deux porteurs par voie, le
 ## véhicule roule sur les porteurs, le tracteur passe dessous.
 func tricable() -> bool:
