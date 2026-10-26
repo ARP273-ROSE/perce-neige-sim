@@ -5,6 +5,45 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.47.0 — 26 octobre 2026
+
+**Fluidité mesurée sur un vrai PC ; bouton MESURE.** Relevés pris avec le vrai rendu sur un
+PC (Ryzen 9 5900X, RTX 5070 Ti, écran 4K) par le banc de fluidité, quatre passes à chaque
+étape : la carte graphique travaillait moins de 2 ms par image et le fil de rendu 3 ms — tout le
+coût était sur le fil principal, et surtout dans les constructions des remontées.
+
+- **Plus de relecture de la carte graphique.** Fusionner des maillages (MeshMerge) ou en faire
+  une forme de collision relisait leurs données dans la mémoire de la carte, ce qui synchronise
+  le rendu : invisible sur les bancs sans écran, des à-coups de 100 à 360 ms sur PC. Désormais :
+  - les maillages créés par le jeu gardent une copie côté processeur tant qu'ils existent
+    (`MeshMerge.valider`, `tableaux`) — les pièces partagées (galets des pylônes, coussins)
+    étaient relues à chaque pylône, 24 000 fois sur un banc ;
+  - boîtes et cylindres sont calculés par le jeu (mêmes faces, même orientation que les
+    primitives de Godot) ; `get_mesh_arrays()` passait aussi par la carte ;
+  - collisions des gares : triangles lus côté processeur (`MeshMerge.faces`) ;
+  - lectures restées sur la carte pendant le banc de fluidité : ~30 000 → ~460 (compteur
+    affiché par le banc, par fusion d'origine).
+- **Constructions en tranches** : têtes des pylônes (0,15 s d'un bloc aux Leissières), talus
+  des gares, gare (terrassement, carénage, poulie), câble du 3S, calage de période de Fresse.
+- **Régulateur** : un écran 4K avec une carte dédiée ne démarre plus au cran 3 (sans éclairage
+  indirect ni anti-crénelage) ; saccades venues du fil principal → on n'enlève plus d'effets
+  (sans effet sur la cause). Sur ce PC : qualité maximale, 88 à 103 i/s.
+- **Mémoire** : copies côté processeur libérées avec leur maillage (un essai les gardait toutes :
+  5 Go au banc des 66 lignes ; 0,9 Go maintenant).
+- **Bouton MESURE** (mode skieur, PWA et PC ; touche F10) : une minute de relevé (images,
+  fil principal, rendu, carte graphique, appels de dessin), envoyé au point de collecte des
+  rapports — pour mesurer la PWA sur iPad, où l'on ne peut pas récupérer de fichier.
+- Banc de fluidité : fenêtre réduite ou sans focus, sans synchronisation verticale ; mesures du
+  rendu quand il y a un écran ; résultat écrit dans le dossier utilisateur.
+- Fil de rendu séparé : essayé, abandonné (expérimental dans Godot 4.6 ; 27 i/s et des gels de
+  4 s, chaque lecture du serveur de rendu le synchronisant).
+- Potence de téléski de hauteur nulle : plus de cylindre de collision de hauteur négative.
+
+Sur ce PC, passe normale, assis dans un télésiège : 1 % des pires images 92 → 15 ms, pire image
+227 → 26 ms ; tournée de six remontées : 1 % des pires images 113 → 53 ms, pire image 249 → 155
+ms. Restent, une fois par construction : les porteurs du 3S (~0,14 s) et les têtes des
+pylônes des Leissières (~0,11 s).
+
 ## 1.46.0 — 26 octobre 2026
 
 **Le bon levier selon le goulot ; relevé de fluidité en jeu.** Retour d'utilisateur, 26/10/2026 :
