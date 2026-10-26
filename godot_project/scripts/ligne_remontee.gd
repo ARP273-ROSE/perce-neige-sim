@@ -2039,8 +2039,8 @@ func _collisions_fixes() -> void:
 		# fûts des potences, là où elles sont (virage : à côté de l'axe)
 		for q in _pyl:
 			var py: PyloneRemontee = q[0]
-			if py.style != "teleski":
-				continue
+			if py.style != "teleski" or py.hauteur < 0.1:
+				continue          # (hauteur nulle ou négative : rien à heurter)
 			var cs1: CollisionShape3D = CollisionShape3D.new()
 			var cy1: CylinderShape3D = CylinderShape3D.new()
 			cy1.radius = 0.22
