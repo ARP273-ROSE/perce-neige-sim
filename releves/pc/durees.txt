@@ -32,3 +32,14 @@ fcca3b4-bancs (headless, --fixed-fps 60, 4 en parallèle)
 6b25b03 (passes fenêtrées)
   a  normal                  09:45:38 -> 09:53:46  (8 min 08 s)
   c  cran=0                  09:53:47 -> 10:03:10  (9 min 23 s)
+
+d52f714-bancs (headless, --fixed-fps 60, 8 en parallèle, longs d'abord)
+  série complète 12:13:15 -> 12:27:52 (14 min 37 s)
+  bollin_fresse 874 s · aller_remontee 452 · boucle_salle 415 · embarquement 348 · toutes_lignes 328
+  3s 293 · descente 169 · skieur 156 · secours 109 · teleski tke2_montet 106 · teleski tkd_chardonnet 83
+  poste_remontee 75 · sons_remontees 70 · teleski 69 · tph 51 · piques_remontees 46 · quai 41
+  issues 40 · ecoute 23 · tunnel_piste 18 · passage 9 · remontee_dynamique 4 · perf ~0
+
+d52f714 (passes fenêtrées)
+  a  normal                  12:28:14 -> 12:35:29  (7 min 15 s)
+  c  cran=0                  12:35:29 -> 12:43:51  (8 min 22 s)
