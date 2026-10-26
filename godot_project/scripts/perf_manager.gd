@@ -62,6 +62,13 @@ var _web: bool = false
 var _t_chauffe: float = CHAUFFE_S
 var _t_fen: float = 0.0
 var _durees: PackedFloat32Array = []
+## Les trois chronomètres de l'image (ms) : fil principal (logique du jeu),
+## fil de rendu (tri, ordres de dessin), carte graphique — pour agir sur le
+## bon levier.
+var _t_princ: PackedFloat32Array = []
+var _t_rendu: PackedFloat32Array = []
+var _t_gpu: PackedFloat32Array = []
+var cause: String = ""              # dernier goulot : gpu / rendu / principal / autre
 var _bonnes: int = 0
 var _derniere_montee_t: float = -1e9
 var _cran_avant_montee: int = -1
@@ -343,11 +350,19 @@ func _process(_delta: float) -> void:
 		_t_chauffe -= dt
 		return
 	_durees.append(dt)
+	_t_princ.append(float(Performance.get_monitor(Performance.TIME_PROCESS)) * 1000.0)
+	if _mesure_gpu:
+		_t_rendu.append(RenderingServer.viewport_get_measured_render_time_cpu(_vp_rid))
+		_t_gpu.append(RenderingServer.viewport_get_measured_render_time_gpu(_vp_rid))
+	_releve_image(dt)
 	_t_fen += dt
 	if _t_fen < FENETRE_S:
 		return
 	_evaluer()
 	_durees.clear()
+	_t_princ.clear()
+	_t_rendu.clear()
+	_t_gpu.clear()
 	_t_fen = 0.0
 
 
@@ -366,36 +381,66 @@ func _evaluer() -> void:
 		if d >= 1.9 * budget:
 			acoups += 1
 	var taux: float = float(acoups) / float(n)
-	var gpu_ms: float = RenderingServer.viewport_get_measured_render_time_gpu(_vp_rid) \
-		if _mesure_gpu else 0.0
-	dernier_bilan = "%.0f i/s, à-coups %.1f %%, 1 %% pires %.0f ms%s" % [ips, taux * 100.0,
-		p99 * 1000.0, (", GPU %.1f ms" % gpu_ms) if gpu_ms > 0.0 else ""]
+	# les trois chronomètres, au 90e centile de la fenêtre (les pointes comptent)
+	var princ_ms: float = _p90(_t_princ)
+	var rendu_ms: float = _p90(_t_rendu)
+	var gpu_ms: float = _p90(_t_gpu)
+	var b_ms: float = budget * 1000.0
+	dernier_bilan = "%.0f i/s, à-coups %.1f %%, 1 %% pires %.0f ms — principal %.1f / rendu %.1f / GPU %.1f ms" % [
+		ips, taux * 100.0, p99 * 1000.0, princ_ms, rendu_ms, gpu_ms]
 	if mode != "auto":
 		return
 	var mauvais: bool = ips < 0.83 * cible_ips or taux > 0.03 or p99 > 3.0 * budget
-	# Saccades venues du PROCESSEUR (chargement du décor du skieur,
-	# téléchargement, ramasse-miettes…) alors que la carte graphique a de la
-	# marge : retirer des effets n'y changerait rien (09/10/2026, l'utilisateur sur
-	# son PC « de la mort » : « cran 2/6 (saccades) … GPU 2,1 ms »).
-	if mauvais and gpu_ms > 0.0 and gpu_ms < 0.40 * budget * 1000.0:
-		dernier_bilan += " — saccades processeur, effets gardés"
-		_bonnes = 0
-		return
+	var rm: Node = main.get("remontees") if main != null else null
 	if mauvais:
 		_bonnes = 0
-		if cran < CRAN_MAX:
-			# le cran qu'on venait de gagner n'a pas tenu : interdit 3 min
-			if _cran_avant_montee >= 0 and _horloge - _derniere_montee_t < 20.0:
-				_echecs[cran] = _horloge + ECHEC_INTERDIT_S
-				_cran_avant_montee = -1
-			_appliquer(cran + 1, "saccades")
+		# le goulot : le plus chargé des trois (sans mesure, la carte, comme avant) —
+		# 26/10/2026 : « il utilise à fond la carte graphique selon sa présence et ses
+		# performances, et tous les cœurs » ; avant, GPU < 40 % du budget → rien,
+		# sinon on retirait des effets même quand le processeur était la cause
+		cause = "gpu"
+		if gpu_ms > 0.0:
+			if rendu_ms >= gpu_ms and rendu_ms >= princ_ms:
+				cause = "rendu"
+			elif princ_ms > gpu_ms:
+				cause = "principal"
+			if maxf(gpu_ms, maxf(rendu_ms, princ_ms)) < 0.5 * b_ms:
+				cause = "autre"           # saccades sans chronomètre chargé : chargement, disque
+		dernier_bilan += " → " + cause
+		match cause:
+			"gpu":
+				if cran < CRAN_MAX:
+					if _cran_avant_montee >= 0 and _horloge - _derniere_montee_t < 20.0:
+						_echecs[cran] = _horloge + ECHEC_INTERDIT_S
+						_cran_avant_montee = -1
+					_appliquer(cran + 1, "saccades, carte graphique")
+			"rendu", "principal":
+				# moins d'objets à trier et à simuler ; le détail au minimum, les
+				# effets (jamais le plafond à 30 i/s ni la résolution : sans effet ici)
+				if rm != null and int(rm.get("niveau_detail")) < 2:
+					rm.call("set_niveau_detail", int(rm.get("niveau_detail")) + 1)
+					_log("[Perf] remontées : détail %d/2 (saccades, fil %s)" % [int(rm.get("niveau_detail")), cause])
+					_t_chauffe = maxf(_t_chauffe, APRES_CHANGEMENT_S)
+				elif cran < 4:
+					_appliquer(cran + 1, "saccades, fil %s" % cause)
 		return
 	var bon: bool = ips >= 0.95 * cible_ips and taux < 0.005
 	if not bon:
 		_bonnes = 0
 		return
 	_bonnes += 1
-	if cran <= cran_min or _bonnes < MONTEE_BONNES_FENETRES:
+	if _bonnes < MONTEE_BONNES_FENETRES:
+		return
+	# marge durable : d'abord rendre le détail des remontées (si les deux fils
+	# du processeur ont de la marge), ensuite seulement remettre un effet
+	if rm != null and int(rm.get("niveau_detail")) > 0 and gpu_ms > 0.0 \
+			and princ_ms < 0.5 * b_ms and rendu_ms < 0.5 * b_ms:
+		rm.call("set_niveau_detail", int(rm.get("niveau_detail")) - 1)
+		_log("[Perf] remontées : détail %d/2 (marge)" % int(rm.get("niveau_detail")))
+		_bonnes = 0
+		_t_chauffe = maxf(_t_chauffe, APRES_CHANGEMENT_S)
+		return
+	if cran <= cran_min:
 		return
 	# marge réelle : sans temps GPU, on exige deux fois plus de patience
 	if gpu_ms > 0.0:
@@ -409,6 +454,102 @@ func _evaluer() -> void:
 	_cran_avant_montee = cran
 	_derniere_montee_t = _horloge
 	_appliquer(vise, "marge")
+
+
+func _p90(a: PackedFloat32Array) -> float:
+	if a.is_empty():
+		return 0.0
+	var t: PackedFloat32Array = a.duplicate()
+	t.sort()
+	return t[mini(t.size() - 1, int(t.size() * 0.9))]
+
+
+# --- relevé en jeu --------------------------------------------------------------
+## Touche F10 : une minute d'enregistrement, image par image (les quatre temps,
+## appels de dessin, objets, primitives, cran, détail, position du skieur),
+## en CSV dans le dossier utilisateur + un résumé dans le journal — pour
+## dimensionner les optimisations sur des chiffres réels (26/10/2026).
+const RELEVE_S: float = 60.0
+var _rel: PackedStringArray = PackedStringArray()
+var _rel_t: float = -1.0
+
+
+func releve() -> void:
+	if _rel_t >= 0.0:
+		_finir_releve()
+		return
+	_rel_t = 0.0
+	_rel = PackedStringArray(["t_s;image_ms;principal_ms;rendu_ms;gpu_ms;appels;objets;primitives;cran;detail;x;y;z;construit"])
+	_log("[Relevé] enregistrement %d s…" % int(RELEVE_S))
+	if main != null and main.has_method("_flash"):
+		main.call("_flash", "Relevé de fluidité : %d s… (F10 pour arrêter)" % int(RELEVE_S))
+
+
+func _releve_image(dt: float) -> void:
+	if _rel_t < 0.0:
+		return
+	_rel_t += dt
+	var sk: Node3D = main.get("skieur") as Node3D if main != null else null
+	var p: Vector3 = sk.global_position if sk != null and sk.get("actif") else Vector3.ZERO
+	var rm: Node = main.get("remontees") if main != null else null
+	var ec: Node = rm.get("_en_cours") if rm != null else null
+	_rel.append("%.3f;%.2f;%.2f;%.2f;%.2f;%d;%d;%d;%d;%d;%.0f;%.0f;%.0f;%s" % [
+		_rel_t, dt * 1000.0, _t_princ[_t_princ.size() - 1] if not _t_princ.is_empty() else 0.0,
+		_t_rendu[_t_rendu.size() - 1] if not _t_rendu.is_empty() else 0.0,
+		_t_gpu[_t_gpu.size() - 1] if not _t_gpu.is_empty() else 0.0,
+		Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME),
+		Performance.get_monitor(Performance.RENDER_TOTAL_OBJECTS_IN_FRAME),
+		Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME),
+		cran, int(rm.get("niveau_detail")) if rm != null else 0, p.x, p.y, p.z,
+		str(ec.name) if ec != null else ""])
+	if _rel_t >= RELEVE_S:
+		_finir_releve()
+
+
+func _finir_releve() -> void:
+	var n: int = _rel.size() - 1
+	_rel_t = -1.0
+	if n < 10:
+		return
+	var cols: Dictionary = {"image": [], "principal": [], "rendu": [], "gpu": [], "appels": [], "objets": []}
+	for k in range(1, _rel.size()):
+		var c: PackedStringArray = _rel[k].split(";")
+		cols["image"].append(float(c[1]))
+		cols["principal"].append(float(c[2]))
+		cols["rendu"].append(float(c[3]))
+		cols["gpu"].append(float(c[4]))
+		cols["appels"].append(float(c[5]))
+		cols["objets"].append(float(c[6]))
+	var horo: String = Time.get_datetime_string_from_system().replace(":", "").replace("-", "").replace("T", "_")
+	var base: String = "user://releve_perf_%s" % horo
+	var f: FileAccess = FileAccess.open(base + ".csv", FileAccess.WRITE)
+	if f != null:
+		f.store_string("\n".join(_rel))
+	var r: PackedStringArray = PackedStringArray()
+	r.append("Relevé de fluidité — %s — %d images en %.0f s" % [_resume_machine(), n, RELEVE_S])
+	r.append("cran %d/%d — %s" % [cran, CRAN_MAX, libelle(cran)])
+	for nom in ["image", "principal", "rendu", "gpu"]:
+		var a: Array = cols[nom]
+		a.sort()
+		var moy: float = 0.0
+		for x in a:
+			moy += x
+		r.append("  %-10s moy %6.2f · médiane %6.2f · p95 %6.2f · p99 %6.2f · max %6.1f ms" % [
+			nom, moy / a.size(), a[a.size() / 2], a[int(a.size() * 0.95)], a[int(a.size() * 0.99)], a[a.size() - 1]])
+	var ap: Array = cols["appels"]
+	ap.sort()
+	var ob: Array = cols["objets"]
+	ob.sort()
+	r.append("  appels de dessin : médiane %d · max %d ; objets : médiane %d · max %d" % [
+		ap[ap.size() / 2], ap[ap.size() - 1], ob[ob.size() / 2], ob[ob.size() - 1]])
+	var fr: FileAccess = FileAccess.open(base + ".txt", FileAccess.WRITE)
+	if fr != null:
+		fr.store_string("\n".join(r))
+	for l in r:
+		_log("[Relevé] " + l)
+	_log("[Relevé] fichiers : %s" % ProjectSettings.globalize_path(base + ".csv"))
+	if main != null and main.has_method("_flash"):
+		main.call("_flash", "Relevé écrit : %s" % ProjectSettings.globalize_path(base + ".txt"))
 
 
 func _resume_machine() -> String:

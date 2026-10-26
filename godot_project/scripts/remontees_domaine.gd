@@ -30,6 +30,26 @@ var a_bord: Array = []
 var _repos: float = 0.0          # pas de nouvel embarquement juste après un débarquement
 var _sous_terre: bool = false    # caméra sous terre (funiculaire) : remontées cachées
 var _f_lod: float = 0.6 if OS.has_feature("web") else 1.0     # distances du niveau de détail
+## Niveau de détail des remontées (0 = tout, 2 = minimum), posé par le
+## PerfManager quand c'est le fil principal ou le fil de rendu qui sature :
+## portées plus courtes, lignes lointaines simulées moins souvent.
+var niveau_detail: int = 0
+var _portees_base: Array = []
+
+
+func set_niveau_detail(n: int) -> void:
+	n = clampi(n, 0, 2)
+	if n == niveau_detail:
+		return
+	if _portees_base.is_empty():
+		_portees_base = [VEHICULES_JUSQUA, DETAILS_JUSQUA, _f_lod]
+	niveau_detail = n
+	VEHICULES_JUSQUA = float(_portees_base[0]) * [1.0, 0.7, 0.5][n]
+	DETAILS_JUSQUA = float(_portees_base[1]) * [1.0, 0.7, 0.5][n]
+	_f_lod = float(_portees_base[2]) * [1.0, 0.75, 0.5][n]
+	for e in lignes:
+		if (e[0] as LigneRemontee).pret:
+			_portees(e[0])
 signal message(texte: String)
 ## Pique sarcastique (PiquesRemontees) : événement, remontée.
 signal pique(evt: String, lg: LigneRemontee)
@@ -319,17 +339,25 @@ func _portees(lg: LigneRemontee) -> void:
 	for c in lg.get_children():
 		var portee: float = VEHICULES_JUSQUA if c is VehiculeRemontee else PYLONES_JUSQUA
 		# pneus, rails et portillons des gares : détails de près seulement
-		if not (c is VehiculeRemontee or c is PyloneRemontee) and not String(c.name).begins_with("Gare") \
+		# (les pylônes en treillis du 3S ne sont pas des PyloneRemontee : ils
+		# disparaissaient à 250 m — retour d'utilisateur, 26/10/2026 : « le pylône
+		# qui se matérialise 20 s avant d'y arriver »)
+		if not (c is VehiculeRemontee or c is PyloneRemontee or c is PyloneTreillis) and not String(c.name).begins_with("Gare") \
 				and String(c.name) != "Cable" and not (c is StaticBody3D):
 			portee = DETAILS_JUSQUA
-		var pile: Array = [c]
+		var pile: Array = [[c, portee]]
 		while not pile.is_empty():
-			var n: Node = pile.pop_back()
+			var e: Array = pile.pop_back()
+			var n: Node = e[0]
+			var pn: float = e[1]
+			# pièces de détail des véhicules, plaques des pylônes : de près seulement
+			if n.has_meta("detail") or n is Label3D:
+				pn = minf(pn, DETAILS_JUSQUA)
 			if n is GeometryInstance3D:
-				(n as GeometryInstance3D).visibility_range_end = portee
-				(n as GeometryInstance3D).visibility_range_end_margin = portee * 0.05
+				(n as GeometryInstance3D).visibility_range_end = pn
+				(n as GeometryInstance3D).visibility_range_end_margin = pn * 0.05
 			for k in n.get_children():
-				pile.append(k)
+				pile.append([k, pn])
 
 
 func _ready() -> void:

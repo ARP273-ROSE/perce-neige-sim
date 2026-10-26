@@ -1509,6 +1509,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		if mode_skieur and event.keycode == KEY_E:
 			basculer_ski()
 			return
+		if event.keycode == KEY_F10 and perf_manager != null:
+			perf_manager.releve()
+			return
 		# X = exploitation auto partout, comme sur le PC ; B = BOUCLE du skieur
 		# (retour d'utilisateur, 09/10/2026 : « il y a un problème entre la touche X et le
 		# bouton EXPLOIT. du mode skieur » — X lançait la boucle)
