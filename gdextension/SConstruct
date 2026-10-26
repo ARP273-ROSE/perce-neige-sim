@@ -1,0 +1,15 @@
+#!/usr/bin/env python
+# Module C++ du simulateur (GDExtension). godot-cpp : chemin GODOT_CPP
+# (défaut : ./godot-cpp). Sortie : godot_project/bin/.
+import os
+
+godot_cpp = os.environ.get("GODOT_CPP", "godot-cpp")
+env = SConscript(os.path.join(godot_cpp, "SConstruct"))
+env.Append(CPPPATH=["src/"])
+sources = Glob("src/*.cpp")
+
+sortie = "bin_local/libperce_neige{}{}".format(env["suffix"], env["SHLIBSUFFIX"])
+if env["platform"] == "web":
+    sortie = "bin_local/libperce_neige{}.wasm".format(env["suffix"])
+bibli = env.SharedLibrary(sortie, source=sources)
+Default(bibli)
