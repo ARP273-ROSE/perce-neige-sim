@@ -31,6 +31,12 @@ const DT: float = 1.0 / 60.0
 func _initialize() -> void:
 	_main = load("res://scenes/main.tscn").instantiate()
 	get_root().add_child(_main)
+	# fenêtre sans focus (PC piloté à distance) : pas de bridage à 20 i/s
+	var pm: Node = _main.get("perf_manager")
+	if pm != null:
+		pm.set("banc", true)
+		pm.set("_retrait", 0)
+		pm.call("_appliquer_ips")
 	process_frame.connect(_tick)
 
 

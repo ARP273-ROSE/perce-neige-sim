@@ -301,9 +301,14 @@ func _notification(what: int) -> void:
 
 
 ## Fenêtre réduite / en arrière-plan (version autonome seulement).
+## Bancs de mesure avec fenêtre : pas de bridage quand la fenêtre perd le
+## focus (relevés du PC à distance, 26/10/2026 : passe faussée à 20 i/s).
+var banc: bool = false
+
+
 func _verifier_retrait() -> void:
 	if _web or main == null or bool(main.get("client_mode")) \
-			or DisplayServer.get_name() == "headless":
+			or DisplayServer.get_name() == "headless" or banc:
 		return
 	var r: int = 0
 	if DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_MINIMIZED:
