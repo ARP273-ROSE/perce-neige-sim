@@ -1,0 +1,129 @@
+=== FLUIDITÉ DU MODE SKIEUR (avec rendu) — AMD Ryzen 9 5900X 12-Core Processor, 24 cœurs — NVIDIA GeForce RTX 5070 Ti — -s bench_fluidite_skieur_3d.gd
+   PerfManager : AMD Ryzen 9 5900X 12-Core Processor, 24 cœurs, 68.6 Go — NVIDIA GeForce RTX 5070 Ti (dedie) — forward_plus / vulkan — écran 3840x2160 @ 60 Hz → mode high ; cran 0/6 ; 76 i/s, à-coups 0.0 %, 1 % pires 18 ms — principal 19.2 / rendu 4.8 / GPU 1.6 ms
+   fenêtre (1600, 900), rendu 3D 100 %, MSAA 2
+1. À l'arrêt au pied des pistes (20 s) : moy 21.44 ms · médiane 21.31 · p95 26.09 · p99 28.08 · max 31.5 · > 16,7 ms : 1171/1200
+   construit : — · 17 lignes prêtes · poubelle 0
+   nœuds 71599 · objets 109925 · mémoire statique 817 Mo
+   part de chaque système (gain quand on le coupe, sur 21.44 ms) :
+     Remontees                     14.32 ms
+       Remontees/tsd6_bollin        4.93 ms
+       Remontees/tsd4_lanches       4.79 ms
+       Remontees/tsd6_fresse        1.49 ms
+     Cabin                          1.17 ms
+     HUD                            1.16 ms
+     CabinGhost                     1.06 ms
+       Remontees/tsd6_tichot        0.80 ms
+     StationHalls                   0.74 ms
+     PerfManager                    0.72 ms
+       Remontees/tkd_col_du_palet   0.62 ms
+     Tunnel                         0.60 ms
+     LumiereVueExterieure           0.59 ms
+     Announcements                  0.58 ms
+       Remontees/tsf3_col_des_ves   0.53 ms
+     DomaineSkiable                 0.51 ms
+       Remontees/Sons               0.47 ms
+     MachineRoom                    0.42 ms
+     Challenge                      0.38 ms
+     SortieSecours                  0.37 ms
+     TrainAudio                     0.36 ms
+       Remontees/tkd_combe_folle    0.35 ms
+       Remontees/tsd6_paquis        0.32 ms
+     Stations                       0.32 ms
+       Remontees/tsd6_tufs          0.31 ms
+     CameraSalleMachines            0.29 ms
+       Remontees/tsd8_tommeuses     0.28 ms
+     FaultManager                   0.27 ms
+     TunnelLights                   0.22 ms
+     ExploitationLog                0.21 ms
+2. Assis dans le télésiège de la Madeleine (40 s) : moy 13.36 ms · médiane 13.42 · p95 18.85 · p99 20.95 · max 30.5 · > 16,7 ms : 413/2402
+   à-coups > 33 ms selon ce qui se construit : {  }
+   construit : — · 11 lignes prêtes · poubelle 0
+   « tsd6_madeleine » : moy 11.47 ms · médiane 11.79 · p95 15.99 · p99 17.63 · max 31.4 · > 16,7 ms : 41/1501
+   « tcd10_vallon_iseran » : moy 17.87 ms · médiane 16.35 · p95 28.39 · p99 44.54 · max 96.7 · > 16,7 ms : 655/1501
+   « tsd6_fresse » : moy 30.92 ms · médiane 27.06 · p95 56.37 · p99 70.68 · max 151.7 · > 16,7 ms : 1443/1501
+   « cabine_3s » : moy 25.66 ms · médiane 22.33 · p95 46.70 · p99 63.03 · max 156.5 · > 16,7 ms : 1482/1501
+   « tke_legettaz » : moy 11.52 ms · médiane 11.13 · p95 16.86 · p99 19.48 · max 36.3 · > 16,7 ms : 82/1501
+   « tsd6_leissieres » : moy 17.59 ms · médiane 14.05 · p95 41.09 · p99 53.33 · max 216.7 · > 16,7 ms : 464/1501
+3. Tournée de 6 remontées (25 s chacune) : moy 19.17 ms · médiane 16.06 · p95 40.46 · p99 59.49 · max 216.7 · > 16,7 ms : 4167/9006
+   à-coups > 33 ms : 763
+     pendant « tcd10_vallon_iseran » : 43 images > 33 ms, pire 114 ms
+     pendant « tsd4_pyramides » : 47 images > 33 ms, pire 75 ms
+     pendant « tph_fornet » : 1 images > 33 ms, pire 97 ms
+     pendant « tkd_signal_1 » : 4 images > 33 ms, pire 36 ms
+     pendant « tkd_signal_2 » : 3 images > 33 ms, pire 38 ms
+     pendant « tsd6_bollin » : 14 images > 33 ms, pire 66 ms
+     pendant « tsd4_lanches » : 15 images > 33 ms, pire 95 ms
+     pendant « tsd6_tichot » : 17 images > 33 ms, pire 57 ms
+     pendant « tsd6_tufs » : 19 images > 33 ms, pire 59 ms
+     pendant « tsd6_fresse » : 32 images > 33 ms, pire 77 ms
+     pendant « tsf3_col_des_ves » : 24 images > 33 ms, pire 82 ms
+     pendant « tsd6_grattalu » : 24 images > 33 ms, pire 70 ms
+     pendant « tkd_col_du_palet » : 8 images > 33 ms, pire 64 ms
+     pendant « tsd6_paquis » : 26 images > 33 ms, pire 101 ms
+     pendant « tcd10_toviere » : 34 images > 33 ms, pire 134 ms
+     pendant « tkd_combe_folle » : 13 images > 33 ms, pire 45 ms
+     pendant « tkd_chardonnet » : 9 images > 33 ms, pire 47 ms
+     pendant « tsd6_merles » : 26 images > 33 ms, pire 68 ms
+     pendant « tsd8_tommeuses » : 55 images > 33 ms, pire 152 ms
+     pendant « tsf4_grand_huit » : 22 images > 33 ms, pire 57 ms
+     pendant « tsf4_rosset » : 10 images > 33 ms, pire 60 ms
+     pendant « tsd6_palafour » : 48 images > 33 ms, pire 64 ms
+     pendant « rien (collisions, relief…) » : 3 images > 33 ms, pire 45 ms
+     pendant « olympique » : 15 images > 33 ms, pire 157 ms
+     pendant « tsd4_bellevarde_express » : 13 images > 33 ms, pire 55 ms
+     pendant « tsf4_rogoney » : 14 images > 33 ms, pire 66 ms
+     pendant « tcd10_solaise » : 19 images > 33 ms, pire 76 ms
+     pendant « tsf4_village » : 10 images > 33 ms, pire 61 ms
+     pendant « tke_savonnette_2 » : 2 images > 33 ms, pire 45 ms
+     pendant « tke_savonnette_1 » : 3 images > 33 ms, pire 42 ms
+     pendant « tke_legettaz » : 3 images > 33 ms, pire 42 ms
+     pendant « tsd4_loyes_express » : 35 images > 33 ms, pire 135 ms
+     pendant « tsd6_laisinant » : 27 images > 33 ms, pire 69 ms
+     pendant « tkf_lanche » : 5 images > 33 ms, pire 51 ms
+     pendant « tcd10_daille » : 31 images > 33 ms, pire 71 ms
+     pendant « tsd6_leissieres » : 16 images > 33 ms, pire 217 ms
+     pendant « tkd_3000 » : 1 images > 33 ms, pire 53 ms
+     pendant « tsf4_cema » : 7 images > 33 ms, pire 45 ms
+     pendant « tsd6_glacier » : 19 images > 33 ms, pire 67 ms
+     pendant « tsd4_cascade » : 26 images > 33 ms, pire 66 ms
+     pendant « tkd_pays_desert » : 5 images > 33 ms, pire 63 ms
+     pendant « tsf4_cugnai » : 15 images > 33 ms, pire 65 ms
+   pires tranches de construction d'un seul tenant, par étape :
+     gare : terrassement                         199.5 ms (tsd6_leissieres)
+     câble : porteurs 3S                         141.2 ms (olympique)
+     câble                                        68.7 ms (tcd10_vallon_iseran)
+     véhicules                                    65.9 ms (tcd10_solaise)
+     boucle                                       65.8 ms (tsd4_lanches)
+                                                  50.5 ms (tph_fornet)
+     pylônes                                      41.8 ms (tcd10_toviere)
+     câble : machinerie 3S                        39.4 ms (olympique)
+     pylônes treillis                             32.7 ms (olympique)
+     période                                      26.9 ms (tsd6_fresse)
+     gare aval                                    15.1 ms (tkd_chardonnet)
+     gare : carénage                              14.0 ms (tkd_combe_folle)
+     lanceurs                                     13.5 ms (tsd6_fresse)
+     gare : poulie                                13.4 ms (tsd6_fresse)
+     table du jumelage                            13.3 ms (tsd6_fresse)
+     magasin                                      13.3 ms (tkd_pays_desert)
+     corps des véhicules                          12.7 ms (tsd6_bollin)
+     rails d'ouverture                            10.6 ms (tsd6_bollin)
+     charpente 3S                                  9.9 ms (olympique)
+     gare amont                                    9.5 ms (olympique)
+     pylônes téléski                               7.3 ms (tkd_col_du_palet)
+     gare : quais 3S                               3.8 ms (olympique)
+     câble : cavaliers 3S                          3.6 ms (olympique)
+     câble : charges                               2.4 ms (tcd10_toviere)
+     câble : tracé                                 2.1 ms (olympique)
+     gare : machinerie 3S                          1.1 ms (olympique)
+     fin (portillons, collisions fixes, fosses)    0.1 ms (olympique)
+   lectures de maillages restées sur la carte graphique : 461 { "ArrayMesh@GareAval": 18, "TorusMesh@GareAval": 5, "ArrayMesh@Fusion": 160, "CylinderMesh@Fusion": 5, "ArrayMesh@Cerces": 168, "CylinderMesh@Cerces": 18, "TorusMesh@Cerces": 2, "SphereMesh@Cerces": 1, "ImmediateMesh@Cerces": 1, "TextMesh@Vehicule": 83 }
+   [arret] fil de rendu : moy 3.96 ms · médiane 3.82 · p95 5.03 · p99 5.62 · max 7.3 · > 16,7 ms : 0/300
+   [arret] carte graphique : moy 1.92 ms · médiane 1.92 · p95 1.94 · p99 1.94 · max 2.1 · > 16,7 ms : 0/300
+   [arret] appels de dessin : médiane 3407 · max 3471 ; objets : médiane 4769 · max 5109
+   [siege] fil de rendu : moy 2.81 ms · médiane 2.68 · p95 3.91 · p99 4.52 · max 9.6 · > 16,7 ms : 0/601
+   [siege] carte graphique : moy 1.58 ms · médiane 1.52 · p95 1.63 · p99 2.80 · max 5.3 · > 16,7 ms : 0/601
+   [siege] appels de dessin : médiane 2651 · max 3273 ; objets : médiane 4120 · max 4958
+   [tournee] fil de rendu : moy 3.77 ms · médiane 3.56 · p95 6.20 · p99 7.43 · max 9.4 · > 16,7 ms : 0/2251
+   [tournee] carte graphique : moy 1.66 ms · médiane 1.63 · p95 2.09 · p99 2.12 · max 6.5 · > 16,7 ms : 0/2251
+   [tournee] appels de dessin : médiane 2965 · max 5947 ; objets : médiane 4304 · max 10446
+BENCH_FLUIDITE_SKIEUR OK
