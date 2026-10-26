@@ -5,6 +5,29 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.47.2 — 27 octobre 2026
+
+**Retours d'essai sur iPad (27/10/2026) : sons des remontées, gares du 3S, terrassements.**
+
+- **Sons** :
+  - le vent de dehors s'efface sous l'ambiance d'une remontée (à bord, au pied d'une gare),
+    comme au funiculaire (`SonsRemontees.couverture`) ;
+  - ambiances des remontées plus fortes (+6 dB) ;
+  - TSD : les compressions de sortie de gare passaient avant le début de la zone « ligne », leur
+    prise arrivait trop tard — les pylônes sont suivis dès la gare.
+- **3S** :
+  - les béquilles des sabots de nez étaient posées de part et d'autre de chaque voie (on les
+    traversait en cabine et à pied) : poteaux droits entre les deux voies, hors du gabarit
+    des cabines, bras horizontal sous chaque caisson ;
+  - les cabines se suivaient à 7 m en gare (0,25 m/s) et se rentraient dedans dans le
+    demi-tour : 0,5 m/s, 14 m.
+- **Fontaine Froide** : la gare du haut était dans le bâtiment de l'Olympique à Bellevarde ;
+  reculée de 28 m (`RECULS_AMONT`).
+- **Terrassements** : la hauteur d'une gare se prend sous le quai et la poulie seulement (avec
+  12 m d'aire d'attente et 5 m de chaque côté, une gare sur un versant était perchée sur un
+  terrassement immense) ; un talus ne dépasse plus 20 m, au-delà un mur raide jusqu'au sol
+  (au lieu d'un plateau en porte-à-faux).
+
 ## 1.47.1 — 26 octobre 2026
 
 **Le relevé MESURE dit qui prend le temps.** Relevés du programme installé sur PC (26/10/2026) :

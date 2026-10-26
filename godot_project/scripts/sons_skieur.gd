@@ -57,7 +57,9 @@ func _process_corps(delta: float) -> void:
 		var dehors: bool = ecoute == 2
 		if dehors and not _vent.playing:
 			_vent.play()
-		var cible: float = -16.0 if dehors else -80.0
+		# sous l'ambiance d'une remontée (à bord, au pied d'une gare), le vent
+		# s'efface (retour d'utilisateur, 27/10/2026)
+		var cible: float = lerpf(-16.0, -80.0, SonsRemontees.couverture) if dehors else -80.0
 		_vent.volume_db = move_toward(_vent.volume_db, cible, delta * 40.0)
 		if not dehors and _vent.volume_db <= -79.0 and _vent.playing:
 			_vent.stop()

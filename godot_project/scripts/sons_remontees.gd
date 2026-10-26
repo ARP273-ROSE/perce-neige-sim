@@ -118,6 +118,25 @@ func _process(delta: float) -> void:
 		_process_corps(delta)
 
 
+## Ambiances des remontées plus fortes (retour d'utilisateur, 27/10/2026 : « trop
+## faibles ») ; le vent de dehors s'efface sous elles (`couverture`, lue par
+## SonsSkieur), comme au funiculaire.
+const GAIN_AMBIANCE: float = 6.0
+static var couverture: float = 0.0       # 0 : rien des remontées ; 1 : à bord ou au pied d'une gare
+
+
+func _maj_couverture(delta: float, sk: Vector3) -> void:
+	var c: float = 0.0
+	if not domaine.a_bord.is_empty():
+		c = 1.0
+	else:
+		for e in _gares:
+			var p3: AudioStreamPlayer3D = e[0]
+			if p3.playing and p3.volume_db > -40.0:
+				c = maxf(c, clampf(1.0 - (p3.global_position.distance_to(sk) - 25.0) / 60.0, 0.0, 1.0))
+	couverture = move_toward(couverture, c, delta * 1.5)
+
+
 func _process_corps(delta: float) -> void:
 	if domaine == null or domaine.skieur == null or not domaine.skieur.actif:
 		_tout_couper()
@@ -131,6 +150,7 @@ func _process_corps(delta: float) -> void:
 		_choisir_gares(sk)
 		_choisir_pylone(sk)
 	_maj_gares(delta)
+	_maj_couverture(delta, sk)
 	_portiques(sk)
 	_a_bord(delta)
 	_pylone_proche()
@@ -139,6 +159,7 @@ func _process_corps(delta: float) -> void:
 
 
 func _tout_couper() -> void:
+	couverture = 0.0
 	for e in _gares:
 		(e[0] as AudioStreamPlayer3D).stop()
 	_ligne.stop()
@@ -196,7 +217,7 @@ func _maj_gares(delta: float) -> void:
 					p3.stop()
 			continue
 		var r: float = clampf(lg.regime(), 0.0, 1.0)
-		var cible: float = -60.0 if r < 0.02 else -8.0 + 20.0 * log(maxf(r, 0.05)) / log(10.0)
+		var cible: float = -60.0 if r < 0.02 else -8.0 + GAIN_AMBIANCE + 20.0 * log(maxf(r, 0.05)) / log(10.0)
 		if not p3.playing and r > 0.02:
 			p3.volume_db = -60.0
 			p3.play(randf() * 4.0)
@@ -426,7 +447,10 @@ func _a_bord_3s(delta: float, lg: LigneRemontee, s: float, z: Array, v: float, p
 			_coup(lg, "tsd_arrivee")
 		_zone3s = zd
 		_ambiance(delta, lg, "tsd_" + zd, -2.0 if zd != "arrete" else 0.0)
-		_pylones_reels(lg, s, v, pref, zd == "ligne")
+		# (dès la gare : les compressions de sortie de gare sont passées avant le
+		# début de la zone « ligne », leur prise arrivait trop tard — retour
+		# d'utilisateur, 27/10/2026)
+		_pylones_reels(lg, s, v, pref, zd != "arrete")
 		return
 	if pref == "tsf":
 		var zt: String = "ligne" if z[0] == "ligne" else ("motrice" if z[0] == "gare_aval" else "arrivee")
@@ -448,14 +472,14 @@ func _a_bord_3s(delta: float, lg: LigneRemontee, s: float, z: Array, v: float, p
 	_zone3s = zone
 	# boucle d'ambiance : changement de prise en fondu ; abaissée pendant les coups
 	var son: String = pref + "_" + zone
-	var cible: float = -4.0
+	var cible: float = -4.0 + GAIN_AMBIANCE
 	if _coup3s.playing or _coup3s_b.playing:
-		cible = -18.0
+		cible = -18.0 + GAIN_AMBIANCE
 	# la cabine vibre de plus en plus à l'approche d'un pylône (retour d'utilisateur,
 	# 25/10/2026) : l'ambiance monte de 5 dB dans les 2 s qui précèdent
 	cible += 5.0 * _approche
 	if lg.regime() < 0.02 and zone == "ligne":
-		cible = -24.0                         # arrêté en ligne : le vent, la cabine qui grince
+		cible = -24.0 + GAIN_AMBIANCE         # arrêté en ligne : le vent, la cabine qui grince
 	if _ligne.stream != _sons[son]:
 		_ligne.volume_db = move_toward(_ligne.volume_db, -50.0, delta * 80.0)
 		if _ligne.volume_db <= -49.0 or not _ligne.playing:
@@ -537,7 +561,7 @@ func _a_bord_tph(delta: float, lg: LigneRemontee) -> void:
 ## Boucle d'ambiance à bord, changée en fondu ; abaissée pendant les coups,
 ## montée à l'approche d'un pylône.
 func _ambiance(delta: float, lg: LigneRemontee, son: String, base: float) -> void:
-	var cible: float = base
+	var cible: float = base + GAIN_AMBIANCE
 	if _coup3s.playing or _coup3s_b.playing:
 		cible = base - 14.0
 	cible += 5.0 * _approche
