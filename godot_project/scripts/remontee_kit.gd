@@ -227,7 +227,7 @@ static func tube(parent: Node3D, pts: PackedVector3Array, r: float, m: String, s
 				st.set_normal(p[1])
 				st.set_uv(Vector2(p[2], q[1]))
 				st.add_vertex(p[0])
-	var mesh: ArrayMesh = st.commit()
+	var mesh: ArrayMesh = MeshMerge.valider(st)
 	mesh.surface_set_material(0, matiere if matiere != null else mat(m))
 	return _mi(parent, mesh, Transform3D.IDENTITY, m)
 
@@ -339,7 +339,7 @@ static func _maillage_coussin(h: Vector3, r: float) -> ArrayMesh:
 				for p in tri:
 					st.set_normal(p[1])
 					st.add_vertex(p[0])
-	return st.commit()
+	return MeshMerge.valider(st)
 
 
 ## Caisson lisse : section rectangulaire balayée le long de `pts` (dans un
@@ -385,7 +385,7 @@ static func caisson(parent: Node3D, pts: PackedVector3Array, l0: float, l1: floa
 		for v in [r[0], r[1], r[2], r[0], r[2], r[3]]:
 			st.set_normal(nb)
 			st.add_vertex(v)
-	var mesh: ArrayMesh = st.commit()
+	var mesh: ArrayMesh = MeshMerge.valider(st)
 	var mt: StandardMaterial3D = (mat(m) as StandardMaterial3D).duplicate()
 	mt.cull_mode = BaseMaterial3D.CULL_DISABLED
 	mesh.surface_set_material(0, mt)
@@ -413,7 +413,7 @@ static func demi_cone(parent: Node3D, a: Vector3, b: Vector3, r0: float, r1: flo
 		for q in [[a + d0 * r0, d0], [b + d0 * r1, d0], [b + d1 * r1, d1], [a + d0 * r0, d0], [b + d1 * r1, d1], [a + d1 * r0, d1]]:
 			st.set_normal(q[1])
 			st.add_vertex(q[0])
-	var mesh: ArrayMesh = st.commit()
+	var mesh: ArrayMesh = MeshMerge.valider(st)
 	var mt: StandardMaterial3D = (mat(m) as StandardMaterial3D).duplicate()
 	mt.cull_mode = BaseMaterial3D.CULL_DISABLED
 	mesh.surface_set_material(0, mt)

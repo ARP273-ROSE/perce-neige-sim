@@ -1557,7 +1557,7 @@ func _mesh_terrassement(tri: PackedVector3Array, y0: float) -> MeshInstance3D:
 	mi.name = "Terrassement"
 	var m2: StandardMaterial3D = (RemonteeKit.mat("neige_damee") as StandardMaterial3D).duplicate()
 	m2.cull_mode = BaseMaterial3D.CULL_DISABLED
-	mi.mesh = st.commit()
+	mi.mesh = MeshMerge.valider(st)
 	mi.material_override = m2
 	return mi
 
@@ -1660,7 +1660,7 @@ func _capot(g: Node3D, znez: float, zc: float, aval: bool) -> void:
 		var s2: SurfaceTool = st[mat]
 		s2.index()
 		s2.generate_normals()
-		s2.commit(mesh)
+		MeshMerge.valider(s2, mesh)
 		mesh.surface_set_material(mesh.get_surface_count() - 1, _mat_capot(mat))
 	var mi: MeshInstance3D = MeshInstance3D.new()
 	mi.name = "Capot"
@@ -1927,7 +1927,7 @@ func _pignon(g: Node3D, x0: float, x1: float, y: float, h: float, z: float, m: S
 			st.set_normal(tri[3])
 			st.add_vertex(tri[k])
 	var mi: MeshInstance3D = MeshInstance3D.new()
-	mi.mesh = st.commit()
+	mi.mesh = MeshMerge.valider(st)
 	mi.material_override = RemonteeKit.mat(m)
 	g.add_child(mi)
 
