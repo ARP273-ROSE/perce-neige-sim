@@ -282,6 +282,12 @@ func _fusionner() -> void:
 		MeshMerge.merge(n, _skis_ranges, "Piece", true)      # skis rangés : affichés à la demande
 	for n in _skis_ranges:
 		MeshMerge.merge(n, [], "Skis", true)
+	# pièces de détail, invisibles de loin (audit de fluidité, 26/10/2026 : 36 000
+	# objets à dessiner au pied des pistes, 7 sur 10 par siège sont ces pièces) ;
+	# les portes et la bulle restent : sans elles, la cabine serait trouée
+	for n in [_machoire, _levier, _gc] + _ressorts + _galets_roul + _skis_ranges:
+		if n != null:
+			(n as Node).set_meta("detail", true)
 
 
 # --- pinces ---------------------------------------------------------------------

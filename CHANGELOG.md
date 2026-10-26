@@ -5,6 +5,35 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.46.0 — 26 octobre 2026
+
+**Le bon levier selon le goulot ; relevé de fluidité en jeu.** Retour d'utilisateur, 26/10/2026 :
+« qu'il utilise à fond la carte graphique selon sa présence et ses performances, et tous les
+cœurs, et qu'il s'adapte à toutes les configs ». Inventaire au pied des pistes : les remontées
+représentaient 36 000 objets à dessiner, 58 000 appels de dessin et 46 millions de sommets —
+c'est le fil de rendu (processeur) qui sature sur un PC puissant, pas la carte graphique.
+
+- **Fil de rendu séparé** : pas encore activé. Sans écran (bancs), il coûte un peu au lieu de
+  rapporter (moyenne 10,0 → 11,4 ms, rien à paralléliser) ; à mesurer sur un vrai PC avec
+  `--render-thread separate` avant de l'imposer.
+- **Trois chronomètres** dans le PerfManager : fil principal, fil de rendu, carte graphique (90e
+  centile de chaque fenêtre de 2 s). Aux saccades, le goulot est le plus chargé des trois :
+  - carte graphique → effets, puis résolution (comme avant) ;
+  - fil de rendu ou fil principal → **niveau de détail des remontées** (`niveau_detail` 0–2 :
+    portées des véhicules et des détails, cadence des lignes lointaines), puis les effets, mais
+    jamais le plafond à 30 i/s ni la résolution, sans effet sur ces causes ;
+  - marge durable → le détail revient d'abord, les effets ensuite.
+  Avant, GPU sous 40 % du budget → rien ; au-dessus, on retirait des effets même quand le
+  processeur était la cause (et l'on finissait plafonné à 30 i/s, rendu à 85 %).
+- **Pièces de détail des véhicules** (ressorts, mâchoire, levier, garde-corps, galets, skis :
+  7 objets sur 10 par siège) et plaques des pylônes : visibles à moins de 250 m seulement.
+- **Pylônes du 3S** : ils n'étaient visibles qu'à 250 m (pas de la classe des autres pylônes) —
+  « le pylône qui se matérialise 20 s avant d'y arriver ». Comme les autres : 3 km.
+- **Relevé en jeu, touche F10** : une minute, image par image (les quatre temps, appels de
+  dessin, objets, primitives, cran, détail, position, ligne en construction) en CSV dans le
+  dossier utilisateur, résumé dans le journal — pour dimensionner la suite sur des chiffres
+  réels (instanciation des véhicules, décor plus fin sur PC).
+
 ## 1.45.0 — 26 octobre 2026
 
 **Fluidité du mode skieur ; lâcher la perche en pleine ligne.** Retours d'utilisateur, 26/10/2026 :
