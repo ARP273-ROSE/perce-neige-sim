@@ -96,6 +96,7 @@ func _tick() -> void:
 				_durees.clear()
 		"arret":
 			_durees.append(ms)
+			_ext_ajout()
 			if _t > 20.0:
 				_resultats.append("1. À l'arrêt au pied des pistes (20 s) : " + _stats(_durees))
 				_resultats.append("   " + _contexte())
@@ -155,6 +156,7 @@ func _tick() -> void:
 			if _durees.is_empty() and _t < 1e5:
 				_t = 1e5
 			_durees.append(ms)
+			_ext_ajout()
 			if ms > 33.0:
 				var ec2: LigneRemontee = rm._en_cours
 				_acoups_siege[str(ec2.name) if ec2 != null else "rien (collisions, relief…)"] = _acoups_siege.get(str(ec2.name) if ec2 != null else "rien (collisions, relief…)", 0) + 1
@@ -165,6 +167,7 @@ func _tick() -> void:
 				_suivant()
 		"tournee":
 			_durees.append(ms)
+			_ext_ajout()
 			if ms > 33.0:
 				var ec: LigneRemontee = rm._en_cours
 				_acoups.append([ms, str(ec.name) if ec != null else "rien (collisions, relief…)"])
@@ -218,9 +221,53 @@ func _ligne(cle: String) -> LigneRemontee:
 	return null
 
 
+## Avec un écran (PC, 26/10/2026) : fil de rendu, carte graphique et appels
+## de dessin, par phase — ce que les bancs sans écran ne mesurent pas.
+var _ext: Dictionary = {}           # phase → {rendu, gpu, appels, objets: PackedFloat32Array}
+
+
+func _ext_ajout() -> void:
+	if DisplayServer.get_name() == "headless":
+		return
+	var vp: RID = get_root().get_viewport_rid()
+	if not _ext.has(_phase):
+		_ext[_phase] = {"rendu": PackedFloat32Array(), "gpu": PackedFloat32Array(), "appels": PackedFloat32Array(), "objets": PackedFloat32Array()}
+	var e: Dictionary = _ext[_phase]
+	e["rendu"].append(RenderingServer.viewport_get_measured_render_time_cpu(vp))
+	e["gpu"].append(RenderingServer.viewport_get_measured_render_time_gpu(vp))
+	e["appels"].append(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME))
+	e["objets"].append(Performance.get_monitor(Performance.RENDER_TOTAL_OBJECTS_IN_FRAME))
+
+
 func _fin() -> void:
-	print("=== FLUIDITÉ DU MODE SKIEUR (CPU, sans rendu) — %s, %d cœurs" % [OS.get_processor_name(), OS.get_processor_count()])
-	for r in _resultats:
-		print(r)
-	print("BENCH_FLUIDITE_SKIEUR OK")
+	var sortie: PackedStringArray = PackedStringArray()
+	var ecran: bool = DisplayServer.get_name() != "headless"
+	sortie.append("=== FLUIDITÉ DU MODE SKIEUR (%s) — %s, %d cœurs — %s — %s" % [
+		"avec rendu" if ecran else "CPU, sans rendu", OS.get_processor_name(), OS.get_processor_count(),
+		RenderingServer.get_video_adapter_name(), " ".join(OS.get_cmdline_args())])
+	if ecran:
+		var pm: Node = _main.get("perf_manager")
+		if pm != null:
+			sortie.append("   PerfManager : " + str(pm.call("resume")))
+		var vp: Viewport = get_root()
+		sortie.append("   fenêtre %s, rendu 3D %d %%, MSAA %d" % [str(DisplayServer.window_get_size()), int(vp.scaling_3d_scale * 100.0), vp.msaa_3d])
+	sortie.append_array(_resultats)
+	for ph in _ext:
+		var e: Dictionary = _ext[ph]
+		sortie.append("   [%s] fil de rendu : %s" % [ph, _stats(e["rendu"])])
+		sortie.append("   [%s] carte graphique : %s" % [ph, _stats(e["gpu"])])
+		var ap: Array = Array(e["appels"])
+		ap.sort()
+		var ob: Array = Array(e["objets"])
+		ob.sort()
+		if not ap.is_empty():
+			sortie.append("   [%s] appels de dessin : médiane %d · max %d ; objets : médiane %d · max %d" % [
+				ph, ap[ap.size() / 2], ap[ap.size() - 1], ob[ob.size() / 2], ob[ob.size() - 1]])
+	sortie.append("BENCH_FLUIDITE_SKIEUR OK")
+	for l in sortie:
+		print(l)
+	var f: FileAccess = FileAccess.open("user://fluidite_%s.txt" % Time.get_datetime_string_from_system().replace(":", "").replace("-", ""), FileAccess.WRITE)
+	if f != null:
+		f.store_string("\n".join(sortie))
+		print("écrit : " + ProjectSettings.globalize_path(f.get_path()))
 	quit(0)
