@@ -103,7 +103,7 @@ func _ready() -> void:
 			_carte_a_pied = on
 		_maj_carte())
 	col.add_child(_b_carte)
-	_b_ski = _bouton("CHAUSSER", "Chausser ou déchausser les skis, dehors sur la neige (touche E)")
+	_b_ski = _bouton("CHAUSSER", "Chausser ou déchausser les skis, dehors sur la neige ; sur une perche de téléski, la lâcher (touche E)")
 	_b_ski.pressed.connect(func() -> void:
 		if main != null:
 			main.basculer_ski())
@@ -277,6 +277,11 @@ func _process(delta: float) -> void:
 		var lg: LigneRemontee = rm.ligne_courante(skieur.global_position) if rm != null else null
 		_b_poste.visible = lg != null
 		poste.ligne = lg
+		# sur une perche, CHAUSSER devient LÂCHER (lâcher la perche en ligne)
+		var perche: bool = rm != null and rm.sur_perche()
+		var t_ski: String = "LÂCHER" if perche else ("DÉCHAUSSER" if _chausse else "CHAUSSER")
+		if _b_ski.text != t_ski:
+			_b_ski.text = t_ski
 		if lg == null and poste.visible:
 			poste.visible = false
 			_b_poste.set_pressed_no_signal(false)

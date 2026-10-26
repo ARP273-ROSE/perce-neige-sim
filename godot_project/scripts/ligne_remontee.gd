@@ -118,12 +118,31 @@ var _t_tranche: int = 0
 signal construite
 
 
-func _pause() -> void:
+## Banc de fluidité : durée de la plus longue tranche d'un seul tenant, par
+## étape (la tranche finit à la pause qui porte le nom de l'étape).
+static var mesurer_tranches: bool = false
+static var tranches: Dictionary = {}       # étape → [pire durée (ms), famille]
+var _t_mesure: int = 0
+
+
+func _pause(etape: String = "") -> void:
+	if mesurer_tranches:
+		var now: int = Time.get_ticks_usec()
+		var ms: float = (now - maxi(_t_mesure, _t_tranche)) / 1000.0
+		var tr: Array = tranches.get(etape, [0.0, "", 0, 0.0])
+		if ms > float(tr[0]):
+			tr[0] = ms
+			tr[1] = String(name)
+		tr[2] = int(tr[2]) + 1
+		tr[3] = float(tr[3]) + ms
+		tranches[etape] = tr
+		_t_mesure = now
 	if not progressif:
 		return
 	if Time.get_ticks_usec() - _t_tranche > int(budget_ms * 1000.0):
 		await get_tree().process_frame
 		_t_tranche = Time.get_ticks_usec()
+		_t_mesure = _t_tranche
 
 
 ## Démontage d'une ligne loin du skieur (mémoire de l'iPad : la PWA était
@@ -197,25 +216,31 @@ func construire() -> void:
 	_preparer_nez()
 	if teleski() or tricable():
 		_construire_boucle()       # (magasin, départ, quais du 3S se posent dessus)
-	_gare(true)
-	await _pause()
-	_gare(false)
-	await _pause()
+	await _gare(true)
+	await _pause("gare aval")
+	await _gare(false)
+	await _pause("gare amont")
 	await _poser_pylones()
 	_construire_boucle()
+	await _pause("boucle")
 	if tricable():
 		_charpente_3s(true)
+		await _pause("charpente 3S")
 		_charpente_3s(false)
-	_cable()
-	await _pause()
+		await _pause("charpente 3S")
+	await _cable()
+	await _pause("câble")
 	await _lanceurs()
 	if not famille.begins_with("perche") and VehiculeRemontee.DESCRIPTIONS.get(famille, ["", 6, ""])[2] != "fixe" \
 			and famille != "cabine_3s" and famille != "cabine_tph":
 		_rail_ouverture(true)
 		_rail_ouverture(false)
-	_caler_periode()
+	await _pause("rails d'ouverture")
+	await _caler_periode()
+	await _pause("période")
 	if jumelee != null:
 		_construire_table()
+		await _pause("table du jumelage")
 	await _peupler()
 	roule = true
 	set_process(true)
@@ -232,10 +257,11 @@ func construire() -> void:
 		_collisions_fixes()
 		for i in range(_vehicules.size()):
 			_corps_vehicule(i)
-			await _pause()
+			await _pause("corps des véhicules")
 	pret = true
 	set_process(true)
 	_percer_fosses()
+	await _pause("fin (portillons, collisions fixes, fosses)")
 	construite.emit()
 
 
@@ -823,8 +849,18 @@ func _temps_boucle(v: float) -> float:
 
 ## Vitesse retouchée (quelques %) pour que la boucle dure un nombre entier
 ## de périodes (pair au tronçon bas : les sièges y alternent Bollin/Fresse).
+## Vitesse calée gardée d'une construction à l'autre (le calcul coûte
+## 0,2 s à Fresse ; une ligne démontée se reconstruit à l'approche).
+static var _periodes: Dictionary = {}
+
+
 func _caler_periode() -> void:
 	if periode_imposee <= 0.0:
+		return
+	var cle: String = "%s|%f|%f" % [name, vitesse, periode_imposee]
+	if _periodes.has(cle):
+		vitesse = _periodes[cle]
+		espacement = periode_imposee * vitesse
 		return
 	var T: float = _temps_boucle(vitesse)
 	var n: int = maxi(2, int(round(T / periode_imposee)))
@@ -839,8 +875,10 @@ func _caler_periode() -> void:
 			lo = m
 		else:
 			hi = m
+		await _pause("période")          # (un tour de boucle par tranche)
 	vitesse = (lo + hi) * 0.5
 	espacement = periode_imposee * vitesse
+	_periodes[cle] = vitesse
 
 
 func _construire_table() -> void:
@@ -1266,6 +1304,7 @@ func _gare(aval: bool) -> void:
 	# (téléski : pas de quai, la gare est posée sur la neige)
 	if not teleski():
 		g.add_child(_mesh_terrassement(_terrassement(aval), y0))
+	await _pause("gare : terrassement")
 	# carénage en gélule sur colonnes, cabine du conducteur (photos des
 	# gares BMF du Marmottes Express, retour d'utilisateur, 23/10/2026)
 	if tricable():
@@ -1287,10 +1326,14 @@ func _gare(aval: bool) -> void:
 	if tricable():
 		# 3S : pas de poulie au demi-tour — les cabines tournent sur leur rail,
 		# le tracteur file derrière, vers la tension (aval) ou la motrice (amont)
+		await _pause("gare : carénage")
 		Machinerie3S.new(self).equipements(g, aval)
+		await _pause("gare : machinerie 3S")
 		Machinerie3S.new(self).maillage_quais(g, aval)
+		await _pause("gare : quais 3S")
 		MeshMerge.merge(g, [], "Gare")
 		return
+	await _pause("gare : carénage")
 	# poulie de demi-tour (motrice en amont, retour-tension en aval)
 	var R: float = voie * 0.5
 	# la roue tourne (nœud à part) ; arbre et bâti restent dans la gare
@@ -1306,6 +1349,7 @@ func _gare(aval: bool) -> void:
 		g.add_child(n)
 		(n as Node3D).position += cp
 	MeshMerge.merge(roue, [], "Roue")
+	await _pause("gare : poulie")
 	# vitesse du câble en ligne, au rayon de la gorge ; sens de la boucle
 	_poulies.append([roue, signf(_x_brin(true)) * vitesse / rayon_poulie()])
 	# galets de déviation (axe vertical) : ils rentrent le câble de la voie
@@ -2414,7 +2458,7 @@ func _peupler_magasin() -> void:
 	var s_a: float = float(_zones[1][1]) + 5.0
 	for k in range(n_desc):
 		_ajouter_vehicule(lerpf(s_a, longueur_boucle - 5.0, (k + 0.5) / n_desc))
-		await _pause()
+		await _pause("magasin")
 
 
 ## Abscisse (boucle) d'un point de la gare : x depuis l'entrée de sa zone.
@@ -2740,7 +2784,7 @@ func _lanceurs() -> void:
 			MeshMerge.merge(pn, [], "Pneu")
 			_pneus.append([pn, s2, base, 0.0])
 			x += 0.62
-			await _pause()
+			await _pause("lanceurs")
 
 
 ## Détails de gare visibles (posé par RemonteesDomaine : moins de 250 m).
@@ -2765,7 +2809,17 @@ var collisions_actives: bool = true:
 func _tourner_pneus(delta: float) -> void:
 	if not details_visibles:
 		return
+	# seulement aux gares à moins de PNEUS_JUSQUA du point de vue : 268 pneus
+	# à Bollin, 0,7 ms par image pour des roues qu'on ne voit pas tourner de loin
+	var pres_aval: bool = not vue_active or Vector2(point_vue.x, point_vue.z).length() < PNEUS_JUSQUA
+	var pres_amont: bool = not vue_active or Vector2(point_vue.x, point_vue.z + longueur_h()).length() < PNEUS_JUSQUA
+	if not (pres_aval or pres_amont):
+		return
 	for e in _pneus:
+		if e.size() < 5:
+			e.append(zone(e[1])[0] == "gare_aval")
+		if not (pres_aval if e[4] else pres_amont):
+			continue
 		var w: float = vitesse_en(e[1]) * regime() / R_PNEU
 		e[3] = fposmod(float(e[3]) + w * delta, TAU)
 		(e[0] as Node3D).transform.basis = (e[2] as Basis) * Basis(Vector3.UP, e[3])
@@ -2822,7 +2876,7 @@ func _poser_pylones() -> void:
 		for m in py.mobiles:
 			MeshMerge.merge(m, [], "Paire")
 		_pyl.append([py, d])
-		await _pause()
+		await _pause("pylônes")
 	# batteries de galets aux nez des gares (le câble y change de pente)
 	for aval in [true, false]:
 		_batterie_gare(aval)
@@ -2888,7 +2942,7 @@ func _poser_pylones_teleski() -> void:
 			py.construire()
 			MeshMerge.merge(py, [], "Pylone")
 			_pyl.append([py, d])
-		await _pause()
+		await _pause("pylônes téléski")
 	# (pas de batterie de nez : au téléski, le câble va droit de la poulie
 	# au premier pylône)
 
@@ -3036,10 +3090,15 @@ func _cable() -> void:
 		# 3S : le tracteur passe sous les porteurs (la boucle suit le chariot)
 		for k in range(pts.size()):
 			pts[k] += Vector3(0, VehiculeRemontee.Y_TRACTEUR_3S, 0)
+		await _pause("câble : tracé")
 		_porteurs(c)
+		await _pause("câble : porteurs 3S")
 		_cavaliers(c)
+		await _pause("câble : cavaliers 3S")
 		_poulies_3s = m3s.construire(c, poulies_3s)
+		await _pause("câble : machinerie 3S")
 	_preparer_charges()
+	await _pause("câble : charges")
 	RemonteeKit.tube(c, pts, diametre_cable * 0.0005, "cable", 8, _mat_cable)
 
 
@@ -3138,10 +3197,12 @@ func _peupler() -> void:
 	if periode_imposee > 0.0:
 		t_fin = _temps_boucle(vitesse) - dt_v * 0.5
 	while s < longueur_boucle and garde < 200000:
-		if t >= prochain and prochain < t_fin:
+		if prochain >= t_fin:
+			break                  # (période imposée : tous posés, la fin de la boucle reste vide)
+		if t >= prochain:
 			_ajouter_vehicule(s)
 			prochain += dt_v
-			await _pause()
+			await _pause("véhicules")
 		var v: float = vitesse_en(s)
 		s += v * 0.05
 		t += 0.05
@@ -3521,7 +3582,7 @@ func _poser_pylones_treillis() -> void:
 		add_child(py)
 		py.construire()
 		MeshMerge.merge(py, [], "Pylone")
-		await _pause()
+		await _pause("pylônes treillis")
 
 
 func _galets() -> void:
@@ -3559,6 +3620,13 @@ var _cales_vues: Dictionary = {}
 var _tour_cales: int = 0
 
 
+## Galets recalés et pneus animés seulement près du point de vue (au-delà, ils
+## font quelques pixels) — audit de fluidité du 26/10/2026 : à 250 m, le calage
+## coûtait 1,6 ms par ligne proche et par image.
+const CALAGE_JUSQUA: float = 100.0
+const PNEUS_JUSQUA: float = 90.0
+
+
 func _caler_galets() -> void:
 	_tour_cales = (_tour_cales + 1) % 2
 	if _tour_cales != 0 or teleski():
@@ -3569,7 +3637,7 @@ func _caler_galets() -> void:
 		if py.style == "gare" or py._paires[true].is_empty():
 			continue
 		var d: float = q[1]
-		if vue_active and Vector2(py.position.x - point_vue.x, py.position.z - point_vue.z).length() > 250.0:
+		if vue_active and Vector2(py.position.x - point_vue.x, py.position.z - point_vue.z).length() > CALAGE_JUSQUA:
 			continue
 		var y_t: float = py.position.y + py.hauteur_cable()
 		for montee in [true, false]:
@@ -3583,17 +3651,20 @@ func _placer(i: int) -> void:
 	var v: VehiculeRemontee = _vehicules[i][0]
 	var s: float = _vehicules[i][1]
 	var pt: Array = point(s)
+	var z: Array = zone(s)
 	if jumelee != null:
 		pt[0] = _pos_vehicule(i, s)
 	# en ligne : la flèche locale sous le poids des véhicules de la portée
-	if _n_appuis >= 2 and zone(s)[0] == "ligne":
+	if _n_appuis >= 2 and z[0] == "ligne":
 		var p0: Vector3 = pt[0]
 		pt[0] = p0 - Vector3(0, _fleche(-p0.z, signf(p0.x) == signf(_x_brin(true))), 0)
 	# cap : corde de 3 m centrée sur le véhicule — sur l'arc de la poulie
 	# c'est la tangente exacte, et elle tourne continûment ; la direction du
 	# segment de la boucle (polygone de 24 côtés autour de la poulie) faisait
 	# tourner la cabine par crans de 7,5° (retour d'utilisateur, 23/10/2026)
-	var dirh: Vector3 = (point(s + 1.5)[0] as Vector3) - (point(s - 1.5)[0] as Vector3)
+	# (en ligne, la portée est droite en plan : la tangente suffit, sans les
+	# deux points de la corde)
+	var dirh: Vector3 = pt[1] if z[0] == "ligne" else (point(s + 1.5)[0] as Vector3) - (point(s - 1.5)[0] as Vector3)
 	if jumelee != null:
 		dirh = _pos_vehicule(i, s + 1.5) - _pos_vehicule(i, s - 1.5)
 	dirh.y = 0.0
@@ -3611,7 +3682,6 @@ func _placer(i: int) -> void:
 	if au_rail:
 		pt[0] = TeleskiGare.new(self).rail_local(s) + Vector3(0, 0.10, 0)
 	v.transform = Transform3D(bv, pt[0])
-	var z: Array = zone(s)
 	# la pince suit la pente du câble ; la partie suspendue balance
 	var d3: Vector3 = pt[1]
 	v.inclinaison(atan2(d3.y, Vector2(d3.x, d3.z).length()))

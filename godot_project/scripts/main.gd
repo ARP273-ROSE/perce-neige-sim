@@ -1871,6 +1871,11 @@ func _remonter_skieur() -> void:
 
 ## Chausser / déchausser (bouton CHAUSSER, touche E ; E du PC relayée).
 func basculer_ski() -> void:
+	# sur une perche de téléski : E (ou LÂCHER) lâche la perche
+	if remontees != null and remontees.sur_perche():
+		remontees.lacher_perche()
+		commandes_skieur.set_chausse(skieur.chausse)
+		return
 	# la BOUCLE en coulisse chausse aussi hors de la vue skieur (09/10/2026 :
 	# « il fait demi-tour tout le temps, allers-retours sans fin, ne chausse
 	# jamais » — refusé ici, l'étape SKI retombait sur VERS_DEPART)

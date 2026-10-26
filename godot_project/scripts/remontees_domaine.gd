@@ -386,6 +386,10 @@ func _vider_poubelle() -> void:
 			n.free()
 
 
+func _exit_tree() -> void:
+	VehiculeRemontee.vider_modeles()
+
+
 func _process(delta: float) -> void:
 	_vider_poubelle()
 	_construire_proches()
@@ -867,28 +871,55 @@ func _suivre_perche() -> void:
 	# l'arrêt plus bas, il repartait en arrière dans la pente
 	var arr: Array = lg.arrivee(i)
 	if not arr.is_empty() and not bool(arr[0]):
-		v.longueur_perche(0.0)
-		skieur.embarque = false
-		var avant: Vector3 = -arriere
-		var dehors: Vector3 = lg.global_transform.basis.x * signf(lg._x_brin(true))
-		# à l'arrêt, skis EN TRAVERS de la pente (les carres le retiennent),
-		# tournés du côté de la sortie ; chasse-neige tant qu'il ne commande rien
-		var ns: Vector3 = relief.normale_sol(skieur.global_position.x, skieur.global_position.z) if relief != null else Vector3.UP
-		var chute: Vector3 = Vector3(ns.x, 0.0, ns.z)
-		var vit: Vector3 = dehors
-		if chute.length() > 0.05:
-			var trav: Vector3 = Vector3(-chute.z, 0.0, chute.x).normalized()
-			vit = trav if trav.dot(dehors) >= 0.0 else -trav
-		skieur._v_ski = Vector3.ZERO
-		skieur.frein_auto = 4.0
-		skieur._cap_ski = atan2(-vit.x, -vit.z)
-		skieur._cap = skieur._cap_ski
-		skieur.cam_yaw = skieur._cap_ski
-		message.emit("Perche lâchée — %s" % lg.nom_ligne)
-		if randf() < 0.33:
-			_piquer("ARRIVEE", lg)
-		a_bord = []
-		_repos = 4.0
+		_lacher_perche(false)
+
+
+## Lâcher la perche : en haut, à l'aire de lâcher ; en pleine ligne, quand le
+## skieur le décide (touche E ou bouton LÂCHER — retour d'utilisateur, 26/10/2026 :
+## « on fait comment pour descendre en pleine ligne d'un tk ? »), un pas de
+## côté hors de la trace pour la perche suivante. À l'arrêt, skis EN TRAVERS
+## de la pente (les carres le retiennent), tournés vers l'extérieur ;
+## chasse-neige tant qu'il ne commande rien.
+func _lacher_perche(en_ligne: bool) -> void:
+	var lg: LigneRemontee = a_bord[0]
+	var v: VehiculeRemontee = lg.vehicule(a_bord[1])
+	v.longueur_perche(0.0)
+	skieur.embarque = false
+	var dehors: Vector3 = lg.global_transform.basis.x * signf(lg._x_brin(true))
+	if en_ligne:
+		var p: Vector3 = skieur.global_position + dehors * 1.8
+		if relief != null:
+			p.y = relief.hauteur_sol(p.x, p.z) + 0.02
+		skieur.global_position = p
+		skieur.dernier_sol = p
+	var ns: Vector3 = relief.normale_sol(skieur.global_position.x, skieur.global_position.z) if relief != null else Vector3.UP
+	var chute: Vector3 = Vector3(ns.x, 0.0, ns.z)
+	var vit: Vector3 = dehors
+	if chute.length() > 0.05:
+		var trav: Vector3 = Vector3(-chute.z, 0.0, chute.x).normalized()
+		vit = trav if trav.dot(dehors) >= 0.0 else -trav
+	skieur._v_ski = Vector3.ZERO
+	skieur.frein_auto = 4.0
+	skieur._cap_ski = atan2(-vit.x, -vit.z)
+	skieur._cap = skieur._cap_ski
+	skieur.cam_yaw = skieur._cap_ski
+	message.emit("Perche lâchée — %s" % lg.nom_ligne)
+	if en_ligne:
+		_piquer("SAUT", lg)
+	elif randf() < 0.33:
+		_piquer("ARRIVEE", lg)
+	a_bord = []
+	_repos = 4.0
+
+
+## Tiré par une perche, en ligne : on peut la lâcher.
+func sur_perche() -> bool:
+	return a_bord.size() > 5 and is_instance_valid(a_bord[0])
+
+
+func lacher_perche() -> void:
+	if sur_perche():
+		_lacher_perche(true)
 
 
 func _suivre_siege() -> void:
