@@ -25,13 +25,13 @@ const _ATTRS: Array = [Mesh.ARRAY_NORMAL, Mesh.ARRAY_TANGENT, Mesh.ARRAY_COLOR,
 ## PC, des à-coups de 100 à 360 ms à chaque construction de remontée (relevés
 ## du 26/10/2026 ; invisible sur les bancs sans écran). On lit donc :
 ##  - les primitives (BoxMesh, CylinderMesh…) par get_mesh_arrays(), calculé
-##    sur le processeur, gardé tant que la primitive existe ;
+##    sur le processeur ;
 ##  - les maillages faits par `valider` ou par une fusion, dans la copie
 ##    gardée à leur création (quelques secondes : le temps d'être refusionnés).
 static var _cpu: Dictionary = {}          # id du maillage → [image, [tableaux par surface]]
-static var _prim: Dictionary = {}         # id de la primitive → [WeakRef, tableaux]
 ## Copies gardées ~5 s (le temps de la fusion qui suit leur création) : les
-## garder plus longtemps triplait la mémoire (3,5 Go au banc des 66 lignes).
+## garder plus longtemps faisait exploser la mémoire (3,5 à 5 Go au banc des
+## 66 lignes).
 const _GARDE_IMAGES: int = 300
 static var _purge: int = 0
 
@@ -54,16 +54,16 @@ static func retenir(mesh: Mesh, si: int, arrays: Array) -> void:
 
 static func tableaux(mesh: Mesh, si: int) -> Array:
 	var id: int = mesh.get_instance_id()
-	if mesh is PrimitiveMesh:
-		var e: Array = _prim.get(id, [])
-		if e.is_empty() or (e[0] as WeakRef).get_ref() != mesh:
-			e = [weakref(mesh), (mesh as PrimitiveMesh).get_mesh_arrays()]
-			_prim[id] = e
-		return e[1]
 	if _cpu.has(id):
 		var l: Array = _cpu[id][1]
 		if si < l.size() and l[si] != null:
 			return l[si]
+	if mesh is PrimitiveMesh:
+		# calculée sur le processeur ; gardée le temps de la fusion, comme le reste
+		# (gardées sans fin, les primitives faisaient 5 Go au banc des 66 lignes)
+		var ap: Array = (mesh as PrimitiveMesh).get_mesh_arrays()
+		retenir(mesh, 0, ap)
+		return ap
 	return mesh.surface_get_arrays(si)       # (lent : relu sur la carte)
 
 
