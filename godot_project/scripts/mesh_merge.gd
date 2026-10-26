@@ -48,6 +48,96 @@ static func _compter(mesh: Mesh) -> void:
 	lectures_par_type[c] = int(lectures_par_type.get(c, 0)) + 1
 
 
+## Tableaux d'une boîte (sans subdivision) ou d'un cylindre (un anneau)
+## calculés ici, mêmes faces que les primitives de Godot (centrées sur
+## l'origine, cylindre d'axe Y) ; UV simples par face (matériaux unis). [] si
+## la primitive sort de ces cas.
+static func _generer(mesh: Mesh) -> Array:
+	var v: PackedVector3Array = PackedVector3Array()
+	var n: PackedVector3Array = PackedVector3Array()
+	var t: PackedFloat32Array = PackedFloat32Array()
+	var uv: PackedVector2Array = PackedVector2Array()
+	var ix: PackedInt32Array = PackedInt32Array()
+	# quad (a, b, c, d) dans le sens horaire vu de dehors (faces avant de Godot)
+	var quad := func(a: Vector3, b: Vector3, c: Vector3, d: Vector3, nn0: Array, tg: Vector3) -> void:
+		var k: int = v.size()
+		v.append_array(PackedVector3Array([a, b, c, d]))
+		for q in range(4):
+			n.append(nn0[q])
+			t.append_array(PackedFloat32Array([tg.x, tg.y, tg.z, 1.0]))
+		uv.append_array(PackedVector2Array([Vector2(0, 0), Vector2(1, 0), Vector2(1, 1), Vector2(0, 1)]))
+		ix.append_array(PackedInt32Array([k, k + 1, k + 2, k, k + 2, k + 3]))
+	if mesh is BoxMesh:
+		var b: BoxMesh = mesh
+		if b.subdivide_width + b.subdivide_height + b.subdivide_depth > 0:
+			return []
+		var h: Vector3 = b.size * 0.5
+		for ax in range(3):
+			for sg in [1.0, -1.0]:
+				var nrm: Vector3 = Vector3.ZERO
+				nrm[ax] = sg
+				var iu: int = (ax + 1) % 3
+				var iw: int = (ax + 2) % 3
+				var u: Vector3 = Vector3.ZERO
+				u[iu] = 1.0
+				var w: Vector3 = Vector3.ZERO
+				w[iw] = 1.0
+				# (u × w) opposé à la normale : quad (−u−w, +u−w, +u+w, −u+w) dans le
+				# sens horaire vu de dehors, la convention des faces avant de Godot
+				if u.cross(w).dot(nrm) > 0.0:
+					u = -u
+				var c: Vector3 = nrm * h[ax]
+				var hu: Vector3 = u * h[iu]
+				var hw: Vector3 = w * h[iw]
+				quad.call(c - hu - hw, c + hu - hw, c + hu + hw, c - hu + hw, [nrm, nrm, nrm, nrm], u)
+	elif mesh is CylinderMesh:
+		var cy: CylinderMesh = mesh
+		if cy.rings != 1 and cy.rings != 0:
+			return []
+		var seg: int = maxi(cy.radial_segments, 3)
+		var y0: float = -cy.height * 0.5
+		var y1: float = cy.height * 0.5
+		var r0: float = cy.bottom_radius
+		var r1: float = cy.top_radius
+		var pente: float = (r0 - r1) / maxf(cy.height, 1e-4)
+		for k in range(seg):
+			var a0: float = TAU * float(k) / seg
+			var a1: float = TAU * float(k + 1) / seg
+			var d0: Vector3 = Vector3(sin(a0), 0, cos(a0))
+			var d1: Vector3 = Vector3(sin(a1), 0, cos(a1))
+			var n0: Vector3 = (d0 + Vector3(0, pente, 0)).normalized()
+			var n1: Vector3 = (d1 + Vector3(0, pente, 0)).normalized()
+			# flanc (bas k+1, bas k, haut k, haut k+1) : sens horaire vu de dehors
+			quad.call(d1 * r0 + Vector3(0, y0, 0), d0 * r0 + Vector3(0, y0, 0), d0 * r1 + Vector3(0, y1, 0),
+				d1 * r1 + Vector3(0, y1, 0), [n1, n0, n0, n1], Vector3(cos(a0), 0, -sin(a0)))
+			if cy.cap_top and r1 > 0.0:
+				var kt: int = v.size()
+				v.append_array(PackedVector3Array([Vector3(0, y1, 0), d1 * r1 + Vector3(0, y1, 0), d0 * r1 + Vector3(0, y1, 0)]))
+				for q in range(3):
+					n.append(Vector3.UP)
+					t.append_array(PackedFloat32Array([1, 0, 0, 1]))
+				uv.append_array(PackedVector2Array([Vector2(0.5, 0.5), Vector2(0.5 + d1.x * 0.5, 0.5 + d1.z * 0.5), Vector2(0.5 + d0.x * 0.5, 0.5 + d0.z * 0.5)]))
+				ix.append_array(PackedInt32Array([kt, kt + 1, kt + 2]))
+			if cy.cap_bottom and r0 > 0.0:
+				var kb: int = v.size()
+				v.append_array(PackedVector3Array([Vector3(0, y0, 0), d0 * r0 + Vector3(0, y0, 0), d1 * r0 + Vector3(0, y0, 0)]))
+				for q in range(3):
+					n.append(Vector3.DOWN)
+					t.append_array(PackedFloat32Array([1, 0, 0, 1]))
+				uv.append_array(PackedVector2Array([Vector2(0.5, 0.5), Vector2(0.5 + d0.x * 0.5, 0.5 + d0.z * 0.5), Vector2(0.5 + d1.x * 0.5, 0.5 + d1.z * 0.5)]))
+				ix.append_array(PackedInt32Array([kb, kb + 1, kb + 2]))
+	else:
+		return []
+	var a: Array = []
+	a.resize(Mesh.ARRAY_MAX)
+	a[Mesh.ARRAY_VERTEX] = v
+	a[Mesh.ARRAY_NORMAL] = n
+	a[Mesh.ARRAY_TANGENT] = t
+	a[Mesh.ARRAY_TEX_UV] = uv
+	a[Mesh.ARRAY_INDEX] = ix
+	return a
+
+
 static func _cle_primitive(mesh: Mesh) -> String:
 	if mesh is BoxMesh:
 		var b: BoxMesh = mesh
@@ -93,8 +183,12 @@ static func tableaux(mesh: Mesh, si: int) -> Array:
 		var cp: String = _cle_primitive(mesh)
 		if cp != "":
 			if not _formes.has(cp):
-				_compter(mesh)
-				_formes[cp] = (mesh as PrimitiveMesh).get_mesh_arrays()
+				# boîtes et cylindres simples : construits ici, sans la carte
+				var gen: Array = _generer(mesh)
+				if gen.is_empty():
+					_compter(mesh)
+					gen = (mesh as PrimitiveMesh).get_mesh_arrays()
+				_formes[cp] = gen
 			return _formes[cp]
 		_compter(mesh)
 		var ap: Array = (mesh as PrimitiveMesh).get_mesh_arrays()
