@@ -60,6 +60,8 @@ void NoyauRemontee::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("points", "s"), &NoyauRemontee::points);
 	ClassDB::bind_method(D_METHOD("touches", "pylones_d", "voie"), &NoyauRemontee::touches);
 	ClassDB::bind_method(D_METHOD("en_gare"), &NoyauRemontee::en_gare);
+	ClassDB::bind_method(D_METHOD("set_portillons", "xa"), &NoyauRemontee::set_portillons);
+	ClassDB::bind_method(D_METHOD("passages"), &NoyauRemontee::passages);
 }
 
 // --- configuration -----------------------------------------------------------
@@ -261,14 +263,25 @@ PackedFloat64Array NoyauRemontee::etape(double dt, double regime, const Vector3 
 	d_onde_amp = onde_amp;
 	d_onde_t = onde_t;
 	d_a_montee = a_montee;
-	// 1. avance sur la boucle (profil de vitesse des lanceurs)
+	// 1. avance sur la boucle (profil de vitesse des lanceurs) ; passages
+	// devant les portillons (fin du demi-tour)
+	passages_derniers.clear();
 	for (size_t i = 0; i < n; i++) {
+		const Zone z0 = zone(s_veh[i]);
 		double s = s_veh[i] + vitesse_en(s_veh[i]) * regime * dt;
 		s = std::fmod(s, longueur);
 		if (s < 0.0) {
 			s += longueur;
 		}
 		s_veh[i] = s;
+		if (z0.idx >= 0 && (size_t)z0.idx < z_xa.size()) {
+			const Zone z1 = zone(s);
+			const double xa = z_xa[z0.idx];
+			if (z1.idx == z0.idx && z0.x < xa && z1.x >= xa) {
+				passages_derniers.push_back(z0.idx);
+				passages_derniers.push_back((int)i);
+			}
+		}
 	}
 	// 2. charges ponctuelles (véhicules en ligne), par brin puis par portée
 	if (charges_actives && appuis.size() >= 2) {
@@ -495,6 +508,19 @@ PackedInt32Array NoyauRemontee::en_gare() const {
 	out.resize(gare_derniere.size());
 	for (size_t k = 0; k < gare_derniere.size(); k++) {
 		out[k] = gare_derniere[k];
+	}
+	return out;
+}
+
+void NoyauRemontee::set_portillons(const PackedFloat32Array &xa) {
+	z_xa.assign(xa.ptr(), xa.ptr() + xa.size());
+}
+
+PackedInt32Array NoyauRemontee::passages() const {
+	PackedInt32Array out;
+	out.resize(passages_derniers.size());
+	for (size_t k = 0; k < passages_derniers.size(); k++) {
+		out[k] = passages_derniers[k];
 	}
 	return out;
 }

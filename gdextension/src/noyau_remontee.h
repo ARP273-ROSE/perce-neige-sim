@@ -72,6 +72,8 @@ class NoyauRemontee : public RefCounted {
 
 	int tour = 0;
 	std::vector<int> gare_derniere;
+	std::vector<double> z_xa;
+	std::vector<int> passages_derniers;
 	double d_onde_amp = 0.0, d_onde_t = 0.0, d_a_montee = 800.0;
 	Object *ligne = nullptr;              // pour les collisions des portes des cabines
 
@@ -108,6 +110,11 @@ public:
 	PackedFloat32Array get_paquets() const { return paquets; }
 	// flèche locale (charges et onde de la dernière étape) : calage des galets
 	double fleche_en(double d, bool montee) const { return fleche(d, montee, d_onde_amp, d_onde_t, d_a_montee); }
+
+	// Portillons : abscisse (dans la zone) où un véhicule finit son demi-tour,
+	// par zone ; passages() : [zone, véhicule, …] franchis à la dernière étape
+	void set_portillons(const PackedFloat32Array &xa);
+	PackedInt32Array passages() const;
 
 	// Véhicules en gare à la dernière étape (tronçons jumelés : le GDScript les
 	// repose, contour et traversée)
