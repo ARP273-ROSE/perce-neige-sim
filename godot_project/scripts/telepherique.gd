@@ -402,7 +402,7 @@ func _gares_grande_motte(aval: bool) -> void:
 				st.set_normal(Vector3.UP)
 				st.add_vertex(Vector3(q.x, -0.02, q.y))
 			var mi: MeshInstance3D = MeshInstance3D.new()
-			mi.mesh = st.commit()
+			mi.mesh = MeshMerge.valider(st)
 			mi.material_override = RemonteeKit.mat("beton")
 			g.add_child(mi)
 			# escalier extérieur : de la porte de la façade côté funiculaire

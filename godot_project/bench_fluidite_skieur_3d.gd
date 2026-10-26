@@ -79,6 +79,10 @@ func _tick() -> void:
 		pm.set("banc", true)
 		pm.set("_retrait", 0)
 		pm.call("_appliquer_ips")
+		# sans synchronisation verticale : on mesure le coût de l'image, pas
+		# l'attente de l'écran (60 Hz : 16,7 ms quoi qu'il arrive)
+		DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
+		Engine.max_fps = 0
 	var us: int = Time.get_ticks_usec()
 	var ms: float = (us - _us_prec) / 1000.0
 	_us_prec = us

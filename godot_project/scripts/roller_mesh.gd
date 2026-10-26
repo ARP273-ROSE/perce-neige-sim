@@ -223,15 +223,15 @@ static func build_galet(detail: bool) -> ArrayMesh:
 		var fond2: PackedVector2Array = PackedVector2Array([
 			Vector2(R_JANTE, BANDE * 0.5 + 0.012), Vector2(0.0, BANDE * 0.5 + 0.012)])
 		_lathe(st, fond2, n_seg, 1.0)
-	st.set_material(mats["alu"])
-	st.commit(mesh)
+	MeshMerge.valider(st, mesh)
+	mesh.surface_set_material(mesh.get_surface_count() - 1, mats["alu"])
 
 	# surface 1 : bande de roulement en caoutchouc
 	var st2: SurfaceTool = SurfaceTool.new()
 	st2.begin(Mesh.PRIMITIVE_TRIANGLES)
 	_lathe(st2, _profil_bande(), n_seg, 1.0)
-	st2.set_material(mats["caoutchouc"])
-	st2.commit(mesh)
+	MeshMerge.valider(st2, mesh)
+	mesh.surface_set_material(mesh.get_surface_count() - 1, mats["caoutchouc"])
 	return mesh
 
 
@@ -282,16 +282,16 @@ static func build_fourche(sans: float = 0.0) -> ArrayMesh:
 	# semelle sous le galet, entre les flasques
 	_boite(st, Vector3(-FOURCHE_BAS - 0.01, 0.0, 0.0),
 		Vector3(0.01, FLASQUE_Y + FLASQUE_T * 0.5, 0.085), ux, uy, uz)
-	st.set_material(mats["galva"])
-	st.commit(mesh)
+	MeshMerge.valider(st, mesh)
+	mesh.surface_set_material(mesh.get_surface_count() - 1, mats["galva"])
 	# axe (acier)
 	var st2: SurfaceTool = SurfaceTool.new()
 	st2.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var y_neg: float = -(FLASQUE_Y + (0.012 if sans < 0.0 else 0.065))
 	var y_pos: float = FLASQUE_Y + (0.012 if sans > 0.0 else 0.065)
 	_cylindre(st2, Vector3(0.0, (y_neg + y_pos) * 0.5, 0.0), uy, 0.022, y_pos - y_neg, 12)
-	st2.set_material(mats["acier"])
-	st2.commit(mesh)
+	MeshMerge.valider(st2, mesh)
+	mesh.surface_set_material(mesh.get_surface_count() - 1, mats["acier"])
 	return mesh
 
 
@@ -307,8 +307,8 @@ static func build_traverse(w: float) -> ArrayMesh:
 	_boite(st, Vector3(0, 0, 0.045), Vector3(w * 0.5, 0.05, 0.005), ux, uy, uz)      # âme
 	_boite(st, Vector3(0, 0.045, 0), Vector3(w * 0.5, 0.005, 0.05), ux, uy, uz)      # aile haute
 	_boite(st, Vector3(0, -0.045, 0), Vector3(w * 0.5, 0.005, 0.05), ux, uy, uz)     # aile basse
-	st.set_material(mats["galva"])
-	st.commit(mesh)
+	MeshMerge.valider(st, mesh)
+	mesh.surface_set_material(mesh.get_surface_count() - 1, mats["galva"])
 	return mesh
 
 
@@ -324,8 +324,8 @@ static func build_pied() -> ArrayMesh:
 	var uz: Vector3 = Vector3.BACK
 	_boite(st, Vector3(0, 0, -0.022), Vector3(0.025, 0.5, 0.003), ux, uy, uz)
 	_boite(st, Vector3(-0.022, 0, 0), Vector3(0.003, 0.5, 0.025), ux, uy, uz)
-	st.set_material(mats["galva"])
-	st.commit(mesh)
+	MeshMerge.valider(st, mesh)
+	mesh.surface_set_material(mesh.get_surface_count() - 1, mats["galva"])
 	return mesh
 
 
@@ -363,6 +363,6 @@ static func build_culot() -> ArrayMesh:
 	for sx in [-1.0, 1.0]:
 		_boite(st, Vector3(sx * 0.035, 0.0, 0.06), Vector3(0.012, 0.045, 0.06), ux, uy, uz)
 	_cylindre(st, Vector3(0.0, 0.0, 0.085), ux, 0.016, 0.11, 10)
-	st.set_material(mats["culot"])
-	st.commit(mesh)
+	MeshMerge.valider(st, mesh)
+	mesh.surface_set_material(mesh.get_surface_count() - 1, mats["culot"])
 	return mesh

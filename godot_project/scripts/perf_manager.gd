@@ -205,9 +205,11 @@ func _cran_de_depart() -> int:
 			c = 5
 		_:
 			c = 1
-	# écran très défini (> 2560 × 1600) : rendu 3D réduit d'office
+	# écran très défini (> 2560 × 1600) : rendu 3D réduit d'office — sauf carte
+	# dédiée (relevés du 26/10/2026 : écran 4K + RTX 5070 Ti → cran 3, sans
+	# éclairage indirect ni anti-crénelage, pour une carte à 1 ms par image)
 	var ecran: Vector2i = machine.get("ecran", Vector2i(1920, 1080))
-	if ecran.x * ecran.y > 2560 * 1600:
+	if ecran.x * ecran.y > 2560 * 1600 and t != "dedie":
 		c = maxi(c, 3)
 	return clampi(maxi(c, cran_min), 0, CRAN_MAX)
 
@@ -356,7 +358,9 @@ func _process(_delta: float) -> void:
 		return
 	_durees.append(dt)
 	_t_princ.append(float(Performance.get_monitor(Performance.TIME_PROCESS)) * 1000.0)
-	if _mesure_gpu:
+	# (une image sur quatre : avec un fil de rendu séparé, chaque lecture le
+	# synchronise — relevés du PC du 26/10/2026)
+	if _mesure_gpu and (Engine.get_process_frames() % 4 == 0 or _rel_t >= 0.0):
 		_t_rendu.append(RenderingServer.viewport_get_measured_render_time_cpu(_vp_rid))
 		_t_gpu.append(RenderingServer.viewport_get_measured_render_time_gpu(_vp_rid))
 	_releve_image(dt)
@@ -422,12 +426,12 @@ func _evaluer() -> void:
 			"rendu", "principal":
 				# moins d'objets à trier et à simuler ; le détail au minimum, les
 				# effets (jamais le plafond à 30 i/s ni la résolution : sans effet ici)
+				# (jamais les effets : la carte graphique n'y est pour rien — relevés
+				# du PC du 26/10/2026 : cran 4 « sans halo » pour un GPU à 0,6 ms)
 				if rm != null and int(rm.get("niveau_detail")) < 2:
 					rm.call("set_niveau_detail", int(rm.get("niveau_detail")) + 1)
 					_log("[Perf] remontées : détail %d/2 (saccades, fil %s)" % [int(rm.get("niveau_detail")), cause])
 					_t_chauffe = maxf(_t_chauffe, APRES_CHANGEMENT_S)
-				elif cran < 4:
-					_appliquer(cran + 1, "saccades, fil %s" % cause)
 		return
 	var bon: bool = ips >= 0.95 * cible_ips and taux < 0.005
 	if not bon:

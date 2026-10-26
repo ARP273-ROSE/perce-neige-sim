@@ -255,10 +255,14 @@ func _multimesh(mmi: MultiMeshInstance3D, zones: Array) -> void:
 
 func _ajouter_forme(corps: CollisionObject3D, m: Mesh, xf: Transform3D, nom: String = "") -> void:
 	if not _formes.has(m):
-		var f: ConcavePolygonShape3D = m.create_trimesh_shape() as ConcavePolygonShape3D
-		if f == null:
+		# triangles lus côté processeur (create_trimesh_shape relisait la carte
+		# graphique : relevés du PC du 26/10/2026)
+		var tri: PackedVector3Array = MeshMerge.faces(m)
+		if tri.size() < 3:
 			_formes[m] = null
 			return
+		var f: ConcavePolygonShape3D = ConcavePolygonShape3D.new()
+		f.set_faces(tri)
 		f.backface_collision = true
 		_formes[m] = f
 		triangles += f.get_faces().size() / 3

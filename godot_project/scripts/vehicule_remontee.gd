@@ -1058,7 +1058,7 @@ func _bulle_siege(siege: Node3D, W: float) -> void:
 				[Vector3(xa, p0.y, p0.z), n0], [Vector3(xb, p1.y, p1.z), n0], [Vector3(xa, p1.y, p1.z), n0]]:
 			st.set_normal(v[1])
 			st.add_vertex(v[0])
-	var mesh: ArrayMesh = st.commit()
+	var mesh: ArrayMesh = MeshMerge.valider(st)
 	mesh.surface_set_material(0, RemonteeKit.mat("bulle"))
 	var mi: MeshInstance3D = MeshInstance3D.new()
 	mi.mesh = mesh
@@ -1670,7 +1670,7 @@ static func _assembler(dico: Dictionary, fam: String, vitres: bool) -> ArrayMesh
 		copie.set_smooth_group(0)
 		copie.index()
 		copie.generate_normals()
-		copie.commit(mesh)
+		MeshMerge.valider(copie, mesh)
 		mesh.surface_set_material(mesh.get_surface_count() - 1, _mat_cabine(mat, fam))
 	return mesh
 

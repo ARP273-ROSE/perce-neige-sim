@@ -46,7 +46,10 @@ func _initialize() -> void:
 	_check("intégrée costaude", pm._cran_de_depart() == 1, "cran %d" % pm._cran_de_depart())
 	pm.machine["type"] = "dedie"
 	pm.machine["ecran"] = Vector2i(3840, 2160)
-	_check("écran 4K : rendu réduit", pm._cran_de_depart() == 3, "cran %d" % pm._cran_de_depart())
+	_check("écran 4K, carte dédiée : tout", pm._cran_de_depart() == 0, "cran %d" % pm._cran_de_depart())
+	pm.machine["type"] = "integre"
+	_check("écran 4K, carte intégrée : rendu réduit", pm._cran_de_depart() == 3, "cran %d" % pm._cran_de_depart())
+	pm.machine["type"] = "dedie"
 	pm.machine["ecran"] = Vector2i(1920, 1080)
 
 	# 2. Saccades → un cran de moins

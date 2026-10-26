@@ -367,7 +367,7 @@ func maillage_quais(g: Node3D, aval: bool) -> void:
 			st.add_vertex(v)
 	var mi: MeshInstance3D = MeshInstance3D.new()
 	mi.name = "Quais"
-	mi.mesh = st.commit()
+	mi.mesh = MeshMerge.valider(st)
 	var m: StandardMaterial3D = (RemonteeKit.mat("beton") as StandardMaterial3D).duplicate()
 	m.cull_mode = BaseMaterial3D.CULL_DISABLED
 	mi.material_override = m

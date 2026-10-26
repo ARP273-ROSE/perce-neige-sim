@@ -19,6 +19,86 @@ const _ATTRS: Array = [Mesh.ARRAY_NORMAL, Mesh.ARRAY_TANGENT, Mesh.ARRAY_COLOR,
 	Mesh.ARRAY_TEX_UV, Mesh.ARRAY_TEX_UV2, Mesh.ARRAY_INDEX]
 
 
+# --- copies côté processeur ------------------------------------------------------
+## Relire un maillage déjà envoyé à la carte graphique (surface_get_arrays)
+## la fait recopier vers le processeur et synchronise le rendu : sur un vrai
+## PC, des à-coups de 100 à 360 ms à chaque construction de remontée (relevés
+## du 26/10/2026 ; invisible sur les bancs sans écran). On lit donc :
+##  - les primitives (BoxMesh, CylinderMesh…) par get_mesh_arrays(), calculé
+##    sur le processeur, gardé tant que la primitive existe ;
+##  - les maillages faits par `valider` ou par une fusion, dans la copie
+##    gardée à leur création (quelques secondes : le temps d'être refusionnés).
+static var _cpu: Dictionary = {}          # id du maillage → [image, [tableaux par surface]]
+static var _prim: Dictionary = {}         # id de la primitive → [WeakRef, tableaux]
+## Copies gardées ~5 s (le temps de la fusion qui suit leur création) : les
+## garder plus longtemps triplait la mémoire (3,5 Go au banc des 66 lignes).
+const _GARDE_IMAGES: int = 300
+static var _purge: int = 0
+
+
+static func retenir(mesh: Mesh, si: int, arrays: Array) -> void:
+	var id: int = mesh.get_instance_id()
+	var e: Array = _cpu.get(id, [0, []])
+	var l: Array = e[1]
+	while l.size() <= si:
+		l.append(null)
+	l[si] = arrays
+	var f: int = Engine.get_process_frames()
+	_cpu[id] = [f, l]
+	if f - _purge > 60:
+		_purge = f
+		for k in _cpu.keys():
+			if int(_cpu[k][0]) < f - _GARDE_IMAGES:
+				_cpu.erase(k)
+
+
+static func tableaux(mesh: Mesh, si: int) -> Array:
+	var id: int = mesh.get_instance_id()
+	if mesh is PrimitiveMesh:
+		var e: Array = _prim.get(id, [])
+		if e.is_empty() or (e[0] as WeakRef).get_ref() != mesh:
+			e = [weakref(mesh), (mesh as PrimitiveMesh).get_mesh_arrays()]
+			_prim[id] = e
+		return e[1]
+	if _cpu.has(id):
+		var l: Array = _cpu[id][1]
+		if si < l.size() and l[si] != null:
+			return l[si]
+	return mesh.surface_get_arrays(si)       # (lent : relu sur la carte)
+
+
+## Triangles d'un maillage (pour une forme de collision) sans relire la
+## carte graphique — create_trimesh_shape() la relisait, surface par surface.
+static func faces(mesh: Mesh) -> PackedVector3Array:
+	var out: PackedVector3Array = PackedVector3Array()
+	for si in range(mesh.get_surface_count()):
+		if mesh is ArrayMesh and (mesh as ArrayMesh).surface_get_primitive_type(si) != Mesh.PRIMITIVE_TRIANGLES:
+			continue
+		var a: Array = tableaux(mesh, si)
+		var v: PackedVector3Array = a[Mesh.ARRAY_VERTEX]
+		if a[Mesh.ARRAY_INDEX] != null:
+			var ix: PackedInt32Array = a[Mesh.ARRAY_INDEX]
+			var k0: int = out.size()
+			out.resize(k0 + ix.size())
+			for i in range(ix.size()):
+				out[k0 + i] = v[ix[i]]
+		else:
+			out.append_array(v)
+	return out
+
+
+## `st.commit()` qui garde la copie côté processeur (à refusionner sans relire
+## la carte graphique).
+static func valider(st: SurfaceTool, mesh: ArrayMesh = null) -> ArrayMesh:
+	var m: ArrayMesh = mesh if mesh != null else ArrayMesh.new()
+	var a: Array = st.commit_to_arrays()
+	if a.is_empty() or a[Mesh.ARRAY_VERTEX] == null or (a[Mesh.ARRAY_VERTEX] as PackedVector3Array).is_empty():
+		return m
+	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, a)
+	retenir(m, m.get_surface_count() - 1, a)
+	return m
+
+
 ## Fusionne sous `root`. Renvoie le nombre de surfaces retirées.
 ## `une_instance` : toutes les surfaces (même ombre, même portée) dans UN
 ## seul MeshInstance3D à plusieurs surfaces — pour les objets qui bougent à
@@ -47,23 +127,24 @@ static func merge(root: Node3D, keep: Array = [], name_prefix: String = "Fusion"
 	var multi: Dictionary = {}      # (ombre, portée) → [ArrayMesh, g]
 	for key in groups:
 		var g: Dictionary = groups[key]
-		var st: SurfaceTool = g["st"]
+		var ta: Array = _tableaux_acc(g["acc"])
+		if (ta[Mesh.ARRAY_VERTEX] as PackedVector3Array).is_empty():
+			continue
 		if une_instance:
 			var cle: String = "%d|%f" % [g["shadow"], g["range"]]
 			if not multi.has(cle):
 				multi[cle] = [ArrayMesh.new(), g]
 			var am: ArrayMesh = multi[cle][0]
 			var n0: int = am.get_surface_count()
-			st.commit(am)
+			am.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, ta)
 			if am.get_surface_count() > n0:
 				am.surface_set_material(n0, g["mat"])
 				removed += g["n"] - 1
 				for src in g["src"]:
 					done[src] = int(done.get(src, 0)) + 1
 			continue
-		var mesh: ArrayMesh = st.commit()
-		if mesh == null or mesh.get_surface_count() == 0:
-			continue
+		var mesh: ArrayMesh = ArrayMesh.new()
+		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, ta)
 		mesh.surface_set_material(0, g["mat"])
 		var mi: MeshInstance3D = MeshInstance3D.new()
 		mi.name = "%s%d" % [name_prefix, k]
@@ -125,11 +206,10 @@ static func _collect(mi: MeshInstance3D, xf: Transform3D, groups: Dictionary, do
 		var key: String = "%d_%d_%d_%.1f" % [mats[si].get_instance_id(), _format(mesh, si),
 			mi.cast_shadow, mi.visibility_range_end]
 		if not groups.has(key):
-			var st: SurfaceTool = SurfaceTool.new()
-			groups[key] = {"mat": mats[si], "st": st, "n": 0, "src": [],
+			groups[key] = {"mat": mats[si], "acc": {}, "n": 0, "src": [],
 				"shadow": mi.cast_shadow, "range": mi.visibility_range_end}
 		var g: Dictionary = groups[key]
-		(g["st"] as SurfaceTool).append_from(mesh, si, xf)
+		_ajouter(g["acc"], tableaux(mesh, si), xf)
 		g["n"] = int(g["n"]) + 1
 		(g["src"] as Array).append(mi)
 
@@ -140,8 +220,79 @@ static func _triangles(mesh: Mesh, si: int) -> bool:
 	return mesh is PrimitiveMesh and not (mesh is PointMesh)
 
 
+## Concatène une surface (tableaux) transformée par `xf` dans l'accumulateur.
+static func _ajouter(acc: Dictionary, a: Array, xf: Transform3D) -> void:
+	var v: PackedVector3Array = a[Mesh.ARRAY_VERTEX]
+	var n0: int = int(acc.get("n", 0))
+	if not acc.has("v"):
+		acc["v"] = PackedVector3Array()
+	var dv: PackedVector3Array = acc["v"]
+	var k0: int = dv.size()
+	dv.resize(k0 + v.size())
+	for i in range(v.size()):
+		dv[k0 + i] = xf * v[i]
+	acc["v"] = dv
+	var nb: Basis = xf.basis.inverse().transposed()
+	if a[Mesh.ARRAY_NORMAL] != null:
+		var nn: PackedVector3Array = a[Mesh.ARRAY_NORMAL]
+		var dn: PackedVector3Array = acc.get("nor", PackedVector3Array())
+		var k1: int = dn.size()
+		dn.resize(k1 + nn.size())
+		for i in range(nn.size()):
+			dn[k1 + i] = (nb * nn[i]).normalized()
+		acc["nor"] = dn
+	if a[Mesh.ARRAY_TANGENT] != null:
+		var tt: PackedFloat32Array = a[Mesh.ARRAY_TANGENT]
+		var dt: PackedFloat32Array = acc.get("tan", PackedFloat32Array())
+		var k2: int = dt.size()
+		dt.resize(k2 + tt.size())
+		for i in range(0, tt.size(), 4):
+			var t3: Vector3 = (xf.basis * Vector3(tt[i], tt[i + 1], tt[i + 2])).normalized()
+			dt[k2 + i] = t3.x
+			dt[k2 + i + 1] = t3.y
+			dt[k2 + i + 2] = t3.z
+			dt[k2 + i + 3] = tt[i + 3]
+		acc["tan"] = dt
+	for e in [[Mesh.ARRAY_COLOR, "col"], [Mesh.ARRAY_TEX_UV, "uv"], [Mesh.ARRAY_TEX_UV2, "uv2"]]:
+		if a[e[0]] != null:
+			if not acc.has(e[1]):
+				acc[e[1]] = a[e[0]].duplicate()
+			else:
+				acc[e[1]].append_array(a[e[0]])
+	if a[Mesh.ARRAY_INDEX] != null:
+		var ix: PackedInt32Array = a[Mesh.ARRAY_INDEX]
+		var di: PackedInt32Array = acc.get("ix", PackedInt32Array())
+		var k3: int = di.size()
+		di.resize(k3 + ix.size())
+		for i in range(ix.size()):
+			di[k3 + i] = ix[i] + n0
+		acc["ix"] = di
+	acc["n"] = n0 + v.size()
+
+
+static func _tableaux_acc(acc: Dictionary) -> Array:
+	var a: Array = []
+	a.resize(Mesh.ARRAY_MAX)
+	a[Mesh.ARRAY_VERTEX] = acc.get("v", PackedVector3Array())
+	for e in [[Mesh.ARRAY_NORMAL, "nor"], [Mesh.ARRAY_TANGENT, "tan"], [Mesh.ARRAY_COLOR, "col"],
+			[Mesh.ARRAY_TEX_UV, "uv"], [Mesh.ARRAY_TEX_UV2, "uv2"], [Mesh.ARRAY_INDEX, "ix"]]:
+		if acc.has(e[1]):
+			a[e[0]] = acc[e[1]]
+	return a
+
+
 static func _format(mesh: Mesh, si: int) -> int:
-	var arrays: Array = mesh.surface_get_arrays(si)
+	if mesh is ArrayMesh:
+		# (le format seul, sans relire les données)
+		var fm: int = (mesh as ArrayMesh).surface_get_format(si)
+		var f0: int = 0
+		var bits: Array = [Mesh.ARRAY_FORMAT_NORMAL, Mesh.ARRAY_FORMAT_TANGENT, Mesh.ARRAY_FORMAT_COLOR,
+			Mesh.ARRAY_FORMAT_TEX_UV, Mesh.ARRAY_FORMAT_TEX_UV2, Mesh.ARRAY_FORMAT_INDEX]
+		for i in range(bits.size()):
+			if fm & int(bits[i]):
+				f0 |= 1 << i
+		return f0
+	var arrays: Array = tableaux(mesh, si)
 	var f: int = 0
 	for i in range(_ATTRS.size()):
 		if arrays[_ATTRS[i]] != null:

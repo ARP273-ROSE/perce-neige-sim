@@ -161,7 +161,7 @@ func _valider(g: Node3D, nom: String) -> void:
 			s.set_smooth_group(0xFFFFFFFF)
 		s.index()
 		s.generate_normals()
-		s.commit(mesh)
+		MeshMerge.valider(s, mesh)
 		mesh.surface_set_material(mesh.get_surface_count() - 1, lg._mat_capot(parts[0]))
 	var mi: MeshInstance3D = MeshInstance3D.new()
 	mi.name = nom
