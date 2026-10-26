@@ -170,6 +170,7 @@ func demolir(poubelle: Array) -> void:
 	_poulies.clear()
 	_pneus.clear()
 	_portillons_gares.clear()
+	_ouv_portillons.clear()
 	_terrassements.clear()
 	_synchro = false
 	if jumelee != null:
@@ -195,6 +196,7 @@ func construire() -> void:
 	_pyl_touches.clear()
 	_corps.clear()
 	_portillons_gares.clear()
+	_ouv_portillons.clear()
 	_pneus.clear()
 	_au_magasin = PackedFloat32Array()
 	_a_lancer = false
@@ -2362,7 +2364,12 @@ func _double_embarquement() -> void:
 
 ## Ouverts 0,3 à 3 s après le passage d'un siège à la ligne d'arrêt.
 func _maj_portillons(delta: float) -> void:
-	for pg in _portillons_gares:
+	# passages en fin de demi-tour : donnés par le noyau C++ (la boucle sur tous
+	# les véhicules, pour chaque gare et à chaque image, coûtait 0,2 ms par ligne)
+	var avec_noyau: bool = _noyau != null and _noyau_valide()
+	var pas_: PackedInt32Array = _noyau.passages() if avec_noyau else PackedInt32Array()
+	for ip in range(_portillons_gares.size()):
+		var pg: Array = _portillons_gares[ip]
 		var aval: bool = pg[0]
 		var l: float = longueur_zone(aval)
 		# ouverts quand un siège termine son demi-tour (il est alors passé
@@ -2370,7 +2377,11 @@ func _maj_portillons(delta: float) -> void:
 		var xa: float = l_gare + PI * voie * 0.5
 		pg[3] = float(pg[3]) + delta
 		var parite: int = int(pg[5]) if pg.size() > 5 else -1
-		for iv in range(_vehicules.size()):
+		var nom_z: String = "gare_aval" if aval else "gare_amont"
+		for k in range(0, pas_.size(), 2):
+			if String(_zones[pas_[k]][2]) == nom_z and (parite < 0 or int(contour_exterieur(pas_[k + 1])) == parite):
+				pg[3] = 0.0
+		for iv in range(0 if avec_noyau else _vehicules.size()):
 			var e: Array = _vehicules[iv]
 			if parite >= 0 and int(contour_exterieur(iv)) != parite:
 				continue
@@ -2381,6 +2392,9 @@ func _maj_portillons(delta: float) -> void:
 					pg[3] = 0.0
 		var t: float = pg[3]
 		var ouv: float = clampf(minf((t - 0.3) / 0.5, (3.5 - t) / 0.5), 0.0, 1.0)
+		if float(_ouv_portillons.get(ip, -1.0)) == ouv:
+			continue                 # (fermés la plupart du temps : rien à poser)
+		_ouv_portillons[ip] = ouv
 
 		# ils s'ouvrent vers l'avant, vers la ligne d'arrêt (retour
 		# d'utilisateur, 23/10/2026) : le repère regarde le nez de la gare (−Z)
@@ -2388,6 +2402,9 @@ func _maj_portillons(delta: float) -> void:
 			(v as Node3D).rotation.y = 1.45 * ouv * float((v as Node3D).get_meta("sens", 1.0))
 		for cs in pg[2]:
 			(cs as CollisionShape3D).disabled = ouv > 0.5
+
+
+var _ouv_portillons: Dictionary = {}
 
 
 # --- embarquement ------------------------------------------------------------------
@@ -3352,6 +3369,10 @@ func _preparer_noyau() -> void:
 		xh.append(x_debarquement() - 3.0 if fixe() else L_FREIN - 2.0)
 		xb.append(x_arret(l) + 2.0 if fixe() else l - L_FREIN)
 	n.set_zones(deb, fin, code, xh, xb)
+	var xa: PackedFloat32Array = PackedFloat32Array()
+	for z2 in _zones:
+		xa.append(l_gare + PI * voie * 0.5)
+	n.set_portillons(xa)
 	n.set_appuis(_appuis if _n_appuis >= 2 else PackedFloat32Array())
 	var v0: VehiculeRemontee = _vehicules[0][0]
 	var places: int = VehiculeRemontee.DESCRIPTIONS.get(famille, ["", 6, ""])[1]
