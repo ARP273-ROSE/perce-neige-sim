@@ -62,7 +62,16 @@ func reset() -> void:
 	pan_y = 0.0
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
+	if Prof.actif:
+		var t0_prof: int = Time.get_ticks_usec()
+		_process_corps(delta)
+		Prof.ajouter("machine_room_camera", t0_prof)
+	else:
+		_process_corps(delta)
+
+
+func _process_corps(_delta: float) -> void:
 	if current and not _was_current:
 		_last_key = []      # retour dans la vue : l'écorché a été réinitialisé
 	_was_current = current

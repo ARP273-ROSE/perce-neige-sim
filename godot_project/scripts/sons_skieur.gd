@@ -44,6 +44,15 @@ func _player(path: String, vol_db: float, boucle: bool) -> AudioStreamPlayer:
 
 
 func _process(delta: float) -> void:
+	if Prof.actif:
+		var t0_prof: int = Time.get_ticks_usec()
+		_process_corps(delta)
+		Prof.ajouter("sons_skieur", t0_prof)
+	else:
+		_process_corps(delta)
+
+
+func _process_corps(delta: float) -> void:
 	if _vent != null and _vent.stream != null:
 		var dehors: bool = ecoute == 2
 		if dehors and not _vent.playing:

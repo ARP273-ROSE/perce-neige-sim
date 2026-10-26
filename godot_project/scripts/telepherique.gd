@@ -136,7 +136,7 @@ func _maj_positions() -> void:
 		_placer(i)
 
 
-func _process(delta: float) -> void:
+func _process_corps(delta: float) -> void:
 	if not pret:
 		return
 	delta = _tic_lod(delta)

@@ -275,6 +275,15 @@ func pique(t: String, duree: float = 6.0) -> void:
 
 
 func _process(delta: float) -> void:
+	if Prof.actif:
+		var t0_prof: int = Time.get_ticks_usec()
+		_process_corps(delta)
+		Prof.ajouter("commandes_skieur", t0_prof)
+	else:
+		_process_corps(delta)
+
+
+func _process_corps(delta: float) -> void:
 	# poste de remontée : la remontée où l'on est, ou la plus proche (à
 	# moins de 400 m d'une gare) ; le pupitre suit quand on en change
 	_t_poste -= delta

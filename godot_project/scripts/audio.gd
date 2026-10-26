@@ -190,7 +190,16 @@ func set_physics(p: TrainPhysics) -> void:
 		_sons_skieur.physics = p
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
+	if Prof.actif:
+		var t0_prof: int = Time.get_ticks_usec()
+		_process_corps(delta)
+		Prof.ajouter("audio", t0_prof)
+	else:
+		_process_corps(delta)
+
+
+func _process_corps(_delta: float) -> void:
 	if physics == null:
 		return
 

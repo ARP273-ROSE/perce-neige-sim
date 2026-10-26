@@ -101,7 +101,16 @@ func progres() -> float:
 	return 1.0 - float(_taches.size()) / float(_n_taches)
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
+	if Prof.actif:
+		var t0_prof: int = Time.get_ticks_usec()
+		_process_corps(delta)
+		Prof.ajouter("collisions_jeu", t0_prof)
+	else:
+		_process_corps(delta)
+
+
+func _process_corps(_delta: float) -> void:
 	_avancer(Time.get_ticks_usec() + budget_us)
 
 

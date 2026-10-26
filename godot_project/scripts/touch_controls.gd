@@ -73,6 +73,15 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
+	if Prof.actif:
+		var t0_prof: int = Time.get_ticks_usec()
+		_process_corps(delta)
+		Prof.ajouter("touch_controls", t0_prof)
+	else:
+		_process_corps(delta)
+
+
+func _process_corps(delta: float) -> void:
 	# Reflète l'état réel de l'auto-exploitation sur le bouton AUTO
 	# (il peut aussi être basculé au clavier F3).
 	_sync_accum += delta

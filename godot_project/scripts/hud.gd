@@ -282,7 +282,16 @@ func flash(text: String, seconds: float = 3.0) -> void:
 	_flash_t = seconds
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
+	if Prof.actif:
+		var t0_prof: int = Time.get_ticks_usec()
+		_process_corps(delta)
+		Prof.ajouter("hud", t0_prof)
+	else:
+		_process_corps(delta)
+
+
+func _process_corps(_delta: float) -> void:
 	if physics == null:
 		return
 	_flash_t = maxf(0.0, _flash_t - _delta)

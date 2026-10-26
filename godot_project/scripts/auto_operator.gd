@@ -230,6 +230,15 @@ func _demander_depart() -> void:
 
 
 func _process(delta: float) -> void:
+	if Prof.actif:
+		var t0_prof: int = Time.get_ticks_usec()
+		_process_corps(delta)
+		Prof.ajouter("auto_operator", t0_prof)
+	else:
+		_process_corps(delta)
+
+
+func _process_corps(delta: float) -> void:
 	if not enabled or physics == null:
 		return
 	# Panne catastrophique : service terminé, l'automate rend la main (le

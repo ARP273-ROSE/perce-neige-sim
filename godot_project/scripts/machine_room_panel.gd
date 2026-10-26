@@ -51,6 +51,15 @@ func setup(p: TrainPhysics, fm: FaultManager) -> void:
 # Redraw à ~15 Hz (cf. cockpit_panel) — l'angle de poulie continue de
 # s'intégrer à chaque frame pour rester exact, seul l'affichage est throttlé.
 func _process(delta: float) -> void:
+	if Prof.actif:
+		var t0_prof: int = Time.get_ticks_usec()
+		_process_corps(delta)
+		Prof.ajouter("machine_room_panel", t0_prof)
+	else:
+		_process_corps(delta)
+
+
+func _process_corps(delta: float) -> void:
 	if physics != null:
 		# Les deux poulies tournent à ω = v / r (r = 2,1 m), dans le sens
 		# fixé par la rame 1, à la vitesse du câble à la poulie (même loi

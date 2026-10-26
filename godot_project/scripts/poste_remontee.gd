@@ -121,7 +121,16 @@ func _bouton(parent: Control, texte: String, couleur: Color) -> Button:
 	return b
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
+	if Prof.actif:
+		var t0_prof: int = Time.get_ticks_usec()
+		_process_corps(delta)
+		Prof.ajouter("poste_remontee", t0_prof)
+	else:
+		_process_corps(delta)
+
+
+func _process_corps(_delta: float) -> void:
 	if not visible or ligne == null or not is_instance_valid(ligne):
 		return
 	_titre.text = "Poste — %s" % ligne.nom_ligne

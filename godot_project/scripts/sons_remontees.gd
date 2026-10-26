@@ -110,6 +110,15 @@ func _reglage_web3d(p: AudioStreamPlayer3D) -> void:
 
 
 func _process(delta: float) -> void:
+	if Prof.actif:
+		var t0_prof: int = Time.get_ticks_usec()
+		_process_corps(delta)
+		Prof.ajouter("sons_remontees", t0_prof)
+	else:
+		_process_corps(delta)
+
+
+func _process_corps(delta: float) -> void:
 	if domaine == null or domaine.skieur == null or not domaine.skieur.actif:
 		_tout_couper()
 		return
