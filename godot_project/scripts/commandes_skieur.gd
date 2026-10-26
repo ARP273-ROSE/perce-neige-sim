@@ -28,6 +28,7 @@ var _b_conduire: Button = null
 var _b_courir: Button = null
 var _b_vue: Button = null
 var _b_ski: Button = null
+var _b_mesure: Button = null
 var _b_auto: Button = null
 var _b_evac: Button = null
 var _b_exploit: Button = null
@@ -133,6 +134,12 @@ func _ready() -> void:
 	poste.position = Vector2(16.0, 140.0)
 	poste.visible = false
 	_racine.add_child(poste)
+	_b_mesure = _bouton("MESURE", "Relevé de fluidité : une minute de mesures (images par seconde, à-coups), envoyé au développeur pour optimiser le jeu sur cet appareil (touche F10)")
+	_b_mesure.pressed.connect(func() -> void:
+		var pm: Node = main.get("perf_manager") if main != null else null
+		if pm != null:
+			pm.call("releve"))
+	col.add_child(_b_mesure)
 	_b_vue = _bouton("1re PERS.", "Vue à la première ou à la troisième personne (touche V)")
 	_b_vue.pressed.connect(basculer_vue)
 	col.add_child(_b_vue)
@@ -277,6 +284,12 @@ func _process(delta: float) -> void:
 		var lg: LigneRemontee = rm.ligne_courante(skieur.global_position) if rm != null else null
 		_b_poste.visible = lg != null
 		poste.ligne = lg
+		# MESURE : décompte pendant le relevé
+		var pm2: Node = main.get("perf_manager")
+		if pm2 != null and _b_mesure != null:
+			var t_m: String = "MESURE…" if bool(pm2.call("releve_en_cours")) else "MESURE"
+			if _b_mesure.text != t_m:
+				_b_mesure.text = t_m
 		# sur une perche, CHAUSSER devient LÂCHER (lâcher la perche en ligne)
 		var perche: bool = rm != null and rm.sur_perche()
 		var t_ski: String = "LÂCHER" if perche else ("DÉCHAUSSER" if _chausse else "CHAUSSER")
