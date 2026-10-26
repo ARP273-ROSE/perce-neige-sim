@@ -31,12 +31,7 @@ const DT: float = 1.0 / 60.0
 func _initialize() -> void:
 	_main = load("res://scenes/main.tscn").instantiate()
 	get_root().add_child(_main)
-	# fenêtre sans focus (PC piloté à distance) : pas de bridage à 20 i/s
-	var pm: Node = _main.get("perf_manager")
-	if pm != null:
-		pm.set("banc", true)
-		pm.set("_retrait", 0)
-		pm.call("_appliquer_ips")
+
 	process_frame.connect(_tick)
 
 
@@ -77,6 +72,13 @@ func _contexte() -> String:
 
 func _tick() -> void:
 	_f += 1
+	# fenêtre sans focus ou réduite (PC piloté à distance) : pas de bridage
+	# (le PerfManager n'existe qu'après le _ready de la scène, d'où ici)
+	var pm: Node = _main.get("perf_manager")
+	if pm != null and not bool(pm.get("banc")):
+		pm.set("banc", true)
+		pm.set("_retrait", 0)
+		pm.call("_appliquer_ips")
 	var us: int = Time.get_ticks_usec()
 	var ms: float = (us - _us_prec) / 1000.0
 	_us_prec = us
