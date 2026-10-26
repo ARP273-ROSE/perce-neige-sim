@@ -25,6 +25,15 @@ func ajouter_vantail(n: Node3D, course: Vector3) -> void:
 
 
 func _process(delta: float) -> void:
+	if Prof.actif:
+		var t0_prof: int = Time.get_ticks_usec()
+		_process_corps(delta)
+		Prof.ajouter("porte_auto", t0_prof)
+	else:
+		_process_corps(delta)
+
+
+func _process_corps(delta: float) -> void:
 	var proche: bool = false
 	for p in presences:
 		if global_position.distance_to(p) < RAYON:

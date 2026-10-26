@@ -921,6 +921,15 @@ func _piques_survitesse() -> void:
 
 
 func _process(delta: float) -> void:
+	if Prof.actif:
+		var t0_prof: int = Time.get_ticks_usec()
+		_process_corps(delta)
+		Prof.ajouter("main", t0_prof)
+	else:
+		_process_corps(delta)
+
+
+func _process_corps(delta: float) -> void:
 	if _skiertest == 1 and relief != null and relief.pret and not client_mode:
 		_skiertest = 2
 		basculer_skieur()

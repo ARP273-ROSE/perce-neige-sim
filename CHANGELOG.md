@@ -5,6 +5,19 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.47.1 — 26 octobre 2026
+
+**Le relevé MESURE dit qui prend le temps.** Relevés du programme installé sur PC (26/10/2026) :
+~37 i/s en jeu, la logique à 25-35 ms par image, contre 15 au banc — il fallait savoir qui, sur
+la vraie machine.
+
+- Chaque `_process` du jeu passe par une enveloppe qui, relevé en cours, chronomètre son corps
+  (`Prof`) ; le relevé (bouton MESURE, touche F10) donne le temps par système en ms par image,
+  et le reste (physique, rendu, moteur). Hors relevé : un test de booléen.
+- Le programme exporté porte sa version (titre, relevés) : il se présentait comme « dev ».
+- Première mesure au banc, au pied des pistes : les remontées (sièges, galets, flèche du câble)
+  font 7,6 ms sur ~9 de logique.
+
 ## 1.47.0 — 26 octobre 2026
 
 **Fluidité mesurée sur un vrai PC ; bouton MESURE.** Relevés pris avec le vrai rendu sur un

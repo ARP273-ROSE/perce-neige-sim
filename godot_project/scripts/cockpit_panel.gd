@@ -80,7 +80,16 @@ var _redraw_slot: int = -1
 var _regen_mode: bool = false   # état hystérésis de la jauge puissance/régen
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
+	if Prof.actif:
+		var t0_prof: int = Time.get_ticks_usec()
+		_process_corps(delta)
+		Prof.ajouter("cockpit_panel", t0_prof)
+	else:
+		_process_corps(delta)
+
+
+func _process_corps(_delta: float) -> void:
 	_redraw_slot = HUD.redraw_at_15hz(self, _redraw_slot, 0.0)
 
 

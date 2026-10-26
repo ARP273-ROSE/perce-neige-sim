@@ -65,6 +65,15 @@ func arreter() -> void:
 
 
 func _process(delta: float) -> void:
+	if Prof.actif:
+		var t0_prof: int = Time.get_ticks_usec()
+		_process_corps(delta)
+		Prof.ajouter("fantome_ski", t0_prof)
+	else:
+		_process_corps(delta)
+
+
+func _process_corps(delta: float) -> void:
 	t += delta
 	if t >= duree + 5.0:
 		arreter()

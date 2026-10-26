@@ -585,6 +585,15 @@ func _clavier() -> Vector2:
 # --- boucle --------------------------------------------------------------------------
 
 func _process(delta: float) -> void:
+	if Prof.actif:
+		var t0_prof: int = Time.get_ticks_usec()
+		_process_corps(delta)
+		Prof.ajouter("skieur_joueur", t0_prof)
+	else:
+		_process_corps(delta)
+
+
+func _process_corps(delta: float) -> void:
 	if not actif:
 		return
 	delta = minf(delta, 0.05)

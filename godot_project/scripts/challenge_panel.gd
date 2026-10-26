@@ -153,7 +153,16 @@ func _build() -> void:
 	ov.add_child(center)
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
+	if Prof.actif:
+		var t0_prof: int = Time.get_ticks_usec()
+		_process_corps(delta)
+		Prof.ajouter("challenge_panel", t0_prof)
+	else:
+		_process_corps(delta)
+
+
+func _process_corps(_delta: float) -> void:
 	if challenge == null or not challenge.enabled:
 		_live.visible = false
 		_banner.visible = false

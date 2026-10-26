@@ -3259,6 +3259,15 @@ func _tic_lod(delta: float) -> float:
 
 
 func _process(delta: float) -> void:
+	if Prof.actif:
+		var t0_prof: int = Time.get_ticks_usec()
+		_process_corps(delta)
+		Prof.ajouter("ligne_remontee", t0_prof)
+	else:
+		_process_corps(delta)
+
+
+func _process_corps(delta: float) -> void:
 	if not roule:
 		return
 	delta = _tic_lod(delta)

@@ -87,7 +87,16 @@ func set_fault_manager(fm: FaultManager) -> void:
 	fault_manager = fm
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
+	if Prof.actif:
+		var t0_prof: int = Time.get_ticks_usec()
+		_process_corps(delta)
+		Prof.ajouter("state_receiver", t0_prof)
+	else:
+		_process_corps(delta)
+
+
+func _process_corps(_delta: float) -> void:
 	if udp == null or physics == null:
 		return
 	# Vide la file UDP, applique le DERNIER packet (anti-lag : si plusieurs

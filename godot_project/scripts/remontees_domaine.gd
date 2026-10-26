@@ -419,6 +419,15 @@ func _exit_tree() -> void:
 
 
 func _process(delta: float) -> void:
+	if Prof.actif:
+		var t0_prof: int = Time.get_ticks_usec()
+		_process_corps(delta)
+		Prof.ajouter("remontees_domaine", t0_prof)
+	else:
+		_process_corps(delta)
+
+
+func _process_corps(delta: float) -> void:
 	_vider_poubelle()
 	_construire_proches()
 	_embarquement()

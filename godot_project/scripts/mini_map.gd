@@ -139,7 +139,16 @@ func _draw() -> void:
 		_draw_label(Vector2(padding, map_size.y - padding + 2), dist_text, Color(0.95, 0.95, 0.95))
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
+	if Prof.actif:
+		var t0_prof: int = Time.get_ticks_usec()
+		_process_corps(delta)
+		Prof.ajouter("mini_map", t0_prof)
+	else:
+		_process_corps(delta)
+
+
+func _process_corps(_delta: float) -> void:
 	queue_redraw()
 
 

@@ -185,7 +185,16 @@ var _labels_node: VBoxContainer = null
 var _labels_done: bool = false
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
+	if Prof.actif:
+		var t0_prof: int = Time.get_ticks_usec()
+		_process_corps(delta)
+		Prof.ajouter("fault_picker", t0_prof)
+	else:
+		_process_corps(delta)
+
+
+func _process_corps(_delta: float) -> void:
 	if _labels_done or fault_manager == null or _labels_node == null:
 		return
 	_labels_done = true

@@ -455,6 +455,15 @@ func trigger_random(exclude_catastrophic: bool = true) -> void:
 
 
 func _process(delta: float) -> void:
+	if Prof.actif:
+		var t0_prof: int = Time.get_ticks_usec()
+		_process_corps(delta)
+		Prof.ajouter("fault_manager", t0_prof)
+	else:
+		_process_corps(delta)
+
+
+func _process_corps(delta: float) -> void:
 	if _active_id == "":
 		_scheduler_tick(delta)
 		return

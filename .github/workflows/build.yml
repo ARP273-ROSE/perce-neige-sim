@@ -62,6 +62,14 @@ jobs:
           unzip -q "Godot_v${{ env.GODOT_VERSION }}_export_templates.tpz"
           cp templates/* ~/.local/share/godot/export_templates/${{ env.GODOT_BIN_TAG }}.stable/
 
+      # Version inscrite dans le jeu exporté (titre, relevés MESURE) : sans
+      # elle, le programme installé se présentait comme « dev ».
+      - name: Inscrire la version
+        run: |
+          V=$(tr -d ' \r\n' < VERSION)
+          sed -i "s|^const VERSION_APP: String = .*|const VERSION_APP: String = \"$V\"|" godot_project/scripts/constants.gd
+          grep -n "VERSION_APP" godot_project/scripts/constants.gd
+
       # Note : l'export Godot headless peut retourner un code non nul malgré
       # un export réussi (warnings) → on ne teste pas le code retour mais la
       # présence effective du binaire produit.

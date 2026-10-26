@@ -53,6 +53,15 @@ func poser(n: Node3D, vers: Vector3) -> void:
 
 
 func _process(delta: float) -> void:
+	if Prof.actif:
+		var t0_prof: int = Time.get_ticks_usec()
+		_process_corps(delta)
+		Prof.ajouter("porte_personnel", t0_prof)
+	else:
+		_process_corps(delta)
+
+
+func _process_corps(delta: float) -> void:
 	if vantail == null:
 		return
 	var proche: bool = false

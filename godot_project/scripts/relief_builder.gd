@@ -326,7 +326,16 @@ func _octets_png(chemin: String) -> PackedByteArray:
 	return img.get_data()
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
+	if Prof.actif:
+		var t0_prof: int = Time.get_ticks_usec()
+		_process_corps(delta)
+		Prof.ajouter("relief_builder", t0_prof)
+	else:
+		_process_corps(delta)
+
+
+func _process_corps(_delta: float) -> void:
 	if _etape >= 3:
 		set_process(false)
 		return

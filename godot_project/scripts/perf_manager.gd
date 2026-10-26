@@ -332,7 +332,16 @@ func _verifier_retrait() -> void:
 
 # --- Mesure en direct -------------------------------------------------------
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
+	if Prof.actif:
+		var t0_prof: int = Time.get_ticks_usec()
+		_process_corps(delta)
+		Prof.ajouter("perf_manager", t0_prof)
+	else:
+		_process_corps(delta)
+
+
+func _process_corps(_delta: float) -> void:
 	if main == null:
 		return
 	var t_us: int = Time.get_ticks_usec()
@@ -493,6 +502,8 @@ func releve() -> void:
 		_finir_releve()
 		return
 	_rel_t = 0.0
+	Prof.t.clear()
+	Prof.actif = true
 	_rel = PackedStringArray(["t_s;image_ms;principal_ms;rendu_ms;gpu_ms;appels;objets;primitives;cran;detail;x;y;z;construit"])
 	_log("[Relevé] enregistrement %d s…" % int(RELEVE_S))
 	if main != null and main.has_method("_flash"):
@@ -523,6 +534,7 @@ func _releve_image(dt: float) -> void:
 func _finir_releve() -> void:
 	var n: int = _rel.size() - 1
 	_rel_t = -1.0
+	Prof.actif = false
 	if n < 10:
 		return
 	var cols: Dictionary = {"image": [], "principal": [], "rendu": [], "gpu": [], "appels": [], "objets": []}
@@ -556,6 +568,22 @@ func _finir_releve() -> void:
 	ob.sort()
 	r.append("  appels de dessin : médiane %d · max %d ; objets : médiane %d · max %d" % [
 		ap[ap.size() / 2], ap[ap.size() - 1], ob[ob.size() / 2], ob[ob.size() - 1]])
+	# temps par système (enveloppes des _process : voir Prof), ms par image
+	var sys: Array = Prof.t.keys()
+	sys.sort_custom(func(a, b): return Prof.t[a] > Prof.t[b])
+	var somme: float = 0.0
+	r.append("  par système (ms par image, fil principal) :")
+	for k in sys:
+		var ms: float = float(Prof.t[k]) / 1000.0 / n
+		somme += ms
+		if ms >= 0.05:
+			r.append("    %-26s %6.2f" % [k, ms])
+	var img: Array = cols["image"]
+	var moy_img: float = 0.0
+	for x in img:
+		moy_img += x
+	moy_img /= maxf(1.0, img.size())
+	r.append("    %-26s %6.2f   (physique, rendu, moteur : image moyenne − scripts)" % ["(reste)", moy_img - somme])
 	var fr: FileAccess = FileAccess.open(base + ".txt", FileAccess.WRITE)
 	if fr != null:
 		fr.store_string("\n".join(r))
