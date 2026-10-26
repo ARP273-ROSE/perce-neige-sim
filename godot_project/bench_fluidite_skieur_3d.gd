@@ -239,7 +239,9 @@ var _ext: Dictionary = {}           # phase → {rendu, gpu, appels, objets: Pac
 
 
 func _ext_ajout() -> void:
-	if DisplayServer.get_name() == "headless":
+	# (une image sur quatre : chaque lecture des chronomètres de rendu
+	# synchronise un fil de rendu séparé)
+	if DisplayServer.get_name() == "headless" or _f % 4 != 0:
 		return
 	var vp: RID = get_root().get_viewport_rid()
 	if not _ext.has(_phase):
@@ -264,6 +266,7 @@ func _fin() -> void:
 		var vp: Viewport = get_root()
 		sortie.append("   fenêtre %s, rendu 3D %d %%, MSAA %d" % [str(DisplayServer.window_get_size()), int(vp.scaling_3d_scale * 100.0), vp.msaa_3d])
 	sortie.append_array(_resultats)
+	sortie.append("   lectures de maillages restées sur la carte graphique : %d %s" % [MeshMerge.lectures_carte, str(MeshMerge.lectures_par_type)])
 	for ph in _ext:
 		var e: Dictionary = _ext[ph]
 		sortie.append("   [%s] fil de rendu : %s" % [ph, _stats(e["rendu"])])
