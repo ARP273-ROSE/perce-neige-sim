@@ -12,6 +12,23 @@ using namespace godot;
 
 namespace {
 
+const StringName &nom_phi_init() {
+	static StringName n("phi");
+	return n;
+}
+
+}
+
+#define nom_phi nom_phi_init()
+#define nom_psi nom_psi_init()
+
+namespace {
+
+const StringName &nom_psi_init() {
+	static StringName n("psi");
+	return n;
+}
+
 double smoothstep(double a, double b, double x) {
 	if (b == a) {
 		return x < a ? 0.0 : 1.0;
@@ -393,6 +410,10 @@ PackedFloat64Array NoyauRemontee::etape(double dt, double regime, const Vector3 
 					phi[i] = std::clamp(phi[i], -0.6, 0.6);
 					psi[i] = std::clamp(psi[i], -0.6, 0.6);
 					susps[i]->set_rotation(Vector3((real_t)phi[i], 0, (real_t)psi[i]));
+					// recopiés dans le véhicule : lus par le GDScript (collisions des
+					// tronçons jumelés, bancs de l'arrêt d'urgence)
+					v->set(nom_phi, phi[i]);
+					v->set(nom_psi, psi[i]);
 				}
 			}
 		}
