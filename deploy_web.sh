@@ -32,6 +32,28 @@ trap restore_build_tag EXIT
 sed -i "s|^const BUILD_TAG: String = .*|const BUILD_TAG: String = \"$BUILD_STAMP\"|" "$CONST_GD"
 # version affichée dans le titre du HUD
 sed -i "s|^const VERSION_APP: String = .*|const VERSION_APP: String = \"$(tr -d ' \r\n' < "$SIM_DIR/VERSION")\"|" "$CONST_GD"
+# module C++ (gdextension/) pour le web : compilé par la CI (Emscripten de
+# Godot) ; on reprend celui de la dernière construction réussie de ce commit.
+# Sans lui, la PWA s'exporte sans module (boucle GDScript) : le .gdextension
+# est mis de côté le temps de l'export.
+WASM="$SIM_DIR/godot_project/bin/libperce_neige.web.template_release.wasm32.nothreads.wasm"
+GDEXT="$SIM_DIR/godot_project/bin/perce_neige.gdextension"
+if [ ! -f "$WASM" ] && command -v gh >/dev/null 2>&1; then
+    SHA=$(git -C "$SIM_DIR" rev-parse HEAD)
+    RUN=$(gh run list -R ARP273-ROSE/perce-neige-sim --workflow build.yml --commit "$SHA" --status success \
+          --json databaseId -q '.[0].databaseId' 2>/dev/null || true)
+    if [ -n "$RUN" ]; then
+        gh run download "$RUN" -R ARP273-ROSE/perce-neige-sim -n gdext-web -D "$SIM_DIR/godot_project/bin" >/dev/null 2>&1 || true
+    fi
+fi
+if [ ! -f "$WASM" ]; then
+    echo "  (module C++ web absent : PWA sans module)"
+    mv "$GDEXT" "$GDEXT.hors_export"
+    remettre_gdext() { mv "$GDEXT.hors_export" "$GDEXT" 2>/dev/null || true; restore_build_tag; }
+    trap remettre_gdext EXIT
+else
+    echo "  module C++ web : $(basename "$WASM")"
+fi
 echo "→ Export Web…"
 mkdir -p "$SIM_DIR/build/web"
 "$GODOT" --headless --path "$SIM_DIR/godot_project" \
