@@ -151,6 +151,7 @@ func _pause(etape: String = "") -> void:
 ## Les nœuds sont rendus à `poubelle` (cachés, détachés plus tard par petits
 ## paquets : tout libérer d'un coup figeait l'image).
 func demolir(poubelle: Array) -> void:
+	_noyau = null
 	_reboucher_fosses()
 	set_process(false)
 	pret = false
@@ -176,6 +177,7 @@ func demolir(poubelle: Array) -> void:
 
 
 func construire() -> void:
+	_noyau = null                  # (ses nœuds vont disparaître)
 	_poulies.clear()
 	_poulies_3s.clear()
 	_cavaliers_n.clear()
@@ -265,6 +267,7 @@ func construire() -> void:
 			await _pause("corps des véhicules")
 	pret = true
 	set_process(true)
+	_preparer_noyau()
 	_percer_fosses()
 	await _pause("fin (portillons, collisions fixes, fosses)")
 	construite.emit()
@@ -939,6 +942,8 @@ func synchroniser() -> void:
 	_synchro = true
 	rail_traversee()
 	b.rail_traversee()
+	if _noyau != null:
+		_preparer_noyau()             # (positions recalées : le noyau repart d'elles)
 
 
 ## Rail du contour extérieur (gare du bas de Bollin) : les sièges de Fresse
@@ -3296,6 +3301,138 @@ func _process_corps(delta: float) -> void:
 	_maj_onde(delta)
 	_maj_portillons(delta)
 	_dt = delta
+	if _noyau != null and _noyau_valide():
+		_etape_noyau(delta)
+	else:
+		_etape_gdscript(delta)
+	_dt = 0.0
+	_galets()
+	if tricable():
+		_caler_cavaliers()
+	_tourner_pneus(delta)
+	if _mat_cable != null:
+		var pas: float = 0.45 * diametre_cable / 52.0
+		_phase_cable = fposmod(_phase_cable + vitesse_reelle * delta, pas)
+		_mat_cable.set_shader_parameter("cable_phase", _phase_cable)
+	for pl in _poulies:
+		(pl[0] as Node3D).rotation.y = fposmod((pl[0] as Node3D).rotation.y + float(pl[1]) * regime() * delta, TAU)
+	for pl2 in _poulies_3s:
+		(pl2[0] as Node3D).rotate_object_local(Vector3.UP, float(pl2[1]) * regime() * delta)
+
+
+# --- noyau C++ ----------------------------------------------------------------------
+## Le noyau C++ (gdextension/, classe NoyauRemontee) fait, pour toute la
+## ligne et en un seul appel par image, ce que la boucle GDScript ci-dessous
+## faisait véhicule par véhicule (demande d'un utilisateur du 26/10/2026 : « va
+## falloir te pencher sur le C++ »). Absent (PWA sans module, plate-forme non
+## compilée) ou ligne particulière (tronçons jumelés, 3S, téléphérique,
+## téléski à magasin) : la boucle GDScript, inchangée.
+var _noyau: RefCounted = null
+var _noyau_n: int = -1
+static var noyau_desactive: bool = false        # bancs : comparer les deux chemins
+
+
+func _preparer_noyau() -> void:
+	_noyau = null
+	if noyau_desactive or not ClassDB.class_exists("NoyauRemontee") or tricable() \
+			or vaetvient() or not _au_magasin.is_empty() or _vehicules.is_empty():
+		return
+	var n: RefCounted = ClassDB.instantiate("NoyauRemontee")
+	n.set_boucle(_boucle, _cumul, longueur_boucle)
+	var deb: PackedFloat32Array = PackedFloat32Array()
+	var fin: PackedFloat32Array = PackedFloat32Array()
+	var code: PackedInt32Array = PackedInt32Array()
+	var xh: PackedFloat32Array = PackedFloat32Array()
+	var xb: PackedFloat32Array = PackedFloat32Array()
+	for z in _zones:
+		var l: float = float(z[1]) - float(z[0])
+		deb.append(z[0])
+		fin.append(z[1])
+		code.append(0 if String(z[2]) == "gare_aval" else 1)
+		xh.append(x_debarquement() - 3.0 if fixe() else L_FREIN - 2.0)
+		xb.append(x_arret(l) + 2.0 if fixe() else l - L_FREIN)
+	n.set_zones(deb, fin, code, xh, xb)
+	n.set_appuis(_appuis if _n_appuis >= 2 else PackedFloat32Array())
+	var v0: VehiculeRemontee = _vehicules[0][0]
+	var places: int = VehiculeRemontee.DESCRIPTIONS.get(famille, ["", 6, ""])[1]
+	n.set_constantes({
+		"vitesse": vitesse, "v_embarquement": v_embarquement, "l_frein": L_FREIN, "l_ouverture": L_OUVERTURE,
+		"fixe": fixe(), "sens_droite": sens_droite, "signe_montee": signf(_x_brin(true)),
+		"cabine": v0.cabine, "masse": v0.masse, "charge_montee": 80.0 * places * 0.7,
+		"longueur_pendule": v0.longueur_pendule, "pivot": v0.pivot,
+		"poids_montee": _poids_vehicule(true) / _tension, "poids_descente": _poids_vehicule(false) / _tension,
+		"w_montee": float(_w_veh[0]), "w_descente": float(_w_veh[1]),
+	})
+	var vs: Array = []
+	var pi: Array = []
+	var su: Array = []
+	var co: Array = []
+	var ss: PackedFloat64Array = PackedFloat64Array()
+	var ph: PackedFloat32Array = PackedFloat32Array()
+	var ps: PackedFloat32Array = PackedFloat32Array()
+	for i in range(_vehicules.size()):
+		var v: VehiculeRemontee = _vehicules[i][0]
+		vs.append(v)
+		pi.append(v._pince)
+		su.append(v._susp)
+		co.append(_corps[i][0] if i < _corps.size() and _corps[i] != null else null)
+		ss.append(_vehicules[i][1])
+		ph.append(v.phi)
+		ps.append(v.psi)
+	n.set_vehicules(vs, pi, su, co, ss, ph, ps)
+	n.set_ligne(self)
+	_noyau = n
+	_noyau_n = _vehicules.size()
+
+
+func _noyau_valide() -> bool:
+	return _noyau_n == _vehicules.size() and not noyau_desactive
+
+
+func _etape_noyau(delta: float) -> void:
+	_noyau.set_vitesse(vitesse)
+	var actives: bool = _mat_cable != null and _n_appuis >= 2
+	var ss: PackedFloat64Array = _noyau.etape(delta, regime(), point_vue, vue_active, collisions_actives,
+		_onde_amp, _onde_t, _a_montee, actives)
+	for i in range(mini(ss.size(), _vehicules.size())):
+		_vehicules[i][1] = ss[i]
+	if jumelee != null:
+		# tronçons jumelés : en gare, contour extérieur et traversée de la gare
+		# intermédiaire (_pos_vehicule) — reposés en GDScript, sans balancement
+		var dt0: float = _dt
+		_dt = 0.0
+		for i2 in _noyau.en_gare():
+			_corps_proche = true
+			_placer(i2)
+		_dt = dt0
+	if actives:
+		var q: PackedFloat32Array = _noyau.get_paquets()
+		if q.size() >= 258:
+			var listes: Array = [[], []]
+			for k in range(2):
+				var packs: PackedVector4Array = PackedVector4Array()
+				packs.resize(32)
+				for j in range(32):
+					var o: int = (k * 32 + j) * 4
+					packs[j] = Vector4(q[o], q[o + 1], q[o + 2], q[o + 3])
+				var nk: int = int(q[256 + k])
+				for j2 in range(nk):
+					var o2: int = (k * 32 + j2 / 2) * 4 + (j2 % 2) * 2
+					listes[k].append(Vector2(q[o2], q[o2 + 1]))
+				for m in _mats_charges():
+					m.set_shader_parameter("charges_m" if k == 0 else "charges_d", packs)
+					m.set_shader_parameter("n_charges_m" if k == 0 else "n_charges_d", nk)
+			_charges = listes
+
+
+## Portes d'une cabine ouvertes ou fermées : collisions des vantaux (noyau C++).
+func _portes_corps(i: int, ouvert: bool) -> void:
+	if i < _corps.size() and _corps[i] != null:
+		for cs in _corps[i][1]:
+			(cs as CollisionShape3D).disabled = ouvert
+
+
+func _etape_gdscript(delta: float) -> void:
 	var tkd: bool = not _au_magasin.is_empty()
 	for i in range(_vehicules.size()):
 		if tkd and _au_magasin[i] >= 0.0:
@@ -3333,19 +3470,6 @@ func _process_corps(delta: float) -> void:
 				_dt = dt0
 				continue
 		_placer(i)
-	_dt = 0.0
-	_galets()
-	if tricable():
-		_caler_cavaliers()
-	_tourner_pneus(delta)
-	if _mat_cable != null:
-		var pas: float = 0.45 * diametre_cable / 52.0
-		_phase_cable = fposmod(_phase_cable + vitesse_reelle * delta, pas)
-		_mat_cable.set_shader_parameter("cable_phase", _phase_cable)
-	for pl in _poulies:
-		(pl[0] as Node3D).rotation.y = fposmod((pl[0] as Node3D).rotation.y + float(pl[1]) * regime() * delta, TAU)
-	for pl2 in _poulies_3s:
-		(pl2[0] as Node3D).rotate_object_local(Vector3.UP, float(pl2[1]) * regime() * delta)
 
 
 ## Appuis du câble (nez des gares, têtes de pylônes) et charges moyennes,
@@ -3443,6 +3567,8 @@ func _portee_de(d: float) -> int:
 
 ## Flèche locale (m, vers le bas) en d sur un brin : même calcul que le shader.
 func _fleche(d: float, montee: bool) -> float:
+	if _noyau != null:
+		return float(_noyau.fleche_en(d, montee))
 	var n: int = _n_appuis
 	if n < 2 or d <= _appuis[0] or d >= _appuis[n - 1]:
 		return 0.0
@@ -3626,6 +3752,23 @@ func _galets() -> void:
 		return
 	_caler_galets()
 	var touches: Dictionary = {}
+	if _noyau != null and _noyau_valide():
+		# recherche des véhicules au droit d'un pylône : noyau C++ (0,96 ms par
+		# image à Lanches en GDScript, 165 sièges × 15 pylônes)
+		if _pyl_tri.size() != _pyl.size():
+			_pyl_tri = range(_pyl.size())
+			_pyl_tri.sort_custom(func(a2: int, b2: int) -> bool: return float(_pyl[a2][1]) < float(_pyl[b2][1]))
+			_pyl_d = PackedFloat32Array()
+			for k0 in _pyl_tri:
+				_pyl_d.append(float(_pyl[k0][1]))
+		var t: PackedFloat32Array = _noyau.touches(_pyl_d, voie)
+		for j in range(0, t.size(), 3):
+			var q0: Array = _pyl[_pyl_tri[int(t[j])]]
+			var mt: bool = t[j + 1] > 0.5
+			(q0[0] as PyloneRemontee).passage(mt, t[j + 2])
+			touches[[q0[0], mt]] = true
+		_repos_galets(touches)
+		return
 	var xm: float = _x_brin(true)
 	for e in _vehicules:
 		var s: float = e[1]
@@ -3639,6 +3782,14 @@ func _galets() -> void:
 			if absf(u) < 6.0:
 				(q[0] as PyloneRemontee).passage(montee, u)
 				touches[[q[0], montee]] = true
+	_repos_galets(touches)
+
+
+var _pyl_tri: Array = []
+var _pyl_d: PackedFloat32Array = PackedFloat32Array()
+
+
+func _repos_galets(touches: Dictionary) -> void:
 	for k in _pyl_touches:
 		if not touches.has(k):
 			(k[0] as PyloneRemontee).repos(k[1])

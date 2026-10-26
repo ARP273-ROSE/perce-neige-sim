@@ -1,0 +1,6 @@
+godot-cpp
+.sconsign.dblite
+src/*.os
+src/*.o
+src/*.obj
+bin_local/

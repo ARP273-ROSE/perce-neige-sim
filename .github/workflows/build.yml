@@ -27,15 +27,73 @@ env:
 
 jobs:
   # --------------------------------------------------------------------- #
+  # Job 0 : module C++ (gdextension/, classe NoyauRemontee) compilé pour
+  # chaque système. Le jeu s'en passe s'il manque (boucle GDScript).
+  # --------------------------------------------------------------------- #
+  gdextension:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, platform: linux, arch: x86_64 }
+          - { os: windows-latest, platform: windows, arch: x86_64 }
+          - { os: macos-latest, platform: macos, arch: universal }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: godot-cpp
+        uses: actions/checkout@v4
+        with:
+          repository: godotengine/godot-cpp
+          ref: godot-4.5-stable
+          path: gdextension/godot-cpp
+      - name: Python et SCons
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install scons==4.9.1
+      - name: Cache godot-cpp
+        uses: actions/cache@v4
+        with:
+          path: gdextension/godot-cpp/bin
+          key: godot-cpp-4.5-${{ matrix.platform }}-${{ matrix.arch }}-v1
+      - name: Compiler (debug et release)
+        shell: bash
+        working-directory: gdextension
+        run: |
+          set -e
+          for t in template_debug template_release; do
+            scons platform=${{ matrix.platform }} arch=${{ matrix.arch }} target=$t -j4
+          done
+          ls -l bin_local/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: gdext-${{ matrix.platform }}
+          path: gdextension/bin_local/libperce_neige*
+          retention-days: 7
+
+  # --------------------------------------------------------------------- #
   # Job 1 : exporte le viewer Godot 3D (Linux + Windows binaires) sur
   # Linux runner. Cross-compile Windows depuis Linux via les templates.
   # Les binaires sont uploadés en artifact pour les jobs build-* qui suivent.
   # --------------------------------------------------------------------- #
   godot-export:
+    needs: gdextension
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      # module C++ : à côté de son .gdextension, embarqué par l'export
+      - name: Module C++
+        uses: actions/download-artifact@v4
+        with:
+          pattern: gdext-*
+          path: godot_project/bin
+          merge-multiple: true
+        continue-on-error: true
 
       - name: Cache Godot binary + templates
         id: godot-cache
