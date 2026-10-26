@@ -38,6 +38,7 @@ jobs:
           - { os: ubuntu-latest, platform: linux, arch: x86_64 }
           - { os: windows-latest, platform: windows, arch: x86_64 }
           - { os: macos-latest, platform: macos, arch: universal }
+          - { os: ubuntu-latest, platform: web, arch: wasm32 }
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
@@ -53,6 +54,12 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install scons==4.9.1
+      # web : même Emscripten que les modèles de Godot 4.6.1 (4.0.20), sans fils
+      - name: Emscripten
+        if: matrix.platform == 'web'
+        uses: mymindstorm/setup-emsdk@v14
+        with:
+          version: 4.0.20
       - name: Cache godot-cpp
         uses: actions/cache@v4
         with:
@@ -64,7 +71,11 @@ jobs:
         run: |
           set -e
           for t in template_debug template_release; do
-            scons platform=${{ matrix.platform }} arch=${{ matrix.arch }} target=$t -j4
+            if [ "${{ matrix.platform }}" = "web" ]; then
+              scons platform=web threads=no target=$t -j4
+            else
+              scons platform=${{ matrix.platform }} arch=${{ matrix.arch }} target=$t -j4
+            fi
           done
           ls -l bin_local/
       - uses: actions/upload-artifact@v4

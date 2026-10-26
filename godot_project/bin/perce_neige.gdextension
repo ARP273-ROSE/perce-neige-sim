@@ -14,3 +14,5 @@ windows.debug.x86_64 = "res://bin/libperce_neige.windows.template_debug.x86_64.d
 windows.release.x86_64 = "res://bin/libperce_neige.windows.template_release.x86_64.dll"
 macos.debug = "res://bin/libperce_neige.macos.template_debug.universal.dylib"
 macos.release = "res://bin/libperce_neige.macos.template_release.universal.dylib"
+web.debug.wasm32 = "res://bin/libperce_neige.web.template_debug.wasm32.nothreads.wasm"
+web.release.wasm32 = "res://bin/libperce_neige.web.template_release.wasm32.nothreads.wasm"
