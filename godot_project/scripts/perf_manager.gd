@@ -360,7 +360,7 @@ func _process(_delta: float) -> void:
 	_t_princ.append(float(Performance.get_monitor(Performance.TIME_PROCESS)) * 1000.0)
 	# (une image sur quatre : avec un fil de rendu séparé, chaque lecture le
 	# synchronise — relevés du PC du 26/10/2026)
-	if _mesure_gpu and (Engine.get_process_frames() % 4 == 0 or _rel_t >= 0.0):
+	if _mesure_gpu and Engine.get_process_frames() % 4 == 0:
 		_t_rendu.append(RenderingServer.viewport_get_measured_render_time_cpu(_vp_rid))
 		_t_gpu.append(RenderingServer.viewport_get_measured_render_time_gpu(_vp_rid))
 	_releve_image(dt)

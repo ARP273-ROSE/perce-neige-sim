@@ -36,6 +36,32 @@ const _GARDE_IMAGES: int = 300
 static var _purge: int = 0
 
 
+static var _formes: Dictionary = {}       # « Box|taille… » → tableaux
+## Lectures restées sur la carte graphique (banc de fluidité : à faire tendre vers 0).
+static var lectures_carte: int = 0
+static var lectures_par_type: Dictionary = {}
+
+
+static func _compter(mesh: Mesh) -> void:
+	lectures_carte += 1
+	var c: String = mesh.get_class()
+	lectures_par_type[c] = int(lectures_par_type.get(c, 0)) + 1
+
+
+static func _cle_primitive(mesh: Mesh) -> String:
+	if mesh is BoxMesh:
+		var b: BoxMesh = mesh
+		return "B|%s|%d|%d|%d" % [str(b.size), b.subdivide_width, b.subdivide_height, b.subdivide_depth]
+	if mesh is CylinderMesh:
+		var c: CylinderMesh = mesh
+		return "C|%f|%f|%f|%d|%d|%s|%s" % [c.top_radius, c.bottom_radius, c.height, c.radial_segments, c.rings,
+			str(c.cap_top), str(c.cap_bottom)]
+	if mesh is SphereMesh:
+		var sp: SphereMesh = mesh
+		return "S|%f|%f|%d|%d|%s" % [sp.radius, sp.height, sp.radial_segments, sp.rings, str(sp.is_hemisphere)]
+	return ""
+
+
 static func retenir(mesh: Mesh, si: int, arrays: Array) -> void:
 	var id: int = mesh.get_instance_id()
 	var e: Array = _cpu.get(id, [0, []])
@@ -59,11 +85,22 @@ static func tableaux(mesh: Mesh, si: int) -> Array:
 		if si < l.size() and l[si] != null:
 			return l[si]
 	if mesh is PrimitiveMesh:
-		# calculée sur le processeur ; gardée le temps de la fusion, comme le reste
-		# (gardées sans fin, les primitives faisaient 5 Go au banc des 66 lignes)
+		# get_mesh_arrays() passe AUSSI par le serveur de rendu (relevés du PC du
+		# 26/10/2026) : boîtes et cylindres gardés par DIMENSIONS — une lecture par
+		# taille distincte, quel que soit le nombre de boîtes (des milliers) ;
+		# les autres primitives, le temps de la fusion (gardées sans fin par
+		# objet, elles faisaient 5 Go au banc des 66 lignes)
+		var cp: String = _cle_primitive(mesh)
+		if cp != "":
+			if not _formes.has(cp):
+				_compter(mesh)
+				_formes[cp] = (mesh as PrimitiveMesh).get_mesh_arrays()
+			return _formes[cp]
+		_compter(mesh)
 		var ap: Array = (mesh as PrimitiveMesh).get_mesh_arrays()
 		retenir(mesh, 0, ap)
 		return ap
+	_compter(mesh)
 	return mesh.surface_get_arrays(si)       # (lent : relu sur la carte)
 
 
