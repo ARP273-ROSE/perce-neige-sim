@@ -5,6 +5,30 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.48.0 — 27 octobre 2026
+
+**Un noyau C++ pour les remontées.** Demande d'un utilisateur, 27/10/2026 : « va falloir te
+pencher sur le C++, on n'a pas les perfs pour augmenter le décor ». Le relevé par système l'avait
+montré : au pied des pistes, la simulation des remontées faisait 6 à 8 ms d'une logique de 8 à 9.
+
+- **Module GDExtension** (`gdextension/`, classe `NoyauRemontee`, godot-cpp 4.5) : pour toute une
+  ligne et en un seul appel par image, l'avance des véhicules (profil des lanceurs), les charges
+  ponctuelles et la flèche du câble par portée (avec l'onde des arrêts), la pose de chaque
+  véhicule (position, cap, inclinaison de la pince), le balancement en pendule, les corps de
+  collision, les pièces animées en gare (appelées seulement quand la valeur change) et la
+  recherche des galets au droit des pylônes. Mêmes formules que le GDScript : poses identiques
+  au millionième sur onze lignes.
+- Tronçons jumelés (Bollin–Fresse) : le noyau, puis le GDScript repose les véhicules en gare
+  (contour extérieur, traversée de l'intermédiaire). 3S, téléphériques et téléskis à magasin
+  restent en GDScript.
+- **Sans le module** (PWA, plate-forme non compilée) : la boucle GDScript, inchangée ; la PWA
+  l'exclut de son export.
+- **CI** : le module est compilé pour Linux, Windows et macOS (universel) avant l'export, et
+  copié à côté du programme dans les paquets (`kit.json`).
+- Banc sans écran, au pied des pistes : 10 → 4,6 ms par image ; tournée de six remontées 8,8 →
+  5,7 ms, à-coups de plus de 33 ms 198 → 111. À confirmer sur PC avec le vrai rendu (bouton
+  MESURE).
+
 ## 1.47.2 — 27 octobre 2026
 
 **Retours d'essai sur iPad (27/10/2026) : sons des remontées, gares du 3S, terrassements.**

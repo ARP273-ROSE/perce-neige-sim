@@ -56,12 +56,32 @@
       "de": "bundled_godot",
       "vers": "bundled_godot",
       "motifs": [
+        "libperce_neige.windows.template_release.x86_64.dll"
+      ],
+      "systemes": [
+        "windows"
+      ]
+    },
+    {
+      "de": "bundled_godot",
+      "vers": "bundled_godot",
+      "motifs": [
         "perce_neige_3d.x86_64"
       ],
       "systemes": [
         "linux-x86_64"
       ],
       "executable": true
+    },
+    {
+      "de": "bundled_godot",
+      "vers": "bundled_godot",
+      "motifs": [
+        "libperce_neige.linux.template_release.x86_64.so"
+      ],
+      "systemes": [
+        "linux-x86_64"
+      ]
     },
     {
       "de": "bundled_godot",
