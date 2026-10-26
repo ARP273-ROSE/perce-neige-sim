@@ -11,7 +11,11 @@ set -euo pipefail
 
 SIM_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
+# (un WEB_ROOT donné à la commande l'emporte sur le réglage local : sinon un
+# déploiement d'essai partait sur la PWA en service)
+WEB_ROOT_DEMANDE="${WEB_ROOT:-}"
 [ -f "$SIM_DIR/deploy_web.local" ] && . "$SIM_DIR/deploy_web.local"
+[ -n "$WEB_ROOT_DEMANDE" ] && WEB_ROOT="$WEB_ROOT_DEMANDE"
 GODOT="${GODOT_BIN:-godot}"
 WEB_ROOT="${WEB_ROOT:-/srv/www/funiculaire}"
 
@@ -55,6 +59,7 @@ else
     echo "  module C++ web : $(basename "$WASM")"
 fi
 echo "→ Export Web…"
+rm -rf "$SIM_DIR/build/web"
 mkdir -p "$SIM_DIR/build/web"
 "$GODOT" --headless --path "$SIM_DIR/godot_project" \
     --export-release "Web" 2>&1 | grep -viE "fontconfig|get_system_font" | tail -2

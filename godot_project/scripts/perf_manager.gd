@@ -554,6 +554,7 @@ func _finir_releve() -> void:
 	var r: PackedStringArray = PackedStringArray()
 	r.append("Relevé de fluidité — %s — %d images en %.0f s" % [_resume_machine(), n, RELEVE_S])
 	r.append("cran %d/%d — %s" % [cran, CRAN_MAX, libelle(cran)])
+	r.append("noyau C++ des remontées : %s" % ("oui" if ClassDB.class_exists("NoyauRemontee") else "non (GDScript)"))
 	for nom in ["image", "principal", "rendu", "gpu"]:
 		var a: Array = cols[nom]
 		a.sort()

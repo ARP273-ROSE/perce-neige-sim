@@ -3347,6 +3347,7 @@ func _process_corps(delta: float) -> void:
 var _noyau: RefCounted = null
 var _noyau_n: int = -1
 static var noyau_desactive: bool = false        # bancs : comparer les deux chemins
+static var _noyau_annonce: bool = false
 
 
 func _preparer_noyau() -> void:
@@ -3404,6 +3405,9 @@ func _preparer_noyau() -> void:
 	n.set_ligne(self)
 	_noyau = n
 	_noyau_n = _vehicules.size()
+	if not _noyau_annonce:
+		_noyau_annonce = true
+		print("[NoyauRemontee] module C++ actif (première ligne : %s)" % name)
 
 
 func _noyau_valide() -> bool:
