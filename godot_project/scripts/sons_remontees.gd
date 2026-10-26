@@ -210,7 +210,7 @@ func _portiques(sk: Vector3) -> void:
 		if e[1] == null or not is_instance_valid(e[1]):
 			continue
 		var lg: LigneRemontee = e[1]
-		for n in lg.find_children("Portique", "Node3D", true, false):
+		for n in domaine._portiques(lg):          # (en cache : find_children à chaque image coûtait 3 ms)
 			var c: Vector3 = (n as Node3D).global_position
 			if Vector2(sk.x - c.x, sk.z - c.z).length() < 1.6 and absf(sk.y - c.y) < 3.0:
 				_une_fois(n, "tsd_forfait", 8.0)

@@ -5,6 +5,36 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.45.0 — 26 octobre 2026
+
+**Fluidité du mode skieur ; lâcher la perche en pleine ligne.** Retours d'utilisateur, 26/10/2026 :
+audit de performance du mode skieur, et « on fait comment pour descendre en pleine ligne d'un
+tk ? ».
+
+- **Lâcher la perche** : sur une perche de téléski, la touche E (ou le bouton CHAUSSER, devenu
+  LÂCHER) la lâche en pleine ligne ; un pas de côté hors de la trace, skis en travers, chasse-neige.
+- **Banc de fluidité** `bench_fluidite_skieur_3d` : coût CPU de chaque image (sans rendu) à l'arrêt
+  au pied des pistes, part de chaque système, assis dans un télésiège, tournée de six remontées
+  avec les à-coups et la plus longue tranche de construction par étape
+  (`LigneRemontee.mesurer_tranches`).
+- **Régime établi** : 15,7 → 10-11,5 ms par image au pied des pistes (images de plus de 16,7 ms :
+  427 sur 1 200 → 0 à 21 ; deux passes, la charge de la machine varie).
+  - sons des remontées : les portiques étaient cherchés dans tout l'arbre de chaque gare à chaque
+    image (3 ms) — ils passent par le cache du domaine ;
+  - galets des pylônes recalés à moins de 100 m (au lieu de 250 : 1,6 ms par ligne proche), pneus
+    des gares animés à moins de 90 m (268 à Bollin : 0,7 ms) ;
+  - placement des véhicules : une seule recherche de zone, tangente directe en ligne.
+- **Constructions à l'approche** : un siège ou une cabine coûtait ~33 ms à fabriquer — une image
+  entière, et des centaines par ligne. Chaque type a désormais 8 modèles (numéros tirés au
+  hasard, comme avant), fabriqués une fois ; les autres véhicules en sont des copies qui
+  partagent les maillages : ~2,5 ms. Gares, câble (porteurs, cavaliers et machinerie du 3S) et
+  calage de période de Fresse découpés en tranches ; période gardée d'une construction à l'autre.
+  - tournée de six remontées : 20 → 9-11 ms par image en moyenne, à-coups de plus de 33 ms
+    2 398 → 195-329 ; assis dans un télésiège, images de plus de 16,7 ms 750 → 135-172 ;
+  - mémoire : 1,85 → 1,04 Go (maillages partagés).
+- Reste, une fois par construction : le talus de la gare des Leissières (~0,18 s d'un bloc) et
+  les porteurs du 3S (~0,15 s) ; la part du rendu (carte graphique) ne se mesure pas sans écran.
+
 ## 1.44.0 — 25 octobre 2026
 
 **Piques des remontées : la station a son mot à dire.** Retour d'utilisateur, 25/10/2026 : « une

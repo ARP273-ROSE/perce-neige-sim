@@ -111,21 +111,112 @@ func constructeur() -> String:
 	return DESCRIPTIONS.get(famille, ["", 6, "doppelmayr"])[2]
 
 
+## Modèles : un véhicule coûtait ~33 ms à fabriquer (pièces, fusion des
+## maillages) — une image entière, et des centaines à l'approche des lignes
+## (audit de fluidité, 26/10/2026). Chaque type (famille, miroir, livrée) a
+## VARIANTES modèles numérotés au hasard, fabriqués une fois ; les autres
+## véhicules en sont des copies, qui partagent les maillages.
+const VARIANTES: int = 8
+static var _numeros: Dictionary = {}      # type → numéros des variantes
+static var _modeles: Dictionary = {}      # type|numéro → [Node3D hors arbre, références, valeurs]
+const REFS: Array = ["_machoire", "_levier", "_gc", "_bulle", "_susp", "_pince", "_corde", "_perche_tige", "_bras"]
+const LISTES: Array = ["_ressorts", "_galets_roul", "_skis_ranges"]
+const VALEURS: Array = ["places", "cabine", "pivot", "masse", "longueur_pendule", "_gc_releve", "_ressort_l0", "_etat_anim"]
+
+
+## Modèles libérés en quittant le jeu.
+static func vider_modeles() -> void:
+	for k in _modeles:
+		((_modeles[k] as Array)[0] as Node).free()
+	_modeles.clear()
+
+
+func _type() -> String:
+	return "%s|%s|%s" % [famille, str(miroir), livree]
+
+
 func construire() -> void:
 	_construit = true
 	for c in get_children():
 		remove_child(c)
 		c.queue_free()
+	# un seul numéro par véhicule, sur la pince comme sur le siège (la pince
+	# en portait un autre — retour d'utilisateur, 23/10/2026 : « numéro fantôme »)
+	if numero <= 0:
+		var ty: String = _type()
+		if not _numeros.has(ty):
+			var l: Array = []
+			for k in range(VARIANTES):
+				l.append(randi() % {"siege_bartholet_6": 81, "cabine_3s": 24}.get(famille, 120) + 1)
+			_numeros[ty] = l
+		numero = (_numeros[ty] as Array).pick_random()
+	var cle: String = "%s|%d" % [_type(), numero]
+	if _modeles.has(cle):
+		_copier(_modeles[cle])
+		return
+	_fabriquer()
+	_modeles[cle] = _modele()
+
+
+## Copie détachée des pièces, et où retrouver les références.
+func _modele() -> Array:
+	var m: Node3D = Node3D.new()
+	for c in get_children():
+		m.add_child(c.duplicate())
+	var refs: Dictionary = {}
+	for r in REFS:
+		var n: Node = get(r)
+		if n != null:
+			refs[r] = _indices(n)
+	for r in LISTES:
+		refs[r] = (get(r) as Array).map(func(n: Node) -> PackedInt32Array: return _indices(n))
+	refs["_portes"] = _portes.map(func(e: Array) -> Array: return [_indices(e[0]), e[1], e[2]])
+	var val: Dictionary = {}
+	for r in VALEURS:
+		val[r] = get(r)
+	return [m, refs, val]
+
+
+func _copier(md: Array) -> void:
+	for c in (md[0] as Node3D).get_children():
+		add_child(c.duplicate())
+	var refs: Dictionary = md[1]
+	for r in REFS:
+		set(r, _par_indices(refs[r]) if refs.has(r) else null)
+	for r in LISTES:
+		set(r, (refs[r] as Array).map(func(ix: PackedInt32Array) -> Node: return _par_indices(ix)))
+	_portes = (refs["_portes"] as Array).map(func(e: Array) -> Array: return [_par_indices(e[0]), e[1], e[2]])
+	var val: Dictionary = md[2]
+	for r in VALEURS:
+		var x: Variant = val[r]
+		set(r, (x as PackedFloat32Array).duplicate() if x is PackedFloat32Array else x)
+
+
+## Place d'un nœud dans l'arbre du véhicule (rangs des enfants) : les nœuds
+## sans nom en reçoivent un autre à chaque copie, les rangs restent.
+func _indices(n: Node) -> PackedInt32Array:
+	var ix: PackedInt32Array = PackedInt32Array()
+	while n != self and n != null:
+		ix.insert(0, n.get_index())
+		n = n.get_parent()
+	return ix
+
+
+func _par_indices(ix: PackedInt32Array) -> Node:
+	var n: Node = self
+	for k in ix:
+		n = n.get_child(k)
+	return n
+
+
+## Fabrication complète (le premier véhicule de chaque variante).
+func _fabriquer() -> void:
 	_ressorts.clear()
 	_galets_roul.clear()
 	_portes.clear()
 	_skis_ranges.clear()
 	_etat_anim = PackedFloat32Array([-1.0, -1.0, -1.0, -1.0])
 	places = DESCRIPTIONS.get(famille, ["", 6, ""])[1]
-	# un seul numéro par véhicule, sur la pince comme sur le siège (la pince
-	# en portait un autre — retour d'utilisateur, 23/10/2026 : « numéro fantôme »)
-	if numero <= 0:
-		numero = randi() % {"siege_bartholet_6": 81, "cabine_3s": 24}.get(famille, 120) + 1
 	cabine = famille.begins_with("cabine")
 	var fixe: bool = constructeur() == "fixe"
 	if famille.begins_with("perche"):

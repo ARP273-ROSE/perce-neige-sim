@@ -29,6 +29,9 @@ const R_PAROI: float = 1.64             # rayon intérieur du tube des voitures
 var pret: bool = false
 var triangles: int = 0
 const BUDGET_US: int = 7000
+## Bancs sans écran : collisions à la demande d'un bloc (le banc de fluidité
+## les veut étalées comme en jeu).
+var synchrone_sans_ecran: bool = true
 var budget_us: int = BUDGET_US          # vue 3D du PC : 14 000 (le PC rend à part)
 var _n_taches: int = 0                  # pour la progression
 var _taches: Array = []                 # Callables à exécuter, dans l'ordre
@@ -135,7 +138,7 @@ func assurer_autour(p: Vector3) -> void:
 			var r2: Rect2 = Rect2(p.x - 200.0, p.z - 200.0, 400.0, 400.0)
 			_zones_relief.append(r2)
 			_taches.append(_terrain.bind(relief, r2))
-			if DisplayServer.get_name() == "headless":
+			if synchrone_sans_ecran and DisplayServer.get_name() == "headless":
 				_avancer(1 << 62)
 			else:
 				set_process(true)
@@ -152,7 +155,7 @@ func assurer_autour(p: Vector3) -> void:
 		if racine != null:
 			_maillages(racine, [zone])
 	if not _taches.is_empty():
-		if DisplayServer.get_name() == "headless":
+		if synchrone_sans_ecran and DisplayServer.get_name() == "headless":
 			_avancer(1 << 62)
 		else:
 			set_process(true)

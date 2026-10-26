@@ -3,7 +3,8 @@
 ##    et un tirage ne ressort pas une pique récente ;
 ## 2. au jeu : embarquer sans passer sous le portique → FRAUDE et huées de la
 ##    file ; quitter le siège en ligne → SAUT ; les Leissières, prises à
-##    l'amont, ne valent pas la pique « à la descente ».
+##    l'amont, ne valent pas la pique « à la descente » ; au téléski, E lâche la
+##    perche en pleine ligne (pique SAUT, un pas de côté, il ne dévale pas).
 ##   godot --headless --fixed-fps 60 --path godot_project -s bench_piques_remontees_3d.gd -- --mode=normal
 extends SceneTree
 
@@ -18,6 +19,9 @@ var _lz: LigneRemontee = null
 var _piques: Array = []
 const CLE: String = "tsd6_madeleine"
 const CLE_2: String = "tsd6_leissieres"
+const CLE_TK: String = "tke_legettaz"
+var _tk: LigneRemontee = null
+var _p_lache: Vector3 = Vector3.ZERO
 
 
 func _initialize() -> void:
@@ -94,7 +98,9 @@ func _tick() -> void:
 					_lg = e[0]
 				if (e[0] as Node).name == CLE_2:
 					_lz = e[0]
-			if _lg == null or _lz == null:
+				if (e[0] as Node).name == CLE_TK:
+					_tk = e[0]
+			if _lg == null or _lz == null or _tk == null:
 				_verif("lignes posées", false)
 				_fin()
 				return
@@ -166,7 +172,38 @@ func _tick() -> void:
 		5:
 			if not rm.a_bord.is_empty():
 				_verif("Leissières prise à l'amont : pas de pique « à la descente »", not _piques.has("DESCENTE"), str(_piques))
-				_fin()
+				rm.quitter()
+				_main.aller_a_remontee(_tk)
+				_phase = 6
+				_t = 0.0
 			elif _t > 40.0:
 				_verif("assis aux Leissières (amont)", false, "rien en 40 s")
+				_fin()
+		6:
+			if not _tk.pret or _t < 2.0:
+				return
+			var q: Vector3 = _tk.global_transform * (_tk.point_embarquement(true) + Vector3(0, 0, 2.5))
+			q.y = _main.relief.hauteur_sol(q.x, q.z)
+			sk.activer(q + Vector3(0, 0.1, 0), 0.0)
+			sk.dernier_sol = q
+			rm._repos = 0.0
+			_phase = 7
+			_t = 0.0
+		7:
+			if rm.sur_perche() and _tk.zone_vehicule(rm.a_bord[1]) == "ligne" and _t > 25.0:
+				_piques.clear()
+				_main.basculer_ski()           # touche E
+				_p_lache = sk.global_position
+				_verif("téléski : E lâche la perche en ligne (pique SAUT)", rm.a_bord.is_empty() and not sk.embarque and sk.chausse
+					and _piques.has("SAUT"), str(_piques))
+				_phase = 8
+				_t = 0.0
+			elif _t > 90.0:
+				_verif("téléski : en ligne sur la perche", false, "a_bord %s" % str(rm.a_bord.size()))
+				_fin()
+		8:
+			if _t > 6.0:
+				var d: float = sk.global_position.distance_to(_p_lache)
+				_verif("perche lâchée : il reste sur place (chasse-neige, skis en travers)", d < 6.0 and rm.a_bord.is_empty(),
+					"%.1f m en 6 s" % d)
 				_fin()
