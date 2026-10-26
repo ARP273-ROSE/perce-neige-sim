@@ -28,11 +28,12 @@ const _ATTRS: Array = [Mesh.ARRAY_NORMAL, Mesh.ARRAY_TANGENT, Mesh.ARRAY_COLOR,
 ##    sur le processeur ;
 ##  - les maillages faits par `valider` ou par une fusion, dans la copie
 ##    gardée à leur création (quelques secondes : le temps d'être refusionnés).
-static var _cpu: Dictionary = {}          # id du maillage → [image, [tableaux par surface]]
-## Copies gardées ~5 s (le temps de la fusion qui suit leur création) : les
-## garder plus longtemps faisait exploser la mémoire (3,5 à 5 Go au banc des
-## 66 lignes).
-const _GARDE_IMAGES: int = 300
+static var _cpu: Dictionary = {}          # id du maillage → [WeakRef, [tableaux par surface]]
+## Copies gardées tant que le maillage existe (les pièces partagées — galets,
+## coussins — servent des milliers de fois : gardées 5 s seulement, elles
+## étaient relues sur la carte à chaque pylône, 24 000 fois au banc) ; celles
+## des maillages libérés (sources d'une fusion) partent à la purge. Les
+## résultats de fusion ne sont pas copiés (mémoire : 5 Go au banc des 66 lignes).
 static var _purge: int = 0
 
 
@@ -42,9 +43,12 @@ static var lectures_carte: int = 0
 static var lectures_par_type: Dictionary = {}
 
 
+static var _ctx: String = ""
+
+
 static func _compter(mesh: Mesh) -> void:
 	lectures_carte += 1
-	var c: String = mesh.get_class()
+	var c: String = mesh.get_class() + ("@" + _ctx if _ctx != "" else "")
 	lectures_par_type[c] = int(lectures_par_type.get(c, 0)) + 1
 
 
@@ -154,23 +158,25 @@ static func _cle_primitive(mesh: Mesh) -> String:
 
 static func retenir(mesh: Mesh, si: int, arrays: Array) -> void:
 	var id: int = mesh.get_instance_id()
-	var e: Array = _cpu.get(id, [0, []])
+	var e: Array = _cpu.get(id, [])
+	if e.is_empty() or (e[0] as WeakRef).get_ref() != mesh:
+		e = [weakref(mesh), []]
 	var l: Array = e[1]
 	while l.size() <= si:
 		l.append(null)
 	l[si] = arrays
+	_cpu[id] = e
 	var f: int = Engine.get_process_frames()
-	_cpu[id] = [f, l]
 	if f - _purge > 60:
 		_purge = f
 		for k in _cpu.keys():
-			if int(_cpu[k][0]) < f - _GARDE_IMAGES:
+			if (_cpu[k][0] as WeakRef).get_ref() == null:
 				_cpu.erase(k)
 
 
 static func tableaux(mesh: Mesh, si: int) -> Array:
 	var id: int = mesh.get_instance_id()
-	if _cpu.has(id):
+	if _cpu.has(id) and (_cpu[id][0] as WeakRef).get_ref() == mesh:
 		var l: Array = _cpu[id][1]
 		if si < l.size() and l[si] != null:
 			return l[si]
@@ -235,6 +241,7 @@ static func valider(st: SurfaceTool, mesh: ArrayMesh = null) -> ArrayMesh:
 ## seul MeshInstance3D à plusieurs surfaces — pour les objets qui bougent à
 ## chaque image (véhicules des remontées : des milliers d'instances).
 static func merge(root: Node3D, keep: Array = [], name_prefix: String = "Fusion", une_instance: bool = false) -> int:
+	_ctx = name_prefix
 	var groups: Dictionary = {}     # clé → {mat, st, n, shadow}
 	var done: Dictionary = {}       # MeshInstance3D → nb de surfaces fusionnées
 	var stack: Array = [[root, Transform3D.IDENTITY]]
