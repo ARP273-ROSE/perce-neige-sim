@@ -212,7 +212,7 @@ func construire() -> void:
 		l_gare += ALLONGE_BAS            # double embarquement, puis le lanceur plus loin
 	if fixe():
 		v_embarquement = vitesse
-	_calculer_tetes()
+	await _calculer_tetes()
 	_preparer_nez()
 	if teleski() or tricable():
 		_construire_boucle()       # (magasin, départ, quais du 3S se posent dessus)
@@ -337,6 +337,7 @@ func _calculer_tetes() -> void:
 		var gm: float = _garde_mesuree(dp)
 		_tetes.append(terrain(dp) + (maxf(gm + 1.0, 6.5) if gm > 0.0 else 9.0))
 	_garde_au_sol()
+	await _pause("têtes des pylônes")     # (Leissières : 0,15 s d'un bloc)
 	for i in range(_tetes.size()):
 		var t: float = terrain(float(pylones[i]["d"]))
 		_tetes[i] = clampf(_tetes[i], t + 6.5, t + (90.0 if tricable() or vaetvient() else 32.0))
@@ -348,6 +349,7 @@ func _calculer_tetes() -> void:
 	# passer SOUS les galets, la ligne y est concave — tête abaissée sous la
 	# corde de ses voisins (sinon le câble décollerait des galets)
 	for it2 in range(30):
+		await _pause("têtes des pylônes")
 		var bouge: bool = false
 		var pts2: Array = _points_appui()
 		for i in range(pylones.size()):
@@ -386,9 +388,11 @@ func _calculer_tetes() -> void:
 	# ce que les trois tiennent ensemble (abaisser une compression faisait
 	# raser le sol au câble chargé de la portée voisine)
 	for passe in range(6):
+		await _pause("têtes des pylônes")
 		if not _garde_au_sol(true):
 			break
 		_porteurs_convexes()
+	await _pause("têtes des pylônes")
 	_ajuster_aux_mesures()
 	for i3 in range(_tetes.size()):
 		var t3: float = terrain(float(pylones[i3]["d"]))
@@ -1303,7 +1307,8 @@ func _gare(aval: bool) -> void:
 	# profondeur fixe, qui sortaient en surplomb quand le terrain plongeait)
 	# (téléski : pas de quai, la gare est posée sur la neige)
 	if not teleski():
-		g.add_child(_mesh_terrassement(_terrassement(aval), y0))
+		var tri_t: PackedVector3Array = await _terrassement(aval)
+		g.add_child(_mesh_terrassement(tri_t, y0))
 	await _pause("gare : terrassement")
 	# carénage en gélule sur colonnes, cabine du conducteur (photos des
 	# gares BMF du Marmottes Express, retour d'utilisateur, 23/10/2026)
@@ -1506,6 +1511,7 @@ func _terrassement(aval: bool) -> PackedVector3Array:
 		for z in zs:
 			var p: Vector3 = Vector3(bd[0], haut.call(z), z)
 			pts.append([p, pied.call(p, bd[1], bd[2])])
+			await _pause("gare : terrassement")      # (Leissières : 0,2 s d'un bloc sur PC)
 		for k in range(pts.size() - 1):
 			quad.call(pts[k][0], pts[k + 1][0], pts[k + 1][1], pts[k][1])
 		pieds_cote.append(pts)
@@ -1518,6 +1524,7 @@ func _terrassement(aval: bool) -> PackedVector3Array:
 		for k in range(nx + 1):
 			var p: Vector3 = Vector3(lerpf(xg, xd, float(k) / nx), haut.call(z), z)
 			pts2.append([p, pied.call(p, n, PENTE_TALUS)])
+			await _pause("gare : terrassement")
 		for k in range(pts2.size() - 1):
 			quad.call(pts2[k][0], pts2[k + 1][0], pts2[k + 1][1], pts2[k][1])
 		# coins : du sommet aux pieds des deux talus voisins
@@ -2079,7 +2086,8 @@ func _collisions_fixes() -> void:
 			continue
 		var tal: CollisionShape3D = CollisionShape3D.new()
 		var cc: ConcavePolygonShape3D = ConcavePolygonShape3D.new()
-		cc.set_faces(_terrassement(aval))
+		# (calculé à la construction de la gare, qui le garde)
+		cc.set_faces(_terrassements.get(aval, PackedVector3Array()))
 		cc.backface_collision = true
 		tal.shape = cc
 		corps.add_child(tal)

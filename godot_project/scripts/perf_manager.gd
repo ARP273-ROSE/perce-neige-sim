@@ -483,6 +483,11 @@ var _rel: PackedStringArray = PackedStringArray()
 var _rel_t: float = -1.0
 
 
+## Relevé en cours ? (le bouton MESURE l'affiche)
+func releve_en_cours() -> bool:
+	return _rel_t >= 0.0
+
+
 func releve() -> void:
 	if _rel_t >= 0.0:
 		_finir_releve()
@@ -491,7 +496,7 @@ func releve() -> void:
 	_rel = PackedStringArray(["t_s;image_ms;principal_ms;rendu_ms;gpu_ms;appels;objets;primitives;cran;detail;x;y;z;construit"])
 	_log("[Relevé] enregistrement %d s…" % int(RELEVE_S))
 	if main != null and main.has_method("_flash"):
-		main.call("_flash", "Relevé de fluidité : %d s… (F10 pour arrêter)" % int(RELEVE_S))
+		main.call("_flash", "Relevé de fluidité : %d s — skiez, prenez une remontée…" % int(RELEVE_S))
 
 
 func _releve_image(dt: float) -> void:
@@ -557,8 +562,54 @@ func _finir_releve() -> void:
 	for l in r:
 		_log("[Relevé] " + l)
 	_log("[Relevé] fichiers : %s" % ProjectSettings.globalize_path(base + ".csv"))
-	if main != null and main.has_method("_flash"):
-		main.call("_flash", "Relevé écrit : %s" % ProjectSettings.globalize_path(base + ".txt"))
+	_envoyer_releve(r)
+
+
+## Le relevé part au point de collecte des rapports (celui des erreurs de la
+## PWA : plafonné, rangé hors du site, une alerte au NAS) — sur l'iPad on ne
+## peut pas récupérer un fichier du dossier utilisateur (demande d'un
+## utilisateur, 26/10/2026 : « ajoute le bouton »). Le résumé, et les images
+## lentes (> 25 ms) image par image : tout tient sous 256 Kio.
+const COLLECTE: String = "https://fenice.giff.re/rapports/collecte.php"
+
+
+func _envoyer_releve(r: PackedStringArray) -> void:
+	var lentes: PackedStringArray = PackedStringArray([_rel[0]])
+	for k in range(1, _rel.size()):
+		if float(_rel[k].split(";")[1]) > 25.0 and lentes.size() < 1500:
+			lentes.append(_rel[k])
+	var ua: String = ""
+	if _web:
+		ua = str(JavaScriptBridge.eval("navigator.userAgent", true))
+	var rapport: Dictionary = {
+		"genre": "releve_perf",
+		"version": PNConstants.VERSION_APP,
+		"poste": ("PWA " if _web else "PC ") + str(machine.get("gpu", "?")),
+		"os": OS.get_name() + ((" — " + ua) if ua != "" else ""),
+		"resume": "\n".join(r.slice(2, 7)),
+		"releve": "\n".join(r),
+		"images_lentes": "\n".join(lentes),
+	}
+	var corps: String = JSON.stringify(rapport)
+	if corps.length() > 250000:
+		rapport["images_lentes"] = "\n".join(lentes.slice(0, 400))
+		corps = JSON.stringify(rapport)
+	var req: HTTPRequest = HTTPRequest.new()
+	add_child(req)
+	req.timeout = 20.0
+	req.request_completed.connect(func(_res: int, code: int, _h: PackedStringArray, _b: PackedByteArray) -> void:
+		req.queue_free()
+		var ok: bool = code >= 200 and code < 300
+		_log("[Relevé] envoi au NAS : %s (%d)" % ["fait" if ok else "échec", code])
+		if main != null and main.has_method("_flash"):
+			main.call("_flash", "Relevé de fluidité envoyé — merci !" if ok else "Relevé : envoi impossible (%d)" % code))
+	var en_tetes: PackedStringArray = PackedStringArray([
+		"Content-Type: application/json",
+		"X-App: %s/%s" % ["funiculaire-pwa" if _web else "funiculaire-pc", PNConstants.VERSION_APP]])
+	if req.request(COLLECTE, en_tetes, HTTPClient.METHOD_POST, corps) != OK:
+		req.queue_free()
+		if main != null and main.has_method("_flash"):
+			main.call("_flash", "Relevé : envoi impossible")
 
 
 func _resume_machine() -> String:

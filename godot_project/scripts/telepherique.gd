@@ -95,7 +95,7 @@ func construire() -> void:
 	voie = VOIE_TPH
 	espacement = longueur_h() * 4.0
 	H_CABLE_GARE = VehiculeRemontee.hauteur_cable_gare(famille)
-	_calculer_tetes()
+	await _calculer_tetes()
 	_preparer_nez()
 	for aval in [true, false]:
 		if gare_aval_existante:
