@@ -5,6 +5,18 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.50.1 — 27 octobre 2026
+
+**Encore moins d'objets à dessiner.** Au pied des pistes, avec le vrai rendu : objets
+3 405 → 2 482, appels de dessin 2 362 → 1 439 (PWA comme PC).
+
+- **Tunnel, voie et salle des machines cachés dès 30 m d'une gare** (60 m auparavant) quand on
+  est dehors : le point de départ du skieur, à 44 m de la gare de Val Claret, les dessinait
+  encore. Captures comparées devant l'entrée : identiques (les portes sont opaques).
+- **Pièces de pylône à portée réduite** selon leur matière : plaques 200 m, caillebotis et
+  mousses 300 m, béton et acier 500 m (environ 130 objets de moins).
+- Bancs : tous verts (sauf l'escalier de la fosse du banc skieur, échec connu).
+
 ## 1.50.0 — 27 octobre 2026
 
 **Moins d'objets à dessiner.** Relevés de l'iPad (27/10/2026) : le dessin y coûte ~20 ms pour
