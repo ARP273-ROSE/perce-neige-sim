@@ -358,10 +358,37 @@ static func _triangles(mesh: Mesh, si: int) -> bool:
 	return mesh is PrimitiveMesh and not (mesh is PointMesh)
 
 
+## Assemblage en C++ (classe OutilsMaillage du module), un appel par groupe,
+## quand il est chargé ; sinon (PWA sans module) les boucles GDScript
+## ci-dessous, mêmes calculs (banc du 27/10/2026 : la fusion faisait l'essentiel
+## des 10 à 40 ms de chaque pylône construit).
+static var cpp_desactive: bool = false           # bancs : comparer les deux chemins
+static var _outils: RefCounted = null
+static var _outils_cherche: bool = false
+
+
+static func _outils_cpp() -> RefCounted:
+	if cpp_desactive:
+		return null
+	if not _outils_cherche:
+		_outils_cherche = true
+		if ClassDB.class_exists("OutilsMaillage"):
+			_outils = ClassDB.instantiate("OutilsMaillage")
+	return _outils
+
+
 ## Concatène une surface (tableaux) transformée par `xf` dans l'accumulateur.
 static func _ajouter(acc: Dictionary, a: Array, xf: Transform3D) -> void:
 	var v: PackedVector3Array = a[Mesh.ARRAY_VERTEX]
 	var n0: int = int(acc.get("n", 0))
+	if _outils_cpp() != null:
+		# (module : les surfaces sont assemblées d'un coup, dans _tableaux_acc)
+		if not acc.has("surfaces"):
+			acc["surfaces"] = []
+			acc["xfs"] = []
+		(acc["surfaces"] as Array).append(a)
+		(acc["xfs"] as Array).append(xf)
+		return
 	if not acc.has("v"):
 		acc["v"] = PackedVector3Array()
 	var dv: PackedVector3Array = acc["v"]
@@ -391,12 +418,7 @@ static func _ajouter(acc: Dictionary, a: Array, xf: Transform3D) -> void:
 			dt[k2 + i + 2] = t3.z
 			dt[k2 + i + 3] = tt[i + 3]
 		acc["tan"] = dt
-	for e in [[Mesh.ARRAY_COLOR, "col"], [Mesh.ARRAY_TEX_UV, "uv"], [Mesh.ARRAY_TEX_UV2, "uv2"]]:
-		if a[e[0]] != null:
-			if not acc.has(e[1]):
-				acc[e[1]] = a[e[0]].duplicate()
-			else:
-				acc[e[1]].append_array(a[e[0]])
+	_ajouter_attributs(acc, a)
 	if a[Mesh.ARRAY_INDEX] != null:
 		var ix: PackedInt32Array = a[Mesh.ARRAY_INDEX]
 		var di: PackedInt32Array = acc.get("ix", PackedInt32Array())
@@ -408,7 +430,19 @@ static func _ajouter(acc: Dictionary, a: Array, xf: Transform3D) -> void:
 	acc["n"] = n0 + v.size()
 
 
+## Couleurs et UV : recopiés tels quels.
+static func _ajouter_attributs(acc: Dictionary, a: Array) -> void:
+	for e in [[Mesh.ARRAY_COLOR, "col"], [Mesh.ARRAY_TEX_UV, "uv"], [Mesh.ARRAY_TEX_UV2, "uv2"]]:
+		if a[e[0]] != null:
+			if not acc.has(e[1]):
+				acc[e[1]] = a[e[0]].duplicate()
+			else:
+				acc[e[1]].append_array(a[e[0]])
+
+
 static func _tableaux_acc(acc: Dictionary) -> Array:
+	if acc.has("surfaces"):
+		return _outils_cpp().fusionner(acc["surfaces"], acc["xfs"])
 	var a: Array = []
 	a.resize(Mesh.ARRAY_MAX)
 	a[Mesh.ARRAY_VERTEX] = acc.get("v", PackedVector3Array())

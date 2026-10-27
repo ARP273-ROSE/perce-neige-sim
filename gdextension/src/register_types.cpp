@@ -1,4 +1,5 @@
 #include "noyau_remontee.h"
+#include "outils_maillage.h"
 
 #include <gdextension_interface.h>
 #include <godot_cpp/core/class_db.hpp>
@@ -12,6 +13,7 @@ void initialiser_module(ModuleInitializationLevel p_level) {
 		return;
 	}
 	GDREGISTER_CLASS(NoyauRemontee);
+	GDREGISTER_CLASS(OutilsMaillage);
 }
 
 void terminer_module(ModuleInitializationLevel p_level) {

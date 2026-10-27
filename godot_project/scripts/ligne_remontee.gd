@@ -20,7 +20,12 @@ extends Node3D
 ## pince se referme sur le câble à la sortie. Toutes les pièces sont animées
 ## d'après la position du véhicule sur la boucle.
 
-var profil: PackedVector2Array = PackedVector2Array([Vector2(0, 0), Vector2(1500, 560)])
+var profil: PackedVector2Array = PackedVector2Array([Vector2(0, 0), Vector2(1500, 560)]):
+	set(v):
+		profil = v
+		_profil_x = PackedFloat32Array()
+## Abscisses du profil (recherche par dichotomie dans terrain()).
+var _profil_x: PackedFloat32Array = PackedFloat32Array()
 var pylones: Array = []          # [{d, montee:[[n,"S"],…], descente:[…]}]
 var voie: float = 6.1
 var vitesse: float = 5.25
@@ -83,17 +88,37 @@ var _h_nez: Array = [0.0, 0.0]  # demi-longueur de la batterie de galets au nez 
 var longueur_boucle: float = 0.0
 
 
+## (Par dichotomie : le calcul des têtes des pylônes l'appelle des dizaines
+## de milliers de fois — Leissières figeait l'image 0,1 s, banc du 27/10/2026.)
 func terrain(d: float) -> float:
-	if profil.size() == 0:
+	var n: int = profil.size()
+	if n == 0:
 		return 0.0
 	if d <= profil[0].x:
 		return profil[0].y
-	for i in range(1, profil.size()):
-		if d <= profil[i].x:
-			var a: Vector2 = profil[i - 1]
-			var b: Vector2 = profil[i]
-			return lerpf(a.y, b.y, (d - a.x) / maxf(b.x - a.x, 0.001))
-	return profil[profil.size() - 1].y
+	if _profil_x.size() != n:
+		_profil_x.resize(n)
+		for k in range(n):
+			_profil_x[k] = profil[k].x
+	var i: int = _premier_au_dela(_profil_x, profil, d)
+	if i >= n:
+		return profil[n - 1].y
+	var a: Vector2 = profil[i - 1]
+	var b: Vector2 = profil[i]
+	return lerpf(a.y, b.y, (d - a.x) / maxf(b.x - a.x, 0.001))
+
+
+## Premier indice i ≥ 1 tel que d ≤ pts[i].x (pts.size() s'il n'y en a pas),
+## avec d > pts[0].x ; `xs` = abscisses de pts. La comparaison finale se fait
+## en double, comme la recherche linéaire qu'elle remplace.
+static func _premier_au_dela(xs: PackedFloat32Array, pts: PackedVector2Array, d: float) -> int:
+	var n: int = pts.size()
+	var i: int = clampi(xs.bsearch(d, true), 1, n)
+	while i < n and d > pts[i].x:
+		i += 1
+	while i > 1 and d <= pts[i - 1].x:
+		i -= 1
+	return i
 
 
 func longueur_h() -> float:
@@ -334,6 +359,16 @@ static func chainette(x: float, x1: float, y1: float, x2: float, y2: float, a: f
 	return a * cosh((x - xm) / a) + c
 
 
+## Les deux constantes [xm, c] de la même chaînette, pour l'évaluer en
+## plusieurs points d'une portée (y = a·cosh((x − xm)/a) + c) : mêmes calculs
+## que chainette(), faits une fois par portée.
+static func chainette_xm_c(x1: float, y1: float, x2: float, y2: float, a: float) -> Array:
+	var L: float = maxf(x2 - x1, 0.01)
+	var sh: float = sinh(L / (2.0 * a))
+	var xm: float = (x1 + x2) * 0.5 - a * asinh((y2 - y1) / (2.0 * a * maxf(sh, 1e-9)))
+	return [xm, y1 - a * cosh((x1 - xm) / a)]       # (double précision, pas un Vector2)
+
+
 func _calculer_tetes() -> void:
 	_parametres_chainette()
 	_tetes.clear()
@@ -500,9 +535,12 @@ func _ajuster_aux_mesures() -> void:
 			for sp in [[pts[i], pts[i + 1]], [pts[i + 1], pts[i + 2]]]:
 				var a: Array = sp[0]
 				var b: Array = sp[1]
+				var xc: Array = chainette_xm_c(a[0], a[1], b[0], b[1], _a_montee)
+				var xm: float = xc[0]
+				var cc: float = xc[1]
 				for k in range(1, 16):
 					var d: float = lerpf(a[0], b[0], float(k) / 16.0)
-					var yc: float = chainette(d, a[0], a[1], b[0], b[1], _a_montee)
+					var yc: float = _a_montee * cosh((d - xm) / _a_montee) + cc
 					marge = minf(marge, yc - terrain(d) - _garde_exigee(d))
 			if marge < 0.8:
 				continue
@@ -521,7 +559,11 @@ func _ajuster_aux_mesures() -> void:
 ## barométrique, gps_hauteurs.py du dossier) : (d, hauteur), tranches de 20 m.
 ## Le câble doit être au moins aussi haut qu'en vrai — les pylônes étaient
 ## trop petits, le câble rentrait dans le sol (retour d'utilisateur, 25/10/2026).
-var hauteurs_mesurees: PackedVector2Array = PackedVector2Array()
+var hauteurs_mesurees: PackedVector2Array = PackedVector2Array():
+	set(v):
+		hauteurs_mesurees = v
+		_mesures_x = PackedFloat32Array()
+var _mesures_x: PackedFloat32Array = PackedFloat32Array()
 ## Ruisseaux (OpenStreetMap) qui passent sous la ligne : abscisses d (m).
 var ruisseaux: PackedFloat32Array = PackedFloat32Array()
 
@@ -534,15 +576,20 @@ func _garde_mesuree(d: float) -> float:
 		return 0.0
 	if d < hauteurs_mesurees[0].x or d > hauteurs_mesurees[n - 1].x:
 		return 0.0
-	for k in range(n - 1):
-		var a: Vector2 = hauteurs_mesurees[k]
-		var b: Vector2 = hauteurs_mesurees[k + 1]
-		if d >= a.x and d <= b.x:
-			if b.x - a.x > 45.0:
-				return 0.0                  # trou dans les mesures
-			var h: float = lerpf(a.y, b.y, (d - a.x) / maxf(b.x - a.x, 0.1))
-			return h + (H_CABLE_GARE - 0.6) - 1.0
-	return 0.0
+	if n < 2:
+		return 0.0
+	if _mesures_x.size() != n:
+		_mesures_x.resize(n)
+		for k0 in range(n):
+			_mesures_x[k0] = hauteurs_mesurees[k0].x
+	# (premier segment [a, b] avec a.x ≤ d ≤ b.x)
+	var k: int = (_premier_au_dela(_mesures_x, hauteurs_mesurees, d) - 1) if d > hauteurs_mesurees[0].x else 0
+	var a: Vector2 = hauteurs_mesurees[k]
+	var b: Vector2 = hauteurs_mesurees[k + 1]
+	if b.x - a.x > 45.0:
+		return 0.0                  # trou dans les mesures
+	var h: float = lerpf(a.y, b.y, (d - a.x) / maxf(b.x - a.x, 0.1))
+	return h + (H_CABLE_GARE - 0.6) - 1.0
 
 
 ## Garde au sol du brin montée chargé : la ou les têtes de chaque portée
@@ -558,11 +605,14 @@ func _garde_au_sol(proteger_c: bool = false) -> bool:
 			var a: Array = pts[i]
 			var b: Array = pts[i + 1]
 			var pire: float = 0.0
+			var xc: Array = chainette_xm_c(a[0], a[1], b[0], b[1], _a_montee)
+			var xm: float = xc[0]
+			var cc: float = xc[1]
 			for k in range(1, 20):
 				var u: float = float(k) / 20.0
 				var d: float = lerpf(a[0], b[0], u)
 				# brin montée (chargé) : la flèche la plus forte
-				var yc: float = chainette(d, a[0], a[1], b[0], b[1], _a_montee)
+				var yc: float = _a_montee * cosh((d - xm) / _a_montee) + cc
 				# garde pleine en ligne, réduite près des gares où le câble
 				# rejoint la hauteur du quai (sinon le dernier pylône était
 				# relevé jusqu'à la butée de 32 m — retour d'utilisateur, 23/10/2026)
@@ -780,13 +830,26 @@ func y_cable(d: float, montee: bool = true) -> float:
 	return _y_chainette(d, montee)
 
 
+## (Mêmes appuis que _points_appui, parcourus sans recopier la liste : appelé
+## des milliers de fois par le calcul des têtes.)
 func _y_chainette(d: float, montee: bool = true) -> float:
-	var pts: Array = _points_appui()
-	for i in range(pts.size() - 1):
-		var a: Array = pts[i]
-		var b: Array = pts[i + 1]
-		if d <= b[0] or i == pts.size() - 2:
-			return chainette(clampf(d, a[0], b[0]), a[0], a[1], b[0], b[1], _a_montee if montee else _a_descente)
+	var n: int = pylones.size()
+	var xa: float = _h_nez[0]
+	var ya: float = terrain(0.0) + H_CABLE_GARE
+	for i in range(n + 1):
+		var xb: float
+		var yb: float
+		if i < n:
+			xb = float(pylones[i]["d"])
+			yb = _tetes[i]
+		else:
+			var L: float = longueur_h()
+			xb = L - _h_nez[1]
+			yb = terrain(L) + H_CABLE_GARE
+		if d <= xb or i == n:
+			return chainette(clampf(d, xa, xb), xa, ya, xb, yb, _a_montee if montee else _a_descente)
+		xa = xb
+		ya = yb
 	return 0.0
 
 
@@ -849,15 +912,54 @@ func contour_exterieur(i: int) -> bool:
 
 
 ## Temps de parcours de la boucle à la vitesse v (régime 1).
+## (Même intégration que vitesse_en() pas à pas, sans ses listes : en ligne,
+## les pas à vitesse constante s'enchaînent jusqu'à la zone suivante — Fresse
+## figeait l'image 28 ms par tour, banc du 27/10/2026.)
 func _temps_boucle(v: float) -> float:
-	var v0: float = vitesse
-	vitesse = v
 	var s2: float = 0.0
 	var t: float = 0.0
+	if get_script() != LigneRemontee:
+		# (sous-classe — téléphérique — : zone() et vitesse_en() redéfinies)
+		var v0: float = vitesse
+		vitesse = v
+		while s2 < longueur_boucle and t < 7200.0:
+			s2 += vitesse_en(s2) * 0.05
+			t += 0.05
+		vitesse = v0
+		return t
+	var pas_ligne: float = v * 0.05
+	var vv: float = v * v
+	var ve: float = vv - v_embarquement * v_embarquement
+	var fx: bool = fixe()
 	while s2 < longueur_boucle and t < 7200.0:
-		s2 += vitesse_en(s2) * 0.05
+		var dans: bool = false
+		var x: float = 0.0
+		var l: float = 0.0
+		var suivante: float = INF
+		for z in _zones:
+			var z0: float = z[0]
+			var z1: float = z[1]
+			if s2 >= z0 and s2 <= z1:
+				dans = true
+				x = s2 - z0
+				l = z1 - z0
+				break
+			if z0 > s2:
+				suivante = minf(suivante, z0)
+		if not dans or fx:
+			# vitesse pleine (vitesse_en : « ligne », ou ligne fixe)
+			if fx:
+				suivante = INF
+			s2 += pas_ligne
+			t += 0.05
+			while s2 < suivante and s2 < longueur_boucle and t < 7200.0:
+				s2 += pas_ligne
+				t += 0.05
+			continue
+		var tt: float = clampf(minf(x, l - x) / L_FREIN, 0.0, 1.0)
+		var lisse: float = tt * tt * tt * (tt * (tt * 6.0 - 15.0) + 10.0)
+		s2 += sqrt(vv - ve * lisse) * 0.05
 		t += 0.05
-	vitesse = v0
 	return t
 
 
@@ -2929,6 +3031,7 @@ func _poser_pylones() -> void:
 	# batteries de galets aux nez des gares (le câble y change de pente)
 	for aval in [true, false]:
 		_batterie_gare(aval)
+		await _pause("batteries des gares")
 
 
 ## Pylônes de téléski : fût fin et potence en T portant les deux brins ; en
@@ -3140,8 +3243,7 @@ func _cable() -> void:
 		for k in range(pts.size()):
 			pts[k] += Vector3(0, VehiculeRemontee.Y_TRACTEUR_3S, 0)
 		await _pause("câble : tracé")
-		_porteurs(c)
-		await _pause("câble : porteurs 3S")
+		await _porteurs(c)
 		_cavaliers(c)
 		await _pause("câble : cavaliers 3S")
 		_poulies_3s = m3s.construire(c, poulies_3s)
@@ -3216,19 +3318,33 @@ func _porteurs(parent: Node3D) -> void:
 	_mat_porteurs = RemonteeKit.materiau_cable_tracteur(57.0)
 	_mat_porteurs.set_shader_parameter("lisse", true)
 	var L: float = longueur_h()
+	# abscisses resserrées aux gares et aux sabots des pylônes, calculées une
+	# fois ; un tube par tranche (Olympique : 0,15 s d'un bloc, banc du 27/10/2026)
+	var ds: PackedFloat32Array = PackedFloat32Array()
+	var d: float = 0.0
+	while d < L:
+		ds.append(d)
+		var fin: bool = d < 30.0 or d > L - 30.0
+		for p3 in pylones:
+			fin = fin or absf(d - float(p3["d"])) < l_sabot_3s(p3) * 0.5 + 4.0
+		d += 0.5 if fin else 4.0
 	for montee in [true, false]:
 		var x0: float = _x_brin(montee)
+		var ys: PackedFloat32Array = PackedFloat32Array()
+		ys.resize(ds.size() + 1)
+		for i in range(ds.size()):
+			ys[i] = y_cable(ds[i], montee)
+		ys[ds.size()] = y_cable(L, montee)
+		await _pause("câble : porteurs 3S")
 		for k in [-0.5, 0.5]:
 			var pts: PackedVector3Array = PackedVector3Array()
-			var d: float = 0.0
-			while d < L:
-				pts.append(Vector3(x0 + k * VehiculeRemontee.E_PORTEURS_3S, y_cable(d, montee), -d))
-				var fin: bool = d < 30.0 or d > L - 30.0
-				for p3 in pylones:
-					fin = fin or absf(d - float(p3["d"])) < l_sabot_3s(p3) * 0.5 + 4.0
-				d += 0.5 if fin else 4.0
-			pts.append(Vector3(x0 + k * VehiculeRemontee.E_PORTEURS_3S, y_cable(L, montee), -L))
+			pts.resize(ds.size() + 1)
+			var x: float = x0 + k * VehiculeRemontee.E_PORTEURS_3S
+			for i in range(ds.size()):
+				pts[i] = Vector3(x, ys[i], -ds[i])
+			pts[ds.size()] = Vector3(x, ys[ds.size()], -L)
 			RemonteeKit.tube(parent, pts, 0.0285, "cable", 8, _mat_porteurs)
+			await _pause("câble : porteurs 3S")
 
 
 func _peupler() -> void:

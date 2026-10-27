@@ -5,6 +5,28 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.51.0 — 27 octobre 2026
+
+**La construction des remontées ne fige presque plus l'image.** Relevés du PC (27/10/2026) :
+60 i/s en jeu, mais 53 des 54 images de plus de 50 ms tombaient pendant la construction d'une
+remontée à l'approche du skieur. Banc de fluidité, pire tranche de construction d'un seul
+tenant : 151 ms → 42 ms.
+
+- **Câbles porteurs du 3S** (151 → 5 ms) : abscisses et hauteurs calculées une fois pour les
+  deux câbles d'une voie, une pause entre chaque câble.
+- **Câbles et tubes** (câble de l'Olympique 67 → 17 ms) : maillage écrit directement en
+  tableaux au lieu de SurfaceTool sommet par sommet — 5 à 6 fois plus rapide, maillages
+  identiques.
+- **Têtes des pylônes** (Leissières 99 → 42 ms, toutes les lignes 1 276 → 372 ms) : terrain et
+  mesures GPS lus par dichotomie, chaînette calculée une fois par portée, câble évalué sans
+  recopier la liste des appuis — hauteurs identiques sur les 66 lignes.
+- **Fusion des maillages en C++** (classe `OutilsMaillage` du module) : un appel par groupe,
+  2 fois plus rapide (un pylône 38 → 22 ms) ; maillages identiques au GDScript, qui reste
+  utilisé sans le module (PWA).
+- **Calage de la période** (Fresse 28 → 4 ms par tranche) et **batteries de galets des gares**
+  séparées par des pauses.
+- Bancs : tous verts (sauf l'escalier de la fosse du banc skieur, échec connu).
+
 ## 1.50.1 — 27 octobre 2026
 
 **Encore moins d'objets à dessiner.** Au pied des pistes, avec le vrai rendu : objets
