@@ -15,6 +15,8 @@
 
 #include <godot_cpp/classes/node3d.hpp>
 #include <godot_cpp/classes/ref_counted.hpp>
+#include <godot_cpp/variant/rid.hpp>
+#include <godot_cpp/variant/transform3d.hpp>
 #include <godot_cpp/variant/array.hpp>
 #include <godot_cpp/variant/packed_float32_array.hpp>
 #include <godot_cpp/variant/packed_float64_array.hpp>
@@ -72,6 +74,12 @@ class NoyauRemontee : public RefCounted {
 
 	int tour = 0;
 	std::vector<int> gare_derniere;
+	std::vector<RID> mm_rid;
+	std::vector<Transform3D> mm_rel;
+	double mm_seuil = 0.0, mm_jusqua = 0.0;
+	std::vector<Transform3D> pose_veh;   // dernière pose (repère de la ligne)
+	std::vector<char> loin_veh;          // 1 : dessiné en MultiMesh
+	std::vector<float> mm_buf;
 	std::vector<double> z_xa;
 	std::vector<int> passages_derniers;
 	double d_onde_amp = 0.0, d_onde_t = 0.0, d_a_montee = 800.0;
@@ -119,6 +127,12 @@ public:
 	// Véhicules en gare à la dernière étape (tronçons jumelés : le GDScript les
 	// repose, contour et traversée)
 	PackedInt32Array en_gare() const;
+
+	// Véhicules lointains dessinés en MultiMesh (un appel de dessin par maillage
+	// et par ligne) : un MultiMesh par maillage du modèle, sa transformation
+	// relative au véhicule ; au-delà de `seuil` du point de vue, le nœud du
+	// véhicule est caché et l'instance prend sa pose.
+	void set_lointains(const Array &multimeshes, const Array &relatives, double seuil, double jusqua);
 
 	// Galets : pour chaque véhicule sur une voie de ligne à moins de 6 m d'un
 	// pylône (abscisses pylones_d), [k, montée (1/0), u = d_pylône − d, …]
