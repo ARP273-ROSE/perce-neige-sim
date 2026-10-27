@@ -5,6 +5,27 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.49.0 — 27 octobre 2026
+
+**Ce que le moteur dessine pour rien ; relevés de l'iPad.** Relevés MESURE de l'iPad (27/10/2026,
+PWA en service et PWA d'essai avec le module C++) : nos scripts n'y font que 5 ms sur ~37, le
+module C++ n'y change presque rien ; le dessin coûte 12 à 13 ms (2 000 à 3 000 appels).
+
+- **Le souterrain n'est plus dessiné dehors** : Godot ne masque pas ce qui est derrière la
+  montagne. Dehors, à plus de 60 m d'une gare du funiculaire, les lampes du tunnel, la voie et la
+  salle des machines sont cachées, et chaque rame à plus de 150 m d'elle (façades vitrées) :
+  ~950 objets et autant d'appels de dessin en moins à 500 m de la gare.
+- **Relevé MESURE** : temps de physique, objets physiques actifs, sons qui jouent, nombre de
+  nœuds, et si le noyau C++ est actif.
+- **Noyau C++** : passages des véhicules devant les portillons (la boucle GDScript, pour chaque
+  gare à chaque image, coûtait 0,2 ms par ligne) ; vantaux posés seulement quand ils bougent.
+- **PWA** : le module C++ se compile pour le web (CI, Emscripten 4.0.20 comme les modèles de
+  Godot 4.6.1) et fonctionne (vérifié dans WebKit) ; la PWA en service reste sans module
+  (`MODULE_WEB=1` pour une PWA d'essai), le moteur web à modules n'apportant rien de mesurable
+  sur iPad.
+- Déploiement : un dossier donné à la commande l'emporte sur le réglage local (une PWA d'essai
+  partait en service), dossier d'export nettoyé avant chaque export.
+
 ## 1.48.0 — 27 octobre 2026
 
 **Un noyau C++ pour les remontées.** Demande d'un utilisateur, 27/10/2026 : « va falloir te
