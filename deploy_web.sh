@@ -42,7 +42,13 @@ sed -i "s|^const VERSION_APP: String = .*|const VERSION_APP: String = \"$(tr -d 
 # est mis de côté le temps de l'export.
 WASM="$SIM_DIR/godot_project/bin/libperce_neige.web.template_release.wasm32.nothreads.wasm"
 GDEXT="$SIM_DIR/godot_project/bin/perce_neige.gdextension"
-if [ ! -f "$WASM" ] && command -v gh >/dev/null 2>&1; then
+# PWA en service : sans module tant que MODULE_WEB=1 n'est pas demandé (l'essai
+# du 27/10/2026 sur iPad : 5 ms de scripts sur 37, le module n'y change presque
+# rien, et il remplace le moteur web) — essai : MODULE_WEB=1 WEB_ROOT=…/essai
+if [ "${MODULE_WEB:-0}" != "1" ]; then
+    rm -f "$SIM_DIR"/godot_project/bin/libperce_neige.web.*
+fi
+if [ "${MODULE_WEB:-0}" = "1" ] && [ ! -f "$WASM" ] && command -v gh >/dev/null 2>&1; then
     SHA=$(git -C "$SIM_DIR" rev-parse HEAD)
     RUN=$(gh run list -R ARP273-ROSE/perce-neige-sim --workflow build.yml --commit "$SHA" --status success \
           --json databaseId -q '.[0].databaseId' 2>/dev/null || true)

@@ -504,16 +504,38 @@ func releve() -> void:
 	_rel_t = 0.0
 	Prof.t.clear()
 	Prof.actif = true
+	# moteur : physique, objets physiques, sons qui jouent (relevés de l'iPad du
+	# 27/10/2026 : nos scripts 5 ms sur 37, le reste dans le moteur)
+	_moteur = {"phys": 0.0, "n": 0, "actifs": 0, "paires": 0, "sons": 0.0, "n_sons": 0, "noeuds": 0}
+	_lecteurs = []
+	for c in get_tree().root.find_children("*", "AudioStreamPlayer", true, false) + get_tree().root.find_children("*", "AudioStreamPlayer3D", true, false):
+		_lecteurs.append(c)
 	_rel = PackedStringArray(["t_s;image_ms;principal_ms;rendu_ms;gpu_ms;appels;objets;primitives;cran;detail;x;y;z;construit"])
 	_log("[Relevé] enregistrement %d s…" % int(RELEVE_S))
 	if main != null and main.has_method("_flash"):
 		main.call("_flash", "Relevé de fluidité : %d s — skiez, prenez une remontée…" % int(RELEVE_S))
 
 
+var _moteur: Dictionary = {}
+var _lecteurs: Array = []
+
+
 func _releve_image(dt: float) -> void:
 	if _rel_t < 0.0:
 		return
 	_rel_t += dt
+	_moteur["phys"] = float(_moteur["phys"]) + float(Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS)) * 1000.0
+	_moteur["n"] = int(_moteur["n"]) + 1
+	_moteur["actifs"] = maxi(int(_moteur["actifs"]), int(Performance.get_monitor(Performance.PHYSICS_3D_ACTIVE_OBJECTS)))
+	_moteur["paires"] = maxi(int(_moteur["paires"]), int(Performance.get_monitor(Performance.PHYSICS_3D_COLLISION_PAIRS)))
+	_moteur["noeuds"] = maxi(int(_moteur["noeuds"]), int(Performance.get_monitor(Performance.OBJECT_NODE_COUNT)))
+	if int(_moteur["n"]) % 15 == 0:
+		var nj: int = 0
+		for l in _lecteurs:
+			if is_instance_valid(l) and bool(l.get("playing")):
+				nj += 1
+		_moteur["sons"] = float(_moteur["sons"]) + nj
+		_moteur["n_sons"] = int(_moteur["n_sons"]) + 1
 	var sk: Node3D = main.get("skieur") as Node3D if main != null else null
 	var p: Vector3 = sk.global_position if sk != null and sk.get("actif") else Vector3.ZERO
 	var rm: Node = main.get("remontees") if main != null else null
@@ -569,6 +591,10 @@ func _finir_releve() -> void:
 	ob.sort()
 	r.append("  appels de dessin : médiane %d · max %d ; objets : médiane %d · max %d" % [
 		ap[ap.size() / 2], ap[ap.size() - 1], ob[ob.size() / 2], ob[ob.size() - 1]])
+	var nm: int = maxi(1, int(_moteur.get("n", 1)))
+	r.append("  moteur : physique %.2f ms par image · objets physiques actifs %d, paires %d · sons qui jouent %.1f (sur %d) · nœuds %d" % [
+		float(_moteur.get("phys", 0.0)) / nm, int(_moteur.get("actifs", 0)), int(_moteur.get("paires", 0)),
+		float(_moteur.get("sons", 0.0)) / maxi(1, int(_moteur.get("n_sons", 1))), _lecteurs.size(), int(_moteur.get("noeuds", 0))])
 	# temps par système (enveloppes des _process : voir Prof), ms par image
 	var sys: Array = Prof.t.keys()
 	sys.sort_custom(func(a, b): return Prof.t[a] > Prof.t[b])

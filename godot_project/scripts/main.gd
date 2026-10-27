@@ -929,6 +929,53 @@ func _process(delta: float) -> void:
 		_process_corps(delta)
 
 
+## Dehors, loin des deux gares du funiculaire, rien de ce qui est sous terre ou
+## dans la rame ne se voit (Godot ne masque pas ce qui est derrière la
+## montagne) : lampes du tunnel, voie, salle des machines, rames — ~1 300
+## objets et autant d'appels de dessin en moins à chaque image (relevés de
+## l'iPad du 27/10/2026 : le dessin y coûte 12 à 13 ms).
+const SOUTERRAIN_LOIN: float = 60.0
+const RAME_LOIN: float = 150.0
+var _t_souterrain: float = 0.0
+var _souterrain_cles: String = ""
+
+
+func _maj_souterrain(delta: float) -> void:
+	_t_souterrain -= delta
+	if _t_souterrain > 0.0:
+		return
+	_t_souterrain = 0.3
+	# [nœud, caché ?] : lampes, voie et salle des machines dehors à plus de 60 m
+	# d'une gare ; chaque rame dehors à plus de 150 m d'elle (façades vitrées)
+	var etat: Array = []
+	var dehors: bool = false
+	var c: Vector3 = Vector3.ZERO
+	if mode_skieur and skieur != null and skieur.actif and tunnel != null and relief != null:
+		var cam: Camera3D = get_viewport().get_camera_3d()
+		if cam != null:
+			c = cam.global_position
+			dehors = c.y > relief.hauteur_sol(c.x, c.z) - 1.0
+	var pres_gare: bool = false
+	if dehors:
+		for sg in [0.0, PNConstants.LENGTH]:
+			var g: Vector3 = tunnel.transform_at(sg).origin
+			if Vector2(c.x - g.x, c.z - g.z).length() < SOUTERRAIN_LOIN:
+				pres_gare = true
+	for n in [lights, track, machine_room]:
+		etat.append([n, dehors and not pres_gare])
+	for r in [cabin, cabin_ghost]:
+		etat.append([r, dehors and r != null and (r as Node3D).global_position.distance_to(c) > RAME_LOIN])
+	var cles: String = ""
+	for e in etat:
+		cles += "1" if e[1] else "0"
+	if cles == _souterrain_cles:
+		return
+	_souterrain_cles = cles
+	for e2 in etat:
+		if e2[0] != null:
+			(e2[0] as Node3D).visible = not bool(e2[1])
+
+
 func _process_corps(delta: float) -> void:
 	if _skiertest == 1 and relief != null and relief.pret and not client_mode:
 		_skiertest = 2
@@ -938,6 +985,7 @@ func _process_corps(delta: float) -> void:
 		print("[Skiertest] skieur au pied de la remontée")
 	_pique_depart_sauvage()
 	_piques_survitesse()
+	_maj_souterrain(delta)
 	if _paused:
 		return
 
