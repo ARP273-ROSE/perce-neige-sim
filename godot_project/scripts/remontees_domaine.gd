@@ -16,6 +16,11 @@ const M_LAT: float = 111320.0
 var VEHICULES_JUSQUA: float = 450.0 if OS.has_feature("web") else 700.0
 const PYLONES_JUSQUA: float = 3000.0
 const GALETS_JUSQUA: float = 150.0
+const PORTEES_PIECES_PYLONE: Dictionary = {
+	"remontee_plaque_bleue": 200.0, "remontee_blanc_plaque": 200.0,
+	"remontee_caillebotis": 300.0, "remontee_mousse_rouge": 300.0,
+	"remontee_beton": 500.0, "remontee_acier_noir": 500.0,
+}
 const ACTIVE_JUSQUA: float = 2500.0
 var DETAILS_JUSQUA: float = 180.0 if OS.has_feature("web") else 250.0
 
@@ -379,6 +384,14 @@ func _portees(lg: LigneRemontee) -> void:
 			# se distingue plus
 			if String(n.name).begins_with("Paire"):
 				pn = minf(pn, GALETS_JUSQUA)
+			# pylônes : au loin, le fût et la tête seulement — plaques, caillebotis,
+			# massif et petites pièces de détail (1 850 objets pour 278 pylônes
+			# jusqu'à 3 km, un par matériau)
+			if c is PyloneRemontee and n is MeshInstance3D and (n as MeshInstance3D).mesh != null \
+					and (n as MeshInstance3D).mesh.get_surface_count() > 0:
+				var mt: Material = (n as MeshInstance3D).mesh.surface_get_material(0)
+				if mt != null and PORTEES_PIECES_PYLONE.has(mt.resource_name):
+					pn = minf(pn, float(PORTEES_PIECES_PYLONE[mt.resource_name]))
 			if n is GeometryInstance3D:
 				(n as GeometryInstance3D).visibility_range_end = pn
 				(n as GeometryInstance3D).visibility_range_end_margin = pn * 0.05

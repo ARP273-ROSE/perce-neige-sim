@@ -934,7 +934,7 @@ func _process(delta: float) -> void:
 ## montagne) : lampes du tunnel, voie, salle des machines, rames — ~1 300
 ## objets et autant d'appels de dessin en moins à chaque image (relevés de
 ## l'iPad du 27/10/2026 : le dessin y coûte 12 à 13 ms).
-const SOUTERRAIN_LOIN: float = 60.0
+const SOUTERRAIN_LOIN: float = 30.0
 const RAME_LOIN: float = 150.0
 var _t_souterrain: float = 0.0
 var _souterrain_cles: String = ""
@@ -945,7 +945,7 @@ func _maj_souterrain(delta: float) -> void:
 	if _t_souterrain > 0.0:
 		return
 	_t_souterrain = 0.3
-	# [nœud, caché ?] : lampes, voie et salle des machines dehors à plus de 60 m
+	# [nœud, caché ?] : lampes, voie et salle des machines dehors à plus de 30 m
 	# d'une gare ; chaque rame dehors à plus de 150 m d'elle (façades vitrées)
 	var etat: Array = []
 	var dehors: bool = false
