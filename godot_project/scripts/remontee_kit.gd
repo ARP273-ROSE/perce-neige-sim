@@ -185,11 +185,25 @@ static func tube(parent: Node3D, pts: PackedVector3Array, r: float, m: String, s
 		matiere: Material = null) -> MeshInstance3D:
 	if pts.size() < 2:
 		return null
-	var st: SurfaceTool = SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var mesh: ArrayMesh = ArrayMesh.new()
+	var a: Array = tube_tableaux(pts, r, seg)
+	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, a)
+	MeshMerge.retenir(mesh, 0, a)
+	mesh.surface_set_material(0, matiere if matiere != null else mat(m))
+	return _mi(parent, mesh, Transform3D.IDENTITY, m)
+
+
+## Tableaux du tube (sommets, normales, UV ; triangles non indexés), écrits
+## directement — par SurfaceTool, sommet par sommet, le câble de l'Olympique
+## figeait l'image 70 ms (banc du 27/10/2026). Mêmes sommets, même ordre.
+static func tube_tableaux(pts: PackedVector3Array, r: float, seg: int) -> Array:
 	var n: int = pts.size()
+	var na: int = seg + 1
+	var ap: PackedVector3Array = PackedVector3Array()
+	var an: PackedVector3Array = PackedVector3Array()
+	ap.resize(n * na)
+	an.resize(n * na)
 	var prec_x: Vector3 = Vector3.ZERO
-	var anneaux: Array = []
 	for i in range(n):
 		var t: Vector3
 		if i == 0:
@@ -206,30 +220,59 @@ static func tube(parent: Node3D, pts: PackedVector3Array, r: float, m: String, s
 			x = (prec_x - t * prec_x.dot(t)).normalized()     # transport parallèle
 		prec_x = x
 		var y: Vector3 = t.cross(x)
-		var a: Array = []
-		for k in range(seg + 1):
+		for k in range(na):
 			var ang: float = TAU * float(k) / seg
 			var nrm: Vector3 = x * cos(ang) + y * sin(ang)
-			a.append([pts[i] + nrm * r, nrm, float(k) / seg])
-		anneaux.append(a)
+			ap[i * na + k] = pts[i] + nrm * r
+			an[i * na + k] = nrm
+	var nv: int = (n - 1) * seg * 6
+	var vs: PackedVector3Array = PackedVector3Array()
+	var ns: PackedVector3Array = PackedVector3Array()
+	var uvs: PackedVector2Array = PackedVector2Array()
+	vs.resize(nv)
+	ns.resize(nv)
+	uvs.resize(nv)
+	var w: int = 0
 	var absc: float = 0.0
 	for i in range(n - 1):
 		var v0: float = absc * 2.0
 		absc += pts[i].distance_to(pts[i + 1])
 		var v1: float = absc * 2.0
 		for k in range(seg):
-			var p00: Array = anneaux[i][k]
-			var p01: Array = anneaux[i][k + 1]
-			var p10: Array = anneaux[i + 1][k]
-			var p11: Array = anneaux[i + 1][k + 1]
-			for q in [[p00, v0], [p10, v1], [p11, v1], [p00, v0], [p11, v1], [p01, v0]]:
-				var p: Array = q[0]
-				st.set_normal(p[1])
-				st.set_uv(Vector2(p[2], q[1]))
-				st.add_vertex(p[0])
-	var mesh: ArrayMesh = MeshMerge.valider(st)
-	mesh.surface_set_material(0, matiere if matiere != null else mat(m))
-	return _mi(parent, mesh, Transform3D.IDENTITY, m)
+			# (p00, v0) (p10, v1) (p11, v1) (p00, v0) (p11, v1) (p01, v0)
+			var i00: int = i * na + k
+			var i10: int = i00 + na
+			var u0: float = float(k) / seg
+			var u1: float = float(k + 1) / seg
+			var p00: Vector3 = ap[i00]
+			var p11: Vector3 = ap[i10 + 1]
+			var n00: Vector3 = an[i00]
+			var n11: Vector3 = an[i10 + 1]
+			vs[w] = p00
+			ns[w] = n00
+			uvs[w] = Vector2(u0, v0)
+			vs[w + 1] = ap[i10]
+			ns[w + 1] = an[i10]
+			uvs[w + 1] = Vector2(u0, v1)
+			vs[w + 2] = p11
+			ns[w + 2] = n11
+			uvs[w + 2] = Vector2(u1, v1)
+			vs[w + 3] = p00
+			ns[w + 3] = n00
+			uvs[w + 3] = Vector2(u0, v0)
+			vs[w + 4] = p11
+			ns[w + 4] = n11
+			uvs[w + 4] = Vector2(u1, v1)
+			vs[w + 5] = ap[i00 + 1]
+			ns[w + 5] = an[i00 + 1]
+			uvs[w + 5] = Vector2(u1, v0)
+			w += 6
+	var a: Array = []
+	a.resize(Mesh.ARRAY_MAX)
+	a[Mesh.ARRAY_VERTEX] = vs
+	a[Mesh.ARRAY_NORMAL] = ns
+	a[Mesh.ARRAY_TEX_UV] = uvs
+	return a
 
 
 ## Câble tracteur : le shader à torons du câble du funiculaire (Fatzer 52 mm,
