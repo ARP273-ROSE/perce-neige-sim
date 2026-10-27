@@ -1,5 +1,6 @@
 #include "noyau_remontee.h"
 
+#include <godot_cpp/classes/rendering_server.hpp>
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/variant/basis.hpp>
 #include <godot_cpp/variant/dictionary.hpp>
@@ -62,6 +63,7 @@ void NoyauRemontee::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("en_gare"), &NoyauRemontee::en_gare);
 	ClassDB::bind_method(D_METHOD("set_portillons", "xa"), &NoyauRemontee::set_portillons);
 	ClassDB::bind_method(D_METHOD("passages"), &NoyauRemontee::passages);
+	ClassDB::bind_method(D_METHOD("set_lointains", "multimeshes", "relatives", "seuil", "jusqua"), &NoyauRemontee::set_lointains);
 }
 
 // --- configuration -----------------------------------------------------------
@@ -132,6 +134,8 @@ void NoyauRemontee::set_vehicules(const Array &p_vehicules, const Array &p_pince
 	e_ouv.assign(n, -1.0f);
 	e_gc.assign(n, -1.0f);
 	e_porte.assign(n, -1.0f);
+	pose_veh.assign(n, Transform3D());
+	loin_veh.assign(n, 0);
 	for (int64_t i = 0; i < n; i++) {
 		vehicules[i] = noeud(p_vehicules, i);
 		pinces[i] = noeud(p_pinces, i);
@@ -359,6 +363,17 @@ PackedFloat64Array NoyauRemontee::etape(double dt, double regime, const Vector3 
 		if (z.idx >= 0) {
 			gare_derniere.push_back((int)i);
 		}
+		// lointain (MultiMesh) : nœud caché, pose seule — le balancement et les
+		// pièces animées ne se voient pas à cette distance
+		bool loin = false;
+		if (!mm_rid.empty() && vue_active) {
+			const double dx = p.x - vue.x, dz = p.z - vue.z;
+			loin = dx * dx + dz * dz > mm_seuil * mm_seuil;
+		}
+		if ((char)loin != loin_veh[i]) {
+			loin_veh[i] = (char)loin;
+			v->set_visible(!loin);
+		}
 		const bool montee_v = signe(p.x) == signe_montee;
 		if (appuis.size() >= 2 && z.idx < 0) {
 			p.y -= (real_t)fleche(-p.z, montee_v, onde_amp, onde_t, a_montee);
@@ -382,7 +397,11 @@ PackedFloat64Array NoyauRemontee::etape(double dt, double regime, const Vector3 
 		if (!sens_droite) {
 			bv = b * Basis::from_scale(Vector3(-1, 1, 1));
 		}
-		v->set_transform(Transform3D(bv, p));
+		pose_veh[i] = Transform3D(bv, p);
+		if (loin) {
+			continue;
+		}
+		v->set_transform(pose_veh[i]);
 		if (pinces[i] != nullptr) {
 			Vector3 r = pinces[i]->get_rotation();
 			r.x = (real_t)std::atan2((double)d3.y, (double)Vector2(d3.x, d3.z).length());
@@ -465,6 +484,38 @@ PackedFloat64Array NoyauRemontee::etape(double dt, double regime, const Vector3 
 			}
 		}
 	}
+	// 4. MultiMesh des lointains : une instance par véhicule (échelle nulle
+	// pour les proches et au-delà de `jusqua`)
+	if (!mm_rid.empty()) {
+		RenderingServer *rs = RenderingServer::get_singleton();
+		for (size_t m = 0; m < mm_rid.size(); m++) {
+			PackedFloat32Array buf;
+			buf.resize(n * 12);
+			float *b = buf.ptrw();
+			for (size_t i = 0; i < n; i++) {
+				Transform3D t;
+				bool montrer = loin_veh[i] != 0;
+				if (montrer && vue_active) {
+					const Vector3 &o = pose_veh[i].origin;
+					const double dx = o.x - vue.x, dz = o.z - vue.z;
+					montrer = dx * dx + dz * dz < mm_jusqua * mm_jusqua;
+				}
+				if (montrer) {
+					t = pose_veh[i] * mm_rel[m];
+				} else {
+					// échelle nulle, sur place (une instance rangée au loin
+					// étirait la boîte englobante)
+					t.basis = Basis().scaled(Vector3(0, 0, 0));
+					t.origin = pose_veh[i].origin;
+				}
+				float *e = b + i * 12;
+				e[0] = t.basis.rows[0].x; e[1] = t.basis.rows[0].y; e[2] = t.basis.rows[0].z; e[3] = t.origin.x;
+				e[4] = t.basis.rows[1].x; e[5] = t.basis.rows[1].y; e[6] = t.basis.rows[1].z; e[7] = t.origin.y;
+				e[8] = t.basis.rows[2].x; e[9] = t.basis.rows[2].y; e[10] = t.basis.rows[2].z; e[11] = t.origin.z;
+			}
+			rs->multimesh_set_buffer(mm_rid[m], buf);
+		}
+	}
 	PackedFloat64Array out;
 	out.resize(n);
 	double *o = out.ptrw();
@@ -523,4 +574,21 @@ PackedInt32Array NoyauRemontee::passages() const {
 		out[k] = passages_derniers[k];
 	}
 	return out;
+}
+
+void NoyauRemontee::set_lointains(const Array &multimeshes, const Array &relatives, double seuil, double jusqua) {
+	mm_rid.clear();
+	mm_rel.clear();
+	for (int64_t k = 0; k < multimeshes.size() && k < relatives.size(); k++) {
+		mm_rid.push_back(multimeshes[k]);
+		mm_rel.push_back(relatives[k]);
+	}
+	mm_seuil = seuil;
+	mm_jusqua = jusqua;
+	for (size_t i = 0; i < loin_veh.size(); i++) {
+		if (loin_veh[i] && vehicules[i] != nullptr) {
+			vehicules[i]->set_visible(true);
+		}
+		loin_veh[i] = 0;
+	}
 }

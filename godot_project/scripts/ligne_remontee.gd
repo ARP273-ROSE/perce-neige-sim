@@ -3405,6 +3405,7 @@ func _preparer_noyau() -> void:
 	n.set_ligne(self)
 	_noyau = n
 	_noyau_n = _vehicules.size()
+	_creer_lointains()
 	if not _noyau_annonce:
 		_noyau_annonce = true
 		print("[NoyauRemontee] module C++ actif (première ligne : %s)" % name)
@@ -3448,6 +3449,131 @@ func _etape_noyau(delta: float) -> void:
 					m.set_shader_parameter("charges_m" if k == 0 else "charges_d", packs)
 					m.set_shader_parameter("n_charges_m" if k == 0 else "n_charges_d", nk)
 			_charges = listes
+
+
+## Véhicules lointains en MultiMesh (relevés de l'iPad du 27/10/2026 : le dessin
+## y coûte 12 à 13 ms, les remontées font 2 000 à 3 000 objets) : un MultiMesh
+## par maillage du modèle de siège ou de cabine, et par ligne — un appel de
+## dessin au lieu d'un par véhicule. Au-delà de LOINTAINS_DES, les pièces de
+## détail ne se voient plus et les numéros sont illisibles : un seul modèle
+## suffit, sans balancement. Lignes en miroir : le maillage est retourné une
+## fois (un MultiMesh ne retourne pas les faces d'une instance en miroir).
+static var LOINTAINS_DES: float = 120.0
+var _lointains: Array = []
+
+
+func _creer_lointains() -> void:
+	for m in _lointains:
+		if is_instance_valid(m):
+			m.queue_free()
+	_lointains = []
+	if _noyau == null or _vehicules.is_empty() or not _noyau.has_method("set_lointains"):
+		return
+	var v0: VehiculeRemontee = _vehicules[0][0]
+	# pose de repos : sans balancement ni inclinaison de la pince
+	var r_susp: Vector3 = v0._susp.rotation if v0._susp != null else Vector3.ZERO
+	var r_pince: Vector3 = v0._pince.rotation if v0._pince != null else Vector3.ZERO
+	if v0._susp != null:
+		v0._susp.rotation = Vector3.ZERO
+	if v0._pince != null:
+		v0._pince.rotation = Vector3.ZERO
+	var inv: Transform3D = v0.global_transform.affine_inverse()
+	var miroir: Transform3D = Transform3D(Basis.from_scale(Vector3(-1, 1, 1)), Vector3.ZERO)
+	var rids: Array = []
+	var rels: Array = []
+	for mi0 in v0.find_children("*", "MeshInstance3D", true, false):
+		var mi: MeshInstance3D = mi0
+		if mi.mesh == null or not mi.is_visible_in_tree() or _sous_detail(mi, v0):
+			continue
+		var mm: MultiMesh = MultiMesh.new()
+		mm.transform_format = MultiMesh.TRANSFORM_3D
+		mm.mesh = mi.mesh if sens_droite else _maillage_miroir(mi.mesh)
+		mm.instance_count = _vehicules.size()
+		# boîte englobante fixe, toute la ligne : celle que Godot calcule ne
+		# suit pas les positions envoyées par le noyau (sièges écartés du dessin)
+		var lh: float = longueur_h()
+		var ymin: float = minf(terrain(0.0), terrain(lh)) - 60.0
+		var ymax: float = maxf(terrain(0.0), terrain(lh)) + 120.0
+		mm.custom_aabb = AABB(Vector3(-voie - 10.0, ymin, -lh - l_gare - 30.0),
+			Vector3(2.0 * voie + 20.0, ymax - ymin, lh + 2.0 * l_gare + 60.0))
+		var mmi: MultiMeshInstance3D = MultiMeshInstance3D.new()
+		mmi.name = "VehiculesLoin%d" % rids.size()
+		mmi.multimesh = mm
+		mmi.material_override = mi.material_override
+		mmi.cast_shadow = mi.cast_shadow
+		add_child(mmi)
+		_lointains.append(mmi)
+		rids.append(mm.get_rid())
+		var rel: Transform3D = inv * mi.global_transform
+		rels.append(rel if sens_droite else rel * miroir)
+	if v0._susp != null:
+		v0._susp.rotation = r_susp
+	if v0._pince != null:
+		v0._pince.rotation = r_pince
+	var dom: Node = get_parent()
+	var jusqua: float = float(dom.get("VEHICULES_JUSQUA")) if dom != null and dom.get("VEHICULES_JUSQUA") != null else 700.0
+	_noyau.set_lointains(rids, rels, LOINTAINS_DES, jusqua)
+
+
+## Pièce de détail (garde-corps, ressorts…) ou sous une telle pièce.
+func _sous_detail(n: Node, v0: Node) -> bool:
+	while n != null and n != v0:
+		if n.has_meta("detail"):
+			return true
+		n = n.get_parent()
+	return false
+
+
+## Copie d'un maillage retournée en x (faces remises dans le bon sens).
+static var _miroirs: Dictionary = {}
+
+
+func _maillage_miroir(m: Mesh) -> Mesh:
+	var cle: int = m.get_instance_id()
+	if _miroirs.has(cle) and is_instance_valid(_miroirs[cle][0]) and _miroirs[cle][0] == m:
+		return _miroirs[cle][1]
+	var out: ArrayMesh = ArrayMesh.new()
+	for si in range(m.get_surface_count()):
+		var a: Array = MeshMerge.tableaux(m, si).duplicate()
+		var v: PackedVector3Array = (a[Mesh.ARRAY_VERTEX] as PackedVector3Array).duplicate()
+		for k in range(v.size()):
+			v[k].x = -v[k].x
+		a[Mesh.ARRAY_VERTEX] = v
+		if a[Mesh.ARRAY_NORMAL] != null:
+			var nn: PackedVector3Array = (a[Mesh.ARRAY_NORMAL] as PackedVector3Array).duplicate()
+			for k in range(nn.size()):
+				nn[k].x = -nn[k].x
+			a[Mesh.ARRAY_NORMAL] = nn
+		if a[Mesh.ARRAY_TANGENT] != null:
+			var tg: PackedFloat32Array = (a[Mesh.ARRAY_TANGENT] as PackedFloat32Array).duplicate()
+			for k in range(0, tg.size(), 4):
+				tg[k] = -tg[k]
+				tg[k + 3] = -tg[k + 3]
+			a[Mesh.ARRAY_TANGENT] = tg
+		if a[Mesh.ARRAY_INDEX] != null:
+			var ix: PackedInt32Array = (a[Mesh.ARRAY_INDEX] as PackedInt32Array).duplicate()
+			for k in range(0, ix.size() - 2, 3):
+				var t: int = ix[k + 1]
+				ix[k + 1] = ix[k + 2]
+				ix[k + 2] = t
+			a[Mesh.ARRAY_INDEX] = ix
+		else:
+			for nom in [Mesh.ARRAY_VERTEX, Mesh.ARRAY_NORMAL, Mesh.ARRAY_TANGENT, Mesh.ARRAY_COLOR, Mesh.ARRAY_TEX_UV, Mesh.ARRAY_TEX_UV2]:
+				if a[nom] == null:
+					continue
+				var pa = a[nom].duplicate()
+				var w: int = 4 if nom == Mesh.ARRAY_TANGENT else 1
+				var nb: int = pa.size() / w
+				for k in range(0, nb - 2, 3):
+					for c in range(w):
+						var t2 = pa[(k + 1) * w + c]
+						pa[(k + 1) * w + c] = pa[(k + 2) * w + c]
+						pa[(k + 2) * w + c] = t2
+				a[nom] = pa
+		out.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, a)
+		out.surface_set_material(si, m.surface_get_material(si))
+	_miroirs[cle] = [m, out]
+	return out
 
 
 ## Portes d'une cabine ouvertes ou fermées : collisions des vantaux (noyau C++).

@@ -15,6 +15,7 @@ const M_LAT: float = 111320.0
 ## lignes, saccadait sur iPad ; retour d'utilisateur, 24/10/2026)
 var VEHICULES_JUSQUA: float = 450.0 if OS.has_feature("web") else 700.0
 const PYLONES_JUSQUA: float = 3000.0
+const GALETS_JUSQUA: float = 150.0
 const ACTIVE_JUSQUA: float = 2500.0
 var DETAILS_JUSQUA: float = 180.0 if OS.has_feature("web") else 250.0
 
@@ -351,6 +352,11 @@ func _poser(D: Dictionary) -> void:
 ## Distances de visibilité : véhicules proches seulement, pylônes et câble loin.
 func _portees(lg: LigneRemontee) -> void:
 	for c in lg.get_children():
+		# (véhicules lointains en MultiMesh : leur portée est gérée par le noyau,
+		# instance par instance — mesurée d'ici, depuis la gare aval, une portée
+		# les faisait disparaître à 250 m de la gare)
+		if c is MultiMeshInstance3D and String(c.name).begins_with("VehiculesLoin"):
+			continue
 		var portee: float = VEHICULES_JUSQUA if c is VehiculeRemontee else PYLONES_JUSQUA
 		# pneus, rails et portillons des gares : détails de près seulement
 		# (les pylônes en treillis du 3S ne sont pas des PyloneRemontee : ils
@@ -367,6 +373,12 @@ func _portees(lg: LigneRemontee) -> void:
 			# pièces de détail des véhicules, plaques des pylônes : de près seulement
 			if n.has_meta("detail") or n is Label3D:
 				pn = minf(pn, DETAILS_JUSQUA)
+			# paires de galets des pylônes (un objet chacune, pour s'animer au
+			# passage des pinces) : 7 800 objets visibles jusqu'à 3 km au pied
+			# des pistes (relevés de l'iPad du 27/10/2026) — à 150 m un galet ne
+			# se distingue plus
+			if String(n.name).begins_with("Paire"):
+				pn = minf(pn, GALETS_JUSQUA)
 			if n is GeometryInstance3D:
 				(n as GeometryInstance3D).visibility_range_end = pn
 				(n as GeometryInstance3D).visibility_range_end_margin = pn * 0.05

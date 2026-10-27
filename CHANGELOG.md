@@ -5,6 +5,24 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.50.0 — 27 octobre 2026
+
+**Moins d'objets à dessiner.** Relevés de l'iPad (27/10/2026) : le dessin y coûte ~20 ms pour
+4 000 appels et 9 500 objets. Inventaire au pied des pistes : les paires de galets des pylônes
+(un objet chacune, pour s'animer au passage des pinces) représentaient 7 800 objets, visibles
+jusqu'à 3 km.
+
+- **Galets des pylônes visibles à 150 m** (au-delà, un galet ne se distingue plus) : au pied
+  des pistes, avec le vrai rendu, appels de dessin 3 430 → 2 360, objets 4 470 → 3 400 —
+  pour la PWA comme pour le PC.
+- **Véhicules lointains en MultiMesh** (noyau C++, donc PC) : au-delà de 120 m du skieur, le
+  nœud du véhicule est caché et le noyau pose une instance par véhicule dans un MultiMesh par
+  maillage du modèle (un appel de dessin par maillage et par ligne, au lieu d'un par véhicule).
+  Sans les pièces de détail ni le balancement, invisibles à cette distance. Lignes en miroir :
+  maillage retourné une fois. Boîte englobante fixe sur toute la ligne (celle que Godot calcule
+  ne suit pas les positions envoyées par le noyau) ; les instances cachées sont mises à
+  l'échelle nulle sur place. Rendus comparés, vrai rendu : identiques.
+
 ## 1.49.0 — 27 octobre 2026
 
 **Ce que le moteur dessine pour rien ; relevés de l'iPad.** Relevés MESURE de l'iPad (27/10/2026,
