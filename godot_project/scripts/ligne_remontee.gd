@@ -248,6 +248,9 @@ func construire() -> void:
 	if fixe():
 		v_embarquement = vitesse
 	contenu_prepare = false
+	_noyau_fil = false
+	var dom: Node = get_parent()
+	_vehicules_jusqua = float(dom.get("VEHICULES_JUSQUA")) if dom != null and dom.get("VEHICULES_JUSQUA") != null else 700.0
 	xf_monde = global_transform
 	if jumelee != null:
 		jumelee.xf_monde = jumelee.global_transform
@@ -272,6 +275,8 @@ static var construction_en_fond: bool = true
 ## le rattachement — `contenu_prepare` dit qu'ils sont faits.
 var prepa_contenu: Callable = Callable()
 var contenu_prepare: bool = false
+var _noyau_fil: bool = false           # noyau et véhicules lointains préparés sur le fil
+var _vehicules_jusqua: float = 700.0    # (portée des véhicules du domaine, relevée au lancement)
 var _chantier: Node3D = null
 var _tache: int = -1
 ## Banc : plus longs blocs passés sur le fil principal par une construction
@@ -293,6 +298,10 @@ func _construire_fil() -> void:
 	progressif = false
 	await _construire_corps()
 	progressif = true
+	# (le noyau ne garde que les nœuds ; les véhicules lointains se posent
+	# sous le contenu : tout cela hors de la scène, ici)
+	_preparer_noyau()
+	_noyau_fil = true
 	if prepa_contenu.is_valid():
 		prepa_contenu.call(_chantier)
 		contenu_prepare = true
@@ -409,7 +418,8 @@ func _construire_corps() -> void:
 func _finir_construction() -> void:
 	pret = true
 	set_process(true)
-	_preparer_noyau()
+	if not _noyau_fil:
+		_preparer_noyau()
 	_percer_fosses()
 	await _pause("fin (portillons, collisions fixes, fosses)")
 	construite.emit()
@@ -3713,13 +3723,12 @@ func _creer_lointains() -> void:
 		v0._susp.rotation = Vector3.ZERO
 	if v0._pince != null:
 		v0._pince.rotation = Vector3.ZERO
-	var inv: Transform3D = v0.global_transform.affine_inverse()
 	var miroir: Transform3D = Transform3D(Basis.from_scale(Vector3(-1, 1, 1)), Vector3.ZERO)
 	var rids: Array = []
 	var rels: Array = []
 	for mi0 in v0.find_children("*", "MeshInstance3D", true, false):
 		var mi: MeshInstance3D = mi0
-		if mi.mesh == null or not mi.is_visible_in_tree() or _sous_detail(mi, v0):
+		if mi.mesh == null or not _visible_sous(mi, v0) or _sous_detail(mi, v0):
 			continue
 		var mm: MultiMesh = MultiMesh.new()
 		mm.transform_format = MultiMesh.TRANSFORM_3D
@@ -3740,15 +3749,33 @@ func _creer_lointains() -> void:
 		_enfant(mmi)
 		_lointains.append(mmi)
 		rids.append(mm.get_rid())
-		var rel: Transform3D = inv * mi.global_transform
+		var rel: Transform3D = _relatif(v0, mi)
 		rels.append(rel if sens_droite else rel * miroir)
 	if v0._susp != null:
 		v0._susp.rotation = r_susp
 	if v0._pince != null:
 		v0._pince.rotation = r_pince
-	var dom: Node = get_parent()
-	var jusqua: float = float(dom.get("VEHICULES_JUSQUA")) if dom != null and dom.get("VEHICULES_JUSQUA") != null else 700.0
-	_noyau.set_lointains(rids, rels, LOINTAINS_DES, jusqua)
+	_noyau.set_lointains(rids, rels, LOINTAINS_DES, _vehicules_jusqua)
+
+
+## (Sans passer par la scène : le contenu peut être hors de la scène, sur
+## l'autre fil.) Repère de `n` dans celui de son ancêtre `anc`.
+static func _relatif(anc: Node, n: Node) -> Transform3D:
+	var xf: Transform3D = Transform3D.IDENTITY
+	while n != anc and n != null:
+		if n is Node3D:
+			xf = (n as Node3D).transform * xf
+		n = n.get_parent()
+	return xf
+
+
+## `n` et ses parents jusqu'à `anc` visibles.
+static func _visible_sous(n: Node, anc: Node) -> bool:
+	while n != anc and n != null:
+		if n is Node3D and not (n as Node3D).visible:
+			return false
+		n = n.get_parent()
+	return true
 
 
 ## Pièce de détail (garde-corps, ressorts…) ou sous une telle pièce.
