@@ -367,9 +367,11 @@ func _process_corps(_delta: float) -> void:
 		var dp: Array = []
 		for k in range(pip.size()):
 			dp.append(pip[k] - (int(_pip_prec[k]) if k < _pip_prec.size() else 0))
-		_log("[Gel3D] image de %.1f s, finie à %s — pipelines compilés : maillage %d, surface %d, dessin %d, spécialisation %d ; scripts %.0f ms" % [
+		_log("[Gel3D] image de %.1f s, finie à %s — pipelines compilés : maillage %d, surface %d, dessin %d, spécialisation %d ; scripts %.0f ms, physique %.0f ms, préparation du rendu %.0f ms" % [
 			dt, Time.get_time_string_from_system(), dp[0], dp[1], dp[2], dp[3],
-			Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0])
+			Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0,
+			Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS) * 1000.0,
+			RenderingServer.get_frame_setup_time_cpu()])
 	_pip_prec = pip
 	_horloge += dt
 	_t_retrait += dt
