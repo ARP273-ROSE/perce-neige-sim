@@ -42,7 +42,11 @@ var altitude_aval: float = 0.0
 var debit: float = 0.0                # personnes / heure
 
 var H_CABLE_GARE: float = 3.9        # câble au-dessus du quai (selon le véhicule)
-const GARDE: float = 6.5              # câble ≥ terrain + GARDE en ligne
+# câble ≥ terrain + GARDE en ligne : 5,0 m (6,5 jusqu'au 28/10/2026). Les
+# hauteurs de pylônes mesurées dans les vidéos de la ligne (≤ 21 m partout)
+# font passer les sièges bas : un siège 4 places pend à ~3,1 m sous le câble,
+# skis ~0,9 m plus bas, et il reste ~1 m au-dessus du sol nu (IGN, sans neige)
+const GARDE: float = 5.0
 const L_GARE: float = 24.0            # du nez de gare à l'axe de la poulie (débrayable)
 ## Télésiège à pinces FIXES : pas de lanceurs ni de pneus, les sièges font
 ## le tour de la poulie à la vitesse de la ligne ; la gare se réduit au nez
@@ -773,7 +777,10 @@ func _garde_mesuree(d: float) -> float:
 	if b.x - a.x > 45.0:
 		return 0.0                  # trou dans les mesures
 	var h: float = lerpf(a.y, b.y, (d - a.x) / maxf(b.x - a.x, 0.1))
-	return h + (H_CABLE_GARE - 0.6) - 1.0
+	# (tolérance 3 m : altitude barométrique de la montre, ±3 m et en retard ;
+	# 1 m jusqu'au 28/10/2026 — elle contredisait les hauteurs de pylônes
+	# mesurées dans les vidéos de la ligne, au-dessus des ravins de Borsat)
+	return h + (H_CABLE_GARE - 0.6) - 3.0
 
 
 ## Garde au sol du brin montée chargé : la ou les têtes de chaque portée
