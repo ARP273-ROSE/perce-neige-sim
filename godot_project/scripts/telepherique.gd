@@ -99,6 +99,20 @@ func construire() -> void:
 	voie = VOIE_TPH
 	espacement = longueur_h() * 4.0
 	H_CABLE_GARE = VehiculeRemontee.hauteur_cable_gare(famille)
+	contenu_prepare = false
+	_noyau_fil = false
+	xf_monde = global_transform if is_inside_tree() else transform
+	if construction_en_fond and progressif and _fil_possible():
+		# comme les autres lignes : contenu construit sur un autre fil, hors
+		# de la scène, puis rattaché par paquets (LigneRemontee._fil_fini)
+		_chantier = Node3D.new()
+		_tache = WorkerThreadPool.add_task(_construire_fil, false, "ligne " + String(name))
+		return
+	await _construire_corps()
+	await _finir_construction()
+
+
+func _construire_corps() -> void:
 	await _calculer_tetes()
 	_preparer_nez()
 	for aval in [true, false]:
@@ -113,7 +127,7 @@ func construire() -> void:
 		var v: VehiculeRemontee = VehiculeRemontee.new()
 		v.famille = famille
 		v.numero = k + 1
-		add_child(v)
+		_enfant(v)
 		v.construire()
 		_vehicules.append([v, 0.0])
 		await _pause()
@@ -123,6 +137,9 @@ func construire() -> void:
 		_collisions_tph()
 		for i in range(2):
 			_corps_vehicule(i)
+
+
+func _finir_construction() -> void:
 	pret = true
 	roule = true
 	set_process(true)
@@ -266,7 +283,7 @@ func _mats_charges() -> Array:
 func _cables_tph() -> void:
 	var c: Node3D = Node3D.new()
 	c.name = "Cable"
-	add_child(c)
+	_enfant(c)
 	_mat_cable = RemonteeKit.materiau_cable_tracteur(40.0)
 	_mat_porteurs = RemonteeKit.materiau_cable_tracteur(50.0)
 	_mat_porteurs.set_shader_parameter("lisse", true)
@@ -316,7 +333,7 @@ func _gare_tph(aval: bool) -> void:
 	g.name = "GareAval" if aval else "GareAmont"
 	var L: float = longueur_h()
 	g.position = Vector3(0, terrain(0.0 if aval else L), 0)
-	add_child(g)
+	_enfant(g)
 	var sg: float = 1.0 if aval else -1.0               # vers le fond de la gare
 	var z0: float = 0.0 if aval else -L
 	var hx: float = voie * 0.5 + 3.0
@@ -381,7 +398,7 @@ func _gares_grande_motte(aval: bool) -> void:
 	# repère de la gare : z = 0 à la façade du bâtiment (aval), au nez (amont)
 	var z_g: float = TphGrandeMotte.Z_NEZ if aval else -L
 	g.position = Vector3(0, y_q, z_g)
-	add_child(g)
+	_enfant(g)
 	var sol := func(x: float, z: float) -> float:
 		return _sol(x, z + z_g) - y_q
 	if aval:
@@ -441,7 +458,7 @@ func _collisions_tph() -> void:
 	corps.name = "CollisionsLigne"
 	corps.collision_layer = CollisionsJeu.COUCHE_DECOR
 	corps.collision_mask = 0
-	add_child(corps)
+	_enfant(corps)
 	var L: float = longueur_h()
 	var boite := func(taille: Vector3, centre: Vector3) -> void:
 		var cs: CollisionShape3D = CollisionShape3D.new()
