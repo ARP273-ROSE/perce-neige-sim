@@ -156,7 +156,18 @@ static func _cle_primitive(mesh: Mesh) -> String:
 	return ""
 
 
+## Les remontées se construisent sur un autre fil pendant que le fil principal
+## lit aussi ces copies (collisions à la demande) : caches sous verrou.
+static var verrou: Mutex = Mutex.new()
+
+
 static func retenir(mesh: Mesh, si: int, arrays: Array) -> void:
+	verrou.lock()
+	_retenir(mesh, si, arrays)
+	verrou.unlock()
+
+
+static func _retenir(mesh: Mesh, si: int, arrays: Array) -> void:
 	var id: int = mesh.get_instance_id()
 	var e: Array = _cpu.get(id, [])
 	if e.is_empty() or (e[0] as WeakRef).get_ref() != mesh:
@@ -175,6 +186,13 @@ static func retenir(mesh: Mesh, si: int, arrays: Array) -> void:
 
 
 static func tableaux(mesh: Mesh, si: int) -> Array:
+	verrou.lock()
+	var a: Array = _tableaux(mesh, si)
+	verrou.unlock()
+	return a
+
+
+static func _tableaux(mesh: Mesh, si: int) -> Array:
 	var id: int = mesh.get_instance_id()
 	if _cpu.has(id) and (_cpu[id][0] as WeakRef).get_ref() == mesh:
 		var l: Array = _cpu[id][1]
