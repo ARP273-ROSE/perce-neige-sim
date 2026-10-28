@@ -76,6 +76,7 @@ var _n_mes: int = 0
 
 const DESCRIPTIONS: Dictionary = {
 	"siege_doppelmayr_e98_6": ["Doppelmayr / Études de Transports E98, 6 places", 6, "doppelmayr"],
+	"siege_doppelmayr_e98_8": ["Doppelmayr 8 places (Tommeuses)", 8, "doppelmayr"],
 	"siege_doppelmayr_e98_4": ["Doppelmayr / Études de Transports E98, 4 places", 4, "doppelmayr"],
 	"siege_doppelmayr_e98_4_bulle": ["E98 4 places à bulle (Lanches)", 4, "doppelmayr"],
 	"siege_poma_ocr6": ["Poma OCR, 6 places", 6, "poma"],
@@ -951,7 +952,7 @@ func _couleurs_assise() -> Array:
 			return ["assise_bleue"]
 		"siege_bartholet_6":
 			return ["assise_noire"]
-		"siege_doppelmayr_e98_6":
+		"siege_doppelmayr_e98_6", "siege_doppelmayr_e98_8":
 			return ["assise_noire", "assise_bleue"]
 		"siege_fixe_4", "siege_fixe_3":
 			return ["assise_bleue"]          # dossiers blancs (Almes)
@@ -986,7 +987,7 @@ func _garde_corps(siege: Node3D, W: float, m: String) -> void:
 	RemonteeKit.barre(_gc, Vector3(-W * 0.5 + 0.15, pied.y, pied.z), Vector3(W * 0.5 - 0.15, pied.y, pied.z), 0.022, m, 8)
 	RemonteeKit.boite_en(_gc, Vector3(W - 0.4, 0.02, 0.16), Vector3(0, pied.y - 0.01, pied.z + 0.04), "caoutchouc")
 	# tenons de sécurité (un par place, devant chaque assise)
-	if famille in ["siege_poma_ocr6", "siege_bartholet_6", "siege_doppelmayr_e98_6"]:
+	if famille in ["siege_poma_ocr6", "siege_bartholet_6", "siege_doppelmayr_e98_6", "siege_doppelmayr_e98_8"]:
 		for i in range(places):
 			var cx: float = -W * 0.5 + 0.10 + 0.50 * (i + 0.5)
 			RemonteeKit.barre(_gc, Vector3(cx, ventre.y, ventre.z), Vector3(cx, ventre.y - 0.30, ventre.z + 0.05), 0.016, m, 6)
