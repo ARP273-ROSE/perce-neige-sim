@@ -2080,6 +2080,28 @@ func _poser_domaine() -> void:
 	domaine.zones_interdites = [[Vector2(xh.origin.x, xh.origin.z), ax, 55.0, 32.0]]
 
 
+## Skieur (invisible et immobile jusqu'à activer()) et ses commandes à
+## l'écran (cachées jusqu'à l'entrée en vue skieur).
+func _creer_skieur() -> void:
+	if skieur != null:
+		return
+	skieur = SkieurJoueur.new()
+	skieur.name = "Skieur"
+	add_child(skieur)
+	skieur.relief = relief
+	skieur.conduite_demandee.connect(_skieur_conduit)
+	skieur.chute.connect(func() -> void:
+		if commandes_skieur != null:
+			commandes_skieur.message("Chute ! CHAUSSER (E) pour rechausser", 5.0))
+	commandes_skieur = CommandesSkieur.new()
+	commandes_skieur.name = "CommandesSkieur"
+	commandes_skieur.skieur = skieur
+	commandes_skieur.main = self
+	add_child(commandes_skieur)
+	if not mode_skieur:
+		commandes_skieur.visible = false
+
+
 ## Remontées mécaniques du domaine (lignes exportées du dossier des
 ## remontées, à leur place réelle) ; le skieur leur est donné à l'entrée.
 func _poser_remontees() -> void:
@@ -2128,26 +2150,16 @@ func _entrer_skieur() -> void:
 			_poser_domaine()
 		elif remontees == null:
 			_poser_remontees()
+		elif skieur == null:
+			_creer_skieur()
 		return
 	if _skieur_en_attente:
 		var ms: int = Time.get_ticks_msec() - _t_skieur_attente
 		print("[Skieur] décor prêt en %d ms" % ms)
 		_skieur_prep("", ms)
 	_skieur_en_attente = false
-	if skieur == null:
-		skieur = SkieurJoueur.new()
-		skieur.name = "Skieur"
-		add_child(skieur)
-		skieur.relief = relief
-		skieur.conduite_demandee.connect(_skieur_conduit)
-		skieur.chute.connect(func() -> void:
-			if commandes_skieur != null:
-				commandes_skieur.message("Chute ! CHAUSSER (E) pour rechausser", 5.0))
-		commandes_skieur = CommandesSkieur.new()
-		commandes_skieur.name = "CommandesSkieur"
-		commandes_skieur.skieur = skieur
-		commandes_skieur.main = self
-		add_child(commandes_skieur)
+	var t_entree: int = Time.get_ticks_usec()
+	_creer_skieur()
 	if skieur_auto != null and skieur.actif:
 		# la BOUCLE tournait en coulisse : on le retrouve où il en est
 		var sup: Node3D = skieur.support
@@ -2220,6 +2232,9 @@ func _entrer_skieur() -> void:
 		toggle_doors()
 	_mode_skieur_ui(true)
 	_flash("Skieur : joystick ou ZQSD pour marcher, glisser pour regarder")
+	# (le reste de la première image en vue skieur est du rendu : à comparer
+	# aux [Gel3D] et aux images lentes des relevés)
+	print("[Skieur] entrée : %.0f ms de script" % ((Time.get_ticks_usec() - t_entree) / 1000.0))
 
 
 ## `garder_boucle` : la BOUCLE (skieur automatique) continue en coulisse —
