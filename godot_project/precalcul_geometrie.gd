@@ -9,6 +9,7 @@
 ##   godot --headless --path godot_project -s precalcul_geometrie.gd -- --mode=normal
 ## En parallèle : `--part=k/N` (k de 1 à N) ne traite qu'une ligne sur N et écrit
 ## data/remontees/geometrie_k.json ; on réunit ensuite les morceaux.
+## `--lignes=a,b` : seulement ces lignes → geometrie_x_a_b.json (l'emporte).
 extends SceneTree
 
 var _main: Node = null
@@ -47,7 +48,10 @@ func _calculer() -> void:
 	var k_part: int = 0
 	var n_part: int = 1
 	var effort: int = 0
+	var seules: PackedStringArray = PackedStringArray()
 	for a in OS.get_cmdline_user_args():
+		if String(a).begins_with("--lignes="):
+			seules = String(a).substr(9).split(",")
 		if String(a).begins_with("--effort="):
 			effort = int(String(a).substr(9))
 		if String(a).begins_with("--part="):
@@ -62,7 +66,10 @@ func _calculer() -> void:
 		if lg.teleski() or lg.tricable() or lg.vaetvient():
 			continue
 		rang += 1
-		if rang % n_part != k_part:
+		if not seules.is_empty():
+			if not seules.has(String(lg.name)):
+				continue
+		elif rang % n_part != k_part:
 			continue
 		lg.progressif = false
 		lg.H_CABLE_GARE = VehiculeRemontee.hauteur_cable_gare(lg.famille)
@@ -93,7 +100,10 @@ func _calculer() -> void:
 		sortie[String(lg.name)] = l
 		print("%-26s dépassement %6.1f° → %6.1f° (pire %5.1f° → %5.1f°) · pylônes > 1° %2d → %2d · portées sous la garde %2d → %2d" % [
 			lg.name, av[0], ap[0], av[1], ap[1], av[2], ap[2], av[3], ap[3]])
+	# (lignes refaites à part : geometrie_x_….json, lu après les morceaux, l'emporte)
 	var nom: String = "geometrie.json" if n_part == 1 else "geometrie_%d.json" % (k_part + 1)
+	if not seules.is_empty():
+		nom = "geometrie_x_%s.json" % "_".join(seules)
 	var f := FileAccess.open("res://data/remontees/" + nom, FileAccess.WRITE)
 	f.store_string(JSON.stringify(sortie, " ", true))
 	print("BILAN dépassement %.0f° → %.0f° · pylônes > 1° %d → %d · portées sous la garde %d → %d" % bilan)
