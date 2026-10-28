@@ -378,10 +378,19 @@ static func surepaisseur(u: float) -> float:
 ## brin montée ou descente : chaque paire se déplace et bascule selon la
 ## surépaisseur sous ses deux galets.
 func passage(montee: bool, u: float) -> void:
+	_hors_repos[montee] = true
 	for e in _paires[montee]:
 		var sgn: float = e[5]
 		var da: float = surepaisseur(float(e[3]) - u)
 		var db: float = surepaisseur(float(e[4]) - u)
+		# (paire déjà posée ainsi — le plus souvent au repos, la pince est loin :
+		# rien à refaire ; un nouveau calage efface cet état)
+		var etat: Vector2 = Vector2(da, db)
+		if e.size() < 7:
+			e.append(null)
+		elif e[6] == etat:
+			continue
+		e[6] = etat
 		var n: Node3D = e[0]
 		var b: Array = _base_paire(e)
 		n.position = (b[0] as Vector3) + Vector3(0, sgn * (da + db) * 0.5, 0)
@@ -390,11 +399,24 @@ func passage(montee: bool, u: float) -> void:
 
 
 ## Plus de pince sur le brin : les paires reviennent au repos.
+## (Rien à faire si elles y sont déjà et que le calage n'a pas bougé : la
+## ligne appelle repos() à chaque image pour tous les pylônes calés.)
 func repos(montee: bool) -> void:
+	if not _hors_repos[montee]:
+		return
+	_hors_repos[montee] = false
 	for e in _paires[montee]:
 		var b: Array = _base_paire(e)
 		(e[0] as Node3D).position = b[0]
 		(e[0] as Node3D).rotation.x = b[1]
+		if e.size() < 7:
+			e.append(null)
+		e[6] = Vector2.ZERO
+
+
+## Paires d'un brin pas (ou plus) à leur position de repos : un passage, ou
+## un nouveau calage, les en a écartées.
+var _hors_repos: Dictionary = {true: true, false: true}
 
 
 ## Paires calées sur le câble TEL QU'IL EST AFFICHÉ (flèche sous les
@@ -422,6 +444,9 @@ func caler(montee: bool, cable: Callable) -> void:
 		var y_loc: float = (y0 + z * sp) / maxf(cp, 0.2)
 		var pente_loc: float = atan2(y2 - y1, 0.52) - tete.rotation.x
 		_cales[n] = [Vector3(0, y_loc + sgn * (R_GALET + R_CABLE + 0.11), z), pente_loc]
+		if e.size() >= 7:
+			e[6] = null
+	_hors_repos[montee] = true
 
 
 func _base_paire(e: Array) -> Array:

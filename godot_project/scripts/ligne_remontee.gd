@@ -3095,12 +3095,20 @@ func _tourner_pneus(delta: float) -> void:
 	var pres_amont: bool = not vue_active or Vector2(point_vue.x, point_vue.z + longueur_h()).length() < PNEUS_JUSQUA
 	if not (pres_aval or pres_amont):
 		return
+	var reg: float = regime()
 	for e in _pneus:
 		if e.size() < 5:
 			e.append(zone(e[1])[0] == "gare_aval")
+			e.append(vitesse)
+			e.append(vitesse_en(e[1]))
 		if not (pres_aval if e[4] else pres_amont):
 			continue
-		var w: float = vitesse_en(e[1]) * regime() / R_PNEU
+		if float(e[5]) != vitesse:
+			# (vitesse_en au droit du pneu, gardée tant que la vitesse nominale
+			# ne change pas : zone() refaisait une liste par pneu et par image)
+			e[5] = vitesse
+			e[6] = vitesse_en(e[1])
+		var w: float = float(e[6]) * reg / R_PNEU
 		e[3] = fposmod(float(e[3]) + w * delta, TAU)
 		(e[0] as Node3D).transform.basis = (e[2] as Basis) * Basis(Vector3.UP, e[3])
 
