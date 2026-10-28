@@ -1213,6 +1213,15 @@ func _suite_process(delta: float) -> void:
 		if collisions.pret:
 			_entrer_skieur()
 		else:
+			# pendant la préparation des collisions, une chose par image : posés
+			# à l'entrée, domaine, remontées et skieur faisaient une image de
+			# 450 ms sur le PC (relevés du 28/10/2026)
+			if domaine == null:
+				_poser_domaine()
+			elif remontees == null:
+				_poser_remontees()
+			elif skieur == null:
+				_creer_skieur()
 			_t_skieur_prep_msg += delta
 			if _t_skieur_prep_msg >= 1.0:
 				_t_skieur_prep_msg = 0.0
@@ -2143,15 +2152,6 @@ func _entrer_skieur() -> void:
 			_skieur_en_attente = true
 			_t_skieur_attente = Time.get_ticks_msec()
 			_skieur_prep("Préparation du décor du skieur…")
-		elif domaine == null:
-			# (pendant la préparation des collisions, une chose par image : posés
-			# à l'entrée, domaine et remontées faisaient une image de 450 ms sur
-			# le PC — relevés du 28/10/2026)
-			_poser_domaine()
-		elif remontees == null:
-			_poser_remontees()
-		elif skieur == null:
-			_creer_skieur()
 		return
 	if _skieur_en_attente:
 		var ms: int = Time.get_ticks_msec() - _t_skieur_attente
