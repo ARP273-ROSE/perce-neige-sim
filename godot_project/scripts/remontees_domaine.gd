@@ -147,6 +147,10 @@ func _pylone_impose(lg: LigneRemontee, d: float, h_min: float, h_max: float) -> 
 		if absf(float(p["d"]) - d) >= 25.0:
 			py.append(p)
 	var n: Dictionary = {"d": d, "montee": [[8, "S"]], "descente": [[8, "S"]], "h_min": h_min, "h_max": h_max, "croisement": true}
+	# hauteur précalculée (precalcul_geometrie.gd), retrouvée par la position
+	for e in lg.get_meta("h_croisements", []):
+		if absf(float(e[0]) - d) < 1.0:
+			n["h"] = float(e[1])
 	var j: int = 0
 	while j < py.size() and float(py[j]["d"]) < d:
 		j += 1
@@ -317,6 +321,7 @@ func _poser(D: Dictionary) -> void:
 		if dg > 0.0 and dg < L:
 			hm.append(Vector2(dg, float(g[1])))
 	lg.hauteurs_mesurees = hm
+	lg.set_meta("h_croisements", D.get("h_croisements", []))
 	var ru: PackedFloat32Array = PackedFloat32Array()
 	for dr in D.get("ruisseaux", []):
 		var wr: Vector2 = a0 + u0 * (float(dr) * L0 / maxf(Ld, 1.0))
