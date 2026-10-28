@@ -151,7 +151,7 @@ var _t_mesure: int = 0
 
 
 func _pause(etape: String = "") -> void:
-	if mesurer_tranches:
+	if mesurer_tranches and _chantier == null:     # (sur l'autre fil, rien ne bloque l'image)
 		var now: int = Time.get_ticks_usec()
 		var ms: float = (now - maxi(_t_mesure, _t_tranche)) / 1000.0
 		var tr: Array = tranches.get(etape, [0.0, "", 0, 0.0])

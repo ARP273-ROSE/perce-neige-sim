@@ -17,6 +17,7 @@ var _t: float = 0.0
 var _us_prec: int = 0
 var _durees: PackedFloat32Array = PackedFloat32Array()
 var _acoups: Array = []
+var _pip_prec: int = 0
 var _acoups_siege: Dictionary = {}
 var _tout: PackedFloat32Array = PackedFloat32Array()
 var _ablations: Array = []          # [nom, nœud]
@@ -86,6 +87,14 @@ func _tick() -> void:
 	var us: int = Time.get_ticks_usec()
 	var ms: float = (us - _us_prec) / 1000.0
 	_us_prec = us
+	# pipelines de rendu compilés pendant cette image (premier affichage d'un
+	# matériau ou d'un format de maillage)
+	var pip: int = 0
+	for m in [Performance.PIPELINE_COMPILATIONS_MESH, Performance.PIPELINE_COMPILATIONS_SURFACE,
+			Performance.PIPELINE_COMPILATIONS_DRAW, Performance.PIPELINE_COMPILATIONS_SPECIALIZATION]:
+		pip += int(Performance.get_monitor(m))
+	var dpip: int = pip - _pip_prec
+	_pip_prec = pip
 	var relief = _main.get("relief")
 	if relief == null or not relief.pret or _f < 30:
 		return
@@ -182,7 +191,7 @@ func _tick() -> void:
 			_ext_ajout()
 			if ms > 33.0:
 				var ec: LigneRemontee = rm._en_cours
-				_acoups.append([ms, str(ec.name) if ec != null else "rien (collisions, relief…)"])
+				_acoups.append([ms, str(ec.name) if ec != null else "rien (collisions, relief…)", dpip])
 			if _t > 25.0:
 				_resultats.append("   « %s » : %s" % [_tournee[_k_tour], _stats(_durees)])
 				_tout.append_array(_durees)
@@ -193,12 +202,14 @@ func _tick() -> void:
 					_resultats.append("   à-coups > 33 ms : %d" % _acoups.size())
 					# à-coups regroupés par ligne en construction
 					var par: Dictionary = {}
+					var pips: Dictionary = {}
 					for a in _acoups:
 						par[a[1]] = par.get(a[1], []) + [a[0]]
+						pips[a[1]] = int(pips.get(a[1], 0)) + int(a[2])
 					for k in par:
 						var l: Array = par[k]
 						l.sort()
-						_resultats.append("     pendant « %s » : %d images > 33 ms, pire %.0f ms" % [k, l.size(), l[l.size() - 1]])
+						_resultats.append("     pendant « %s » : %d images > 33 ms, pire %.0f ms — %d pipelines compilés dans ces images" % [k, l.size(), l[l.size() - 1], pips[k]])
 					_resultats.append("   pires tranches de construction d'un seul tenant, par étape :")
 					var et: Array = LigneRemontee.tranches.keys()
 					et.sort_custom(func(a, b): return LigneRemontee.tranches[a][0] > LigneRemontee.tranches[b][0])
