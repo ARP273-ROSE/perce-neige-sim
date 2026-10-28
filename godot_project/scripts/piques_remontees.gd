@@ -258,9 +258,11 @@ static func _charger() -> void:
 		return
 	_charge = true
 	if FileAccess.file_exists(FICHIER):
-		var d = JSON.parse_string(FileAccess.get_file_as_string(FICHIER))
-		if d is Dictionary:
-			_vus = d
+		# (fichier vide ou en cours d'écriture par un autre lancement : on
+		# repart de zéro, sans erreur)
+		var j: JSON = JSON.new()
+		if j.parse(FileAccess.get_file_as_string(FICHIER)) == OK and j.data is Dictionary:
+			_vus = j.data
 
 
 static func _sauver() -> void:
