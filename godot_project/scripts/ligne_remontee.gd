@@ -251,9 +251,9 @@ func construire() -> void:
 	_noyau_fil = false
 	var dom: Node = get_parent()
 	_vehicules_jusqua = float(dom.get("VEHICULES_JUSQUA")) if dom != null and dom.get("VEHICULES_JUSQUA") != null else 700.0
-	xf_monde = global_transform
+	xf_monde = global_transform if is_inside_tree() else transform      # (bancs : ligne hors de la scène)
 	if jumelee != null:
-		jumelee.xf_monde = jumelee.global_transform
+		jumelee.xf_monde = jumelee.global_transform if jumelee.is_inside_tree() else jumelee.transform
 	if construction_en_fond and progressif and _fil_possible():
 		# le contenu se construit d'un bloc sur un autre cœur, hors de la scène ;
 		# le fil principal le rattache ensuite par paquets (_fil_fini)
