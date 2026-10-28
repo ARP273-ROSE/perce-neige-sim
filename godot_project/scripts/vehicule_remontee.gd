@@ -778,14 +778,17 @@ func _siege_bmf() -> void:
 	var x_att: float = 0.30 if not fixe else 0.17      # bras de la pince, ou monopince
 	var y_att: float = 0.14 if not fixe else 0.02
 	pivot = Vector3(x_att, y_att, 0)
+	# siège à bulle (Lanches) : arceau à ~1,55 m au-dessus de l'assise (vidéos
+	# de la ligne), la bulle ouverte se loge dessous → poutre remontée
+	var dp: float = 0.55 if famille.ends_with("_bulle") else 0.0
 	var pts: PackedVector3Array = PackedVector3Array()
 	pts.append(Vector3(x_att, y_att, 0))
 	pts.append(Vector3(0.44, y_att - 0.06, 0))
 	pts.append(Vector3(0.50, -0.30, 0))
-	pts.append(Vector3(0.50, -hs + 0.75, 0))
-	for p in RemonteeKit.arc(Vector3(0.12, -hs + 0.75, 0), Vector3.RIGHT, Vector3.DOWN, 0.38, 0.0, PI * 0.5, 8):
+	pts.append(Vector3(0.50, -hs + 0.75 + dp, 0))
+	for p in RemonteeKit.arc(Vector3(0.12, -hs + 0.75 + dp, 0), Vector3.RIGHT, Vector3.DOWN, 0.38, 0.0, PI * 0.5, 8):
 		pts.append(p)
-	pts.append(Vector3(0.02, -hs + 0.12, 0.0))
+	pts.append(Vector3(0.02, -hs + 0.12 + dp, 0.0))
 	RemonteeKit.tube(self, pts, 0.05, m_alu, 12)
 	var siege: Node3D = Node3D.new()
 	siege.name = "Siege"
@@ -797,8 +800,8 @@ func _siege_bmf() -> void:
 	# milieu (attache de la suspente, plaque du numéro) et aux deux bouts,
 	# ajourée de triangles entre les deux ; posée sur un longeron inférieur
 	# en caisson, sous lequel sortent les cadres latéraux
-	var yb0: float = 0.05
-	var yb1: float = 0.21
+	var yb0: float = 0.05 + dp
+	var yb1: float = 0.21 + dp
 	var zb: float = 0.18
 	var ep: float = 0.022
 	var hp: float = yb1 - yb0
@@ -1036,41 +1039,140 @@ func garde_corps(t: float) -> void:
 		_gc.rotation.x = lerpf(_gc_releve, 0.0, clampf(t, 0.0, 1.0))
 
 
-## Bulle (Lanches) : coque de polycarbonate en quart de cylindre, pivotant
-## sur l'arceau ; ouverte elle se range au-dessus du dossier.
+## Bulle des Lanches (sièges Études de Transports, pinces ET-106), refaite
+## entièrement d'après les vidéos et les photos de la ligne (retours
+## d'utilisateur, 28/10/2026 : « ton design de bulle c'est à refaire depuis
+## 0 ») : 2,50 m de large ; de profil une coque en « D » (corde moyeu → bord
+## 1,37 m, flèche 0,73 m, courbure serrée près du moyeu, plus plate vers le
+## bord) ; de face un rectangle aux coins arrondis, extrémités en calottes
+## bombées, face avant presque verticale et toit presque plat ; fermée,
+## sommet à ~1,0 m au-dessus de l'assise et bord ~0,12 m
+## dessous ; moyeu de chaque côté à ~0,25 m au-dessus de l'assise, à
+## l'aplomb du dossier ; elle bascule de 90° vers l'ARRIÈRE et se loge
+## au-dessus et derrière le dossier. Bandeau bas sombre de 0,35 m portant
+## une plaque blanche « TIGNES » (rouge) au milieu et un carré blanc au
+## logo bleu à chaque bout, deux sangles noires de préhension ;
+## polycarbonate fumé gris.
+var _bulle_l: float = 2.50           # largeur hors tout (2,50 m mesurés ; selon le siège)
+const BULLE_CORDE: float = 1.00      # moyeu → bord du bandeau (1,37 mesurés : trop longue vers l'avant, retour d'utilisateur 28/10/2026)
+const BULLE_FLECHE: float = 0.90     # bombé maxi, perpendiculaire à la corde
+const BULLE_INCL: float = 0.38       # corde fermée : 22° sous l'horizontale (bord ~0,12 m sous l'assise)
+const BULLE_BANDEAU: float = 0.35
+
+
+## Point de la coque (repère de la bulle : moyeu à l'origine, bulle fermée) ;
+## s : de 0 (moyeu) à 1 (bord du bandeau) ; t : de -1 à 1 sur la largeur.
+func _bulle_point(s: float, t: float) -> Vector3:
+	var c: Vector2 = Vector2(-cos(BULLE_INCL), -sin(BULLE_INCL))      # (z, y)
+	var n: Vector2 = Vector2(-sin(BULLE_INCL), cos(BULLE_INCL))       # bombé : vers le haut et l'avant
+	# profil en « D » plein (superellipse) : flancs raides au moyeu et à la face
+	# avant, toit presque plat — la bulle fermée est une « boîte » arrondie
+	var f: float = pow(maxf(0.0, 1.0 - pow(absf(2.0 * s - 1.0), 3.0)), 1.0 / 3.0)
+	# calottes : la flèche tombe à zéro aux extrémités (superellipse)
+	var k: float = pow(maxf(0.0, 1.0 - pow(absf(t), 4.0)), 0.25)
+	var p: Vector2 = c * (s * BULLE_CORDE) + n * (BULLE_FLECHE * f * k)
+	return Vector3(t * _bulle_l * 0.5, p.y, p.x)
+
+
 func _bulle_siege(siege: Node3D, W: float) -> void:
 	_bulle = Node3D.new()
 	_bulle.name = "Bulle"
-	_bulle.position = Vector3(0, 0.18, 0.22)
+	_bulle_l = W + 0.22
+	# moyeu : ~0,25 m au-dessus de l'assise (-0,93), sur le coude du cadre
+	# latéral, à l'aplomb du dossier
+	_bulle.position = Vector3(0, -0.68, 0.27)
 	siege.add_child(_bulle)
-	var st: SurfaceTool = SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var R: float = 1.30
-	var n: int = 16
-	for i in range(n):
-		var a0: float = lerpf(-0.05, PI * 0.62, float(i) / n)
-		var a1: float = lerpf(-0.05, PI * 0.62, float(i + 1) / n)
-		var p0: Vector3 = Vector3(0, -sin(a0) * R, -cos(a0) * R)
-		var p1: Vector3 = Vector3(0, -sin(a1) * R, -cos(a1) * R)
-		var xa: float = -W * 0.5 - 0.05
-		var xb: float = W * 0.5 + 0.05
-		var n0: Vector3 = Vector3(0, -sin(a0), -cos(a0))
-		for v in [[Vector3(xa, p0.y, p0.z), n0], [Vector3(xb, p0.y, p0.z), n0], [Vector3(xb, p1.y, p1.z), n0],
-				[Vector3(xa, p0.y, p0.z), n0], [Vector3(xb, p1.y, p1.z), n0], [Vector3(xa, p1.y, p1.z), n0]]:
-			st.set_normal(v[1])
-			st.add_vertex(v[0])
-	var mesh: ArrayMesh = MeshMerge.valider(st)
-	mesh.surface_set_material(0, RemonteeKit.mat("bulle"))
-	var mi: MeshInstance3D = MeshInstance3D.new()
-	mi.mesh = mesh
-	mi.name = "Coque"
-	_bulle.add_child(mi)
-	# flasques latérales et logo (cadre)
+	var ns: int = 28
+	var nt: int = 24
+	# abscisse s du haut du bandeau (0,35 m de coque mesurés depuis le bord)
+	var s_b: float = 1.0
+	var l_: float = 0.0
+	for i in range(200, 0, -1):
+		var a: Vector3 = _bulle_point(float(i) / 200.0, 0.0)
+		var b: Vector3 = _bulle_point(float(i - 1) / 200.0, 0.0)
+		l_ += a.distance_to(b)
+		if l_ >= BULLE_BANDEAU:
+			s_b = float(i - 1) / 200.0
+			break
+	# coque (polycarbonate) et bandeau (blanc), même nappe
+	for part in [[0.0, s_b, "bulle"], [s_b, 1.0, "acier_noir"]]:
+		var st: SurfaceTool = SurfaceTool.new()
+		st.begin(Mesh.PRIMITIVE_TRIANGLES)
+		var n_: int = ns if part[2] == "bulle" else 6
+		for i in range(n_):
+			var s0: float = lerpf(part[0], part[1], float(i) / n_)
+			var s1: float = lerpf(part[0], part[1], float(i + 1) / n_)
+			for j in range(nt):
+				var t0: float = lerpf(-1.0, 1.0, float(j) / nt)
+				var t1: float = lerpf(-1.0, 1.0, float(j + 1) / nt)
+				var q: Array = [_bulle_point(s0, t0), _bulle_point(s0, t1), _bulle_point(s1, t1), _bulle_point(s1, t0)]
+				for v in [q[0], q[1], q[2], q[0], q[2], q[3]]:
+					st.add_vertex(v)
+		st.generate_normals()
+		var mi: MeshInstance3D = MeshInstance3D.new()
+		mi.mesh = MeshMerge.valider(st)
+		var m_: StandardMaterial3D = RemonteeKit.mat(part[2])
+		if part[2] != "bulle":
+			m_ = m_.duplicate()
+			m_.cull_mode = BaseMaterial3D.CULL_DISABLED      # (nappe vue des deux côtés)
+		mi.mesh.surface_set_material(0, m_)
+		mi.name = "Coque" if part[2] == "bulle" else "Bandeau"
+		_bulle.add_child(mi)
+	# joncs : noir sur le haut du bandeau et le long du bord, alu sur les côtés
+	var haut_b: PackedVector3Array = PackedVector3Array()
+	var bord: PackedVector3Array = PackedVector3Array()
+	for j in range(nt + 1):
+		var t: float = lerpf(-1.0, 1.0, float(j) / nt)
+		haut_b.append(_bulle_point(s_b, t))
+		bord.append(_bulle_point(1.0, t))
+	RemonteeKit.tube(_bulle, haut_b, 0.015, "alu_pince", 6)
+	RemonteeKit.tube(_bulle, bord, 0.035, "noir_mat", 6)
 	for sx in [-1.0, 1.0]:
-		RemonteeKit.tube(_bulle, RemonteeKit.arc(Vector3(sx * (W * 0.5 + 0.05), 0, 0), Vector3.FORWARD, Vector3.DOWN, R, -0.05, PI * 0.62, 12),
-			0.02, "acier_noir", 6)
-	RemonteeKit.tube(_bulle, PackedVector3Array([Vector3(-W * 0.5 - 0.05, -sin(PI * 0.62) * R, -cos(PI * 0.62) * R),
-		Vector3(W * 0.5 + 0.05, -sin(PI * 0.62) * R, -cos(PI * 0.62) * R)]), 0.025, "acier_noir", 6)
+		RemonteeKit.tube(_bulle, PackedVector3Array([_bulle_point(0.0, sx), _bulle_point(1.0, sx)]), 0.018, "alu_pince", 6)
+		# moyeu (disque ~12 cm) sur le coude de la suspente
+		RemonteeKit.cylindre(_bulle, 0.06, 0.06, 0.05, Transform3D(Basis(Vector3.FORWARD, PI * 0.5), Vector3(sx * (W * 0.5 + 0.06), 0, 0)), "acier_noir", 12)
+		# sangle noire de préhension, du polycarbonate vers le bandeau
+		var sangle: PackedVector3Array = PackedVector3Array()
+		for k in range(6):
+			var pt: Vector3 = _bulle_point(lerpf(s_b - 0.30, s_b, float(k) / 5.0), sx * 0.42)
+			sangle.append(pt + (pt - _bulle_point(s_b * 0.5, sx * 0.42)).normalized() * 0.012)
+		RemonteeKit.tube(_bulle, sangle, 0.03, "noir_mat", 5)
+	# décor du bandeau : « TIGNES » rouge au milieu, logo STGM (vague bleue) à chaque bout
+	var sm: float = lerpf(s_b, 1.0, 0.5)
+	for e in [["TIGNES", 0.0, 64, 0.0026, Color(0.78, 0.08, 0.08)], ["STGM", -0.76, 40, 0.0014, Color(0.10, 0.30, 0.65)], ["STGM", 0.76, 40, 0.0014, Color(0.10, 0.30, 0.65)]]:
+		var p0: Vector3 = _bulle_point(sm, e[1])
+		var nrm: Vector3 = (_bulle_point(sm, e[1] + 0.02) - _bulle_point(sm, e[1] - 0.02)).cross(_bulle_point(sm + 0.02, e[1]) - _bulle_point(sm - 0.02, e[1])).normalized()
+		if nrm.dot(p0 - _bulle_point(s_b * 0.5, 0.0)) < 0.0:
+			nrm = -nrm
+		var tm: TextMesh = TextMesh.new()
+		tm.text = e[0]
+		tm.font_size = e[2]
+		tm.pixel_size = e[3]
+		tm.depth = 0.0
+		var mt: MeshInstance3D = MeshInstance3D.new()
+		mt.mesh = tm
+		mt.material_override = _mat_texte(e[4])
+		# le texte regarde le long de la normale, à l'endroit (axe x de la bulle)
+		var z_: Vector3 = nrm
+		var x_: Vector3 = Vector3.UP.cross(z_).normalized() if absf(z_.y) < 0.95 else Vector3.RIGHT
+		var bs_: Basis = Basis(x_, z_.cross(x_), z_)
+		mt.transform = Transform3D(bs_, p0 + nrm * 0.012 - bs_.y * (0.0 if e[0] == "TIGNES" else 0.06))
+		# plaque blanche sous le texte (centre : 0,60 × 0,22 ; bouts : carré 0,28)
+		var pl: MeshInstance3D = MeshInstance3D.new()
+		var bm: BoxMesh = BoxMesh.new()
+		bm.size = Vector3(0.60, 0.22, 0.008) if e[0] == "TIGNES" else Vector3(0.28, 0.26, 0.008)
+		pl.mesh = bm
+		pl.material_override = RemonteeKit.mat("blanc_plaque")
+		pl.transform = Transform3D(bs_, p0 + nrm * 0.006)
+		_bulle.add_child(pl)
+		if miroir:
+			mt.scale = Vector3(-1, 1, 1)
+		mt.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		_bulle.add_child(mt)
+		if e[0] == "STGM":
+			# vague bleue au-dessus du sigle
+			var w_: Vector3 = p0 + nrm * 0.012 + z_.cross(x_) * 0.04
+			RemonteeKit.tube(_bulle, PackedVector3Array([w_ - x_ * 0.11, w_ - x_ * 0.04 + z_.cross(x_) * 0.03, w_ + x_ * 0.03, w_ + x_ * 0.11 + z_.cross(x_) * 0.03]), 0.012, "bleu_logo", 5)
 
 
 ## 0 : ouverte (relevée sur le dossier) ; 1 : fermée devant les passagers.
@@ -1079,7 +1181,7 @@ func bulle(t: float) -> void:
 		return
 	_etat_anim[2] = t
 	if _bulle != null:
-		_bulle.rotation.x = lerpf(2.1, 0.0, clampf(t, 0.0, 1.0))
+		_bulle.rotation.x = lerpf(PI * 0.5, 0.0, clampf(t, 0.0, 1.0))   # bascule de 90° vers l'arrière
 
 
 # --- cabines -------------------------------------------------------------------------
