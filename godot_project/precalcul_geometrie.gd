@@ -17,7 +17,7 @@ var _f0: int = 0
 var _fait: bool = false
 
 const POIDS_DEV: float = 1.0e4          # (rad²) : 0,1 rad de trop → 100
-const POIDS_GARDE: float = 10.0         # (m²) : 1 m sous la garde → 10
+const POIDS_GARDE: float = 1.0e5        # (m²) : 0,1 m sous la garde → 1 000 (quasi intouchable)
 const POIDS_ECART: float = 0.002        # (m²) : 10 m d'écart au départ → 0,2
 
 
@@ -53,7 +53,7 @@ func _calculer() -> void:
 			n_part = maxi(int(t[1]), 1)
 	var rang: int = -1
 	var sortie: Dictionary = {}
-	var bilan: Array = [0, 0, 0, 0]     # [pylônes hors limites avant, après, portées sous la garde avant, après]
+	var bilan: Array = [0.0, 0.0, 0, 0, 0, 0]   # dépassement total avant/après (°), pylônes > 1° avant/après, portées sous la garde avant/après
 	for e in _main.remontees.lignes:
 		var lg: LigneRemontee = e[0]
 		if lg.teleski() or lg.tricable() or lg.vaetvient():
@@ -71,22 +71,27 @@ func _calculer() -> void:
 		var ap: Array = _defauts(lg)
 		bilan[0] += av[0]
 		bilan[1] += ap[0]
-		bilan[2] += av[1]
-		bilan[3] += ap[1]
+		bilan[2] += av[2]
+		bilan[3] += ap[2]
+		bilan[4] += av[3]
+		bilan[5] += ap[3]
 		var l: Array = []
 		for i in range(lg.pylones.size()):
 			var p: Dictionary = lg.pylones[i]
-			var q: Dictionary = {"k": int(p["k"]), "h": snappedf(lg._tetes[i] - lg.terrain(float(p["d"])), 0.01)}
+			var h: float = snappedf(lg._tetes[i] - lg.terrain(float(p["d"])), 0.01)
+			# (pylône de croisement, posé par le domaine : retrouvé par sa position)
+			var q: Dictionary = {"k": int(p["k"]), "h": h} if p.has("k") else {"croisement_d": snappedf(float(p["d"]), 0.1), "h": h}
 			if lg.balanciers_estimes:
 				q["montee"] = p.get("montee")
 				q["descente"] = p.get("descente")
 			l.append(q)
 		sortie[String(lg.name)] = l
-		print("%-26s pylônes hors limites %2d → %2d · portées sous la garde %2d → %2d" % [lg.name, av[0], ap[0], av[1], ap[1]])
+		print("%-26s dépassement %6.1f° → %6.1f° (pire %5.1f° → %5.1f°) · pylônes > 1° %2d → %2d · portées sous la garde %2d → %2d" % [
+			lg.name, av[0], ap[0], av[1], ap[1], av[2], ap[2], av[3], ap[3]])
 	var nom: String = "geometrie.json" if n_part == 1 else "geometrie_%d.json" % (k_part + 1)
 	var f := FileAccess.open("res://data/remontees/" + nom, FileAccess.WRITE)
 	f.store_string(JSON.stringify(sortie, " ", true))
-	print("BILAN pylônes hors limites %d → %d · portées sous la garde %d → %d" % bilan)
+	print("BILAN dépassement %.0f° → %.0f° · pylônes > 1° %d → %d · portées sous la garde %d → %d" % bilan)
 	quit(0)
 
 
@@ -153,19 +158,30 @@ func _optimiser(lg: LigneRemontee) -> void:
 						mieux = true
 					else:
 						lg._tetes[i] = h
+			lg._preparer_nez()
 			if not mieux:
 				break
-		lg._preparer_nez()
 
 
-## [pylônes hors de leurs bornes de déviation, portées sous la garde].
+## [dépassement total (°), pire dépassement (°), pylônes à plus de 1° au-delà
+## de leurs bornes, portées sous la garde de plus de 0,3 m].
 func _defauts(lg: LigneRemontee) -> Array:
+	var total: float = 0.0
+	var pire: float = 0.0
 	var hors: int = 0
 	for i in range(lg.pylones.size()):
-		if _pen_dev(lg, i) > POIDS_DEV * pow(0.0026, 2.0):          # (0,15° de tolérance)
+		var bo: Array = _bornes(lg, i)
+		var e: float = 0.0
+		for m in [true, false]:
+			var d: float = lg.deviation_pylone(i, m)
+			e = maxf(e, maxf(float(bo[0]) - d, d - float(bo[1])))
+		e = rad_to_deg(maxf(e, 0.0))
+		total += e
+		pire = maxf(pire, e)
+		if e > 1.0:
 			hors += 1
 	var sous: int = 0
 	for k in range(lg.pylones.size() + 1):
 		if lg._garde_portee(k) < -0.3:
 			sous += 1
-	return [hors, sous]
+	return [total, pire, hors, sous]
