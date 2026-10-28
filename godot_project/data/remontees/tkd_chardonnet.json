@@ -371,7 +371,7 @@
  ],
  "pylones": [
   {
-   "d": 71.6,
+   "d": 18.0,
    "montee": [
     [
      null,
@@ -381,7 +381,7 @@
    "descente": []
   },
   {
-   "d": 143.2,
+   "d": 41.0,
    "montee": [
     [
      null,
@@ -391,7 +391,7 @@
    "descente": []
   },
   {
-   "d": 214.7,
+   "d": 142.0,
    "montee": [
     [
      null,
@@ -401,12 +401,12 @@
    "descente": []
   },
   {
-   "d": 286.3,
+   "d": 243.0,
    "montee": [],
    "descente": []
   },
   {
-   "d": 357.9,
+   "d": 320.0,
    "montee": [
     [
      null,
@@ -416,7 +416,7 @@
    "descente": []
   },
   {
-   "d": 429.4,
+   "d": 379.0,
    "montee": [
     [
      null,
@@ -426,7 +426,7 @@
    "descente": []
   },
   {
-   "d": 501.0,
+   "d": 480.0,
    "montee": [
     [
      null,
@@ -436,7 +436,7 @@
    "descente": []
   },
   {
-   "d": 572.6,
+   "d": 569.0,
    "montee": [
     [
      null,
@@ -446,7 +446,7 @@
    "descente": []
   },
   {
-   "d": 644.2,
+   "d": 640.0,
    "montee": [
     [
      null,
@@ -456,7 +456,7 @@
    "descente": []
   },
   {
-   "d": 715.8,
+   "d": 717.0,
    "montee": [
     [
      null,
@@ -466,7 +466,17 @@
    "descente": []
   },
   {
-   "d": 787.3,
+   "d": 794.0,
+   "montee": [
+    [
+     null,
+     "S"
+    ]
+   ],
+   "descente": []
+  },
+  {
+   "d": 841.0,
    "montee": [
     [
      null,
@@ -476,6 +486,6 @@
    "descente": []
   }
  ],
- "balanciers": "estimés",
+ "balanciers": "remontees-mecaniques.net",
  "gps": []
 }
