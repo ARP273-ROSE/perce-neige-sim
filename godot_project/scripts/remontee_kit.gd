@@ -44,6 +44,7 @@ const COULEURS: Dictionary = {
 	"ressort_gris": [Color(0.62, 0.64, 0.67), 0.45, 0.55],
 	"polyurethane": [Color(0.93, 0.91, 0.84), 0.55, 0.0],
 	"noir_mat": [Color(0.05, 0.05, 0.06), 0.80, 0.10],
+	"bleu_logo": [Color(0.10, 0.30, 0.65), 0.5, 0.0],        # vague du logo STGM (bulles des Lanches)
 	"pierre": [Color(0.52, 0.50, 0.46), 0.95, 0.0],            # moellons des cabines de conducteur
 	"neige_damee": [Color(0.96, 0.97, 0.99), 0.92, 0.0],       # talus et rampes des gares
 	"toit_bardeaux": [Color(0.24, 0.23, 0.22), 0.9, 0.0],
@@ -113,7 +114,7 @@ static func _mat(nom: String) -> StandardMaterial3D:
 		m.metallic = 0.5
 		m.cull_mode = BaseMaterial3D.CULL_DISABLED
 	elif nom == "bulle":
-		m.albedo_color = Color(0.62, 0.45, 0.25, 0.42)    # polycarbonate fumé orangé
+		m.albedo_color = Color(0.30, 0.31, 0.33, 0.45)    # polycarbonate fumé gris neutre (vidéos des Lanches)
 		m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 		m.roughness = 0.08
 		m.metallic = 0.2
