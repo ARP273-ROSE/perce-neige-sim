@@ -5,6 +5,34 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.52.0 — 28 octobre 2026
+
+**Les remontées se construisent sur un autre cœur du processeur.** Relevés du PC (5900X,
+RTX 5070 Ti, vrai rendu) pendant la tournée de six remontées du banc de fluidité :
+images de plus de 33 ms 536 → 3, de plus de 16,7 ms 1 975 → 321, pire image 157 → 54 ms ;
+assis dans un télésiège, images de plus de 16,7 ms 322 → 20.
+
+- **Construction sur un autre fil** (`WorkerThreadPool`) : le contenu d'une ligne (gares,
+  pylônes, câbles, véhicules, collisions, noyau C++ et véhicules lointains, portées et
+  couche de rendu) se construit hors de la scène, puis le fil principal le rattache par
+  paquets de 2 ms. Téléphériques compris. Sans fils (PWA) et dans les bancs sans écran :
+  par tranches, comme avant.
+- **Fil de construction freiné** à 4 ms de travail par image : les ordres de rendu qu'il
+  crée sont exécutés par le fil principal au début de l'image suivante (des images de
+  80 ms sans script ni physique sinon).
+- **Caches partagés sous verrou** (copies des maillages, matériaux, coussins, galets).
+- **Entrée en mode skieur** : domaine (jalons, panneaux), remontées et skieur posés pendant
+  la préparation du décor, une chose par image — l'image de 460 ms à l'entrée disparaît
+  (script d'entrée : 1 ms).
+- **Lignes à l'arrêt** : paires de galets déjà posées non réécrites, vitesse des pneus gardée
+  — script des remontées au pied des pistes ≈ 2,8 → 2,2 ms par image (NAS), PWA comprise.
+- **Mesures** : la ligne `[Gel3D]` donne les pipelines de rendu compilés, le temps de
+  script, de physique et de préparation du rendu ; le banc de fluidité détaille chaque
+  à-coup ; le journal donne la durée du script d'entrée en mode skieur.
+- Corrigé : véhicules lointains libérés deux fois après un démontage ; lecture des piques
+  tolérante à un fichier vide.
+- Bancs : tous verts sur le PC (sauf l'escalier de la fosse du banc skieur, échec connu).
+
 ## 1.51.0 — 27 octobre 2026
 
 **La construction des remontées ne fige presque plus l'image.** Relevés du PC (27/10/2026) :
