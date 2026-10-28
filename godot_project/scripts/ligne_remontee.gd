@@ -531,6 +531,14 @@ func _calculer_tetes() -> void:
 	if teleski():
 		_tetes_teleski()
 		return
+	# géométrie calculée une fois pour toutes (outils/precalcul_geometrie.gd :
+	# capacité des galets, garde au sol, mesures GPS, réglés ensemble) : le
+	# jeu la reprend telle quelle (demande d'un utilisateur, 28/10/2026)
+	if not ignorer_precalcul and _precalcul_complet():
+		for p in pylones:
+			_tetes.append(terrain(float(p["d"])) + float(p["h"]))
+		_bornes_tetes()
+		return
 	# lignes relevées au GPS : chaque tête part de la hauteur MESURÉE du câble
 	# au droit du pylône (siège mesuré + suspente) ; sinon 9 m
 	for p in pylones:
@@ -588,13 +596,32 @@ func _calculer_tetes() -> void:
 	# garde au sol, compressions et porteurs s'influencent : on boucle jusqu'à
 	# ce que les trois tiennent ensemble (abaisser une compression faisait
 	# raser le sol au câble chargé de la portée voisine)
-	for passe in range(6):
+	for passe in range(8):
 		await _pause("têtes des pylônes")
-		if not _garde_au_sol(true):
-			break
+		var garde_bouge: bool = _garde_au_sol(true)
 		_porteurs_convexes()
+		if not _capacite_galets() and not garde_bouge:
+			break
 	await _pause("têtes des pylônes")
 	_ajuster_aux_mesures()
+	_bornes_tetes()
+
+
+## Têtes précalculées présentes pour tous les pylônes.
+static var ignorer_precalcul: bool = false        # (l'outil de précalcul part du calcul d'ici)
+
+
+func _precalcul_complet() -> bool:
+	if pylones.is_empty():
+		return false
+	for p in pylones:
+		if not (p as Dictionary).has("h"):
+			return false
+	return true
+
+
+## Hauteur maximale et étages des croisements (RemonteesDomaine._croisements).
+func _bornes_tetes() -> void:
 	for i3 in range(_tetes.size()):
 		var t3: float = terrain(float(pylones[i3]["d"]))
 		_tetes[i3] = minf(_tetes[i3], t3 + (90.0 if tricable() or vaetvient() else 36.0))
@@ -703,7 +730,8 @@ func _ajuster_aux_mesures() -> void:
 			var t: float = terrain(float(pylones[i]["d"]))
 			var h0: float = _tetes[i]
 			_tetes[i] = maxf(h0 - (marge - 0.5) * 0.6, t + 6.0)
-			if minf(deviation_pylone(i, true), deviation_pylone(i, false)) < DEVIATION_MIN:
+			if minf(deviation_pylone(i, true), deviation_pylone(i, false)) < DEVIATION_MIN \
+					or maxf(deviation_pylone(i, true), deviation_pylone(i, false)) > _capacite(pylones[i])[0]:
 				_tetes[i] = h0
 			elif _tetes[i] < h0 - 0.05:
 				bouge = true
@@ -873,6 +901,96 @@ func _porteurs_convexes() -> void:
 				bouge = true
 		if not bouge:
 			break
+
+
+## Déviation que les galets d'un pylône peuvent encaisser (rad) : [convexe
+## (supports), concave (compressions)]. Chaque galet porte quelques kN, le
+## câble est tendu à quelques centaines : la déviation par galet vaut leur
+## rapport, ≈ 1,3° en support, ≈ 0,65° en compression (médianes mesurées sur
+## les 519 pylônes relevés : 1,2° et 0,5-0,6°). Un pylône de crête à 12
+## galets ne dévie donc le câble que de ~15° — Leissières en avait un seul
+## à 91°, où il y en a trois (retour d'utilisateur, 28/10/2026).
+const DEV_PAR_GALET_S: float = 1.3 * PI / 180.0
+const DEV_PAR_GALET_C: float = 0.65 * PI / 180.0
+
+
+func _capacite(p: Dictionary) -> Array:
+	var n_s: int = 0
+	var n_c: int = 0
+	for g in p.get("montee", []):
+		var n: int = int(g[0]) if g[0] != null else 2
+		if String(g[1]).contains("S"):
+			n_s += n
+		if String(g[1]).contains("C"):
+			n_c += n
+	return [n_s * DEV_PAR_GALET_S, n_c * DEV_PAR_GALET_C]
+
+
+## Têtes ramenées dans la capacité de leurs galets : un support trop
+## saillant est abaissé, une compression trop creuse relevée (sans repasser
+## sous la garde : la boucle de _calculer_tetes alterne avec _garde_au_sol).
+## Renvoie vrai si une tête a bougé.
+func _capacite_galets() -> bool:
+	if tricable() or vaetvient() or teleski():
+		return false
+	var a_bouge: bool = false
+	for it in range(40):
+		var bouge: bool = false
+		for i in range(pylones.size()):
+			var pts: Array = _points_appui()
+			var cap: Array = _capacite(pylones[i])
+			var dm: float = deviation_pylone(i, true)
+			var dd: float = deviation_pylone(i, false)
+			var d: float = float(pylones[i]["d"])
+			var a: float = maxf(d - float(pts[i][0]), 1.0)
+			var b: float = maxf(float(pts[i + 2][0]) - d, 1.0)
+			var k: float = 1.0 / a + 1.0 / b
+			var t: float = terrain(d)
+			var trop: float = maxf(dm, dd) - float(cap[0])
+			if trop > 0.002:
+				# d'abord abaisser la tête, si les deux portées gardent leur garde ;
+				# sinon relever les voisins (jamais sous la garde)
+				var h0: float = _tetes[i]
+				_tetes[i] = maxf(h0 - trop * 0.7 / k, t + 6.5)
+				if _tetes[i] < h0 - 0.01 and _garde_portee(i) >= 0.0 and _garde_portee(i + 1) >= 0.0:
+					bouge = true
+					continue
+				_tetes[i] = h0
+				var e: float = trop * 0.7 / k
+				for j in [i - 1, i + 1]:
+					if j < 0 or j >= pylones.size():
+						continue
+					var tj: float = terrain(float(pylones[j]["d"]))
+					var hj: float = minf(_tetes[j] + e, tj + 36.0)
+					if hj > _tetes[j] + 0.01:
+						_tetes[j] = hj
+						bouge = true
+				continue
+			var creux: float = -minf(dm, dd) - float(cap[1])
+			if creux > 0.002:
+				# compression trop creuse (ou support où le câble décolle) : relever
+				var h2: float = minf(_tetes[i] + creux * 0.7 / k, t + 36.0)
+				if h2 > _tetes[i] + 0.01:
+					_tetes[i] = h2
+					bouge = true
+		if not bouge:
+			break
+		a_bouge = true
+	return a_bouge
+
+
+## Plus petite marge (m) du câble chargé au-dessus de la garde exigée, sur la
+## portée qui va de l'appui k à l'appui k + 1 (0 : gare aval).
+func _garde_portee(k: int) -> float:
+	var pts: Array = _points_appui()
+	var a: Array = pts[k]
+	var b: Array = pts[k + 1]
+	var xc: Array = chainette_xm_c(a[0], a[1], b[0], b[1], _a_montee)
+	var m: float = INF
+	for j in range(1, 20):
+		var x: float = lerpf(a[0], b[0], float(j) / 20.0)
+		m = minf(m, _a_montee * cosh((x - float(xc[0])) / _a_montee) + float(xc[1]) - terrain(x) - _garde_exigee(x))
+	return m
 
 
 func _compression(p: Dictionary) -> bool:

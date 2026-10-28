@@ -299,8 +299,10 @@ func _poser(D: Dictionary) -> void:
 	var L0: float = (b0 - a0).length()
 	var u0: Vector2 = (b0 - a0) / maxf(L0, 1.0)
 	var py: Array = []
-	for p in D["pylones"]:
-		var q: Dictionary = (p as Dictionary).duplicate()
+	for kp in range((D["pylones"] as Array).size()):
+		var p: Dictionary = D["pylones"][kp]
+		var q: Dictionary = p.duplicate()
+		q["k"] = kp                     # (rang dans les données : géométrie précalculée)
 		var w: Vector2 = a0 + u0 * (float(p["d"]) * L0 / maxf(Ld, 1.0))
 		q["d"] = (w - a).dot(dirh)
 		if float(q["d"]) < 5.0 or float(q["d"]) > L - 5.0:
