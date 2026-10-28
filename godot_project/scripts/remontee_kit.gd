@@ -72,7 +72,18 @@ const COULEURS: Dictionary = {
 }
 
 
+## (Caches sous verrou : les remontées se construisent sur un autre fil.)
+static var verrou: Mutex = Mutex.new()
+
+
 static func mat(nom: String) -> StandardMaterial3D:
+	verrou.lock()
+	var m: StandardMaterial3D = _mat(nom)
+	verrou.unlock()
+	return m
+
+
+static func _mat(nom: String) -> StandardMaterial3D:
 	if _mats.has(nom):
 		return _mats[nom]
 	var m: StandardMaterial3D = StandardMaterial3D.new()
@@ -310,8 +321,10 @@ static var _galet_mesh: ArrayMesh = null
 ## du galet. Axe du galet selon X local, centre en `c`.
 static func galet(parent: Node3D, c: Vector3, r: float = 0.21, _l: float = 0.0, _moyeu: String = "",
 		_garniture: String = "") -> void:
+	verrou.lock()
 	if _galet_mesh == null:
 		_galet_mesh = RollerMesh.build_galet(false)
+	verrou.unlock()
 	var k: float = r / RollerMesh.R_BANDE
 	var mi: MeshInstance3D = MeshInstance3D.new()
 	mi.mesh = _galet_mesh
@@ -329,9 +342,11 @@ static var _coussins: Dictionary = {}
 
 static func coussin(parent: Node3D, taille: Vector3, xf: Transform3D, m: String, r: float = 0.04) -> MeshInstance3D:
 	var cle: String = "%.3f|%.3f|%.3f|%.3f" % [taille.x, taille.y, taille.z, r]
+	verrou.lock()
 	if not _coussins.has(cle):
 		_coussins[cle] = _maillage_coussin(taille * 0.5, minf(r, minf(taille.x, minf(taille.y, taille.z)) * 0.5 - 0.001))
 	var mesh: ArrayMesh = _coussins[cle]
+	verrou.unlock()
 	var mi: MeshInstance3D = MeshInstance3D.new()
 	mi.mesh = mesh
 	mi.material_override = mat(m)

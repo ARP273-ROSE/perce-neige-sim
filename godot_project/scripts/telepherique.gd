@@ -45,6 +45,10 @@ func regime() -> float:
 	return 1.0
 
 
+
+func _boucle_standard() -> bool:
+	return false
+
 func vitesse_en(_s2: float) -> float:
 	return absf(_v)
 

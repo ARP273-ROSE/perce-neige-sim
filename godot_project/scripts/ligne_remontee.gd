@@ -197,6 +197,7 @@ func demolir(poubelle: Array) -> void:
 	_portillons_gares.clear()
 	_ouv_portillons.clear()
 	_terrassements.clear()
+	_lointains.clear()             # (déjà à la poubelle : ne pas les libérer deux fois)
 	_synchro = false
 	if jumelee != null:
 		jumelee._synchro = false
@@ -246,6 +247,114 @@ func construire() -> void:
 		l_gare += ALLONGE_BAS            # double embarquement, puis le lanceur plus loin
 	if fixe():
 		v_embarquement = vitesse
+	contenu_prepare = false
+	xf_monde = global_transform
+	if jumelee != null:
+		jumelee.xf_monde = jumelee.global_transform
+	if construction_en_fond and progressif and _fil_possible():
+		# le contenu se construit d'un bloc sur un autre cœur, hors de la scène ;
+		# le fil principal le rattache ensuite par paquets (_fil_fini)
+		_chantier = Node3D.new()
+		_tache = WorkerThreadPool.add_task(_construire_fil, false, "ligne " + String(name))
+		return
+	await _construire_corps()
+	await _finir_construction()
+
+
+## Construction d'une ligne sur un autre fil (PC : les à-coups de 20 à 150 ms
+## à l'approche d'une remontée venaient de sa construction sur le fil
+## principal — relevés du 27/10/2026). Le contenu est posé sous `_chantier`,
+## hors de la scène (seule façon d'y toucher depuis un autre fil) ; pas de
+## pause (`progressif` coupé le temps du fil). Sans fils (PWA) : par tranches
+## sur le fil principal, comme avant.
+static var construction_en_fond: bool = true
+## Réglages du contenu (portées, couche de rendu) appliqués sur le fil, avant
+## le rattachement — `contenu_prepare` dit qu'ils sont faits.
+var prepa_contenu: Callable = Callable()
+var contenu_prepare: bool = false
+var _chantier: Node3D = null
+var _tache: int = -1
+## Banc : plus longs blocs passés sur le fil principal par une construction
+## en fond — rattachement d'un paquet, fin de construction (ms).
+static var fil_pire_ms: float = 0.0
+static var fil_pire_fin_ms: float = 0.0
+## Repère monde de la ligne, relevé sur le fil principal (global_transform ne
+## se lit pas depuis un autre fil ; les lignes ne bougent pas).
+var xf_monde: Transform3D = Transform3D.IDENTITY
+
+
+## (Pas sans écran : le rendu factice des bancs ne crée pas de maillages
+## depuis un autre fil — les bancs gardent la construction par tranches.)
+static func _fil_possible() -> bool:
+	return OS.get_processor_count() > 1 and not OS.has_feature("web") and DisplayServer.get_name() != "headless"
+
+
+func _construire_fil() -> void:
+	progressif = false
+	await _construire_corps()
+	progressif = true
+	if prepa_contenu.is_valid():
+		prepa_contenu.call(_chantier)
+		contenu_prepare = true
+	_fil_fini.call_deferred()
+
+
+## Parent du contenu de la ligne : `_chantier` pendant le fil, sinon la ligne.
+func _cont() -> Node3D:
+	return _chantier if _chantier != null else self
+
+
+## Enfant posé par la construction : sous `_chantier` pendant le fil.
+func _enfant(n: Node) -> void:
+	if _chantier != null:
+		_chantier.add_child(n)
+	else:
+		add_child(n)
+
+
+## En quittant (ou en retirant la ligne) pendant le fil : on attend sa fin —
+## les modèles de véhicules partagés sont libérés juste après (domaine).
+func _exit_tree() -> void:
+	if _tache >= 0:
+		WorkerThreadPool.wait_for_task_completion(_tache)
+		_tache = -1
+		if _chantier != null:
+			_chantier.free()
+			_chantier = null
+
+
+func _fil_fini() -> void:
+	if _tache < 0:
+		return                 # (déjà attendu en quittant)
+	WorkerThreadPool.wait_for_task_completion(_tache)
+	_tache = -1
+	if not is_inside_tree():
+		_chantier.free()
+		_chantier = null
+		return
+	# rattachés par paquets (entrer dans la scène a un coût : enregistrement
+	# des maillages et des corps) — 2 ms par image au plus
+	var t0: int = Time.get_ticks_usec()
+	for c in _chantier.get_children():
+		_chantier.remove_child(c)
+		add_child(c)
+		if Time.get_ticks_usec() - t0 > 2000:
+			fil_pire_ms = maxf(fil_pire_ms, (Time.get_ticks_usec() - t0) / 1000.0)
+			await get_tree().process_frame
+			t0 = Time.get_ticks_usec()
+			if not is_inside_tree():
+				return
+	_chantier.free()
+	_chantier = null
+	fil_pire_ms = maxf(fil_pire_ms, (Time.get_ticks_usec() - t0) / 1000.0)
+	_t_tranche = Time.get_ticks_usec()
+	roule = true
+	var t1: int = Time.get_ticks_usec()
+	_finir_construction()
+	fil_pire_fin_ms = maxf(fil_pire_fin_ms, (Time.get_ticks_usec() - t1) / 1000.0)
+
+
+func _construire_corps() -> void:
 	await _calculer_tetes()
 	_preparer_nez()
 	if teleski() or tricable():
@@ -276,8 +385,11 @@ func construire() -> void:
 		_construire_table()
 		await _pause("table du jumelage")
 	await _peupler()
-	roule = true
-	set_process(true)
+	if _chantier == null:
+		# (pendant le fil, la ligne reste « à l'arrêt » pour le reste du jeu
+		# jusqu'au rattachement : sons, niveaux de détail lisent `roule`)
+		roule = true
+		set_process(true)
 	if not (famille.begins_with("cabine") or famille.begins_with("perche")):
 		# (Fresse, jumelé : on n'embarque pas à l'intermédiaire, les sièges
 		# arrivent pleins de Bollin)
@@ -292,6 +404,9 @@ func construire() -> void:
 		for i in range(_vehicules.size()):
 			_corps_vehicule(i)
 			await _pause("corps des véhicules")
+
+
+func _finir_construction() -> void:
 	pret = true
 	set_process(true)
 	_preparer_noyau()
@@ -912,13 +1027,18 @@ func contour_exterieur(i: int) -> bool:
 
 
 ## Temps de parcours de la boucle à la vitesse v (régime 1).
+## Faux dans une sous-classe qui redéfinit zone() et vitesse_en() (téléphérique).
+func _boucle_standard() -> bool:
+	return true
+
+
 ## (Même intégration que vitesse_en() pas à pas, sans ses listes : en ligne,
 ## les pas à vitesse constante s'enchaînent jusqu'à la zone suivante — Fresse
 ## figeait l'image 28 ms par tour, banc du 27/10/2026.)
 func _temps_boucle(v: float) -> float:
 	var s2: float = 0.0
 	var t: float = 0.0
-	if get_script() != LigneRemontee:
+	if not _boucle_standard():
 		# (sous-classe — téléphérique — : zone() et vitesse_en() redéfinies)
 		var v0: float = vitesse
 		vitesse = v
@@ -1069,7 +1189,7 @@ func _rail_contour() -> void:
 	if pts.size() > 2:
 		var n: Node3D = Node3D.new()
 		n.name = "RailContour"
-		add_child(n)
+		_enfant(n)
 		RemonteeKit.tube(n, pts, 0.045, "acier", 6)
 		# suspentes du rail au carénage
 		for k in range(0, pts.size(), 10):
@@ -1084,7 +1204,7 @@ func rail_traversee() -> void:
 	_construire_traversee()
 	var n: Node3D = Node3D.new()
 	n.name = "RailTraversee"
-	add_child(n)
+	_enfant(n)
 	var pts: PackedVector3Array = PackedVector3Array()
 	for p in _trav_pts:
 		pts.append(p + Vector3(0, 0.01, 0))
@@ -1113,7 +1233,7 @@ var _trav_cum: PackedFloat32Array = PackedFloat32Array()
 
 func _construire_traversee() -> void:
 	var b: LigneRemontee = jumelee
-	var xf: Transform3D = global_transform.affine_inverse() * b.global_transform
+	var xf: Transform3D = xf_monde.affine_inverse() * b.xf_monde
 	var D: float = DECAL_CONTOUR
 	var debut: Array = []                 # points de ce tronçon, du nez vers le coude
 	var fin: Array = []                   # points de l'autre, du coude vers son nez
@@ -1409,7 +1529,7 @@ func _gare(aval: bool) -> void:
 	var zc: float = l_gare if aval else -L - l_gare     # axe de la poulie
 	var znez: float = 0.0 if aval else -L
 	g.position = Vector3(0, y0, 0)
-	add_child(g)
+	_enfant(g)
 	var dz: float = zc - znez
 	var zm: float = (zc + znez) * 0.5 + signf(dz) * 4.0
 	var long_g: float = absf(dz) + voie * 0.5 + 3.5 + 5.0      # + aire d'attente derrière la poulie
@@ -2104,7 +2224,7 @@ func _charpente_3s(aval: bool) -> void:
 	var g: Node3D = Node3D.new()
 	g.name = "Charpente" + ("Aval" if aval else "Amont")
 	g.position = Vector3(0, terrain(0.0 if aval else longueur_h()), 0)
-	add_child(g)
+	_enfant(g)
 	var hr: float = _emprise_3s(aval)[3]
 	var rouge: String = "cabine_rouge"
 	for dx in [-1.1, 1.1]:
@@ -2161,7 +2281,7 @@ func _collisions_fixes() -> void:
 	corps.name = "CollisionsLigne"
 	corps.collision_layer = CollisionsJeu.COUCHE_DECOR
 	corps.collision_mask = 0
-	add_child(corps)
+	_enfant(corps)
 	var boite := func(taille: Vector3, centre: Vector3) -> void:
 		var cs: CollisionShape3D = CollisionShape3D.new()
 		var b: BoxShape3D = BoxShape3D.new()
@@ -2283,7 +2403,7 @@ func _corps_vehicule(i: int) -> void:
 	corps.collision_layer = CollisionsJeu.COUCHE_VEHICULE
 	corps.collision_mask = 0
 	corps.set_meta("vehicule", corps)
-	add_child(corps)
+	_enfant(corps)
 	var portes: Array = []
 	for f in formes:
 		var cs: CollisionShape3D = CollisionShape3D.new()
@@ -2330,7 +2450,7 @@ func _portillons(aval: bool) -> void:
 	var g: Node3D = Node3D.new()
 	g.name = "Portillons" + ("Aval" if aval else "Amont")
 	g.transform = Transform3D(Basis.looking_at(dirh, Vector3.UP), Vector3(p.x, y0, p.z))
-	add_child(g)
+	_enfant(g)
 	var places: int = VehiculeRemontee.DESCRIPTIONS.get(famille, ["", 6, ""])[1]
 	var W: float = 0.50 * places + 0.20
 	# un portillon par place (retour d'utilisateur, 24/10/2026), par paires : une
@@ -2404,7 +2524,7 @@ func _portillons(aval: bool) -> void:
 	var q: Vector3 = point_embarquement(aval)
 	var ls: Node3D = Node3D.new()
 	ls.transform = Transform3D(Basis.looking_at(dirh, Vector3.UP), Vector3(q.x, y0 + 0.01, q.z))
-	add_child(ls)
+	_enfant(ls)
 	RemonteeKit.boite_en(ls, Vector3(W, 0.02, 0.12), Vector3.ZERO, "jaune_securite")
 	RemonteeKit.boite_en(ls, Vector3(W, 0.02, 0.05), Vector3(0, 0, 0.25), "joint")
 	_portillons_gares.append([aval, vantaux, formes, 99.0, 0.0])
@@ -2414,12 +2534,12 @@ func _portillons(aval: bool) -> void:
 ## sa ligne d'arrêt sur le contour extérieur ; un seul portique, élargi sur
 ## les deux files, avec un panneau bleu par destination au-dessus de chacune.
 func _double_embarquement() -> void:
-	var g0: Node3D = get_node_or_null("PortillonsAval")
-	var n0: int = get_child_count()
+	var g0: Node3D = _cont().get_node_or_null("PortillonsAval")
+	var n0: int = _cont().get_child_count()
 	_portillons(true)
 	var dh: Vector3 = _dehors(s_gare(true, x_arret(longueur_zone(true)))) * DECAL_CONTOUR
-	for k in range(n0, get_child_count()):
-		var c: Node3D = get_child(k)
+	for k in range(n0, _cont().get_child_count()):
+		var c: Node3D = _cont().get_child(k)
 		c.position += dh
 		var po: Node = c.get_node_or_null("Portique")
 		if po != null:
@@ -2440,7 +2560,7 @@ func _double_embarquement() -> void:
 	var W: float = 0.50 * places + 0.20
 	var ent: Node3D = Node3D.new()
 	ent.name = "Portique"
-	add_child(ent)
+	_enfant(ent)
 	ent.transform = g0.transform * Transform3D(Basis.IDENTITY, Vector3(0, 0, 3.0))
 	ent.position += dh * 0.5
 	PortiqueEntree.construire(ent, self, W * 0.5 + 0.9 + DECAL_CONTOUR * 0.5)
@@ -2833,7 +2953,7 @@ func _rail_ouverture(aval: bool) -> void:
 	var l: float = longueur_zone(aval)
 	var r_node: Node3D = Node3D.new()
 	r_node.name = "RailOuverture" + ("Aval" if aval else "Amont")
-	add_child(r_node)
+	_enfant(r_node)
 	var pts: PackedVector3Array = PackedVector3Array()
 	var x: float = -0.8
 	while x <= l + 0.8:
@@ -2891,7 +3011,7 @@ func _lanceurs() -> void:
 			x += 0.5
 		var r_node: Node3D = Node3D.new()
 		r_node.name = "Rail" + ("Aval" if aval else "Amont")
-		add_child(r_node)
+		_enfant(r_node)
 		RemonteeKit.tube(r_node, rail, 0.045, "acier", 6)
 		if tricable():
 			var rail2: PackedVector3Array = PackedVector3Array()
@@ -2922,7 +3042,7 @@ func _lanceurs() -> void:
 			var base: Basis = Basis(t2, o2, t2.cross(o2)).orthonormalized()
 			var pn: Node3D = Node3D.new()
 			pn.transform = Transform3D(base, c)
-			add_child(pn)
+			_enfant(pn)
 			RemonteeKit.cylindre(pn, R_PNEU, R_PNEU, 0.14, Transform3D.IDENTITY, "caoutchouc", 18)
 			RemonteeKit.cylindre(pn, 0.12, 0.12, 0.16, Transform3D.IDENTITY, "galva_pylone", 12)
 			for b in range(5):
@@ -2930,7 +3050,7 @@ func _lanceurs() -> void:
 				RemonteeKit.cylindre(pn, 0.012, 0.012, 0.17, Transform3D(Basis.IDENTITY, Vector3(cos(a2) * 0.08, 0, sin(a2) * 0.08)), "acier_noir", 6)
 			# fourche : deux flasques jusqu'à la poutre haute
 			for sy in [-0.09, 0.09]:
-				RemonteeKit.poutre(self, c + o2 * sy, c + o2 * sy + Vector3(0, R_PNEU + 0.16, 0), 0.05, 0.012, "galva_pylone", o2)
+				RemonteeKit.poutre(_cont(), c + o2 * sy, c + o2 * sy + Vector3(0, R_PNEU + 0.16, 0), 0.05, 0.012, "galva_pylone", o2)
 			MeshMerge.merge(pn, [], "Pneu")
 			_pneus.append([pn, s2, base, 0.0])
 			x += 0.62
@@ -3021,7 +3141,7 @@ func _poser_pylones() -> void:
 		py.deviation = atan2(y_cable(d) - y_cable(d - e), e) - atan2(y_cable(d + e) - y_cable(d), e)
 		py.position = Vector3(0, t, -d)
 		py.name = "P%d" % (i + 1)
-		add_child(py)
+		_enfant(py)
 		py.construire()
 		MeshMerge.merge(py, py.mobiles, "Pylone")
 		for m in py.mobiles:
@@ -3090,7 +3210,7 @@ func _poser_pylones_teleski() -> void:
 			py.hauteur = y_c - t - py.dessus_traverse
 			py.position = Vector3(xc, t, -d)
 			py.name = "P%d%s" % [i + 1, "" if cote == 0 else ("m" if cote == 1 else "d")]
-			add_child(py)
+			_enfant(py)
 			py.construire()
 			MeshMerge.merge(py, [], "Pylone")
 			_pyl.append([py, d])
@@ -3127,7 +3247,7 @@ func _batterie_gare(aval: bool) -> void:
 	py.deviation = dev
 	py.position = Vector3(0, terrain(d), -d)
 	py.name = "Batterie%s" % ("Aval" if aval else "Amont")
-	add_child(py)
+	_enfant(py)
 	py.construire()
 	MeshMerge.merge(py, py.mobiles, "Batterie")
 	for m in py.mobiles:
@@ -3235,7 +3355,7 @@ func _cable() -> void:
 	pts.append(pts[0])
 	var c: Node3D = Node3D.new()
 	c.name = "Cable"
-	add_child(c)
+	_enfant(c)
 	# câble à torons du funiculaire, au diamètre de la ligne, qui défile
 	_mat_cable = RemonteeKit.materiau_cable_tracteur(diametre_cable)
 	if tricable():
@@ -3381,7 +3501,7 @@ func _ajouter_vehicule(s: float, magasin: bool = false) -> void:
 	v.famille = famille
 	v.miroir = not sens_droite
 	v.livree = station
-	add_child(v)
+	_enfant(v)
 	v.construire()
 	_vehicules.append([v, s])
 	_placer(_vehicules.size() - 1)
@@ -3617,7 +3737,7 @@ func _creer_lointains() -> void:
 		mmi.multimesh = mm
 		mmi.material_override = mi.material_override
 		mmi.cast_shadow = mi.cast_shadow
-		add_child(mmi)
+		_enfant(mmi)
 		_lointains.append(mmi)
 		rids.append(mm.get_rid())
 		var rel: Transform3D = inv * mi.global_transform
@@ -4008,7 +4128,7 @@ func _poser_pylones_treillis() -> void:
 			py.pente = atan((y_cable(d + 0.25) - y_cable(d - 0.25)) / 0.5)
 			py.deviation = atan(_pente_chainette(d - hs - 0.3, true)) - atan(_pente_chainette(d + hs + 0.3, true))
 		py.name = "P%d" % (i + 1)
-		add_child(py)
+		_enfant(py)
 		py.construire()
 		MeshMerge.merge(py, [], "Pylone")
 		await _pause("pylônes treillis")

@@ -346,17 +346,29 @@ func _poser(D: Dictionary) -> void:
 	lg.set_process(false)
 	add_child(lg)
 	# construite plus tard, quand le skieur approche (_construire_proches)
+	# construite sur un autre fil : portées et couche posées sur le contenu
+	# avant son entrée dans la scène, sur ce fil-là (sur le fil principal, ces
+	# milliers d'appels au rendu coûtaient 15 à 35 ms d'un bloc)
+	lg.prepa_contenu = func(racine: Node) -> void:
+		_portees(racine)
+		Cabin.tag_layer(racine, Cabin.LAYER_VOIE)
 	lg.construite.connect(func() -> void:
-		_portees(lg)
-		Cabin.tag_layer(lg, Cabin.LAYER_VOIE)
+		if lg.contenu_prepare:
+			for c in lg.get_children():
+				if c is MultiMeshInstance3D:           # (véhicules lointains, posés à la fin)
+					Cabin.tag_layer(c, Cabin.LAYER_VOIE)
+		else:
+			_portees(lg)
+			Cabin.tag_layer(lg, Cabin.LAYER_VOIE)
 		_en_cours = null)
 	var m: Vector2 = (a + b) * 0.5
 	lignes.append([lg, Vector3(m.x, relief.hauteur_sol(m.x, m.y), m.y)])
 
 
 ## Distances de visibilité : véhicules proches seulement, pylônes et câble loin.
-func _portees(lg: LigneRemontee) -> void:
-	for c in lg.get_children():
+## (`racine` : la ligne, ou le contenu en construction hors de la scène)
+func _portees(racine: Node) -> void:
+	for c in racine.get_children():
 		# (véhicules lointains en MultiMesh : leur portée est gérée par le noyau,
 		# instance par instance — mesurée d'ici, depuis la gare aval, une portée
 		# les faisait disparaître à 250 m de la gare)
