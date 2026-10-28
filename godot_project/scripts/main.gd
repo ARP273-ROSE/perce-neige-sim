@@ -2064,6 +2064,38 @@ func skieur_externe(on: bool) -> void:
 		_sortir_skieur()
 
 
+## L'hiver : neige, relief ombré, pistes damées et balisées.
+func _poser_domaine() -> void:
+	if domaine != null:
+		return
+	domaine = DomaineSkiable.new()
+	domaine.name = "DomaineSkiable"
+	add_child(domaine)
+	domaine.construire(relief)
+	# emprise de la gare du haut (relief évidé sous le bâtiment) : les
+	# itinéraires à ski l'évitent — la BOUCLE partie de la terrasse y
+	# tombait (retour d'utilisateur, 13/10/2026)
+	var xh: Transform3D = tunnel.transform_at(PNConstants.LENGTH)
+	var ax: Vector2 = Vector2(-xh.basis.z.x, -xh.basis.z.z).normalized()
+	domaine.zones_interdites = [[Vector2(xh.origin.x, xh.origin.z), ax, 55.0, 32.0]]
+
+
+## Remontées mécaniques du domaine (lignes exportées du dossier des
+## remontées, à leur place réelle) ; le skieur leur est donné à l'entrée.
+func _poser_remontees() -> void:
+	if remontees != null:
+		return
+	remontees = RemonteesDomaine.new()
+	remontees.name = "Remontees"
+	add_child(remontees)
+	if station_halls != null:
+		remontees.gare_amont = station_halls.gare_amont
+	remontees.construire(relief)
+	remontees.message.connect(func(t: String) -> void: commandes_skieur.message(t, 3.0))
+	remontees.pique.connect(func(evt: String, lg: LigneRemontee) -> void:
+		commandes_skieur.pique(PiquesRemontees.pique(evt, lg, challenge.lang if challenge != null else "fr")))
+
+
 func _entrer_skieur() -> void:
 	if relief == null or not relief.pret:
 		_flash("Le relief se prépare encore : réessayer dans un instant")
@@ -2089,6 +2121,13 @@ func _entrer_skieur() -> void:
 			_skieur_en_attente = true
 			_t_skieur_attente = Time.get_ticks_msec()
 			_skieur_prep("Préparation du décor du skieur…")
+		elif domaine == null:
+			# (pendant la préparation des collisions, une chose par image : posés
+			# à l'entrée, domaine et remontées faisaient une image de 450 ms sur
+			# le PC — relevés du 28/10/2026)
+			_poser_domaine()
+		elif remontees == null:
+			_poser_remontees()
 		return
 	if _skieur_en_attente:
 		var ms: int = Time.get_ticks_msec() - _t_skieur_attente
@@ -2160,31 +2199,10 @@ func _entrer_skieur() -> void:
 	for a in ["brake", "speed_up", "speed_down", "emergency"]:
 		if Input.is_action_pressed(a):
 			Input.action_release(a)
-	# l'hiver : neige, relief ombré, pistes damées et balisées
-	if domaine == null:
-		domaine = DomaineSkiable.new()
-		domaine.name = "DomaineSkiable"
-		add_child(domaine)
-		domaine.construire(relief)
-		# emprise de la gare du haut (relief évidé sous le bâtiment) : les
-		# itinéraires à ski l'évitent — la BOUCLE partie de la terrasse y
-		# tombait (retour d'utilisateur, 13/10/2026)
-		var xh: Transform3D = tunnel.transform_at(PNConstants.LENGTH)
-		var ax: Vector2 = Vector2(-xh.basis.z.x, -xh.basis.z.z).normalized()
-		domaine.zones_interdites = [[Vector2(xh.origin.x, xh.origin.z), ax, 55.0, 32.0]]
-	# remontées mécaniques du domaine (échantillon : lignes exportées du
-	# dossier des remontées, à leur place réelle)
-	if remontees == null:
-		remontees = RemonteesDomaine.new()
-		remontees.name = "Remontees"
-		add_child(remontees)
-		if station_halls != null:
-			remontees.gare_amont = station_halls.gare_amont
-		remontees.construire(relief)
+	_poser_domaine()
+	_poser_remontees()
+	if remontees.skieur == null:
 		remontees.skieur = skieur
-		remontees.message.connect(func(t: String) -> void: commandes_skieur.message(t, 3.0))
-		remontees.pique.connect(func(evt: String, lg: LigneRemontee) -> void:
-			commandes_skieur.pique(PiquesRemontees.pique(evt, lg, challenge.lang if challenge != null else "fr")))
 	relief.set_hiver(1.0)
 	commandes_skieur.set_chausse(skieur.chausse)
 	mode_skieur = true
