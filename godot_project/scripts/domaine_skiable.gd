@@ -256,8 +256,12 @@ func _construire_panneaux() -> void:
 		l.transform = Transform3D(Basis(nx, Vector3.UP, nz), pos + nz * 0.026)
 		racine.add_child(l)
 		n_panneaux += 1
-	if DisplayServer.get_name() != "headless":
+	if DisplayServer.get_name() != "headless" and faces_panneaux:
 		_faces_panneaux.call_deferred(par_piste)
+
+
+## Bancs : faces dessinées des panneaux (nom de la piste en arc) ou non.
+static var faces_panneaux: bool = true
 
 
 ## Disque plat de rayon r face à +Z, UV de la texture carrée qui l'inscrit.
