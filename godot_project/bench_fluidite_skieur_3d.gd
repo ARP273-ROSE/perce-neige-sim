@@ -191,7 +191,11 @@ func _tick() -> void:
 			_ext_ajout()
 			if ms > 33.0:
 				var ec: LigneRemontee = rm._en_cours
-				_acoups.append([ms, str(ec.name) if ec != null else "rien (collisions, relief…)", dpip])
+				_acoups.append([ms, str(ec.name) if ec != null else "rien (collisions, relief…)", dpip,
+					Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0,
+					Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS) * 1000.0,
+					RenderingServer.get_frame_setup_time_cpu(),
+					LigneRemontee.rattaches_image if LigneRemontee._image_rattaches >= Engine.get_process_frames() - 1 else 0])
 			if _t > 25.0:
 				_resultats.append("   « %s » : %s" % [_tournee[_k_tour], _stats(_durees)])
 				_tout.append_array(_durees)
@@ -206,6 +210,8 @@ func _tick() -> void:
 					for a in _acoups:
 						par[a[1]] = par.get(a[1], []) + [a[0]]
 						pips[a[1]] = int(pips.get(a[1], 0)) + int(a[2])
+						_resultats.append("       %.0f ms : scripts %.0f, physique %.0f, préparation du rendu %.0f ms ; nœuds rattachés dans l'image %d (%s)" % [
+							a[0], a[3], a[4], a[5], a[6], a[1]])
 					for k in par:
 						var l: Array = par[k]
 						l.sort()

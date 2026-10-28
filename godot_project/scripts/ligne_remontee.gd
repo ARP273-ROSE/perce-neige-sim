@@ -283,6 +283,9 @@ var _tache: int = -1
 ## en fond — rattachement d'un paquet, fin de construction (ms).
 static var fil_pire_ms: float = 0.0
 static var fil_pire_fin_ms: float = 0.0
+## Banc : nœuds rattachés pendant l'image en cours (toutes lignes).
+static var rattaches_image: int = 0
+static var _image_rattaches: int = -1
 ## Repère monde de la ligne, relevé sur le fil principal (global_transform ne
 ## se lit pas depuis un autre fil ; les lignes ne bougent pas).
 var xf_monde: Transform3D = Transform3D.IDENTITY
@@ -347,6 +350,10 @@ func _fil_fini() -> void:
 	for c in _chantier.get_children():
 		_chantier.remove_child(c)
 		add_child(c)
+		if Engine.get_process_frames() != _image_rattaches:
+			_image_rattaches = Engine.get_process_frames()
+			rattaches_image = 0
+		rattaches_image += 1
 		if Time.get_ticks_usec() - t0 > 2000:
 			fil_pire_ms = maxf(fil_pire_ms, (Time.get_ticks_usec() - t0) / 1000.0)
 			await get_tree().process_frame
