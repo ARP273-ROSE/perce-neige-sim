@@ -151,7 +151,10 @@ var _t_mesure: int = 0
 
 
 func _pause(etape: String = "") -> void:
-	if mesurer_tranches and _chantier == null:     # (sur l'autre fil, rien ne bloque l'image)
+	if _chantier != null:
+		_pause_fil()
+		return
+	if mesurer_tranches:
 		var now: int = Time.get_ticks_usec()
 		var ms: float = (now - maxi(_t_mesure, _t_tranche)) / 1000.0
 		var tr: Array = tranches.get(etape, [0.0, "", 0, 0.0])
@@ -299,6 +302,7 @@ static func _fil_possible() -> bool:
 
 func _construire_fil() -> void:
 	progressif = false
+	_t_tranche = Time.get_ticks_usec()
 	await _construire_corps()
 	progressif = true
 	# (le noyau ne garde que les nœuds ; les véhicules lointains se posent
@@ -316,6 +320,24 @@ func _cont() -> Node3D:
 	return _chantier if _chantier != null else self
 
 
+## Sur l'autre fil : après FIL_US de travail dans une image, on attend la
+## suivante. Les maillages et objets créés ici ne partent pas tout de suite au
+## rendu : le fil principal exécute leurs ordres, tous d'un coup, au début de
+## l'image suivante — sans ce frein, des images de 80 ms sur le PC (relevés
+## du 28/10/2026 : ni scripts, ni physique, ni nœuds rattachés).
+const FIL_US: int = 4000
+var _abandon: bool = false
+
+
+func _pause_fil() -> void:
+	if Time.get_ticks_usec() - _t_tranche < FIL_US:
+		return
+	var f0: int = Engine.get_process_frames()
+	while Engine.get_process_frames() == f0 and not _abandon:
+		OS.delay_msec(1)
+	_t_tranche = Time.get_ticks_usec()
+
+
 ## Enfant posé par la construction : sous `_chantier` pendant le fil.
 func _enfant(n: Node) -> void:
 	if _chantier != null:
@@ -328,7 +350,9 @@ func _enfant(n: Node) -> void:
 ## les modèles de véhicules partagés sont libérés juste après (domaine).
 func _exit_tree() -> void:
 	if _tache >= 0:
+		_abandon = true            # (le fil n'attend plus les images : il finit d'un trait)
 		WorkerThreadPool.wait_for_task_completion(_tache)
+		_abandon = false
 		_tache = -1
 		if _chantier != null:
 			_chantier.free()
