@@ -46,7 +46,10 @@ func _tick() -> void:
 func _calculer() -> void:
 	var k_part: int = 0
 	var n_part: int = 1
+	var effort: int = 0
 	for a in OS.get_cmdline_user_args():
+		if String(a).begins_with("--effort="):
+			effort = int(String(a).substr(9))
 		if String(a).begins_with("--part="):
 			var t: PackedStringArray = String(a).substr(7).split("/")
 			k_part = int(t[0]) - 1
@@ -67,7 +70,9 @@ func _calculer() -> void:
 		await lg._calculer_tetes()
 		lg._preparer_nez()
 		var av: Array = _defauts(lg)
-		_optimiser(lg)
+		var h0: Array = lg._tetes.duplicate()
+		_optimiser(lg, h0)
+		_relances(lg, h0, effort)
 		var ap: Array = _defauts(lg)
 		bilan[0] += av[0]
 		bilan[1] += ap[0]
@@ -130,9 +135,8 @@ func _cout_local(lg: LigneRemontee, i: int, h0: Array) -> float:
 
 ## Descente coordonnée : chaque tête bouge de ±pas tant que le coût local
 ## baisse, pas de 8 m à 0,25 m.
-func _optimiser(lg: LigneRemontee) -> void:
+func _optimiser(lg: LigneRemontee, h0: Array) -> void:
 	var n: int = lg.pylones.size()
-	var h0: Array = lg._tetes.duplicate()
 	var lo: Array = []
 	var hi: Array = []
 	for i in range(n):
@@ -161,6 +165,43 @@ func _optimiser(lg: LigneRemontee) -> void:
 			lg._preparer_nez()
 			if not mieux:
 				break
+
+
+## Coût de toute la ligne (même pondération que la descente).
+func _cout_total(lg: LigneRemontee, h0: Array) -> float:
+	var c: float = 0.0
+	for i in range(lg.pylones.size()):
+		c += _pen_dev(lg, i) + POIDS_ECART * pow(float(lg._tetes[i]) - float(h0[i]), 2.0)
+	for k in range(lg.pylones.size() + 1):
+		c += _pen_garde(lg, k)
+	return c
+
+
+## `--effort=N` (gros calcul, PC) : N relances depuis la meilleure solution,
+## têtes perturbées au hasard (±6 m), chacune redescendue ; la meilleure
+## est gardée. Graine fixée par ligne : résultat reproductible.
+func _relances(lg: LigneRemontee, h0: Array, effort: int) -> void:
+	if effort <= 0:
+		return
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash(String(lg.name))
+	var meilleur: Array = lg._tetes.duplicate()
+	var c_best: float = _cout_total(lg, h0)
+	for r in range(effort):
+		for i in range(lg.pylones.size()):
+			var t: float = lg.terrain(float(lg.pylones[i]["d"]))
+			var p: Dictionary = lg.pylones[i]
+			lg._tetes[i] = clampf(float(meilleur[i]) + rng.randf_range(-6.0, 6.0),
+				t + float(p.get("h_min", 6.5)), t + float(p.get("h_max", 36.0)))
+		lg._preparer_nez()
+		_optimiser(lg, h0)
+		var c: float = _cout_total(lg, h0)
+		if c < c_best:
+			c_best = c
+			meilleur = lg._tetes.duplicate()
+	for i in range(meilleur.size()):
+		lg._tetes[i] = meilleur[i]
+	lg._preparer_nez()
 
 
 ## [dépassement total (°), pire dépassement (°), pylônes à plus de 1° au-delà
