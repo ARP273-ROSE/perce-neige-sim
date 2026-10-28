@@ -919,9 +919,13 @@ func _capacite(p: Dictionary) -> Array:
 	var n_c: int = 0
 	for g in p.get("montee", []):
 		var n: int = int(g[0]) if g[0] != null else 2
-		if String(g[1]).contains("S"):
+		if String(g[1]) == "SC":
+			# batterie mixte : n galets, la moitié de chaque côté du câble
+			n_s += n / 2
+			n_c += n / 2
+		elif String(g[1]) == "S":
 			n_s += n
-		if String(g[1]).contains("C"):
+		elif String(g[1]) == "C":
 			n_c += n
 	return [n_s * DEV_PAR_GALET_S, n_c * DEV_PAR_GALET_C]
 
