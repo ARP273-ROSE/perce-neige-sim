@@ -289,6 +289,9 @@ func _faces_panneaux(par_piste: Dictionary) -> void:
 	# transparent (retour d'utilisateur, 09/10/2026 : « tes panneaux de piste ont tendance à
 	# devenir transparents, surtout vus de dos, mais de face aussi »)
 	var quad: ArrayMesh = _disque_texture(R_DISQUE + 0.06)
+	if OS.has_feature("web"):
+		_faces_atlas(par_piste, quad)
+		return
 	var lot: Array = []
 	for ip in par_piste:
 		var sv: SubViewport = SubViewport.new()
@@ -313,6 +316,21 @@ func _faces_panneaux(par_piste: Dictionary) -> void:
 		await _poser_faces(lot, par_piste, quad)
 
 
+## PWA : faces tirées d'un atlas fabriqué d'avance (bake_panneaux_web.gd). Dessiner et
+## relire 300 faces à l'entrée en mode skieur créait ~1 900 textures de passage, et
+## l'iPad perdait son contexte WebGL.
+func _faces_atlas(par_piste: Dictionary, quad: Mesh) -> void:
+	const COLONNES: int = 16
+	var atlas: Texture2D = load("res://textures/web/panneaux_atlas.png")
+	var lignes: int = atlas.get_height() / 128
+	for ip in par_piste:
+		var m: StandardMaterial3D = StandardMaterial3D.new()
+		m.albedo_texture = atlas
+		m.uv1_scale = Vector3(1.0 / COLONNES, 1.0 / lignes, 1.0)
+		m.uv1_offset = Vector3(float(int(ip) % COLONNES) / COLONNES, float(int(ip) / COLONNES) / lignes, 0.0)
+		_poser_face(ip, par_piste, quad, m)
+
+
 func _poser_faces(lot: Array, par_piste: Dictionary, quad: Mesh) -> void:
 	await RenderingServer.frame_post_draw
 	await RenderingServer.frame_post_draw
@@ -325,25 +343,29 @@ func _poser_faces(lot: Array, par_piste: Dictionary, quad: Mesh) -> void:
 		img.generate_mipmaps()
 		var m: StandardMaterial3D = StandardMaterial3D.new()
 		m.albedo_texture = ImageTexture.create_from_image(img)
-		m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
-		# face réfléchissante, non ombrée comme le numéro : à contre-jour, le
-		# bleu virait au noir et le nom disparaissait (retour d'utilisateur, 23/10/2026)
-		m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-		var xs: Array = par_piste[e[0]][2]
-		var mm: MultiMesh = MultiMesh.new()
-		mm.transform_format = MultiMesh.TRANSFORM_3D
-		mm.mesh = quad
-		mm.instance_count = xs.size()
-		for i in range(xs.size()):
-			mm.set_instance_transform(i, xs[i])
-		var mi: MultiMeshInstance3D = MultiMeshInstance3D.new()
-		mi.name = "PanneauxFaces"
-		mi.multimesh = mm
-		mi.material_override = m
-		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		mi.visibility_range_end = 0.0   # (MultiMesh : la portée se mesure au CENTRE du lot, à l'échelle du domaine — les panneaux disparaissaient par moments, 11/10/2026)
-		mi.layers = 1 | Cabin.LAYER_VOIE
-		add_child(mi)
+		_poser_face(e[0], par_piste, quad, m)
+
+
+func _poser_face(ip: int, par_piste: Dictionary, quad: Mesh, m: StandardMaterial3D) -> void:
+	m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+	# face réfléchissante, non ombrée comme le numéro : à contre-jour, le
+	# bleu virait au noir et le nom disparaissait (retour d'utilisateur, 23/10/2026)
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	var xs: Array = par_piste[ip][2]
+	var mm: MultiMesh = MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.mesh = quad
+	mm.instance_count = xs.size()
+	for i in range(xs.size()):
+		mm.set_instance_transform(i, xs[i])
+	var mi: MultiMeshInstance3D = MultiMeshInstance3D.new()
+	mi.name = "PanneauxFaces"
+	mi.multimesh = mm
+	mi.material_override = m
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	mi.visibility_range_end = 0.0   # (MultiMesh : la portée se mesure au CENTRE du lot, à l'échelle du domaine — les panneaux disparaissaient par moments, 11/10/2026)
+	mi.layers = 1 | Cabin.LAYER_VOIE
+	add_child(mi)
 
 
 ## Hors de toute piste (bord de piste + 1 m) : plus strict que piste_sous,

@@ -5,6 +5,20 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.53.2 — 1er novembre 2026
+
+**PWA : entrée en mode skieur sur iPad.** Essai sur iPad 11 pouces en 1.53.1 : contexte WebGL perdu 24 s après
+le lancement, en mode skieur, avec 368 Mo de mémoire vidéo seulement, et même au niveau de secours 1.
+
+- **Faces des panneaux de piste en atlas** (`textures/web/panneaux_atlas.png`, `bake_panneaux_web.gd`) : une
+  SubViewport et une relecture par piste créaient une rafale à l'entrée. Mesure WebKit : textures créées 2 329 → 126,
+  vivantes 410 → 97, 207 → 159 Mo. Faces en 128 px au lieu de 192 sur le web.
+- **Message du moteur supprimé** : son `alert()` bloquait la relance allégée jusqu'à « Fermer ».
+- **Rapport de perte plus précis** : programmes de shaders, temps depuis le dernier, textures, tampons et
+  FBO vivants, état publié toutes les 2 s.
+
+Non vérifié sur iPad : rien ne prouve encore que cette rafale soit la cause de la perte.
+
 ## 1.53.1 — 1er novembre 2026
 
 **PC à carte intégrée.** Non essayé sur le PC concerné (5700G, Vega 8) : à confirmer par son relevé.
