@@ -419,6 +419,12 @@ func _portees(racine: Node) -> void:
 
 
 func _ready() -> void:
+	if PerfManager.secours_web > 0:
+		var fort: bool = PerfManager.secours_web >= 2
+		CONSTRUIRE_JUSQUA = 500.0 if fort else 800.0
+		DEMOLIR_AU_DELA = 900.0 if fort else 1400.0
+		VEHICULES_JUSQUA = 200.0 if fort else 300.0
+		DETAILS_JUSQUA = 80.0 if fort else 120.0
 	# après les lignes (véhicules déjà déplacés), avant le skieur (priorité 100)
 	process_priority = 50
 

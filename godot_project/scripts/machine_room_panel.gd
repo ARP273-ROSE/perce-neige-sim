@@ -65,7 +65,18 @@ func _process_corps(delta: float) -> void:
 		# fixé par la rame 1, à la vitesse du câble à la poulie (même loi
 		# que la 3D, cf. TrainPhysics.machine_v : arrêt si le câble rompt).
 		_pulley_angle += physics.machine_v / SHEAVE_R_M * delta
-	_redraw_slot = HUD.redraw_at_15hz(self, _redraw_slot, 0.5)
+	# PWA : 7,5 Hz, les poulies n'en demandent pas plus
+	_redraw_slot = HUD.redraw_at_15hz(self, _redraw_slot, 0.5, 2 if OS.has_feature("web") else 1)
+
+
+## Tout ce que _draw() affiche, à la précision de l'affichage.
+func signature_affichage() -> int:
+	if physics == null:
+		return 0
+	return hash([snappedf(_pulley_angle, 0.02), snappedf(physics.machine_v, 0.01),
+		snappedf(physics.power_kw_disp, 1.0), snappedf(physics.tension_dan_disp, 5.0),
+		int(physics.trip_time), physics.pax(), physics.cable_rupture, driver_rame2, size,
+		fault_manager.get_active_id() if fault_manager != null else ""])
 
 
 func _draw() -> void:
@@ -76,7 +87,7 @@ func _draw() -> void:
 
 	# Fond + bezel + bandeau doré
 	draw_rect(Rect2(Vector2.ZERO, Vector2(w, h)), bg_color, true)
-	draw_rect(Rect2(Vector2.ZERO, Vector2(w, h)), bezel_color, false, 2.0)
+	HUD.contour(self, Rect2(Vector2.ZERO, Vector2(w, h)), bezel_color, 2.0)
 	draw_rect(Rect2(Vector2.ZERO, Vector2(w, 28.0)), Color(0.18, 0.16, 0.10, 0.92), true)
 	_draw_text_center(Vector2(w * 0.5, 18.0), "SALLE DES MACHINES", 12, Color(0.95, 0.85, 0.25))
 
@@ -120,7 +131,7 @@ func _draw_room(rect: Rect2) -> void:
 	var x0: float = rect.position.x
 	var y0: float = rect.position.y
 	draw_rect(rect, Color(22.0 / 255.0, 28.0 / 255.0, 42.0 / 255.0, 0.94), true)
-	draw_rect(rect, bezel_color, false, 1.5)
+	HUD.contour(self, rect, bezel_color, 1.5)
 	# lueur de fond (mur de béton)
 	draw_rect(Rect2(x0 + 2.0, y0 + 16.0, rect.size.x - 4.0, rect.size.y * 0.45),
 		Color(32.0 / 255.0, 38.0 / 255.0, 54.0 / 255.0, 0.45), true)
@@ -136,11 +147,10 @@ func _draw_room(rect: Rect2) -> void:
 	# Sol de la machinerie, hachuré
 	var floor_y: float = rect.end.y - 16.0 * k
 	draw_rect(Rect2(x0 + 4.0, floor_y, rect.size.x - 8.0, 12.0 * k), Color(48.0 / 255.0, 52.0 / 255.0, 64.0 / 255.0), true)
-	draw_rect(Rect2(x0 + 4.0, floor_y, rect.size.x - 8.0, 12.0 * k), Color(18.0 / 255.0, 18.0 / 255.0, 22.0 / 255.0), false, 1.0)
+	HUD.contour(self, Rect2(x0 + 4.0, floor_y, rect.size.x - 8.0, 12.0 * k), Color(18.0 / 255.0, 18.0 / 255.0, 22.0 / 255.0), 1.0)
 	for i in range(10):
 		var hx: float = x0 + 6.0 + float(i) * (rect.size.x - 12.0) / 10.0
-		draw_line(Vector2(hx, floor_y + 2.0 * k), Vector2(hx + 4.0 * k, floor_y + 10.0 * k),
-			Color(70.0 / 255.0, 74.0 / 255.0, 86.0 / 255.0), 1.0)
+		HUD.segment(self, Vector2(hx, floor_y + 2.0 * k), Vector2(hx + 4.0 * k, floor_y + 10.0 * k), Color(70.0 / 255.0, 74.0 / 255.0, 86.0 / 255.0), 1.0)
 
 	# Charge → teinte des moteurs (bleu → rouge)
 	var load: float = clampf(physics.power_kw_disp / (PNConstants.P_MAX / 1000.0), 0.0, 1.0)
@@ -156,11 +166,11 @@ func _draw_room(rect: Rect2) -> void:
 		draw_rect(Rect2(mx + 1.0, my + 2.0, m_w, m_h), Color(6.0 / 255.0, 8.0 / 255.0, 12.0 / 255.0, 0.65), true)
 		draw_rect(Rect2(mx, my, m_w, m_h), motor_body, true)
 		draw_rect(Rect2(mx, my, m_w * 0.35, m_h), motor_body.darkened(0.30), true)
-		draw_rect(Rect2(mx, my, m_w, m_h), Color(15.0 / 255.0, 15.0 / 255.0, 20.0 / 255.0), false, 1.0)
+		HUD.contour(self, Rect2(mx, my, m_w, m_h), Color(15.0 / 255.0, 15.0 / 255.0, 20.0 / 255.0), 1.0)
 		for kk in range(5):
 			var fy: float = my + 4.0 * k + float(kk) * 6.0 * k
-			draw_line(Vector2(mx + 2.0, fy), Vector2(mx + m_w - 2.0, fy), Color(18.0 / 255.0, 18.0 / 255.0, 22.0 / 255.0), 1.0)
-		draw_circle(Vector2(mx + m_w * 0.5, my + 1.0), 3.0 * k, Color(190.0 / 255.0, 190.0 / 255.0, 200.0 / 255.0))
+			HUD.segment(self, Vector2(mx + 2.0, fy), Vector2(mx + m_w - 2.0, fy), Color(18.0 / 255.0, 18.0 / 255.0, 22.0 / 255.0), 1.0)
+		HUD.disque(self, Vector2(mx + m_w * 0.5, my + 1.0), 3.0 * k, Color(190.0 / 255.0, 190.0 / 255.0, 200.0 / 255.0))
 
 	# Réducteur
 	var gx: float = x0 + 74.0 * k
@@ -169,22 +179,22 @@ func _draw_room(rect: Rect2) -> void:
 	var gh: float = 30.0 * k
 	draw_rect(Rect2(gx, gy, gw, gh), Color(82.0 / 255.0, 85.0 / 255.0, 98.0 / 255.0), true)
 	draw_rect(Rect2(gx, gy, gw, gh * 0.5), Color(110.0 / 255.0, 112.0 / 255.0, 126.0 / 255.0), true)
-	draw_rect(Rect2(gx, gy, gw, gh), Color(18.0 / 255.0, 18.0 / 255.0, 22.0 / 255.0), false, 1.2)
+	HUD.contour(self, Rect2(gx, gy, gw, gh), Color(18.0 / 255.0, 18.0 / 255.0, 22.0 / 255.0), 1.2)
 	for kk in range(4):
 		var ry: float = gy + 5.0 * k + float(kk) * 7.0 * k
-		draw_line(Vector2(gx + 4.0 * k, ry), Vector2(gx + gw - 4.0 * k, ry), Color(25.0 / 255.0, 25.0 / 255.0, 30.0 / 255.0), 1.0)
+		HUD.segment(self, Vector2(gx + 4.0 * k, ry), Vector2(gx + gw - 4.0 * k, ry), Color(25.0 / 255.0, 25.0 / 255.0, 30.0 / 255.0), 1.0)
 	draw_rect(Rect2(gx + 6.0 * k, gy + gh - 8.0 * k, gw - 12.0 * k, 6.0 * k), Color(230.0 / 255.0, 200.0 / 255.0, 60.0 / 255.0), true)
 
 	# Arbre réducteur → poulie motrice
 	var shaft_y: float = gy + gh * 0.5 + 2.0 * k
-	draw_line(Vector2(gx + gw, shaft_y), Vector2(gx + gw + 26.0 * k, shaft_y), Color(150.0 / 255.0, 150.0 / 255.0, 160.0 / 255.0), 4.0 * k)
+	HUD.segment(self, Vector2(gx + gw, shaft_y), Vector2(gx + gw + 26.0 * k, shaft_y), Color(150.0 / 255.0, 150.0 / 255.0, 160.0 / 255.0), 4.0 * k)
 
 	# Deux poulies jaunes Von Roll : motrice (P1) et déviation (P2)
 	var R: float = 32.0 * k
 	var cx1: float = x0 + 152.0 * k
 	var cx2: float = cx1 + R * 2.6
 	var cy: float = floor_y - 52.0 * k
-	draw_line(Vector2(gx + gw + 22.0 * k, shaft_y), Vector2(cx1 - R * 0.15, cy), Color(90.0 / 255.0, 92.0 / 255.0, 105.0 / 255.0), 5.0 * k)
+	HUD.segment(self, Vector2(gx + gw + 22.0 * k, shaft_y), Vector2(cx1 - R * 0.15, cy), Color(90.0 / 255.0, 92.0 / 255.0, 105.0 / 255.0), 5.0 * k)
 	draw_rect(Rect2(gx + gw + 18.0 * k, shaft_y - 4.0 * k, 10.0 * k, 10.0 * k), Color(60.0 / 255.0, 60.0 / 255.0, 70.0 / 255.0), true)
 
 	# Paliers (derrière les roues)
@@ -192,9 +202,9 @@ func _draw_room(rect: Rect2) -> void:
 		var ped: Rect2 = Rect2(cx - 18.0 * k, cy + R * 0.1, 36.0 * k, floor_y - (cy + R * 0.1))
 		draw_rect(ped, Color(60.0 / 255.0, 64.0 / 255.0, 79.0 / 255.0), true)
 		draw_rect(Rect2(ped.position, Vector2(ped.size.x, ped.size.y * 0.5)), Color(80.0 / 255.0, 84.0 / 255.0, 100.0 / 255.0), true)
-		draw_rect(ped, Color(20.0 / 255.0, 20.0 / 255.0, 24.0 / 255.0), false, 1.0)
+		HUD.contour(self, ped, Color(20.0 / 255.0, 20.0 / 255.0, 24.0 / 255.0), 1.0)
 		for sx in [-1.0, 1.0]:
-			draw_circle(Vector2(cx + sx * 12.0 * k, ped.end.y - 4.0 * k), 1.5 * k, Color(180.0 / 255.0, 180.0 / 255.0, 190.0 / 255.0))
+			HUD.disque(self, Vector2(cx + sx * 12.0 * k, ped.end.y - 4.0 * k), 1.5 * k, Color(180.0 / 255.0, 180.0 / 255.0, 190.0 / 255.0))
 
 	# Câble en huit : arc extérieur de P1, croisement, arc extérieur de P2,
 	# croisement — une seule polyligne fermée, tangentes lisses.
@@ -229,8 +239,8 @@ func _draw_room(rect: Rect2) -> void:
 
 	# Brins d'entrée et de sortie, verticaux vers le tunnel (sous le sol)
 	for col_w in [[shadow, 5.0 * k], [core, 2.4 * k]]:
-		draw_line(Vector2(cx1, floor_y + 1.0), Vector2(cx1, cy + cable_r), col_w[0], col_w[1])
-		draw_line(Vector2(cx2, cy + cable_r), Vector2(cx2, floor_y + 1.0), col_w[0], col_w[1])
+		HUD.segment(self, Vector2(cx1, floor_y + 1.0), Vector2(cx1, cy + cable_r), col_w[0], col_w[1])
+		HUD.segment(self, Vector2(cx2, cy + cable_r), Vector2(cx2, floor_y + 1.0), col_w[0], col_w[1])
 
 	# Repère qui défile sur le câble à v = ω · r_câble
 	if pts.size() > 2:
@@ -247,12 +257,11 @@ func _draw_room(rect: Rect2) -> void:
 					mark = pts[i].lerp(pts[i + 1], (d - acc) / maxf(seg, 0.001))
 					break
 				acc += seg
-			draw_circle(mark, 3.0 * k, Color(20.0 / 255.0, 20.0 / 255.0, 28.0 / 255.0))
+			HUD.disque(self, mark, 3.0 * k, Color(20.0 / 255.0, 20.0 / 255.0, 28.0 / 255.0))
 			draw_arc(mark, 3.0 * k, 0.0, TAU, 16, Color(240.0 / 255.0, 240.0 / 255.0, 245.0 / 255.0), 0.8, true)
 
 	# LED de puissance : vert → rouge avec la charge
-	draw_circle(Vector2(rect.end.x - 12.0 * k, y0 + 12.0 * k), 3.5 * k,
-		Color((100.0 + 155.0 * load) / 255.0, (220.0 - 160.0 * load) / 255.0, 80.0 / 255.0))
+	HUD.disque(self, Vector2(rect.end.x - 12.0 * k, y0 + 12.0 * k), 3.5 * k, Color((100.0 + 155.0 * load) / 255.0, (220.0 - 160.0 * load) / 255.0, 80.0 / 255.0))
 	draw_arc(Vector2(rect.end.x - 12.0 * k, y0 + 12.0 * k), 3.5 * k, 0.0, TAU, 16, Color(10.0 / 255.0, 10.0 / 255.0, 10.0 / 255.0), 1.0, true)
 
 
@@ -261,13 +270,13 @@ func _draw_room(rect: Rect2) -> void:
 ## moyeu ; un bout d'arbre à gauche sur la motrice.
 func _draw_bullwheel(cx: float, cy: float, r: float, angle: float, drive: bool, k: float) -> void:
 	var c: Vector2 = Vector2(cx, cy)
-	draw_circle(Vector2(cx + 1.5 * k, cy + 3.0 * k), r + k, Color(0.0, 0.0, 0.0, 0.6))
-	draw_circle(c, r, Color(225.0 / 255.0, 170.0 / 255.0, 25.0 / 255.0))
+	HUD.disque(self, Vector2(cx + 1.5 * k, cy + 3.0 * k), r + k, Color(0.0, 0.0, 0.0, 0.6))
+	HUD.disque(self, c, r, Color(225.0 / 255.0, 170.0 / 255.0, 25.0 / 255.0))
 	draw_arc(c, r - 0.75, 0.0, TAU, 64, Color(60.0 / 255.0, 42.0 / 255.0, 0.0), 1.5, true)
 	draw_arc(c, r - 2.6 * k, 0.0, TAU, 64, Color(110.0 / 255.0, 75.0 / 255.0, 0.0), 1.3, true)
 	draw_arc(c, r - 5.0 * k, 0.0, TAU, 64, Color(60.0 / 255.0, 42.0 / 255.0, 0.0), 0.8, true)
-	draw_circle(c, r * 0.82, Color(255.0 / 255.0, 225.0 / 255.0, 75.0 / 255.0))
-	draw_circle(c + Vector2(-r * 0.25, -r * 0.25), r * 0.45, Color(1.0, 0.95, 0.55, 0.35))
+	HUD.disque(self, c, r * 0.82, Color(255.0 / 255.0, 225.0 / 255.0, 75.0 / 255.0))
+	HUD.disque(self, c + Vector2(-r * 0.25, -r * 0.25), r * 0.45, Color(1.0, 0.95, 0.55, 0.35))
 	draw_arc(c, r * 0.82, 0.0, TAU, 64, Color(90.0 / 255.0, 60.0 / 255.0, 5.0 / 255.0), 1.0, true)
 	for kk in range(5):
 		var ang: float = angle + float(kk) * TAU / 5.0
@@ -277,10 +286,10 @@ func _draw_bullwheel(cx: float, cy: float, r: float, angle: float, drive: bool, 
 		draw_line(p1, p2, Color(140.0 / 255.0, 95.0 / 255.0, 0.0), 4.0 * k, true)
 		draw_line(p1, p2, Color(255.0 / 255.0, 220.0 / 255.0, 60.0 / 255.0), 1.5 * k, true)
 		if kk == 0:
-			draw_circle(p2, 2.0 * k, Color(220.0 / 255.0, 60.0 / 255.0, 40.0 / 255.0))
-	draw_circle(c, r * 0.19, Color(75.0 / 255.0, 78.0 / 255.0, 92.0 / 255.0))
+			HUD.disque(self, p2, 2.0 * k, Color(220.0 / 255.0, 60.0 / 255.0, 40.0 / 255.0))
+	HUD.disque(self, c, r * 0.19, Color(75.0 / 255.0, 78.0 / 255.0, 92.0 / 255.0))
 	draw_arc(c, r * 0.19, 0.0, TAU, 32, Color(18.0 / 255.0, 18.0 / 255.0, 22.0 / 255.0), 1.5, true)
-	draw_circle(c, r * 0.08, Color(200.0 / 255.0, 200.0 / 255.0, 210.0 / 255.0))
+	HUD.disque(self, c, r * 0.08, Color(200.0 / 255.0, 200.0 / 255.0, 210.0 / 255.0))
 	if drive:
 		draw_rect(Rect2(cx - r - 4.0 * k, cy - 3.0 * k, 6.0 * k, 6.0 * k), Color(160.0 / 255.0, 160.0 / 255.0, 170.0 / 255.0), true)
 
@@ -288,7 +297,7 @@ func _draw_bullwheel(cx: float, cy: float, r: float, angle: float, drive: bool, 
 func _draw_motor_bank(x: float, y: float, w: float, h: float) -> void:
 	# Cadre
 	draw_rect(Rect2(Vector2(x, y), Vector2(w, h)), Color(0.04, 0.05, 0.07), true)
-	draw_rect(Rect2(Vector2(x, y), Vector2(w, h)), bezel_color, false, 1.2)
+	HUD.contour(self, Rect2(Vector2(x, y), Vector2(w, h)), bezel_color, 1.2)
 	_draw_text(Vector2(x + 6, y + 14), "GROUPES MOTEURS", 11, label_color)
 	_draw_text(Vector2(x + 6, y + 28), "3 × DC 800 kW (Von Roll)", 9, Color(0.75, 0.78, 0.82))
 
@@ -318,8 +327,7 @@ func _draw_motor_bank(x: float, y: float, w: float, h: float) -> void:
 		if (motor_degraded and i == 2) or (motor_thermal and i == 0):
 			motor_col = Color(0.45, 0.20, 0.20)   # rouge si HS
 		draw_rect(Rect2(Vector2(mx, my), Vector2(motor_w, mh * 0.45)), motor_col, true)
-		draw_rect(Rect2(Vector2(mx, my), Vector2(motor_w, mh * 0.45)), bezel_color, false, 1.0)
-
+		HUD.contour(self, Rect2(Vector2(mx, my), Vector2(motor_w, mh * 0.45)), bezel_color, 1.0)
 		# Label (M1/M2/M3)
 		_draw_text_center(Vector2(mx + motor_w * 0.5, my + 13), "M%d" % (i + 1), 11, Color(0.95, 1.0, 0.95))
 
@@ -327,7 +335,7 @@ func _draw_motor_bank(x: float, y: float, w: float, h: float) -> void:
 		var led_col: Color = Color(0.20, 0.85, 0.35) if p_per_motor[i] > 0.0 else Color(0.18, 0.18, 0.20)
 		if (motor_degraded and i == 2):
 			led_col = Color(1.0, 0.20, 0.18)
-		draw_circle(Vector2(mx + motor_w * 0.5, my + mh * 0.33), 4.0, led_col)
+		HUD.disque(self, Vector2(mx + motor_w * 0.5, my + mh * 0.33), 4.0, led_col)
 
 		# Mini bar de puissance verticale en bas
 		var bar_y: float = my + mh * 0.45 + 4.0
@@ -341,8 +349,7 @@ func _draw_motor_bank(x: float, y: float, w: float, h: float) -> void:
 			fill_col = Color(1.0, 0.80, 0.20)
 		draw_rect(Rect2(Vector2(mx + 1.0, bar_y + bar_h * (1.0 - p_norm)),
 			Vector2(motor_w - 2.0, bar_h * p_norm)), fill_col, true)
-		draw_rect(Rect2(Vector2(mx, bar_y), Vector2(motor_w, bar_h)), Color(0.55, 0.60, 0.65), false, 1.0)
-
+		HUD.contour(self, Rect2(Vector2(mx, bar_y), Vector2(motor_w, bar_h)), Color(0.55, 0.60, 0.65), 1.0)
 		# Lecture kW
 		_draw_text_center(Vector2(mx + motor_w * 0.5, bar_y + bar_h - 4.0),
 			"%.0f" % p_per_motor[i], 10, Color(1.0, 1.0, 1.0))

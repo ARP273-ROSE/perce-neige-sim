@@ -5,6 +5,37 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.53.0 — 1er novembre 2026
+
+**PWA : pertes du contexte WebGL sur iPad.** Les rapports du 29 octobre montrent `createProgram`
+qui renvoie null quelques dizaines de secondes après le lancement : le contexte WebGL est perdu.
+Mesures dans WebKit (compteurs posés sur les appels WebGL), au lancement puis après le passage en jeu :
+
+| | avant | après |
+|---|---|---|
+| tas wasm | 286 → 412 Mo | 199 → 239 Mo |
+| textures | 189 Mo | 138 Mo |
+| tampons de rendu (MSAA) | 60 Mo | 30 Mo |
+| moteur JS + wasm | 5,5 + 42,6 Mo | 0,3 + 37,7 Mo |
+| tampons graphiques créés par dessin des instruments | 145 | 52, aucun à l'arrêt |
+
+- **Perte du contexte rattrapée** : rapport avec l'état du jeu, puis relance automatique en mode
+  allégé (2 niveaux gardés pour cette version sur cet appareil : crans, anti-crénelage, portée des
+  remontées) ; si elle se reproduit au niveau 2, un écran explicite remplace la relance en boucle.
+  Page cachée : relance au retour, sans changer de niveau.
+- **Moteur web sans modules** : le moteur « dlink » était livré alors que le module C++ n'est pas
+  déployé (`MODULE_WEB=1` le remet pour un essai).
+- **Textures web** déjà réduites (`textures/web/`, `tools_textures_web.py`) : les originaux ne sont
+  plus envoyés à la carte puis relus. Originaux exclus de l'export Web.
+- **Anti-crénelage web** ×4 → ×2, coupé au cran 6 et en mode allégé.
+- **Instruments** : redessinés seulement si une valeur affichée change et jamais quand ils sont cachés (leur cache se
+  rendait aussi en vue skieur), salle des machines à 7,5 Hz sur le web, mini-carte à 15 Hz au lieu de
+  chaque image. `HUD.disque/segment/contour` remplacent `draw_circle/line/rect` : en OpenGL, ces
+  derniers recréent leurs tampons à chaque dessin. Rendu identique à la capture.
+- `tests/web/` : scripts Playwright de mesure mémoire, de tampons et de perte simulée.
+
+Non vérifié sur un vrai iPad : la cause de la perte n'est pas reproductible dans WebKit sous Linux.
+
 ## 1.52.0 — 28 octobre 2026
 
 **Les remontées se construisent sur un autre cœur du processeur.** Relevés du PC (5900X,

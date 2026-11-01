@@ -1,0 +1,14 @@
+[remap]
+
+importer="image"
+type="Image"
+uid="uid://ceqthabcoefyb"
+path="res://.godot/imported/relief_ortho.jpg-5c89c2c8347a26ced8a6b8a546783363.image"
+
+[deps]
+
+source_file="res://textures/web/relief_ortho.jpg"
+dest_files=["res://.godot/imported/relief_ortho.jpg-5c89c2c8347a26ced8a6b8a546783363.image"]
+
+[params]
+

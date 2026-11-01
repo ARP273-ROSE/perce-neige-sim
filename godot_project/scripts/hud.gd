@@ -224,15 +224,66 @@ func _fit_cache(tr: TextureRect, sv: SubViewport) -> void:
 
 ## Redessine `c` à 15 Hz, au créneau décalé de `phase` (fraction de
 ## créneau), et rafraîchit sa SubViewport de cache. Renvoie le créneau.
-static func redraw_at_15hz(c: CanvasItem, last_slot: int, phase: float) -> int:
-	var slot: int = int(floor(float(Time.get_ticks_msec()) * 0.015 + phase))
+##
+## Rien n'est redessiné si le panneau est caché ou si `signature_affichage()`
+## n'a pas changé : en rendu OpenGL, chaque cercle ou trait épais recrée ses
+## tampons graphiques (144 créés puis détruits par dessin des instruments).
+## Le cache d'une SubViewport se rend même quand son parent est caché.
+static func redraw_at_15hz(c: CanvasItem, last_slot: int, phase: float, diviseur: int = 1) -> int:
+	var slot: int = int(floor(float(Time.get_ticks_msec()) * 0.015 / diviseur + phase))
 	if slot == last_slot:
 		return last_slot
-	c.queue_redraw()
 	var vp: Viewport = c.get_viewport()
+	if vp is SubViewport:
+		var porteur: CanvasItem = vp.get_parent() as CanvasItem
+		if porteur != null and not porteur.is_visible_in_tree():
+			return slot
+	if c.has_method("signature_affichage"):
+		var h: int = c.call("signature_affichage")
+		if c.has_meta("_sig") and int(c.get_meta("_sig")) == h:
+			return slot
+		c.set_meta("_sig", h)
+	c.queue_redraw()
 	if vp is SubViewport:
 		(vp as SubViewport).render_target_update_mode = SubViewport.UPDATE_ONCE
 	return slot
+
+
+static var _tex_disque: ImageTexture = null
+
+
+## Disque plein sans draw_circle() : en rendu OpenGL, chaque draw_circle crée
+## ses 2 tampons graphiques à chaque dessin ; un rectangle texturé n'en crée aucun.
+static func disque(c: CanvasItem, centre: Vector2, r: float, couleur: Color) -> void:
+	if _tex_disque == null:
+		const T: int = 64
+		var img: Image = Image.create_empty(T, T, false, Image.FORMAT_RGBA8)
+		var o: float = (T - 1) * 0.5
+		for y in T:
+			for x in T:
+				var bord: float = clampf(o - Vector2(x - o, y - o).length(), 0.0, 1.0)
+				img.set_pixel(x, y, Color(1, 1, 1, bord))
+		img.generate_mipmaps()
+		_tex_disque = ImageTexture.create_from_image(img)
+	c.draw_texture_rect(_tex_disque, Rect2(centre - Vector2(r, r), Vector2(r, r) * 2.0), false, couleur)
+
+
+## Trait droit sans draw_line() : épais, il crée lui aussi ses tampons à chaque dessin.
+static func segment(c: CanvasItem, a: Vector2, b: Vector2, couleur: Color, largeur: float = 1.0) -> void:
+	var n: Vector2 = (b - a).normalized().orthogonal() * maxf(largeur, 1.0) * 0.5
+	c.draw_primitive(PackedVector2Array([a + n, b + n, b - n, a - n]),
+		PackedColorArray([couleur]), PackedVector2Array())
+
+
+## Contour de rectangle sans draw_rect(…, false) : même raison que segment().
+static func contour(c: CanvasItem, r: Rect2, couleur: Color, largeur: float = 1.0) -> void:
+	var m: float = maxf(largeur, 1.0) * 0.5
+	var x0: Vector2 = r.position
+	var x1: Vector2 = r.end
+	segment(c, Vector2(x0.x - m, x0.y), Vector2(x1.x + m, x0.y), couleur, largeur)
+	segment(c, Vector2(x0.x - m, x1.y), Vector2(x1.x + m, x1.y), couleur, largeur)
+	segment(c, Vector2(x0.x, x0.y), Vector2(x0.x, x1.y), couleur, largeur)
+	segment(c, Vector2(x1.x, x0.y), Vector2(x1.x, x1.y), couleur, largeur)
 
 
 ## Vue skieur : les instruments de conduite (colonne de droite) s'effacent.

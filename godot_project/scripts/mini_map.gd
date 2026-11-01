@@ -87,8 +87,7 @@ func _draw() -> void:
 		return
 	# Fond
 	draw_rect(Rect2(Vector2.ZERO, map_size), bg_color, true)
-	draw_rect(Rect2(Vector2.ZERO, map_size), border_color, false, 2.0)
-
+	HUD.contour(self, Rect2(Vector2.ZERO, map_size), border_color, 2.0)
 	# Titre
 	var title_font: Font = ThemeDB.fallback_font
 	if title_font != null:
@@ -98,11 +97,11 @@ func _draw() -> void:
 
 	# Tracé complet (polyline blanche fine)
 	for i in range(path_points_2d.size() - 1):
-		draw_line(path_points_2d[i], path_points_2d[i + 1], Color(0.78, 0.82, 0.88, 0.85), 1.4)
+		HUD.segment(self, path_points_2d[i], path_points_2d[i + 1], Color(0.78, 0.82, 0.88, 0.85), 1.4)
 
 	# Section passing loop : surcoloration jaune
 	for i in range(loop_start_idx, mini(loop_end_idx, path_points_2d.size() - 1)):
-		draw_line(path_points_2d[i], path_points_2d[i + 1], Color(1.0, 0.85, 0.30, 0.90), 2.6)
+		HUD.segment(self, path_points_2d[i], path_points_2d[i + 1], Color(1.0, 0.85, 0.30, 0.90), 2.6)
 
 	# Marqueur Val Claret (bas) — carré vert
 	if path_points_2d.size() > 0:
@@ -123,7 +122,7 @@ func _draw() -> void:
 		var idx: int = clampi(int(idx_f), 0, path_points_2d.size() - 2)
 		var k: float = idx_f - float(idx)
 		var p_cabin: Vector2 = path_points_2d[idx].lerp(path_points_2d[idx + 1], k)
-		draw_circle(p_cabin, 5.0, Color(1.0, 0.65, 0.10))
+		HUD.disque(self, p_cabin, 5.0, Color(1.0, 0.65, 0.10))
 		draw_circle(p_cabin, 5.0, Color.WHITE, false, 1.5)
 		# Ghost (rame opposée) au point miroir
 		var s_ghost: float = clampf(PNConstants.miroir(physics.s), 0.0, PNConstants.LENGTH)
@@ -131,12 +130,15 @@ func _draw() -> void:
 		var idx_g: int = clampi(int(idx_g_f), 0, path_points_2d.size() - 2)
 		var k_g: float = idx_g_f - float(idx_g)
 		var p_ghost: Vector2 = path_points_2d[idx_g].lerp(path_points_2d[idx_g + 1], k_g)
-		draw_circle(p_ghost, 4.0, Color(0.30, 0.65, 1.0))
+		HUD.disque(self, p_ghost, 4.0, Color(0.30, 0.65, 1.0))
 
 		# Distance restante en bas
 		var dist_text: String = "%.0f / %.0f m" % [
 			PNConstants.distance_compteur(physics.s, physics.direction), PNConstants.PARCOURS]
 		_draw_label(Vector2(padding, map_size.y - padding + 2), dist_text, Color(0.95, 0.95, 0.95))
+
+
+var _redraw_slot: int = -1
 
 
 func _process(delta: float) -> void:
@@ -148,8 +150,15 @@ func _process(delta: float) -> void:
 		_process_corps(delta)
 
 
+## 15 Hz et seulement si elle se voit : en rendu OpenGL, chaque cercle ou trait
+## épais crée puis détruit ses tampons graphiques à chaque dessin.
 func _process_corps(_delta: float) -> void:
-	queue_redraw()
+	if is_visible_in_tree():
+		_redraw_slot = HUD.redraw_at_15hz(self, _redraw_slot, 0.25)
+
+
+func signature_affichage() -> int:
+	return hash([snappedf(physics.s, 1.0), physics.direction, size]) if physics != null else 0
 
 
 func _draw_label(pos: Vector2, text: String, color: Color) -> void:

@@ -44,6 +44,9 @@ const CRAN_MAX: int = 6
 const IPS_REDUITE: int = 5
 const IPS_ARRIERE_PLAN: int = 20
 static var cran_courant: int = 0
+## PWA : niveau de secours après une perte du contexte WebGL (0, 1 ou 2), posé
+## par la page (window.__pn_secours) et gardé pour cette version et cet appareil.
+static var secours_web: int = 0
 const FENETRE_S: float = 2.0
 const CHAUFFE_S: float = 6.0        # compilation des shaders, chargement
 const APRES_CHANGEMENT_S: float = 2.5
@@ -105,10 +108,14 @@ func setup(p_main: Node, p_env: Environment, p_mode: String) -> void:
 	cran_min = 0 if _rd else 2
 	var plancher_web: int = 4  # PWA : départ au réglage bas (mesuré sur iPad)
 	if _web:
+		secours_web = clampi(int(JavaScriptBridge.eval("window.__pn_secours||0", true)), 0, 2)
 		# la PWA DÉMARRE au cran 4 mais peut REMONTER jusqu'au rendu à 100 %
 		# (cran 2) si l'appareil a de la marge — avant, elle restait à 70 %
 		# au mieux et le pupitre était illisible (retour d'utilisateur, 09/10/2026)
 		cran_min = 2
+		if secours_web > 0:
+			cran_min = 5 if secours_web == 1 else 6
+			plancher_web = cran_min
 	var depart: int = maxi(_cran_de_depart(), plancher_web) if (_web and mode == "auto") else _cran_de_depart()
 	# --cran=N : cran imposé, sans adaptation (captures de contrôle)
 	for a in OS.get_cmdline_user_args():
@@ -233,6 +240,10 @@ func _appliquer(c: int, pourquoi: String) -> void:
 			# PC du père : « crénelage net au réglage haute ») — on ne se fie
 			# plus à la valeur lue sur la fenêtre, on l'impose
 			vp.msaa_3d = maxi(_msaa_origine, Viewport.MSAA_4X) if cran <= 2 else Viewport.MSAA_DISABLED
+		if _web:
+			# jamais plus de ×2 sur le web : le ×4 prenait 60 Mo de tampons à
+			# 1671×1167, et il ne s'éteignait à aucun cran
+			vp.msaa_3d = Viewport.MSAA_2X if cran <= 5 and secours_web == 0 else Viewport.MSAA_DISABLED
 		var echelle: float = _echelle(cran)
 		if echelle < 0.999:
 			# FSR 2 (reconstruction temporelle) garde les textes nets ; FSR 1
@@ -268,6 +279,8 @@ func _appliquer(c: int, pourquoi: String) -> void:
 ## Échelle du rendu 3D au cran `c` : PC jamais sous 85 %, PWA comme mesuré.
 func _echelle(c: int) -> float:
 	if _web:
+		if secours_web >= 2:
+			return 0.5
 		return [1.0, 1.0, 1.0, 0.85, 0.7, 0.6, 0.6][c]
 	return [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.85][c]
 
@@ -276,8 +289,8 @@ func _echelle(c: int) -> float:
 func libelle(c: int) -> String:
 	if _web:
 		return ["tout", "sans éclairage indirect", "sans brouillard ni reflets",
-			"sans anti-crénelage, rendu 85 %", "rendu 70 %", "rendu 60 %, sans halo",
-			"30 i/s"][c]
+			"rendu 85 %", "rendu 70 %", "rendu 60 %, sans halo",
+			"30 i/s, sans anti-crénelage"][c]
 	return ["tout", "sans éclairage indirect", "sans brouillard ni reflets",
 		"sans anti-crénelage", "sans halo", "30 i/s", "rendu à 85 %"][c]
 
@@ -342,11 +355,32 @@ func _process(delta: float) -> void:
 
 
 var _pip_prec: Array = []
+var _t_etat_web: float = 0.0
 
 
-func _process_corps(_delta: float) -> void:
+## État lu par la page pour le rapport de perte du contexte WebGL : on ne peut
+## plus rien demander au moteur une fois le contexte perdu.
+func _publier_etat_web() -> void:
+	var p := Performance
+	var etat: String = "cran %d secours %d skieur %s video %.0f tex %.0f tampons %.0f Mo noeuds %d objets %d appels %d" % [
+		cran, secours_web, str(main.get("mode_skieur")),
+		p.get_monitor(p.RENDER_VIDEO_MEM_USED) / 1048576.0,
+		p.get_monitor(p.RENDER_TEXTURE_MEM_USED) / 1048576.0,
+		p.get_monitor(p.RENDER_BUFFER_MEM_USED) / 1048576.0,
+		p.get_monitor(p.OBJECT_NODE_COUNT),
+		p.get_monitor(p.RENDER_TOTAL_OBJECTS_IN_FRAME),
+		p.get_monitor(p.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)]
+	JavaScriptBridge.eval("window.__pn_etat='%s'" % etat, true)
+
+
+func _process_corps(delta: float) -> void:
 	if main == null:
 		return
+	if _web:
+		_t_etat_web -= delta
+		if _t_etat_web <= 0.0:
+			_t_etat_web = 5.0
+			_publier_etat_web()
 	var t_us: int = Time.get_ticks_usec()
 	if _t_prec_us == 0:
 		_t_prec_us = t_us

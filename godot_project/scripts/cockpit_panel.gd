@@ -93,6 +93,17 @@ func _process_corps(_delta: float) -> void:
 	_redraw_slot = HUD.redraw_at_15hz(self, _redraw_slot, 0.0)
 
 
+## Tout ce que _draw() affiche, à la précision de l'affichage.
+func signature_affichage() -> int:
+	if physics == null:
+		return 0
+	return hash([snappedf(physics.s, 0.5), snappedf(physics.vitesse_roues(), 0.02),
+		snappedf(physics.power_kw_disp, 1.0), snappedf(physics.regen_kw_disp, 1.0),
+		snappedf(physics.tension_dan_disp, 5.0), snappedf(physics.speed_cmd, 0.01),
+		physics.direction, physics.emergency_brake, driver_is_rame2, size,
+		fault_manager.get_active_id() if fault_manager != null else ""])
+
+
 func _draw() -> void:
 	if physics == null:
 		return
@@ -110,8 +121,8 @@ func _draw() -> void:
 	var h_tot: float = (fixe + h_d) * k
 	# Fond + bezel métallique, liseré doré en haut
 	draw_rect(Rect2(Vector2.ZERO, Vector2(w, h_tot)), bg_color, true)
-	draw_rect(Rect2(Vector2.ZERO, Vector2(w, h_tot)), bezel_color, false, 2.0)
-	draw_line(Vector2(0, 0), Vector2(w, 0), Color(0.95, 0.75, 0.20, 0.85), 2.5)
+	HUD.contour(self, Rect2(Vector2.ZERO, Vector2(w, h_tot)), bezel_color, 2.0)
+	HUD.segment(self, Vector2(0, 0), Vector2(w, 0), Color(0.95, 0.75, 0.20, 0.85), 2.5)
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2(k, k))
 	var lw: float = w / k                 # largeur dans le repère réduit
 	var y: float = ECART
@@ -138,19 +149,19 @@ func _draw() -> void:
 
 ## Voyant E-STOP (champignon rouge, sombre quand l'urgence est engagée).
 func _draw_estop(cx: float, cy: float) -> void:
-	draw_circle(Vector2(cx, cy), 13.0, Color(0.85, 0.78, 0.18))
+	HUD.disque(self, Vector2(cx, cy), 13.0, Color(0.85, 0.78, 0.18))
 	var active: bool = physics != null and physics.emergency_brake
 	var col: Color = Color(0.50, 0.15, 0.10) if active else Color(0.85, 0.20, 0.15)
-	draw_circle(Vector2(cx, cy), 10.5, col)
-	draw_circle(Vector2(cx - 3, cy - 3), 4.0, Color(1.0, 0.55, 0.40, 0.55))
+	HUD.disque(self, Vector2(cx, cy), 10.5, col)
+	HUD.disque(self, Vector2(cx - 3, cy - 3), 4.0, Color(1.0, 0.55, 0.40, 0.55))
 	_draw_text_center(Vector2(cx, cy + 24), "E-STOP", 8, Color(0.85, 0.85, 0.85))
 
 
 func _draw_speedometer(cx: float, cy: float, radius: float = 70.0) -> void:
 	# Bezel extérieur
-	draw_circle(Vector2(cx, cy), radius + 3.0, Color(0.35, 0.32, 0.28))
+	HUD.disque(self, Vector2(cx, cy), radius + 3.0, Color(0.35, 0.32, 0.28))
 	# Cadran sombre
-	draw_circle(Vector2(cx, cy), radius, Color(0.05, 0.06, 0.08))
+	HUD.disque(self, Vector2(cx, cy), radius, Color(0.05, 0.06, 0.08))
 	# Graduations 0 à 50 km/h (notre V_MAX = 12 m/s ≈ 43 km/h)
 	var v_max_kmh: float = PNConstants.V_MAX * 3.6
 	for i in range(11):
@@ -158,7 +169,7 @@ func _draw_speedometer(cx: float, cy: float, radius: float = 70.0) -> void:
 		var ang: float = lerpf(-PI * 0.75, PI * 0.75, float(i) / 10.0)
 		var p1: Vector2 = Vector2(cx + cos(ang) * (radius - 4.0), cy + sin(ang) * (radius - 4.0))
 		var p2: Vector2 = Vector2(cx + cos(ang) * (radius - 14.0), cy + sin(ang) * (radius - 14.0))
-		draw_line(p1, p2, Color(0.85, 0.88, 0.92), 1.8)
+		HUD.segment(self, p1, p2, Color(0.85, 0.88, 0.92), 1.8)
 		# Chiffre tous les 2 ticks (0, 10, 20, 30, 40)
 		if i % 2 == 0:
 			var p_label: Vector2 = Vector2(cx + cos(ang) * (radius - 26.0), cy + sin(ang) * (radius - 22.0))
@@ -169,9 +180,9 @@ func _draw_speedometer(cx: float, cy: float, radius: float = 70.0) -> void:
 	var v_norm: float = clampf(v_kmh / v_max_kmh, 0.0, 1.0)
 	var needle_ang: float = lerpf(-PI * 0.75, PI * 0.75, v_norm)
 	var needle_end: Vector2 = Vector2(cx + cos(needle_ang) * (radius - 8.0), cy + sin(needle_ang) * (radius - 8.0))
-	draw_line(Vector2(cx, cy), needle_end, Color(1.0, 0.30, 0.20), 3.0)
-	draw_circle(Vector2(cx, cy), 5.0, Color(0.85, 0.88, 0.92))
-	draw_circle(Vector2(cx, cy), 3.0, Color(0.10, 0.10, 0.10))
+	HUD.segment(self, Vector2(cx, cy), needle_end, Color(1.0, 0.30, 0.20), 3.0)
+	HUD.disque(self, Vector2(cx, cy), 5.0, Color(0.85, 0.88, 0.92))
+	HUD.disque(self, Vector2(cx, cy), 3.0, Color(0.10, 0.10, 0.10))
 	# Lecture digitale : m/s dans le cadran (zone libre sous le moyeu),
 	# km/h SOUS le cadran — l'ancien placement à 0.78×R tombait sur les
 	# graduations du bas (retour d'essai 2026-07-13 : valeurs confondues).
@@ -186,7 +197,7 @@ func _draw_speedometer(cx: float, cy: float, radius: float = 70.0) -> void:
 func _draw_tension_gauge(x: float, y: float, w: float, h: float) -> void:
 	# Cadre
 	draw_rect(Rect2(Vector2(x, y), Vector2(w, h)), Color(0.04, 0.05, 0.07), true)
-	draw_rect(Rect2(Vector2(x, y), Vector2(w, h)), bezel_color, false, 1.2)
+	HUD.contour(self, Rect2(Vector2(x, y), Vector2(w, h)), bezel_color, 1.2)
 	# Label
 	_draw_text(Vector2(x + 6, y + 14), "TENSION CÂBLE", 11, label_color)
 	# Échelle de SERVICE 0 → T_GAUGE_MAX (42 000 daN), pas 0 → rupture :
@@ -220,9 +231,9 @@ func _draw_tension_gauge(x: float, y: float, w: float, h: float) -> void:
 	_draw_text(Vector2(x_nom - 12.0, bar_y - 5.0), "NOM", 8, Color(0.85, 0.88, 0.92))
 	# Aiguille de la valeur courante
 	var x_cur: float = bar_x + bar_w * clampf(t_cur / t_max, 0.0, 1.0)
-	draw_line(Vector2(x_cur, bar_y - 3.0), Vector2(x_cur, bar_y + bar_h + 3.0), Color(1.0, 1.0, 1.0), 2.5)
+	HUD.segment(self, Vector2(x_cur, bar_y - 3.0), Vector2(x_cur, bar_y + bar_h + 3.0), Color(1.0, 1.0, 1.0), 2.5)
 	# Cadre bar
-	draw_rect(Rect2(Vector2(bar_x, bar_y), Vector2(bar_w, bar_h)), Color(0.85, 0.88, 0.92), false, 1.0)
+	HUD.contour(self, Rect2(Vector2(bar_x, bar_y), Vector2(bar_w, bar_h)), Color(0.85, 0.88, 0.92), 1.0)
 	# Lecture sous la bar — les couleurs suivent les zones de la jauge
 	var col: Color = Color(0.55, 1.0, 0.65)
 	if t_cur >= t_red:
@@ -239,7 +250,7 @@ func _draw_tension_gauge(x: float, y: float, w: float, h: float) -> void:
 
 func _draw_power_gauge(x: float, y: float, w: float, h: float) -> void:
 	draw_rect(Rect2(Vector2(x, y), Vector2(w, h)), Color(0.04, 0.05, 0.07), true)
-	draw_rect(Rect2(Vector2(x, y), Vector2(w, h)), bezel_color, false, 1.2)
+	HUD.contour(self, Rect2(Vector2(x, y), Vector2(w, h)), bezel_color, 1.2)
 	# Mode RÉGEN : rame lourde retenue en descente → l'entraînement
 	# fonctionne en génératrice. La jauge bascule (titre + barre cyan)
 	# au lieu d'afficher une traction fantôme. HYSTÉRÉSIS : on entre en
@@ -275,7 +286,7 @@ func _draw_power_gauge(x: float, y: float, w: float, h: float) -> void:
 		elif p_norm > 0.65:
 			fill_col = Color(1.0, 0.80, 0.20)
 	draw_rect(Rect2(Vector2(bar_x, bar_y + bar_h - fill_h), Vector2(bar_w, fill_h)), fill_col, true)
-	draw_rect(Rect2(Vector2(bar_x, bar_y), Vector2(bar_w, bar_h)), Color(0.85, 0.88, 0.92), false, 1.0)
+	HUD.contour(self, Rect2(Vector2(bar_x, bar_y), Vector2(bar_w, bar_h)), Color(0.85, 0.88, 0.92), 1.0)
 	# Lecture
 	var read_col: Color = Color(0.55, 0.90, 1.0) if regen_mode else Color(0.85, 1.0, 0.85)
 	_draw_text_center(Vector2(x + w * 0.5, y + h - 24.0),
@@ -285,7 +296,7 @@ func _draw_power_gauge(x: float, y: float, w: float, h: float) -> void:
 
 func _draw_setpoint_panel(x: float, y: float, w: float, h: float) -> void:
 	draw_rect(Rect2(Vector2(x, y), Vector2(w, h)), Color(0.04, 0.05, 0.07), true)
-	draw_rect(Rect2(Vector2(x, y), Vector2(w, h)), bezel_color, false, 1.2)
+	HUD.contour(self, Rect2(Vector2(x, y), Vector2(w, h)), bezel_color, 1.2)
 	_draw_text(Vector2(x + 8, y + 14), "CONSIGNE", 11, label_color)
 
 	# Bar horizontale 0-100%
@@ -297,7 +308,7 @@ func _draw_setpoint_panel(x: float, y: float, w: float, h: float) -> void:
 	var pct: float = physics.speed_cmd if physics != null else 0.0
 	var fill_w: float = bar_w * pct
 	draw_rect(Rect2(Vector2(bar_x, bar_y), Vector2(fill_w, bar_h)), Color(0.20, 0.65, 1.0), true)
-	draw_rect(Rect2(Vector2(bar_x, bar_y), Vector2(bar_w, bar_h)), Color(0.85, 0.88, 0.92), false, 1.0)
+	HUD.contour(self, Rect2(Vector2(bar_x, bar_y), Vector2(bar_w, bar_h)), Color(0.85, 0.88, 0.92), 1.0)
 	_draw_text_center(Vector2(bar_x + bar_w * 0.5, bar_y + 12.5), "%d %%" % int(pct * 100.0), 11, Color(1, 1, 1))
 
 	# Position, altitude, pente
@@ -316,7 +327,7 @@ func _draw_setpoint_panel(x: float, y: float, w: float, h: float) -> void:
 
 func _draw_slope_profile(x: float, y: float, w: float, h: float) -> void:
 	draw_rect(Rect2(Vector2(x, y), Vector2(w, h)), Color(0.04, 0.05, 0.07), true)
-	draw_rect(Rect2(Vector2(x, y), Vector2(w, h)), bezel_color, false, 1.2)
+	HUD.contour(self, Rect2(Vector2(x, y), Vector2(w, h)), bezel_color, 1.2)
 	_draw_text(Vector2(x + 8, y + 14), "PROFIL DE LIGNE", 11, label_color)
 
 	if slope_profile_pts.is_empty():
@@ -329,8 +340,8 @@ func _draw_slope_profile(x: float, y: float, w: float, h: float) -> void:
 	draw_rect(Rect2(Vector2(plot_x, plot_y), Vector2(plot_w, plot_h)), Color(0.02, 0.04, 0.06), true)
 
 	# Axes
-	draw_line(Vector2(plot_x, plot_y + plot_h), Vector2(plot_x + plot_w, plot_y + plot_h), Color(0.5, 0.55, 0.60), 1.0)
-	draw_line(Vector2(plot_x, plot_y), Vector2(plot_x, plot_y + plot_h), Color(0.5, 0.55, 0.60), 1.0)
+	HUD.segment(self, Vector2(plot_x, plot_y + plot_h), Vector2(plot_x + plot_w, plot_y + plot_h), Color(0.5, 0.55, 0.60), 1.0)
+	HUD.segment(self, Vector2(plot_x, plot_y), Vector2(plot_x, plot_y + plot_h), Color(0.5, 0.55, 0.60), 1.0)
 
 	# Étiquettes altitudes
 	_draw_text(Vector2(x + 2, plot_y - 2.0), "%dm" % int(PNConstants.ALT_HIGH), 9, Color(0.85, 0.88, 0.92))
@@ -344,7 +355,7 @@ func _draw_slope_profile(x: float, y: float, w: float, h: float) -> void:
 		var py: float = plot_y + plot_h - sp.y * plot_h
 		var p: Vector2 = Vector2(px, py)
 		if i > 0:
-			draw_line(prev, p, Color(0.85, 0.88, 0.92), 1.6)
+			HUD.segment(self, prev, p, Color(0.85, 0.88, 0.92), 1.6)
 		prev = p
 
 	# Marqueur passing loop (zone jaune verticale)
@@ -366,13 +377,13 @@ func _draw_slope_profile(x: float, y: float, w: float, h: float) -> void:
 		var own_lbl: String = "R2" if driver_is_rame2 else "R1"
 		var opp_lbl: String = "R1" if driver_is_rame2 else "R2"
 		# Rame opposée (bleu clair, plus petite)
-		draw_line(Vector2(p_opp.x, plot_y), Vector2(p_opp.x, plot_y + plot_h), Color(0.45, 0.75, 1.0, 0.40), 1.0)
-		draw_circle(p_opp, 4.0, Color(0.45, 0.75, 1.0))
+		HUD.segment(self, Vector2(p_opp.x, plot_y), Vector2(p_opp.x, plot_y + plot_h), Color(0.45, 0.75, 1.0, 0.40), 1.0)
+		HUD.disque(self, p_opp, 4.0, Color(0.45, 0.75, 1.0))
 		draw_circle(p_opp, 4.0, Color(1, 1, 1), false, 1.0)
 		_draw_text(Vector2(p_opp.x - 8.0, p_opp.y - 8.0), opp_lbl, 9, Color(0.45, 0.75, 1.0))
 		# Rame pilotée (orange)
-		draw_line(Vector2(p_own.x, plot_y), Vector2(p_own.x, plot_y + plot_h), Color(1.0, 0.65, 0.10, 0.6), 1.2)
-		draw_circle(p_own, 5.0, Color(1.0, 0.65, 0.10))
+		HUD.segment(self, Vector2(p_own.x, plot_y), Vector2(p_own.x, plot_y + plot_h), Color(1.0, 0.65, 0.10, 0.6), 1.2)
+		HUD.disque(self, p_own, 5.0, Color(1.0, 0.65, 0.10))
 		draw_circle(p_own, 5.0, Color(1, 1, 1), false, 1.0)
 		_draw_text(Vector2(p_own.x - 8.0, p_own.y - 8.0), own_lbl, 9, Color(1.0, 0.75, 0.35))
 		# Distance
