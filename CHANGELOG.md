@@ -17,7 +17,11 @@ le lancement, en mode skieur, avec 368 Mo de mémoire vidéo seulement, et même
 - **Rapport de perte plus précis** : programmes de shaders, temps depuis le dernier, textures, tampons et
   FBO vivants, état publié toutes les 2 s.
 
-Non vérifié sur iPad : rien ne prouve encore que cette rafale soit la cause de la perte.
+Vérifié sur iPad 11 pouces (Safari 26.5.2) : plus de perte du contexte en mode skieur, plus aucun rapport.
+La perte survenait à 368 Mo de mémoire vidéo seulement : c'est la rafale d'entrée qui était en cause, pas le volume.
+
+Bancs sur le NAS : 33 sur 35 au vert. Les deux échecs (écart au sol de 6,8 cm pour 5 cm tolérés dans le banc ski,
+escalier de la fosse du banc skieur) sont identiques sur la 1.52.0.
 
 ## 1.53.1 — 1er novembre 2026
 

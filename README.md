@@ -307,7 +307,8 @@ python perce_neige_sim.py
   `./build_godot_viewer.sh`. Sans viewer, F4 retombe sur la vue cabine
   dessinée.
 - **Tests** : `QT_QPA_PLATFORM=offscreen pytest tests` ; bancs Godot :
-  `godot --headless --path godot_project -s bench_<nom>.gd`.
+  `godot --headless --fixed-fps 60 --path godot_project -s bench_<nom>.gd`
+  (sans `--fixed-fps 60`, leurs chronomètres comptent mal les images).
 - **Version Web** : `bash deploy_web.sh` (export Web Godot, puis copie sur
   le serveur).
 - **Release PC** : un tag `v*` déclenche GitHub Actions
