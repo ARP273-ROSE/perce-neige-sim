@@ -51,7 +51,6 @@ const [url, W, H, T1, T2] = [process.argv[2], +process.argv[3] || 1194, +process
   await p.goto(url, { waitUntil: 'load', timeout: 180000 });
   for (let i = 0; i < T1 / 10; i++) { await p.waitForTimeout(10000); await lire('menu'); }
   await p.mouse.click(W / 2, H / 2);
-  await p.waitForTimeout(3000);
   await p.keyboard.press('k');
   for (let i = 0; i < T2 / 20; i++) { await p.waitForTimeout(20000); await lire('skieur'); }
   await p.screenshot({ path: '/out/memoire.png' });

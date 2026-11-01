@@ -18,7 +18,7 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 **PWA : pertes du contexte WebGL sur iPad.** Les rapports du 29 octobre montrent `createProgram`
 qui renvoie null quelques dizaines de secondes après le lancement : le contexte WebGL est perdu.
-Mesures dans WebKit (compteurs posés sur les appels WebGL), au lancement puis après le passage en jeu :
+Mesures dans WebKit (compteurs posés sur les appels WebGL), au lancement puis relief chargé, avant le mode skieur :
 
 | | avant | après |
 |---|---|---|
@@ -42,6 +42,9 @@ Mesures dans WebKit (compteurs posés sur les appels WebGL), au lancement puis a
   chaque image. `HUD.disque/segment/contour` remplacent `draw_circle/line/rect` : en OpenGL, ces
   derniers recréent leurs tampons à chaque dessin. Rendu identique à la capture.
 - `tests/web/` : scripts Playwright de mesure mémoire, de tampons et de perte simulée.
+
+En mode skieur, 3 min après l'entrée : tas 344 Mo (412 avant), textures 207 Mo, 26 000 tampons pour 224 Mo, qui montent encore,
+et 279 programmes de shaders. C'est le prochain levier.
 
 Non vérifié sur un vrai iPad : la cause de la perte n'est pas reproductible dans WebKit sous Linux.
 
