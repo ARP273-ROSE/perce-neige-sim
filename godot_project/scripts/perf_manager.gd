@@ -393,7 +393,7 @@ func _process_corps(delta: float) -> void:
 	if _web:
 		_t_etat_web -= delta
 		if _t_etat_web <= 0.0:
-			_t_etat_web = 5.0
+			_t_etat_web = 2.0
 			_publier_etat_web()
 	var t_us: int = Time.get_ticks_usec()
 	if _t_prec_us == 0:
