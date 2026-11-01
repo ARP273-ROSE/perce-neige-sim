@@ -40,7 +40,9 @@ extends Node
 ## `cran_courant` : lu par les constructeurs (relief, panorama) pour choisir
 ## la taille des textures et la finesse des maillages.
 
-const CRAN_MAX: int = 6
+## 6 sur le web ; 7 ailleurs (cartes intégrées : voir _appliquer_cran_igpu).
+const CRAN_MAX_WEB: int = 6
+const CRAN_MAX_PC: int = 7
 const IPS_REDUITE: int = 5
 const IPS_ARRIERE_PLAN: int = 20
 static var cran_courant: int = 0
@@ -218,13 +220,13 @@ func _cran_de_depart() -> int:
 	var ecran: Vector2i = machine.get("ecran", Vector2i(1920, 1080))
 	if ecran.x * ecran.y > 2560 * 1600 and t != "dedie":
 		c = maxi(c, 3)
-	return clampi(maxi(c, cran_min), 0, CRAN_MAX)
+	return clampi(maxi(c, cran_min), 0, _cran_max())
 
 
 # --- Application d'un cran ------------------------------------------------
 
 func _appliquer(c: int, pourquoi: String) -> void:
-	cran = clampi(maxi(c, cran_min), 0, CRAN_MAX)
+	cran = clampi(maxi(c, cran_min), 0, _cran_max())
 	if _env != null and _rd:
 		_env.sdfgi_enabled = cran <= 0
 		_env.volumetric_fog_enabled = cran <= 1
@@ -233,6 +235,12 @@ func _appliquer(c: int, pourquoi: String) -> void:
 		_env.glow_enabled = cran <= (4 if _web else 3)
 	cran_courant = cran
 	_appliquer_ips()
+	# dernier cran (PC à carte intégrée) : portées de la PWA, détail minimal
+	var rm_loin: Node = main.get("remontees") as Node if main != null else null
+	var reduites: bool = cran >= CRAN_MAX_PC
+	if not _web and rm_loin != null and reduites != _portees_reduites:
+		_portees_reduites = reduites
+		rm_loin.call("set_portees_reduites", reduites)
 	var vp: Viewport = main.get_viewport() if main != null else null
 	if vp != null:
 		if not _web:
@@ -265,24 +273,28 @@ func _appliquer(c: int, pourquoi: String) -> void:
 	if vp != null:
 		aa = [" ; MSAA –", " ; MSAA ×2", " ; MSAA ×4", " ; MSAA ×8"][clampi(vp.msaa_3d, 0, 3)] \
 			+ " ; rendu %d %%" % int(round(vp.scaling_3d_scale * 100.0))
-	_log("[Perf] cran %d/%d — %s (%s)%s%s" % [cran, CRAN_MAX, libelle(cran), pourquoi, aa,
+	_log("[Perf] cran %d/%d — %s (%s)%s%s" % [cran, _cran_max(), libelle(cran), pourquoi, aa,
 		(" — " + dernier_bilan) if dernier_bilan != "" else ""])
 	# le PC l'écrit dans son journal de bord (« c'est super pixélisé » :
 	# on veut savoir où en est la 3D)
 	if main != null:
 		var sr: Node = main.get("state_receiver") as Node
 		if sr != null and sr.has_method("envoyer"):
-			sr.envoyer({"perf": cran, "perf_max": CRAN_MAX, "perf_txt": "%s (%s)%s%s" % [
+			sr.envoyer({"perf": cran, "perf_max": _cran_max(), "perf_txt": "%s (%s)%s%s" % [
 				libelle(cran), pourquoi, aa, (" — " + dernier_bilan) if dernier_bilan != "" else ""]})
 
 
 ## Échelle du rendu 3D au cran `c` : PC jamais sous 85 %, PWA comme mesuré.
+func _cran_max() -> int:
+	return CRAN_MAX_WEB if _web else CRAN_MAX_PC
+
+
 func _echelle(c: int) -> float:
 	if _web:
 		if secours_web >= 2:
 			return 0.5
 		return [1.0, 1.0, 1.0, 0.85, 0.7, 0.6, 0.6][c]
-	return [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.85][c]
+	return [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.85, 0.7][c]
 
 
 ## Ce que fait le cran `c`, en clair (journal, PC).
@@ -292,7 +304,8 @@ func libelle(c: int) -> String:
 			"rendu 85 %", "rendu 70 %", "rendu 60 %, sans halo",
 			"30 i/s, sans anti-crénelage"][c]
 	return ["tout", "sans éclairage indirect", "sans brouillard ni reflets",
-		"sans anti-crénelage", "sans halo", "30 i/s", "rendu à 85 %"][c]
+		"sans anti-crénelage", "sans halo", "30 i/s", "rendu à 85 %",
+		"rendu à 70 %, remontées proches seulement"][c]
 
 
 ## Plafond d'images par seconde : cran 6 (30 i/s) et retrait de la fenêtre.
@@ -356,6 +369,7 @@ func _process(delta: float) -> void:
 
 var _pip_prec: Array = []
 var _t_etat_web: float = 0.0
+var _portees_reduites: bool = false
 
 
 ## État lu par la page pour le rapport de perte du contexte WebGL : on ne peut
@@ -479,7 +493,7 @@ func _evaluer() -> void:
 		dernier_bilan += " → " + cause
 		match cause:
 			"gpu":
-				if cran < CRAN_MAX:
+				if cran < _cran_max():
 					if _cran_avant_montee >= 0 and _horloge - _derniere_montee_t < 20.0:
 						_echecs[cran] = _horloge + ECHEC_INTERDIT_S
 						_cran_avant_montee = -1
@@ -627,7 +641,7 @@ func _finir_releve() -> void:
 		f.store_string("\n".join(_rel))
 	var r: PackedStringArray = PackedStringArray()
 	r.append("Relevé de fluidité — %s — %d images en %.0f s" % [_resume_machine(), n, RELEVE_S])
-	r.append("cran %d/%d — %s" % [cran, CRAN_MAX, libelle(cran)])
+	r.append("cran %d/%d — %s" % [cran, _cran_max(), libelle(cran)])
 	r.append("noyau C++ des remontées : %s" % ("oui" if ClassDB.class_exists("NoyauRemontee") else "non (GDScript)"))
 	for nom in ["image", "principal", "rendu", "gpu"]:
 		var a: Array = cols[nom]
@@ -732,7 +746,7 @@ func _resume_machine() -> String:
 
 
 func resume() -> String:
-	return "%s ; cran %d/%d ; %s" % [_resume_machine(), cran, CRAN_MAX, dernier_bilan]
+	return "%s ; cran %d/%d ; %s" % [_resume_machine(), cran, _cran_max(), dernier_bilan]
 
 
 # stderr : c'est le seul canal que le sim PC recueille (journal du viewer)

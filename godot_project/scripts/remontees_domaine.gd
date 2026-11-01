@@ -43,6 +43,21 @@ var niveau_detail: int = 0
 var _portees_base: Array = []
 
 
+## PC à carte intégrée, dernier cran du régulateur : portées de la PWA.
+func set_portees_reduites(oui: bool) -> void:
+	if oui:
+		CONSTRUIRE_JUSQUA = 1200.0
+		DEMOLIR_AU_DELA = 2200.0
+		VEHICULES_JUSQUA = 450.0
+		DETAILS_JUSQUA = 180.0
+		set_niveau_detail(2)
+	else:
+		CONSTRUIRE_JUSQUA = 2000.0
+		DEMOLIR_AU_DELA = 3500.0
+		VEHICULES_JUSQUA = 700.0
+		DETAILS_JUSQUA = 250.0
+
+
 func set_niveau_detail(n: int) -> void:
 	n = clampi(n, 0, 2)
 	if n == niveau_detail:
@@ -419,6 +434,8 @@ func _portees(racine: Node) -> void:
 
 
 func _ready() -> void:
+	if not OS.has_feature("web") and PerfManager.cran_courant >= PerfManager.CRAN_MAX_PC:
+		set_portees_reduites(true)
 	if PerfManager.secours_web > 0:
 		var fort: bool = PerfManager.secours_web >= 2
 		CONSTRUIRE_JUSQUA = 500.0 if fort else 800.0
