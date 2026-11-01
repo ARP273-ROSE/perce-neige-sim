@@ -45,17 +45,14 @@ var _portees_base: Array = []
 
 ## PC à carte intégrée, dernier cran du régulateur : portées de la PWA.
 func set_portees_reduites(oui: bool) -> void:
-	if oui:
-		CONSTRUIRE_JUSQUA = 1200.0
-		DEMOLIR_AU_DELA = 2200.0
-		VEHICULES_JUSQUA = 450.0
-		DETAILS_JUSQUA = 180.0
-		set_niveau_detail(2)
-	else:
-		CONSTRUIRE_JUSQUA = 2000.0
-		DEMOLIR_AU_DELA = 3500.0
-		VEHICULES_JUSQUA = 700.0
-		DETAILS_JUSQUA = 250.0
+	CONSTRUIRE_JUSQUA = 1200.0 if oui else 2000.0
+	DEMOLIR_AU_DELA = 2200.0 if oui else 3500.0
+	# les portées de base : set_niveau_detail en repart, à n'importe quel niveau
+	var f_lod: float = float(_portees_base[2]) if not _portees_base.is_empty() else _f_lod
+	_portees_base = [450.0 if oui else 700.0, 180.0 if oui else 250.0, f_lod]
+	var n: int = 2 if oui else niveau_detail
+	niveau_detail = -1
+	set_niveau_detail(n)
 
 
 func set_niveau_detail(n: int) -> void:
