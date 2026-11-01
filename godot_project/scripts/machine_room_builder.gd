@@ -468,8 +468,10 @@ void fragment() {
 	mat.shader = sh
 	# texture de 6 144 px (25 Mo en mémoire graphique) : divisée par deux sur
 	# les machines modestes (cran ≥ 3 : iPad, carte intégrée)
-	var pano: Texture2D = load("res://textures/panorama_glacier.png")
-	if PerfManager.cran_courant >= 3:
+	var web: bool = OS.has_feature("web")
+	var pano: Texture2D = load("res://textures/web/panorama_glacier.png" if web
+		else "res://textures/panorama_glacier.png")
+	if not web and PerfManager.cran_courant >= 3:
 		var img_p: Image = pano.get_image()
 		if img_p.is_compressed():
 			img_p.decompress()

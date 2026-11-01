@@ -503,7 +503,13 @@ var _img_loin: Image = null
 
 
 func _image_ortho(chemin: String) -> Image:
-	var img: Image = (load(chemin) as Texture2D).get_image()
+	# web : fichier déjà réduit, chargé comme image (ni envoi à la carte
+	# graphique ni relecture) — cf. tools_textures_web.py
+	var img: Image
+	if OS.has_feature("web"):
+		img = load(chemin.replace("res://textures/", "res://textures/web/")) as Image
+	else:
+		img = (load(chemin) as Texture2D).get_image()
 	if img.is_compressed():
 		img.decompress()
 	if img.get_width() > _ortho_l:
@@ -909,7 +915,8 @@ var _tex_pistes: Texture2D = null
 func _hiver_mat(m: ShaderMaterial, pistes_ok: bool) -> void:
 	if pistes_ok:
 		if _tex_pistes == null:
-			_tex_pistes = load("res://textures/pistes_masque.png") as Texture2D
+			_tex_pistes = load("res://textures/web/pistes_masque.png" if OS.has_feature("web")
+				else "res://textures/pistes_masque.png") as Texture2D
 		m.set_shader_parameter("pistes", _tex_pistes)
 		m.set_shader_parameter("avec_pistes", 1.0)
 	m.set_shader_parameter("hiver", _hiver)

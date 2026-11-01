@@ -83,10 +83,10 @@ func _texte(pos: Vector2, t: String, taille: int, c: Color, larg: float = -1.0,
 
 
 func _voyant(c: Vector2, r: float, allume: bool, couleur: Color) -> void:
-	draw_circle(c, r + 1.0, C_SOMBRE)
-	draw_circle(c, r, couleur if allume else C_ETEINT)
+	HUD.disque(self, c, r + 1.0, C_SOMBRE)
+	HUD.disque(self, c, r, couleur if allume else C_ETEINT)
 	if allume:
-		draw_circle(c + Vector2(-r * 0.3, -r * 0.3), r * 0.35, couleur.lightened(0.5))
+		HUD.disque(self, c + Vector2(-r * 0.3, -r * 0.3), r * 0.35, couleur.lightened(0.5))
 
 
 ## Signature de ce que montre le fond : il est redessiné quand elle change.
@@ -190,9 +190,7 @@ func _page_conduite() -> void:
 	_texte(Vector2(278, y + 12), "VITESSE RÉDUITE", 9, C_TEXTE)
 	# bouton sans libellé lisible
 	draw_rect(Rect2(300, 190, 86, 16), Color(0.92, 0.94, 0.97))
-	draw_rect(Rect2(300, 190, 86, 16), C_GRIS, false, 1.0)
-
-
+	HUD.contour(self, Rect2(300, 190, 86, 16), C_GRIS, 1.0)
 func _page_voiture() -> void:
 	_titre("VOITURE AVAL")
 	# caisse (accolades jaunes) et six portes, trois de chaque côté
@@ -206,17 +204,17 @@ func _page_voiture() -> void:
 			draw_rect(Rect2(cx - 28, bar_y, 56, 7),
 				Color(0.95, 0.30, 0.20) if portes_ouvertes else C_VERT)
 			draw_rect(Rect2(cx - 14, cy - 14, 28, 28), Color(0.97, 0.97, 0.98))
-			draw_rect(Rect2(cx - 14, cy - 14, 28, 28), C_GRIS, false, 1.0)
-			draw_circle(Vector2(cx, cy), 9.0, C_SOMBRE)
-			draw_circle(Vector2(cx, cy), 6.5, Color(0.97, 0.97, 0.98))
-			draw_line(Vector2(cx - 7, cy - 7), Vector2(cx + 7, cy + 7), C_SOMBRE, 3.0)
+			HUD.contour(self, Rect2(cx - 14, cy - 14, 28, 28), C_GRIS, 1.0)
+			HUD.disque(self, Vector2(cx, cy), 9.0, C_SOMBRE)
+			HUD.disque(self, Vector2(cx, cy), 6.5, Color(0.97, 0.97, 0.98))
+			HUD.segment(self, Vector2(cx - 7, cy - 7), Vector2(cx + 7, cy + 7), C_SOMBRE, 3.0)
 	# deux cartouches centraux (petits textes illisibles sur la photo)
 	for k in range(2):
 		var cx2: float = 175.0 + 130.0 * k
 		draw_rect(Rect2(cx2 - 52, 122, 104, 44), Color(0.80, 0.84, 0.90))
 		draw_rect(Rect2(cx2 - 52, 122, 104, 9), C_GRIS)
 		draw_rect(Rect2(cx2 - 11, 134, 22, 22), Color(0.97, 0.97, 0.98))
-		draw_circle(Vector2(cx2, 145), 7.0, C_SOMBRE)
+		HUD.disque(self, Vector2(cx2, 145), 7.0, C_SOMBRE)
 	# passage à l'autre voiture
 	draw_rect(Rect2(L - 74, 128, 28, 24), Color(0.40, 0.52, 0.66))
 	draw_colored_polygon(PackedVector2Array([Vector2(L - 68, 134), Vector2(L - 56, 134),
@@ -242,9 +240,7 @@ func _bandeau_bas() -> void:
 	_texte(Vector2(346, y0 + 20), "DÉFAUTS", 9, C_TEXTE if alarme else C_GRIS, 90,
 		HORIZONTAL_ALIGNMENT_CENTER)
 	draw_rect(Rect2(440, y0 + 3, 32, 26), Color(0.40, 0.52, 0.66))
-	draw_rect(Rect2(448, y0 + 9, 16, 14), Color(0.95, 0.96, 0.98), false, 2.0)
-
-
+	HUD.contour(self, Rect2(448, y0 + 9, 16, 14), Color(0.95, 0.96, 0.98), 2.0)
 ## Date et heure (heure LOCALE de l'appareil, à la seconde :
 ## PNConstants.heure_locale), vitesse (m/s, au centième) et distance (m).
 func _valeurs() -> void:

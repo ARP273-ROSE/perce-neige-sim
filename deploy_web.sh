@@ -29,6 +29,7 @@ echo "→ Import des ressources…"
 CONST_GD="$SIM_DIR/godot_project/scripts/constants.gd"
 BUILD_STAMP=$(date +"%Y-%m-%d %H:%M")
 restore_build_tag() {
+    [ "${MODULE_WEB:-0}" = "1" ] && sed -i '/^name="Web"/,/^\[preset.3\]/s/^variant\/extensions_support=true/variant\/extensions_support=false/' "$SIM_DIR/godot_project/export_presets.cfg"
     sed -i 's|^const BUILD_TAG: String = .*|const BUILD_TAG: String = "dev"|' "$CONST_GD"
     sed -i 's|^const VERSION_APP: String = .*|const VERSION_APP: String = "dev"|' "$CONST_GD"
 }
@@ -47,6 +48,12 @@ GDEXT="$SIM_DIR/godot_project/bin/perce_neige.gdextension"
 # rien, et il remplace le moteur web) — essai : MODULE_WEB=1 WEB_ROOT=…/essai
 if [ "${MODULE_WEB:-0}" != "1" ]; then
     rm -f "$SIM_DIR"/godot_project/bin/libperce_neige.web.*
+fi
+# Le moteur à modules (dlink) n'est livré que pour un essai avec module : il pèse
+# 5,5 Mo de JavaScript et 41 Mo de wasm, contre 0,3 et 38 Mo.
+PRESETS="$SIM_DIR/godot_project/export_presets.cfg"
+if [ "${MODULE_WEB:-0}" = "1" ]; then
+    sed -i '/^name="Web"/,/^\[preset.3\]/s/^variant\/extensions_support=false/variant\/extensions_support=true/' "$PRESETS"
 fi
 if [ "${MODULE_WEB:-0}" = "1" ] && [ ! -f "$WASM" ] && command -v gh >/dev/null 2>&1; then
     SHA=$(git -C "$SIM_DIR" rev-parse HEAD)
@@ -78,6 +85,8 @@ sed -i "s/__PN_VERSION__/$(tr -d ' \r\n' < "$SIM_DIR/VERSION")/g" "$SIM_DIR/buil
 
 echo "→ Déploiement vers $WEB_ROOT (uid 33)…"
 mkdir -p "$WEB_ROOT"
+# reste d'un moteur à modules : le service worker ne doit plus le voir
+[ -f "$SIM_DIR/build/web/index.side.wasm" ] || rm -f "$WEB_ROOT/index.side.wasm"
 cp "$SIM_DIR"/build/web/* "$WEB_ROOT/"
 # En-têtes de cache : sans eux Cloudflare garde l'export 4 h et il faut
 # purger à la main après chaque déploiement (cf. commentaires du fichier).
