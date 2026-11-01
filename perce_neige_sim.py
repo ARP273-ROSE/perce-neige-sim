@@ -13101,7 +13101,20 @@ class GameWidget(QWidget):
         if self._godot_child_hwnd:
             try:
                 import ctypes
-                ctypes.windll.user32.SetParent(self._godot_child_hwnd, 0)
+                # SetParent attend la réponse de la fenêtre : si Godot est figé,
+                # le simulateur figeait avec lui, jusqu'à la fermeture
+                # (rapport du 24/10/2026) → on le tue d'abord.
+                from ctypes import wintypes as wt
+                envoi = ctypes.windll.user32.SendMessageTimeoutW
+                envoi.argtypes = [wt.HWND, wt.UINT, wt.WPARAM, wt.LPARAM, wt.UINT, wt.UINT,
+                                  ctypes.POINTER(ctypes.c_size_t)]
+                envoi.restype = wt.LPARAM
+                reponse = ctypes.c_size_t(0)
+                vivant = envoi(self._godot_child_hwnd, 0, 0, 0, 0x0002, 200, ctypes.byref(reponse))
+                if vivant:
+                    ctypes.windll.user32.SetParent(self._godot_child_hwnd, 0)
+                elif self._godot_bridge is not None:
+                    self._godot_bridge.stop()
             except Exception:
                 pass
             self._godot_child_hwnd = None

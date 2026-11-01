@@ -5,6 +5,15 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.53.1 — 1er novembre 2026
+
+**PC à carte intégrée.** Non essayé sur le PC concerné (5700G, Vega 8) : à confirmer par son relevé.
+
+- **Nouveau dernier cran (7)** : rendu à 70 %, 30 i/s, portées des remontées de la PWA et détail minimal.
+  Les ombres étaient déjà coupées partout : ce levier-là n'existait pas.
+- **Fermeture sur une 3D figée** : `SetParent` attendait la réponse de la fenêtre Godot, et le simulateur
+  restait bloqué avec elle (rapport du 24 octobre). Fenêtre sans réponse à 200 ms : Godot est tué d'abord.
+
 ## 1.53.0 — 1er novembre 2026
 
 **PWA : pertes du contexte WebGL sur iPad.** Les rapports du 29 octobre montrent `createProgram`
