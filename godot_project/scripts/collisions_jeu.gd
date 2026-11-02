@@ -24,6 +24,7 @@ const COUCHE_DECOR: int = 1
 const COUCHE_VEHICULE: int = 2
 const COUCHE_SKIEUR: int = 4
 const COUCHE_CAMERA: int = 8            # n'arrête que la caméra, pas le corps
+const COUCHE_CAMERA_BORD: int = 16      # idem, seulement quand on est à bord
 const DEMI_ZONE_GARE: float = 160.0     # zone des gares (m) : maillages réels
 const R_PAROI: float = 1.64             # rayon intérieur du tube des voitures
 
@@ -365,6 +366,21 @@ func _plafond_camera(voiture: Node3D, car_len: float) -> void:
 	cs.position.y = TrainBodyBuilder.Y_FLOOR + 2.4 + 0.15
 	corps.add_child(cs)
 	voiture.add_child(corps)
+	# flancs de la caisse : à quai, le bras sortait par les portes ouvertes, et la vue
+	# sautait dehors (relevé du 02/11/2026 : 1,7 m en une image). Actifs seulement à bord,
+	# pour qu'on puisse rester dos à la rame sur le quai.
+	var flancs: StaticBody3D = StaticBody3D.new()
+	flancs.name = "FlancsCamera"
+	flancs.collision_layer = COUCHE_CAMERA_BORD
+	flancs.collision_mask = 0
+	for cote in [-1.0, 1.0]:
+		var bf: BoxShape3D = BoxShape3D.new()
+		bf.size = Vector3(0.10, 3.60, car_len)
+		var csf: CollisionShape3D = CollisionShape3D.new()
+		csf.shape = bf
+		csf.position = Vector3(cote * 1.75, TrainBodyBuilder.Y_CENTER, 0.0)
+		flancs.add_child(csf)
+	voiture.add_child(flancs)
 
 
 func _rame(c: Cabin) -> void:
