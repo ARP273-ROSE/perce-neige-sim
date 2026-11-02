@@ -58,6 +58,8 @@ const LAYER_VOIE: int = 1 << 2
 # Intérieur de la cabine, PWA seulement (Compatibility) : les néons des
 # gares, renforcés sur le web, ne l'éclairent pas (cf. _couche_interieur)
 const LAYER_INTERIEUR: int = 1 << 3
+# Relief : seul à recevoir le soleil qui porte les ombres (main._soleil_relief).
+const LAYER_RELIEF: int = 1 << 4
 ## Masque des lampes de gare renforcées sur le web : tout sauf l'intérieur
 ## (qui n'a ni la couche 1, ni ne doit être pris par LAYER_RAME).
 const MASQUE_GARE_WEB: int = 0xFFFFF & ~(LAYER_INTERIEUR | LAYER_RAME)
