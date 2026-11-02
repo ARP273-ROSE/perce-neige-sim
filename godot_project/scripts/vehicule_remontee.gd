@@ -510,7 +510,7 @@ static func _aigle() -> ImageTexture:
 			var q2: Vector2 = Vector2((i + 0.5) / n, (j + 0.5) / n)
 			for f in formes:
 				if Geometry2D.is_point_in_polygon(q2, f):
-					img.set_pixel(i, j, Color(0.05, 0.05, 0.06, 1.0))
+					img.set_pixel(i, j, Color.WHITE)
 					break
 	img.generate_mipmaps()
 	_tex_aigle = ImageTexture.create_from_image(img)
@@ -522,20 +522,33 @@ static func _dims_panneau(fam: String, H: float) -> Array:
 	var a: float = 0.0
 	var b: float = 0.0
 	var y: float = -H * 0.70
-	for r in _profil_cabine(fam):
+	var caisse: Array = []
+	var profil: Array = _profil_cabine(fam)
+	for r in profil:
 		a = maxf(a, float(r[1]))
 		b = maxf(b, float(r[2]))
 		if String(r[4]) == "caisse":
+			caisse.append(r)
 			y = float(r[0]) - 0.30
-	return [a, b, y]
+	if caisse.size() < 2:
+		return [a, b, y]
+	# caisse en œuf (télécabines) : dans le haut du panneau, là où la coque est
+	# presque droite ; sous la dernière cote, le logo tombait sous le fond
+	return [float(caisse[0][1]), float(caisse[0][2]), float(caisse[0][0]) - 0.14]
 
 
 func _logo_station(cab: Node3D, a: float, b: float, y: float, face_portes: float) -> void:
+	if livree == "Tignes":
+		_logo_tignes(cab, a, b, y, -face_portes)
+		return
 	if livree != "Val d'Isère":
 		return
-	var t: float = clampf(a * 0.35, 0.30, 0.55)          # côté de l'aigle
+	var t: float = clampf(b * 0.35, 0.30, 0.55)          # côté de l'aigle
+	# encre claire sur la caisse noire
+	var encre: Color = Color(0.93, 0.93, 0.93) if famille == "cabine_diamond" else Color(0.05, 0.05, 0.06)
 	var m: StandardMaterial3D = StandardMaterial3D.new()
 	m.albedo_texture = _aigle()
+	m.albedo_color = encre
 	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
 	m.alpha_scissor_threshold = 0.5
 	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
@@ -554,10 +567,24 @@ func _logo_station(cab: Node3D, a: float, b: float, y: float, face_portes: float
 		ai.scale = Vector3(-1, 1, 1)
 	ai.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	cab.add_child(ai)
-	_numero(cab, "Val d'Isère", Vector3(fx * (a + 0.012), y - 0.02, fx * b * 0.16), rot, 64, t * 0.0062, Color(0.05, 0.05, 0.06))
+	_numero(cab, "Val d'Isère", Vector3(fx * (a + 0.012), y - 0.02, fx * b * 0.20), rot, 64, t * 0.0062, encre)
 	# faces avant et arrière : le nom
 	for sz in [-1.0, 1.0]:
-		_numero(cab, "Val d'Isère", Vector3(0, y, sz * (b + 0.012)), 0.0 if sz > 0.0 else PI, 64, t * 0.0055, Color(0.05, 0.05, 0.06))
+		_numero(cab, "Val d'Isère", Vector3(0, y, sz * (b + 0.012)), 0.0 if sz > 0.0 else PI, 64, t * 0.0055, encre)
+
+
+## Tignes : « TIGNES » rouge sur plaque sombre (photos de Tovière et des Brévières),
+## lettrage du jeu, sur la face sans portes et les deux bouts.
+func _logo_tignes(cab: Node3D, a: float, b: float, y: float, fx: float) -> void:
+	var rouge: Color = Color(0.82, 0.08, 0.07)
+	var haut: float = 0.22
+	var large: float = minf(a, b) * 1.15
+	var px: float = 0.0030
+	RemonteeKit.boite_en(cab, Vector3(0.008, haut, large), Vector3(fx * (a + 0.006), y, 0), "cabine_noire")
+	_numero(cab, "TIGNES", Vector3(fx * (a + 0.014), y, 0), fx * PI * 0.5, 64, px, rouge)
+	for sz in [-1.0, 1.0]:
+		RemonteeKit.boite_en(cab, Vector3(large, haut, 0.008), Vector3(0, y, sz * (b + 0.006)), "cabine_noire")
+		_numero(cab, "TIGNES", Vector3(0, y, sz * (b + 0.014)), 0.0 if sz > 0.0 else PI, 64, px, rouge)
 
 
 static var _textes: Dictionary = {}
