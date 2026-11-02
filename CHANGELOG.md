@@ -7,6 +7,8 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## 1.53.5 — 2 novembre 2026
 
+**Gares creusées dans la pente.** Elles étaient posées au plus haut du terrain sous leur emprise, jusqu'à 18 m au-dessus du sol côté aval. Le relief est abaissé sous l'emprise, avec un talus autour : hauteur au-dessus du point le plus bas, médiane 2,9 → 1,6 m, 90 % des gares sous 7,4 → 4,6 m (Lanches amont 8,3 → 3,4 m). Grille à 25 m : le déblai se fait donc sur des mailles entières.
+
 **Câble immobile.** Il fléchissait sous chaque véhicule, par deux calculs différents pour le câble dessiné et pour la pince : celle-ci passait au-dessus ou en dessous, et le câble ondulait en permanence. Plus de flèche locale ; seule reste l'onde des arrêts d'urgence.
 
 **Câble sur les galets.** Il cassait en un point au droit du pylône, et le pas de 3 m décalait la cassure avant les galets. Il suit maintenant un arc sur la longueur du train, tous les 0,5 m, et les galets se calent dessus partout, batteries de gare et téléskis compris : écart maximal de repos 0,71 → 0,40 m.
