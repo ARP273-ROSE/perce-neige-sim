@@ -13,6 +13,15 @@ dédié, pour lui seul, assombrit la neige là où pylônes, véhicules et bâti
 
 **Fil principal à ski.** Collisions du tunnel construites pour un skieur sur la neige, pièces fines des gares refaites en double à chaque carré de relief (26 à 54 ms), portées de toutes
 les lignes réglées d'un bloc à chaque changement de détail (72 à 103 ms). Boucle de 11 min en 4K : images de plus de 25 ms à ski 20 → 2.
+## 1.53.4 — 2 novembre 2026
+
+**Mémoire des remontées divisée.** Sur un téléphone Android, WebGL s'est perdu après 368 s, à 325 Mo de tampons (47 775). Chaque ligne pesait 40 Mo : chaque paire de galets et chaque pneu de lanceur avait son propre maillage, soit la moitié des sommets de la ligne (Lanches : 788 000 sur 1,6 million) et 800 de ses 1 300 maillages. Ils sont maintenant partagés, sans changement à l'image. Mesuré dans WebKit à 824×384, au même endroit, à l'arrêt : 285 → 210 Mo, 45 182 → 29 936 tampons. Non essayé sur le téléphone lui-même : la limite exacte de l'appareil reste inconnue.
+
+**Plafond de tampons sur la PWA.** 200 Mo sur téléphone, 350 Mo ailleurs, 180 et 140 Mo après une perte de WebGL. Au plafond, on ne construit plus que la ligne à moins de 400 m, en démontant d'abord la plus lointaine. Ce démontage n'a pas été déclenché en essai : à l'arrêt, le plafond arrête seulement les constructions.
+
+**Ancien moteur en cache.** Un moteur gardé d'une version plus ancienne pouvait démarrer avec les fichiers neufs (« need dylink section »). La page vide alors son cache et se recharge, une seule fois.
+
+**Bulle des Lanches.** Fermée, la face avant est verticale au lieu de déverser, s'avance de 0,85 m depuis le moyeu au lieu de 1,05 m, et le toit passe à 1,15 m au-dessus de l'assise (0,90 m avant, sous le casque à 0,94 m).
 
 ## 1.53.3 — 2 novembre 2026
 
@@ -26,6 +35,8 @@ le raccord tombe à +0,3 dB (−2,0 dB jusqu'à 0:54), avec le même spectre de 
 pylône qui approche reste dehors. La source garde un saut d'environ 5 dB à 0:44. Niveau moyen −27,8 dB contre −20,6 : même gain que les autres sons
 `tcd_*`, ce passage est simplement plus calme. Mesuré seulement : l'écoute reste à faire.
 
+**Sons des télésièges débrayables.** Les compressions et les support-compression ont leur propre prise, au lieu du son de pylône porteur. Vérifié par banc, écoute à faire.
+
 **Pylônes inclinés.** Sur les fortes pentes, le fût penche et la tête lui reste perpendiculaire ; le câble ne bouge pas.
 Règle **estimée** : 0,9 × pente locale du câble, plafond 25°, tirée d'une seule vue de côté (arête d'une ligne Garaventa, 3 pylônes)
 et étendue sans mesure à tous les fûts tubulaires. Non concernés : treillis du 3S, téléskis, pylônes de nez des gares.
@@ -36,7 +47,8 @@ profil de la ligne : il flottait jusqu'à 1,31 m (Cugnaï) ou s'enterrait jusqu'
 garde-corps refermé et échelle courte jusqu'à la traverse.
 Coût en triangles par ligne : Leissières 237 272 → 255 904 (+7,9 %), Tovière 291 576 → 312 532 (+7,2 %), Grand Huit 180 928 → 196 716 (+8,7 %),
 même nombre de nœuds. Vue fixe : Tovière +0,3 à +1,2 % de primitives, Grand Huit +0,9 à +3,5 % ; les appels de dessin varient d'un essai à l'autre
-(Tovière 281 avant, 281 à 312 après) et ne permettent pas de conclure. Leissières non comparable. Bancs : 36 sur 36.
+(Tovière 281 avant, 281 à 312 après) et ne permettent pas de conclure. Leissières non comparable. Bancs : 37 sur 37 sous Windows au commit final.
+La marge baisse : images de plus de 16,7 ms au banc sans synchro écran, tournée de 6 lignes 144-172 → 223-224, Fresse 79-96 → 121-138, à cause des petites pièces de tête (sans elles 150-172 ; l'inclinaison ne coûte presque rien). En jeu à 60 Hz sur RTX 5070 Ti, image moyenne inchangée ; écran 120 Hz et machines plus faibles non mesurés.
 
 **Régulateur sur PC.** Relevé d'une RTX 5070 Ti en 4K : les remontées passaient au détail réduit à l'entrée en mode
 skieur et n'en revenaient jamais. Le temps du fil principal comptait aussi le dessin et l'attente de l'écran, soit au moins
@@ -47,17 +59,17 @@ Vérifié sur PC en 4K (16 min, train puis ski) : le détail revient à 0 en ~10
 tout le trajet. La caméra s'arrête maintenant sous le plafond (y 1,57 → 1,33 pour un plafond à 1,45, vérification ajoutée
 au banc `skieur`, qui échoue sans le correctif). Le corps du skieur n'est pas concerné.
 À quai, elle sortait aussi par les portes ouvertes et sautait dehors (1,7 m en une image) : les flancs de la caisse
-l'arrêtent maintenant quand on est à bord (écart à l'axe 3,08 → 1,58 m, sur un tour complet, dans les deux voitures). Reste un
-saut de 0,76 m au droit des portes, à l'intérieur de la rame.
+l'arrêtent maintenant quand on est à bord (16 facettes qui épousent le tube de la caisse, écart à l'axe 3,08 → 1,25 m, ce qui fait disparaître l'aplat noir
+à l'entrée du tunnel). Il reste un saut de caméra d'environ 0,8 m au droit des portes.
 
 **Skieur qui coince.** Nouveau banc `coince` : marche aléatoire enchaînée dans les gares, chaque segment droit étant prouvé
 praticable au préalable (sol, marches ≤ 30 cm, place pour le corps). Sur 1 200 segments : 9 arrêts avant correction, 4 après,
-aucun blocage complet dans les deux cas.
+aucun blocage complet dans les deux cas. **Le problème n'est pas réglé partout** : sur un essai plus long (18 000 segments, 12 graines, avant le correctif du
+toit), 22 arrêts, 13 reprises par le filet et 2 vrais blocages, l'un à l'entrée du tunnel haut de la gare amont, l'autre contre un objet mobile non identifié.
 - La montée de marche et le contournement ne dépendent plus d'un contact « mur » détecté : la tête qui touche, qui n'en est
   pas un, arrêtait le skieur net. Hauteur de marche essayée de 40 à 8 cm.
 - Filet : commande tenue, moins de 10 cm parcourus en 1,2 s et aucune des 8 directions libre (corps pris dans le décor) → reposé
-  à la place libre la plus proche, à pied comme à ski. Contre un simple mur, rien ne se passe. Essayé sur un corps forcé dans
-  le décor ; jamais déclenché pendant les 1 200 segments.
+  à la place libre la plus proche, à pied comme à ski. Contre un simple mur, rien ne se passe. Repli limité à 5 m ; refuge seulement après 6 s.
 
 **Fermeture pendant une construction de remontée.** Fermer la fenêtre 3 à 10 s après l'entrée en mode skieur la bloquait
 parfois plus de 60 s (2 essais sur 6 sur PC). L'attente du fil de construction est maintenant bornée à 1,5 s, en vidant les
@@ -65,7 +77,7 @@ ordres de rendu ; au-delà, le processus se termine. La cause exacte du blocage 
 
 **Véhicules.** Suspentes aux longueurs mesurées en vidéo : télécabines 1,15 → 1,50 m, 3S 2,15 → 2,65 m, téléphériques 4,6 → 5,2 m,
 sièges 8 places 3,4 → 3,9 m de la pince à l'assise. Le skieur assis balance avec son siège ou sa cabine (sa tête entrait dans
-la vitre). Vérifié par les bancs seulement, à l'écran pour l'instant non.
+la vitre). Vérifié par les bancs, et à l'écran sur captures : cabine et sièges au passage d'un pylône ; 3S et téléphériques de loin seulement.
 
 **Fosse de la gare basse.** En descendant l'escalier du personnel, on marchait sur le plancher du tunnel à −2,65 m, à
 mi-hauteur. Son flanc est maintenant fermé le long de l'escalier, et l'on descend jusqu'au fond.
@@ -77,8 +89,8 @@ pylône par pylône :
 - Tovière : passages recomptés en vidéo ; pylônes de 305 et 906 m retirés, P15-P16 ajoutés contre la gare, estimés.
 - Leissières : P2 de 65 à 32 m (estimé : aucun pylône vu à 65 m).
 
-Géométrie recalculée (effort 400), dépassement des galets sur ces trois lignes : 171° → 108° (Tovière 2°, Leissières 53°,
-Grand Huit 53°), 1 portée sous la garde par ligne. Rogoney : pylône de 240 m retiré, un ajouté vers 524 m, 9,5°.
+Géométrie recalculée (effort 400), dépassement des galets sur ces trois lignes : 171° → 108° (Tovière 2,5°, Leissières 53°,
+Grand Huit 53°). Sept autres lignes dont les suspentes ont changé, recalculées : 51° → 28° au total, 2 portées sous la garde au lieu de 3. Rogoney : pylône de 240 m retiré, un ajouté vers 524 m, 9,5°.
 
 **Bancs.**
 - `skieur` et `ski` repassent au vert. Ski : 0,000 m d'écart hors des gares ; 6,8 cm dans leurs pièces fines, où la
