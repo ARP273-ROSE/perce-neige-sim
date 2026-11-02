@@ -17,13 +17,13 @@ les lignes réglées d'un bloc à chaque changement de détail (72 à 103 ms). B
 
 **Rester dans la cabine.** Sans bouger à l'arrivée, on suit maintenant la cabine et l'on se rassoit pour le retour ; au premier pas, on est libre de sortir. Elle repartait sans soi, ou l'on restait debout. Nouveau banc `cabine_retour` : aller-retour complet.
 
-**Piques « resté à bord ».** Nouvelle série, adaptée à la télécabine, au téléphérique et au 3S, et au télésiège repris dans les 90 s après l'arrivée.
+**Piques « resté à bord ».** Nouvelle série, adaptée à la télécabine, au téléphérique et au 3S, et au télésiège repris dans les 90 s après l'arrivée. Arrivée en bas : ses propres piques, au lieu de « vous êtes en haut ».
 
 **Carte des pistes.** Elle s'ouvre à gauche de la colonne de boutons, qu'elle recouvrait, y compris le sien : une fois ouverte, on ne pouvait plus la fermer.
 
 **Galets.** Au moins 4 sous le câble et 4 au-dessus sur chaque pylône (un « 4 SC » faisait 2 + 2), sur toutes les lignes, d'après un retour d'utilisateur.
 
-**Crête de Leissières.** Quatre pylônes centrés sur le sommet, deux de chaque côté (547, 561, 575, 589 m), au lieu de trois d'un côté et un de l'autre : déviation de 14 à 17° sur chacun, au lieu de 33° sur deux d'entre eux. Positions et hauteurs **estimées** pour obtenir cette courbe : le premier côté est passe à 20 m, la vidéo donnait 5 à 8 m sur la crête.
+**Crête de Leissières.** Quatre pylônes centrés sur le sommet, deux de chaque côté (547, 561, 575, 589 m), au lieu de trois d'un côté et un de l'autre : déviation du câble de 17 à 18° sur chacun, au lieu de 33° sur deux d'entre eux. Positions et hauteurs **estimées** pour obtenir cette courbe : le premier côté est passe à 18,6 m, la vidéo donnait 5 à 8 m sur la crête.
 
 **Construction des lignes allégée.** Chaque petite pièce d'une ligne (boîte, cylindre) partait à la carte graphique dès sa pose, puis la fusion la jetait : 40 000 par ligne. Les pièces identiques partagent maintenant le même envoi le temps de la construction : 2,6 millions → 100 000 sur les 66 lignes du banc, lignes avec une image de plus de 40 ms 11-12 → 6 (1 essai sous Linux, sans écran). PWA à 824×384 dans WebKit, entrée en skieur à l'arrêt : tampons créés 196 000 → 47 000, vivants 29 936 → 22 367, mémoire 210 → 207 Mo. Non mesuré sur PC avec écran ni sur téléphone.
 
