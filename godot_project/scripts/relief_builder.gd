@@ -603,7 +603,8 @@ func _hauteur_tri(x: float, z: float) -> float:
 ## affiché, la collision et le profil des lignes (lu sur hauteur_sol) suivent.
 const DEBLAI_PART: float = 0.35
 const DEBLAI_TALUS: float = 1.0        # hauteur par mètre, autour de l'emprise
-const DEBLAI_NON: Array = ["tph_grande_motte"]    # gare d'aval : bâtiment existant
+# bâtiments existants ; 3S : machinerie en fosse, gare posée à son niveau (creux de 10 m, PC 03/11/2026)
+const DEBLAI_NON: Array = ["tph_grande_motte", "olympique"]
 
 
 func _creuser_gares() -> void:
