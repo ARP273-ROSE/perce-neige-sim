@@ -1625,9 +1625,15 @@ const RETRAIT_POULIE: float = 0.45
 const Z_DEVIATION: float = 2.5
 
 
-func rayon_poulie() -> float:
+## Diamètres relevés [aval, amont] quand les deux poulies diffèrent (reportage de l'appareil).
+const DIAMETRES_POULIES: Dictionary = {"tsd8_tommeuses": [7.20, 6.10]}
+
+
+func rayon_poulie(aval: bool = true) -> float:
 	if fixe():
 		return voie * 0.5           # le câble porte les sièges : poulie = voie
+	if DIAMETRES_POULIES.has(String(name)):
+		return float(DIAMETRES_POULIES[String(name)][0 if aval else 1]) * 0.5
 	return voie * 0.5 - RETRAIT_POULIE
 
 
@@ -1772,7 +1778,7 @@ func _gare(aval: bool) -> void:
 	roue.name = "Poulie"
 	roue.position = cp
 	g.add_child(roue)
-	_poulie(roue, Vector3.ZERO, rayon_poulie(), aval)
+	_poulie(roue, Vector3.ZERO, rayon_poulie(aval), aval)
 	var fixes: Array = roue.get_children().slice(_coupe_poulie)
 	for n in fixes:
 		roue.remove_child(n)
@@ -1781,14 +1787,14 @@ func _gare(aval: bool) -> void:
 	MeshMerge.merge(roue, [], "Roue")
 	await _pause("gare : poulie")
 	# vitesse du câble en ligne, au rayon de la gorge ; sens de la boucle
-	_poulies.append([roue, signf(_x_brin(true)) * vitesse / rayon_poulie()])
+	_poulies.append([roue, signf(_x_brin(true)) * vitesse / rayon_poulie(aval)])
 	# galets de déviation (axe vertical) : ils rentrent le câble de la voie
 	# de ligne au diamètre de la poulie, juste après le nez de la gare
 	for sx in ([] if fixe() else [-1.0, 1.0]):
 		for k in range(3):
 			var zd: float = znez + signf(dz) * (Z_DEVIATION + 0.7 * k)
 			# sous le câble, côté intérieur : là où il s'enroule (convexe)
-			var xd: float = sx * (_x_rentre(Z_DEVIATION + 0.7 * k) - 0.21 - diametre_cable * 0.0005)
+			var xd: float = sx * (_x_rentre(Z_DEVIATION + 0.7 * k, aval) - 0.21 - diametre_cable * 0.0005)
 			RemonteeKit.galet(g, Vector3(xd, H_CABLE_GARE, zd), 0.21)
 			(g.get_child(g.get_child_count() - 1) as Node3D).transform.basis = Basis(Vector3.FORWARD, 0.0).scaled(Vector3.ONE * 0.21 / RollerMesh.R_BANDE)
 			RemonteeKit.boite_en(g, Vector3(0.22, 0.04, 0.30), Vector3(xd, H_CABLE_GARE + 0.16, zd), "galva_pylone")
@@ -3491,7 +3497,7 @@ func _batterie_gare(aval: bool) -> void:
 
 ## Demi-écartement du câble à `dz` m du nez, en gare : de la voie de ligne
 ## au diamètre de la poulie (les galets de déviation suivent la même courbe).
-func _x_rentre(dz: float) -> float:
+func _x_rentre(dz: float, aval: bool) -> float:
 	# le câble arrive droit (voie de ligne), s'enroule sur les galets de
 	# déviation (côté INTÉRIEUR : convexe), file en ligne droite et arrive
 	# tangent à la poulie (convexe aussi) — la tangente commune aux deux
@@ -3499,7 +3505,7 @@ func _x_rentre(dz: float) -> float:
 	# concave contre des galets du mauvais côté)
 	if fixe():
 		return voie * 0.5
-	var t: Array = _tangente_deviation()
+	var t: Array = _tangente_deviation(aval)
 	var R: float = voie * 0.5
 	var cA: Vector2 = t[0]
 	var TA: Vector2 = t[2]
@@ -3510,7 +3516,7 @@ func _x_rentre(dz: float) -> float:
 		return cA.y + sqrt(maxf(R_DEVIATION * R_DEVIATION - (dz - cA.x) * (dz - cA.x), 0.0))
 	if dz <= TB.x:
 		return lerpf(TA.y, TB.y, (dz - TA.x) / maxf(TB.x - TA.x, 1e-4))
-	var Rp: float = rayon_poulie()
+	var Rp: float = rayon_poulie(aval)
 	return sqrt(maxf(Rp * Rp - (dz - l_gare) * (dz - l_gare), 0.0))
 
 
@@ -3522,9 +3528,9 @@ const R_DEVIATION: float = 1.5
 ## w = demi-écartement) : [centre A des galets, centre B de la poulie,
 ## point de départ TA sur A, point d'arrivée TB sur B] — tangente
 ## extérieure commune aux deux cercles, tous deux côté intérieur du câble.
-func _tangente_deviation() -> Array:
+func _tangente_deviation(aval: bool) -> Array:
 	var R: float = voie * 0.5
-	var Rp: float = rayon_poulie()
+	var Rp: float = rayon_poulie(aval)
 	var cA: Vector2 = Vector2(Z_DEVIATION, R - R_DEVIATION)
 	var cB: Vector2 = Vector2(l_gare, 0.0)
 	var d: Vector2 = cB - cA
@@ -3579,11 +3585,11 @@ func _cable() -> void:
 			var dz: float = zc - znez
 			var u: float = (q.z - znez) / dz
 			if u > 0.0 and absf(q.z - znez) <= absf(dz) + 0.01:
-				q.x = signf(q.x) * _x_rentre(absf(q.z - znez)) if absf(q.x) > 0.01 else q.x
+				q.x = signf(q.x) * _x_rentre(absf(q.z - znez), znez == 0.0) if absf(q.x) > 0.01 else q.x
 			elif u > 1.0:
 				var r: Vector3 = Vector3(q.x, 0, q.z - zc)
 				if r.length() > 0.01:
-					r = r.normalized() * Rp
+					r = r.normalized() * rayon_poulie(znez == 0.0)
 					q = Vector3(r.x, q.y, zc + r.z)
 		pts.append(q)
 	pts.append(pts[0])
