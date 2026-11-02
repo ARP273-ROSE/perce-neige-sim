@@ -6,7 +6,7 @@ extends SceneTree
 
 
 func _initialize() -> void:
-	var out_path: String = "/tmp/rame_mesh.txt"
+	var out_path: String = OS.get_temp_dir().path_join("rame_mesh.txt")
 	var args: PackedStringArray = OS.get_cmdline_user_args()
 	if args.size() > 0:
 		out_path = args[0]
@@ -14,6 +14,10 @@ func _initialize() -> void:
 	get_root().add_child(root)
 	var built: Dictionary = TrainBodyBuilder.build_train(root, 32.0, 2)
 	var f: FileAccess = FileAccess.open(out_path, FileAccess.WRITE)
+	if f == null:
+		push_error("écriture impossible : " + out_path)
+		quit(1)
+		return
 	var n_tri: int = 0
 	var y_min: float = 99.0
 	var y_max: float = -99.0

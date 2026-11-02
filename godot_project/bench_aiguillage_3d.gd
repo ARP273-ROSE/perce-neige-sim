@@ -23,7 +23,7 @@ func _initialize() -> void:
 
 
 func _suite() -> void:
-	var out_path: String = "/tmp/aiguillage.txt"
+	var out_path: String = OS.get_temp_dir().path_join("aiguillage.txt")
 	var args: PackedStringArray = OS.get_cmdline_user_args()
 	if args.size() > 0:
 		out_path = args[0]
@@ -198,6 +198,10 @@ func _export(tr: TrackBuilder, out_path: String, s_ref: float) -> void:
 	var xf: Transform3D = _tunnel.transform_at(s_ref)
 	var inv: Transform3D = xf.affine_inverse()
 	var f: FileAccess = FileAccess.open(out_path, FileAccess.WRITE)
+	if f == null:
+		push_error("écriture impossible : " + out_path)
+		quit(1)
+		return
 	var n_tri: int = 0
 	var stack: Array = [tr]
 	while not stack.is_empty():

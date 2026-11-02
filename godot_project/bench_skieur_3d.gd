@@ -329,7 +329,7 @@ func _tick() -> void:
 				sk.velocity = Vector3.ZERO
 				sk.support = null
 				sk.chemin = []
-				for e in [[42.0, x_porte], [43.3, x_porte], [43.3, 1.45], [42.6, 1.45], [38.0, 1.45]]:
+				for e in [[42.0, x_porte], [43.3, x_porte], [43.3, 1.28], [42.6, 1.28], [38.0, 1.28]]:
 					var xe: Transform3D = tun.transform_at(e[0])
 					sk.chemin.append(xe.origin + xe.basis.x * e[1] + xe.basis.y * y_q)
 				_ouv_max = 0.0

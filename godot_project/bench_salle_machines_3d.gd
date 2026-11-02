@@ -11,7 +11,7 @@ var _track: TrackBuilder
 
 
 func _initialize() -> void:
-	var out_path: String = "/tmp/salle_machines.txt"
+	var out_path: String = OS.get_temp_dir().path_join("salle_machines.txt")
 	var args: PackedStringArray = OS.get_cmdline_user_args()
 	if args.size() > 0:
 		out_path = args[0]
@@ -30,7 +30,7 @@ func _initialize() -> void:
 
 func _suite() -> void:
 	assert(_tunnel.path_points.size() > 0)
-	var out_path: String = "/tmp/salle_machines.txt"
+	var out_path: String = OS.get_temp_dir().path_join("salle_machines.txt")
 	var args: PackedStringArray = OS.get_cmdline_user_args()
 	if args.size() > 0:
 		out_path = args[0]
@@ -48,6 +48,10 @@ func _suite() -> void:
 	var xf: Transform3D = _tunnel.transform_at(PNConstants.LENGTH)
 	var inv: Transform3D = xf.affine_inverse()
 	var f: FileAccess = FileAccess.open(out_path, FileAccess.WRITE)
+	if f == null:
+		push_error("écriture impossible : " + out_path)
+		quit(1)
+		return
 	var n_tri: int = 0
 	for holder in [mr, st, _track, _tunnel]:
 		var stack: Array = [holder]

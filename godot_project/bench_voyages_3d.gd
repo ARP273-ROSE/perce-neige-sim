@@ -4,6 +4,8 @@
 # Exécution : godot --headless --path godot_project -s bench_voyages_3d.gd
 extends SceneTree
 
+var _ok: bool = true
+
 
 func _make(direction: int, pax: int, gpax: int) -> TrainPhysics:
 	var ph := TrainPhysics.new()
@@ -31,12 +33,14 @@ func _voyage(nom: String, direction: int, pax: int, gpax: int) -> void:
 	var t_max := 0.0
 	var e_trac := 0.0
 	var e_regen := 0.0
+	var v_max := 0.0
 	while not ph.finished and t < 900.0:
 		ph.step(dt)
 		t += dt
 		e_trac += ph.power_kw * dt / 3600.0
 		e_regen += ph.regen_kw * dt / 3600.0
 		p_max = maxf(p_max, ph.power_kw)
+		v_max = maxf(v_max, absf(ph.v))
 		r_max = maxf(r_max, ph.regen_kw)
 		t_max = maxf(t_max, ph.tension_dan)
 		if t >= next_log:
@@ -44,6 +48,11 @@ func _voyage(nom: String, direction: int, pax: int, gpax: int) -> void:
 			print("ROW,%s,%.3f,%.3f,%.3f,%.4f,%.4f,%.3f,%.3f,%.3f,%.3f" % [
 				nom, t, ph.s, ph.ghost_s_phys(), ph.v, ph.power_kw,
 				ph.regen_kw, ph.tension_dan, ph.throttle, ph.regen_level])
+	# arrivé au terminus, sans dépasser la survitesse (+10 %, premier seuil)
+	var bon: bool = ph.finished and t > 60.0 and t < 900.0 and v_max <= PNConstants.V_MAX * 1.10 \
+		and p_max > 0.0 and t_max > 0.0 and absf(ph.v) < 0.5
+	print("%s %s : %.0f s, v max %.2f m/s" % ["[OK]  " if bon else "[ECHEC]", nom, t, v_max])
+	_ok = _ok and bon
 	print("SUM,%s,%s,%.0f,%.0f,%.0f,%.1f,%.1f,%.0f" % [
 		nom, "oui" if ph.finished else "NON", t, p_max, r_max, e_trac,
 		e_regen, t_max])
@@ -60,4 +69,5 @@ func _initialize() -> void:
 	_voyage("descente_vide_pleine", -1, 0, 334)
 	_voyage("descente_pleine_vide", -1, 334, 0)
 	_voyage("montee_pleine_pleine", 1, 334, 334)
-	quit(0)
+	print("BENCH_VOYAGES " + ("OK" if _ok else "ECHEC"))
+	quit(0 if _ok else 1)
