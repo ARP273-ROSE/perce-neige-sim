@@ -37,6 +37,7 @@ const ACCEL: float = 7.0
 const G: float = 9.81
 const Y_YEUX: float = 1.62
 const DIST_MIN: float = 1.2
+const RALLONGE_BRAS: float = 3.0         # m/s
 const DIST_MAX: float = 9.0
 const N_IMAGES: int = 8
 
@@ -1340,7 +1341,11 @@ func _animer(delta: float, dir: Vector3) -> void:
 func _camera() -> void:
 	cam_pitch = clampf(cam_pitch, PITCH_MIN, _pitch_max())
 	pivot.rotation = Vector3(clampf(cam_pitch - _pitch_sol, PITCH_MIN, _pitch_max()), cam_yaw, 0.0)
-	bras.spring_length = 0.0 if premiere_personne else cam_dist
+	# le bras se raccourcit aussitôt (il ne doit pas traverser les parois) mais ne se
+	# rallonge qu'à RALLONGE_BRAS : dans la rame, passant devant une baie ou une barre,
+	# il faisait des bonds de 0,7 à 1,8 m en une image
+	var voulu: float = 0.0 if premiere_personne else cam_dist
+	bras.spring_length = minf(voulu, bras.get_hit_length() + RALLONGE_BRAS * get_process_delta_time())
 	# en remontée, la caméra de dos passe à travers le véhicule (vitré) :
 	# arrêtée par ses parois, elle restait enfermée dans la cabine portes
 	# fermées (retour d'utilisateur, 23/10/2026) ; dans le funiculaire, elle reste
