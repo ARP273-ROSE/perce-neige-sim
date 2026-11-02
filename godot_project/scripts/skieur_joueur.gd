@@ -37,6 +37,9 @@ const ACCEL: float = 7.0
 const G: float = 9.81
 const Y_YEUX: float = 1.62
 const DIST_MIN: float = 1.2
+const RALLONGE_BRAS: float = 3.0         # m/s
+const X_BRAS_MAX: float = 1.20           # écart à l'axe de la voiture de l'origine du bras (m)
+const BRAS_CORPS_MIN: float = 0.45       # en dessous, le corps est masqué (m)
 const DIST_MAX: float = 9.0
 const N_IMAGES: int = 8
 
@@ -81,6 +84,7 @@ var chemin: Array = []
 
 var pivot: Node3D = null
 var bras: SpringArm3D = null
+var _decal_bras: Vector3 = Vector3.ZERO
 var camera: Camera3D = null
 var _visuel: Node3D = null
 var _corps: MultiMeshInstance3D = null
@@ -1340,7 +1344,11 @@ func _animer(delta: float, dir: Vector3) -> void:
 func _camera() -> void:
 	cam_pitch = clampf(cam_pitch, PITCH_MIN, _pitch_max())
 	pivot.rotation = Vector3(clampf(cam_pitch - _pitch_sol, PITCH_MIN, _pitch_max()), cam_yaw, 0.0)
-	bras.spring_length = 0.0 if premiere_personne else cam_dist
+	# le bras se raccourcit aussitôt (il ne doit pas traverser les parois) mais ne se
+	# rallonge qu'à RALLONGE_BRAS : dans la rame, passant devant une baie ou une barre,
+	# il faisait des bonds de 0,7 à 1,8 m en une image
+	var voulu: float = 0.0 if premiere_personne else cam_dist
+	bras.spring_length = minf(voulu, bras.get_hit_length() + RALLONGE_BRAS * get_process_delta_time())
 	# en remontée, la caméra de dos passe à travers le véhicule (vitré) :
 	# arrêtée par ses parois, elle restait enfermée dans la cabine portes
 	# fermées (retour d'utilisateur, 23/10/2026) ; dans le funiculaire, elle reste
@@ -1351,6 +1359,17 @@ func _camera() -> void:
 	pivot.position.y = Y_YEUX if premiere_personne else Y_YEUX - 0.05
 	pivot.position.x = 0.0
 	pivot.position.z = 0.0
+	# à bord, arrêté sur le seuil ou contre la paroi : l'origine du bras reste dans la
+	# rame, sinon le bras sortait par la porte (il partait de l'autre côté des flancs)
+	var sup_cam: Node3D = support as Node3D
+	var decal_voulu: Vector3 = Vector3.ZERO
+	if sup_cam != null and not embarque and not premiere_personne:
+		var x_loc: float = sup_cam.to_local(global_position).x
+		var exces: float = absf(x_loc) - X_BRAS_MAX
+		if exces > 0.0:
+			decal_voulu = sup_cam.global_basis.x * (-signf(x_loc) * exces)
+	_decal_bras = _decal_bras.move_toward(decal_voulu, 2.0 * get_process_delta_time())
+	pivot.position += global_basis.inverse() * _decal_bras
 	if premiere_personne:
 		# on ne se voit pas soi-même, à pied, à ski ou en remontée (retour
 		# d'utilisateur, 23/10/2026 : « à la première personne sur le TS je me vois »)
@@ -1359,8 +1378,9 @@ func _camera() -> void:
 			# yeux du passager assis : au-dessus du bassin (en arrière des
 			# pieds), à 1,25 m au-dessus des pieds
 			pivot.position = Vector3(_visuel.position.x * 0.9, Y_YEUX_ASSIS, _visuel.position.z * 0.9)
-	elif not _visuel.visible and _chute_t <= 0.0:
-		_visuel.visible = true
+	elif _chute_t <= 0.0:
+		# caméra plaquée contre lui : on verrait l'intérieur de sa tête
+		_visuel.visible = bras.get_hit_length() > BRAS_CORPS_MIN
 
 
 ## Le skieur est-il à l'air libre (ni dans une gare, ni dans le tunnel) ?
