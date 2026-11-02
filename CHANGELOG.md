@@ -26,11 +26,10 @@ mi-hauteur. Son flanc est maintenant fermé le long de l'escalier, et l'on desce
 pylône par pylône :
 - Grand Huit : numéros lus sur les plaques ; deux pylônes à 484 et 607 m retirés, galets replacés (support-compression en
   P5-P6). P1 et P12-P14 estimés.
-- Tovière : pylône de 906 m jamais vu, retiré ; P15-P16 ajoutés contre la gare, estimés. Le retrait de celui de 450 m est
-  déduit du calcul (dépassement nul, contre 3,7 à 15,9° pour les autres candidats), sans vérification en vidéo pour l'instant.
+- Tovière : passages recomptés en vidéo ; pylônes de 305 et 906 m retirés, P15-P16 ajoutés contre la gare, estimés.
 - Leissières : P2 de 65 à 32 m (estimé : aucun pylône vu à 65 m).
 
-Géométrie recalculée (effort 400), dépassement des galets sur ces trois lignes : 171° → 107° (Tovière 0°, Leissières 53°,
+Géométrie recalculée (effort 400), dépassement des galets sur ces trois lignes : 171° → 109° (Tovière 2°, Leissières 53°,
 Grand Huit 54°), 1 portée sous la garde par ligne.
 
 **Bancs.**
