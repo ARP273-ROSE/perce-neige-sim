@@ -148,7 +148,12 @@ func assurer_autour(p: Vector3) -> void:
 		if not couvert:
 			var r2: Rect2 = Rect2(p.x - 200.0, p.z - 200.0, 400.0, 400.0)
 			_zones_relief.append(r2)
-			_taches.append(_terrain.bind(relief, r2))
+			# par blocs, sur plusieurs images : le carré entier prenait 26 ms d'un coup, à ski
+			for bi in range(4):
+				for bj in range(4):
+					var bloc: Rect2 = Rect2(r2.position + r2.size * 0.25 * Vector2(bi, bj), r2.size * 0.25)
+					_taches.append(_terrain.bind(relief, bloc, TERRAIN_GRILLE))
+			_taches.append(_terrain.bind(relief, r2, TERRAIN_PIECES))
 			if synchrone_sans_ecran and DisplayServer.get_name() == "headless":
 				_avancer(1 << 62)
 			else:
@@ -692,7 +697,12 @@ static func _hors(z0: float, z1: float, trous: Array) -> Array:
 ## triangles mêmes du bloc affiché (nœuds de sa grille, même diagonale),
 ## sauf dans les pièces fines des gares, maillées à 2 m sans les trous des
 ## bâtiments.
-func _terrain(relief: ReliefBuilder, r: Rect2) -> void:
+const TERRAIN_TOUT: int = 0
+const TERRAIN_GRILLE: int = 1
+const TERRAIN_PIECES: int = 2
+
+
+func _terrain(relief: ReliefBuilder, r: Rect2, quoi: int = TERRAIN_TOUT) -> void:
 	var faces: PackedVector3Array = PackedVector3Array()
 	var pieces: Array = relief._rects_pieces
 	# bloc : nœuds de la grille (pas d'affichage _pas)
@@ -704,6 +714,8 @@ func _terrain(relief: ReliefBuilder, r: Rect2) -> void:
 	var i1: int = mini(int(ceil((r.end.y - ReliefDonnees.Z_NORD) / dz)), (ReliefDonnees.NZ - 1) / relief._pas)
 	var n: int = ReliefDonnees.NX
 	var p: int = relief._pas
+	if quoi == TERRAIN_PIECES:
+		i1 = i0
 	for i in range(i0, i1):
 		for j in range(j0, j1):
 			var x0: float = ReliefDonnees.X_OUEST + j * dx
@@ -726,7 +738,7 @@ func _terrain(relief: ReliefBuilder, r: Rect2) -> void:
 	# touchent (hors de la pièce : les triangles du bloc, échantillonnés)
 	for pc3 in pieces:
 		var pr: Rect2 = pc3 as Rect2
-		if not pr.intersects(r):
+		if quoi == TERRAIN_GRILLE or not pr.intersects(r):
 			continue
 		var gx0: float = ReliefDonnees.X_OUEST + floor((pr.position.x - ReliefDonnees.X_OUEST) / dx) * dx
 		var gx1: float = ReliefDonnees.X_OUEST + ceil((pr.end.x - ReliefDonnees.X_OUEST) / dx) * dx
