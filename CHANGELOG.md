@@ -30,6 +30,7 @@ garde-corps refermé et échelle courte jusqu'à la traverse.
 Coût en triangles par ligne : Leissières 237 272 → 255 904 (+7,9 %), Tovière 291 576 → 312 532 (+7,2 %), Grand Huit 180 928 → 196 716 (+8,7 %),
 même nombre de nœuds. Vue fixe : Tovière +0,3 à +1,2 % de primitives, Grand Huit +0,9 à +3,5 % ; les appels de dessin varient d'un essai à l'autre
 (Tovière 281 avant, 281 à 312 après) et ne permettent pas de conclure. Leissières non comparable. Bancs : 37 sur 37 sous Windows au commit final.
+La marge baisse : images de plus de 16,7 ms au banc sans synchro écran, tournée de 6 lignes 144-172 → 223-224, Fresse 79-96 → 121-138, à cause des petites pièces de tête (sans elles 150-172 ; l'inclinaison ne coûte presque rien). En jeu à 60 Hz sur RTX 5070 Ti, image moyenne inchangée ; écran 120 Hz et machines plus faibles non mesurés.
 
 **Régulateur sur PC.** Relevé d'une RTX 5070 Ti en 4K : les remontées passaient au détail réduit à l'entrée en mode
 skieur et n'en revenaient jamais. Le temps du fil principal comptait aussi le dessin et l'attente de l'écran, soit au moins
