@@ -374,6 +374,7 @@ func _preparer(fin_us: int) -> void:
 				_decoder_ligne_lointaine(_k - nz)
 			_k += 1
 			if _k >= nz + ReliefLointainDonnees.N:
+				_creuser_gares()
 				_etape = 1
 				_k = 0
 				_octets = PackedByteArray()
@@ -593,6 +594,78 @@ func _hauteur_tri(x: float, z: float) -> float:
 	if wx + wz <= 1.0:
 		return a + (b - a) * wx + (c - a) * wz
 	return d + (c - d) * (1.0 - wx) + (b - d) * (1.0 - wz)
+
+
+## Déblai des gares de remontées (retour d'utilisateur, 02/11/2026 : « creuser la montagne en
+## amont plutôt que relever l'aval ») : la gare était posée au plus haut du terrain sous
+## son emprise, jusqu'à 18 m au-dessus du sol côté aval (médiane 2,9 m). On abaisse la
+## grille sous l'emprise à DEBLAI_PART de la dénivelée, talus raide autour. Le sol
+## affiché, la collision et le profil des lignes (lu sur hauteur_sol) suivent.
+const DEBLAI_PART: float = 0.35
+const DEBLAI_TALUS: float = 1.0        # hauteur par mètre, autour de l'emprise
+const DEBLAI_NON: Array = ["tph_grande_motte"]    # gare d'aval : bâtiment existant
+
+
+func _creuser_gares() -> void:
+	var interieur: Dictionary = {}
+	for j in RemonteesDomaine.JUMELAGES:
+		interieur[[j[0], false]] = true    # (tronçon bas : gare amont intermédiaire)
+		interieur[[j[1], true]] = true
+	for D in RemonteesDonnees.LIGNES:
+		var cle: String = String(D["cle"])
+		if cle not in DEBLAI_NON:
+			var a: Vector2 = RemonteesDomaine.monde(float(D["aval"][0]), float(D["aval"][1]))
+			var b: Vector2 = RemonteesDomaine.monde(float(D["amont"][0]), float(D["amont"][1]))
+			if a.distance_to(b) < 10.0:
+				continue
+			var dirh: Vector2 = (b - a).normalized()
+			a += dirh * float(RemonteesDomaine.AVANCES_AVAL.get(cle, 0.0))
+			b -= dirh * float(RemonteesDomaine.RECULS_AMONT.get(cle, 0.0))
+			var demi: float = float(D["voie"]) * 0.5 + 1.5
+			var lg: float = LigneRemontee.l_gare_pour(String(D["famille"])) + 2.0
+			for bout in [[true, a, -dirh], [false, b, dirh]]:
+				if interieur.has([cle, bout[0]]):
+					continue
+				_creuser_gare(bout[1], bout[2], demi, lg)
+
+
+func _creuser_gare(o: Vector2, u: Vector2, demi: float, long_g: float) -> void:
+	for am in amenagements:
+		if (am["rect"] as Rect2).grow(30.0).has_point(o):
+			return                         # gare du funiculaire
+	var lat: Vector2 = Vector2(-u.y, u.x)
+	var mi: float = INF
+	var ma: float = -INF
+	var t: float = -2.0
+	while t <= long_g:
+		for x in [-demi, 0.0, demi]:
+			var q: Vector2 = o + u * t + lat * x
+			var h: float = _hauteur_tri(q.x, q.y)
+			mi = minf(mi, h)
+			ma = maxf(ma, h)
+		t += 3.0
+	if ma - mi < 1.0:
+		return
+	var y: float = mi + (ma - mi) * DEBLAI_PART
+	var n: int = ReliefDonnees.NX
+	var m_c: float = maxf(_dx, _dz) * _pas
+	var r: float = long_g + demi + m_c * 2.0 + (ma - y) / DEBLAI_TALUS
+	var j0: int = clampi(int((o.x - r - ReliefDonnees.X_OUEST) / _dx), 0, n - 1)
+	var j1: int = clampi(int((o.x + r - ReliefDonnees.X_OUEST) / _dx) + 1, 0, n - 1)
+	var i0: int = clampi(int((o.y - r - ReliefDonnees.Z_NORD) / _dz), 0, ReliefDonnees.NZ - 1)
+	var i1: int = clampi(int((o.y + r - ReliefDonnees.Z_NORD) / _dz) + 1, 0, ReliefDonnees.NZ - 1)
+	for i in range(i0, i1 + 1):
+		var zv: float = ReliefDonnees.Z_NORD + i * _dz
+		for j in range(j0, j1 + 1):
+			var v: Vector2 = Vector2(ReliefDonnees.X_OUEST + j * _dx, zv) - o
+			var tv: float = v.dot(u)
+			var xv: float = v.dot(lat)
+			var dt: float = maxf(maxf(-2.0 - tv, tv - long_g), 0.0)
+			var dx: float = maxf(absf(xv) - demi, 0.0)
+			# toute la maille qui touche l'emprise, puis le talus
+			var dist: float = maxf(Vector2(dt, dx).length() - m_c, 0.0)
+			var k: int = i * n + j
+			_h[k] = minf(_h[k], y - 0.3 + dist * DEBLAI_TALUS)
 
 
 ## Distance d'un point à un polygone (0 dedans).
