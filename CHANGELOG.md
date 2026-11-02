@@ -7,6 +7,11 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## 1.53.3 — 2 novembre 2026
 
+**Sur le toit de la gare en une image.** Pendant les 10 s qui suivent une dépose par la carte, le skieur était reposé à chaque image sur
+le premier sol trouvé en partant de 40 m au-dessus de lui : passer sous un auvent le mettait sur le toit (+6,27 m à Leissières, reproduit 3 fois sur 3),
+refuge compris. Cela ne joue plus que s'il ne touche plus le sol, le cas prévu (talus d'une ligne voisine construit autour de lui). Nouveau banc `mur`, vraies touches
+contre les murs trouvés au rayon sur 3 lignes : 11 murs, plus grand saut 1,04 m, filet jamais déclenché.
+
 **Son de ligne des télécabines.** `tcd_ligne` passe de 1,5 s à 18,5 s, pris sur le passage désigné par l'utilisateur et coupé à 0:53 au lieu de 0:54 :
 le raccord tombe à +0,3 dB (−2,0 dB jusqu'à 0:54), avec le même spectre de part et d'autre (<100 Hz 72 et 69 %, 100-300 Hz 25 et 28 %), et le
 pylône qui approche reste dehors. La source garde un saut d'environ 5 dB à 0:44. Niveau moyen −27,8 dB contre −20,6 : même gain que les autres sons
