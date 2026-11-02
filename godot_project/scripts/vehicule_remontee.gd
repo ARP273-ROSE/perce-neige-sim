@@ -1053,11 +1053,9 @@ func garde_corps(t: float) -> void:
 ## Bulle des Lanches (sièges Études de Transports, pinces ET-106), refaite
 ## entièrement d'après les vidéos et les photos de la ligne (retours
 ## d'utilisateur, 28/10/2026 : « ton design de bulle c'est à refaire depuis
-## 0 ») : 2,50 m de large ; de profil une coque en « D » (corde moyeu → bord
-## 1,37 m, flèche 0,73 m, courbure serrée près du moyeu, plus plate vers le
-## bord) ; de face un rectangle aux coins arrondis, extrémités en calottes
-## bombées, face avant presque verticale et toit presque plat ; fermée,
-## sommet à ~1,0 m au-dessus de l'assise et bord ~0,12 m
+## 0 ») : 2,50 m de large ; de profil une coque en « D » ; de face un rectangle aux coins arrondis, extrémités en calottes
+## bombées, face avant verticale et toit presque plat ; fermée,
+## sommet à 1,15 m au-dessus de l'assise et bord ~0,12 m
 ## dessous ; moyeu de chaque côté à ~0,25 m au-dessus de l'assise, à
 ## l'aplomb du dossier ; elle bascule de 90° vers l'ARRIÈRE et se loge
 ## au-dessus et derrière le dossier. Bandeau bas sombre de 0,35 m portant
@@ -1065,23 +1063,31 @@ func garde_corps(t: float) -> void:
 ## logo bleu à chaque bout, deux sangles noires de préhension ;
 ## polycarbonate fumé gris.
 var _bulle_l: float = 2.50           # largeur hors tout (2,50 m mesurés ; selon le siège)
-const BULLE_CORDE: float = 1.00      # moyeu → bord du bandeau (1,37 mesurés : trop longue vers l'avant, retour d'utilisateur 28/10/2026)
-const BULLE_FLECHE: float = 0.90     # bombé maxi, perpendiculaire à la corde
-const BULLE_INCL: float = 0.38       # corde fermée : 22° sous l'horizontale (bord ~0,12 m sous l'assise)
+const BULLE_AVANT: float = 0.85      # moyeu → face avant, à plat (retour d'utilisateur, 02/11/2026 : « va moins loin devant »)
+const BULLE_HAUT: float = 0.90       # moyeu → toit : assise + 1,15 m (le casque est à assise + 0,94 ; il dépassait du toit à + 0,90)
+const BULLE_BAS: float = 0.37        # moyeu → bord du bandeau, en dessous (bord ~0,12 m sous l'assise)
+const BULLE_S_FACE: float = 0.80     # abscisse s où commence la face avant droite
 const BULLE_BANDEAU: float = 0.35
 
 
 ## Point de la coque (repère de la bulle : moyeu à l'origine, bulle fermée) ;
 ## s : de 0 (moyeu) à 1 (bord du bandeau) ; t : de -1 à 1 sur la largeur.
+## Fermée, de profil : une arche du moyeu au haut de la face avant, puis une
+## face avant VERTICALE, qui ne déverse pas (retour d'utilisateur, 02/11/2026).
 func _bulle_point(s: float, t: float) -> Vector3:
-	var c: Vector2 = Vector2(-cos(BULLE_INCL), -sin(BULLE_INCL))      # (z, y)
-	var n: Vector2 = Vector2(-sin(BULLE_INCL), cos(BULLE_INCL))       # bombé : vers le haut et l'avant
-	# profil en « D » plein (superellipse) : flancs raides au moyeu et à la face
-	# avant, toit presque plat — la bulle fermée est une « boîte » arrondie
-	var f: float = pow(maxf(0.0, 1.0 - pow(absf(2.0 * s - 1.0), 3.0)), 1.0 / 3.0)
-	# calottes : la flèche tombe à zéro aux extrémités (superellipse)
+	var p: Vector2                                                     # (z, y)
+	if s < BULLE_S_FACE:
+		# demi-superellipse : flancs raides, toit presque plat
+		var th: float = PI * s / BULLE_S_FACE
+		var cs: float = cos(th)
+		var u: float = signf(cs) * pow(absf(cs), 2.0 / 3.5)
+		p = Vector2(-BULLE_AVANT * 0.5 * (1.0 - u), BULLE_HAUT * pow(sin(th), 2.0 / 3.5))
+	else:
+		p = Vector2(-BULLE_AVANT, -BULLE_BAS * (s - BULLE_S_FACE) / (1.0 - BULLE_S_FACE))
+	# calottes : le bombé tombe à zéro aux extrémités, sur la droite moyeu → bord
 	var k: float = pow(maxf(0.0, 1.0 - pow(absf(t), 4.0)), 0.25)
-	var p: Vector2 = c * (s * BULLE_CORDE) + n * (BULLE_FLECHE * f * k)
+	var corde: Vector2 = Vector2(-BULLE_AVANT, -BULLE_BAS) * s
+	p = corde.lerp(p, k)
 	return Vector3(t * _bulle_l * 0.5, p.y, p.x)
 
 
