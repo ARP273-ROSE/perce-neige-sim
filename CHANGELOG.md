@@ -15,6 +15,10 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 **Galets.** Au moins 4 sous le câble et 4 au-dessus sur chaque pylône (un « 4 SC » faisait 2 + 2), sur les télécabines et les télésièges, sauf les télésièges fixes à 2 m/s ou moins (Rosset, Panoramic, Village), d'après un retour d'utilisateur. Téléskis non concernés.
 
+**Véhicules.** Pince A-108 aux cotes relevées sur les sièges des Tommeuses (11 436 → 9 548 triangles). Sièges Études de Transports : tôle pleine percée de 4 trous au lieu du treillis. Poulies des Tommeuses : Ø 7,20 m en aval, Ø 6,10 m en amont, câble et galets de déviation suivent ; en aval, la pince mord la jante de 3 cm dans le demi-tour. Logos des télécabines : le panneau passait sous la caisse sur Omega, Diamond et Symphony ; « TIGNES » ajouté (lettrage du jeu), encre claire sur les caisses noires.
+
+**Relevés de pylônes.** Legettaz : 5 pylônes (P4 estimé). Col du Palet P3 et Combe Folle P8 : compressions, d'après les reportages. Positions confirmées en vidéo : Col du Palet, Chardonnet (brin montant), Fontaine Froide.
+
 **Crête de Leissières.** Quatre pylônes centrés sur le sommet, deux de chaque côté (547, 561, 575, 589 m), au lieu de trois d'un côté et un de l'autre : déviation du câble de 17 à 18° sur chacun, au lieu de 33° sur deux d'entre eux. Positions et hauteurs **estimées** pour obtenir cette courbe : le premier côté est passe à 18,6 m, la vidéo donnait 5 à 8 m sur la crête.
 
 **Construction des lignes allégée.** Chaque petite pièce d'une ligne (boîte, cylindre) partait à la carte graphique dès sa pose, puis la fusion la jetait : 40 000 par ligne. Les pièces identiques partagent maintenant le même envoi le temps de la construction : 2,6 millions → 100 000 sur les 66 lignes du banc, lignes avec une image de plus de 40 ms 11-12 → 6 (1 essai sous Linux, sans écran). PWA à 824×384 dans WebKit, entrée en skieur à l'arrêt : tampons créés 196 000 → 47 000, vivants 29 936 → 22 367, mémoire 210 → 207 Mo. Non mesuré sur PC avec écran ni sur téléphone.
