@@ -11,6 +11,8 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 **Géométrie recalculée.** Précalcul complet (effort 400) des 45 lignes concernées sur les nouveaux profils creusés : dépassement cumulé 1 055° → 663° entre le calcul de départ et le résultat, portées sous la garde 15 → 12. Le pire : Grand Huit 29,3°, Datcha 19,3°, Mont Blanc 16,2°. Crête de Leissières conservée, réglée à la main.
 
+**Lanches près de la Vanoise.** Le câble passait dans le sol à d = 2 046 m. P19 à P22 relevés (hauteurs estimées, au-delà des mesures vidéo) : garde 4,6 m au pire, plus aucune portée sous la garde, dépassement de la ligne 42°.
+
 **Câble immobile.** Il fléchissait sous chaque véhicule, par deux calculs différents pour le câble dessiné et pour la pince : celle-ci passait au-dessus ou en dessous, et le câble ondulait en permanence. Plus de flèche locale ; seule reste l'onde des arrêts d'urgence.
 
 **Câble sur les galets.** Il cassait en un point au droit du pylône, et le pas de 3 m décalait la cassure avant les galets. Il suit maintenant un arc sur la longueur du train, tous les 0,5 m, et les galets se calent dessus partout, batteries de gare et téléskis compris : écart maximal de repos 0,71 → 0,40 m.
