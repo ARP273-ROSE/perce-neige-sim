@@ -697,6 +697,7 @@ static func _hors(z0: float, z1: float, trous: Array) -> Array:
 ## triangles mêmes du bloc affiché (nœuds de sa grille, même diagonale),
 ## sauf dans les pièces fines des gares, maillées à 2 m sans les trous des
 ## bâtiments.
+var _pieces_faites: Dictionary = {}
 const TERRAIN_TOUT: int = 0
 const TERRAIN_GRILLE: int = 1
 const TERRAIN_PIECES: int = 2
@@ -738,8 +739,10 @@ func _terrain(relief: ReliefBuilder, r: Rect2, quoi: int = TERRAIN_TOUT) -> void
 	# touchent (hors de la pièce : les triangles du bloc, échantillonnés)
 	for pc3 in pieces:
 		var pr: Rect2 = pc3 as Rect2
-		if quoi == TERRAIN_GRILLE or not pr.intersects(r):
+		if quoi == TERRAIN_GRILLE or not pr.intersects(r) or _pieces_faites.has(pr):
 			continue
+		# (une seule fois : chaque carré qui la touchait la refaisait en entier, en double, 26 à 54 ms)
+		_pieces_faites[pr] = true
 		var gx0: float = ReliefDonnees.X_OUEST + floor((pr.position.x - ReliefDonnees.X_OUEST) / dx) * dx
 		var gx1: float = ReliefDonnees.X_OUEST + ceil((pr.end.x - ReliefDonnees.X_OUEST) / dx) * dx
 		var gz0: float = ReliefDonnees.Z_NORD + floor((pr.position.y - ReliefDonnees.Z_NORD) / dz) * dz
