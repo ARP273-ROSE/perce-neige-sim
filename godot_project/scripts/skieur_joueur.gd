@@ -848,6 +848,17 @@ func _marcher(delta: float, dir: Vector3, vite: bool) -> void:
 		if _chute == 0.0:
 			_depart_chute = global_position
 		_chute += delta
+		if _chute > 2.5 and global_position.distance_to(_depart_chute) < 0.5:
+			# « en chute » sans avoir bougé : pris dans le décor, pas dans le vide. Il repartait
+			# au dernier sol sûr, parfois à 3 km : on le repose à côté s'il y a de la place
+			var a_cote: Vector3 = _place_libre()
+			if a_cote != Vector3.ZERO:
+				global_position = a_cote
+				velocity = Vector3.ZERO
+				support = null
+				_chute = 0.0
+				degagements += 1
+				return
 		if _chute > 2.5:
 			# tombé dans un trou (fosse, vide) : retour au dernier sol sûr ;
 			# au troisième rattrapage en 30 s, au refuge (gare)
@@ -885,37 +896,54 @@ func _monter_marche_au_mieux(voulu: Vector3) -> bool:
 
 
 ## Le filet : on commande un déplacement, il n'a pas bougé de 10 cm en 1,2 s, et aucune
-## des 8 directions n'est libre (corps pris dans le décor). Contre un simple mur, une
-## direction reste libre : rien ne se passe. Il est reposé à l'endroit libre le plus
-## proche, avec un sol dessous ; sinon au dernier sol sûr, sinon au refuge.
+## des 8 directions n'est libre, ni au sol ni à hauteur de marche (corps pris dans le décor,
+## par exemple une plateforme de gare construite autour de lui). Contre un simple mur, une
+## direction reste libre : rien ne se passe. Il est reposé à l'endroit libre le plus proche.
+## Jamais de renvoi lointain tout de suite (il sautait à 3 km) : au-delà de REPLI_PROCHE, on
+## reste là et on le signale ; le refuge seulement après PIEGE_REFUGE_S de commande sans
+## issue, faute de quoi le joueur devrait relancer la partie.
 const PIEGE_S: float = 1.2
+const REPLI_PROCHE: float = 5.0
+const PIEGE_REFUGE_S: float = 6.0
 var _piege_t: float = 0.0
+var _piege_long: float = 0.0
 var _piege_p: Vector3 = Vector3.ZERO
 var degagements: int = 0
+var pieges_sans_issue: int = 0
 
 
 func _anti_piege(delta: float, commande: bool) -> void:
 	if not commande or global_position.distance_to(_piege_p) > 0.10:
 		_piege_t = 0.0
+		_piege_long = 0.0
 		_piege_p = global_position
 		return
 	_piege_t += delta
 	if _piege_t < PIEGE_S:
 		return
+	_piege_long += _piege_t
 	_piege_t = 0.0
-	var ici: Transform3D = global_transform.translated(Vector3.UP * 0.02)
-	for k in range(8):
-		var a: float = k * TAU / 8.0
-		if not test_move(ici, Vector3(cos(a), 0.0, sin(a)) * 0.06):
-			return
+	for h in [0.02, MARCHE_MAX]:
+		var ici: Transform3D = global_transform.translated(Vector3.UP * h)
+		if test_move(ici, Vector3.ZERO):
+			continue
+		for k in range(8):
+			var a: float = k * TAU / 8.0
+			if not test_move(ici, Vector3(cos(a), 0.0, sin(a)) * 0.06):
+				return
 	var ou: Vector3 = _place_libre()
+	if ou == Vector3.ZERO and dernier_sol != Vector3.ZERO and global_position.distance_to(dernier_sol) > 0.3 			and global_position.distance_to(dernier_sol) < REPLI_PROCHE:
+		ou = dernier_sol
+	if ou == Vector3.ZERO and _piege_long >= PIEGE_REFUGE_S:
+		ou = refuge
 	if ou == Vector3.ZERO:
-		ou = dernier_sol if dernier_sol != Vector3.ZERO else refuge
-	if ou == Vector3.ZERO:
+		pieges_sans_issue += 1
+		push_warning("[Skieur] coincé sans place libre proche en %s" % global_position)
 		return
 	global_position = ou
 	velocity = Vector3.ZERO
 	support = null
+	_piege_long = 0.0
 	degagements += 1
 
 
@@ -925,16 +953,18 @@ func _place_libre() -> Vector3:
 	for r in [0.2, 0.4, 0.6, 0.9, 1.3, 1.8, 2.5]:
 		for k in range(16):
 			var a: float = k * TAU / 16.0
-			for dy in [0.0, 0.4, 0.8, -0.4]:
+			for dy in [0.0, 0.4, 0.8, -0.4, 1.3, 1.8, 2.4, 3.0]:
 				var c: Vector3 = p + Vector3(cos(a) * r, dy, sin(a) * r)
 				var rq: PhysicsRayQueryParameters3D = PhysicsRayQueryParameters3D.create(
 					c + Vector3.UP * 0.3, c + Vector3.DOWN * 0.6, collision_mask, [get_rid()])
-				rq.hit_back_faces = false
+				# (une plateforme de gare a sa face utile tournée vers le bas ; elle porte quand même)
+				rq.hit_back_faces = true
 				var h: Dictionary = espace.intersect_ray(rq)
 				if h.is_empty() or (h["normal"] as Vector3).y < 0.7:
 					continue
 				var sur: Vector3 = (h["position"] as Vector3) + Vector3.UP * 0.03
-				var xf: Transform3D = Transform3D(global_transform.basis, sur)
+				# testé un peu au-dessus : sur une pente, le moindre pas de côté touche le sol
+				var xf: Transform3D = Transform3D(global_transform.basis, sur + Vector3.UP * 0.08)
 				if not test_move(xf, Vector3.UP * 0.01) and not test_move(xf, Vector3(0.05, 0.0, 0.0)) \
 						and not test_move(xf, Vector3(-0.05, 0.0, 0.0)):
 					return sur
