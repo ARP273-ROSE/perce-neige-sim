@@ -173,6 +173,12 @@ Les photos numérotées prouvent l'existence et l'ordre, pas la position. Vues d
 | tsd6_bollin | 10, P2 à P10 photographiés | 10 | 413,2 ; 533,0 | P10 « avant l'entrée en gare » : compatible |
 | tsd6_fresse | 19, P2 à P19 photographiés, P9, P15, P16 compressions | 19 | 934,0 ; 1848,8 | compressions conformes au JSON (rangs 9, 15, 16) ; d non mesuré |
 | tsd6_marais | 23, dont 7 compressions, P12 et P15 support-compression | 23 | 8 valeurs | 7 C et 2 SC conformes au JSON ; d non mesurés, vidéo de l'ancien appareil |
-| tsd6_fontaine_froide | non recompté | 10 | 23,7 | vidéo plus complète à exploiter ; non fait |
+| tsd6_fontaine_froide | 10 passages en vidéo | 10 | 23,7 | voir ci-dessous : ~19 m ESTIMÉ, compatible |
 
 Voie d'après le reportage : Bollin 7,35 m, Fresse 6,00 m.
+
+## tsd6_fontaine_froide
+
+Vidéo continue de la montée, 10 passages pour 10 au JSON, 4,0 à 5,0 m/s entre passages et d du JSON : **les d tiennent.** N° par ordre : ESTIMÉ.
+Passages (s) → d JSON (m) : 30 → 23,7 · 44 → 79,1 · 80 → 232,7 · 94 → 294,9 · 132 → 458,9 · 142 → 509,5 · 182 → 684,5 · 208 → 806,7 · 238 → 937,3 · 283 → 1119,0.
+P1 en remontant de P2 à ~4,3 m/s : d ≈ 19 m (ESTIMÉ), pour 23,7 `reconstitue`. Hauteurs : non mesurées, image de faible qualité.
