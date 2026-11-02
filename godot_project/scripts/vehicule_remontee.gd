@@ -396,58 +396,81 @@ func _pince_debrayable() -> void:
 	# à côté des pinces — retour d'utilisateur, 25/10/2026 : « numéros fantômes »)
 
 
-## Pince Doppelmayr A-108 (Tommeuses), cotes relevées en vidéo : corps de 415 mm, plaque de
-## mors 25 × 230, gros ressort bleu 265 × Ø150 à 9-10 spires parallèle au bras, 2 galets de
-## roulement Ø180 × 30, ailette en peigne 100 × 80, 2 galets noirs Ø125 et Ø105 sur le bras,
-## patin de 330 × 60, bras caisson galvanisé de 110 mm. Mêmes repères que `_pince_debrayable` :
-## suspente à X+, dessus du patin à Y_PLAQUE (pneus du lanceur).
+## Pince Doppelmayr A-108 (Tommeuses, Bollin, Fresse), d'après les photos de l'utilisateur et
+## son explication (02/11/2026) : corps gris COURT, qui ne descend pas sous le câble ; une pièce
+## articulée en bas du corps pince le câble d'un côté et, de l'autre, remonte vers l'arrière où
+## DEUX ressorts bleus, derrière le corps et sans le traverser, la poussent vers le haut.
+## Repère : câble à l'origine le long de Z, suspente à X+, patin à Y_PLAQUE (pneus du lanceur).
+const A108_X_PATIN: float = 0.06
+const A108_Y_PATIN: float = 0.15
+## Articulation et roue de came, en position fermée (repère de la pince).
+const A108_ARTICULATION: Vector2 = Vector2(0.10, 0.0)
+const A108_ROUE: Vector3 = Vector3(0.2930, 0.3144, 0)    # 0,43 m le long du bras, depuis l'articulation
+const A108_R_ROUE: float = 0.07
+const A108_OUVERTURE: float = 0.45                        # rad
+
+
 func _pince_a108() -> void:
 	var p: Node3D = Node3D.new()
 	p.name = "Pince"
 	add_child(p)
 	var corps_m: String = "alu_pince"
-	var L: float = 0.415
-	RemonteeKit.boite_en(p, Vector3(0.13, 0.07, L), Vector3(0.0, 0.055, 0), corps_m)
-	RemonteeKit.boite_en(p, Vector3(0.025, 0.11, 0.23), Vector3(-0.055, 0.0, 0), corps_m)      # plaque de mors
+	var L: float = 0.30
+	var travers: Basis = Basis(Vector3.FORWARD, PI * 0.5)
+	# corps : au-dessus et derrière le câble, rien sous sa génératrice basse
+	RemonteeKit.boite_en(p, Vector3(0.19, 0.075, L), Vector3(0.075, 0.055, 0), corps_m)
+	RemonteeKit.boite_en(p, Vector3(0.025, 0.09, 0.23), Vector3(-0.040, 0.020, 0), corps_m)    # mors fixe, devant le câble
 	for sz in [-1.0, 1.0]:
-		RemonteeKit.demi_cone(p, Vector3(0, 0, sz * L * 0.5), Vector3(0, 0, sz * (L * 0.5 + 0.30)), 0.055, 0.0245, "noir_mat", 12)
+		RemonteeKit.demi_cone(p, Vector3(0, 0, sz * L * 0.5), Vector3(0, 0, sz * (L * 0.5 + 0.34)), 0.055, 0.0245, "noir_mat", 12)
+	# pièce articulée en bas du corps : côté câble le mors mobile, côté arrière le bras
+	# qui remonte entre les deux ressorts jusqu'au galet de came
+	var h: Vector3 = Vector3(A108_ARTICULATION.x, A108_ARTICULATION.y, 0)
+	RemonteeKit.cylindre(p, 0.018, 0.018, 0.26, Transform3D(Basis(Vector3.RIGHT, PI * 0.5), h), "acier_noir", 10)
 	_machoire = Node3D.new()
 	_machoire.name = "MachoireMobile"
-	_machoire.position = Vector3(0.07, 0.07, 0)
+	_machoire.position = h
 	p.add_child(_machoire)
-	RemonteeKit.boite_en(_machoire, Vector3(0.025, 0.12, 0.23), Vector3(-0.018, -0.075, 0), corps_m)
-	# bras caisson galvanisé
-	RemonteeKit.poutre(p, Vector3(0.05, 0.07, 0), Vector3(0.34, 0.16, 0), 0.11, 0.11, "galva_pylone", Vector3.BACK)
-	# deux ressorts bleus côte à côte le long du câble, parallèles au bras
-	var dir: Vector3 = Vector3(0.29, 0.09, 0).normalized()
+	RemonteeKit.boite_en(_machoire, Vector3(0.05, 0.03, 0.23), Vector3(-0.085, 0.085, 0), corps_m)
+	RemonteeKit.poutre(_machoire, Vector3(-0.07, 0.085, 0), Vector3(0.0, 0.0, 0), 0.04, 0.05, corps_m, Vector3.BACK)
+	var dir: Vector3 = Vector3(0.68, 0.73, 0).normalized()
+	var haut_bras: Vector3 = dir * 0.40
+	RemonteeKit.poutre(_machoire, Vector3.ZERO, haut_bras, 0.04, 0.035, "galva_pylone", Vector3.BACK)
+	# coupelle haute et galet de came Ø 160, sur la pièce articulée
+	RemonteeKit.poutre(_machoire, haut_bras - Vector3(0, 0, 0.17), haut_bras + Vector3(0, 0, 0.17), 0.06, 0.02, corps_m, Vector3.UP)
+	# au sommet, la roue cylindrique sur laquelle appuie le rail d'ouverture du lanceur ;
+	# elle roule le long du câble (retour d'utilisateur, 02/11/2026)
+	RemonteeKit.cylindre(_machoire, A108_R_ROUE, A108_R_ROUE, 0.11, Transform3D(travers, A108_ROUE), "polyurethane", 18)
+	# deux ressorts bleus côte à côte, assis sur le dos du corps, parallèles au bras
+	var pied: Vector3 = Vector3(0.175, 0.055, 0)
+	RemonteeKit.poutre(p, pied - Vector3(0, 0, 0.17), pied + Vector3(0, 0, 0.17), 0.09, 0.02, corps_m, Vector3.UP)
 	for sz in [-1.0, 1.0]:
 		var r: Node3D = Node3D.new()
-		r.position = Vector3(0.07, 0.10, sz * 0.125)
-		r.basis = Basis(dir.cross(Vector3.BACK).normalized() * -1.0, dir, Vector3.BACK)
+		r.position = pied + Vector3(0, 0, sz * 0.095)
+		r.basis = Basis(dir.cross(Vector3.BACK).normalized(), dir, Vector3.BACK)
 		p.add_child(r)
-		RemonteeKit.ressort(r, Vector3.ZERO, Vector3.UP, 0.265, 0.065, 0.012, 9, "bleu_ressort")
+		RemonteeKit.ressort(r, Vector3.ZERO, Vector3.UP, 0.265, 0.062, 0.012, 9, "bleu_ressort")
 		_ressorts.append(r)
-	# levier d'ouverture et son galet (came de gare)
+	# bras de suspente : fin, sous les ressorts et entre eux, jusqu'à l'articulation du pendule
+	RemonteeKit.poutre(p, Vector3(0.10, 0.02, 0), Vector3(0.30, 0.14, 0), 0.03, 0.06, "galva_pylone", Vector3.BACK)
+	# levier latéral et son galet, avec le peigne noir de contact
 	_levier = Node3D.new()
 	_levier.name = "Levier"
-	_levier.position = Vector3(0.36, 0.17, 0)
+	_levier.position = Vector3(0.30, 0.04, 0)
 	p.add_child(_levier)
-	RemonteeKit.poutre(_levier, Vector3.ZERO, Vector3(0.12, 0.05, 0), 0.05, 0.05, corps_m, Vector3.BACK)
-	# galets noirs du bras (Ø125 et Ø105), axe en travers
-	var travers: Basis = Basis(Vector3.FORWARD, PI * 0.5)
-	RemonteeKit.cylindre(_levier, 0.0625, 0.0625, 0.04, Transform3D(travers, Vector3(0.13, 0.06, 0)), "noir_mat", 14)
-	RemonteeKit.cylindre(p, 0.0525, 0.0525, 0.04, Transform3D(travers, Vector3(0.22, 0.05, 0)), "noir_mat", 14)
-	# galets de roulement Ø180 × 30, en tête et en queue
+	RemonteeKit.poutre(_levier, Vector3.ZERO, Vector3(0.20, -0.02, 0), 0.045, 0.045, "galva_pylone", Vector3.BACK)
+	RemonteeKit.cylindre(_levier, 0.07, 0.07, 0.03, Transform3D(travers, Vector3(0.235, -0.02, 0)), "polyurethane", 16)
+	for k in range(5):
+		RemonteeKit.boite_en(_levier, Vector3(0.012, 0.012, 0.10), Vector3(0.20, -0.06 - k * 0.018, 0), "noir_mat")
+	# galets de roulement Ø 180 × 30, en tête et en queue
 	for sz in [-1.0, 1.0]:
 		RemonteeKit.cylindre(p, 0.016, 0.016, 0.10, Transform3D(travers, Vector3(0.20, 0.11, sz * 0.19)), corps_m, 8)
 		RemonteeKit.cylindre(p, 0.09, 0.09, 0.03, Transform3D(travers, Vector3(0.25, 0.11, sz * 0.19)), "polyurethane", 16)
-	# ailette en peigne 100 × 80
-	for k in range(5):
-		RemonteeKit.boite_en(p, Vector3(0.10, 0.014, 0.012), Vector3(0.11, -0.05 - k * 0.0165, 0), corps_m)
-	RemonteeKit.boite_en(p, Vector3(0.016, 0.08, 0.012), Vector3(0.06, -0.083, 0), corps_m)
-	# patin 330 × 60, sur un montant : les pneus du lanceur y appuient
-	RemonteeKit.boite_en(p, Vector3(0.06, Y_PLAQUE - 0.022 - 0.16, 0.08), Vector3(0.28, (Y_PLAQUE - 0.022 + 0.16) * 0.5, 0), "galva_pylone")
-	RemonteeKit.boite_en(p, Vector3(0.06, 0.022, 0.33), Vector3(0.28, Y_PLAQUE - 0.011, 0), "noir_mat")
+	# patin noir au-dessus de la pince, le long du câble : les pneus du lanceur roulent dessus
+	# et font avancer le siège (et non au-dessus des ressorts ; retour d'utilisateur, 02/11/2026)
+	RemonteeKit.boite_en(p, Vector3(0.09, A108_Y_PATIN - 0.09, 0.08), Vector3(A108_X_PATIN, (A108_Y_PATIN + 0.09) * 0.5, 0.0), corps_m)
+	RemonteeKit.boite_en(p, Vector3(0.10, 0.025, 0.72), Vector3(A108_X_PATIN, A108_Y_PATIN - 0.0125, 0), "noir_mat")
+	for sz in [-1.0, 1.0]:
+		RemonteeKit.poutre(p, Vector3(A108_X_PATIN, A108_Y_PATIN - 0.03, sz * 0.36), Vector3(A108_X_PATIN, 0.06, sz * 0.52), 0.07, 0.015, "noir_mat", Vector3.UP)
 
 
 ## Numéro lisible À L'ENDROIT : une étiquette d'un seul côté (vue de dos,
