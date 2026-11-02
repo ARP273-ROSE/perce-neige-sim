@@ -398,13 +398,20 @@ func _prise_pylone(lg: LigneRemontee, k: int, montee: bool, pref: String) -> Arr
 		var pr0: Array = _prise_pylone(lg, k, montee, "tcd")
 		return pr0 if String(pr0[0]) != "tcd_pyl_s" else ["boisses_pyl_s", 1.9]
 	if pref == "tsd":
-		var c0: bool = false
-		for g1 in lg.pylones[k].get("montee" if montee else "descente", []):
-			c0 = c0 or String(g1[1]) in ["C", "SC"]
-		if c0:
-			# premières compressions après la gare : la prise des deux pylônes
-			return ["tsd_pyl_cc", 0.3] if k == 0 else ["", 0.0]
-		return ["tsd_pyl_s", 1.6]
+		# compressions : la prise des deux pylônes, une seule fois pour deux pylônes
+		# rapprochés. Avant : seulement au premier pylône de la ligne, et support-compression
+		# muet (retour d'utilisateur, 28/10/2026 : « compression pas synchro ou absente, SC absent »)
+		var nat0: Array = lg.pylones[k].get("montee" if montee else "descente", []).map(func(g1): return String(g1[1]))
+		if "S" in nat0 or "SC" in nat0:
+			return ["tsd_pyl_s", 1.6]
+		if "C" not in nat0:
+			return ["tsd_pyl_s", 1.6]
+		var k_prec: int = k - 1 if montee else k + 1
+		if k_prec >= 0 and k_prec < lg.pylones.size() and absf(float(lg.pylones[k_prec]["d"]) - float(lg.pylones[k]["d"])) < 40.0:
+			for g3 in lg.pylones[k_prec].get("montee" if montee else "descente", []):
+				if String(g3[1]) == "C":
+					return ["", 0.0]
+		return ["tsd_pyl_cc", 0.3]
 	if pref == "tkd" or pref == "tsf" or pref == "tke":
 		var chocs: Dictionary = {"tkd": [0.3, 0.5], "tsf": [T_PYL_C_TSF, 1.65], "tke": [2.95, 1.52]}
 		for g0 in lg.pylones[k].get("montee" if montee else "descente", []):
