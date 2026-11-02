@@ -7,6 +7,18 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## 1.53.3 — 2 novembre 2026
 
+**Pylônes inclinés.** Sur les fortes pentes, le fût penche et la tête lui reste perpendiculaire ; le câble ne bouge pas.
+Règle **estimée** : 0,9 × pente locale du câble, plafond 25°, tirée d'une seule vue de côté (arête d'une ligne Garaventa, 3 pylônes)
+et étendue sans mesure à tous les fûts tubulaires. Non concernés : treillis du 3S, téléskis, pylônes de nez des gares.
+Le massif en béton s'incline avec le fût (retour d'utilisateur) et sa collision aussi. Le pied se cale sur le relief affiché, plus sur le
+profil de la ligne : il flottait jusqu'à 1,31 m (Cugnaï) ou s'enterrait jusqu'à 1,70 m (Merles) ; écart mesuré désormais nul sur les
+595 pylônes inclinés (721 pylônes vus). Sur un dévers, un coin du massif se décolle encore du sol de 1,09 m au pire : le béton descend donc
+à 1,75 m sous le pied. La plaque de la passerelle, qui se voyait de loin comme un rectangle gris, devient une passerelle ajourée, avec
+garde-corps refermé et échelle courte jusqu'à la traverse.
+Coût en triangles par ligne : Leissières 237 272 → 255 904 (+7,9 %), Tovière 291 576 → 312 532 (+7,2 %), Grand Huit 180 928 → 196 716 (+8,7 %),
+même nombre de nœuds. Vue fixe : Tovière +0,3 à +1,2 % de primitives, Grand Huit +0,9 à +3,5 % ; les appels de dessin varient d'un essai à l'autre
+(Tovière 281 avant, 281 à 312 après) et ne permettent pas de conclure. Leissières non comparable. Bancs : 36 sur 36.
+
 **Régulateur sur PC.** Relevé d'une RTX 5070 Ti en 4K : les remontées passaient au détail réduit à l'entrée en mode
 skieur et n'en revenaient jamais. Le temps du fil principal comptait aussi le dessin et l'attente de l'écran, soit au moins
 16 ms à 60 Hz, alors que le retour au détail exige moins de 8,3 ms. Il mesure désormais les scripts et la physique.

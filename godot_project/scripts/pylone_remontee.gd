@@ -55,6 +55,21 @@ var dessus_traverse: float = DESSUS_TRAVERSE_CABLE
 
 
 var _construit: bool = false
+## Fût incliné sur les fortes pentes, tête perpendiculaire au fût ; le massif, posé au sol,
+## s'incline avec le fût ; le câble reste au même endroit. Règle ESTIMÉE sur une seule vue de côté (arête d'une ligne
+## Garaventa, 3 pylônes : fût ≈ 0,8 à 1 × pente locale du câble) ; étendue à toutes les
+## lignes à fût tubulaire, sans mesure sur les autres constructeurs.
+const INCLI_FACTEUR: float = 0.9
+const INCLI_MAX: float = deg_to_rad(25.0)
+var inclinaison: float = 0.0      # rad ; > 0 : pied côté amont (−Z), tête côté aval
+var pied: Vector3 = Vector3.ZERO  # pied du fût, au sol, dans le repère du pylône
+var _n: Node3D = null             # conteneur des pièces en cours de pose
+var _y_pied: float = 0.0          # pied du fût dans le repère du mât (y de la tête inchangé)
+var _xf_tete: Transform3D = Transform3D.IDENTITY
+
+
+static func inclinaison_pour(p_pente: float) -> float:
+	return clampf(p_pente * INCLI_FACTEUR, -INCLI_MAX, INCLI_MAX)
 
 
 ## Construit à l'entrée dans l'arbre seulement si personne ne l'a fait : un
@@ -84,6 +99,7 @@ func construire() -> void:
 	for c in get_children():
 		remove_child(c)
 		c.queue_free()
+	_n = self
 	mobiles.clear()
 	_paires = {true: [], false: []}
 	if style == "teleski":
@@ -111,66 +127,87 @@ func construire() -> void:
 	var r1: float = 0.40                              # rayon en tête
 	var r0: float = r1 + 0.05 + h * 0.003             # léger fruit vers le pied
 	var y_tete: float = h - 0.75                      # dessous de la chaise de tête
+	var base: Basis = Basis(Vector3.RIGHT, inclinaison)
+	var haut: Vector3 = Vector3(0, h, 0)
+	_xf_tete = Transform3D(base, haut - base * haut)
+	_y_pied = h - pied.distance_to(haut) if inclinaison != 0.0 else 0.0
+	var socle: Node3D = Node3D.new()
+	socle.name = "Socle"
+	socle.transform = Transform3D(base, pied)
+	add_child(socle)
+	_n = socle
 	_massif(r0)
+	var mat: Node3D = Node3D.new()
+	mat.name = "Mat"
+	mat.transform = _xf_tete
+	add_child(mat)
+	_n = mat
 	_fut(r0, r1, y_tete)
 	_echelle(r0, r1, y_tete)
 	_chaise_et_traverse(r1, y_tete)
+	_n = self
 	for montee in [true, false]:
 		_train(montee)
+	_n = mat
 	_plaques(r0, r1, y_tete)
+	_n = self
 
 
 ## Massif béton affleurant, platine et tiges d'ancrage.
 func _massif(r0: float) -> void:
-	RemonteeKit.boite_en(self, Vector3(2.0, 0.8, 2.0), Vector3(0, -0.15, 0), "beton")
-	RemonteeKit.cylindre(self, r0 + 0.28, r0 + 0.28, 0.06, Transform3D(Basis.IDENTITY, Vector3(0, 0.28, 0)), "galva_pylone", 28)
+	# En ligne, le béton descend plus bas : sur un dévers, un coin du massif se décolle du sol
+	# (1,09 m au pire, mesuré sur toutes les lignes) ; la part enterrée ne se voit pas.
+	var prof: float = 0.55 if style == "gare" else 1.75
+	RemonteeKit.boite_en(_n, Vector3(2.0, 0.25 + prof, 2.0), Vector3(0, (0.25 - prof) * 0.5, 0), "beton")
+	RemonteeKit.cylindre(_n, r0 + 0.28, r0 + 0.28, 0.06, Transform3D(Basis.IDENTITY, Vector3(0, 0.28, 0)), "galva_pylone", 28)
 	for k in range(12):
 		var a: float = TAU * (k + 0.5) / 12.0
 		var q: Vector3 = Vector3(cos(a) * (r0 + 0.18), 0.34, sin(a) * (r0 + 0.18))
-		RemonteeKit.cylindre(self, 0.022, 0.022, 0.14, Transform3D(Basis.IDENTITY, q), "galva_patine", 6)
-		RemonteeKit.cylindre(self, 0.038, 0.038, 0.035, Transform3D(Basis.IDENTITY, q + Vector3(0, -0.02, 0)), "galva_patine", 6)
+		RemonteeKit.cylindre(_n, 0.022, 0.022, 0.14, Transform3D(Basis.IDENTITY, q), "galva_patine", 6)
+		RemonteeKit.cylindre(_n, 0.038, 0.038, 0.035, Transform3D(Basis.IDENTITY, q + Vector3(0, -0.02, 0)), "galva_patine", 6)
 		# goussets de pied entre les tiges
 		if k % 3 == 0:
 			var d: Vector3 = Vector3(cos(a), 0, sin(a))
-			RemonteeKit.poutre(self, d * r0 + Vector3(0, 0.31, 0), d * r0 + Vector3(0, 0.75, 0) + d * 0.01, 0.02, 0.20,
+			RemonteeKit.poutre(_n, d * r0 + Vector3(0, 0.31, 0), d * r0 + Vector3(0, 0.75, 0) + d * 0.01, 0.02, 0.20,
 				"galva_pylone", d)
 
 
 ## Fût tubulaire galvanisé, tronçons de ~6 m (les brides sont intérieures :
 ## on ne voit qu'un cordon de soudure).
 func _fut(r0: float, r1: float, y_tete: float) -> void:
-	var n: int = maxi(1, int(ceil((y_tete - 0.31) / 6.0)))
+	var y0: float = _y_pied + 0.31
+	var n: int = maxi(1, int(ceil((y_tete - y0) / 6.0)))
 	for i in range(n):
-		var ya: float = 0.31 + (y_tete - 0.31) * float(i) / n
-		var yb: float = 0.31 + (y_tete - 0.31) * float(i + 1) / n
-		var ra: float = lerpf(r0, r1, (ya - 0.31) / (y_tete - 0.31))
-		var rb: float = lerpf(r0, r1, (yb - 0.31) / (y_tete - 0.31))
-		RemonteeKit.cylindre(self, ra, rb, yb - ya, Transform3D(Basis.IDENTITY, Vector3(0, (ya + yb) * 0.5, 0)), "galva_pylone", 28)
+		var ya: float = y0 + (y_tete - y0) * float(i) / n
+		var yb: float = y0 + (y_tete - y0) * float(i + 1) / n
+		var ra: float = lerpf(r0, r1, (ya - y0) / (y_tete - y0))
+		var rb: float = lerpf(r0, r1, (yb - y0) / (y_tete - y0))
+		RemonteeKit.cylindre(_n, ra, rb, yb - ya, Transform3D(Basis.IDENTITY, Vector3(0, (ya + yb) * 0.5, 0)), "galva_pylone", 28)
 		if i > 0:
-			RemonteeKit.cylindre(self, ra + 0.012, ra + 0.012, 0.03, Transform3D(Basis.IDENTITY, Vector3(0, ya, 0)), "galva_patine", 28)
+			RemonteeKit.cylindre(_n, ra + 0.012, ra + 0.012, 0.03, Transform3D(Basis.IDENTITY, Vector3(0, ya, 0)), "galva_patine", 28)
 
 
 ## Échelle droite à montants (pas de crinoline sur les lignes récentes : un
 ## rail antichute), sur pattes boulonnées au fût, côté aval.
 func _echelle(r0: float, r1: float, y_tete: float) -> void:
-	var y0: float = 1.9
+	var y0: float = _y_pied + 1.9
 	var y1: float = hauteur - 0.05
 	var zr := func(y: float) -> float:
-		return lerpf(r0, r1, clampf((y - 0.31) / (y_tete - 0.31), 0.0, 1.0)) + 0.24
+		return lerpf(r0, r1, clampf((y - _y_pied - 0.31) / (y_tete - _y_pied - 0.31), 0.0, 1.0)) + 0.24
 	for sx in [-0.21, 0.21]:
-		RemonteeKit.poutre(self, Vector3(sx, y0, zr.call(y0)), Vector3(sx, y1, zr.call(y1)), 0.06, 0.012, "galva_pylone", Vector3.BACK)
+		RemonteeKit.poutre(_n, Vector3(sx, y0, zr.call(y0)), Vector3(sx, y1, zr.call(y1)), 0.06, 0.012, "galva_pylone", Vector3.BACK)
 	var y: float = y0 + 0.14
 	while y < y1 - 0.1:
-		RemonteeKit.barre(self, Vector3(-0.21, y, zr.call(y)), Vector3(0.21, y, zr.call(y)), 0.013, "galva_pylone", 6)
+		RemonteeKit.barre(_n, Vector3(-0.21, y, zr.call(y)), Vector3(0.21, y, zr.call(y)), 0.013, "galva_pylone", 6)
 		y += 0.28
 	# rail antichute au milieu
-	RemonteeKit.poutre(self, Vector3(0, y0, zr.call(y0) + 0.01), Vector3(0, y1, zr.call(y1) + 0.01), 0.035, 0.02, "galva_patine", Vector3.BACK)
+	RemonteeKit.poutre(_n, Vector3(0, y0, zr.call(y0) + 0.01), Vector3(0, y1, zr.call(y1) + 0.01), 0.035, 0.02, "galva_patine", Vector3.BACK)
 	# pattes de fixation tous les 1,5 m
 	var yp: float = y0 + 0.4
 	while yp < y_tete:
 		var rr: float = zr.call(yp) - 0.24
 		for sx in [-0.21, 0.21]:
-			RemonteeKit.poutre(self, Vector3(sx * 0.6, yp, rr - 0.02), Vector3(sx, yp, zr.call(yp)), 0.04, 0.012, "galva_pylone")
+			RemonteeKit.poutre(_n, Vector3(sx * 0.6, yp, rr - 0.02), Vector3(sx, yp, zr.call(yp)), 0.04, 0.012, "galva_pylone")
 		yp += 1.5
 
 
@@ -179,8 +216,8 @@ func _echelle(r0: float, r1: float, y_tete: float) -> void:
 ## garde-corps en arceaux.
 func _chaise_et_traverse(r1: float, y_tete: float) -> void:
 	var h: float = hauteur
-	RemonteeKit.cylindre(self, r1 + 0.04, r1 + 0.04, 0.05, Transform3D(Basis.IDENTITY, Vector3(0, y_tete, 0)), "galva_patine", 28)
-	RemonteeKit.boite_en(self, Vector3(1.0, h - y_tete - 0.30, 0.80), Vector3(0, (y_tete + h - 0.30) * 0.5, 0), "galva_pylone")
+	RemonteeKit.cylindre(_n, r1 + 0.04, r1 + 0.04, 0.05, Transform3D(Basis.IDENTITY, Vector3(0, y_tete, 0)), "galva_patine", 28)
+	RemonteeKit.boite_en(_n, Vector3(1.0, h - y_tete - 0.30, 0.80), Vector3(0, (y_tete + h - 0.30) * 0.5, 0), "galva_pylone")
 	# la traverse s'arrête en dedans des câbles : les trains de galets
 	# pendent en porte-à-faux au-delà de ses bouts, sous leur console (photo
 	# Commons « Laterns-Gapfohl … pylons », vue dans l'axe ; retour d'utilisateur,
@@ -190,28 +227,49 @@ func _chaise_et_traverse(r1: float, y_tete: float) -> void:
 		_poutre_i(Vector3(-xe, h - 0.15, sz), Vector3(xe, h - 0.15, sz), 0.30, 0.18)
 	# platine de bout de traverse
 	for sx in [-1.0, 1.0]:
-		RemonteeKit.boite_en(self, Vector3(0.03, 0.34, 0.90), Vector3(sx * (xe + 0.015), h - 0.15, 0), "galva_pylone")
+		RemonteeKit.boite_en(_n, Vector3(0.03, 0.34, 0.90), Vector3(sx * (xe + 0.015), h - 0.15, 0), "galva_pylone")
 	# entretoises entre les deux poutres
 	var x: float = -xe + 0.3
 	while x < xe:
-		RemonteeKit.boite_en(self, Vector3(0.08, 0.22, 0.60), Vector3(x, h - 0.15, 0), "galva_pylone")
+		RemonteeKit.boite_en(_n, Vector3(0.08, 0.22, 0.60), Vector3(x, h - 0.15, 0), "galva_pylone")
 		x += 1.2
 	# jambes de force sous la traverse
 	for sx in [-1.0, 1.0]:
 		for sz in [-0.34, 0.34]:
-			RemonteeKit.poutre(self, Vector3(sx * r1 * 0.9, y_tete - 1.4, sz * 0.7), Vector3(sx * xe * 0.55, h - 0.30, sz), 0.10, 0.10, "galva_pylone")
+			RemonteeKit.poutre(_n, Vector3(sx * r1 * 0.9, y_tete - 1.4, sz * 0.7), Vector3(sx * xe * 0.55, h - 0.30, sz), 0.10, 0.10, "galva_pylone")
 	# caillebotis : bande centrale de part et d'autre de la traverse
 	for sz in [-1.0, 1.0]:
-		RemonteeKit.boite_en(self, Vector3(2.0 * xe - 1.2, 0.035, 0.72), Vector3(0, h + 0.02, sz * 0.80), "caillebotis")
+		_passerelle(Vector3(0, h + 0.02, sz * 0.80), Vector3(2.0 * xe - 1.2, 0.0, 0.72))
 		_rambarde(Vector3(-xe + 0.6, h + 0.02, sz * 1.14), Vector3(xe - 0.6, h + 0.02, sz * 1.14))
+	# garde-corps refermé aux deux bouts, échelle courte du caisson à la traverse (photos)
+	for sx in [-1.0, 1.0]:
+		_rambarde(Vector3(sx * (xe - 0.6), h + 0.02, -1.14), Vector3(sx * (xe - 0.6), h + 0.02, 1.14))
+	for sx in [-0.17, 0.17]:
+		RemonteeKit.barre(_n, Vector3(sx, y_tete, r1 + 0.05), Vector3(sx, h + 1.05, 1.18), 0.016, "galva_pylone", 6)
+
+
+## Passerelle ajourée, à plat, dans le sens le plus long de `taille` : deux longerons et des
+## barreaux. Une plaque pleine se voyait de loin comme un rectangle gris à côté des galets.
+func _passerelle(c: Vector3, taille: Vector3) -> void:
+	var sens_x: bool = taille.x >= taille.z
+	var lo: float = taille.x if sens_x else taille.z
+	var la: float = taille.z if sens_x else taille.x
+	for k in [-0.5, 0.5]:
+		var q: Vector3 = c + (Vector3(0, 0, k * la) if sens_x else Vector3(k * la, 0, 0))
+		RemonteeKit.boite_en(_n, Vector3(lo, 0.05, 0.04) if sens_x else Vector3(0.04, 0.05, lo), q, "galva_pylone")
+	var n: int = maxi(2, int(lo / 0.45))
+	for i in range(n + 1):
+		var u: float = (float(i) / n - 0.5) * lo
+		var q2: Vector3 = c + (Vector3(u, 0, 0) if sens_x else Vector3(0, 0, u))
+		RemonteeKit.boite_en(_n, Vector3(0.03, 0.03, la) if sens_x else Vector3(la, 0.03, 0.03), q2, "caillebotis")
 
 
 ## Poutre en I de a à b (âme verticale).
 func _poutre_i(a: Vector3, b: Vector3, ht: float, larg: float) -> void:
 	var m: String = "galva_pylone"
-	RemonteeKit.poutre(self, a + Vector3(0, ht * 0.5, 0), b + Vector3(0, ht * 0.5, 0), larg, 0.022, m)
-	RemonteeKit.poutre(self, a - Vector3(0, ht * 0.5, 0), b - Vector3(0, ht * 0.5, 0), larg, 0.022, m)
-	RemonteeKit.poutre(self, a, b, 0.016, ht, m)
+	RemonteeKit.poutre(_n, a + Vector3(0, ht * 0.5, 0), b + Vector3(0, ht * 0.5, 0), larg, 0.022, m)
+	RemonteeKit.poutre(_n, a - Vector3(0, ht * 0.5, 0), b - Vector3(0, ht * 0.5, 0), larg, 0.022, m)
+	RemonteeKit.poutre(_n, a, b, 0.016, ht, m)
 
 
 ## Garde-corps : montants, lisse haute et sous-lisse, arceaux aux bouts.
@@ -220,10 +278,10 @@ func _rambarde(a: Vector3, b: Vector3) -> void:
 	var n: int = maxi(1, int(ceil(l / 1.1)))
 	for k in range(n + 1):
 		var p: Vector3 = a.lerp(b, float(k) / n)
-		RemonteeKit.barre(self, p, p + Vector3(0, 1.05, 0), 0.02, "galva_pylone", 6)
-	RemonteeKit.barre(self, a + Vector3(0, 1.05, 0), b + Vector3(0, 1.05, 0), 0.024, "galva_pylone", 8)
-	RemonteeKit.barre(self, a + Vector3(0, 0.55, 0), b + Vector3(0, 0.55, 0), 0.018, "galva_pylone", 6)
-	RemonteeKit.boite_en(self, Vector3(l, 0.10, 0.01), (a + b) * 0.5 + Vector3(0, 0.07, 0), "galva_pylone")
+		RemonteeKit.barre(_n, p, p + Vector3(0, 1.05, 0), 0.02, "galva_pylone", 6)
+	RemonteeKit.barre(_n, a + Vector3(0, 1.05, 0), b + Vector3(0, 1.05, 0), 0.024, "galva_pylone", 8)
+	RemonteeKit.barre(_n, a + Vector3(0, 0.55, 0), b + Vector3(0, 0.55, 0), 0.018, "galva_pylone", 6)
+	RemonteeKit.boite_en(_n, Vector3(l, 0.10, 0.01), (a + b) * 0.5 + Vector3(0, 0.07, 0), "galva_pylone")
 
 
 ## Train de galets d'un brin, au nombre réel (groupes [n, "S"|"C"|"SC"]) :
@@ -322,9 +380,9 @@ func _train(montee: bool) -> void:
 	var hp: float = 1.25 if dessus.is_empty() else 1.55
 	var demi: float = maxf(0.7, L * 0.5 + 0.25)
 	for sz in [-1.0, 1.0]:
-		RemonteeKit.poutre(self, Vector3(x - ext * 0.55, hauteur, sz * minf(demi, 1.3)), Vector3(x, hauteur_cable() + hp, sz * minf(demi, 1.3) * 0.55),
+		RemonteeKit.poutre(self, _xf_tete * Vector3(x - ext * 0.55, hauteur, sz * minf(demi, 1.3)), Vector3(x, hauteur_cable() + hp, sz * minf(demi, 1.3) * 0.55),
 			0.10, 0.10, "galva_pylone")
-		RemonteeKit.poutre(self, Vector3(x - ext * 0.55, hauteur, sz * minf(demi, 1.3)), Vector3(x, hauteur_cable() + hp, 0), 0.06, 0.06, "galva_pylone")
+		RemonteeKit.poutre(self, _xf_tete * Vector3(x - ext * 0.55, hauteur, sz * minf(demi, 1.3)), Vector3(x, hauteur_cable() + hp, 0), 0.06, 0.06, "galva_pylone")
 	RemonteeKit.poutre(tete, Vector3(0, hp, -minf(demi, 1.3) * 0.55 - 0.15), Vector3(0, hp, minf(demi, 1.3) * 0.55 + 0.15), 0.14, 0.12, "galva_pylone")
 	RemonteeKit.tube(tete, RemonteeKit.arc(Vector3(0, hp + 0.14, 0), Vector3.FORWARD, Vector3.UP, 0.07, 0.0, TAU, 12), 0.018, "galva_patine", 6)
 	if not dessus.is_empty():
@@ -333,7 +391,12 @@ func _train(montee: bool) -> void:
 		RemonteeKit.cylindre(tete, 0.07, 0.07, 0.36, Transform3D(Basis(Vector3.FORWARD, PI * 0.5), Vector3(0, dy + 0.36, 0)), "acier_noir", 12)
 	# caillebotis autour du train (côté intérieur), garde-corps côté fût
 	var lc: float = 2.0 * demi + 0.6
-	RemonteeKit.boite_en(self, Vector3(0.95, 0.035, lc), Vector3(x - ext * 0.62, hauteur + 0.02, 0), "caillebotis")
+	var mat_n: Node3D = get_node_or_null("Mat") as Node3D
+	var xp: float = x - ext * 0.62
+	_n = mat_n if mat_n != null else self
+	_passerelle(Vector3(xp, hauteur + 0.02, 0), Vector3(0.95, 0.0, lc))
+	_rambarde(Vector3(xp - ext * 0.47, hauteur + 0.02, -lc * 0.5), Vector3(xp - ext * 0.47, hauteur + 0.02, lc * 0.5))
+	_n = self
 
 
 ## Palonniers au-dessus des paires (2, 4, 8 paires…), jusqu'à la poutre
@@ -458,7 +521,7 @@ func _base_paire(e: Array) -> Array:
 func _plaques(r0: float, r1: float, y_tete: float) -> void:
 	var yp: float = y_tete - 1.0
 	var z: float = r1 + 0.012
-	RemonteeKit.boite_en(self, Vector3(0.36, 0.30, 0.02), Vector3(0.42, yp, z - 0.06), "plaque_bleue")
+	RemonteeKit.boite_en(_n, Vector3(0.36, 0.30, 0.02), Vector3(0.42, yp, z - 0.06), "plaque_bleue")
 	var lab: Label3D = Label3D.new()
 	lab.text = str(numero)
 	lab.font_size = 110
@@ -467,12 +530,12 @@ func _plaques(r0: float, r1: float, y_tete: float) -> void:
 	lab.outline_size = 0
 	lab.position = Vector3(0.42, yp, z - 0.045)
 	lab.name = "Numero"
-	add_child(lab)
+	_n.add_child(lab)
 	# panneau de consigne (pictogramme bleu sur fond blanc)
 	var y2: float = y_tete - 2.2
-	var r2: float = lerpf(r0, r1, (y2 - 0.31) / (y_tete - 0.31))
-	RemonteeKit.boite_en(self, Vector3(0.40, 0.45, 0.015), Vector3(-0.05, y2, r2 + 0.01), "blanc_plaque")
-	RemonteeKit.cylindre(self, 0.15, 0.15, 0.01, Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3(-0.05, y2 + 0.03, r2 + 0.02)), "plaque_bleue", 20)
+	var r2: float = lerpf(r0, r1, (y2 - _y_pied - 0.31) / (y_tete - _y_pied - 0.31))
+	RemonteeKit.boite_en(_n, Vector3(0.40, 0.45, 0.015), Vector3(-0.05, y2, r2 + 0.01), "blanc_plaque")
+	RemonteeKit.cylindre(_n, 0.15, 0.15, 0.01, Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3(-0.05, y2 + 0.03, r2 + 0.02)), "plaque_bleue", 20)
 
 
 ## Pylône de téléski en potence (photos Commons « Plan du Jeu POMA ») : fût

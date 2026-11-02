@@ -2500,13 +2500,27 @@ func _collisions_fixes() -> void:
 			h = _tetes[i] - t - 3.0
 			boite.call(Vector3(clampf(h * 0.22, 4.0, 12.0), h, clampf(h * 0.22, 4.0, 12.0) * 0.6), Vector3(0, t + h * 0.5, -d))
 			continue
-		boite.call(Vector3(2.4, 0.7, 2.4), Vector3(0, t - 0.15, -d))
+		var e_c: float = 4.0
+		var incl: float = PyloneRemontee.inclinaison_pour(atan2(y_cable(d + e_c) - y_cable(d - e_c), 2.0 * e_c))
+		var pd: Vector3 = _pied_pylone(d, t, h, incl)
+		if pd == Vector3.ZERO:
+			incl = 0.0
+		var haut_c: Vector3 = Vector3(0, t + h, -d)
+		var bas_c: Vector3 = Vector3(0, t, -d) + pd
+		var base_c: Basis = Basis(Vector3.RIGHT, incl)
+		var cs_m: CollisionShape3D = CollisionShape3D.new()
+		var bm: BoxShape3D = BoxShape3D.new()
+		bm.size = Vector3(2.4, 1.95, 2.4)      # aussi profond que le béton affiché
+		cs_m.shape = bm
+		cs_m.transform = Transform3D(base_c, bas_c + base_c * Vector3(0, -0.775, 0))
+		corps.add_child(cs_m)
 		var cs2: CollisionShape3D = CollisionShape3D.new()
 		var cy: CylinderShape3D = CylinderShape3D.new()
 		cy.radius = 0.45 + h * 0.003
-		cy.height = h
+		cy.height = bas_c.distance_to(haut_c)
 		cs2.shape = cy
-		cs2.position = Vector3(0, t + h * 0.5, -d)
+		cs2.position = (bas_c + haut_c) * 0.5
+		cs2.basis = base_c
 		corps.add_child(cs2)
 		boite.call(Vector3(voie - 2.0 * PyloneRemontee.RETRAIT_TRAVERSE + 0.06, 0.55, 0.5), Vector3(0, t + h - 0.275, -d))
 	var L: float = longueur_h()
@@ -3335,6 +3349,10 @@ func _poser_pylones() -> void:
 		py.compo_descente = p.get("descente", [[8, "S"]])
 		var e: float = 4.0
 		py.pente = atan2(y_cable(d + e) - y_cable(d - e), 2.0 * e)
+		py.inclinaison = PyloneRemontee.inclinaison_pour(py.pente)
+		py.pied = _pied_pylone(d, t, py.hauteur, py.inclinaison)
+		if py.pied == Vector3.ZERO:
+			py.inclinaison = 0.0
 		# déviation : pente côté aval − pente côté amont (> 0 : convexe)
 		py.deviation = atan2(y_cable(d) - y_cable(d - e), e) - atan2(y_cable(d + e) - y_cable(d), e)
 		py.position = Vector3(0, t, -d)
@@ -3350,6 +3368,22 @@ func _poser_pylones() -> void:
 	for aval in [true, false]:
 		_batterie_gare(aval)
 		await _pause("batteries des gares")
+
+
+## Pied du fût incliné (repère du pylône) : là où son axe, passant par la tête, touche le
+## sol réel (le profil de la ligne s'en écarte de plus d'un mètre par endroits). ZERO si le pylône reste droit.
+func _pied_pylone(d: float, t: float, h: float, incl: float) -> Vector3:
+	if absf(incl) < deg_to_rad(0.5) or h < 3.0:
+		return Vector3.ZERO
+	var dp: float = d
+	var tp: float = t
+	for _k in range(5):
+		tp = _sol(0.0, -dp)
+		dp = clampf(d + (t + h - tp) * tan(incl), 0.0, longueur_h())
+	tp = _sol(0.0, -dp)
+	if t + h - tp < 2.0:
+		return Vector3.ZERO
+	return Vector3(0.0, tp - t, -(dp - d))
 
 
 ## Pylônes de téléski : fût fin et potence en T portant les deux brins ; en
