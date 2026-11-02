@@ -1,0 +1,67 @@
+# Mesures de pylônes (vidéo et photo)
+
+Valeurs numériques seulement. Hauteurs pied → câble en mètres, brutes : échelle par la largeur de la traverse de tête,
+biais de −10 à −20 % non corrigé.
+
+- **rang** : place dans `pylones` du JSON de 379d064, en partant de l'aval (k = rang − 1).
+- **n°** : numéro réel, lu sur la plaque ou donné par le reportage ; il peut différer du rang.
+- **source** : `plaque` (lue sur la vidéo), `vidéo`, `photo` (copie locale du site, lecture seule), `déduit`.
+- **statut** : `certain` ou `incertain`. « non vu » plutôt qu'une estimation.
+
+## tsf4_grand_huit
+
+Plaques 2 à 11 lues sur la vidéo. 14 pylônes réels. **Le JSON est décalé d'au moins un rang** : il lui manque P1 et il
+contient deux `reconstitue` (483,9 et 607,1 m) à des places où aucun pylône n'a été vu.
+
+| n° réel | d proposé (m) | source du n° | h_min | h_max | source h | statut |
+|---|---|---|---|---|---|---|
+| P1 | non vu (contre la gare, avant 17 m) | photo | 9 | 11 | photo, de loin | incertain |
+| P2 | ~17 | plaque | 7,5 | 9,5 | photo | certain (n°), incertain (h) |
+| P3 | 113,5 | plaque | 10 | 12 | vidéo + photo | certain |
+| P4 | 158,5 | plaque | 12 | 14,5 | photo | certain |
+| P5 | 265,1 | plaque | 10 | 12 | vidéo | certain |
+| P6 | 314,7 | plaque | 8 | 10 | vidéo | certain |
+| P7 | 418,0 | plaque | 11 | 15 | vidéo + photo | certain |
+| P8 | 471,9 | plaque | 8 | 10 | vidéo + photo | certain |
+| P9 | 499,6 | plaque | 7,5 | 9,5 | vidéo + photo | certain |
+| P10 | 662,5 | plaque | 9 | 14,5 | vidéo 9-12, photo ~13 : désaccord | incertain |
+| P11 | 703,7 | plaque | 14 | 17 | vidéo | certain |
+| P12 | ~792 | déduit (ordre) | 5,5 | 7 | photo | incertain |
+| P13 | ~800 | déduit (ordre) | 6 | 7,5 | photo | incertain |
+| P14 | ~808 | plaque sur photo | 5 | 6,5 | photo | incertain (h) |
+
+Passages vidéo (s) : P2 66 · P3 113 · P4 135 · P5 187 · P6 210 · P7 263 · P8 291 · P9 305 · P10 383 · P11 406 · P12 ~459 · P13 ~463 · P14 ~467.
+Support-compression d'après le reportage : P5 et P6, soit 265 et 315 m (le JSON les met à 314,7 et 418).
+
+## tcd10_toviere
+
+Pas de plaque lisible depuis la cabine. N° par comparaison avec les photos numérotées. 16 pylônes réels d'après le
+reportage ; **17 passages comptés en vidéo**, donc un en trop quelque part entre 139 et 195 s, non résolu.
+
+| n° réel | passage (s) | d (m) | h_min | h_max | source h | statut |
+|---|---|---|---|---|---|---|
+| P1 | 60,6 | ~19 | 5 | 7 | vidéo | incertain (au contact de la gare) |
+| P2 | 66 | ~41 | 9 | 13 | vidéo | incertain |
+| P3 | 81 | ~102 | 18 | 21 | vidéo | certain |
+| P4 | 111 | ~225 | 18 | 23 | vidéo | certain |
+| P5 | 130,5 | ~305 | 12 | 16 | vidéo | certain (tête de compression) |
+| P6 | 139 ? | 340 ? | 13 | 17 | photo | incertain (position) |
+| P7 | 158,5 ou 177,5 | 450 ou 548 | 17 | 22 | photo | incertain (position) |
+| P8 | ~195,5 ? | non établi | 11 | 14 | photo | incertain (position) |
+| P9 | 217 | 754 | 15 | 20 | vidéo 15-17,5, photo ~17,7 | certain |
+| P10 | 232,5 | 832 | 19 | 24 | vidéo + photo | certain (croisement du télésiège) |
+| P11 | 261 | 1004 | 21 | 25 | vidéo + photo | certain |
+| P12 | 289 | 1164 | 16 | 19 | vidéo + photo | certain |
+| P13 | 317 | 1321 | 15 | 19 | vidéo + photo | certain |
+| P14 | 367 | 1591 | 17,5 | 20,5 | vidéo + photo | certain |
+| P15 | ~372-376 | contre la gare, non établi | non vu | non vu | | incertain |
+| P16 | ~376 | contre la gare, non établi | non vu | non vu | | incertain |
+
+Le JSON (rang) : le pylône à 906 m n'est jamais vu ; rien de prévu pour P15 et P16 après 1591 m.
+Attention : mon tableau précédent attribuait 217 → P10, 232,5 → P11, 261 → P13, 289 → P14, 317 → P15, 367 → P16 : **à remplacer**.
+
+## tsd6_leissieres
+
+Les plaques ne se lisent pas sur cette vidéo. Le reportage numérote depuis l'amont du JSON : **n° réel = 15 − rang**.
+L'ordre des rangs du tableau précédent reste valable. Le reportage confirme : 2 pylônes contre la gare (rangs 1, 2),
+un pylône de compression (rang 6) et l'enchaînement de l'arête (rangs 7 à 11).
