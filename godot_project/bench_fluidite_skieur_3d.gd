@@ -10,6 +10,7 @@
 extends SceneTree
 
 var _main: Node = null
+var _portee_posee: bool = false
 var _f: int = 0
 var _t0: int = 0
 var _phase: String = "chauffe"
@@ -74,6 +75,12 @@ func _contexte() -> String:
 
 
 func _tick() -> void:
+	# --vehicules=1400 : portée d'essai des véhicules, posée avant la construction des lignes
+	if not _portee_posee and _main.get("remontees") != null:
+		_portee_posee = true
+		for a in OS.get_cmdline_user_args():
+			if String(a).begins_with("--vehicules="):
+				_main.remontees.VEHICULES_JUSQUA = float(String(a).substr(12))
 	_f += 1
 	# fenêtre sans focus ou réduite (PC piloté à distance) : pas de bridage
 	# (le PerfManager n'existe qu'après le _ready de la scène, d'où ici)
