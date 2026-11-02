@@ -20,7 +20,9 @@ au banc `skieur`, qui échoue sans le correctif). Le corps du skieur n'est pas c
 mi-hauteur. Son flanc est maintenant fermé le long de l'escalier, et l'on descend jusqu'au fond.
 
 **Pylônes d'après les vidéos de la ligne.** Hauteurs bornées pylône par pylône sur Leissières, Grand Huit et Tovière ;
-P1 de Grand Huit passe de 62 à 17 m. Leur géométrie précalculée reste à refaire.
+P1 de Grand Huit passe de 62 à 17 m, P2 de Leissières de 65 à 32 m (estimé : aucun pylône vu à 65 m). Géométrie
+recalculée (effort 400), dépassement des galets sur ces trois lignes : 171° → 122°, portées sous la garde 6 → 4.
+Restent loin de zéro : Grand Huit 61°, Leissières 53°, Tovière 3 portées sous la garde.
 
 **Bancs.**
 - `skieur` et `ski` repassent au vert. Ski : 0,000 m d'écart hors des gares ; 6,8 cm dans leurs pièces fines, où la
