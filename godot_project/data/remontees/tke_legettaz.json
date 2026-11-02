@@ -592,8 +592,23 @@
    ]
   },
   {
-   "d": 257.3,
+   "d": 200.0,
    "montee": [],
+   "descente": [
+    [
+     4,
+     "C"
+    ]
+   ]
+  },
+  {
+   "d": 257.3,
+   "montee": [
+    [
+     4,
+     "C"
+    ]
+   ],
    "descente": [
     [
      4,
@@ -602,6 +617,6 @@
    ]
   }
  ],
- "balanciers": "estimés",
+ "balanciers": "remontees-mecaniques.net",
  "gps": []
 }
