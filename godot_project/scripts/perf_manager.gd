@@ -20,9 +20,9 @@ extends Node
 ## cockpit ») : la RÉSOLUTION du rendu est le tout dernier recours, et
 ## jamais sous 85 % — avant elle, on coupe les effets puis on verrouille la
 ## cadence à 30 i/s, lisible :
-##   0 tout : SDFGI, brouillard volumétrique, SSR, MSAA (×4), halo, rendu 100 %
+##   0 tout : SDFGI, brouillard volumétrique, MSAA (×4), halo, rendu 100 %
 ##   1 sans SDFGI (éclairage indirect)
-##   2 + sans brouillard volumétrique ni SSR
+##   2 + sans brouillard volumétrique
 ##   3 + sans MSAA
 ##   4 + sans halo (glow)
 ##   5 + cadence verrouillée à 30 i/s (régulière plutôt que 40-55 en dents de scie)
@@ -235,7 +235,6 @@ func _appliquer(c: int, pourquoi: String) -> void:
 	if _env != null and _rd:
 		_env.sdfgi_enabled = cran <= 0
 		_env.volumetric_fog_enabled = cran <= 1
-		_env.ssr_enabled = cran <= 1
 	if _env != null:
 		_env.glow_enabled = cran <= (4 if _web else 3)
 	cran_courant = cran
