@@ -15,6 +15,9 @@ Vérifié sur PC en 4K (16 min, train puis ski) : le détail revient à 0 en ~10
 **Vue de dos dans la rame.** La caméra traversait le plafond : écran beige à quai, brun à rayures dans le tunnel, sur
 tout le trajet. La caméra s'arrête maintenant sous le plafond (y 1,57 → 1,33 pour un plafond à 1,45, vérification ajoutée
 au banc `skieur`, qui échoue sans le correctif). Le corps du skieur n'est pas concerné.
+À quai, elle sortait aussi par les portes ouvertes et sautait dehors (1,7 m en une image) : les flancs de la caisse
+l'arrêtent maintenant quand on est à bord (écart à l'axe 3,08 → 1,58 m, sur un tour complet, dans les deux voitures). Reste un
+saut de 0,76 m au droit des portes, à l'intérieur de la rame.
 
 **Fosse de la gare basse.** En descendant l'escalier du personnel, on marchait sur le plancher du tunnel à −2,65 m, à
 mi-hauteur. Son flanc est maintenant fermé le long de l'escalier, et l'on descend jusqu'au fond.

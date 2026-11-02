@@ -1346,6 +1346,8 @@ func _camera() -> void:
 	# fermées (retour d'utilisateur, 23/10/2026) ; dans le funiculaire, elle reste
 	# dans la rame
 	bras.collision_mask = CollisionsJeu.COUCHE_CAMERA | (CollisionsJeu.COUCHE_DECOR if embarque else (CollisionsJeu.COUCHE_DECOR | CollisionsJeu.COUCHE_VEHICULE))
+	if support != null and not embarque:
+		bras.collision_mask |= CollisionsJeu.COUCHE_CAMERA_BORD
 	pivot.position.y = Y_YEUX if premiere_personne else Y_YEUX - 0.05
 	pivot.position.x = 0.0
 	pivot.position.z = 0.0
