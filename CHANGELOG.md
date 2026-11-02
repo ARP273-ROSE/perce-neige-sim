@@ -5,6 +5,16 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.53.4 — 2 novembre 2026
+
+**Mémoire des remontées divisée.** Sur un téléphone Android, WebGL s'est perdu après 368 s, à 325 Mo de tampons (47 775). Chaque ligne pesait 40 Mo : chaque paire de galets et chaque pneu de lanceur avait son propre maillage, soit la moitié des sommets de la ligne (Lanches : 788 000 sur 1,6 million) et 800 de ses 1 300 maillages. Ils sont maintenant partagés, sans changement à l'image. Mesuré dans WebKit à 824×384, au même endroit, à l'arrêt : 285 → 210 Mo, 45 182 → 29 936 tampons. Non essayé sur le téléphone lui-même : la limite exacte de l'appareil reste inconnue.
+
+**Plafond de tampons sur la PWA.** 200 Mo sur téléphone, 350 Mo ailleurs, 180 et 140 Mo après une perte de WebGL. Au plafond, on ne construit plus que la ligne à moins de 400 m, en démontant d'abord la plus lointaine. Ce démontage n'a pas été déclenché en essai : à l'arrêt, le plafond arrête seulement les constructions.
+
+**Ancien moteur en cache.** Un moteur gardé d'une version plus ancienne pouvait démarrer avec les fichiers neufs (« need dylink section »). La page vide alors son cache et se recharge, une seule fois.
+
+**Bulle des Lanches.** Fermée, la face avant est verticale au lieu de déverser, s'avance de 0,85 m depuis le moyeu au lieu de 1,05 m, et le toit passe à 1,15 m au-dessus de l'assise (0,90 m avant, sous le casque à 0,94 m).
+
 ## 1.53.3 — 2 novembre 2026
 
 **Sur le toit de la gare en une image.** Pendant les 10 s qui suivent une dépose par la carte, le skieur était reposé à chaque image sur
