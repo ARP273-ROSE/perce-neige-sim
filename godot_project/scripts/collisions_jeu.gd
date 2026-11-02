@@ -23,6 +23,7 @@ extends Node3D
 const COUCHE_DECOR: int = 1
 const COUCHE_VEHICULE: int = 2
 const COUCHE_SKIEUR: int = 4
+const COUCHE_CAMERA: int = 8            # n'arrête que la caméra, pas le corps
 const DEMI_ZONE_GARE: float = 160.0     # zone des gares (m) : maillages réels
 const R_PAROI: float = 1.64             # rayon intérieur du tube des voitures
 
@@ -349,6 +350,23 @@ func _boite(parent: Node3D, taille: Vector3, xf: Transform3D, couche: int = COUC
 	return cs
 
 
+## Plafond intérieur (2,4 m au-dessus du plancher), pour la caméra seule. Sans lui,
+## le bras de la vue de dos le traversait dans la rame : on regardait le dos du panneau,
+## tout le trajet (écran brun à rayures dans le tunnel, relevé du 02/11/2026).
+func _plafond_camera(voiture: Node3D, car_len: float) -> void:
+	var corps: StaticBody3D = StaticBody3D.new()
+	corps.name = "PlafondCamera"
+	corps.collision_layer = COUCHE_CAMERA
+	corps.collision_mask = 0
+	var b: BoxShape3D = BoxShape3D.new()
+	b.size = Vector3(3.6, 0.30, car_len)
+	var cs: CollisionShape3D = CollisionShape3D.new()
+	cs.shape = b
+	cs.position.y = TrainBodyBuilder.Y_FLOOR + 2.4 + 0.15
+	corps.add_child(cs)
+	voiture.add_child(corps)
+
+
 func _rame(c: Cabin) -> void:
 	var car_len: float = c.train_length / float(c.car_count)
 	var pas: float = TrainBodyBuilder.PANEL_L + TrainBodyBuilder.RIB_W
@@ -359,6 +377,7 @@ func _rame(c: Cabin) -> void:
 	for idx in range(c.car_count):
 		var voiture: Node3D = c._interior_cars[idx]
 		voiture.set_meta("vehicule", voiture)
+		_plafond_camera(voiture, car_len)
 		var z_c: float = (float(idx) - (c.car_count - 1) * 0.5) * car_len
 		var z0: float = -car_len * 0.5 + 0.30
 		var z1: float = car_len * 0.5 - 0.30

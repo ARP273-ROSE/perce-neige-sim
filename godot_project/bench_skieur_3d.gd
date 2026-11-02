@@ -140,11 +140,20 @@ func _tick() -> void:
 			ph.speed_cmd = 1.0                 # le conducteur pousse la consigne
 			if _t_depart < 0.0 and ph.trip_started:
 				_t_depart = _t_phase
+			if _t_depart > 0.0 and _t_phase - _t_depart > 38.0:
+				# vue de dos, dans l'axe de la voiture, regard plongeant : le bras monte le plus haut
+				var av: Vector3 = -(cab._interior_cars[1] as Node3D).global_transform.basis.z
+				sk.cam_yaw = atan2(-av.x, -av.z)
+				sk.cam_pitch = -0.28
+				sk.cam_dist = 3.2
 			if _t_depart > 0.0 and _t_phase - _t_depart > 40.0:
 				var v3: Node3D = cab._interior_cars[1]
 				_verif("en marche : emporté par la rame, toujours dans la voiture",
 					sk.support == v3 and _dans_voiture(sk, v3, car_len) and ph.s > PNConstants.START_S + 80.0,
 					"rame à %.0f m, support %s" % [ph.s, sk.support.name if sk.support else "aucun"])
+				var y_cam: float = (v3.global_transform.affine_inverse() * sk.camera.global_position).y
+				_verif("vue de dos dans la rame : la caméra reste sous le plafond", not sk.premiere_personne
+					and y_cam < TrainBodyBuilder.Y_FLOOR + 2.4, "y %.2f, plafond %.2f" % [y_cam, TrainBodyBuilder.Y_FLOOR + 2.4])
 				_main.basculer_skieur()           # on quitte la vue skieur en marche…
 				_phase = 31
 				_t_phase = 0.0

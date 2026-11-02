@@ -10,7 +10,11 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 **Régulateur sur PC.** Relevé d'une RTX 5070 Ti en 4K : les remontées passaient au détail réduit à l'entrée en mode
 skieur et n'en revenaient jamais. Le temps du fil principal comptait aussi le dessin et l'attente de l'écran, soit au moins
 16 ms à 60 Hz, alors que le retour au détail exige moins de 8,3 ms. Il mesure désormais les scripts et la physique.
-Non vérifié à l'écran pour l'instant : à confirmer par un relevé F10.
+Vérifié sur PC en 4K (16 min, train puis ski) : le détail revient à 0 en ~100 s et y reste ; temps du fil principal à 2-3 ms en médiane.
+
+**Vue de dos dans la rame.** La caméra traversait le plafond : écran beige à quai, brun à rayures dans le tunnel, sur
+tout le trajet. La caméra s'arrête maintenant sous le plafond (y 1,57 → 1,33 pour un plafond à 1,45, vérification ajoutée
+au banc `skieur`, qui échoue sans le correctif). Le corps du skieur n'est pas concerné.
 
 **Fosse de la gare basse.** En descendant l'escalier du personnel, on marchait sur le plancher du tunnel à −2,65 m, à
 mi-hauteur. Son flanc est maintenant fermé le long de l'escalier, et l'on descend jusqu'au fond.
