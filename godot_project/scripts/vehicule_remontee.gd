@@ -818,21 +818,31 @@ func _siege_bmf() -> void:
 	var hp: float = yb1 - yb0
 	var plein_c: float = 0.36                   # demi-largeur pleine au milieu
 	var plein_b: float = 0.30                   # longueur pleine à chaque bout
-	RemonteeKit.boite_en(siege, Vector3(2.0 * plein_c, hp, ep), Vector3(0, (yb0 + yb1) * 0.5, zb), m_alu)
+	# sièges Études de Transports (photos de Bollin-Fresse) : pas de treillis, une tôle
+	# pleine sur toute la largeur, percée de quelques trous ronds de part et d'autre du numéro
+	var et: bool = famille.begins_with("siege_doppelmayr_e98")
+	if et:
+		RemonteeKit.boite_en(siege, Vector3(2.0 * xb, hp, ep), Vector3(0, (yb0 + yb1) * 0.5, zb), m_alu)
+	else:
+		RemonteeKit.boite_en(siege, Vector3(2.0 * plein_c, hp, ep), Vector3(0, (yb0 + yb1) * 0.5, zb), m_alu)
 	for sx in [-1.0, 1.0]:
-		RemonteeKit.boite_en(siege, Vector3(plein_b, hp, ep), Vector3(sx * (xb - plein_b * 0.5), (yb0 + yb1) * 0.5, zb), m_alu)
-		# zone ajourée : membrures haute et basse, diagonales en zigzag
-		var xa: float = plein_c
-		var xz: float = xb - plein_b
-		for y in [yb1 - 0.02, yb0 + 0.02]:
-			RemonteeKit.boite_en(siege, Vector3(xz - xa, 0.04, ep), Vector3(sx * (xa + xz) * 0.5, y, zb), m_alu)
-		var nd: int = 5
-		for k in range(nd):
-			var x0: float = lerpf(xa, xz, float(k) / nd)
-			var x1: float = lerpf(xa, xz, float(k + 1) / nd)
-			var haut: bool = k % 2 == 0
-			RemonteeKit.poutre(siege, Vector3(sx * x0, yb0 + 0.02 if haut else yb1 - 0.02, zb), Vector3(sx * x1, yb1 - 0.02 if haut else yb0 + 0.02, zb),
-				0.045, ep, m_alu, Vector3.BACK)
+		if et:
+			for u in [0.38, 0.72]:
+				RemonteeKit.cylindre(siege, 0.042, 0.042, ep + 0.004, Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3(sx * xb * u, (yb0 + yb1) * 0.5, zb)), "noir_mat", 10)
+		else:
+			RemonteeKit.boite_en(siege, Vector3(plein_b, hp, ep), Vector3(sx * (xb - plein_b * 0.5), (yb0 + yb1) * 0.5, zb), m_alu)
+			# zone ajourée : membrures haute et basse, diagonales en zigzag
+			var xa: float = plein_c
+			var xz: float = xb - plein_b
+			for y in [yb1 - 0.02, yb0 + 0.02]:
+				RemonteeKit.boite_en(siege, Vector3(xz - xa, 0.04, ep), Vector3(sx * (xa + xz) * 0.5, y, zb), m_alu)
+			var nd: int = 5
+			for k in range(nd):
+				var x0: float = lerpf(xa, xz, float(k) / nd)
+				var x1: float = lerpf(xa, xz, float(k + 1) / nd)
+				var haut: bool = k % 2 == 0
+				RemonteeKit.poutre(siege, Vector3(sx * x0, yb0 + 0.02 if haut else yb1 - 0.02, zb), Vector3(sx * x1, yb1 - 0.02 if haut else yb0 + 0.02, zb),
+					0.045, ep, m_alu, Vector3.BACK)
 		# boulons des chapes de bout
 		for dy in [-0.04, 0.04]:
 			RemonteeKit.cylindre(siege, 0.012, 0.012, 0.05, Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3(sx * (xb - 0.10), (yb0 + yb1) * 0.5 + dy, zb)), "acier", 6)
