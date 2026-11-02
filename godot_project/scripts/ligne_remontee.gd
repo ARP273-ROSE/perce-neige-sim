@@ -1579,6 +1579,10 @@ func decalage_montee(d: float) -> float:
 	return lerpf(x0, 0.0, clampf((d - d0) / maxf(L - d0, 0.01), 0.0, 1.0))
 
 
+## Longueur de l'évasement du rail avant le demi-tour.
+const L_EVASE: float = 6.0
+
+
 func _construire_boucle() -> void:
 	_preparer_raccords()
 	_boucle = PackedVector3Array()
@@ -1592,12 +1596,24 @@ func _construire_boucle() -> void:
 	# 1. gare aval : du nez de gare (brin descente) autour de la poulie au nez (brin montée)
 	var s0: float = 0.0
 	_ajouter(Vector3(xd, ya, 0.0))
-	_ajouter(Vector3(xd, ya, l_gare))
+	var Rt: float = rayon_tour(true)
+	var evase: bool = Rt > R + 0.001
+	if evase:
+		for k in range(0, 13):
+			var ze: float = l_gare - L_EVASE * (1.0 - k / 12.0)
+			_ajouter(Vector3(signf(xd) * lerpf(R, Rt, smoothstep(0.0, 1.0, k / 12.0)), ya, ze))
+	else:
+		_ajouter(Vector3(xd, ya, l_gare))
 	for k in range(1, 24):
 		var a: float = PI * float(k) / 24.0
 		# demi-tour par l'arrière de la gare (+Z), de xd vers xm
-		_ajouter(Vector3(-cos(a) * R * signf(xm), ya, l_gare + sin(a) * R))
-	_ajouter(Vector3(xm, ya, l_gare))
+		_ajouter(Vector3(-cos(a) * Rt * signf(xm), ya, l_gare + sin(a) * Rt))
+	if evase:
+		for k in range(0, 13):
+			var ze2: float = l_gare - L_EVASE * (k / 12.0)
+			_ajouter(Vector3(signf(xm) * lerpf(Rt, R, smoothstep(0.0, 1.0, k / 12.0)), ya, ze2))
+	else:
+		_ajouter(Vector3(xm, ya, l_gare))
 	_ajouter(Vector3(xm, ya, 0.0))
 	_zones.append([s0, _longueur(), "gare_aval"])
 	# 2. brin montée
@@ -1682,6 +1698,15 @@ const Z_DEVIATION: float = 2.5
 
 ## Diamètres relevés [aval, amont] quand les deux poulies diffèrent (reportage de l'appareil).
 const DIAMETRES_POULIES: Dictionary = {"tsd8_tommeuses": [7.20, 6.10]}
+
+
+## Rayon du demi-tour des véhicules : ils contournent la poulie d'au moins le
+## retrait. Sur une ligne dont la poulie vaut la voie, la gare s'évase pour cela.
+func rayon_tour(aval: bool) -> float:
+	var R: float = voie * 0.5
+	if not DIAMETRES_POULIES.has(String(name)):
+		return R
+	return maxf(R, rayon_poulie(aval) + RETRAIT_POULIE)
 
 
 func rayon_poulie(aval: bool = true) -> float:
@@ -1845,7 +1870,7 @@ func _gare(aval: bool) -> void:
 	_poulies.append([roue, signf(_x_brin(true)) * vitesse / rayon_poulie(aval)])
 	# galets de déviation (axe vertical) : ils rentrent le câble de la voie
 	# de ligne au diamètre de la poulie, juste après le nez de la gare
-	for sx in ([] if fixe() else [-1.0, 1.0]):
+	for sx in ([] if fixe() or rayon_poulie(aval) >= voie * 0.5 - 0.01 else [-1.0, 1.0]):
 		for k in range(3):
 			var zd: float = znez + signf(dz) * (Z_DEVIATION + 0.7 * k)
 			# sous le câble, côté intérieur : là où il s'enroule (convexe)
@@ -3790,6 +3815,12 @@ func _peupler() -> void:
 		garde += 1
 
 
+## Lignes équipées de la pince A-108 (décision d'utilisateur, 02/11/2026).
+const LIGNES_A108: Array = ["tsd8_tommeuses", "tsd6_bollin", "tsd6_fresse"]
+## Couleur des cabines, ligne par ligne, d'après les photos (les autres gardent celle de leur famille).
+const TEINTES_CABINES: Dictionary = {"tcd10_toviere": "gris", "tcd8_brevieres": "gris", "tcd10_solaise": "noire", "tcd10_daille": "noire", "tcd10_vallon_iseran": "noire"}
+
+
 func _ajouter_vehicule(s: float, magasin: bool = false) -> void:
 	if famille == "perche_debrayable":
 		_au_magasin.append(s if magasin else -1.0)
@@ -3797,6 +3828,8 @@ func _ajouter_vehicule(s: float, magasin: bool = false) -> void:
 	v.famille = famille
 	v.miroir = not sens_droite
 	v.livree = station
+	v.teinte = TEINTES_CABINES.get(String(name), "")
+	v.pince_a108 = String(name) in LIGNES_A108
 	_enfant(v)
 	v.construire()
 	_vehicules.append([v, s])

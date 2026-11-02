@@ -34,6 +34,7 @@ var _filet_ok: bool = false
 var _d_prec: int = 0
 var _q_prec: Vector3 = Vector3.ZERO
 const P_PLATEFORME: Vector3 = Vector3(-639.19, 3029.91, 3163.47)
+var _p_filet: Vector3 = P_PLATEFORME
 
 
 func _initialize() -> void:
@@ -228,6 +229,7 @@ func _tick() -> void:
 			if _t > 3.0:
 				var parti: float = sk.global_position.distance_to(_p_fuite)
 				print("%s filet : corps pris dans le décor → dégagé — %d dégagement, %.2f m" % ["[OK]  " if sk.degagements >= 1 and parti > 0.1 else "[INFO]", sk.degagements, parti])
+				_filet_ok = sk.degagements >= 1
 				sk.degagements = 0
 				_st = 11
 				_t = 0.0
@@ -241,15 +243,25 @@ func _tick() -> void:
 			if (_ligne("tsd4_vanoise") != null and _ligne("tsd4_vanoise").pret) or _t > 90.0:
 				_t = 0.0
 				_st = 12
+				# sous le dessus de la plateforme, quelle que soit sa hauteur (les gares sont
+				# creusées depuis le 02/11/2026) : 0,91 m plus bas, comme au relevé d'origine
+				var vn: LigneRemontee = _ligne("tsd4_vanoise")
+				if vn != null and vn.pret:
+					var y_pl: float = (vn.global_transform * Vector3(0, vn.terrain(vn.longueur_h()), 0)).y
+					_p_filet = Vector3(P_PLATEFORME.x, y_pl - 0.91, P_PLATEFORME.z)
+					sk.global_position = _p_filet
 		12:
 			_t += 1.0 / 60.0
 			sk.chausse = false
 			_viser(sk, sk.global_position + Vector3.FORWARD, 0.85)
 			if _t > 3.0:
-				var loin: float = sk.global_position.distance_to(P_PLATEFORME)
-				print("%s filet : plateforme construite autour de lui → reposé tout près — %d dégagement, %.2f m" % [
-					"[OK]  " if sk.degagements >= 1 and loin < SkieurJoueur.REPLI_PROCHE else "[ECHEC]", sk.degagements, loin])
-				_filet_ok = sk.degagements >= 1 and loin < SkieurJoueur.REPLI_PROCHE
+				var loin: float = sk.global_position.distance_to(_p_filet)
+				# gares creusées (02/11/2026) : cette plateforme ne le prend plus forcément ; alors,
+				# il doit simplement être libre. Le filet reste prouvé par le test du corps pris.
+				var ok_pl: bool = (sk.degagements >= 1 and loin < SkieurJoueur.REPLI_PROCHE) or (sk.degagements == 0 and _libre(sk.global_position))
+				print("%s filet : plateforme de gare autour de lui → reposé tout près, ou pas pris — %d dégagement, %.2f m" % [
+					"[OK]  " if ok_pl else "[ECHEC]", sk.degagements, loin])
+				_filet_ok = _filet_ok and ok_pl
 				sk.degagements = 0
 				sk.pieges_sans_issue = 0
 				_st = 2
