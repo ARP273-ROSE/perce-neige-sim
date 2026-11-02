@@ -19,6 +19,15 @@ au banc `skieur`, qui échoue sans le correctif). Le corps du skieur n'est pas c
 l'arrêtent maintenant quand on est à bord (écart à l'axe 3,08 → 1,58 m, sur un tour complet, dans les deux voitures). Reste un
 saut de 0,76 m au droit des portes, à l'intérieur de la rame.
 
+**Skieur qui coince.** Nouveau banc `coince` : marche aléatoire enchaînée dans les gares, chaque segment droit étant prouvé
+praticable au préalable (sol, marches ≤ 30 cm, place pour le corps). Sur 1 200 segments : 9 arrêts avant correction, 4 après,
+aucun blocage complet dans les deux cas.
+- La montée de marche et le contournement ne dépendent plus d'un contact « mur » détecté : la tête qui touche, qui n'en est
+  pas un, arrêtait le skieur net. Hauteur de marche essayée de 40 à 8 cm.
+- Filet : commande tenue, moins de 10 cm parcourus en 1,2 s et aucune des 8 directions libre (corps pris dans le décor) → reposé
+  à la place libre la plus proche, à pied comme à ski. Contre un simple mur, rien ne se passe. Essayé sur un corps forcé dans
+  le décor ; jamais déclenché pendant les 1 200 segments.
+
 **Fosse de la gare basse.** En descendant l'escalier du personnel, on marchait sur le plancher du tunnel à −2,65 m, à
 mi-hauteur. Son flanc est maintenant fermé le long de l'escalier, et l'on descend jusqu'au fond.
 
