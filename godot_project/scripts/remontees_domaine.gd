@@ -321,13 +321,19 @@ func _poser(D: Dictionary) -> void:
 	var L0: float = (b0 - a0).length()
 	var u0: Vector2 = (b0 - a0) / maxf(L0, 1.0)
 	var py: Array = []
+	# 4 galets au moins : télécabines et télésièges, sauf les fixes pour débutants (2 m/s
+	# au plus) ; téléskis non concernés (retour d'utilisateur, 02/11/2026)
+	var cle_l: String = String(D["cle"])
+	var mini_galets: bool = cle_l.begins_with("tcd") or cle_l.begins_with("tsd") \
+			or (cle_l.begins_with("tsf") and float(D.get("vitesse", 9.0)) > 2.0)
 	for kp in range((D["pylones"] as Array).size()):
 		var p: Dictionary = D["pylones"][kp]
 		var q: Dictionary = p.duplicate()
 		q["k"] = kp                     # (rang dans les données : géométrie précalculée)
-		for sens in ["montee", "descente"]:
-			if q.has(sens):
-				q[sens] = PyloneRemontee.compo_mini(q[sens])
+		if mini_galets:
+			for sens in ["montee", "descente"]:
+				if q.has(sens):
+					q[sens] = PyloneRemontee.compo_mini(q[sens])
 		var w: Vector2 = a0 + u0 * (float(p["d"]) * L0 / maxf(Ld, 1.0))
 		q["d"] = (w - a).dot(dirh)
 		if float(q["d"]) < 5.0 or float(q["d"]) > L - 5.0:

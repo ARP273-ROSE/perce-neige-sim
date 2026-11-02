@@ -13,7 +13,7 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 **Carte des pistes.** Elle s'ouvre à gauche de la colonne de boutons, qu'elle recouvrait, y compris le sien : une fois ouverte, on ne pouvait plus la fermer.
 
-**Galets.** Au moins 4 sous le câble et 4 au-dessus sur chaque pylône (un « 4 SC » faisait 2 + 2), sur toutes les lignes, d'après un retour d'utilisateur.
+**Galets.** Au moins 4 sous le câble et 4 au-dessus sur chaque pylône (un « 4 SC » faisait 2 + 2), sur les télécabines et les télésièges, sauf les télésièges fixes à 2 m/s ou moins (Rosset, Panoramic, Village), d'après un retour d'utilisateur. Téléskis non concernés.
 
 **Crête de Leissières.** Quatre pylônes centrés sur le sommet, deux de chaque côté (547, 561, 575, 589 m), au lieu de trois d'un côté et un de l'autre : déviation du câble de 17 à 18° sur chacun, au lieu de 33° sur deux d'entre eux. Positions et hauteurs **estimées** pour obtenir cette courbe : le premier côté est passe à 18,6 m, la vidéo donnait 5 à 8 m sur la crête.
 
