@@ -107,7 +107,7 @@ func _calculer() -> void:
 	var f := FileAccess.open("res://data/remontees/" + nom, FileAccess.WRITE)
 	f.store_string(JSON.stringify(sortie, " ", true))
 	print("BILAN dépassement %.0f° → %.0f° · pylônes > 1° %d → %d · portées sous la garde %d → %d" % bilan)
-	quit(0)
+	FinBanc.quitter(self, _main, 0)
 
 
 ## Bornes de déviation (rad) d'un pylône : [mini, maxi].

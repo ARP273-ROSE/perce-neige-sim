@@ -28,7 +28,7 @@ func _verif(label: String, cond: bool, detail: String = "") -> void:
 
 func _fin() -> void:
 	print("BENCH_PASSAGE " + ("OK" if _ok else "ECHEC"))
-	quit(0 if _ok else 1)
+	FinBanc.quitter(self, _main, 0 if _ok else 1)
 
 
 func _point(cab: Cabin, idx: int, k: int) -> Vector3:
