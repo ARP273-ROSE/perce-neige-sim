@@ -7,13 +7,19 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## 1.53.5 — 2 novembre 2026
 
+**Câble immobile.** Il fléchissait sous chaque véhicule, par deux calculs différents pour le câble dessiné et pour la pince : celle-ci passait au-dessus ou en dessous, et le câble ondulait en permanence. Plus de flèche locale ; seule reste l'onde des arrêts d'urgence.
+
+**Câble sur les galets.** Il cassait en un point au droit du pylône, et le pas de 3 m décalait la cassure avant les galets. Il suit maintenant un arc sur la longueur du train, tous les 0,5 m, et les galets se calent dessus partout, batteries de gare et téléskis compris : écart maximal de repos 0,71 → 0,40 m.
+
+**Brévières.** Constructeur corrigé : Poma.
+
 **Rester dans la cabine.** Sans bouger à l'arrivée, on suit maintenant la cabine et l'on se rassoit pour le retour ; au premier pas, on est libre de sortir. Elle repartait sans soi, ou l'on restait debout. Nouveau banc `cabine_retour` : aller-retour complet.
 
 **Piques « resté à bord ».** Nouvelle série, adaptée à la télécabine, au téléphérique et au 3S, et au télésiège repris dans les 90 s après l'arrivée. Arrivée en bas : ses propres piques, au lieu de « vous êtes en haut ».
 
 **Carte des pistes.** Elle s'ouvre à gauche de la colonne de boutons, qu'elle recouvrait, y compris le sien : une fois ouverte, on ne pouvait plus la fermer.
 
-**Galets.** Au moins 4 sous le câble et 4 au-dessus sur chaque pylône (un « 4 SC » faisait 2 + 2), sur les télécabines et les télésièges, sauf les télésièges fixes à 2 m/s ou moins (Rosset, Panoramic, Village), d'après un retour d'utilisateur. Téléskis non concernés.
+**Galets.** Au moins 4 sous le câble et 4 au-dessus sur chaque pylône (un « 4 SC » faisait 2 + 2), sur les télécabines et les télésièges, sauf les télésièges fixes pour débutants (Rosset, Panoramic, Village, Almes, Cema), d'après un retour d'utilisateur. Leissières P11 passe à 12 galets. Téléskis non concernés.
 
 **Véhicules.** Pince A-108 aux cotes relevées sur les sièges des Tommeuses (11 436 → 9 548 triangles). Sièges Études de Transports : tôle pleine percée de 4 trous au lieu du treillis. Poulies des Tommeuses : Ø 7,20 m en aval, Ø 6,10 m en amont, câble et galets de déviation suivent ; en aval, la pince mord la jante de 3 cm dans le demi-tour. Logos des télécabines : le panneau passait sous la caisse sur Omega, Diamond et Symphony ; « TIGNES » ajouté (lettrage du jeu), encre claire sur les caisses noires.
 
