@@ -472,6 +472,7 @@ func _construire_corps() -> void:
 
 func _finir_construction() -> void:
 	pret = true
+	RemonteeKit.vider_primitives()
 	set_process(true)
 	if not _noyau_fil:
 		_preparer_noyau()

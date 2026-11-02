@@ -5,6 +5,10 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.53.5 — 2 novembre 2026
+
+**Construction des lignes allégée.** Chaque petite pièce d'une ligne (boîte, cylindre) partait à la carte graphique dès sa pose, puis la fusion la jetait : 40 000 par ligne. Les pièces identiques partagent maintenant le même envoi le temps de la construction : 2,6 millions → 100 000 sur les 66 lignes du banc, lignes avec une image de plus de 40 ms 11-12 → 6 (1 essai sous Linux, sans écran). PWA à 824×384 dans WebKit, entrée en skieur à l'arrêt : tampons créés 196 000 → 47 000, vivants 29 936 → 22 367, mémoire 210 → 207 Mo. Non mesuré sur PC avec écran ni sur téléphone.
+
 ## 1.53.4 — 2 novembre 2026
 
 **Mémoire des remontées divisée.** Sur un téléphone Android, WebGL s'est perdu après 368 s, à 325 Mo de tampons (47 775). Chaque ligne pesait 40 Mo : chaque paire de galets et chaque pneu de lanceur avait son propre maillage, soit la moitié des sommets de la ligne (Lanches : 788 000 sur 1,6 million) et 800 de ses 1 300 maillages. Ils sont maintenant partagés, sans changement à l'image. Mesuré dans WebKit à 824×384, au même endroit, à l'arrêt : 285 → 210 Mo, 45 182 → 29 936 tampons. Non essayé sur le téléphone lui-même : la limite exacte de l'appareil reste inconnue.

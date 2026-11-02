@@ -137,11 +137,39 @@ static func _mi(parent: Node3D, mesh: Mesh, xf: Transform3D, nom: String) -> Mes
 	return mi
 
 
+## Primitives partagées le temps d'une construction : chacune part à la carte
+## graphique dès qu'elle est posée sur un nœud, puis la fusion la jette. 40 000
+## par ligne (banc des 66 lignes, 02/11/2026) : ~150 000 tampons créés et détruits
+## à l'entrée en skieur sur la PWA. Pièces identiques → un seul envoi.
+static var _primitives: Dictionary = {}
+const MAX_PRIMITIVES: int = 4000
+
+
+static func _retenir_primitive(cle: String, m: Mesh) -> void:
+	verrou.lock()
+	if _primitives.size() >= MAX_PRIMITIVES:
+		_primitives.clear()
+	_primitives[cle] = m
+	verrou.unlock()
+
+
+static func vider_primitives() -> void:
+	verrou.lock()
+	_primitives.clear()
+	verrou.unlock()
+
+
 ## Boîte de dimensions `taille`, centrée en `xf`.
 static func boite(parent: Node3D, taille: Vector3, xf: Transform3D, m: String) -> MeshInstance3D:
-	var b: BoxMesh = BoxMesh.new()
-	b.size = taille
-	b.material = mat(m)
+	var cle: String = "B%.4f|%.4f|%.4f|%s" % [taille.x, taille.y, taille.z, m]
+	verrou.lock()
+	var b: BoxMesh = _primitives.get(cle)
+	verrou.unlock()
+	if b == null:
+		b = BoxMesh.new()
+		b.size = taille
+		b.material = mat(m)
+		_retenir_primitive(cle, b)
 	return _mi(parent, b, xf, m)
 
 
@@ -152,13 +180,19 @@ static func boite_en(parent: Node3D, taille: Vector3, centre: Vector3, m: String
 ## Cylindre d'axe Y local (r_bas, r_haut, hauteur h), centré en `xf`.
 static func cylindre(parent: Node3D, r_bas: float, r_haut: float, h: float, xf: Transform3D, m: String,
 		seg: int = 16) -> MeshInstance3D:
-	var c: CylinderMesh = CylinderMesh.new()
-	c.bottom_radius = r_bas
-	c.top_radius = r_haut
-	c.height = h
-	c.radial_segments = seg
-	c.rings = 1
-	c.material = mat(m)
+	var cle: String = "C%.4f|%.4f|%.4f|%d|%s" % [r_bas, r_haut, h, seg, m]
+	verrou.lock()
+	var c: CylinderMesh = _primitives.get(cle)
+	verrou.unlock()
+	if c == null:
+		c = CylinderMesh.new()
+		c.bottom_radius = r_bas
+		c.top_radius = r_haut
+		c.height = h
+		c.radial_segments = seg
+		c.rings = 1
+		c.material = mat(m)
+		_retenir_primitive(cle, c)
 	return _mi(parent, c, xf, m)
 
 
