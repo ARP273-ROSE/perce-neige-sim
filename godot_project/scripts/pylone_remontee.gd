@@ -340,14 +340,16 @@ func _train(montee: bool) -> void:
 			piv.position = base_pos
 			piv.rotation.x = base_rot
 			tete.add_child(piv)
-			RemonteeKit.galet(piv, Vector3(0, -s * 0.11, za - zp), R_GALET, 0.10, "moyeu", "garniture")
-			if zb != za:
-				RemonteeKit.galet(piv, Vector3(0, -s * 0.11, zb - zp), R_GALET, 0.10, "moyeu", "garniture")
-			# flasques de part et d'autre des joues (comme les fourches du funiculaire)
-			var fy: float = RollerMesh.FLASQUE_Y * R_GALET / RollerMesh.R_BANDE
-			for sx in [-fy, fy]:
-				RemonteeKit.poutre(piv, Vector3(sx, -s * 0.11, za - zp + 0.14), Vector3(sx, -s * 0.11, zb - zp - 0.14), 0.016, 0.13, "galva_patine")
-			RemonteeKit.cylindre(piv, 0.035, 0.035, 0.26, Transform3D(Basis(Vector3.FORWARD, PI * 0.5), Vector3.ZERO), "acier_noir", 8)
+			# même écartement, même sens : même maillage, partagé (MeshMerge.poser_partage)
+			if not MeshMerge.poser_partage(piv, "paire|%.1f|%.3f" % [s, zb - za]):
+				RemonteeKit.galet(piv, Vector3(0, -s * 0.11, za - zp), R_GALET, 0.10, "moyeu", "garniture")
+				if zb != za:
+					RemonteeKit.galet(piv, Vector3(0, -s * 0.11, zb - zp), R_GALET, 0.10, "moyeu", "garniture")
+				# flasques de part et d'autre des joues (comme les fourches du funiculaire)
+				var fy: float = RollerMesh.FLASQUE_Y * R_GALET / RollerMesh.R_BANDE
+				for sx in [-fy, fy]:
+					RemonteeKit.poutre(piv, Vector3(sx, -s * 0.11, za - zp + 0.14), Vector3(sx, -s * 0.11, zb - zp - 0.14), 0.016, 0.13, "galva_patine")
+				RemonteeKit.cylindre(piv, 0.035, 0.035, 0.26, Transform3D(Basis(Vector3.FORWARD, PI * 0.5), Vector3.ZERO), "acier_noir", 8)
 			mobiles.append(piv)
 			(_paires[montee] as Array).append([piv, base_pos, base_rot, za, zb, s])
 			pivots.append(zp)

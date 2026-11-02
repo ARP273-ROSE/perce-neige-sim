@@ -433,6 +433,9 @@ func _portees(racine: Node) -> void:
 func _ready() -> void:
 	if not OS.has_feature("web") and PerfManager.cran_courant >= PerfManager.CRAN_MAX_PC:
 		set_portees_reduites(true)
+	if OS.has_feature("web"):
+		var telephone: bool = bool(JavaScriptBridge.eval("/Mobile|Android/.test(navigator.userAgent)", true))
+		_budget_tampons_mo = [200.0 if telephone else 350.0, 180.0, 140.0][clampi(PerfManager.secours_web, 0, 2)]
 	if PerfManager.secours_web > 0:
 		var fort: bool = PerfManager.secours_web >= 2
 		CONSTRUIRE_JUSQUA = 500.0 if fort else 800.0
@@ -449,6 +452,12 @@ var CONSTRUIRE_JUSQUA: float = 1200.0 if OS.has_feature("web") else 2000.0
 ## Au-delà, une ligne construite est démontée (mémoire) ; écart avec la
 ## distance de construction pour ne pas battre.
 var DEMOLIR_AU_DELA: float = 2200.0 if OS.has_feature("web") else 3500.0
+## PWA : plafond des tampons de la carte graphique. Sur téléphone Android, WebGL
+## s'est perdu à 325 Mo (47 775 tampons) après 368 s (02/11/2026) ; en un même lieu,
+## sans bouger, le total monte en 200 s jusqu'à 285 Mo puis ne bouge plus (mesure
+## à 824×384) : c'est le nombre de lignes construites, pas une fuite.
+var _budget_tampons_mo: float = 0.0
+const BUDGET_PROCHE: float = 400.0
 var _en_cours: LigneRemontee = null
 
 
@@ -474,10 +483,38 @@ func _construire_proches() -> void:
 		if d < CONSTRUIRE_JUSQUA and d < d_best:
 			d_best = d
 			best = lg
+	if best != null and _budget_tampons_mo > 0.0 \
+			and Performance.get_monitor(Performance.RENDER_BUFFER_MEM_USED) / 1048576.0 > _budget_tampons_mo:
+		# budget atteint : on ne construit plus que la ligne où l'on arrive,
+		# en démontant d'abord la plus lointaine
+		if d_best > BUDGET_PROCHE or not _poubelle.is_empty() or _faire_place(p, d_best):
+			return
 	if best != null:
 		_en_cours = best
 		best.set_meta("lancee", true)
 		best.construire()
+
+
+## Démonte la ligne construite la plus lointaine, à 200 m au moins au-delà de
+## d_min ; faux s'il n'y en a pas (la ligne proche passe alors quand même).
+func _faire_place(p: Vector3, d_min: float) -> bool:
+	var loin: LigneRemontee = null
+	var d_loin: float = d_min + 200.0
+	for e in lignes:
+		var lg: LigneRemontee = e[0]
+		if not lg.pret or lg == _en_cours or (not a_bord.is_empty() and (a_bord[0] == lg or a_bord[0] == lg.jumelee)):
+			continue
+		var d: float = _distance_ligne(lg, p)
+		if lg.jumelee != null:
+			d = minf(d, _distance_ligne(lg.jumelee, p))
+		if d > d_loin:
+			d_loin = d
+			loin = lg
+	if loin == null:
+		return false
+	loin.demolir(_poubelle)
+	loin.set_meta("lancee", false)
+	return true
 
 
 var _poubelle: Array = []
@@ -495,6 +532,7 @@ func _vider_poubelle() -> void:
 
 func _exit_tree() -> void:
 	VehiculeRemontee.vider_modeles()
+	MeshMerge.vider_partages()
 
 
 func _process(delta: float) -> void:
