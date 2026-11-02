@@ -80,3 +80,48 @@ pylône vers 524 m.** Le 8e cherché est celui de ~165 m. d à ~1,9 m/s, recalé
 | P8 | 329,5 | ~524 | non mesuré | non mesuré | | incertain (position) |
 
 Galets d'après le reportage : P4 est le seul support-compression (4S-C) ; à comparer au JSON.
+
+## tsd6_aiguille_percee
+
+10 pylônes réels, numérotés de l'aval (photos numérotées) : même nombre et même ordre que le JSON ; P1 contre la gare aval,
+P5-P6 et P8-P9 groupés, P10 contre la gare amont. Hauteur : rapport hauteur / traverse (≈ 7,5 m) sur une photo, en contre-plongée.
+
+| n° réel | d JSON (m) | source du n° | h_min | h_max | source h | statut |
+|---|---|---|---|---|---|---|
+| P1 | 45 | photo | 6,5 | 9 | photo | certain (n°), incertain (h) |
+| P2 | 217 | photo | 15 | 20 | photo | certain (n°), incertain (h) |
+| P3 | 357 | photo | 12 | 16 | photo | certain (n°), incertain (h) |
+| P4 | 534 | photo | 18 | 24 | photo | certain (n°), incertain (h) |
+| P5 | 661 | photo | 15 | 19 | photo | certain (n°), incertain (h) |
+| P6 | 680 | photo | 15 | 19 | photo | certain (n°), incertain (h) |
+| P7 | 792 | photo | 14 | 18 | photo | certain (n°), incertain (h) |
+| P8 | 870 | photo | 16 | 21 | photo | certain (n°), incertain (h) |
+| P9 | 889 | photo | 20 | 26 | photo | certain (n°), incertain (h) |
+| P10 | 965 | photo | 10 | 14 | photo | certain (n°), incertain (h) |
+
+## tke_legettaz
+
+**5 pylônes réels, numérotés sur les plaques (photos) ; le JSON en a 4.** Les d du JSON sont équidistants (64,3 / 128,6 / 193,0 /
+257,3) : positions de remplissage, sans mesure, non marquées `reconstitue`. P3 et P4 sont côte à côte, décalés ; la pente atteint 60 % vers P5
+(reportage). d réels et hauteurs : non vus (pas de vidéo, pas d'échelle).
+
+## tke_lavachet
+
+3 pylônes, P1 et P3 photographiés, 2S/2S d'après le reportage (JSON : [4, S] par pylône, sans brin distinct, à comparer). d équidistants
+dans le JSON (65,2 / 130,3 / 195,5) : remplissage. d et hauteurs : non vus.
+
+## tke_savonnette_1, tke_savonnette_2
+
+2 pylônes chacun (reportage). **Longueurs 237 et 198 m au reportage ; 208 m pour les deux au JSON.** d équidistants dans le JSON
+(69,4 / 138,8) : remplissage. Galets au reportage, I | II : P1 1S-1C | 1S-1C ; P2 1S-1C/1S | 1S/1S (JSON : [4, S] partout). d et hauteurs : non vus.
+
+## tke_termignon_1, tke_termignon_2
+
+7 pylônes, numérotés du reportage, photos de P2, P3, P5, P6, P7. **Formes différentes de deux lignes indépendantes : P2 = deux fûts séparés ; P3, P6, P7 =
+portiques communs aux deux lignes ; P5 = fût unique et double potence en T.** P2, P3, P6, P7 sur glace (reportage). d du JSON : 3 `reconstitue` (91,6 ; 491,5 ; 489,2), voir
+le rapport précédent (un pylône vu à ~476 m). Hauteurs : non mesurées (pas d'échelle fiable).
+
+## tsf3_mont_blanc
+
+14 ouvrages P0 à P13 (reportage), même nombre que le JSON. Montée/descente : P0 8C/8C · P1 8C/8C · P2 4SC/8S · P3 8S/rien · P4 8S/4S · P5 8S/4S · P6 8S/4S ·
+P7 8S/8S · P8 8S/4S · P9 8S/2S · P10 8S/4S · P11 8S/4S · P12 8S/4S · P13 8S/8S. **P3 ne porte que le brin montant.** Numérotation à partir de P0 : rang = n° + 1.
