@@ -983,6 +983,8 @@ func _process_corps(delta: float) -> void:
 		if remontees != null and not remontees.lignes.is_empty():
 			aller_a_remontee(remontees.lignes[remontees.lignes.size() - 1][0])
 		print("[Skiertest] skieur au pied de la remontée")
+	if cabin_ghost != null:
+		cabin_ghost.eclairer_passager(_rame_du_skieur() == cabin_ghost)
 	_pique_depart_sauvage()
 	_piques_survitesse()
 	_maj_souterrain(delta)

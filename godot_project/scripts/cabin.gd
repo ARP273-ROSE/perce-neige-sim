@@ -43,6 +43,7 @@ var _cam_fpv_basis_base: Basis = Basis.IDENTITY
 var _ecran_loupe: Node3D = null
 var camera_ext: Camera3D = null
 var interior_light: OmniLight3D = null
+var _passager_eclaire: bool = false
 # Lumières du poste de conduite : suivent l'éclairage cabine (C). Éteint, il
 # ne reste que les écrans et les voyants (retour du 03/10 : « le pupitre est
 # éclairé par la cabine sauf si l'éclairage cabine est off »).
@@ -1912,6 +1913,19 @@ func set_headlights(on: bool) -> void:
 	# _animate_headlights, appelé à chaque tick
 	if physics != null:
 		physics.lights_head = on
+
+
+## Rame d'en face : elle n'a pas d'éclairage intérieur, inutile vue de loin. Le skieur
+## à bord y voyait tout noir dans le tunnel : allumé seulement quand il y est.
+func eclairer_passager(on: bool) -> void:
+	if not is_ghost or on == _passager_eclaire:
+		return
+	_passager_eclaire = on
+	if on and interior_light == null:
+		_build_cabin_lights()
+		_tag_layer_rame(self)
+	if interior_light != null:
+		interior_light.visible = on
 
 
 func set_interior_lights(on: bool) -> void:
