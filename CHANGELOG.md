@@ -28,6 +28,10 @@ aucun blocage complet dans les deux cas.
   à la place libre la plus proche, à pied comme à ski. Contre un simple mur, rien ne se passe. Essayé sur un corps forcé dans
   le décor ; jamais déclenché pendant les 1 200 segments.
 
+**Fermeture pendant une construction de remontée.** Fermer la fenêtre 3 à 10 s après l'entrée en mode skieur la bloquait
+parfois plus de 60 s (2 essais sur 6 sur PC). L'attente du fil de construction est maintenant bornée à 1,5 s, en vidant les
+ordres de rendu ; au-delà, le processus se termine. La cause exacte du blocage reste une hypothèse.
+
 **Fosse de la gare basse.** En descendant l'escalier du personnel, on marchait sur le plancher du tunnel à −2,65 m, à
 mi-hauteur. Son flanc est maintenant fermé le long de l'escalier, et l'on descend jusqu'au fond.
 
@@ -38,8 +42,8 @@ pylône par pylône :
 - Tovière : passages recomptés en vidéo ; pylônes de 305 et 906 m retirés, P15-P16 ajoutés contre la gare, estimés.
 - Leissières : P2 de 65 à 32 m (estimé : aucun pylône vu à 65 m).
 
-Géométrie recalculée (effort 400), dépassement des galets sur ces trois lignes : 171° → 109° (Tovière 2°, Leissières 53°,
-Grand Huit 54°), 1 portée sous la garde par ligne.
+Géométrie recalculée (effort 400), dépassement des galets sur ces trois lignes : 171° → 108° (Tovière 2°, Leissières 53°,
+Grand Huit 53°), 1 portée sous la garde par ligne. Rogoney : pylône de 240 m retiré, un ajouté vers 524 m, 9,5°.
 
 **Bancs.**
 - `skieur` et `ski` repassent au vert. Ski : 0,000 m d'écart hors des gares ; 6,8 cm dans leurs pièces fines, où la
