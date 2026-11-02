@@ -487,9 +487,10 @@ var _poubelle: Array = []
 func _vider_poubelle() -> void:
 	var t0: int = Time.get_ticks_usec()
 	while not _poubelle.is_empty() and Time.get_ticks_usec() - t0 < 1500:
-		var n: Node = _poubelle.pop_back()
+		# (sans type : un nœud déjà libéré avec son parent ferait une erreur dès l'affectation)
+		var n: Variant = _poubelle.pop_back()
 		if is_instance_valid(n):
-			n.free()
+			(n as Node).free()
 
 
 func _exit_tree() -> void:
