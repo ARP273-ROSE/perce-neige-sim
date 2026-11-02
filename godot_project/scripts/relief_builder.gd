@@ -954,7 +954,7 @@ uniform float ombre_k = 0.0;")
 	code += "
 void light() {
 	if (LIGHT_IS_DIRECTIONAL) {
-		DIFFUSE_LIGHT += ATTENUATION * 3.14159;
+		DIFFUSE_LIGHT += ATTENUATION;
 	}
 }
 "
