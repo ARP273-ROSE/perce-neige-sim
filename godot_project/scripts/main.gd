@@ -1914,7 +1914,9 @@ func _poser_sur_gare() -> void:
 	# pris dedans, le skieur ne touchait plus le sol — on le remonte dessus
 	if _t_depose > 0.0 and skieur != null:
 		_t_depose -= get_process_delta_time()
-		if skieur.support == null and not skieur.embarque:
+		# (seulement s'il ne touche plus le sol : le rayon part de 40 m au-dessus, et passer
+		# sous un auvent dans ces 10 s le posait sur le toit, refuge compris)
+		if skieur.support == null and not skieur.embarque and not skieur.is_on_floor():
 			_remonter_skieur()
 	var lg: LigneRemontee = _depose_remontee
 	if lg == null or not is_instance_valid(lg) or not lg.pret or skieur == null:
