@@ -373,13 +373,20 @@ func _plafond_camera(voiture: Node3D, car_len: float) -> void:
 	flancs.name = "FlancsCamera"
 	flancs.collision_layer = COUCHE_CAMERA_BORD
 	flancs.collision_mask = 0
+	# la caisse est un tube : un mur droit laissait la caméra ressortir près du plafond
+	# (x 1,56 à y 1,33, tube à 1,32) et l'on regardait la rame à travers le dos d'une
+	# vitre, en grand aplat de ciel ou de noir. Facettes tangentes au tube.
+	var r_cam: float = TrainBodyBuilder.R_BODY - 0.17
 	for cote in [-1.0, 1.0]:
-		var bf: BoxShape3D = BoxShape3D.new()
-		bf.size = Vector3(0.10, 3.60, car_len)
-		var csf: CollisionShape3D = CollisionShape3D.new()
-		csf.shape = bf
-		csf.position = Vector3(cote * 1.75, TrainBodyBuilder.Y_CENTER, 0.0)
-		flancs.add_child(csf)
+		for pas_a in range(8):
+			var a: float = deg_to_rad(30.0 + pas_a * 15.0)
+			var bf: BoxShape3D = BoxShape3D.new()
+			bf.size = Vector3(0.10, 2.0 * r_cam * tan(deg_to_rad(7.5)) + 0.06, car_len)
+			var csf: CollisionShape3D = CollisionShape3D.new()
+			csf.shape = bf
+			csf.position = Vector3(cote * (r_cam + 0.05) * sin(a), TrainBodyBuilder.Y_CENTER + (r_cam + 0.05) * cos(a), 0.0)
+			csf.rotation.z = -cote * (PI * 0.5 - a)
+			flancs.add_child(csf)
 	voiture.add_child(flancs)
 
 
