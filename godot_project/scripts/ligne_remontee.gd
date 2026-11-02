@@ -352,10 +352,30 @@ func _enfant(n: Node) -> void:
 
 ## En quittant (ou en retirant la ligne) pendant le fil : on attend sa fin —
 ## les modèles de véhicules partagés sont libérés juste après (domaine).
+## À la fermeture, attente bornée du fil de construction. wait_for_task_completion ne
+## rendait jamais la main dans 2 essais sur 6 (fermeture 3 à 10 s après l'entrée en mode
+## skieur, relevé du 02/11/2026) : le fil attend sans doute un ordre de rendu que seul le
+## fil principal exécute. On vide donc cette file en attendant ; passé FERMETURE_MS, on
+## termine le processus plutôt que de laisser une fenêtre figée.
+const FERMETURE_MS: int = 1500
+
+
+static func attendre_fil(tache: int) -> void:
+	var t0: int = Time.get_ticks_msec()
+	while not WorkerThreadPool.is_task_completed(tache):
+		RenderingServer.force_sync()
+		OS.delay_msec(2)
+		if Time.get_ticks_msec() - t0 > FERMETURE_MS:
+			push_warning("fermeture : fil de construction sans réponse, arrêt immédiat")
+			OS.kill(OS.get_process_id())
+			return
+	WorkerThreadPool.wait_for_task_completion(tache)
+
+
 func _exit_tree() -> void:
 	if _tache >= 0:
 		_abandon = true            # (le fil n'attend plus les images : il finit d'un trait)
-		WorkerThreadPool.wait_for_task_completion(_tache)
+		attendre_fil(_tache)
 		_abandon = false
 		_tache = -1
 		if _chantier != null:
