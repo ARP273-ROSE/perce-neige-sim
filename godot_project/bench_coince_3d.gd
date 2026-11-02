@@ -30,6 +30,10 @@ var _p_fuite: Vector3
 var _fuite_max: float = 0.0
 var _etapes: int = 0
 var _attente: int = 0
+var _filet_ok: bool = false
+var _d_prec: int = 0
+var _q_prec: Vector3 = Vector3.ZERO
+const P_PLATEFORME: Vector3 = Vector3(-639.19, 3029.91, 3163.47)
 
 
 func _initialize() -> void:
@@ -177,6 +181,14 @@ func _viser(sk: SkieurJoueur, cible: Vector3, force: float) -> void:
 
 func _tick() -> void:
 	_f += 1
+	if _main.get("skieur") != null:
+		var sk0: SkieurJoueur = _main.skieur
+		if sk0.degagements != _d_prec:
+			if sk0.degagements > _d_prec and _st != 10 and _st != 12:
+				print("DEGAGE de %s vers %s, %.2f m ; segment %s → %s ; marche[%s] ; chaussé %s" % [_q_prec, sk0.global_position,
+					_q_prec.distance_to(sk0.global_position), _a, _b, sk0.debug_marche, sk0.chausse])
+			_d_prec = sk0.degagements
+		_q_prec = sk0.global_position
 	var relief = _main.get("relief")
 	if relief == null or not relief.pret or _f < 30:
 		return
@@ -217,14 +229,48 @@ func _tick() -> void:
 				var parti: float = sk.global_position.distance_to(_p_fuite)
 				print("%s filet : corps pris dans le décor → dégagé — %d dégagement, %.2f m" % ["[OK]  " if sk.degagements >= 1 and parti > 0.1 else "[INFO]", sk.degagements, parti])
 				sk.degagements = 0
+				_st = 11
+				_t = 0.0
+		11:
+			# plateforme d'une gare construite autour de lui (TSD4 de la Vanoise, gare amont)
+			_t += 1.0 / 60.0
+			sk.chausse = false
+			sk.entree = Vector2.ZERO
+			sk.global_position = P_PLATEFORME
+			sk.velocity = Vector3.ZERO
+			if (_ligne("tsd4_vanoise") != null and _ligne("tsd4_vanoise").pret) or _t > 90.0:
+				_t = 0.0
+				_st = 12
+		12:
+			_t += 1.0 / 60.0
+			sk.chausse = false
+			_viser(sk, sk.global_position + Vector3.FORWARD, 0.85)
+			if _t > 3.0:
+				var loin: float = sk.global_position.distance_to(P_PLATEFORME)
+				print("%s filet : plateforme construite autour de lui → reposé tout près — %d dégagement, %.2f m" % [
+					"[OK]  " if sk.degagements >= 1 and loin < SkieurJoueur.REPLI_PROCHE else "[ECHEC]", sk.degagements, loin])
+				_filet_ok = sk.degagements >= 1 and loin < SkieurJoueur.REPLI_PROCHE
+				sk.degagements = 0
+				sk.pieges_sans_issue = 0
 				_st = 2
 		2:
+			# on ne marche qu'une fois les remontées proches construites : leurs plateformes
+			# apparaîtraient sinon autour de lui, ce qui n'est pas le cas en jeu (construites
+			# à 2 km) et reste couvert par le test du filet ci-dessus
+			if _main.remontees._en_cours != null and _i < _n:
+				sk.entree = Vector2.ZERO
+				return
+			# posé par le tirage avant que la plateforme n'apparaisse : retiré, pas de marche d'ici
+			if _i < _n and _etapes == 0 and sk.is_on_floor() and not _libre(sk.global_position):
+				_graine()
+				return
 			if _i >= _n:
-				print("dégagements du filet pendant la marche : %d" % sk.degagements)
+				print("dégagements du filet pendant la marche : %d, sans issue : %d" % [sk.degagements, sk.pieges_sans_issue])
 				print("BILAN %d segments praticables : %d pas au bout, dont %d vraiment coincés (%d tirages)" % [_i, _echecs, _coinces, _essais])
 				# vraiment coincé : jamais. Arrêts (tombé dans une fosse au bord du segment, rame qui
 				# gêne, temps dépassé) : tolérés à 1 %.
-				var bon: bool = _coinces == 0 and _echecs * 100 <= _i
+				# un déclenchement du filet en marche est un blocage
+				var bon: bool = _filet_ok and _coinces == 0 and sk.degagements == 0 and sk.pieges_sans_issue == 0 and _echecs * 100 <= _i
 				print("BENCH_COINCE " + ("OK" if bon else "ECHEC"))
 				quit(0 if bon else 1)
 				return
@@ -286,3 +332,10 @@ func _tick() -> void:
 					_i += 1
 					_etapes = 99
 					_st = 2
+
+
+func _ligne(cle: String) -> LigneRemontee:
+	for e in (_main.remontees as RemonteesDomaine).lignes:
+		if (e[0] as Node).name == cle:
+			return e[0]
+	return null
