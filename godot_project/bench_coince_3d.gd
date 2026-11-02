@@ -270,7 +270,13 @@ func _tick() -> void:
 				# vraiment coincé : jamais. Arrêts (tombé dans une fosse au bord du segment, rame qui
 				# gêne, temps dépassé) : tolérés à 1 %.
 				# un déclenchement du filet en marche est un blocage
+				# TAUX CONNU, non résolu (02/11/2026) : 13 filets sur 18 000 segments, 3 sur 4 800, soit
+				# environ 0,07 %, surtout en gare amont vers (-544 ; 3028 ; 3116), où le segment affiché
+				# est souvent ailleurs (tirage du banc probable, non prouvé). À 300 segments, ce verdict
+				# échoue donc par intermittence sans régression : comparer au taux sur plusieurs graines.
 				var bon: bool = _filet_ok and _coinces == 0 and sk.degagements == 0 and sk.pieges_sans_issue == 0 and _echecs * 100 <= _i
+				if not bon and _coinces == 0 and sk.pieges_sans_issue == 0 and _filet_ok and _echecs * 100 <= _i:
+					print("(échec dû au seul filet, %d sur %d segments ; taux de base connu 0,07 %% : voir la note ci-dessus dans le banc)" % [sk.degagements, _i])
 				print("BENCH_COINCE " + ("OK" if bon else "ECHEC"))
 				quit(0 if bon else 1)
 				return
