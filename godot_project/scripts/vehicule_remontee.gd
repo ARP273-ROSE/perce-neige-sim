@@ -43,6 +43,8 @@ var miroir: bool = false
 ## télécabines et du 3S — photo d'une cabine de l'Olympique, retour d'utilisateur,
 ## 25/10/2026). Posée par la ligne.
 var livree: String = ""
+var pince_a108: bool = false            # pince A-108 (Tommeuses, Bollin, Fresse)
+var teinte: String = ""                # caisse propre à la ligne : "gris", "noire" (sinon, celle de la famille)
 var _skis_ranges: Array = []
 var _etat_anim: PackedFloat32Array = PackedFloat32Array([-1.0, -1.0, -1.0, -1.0])   # pince, garde-corps, bulle, portes    # skis au porte-skis des cabines (un par vantail)
 var numero: int = 0
@@ -135,7 +137,7 @@ static func vider_modeles() -> void:
 
 
 func _type() -> String:
-	return "%s|%s|%s" % [famille, str(miroir), livree]
+	return "%s|%s|%s|%s|%s" % [famille, str(miroir), livree, teinte, str(pince_a108)]
 
 
 func construire() -> void:
@@ -229,7 +231,7 @@ func _fabriquer() -> void:
 	else:
 		if fixe:
 			_pince_fixe()
-		elif famille == "siege_doppelmayr_e98_8":
+		elif pince_a108:
 			_pince_a108()
 		else:
 			_pince_debrayable()
@@ -253,7 +255,7 @@ func _fabriquer() -> void:
 	# masse à vide (pince comprise) et longueur du pendule jusqu'au centre de gravité
 	if cabine or famille == "cabine_3s" or famille == "cabine_tph":
 		masse = 2950.0 if famille == "cabine_3s" else (9000.0 if famille == "cabine_tph" else 850.0)
-		longueur_pendule = 4.1 if famille == "cabine_3s" else (5.6 if famille == "cabine_tph" else 2.65)
+		longueur_pendule = 3.85 if famille == "cabine_3s" else (5.6 if famille == "cabine_tph" else 2.65)
 	elif famille.begins_with("perche"):
 		masse = 25.0
 		longueur_pendule = 1.6
@@ -416,14 +418,15 @@ func _pince_a108() -> void:
 	RemonteeKit.boite_en(_machoire, Vector3(0.025, 0.12, 0.23), Vector3(-0.018, -0.075, 0), corps_m)
 	# bras caisson galvanisé
 	RemonteeKit.poutre(p, Vector3(0.05, 0.07, 0), Vector3(0.34, 0.16, 0), 0.11, 0.11, "galva_pylone", Vector3.BACK)
-	# ressort, parallèle au bras, au-dessus de lui
+	# deux ressorts bleus côte à côte le long du câble, parallèles au bras
 	var dir: Vector3 = Vector3(0.29, 0.09, 0).normalized()
-	var r: Node3D = Node3D.new()
-	r.position = Vector3(0.07, 0.20, 0)
-	r.basis = Basis(dir.cross(Vector3.BACK).normalized() * -1.0, dir, Vector3.BACK)
-	p.add_child(r)
-	RemonteeKit.ressort(r, Vector3.ZERO, Vector3.UP, 0.265, 0.065, 0.012, 9, "bleu_ressort")
-	_ressorts.append(r)
+	for sz in [-1.0, 1.0]:
+		var r: Node3D = Node3D.new()
+		r.position = Vector3(0.07, 0.10, sz * 0.125)
+		r.basis = Basis(dir.cross(Vector3.BACK).normalized() * -1.0, dir, Vector3.BACK)
+		p.add_child(r)
+		RemonteeKit.ressort(r, Vector3.ZERO, Vector3.UP, 0.265, 0.065, 0.012, 9, "bleu_ressort")
+		_ressorts.append(r)
 	# levier d'ouverture et son galet (came de gare)
 	_levier = Node3D.new()
 	_levier.name = "Levier"
@@ -450,7 +453,7 @@ func _pince_a108() -> void:
 ## Numéro lisible À L'ENDROIT : une étiquette d'un seul côté (vue de dos,
 ## elle s'effaçait en miroir — retour d'utilisateur, 23/10/2026), contre-
 ## inversée sur les véhicules en miroir ; `rot` oriente sa face (autour de Y).
-func _numero(parent: Node3D, texte: String, pos: Vector3, rot: float, taille: int, px: float, coul: Color) -> void:
+func _numero(parent: Node3D, texte: String, pos: Vector3, rot: float, taille: int, px: float, coul: Color, incl: float = 0.0) -> void:
 	# maillage de texte (TextMesh), partagé par texte et taille, fusionné avec
 	# le véhicule : des centaines de Label3D qui bougent coûtaient ~25 ms par
 	# image au pied de Solaise
@@ -467,7 +470,7 @@ func _numero(parent: Node3D, texte: String, pos: Vector3, rot: float, taille: in
 	mi.mesh = _textes[cle]
 	mi.material_override = _mat_texte(coul)
 	mi.position = pos
-	mi.rotation.y = rot
+	mi.rotation = Vector3(incl, rot, 0)
 	if miroir:
 		# le miroir du véhicule (x → −x) garde la face au bon endroit mais
 		# inverse le texte : une seconde symétrie en x le remet à l'endroit
@@ -517,74 +520,114 @@ static func _aigle() -> ImageTexture:
 	return _tex_aigle
 
 
-## Panneau sous les vitres : [demi-largeur x, demi-longueur z, y] (repère de la caisse).
-static func _dims_panneau(fam: String, H: float) -> Array:
-	var a: float = 0.0
-	var b: float = 0.0
-	var y: float = -H * 0.70
-	var caisse: Array = []
+## Panneau sous les vitres, au milieu du premier tronçon de caisse (repère de
+## la caisse) : [demi-largeur x, demi-longueur z, y, pente x, pente z, rayon
+## d'angle, hauteur du tronçon]. Les pentes font épouser la coque au logo.
+static func _dims_panneau(fam: String, _H: float) -> Array:
 	var profil: Array = _profil_cabine(fam)
-	for r in profil:
-		a = maxf(a, float(r[1]))
-		b = maxf(b, float(r[2]))
-		if String(r[4]) == "caisse":
-			caisse.append(r)
-			y = float(r[0]) - 0.30
-	if caisse.size() < 2:
-		return [a, b, y]
-	# caisse en œuf (télécabines) : dans le haut du panneau, là où la coque est
-	# presque droite ; sous la dernière cote, le logo tombait sous le fond
-	return [float(caisse[0][1]), float(caisse[0][2]), float(caisse[0][0]) - 0.14]
+	for i in range(profil.size() - 1):
+		var r0: Array = profil[i]
+		var r1: Array = profil[i + 1]
+		if String(r0[4]) != "caisse":
+			continue
+		var y0: float = r0[0]
+		var y1: float = r1[0]
+		var dy: float = maxf(y0 - y1, 1e-4)
+		return [(float(r0[1]) + float(r1[1])) * 0.5, (float(r0[2]) + float(r1[2])) * 0.5, (y0 + y1) * 0.5,
+			(float(r0[1]) - float(r1[1])) / dy, (float(r0[2]) - float(r1[2])) / dy,
+			(float(r0[3]) + float(r1[3])) * 0.5, dy]
+	return [1.0, 1.0, -_CAB_H * 0.7, 0.0, 0.0, 0.3, 0.3]
 
 
-func _logo_station(cab: Node3D, a: float, b: float, y: float, face_portes: float) -> void:
-	if livree == "Tignes":
-		_logo_tignes(cab, a, b, y, -face_portes)
+## Largeur de pixel pour qu'un texte occupe `largeur` m (TextMesh de taille 64).
+static var _px_textes: Dictionary = {}
+
+
+static func _px_pour(texte: String, largeur: float) -> float:
+	if not _px_textes.has(texte):
+		var tm: TextMesh = TextMesh.new()
+		tm.text = texte
+		tm.font_size = 64
+		tm.pixel_size = 0.01
+		tm.depth = 0.0
+		var l: float = tm.get_aabb().size.x
+		_px_textes[texte] = l / 0.01 if l > 0.001 else 40.0 * texte.length()
+	return largeur / float(_px_textes[texte])
+
+
+## Emplacement de chaque élément du logo sur la coque : [genre, point, rotation
+## y, inclinaison, largeur, hauteur]. Genres : "aigle", "nom", "plaque".
+## La face sans portes est en x = fx ; le reste suit la coque.
+static func logo_elements(fam: String, livree_: String, fx: float) -> Array:
+	var dp: Array = _dims_panneau(fam, _h_cab(fam))
+	var a: float = dp[0]
+	var b: float = dp[1]
+	var y: float = dp[2]
+	var h: float = dp[6]
+	var inc_x: float = atan(float(dp[3]))
+	var inc_z: float = atan(float(dp[4]))
+	var utile_x: float = 2.0 * maxf(b - float(dp[5]), 0.2) * 0.96     # partie droite de la face sans portes
+	var utile_z: float = 2.0 * maxf(a - float(dp[5]), 0.2) * 0.96     # partie droite des bouts
+	var rot_x: float = fx * PI * 0.5
+	var el: Array = []
+	if livree_ == "Tignes":
+		var lp: float = minf(minf(utile_x, utile_z), 0.90)
+		var hp: float = minf(h * 0.85, 0.22)
+		var lt: float = minf(lp * 0.86, hp * 4.3)
+		el.append(["plaque", Vector3(fx * (a + 0.004), y, 0), rot_x, inc_x, lp, hp])
+		el.append(["nom", Vector3(fx * (a + 0.007), y, 0), rot_x, inc_x, lt, hp * 0.8])
+		for sz in [1.0, -1.0]:
+			var rot: float = 0.0 if sz > 0.0 else PI
+			el.append(["plaque", Vector3(0, y, sz * (b + 0.004)), rot, inc_z, lp, hp])
+			el.append(["nom", Vector3(0, y, sz * (b + 0.007)), rot, inc_z, lt, hp * 0.8])
+		return el
+	if livree_ == "Val d'Isère":
+		var t: float = clampf(minf(utile_x * 0.30, h * 1.45), 0.16, 0.55)     # côté de l'aigle
+		var ln: float = minf(utile_x - t - 0.03, t * 2.6)
+		var w: float = t + 0.03 + ln
+		el.append(["aigle", Vector3(fx * (a + 0.005), y, -fx * (w * 0.5 - t * 0.5)), rot_x, inc_x, t, t])
+		el.append(["nom", Vector3(fx * (a + 0.006), y, fx * (w * 0.5 - ln * 0.5)), rot_x, inc_x, ln, ln * 0.2])
+		for sz in [1.0, -1.0]:
+			var rz: float = 0.0 if sz > 0.0 else PI
+			if fam == "cabine_3s":
+				# aigle et nom sur les bouts aussi (photo à quai)
+				el.append(["aigle", Vector3(-sz * (w * 0.5 - t * 0.5), y, sz * (b + 0.005)), rz, inc_z, t, t])
+				el.append(["nom", Vector3(sz * (w * 0.5 - ln * 0.5), y, sz * (b + 0.006)), rz, inc_z, ln, ln * 0.2])
+			else:
+				el.append(["nom", Vector3(0, y, sz * (b + 0.006)), rz, inc_z, minf(utile_z * 0.6, ln), ln * 0.2])
+	return el
+
+
+func _logo_station(cab: Node3D, face_portes: float) -> void:
+	if livree != "Val d'Isère" and livree != "Tignes":
 		return
-	if livree != "Val d'Isère":
-		return
-	var t: float = clampf(b * 0.35, 0.30, 0.55)          # côté de l'aigle
-	# encre claire sur la caisse noire
-	var encre: Color = Color(0.93, 0.93, 0.93) if famille == "cabine_diamond" else Color(0.05, 0.05, 0.06)
-	var m: StandardMaterial3D = StandardMaterial3D.new()
-	m.albedo_texture = _aigle()
-	m.albedo_color = encre
-	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
-	m.alpha_scissor_threshold = 0.5
-	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	m.cull_mode = BaseMaterial3D.CULL_BACK
-	var q: QuadMesh = QuadMesh.new()
-	q.size = Vector2(t, t)
-	# face sans portes (x opposé) : aigle et nom côte à côte
-	var fx: float = -face_portes
-	var rot: float = fx * PI * 0.5
-	var ai: MeshInstance3D = MeshInstance3D.new()
-	ai.mesh = q
-	ai.material_override = m
-	ai.position = Vector3(fx * (a + 0.012), y, -fx * b * 0.42)
-	ai.rotation.y = rot
-	if miroir:
-		ai.scale = Vector3(-1, 1, 1)
-	ai.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	cab.add_child(ai)
-	_numero(cab, "Val d'Isère", Vector3(fx * (a + 0.012), y - 0.02, fx * b * 0.20), rot, 64, t * 0.0062, encre)
-	# faces avant et arrière : le nom
-	for sz in [-1.0, 1.0]:
-		_numero(cab, "Val d'Isère", Vector3(0, y, sz * (b + 0.012)), 0.0 if sz > 0.0 else PI, 64, t * 0.0055, encre)
-
-
-## Tignes : « TIGNES » rouge sur plaque sombre (photos de Tovière et des Brévières),
-## lettrage du jeu, sur la face sans portes et les deux bouts.
-func _logo_tignes(cab: Node3D, a: float, b: float, y: float, fx: float) -> void:
-	var rouge: Color = Color(0.82, 0.08, 0.07)
-	var haut: float = 0.22
-	var large: float = minf(a, b) * 1.15
-	var px: float = 0.0030
-	RemonteeKit.boite_en(cab, Vector3(0.008, haut, large), Vector3(fx * (a + 0.006), y, 0), "cabine_noire")
-	_numero(cab, "TIGNES", Vector3(fx * (a + 0.014), y, 0), fx * PI * 0.5, 64, px, rouge)
-	for sz in [-1.0, 1.0]:
-		RemonteeKit.boite_en(cab, Vector3(large, haut, 0.008), Vector3(0, y, sz * (b + 0.006)), "cabine_noire")
-		_numero(cab, "TIGNES", Vector3(0, y, sz * (b + 0.014)), 0.0 if sz > 0.0 else PI, 64, px, rouge)
+	var nom: String = "TIGNES" if livree == "Tignes" else "Val d'Isère"
+	# encre : rouge à Tignes ; à Val d'Isère, claire sur les caisses noires (photos de Solaise et de la Daille)
+	var clair: bool = teinte == "noire" or famille == "cabine_diamond"
+	var encre: Color = Color(0.82, 0.08, 0.07) if livree == "Tignes" else (Color(0.93, 0.93, 0.93) if clair else Color(0.05, 0.05, 0.06))
+	for e in logo_elements(famille, livree, -face_portes):
+		if String(e[0]) == "nom":
+			_numero(cab, nom, e[1], e[2], 64, _px_pour(nom, e[4]), encre, e[3])
+			continue
+		var m: StandardMaterial3D = StandardMaterial3D.new()
+		m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		m.cull_mode = BaseMaterial3D.CULL_BACK
+		m.albedo_color = encre if String(e[0]) == "aigle" else Color(0.05, 0.05, 0.06)
+		if String(e[0]) == "aigle":
+			m.albedo_texture = _aigle()
+			m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
+			m.alpha_scissor_threshold = 0.5
+		var q: QuadMesh = QuadMesh.new()
+		q.size = Vector2(e[4], e[5])
+		var mi: MeshInstance3D = MeshInstance3D.new()
+		mi.mesh = q
+		mi.material_override = m
+		mi.position = e[1]
+		mi.rotation = Vector3(e[3], e[2], 0)
+		if miroir:
+			mi.scale = Vector3(-1, 1, 1)
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		cab.add_child(mi)
 
 
 static var _textes: Dictionary = {}
@@ -642,7 +685,7 @@ static func hauteur_cable_gare(fam: String) -> float:
 		# chariot → plancher de la Zeta (suspente, caisse, plancher à 0,20 m)
 		# (+ quai de 25 cm : les cabines passent dans une tranchée, le quai est
 		# au niveau de leur plancher — retour d'utilisateur, 25/10/2026)
-		return H_SUSP_3S + 0.08 + 2.80 - 0.22 + Machinerie3S.H_QUAI
+		return H_SUSP_3S + 0.08 + _h_cab("cabine_3s") - 0.22 + Machinerie3S.H_QUAI
 	if fam.begins_with("cabine"):
 		return H_SUSP_CABINE + 0.10 + 2.25 - 0.07 + 0.02
 	if fam.begins_with("perche"):
@@ -744,7 +787,7 @@ func place_assise(i: int = -1, avant: bool = false) -> Vector3:
 	if famille == "cabine_3s":
 		# banquettes de 6 places face à face (z = ±0,95), plancher 0,20 m
 		# au-dessus du bas de la caisse
-		var yp: float = -H_SUSP_3S - 0.08 - 2.80 + 0.22
+		var yp: float = -H_SUSP_3S - 0.08 - _h_cab("cabine_3s") + 0.22
 		var xi: float = (clampf(float(i if i >= 0 else 2), 0.0, 5.0) - 2.5) * 0.45
 		var zs: float = 1.06 - 0.42
 		return Vector3(xi, yp + 0.44 + 0.045 - 0.45, -zs if avant else zs)
@@ -779,9 +822,9 @@ func formes_collision(cote_ext: float) -> Array:
 		f.append([Vector3(0.06, 2.5, 5.6), Vector3(cote_ext * 1.51, yt + 1.25, 0), true])
 		return f
 	if famille == "cabine_3s":
-		var yb: float = -H_SUSP_3S - 0.08 - 2.80 + 0.22
+		var yb: float = -H_SUSP_3S - 0.08 - _h_cab("cabine_3s") + 0.22
 		f.append([Vector3(2.9, 0.15, 2.8), Vector3(0, yb - 0.075, 0), false])           # plancher
-		f.append([Vector3(2.9, 0.10, 2.8), Vector3(0, -H_SUSP_3S - 0.10, 0), false])    # toit
+		f.append([Vector3(2.8, 0.10, 2.7), Vector3(0, -H_SUSP_3S - 0.10, 0), false])    # toit
 		f.append([Vector3(2.9, 2.45, 0.06), Vector3(0, yb + 1.22, -1.44), false])
 		f.append([Vector3(2.9, 2.45, 0.06), Vector3(0, yb + 1.22, 1.44), false])
 		f.append([Vector3(0.06, 2.45, 2.8), Vector3(-cote_ext * 1.50, yb + 1.22, 0), false])
@@ -903,12 +946,19 @@ func _siege_bmf() -> void:
 	# sièges Études de Transports (photos de Bollin-Fresse) : pas de treillis, une tôle
 	# pleine sur toute la largeur, percée de quelques trous ronds de part et d'autre du numéro
 	var et: bool = famille.begins_with("siege_doppelmayr_e98")
-	if et:
+	# 8 places de Tommeuses (photos de la ligne) : fronton triangulaire ajouré sur la
+	# poutre, dossier d'une pièce bleu marine percé de 7 lumières, assise bleue
+	var d8: bool = famille == "siege_doppelmayr_e98_8"
+	if d8:
+		_fronton_d8(siege, xb, yb0, yb1, zb, ep, m_alu)
+	elif et:
 		RemonteeKit.boite_en(siege, Vector3(2.0 * xb, hp, ep), Vector3(0, (yb0 + yb1) * 0.5, zb), m_alu)
 	else:
 		RemonteeKit.boite_en(siege, Vector3(2.0 * plein_c, hp, ep), Vector3(0, (yb0 + yb1) * 0.5, zb), m_alu)
 	for sx in [-1.0, 1.0]:
-		if et:
+		if d8:
+			pass
+		elif et:
 			for u in [0.38, 0.72]:
 				RemonteeKit.cylindre(siege, 0.042, 0.042, ep + 0.004, Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3(sx * xb * u, (yb0 + yb1) * 0.5, zb)), "noir_mat", 10)
 		else:
@@ -963,7 +1013,12 @@ func _siege_bmf() -> void:
 	var dossier_h: float = 0.48
 	var t_dos: Basis = Basis(Vector3.RIGHT, -0.10)
 	var y_dos: float = -0.98 + dossier_h * 0.5 + 0.07
-	RemonteeKit.coussin(siege, Vector3(W - 0.02, dossier_h + 0.06, 0.05), Transform3D(t_dos, Vector3(0, y_dos, 0.245)), "coque_siege", 0.022)
+	if d8:
+		_dossier_d8(siege, W, dossier_h + 0.08, Transform3D(t_dos, Vector3(0, y_dos, 0.235)))
+		for sx in [-1.0, 1.0]:
+			RemonteeKit.coussin(siege, Vector3(0.09, 0.14, 0.52), Transform3D(t_assise, Vector3(sx * (W * 0.5 + 0.0), -0.98, -0.07)), "noir_mat", 0.03)
+	else:
+		RemonteeKit.coussin(siege, Vector3(W - 0.02, dossier_h + 0.06, 0.05), Transform3D(t_dos, Vector3(0, y_dos, 0.245)), "coque_siege", 0.022)
 	var couleurs: Array = _couleurs_assise()
 	for i in range(places):
 		var cx: float = -W * 0.5 + 0.10 + 0.50 * (i + 0.5)
@@ -971,11 +1026,64 @@ func _siege_bmf() -> void:
 		var a: MeshInstance3D = RemonteeKit.coussin(siege, Vector3(0.48, 0.085, 0.48),
 			Transform3D(t_assise, Vector3(cx, -0.975, -0.08)), coul, 0.035)
 		a.name = "Assise%d" % i
-		RemonteeKit.coussin(siege, Vector3(0.48, dossier_h, 0.08), Transform3D(t_dos, Vector3(cx, y_dos, 0.20)), coul, 0.035)
+		if not d8:
+			RemonteeKit.coussin(siege, Vector3(0.48, dossier_h, 0.08), Transform3D(t_dos, Vector3(cx, y_dos, 0.20)), coul, 0.035)
 	# attaches du dossier sous la poutre
 	for sx in [-1.0, 1.0]:
 		RemonteeKit.barre(siege, Vector3(sx * W * 0.25, yb0, zb), Vector3(sx * W * 0.25, y_dos + dossier_h * 0.5, 0.25), 0.028, m_alu, 8)
 	_garde_corps(siege, W, m_alu)
+
+
+## Fronton du 8 places : tôle en triangle au-dessus de la poutre, deux grandes
+## lumières triangulaires de part et d'autre de l'attache de la suspente.
+func _fronton_d8(g: Node3D, xb: float, yb0: float, yb1: float, zb: float, ep: float, m: String) -> void:
+	var y_sommet: float = yb1 + 0.20
+	var x_pied: float = xb * 0.62
+	RemonteeKit.boite_en(g, Vector3(2.0 * xb, 0.05, ep), Vector3(0, yb0 + 0.025, zb), m)
+	RemonteeKit.boite_en(g, Vector3(0.44, y_sommet - yb0, ep), Vector3(0, (yb0 + y_sommet) * 0.5, zb), m)
+	for sx in [-1.0, 1.0]:
+		RemonteeKit.poutre(g, Vector3(sx * x_pied, yb0 + 0.03, zb), Vector3(sx * 0.18, y_sommet - 0.02, zb), 0.07, ep, m, Vector3.BACK)
+		RemonteeKit.poutre(g, Vector3(sx * x_pied * 0.60, yb0 + 0.03, zb), Vector3(sx * 0.20, yb0 + 0.09, zb), 0.05, ep, m, Vector3.BACK)
+		# bouts de la poutre
+		RemonteeKit.boite_en(g, Vector3(0.14, 0.10, ep), Vector3(sx * (xb - 0.07), yb0 + 0.05, zb), m)
+
+
+## Dossier d'une pièce du 8 places : 7 vraies lumières aux angles abattus.
+func _dossier_d8(g: Node3D, W: float, h: float, xf: Transform3D) -> void:
+	var d: Node3D = Node3D.new()
+	d.name = "Dossier"
+	d.transform = xf
+	g.add_child(d)
+	var mat: String = "assise_bleue"
+	var e: float = 0.035
+	var n: int = 7
+	var pas: float = (W - 0.02) / float(n)
+	var lt: float = pas * 0.50                # largeur d'une lumière
+	var ht: float = minf(h * 0.32, 0.17)      # hauteur d'une lumière
+	var y_t: float = h * 0.08
+	var haut: float = h * 0.5 - (y_t + ht * 0.5)
+	var bas: float = (y_t - ht * 0.5) + h * 0.5
+	RemonteeKit.boite_en(d, Vector3(W - 0.02, haut, e), Vector3(0, h * 0.5 - haut * 0.5, 0), mat)
+	RemonteeKit.boite_en(d, Vector3(W - 0.02, bas, e), Vector3(0, -h * 0.5 + bas * 0.5, 0), mat)
+	var biais: BoxMesh = BoxMesh.new()
+	biais.size = Vector3(0.05, 0.05, e)
+	biais.material = RemonteeKit.mat(mat)
+	for i in range(n + 1):
+		var xm: float = -(W - 0.02) * 0.5 + pas * i
+		var l: float = pas - lt
+		if i == 0 or i == n:
+			l *= 0.5
+			xm += (l * 0.5) * (1.0 if i == 0 else -1.0)
+		RemonteeKit.boite_en(d, Vector3(l, ht, e), Vector3(xm, y_t, 0), mat)
+	for i in range(n):
+		var xc: float = -(W - 0.02) * 0.5 + pas * (i + 0.5)
+		for sx in [-1.0, 1.0]:
+			for sy in [-1.0, 1.0]:
+				var mi: MeshInstance3D = MeshInstance3D.new()
+				mi.mesh = biais
+				mi.position = Vector3(xc + sx * lt * 0.5, y_t + sy * ht * 0.5, 0)
+				mi.rotation.z = PI * 0.25
+				d.add_child(mi)
 
 
 ## Ossature des sièges débrayables et fixes récents, d'après les photos des
@@ -1058,7 +1166,9 @@ func _couleurs_assise() -> Array:
 			return ["assise_bleue"]
 		"siege_bartholet_6":
 			return ["assise_noire"]
-		"siege_doppelmayr_e98_6", "siege_doppelmayr_e98_8":
+		"siege_doppelmayr_e98_8":
+			return ["assise_bleue"]
+		"siege_doppelmayr_e98_6":
 			return ["assise_noire", "assise_bleue"]
 		"siege_fixe_4", "siege_fixe_3":
 			return ["assise_bleue"]          # dossiers blancs (Almes)
@@ -1320,14 +1430,13 @@ func _cabine() -> void:
 	cab.position = Vector3(0, -hs - 0.10, 0)
 	add_child(cab)
 	var H: float = _CAB_H
-	var mailles: Dictionary = _maillage_cabine(famille)
+	var mailles: Dictionary = _maillage_cabine(famille, teinte)
 	for cle in ["coque", "vitres"]:
 		var mi: MeshInstance3D = MeshInstance3D.new()
 		mi.name = cle.capitalize()
 		mi.mesh = mailles[cle]
 		cab.add_child(mi)
-	var dp: Array = _dims_panneau(famille, H)
-	_logo_station(cab, dp[0], dp[1], dp[2], 1.0)
+	_logo_station(cab, 1.0)
 	# portes : deux vantaux découpés dans la face en œuf, qui coulissent
 	# vers l'extérieur par-dessus les panneaux fixes
 	for sz in [-1.0, 1.0]:
@@ -1477,14 +1586,13 @@ func _cabine_zeta() -> void:
 	cab.position = Vector3(0, -hs - 0.08, 0)
 	add_child(cab)
 	var H: float = _h_cab(famille)
-	var mailles: Dictionary = _maillage_cabine(famille)
+	var mailles: Dictionary = _maillage_cabine(famille, teinte)
 	for cle in ["coque", "vitres"]:
 		var mi: MeshInstance3D = MeshInstance3D.new()
 		mi.name = cle.capitalize()
 		mi.mesh = mailles[cle]
 		cab.add_child(mi)
-	var dp: Array = _dims_panneau(famille, H)
-	_logo_station(cab, dp[0], dp[1], dp[2], 1.0)
+	_logo_station(cab, 1.0)
 	for sz in [-1.0, 1.0]:
 		var v: Node3D = Node3D.new()
 		v.name = "Vantail%s" % ("Avant" if sz < 0 else "Arriere")
@@ -1497,23 +1605,75 @@ func _cabine_zeta() -> void:
 	# intérieur : 24 places sur des banquettes rouge et gris le long des
 	# parois, barres de maintien (photo de l'intérieur)
 	var yp: float = -H + 0.22
-	RemonteeKit.boite_en(cab, Vector3(2.60, 0.03, 2.50), Vector3(0, yp, 0), "noir_mat")
+	RemonteeKit.boite_en(cab, Vector3(2.50, 0.03, 2.40), Vector3(0, yp, 0), "noir_mat")
 	for sz in [-1.0, 1.0]:
 		for i in range(6):
 			var xi: float = (i - 2.5) * 0.45
-			RemonteeKit.coussin(cab, Vector3(0.42, 0.09, 0.44), Transform3D(Basis.IDENTITY, Vector3(xi, yp + 0.44, sz * 1.06)), "cabine_rouge" if i % 2 == 0 else "assise_grise", 0.035)
-			RemonteeKit.coussin(cab, Vector3(0.42, 0.50, 0.07), Transform3D(Basis(Vector3.RIGHT, sz * 0.10), Vector3(xi, yp + 0.80, sz * 1.31)), "cabine_rouge" if i % 2 == 0 else "assise_grise", 0.03)
-		RemonteeKit.boite_en(cab, Vector3(2.60, 0.40, 0.38), Vector3(0, yp + 0.20, sz * 1.08), "noir_mat")
+			RemonteeKit.coussin(cab, Vector3(0.42, 0.09, 0.44), Transform3D(Basis.IDENTITY, Vector3(xi, yp + 0.44, sz * 1.00)), "cabine_rouge" if i % 2 == 0 else "assise_grise", 0.035)
+			RemonteeKit.coussin(cab, Vector3(0.42, 0.50, 0.07), Transform3D(Basis(Vector3.RIGHT, sz * 0.10), Vector3(xi, yp + 0.80, sz * 1.24)), "cabine_rouge" if i % 2 == 0 else "assise_grise", 0.03)
+		RemonteeKit.boite_en(cab, Vector3(2.50, 0.40, 0.38), Vector3(0, yp + 0.20, sz * 1.02), "noir_mat")
 	for sx in [-0.5, 0.5]:
 		RemonteeKit.barre(cab, Vector3(sx, yp, 0.30), Vector3(sx, -0.30, 0.30), 0.02, "acier", 8)
 		RemonteeKit.barre(cab, Vector3(sx, yp, -0.30), Vector3(sx, -0.30, -0.30), 0.02, "acier", 8)
 	RemonteeKit.barre(cab, Vector3(-0.5, -0.30, 0.30), Vector3(0.5, -0.30, 0.30), 0.02, "acier", 8)
 	RemonteeKit.barre(cab, Vector3(-0.5, -0.30, -0.30), Vector3(0.5, -0.30, -0.30), 0.02, "acier", 8)
-	# numéro dans le cadre noir, sur les quatre faces
+	# numéro en bas de vitre, sur les quatre faces
 	var no: String = "%d" % numero
-	for f in [[Vector3(0, -0.11, 1.46), 0.0], [Vector3(0, -0.11, -1.46), PI], [Vector3(1.52, -0.11, 0.55), PI * 0.5],
-			[Vector3(-1.52, -0.11, 0.0), -PI * 0.5]]:
-		_numero(cab, no, f[0], f[1], 56, 0.0020, Color(1, 1, 1))
+	for f in [[Vector3(-0.55, -1.13, 1.415), 0.0], [Vector3(0.55, -1.13, -1.415), PI], [Vector3(1.465, -1.13, 0.55), PI * 0.5],
+			[Vector3(-1.465, -1.13, -0.55), -PI * 0.5]]:
+		_numero(cab, no, f[0], f[1], 56, 0.0034, Color(1, 1, 1))
+	_baies_zeta(cab)
+
+
+## Deux grandes baies par face (photo à quai) : montant central, poteaux d'angle,
+## angles de baie abattus ; tampons noirs sur les flancs, en bas de la caisse.
+func _baies_zeta(cab: Node3D) -> void:
+	var y_h: float = -0.18
+	var y_b: float = -1.24
+	var yc: float = (y_h + y_b) * 0.5
+	var hb: float = y_h - y_b
+	var noir: Material = RemonteeKit.mat("cabine_noire")
+	var st: SurfaceTool = SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	# coin de baie : triangle plein vers l'intérieur de la baie (vu des deux côtés)
+	var coin = func(c: Vector3, dt: Vector3, dv: Vector3) -> void:
+		for v in [c, c + dt, c + dv, c, c + dv, c + dt]:
+			st.add_vertex(v)
+	var d_c: float = 0.17
+	# faces : [normale x, normale z, demi-largeur droite, cote de la face]
+	for f in [[0.0, 1.0, 0.91, 1.415], [0.0, -1.0, 0.91, 1.415], [-1.0, 0.0, 0.86, 1.465]]:
+		var n: Vector3 = Vector3(f[0], 0, f[1])
+		var t: Vector3 = Vector3(f[1], 0, -f[0]).normalized()
+		var hw: float = f[2]
+		var o: Vector3 = n * float(f[3])
+		var sz_m: Vector3 = Vector3(0.10, hb, 0.04) if absf(float(f[1])) > 0.5 else Vector3(0.04, hb, 0.10)
+		RemonteeKit.boite_en(cab, sz_m, o + Vector3(0, yc, 0), "cabine_noire")
+		for su in [-1.0, 1.0]:
+			for sv in [-1.0, 1.0]:
+				var yv: float = y_h if sv > 0.0 else y_b
+				var vers_bas: Vector3 = Vector3(0, -sv * d_c, 0)
+				coin.call(o + t * (su * 0.05) + Vector3(0, yv, 0), t * (su * d_c), vers_bas)
+				coin.call(o + t * (su * hw) + Vector3(0, yv, 0), t * (-su * d_c), vers_bas)
+	st.generate_normals()
+	var mc: MeshInstance3D = MeshInstance3D.new()
+	mc.mesh = st.commit()
+	mc.material_override = noir
+	cab.add_child(mc)
+	# poteaux d'angle, à 45°
+	var pot: BoxMesh = BoxMesh.new()
+	pot.size = Vector3(0.16, hb, 0.03)
+	pot.material = noir
+	for sx in [-1.0, 1.0]:
+		for sz in [-1.0, 1.0]:
+			var mi2: MeshInstance3D = MeshInstance3D.new()
+			mi2.mesh = pot
+			mi2.position = Vector3(sx * 1.30, yc, sz * 1.25)
+			mi2.rotation.y = atan2(sx, sz)
+			cab.add_child(mi2)
+	# tampons noirs
+	for sx in [-1.0, 1.0]:
+		for sz in [-0.85, 0.85]:
+			RemonteeKit.boite_en(cab, Vector3(0.10, 0.20, 0.34), Vector3(sx * 1.45, -1.76, sz), "noir_mat")
 
 
 ## Téléphérique va-et-vient de la Grande Motte (Von Roll 1975, cabine Swoboda
@@ -1565,7 +1725,7 @@ func _cabine_tph() -> void:
 	cab.position = Vector3(0, -hs - 0.08, 0)
 	add_child(cab)
 	var H: float = _h_cab(famille)
-	var mailles: Dictionary = _maillage_cabine(famille)
+	var mailles: Dictionary = _maillage_cabine(famille, teinte)
 	for cle in ["coque", "vitres"]:
 		var mc: MeshInstance3D = MeshInstance3D.new()
 		mc.mesh = mailles[cle]
@@ -1650,7 +1810,7 @@ const BANC_Z: float = 0.50              # milieu des assises (de part et d'autre
 ## (travers du câble), demi-longueur z (sens du câble), bande jusqu'à
 ## l'anneau suivant]. Les demi-dimensions sont lues sur les plans.
 static func _h_cab(fam: String) -> float:
-	return {"cabine_3s": 2.80, "cabine_tph": 2.70}.get(fam, _CAB_H)
+	return {"cabine_3s": 2.30, "cabine_tph": 2.70}.get(fam, _CAB_H)
 
 
 ## Demi-largeur réduite de la baie de porte sur le côté X+ (−1…1 du côté).
@@ -1682,25 +1842,23 @@ static func _profil_cabine(fam: String) -> Array:
 			anneaux.append([-float(c[0]), c[1], c[2], c[3], c[4]])
 		return anneaux
 	if fam == "cabine_3s":
-		# CWA Zeta du 3S de l'Olympique (photos de la ligne), agrandie de 12 %
-		# (retour d'utilisateur, 25/10/2026 : « cabines trop petites » ; 30 places dont
-		# 24 assises ≈ 7,5 m² de plancher) : caisse presque
-		# carrée aux angles très arrondis, toit plat noir, grand vitrage
-		# panoramique de 1,1 m, bandeau blanc (logo), jupe inclinée en tôle
-		# perforée blanche qui se resserre sous le plancher
+		# CWA Zeta du 3S de l'Olympique, aux mesures des photos (2,3 m de haut,
+		# 2,9 m de large, décision d'utilisateur, 02/11/2026) : chapeau blanc, deux
+		# grandes baies par face, numéro en bas de vitre, bas blanc (aigle et nom),
+		# jupe inclinée en tôle perforée blanche qui se resserre sous le plancher
 		for c in [
 			# d,    a,    b,    r,    bande
-			[0.00, 1.23, 1.18, 0.45, "toit"],
-			[0.06, 1.43, 1.38, 0.56, "toit"],
-			[0.15, 1.50, 1.44, 0.58, "cadre"],
-			[0.24, 1.52, 1.47, 0.58, "vitre"],
-			[0.88, 1.55, 1.49, 0.58, "vitre"],
-			[1.50, 1.55, 1.49, 0.58, "cadre"],
-			[1.56, 1.55, 1.49, 0.58, "caisse"],
-			[2.22, 1.52, 1.47, 0.58, "liseré"],
-			[2.27, 1.51, 1.46, 0.58, "jupe"],
-			[2.64, 1.41, 1.14, 0.50, "jupe"],
-			[2.81, 1.30, 0.99, 0.45, ""],
+			[0.00, 1.12, 1.07, 0.42, "toit"],
+			[0.05, 1.33, 1.28, 0.52, "toit"],
+			[0.11, 1.40, 1.35, 0.54, "cadre"],
+			[0.18, 1.42, 1.37, 0.54, "vitre"],
+			[0.78, 1.45, 1.40, 0.54, "vitre"],
+			[1.24, 1.45, 1.40, 0.54, "cadre"],
+			[1.30, 1.45, 1.40, 0.54, "caisse"],
+			[1.84, 1.42, 1.37, 0.54, "liseré"],
+			[1.88, 1.41, 1.36, 0.54, "jupe"],
+			[2.16, 1.31, 1.06, 0.47, "jupe"],
+			[2.30, 1.21, 0.92, 0.42, ""],
 		]:
 			anneaux.append([-float(c[0]), c[1], c[2], c[3], c[4]])
 		return anneaux
@@ -1768,8 +1926,8 @@ static var _cache_cabines: Dictionary = {}
 
 
 ## Couleurs : caisse (bas), cadre (pourtour noir), toit, liseré.
-static func _mat_cabine(nom: String, fam: String) -> Material:
-	var cle: String = nom + "|" + fam
+static func _mat_cabine(nom: String, fam: String, teinte_: String = "") -> Material:
+	var cle: String = nom + "|" + fam + "|" + teinte_
 	if _cache_cabines.has(cle):
 		return _cache_cabines[cle]
 	var base: String = nom
@@ -1781,16 +1939,25 @@ static func _mat_cabine(nom: String, fam: String) -> Material:
 		"liseré":
 			base = {"cabine_diamond": "acier", "cabine_symphony": "cabine_bleue", "cabine_3s": "cabine_noire", "cabine_tph": "cabine_bleue"}.get(fam, "cabine_rouge")
 		"toit":
-			base = "cabine_blanche" if fam == "cabine_tph" else "cabine_noire"
+			base = "cabine_blanche" if fam == "cabine_tph" or fam == "cabine_3s" else "cabine_noire"
 		"cadre":
 			base = "cabine_noire"
 		"vitre":
 			base = {"cabine_tph": "vitre_bleue", "cabine_3s": "vitre_bleu_clair"}.get(fam, "vitre_teintee")
+	if teinte_ == "noire" and (nom == "caisse" or nom == "liseré" or nom == "toit"):
+		base = "cabine_noire"
+	elif teinte_ == "gris" and nom == "liseré":
+		base = "cabine_noire"
 	var m: Material = RemonteeKit.mat(base)
 	if nom != "vitre":
 		# double face : on voit l'intérieur de la caisse à travers les vitres
 		var m2: StandardMaterial3D = (m as StandardMaterial3D).duplicate()
 		m2.cull_mode = BaseMaterial3D.CULL_DISABLED
+		if teinte_ == "gris" and (nom == "caisse" or nom == "toit"):
+			# gris métal (photos de Tovière et des Brévières)
+			m2.albedo_color = Color(0.60, 0.62, 0.64)
+			m2.metallic = 0.75
+			m2.roughness = 0.30
 		m = m2
 	_cache_cabines[cle] = m
 	return m
@@ -1798,12 +1965,13 @@ static func _mat_cabine(nom: String, fam: String) -> Material:
 
 ## Maillages (partagés par famille) de la caisse, de son vitrage et des deux
 ## vantaux : surfaces lissées par anneaux, bande par bande.
-static func _maillage_cabine(fam: String) -> Dictionary:
-	if _cache_cabines.has(fam):
-		return _cache_cabines[fam]
+static func _maillage_cabine(fam: String, teinte_: String = "") -> Dictionary:
+	var cle_m: String = fam + "#" + teinte_
+	if _cache_cabines.has(cle_m):
+		return _cache_cabines[cle_m]
 	var prof: Array = _profil_cabine(fam)
 	var H: float = _h_cab(fam)
-	var y_haut_porte: float = -0.19 if fam != "cabine_3s" else -0.22
+	var y_haut_porte: float = -0.19 if fam != "cabine_3s" else -0.15
 	var y_bas_porte: float = -H + 0.12
 	var anneaux: Array = []
 	for r in prof:
@@ -1861,17 +2029,17 @@ static func _maillage_cabine(fam: String) -> Dictionary:
 			var p1: Vector3 = (anneaux[i3][(k + 1) % n][0] as Vector3) + Vector3(0, y3, 0)
 			quad.call(st, bout[2], [p0, p0.lerp(c, 0.5), c, p1] if bout[1] > 0.0 else [p0, p1, c, p0.lerp(c, 0.5)], 0.0)
 	var res: Dictionary = {}
-	res["coque"] = _assembler(st, fam, false)
-	res["vitres"] = _assembler(st, fam, true)
-	res["porte_coque_p"] = _assembler(st_porte[1.0], fam, false)
-	res["porte_vitre_p"] = _assembler(st_porte[1.0], fam, true)
-	res["porte_coque_m"] = _assembler(st_porte[-1.0], fam, false)
-	res["porte_vitre_m"] = _assembler(st_porte[-1.0], fam, true)
-	_cache_cabines[fam] = res
+	res["coque"] = _assembler(st, fam, false, teinte_)
+	res["vitres"] = _assembler(st, fam, true, teinte_)
+	res["porte_coque_p"] = _assembler(st_porte[1.0], fam, false, teinte_)
+	res["porte_vitre_p"] = _assembler(st_porte[1.0], fam, true, teinte_)
+	res["porte_coque_m"] = _assembler(st_porte[-1.0], fam, false, teinte_)
+	res["porte_vitre_m"] = _assembler(st_porte[-1.0], fam, true, teinte_)
+	_cache_cabines[cle_m] = res
 	return res
 
 
-static func _assembler(dico: Dictionary, fam: String, vitres: bool) -> ArrayMesh:
+static func _assembler(dico: Dictionary, fam: String, vitres: bool, teinte_: String = "") -> ArrayMesh:
 	var mesh: ArrayMesh = ArrayMesh.new()
 	for mat in dico.keys():
 		if (mat == "vitre") != vitres:
@@ -1883,7 +2051,7 @@ static func _assembler(dico: Dictionary, fam: String, vitres: bool) -> ArrayMesh
 		copie.index()
 		copie.generate_normals()
 		MeshMerge.valider(copie, mesh)
-		mesh.surface_set_material(mesh.get_surface_count() - 1, _mat_cabine(mat, fam))
+		mesh.surface_set_material(mesh.get_surface_count() - 1, _mat_cabine(mat, fam, teinte_))
 	return mesh
 
 
