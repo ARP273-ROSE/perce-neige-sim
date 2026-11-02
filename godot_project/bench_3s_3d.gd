@@ -92,10 +92,13 @@ func _tick() -> void:
 		3:
 			# sons réels du 3S : on note ce qui a été joué pendant le trajet
 			var so: SonsRemontees = rm.sons
-			if so != null and so._coup3s.playing and so._coup3s.stream != null:
-				for nom in ["3s_lanceur_acc", "3s_pylone", "3s_lanceur_dec"]:
-					if so._coup3s.stream == so._sons[nom]:
-						_sons_vus[nom] = true
+			if so != null:
+				# (deux joueurs : un coup peut partir sur le second)
+				for jo in [so._coup3s, so._coup3s_b]:
+					if jo.playing and jo.stream != null:
+						for nom in ["3s_lanceur_acc", "3s_pylone", "3s_lanceur_dec"]:
+							if jo.stream == so._sons[nom]:
+								_sons_vus[nom] = true
 			if so != null and so._ligne.playing and so._ligne.stream == so._sons["3s_ligne"]:
 				_sons_vus["3s_ligne"] = true
 			if _t > 1.0 and _t < 1.0 + 1.0 / 60.0:
