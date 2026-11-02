@@ -44,10 +44,10 @@ var _scenario_rame2: bool = false
 var client_mode: bool = false
 
 # Préréglage de rendu (--quality=low|medium|high en arg projet) :
-#   high   (défaut) : SDFGI + fog volumétrique + SSR — machines Vulkan solides
+#   high   (défaut) : SDFGI + fog volumétrique — machines Vulkan solides
 #   medium          : SDFGI off (le poste GPU le plus cher, peu utile dans un
 #                     tunnel éclairé aux omnis sans ombres)
-#   low             : SDFGI + fog volumétrique + SSR off — iGPU / fallback
+#   low             : SDFGI + fog volumétrique — iGPU / fallback
 var quality: String = "high"
 
 # État précédent pour détection de transition (annonces)
@@ -770,9 +770,8 @@ func _build_environment() -> void:
 	env.glow_bloom = 0.08
 	env.glow_hdr_threshold = 1.5
 
-	# --- SSR -------------------------------------------------------------
-	env.ssr_enabled = (quality != "low")
-	env.ssr_max_steps = 40
+	# --- SSR : retiré (décision du 02/11/2026, coût sans gain visible sur la neige) ---
+	env.ssr_enabled = false
 
 	# --- Ajustements couleur ---------------------------------------------
 	env.adjustment_enabled = true

@@ -4041,7 +4041,22 @@ func _creer_lointains() -> void:
 		v0._susp.rotation = r_susp
 	if v0._pince != null:
 		v0._pince.rotation = r_pince
+	_rids_loin = rids
+	_rels_loin = rels
 	_noyau.set_lointains(rids, rels, LOINTAINS_DES, _vehicules_jusqua)
+
+
+var _rids_loin: Array = []
+var _rels_loin: Array = []
+
+
+## Portée des véhicules changée en jeu (régulateur) : la ligne et son noyau.
+func regler_portee_vehicules(d: float) -> void:
+	if absf(d - _vehicules_jusqua) < 1.0:
+		return
+	_vehicules_jusqua = d
+	if _noyau != null and not _rids_loin.is_empty():
+		_noyau.set_lointains(_rids_loin, _rels_loin, LOINTAINS_DES, d)
 
 
 ## (Sans passer par la scène : le contenu peut être hors de la scène, sur
@@ -4159,7 +4174,7 @@ func _etape_gdscript(delta: float) -> void:
 			var q: Vector3 = _point_cable(_vehicules[i][1])[0]
 			var d2: float = Vector2(q.x - point_vue.x, q.z - point_vue.z).length_squared()
 			_corps_proche = d2 < 60.0 * 60.0
-			if d2 > 700.0 * 700.0:
+			if d2 > _vehicules_jusqua * _vehicules_jusqua:
 				continue
 			if d2 > 250.0 * 250.0:
 				if (i + _tour) % 4 != 0:

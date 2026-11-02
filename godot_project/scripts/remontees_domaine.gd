@@ -51,7 +51,34 @@ var _portees_base: Array = []
 
 
 ## PC à carte intégrée, dernier cran du régulateur : portées de la PWA.
+## Véhicules plus loin au cran 0 du PC (1 400 m contre 700) : suivi du régulateur,
+## appliqué par tranches comme tout changement de détail.
+const VEHICULES_CRAN_0: float = 1400.0
+const VEHICULES_PC: float = 700.0
+var _portee_cran_0: bool = false
+
+
+func _suivre_cran() -> void:
+	if OS.has_feature("web"):
+		return
+	var oui: bool = PerfManager.cran_courant <= 0 and not _portees_pc_reduites
+	if oui == _portee_cran_0:
+		return
+	_portee_cran_0 = oui
+	if _portees_base.is_empty():
+		_portees_base = [VEHICULES_JUSQUA, DETAILS_JUSQUA, _f_lod]
+	_portees_base[0] = VEHICULES_CRAN_0 if oui else VEHICULES_PC
+	var n: int = niveau_detail
+	niveau_detail = -1
+	set_niveau_detail(n)
+
+
+var _portees_pc_reduites: bool = false
+
+
 func set_portees_reduites(oui: bool) -> void:
+	_portees_pc_reduites = oui
+	_portee_cran_0 = false
 	CONSTRUIRE_JUSQUA = 1200.0 if oui else 2000.0
 	DEMOLIR_AU_DELA = 2200.0 if oui else 3500.0
 	# les portées de base : set_niveau_detail en repart, à n'importe quel niveau
@@ -103,6 +130,7 @@ func _revoir_portees() -> void:
 			var lg_p: Variant = _portees_a_revoir.pop_back()
 			if is_instance_valid(lg_p):
 				_portees_amorce(lg_p, _file_portees)
+				(lg_p as LigneRemontee).regler_portee_vehicules(VEHICULES_JUSQUA)
 			continue
 		var e: Array = _file_portees.pop_back()
 		if is_instance_valid(e[0]) and is_instance_valid(e[1]):
@@ -623,6 +651,7 @@ func _process(delta: float) -> void:
 
 
 func _process_corps(delta: float) -> void:
+	_suivre_cran()
 	_revoir_portees()
 	_avancer_visibilite()
 	_vider_poubelle()
