@@ -53,7 +53,7 @@ func _tick() -> void:
 				print("BILAN %d lignes, %d avec une image > 40 ms ; à la fin %d construites, mémoire %.0f Mo" % [_bilan.size(), lents,
 					construites, OS.get_static_memory_usage() / 1048576.0])
 				print("BENCH_TOUTES_LIGNES " + ("OK" if _ok else "ECHEC"))
-				quit(0 if _ok else 1)
+				FinBanc.quitter(self, _main, 0 if _ok else 1)
 				return
 			_lg = lignes[_i][0]
 			_main.aller_a_remontee(_lg)
