@@ -31,6 +31,8 @@ const DT: float = 1.0 / 60.0
 
 func _initialize() -> void:
 	_main = load("res://scenes/main.tscn").instantiate()
+	if OS.get_cmdline_user_args().has("--sans-ombres"):
+		_main.ombres_relief_permises = false
 	get_root().add_child(_main)
 
 	process_frame.connect(_tick)
