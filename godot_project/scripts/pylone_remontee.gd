@@ -37,6 +37,34 @@ var compo_descente: Array = [[8, "S"]]
 ## (> 0 : ligne convexe, en support). Les paires de galets se posent sur
 ## l'arc du câble (tangentes et hauteurs) au lieu d'une ligne droite.
 var deviation: float = 0.0
+## Au moins 4 galets sous le câble et 4 au-dessus quand il y en a : un train de 2 n'existe
+## pas (retour d'utilisateur, 02/11/2026). « SC » compte moitié de chaque côté, donc 8.
+static func compo_mini(compo: Array) -> Array:
+	var c: Array = []
+	var dessous: int = 0
+	var dessus: int = 0
+	for g in compo:
+		var n: int = int(g[0]) if g[0] != null else 2
+		var nat: String = String(g[1])
+		c.append([n, nat])
+		dessous += n if nat == "S" else (n / 2 if nat == "SC" else 0)
+		dessus += n if nat == "C" else (n / 2 if nat == "SC" else 0)
+	for e in c:
+		var nat: String = e[1]
+		if nat == "S" and dessous > 0 and dessous < 4:
+			e[0] += 4 - dessous
+			dessous = 4
+		elif nat == "C" and dessus > 0 and dessus < 4:
+			e[0] += 4 - dessus
+			dessus = 4
+		elif nat == "SC" and ((dessous > 0 and dessous < 4) or (dessus > 0 and dessus < 4)):
+			var plus: int = maxi(4 - dessous, 4 - dessus)
+			e[0] += plus * 2
+			dessous += plus
+			dessus += plus
+	return c
+
+
 ## Paires de galets mobiles (à garder hors de la fusion des maillages) ; par
 ## brin : [nœud, position de repos, rotation de repos, z galet aval, z galet amont, s]
 var mobiles: Array = []

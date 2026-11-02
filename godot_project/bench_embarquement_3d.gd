@@ -185,7 +185,7 @@ func _tick() -> void:
 		6:
 			# debout dans la cabine, portes ouvertes : il n'est pas tombé
 			if _t > 4.0:
-				_verif("télécabine : debout à pied après l'ouverture des portes, pas tombé", not sk.embarque and not sk.chausse
+				_verif("télécabine : debout à pied après l'ouverture des portes, pas tombé", not sk.assis and not sk.chausse
 					and sk.global_position.y > _quai_haut - 0.5, "%.2f m au-dessus du quai, support %s" % [sk.global_position.y - _quai_haut, sk.support])
 				_fin()
 			elif _t > 600.0:
