@@ -160,6 +160,10 @@ func assurer_autour(p: Vector3) -> void:
 		if zi.has_point(p):
 			return
 	var zone: AABB = AABB(p - Vector3(80.0, 40.0, 80.0), Vector3(160.0, 80.0, 160.0))
+	# sur la neige, le tunnel ne sert à rien, si près qu'il passe : à ski, une nouvelle zone toutes
+	# les 1 à 3 s, et chaque grande pièce de tunnel coûtait 25 à 31 ms (relevé 4K, 02/11/2026)
+	if not _souterrain_a_portee(p, zone):
+		return
 	_zones.append(zone)
 	for nom in ["tunnel", "track", "sortie_secours"]:
 		var racine: Node3D = _main.get(nom) as Node3D
@@ -170,6 +174,29 @@ func assurer_autour(p: Vector3) -> void:
 			_avancer(1 << 62)
 		else:
 			set_process(true)
+
+
+var _ab_galerie: AABB = AABB()
+const MARGE_SOUTERRAIN: float = 40.0
+
+
+## Sous le relief (tunnel, gares) ou près de la galerie de secours, qui sort à l'air libre ?
+func _souterrain_a_portee(p: Vector3, zone: AABB) -> bool:
+	# à ski, jamais : on ne chausse pas dans le tunnel du funiculaire, et le tunnel à ski a les siennes
+	var sk: SkieurJoueur = _main.get("skieur") as SkieurJoueur
+	if sk != null and sk.chausse:
+		return false
+	var relief: ReliefBuilder = _main.get("relief")
+	if relief == null or not relief.pret or p.y < relief.hauteur_sol(p.x, p.z) - 1.0:
+		return true
+	var galerie: Node3D = _main.get("sortie_secours") as Node3D
+	if galerie == null:
+		return false
+	if _ab_galerie.size == Vector3.ZERO:
+		for mi in galerie.find_children("*", "MeshInstance3D", true, false):
+			var ab: AABB = (mi as MeshInstance3D).global_transform * (mi as MeshInstance3D).get_aabb()
+			_ab_galerie = ab if _ab_galerie.size == Vector3.ZERO else _ab_galerie.merge(ab)
+	return zone.grow(MARGE_SOUTERRAIN).intersects(_ab_galerie)
 
 
 ## Panneaux d'issue de secours d'une rame : retirés (plus de collision) ou
