@@ -49,6 +49,7 @@ static var cran_courant: int = 0
 ## PWA : niveau de secours après une perte du contexte WebGL (0, 1 ou 2), posé
 ## par la page (window.__pn_secours) et gardé pour cette version et cet appareil.
 static var secours_web: int = 0
+const PRIORITE_CHRONO: int = 1000000   # le chrono du travail encadre tous les scripts
 const FENETRE_S: float = 2.0
 const CHAUFFE_S: float = 6.0        # compilation des shaders, chargement
 const APRES_CHANGEMENT_S: float = 2.5
@@ -71,6 +72,7 @@ var _durees: PackedFloat32Array = []
 ## fil de rendu (tri, ordres de dessin), carte graphique — pour agir sur le
 ## bon levier.
 var _t_princ: PackedFloat32Array = []
+var _debut_image: _DebutImage = null   # chrono du travail réel, voir _travail_ms
 var _t_rendu: PackedFloat32Array = []
 var _t_gpu: PackedFloat32Array = []
 var cause: String = ""              # dernier goulot : gpu / rendu / principal / autre
@@ -90,6 +92,9 @@ var _t_retrait: float = 0.0
 
 func setup(p_main: Node, p_env: Environment, p_mode: String) -> void:
 	main = p_main
+	process_priority = PRIORITE_CHRONO
+	_debut_image = _DebutImage.new()
+	add_child(_debut_image)
 	# plafond passé au lancement (--max-fps, vue embarquée sous XWayland
 	# sans V-Sync : 13/10/2026) — gardé : sans lui, la carte calculerait des
 	# centaines d'images pour rien
@@ -358,6 +363,29 @@ func _verifier_retrait() -> void:
 
 # --- Mesure en direct -------------------------------------------------------
 
+## Premier nœud servi à chaque image : top de départ du chrono des scripts.
+class _DebutImage extends Node:
+	var t_us: int = 0
+
+	func _ready() -> void:
+		process_priority = -PRIORITE_CHRONO
+
+	func _process(_delta: float) -> void:
+		t_us = Time.get_ticks_usec()
+
+
+## Travail réel du fil principal sur cette image : scripts + physique.
+## TIME_PROCESS englobe aussi le dessin et l'attente de l'écran : à 60 Hz, il
+## vaut au moins 16 ms quoi qu'il arrive. Le régulateur y voyait un fil saturé :
+## une RTX 5070 Ti restait au détail 2 (relevé F10 du 01/11/2026 : « principal »
+## 17,4 ms pour une image de 16,67 ms), le retour exigeant moins de 8,3 ms.
+func _travail_ms() -> float:
+	var physique: float = float(Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS)) * 1000.0
+	if _debut_image == null or _debut_image.t_us == 0:
+		return physique
+	return float(Time.get_ticks_usec() - _debut_image.t_us) / 1000.0 + physique
+
+
 func _process(delta: float) -> void:
 	if Prof.actif:
 		var t0_prof: int = Time.get_ticks_usec()
@@ -432,7 +460,7 @@ func _process_corps(delta: float) -> void:
 		_t_chauffe -= dt
 		return
 	_durees.append(dt)
-	_t_princ.append(float(Performance.get_monitor(Performance.TIME_PROCESS)) * 1000.0)
+	_t_princ.append(_travail_ms())
 	# (une image sur quatre : avec un fil de rendu séparé, chaque lecture le
 	# synchronise — relevés du PC du 26/10/2026)
 	if _mesure_gpu and Engine.get_process_frames() % 4 == 0:

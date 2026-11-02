@@ -828,6 +828,10 @@ func _build_pit(s0: float, s1: float, with_sheaves: bool) -> void:
 					y_bottom + (y_h - y_bottom) * 0.5, "EscalierFosseHaut")
 				_box(Vector3(esc_x1 - esc_x0, 0.03, 0.05), steel, s_h - esc_giron * 0.5 + 0.025,
 					sxe * (esc_x0 + esc_x1) * 0.5, y_h - 0.013, "NezMarcheFosseHaut")
+			# flanc du plancher du tunnel (−2,65, au-delà de x = 1,55) : sans lui, on
+			# marchait dessus, à mi-hauteur de la fosse, au lieu de descendre
+			_box(Vector3(0.06, -2.65 - y_bottom, 1.6), concrete, esch_s0 + 0.75, sxe * 1.52,
+				(y_bottom - 2.65) * 0.5, "FlancEscalierFosse")
 			# sol sous l'escalier jusque sous le quai (le rebord est coupé là)
 			_box(Vector3(BORD_FOSSE + 0.1 - 1.0, 0.06, s1 - esch_s0 + 0.3), grating,
 				(esch_s0 + s1 + 0.3) * 0.5, sxe * (1.0 + BORD_FOSSE + 0.1) * 0.5, y_bottom + 0.03, "FondFosseEscalier")

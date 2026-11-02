@@ -6,12 +6,15 @@
 ##   godot --headless --path godot_project -s bench_auto_3d.gd
 extends SceneTree
 
+var _ok: bool = true
+
 
 func _initialize() -> void:
 	for direction in [1, -1]:
 		print("\n===== ARRIVÉE %s =====" % ("EN HAUT (montée)" if direction > 0 else "EN BAS (descente)"))
 		_run(direction)
-	quit(0)
+	print("BENCH_AUTO " + ("OK" if _ok else "ECHEC"))
+	quit(0 if _ok else 1)
 
 
 func _run(direction: int) -> void:
@@ -33,6 +36,8 @@ func _run(direction: int) -> void:
 	var prev := ""
 	var t_arret := -1.0
 	var excursion := 0.0
+	var attente_portes := -1.0
+	var reparti := false
 	while t < 420.0:
 		ph.step(dt)
 		ao._process(dt)
@@ -49,9 +54,15 @@ func _run(direction: int) -> void:
 			if ph.doors_open and prev != "" and not prev.begins_with("open=true"):
 				print("   → portes ouvertes %.1f s après l'arrêt, enveloppe du rebond %.1f cm, excursion max vue %.1f cm"
 					% [t - t_arret, ph.rebound_envelope() * 100.0, excursion * 100.0])
+				attente_portes = t - t_arret
 			prev = cur
 		var parti_haut := direction > 0 and ph.s < PNConstants.STOP_S - 100.0
 		var parti_bas := direction < 0 and ph.s > PNConstants.START_S + 100.0
 		if ph.trip_started and t > 120.0 and (parti_haut or parti_bas):
 			print("… reparti, fin du dry run")
+			reparti = true
 			break
+	# portes : stabilisation du câble, entre 3 et 30 s après l'arrêt (v1.15.21)
+	var bon: bool = t_arret >= 0.0 and attente_portes >= 2.9 and attente_portes <= 31.0 and reparti
+	print("%s arrêté %s, portes %.1f s après l'arrêt, reparti %s" % ["[OK]  " if bon else "[ECHEC]", t_arret >= 0.0, attente_portes, reparti])
+	_ok = _ok and bon

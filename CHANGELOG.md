@@ -5,6 +5,26 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.53.3 — 2 novembre 2026
+
+**Régulateur sur PC.** Relevé d'une RTX 5070 Ti en 4K : les remontées passaient au détail réduit à l'entrée en mode
+skieur et n'en revenaient jamais. Le temps du fil principal comptait aussi le dessin et l'attente de l'écran, soit au moins
+16 ms à 60 Hz, alors que le retour au détail exige moins de 8,3 ms. Il mesure désormais les scripts et la physique.
+Non vérifié à l'écran pour l'instant : à confirmer par un relevé F10.
+
+**Fosse de la gare basse.** En descendant l'escalier du personnel, on marchait sur le plancher du tunnel à −2,65 m, à
+mi-hauteur. Son flanc est maintenant fermé le long de l'escalier, et l'on descend jusqu'au fond.
+
+**Pylônes d'après les vidéos de la ligne.** Hauteurs bornées pylône par pylône sur Leissières, Grand Huit et Tovière ;
+P1 de Grand Huit passe de 62 à 17 m. Leur géométrie précalculée reste à refaire.
+
+**Bancs.**
+- `skieur` et `ski` repassent au vert. Ski : 0,000 m d'écart hors des gares ; 6,8 cm dans leurs pièces fines, où la
+  collision (triangles de 2 m) et `hauteur_sol` (bilinéaire) diffèrent, tolérés désormais jusqu'à 10 cm.
+- `auto` et `voyages` rendent un verdict au lieu d'un simple relevé.
+- `salle_machines`, `train_mesh` et `aiguillage` écrivent dans le dossier temporaire du système : sous Windows,
+  ils tournaient sans fin.
+
 ## 1.53.2 — 1er novembre 2026
 
 **PWA : entrée en mode skieur sur iPad.** Essai sur iPad 11 pouces en 1.53.1 : contexte WebGL perdu 24 s après
