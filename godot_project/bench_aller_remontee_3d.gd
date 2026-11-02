@@ -46,7 +46,7 @@ func _tick() -> void:
 		carte.echelle = CartePistes.ECHELLE_MIN
 	if _i >= lignes.size():
 		print("BENCH_ALLER_REMONTEE " + ("OK" if _ok else "ECHEC"))
-		quit(0 if _ok else 1)
+		FinBanc.quitter(self, _main, 0 if _ok else 1)
 		return
 	var sk: SkieurJoueur = _main.skieur
 	if _t == 0.0:
