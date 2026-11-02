@@ -1054,8 +1054,10 @@ func _suivre_siege() -> void:
 	skieur.global_position = v.vers_monde(v.place_assise(a_bord[2], a_bord[4]))
 	skieur.velocity = Vector3.ZERO
 	var cap: float = _cap(v, a_bord[4])
-	skieur._visuel.rotation = Vector3(0.0, cap, 0.0)
-	skieur._visuel.position = Vector3(sin(cap), 0.0, cos(cap)) * SkieurJoueur.RECUL_ASSIS if skieur.assis else Vector3.ZERO
+	# il balance avec le siège ou la cabine (assis bien droit, sa tête entrait dans la vitre)
+	var penche: Basis = v.balancement_monde()
+	skieur._visuel.basis = penche * Basis(Vector3.UP, cap)
+	skieur._visuel.position = penche * (Vector3(sin(cap), 0.0, cos(cap)) * SkieurJoueur.RECUL_ASSIS) if skieur.assis else Vector3.ZERO
 	# arrivée à l'autre gare : il se lève sur la rampe, devant le siège ;
 	# en cabine, seulement portes ouvertes (il était éjecté avant —
 	# retour d'utilisateur, 23/10/2026)

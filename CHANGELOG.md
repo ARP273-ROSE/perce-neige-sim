@@ -32,6 +32,10 @@ aucun blocage complet dans les deux cas.
 parfois plus de 60 s (2 essais sur 6 sur PC). L'attente du fil de construction est maintenant bornée à 1,5 s, en vidant les
 ordres de rendu ; au-delà, le processus se termine. La cause exacte du blocage reste une hypothèse.
 
+**Véhicules.** Suspentes aux longueurs mesurées en vidéo : télécabines 1,15 → 1,50 m, 3S 2,15 → 2,65 m, téléphériques 4,6 → 5,2 m,
+sièges 8 places 3,4 → 3,9 m de la pince à l'assise. Le skieur assis balance avec son siège ou sa cabine (sa tête entrait dans
+la vitre). Vérifié par les bancs seulement, à l'écran pour l'instant non.
+
 **Fosse de la gare basse.** En descendant l'escalier du personnel, on marchait sur le plancher du tunnel à −2,65 m, à
 mi-hauteur. Son flanc est maintenant fermé le long de l'escalier, et l'on descend jusqu'au fond.
 
