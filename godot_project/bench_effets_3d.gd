@@ -10,6 +10,7 @@ const SOLEIL_RASANT: Vector3 = Vector3(0.75, 0.25, 0.60)
 var _main: Node = null
 var _out: String = "user://effets/"
 var _filtre: PackedStringArray = PackedStringArray()
+var _filtre_vues: String = ""
 var _cam: Camera3D
 var _env: Environment
 var _lum: DirectionalLight3D
@@ -26,6 +27,8 @@ func _initialize() -> void:
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--sortie="):
 			_out = a.substr(9)
+		if a.begins_with("--vues="):
+			_filtre_vues = a.substr(7)
 		if a.begins_with("--effets="):
 			_filtre = a.substr(9).split(",")
 	DirAccess.make_dir_recursive_absolute(_out)
@@ -178,6 +181,13 @@ func _suite() -> void:
 	var hall: Vector3 = depart[0]
 	_vues.append(["funi_place_vitres", hall + Vector3.UP * 1.6, hall + Vector3.UP * 3.0 + Vector3(-sin(float(depart[1])), 0, -cos(float(depart[1]))) * 20.0, hall, null])
 	_vues.append(["funi_quai_rails", Vector3(4.2, 2112.0, 5.5), Vector3(-5.0, 2110.0, -25.0), Vector3(4.2, 2110.5, 5.5), null])
+	# bas de la descente : là où le GPU plafonne (relevé 4K, 02/11/2026)
+	for k in 3:
+		var a_p: Vector3 = [Vector3(-134, 0, 534), Vector3(-121, 0, 375), Vector3(-49, 0, 220)][k]
+		var b_p: Vector3 = [Vector3(-121, 0, 375), Vector3(-49, 0, 220), Vector3(-20, 0, 60)][k]
+		_vues.append(["pied_pistes_%d" % k, _au_sol(a_p, 2.0), _au_sol(b_p, 1.0), _au_sol(a_p, 0.5), null])
+	if not _filtre_vues.is_empty():
+		_vues = _vues.filter(func(v): return String(v[0]).begins_with(_filtre_vues))
 	for v in _vues:
 		print("EFFETS vue ", v[0], " cam ", v[1])
 	_cacher(get_root())
