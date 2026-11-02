@@ -63,6 +63,8 @@ const X_PLAQUE: float = 0.28
 var pivot: Vector3 = Vector3.ZERO
 var masse: float = 650.0
 var longueur_pendule: float = 2.6
+## Pince → toit de la télécabine, mesuré en vidéo : Daille 1,46, Tovière 1,45, Solaise 1,65.
+const H_SUSP_CABINE: float = 1.50
 var _susp: Node3D = null
 var _pince: Node3D = null
 var phi: float = 0.0
@@ -249,7 +251,7 @@ func _fabriquer() -> void:
 	# masse à vide (pince comprise) et longueur du pendule jusqu'au centre de gravité
 	if cabine or famille == "cabine_3s" or famille == "cabine_tph":
 		masse = 2950.0 if famille == "cabine_3s" else (9000.0 if famille == "cabine_tph" else 850.0)
-		longueur_pendule = 3.6 if famille == "cabine_3s" else (5.0 if famille == "cabine_tph" else 2.3)
+		longueur_pendule = 4.1 if famille == "cabine_3s" else (5.6 if famille == "cabine_tph" else 2.65)
 	elif famille.begins_with("perche"):
 		masse = 25.0
 		longueur_pendule = 1.6
@@ -560,12 +562,20 @@ static func hauteur_cable_gare(fam: String) -> float:
 		# au niveau de leur plancher — retour d'utilisateur, 25/10/2026)
 		return H_SUSP_3S + 0.08 + 2.80 - 0.22 + Machinerie3S.H_QUAI
 	if fam.begins_with("cabine"):
-		return 1.15 + 0.10 + 2.25 - 0.07 + 0.02
+		return H_SUSP_CABINE + 0.10 + 2.25 - 0.07 + 0.02
 	if fam.begins_with("perche"):
 		return 4.2          # rondelle à ~2,4 m du sol, perche rentrée
 	var pl: int = DESCRIPTIONS.get(fam, ["", 6, ""])[1]
-	var hs: float = 2.35 if pl >= 6 else 2.05
+	var hs: float = 2.85 if pl >= 8 else (2.35 if pl >= 6 else 2.05)
 	return hs + 0.12 + 0.98 - 0.045 + 0.48
+
+
+## Balancement de la partie suspendue, en repère monde (identité si elle n'existe pas).
+func balancement_monde() -> Basis:
+	if _susp == null:
+		return Basis.IDENTITY
+	var b: Basis = global_transform.basis.orthonormalized()
+	return b * _susp.basis.orthonormalized() * b.inverse()
 
 
 ## Point du repère du véhicule (au repos) porté par la partie suspendue,
@@ -657,7 +667,7 @@ func place_assise(i: int = -1, avant: bool = false) -> Vector3:
 		var zs: float = 1.06 - 0.42
 		return Vector3(xi, yp + 0.44 + 0.045 - 0.45, -zs if avant else zs)
 	if cabine:
-		var hs: float = 1.15
+		var hs: float = H_SUSP_CABINE
 		var y_banc: float = -hs - 0.10 - 2.25 + 0.15 + 0.46
 		var xi: float = clampf(float(i if i >= 0 else 2) - 2.0, -2.0, 2.0) * 0.46
 		var zs: float = BANC_Z + 0.04 - 0.42
@@ -698,7 +708,7 @@ func formes_collision(cote_ext: float) -> Array:
 		f.append([Vector3(2.7, 0.42, 0.40), Vector3(0, yb + 0.21, -1.09), false])
 		return f
 	if cabine:
-		var hs: float = 1.15
+		var hs: float = H_SUSP_CABINE
 		var yb: float = -hs - 0.10 - 2.25
 		f.append([Vector3(2.3, 0.15, 1.5), Vector3(0, yb + 0.075, 0), false])           # plancher
 		f.append([Vector3(2.0, 0.10, 1.0), Vector3(0, -hs - 0.15, 0), false])           # toit
@@ -721,7 +731,8 @@ func _largeur_siege() -> float:
 
 
 func _haut_suspente() -> float:
-	return 2.35 if places >= 6 else 2.05
+	# pince → assise mesuré en vidéo : TSD4 3,1 m, TSD6 3,2 m, TSD8 3,9 m (±0,4)
+	return 2.85 if places >= 8 else (2.35 if places >= 6 else 2.05)
 
 
 func _siege() -> void:
@@ -1189,7 +1200,7 @@ func bulle(t: float) -> void:
 func _cabine() -> void:
 	pivot = Vector3(0.30, 0.14, 0)
 	var sus_m: String = "acier_noir" if famille != "cabine_omega4" else "galva"
-	var hs: float = 1.15
+	var hs: float = H_SUSP_CABINE
 	# suspente (plans CWA de l'Omega V, Wikimedia Commons) : de la pince elle
 	# descend à l'extérieur, se cintre vers l'intérieur et finit en poutre
 	# horizontale posée sur le toit par deux pieds
@@ -1290,7 +1301,7 @@ func _cabine() -> void:
 ## porteurs).
 const E_PORTEURS_3S: float = 0.62
 const Y_TRACTEUR_3S: float = -0.42
-const H_SUSP_3S: float = 2.15        # du chariot au toit de la cabine
+const H_SUSP_3S: float = 2.65        # du chariot au toit de la cabine (mesuré en vidéo : 2,6-2,7)
 
 
 ## Véhicule du 3S de l'Olympique (photos de la ligne, reportage
@@ -1412,7 +1423,7 @@ func _cabine_zeta() -> void:
 ## en deux bogies sur le câble porteur, attaches du tracteur aux deux bouts ;
 ## grande suspente pleine en coin ; cabine de 115 + 1 places (6,4 × 3,0 m),
 ## poste du conducteur à l'avant, barres de maintien, portes au milieu.
-const H_SUSP_TPH: float = 4.6
+const H_SUSP_TPH: float = 5.2         # mesuré en vidéo : Fornet 5,1, Grande Motte 5,7
 
 
 func _cabine_tph() -> void:
