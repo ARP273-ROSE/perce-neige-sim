@@ -3235,6 +3235,13 @@ static func galet_levier(t: float) -> Vector2:
 	return Vector2(0.36, 0.20) + Vector2(g.x * cos(a) - g.y * sin(a), g.x * sin(a) + g.y * cos(a))
 
 
+## Même chose pour la pince A-108 : la roue au sommet des ressorts, sur la pièce articulée.
+static func galet_a108(t: float) -> Vector2:
+	var a: float = -VehiculeRemontee.A108_OUVERTURE * t
+	var g: Vector2 = Vector2(VehiculeRemontee.A108_ROUE.x, VehiculeRemontee.A108_ROUE.y)
+	return VehiculeRemontee.A108_ARTICULATION + Vector2(g.x * cos(a) - g.y * sin(a), g.x * sin(a) + g.y * cos(a))
+
+
 ## Rail d'ouverture des pinces (retour d'utilisateur, 23/10/2026) : un fer plat
 ## au-dessus du galet du levier, sur toute la zone de gare ; il descend
 ## en rampe à l'entrée (il appuie sur le levier, comprime les ressorts et
@@ -3251,11 +3258,14 @@ func _rail_ouverture(aval: bool) -> void:
 		var s: float = s0 + x
 		var p: Vector3 = point(s)[0]
 		var o: Vector3 = _dehors(s)
-		var gl: Vector2 = galet_levier(ouverture_pince(clampf(x, 0.0, l), l))
-		# au-dessus du galet (rayon 0,055) ; un peu plus haut avant/après la
+		var t_ou: float = ouverture_pince(clampf(x, 0.0, l), l)
+		var a108: bool = String(name) in LIGNES_A108
+		var gl: Vector2 = galet_a108(t_ou) if a108 else galet_levier(t_ou)
+		var r_g: float = VehiculeRemontee.A108_R_ROUE if a108 else 0.055
+		# au-dessus du galet ; un peu plus haut avant/après la
 		# zone, là où le galet arrive et repart sans toucher
 		var lev: float = 0.03 * (1.0 - clampf(minf(x, l - x) / 0.8 + 1.0, 0.0, 1.0))
-		pts.append(p + o * gl.x + Vector3(0, gl.y + 0.055 + 0.012 + lev, 0))
+		pts.append(p + o * gl.x + Vector3(0, gl.y + r_g + 0.012 + lev, 0))
 		var dans_rampe: bool = minf(x, l - x) < L_OUVERTURE + 0.5
 		x += 0.2 if dans_rampe else 1.0
 	# fer plat : deux tubes fins côte à côte, comme une semelle
@@ -3270,10 +3280,14 @@ func _rail_ouverture(aval: bool) -> void:
 ## Appui des pneus du lanceur (repère du véhicule : dehors, haut) : la
 ## plaque de friction de la pince ; au 3S, le dessus du chariot.
 func _x_plaque() -> float:
+	if String(name) in LIGNES_A108:
+		return VehiculeRemontee.A108_X_PATIN
 	return 0.0 if tricable() else VehiculeRemontee.X_PLAQUE
 
 
 func _y_plaque() -> float:
+	if String(name) in LIGNES_A108:
+		return VehiculeRemontee.A108_Y_PATIN
 	return 0.46 if tricable() else VehiculeRemontee.Y_PLAQUE
 
 
