@@ -401,8 +401,10 @@ func _pince_debrayable() -> void:
 ## articulée en bas du corps pince le câble d'un côté et, de l'autre, remonte vers l'arrière où
 ## DEUX ressorts bleus, derrière le corps et sans le traverser, la poussent vers le haut.
 ## Repère : câble à l'origine le long de Z, suspente à X+, patin à Y_PLAQUE (pneus du lanceur).
-const A108_X_PATIN: float = 0.06
-const A108_Y_PATIN: float = 0.15
+## Patin décalé vers les ressorts : au-dessus du câble, il passerait sous les galets de
+## compression (retour d'utilisateur, 03/11/2026) ; assez haut pour rester au-dessus d'eux.
+const A108_X_PATIN: float = 0.17
+const A108_Y_PATIN: float = 0.20
 ## Articulation et roue de came, en position fermée (repère de la pince).
 const A108_ARTICULATION: Vector2 = Vector2(0.10, 0.0)
 const A108_ROUE: Vector3 = Vector3(0.2930, 0.3144, 0)    # 0,43 m le long du bras, depuis l'articulation
@@ -467,7 +469,7 @@ func _pince_a108() -> void:
 		RemonteeKit.cylindre(p, 0.09, 0.09, 0.03, Transform3D(travers, Vector3(0.25, 0.11, sz * 0.19)), "polyurethane", 16)
 	# patin noir au-dessus de la pince, le long du câble : les pneus du lanceur roulent dessus
 	# et font avancer le siège (et non au-dessus des ressorts ; retour d'utilisateur, 02/11/2026)
-	RemonteeKit.boite_en(p, Vector3(0.09, A108_Y_PATIN - 0.09, 0.08), Vector3(A108_X_PATIN, (A108_Y_PATIN + 0.09) * 0.5, 0.0), corps_m)
+	RemonteeKit.boite_en(p, Vector3(0.07, A108_Y_PATIN - 0.09, 0.05), Vector3(A108_X_PATIN, (A108_Y_PATIN + 0.09) * 0.5, 0.0), corps_m)
 	RemonteeKit.boite_en(p, Vector3(0.10, 0.025, 0.72), Vector3(A108_X_PATIN, A108_Y_PATIN - 0.0125, 0), "noir_mat")
 	for sz in [-1.0, 1.0]:
 		RemonteeKit.poutre(p, Vector3(A108_X_PATIN, A108_Y_PATIN - 0.03, sz * 0.36), Vector3(A108_X_PATIN, 0.06, sz * 0.52), 0.07, 0.015, "noir_mat", Vector3.UP)
