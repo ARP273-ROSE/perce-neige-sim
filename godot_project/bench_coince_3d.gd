@@ -229,6 +229,7 @@ func _tick() -> void:
 			if _t > 3.0:
 				var parti: float = sk.global_position.distance_to(_p_fuite)
 				print("%s filet : corps pris dans le décor → dégagé — %d dégagement, %.2f m" % ["[OK]  " if sk.degagements >= 1 and parti > 0.1 else "[INFO]", sk.degagements, parti])
+				_filet_ok = sk.degagements >= 1
 				sk.degagements = 0
 				_st = 11
 				_t = 0.0
