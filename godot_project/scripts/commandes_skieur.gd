@@ -90,9 +90,18 @@ func _ready() -> void:
 	carte = CartePistes.new()
 	carte.name = "CartePistes"
 	carte.set_anchors_preset(Control.PRESET_TOP_RIGHT)
-	carte.position = Vector2(-CartePistes.TAILLE.x - 16.0, 96.0)
 	carte.visible = false
 	_racine.add_child(carte)
+	# à gauche de la colonne de boutons, qu'elle recouvrait, CARTE compris : une fois
+	# ouverte, plus moyen de la fermer (retour d'utilisateur, 02/11/2026)
+	var placer_carte: Callable = func() -> void:
+		var bord: float = col.size.x + 24.0 + 12.0
+		carte.offset_left = -CartePistes.TAILLE.x - bord
+		carte.offset_right = -bord
+		carte.offset_top = 96.0
+		carte.offset_bottom = 96.0 + CartePistes.TAILLE.y
+	col.resized.connect(placer_carte)
+	placer_carte.call()
 	_b_carte = _bouton("CARTE", "Carte des pistes autour de soi : + / − ou molette pour zoomer ; toucher une remontée pour y aller")
 	_b_carte.toggle_mode = true
 	_b_carte.button_pressed = true

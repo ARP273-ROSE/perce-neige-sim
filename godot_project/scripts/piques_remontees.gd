@@ -223,7 +223,48 @@ const ARRIVEE_TK: Array = [
 	["Arrivé au bout de la perche sans tomber. L'exploit du jour.", "Made it to the top of the drag lift without falling. Today's feat."],
 ]
 
-const EVENEMENTS: Array = ["ARRET", "FRAUDE", "CHAUSSE", "PIETON", "LOUPE", "SAUT", "DESCENTE", "ARRIVEE"]
+# Resté à bord en gare pour repartir dans l'autre sens (retour d'utilisateur, 02/11/2026).
+const RESTE_COMMUN: Array = [
+	["Vous êtes arrivé. Ah non, finalement, vous repartez.", "You've arrived. Oh wait, no, you're leaving again."],
+	["Le but d'une remontée, c'est d'en descendre. Dernier rappel.", "The point of a lift is getting off it. Final reminder."],
+	["Vous n'avez rien oublié là-haut, à part d'y aller.", "You left nothing up there, except actually going there."],
+	["Forfait journée rentabilisé au kilomètre, sans une seule piste.", "Getting your day pass's worth by the kilometre, without a single run."],
+	["Faire demi-tour au sommet : l'alpinisme sans la partie pénible.", "Turning around at the summit: mountaineering minus the hard part."],
+	["La neige est dehors, au cas où.", "The snow is outside, just so you know."],
+	["L'opérateur vous a vu. Il a choisi de ne rien dire. C'est pire.", "The operator saw you. He chose to say nothing. That's worse."],
+	["Retour au point de départ. Votre journée, résumée.", "Back where you started. Your day, in a nutshell."],
+]
+const RESTE_TC: Array = [
+	["Les portes se sont ouvertes, puis refermées. Vous, vous n'avez pas bougé.", "The doors opened, then closed. You didn't move."],
+	["Vous restez dans la cabine. Vous avez trouvé la banquette à votre goût ?", "Staying in the gondola. Found the bench to your liking?"],
+	["Tour de manège offert par la poulie. Pas de peluche à la sortie.", "A free spin round the bullwheel. No teddy bear at the end."],
+	["Huit places, de la buée et personne pour vous juger. Sauf nous.", "Eight seats, foggy windows and nobody to judge you. Except us."],
+	["Pour le prix d'un forfait, une navette sans fin. La RATP est jalouse.", "For the price of a pass, an endless shuttle. The Paris metro is jealous."],
+	["Vos skis sont restés sur la porte. Eux aussi auraient aimé descendre.", "Your skis stayed on the door. They'd have liked to get off too."],
+	["Vous repartez dans la même cabine. Elle commence à s'attacher.", "Leaving in the same gondola. It's starting to get attached."],
+	["Une télécabine, ça se quitte aussi. C'est prévu, il y a des portes.", "You can leave a gondola too. It's designed for it: there are doors."],
+]
+const RESTE_TPH: Array = [
+	["Aller-retour sans mettre un pied dehors. Le touriste japonais salue la méthode.", "A round trip without setting foot outside. Tourists everywhere salute you."],
+	["Le cabinier refait son annonce pour vous tout seul. Il ne l'oubliera pas.", "The cabin attendant repeats his announcement just for you. He won't forget this."],
+	["Vous étiez déjà là il y a cinq minutes. La cabine s'en souvient.", "You were here five minutes ago. The cabin remembers."],
+	["Tout ce câble et ces tonnes d'acier pour vous ramener où vous étiez.", "All that cable and tons of steel to take you back where you were."],
+	["Un téléphérique, ça a deux sens. Vous tenez à vérifier les deux, c'est sérieux.", "A cable car goes both ways. You're checking both, very thorough."],
+	["Le sommet était pourtant juste là, derrière la porte.", "The summit was right there, just past the door."],
+	["Vous gardez votre place près de la vitre. Personne ne vous la disputait.", "Keeping your spot by the window. Nobody was fighting you for it."],
+	["Soixante places, et vous êtes le seul à ne pas être sorti. Remarqué.", "Sixty places, and you're the only one who stayed on. Noticed."],
+]
+const RESTE_TS: Array = [
+	["Vous aviez débarqué. C'était presque réussi. Et vous revoilà assis.", "You had unloaded. Nearly a success. And now you're sitting down again."],
+	["Reprendre le siège en sens inverse : la piste vous a regardé de travers ?", "Taking the chair back down: did the run give you a funny look?"],
+	["Le préposé vous a vu faire le tour de la gare pour vous rasseoir. Il a tout noté.", "The attendant watched you circle the station to sit back down. He took notes."],
+	["Sur le siège en descente, jambes pendantes, face au vide. Beau programme.", "On the chair going down, legs dangling, facing the void. Great plan."],
+	["Tout le monde descend à ski. Vous, vous saluez ceux qui montent.", "Everyone skis down. You wave at the people coming up."],
+	["Vous passez devant tous ceux qui montent. Ils ont des questions.", "You're passing everyone on their way up. They have questions."],
+	["Le télésiège, ça se prend une fois par montée. D'habitude.", "A chairlift is usually taken once per climb. Usually."],
+]
+
+const EVENEMENTS: Array = ["ARRET", "FRAUDE", "CHAUSSE", "PIETON", "LOUPE", "SAUT", "DESCENTE", "ARRIVEE", "RESTE"]
 
 
 ## Famille de piques d'une ligne : ts, tc, tk, tph.

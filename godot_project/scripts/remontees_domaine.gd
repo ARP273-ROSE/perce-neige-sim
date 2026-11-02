@@ -34,6 +34,12 @@ var _t_lod: float = 0.0
 ## À bord d'un siège : [ligne, indice du véhicule, place, gare de départ aval ?]
 var a_bord: Array = []
 var _repos: float = 0.0          # pas de nouvel embarquement juste après un débarquement
+## Cabine dont les portes viennent de s'ouvrir : [ligne, véhicule, gare d'arrivée = aval].
+## S'il y reste quand elle repart, il se rassoit (il restait debout, le temps d'attente
+## d'après débarquement passant après le départ — retour d'utilisateur, 02/11/2026).
+var _reste_cabine: Array = []
+## Siège : [ligne, instant d'arrivée] pour reconnaître qui reprend aussitôt le siège en sens inverse.
+var _arrivee_siege: Array = []
 var _sous_terre: bool = false    # caméra sous terre (funiculaire) : remontées cachées
 var _f_lod: float = 0.6 if OS.has_feature("web") else 1.0     # distances du niveau de détail
 ## Niveau de détail des remontées (0 = tout, 2 = minimum), posé par le
@@ -319,6 +325,9 @@ func _poser(D: Dictionary) -> void:
 		var p: Dictionary = D["pylones"][kp]
 		var q: Dictionary = p.duplicate()
 		q["k"] = kp                     # (rang dans les données : géométrie précalculée)
+		for sens in ["montee", "descente"]:
+			if q.has(sens):
+				q[sens] = PyloneRemontee.compo_mini(q[sens])
 		var w: Vector2 = a0 + u0 * (float(p["d"]) * L0 / maxf(Ld, 1.0))
 		q["d"] = (w - a).dot(dirh)
 		if float(q["d"]) < 5.0 or float(q["d"]) > L - 5.0:
@@ -734,6 +743,9 @@ func _embarquement() -> void:
 	if _attente_tk != null:
 		_attendre_perche()
 		return
+	_surveiller_reste_cabine()
+	if not a_bord.is_empty():
+		return
 	_repos = maxf(0.0, _repos - get_process_delta_time())
 	if _repos > 0.0:
 		return
@@ -775,7 +787,8 @@ func _embarquement() -> void:
 					if evt == "" and not _depose_recente():
 						evt = "PIETON"
 				if evt == "" and not aval:
-					evt = "DESCENTE"
+					evt = "RESTE" if not _arrivee_siege.is_empty() and _arrivee_siege[0] == lg \
+							and _t - float(_arrivee_siege[1]) < 90.0 else "DESCENTE"
 				_guet = []
 				a_bord = [lg, i, k, aval, false]
 				_etat_bord = lg.etat
@@ -811,6 +824,50 @@ func ligne_courante(p: Vector3) -> LigneRemontee:
 	return best
 
 
+## Resté dans la cabine au-delà de la gare : assis pour le retour, avec le commentaire de rigueur.
+func _surveiller_reste_cabine() -> void:
+	if _reste_cabine.is_empty():
+		return
+	var lg: LigneRemontee = _reste_cabine[0]
+	if not is_instance_valid(lg) or not lg.pret:
+		_reste_cabine = []
+		return
+	var i: int = _reste_cabine[1]
+	var v: VehiculeRemontee = lg.vehicule(i)
+	# tant qu'il ne bouge pas, il suit la cabine (rien ne le portait : elle partait sans
+	# lui, ou le poussait sur le quai) ; au premier pas, il est libre de sortir
+	if skieur._clavier() != Vector2.ZERO:
+		_reste_cabine = []
+		skieur.embarque = false
+		return
+	var xf: Transform3D = v.global_transform
+	if _reste_cabine.size() < 4:
+		_reste_cabine.append(xf.affine_inverse() * skieur.global_position)
+		skieur.embarque = true
+	var loc: Vector3 = _reste_cabine[3]
+	skieur.global_position = xf * loc
+	if lg.zone_vehicule(i) != "ligne":
+		return
+	var aval: bool = _reste_cabine[2]
+	var k: int = clampi(int(round(loc.x / 0.40 + 2.5)), 0, 5) if lg.tricable() else clampi(int(round(loc.x / 0.46)) + 2, 0, 4)
+	if lg.vaetvient():
+		k = clampi(int(round(loc.z / 1.0)) + 2, 0, 4)
+	_reste_cabine = []
+	_guet = []
+	_etat_bord = lg.etat
+	v.porte_skis(false)
+	a_bord = [lg, i, k, aval, not aval]
+	skieur.support = null
+	skieur.embarque = true
+	if not lg.vaetvient():
+		skieur.asseoir(_cap(v, not aval), true)
+	else:
+		skieur.velocity = Vector3.ZERO
+	skieur._skis.visible = false
+	_suivre_siege()
+	_piquer("RESTE", lg)
+
+
 func _cap(v: Node3D, avant: bool = false) -> float:
 	var f: Vector3 = -v.global_transform.basis.z
 	return atan2(-f.x, -f.z) + (PI if avant else 0.0)
@@ -844,6 +901,9 @@ func _entrer_cabine(lg: LigneRemontee, p: Vector3) -> bool:
 		_guet = []
 		_etat_bord = lg.etat
 		var evt: String = "CHAUSSE" if skis else ("DESCENTE" if zn == "gare_amont" and not lg.vaetvient() else "")
+		if not _reste_cabine.is_empty() and _reste_cabine[0] == lg and _reste_cabine[1] == i:
+			evt = "RESTE"
+		_reste_cabine = []
 		if skis:
 			skieur.basculer_ski()
 		v.porte_skis(skis)
@@ -1124,6 +1184,7 @@ func _suivre_siege() -> void:
 			_t_loupe = _t          # en sortant, les cabines qui repartent ne sont pas « loupées »
 			if randf() < 0.33:
 				_piquer("ARRIVEE", lg)
+			_reste_cabine = [lg, i, aval_arr]
 			a_bord = []
 			_repos = 8.0          # le temps de sortir avant d'être rassis
 			return
@@ -1156,5 +1217,6 @@ func _suivre_siege() -> void:
 		_t_loupe = _t
 		if randf() < 0.33:
 			_piquer("ARRIVEE", lg)
+		_arrivee_siege = [lg, _t]
 		a_bord = []
 		_repos = 6.0
