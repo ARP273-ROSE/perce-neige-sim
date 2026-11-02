@@ -636,6 +636,7 @@ func _process_corps(delta: float) -> void:
 		elif k.length() == 0.0 and entree.length() > 0.12:
 			cmd = _cmd_joystick_ski()
 		_glisser(delta, cmd, vite)
+		_anti_piege(delta, cmd.length() > 0.05)
 		_vue_libre += delta
 		_camera_ski(delta)
 		_camera()
@@ -656,6 +657,7 @@ func _process_corps(delta: float) -> void:
 		dir = _suivre_chemin()
 		vite = course_auto
 	_marcher(delta, dir, vite)
+	_anti_piege(delta, dir.length() > 0.05)
 	_trouver_support()
 	_animer(delta, dir)
 	_camera()
@@ -798,30 +800,27 @@ func _marcher(delta: float, dir: Vector3, vite: bool) -> void:
 		var net: Vector3 = global_position - _pos_marche_prec
 		net.y = 0.0
 		_avance_moy = lerpf(_avance_moy, net.dot(voulu.normalized()) / maxf(delta, 1e-3), minf(1.0, delta * 4.0))
-		if _avance_moy < 0.25 * v_cible.length() and is_on_wall() and _marche_t > 0.4:
-			var nw: Vector3 = get_wall_normal()
-			nw.y = 0.0
-			_contourner(voulu, nw.normalized() if nw.length() > 1e-4 else Vector3.ZERO)
+		if _avance_moy < 0.25 * v_cible.length() and _marche_t > 0.4:
+			_contourner(voulu, _normale_obstacle())
 		_marche_t += delta
 	else:
 		_avance_moy = 0.0
 		_marche_t = 0.0
 	_pos_marche_prec = global_position
-	if voulu.length() > 1e-4 and fait.length() < voulu.length() * 0.5 and is_on_wall():
-		# marche montée par le haut (40 cm) ; si la tête cogne, au plus juste
-		# (15 cm : les marches du quai font 7 cm) — contre la rame, soulevé de
-		# 40 cm, il heurtait le flanc bombé de la caisse au-dessus du quai et
-		# restait coincé devant chaque marche (retour d'utilisateur, 12/10/2026)
-		if not _monter_marche(voulu) and not _monter_marche(voulu, 0.15) \
+	if voulu.length() > 1e-4 and fait.length() < voulu.length() * 0.5:
+		# marche montée par le haut ; si la tête cogne, de moins en moins haut (les
+		# marches du quai font 7 cm) — contre la rame, soulevé de 40 cm, il heurtait
+		# le flanc bombé de la caisse et restait coincé devant chaque marche (retour
+		# d'utilisateur, 12/10/2026). Plus de condition « contre un mur » : la tête
+		# qui touche ne compte pas comme un mur, et il s'arrêtait net (02/11/2026)
+		if not _monter_marche_au_mieux(voulu) \
 				and not (grimpe and support == null and not chausse and _monter_marche(voulu, GRIMPE_MAX, 0.6)):
 			# pas une marche : on glisse le long du mur (porte-skis abordé
 			# presque de face, contremarche, chambranle) — move_and_slide
 			# s'arrêtait net quand le mur était presque perpendiculaire à la
 			# marche ; second passage avec la vitesse projetée sur le mur
-			var nm: Vector3 = get_wall_normal()
-			nm.y = 0.0
+			var nm: Vector3 = _normale_obstacle()
 			if nm.length() > 1e-4:
-				nm = nm.normalized()
 				var glisse: Vector3 = voulu - nm * voulu.dot(nm)
 				glisse.y = 0.0
 				# pas de côté kinématique (un move_and_slide de plus restait
@@ -866,6 +865,80 @@ func _marcher(delta: float, dir: Vector3, vite: bool) -> void:
 			velocity = Vector3.ZERO
 			support = null
 			_chute = 0.0
+
+
+## Normale horizontale de ce qui gêne (mur, marche, tête qui touche) : ZERO si rien.
+func _normale_obstacle() -> Vector3:
+	var somme: Vector3 = Vector3.ZERO
+	for i in range(get_slide_collision_count()):
+		var n: Vector3 = get_slide_collision(i).get_normal()
+		if n.y < 0.7:
+			somme += Vector3(n.x, 0.0, n.z)
+	return somme.normalized() if somme.length() > 1e-3 else Vector3.ZERO
+
+
+func _monter_marche_au_mieux(voulu: Vector3) -> bool:
+	for h in [MARCHE_MAX, 0.30, 0.22, 0.15, 0.08]:
+		if _monter_marche(voulu, h):
+			return true
+	return false
+
+
+## Le filet : on commande un déplacement, il n'a pas bougé de 10 cm en 1,2 s, et aucune
+## des 8 directions n'est libre (corps pris dans le décor). Contre un simple mur, une
+## direction reste libre : rien ne se passe. Il est reposé à l'endroit libre le plus
+## proche, avec un sol dessous ; sinon au dernier sol sûr, sinon au refuge.
+const PIEGE_S: float = 1.2
+var _piege_t: float = 0.0
+var _piege_p: Vector3 = Vector3.ZERO
+var degagements: int = 0
+
+
+func _anti_piege(delta: float, commande: bool) -> void:
+	if not commande or global_position.distance_to(_piege_p) > 0.10:
+		_piege_t = 0.0
+		_piege_p = global_position
+		return
+	_piege_t += delta
+	if _piege_t < PIEGE_S:
+		return
+	_piege_t = 0.0
+	var ici: Transform3D = global_transform.translated(Vector3.UP * 0.02)
+	for k in range(8):
+		var a: float = k * TAU / 8.0
+		if not test_move(ici, Vector3(cos(a), 0.0, sin(a)) * 0.06):
+			return
+	var ou: Vector3 = _place_libre()
+	if ou == Vector3.ZERO:
+		ou = dernier_sol if dernier_sol != Vector3.ZERO else refuge
+	if ou == Vector3.ZERO:
+		return
+	global_position = ou
+	velocity = Vector3.ZERO
+	support = null
+	degagements += 1
+
+
+func _place_libre() -> Vector3:
+	var p: Vector3 = global_position
+	var espace: PhysicsDirectSpaceState3D = get_world_3d().direct_space_state
+	for r in [0.2, 0.4, 0.6, 0.9, 1.3, 1.8, 2.5]:
+		for k in range(16):
+			var a: float = k * TAU / 16.0
+			for dy in [0.0, 0.4, 0.8, -0.4]:
+				var c: Vector3 = p + Vector3(cos(a) * r, dy, sin(a) * r)
+				var rq: PhysicsRayQueryParameters3D = PhysicsRayQueryParameters3D.create(
+					c + Vector3.UP * 0.3, c + Vector3.DOWN * 0.6, collision_mask, [get_rid()])
+				rq.hit_back_faces = false
+				var h: Dictionary = espace.intersect_ray(rq)
+				if h.is_empty() or (h["normal"] as Vector3).y < 0.7:
+					continue
+				var sur: Vector3 = (h["position"] as Vector3) + Vector3.UP * 0.03
+				var xf: Transform3D = Transform3D(global_transform.basis, sur)
+				if not test_move(xf, Vector3.UP * 0.01) and not test_move(xf, Vector3(0.05, 0.0, 0.0)) \
+						and not test_move(xf, Vector3(-0.05, 0.0, 0.0)):
+					return sur
+	return Vector3.ZERO
 
 
 ## Monte une marche (≤ MARCHE_MAX) : soulever, avancer, reposer.
