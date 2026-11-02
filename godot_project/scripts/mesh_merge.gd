@@ -258,6 +258,56 @@ static func valider(st: SurfaceTool, mesh: ArrayMesh = null) -> ArrayMesh:
 ## `une_instance` : toutes les surfaces (même ombre, même portée) dans UN
 ## seul MeshInstance3D à plusieurs surfaces — pour les objets qui bougent à
 ## chaque image (véhicules des remontées : des milliers d'instances).
+## Maillages partagés entre pièces identiques (paires de galets, pneus des lanceurs) :
+## sans cela, chaque ligne en refaisait des centaines, soit la moitié de ses sommets
+## (Lanches : 680 000 sur 1,6 million) et 800 de ses 1 300 maillages (mesure PWA, 02/11/2026).
+static var _partages: Dictionary = {}          # clé → [[mesh, ombre, portée, nom], …]
+static var _verrou_partages: Mutex = Mutex.new()
+
+
+## Pose sous `root` les maillages déjà faits pour `cle` ; faux s'il faut les
+## construire : fabriquer alors les pièces sous `root`, puis fusion_partagee.
+static func poser_partage(root: Node3D, cle: String) -> bool:
+	root.set_meta("modele", cle)
+	_verrou_partages.lock()
+	var l: Variant = _partages.get(cle)
+	_verrou_partages.unlock()
+	if l == null:
+		return false
+	for e in l:
+		var mi: MeshInstance3D = MeshInstance3D.new()
+		mi.name = e[3]
+		mi.mesh = e[0]
+		mi.cast_shadow = e[1]
+		mi.visibility_range_end = e[2]
+		root.add_child(mi)
+	root.set_meta("modele_pose", true)
+	return true
+
+
+## Fusionne `root` et retient le résultat pour les suivants de même clé.
+static func fusion_partagee(root: Node3D, name_prefix: String) -> void:
+	if root.has_meta("modele_pose"):
+		return
+	merge(root, [], name_prefix)
+	if not root.has_meta("modele"):
+		return
+	var l: Array = []
+	for c in root.get_children():
+		if c is MeshInstance3D:
+			var mi: MeshInstance3D = c
+			l.append([mi.mesh, mi.cast_shadow, mi.visibility_range_end, String(mi.name)])
+	_verrou_partages.lock()
+	_partages[String(root.get_meta("modele"))] = l
+	_verrou_partages.unlock()
+
+
+static func vider_partages() -> void:
+	_verrou_partages.lock()
+	_partages.clear()
+	_verrou_partages.unlock()
+
+
 static func merge(root: Node3D, keep: Array = [], name_prefix: String = "Fusion", une_instance: bool = false) -> int:
 	_ctx = name_prefix
 	var groups: Dictionary = {}     # clé → {mat, st, n, shadow}

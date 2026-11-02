@@ -3247,15 +3247,16 @@ func _lanceurs() -> void:
 			var pn: Node3D = Node3D.new()
 			pn.transform = Transform3D(base, c)
 			_enfant(pn)
-			RemonteeKit.cylindre(pn, R_PNEU, R_PNEU, 0.14, Transform3D.IDENTITY, "caoutchouc", 18)
-			RemonteeKit.cylindre(pn, 0.12, 0.12, 0.16, Transform3D.IDENTITY, "galva_pylone", 12)
-			for b in range(5):
-				var a2: float = TAU * b / 5.0
-				RemonteeKit.cylindre(pn, 0.012, 0.012, 0.17, Transform3D(Basis.IDENTITY, Vector3(cos(a2) * 0.08, 0, sin(a2) * 0.08)), "acier_noir", 6)
+			if not MeshMerge.poser_partage(pn, "pneu"):
+				RemonteeKit.cylindre(pn, R_PNEU, R_PNEU, 0.14, Transform3D.IDENTITY, "caoutchouc", 18)
+				RemonteeKit.cylindre(pn, 0.12, 0.12, 0.16, Transform3D.IDENTITY, "galva_pylone", 12)
+				for b in range(5):
+					var a2: float = TAU * b / 5.0
+					RemonteeKit.cylindre(pn, 0.012, 0.012, 0.17, Transform3D(Basis.IDENTITY, Vector3(cos(a2) * 0.08, 0, sin(a2) * 0.08)), "acier_noir", 6)
 			# fourche : deux flasques jusqu'à la poutre haute
 			for sy in [-0.09, 0.09]:
 				RemonteeKit.poutre(_cont(), c + o2 * sy, c + o2 * sy + Vector3(0, R_PNEU + 0.16, 0), 0.05, 0.012, "galva_pylone", o2)
-			MeshMerge.merge(pn, [], "Pneu")
+			MeshMerge.fusion_partagee(pn, "Pneu")
 			_pneus.append([pn, s2, base, 0.0])
 			x += 0.62
 			await _pause("lanceurs")
@@ -3361,7 +3362,7 @@ func _poser_pylones() -> void:
 		py.construire()
 		MeshMerge.merge(py, py.mobiles, "Pylone")
 		for m in py.mobiles:
-			MeshMerge.merge(m, [], "Paire")
+			MeshMerge.fusion_partagee(m, "Paire")
 		_pyl.append([py, d])
 		await _pause("pylônes")
 	# batteries de galets aux nez des gares (le câble y change de pente)
@@ -3483,7 +3484,7 @@ func _batterie_gare(aval: bool) -> void:
 	py.construire()
 	MeshMerge.merge(py, py.mobiles, "Batterie")
 	for m in py.mobiles:
-		MeshMerge.merge(m, [], "Paire")
+		MeshMerge.fusion_partagee(m, "Paire")
 	_pyl.append([py, d])
 
 
