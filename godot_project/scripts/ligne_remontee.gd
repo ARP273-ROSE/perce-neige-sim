@@ -1133,7 +1133,54 @@ func y_cable(d: float, montee: bool = true) -> float:
 	if h > 0.0 and L - d < 2.0 * h:
 		var t: float = maxf(L - d, 0.0)
 		return terrain(L) + H_CABLE_GARE + _pente_nez(false, montee) * t * t / (4.0 * h)
+	for r in _raccords[0 if montee else 1]:
+		if d < r[0] - r[1]:
+			break
+		if d <= r[0] + r[1]:
+			# Hermite cubique entre les deux tangentes de la chaînette
+			var u: float = (d - (r[0] - r[1])) / (2.0 * r[1])
+			var u2: float = u * u
+			var u3: float = u2 * u
+			var ld: float = 2.0 * r[1]
+			return (2.0 * u3 - 3.0 * u2 + 1.0) * r[2] + (u3 - 2.0 * u2 + u) * ld * r[3] \
+					+ (-2.0 * u3 + 3.0 * u2) * r[4] + (u3 - u2) * ld * r[5]
 	return _y_chainette(d, montee)
+
+
+## Au droit d'un pylône, le câble suit l'arc du train de galets au lieu de casser
+## en un point (retour d'utilisateur, 02/11/2026 : ruptures d'angle avant les galets,
+## câble au-dessus ou en dessous) : pour chaque brin, [d, demi-longueur, y0, pente0, y1, pente1].
+var _raccords: Array = [[], []]
+
+
+func _preparer_raccords() -> void:
+	_raccords = [[], []]
+	if tricable() or vaetvient() or _tetes.size() != pylones.size():
+		return
+	var n: int = pylones.size()
+	for k in [0, 1]:
+		var montee: bool = k == 0
+		for i in range(n):
+			var p: Dictionary = pylones[i]
+			var n_pos: int = 0
+			for g in p.get("montee" if montee else "descente", []):
+				var ng: int = int(g[0]) if g[0] != null else 2
+				n_pos += ng / 2 if String(g[1]) == "SC" else ng
+			if n_pos < 2:
+				continue
+			var d: float = float(p["d"])
+			var h: float = float(n_pos) * PyloneRemontee.PAS_GALET * 0.5
+			if i > 0:
+				h = minf(h, (d - float(pylones[i - 1]["d"])) * 0.5 - 0.1)
+			if i < n - 1:
+				h = minf(h, (float(pylones[i + 1]["d"]) - d) * 0.5 - 0.1)
+			if h < 0.3:
+				continue
+			var e: float = 0.05
+			var y0: float = _y_chainette(d - h, montee)
+			var y1: float = _y_chainette(d + h, montee)
+			(_raccords[k] as Array).append([d, h, y0, (y0 - _y_chainette(d - h - e, montee)) / e,
+				y1, (_y_chainette(d + h + e, montee) - y1) / e])
 
 
 ## (Mêmes appuis que _points_appui, parcourus sans recopier la liste : appelé
@@ -1533,6 +1580,7 @@ func decalage_montee(d: float) -> float:
 
 
 func _construire_boucle() -> void:
+	_preparer_raccords()
 	_boucle = PackedVector3Array()
 	_zones.clear()
 	var L: float = longueur_h()
@@ -1585,7 +1633,14 @@ func _pas_ligne(d: float) -> float:
 			if absf(d - float(p["d"])) < l_sabot_3s(p) * 0.5 + 1.0:
 				return 0.5
 		return 3.0
-	return 0.5 if d < 2.0 * _h_nez[0] + 1.0 or d > L - 2.0 * _h_nez[1] - 1.0 else 3.0
+	if d < 2.0 * _h_nez[0] + 1.0 or d > L - 2.0 * _h_nez[1] - 1.0:
+		return 0.5
+	# fin aussi dans les raccords des pylônes
+	for l_r in _raccords:
+		for r in l_r:
+			if absf(d - float(r[0])) < float(r[1]) + 3.0:
+				return 0.5
+	return 3.0
 
 
 func _ajouter(p: Vector3) -> void:
@@ -3337,6 +3392,7 @@ func _dessus_traverse() -> float:
 
 
 func _poser_pylones() -> void:
+	_preparer_raccords()
 	if tricable():
 		await _poser_pylones_treillis()
 		return
@@ -3352,7 +3408,7 @@ func _poser_pylones() -> void:
 		py.voie = voie
 		py.sens_montee_droite = sens_droite
 		py.dessus_traverse = _dessus_traverse()
-		py.hauteur = _tetes[i] - t - py.dessus_traverse
+		py.hauteur = y_cable(d) - t - py.dessus_traverse
 		py.compo_montee = p.get("montee", [[8, "S"]])
 		py.compo_descente = p.get("descente", [[8, "S"]])
 		var e: float = 4.0
@@ -3362,7 +3418,7 @@ func _poser_pylones() -> void:
 		if py.pied == Vector3.ZERO:
 			py.inclinaison = 0.0
 		# déviation : pente côté aval − pente côté amont (> 0 : convexe)
-		py.deviation = atan2(y_cable(d) - y_cable(d - e), e) - atan2(y_cable(d + e) - y_cable(d), e)
+		py.deviation = atan2(_y_chainette(d) - _y_chainette(d - e), e) - atan2(_y_chainette(d + e) - _y_chainette(d), e)
 		py.position = Vector3(0, t, -d)
 		py.name = "P%d" % (i + 1)
 		_enfant(py)
@@ -3406,7 +3462,7 @@ func _poser_pylones_teleski() -> void:
 		var p: Dictionary = pylones[i]
 		var d: float = float(p["d"])
 		var dx: float = float(p.get("x", 0.0))
-		var y_c: float = _tetes[i]
+		var y_c: float = y_cable(float(p["d"]))
 		var postes: Array = []          # [x du câble montée, x du câble descente, côté]
 		if absf(dx) < 2.0:
 			postes.append([xm + dx, xd, 0])
@@ -3893,7 +3949,7 @@ func _noyau_valide() -> bool:
 
 func _etape_noyau(delta: float) -> void:
 	_noyau.set_vitesse(vitesse)
-	var actives: bool = _mat_cable != null and _n_appuis >= 2
+	var actives: bool = CHARGES_PONCTUELLES and _mat_cable != null and _n_appuis >= 2
 	var ss: PackedFloat64Array = _noyau.etape(delta, regime(), point_vue, vue_active, collisions_actives,
 		_onde_amp, _onde_t, _a_montee, actives)
 	for i in range(mini(ss.size(), _vehicules.size())):
@@ -4134,7 +4190,10 @@ func _preparer_charges() -> void:
 	_n_appuis = mini(_appuis.size(), 48)
 	_tension = tension_h()
 	var e: float = maxf(espacement, 8.0)
-	_w_veh = [_poids_vehicule(true) / e / _tension, _poids_vehicule(false) / e / _tension]
+	# câble immobile (retour d'utilisateur, 02/11/2026 : il oscillait sous les pinces, qui restaient
+	# fixes, tantôt au-dessus, tantôt en dessous) : plus de flèche locale par véhicule ; seule
+	# reste l'onde des arrêts. Les véhicules sont sur le câble tel qu'il est dessiné.
+	_w_veh = [0.0, 0.0]
 	var packs: Array = []
 	for k in range(12):
 		var q: Vector4 = Vector4.ZERO
@@ -4161,9 +4220,10 @@ func _poids_vehicule(montee: bool) -> float:
 	return (masse_vehicule() + (80.0 * places if montee else 0.0)) * 9.81
 
 
+const CHARGES_PONCTUELLES: bool = false
 ## Charges du moment : chaque véhicule en ligne, sur son brin.
 func _charges_ponctuelles() -> void:
-	if _mat_cable == null or _n_appuis < 2:
+	if not CHARGES_PONCTUELLES or _mat_cable == null or _n_appuis < 2:
 		return
 	var xm: float = signf(_x_brin(true))
 	var listes: Array = [[], []]
@@ -4460,12 +4520,12 @@ const PNEUS_JUSQUA: float = 90.0
 
 func _caler_galets() -> void:
 	_tour_cales = (_tour_cales + 1) % 2
-	if _tour_cales != 0 or teleski():
+	if _tour_cales != 0:
 		return
 	_cales_vues.clear()
 	for q in _pyl:
 		var py: PyloneRemontee = q[0]
-		if py.style == "gare" or py._paires[true].is_empty():
+		if py._paires[true].is_empty():
 			continue
 		var d: float = q[1]
 		if vue_active and Vector2(py.position.x - point_vue.x, py.position.z - point_vue.z).length() > CALAGE_JUSQUA:

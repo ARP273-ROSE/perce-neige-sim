@@ -38,6 +38,7 @@ var _repos: float = 0.0          # pas de nouvel embarquement juste après un d�
 ## S'il y reste quand elle repart, il se rassoit (il restait debout, le temps d'attente
 ## d'après débarquement passant après le départ — retour d'utilisateur, 02/11/2026).
 var _reste_cabine: Array = []
+const TSF_DEBUTANTS: Array = ["tsf4_rosset", "tsf3_panoramic", "tsf4_village", "tsf4_almes", "tsf4_cema"]
 ## Siège : [ligne, instant d'arrivée] pour reconnaître qui reprend aussitôt le siège en sens inverse.
 var _arrivee_siege: Array = []
 var _sous_terre: bool = false    # caméra sous terre (funiculaire) : remontées cachées
@@ -321,11 +322,11 @@ func _poser(D: Dictionary) -> void:
 	var L0: float = (b0 - a0).length()
 	var u0: Vector2 = (b0 - a0) / maxf(L0, 1.0)
 	var py: Array = []
-	# 4 galets au moins : télécabines et télésièges, sauf les fixes pour débutants (2 m/s
-	# au plus) ; téléskis non concernés (retour d'utilisateur, 02/11/2026)
+	# 4 galets au moins : télécabines et télésièges, sauf les fixes pour débutants ;
+	# téléskis non concernés (retour d'utilisateur, 02/11/2026)
 	var cle_l: String = String(D["cle"])
 	var mini_galets: bool = cle_l.begins_with("tcd") or cle_l.begins_with("tsd") \
-			or (cle_l.begins_with("tsf") and float(D.get("vitesse", 9.0)) > 2.0)
+			or (cle_l.begins_with("tsf") and not cle_l in TSF_DEBUTANTS)
 	for kp in range((D["pylones"] as Array).size()):
 		var p: Dictionary = D["pylones"][kp]
 		var q: Dictionary = p.duplicate()
