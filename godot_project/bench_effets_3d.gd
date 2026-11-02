@@ -107,12 +107,12 @@ func _suite() -> void:
 		var t: Vector3 = pm.global_position + Vector3.UP * pm.hauteur * 0.6
 		var x: Vector3 = pm.global_transform.basis.x
 		var z: Vector3 = pm.global_transform.basis.z
-		_vues.append([c + "_pylone", _au_sol(t + x * 28.0 + z * 12.0, 3.0), t, _au_sol(pm.global_position + x * 25.0, 0.5)])
+		_vues.append([c + "_pylone", _au_sol(t + x * 28.0 + z * 12.0, 3.0), t, _au_sol(pm.global_position + x * 25.0, 0.5), lg])
 		var q: Vector3 = lg.global_transform * lg.point_embarquement(true)
-		_vues.append([c + "_gare", _au_sol(q + lg.global_transform.basis.x * 40.0 + lg.global_transform.basis.z * 30.0, 2.0), q + Vector3.UP * 3.0, _au_sol(q + lg.global_transform.basis.x * 20.0, 0.5)])
+		_vues.append([c + "_gare", _au_sol(q + lg.global_transform.basis.x * 40.0 + lg.global_transform.basis.z * 30.0, 2.0), q + Vector3.UP * 3.0, _au_sol(q + lg.global_transform.basis.x * 20.0, 0.5), lg])
 	var lg2: LigneRemontee = _ligne("tcd10_toviere")
 	var q2: Vector3 = lg2.global_transform * lg2.point_embarquement(true)
-	_vues.append(["tcd10_toviere_quai", q2 + Vector3.UP * 1.7, q2 + Vector3.UP * 2.2 + Vector3(-5, 0, 8.66), q2 + Vector3.UP * 0.1])
+	_vues.append(["tcd10_toviere_quai", q2 + Vector3.UP * 1.7, q2 + Vector3.UP * 2.2 + Vector3(-5, 0, 8.66), q2 + Vector3.UP * 0.1, lg2])
 	for v in _vues:
 		print("EFFETS vue ", v[0], " cam ", v[1])
 	_cacher(get_root())
@@ -125,14 +125,14 @@ func _suite() -> void:
 			# (les lignes proches se construisent et les lointaines se démolissent : scène stable d'abord)
 			var calme: int = 0
 			var attente: int = 0
-			while calme < IMAGES_CALME and attente < 2400:
+			while calme < IMAGES_CALME and attente < 3600:
 				sk.global_position = v[3]
 				sk.velocity = Vector3.ZERO
 				_cam.global_position = v[1]
 				_cam.look_at(v[2], Vector3.UP)
 				await process_frame
 				attente += 1
-				calme = 0 if _main.remontees.get("_en_cours") != null else calme + 1
+				calme = 0 if _main.remontees.get("_en_cours") != null or not (v[4] as LigneRemontee).pret else calme + 1
 			var g: PackedFloat32Array = PackedFloat32Array()
 			var r: PackedFloat32Array = PackedFloat32Array()
 			for i in IMAGES_MESURE:
