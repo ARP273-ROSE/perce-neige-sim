@@ -229,6 +229,8 @@ func _fabriquer() -> void:
 	else:
 		if fixe:
 			_pince_fixe()
+		elif famille == "siege_doppelmayr_e98_8":
+			_pince_a108()
 		else:
 			_pince_debrayable()
 		if cabine:
@@ -390,6 +392,59 @@ func _pince_debrayable() -> void:
 		z += 0.04
 	# (plus de numéro sur la plaque : vus de loin, ces petits textes flottaient
 	# à côté des pinces — retour d'utilisateur, 25/10/2026 : « numéros fantômes »)
+
+
+## Pince Doppelmayr A-108 (Tommeuses), cotes relevées en vidéo : corps de 415 mm, plaque de
+## mors 25 × 230, gros ressort bleu 265 × Ø150 à 9-10 spires parallèle au bras, 2 galets de
+## roulement Ø180 × 30, ailette en peigne 100 × 80, 2 galets noirs Ø125 et Ø105 sur le bras,
+## patin de 330 × 60, bras caisson galvanisé de 110 mm. Mêmes repères que `_pince_debrayable` :
+## suspente à X+, dessus du patin à Y_PLAQUE (pneus du lanceur).
+func _pince_a108() -> void:
+	var p: Node3D = Node3D.new()
+	p.name = "Pince"
+	add_child(p)
+	var corps_m: String = "alu_pince"
+	var L: float = 0.415
+	RemonteeKit.boite_en(p, Vector3(0.13, 0.07, L), Vector3(0.0, 0.055, 0), corps_m)
+	RemonteeKit.boite_en(p, Vector3(0.025, 0.11, 0.23), Vector3(-0.055, 0.0, 0), corps_m)      # plaque de mors
+	for sz in [-1.0, 1.0]:
+		RemonteeKit.demi_cone(p, Vector3(0, 0, sz * L * 0.5), Vector3(0, 0, sz * (L * 0.5 + 0.30)), 0.055, 0.0245, "noir_mat", 12)
+	_machoire = Node3D.new()
+	_machoire.name = "MachoireMobile"
+	_machoire.position = Vector3(0.07, 0.07, 0)
+	p.add_child(_machoire)
+	RemonteeKit.boite_en(_machoire, Vector3(0.025, 0.12, 0.23), Vector3(-0.018, -0.075, 0), corps_m)
+	# bras caisson galvanisé
+	RemonteeKit.poutre(p, Vector3(0.05, 0.07, 0), Vector3(0.34, 0.16, 0), 0.11, 0.11, "galva_pylone", Vector3.BACK)
+	# ressort, parallèle au bras, au-dessus de lui
+	var dir: Vector3 = Vector3(0.29, 0.09, 0).normalized()
+	var r: Node3D = Node3D.new()
+	r.position = Vector3(0.07, 0.20, 0)
+	r.basis = Basis(dir.cross(Vector3.BACK).normalized() * -1.0, dir, Vector3.BACK)
+	p.add_child(r)
+	RemonteeKit.ressort(r, Vector3.ZERO, Vector3.UP, 0.265, 0.065, 0.012, 9, "bleu_ressort")
+	_ressorts.append(r)
+	# levier d'ouverture et son galet (came de gare)
+	_levier = Node3D.new()
+	_levier.name = "Levier"
+	_levier.position = Vector3(0.36, 0.17, 0)
+	p.add_child(_levier)
+	RemonteeKit.poutre(_levier, Vector3.ZERO, Vector3(0.12, 0.05, 0), 0.05, 0.05, corps_m, Vector3.BACK)
+	# galets noirs du bras (Ø125 et Ø105), axe en travers
+	var travers: Basis = Basis(Vector3.FORWARD, PI * 0.5)
+	RemonteeKit.cylindre(_levier, 0.0625, 0.0625, 0.04, Transform3D(travers, Vector3(0.13, 0.06, 0)), "noir_mat", 14)
+	RemonteeKit.cylindre(p, 0.0525, 0.0525, 0.04, Transform3D(travers, Vector3(0.22, 0.05, 0)), "noir_mat", 14)
+	# galets de roulement Ø180 × 30, en tête et en queue
+	for sz in [-1.0, 1.0]:
+		RemonteeKit.cylindre(p, 0.016, 0.016, 0.10, Transform3D(travers, Vector3(0.20, 0.11, sz * 0.19)), corps_m, 8)
+		RemonteeKit.cylindre(p, 0.09, 0.09, 0.03, Transform3D(travers, Vector3(0.25, 0.11, sz * 0.19)), "polyurethane", 16)
+	# ailette en peigne 100 × 80
+	for k in range(5):
+		RemonteeKit.boite_en(p, Vector3(0.10, 0.014, 0.012), Vector3(0.11, -0.05 - k * 0.0165, 0), corps_m)
+	RemonteeKit.boite_en(p, Vector3(0.016, 0.08, 0.012), Vector3(0.06, -0.083, 0), corps_m)
+	# patin 330 × 60, sur un montant : les pneus du lanceur y appuient
+	RemonteeKit.boite_en(p, Vector3(0.06, Y_PLAQUE - 0.022 - 0.16, 0.08), Vector3(0.28, (Y_PLAQUE - 0.022 + 0.16) * 0.5, 0), "galva_pylone")
+	RemonteeKit.boite_en(p, Vector3(0.06, 0.022, 0.33), Vector3(0.28, Y_PLAQUE - 0.011, 0), "noir_mat")
 
 
 ## Numéro lisible À L'ENDROIT : une étiquette d'un seul côté (vue de dos,
