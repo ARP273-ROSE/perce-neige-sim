@@ -264,7 +264,17 @@ const RESTE_TS: Array = [
 	["Le télésiège, ça se prend une fois par montée. D'habitude.", "A chairlift is usually taken once per climb. Usually."],
 ]
 
-const EVENEMENTS: Array = ["ARRET", "FRAUDE", "CHAUSSE", "PIETON", "LOUPE", "SAUT", "DESCENTE", "ARRIVEE", "RESTE"]
+# Arrivée à la gare du bas (descendu en remontée) : les piques d'ARRIVEE parlent du sommet.
+const ARRIVEE_BAS_COMMUN: Array = [
+	["De retour en bas. Sans une seule piste, c'est plus reposant.", "Back at the bottom. Without a single run: much more restful."],
+	["En bas. Vos skis n'ont toujours pas touché la neige.", "At the bottom. Your skis still haven't touched the snow."],
+	["Descente terminée, zéro virage, zéro chute. Performance intacte.", "Descent complete: zero turns, zero falls. A flawless record."],
+	["Arrivé en bas par le chemin des gens prudents.", "Reached the bottom the cautious way."],
+	["La gare du bas vous accueille. Elle ne pose pas de questions, elle.", "The bottom station welcomes you. It, at least, asks no questions."],
+	["Vous voilà où tout le monde arrive à ski, avec moins de mérite.", "You're where everyone ends up on skis, with less merit."],
+]
+
+const EVENEMENTS: Array = ["ARRET", "FRAUDE", "CHAUSSE", "PIETON", "LOUPE", "SAUT", "DESCENTE", "ARRIVEE", "RESTE", "ARRIVEE_BAS"]
 
 
 ## Famille de piques d'une ligne : ts, tc, tk, tph.
