@@ -1183,7 +1183,7 @@ func _suivre_siege() -> void:
 			message.emit("Portes ouvertes — %s" % lg.nom_ligne)
 			_t_loupe = _t          # en sortant, les cabines qui repartent ne sont pas « loupées »
 			if randf() < 0.33:
-				_piquer("ARRIVEE", lg)
+				_piquer("ARRIVEE_BAS" if aval_arr else "ARRIVEE", lg)
 			_reste_cabine = [lg, i, aval_arr]
 			a_bord = []
 			_repos = 8.0          # le temps de sortir avant d'être rassis
@@ -1216,7 +1216,7 @@ func _suivre_siege() -> void:
 		message.emit("Arrivé — %s" % lg.nom_ligne)
 		_t_loupe = _t
 		if randf() < 0.33:
-			_piquer("ARRIVEE", lg)
+			_piquer("ARRIVEE_BAS" if aval_arr else "ARRIVEE", lg)
 		_arrivee_siege = [lg, _t]
 		a_bord = []
 		_repos = 6.0
