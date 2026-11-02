@@ -120,6 +120,8 @@ const SOL_HIVER: Color = Color(0.78, 0.83, 0.90)
 const AMBIENT_DEHORS: float = 1.0
 var _sol_ext: int = 0                  # 0 ciel, 1 roche (vue extérieure), 2 hiver (skieur dehors)
 var _soleil_skieur: bool = false
+var _soleil_relief: DirectionalLight3D = null
+var ombres_relief_permises: bool = true
 const FOG_LIGHT_ON: float = 1.0
 const FOG_LIGHT_OFF: float = 0.0      # le brouillard ne doit pas « éclairer » le fond
 
@@ -801,6 +803,17 @@ func _build_environment() -> void:
 	_ext_light.light_cull_mask = Cabin.LAYER_RAME | Cabin.LAYER_VOIE
 	_ext_light.visible = false
 	add_child(_ext_light)
+	# ombres portées sur la neige : un soleil pour le seul relief ; le décor reste éclairé comme
+	# avant, sans quoi le toit d'une gare mettait son quai dans le noir (02/11/2026)
+	_soleil_relief = DirectionalLight3D.new()
+	_soleil_relief.name = "SoleilRelief"
+	_soleil_relief.basis = Basis.looking_at(-GareAmont.SOLEIL.normalized(), Vector3.UP)
+	_soleil_relief.shadow_enabled = true
+	_soleil_relief.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
+	_soleil_relief.directional_shadow_max_distance = 600.0
+	_soleil_relief.light_cull_mask = Cabin.LAYER_RELIEF
+	_soleil_relief.visible = false
+	add_child(_soleil_relief)
 
 
 func _build_physics() -> void:
@@ -1141,6 +1154,10 @@ func _suite_process(delta: float) -> void:
 			_ext_light.basis = Basis.looking_at(-GareAmont.SOLEIL.normalized(), Vector3.UP)
 		else:
 			_ext_light.rotation = Vector3(deg_to_rad(-40.0), deg_to_rad(160.0), 0.0)
+	if relief != null and _soleil_relief != null and perf_manager != null:
+		var permises: bool = ombres_relief_permises and perf_manager.cran == 0 and not OS.has_feature("web") 			and RenderingServer.get_current_rendering_method() == "forward_plus"
+		_soleil_relief.visible = permises and dehors
+		relief.set_ombres_portees(permises, permises and dehors)
 	if relief != null and cabin != null:
 		var vue_ext: bool = cabin.view_mode == Cabin.ViewMode.EXTERIOR
 		var ext: bool = (vue_ext or dehors) and relief.pret

@@ -5,6 +5,15 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## Version suivante (branche pc-max, non publiée)
+
+**Ombres portées sur la neige** (PC, cran 0 seulement ; ni le web ni les crans suivants). Le relief n'est pas éclairé et ne recevait donc aucune ombre : un soleil
+dédié, pour lui seul, assombrit la neige là où pylônes, véhicules et bâtiments font de l'ombre ; ailleurs le rendu ne change pas. Boucle de 16 min en 4K : GPU p95 8,14 → 9,83 ms,
+16 images sur 42 991 au-dessus de 14 ms (max 15,46), fil de rendu p95 2,57 → 3,01 ms, aucune descente de cran.
+
+**Fil principal à ski.** Collisions du tunnel construites pour un skieur sur la neige, pièces fines des gares refaites en double à chaque carré de relief (26 à 54 ms), portées de toutes
+les lignes réglées d'un bloc à chaque changement de détail (72 à 103 ms). Boucle de 11 min en 4K : images de plus de 25 ms à ski 20 → 2.
+
 ## 1.53.3 — 2 novembre 2026
 
 **Sur le toit de la gare en une image.** Pendant les 10 s qui suivent une dépose par la carte, le skieur était reposé à chaque image sur

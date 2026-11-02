@@ -534,6 +534,7 @@ func _creer_maillages(fin_us: int) -> void:
 			var mi: MeshInstance3D = MeshInstance3D.new()
 			mi.mesh = mesh
 			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			mi.layers = 1 | Cabin.LAYER_RELIEF
 			add_child(mi)
 		_tableaux[_k] = null
 		_k += 1
@@ -828,6 +829,7 @@ func _instance(mesh: Mesh, nom: String) -> MeshInstance3D:
 	mi.name = nom
 	mi.mesh = mesh
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	mi.layers = 1 | Cabin.LAYER_RELIEF
 	add_child(mi)
 	return mi
 
@@ -921,10 +923,74 @@ func _hiver_mat(m: ShaderMaterial, pistes_ok: bool) -> void:
 		m.set_shader_parameter("avec_pistes", 1.0)
 	m.set_shader_parameter("hiver", _hiver)
 	_mats_hiver.append(m)
+	_ombres_sur(m)
 
 
 ## Neige, relief ombré et pistes damées (skieur jouable) : 1 ; été
 ## (photographie aérienne seule, vue extérieure) : 0.
+## Ombres portées sur la neige (PC, cran 0) : le relief garde son aspect, sans éclairage ; une
+## part de sa couleur passe en albédo, et le soleil dédié ne rend que cette part, sauf à l'ombre.
+const OMBRE_FORCE: float = 0.45
+const _ALBEDO_TERRAIN: String = "ALBEDO = pow(mix(c, brume, clamp(1.0 - exp(-d / 28000.0), 0.0, 0.7)), vec3(gamma));"
+var _shaders_ombres: Dictionary = {}     # shader d'origine → version qui reçoit l'ombre
+var _ombres_permises: bool = false
+var _ombres_force: float = 0.0
+
+
+func _shader_ombres(sh: Shader) -> Shader:
+	if _shaders_ombres.has(sh):
+		return _shaders_ombres[sh]
+	var code: String = sh.code
+	if not code.contains(_ALBEDO_TERRAIN):
+		_shaders_ombres[sh] = sh
+		return sh
+	code = code.replace("render_mode unshaded, fog_disabled, cull_disabled;",
+		"render_mode fog_disabled, cull_disabled, ambient_light_disabled, specular_disabled;
+uniform float ombre_k = 0.0;")
+	code = code.replace(_ALBEDO_TERRAIN, "vec3 c_fin = pow(mix(c, brume, clamp(1.0 - exp(-d / 28000.0), 0.0, 0.7)), vec3(gamma));
+	ALBEDO = c_fin * ombre_k;
+	EMISSION = c_fin * (1.0 - ombre_k);
+	ROUGHNESS = 1.0;")
+	code += "
+void light() {
+	if (LIGHT_IS_DIRECTIONAL) {
+		DIFFUSE_LIGHT += ATTENUATION * 3.14159;
+	}
+}
+"
+	var s2: Shader = Shader.new()
+	s2.code = code
+	_shaders_ombres[sh] = s2
+	_shaders_ombres[s2] = s2
+	return s2
+
+
+func _ombres_sur(m: ShaderMaterial) -> void:
+	if not _ombres_permises or m.shader == null:
+		return
+	m.shader = _shader_ombres(m.shader)
+	m.set_shader_parameter("ombre_k", _ombres_force)
+
+
+## permises : shaders éclairés ou d'origine ; actives : le soleil dédié est allumé.
+func set_ombres_portees(permises: bool, actives: bool) -> void:
+	var force: float = OMBRE_FORCE if permises and actives else 0.0
+	if permises == _ombres_permises and is_equal_approx(force, _ombres_force):
+		return
+	var retour: bool = _ombres_permises and not permises
+	_ombres_permises = permises
+	_ombres_force = force
+	for m in _mats_hiver:
+		var mat: ShaderMaterial = m
+		if retour:
+			for k in _shaders_ombres:
+				if _shaders_ombres[k] == mat.shader and k != mat.shader:
+					mat.shader = k
+					break
+		else:
+			_ombres_sur(mat)
+
+
 func set_hiver(f: float) -> void:
 	if absf(f - _hiver) < 0.001:
 		return
