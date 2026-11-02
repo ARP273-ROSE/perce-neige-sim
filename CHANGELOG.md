@@ -22,10 +22,16 @@ saut de 0,76 m au droit des portes, à l'intérieur de la rame.
 **Fosse de la gare basse.** En descendant l'escalier du personnel, on marchait sur le plancher du tunnel à −2,65 m, à
 mi-hauteur. Son flanc est maintenant fermé le long de l'escalier, et l'on descend jusqu'au fond.
 
-**Pylônes d'après les vidéos de la ligne.** Hauteurs bornées pylône par pylône sur Leissières, Grand Huit et Tovière ;
-P1 de Grand Huit passe de 62 à 17 m, P2 de Leissières de 65 à 32 m (estimé : aucun pylône vu à 65 m). Géométrie
-recalculée (effort 400), dépassement des galets sur ces trois lignes : 171° → 122°, portées sous la garde 6 → 4.
-Restent loin de zéro : Grand Huit 61°, Leissières 53°, Tovière 3 portées sous la garde.
+**Pylônes d'après les vidéos de la ligne et les plaques.** Listes de pylônes revues sur trois lignes, hauteurs bornées
+pylône par pylône :
+- Grand Huit : numéros lus sur les plaques ; deux pylônes à 484 et 607 m retirés, galets replacés (support-compression en
+  P5-P6). P1 et P12-P14 estimés.
+- Tovière : pylône de 906 m jamais vu, retiré ; P15-P16 ajoutés contre la gare, estimés. Le retrait de celui de 450 m est
+  déduit du calcul (dépassement nul, contre 3,7 à 15,9° pour les autres candidats), sans vérification en vidéo pour l'instant.
+- Leissières : P2 de 65 à 32 m (estimé : aucun pylône vu à 65 m).
+
+Géométrie recalculée (effort 400), dépassement des galets sur ces trois lignes : 171° → 107° (Tovière 0°, Leissières 53°,
+Grand Huit 54°), 1 portée sous la garde par ligne.
 
 **Bancs.**
 - `skieur` et `ski` repassent au vert. Ski : 0,000 m d'écart hors des gares ; 6,8 cm dans leurs pièces fines, où la
