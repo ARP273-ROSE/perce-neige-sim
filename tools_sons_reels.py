@@ -23,7 +23,7 @@ tcd — une télécabine débrayable de 8 places (Saulire Express 2, Méribel) :
   tcd_lanceur_acc  0:09–0:16   accélération au départ
   tcd_pyl_cc       0:17–0:21   deux pylônes de compression rapprochés (choc vers 2,9 s)
   tcd_pyl_s        0:31–0:33   pylône porteur, 6 galets (choc vers 1,1 s)
-  tcd_ligne        3:09–3:11   en ligne                                 (boucle)
+  tcd_ligne        0:34–0:53   en ligne, entre deux pylônes             (boucle)
   tcd_pyl_sc       4:27,5–4:30 pylône porteur et compression, 2 × 4 galets (choc vers 0,6 s)
   tcd_pyl_c        5:00–5:10   approche et passage d'une compression : la cabine
                                vibre de plus en plus avant le pylône (choc vers 6,8 s)
@@ -104,7 +104,7 @@ PROFILS = {
         ("tcd_lanceur_acc", 9.0, 16.0, False),
         ("tcd_pyl_cc", 17.0, 21.0, False),
         ("tcd_pyl_s", 31.0, 33.0, False),
-        ("tcd_ligne", 189.0, 191.0, True),
+        ("tcd_ligne", 34.0, 53.0, True),
         ("tcd_pyl_sc", 267.5, 270.0, False),
         ("tcd_pyl_c", 300.0, 310.0, False),
         ("tcd_lanceur_dec", 381.0, 384.0, False),

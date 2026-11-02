@@ -7,6 +7,11 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## 1.53.3 — 2 novembre 2026
 
+**Son de ligne des télécabines.** `tcd_ligne` passe de 1,5 s à 18,5 s, pris sur le passage désigné par l'utilisateur et coupé à 0:53 au lieu de 0:54 :
+le raccord tombe à +0,3 dB (−2,0 dB jusqu'à 0:54), avec le même spectre de part et d'autre (<100 Hz 72 et 69 %, 100-300 Hz 25 et 28 %), et le
+pylône qui approche reste dehors. La source garde un saut d'environ 5 dB à 0:44. Niveau moyen −27,8 dB contre −20,6 : même gain que les autres sons
+`tcd_*`, ce passage est simplement plus calme. Mesuré seulement : l'écoute reste à faire.
+
 **Pylônes inclinés.** Sur les fortes pentes, le fût penche et la tête lui reste perpendiculaire ; le câble ne bouge pas.
 Règle **estimée** : 0,9 × pente locale du câble, plafond 25°, tirée d'une seule vue de côté (arête d'une ligne Garaventa, 3 pylônes)
 et étendue sans mesure à tous les fûts tubulaires. Non concernés : treillis du 3S, téléskis, pylônes de nez des gares.
