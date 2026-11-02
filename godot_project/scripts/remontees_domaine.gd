@@ -594,6 +594,7 @@ func _vider_poubelle() -> void:
 func _exit_tree() -> void:
 	VehiculeRemontee.vider_modeles()
 	MeshMerge.vider_partages()
+	RemonteeKit.vider_primitives()
 
 
 func _process(delta: float) -> void:
