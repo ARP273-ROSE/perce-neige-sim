@@ -55,6 +55,9 @@ func set_portees_reduites(oui: bool) -> void:
 	set_niveau_detail(n)
 
 
+var _portees_a_revoir: Array = []
+
+
 func set_niveau_detail(n: int) -> void:
 	n = clampi(n, 0, 2)
 	if n == niveau_detail:
@@ -65,9 +68,12 @@ func set_niveau_detail(n: int) -> void:
 	VEHICULES_JUSQUA = float(_portees_base[0]) * [1.0, 0.7, 0.5][n]
 	DETAILS_JUSQUA = float(_portees_base[1]) * [1.0, 0.7, 0.5][n]
 	_f_lod = float(_portees_base[2]) * [1.0, 0.75, 0.5][n]
+	# une ligne par image : toutes d'un coup faisaient une image de 72 à 103 ms, à chaque
+	# changement de détail (relevé 4K, 02/11/2026)
+	_portees_a_revoir.clear()
 	for e in lignes:
 		if (e[0] as LigneRemontee).pret:
-			_portees(e[0])
+			_portees_a_revoir.append(e[0])
 signal message(texte: String)
 ## Pique sarcastique (PiquesRemontees) : événement, remontée.
 signal pique(evt: String, lg: LigneRemontee)
@@ -507,6 +513,10 @@ func _process(delta: float) -> void:
 
 
 func _process_corps(delta: float) -> void:
+	if not _portees_a_revoir.is_empty():
+		var lg_p = _portees_a_revoir.pop_back()
+		if is_instance_valid(lg_p):
+			_portees(lg_p)
 	_vider_poubelle()
 	_construire_proches()
 	_embarquement()
