@@ -15,13 +15,25 @@ dédié, pour lui seul, assombrit la neige là où pylônes, véhicules et bâti
 les lignes réglées d'un bloc à chaque changement de détail (72 à 103 ms). Boucle de 11 min en 4K : images de plus de 25 ms à ski 20 → 2.
 ## 1.53.5 — 2 novembre 2026
 
+**Gares creusées dans la pente.** Elles étaient posées au plus haut du terrain sous leur emprise, jusqu'à 18 m au-dessus du sol côté aval. Le relief est abaissé sous l'emprise, avec un talus autour : hauteur au-dessus du point le plus bas, médiane 2,9 → 1,6 m, 90 % des gares sous 7,4 → 4,6 m (Lanches amont 8,3 → 3,4 m). Grille à 25 m : le déblai se fait donc sur des mailles entières.
+
+**Câble immobile.** Il fléchissait sous chaque véhicule, par deux calculs différents pour le câble dessiné et pour la pince : celle-ci passait au-dessus ou en dessous, et le câble ondulait en permanence. Plus de flèche locale ; seule reste l'onde des arrêts d'urgence.
+
+**Câble sur les galets.** Il cassait en un point au droit du pylône, et le pas de 3 m décalait la cassure avant les galets. Il suit maintenant un arc sur la longueur du train, tous les 0,5 m, et les galets se calent dessus partout, batteries de gare et téléskis compris : écart maximal de repos 0,71 → 0,40 m.
+
+**Brévières.** Constructeur corrigé : Poma.
+
 **Rester dans la cabine.** Sans bouger à l'arrivée, on suit maintenant la cabine et l'on se rassoit pour le retour ; au premier pas, on est libre de sortir. Elle repartait sans soi, ou l'on restait debout. Nouveau banc `cabine_retour` : aller-retour complet.
 
 **Piques « resté à bord ».** Nouvelle série, adaptée à la télécabine, au téléphérique et au 3S, et au télésiège repris dans les 90 s après l'arrivée. Arrivée en bas : ses propres piques, au lieu de « vous êtes en haut ».
 
 **Carte des pistes.** Elle s'ouvre à gauche de la colonne de boutons, qu'elle recouvrait, y compris le sien : une fois ouverte, on ne pouvait plus la fermer.
 
-**Galets.** Au moins 4 sous le câble et 4 au-dessus sur chaque pylône (un « 4 SC » faisait 2 + 2), sur toutes les lignes, d'après un retour d'utilisateur.
+**Galets.** Au moins 4 sous le câble et 4 au-dessus sur chaque pylône (un « 4 SC » faisait 2 + 2), sur les télécabines et les télésièges, sauf les télésièges fixes pour débutants (Rosset, Panoramic, Village, Almes, Cema), d'après un retour d'utilisateur. Leissières P11 passe à 12 galets. Téléskis non concernés.
+
+**Véhicules.** Pince A-108 aux cotes relevées sur les sièges des Tommeuses (11 436 → 9 548 triangles). Sièges Études de Transports : tôle pleine percée de 4 trous au lieu du treillis. Poulies des Tommeuses : Ø 7,20 m en aval, Ø 6,10 m en amont, câble et galets de déviation suivent ; en aval, la pince mord la jante de 3 cm dans le demi-tour. Logos des télécabines : le panneau passait sous la caisse sur Omega, Diamond et Symphony ; « TIGNES » ajouté (lettrage du jeu), encre claire sur les caisses noires.
+
+**Relevés de pylônes.** Legettaz : 5 pylônes (P4 estimé). Col du Palet P3 et Combe Folle P8 : compressions, d'après les reportages. Positions confirmées en vidéo : Col du Palet, Chardonnet (brin montant), Fontaine Froide.
 
 **Crête de Leissières.** Quatre pylônes centrés sur le sommet, deux de chaque côté (547, 561, 575, 589 m), au lieu de trois d'un côté et un de l'autre : déviation du câble de 17 à 18° sur chacun, au lieu de 33° sur deux d'entre eux. Positions et hauteurs **estimées** pour obtenir cette courbe : le premier côté est passe à 18,6 m, la vidéo donnait 5 à 8 m sur la crête.
 

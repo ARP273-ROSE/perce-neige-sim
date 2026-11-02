@@ -80,3 +80,105 @@ pylône vers 524 m.** Le 8e cherché est celui de ~165 m. d à ~1,9 m/s, recalé
 | P8 | 329,5 | ~524 | non mesuré | non mesuré | | incertain (position) |
 
 Galets d'après le reportage : P4 est le seul support-compression (4S-C) ; à comparer au JSON.
+
+## tsd6_aiguille_percee
+
+10 pylônes réels, numérotés de l'aval (photos numérotées) : même nombre et même ordre que le JSON ; P1 contre la gare aval,
+P5-P6 et P8-P9 groupés, P10 contre la gare amont. Hauteur : rapport hauteur / traverse (≈ 7,5 m) sur une photo, en contre-plongée.
+
+| n° réel | d JSON (m) | source du n° | h_min | h_max | source h | statut |
+|---|---|---|---|---|---|---|
+| P1 | 45 | photo | 6,5 | 9 | photo | certain (n°), incertain (h) |
+| P2 | 217 | photo | 15 | 20 | photo | certain (n°), incertain (h) |
+| P3 | 357 | photo | 12 | 16 | photo | certain (n°), incertain (h) |
+| P4 | 534 | photo | 18 | 24 | photo | certain (n°), incertain (h) |
+| P5 | 661 | photo | 15 | 19 | photo | certain (n°), incertain (h) |
+| P6 | 680 | photo | 15 | 19 | photo | certain (n°), incertain (h) |
+| P7 | 792 | photo | 14 | 18 | photo | certain (n°), incertain (h) |
+| P8 | 870 | photo | 16 | 21 | photo | certain (n°), incertain (h) |
+| P9 | 889 | photo | 20 | 26 | photo | certain (n°), incertain (h) |
+| P10 | 965 | photo | 10 | 14 | photo | certain (n°), incertain (h) |
+
+## tke_legettaz
+
+**5 pylônes réels, numérotés sur les plaques (photos) ; le JSON en a 4.** Les d du JSON sont équidistants (64,3 / 128,6 / 193,0 /
+257,3) : positions de remplissage, sans mesure, non marquées `reconstitue`. P3 et P4 sont côte à côte, décalés ; la pente atteint 60 % vers P5
+(reportage). d réels et hauteurs : non vus (pas de vidéo, pas d'échelle).
+
+## tke_lavachet
+
+3 pylônes, P1 et P3 photographiés, 2S/2S d'après le reportage (JSON : [4, S] par pylône, sans brin distinct, à comparer). d équidistants
+dans le JSON (65,2 / 130,3 / 195,5) : remplissage. d et hauteurs : non vus.
+
+## tke_savonnette_1, tke_savonnette_2
+
+2 pylônes chacun (reportage). **Longueurs 237 et 198 m au reportage ; 208 m pour les deux au JSON.** d équidistants dans le JSON
+(69,4 / 138,8) : remplissage. Galets au reportage, I | II : P1 1S-1C | 1S-1C ; P2 1S-1C/1S | 1S/1S (JSON : [4, S] partout). d et hauteurs : non vus.
+
+## tke_termignon_1, tke_termignon_2
+
+7 pylônes, numérotés du reportage, photos de P2, P3, P5, P6, P7. **Formes différentes de deux lignes indépendantes : P2 = deux fûts séparés ; P3, P6, P7 =
+portiques communs aux deux lignes ; P5 = fût unique et double potence en T.** P2, P3, P6, P7 sur glace (reportage). d du JSON : 3 `reconstitue` (91,6 ; 491,5 ; 489,2), voir
+le rapport précédent (un pylône vu à ~476 m). Hauteurs : non mesurées (pas d'échelle fiable).
+
+## tsf3_mont_blanc
+
+14 ouvrages P0 à P13 (reportage), même nombre que le JSON. Montée/descente : P0 8C/8C · P1 8C/8C · P2 4SC/8S · P3 8S/rien · P4 8S/4S · P5 8S/4S · P6 8S/4S ·
+P7 8S/8S · P8 8S/4S · P9 8S/2S · P10 8S/4S · P11 8S/4S · P12 8S/4S · P13 8S/8S. **P3 ne porte que le brin montant.** Numérotation à partir de P0 : rang = n° + 1.
+
+## tkd_col_du_palet
+
+14 passages en vidéo montante pour 14 pylônes au reportage et au JSON. Vitesse déduite entre passages et d du JSON : 3,1 à 3,6 m/s, sans anomalie : **les d du JSON tiennent.**
+N° par ordre (plaques illisibles sur la vidéo) : ESTIMÉ, sauf P3, nommé au reportage. P3 est une compression au reportage ; le JSON met S partout. P9 a deux fûts côte à côte en vidéo. Hauteurs : non mesurées (pas d'échelle).
+
+| n° | passage (s) | d JSON (m) | statut |
+|---|---|---|---|
+| P1 | 56 | 76 | ESTIMÉ (ordre) |
+| P2 | 82,5 | 167 | ESTIMÉ (ordre) |
+| P3 | 110 | 264 | photo + ordre |
+| P4 | 136 | 354 | ESTIMÉ (ordre) |
+| P5 | 158 | 431 | ESTIMÉ (ordre) |
+| P6 | 186 | 528 | ESTIMÉ (ordre) |
+| P7 | 216 | 636 | ESTIMÉ (ordre) |
+| P8 | 237 | 702 | ESTIMÉ (ordre) |
+| P9 | 264 | 799 | ESTIMÉ (ordre), deux fûts |
+| P10 | 298 | 917 | ESTIMÉ (ordre) |
+| P11 | 332 | 1036 | ESTIMÉ (ordre) |
+| P12 | 366 | 1154 | ESTIMÉ (ordre) |
+| P13 | 394 | 1251 | ESTIMÉ (ordre) |
+| P14 | 430 | 1370 | ESTIMÉ (ordre) |
+
+## tkd_chardonnet
+
+Reportage : brin montant 12 pylônes, brin descendant 4, le plus haut commun, soit 15 ouvrages sur un tracé en quadrilatère. **Le JSON ne porte que les 12 du brin montant.** Un pylône du brin descendant se voit à droite vers 34-40 s.
+Passages du brin montant : ~16, 25, 58, 92, 117, 136, 170, 202, 224, 252, 278, 292 s, contre les d 18, 41, 142, 243, 320, 379, 480, 569, 640, 717, 794, 841 du JSON : ~3 m/s, sans anomalie, **les d tiennent**, les deux premiers moins sûrs (contre la gare).
+N° : P1 à P10, P12, P13 photographiés (numérotation du reportage, à recouper avec les rangs : le brin descendant y porte 13 à 15). Reste ESTIMÉ par ordre. Hauteurs : non mesurées.
+
+## tkd_combe_folle
+
+12 pylônes photographiés et numérotés (reportage), comme le JSON. P1, P2, P3 enchaînés. Le n° 8 est une compression (reportage), le JSON met S partout. P6 ouvre une série qui ne porte que le brin descendant ou montant, à préciser (légende). d et hauteurs : pas de nouveau relevé.
+
+## tkd_signal_1, tkd_signal_2
+
+Plusieurs reportages portent ce nom dans d'autres stations : le bon appareil **n'est pas établi** dans mes lectures ; aucune valeur reprise. Vidéo déjà relevée, voir le rapport précédent.
+
+## Lignes à `reconstitue` : ce qui est établi
+
+Les photos numérotées prouvent l'existence et l'ordre, pas la position. Vues depuis la cabine, trop plongeantes pour une hauteur fiable : hauteurs non mesurées.
+
+| ligne | n réel (reportage) | n JSON | `reconstitue` | établi |
+|---|---|---|---|---|
+| tcd10_solaise | 16, P1 à P16 photographiés | 16 | 28,8 | P1 « en sortie de gare » : compatible ; d non mesuré |
+| tcd10_vallon_iseran | 17, P3 à P16 photographiés | 17 | 1452,3 | nombre confirmé ; d non mesuré, vidéo de l'ancien appareil |
+| tsd6_bollin | 10, P2 à P10 photographiés | 10 | 413,2 ; 533,0 | P10 « avant l'entrée en gare » : compatible |
+| tsd6_fresse | 19, P2 à P19 photographiés, P9, P15, P16 compressions | 19 | 934,0 ; 1848,8 | compressions conformes au JSON (rangs 9, 15, 16) ; d non mesuré |
+| tsd6_marais | 23, dont 7 compressions, P12 et P15 support-compression | 23 | 8 valeurs | 7 C et 2 SC conformes au JSON ; d non mesurés, vidéo de l'ancien appareil |
+| tsd6_fontaine_froide | 10 passages en vidéo | 10 | 23,7 | voir ci-dessous : ~19 m ESTIMÉ, compatible |
+
+Voie d'après le reportage : Bollin 7,35 m, Fresse 6,00 m.
+
+## tsd6_fontaine_froide
+
+Vidéo continue de la montée, 10 passages pour 10 au JSON, 4,0 à 5,0 m/s entre passages et d du JSON : **les d tiennent.** N° par ordre : ESTIMÉ.
+Passages (s) → d JSON (m) : 30 → 23,7 · 44 → 79,1 · 80 → 232,7 · 94 → 294,9 · 132 → 458,9 · 142 → 509,5 · 182 → 684,5 · 208 → 806,7 · 238 → 937,3 · 283 → 1119,0.
+P1 en remontant de P2 à ~4,3 m/s : d ≈ 19 m (ESTIMÉ), pour 23,7 `reconstitue`. Hauteurs : non mesurées, image de faible qualité.

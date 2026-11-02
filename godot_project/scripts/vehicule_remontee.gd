@@ -229,6 +229,8 @@ func _fabriquer() -> void:
 	else:
 		if fixe:
 			_pince_fixe()
+		elif famille == "siege_doppelmayr_e98_8":
+			_pince_a108()
 		else:
 			_pince_debrayable()
 		if cabine:
@@ -392,6 +394,59 @@ func _pince_debrayable() -> void:
 	# à côté des pinces — retour d'utilisateur, 25/10/2026 : « numéros fantômes »)
 
 
+## Pince Doppelmayr A-108 (Tommeuses), cotes relevées en vidéo : corps de 415 mm, plaque de
+## mors 25 × 230, gros ressort bleu 265 × Ø150 à 9-10 spires parallèle au bras, 2 galets de
+## roulement Ø180 × 30, ailette en peigne 100 × 80, 2 galets noirs Ø125 et Ø105 sur le bras,
+## patin de 330 × 60, bras caisson galvanisé de 110 mm. Mêmes repères que `_pince_debrayable` :
+## suspente à X+, dessus du patin à Y_PLAQUE (pneus du lanceur).
+func _pince_a108() -> void:
+	var p: Node3D = Node3D.new()
+	p.name = "Pince"
+	add_child(p)
+	var corps_m: String = "alu_pince"
+	var L: float = 0.415
+	RemonteeKit.boite_en(p, Vector3(0.13, 0.07, L), Vector3(0.0, 0.055, 0), corps_m)
+	RemonteeKit.boite_en(p, Vector3(0.025, 0.11, 0.23), Vector3(-0.055, 0.0, 0), corps_m)      # plaque de mors
+	for sz in [-1.0, 1.0]:
+		RemonteeKit.demi_cone(p, Vector3(0, 0, sz * L * 0.5), Vector3(0, 0, sz * (L * 0.5 + 0.30)), 0.055, 0.0245, "noir_mat", 12)
+	_machoire = Node3D.new()
+	_machoire.name = "MachoireMobile"
+	_machoire.position = Vector3(0.07, 0.07, 0)
+	p.add_child(_machoire)
+	RemonteeKit.boite_en(_machoire, Vector3(0.025, 0.12, 0.23), Vector3(-0.018, -0.075, 0), corps_m)
+	# bras caisson galvanisé
+	RemonteeKit.poutre(p, Vector3(0.05, 0.07, 0), Vector3(0.34, 0.16, 0), 0.11, 0.11, "galva_pylone", Vector3.BACK)
+	# ressort, parallèle au bras, au-dessus de lui
+	var dir: Vector3 = Vector3(0.29, 0.09, 0).normalized()
+	var r: Node3D = Node3D.new()
+	r.position = Vector3(0.07, 0.20, 0)
+	r.basis = Basis(dir.cross(Vector3.BACK).normalized() * -1.0, dir, Vector3.BACK)
+	p.add_child(r)
+	RemonteeKit.ressort(r, Vector3.ZERO, Vector3.UP, 0.265, 0.065, 0.012, 9, "bleu_ressort")
+	_ressorts.append(r)
+	# levier d'ouverture et son galet (came de gare)
+	_levier = Node3D.new()
+	_levier.name = "Levier"
+	_levier.position = Vector3(0.36, 0.17, 0)
+	p.add_child(_levier)
+	RemonteeKit.poutre(_levier, Vector3.ZERO, Vector3(0.12, 0.05, 0), 0.05, 0.05, corps_m, Vector3.BACK)
+	# galets noirs du bras (Ø125 et Ø105), axe en travers
+	var travers: Basis = Basis(Vector3.FORWARD, PI * 0.5)
+	RemonteeKit.cylindre(_levier, 0.0625, 0.0625, 0.04, Transform3D(travers, Vector3(0.13, 0.06, 0)), "noir_mat", 14)
+	RemonteeKit.cylindre(p, 0.0525, 0.0525, 0.04, Transform3D(travers, Vector3(0.22, 0.05, 0)), "noir_mat", 14)
+	# galets de roulement Ø180 × 30, en tête et en queue
+	for sz in [-1.0, 1.0]:
+		RemonteeKit.cylindre(p, 0.016, 0.016, 0.10, Transform3D(travers, Vector3(0.20, 0.11, sz * 0.19)), corps_m, 8)
+		RemonteeKit.cylindre(p, 0.09, 0.09, 0.03, Transform3D(travers, Vector3(0.25, 0.11, sz * 0.19)), "polyurethane", 16)
+	# ailette en peigne 100 × 80
+	for k in range(5):
+		RemonteeKit.boite_en(p, Vector3(0.10, 0.014, 0.012), Vector3(0.11, -0.05 - k * 0.0165, 0), corps_m)
+	RemonteeKit.boite_en(p, Vector3(0.016, 0.08, 0.012), Vector3(0.06, -0.083, 0), corps_m)
+	# patin 330 × 60, sur un montant : les pneus du lanceur y appuient
+	RemonteeKit.boite_en(p, Vector3(0.06, Y_PLAQUE - 0.022 - 0.16, 0.08), Vector3(0.28, (Y_PLAQUE - 0.022 + 0.16) * 0.5, 0), "galva_pylone")
+	RemonteeKit.boite_en(p, Vector3(0.06, 0.022, 0.33), Vector3(0.28, Y_PLAQUE - 0.011, 0), "noir_mat")
+
+
 ## Numéro lisible À L'ENDROIT : une étiquette d'un seul côté (vue de dos,
 ## elle s'effaçait en miroir — retour d'utilisateur, 23/10/2026), contre-
 ## inversée sur les véhicules en miroir ; `rot` oriente sa face (autour de Y).
@@ -455,7 +510,7 @@ static func _aigle() -> ImageTexture:
 			var q2: Vector2 = Vector2((i + 0.5) / n, (j + 0.5) / n)
 			for f in formes:
 				if Geometry2D.is_point_in_polygon(q2, f):
-					img.set_pixel(i, j, Color(0.05, 0.05, 0.06, 1.0))
+					img.set_pixel(i, j, Color.WHITE)
 					break
 	img.generate_mipmaps()
 	_tex_aigle = ImageTexture.create_from_image(img)
@@ -467,20 +522,33 @@ static func _dims_panneau(fam: String, H: float) -> Array:
 	var a: float = 0.0
 	var b: float = 0.0
 	var y: float = -H * 0.70
-	for r in _profil_cabine(fam):
+	var caisse: Array = []
+	var profil: Array = _profil_cabine(fam)
+	for r in profil:
 		a = maxf(a, float(r[1]))
 		b = maxf(b, float(r[2]))
 		if String(r[4]) == "caisse":
+			caisse.append(r)
 			y = float(r[0]) - 0.30
-	return [a, b, y]
+	if caisse.size() < 2:
+		return [a, b, y]
+	# caisse en œuf (télécabines) : dans le haut du panneau, là où la coque est
+	# presque droite ; sous la dernière cote, le logo tombait sous le fond
+	return [float(caisse[0][1]), float(caisse[0][2]), float(caisse[0][0]) - 0.14]
 
 
 func _logo_station(cab: Node3D, a: float, b: float, y: float, face_portes: float) -> void:
+	if livree == "Tignes":
+		_logo_tignes(cab, a, b, y, -face_portes)
+		return
 	if livree != "Val d'Isère":
 		return
-	var t: float = clampf(a * 0.35, 0.30, 0.55)          # côté de l'aigle
+	var t: float = clampf(b * 0.35, 0.30, 0.55)          # côté de l'aigle
+	# encre claire sur la caisse noire
+	var encre: Color = Color(0.93, 0.93, 0.93) if famille == "cabine_diamond" else Color(0.05, 0.05, 0.06)
 	var m: StandardMaterial3D = StandardMaterial3D.new()
 	m.albedo_texture = _aigle()
+	m.albedo_color = encre
 	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
 	m.alpha_scissor_threshold = 0.5
 	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
@@ -499,10 +567,24 @@ func _logo_station(cab: Node3D, a: float, b: float, y: float, face_portes: float
 		ai.scale = Vector3(-1, 1, 1)
 	ai.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	cab.add_child(ai)
-	_numero(cab, "Val d'Isère", Vector3(fx * (a + 0.012), y - 0.02, fx * b * 0.16), rot, 64, t * 0.0062, Color(0.05, 0.05, 0.06))
+	_numero(cab, "Val d'Isère", Vector3(fx * (a + 0.012), y - 0.02, fx * b * 0.20), rot, 64, t * 0.0062, encre)
 	# faces avant et arrière : le nom
 	for sz in [-1.0, 1.0]:
-		_numero(cab, "Val d'Isère", Vector3(0, y, sz * (b + 0.012)), 0.0 if sz > 0.0 else PI, 64, t * 0.0055, Color(0.05, 0.05, 0.06))
+		_numero(cab, "Val d'Isère", Vector3(0, y, sz * (b + 0.012)), 0.0 if sz > 0.0 else PI, 64, t * 0.0055, encre)
+
+
+## Tignes : « TIGNES » rouge sur plaque sombre (photos de Tovière et des Brévières),
+## lettrage du jeu, sur la face sans portes et les deux bouts.
+func _logo_tignes(cab: Node3D, a: float, b: float, y: float, fx: float) -> void:
+	var rouge: Color = Color(0.82, 0.08, 0.07)
+	var haut: float = 0.22
+	var large: float = minf(a, b) * 1.15
+	var px: float = 0.0030
+	RemonteeKit.boite_en(cab, Vector3(0.008, haut, large), Vector3(fx * (a + 0.006), y, 0), "cabine_noire")
+	_numero(cab, "TIGNES", Vector3(fx * (a + 0.014), y, 0), fx * PI * 0.5, 64, px, rouge)
+	for sz in [-1.0, 1.0]:
+		RemonteeKit.boite_en(cab, Vector3(large, haut, 0.008), Vector3(0, y, sz * (b + 0.006)), "cabine_noire")
+		_numero(cab, "TIGNES", Vector3(0, y, sz * (b + 0.014)), 0.0 if sz > 0.0 else PI, 64, px, rouge)
 
 
 static var _textes: Dictionary = {}
@@ -818,21 +900,31 @@ func _siege_bmf() -> void:
 	var hp: float = yb1 - yb0
 	var plein_c: float = 0.36                   # demi-largeur pleine au milieu
 	var plein_b: float = 0.30                   # longueur pleine à chaque bout
-	RemonteeKit.boite_en(siege, Vector3(2.0 * plein_c, hp, ep), Vector3(0, (yb0 + yb1) * 0.5, zb), m_alu)
+	# sièges Études de Transports (photos de Bollin-Fresse) : pas de treillis, une tôle
+	# pleine sur toute la largeur, percée de quelques trous ronds de part et d'autre du numéro
+	var et: bool = famille.begins_with("siege_doppelmayr_e98")
+	if et:
+		RemonteeKit.boite_en(siege, Vector3(2.0 * xb, hp, ep), Vector3(0, (yb0 + yb1) * 0.5, zb), m_alu)
+	else:
+		RemonteeKit.boite_en(siege, Vector3(2.0 * plein_c, hp, ep), Vector3(0, (yb0 + yb1) * 0.5, zb), m_alu)
 	for sx in [-1.0, 1.0]:
-		RemonteeKit.boite_en(siege, Vector3(plein_b, hp, ep), Vector3(sx * (xb - plein_b * 0.5), (yb0 + yb1) * 0.5, zb), m_alu)
-		# zone ajourée : membrures haute et basse, diagonales en zigzag
-		var xa: float = plein_c
-		var xz: float = xb - plein_b
-		for y in [yb1 - 0.02, yb0 + 0.02]:
-			RemonteeKit.boite_en(siege, Vector3(xz - xa, 0.04, ep), Vector3(sx * (xa + xz) * 0.5, y, zb), m_alu)
-		var nd: int = 5
-		for k in range(nd):
-			var x0: float = lerpf(xa, xz, float(k) / nd)
-			var x1: float = lerpf(xa, xz, float(k + 1) / nd)
-			var haut: bool = k % 2 == 0
-			RemonteeKit.poutre(siege, Vector3(sx * x0, yb0 + 0.02 if haut else yb1 - 0.02, zb), Vector3(sx * x1, yb1 - 0.02 if haut else yb0 + 0.02, zb),
-				0.045, ep, m_alu, Vector3.BACK)
+		if et:
+			for u in [0.38, 0.72]:
+				RemonteeKit.cylindre(siege, 0.042, 0.042, ep + 0.004, Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3(sx * xb * u, (yb0 + yb1) * 0.5, zb)), "noir_mat", 10)
+		else:
+			RemonteeKit.boite_en(siege, Vector3(plein_b, hp, ep), Vector3(sx * (xb - plein_b * 0.5), (yb0 + yb1) * 0.5, zb), m_alu)
+			# zone ajourée : membrures haute et basse, diagonales en zigzag
+			var xa: float = plein_c
+			var xz: float = xb - plein_b
+			for y in [yb1 - 0.02, yb0 + 0.02]:
+				RemonteeKit.boite_en(siege, Vector3(xz - xa, 0.04, ep), Vector3(sx * (xa + xz) * 0.5, y, zb), m_alu)
+			var nd: int = 5
+			for k in range(nd):
+				var x0: float = lerpf(xa, xz, float(k) / nd)
+				var x1: float = lerpf(xa, xz, float(k + 1) / nd)
+				var haut: bool = k % 2 == 0
+				RemonteeKit.poutre(siege, Vector3(sx * x0, yb0 + 0.02 if haut else yb1 - 0.02, zb), Vector3(sx * x1, yb1 - 0.02 if haut else yb0 + 0.02, zb),
+					0.045, ep, m_alu, Vector3.BACK)
 		# boulons des chapes de bout
 		for dy in [-0.04, 0.04]:
 			RemonteeKit.cylindre(siege, 0.012, 0.012, 0.05, Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3(sx * (xb - 0.10), (yb0 + yb1) * 0.5 + dy, zb)), "acier", 6)

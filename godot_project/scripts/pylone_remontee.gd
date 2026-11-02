@@ -38,7 +38,7 @@ var compo_descente: Array = [[8, "S"]]
 ## l'arc du câble (tangentes et hauteurs) au lieu d'une ligne droite.
 var deviation: float = 0.0
 ## Au moins 4 galets sous le câble et 4 au-dessus quand il y en a : un train de 2 n'existe
-## pas (retour d'utilisateur, 02/11/2026). « SC » compte moitié de chaque côté, donc 8.
+## pas (retour d'utilisateur, 02/11/2026 ; lignes concernées : remontees_domaine.gd). « SC » compte moitié de chaque côté, donc 8.
 static func compo_mini(compo: Array) -> Array:
 	var c: Array = []
 	var dessous: int = 0
