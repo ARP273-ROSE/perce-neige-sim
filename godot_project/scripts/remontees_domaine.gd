@@ -275,6 +275,24 @@ func _jumeler() -> void:
 		haut.rampes = [0.0, haut.rampes[1]]
 
 
+## Hauteurs des pylônes sur le relief fin (precalcul_geometrie.gd sur ce sol-là), par-dessus
+## celles des données, ligne par ligne. Suit le relief chargé, jamais le cran courant : le
+## régulateur peut changer de cran sans que le câble bouge. Sans relief fin ou sans fichier :
+## les hauteurs des données.
+const GEOMETRIE_FIN: String = "res://data/remontees/geometrie_fin.json"
+var _geo_fin: Variant = null
+
+
+func _geometrie_fin() -> Dictionary:
+	if _geo_fin == null:
+		_geo_fin = {}
+		if relief != null and relief.fin != null and FileAccess.file_exists(GEOMETRIE_FIN):
+			var lu: Variant = JSON.parse_string(FileAccess.get_file_as_string(GEOMETRIE_FIN))
+			if lu is Dictionary:
+				_geo_fin = lu
+	return _geo_fin
+
+
 func _poser(D: Dictionary) -> void:
 	var a: Vector2 = monde(float(D["aval"][0]), float(D["aval"][1]))
 	var b: Vector2 = monde(float(D["amont"][0]), float(D["amont"][1]))
@@ -406,10 +424,19 @@ func _poser(D: Dictionary) -> void:
 	var cle_l: String = String(D["cle"])
 	var mini_galets: bool = cle_l.begins_with("tcd") or cle_l.begins_with("tsd") \
 			or (cle_l.begins_with("tsf") and not cle_l in TSF_DEBUTANTS)
+	var fines: Dictionary = {}
+	var croisements_fins: Array = []
+	for e_f in _geometrie_fin().get(cle_l, []):
+		if (e_f as Dictionary).has("k"):
+			fines[int(e_f["k"])] = float(e_f["h"])
+		else:
+			croisements_fins.append([float(e_f["croisement_d"]), float(e_f["h"])])
 	for kp in range((D["pylones"] as Array).size()):
 		var p: Dictionary = D["pylones"][kp]
 		var q: Dictionary = p.duplicate()
 		q["k"] = kp                     # (rang dans les données : géométrie précalculée)
+		if fines.has(kp):
+			q["h"] = float(fines[kp])
 		if mini_galets:
 			for sens in ["montee", "descente"]:
 				if q.has(sens):
@@ -428,7 +455,7 @@ func _poser(D: Dictionary) -> void:
 		if dg > 0.0 and dg < L:
 			hm.append(Vector2(dg, float(g[1])))
 	lg.hauteurs_mesurees = hm
-	lg.set_meta("h_croisements", D.get("h_croisements", []))
+	lg.set_meta("h_croisements", croisements_fins if not croisements_fins.is_empty() else D.get("h_croisements", []))
 	var ru: PackedFloat32Array = PackedFloat32Array()
 	for dr in D.get("ruisseaux", []):
 		var wr: Vector2 = a0 + u0 * (float(dr) * L0 / maxf(Ld, 1.0))

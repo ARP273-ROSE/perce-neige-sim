@@ -76,5 +76,73 @@ func _suite() -> void:
 		ecart = maxf(ecart, absf(rel._hauteur_tri(x, z2) - h))
 		n += 1
 	_check("un seul sol", n > 1000 and ecart < 0.001, "%d points, écart max %.5f m" % [n, ecart])
+	await _regulateur(rel, rf)
 	print("BENCH_RELIEF_FIN %s" % ("OK" if _echecs == 0 else "ECHEC"))
 	FinBanc.quitter(self, _main, 0 if _echecs == 0 else 1)
+
+
+## Le jeu de hauteurs suit le relief chargé, pas le cran : quand le régulateur change de cran,
+## ni le sol, ni les têtes de pylônes, ni le câble ne bougent.
+func _regulateur(rel: ReliefBuilder, rf: ReliefFin) -> void:
+	_main.basculer_skieur()
+	for _i in range(60):
+		await process_frame
+	var pm: Node = _main.perf_manager
+	var fines: Dictionary = _main.remontees._geometrie_fin()
+	var pts: PackedVector2Array = PackedVector2Array()
+	var alea: RandomNumberGenerator = RandomNumberGenerator.new()
+	alea.seed = 11
+	for k in range(5000):
+		pts.append(Vector2(alea.randf_range(rf.zone.position.x, rf.zone.end.x), alea.randf_range(rf.zone.position.y, rf.zone.end.y)))
+	await _etat(rel, pts)    # (2 lignes bougent de 4 cm au second calcul seulement, sans changer de cran)
+	var etat: Array = await _etat(rel, pts)
+	var appliquees: int = 0
+	for e in _main.remontees.lignes:
+		var lg: LigneRemontee = e[0]
+		for x in fines.get(String(lg.name), []):
+			if (x as Dictionary).has("k"):
+				for p in lg.pylones:
+					if int(p.get("k", -1)) == int(x["k"]) and absf(float(p["h"]) - float(x["h"])) < 0.001:
+						appliquees += 1
+	var n_f: int = 0
+	for v in fines.values():
+		n_f += (v as Array).size()
+	_check("hauteurs du relief fin appliquées", appliquees == n_f, "%d sur %d" % [appliquees, n_f])
+	var pire: float = 0.0
+	var pire_t: float = 0.0
+	var pire_c: float = 0.0
+	for c in [1, 3, 0, 2, 0]:
+		pm._appliquer(c, "banc")
+		for _i in range(5):
+			await process_frame
+		var e2: Array = await _etat(rel, pts)
+		for k in range((e2[0] as PackedFloat32Array).size()):
+			pire = maxf(pire, absf(e2[0][k] - etat[0][k]))
+		for k in range((e2[1] as PackedFloat32Array).size()):
+			pire_t = maxf(pire_t, absf(e2[1][k] - etat[1][k]))
+		for k in range((e2[2] as PackedFloat32Array).size()):
+			pire_c = maxf(pire_c, absf(e2[2][k] - etat[2][k]))
+	_check("changer de cran ne change ni le sol ni le câble", rel.fin == rf and pire == 0.0 and pire_t == 0.0 and pire_c == 0.0,
+		"sol %.4f m, têtes %.4f m, câble %.4f m (%d têtes, %d points de câble)" % [pire, pire_t, pire_c, (etat[1] as PackedFloat32Array).size(), (etat[2] as PackedFloat32Array).size()])
+
+
+func _etat(rel: ReliefBuilder, pts: PackedVector2Array) -> Array:
+	var sol: PackedFloat32Array = PackedFloat32Array()
+	for q in pts:
+		sol.append(rel.hauteur_sol(q.x, q.y))
+	var tetes: PackedFloat32Array = PackedFloat32Array()
+	var cable: PackedFloat32Array = PackedFloat32Array()
+	for e in _main.remontees.lignes:
+		var lg: LigneRemontee = e[0]
+		if lg.tricable() or lg.vaetvient():
+			continue
+		lg.progressif = false
+		lg.H_CABLE_GARE = VehiculeRemontee.hauteur_cable_gare(lg.famille)
+		lg.l_gare = lg.l_gare_pour(lg.famille)
+		await lg._calculer_tetes()
+		lg._preparer_nez()
+		for t in lg._tetes:
+			tetes.append(t)
+		for f in [0.2, 0.5, 0.8]:
+			cable.append(lg.y_cable(lg.longueur_h() * f))
+	return [sol, tetes, cable]

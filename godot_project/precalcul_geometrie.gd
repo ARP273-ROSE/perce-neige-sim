@@ -10,6 +10,8 @@
 ## En parallèle : `--part=k/N` (k de 1 à N) ne traite qu'une ligne sur N et écrit
 ## data/remontees/geometrie_k.json ; on réunit ensuite les morceaux.
 ## `--lignes=a,b` : seulement ces lignes → geometrie_x_a_b.json (l'emporte).
+## `--relief-fin` : jeu du relief fin. Part des hauteurs des données sur ce sol, ne change que
+## les hauteurs, garde à la main celles de HAUTEURS_A_LA_MAIN → geometrie_fin[_…].json.
 extends SceneTree
 
 var _main: Node = null
@@ -17,6 +19,7 @@ var _f: int = 0
 var _f0: int = 0
 var _fait: bool = false
 
+const HAUTEURS_A_LA_MAIN: Array = ["tsd6_leissieres"]
 const POIDS_DEV: float = 1.0e4          # (rad²) : 0,1 rad de trop → 100
 const POIDS_GARDE: float = 1.0e5        # (m²) : 0,1 m sous la garde → 1 000 (quasi intouchable)
 const POIDS_ECART: float = 0.002        # (m²) : 10 m d'écart au départ → 0,2
@@ -45,6 +48,9 @@ func _tick() -> void:
 
 
 func _calculer() -> void:
+	var sol_fin: bool = _main.relief.fin != null
+	if sol_fin:
+		LigneRemontee.ignorer_precalcul = false
 	var k_part: int = 0
 	var n_part: int = 1
 	var effort: int = 0
@@ -66,6 +72,8 @@ func _calculer() -> void:
 		if lg.teleski() or lg.tricable() or lg.vaetvient():
 			continue
 		rang += 1
+		if sol_fin and String(lg.name) in HAUTEURS_A_LA_MAIN:
+			continue
 		if not seules.is_empty():
 			if not seules.has(String(lg.name)):
 				continue
@@ -93,7 +101,7 @@ func _calculer() -> void:
 			var h: float = snappedf(lg._tetes[i] - lg.terrain(float(p["d"])), 0.01)
 			# (pylône de croisement, posé par le domaine : retrouvé par sa position)
 			var q: Dictionary = {"k": int(p["k"]), "h": h} if p.has("k") else {"croisement_d": snappedf(float(p["d"]), 0.1), "h": h}
-			if lg.balanciers_estimes:
+			if lg.balanciers_estimes and not sol_fin:
 				q["montee"] = p.get("montee")
 				q["descente"] = p.get("descente")
 			l.append(q)
@@ -104,6 +112,8 @@ func _calculer() -> void:
 	var nom: String = "geometrie.json" if n_part == 1 else "geometrie_%d.json" % (k_part + 1)
 	if not seules.is_empty():
 		nom = "geometrie_x_%s.json" % "_".join(seules)
+	if sol_fin:
+		nom = nom.replace("geometrie", "geometrie_fin")
 	var f := FileAccess.open("res://data/remontees/" + nom, FileAccess.WRITE)
 	f.store_string(JSON.stringify(sortie, " ", true))
 	print("BILAN dépassement %.0f° → %.0f° · pylônes > 1° %d → %d · portées sous la garde %d → %d" % bilan)
