@@ -7,6 +7,8 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## Version suivante (non publiée)
 
+**Modes allégés de la PWA : écran et relief.** En allégé 1 et 2 : densité d'écran limitée à 1,5 (2388×1668 → 1791×1251), photo du relief à 1 024 px de large. Sous WebKit : textures 147 → 111 Mo, tampons de rendu 30 → 17 Mo. Le mode normal ne change pas. Contrôlé : les boutons répondent au bon endroit et l'interface s'affiche en entier ; le relief plus flou n'a pas été jugé à l'écran.
+
 **Relief fin à 5 m sur tout le domaine** (PC partis au cran 0 ; ni le web ni les crans suivants, relief à 25 m inchangé, vérifié ligne à ligne sur le câble et le sol). Altitude IGN RGE ALTI (`tools_relief_fin.py`), 15,5 Mo, fusion en C++ ; sans le module, repli sur 25 m avec un message au journal. Le choix est fait au chargement et ne suit pas le régulateur : changer de cran ne bouge ni le sol ni le câble (banc du relief fin).
 
 **Pylônes réajustés sur ce sol** (`data/remontees/geometrie_fin.json`, 45 lignes) : hauteurs seules, jamais plus de 4 m au-dessus de celles à 25 m ni au-delà des bornes mesurées ; Leissières et deux pylônes de Borsat posés à la main. Sur 63 lignes : dépassement des galets 629° → 628°, pylônes au-delà de 1° 174 → 169. Écarts connus : Rogoney, Vallon de l'Iseran et Borsat perdent en galets ; la mesure de contact (`bench_sol_lignes_3d.gd`, prudente) voit encore 10 lignes contre 17 à 25 m où un véhicule pourrait toucher, dont la perche du Col du Palet.

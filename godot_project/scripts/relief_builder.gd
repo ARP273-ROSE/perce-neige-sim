@@ -522,8 +522,10 @@ func _image_ortho(chemin: String) -> Image:
 		img = (load(chemin) as Texture2D).get_image()
 	if img.is_compressed():
 		img.decompress()
-	if img.get_width() > _ortho_l:
-		img.resize(_ortho_l, int(img.get_height() * float(_ortho_l) / img.get_width()),
+	# (mode allégé de la PWA : 25 Mo de moins, 03/11/2026)
+	var larg: int = mini(_ortho_l, 1024) if PerfManager.secours_web > 0 else _ortho_l
+	if img.get_width() > larg:
+		img.resize(larg, int(img.get_height() * float(larg) / img.get_width()),
 			Image.INTERPOLATE_LANCZOS)
 	img.generate_mipmaps()
 	return img
