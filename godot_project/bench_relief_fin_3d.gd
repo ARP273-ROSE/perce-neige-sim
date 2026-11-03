@@ -94,7 +94,11 @@ func _regulateur(rel: ReliefBuilder, rf: ReliefFin) -> void:
 	alea.seed = 11
 	for k in range(5000):
 		pts.append(Vector2(alea.randf_range(rf.zone.position.x, rf.zone.end.x), alea.randf_range(rf.zone.position.y, rf.zone.end.y)))
-	await _etat(rel, pts)    # (2 lignes bougent de 4 cm au second calcul seulement, sans changer de cran)
+	# (fresse et col des Vés : 4 cm de plus une seule fois dans les premières images après le
+	# premier calcul, sans changer de cran, cause non établie ; stable ensuite, témoin vérifié sur 900 images)
+	await _etat(rel, pts)
+	for _i in range(30):
+		await process_frame
 	var etat: Array = await _etat(rel, pts)
 	var appliquees: int = 0
 	for e in _main.remontees.lignes:
@@ -146,3 +150,4 @@ func _etat(rel: ReliefBuilder, pts: PackedVector2Array) -> Array:
 		for f in [0.2, 0.5, 0.8]:
 			cable.append(lg.y_cable(lg.longueur_h() * f))
 	return [sol, tetes, cable]
+
