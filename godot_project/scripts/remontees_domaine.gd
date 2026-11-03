@@ -682,7 +682,9 @@ func _vider_poubelle() -> void:
 const CUIT_PROCHE: float = 450.0
 const CUIT_DEMOLIR: float = 650.0
 static var dossier_cuites: String = "user://cuites"
-var _cuit_actif: bool = "--cuit" in OS.get_cmdline_user_args()
+var _cuit_actif: bool = "--cuit" in OS.get_cmdline_user_args() or OS.has_feature("web")
+var _cuit_http: HTTPRequest = null
+var _cuit_attente: bool = false
 var _fichiers_cuits: Dictionary = {}
 var _cuites: Dictionary = {}                # clé → LigneCuite posée
 var _cuit_tache: int = -1
@@ -699,6 +701,8 @@ func _a_cuit(lg: LigneRemontee) -> bool:
 	if not _cuit_actif:
 		return false
 	var nom: String = String(lg.name)
+	if OS.has_feature("web"):
+		return _fichiers_cuits.get(nom, true)     # (sur le serveur ; faux dès qu'un téléchargement échoue)
 	if not _fichiers_cuits.has(nom):
 		_fichiers_cuits[nom] = FileAccess.file_exists(LigneCuite.chemin(dossier_cuites, nom, OS.has_feature("web")))
 	return _fichiers_cuits[nom]
@@ -752,7 +756,7 @@ func _gerer_cuites(delta: float) -> void:
 	if _t_cuit_dist > 0.0:
 		return
 	_t_cuit_dist = 0.25
-	if _cuit_tache >= 0:
+	if _cuit_tache >= 0 or _cuit_attente:
 		return
 	var best: LigneRemontee = null
 	var d_best: float = INF
@@ -774,7 +778,9 @@ func _gerer_cuites(delta: float) -> void:
 		_cuit_ligne = best
 		_cuit_scenario = get_world_3d().scenario
 		_cuit_en_cours.preparer_chemin(LigneCuite.chemin(dossier_cuites, String(best.name), OS.has_feature("web")))
-		if LigneRemontee._fil_possible():
+		if OS.has_feature("web"):
+			_telecharger_cuite(String(best.name))
+		elif LigneRemontee._fil_possible():
 			_cuit_tache = WorkerThreadPool.add_task(_poser_cuite, false, "ligne cuite")
 		else:
 			# (PWA sans fils : d'un bloc sur le fil principal, une ligne à la fois, 25 + 22 ms à Tovière sous
@@ -783,6 +789,36 @@ func _gerer_cuites(delta: float) -> void:
 			if _cuit_en_cours.cle != "":
 				_cuites[_cuit_en_cours.cle] = _cuit_en_cours
 			_cuit_en_cours = null
+
+
+## PWA : le fichier vient du serveur, une ligne à la fois, à la version près ; si ça échoue (hors
+## ligne, fichier absent) la ligne reprend les seuils de construction habituels.
+func _telecharger_cuite(nom: String) -> void:
+	if _cuit_http == null:
+		_cuit_http = HTTPRequest.new()
+		add_child(_cuit_http)
+		_cuit_http.request_completed.connect(_cuite_recue)
+	var base: String = str(JavaScriptBridge.eval("new URL('cuites/',location.href).href", true))
+	_cuit_attente = true
+	if _cuit_http.request("%s%s.web.cuit?v=%s" % [base, nom, PNConstants.VERSION_APP]) != OK:
+		_cuit_attente = false
+		_fichiers_cuits[nom] = false
+		_cuit_en_cours = null
+
+
+func _cuite_recue(resultat: int, code: int, _entetes: PackedStringArray, corps: PackedByteArray) -> void:
+	_cuit_attente = false
+	var lc: LigneCuite = _cuit_en_cours
+	_cuit_en_cours = null
+	if lc == null or _cuit_ligne == null:
+		return
+	var nom: String = String(_cuit_ligne.name)
+	if resultat != HTTPRequest.RESULT_SUCCESS or code != 200 or not lc.lire_octets(corps):
+		_fichiers_cuits[nom] = false
+		return
+	lc.poser(get_world_3d().scenario, false)
+	if lc.cle != "":
+		_cuites[lc.cle] = lc
 
 
 func _poser_cuite() -> void:
