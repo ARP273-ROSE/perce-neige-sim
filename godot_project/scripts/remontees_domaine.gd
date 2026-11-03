@@ -570,9 +570,9 @@ func _ready() -> void:
 		# (l'iPad se présente en Mac : on le reconnaît au tactile. WebGL y a lâché à 265 Mo, puis à 199 Mo
 		# en secours 1, au Lac de Tignes, le 03/11/2026)
 		var telephone: bool = bool(JavaScriptBridge.eval("/Mobile|Android/.test(navigator.userAgent)||(/Macintosh/.test(navigator.userAgent)&&navigator.maxTouchPoints>1)", true))
-		# (sommets soudés depuis le 03/11/2026 : base skieur ~94 Mo au lieu de 145 ; à budget égal,
-		# on construisait davantage de lignes, donc davantage de tampons)
-		_budget_tampons_mo = [150.0 if telephone else 350.0, 120.0 if telephone else 180.0, 105.0 if telephone else 140.0][clampi(PerfManager.secours_web, 0, 2)]
+		# (sommets soudés et tampons 2D réduits, 03/11/2026 : base skieur ~50 Mo au lieu de 145 ; à budget
+		# égal, on construisait davantage de lignes, donc davantage de tampons)
+		_budget_tampons_mo = [100.0 if telephone else 300.0, 75.0 if telephone else 130.0, 60.0 if telephone else 90.0][clampi(PerfManager.secours_web, 0, 2)]
 		if telephone and PerfManager.secours_web > 0:
 			# (secours 2 : seule la ligne où l'on arrive ; perte à 160 Mo le 03/11/2026)
 			_budget_proche = 250.0 if PerfManager.secours_web == 1 else 120.0
