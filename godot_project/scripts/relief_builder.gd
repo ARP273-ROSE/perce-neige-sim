@@ -225,6 +225,7 @@ void fragment() {
 
 var tunnel: TunnelBuilder = null
 var _h: PackedFloat32Array = PackedFloat32Array()
+var fin: ReliefFin = null               # essai : zone à 4 m, voir ReliefFin
 var _dx: float = 1.0
 var _dz: float = 1.0
 ## Prêt à être affiché (construction terminée).
@@ -374,7 +375,13 @@ func _preparer(fin_us: int) -> void:
 				_decoder_ligne_lointaine(_k - nz)
 			_k += 1
 			if _k >= nz + ReliefLointainDonnees.N:
+				var h0: PackedFloat32Array = _h.duplicate() if ReliefFin.voulu() else PackedFloat32Array()
 				_creuser_gares()
+				if not h0.is_empty():
+					var rf: ReliefFin = ReliefFin.new()
+					rf.preparer(self, h0)
+					if rf.pret:
+						fin = rf
 				_etape = 1
 				_k = 0
 				_octets = PackedByteArray()
@@ -553,6 +560,8 @@ func _creer_maillages(fin_us: int) -> void:
 	_build_lieux()
 	_tableaux.clear()
 	_etape = 3
+	if fin != null and fin.get_parent() == null:
+		add_child(fin)
 	pret = true
 	print("[Relief] prêt")
 
@@ -576,6 +585,11 @@ func _materiaux() -> void:
 ## Altitude sur les triangles du maillage du bloc (comme les tuiles) : les
 ## pièces fines s'y raccordent sans marche.
 func _hauteur_tri(x: float, z: float) -> float:
+	var b: float = _tri_sur(_h, x, z)
+	return b + fin.delta(x, z) if fin != null else b
+
+
+func _tri_sur(grille: PackedFloat32Array, x: float, z: float) -> float:
 	var lim_x: int = ReliefDonnees.NX - 1
 	var lim_z: int = ReliefDonnees.NZ - 1
 	var fx: float = clampf((x - ReliefDonnees.X_OUEST) / _dx, 0.0, lim_x - 0.001) / _pas
@@ -587,10 +601,10 @@ func _hauteur_tri(x: float, z: float) -> float:
 	var j1: int = mini(j0 + _pas, lim_x)
 	var i1: int = mini(i0 + _pas, lim_z)
 	var n: int = ReliefDonnees.NX
-	var a: float = _h[i0 * n + j0]
-	var b: float = _h[i0 * n + j1]
-	var c: float = _h[i1 * n + j0]
-	var d: float = _h[i1 * n + j1]
+	var a: float = grille[i0 * n + j0]
+	var b: float = grille[i0 * n + j1]
+	var c: float = grille[i1 * n + j0]
+	var d: float = grille[i1 * n + j1]
 	# même découpe que les tuiles : (a, a+1, a+w) puis (a+1, a+w+1, a+w)
 	if wx + wz <= 1.0:
 		return a + (b - a) * wx + (c - a) * wz
@@ -1116,8 +1130,9 @@ func _hauteur_bloc(x: float, z: float) -> float:
 	var u: float = fx - j
 	var v: float = fz - i
 	var n: int = ReliefDonnees.NX
-	return lerpf(lerpf(_h[i * n + j], _h[i * n + j + 1], u),
+	var hb: float = lerpf(lerpf(_h[i * n + j], _h[i * n + j + 1], u),
 		lerpf(_h[(i + 1) * n + j], _h[(i + 1) * n + j + 1], u), v)
+	return hb + fin.delta(x, z) if fin != null else hb
 
 
 ## Altitude partout : bloc détaillé, sinon anneau lointain.

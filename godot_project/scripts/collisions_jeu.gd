@@ -152,7 +152,13 @@ func assurer_autour(p: Vector3) -> void:
 			for bi in range(4):
 				for bj in range(4):
 					var bloc: Rect2 = Rect2(r2.position + r2.size * 0.25 * Vector2(bi, bj), r2.size * 0.25)
-					_taches.append(_terrain.bind(relief, bloc, TERRAIN_GRILLE))
+					# (zone du relief fin : 16 fois plus de triangles, bloc redécoupé pour tenir dans le budget)
+					if relief.fin != null and relief.fin.zone.intersects(bloc):
+						for bk in range(16):
+							var sb: Rect2 = Rect2(bloc.position + bloc.size * 0.25 * Vector2(bk % 4, bk / 4), bloc.size * 0.25)
+							_taches.append(_terrain.bind(relief, sb, TERRAIN_GRILLE))
+					else:
+						_taches.append(_terrain.bind(relief, bloc, TERRAIN_GRILLE))
 			_taches.append(_terrain.bind(relief, r2, TERRAIN_PIECES))
 			if synchrone_sans_ecran and DisplayServer.get_name() == "headless":
 				_avancer(1 << 62)
@@ -703,6 +709,24 @@ const TERRAIN_GRILLE: int = 1
 const TERRAIN_PIECES: int = 2
 
 
+func _mailles_fines(relief: ReliefBuilder, m: Rect2, faces: PackedVector3Array) -> void:
+	var rf: ReliefFin = relief.fin
+	var p: float = ReliefFin.PAS
+	var j0: int = int(floor((m.position.x - rf.x0) / p))
+	var j1: int = int(ceil((m.end.x - rf.x0) / p))
+	var i0: int = int(floor((m.position.y - rf.z0) / p))
+	var i1: int = int(ceil((m.end.y - rf.z0) / p))
+	for i in range(i0, i1):
+		var z: float = rf.z0 + i * p
+		for j in range(j0, j1):
+			var x: float = rf.x0 + j * p
+			var a: Vector3 = Vector3(x, relief._hauteur_tri(x, z), z)
+			var b: Vector3 = Vector3(x + p, relief._hauteur_tri(x + p, z), z)
+			var c: Vector3 = Vector3(x, relief._hauteur_tri(x, z + p), z + p)
+			var d: Vector3 = Vector3(x + p, relief._hauteur_tri(x + p, z + p), z + p)
+			faces.append_array([a, b, c, b, d, c])
+
+
 func _terrain(relief: ReliefBuilder, r: Rect2, quoi: int = TERRAIN_TOUT) -> void:
 	var faces: PackedVector3Array = PackedVector3Array()
 	var pieces: Array = relief._rects_pieces
@@ -728,6 +752,10 @@ func _terrain(relief: ReliefBuilder, r: Rect2, quoi: int = TERRAIN_TOUT) -> void
 					dans_piece = true     # recouverte par la pièce fine (ci-dessous)
 					break
 			if dans_piece:
+				continue
+			# zone du relief fin : mailles de 4 m, le sol que voit et que skie le joueur
+			if relief.fin != null and relief.fin.zone.intersects(maille):
+				_mailles_fines(relief, maille, faces)
 				continue
 			var pa: Vector3 = Vector3(x0, relief._h[(i * p) * n + j * p], z0)
 			var pb: Vector3 = Vector3(x0 + dx, relief._h[(i * p) * n + (j + 1) * p], z0)
