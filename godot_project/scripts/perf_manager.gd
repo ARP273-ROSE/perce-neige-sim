@@ -20,9 +20,9 @@ extends Node
 ## cockpit ») : la RÉSOLUTION du rendu est le tout dernier recours, et
 ## jamais sous 85 % — avant elle, on coupe les effets puis on verrouille la
 ## cadence à 30 i/s, lisible :
-##   0 tout : SDFGI, brouillard volumétrique, SSR, MSAA (×4), halo, rendu 100 %
+##   0 tout : SDFGI, brouillard volumétrique, MSAA (×4), halo, rendu 100 %
 ##   1 sans SDFGI (éclairage indirect)
-##   2 + sans brouillard volumétrique ni SSR
+##   2 + sans brouillard volumétrique
 ##   3 + sans MSAA
 ##   4 + sans halo (glow)
 ##   5 + cadence verrouillée à 30 i/s (régulière plutôt que 40-55 en dents de scie)
@@ -235,7 +235,6 @@ func _appliquer(c: int, pourquoi: String) -> void:
 	if _env != null and _rd:
 		_env.sdfgi_enabled = cran <= 0
 		_env.volumetric_fog_enabled = cran <= 1
-		_env.ssr_enabled = cran <= 1
 	if _env != null:
 		_env.glow_enabled = cran <= (4 if _web else 3)
 	cran_courant = cran
@@ -366,12 +365,28 @@ func _verifier_retrait() -> void:
 ## Premier nœud servi à chaque image : top de départ du chrono des scripts.
 class _DebutImage extends Node:
 	var t_us: int = 0
+	var t_phys_us: int = 0
+	var phys_ms: float = 0.0
+	var t_fin_us: int = 0       # fin des scripts de l'image précédente (posé par le PerfManager)
+	var apres_ms: float = 0.0   # de cette fin au début de l'image suivante : dessin, synchro, attente
 
 	func _ready() -> void:
 		process_priority = -PRIORITE_CHRONO
+		process_physics_priority = -PRIORITE_CHRONO
+
+	func _physics_process(_delta: float) -> void:
+		if t_phys_us == 0:
+			t_phys_us = Time.get_ticks_usec()
 
 	func _process(_delta: float) -> void:
 		t_us = Time.get_ticks_usec()
+		# physique de CETTE image : du premier pas au début des scripts. Le moniteur
+		# du moteur donne le maximum de la dernière seconde : un seul pas lent de
+		# 30 ms comptait pour 60 images (relevé 4K, 03/11/2026)
+		phys_ms = float(t_us - t_phys_us) / 1000.0 if t_phys_us != 0 else 0.0
+		var debut: int = t_phys_us if t_phys_us != 0 else t_us
+		apres_ms = float(debut - t_fin_us) / 1000.0 if t_fin_us != 0 else 0.0
+		t_phys_us = 0
 
 
 ## Travail réel du fil principal sur cette image : scripts + physique.
@@ -380,10 +395,9 @@ class _DebutImage extends Node:
 ## une RTX 5070 Ti restait au détail 2 (relevé F10 du 01/11/2026 : « principal »
 ## 17,4 ms pour une image de 16,67 ms), le retour exigeant moins de 8,3 ms.
 func _travail_ms() -> float:
-	var physique: float = float(Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS)) * 1000.0
 	if _debut_image == null or _debut_image.t_us == 0:
-		return physique
-	return float(Time.get_ticks_usec() - _debut_image.t_us) / 1000.0 + physique
+		return float(Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS)) * 1000.0
+	return float(Time.get_ticks_usec() - _debut_image.t_us) / 1000.0 + _debut_image.phys_ms
 
 
 func _process(delta: float) -> void:
@@ -424,6 +438,8 @@ func _process_corps(delta: float) -> void:
 			_t_etat_web = 2.0
 			_publier_etat_web()
 	var t_us: int = Time.get_ticks_usec()
+	if _debut_image != null:
+		_debut_image.t_fin_us = t_us
 	if _t_prec_us == 0:
 		_t_prec_us = t_us
 		return
@@ -604,7 +620,7 @@ func releve() -> void:
 	_lecteurs = []
 	for c in get_tree().root.find_children("*", "AudioStreamPlayer", true, false) + get_tree().root.find_children("*", "AudioStreamPlayer3D", true, false):
 		_lecteurs.append(c)
-	_rel = PackedStringArray(["t_s;image_ms;principal_ms;rendu_ms;gpu_ms;appels;objets;primitives;cran;detail;x;y;z;construit"])
+	_rel = PackedStringArray(["t_s;image_ms;principal_ms;rendu_ms;gpu_ms;appels;objets;primitives;cran;detail;x;y;z;construit;physique_ms;apres_ms"])
 	_log("[Relevé] enregistrement %d s…" % int(RELEVE_S))
 	if main != null and main.has_method("_flash"):
 		main.call("_flash", "Relevé de fluidité : %d s — skiez, prenez une remontée…" % int(RELEVE_S))
@@ -614,11 +630,29 @@ var _moteur: Dictionary = {}
 var _lecteurs: Array = []
 
 
+## Image lente pendant un relevé : ce qui l'a occupée, pour chercher sans deviner.
+func _noter_pic(dt: float) -> void:
+	var pr: float = float(_t_princ[_t_princ.size() - 1]) if not _t_princ.is_empty() else 0.0
+	var ph: float = _debut_image.phys_ms if _debut_image != null else 0.0
+	var ap: float = _debut_image.apres_ms if _debut_image != null else 0.0
+	if _rel_t > 0.2 and (dt > 0.025 or pr - ph > 12.0 or ph > 12.0 or ap > 25.0):
+		var cles: Array = Prof.image.keys()
+		cles.sort_custom(func(a: Variant, b: Variant) -> bool: return int(Prof.image[a]) > int(Prof.image[b]))
+		var haut: PackedStringArray = PackedStringArray()
+		for k in cles.slice(0, 4):
+			haut.append("%s %.1f" % [k, float(Prof.image[k]) / 1000.0])
+		_log("[Pic] t=%.2f image %.1f ; scripts %.1f, physique %.1f, après %.1f ; %s ; étape %s ; physique : %d actifs, %d paires" % [
+			_rel_t, dt * 1000.0, pr - ph, ph, ap, ", ".join(haut), LigneRemontee.derniere_etape,
+			PhysicsServer3D.get_process_info(PhysicsServer3D.INFO_ACTIVE_OBJECTS), PhysicsServer3D.get_process_info(PhysicsServer3D.INFO_COLLISION_PAIRS)])
+	Prof.image.clear()
+
+
 func _releve_image(dt: float) -> void:
 	if _rel_t < 0.0:
 		return
+	_noter_pic(dt)
 	_rel_t += dt
-	_moteur["phys"] = float(_moteur["phys"]) + float(Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS)) * 1000.0
+	_moteur["phys"] = float(_moteur["phys"]) + (_debut_image.phys_ms if _debut_image != null else 0.0)
 	_moteur["n"] = int(_moteur["n"]) + 1
 	_moteur["actifs"] = maxi(int(_moteur["actifs"]), int(Performance.get_monitor(Performance.PHYSICS_3D_ACTIVE_OBJECTS)))
 	_moteur["paires"] = maxi(int(_moteur["paires"]), int(Performance.get_monitor(Performance.PHYSICS_3D_COLLISION_PAIRS)))
@@ -634,7 +668,7 @@ func _releve_image(dt: float) -> void:
 	var p: Vector3 = sk.global_position if sk != null and sk.get("actif") else Vector3.ZERO
 	var rm: Node = main.get("remontees") if main != null else null
 	var ec: Node = rm.get("_en_cours") if rm != null else null
-	_rel.append("%.3f;%.2f;%.2f;%.2f;%.2f;%d;%d;%d;%d;%d;%.0f;%.0f;%.0f;%s" % [
+	_rel.append("%.3f;%.2f;%.2f;%.2f;%.2f;%d;%d;%d;%d;%d;%.0f;%.0f;%.0f;%s;%.2f;%.2f" % [
 		_rel_t, dt * 1000.0, _t_princ[_t_princ.size() - 1] if not _t_princ.is_empty() else 0.0,
 		_t_rendu[_t_rendu.size() - 1] if not _t_rendu.is_empty() else 0.0,
 		_t_gpu[_t_gpu.size() - 1] if not _t_gpu.is_empty() else 0.0,
@@ -642,7 +676,7 @@ func _releve_image(dt: float) -> void:
 		Performance.get_monitor(Performance.RENDER_TOTAL_OBJECTS_IN_FRAME),
 		Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME),
 		cran, int(rm.get("niveau_detail")) if rm != null else 0, p.x, p.y, p.z,
-		str(ec.name) if ec != null else ""])
+		str(ec.name) if ec != null else "", _debut_image.phys_ms if _debut_image != null else 0.0, _debut_image.apres_ms if _debut_image != null else 0.0])
 	if _rel_t >= RELEVE_S:
 		_finir_releve()
 

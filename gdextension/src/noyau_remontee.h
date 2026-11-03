@@ -18,6 +18,7 @@
 #include <godot_cpp/variant/rid.hpp>
 #include <godot_cpp/variant/transform3d.hpp>
 #include <godot_cpp/variant/array.hpp>
+#include <godot_cpp/variant/packed_byte_array.hpp>
 #include <godot_cpp/variant/packed_float32_array.hpp>
 #include <godot_cpp/variant/packed_float64_array.hpp>
 #include <godot_cpp/variant/packed_int32_array.hpp>
@@ -100,6 +101,10 @@ protected:
 	static void _bind_methods();
 
 public:
+	// Relief fin (relief_fin.gd) : altitudes des nœuds de la grille fine, fusion du relief à
+	// 25 m et de l'écart lu. Renvoie [altitudes, mailles fines, relief à 25 m recalé].
+	Array fusion_relief(const PackedFloat32Array &h, const PackedFloat32Array &h0, const PackedByteArray &ecart,
+			int nx, int nz, int k, const PackedFloat32Array &rects, double x0, double z0, double dx, double dz) const;
 	void set_boucle(const PackedVector3Array &p_boucle, const PackedFloat32Array &p_cumul, double p_longueur);
 	void set_zones(const PackedFloat32Array &debut, const PackedFloat32Array &fin, const PackedInt32Array &code,
 			const PackedFloat32Array &x_haut, const PackedFloat32Array &x_bas);

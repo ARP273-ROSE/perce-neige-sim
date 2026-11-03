@@ -217,7 +217,7 @@ func _tick() -> void:
 			if sk.chemin.is_empty() or _t_phase > 30.0:
 				var ga3: GareAmont = _main.station_halls.gare_amont
 				var bas: float = ga3._o.y - GareAmont.ESC_HAUT
-				var sol: float = relief.hauteur(sk.global_position.x, sk.global_position.z)
+				var sol: float = relief.hauteur_sol(sk.global_position.x, sk.global_position.z)   # (sol affiché : la pièce fine de la gare)
 				_verif("terrasse : l'escalier du bout descend jusqu'à la neige",
 					sk.chemin.is_empty() and sk.is_on_floor() and absf(sk.global_position.y - bas) < 0.25
 						and absf(sk.global_position.y - sol) < 0.25 and sk.dehors(relief),

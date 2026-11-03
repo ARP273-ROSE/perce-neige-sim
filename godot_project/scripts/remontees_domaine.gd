@@ -51,7 +51,34 @@ var _portees_base: Array = []
 
 
 ## PC à carte intégrée, dernier cran du régulateur : portées de la PWA.
+## Véhicules plus loin au cran 0 du PC (1 400 m contre 700) : suivi du régulateur,
+## appliqué par tranches comme tout changement de détail.
+const VEHICULES_CRAN_0: float = 1400.0
+const VEHICULES_PC: float = 700.0
+var _portee_cran_0: bool = false
+
+
+func _suivre_cran() -> void:
+	if OS.has_feature("web"):
+		return
+	var oui: bool = PerfManager.cran_courant <= 0 and not _portees_pc_reduites
+	if oui == _portee_cran_0:
+		return
+	_portee_cran_0 = oui
+	if _portees_base.is_empty():
+		_portees_base = [VEHICULES_JUSQUA, DETAILS_JUSQUA, _f_lod]
+	_portees_base[0] = VEHICULES_CRAN_0 if oui else VEHICULES_PC
+	var n: int = niveau_detail
+	niveau_detail = -1
+	set_niveau_detail(n)
+
+
+var _portees_pc_reduites: bool = false
+
+
 func set_portees_reduites(oui: bool) -> void:
+	_portees_pc_reduites = oui
+	_portee_cran_0 = false
 	CONSTRUIRE_JUSQUA = 1200.0 if oui else 2000.0
 	DEMOLIR_AU_DELA = 2200.0 if oui else 3500.0
 	# les portées de base : set_niveau_detail en repart, à n'importe quel niveau
@@ -60,6 +87,54 @@ func set_portees_reduites(oui: bool) -> void:
 	var n: int = 2 if oui else niveau_detail
 	niveau_detail = -1
 	set_niveau_detail(n)
+
+
+## Sous terre, tout est caché : ligne par ligne, la plus proche montrée en premier. Le domaine
+## entier d'un coup prenait 48 ms en sortant du tunnel, 24 ms en y entrant (relevé 4K, 02/11/2026).
+var _lignes_montrees: bool = true
+var _file_visibilite: Array = []
+const BUDGET_VISIBILITE_US: int = 1500
+
+
+func _montrer_lignes(oui: bool, p: Vector3) -> void:
+	_lignes_montrees = oui
+	_file_visibilite.clear()
+	for c in get_children():
+		if c is Node3D and (c as Node3D).visible != oui:
+			_file_visibilite.append(c)
+	# (file lue par la fin : la plus lointaine au début)
+	_file_visibilite.sort_custom(func(a, b): return (a as Node3D).global_position.distance_squared_to(p) > (b as Node3D).global_position.distance_squared_to(p))
+
+
+func _avancer_visibilite() -> void:
+	var t0: int = Time.get_ticks_usec()
+	while not _file_visibilite.is_empty() and Time.get_ticks_usec() - t0 < BUDGET_VISIBILITE_US:
+		var n: Variant = _file_visibilite.pop_back()
+		if is_instance_valid(n):
+			(n as Node3D).visible = _lignes_montrees
+
+
+var _portees_a_revoir: Array = []
+var _file_portees: Array = []
+const BUDGET_PORTEES_US: int = 1500
+
+
+func _revoir_portees() -> void:
+	if _portees_a_revoir.is_empty() and _file_portees.is_empty():
+		return
+	var t0: int = Time.get_ticks_usec()
+	while Time.get_ticks_usec() - t0 < BUDGET_PORTEES_US:
+		if _file_portees.is_empty():
+			if _portees_a_revoir.is_empty():
+				return
+			var lg_p: Variant = _portees_a_revoir.pop_back()
+			if is_instance_valid(lg_p):
+				_portees_amorce(lg_p, _file_portees)
+				(lg_p as LigneRemontee).regler_portee_vehicules(VEHICULES_JUSQUA)
+			continue
+		var e: Array = _file_portees.pop_back()
+		if is_instance_valid(e[0]) and is_instance_valid(e[1]):
+			_portee_noeud(e, _file_portees)
 
 
 func set_niveau_detail(n: int) -> void:
@@ -72,9 +147,13 @@ func set_niveau_detail(n: int) -> void:
 	VEHICULES_JUSQUA = float(_portees_base[0]) * [1.0, 0.7, 0.5][n]
 	DETAILS_JUSQUA = float(_portees_base[1]) * [1.0, 0.7, 0.5][n]
 	_f_lod = float(_portees_base[2]) * [1.0, 0.75, 0.5][n]
+	# par petites tranches : toutes les lignes d'un coup faisaient une image de 72 à 103 ms à
+	# chaque changement de détail, et une ligne seule jusqu'à 26 ms (relevé 4K, 02/11/2026)
+	_portees_a_revoir.clear()
+	_file_portees.clear()
 	for e in lignes:
 		if (e[0] as LigneRemontee).pret:
-			_portees(e[0])
+			_portees_a_revoir.append(e[0])
 signal message(texte: String)
 ## Pique sarcastique (PiquesRemontees) : événement, remontée.
 signal pique(evt: String, lg: LigneRemontee)
@@ -194,6 +273,25 @@ func _jumeler() -> void:
 		haut.periode_imposee = 2.0 * bas.periode_imposee
 		haut.espacement = haut.periode_imposee * haut.vitesse
 		haut.rampes = [0.0, haut.rampes[1]]
+
+
+## Hauteurs des pylônes sur le relief fin (precalcul_geometrie.gd sur ce sol-là), par-dessus
+## celles des données, ligne par ligne. Suit le relief chargé, jamais le cran courant : le
+## régulateur peut changer de cran sans que le câble bouge. Sans relief fin ou sans fichier :
+## les hauteurs des données.
+const GEOMETRIE_FIN: String = "res://data/remontees/geometrie_fin.json"
+var _geo_fin: Variant = null
+static var sans_geometrie_fin: bool = false    # (l'outil de précalcul part des hauteurs des données)
+
+
+func _geometrie_fin() -> Dictionary:
+	if _geo_fin == null:
+		_geo_fin = {}
+		if not sans_geometrie_fin and relief != null and relief.fin != null and FileAccess.file_exists(GEOMETRIE_FIN):
+			var lu: Variant = JSON.parse_string(FileAccess.get_file_as_string(GEOMETRIE_FIN))
+			if lu is Dictionary:
+				_geo_fin = lu
+	return _geo_fin
 
 
 func _poser(D: Dictionary) -> void:
@@ -327,10 +425,19 @@ func _poser(D: Dictionary) -> void:
 	var cle_l: String = String(D["cle"])
 	var mini_galets: bool = cle_l.begins_with("tcd") or cle_l.begins_with("tsd") \
 			or (cle_l.begins_with("tsf") and not cle_l in TSF_DEBUTANTS)
+	var fines: Dictionary = {}
+	var croisements_fins: Array = []
+	for e_f in _geometrie_fin().get(cle_l, []):
+		if (e_f as Dictionary).has("k"):
+			fines[int(e_f["k"])] = float(e_f["h"])
+		else:
+			croisements_fins.append([float(e_f["croisement_d"]), float(e_f["h"])])
 	for kp in range((D["pylones"] as Array).size()):
 		var p: Dictionary = D["pylones"][kp]
 		var q: Dictionary = p.duplicate()
 		q["k"] = kp                     # (rang dans les données : géométrie précalculée)
+		if fines.has(kp):
+			q["h"] = float(fines[kp])
 		if mini_galets:
 			for sens in ["montee", "descente"]:
 				if q.has(sens):
@@ -349,7 +456,7 @@ func _poser(D: Dictionary) -> void:
 		if dg > 0.0 and dg < L:
 			hm.append(Vector2(dg, float(g[1])))
 	lg.hauteurs_mesurees = hm
-	lg.set_meta("h_croisements", D.get("h_croisements", []))
+	lg.set_meta("h_croisements", croisements_fins if not croisements_fins.is_empty() else D.get("h_croisements", []))
 	var ru: PackedFloat32Array = PackedFloat32Array()
 	for dr in D.get("ruisseaux", []):
 		var wr: Vector2 = a0 + u0 * (float(dr) * L0 / maxf(Ld, 1.0))
@@ -403,6 +510,13 @@ func _poser(D: Dictionary) -> void:
 ## Distances de visibilité : véhicules proches seulement, pylônes et câble loin.
 ## (`racine` : la ligne, ou le contenu en construction hors de la scène)
 func _portees(racine: Node) -> void:
+	var file: Array = []
+	_portees_amorce(racine, file)
+	while not file.is_empty():
+		_portee_noeud(file.pop_back(), file)
+
+
+func _portees_amorce(racine: Node, file: Array) -> void:
 	for c in racine.get_children():
 		# (véhicules lointains en MultiMesh : leur portée est gérée par le noyau,
 		# instance par instance — mesurée d'ici, depuis la gare aval, une portée
@@ -417,33 +531,36 @@ func _portees(racine: Node) -> void:
 		if not (c is VehiculeRemontee or c is PyloneRemontee or c is PyloneTreillis) and not String(c.name).begins_with("Gare") \
 				and String(c.name) != "Cable" and not (c is StaticBody3D):
 			portee = DETAILS_JUSQUA
-		var pile: Array = [[c, portee]]
-		while not pile.is_empty():
-			var e: Array = pile.pop_back()
-			var n: Node = e[0]
-			var pn: float = e[1]
-			# pièces de détail des véhicules, plaques des pylônes : de près seulement
-			if n.has_meta("detail") or n is Label3D:
-				pn = minf(pn, DETAILS_JUSQUA)
-			# paires de galets des pylônes (un objet chacune, pour s'animer au
-			# passage des pinces) : 7 800 objets visibles jusqu'à 3 km au pied
-			# des pistes (relevés de l'iPad du 27/10/2026) — à 150 m un galet ne
-			# se distingue plus
-			if String(n.name).begins_with("Paire"):
-				pn = minf(pn, GALETS_JUSQUA)
-			# pylônes : au loin, le fût et la tête seulement — plaques, caillebotis,
-			# massif et petites pièces de détail (1 850 objets pour 278 pylônes
-			# jusqu'à 3 km, un par matériau)
-			if c is PyloneRemontee and n is MeshInstance3D and (n as MeshInstance3D).mesh != null \
-					and (n as MeshInstance3D).mesh.get_surface_count() > 0:
-				var mt: Material = (n as MeshInstance3D).mesh.surface_get_material(0)
-				if mt != null and PORTEES_PIECES_PYLONE.has(mt.resource_name):
-					pn = minf(pn, float(PORTEES_PIECES_PYLONE[mt.resource_name]))
-			if n is GeometryInstance3D:
-				(n as GeometryInstance3D).visibility_range_end = pn
-				(n as GeometryInstance3D).visibility_range_end_margin = pn * 0.05
-			for k in n.get_children():
-				pile.append([k, pn])
+		file.append([c, c, portee])
+
+
+## Une pièce : sa portée, puis ses enfants dans la file.
+func _portee_noeud(e: Array, file: Array) -> void:
+	var c: Node = e[0]
+	var n: Node = e[1]
+	var pn: float = e[2]
+	# pièces de détail des véhicules, plaques des pylônes : de près seulement
+	if n.has_meta("detail") or n is Label3D:
+		pn = minf(pn, DETAILS_JUSQUA)
+	# paires de galets des pylônes (un objet chacune, pour s'animer au
+	# passage des pinces) : 7 800 objets visibles jusqu'à 3 km au pied
+	# des pistes (relevés de l'iPad du 27/10/2026) — à 150 m un galet ne
+	# se distingue plus
+	if String(n.name).begins_with("Paire"):
+		pn = minf(pn, GALETS_JUSQUA)
+	# pylônes : au loin, le fût et la tête seulement — plaques, caillebotis,
+	# massif et petites pièces de détail (1 850 objets pour 278 pylônes
+	# jusqu'à 3 km, un par matériau)
+	if c is PyloneRemontee and n is MeshInstance3D and (n as MeshInstance3D).mesh != null \
+			and (n as MeshInstance3D).mesh.get_surface_count() > 0:
+		var mt: Material = (n as MeshInstance3D).mesh.surface_get_material(0)
+		if mt != null and PORTEES_PIECES_PYLONE.has(mt.resource_name):
+			pn = minf(pn, float(PORTEES_PIECES_PYLONE[mt.resource_name]))
+	if n is GeometryInstance3D:
+		(n as GeometryInstance3D).visibility_range_end = pn
+		(n as GeometryInstance3D).visibility_range_end_margin = pn * 0.05
+	for k in n.get_children():
+		file.append([c, k, pn])
 
 
 func _ready() -> void:
@@ -567,6 +684,9 @@ func _process(delta: float) -> void:
 
 
 func _process_corps(delta: float) -> void:
+	_suivre_cran()
+	_revoir_portees()
+	_avancer_visibilite()
 	_vider_poubelle()
 	_construire_proches()
 	_embarquement()
@@ -588,12 +708,13 @@ func _process_corps(delta: float) -> void:
 	# fluide sur la PWA, retour d'utilisateur, 24/10/2026)
 	_sous_terre = relief != null and p.y < relief.hauteur_sol(p.x, p.z) - 6.0 and a_bord.is_empty()
 	if _sous_terre:
-		if visible:
-			visible = false
+		if _lignes_montrees:
+			_montrer_lignes(false, p)
 			for e in lignes:
 				(e[0] as LigneRemontee).set_process(false)
 		return
-	visible = true
+	if not _lignes_montrees:
+		_montrer_lignes(true, p)
 	# niveau de détail par ligne, selon la distance à la LIGNE (segment
 	# gare aval – gare amont) : véhicules invisibles au-delà de
 	# VEHICULES_JUSQUA → ligne figée ; au-delà de 300 m, une image sur
