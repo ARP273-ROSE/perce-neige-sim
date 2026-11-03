@@ -7,8 +7,6 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## Version suivante (non publiée)
 
-**Matériau palette sur la PWA** : couleur des matériaux unis passée dans les sommets, 16 matériaux partagés au lieu de centaines (web seulement ; banc : `--palette`). Au pied de Tovière en allégé 2, sous WebKit : 10 830 tampons contre 12 093 ; 112 Mo contre 114. Les programmes graphiques ne baissent pas (316 mesurés).
-
 **Relief fin à 5 m sur tout le domaine** (PC partis au cran 0 ; ni le web ni les crans suivants, relief à 25 m inchangé, vérifié ligne à ligne sur le câble et le sol). Altitude IGN RGE ALTI (`tools_relief_fin.py`), 15,5 Mo, fusion en C++ ; sans le module, repli sur 25 m avec un message au journal. Le choix est fait au chargement et ne suit pas le régulateur : changer de cran ne bouge ni le sol ni le câble (banc du relief fin).
 
 **Pylônes réajustés sur ce sol** (`data/remontees/geometrie_fin.json`, 45 lignes) : hauteurs seules, jamais plus de 4 m au-dessus de celles à 25 m ni au-delà des bornes mesurées ; Leissières et deux pylônes de Borsat posés à la main. Sur 63 lignes : dépassement des galets 629° → 628°, pylônes au-delà de 1° 174 → 169. Écarts connus : Rogoney, Vallon de l'Iseran et Borsat perdent en galets ; la mesure de contact (`bench_sol_lignes_3d.gd`, prudente) voit encore 10 lignes contre 17 à 25 m où un véhicule pourrait toucher, dont la perche du Col du Palet.
@@ -21,6 +19,12 @@ dédié, pour lui seul, assombrit la neige là où pylônes, véhicules et bâti
 
 **Fil principal à ski.** Collisions du tunnel construites pour un skieur sur la neige, pièces fines des gares refaites en double à chaque carré de relief (26 à 54 ms), portées de toutes
 les lignes réglées d'un bloc à chaque changement de détail (72 à 103 ms). Boucle de 11 min en 4K : images de plus de 25 ms à ski 20 → 2.
+
+## 1.53.8 — 3 novembre 2026 (PWA seule)
+
+**Tampon 2D réduit sur la PWA** : `gl_compatibility/item_buffer_size` de 16 384 à 2 048 éléments (web seulement) ; il réservait 28 tampons de 2 Mo. Plafonds tablette abaissés à 100, 75 et 60 Mo. Sous WebKit : menu 90 → 43 Mo ; au pied de Tovière, 109 Mo et 16 315 tampons en mode normal, 81 Mo et 13 236 en allégé 1, 65 Mo et 10 973 en allégé 2. Plantages réels à 265, 199 et 160 Mo. Effet sur l'iPad à vérifier, carte des pistes comprise.
+
+**Matériau palette sur la PWA** : couleur des matériaux unis passée dans les sommets, 16 matériaux partagés au lieu de centaines (web seulement ; banc : `--palette`). Au pied de Tovière en allégé 2, sous WebKit : 10 830 tampons contre 12 093 ; 112 Mo contre 114. Les programmes graphiques ne baissent pas (316 mesurés).
 
 ## 1.53.7 — 3 novembre 2026 (PWA seule)
 
