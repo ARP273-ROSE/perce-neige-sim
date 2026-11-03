@@ -609,7 +609,7 @@ func _build_platform_barrier(s_start: float, s_end: float, s_nez: float, side: f
 		var tubes_p: MeshInstance3D = MeshInstance3D.new()
 		tubes_p.name = "TubesPorte"
 		stp.set_material(bleu)
-		tubes_p.mesh = stp.commit()
+		tubes_p.mesh = MeshMerge.valider_indexe(stp)
 		tubes_p.transform = inv_p
 		tubes_p.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		vant.add_child(tubes_p)
@@ -649,7 +649,7 @@ func _build_platform_barrier(s_start: float, s_end: float, s_nez: float, side: f
 	var mi: MeshInstance3D = MeshInstance3D.new()
 	mi.name = "Tubes"
 	st.set_material(bleu)
-	mi.mesh = st.commit()
+	mi.mesh = MeshMerge.valider_indexe(st)
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	racine.add_child(mi)
 

@@ -197,12 +197,12 @@ func _construire() -> void:
 	st.set_material(_roche())
 	var tube: MeshInstance3D = MeshInstance3D.new()
 	tube.name = "Voute"
-	tube.mesh = st.commit()
+	tube.mesh = MeshMerge.valider_indexe(st)
 	add_child(tube)
 	st_t.set_material(_mat(Color(0.42, 0.24, 0.14), 0.75, 0.35))       # tôle ondulée rouillée
 	var tole_mi: MeshInstance3D = MeshInstance3D.new()
 	tole_mi.name = "Toles"
-	tole_mi.mesh = st_t.commit()
+	tole_mi.mesh = MeshMerge.valider_indexe(st_t)
 	add_child(tole_mi)
 	# cerces d'acier tous les 80 cm, un peu en dedans de la paroi
 	var cerces: Node3D = Node3D.new()
@@ -329,7 +329,7 @@ func _sortie(p: Vector3, sens: float) -> void:
 	st.set_material(mb)
 	var mi: MeshInstance3D = MeshInstance3D.new()
 	mi.name = "Bache"
-	mi.mesh = st.commit()
+	mi.mesh = MeshMerge.valider_indexe(st)
 	g.add_child(mi)
 	# sangles vertes
 	for z2 in [0.6, 1.4, 2.2]:

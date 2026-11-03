@@ -182,7 +182,7 @@ func _construire_tube() -> void:
 			st.generate_normals()
 			st.set_material(paroi)
 			var mi2: MeshInstance3D = MeshInstance3D.new()
-			mi2.mesh = st.commit()
+			mi2.mesh = MeshMerge.valider_indexe(st)
 			mi2.name = "Galerie"
 			mi2.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 			add_child(mi2)
@@ -252,7 +252,7 @@ func _construire_tete() -> void:
 	st.generate_normals()
 	st.set_material(_beton(Color(0.66, 0.66, 0.63)))
 	var mi: MeshInstance3D = MeshInstance3D.new()
-	mi.mesh = st.commit()
+	mi.mesh = MeshMerge.valider_indexe(st)
 	mi.name = "MurDeTete"
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(mi)

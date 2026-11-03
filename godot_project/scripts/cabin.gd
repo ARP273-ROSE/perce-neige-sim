@@ -293,6 +293,7 @@ func _merge_static_meshes() -> void:
 	for h in _horloges:
 		if h != null and (h as Node).get_parent() != null:
 			keep.append((h as Node).get_parent())
+	MeshMerge.partager_identiques = OS.has_feature("web") or "--partage-rames" in OS.get_cmdline_user_args()
 	var roots: Array = []
 	roots.append_array(_car_roots)
 	roots.append_array(_interior_cars)
@@ -314,8 +315,9 @@ func _merge_static_meshes() -> void:
 		MeshMerge.merge(w as Node3D, variantes)
 	for b in _bogies:
 		MeshMerge.merge(b as Node3D)
-	print("[Cabin%s] maillages fixes fusionnés : %d surfaces restantes" % [
-		" ghost" if is_ghost else "", _count_surfaces(self)])
+	MeshMerge.partager_identiques = false
+	print("[Cabin%s] maillages fixes fusionnés : %d surfaces restantes, %d sommets partagés, soudure %d ms" % [
+		" ghost" if is_ghost else "", _count_surfaces(self), MeshMerge.sommets_partages, MeshMerge.index_us / 1000])
 
 
 ## Le skieur à bord ne voit ni roues ni châssis de bogie : le plancher n'est
@@ -1068,7 +1070,7 @@ func _porte_skis(pal: Node3D, x: float, orange: StandardMaterial3D, gris: Standa
 	st.generate_normals()
 	st.set_material(orange)
 	var mi: MeshInstance3D = MeshInstance3D.new()
-	mi.mesh = st.commit()
+	mi.mesh = MeshMerge.valider_indexe(st)
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	pal.add_child(mi)
 

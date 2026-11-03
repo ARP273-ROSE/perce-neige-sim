@@ -738,14 +738,14 @@ func _commit_rail_chunk(st_rail: SurfaceTool, st_top: SurfaceTool, name: String)
 	st_rail.generate_tangents()
 	var mi: MeshInstance3D = MeshInstance3D.new()
 	mi.name = name
-	mi.mesh = st_rail.commit()
+	mi.mesh = MeshMerge.valider_indexe(st_rail)
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(mi)
 	st_top.generate_normals()
 	st_top.generate_tangents()
 	var mt: MeshInstance3D = MeshInstance3D.new()
 	mt.name = name + "Top"
-	mt.mesh = st_top.commit()
+	mt.mesh = MeshMerge.valider_indexe(st_top)
 	mt.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(mt)
 
@@ -956,7 +956,7 @@ func _build_slab_chunk(
 	st.generate_tangents()
 	var mi: MeshInstance3D = MeshInstance3D.new()
 	mi.name = name
-	mi.mesh = st.commit()
+	mi.mesh = MeshMerge.valider_indexe(st)
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(mi)
 
@@ -1161,7 +1161,7 @@ func _build_rail_chunk(
 	st_rail.generate_tangents()
 	var mi_rail: MeshInstance3D = MeshInstance3D.new()
 	mi_rail.name = name
-	mi_rail.mesh = st_rail.commit()
+	mi_rail.mesh = MeshMerge.valider_indexe(st_rail)
 	mi_rail.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(mi_rail)
 
@@ -1169,7 +1169,7 @@ func _build_rail_chunk(
 	st_top.generate_tangents()
 	var mi_top: MeshInstance3D = MeshInstance3D.new()
 	mi_top.name = name + "Top"
-	mi_top.mesh = st_top.commit()
+	mi_top.mesh = MeshMerge.valider_indexe(st_top)
 	mi_top.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(mi_top)
 
@@ -1705,7 +1705,7 @@ func _ring_arc_mesh(joint_mat: StandardMaterial3D) -> ArrayMesh:
 	var mat: StandardMaterial3D = joint_mat.duplicate()
 	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 	st.set_material(mat)
-	return st.commit()
+	return MeshMerge.valider_indexe(st)
 
 
 ## Point de la canalisation de voûte dans le tube DROIT de l'évitement.
@@ -1779,7 +1779,7 @@ func _build_loop_rings(joint_mat: StandardMaterial3D) -> void:
 		if s - s_chunk > 40.0 or s >= PNConstants.PASSING_END:
 			var mi: MeshInstance3D = MeshInstance3D.new()
 			mi.name = "LoopRings_%d" % n_chunk
-			mi.mesh = st.commit()
+			mi.mesh = MeshMerge.valider_indexe(st)
 			mi.material_override = mat
 			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 			mi.visibility_range_end = 250.0
@@ -1934,7 +1934,7 @@ func _build_cable_beam_chunk(
 	st.generate_tangents()
 	var mi: MeshInstance3D = MeshInstance3D.new()
 	mi.name = name
-	mi.mesh = st.commit()
+	mi.mesh = MeshMerge.valider_indexe(st)
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(mi)
 
@@ -2767,7 +2767,7 @@ func _build_cable_segment(
 	st.generate_normals()
 	var mi: MeshInstance3D = MeshInstance3D.new()
 	mi.name = name
-	mi.mesh = st.commit()
+	mi.mesh = MeshMerge.valider_indexe(st)
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(mi)
 	return mi
