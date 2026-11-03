@@ -7,6 +7,12 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## Version suivante (branche pc-max, non publiée)
 
+**Relief fin à 5 m sur tout le domaine** (PC partis au cran 0 ; ni le web ni les crans suivants, relief à 25 m inchangé, vérifié ligne à ligne sur le câble et le sol). Altitude IGN RGE ALTI (`tools_relief_fin.py`), 15,5 Mo, fusion en C++ ; sans le module, repli sur 25 m avec un message au journal. Le choix est fait au chargement et ne suit pas le régulateur : changer de cran ne bouge ni le sol ni le câble (banc du relief fin).
+
+**Pylônes réajustés sur ce sol** (`data/remontees/geometrie_fin.json`, 45 lignes) : hauteurs seules, jamais plus de 4 m au-dessus de celles à 25 m ni au-delà des bornes mesurées ; Leissières et deux pylônes de Borsat posés à la main. Sur 63 lignes : dépassement des galets 629° → 628°, pylônes au-delà de 1° 174 → 169. Écarts connus : Rogoney, Vallon de l'Iseran et Borsat perdent en galets ; la mesure de contact (`bench_sol_lignes_3d.gd`, prudente) voit encore 10 lignes contre 17 à 25 m où un véhicule pourrait toucher, dont la perche du Col du Palet.
+
+**Coût** : 7,4-7,7 s au lieu de 7,3-7,5 s jusqu'à la fin du chargement, 55 Mo de plus ; images au-dessus de 25 ms 29 et 28 contre 29 et 27 sur deux boucles, mais environ 80 images de plus entre 20 et 25 ms, cause non trouvée. Collisions du sol fin à 2 ms par image.
+
 **Ombres portées sur la neige** (PC, cran 0 seulement ; ni le web ni les crans suivants). Le relief n'est pas éclairé et ne recevait donc aucune ombre : un soleil
 dédié, pour lui seul, assombrit la neige là où pylônes, véhicules et bâtiments font de l'ombre ; ailleurs le rendu ne change pas. Boucle de 16 min en 4K : GPU p95 8,14 → 9,83 ms,
 16 images sur 42 991 au-dessus de 14 ms (max 15,46), fil de rendu p95 2,57 → 3,01 ms, aucune descente de cran.

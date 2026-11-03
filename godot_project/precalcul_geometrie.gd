@@ -24,6 +24,7 @@ const HAUTEURS_A_LA_MAIN: Array = ["tsd6_leissieres"]
 const PLAFOND_FIN: float = 4.0
 # relief fin : garde lue sur le vrai sol, tous les 5 m, sous les deux brins (le profil, lui, reste tous les 10 m)
 const PAS_REEL: float = 5.0
+var _poids_garde: float = POIDS_GARDE    # (--poids-garde=N : ligne où aucun véhicule ne touche, les galets d'abord)
 var _poids_reel: float = 0.0            # (--poids-reel=N, (m²) ; 0 : garde sur le profil seul)
 var _sols: Dictionary = {}              # ligne → sol le plus haut sous les brins, tous les PAS_REEL
 const POIDS_DEV: float = 1.0e4          # (rad²) : 0,1 rad de trop → 100
@@ -65,6 +66,8 @@ func _calculer() -> void:
 	for a in OS.get_cmdline_user_args():
 		if String(a).begins_with("--lignes="):
 			seules = String(a).substr(9).split(",")
+		if String(a).begins_with("--poids-garde="):
+			_poids_garde = float(String(a).substr(14))
 		if String(a).begins_with("--poids-reel="):
 			_poids_reel = float(String(a).substr(13))
 		if String(a).begins_with("--effort="):
@@ -153,7 +156,7 @@ func _pen_dev(lg: LigneRemontee, i: int) -> float:
 func _pen_garde(lg: LigneRemontee, k: int) -> float:
 	if k < 0 or k > lg.pylones.size():
 		return 0.0
-	var pen: float = POIDS_GARDE * pow(maxf(0.0, -lg._garde_portee(k)), 2.0)
+	var pen: float = _poids_garde * pow(maxf(0.0, -lg._garde_portee(k)), 2.0)
 	if _poids_reel > 0.0:
 		pen += _poids_reel * _manque_reel(lg, k)
 	return pen
