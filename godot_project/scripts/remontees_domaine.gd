@@ -774,10 +774,11 @@ func _gerer_cuites(delta: float) -> void:
 		_cuit_ligne = best
 		_cuit_scenario = get_world_3d().scenario
 		_cuit_en_cours.preparer_chemin(LigneCuite.chemin(dossier_cuites, String(best.name), OS.has_feature("web")))
-		if OS.has_feature("threads"):
+		if LigneRemontee._fil_possible():
 			_cuit_tache = WorkerThreadPool.add_task(_poser_cuite, false, "ligne cuite")
 		else:
-			# (PWA sans fils : d'un bloc sur le fil principal, une ligne à la fois ; 25 + 22 ms à Tovière sous WebKit)
+			# (PWA sans fils : d'un bloc sur le fil principal, une ligne à la fois, 25 + 22 ms à Tovière sous
+			# WebKit. Bancs sans écran aussi : leur rendu factice ne crée pas de maillages depuis un autre fil)
 			_cuit_en_cours.charger(_cuit_scenario, false)
 			if _cuit_en_cours.cle != "":
 				_cuites[_cuit_en_cours.cle] = _cuit_en_cours
@@ -790,8 +791,13 @@ func _poser_cuite() -> void:
 
 func _exit_tree() -> void:
 	if _cuit_tache >= 0:
+		if _cuit_en_cours != null:
+			_cuit_en_cours.abandon = true        # (le fil n'attend plus les images : il finit d'un trait)
 		LigneRemontee.attendre_fil(_cuit_tache)
 		_cuit_tache = -1
+		if _cuit_en_cours != null and _cuit_en_cours.cle != "":
+			_cuites[_cuit_en_cours.cle] = _cuit_en_cours
+		_cuit_en_cours = null
 	for k in _cuites:
 		(_cuites[k] as LigneCuite).liberer()
 	_cuites.clear()
