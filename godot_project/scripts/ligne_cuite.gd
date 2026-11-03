@@ -38,6 +38,7 @@ var _octets: int = 0
 var _t_fil: int = 0
 var _sur_fil: bool = false
 var lecture_ms: float = 0.0
+var abandon: bool = false
 
 
 static func chemin(dossier: String, nom: String, web: bool) -> String:
@@ -212,7 +213,7 @@ func _pause() -> void:
 
 func _attendre_image() -> void:
 	var f0: int = Engine.get_process_frames()
-	while Engine.get_process_frames() == f0:
+	while Engine.get_process_frames() == f0 and not abandon:
 		OS.delay_msec(1)
 	_t_fil = Time.get_ticks_usec()
 	_octets = 0
