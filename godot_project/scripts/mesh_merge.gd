@@ -478,15 +478,85 @@ static func _collect(mi: MeshInstance3D, xf: Transform3D, groups: Dictionary, do
 			return   # une surface non fusionnable → l'objet reste entier
 		mats.append(m)
 	for si in range(ns):
-		var key: String = "%d_%d_%d_%.1f" % [mats[si].get_instance_id(), _format(mesh, si),
-			mi.cast_shadow, mi.visibility_range_end]
+		var cp: String = _classe_palette(mats[si])
+		var ta0: Array = []
+		var mat_g: Material = mats[si]
+		var fmt: int = _format(mesh, si)
+		if cp != "":
+			ta0 = tableaux(mesh, si)
+			if ta0[Mesh.ARRAY_NORMAL] == null or ta0[Mesh.ARRAY_COLOR] != null:
+				cp = ""
+		var key: String
+		if cp != "":
+			mat_g = _materiau_palette(cp, mats[si])
+			key = "P%s_%d_%d_%.1f" % [cp, 1 if ta0[Mesh.ARRAY_INDEX] != null else 0, mi.cast_shadow, mi.visibility_range_end]
+		else:
+			key = "%d_%d_%d_%.1f" % [mats[si].get_instance_id(), fmt, mi.cast_shadow, mi.visibility_range_end]
 		if not groups.has(key):
-			groups[key] = {"mat": mats[si], "acc": {}, "n": 0, "src": [],
+			groups[key] = {"mat": mat_g, "acc": {}, "n": 0, "src": [],
 				"shadow": mi.cast_shadow, "range": mi.visibility_range_end}
 		var g: Dictionary = groups[key]
-		_ajouter(g["acc"], tableaux(mesh, si), xf)
+		if cp != "":
+			_ajouter(g["acc"], _en_palette(ta0, (mats[si] as BaseMaterial3D).albedo_color), xf)
+		else:
+			_ajouter(g["acc"], tableaux(mesh, si), xf)
 		g["n"] = int(g["n"]) + 1
 		(g["src"] as Array).append(mi)
+
+
+## PWA : matériau « palette ». Les matériaux unis ne diffèrent le plus souvent que par leur
+## couleur (717 uniques, un UBO et souvent un programme chacun ; 2 000 à 2 700 appels de dessin
+## à chaque plantage iPad, 03/11/2026) : la couleur passe dans les sommets, et un seul matériau
+## par classe (rugosité et métal arrondis, faces, ombrage). Les matériaux à texture, à émission
+## ou aux effets particuliers gardent leur chemin.
+static var palette: bool = OS.has_feature("web") or "--palette" in OS.get_cmdline_user_args()
+static var _palette: Dictionary = {}    # classe → StandardMaterial3D
+const SANS_PALETTE: StringName = &"sans_palette"   # méta : matériau dont la couleur change en jeu
+
+
+static func _classe_palette(m: Material) -> String:
+	if not palette or not (m is BaseMaterial3D) or m.has_meta(SANS_PALETTE):
+		return ""
+	var b: BaseMaterial3D = m
+	if b.albedo_texture != null or b.normal_enabled or b.emission_enabled or b.vertex_color_use_as_albedo \
+			or b.rim_enabled or b.clearcoat_enabled or b.anisotropy_enabled or b.ao_enabled \
+			or b.heightmap_enabled or b.refraction_enabled or b.backlight_enabled or b.subsurf_scatter_enabled \
+			or b.detail_enabled or b.metallic_texture != null or b.roughness_texture != null \
+			or b.billboard_mode != BaseMaterial3D.BILLBOARD_DISABLED or b.grow or b.no_depth_test \
+			or b.uv1_triplanar or b.fixed_size or b.use_point_size or b.proximity_fade_enabled \
+			or b.distance_fade_mode != BaseMaterial3D.DISTANCE_FADE_DISABLED:
+		return ""
+	return "%d_%d_%d_%d" % [roundi(b.roughness * 4.0), 1 if b.metallic >= 0.5 else 0, b.cull_mode, b.shading_mode]
+
+
+static func _materiau_palette(cle: String, m: Material) -> StandardMaterial3D:
+	var r: StandardMaterial3D = _palette.get(cle, null)
+	if r == null:
+		var b: BaseMaterial3D = m
+		r = StandardMaterial3D.new()
+		r.resource_name = "palette_" + cle
+		r.vertex_color_use_as_albedo = true
+		r.vertex_color_is_srgb = true
+		r.roughness = roundf(b.roughness * 4.0) / 4.0
+		r.metallic = 1.0 if b.metallic >= 0.5 else 0.0
+		r.metallic_specular = b.metallic_specular
+		r.cull_mode = b.cull_mode
+		r.shading_mode = b.shading_mode
+		_palette[cle] = r
+	return r
+
+
+## Sans UV ni tangentes (inutiles sans texture : autant de tampon en moins), couleur en sommets.
+static func _en_palette(a: Array, couleur: Color) -> Array:
+	var r: Array = a.duplicate()
+	r[Mesh.ARRAY_TEX_UV] = null
+	r[Mesh.ARRAY_TEX_UV2] = null
+	r[Mesh.ARRAY_TANGENT] = null
+	var c: PackedColorArray = PackedColorArray()
+	c.resize((a[Mesh.ARRAY_VERTEX] as PackedVector3Array).size())
+	c.fill(Color(couleur.r, couleur.g, couleur.b, 1.0))
+	r[Mesh.ARRAY_COLOR] = c
+	return r
 
 
 static func _triangles(mesh: Mesh, si: int) -> bool:
