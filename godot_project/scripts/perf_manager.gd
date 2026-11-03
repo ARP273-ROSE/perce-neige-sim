@@ -365,12 +365,24 @@ func _verifier_retrait() -> void:
 ## Premier nœud servi à chaque image : top de départ du chrono des scripts.
 class _DebutImage extends Node:
 	var t_us: int = 0
+	var t_phys_us: int = 0
+	var phys_ms: float = 0.0
 
 	func _ready() -> void:
 		process_priority = -PRIORITE_CHRONO
+		process_physics_priority = -PRIORITE_CHRONO
+
+	func _physics_process(_delta: float) -> void:
+		if t_phys_us == 0:
+			t_phys_us = Time.get_ticks_usec()
 
 	func _process(_delta: float) -> void:
 		t_us = Time.get_ticks_usec()
+		# physique de CETTE image : du premier pas au début des scripts. Le moniteur
+		# du moteur donne le maximum de la dernière seconde : un seul pas lent de
+		# 30 ms comptait pour 60 images (relevé 4K, 03/11/2026)
+		phys_ms = float(t_us - t_phys_us) / 1000.0 if t_phys_us != 0 else 0.0
+		t_phys_us = 0
 
 
 ## Travail réel du fil principal sur cette image : scripts + physique.
@@ -379,10 +391,9 @@ class _DebutImage extends Node:
 ## une RTX 5070 Ti restait au détail 2 (relevé F10 du 01/11/2026 : « principal »
 ## 17,4 ms pour une image de 16,67 ms), le retour exigeant moins de 8,3 ms.
 func _travail_ms() -> float:
-	var physique: float = float(Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS)) * 1000.0
 	if _debut_image == null or _debut_image.t_us == 0:
-		return physique
-	return float(Time.get_ticks_usec() - _debut_image.t_us) / 1000.0 + physique
+		return float(Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS)) * 1000.0
+	return float(Time.get_ticks_usec() - _debut_image.t_us) / 1000.0 + _debut_image.phys_ms
 
 
 func _process(delta: float) -> void:
@@ -617,7 +628,7 @@ func _releve_image(dt: float) -> void:
 	if _rel_t < 0.0:
 		return
 	_rel_t += dt
-	_moteur["phys"] = float(_moteur["phys"]) + float(Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS)) * 1000.0
+	_moteur["phys"] = float(_moteur["phys"]) + (_debut_image.phys_ms if _debut_image != null else 0.0)
 	_moteur["n"] = int(_moteur["n"]) + 1
 	_moteur["actifs"] = maxi(int(_moteur["actifs"]), int(Performance.get_monitor(Performance.PHYSICS_3D_ACTIVE_OBJECTS)))
 	_moteur["paires"] = maxi(int(_moteur["paires"]), int(Performance.get_monitor(Performance.PHYSICS_3D_COLLISION_PAIRS)))
