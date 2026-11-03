@@ -51,10 +51,10 @@ func preparer_chemin(fichier: String) -> void:
 	_chemin = fichier
 
 
-## Sur un fil de travail : lecture puis pose, freinée. Sans fichier valable, `cle` reste vide.
-func charger(scenario: RID) -> void:
+## Lecture puis pose (freinée sur un fil de travail). Sans fichier valable, `cle` reste vide.
+func charger(scenario: RID, sur_fil: bool) -> void:
 	if lire(_chemin):
-		poser(scenario, true)
+		poser(scenario, sur_fil)
 	else:
 		cle = ""
 

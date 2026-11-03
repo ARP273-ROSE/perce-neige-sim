@@ -774,11 +774,18 @@ func _gerer_cuites(delta: float) -> void:
 		_cuit_ligne = best
 		_cuit_scenario = get_world_3d().scenario
 		_cuit_en_cours.preparer_chemin(LigneCuite.chemin(dossier_cuites, String(best.name), OS.has_feature("web")))
-		_cuit_tache = WorkerThreadPool.add_task(_poser_cuite, false, "ligne cuite")
+		if OS.has_feature("threads"):
+			_cuit_tache = WorkerThreadPool.add_task(_poser_cuite, false, "ligne cuite")
+		else:
+			# (PWA sans fils : d'un bloc sur le fil principal, une ligne à la fois ; 25 + 22 ms à Tovière sous WebKit)
+			_cuit_en_cours.charger(_cuit_scenario, false)
+			if _cuit_en_cours.cle != "":
+				_cuites[_cuit_en_cours.cle] = _cuit_en_cours
+			_cuit_en_cours = null
 
 
 func _poser_cuite() -> void:
-	_cuit_en_cours.charger(_cuit_scenario)
+	_cuit_en_cours.charger(_cuit_scenario, true)
 
 
 func _exit_tree() -> void:
