@@ -226,6 +226,7 @@ void fragment() {
 var tunnel: TunnelBuilder = null
 var _h: PackedFloat32Array = PackedFloat32Array()
 var fin: ReliefFin = null               # essai : zone à 4 m, voir ReliefFin
+var _cran_depart: int = 0
 var _dx: float = 1.0
 var _dz: float = 1.0
 ## Prêt à être affiché (construction terminée).
@@ -286,6 +287,7 @@ var _pieces: Array = []               # [rect, nx, nz, hauteurs, masque] (bancs)
 
 func build(t: TunnelBuilder, cran: int = 0) -> void:
 	tunnel = t
+	_cran_depart = cran
 	_pas = 1 if cran <= 2 else 2
 	# 21 km d'emprise depuis le 09/10/2026 (Tignes – Val d'Isère) : 4096 px =
 	# 5,1 m/px sur une bonne machine ; 2048 px (10 m/px) sinon et sur le web
@@ -375,7 +377,7 @@ func _preparer(fin_us: int) -> void:
 				_decoder_ligne_lointaine(_k - nz)
 			_k += 1
 			if _k >= nz + ReliefLointainDonnees.N:
-				var h0: PackedFloat32Array = _h.duplicate() if ReliefFin.voulu() else PackedFloat32Array()
+				var h0: PackedFloat32Array = _h.duplicate() if ReliefFin.voulu(_cran_depart) else PackedFloat32Array()
 				_creuser_gares()
 				if not h0.is_empty():
 					var rf: ReliefFin = ReliefFin.new()

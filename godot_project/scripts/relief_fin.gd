@@ -40,11 +40,21 @@ var _centre: Vector2 = Vector2(INF, INF)
 var _tache: int = -1
 var _resultat: Array = []
 var _demande: Vector2 = Vector2.ZERO
-static var voulu_banc: bool = false
 
 
-## PC à rendu complet, et pas sur demande contraire.
-static func voulu() -> bool:
+## PC parti au cran 0 : décidé au chargement, le sol ne change plus ensuite (le régulateur
+## peut baisser de cran en cours de partie, le skieur reste sur le même sol). Aux autres
+## crans et sur le web, rien n'est lu : relief à 25 m, sans surcoût de chargement.
+## --relief-fin : force la grille fine (les bancs sans écran ne partent pas forcément au cran 0).
+static func voulu(cran: int) -> bool:
+	return voulu_sans_forcer(cran) or ("--relief-fin" in OS.get_cmdline_user_args() and _permis())
+
+
+static func voulu_sans_forcer(cran: int) -> bool:
+	return cran == 0 and _permis()
+
+
+static func _permis() -> bool:
 	if OS.has_feature("web") or "--sans-relief-fin" in OS.get_cmdline_user_args():
 		return false
 	return FileAccess.file_exists("res://data/relief_fin/zone_essai.bin")
