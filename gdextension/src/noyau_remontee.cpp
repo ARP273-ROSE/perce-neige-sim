@@ -458,7 +458,10 @@ PackedFloat64Array NoyauRemontee::etape(double dt, double regime, const Vector3 
 		// pièces animées en gare : appel seulement quand la valeur change
 		float ouv = 0.0f, gc = 1.0f, porte = 0.0f;
 		if (z.idx >= 0) {
-			ouv = fixe ? 0.0f : (float)smoothstep(0.0, l_ouverture, std::min(z.x, z.l - z.x));
+			{
+				const double u_ouv = std::min(z.x, z.l - z.x);
+				ouv = fixe ? 0.0f : (float)(smoothstep(0.0, l_ouverture, u_ouv) * (1.0 - smoothstep(l_ouverture, l_ouverture + 1.0, u_ouv)));
+			}
 			const double xh = z_haut[z.idx], xb = z_bas[z.idx];
 			gc = (float)(1.0 - std::clamp((z.x - xh) / 2.0, 0.0, 1.0) * std::clamp((xb - z.x) / 2.0, 0.0, 1.0));
 			if (cabine) {
