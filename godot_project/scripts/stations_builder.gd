@@ -123,16 +123,71 @@ func _build_station_high() -> void:
 	# long du palier jusqu'au mur, pour qu'on ne tombe pas dans la fosse.
 	var s_palier: float = PNConstants.LENGTH + MachineRoomBuilder.PALIER_S0
 	var s_fond: float = PNConstants.LENGTH + MachineRoomBuilder.HALL_DEPTH
-	var s_debut_barriere: float = PNConstants.STOP_S + PNConstants.TRAIN_HALF - 1.0
+	# la barrière reprend après le petit escalier voie → quai : son haut donne sur le quai
+	var s_debut_barriere: float = ESC_VOIE_S1 + 0.05
 	for sd in [-1.0, 1.0]:
 		_build_platform(s_plat_start, s_palier, false, sd)
 		_build_palier(s_palier, s_fond, sd)
 		_build_platform_barrier(s_plat_start, s_palier, s_debut_barriere, sd, false, s_fond - 0.08)
+		_build_escalier_voie(s_plat_start, s_palier, sd)
 	# Pas de fosse en haut (retour d'essai 2026-09-26) : butoirs bleus seuls
 	_build_bumper(s_bumper, false)
 	_build_room_dressing(tunnel.station_high_start + tunnel.station_room_transition_haut,
 		PNConstants.LENGTH - 0.3, false)
 	_build_ceiling_lights(s_plat_start, PNConstants.QUAI_HAUT_FIN_S)
+
+
+## Petit escalier de la voie au quai, gare haute, le long du mur du quai (retour
+## d'utilisateur, 03/11/2026 : « on n'arrive pas à remonter de la voie au quai ») :
+## entre le nez de la rame arrêtée et la fosse, là où la rame ne passe jamais.
+const ESC_VOIE_S0: float = PNConstants.STOP_S + PNConstants.TRAIN_HALF + 0.12
+const ESC_VOIE_S1: float = PNConstants.LENGTH + MachineRoomBuilder.PIT_S0 - 0.12
+const ESC_VOIE_X0: float = 0.85
+const ESC_VOIE_MARCHE: float = 0.17
+
+
+func _build_escalier_voie(s_start: float, s_end: float, side: float) -> void:
+	var beton: StandardMaterial3D = _mkmat(Color(0.46, 0.46, 0.45), 0.9, 0.0)
+	var jaune: StandardMaterial3D = _mkmat(Color(0.85, 0.68, 0.10), 0.7, 0.0)
+	var y_quai: float = FLOOR_Y_LOCAL + platform_height
+	# le quai est en marches : niveau de celle qui contient le haut de l'escalier
+	var s_up: float = s_end
+	for b in _bornes_marches(s_start, s_end, false):
+		if float(b) > ESC_VOIE_S0:
+			s_up = float(b)
+			break
+	var xf_q: Transform3D = _xf_at(s_up)
+	var y_haut: float = (xf_q.origin + xf_q.basis.y * y_quai).y
+	var xf_p: Transform3D = _xf_at(ESC_VOIE_S1)
+	var y_bas: float = (xf_p.origin + xf_p.basis.y * FLOOR_Y_LOCAL).y
+	var n: int = maxi(1, int(ceil((y_haut - y_bas) / ESC_VOIE_MARCHE)))
+	var giron: float = (ESC_VOIE_S1 - ESC_VOIE_S0) / n
+	var larg: float = platform_inner_x - ESC_VOIE_X0
+	var x_c: float = side * (ESC_VOIE_X0 + larg * 0.5)
+	# marches de niveau, qui montent vers l'aval : la voie monte vers l'amont
+	for k in range(n):
+		var s_m: float = ESC_VOIE_S1 - giron * (k + 0.5)
+		var xf: Transform3D = _xf_at(s_m)
+		var droite: Vector3 = xf.basis.x
+		var base: Basis = Basis(droite, Vector3.UP, droite.cross(Vector3.UP)).orthonormalized()
+		var y_k: float = lerpf(y_bas, y_haut, float(k + 1) / n)
+		var y_sol: float = (xf.origin + xf.basis.y * FLOOR_Y_LOCAL).y - 0.15
+		var c: Vector3 = xf.origin + droite * x_c
+		for e in [[beton, Vector3(larg, y_k - y_sol, giron + 0.01), (y_k + y_sol) * 0.5, "MarcheVoieQuai"],
+				[jaune, Vector3(larg, 0.012, 0.05), y_k + 0.004, "NezMarcheVoieQuai"]]:
+			var bm: BoxMesh = BoxMesh.new()
+			bm.size = e[1]
+			bm.material = e[0]
+			var mi: MeshInstance3D = MeshInstance3D.new()
+			mi.mesh = bm
+			mi.name = e[3]
+			var o: Vector3 = c
+			o.y = e[2]
+			mi.transform = Transform3D(base, o)
+			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			if e[3] == "NezMarcheVoieQuai":
+				mi.set_meta("sans_collision", true)
+			add_child(mi)
 
 
 ## Palier plat en haut des marches (dessus = dessus de la dernière marche),
