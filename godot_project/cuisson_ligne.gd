@@ -23,6 +23,7 @@ var _loin: bool = false
 ## --loin : pièces plus petites que ça ôtées (~1 px à 450 m sur iPad, 60° de champ, 1 200 px de haut).
 const LOIN_PETIT: float = 0.45
 const LOIN_DISTANCE: float = 450.0
+const LOIN_PART: float = 0.3
 var _lg: LigneRemontee = null
 var _t0: int = 0
 var _fait: bool = false
@@ -256,7 +257,7 @@ func _boite_ligne() -> AABB:
 	return AABB(Vector3(-_lg.voie - 10.0, ymin, -lh - _lg.l_gare - 30.0), Vector3(2.0 * _lg.voie + 20.0, ymax - ymin, lh + 2.0 * _lg.l_gare + 60.0))
 
 
-## Fichier « loin » (PWA) : tout en une seule surface au plus bas niveau de détail, couleur dans les
+## Fichier « loin » (PWA) : tout en une seule surface, niveau de détail à 1 px d'erreur à 450 m, couleur dans les
 ## sommets, un seul matériau ; le véhicule en un seul maillage. Ni ombres ni pièces de moins de 1 px.
 func _cuire_loin(vehicule: Array) -> void:
 	_parcours(_lg, Transform3D.IDENTITY, "")
@@ -294,6 +295,8 @@ func _cuire_loin(vehicule: Array) -> void:
 			continue
 		for si in range(m3.get_surface_count()):
 			_verser(veh, _plus_bas(m3, si), miroir_v * (e["xf"] as Transform3D), e["ov"] if e["ov"] != null else m3.surface_get_material(si))
+	_souder(acc)
+	_souder(veh)
 	var palette: Dictionary = {"classe": "StandardMaterial3D", "vertex_color_use_as_albedo": true, "roughness": 0.7, "metallic": 0.0, "cull_mode": BaseMaterial3D.CULL_DISABLED}
 	var d: Dictionary = {
 		"version": VERSION, "cle": _cle, "xf_ligne": _lg.global_transform, "cible": "web-loin",
@@ -312,11 +315,50 @@ func _cuire_loin(vehicule: Array) -> void:
 	f.store_32(brut.size())
 	f.store_buffer(z)
 	f.close()
-	var octets: int = ((acc["v"] as PackedVector3Array).size() + (veh["v"] as PackedVector3Array).size()) * 28 + ((acc["i"] as PackedInt32Array).size() + (veh["i"] as PackedInt32Array).size()) * 4
+	var octets: int = ((acc["v"] as PackedVector3Array).size() + (veh["v"] as PackedVector3Array).size()) * 20 + ((acc["i"] as PackedInt32Array).size() + (veh["i"] as PackedInt32Array).size()) * 2
 	print("LOIN %s : fixe %d sommets %d triangles ; vehicule %d sommets %d triangles ; poses gardees %d, otees portee %d, otees petites %d ; tampons estimes %.2f Mo ; fichier %.2f Mo" % [_cle,
 		(acc["v"] as PackedVector3Array).size(), (acc["i"] as PackedInt32Array).size() / 3, (veh["v"] as PackedVector3Array).size(), (veh["i"] as PackedInt32Array).size() / 3,
 		ot[2], ot[0], ot[1], octets / 1048576.0, z.size() / 1048576.0])
 	print("FICHIER %s : brut %.2f Mo, compresse %.2f Mo" % [chemin, brut.size() / 1048576.0, z.size() / 1048576.0])
+
+
+## Sommets soudés (même position à 5 cm, même couleur) : de loin, les arêtes vives ne se voient pas.
+func _souder(acc: Dictionary) -> void:
+	var v: PackedVector3Array = acc["v"]
+	var n: PackedVector3Array = acc["n"]
+	var c: PackedColorArray = acc["c"]
+	var ix: PackedInt32Array = acc["i"]
+	var vus: Dictionary = {}
+	var nv: PackedVector3Array = PackedVector3Array()
+	var nn: PackedVector3Array = PackedVector3Array()
+	var nc: PackedColorArray = PackedColorArray()
+	var remap: PackedInt32Array = PackedInt32Array()
+	remap.resize(v.size())
+	for i in range(v.size()):
+		var k: Vector4i = Vector4i(roundi(v[i].x * 20.0), roundi(v[i].y * 20.0), roundi(v[i].z * 20.0), c[i].to_rgba32())
+		var j: int = vus.get(k, -1)
+		if j < 0:
+			j = nv.size()
+			vus[k] = j
+			nv.append(v[i])
+			nn.append(n[i])
+			nc.append(c[i])
+		else:
+			nn[j] += n[i]
+		remap[i] = j
+	var ni: PackedInt32Array = PackedInt32Array()
+	for t in range(0, ix.size() - 2, 3):
+		var a0: int = remap[ix[t]]
+		var b0: int = remap[ix[t + 1]]
+		var c0: int = remap[ix[t + 2]]
+		if a0 != b0 and b0 != c0 and a0 != c0:
+			ni.append_array(PackedInt32Array([a0, b0, c0]))
+	for i in range(nn.size()):
+		nn[i] = nn[i].normalized() if nn[i].length() > 0.001 else Vector3.UP
+	acc["v"] = nv
+	acc["n"] = nn
+	acc["c"] = nc
+	acc["i"] = ni
 
 
 func _surface(acc: Dictionary) -> Dictionary:
@@ -361,7 +403,14 @@ func _plus_bas(m: Mesh, si: int) -> Array:
 		v = c0[Mesh.ARRAY_VERTEX]
 		nor = c0[Mesh.ARRAY_NORMAL]
 		a = c0
-		ix = im.get_surface_lod_indices(0, nl - 1) if nl > 0 else (c0[Mesh.ARRAY_INDEX] as PackedInt32Array)
+		# pas le tout dernier niveau, qui effaçait pylônes et câbles (longs et fins) : le plus bas qui garde
+		# au moins LOIN_PART des triangles
+		var n0: int = (c0[Mesh.ARRAY_INDEX] as PackedInt32Array).size()
+		ix = c0[Mesh.ARRAY_INDEX]
+		for l in range(nl):
+			var il: PackedInt32Array = im.get_surface_lod_indices(0, l)
+			if il.size() >= n0 * LOIN_PART:
+				ix = il
 	var remap: Dictionary = {}
 	var nv: PackedVector3Array = PackedVector3Array()
 	var nn: PackedVector3Array = PackedVector3Array()
