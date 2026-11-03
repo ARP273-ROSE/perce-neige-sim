@@ -44,6 +44,21 @@ static func chemin(dossier: String, nom: String, web: bool) -> String:
 	return dossier.path_join(nom + (".web.cuit" if web else ".cuit"))
 
 
+var _chemin: String = ""
+
+
+func preparer_chemin(fichier: String) -> void:
+	_chemin = fichier
+
+
+## Sur un fil de travail : lecture puis pose, freinée. Sans fichier valable, `cle` reste vide.
+func charger(scenario: RID) -> void:
+	if lire(_chemin):
+		poser(scenario, true)
+	else:
+		cle = ""
+
+
 ## Lit et décompresse le fichier (à faire sur un fil de travail). Faux si absent ou d'une autre version.
 func lire(fichier: String) -> bool:
 	var t0: int = Time.get_ticks_usec()
