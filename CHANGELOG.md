@@ -19,7 +19,7 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 **Brévières.** Constructeur corrigé : Poma.
 
-**Pince A-108 refaite d'après les photos.** Tommeuses, Bollin, Fresse : corps court qui ne descend pas sous le câble ; pièce articulée en bas du corps, mors d'un côté, bras de l'autre, poussé vers le haut par deux ressorts bleus derrière le corps (ils le traversaient) ; roue cylindrique au sommet, sur laquelle appuie le rail d'ouverture du lanceur ; patin noir au-dessus de la pince, sous les pneus du lanceur, qui suivent. Les autres pinces gardent leur plaque au-dessus des ressorts.
+**Pince débrayable refaite d'après les photos, sur le modèle de l'A-108.** Toutes les lignes débrayables (ressorts bleus sur Tommeuses, Bollin, Fresse) : corps court qui ne descend pas sous le câble ; pièce articulée en bas du corps, mors d'un côté, bras de l'autre, poussé vers le haut par deux ressorts bleus derrière le corps (ils le traversaient) ; galets de roulement plus petits, sous les ressorts ; roue cylindrique au sommet ; patin noir au-dessus de la pince, décalé hors des galets de compression, sous les pneus du lanceur, qui suivent. Rail d'ouverture aux deux bouts du lanceur seulement : le mors s'ouvre jusqu'au débrayage, puis se referme à vide ; même chose à l'embrayage.
 
 **Rester dans la cabine.** Sans bouger à l'arrivée, on suit maintenant la cabine et l'on se rassoit pour le retour ; au premier pas, on est libre de sortir. Elle repartait sans soi, ou l'on restait debout. Nouveau banc `cabine_retour` : aller-retour complet.
 
