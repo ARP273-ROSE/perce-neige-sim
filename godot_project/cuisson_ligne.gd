@@ -18,6 +18,12 @@ var _f: int = 0
 var _cle: String = ""
 var _sortie: String = "user://cuites"
 var _web: bool = false
+var _seulement_materiaux: bool = false
+var _loin: bool = false
+## --loin : pièces plus petites que ça ôtées (~1 px à 450 m sur iPad, 60° de champ, 1 200 px de haut).
+const LOIN_PETIT: float = 0.45
+const LOIN_DISTANCE: float = 450.0
+const LOIN_PART: float = 0.3
 var _lg: LigneRemontee = null
 var _t0: int = 0
 var _fait: bool = false
@@ -42,6 +48,14 @@ func _initialize() -> void:
 			_sortie = a.trim_prefix("--sortie=")
 		elif a == "--web":
 			_web = true
+		elif a == "--materiaux":
+			_seulement_materiaux = true
+		elif a == "--loin":
+			_loin = true
+	if _seulement_materiaux:
+		_reunir_materiaux()
+		quit(0)
+		return
 	if _cle == "":
 		printerr("--ligne=CLE manquant")
 		quit(2)
@@ -49,6 +63,30 @@ func _initialize() -> void:
 	_main = load("res://scenes/main.tscn").instantiate()
 	get_root().add_child(_main)
 	process_frame.connect(_tick)
+
+
+## Après les lignes : les matériaux de tous les fichiers, sans doublon, pour les préparer au démarrage.
+func _reunir_materiaux() -> void:
+	var fin: String = ".web.cuit" if _web else ".cuit"
+	var vus: Dictionary = {}
+	var nb: int = 0
+	for nom in DirAccess.get_files_at(_sortie):
+		if not nom.ends_with(fin) or (not _web and nom.ends_with(".web.cuit")) or nom.begins_with("materiaux"):
+			continue
+		var f: FileAccess = FileAccess.open(_sortie.path_join(nom), FileAccess.READ)
+		var n: int = f.get_32()
+		var d: Dictionary = bytes_to_var(f.get_buffer(f.get_length() - 4).decompress(n, FileAccess.COMPRESSION_ZSTD))
+		f.close()
+		nb += 1
+		for md in d["materiaux"]:
+			# (ShaderMaterial : une seule entrée par code, les paramètres sont propres à chaque ligne)
+			vus[hash(md["code"]) if md["classe"] == "ShaderMaterial" else hash(md)] = md
+	var brut: PackedByteArray = var_to_bytes({"version": VERSION, "materiaux": vus.values()})
+	var g: FileAccess = FileAccess.open(_sortie.path_join("materiaux" + fin), FileAccess.WRITE)
+	g.store_32(brut.size())
+	g.store_buffer(brut.compress(FileAccess.COMPRESSION_ZSTD))
+	g.close()
+	print("MATERIAUX %d lignes, %d materiaux uniques" % [nb, vus.size()])
 
 
 func _tick() -> void:
@@ -89,6 +127,9 @@ func _cuire() -> void:
 	var vehicule: Array = []
 	if v0 != null:
 		_lire_vehicule(v0, v0, Transform3D.IDENTITY, vehicule)
+	if _loin:
+		_cuire_loin(vehicule)
+		return
 	_parcours(_lg, Transform3D.IDENTITY, "")
 	var surfaces: Array = []
 	var instances: Array = []
@@ -214,6 +255,216 @@ func _boite_ligne() -> AABB:
 	var ymin: float = minf(_lg.terrain(0.0), _lg.terrain(lh)) - 60.0
 	var ymax: float = maxf(_lg.terrain(0.0), _lg.terrain(lh)) + 120.0
 	return AABB(Vector3(-_lg.voie - 10.0, ymin, -lh - _lg.l_gare - 30.0), Vector3(2.0 * _lg.voie + 20.0, ymax - ymin, lh + 2.0 * _lg.l_gare + 60.0))
+
+
+## Fichier « loin » (PWA) : tout en une seule surface, niveau de détail à 1 px d'erreur à 450 m, couleur dans les
+## sommets, un seul matériau ; le véhicule en un seul maillage. Ni ombres ni pièces de moins de 1 px.
+func _cuire_loin(vehicule: Array) -> void:
+	_parcours(_lg, Transform3D.IDENTITY, "")
+	var acc: Dictionary = {"v": PackedVector3Array(), "n": PackedVector3Array(), "c": PackedColorArray(), "i": PackedInt32Array()}
+	var ot: Array = [0, 0, 0]
+	for cle in _poses:
+		var p: Dictionary = _poses[cle]
+		var portee: float = p["portee"]
+		if portee > 0.0 and portee < LOIN_DISTANCE:
+			ot[0] += (p["xfs"] as Array).size()
+			continue
+		var m: Mesh = p["mesh"]
+		if m.get_aabb().size.length() < LOIN_PETIT:
+			ot[1] += (p["xfs"] as Array).size()
+			continue
+		for si in range(m.get_surface_count()):
+			var mat: Material = p["ov"] if p["ov"] != null else m.surface_get_material(si)
+			var bas: Array = _plus_bas(m, si)
+			for x in p["xfs"]:
+				_verser(acc, bas, x, mat)
+				ot[2] += 1
+	for e in _mobiles:
+		var m2: Mesh = e["mesh"]
+		var portee2: float = e["portee"]
+		if m2.get_aabb().size.length() < LOIN_PETIT or (portee2 > 0.0 and portee2 < LOIN_DISTANCE):
+			ot[1] += 1
+			continue
+		for si in range(m2.get_surface_count()):
+			_verser(acc, _plus_bas(m2, si), (e["xf_racine"] as Transform3D) * (e["xf"] as Transform3D), e["ov"] if e["ov"] != null else m2.surface_get_material(si))
+	var veh: Dictionary = {"v": PackedVector3Array(), "n": PackedVector3Array(), "c": PackedColorArray(), "i": PackedInt32Array()}
+	var miroir_v: Transform3D = Transform3D.IDENTITY if _lg.sens_droite else Transform3D(Basis.from_scale(Vector3(-1, 1, 1)), Vector3.ZERO)
+	for e in vehicule:
+		var m3: Mesh = e["mesh"]
+		if e["detail"] or m3.get_aabb().size.length() < LOIN_PETIT:
+			continue
+		for si in range(m3.get_surface_count()):
+			_verser(veh, _plus_bas(m3, si), miroir_v * (e["xf"] as Transform3D), e["ov"] if e["ov"] != null else m3.surface_get_material(si))
+	_souder(acc)
+	_souder(veh)
+	var palette: Dictionary = {"classe": "StandardMaterial3D", "vertex_color_use_as_albedo": true, "roughness": 0.7, "metallic": 0.0, "cull_mode": BaseMaterial3D.CULL_DISABLED}
+	var d: Dictionary = {
+		"version": VERSION, "cle": _cle, "xf_ligne": _lg.global_transform, "cible": "web-loin",
+		"materiaux": [palette],
+		"surfaces": [{"surface": _surface(acc), "mat": 0, "portee": 0.0, "ombre": 0, "couches": 5}],
+		"instances": [], "mobiles": [], "textes": [],
+		"vehicule_fusion": [{"surface": _surface(veh), "mat": 0, "ombre": 0, "couches": 5}],
+		"vitesse_cable": 0.0, "pas_cable": 1.0, "boite_ligne": _boite_ligne(),
+	}
+	_trajet(d)
+	var brut: PackedByteArray = var_to_bytes(d)
+	var z: PackedByteArray = brut.compress(FileAccess.COMPRESSION_ZSTD)
+	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(_sortie))
+	var chemin: String = _sortie.path_join(_cle + ".web.cuit")
+	var f: FileAccess = FileAccess.open(chemin, FileAccess.WRITE)
+	f.store_32(brut.size())
+	f.store_buffer(z)
+	f.close()
+	var octets: int = ((acc["v"] as PackedVector3Array).size() + (veh["v"] as PackedVector3Array).size()) * 20 + ((acc["i"] as PackedInt32Array).size() + (veh["i"] as PackedInt32Array).size()) * 2
+	print("LOIN %s : fixe %d sommets %d triangles ; vehicule %d sommets %d triangles ; poses gardees %d, otees portee %d, otees petites %d ; tampons estimes %.2f Mo ; fichier %.2f Mo" % [_cle,
+		(acc["v"] as PackedVector3Array).size(), (acc["i"] as PackedInt32Array).size() / 3, (veh["v"] as PackedVector3Array).size(), (veh["i"] as PackedInt32Array).size() / 3,
+		ot[2], ot[0], ot[1], octets / 1048576.0, z.size() / 1048576.0])
+	print("FICHIER %s : brut %.2f Mo, compresse %.2f Mo" % [chemin, brut.size() / 1048576.0, z.size() / 1048576.0])
+
+
+## Sommets soudés (même position à 5 cm, même couleur) : de loin, les arêtes vives ne se voient pas.
+func _souder(acc: Dictionary) -> void:
+	var v: PackedVector3Array = acc["v"]
+	var n: PackedVector3Array = acc["n"]
+	var c: PackedColorArray = acc["c"]
+	var ix: PackedInt32Array = acc["i"]
+	var vus: Dictionary = {}
+	var nv: PackedVector3Array = PackedVector3Array()
+	var nn: PackedVector3Array = PackedVector3Array()
+	var nc: PackedColorArray = PackedColorArray()
+	var remap: PackedInt32Array = PackedInt32Array()
+	remap.resize(v.size())
+	for i in range(v.size()):
+		var k: Vector4i = Vector4i(roundi(v[i].x * 20.0), roundi(v[i].y * 20.0), roundi(v[i].z * 20.0), c[i].to_rgba32())
+		var j: int = vus.get(k, -1)
+		if j < 0:
+			j = nv.size()
+			vus[k] = j
+			nv.append(v[i])
+			nn.append(n[i])
+			nc.append(c[i])
+		else:
+			nn[j] += n[i]
+		remap[i] = j
+	var ni: PackedInt32Array = PackedInt32Array()
+	for t in range(0, ix.size() - 2, 3):
+		var a0: int = remap[ix[t]]
+		var b0: int = remap[ix[t + 1]]
+		var c0: int = remap[ix[t + 2]]
+		if a0 != b0 and b0 != c0 and a0 != c0:
+			ni.append_array(PackedInt32Array([a0, b0, c0]))
+	for i in range(nn.size()):
+		nn[i] = nn[i].normalized() if nn[i].length() > 0.001 else Vector3.UP
+	acc["v"] = nv
+	acc["n"] = nn
+	acc["c"] = nc
+	acc["i"] = ni
+
+
+func _surface(acc: Dictionary) -> Dictionary:
+	var a: Array = []
+	a.resize(Mesh.ARRAY_MAX)
+	a[Mesh.ARRAY_VERTEX] = acc["v"]
+	a[Mesh.ARRAY_NORMAL] = acc["n"]
+	a[Mesh.ARRAY_COLOR] = acc["c"]
+	a[Mesh.ARRAY_INDEX] = acc["i"]
+	return {"tableaux": a, "lods": {}}
+
+
+var _bas_cache: Dictionary = {}
+
+
+## Le plus bas niveau de détail d'une surface, sommets inutiles retirés.
+func _plus_bas(m: Mesh, si: int) -> Array:
+	var cle: String = "%d|%d" % [m.get_instance_id(), si]
+	if _bas_cache.has(cle):
+		return _bas_cache[cle]
+	var a: Array = MeshMerge.tableaux(m, si)
+	var v: PackedVector3Array = a[Mesh.ARRAY_VERTEX]
+	var ix: PackedInt32Array = PackedInt32Array()
+	if a[Mesh.ARRAY_INDEX] != null:
+		ix = a[Mesh.ARRAY_INDEX]
+	else:
+		ix.resize(v.size())
+		for i in range(v.size()):
+			ix[i] = i
+	var nor: Variant = a[Mesh.ARRAY_NORMAL]
+	if v.size() >= 24 and nor != null:
+		var b: Array = a.duplicate()
+		b[Mesh.ARRAY_INDEX] = ix
+		b[Mesh.ARRAY_TANGENT] = null
+		b[Mesh.ARRAY_TEX_UV] = null
+		b[Mesh.ARRAY_TEX_UV2] = null
+		var im: ImporterMesh = ImporterMesh.new()
+		im.add_surface(Mesh.PRIMITIVE_TRIANGLES, b)
+		im.generate_lods(60.0, 60.0, [])
+		var nl: int = im.get_surface_lod_count(0)
+		var c0: Array = im.get_surface_arrays(0)
+		v = c0[Mesh.ARRAY_VERTEX]
+		nor = c0[Mesh.ARRAY_NORMAL]
+		a = c0
+		# pas le tout dernier niveau, qui effaçait pylônes et câbles (longs et fins) : le plus bas qui garde
+		# au moins LOIN_PART des triangles
+		var n0: int = (c0[Mesh.ARRAY_INDEX] as PackedInt32Array).size()
+		ix = c0[Mesh.ARRAY_INDEX]
+		for l in range(nl):
+			var il: PackedInt32Array = im.get_surface_lod_indices(0, l)
+			if il.size() >= n0 * LOIN_PART:
+				ix = il
+	var remap: Dictionary = {}
+	var nv: PackedVector3Array = PackedVector3Array()
+	var nn: PackedVector3Array = PackedVector3Array()
+	var cc: PackedColorArray = PackedColorArray()
+	var ni: PackedInt32Array = PackedInt32Array()
+	ni.resize(ix.size())
+	var col: Variant = a[Mesh.ARRAY_COLOR]
+	for k in range(ix.size()):
+		var i: int = ix[k]
+		if not remap.has(i):
+			remap[i] = nv.size()
+			nv.append(v[i])
+			nn.append((nor as PackedVector3Array)[i] if nor != null else Vector3.UP)
+			if col != null:
+				cc.append((col as PackedColorArray)[i])
+		ni[k] = remap[i]
+	var o: Array = [nv, nn, cc, ni]
+	_bas_cache[cle] = o
+	return o
+
+
+func _verser(acc: Dictionary, bas: Array, x: Transform3D, mat: Material) -> void:
+	var teinte: Color = Color.WHITE
+	if mat is BaseMaterial3D:
+		teinte = (mat as BaseMaterial3D).albedo_color
+		teinte.a = 1.0
+	var pv: PackedVector3Array = bas[0]
+	var pn: PackedVector3Array = bas[1]
+	var pc: PackedColorArray = bas[2]
+	var pi: PackedInt32Array = bas[3]
+	var n0: int = (acc["v"] as PackedVector3Array).size()
+	var nb: Basis = x.basis.inverse().transposed()
+	var dv: PackedVector3Array = acc["v"]
+	var dn: PackedVector3Array = acc["n"]
+	var dc: PackedColorArray = acc["c"]
+	var di: PackedInt32Array = acc["i"]
+	dv.resize(n0 + pv.size())
+	dn.resize(n0 + pv.size())
+	dc.resize(n0 + pv.size())
+	for i in range(pv.size()):
+		dv[n0 + i] = x * pv[i]
+		dn[n0 + i] = (nb * pn[i]).normalized()
+		dc[n0 + i] = (pc[i] * teinte) if not pc.is_empty() else teinte
+	var miroir: bool = x.basis.determinant() < 0.0
+	var i0: int = di.size()
+	di.resize(i0 + pi.size())
+	for k in range(0, pi.size() - 2, 3):
+		di[i0 + k] = pi[k] + n0
+		di[i0 + k + 1] = pi[k + 2 if miroir else k + 1] + n0
+		di[i0 + k + 2] = pi[k + 1 if miroir else k + 2] + n0
+	acc["v"] = dv
+	acc["n"] = dn
+	acc["c"] = dc
+	acc["i"] = di
 
 
 func _pousser(a: PackedFloat32Array, x: Transform3D) -> void:
