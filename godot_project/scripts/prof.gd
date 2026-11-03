@@ -7,8 +7,11 @@ extends RefCounted
 ## il fallait savoir qui, sur la vraie machine.)
 
 static var actif: bool = false
+static var image: Dictionary = {}     # système → µs de l'image en cours
 static var t: Dictionary = {}         # système → µs cumulées pendant le relevé
 
 
 static func ajouter(nom: String, t0: int) -> void:
-	t[nom] = int(t.get(nom, 0)) + Time.get_ticks_usec() - t0
+	var d: int = Time.get_ticks_usec() - t0
+	t[nom] = int(t.get(nom, 0)) + d
+	image[nom] = int(image.get(nom, 0)) + d
