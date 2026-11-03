@@ -7,6 +7,9 @@ extends SceneTree
 const VERSION: int = 1
 ## À partir de ce nombre de poses d'un même maillage, des instances plutôt qu'une fusion.
 const SEUIL_INSTANCES: int = 4
+## Fusion par tronçons le long de la ligne : d'un seul bloc, plus rien n'est éliminé hors du champ
+## et le niveau de détail se règle sur toute la ligne.
+const TRONCON: float = 250.0
 
 var _main: Node = null
 var _f: int = 0
@@ -99,7 +102,7 @@ func _cuire() -> void:
 		else:
 			for x in p["xfs"]:
 				for s in _surfaces_de(p["mesh"]):
-					_fusionner_dans(s[1] if p["ov"] == null else p["ov"], p["portee"], p["ombre"], p["couches"], s[0], x)
+					_fusionner_dans(s[1] if p["ov"] == null else p["ov"], p["portee"], p["ombre"], p["couches"], s[0], x, p["troncon"])
 	for cle in _fixes:
 		var g: Dictionary = _fixes[cle]
 		var ta: Array = MeshMerge._tableaux_acc(g["acc"])
@@ -211,9 +214,10 @@ func _poser(m: Mesh, ov: Material, x: Transform3D, g: GeometryInstance3D) -> voi
 		var vv: PackedVector3Array = sf[0][Mesh.ARRAY_VERTEX]
 		_avant["triangles"] += (ix as PackedInt32Array).size() / 3 if ix != null else vv.size() / 3
 	var mirroir: bool = x.basis.determinant() < 0.0
-	var cle: String = "%d|%d|%.0f|%d|%d|%s" % [m.get_instance_id(), ov.get_instance_id() if ov != null else 0, g.visibility_range_end, g.cast_shadow, g.layers, str(mirroir)]
+	var tr: int = _troncon(x * m.get_aabb())
+	var cle: String = "%d|%d|%.0f|%d|%d|%s|%d" % [m.get_instance_id(), ov.get_instance_id() if ov != null else 0, g.visibility_range_end, g.cast_shadow, g.layers, str(mirroir), tr]
 	if not _poses.has(cle):
-		_poses[cle] = {"mesh": m, "ov": ov, "xfs": [], "portee": g.visibility_range_end, "ombre": g.cast_shadow, "couches": g.layers}
+		_poses[cle] = {"mesh": m, "ov": ov, "xfs": [], "portee": g.visibility_range_end, "ombre": g.cast_shadow, "couches": g.layers, "troncon": tr}
 	(_poses[cle]["xfs"] as Array).append(x)
 
 
@@ -225,8 +229,12 @@ func _surfaces_de(m: Mesh) -> Array:
 	return o
 
 
-func _fusionner_dans(m: Material, portee: float, ombre: int, couches: int, a: Array, x: Transform3D) -> void:
-	var cle: String = "%d|%.0f|%d|%d" % [m.get_instance_id() if m != null else 0, portee, ombre, couches]
+func _troncon(ab: AABB) -> int:
+	return int(floor(-ab.get_center().z / TRONCON))
+
+
+func _fusionner_dans(m: Material, portee: float, ombre: int, couches: int, a: Array, x: Transform3D, tr: int) -> void:
+	var cle: String = "%d|%.0f|%d|%d|%d" % [m.get_instance_id() if m != null else 0, portee, ombre, couches, tr]
 	if not _fixes.has(cle):
 		_fixes[cle] = {"m": m, "acc": {}, "portee": portee, "ombre": ombre, "couches": couches}
 	var ind: Array = a
