@@ -350,8 +350,11 @@ func _pince_debrayable() -> void:
 	var L: float = 0.30
 	var travers: Basis = Basis(Vector3.FORWARD, PI * 0.5)
 	# corps : au-dessus et derrière le câble, rien sous sa génératrice basse
-	RemonteeKit.boite_en(p, Vector3(0.19, 0.075, L), Vector3(0.075, 0.055, 0), corps_m)
-	RemonteeKit.boite_en(p, Vector3(0.025, 0.09, 0.23), Vector3(-0.040, 0.020, 0), corps_m)    # mors fixe, devant le câble
+	# au droit du câble, seulement les mors et une semelle mince : le gros du corps est à côté
+	# (x > 0,09), hors de la largeur des galets de compression, qui appuient sur le câble
+	RemonteeKit.boite_en(p, Vector3(0.08, 0.075, L), Vector3(0.13, 0.055, 0), corps_m)
+	RemonteeKit.boite_en(p, Vector3(0.135, 0.016, 0.23), Vector3(0.0225, 0.034, 0), corps_m)
+	RemonteeKit.boite_en(p, Vector3(0.02, 0.054, 0.23), Vector3(-0.037, 0.002, 0), corps_m)    # mors fixe
 	for sz in [-1.0, 1.0]:
 		RemonteeKit.demi_cone(p, Vector3(0, 0, sz * L * 0.5), Vector3(0, 0, sz * (L * 0.5 + 0.34)), 0.055, 0.0245, "noir_mat", 12)
 	# pièce articulée en bas du corps : côté câble le mors mobile, côté arrière le bras
@@ -362,8 +365,8 @@ func _pince_debrayable() -> void:
 	_machoire.name = "MachoireMobile"
 	_machoire.position = h
 	p.add_child(_machoire)
-	RemonteeKit.boite_en(_machoire, Vector3(0.05, 0.03, 0.23), Vector3(-0.085, 0.085, 0), corps_m)
-	RemonteeKit.poutre(_machoire, Vector3(-0.07, 0.085, 0), Vector3(0.0, 0.0, 0), 0.04, 0.05, corps_m, Vector3.BACK)
+	RemonteeKit.boite_en(_machoire, Vector3(0.02, 0.046, 0.23), Vector3(-0.063, 0.0, 0), corps_m)
+	RemonteeKit.poutre(_machoire, Vector3(-0.06, 0.0, 0), Vector3(0.0, 0.0, 0), 0.04, 0.03, corps_m, Vector3.BACK)
 	var dir: Vector3 = Vector3(0.68, 0.73, 0).normalized()
 	var haut_bras: Vector3 = dir * 0.40
 	RemonteeKit.poutre(_machoire, Vector3.ZERO, haut_bras, 0.04, 0.035, "galva_pylone", Vector3.BACK)
