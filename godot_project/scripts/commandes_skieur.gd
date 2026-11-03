@@ -28,6 +28,7 @@ var _b_conduire: Button = null
 var _b_courir: Button = null
 var _b_vue: Button = null
 var _b_ski: Button = null
+var _b_echelle: Button = null
 var _b_mesure: Button = null
 var _b_auto: Button = null
 var _b_evac: Button = null
@@ -118,6 +119,12 @@ func _ready() -> void:
 		if main != null:
 			main.basculer_ski())
 	col.add_child(_b_ski)
+	_b_echelle = _bouton("GRIMPER", "Monter à l'échelle du pylône, déchaussé ; de nouveau pour repartir dans l'autre sens (touche G ; joystick : haut, bas)")
+	_b_echelle.visible = false
+	_b_echelle.pressed.connect(func() -> void:
+		if main != null:
+			main.basculer_echelle())
+	col.add_child(_b_echelle)
 	_b_auto = _bouton("BOUCLE", "BOUCLE : le skieur fait la boucle tout seul — gare, rame, terrasse, ski, retour (touche B) ; il enclenche l'exploitation auto pour son trajet")
 	_b_auto.toggle_mode = true
 	_b_auto.toggled.connect(func(on: bool) -> void:
@@ -302,6 +309,10 @@ func _process_corps(delta: float) -> void:
 		var lg: LigneRemontee = rm.ligne_courante(skieur.global_position) if rm != null else null
 		_b_poste.visible = lg != null
 		poste.ligne = lg
+		var sur_e: bool = skieur.sur_echelle()
+		_b_echelle.visible = sur_e or (rm != null and not skieur.chausse and not skieur.embarque and rm.echelle_proche(skieur.global_position) != null)
+		if _b_echelle.visible:
+			_b_echelle.text = ("DESCENDRE" if skieur._echelle_auto >= 0.0 or skieur.echelle_en_haut() else "GRIMPER") if sur_e else "GRIMPER"
 		# MESURE : décompte pendant le relevé
 		var pm2: Node = main.get("perf_manager")
 		if pm2 != null and _b_mesure != null:

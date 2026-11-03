@@ -13,6 +13,10 @@ dédié, pour lui seul, assombrit la neige là où pylônes, véhicules et bâti
 
 **Fil principal à ski.** Collisions du tunnel construites pour un skieur sur la neige, pièces fines des gares refaites en double à chaque carré de relief (26 à 54 ms), portées de toutes
 les lignes réglées d'un bloc à chaque changement de détail (72 à 103 ms). Boucle de 11 min en 4K : images de plus de 25 ms à ski 20 → 2.
+## 1.53.6 — 3 novembre 2026
+
+Paquet Windows : pip est posé depuis sa roue, le script d'installation habituel refusant désormais de s'exécuter ; la Release 1.53.5 n'a pas pu être construite. Contenu du jeu identique à la 1.53.5.
+
 ## 1.53.5 — 2 novembre 2026
 
 **Gares creusées dans la pente.** Elles étaient posées au plus haut du terrain sous leur emprise, jusqu'à 18 m au-dessus du sol côté aval. Le relief est abaissé sous l'emprise, avec un talus autour : hauteur au-dessus du point le plus bas, médiane 2,9 → 1,6 m, 90 % des gares sous 7,4 → 4,6 m (Lanches amont 8,3 → 3,4 m). Grille à 25 m : le déblai se fait donc sur des mailles entières.
