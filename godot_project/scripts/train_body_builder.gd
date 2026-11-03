@@ -476,9 +476,9 @@ static func _build_tube(mesh: ArrayMesh, mats: Dictionary, z_a: float, z_b: floa
 			for sx in [-1.0, 1.0]:
 				var lm: ArrayMesh = ArrayMesh.new()
 				var d: Dictionary = leaf_st[sx]
-				(d["body"] as SurfaceTool).set_material(mats["door"]); (d["body"] as SurfaceTool).commit(lm)
-				(d["rubber"] as SurfaceTool).set_material(mats["rubber"]); (d["rubber"] as SurfaceTool).commit(lm)
-				(d["glass"] as SurfaceTool).set_material(mats["glass"]); (d["glass"] as SurfaceTool).commit(lm)
+				(d["body"] as SurfaceTool).set_material(mats["door"]); MeshMerge.valider_indexe(d["body"] as SurfaceTool, lm)
+				(d["rubber"] as SurfaceTool).set_material(mats["rubber"]); MeshMerge.valider_indexe(d["rubber"] as SurfaceTool, lm)
+				(d["glass"] as SurfaceTool).set_material(mats["glass"]); MeshMerge.valider_indexe(d["glass"] as SurfaceTool, lm)
 				leaves.append({"mesh": lm, "side": sx, "z_c": z0c + plen * 0.5})
 	if inner:
 		# joints sombres intérieurs autour des hublots (doublure)
@@ -502,9 +502,9 @@ static func _build_tube(mesh: ArrayMesh, mats: Dictionary, z_a: float, z_b: floa
 				# encadrement noir épais côté passagers (photos de l'intérieur)
 				_emit_band(st_ri2, _offset_normal(hole2, -TUBE_GASKET_IN),
 					_offset_normal(hole2, 0.055), pt_i, n_i, -0.012)
-		st_body.set_material(mats["lining"]); st_body.commit(mesh)
-		st_haut.set_material(mats["lining_haut"]); st_haut.commit(mesh)
-		st_ri2.set_material(mats["rubber"]); st_ri2.commit(mesh)
+		st_body.set_material(mats["lining"]); MeshMerge.valider_indexe(st_body, mesh)
+		st_haut.set_material(mats["lining_haut"]); MeshMerge.valider_indexe(st_haut, mesh)
+		st_ri2.set_material(mats["rubber"]); MeshMerge.valider_indexe(st_ri2, mesh)
 		return
 	# Fond plat (châssis) entre les échancrures, et plafond des échancrures
 	var xw: float = R_BODY * sin(th_cut)
@@ -523,14 +523,14 @@ static func _build_tube(mesh: ArrayMesh, mats: Dictionary, z_a: float, z_b: floa
 	for w in wells:
 		_quad_flat(st_dark, Vector3(-xw_top, WELL_TOP, w - WELL_HALF), Vector3(-xw_top, WELL_TOP, w + WELL_HALF),
 			Vector3(xw_top, WELL_TOP, w + WELL_HALF), Vector3(xw_top, WELL_TOP, w - WELL_HALF))
-	st_body.set_material(mats["body"]); st_body.commit(mesh)
-	st_yellow.set_material(mats["yellow"]); st_yellow.commit(mesh)
-	st_door.set_material(mats["door"]); st_door.commit(mesh)
-	st_rib.set_material(mats["rib"]); st_rib.commit(mesh)
-	st_seam.set_material(mats["seam"]); st_seam.commit(mesh)
-	st_dark.set_material(mats["dark"]); st_dark.commit(mesh)
-	st_rubber.set_material(mats["rubber"]); st_rubber.commit(mesh)
-	st_glass.set_material(mats["glass"]); st_glass.commit(mesh)
+	st_body.set_material(mats["body"]); MeshMerge.valider_indexe(st_body, mesh)
+	st_yellow.set_material(mats["yellow"]); MeshMerge.valider_indexe(st_yellow, mesh)
+	st_door.set_material(mats["door"]); MeshMerge.valider_indexe(st_door, mesh)
+	st_rib.set_material(mats["rib"]); MeshMerge.valider_indexe(st_rib, mesh)
+	st_seam.set_material(mats["seam"]); MeshMerge.valider_indexe(st_seam, mesh)
+	st_dark.set_material(mats["dark"]); MeshMerge.valider_indexe(st_dark, mesh)
+	st_rubber.set_material(mats["rubber"]); MeshMerge.valider_indexe(st_rubber, mesh)
+	st_glass.set_material(mats["glass"]); MeshMerge.valider_indexe(st_glass, mesh)
 
 
 ## Disque fermant le tube (section coupée) à l'abscisse z, normale vers dir_z.
@@ -559,7 +559,7 @@ static func _build_end_disc(mesh: ArrayMesh, mat: StandardMaterial3D, z: float, 
 	else:
 		_tri(st, c, a2, b2, n, n, n)
 	st.set_material(mat)
-	st.commit(mesh)
+	MeshMerge.valider_indexe(st, mesh)
 
 
 ## Passage d'intercirculation (retour d'utilisateur, 09/10/2026 : « fais en sorte qu'on
@@ -595,7 +595,7 @@ static func _build_end_disc_porte(mesh: ArrayMesh, mat: StandardMaterial3D, z: f
 				v.append(Vector3(q.x, Y_CENTER + q.y, z))
 			_tri_out(st, v[0], v[1], v[2], n, n, n)
 	st.set_material(mat)
-	st.commit(mesh)
+	MeshMerge.valider_indexe(st, mesh)
 
 
 # --- calotte bombée jaune ----------------------------------------------------
@@ -910,8 +910,8 @@ static func _build_cap(mesh: ArrayMesh, mats: Dictionary, z_join: float, dir_z: 
 			# côté passagers, le D est gris-bleu comme l'habillage, pas jaune
 			# (retour d'utilisateur, 09/10/2026 ; photos du poste : panneau gris-bleu à persiennes)
 			_issue_panneau(issues, dir_z, door, pt_in, n_in, -0.006, mats, "lining")
-		st_y.set_material(mats["lining"]); st_y.commit(mesh)
-		st_ri.set_material(mats["rubber"]); st_ri.commit(mesh)
+		st_y.set_material(mats["lining"]); MeshMerge.valider_indexe(st_y, mesh)
+		st_ri.set_material(mats["rubber"]); MeshMerge.valider_indexe(st_ri, mesh)
 		return
 	# pare-brise : joint + vitre ; portes d'évacuation : liseré sombre seul
 	var pt_fn: Callable = func(x: float, y_rel: float, lift: float) -> Vector3:
@@ -942,10 +942,10 @@ static func _build_cap(mesh: ArrayMesh, mats: Dictionary, z_join: float, dir_z: 
 	# fond sombre derrière les vitres (rame sans intérieur)
 	if backboard:
 		_build_end_disc(mesh, mats["dark"], z_join + dir_z * 0.12, dir_z, R_BODY - 0.04)
-	st_y.set_material(mats["yellow"]); st_y.commit(mesh)
-	st_d.set_material(mats["dark"]); st_d.commit(mesh)
-	st_r.set_material(mats["rubber"]); st_r.commit(mesh)
-	st_g.set_material(mats["glass"]); st_g.commit(mesh)
+	st_y.set_material(mats["yellow"]); MeshMerge.valider_indexe(st_y, mesh)
+	st_d.set_material(mats["dark"]); MeshMerge.valider_indexe(st_d, mesh)
+	st_r.set_material(mats["rubber"]); MeshMerge.valider_indexe(st_r, mesh)
+	st_g.set_material(mats["glass"]); MeshMerge.valider_indexe(st_g, mesh)
 
 
 ## Un panneau d'issue de secours (D jaune) : une face de plus au maillage
@@ -1310,7 +1310,7 @@ static func build_train(root: Node3D, train_length: float, car_count: int,
 					_tube_pt(t1, rb, z_b), _tube_pt(t0, rb, z_b),
 					_tube_n(t0), _tube_n(t1), _tube_n(t1), _tube_n(t0))
 			st.set_material(mats["dark"])
-			st.commit(bm)
+			MeshMerge.valider_indexe(st, bm)
 			bellows.mesh = bm
 			bellows.name = "Soufflet"
 			car_root.add_child(bellows)

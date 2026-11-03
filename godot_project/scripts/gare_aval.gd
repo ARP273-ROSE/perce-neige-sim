@@ -321,7 +321,7 @@ func _polygone(m: String, pts: Array, y: float, nom: String, uv_echelle: float =
 		st.add_vertex(_p2(poly[i], y))
 	st.generate_normals()
 	st.set_material(_mats[m])
-	_instance(st.commit(), nom)
+	_instance(MeshMerge.valider_indexe(st), nom)
 
 
 # --- hall : sol, toit, murs ----------------------------------------------------
@@ -368,7 +368,7 @@ func _hall() -> void:
 			[st_haut, "blanc", "EnduitHall"]]:
 		(e[0] as SurfaceTool).generate_normals()
 		(e[0] as SurfaceTool).set_material(_mats[e[1]])
-		_instance((e[0] as SurfaceTool).commit(), e[2])
+		_instance(MeshMerge.valider_indexe(e[0] as SurfaceTool), e[2])
 
 
 ## Plafond « origami » (photos 093506 / 093522) : grandes facettes crème
@@ -396,7 +396,7 @@ func _plafond() -> void:
 					st.add_vertex(_p(w.x, w.z, w.y))
 	st.generate_normals()
 	st.set_material(_mats["plafond"])
-	_instance(st.commit(), "PlafondOrigami")
+	_instance(MeshMerge.valider_indexe(st), "PlafondOrigami")
 
 
 # --- cloison vitrée et portes coulissantes ------------------------------------
@@ -637,7 +637,7 @@ func _facade() -> void:
 	_quad(st, _p2(b - t * 1.6, 0.0), _p2(b, 0.0), _p2(b, 3.0), _p2(b - t * 1.6, 3.0))
 	st.generate_normals()
 	st.set_material(_mats["bardage"])
-	_instance(st.commit(), "FacadeEntree")
+	_instance(MeshMerge.valider_indexe(st), "FacadeEntree")
 	# entrée vitrée : six baies ; les deux du milieu sont la porte
 	# automatique (deux vantaux qui s'effacent derrière les vitrages fixes,
 	# côté salle, quand on approche — skieur jouable, 07/10/2026)
@@ -782,7 +782,7 @@ func _arche_cercle(m: String, c: Vector3, u3: Vector3, n3: Vector3, r: float,
 		prec_ok = ok
 	st.generate_normals()
 	st.set_material(_mats[m])
-	_instance(st.commit(), "Arche")
+	_instance(MeshMerge.valider_indexe(st), "Arche")
 
 
 ## Escalier métallique devant l'arche rouge jusqu'à la place (LiDAR : place

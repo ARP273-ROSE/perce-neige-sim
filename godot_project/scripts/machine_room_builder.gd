@@ -535,7 +535,7 @@ void fragment() {
 		st.set_material(mat)
 		var mi_d: MeshInstance3D = MeshInstance3D.new()
 		mi_d.name = "PanoramaLointain" if lointain else "Panorama"
-		mi_d.mesh = st.commit()
+		mi_d.mesh = MeshMerge.valider_indexe(st)
 		mi_d.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		mi_d.visible = not lointain
 		_exterieur.add_child(mi_d)
@@ -788,7 +788,7 @@ func _web_mesh(r_hub: float, r_out: float, t: float, mat: StandardMaterial3D) ->
 			st.add_vertex(v00); st.add_vertex(v10); st.add_vertex(v11)
 			st.add_vertex(v00); st.add_vertex(v11); st.add_vertex(v01)
 	st.generate_normals()
-	return st.commit()
+	return MeshMerge.valider_indexe(st)
 
 
 ## Carter fixe rouge : tôle extérieure cylindrique + deux flasques, coiffant
@@ -868,7 +868,7 @@ func _ring_arc(parent: Node3D, r_in: float, r_out: float, x0: float, x1: float,
 		st.add_vertex(e0); st.add_vertex(e2); st.add_vertex(e3)
 	st.generate_normals()
 	var mi: MeshInstance3D = MeshInstance3D.new()
-	mi.mesh = st.commit()
+	mi.mesh = MeshMerge.valider_indexe(st)
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	parent.add_child(mi)
 
@@ -1246,7 +1246,7 @@ func _tube(pts_in: Array, mat: Material, nom: String, sup_in: Array = []) -> voi
 	st.generate_normals()
 	var mi: MeshInstance3D = MeshInstance3D.new()
 	mi.name = nom
-	mi.mesh = st.commit()
+	mi.mesh = MeshMerge.valider_indexe(st)
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(mi)
 
@@ -1466,6 +1466,6 @@ func _ring(parent: Node3D, r_in: float, r_out: float, x0: float, x1: float, mat:
 			st.add_vertex(q0); st.add_vertex(q2); st.add_vertex(q3)
 	st.generate_normals()
 	var mi: MeshInstance3D = MeshInstance3D.new()
-	mi.mesh = st.commit()
+	mi.mesh = MeshMerge.valider_indexe(st)
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	parent.add_child(mi)

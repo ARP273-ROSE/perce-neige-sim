@@ -246,6 +246,8 @@ static func faces(mesh: Mesh) -> PackedVector3Array:
 ## la carte graphique).
 static func valider(st: SurfaceTool, mesh: ArrayMesh = null) -> ArrayMesh:
 	var m: ArrayMesh = mesh if mesh != null else ArrayMesh.new()
+	if indexer:
+		st.index()
 	var a: Array = st.commit_to_arrays()
 	if a.is_empty() or a[Mesh.ARRAY_VERTEX] == null or (a[Mesh.ARRAY_VERTEX] as PackedVector3Array).is_empty():
 		return m
@@ -308,6 +310,67 @@ static func vider_partages() -> void:
 	_verrou_partages.unlock()
 
 
+## PWA : sommets soudés (les maillages sans index répètent chaque sommet à chaque
+## triangle : la mémoire des tampons est le plafond de l'iPad, 03/11/2026). Les sommets
+## ne sont soudés que si position, normale, UV… concordent : le rendu ne change pas.
+static var indexer: bool = OS.has_feature("web") or "--indexer" in OS.get_cmdline_user_args()
+static var index_us: int = 0
+
+
+static func _indexes(ta: Array) -> Array:
+	# (petits maillages : un tampon de plus pour presque rien)
+	if not indexer or ta[Mesh.ARRAY_INDEX] != null or (ta[Mesh.ARRAY_VERTEX] as PackedVector3Array).size() < 128:
+		return ta
+	var t0: int = Time.get_ticks_usec()
+	var st: SurfaceTool = SurfaceTool.new()
+	st.create_from_arrays(ta)
+	st.index()
+	var r: Array = st.commit_to_arrays()
+	index_us += Time.get_ticks_usec() - t0
+	return r
+
+
+## `st.commit()`, sommets soudés sur la PWA.
+static func valider_indexe(st: SurfaceTool, mesh: ArrayMesh = null) -> ArrayMesh:
+	if indexer:
+		var t0: int = Time.get_ticks_usec()
+		st.index()
+		index_us += Time.get_ticks_usec() - t0
+	return st.commit(mesh)
+
+
+## Partage des fusions à géométrie identique (PWA : les deux rames et leurs voitures
+## envoyaient chacune la leur à la carte, ~66 Mo de tampons au menu, 03/11/2026).
+## Seule une empreinte est gardée, pas les sommets. Actif le temps de fusionner une rame.
+static var partager_identiques: bool = false
+static var _identiques: Dictionary = {}    # empreinte → ArrayMesh
+static var sommets_partages: int = 0
+
+
+static func _empreinte(ta: Array) -> String:
+	var h: HashingContext = HashingContext.new()
+	h.start(HashingContext.HASH_MD5)
+	for i in range(ta.size()):
+		h.update(("|%d:" % i).to_ascii_buffer())
+		if ta[i] != null:
+			h.update(ta[i].to_byte_array())
+	return h.finish().hex_encode()
+
+
+static func _maillage_identique(ta: Array) -> ArrayMesh:
+	if not partager_identiques:
+		return null
+	var m: ArrayMesh = _identiques.get(_empreinte(ta), null)
+	if m != null:
+		sommets_partages += (ta[Mesh.ARRAY_VERTEX] as PackedVector3Array).size()
+	return m
+
+
+static func _retenir_identique(ta: Array, m: ArrayMesh) -> void:
+	if partager_identiques:
+		_identiques[_empreinte(ta)] = m
+
+
 static func merge(root: Node3D, keep: Array = [], name_prefix: String = "Fusion", une_instance: bool = false) -> int:
 	_ctx = name_prefix
 	var groups: Dictionary = {}     # clé → {mat, st, n, shadow}
@@ -342,19 +405,25 @@ static func merge(root: Node3D, keep: Array = [], name_prefix: String = "Fusion"
 				multi[cle] = [ArrayMesh.new(), g]
 			var am: ArrayMesh = multi[cle][0]
 			var n0: int = am.get_surface_count()
-			am.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, ta)
+			am.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, _indexes(ta))
 			if am.get_surface_count() > n0:
 				am.surface_set_material(n0, g["mat"])
 				removed += g["n"] - 1
 				for src in g["src"]:
 					done[src] = int(done.get(src, 0)) + 1
 			continue
-		var mesh: ArrayMesh = ArrayMesh.new()
-		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, ta)
-		mesh.surface_set_material(0, g["mat"])
+		var mesh: ArrayMesh = _maillage_identique(ta)
+		var nouveau: bool = mesh == null
+		if nouveau:
+			mesh = ArrayMesh.new()
+			mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, _indexes(ta))
+			mesh.surface_set_material(0, g["mat"])
+			_retenir_identique(ta, mesh)
 		var mi: MeshInstance3D = MeshInstance3D.new()
 		mi.name = "%s%d" % [name_prefix, k]
 		mi.mesh = mesh
+		if not nouveau and mesh.surface_get_material(0) != g["mat"]:
+			mi.set_surface_override_material(0, g["mat"])
 		mi.cast_shadow = g["shadow"]
 		mi.visibility_range_end = g["range"]
 		root.add_child(mi)

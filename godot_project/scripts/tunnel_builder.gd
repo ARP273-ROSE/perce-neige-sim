@@ -252,7 +252,7 @@ func _build_sortie_secours() -> void:
 		st.generate_normals()
 		var mi: MeshInstance3D = MeshInstance3D.new()
 		mi.name = nom
-		mi.mesh = st.commit()
+		mi.mesh = MeshMerge.valider_indexe(st)
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		add_child(mi)
 	# 1. rebords circulaires de la chambre : anneaux sombres au-dessus de
@@ -279,7 +279,7 @@ func _build_sortie_secours() -> void:
 	st_r.generate_normals()
 	var mi_r: MeshInstance3D = MeshInstance3D.new()
 	mi_r.name = "SortieSecoursRebord"
-	mi_r.mesh = st_r.commit()
+	mi_r.mesh = MeshMerge.valider_indexe(st_r)
 	mi_r.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(mi_r)
 	# 2. ouverture à droite, haute, depuis la passerelle : fond sombre et
@@ -446,7 +446,7 @@ func _build_wall_cable_chunk(
 	st.generate_normals()
 	var mi: MeshInstance3D = MeshInstance3D.new()
 	mi.name = name
-	mi.mesh = st.commit()
+	mi.mesh = MeshMerge.valider_indexe(st)
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(mi)
 
@@ -674,7 +674,7 @@ func _build_tunnel_chunk(
 	st.generate_tangents()
 	var mi: MeshInstance3D = MeshInstance3D.new()
 	mi.name = name
-	mi.mesh = st.commit()
+	mi.mesh = MeshMerge.valider_indexe(st)
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(mi)
 
@@ -803,7 +803,7 @@ func _build_tunnel_fusion(
 	st.generate_tangents()
 	var mi: MeshInstance3D = MeshInstance3D.new()
 	mi.name = name
-	mi.mesh = st.commit()
+	mi.mesh = MeshMerge.valider_indexe(st)
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(mi)
 
@@ -1041,7 +1041,7 @@ func _draw_debug_path() -> void:
 	for p in path_points:
 		st.add_vertex(p)
 	var mi: MeshInstance3D = MeshInstance3D.new()
-	mi.mesh = st.commit()
+	mi.mesh = MeshMerge.valider_indexe(st)
 	mi.name = "DebugPath"
 	add_child(mi)
 

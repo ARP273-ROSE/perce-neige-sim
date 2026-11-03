@@ -344,7 +344,7 @@ static func _disque_texture(r: float) -> ArrayMesh:
 			st.set_normal(Vector3.BACK)
 			st.set_uv(Vector2(0.5 + p.x / (2.0 * r), 0.5 - p.y / (2.0 * r)))
 			st.add_vertex(Vector3(p.x, p.y, 0.0))
-	return st.commit()
+	return MeshMerge.valider_indexe(st)
 
 
 ## Dessine les faces (une SubViewport par piste, rendue une fois, copiée en
