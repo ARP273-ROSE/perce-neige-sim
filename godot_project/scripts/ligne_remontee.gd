@@ -4055,6 +4055,13 @@ func _creer_lointains() -> void:
 		mm.transform_format = MultiMesh.TRANSFORM_3D
 		mm.mesh = mi.mesh if sens_droite else _maillage_miroir(mi.mesh)
 		mm.instance_count = _vehicules.size()
+		# rien de dessiné tant que le noyau n'a pas tourné : le tampon neuf n'est pas initialisé, et
+		# une ligne construite trop loin pour tourner affichait la mémoire GPU réutilisée (silhouettes
+		# géantes dans le ciel, temps GPU de 5 à 16-28 ms ; relevés du 03/11/2026)
+		var vide: PackedFloat32Array = PackedFloat32Array()
+		vide.resize(_vehicules.size() * 12)
+		vide.fill(0.0)
+		RenderingServer.multimesh_set_buffer(mm.get_rid(), vide)
 		# boîte englobante fixe, toute la ligne : celle que Godot calcule ne
 		# suit pas les positions envoyées par le noyau (sièges écartés du dessin)
 		var lh: float = longueur_h()
