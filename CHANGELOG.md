@@ -5,7 +5,9 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
-## Version suivante (branche pc-max, non publiée)
+## Version suivante (non publiée)
+
+**Mémoire de la PWA sur iPad** (web seulement ; plantage à la montée dans le TCD10 Tovière en 1.53.6). Numéros de balise posés en flux autour du joueur au lieu de 1 669 textes permanents, Val Claret et Grande Motte fusionnées, câble du funiculaire en segments de 30 m au lieu de 15, rayon de construction de 120 m en mode allégé 2. Mesuré sous WebKit avec la signature tactile d'un iPad, au pied de Tovière : 209 Mo et 15 747 tampons en mode normal, 192 Mo et 14 088 en allégé 1, 168 Mo et 11 496 en allégé 2. Les plantages réels avaient eu lieu à 265, 199 et 160 Mo (31 265, 25 104 et 23 849 tampons) : le nombre de tampons baisse de moitié environ, moins la mémoire. La perte de contexte ne se reproduit pas sous Linux : l'effet sur l'iPad reste à vérifier sur l'appareil.
 
 **Relief fin à 5 m sur tout le domaine** (PC partis au cran 0 ; ni le web ni les crans suivants, relief à 25 m inchangé, vérifié ligne à ligne sur le câble et le sol). Altitude IGN RGE ALTI (`tools_relief_fin.py`), 15,5 Mo, fusion en C++ ; sans le module, repli sur 25 m avec un message au journal. Le choix est fait au chargement et ne suit pas le régulateur : changer de cran ne bouge ni le sol ni le câble (banc du relief fin).
 
