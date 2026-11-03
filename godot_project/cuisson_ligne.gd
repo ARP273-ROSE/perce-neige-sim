@@ -1,10 +1,12 @@
 ## Cuisson hors ligne d'une remontée : fait tourner les constructeurs du jeu puis écrit un fichier
 ## binaire par ligne : géométrie fixe fusionnée, pièces répétées en instances, niveaux de détail,
 ## modèle de véhicule, pièces mobiles, formes de collision.
-##   godot --headless --fixed-fps 60 --path godot_project -s cuisson_ligne.gd -- --mode=normal --ligne=tcd10_toviere [--sortie=DOSSIER]
+##   godot --headless --fixed-fps 60 --path godot_project -s cuisson_ligne.gd -- --mode=normal --relief-fin --ligne=tcd10_toviere [--sortie=DOSSIER]
+## Le relief décide des hauteurs : un fichier par relief. PC : --relief-fin. PWA : --web --sans-relief-fin --indexer --palette
+## (fichier .web.cuit : ni tangentes ni UV2).
 extends SceneTree
 
-const VERSION: int = 1
+const VERSION: int = 2
 ## À partir de ce nombre de poses d'un même maillage, des instances plutôt qu'une fusion.
 const SEUIL_INSTANCES: int = 4
 ## Fusion par tronçons le long de la ligne : d'un seul bloc, plus rien n'est éliminé hors du champ
@@ -15,6 +17,7 @@ var _main: Node = null
 var _f: int = 0
 var _cle: String = ""
 var _sortie: String = "user://cuites"
+var _web: bool = false
 var _lg: LigneRemontee = null
 var _t0: int = 0
 var _fait: bool = false
@@ -37,6 +40,8 @@ func _initialize() -> void:
 			_cle = a.trim_prefix("--ligne=")
 		elif a.begins_with("--sortie="):
 			_sortie = a.trim_prefix("--sortie=")
+		elif a == "--web":
+			_web = true
 	if _cle == "":
 		printerr("--ligne=CLE manquant")
 		quit(2)
@@ -84,9 +89,6 @@ func _cuire() -> void:
 	var vehicule: Array = []
 	if v0 != null:
 		_lire_vehicule(v0, v0, Transform3D.IDENTITY, vehicule)
-	var corps0: Array = []
-	if not _lg._corps.is_empty() and _lg._corps[0] != null and _lg._corps[0][0] != null:
-		_lire_formes(_lg._corps[0][0], Transform3D.IDENTITY, corps0)
 	_parcours(_lg, Transform3D.IDENTITY, "")
 	var surfaces: Array = []
 	var instances: Array = []
@@ -107,15 +109,11 @@ func _cuire() -> void:
 		var g: Dictionary = _fixes[cle]
 		var ta: Array = MeshMerge._tableaux_acc(g["acc"])
 		surfaces.append({"surface": _emballer(ta), "mat": _mat(g["m"]), "portee": g["portee"], "ombre": g["ombre"], "couches": g["couches"]})
-	var veh_sortie: Array = []
-	for e in vehicule:
-		var s2: Array = []
-		for s in _surfaces_de(e["mesh"]):
-			s2.append({"surface": _emballer(s[0]), "mat": _mat(s[1] if e["ov"] == null else e["ov"])})
-		veh_sortie.append({"chemin": e["chemin"], "xf": e["xf"], "detail": e["detail"], "ombre": e["ombre"], "surfaces": s2})
-	# pièces mobiles : un groupe par maillage ; xf_racines (la pose de chaque pièce) et xf (le maillage dans la pièce)
 	var veh_acc: Dictionary = {}
+	var miroir_v: Transform3D = Transform3D.IDENTITY if _lg.sens_droite else Transform3D(Basis.from_scale(Vector3(-1, 1, 1)), Vector3.ZERO)
 	for e in vehicule:
+		if e["detail"]:
+			continue               # (pièces de détail : de près, la ligne construite)
 		for s in _surfaces_de(e["mesh"]):
 			var mt: Material = s[1] if e["ov"] == null else e["ov"]
 			var ck2: String = "%d|%d|%s" % [mt.get_instance_id() if mt != null else 0, e["ombre"], _attributs(s[0])]
@@ -130,7 +128,8 @@ func _cuire() -> void:
 				for i2 in range(nv):
 					ix2[i2] = i2
 				ind[Mesh.ARRAY_INDEX] = ix2
-			MeshMerge._ajouter(veh_acc[ck2]["acc"], ind, e["xf"])
+			var xv: Transform3D = miroir_v * (e["xf"] as Transform3D)
+			MeshMerge._ajouter(veh_acc[ck2]["acc"], _retourne(ind, xv), xv)
 	var veh_fusion: Array = []
 	for ck2 in veh_acc:
 		veh_fusion.append({"surface": _emballer(MeshMerge._tableaux_acc(veh_acc[ck2]["acc"])), "mat": _mat(veh_acc[ck2]["m"]), "ombre": veh_acc[ck2]["ombre"]})
@@ -149,16 +148,17 @@ func _cuire() -> void:
 			s3.append({"surface": _emballer(s[0]), "mat": _mat(s[1] if e["ov"] == null else e["ov"])})
 		mob_sortie.append({"type": e["type"], "xf": e["xf"], "xf_racines": e["xf_racines"], "surfaces": s3, "portee": e["portee"], "ombre": e["ombre"], "couches": e["couches"]})
 	var d: Dictionary = {
-		"version": VERSION, "cle": _cle, "xf_ligne": _lg.global_transform,
+		"version": VERSION, "cle": _cle, "xf_ligne": _lg.global_transform, "cible": "web" if _web else "pc",
 		"materiaux": _materiaux, "surfaces": surfaces, "instances": instances,
-		"vehicule": veh_sortie, "vehicule_fusion": veh_fusion, "corps_vehicule": corps0, "mobiles": mob_sortie,
-		"textes": _textes, "formes": _formes,
-		"n_vehicules": _lg._vehicules.size(),
+		"vehicule_fusion": veh_fusion, "mobiles": mob_sortie, "textes": _textes,
+		"vitesse_cable": _lg.vitesse, "pas_cable": 0.45 * _lg.diametre_cable / 52.0,
+		"boite_ligne": _boite_ligne(),
 	}
+	_trajet(d)
 	var brut: PackedByteArray = var_to_bytes(d)
 	var z: PackedByteArray = brut.compress(FileAccess.COMPRESSION_ZSTD)
 	DirAccess.make_dir_recursive_absolute(ProjectSettings.globalize_path(_sortie))
-	var chemin: String = _sortie.path_join(_cle + ".cuit")
+	var chemin: String = _sortie.path_join(_cle + (".web.cuit" if _web else ".cuit"))
 	var f: FileAccess = FileAccess.open(chemin, FileAccess.WRITE)
 	f.store_32(brut.size())
 	f.store_buffer(z)
@@ -170,16 +170,50 @@ func _cuire() -> void:
 			sans_lod += 1
 		lods += (s["surface"]["lods"] as Dictionary).size()
 	var appels_apres: int = surfaces.size() + instances.size()
-	var appels_vehicule: int = 0
-	for e in veh_sortie:
-		appels_vehicule += (e["surfaces"] as Array).size()
 	print("AVANT noeuds %d, geometries %d, surfaces fixes %d, surfaces d'un vehicule %d x %d, triangles fixes %d, materiaux %d" % [
 		_avant["noeuds"], _avant["geometries"], _avant["surfaces"], _avant["surfaces_vehicule"], _lg._vehicules.size(), _avant["triangles"], _materiaux.size()])
 	print("APRES noeuds 0 (serveurs), surfaces fusionnees %d, groupes d'instances %d, groupes de pieces mobiles %d, surfaces d'un vehicule %d, appels fixes %d" % [
-		surfaces.size(), instances.size(), mob_sortie.size(), appels_vehicule, appels_apres])
+		surfaces.size(), instances.size(), mob_sortie.size(), veh_fusion.size(), appels_apres])
 	print("LOD %d niveaux en tout, %d surfaces sans LOD" % [lods, sans_lod])
-	print("FORMES %d ; corps de vehicule %d ; textes %d ; materiaux avec texture non cuite %d" % [_formes.size(), corps0.size(), _textes.size(), _sans_textures.size()])
+	print("TEXTES %d ; materiaux avec texture non cuite %d ; trajet %d points, %d vehicules" % [_textes.size(), _sans_textures.size(), (d["trajet"] as PackedFloat32Array).size() / 4, (d["phases"] as PackedFloat32Array).size()])
 	print("FICHIER %s : brut %.2f Mo, compresse %.2f Mo" % [chemin, brut.size() / 1048576.0, z.size() / 1048576.0])
+
+
+## Trajet des véhicules : une pose toutes les pas_t secondes sur toute la boucle (vitesse des lanceurs
+## comprise) et la phase de chaque véhicule ; la ligne cuite n'a qu'à interpoler.
+func _trajet(d: Dictionary) -> void:
+	var pas_t: float = 0.5
+	var t: PackedFloat32Array = PackedFloat32Array()
+	var horaire: PackedFloat32Array = PackedFloat32Array()
+	var long: float = _lg.longueur_boucle
+	var s: float = 0.0
+	var tps: float = 0.0
+	var prochain: float = 0.0
+	while s < long:
+		if tps >= prochain:
+			var pc: Array = _lg.point(s)
+			var dh: Vector3 = pc[1]
+			dh.y = 0.0
+			var b: Basis = Basis.looking_at(dh.normalized() if dh.length() > 0.001 else Vector3.FORWARD, Vector3.UP)
+			var pos: Vector3 = pc[0]
+			t.append_array(PackedFloat32Array([pos.x, pos.y, pos.z, atan2(-b.x.z, b.x.x)]))
+			horaire.append(s)
+			prochain += pas_t
+		s += maxf(_lg.vitesse_en(s), 0.05) * 0.05
+		tps += 0.05
+	d["trajet"] = t
+	d["pas_t"] = pas_t
+	var ph: PackedFloat32Array = PackedFloat32Array()
+	for e in _lg._vehicules:
+		ph.append(horaire.bsearch(float(e[1])) * pas_t)
+	d["phases"] = ph
+
+
+func _boite_ligne() -> AABB:
+	var lh: float = _lg.longueur_h()
+	var ymin: float = minf(_lg.terrain(0.0), _lg.terrain(lh)) - 60.0
+	var ymax: float = maxf(_lg.terrain(0.0), _lg.terrain(lh)) + 120.0
+	return AABB(Vector3(-_lg.voie - 10.0, ymin, -lh - _lg.l_gare - 30.0), Vector3(2.0 * _lg.voie + 20.0, ymax - ymin, lh + 2.0 * _lg.l_gare + 60.0))
 
 
 func _pousser(a: PackedFloat32Array, x: Transform3D) -> void:
@@ -259,6 +293,20 @@ func _attributs(a: Array) -> String:
 	return o
 
 
+## Pose en miroir : l'ordre des sommets s'inverse, sinon les faces se retournent.
+func _retourne(a: Array, x: Transform3D) -> Array:
+	if x.basis.determinant() >= 0.0:
+		return a
+	var o: Array = a.duplicate()
+	var ix: PackedInt32Array = (a[Mesh.ARRAY_INDEX] as PackedInt32Array).duplicate()
+	for k in range(0, ix.size() - 2, 3):
+		var t: int = ix[k + 1]
+		ix[k + 1] = ix[k + 2]
+		ix[k + 2] = t
+	o[Mesh.ARRAY_INDEX] = ix
+	return o
+
+
 func _troncon(ab: AABB) -> int:
 	return int(floor(-ab.get_center().z / TRONCON))
 
@@ -276,12 +324,16 @@ func _fusionner_dans(m: Material, portee: float, ombre: int, couches: int, a: Ar
 		for i in range(n):
 			ix[i] = i
 		ind[Mesh.ARRAY_INDEX] = ix
-	MeshMerge._ajouter(_fixes[cle]["acc"], ind, x)
+	MeshMerge._ajouter(_fixes[cle]["acc"], _retourne(ind, x), x)
 
 
 ## Surface prête pour RenderingServer.mesh_add_surface_from_arrays : tableaux et niveaux de détail
 ## (taille d'arête → indices), lisibles aussi bien par le module C++ que par la PWA.
 func _emballer(a: Array) -> Dictionary:
+	if _web:
+		a = a.duplicate()
+		a[Mesh.ARRAY_TANGENT] = null
+		a[Mesh.ARRAY_TEX_UV2] = null
 	var im: ImporterMesh = ImporterMesh.new()
 	im.add_surface(Mesh.PRIMITIVE_TRIANGLES, a)
 	if (a[Mesh.ARRAY_VERTEX] as PackedVector3Array).size() >= 64:
