@@ -66,10 +66,22 @@ func lire(fichier: String) -> bool:
 	var f: FileAccess = FileAccess.open(fichier, FileAccess.READ)
 	if f == null:
 		return false
-	var n: int = f.get_32()
-	var z: PackedByteArray = f.get_buffer(f.get_length() - 4)
+	var o: PackedByteArray = f.get_buffer(f.get_length())
 	f.close()
-	_d = bytes_to_var(z.decompress(n, FileAccess.COMPRESSION_ZSTD))
+	return lire_octets(o, t0)
+
+
+## Mêmes octets reçus du serveur (PWA : pas de copie dans user://, qui resterait en mémoire).
+func lire_octets(o: PackedByteArray, t0: int = -1) -> bool:
+	if t0 < 0:
+		t0 = Time.get_ticks_usec()
+	if o.size() < 8:
+		return false
+	var n: int = o.decode_u32(0)
+	_d = bytes_to_var(o.slice(4).decompress(n, FileAccess.COMPRESSION_ZSTD))
+	if not (_d is Dictionary):
+		_d = {}
+		return false
 	lecture_ms = (Time.get_ticks_usec() - t0) / 1000.0
 	if int(_d.get("version", 0)) != VERSION:
 		_d = {}
