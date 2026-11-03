@@ -114,11 +114,32 @@ func _cuire() -> void:
 			s2.append({"surface": _emballer(s[0]), "mat": _mat(s[1] if e["ov"] == null else e["ov"])})
 		veh_sortie.append({"chemin": e["chemin"], "xf": e["xf"], "detail": e["detail"], "ombre": e["ombre"], "surfaces": s2})
 	# pièces mobiles : un groupe par maillage ; xf_racines (la pose de chaque pièce) et xf (le maillage dans la pièce)
+	var veh_acc: Dictionary = {}
+	for e in vehicule:
+		for s in _surfaces_de(e["mesh"]):
+			var mt: Material = s[1] if e["ov"] == null else e["ov"]
+			var ck2: String = "%d|%d|%s" % [mt.get_instance_id() if mt != null else 0, e["ombre"], _attributs(s[0])]
+			if not veh_acc.has(ck2):
+				veh_acc[ck2] = {"m": mt, "acc": {}, "ombre": e["ombre"]}
+			var ind: Array = s[0]
+			if ind[Mesh.ARRAY_INDEX] == null:
+				ind = ind.duplicate()
+				var nv: int = (ind[Mesh.ARRAY_VERTEX] as PackedVector3Array).size()
+				var ix2: PackedInt32Array = PackedInt32Array()
+				ix2.resize(nv)
+				for i2 in range(nv):
+					ix2[i2] = i2
+				ind[Mesh.ARRAY_INDEX] = ix2
+			MeshMerge._ajouter(veh_acc[ck2]["acc"], ind, e["xf"])
+	var veh_fusion: Array = []
+	for ck2 in veh_acc:
+		veh_fusion.append({"surface": _emballer(MeshMerge._tableaux_acc(veh_acc[ck2]["acc"])), "mat": _mat(veh_acc[ck2]["m"]), "ombre": veh_acc[ck2]["ombre"]})
+	print("VEHICULE fusionne : %d surfaces" % veh_fusion.size())
 	var mob_groupes: Dictionary = {}
 	for e in _mobiles:
-		var ck: String = "%s|%d|%d|%s" % [e["type"], (e["mesh"] as Mesh).get_instance_id(), (e["ov"] as Material).get_instance_id() if e["ov"] != null else 0, str(e["xf"])]
+		var ck: String = "%s|%d|%d|%s|%.0f|%d|%d|%d" % [e["type"], (e["mesh"] as Mesh).get_instance_id(), (e["ov"] as Material).get_instance_id() if e["ov"] != null else 0, str(e["xf"]), e["portee"], e["ombre"], e["couches"], _troncon(AABB((e["xf_racine"] as Transform3D).origin, Vector3.ZERO))]
 		if not mob_groupes.has(ck):
-			mob_groupes[ck] = {"type": e["type"], "mesh": e["mesh"], "ov": e["ov"], "xf": e["xf"], "xf_racines": PackedFloat32Array()}
+			mob_groupes[ck] = {"type": e["type"], "mesh": e["mesh"], "ov": e["ov"], "xf": e["xf"], "xf_racines": PackedFloat32Array(), "portee": e["portee"], "ombre": e["ombre"], "couches": e["couches"]}
 		_pousser(mob_groupes[ck]["xf_racines"], e["xf_racine"])
 	var mob_sortie: Array = []
 	for ck in mob_groupes:
@@ -126,11 +147,11 @@ func _cuire() -> void:
 		var s3: Array = []
 		for s in _surfaces_de(e["mesh"]):
 			s3.append({"surface": _emballer(s[0]), "mat": _mat(s[1] if e["ov"] == null else e["ov"])})
-		mob_sortie.append({"type": e["type"], "xf": e["xf"], "xf_racines": e["xf_racines"], "surfaces": s3})
+		mob_sortie.append({"type": e["type"], "xf": e["xf"], "xf_racines": e["xf_racines"], "surfaces": s3, "portee": e["portee"], "ombre": e["ombre"], "couches": e["couches"]})
 	var d: Dictionary = {
 		"version": VERSION, "cle": _cle, "xf_ligne": _lg.global_transform,
 		"materiaux": _materiaux, "surfaces": surfaces, "instances": instances,
-		"vehicule": veh_sortie, "corps_vehicule": corps0, "mobiles": mob_sortie,
+		"vehicule": veh_sortie, "vehicule_fusion": veh_fusion, "corps_vehicule": corps0, "mobiles": mob_sortie,
 		"textes": _textes, "formes": _formes,
 		"n_vehicules": _lg._vehicules.size(),
 	}
@@ -229,12 +250,21 @@ func _surfaces_de(m: Mesh) -> Array:
 	return o
 
 
+## Attributs présents : fusionner une surface sans couleurs avec une surface qui en a donne des
+## tableaux de longueurs différentes, rejetés à la pose.
+func _attributs(a: Array) -> String:
+	var o: String = ""
+	for k in [Mesh.ARRAY_NORMAL, Mesh.ARRAY_TANGENT, Mesh.ARRAY_COLOR, Mesh.ARRAY_TEX_UV, Mesh.ARRAY_TEX_UV2]:
+		o += "1" if a[k] != null else "0"
+	return o
+
+
 func _troncon(ab: AABB) -> int:
 	return int(floor(-ab.get_center().z / TRONCON))
 
 
 func _fusionner_dans(m: Material, portee: float, ombre: int, couches: int, a: Array, x: Transform3D, tr: int) -> void:
-	var cle: String = "%d|%.0f|%d|%d|%d" % [m.get_instance_id() if m != null else 0, portee, ombre, couches, tr]
+	var cle: String = "%d|%.0f|%d|%d|%d|%s" % [m.get_instance_id() if m != null else 0, portee, ombre, couches, tr, _attributs(a)]
 	if not _fixes.has(cle):
 		_fixes[cle] = {"m": m, "acc": {}, "portee": portee, "ombre": ombre, "couches": couches}
 	var ind: Array = a
@@ -365,6 +395,7 @@ func _lire_mobile(n: Node, racine: Node, x: Transform3D, type_mob: String, xf_ra
 		var mi: MeshInstance3D = n
 		_avant["geometries"] += 1
 		_avant["surfaces"] += mi.mesh.get_surface_count()
-		_mobiles.append({"type": type_mob, "racine": racine.get_instance_id(), "xf": xx, "xf_racine": xf_racine, "mesh": mi.mesh, "ov": mi.material_override})
+		_mobiles.append({"type": type_mob, "racine": racine.get_instance_id(), "xf": xx, "xf_racine": xf_racine, "mesh": mi.mesh, "ov": mi.material_override,
+			"portee": mi.visibility_range_end, "ombre": mi.cast_shadow, "couches": mi.layers})
 	for c in n.get_children():
 		_lire_mobile(c, racine, xx, type_mob, xf_racine)
