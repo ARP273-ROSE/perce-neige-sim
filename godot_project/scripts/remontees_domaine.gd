@@ -695,6 +695,16 @@ var _t_cuit_dist: float = 0.0
 var _cuit_sous_terre: bool = false
 
 
+var _communs_faits: bool = false
+
+
+func _preparer_communs() -> void:
+	_communs_faits = true
+	var t0: int = Time.get_ticks_usec()
+	var n: int = LigneCuite.preparer_communs(dossier_cuites, OS.has_feature("web"))
+	print("[Cuites] %d matériaux préparés en %.1f ms" % [n, (Time.get_ticks_usec() - t0) / 1000.0])
+
+
 func _a_cuit(lg: LigneRemontee) -> bool:
 	if not _cuit_actif:
 		return false
@@ -723,6 +733,8 @@ func _point_cuit() -> Variant:
 func _gerer_cuites(delta: float) -> void:
 	if not _cuit_actif:
 		return
+	if not _communs_faits:
+		_preparer_communs()
 	if _cuit_tache >= 0 and WorkerThreadPool.is_task_completed(_cuit_tache):
 		WorkerThreadPool.wait_for_task_completion(_cuit_tache)
 		_cuit_tache = -1
