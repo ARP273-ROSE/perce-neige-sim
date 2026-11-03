@@ -3217,72 +3217,70 @@ func _dehors(s: float) -> Vector3:
 ## sur les L_OUVERTURE premiers mètres (la pince lâche le câble au début de
 ## la décélération), et le relâche de même à la sortie.
 const L_OUVERTURE: float = 2.5
+const L_REFERMETURE: float = 1.0
 
 
 func ouverture_pince(x: float, l: float) -> float:
 	if fixe():
 		return 0.0
-	return smoothstep(0.0, L_OUVERTURE, minf(x, l - x))
+	# (retour d'utilisateur, 03/11/2026) à chaque bout du lanceur : le rail comprime les
+	# ressorts jusqu'au débrayage, puis sa pente s'inverse, plus raide, et le mors se
+	# referme à vide. Rien le long du quai.
+	var u: float = minf(x, l - x)
+	return smoothstep(0.0, L_OUVERTURE, u) * (1.0 - smoothstep(L_OUVERTURE, L_OUVERTURE + L_REFERMETURE, u))
 
 
-## Centre du galet du levier dans le repère de la pince (x vers l'extérieur
-## de la boucle, y vers le haut) pour une ouverture t — même géométrie que
-## VehiculeRemontee._levier : pivot (0,36 ; 0,20), galet à (0,14 ; 0,07),
-## rotation −0,55 rad quand la pince est ouverte.
-static func galet_levier(t: float) -> Vector2:
-	var a: float = -0.55 * t
-	var g: Vector2 = Vector2(0.14, 0.07)
-	return Vector2(0.36, 0.20) + Vector2(g.x * cos(a) - g.y * sin(a), g.x * sin(a) + g.y * cos(a))
+## Centre de la roue au sommet des ressorts (repère de la pince) pour une ouverture t.
+static func galet_a108(t: float) -> Vector2:
+	var a: float = -VehiculeRemontee.A108_OUVERTURE * t
+	var g: Vector2 = Vector2(VehiculeRemontee.A108_ROUE.x, VehiculeRemontee.A108_ROUE.y)
+	return VehiculeRemontee.A108_ARTICULATION + Vector2(g.x * cos(a) - g.y * sin(a), g.x * sin(a) + g.y * cos(a))
 
 
-## Rail d'ouverture des pinces (retour d'utilisateur, 23/10/2026) : un fer plat
-## au-dessus du galet du levier, sur toute la zone de gare ; il descend
-## en rampe à l'entrée (il appuie sur le levier, comprime les ressorts et
-## ouvre la mâchoire) et remonte à la sortie. Suspendu au carénage.
+## Rail d'ouverture des pinces : un fer plat au-dessus de la roue, à chaque bout du lanceur
+## seulement : pente descendante (la roue descend, les ressorts se compriment, le mors
+## s'ouvre), compression maximale au débrayage, puis pente inverse plus raide (le mors se
+## referme à vide). Suspendu au carénage.
 func _rail_ouverture(aval: bool) -> void:
 	var s0: float = s_gare(aval, 0.0)
 	var l: float = longueur_zone(aval)
 	var r_node: Node3D = Node3D.new()
 	r_node.name = "RailOuverture" + ("Aval" if aval else "Amont")
 	_enfant(r_node)
-	var pts: PackedVector3Array = PackedVector3Array()
-	var x: float = -0.8
-	while x <= l + 0.8:
-		var s: float = s0 + x
-		var p: Vector3 = point(s)[0]
-		var o: Vector3 = _dehors(s)
-		var gl: Vector2 = galet_levier(ouverture_pince(clampf(x, 0.0, l), l))
-		# au-dessus du galet (rayon 0,055) ; un peu plus haut avant/après la
-		# zone, là où le galet arrive et repart sans toucher
-		var lev: float = 0.03 * (1.0 - clampf(minf(x, l - x) / 0.8 + 1.0, 0.0, 1.0))
-		pts.append(p + o * gl.x + Vector3(0, gl.y + 0.055 + 0.012 + lev, 0))
-		var dans_rampe: bool = minf(x, l - x) < L_OUVERTURE + 0.5
-		x += 0.2 if dans_rampe else 1.0
-	# fer plat : deux tubes fins côte à côte, comme une semelle
-	RemonteeKit.tube(r_node, pts, 0.022, "acier", 6)
-	var k: int = 0
-	while k < pts.size():
-		RemonteeKit.barre(r_node, pts[k], Vector3(pts[k].x, terrain(0.0 if aval else longueur_h()) + H_CABLE_GARE + Y_CAPOT, pts[k].z), 0.018, "galva_pylone", 6)
-		k += 8
+	var y_toit: float = terrain(0.0 if aval else longueur_h()) + H_CABLE_GARE + Y_CAPOT
+	# seulement aux deux bouts du lanceur, de part et d'autre du point de débrayage
+	var bout: float = L_OUVERTURE + L_REFERMETURE + 0.4
+	for tr in [[-0.8, bout], [l - bout, l + 0.8]]:
+		var pts: PackedVector3Array = PackedVector3Array()
+		var x: float = tr[0]
+		while x <= float(tr[1]) + 0.001:
+			var p: Vector3 = point(s0 + x)[0]
+			var o: Vector3 = _dehors(s0 + x)
+			var gl: Vector2 = galet_a108(ouverture_pince(clampf(x, 0.0, l), l))
+			pts.append(p + o * gl.x + Vector3(0, gl.y + VehiculeRemontee.A108_R_ROUE + 0.012, 0))
+			x += 0.2
+		RemonteeKit.tube(r_node, pts, 0.022, "acier", 6)
+		for k in [0, pts.size() / 2, pts.size() - 1]:
+			RemonteeKit.barre(r_node, pts[k], Vector3(pts[k].x, y_toit, pts[k].z), 0.018, "galva_pylone", 6)
 	MeshMerge.merge(r_node, [], "Rail")
 
 
 ## Appui des pneus du lanceur (repère du véhicule : dehors, haut) : la
 ## plaque de friction de la pince ; au 3S, le dessus du chariot.
 func _x_plaque() -> float:
-	return 0.0 if tricable() else VehiculeRemontee.X_PLAQUE
+	return 0.0 if tricable() else VehiculeRemontee.A108_X_PATIN
 
 
 func _y_plaque() -> float:
-	return 0.46 if tricable() else VehiculeRemontee.Y_PLAQUE
+	return 0.46 if tricable() else VehiculeRemontee.A108_Y_PATIN
 
 
 func _lanceurs() -> void:
 	_pneus.clear()
 	if famille.begins_with("perche") or fixe():
 		return
-	var y_rail: float = 0.11 - 0.065 - 0.035
-	var x_rail: float = 0.25
+	var y_rail: float = VehiculeRemontee.A108_Y_GALET - VehiculeRemontee.A108_R_GALET - 0.035
+	var x_rail: float = VehiculeRemontee.A108_X_GALET
 	if tricable():
 		# rail sous les galets de gare du chariot (de part et d'autre)
 		y_rail = 0.36 - 0.09 - 0.045
