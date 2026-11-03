@@ -299,6 +299,10 @@ static func _squelette_marche(ph: float) -> Dictionary:
 # --- activation ------------------------------------------------------------------
 
 func activer(position_depart: Vector3, regard: float) -> void:
+	if sur_echelle():
+		_echelle_bas = Vector3.ZERO
+		_echelle_haut = Vector3.ZERO
+		embarque = false
 	global_position = position_depart
 	velocity = Vector3.ZERO
 	cam_yaw = regard
@@ -571,6 +575,65 @@ func _pitch_max() -> float:
 	return 0.60 if premiere_personne else 0.25
 
 
+# --- échelle des pylônes (demande d'utilisateur, 03/11/2026) -------------------------
+
+const VITESSE_ECHELLE: float = 0.8    # m/s, à la main
+const RECUL_ECHELLE: float = 0.32     # du corps à l'échelle
+var _echelle_bas: Vector3 = Vector3.ZERO
+var _echelle_haut: Vector3 = Vector3.ZERO
+var _echelle_s: float = 0.0
+var _echelle_auto: float = 0.0        # +1 monte, −1 descend tout seul (bouton), 0 : joystick
+
+
+func sur_echelle() -> bool:
+	return _echelle_haut != _echelle_bas
+
+
+func echelle_en_haut() -> bool:
+	return sur_echelle() and _echelle_s >= _echelle_bas.distance_to(_echelle_haut) - 0.01
+
+
+## Prend l'échelle là où l'on est et monte, dans l'axe de l'échelle.
+func prendre_echelle(py: PyloneRemontee) -> void:
+	var n: Vector3 = (py.global_transform.basis.z * Vector3(1, 0, 1)).normalized() * RECUL_ECHELLE
+	_echelle_haut = (py.global_transform * py.echelle_haut) + n
+	_echelle_bas = py.echelle_a_hauteur(global_position.y) + n
+	_echelle_s = 0.0
+	_echelle_auto = 1.0
+	lever()
+	chemin.clear()
+	support = null
+	embarque = true
+	velocity = Vector3.ZERO
+	_cap = atan2(n.x, n.z)
+	_visuel.rotation = Vector3(0.0, _cap, 0.0)
+
+
+## GRIMPER / DESCENDRE sur l'échelle : repart dans l'autre sens.
+func sens_echelle() -> void:
+	_echelle_auto = -1.0 if _echelle_auto > 0.0 or echelle_en_haut() else 1.0
+
+
+func _grimper(delta: float) -> void:
+	velocity = Vector3.ZERO
+	var k: Vector2 = _clavier()
+	var cmd: float = k.y if k.y != 0.0 else entree.y
+	if absf(cmd) > 0.15:
+		_echelle_auto = 0.0
+	else:
+		cmd = _echelle_auto
+	var L: float = _echelle_bas.distance_to(_echelle_haut)
+	_echelle_s = clampf(_echelle_s + cmd * VITESSE_ECHELLE * delta, 0.0, L)
+	global_position = _echelle_bas.lerp(_echelle_haut, _echelle_s / maxf(L, 0.01))
+	if _echelle_s <= 0.0 and cmd < 0.0:
+		# revenu en bas : on lâche, un pas en arrière
+		_echelle_bas = Vector3.ZERO
+		_echelle_haut = Vector3.ZERO
+		_echelle_auto = 0.0
+		embarque = false
+		dernier_sol = global_position
+
+
 func _clavier() -> Vector2:
 	var v: Vector2 = Vector2.ZERO
 	if Input.is_physical_key_pressed(KEY_W) or Input.is_physical_key_pressed(KEY_UP):
@@ -603,6 +666,10 @@ func _process_corps(delta: float) -> void:
 	delta = minf(delta, 0.05)
 	_porter()
 	_aligner_capsule()
+	if sur_echelle():
+		_grimper(delta)
+		_camera()
+		return
 	if embarque:
 		velocity = Vector3.ZERO
 		_camera()

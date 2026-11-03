@@ -54,7 +54,11 @@ CACHE = ROOT / '.build_cache'
 PY_VERSION = '3.12.10'
 PY_EMBED_URL = (f'https://www.python.org/ftp/python/{PY_VERSION}/'
                 f'python-{PY_VERSION}-embed-amd64.zip')
-GET_PIP_URL = 'https://bootstrap.pypa.io/get-pip.py'
+# pip posé depuis sa roue : le get-pip.py actuel refuse de s'installer sous Windows
+# (« To modify pip, please run… », 03/11/2026). Roue pure Python, simple archive.
+PIP_VERSION = '25.2'
+PIP_WHEEL_URL = (f'https://files.pythonhosted.org/packages/py3/p/pip/'
+                 f'pip-{PIP_VERSION}-py3-none-any.whl')
 
 # Ce qui entre dans le paquet est decrit explicitement plutot que copie en
 # bloc : un depot contient aussi des scripts de maintenance, des rapports et
@@ -140,10 +144,13 @@ def step_python():
         log(f'{pth.name} ajuste (site actif, ../app dans le chemin)')
 
     exe = py_dir / 'python.exe'
-    get_pip = fetch(GET_PIP_URL, CACHE / 'get-pip.py')
+    roue = fetch(PIP_WHEEL_URL, CACHE / f'pip-{PIP_VERSION}.whl')
     log('installation de pip')
-    subprocess.run([str(exe), str(get_pip), '--no-warn-script-location', '-q'],
-                   check=True)
+    site = py_dir / 'Lib' / 'site-packages'
+    site.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(roue) as z:
+        z.extractall(site)
+    subprocess.run([str(exe), '-m', 'pip', '--version'], check=True)
 
     # setuptools et wheel ne sont pas fournis par la distribution embeddable,
     # et get-pip n'installe que pip. Des qu'une dependance n'a pas de roue
