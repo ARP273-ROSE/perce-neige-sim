@@ -711,19 +711,14 @@ const TERRAIN_PIECES: int = 2
 
 func _mailles_fines(relief: ReliefBuilder, m: Rect2, faces: PackedVector3Array) -> void:
 	var rf: ReliefFin = relief.fin
-	var p: float = ReliefFin.PAS
-	var j0: int = int(floor((m.position.x - rf.x0) / p))
-	var j1: int = int(ceil((m.end.x - rf.x0) / p))
-	var i0: int = int(floor((m.position.y - rf.z0) / p))
-	var i1: int = int(ceil((m.end.y - rf.z0) / p))
-	for i in range(i0, i1):
-		var z: float = rf.z0 + i * p
-		for j in range(j0, j1):
-			var x: float = rf.x0 + j * p
-			var a: Vector3 = Vector3(x, relief._hauteur_tri(x, z), z)
-			var b: Vector3 = Vector3(x + p, relief._hauteur_tri(x + p, z), z)
-			var c: Vector3 = Vector3(x, relief._hauteur_tri(x, z + p), z + p)
-			var d: Vector3 = Vector3(x + p, relief._hauteur_tri(x + p, z + p), z + p)
+	var j0: int = int(round((m.position.x - rf.x0) / ReliefFin.PX))
+	var i0: int = int(round((m.position.y - rf.z0) / ReliefFin.PZ))
+	for i in range(i0, i0 + ReliefFin.K):
+		for j in range(j0, j0 + ReliefFin.K):
+			var a: Vector3 = rf.noeud(i, j)
+			var b: Vector3 = rf.noeud(i, j + 1)
+			var c: Vector3 = rf.noeud(i + 1, j)
+			var d: Vector3 = rf.noeud(i + 1, j + 1)
 			faces.append_array([a, b, c, b, d, c])
 
 
@@ -753,8 +748,8 @@ func _terrain(relief: ReliefBuilder, r: Rect2, quoi: int = TERRAIN_TOUT) -> void
 					break
 			if dans_piece:
 				continue
-			# zone du relief fin : mailles de 4 m, le sol que voit et que skie le joueur
-			if relief.fin != null and relief.fin.zone.intersects(maille):
+			# relief fin : ses triangles, le sol que voit et que skie le joueur
+			if relief.fin != null and relief.fin.fine_ici(x0 + dx * 0.5, z0 + dz * 0.5):
 				_mailles_fines(relief, maille, faces)
 				continue
 			var pa: Vector3 = Vector3(x0, relief._h[(i * p) * n + j * p], z0)
