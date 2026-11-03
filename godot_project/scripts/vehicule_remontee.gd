@@ -327,7 +327,7 @@ func _couleur_ressorts() -> String:
 ## Patin décalé vers les ressorts : au-dessus du câble, il passerait sous les galets de
 ## compression (retour d'utilisateur, 03/11/2026) ; assez haut pour rester au-dessus d'eux.
 const A108_X_PATIN: float = 0.17
-const A108_Y_PATIN: float = 0.225
+const A108_Y_PATIN: float = 0.26
 ## Galets de roulement sur le rail de gare, plus petits et plus bas, sous les ressorts.
 const A108_X_GALET: float = 0.22
 const A108_Y_GALET: float = 0.05

@@ -3257,7 +3257,7 @@ func _rail_ouverture(aval: bool) -> void:
 			var p: Vector3 = point(s0 + x)[0]
 			var o: Vector3 = _dehors(s0 + x)
 			var gl: Vector2 = galet_a108(ouverture_pince(clampf(x, 0.0, l), l))
-			pts.append(p + o * gl.x + Vector3(0, gl.y + VehiculeRemontee.A108_R_ROUE + 0.012, 0))
+			pts.append(p + o * gl.x + Vector3(0, gl.y + VehiculeRemontee.A108_R_ROUE + 0.024, 0))
 			x += 0.2
 		RemonteeKit.tube(r_node, pts, 0.022, "acier", 6)
 		for k in [0, pts.size() / 2, pts.size() - 1]:
@@ -3279,7 +3279,7 @@ func _lanceurs() -> void:
 	_pneus.clear()
 	if famille.begins_with("perche") or fixe():
 		return
-	var y_rail: float = VehiculeRemontee.A108_Y_GALET - VehiculeRemontee.A108_R_GALET - 0.035
+	var y_rail: float = VehiculeRemontee.A108_Y_GALET - VehiculeRemontee.A108_R_GALET - 0.047
 	var x_rail: float = VehiculeRemontee.A108_X_GALET
 	if tricable():
 		# rail sous les galets de gare du chariot (de part et d'autre)
@@ -3333,7 +3333,7 @@ func _lanceurs() -> void:
 			pn.transform = Transform3D(base, c)
 			_enfant(pn)
 			if not MeshMerge.poser_partage(pn, "pneu"):
-				RemonteeKit.cylindre(pn, R_PNEU, R_PNEU, 0.14, Transform3D.IDENTITY, "caoutchouc", 18)
+				RemonteeKit.cylindre(pn, R_PNEU, R_PNEU, 0.10, Transform3D.IDENTITY, "caoutchouc", 18)
 				RemonteeKit.cylindre(pn, 0.12, 0.12, 0.16, Transform3D.IDENTITY, "galva_pylone", 12)
 				for b in range(5):
 					var a2: float = TAU * b / 5.0
