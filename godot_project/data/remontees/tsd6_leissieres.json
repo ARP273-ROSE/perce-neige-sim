@@ -12,6 +12,7 @@
  "espacement": 45.0,
  "voie": 6.1,
  "sens_droite": true,
+ "numeros_inverses": true,
  "diametre_cable": 42.0,
  "famille": "siege_garaventa_sk6",
  "aval": [

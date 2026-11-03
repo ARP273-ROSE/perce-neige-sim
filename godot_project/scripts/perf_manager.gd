@@ -255,7 +255,7 @@ func _appliquer(c: int, pourquoi: String) -> void:
 		if _web:
 			# jamais plus de ×2 sur le web : le ×4 prenait 60 Mo de tampons à
 			# 1671×1167, et il ne s'éteignait à aucun cran
-			vp.msaa_3d = Viewport.MSAA_2X if cran <= 5 and secours_web == 0 else Viewport.MSAA_DISABLED
+			vp.msaa_3d = Viewport.MSAA_2X if cran <= 5 and secours_web <= 1 else Viewport.MSAA_DISABLED
 		var echelle: float = _echelle(cran)
 		if echelle < 0.999:
 			# FSR 2 (reconstruction temporelle) garde les textes nets ; FSR 1
@@ -295,9 +295,13 @@ func _cran_max() -> int:
 
 func _echelle(c: int) -> float:
 	if _web:
+		# modes allégés : écran à densité 1,5 (index.html). Même nombre de pixels 3D et même
+		# mémoire qu'à 60 % sur l'écran entier, bien plus net (« tout pixelisé », 03/11/2026)
 		if secours_web >= 2:
-			return 0.5
-		return [1.0, 1.0, 1.0, 0.85, 0.7, 0.6, 0.6][c]
+			return 0.8
+		if secours_web == 1:
+			return 1.0
+		return [1.0, 1.0, 1.0, 0.85, 0.75, 0.7, 0.7][c]
 	return [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.85, 0.7][c]
 
 
@@ -305,7 +309,7 @@ func _echelle(c: int) -> float:
 func libelle(c: int) -> String:
 	if _web:
 		return ["tout", "sans éclairage indirect", "sans brouillard ni reflets",
-			"rendu 85 %", "rendu 70 %", "rendu 60 %, sans halo",
+			"rendu 85 %", "rendu 75 %", "rendu 70 %, sans halo",
 			"30 i/s, sans anti-crénelage"][c]
 	return ["tout", "sans éclairage indirect", "sans brouillard ni reflets",
 		"sans anti-crénelage", "sans halo", "30 i/s", "rendu à 85 %",
