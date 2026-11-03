@@ -2555,6 +2555,14 @@ func _pos_cabine_conducteur(aval: bool) -> Vector3:
 ## Collisions fixes : pylônes (massif, fût, traverse) et gares (dalle,
 ## poteaux, bâti de poulie) ; les véhicules portent la leur.
 var avec_collisions: bool = false
+## Numéros d'exploitation décroissants depuis la gare aval (Leissières : P14 au départ).
+var numeros_inverses: bool = false
+
+
+func numero_pylone(i: int) -> int:
+	return pylones.size() - i if numeros_inverses else i + 1
+
+
 
 
 func _collisions_fixes() -> void:
@@ -3431,7 +3439,7 @@ func _poser_pylones() -> void:
 		var d: float = float(p["d"])
 		var t: float = terrain(d)
 		var py: PyloneRemontee = PyloneRemontee.new()
-		py.numero = i + 1
+		py.numero = numero_pylone(i)
 		py.voie = voie
 		py.sens_montee_droite = sens_droite
 		py.dessus_traverse = _dessus_traverse()
@@ -3500,7 +3508,7 @@ func _poser_pylones_teleski() -> void:
 			var cote: int = po[2]
 			var py: PyloneRemontee = PyloneRemontee.new()
 			py.style = "teleski"
-			py.numero = i + 1
+			py.numero = numero_pylone(i)
 			py.dessus_traverse = -PyloneRemontee.DESSUS_BRAS_TELESKI
 			py.cote = cote
 			py.en_t = not constructeur.to_lower().contains("poma")
@@ -4479,7 +4487,7 @@ func _poser_pylones_treillis() -> void:
 		var d: float = float(p["d"])
 		var t: float = terrain(d)
 		var py: PyloneTreillis = PyloneTreillis.new()
-		py.numero = i + 1
+		py.numero = numero_pylone(i)
 		py.voie = voie
 		py.ecart_porteurs = VehiculeRemontee.E_PORTEURS_3S
 		if vaetvient():

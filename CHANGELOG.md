@@ -7,7 +7,9 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## Version suivante (non publiée)
 
-**Modes allégés de la PWA : écran et relief.** En allégé 1 et 2 : densité d'écran limitée à 1,5 (2388×1668 → 1791×1251), photo du relief à 1 024 px de large. Sous WebKit : textures 147 → 111 Mo, tampons de rendu 30 → 17 Mo. Le mode normal ne change pas. Contrôlé : les boutons répondent au bon endroit et l'interface s'affiche en entier ; le relief plus flou n'a pas été jugé à l'écran.
+**Modes allégés de la PWA : plus nets, moins lourds.** Densité d'écran limitée à 1,5 et photo du relief à 1 024 px. La 3D passe de 60 % à 100 % de cette densité en allégé 1, anti-crénelage rétabli, et de 50 % à 80 % en allégé 2 : l'image n'est plus pixelisée après un plantage. En mode normal, le rendu ne descend plus sous 70 %. Sous WebKit, au pied de Tovière : allégé 1 à 123 Mo de textures et 51 Mo de tampons de rendu, allégé 2 à 117 et 17 Mo.
+
+**Télésiège des Leissières** : pylônes numérotés dans l'ordre d'exploitation, P14 au départ et P1 à l'arrivée ; compositions de galets inchangées, conformes au relevé.
 
 **Relief fin à 5 m sur tout le domaine** (PC partis au cran 0 ; ni le web ni les crans suivants, relief à 25 m inchangé, vérifié ligne à ligne sur le câble et le sol). Altitude IGN RGE ALTI (`tools_relief_fin.py`), 15,5 Mo, fusion en C++ ; sans le module, repli sur 25 m avec un message au journal. Le choix est fait au chargement et ne suit pas le régulateur : changer de cran ne bouge ni le sol ni le câble (banc du relief fin).
 

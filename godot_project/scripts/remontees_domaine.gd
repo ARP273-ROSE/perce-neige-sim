@@ -469,6 +469,7 @@ func _poser(D: Dictionary) -> void:
 	lg.espacement = float(D["espacement"])
 	lg.famille = String(D["famille"])
 	lg.sens_droite = bool(D["sens_droite"])
+	lg.numeros_inverses = bool(D.get("numeros_inverses", false))
 	lg.diametre_cable = float(D.get("diametre_cable", 47.0))
 	lg.nom_ligne = String(D["nom"])
 	lg.constructeur = String(D.get("constructeur", ""))
