@@ -2595,6 +2595,8 @@ func _build_cable() -> void:
 	cable_left_segments.clear()
 	cable_right_segments.clear()
 	var total_len: float = PNConstants.LENGTH
+	if OS.has_feature("web"):       # PWA : 3 tampons par segment, deux fois moins (coupe au câble à 30 m près)
+		cable_segment_length = 30.0
 	var n_seg: int = int(ceil(total_len / cable_segment_length))
 	for i in range(n_seg):
 		var s_start: float = float(i) * cable_segment_length

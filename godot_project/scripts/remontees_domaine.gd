@@ -572,7 +572,8 @@ func _ready() -> void:
 		var telephone: bool = bool(JavaScriptBridge.eval("/Mobile|Android/.test(navigator.userAgent)||(/Macintosh/.test(navigator.userAgent)&&navigator.maxTouchPoints>1)", true))
 		_budget_tampons_mo = [200.0 if telephone else 350.0, 140.0 if telephone else 180.0, 140.0][clampi(PerfManager.secours_web, 0, 2)]
 		if telephone and PerfManager.secours_web > 0:
-			_budget_proche = 250.0
+			# (secours 2 : seule la ligne où l'on arrive ; perte à 160 Mo le 03/11/2026)
+			_budget_proche = 250.0 if PerfManager.secours_web == 1 else 120.0
 	if PerfManager.secours_web > 0:
 		var fort: bool = PerfManager.secours_web >= 2 or _budget_proche < BUDGET_PROCHE
 		CONSTRUIRE_JUSQUA = 500.0 if fort else 800.0

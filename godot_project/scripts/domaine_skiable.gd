@@ -241,23 +241,90 @@ func _construire_panneaux() -> void:
 		if not par_piste.has(ip2):
 			par_piste[ip2] = [e[2], e[3], []]
 		(par_piste[ip2][2] as Array).append(Transform3D(Basis(nx, Vector3.UP, nz), pos + nz * 0.021))
-		var l: Label3D = Label3D.new()
-		l.text = str(e[4])
-		l.font_size = 160
-		l.pixel_size = 0.0021          # (plus petit : place pour le nom et la station)
-		l.modulate = Color.WHITE
-		l.outline_size = 0
-		l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-		l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-		l.alpha_cut = Label3D.ALPHA_CUT_OPAQUE_PREPASS
-		l.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
-		l.visibility_range_end = 350.0
-		l.layers = 1 | Cabin.LAYER_VOIE
-		l.transform = Transform3D(Basis(nx, Vector3.UP, nz), pos + nz * 0.026)
-		racine.add_child(l)
 		n_panneaux += 1
+		var xf_num: Transform3D = Transform3D(Basis(nx, Vector3.UP, nz), pos + nz * 0.026)
+		if OS.has_feature("web"):
+			var c_num: Vector2i = _case_numero(xf_num.origin)
+			if not _numeros.has(c_num):
+				_numeros[c_num] = []
+			(_numeros[c_num] as Array).append([xf_num, str(e[4])])
+			continue
+		racine.add_child(_label_numero(xf_num, str(e[4])))
+	if OS.has_feature("web"):
+		_racine_numeros = racine
+		set_process(true)
 	if DisplayServer.get_name() != "headless" and faces_panneaux:
 		_faces_panneaux.call_deferred(par_piste)
+
+
+## PWA : les numéros de balise ne vivent que près de la caméra. Chaque Label3D coûte
+## 4 tampons WebGL (3 maillage, 1 matériau) : les 1 669 du domaine en faisaient 6 700,
+## le tiers des 19 000 tampons en mode skieur (mesure WebKit, 03/11/2026).
+const CASE_NUMERO: float = 350.0
+const NUMEROS_PAR_IMAGE: int = 6
+var _numeros: Dictionary = {}             # case → [[Transform3D, texte], …]
+var _racine_numeros: Node3D = null
+var _cases_posees: Dictionary = {}        # case → [Label3D, …]
+var _cases_a_poser: Array = []            # [case, indice suivant]
+var _case_cam: Vector2i = Vector2i(1 << 30, 0)
+
+
+func _case_numero(p: Vector3) -> Vector2i:
+	return Vector2i(floori(p.x / CASE_NUMERO), floori(p.z / CASE_NUMERO))
+
+
+func _label_numero(xf: Transform3D, texte: String) -> Label3D:
+	var l: Label3D = Label3D.new()
+	l.text = texte
+	l.font_size = 160
+	l.pixel_size = 0.0021          # (plus petit : place pour le nom et la station)
+	l.modulate = Color.WHITE
+	l.outline_size = 0
+	l.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	l.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	l.alpha_cut = Label3D.ALPHA_CUT_OPAQUE_PREPASS
+	l.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+	l.visibility_range_end = 350.0
+	l.layers = 1 | Cabin.LAYER_VOIE
+	l.transform = xf
+	return l
+
+
+func _process(_delta: float) -> void:
+	if _racine_numeros == null:
+		return
+	var cam: Camera3D = get_viewport().get_camera_3d()
+	if cam == null:
+		return
+	var c: Vector2i = _case_numero(cam.global_position)
+	if c != _case_cam:
+		_case_cam = c
+		for k in _cases_posees.keys():
+			if absi((k as Vector2i).x - c.x) > 1 or absi((k as Vector2i).y - c.y) > 1:
+				for l in _cases_posees[k]:
+					(l as Node).queue_free()
+				_cases_posees.erase(k)
+		_cases_a_poser = _cases_a_poser.filter(func(e: Array) -> bool:
+			return absi((e[0] as Vector2i).x - c.x) <= 1 and absi((e[0] as Vector2i).y - c.y) <= 1)
+		for dx in range(-1, 2):
+			for dz in range(-1, 2):
+				var k2: Vector2i = c + Vector2i(dx, dz)
+				if _numeros.has(k2) and not _cases_posees.has(k2):
+					_cases_posees[k2] = []
+					_cases_a_poser.append([k2, 0])
+	var budget: int = NUMEROS_PAR_IMAGE
+	while budget > 0 and not _cases_a_poser.is_empty():
+		var e: Array = _cases_a_poser[0]
+		var liste: Array = _numeros[e[0]]
+		if int(e[1]) >= liste.size():
+			_cases_a_poser.pop_front()
+			continue
+		var n: Array = liste[int(e[1])]
+		var l2: Label3D = _label_numero(n[0], n[1])
+		_racine_numeros.add_child(l2)
+		(_cases_posees[e[0]] as Array).append(l2)
+		e[1] = int(e[1]) + 1
+		budget -= 1
 
 
 ## Bancs : faces dessinées des panneaux (nom de la piste en arc) ou non.
