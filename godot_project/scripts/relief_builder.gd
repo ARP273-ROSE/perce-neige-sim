@@ -585,8 +585,9 @@ func _materiaux() -> void:
 ## Altitude sur les triangles du maillage du bloc (comme les tuiles) : les
 ## pièces fines s'y raccordent sans marche.
 func _hauteur_tri(x: float, z: float) -> float:
-	var b: float = _tri_sur(_h, x, z)
-	return b + fin.delta(x, z) if fin != null else b
+	if fin != null and fin.fine_ici(x, z):
+		return fin.hauteur(x, z)
+	return _tri_sur(_h, x, z)
 
 
 func _tri_sur(grille: PackedFloat32Array, x: float, z: float) -> float:
@@ -1123,6 +1124,8 @@ func hauteur(x: float, z: float) -> float:
 
 
 func _hauteur_bloc(x: float, z: float) -> float:
+	if fin != null and fin.fine_ici(x, z):
+		return fin.hauteur(x, z)
 	var fx: float = clampf((x - ReliefDonnees.X_OUEST) / _dx, 0.0, ReliefDonnees.NX - 1.001)
 	var fz: float = clampf((z - ReliefDonnees.Z_NORD) / _dz, 0.0, ReliefDonnees.NZ - 1.001)
 	var i: int = int(fz)
@@ -1130,9 +1133,8 @@ func _hauteur_bloc(x: float, z: float) -> float:
 	var u: float = fx - j
 	var v: float = fz - i
 	var n: int = ReliefDonnees.NX
-	var hb: float = lerpf(lerpf(_h[i * n + j], _h[i * n + j + 1], u),
+	return lerpf(lerpf(_h[i * n + j], _h[i * n + j + 1], u),
 		lerpf(_h[(i + 1) * n + j], _h[(i + 1) * n + j + 1], u), v)
-	return hb + fin.delta(x, z) if fin != null else hb
 
 
 ## Altitude partout : bloc détaillé, sinon anneau lointain.
