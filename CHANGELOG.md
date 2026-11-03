@@ -7,10 +7,6 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## Version suivante (non publiée)
 
-**Modes allégés de la PWA : plus nets, moins lourds.** Densité d'écran limitée à 1,5 et photo du relief à 1 024 px. La 3D passe de 60 % à 100 % de cette densité en allégé 1, anti-crénelage rétabli, et de 50 % à 80 % en allégé 2 : l'image n'est plus pixelisée après un plantage. En mode normal, le rendu ne descend plus sous 70 %. Sous WebKit, au pied de Tovière : allégé 1 à 123 Mo de textures et 51 Mo de tampons de rendu, allégé 2 à 117 et 17 Mo.
-
-**Télésiège des Leissières** : pylônes numérotés dans l'ordre d'exploitation, P14 au départ et P1 à l'arrivée ; compositions de galets inchangées, conformes au relevé.
-
 **Relief fin à 5 m sur tout le domaine** (PC partis au cran 0 ; ni le web ni les crans suivants, relief à 25 m inchangé, vérifié ligne à ligne sur le câble et le sol). Altitude IGN RGE ALTI (`tools_relief_fin.py`), 15,5 Mo, fusion en C++ ; sans le module, repli sur 25 m avec un message au journal. Le choix est fait au chargement et ne suit pas le régulateur : changer de cran ne bouge ni le sol ni le câble (banc du relief fin).
 
 **Pylônes réajustés sur ce sol** (`data/remontees/geometrie_fin.json`, 45 lignes) : hauteurs seules, jamais plus de 4 m au-dessus de celles à 25 m ni au-delà des bornes mesurées ; Leissières et deux pylônes de Borsat posés à la main. Sur 63 lignes : dépassement des galets 629° → 628°, pylônes au-delà de 1° 174 → 169. Écarts connus : Rogoney, Vallon de l'Iseran et Borsat perdent en galets ; la mesure de contact (`bench_sol_lignes_3d.gd`, prudente) voit encore 10 lignes contre 17 à 25 m où un véhicule pourrait toucher, dont la perche du Col du Palet.
@@ -23,6 +19,12 @@ dédié, pour lui seul, assombrit la neige là où pylônes, véhicules et bâti
 
 **Fil principal à ski.** Collisions du tunnel construites pour un skieur sur la neige, pièces fines des gares refaites en double à chaque carré de relief (26 à 54 ms), portées de toutes
 les lignes réglées d'un bloc à chaque changement de détail (72 à 103 ms). Boucle de 11 min en 4K : images de plus de 25 ms à ski 20 → 2.
+
+## 1.53.9 — 3 novembre 2026 (PWA seule)
+
+**Modes allégés de la PWA : plus nets, moins lourds.** Densité d'écran limitée à 1,5 et photo du relief à 1 024 px. La 3D passe de 60 % à 100 % de cette densité en allégé 1, anti-crénelage rétabli, et de 50 % à 80 % en allégé 2 : l'image n'est plus pixelisée après un plantage. En mode normal, le rendu ne descend plus sous 70 %. Sous WebKit, au pied de Tovière : allégé 1 à 123 Mo de textures et 51 Mo de tampons de rendu, allégé 2 à 117 et 17 Mo.
+
+**Télésiège des Leissières** : pylônes numérotés dans l'ordre d'exploitation, P14 au départ et P1 à l'arrivée ; compositions de galets inchangées, conformes au relevé.
 
 ## 1.53.8 — 3 novembre 2026 (PWA seule)
 
