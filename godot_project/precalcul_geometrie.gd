@@ -22,6 +22,10 @@ var _fait: bool = false
 
 const HAUTEURS_A_LA_MAIN: Array = ["tsd6_leissieres"]
 const PLAFOND_FIN: float = 4.0
+# relief fin : garde lue sur le vrai sol, tous les 5 m, sous les deux brins (le profil, lui, reste tous les 10 m)
+const PAS_REEL: float = 5.0
+var _poids_reel: float = 0.0            # (--poids-reel=N, (m²) ; 0 : garde sur le profil seul)
+var _sols: Dictionary = {}              # ligne → sol le plus haut sous les brins, tous les PAS_REEL
 const POIDS_DEV: float = 1.0e4          # (rad²) : 0,1 rad de trop → 100
 const POIDS_GARDE: float = 1.0e5        # (m²) : 0,1 m sous la garde → 1 000 (quasi intouchable)
 const POIDS_ECART: float = 0.002        # (m²) : 10 m d'écart au départ → 0,2
@@ -61,6 +65,8 @@ func _calculer() -> void:
 	for a in OS.get_cmdline_user_args():
 		if String(a).begins_with("--lignes="):
 			seules = String(a).substr(9).split(",")
+		if String(a).begins_with("--poids-reel="):
+			_poids_reel = float(String(a).substr(13))
 		if String(a).begins_with("--effort="):
 			effort = int(String(a).substr(9))
 		if String(a).begins_with("--part="):
@@ -147,7 +153,35 @@ func _pen_dev(lg: LigneRemontee, i: int) -> float:
 func _pen_garde(lg: LigneRemontee, k: int) -> float:
 	if k < 0 or k > lg.pylones.size():
 		return 0.0
-	return POIDS_GARDE * pow(maxf(0.0, -lg._garde_portee(k)), 2.0)
+	var pen: float = POIDS_GARDE * pow(maxf(0.0, -lg._garde_portee(k)), 2.0)
+	if _poids_reel > 0.0:
+		pen += _poids_reel * _manque_reel(lg, k)
+	return pen
+
+
+## Sur le vrai sol : somme des manques de garde² de la portée k, par point (m²), hors abords des gares.
+func _manque_reel(lg: LigneRemontee, k: int) -> float:
+	var sols: Array = _sols.get(lg.name, [])
+	if sols.is_empty():
+		var v: float = lg.voie * 0.5
+		var L: float = lg.longueur_h()
+		for i in range(int(L / PAS_REEL) + 2):
+			var d: float = i * PAS_REEL
+			sols.append([maxf(lg._sol(-v, -d), lg._sol(v, -d)), lg._garde_exigee(d)])
+		_sols[lg.name] = sols
+	var pts: Array = lg._points_appui()
+	var a: Array = pts[k]
+	var b: Array = pts[k + 1]
+	var xc: Array = lg.chainette_xm_c(a[0], a[1], b[0], b[1], lg._a_montee)
+	var somme: float = 0.0
+	var i0: int = maxi(int(ceil(float(a[0]) / PAS_REEL)), int(ceil(20.0 / PAS_REEL)))
+	var i1: int = mini(int(floor(float(b[0]) / PAS_REEL)), int(floor((lg.longueur_h() - 20.0) / PAS_REEL)))
+	for i in range(i0, i1 + 1):
+		var y: float = lg._a_montee * cosh((i * PAS_REEL - float(xc[0])) / lg._a_montee) + float(xc[1])
+		var m: float = y - float(sols[i][0]) - float(sols[i][1])
+		if m < 0.0:
+			somme += m * m
+	return somme
 
 
 ## Haut de la course d'une tête : borne mesurée ; sur le relief fin, jamais plus de PLAFOND_FIN
