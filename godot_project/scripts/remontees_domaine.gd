@@ -621,7 +621,10 @@ func _construire_proches() -> void:
 		var b: Vector3 = xf * Vector3(0, 0, -lg.longueur_h())
 		var q: Vector2 = Geometry2D.get_closest_point_to_segment(Vector2(p.x, p.z), Vector2(a.x, a.z), Vector2(b.x, b.z))
 		var d: float = q.distance_to(Vector2(p.x, p.z))
-		if d < CONSTRUIRE_JUSQUA and d < d_best:
+		# (tronçons jumelés : l'un ne tourne pas sans l'autre, construits ensemble ; l'embarquement est en bas)
+		if lg.jumelee != null and _a_cuit(lg):
+			d = minf(d, _distance_ligne(lg.jumelee, p))
+		if d < _construire_jusqua(lg) and d < d_best:
 			d_best = d
 			best = lg
 	if best != null and _budget_tampons_mo > 0.0 \
@@ -671,7 +674,119 @@ func _vider_poubelle() -> void:
 			(n as Node).free()
 
 
+# --- lignes cuites : vues de loin sans nœud --------------------------------------
+## De loin, le fichier écrit par cuisson_ligne.gd (LigneCuite) ; de près, la ligne construite, seule à
+## porter le jeu : collisions, embarquement, portes. Une ligne cuite reste « non construite » pour tout
+## le reste. Sans fichier, ou sans --cuit : les seuils habituels.
+const CUIT_PROCHE: float = 450.0
+const CUIT_DEMOLIR: float = 650.0
+static var dossier_cuites: String = "user://cuites"
+var _cuit_actif: bool = "--cuit" in OS.get_cmdline_user_args()
+var _fichiers_cuits: Dictionary = {}
+var _cuites: Dictionary = {}                # clé → LigneCuite posée
+var _cuit_tache: int = -1
+var _cuit_en_cours: LigneCuite = null
+var _cuit_ligne: LigneRemontee = null
+var _cuit_scenario: RID
+var _t_cuit: float = 0.0
+var _t_cuit_veh: float = 0.0
+var _t_cuit_dist: float = 0.0
+var _cuit_sous_terre: bool = false
+
+
+func _a_cuit(lg: LigneRemontee) -> bool:
+	if not _cuit_actif:
+		return false
+	var nom: String = String(lg.name)
+	if not _fichiers_cuits.has(nom):
+		_fichiers_cuits[nom] = FileAccess.file_exists(LigneCuite.chemin(dossier_cuites, nom, OS.has_feature("web")))
+	return _fichiers_cuits[nom]
+
+
+func _construire_jusqua(lg: LigneRemontee) -> float:
+	return minf(CUIT_PROCHE, CONSTRUIRE_JUSQUA) if _a_cuit(lg) else CONSTRUIRE_JUSQUA
+
+
+func _demolir_au_dela(lg: LigneRemontee) -> float:
+	return minf(CUIT_DEMOLIR, DEMOLIR_AU_DELA) if _a_cuit(lg) else DEMOLIR_AU_DELA
+
+
+func _point_cuit() -> Variant:
+	if skieur != null and skieur.actif:
+		return skieur.global_position
+	var cam: Camera3D = get_viewport().get_camera_3d()
+	return cam.global_position if cam != null else null
+
+
+## Une pose à la fois, sur un fil de travail ; montrées tant que la ligne construite n'est pas prête.
+func _gerer_cuites(delta: float) -> void:
+	if not _cuit_actif:
+		return
+	if _cuit_tache >= 0 and WorkerThreadPool.is_task_completed(_cuit_tache):
+		WorkerThreadPool.wait_for_task_completion(_cuit_tache)
+		_cuit_tache = -1
+		if _cuit_en_cours != null and _cuit_en_cours.cle != "":
+			_cuites[_cuit_en_cours.cle] = _cuit_en_cours
+		_cuit_en_cours = null
+	var pv: Variant = _point_cuit()
+	if pv == null:
+		return
+	var p: Vector3 = pv
+	_t_cuit_veh += delta
+	var bouge: bool = _t_cuit_veh >= 0.066
+	var dt_veh: float = _t_cuit_veh
+	if bouge:
+		_t_cuit_veh = 0.0
+	var montrer_tout: bool = not _sous_terre
+	for e in lignes:
+		var lg: LigneRemontee = e[0]
+		var nom: String = String(lg.name)
+		if not _cuites.has(nom):
+			continue
+		var lc: LigneCuite = _cuites[nom]
+		lc.montrer(montrer_tout and not lg.pret)
+		if bouge and montrer_tout and not lg.pret and _distance_ligne(lg, p) < VEHICULES_JUSQUA + 50.0:
+			lc.avancer(dt_veh)
+	_t_cuit_dist -= delta
+	if _t_cuit_dist > 0.0:
+		return
+	_t_cuit_dist = 0.25
+	if _cuit_tache >= 0:
+		return
+	var best: LigneRemontee = null
+	var d_best: float = INF
+	for e in lignes:
+		var lg: LigneRemontee = e[0]
+		var nom: String = String(lg.name)
+		if not _a_cuit(lg):
+			continue
+		var d: float = _distance_ligne(lg, p)
+		if _cuites.has(nom):
+			if d > DEMOLIR_AU_DELA:
+				(_cuites[nom] as LigneCuite).liberer()
+				_cuites.erase(nom)
+		elif d < CONSTRUIRE_JUSQUA and d < d_best:
+			d_best = d
+			best = lg
+	if best != null:
+		_cuit_en_cours = LigneCuite.new()
+		_cuit_ligne = best
+		_cuit_scenario = get_world_3d().scenario
+		_cuit_en_cours.preparer_chemin(LigneCuite.chemin(dossier_cuites, String(best.name), OS.has_feature("web")))
+		_cuit_tache = WorkerThreadPool.add_task(_poser_cuite, false, "ligne cuite")
+
+
+func _poser_cuite() -> void:
+	_cuit_en_cours.charger(_cuit_scenario)
+
+
 func _exit_tree() -> void:
+	if _cuit_tache >= 0:
+		LigneRemontee.attendre_fil(_cuit_tache)
+		_cuit_tache = -1
+	for k in _cuites:
+		(_cuites[k] as LigneCuite).liberer()
+	_cuites.clear()
 	VehiculeRemontee.vider_modeles()
 	MeshMerge.vider_partages()
 	RemonteeKit.vider_primitives()
@@ -688,6 +803,7 @@ func _process(delta: float) -> void:
 
 func _process_corps(delta: float) -> void:
 	_suivre_cran()
+	_gerer_cuites(delta)
 	_revoir_portees()
 	_avancer_visibilite()
 	_vider_poubelle()
@@ -725,8 +841,8 @@ func _process_corps(delta: float) -> void:
 	for e in lignes:
 		var lg: LigneRemontee = e[0]
 		if lg.pret and lg != _en_cours and (a_bord.is_empty() or (a_bord[0] != lg and a_bord[0] != lg.jumelee)) \
-				and _distance_ligne(lg, p) > DEMOLIR_AU_DELA \
-				and (lg.jumelee == null or _distance_ligne(lg.jumelee, p) > DEMOLIR_AU_DELA):
+				and _distance_ligne(lg, p) > _demolir_au_dela(lg) \
+				and (lg.jumelee == null or _distance_ligne(lg.jumelee, p) > _demolir_au_dela(lg.jumelee)):
 			lg.demolir(_poubelle)
 			lg.set_meta("lancee", false)
 			continue
