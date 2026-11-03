@@ -94,8 +94,11 @@ func _regulateur(rel: ReliefBuilder, rf: ReliefFin) -> void:
 	alea.seed = 11
 	for k in range(5000):
 		pts.append(Vector2(alea.randf_range(rf.zone.position.x, rf.zone.end.x), alea.randf_range(rf.zone.position.y, rf.zone.end.y)))
-	# (fresse et col des Vés : 4 cm de plus une seule fois dans les premières images après le
-	# premier calcul, sans changer de cran, cause non établie ; stable ensuite, témoin vérifié sur 900 images)
+	# Référence une fois les lignes proches construites : pendant leur première construction, y_cable
+	# bouge normalement (cherché le 03/11/2026, sans lien avec le cran ni le relief) : Fresse cale sa
+	# période et son espacement (60 → 59,66 m, donc la chaînette), Col des Vés gagne ses raccords de
+	# pylônes (_preparer_raccords : explication lue dans le code, non isolée à l'exécution), 4 cm au plus
+	# sur les points relevés ici.
 	await _etat(rel, pts)
 	for _i in range(30):
 		await process_frame
@@ -104,10 +107,10 @@ func _regulateur(rel: ReliefBuilder, rf: ReliefFin) -> void:
 	for e in _main.remontees.lignes:
 		var lg: LigneRemontee = e[0]
 		for x in fines.get(String(lg.name), []):
-			if (x as Dictionary).has("k"):
-				for p in lg.pylones:
-					if int(p.get("k", -1)) == int(x["k"]) and absf(float(p["h"]) - float(x["h"])) < 0.001:
-						appliquees += 1
+			for p in lg.pylones:
+				var meme: bool = int(p.get("k", -1)) == int(x["k"]) if (x as Dictionary).has("k") 					else (p.has("croisement") and absf(float(p["d"]) - float(x["croisement_d"])) < 1.0)
+				if meme and absf(float(p["h"]) - float(x["h"])) < 0.001:
+					appliquees += 1
 	var n_f: int = 0
 	for v in fines.values():
 		n_f += (v as Array).size()
