@@ -41,6 +41,24 @@ var lecture_ms: float = 0.0
 var abandon: bool = false
 
 
+## Au chargement du jeu : tous les matériaux des lignes (fichier écrit par cuisson_ligne.gd --materiaux).
+## Créés ici, leurs shaders ne coûtent plus d'image lente à la première pose (68 ms mesurées sur PC).
+## Renvoie le nombre de matériaux, -1 sans fichier.
+static func preparer_communs(dossier: String, web: bool) -> int:
+	var f: FileAccess = FileAccess.open(chemin(dossier, "materiaux", web), FileAccess.READ)
+	if f == null:
+		return -1
+	var n: int = f.get_32()
+	var z: PackedByteArray = f.get_buffer(f.get_length() - 4)
+	f.close()
+	var d: Dictionary = bytes_to_var(z.decompress(n, FileAccess.COMPRESSION_ZSTD))
+	if int(d.get("version", 0)) != VERSION:
+		return -1
+	for md in d["materiaux"]:
+		_materiau(md)
+	return (d["materiaux"] as Array).size()
+
+
 static func chemin(dossier: String, nom: String, web: bool) -> String:
 	return dossier.path_join(nom + (".web.cuit" if web else ".cuit"))
 
