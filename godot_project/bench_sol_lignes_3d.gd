@@ -33,7 +33,7 @@ func _tick() -> void:
 
 func _mesurer() -> void:
 	var fine: bool = _main.relief.fin != null
-	var lignes: PackedStringArray = PackedStringArray(["ligne;famille;pylones;pied_max;pied_coin_max;pied_pire;garde_outil_min;sous_garde;garde_reelle_min;d_reelle;sol_axe_ecart_max;tete_min;tete_max;dev_max;gare_aval_haut;gare_aval_bas;gare_amont_haut;gare_amont_bas"])
+	var lignes: PackedStringArray = PackedStringArray(["ligne;famille;pylones;pied_max;pied_coin_max;pied_pire;garde_outil_min;sous_garde;garde_reelle_min;d_reelle;sol_axe_ecart_max;tete_min;tete_max;dev_max;gare_aval_haut;gare_aval_bas;gare_amont_haut;gare_amont_bas;contact_min;contact_d;contact_brin"])
 	var detail: PackedStringArray = PackedStringArray(["ligne;h0;d;y_abs;sol_g;sol_d;garde"])
 	for e in _main.remontees.lignes:
 		var lg: LigneRemontee = e[0]
@@ -105,9 +105,10 @@ func _ligne(lg: LigneRemontee) -> String:
 				dreel = dv
 		dv += 2.0
 	# gare : sol sous l'emprise, par rapport au niveau de la gare (terrain au bout de ligne)
+	var co: Array = _contact(lg)
 	var ga: Array = _gare(lg, 0.0, 1.0)
 	var gb: Array = _gare(lg, L, -1.0)
-	return "%s;%s;%d;%.2f;%.2f;%s;%.2f;%d;%.2f;%.0f;%.2f;%.1f;%.1f;%.2f;%.2f;%.2f;%.2f;%.2f" % [lg.name, lg.famille, lg.pylones.size(), pied, pied_coin, pire, gout, sous, greel, dreel, axe, tmin, tmax, rad_to_deg(dev), ga[0], ga[1], gb[0], gb[1]]
+	return "%s;%s;%d;%.2f;%.2f;%s;%.2f;%d;%.2f;%.0f;%.2f;%.1f;%.1f;%.2f;%.2f;%.2f;%.2f;%.2f;%.2f;%.0f;%s" % [lg.name, lg.famille, lg.pylones.size(), pied, pied_coin, pire, gout, sous, greel, dreel, axe, tmin, tmax, rad_to_deg(dev), ga[0], ga[1], gb[0], gb[1], co[0], co[1], co[2]]
 
 
 func _gare(lg: LigneRemontee, d0: float, sens: float) -> Array:
@@ -145,3 +146,36 @@ func _detail(lg: LigneRemontee) -> String:
 			o.append("%s;%.3f;P%d;%.3f;%.3f;%.3f;%.3f" % [lg.name, h0, i + 1, rad_to_deg(maxf(e, 0.0)), rad_to_deg(lg.deviation_pylone(i, true)), lg.terrain(float(lg.pylones[i]["d"])) + h0, lg.y_cable(float(lg.pylones[i]["d"])) + h0])
 	return "
 ".join(o)
+
+
+## Contact réel : bas du véhicule en ligne moins le sol, pire point (d de 20 m à L − 20 m, tous les 2 m).
+## Le bas : le niveau du quai vu du câble (H_CABLE_GARE), siège et skis du passager ou plancher de cabine,
+## sans balancement. Sol le plus haut sur 3 m de large autour de chaque brin : le côté de la montée n'est
+## pas distingué. Téléski : seule la perche rentrée compte, sur le brin de descente (rondelle à 2,4 m du
+## sol en gare, câble à 4,2 m, donc 1,8 m sous le câble) ; à la montée la perche tire un skieur au sol.
+func _contact(lg: LigneRemontee) -> Array:
+	var L: float = lg.longueur_h()
+	var pire: float = INF
+	var dp: float = 0.0
+	var brin: String = ""
+	var dv: float = 20.0
+	while dv < L - 20.0:
+		var sol: float = -INF
+		for x in [-lg.voie * 0.5, lg.voie * 0.5]:
+			for e in [-1.5, 0.0, 1.5]:
+				sol = maxf(sol, lg._sol(x + e, -dv))
+		if lg.teleski():
+			var m: float = lg.y_cable(dv, false) - 1.8 - sol
+			if m < pire:
+				pire = m
+				dp = dv
+				brin = "descente"
+		else:
+			for montee in [true, false]:
+				var m2: float = lg.y_cable(dv, montee) - lg.H_CABLE_GARE - sol
+				if m2 < pire:
+					pire = m2
+					dp = dv
+					brin = "montee" if montee else "descente"
+		dv += 2.0
+	return [pire, dp, brin]
