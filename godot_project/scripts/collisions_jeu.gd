@@ -31,6 +31,7 @@ const R_PAROI: float = 1.64             # rayon intérieur du tube des voitures
 var pret: bool = false
 var triangles: int = 0
 const BUDGET_US: int = 7000
+const BUDGET_FIN_US: int = 2000         # relief fin : ses sous-blocs (60 µs) n'ont pas besoin de plus, et 7 ms pleines s'ajoutaient aux images déjà chargées
 ## Bancs sans écran : collisions à la demande d'un bloc (le banc de fluidité
 ## les veut étalées comme en jeu).
 var synchrone_sans_ecran: bool = true
@@ -113,7 +114,8 @@ func _process(delta: float) -> void:
 
 
 func _process_corps(_delta: float) -> void:
-	_avancer(Time.get_ticks_usec() + budget_us)
+	var relief: ReliefBuilder = _main.get("relief") if _main != null else null
+	_avancer(Time.get_ticks_usec() + (mini(budget_us, BUDGET_FIN_US) if relief != null and relief.fin != null else budget_us))
 
 
 ## Exécute les tâches jusqu'à l'échéance ; prêt quand il n'en reste plus.
@@ -148,7 +150,18 @@ func assurer_autour(p: Vector3) -> void:
 		if not couvert:
 			var r2: Rect2 = Rect2(p.x - 200.0, p.z - 200.0, 400.0, 400.0)
 			_zones_relief.append(r2)
-			_taches.append(_terrain.bind(relief, r2))
+			# par blocs, sur plusieurs images : le carré entier prenait 26 ms d'un coup, à ski
+			for bi in range(4):
+				for bj in range(4):
+					var bloc: Rect2 = Rect2(r2.position + r2.size * 0.25 * Vector2(bi, bj), r2.size * 0.25)
+					# (relief fin : 25 fois plus de triangles, bloc redécoupé pour tenir dans le budget)
+					if relief.fin != null:
+						for bk in range(16):
+							var sb: Rect2 = Rect2(bloc.position + bloc.size * 0.25 * Vector2(bk % 4, bk / 4), bloc.size * 0.25)
+							_taches.append(_terrain.bind(relief, sb, TERRAIN_GRILLE))
+					else:
+						_taches.append(_terrain.bind(relief, bloc, TERRAIN_GRILLE))
+			_taches.append(_terrain.bind(relief, r2, TERRAIN_PIECES))
 			if synchrone_sans_ecran and DisplayServer.get_name() == "headless":
 				_avancer(1 << 62)
 			else:
@@ -160,6 +173,10 @@ func assurer_autour(p: Vector3) -> void:
 		if zi.has_point(p):
 			return
 	var zone: AABB = AABB(p - Vector3(80.0, 40.0, 80.0), Vector3(160.0, 80.0, 160.0))
+	# sur la neige, le tunnel ne sert à rien, si près qu'il passe : à ski, une nouvelle zone toutes
+	# les 1 à 3 s, et chaque grande pièce de tunnel coûtait 25 à 31 ms (relevé 4K, 02/11/2026)
+	if not _souterrain_a_portee(p, zone):
+		return
 	_zones.append(zone)
 	for nom in ["tunnel", "track", "sortie_secours"]:
 		var racine: Node3D = _main.get(nom) as Node3D
@@ -170,6 +187,29 @@ func assurer_autour(p: Vector3) -> void:
 			_avancer(1 << 62)
 		else:
 			set_process(true)
+
+
+var _ab_galerie: AABB = AABB()
+const MARGE_SOUTERRAIN: float = 40.0
+
+
+## Sous le relief (tunnel, gares) ou près de la galerie de secours, qui sort à l'air libre ?
+func _souterrain_a_portee(p: Vector3, zone: AABB) -> bool:
+	# à ski, jamais : on ne chausse pas dans le tunnel du funiculaire, et le tunnel à ski a les siennes
+	var sk: SkieurJoueur = _main.get("skieur") as SkieurJoueur
+	if sk != null and sk.chausse:
+		return false
+	var relief: ReliefBuilder = _main.get("relief")
+	if relief == null or not relief.pret or p.y < relief.hauteur_sol(p.x, p.z) - 1.0:
+		return true
+	var galerie: Node3D = _main.get("sortie_secours") as Node3D
+	if galerie == null:
+		return false
+	if _ab_galerie.size == Vector3.ZERO:
+		for mi in galerie.find_children("*", "MeshInstance3D", true, false):
+			var ab: AABB = (mi as MeshInstance3D).global_transform * (mi as MeshInstance3D).get_aabb()
+			_ab_galerie = ab if _ab_galerie.size == Vector3.ZERO else _ab_galerie.merge(ab)
+	return zone.grow(MARGE_SOUTERRAIN).intersects(_ab_galerie)
 
 
 ## Panneaux d'issue de secours d'une rame : retirés (plus de collision) ou
@@ -665,7 +705,26 @@ static func _hors(z0: float, z1: float, trous: Array) -> Array:
 ## triangles mêmes du bloc affiché (nœuds de sa grille, même diagonale),
 ## sauf dans les pièces fines des gares, maillées à 2 m sans les trous des
 ## bâtiments.
-func _terrain(relief: ReliefBuilder, r: Rect2) -> void:
+var _pieces_faites: Dictionary = {}
+const TERRAIN_TOUT: int = 0
+const TERRAIN_GRILLE: int = 1
+const TERRAIN_PIECES: int = 2
+
+
+func _mailles_fines(relief: ReliefBuilder, m: Rect2, faces: PackedVector3Array) -> void:
+	var rf: ReliefFin = relief.fin
+	var j0: int = int(round((m.position.x - ReliefFin.X0) / ReliefFin.PX))
+	var i0: int = int(round((m.position.y - ReliefFin.Z0) / ReliefFin.PZ))
+	for i in range(i0, i0 + ReliefFin.K):
+		for j in range(j0, j0 + ReliefFin.K):
+			var a: Vector3 = rf.noeud(i, j)
+			var b: Vector3 = rf.noeud(i, j + 1)
+			var c: Vector3 = rf.noeud(i + 1, j)
+			var d: Vector3 = rf.noeud(i + 1, j + 1)
+			faces.append_array([a, b, c, b, d, c])
+
+
+func _terrain(relief: ReliefBuilder, r: Rect2, quoi: int = TERRAIN_TOUT) -> void:
 	var faces: PackedVector3Array = PackedVector3Array()
 	var pieces: Array = relief._rects_pieces
 	# bloc : nœuds de la grille (pas d'affichage _pas)
@@ -677,17 +736,26 @@ func _terrain(relief: ReliefBuilder, r: Rect2) -> void:
 	var i1: int = mini(int(ceil((r.end.y - ReliefDonnees.Z_NORD) / dz)), (ReliefDonnees.NZ - 1) / relief._pas)
 	var n: int = ReliefDonnees.NX
 	var p: int = relief._pas
+	if quoi == TERRAIN_PIECES:
+		i1 = i0
 	for i in range(i0, i1):
 		for j in range(j0, j1):
 			var x0: float = ReliefDonnees.X_OUEST + j * dx
 			var z0: float = ReliefDonnees.Z_NORD + i * dz
 			var maille: Rect2 = Rect2(x0, z0, dx, dz)
+			# (un bloc d'une maille en touche quatre : chacune à un seul bloc, celui de son centre)
+			if quoi == TERRAIN_GRILLE and relief.fin != null and not r.has_point(maille.get_center()):
+				continue
 			var dans_piece: bool = false
 			for pc in pieces:
 				if (pc as Rect2).intersects(maille):
 					dans_piece = true     # recouverte par la pièce fine (ci-dessous)
 					break
 			if dans_piece:
+				continue
+			# relief fin : ses triangles, le sol que voit et que skie le joueur
+			if relief.fin != null and relief.fin.fine_ici(x0 + dx * 0.5, z0 + dz * 0.5):
+				_mailles_fines(relief, maille, faces)
 				continue
 			var pa: Vector3 = Vector3(x0, relief._h[(i * p) * n + j * p], z0)
 			var pb: Vector3 = Vector3(x0 + dx, relief._h[(i * p) * n + (j + 1) * p], z0)
@@ -699,8 +767,10 @@ func _terrain(relief: ReliefBuilder, r: Rect2) -> void:
 	# touchent (hors de la pièce : les triangles du bloc, échantillonnés)
 	for pc3 in pieces:
 		var pr: Rect2 = pc3 as Rect2
-		if not pr.intersects(r):
+		if quoi == TERRAIN_GRILLE or not pr.intersects(r) or _pieces_faites.has(pr):
 			continue
+		# (une seule fois : chaque carré qui la touchait la refaisait en entier, en double, 26 à 54 ms)
+		_pieces_faites[pr] = true
 		var gx0: float = ReliefDonnees.X_OUEST + floor((pr.position.x - ReliefDonnees.X_OUEST) / dx) * dx
 		var gx1: float = ReliefDonnees.X_OUEST + ceil((pr.end.x - ReliefDonnees.X_OUEST) / dx) * dx
 		var gz0: float = ReliefDonnees.Z_NORD + floor((pr.position.y - ReliefDonnees.Z_NORD) / dz) * dz

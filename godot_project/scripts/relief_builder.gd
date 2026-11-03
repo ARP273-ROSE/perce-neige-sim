@@ -225,6 +225,8 @@ void fragment() {
 
 var tunnel: TunnelBuilder = null
 var _h: PackedFloat32Array = PackedFloat32Array()
+var fin: ReliefFin = null               # essai : zone à 4 m, voir ReliefFin
+var _cran_depart: int = 0
 var _dx: float = 1.0
 var _dz: float = 1.0
 ## Prêt à être affiché (construction terminée).
@@ -285,6 +287,7 @@ var _pieces: Array = []               # [rect, nx, nz, hauteurs, masque] (bancs)
 
 func build(t: TunnelBuilder, cran: int = 0) -> void:
 	tunnel = t
+	_cran_depart = cran
 	_pas = 1 if cran <= 2 else 2
 	# 21 km d'emprise depuis le 09/10/2026 (Tignes – Val d'Isère) : 4096 px =
 	# 5,1 m/px sur une bonne machine ; 2048 px (10 m/px) sinon et sur le web
@@ -374,7 +377,13 @@ func _preparer(fin_us: int) -> void:
 				_decoder_ligne_lointaine(_k - nz)
 			_k += 1
 			if _k >= nz + ReliefLointainDonnees.N:
+				var h0: PackedFloat32Array = _h.duplicate() if ReliefFin.voulu(_cran_depart) else PackedFloat32Array()
 				_creuser_gares()
+				if not h0.is_empty():
+					var rf: ReliefFin = ReliefFin.new()
+					rf.preparer(self, h0)
+					if rf.pret:
+						fin = rf
 				_etape = 1
 				_k = 0
 				_octets = PackedByteArray()
@@ -535,6 +544,7 @@ func _creer_maillages(fin_us: int) -> void:
 			var mi: MeshInstance3D = MeshInstance3D.new()
 			mi.mesh = mesh
 			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			mi.layers = 1 | Cabin.LAYER_RELIEF
 			add_child(mi)
 		_tableaux[_k] = null
 		_k += 1
@@ -552,6 +562,8 @@ func _creer_maillages(fin_us: int) -> void:
 	_build_lieux()
 	_tableaux.clear()
 	_etape = 3
+	if fin != null and fin.get_parent() == null:
+		add_child(fin)
 	pret = true
 	print("[Relief] prêt")
 
@@ -575,6 +587,12 @@ func _materiaux() -> void:
 ## Altitude sur les triangles du maillage du bloc (comme les tuiles) : les
 ## pièces fines s'y raccordent sans marche.
 func _hauteur_tri(x: float, z: float) -> float:
+	if fin != null and fin.fine_ici(x, z):
+		return fin.hauteur(x, z)
+	return _tri_sur(_h, x, z)
+
+
+func _tri_sur(grille: PackedFloat32Array, x: float, z: float) -> float:
 	var lim_x: int = ReliefDonnees.NX - 1
 	var lim_z: int = ReliefDonnees.NZ - 1
 	var fx: float = clampf((x - ReliefDonnees.X_OUEST) / _dx, 0.0, lim_x - 0.001) / _pas
@@ -586,10 +604,10 @@ func _hauteur_tri(x: float, z: float) -> float:
 	var j1: int = mini(j0 + _pas, lim_x)
 	var i1: int = mini(i0 + _pas, lim_z)
 	var n: int = ReliefDonnees.NX
-	var a: float = _h[i0 * n + j0]
-	var b: float = _h[i0 * n + j1]
-	var c: float = _h[i1 * n + j0]
-	var d: float = _h[i1 * n + j1]
+	var a: float = grille[i0 * n + j0]
+	var b: float = grille[i0 * n + j1]
+	var c: float = grille[i1 * n + j0]
+	var d: float = grille[i1 * n + j1]
 	# même découpe que les tuiles : (a, a+1, a+w) puis (a+1, a+w+1, a+w)
 	if wx + wz <= 1.0:
 		return a + (b - a) * wx + (c - a) * wz
@@ -902,6 +920,7 @@ func _instance(mesh: Mesh, nom: String) -> MeshInstance3D:
 	mi.name = nom
 	mi.mesh = mesh
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	mi.layers = 1 | Cabin.LAYER_RELIEF
 	add_child(mi)
 	return mi
 
@@ -995,10 +1014,74 @@ func _hiver_mat(m: ShaderMaterial, pistes_ok: bool) -> void:
 		m.set_shader_parameter("avec_pistes", 1.0)
 	m.set_shader_parameter("hiver", _hiver)
 	_mats_hiver.append(m)
+	_ombres_sur(m)
 
 
 ## Neige, relief ombré et pistes damées (skieur jouable) : 1 ; été
 ## (photographie aérienne seule, vue extérieure) : 0.
+## Ombres portées sur la neige (PC, cran 0) : le relief garde son aspect, sans éclairage ; une
+## part de sa couleur passe en albédo, et le soleil dédié ne rend que cette part, sauf à l'ombre.
+const OMBRE_FORCE: float = 0.45
+const _ALBEDO_TERRAIN: String = "ALBEDO = pow(mix(c, brume, clamp(1.0 - exp(-d / 28000.0), 0.0, 0.7)), vec3(gamma));"
+var _shaders_ombres: Dictionary = {}     # shader d'origine → version qui reçoit l'ombre
+var _ombres_permises: bool = false
+var _ombres_force: float = 0.0
+
+
+func _shader_ombres(sh: Shader) -> Shader:
+	if _shaders_ombres.has(sh):
+		return _shaders_ombres[sh]
+	var code: String = sh.code
+	if not code.contains(_ALBEDO_TERRAIN):
+		_shaders_ombres[sh] = sh
+		return sh
+	code = code.replace("render_mode unshaded, fog_disabled, cull_disabled;",
+		"render_mode fog_disabled, cull_disabled, ambient_light_disabled, specular_disabled;
+uniform float ombre_k = 0.0;")
+	code = code.replace(_ALBEDO_TERRAIN, "vec3 c_fin = pow(mix(c, brume, clamp(1.0 - exp(-d / 28000.0), 0.0, 0.7)), vec3(gamma));
+	ALBEDO = c_fin * ombre_k;
+	EMISSION = c_fin * (1.0 - ombre_k);
+	ROUGHNESS = 1.0;")
+	code += "
+void light() {
+	if (LIGHT_IS_DIRECTIONAL) {
+		DIFFUSE_LIGHT += ATTENUATION;
+	}
+}
+"
+	var s2: Shader = Shader.new()
+	s2.code = code
+	_shaders_ombres[sh] = s2
+	_shaders_ombres[s2] = s2
+	return s2
+
+
+func _ombres_sur(m: ShaderMaterial) -> void:
+	if not _ombres_permises or m.shader == null:
+		return
+	m.shader = _shader_ombres(m.shader)
+	m.set_shader_parameter("ombre_k", _ombres_force)
+
+
+## permises : shaders éclairés ou d'origine ; actives : le soleil dédié est allumé.
+func set_ombres_portees(permises: bool, actives: bool) -> void:
+	var force: float = OMBRE_FORCE if permises and actives else 0.0
+	if permises == _ombres_permises and is_equal_approx(force, _ombres_force):
+		return
+	var retour: bool = _ombres_permises and not permises
+	_ombres_permises = permises
+	_ombres_force = force
+	for m in _mats_hiver:
+		var mat: ShaderMaterial = m
+		if retour:
+			for k in _shaders_ombres:
+				if _shaders_ombres[k] == mat.shader and k != mat.shader:
+					mat.shader = k
+					break
+		else:
+			_ombres_sur(mat)
+
+
 func set_hiver(f: float) -> void:
 	if absf(f - _hiver) < 0.001:
 		return
@@ -1043,6 +1126,8 @@ func hauteur(x: float, z: float) -> float:
 
 
 func _hauteur_bloc(x: float, z: float) -> float:
+	if fin != null and fin.fine_ici(x, z):
+		return fin.hauteur(x, z)
 	var fx: float = clampf((x - ReliefDonnees.X_OUEST) / _dx, 0.0, ReliefDonnees.NX - 1.001)
 	var fz: float = clampf((z - ReliefDonnees.Z_NORD) / _dz, 0.0, ReliefDonnees.NZ - 1.001)
 	var i: int = int(fz)
