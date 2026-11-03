@@ -152,8 +152,8 @@ func assurer_autour(p: Vector3) -> void:
 			for bi in range(4):
 				for bj in range(4):
 					var bloc: Rect2 = Rect2(r2.position + r2.size * 0.25 * Vector2(bi, bj), r2.size * 0.25)
-					# (zone du relief fin : 16 fois plus de triangles, bloc redécoupé pour tenir dans le budget)
-					if relief.fin != null and relief.fin.zone.intersects(bloc):
+					# (relief fin : 25 fois plus de triangles, bloc redécoupé pour tenir dans le budget)
+					if relief.fin != null:
 						for bk in range(16):
 							var sb: Rect2 = Rect2(bloc.position + bloc.size * 0.25 * Vector2(bk % 4, bk / 4), bloc.size * 0.25)
 							_taches.append(_terrain.bind(relief, sb, TERRAIN_GRILLE))
@@ -711,8 +711,8 @@ const TERRAIN_PIECES: int = 2
 
 func _mailles_fines(relief: ReliefBuilder, m: Rect2, faces: PackedVector3Array) -> void:
 	var rf: ReliefFin = relief.fin
-	var j0: int = int(round((m.position.x - rf.x0) / ReliefFin.PX))
-	var i0: int = int(round((m.position.y - rf.z0) / ReliefFin.PZ))
+	var j0: int = int(round((m.position.x - ReliefFin.X0) / ReliefFin.PX))
+	var i0: int = int(round((m.position.y - ReliefFin.Z0) / ReliefFin.PZ))
 	for i in range(i0, i0 + ReliefFin.K):
 		for j in range(j0, j0 + ReliefFin.K):
 			var a: Vector3 = rf.noeud(i, j)
@@ -741,6 +741,9 @@ func _terrain(relief: ReliefBuilder, r: Rect2, quoi: int = TERRAIN_TOUT) -> void
 			var x0: float = ReliefDonnees.X_OUEST + j * dx
 			var z0: float = ReliefDonnees.Z_NORD + i * dz
 			var maille: Rect2 = Rect2(x0, z0, dx, dz)
+			# (un bloc d'une maille en touche quatre : chacune à un seul bloc, celui de son centre)
+			if quoi == TERRAIN_GRILLE and relief.fin != null and not r.has_point(maille.get_center()):
+				continue
 			var dans_piece: bool = false
 			for pc in pieces:
 				if (pc as Rect2).intersects(maille):

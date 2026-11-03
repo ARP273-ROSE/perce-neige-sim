@@ -36,10 +36,10 @@ func _suite() -> void:
 	var bords: int = 0
 	var pas_x: float = ReliefFin.K * ReliefFin.PX
 	var pas_z: float = ReliefFin.K * ReliefFin.PZ
-	for ci in range(ReliefFin.NC):
-		for cj in range(ReliefFin.NC - 1):
-			var xb: float = rf.x0 + (cj + 1) * pas_x
-			var z: float = rf.z0 + (ci + 0.37) * pas_z
+	for ci in range(ReliefFin.NCZ):
+		for cj in range(ReliefFin.NCX - 1):
+			var xb: float = ReliefFin.X0 + (cj + 1) * pas_x
+			var z: float = ReliefFin.Z0 + (ci + 0.37) * pas_z
 			var a: bool = rf.fine_ici(xb - 0.01, z)
 			var b: bool = rf.fine_ici(xb + 0.01, z)
 			if a != b:
@@ -56,11 +56,11 @@ func _suite() -> void:
 		var z2: float = alea.randf_range(rf.zone.position.y, rf.zone.end.y)
 		if not rf.fine_ici(x, z2):
 			continue
-		var j: int = int((x - rf.x0) / ReliefFin.PX)
-		var i: int = int((z2 - rf.z0) / ReliefFin.PZ)
+		var j: int = int((x - ReliefFin.X0) / ReliefFin.PX)
+		var i: int = int((z2 - ReliefFin.Z0) / ReliefFin.PZ)
 		var pa: Vector3 = rf.noeud(i, j)
-		var u: float = (x - pa.x) / ReliefFin.PX
-		var v: float = (z2 - pa.z) / ReliefFin.PZ
+		var u: float = (x - ReliefFin.X0) / ReliefFin.PX - j   # (pas pa.x : Vector3 en 32 bits, 1 mm près à 15 km)
+		var v: float = (z2 - ReliefFin.Z0) / ReliefFin.PZ - i
 		var h: float
 		if u + v <= 1.0:
 			h = pa.y + (rf.noeud(i, j + 1).y - pa.y) * u + (rf.noeud(i + 1, j).y - pa.y) * v

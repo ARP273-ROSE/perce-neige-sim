@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 
 using namespace godot;
 
@@ -44,7 +45,134 @@ double signe(double x) {
 
 } // namespace
 
+static inline float demi_flottant(uint16_t v) {
+	const uint32_t signe = uint32_t(v & 0x8000) << 16;
+	const uint32_t exposant = (v >> 10) & 0x1f;
+	const uint32_t mantisse = v & 0x3ff;
+	uint32_t bits;
+	if (exposant == 0) {
+		if (mantisse == 0) {
+			bits = signe;
+		} else {
+			// dénormal : normalisé pour le format 32 bits
+			uint32_t e = 127 - 14;
+			uint32_t m = mantisse;
+			while ((m & 0x400) == 0) {
+				m <<= 1;
+				e--;
+			}
+			bits = signe | (e << 23) | ((m & 0x3ff) << 13);
+		}
+	} else if (exposant == 31) {
+		bits = signe | 0x7f800000 | (mantisse << 13);
+	} else {
+		bits = signe | ((exposant + 127 - 15) << 23) | (mantisse << 13);
+	}
+	float f;
+	memcpy(&f, &bits, 4);
+	return f;
+}
+
+Array NoyauRemontee::fusion_relief(const PackedFloat32Array &h, const PackedFloat32Array &h0, const PackedByteArray &ecart,
+		int nx, int nz, int k, const PackedFloat32Array &rects, double x0, double z0, double dx, double dz) const {
+	Array sortie;
+	const int64_t nj = int64_t(nx - 1) * k + 1;
+	const int64_t ni = int64_t(nz - 1) * k + 1;
+	if (k < 1 || h.size() != nx * nz || h0.size() != nx * nz || ecart.size() != ni * nj * 2) {
+		return sortie;
+	}
+	const float *ph = h.ptr();
+	const float *ph0 = h0.ptr();
+	const uint8_t *pe = ecart.ptr();
+
+	// mailles à 25 m retouchées (déblais), élargies d'une maille
+	std::vector<uint8_t> tenu(size_t(nx) * nz, 0);
+	for (int i = 0; i < nz; i++) {
+		for (int j = 0; j < nx; j++) {
+			if (std::fabs(ph[i * nx + j] - ph0[i * nx + j]) > 0.02f) {
+				for (int a = std::max(i - 1, 0); a <= std::min(i + 1, nz - 1); a++) {
+					for (int b = std::max(j - 1, 0); b <= std::min(j + 1, nx - 1); b++) {
+						tenu[size_t(a) * nx + b] = 1;
+					}
+				}
+			}
+		}
+	}
+	// nœuds sous un aménagement
+	const double px = dx / k;
+	const double pz = dz / k;
+	std::vector<uint8_t> coupe(size_t(ni * nj), 0);
+	for (int64_t q = 0; q + 3 < rects.size(); q += 4) {
+		const int64_t ja = std::max<int64_t>(int64_t(std::ceil((rects[q] - x0) / px)), 0);
+		const int64_t ia = std::max<int64_t>(int64_t(std::ceil((rects[q + 1] - z0) / pz)), 0);
+		const int64_t jb = std::min<int64_t>(int64_t(std::floor((rects[q + 2] - x0) / px)), nj - 1);
+		const int64_t ib = std::min<int64_t>(int64_t(std::floor((rects[q + 3] - z0) / pz)), ni - 1);
+		for (int64_t i = ia; i <= ib; i++) {
+			std::fill(coupe.begin() + i * nj + ja, coupe.begin() + i * nj + std::max(jb + 1, ja), uint8_t(1));
+		}
+	}
+
+	PackedFloat32Array hn;
+	hn.resize(ni * nj);
+	float *ps = hn.ptrw();
+	PackedByteArray fine;
+	fine.resize(int64_t(nx - 1) * (nz - 1));
+	uint8_t *pf = fine.ptrw();
+	memset(pf, 0, size_t(fine.size()));
+	const float inv = 1.0f / k;
+	for (int64_t i = 0; i < ni; i++) {
+		const int ci = int(std::min<int64_t>(i / k, nz - 2));
+		const float v = float(i - int64_t(ci) * k) * inv;
+		for (int64_t j = 0; j < nj; j++) {
+			const int cj = int(std::min<int64_t>(j / k, nx - 2));
+			const float u = float(j - int64_t(cj) * k) * inv;
+			const size_t c0 = size_t(ci) * nx + cj;
+			const float a = ph[c0];
+			const float b = ph[c0 + 1];
+			const float cc = ph[c0 + nx];
+			const float d = ph[c0 + nx + 1];
+			// même découpe que les tuiles
+			const float base = u + v <= 1.0f ? a + (b - a) * u + (cc - a) * v : d + (cc - d) * (1.0f - u) + (b - d) * (1.0f - v);
+			const int64_t q = i * nj + j;
+			uint16_t brut;
+			memcpy(&brut, pe + q * 2, 2);
+			float e = demi_flottant(brut);
+			if (e != 0.0f && (coupe[size_t(q)] || tenu[c0] || tenu[c0 + 1] || tenu[c0 + nx] || tenu[c0 + nx + 1])) {
+				const float l0 = (1.0f - tenu[c0]) * (1.0f - u) + (1.0f - tenu[c0 + 1]) * u;
+				const float l1 = (1.0f - tenu[c0 + nx]) * (1.0f - u) + (1.0f - tenu[c0 + nx + 1]) * u;
+				const float libre = l0 * (1.0f - v) + l1 * v;
+				e = coupe[size_t(q)] ? 0.0f : e * libre * libre;
+			}
+			ps[q] = base + e;
+			if (e != 0.0f) {
+				// toutes les mailles qui touchent ce nœud
+				const int i_a = int(i % k == 0 ? std::max<int64_t>(i / k - 1, 0) : i / k);
+				const int j_a = int(j % k == 0 ? std::max<int64_t>(j / k - 1, 0) : j / k);
+				for (int a2 = i_a; a2 <= ci; a2++) {
+					for (int b2 = j_a; b2 <= cj; b2++) {
+						pf[size_t(a2) * (nx - 1) + b2] = 1;
+					}
+				}
+			}
+		}
+	}
+	// nœuds à 25 m : mêmes altitudes, pour les tuiles et le raccord au bord de la grille suiveuse
+	PackedFloat32Array recale;
+	recale.resize(int64_t(nx) * nz);
+	float *pr = recale.ptrw();
+	for (int i = 0; i < nz; i++) {
+		for (int j = 0; j < nx; j++) {
+			pr[size_t(i) * nx + j] = ps[int64_t(i) * k * nj + int64_t(j) * k];
+		}
+	}
+	sortie.append(hn);
+	sortie.append(fine);
+	sortie.append(recale);
+	return sortie;
+}
+
 void NoyauRemontee::_bind_methods() {
+	ClassDB::bind_method(D_METHOD("fusion_relief", "h", "h0", "ecart", "nx", "nz", "k", "rects", "x0", "z0", "dx", "dz"), &NoyauRemontee::fusion_relief);
 	ClassDB::bind_method(D_METHOD("set_boucle", "boucle", "cumul", "longueur"), &NoyauRemontee::set_boucle);
 	ClassDB::bind_method(D_METHOD("set_zones", "debut", "fin", "code", "x_haut", "x_bas"), &NoyauRemontee::set_zones);
 	ClassDB::bind_method(D_METHOD("set_appuis", "appuis"), &NoyauRemontee::set_appuis);
