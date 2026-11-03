@@ -79,6 +79,7 @@ pause={
 
 [rendering]
 
+gl_compatibility/item_buffer_size.web=2048
 textures/vram_compression/import_etc2_astc=true
 limits/opengl/max_renderable_lights=128
 anti_aliasing/quality/msaa_3d=2

@@ -7,6 +7,8 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## Version suivante (non publiée)
 
+**Tampon 2D réduit sur la PWA** : `gl_compatibility/item_buffer_size` de 16 384 à 2 048 éléments (web seulement) ; il réservait 28 tampons de 2 Mo. Plafonds tablette abaissés à 100, 75 et 60 Mo. Sous WebKit : menu 90 → 43 Mo ; au pied de Tovière, 109 Mo et 16 315 tampons en mode normal, 81 Mo et 13 236 en allégé 1, 65 Mo et 10 973 en allégé 2. Plantages réels à 265, 199 et 160 Mo. Effet sur l'iPad à vérifier, carte des pistes comprise.
+
 **Matériau palette sur la PWA** : couleur des matériaux unis passée dans les sommets, 16 matériaux partagés au lieu de centaines (web seulement ; banc : `--palette`). Au pied de Tovière en allégé 2, sous WebKit : 10 830 tampons contre 12 093 ; 112 Mo contre 114. Les programmes graphiques ne baissent pas (316 mesurés).
 
 **Relief fin à 5 m sur tout le domaine** (PC partis au cran 0 ; ni le web ni les crans suivants, relief à 25 m inchangé, vérifié ligne à ligne sur le câble et le sol). Altitude IGN RGE ALTI (`tools_relief_fin.py`), 15,5 Mo, fusion en C++ ; sans le module, repli sur 25 m avec un message au journal. Le choix est fait au chargement et ne suit pas le régulateur : changer de cran ne bouge ni le sol ni le câble (banc du relief fin).
