@@ -31,6 +31,7 @@ const R_PAROI: float = 1.64             # rayon intérieur du tube des voitures
 var pret: bool = false
 var triangles: int = 0
 const BUDGET_US: int = 7000
+const BUDGET_FIN_US: int = 2000         # relief fin : ses sous-blocs (60 µs) n'ont pas besoin de plus, et 7 ms pleines s'ajoutaient aux images déjà chargées
 ## Bancs sans écran : collisions à la demande d'un bloc (le banc de fluidité
 ## les veut étalées comme en jeu).
 var synchrone_sans_ecran: bool = true
@@ -113,7 +114,8 @@ func _process(delta: float) -> void:
 
 
 func _process_corps(_delta: float) -> void:
-	_avancer(Time.get_ticks_usec() + budget_us)
+	var relief: ReliefBuilder = _main.get("relief") if _main != null else null
+	_avancer(Time.get_ticks_usec() + (mini(budget_us, BUDGET_FIN_US) if relief != null and relief.fin != null else budget_us))
 
 
 ## Exécute les tâches jusqu'à l'échéance ; prêt quand il n'en reste plus.

@@ -11,7 +11,8 @@
 ## data/remontees/geometrie_k.json ; on réunit ensuite les morceaux.
 ## `--lignes=a,b` : seulement ces lignes → geometrie_x_a_b.json (l'emporte).
 ## `--relief-fin` : jeu du relief fin. Part des hauteurs des données sur ce sol, ne change que
-## les hauteurs, garde à la main celles de HAUTEURS_A_LA_MAIN → geometrie_fin[_…].json.
+## les hauteurs, garde à la main celles de HAUTEURS_A_LA_MAIN, plafonne à la hauteur des
+## données + PLAFOND_FIN (pas de galets gagnés par des pylônes irréalistes) → geometrie_fin[_…].json.
 extends SceneTree
 
 var _main: Node = null
@@ -20,6 +21,7 @@ var _f0: int = 0
 var _fait: bool = false
 
 const HAUTEURS_A_LA_MAIN: Array = ["tsd6_leissieres"]
+const PLAFOND_FIN: float = 4.0
 const POIDS_DEV: float = 1.0e4          # (rad²) : 0,1 rad de trop → 100
 const POIDS_GARDE: float = 1.0e5        # (m²) : 0,1 m sous la garde → 1 000 (quasi intouchable)
 const POIDS_ECART: float = 0.002        # (m²) : 10 m d'écart au départ → 0,2
@@ -27,6 +29,7 @@ const POIDS_ECART: float = 0.002        # (m²) : 10 m d'écart au départ → 0
 
 func _initialize() -> void:
 	LigneRemontee.ignorer_precalcul = true
+	RemonteesDomaine.sans_geometrie_fin = true
 	_main = load("res://scenes/main.tscn").instantiate()
 	get_root().add_child(_main)
 	process_frame.connect(_tick)
@@ -147,6 +150,16 @@ func _pen_garde(lg: LigneRemontee, k: int) -> float:
 	return POIDS_GARDE * pow(maxf(0.0, -lg._garde_portee(k)), 2.0)
 
 
+## Haut de la course d'une tête : borne mesurée ; sur le relief fin, jamais plus de PLAFOND_FIN
+## au-dessus de la hauteur des données.
+func _h_haut(lg: LigneRemontee, i: int, t: float) -> float:
+	var p: Dictionary = lg.pylones[i]
+	var haut: float = t + float(p.get("h_max", 36.0))
+	if _main.relief.fin != null and p.has("h"):
+		haut = minf(haut, t + float(p["h"]) + PLAFOND_FIN)
+	return haut
+
+
 func _cout_local(lg: LigneRemontee, i: int, h0: Array) -> float:
 	return _pen_dev(lg, i - 1) + _pen_dev(lg, i) + _pen_dev(lg, i + 1) \
 		+ _pen_garde(lg, i) + _pen_garde(lg, i + 1) \
@@ -163,7 +176,7 @@ func _optimiser(lg: LigneRemontee, h0: Array) -> void:
 		var p: Dictionary = lg.pylones[i]
 		var t: float = lg.terrain(float(p["d"]))
 		lo.append(t + float(p.get("h_min", 6.5)))
-		hi.append(t + float(p.get("h_max", 36.0)))
+		hi.append(_h_haut(lg, i, t))
 	for pas in [8.0, 4.0, 2.0, 1.0, 0.5, 0.25]:
 		for balayage in range(60):
 			var mieux: bool = false
@@ -212,7 +225,7 @@ func _relances(lg: LigneRemontee, h0: Array, effort: int) -> void:
 			var t: float = lg.terrain(float(lg.pylones[i]["d"]))
 			var p: Dictionary = lg.pylones[i]
 			lg._tetes[i] = clampf(float(meilleur[i]) + rng.randf_range(-6.0, 6.0),
-				t + float(p.get("h_min", 6.5)), t + float(p.get("h_max", 36.0)))
+				t + float(p.get("h_min", 6.5)), _h_haut(lg, i, t))
 		lg._preparer_nez()
 		_optimiser(lg, h0)
 		var c: float = _cout_total(lg, h0)

@@ -281,12 +281,13 @@ func _jumeler() -> void:
 ## les hauteurs des données.
 const GEOMETRIE_FIN: String = "res://data/remontees/geometrie_fin.json"
 var _geo_fin: Variant = null
+static var sans_geometrie_fin: bool = false    # (l'outil de précalcul part des hauteurs des données)
 
 
 func _geometrie_fin() -> Dictionary:
 	if _geo_fin == null:
 		_geo_fin = {}
-		if relief != null and relief.fin != null and FileAccess.file_exists(GEOMETRIE_FIN):
+		if not sans_geometrie_fin and relief != null and relief.fin != null and FileAccess.file_exists(GEOMETRIE_FIN):
 			var lu: Variant = JSON.parse_string(FileAccess.get_file_as_string(GEOMETRIE_FIN))
 			if lu is Dictionary:
 				_geo_fin = lu
