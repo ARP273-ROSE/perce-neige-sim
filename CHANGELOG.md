@@ -5,6 +5,10 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.53.6 — 3 novembre 2026
+
+Paquet Windows : pip est posé depuis sa roue, le script d'installation habituel refusant désormais de s'exécuter ; la Release 1.53.5 n'a pas pu être construite. Contenu du jeu identique à la 1.53.5.
+
 ## 1.53.5 — 2 novembre 2026
 
 **Gares creusées dans la pente.** Elles étaient posées au plus haut du terrain sous leur emprise, jusqu'à 18 m au-dessus du sol côté aval. Le relief est abaissé sous l'emprise, avec un talus autour : hauteur au-dessus du point le plus bas, médiane 2,9 → 1,6 m, 90 % des gares sous 7,4 → 4,6 m (Lanches amont 8,3 → 3,4 m). Grille à 25 m : le déblai se fait donc sur des mailles entières.
