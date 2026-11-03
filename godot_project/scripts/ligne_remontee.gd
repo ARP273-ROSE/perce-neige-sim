@@ -154,7 +154,11 @@ static var tranches: Dictionary = {}       # étape → [pire durée (ms), famil
 var _t_mesure: int = 0
 
 
+static var derniere_etape: String = ""
+
+
 func _pause(etape: String = "") -> void:
+	derniere_etape = etape
 	if _chantier != null:
 		_pause_fil()
 		return
