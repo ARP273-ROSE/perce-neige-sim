@@ -23,6 +23,12 @@ func _suite() -> void:
 	while _main.relief == null or not _main.relief.pret:
 		await process_frame
 	var rel: ReliefBuilder = _main.relief
+	# (sans --relief-fin, un banc sans écran part au cran 1 : rien à vérifier, le relief reste à 25 m)
+	if not "--relief-fin" in OS.get_cmdline_user_args():
+		_check("relief à 25 m hors du cran 0", _main.relief.fin == null, "sans grille fine")
+		print("BENCH_RELIEF_FIN %s" % ("OK" if _echecs == 0 else "ECHEC"))
+		FinBanc.quitter(self, _main, 0 if _echecs == 0 else 1)
+		return
 	var rf: ReliefFin = rel.fin
 	_check("réservé au cran 0", ReliefFin.voulu(0) and not ReliefFin.voulu_sans_forcer(1) and not ReliefFin.voulu_sans_forcer(3),
 		"cran 0 %s, cran 1 %s, cran 3 %s" % [str(ReliefFin.voulu(0)), str(ReliefFin.voulu_sans_forcer(1)), str(ReliefFin.voulu_sans_forcer(3))])
