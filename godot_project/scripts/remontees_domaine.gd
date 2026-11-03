@@ -450,10 +450,14 @@ func _ready() -> void:
 	if not OS.has_feature("web") and PerfManager.cran_courant >= PerfManager.CRAN_MAX_PC:
 		set_portees_reduites(true)
 	if OS.has_feature("web"):
-		var telephone: bool = bool(JavaScriptBridge.eval("/Mobile|Android/.test(navigator.userAgent)", true))
-		_budget_tampons_mo = [200.0 if telephone else 350.0, 180.0, 140.0][clampi(PerfManager.secours_web, 0, 2)]
+		# (l'iPad se présente en Mac : on le reconnaît au tactile. WebGL y a lâché à 265 Mo, puis à 199 Mo
+		# en secours 1, au Lac de Tignes, le 03/11/2026)
+		var telephone: bool = bool(JavaScriptBridge.eval("/Mobile|Android/.test(navigator.userAgent)||(/Macintosh/.test(navigator.userAgent)&&navigator.maxTouchPoints>1)", true))
+		_budget_tampons_mo = [200.0 if telephone else 350.0, 140.0 if telephone else 180.0, 140.0][clampi(PerfManager.secours_web, 0, 2)]
+		if telephone and PerfManager.secours_web > 0:
+			_budget_proche = 250.0
 	if PerfManager.secours_web > 0:
-		var fort: bool = PerfManager.secours_web >= 2
+		var fort: bool = PerfManager.secours_web >= 2 or _budget_proche < BUDGET_PROCHE
 		CONSTRUIRE_JUSQUA = 500.0 if fort else 800.0
 		DEMOLIR_AU_DELA = 900.0 if fort else 1400.0
 		VEHICULES_JUSQUA = 200.0 if fort else 300.0
@@ -474,6 +478,7 @@ var DEMOLIR_AU_DELA: float = 2200.0 if OS.has_feature("web") else 3500.0
 ## à 824×384) : c'est le nombre de lignes construites, pas une fuite.
 var _budget_tampons_mo: float = 0.0
 const BUDGET_PROCHE: float = 400.0
+var _budget_proche: float = BUDGET_PROCHE
 var _en_cours: LigneRemontee = null
 
 
@@ -503,7 +508,7 @@ func _construire_proches() -> void:
 			and Performance.get_monitor(Performance.RENDER_BUFFER_MEM_USED) / 1048576.0 > _budget_tampons_mo:
 		# budget atteint : on ne construit plus que la ligne où l'on arrive,
 		# en démontant d'abord la plus lointaine
-		if d_best > BUDGET_PROCHE or not _poubelle.is_empty() or _faire_place(p, d_best):
+		if d_best > _budget_proche or not _poubelle.is_empty() or _faire_place(p, d_best):
 			return
 	if best != null:
 		_en_cours = best
@@ -808,6 +813,22 @@ func _embarquement() -> void:
 				if evt != "":
 					_piquer(evt, lg)
 				return
+
+
+## Pylône dont l'échelle est à portée de main (demande d'utilisateur, 03/11/2026), sinon null.
+func echelle_proche(p: Vector3) -> PyloneRemontee:
+	for e in lignes:
+		var lg: LigneRemontee = e[0]
+		if not lg.pret:
+			continue
+		for q in lg._pyl:
+			var py: PyloneRemontee = q[0]
+			if not py.a_echelle:
+				continue
+			var b: Vector3 = py.echelle_a_hauteur(p.y)
+			if Vector2(p.x - b.x, p.z - b.z).length() < 1.8 and absf(p.y - b.y) < 4.0:
+				return py
+	return null
 
 
 ## Remontée « courante » pour le poste de commande : celle où l'on est

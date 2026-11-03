@@ -1577,6 +1577,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		if mode_skieur and event.keycode == KEY_E:
 			basculer_ski()
 			return
+		if mode_skieur and event.keycode == KEY_G:
+			basculer_echelle()
+			return
 		if event.keycode == KEY_F10 and perf_manager != null:
 			perf_manager.releve()
 			return
@@ -1943,6 +1946,25 @@ func _remonter_skieur() -> void:
 
 
 ## Chausser / déchausser (bouton CHAUSSER, touche E ; E du PC relayée).
+## Échelle du pylône voisin (bouton GRIMPER, touche G), à pied : monte jusqu'en haut ;
+## sur l'échelle, repart dans l'autre sens ; arrivé en bas, on lâche.
+func basculer_echelle() -> void:
+	if skieur == null or not mode_skieur or remontees == null:
+		return
+	if skieur.sur_echelle():
+		skieur.sens_echelle()
+		return
+	if skieur.embarque or skieur.support != null or skieur.assis:
+		return
+	var py: PyloneRemontee = remontees.echelle_proche(skieur.global_position)
+	if py == null:
+		return
+	if skieur.chausse:
+		commandes_skieur.message("Pas à ski : déchausse d'abord")
+		return
+	skieur.prendre_echelle(py)
+
+
 func basculer_ski() -> void:
 	# sur une perche de téléski : E (ou LÂCHER) lâche la perche
 	if remontees != null and remontees.sur_perche():

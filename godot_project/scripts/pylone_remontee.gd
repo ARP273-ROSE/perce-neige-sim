@@ -217,11 +217,27 @@ func _fut(r0: float, r1: float, y_tete: float) -> void:
 
 ## Échelle droite à montants (pas de crinoline sur les lignes récentes : un
 ## rail antichute), sur pattes boulonnées au fût, côté aval.
+## Échelle praticable (bouton GRIMPER, déchaussé) : bas et haut, repère du pylône, et sa face (+Z du mât).
+var a_echelle: bool = false
+var echelle_bas: Vector3 = Vector3.ZERO
+var echelle_haut: Vector3 = Vector3.ZERO
+
+
+## Point de l'échelle, ou de son prolongement vers le pied du mât (fût incliné), à l'altitude y.
+func echelle_a_hauteur(y: float) -> Vector3:
+	var b: Vector3 = global_transform * echelle_bas
+	var u: Vector3 = (global_transform * echelle_haut) - b
+	return b + u * minf((y - b.y) / maxf(u.y, 0.01), 0.0)
+
+
 func _echelle(r0: float, r1: float, y_tete: float) -> void:
 	var y0: float = _y_pied + 1.9
 	var y1: float = hauteur - 0.05
 	var zr := func(y: float) -> float:
 		return lerpf(r0, r1, clampf((y - _y_pied - 0.31) / (y_tete - _y_pied - 0.31), 0.0, 1.0)) + 0.24
+	a_echelle = true
+	echelle_bas = _xf_tete * Vector3(0, y0, zr.call(y0))
+	echelle_haut = _xf_tete * Vector3(0, y1, zr.call(y1))
 	for sx in [-0.21, 0.21]:
 		RemonteeKit.poutre(_n, Vector3(sx, y0, zr.call(y0)), Vector3(sx, y1, zr.call(y1)), 0.06, 0.012, "galva_pylone", Vector3.BACK)
 	var y: float = y0 + 0.14
