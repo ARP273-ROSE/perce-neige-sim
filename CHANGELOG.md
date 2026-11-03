@@ -7,10 +7,6 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## Version suivante (non publiée)
 
-**Mémoire de la PWA sur iPad** (web seulement ; plantage à la montée dans le TCD10 Tovière en 1.53.6). Numéros de balise posés en flux autour du joueur au lieu de 1 669 textes permanents, Val Claret et Grande Motte fusionnées, câble du funiculaire en segments de 30 m au lieu de 15, rayon de construction de 120 m en mode allégé 2. Mesuré sous WebKit avec la signature tactile d'un iPad, au pied de Tovière : 209 Mo et 15 747 tampons en mode normal, 192 Mo et 14 088 en allégé 1, 168 Mo et 11 496 en allégé 2. Les plantages réels avaient eu lieu à 265, 199 et 160 Mo (31 265, 25 104 et 23 849 tampons) : le nombre de tampons baisse de moitié environ, moins la mémoire. La perte de contexte ne se reproduit pas sous Linux : l'effet sur l'iPad reste à vérifier sur l'appareil.
-
-**Sommets soudés sur la PWA.** Les maillages sans index répétaient chaque sommet à chaque triangle : ils sont soudés à la construction, et les fusions identiques des rames et de leurs voitures partagent une seule géométrie. Plafonds de tampons de la tablette abaissés à 150, 120 et 105 Mo. Au pied de Tovière, sous WebKit : 152 Mo et 17 463 tampons en mode normal (8 lignes), 132 Mo et 14 969 en allégé 1 (4 lignes), 114 Mo et 12 093 en allégé 2 (1 ligne). La soudure ne prend que 240 à 270 ms au total. Les chiffres de tampons remontent un peu (un tampon d'index par maillage). PC inchangé, sauf avec les options de banc `--indexer` et `--partage-rames`.
-
 **Relief fin à 5 m sur tout le domaine** (PC partis au cran 0 ; ni le web ni les crans suivants, relief à 25 m inchangé, vérifié ligne à ligne sur le câble et le sol). Altitude IGN RGE ALTI (`tools_relief_fin.py`), 15,5 Mo, fusion en C++ ; sans le module, repli sur 25 m avec un message au journal. Le choix est fait au chargement et ne suit pas le régulateur : changer de cran ne bouge ni le sol ni le câble (banc du relief fin).
 
 **Pylônes réajustés sur ce sol** (`data/remontees/geometrie_fin.json`, 45 lignes) : hauteurs seules, jamais plus de 4 m au-dessus de celles à 25 m ni au-delà des bornes mesurées ; Leissières et deux pylônes de Borsat posés à la main. Sur 63 lignes : dépassement des galets 629° → 628°, pylônes au-delà de 1° 174 → 169. Écarts connus : Rogoney, Vallon de l'Iseran et Borsat perdent en galets ; la mesure de contact (`bench_sol_lignes_3d.gd`, prudente) voit encore 10 lignes contre 17 à 25 m où un véhicule pourrait toucher, dont la perche du Col du Palet.
@@ -23,6 +19,15 @@ dédié, pour lui seul, assombrit la neige là où pylônes, véhicules et bâti
 
 **Fil principal à ski.** Collisions du tunnel construites pour un skieur sur la neige, pièces fines des gares refaites en double à chaque carré de relief (26 à 54 ms), portées de toutes
 les lignes réglées d'un bloc à chaque changement de détail (72 à 103 ms). Boucle de 11 min en 4K : images de plus de 25 ms à ski 20 → 2.
+
+## 1.53.7 — 3 novembre 2026 (PWA seule)
+
+**Mémoire de la PWA sur iPad** (web seulement ; plantage à la montée dans le TCD10 Tovière en 1.53.6). Numéros de balise posés en flux autour du joueur au lieu de 1 669 textes permanents, Val Claret et Grande Motte fusionnées, câble du funiculaire en segments de 30 m au lieu de 15, rayon de construction de 120 m en mode allégé 2. Mesuré sous WebKit avec la signature tactile d'un iPad, au pied de Tovière : 209 Mo et 15 747 tampons en mode normal, 192 Mo et 14 088 en allégé 1, 168 Mo et 11 496 en allégé 2. Les plantages réels avaient eu lieu à 265, 199 et 160 Mo (31 265, 25 104 et 23 849 tampons) : le nombre de tampons baisse de moitié environ, moins la mémoire. La perte de contexte ne se reproduit pas sous Linux : l'effet sur l'iPad reste à vérifier sur l'appareil.
+
+**Sommets soudés sur la PWA.** Les maillages sans index répétaient chaque sommet à chaque triangle : ils sont soudés à la construction, et les fusions identiques des rames et de leurs voitures partagent une seule géométrie. Plafonds de tampons de la tablette abaissés à 150, 120 et 105 Mo. Au pied de Tovière, sous WebKit : 152 Mo et 17 463 tampons en mode normal (8 lignes), 132 Mo et 14 969 en allégé 1 (4 lignes), 114 Mo et 12 093 en allégé 2 (1 ligne). La soudure ne prend que 240 à 270 ms au total. Les chiffres de tampons remontent un peu (un tampon d'index par maillage). PC inchangé, sauf avec les options de banc `--indexer` et `--partage-rames`.
+
+**Télésiège des Leissières** : pylônes repositionnés d'après le relevé GPS (P11 à 130 m, hauteurs de P10 et P11 revues).
+
 ## 1.53.6 — 3 novembre 2026
 
 Paquet Windows : pip est posé depuis sa roue, le script d'installation habituel refusant désormais de s'exécuter ; la Release 1.53.5 n'a pas pu être construite. Contenu du jeu identique à la 1.53.5.
