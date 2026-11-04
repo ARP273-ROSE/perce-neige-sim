@@ -80,8 +80,9 @@ func _tick() -> void:
 		var hit: Dictionary = _main.get_world_3d().direct_space_state.intersect_ray(rq)
 		if not hit.is_empty():
 			sol = maxf(sol, (hit["position"] as Vector3).y)
+		# jusqu'à 20 m de plus depuis le correctif du saut : caméra hors du bâtiment (04/11/2026)
 		_verif("touché %s : déposé au pied de la gare aval, debout sur la neige" % _lg.nom_ligne,
-			d < (20.0 if _lg.teleski() else 15.0) and absf(sk.global_position.y - sol) < 1.0 and sk.is_on_floor(),
+			d < 30.0 and absf(sk.global_position.y - sol) < 1.0 and sk.is_on_floor(),
 			"%.1f m de la gare, %.2f m au-dessus du sol, au sol %s" % [d, sk.global_position.y - sol, sk.is_on_floor()])
 		_t = 0.0
 		_i += 1
