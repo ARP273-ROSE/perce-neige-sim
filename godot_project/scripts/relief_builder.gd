@@ -538,6 +538,8 @@ func _creer_maillages(fin_us: int) -> void:
 	if _mat_terrain == null:
 		_materiaux()
 		return
+	if fin != null and fin.hd and not fin.envoyer_couches(fin_us):
+		return
 	while _k < _tableaux.size():
 		var arr: Array = _tableaux[_k]
 		if (arr[Mesh.ARRAY_INDEX] as PackedInt32Array).size() > 0:
@@ -571,8 +573,8 @@ func _creer_maillages(fin_us: int) -> void:
 	print("[Relief] prêt")
 
 
-var _tex_normales: Texture2DArray = null
-var _tex_ortho_hd: Texture2DArray = null
+var _tex_normales: Texture2DArrayRD = null
+var _tex_ortho_hd: Texture2DArrayRD = null
 var _h0_ref: PackedFloat32Array = PackedFloat32Array()   # banc du sol au mètre
 var _hn5_ref: PackedFloat32Array = PackedFloat32Array()
 
