@@ -119,6 +119,7 @@ void ReliefHD::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("anneaux", "hn", "nj", "ni", "h", "nx", "nz", "k", "cj", "ci", "m", "niveaux"), &ReliefHD::anneaux);
 	ClassDB::bind_method(D_METHOD("normales_couche", "hn", "nj", "ni", "ti", "tj", "taille", "marge", "px", "pz"), &ReliefHD::normales_couche);
 	ClassDB::bind_method(D_METHOD("couches", "chemin"), &ReliefHD::couches);
+	ClassDB::bind_method(D_METHOD("foret", "chemin", "hn", "nj", "ni", "x0", "z0", "px", "pz", "capsules", "rects"), &ReliefHD::foret);
 	ClassDB::bind_method(D_METHOD("normales", "hn", "nj", "ni", "tuile", "taille", "marge", "px", "pz"), &ReliefHD::normales);
 }
 
@@ -551,6 +552,142 @@ Array ReliefHD::couches(const String &chemin) const {
 	sortie.append(int(champs[4]));
 	for (const PackedByteArray &o : c) {
 		sortie.append(o);
+	}
+	return sortie;
+}
+
+Array ReliefHD::foret(const String &chemin, const PackedFloat32Array &hn, int nj, int ni, double x0, double z0, double px, double pz,
+		const PackedFloat32Array &capsules, const PackedFloat32Array &rects) const {
+	Array sortie;
+	Ref<FileAccess> f = FileAccess::open(chemin, FileAccess::READ);
+	if (f.is_null()) {
+		return sortie;
+	}
+	const PackedByteArray b_tete = f->get_buffer(32);
+	if (b_tete.size() != 32 || std::memcmp(b_tete.ptr(), "PNAB", 4) != 0) {
+		return sortie;
+	}
+	double ax0, az0;
+	float cote;
+	uint32_t n;
+	std::memcpy(&ax0, b_tete.ptr() + 8, 8);
+	std::memcpy(&az0, b_tete.ptr() + 16, 8);
+	std::memcpy(&cote, b_tete.ptr() + 24, 4);
+	std::memcpy(&n, b_tete.ptr() + 28, 4);
+	const PackedByteArray b_index = f->get_buffer(int64_t(n) * 20);
+	if (b_index.size() != int64_t(n) * 20) {
+		return sortie;
+	}
+	const uint64_t corps = uint64_t(32) + uint64_t(n) * 20;
+	const float *ps = hn.ptr();
+	struct Resultat {
+		int cx = 0, cz = 0, nb = 0;
+		PackedFloat32Array tampon;
+	};
+	std::vector<Resultat> res(n);
+	const auto libre = [&](float x, float z) {
+		for (int64_t q = 0; q + 5 < capsules.size(); q += 6) {
+			const float ax = capsules[q], az = capsules[q + 1], bx = capsules[q + 2], bz = capsules[q + 3], r0 = capsules[q + 4];
+			if (x < std::min(ax, bx) - r0 || x > std::max(ax, bx) + r0 || z < std::min(az, bz) - r0 || z > std::max(az, bz) + r0) {
+				continue;
+			}
+			const float ux = bx - ax, uz = bz - az;
+			const float t = std::min(std::max(((x - ax) * ux + (z - az) * uz) / std::max(ux * ux + uz * uz, 1e-6f), 0.0f), 1.0f);
+			const float dx = x - (ax + ux * t), dz = z - (az + uz * t);
+			if (dx * dx + dz * dz < r0 * r0) {
+				return false;
+			}
+		}
+		for (int64_t q = 0; q + 3 < rects.size(); q += 4) {
+			if (x > rects[q] && x < rects[q + 2] && z > rects[q + 1] && z < rects[q + 3]) {
+				return false;
+			}
+		}
+		return true;
+	};
+	en_parallele(n, [&](int64_t k) {
+		const uint8_t *e = b_index.ptr() + k * 20;
+		uint16_t cx, cz;
+		uint32_t nb, taille;
+		uint64_t pos;
+		std::memcpy(&cx, e, 2);
+		std::memcpy(&cz, e + 2, 2);
+		std::memcpy(&nb, e + 4, 4);
+		std::memcpy(&pos, e + 8, 8);
+		std::memcpy(&taille, e + 16, 4);
+		Ref<FileAccess> fk = FileAccess::open(chemin, FileAccess::READ);
+		if (fk.is_null()) {
+			return;
+		}
+		fk->seek(corps + pos);
+		const PackedByteArray z = fk->get_buffer(taille);
+		const PackedByteArray clair = z.decompress(int64_t(nb) * 7, FileAccess::COMPRESSION_ZSTD);
+		if (clair.size() != int64_t(nb) * 7) {
+			return;
+		}
+		std::vector<float> t;
+		t.reserve(size_t(nb) * 16 * 2);
+		int total = 0;
+		const auto poser = [&](float x, float zz, float h, float r, uint32_t graine) {
+			if (!libre(x, zz)) {
+				return;
+			}
+			const double fx = (x - x0) / px;
+			const double fz = (zz - z0) / pz;
+			if (fx < 0.0 || fz < 0.0 || fx >= nj - 1 || fz >= ni - 1) {
+				return;
+			}
+			const float y = ReliefHD::hauteur_tri(ps, nj, ni, fx, fz) - 0.2f;
+			const float a = float(graine % 628) * 0.01f;
+			const float c = std::cos(a), s = std::sin(a);
+			// lignes de la matrice : base (rotation Y × échelle r, h, r) et origine
+			const float l[16] = { c * r, 0.0f, s * r, x, 0.0f, h, 0.0f, y, -s * r, 0.0f, c * r, zz,
+				0.85f + float((graine >> 10) % 31) * 0.01f, 0.85f + float((graine >> 15) % 31) * 0.01f, 0.85f + float((graine >> 20) % 31) * 0.01f, 1.0f };
+			t.insert(t.end(), l, l + 16);
+			total++;
+		};
+		for (uint32_t q = 0; q < nb; q++) {
+			const uint8_t *a = clair.ptr() + size_t(q) * 7;
+			uint16_t ux, uz;
+			std::memcpy(&ux, a, 2);
+			std::memcpy(&uz, a + 2, 2);
+			const float x = float(ax0 + (double(cx) + double(ux) / 65535.0) * cote);
+			const float zz = float(az0 + (double(cz) + double(uz) / 65535.0) * cote);
+			// (hauteur plafonnée : au-delà de 40 m, des erreurs de la hauteur de végétation)
+			const float h = std::min(float(a[4]) * 0.25f, 40.0f);
+			const float r = std::max(float(a[5]) * 0.1f * 1.25f, 0.6f);
+			if (h < 2.0f) {
+				continue;
+			}
+			uint32_t g = (uint32_t(ux) * 2654435761u) ^ (uint32_t(uz) * 40503u) ^ q;
+			g ^= g >> 13;
+			poser(x, zz, h, r, g);
+			if (h >= 8.0f) {
+				g = g * 2654435761u + 7u;
+				const float ang = float(g % 628) * 0.01f;
+				const float d = r * (1.6f + float((g >> 10) % 100) * 0.012f);
+				const float k = 0.45f + float((g >> 18) % 30) * 0.01f;
+				poser(x + std::cos(ang) * d, zz + std::sin(ang) * d, h * k, r * k, g >> 3);
+			}
+		}
+		Resultat &o = res[size_t(k)];
+		o.cx = cx;
+		o.cz = cz;
+		o.nb = total;
+		o.tampon.resize(int64_t(t.size()));
+		if (!t.empty()) {
+			std::memcpy(o.tampon.ptrw(), t.data(), t.size() * 4);
+		}
+	});
+	for (const Resultat &o : res) {
+		if (o.nb > 0) {
+			Array c;
+			c.append(o.cx);
+			c.append(o.cz);
+			c.append(o.nb);
+			c.append(o.tampon);
+			sortie.append(c);
+		}
 	}
 	return sortie;
 }
