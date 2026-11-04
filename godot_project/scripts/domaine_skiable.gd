@@ -213,8 +213,10 @@ func _construire_panneaux() -> void:
 			mm.transform_format = MultiMesh.TRANSFORM_3D
 			mm.mesh = [poteau, disque, cercle][k]
 			mm.instance_count = xs.size()
-			for i in range(xs.size()):
-				mm.set_instance_transform(i, xs[i][k])
+			# pleine définition autour du joueur seulement : voir _maj_panneaux
+			mm.visible_instance_count = 0
+			mm.custom_aabb = AABB(Vector3(-60000.0, -1000.0, -60000.0), Vector3(120000.0, 8000.0, 120000.0))
+			_pan_proches.append([mm, xs, k])
 			var mi: MultiMeshInstance3D = MultiMeshInstance3D.new()
 			mi.name = "Panneaux%s" % ["Poteaux", "Disques", "Cercles"][k]
 			mi.multimesh = mm
@@ -231,6 +233,8 @@ func _construire_panneaux() -> void:
 			mi.visibility_range_end = 0.0   # (MultiMesh : la portée se mesure au CENTRE du lot, à l'échelle du domaine — les panneaux disparaissaient par moments, 11/10/2026)
 			mi.layers = 1 | Cabin.LAYER_VOIE
 			add_child(mi)
+			if k == 1:
+				_poser_panneaux_loin(xs, COULEURS[c])
 	var racine: Node3D = Node3D.new()
 	racine.name = "PanneauxTextes"
 	add_child(racine)
@@ -271,6 +275,52 @@ var _racine_numeros: Node3D = null
 var _cases_posees: Dictionary = {}        # case → [Label3D, …]
 var _cases_a_poser: Array = []            # [case, indice suivant]
 var _case_cam: Vector2i = Vector2i(1 << 30, 0)
+var _pan_proches: Array = []              # [MultiMesh, transformations, indice dans la transformation]
+
+
+## Panneaux de loin : un disque à 10 triangles, à l'intérieur du disque complet (qui le cache de près).
+## 340 000 triangles dessinés en permanence sinon, relevés du 04/11/2026 ; à plus de 350 m, ce disque
+## fait moins de 10 pixels et son liseré blanc moins d'un.
+func _poser_panneaux_loin(xs: Array, col: Color) -> void:
+	var st: SurfaceTool = SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for i in range(1, 11):
+		for a in [0.0, TAU * float(i) / 12.0, TAU * float(i + 1) / 12.0]:
+			st.set_normal(Vector3.UP)
+			st.add_vertex(Vector3(cos(a) * R_DISQUE, 0.0, sin(a) * R_DISQUE))
+	var m: StandardMaterial3D = StandardMaterial3D.new()
+	m.albedo_color = col
+	m.roughness = 0.55
+	m.cull_mode = BaseMaterial3D.CULL_DISABLED
+	var mm: MultiMesh = MultiMesh.new()
+	mm.transform_format = MultiMesh.TRANSFORM_3D
+	mm.mesh = st.commit()
+	mm.instance_count = xs.size()
+	for i in range(xs.size()):
+		mm.set_instance_transform(i, xs[i][1])
+	var mi: MultiMeshInstance3D = MultiMeshInstance3D.new()
+	mi.name = "PanneauxLoin"
+	mi.multimesh = mm
+	mi.material_override = m
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	mi.layers = 1 | Cabin.LAYER_VOIE
+	add_child(mi)
+
+
+## Panneaux complets des 9 cases autour de la caméra.
+func _maj_panneaux(c: Vector2i) -> void:
+	for e in _pan_proches:
+		var mm: MultiMesh = e[0]
+		var xs: Array = e[1]
+		var k: int = e[2]
+		var n: int = 0
+		for x in xs:
+			var xf: Transform3D = x[k]
+			var q: Vector2i = _case_numero(xf.origin)
+			if absi(q.x - c.x) <= 1 and absi(q.y - c.y) <= 1:
+				mm.set_instance_transform(n, xf)
+				n += 1
+		mm.visible_instance_count = n
 
 
 func _case_numero(p: Vector3) -> Vector2i:
@@ -303,6 +353,7 @@ func _process(_delta: float) -> void:
 	var c: Vector2i = _case_numero(cam.global_position)
 	if c != _case_cam:
 		_case_cam = c
+		_maj_panneaux(c)
 		for k in _cases_posees.keys():
 			if absi((k as Vector2i).x - c.x) > 1 or absi((k as Vector2i).y - c.y) > 1:
 				for l in _cases_posees[k]:
