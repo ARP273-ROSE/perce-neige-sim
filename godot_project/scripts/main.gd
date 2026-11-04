@@ -1956,15 +1956,60 @@ func _poser_sur_gare() -> void:
 		# sous un auvent dans ces 10 s le posait sur le toit, refuge compris)
 		if skieur.support == null and not skieur.embarque and not skieur.is_on_floor():
 			_remonter_skieur()
+		# (les gares voisines viennent de se construire : l'une d'elles peut enfermer la caméra)
+		if _t_depose <= 0.0:
+			_regard_libre()
 	var lg: LigneRemontee = _depose_remontee
 	if lg == null or not is_instance_valid(lg) or not lg.pret or skieur == null:
 		return
 	_depose_remontee = null
 	_t_depose = 10.0
 	_remonter_skieur()
+	_regard_libre()
 
 
 var _t_depose: float = 0.0
+
+
+## Après une dépose : la caméra, 5 m derrière le skieur, tombait dans le bâtiment de la gare, sans
+## collision à cet endroit (écran tout gris ou brun à Tichot, aux Merles). On garde le premier des
+## quatre regards dont la caméra est hors des gares ; sinon, celui qui en a le moins autour d'elle.
+func _regard_libre() -> void:
+	if skieur == null or remontees == null or skieur.embarque or skieur.support != null:
+		return
+	var boites: Array = []
+	var p: Vector3 = skieur.global_position
+	for e in remontees.lignes:
+		var lg: LigneRemontee = e[0]
+		if lg.pret and lg.visible and lg.global_position.distance_to(p) < 800.0:
+			for nom in ["GareAval", "GareAmont"]:
+				var g: Node = lg.get_node_or_null(nom)
+				if g != null:
+					_boites_sous(g, p, boites)
+	var meilleur: float = skieur.cam_yaw
+	var mini_n: int = 1 << 30
+	for da in [0.0, PI * 0.5, -PI * 0.5, PI]:
+		var y: float = skieur.cam_yaw + da
+		var q: Vector3 = p + Vector3.UP * SkieurJoueur.Y_YEUX 			+ Basis(Vector3.UP, y) * (Basis(Vector3.RIGHT, skieur.cam_pitch) * Vector3(0.0, 0.0, skieur.cam_dist))
+		var n: int = 0
+		for b in boites:
+			if (b as AABB).has_point(q):
+				n += 1
+		if n < mini_n:
+			mini_n = n
+			meilleur = y
+		if n == 0:
+			break
+	skieur.cam_yaw = meilleur
+
+
+func _boites_sous(n: Node, p: Vector3, o: Array) -> void:
+	if n is MeshInstance3D and (n as MeshInstance3D).mesh != null:
+		var ab: AABB = (n as Node3D).global_transform * (n as GeometryInstance3D).get_aabb()
+		if ab.grow(12.0).has_point(p):
+			o.append(ab.grow(0.3))
+	for c in n.get_children():
+		_boites_sous(c, p, o)
 
 
 func _remonter_skieur() -> void:
