@@ -655,7 +655,7 @@ func _creuser_gares() -> void:
 ## d'utilisateur, 04/11/2026 : la montagne a été creusée, replat de 30 m). Déblai côté haut, remblai
 ## côté bas. [clé, d du centre, demi-longueur le long de la ligne, demi-largeur en travers,
 ## abaissement sous le point le plus haut du replat]
-const ARASEMENTS: Array = [["tsd6_leissieres", 587.0, 15.0, 28.0, 3.5]]
+const ARASEMENTS: Array = [["tsd6_leissieres", 581.0, 15.0, 28.0, 4.6]]
 const ARASEMENT_RACCORD: float = 18.0
 
 

@@ -135,7 +135,7 @@ static func vider_modeles() -> void:
 
 
 func _type() -> String:
-	return "%s|%s|%s|%s|%s" % [famille, str(miroir), livree, teinte, str(pince_a108)]
+	return "%s|%s|%s|%s|%s|%s" % [famille, str(miroir), livree, teinte, str(pince_a108), style_tph]
 
 
 func construire() -> void:
@@ -1656,6 +1656,26 @@ func _baies_zeta(cab: Node3D) -> void:
 const H_SUSP_TPH: float = 5.2         # mesuré en vidéo : Fornet 5,1, Grande Motte 5,7
 
 
+## Suspente du Fornet (photos) : cadre en A dans le plan de la ligne, centré, deux jambes de métal nu
+## du chariot au toit, entretoises, caisson long au milieu du toit.
+var style_tph: String = ""
+
+
+func _suspente_fornet(hs: float) -> void:
+	var y_toit: float = -hs - 0.02
+	var ecart: float = 1.05
+	RemonteeKit.boite_en(self, Vector3(0.50, 0.18, 2.0), Vector3(0, y_toit + 0.09, 0), "galva_pylone")
+	for sz in [-1.0, 1.0]:
+		var bas: Vector3 = Vector3(0, y_toit + 0.15, sz * ecart)
+		var genou: Vector3 = Vector3(0, y_toit + 1.05, sz * ecart * 0.82)
+		RemonteeKit.poutre(self, Vector3(0, 0.05, sz * 0.10), genou, 0.22, 0.34, "acier", Vector3.RIGHT)
+		RemonteeKit.poutre(self, genou, bas, 0.26, 0.40, "acier", Vector3.RIGHT)
+	for u in [0.35, 0.60, 0.82]:
+		var y: float = lerpf(0.05, y_toit + 1.05, u)
+		var z: float = lerpf(0.10, ecart * 0.82, u)
+		RemonteeKit.boite_en(self, Vector3(0.14, 0.12, 2.0 * z), Vector3(0, y, 0), "acier")
+
+
 func _cabine_tph() -> void:
 	pivot = Vector3(0, 0.0, 0)
 	var ch: Node3D = Node3D.new()
@@ -1676,9 +1696,12 @@ func _cabine_tph() -> void:
 		RemonteeKit.boite_en(ch, Vector3(0.24, 0.55, 0.34), Vector3(0, 0.08, bz * 2.35), gris)
 		RemonteeKit.cylindre(ch, 0.08, 0.08, 0.30, Transform3D(Basis(Vector3.FORWARD, PI * 0.5), Vector3(0, -0.15, bz * 2.35)), "acier", 10)
 	RemonteeKit.boite_en(ch, Vector3(0.05, 0.10, 0.12), Vector3(0.24, 0.84, 2.0), "cabine_rouge")       # feu
+	var hs: float = H_SUSP_TPH
+	var fornet: bool = style_tph == "fornet"
+	if fornet:
+		_suspente_fornet(hs)
 	# suspente (photos) : grand bras gris en caisson qui monte d'un côté du
 	# toit et se recourbe au-dessus du centre de la cabine jusqu'au chariot
-	var hs: float = H_SUSP_TPH
 	var p0: Vector3 = Vector3(0.0, 0.40, 0)
 	var p1: Vector3 = Vector3(1.55, 0.30, 0)
 	var p2: Vector3 = Vector3(1.10, -hs + 0.9, 0)
@@ -1689,8 +1712,9 @@ func _cabine_tph() -> void:
 		var u: float = 1.0 - t
 		arc_t.append(p0 * u * u * u + p1 * 3.0 * u * u * t + p2 * 3.0 * u * t * t + p3 * t * t * t)
 	# caisson qui s'élargit vers le toit (photos)
-	RemonteeKit.caisson(self, arc_t, 0.40, 0.55, 1.1, "acier", Vector3.BACK)
-	RemonteeKit.boite_en(self, Vector3(0.9, 0.14, 1.6), Vector3(1.05, -hs - 0.02, 0), gris)
+	if not fornet:
+		RemonteeKit.caisson(self, arc_t, 0.40, 0.55, 1.1, "acier", Vector3.BACK)
+		RemonteeKit.boite_en(self, Vector3(0.9, 0.14, 1.6), Vector3(1.05, -hs - 0.02, 0), gris)
 	# caisse
 	var cab: Node3D = Node3D.new()
 	cab.name = "Caisse"
@@ -1713,7 +1737,7 @@ func _cabine_tph() -> void:
 	# deux cabines différentes (fiche RM.net) : la n° 1 Swoboda 1993, toit et
 	# liseré bleus, vitrage bleuté ; la n° 2 CWA Varos 2003, liseré gris
 	# argent, vitrage sombre
-	if numero == 2:
+	if numero == 2 or fornet:
 		for mc2 in cab.get_children():
 			if mc2 is MeshInstance3D and (mc2 as MeshInstance3D).mesh != null:
 				var mm: Mesh = (mc2 as MeshInstance3D).mesh
@@ -1722,7 +1746,7 @@ func _cabine_tph() -> void:
 					if ma == null:
 						continue
 					if ma.resource_name == "remontee_cabine_bleue":
-						(mc2 as MeshInstance3D).set_surface_override_material(k, RemonteeKit.mat("peinture_gris"))
+						(mc2 as MeshInstance3D).set_surface_override_material(k, RemonteeKit.mat("peinture_anthracite" if fornet else "peinture_gris"))
 					elif ma.resource_name == "remontee_vitre_bleue":
 						(mc2 as MeshInstance3D).set_surface_override_material(k, RemonteeKit.mat("vitre_teintee"))
 	# meneaux des grandes vitres (trois en façade, cinq sur les côtés)
@@ -1734,8 +1758,11 @@ func _cabine_tph() -> void:
 			if sx2 > 0.0 and absf(k2) < 1:
 				continue          # baie de la porte
 			RemonteeKit.boite_en(cab, Vector3(0.04, 1.35, 0.06), Vector3(sx2 * 1.52, -0.95, k2 * 0.95), "cabine_blanche")
+	# Fornet (photos) : pas de garde-corps sur le toit, châssis rouge vif sous le plancher
+	if fornet:
+		RemonteeKit.boite_en(cab, Vector3(2.7, 0.14, 5.2), Vector3(0, -H - 0.07, 0), "cabine_rouge")
 	# toit : plate-forme de service, garde-corps, trappe
-	for sx3 in [-1.0, 1.0]:
+	for sx3 in ([] if fornet else [-1.0, 1.0]):
 		RemonteeKit.barre(cab, Vector3(sx3 * 1.30, 0.55, -2.55), Vector3(sx3 * 1.30, 0.55, 2.55), 0.025, "galva", 6)
 		for k3 in range(6):
 			var zz: float = -2.55 + k3 * 1.02
@@ -1754,11 +1781,11 @@ func _cabine_tph() -> void:
 	for f in [[Vector3(0, -2.05, 2.815), 0.0, 1.0], [Vector3(0, -2.05, -2.815), PI, 1.0], [Vector3(1.535, -2.05, -1.2), PI * 0.5, 0.8],
 			[Vector3(-1.535, -2.05, 0.0), -PI * 0.5, 1.0]]:
 		var l: Label3D = Label3D.new()
-		l.text = "CAPITALE DU SKI D'ÉTÉ"
+		l.text = "VAL D'ISÈRE" if fornet else "CAPITALE DU SKI D'ÉTÉ"
 		l.visibility_range_end = 120.0
 		l.font_size = 80
 		l.pixel_size = 0.0032 * float(f[2])
-		l.modulate = Color(0.75, 0.10, 0.12)
+		l.modulate = Color(0.12, 0.25, 0.60) if fornet else Color(0.75, 0.10, 0.12)
 		l.outline_size = 0
 		l.double_sided = false
 		l.position = f[0]

@@ -567,6 +567,9 @@ func _calculer_tetes() -> void:
 		for p in pylones:
 			_tetes.append(terrain(float(p["d"])) + float(p["h"]))
 		_bornes_tetes()
+		# (relief affiché : le précalcul ne le connaît pas tout à fait, et les véhicules passaient sous la
+		# neige entre deux pylônes, retour d'utilisateur, 04/11/2026 : P9-P10 des Pyramides)
+		_garde_au_sol(true)
 		return
 	# lignes relevées au GPS : chaque tête part de la hauteur MESURÉE du câble
 	# au droit du pylône (siège mesuré + suspente) ; sinon 9 m
@@ -1051,10 +1054,33 @@ func _preparer_nez() -> void:
 	if tricable() or vaetvient() or teleski():
 		return
 	var L: float = longueur_h()
+	_pylones_de_nez(L)
 	var e: float = 6.0
 	var p_a: float = atan2(y_cable(e) - y_cable(0.0), e)
 	var p_b: float = atan2(y_cable(L) - y_cable(L - e), e)
-	_h_nez = [_demi_batterie(p_a), _demi_batterie(p_b)]
+	# un pylône juste à la sortie de la gare fait le raccord : pas de batterie en plus
+	_h_nez = [0.0 if _nez_par_pylone[0] else _demi_batterie(p_a), 0.0 if _nez_par_pylone[1] else _demi_batterie(p_b)]
+
+
+const NEZ_PYLONE: float = 45.0          # m : un pylône plus près que ça du nez fait le raccord
+const NEZ_H_MIN: float = 5.0            # m : tête de ce pylône au-dessus du sol, au moins
+var _nez_par_pylone: Array = [false, false]
+
+
+## Pylône collé à une gare (retour d'utilisateur, 04/11/2026 : les galets au départ étaient en lévitation
+## à côté d'un P1 qui faisait double emploi) : le câble sort de la gare à l'horizontale jusqu'à lui, et
+## c'est lui qui le fait passer à la pente de la ligne, si le sol le permet.
+func _pylones_de_nez(L: float) -> void:
+	_nez_par_pylone = [false, false]
+	if pylones.is_empty() or _tetes.size() != pylones.size():
+		return
+	var n: int = pylones.size() - 1
+	if float(pylones[0]["d"]) < NEZ_PYLONE:
+		_nez_par_pylone[0] = true
+		_tetes[0] = maxf(terrain(0.0) + H_CABLE_GARE, terrain(float(pylones[0]["d"])) + NEZ_H_MIN)
+	if L - float(pylones[n]["d"]) < NEZ_PYLONE and n > 0:
+		_nez_par_pylone[1] = true
+		_tetes[n] = maxf(terrain(L) + H_CABLE_GARE, terrain(float(pylones[n]["d"])) + NEZ_H_MIN)
 
 
 func _galets_batterie(dev: float) -> int:
@@ -2535,13 +2561,34 @@ func _cabine_conducteur(g: Node3D, znez: float, dz: float, aval: bool) -> void:
 	var xb: float = signf(_x_brin(aval))
 	var c: Vector3 = _pos_cabine_conducteur(aval) - Vector3(0, 0, 0)
 	c.y = 0.0
-	RemonteeKit.boite_en(g, Vector3(3.0, 2.5, 3.6), c + Vector3(0, 1.25, 0), "pierre")
+	# petit chalet de bois (retour d'utilisateur, 04/11/2026) : soubassement de pierre, bardage, toit à deux pans
+	const LX: float = 3.0
+	const LZ: float = 3.6
+	const H_MUR: float = 2.5
+	const PENTE: float = 0.48
+	var h_toit: float = LX * 0.5 * tan(PENTE)
+	RemonteeKit.boite_en(g, Vector3(LX + 0.06, 0.5, LZ + 0.06), c + Vector3(0, 0.25, 0), "pierre")
+	RemonteeKit.boite_en(g, Vector3(LX, H_MUR - 0.5, LZ), c + Vector3(0, 0.5 + (H_MUR - 0.5) * 0.5, 0), "bois_meleze")
+	# lames du bardage
+	for yl in [0.95, 1.4, 1.85, 2.3]:
+		for sx in [-1.0, 1.0]:
+			RemonteeKit.boite_en(g, Vector3(0.02, 0.03, LZ), c + Vector3(sx * (LX * 0.5 + 0.01), yl, 0), "bois_fonce")
+			RemonteeKit.boite_en(g, Vector3(LX, 0.03, 0.02), c + Vector3(0, yl, sx * (LZ * 0.5 + 0.01)), "bois_fonce")
+	# pignons
 	for sz in [-1.0, 1.0]:
-		var pan: Transform3D = Transform3D(Basis(Vector3.FORWARD, -xb * sz * 0.0) * Basis(Vector3.BACK, sz * 0.48), c + Vector3(sz * 0.80, 2.88, 0))
-		RemonteeKit.boite(g, Vector3(1.95, 0.10, 4.0), pan, "toit_bardeaux")
+		for j in range(4):
+			var yp: float = H_MUR + (j + 0.5) * h_toit / 4.0
+			var demi_p: float = (H_MUR + h_toit - yp) / tan(PENTE)
+			RemonteeKit.boite_en(g, Vector3(demi_p * 2.0, h_toit / 4.0 + 0.01, 0.10), c + Vector3(0, yp, sz * (LZ * 0.5 - 0.05)), "bois_meleze")
+	# deux pans qui descendent du faîtage, avec débord
+	for sx in [-1.0, 1.0]:
+		var lp: float = (LX * 0.5 + 0.35) / cos(PENTE)
+		var xm: float = sx * (LX * 0.5 + 0.35) * 0.5
+		var pan: Transform3D = Transform3D(Basis(Vector3.BACK, -sx * PENTE), c + Vector3(xm, H_MUR + h_toit - absf(xm) * tan(PENTE) + 0.06, 0))
+		RemonteeKit.boite(g, Vector3(lp, 0.10, LZ + 0.5), pan, "toit_brun")
 	# grande vitre côté quai, porte côté aval
 	RemonteeKit.boite_en(g, Vector3(0.05, 1.0, 2.2), c + Vector3(-xb * 1.52, 1.45, 0), "vitre_teintee")
-	RemonteeKit.boite_en(g, Vector3(0.9, 2.0, 0.05), c + Vector3(0, 1.0, sg * -1.82), "peinture_anthracite")
+	RemonteeKit.boite_en(g, Vector3(0.9, 2.0, 0.05), c + Vector3(0, 1.0, sg * -1.82), "bois_fonce")
 
 
 func _pos_cabine_conducteur(aval: bool) -> Vector3:
