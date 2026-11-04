@@ -23,7 +23,7 @@ static func _lire() -> void:
 	var z: PackedByteArray = f.get_buffer(f.get_length() - 4)
 	f.close()
 	var d: Variant = bytes_to_var(z.decompress(n, FileAccess.COMPRESSION_ZSTD))
-	if d is Dictionary and int((d as Dictionary).get("version", 0)) == 1:
+	if d is Dictionary and int((d as Dictionary).get("version", 0)) == 2:
 		_types = d["types"]
 
 
@@ -33,8 +33,8 @@ static func materiau() -> StandardMaterial3D:
 		_materiau.resource_name = "vehicules_lod"
 		_materiau.vertex_color_use_as_albedo = true
 		_materiau.vertex_color_is_srgb = true
-		_materiau.roughness = 1.0
-		_materiau.metallic = 0.0
+		# (lumière déjà dans les couleurs, comme les lignes cuites)
+		_materiau.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 		_materiau.cull_mode = BaseMaterial3D.CULL_DISABLED
 	return _materiau
 
@@ -50,15 +50,12 @@ static func maillage(cle: String, niveau: String, miroir: bool) -> ArrayMesh:
 		return _maillages[k]
 	var s: Dictionary = _types[cle][niveau]
 	var v: PackedVector3Array = s["v"]
-	var nr: PackedVector3Array = s["n"]
 	var ix: PackedInt32Array = s["i"]
 	if miroir:
 		v = v.duplicate()
-		nr = nr.duplicate()
 		ix = ix.duplicate()
 		for i in range(v.size()):
 			v[i].x = -v[i].x
-			nr[i].x = -nr[i].x
 		for t in range(0, ix.size() - 2, 3):
 			var q: int = ix[t + 1]
 			ix[t + 1] = ix[t + 2]
@@ -66,7 +63,6 @@ static func maillage(cle: String, niveau: String, miroir: bool) -> ArrayMesh:
 	var ta: Array = []
 	ta.resize(Mesh.ARRAY_MAX)
 	ta[Mesh.ARRAY_VERTEX] = v
-	ta[Mesh.ARRAY_NORMAL] = nr
 	ta[Mesh.ARRAY_COLOR] = s["c"]
 	ta[Mesh.ARRAY_INDEX] = ix
 	var m: ArrayMesh = ArrayMesh.new()
@@ -92,7 +88,7 @@ static func _lire_pylones() -> void:
 	var z: PackedByteArray = f.get_buffer(f.get_length() - 4)
 	f.close()
 	var d: Variant = bytes_to_var(z.decompress(n, FileAccess.COMPRESSION_ZSTD))
-	if d is Dictionary and int((d as Dictionary).get("version", 0)) == 1:
+	if d is Dictionary and int((d as Dictionary).get("version", 0)) == 2:
 		_pylones = d["lignes"]
 
 
@@ -108,7 +104,6 @@ static func pylone(ligne: String, nom: String) -> ArrayMesh:
 			var ta: Array = []
 			ta.resize(Mesh.ARRAY_MAX)
 			ta[Mesh.ARRAY_VERTEX] = s["v"]
-			ta[Mesh.ARRAY_NORMAL] = s["n"]
 			ta[Mesh.ARRAY_COLOR] = s["c"]
 			ta[Mesh.ARRAY_INDEX] = s["i"]
 			var m: ArrayMesh = ArrayMesh.new()
