@@ -541,7 +541,11 @@ func _evaluer() -> void:
 		dernier_bilan += " → " + cause
 		match cause:
 			"gpu":
-				if cran < _cran_max():
+				# pack haute définition : la forêt et le détail d'abord, sans rien recharger
+				var fin_hd: ReliefFin = main.get("relief").fin if main != null and main.get("relief") != null else null
+				if fin_hd != null and fin_hd.hd and fin_hd.baisser_repli():
+					_t_chauffe = maxf(_t_chauffe, APRES_CHANGEMENT_S)
+				elif cran < _cran_max():
 					if _cran_avant_montee >= 0 and _horloge - _derniere_montee_t < 20.0:
 						_echecs[cran] = _horloge + ECHEC_INTERDIT_S
 						_cran_avant_montee = -1
@@ -572,7 +576,7 @@ func _evaluer() -> void:
 		_bonnes = 0
 		_t_chauffe = maxf(_t_chauffe, APRES_CHANGEMENT_S)
 		return
-	if cran <= cran_min:
+	if cran <= cran_min and not _repli_a_rendre():
 		return
 	# marge réelle : sans temps GPU, on exige deux fois plus de patience
 	if gpu_ms > 0.0:
@@ -580,12 +584,24 @@ func _evaluer() -> void:
 			return
 	elif _bonnes < 2 * MONTEE_BONNES_FENETRES:
 		return
+	if cran <= cran_min:
+		(main.get("relief").fin as ReliefFin).monter_repli()
+		_bonnes = 0
+		_t_chauffe = maxf(_t_chauffe, APRES_CHANGEMENT_S)
+		return
 	var vise: int = cran - 1
 	if _echecs.get(vise, -1.0) > _horloge:
 		return
 	_cran_avant_montee = cran
 	_derniere_montee_t = _horloge
 	_appliquer(vise, "marge")
+
+
+func _repli_a_rendre() -> bool:
+	var r: Object = main.get("relief") if main != null else null
+	if r == null or r.get("fin") == null:
+		return false
+	return int((r.get("fin") as ReliefFin).repli) > 0
 
 
 func _p90(a: PackedFloat32Array) -> float:

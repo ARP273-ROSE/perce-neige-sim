@@ -240,6 +240,14 @@ func _installer() -> void:
 	_installe = true
 
 
+## Repli en jeu : sans le détail de la neige. Les anneaux restent posés.
+func regler_detail(actif: bool) -> void:
+	var v: float = 1.0 if actif and _tex_detail != null else 0.0
+	for m in _mats:
+		(m as ShaderMaterial).set_shader_parameter("a_detail", v)
+	_rel._mat_terrain.set_shader_parameter("a_detail", v)
+
+
 func _noeud_vue() -> Vector2i:
 	var cam: Camera3D = get_viewport().get_camera_3d()
 	var p: Vector3 = cam.global_position if cam != null else Vector3.ZERO
