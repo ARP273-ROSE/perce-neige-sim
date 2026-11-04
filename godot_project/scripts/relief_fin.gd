@@ -20,13 +20,17 @@ extends Node3D
 ## quand elle s'est éloignée de son centre ; au-delà, les tuiles, recalées sur les mêmes
 ## altitudes aux nœuds à 25 m.
 
-const K: int = 5                     # mailles fines par maille à 25 m : 5,00 m
+const KF: int = 5                    # grille du dépôt : 5,00 m
+const KHD: int = 25                  # pack haute définition : 1,00 m
 const NCX: int = ReliefDonnees.NX - 1
 const NCZ: int = ReliefDonnees.NZ - 1
-const NJ: int = NCX * K + 1
-const NI: int = NCZ * K + 1
-const PX: float = (ReliefDonnees.X_EST - ReliefDonnees.X_OUEST) / float(NCX) / K
-const PZ: float = (ReliefDonnees.Z_SUD - ReliefDonnees.Z_NORD) / float(NCZ) / K
+const L_X: float = (ReliefDonnees.X_EST - ReliefDonnees.X_OUEST) / float(NCX)
+const L_Z: float = (ReliefDonnees.Z_SUD - ReliefDonnees.Z_NORD) / float(NCZ)
+static var K: int = KF               # mailles fines par maille à 25 m
+static var NJ: int = NCX * KF + 1
+static var NI: int = NCZ * KF + 1
+static var PX: float = L_X / KF
+static var PZ: float = L_Z / KF
 const X0: float = ReliefDonnees.X_OUEST
 const Z0: float = ReliefDonnees.Z_NORD
 const FICHIER: String = "res://data/relief_fin/domaine.bin"
@@ -39,7 +43,11 @@ const JUPE: float = 1.5              # jupe des bords, cache les jointures entre
 
 var rel: ReliefBuilder = null
 var pret: bool = false
-var zone: Rect2 = Rect2(X0, Z0, NCX * K * PX, NCZ * K * PZ)
+var zone: Rect2 = Rect2(X0, Z0, NCX * L_X, NCZ * L_Z)
+var _k_propre: int = KF
+var hd: bool = false                                 # sol au mètre du pack, anneaux, normales
+var anneaux: ReliefAnneaux = null
+var _couches_normales: Array = []
 var _hn: PackedFloat32Array = PackedFloat32Array()   # altitude des nœuds de la grille fine
 var _fine: PackedByteArray = PackedByteArray()       # par maille à 25 m : 1 si la grille fine y est le sol
 var _mat: ShaderMaterial = null
@@ -68,6 +76,33 @@ static func voulu_sans_forcer(cran: int) -> bool:
 	return cran == 0 and _permis()
 
 
+## Pack haute définition : un fichier optionnel à côté de l'exécutable (dossier pack_hd).
+## Absent, le jeu tourne comme avant. --pack-hd=dossier pour les essais.
+static func dossier_pack() -> String:
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--pack-hd="):
+			return a.trim_prefix("--pack-hd=")
+	return OS.get_executable_path().get_base_dir().path_join("pack_hd")
+
+
+## Sol au mètre : 1,45 Go de grille en mémoire, 16 Go de mémoire vive au moins.
+static func hd_voulu() -> bool:
+	if "--sans-hd" in OS.get_cmdline_user_args() or not ClassDB.class_exists("ReliefHD"):
+		return false
+	if not FileAccess.file_exists(dossier_pack().path_join("relief.pnhd")):
+		return false
+	var ram_go: float = float(OS.get_memory_info().get("physical", 0)) / 1073741824.0
+	return ram_go >= 15.0 or "--hd-force" in OS.get_cmdline_user_args()
+
+
+static func _regler_grille(k: int) -> void:
+	K = k
+	NJ = NCX * k + 1
+	NI = NCZ * k + 1
+	PX = L_X / k
+	PZ = L_Z / k
+
+
 static func _permis() -> bool:
 	if OS.has_feature("web") or "--sans-relief-fin" in OS.get_cmdline_user_args():
 		return false
@@ -80,6 +115,7 @@ static func _permis() -> bool:
 func preparer(r: ReliefBuilder, h0: PackedFloat32Array) -> void:
 	rel = r
 	var debut: int = Time.get_ticks_usec()
+	_regler_grille(KF)
 	var f: FileAccess = FileAccess.open(FICHIER, FileAccess.READ)
 	if f == null:
 		return
@@ -102,15 +138,130 @@ func preparer(r: ReliefBuilder, h0: PackedFloat32Array) -> void:
 		return
 	_hn = res[0]
 	_fine = res[1]
+	var h_retouche: PackedFloat32Array = r._h
 	r._h = res[2]
 	pret = true
 	print("[ReliefFin] %.1f M de nœuds : lecture %d ms, fusion %d ms" % [NI * NJ / 1.0e6, (t_lu - debut) / 1000, (Time.get_ticks_usec() - t_lu) / 1000])
+	if hd_voulu():
+		# (les gares s'annoncent au fil principal, après le départ de ce fil de préparation)
+		var attente: int = Time.get_ticks_msec() + 20000
+		while not r.amenagements_poses and Time.get_ticks_msec() < attente:
+			OS.delay_msec(5)
+		for am in r.amenagements:
+			var q2: Rect2 = (am["rect"] as Rect2).grow(FONDU + RACCORD_GARE)
+			rects.append_array(PackedFloat32Array([q2.position.x, q2.position.y, q2.end.x, q2.end.y]))
+		_preparer_hd(r, h0, h_retouche, rects)
+
+
+## Sol au mètre : le relevé LiDAR du pack, sauf sous les ouvrages, où reste la grille à 5 m sur
+## laquelle ils sont réglés. Couloir de chaque ligne (gares, rampes, pylônes, véhicules) et
+## aménagements : hauteur_sol ne change pas, ni le profil des lignes qui y est lu.
+func _preparer_hd(r: ReliefBuilder, h0: PackedFloat32Array, h_retouche: PackedFloat32Array, rects: PackedFloat32Array) -> void:
+	var t0: int = Time.get_ticks_usec()
+	var n: RefCounted = ClassDB.instantiate("ReliefHD")
+	var nj1: int = NCX * KHD + 1
+	var ni1: int = NCZ * KHD + 1
+	var chemin: String = ProjectSettings.globalize_path(dossier_pack().path_join("relief.pnhd"))
+	var leve: PackedFloat32Array = n.call("decoder", chemin, 0, nj1, ni1)
+	if leve.is_empty():
+		print("[ReliefHD] pack illisible : grille à 5 m")
+		return
+	var t1: int = Time.get_ticks_usec()
+	var caps: PackedFloat32Array = PackedFloat32Array()
+	for D in RemonteesDonnees.LIGNES:
+		var a: Vector2 = RemonteesDomaine.monde(float(D["aval"][0]), float(D["aval"][1]))
+		var b: Vector2 = RemonteesDomaine.monde(float(D["amont"][0]), float(D["amont"][1]))
+		if a.distance_to(b) < 1.0:
+			continue
+		var u: Vector2 = (b - a).normalized()
+		a -= u * RACCORD_BOUT
+		b += u * RACCORD_BOUT
+		var r0: float = float(D["voie"]) * 0.5 + RACCORD_R0
+		caps.append_array(PackedFloat32Array([a.x, a.y, b.x, b.y, r0, r0 + RACCORD_LARGEUR]))
+	var reference: PackedFloat32Array = _hn
+	var res: Array = n.call("raccorder", leve, _hn, _fine, h_retouche, h0, ReliefDonnees.NX, ReliefDonnees.NZ, KHD, KF,
+		caps, rects, RACCORD_LARGEUR, X0, Z0, L_X / KHD, L_Z / KHD)
+	if res.size() != 3:
+		print("[ReliefHD] raccord impossible : grille à 5 m")
+		return
+	_hn = res[0]
+	_fine = res[1]
+	r._h = res[2]
+	if "--garder-reference" in OS.get_cmdline_user_args():
+		r._h0_ref = h0
+		r._hn5_ref = reference
+	_regler_grille(KHD)
+	_k_propre = KHD
+	hd = true
+	var t2: int = Time.get_ticks_usec()
+	if DisplayServer.get_name() != "headless":
+		# (du relevé, partout : le sol réglé des ouvrages, en facettes à 25 m, marquait l'ombrage ;
+		# le détail reste lisible le long des lignes)
+		_couches_normales = n.call("normales", leve, NJ, NI, ReliefAnneaux.TUILE, ReliefAnneaux.TAILLE, ReliefAnneaux.MARGE, PX, PZ)
+	print("[ReliefHD] sol à 1 m, %.0f M de nœuds : pack %d ms, raccord %d ms, normales %d ms" % [NI * NJ / 1.0e6,
+		(t1 - t0) / 1000, (t2 - t1) / 1000, (Time.get_ticks_usec() - t2) / 1000])
+
+
+const RACCORD_R0: float = 12.0        # couloir d'une ligne, au-delà de sa demi-voie : le sol réglé
+const RACCORD_LARGEUR: float = 16.0   # raccord vers le relevé
+const RACCORD_GARE: float = 30.0      # abords des gares du funiculaire (rampes, terrasses, au ras du sol)
+const RACCORD_BOUT: float = 60.0      # couloir prolongé derrière chaque gare (rampes)
+
+
+## Tableau de textures des normales (fil principal) : à poser sur les matériaux du relief.
+func normales_texture() -> Texture2DArray:
+	if _couches_normales.is_empty():
+		return null
+	var images: Array[Image] = []
+	for o in _couches_normales:
+		images.append(Image.create_from_data(ReliefAnneaux.TAILLE, ReliefAnneaux.TAILLE, true, Image.FORMAT_RGTC_RG, o))
+	_couches_normales = []
+	var t: Texture2DArray = Texture2DArray.new()
+	t.create_from_images(images)
+	return t
+
+
+func noeuds_grille() -> PackedFloat32Array:
+	return _hn
+
+
+func mailles_fines() -> PackedByteArray:
+	return _fine
+
+
+## Altitude sur les triangles de cette grille, où que soit (x, z) (bancs).
+func hauteur_grille(x: float, z: float) -> float:
+	var px: float = L_X / _k_propre
+	var pz: float = L_Z / _k_propre
+	var nj: int = NCX * _k_propre + 1
+	var ni: int = NCZ * _k_propre + 1
+	var fx: float = clampf((x - X0) / px, 0.0, nj - 1.001)
+	var fz: float = clampf((z - Z0) / pz, 0.0, ni - 1.001)
+	var j: int = int(fx)
+	var i: int = int(fz)
+	var u: float = fx - j
+	var v: float = fz - i
+	var a: int = i * nj + j
+	if u + v <= 1.0:
+		return _hn[a] + (_hn[a + 1] - _hn[a]) * u + (_hn[a + nj] - _hn[a]) * v
+	var d: float = _hn[a + nj + 1]
+	return d + (_hn[a + nj] - d) * (1.0 - u) + (_hn[a + 1] - d) * (1.0 - v)
+
+
+## Banc : la grille à 5 m seule, sur le relief d'origine et les mêmes aménagements.
+static func reference_5m(r: ReliefBuilder) -> ReliefFin:
+	if r._h0_ref.is_empty():
+		return null
+	var rf: ReliefFin = ReliefFin.new()
+	rf._hn = r._hn5_ref
+	rf._k_propre = KF
+	return rf
 
 
 ## La grille fine est-elle le sol au point (x, z) ?
 func fine_ici(x: float, z: float) -> bool:
-	var cj: int = int(floor((x - X0) / (K * PX)))
-	var ci: int = int(floor((z - Z0) / (K * PZ)))
+	var cj: int = int(floor((x - X0) / L_X))
+	var ci: int = int(floor((z - Z0) / L_Z))
 	return cj >= 0 and ci >= 0 and cj < NCX and ci < NCZ and _fine[ci * NCX + cj] == 1
 
 
@@ -140,6 +291,12 @@ func _ready() -> void:
 		set_process(false)
 		return                 # (bancs : le sol suit, sans rien à afficher)
 	name = "ReliefFin"
+	if hd:
+		set_process(false)
+		anneaux = ReliefAnneaux.new()
+		add_child(anneaux)
+		anneaux.demarrer(self, rel)
+		return
 	_mat = (rel._mat_terrain as ShaderMaterial).duplicate()
 	var noir: Image = Image.create(2, 2, false, Image.FORMAT_RF)
 	noir.fill(Color(0, 0, 0))
@@ -273,6 +430,7 @@ func _poser() -> void:
 
 
 func _exit_tree() -> void:
+	# (la grille HD reste K = 25 d'une scène à l'autre tant que preparer ne la remet pas)
 	if _tache >= 0:
 		WorkerThreadPool.wait_for_task_completion(_tache)
 		_tache = -1

@@ -25,6 +25,7 @@ const COUCHE_VEHICULE: int = 2
 const COUCHE_SKIEUR: int = 4
 const COUCHE_CAMERA: int = 8            # n'arrête que la caméra, pas le corps
 const COUCHE_CAMERA_BORD: int = 16      # idem, seulement quand on est à bord
+const COUCHE_RELIEF: int = 32           # sol au mètre : collisions à 5 m, à part (le ski lit hauteur_sol, au mètre)
 const DEMI_ZONE_GARE: float = 160.0     # zone des gares (m) : maillages réels
 const R_PAROI: float = 1.64             # rayon intérieur du tube des voitures
 
@@ -40,6 +41,7 @@ var _n_taches: int = 0                  # pour la progression
 var _taches: Array = []                 # Callables à exécuter, dans l'ordre
 var _t0: int = 0
 var _decor: StaticBody3D = null
+var _corps_relief: StaticBody3D = null
 var _formes: Dictionary = {}            # Mesh → Shape3D (formes partagées)
 ## Nœuds dont le sous-arbre bouge : un corps à part, accroché à eux.
 var mobiles: Array = []
@@ -715,16 +717,22 @@ func _mailles_fines(relief: ReliefBuilder, m: Rect2, faces: PackedVector3Array) 
 	var rf: ReliefFin = relief.fin
 	var j0: int = int(round((m.position.x - ReliefFin.X0) / ReliefFin.PX))
 	var i0: int = int(round((m.position.y - ReliefFin.Z0) / ReliefFin.PZ))
-	for i in range(i0, i0 + ReliefFin.K):
-		for j in range(j0, j0 + ReliefFin.K):
+	# (sol au mètre : collisions à 5 m, un nœud sur cinq, 25 fois moins de triangles)
+	var p: int = ReliefFin.K / ReliefFin.KF
+	for i in range(i0, i0 + ReliefFin.K, p):
+		for j in range(j0, j0 + ReliefFin.K, p):
 			var a: Vector3 = rf.noeud(i, j)
-			var b: Vector3 = rf.noeud(i, j + 1)
-			var c: Vector3 = rf.noeud(i + 1, j)
-			var d: Vector3 = rf.noeud(i + 1, j + 1)
+			var b: Vector3 = rf.noeud(i, j + p)
+			var c: Vector3 = rf.noeud(i + p, j)
+			var d: Vector3 = rf.noeud(i + p, j + p)
 			faces.append_array([a, b, c, b, d, c])
 
 
 func _terrain(relief: ReliefBuilder, r: Rect2, quoi: int = TERRAIN_TOUT) -> void:
+	if quoi == TERRAIN_TOUT and relief.fin != null and relief.fin.hd:
+		_terrain(relief, r, TERRAIN_GRILLE)
+		_terrain(relief, r, TERRAIN_PIECES)
+		return
 	var faces: PackedVector3Array = PackedVector3Array()
 	var pieces: Array = relief._rects_pieces
 	# bloc : nœuds de la grille (pas d'affichage _pas)
@@ -817,5 +825,14 @@ func _terrain(relief: ReliefBuilder, r: Rect2, quoi: int = TERRAIN_TOUT) -> void
 	var cs: CollisionShape3D = CollisionShape3D.new()
 	cs.name = "Relief"
 	cs.shape = f
-	_decor.add_child(cs)
+	if quoi == TERRAIN_GRILLE and relief.fin != null and relief.fin.hd:
+		if _corps_relief == null:
+			_corps_relief = StaticBody3D.new()
+			_corps_relief.name = "SolAuMetre"
+			_corps_relief.collision_layer = COUCHE_RELIEF
+			_corps_relief.collision_mask = 0
+			add_child(_corps_relief)
+		_corps_relief.add_child(cs)
+	else:
+		_decor.add_child(cs)
 	triangles += faces.size() / 3
