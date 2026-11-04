@@ -49,6 +49,8 @@ var hd: bool = false                                 # sol au mètre du pack, an
 var anneaux: ReliefAnneaux = null
 var _couches_normales: Array = []
 var _couches_ortho: Array = []
+var _cases_arbres: Array = []
+var foret: ReliefForet = null
 var _hn: PackedFloat32Array = PackedFloat32Array()   # altitude des nœuds de la grille fine
 var _fine: PackedByteArray = PackedByteArray()       # par maille à 25 m : 1 si la grille fine y est le sol
 var _mat: ShaderMaterial = null
@@ -206,6 +208,11 @@ func _preparer_hd(r: ReliefBuilder, h0: PackedFloat32Array, h_retouche: PackedFl
 		var t3: int = Time.get_ticks_usec()
 		_couches_ortho = n.call("couches", f_ortho)
 		print("[ReliefHD] orthophoto : %d couches, %d ms" % [maxi(_couches_ortho.size() - 2, 0), (Time.get_ticks_usec() - t3) / 1000])
+	var f_arbres: String = dossier_pack().path_join("arbres.pnhd")
+	if DisplayServer.get_name() != "headless" and FileAccess.file_exists(f_arbres) and not "--sans-foret" in OS.get_cmdline_user_args():
+		var t4: int = Time.get_ticks_usec()
+		_cases_arbres = n.call("foret", f_arbres, _hn, NJ, NI, X0, Z0, PX, PZ, caps, rects)
+		print("[ReliefHD] forêt : %d cases, %d ms" % [_cases_arbres.size(), (Time.get_ticks_usec() - t4) / 1000])
 
 
 const RACCORD_R0: float = 12.0        # couloir d'une ligne, au-delà de sa demi-voie : le sol réglé
@@ -317,6 +324,11 @@ func _ready() -> void:
 		anneaux = ReliefAnneaux.new()
 		add_child(anneaux)
 		anneaux.demarrer(self, rel)
+		if not _cases_arbres.is_empty():
+			foret = ReliefForet.new()
+			add_child(foret)
+			foret.demarrer(rel, _cases_arbres)
+			_cases_arbres = []
 		return
 	_mat = (rel._mat_terrain as ShaderMaterial).duplicate()
 	var noir: Image = Image.create(2, 2, false, Image.FORMAT_RF)

@@ -51,6 +51,13 @@ public:
 	// Vide si le fichier est illisible.
 	Array couches(const String &chemin) const;
 
+	// Forêt (arbres.pnhd, voir FORMAT_ARBRES dans tools_relief_hd.py) posée sur la grille : par case
+	// [cx, cz, nombre, tampon MultiMesh 3D + couleur, 16 flottants par arbre]. Arbres écartés sous les
+	// capsules et rectangles des ouvrages ; jeunes arbres ajoutés autour des grands (la détection garde
+	// un sommet par fenêtre de 5 m, elle sous-compte les forêts serrées).
+	Array foret(const String &chemin, const PackedFloat32Array &hn, int nj, int ni, double x0, double z0, double px, double pz,
+			const PackedFloat32Array &capsules, const PackedFloat32Array &rects) const;
+
 	// Toutes les couches d'un coup, en parallèle : `tuiles` nœuds par couche.
 	Array normales(const PackedFloat32Array &hn, int nj, int ni, int tuile, int taille, int marge, double px, double pz) const;
 };
