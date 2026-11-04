@@ -313,6 +313,34 @@ func envoyer_couches(fin_us: int) -> bool:
 	return _a_envoyer.is_empty()
 
 
+## Repli en jeu, avant de toucher aux effets du moteur. Vrai s'il restait un cran à retirer.
+const REPLI_MAX: int = 3
+var repli: int = 0
+
+
+func baisser_repli() -> bool:
+	if repli >= REPLI_MAX:
+		return false
+	_appliquer_repli(repli + 1)
+	return true
+
+
+func monter_repli() -> bool:
+	if repli <= 0:
+		return false
+	_appliquer_repli(repli - 1)
+	return true
+
+
+func _appliquer_repli(n: int) -> void:
+	repli = n
+	if foret != null:
+		foret.regler_repli(mini(n, 2))
+	if anneaux != null:
+		anneaux.regler_detail(n < 3)
+	print("[ReliefHD] repli %d/%d" % [n, REPLI_MAX])
+
+
 func noeuds_grille() -> PackedFloat32Array:
 	return _hn
 

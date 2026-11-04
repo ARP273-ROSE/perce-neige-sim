@@ -103,6 +103,27 @@ func _process(_dt: float) -> void:
 		_poser(int(e[0]) - 1, e[1], e[2], e[3], e[4])
 
 
+## Repli en jeu : 0 tel quel ; 1 sans ombre des arbres, proches à 200 m ; 2 forêt lointaine à 1,2 km et
+## au-delà jusqu'à 6 km. Sans rechargement, le temps de parcourir les nœuds.
+func regler_repli(n: int) -> void:
+	var pres: float = PORTEE_PRES if n == 0 else 200.0
+	var moyen: float = PORTEE_MOYEN if n < 2 else 1200.0
+	var loin: float = PORTEE_LOIN if n < 2 else 6000.0
+	for c in get_children():
+		var mi: MultiMeshInstance3D = c as MultiMeshInstance3D
+		if mi == null:
+			continue
+		if mi.material_override == _mats[0]:
+			mi.visibility_range_end = pres
+			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if n == 0 else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		elif mi.material_override == _mats[1]:
+			mi.visibility_range_begin = pres
+			mi.visibility_range_end = moyen
+		else:
+			mi.visibility_range_begin = moyen - 200.0
+			mi.visibility_range_end = loin
+
+
 func _poser(niveau: int, tampon: PackedFloat32Array, nb: int, debut: float, fin_portee: float) -> void:
 	var mm: MultiMesh = MultiMesh.new()
 	mm.transform_format = MultiMesh.TRANSFORM_3D
