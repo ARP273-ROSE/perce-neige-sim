@@ -537,6 +537,9 @@ func _parcours(n: Node, xf: Transform3D, chemin_mobile: String) -> void:
 			return
 	if nom.begins_with("VehiculesLoin") or nom.begins_with("PneusFixes"):
 		return
+	# (de loin, ces petites pièces étaient écartées une à une ; fusionnées, elles passeraient le seuil)
+	if _loin and nom == "Fourches":
+		return
 	if nom.begins_with("Corps_") and n is StaticBody3D:
 		return
 	if n is Node3D and not (n as Node3D).visible and not n is CollisionObject3D:
