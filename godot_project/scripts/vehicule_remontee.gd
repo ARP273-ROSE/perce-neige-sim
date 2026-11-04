@@ -880,9 +880,15 @@ func _siege_bmf() -> void:
 	pts.append(Vector3(0.44, y_att - 0.06, 0))
 	pts.append(Vector3(0.50, -0.30, 0))
 	pts.append(Vector3(0.50, -hs + 0.75 + dp, 0))
-	for p in RemonteeKit.arc(Vector3(0.12, -hs + 0.75 + dp, 0), Vector3.RIGHT, Vector3.DOWN, 0.38, 0.0, PI * 0.5, 8):
-		pts.append(p)
-	pts.append(Vector3(0.02, -hs + 0.12 + dp, 0.0))
+	# (le bas revient vers l'arrière, jusque dans l'attache de la poutre de tête, posée à z = 0,18 derrière le
+	# câble : tombé tout droit, le bras s'arrêtait 8 cm devant elle, sans la toucher)
+	var arc_bas: PackedVector3Array = RemonteeKit.arc(Vector3(0.12, -hs + 0.75 + dp, 0), Vector3.RIGHT, Vector3.DOWN, 0.38, 0.0, PI * 0.5, 8)
+	var z_att: float = 0.18
+	for i in range(arc_bas.size()):
+		var q: Vector3 = arc_bas[i]
+		q.z = z_att * 0.6 * float(i) / (arc_bas.size() - 1)
+		pts.append(q)
+	pts.append(Vector3(0.0, -hs + 0.15 + dp, z_att))
 	RemonteeKit.tube(self, pts, 0.05, m_alu, 12)
 	var siege: Node3D = Node3D.new()
 	siege.name = "Siege"
@@ -1191,14 +1197,22 @@ func _garde_corps_bmf(siege: Node3D, W: float, m: String, xe: float) -> void:
 		RemonteeKit.tube(_gc, PackedVector3Array([Vector3(sx * xe, 0, 0), Vector3(sx * xe, 0.02, -0.28),
 			Vector3(sx * xe, -0.10, -0.56), Vector3(sx * xe, ventre.y, ventre.z)]), 0.022, m, 8)
 	RemonteeKit.barre(_gc, Vector3(-xe, ventre.y, ventre.z), Vector3(xe, ventre.y, ventre.z), 0.026, m, 10)
-	for k in range(places / 2):
-		var cx: float = -W * 0.5 + 0.10 + 1.0 * (k + 0.5)
+	# 3 places (photos des lignes) : deux T séparés, symétriques, aux limites entre places, traverse noire de
+	# 0,45 m (avec un repose-pieds pour deux places, le seul T tombait à 0,25 m de l'axe et la 3e place n'avait rien)
+	var trois: bool = places == 3
+	var demi_t: float = 0.225 if trois else 0.40
+	var m_t: String = "noir_mat" if trois else m
+	var centres: Array = [-W / 6.0, W / 6.0] if trois else []
+	if not trois:
+		for k in range(places / 2):
+			centres.append(-W * 0.5 + 0.10 + 1.0 * (k + 0.5))
+	for cx in centres:
 		# une seule tige, légèrement coudée, de la barre au repose-pieds
 		RemonteeKit.tube(_gc, PackedVector3Array([Vector3(cx, ventre.y, ventre.z), Vector3(cx, (ventre.y + pied.y) * 0.5, ventre.z - 0.10),
 			Vector3(cx, pied.y, pied.z)]), 0.017, m, 6)
 		# patin en T : traverse et semelle caoutchouc, pour deux paires de skis
-		RemonteeKit.poutre(_gc, Vector3(cx - 0.40, pied.y, pied.z), Vector3(cx + 0.40, pied.y, pied.z), 0.05, 0.025, m)
-		RemonteeKit.boite_en(_gc, Vector3(0.78, 0.02, 0.13), Vector3(cx, pied.y + 0.02, pied.z + 0.01), "caoutchouc")
+		RemonteeKit.poutre(_gc, Vector3(cx - demi_t, pied.y, pied.z), Vector3(cx + demi_t, pied.y, pied.z), 0.05, 0.025, m_t)
+		RemonteeKit.boite_en(_gc, Vector3(demi_t * 2.0 - 0.02, 0.02, 0.13), Vector3(cx, pied.y + 0.02, pied.z + 0.01), "caoutchouc")
 
 
 ## 0 : relevé (au-dessus des têtes) ; 1 : baissé.
