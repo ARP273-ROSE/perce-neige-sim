@@ -226,7 +226,8 @@ func _tick() -> void:
 			_t += 1.0 / 60.0
 			sk.chausse = false
 			_viser(sk, sk.global_position + Vector3.FORWARD, 0.85)
-			if _t > 3.0:
+			# (avec le pack, le filet part vers 4 s : il attend 2,5 s de chute, qui commence plus tard)
+			if _t > 6.0:
 				var parti: float = sk.global_position.distance_to(_p_fuite)
 				print("%s filet : corps pris dans le décor → dégagé — %d dégagement, %.2f m" % ["[OK]  " if sk.degagements >= 1 and parti > 0.1 else "[INFO]", sk.degagements, parti])
 				_filet_ok = sk.degagements >= 1
