@@ -20,6 +20,14 @@ dédié, pour lui seul, assombrit la neige là où pylônes, véhicules et bâti
 **Fil principal à ski.** Collisions du tunnel construites pour un skieur sur la neige, pièces fines des gares refaites en double à chaque carré de relief (26 à 54 ms), portées de toutes
 les lignes réglées d'un bloc à chaque changement de détail (72 à 103 ms). Boucle de 11 min en 4K : images de plus de 25 ms à ski 20 → 2.
 
+## 1.53.12 — 4 novembre 2026 (PWA seule)
+
+**Moins de programmes graphiques.** Shaders des façades de gare et des catadioptres partagés au lieu d'être recompilés par matériau, pré-passe de profondeur coupée : 534 → 346 sur un tour Olympique + Lanches sous WebKit. Effet sur les plantages iPad à vérifier.
+
+**Hauteurs de pylônes justes sur la PWA.** L'exporteur mêlait celles du relief fin à celles du relief à 25 m (bug du 3 novembre). Hauteurs recalculées ensuite sur le sol affiché, positions inchangées.
+
+**Sortie des gares.** Le pylône voisin d'une gare reçoit le câble à l'horizontale et se rapproche si le sol monte ; un pylône de compression en tête de ligne remplace la batterie sans numéro. Poteaux des batteries restantes jusqu'au sol réel.
+
 ## 1.53.11 — 4 novembre 2026 (PWA seule)
 
 **Leissières : pylônes refaits.** Positions tirées de la description de l'utilisateur, d'OSM, de la vidéo image par image et de 6 passages GPS : P13 à 126 m, replat P11-P10, crête P8 à P4 en arrondi sur un replat de 30 m. Reste P8 très sollicité (25°) et un replat en facettes sur le relief à 25 m.
