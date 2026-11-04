@@ -4300,6 +4300,9 @@ var _lod_mm: Array = []                 # MultiMesh L1, L2
 var _lod_b1: PackedFloat32Array = PackedFloat32Array()   # tampons d'instances (12 flottants par véhicule)
 var _lod_b2: PackedFloat32Array = PackedFloat32Array()
 var _lod_niv: PackedInt32Array = PackedInt32Array()
+var _lod_slot: PackedInt32Array = PackedInt32Array()     # place du véhicule dans le tampon de son niveau
+var _lod_nb: PackedInt32Array = PackedInt32Array()       # véhicules par niveau (L1, L2)
+var _lod_qui: Array = []                                 # place → véhicule, par niveau
 var _lod_essaye: bool = false
 
 
@@ -4328,6 +4331,7 @@ func _lod_preparer() -> void:
 		mm.instance_count = _vehicules.size()
 		mm.custom_aabb = boite
 		RenderingServer.multimesh_set_buffer(mm.get_rid(), vide)
+		mm.visible_instance_count = 0
 		var mmi: MultiMeshInstance3D = MultiMeshInstance3D.new()
 		mmi.name = "VehiculesLod%d" % (k + 1)
 		mmi.multimesh = mm
@@ -4339,6 +4343,12 @@ func _lod_preparer() -> void:
 	_lod_b2 = vide.duplicate()
 	_lod_niv.resize(_vehicules.size())
 	_lod_niv.fill(0)
+	_lod_slot.resize(_vehicules.size())
+	_lod_slot.fill(-1)
+	_lod_nb = PackedInt32Array([0, 0])
+	var q1: PackedInt32Array = PackedInt32Array()
+	q1.resize(_vehicules.size())
+	_lod_qui = [q1, q1.duplicate()]
 
 
 ## PWA : de loin, un maillage allégé à la place du pylône, par les portées de visibilité.
@@ -4369,18 +4379,18 @@ func _lod_niveau(i: int, niv: int, d2: float) -> bool:
 		_lod_niv[i] = niv
 		v.visible = niv == 0
 		if ancien == 1 or ancien == 2:
-			for c in range(12):
-				if ancien == 1:
-					_lod_b1[i * 12 + c] = 0.0
-				else:
-					_lod_b2[i * 12 + c] = 0.0
+			_lod_oter(i, ancien - 1)
 			change = true
+		if niv == 1 or niv == 2:
+			_lod_slot[i] = _lod_nb[niv - 1]
+			(_lod_qui[niv - 1] as PackedInt32Array)[_lod_nb[niv - 1]] = i
+			_lod_nb[niv - 1] += 1
 	if niv == 1 or niv == 2:
 		# (au-delà de 250 m, une image sur quatre, comme les véhicules complets)
 		if ancien == niv and d2 > 62500.0 and (i + _tour) % 4 != 0:
 			return change
 		var xf: Transform3D = _lod_pose(i)
-		var o: int = i * 12
+		var o: int = _lod_slot[i] * 12
 		var x: PackedFloat32Array = PackedFloat32Array([xf.basis.x.x, xf.basis.y.x, xf.basis.z.x, xf.origin.x,
 			xf.basis.x.y, xf.basis.y.y, xf.basis.z.y, xf.origin.y, xf.basis.x.z, xf.basis.y.z, xf.basis.z.z, xf.origin.z])
 		for c2 in range(12):
@@ -4390,6 +4400,25 @@ func _lod_niveau(i: int, niv: int, d2: float) -> bool:
 				_lod_b2[o + c2] = x[c2]
 		change = true
 	return change
+
+
+## Instances tassées au début du tampon : le MultiMesh ne dessine que `visible_instance_count`. (Une
+## instance mise à l'échelle zéro compte quand même tous ses triangles : 253 000 en L1 pour rien à
+## Tovière, relevés du 04/11/2026.) Le dernier véhicule du niveau prend la place libérée.
+func _lod_oter(i: int, k: int) -> void:
+	var s0: int = _lod_slot[i]
+	var der: int = _lod_nb[k] - 1
+	if s0 != der:
+		for c in range(12):
+			if k == 0:
+				_lod_b1[s0 * 12 + c] = _lod_b1[der * 12 + c]
+			else:
+				_lod_b2[s0 * 12 + c] = _lod_b2[der * 12 + c]
+		var q: int = (_lod_qui[k] as PackedInt32Array)[der]
+		(_lod_qui[k] as PackedInt32Array)[s0] = q
+		_lod_slot[q] = s0
+	_lod_nb[k] = der
+	_lod_slot[i] = -1
 
 
 ## Pose de repos du véhicule : mêmes point et cap que _placer, sans balancement.
@@ -4488,6 +4517,8 @@ func _etape_gdscript(delta: float) -> void:
 	if lod_change:
 		RenderingServer.multimesh_set_buffer((_lod_mm[0] as MultiMesh).get_rid(), _lod_b1)
 		RenderingServer.multimesh_set_buffer((_lod_mm[1] as MultiMesh).get_rid(), _lod_b2)
+		(_lod_mm[0] as MultiMesh).visible_instance_count = _lod_nb[0]
+		(_lod_mm[1] as MultiMesh).visible_instance_count = _lod_nb[1]
 
 
 ## Appuis du câble (nez des gares, têtes de pylônes) et charges moyennes,

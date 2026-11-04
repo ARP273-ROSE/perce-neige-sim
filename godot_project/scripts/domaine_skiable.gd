@@ -98,7 +98,11 @@ func construire(r: ReliefBuilder) -> void:
 	mesh.bottom_radius = 0.034
 	mesh.height = H_JALON
 	mesh.radial_segments = 6
-	mesh.rings = 1
+	# (12 triangles au lieu de 36 : ni bouts ni anneau, invisibles sur un piquet de 6 cm ; plus de 500 000
+	# triangles à l'écran à chaque endroit, relevés du 04/11/2026)
+	mesh.rings = 0
+	mesh.cap_top = false
+	mesh.cap_bottom = false
 	var mats: Array = []
 	for col in COULEURS:
 		var m: StandardMaterial3D = StandardMaterial3D.new()
@@ -145,14 +149,14 @@ func _construire_panneaux() -> void:
 	disque.bottom_radius = R_DISQUE
 	disque.height = 0.035
 	disque.radial_segments = 28
-	disque.rings = 1
+	disque.rings = 0
 	# liseré blanc : un disque un peu plus grand, juste derrière
 	var cercle: CylinderMesh = CylinderMesh.new()
 	cercle.top_radius = R_DISQUE + 0.06
 	cercle.bottom_radius = R_DISQUE + 0.06
 	cercle.height = 0.03
 	cercle.radial_segments = 28
-	cercle.rings = 1
+	cercle.rings = 0
 	var m_cercle: StandardMaterial3D = StandardMaterial3D.new()
 	m_cercle.albedo_color = Color(0.96, 0.96, 0.94)
 	m_cercle.roughness = 0.5
