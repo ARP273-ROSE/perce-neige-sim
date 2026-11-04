@@ -449,9 +449,8 @@ func _construire_corps() -> void:
 	await _pause("rails d'ouverture")
 	await _caler_periode()
 	await _pause("période")
-	if jumelee != null:
-		_construire_table()
-		await _pause("table du jumelage")
+	_construire_table()
+	await _pause("table de parcours")
 	await _peupler()
 	if _chantier == null:
 		# (pendant le fil, la ligne reste « à l'arrêt » pour le reste du jeu
@@ -1430,6 +1429,8 @@ func _construire_table() -> void:
 		_tab_s.append(s2)
 		s2 += vitesse_en(s2) * 0.05
 	_tab_s.append(longueur_boucle)
+	if _noyau != null and _noyau.has_method("set_temps"):
+		_noyau.set_temps(_tab_s)
 
 
 func _t_de_s(s2: float) -> float:
@@ -3898,9 +3899,12 @@ func _peupler() -> void:
 	var t: float = 0.0
 	var prochain: float = 0.0
 	var garde: int = 0
-	var t_fin: float = INF
-	if periode_imposee > 0.0:
-		t_fin = _temps_boucle(vitesse) - dt_v * 0.5
+	var t_tour: float = _temps_boucle(vitesse)
+	# nombre entier d'intervalles sur le tour : le reste de la division faisait un seul écart court, gardé
+	# ensuite indéfiniment — deux véhicules collés (0,2 s au lieu de 5,9 s à Tichot ; retour d'utilisateur, 04/11/2026)
+	if periode_imposee <= 0.0:
+		dt_v = t_tour / maxf(1.0, roundf(t_tour / dt_v))
+	var t_fin: float = t_tour - dt_v * 0.5
 	while s < longueur_boucle and garde < 200000:
 		if prochain >= t_fin:
 			break                  # (période imposée : tous posés, la fin de la boucle reste vide)
@@ -4067,6 +4071,8 @@ func _preparer_noyau() -> void:
 		ps.append(v.psi)
 	n.set_vehicules(vs, pi, su, co, ss, ph, ps)
 	n.set_ligne(self)
+	if _tab_s.size() > 1 and n.has_method("set_temps"):
+		n.set_temps(_tab_s)
 	_noyau = n
 	_noyau_n = _vehicules.size()
 	_creer_lointains()
