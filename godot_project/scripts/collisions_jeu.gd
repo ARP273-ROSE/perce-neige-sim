@@ -732,8 +732,8 @@ func _mailles_fines(relief: ReliefBuilder, m: Rect2, faces: PackedVector3Array) 
 
 ## Sol au mètre : un seul morceau de collision, les mêmes triangles que l'affichage, autour du joueur,
 ## préparé sur un fil de travail quand il s'est éloigné du centre.
-const SOL_DEMI: int = 64               # mailles de part et d'autre
-const SOL_SAUT: int = 24
+const SOL_DEMI: int = 32               # mailles de part et d'autre
+const SOL_SAUT: int = 12
 var _sol_forme: CollisionShape3D = null
 var _sol_centre: Vector2i = Vector2i(-1073741824, 0)
 var _sol_tache: int = -1
@@ -743,6 +743,11 @@ var _sol_rects: PackedFloat32Array = PackedFloat32Array()
 
 
 func _sol_autour(relief: ReliefBuilder, p: Vector3) -> void:
+	# à ski et en remontée, personne ne marche : le sol vient de hauteur_sol. Remplacer la forme
+	# coûtait 31 ms, une fois par seconde à ski (relevé 4K du 04/11/2026)
+	var sk: SkieurJoueur = _main.get("skieur") as SkieurJoueur
+	if sk != null and _sol_forme != null and (sk.chausse or sk.get("support") != null):
+		return
 	if _sol_tache >= 0 and WorkerThreadPool.is_task_completed(_sol_tache):
 		WorkerThreadPool.wait_for_task_completion(_sol_tache)
 		_sol_tache = -1

@@ -53,6 +53,8 @@ var _couches_normales: Array = []
 var _couches_ortho: Array = []
 var _cases_arbres: Array = []
 var pyramide: Array = []                             # niveaux 1 à 4 des anneaux
+var quarts_anneaux: Array = []
+var blocs_arbres: Array = []
 var _a_envoyer: Array = []                           # [RID, couche, données]
 var _rids: Array = []
 static var _rids_anciens: Array = []
@@ -229,6 +231,7 @@ func _preparer_hd(r: ReliefBuilder, h0: PackedFloat32Array, h_retouche: PackedFl
 	var t2: int = Time.get_ticks_usec()
 	if DisplayServer.get_name() != "headless":
 		pyramide = n.call("pyramide", _hn, NJ, NI, ReliefAnneaux.NIVEAUX)
+		quarts_anneaux = ReliefAnneaux.preparer_quarts()
 		# (du relevé, partout : le sol réglé des ouvrages, en facettes à 25 m, marquait l'ombrage ;
 		# le détail reste lisible le long des lignes)
 		_couches_normales = n.call("normales", leve, NJ, NI, ReliefAnneaux.TUILE, ReliefAnneaux.TAILLE, ReliefAnneaux.MARGE, PX, PZ)
@@ -243,6 +246,7 @@ func _preparer_hd(r: ReliefBuilder, h0: PackedFloat32Array, h_retouche: PackedFl
 	if DisplayServer.get_name() != "headless" and FileAccess.file_exists(f_arbres) and not "--sans-foret" in OS.get_cmdline_user_args():
 		var t4: int = Time.get_ticks_usec()
 		_cases_arbres = n.call("foret", f_arbres, _hn, NJ, NI, X0, Z0, PX, PZ, caps, rects)
+		blocs_arbres = ReliefForet.preparer_blocs(_cases_arbres)
 		print("[ReliefHD] forêt : %d cases, %d ms" % [_cases_arbres.size(), (Time.get_ticks_usec() - t4) / 1000])
 
 
@@ -387,8 +391,9 @@ func _ready() -> void:
 		if not _cases_arbres.is_empty():
 			foret = ReliefForet.new()
 			add_child(foret)
-			foret.demarrer(rel, _cases_arbres)
+			foret.demarrer(rel, _cases_arbres, blocs_arbres)
 			_cases_arbres = []
+			blocs_arbres = []
 		return
 	_mat = (rel._mat_terrain as ShaderMaterial).duplicate()
 	var noir: Image = Image.create(2, 2, false, Image.FORMAT_RF)

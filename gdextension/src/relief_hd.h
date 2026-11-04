@@ -37,6 +37,14 @@ public:
 	// pas de la sortie / pas de la source. Voie moyenne : 2,5 m à partir du niveau à 2 m du pack.
 	PackedFloat32Array reechantillonner(const PackedFloat32Array &src, int sj, int si, int nj, int ni, double rapport) const;
 
+	// Quart d'anneau, depuis le nœud (j0, i0), d mailles de côté : [sommets, indices], sans les mailles
+	// du carré [t0, t1[ si t1 > t0.
+	Array quart_anneau(int j0, int i0, int d, int t0, int t1) const;
+
+	// Texture de détail de la neige, calculée au chargement (rien dans le dépôt) : RGBA8 raccordable, côté
+	// `taille`. R, G : pente d'un bruit à plusieurs échelles ; B : grain fin ; A : le bruit lui-même.
+	PackedByteArray texture_detail(int taille) const;
+
 	// Mémoire vidéo dédiée de la plus grosse carte (Go), 0 si elle n'est pas connue.
 	double memoire_video() const;
 
