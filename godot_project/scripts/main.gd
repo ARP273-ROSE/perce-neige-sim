@@ -1939,6 +1939,7 @@ func aller_a_remontee(lg: LigneRemontee) -> void:
 	# la gare se construit à l'approche : une fois prête, il est posé sur son
 	# quai (le terrassement domine souvent le relief — il était dedans)
 	_depose_remontee = lg
+	_derniere_depose = lg
 
 
 var _depose_remontee: LigneRemontee = null
@@ -1969,12 +1970,14 @@ func _poser_sur_gare() -> void:
 
 
 var _t_depose: float = 0.0
+var _derniere_depose: LigneRemontee = null
 
 
 ## Après une dépose : la caméra, 5 m derrière le skieur, tombait dans le bâtiment de la gare, sans
 ## collision à cet endroit (écran tout gris ou brun à Tichot, aux Merles). On garde le premier des
-## quatre regards dont la caméra est hors des gares ; sinon, celui qui en a le moins autour d'elle.
+## quatre regards dont la caméra et la vue sont hors des gares ; sinon, le moins gêné.
 func _regard_libre() -> void:
+	var lg0: LigneRemontee = _derniere_depose if is_instance_valid(_derniere_depose) else null
 	if skieur == null or remontees == null or skieur.embarque or skieur.support != null:
 		return
 	var boites: Array = []
@@ -1986,27 +1989,58 @@ func _regard_libre() -> void:
 				var g: Node = lg.get_node_or_null(nom)
 				if g != null:
 					_boites_sous(g, p, boites)
+	var r: Array = _meilleur_regard(p, boites)
+	# même le meilleur regard est dans un bâtiment : le skieur en est trop près, on l'écarte
+	if int(r[1]) >= 100 and lg0 != null:
+		var cote: Vector3 = lg0.global_transform.basis.x * signf(lg0._x_brin(true))
+		for d in [5.0, 10.0, 15.0, 20.0]:
+			var q: Vector3 = p + cote * float(d)
+			q.y = relief.hauteur_sol(q.x, q.z) + 0.1
+			var r2: Array = _meilleur_regard(q, boites)
+			if int(r2[1]) < 100:
+				skieur.global_position = q
+				skieur.velocity = Vector3.ZERO
+				skieur.refuge = q
+				skieur.dernier_sol = q
+				if collisions != null:
+					collisions.assurer_autour(q)
+				r = r2
+				break
+	skieur.cam_yaw = r[0]
+
+
+## [regard, note] : 100 par boîte autour de la caméra, 1 par boîte sur la vue, à 8 et 16 m devant.
+func _meilleur_regard(p: Vector3, boites: Array) -> Array:
 	var meilleur: float = skieur.cam_yaw
 	var mini_n: int = 1 << 30
+	var yeux: Vector3 = p + Vector3.UP * SkieurJoueur.Y_YEUX
 	for da in [0.0, PI * 0.5, -PI * 0.5, PI]:
 		var y: float = skieur.cam_yaw + da
-		var q: Vector3 = p + Vector3.UP * SkieurJoueur.Y_YEUX 			+ Basis(Vector3.UP, y) * (Basis(Vector3.RIGHT, skieur.cam_pitch) * Vector3(0.0, 0.0, skieur.cam_dist))
+		var ry: Basis = Basis(Vector3.UP, y)
+		var q: Vector3 = yeux + ry * (Basis(Vector3.RIGHT, skieur.cam_pitch) * Vector3(0.0, 0.0, skieur.cam_dist))
+		var devant1: Vector3 = yeux + ry * Vector3(0.0, 0.0, -8.0)
+		var devant2: Vector3 = yeux + ry * Vector3(0.0, 0.0, -16.0)
 		var n: int = 0
 		for b in boites:
-			if (b as AABB).has_point(q):
+			var ab: AABB = b
+			if ab.has_point(q):
+				n += 100
+			if ab.has_point(devant1):
+				n += 1
+			if ab.has_point(devant2):
 				n += 1
 		if n < mini_n:
 			mini_n = n
 			meilleur = y
 		if n == 0:
 			break
-	skieur.cam_yaw = meilleur
+	return [meilleur, mini_n]
 
 
 func _boites_sous(n: Node, p: Vector3, o: Array) -> void:
 	if n is MeshInstance3D and (n as MeshInstance3D).mesh != null:
 		var ab: AABB = (n as Node3D).global_transform * (n as GeometryInstance3D).get_aabb()
-		if ab.grow(12.0).has_point(p):
+		if ab.grow(40.0).has_point(p):
 			o.append(ab.grow(0.3))
 	for c in n.get_children():
 		_boites_sous(c, p, o)
