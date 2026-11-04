@@ -216,7 +216,10 @@ func _construire_panneaux() -> void:
 			# pleine définition autour du joueur seulement : voir _maj_panneaux
 			mm.visible_instance_count = 0
 			mm.custom_aabb = AABB(Vector3(-60000.0, -1000.0, -60000.0), Vector3(120000.0, 8000.0, 120000.0))
-			_pan_proches.append([mm, xs, k])
+			var xk: Array = []
+			for x0 in xs:
+				xk.append(x0[k])
+			_pan_enregistrer(mm, null, xk)
 			var mi: MultiMeshInstance3D = MultiMeshInstance3D.new()
 			mi.name = "Panneaux%s" % ["Poteaux", "Disques", "Cercles"][k]
 			mi.multimesh = mm
@@ -275,7 +278,12 @@ var _racine_numeros: Node3D = null
 var _cases_posees: Dictionary = {}        # case → [Label3D, …]
 var _cases_a_poser: Array = []            # [case, indice suivant]
 var _case_cam: Vector2i = Vector2i(1 << 30, 0)
-var _pan_proches: Array = []              # [MultiMesh, transformations, indice dans la transformation]
+var _pan_mm: Array = []                   # MultiMesh de panneaux tenus à jour autour de la caméra
+var _pan_mi: Array = []                   # (leur instance quand elle se cache à vide : faces, une par piste)
+var _pan_n: PackedInt32Array = PackedInt32Array()
+var _pan_cases: Dictionary = {}           # case → [[indice du MultiMesh, Transform3D], …]
+var _pan_sale: bool = false
+static var maj_panneaux_max_us: int = 0   # bancs
 
 
 ## Panneaux de loin : un disque à 10 triangles, à l'intérieur du disque complet (qui le cache de près).
@@ -307,20 +315,39 @@ func _poser_panneaux_loin(xs: Array, col: Color) -> void:
 	add_child(mi)
 
 
-## Panneaux complets des 9 cases autour de la caméra.
+## Range les panneaux d'un MultiMesh par case de terrain, une fois pour toutes.
+func _pan_enregistrer(mm: MultiMesh, mi: MultiMeshInstance3D, xs: Array) -> void:
+	var idx: int = _pan_mm.size()
+	_pan_mm.append(mm)
+	_pan_mi.append(mi)
+	_pan_n.append(0)
+	for xf in xs:
+		var q: Vector2i = _case_numero((xf as Transform3D).origin)
+		if not _pan_cases.has(q):
+			_pan_cases[q] = []
+		(_pan_cases[q] as Array).append([idx, xf])
+	_pan_sale = true
+
+
+## Panneaux complets et faces des 9 cases autour de la caméra.
 func _maj_panneaux(c: Vector2i) -> void:
-	for e in _pan_proches:
-		var mm: MultiMesh = e[0]
-		var xs: Array = e[1]
-		var k: int = e[2]
-		var n: int = 0
-		for x in xs:
-			var xf: Transform3D = x[k]
-			var q: Vector2i = _case_numero(xf.origin)
-			if absi(q.x - c.x) <= 1 and absi(q.y - c.y) <= 1:
-				mm.set_instance_transform(n, xf)
-				n += 1
-		mm.visible_instance_count = n
+	var t0: int = Time.get_ticks_usec()
+	_pan_n.fill(0)
+	for dx in range(-1, 2):
+		for dz in range(-1, 2):
+			var liste: Variant = _pan_cases.get(c + Vector2i(dx, dz))
+			if liste == null:
+				continue
+			for e in liste:
+				var idx: int = e[0]
+				(_pan_mm[idx] as MultiMesh).set_instance_transform(_pan_n[idx], e[1])
+				_pan_n[idx] += 1
+	for i in range(_pan_mm.size()):
+		(_pan_mm[i] as MultiMesh).visible_instance_count = _pan_n[i]
+		if _pan_mi[i] != null:
+			(_pan_mi[i] as Node3D).visible = _pan_n[i] > 0
+	_pan_sale = false
+	maj_panneaux_max_us = maxi(maj_panneaux_max_us, Time.get_ticks_usec() - t0)
 
 
 func _case_numero(p: Vector3) -> Vector2i:
@@ -351,6 +378,8 @@ func _process(_delta: float) -> void:
 	if cam == null:
 		return
 	var c: Vector2i = _case_numero(cam.global_position)
+	if _pan_sale and c == _case_cam:
+		_maj_panneaux(c)
 	if c != _case_cam:
 		_case_cam = c
 		_maj_panneaux(c)
@@ -478,10 +507,13 @@ func _poser_face(ip: int, par_piste: Dictionary, quad: Mesh, m: StandardMaterial
 	mm.transform_format = MultiMesh.TRANSFORM_3D
 	mm.mesh = quad
 	mm.instance_count = xs.size()
-	for i in range(xs.size()):
-		mm.set_instance_transform(i, xs[i])
+	# (de loin, le disque seul : ces faces, une par piste, coûtaient ~180 appels partout, relevés du 04/11/2026)
+	mm.visible_instance_count = 0
+	mm.custom_aabb = AABB(Vector3(-60000.0, -1000.0, -60000.0), Vector3(120000.0, 8000.0, 120000.0))
 	var mi: MultiMeshInstance3D = MultiMeshInstance3D.new()
 	mi.name = "PanneauxFaces"
+	mi.visible = false
+	_pan_enregistrer(mm, mi, xs)
 	mi.multimesh = mm
 	mi.material_override = m
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
