@@ -126,7 +126,7 @@ static func code_hd(code: String) -> String:
 	return code.replace("varying vec3 nw;", _ENTETE_HD) \
 		.replace("vec3 n = normalize(nw);", "vec3 n = normale_hd(pw.xz);\n\tfloat d_cam = distance(pw, cam);\n\tvec4 n_fin = neige_detail(pw, n, d_cam);") \
 		.replace("float l = 0.36 + 0.74 * max(dot(n, normalize(soleil)), 0.0);", "float l = 0.36 + 0.74 * max(dot(n_fin.xyz, normalize(soleil)), 0.0);") \
-		.replace("return mix(c, mix(c * 0.80, blanc, neige) * l, hiver);", "blanc += vec3(0.5) * paillettes(pw, n_fin.xyz, cam, d_cam) * neige;\n\t// grain de la roche, sur la photo sombre, près de l'œil\n\tfloat roche = n_fin.w * (1.0 - neige) * (1.0 - smoothstep(0.25, 0.6, grain));\n\tvec3 c_roc = c * (1.0 + roche * ((texture(detail_hd, pw.xz / 1.7).a - 0.5) * 1.2 + (texture(detail_hd, pw.xz / 0.43).a - 0.5) * 0.6));\n\treturn mix(c, mix(c_roc * 0.80, blanc, neige) * l, hiver);") \
+		.replace("return mix(c, mix(c * 0.80, blanc, neige) * l, hiver);", "blanc += vec3(0.5) * paillettes(pw, n_fin.xyz, cam, d_cam) * neige;\n\t// grain de la roche, sur la photo sombre, près de l'œil\n\tfloat roche = n_fin.w * (1.0 - neige) * (1.0 - smoothstep(0.25, 0.6, grain));\n\tvec3 c_roc = c * (1.0 + roche * ((texture(detail_hd, pw.xz / 5.3).a - 0.5) * 1.1 + (texture(detail_hd, pw.xz / 1.3).a - 0.5) * 0.3));\n\treturn mix(c, mix(c_roc * 0.80, blanc, neige) * l, hiver);") \
 		.replace("vec3 c = texture(ortho, UV).rgb;", "vec2 uv_hd = (pw.xz - hd_xf.xy) / (hd_xf.zw * hd_nb);\n\tvec3 c = photo_hd(pw.xz, texture(ortho, uv_hd).rgb);") \
 		.replace("c = en_hiver(c, UV, CAMERA_POSITION_WORLD);", "c = en_hiver(c, uv_hd, CAMERA_POSITION_WORLD);")
 
@@ -218,7 +218,8 @@ func _installer() -> void:
 		var img: Image = Image.create_from_data(M + 1, M + 1, false, Image.FORMAT_RGF, couches[n])
 		_images.append(img)
 		_textures.append(ImageTexture.create_from_image(img))
-		var mat: ShaderMaterial = rel._shader(code)
+		# (un seul nuanceur pour les cinq anneaux : compilé cinq fois, il gelait l'image 0,5 s)
+		var mat: ShaderMaterial = rel._shader(code) if _mats.is_empty() else (_mats[0] as ShaderMaterial).duplicate()
 		mat.set_shader_parameter("ortho", rel._tex_ortho)
 		regler_hd(mat, rel._tex_normales, rel._tex_ortho_hd)
 		mat.set_shader_parameter("anneau", _textures[n])

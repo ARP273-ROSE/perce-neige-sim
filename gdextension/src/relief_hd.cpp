@@ -146,6 +146,10 @@ PackedFloat32Array ReliefHD::decoder(const String &chemin, int niveau, int nj, i
 	std::memcpy(&pack_nj, tete + 32, 4);
 	std::memcpy(&pack_ni, tete + 36, 4);
 	std::memcpy(&n, tete + 44, 4);
+	const int64_t longueur = int64_t(f->get_length());
+	if (int64_t(n) * 36 + 48 > longueur) {
+		return sortie;
+	}
 	const PackedByteArray b_index = f->get_buffer(int64_t(n) * 36);
 	if (b_index.size() != int64_t(n) * 36) {
 		return sortie;
@@ -158,10 +162,21 @@ PackedFloat32Array ReliefHD::decoder(const String &chemin, int niveau, int nj, i
 		return sortie;
 	}
 	std::vector<EntreeTuile> tuiles;
+	// (grille couverte exactement : une tuile absente laisserait des altitudes nulles)
+	int64_t couverts = 0;
 	for (const EntreeTuile &e : index) {
 		if (e.niveau == niveau) {
+			if (int64_t(e.taille) > longueur || int64_t(e.ti) + e.hauteur > ni || int64_t(e.tj) + e.largeur > nj || e.largeur < 2 || e.hauteur < 2
+					|| !(e.pas > 0.0f) || !std::isfinite(e.base)) {
+				return sortie;
+			}
 			tuiles.push_back(e);
+			couverts += int64_t(e.hauteur - (e.ti > 0 ? 1 : 0)) * (e.largeur - (e.tj > 0 ? 1 : 0));
 		}
+	}
+	if (couverts != int64_t(nj) * ni) {
+		UtilityFunctions::print(String::utf8("[ReliefHD] pack incomplet : "), couverts, " / ", int64_t(nj) * ni);
+		return sortie;
 	}
 	sortie.resize(int64_t(nj) * ni);
 	float *ps = sortie.ptrw();
@@ -217,6 +232,22 @@ PackedFloat32Array ReliefHD::decoder(const String &chemin, int niveau, int nj, i
 	if (erreurs.load() > 0) {
 		UtilityFunctions::print("[ReliefHD] tuiles illisibles : ", erreurs.load());
 		return PackedFloat32Array();
+	}
+	// (altitudes du domaine : 1 400 à 3 900 m ; des tuiles décodées mais fausses n'y passent pas)
+	{
+		std::atomic<int64_t> hors(0);
+		en_parallele(ni, [&](int64_t i) {
+			for (int64_t j = 0; j < nj; j += 7) {
+				const float v = ps[i * nj + j];
+				if (!(v > 500.0f && v < 5000.0f)) {
+					hors++;
+				}
+			}
+		});
+		if (hors.load() > int64_t(ni) * nj / 7 / 100) {
+			UtilityFunctions::print(String::utf8("[ReliefHD] altitudes hors du domaine : "), hors.load());
+			return PackedFloat32Array();
+		}
 	}
 	// Aberrations du relevé : quelques nœuds isolés, à des centaines de mètres de leurs voisins
 	// (2636, 1409, 2634 m). Remplacés par la médiane autour d'eux, une barre rocheuse tient.
@@ -751,11 +782,17 @@ Array ReliefHD::couches(const String &chemin, int sauter_niveaux) const {
 	uint32_t champs[7];
 	std::memcpy(champs, b_tete.ptr() + 4, 28);
 	const int64_t nb = int64_t(champs[1]) * champs[2];
+	const int64_t longueur = int64_t(f->get_length());
+	if (nb <= 0 || nb * 16 + 32 > longueur || champs[4] != 2048) {
+		return sortie;
+	}
 	const PackedByteArray b_index = f->get_buffer(nb * 16);
 	if (b_index.size() != nb * 16) {
 		return sortie;
 	}
 	const uint64_t corps = uint64_t(32) + uint64_t(nb) * 16;
+	// taille exacte d'une couche BC7 de 2048 texels avec tous ses niveaux (comme le BC5)
+	const uint32_t attendu = uint32_t(taille_bc5(int(champs[4])));
 	std::vector<PackedByteArray> c(static_cast<size_t>(nb));
 	std::atomic<int> erreurs(0);
 	en_parallele(nb, [&](int64_t q) {
@@ -764,6 +801,10 @@ Array ReliefHD::couches(const String &chemin, int sauter_niveaux) const {
 		std::memcpy(&pos, b_index.ptr() + q * 16, 8);
 		std::memcpy(&taille, b_index.ptr() + q * 16 + 8, 4);
 		std::memcpy(&brut, b_index.ptr() + q * 16 + 12, 4);
+		if (int64_t(taille) > longueur || brut != attendu) {
+			erreurs++;
+			return;
+		}
 		Ref<FileAccess> fk = FileAccess::open(chemin, FileAccess::READ);
 		if (fk.is_null()) {
 			erreurs++;
@@ -813,6 +854,10 @@ Array ReliefHD::foret(const String &chemin, const PackedFloat32Array &hn, int nj
 	std::memcpy(&az0, b_tete.ptr() + 16, 8);
 	std::memcpy(&cote, b_tete.ptr() + 24, 4);
 	std::memcpy(&n, b_tete.ptr() + 28, 4);
+	const int64_t longueur = int64_t(f->get_length());
+	if (int64_t(n) * 20 + 32 > longueur || !(cote > 0.0f)) {
+		return sortie;
+	}
 	const PackedByteArray b_index = f->get_buffer(int64_t(n) * 20);
 	if (b_index.size() != int64_t(n) * 20) {
 		return sortie;
@@ -854,6 +899,9 @@ Array ReliefHD::foret(const String &chemin, const PackedFloat32Array &hn, int nj
 		std::memcpy(&nb, e + 4, 4);
 		std::memcpy(&pos, e + 8, 8);
 		std::memcpy(&taille, e + 16, 4);
+		if (int64_t(taille) > longueur || nb > 2000000u) {
+			return;
+		}
 		Ref<FileAccess> fk = FileAccess::open(chemin, FileAccess::READ);
 		if (fk.is_null()) {
 			return;
