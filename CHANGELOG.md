@@ -20,6 +20,16 @@ dédié, pour lui seul, assombrit la neige là où pylônes, véhicules et bâti
 **Fil principal à ski.** Collisions du tunnel construites pour un skieur sur la neige, pièces fines des gares refaites en double à chaque carré de relief (26 à 54 ms), portées de toutes
 les lignes réglées d'un bloc à chaque changement de détail (72 à 103 ms). Boucle de 11 min en 4K : images de plus de 25 ms à ski 20 → 2.
 
+## 1.53.10 — 4 novembre 2026 (PWA seule)
+
+**Lignes vues de loin sur la PWA.** Une version très allégée de chaque remontée, téléchargée à la demande, s'affiche au loin puis cède la place à la ligne construite en approchant (66 lignes, 30 Mo sur le serveur ; sans réseau, seuils habituels). Sous WebKit au pied de Tovière, niveaux normal, allégé 1 et 2 : 100/80/66 Mo de tampons, contre 109/81/65 Mo, avec 6, 3 et 6 lignes de plus à l'écran. Vu de près, le rendu reste grossier : teintes des sièges, gares incomplètes. Essai sur iPad à faire.
+
+**Données des remontées en binaire** (`data/remontees/lignes.bin`, contenu identique octet par octet) : 7 Mo de mémoire écrite en moins en jeu sur la PWA (305 → 298 Mo), et une compilation des scripts moins gourmande.
+
+**Télésièges : bras de suspente relié au siège.** Il s'arrêtait 8 cm devant l'attache de la poutre de tête, sans la toucher (retour d'essai sur iPad) ; son bas revient maintenant jusqu'à elle, sur tous les sièges.
+
+**Télésièges 3 places : repose-skis refaits.** Une seule tige décentrée de 25 cm, rien pour la 3e place : ce sont maintenant deux T noirs séparés de 0,45 m, symétriques, aux limites entre places. Nombre, position et largeur relevés sur photos, relevée seulement ; hauteur et avancée en position baissée non vues, inchangées.
+
 ## 1.53.9 — 3 novembre 2026 (PWA seule)
 
 **Modes allégés de la PWA : plus nets, moins lourds.** Densité d'écran limitée à 1,5 et photo du relief à 1 024 px. La 3D passe de 60 % à 100 % de cette densité en allégé 1, anti-crénelage rétabli, et de 50 % à 80 % en allégé 2 : l'image n'est plus pixelisée après un plantage. En mode normal, le rendu ne descend plus sous 70 %. Sous WebKit, au pied de Tovière : allégé 1 à 123 Mo de textures et 51 Mo de tampons de rendu, allégé 2 à 117 et 17 Mo.
