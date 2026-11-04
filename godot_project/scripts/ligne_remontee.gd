@@ -2679,7 +2679,7 @@ func _collisions_fixes() -> void:
 	for i in range(0 if teleski() else pylones.size()):
 		var d: float = float(pylones[i]["d"])
 		var t: float = terrain(d)
-		var h: float = _tetes[i] - t - _dessus_traverse()
+		var h: float = _tetes[i] - t - (PyloneRemontee.DESSUS_TRAVERSE_COMPRESSION if _compression(pylones[i]) else _dessus_traverse())
 		if tricable():
 			h = _tetes[i] - t - 3.0
 			boite.call(Vector3(clampf(h * 0.22, 4.0, 12.0), h, clampf(h * 0.22, 4.0, 12.0) * 0.6), Vector3(0, t + h * 0.5, -d))
@@ -3528,7 +3528,9 @@ func _poser_pylones() -> void:
 		py.numero = numero_pylone(i)
 		py.voie = voie
 		py.sens_montee_droite = sens_droite
-		py.dessus_traverse = _dessus_traverse()
+		# compression : galets à hauteur de la tête horizontale, le câble passe juste dessous (retour
+		# d'utilisateur, 04/11/2026 : ils étaient trop haut sur le pylône)
+		py.dessus_traverse = PyloneRemontee.DESSUS_TRAVERSE_COMPRESSION if _compression(p) else _dessus_traverse()
 		py.hauteur = y_cable(d) - t - py.dessus_traverse
 		py.compo_montee = p.get("montee", [[8, "S"]])
 		py.compo_descente = p.get("descente", [[8, "S"]])
@@ -4324,7 +4326,7 @@ func _lod_preparer() -> void:
 		mmi.multimesh = mm
 		mmi.layers = 1 | Cabin.LAYER_VOIE
 		mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		add_child(mmi)
+		(_vehicules[0][0] as Node).get_parent().add_child(mmi)      # (même repère que les véhicules)
 		_lod_mm.append(mm)
 	_lod_b1 = vide.duplicate()
 	_lod_b2 = vide.duplicate()
