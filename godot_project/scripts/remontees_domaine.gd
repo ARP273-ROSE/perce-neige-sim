@@ -681,6 +681,10 @@ func _vider_poubelle() -> void:
 ## le reste. Sans fichier, ou sans --cuit : les seuils habituels.
 const CUIT_PROCHE: float = 450.0
 const CUIT_DEMOLIR: float = 650.0
+## PWA : la mémoire compte, une ligne construite libère sa version cuite, reprise avant la démolition
+## (rechargée au-delà de CUIT_RECHARGER, encore cachée tant que la ligne construite est là).
+const CUIT_LIBERER: float = 500.0
+const CUIT_RECHARGER: float = 560.0
 static var dossier_cuites: String = "user://cuites"
 var _cuit_actif: bool = "--cuit" in OS.get_cmdline_user_args() or OS.has_feature("web")
 var _cuit_http: HTTPRequest = null
@@ -770,6 +774,7 @@ func _gerer_cuites(delta: float) -> void:
 	_t_cuit_dist = 0.25
 	if _cuit_tache >= 0 or _cuit_attente:
 		return
+	var web: bool = OS.has_feature("web")
 	var best: LigneRemontee = null
 	var d_best: float = INF
 	for e in lignes:
@@ -779,10 +784,10 @@ func _gerer_cuites(delta: float) -> void:
 			continue
 		var d: float = _distance_ligne(lg, p)
 		if _cuites.has(nom):
-			if d > DEMOLIR_AU_DELA:
+			if d > DEMOLIR_AU_DELA or (web and lg.pret and d < CUIT_LIBERER):
 				(_cuites[nom] as LigneCuite).liberer()
 				_cuites.erase(nom)
-		elif d < CONSTRUIRE_JUSQUA and d < d_best:
+		elif d < CONSTRUIRE_JUSQUA and d < d_best and (not web or not lg.pret or d > CUIT_RECHARGER):
 			d_best = d
 			best = lg
 	if best != null:
