@@ -4286,12 +4286,32 @@ func _portes_corps(i: int, ouvert: bool) -> void:
 			(cs as CollisionShape3D).disabled = ouvert
 
 
+var _temps_s: PackedFloat64Array = PackedFloat64Array()
+var _temps_t: PackedFloat64Array = PackedFloat64Array()
+
+
 func _etape_gdscript(delta: float) -> void:
 	var tkd: bool = not _au_magasin.is_empty()
+	var par_temps: bool = not tkd and _tab_s.size() > 1
+	var t_boucle: float = (_tab_s.size() - 1) * 0.05
 	for i in range(_vehicules.size()):
 		if tkd and _au_magasin[i] >= 0.0:
 			continue
 		var s: float = _vehicules[i][1]
+		# temps de parcours, pas distance cumulée : à grands pas (images longues, lignes lointaines), s += v·dt
+		# passait les zones lentes de travers et les véhicules finissaient collés (retour d'utilisateur, 04/11/2026)
+		if par_temps:
+			if _temps_s.size() != _vehicules.size():
+				_temps_s.resize(_vehicules.size())
+				_temps_t.resize(_vehicules.size())
+				_temps_s.fill(-1.0)
+			if _temps_s[i] != s:
+				_temps_t[i] = _t_de_s(s)
+			_temps_t[i] = fposmod(_temps_t[i] + regime() * delta, t_boucle)
+			var s_t: float = _s_de_t(_temps_t[i])
+			_vehicules[i][1] = s_t
+			_temps_s[i] = s_t
+			continue
 		var ds: float = vitesse_en(s) * regime() * delta
 		# TKD : la perche qui redescend se débraye juste après le nez de la
 		# gare aval et glisse sur le rail du magasin

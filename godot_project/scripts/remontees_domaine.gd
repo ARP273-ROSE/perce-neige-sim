@@ -1183,7 +1183,8 @@ func _surveiller_reste_cabine() -> void:
 	var v: VehiculeRemontee = lg.vehicule(i)
 	# tant qu'il ne bouge pas, il suit la cabine (rien ne le portait : elle partait sans
 	# lui, ou le poussait sur le quai) ; au premier pas, il est libre de sortir
-	if skieur._clavier() != Vector2.ZERO:
+	# (clavier ou joystick : sur iPad, le joystick n'était pas vu et le skieur restait prisonnier de la cabine)
+	if skieur._clavier() != Vector2.ZERO or skieur.entree.length() > 0.12:
 		_reste_cabine = []
 		skieur.embarque = false
 		return
