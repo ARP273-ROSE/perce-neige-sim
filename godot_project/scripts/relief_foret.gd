@@ -55,7 +55,26 @@ var _rel: ReliefBuilder = null
 var nb_arbres: int = 0
 
 
-func demarrer(rel: ReliefBuilder, cases: Array) -> void:
+## Fil de préparation : blocs lointains, un seul appel de dessin par kilomètre carré.
+static func preparer_blocs(cases: Array) -> Array:
+	var d: Dictionary = {}
+	for c in cases:
+		var cle: Vector2i = Vector2i(int(c[0]) / BLOC, int(c[1]) / BLOC)
+		if not d.has(cle):
+			d[cle] = []
+		(d[cle] as Array).append(c)
+	var r: Array = []
+	for cle in d:
+		var t: PackedFloat32Array = PackedFloat32Array()
+		var nb: int = 0
+		for c in d[cle]:
+			t.append_array(c[3])
+			nb += int(c[2])
+		r.append([t, nb])
+	return r
+
+
+func demarrer(rel: ReliefBuilder, cases: Array, blocs: Array) -> void:
 	name = "ReliefForet"
 	_rel = rel
 	_meshes = [_conifere(9, 9, true), _conifere(3, 6, false), _triangle()]
@@ -65,23 +84,12 @@ func demarrer(rel: ReliefBuilder, cases: Array) -> void:
 		m.set_shader_parameter("hiver", rel._hiver)
 		rel._mats_hiver.append(m)
 		_mats.append(m)
-	# blocs lointains : un seul appel de dessin par kilomètre carré
-	var blocs: Dictionary = {}
 	for c in cases:
 		nb_arbres += int(c[2])
-		var cx: int = c[0]
-		var cz: int = c[1]
 		_a_poser.append([1, c[3], c[2], 0.0, PORTEE_PRES])                  # près
 		_a_poser.append([2, c[3], c[2], PORTEE_PRES, PORTEE_MOYEN])          # moyen
-		var cle: Vector2i = Vector2i(cx / BLOC, cz / BLOC)
-		if not blocs.has(cle):
-			blocs[cle] = [PackedFloat32Array(), 0]
-		var tb: PackedFloat32Array = blocs[cle][0]
-		tb.append_array(c[3])
-		blocs[cle][0] = tb
-		blocs[cle][1] += int(c[2])
-	for cle in blocs:
-		_a_poser.append([3, blocs[cle][0], blocs[cle][1], PORTEE_MOYEN - 200.0, PORTEE_LOIN])
+	for b in blocs:
+		_a_poser.append([3, b[0], b[1], PORTEE_MOYEN - 200.0, PORTEE_LOIN])
 	print("[ReliefForet] %d arbres, %d cases, %d blocs" % [nb_arbres, cases.size(), blocs.size()])
 
 

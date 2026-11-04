@@ -293,6 +293,9 @@ func build(t: TunnelBuilder, cran: int = 0) -> void:
 	# 21 km d'emprise depuis le 09/10/2026 (Tignes – Val d'Isère) : 4096 px =
 	# 5,1 m/px sur une bonne machine ; 2048 px (10 m/px) sinon et sur le web
 	_ortho_l = 4096 if cran <= 2 else 2048
+	# (photo au mètre du pack : celle-ci ne sert plus qu'au loin, à plus de 16 m par texel)
+	if ReliefFin.voulu(cran) and ReliefFin.niveau_hd() > 0 and FileAccess.file_exists(ReliefFin.dossier_pack().path_join("ortho.pnhd")):
+		_ortho_l = 2048
 	_octets = _octets_png("res://textures/relief_hauteurs.png")
 	_octets_loin = _octets_png("res://textures/relief_lointain_hauteurs.png")
 	_h.resize(ReliefDonnees.NX * ReliefDonnees.NZ)
@@ -585,6 +588,7 @@ func _materiaux() -> void:
 	_mat_terrain = _shader(ReliefAnneaux.code_hd(SHADER_TERRAIN) if fin != null and fin.hd else SHADER_TERRAIN)
 	_mat_terrain.set_shader_parameter("ortho", _tex_ortho)
 	if fin != null and fin.hd:
+		ReliefAnneaux.preparer_detail()
 		_tex_normales = fin.normales_texture()
 		_tex_ortho_hd = fin.ortho_texture()
 		ReliefAnneaux.regler_hd(_mat_terrain, _tex_normales, _tex_ortho_hd)
@@ -798,7 +802,9 @@ func _poser_trous() -> void:
 	_mat_terrain.set_shader_parameter("pieces", v.slice(0, 8))
 	_mat_terrain.set_shader_parameter("n_pieces", n)
 	if fin != null and fin.anneaux != null:
-		fin.anneaux.poser_trous(_rects_pieces + _fosses.values().filter(func(r: Rect2) -> bool: return r != _fosses.get("relief_fin", Rect2())))
+		# (anneaux sous le bord des pièces fines : de même surface, et plus de points de ciel à la jonction)
+		var sous_pieces: Array = _rects_pieces.map(func(r: Rect2) -> Rect2: return r.grow(-1.5))
+		fin.anneaux.poser_trous(sous_pieces + _fosses.values().filter(func(r: Rect2) -> bool: return r != _fosses.get("relief_fin", Rect2())))
 
 
 func _build_piece(am: Dictionary) -> void:
@@ -906,8 +912,12 @@ func _build_piece(am: Dictionary) -> void:
 				var q: Vector2 = r.position + Vector2((j + 0.5) / 4.0, (i + 0.5) / 4.0)
 				if Geometry2D.is_point_in_polygon(q, poly):
 					img.set_pixel(j, i, Color.WHITE)
-	var mat: ShaderMaterial = _shader(SHADER_TERRAIN)
+	# (pack haute définition : même photo et mêmes normales que le sol alentour)
+	var hd_piece: bool = fin != null and fin.hd and _tex_normales != null
+	var mat: ShaderMaterial = _shader(ReliefAnneaux.code_hd(SHADER_TERRAIN) if hd_piece else SHADER_TERRAIN)
 	mat.set_shader_parameter("ortho", _tex_ortho)
+	if hd_piece:
+		ReliefAnneaux.regler_hd(mat, _tex_normales, _tex_ortho_hd)
 	mat.set_shader_parameter("piece", 1.0)
 	mat.set_shader_parameter("trous", ImageTexture.create_from_image(img))
 	mat.set_shader_parameter("emprise", Vector4(r.position.x, r.position.y, r.end.x, r.end.y))

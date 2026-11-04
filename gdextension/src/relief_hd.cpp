@@ -2,6 +2,8 @@
 
 #include <godot_cpp/classes/file_access.hpp>
 #include <godot_cpp/core/class_db.hpp>
+#include <godot_cpp/variant/packed_int32_array.hpp>
+#include <godot_cpp/variant/packed_vector3_array.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
 
 #include <algorithm>
@@ -123,6 +125,8 @@ void ReliefHD::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("couches", "chemin", "sauter_niveaux"), &ReliefHD::couches);
 	ClassDB::bind_method(D_METHOD("reechantillonner", "src", "sj", "si", "nj", "ni", "rapport"), &ReliefHD::reechantillonner);
 	ClassDB::bind_method(D_METHOD("memoire_video"), &ReliefHD::memoire_video);
+	ClassDB::bind_method(D_METHOD("texture_detail", "taille"), &ReliefHD::texture_detail);
+	ClassDB::bind_method(D_METHOD("quart_anneau", "j0", "i0", "d", "t0", "t1"), &ReliefHD::quart_anneau);
 	ClassDB::bind_method(D_METHOD("foret", "chemin", "hn", "nj", "ni", "x0", "z0", "px", "pz", "capsules", "rects"), &ReliefHD::foret);
 	ClassDB::bind_method(D_METHOD("normales", "hn", "nj", "ni", "tuile", "taille", "marge", "px", "pz"), &ReliefHD::normales);
 }
@@ -638,6 +642,99 @@ PackedFloat32Array ReliefHD::reechantillonner(const PackedFloat32Array &src, int
 			out[j] = (l0[b] * (1.0f - u) + l0[b + 1] * u) * (1.0f - v) + (l1[b] * (1.0f - u) + l1[b + 1] * u) * v;
 		}
 	});
+	return o;
+}
+
+Array ReliefHD::quart_anneau(int j0, int i0, int d, int t0, int t1) const {
+	const int nb = d + 1;
+	PackedVector3Array v;
+	v.resize(int64_t(nb) * nb);
+	Vector3 *pv = v.ptrw();
+	for (int i = 0; i < nb; i++) {
+		for (int j = 0; j < nb; j++) {
+			pv[size_t(i) * nb + j] = Vector3(float(j0 + j), 0.0f, float(i0 + i));
+		}
+	}
+	PackedInt32Array idx;
+	idx.resize(int64_t(d) * d * 6);
+	int32_t *po = idx.ptrw();
+	int64_t o = 0;
+	for (int i = 0; i < d; i++) {
+		const int gi = i0 + i;
+		for (int j = 0; j < d; j++) {
+			const int gj = j0 + j;
+			if (t1 > t0 && gi >= t0 && gi < t1 && gj >= t0 && gj < t1) {
+				continue;
+			}
+			const int a = i * nb + j;
+			po[o] = a;
+			po[o + 1] = a + 1;
+			po[o + 2] = a + nb;
+			po[o + 3] = a + 1;
+			po[o + 4] = a + nb + 1;
+			po[o + 5] = a + nb;
+			o += 6;
+		}
+	}
+	idx.resize(o);
+	Array s;
+	s.append(v);
+	s.append(idx);
+	return s;
+}
+
+PackedByteArray ReliefHD::texture_detail(int taille) const {
+	PackedByteArray o;
+	o.resize(int64_t(taille) * taille * 4);
+	uint8_t *po = o.ptrw();
+	std::vector<float> h(size_t(taille) * taille, 0.0f);
+	const auto alea = [](uint32_t a, uint32_t b, uint32_t c) {
+		uint32_t x = a * 73856093u ^ b * 19349663u ^ c * 83492791u;
+		x ^= x >> 13;
+		x *= 1274126177u;
+		x ^= x >> 16;
+		return float(x & 0xffffu) / 65535.0f;
+	};
+	// bruit raccordable : grilles de 8 à 128 cases sur le côté
+	float poids = 1.0f;
+	float total = 0.0f;
+	for (int per = 8; per <= 128; per *= 2) {
+		for (int i = 0; i < taille; i++) {
+			const float fz = float(i) * per / taille;
+			const int a = int(fz);
+			float v = fz - float(a);
+			v = v * v * (3.0f - 2.0f * v);
+			for (int j = 0; j < taille; j++) {
+				const float fx = float(j) * per / taille;
+				const int b = int(fx);
+				float u = fx - float(b);
+				u = u * u * (3.0f - 2.0f * u);
+				const float c00 = alea(a % per, b % per, per);
+				const float c01 = alea(a % per, (b + 1) % per, per);
+				const float c10 = alea((a + 1) % per, b % per, per);
+				const float c11 = alea((a + 1) % per, (b + 1) % per, per);
+				h[size_t(i) * taille + j] += poids * ((c00 * (1.0f - u) + c01 * u) * (1.0f - v) + (c10 * (1.0f - u) + c11 * u) * v);
+			}
+		}
+		total += poids;
+		poids *= 0.6f;
+	}
+	const float echelle = float(taille) / 8.0f;
+	for (int i = 0; i < taille; i++) {
+		const int im = (i + taille - 1) % taille;
+		const int ip = (i + 1) % taille;
+		for (int j = 0; j < taille; j++) {
+			const int jm = (j + taille - 1) % taille;
+			const int jp = (j + 1) % taille;
+			const float gx = (h[size_t(i) * taille + jp] - h[size_t(i) * taille + jm]) * echelle / total;
+			const float gz = (h[size_t(ip) * taille + j] - h[size_t(im) * taille + j]) * echelle / total;
+			uint8_t *c = po + (size_t(i) * taille + j) * 4;
+			c[0] = uint8_t(std::min(std::max(gx * 127.5f + 127.5f, 0.0f), 255.0f));
+			c[1] = uint8_t(std::min(std::max(gz * 127.5f + 127.5f, 0.0f), 255.0f));
+			c[2] = uint8_t(alea(uint32_t(i), uint32_t(j), 991u) * 255.0f);
+			c[3] = uint8_t(std::min(std::max(h[size_t(i) * taille + j] / total * 255.0f, 0.0f), 255.0f));
+		}
+	}
 	return o;
 }
 

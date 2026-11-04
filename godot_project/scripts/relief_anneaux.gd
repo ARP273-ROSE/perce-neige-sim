@@ -23,6 +23,36 @@ uniform vec4 hd_tex;                // nœuds par couche, texels, marge, couches
 uniform vec4 o_xf;                  // photo : x0, z0, pas des nœuds au mètre
 uniform vec4 o_tex;                 // nœuds par couche, marge en nœuds, couches par ligne, dernière ligne
 uniform vec2 hd_nb;                 // dernier nœud (j, i)
+uniform sampler2D detail_hd : filter_linear_mipmap_anisotropic, repeat_enable;
+uniform float a_detail = 0.0;
+// Neige de près : pente de bosses à plusieurs échelles et sillons de vent ; xyz normale, w fondu.
+vec4 neige_detail(vec3 p, vec3 n, float d_cam) {
+	float pres = (1.0 - smoothstep(100.0, 200.0, d_cam)) * a_detail;
+	if (pres <= 0.0) {
+		return vec4(n, 0.0);
+	}
+	vec2 q = p.xz;
+	vec2 g = (texture(detail_hd, q / 41.0).rg - vec2(0.5)) * 0.30
+		+ (texture(detail_hd, q / 9.3 + vec2(0.37, 0.11)).rg - vec2(0.5)) * 0.22
+		+ (texture(detail_hd, q / 2.3 + vec2(0.71, 0.53)).rg - vec2(0.5)) * 0.10;
+	// sillons de vent : étirés suivant une direction fixe
+	const vec2 V = vec2(0.82, 0.57);
+	vec2 qv = vec2(dot(q, V), dot(q, vec2(-V.y, V.x)));
+	vec2 gv = texture(detail_hd, qv * vec2(1.0 / 37.0, 1.0 / 2.9)).rg - vec2(0.5);
+	g += vec2(-V.y, V.x) * gv.g * 0.22;
+	return vec4(normalize(n + vec3(g.x, 0.0, g.y) * pres), pres);
+}
+// Paillettes : un grain fin qui change avec le regard, au soleil, discret, à moins de 50 m.
+float paillettes(vec3 p, vec3 n, vec3 cam, float d_cam) {
+	if (a_detail < 0.5 || d_cam > 50.0) {
+		return 0.0;
+	}
+	vec3 v = (cam - p) / max(d_cam, 0.01);
+	vec2 s = p.xz * 0.37 + v.xz * 0.17;
+	float b = texture(detail_hd, s).b;
+	float soleil_vu = max(dot(normalize(v + normalize(soleil)), n), 0.0);
+	return smoothstep(0.965, 0.995, b) * (1.0 - smoothstep(12.0, 50.0, d_cam)) * smoothstep(0.75, 0.97, soleil_vu);
+}
 uniform sampler2DArray ortho_hd : source_color, filter_linear_mipmap_anisotropic, repeat_disable;
 uniform float a_ortho = 0.0;        // 1 : orthophoto au mètre présente
 // Photo au mètre ; au-delà de 16 m par texel, la photo d'ensemble (la marge entre couches ne suffit plus)
@@ -73,6 +103,9 @@ void vertex() {
 var _fin: ReliefFin = null
 var _rel: ReliefBuilder = null
 var _hd: RefCounted = null
+var _a_mailler: Array = []
+var _quarts: Array = []
+var _installe: bool = false
 var _images: Array = []
 var _textures: Array = []
 var _mats: Array = []
@@ -91,7 +124,9 @@ var nb_recentrages: int = 0
 ## Le nuanceur du relief, avec les normales du pack et sans les UV du maillage.
 static func code_hd(code: String) -> String:
 	return code.replace("varying vec3 nw;", _ENTETE_HD) \
-		.replace("vec3 n = normalize(nw);", "vec3 n = normale_hd(pw.xz);") \
+		.replace("vec3 n = normalize(nw);", "vec3 n = normale_hd(pw.xz);\n\tfloat d_cam = distance(pw, cam);\n\tvec4 n_fin = neige_detail(pw, n, d_cam);") \
+		.replace("float l = 0.36 + 0.74 * max(dot(n, normalize(soleil)), 0.0);", "float l = 0.36 + 0.74 * max(dot(n_fin.xyz, normalize(soleil)), 0.0);") \
+		.replace("return mix(c, mix(c * 0.80, blanc, neige) * l, hiver);", "blanc += vec3(0.5) * paillettes(pw, n_fin.xyz, cam, d_cam) * neige;\n\t// grain de la roche, sur la photo sombre, près de l'œil\n\tfloat roche = n_fin.w * (1.0 - neige) * (1.0 - smoothstep(0.25, 0.6, grain));\n\tvec3 c_roc = c * (1.0 + roche * ((texture(detail_hd, pw.xz / 1.7).a - 0.5) * 1.2 + (texture(detail_hd, pw.xz / 0.43).a - 0.5) * 0.6));\n\treturn mix(c, mix(c_roc * 0.80, blanc, neige) * l, hiver);") \
 		.replace("vec3 c = texture(ortho, UV).rgb;", "vec2 uv_hd = (pw.xz - hd_xf.xy) / (hd_xf.zw * hd_nb);\n\tvec3 c = photo_hd(pw.xz, texture(ortho, uv_hd).rgb);") \
 		.replace("c = en_hiver(c, UV, CAMERA_POSITION_WORLD);", "c = en_hiver(c, uv_hd, CAMERA_POSITION_WORLD);")
 
@@ -102,8 +137,24 @@ static func regler_niveaux(niveau: int) -> void:
 	SAUT = 1 << NIVEAUX
 
 
+static var _tex_detail: ImageTexture = null
+
+
+## Texture de détail, une fois pour toutes (« --sans-detail » : pour en mesurer le coût).
+static func preparer_detail() -> void:
+	if _tex_detail != null or "--sans-detail" in OS.get_cmdline_user_args():
+		return
+	var octets: PackedByteArray = ClassDB.instantiate("ReliefHD").call("texture_detail", 512)
+	var img: Image = Image.create_from_data(512, 512, false, Image.FORMAT_RGBA8, octets)
+	img.generate_mipmaps()
+	_tex_detail = ImageTexture.create_from_image(img)
+
+
 static func regler_hd(m: ShaderMaterial, normales: Texture2DArrayRD, ortho: Texture2DArrayRD = null) -> void:
 	m.set_shader_parameter("normal_hd", normales)
+	if _tex_detail != null:
+		m.set_shader_parameter("detail_hd", _tex_detail)
+		m.set_shader_parameter("a_detail", 1.0)
 	if ortho != null:
 		m.set_shader_parameter("ortho_hd", ortho)
 		m.set_shader_parameter("a_ortho", 1.0)
@@ -114,18 +165,51 @@ static func regler_hd(m: ShaderMaterial, normales: Texture2DArrayRD, ortho: Text
 	m.set_shader_parameter("hd_nb", Vector2(ReliefFin.NJ - 1, ReliefFin.NI - 1))
 
 
+## Fil de préparation : les tableaux des quarts d'anneaux, sans trou puis avec le trou de l'anneau
+## précédent (une maille de recouvrement : au bord, l'anneau précédent est sur la même surface, et
+## sans lui les jonctions en T laissaient passer des points de ciel).
+static func preparer_quarts() -> Array:
+	var hd: RefCounted = ClassDB.instantiate("ReliefHD")
+	var r: Array = []
+	var d: int = M / 2
+	for avec_trou in [false, true]:
+		for k in range(4):
+			r.append(hd.call("quart_anneau", d if k & 1 else 0, d if k & 2 else 0, d,
+				M / 4 + 1 if avec_trou else 0, 3 * M / 4 - 1 if avec_trou else 0))
+	return r
+
+
 func demarrer(fin: ReliefFin, rel: ReliefBuilder) -> void:
 	name = "ReliefAnneaux"
 	_fin = fin
 	_rel = rel
 	_hd = ClassDB.instantiate("ReliefHD")
+	_a_mailler = fin.quarts_anneaux
+	fin.quarts_anneaux = []
+
+
+## Une surface par image : 66 000 sommets chacune, envoyées une par une.
+func _mailler_un() -> void:
+	var t: Array = _a_mailler.pop_front()
+	var arr: Array = []
+	arr.resize(Mesh.ARRAY_MAX)
+	arr[Mesh.ARRAY_VERTEX] = t[0]
+	arr[Mesh.ARRAY_INDEX] = t[1]
+	var m: ArrayMesh = ArrayMesh.new()
+	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
+	_quarts.append(m)
+	if _a_mailler.is_empty():
+		_installer()
+
+
+func _installer() -> void:
+	var fin: ReliefFin = _fin
+	var rel: ReliefBuilder = _rel
 	var code: String = code_hd(ReliefBuilder.SHADER_TERRAIN)
 	# les sommets du relief (tuiles) laissent place à ceux de l'anneau
 	var deb: int = code.find("void vertex() {")
 	var fin_v: int = code.find("}", deb) + 1
 	code = code.substr(0, deb) + _SOMMETS_ANNEAU + code.substr(fin_v)
-	# même découpe en quatre pour tous : la caméra n'en voit souvent que deux
-	var q: Array = [_maillages(false), _maillages(true)]
 	var centre: Vector2i = _noeud_vue()
 	_cj = centre.x
 	_ci = centre.y
@@ -144,7 +228,7 @@ func demarrer(fin: ReliefFin, rel: ReliefBuilder) -> void:
 		for k in range(4):
 			var mi: MeshInstance3D = MeshInstance3D.new()
 			mi.name = "Anneau%d_%d" % [n, k]
-			mi.mesh = q[0 if n == 0 else 1][k]
+			mi.mesh = _quarts[(0 if n == 0 else 4) + k]
 			mi.material_override = mat
 			mi.layers = 1 | Cabin.LAYER_RELIEF
 			mi.set_meta("sans_collision", true)
@@ -153,51 +237,7 @@ func demarrer(fin: ReliefFin, rel: ReliefBuilder) -> void:
 			_instances.append([n, k, mi])
 	_regler_uniformes()
 	rel._poser_trous()
-
-
-## Les quatre quarts d'un anneau, avec ou sans le trou de l'anneau précédent.
-func _maillages(avec_trou: bool) -> Array:
-	var r: Array = []
-	var d: int = M / 2
-	for k in range(4):
-		var j0: int = d if k & 1 else 0
-		var i0: int = d if k & 2 else 0
-		var nb: int = d + 1
-		var v: PackedVector3Array = PackedVector3Array()
-		v.resize(nb * nb)
-		var o: int = 0
-		for i in range(nb):
-			for j in range(nb):
-				v[o] = Vector3(j0 + j, 0.0, i0 + i)
-				o += 1
-		var idx: PackedInt32Array = PackedInt32Array()
-		idx.resize(d * d * 6)
-		o = 0
-		for i in range(d):
-			var gi: int = i0 + i
-			for j in range(d):
-				var gj: int = j0 + j
-				# (une maille de recouvrement : au bord, l'anneau précédent est sur la même surface,
-				# et sans lui les jonctions en T laissaient passer des points de ciel)
-				if avec_trou and gi >= M / 4 + 1 and gi < 3 * M / 4 - 1 and gj >= M / 4 + 1 and gj < 3 * M / 4 - 1:
-					continue
-				var a: int = i * nb + j
-				idx[o] = a
-				idx[o + 1] = a + 1
-				idx[o + 2] = a + nb
-				idx[o + 3] = a + 1
-				idx[o + 4] = a + nb + 1
-				idx[o + 5] = a + nb
-				o += 6
-		idx.resize(o)
-		var arr: Array = []
-		arr.resize(Mesh.ARRAY_MAX)
-		arr[Mesh.ARRAY_VERTEX] = v
-		arr[Mesh.ARRAY_INDEX] = idx
-		var m: ArrayMesh = ArrayMesh.new()
-		m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
-		r.append(m)
-	return r
+	_installe = true
 
 
 func _noeud_vue() -> Vector2i:
@@ -237,6 +277,10 @@ func _regler_uniformes() -> void:
 
 
 func _process(_dt: float) -> void:
+	if not _installe:
+		if not _a_mailler.is_empty():
+			_mailler_un()
+		return
 	if _tache >= 0:
 		if not WorkerThreadPool.is_task_completed(_tache):
 			return

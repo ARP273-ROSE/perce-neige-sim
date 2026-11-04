@@ -124,8 +124,8 @@ func _suite() -> void:
 		for i in range(6):
 			await physics_frame
 		espace = _main.get_world_3d().direct_space_state
-		for a2 in range(-50, 51, 7):
-			for b2 in range(-50, 51, 7):
+		for a2 in range(-25, 26, 4):
+			for b2 in range(-25, 26, 4):
 				var x3: float = centre.x + a2 + 0.37
 				var z3: float = centre.y + b2 + 0.61
 				var h3: float = rel.hauteur_sol(x3, z3)
