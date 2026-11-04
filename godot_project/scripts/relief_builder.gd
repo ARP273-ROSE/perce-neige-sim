@@ -648,6 +648,54 @@ func _creuser_gares() -> void:
 				if interieur.has([cle, bout[0]]):
 					continue
 				_creuser_gare(bout[1], bout[2], demi, lg)
+	_araser_cretes()
+
+
+## Crêtes terrassées pour une ligne : sommet pointu du relevé remplacé par un replat (retour
+## d'utilisateur, 04/11/2026 : la montagne a été creusée, replat de 30 m). Déblai côté haut, remblai
+## côté bas. [clé, d du centre, demi-longueur le long de la ligne, demi-largeur en travers,
+## abaissement sous le point le plus haut du replat]
+const ARASEMENTS: Array = [["tsd6_leissieres", 587.0, 15.0, 28.0, 3.5]]
+const ARASEMENT_RACCORD: float = 18.0
+
+
+func _araser_cretes() -> void:
+	for ar in ARASEMENTS:
+		for D in RemonteesDonnees.LIGNES:
+			if String(D["cle"]) == ar[0]:
+				var a: Vector2 = RemonteesDomaine.monde(float(D["aval"][0]), float(D["aval"][1]))
+				var b: Vector2 = RemonteesDomaine.monde(float(D["amont"][0]), float(D["amont"][1]))
+				_araser(a, (b - a).normalized(), ar)
+
+
+func _araser(a: Vector2, u: Vector2, ar: Array) -> void:
+	var c: Vector2 = a + u * float(ar[1])
+	var lat: Vector2 = Vector2(-u.y, u.x)
+	var demi_l: float = ar[2]
+	var demi_x: float = ar[3]
+	var haut: float = -INF
+	var t: float = -demi_l
+	while t <= demi_l:
+		haut = maxf(haut, _hauteur_tri((c + u * t).x, (c + u * t).y))
+		t += 2.0
+	var y0: float = haut - float(ar[4])
+	var r: float = maxf(demi_l, demi_x) + ARASEMENT_RACCORD + maxf(_dx, _dz)
+	var n: int = ReliefDonnees.NX
+	var j0: int = clampi(int((c.x - r - ReliefDonnees.X_OUEST) / _dx), 0, n - 1)
+	var j1: int = clampi(int((c.x + r - ReliefDonnees.X_OUEST) / _dx) + 1, 0, n - 1)
+	var i0: int = clampi(int((c.y - r - ReliefDonnees.Z_NORD) / _dz), 0, ReliefDonnees.NZ - 1)
+	var i1: int = clampi(int((c.y + r - ReliefDonnees.Z_NORD) / _dz) + 1, 0, ReliefDonnees.NZ - 1)
+	for i in range(i0, i1 + 1):
+		for j in range(j0, j1 + 1):
+			var v: Vector2 = Vector2(ReliefDonnees.X_OUEST + j * _dx, ReliefDonnees.Z_NORD + i * _dz) - c
+			var tv: float = v.dot(u)
+			var xv: float = v.dot(lat)
+			var dist: float = Vector2(maxf(absf(tv) - demi_l, 0.0), maxf(absf(xv) - demi_x, 0.0)).length()
+			var poids: float = 1.0 - smoothstep(0.0, ARASEMENT_RACCORD, dist)
+			if poids <= 0.0:
+				continue
+			var k: int = i * n + j
+			_h[k] = lerpf(_h[k], y0, poids)
 
 
 func _creuser_gare(o: Vector2, u: Vector2, demi: float, long_g: float) -> void:

@@ -12,6 +12,7 @@
  "espacement": 72.0,
  "voie": 6.1,
  "sens_droite": false,
+ "numeros_inverses": false,
  "diametre_cable": 46.0,
  "famille": "cabine_omega4",
  "aval": [
@@ -1314,7 +1315,7 @@
    ]
   },
   {
-   "d": 859.0,
+   "d": 827.0,
    "montee": [
     [
      10,
@@ -1329,7 +1330,7 @@
    ]
   },
   {
-   "d": 876.0,
+   "d": 844.0,
    "montee": [
     [
      10,
