@@ -334,9 +334,14 @@ func _octets_png(chemin: String) -> PackedByteArray:
 
 
 ## Quitter pendant le chargement : le fil de préparation finit avant que le nœud disparaisse.
+## (Il crée des textures : ces appels attendent le fil principal, qu'une attente simple figerait
+## pour toujours. D'où la boucle, qui les laisse passer.)
 func _exit_tree() -> void:
 	amenagements_poses = true
 	if _tache >= 0:
+		while not WorkerThreadPool.is_task_completed(_tache):
+			RenderingServer.force_sync()
+			OS.delay_msec(1)
 		WorkerThreadPool.wait_for_task_completion(_tache)
 		_tache = -1
 
