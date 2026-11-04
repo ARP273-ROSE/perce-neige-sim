@@ -74,3 +74,45 @@ static func maillage(cle: String, niveau: String, miroir: bool) -> ArrayMesh:
 	m.surface_set_material(0, materiau())
 	_maillages[k] = m
 	return m
+
+
+# --- pylônes vus de loin -------------------------------------------------------------------
+const FICHIER_PYLONES: String = "res://data/remontees/pylones_lod_25.web.cuit"
+const PYLONE_DES: float = 150.0         # m : au-delà, le pylône allégé (portée posée sur le vrai)
+static var _pylones: Dictionary = {}
+static var _pylones_lu: bool = false
+
+
+static func _lire_pylones() -> void:
+	_pylones_lu = true
+	var f: FileAccess = FileAccess.open(FICHIER_PYLONES, FileAccess.READ)
+	if f == null:
+		return
+	var n: int = f.get_32()
+	var z: PackedByteArray = f.get_buffer(f.get_length() - 4)
+	f.close()
+	var d: Variant = bytes_to_var(z.decompress(n, FileAccess.COMPRESSION_ZSTD))
+	if d is Dictionary and int((d as Dictionary).get("version", 0)) == 1:
+		_pylones = d["lignes"]
+
+
+## Maillage allégé du pylône `nom` de la ligne `ligne`, ou null.
+static func pylone(ligne: String, nom: String) -> ArrayMesh:
+	if not _pylones_lu:
+		_lire_pylones()
+	if not _pylones.has(ligne):
+		return null
+	for e in _pylones[ligne]:
+		if String(e["nom"]) == nom and e.get("L2") != null:
+			var s: Dictionary = e["L2"]
+			var ta: Array = []
+			ta.resize(Mesh.ARRAY_MAX)
+			ta[Mesh.ARRAY_VERTEX] = s["v"]
+			ta[Mesh.ARRAY_NORMAL] = s["n"]
+			ta[Mesh.ARRAY_COLOR] = s["c"]
+			ta[Mesh.ARRAY_INDEX] = s["i"]
+			var m: ArrayMesh = ArrayMesh.new()
+			m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, ta)
+			m.surface_set_material(0, materiau())
+			return m
+	return null
