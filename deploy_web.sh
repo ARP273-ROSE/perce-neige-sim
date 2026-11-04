@@ -96,6 +96,12 @@ if ls "$SIM_DIR"/sons/musique/*.mp3 >/dev/null 2>&1; then
     mkdir -p "$WEB_ROOT/musique"
     cp "$SIM_DIR"/sons/musique/*.mp3 "$WEB_ROOT/musique/"
 fi
+# lignes cuites « loin » (hors dépôt, écrites par cuisson_ligne.gd) : sans elles, seuils habituels
+if [ -n "${CUITES_WEB:-}" ] && ls "$CUITES_WEB"/*.web.cuit >/dev/null 2>&1; then
+    rm -rf "$WEB_ROOT/cuites"
+    mkdir -p "$WEB_ROOT/cuites"
+    cp "$CUITES_WEB"/*.web.cuit "$WEB_ROOT/cuites/"
+fi
 chown -R 33:33 "$WEB_ROOT"
 
 echo "✓ Déployé. https://funiculaire.giff.re ($(du -sh "$WEB_ROOT" | cut -f1))"
