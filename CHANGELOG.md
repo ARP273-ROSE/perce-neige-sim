@@ -20,6 +20,14 @@ dédié, pour lui seul, assombrit la neige là où pylônes, véhicules et bâti
 **Fil principal à ski.** Collisions du tunnel construites pour un skieur sur la neige, pièces fines des gares refaites en double à chaque carré de relief (26 à 54 ms), portées de toutes
 les lignes réglées d'un bloc à chaque changement de détail (72 à 103 ms). Boucle de 11 min en 4K : images de plus de 25 ms à ski 20 → 2.
 
+## 1.53.13 — 4 novembre 2026 (PWA seule)
+
+**Beaucoup moins à dessiner.** Au pied de Tovière sous WebKit, regard du saut : 2,33 M de triangles et 1 563 appels de dessin en 1.53.12, 0,71 M et 673 avec les véhicules, pylônes, panneaux et lignes lointaines allégés. Puis, à position fixe sur 8 caps : 410 appels en moyenne à Tovière (689 avant les lanceurs et portillons), 196 à Leissières (396). Gain réel sur iPad encore à relever.
+
+**Véhicules et pylônes de loin** : versions allégées à lumière cuite au-delà de 60 et 150 m, véhicules cachés retirés du tampon (ils comptaient tous leurs triangles). **Panneaux de piste** : simple disque au-delà de 350 à 700 m, sans nom ni liseré ; jalons à 12 triangles. **Lanceurs et portillons** : fourches fusionnées, pneus immobiles au-delà de 45 m, portillons immobiles et fermés au-delà de 60 m. **Gares du funiculaire** : masquées au-delà de 4 à 5 km.
+
+**Corrigé** : galets de compression à hauteur de la tête horizontale ; véhicules collés au départ (dernier écart de la boucle trop court) ; sortie de cabine au joystick ; saut vers une remontée qui posait la caméra dans un bâtiment (skieur écarté jusqu'à 20 m de plus). Mémoire : 320 Mo de pages écrites contre 298 à 305, à surveiller.
+
 ## 1.53.12 — 4 novembre 2026 (PWA seule)
 
 **Moins de programmes graphiques.** Shaders des façades de gare et des catadioptres partagés au lieu d'être recompilés par matériau, pré-passe de profondeur coupée : 534 → 346 sur un tour Olympique + Lanches sous WebKit. Effet sur les plantages iPad à vérifier.
