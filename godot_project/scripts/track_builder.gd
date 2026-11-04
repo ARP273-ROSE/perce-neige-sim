@@ -2296,9 +2296,15 @@ var _retro_mats: Array[ShaderMaterial] = []
 var _retro_level: float = -1.0
 
 
+## Partagé : un Shader par matériau, au même code, recompilait autant de programmes graphiques.
+static var _shader_retro: Shader = null
+
+
 func _retro_material(col: Color, gain: float, plafond: float = 20.0) -> ShaderMaterial:
-	var sh: Shader = Shader.new()
-	sh.code = RETRO_SHADER
+	if _shader_retro == null:
+		_shader_retro = Shader.new()
+		_shader_retro.code = RETRO_SHADER
+	var sh: Shader = _shader_retro
 	var m: ShaderMaterial = ShaderMaterial.new()
 	m.shader = sh
 	m.set_shader_parameter("couleur", col)

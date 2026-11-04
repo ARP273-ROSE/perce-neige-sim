@@ -152,9 +152,15 @@ void fragment() {
 """
 
 
+## Partagé : un Shader par matériau, au même code, recompilait autant de programmes graphiques.
+static var _shader_ext: Shader = null
+
+
 func _mat(nom: String, c: Color, motif: Image = null, periode: Vector2 = Vector2.ONE) -> void:
-	var sh: Shader = Shader.new()
-	sh.code = SHADER_EXT
+	if _shader_ext == null:
+		_shader_ext = Shader.new()
+		_shader_ext.code = SHADER_EXT
+	var sh: Shader = _shader_ext
 	var m: ShaderMaterial = ShaderMaterial.new()
 	m.shader = sh
 	m.set_shader_parameter("couleur", c)
