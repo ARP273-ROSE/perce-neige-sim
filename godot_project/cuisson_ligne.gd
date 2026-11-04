@@ -24,6 +24,11 @@ var _loin: bool = false
 const LOIN_PETIT: float = 0.45
 const LOIN_DISTANCE: float = 450.0
 const LOIN_PART: float = 0.3
+## Surfaces en dessous de ce nombre de triangles gardées entières : décimées, elles perdaient leurs murs.
+const LOIN_GARDE: int = 1500
+## Lumière cuite dans la couleur (réglée à l'œil sur Palafour, sous WebKit) : ambiante + soleil.
+const LOIN_AMBIANTE: float = 0.55
+const LOIN_SOLEIL: float = 0.60
 var _lg: LigneRemontee = null
 var _t0: int = 0
 var _fait: bool = false
@@ -297,7 +302,8 @@ func _cuire_loin(vehicule: Array) -> void:
 			_verser(veh, _plus_bas(m3, si), miroir_v * (e["xf"] as Transform3D), e["ov"] if e["ov"] != null else m3.surface_get_material(si))
 	_souder(acc)
 	_souder(veh)
-	var palette: Dictionary = {"classe": "StandardMaterial3D", "vertex_color_use_as_albedo": true, "roughness": 0.7, "metallic": 0.0, "cull_mode": BaseMaterial3D.CULL_DISABLED}
+	var palette: Dictionary = {"classe": "StandardMaterial3D", "vertex_color_use_as_albedo": true, "vertex_color_is_srgb": true,
+		"shading_mode": BaseMaterial3D.SHADING_MODE_UNSHADED, "cull_mode": BaseMaterial3D.CULL_DISABLED}
 	var d: Dictionary = {
 		"version": VERSION, "cle": _cle, "xf_ligne": _lg.global_transform, "cible": "web-loin",
 		"materiaux": [palette],
@@ -315,7 +321,7 @@ func _cuire_loin(vehicule: Array) -> void:
 	f.store_32(brut.size())
 	f.store_buffer(z)
 	f.close()
-	var octets: int = ((acc["v"] as PackedVector3Array).size() + (veh["v"] as PackedVector3Array).size()) * 20 + ((acc["i"] as PackedInt32Array).size() + (veh["i"] as PackedInt32Array).size()) * 2
+	var octets: int = ((acc["v"] as PackedVector3Array).size() + (veh["v"] as PackedVector3Array).size()) * 16 + ((acc["i"] as PackedInt32Array).size() + (veh["i"] as PackedInt32Array).size()) * 2
 	print("LOIN %s : fixe %d sommets %d triangles ; vehicule %d sommets %d triangles ; poses gardees %d, otees portee %d, otees petites %d ; tampons estimes %.2f Mo ; fichier %.2f Mo" % [_cle,
 		(acc["v"] as PackedVector3Array).size(), (acc["i"] as PackedInt32Array).size() / 3, (veh["v"] as PackedVector3Array).size(), (veh["i"] as PackedInt32Array).size() / 3,
 		ot[2], ot[0], ot[1], octets / 1048576.0, z.size() / 1048576.0])
@@ -365,7 +371,6 @@ func _surface(acc: Dictionary) -> Dictionary:
 	var a: Array = []
 	a.resize(Mesh.ARRAY_MAX)
 	a[Mesh.ARRAY_VERTEX] = acc["v"]
-	a[Mesh.ARRAY_NORMAL] = acc["n"]
 	a[Mesh.ARRAY_COLOR] = acc["c"]
 	a[Mesh.ARRAY_INDEX] = acc["i"]
 	return {"tableaux": a, "lods": {}}
@@ -389,7 +394,7 @@ func _plus_bas(m: Mesh, si: int) -> Array:
 		for i in range(v.size()):
 			ix[i] = i
 	var nor: Variant = a[Mesh.ARRAY_NORMAL]
-	if v.size() >= 24 and nor != null:
+	if ix.size() / 3 > LOIN_GARDE and nor != null:
 		var b: Array = a.duplicate()
 		b[Mesh.ARRAY_INDEX] = ix
 		b[Mesh.ARRAY_TANGENT] = null
@@ -435,6 +440,9 @@ func _plus_bas(m: Mesh, si: int) -> Array:
 func _verser(acc: Dictionary, bas: Array, x: Transform3D, mat: Material) -> void:
 	var teinte: Color = Color.WHITE
 	if mat is BaseMaterial3D:
+		# (vitres : opaques, elles teintaient de bleu tout ce qu'elles couvrent, sièges compris)
+		if (mat as BaseMaterial3D).transparency != BaseMaterial3D.TRANSPARENCY_DISABLED:
+			return
 		teinte = (mat as BaseMaterial3D).albedo_color
 		teinte.a = 1.0
 	var pv: PackedVector3Array = bas[0]
@@ -450,10 +458,16 @@ func _verser(acc: Dictionary, bas: Array, x: Transform3D, mat: Material) -> void
 	dv.resize(n0 + pv.size())
 	dn.resize(n0 + pv.size())
 	dc.resize(n0 + pv.size())
+	var monde: Basis = _lg.global_transform.basis
+	var soleil: Vector3 = GareAmont.SOLEIL.normalized()
 	for i in range(pv.size()):
 		dv[n0 + i] = x * pv[i]
-		dn[n0 + i] = (nb * pn[i]).normalized()
-		dc[n0 + i] = (pc[i] * teinte) if not pc.is_empty() else teinte
+		var nm: Vector3 = (nb * pn[i]).normalized()
+		dn[n0 + i] = nm
+		var base: Color = (pc[i] * teinte) if not pc.is_empty() else teinte
+		var k: float = LOIN_AMBIANTE + LOIN_SOLEIL * maxf(0.0, (monde * nm).normalized().dot(soleil))
+		var lin: Color = base.srgb_to_linear()
+		dc[n0 + i] = Color(lin.r * k, lin.g * k, lin.b * k, 1.0).linear_to_srgb()
 	var miroir: bool = x.basis.determinant() < 0.0
 	var i0: int = di.size()
 	di.resize(i0 + pi.size())
