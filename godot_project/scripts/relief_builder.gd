@@ -333,6 +333,14 @@ func _octets_png(chemin: String) -> PackedByteArray:
 	return img.get_data()
 
 
+## Quitter pendant le chargement : le fil de préparation finit avant que le nœud disparaisse.
+func _exit_tree() -> void:
+	amenagements_poses = true
+	if _tache >= 0:
+		WorkerThreadPool.wait_for_task_completion(_tache)
+		_tache = -1
+
+
 func _process(delta: float) -> void:
 	if Prof.actif:
 		var t0_prof: int = Time.get_ticks_usec()
@@ -914,7 +922,7 @@ func _build_piece(am: Dictionary) -> void:
 					img.set_pixel(j, i, Color.WHITE)
 	# (pack haute définition : même photo et mêmes normales que le sol alentour)
 	var hd_piece: bool = fin != null and fin.hd and _tex_normales != null
-	var mat: ShaderMaterial = _shader(ReliefAnneaux.code_hd(SHADER_TERRAIN) if hd_piece else SHADER_TERRAIN)
+	var mat: ShaderMaterial = _mat_terrain.duplicate() if hd_piece else _shader(SHADER_TERRAIN)
 	mat.set_shader_parameter("ortho", _tex_ortho)
 	if hd_piece:
 		ReliefAnneaux.regler_hd(mat, _tex_normales, _tex_ortho_hd)
