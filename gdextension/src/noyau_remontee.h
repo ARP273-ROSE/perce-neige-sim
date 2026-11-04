@@ -63,6 +63,10 @@ class NoyauRemontee : public RefCounted {
 
 	// --- état par véhicule -----------------------------------------------------
 	std::vector<double> s_veh;
+	// temps de parcours par véhicule (table s tous les 0,05 s à régime 1)
+	std::vector<float> tab_s;
+	std::vector<double> t_veh;
+	std::vector<double> s_repere;
 	std::vector<double> phi, psi, dphi, dpsi;
 	std::vector<Vector3> p_prec, v_prec, a_f;
 	std::vector<int> n_mes;
@@ -93,6 +97,8 @@ class NoyauRemontee : public RefCounted {
 	};
 	Zone zone(double s) const;
 	double vitesse_en(double s) const;
+	double t_de_s(double s) const;
+	double s_de_t(double t) const;
 	void point_cable(double s, Vector3 &p, Vector3 &d) const;
 	int portee_de(double d) const;
 	double fleche(double d, bool montee, double onde_amp, double onde_t, double a_montee) const;
@@ -110,6 +116,7 @@ public:
 			const PackedFloat32Array &x_haut, const PackedFloat32Array &x_bas);
 	void set_appuis(const PackedFloat32Array &p_appuis);
 	void set_constantes(const Dictionary &c);
+	void set_temps(const PackedFloat32Array &p_tab_s);
 	void set_vehicules(const Array &p_vehicules, const Array &p_pinces, const Array &p_susps, const Array &p_corps,
 			const PackedFloat64Array &s, const PackedFloat32Array &p_phi, const PackedFloat32Array &p_psi);
 	void set_vitesse(double v) { vitesse = v; }
