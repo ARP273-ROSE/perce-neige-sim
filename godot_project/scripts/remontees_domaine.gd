@@ -534,7 +534,7 @@ func _portees_amorce(racine: Node, file: Array) -> void:
 		# (véhicules lointains en MultiMesh : leur portée est gérée par le noyau,
 		# instance par instance — mesurée d'ici, depuis la gare aval, une portée
 		# les faisait disparaître à 250 m de la gare)
-		if c is MultiMeshInstance3D and String(c.name).begins_with("VehiculesLoin"):
+		if c is MultiMeshInstance3D and (String(c.name).begins_with("VehiculesLoin") or String(c.name).begins_with("VehiculesLod")):
 			continue
 		var portee: float = VEHICULES_JUSQUA if c is VehiculeRemontee else PYLONES_JUSQUA
 		# pneus, rails et portillons des gares : détails de près seulement
