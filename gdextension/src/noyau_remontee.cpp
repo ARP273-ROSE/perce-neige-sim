@@ -180,6 +180,7 @@ void NoyauRemontee::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_vehicules", "vehicules", "pinces", "susps", "corps", "s", "phi", "psi"),
 			&NoyauRemontee::set_vehicules);
 	ClassDB::bind_method(D_METHOD("set_vitesse", "vitesse"), &NoyauRemontee::set_vitesse);
+	ClassDB::bind_method(D_METHOD("set_temps", "tab_s"), &NoyauRemontee::set_temps);
 	ClassDB::bind_method(D_METHOD("set_ligne", "ligne"), &NoyauRemontee::set_ligne);
 	ClassDB::bind_method(D_METHOD("etape", "dt", "regime", "vue", "vue_active", "corps_actifs", "onde_amp", "onde_t",
 								 "a_montee", "charges_actives"),
@@ -389,6 +390,44 @@ PackedVector3Array NoyauRemontee::points(const PackedFloat32Array &s_in) const {
 
 // --- une image -----------------------------------------------------------------
 
+static const double PAS_TAB_S = 0.05;
+
+void NoyauRemontee::set_temps(const PackedFloat32Array &p_tab_s) {
+	tab_s.assign(p_tab_s.ptr(), p_tab_s.ptr() + p_tab_s.size());
+	s_repere.assign(s_veh.size(), -1.0);
+	t_veh.assign(s_veh.size(), 0.0);
+}
+
+double NoyauRemontee::t_de_s(double s) const {
+	s = std::fmod(s, longueur);
+	if (s < 0.0) {
+		s += longueur;
+	}
+	size_t lo = 0;
+	size_t hi = tab_s.size() - 1;
+	while (hi - lo > 1) {
+		const size_t m = (lo + hi) / 2;
+		if ((double)tab_s[m] <= s) {
+			lo = m;
+		} else {
+			hi = m;
+		}
+	}
+	const double u = (s - (double)tab_s[lo]) / std::max((double)tab_s[hi] - (double)tab_s[lo], 1e-4);
+	return ((double)lo + u) * PAS_TAB_S;
+}
+
+double NoyauRemontee::s_de_t(double t) const {
+	const size_t der = tab_s.size() - 1;
+	size_t k = (size_t)(t / PAS_TAB_S);
+	if (k > der) {
+		k = der;
+	}
+	const double u = (t - (double)k * PAS_TAB_S) / PAS_TAB_S;
+	const size_t k1 = std::min(k + 1, der);
+	return (double)tab_s[k] + ((double)tab_s[k1] - (double)tab_s[k]) * u;
+}
+
 PackedFloat64Array NoyauRemontee::etape(double dt, double regime, const Vector3 &vue, bool vue_active, bool corps_actifs,
 		double onde_amp, double onde_t, double a_montee, bool charges_actives) {
 	const size_t n = s_veh.size();
@@ -398,12 +437,34 @@ PackedFloat64Array NoyauRemontee::etape(double dt, double regime, const Vector3 
 	// 1. avance sur la boucle (profil de vitesse des lanceurs) ; passages
 	// devant les portillons (fin du demi-tour)
 	passages_derniers.clear();
+	const bool par_temps = tab_s.size() > 1;
+	const double t_boucle = PAS_TAB_S * (double)(tab_s.size() - 1);
+	if (par_temps && t_veh.size() != n) {
+		t_veh.assign(n, 0.0);
+		s_repere.assign(n, -1.0);
+	}
 	for (size_t i = 0; i < n; i++) {
 		const Zone z0 = zone(s_veh[i]);
-		double s = s_veh[i] + vitesse_en(s_veh[i]) * regime * dt;
-		s = std::fmod(s, longueur);
-		if (s < 0.0) {
-			s += longueur;
+		double s;
+		if (par_temps) {
+			// temps de parcours, pas distance cumulée : à grands pas (images longues, lignes lointaines),
+			// s += v·dt passait les zones lentes de travers et les véhicules finissaient collés
+			if (s_repere[i] != s_veh[i]) {
+				t_veh[i] = t_de_s(s_veh[i]);
+			}
+			double t = std::fmod(t_veh[i] + regime * dt, t_boucle);
+			if (t < 0.0) {
+				t += t_boucle;
+			}
+			t_veh[i] = t;
+			s = s_de_t(t);
+			s_repere[i] = s;
+		} else {
+			s = s_veh[i] + vitesse_en(s_veh[i]) * regime * dt;
+			s = std::fmod(s, longueur);
+			if (s < 0.0) {
+				s += longueur;
+			}
 		}
 		s_veh[i] = s;
 		if (z0.idx >= 0 && (size_t)z0.idx < z_xa.size()) {
