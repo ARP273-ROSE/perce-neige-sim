@@ -47,6 +47,10 @@ public:
 	PackedByteArray normales_couche(const PackedFloat32Array &hn, int nj, int ni, int ti, int tj, int taille, int marge,
 			double px, double pz) const;
 
+	// Couches de l'orthophoto (cuisson_ortho_hd.gd), en parallèle : [format d'Image, texels, données…].
+	// Vide si le fichier est illisible.
+	Array couches(const String &chemin) const;
+
 	// Toutes les couches d'un coup, en parallèle : `tuiles` nœuds par couche.
 	Array normales(const PackedFloat32Array &hn, int nj, int ni, int tuile, int taille, int marge, double px, double pz) const;
 };

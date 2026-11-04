@@ -572,6 +572,7 @@ func _creer_maillages(fin_us: int) -> void:
 
 
 var _tex_normales: Texture2DArray = null
+var _tex_ortho_hd: Texture2DArray = null
 var _h0_ref: PackedFloat32Array = PackedFloat32Array()   # banc du sol au mètre
 var _hn5_ref: PackedFloat32Array = PackedFloat32Array()
 
@@ -583,7 +584,8 @@ func _materiaux() -> void:
 	_mat_terrain.set_shader_parameter("ortho", _tex_ortho)
 	if fin != null and fin.hd:
 		_tex_normales = fin.normales_texture()
-		ReliefAnneaux.regler_hd(_mat_terrain, _tex_normales)
+		_tex_ortho_hd = fin.ortho_texture()
+		ReliefAnneaux.regler_hd(_mat_terrain, _tex_normales, _tex_ortho_hd)
 	_mat_loin = _shader(SHADER_LOINTAIN)
 	_mat_loin.set_shader_parameter("ortho", ImageTexture.create_from_image(_img_loin if _img_loin != null
 		else _image_ortho("res://textures/relief_lointain.jpg")))
