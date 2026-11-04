@@ -65,7 +65,8 @@ func _process_corps(delta: float) -> void:
 		# fixé par la rame 1, à la vitesse du câble à la poulie (même loi
 		# que la 3D, cf. TrainPhysics.machine_v : arrêt si le câble rompt).
 		_pulley_angle += physics.machine_v / SHEAVE_R_M * delta
-	# PWA : 7,5 Hz, les poulies n'en demandent pas plus
+	_tourner_rayons()
+	# (PWA : les textes et barres à 7,5 Hz ; ce qui tourne a ses propres nœuds, à chaque image)
 	_redraw_slot = HUD.redraw_at_15hz(self, _redraw_slot, 0.5, 2 if OS.has_feature("web") else 1)
 
 
@@ -73,7 +74,7 @@ func _process_corps(delta: float) -> void:
 func signature_affichage() -> int:
 	if physics == null:
 		return 0
-	return hash([snappedf(_pulley_angle, 0.02), snappedf(physics.machine_v, 0.01),
+	return hash([snappedf(physics.machine_v, 0.01),
 		snappedf(physics.power_kw_disp, 1.0), snappedf(physics.tension_dan_disp, 5.0),
 		int(physics.trip_time), physics.pax(), physics.cable_rupture, driver_rame2, size,
 		fault_manager.get_active_id() if fault_manager != null else ""])
@@ -234,8 +235,9 @@ func _draw_room(rect: Rect2) -> void:
 	# Roues par-dessus (elles couvrent l'intérieur de la boucle, seul le
 	# croissant du câble sur la jante reste visible) ; P2 tourne en sens
 	# inverse, comme dans un huit.
-	_draw_bullwheel(cx1, cy, R, _pulley_angle, true, k)
-	_draw_bullwheel(cx2, cy, R, -_pulley_angle, false, k)
+	_draw_bullwheel(cx1, cy, R, true, k)
+	_draw_bullwheel(cx2, cy, R, false, k)
+	_poser_rayons(Vector2(cx1, cy), Vector2(cx2, cy), R, k)
 
 	# Brins d'entrée et de sortie, verticaux vers le tunnel (sous le sol)
 	for col_w in [[shadow, 5.0 * k], [core, 2.4 * k]]:
@@ -248,17 +250,9 @@ func _draw_room(rect: Rect2) -> void:
 		for i in range(pts.size() - 1):
 			total += pts[i].distance_to(pts[i + 1])
 		if total > 0.0:
-			var d: float = fposmod(_pulley_angle * cable_r, total)
-			var acc: float = 0.0
-			var mark: Vector2 = pts[0]
-			for i in range(pts.size() - 1):
-				var seg: float = pts[i].distance_to(pts[i + 1])
-				if acc + seg >= d:
-					mark = pts[i].lerp(pts[i + 1], (d - acc) / maxf(seg, 0.001))
-					break
-				acc += seg
-			HUD.disque(self, mark, 3.0 * k, Color(20.0 / 255.0, 20.0 / 255.0, 28.0 / 255.0))
-			draw_arc(mark, 3.0 * k, 0.0, TAU, 16, Color(240.0 / 255.0, 240.0 / 255.0, 245.0 / 255.0), 0.8, true)
+			_trace = pts
+			_trace_long = total
+			_trace_r = cable_r
 
 	# LED de puissance : vert → rouge avec la charge
 	HUD.disque(self, Vector2(rect.end.x - 12.0 * k, y0 + 12.0 * k), 3.5 * k, Color((100.0 + 155.0 * load) / 255.0, (220.0 - 160.0 * load) / 255.0, 80.0 / 255.0))
@@ -268,7 +262,7 @@ func _draw_room(rect: Rect2) -> void:
 ## Une poulie Von Roll jaune signal : jante avec gorge, plateau clair,
 ## cinq rayons qui tournent (nombre impair contre l'illusion de stroboscope),
 ## moyeu ; un bout d'arbre à gauche sur la motrice.
-func _draw_bullwheel(cx: float, cy: float, r: float, angle: float, drive: bool, k: float) -> void:
+func _draw_bullwheel(cx: float, cy: float, r: float, drive: bool, k: float) -> void:
 	var c: Vector2 = Vector2(cx, cy)
 	HUD.disque(self, Vector2(cx + 1.5 * k, cy + 3.0 * k), r + k, Color(0.0, 0.0, 0.0, 0.6))
 	HUD.disque(self, c, r, Color(225.0 / 255.0, 170.0 / 255.0, 25.0 / 255.0))
@@ -278,18 +272,6 @@ func _draw_bullwheel(cx: float, cy: float, r: float, angle: float, drive: bool, 
 	HUD.disque(self, c, r * 0.82, Color(255.0 / 255.0, 225.0 / 255.0, 75.0 / 255.0))
 	HUD.disque(self, c + Vector2(-r * 0.25, -r * 0.25), r * 0.45, Color(1.0, 0.95, 0.55, 0.35))
 	draw_arc(c, r * 0.82, 0.0, TAU, 64, Color(90.0 / 255.0, 60.0 / 255.0, 5.0 / 255.0), 1.0, true)
-	for kk in range(5):
-		var ang: float = angle + float(kk) * TAU / 5.0
-		var dirv: Vector2 = Vector2(cos(ang), sin(ang))
-		var p1: Vector2 = c + dirv * (r * 0.18)
-		var p2: Vector2 = c + dirv * (r * 0.78)
-		draw_line(p1, p2, Color(140.0 / 255.0, 95.0 / 255.0, 0.0), 4.0 * k, true)
-		draw_line(p1, p2, Color(255.0 / 255.0, 220.0 / 255.0, 60.0 / 255.0), 1.5 * k, true)
-		if kk == 0:
-			HUD.disque(self, p2, 2.0 * k, Color(220.0 / 255.0, 60.0 / 255.0, 40.0 / 255.0))
-	HUD.disque(self, c, r * 0.19, Color(75.0 / 255.0, 78.0 / 255.0, 92.0 / 255.0))
-	draw_arc(c, r * 0.19, 0.0, TAU, 32, Color(18.0 / 255.0, 18.0 / 255.0, 22.0 / 255.0), 1.5, true)
-	HUD.disque(self, c, r * 0.08, Color(200.0 / 255.0, 200.0 / 255.0, 210.0 / 255.0))
 	if drive:
 		draw_rect(Rect2(cx - r - 4.0 * k, cy - 3.0 * k, 6.0 * k, 6.0 * k), Color(160.0 / 255.0, 160.0 / 255.0, 170.0 / 255.0), true)
 
@@ -375,3 +357,98 @@ func _draw_text_center(pos: Vector2, text: String, size_pt: int, color: Color) -
 		return
 	var sz: Vector2 = font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, size_pt)
 	draw_string(font, pos - Vector2(sz.x * 0.5, -sz.y * 0.3), text, HORIZONTAL_ALIGNMENT_LEFT, -1, size_pt, color)
+
+
+## Rayons, moyeu et repère du câble : des nœuds à part, posés sur la texture du panneau (dans le
+## TextureRect de HUD.cache_panel, mêmes coordonnées). Dessinés une fois, ils tournent à chaque image
+## sans redessiner le panneau : les poulies restent fluides, le reste garde son rythme (retour d'essai,
+## 04/11/2026 : à 7,5 Hz elles saccadaient).
+class RayonsPoulie extends Node2D:
+	var r: float = 0.0
+	var k: float = 1.0
+
+	func _draw() -> void:
+		for kk in range(5):
+			var ang: float = float(kk) * TAU / 5.0
+			var dirv: Vector2 = Vector2(cos(ang), sin(ang))
+			var p1: Vector2 = dirv * (r * 0.18)
+			var p2: Vector2 = dirv * (r * 0.78)
+			draw_line(p1, p2, Color(140.0 / 255.0, 95.0 / 255.0, 0.0), 4.0 * k, true)
+			draw_line(p1, p2, Color(255.0 / 255.0, 220.0 / 255.0, 60.0 / 255.0), 1.5 * k, true)
+			if kk == 0:
+				HUD.disque(self, p2, 2.0 * k, Color(220.0 / 255.0, 60.0 / 255.0, 40.0 / 255.0))
+		HUD.disque(self, Vector2.ZERO, r * 0.19, Color(75.0 / 255.0, 78.0 / 255.0, 92.0 / 255.0))
+		draw_arc(Vector2.ZERO, r * 0.19, 0.0, TAU, 32, Color(18.0 / 255.0, 18.0 / 255.0, 22.0 / 255.0), 1.5, true)
+		HUD.disque(self, Vector2.ZERO, r * 0.08, Color(200.0 / 255.0, 200.0 / 255.0, 210.0 / 255.0))
+
+
+class RepereCable extends Node2D:
+	var k: float = 1.0
+
+	func _draw() -> void:
+		HUD.disque(self, Vector2.ZERO, 3.0 * k, Color(20.0 / 255.0, 20.0 / 255.0, 28.0 / 255.0))
+		draw_arc(Vector2.ZERO, 3.0 * k, 0.0, TAU, 16, Color(240.0 / 255.0, 240.0 / 255.0, 245.0 / 255.0), 0.8, true)
+
+
+var _rayons: Array = []
+var _repere: RepereCable = null
+var _trace: PackedVector2Array = PackedVector2Array()
+var _trace_long: float = 0.0
+var _trace_r: float = 0.0
+var _pose_attente: Array = []
+
+
+## Depuis _draw : ne touche à l'arbre qu'en dehors du dessin.
+func _poser_rayons(c1: Vector2, c2: Vector2, r: float, k: float) -> void:
+	_pose_attente = [c1, c2, r, k]
+
+
+func _appliquer_pose() -> void:
+	var c1: Vector2 = _pose_attente[0]
+	var c2: Vector2 = _pose_attente[1]
+	var r: float = _pose_attente[2]
+	var k: float = _pose_attente[3]
+	_pose_attente = []
+	if _rayons.is_empty():
+		var vp: Viewport = get_viewport()
+		var porteur: Node = vp.get_parent() if vp is SubViewport else self
+		for i in range(2):
+			var n: RayonsPoulie = RayonsPoulie.new()
+			n.name = "RayonsPoulie%d" % (i + 1)
+			porteur.add_child(n)
+			_rayons.append(n)
+		_repere = RepereCable.new()
+		_repere.name = "RepereCable"
+		porteur.add_child(_repere)
+	for i in range(2):
+		var n: RayonsPoulie = _rayons[i]
+		n.position = c1 if i == 0 else c2
+		if n.r != r or n.k != k:
+			n.r = r
+			n.k = k
+			n.queue_redraw()
+	if _repere.k != k or _repere.get_meta("pose", false) == false:
+		_repere.k = k
+		_repere.set_meta("pose", true)
+		_repere.queue_redraw()
+
+
+func _tourner_rayons() -> void:
+	if not _pose_attente.is_empty():
+		_appliquer_pose()
+	if _rayons.is_empty():
+		return
+	(_rayons[0] as Node2D).rotation = _pulley_angle
+	(_rayons[1] as Node2D).rotation = -_pulley_angle
+	_repere.visible = _trace.size() > 2 and _trace_long > 0.0
+	if not _repere.visible:
+		return
+	# repère qui défile sur le câble à v = ω · r_câble
+	var d: float = fposmod(_pulley_angle * _trace_r, _trace_long)
+	var acc: float = 0.0
+	for i in range(_trace.size() - 1):
+		var seg: float = _trace[i].distance_to(_trace[i + 1])
+		if acc + seg >= d:
+			_repere.position = _trace[i].lerp(_trace[i + 1], (d - acc) / maxf(seg, 0.001))
+			return
+		acc += seg
