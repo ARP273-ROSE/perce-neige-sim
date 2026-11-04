@@ -48,6 +48,7 @@ var _k_propre: int = KF
 var hd: bool = false                                 # sol au mètre du pack, anneaux, normales
 var anneaux: ReliefAnneaux = null
 var _couches_normales: Array = []
+var _couches_ortho: Array = []
 var _hn: PackedFloat32Array = PackedFloat32Array()   # altitude des nœuds de la grille fine
 var _fine: PackedByteArray = PackedByteArray()       # par maille à 25 m : 1 si la grille fine y est le sol
 var _mat: ShaderMaterial = null
@@ -200,6 +201,11 @@ func _preparer_hd(r: ReliefBuilder, h0: PackedFloat32Array, h_retouche: PackedFl
 		_couches_normales = n.call("normales", leve, NJ, NI, ReliefAnneaux.TUILE, ReliefAnneaux.TAILLE, ReliefAnneaux.MARGE, PX, PZ)
 	print("[ReliefHD] sol à 1 m, %.0f M de nœuds : pack %d ms, raccord %d ms, normales %d ms" % [NI * NJ / 1.0e6,
 		(t1 - t0) / 1000, (t2 - t1) / 1000, (Time.get_ticks_usec() - t2) / 1000])
+	var f_ortho: String = dossier_pack().path_join("ortho.pnhd")
+	if DisplayServer.get_name() != "headless" and FileAccess.file_exists(f_ortho):
+		var t3: int = Time.get_ticks_usec()
+		_couches_ortho = n.call("couches", f_ortho)
+		print("[ReliefHD] orthophoto : %d couches, %d ms" % [maxi(_couches_ortho.size() - 2, 0), (Time.get_ticks_usec() - t3) / 1000])
 
 
 const RACCORD_R0: float = 12.0        # couloir d'une ligne, au-delà de sa demi-voie : le sol réglé
@@ -216,6 +222,21 @@ func normales_texture() -> Texture2DArray:
 	for o in _couches_normales:
 		images.append(Image.create_from_data(ReliefAnneaux.TAILLE, ReliefAnneaux.TAILLE, true, Image.FORMAT_RGTC_RG, o))
 	_couches_normales = []
+	var t: Texture2DArray = Texture2DArray.new()
+	t.create_from_images(images)
+	return t
+
+
+## Tableau de textures de l'orthophoto au mètre, ou null sans le fichier.
+func ortho_texture() -> Texture2DArray:
+	if _couches_ortho.size() < 3:
+		return null
+	var fmt: Image.Format = _couches_ortho[0] as Image.Format
+	var taille: int = _couches_ortho[1]
+	var images: Array[Image] = []
+	for k in range(2, _couches_ortho.size()):
+		images.append(Image.create_from_data(taille, taille, true, fmt, _couches_ortho[k]))
+	_couches_ortho = []
 	var t: Texture2DArray = Texture2DArray.new()
 	t.create_from_images(images)
 	return t

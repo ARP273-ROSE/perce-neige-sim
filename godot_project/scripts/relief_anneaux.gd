@@ -20,6 +20,26 @@ uniform sampler2DArray normal_hd : filter_linear_mipmap_anisotropic, repeat_disa
 uniform vec4 hd_xf;                 // x0, z0, px, pz
 uniform vec4 hd_tex;                // nœuds par couche, texels, marge, couches par ligne
 uniform vec2 hd_nb;                 // dernier nœud (j, i)
+uniform sampler2DArray ortho_hd : source_color, filter_linear_mipmap_anisotropic, repeat_disable;
+uniform float a_ortho = 0.0;        // 1 : orthophoto au mètre présente
+// Photo au mètre ; au-delà de 16 m par texel, la photo d'ensemble (la marge entre couches ne suffit plus)
+vec3 photo_hd(vec2 p, vec3 c_loin) {
+	if (a_ortho < 0.5) {
+		return c_loin;
+	}
+	vec2 nn = (p - hd_xf.xy) / hd_xf.zw;
+	vec2 dx_n = dFdx(nn);
+	vec2 dy_n = dFdy(nn);
+	float lod = 0.5 * log2(max(max(dot(dx_n, dx_n), dot(dy_n, dy_n)), 1e-6));
+	float k = smoothstep(4.0, 5.0, lod);
+	if (k >= 1.0) {
+		return c_loin;
+	}
+	vec2 t = clamp(floor(nn / hd_tex.x), vec2(0.0), floor((hd_nb - vec2(0.5)) / hd_tex.x));
+	vec2 uv = (nn - t * hd_tex.x + hd_tex.z + 0.5) / hd_tex.y;
+	vec3 c = textureGrad(ortho_hd, vec3(uv, t.y * hd_tex.w + t.x), dx_n / hd_tex.y, dy_n / hd_tex.y).rgb;
+	return mix(c, c_loin, k);
+}
 vec3 normale_hd(vec2 p) {
 	vec2 nn = (p - hd_xf.xy) / hd_xf.zw;
 	vec2 t = clamp(floor(nn / hd_tex.x), vec2(0.0), floor((hd_nb - vec2(0.5)) / hd_tex.x));
@@ -75,12 +95,15 @@ var nb_recentrages: int = 0
 static func code_hd(code: String) -> String:
 	return code.replace("varying vec3 nw;", _ENTETE_HD) \
 		.replace("vec3 n = normalize(nw);", "vec3 n = normale_hd(pw.xz);") \
-		.replace("vec3 c = texture(ortho, UV).rgb;", "vec2 uv_hd = (pw.xz - hd_xf.xy) / (hd_xf.zw * hd_nb);\n\tvec3 c = texture(ortho, uv_hd).rgb;") \
+		.replace("vec3 c = texture(ortho, UV).rgb;", "vec2 uv_hd = (pw.xz - hd_xf.xy) / (hd_xf.zw * hd_nb);\n\tvec3 c = photo_hd(pw.xz, texture(ortho, uv_hd).rgb);") \
 		.replace("c = en_hiver(c, UV, CAMERA_POSITION_WORLD);", "c = en_hiver(c, uv_hd, CAMERA_POSITION_WORLD);")
 
 
-static func regler_hd(m: ShaderMaterial, normales: Texture2DArray) -> void:
+static func regler_hd(m: ShaderMaterial, normales: Texture2DArray, ortho: Texture2DArray = null) -> void:
 	m.set_shader_parameter("normal_hd", normales)
+	if ortho != null:
+		m.set_shader_parameter("ortho_hd", ortho)
+		m.set_shader_parameter("a_ortho", 1.0)
 	m.set_shader_parameter("hd_xf", Vector4(ReliefFin.X0, ReliefFin.Z0, ReliefFin.PX, ReliefFin.PZ))
 	m.set_shader_parameter("hd_tex", Vector4(TUILE, TAILLE, MARGE, (ReliefFin.NJ - 1 + TUILE - 1) / TUILE))
 	m.set_shader_parameter("hd_nb", Vector2(ReliefFin.NJ - 1, ReliefFin.NI - 1))
@@ -108,7 +131,7 @@ func demarrer(fin: ReliefFin, rel: ReliefBuilder) -> void:
 		_textures.append(ImageTexture.create_from_image(img))
 		var mat: ShaderMaterial = rel._shader(code)
 		mat.set_shader_parameter("ortho", rel._tex_ortho)
-		regler_hd(mat, rel._tex_normales)
+		regler_hd(mat, rel._tex_normales, rel._tex_ortho_hd)
 		mat.set_shader_parameter("anneau", _textures[n])
 		mat.set_shader_parameter("piece", 0.0)
 		rel._hiver_mat(mat, true)

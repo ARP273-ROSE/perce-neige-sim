@@ -118,6 +118,7 @@ void ReliefHD::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("raccorder", "leve", "ref", "fine_ref", "h", "h0", "nx", "nz", "k_h", "k_r", "capsules", "rects", "r1_rect", "x0", "z0", "px", "pz"), &ReliefHD::raccorder);
 	ClassDB::bind_method(D_METHOD("anneaux", "hn", "nj", "ni", "h", "nx", "nz", "k", "cj", "ci", "m", "niveaux"), &ReliefHD::anneaux);
 	ClassDB::bind_method(D_METHOD("normales_couche", "hn", "nj", "ni", "ti", "tj", "taille", "marge", "px", "pz"), &ReliefHD::normales_couche);
+	ClassDB::bind_method(D_METHOD("couches", "chemin"), &ReliefHD::couches);
 	ClassDB::bind_method(D_METHOD("normales", "hn", "nj", "ni", "tuile", "taille", "marge", "px", "pz"), &ReliefHD::normales);
 }
 
@@ -501,6 +502,55 @@ PackedByteArray ReliefHD::normales_couche(const PackedFloat32Array &hn, int nj, 
 			}
 		}
 		w = w2;
+	}
+	return sortie;
+}
+
+Array ReliefHD::couches(const String &chemin) const {
+	Array sortie;
+	Ref<FileAccess> f = FileAccess::open(chemin, FileAccess::READ);
+	if (f.is_null()) {
+		return sortie;
+	}
+	const PackedByteArray b_tete = f->get_buffer(32);
+	if (b_tete.size() != 32 || std::memcmp(b_tete.ptr(), "PNOH", 4) != 0) {
+		return sortie;
+	}
+	uint32_t champs[7];
+	std::memcpy(champs, b_tete.ptr() + 4, 28);
+	const int64_t nb = int64_t(champs[1]) * champs[2];
+	const PackedByteArray b_index = f->get_buffer(nb * 16);
+	if (b_index.size() != nb * 16) {
+		return sortie;
+	}
+	const uint64_t corps = uint64_t(32) + uint64_t(nb) * 16;
+	std::vector<PackedByteArray> c(static_cast<size_t>(nb));
+	std::atomic<int> erreurs(0);
+	en_parallele(nb, [&](int64_t q) {
+		uint64_t pos;
+		uint32_t taille, brut;
+		std::memcpy(&pos, b_index.ptr() + q * 16, 8);
+		std::memcpy(&taille, b_index.ptr() + q * 16 + 8, 4);
+		std::memcpy(&brut, b_index.ptr() + q * 16 + 12, 4);
+		Ref<FileAccess> fk = FileAccess::open(chemin, FileAccess::READ);
+		if (fk.is_null()) {
+			erreurs++;
+			return;
+		}
+		fk->seek(corps + pos);
+		const PackedByteArray z = fk->get_buffer(taille);
+		c[size_t(q)] = z.decompress(brut, FileAccess::COMPRESSION_ZSTD);
+		if (c[size_t(q)].size() != int64_t(brut)) {
+			erreurs++;
+		}
+	});
+	if (erreurs.load() > 0) {
+		return sortie;
+	}
+	sortie.append(int(champs[6]));
+	sortie.append(int(champs[4]));
+	for (const PackedByteArray &o : c) {
+		sortie.append(o);
 	}
 	return sortie;
 }
