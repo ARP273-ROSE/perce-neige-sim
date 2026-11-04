@@ -216,6 +216,9 @@ func demolir(poubelle: Array) -> void:
 
 func construire() -> void:
 	_noyau = null                  # (ses nœuds vont disparaître)
+	_pyl_l2 = []
+	_pyl_pres = PackedByteArray()
+	_pyl_mi = null
 	_poulies.clear()
 	_poulies_3s.clear()
 	_cavaliers_n.clear()
@@ -3554,6 +3557,7 @@ func _poser_pylones() -> void:
 			MeshMerge.fusion_partagee(m, "Paire")
 		_pyl.append([py, d])
 		await _pause("pylônes")
+	_pyl_reconstruire()
 	# batteries de galets aux nez des gares (le câble y change de pente)
 	for aval in [true, false]:
 		_batterie_gare(aval)
@@ -4358,16 +4362,81 @@ func _pylone_lod(py: PyloneRemontee) -> void:
 	var m: ArrayMesh = VehiculesLod.pylone(String(name), String(py.name))
 	if m == null:
 		return
-	var mi: MeshInstance3D = MeshInstance3D.new()
-	mi.name = "PyloneLod_" + String(py.name)
-	mi.mesh = m
-	mi.transform = py.transform
-	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	mi.visibility_range_begin = VehiculesLod.PYLONE_DES
-	mi.visibility_range_end = 3000.0
-	mi.layers = 1 | Cabin.LAYER_VOIE
-	_enfant(mi)
+	var t: Array = m.surface_get_arrays(0)
+	var v: PackedVector3Array = t[Mesh.ARRAY_VERTEX]
+	for i in range(v.size()):
+		v[i] = py.transform * v[i]
+	_pyl_l2.append([py, v, t[Mesh.ARRAY_COLOR], t[Mesh.ARRAY_INDEX]])
+	_pyl_pres.append(0)
 	py.set_meta("lod_loin", true)
+
+
+## Pylônes allégés de la ligne en UN maillage, donc un appel (un par pylône sinon : 150 appels à
+## Tovière, relevés du 04/11/2026) ; celui qui est près sort du maillage et le vrai prend sa place.
+var _pyl_l2: Array = []                 # [pylône, sommets dans le repère de la ligne, couleurs, indices]
+var _pyl_pres: PackedByteArray = PackedByteArray()
+var _pyl_mi: MeshInstance3D = null
+var _pyl_t: float = 0.0
+
+
+func _pyl_reconstruire() -> void:
+	if _pyl_l2.is_empty():
+		return
+	if _pyl_mi == null:
+		_pyl_mi = MeshInstance3D.new()
+		_pyl_mi.name = "PyloneLod_ligne"
+		_pyl_mi.mesh = ArrayMesh.new()
+		_pyl_mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		_pyl_mi.layers = 1 | Cabin.LAYER_VOIE
+		_enfant(_pyl_mi)
+	var v: PackedVector3Array = PackedVector3Array()
+	var c: PackedColorArray = PackedColorArray()
+	var ix: PackedInt32Array = PackedInt32Array()
+	for k in range(_pyl_l2.size()):
+		var py: PyloneRemontee = _pyl_l2[k][0]
+		py.visible = _pyl_pres[k] == 1
+		if _pyl_pres[k] == 1:
+			continue
+		var n0: int = v.size()
+		v.append_array(_pyl_l2[k][1])
+		c.append_array(_pyl_l2[k][2])
+		var pi2: PackedInt32Array = _pyl_l2[k][3]
+		var i0: int = ix.size()
+		ix.resize(i0 + pi2.size())
+		for j in range(pi2.size()):
+			ix[i0 + j] = pi2[j] + n0
+	var m: ArrayMesh = _pyl_mi.mesh
+	m.clear_surfaces()
+	if ix.is_empty():
+		return
+	var a: Array = []
+	a.resize(Mesh.ARRAY_MAX)
+	a[Mesh.ARRAY_VERTEX] = v
+	a[Mesh.ARRAY_COLOR] = c
+	a[Mesh.ARRAY_INDEX] = ix
+	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, a)
+	m.surface_set_material(0, VehiculesLod.materiau())
+
+
+## Quatre fois par seconde : quels pylônes sont assez près pour être les vrais ?
+func _pyl_maj(delta: float) -> void:
+	if _pyl_l2.is_empty():
+		return
+	_pyl_t -= delta
+	if _pyl_t > 0.0:
+		return
+	_pyl_t = 0.25
+	var change: bool = false
+	for k in range(_pyl_l2.size()):
+		var q: Vector3 = (_pyl_l2[k][0] as Node3D).position
+		var d2: float = Vector2(q.x - point_vue.x, q.z - point_vue.z).length_squared()
+		var r: float = VehiculesLod.PYLONE_DES + (15.0 if _pyl_pres[k] == 1 else 0.0)
+		var pres: int = 1 if not vue_active or d2 < r * r else 0
+		if pres != _pyl_pres[k]:
+			_pyl_pres[k] = pres
+			change = true
+	if change:
+		_pyl_reconstruire()
 
 
 ## Pose le véhicule i au niveau `niv` (0 : le vrai ; 1, 2 : allégés ; 3 : rien). Vrai si un tampon a changé.
@@ -4482,6 +4551,7 @@ func _etape_gdscript(delta: float) -> void:
 	# quatre, sans balancement ; près → chaque image
 	_tour = (_tour + 1) % 4
 	_lod_preparer()
+	_pyl_maj(delta)
 	var lod_change: bool = false
 	for i in range(_vehicules.size()):
 		_corps_proche = true

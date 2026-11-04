@@ -540,7 +540,8 @@ func _portees_amorce(racine: Node, file: Array) -> void:
 			continue
 		var portee: float = VEHICULES_JUSQUA if c is VehiculeRemontee else PYLONES_JUSQUA
 		if c.has_meta("lod_loin"):
-			portee = VehiculesLod.PYLONE_DES
+			# (c'est la ligne qui l'échange contre le pylône allégé, à sa position : ici, juste une marge)
+			portee = VehiculesLod.PYLONE_DES + 60.0
 		# pneus, rails et portillons des gares : détails de près seulement
 		# (les pylônes en treillis du 3S ne sont pas des PyloneRemontee : ils
 		# disparaissaient à 250 m — retour d'utilisateur, 26/10/2026 : « le pylône
