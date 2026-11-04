@@ -183,8 +183,18 @@ def carreler_altitudes(dossier, sortie):
         im = np.asarray(Image.open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'godot_project', 'textures',
                                                 'relief_hauteurs.png')).convert('RGB')).astype('f4')
         h = 1300.0 + (256.0 * im[..., 0] + im[..., 1]) * 0.1
+        # (l'interpolation en Lambert laisse des valeurs mêlées sur 2 nœuds autour du vide)
+        v = ndimage.binary_dilation(v, iterations=3)
         ii, jj = np.nonzero(v)
         a[ii, jj] = ndimage.map_coordinates(h, [ii / K, jj / K], order=1, mode='nearest')
+        # raccord adouci sur 30 m, pour ne pas laisser de marche avec le relevé
+        c0, c1 = max(0, ii.min() - 60), min(NI, ii.max() + 60)
+        bande = a[c0:c1]
+        fond = ndimage.gaussian_filter(bande, 8.0)
+        d = ndimage.distance_transform_edt(v[c0:c1] == 0)
+        d2 = ndimage.distance_transform_edt(v[c0:c1])
+        k = np.clip(np.minimum(np.maximum(d, d2), 30.0) / 30.0, 0.0, 1.0)[..., ] 
+        a[c0:c1] = fond + (bande - fond) * k
         print('comblés', ii.size, flush=True)
     print('altitudes', float(a.min()), float(a.max()), flush=True)
     cctx = zstandard.ZstdCompressor(level=12, threads=-1)
