@@ -1072,24 +1072,51 @@ func _preparer_nez() -> void:
 
 
 const NEZ_PYLONE: float = 45.0          # m : un pylône plus près que ça du nez fait le raccord
-const NEZ_H_MIN: float = 5.0            # m : tête de ce pylône au-dessus du sol, au moins
+const NEZ_PYLONE_C: float = 130.0       # m : même chose pour un pylône de compression
+const NEZ_D_MIN: float = 8.0            # m : pas plus près du nez (les galets et le lanceur)
 var _nez_par_pylone: Array = [false, false]
 
 
 ## Pylône collé à une gare (retour d'utilisateur, 04/11/2026 : les galets au départ étaient en lévitation
 ## à côté d'un P1 qui faisait double emploi) : le câble sort de la gare à l'horizontale jusqu'à lui, et
 ## c'est lui qui le fait passer à la pente de la ligne, si le sol le permet.
+## Tête à la hauteur du câble en gare : le câble sort à l'horizontale, sans angle hors des galets. Si le
+## sol monte trop vite, le pylône se rapproche de la gare jusqu'où il tient (retour d'utilisateur, 04/11/2026 :
+## P1 trop loin aux Brévières, angle fantôme à la sortie du lanceur).
+func _caler_pylone_nez(i: int, d_nez: float) -> void:
+	var y_gare: float = terrain(d_nez) + H_CABLE_GARE
+	var hauteur_min: float = H_CABLE_GARE - 0.3
+	var d0: float = float(pylones[i]["d"])
+	var sens: float = signf(d0 - d_nez)
+	var l0: float = absf(d0 - d_nez)
+	var d_ok: float = d0
+	var l: float = l0
+	while l >= NEZ_D_MIN:
+		var dl: float = d_nez + sens * l
+		d_ok = dl
+		if terrain(dl) + hauteur_min <= y_gare + 0.1:
+			break
+		l -= 1.0
+	if d_ok != d0:
+		var p: Dictionary = (pylones[i] as Dictionary).duplicate()
+		p["d"] = d_ok
+		pylones[i] = p
+	_tetes[i] = maxf(y_gare, terrain(d_ok) + hauteur_min)
+
+
 func _pylones_de_nez(L: float) -> void:
 	_nez_par_pylone = [false, false]
 	if pylones.is_empty() or _tetes.size() != pylones.size():
 		return
 	var n: int = pylones.size() - 1
-	if float(pylones[0]["d"]) < NEZ_PYLONE:
+	# (un pylône de compression en première ou dernière place fait le raccord, même plus loin : c'est lui
+	# le P1 du schéma, la batterie sans numéro à côté décalait la lecture de la ligne)
+	if float(pylones[0]["d"]) < NEZ_PYLONE or (_compression(pylones[0]) and float(pylones[0]["d"]) < NEZ_PYLONE_C):
 		_nez_par_pylone[0] = true
-		_tetes[0] = maxf(terrain(0.0) + H_CABLE_GARE, terrain(float(pylones[0]["d"])) + NEZ_H_MIN)
-	if L - float(pylones[n]["d"]) < NEZ_PYLONE and n > 0:
+		_caler_pylone_nez(0, 0.0)
+	if n > 0 and (L - float(pylones[n]["d"]) < NEZ_PYLONE or (_compression(pylones[n]) and L - float(pylones[n]["d"]) < NEZ_PYLONE_C)):
 		_nez_par_pylone[1] = true
-		_tetes[n] = maxf(terrain(L) + H_CABLE_GARE, terrain(float(pylones[n]["d"])) + NEZ_H_MIN)
+		_caler_pylone_nez(n, L)
 	if _nez_par_pylone[0] or _nez_par_pylone[1]:
 		_garde_au_sol(true)                # (la portée voisine ne doit pas y laisser sa garde)
 
