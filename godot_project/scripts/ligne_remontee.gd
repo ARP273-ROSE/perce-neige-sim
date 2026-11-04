@@ -3631,12 +3631,14 @@ func _batterie_gare(aval: bool) -> void:
 	py.style = "gare"
 	py.voie = voie
 	py.sens_montee_droite = sens_droite
-	py.hauteur = y_c - terrain(d) - PyloneRemontee.DESSUS_TRAVERSE_CABLE
+	# (poteau jusqu'au sol réel, pas celui du profil de l'axe : batterie à 4 m du sol à Fresse)
+	var sol_b: float = minf(terrain(d), _sol(0.0, -d))
+	py.hauteur = y_c - sol_b - PyloneRemontee.DESSUS_TRAVERSE_CABLE
 	py.compo_montee = [[n, nat]]
 	py.compo_descente = [[n, nat]]
 	py.pente = pente_ligne * 0.5
 	py.deviation = dev
-	py.position = Vector3(0, terrain(d), -d)
+	py.position = Vector3(0, sol_b, -d)
 	py.name = "Batterie%s" % ("Aval" if aval else "Amont")
 	_enfant(py)
 	py.construire()
