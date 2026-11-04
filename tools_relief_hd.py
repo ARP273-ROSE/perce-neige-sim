@@ -6,6 +6,7 @@
   python tools_relief_hd.py lambert DOSSIER         MNT sur la grille d'origine du LiDAR, à lancer avant « relief »
   python tools_relief_hd.py relief DOSSIER          pyramide d'altitudes 1/2/4/8 m : DOSSIER/relief.pnhd
   python tools_relief_hd.py arbres DOSSIER          arbres de la hauteur de végétation : DOSSIER/arbres.pnhd
+  python tools_relief_hd.py batiments DOSSIER       bâtiments BD TOPO, puis retire les arbres qui tombent dessus
 
 Grille régulière dans le repère du jeu, pas de 1 m environ : les mailles à 25 m du relief divisées
 par K = 25 (même alignement que relief_fin). Tuiles de 2000 pixels, reprise possible : une tuile déjà
@@ -305,6 +306,86 @@ def arbres(dossier, sortie):
     print('arbres', total, 'cases', len(index), 'Mo', os.path.getsize(sortie) >> 20)
 
 
+def batiments(dossier):
+    """Emprises des bâtiments (BD TOPO), en coordonnées du jeu : DOSSIER/batiments.json."""
+    import json
+    sortie = []
+    bbox = '%.6f,%.6f,%.6f,%.6f' % (LAT_O - Z1 / M_LAT, LON_O + X0 / M_LON, LAT_O - Z0 / M_LAT, LON_O + X1 / M_LON)
+    debut = 0
+    while True:
+        u = ('https://data.geopf.fr/wfs/ows?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature&TYPENAMES=BDTOPO_V3:batiment'
+             '&COUNT=5000&STARTINDEX=%d&SORTBY=cleabs&OUTPUTFORMAT=application/json&SRSNAME=urn:ogc:def:crs:EPSG::4326'
+             '&BBOX=%s,urn:ogc:def:crs:EPSG::4326' % (debut, bbox))
+        for essai in range(6):
+            try:
+                g = json.load(urllib.request.urlopen(u, timeout=240))
+                break
+            except Exception as e:
+                print(' reprise', str(e)[:120], flush=True)
+                time.sleep(10 + 20 * essai)
+        else:
+            raise RuntimeError(u)
+        for f in g['features']:
+            c = f['geometry']['coordinates']
+            for poly in (c if f['geometry']['type'] == 'MultiPolygon' else [c]):
+                # (le service rend lat, lon ou lon, lat selon la version : on reconnaît la latitude à sa valeur)
+                r = [(p[0], p[1]) if p[0] < 20.0 else (p[1], p[0]) for p in poly[0]]
+                sortie.append([[round((lo - LON_O) * M_LON, 1), round((LAT_O - la) * M_LAT, 1)] for lo, la in r])
+        print('bâtiments', len(sortie), flush=True)
+        if len(g['features']) < 5000:
+            break
+        debut += 5000
+    with open(os.path.join(dossier, 'batiments.json'), 'w') as s:
+        json.dump(sortie, s)
+
+
+def nettoyer_arbres(dossier, marge=6.0):
+    """Retire de arbres.pnhd ce qui tombe sur un bâtiment (un toit vu comme un sommet)."""
+    import json
+    import numpy as np
+    import struct
+    import zstandard
+    from PIL import Image, ImageDraw
+    from scipy import ndimage
+    pas = 2.0
+    im = Image.new('1', (int((X1 - X0) / pas) + 1, int((Z1 - Z0) / pas) + 1))
+    d = ImageDraw.Draw(im)
+    for r in json.load(open(os.path.join(dossier, 'batiments.json'))):
+        d.polygon([((x - X0) / pas, (z - Z0) / pas) for x, z in r], fill=1)
+    bati = ndimage.binary_dilation(np.asarray(im), iterations=int(marge / pas))
+    print('bâti %.2f %%' % (bati.mean() * 100), flush=True)
+    f = os.path.join(dossier, 'arbres.pnhd')
+    brut = open(f, 'rb').read()
+    tete = struct.unpack('<4sIddfI', brut[:32])
+    xo, zo, c, n = tete[2], tete[3], tete[4], tete[5]
+    o = 32 + 20 * n
+    dd = zstandard.ZstdDecompressor()
+    cc = zstandard.ZstdCompressor(level=12)
+    dt = [('x', '<u2'), ('z', '<u2'), ('h', 'u1'), ('r', 'u1'), ('e', 'u1')]
+    idx, corps, off, av, ap = [], [], 0, 0, 0
+    for k in range(n):
+        cx, cz, nb, of, sz = struct.unpack('<HHIQI', brut[32 + 20 * k:52 + 20 * k])
+        a = np.frombuffer(dd.decompress(brut[o + of:o + of + sz]), dt)
+        av += a.size
+        x = xo + (cx + a['x'] / 65535.0) * c
+        z = zo + (cz + a['z'] / 65535.0) * c
+        a = a[~bati[((z - Z0) / pas).astype('i4'), ((x - X0) / pas).astype('i4')]]
+        ap += a.size
+        if a.size == 0:
+            continue
+        s = cc.compress(a.tobytes())
+        idx.append(struct.pack('<HHIQI', cx, cz, a.size, off, len(s)))
+        corps.append(s)
+        off += len(s)
+    with open(f + '.tmp', 'wb') as s:
+        s.write(struct.pack('<4sIddfI', b'PNAB', 1, xo, zo, c, len(idx)))
+        s.write(b''.join(idx))
+        for e in corps:
+            s.write(e)
+    os.replace(f + '.tmp', f)
+    print('arbres', av, '->', ap)
+
+
 FORMAT_ARBRES = """arbres.pnhd, petit-boutiste. En-tête 32 octets : 'PNAB', u32 version, f64 x0, f64 z0, f32 côté de case (250 m), u32 n.
 Puis n entrées de 20 octets : u16 cx, u16 cz, u32 nombre d'arbres, u64 position dans le corps, u32 taille. Corps juste après l'index.
 Une case décompressée (zstd) : enregistrements de 7 octets u16 x, u16 z (relatifs à la case, 65535 = 250 m), u8 h (× 0,25 m),
@@ -322,5 +403,8 @@ if __name__ == '__main__':
         carreler_altitudes(sys.argv[2], os.path.join(sys.argv[2], 'relief.pnhd'))
     elif len(sys.argv) >= 3 and sys.argv[1] == 'arbres':
         arbres(sys.argv[2], os.path.join(sys.argv[2], 'arbres.pnhd'))
+    elif len(sys.argv) >= 3 and sys.argv[1] == 'batiments':
+        batiments(sys.argv[2])
+        nettoyer_arbres(sys.argv[2])
     else:
         print(__doc__)
