@@ -3549,6 +3549,7 @@ func _poser_pylones() -> void:
 		_enfant(py)
 		py.construire()
 		MeshMerge.merge(py, py.mobiles, "Pylone")
+		_pylone_lod(py)
 		for m in py.mobiles:
 			MeshMerge.fusion_partagee(m, "Paire")
 		_pyl.append([py, d])
@@ -4338,6 +4339,25 @@ func _lod_preparer() -> void:
 	_lod_b2 = vide.duplicate()
 	_lod_niv.resize(_vehicules.size())
 	_lod_niv.fill(0)
+
+
+## PWA : de loin, un maillage allégé à la place du pylône, par les portées de visibilité.
+func _pylone_lod(py: PyloneRemontee) -> void:
+	if not OS.has_feature("web") and "--lod-vehicules" not in OS.get_cmdline_user_args():
+		return
+	var m: ArrayMesh = VehiculesLod.pylone(String(name), String(py.name))
+	if m == null:
+		return
+	var mi: MeshInstance3D = MeshInstance3D.new()
+	mi.name = "PyloneLod_" + String(py.name)
+	mi.mesh = m
+	mi.transform = py.transform
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	mi.visibility_range_begin = VehiculesLod.PYLONE_DES
+	mi.visibility_range_end = 3000.0
+	mi.layers = 1 | Cabin.LAYER_VOIE
+	_enfant(mi)
+	py.set_meta("lod_loin", true)
 
 
 ## Pose le véhicule i au niveau `niv` (0 : le vrai ; 1, 2 : allégés ; 3 : rien). Vrai si un tampon a changé.
