@@ -177,7 +177,7 @@ def carreler_altitudes(dossier, sortie):
     from scipy import ndimage
     a = assembler(dossier, 'mnt')
     # bande nord hors de toute source (0,4 %, loin des pistes) : relief à 25 m du jeu
-    v = a < 1000.0  # (valeurs d'absence, et leurs mélanges au bord des tuiles)
+    v = a < 1400.0  # (absence, et ses mélanges en bordure ; le point le plus bas du domaine est à 1 410 m)
     if v.any():
         from PIL import Image
         im = np.asarray(Image.open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'godot_project', 'textures',
