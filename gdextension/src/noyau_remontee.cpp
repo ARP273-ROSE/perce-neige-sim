@@ -676,14 +676,14 @@ PackedFloat64Array NoyauRemontee::etape(double dt, double regime, const Vector3 
 			}
 		}
 	}
-	// 4. MultiMesh des lointains : une instance par véhicule (échelle nulle
-	// pour les proches et au-delà de `jusqua`)
+	// 4. MultiMesh des lointains : seuls les véhicules à dessiner (ni les proches, ni au-delà de `jusqua`)
 	if (!mm_rid.empty()) {
 		RenderingServer *rs = RenderingServer::get_singleton();
 		for (size_t m = 0; m < mm_rid.size(); m++) {
 			PackedFloat32Array buf;
 			buf.resize(n * 12);
 			float *b = buf.ptrw();
+			int nb_vus = 0;
 			for (size_t i = 0; i < n; i++) {
 				Transform3D t;
 				bool montrer = loin_veh[i] != 0;
@@ -692,20 +692,20 @@ PackedFloat64Array NoyauRemontee::etape(double dt, double regime, const Vector3 
 					const double dx = o.x - vue.x, dz = o.z - vue.z;
 					montrer = dx * dx + dz * dz < mm_jusqua * mm_jusqua;
 				}
-				if (montrer) {
-					t = pose_veh[i] * mm_rel[m];
-				} else {
-					// échelle nulle, sur place (une instance rangée au loin
-					// étirait la boîte englobante)
-					t.basis = Basis().scaled(Vector3(0, 0, 0));
-					t.origin = pose_veh[i].origin;
+				// instances dessinées tassées en tête : une instance à l'échelle nulle compte quand même
+				// tous ses triangles (8,7 M de primitives pour rien, relevés du 04/11/2026)
+				if (!montrer) {
+					continue;
 				}
-				float *e = b + i * 12;
+				t = pose_veh[i] * mm_rel[m];
+				float *e = b + nb_vus * 12;
+				nb_vus++;
 				e[0] = t.basis.rows[0].x; e[1] = t.basis.rows[0].y; e[2] = t.basis.rows[0].z; e[3] = t.origin.x;
 				e[4] = t.basis.rows[1].x; e[5] = t.basis.rows[1].y; e[6] = t.basis.rows[1].z; e[7] = t.origin.y;
 				e[8] = t.basis.rows[2].x; e[9] = t.basis.rows[2].y; e[10] = t.basis.rows[2].z; e[11] = t.origin.z;
 			}
 			rs->multimesh_set_buffer(mm_rid[m], buf);
+			rs->multimesh_set_visible_instances(mm_rid[m], nb_vus);
 		}
 	}
 	PackedFloat64Array out;

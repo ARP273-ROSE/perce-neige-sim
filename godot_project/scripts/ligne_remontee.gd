@@ -219,6 +219,9 @@ func construire() -> void:
 	_pyl_l2 = []
 	_pyl_pres = PackedByteArray()
 	_pyl_mi = null
+	# (les MultiMesh allégés partent avec la ligne démolie : à refaire à la reconstruction)
+	_lod_essaye = false
+	_lod_mm = []
 	_poulies.clear()
 	_poulies_3s.clear()
 	_cavaliers_n.clear()
