@@ -186,7 +186,7 @@ var _capsule: CollisionShape3D = null    # la forme, inclinée avec la voiture q
 
 func _init() -> void:
 	collision_layer = CollisionsJeu.COUCHE_SKIEUR
-	collision_mask = CollisionsJeu.COUCHE_DECOR | CollisionsJeu.COUCHE_VEHICULE
+	collision_mask = CollisionsJeu.COUCHE_DECOR | CollisionsJeu.COUCHE_VEHICULE | CollisionsJeu.COUCHE_RELIEF
 	floor_max_angle = deg_to_rad(52.0)
 	floor_snap_length = MARCHE_MAX + 0.05
 	# on glisse le long d'un mur quel que soit l'angle d'attaque : à moins
@@ -217,7 +217,7 @@ func _ready() -> void:
 	var boule: SphereShape3D = SphereShape3D.new()
 	boule.radius = 0.12
 	bras.shape = boule
-	bras.collision_mask = CollisionsJeu.COUCHE_DECOR | CollisionsJeu.COUCHE_VEHICULE
+	bras.collision_mask = CollisionsJeu.COUCHE_DECOR | CollisionsJeu.COUCHE_VEHICULE | CollisionsJeu.COUCHE_RELIEF
 	bras.margin = 0.05
 	bras.add_excluded_object(get_rid())
 	pivot.add_child(bras)
@@ -1564,7 +1564,7 @@ func _camera() -> void:
 	# arrêtée par ses parois, elle restait enfermée dans la cabine portes
 	# fermées (retour d'utilisateur, 23/10/2026) ; dans le funiculaire, elle reste
 	# dans la rame
-	bras.collision_mask = CollisionsJeu.COUCHE_CAMERA | (CollisionsJeu.COUCHE_DECOR if embarque else (CollisionsJeu.COUCHE_DECOR | CollisionsJeu.COUCHE_VEHICULE))
+	bras.collision_mask = CollisionsJeu.COUCHE_RELIEF | CollisionsJeu.COUCHE_CAMERA | (CollisionsJeu.COUCHE_DECOR if embarque else (CollisionsJeu.COUCHE_DECOR | CollisionsJeu.COUCHE_VEHICULE))
 	if support != null and not embarque:
 		bras.collision_mask |= CollisionsJeu.COUCHE_CAMERA_BORD
 	pivot.position.y = Y_YEUX if premiere_personne else Y_YEUX - 0.05
