@@ -185,6 +185,7 @@ func _ready() -> void:
 	_build_machine_room()
 	if station_halls != null and machine_room != null:
 		station_halls.build_amont(machine_room)
+		_portees_gares_funi()
 	# le relief s'écarte des gares (bâtiments, place, terrasse, quais)
 	if relief != null and station_halls != null:
 		for g in [station_halls.gare_aval, station_halls.gare_amont]:
@@ -677,6 +678,22 @@ func _build_stations() -> void:
 	if OS.has_feature("web"):       # 305 surfaces fixes, ~900 tampons WebGL (mesure 03/11/2026)
 		MeshMerge.merge(stations, [], "Stations")
 	print("[Stations] Val Claret + Grande Motte construites")
+
+
+## Gares du funiculaire vues de loin : de Leissières ou Bellevarde, à 6-10 km, 65 000 primitives et
+## 146 appels pour quelques pixels (relevés du 04/11/2026). Les quais et la salle des machines, sous
+## terre, ne se voient jamais de plus loin que le tunnel n'est long.
+func _portees_gares_funi() -> void:
+	_portee_sous(station_halls, 5000.0)
+	_portee_sous(stations, 4000.0)
+	_portee_sous(machine_room, 4000.0)
+
+
+func _portee_sous(n: Node, d: float) -> void:
+	if n is GeometryInstance3D and (n as GeometryInstance3D).visibility_range_end <= 0.0:
+		(n as GeometryInstance3D).visibility_range_end = d
+	for c in n.get_children():
+		_portee_sous(c, d)
 
 
 func _build_station_halls() -> void:
