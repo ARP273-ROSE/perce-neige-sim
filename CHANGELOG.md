@@ -20,6 +20,20 @@ dédié, pour lui seul, assombrit la neige là où pylônes, véhicules et bâti
 **Fil principal à ski.** Collisions du tunnel construites pour un skieur sur la neige, pièces fines des gares refaites en double à chaque carré de relief (26 à 54 ms), portées de toutes
 les lignes réglées d'un bloc à chaque changement de détail (72 à 103 ms). Boucle de 11 min en 4K : images de plus de 25 ms à ski 20 → 2.
 
+## 1.53.11 — 4 novembre 2026 (PWA seule)
+
+**Leissières : pylônes refaits.** Positions tirées de la description de l'utilisateur, d'OSM, de la vidéo image par image et de 6 passages GPS : P13 à 126 m, replat P11-P10, crête P8 à P4 en arrondi sur un replat de 30 m. Reste P8 très sollicité (25°) et un replat en facettes sur le relief à 25 m.
+
+**Gares et pylônes.** Pneus dans le bon sens selon le côté de la montée. Un pylône tombé dans une gare déplacée n'est plus supprimé (Vallon : tout glissait d'un cran). Plus de galets en lévitation : un pylône à moins de 45 m du nez fait le raccord, les autres batteries ont un poteau. Gare amont des Brévières sortie de celle des Boisses. Croisement Vallon/Pyramides sur un fût droit à deux étages. Chalets de bois près des gares. Plinthes de rambarde dans le bon sens.
+
+**Véhicules sous la neige.** Hauteurs recalculées sur le sol réel sous les deux brins, 4,8 m de garde visés ; quelques passages restent en dessous.
+
+**Fornet.** Suspente en cadre en A centré, châssis rouge, toit sans garde-corps ; forme des bouts et baies pas encore refaites.
+
+**Caméra du skieur.** Zoom en pinçant et recul plus grand, regard vertical en 1re personne, vue qui garde son angle dans les virages.
+
+**Salle des machines.** Rayons des poulies et repère du câble tournent à chaque image.
+
 ## 1.53.10 — 4 novembre 2026 (PWA seule)
 
 **Lignes vues de loin sur la PWA.** Une version très allégée de chaque remontée, téléchargée à la demande, s'affiche au loin puis cède la place à la ligne construite en approchant (66 lignes, 30 Mo sur le serveur ; sans réseau, seuils habituels). Sous WebKit au pied de Tovière, niveaux normal, allégé 1 et 2 : 100/80/66 Mo de tampons, contre 109/81/65 Mo, avec 6, 3 et 6 lignes de plus à l'écran. Vu de près, le rendu reste grossier : teintes des sièges, gares incomplètes. Essai sur iPad à faire.
