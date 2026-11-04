@@ -191,6 +191,8 @@ func _ready() -> void:
 		for g in [station_halls.gare_aval, station_halls.gare_amont]:
 			if g != null:
 				relief.amenagements.append(g.amenagement_relief())
+	if relief != null:
+		relief.amenagements_poses = true
 	if _compat:
 		_remplissage_gares_web()
 	_build_lights()
@@ -2049,7 +2051,7 @@ func _boites_sous(n: Node, p: Vector3, o: Array) -> void:
 func _remonter_skieur() -> void:
 	var p: Vector3 = skieur.global_position
 	var rq: PhysicsRayQueryParameters3D = PhysicsRayQueryParameters3D.create(
-		p + Vector3(0, 40, 0), p + Vector3(0, -2, 0), CollisionsJeu.COUCHE_DECOR)
+		p + Vector3(0, 40, 0), p + Vector3(0, -2, 0), CollisionsJeu.COUCHE_DECOR | CollisionsJeu.COUCHE_RELIEF)
 	var hit: Dictionary = get_world_3d().direct_space_state.intersect_ray(rq)
 	if not hit.is_empty() and (hit["position"] as Vector3).y > p.y + (0.15 if _depose_remontee == null else -0.05):
 		var q: Vector3 = (hit["position"] as Vector3) + Vector3(0, 0.1, 0)

@@ -275,6 +275,7 @@ var _mat_trait: ShaderMaterial = null
 ## plafond de la salle)}. Le relief IGN maillé à 25 m traversait les bâtiments et les
 ## quais (« le relief rentre dans le bâtiment et les quais », 07/10/2026).
 var amenagements: Array = []
+var amenagements_poses: bool = false    # les gares du funiculaire y sont
 ## Callables appelés au fil principal juste avant les pièces fines, quand
 ## hauteur() répond : chacun rend un aménagement (ou {}).
 var amenageurs: Array = []
@@ -570,11 +571,19 @@ func _creer_maillages(fin_us: int) -> void:
 	print("[Relief] prêt")
 
 
+var _tex_normales: Texture2DArray = null
+var _h0_ref: PackedFloat32Array = PackedFloat32Array()   # banc du sol au mètre
+var _hn5_ref: PackedFloat32Array = PackedFloat32Array()
+
+
 func _materiaux() -> void:
 	_tex_ortho = ImageTexture.create_from_image(_img_ortho if _img_ortho != null
 		else _image_ortho("res://textures/relief_ortho.jpg"))
-	_mat_terrain = _shader(SHADER_TERRAIN)
+	_mat_terrain = _shader(ReliefAnneaux.code_hd(SHADER_TERRAIN) if fin != null and fin.hd else SHADER_TERRAIN)
 	_mat_terrain.set_shader_parameter("ortho", _tex_ortho)
+	if fin != null and fin.hd:
+		_tex_normales = fin.normales_texture()
+		ReliefAnneaux.regler_hd(_mat_terrain, _tex_normales)
 	_mat_loin = _shader(SHADER_LOINTAIN)
 	_mat_loin.set_shader_parameter("ortho", ImageTexture.create_from_image(_img_loin if _img_loin != null
 		else _image_ortho("res://textures/relief_lointain.jpg")))
@@ -784,6 +793,8 @@ func _poser_trous() -> void:
 		v.append(Vector4.ZERO)
 	_mat_terrain.set_shader_parameter("pieces", v.slice(0, 8))
 	_mat_terrain.set_shader_parameter("n_pieces", n)
+	if fin != null and fin.anneaux != null:
+		fin.anneaux.poser_trous(_rects_pieces + _fosses.values().filter(func(r: Rect2) -> bool: return r != _fosses.get("relief_fin", Rect2())))
 
 
 func _build_piece(am: Dictionary) -> void:

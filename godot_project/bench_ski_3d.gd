@@ -17,6 +17,7 @@ var _t: float = 0.0
 var _ok: bool = true
 var _v_max: float = 0.0
 var _ecart_max: float = 0.0
+var _ou_max: Vector3 = Vector3.ZERO
 var _ecart_gares: float = 0.0
 var _nan: bool = false
 var _chausse5: bool = false
@@ -108,6 +109,8 @@ func _tick() -> void:
 				if pres_gare:
 					_ecart_gares = maxf(_ecart_gares, ecart)
 				else:
+					if ecart > _ecart_max:
+						_ou_max = p
 					_ecart_max = maxf(_ecart_max, ecart)
 			_v_max = maxf(_v_max, sk.vitesse_ski())
 			var dom3: DomaineSkiable = _main.domaine
@@ -134,8 +137,8 @@ func _tick() -> void:
 					_resultat = str(_main.commandes_skieur._msg.text)
 				_verif("descente jusqu'à Val Claret, posé sur le sol",
 					arrive and not _nan and _ecart_max < 0.05 and _ecart_gares < 0.10,
-					"%s, %.0f s, écart au sol max %.3f m (près des gares %.3f), %.0f m de la gare" % [
-						DomaineSkiable._mmss(_t), _t, _ecart_max, _ecart_gares, Vector2(p.x, p.z).length()])
+					"%s, %.0f s, écart au sol max %.3f m en %s (près des gares %.3f), %.0f m de la gare" % [
+						DomaineSkiable._mmss(_t), _t, _ecart_max, str(_ou_max.round()), _ecart_gares, Vector2(p.x, p.z).length()])
 				_verif("vitesse plausible", _v_max > 8.0 and _v_max < 28.0, "max %.1f m/s (%.0f km/h)" % [_v_max, _v_max * 3.6])
 				_verif("course contre le fantôme : chrono à l'arrivée", _resultat.begins_with("Arrivée"), _resultat)
 				_main.basculer_ski()
