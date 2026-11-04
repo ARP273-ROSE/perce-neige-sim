@@ -3421,6 +3421,10 @@ func _lanceurs() -> void:
 			k += 6
 		MeshMerge.merge(r_node, [], "Rail")
 		# pneus au pas de 0,62 m
+		var fourches: Node3D = Node3D.new()
+		fourches.name = "Fourches"
+		_enfant(fourches)
+		var pneus_zone: Array = []
 		x = 0.3
 		while x < l - 0.3:
 			var s2: float = s0 + x
@@ -3444,11 +3448,40 @@ func _lanceurs() -> void:
 					RemonteeKit.cylindre(pn, 0.012, 0.012, 0.17, Transform3D(Basis.IDENTITY, Vector3(cos(a2) * 0.08, 0, sin(a2) * 0.08)), "acier_noir", 6)
 			# fourche : deux flasques jusqu'à la poutre haute
 			for sy in [-0.09, 0.09]:
-				RemonteeKit.poutre(_cont(), c + o2 * sy, c + o2 * sy + Vector3(0, R_PNEU + 0.16, 0), 0.05, 0.012, "galva_pylone", o2)
+				RemonteeKit.poutre(fourches, c + o2 * sy, c + o2 * sy + Vector3(0, R_PNEU + 0.16, 0), 0.05, 0.012, "galva_pylone", o2)
 			MeshMerge.fusion_partagee(pn, "Pneu")
 			_pneus.append([pn, s2, base, 0.0])
+			pn.set_meta("pneu_tourne", true)
+			pneus_zone.append(pn)
 			x += 0.62
 			await _pause("lanceurs")
+		# (un appel par fourche et par pièce de pneu sinon : 600 appels de près d'une gare, relevés du 04/11/2026)
+		MeshMerge.merge(fourches, [], "Fourches")
+		_pneus_fixes(pneus_zone)
+
+
+## Pneus d'un lanceur vus de plus loin qu'on ne les voit tourner : immobiles, un appel par pièce.
+func _pneus_fixes(pneus: Array) -> void:
+	if pneus.is_empty():
+		return
+	var pieces: Array = (pneus[0] as Node).find_children("*", "MeshInstance3D", true, false)
+	for k in range(pieces.size()):
+		var mi0: MeshInstance3D = pieces[k]
+		var mm: MultiMesh = MultiMesh.new()
+		mm.transform_format = MultiMesh.TRANSFORM_3D
+		mm.mesh = mi0.mesh
+		mm.instance_count = pneus.size()
+		var rel: Transform3D = mi0.transform
+		for i in range(pneus.size()):
+			mm.set_instance_transform(i, (pneus[i] as Node3D).transform * rel)
+		var mmi: MultiMeshInstance3D = MultiMeshInstance3D.new()
+		mmi.name = "PneusFixes"
+		mmi.multimesh = mm
+		mmi.material_override = mi0.material_override
+		mmi.cast_shadow = mi0.cast_shadow
+		mmi.layers = mi0.layers
+		mmi.visibility_range_begin = PNEUS_JUSQUA
+		_enfant(mmi)
 
 
 ## Détails de gare visibles (posé par RemonteesDomaine : moins de 250 m).

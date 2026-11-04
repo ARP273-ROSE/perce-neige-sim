@@ -560,6 +560,9 @@ func _portee_noeud(e: Array, file: Array) -> void:
 	# pièces de détail des véhicules, plaques des pylônes : de près seulement
 	if n.has_meta("detail") or n is Label3D:
 		pn = minf(pn, DETAILS_JUSQUA)
+	# pneus qui tournent : de près (au-delà, PneusFixes ; la marge couvre la longueur du lanceur)
+	if c.has_meta("pneu_tourne"):
+		pn = minf(pn, LigneRemontee.PNEUS_JUSQUA + 30.0)
 	# paires de galets des pylônes (un objet chacune, pour s'animer au
 	# passage des pinces) : 7 800 objets visibles jusqu'à 3 km au pied
 	# des pistes (relevés de l'iPad du 27/10/2026) — à 150 m un galet ne

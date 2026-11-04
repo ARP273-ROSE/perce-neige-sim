@@ -535,7 +535,7 @@ func _parcours(n: Node, xf: Transform3D, chemin_mobile: String) -> void:
 		if m_p != null:
 			_pylones_l2.append([m_p, x])
 			return
-	if nom.begins_with("VehiculesLoin"):
+	if nom.begins_with("VehiculesLoin") or nom.begins_with("PneusFixes"):
 		return
 	if nom.begins_with("Corps_") and n is StaticBody3D:
 		return
