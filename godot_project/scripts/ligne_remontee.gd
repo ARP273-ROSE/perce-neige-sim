@@ -2931,7 +2931,9 @@ func _portillons(aval: bool) -> void:
 ## PWA : bornes et portique fusionnés ; au-delà de 60 m, des vantaux immobiles et fermés fusionnés aussi
 ## (85 à 162 appels par groupe de portillons vus vers une gare, relevés du 04/11/2026).
 func _portillons_fixes(g: Node3D, vantaux: Array) -> void:
-	MeshMerge.merge(g, vantaux, "Bornes")
+	# (le portique reste à part : fusionné, il sortait délavé)
+	var portique: Node = g.get_node_or_null("Portique")
+	MeshMerge.merge(g, vantaux + ([portique] if portique != null else []), "Bornes")
 	var fixe: Node3D = Node3D.new()
 	fixe.name = "PortillonsFixes"
 	g.add_child(fixe)
@@ -3530,8 +3532,13 @@ func _pneus_mm(pres_aval: bool, pres_amont: bool) -> void:
 		var pneus: Array = lot[3]
 		var buf: PackedFloat32Array = PackedFloat32Array()
 		buf.resize(pneus.size() * 12)
+		var rel0: Variant = null
 		for k in range((lot[1] as Array).size()):
 			var rel: Transform3D = lot[2][k]
+			if rel0 != null and rel.is_equal_approx(rel0):
+				RenderingServer.multimesh_set_buffer((lot[1][k] as MultiMesh).get_rid(), buf)
+				continue
+			rel0 = rel
 			var o: int = 0
 			for e in pneus:
 				var x: Transform3D = Transform3D((e[2] as Basis) * Basis(Vector3.UP, e[3]), (e[0] as Node3D).position) * rel
