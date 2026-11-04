@@ -264,6 +264,9 @@ func _boite_ligne() -> AABB:
 
 ## Fichier « loin » (PWA) : tout en une seule surface, niveau de détail à 1 px d'erreur à 450 m, couleur dans les
 ## sommets, un seul matériau ; le véhicule en un seul maillage. Ni ombres ni pièces de moins de 1 px.
+var _pylones_l2: Array = []
+
+
 func _cuire_loin(vehicule: Array) -> void:
 	_parcours(_lg, Transform3D.IDENTITY, "")
 	var acc: Dictionary = {"v": PackedVector3Array(), "n": PackedVector3Array(), "c": PackedColorArray(), "i": PackedInt32Array()}
@@ -300,8 +303,39 @@ func _cuire_loin(vehicule: Array) -> void:
 			continue
 		for si in range(m3.get_surface_count()):
 			_verser(veh, _plus_bas(m3, si), miroir_v * (e["xf"] as Transform3D), e["ov"] if e["ov"] != null else m3.surface_get_material(si))
+	# pylônes vus de loin : le niveau L2 cuit, lumière comprise (pas de nouveau calcul de lumière)
+	for e_p in _pylones_l2:
+		var t_p: Array = (e_p[0] as ArrayMesh).surface_get_arrays(0)
+		var x_p: Transform3D = e_p[1]
+		var d_v: PackedVector3Array = acc["v"]
+		var d_n: PackedVector3Array = acc["n"]
+		var d_c: PackedColorArray = acc["c"]
+		var d_i: PackedInt32Array = acc["i"]
+		var n_0: int = d_v.size()
+		for p_v in (t_p[Mesh.ARRAY_VERTEX] as PackedVector3Array):
+			d_v.append(x_p * p_v)
+			d_n.append(Vector3.UP)
+		d_c.append_array(t_p[Mesh.ARRAY_COLOR])
+		for p_i in (t_p[Mesh.ARRAY_INDEX] as PackedInt32Array):
+			d_i.append(p_i + n_0)
+		acc["v"] = d_v
+		acc["n"] = d_n
+		acc["c"] = d_c
+		acc["i"] = d_i
 	_souder(acc)
 	_souder(veh)
+	# véhicule vu de loin : le niveau L2 cuit (300 à 400 triangles), lumière comprise
+	if not _lg._vehicules.is_empty():
+		var v0l: VehiculeRemontee = _lg._vehicules[0][0]
+		var cle_l: String = "%s|%s|%s|%s|%s" % [v0l.famille, v0l.livree, v0l.teinte, str(v0l.pince_a108), v0l.style_tph]
+		var m_l: ArrayMesh = VehiculesLod.maillage(cle_l, "L2", not _lg.sens_droite)
+		if m_l != null:
+			var t_l: Array = m_l.surface_get_arrays(0)
+			veh["v"] = t_l[Mesh.ARRAY_VERTEX]
+			veh["c"] = t_l[Mesh.ARRAY_COLOR]
+			veh["i"] = t_l[Mesh.ARRAY_INDEX]
+		else:
+			print("LOIN sans L2 : ", cle_l)
 	var palette: Dictionary = {"classe": "StandardMaterial3D", "vertex_color_use_as_albedo": true, "vertex_color_is_srgb": true,
 		"shading_mode": BaseMaterial3D.SHADING_MODE_UNSHADED, "cull_mode": BaseMaterial3D.CULL_DISABLED}
 	var d: Dictionary = {
@@ -496,6 +530,11 @@ func _parcours(n: Node, xf: Transform3D, chemin_mobile: String) -> void:
 		_compter_vehicule(n)
 		return
 	var nom: String = String(n.name)
+	if _loin and (n is PyloneRemontee or n is PyloneTreillis):
+		var m_p: ArrayMesh = VehiculesLod.pylone(String(_lg.name), nom)
+		if m_p != null:
+			_pylones_l2.append([m_p, x])
+			return
 	if nom.begins_with("VehiculesLoin"):
 		return
 	if nom.begins_with("Corps_") and n is StaticBody3D:
