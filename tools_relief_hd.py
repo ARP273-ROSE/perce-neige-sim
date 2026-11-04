@@ -3,6 +3,7 @@
 (LiDAR HD et BD ORTHO, Licence Ouverte Etalab 2.0), hors du dépôt.
 
   python tools_relief_hd.py telecharger DOSSIER [mnt|mnh|ortho …]
+  python tools_relief_hd.py lambert DOSSIER         MNT sur la grille d'origine du LiDAR, à lancer avant « relief »
   python tools_relief_hd.py relief DOSSIER          pyramide d'altitudes 1/2/4/8 m : DOSSIER/relief.pnhd
   python tools_relief_hd.py arbres DOSSIER          arbres de la hauteur de végétation : DOSSIER/arbres.pnhd
 
@@ -91,6 +92,65 @@ def telecharger(dossier, nom):
             os.replace(f + '.tmp', f)
             print('%s %d/%d %.0f s' % (nom, n, total, time.time() - t0), flush=True)
             time.sleep(0.2)
+
+
+COUCHE_L93 = 'IGNF_LIDAR-HD_MNT_ELEVATION.ELEVATIONGRIDCOVERAGE.LAMB93'
+
+
+def mnt_lambert(dossier):
+    """MNT sur la grille d'origine du LiDAR (Lambert 93, mètres entiers), puis rééchantillonné sur celle du
+    jeu. Une demande en degrés revient au plus proche voisin : quadrillage de 0,7 m sur les pentes."""
+    import numpy as np
+    from pyproj import Transformer
+    from scipy import ndimage
+    os.makedirs(os.path.join(dossier, 'mnt_l93'), exist_ok=True)
+    os.makedirs(os.path.join(dossier, 'mnt'), exist_ok=True)
+    vers = Transformer.from_crs(4326, 2154, always_xy=True)
+    xs = np.array([X0, X1, X0, X1])
+    zs = np.array([Z0, Z0, Z1, Z1])
+    ex, ny = vers.transform(LON_O + xs / M_LON, LAT_O - zs / M_LAT)
+    e0, e1 = int(ex.min()) - 10, int(ex.max()) + 10
+    n0, n1 = int(ny.min()) - 10, int(ny.max()) + 10
+    W, H = e1 - e0, n1 - n0
+    m = np.zeros((H, W), 'f4')
+    for ty in range(0, H, T):
+        for tx in range(0, W, T):
+            w, h = min(T, W - tx), min(T, H - ty)
+            f = os.path.join(dossier, 'mnt_l93', '%05d_%05d.bin' % (ty, tx))
+            if not os.path.exists(f):
+                # lignes du haut vers le bas ; le pixel (0, 0) est centré sur (e0+tx+0,5 ; n1-ty-0,5)
+                u = '%s&LAYERS=%%s&BBOX=%d,%d,%d,%d&WIDTH=%d&HEIGHT=%d&FORMAT=image/x-bil;bits=32' % (
+                    WMS.replace('EPSG:4326', 'EPSG:2154'), e0 + tx, n1 - ty - h, e0 + tx + w, n1 - ty, w, h)
+                a = np.frombuffer(lire(u % COUCHE_L93, w * h * 4), '<f4').reshape(h, w).copy()
+                vide = a < 1000.0
+                if vide.any():
+                    r = np.frombuffer(lire(u % SECOURS_MNT, w * h * 4), '<f4').reshape(h, w)
+                    a[vide] = r[vide]
+                with open(f + '.tmp', 'wb') as s:
+                    s.write(a.tobytes())
+                os.replace(f + '.tmp', f)
+                print('l93', ty, tx, 'secours %.1f %%' % (vide.mean() * 100), flush=True)
+                time.sleep(0.1)
+            m[ty:ty + h, tx:tx + w] = np.fromfile(f, '<f4').reshape(h, w)
+    print('mosaïque', m.shape, flush=True)
+    # correspondance jeu → Lambert : régulière, calculée sur une grille lâche (écart < 1 mm) et interpolée
+    pas = 200
+    ic = np.arange(0, NI + pas, pas)
+    jc = np.arange(0, NJ + pas, pas)
+    jg, ig = np.meshgrid(jc, ic)
+    ec, nc = vers.transform(LON_O + (X0 + jg * PX) / M_LON, LAT_O - (Z0 + ig * PZ) / M_LAT)
+    for ti in range(0, NI, T):
+        for tj in range(0, NJ, T):
+            h, w = min(T, NI - ti), min(T, NJ - tj)
+            jj, ii = np.meshgrid(np.arange(tj, tj + w) / pas, np.arange(ti, ti + h) / pas)
+            e = ndimage.map_coordinates(ec, [ii, jj], order=1)
+            n = ndimage.map_coordinates(nc, [ii, jj], order=1)
+            r = ndimage.map_coordinates(m, [n1 - n - 0.5, e - e0 - 0.5], order=1, mode='nearest').astype('<f4')
+            f = os.path.join(dossier, 'mnt', '%05d_%05d.bin' % (ti, tj))
+            with open(f + '.tmp', 'wb') as s:
+                s.write(r.tobytes())
+            os.replace(f + '.tmp', f)
+    print('mnt rééchantillonné', flush=True)
 
 
 def assembler(dossier, nom):
@@ -246,6 +306,8 @@ if __name__ == '__main__':
     if len(sys.argv) >= 3 and sys.argv[1] == 'telecharger':
         for c in sys.argv[3:] or list(COUCHES):
             telecharger(sys.argv[2], c)
+    elif len(sys.argv) >= 3 and sys.argv[1] == 'lambert':
+        mnt_lambert(sys.argv[2])
     elif len(sys.argv) >= 3 and sys.argv[1] == 'relief':
         carreler_altitudes(sys.argv[2], os.path.join(sys.argv[2], 'relief.pnhd'))
     elif len(sys.argv) >= 3 and sys.argv[1] == 'arbres':
