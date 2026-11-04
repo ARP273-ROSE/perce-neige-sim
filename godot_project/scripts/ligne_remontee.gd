@@ -4286,6 +4286,103 @@ func _portes_corps(i: int, ouvert: bool) -> void:
 			(cs as CollisionShape3D).disabled = ouvert
 
 
+# --- véhicules vus de loin (PWA, sans noyau) : VehiculesLod ------------------------------------------
+var _lod_mm: Array = []                 # MultiMesh L1, L2
+var _lod_b1: PackedFloat32Array = PackedFloat32Array()   # tampons d'instances (12 flottants par véhicule)
+var _lod_b2: PackedFloat32Array = PackedFloat32Array()
+var _lod_niv: PackedInt32Array = PackedInt32Array()
+var _lod_essaye: bool = false
+
+
+func _lod_preparer() -> void:
+	if _lod_essaye:
+		return
+	_lod_essaye = true
+	if _vehicules.is_empty() or teleski() or not OS.has_feature("web") and "--lod-vehicules" not in OS.get_cmdline_user_args():
+		return
+	var v0: VehiculeRemontee = _vehicules[0][0]
+	var cle: String = "%s|%s|%s|%s|%s" % [v0.famille, v0.livree, v0.teinte, str(v0.pince_a108), v0.style_tph]
+	var ms: Array = [VehiculesLod.maillage(cle, "L1", not sens_droite), VehiculesLod.maillage(cle, "L2", not sens_droite)]
+	if ms[0] == null or ms[1] == null:
+		return
+	var lh: float = longueur_h()
+	var ymin: float = minf(terrain(0.0), terrain(lh)) - 60.0
+	var ymax: float = maxf(terrain(0.0), terrain(lh)) + 160.0
+	var boite: AABB = AABB(Vector3(-voie - 12.0, ymin, -lh - l_gare - 30.0), Vector3(2.0 * voie + 24.0, ymax - ymin, lh + 2.0 * l_gare + 60.0))
+	var vide: PackedFloat32Array = PackedFloat32Array()
+	vide.resize(_vehicules.size() * 12)
+	vide.fill(0.0)
+	for k in range(2):
+		var mm: MultiMesh = MultiMesh.new()
+		mm.transform_format = MultiMesh.TRANSFORM_3D
+		mm.mesh = ms[k]
+		mm.instance_count = _vehicules.size()
+		mm.custom_aabb = boite
+		RenderingServer.multimesh_set_buffer(mm.get_rid(), vide)
+		var mmi: MultiMeshInstance3D = MultiMeshInstance3D.new()
+		mmi.name = "VehiculesLod%d" % (k + 1)
+		mmi.multimesh = mm
+		mmi.layers = 1 | Cabin.LAYER_VOIE
+		mmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(mmi)
+		_lod_mm.append(mm)
+	_lod_b1 = vide.duplicate()
+	_lod_b2 = vide.duplicate()
+	_lod_niv.resize(_vehicules.size())
+	_lod_niv.fill(0)
+
+
+## Pose le véhicule i au niveau `niv` (0 : le vrai ; 1, 2 : allégés ; 3 : rien). Vrai si un tampon a changé.
+func _lod_niveau(i: int, niv: int, d2: float) -> bool:
+	var ancien: int = _lod_niv[i]
+	var v: VehiculeRemontee = _vehicules[i][0]
+	var change: bool = false
+	if ancien != niv:
+		_lod_niv[i] = niv
+		v.visible = niv == 0
+		if ancien == 1 or ancien == 2:
+			for c in range(12):
+				if ancien == 1:
+					_lod_b1[i * 12 + c] = 0.0
+				else:
+					_lod_b2[i * 12 + c] = 0.0
+			change = true
+	if niv == 1 or niv == 2:
+		# (au-delà de 250 m, une image sur quatre, comme les véhicules complets)
+		if ancien == niv and d2 > 62500.0 and (i + _tour) % 4 != 0:
+			return change
+		var xf: Transform3D = _lod_pose(i)
+		var o: int = i * 12
+		var x: PackedFloat32Array = PackedFloat32Array([xf.basis.x.x, xf.basis.y.x, xf.basis.z.x, xf.origin.x,
+			xf.basis.x.y, xf.basis.y.y, xf.basis.z.y, xf.origin.y, xf.basis.x.z, xf.basis.y.z, xf.basis.z.z, xf.origin.z])
+		for c2 in range(12):
+			if niv == 1:
+				_lod_b1[o + c2] = x[c2]
+			else:
+				_lod_b2[o + c2] = x[c2]
+		change = true
+	return change
+
+
+## Pose de repos du véhicule : mêmes point et cap que _placer, sans balancement.
+func _lod_pose(i: int) -> Transform3D:
+	var s: float = _vehicules[i][1]
+	var pt: Array = point(s)
+	var en_ligne: bool = zone(s)[0] == "ligne"
+	if jumelee != null:
+		pt[0] = _pos_vehicule(i, s)
+	if _n_appuis >= 2 and en_ligne:
+		var p0: Vector3 = pt[0]
+		pt[0] = p0 - Vector3(0, _fleche(-p0.z, signf(p0.x) == signf(_x_brin(true))), 0)
+	var dirh: Vector3 = pt[1] if en_ligne else (point(s + 1.5)[0] as Vector3) - (point(s - 1.5)[0] as Vector3)
+	if jumelee != null:
+		dirh = _pos_vehicule(i, s + 1.5) - _pos_vehicule(i, s - 1.5)
+	dirh.y = 0.0
+	if dirh.length() < 0.001:
+		dirh = Vector3.FORWARD
+	return Transform3D(Basis.looking_at(dirh.normalized(), Vector3.UP), pt[0])
+
+
 var _temps_s: PackedFloat64Array = PackedFloat64Array()
 var _temps_t: PackedFloat64Array = PackedFloat64Array()
 
@@ -4327,12 +4424,26 @@ func _etape_gdscript(delta: float) -> void:
 	# invisible au-delà de 700 m → pas déplacé ; 250 à 700 m → une image sur
 	# quatre, sans balancement ; près → chaque image
 	_tour = (_tour + 1) % 4
+	_lod_preparer()
+	var lod_change: bool = false
 	for i in range(_vehicules.size()):
 		_corps_proche = true
 		if vue_active:
 			var q: Vector3 = _point_cable(_vehicules[i][1])[0]
 			var d2: float = Vector2(q.x - point_vue.x, q.z - point_vue.z).length_squared()
 			_corps_proche = d2 < 60.0 * 60.0
+			if _lod_mm.size() == 2:
+				var niv: int = 0
+				if d2 > _vehicules_jusqua * _vehicules_jusqua:
+					niv = 3
+				elif d2 > VehiculesLod.DES_L2 * VehiculesLod.DES_L2:
+					niv = 2
+				elif d2 > VehiculesLod.DES_L1 * VehiculesLod.DES_L1:
+					niv = 1
+				if _lod_niveau(i, niv, d2):
+					lod_change = true
+				if niv > 0:
+					continue
 			if d2 > _vehicules_jusqua * _vehicules_jusqua:
 				continue
 			if d2 > 250.0 * 250.0:
@@ -4343,7 +4454,12 @@ func _etape_gdscript(delta: float) -> void:
 				_placer(i)
 				_dt = dt0
 				continue
+		elif _lod_mm.size() == 2 and _lod_niveau(i, 0, 0.0):
+			lod_change = true
 		_placer(i)
+	if lod_change:
+		RenderingServer.multimesh_set_buffer((_lod_mm[0] as MultiMesh).get_rid(), _lod_b1)
+		RenderingServer.multimesh_set_buffer((_lod_mm[1] as MultiMesh).get_rid(), _lod_b2)
 
 
 ## Appuis du câble (nez des gares, têtes de pylônes) et charges moyennes,
