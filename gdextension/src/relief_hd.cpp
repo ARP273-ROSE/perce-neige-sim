@@ -116,9 +116,13 @@ inline int64_t taille_bc5(int taille) {
 void ReliefHD::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("decoder", "chemin", "niveau", "nj", "ni"), &ReliefHD::decoder);
 	ClassDB::bind_method(D_METHOD("raccorder", "leve", "ref", "fine_ref", "h", "h0", "nx", "nz", "k_h", "k_r", "capsules", "rects", "r1_rect", "x0", "z0", "px", "pz"), &ReliefHD::raccorder);
-	ClassDB::bind_method(D_METHOD("anneaux", "hn", "nj", "ni", "h", "nx", "nz", "k", "cj", "ci", "m", "niveaux"), &ReliefHD::anneaux);
+	ClassDB::bind_method(D_METHOD("pyramide", "hn", "nj", "ni", "niveaux"), &ReliefHD::pyramide);
+	ClassDB::bind_method(D_METHOD("anneaux", "hn", "pyr", "nj", "ni", "h", "nx", "nz", "k", "cj", "ci", "m", "niveaux"), &ReliefHD::anneaux);
+	ClassDB::bind_method(D_METHOD("facettes", "hn", "nj", "ni", "j0", "i0", "n", "x0", "z0", "px", "pz", "rects"), &ReliefHD::facettes);
 	ClassDB::bind_method(D_METHOD("normales_couche", "hn", "nj", "ni", "ti", "tj", "taille", "marge", "px", "pz"), &ReliefHD::normales_couche);
-	ClassDB::bind_method(D_METHOD("couches", "chemin"), &ReliefHD::couches);
+	ClassDB::bind_method(D_METHOD("couches", "chemin", "sauter_niveaux"), &ReliefHD::couches);
+	ClassDB::bind_method(D_METHOD("reechantillonner", "src", "sj", "si", "nj", "ni", "rapport"), &ReliefHD::reechantillonner);
+	ClassDB::bind_method(D_METHOD("memoire_video"), &ReliefHD::memoire_video);
 	ClassDB::bind_method(D_METHOD("foret", "chemin", "hn", "nj", "ni", "x0", "z0", "px", "pz", "capsules", "rects"), &ReliefHD::foret);
 	ClassDB::bind_method(D_METHOD("normales", "hn", "nj", "ni", "tuile", "taille", "marge", "px", "pz"), &ReliefHD::normales);
 }
@@ -407,39 +411,147 @@ Array ReliefHD::raccorder(const PackedFloat32Array &leve, const PackedFloat32Arr
 	return sortie;
 }
 
-Array ReliefHD::anneaux(const PackedFloat32Array &hn, int nj, int ni, const PackedFloat32Array &h, int nx, int nz, int k,
+Array ReliefHD::pyramide(const PackedFloat32Array &hn, int nj, int ni, int niveaux) const {
+	Array sortie;
+	PackedFloat32Array prec = hn;
+	int pj = nj;
+	int pi = ni;
+	for (int n = 1; n < niveaux; n++) {
+		const int qj = (pj - 1) / 2 + 1;
+		const int qi = (pi - 1) / 2 + 1;
+		PackedFloat32Array o;
+		o.resize(int64_t(qj) * qi);
+		float *po = o.ptrw();
+		const float *ps = prec.ptr();
+		const int wj = pj;
+		const int wi = pi;
+		en_parallele(qi, [&](int64_t i) {
+			const int64_t g = std::min<int64_t>(i * 2, wi - 1);
+			const float *l1 = ps + g * wj;
+			const float *l0 = ps + std::max<int64_t>(g - 1, 0) * wj;
+			const float *l2 = ps + std::min<int64_t>(g + 1, wi - 1) * wj;
+			float *out = po + i * qj;
+			for (int j = 0; j < qj; j++) {
+				const int c = std::min(j * 2, wj - 1);
+				const int a = std::max(c - 1, 0);
+				const int b = std::min(c + 1, wj - 1);
+				const float v0 = l0[a] + 2.0f * l0[c] + l0[b];
+				const float v1 = l1[a] + 2.0f * l1[c] + l1[b];
+				const float v2 = l2[a] + 2.0f * l2[c] + l2[b];
+				out[j] = (v0 + 2.0f * v1 + v2) * (1.0f / 16.0f);
+			}
+		});
+		sortie.append(o);
+		prec = o;
+		pj = qj;
+		pi = qi;
+	}
+	return sortie;
+}
+
+Array ReliefHD::anneaux(const PackedFloat32Array &hn, const Array &pyr, int nj, int ni, const PackedFloat32Array &h, int nx, int nz, int k,
 		int cj, int ci, int m, int niveaux) const {
 	Array sortie;
-	const float *ps = hn.ptr();
 	const float *ph = h.ptr();
 	const int w = m + 1;
+	std::vector<PackedFloat32Array> garde;
+	garde.push_back(hn);
+	for (int n = 0; n < pyr.size(); n++) {
+		garde.push_back(pyr[n]);
+	}
 	for (int n = 0; n < niveaux; n++) {
 		const int s = 1 << n;
 		const bool dernier = n == niveaux - 1;
+		const int gj = ((nj - 1) >> n) + 1;
+		const int gi = ((ni - 1) >> n) + 1;
+		const int gj2 = ((nj - 1) >> (n + 1)) + 1;
+		const int gi2 = ((ni - 1) >> (n + 1)) + 1;
+		const float *pn = garde[size_t(n)].ptr();
+		const float *pp = dernier ? nullptr : garde[size_t(n + 1)].ptr();
 		PackedByteArray o;
-		o.resize(int64_t(w) * w * (dernier ? 8 : 4));
+		o.resize(int64_t(w) * w * 8);
 		float *po = reinterpret_cast<float *>(o.ptrw());
-		const int j0 = cj - (m / 2) * s;
-		const int i0 = ci - (m / 2) * s;
+		// nœud de ce niveau (SAUT est multiple de 2^n : le centre tombe sur la grille du niveau)
+		const int j0 = cj / s - m / 2;
+		const int i0 = ci / s - m / 2;
+		const auto fp = [&](int a, int b) {
+			return pp[int64_t(std::min(std::max(a, 0), gi2 - 1)) * gj2 + std::min(std::max(b, 0), gj2 - 1)];
+		};
 		for (int a = 0; a < w; a++) {
-			const int gi = std::min(std::max(i0 + a * s, 0), ni - 1);
-			const float *l = ps + int64_t(gi) * nj;
-			if (!dernier) {
-				float *out = po + size_t(a) * w;
-				for (int b = 0; b < w; b++) {
-					out[b] = l[std::min(std::max(j0 + b * s, 0), nj - 1)];
-				}
-			} else {
-				float *out = po + size_t(a) * w * 2;
-				for (int b = 0; b < w; b++) {
-					const int gj = std::min(std::max(j0 + b * s, 0), nj - 1);
-					out[2 * b] = l[gj];
-					out[2 * b + 1] = ReliefHD::hauteur_tri(ph, nx, nz, double(gj) / k, double(gi) / k);
+			const int ga = i0 + a;
+			const int gc = std::min(std::max(ga, 0), gi - 1);
+			const float *l = pn + int64_t(gc) * gj;
+			float *out = po + size_t(a) * w * 2;
+			for (int b = 0; b < w; b++) {
+				const int gb = j0 + b;
+				out[2 * b] = l[std::min(std::max(gb, 0), gj - 1)];
+				if (dernier) {
+					const int ja = std::min(std::max(gb * s, 0), nj - 1);
+					const int ia = std::min(std::max(ga * s, 0), ni - 1);
+					out[2 * b + 1] = ReliefHD::hauteur_tri(ph, nx, nz, double(ja) / k, double(ia) / k);
+				} else {
+					// même découpe que le maillage du niveau suivant ; un indice négatif reste pair ou impair
+					const int oa = ga & 1;
+					const int ob = gb & 1;
+					const int a2 = (ga - oa) / 2;
+					const int b2 = (gb - ob) / 2;
+					float v;
+					if (oa == 0 && ob == 0) {
+						v = fp(a2, b2);
+					} else if (oa == 0) {
+						v = 0.5f * (fp(a2, b2) + fp(a2, b2 + 1));
+					} else if (ob == 0) {
+						v = 0.5f * (fp(a2, b2) + fp(a2 + 1, b2));
+					} else {
+						v = 0.5f * (fp(a2, b2 + 1) + fp(a2 + 1, b2));
+					}
+					out[2 * b + 1] = v;
 				}
 			}
 		}
 		sortie.append(o);
 	}
+	return sortie;
+}
+
+PackedVector3Array ReliefHD::facettes(const PackedFloat32Array &hn, int nj, int ni, int j0, int i0, int n,
+		double x0, double z0, double px, double pz, const PackedFloat32Array &rects) const {
+	PackedVector3Array sortie;
+	sortie.resize(int64_t(n) * n * 6);
+	Vector3 *o = sortie.ptrw();
+	const float *ps = hn.ptr();
+	int64_t q = 0;
+	for (int i = std::max(i0, 0); i < std::min(i0 + n, ni - 1); i++) {
+		const float z = float(z0 + i * pz);
+		const float z2 = float(z0 + (i + 1) * pz);
+		const float *l = ps + int64_t(i) * nj;
+		for (int j = std::max(j0, 0); j < std::min(j0 + n, nj - 1); j++) {
+			const float x = float(x0 + j * px);
+			const float x2 = float(x0 + (j + 1) * px);
+			bool coupe = false;
+			for (int64_t r = 0; r + 3 < rects.size(); r += 4) {
+				if (x2 > rects[r] && x < rects[r + 2] && z2 > rects[r + 1] && z < rects[r + 3]) {
+					coupe = true;
+					break;
+				}
+			}
+			if (coupe) {
+				continue;
+			}
+			const Vector3 a(x, l[j], z);
+			const Vector3 b(x2, l[j + 1], z);
+			const Vector3 c(x, l[j + nj], z2);
+			const Vector3 d(x2, l[j + nj + 1], z2);
+			o[q] = a;
+			o[q + 1] = b;
+			o[q + 2] = c;
+			o[q + 3] = b;
+			o[q + 4] = d;
+			o[q + 5] = c;
+			q += 6;
+		}
+	}
+	sortie.resize(q);
 	return sortie;
 }
 
@@ -507,7 +619,29 @@ PackedByteArray ReliefHD::normales_couche(const PackedFloat32Array &hn, int nj, 
 	return sortie;
 }
 
-Array ReliefHD::couches(const String &chemin) const {
+PackedFloat32Array ReliefHD::reechantillonner(const PackedFloat32Array &src, int sj, int si, int nj, int ni, double rapport) const {
+	PackedFloat32Array o;
+	o.resize(int64_t(nj) * ni);
+	float *po = o.ptrw();
+	const float *ps = src.ptr();
+	en_parallele(ni, [&](int64_t i) {
+		const double fz = std::min(double(i) * rapport, double(si) - 1.001);
+		const int64_t a = int64_t(fz);
+		const float v = float(fz - double(a));
+		const float *l0 = ps + a * sj;
+		const float *l1 = l0 + sj;
+		float *out = po + i * nj;
+		for (int j = 0; j < nj; j++) {
+			const double fx = std::min(double(j) * rapport, double(sj) - 1.001);
+			const int b = int(fx);
+			const float u = float(fx - double(b));
+			out[j] = (l0[b] * (1.0f - u) + l0[b + 1] * u) * (1.0f - v) + (l1[b] * (1.0f - u) + l1[b + 1] * u) * v;
+		}
+	});
+	return o;
+}
+
+Array ReliefHD::couches(const String &chemin, int sauter_niveaux) const {
 	Array sortie;
 	Ref<FileAccess> f = FileAccess::open(chemin, FileAccess::READ);
 	if (f.is_null()) {
@@ -549,9 +683,17 @@ Array ReliefHD::couches(const String &chemin) const {
 		return sortie;
 	}
 	sortie.append(int(champs[6]));
-	sortie.append(int(champs[4]));
+	// BC7 : 16 octets par bloc de 4 × 4 ; les niveaux écartés sont en tête des données
+	int taille = int(champs[4]);
+	int64_t saut = 0;
+	for (int k = 0; k < sauter_niveaux; k++) {
+		const int64_t b = (taille + 3) / 4;
+		saut += b * b * 16;
+		taille /= 2;
+	}
+	sortie.append(taille);
 	for (const PackedByteArray &o : c) {
-		sortie.append(o);
+		sortie.append(saut > 0 ? o.slice(saut) : o);
 	}
 	return sortie;
 }

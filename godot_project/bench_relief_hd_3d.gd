@@ -38,7 +38,8 @@ func _suite() -> void:
 		print("BENCH_RELIEF_HD %s" % ("OK" if _echecs == 0 else "ECHEC"))
 		FinBanc.quitter(self, _main, 0 if _echecs == 0 else 1)
 		return
-	_check("grille au mètre", ReliefFin.K == 25 and ReliefFin.NJ == 21076 and ReliefFin.NI == 17251, "K = %d, %d × %d" % [ReliefFin.K, ReliefFin.NJ, ReliefFin.NI])
+	var niveau: int = rel.fin.niveau_pose
+	_check("grille du niveau %d" % niveau, ReliefFin.K == (25 if niveau == 2 else 10) and ReliefFin.NJ == 843 * ReliefFin.K + 1 and ReliefFin.NI == 690 * ReliefFin.K + 1, "K = %d, %d × %d" % [ReliefFin.K, ReliefFin.NJ, ReliefFin.NI])
 	# le pack se relit : altitudes plausibles, aucune hors de ce que relève l'IGN sur le domaine
 	var g: PackedFloat32Array = rel.fin.noeuds_grille()
 	var mi: float = INF
@@ -107,5 +108,34 @@ func _suite() -> void:
 		for j in range(0, nj - 1, 7):
 			saut = maxf(saut, absf(g[i * nj + j + 1] - g[i * nj + j]))
 	_check("pas de nœud aberrant", saut < 60.0, "plus grand écart entre voisins %.2f m (1 m de maille ; barres rocheuses comprises)" % saut)
+	# collisions à pied, hors des couloirs : rayons contre le sol affiché
+	_main.basculer_skieur()
+	while not _main.mode_skieur or _main.collisions == null:
+		await process_frame
+	var col: CollisionsJeu = _main.collisions
+	var pire_col: float = 0.0
+	var manques: int = 0
+	var nb_col: int = 0
+	var espace: PhysicsDirectSpaceState3D = _main.get_world_3d().direct_space_state
+	for centre in [Vector2(1800.0, 1500.0), Vector2(5000.0, -1000.0), Vector2(400.0, 1800.0), Vector2(-2000.0, 2000.0)]:
+		var p0: Vector3 = Vector3(centre.x, rel.hauteur_sol(centre.x, centre.y), centre.y)
+		col._sol_centre = Vector2i(-1073741824, 0)
+		col.assurer_autour(p0)
+		for i in range(6):
+			await physics_frame
+		espace = _main.get_world_3d().direct_space_state
+		for a2 in range(-50, 51, 7):
+			for b2 in range(-50, 51, 7):
+				var x3: float = centre.x + a2 + 0.37
+				var z3: float = centre.y + b2 + 0.61
+				var h3: float = rel.hauteur_sol(x3, z3)
+				var rq: PhysicsRayQueryParameters3D = PhysicsRayQueryParameters3D.create(Vector3(x3, h3 + 5.0, z3), Vector3(x3, h3 - 5.0, z3), CollisionsJeu.COUCHE_RELIEF)
+				var hit: Dictionary = espace.intersect_ray(rq)
+				nb_col += 1
+				if hit.is_empty():
+					manques += 1
+				else:
+					pire_col = maxf(pire_col, absf((hit["position"] as Vector3).y - h3))
+	_check("à pied, les collisions sont le sol affiché", manques == 0 and pire_col < 0.01, "écart max %.4f m, %d rayons, %d sans sol" % [pire_col, nb_col, manques])
 	print("BENCH_RELIEF_HD %s" % ("OK" if _echecs == 0 else "ECHEC"))
 	FinBanc.quitter(self, _main, 0 if _echecs == 0 else 1)

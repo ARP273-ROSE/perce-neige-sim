@@ -38,13 +38,13 @@ void vertex() {
 	neige = UV.x;
 }
 void fragment() {
-	vec3 vert = vec3(0.075, 0.125, 0.085) * COLOR.rgb;
+	vec3 vert = vec3(0.045, 0.085, 0.060) * COLOR.rgb;
 	vec3 tronc = vec3(0.09, 0.07, 0.05);
 	vec3 base = mix(tronc, vert, smoothstep(-0.5, 0.0, neige));
-	vec3 c = mix(base, vec3(0.80, 0.84, 0.90), clamp(neige, 0.0, 1.0) * hiver);
+	vec3 c = mix(base, vec3(0.72, 0.76, 0.82), clamp(neige, 0.0, 1.0) * 0.55 * hiver);
 	c *= lum;
 	float d = distance(pw, CAMERA_POSITION_WORLD);
-	ALBEDO = pow(mix(c, brume, clamp(1.0 - exp(-d / 28000.0), 0.0, 0.7)), vec3(gamma));
+	ALBEDO = pow(max(mix(c, brume, clamp(1.0 - exp(-d / 28000.0), 0.0, 0.7)), vec3(0.0)), vec3(gamma));
 }
 """
 
@@ -58,7 +58,7 @@ var nb_arbres: int = 0
 func demarrer(rel: ReliefBuilder, cases: Array) -> void:
 	name = "ReliefForet"
 	_rel = rel
-	_meshes = [_conifere(5, 8, true), _conifere(2, 6, false), _triangle()]
+	_meshes = [_conifere(9, 9, true), _conifere(3, 6, false), _triangle()]
 	for k in range(3):
 		var m: ShaderMaterial = rel._shader(_SHADER)
 		m.set_shader_parameter("billboard", 1.0 if k == 2 else 0.0)
@@ -113,40 +113,45 @@ func _poser(niveau: int, tampon: PackedFloat32Array, nb: int, debut: float, fin_
 	add_child(mi)
 
 
-## Hauteur 1, rayon 1 : `etages` cônes emboîtés de `pans` pans (UV : x neige, y ombre).
+## Hauteur 1, rayon 1 : `etages` couronnes de `pans` pans, irrégulières, normales adoucies
+## (UV : x neige, y ombre).
 func _conifere(etages: int, pans: int, avec_tronc: bool) -> ArrayMesh:
 	var st: SurfaceTool = SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var alea: RandomNumberGenerator = RandomNumberGenerator.new()
+	alea.seed = 2747
 	for e in range(etages):
 		var t0: float = float(e) / etages
-		var bas: float = 0.10 + 0.86 * t0 * 0.92
-		var haut: float = minf(0.10 + 0.86 * (t0 + 1.25 / etages), 1.0)
-		var rayon: float = 1.0 - 0.82 * t0
+		var bas: float = 0.06 + 0.84 * t0
+		var haut: float = minf(bas + 2.1 / etages, 1.0)
+		var rayon: float = 0.62 * pow(1.0 - t0 * 0.93, 0.9)
+		var pointes: Array = []
 		for p in range(pans):
-			var a0: float = TAU * (p + 0.37 * e) / pans
-			var a1: float = TAU * (p + 1 + 0.37 * e) / pans
-			var v0: Vector3 = Vector3(cos(a0) * rayon, bas, sin(a0) * rayon)
-			var v1: Vector3 = Vector3(cos(a1) * rayon, bas, sin(a1) * rayon)
-			var s: Vector3 = Vector3(0.0, haut, 0.0)
-			var nm: Vector3 = (v1 - v0).cross(s - v0).normalized()
-			if nm.y < 0.0:
-				nm = -nm
-			# neige sur le dessus des branches, le bas de chaque étage reste vert
-			for q in [[v0, 0.15, 0.62], [s, 0.95, 1.05], [v1, 0.15, 0.62]]:
+			var a: float = TAU * (p + 0.41 * e) / pans
+			var rr: float = rayon * alea.randf_range(0.78, 1.15)
+			pointes.append(Vector3(cos(a) * rr, bas - alea.randf_range(0.0, 0.03), sin(a) * rr))
+		var s: Vector3 = Vector3(0.0, haut, 0.0)
+		for p in range(pans):
+			var v0: Vector3 = pointes[p]
+			var v1: Vector3 = pointes[(p + 1) % pans]
+			# la moitié du cône seulement reçoit la neige : le dessus de la branche
+			for q in [[v0, 0.05, 0.55], [s, 0.70, 1.0], [v1, 0.05, 0.55]]:
+				var pt: Vector3 = q[0]
+				var nm: Vector3 = (Vector3(pt.x, 0.0, pt.z).normalized() + Vector3.UP * 0.9).normalized() if pt != s else Vector3.UP
 				st.set_normal(nm)
 				st.set_uv(Vector2(q[1], q[2]))
-				st.add_vertex(q[0])
+				st.add_vertex(pt)
 	if avec_tronc:
 		for p in range(4):
 			var a0: float = TAU * p / 4.0
 			var a1: float = TAU * (p + 1) / 4.0
-			var b0: Vector3 = Vector3(cos(a0) * 0.10, 0.0, sin(a0) * 0.10)
-			var b1: Vector3 = Vector3(cos(a1) * 0.10, 0.0, sin(a1) * 0.10)
-			var h0: Vector3 = b0 + Vector3.UP * 0.2
-			var h1: Vector3 = b1 + Vector3.UP * 0.2
+			var b0: Vector3 = Vector3(cos(a0) * 0.035, 0.0, sin(a0) * 0.035)
+			var b1: Vector3 = Vector3(cos(a1) * 0.035, 0.0, sin(a1) * 0.035)
+			var h0: Vector3 = b0 + Vector3.UP * 0.12
+			var h1: Vector3 = b1 + Vector3.UP * 0.12
 			for q in [b0, h0, b1, b1, h0, h1]:
 				st.set_normal(Vector3(cos(a0), 0.0, sin(a0)))
-				st.set_uv(Vector2(-1.0, 1.0))
+				st.set_uv(Vector2(-1.0, 0.6))
 				st.add_vertex(q)
 	return st.commit()
 
@@ -154,7 +159,7 @@ func _conifere(etages: int, pans: int, avec_tronc: bool) -> ArrayMesh:
 func _triangle() -> ArrayMesh:
 	var st: SurfaceTool = SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	for q in [[Vector3(-0.9, 0.08, 0.0), 0.3, 0.75], [Vector3(0.0, 1.0, 0.0), 0.8, 1.0], [Vector3(0.9, 0.08, 0.0), 0.3, 0.75]]:
+	for q in [[Vector3(-0.6, 0.06, 0.0), 0.25, 0.75], [Vector3(0.0, 1.0, 0.0), 0.8, 1.0], [Vector3(0.6, 0.06, 0.0), 0.25, 0.75]]:
 		st.set_normal(Vector3.UP)
 		st.set_uv(Vector2(q[1], q[2]))
 		st.add_vertex(q[0])

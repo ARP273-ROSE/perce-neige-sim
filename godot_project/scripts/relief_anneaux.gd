@@ -5,11 +5,12 @@ extends Node3D
 ## altitudes d'une texture par anneau, recalculée sur un fil de travail quand la caméra a fait
 ## 32 m ; plus de construction de maillage ni de reconstruction visible. Chaque anneau rejoint
 ## le suivant à son bord (morphing selon la distance), le dernier se pose sur les tuiles à 25 m.
+## Altitudes des anneaux filtrées d'un niveau à l'autre : sans crénelage sur les barres rocheuses.
 ## L'ombrage vient d'un tableau de textures de normales au mètre, valable à toute distance.
 
 const M: int = 512                     # mailles par côté d'un anneau, multiple de 4
-const NIVEAUX: int = 5
-const SAUT: int = 1 << NIVEAUX         # les anneaux se déplacent ensemble, de 32 nœuds
+static var NIVEAUX: int = 5
+static var SAUT: int = 32              # les anneaux se déplacent ensemble, de 2^NIVEAUX nœuds
 const TUILE: int = 2000                # nœuds par couche du tableau de textures
 const TAILLE: int = 2048               # texels par couche, dont
 const MARGE: int = 24                  # la marge prise aux voisines (filtrage, niveaux)
@@ -19,6 +20,8 @@ const _ENTETE_HD: String = """varying vec3 nw;
 uniform sampler2DArray normal_hd : filter_linear_mipmap_anisotropic, repeat_disable;
 uniform vec4 hd_xf;                 // x0, z0, px, pz
 uniform vec4 hd_tex;                // nœuds par couche, texels, marge, couches par ligne
+uniform vec4 o_xf;                  // photo : x0, z0, pas des nœuds au mètre
+uniform vec4 o_tex;                 // nœuds par couche, marge en nœuds, couches par ligne, dernière ligne
 uniform vec2 hd_nb;                 // dernier nœud (j, i)
 uniform sampler2DArray ortho_hd : source_color, filter_linear_mipmap_anisotropic, repeat_disable;
 uniform float a_ortho = 0.0;        // 1 : orthophoto au mètre présente
@@ -27,7 +30,7 @@ vec3 photo_hd(vec2 p, vec3 c_loin) {
 	if (a_ortho < 0.5) {
 		return c_loin;
 	}
-	vec2 nn = (p - hd_xf.xy) / hd_xf.zw;
+	vec2 nn = (p - o_xf.xy) / o_xf.zw;
 	vec2 dx_n = dFdx(nn);
 	vec2 dy_n = dFdy(nn);
 	float lod = 0.5 * log2(max(max(dot(dx_n, dx_n), dot(dy_n, dy_n)), 1e-6));
@@ -35,9 +38,10 @@ vec3 photo_hd(vec2 p, vec3 c_loin) {
 	if (k >= 1.0) {
 		return c_loin;
 	}
-	vec2 t = clamp(floor(nn / hd_tex.x), vec2(0.0), floor((hd_nb - vec2(0.5)) / hd_tex.x));
-	vec2 uv = (nn - t * hd_tex.x + hd_tex.z + 0.5) / hd_tex.y;
-	vec3 c = textureGrad(ortho_hd, vec3(uv, t.y * hd_tex.w + t.x), dx_n / hd_tex.y, dy_n / hd_tex.y).rgb;
+	vec2 t = clamp(floor(nn / o_tex.x), vec2(0.0), vec2(o_tex.z - 1.0, o_tex.w));
+	float couverts = o_tex.x + 2.0 * o_tex.y;
+	vec2 uv = (nn - t * o_tex.x + o_tex.y + 0.5) / couverts;
+	vec3 c = textureGrad(ortho_hd, vec3(uv, t.y * o_tex.z + t.x), dx_n / couverts, dy_n / couverts).rgb;
 	return mix(c, c_loin, k);
 }
 vec3 normale_hd(vec2 p) {
@@ -50,7 +54,7 @@ vec3 normale_hd(vec2 p) {
 """
 ## Sommets d'un anneau : position et altitude lues de sa texture.
 const _SOMMETS_ANNEAU: String = """uniform sampler2D anneau : filter_nearest, repeat_disable;
-uniform vec4 a_o;                   // premier nœud (j, i), pas en nœuds, 1 : dernier anneau
+uniform vec4 a_o;                   // premier nœud (j, i), pas en nœuds
 uniform vec2 a_m;                   // début et fin du morphing (m de la caméra)
 void vertex() {
 	ivec2 g = ivec2(VERTEX.xz);
@@ -59,14 +63,7 @@ void vertex() {
 	vec4 t0 = texelFetch(anneau, g, 0);
 	float d = max(abs(w.x - CAMERA_POSITION_WORLD.x), abs(w.y - CAMERA_POSITION_WORLD.z));
 	float al = clamp((d - a_m.x) / (a_m.y - a_m.x), 0.0, 1.0);
-	float hp = t0.g;
-	if (a_o.w < 0.5) {
-		// nœud absent de l'anneau suivant : le milieu de son arête (même diagonale que le maillage)
-		ivec2 o = g % 2;
-		ivec2 o2 = ivec2(o.x, -o.y);
-		hp = 0.5 * (texelFetch(anneau, g - o2, 0).r + texelFetch(anneau, g + o2, 0).r);
-	}
-	VERTEX = vec3(w.x, mix(t0.r, hp, al), w.y);
+	VERTEX = vec3(w.x, mix(t0.r, t0.g, al), w.y);
 	NORMAL = vec3(0.0, 1.0, 0.0);
 	pw = VERTEX;
 	nw = NORMAL;
@@ -99,11 +96,19 @@ static func code_hd(code: String) -> String:
 		.replace("c = en_hiver(c, UV, CAMERA_POSITION_WORLD);", "c = en_hiver(c, uv_hd, CAMERA_POSITION_WORLD);")
 
 
-static func regler_hd(m: ShaderMaterial, normales: Texture2DArray, ortho: Texture2DArray = null) -> void:
+## Voie moyenne : un anneau de moins, la grille est déjà 2,5 fois plus grosse.
+static func regler_niveaux(niveau: int) -> void:
+	NIVEAUX = 5 if niveau >= 2 else 4
+	SAUT = 1 << NIVEAUX
+
+
+static func regler_hd(m: ShaderMaterial, normales: Texture2DArrayRD, ortho: Texture2DArrayRD = null) -> void:
 	m.set_shader_parameter("normal_hd", normales)
 	if ortho != null:
 		m.set_shader_parameter("ortho_hd", ortho)
 		m.set_shader_parameter("a_ortho", 1.0)
+		m.set_shader_parameter("o_xf", Vector4(ReliefFin.X0, ReliefFin.Z0, ReliefFin.L_X / ReliefFin.KHD, ReliefFin.L_Z / ReliefFin.KHD))
+		m.set_shader_parameter("o_tex", Vector4(TUILE, MARGE, (ReliefFin.NCX * ReliefFin.KHD + TUILE - 1) / TUILE, (ReliefFin.NCZ * ReliefFin.KHD + TUILE - 1) / TUILE - 1))
 	m.set_shader_parameter("hd_xf", Vector4(ReliefFin.X0, ReliefFin.Z0, ReliefFin.PX, ReliefFin.PZ))
 	m.set_shader_parameter("hd_tex", Vector4(TUILE, TAILLE, MARGE, (ReliefFin.NJ - 1 + TUILE - 1) / TUILE))
 	m.set_shader_parameter("hd_nb", Vector2(ReliefFin.NJ - 1, ReliefFin.NI - 1))
@@ -124,9 +129,9 @@ func demarrer(fin: ReliefFin, rel: ReliefBuilder) -> void:
 	var centre: Vector2i = _noeud_vue()
 	_cj = centre.x
 	_ci = centre.y
-	var couches: Array = _hd.call("anneaux", fin.noeuds_grille(), ReliefFin.NJ, ReliefFin.NI, rel._h, ReliefDonnees.NX, ReliefDonnees.NZ, ReliefFin.K, _cj, _ci, M, NIVEAUX)
+	var couches: Array = _hd.call("anneaux", fin.noeuds_grille(), fin.pyramide, ReliefFin.NJ, ReliefFin.NI, rel._h, ReliefDonnees.NX, ReliefDonnees.NZ, ReliefFin.K, _cj, _ci, M, NIVEAUX)
 	for n in range(NIVEAUX):
-		var img: Image = Image.create_from_data(M + 1, M + 1, false, Image.FORMAT_RGF if n == NIVEAUX - 1 else Image.FORMAT_RF, couches[n])
+		var img: Image = Image.create_from_data(M + 1, M + 1, false, Image.FORMAT_RGF, couches[n])
 		_images.append(img)
 		_textures.append(ImageTexture.create_from_image(img))
 		var mat: ShaderMaterial = rel._shader(code)
@@ -207,7 +212,7 @@ func _regler_uniformes() -> void:
 	for n in range(NIVEAUX):
 		var s: int = 1 << n
 		var m: ShaderMaterial = _mats[n]
-		m.set_shader_parameter("a_o", Vector4(_cj - (M / 2) * s, _ci - (M / 2) * s, s, 1.0 if n == NIVEAUX - 1 else 0.0))
+		m.set_shader_parameter("a_o", Vector4(_cj - (M / 2) * s, _ci - (M / 2) * s, s, 0.0))
 		var demi: float = (M / 2) * s
 		# plein morphing avant le bord le plus proche possible de la caméra (décalée de SAUT / 2 au plus)
 		var m1: float = demi - float(SAUT) * 0.5 - 2.0 * s
@@ -246,7 +251,7 @@ func _process(_dt: float) -> void:
 
 func _calculer() -> void:
 	var t0: int = Time.get_ticks_usec()
-	_resultat = _hd.call("anneaux", _fin.noeuds_grille(), ReliefFin.NJ, ReliefFin.NI, _rel._h, ReliefDonnees.NX, ReliefDonnees.NZ, ReliefFin.K, _demande.x, _demande.y, M, NIVEAUX)
+	_resultat = _hd.call("anneaux", _fin.noeuds_grille(), _fin.pyramide, ReliefFin.NJ, ReliefFin.NI, _rel._h, ReliefDonnees.NX, ReliefDonnees.NZ, ReliefFin.K, _demande.x, _demande.y, M, NIVEAUX)
 	dernier_calcul_us = Time.get_ticks_usec() - t0
 
 
@@ -256,7 +261,7 @@ func _poser() -> void:
 	_ci = _demande.y
 	for n in range(NIVEAUX):
 		var img: Image = _images[n]
-		img.set_data(M + 1, M + 1, false, Image.FORMAT_RGF if n == NIVEAUX - 1 else Image.FORMAT_RF, _resultat[n])
+		img.set_data(M + 1, M + 1, false, Image.FORMAT_RGF, _resultat[n])
 		(_textures[n] as ImageTexture).update(img)
 	_regler_uniformes()
 	_resultat = []
