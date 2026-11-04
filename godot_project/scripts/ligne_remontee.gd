@@ -554,6 +554,10 @@ static func chainette_xm_c(x1: float, y1: float, x2: float, y2: float, a: float)
 	return [xm, y1 - a * cosh((x1 - xm) / a)]       # (double précision, pas un Vector2)
 
 
+static var garde_pire_us: int = 0
+const GARDE_VEHICULE: float = 4.8       # câble au-dessus du sol, au moins : siège ou cabine dégagés
+
+
 func _calculer_tetes() -> void:
 	_parametres_chainette()
 	_tetes.clear()
@@ -569,7 +573,9 @@ func _calculer_tetes() -> void:
 		_bornes_tetes()
 		# (relief affiché : le précalcul ne le connaît pas tout à fait, et les véhicules passaient sous la
 		# neige entre deux pylônes, retour d'utilisateur, 04/11/2026 : P9-P10 des Pyramides)
+		var t0_g: int = Time.get_ticks_usec()
 		_garde_au_sol(true)
+		garde_pire_us = maxi(garde_pire_us, Time.get_ticks_usec() - t0_g)
 		return
 	# lignes relevées au GPS : chaque tête part de la hauteur MESURÉE du câble
 	# au droit du pylône (siège mesuré + suspente) ; sinon 9 m
@@ -729,9 +735,11 @@ func _pire_portee_teleski(a: Array, b: Array) -> Array:
 ## elle existe, sinon la garde réglementaire (réduite près des gares).
 func _garde_exigee(d: float) -> float:
 	var gm: float = _garde_mesuree(d)
+	var pres_gare: float = smoothstep(0.0, 40.0, minf(d, longueur_h() - d))
 	if gm > 0.0:
-		return gm
-	return lerpf(H_CABLE_GARE - 0.5, GARDE, smoothstep(0.0, 40.0, minf(d, longueur_h() - d)))
+		# (mesure GPS : jamais assez basse pour que le véhicule touche la neige)
+		return maxf(gm, lerpf(H_CABLE_GARE - 0.5, GARDE_VEHICULE, pres_gare))
+	return lerpf(H_CABLE_GARE - 0.5, GARDE, pres_gare)
 
 
 ## Les têtes relevées pour la garde dépassaient la réalité (jusqu'à +14 m en
@@ -827,15 +835,16 @@ func _garde_au_sol(proteger_c: bool = false) -> bool:
 			var xc: Array = chainette_xm_c(a[0], a[1], b[0], b[1], _a_montee)
 			var xm: float = xc[0]
 			var cc: float = xc[1]
-			for k in range(1, 20):
-				var u: float = float(k) / 20.0
+			for k in range(1, 12):
+				var u: float = float(k) / 12.0
 				var d: float = lerpf(a[0], b[0], u)
 				# brin montée (chargé) : la flèche la plus forte
 				var yc: float = _a_montee * cosh((d - xm) / _a_montee) + cc
 				# garde pleine en ligne, réduite près des gares où le câble
 				# rejoint la hauteur du quai (sinon le dernier pylône était
 				# relevé jusqu'à la butée de 32 m — retour d'utilisateur, 23/10/2026)
-				pire = maxf(pire, terrain(d) + _garde_exigee(d) - yc)
+				# (sol réel sous les deux brins : le profil de l'axe ignore le dévers et le relief fin)
+				pire = maxf(pire, maxf(terrain(d), maxf(_sol(voie * 0.5, -d), _sol(-voie * 0.5, -d))) + _garde_exigee(d) - yc)
 			if pire > 0.05:
 				var ga: bool = i > 0
 				var dr: bool = i < pts.size() - 2
@@ -1081,6 +1090,8 @@ func _pylones_de_nez(L: float) -> void:
 	if L - float(pylones[n]["d"]) < NEZ_PYLONE and n > 0:
 		_nez_par_pylone[1] = true
 		_tetes[n] = maxf(terrain(L) + H_CABLE_GARE, terrain(float(pylones[n]["d"])) + NEZ_H_MIN)
+	if _nez_par_pylone[0] or _nez_par_pylone[1]:
+		_garde_au_sol(true)                # (la portée voisine ne doit pas y laisser sa garde)
 
 
 func _galets_batterie(dev: float) -> int:

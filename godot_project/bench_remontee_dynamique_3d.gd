@@ -125,8 +125,10 @@ func _initialize() -> void:
 				var py2: PyloneRemontee = lg._pyl[k2][0]
 				if py2.deviation < 0.0:
 					conc_ok += 1
-		_verif("pente : batteries de galets aux nez des gares ; câble concave aux pylônes de compression",
-			batt >= 1 and conc_ok == conc_n, "%d batterie(s), %d/%d compressions concaves" % [batt, conc_ok, conc_n])
+		# (un pylône collé à la gare fait le raccord à la place de la batterie)
+		var par_pylone: int = lg._nez_par_pylone.count(true)
+		_verif("pente : batteries de galets ou pylône au nez des gares ; câble concave aux pylônes de compression",
+			batt + par_pylone >= 1 and conc_ok == conc_n, "%d batterie(s), %d nez par pylône, %d/%d compressions concaves" % [batt, par_pylone, conc_ok, conc_n])
 		# 6. lanceur de pneus : chaque pneu tourne à la vitesse du véhicule à sa place
 		var v_min: float = INF
 		var v_max: float = 0.0
