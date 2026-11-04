@@ -74,6 +74,7 @@ const R_GALET: float = 0.21                # Ø 420 mm, la norme des débrayable
 const PAS_GALET: float = 0.52              # entraxe de deux galets d'un même balancier
 const R_CABLE: float = 0.0235              # Ø 47 mm (Tufs)
 const DESSUS_TRAVERSE_CABLE: float = 0.95  # du dessus de la traverse à l'axe du câble
+const DESSUS_TRAVERSE_COMPRESSION: float = -0.35  # compression seule : le câble passe sous les galets, à hauteur de tête
 const RETRAIT_TRAVERSE: float = 0.45       # bout de la traverse en dedans du câble
 ## Télécabines : traverse remontée au pivot du train support — à 0,95 m,
 ## elle était à hauteur du toit et les cabines passaient au travers
@@ -423,7 +424,7 @@ func _train(montee: bool) -> void:
 			RemonteeKit.boite_en(tete, Vector3(0.40, 0.12, 0.40), Vector3(0, 1.62, 0), "galva_pylone")
 		return
 	# portique de levage : deux jambes inclinées et une poutre haute avec œil
-	var hp: float = 1.25 if dessus.is_empty() else 1.55
+	var hp: float = 1.25 if dessus.is_empty() else (1.55 if not dessous.is_empty() else 0.95)
 	var demi: float = maxf(0.7, L * 0.5 + 0.25)
 	for sz in [-1.0, 1.0]:
 		RemonteeKit.poutre(self, _xf_tete * Vector3(x - ext * 0.55, hauteur, sz * minf(demi, 1.3)), Vector3(x, hauteur_cable() + hp, sz * minf(demi, 1.3) * 0.55),
