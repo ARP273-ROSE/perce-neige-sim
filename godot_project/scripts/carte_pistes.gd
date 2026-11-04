@@ -146,9 +146,80 @@ func _carte(q: Vector2, c: Vector2, o: Vector2) -> Vector2:
 	return o + (q - c) * echelle
 
 
+## Tout ce qui ne bouge pas (pistes, remontées, tracé du funiculaire) dans un seul maillage, refait au
+## changement de zoom : tracé à la main, chaque trait, cercle ou piste recréait ses tampons graphiques
+## à chaque dessin (3 900 tampons créés et détruits par seconde, carte ouverte, essai du 04/11/2026).
+var _fond: ArrayMesh = null
+var _cle_fond: String = ""
+var _noms_pistes: Array = []            # [cadre, nom, milieu (monde), couleur]
+
+
+func _ajouter_trait(v: PackedVector2Array, cols: PackedColorArray, a: Vector2, b: Vector2, l: float, col: Color) -> void:
+	var d: Vector2 = b - a
+	if d.length_squared() < 0.0001:
+		return
+	var n: Vector2 = d.normalized().orthogonal() * l * 0.5
+	var e: Vector2 = d.normalized() * l * 0.25       # recouvrement aux coudes
+	for q in [a - e + n, b + e + n, b + e - n, a - e + n, b + e - n, a - e - n]:
+		v.append(q)
+		cols.append(col)
+
+
+func _ajouter_disque(v: PackedVector2Array, cols: PackedColorArray, c: Vector2, r: float, col: Color) -> void:
+	const N: int = 12
+	for i in range(N):
+		v.append(c)
+		v.append(c + Vector2.from_angle(TAU * i / N) * r)
+		v.append(c + Vector2.from_angle(TAU * (i + 1) / N) * r)
+		for _k in range(3):
+			cols.append(col)
+
+
+## Sommets en pixels de carte, l'origine du monde en (0, 0).
+func _refaire_fond(remontees: Array) -> void:
+	var v: PackedVector2Array = PackedVector2Array()
+	var cols: PackedColorArray = PackedColorArray()
+	_noms_pistes.clear()
+	var l_piste: float = clampf(PistesDonnees.LARGEUR * echelle * 0.35, 2.0, 7.0)
+	for k in range(domaine._axes.size()):
+		var coul: int = PistesDonnees.PISTES[k][1]
+		var col: Color = DomaineSkiable.COULEURS[coul] if coul >= 0 else Color(0.8, 0.8, 0.8)
+		col.a = 0.92
+		var pts: PackedVector2Array = domaine._axes[k]
+		var long_px: float = 0.0
+		for i in range(1, pts.size()):
+			_ajouter_trait(v, cols, pts[i - 1] * echelle, pts[i] * echelle, l_piste, col)
+			long_px += pts[i].distance_to(pts[i - 1]) * echelle
+		var nom: String = PistesDonnees.PISTES[k][0]
+		if nom != "" and long_px > NOM_MIN_PX and pts.size() >= 2:
+			_noms_pistes.append([domaine._cadres[k], nom, pts[pts.size() / 2], col])
+	for r in remontees:
+		var a: Vector2 = r[1] * echelle
+		var b: Vector2 = r[2] * echelle
+		_ajouter_trait(v, cols, a, b, 4.5, Color(1, 1, 1, 0.8))
+		_ajouter_trait(v, cols, a, b, 2.5, Color(0.08, 0.08, 0.10, 0.95))
+		_ajouter_disque(v, cols, a, 6.5, Color(1, 1, 1, 0.95))
+		_ajouter_disque(v, cols, a, 5.0, Color(0.78, 0.06, 0.18, 1.0))
+		_ajouter_disque(v, cols, b, 3.5, Color(0.08, 0.08, 0.10, 0.95))
+	if trace_funi.size() >= 2:
+		# en souterrain : tireté noir et jaune le long du vrai tracé
+		for i in range(trace_funi.size() - 1):
+			_ajouter_trait(v, cols, trace_funi[i] * echelle, trace_funi[i + 1] * echelle, 4.0, Color(0.05, 0.05, 0.05, 0.85))
+		for i in range(trace_funi.size() - 1):
+			if (i / 2) % 2 == 0:
+				_ajouter_trait(v, cols, trace_funi[i] * echelle, trace_funi[i + 1] * echelle, 2.5, Color(1.0, 0.85, 0.1, 0.95))
+	var ta: Array = []
+	ta.resize(Mesh.ARRAY_MAX)
+	ta[Mesh.ARRAY_VERTEX] = v
+	ta[Mesh.ARRAY_COLOR] = cols
+	_fond = ArrayMesh.new()
+	if not v.is_empty():
+		_fond.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, ta)
+
+
 func _draw() -> void:
 	draw_rect(Rect2(Vector2.ZERO, TAILLE), Color(0.05, 0.07, 0.10, 0.55))
-	draw_rect(Rect2(Vector2.ZERO, TAILLE), Color(1, 1, 1, 0.35), false, 2.0)
+	HUD.contour(self, Rect2(Vector2.ZERO, TAILLE), Color(1, 1, 1, 0.35), 2.0)
 	if domaine == null or skieur == null:
 		return
 	var p: Vector3 = skieur.global_position
@@ -156,55 +227,34 @@ func _draw() -> void:
 	var o: Vector2 = TAILLE * 0.5
 	var demi: Vector2 = TAILLE * 0.5 / echelle
 	var vue: Rect2 = Rect2(c - demi, demi * 2.0).grow(PistesDonnees.LARGEUR)
+	var remontees: Array = _remontees()
+	var cle: String = "%f|%d|%d" % [echelle, remontees.size(), trace_funi.size()]
+	if cle != _cle_fond:
+		_cle_fond = cle
+		_refaire_fond(remontees)
+	draw_mesh(_fond, null, Transform2D(0.0, o - c * echelle))
 	var noms: Array = []
-	for k in range(domaine._axes.size()):
-		if not (domaine._cadres[k] as Rect2).intersects(vue):
-			continue
-		var coul: int = PistesDonnees.PISTES[k][1]
-		var col: Color = DomaineSkiable.COULEURS[coul] if coul >= 0 else Color(0.8, 0.8, 0.8)
-		col.a = 0.92
-		var pts: PackedVector2Array = domaine._axes[k]
-		var ecran: PackedVector2Array = PackedVector2Array()
-		var long_px: float = 0.0
-		for i in range(pts.size()):
-			ecran.append(_carte(pts[i], c, o))
-			if i > 0:
-				long_px += ecran[i].distance_to(ecran[i - 1])
-		if ecran.size() >= 2:
-			draw_polyline(ecran, col, clampf(PistesDonnees.LARGEUR * echelle * 0.35, 2.0, 7.0), true)
-		var nom: String = PistesDonnees.PISTES[k][0]
-		if nom != "" and long_px > NOM_MIN_PX:
-			noms.append([nom, ecran[ecran.size() / 2], col])
-	# remontées posées : trait noir, gare aval en rouge, nom ; un toucher dessus
-	# y emmène le skieur
-	for r in _remontees():
+	for np in _noms_pistes:
+		if (np[0] as Rect2).intersects(vue):
+			noms.append([np[1], _carte(np[2], c, o), np[3]])
+	# un toucher sur une remontée y emmène le skieur
+	for r in remontees:
 		var a: Vector2 = _carte(r[1], c, o)
-		var b: Vector2 = _carte(r[2], c, o)
-		draw_line(a, b, Color(1, 1, 1, 0.8), 4.5, true)
-		draw_line(a, b, Color(0.08, 0.08, 0.10, 0.95), 2.5, true)
-		draw_circle(a, 6.5, Color(1, 1, 1, 0.95))
-		draw_circle(a, 5.0, Color(0.78, 0.06, 0.18, 1.0))
-		draw_circle(b, 3.5, Color(0.08, 0.08, 0.10, 0.95))
 		if Rect2(Vector2.ZERO, TAILLE).has_point(a):
 			noms.append([(r[0] as LigneRemontee).nom_ligne + " »", a + Vector2(0, -12), Color(1, 1, 1)])
 	# gares du funiculaire
 	for g in gares:
 		var gp: Vector2 = _carte(Vector2((g as Vector3).x, (g as Vector3).z), c, o)
 		draw_rect(Rect2(gp - Vector2(6, 6), Vector2(12, 12)), Color(1.0, 0.85, 0.1, 0.95))
-		draw_rect(Rect2(gp - Vector2(6, 6), Vector2(12, 12)), Color(0, 0, 0, 0.9), false, 1.5)
-	if trace_funi.size() >= 2:
-		# en souterrain : tireté noir et jaune le long du vrai tracé
-		var pts_e: PackedVector2Array = PackedVector2Array()
-		for q in trace_funi:
-			pts_e.append(_carte(q, c, o))
-		draw_polyline(pts_e, Color(0.05, 0.05, 0.05, 0.85), 4.0, true)
-		for i in range(pts_e.size() - 1):
-			if (i / 2) % 2 == 0:
-				draw_line(pts_e[i], pts_e[i + 1], Color(1.0, 0.85, 0.1, 0.95), 2.5, true)
-	elif gares.size() == 2:
+		HUD.contour(self, Rect2(gp - Vector2(6, 6), Vector2(12, 12)), Color(0, 0, 0, 0.9), 1.5)
+	if trace_funi.size() < 2 and gares.size() == 2:
 		var a: Vector2 = _carte(Vector2(gares[0].x, gares[0].z), c, o)
 		var b: Vector2 = _carte(Vector2(gares[1].x, gares[1].z), c, o)
-		draw_dashed_line(a, b, Color(1.0, 0.85, 0.1, 0.8), 2.0, 8.0)
+		var t: float = 0.0
+		var lg_t: float = a.distance_to(b)
+		while t < lg_t:
+			HUD.segment(self, a.lerp(b, t / maxf(lg_t, 1.0)), a.lerp(b, minf(t + 8.0, lg_t) / maxf(lg_t, 1.0)), Color(1.0, 0.85, 0.1, 0.8), 2.0)
+			t += 16.0
 	# les deux rames, en direct
 	if main != null:
 		for r in [[main.get("cabin"), "1"], [main.get("cabin_ghost"), "2"]]:
@@ -216,8 +266,8 @@ func _draw() -> void:
 			var rp: Vector2 = _carte(Vector2(gp.x, gp.z), c, o)
 			if not Rect2(Vector2.ZERO, TAILLE).grow(-4.0).has_point(rp):
 				continue
-			draw_circle(rp, 7.5, Color(0.0, 0.0, 0.0, 0.9))
-			draw_circle(rp, 6.0, Color(1.0, 0.85, 0.1, 1.0))
+			HUD.disque(self, rp, 7.5, Color(0.0, 0.0, 0.0, 0.9))
+			HUD.disque(self, rp, 6.0, Color(1.0, 0.85, 0.1, 1.0))
 			draw_string(_police, rp + Vector2(-3.5, 4.5), num, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0, 0, 0))
 	# noms par-dessus les tracés
 	for n in noms:
@@ -234,7 +284,8 @@ func _draw() -> void:
 	var fl: PackedVector2Array = PackedVector2Array([o + av * 11.0, o - av * 7.0 + dr * 7.0,
 		o - av * 3.0, o - av * 7.0 - dr * 7.0])
 	draw_colored_polygon(fl, Color(1.0, 0.25, 0.15, 1.0))
-	draw_polyline(fl + PackedVector2Array([fl[0]]), Color(1, 1, 1), 1.5, true)
+	for i in range(4):
+		HUD.segment(self, fl[i], fl[(i + 1) % 4], Color(1, 1, 1), 1.5)
 	# échelle
 	var m: float = 100.0
 	for cand in [50.0, 100.0, 200.0, 500.0, 1000.0, 2000.0, 5000.0]:
@@ -242,7 +293,7 @@ func _draw() -> void:
 		if cand * echelle > 60.0:
 			break
 	var y: float = TAILLE.y - 12.0
-	draw_line(Vector2(10, y), Vector2(10 + m * echelle, y), Color(1, 1, 1, 0.9), 2.0)
+	HUD.segment(self, Vector2(10, y), Vector2(10 + m * echelle, y), Color(1, 1, 1, 0.9), 2.0)
 	draw_string(_police, Vector2(10, y - 5), ("%d m" % m) if m < 1000.0 else ("%d km" % int(m / 1000.0)),
 		HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(1, 1, 1, 0.9))
 	draw_string(_police, Vector2(TAILLE.x * 0.5 - 4, 16), "N", HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(1, 1, 1, 0.9))
