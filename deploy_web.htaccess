@@ -25,6 +25,11 @@ Options -Indexes
         Header set Cloudflare-CDN-Cache-Control "no-store"
     </FilesMatch>
 
+    # Lignes cuites : demandées avec ?v=<version>, elles peuvent rester en cache.
+    <FilesMatch "\.web\.cuit$">
+        Header set Cache-Control "public, max-age=2592000, immutable"
+    </FilesMatch>
+
     # Icônes : stables d'un build à l'autre, elles peuvent rester en cache.
     <FilesMatch "\.png$">
         Header set Cache-Control "public, max-age=86400"
