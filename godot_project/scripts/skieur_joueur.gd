@@ -40,7 +40,7 @@ const DIST_MIN: float = 1.2
 const RALLONGE_BRAS: float = 3.0         # m/s
 const X_BRAS_MAX: float = 1.20           # écart à l'axe de la voiture de l'origine du bras (m)
 const BRAS_CORPS_MIN: float = 0.45       # en dessous, le corps est masqué (m)
-const DIST_MAX: float = 9.0
+const DIST_MAX: float = 18.0
 const N_IMAGES: int = 8
 
 var actif: bool = false
@@ -64,7 +64,7 @@ var _image_assise: Mesh = null
 var touches_ext: int = 0
 var cam_yaw: float = 0.0
 var cam_pitch: float = -0.28
-var cam_dist: float = 3.2
+var cam_dist: float = 5.0
 var premiere_personne: bool = false
 ## Voiture qui porte le skieur (nœud de la voiture), ou null.
 var support: Node3D = null
@@ -554,25 +554,60 @@ func _unhandled_input(event: InputEvent) -> void:
 		tourner_vue(event.relative)
 	elif event is InputEventMouseButton and event.pressed:
 		if event.button_index == MOUSE_BUTTON_WHEEL_UP:
-			cam_dist = maxf(DIST_MIN, cam_dist * 0.88)
+			zoomer(0.88)
 		elif event.button_index == MOUSE_BUTTON_WHEEL_DOWN:
-			cam_dist = minf(DIST_MAX, cam_dist / 0.88)
+			zoomer(1.0 / 0.88)
 
 
 ## Rotation de la vue (glissé de souris ou de doigt, en pixels).
 func tourner_vue(d: Vector2) -> void:
 	_vue_libre = 0.0
 	_cam_v = 0.0
+	_ecart_a_reprendre = true
 	cam_yaw -= d.x * 0.006
-	cam_pitch = clampf(cam_pitch - d.y * 0.005, PITCH_MIN, _pitch_max())
+	cam_pitch = clampf(cam_pitch - d.y * 0.005, _pitch_min(), _pitch_max())
+	_vue_main_ski = chausse
 
 
 ## Regard vers le haut borné : en 3e personne, au-delà de ~14° la caméra
 ## passe sous les épaules et rase le sol (« la caméra se retrouve par
-## terre ») ; en 1re personne, 35° suffisent.
+## terre ») ; en 1re personne, regard jusqu'à la verticale (retour d'utilisateur, 04/11/2026).
 const PITCH_MIN: float = -1.20
+const PITCH_VERTICALE: float = 1.55
+func _pitch_min() -> float:
+	return -PITCH_VERTICALE if premiere_personne else PITCH_MIN
+
+
 func _pitch_max() -> float:
-	return 0.60 if premiere_personne else 0.25
+	return PITCH_VERTICALE if premiere_personne else 0.25
+
+
+## Zoom de la 3e personne : rapport de distance (molette, pincement).
+func zoomer(rapport: float) -> void:
+	cam_dist = clampf(cam_dist * rapport, DIST_MIN, DIST_MAX)
+
+
+## La vue suit le skieur dans ses virages en gardant l'angle qu'elle a avec sa marche (retour
+## d'utilisateur, 04/11/2026 : la vue gardait son axe et on ne voyait plus où il allait). L'angle est
+## repris au départ et après chaque rotation de la vue à la main.
+const SUIVI_RAIDEUR: float = 3.0        # s⁻¹
+const SUIVI_V_MAX: float = deg_to_rad(90.0)
+var _ecart_vue: float = 0.0
+var _ecart_a_reprendre: bool = true
+var _vue_main_ski: bool = false
+
+
+func _suivre_marche(delta: float, dir: Vector3) -> void:
+	if dir.length() < 0.08:
+		_ecart_a_reprendre = true
+		return
+	var cap_marche: float = atan2(-dir.x, -dir.z)
+	if _ecart_a_reprendre:
+		_ecart_vue = wrapf(cam_yaw - cap_marche, -PI, PI)
+		_ecart_a_reprendre = false
+		return
+	var e: float = wrapf(cap_marche + _ecart_vue - cam_yaw, -PI, PI)
+	cam_yaw += clampf(e * minf(1.0, delta * SUIVI_RAIDEUR), -SUIVI_V_MAX * delta, SUIVI_V_MAX * delta)
 
 
 # --- échelle des pylônes (demande d'utilisateur, 03/11/2026) -------------------------
@@ -723,6 +758,8 @@ func _process_corps(delta: float) -> void:
 	if not chemin.is_empty():
 		dir = _suivre_chemin()
 		vite = course_auto
+	if chemin.is_empty():
+		_suivre_marche(delta, dir)
 	_marcher(delta, dir, vite)
 	_anti_piege(delta, dir.length() > 0.05)
 	_trouver_support()
@@ -1322,7 +1359,11 @@ func _mur_devant(p: Vector3, dp: Vector3) -> Vector3:
 func _camera_ski(delta: float) -> void:
 	var vh: Vector3 = Vector3(_v_ski.x, 0.0, _v_ski.z)
 	if vh.length() > 1.5 and _vue_libre > VUE_MAIN_PAUSE:
-		var e: float = wrapf(_cap_ski - cam_yaw, -PI, PI)
+		# (l'angle choisi à la main est gardé ; sans rotation à la main, juste derrière le skieur)
+		if _ecart_a_reprendre:
+			_ecart_vue = wrapf(cam_yaw - _cap_ski, -PI, PI) if _vue_main_ski else 0.0
+			_ecart_a_reprendre = false
+		var e: float = wrapf(_cap_ski + _ecart_vue - cam_yaw, -PI, PI)
 		_cam_v += (CAM_OMEGA * CAM_OMEGA * e - 2.0 * CAM_OMEGA * _cam_v) * delta
 		_cam_v = clampf(_cam_v, -CAM_V_MAX, CAM_V_MAX)
 		cam_yaw += _cam_v * delta
@@ -1512,8 +1553,8 @@ func _animer(delta: float, dir: Vector3) -> void:
 
 
 func _camera() -> void:
-	cam_pitch = clampf(cam_pitch, PITCH_MIN, _pitch_max())
-	pivot.rotation = Vector3(clampf(cam_pitch - _pitch_sol, PITCH_MIN, _pitch_max()), cam_yaw, 0.0)
+	cam_pitch = clampf(cam_pitch, _pitch_min(), _pitch_max())
+	pivot.rotation = Vector3(clampf(cam_pitch - _pitch_sol, _pitch_min(), _pitch_max()), cam_yaw, 0.0)
 	# le bras se raccourcit aussitôt (il ne doit pas traverser les parois) mais ne se
 	# rallonge qu'à RALLONGE_BRAS : dans la rame, passant devant une baie ou une barre,
 	# il faisait des bonds de 0,7 à 1,8 m en une image

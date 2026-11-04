@@ -127,6 +127,8 @@ func _construire_corps() -> void:
 		var v: VehiculeRemontee = VehiculeRemontee.new()
 		v.famille = famille
 		v.numero = k + 1
+		if String(name) == "tph_fornet":
+			v.style_tph = "fornet"
 		_enfant(v)
 		v.construire()
 		_vehicules.append([v, 0.0])

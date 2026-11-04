@@ -20,6 +20,8 @@ var _joy: Control = null
 var _centre: Vector2 = Vector2.ZERO
 var _doigt_joy: int = -1
 var _doigt_vue: int = -1
+var _doigt_zoom: int = -1
+var _pos_zoom: Vector2 = Vector2.ZERO
 var _doigts: Dictionary = {}             # doigts posés (index)
 var _pos_vue: Vector2 = Vector2.ZERO
 var _bouton_pos: Vector2 = Vector2.ZERO
@@ -400,6 +402,10 @@ func _input(event: InputEvent) -> void:
 			elif _doigt_vue < 0:
 				_doigt_vue = t.index
 				_pos_vue = t.position
+			elif _doigt_zoom < 0:
+				# deuxième doigt sur la vue : pincer zoome la 3e personne
+				_doigt_zoom = t.index
+				_pos_zoom = t.position
 		else:
 			if t.index == _doigt_joy:
 				_doigt_joy = -1
@@ -410,12 +416,25 @@ func _input(event: InputEvent) -> void:
 				_joy.queue_redraw()
 				get_viewport().set_input_as_handled()
 			elif t.index == _doigt_vue:
-				_doigt_vue = -1
+				_doigt_vue = _doigt_zoom
+				_pos_vue = _pos_zoom
+				_doigt_zoom = -1
+			elif t.index == _doigt_zoom:
+				_doigt_zoom = -1
 	elif event is InputEventScreenDrag:
 		var d: InputEventScreenDrag = event
 		if d.index == _doigt_joy:
 			_maj_joy(d.position)
 			get_viewport().set_input_as_handled()
+		elif _doigt_zoom >= 0 and (d.index == _doigt_vue or d.index == _doigt_zoom):
+			var avant: float = _pos_vue.distance_to(_pos_zoom)
+			if d.index == _doigt_vue:
+				_pos_vue = d.position
+			else:
+				_pos_zoom = d.position
+			var apres: float = _pos_vue.distance_to(_pos_zoom)
+			if avant > 10.0 and apres > 10.0:
+				skieur.zoomer(avant / apres)      # écarter les doigts rapproche
 		elif d.index == _doigt_vue:
 			skieur.tourner_vue((d.position - _pos_vue) * 1.3)
 			_pos_vue = d.position

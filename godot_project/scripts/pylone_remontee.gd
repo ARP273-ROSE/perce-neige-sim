@@ -141,10 +141,8 @@ func construire() -> void:
 		# pylône de nez : comme en ligne, un fût central et une traverse qui
 		# porte les deux trains (avant : un poteau sous chaque train, dans le
 		# passage des sièges — retour d'utilisateur, 24/10/2026)
-		var porte: bool = false
-		for c in compo_montee + compo_descente:
-			porte = porte or String(c[1]) != "C"
-		if porte:
+		# (compression comprise : sans poteau, ses galets restaient en lévitation au-dessus du sol)
+		if true:
 			_massif(0.40)
 			RemonteeKit.cylindre(self, 0.36, 0.32, hauteur - 0.4, Transform3D(Basis.IDENTITY, Vector3(0, (hauteur - 0.4) * 0.5, 0)), "peinture_gris", 18)
 			RemonteeKit.boite_en(self, Vector3(voie + 0.55, 0.40, 0.42), Vector3(0, hauteur - 0.20, 0), "peinture_gris")
@@ -325,7 +323,9 @@ func _rambarde(a: Vector3, b: Vector3) -> void:
 		RemonteeKit.barre(_n, p, p + Vector3(0, 1.05, 0), 0.02, "galva_pylone", 6)
 	RemonteeKit.barre(_n, a + Vector3(0, 1.05, 0), b + Vector3(0, 1.05, 0), 0.024, "galva_pylone", 8)
 	RemonteeKit.barre(_n, a + Vector3(0, 0.55, 0), b + Vector3(0, 0.55, 0), 0.018, "galva_pylone", 6)
-	RemonteeKit.boite_en(_n, Vector3(l, 0.10, 0.01), (a + b) * 0.5 + Vector3(0, 0.07, 0), "galva_pylone")
+	# plinthe dans le sens de la rambarde (posée toujours en X, elle dépassait en travers des trains de galets)
+	var en_x: bool = absf(b.x - a.x) >= absf(b.z - a.z)
+	RemonteeKit.boite_en(_n, Vector3(l, 0.10, 0.01) if en_x else Vector3(0.01, 0.10, l), (a + b) * 0.5 + Vector3(0, 0.07, 0), "galva_pylone")
 
 
 ## Train de galets d'un brin, au nombre réel (groupes [n, "S"|"C"|"SC"]) :

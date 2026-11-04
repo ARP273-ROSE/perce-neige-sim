@@ -205,6 +205,8 @@ const AVANCES_AVAL: Dictionary = {"tcd10_vallon_iseran": 42.0}
 ## était dans le bâtiment de l'Olympique à Bellevarde (retour d'utilisateur,
 ## 27/10/2026 ; emprises : 3S x 4059-4103 / z 983-1009, Fontaine Froide
 ## z 987-1020).
+## Distance au nez d'un pylône dont la position tombe dans une gare déplacée.
+const PYLONE_SORTIE_GARE: float = 12.0
 const RECULS_AMONT: Dictionary = {"tsd6_fontaine_froide": 28.0, "tcd8_brevieres": 32.0}
 ## Croisements [dessus, dessous] : un pylône à deux étages au point de
 ## croisement, la ligne du dessous plafonnée, celle du dessus au moins
@@ -432,6 +434,7 @@ func _poser(D: Dictionary) -> void:
 			fines[int(e_f["k"])] = float(e_f["h"])
 		else:
 			croisements_fins.append([float(e_f["croisement_d"]), float(e_f["h"])])
+	var reportes_aval: int = 0
 	for kp in range((D["pylones"] as Array).size()):
 		var p: Dictionary = D["pylones"][kp]
 		var q: Dictionary = p.duplicate()
@@ -444,9 +447,18 @@ func _poser(D: Dictionary) -> void:
 					q[sens] = PyloneRemontee.compo_mini(q[sens])
 		var w: Vector2 = a0 + u0 * (float(p["d"]) * L0 / maxf(Ld, 1.0))
 		q["d"] = (w - a).dot(dirh)
-		if float(q["d"]) < 5.0 or float(q["d"]) > L - 5.0:
-			continue                    # tombé dans une gare reportée
+		# tombé dans une gare reportée : gardé juste au sortir de celle-ci, sinon le pylône manque et tout
+		# le schéma de la ligne glisse d'un cran (retour d'utilisateur, 04/11/2026 : P1 du Vallon)
+		if float(q["d"]) < PYLONE_SORTIE_GARE:
+			q["d"] = PYLONE_SORTIE_GARE + 12.0 * reportes_aval
+			reportes_aval += 1
+		elif float(q["d"]) > L - PYLONE_SORTIE_GARE:
+			q["d"] = L - PYLONE_SORTIE_GARE
 		py.append(q)
+	# (plusieurs reportés côté amont : espacés depuis le dernier)
+	for ip in range(py.size() - 2, -1, -1):
+		if float(py[ip]["d"]) > float(py[ip + 1]["d"]) - 12.0 and float(py[ip + 1]["d"]) >= L - PYLONE_SORTIE_GARE - 60.0:
+			py[ip]["d"] = float(py[ip + 1]["d"]) - 12.0
 	lg.pylones = py
 	# hauteurs mesurées (traces GPS) : même projection que les pylônes
 	var hm: PackedVector2Array = PackedVector2Array()
