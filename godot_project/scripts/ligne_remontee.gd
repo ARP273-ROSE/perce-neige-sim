@@ -216,6 +216,7 @@ func demolir(poubelle: Array) -> void:
 
 func construire() -> void:
 	_noyau = null                  # (ses nœuds vont disparaître)
+	_pn_lots = []
 	_pyl_l2 = []
 	_pyl_pres = PackedByteArray()
 	_pyl_mi = null
@@ -2922,7 +2923,28 @@ func _portillons(aval: bool) -> void:
 	_enfant(ls)
 	RemonteeKit.boite_en(ls, Vector3(W, 0.02, 0.12), Vector3.ZERO, "jaune_securite")
 	RemonteeKit.boite_en(ls, Vector3(W, 0.02, 0.05), Vector3(0, 0, 0.25), "joint")
+	if OS.has_feature("web"):
+		_portillons_fixes(g, vantaux)
 	_portillons_gares.append([aval, vantaux, formes, 99.0, 0.0])
+
+
+## PWA : bornes et portique fusionnés ; au-delà de 60 m, des vantaux immobiles et fermés fusionnés aussi
+## (85 à 162 appels par groupe de portillons vus vers une gare, relevés du 04/11/2026).
+func _portillons_fixes(g: Node3D, vantaux: Array) -> void:
+	MeshMerge.merge(g, vantaux, "Bornes")
+	var fixe: Node3D = Node3D.new()
+	fixe.name = "PortillonsFixes"
+	g.add_child(fixe)
+	for v in vantaux:
+		var v2: Node3D = (v as Node3D).duplicate()
+		fixe.add_child(v2)
+		for l in v2.find_children("*", "Label3D", true, false):
+			(l as Node).get_parent().remove_child(l)
+			(l as Node).queue_free()
+		(v as Node3D).set_meta("portillon_mobile", true)
+	MeshMerge.merge(fixe, [], "Vantaux")
+	for m in fixe.find_children("*", "MeshInstance3D", true, false):
+		(m as GeometryInstance3D).visibility_range_begin = PORTILLONS_MOBILES
 
 
 ## Double embarquement de Bollin–Fresse : un second groupe de portillons et
@@ -3022,6 +3044,7 @@ func _maj_portillons(delta: float) -> void:
 
 
 var _ouv_portillons: Dictionary = {}
+const PORTILLONS_MOBILES: float = 60.0
 
 
 # --- embarquement ------------------------------------------------------------------
@@ -3457,14 +3480,18 @@ func _lanceurs() -> void:
 			await _pause("lanceurs")
 		# (un appel par fourche et par pièce de pneu sinon : 600 appels de près d'une gare, relevés du 04/11/2026)
 		MeshMerge.merge(fourches, [], "Fourches")
-		_pneus_fixes(pneus_zone)
+		_pneus_fixes(pneus_zone, aval)
 
 
-## Pneus d'un lanceur vus de plus loin qu'on ne les voit tourner : immobiles, un appel par pièce.
-func _pneus_fixes(pneus: Array) -> void:
+## Pneus d'un lanceur en MultiMesh, un appel par pièce. PC : immobiles, de plus loin qu'on ne les voit
+## tourner. PWA : les seuls dessinés ; ils tournent à moins de PNEUS_JUSQUA (_pneus_mm).
+func _pneus_fixes(pneus: Array, aval: bool) -> void:
 	if pneus.is_empty():
 		return
+	var web: bool = OS.has_feature("web")
 	var pieces: Array = (pneus[0] as Node).find_children("*", "MeshInstance3D", true, false)
+	var mms: Array = []
+	var rels: Array = []
 	for k in range(pieces.size()):
 		var mi0: MeshInstance3D = pieces[k]
 		var mm: MultiMesh = MultiMesh.new()
@@ -3480,8 +3507,48 @@ func _pneus_fixes(pneus: Array) -> void:
 		mmi.material_override = mi0.material_override
 		mmi.cast_shadow = mi0.cast_shadow
 		mmi.layers = mi0.layers
-		mmi.visibility_range_begin = PNEUS_JUSQUA
+		if not web:
+			mmi.visibility_range_begin = PNEUS_JUSQUA
 		_enfant(mmi)
+		mms.append(mm)
+		rels.append(rel)
+	if web:
+		var fin: int = _pneus.size()
+		_pn_lots.append([aval, mms, rels, _pneus.slice(fin - pneus.size(), fin)])
+		for pn in pneus:
+			(pn as Node3D).visible = false
+
+
+var _pn_lots: Array = []                # PWA : [gare aval ?, MultiMesh, transformations relatives, pneus]
+
+
+## PWA : la rotation des pneus d'une gare proche va dans leurs MultiMesh.
+func _pneus_mm(pres_aval: bool, pres_amont: bool) -> void:
+	for lot in _pn_lots:
+		if not (pres_aval if lot[0] else pres_amont):
+			continue
+		var pneus: Array = lot[3]
+		var buf: PackedFloat32Array = PackedFloat32Array()
+		buf.resize(pneus.size() * 12)
+		for k in range((lot[1] as Array).size()):
+			var rel: Transform3D = lot[2][k]
+			var o: int = 0
+			for e in pneus:
+				var x: Transform3D = Transform3D((e[2] as Basis) * Basis(Vector3.UP, e[3]), (e[0] as Node3D).position) * rel
+				buf[o] = x.basis.x.x
+				buf[o + 1] = x.basis.y.x
+				buf[o + 2] = x.basis.z.x
+				buf[o + 3] = x.origin.x
+				buf[o + 4] = x.basis.x.y
+				buf[o + 5] = x.basis.y.y
+				buf[o + 6] = x.basis.z.y
+				buf[o + 7] = x.origin.y
+				buf[o + 8] = x.basis.x.z
+				buf[o + 9] = x.basis.y.z
+				buf[o + 10] = x.basis.z.z
+				buf[o + 11] = x.origin.z
+				o += 12
+			RenderingServer.multimesh_set_buffer((lot[1][k] as MultiMesh).get_rid(), buf)
 
 
 ## Détails de gare visibles (posé par RemonteesDomaine : moins de 250 m).
@@ -3528,7 +3595,10 @@ func _tourner_pneus(delta: float) -> void:
 		# (le tangent de la boucle s'inverse avec le côté de la montée : le dessous du pneu doit suivre la marche)
 		var w: float = float(e[6]) * reg / R_PNEU * (1.0 if sens_droite else -1.0)
 		e[3] = fposmod(float(e[3]) + w * delta, TAU)
-		(e[0] as Node3D).transform.basis = (e[2] as Basis) * Basis(Vector3.UP, e[3])
+		if _pn_lots.is_empty():
+			(e[0] as Node3D).transform.basis = (e[2] as Basis) * Basis(Vector3.UP, e[3])
+	if not _pn_lots.is_empty():
+		_pneus_mm(pres_aval, pres_amont)
 
 
 const V_EMBARQUEMENT_3S: float = 0.5
@@ -4970,7 +5040,7 @@ var _tour_cales: int = 0
 ## font quelques pixels) — audit de fluidité du 26/10/2026 : à 250 m, le calage
 ## coûtait 1,6 ms par ligne proche et par image.
 const CALAGE_JUSQUA: float = 100.0
-const PNEUS_JUSQUA: float = 90.0
+static var PNEUS_JUSQUA: float = 45.0 if OS.has_feature("web") else 90.0
 
 
 func _caler_galets() -> void:
