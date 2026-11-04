@@ -313,7 +313,7 @@ static func vider_partages() -> void:
 ## PWA : sommets soudés (les maillages sans index répètent chaque sommet à chaque
 ## triangle : la mémoire des tampons est le plafond de l'iPad, 03/11/2026). Les sommets
 ## ne sont soudés que si position, normale, UV… concordent : le rendu ne change pas.
-static var indexer: bool = OS.has_feature("web") or "--indexer" in OS.get_cmdline_user_args()
+static var indexer: bool = OS.has_feature("web") or not ("--sans-indexer" in OS.get_cmdline_user_args())
 static var index_us: int = 0
 
 

@@ -2600,7 +2600,7 @@ func _collisions_fixes() -> void:
 			boite.call(Vector3(clampf(h * 0.22, 4.0, 12.0), h, clampf(h * 0.22, 4.0, 12.0) * 0.6), Vector3(0, t + h * 0.5, -d))
 			continue
 		var e_c: float = 4.0
-		var incl: float = PyloneRemontee.inclinaison_pour(atan2(y_cable(d + e_c) - y_cable(d - e_c), 2.0 * e_c))
+		var incl: float = 0.0 if pylones[i].get("croisement", false) else PyloneRemontee.inclinaison_pour(atan2(y_cable(d + e_c) - y_cable(d - e_c), 2.0 * e_c))
 		var pd: Vector3 = _pied_pylone(d, t, h, incl)
 		if pd == Vector3.ZERO:
 			incl = 0.0
@@ -3400,7 +3400,8 @@ func _tourner_pneus(delta: float) -> void:
 			# ne change pas : zone() refaisait une liste par pneu et par image)
 			e[5] = vitesse
 			e[6] = vitesse_en(e[1])
-		var w: float = float(e[6]) * reg / R_PNEU
+		# (le tangent de la boucle s'inverse avec le côté de la montée : le dessous du pneu doit suivre la marche)
+		var w: float = float(e[6]) * reg / R_PNEU * (1.0 if sens_droite else -1.0)
 		e[3] = fposmod(float(e[3]) + w * delta, TAU)
 		(e[0] as Node3D).transform.basis = (e[2] as Basis) * Basis(Vector3.UP, e[3])
 
@@ -3448,7 +3449,8 @@ func _poser_pylones() -> void:
 		py.compo_descente = p.get("descente", [[8, "S"]])
 		var e: float = 4.0
 		py.pente = atan2(y_cable(d + e) - y_cable(d - e), 2.0 * e)
-		py.inclinaison = PyloneRemontee.inclinaison_pour(py.pente)
+		# (croisement : les deux lignes partagent un fût à deux étages, droit)
+		py.inclinaison = 0.0 if p.get("croisement", false) else PyloneRemontee.inclinaison_pour(py.pente)
 		py.pied = _pied_pylone(d, t, py.hauteur, py.inclinaison)
 		if py.pied == Vector3.ZERO:
 			py.inclinaison = 0.0

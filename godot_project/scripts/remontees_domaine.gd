@@ -205,7 +205,7 @@ const AVANCES_AVAL: Dictionary = {"tcd10_vallon_iseran": 42.0}
 ## était dans le bâtiment de l'Olympique à Bellevarde (retour d'utilisateur,
 ## 27/10/2026 ; emprises : 3S x 4059-4103 / z 983-1009, Fontaine Froide
 ## z 987-1020).
-const RECULS_AMONT: Dictionary = {"tsd6_fontaine_froide": 28.0}
+const RECULS_AMONT: Dictionary = {"tsd6_fontaine_froide": 28.0, "tcd8_brevieres": 32.0}
 ## Croisements [dessus, dessous] : un pylône à deux étages au point de
 ## croisement, la ligne du dessous plafonnée, celle du dessus au moins
 ## ECART_CROISEMENT m plus haut (retour d'utilisateur, 25/10/2026 : « Pyramides
