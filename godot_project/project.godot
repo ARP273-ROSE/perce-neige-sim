@@ -79,6 +79,8 @@ pause={
 
 [rendering]
 
+driver/depth_prepass/enable.web=false
+
 gl_compatibility/item_buffer_size.web=2048
 textures/vram_compression/import_etc2_astc=true
 limits/opengl/max_renderable_lights=128
