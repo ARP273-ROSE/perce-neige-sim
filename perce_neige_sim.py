@@ -7410,6 +7410,8 @@ class GameWidget(QWidget):
         self._last_time = 0.0
         self._frame_count = 0
         self._fps = 0.0
+        self._ips_3d = 0.0
+        self._t_ips_3d = -1e9
         self._fps_acc = 0.0
         self._show_help = True
         self._show_info = False
@@ -7712,6 +7714,9 @@ class GameWidget(QWidget):
         """Message de la vue 3D embarquée (GodotBridge.poll_messages)."""
         if "pupitre" in m:
             self._pupitre_3d(str(m["pupitre"]), bool(m.get("enfonce", False)))
+        elif "ips_3d" in m:
+            self._ips_3d = float(m["ips_3d"])
+            self._t_ips_3d = time.monotonic()
         elif m.get("skieur_basculer"):
             self.basculer_skieur()
         elif m.get("skieur_conduire"):
@@ -10538,9 +10543,9 @@ class GameWidget(QWidget):
         p.setPen(self._pen_version)
         p.setFont(self._font_version)
         p.drawText(
-            QRectF(w - 140, h - 18, 130, 16),
+            QRectF(w - 190, h - 18, 180, 16),
             int(Qt.AlignmentFlag.AlignRight),
-            f"v{VERSION}  {self._fps:.0f} fps",
+            self._texte_cadence(),
         )
         # Écran de COLLISION (game-over, priorité sur le reste).
         if self.state.crashed:
@@ -16234,6 +16239,13 @@ class GameWidget(QWidget):
                    int(Qt.AlignmentFlag.AlignHCenter),
                    T("Doors, lights, announcements remain available",
                      "Portes, éclairage, annonces restent disponibles"))
+
+    def _texte_cadence(self) -> str:
+        """Version et cadence : celle de la 3D si le viewer tourne, sinon celle du pupitre.
+        (Le pupitre tourne sur une minuterie de 16 ms : ses 62 fps ne disent rien de la 3D.)"""
+        if time.monotonic() - self._t_ips_3d < 3.0:
+            return f"v{VERSION}  3D {self._ips_3d:.0f} i/s"
+        return f"v{VERSION}  pupitre {self._fps:.0f} fps"
 
     def _draw_ann_menu(self, p: QPainter, w: int, h: int) -> None:
         """Overlay panel listing every on-board announcement, with a
