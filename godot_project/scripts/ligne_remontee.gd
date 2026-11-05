@@ -4974,7 +4974,8 @@ func _poser_pylones_treillis() -> void:
 		py.l_sabot = 6.0 if vaetvient() else l_sabot_3s(p)
 		py.sol_z = func(z: float) -> float:
 			return terrain(clampf(d - z, 0.0, longueur_h())) - t
-		py.hauteur = _tetes[i] - t - (py.hauteur_porteurs() - py.hauteur)
+		# 3S : le sabot au câble lisse, pas au sommet de la chaînette (2,3 m au-dessus au grand pylône, câbles en l'air)
+		py.hauteur = (y_cable(d) if tricable() else _tetes[i]) - t - (py.hauteur_porteurs() - py.hauteur)
 		py.position = Vector3(0, t, -d)
 		var e: float = 6.0
 		py.pente = atan2(y_cable(d + e) - y_cable(d - e), 2.0 * e)
