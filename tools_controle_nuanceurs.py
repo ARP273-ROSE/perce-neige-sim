@@ -36,6 +36,7 @@ def chemins(pack: str | None) -> list[tuple[str, list[str], list[str]]]:
     liste = [
         ("sans pack, cran 0", [], ["--cran=0", *sans]),
         ("sans pack, cran 4 allégé", [], ["--cran=4", "--allege", *sans]),
+        ("sans pack ni normales, cran 4 allégé", [], ["--cran=4", "--allege", "--sans-normales", *sans]),
         ("OpenGL, cran 4 allégé", ["--rendering-method", "gl_compatibility", "--rendering-driver", "opengl3"],
          ["--cran=4", "--allege", *sans]),
     ]
