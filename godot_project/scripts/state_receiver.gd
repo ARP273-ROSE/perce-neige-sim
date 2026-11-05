@@ -108,8 +108,11 @@ func _process_corps(_delta: float) -> void:
 	var t_ips: int = Time.get_ticks_msec()
 	if t_ips - _t_ips_envoi >= 1000:
 		_t_ips_envoi = t_ips
-		if not _releve_auto.is_empty() and main != null and main.get("perf_manager") != null:
-			main.perf_manager.essai_releve_auto(_releve_auto)
+		if main != null and main.get("perf_manager") != null:
+			if _releve_auto.is_empty():
+				main.perf_manager.releve_auto_suspendu()
+			else:
+				main.perf_manager.essai_releve_auto(_releve_auto)
 		# le pupitre n'installe le pack haute définition que si cette machine s'en servirait
 		if not _hd_annonce and main != null and main.get("perf_manager") != null:
 			_hd_annonce = true

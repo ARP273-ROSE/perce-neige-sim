@@ -8740,7 +8740,7 @@ class GameWidget(QWidget):
                 state_dict["ext_view"] = vue3d == 1
                 state_dict["qualite_3d"] = self._qualite_3d
                 # relevé de fluidité automatique (viewer : essai_releve_auto)
-                if not getattr(self, "_godot_embed_hidden", False):
+                if not getattr(self, "_godot_embed_hidden", False) and not self.window().isMinimized():
                     state_dict["releve_auto"] = self._releves_auto_voulus()
                 # vue 3D cachée (F4, panneaux, pause) : la 3D cesse de
                 # dessiner — elle occupait la carte graphique à 100 % même

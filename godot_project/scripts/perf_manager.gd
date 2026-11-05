@@ -660,8 +660,9 @@ func releve_en_cours() -> bool:
 ## l'envoi des rapports. Appelé une fois par seconde.
 var _auto_situation: String = ""
 var _auto_vue: String = ""
-var _auto_t0: int = 0
 var _auto_delai_ms: int = 0
+var _auto_ecoule_ms: int = 0
+var _auto_t_prec: int = 0
 const RELEVE_AUTO_MIN_MS: int = 30000
 const RELEVE_AUTO_MAX_MS: int = 240000
 
@@ -676,19 +677,42 @@ func essai_releve_auto(voulues: Array) -> void:
 	var now: int = Time.get_ticks_msec()
 	if not voulues.has(vue) or vue != _auto_vue:
 		_auto_vue = vue if voulues.has(vue) else ""
-		_auto_t0 = now
+		_auto_ecoule_ms = 0
+		_auto_t_prec = now
 		_auto_delai_ms = randi_range(RELEVE_AUTO_MIN_MS, RELEVE_AUTO_MAX_MS)
 		return
-	if now - _auto_t0 >= _auto_delai_ms:
+	# (vue cachée, pause : plus d'appels, le délai attend ; il ne reprend pas d'un coup au retour)
+	if now - _auto_t_prec < 3000:
+		_auto_ecoule_ms += now - _auto_t_prec
+	_auto_t_prec = now
+	if _auto_ecoule_ms >= _auto_delai_ms:
 		_auto_situation = vue
 		_auto_vue = ""
 		releve()
 
 
+## Vue cachée, pause, fenêtre réduite, ou plus rien à relever : un relevé automatique en cours ne
+## mesurerait rien d'utile. Annulé sans rien envoyer, il repartira plus tard.
+func releve_auto_suspendu() -> void:
+	if _rel_t >= 0.0 and _auto_situation != "":
+		_annuler_releve_auto()
+
+
+func _annuler_releve_auto() -> void:
+	_rel_t = -1.0
+	_auto_situation = ""
+	_auto_vue = ""
+	Prof.actif = false
+	_rel = PackedStringArray()
+
+
 func releve() -> void:
 	if _rel_t >= 0.0:
-		_finir_releve()
-		return
+		if _auto_situation == "":
+			_finir_releve()
+			return
+		# F10 pendant un relevé automatique : celui-ci est abandonné en silence, le vrai démarre
+		_annuler_releve_auto()
 	_rel_t = 0.0
 	Prof.t.clear()
 	Prof.actif = true
