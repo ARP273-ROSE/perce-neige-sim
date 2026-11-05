@@ -333,7 +333,7 @@ func _poser(D: Dictionary) -> void:
 	if rc > 0.0:
 		b -= dirh * rc
 		L -= rc
-	var h0: float = relief.hauteur_sol(a.x, a.y)
+	var h0: float = relief.hauteur_ligne(a.x, a.y)
 	if not quai_tph.is_empty():
 		h0 = (quai_tph["nez"] as Vector3).y
 	# profil sous l'axe, pris sur le relief AFFICHÉ (pas l'IGN) : pylônes et
@@ -342,9 +342,9 @@ func _poser(D: Dictionary) -> void:
 	var d: float = 0.0
 	while d < L:
 		var p: Vector2 = a + dirh * d
-		prof.append(Vector2(d, relief.hauteur_sol(p.x, p.y) - h0))
+		prof.append(Vector2(d, relief.hauteur_ligne(p.x, p.y) - h0))
 		d += 10.0
-	prof.append(Vector2(L, relief.hauteur_sol(b.x, b.y) - h0))
+	prof.append(Vector2(L, relief.hauteur_ligne(b.x, b.y) - h0))
 	# chaque gare au plus haut du terrain sous son emprise (quai, poulie,
 	# largeur) : sur un versant, la gare amont était enterrée côté pente
 	# (retour d'utilisateur, 23/10/2026)
@@ -363,7 +363,7 @@ func _poser(D: Dictionary) -> void:
 		while t <= long_g:
 			for x in [-demi, 0.0, demi]:
 				var q2: Vector2 = o + dirh * (t * float(bout[2])) + lat * x
-				haut = maxf(haut, relief.hauteur_sol(q2.x, q2.y) - h0)
+				haut = maxf(haut, relief.hauteur_ligne(q2.x, q2.y) - h0)
 			t += 3.0
 		prof[bout[0]] = Vector2(prof[bout[0]].x, haut)
 	# rampe d'accès derrière chaque gare (côté portillons) : jusqu'où faut-il
@@ -411,6 +411,9 @@ func _poser(D: Dictionary) -> void:
 	lg.sol_local = func(x: float, z: float) -> float:
 		var w: Vector3 = xf0 * Vector3(x, 0.0, z)
 		return relief.hauteur_sol(w.x, w.z) - h0
+	lg.sol_garde = func(x: float, z: float) -> float:
+		var w: Vector3 = xf0 * Vector3(x, 0.0, z)
+		return relief.hauteur_ligne(w.x, w.z) - h0
 	# pylônes : à leur place au sol (distance des données ramenée à la longueur
 	# gare-à-gare des données), puis projetés sur la ligne posée. Avant, la
 	# distance était mise à l'échelle de la ligne posée : quand une gare était
