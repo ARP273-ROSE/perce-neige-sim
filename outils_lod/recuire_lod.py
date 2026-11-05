@@ -91,7 +91,7 @@ if 'loin' in ETAPES:
     for r in R:
         if r not in ok:
             print('    ECHEC', r[0], r[1], r[2][:2], flush=True)
-    godot('cuisson_ligne.gd', '--materiaux', '--sortie=user://cuites_loin', delai=120)
+    godot('cuisson_ligne.gd', '--materiaux', '--web', '--sortie=user://cuites_loin', delai=120)
     F = glob.glob(os.path.join(U, 'cuites_loin', '*.web.cuit'))
     os.makedirs(A.web_loin, exist_ok=True)
     for f in F:
