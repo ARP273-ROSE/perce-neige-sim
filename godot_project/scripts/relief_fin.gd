@@ -59,6 +59,7 @@ var _a_envoyer: Array = []                           # [RID, couche, données]
 var _rids: Array = []
 static var _rids_anciens: Array = []
 var foret: ReliefForet = null
+var normales_seules: bool = false
 var _hn: PackedFloat32Array = PackedFloat32Array()   # altitude des nœuds de la grille fine
 var _fine: PackedByteArray = PackedByteArray()       # par maille à 25 m : 1 si la grille fine y est le sol
 var _mat: ShaderMaterial = null
@@ -136,6 +137,35 @@ static func _permis() -> bool:
 	if OS.has_feature("web") or "--sans-relief-fin" in OS.get_cmdline_user_args():
 		return false
 	return FileAccess.file_exists(FICHIER)
+
+
+## Sans le pack, aux crans où la grille à 5 m n'est pas affichée : ses normales seules, en texture, sur
+## le maillage habituel. Crêtes et rochers se lisent au loin ; ni le sol des collisions, ni le relief à
+## 25 m, ni le nombre de triangles ne changent.
+static func normales_voulues(cran: int) -> bool:
+	var args: PackedStringArray = OS.get_cmdline_user_args()
+	if voulu_sans_forcer(cran) or "--relief-fin" in args or "--sans-normales" in args or not _permis() or DisplayServer.get_name() == "headless":
+		return false
+	return RenderingServer.get_current_rendering_method() != "gl_compatibility" and ClassDB.class_exists("ReliefHD") \
+		and ClassDB.class_has_method("NoyauRemontee", "fusion_relief")
+
+
+func preparer_normales(r: ReliefBuilder, h0: PackedFloat32Array) -> void:
+	var debut: int = Time.get_ticks_usec()
+	_regler_grille(KF)
+	var f: FileAccess = FileAccess.open(FICHIER, FileAccess.READ)
+	if f == null:
+		return
+	var ecart: PackedByteArray = f.get_buffer(f.get_length()).decompress(NI * NJ * 2, FileAccess.COMPRESSION_DEFLATE)
+	var n: RefCounted = ClassDB.instantiate("NoyauRemontee")
+	var res: Array = n.call("fusion_relief", r._h, h0, ecart, ReliefDonnees.NX, ReliefDonnees.NZ, K, PackedFloat32Array(), X0, Z0, K * PX, K * PZ)
+	if res.size() != 3:
+		return
+	var hd_n: RefCounted = ClassDB.instantiate("ReliefHD")
+	_couches_normales = hd_n.call("normales", res[0], NJ, NI, ReliefAnneaux.TUILE, ReliefAnneaux.TAILLE, ReliefAnneaux.MARGE, PX, PZ)
+	normales_seules = true
+	pret = not _couches_normales.is_empty()
+	print("[ReliefFin] normales à 5 m, sans le pack : %d couches, %d ms" % [_couches_normales.size(), (Time.get_ticks_usec() - debut) / 1000])
 
 
 ## Lit l'écart et calcule les altitudes des nœuds (fil de préparation du relief). Écart
@@ -414,6 +444,9 @@ func noeud(i: int, j: int) -> Vector3:
 
 
 func _ready() -> void:
+	if normales_seules:
+		set_process(false)
+		return
 	if DisplayServer.get_name() == "headless":
 		set_process(false)
 		return                 # (bancs : le sol suit, sans rien à afficher)

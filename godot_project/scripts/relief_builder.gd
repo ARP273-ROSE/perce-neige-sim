@@ -394,9 +394,15 @@ func _preparer(fin_us: int) -> void:
 				_decoder_ligne_lointaine(_k - nz)
 			_k += 1
 			if _k >= nz + ReliefLointainDonnees.N:
-				var h0: PackedFloat32Array = _h.duplicate() if ReliefFin.voulu(_cran_depart) else PackedFloat32Array()
+				var seules: bool = ReliefFin.normales_voulues(_cran_depart)
+				var h0: PackedFloat32Array = _h.duplicate() if ReliefFin.voulu(_cran_depart) or seules else PackedFloat32Array()
 				_creuser_gares()
-				if not h0.is_empty():
+				if seules:
+					var rn: ReliefFin = ReliefFin.new()
+					rn.preparer_normales(self, h0)
+					if rn.pret:
+						_normales_seules = rn
+				elif not h0.is_empty():
 					var rf: ReliefFin = ReliefFin.new()
 					rf.preparer(self, h0)
 					if rf.pret:
@@ -556,6 +562,8 @@ func _creer_maillages(fin_us: int) -> void:
 		return
 	if fin != null and fin.hd and not fin.envoyer_couches(fin_us):
 		return
+	if _normales_seules != null and not _normales_seules.envoyer_couches(fin_us):
+		return
 	while _k < _tableaux.size():
 		var arr: Array = _tableaux[_k]
 		if (arr[Mesh.ARRAY_INDEX] as PackedInt32Array).size() > 0:
@@ -588,6 +596,7 @@ var _hn5_ref: PackedFloat32Array = PackedFloat32Array()
 
 ## Une étape par image : réunies, elles faisaient une image de 250 ms en fin de chargement.
 const PAS_MAT_DERNIER: int = 6
+var _normales_seules: ReliefFin = null
 var _detail_seul: bool = false
 var _pas_mat: int = 0
 
@@ -598,10 +607,10 @@ func _materiaux_pas() -> void:
 			_tex_ortho = ImageTexture.create_from_image(_img_ortho if _img_ortho != null
 				else _image_ortho("res://textures/relief_ortho.jpg"))
 		1:
-			_detail_seul = (fin == null or not fin.hd) and not OS.has_feature("web") and ClassDB.class_exists("ReliefHD")
+			_detail_seul = (fin == null or not fin.hd) and _normales_seules == null and not OS.has_feature("web") and ClassDB.class_exists("ReliefHD")
 			if _detail_seul:
 				ReliefAnneaux.preparer_detail()
-			_mat_terrain = _shader(ReliefAnneaux.code_hd(SHADER_TERRAIN) if fin != null and fin.hd
+			_mat_terrain = _shader(ReliefAnneaux.code_hd(SHADER_TERRAIN) if (fin != null and fin.hd) or _normales_seules != null
 				else ReliefAnneaux.code_detail(SHADER_TERRAIN) if _detail_seul else SHADER_TERRAIN)
 			if _detail_seul:
 				ReliefAnneaux.regler_detail_seul(_mat_terrain)
@@ -612,6 +621,10 @@ func _materiaux_pas() -> void:
 				_tex_normales = fin.normales_texture()
 				_tex_ortho_hd = fin.ortho_texture()
 				ReliefAnneaux.regler_hd(_mat_terrain, _tex_normales, _tex_ortho_hd)
+			elif _normales_seules != null:
+				ReliefAnneaux.preparer_detail()
+				_tex_normales = _normales_seules.normales_texture()
+				ReliefAnneaux.regler_hd(_mat_terrain, _tex_normales, null)
 		3:
 			_mat_loin = _shader(SHADER_LOINTAIN)
 		4:
@@ -666,6 +679,8 @@ func _finition_pas() -> bool:
 		5:
 			if fin != null and fin.get_parent() == null:
 				add_child(fin)
+			if _normales_seules != null and _normales_seules.get_parent() == null:
+				add_child(_normales_seules)
 			_pas_fin = 6
 		_:
 			return true
@@ -975,7 +990,7 @@ func _build_piece(am: Dictionary) -> void:
 				if Geometry2D.is_point_in_polygon(q, poly):
 					img.set_pixel(j, i, Color.WHITE)
 	# (pack haute définition : même photo et mêmes normales que le sol alentour)
-	var hd_piece: bool = fin != null and fin.hd and _tex_normales != null
+	var hd_piece: bool = _tex_normales != null and ((fin != null and fin.hd) or _normales_seules != null)
 	var mat: ShaderMaterial = _mat_terrain.duplicate() if hd_piece or _detail_seul else _shader(SHADER_TERRAIN)
 	mat.set_shader_parameter("ortho", _tex_ortho)
 	if hd_piece:

@@ -268,6 +268,8 @@ func _appliquer(c: int, pourquoi: String) -> void:
 	_appliquer_ips()
 	# dernier cran (PC à carte intégrée) : portées de la PWA, détail minimal
 	var rm_loin: Node = main.get("remontees") as Node if main != null else null
+	if _env != null and _env.sky != null and _env.sky.sky_material is ShaderMaterial:
+		(_env.sky.sky_material as ShaderMaterial).set_shader_parameter("nuages", 0.0 if cran >= 3 or allege else 1.0)
 	var reduites: bool = cran >= CRAN_MAX_PC or allege
 	if not _web and rm_loin != null and reduites != _portees_reduites:
 		_portees_reduites = reduites
