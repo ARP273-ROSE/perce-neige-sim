@@ -26,7 +26,7 @@ extends Node
 ##   3 + sans MSAA
 ##   4 + sans halo (glow)
 ##   5 + cadence verrouillée à 30 i/s (régulière plutôt que 40-55 en dents de scie)
-##   6 + rendu 3D à 85 % (FSR 2 en Forward+, FSR 1 en Mobile, bilinéaire en OpenGL)
+##   6 + rendu 3D à 85 % (FSR 1 en Vulkan, bilinéaire en OpenGL)
 ## PWA (réglage mesuré sur iPad, v1.15.37, inchangé) :
 ##   3 sans MSAA, rendu 85 % · 4 rendu 70 % · 5 rendu 60 %, sans halo · 6 30 i/s
 ## Le rendu OpenGL (PWA, PC sans Vulkan) n'a ni SDFGI, ni brouillard
@@ -258,11 +258,9 @@ func _appliquer(c: int, pourquoi: String) -> void:
 			vp.msaa_3d = Viewport.MSAA_2X if cran <= 5 and secours_web <= 1 else Viewport.MSAA_DISABLED
 		var echelle: float = _echelle(cran)
 		if echelle < 0.999:
-			# FSR 2 (reconstruction temporelle) garde les textes nets ; FSR 1
-			# en Mobile ; bilinéaire en OpenGL
-			if RenderingServer.get_current_rendering_method() == "forward_plus":
-				vp.scaling_3d_mode = Viewport.SCALING_3D_MODE_FSR2
-			elif _rd:
+			# FSR 1, et plus FSR 2 : mesuré aux crans 6 et 7, FSR 2 coûtait 50 à 100 % de temps de
+			# carte de plus qu'au cran 5, à 100 % de résolution ; bilinéaire en OpenGL
+			if _rd:
 				vp.scaling_3d_mode = Viewport.SCALING_3D_MODE_FSR
 			else:
 				vp.scaling_3d_mode = Viewport.SCALING_3D_MODE_BILINEAR
@@ -541,15 +539,17 @@ func _evaluer() -> void:
 		dernier_bilan += " → " + cause
 		match cause:
 			"gpu":
-				# pack haute définition : la forêt et le détail d'abord, sans rien recharger
+				# les effets d'abord. La forêt et le détail du pack en dernier : mesurés sur vues fixes,
+				# 0 à 7 % du temps de la carte, contre 36 à 48 % pour le seul cran 1, et les trois
+				# étapes retardaient de 16 s le premier gain
 				var fin_hd: ReliefFin = main.get("relief").fin if main != null and main.get("relief") != null else null
-				if fin_hd != null and fin_hd.hd and fin_hd.baisser_repli():
-					_t_chauffe = maxf(_t_chauffe, APRES_CHANGEMENT_S)
-				elif cran < _cran_max():
+				if cran < _cran_max():
 					if _cran_avant_montee >= 0 and _horloge - _derniere_montee_t < 20.0:
 						_echecs[cran] = _horloge + ECHEC_INTERDIT_S
 						_cran_avant_montee = -1
 					_appliquer(cran + 1, "saccades, carte graphique")
+				elif fin_hd != null and fin_hd.hd and fin_hd.baisser_repli():
+					_t_chauffe = maxf(_t_chauffe, APRES_CHANGEMENT_S)
 			"rendu", "principal":
 				# moins d'objets à trier et à simuler ; le détail au minimum, les
 				# effets (jamais le plafond à 30 i/s ni la résolution : sans effet ici)
@@ -584,7 +584,7 @@ func _evaluer() -> void:
 			return
 	elif _bonnes < 2 * MONTEE_BONNES_FENETRES:
 		return
-	if cran <= cran_min:
+	if _repli_a_rendre():
 		(main.get("relief").fin as ReliefFin).monter_repli()
 		_bonnes = 0
 		_t_chauffe = maxf(_t_chauffe, APRES_CHANGEMENT_S)
