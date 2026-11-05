@@ -850,7 +850,7 @@ func _garde_au_sol(proteger_c: bool = false) -> bool:
 				# rejoint la hauteur du quai (sinon le dernier pylône était
 				# relevé jusqu'à la butée de 32 m — retour d'utilisateur, 23/10/2026)
 				# (sol réel sous les deux brins : le profil de l'axe ignore le dévers et le relief fin)
-				pire = maxf(pire, maxf(terrain(d), maxf(_sol(voie * 0.5, -d), _sol(-voie * 0.5, -d))) + _garde_exigee(d) - yc)
+				pire = maxf(pire, maxf(terrain(d), maxf(_sol_ligne(voie * 0.5, -d), _sol_ligne(-voie * 0.5, -d))) + _garde_exigee(d) - yc)
 			if pire > 0.05:
 				var ga: bool = i > 0
 				var dr: bool = i < pts.size() - 2
@@ -2007,6 +2007,16 @@ const PENTE_TALUS: float = 3.5      # base / hauteur
 ## RemonteesDomaine (relief affiché) ; à défaut, le profil sous l'axe.
 var sol_local: Callable = Callable()
 var _terrassements: Dictionary = {}
+
+
+## Sol de calcul de la ligne (voir ReliefBuilder.hauteur_ligne) ; _sol : le sol affiché.
+var sol_garde: Callable = Callable()
+
+
+func _sol_ligne(x: float, z: float) -> float:
+	if sol_garde.is_valid():
+		return float(sol_garde.call(x, z))
+	return _sol(x, z)
 
 
 func _sol(x: float, z: float) -> float:
@@ -3640,7 +3650,7 @@ func _poser_pylones() -> void:
 	for i in range(pylones.size()):
 		var p: Dictionary = pylones[i]
 		var d: float = float(p["d"])
-		var t: float = terrain(d)
+		var t: float = minf(terrain(d), _sol(0.0, -d))      # (fût jusqu'au sol affiché : maille à 50 m)
 		var py: PyloneRemontee = PyloneRemontee.new()
 		py.numero = numero_pylone(i)
 		py.voie = voie

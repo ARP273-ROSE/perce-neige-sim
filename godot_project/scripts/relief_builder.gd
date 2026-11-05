@@ -666,7 +666,6 @@ func _finition_pas() -> bool:
 				_k_fin += 1
 				return false
 			_poser_trous()
-			_h25 = PackedFloat32Array()
 			_pas_fin = 2
 		2:
 			_build_flancs()
@@ -1274,6 +1273,18 @@ func set_hiver(f: float) -> void:
 ## Altitude du sol AFFICHÉ en (x, z) : la pièce fine d'une gare si l'on y
 ## est (hors bâtiments), sinon les triangles du bloc — le skieur glisse
 ## exactement sur ce qu'on voit.
+## Sol sur lequel les lignes sont calculées : le même à tous les crans. Sur la maille à 50 m, le sol affiché
+## bombe et se creuse de plusieurs mètres : la garde au sol relevait les pylônes un par un, câble en dents
+## de scie et angles à l'arrivée en gare (Loyes P15-P17, Fontaine Froide P9-P10).
+func hauteur_ligne(x: float, z: float) -> float:
+	if _pas <= 1 or _h25.is_empty() or _etape < 1:
+		return hauteur_sol(x, z)
+	for pc in _pieces:
+		if (pc[0] as Rect2).has_point(Vector2(x, z)):
+			return hauteur_sol(x, z)
+	return _tri_sur(_h25, x, z, 1)
+
+
 func hauteur_sol(x: float, z: float) -> float:
 	if _etape < 1:
 		return -INF
