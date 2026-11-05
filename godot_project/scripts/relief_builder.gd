@@ -743,6 +743,9 @@ func _creuser_gares() -> void:
 		_h = h_aff
 		_pas = pas_aff
 	_creuser_gares_corps()
+	# (maille à 50 m : elle ne porte pas cette butte ; relief fin : il a son propre sol)
+	if _pas == 1 and not ReliefFin.voulu(_cran_depart):
+		_plafonner_grille()
 
 
 func _creuser_gares_corps() -> void:
@@ -775,6 +778,40 @@ func _creuser_gares_corps() -> void:
 ## abaissement sous le point le plus haut du replat]
 const ARASEMENTS: Array = [["tsd6_leissieres", 581.0, 15.0, 28.0, 4.6]]
 const ARASEMENT_RACCORD: float = 18.0
+
+
+## Buttes de la seule grille à 25 m : sur une falaise, ses triangles passent jusqu'à 8 m au-dessus du sol
+## du relevé fin, et la cabine du 3S les traversait à l'approche de l'ouvrage (l'altitude du câble vient du
+## document, on ne la touche pas). [clé, d début, d fin, demi-largeur, altitude maximale]. Plafond resté
+## au-dessus du sol fin (2708,7 m à d=1785).
+const PLAFONDS_25: Array = [["olympique", 1772.0, 1808.0, 12.0, 2712.5]]
+
+
+func _plafonner_grille() -> void:
+	for pl in PLAFONDS_25:
+		for D in RemonteesDonnees.LIGNES:
+			if String(D["cle"]) == pl[0]:
+				var a: Vector2 = RemonteesDomaine.monde(float(D["aval"][0]), float(D["aval"][1]))
+				var b: Vector2 = RemonteesDomaine.monde(float(D["amont"][0]), float(D["amont"][1]))
+				var u: Vector2 = (b - a).normalized()
+				var demi_l: float = (float(pl[2]) - float(pl[1])) * 0.5
+				var c: Vector2 = a + u * (float(pl[1]) + demi_l)
+				var lat: Vector2 = Vector2(-u.y, u.x)
+				var demi_x: float = pl[3]
+				var r: float = maxf(demi_l, demi_x) + ARASEMENT_RACCORD + maxf(_dx, _dz)
+				var n: int = ReliefDonnees.NX
+				var j0: int = clampi(int((c.x - r - ReliefDonnees.X_OUEST) / _dx), 0, n - 1)
+				var j1: int = clampi(int((c.x + r - ReliefDonnees.X_OUEST) / _dx) + 1, 0, n - 1)
+				var i0: int = clampi(int((c.y - r - ReliefDonnees.Z_NORD) / _dz), 0, ReliefDonnees.NZ - 1)
+				var i1: int = clampi(int((c.y + r - ReliefDonnees.Z_NORD) / _dz) + 1, 0, ReliefDonnees.NZ - 1)
+				for i in range(i0, i1 + 1):
+					for j in range(j0, j1 + 1):
+						var v: Vector2 = Vector2(ReliefDonnees.X_OUEST + j * _dx, ReliefDonnees.Z_NORD + i * _dz) - c
+						var dist: float = Vector2(maxf(absf(v.dot(u)) - demi_l, 0.0), maxf(absf(v.dot(lat)) - demi_x, 0.0)).length()
+						var poids: float = 1.0 - smoothstep(0.0, ARASEMENT_RACCORD, dist)
+						if poids > 0.0:
+							var k: int = i * n + j
+							_h[k] = minf(_h[k], lerpf(_h[k], float(pl[4]), poids))
 
 
 func _araser_cretes() -> void:
