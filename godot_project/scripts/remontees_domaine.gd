@@ -501,6 +501,7 @@ func _poser(D: Dictionary) -> void:
 	# repère : origine au sol de la gare aval, −Z local vers l'amont
 	var fwd: Vector3 = Vector3(dirh.x, 0.0, dirh.y)
 	lg.transform = Transform3D(Basis.looking_at(fwd, Vector3.UP), Vector3(a.x, h0, a.y))
+	lg.y_origine = h0
 	lg.avec_collisions = true
 	lg.progressif = true
 	if OS.has_feature("web"):
