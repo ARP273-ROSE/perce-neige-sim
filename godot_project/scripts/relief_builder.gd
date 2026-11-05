@@ -588,6 +588,7 @@ var _hn5_ref: PackedFloat32Array = PackedFloat32Array()
 
 ## Une étape par image : réunies, elles faisaient une image de 250 ms en fin de chargement.
 const PAS_MAT_DERNIER: int = 6
+var _detail_seul: bool = false
 var _pas_mat: int = 0
 
 
@@ -597,7 +598,13 @@ func _materiaux_pas() -> void:
 			_tex_ortho = ImageTexture.create_from_image(_img_ortho if _img_ortho != null
 				else _image_ortho("res://textures/relief_ortho.jpg"))
 		1:
-			_mat_terrain = _shader(ReliefAnneaux.code_hd(SHADER_TERRAIN) if fin != null and fin.hd else SHADER_TERRAIN)
+			_detail_seul = (fin == null or not fin.hd) and not OS.has_feature("web") and ClassDB.class_exists("ReliefHD")
+			if _detail_seul:
+				ReliefAnneaux.preparer_detail()
+			_mat_terrain = _shader(ReliefAnneaux.code_hd(SHADER_TERRAIN) if fin != null and fin.hd
+				else ReliefAnneaux.code_detail(SHADER_TERRAIN) if _detail_seul else SHADER_TERRAIN)
+			if _detail_seul:
+				ReliefAnneaux.regler_detail_seul(_mat_terrain)
 			_mat_terrain.set_shader_parameter("ortho", _tex_ortho)
 		2:
 			if fin != null and fin.hd:
@@ -969,7 +976,7 @@ func _build_piece(am: Dictionary) -> void:
 					img.set_pixel(j, i, Color.WHITE)
 	# (pack haute définition : même photo et mêmes normales que le sol alentour)
 	var hd_piece: bool = fin != null and fin.hd and _tex_normales != null
-	var mat: ShaderMaterial = _mat_terrain.duplicate() if hd_piece else _shader(SHADER_TERRAIN)
+	var mat: ShaderMaterial = _mat_terrain.duplicate() if hd_piece or _detail_seul else _shader(SHADER_TERRAIN)
 	mat.set_shader_parameter("ortho", _tex_ortho)
 	if hd_piece:
 		ReliefAnneaux.regler_hd(mat, _tex_normales, _tex_ortho_hd)
