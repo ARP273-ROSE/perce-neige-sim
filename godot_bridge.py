@@ -50,6 +50,7 @@ class GodotBridge:
         self.bundled_dir = Path(bundled_dir).expanduser().resolve() if bundled_dir else None
         self.dev_project_dir = Path(dev_project_dir).expanduser().resolve() if dev_project_dir else None
         self.port = port
+        self._port_base = port
         # Qualité 3D : « auto » = le viewer détecte la machine et s'ajuste
         # en direct ; high / medium / low = forcée (menu Affichage du sim)
         self.quality = "auto"
@@ -377,6 +378,30 @@ class GodotBridge:
             )
         return False, msg
 
+    def _choisir_port(self) -> None:
+        """Prend la première paire de ports UDP libre (état, retour). Un viewer resté d'un plantage
+        tenait le port : le nouveau ne recevait rien et se fermait au bout de 30 s, pendant que nos
+        paquets gardaient l'ancien en vie. Sur un autre port, l'ancien n'entend plus rien : il se
+        ferme tout seul."""
+        for p in range(self._port_base, self._port_base + 40, 2):
+            sockets = []
+            try:
+                for q in (p, p + 1):
+                    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+                    sockets.append(s)
+                    s.bind(("127.0.0.1", q))
+            except OSError:
+                continue
+            finally:
+                for s in sockets:
+                    s.close()
+            if p != self._port_base:
+                self._log(f"[start] port UDP {self._port_base} occupé, viewer sur {p}")
+            self.port = p
+            self._addr = ("127.0.0.1", p)
+            return
+        self._log(f"[start] aucun port UDP libre à partir de {self._port_base}")
+
     def start(self) -> bool:
         """Démarre Godot en mode --client. Retourne True si OK.
         Si False : aucune exception, le sim continue avec la vue cabine
@@ -385,6 +410,7 @@ class GodotBridge:
         if self.is_running():
             return True
         self._abort = False
+        self._choisir_port()
         cmd = self._resolve_command()
         if cmd is None:
             ok, reason = self.is_available()
