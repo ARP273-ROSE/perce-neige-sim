@@ -739,11 +739,12 @@ func _creuser_gares() -> void:
 		_h = _h.duplicate()
 		_pas = 1
 		_creuser_gares_corps()
+		_plafonner_grille()
 		_h25 = _h
 		_h = h_aff
 		_pas = pas_aff
 	_creuser_gares_corps()
-	# (maille à 50 m : elle ne porte pas cette butte ; relief fin : il a son propre sol)
+	# (relief fin : il a son propre sol. Maille à 50 m : sa copie à 25 m est plafonnée plus haut, pieds et cuissons identiques)
 	if _pas == 1 and not ReliefFin.voulu(_cran_depart):
 		_plafonner_grille()
 
@@ -784,7 +785,7 @@ const ARASEMENT_RACCORD: float = 18.0
 ## du relevé fin, et la cabine du 3S les traversait à l'approche de l'ouvrage (l'altitude du câble vient du
 ## document, on ne la touche pas). [clé, d début, d fin, demi-largeur, altitude maximale]. Plafond resté
 ## au-dessus du sol fin (2708,7 m à d=1785).
-const PLAFONDS_25: Array = [["olympique", 1772.0, 1808.0, 12.0, 2712.5]]
+const PLAFONDS_25: Array = [["olympique", 1772.0, 1826.0, 12.0, 2711.0]]
 
 
 func _plafonner_grille() -> void:
