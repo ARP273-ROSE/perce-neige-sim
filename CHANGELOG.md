@@ -7,7 +7,9 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## Version suivante (non publiée)
 
-**Pack haute définition installé tout seul** : le simulateur télécharge le pack (819 Mo) en arrière-plan au lancement, le vérifie et le pose dans le dossier de données de l'utilisateur, où les mises à jour ne le touchent pas. Un téléchargement coupé reprend au lancement suivant ; le pack sert au lancement suivant du viewer 3D une fois complet. Pas d'installation sous 7,5 Go de mémoire vive ni sans 1,8 Go de place libre. Aucune barre de progression. Le pack reste hors de la PWA.
+**Pack haute définition installé tout seul** : le simulateur télécharge le pack (819 Mo) en arrière-plan au lancement, le vérifie et le pose dans le dossier de données de l'utilisateur, où les mises à jour ne le touchent pas. Un téléchargement coupé reprend au lancement suivant ; le pack sert au lancement suivant du viewer 3D une fois complet. Le viewer dit d'abord si la machine s'en servirait : pas de téléchargement sans carte dédiée assez fournie, ni sans 1,8 Go de place libre. Aucune barre de progression. Le pack reste hors de la PWA.
+
+**Processeur graphique intégré** : départ au cran 4 au lieu de 1 ou 2, le régulateur remontant s'il reste de la marge (rapport du 24/10 : 1 à 20 s par image sur un Vega 8 en 1.31.1). Non mesuré sur une vraie machine de ce type.
 
 **Compteur en bas du pupitre** : il affichait la cadence du pupitre (minuterie de 16 ms, 62 fps fixes), jamais celle de la 3D. Il montre maintenant `3D n i/s` quand le viewer tourne, et `pupitre n fps` sinon.
 

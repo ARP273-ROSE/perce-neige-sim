@@ -33,7 +33,7 @@ func _initialize() -> void:
 	# 1. Profils de départ
 	pm._rd = true
 	pm.cran_min = 0
-	var cas := {"dedie": 0, "integre": 2, "logiciel": 5, "apple": 1}
+	var cas := {"dedie": 0, "integre": 4, "logiciel": 5, "apple": 1}
 	for t in cas:
 		pm.machine["type"] = t
 		pm.machine["ram_go"] = 8.0
@@ -43,12 +43,12 @@ func _initialize() -> void:
 	pm.machine["type"] = "integre"
 	pm.machine["ram_go"] = 32.0
 	pm.machine["coeurs"] = 12
-	_check("intégrée costaude", pm._cran_de_depart() == 1, "cran %d" % pm._cran_de_depart())
+	_check("intégrée, même costaude : départ bas", pm._cran_de_depart() == 4, "cran %d" % pm._cran_de_depart())
 	pm.machine["type"] = "dedie"
 	pm.machine["ecran"] = Vector2i(3840, 2160)
 	_check("écran 4K, carte dédiée : tout", pm._cran_de_depart() == 0, "cran %d" % pm._cran_de_depart())
 	pm.machine["type"] = "integre"
-	_check("écran 4K, carte intégrée : rendu réduit", pm._cran_de_depart() == 3, "cran %d" % pm._cran_de_depart())
+	_check("écran 4K, carte intégrée : départ bas", pm._cran_de_depart() == 4, "cran %d" % pm._cran_de_depart())
 	pm.machine["type"] = "dedie"
 	pm.machine["ecran"] = Vector2i(1920, 1080)
 

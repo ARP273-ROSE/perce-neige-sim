@@ -107,6 +107,13 @@ static func niveau_hd() -> int:
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--hd-niveau="):
 			return clampi(int(a.trim_prefix("--hd-niveau=")), 0, 2)
+	return niveau_machine()
+
+
+## Ce que la machine peut porter, pack présent ou non (le pupitre ne le télécharge que si elle s'en sert).
+static func niveau_machine() -> int:
+	if not ClassDB.class_exists("ReliefHD"):
+		return 0
 	var ram: float = float(OS.get_memory_info().get("physical", 0)) / 1073741824.0
 	var vram: float = float(ClassDB.instantiate("ReliefHD").call("memoire_video"))
 	var coeurs: int = OS.get_processor_count()
