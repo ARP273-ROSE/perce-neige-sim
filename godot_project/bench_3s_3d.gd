@@ -68,7 +68,7 @@ static func garde_pire(lg: LigneRemontee, th: float) -> float:
 
 static func garde_rapport(lg: LigneRemontee) -> Array:
 	var o: Array = []
-	var fin: bool = (lg.get_tree().current_scene if lg.get_tree().current_scene != null else lg.get_node("/root/Main")).relief.fin != null
+	var fin: bool = (lg.get_tree().current_scene if lg.get_tree().current_scene != null else lg.get_tree().root.get_node("Main")).relief.fin != null
 	for th in [0.0, BALANCEMENT_PIRE]:
 		var r: Array = garde_detail(lg, th)
 		o.append("GARDE_3S relief %s, balancement %.1f : %.2f m à d=%.0f, %s" % ["fin" if fin else "25 m", th, r[0], r[1], "montée" if r[2] else "descente"])
