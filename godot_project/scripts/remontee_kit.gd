@@ -27,6 +27,7 @@ const COULEURS: Dictionary = {
 	"caillebotis": [Color(0.55, 0.57, 0.58), 0.6, 0.7],
 	"blanc_plaque": [Color(0.94, 0.94, 0.92), 0.6, 0.0],
 	"cabine_rouge": [Color(0.72, 0.07, 0.10), 0.35, 0.35],
+	"matelas_piste": [Color(0.88, 0.24, 0.08), 0.85, 0.0],
 	"cabine_noire": [Color(0.07, 0.07, 0.08), 0.35, 0.35],
 	"cabine_blanche": [Color(0.92, 0.93, 0.94), 0.35, 0.30],
 	"cabine_bleue": [Color(0.08, 0.28, 0.62), 0.35, 0.35],

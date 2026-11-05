@@ -24,7 +24,9 @@ extends Node3D
 var _machoire: Node3D
 var _ressorts: Array = []
 var _galets_roul: Array = []      # galets du chariot du 3S (axe local X)
-const R_GALET_CHARIOT: float = 0.17
+## Rayon de roulement du galet, au fond de la gorge ; flasques à R_FLASQUE_CHARIOT (estimés sur photo).
+const R_GALET_CHARIOT: float = 0.19
+const R_FLASQUE_CHARIOT: float = 0.22
 
 
 ## Le chariot a avancé de `ds` m sur les porteurs : ses galets tournent.
@@ -1533,9 +1535,30 @@ func _cabine() -> void:
 ## Écart des deux câbles porteurs d'une voie du 3S (axe à axe) et hauteur
 ## du tracteur sous eux, dans le repère du chariot (origine : milieu des
 ## porteurs).
-const E_PORTEURS_3S: float = 0.62
+## Chariot du 3S : cotes estimées sur photo, d'après le Ø connu des porteurs (57 mm), incertitude ±15 %.
+const E_PORTEURS_3S: float = 0.80
+const ENTRAXE_GALETS_3S: float = 0.62
+const Z_BALANCIER_3S: float = 0.80        # du milieu du chariot au milieu d'un balancier
+const Y_POUTRES_3S: float = 0.40
+const X_PIVOT_3S: float = 0.68
+const Y_PIVOT_3S: float = -0.22
 const Y_TRACTEUR_3S: float = -0.42
 const H_SUSP_3S: float = 2.65        # du chariot au toit de la cabine (mesuré en vidéo : 2,6-2,7)
+
+
+## Galet du chariot, axe X : deux flasques d'aluminium, bandage clair entre elles, moyeu, et de quoi le voir tourner.
+func _galet_chariot(n: Node3D) -> void:
+	var tr: Basis = Basis(Vector3.FORWARD, PI * 0.5)
+	RemonteeKit.cylindre(n, R_GALET_CHARIOT, R_GALET_CHARIOT, 0.11, Transform3D(tr, Vector3.ZERO), "polyurethane", 20)
+	for sx in [-1.0, 1.0]:
+		RemonteeKit.cylindre(n, R_FLASQUE_CHARIOT, R_FLASQUE_CHARIOT, 0.016, Transform3D(tr, Vector3(sx * 0.063, 0, 0)), "alu_pince", 24)
+		RemonteeKit.cylindre(n, 0.085, 0.085, 0.014, Transform3D(tr, Vector3(sx * 0.073, 0, 0)), "acier", 14)
+		RemonteeKit.cylindre(n, 0.042, 0.042, 0.02, Transform3D(tr, Vector3(sx * 0.08, 0, 0)), "acier_noir", 10)
+		# fenêtres sombres du moyeu, inégales : un motif symétrique se fige à l'écran
+		for k in range(3):
+			var a: float = TAU * k / 3.0
+			var taille: float = 0.040 if k == 0 else 0.026
+			RemonteeKit.boite_en(n, Vector3(0.006, taille, taille), Vector3(sx * 0.073, cos(a) * 0.15, sin(a) * 0.15), "noir_mat")
 
 
 ## Véhicule du 3S de l'Olympique (photos de la ligne, reportage
@@ -1544,67 +1567,101 @@ const H_SUSP_3S: float = 2.65        # du chariot au toit de la cabine (mesuré 
 ## ses ressorts ; suspente unique en caisson gris foncé, coudée ; cabine
 ## CWA Zeta 30 places (24 assises), portes coulissantes côté quai.
 func _cabine_zeta() -> void:
-	# le chariot roule sur les porteurs (nœud « Pince », fixe) ; suspente et
-	# cabine balancent autour de l'articulation, sous le longeron
-	pivot = Vector3(0, 0.30, 0)
+	# le chariot roule sur les porteurs (nœud « Pince », fixe) ; suspente et cabine balancent autour de la
+	# grosse articulation, sur le flanc du corps et sous le plan des porteurs
+	pivot = Vector3(X_PIVOT_3S, Y_PIVOT_3S, 0)
 	var ch: Node3D = Node3D.new()
 	ch.name = "Pince"
 	add_child(ch)
 	var gris: String = "peinture_anthracite"
 	var e: float = E_PORTEURS_3S * 0.5
-	var rg: float = 0.17                       # rayon des galets (gorge)
-	var pas: float = 0.42
-	# châssis du chariot : longeron central, deux poutres de balanciers
-	RemonteeKit.boite_en(ch, Vector3(0.30, 0.20, 2.0), Vector3(0, 0.36, 0), gris)
+	var y_axe: float = R_GALET_CHARIOT + 0.0285
+	# quatre balanciers bleus de deux galets : un à chaque bout de chaque porteur
 	for sx in [-1.0, 1.0]:
 		var x: float = sx * e
-		# deux balanciers par câble (2 galets chacun) sur un palonnier
 		for bz in [-1.0, 1.0]:
-			var piv: Vector3 = Vector3(x, rg + 0.10, bz * pas)
-			RemonteeKit.boite_en(ch, Vector3(0.05, 0.10, pas + 0.18), piv + Vector3(sx * 0.10, 0.02, 0), "bleu_ressort")
-			RemonteeKit.boite_en(ch, Vector3(0.05, 0.10, pas + 0.18), piv + Vector3(-sx * 0.10, 0.02, 0), "bleu_ressort")
+			var zb: float = bz * Z_BALANCIER_3S
 			for gz in [-0.5, 0.5]:
-				# chaque galet sur son axe : il tourne en roulant sur le porteur
-				# (retour d'utilisateur, 25/10/2026)
 				var gn: Node3D = Node3D.new()
 				gn.name = "GaletChariot"
-				gn.position = Vector3(x, rg + PyloneRemontee.R_CABLE, bz * pas + gz * pas)
+				gn.position = Vector3(x, y_axe, zb + gz * ENTRAXE_GALETS_3S)
 				ch.add_child(gn)
-				RemonteeKit.galet(gn, Vector3.ZERO, rg)
+				_galet_chariot(gn)
 				_galets_roul.append(gn)
-			RemonteeKit.cylindre(ch, 0.03, 0.03, 0.26, Transform3D(Basis(Vector3.FORWARD, PI * 0.5), piv), "acier", 8)
-			# étiquette rouge (contrôle des galets, photos)
-			RemonteeKit.boite_en(ch, Vector3(0.012, 0.07, 0.10), piv + Vector3(sx * 0.13, 0.10, 0), "cabine_rouge")
-		RemonteeKit.boite_en(ch, Vector3(0.10, 0.12, 1.9), Vector3(x + sx * 0.14, 0.36, 0), gris)
-		RemonteeKit.boite_en(ch, Vector3(sx * 0.14 + 0.08, 0.10, 0.20), Vector3(x * 0.5 + sx * 0.07, 0.36, 0), gris)
-	# pince du tracteur, sous les porteurs, avec ses ressorts et ses gaines
-	RemonteeKit.boite_en(ch, Vector3(0.16, 0.20, 0.70), Vector3(0, Y_TRACTEUR_3S + 0.06, 0), "alu_pince")
+			# bras du balancier, côté extérieur et plus mince côté intérieur, avec la plaque qui monte au corps
+			var xb: float = x + sx * 0.105
+			var tete: Vector3 = Vector3(xb, y_axe, zb + bz * ENTRAXE_GALETS_3S * 0.5 + bz * 0.20)
+			var queue: Vector3 = Vector3(xb, y_axe, zb - bz * ENTRAXE_GALETS_3S * 0.5)
+			RemonteeKit.poutre(ch, queue, Vector3(xb, y_axe + 0.03, zb), 0.03, 0.09, "bleu_doppelmayr")
+			RemonteeKit.poutre(ch, Vector3(xb, y_axe + 0.03, zb), tete, 0.03, 0.09, "bleu_doppelmayr")
+			RemonteeKit.poutre(ch, Vector3(x - sx * 0.105, y_axe, zb - ENTRAXE_GALETS_3S * 0.5), Vector3(x - sx * 0.105, y_axe, zb + ENTRAXE_GALETS_3S * 0.5), 0.02, 0.06, "bleu_doppelmayr")
+			RemonteeKit.boite_en(ch, Vector3(0.03, Y_POUTRES_3S - y_axe, 0.14), Vector3(xb, (Y_POUTRES_3S + y_axe) * 0.5, zb), "bleu_doppelmayr")
+			RemonteeKit.cylindre(ch, 0.025, 0.025, 0.26, Transform3D(Basis(Vector3.FORWARD, PI * 0.5), Vector3(x, y_axe, zb)), "acier", 8)
+			# crosse d'extrémité rouge et blanche
+			RemonteeKit.boite_en(ch, Vector3(0.20, 0.16, 0.035), tete + Vector3(-sx * 0.09, 0.0, bz * 0.02), "cabine_rouge")
+			RemonteeKit.boite_en(ch, Vector3(0.11, 0.08, 0.012), tete + Vector3(-sx * 0.09, 0.0, bz * 0.043), "polyurethane")
+			# traverse au-dessus du porteur, du corps au balancier
+			RemonteeKit.boite_en(ch, Vector3(xb * sx - 0.10, 0.08, 0.12), Vector3(sx * (xb * sx + 0.10) * 0.5, Y_POUTRES_3S, zb), gris)
+	# corps en « U » : quille basse sous le tracteur, deux bras qui remontent de part et d'autre de lui
+	RemonteeKit.boite_en(ch, Vector3(0.26, 0.12, 1.10), Vector3(0, Y_TRACTEUR_3S - 0.15, 0), gris)
 	for sz in [-1.0, 1.0]:
-		RemonteeKit.demi_cone(ch, Vector3(0, Y_TRACTEUR_3S, sz * 0.35), Vector3(0, Y_TRACTEUR_3S, sz * 0.62), 0.05, 0.028, "noir_mat", 12)
-		var r: Node3D = Node3D.new()
-		r.position = Vector3(0, Y_TRACTEUR_3S + 0.16, sz * 0.20)
-		ch.add_child(r)
-		RemonteeKit.ressort(r, Vector3.ZERO, Vector3.UP, 0.30, 0.055, 0.012, 8, "ressort_gris")
-		_ressorts.append(r)
-	RemonteeKit.boite_en(ch, Vector3(0.16, 0.40, 0.20), Vector3(0, (Y_TRACTEUR_3S + 0.36) * 0.5 + 0.12, 0), gris)
-	# galets de roulement de gare, de part et d'autre
+		for sx in [-1.0, 1.0]:
+			RemonteeKit.poutre(ch, Vector3(sx * 0.15, Y_TRACTEUR_3S - 0.15, sz * 0.50), Vector3(sx * 0.15, Y_POUTRES_3S, sz * 0.50), 0.09, 0.20, gris, Vector3.BACK)
+			# cale claire en bout de poutre
+			RemonteeKit.boite_en(ch, Vector3(0.13, 0.10, 0.10), Vector3(sx * 0.15, Y_POUTRES_3S + 0.03, sz * 0.92), "polyurethane")
+	# deux poutres carrées à semelle noire crantée : les pneus du lanceur roulent dessus
 	for sx in [-1.0, 1.0]:
-		for sz in [-0.7, 0.7]:
-			RemonteeKit.cylindre(ch, 0.09, 0.09, 0.07, Transform3D(Basis(Vector3.FORWARD, PI * 0.5), Vector3(sx * 0.62, 0.36, sz)), "polyurethane", 16)
-	# suspente : caisson rectangulaire coudé, du chariot (au-dessus de
-	# l'axe) au toit — elle s'écarte vers l'extérieur pour laisser passer les
-	# porteurs, puis revient au-dessus du centre de la cabine
+		RemonteeKit.boite_en(ch, Vector3(0.11, 0.09, 1.80), Vector3(sx * 0.15, Y_POUTRES_3S + 0.03, 0), "alu_pince")
+		RemonteeKit.boite_en(ch, Vector3(0.11, 0.02, 1.10), Vector3(sx * 0.15, 0.45, 0), "noir_mat")
+		for k in range(7):
+			RemonteeKit.boite_en(ch, Vector3(0.11, 0.012, 0.05), Vector3(sx * 0.15, 0.462, -0.48 + k * 0.16), "noir_mat")
+	# mâchoires empilées autour du tracteur, entre les deux porteurs
+	for k in range(3):
+		var zm: float = (k - 1.0) * 0.27
+		RemonteeKit.boite_en(ch, Vector3(0.19, 0.11, 0.23), Vector3(0, Y_TRACTEUR_3S - 0.035, zm), "alu_pince")
+		RemonteeKit.boite_en(ch, Vector3(0.09, 0.05, 0.20), Vector3(-0.055, Y_TRACTEUR_3S + 0.04, zm), "alu_pince")
+	for sz in [-1.0, 1.0]:
+		RemonteeKit.demi_cone(ch, Vector3(0, Y_TRACTEUR_3S, sz * 0.40), Vector3(0, Y_TRACTEUR_3S, sz * 0.68), 0.05, 0.028, "noir_mat", 12)
+		# tige rouge en U autour du tracteur
+		var u: PackedVector3Array = PackedVector3Array()
+		for pt in [Vector3(-0.30, -0.02, 0), Vector3(-0.13, Y_TRACTEUR_3S - 0.02, 0), Vector3(0.13, Y_TRACTEUR_3S - 0.02, 0), Vector3(0.30, -0.02, 0)]:
+			u.append((pt as Vector3) + Vector3(0, 0, sz * 0.68))
+		RemonteeKit.tube(ch, u, 0.012, "cabine_rouge", 6)
+		# petit amortisseur rouge
+		RemonteeKit.boite_en(ch, Vector3(0.05, 0.22, 0.05), Vector3(0.21, 0.10, sz * 0.36), "cabine_rouge")
+		RemonteeKit.cylindre(ch, 0.03, 0.03, 0.15, Transform3D(Basis.IDENTITY, Vector3(0.21, 0.10, sz * 0.36)), "noir_mat", 8)
+		# ouverture de la pince, côté intérieur de la boucle : bras sous le porteur, ressort incliné à disques,
+		# paire de galets clairs en bout (ils portent sur le rail courbe de la gare)
+		var zp: float = sz * 0.17
+		var pied: Vector3 = Vector3(-0.60, -0.10, zp)
+		RemonteeKit.poutre(ch, Vector3(-0.12, Y_TRACTEUR_3S - 0.05, zp), pied, 0.05, 0.11, "alu_pince", Vector3.BACK)
+		var d_r: Vector3 = Vector3(-0.72, 0.69, 0).normalized()
+		var r: Node3D = Node3D.new()
+		r.position = pied
+		r.basis = Basis(d_r.cross(Vector3.BACK).normalized(), d_r, Vector3.BACK)
+		ch.add_child(r)
+		RemonteeKit.ressort(r, Vector3.ZERO, Vector3.UP, 0.30, 0.085, 0.016, 9, "ressort_gris")
+		_ressorts.append(r)
+		var bout: Vector3 = pied + d_r * 0.34
+		RemonteeKit.boite_en(ch, Vector3(0.07, 0.07, 0.24), bout, "alu_pince")
+		for dz in [-0.11, 0.11]:
+			RemonteeKit.cylindre(ch, 0.09, 0.09, 0.07, Transform3D(Basis(Vector3.FORWARD, PI * 0.5), bout + Vector3(-0.07, 0.02, dz)), "polyurethane", 16)
+	# grosse articulation ronde, sur le flanc du corps, sous le plan du porteur
+	RemonteeKit.poutre(ch, Vector3(0.10, Y_TRACTEUR_3S - 0.15, 0), Vector3(X_PIVOT_3S, Y_PIVOT_3S, 0), 0.40, 0.14, gris, Vector3.BACK)
+	RemonteeKit.cylindre(ch, 0.17, 0.17, 0.26, Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3(X_PIVOT_3S, Y_PIVOT_3S, 0)), gris, 18)
+	RemonteeKit.cylindre(ch, 0.07, 0.07, 0.28, Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3(X_PIVOT_3S, Y_PIVOT_3S, 0)), "acier_noir", 12)
+	# suspente : caisson coudé, de l'articulation au toit ; elle s'écarte pour laisser passer les porteurs
+	# puis revient au-dessus du centre de la cabine
 	var hs: float = H_SUSP_3S
-	var arc: PackedVector3Array = PackedVector3Array()
-	var q0: Vector3 = Vector3(0.0, 0.42, 0)
-	var q1: Vector3 = Vector3(0.95, 0.40, 0)
+	var arc_z: PackedVector3Array = PackedVector3Array()
+	var q0: Vector3 = Vector3(X_PIVOT_3S, Y_PIVOT_3S, 0)
+	var q1: Vector3 = Vector3(1.05, Y_PIVOT_3S - 0.25, 0)
 	var q2: Vector3 = Vector3(0.95, -hs + 0.30, 0)
 	var q3: Vector3 = Vector3(0.0, -hs + 0.05, 0)
-	var arc_z: PackedVector3Array = PackedVector3Array()
 	for k in range(21):
 		var t: float = float(k) / 20.0
-		var u: float = 1.0 - t
-		arc_z.append(q0 * u * u * u + q1 * 3.0 * u * u * t + q2 * 3.0 * u * t * t + q3 * t * t * t)
+		var w: float = 1.0 - t
+		arc_z.append(q0 * w * w * w + q1 * 3.0 * w * w * t + q2 * 3.0 * w * t * t + q3 * t * t * t)
 	RemonteeKit.caisson(self, arc_z, 0.22, 0.30, 0.30, gris, Vector3.BACK)
 	RemonteeKit.boite_en(self, Vector3(0.50, 0.12, 0.70), Vector3(0, -hs - 0.02, 0), gris)
 	# caisse
