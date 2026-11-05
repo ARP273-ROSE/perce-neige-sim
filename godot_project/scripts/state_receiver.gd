@@ -75,6 +75,7 @@ func _ready() -> void:
 
 ## Message au PC, une ligne JSON (lu par GodotBridge.poll_messages).
 var _t_ips_envoi: int = 0
+var _hd_annonce: bool = false
 
 
 func envoyer(d: Dictionary) -> void:
@@ -106,6 +107,10 @@ func _process_corps(_delta: float) -> void:
 	var t_ips: int = Time.get_ticks_msec()
 	if t_ips - _t_ips_envoi >= 1000:
 		_t_ips_envoi = t_ips
+		# le pupitre n'installe le pack haute définition que si cette machine s'en servirait
+		if not _hd_annonce and main != null and main.get("perf_manager") != null:
+			_hd_annonce = true
+			envoyer({"hd_possible": main.perf_manager._cran_de_depart() == 0 and ReliefFin.niveau_machine() > 0})
 		envoyer({"ips_3d": Engine.get_frames_per_second()})
 	# Vide la file UDP, applique le DERNIER packet (anti-lag : si plusieurs
 	# packets sont en attente, seul le plus récent est appliqué)
