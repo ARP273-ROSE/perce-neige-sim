@@ -198,49 +198,71 @@ func _mailler_un() -> void:
 	var m: ArrayMesh = ArrayMesh.new()
 	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
 	_quarts.append(m)
-	if _a_mailler.is_empty():
-		_installer()
+	_a_installer = _a_mailler.is_empty()
 
 
-func _installer() -> void:
-	var fin: ReliefFin = _fin
-	var rel: ReliefBuilder = _rel
+var _a_installer: bool = false
+var _n_installe: int = -1
+var _code_anneau: String = ""
+
+
+## Une étape par image (ensemble : 110 ms en fin de chargement) : hauteurs calculées sur un autre
+## fil, puis un anneau à la fois.
+func _installer_pas() -> void:
+	if _tache >= 0:
+		if not WorkerThreadPool.is_task_completed(_tache):
+			return
+		WorkerThreadPool.wait_for_task_completion(_tache)
+		_tache = -1
+	if _n_installe < 0:
+		_code_anneau = _code_des_anneaux()
+		_demande = _noeud_vue()
+		_tache = WorkerThreadPool.add_task(_calculer, false, "anneaux du relief")
+		_n_installe = 0
+	elif _n_installe < NIVEAUX:
+		_installer_niveau(_n_installe)
+		_n_installe += 1
+	else:
+		_cj = _demande.x
+		_ci = _demande.y
+		_resultat = []
+		_code_anneau = ""
+		_regler_uniformes()
+		_rel._poser_trous()
+		_installe = true
+
+
+func _code_des_anneaux() -> String:
 	var code: String = code_hd(ReliefBuilder.SHADER_TERRAIN)
 	# les sommets du relief (tuiles) laissent place à ceux de l'anneau
 	var deb: int = code.find("void vertex() {")
 	var fin_v: int = code.find("}", deb) + 1
-	code = code.substr(0, deb) + _SOMMETS_ANNEAU + code.substr(fin_v)
-	var centre: Vector2i = _noeud_vue()
-	_cj = centre.x
-	_ci = centre.y
-	var couches: Array = _hd.call("anneaux", fin.noeuds_grille(), fin.pyramide, ReliefFin.NJ, ReliefFin.NI, rel._h, ReliefDonnees.NX, ReliefDonnees.NZ, ReliefFin.K, _cj, _ci, M, NIVEAUX)
-	for n in range(NIVEAUX):
-		var img: Image = Image.create_from_data(M + 1, M + 1, false, Image.FORMAT_RGF, couches[n])
-		_images.append(img)
-		_textures.append(ImageTexture.create_from_image(img))
-		# (un seul nuanceur pour les cinq anneaux : compilé cinq fois, il gelait l'image 0,5 s)
-		var mat: ShaderMaterial = rel._shader(code) if _mats.is_empty() else (_mats[0] as ShaderMaterial).duplicate()
-		mat.set_shader_parameter("ortho", rel._tex_ortho)
-		regler_hd(mat, rel._tex_normales, rel._tex_ortho_hd)
-		mat.set_shader_parameter("anneau", _textures[n])
-		mat.set_shader_parameter("piece", 0.0)
-		rel._hiver_mat(mat, true)
-		_mats.append(mat)
-		for k in range(4):
-			var mi: MeshInstance3D = MeshInstance3D.new()
-			mi.name = "Anneau%d_%d" % [n, k]
-			mi.mesh = _quarts[(0 if n == 0 else 4) + k]
-			mi.material_override = mat
-			mi.layers = 1 | Cabin.LAYER_RELIEF
-			mi.set_meta("sans_collision", true)
-			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-			add_child(mi)
-			_instances.append([n, k, mi])
-	_regler_uniformes()
-	rel._poser_trous()
-	_installe = true
+	return code.substr(0, deb) + _SOMMETS_ANNEAU + code.substr(fin_v)
 
 
+func _installer_niveau(n: int) -> void:
+	var rel: ReliefBuilder = _rel
+	var img: Image = Image.create_from_data(M + 1, M + 1, false, Image.FORMAT_RGF, _resultat[n])
+	_images.append(img)
+	_textures.append(ImageTexture.create_from_image(img))
+	# (un seul nuanceur pour les cinq anneaux : compilé cinq fois, il gelait l'image 0,5 s)
+	var mat: ShaderMaterial = rel._shader(_code_anneau) if _mats.is_empty() else (_mats[0] as ShaderMaterial).duplicate()
+	mat.set_shader_parameter("ortho", rel._tex_ortho)
+	regler_hd(mat, rel._tex_normales, rel._tex_ortho_hd)
+	mat.set_shader_parameter("anneau", _textures[n])
+	mat.set_shader_parameter("piece", 0.0)
+	rel._hiver_mat(mat, true)
+	_mats.append(mat)
+	for k in range(4):
+		var mi: MeshInstance3D = MeshInstance3D.new()
+		mi.name = "Anneau%d_%d" % [n, k]
+		mi.mesh = _quarts[(0 if n == 0 else 4) + k]
+		mi.material_override = mat
+		mi.layers = 1 | Cabin.LAYER_RELIEF
+		mi.set_meta("sans_collision", true)
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(mi)
+		_instances.append([n, k, mi])
 ## Repli en jeu : sans le détail de la neige. Les anneaux restent posés.
 func regler_detail(actif: bool) -> void:
 	var v: float = 1.0 if actif and _tex_detail != null else 0.0
@@ -289,6 +311,8 @@ func _process(_dt: float) -> void:
 	if not _installe:
 		if not _a_mailler.is_empty():
 			_mailler_un()
+		elif _a_installer:
+			_installer_pas()
 		return
 	if _tache >= 0:
 		if not WorkerThreadPool.is_task_completed(_tache):
