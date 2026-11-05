@@ -7,7 +7,7 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## 1.55.0 — 5 novembre 2026
 
-**Olympique (3S), cabine et relief** : la cabine ne traverse plus le sol à l'approche du grand pylône, à tous les crans. Le câble y suit les altitudes du document ; sur la grille à 25 m, une butte qui n'existe pas sur le relevé fin est abaissée localement.
+**Olympique (3S), cabine et relief** : la cabine ne traverse plus le sol à l'approche du grand pylône, à tous les crans. Le haut de la ligne est relevé de 3,3 m au-dessus des altitudes du document (3A 2718,35 m, 3B 2724,8 m) pour garder au moins 3 m sous la cabine balancée, hors abords des gares ; sur la grille à 25 m, une butte qui n'existe pas sur le relevé fin est abaissée localement.
 
 **Installation du décor haute définition** : le pupitre affiche la progression du téléchargement, puis dit quand relancer le simulateur.
 

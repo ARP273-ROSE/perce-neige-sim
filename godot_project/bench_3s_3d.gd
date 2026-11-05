@@ -27,11 +27,13 @@ func _initialize() -> void:
 const BALANCEMENT_PIRE: float = 0.2
 ## Près des gares la cabine est guidée et descend vers le quai : pas de balancement compté.
 const SANS_BALANCEMENT: float = 30.0
+## Garde voulue en ligne (demande du 05/11/2026), pas celle de la dernière approche du quai.
+const GARDE_LIGNE: float = 3.0
 
 
 ## Plus petite garde (m) entre le dessous de la caisse et le sol affiché, coins de la caisse, sur toute la ligne
 ## hors gares et dans les deux sens, cabine chargée, balancée de `th` en long et en travers. [garde, d, sens]
-static func garde_detail(lg: LigneRemontee, th: float) -> Array:
+static func garde_detail(lg: LigneRemontee, th: float, hors_gares: float = 0.0) -> Array:
 	var pv: Vector3 = Vector3(VehiculeRemontee.X_PIVOT_3S, VehiculeRemontee.Y_PIVOT_3S, 0)
 	var bas: float = -(VehiculeRemontee.H_SUSP_3S + 0.08 + VehiculeRemontee._h_cab("cabine_3s"))
 	var coins: Array = []
@@ -46,8 +48,8 @@ static func garde_detail(lg: LigneRemontee, th: float) -> Array:
 	for montee in [true, false]:
 		var x0: float = lg._x_brin(montee)
 		var cote: float = signf(x0) if lg.sens_droite else -signf(x0)
-		var d: float = LigneRemontee.NEZ_3S
-		while d < L - LigneRemontee.NEZ_3S:
+		var d: float = maxf(LigneRemontee.NEZ_3S, hors_gares)
+		while d < L - maxf(LigneRemontee.NEZ_3S, hors_gares):
 			var y: float = lg.y_cable(d, montee)
 			var pres: bool = minf(d, L - d) < SANS_BALANCEMENT
 			for b in ([Basis.IDENTITY] if pres else bases):
@@ -123,6 +125,8 @@ func _tick() -> void:
 			for ligne_g in garde_rapport(_lg):
 				print(ligne_g)
 			var g_pire: float = garde_pire(_lg, BALANCEMENT_PIRE)
+			var g_ligne: float = float(garde_detail(_lg, BALANCEMENT_PIRE, SANS_BALANCEMENT)[0])
+			_verif("3S : au moins %.0f m sous la cabine hors abords des gares" % GARDE_LIGNE, g_ligne >= GARDE_LIGNE, "%.2f m" % g_ligne)
 			_verif("3S : cabine au-dessus du sol, deux sens, balancement %.1f rad" % BALANCEMENT_PIRE, g_pire >= 0.0, "%.2f m" % g_pire)
 			_verif("3S : ligne construite, véhicules en ligne", n_l >= 6, "%d véhicules, %d en ligne" % [_lg.nombre_vehicules(), n_l])
 			_phase = 2
