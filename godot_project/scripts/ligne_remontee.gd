@@ -2052,6 +2052,14 @@ var _terrassements: Dictionary = {}
 var sol_garde: Callable = Callable()
 
 
+## Le pied du pylône en d est-il sur une piste ? (faux hors du jeu : cuissons, bancs sans domaine)
+func _sur_une_piste(d: float, t: float) -> bool:
+	if not is_inside_tree() or get_tree().current_scene == null:
+		return false
+	var dom: Variant = get_tree().current_scene.get("domaine")
+	return dom != null and not (dom as DomaineSkiable).hors_piste(global_transform * Vector3(0, t, -d))
+
+
 func _sol_ligne(x: float, z: float) -> float:
 	if sol_garde.is_valid():
 		return float(sol_garde.call(x, z))
@@ -3783,6 +3791,7 @@ func _poser_pylones() -> void:
 		# d'utilisateur, 04/11/2026 : ils étaient trop haut sur le pylône)
 		py.dessus_traverse = PyloneRemontee.DESSUS_TRAVERSE_COMPRESSION if _compression(p) else _dessus_traverse()
 		py.hauteur = y_cable(d) - t - py.dessus_traverse
+		py.matelas = _sur_une_piste(d, t)
 		py.compo_montee = p.get("montee", [[8, "S"]])
 		py.compo_descente = p.get("descente", [[8, "S"]])
 		var e: float = 4.0
