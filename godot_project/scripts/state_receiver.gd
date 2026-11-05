@@ -74,6 +74,9 @@ func _ready() -> void:
 
 
 ## Message au PC, une ligne JSON (lu par GodotBridge.poll_messages).
+var _t_ips_envoi: int = 0
+
+
 func envoyer(d: Dictionary) -> void:
 	if _retour != null:
 		_retour.put_packet((JSON.stringify(d) + "\n").to_utf8_buffer())
@@ -99,6 +102,11 @@ func _process(delta: float) -> void:
 func _process_corps(_delta: float) -> void:
 	if udp == null or physics == null:
 		return
+	# cadence réelle de la 3D, pour l'affichage du pupitre (il n'avait que la sienne, 62 fps fixes)
+	var t_ips: int = Time.get_ticks_msec()
+	if t_ips - _t_ips_envoi >= 1000:
+		_t_ips_envoi = t_ips
+		envoyer({"ips_3d": Engine.get_frames_per_second()})
 	# Vide la file UDP, applique le DERNIER packet (anti-lag : si plusieurs
 	# packets sont en attente, seul le plus récent est appliqué)
 	var latest: Dictionary = {}
