@@ -9,6 +9,8 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 **Pack haute définition installé tout seul** : le simulateur télécharge le pack (819 Mo) en arrière-plan au lancement, le vérifie et le pose dans le dossier de données de l'utilisateur, où les mises à jour ne le touchent pas. Un téléchargement coupé reprend au lancement suivant ; le pack sert au lancement suivant du viewer 3D une fois complet. Pas d'installation sous 7,5 Go de mémoire vive ni sans 1,8 Go de place libre. Aucune barre de progression. Le pack reste hors de la PWA.
 
+**Compteur en bas du pupitre** : il affichait la cadence du pupitre (minuterie de 16 ms, 62 fps fixes), jamais celle de la 3D. Il montre maintenant `3D n i/s` quand le viewer tourne, et `pupitre n fps` sinon.
+
 ## 1.54.0 — 5 novembre 2026
 
 **Pack haute définition** (PC, facultatif, environ 780 Mo à poser dans `pack_hd/` à côté de l'exécutable ; sans lui, rien ne change, et la PWA ne le charge jamais). Sol au mètre sur tout le domaine depuis le LiDAR HD de l'IGN, photo aérienne IGN au mètre, 113 376 arbres relevés au LiDAR et retirés des emprises de bâtiments (BD TOPO), détail de neige et de roche à bout de ski, données sous Licence Ouverte Etalab 2.0. Construit par `tools_relief_hd.py`, décodé en C++ sur tous les cœurs au chargement. Le niveau est choisi d'après la mémoire de la machine : sol au mètre (1,45 Go de grille, 1,1 Go de mémoire vidéo), sol à 2,50 m (230 Mo, 300 Mo) ou grille du dépôt. Sous les ouvrages et le long des voies, le sol reste celui de la grille à 5 m : pylônes et câbles n'ont pas bougé.
