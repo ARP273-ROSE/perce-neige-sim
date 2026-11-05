@@ -682,12 +682,19 @@ func _precalcul_complet() -> bool:
 
 
 ## Hauteur maximale et étages des croisements (RemonteesDomaine._croisements).
+## Altitude de l'origine de la ligne, posée par le domaine : le sol du relief chargé sous la gare aval.
+var y_origine: float = 0.0
+
+
 func _bornes_tetes() -> void:
 	for i3 in range(_tetes.size()):
 		var t3: float = terrain(float(pylones[i3]["d"]))
 		_tetes[i3] = minf(_tetes[i3], t3 + (90.0 if tricable() or vaetvient() else 36.0))
 		# croisement : pylône à deux étages (RemonteesDomaine._croisements)
 		var p3: Dictionary = pylones[i3]
+		# altitude du câble donnée par une source : elle ne dépend pas du relief chargé
+		if p3.has("alt_cable"):
+			_tetes[i3] = float(p3["alt_cable"]) - y_origine
 		if p3.has("h_min") or p3.has("h_max"):
 			_tetes[i3] = clampf(_tetes[i3], t3 + float(p3.get("h_min", 0.0)), t3 + float(p3.get("h_max", 999.0)))
 
@@ -1212,6 +1219,9 @@ func _y_lisse_3s(d: float, montee: bool) -> float:
 		return _hermite(clampf((d - da) / NEZ_3S, 0.0, 1.0), _y_chainette(da, montee), y1, _pente_chainette(da, montee), 0.0, NEZ_3S)
 	for p in pylones:
 		var b: Vector2 = bouts_sabot_3s(p)
+		# (à deux appuis, le porte-à-faux aval suit la portée, la courbe part du premier appui)
+		if p.has("appui_aval"):
+			b.x = float(p["d"]) - float(p["appui_aval"])
 		if d > b.x and d < b.y:
 			var d0: float = b.x
 			var d1: float = b.y
@@ -1307,12 +1317,19 @@ func _y_chainette(d: float, montee: bool = true) -> float:
 		if i < n:
 			xb = float(pylones[i]["d"])
 			yb = _tetes[i]
+			# ouvrage à deux appuis : la portée s'arrête au premier, le câble suit ensuite la poutre (_y_lisse_3s)
+			if pylones[i].has("appui_aval"):
+				xb -= float(pylones[i]["appui_aval"])
+				yb = float(pylones[i]["appui_alt"]) - y_origine
 		else:
 			var L: float = longueur_h()
 			xb = L - _h_nez[1]
 			yb = terrain(L) + H_CABLE_GARE
 		if d <= xb or i == n:
 			return chainette(clampf(d, xa, xb), xa, ya, xb, yb, _a_montee if montee else _a_descente)
+		if i < n:
+			xb = float(pylones[i]["d"])
+			yb = _tetes[i]
 		xa = xb
 		ya = yb
 	return 0.0
