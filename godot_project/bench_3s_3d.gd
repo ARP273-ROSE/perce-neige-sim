@@ -25,8 +25,6 @@ func _initialize() -> void:
 
 ## Balancement le plus fort admis (0,2 rad : guide RM2 cité sur un forum, source indirecte).
 const BALANCEMENT_PIRE: float = 0.2
-## Relief à 25 m : état mesuré, pas un objectif. Voir le message du banc.
-const GARDE_25_CONNUE: float = -3.0
 ## Près des gares la cabine est guidée et descend vers le quai : pas de balancement compté.
 const SANS_BALANCEMENT: float = 30.0
 
@@ -125,12 +123,7 @@ func _tick() -> void:
 			for ligne_g in garde_rapport(_lg):
 				print(ligne_g)
 			var g_pire: float = garde_pire(_lg, BALANCEMENT_PIRE)
-			if _main.relief.fin != null:
-				_verif("3S : cabine au-dessus du sol, deux sens, balancement %.1f rad" % BALANCEMENT_PIRE, g_pire >= 0.0, "%.2f m" % g_pire)
-			else:
-				# relief à 25 m (PWA, PC sans pack) : butte sous le brin montant, l'altitude du document ne la franchit pas
-				print("ATTENTION 3S : garde %.2f m sur le relief à 25 m, défaut connu" % g_pire)
-				_verif("3S : garde sur le relief à 25 m pas pire que l'état connu", g_pire >= GARDE_25_CONNUE, "%.2f m" % g_pire)
+			_verif("3S : cabine au-dessus du sol, deux sens, balancement %.1f rad" % BALANCEMENT_PIRE, g_pire >= 0.0, "%.2f m" % g_pire)
 			_verif("3S : ligne construite, véhicules en ligne", n_l >= 6, "%d véhicules, %d en ligne" % [_lg.nombre_vehicules(), n_l])
 			_phase = 2
 			_t = 0.0

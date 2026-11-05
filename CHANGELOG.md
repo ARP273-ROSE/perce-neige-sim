@@ -7,6 +7,8 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## Version suivante (non publiée)
 
+**Olympique (3S), cabine et relief** : la cabine ne traverse plus le sol à l'approche du grand pylône, à tous les crans. Le câble y suit les altitudes du document ; sur la grille à 25 m, une butte qui n'existe pas sur le relevé fin est abaissée localement.
+
 **Installation du décor haute définition** : le pupitre affiche la progression du téléchargement, puis dit quand relancer le simulateur.
 
 **Véhicules des lignes lointaines** (PWA) : ils s'arrêtaient net au-delà de 500 m ; ils avancent maintenant à tour de rôle, 3 lignes par pas.
