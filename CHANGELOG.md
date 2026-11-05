@@ -13,6 +13,8 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 **À-coups** : entrée en skieur ~280 → 35-41 ms ; fin de chargement 430-450 → 88-91 ms et ~255 → 101-110 ms. Repli automatique refait : les effets passent d'abord, FSR 1 au lieu de FSR 2 aux crans 6 et 7. Reste 210-216 ms au début de la préparation du skieur. PWA inchangée sur l'entrée en skieur.
 
+**Détail de neige et de roche sans le pack** : PC seulement, à tous les crans, à moins de 200 m ; +0,04-0,05 ms de carte sur 5070 Ti. `--sans-detail` le coupe.
+
 **Pupitre** : tableau de bord redessiné à 10 Hz quand la 3D est affichée, repeint médian 9,7 → 5,4 ms.
 
 **Compteur en bas du pupitre** : il affichait la cadence du pupitre (minuterie de 16 ms, 62 fps fixes), jamais celle de la 3D. Il montre maintenant `3D n i/s` quand le viewer tourne, et `pupitre n fps` sinon.
