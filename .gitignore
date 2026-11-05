@@ -107,3 +107,6 @@ manuel-*.log
 manuel-*.out
 manuel-*.toc
 _shots_tmp/
+/pack_hd/
+/pack_hd.tmp/
+/pack_hd.zip.part

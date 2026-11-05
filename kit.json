@@ -17,7 +17,8 @@
     "reporting.py",
     "updater.py",
     "interface_kit.py",
-    "profil_coupe.py"
+    "profil_coupe.py",
+    "pack_hd.py"
   ],
   "paquets": [],
   "assets": [
