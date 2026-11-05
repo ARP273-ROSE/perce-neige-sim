@@ -110,7 +110,7 @@ func _process_corps(_delta: float) -> void:
 		# le pupitre n'installe le pack haute définition que si cette machine s'en servirait
 		if not _hd_annonce and main != null and main.get("perf_manager") != null:
 			_hd_annonce = true
-			envoyer({"hd_possible": main.perf_manager._cran_de_depart() == 0 and ReliefFin.niveau_machine() > 0})
+			envoyer({"hd_possible": ReliefFin.voulu_sans_forcer(main.perf_manager._cran_de_depart()) and ReliefFin.niveau_machine() > 0})
 		envoyer({"ips_3d": Engine.get_frames_per_second()})
 	# Vide la file UDP, applique le DERNIER packet (anti-lag : si plusieurs
 	# packets sont en attente, seul le plus récent est appliqué)

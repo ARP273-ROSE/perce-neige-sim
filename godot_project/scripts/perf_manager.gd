@@ -46,6 +46,10 @@ const CRAN_MAX_PC: int = 7
 const IPS_REDUITE: int = 5
 const IPS_ARRIERE_PLAN: int = 20
 static var cran_courant: int = 0
+## PC sans carte graphique dédiée : remontées aux portées courtes et véhicules allégés, à tous les crans.
+static var allege: bool = false
+## Dernier cran de départ qui garde le relief fin et le pack : 1 sur carte dédiée, 0 ailleurs.
+static var relief_fin_jusqua: int = 0
 ## PWA : niveau de secours après une perte du contexte WebGL (0, 1 ou 2), posé
 ## par la page (window.__pn_secours) et gardé pour cette version et cet appareil.
 static var secours_web: int = 0
@@ -112,6 +116,9 @@ func setup(p_main: Node, p_env: Environment, p_mode: String) -> void:
 	if _mesure_gpu:
 		RenderingServer.viewport_set_measure_render_time(_vp_rid, true)
 	machine = _detecter()
+	var type_gpu: String = machine.get("type", "inconnu")
+	allege = not _web and type_gpu in ["integre", "logiciel"]
+	relief_fin_jusqua = 1 if type_gpu == "dedie" else 0
 	cran_min = 0 if _rd else 2
 	var plancher_web: int = 4  # PWA : départ au réglage bas (mesuré sur iPad)
 	if _web:
@@ -206,7 +213,7 @@ func _cran_de_depart() -> int:
 	var c: int = 1
 	match t:
 		"dedie":
-			c = 0
+			c = _cran_carte_dediee()
 		"apple":
 			c = 1
 		"integre":
@@ -220,10 +227,32 @@ func _cran_de_depart() -> int:
 	# écran très défini (> 2560 × 1600) : rendu 3D réduit d'office — sauf carte
 	# dédiée (relevés du 26/10/2026 : écran 4K + RTX 5070 Ti → cran 3, sans
 	# éclairage indirect ni anti-crénelage, pour une carte à 1 ms par image)
-	var ecran: Vector2i = machine.get("ecran", Vector2i(1920, 1080))
-	if ecran.x * ecran.y > 2560 * 1600 and t != "dedie":
+	if _ecran_tres_defini() and t != "dedie":
 		c = maxi(c, 3)
 	return clampi(maxi(c, cran_min), 0, _cran_max())
+
+
+func _ecran_tres_defini() -> bool:
+	var ecran: Vector2i = machine.get("ecran", Vector2i(1920, 1080))
+	return ecran.x * ecran.y > 2560 * 1600
+
+
+## Carte dédiée : sa mémoire vidéo sert d'indice de puissance. 8 Go ou inconnue : tout ; 6 Go : sans
+## éclairage indirect, le plus cher des effets ; moins : sans anti-crénelage, et sans halo sur un écran
+## très défini. Le régulateur remonte tout seul s'il reste de la marge.
+func _cran_carte_dediee() -> int:
+	var go: float = _memoire_video_go()
+	if go <= 0.0 or go >= 7.5:
+		return 0
+	if go >= 5.0:
+		return 3 if _ecran_tres_defini() else 1
+	return 4 if _ecran_tres_defini() else 3
+
+
+func _memoire_video_go() -> float:
+	if not ClassDB.class_exists("ReliefHD"):
+		return 0.0
+	return float(ClassDB.instantiate("ReliefHD").call("memoire_video"))
 
 
 # --- Application d'un cran ------------------------------------------------
@@ -239,7 +268,7 @@ func _appliquer(c: int, pourquoi: String) -> void:
 	_appliquer_ips()
 	# dernier cran (PC à carte intégrée) : portées de la PWA, détail minimal
 	var rm_loin: Node = main.get("remontees") as Node if main != null else null
-	var reduites: bool = cran >= CRAN_MAX_PC
+	var reduites: bool = cran >= CRAN_MAX_PC or allege
 	if not _web and rm_loin != null and reduites != _portees_reduites:
 		_portees_reduites = reduites
 		rm_loin.call("set_portees_reduites", reduites)

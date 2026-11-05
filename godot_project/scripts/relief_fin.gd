@@ -84,7 +84,7 @@ static func voulu(cran: int) -> bool:
 
 
 static func voulu_sans_forcer(cran: int) -> bool:
-	return cran == 0 and _permis()
+	return cran <= PerfManager.relief_fin_jusqua and _permis()
 
 
 ## Pack haute définition : un fichier optionnel à côté de l'exécutable (dossier pack_hd).
