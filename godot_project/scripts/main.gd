@@ -2821,7 +2821,8 @@ func _maj_skieur() -> void:
 	var a_pied_tunnel: bool = skieur.support == null and not skieur.chausse and not en_gare and _dans_tunnel
 	if skieur.support == null and collisions != null:
 		_t_zone += get_process_delta_time()
-		if _t_zone > 1.0:
+		# (à pied, loin du sol au mètre : tout de suite, il passerait au travers avant la seconde)
+		if _t_zone > 1.0 or (not skieur.chausse and collisions.sol_depasse(skieur.global_position)):
 			_t_zone = 0.0
 			collisions.assurer_autour(skieur.global_position)
 	# à pied sur la voie (tunnel, galerie) : la rame est IMMOBILISÉE, sans

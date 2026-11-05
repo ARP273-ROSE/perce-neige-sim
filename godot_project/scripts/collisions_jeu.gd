@@ -742,6 +742,15 @@ var _hd_outil: RefCounted = null
 var _sol_rects: PackedFloat32Array = PackedFloat32Array()
 
 
+## Le point est-il sorti du sol au mètre déjà posé ? (saut, ou skis retirés loin de lui)
+func sol_depasse(p: Vector3) -> bool:
+	var relief: ReliefBuilder = _main.get("relief")
+	if relief == null or not relief.pret or relief.fin == null or not relief.fin.hd:
+		return false
+	var c: Vector2i = Vector2i(int((p.x - ReliefFin.X0) / ReliefFin.PX), int((p.z - ReliefFin.Z0) / ReliefFin.PZ))
+	return absi(c.x - _sol_centre.x) > SOL_DEMI - 4 or absi(c.y - _sol_centre.y) > SOL_DEMI - 4
+
+
 func _sol_autour(relief: ReliefBuilder, p: Vector3) -> void:
 	# à ski et en remontée, personne ne marche : le sol vient de hauteur_sol. Remplacer la forme
 	# coûtait 31 ms, une fois par seconde à ski (relevé 4K du 04/11/2026)
