@@ -71,6 +71,7 @@ class GodotBridge:
         self._resolved_cmd: Optional[list] = None
         # Dossier de données : pack_hd.py y installe le pack haute définition
         self.donnees: Optional[Path] = None
+        self.pack_en_service = False       # le viewer lancé a reçu le pack
         # Fichier de log : capture stderr du viewer + diagnostic de lancement,
         # car le sim PyInstaller tourne sans console (console=False) → c'est le
         # seul moyen de savoir POURQUOI la vue 3D n'a pas démarré.
@@ -191,6 +192,7 @@ class GodotBridge:
             return []
         import pack_hd
         pret = pack_hd.dossier_si_pret(self.donnees)
+        self.pack_en_service = pret is not None
         return [f"--pack-hd={pret}"] if pret is not None else []
 
     def _resolve_command(self, engine_args: Optional[list] = None) -> Optional[list]:

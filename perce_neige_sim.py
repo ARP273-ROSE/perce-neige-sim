@@ -10592,6 +10592,12 @@ class GameWidget(QWidget):
             int(Qt.AlignmentFlag.AlignRight),
             self._texte_cadence(),
         )
+        # Installation du décor haute définition : progression, puis quand relancer
+        if self._godot_bridge is not None:
+            import pack_hd
+            ligne = pack_hd.texte_etat(self._godot_bridge.pack_en_service)
+            if ligne:
+                p.drawText(QRectF(w - 620, h - 36, 610, 16), int(Qt.AlignmentFlag.AlignRight), ligne)
         # Écran de COLLISION (game-over, priorité sur le reste).
         if self.state.crashed:
             self._draw_crash_overlay(p, w, h)
