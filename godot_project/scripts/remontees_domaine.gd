@@ -644,17 +644,24 @@ const PREPARATION_PROCHE: float = 60.0
 
 ## Skieur tout près d'une ligne encore en construction : elle passe avant le reste, et il le sait.
 func _presser_construction() -> void:
-	if _en_cours == null or _en_cours.pret or skieur == null or not skieur.actif:
+	if _en_cours == null or _en_cours.pret or not _en_cours.construction_cachee or skieur == null or not skieur.actif:
 		return
 	var d: float = _distance_ligne(_en_cours, skieur.global_position)
 	if d < PREPARATION_PROCHE:
 		_en_cours.budget_ms = maxf(_en_cours.budget_ms, 8.0)
 		var t: int = Time.get_ticks_msec()
-		if t - _t_message_preparation > 8000 and d < 25.0:
+		if t - _t_message_preparation > 8000 and d < 25.0 and _pres_d_une_gare(_en_cours, skieur.global_position):
 			_t_message_preparation = t
 			var m: Node = get_parent()
 			if m != null and m.get("commandes_skieur") != null:
 				m.commandes_skieur.message("Remontée en préparation, encore un instant…", 4.0)
+
+
+## (Un passant sous la ligne n'a pas à le savoir : seulement celui qui veut embarquer.)
+func _pres_d_une_gare(lg: LigneRemontee, p: Vector3) -> bool:
+	var a: Vector3 = lg.global_transform.origin
+	var c: Vector3 = lg.global_transform * Vector3(0, 0, -lg.longueur_h())
+	return Vector2(p.x - a.x, p.z - a.z).length() < 40.0 or Vector2(p.x - c.x, p.z - c.z).length() < 40.0
 
 
 var _t_message_preparation: int = -100000
