@@ -864,7 +864,7 @@ func _garde_au_sol(proteger_c: bool = false) -> bool:
 				# rejoint la hauteur du quai (sinon le dernier pylône était
 				# relevé jusqu'à la butée de 32 m — retour d'utilisateur, 23/10/2026)
 				# (sol réel sous les deux brins : le profil de l'axe ignore le dévers et le relief fin)
-				pire = maxf(pire, maxf(terrain(d), maxf(_sol(voie * 0.5, -d), _sol(-voie * 0.5, -d))) + _garde_exigee(d) - yc)
+				pire = maxf(pire, maxf(terrain(d), maxf(_sol_ligne(voie * 0.5, -d), _sol_ligne(-voie * 0.5, -d))) + _garde_exigee(d) - yc)
 			if pire > 0.05:
 				var ga: bool = i > 0
 				var dr: bool = i < pts.size() - 2
@@ -1209,6 +1209,9 @@ func _y_lisse_3s(d: float, montee: bool) -> float:
 
 ## Hauteur du câble (chaînette) à la distance d, brin montée ou descente ;
 ## aux nez, raccord parabolique sur 2 h (l'arc de la batterie de galets).
+const SABOT_TPH: float = 6.0
+
+
 func y_cable(d: float, montee: bool = true) -> float:
 	if tricable():
 		return _y_lisse_3s(d, montee)
@@ -1221,6 +1224,14 @@ func y_cable(d: float, montee: bool = true) -> float:
 	if h > 0.0 and L - d < 2.0 * h:
 		var t: float = maxf(L - d, 0.0)
 		return terrain(L) + H_CABLE_GARE + _pente_nez(false, montee) * t * t / (4.0 * h)
+	if vaetvient():
+		for p in pylones:
+			var a_p: float = float(p["d"])
+			if absf(d - a_p) < SABOT_TPH * 0.5:
+				var d0: float = a_p - SABOT_TPH * 0.5
+				var d1: float = a_p + SABOT_TPH * 0.5
+				return _hermite((d - d0) / SABOT_TPH, _y_chainette(d0, montee), _y_chainette(d1, montee),
+					_pente_chainette(d0 - 0.3, montee), _pente_chainette(d1 + 0.3, montee), SABOT_TPH)
 	for r in _raccords[0 if montee else 1]:
 		if d < r[0] - r[1]:
 			break
@@ -2021,6 +2032,16 @@ const PENTE_TALUS: float = 3.5      # base / hauteur
 ## RemonteesDomaine (relief affiché) ; à défaut, le profil sous l'axe.
 var sol_local: Callable = Callable()
 var _terrassements: Dictionary = {}
+
+
+## Sol de calcul de la ligne (voir ReliefBuilder.hauteur_ligne) ; _sol : le sol affiché.
+var sol_garde: Callable = Callable()
+
+
+func _sol_ligne(x: float, z: float) -> float:
+	if sol_garde.is_valid():
+		return float(sol_garde.call(x, z))
+	return _sol(x, z)
 
 
 func _sol(x: float, z: float) -> float:
@@ -3654,7 +3675,7 @@ func _poser_pylones() -> void:
 	for i in range(pylones.size()):
 		var p: Dictionary = pylones[i]
 		var d: float = float(p["d"])
-		var t: float = terrain(d)
+		var t: float = minf(terrain(d), _sol(0.0, -d))      # (fût jusqu'au sol affiché : maille à 50 m)
 		var py: PyloneRemontee = PyloneRemontee.new()
 		py.numero = numero_pylone(i)
 		py.voie = voie
@@ -3676,6 +3697,10 @@ func _poser_pylones() -> void:
 		py.deviation = atan2(_y_chainette(d) - _y_chainette(d - e), e) - atan2(_y_chainette(d + e) - _y_chainette(d), e)
 		py.position = Vector3(0, t, -d)
 		py.name = "P%d" % (i + 1)
+		var y_t0: float = py.position.y + py.hauteur_cable()
+		for brin in [true, false]:
+			py.cable_repos[brin] = func(z: float) -> float:
+				return y_cable(d - z, brin) - y_t0
 		_enfant(py)
 		py.construire()
 		MeshMerge.merge(py, py.mobiles, "Pylone")
@@ -3802,6 +3827,10 @@ func _batterie_gare(aval: bool) -> void:
 	py.deviation = dev
 	py.position = Vector3(0, sol_b, -d)
 	py.name = "Batterie%s" % ("Aval" if aval else "Amont")
+	var y_b0: float = py.position.y + py.hauteur_cable()
+	for brin in [true, false]:
+		py.cable_repos[brin] = func(z: float) -> float:
+			return y_cable(d - z, brin) - y_b0
 	_enfant(py)
 	py.construire()
 	MeshMerge.merge(py, py.mobiles, "Batterie")
@@ -4984,7 +5013,8 @@ func _poser_pylones_treillis() -> void:
 		py.l_sabot = 6.0 if vaetvient() else l_sabot_3s(p)
 		py.sol_z = func(z: float) -> float:
 			return terrain(clampf(d - z, 0.0, longueur_h())) - t
-		py.hauteur = _tetes[i] - t - (py.hauteur_porteurs() - py.hauteur)
+		# 3S : le sabot au câble lisse, pas au sommet de la chaînette (2,3 m au-dessus au grand pylône, câbles en l'air)
+		py.hauteur = (y_cable(d) if tricable() or vaetvient() else _tetes[i]) - t - (py.hauteur_porteurs() - py.hauteur)
 		py.position = Vector3(0, t, -d)
 		var e: float = 6.0
 		py.pente = atan2(y_cable(d + e) - y_cable(d - e), 2.0 * e)
