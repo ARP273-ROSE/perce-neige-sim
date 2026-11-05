@@ -132,7 +132,8 @@ matériel roulant. Détail dans `SOURCES.md`.
 - **Relief réel** : tout le domaine Tignes – Val d'Isère en 3D sur
   21 × 17 km, des Brévières au glacier du Pissaillas en passant par le
   Fornet (IGN RGE ALTI et orthophotographie), avec ses 420 pistes nommées
-  (OpenStreetMap). Vue extérieure en
+  (OpenStreetMap). Sur PC, pack facultatif au mètre (IGN LiDAR HD, BD TOPO
+  et orthophotographie, Licence Ouverte Etalab 2.0). Vue extérieure en
   « rayons X » : le sol devient translucide autour du tunnel. Sur PC, la
   vue de profil est une vraie coupe du terrain.
 - **Vue cabine 3D** (F4) : viewer Godot embarqué, rien à installer. Rames
