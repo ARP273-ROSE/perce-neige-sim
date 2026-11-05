@@ -15,6 +15,8 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 **Détail de neige et de roche sans le pack** : PC seulement, à tous les crans, à moins de 200 m ; +0,04-0,05 ms de carte sur 5070 Ti. `--sans-detail` le coupe.
 
+**Relevé de fluidité automatique** (PC) : une fois par version, dans la rame et à ski, 30 s après y être, sans rien afficher ni rien changer au jeu ; envoyé comme un relevé F10 et seulement si l'envoi des rapports a été accepté. Pas de nom de machine dans le rapport.
+
 **Pupitre** : tableau de bord redessiné à 10 Hz quand la 3D est affichée, repeint médian 9,7 → 5,4 ms.
 
 **Compteur en bas du pupitre** : il affichait la cadence du pupitre (minuterie de 16 ms, 62 fps fixes), jamais celle de la 3D. Il montre maintenant `3D n i/s` quand le viewer tourne, et `pupitre n fps` sinon.
