@@ -551,8 +551,8 @@ func _image_ortho(chemin: String) -> Image:
 ## Fil principal : quelques tuiles par image, puis flancs, trait du
 ## tunnel, lieux.
 func _creer_maillages(fin_us: int) -> void:
-	if _mat_terrain == null:
-		_materiaux()
+	if _pas_mat <= PAS_MAT_DERNIER:
+		_materiaux_pas()
 		return
 	if fin != null and fin.hd and not fin.envoyer_couches(fin_us):
 		return
@@ -571,20 +571,11 @@ func _creer_maillages(fin_us: int) -> void:
 		_k += 1
 		if Time.get_ticks_usec() > fin_us:
 			return
-	# aménagements qui dépendent des altitudes (SortieSecours), avant les pièces
-	for c in amenageurs:
-		var am: Variant = (c as Callable).call()
-		if am is Dictionary and not (am as Dictionary).is_empty():
-			amenagements.append(am)
-	amenageurs.clear()
-	_build_pieces()
-	_build_flancs()
-	_build_trait()
-	_build_lieux()
+	while not _finition_pas():
+		if Time.get_ticks_usec() > fin_us:
+			return
 	_tableaux.clear()
 	_etape = 3
-	if fin != null and fin.get_parent() == null:
-		add_child(fin)
 	pret = true
 	print("[Relief] prêt")
 
@@ -595,25 +586,83 @@ var _h0_ref: PackedFloat32Array = PackedFloat32Array()   # banc du sol au mètre
 var _hn5_ref: PackedFloat32Array = PackedFloat32Array()
 
 
-func _materiaux() -> void:
-	_tex_ortho = ImageTexture.create_from_image(_img_ortho if _img_ortho != null
-		else _image_ortho("res://textures/relief_ortho.jpg"))
-	_mat_terrain = _shader(ReliefAnneaux.code_hd(SHADER_TERRAIN) if fin != null and fin.hd else SHADER_TERRAIN)
-	_mat_terrain.set_shader_parameter("ortho", _tex_ortho)
-	if fin != null and fin.hd:
-		ReliefAnneaux.preparer_detail()
-		_tex_normales = fin.normales_texture()
-		_tex_ortho_hd = fin.ortho_texture()
-		ReliefAnneaux.regler_hd(_mat_terrain, _tex_normales, _tex_ortho_hd)
-	_mat_loin = _shader(SHADER_LOINTAIN)
-	_mat_loin.set_shader_parameter("ortho", ImageTexture.create_from_image(_img_loin if _img_loin != null
-		else _image_ortho("res://textures/relief_lointain.jpg")))
-	_img_ortho = null
-	_img_loin = null
-	_mat_loin.set_shader_parameter("bloc", Vector4(ReliefDonnees.X_OUEST, ReliefDonnees.Z_NORD,
-		ReliefDonnees.X_EST, ReliefDonnees.Z_SUD))
-	_hiver_mat(_mat_terrain, true)
-	_hiver_mat(_mat_loin, false)
+## Une étape par image : réunies, elles faisaient une image de 250 ms en fin de chargement.
+const PAS_MAT_DERNIER: int = 6
+var _pas_mat: int = 0
+
+
+func _materiaux_pas() -> void:
+	match _pas_mat:
+		0:
+			_tex_ortho = ImageTexture.create_from_image(_img_ortho if _img_ortho != null
+				else _image_ortho("res://textures/relief_ortho.jpg"))
+		1:
+			_mat_terrain = _shader(ReliefAnneaux.code_hd(SHADER_TERRAIN) if fin != null and fin.hd else SHADER_TERRAIN)
+			_mat_terrain.set_shader_parameter("ortho", _tex_ortho)
+		2:
+			if fin != null and fin.hd:
+				ReliefAnneaux.preparer_detail()
+				_tex_normales = fin.normales_texture()
+				_tex_ortho_hd = fin.ortho_texture()
+				ReliefAnneaux.regler_hd(_mat_terrain, _tex_normales, _tex_ortho_hd)
+		3:
+			_mat_loin = _shader(SHADER_LOINTAIN)
+		4:
+			_mat_loin.set_shader_parameter("ortho", ImageTexture.create_from_image(_img_loin if _img_loin != null
+				else _image_ortho("res://textures/relief_lointain.jpg")))
+			_img_ortho = null
+			_img_loin = null
+			_mat_loin.set_shader_parameter("bloc", Vector4(ReliefDonnees.X_OUEST, ReliefDonnees.Z_NORD,
+				ReliefDonnees.X_EST, ReliefDonnees.Z_SUD))
+		5:
+			_hiver_mat(_mat_terrain, true)
+		6:
+			_hiver_mat(_mat_loin, false)
+	_pas_mat += 1
+
+
+## Fin du chargement, un morceau à la fois (ensemble : une image de 430 ms). Vrai quand tout est posé.
+var _pas_fin: int = 0
+var _k_fin: int = 0
+
+
+func _finition_pas() -> bool:
+	match _pas_fin:
+		0:
+			# aménagements qui dépendent des altitudes (SortieSecours), avant les pièces
+			if _k_fin < amenageurs.size():
+				var am: Variant = (amenageurs[_k_fin] as Callable).call()
+				if am is Dictionary and not (am as Dictionary).is_empty():
+					amenagements.append(am)
+				_k_fin += 1
+				return false
+			amenageurs.clear()
+			_rects_pieces.clear()
+			_k_fin = 0
+			_pas_fin = 1
+		1:
+			if _k_fin < amenagements.size():
+				_build_piece(amenagements[_k_fin])
+				_k_fin += 1
+				return false
+			_poser_trous()
+			_pas_fin = 2
+		2:
+			_build_flancs()
+			_pas_fin = 3
+		3:
+			_build_trait()
+			_pas_fin = 4
+		4:
+			_build_lieux()
+			_pas_fin = 5
+		5:
+			if fin != null and fin.get_parent() == null:
+				add_child(fin)
+			_pas_fin = 6
+		_:
+			return true
+	return false
 
 
 ## Altitude sur les triangles du maillage du bloc (comme les tuiles) : les
@@ -780,13 +829,6 @@ static func _dist_poly(q: Vector2, poly: PackedVector2Array) -> float:
 
 
 ## Pièces de terrain fines (maille de 2 m) autour des gares.
-func _build_pieces() -> void:
-	_rects_pieces.clear()
-	for am in amenagements:
-		_build_piece(am)
-	_poser_trous()
-
-
 ## Trous du relief : pièces fines des gares (remplacées par leur maillage
 ## fin) et fosses ouvertes (`percer` : rien dessous, la remontée y dessine
 ## sa fosse — contrepoids et motrice de l'Olympique). 8 au plus.

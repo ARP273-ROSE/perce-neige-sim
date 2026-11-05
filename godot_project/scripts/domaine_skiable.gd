@@ -433,6 +433,9 @@ static func _disque_texture(r: float) -> ArrayMesh:
 
 ## Dessine les faces (une SubViewport par piste, rendue une fois, copiée en
 ## texture puis libérée) et les pose en MultiMesh, une par piste.
+const LOT_FACES: int = 6                 # par image : 24 faces créées d'un coup prenaient 95 ms
+
+
 func _faces_panneaux(par_piste: Dictionary) -> void:
 	var px: int = 192 if OS.has_feature("web") else 256
 	# un DISQUE opaque, plus un carré découpé par transparence : de loin, les
@@ -460,7 +463,7 @@ func _faces_panneaux(par_piste: Dictionary) -> void:
 		sv.add_child(f)
 		add_child(sv)
 		lot.append([ip, sv])
-		if lot.size() >= 24:
+		if lot.size() >= LOT_FACES:
 			await _poser_faces(lot, par_piste, quad)
 			lot = []
 	if not lot.is_empty():
