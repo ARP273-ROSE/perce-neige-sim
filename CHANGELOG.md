@@ -7,6 +7,22 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## Version suivante (non publiée)
 
+**Pack haute définition** (PC, facultatif, environ 780 Mo à poser dans `pack_hd/` à côté de l'exécutable ; sans lui, rien ne change, et la PWA ne le charge jamais). Sol au mètre sur tout le domaine depuis le LiDAR HD de l'IGN, photo aérienne IGN au mètre, 113 376 arbres relevés au LiDAR et retirés des emprises de bâtiments (BD TOPO), détail de neige et de roche à bout de ski, données sous Licence Ouverte Etalab 2.0. Construit par `tools_relief_hd.py`, décodé en C++ sur tous les cœurs au chargement. Le niveau est choisi d'après la mémoire de la machine : sol au mètre (1,45 Go de grille, 1,1 Go de mémoire vidéo), sol à 2,50 m (230 Mo, 300 Mo) ou grille du dépôt. Sous les ouvrages et le long des voies, le sol reste celui de la grille à 5 m : pylônes et câbles n'ont pas bougé.
+
+**Coût mesuré** (5070 Ti, 5900X, release, sans vsync) : en 4K à ski 5,0 ms par image au médian, 10,1 ms au 99e centile, 2 images au-dessus de 25 ms sur 39 151 ; à bord 5,0 et 8,5 ms ; en 2388×1668 à ski 4,1 et 9,9 ms. Mémoire vidéo du système au plus 5,3 Go, mémoire vive du jeu au plus 4,6 Go. Mode `--client` mené par un émetteur d'essai, pas par le vrai programme PC : 4,4 ms en 4K. Non vérifié sur une vraie machine moyenne : le niveau à 2,50 m et ses seuils n'ont été forcés que sur cette carte. Pas de collisions avec les arbres de la forêt.
+
+**Pack abîmé** : 13 cas essayés sans plantage en chargement. Relief absent, tronqué ou faux : retour à la grille à 5 m. Photo ou arbres abîmés : le relief au mètre reste. Limite connue : quelques Ko corrompus au milieu de la photo ne sont pas détectés et peuvent donner une tuile fausse.
+
+**Sortie de chargement** : quitter pendant le chargement ne fige plus le processus (défaut du fil de préparation avec le pack).
+
+**Skieur coincé dans un ouvrage** : le filet de sécurité voit maintenant un corps enfoncé dans le décor, où ses anciens essais passaient alors que la marche restait bloquée. Touche tous les rendus, PWA comprise.
+
+**Galerie de secours** : remblai par pas de 4 m au lieu d'un seul palier par tronçon, qui faisait de grands trapèzes sombres dans le versant. Touche aussi la PWA.
+
+**Pilote automatique à ski** : la descente auto du banc passe de 9 min 07 à 11 min sur le sol au mètre. Écart gardé, cause non établie.
+
+**Reste ouvert** : à-coups de 426-456 ms et 219-233 ms au chargement, entrée en skieur jusqu'à 278 ms ; repli automatique peu efficace (0,2 ms environ) ; `bench_coince` passe sur 5 graines sur 8 avec le pack et 8 sur 8 sans, à cause d'un même filet de 0,44 m sous une plateforme du TSD4 Vanoise, jamais de vrai blocage, cause non expliquée.
+
 **Relief fin à 5 m sur tout le domaine** (PC partis au cran 0 ; ni le web ni les crans suivants, relief à 25 m inchangé, vérifié ligne à ligne sur le câble et le sol). Altitude IGN RGE ALTI (`tools_relief_fin.py`), 15,5 Mo, fusion en C++ ; sans le module, repli sur 25 m avec un message au journal. Le choix est fait au chargement et ne suit pas le régulateur : changer de cran ne bouge ni le sol ni le câble (banc du relief fin).
 
 **Pylônes réajustés sur ce sol** (`data/remontees/geometrie_fin.json`, 45 lignes) : hauteurs seules, jamais plus de 4 m au-dessus de celles à 25 m ni au-delà des bornes mesurées ; Leissières et deux pylônes de Borsat posés à la main. Sur 63 lignes : dépassement des galets 629° → 628°, pylônes au-delà de 1° 174 → 169. Écarts connus : Rogoney, Vallon de l'Iseran et Borsat perdent en galets ; la mesure de contact (`bench_sol_lignes_3d.gd`, prudente) voit encore 10 lignes contre 17 à 25 m où un véhicule pourrait toucher, dont la perche du Col du Palet.
