@@ -119,6 +119,9 @@ func _suite() -> void:
 	var espace: PhysicsDirectSpaceState3D = _main.get_world_3d().direct_space_state
 	for centre in [Vector2(1800.0, 1500.0), Vector2(5000.0, -1000.0), Vector2(400.0, 1800.0), Vector2(-2000.0, 2000.0)]:
 		var p0: Vector3 = Vector3(centre.x, rel.hauteur_sol(centre.x, centre.y), centre.y)
+		# (le joueur est là : le sol au mètre suit le joueur, à pied)
+		_main.skieur.global_position = p0 + Vector3.UP * 0.3
+		_main.skieur.velocity = Vector3.ZERO
 		col._sol_centre = Vector2i(-1073741824, 0)
 		col.assurer_autour(p0)
 		for i in range(6):
