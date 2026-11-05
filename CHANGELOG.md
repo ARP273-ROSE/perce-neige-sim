@@ -13,6 +13,10 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 **Relevé automatique et vue cachée** : le délai s'arrête tant que la vue est cachée, et un relevé en cours s'annule sans envoi.
 
+**Ciel** (PC en Vulkan) : le ciel physique gris terne est remplacé par un nuanceur, bleu d'altitude, horizon clair, soleil, nuages immobiles coupés au cran 3 et au-delà et en profil allégé ; coût dans le bruit. PWA et OpenGL inchangés.
+
+**Crêtes et rochers sans le pack** (PC) : normales de la grille à 5 m posées en texture sur le maillage habituel, dès que le relief fin n'est pas affiché ; +82 Mo de mémoire vidéo, GPU presque inchangé sur 5070 Ti. Collisions et sol inchangés. `--sans-normales` le coupe.
+
 **Parois raides** (pack) : sur les pentes très raides, la photo verticale étirée en traînées est remplacée par sa couleur moyenne et un grain projeté sur les plans verticaux ; +0,1 à +0,27 ms de carte en 4K. Motif fin à 9 m parfois visible sur grande paroi claire.
 
 ## 1.54.1 — 5 novembre 2026
