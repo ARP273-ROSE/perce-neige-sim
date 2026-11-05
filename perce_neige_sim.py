@@ -7630,6 +7630,11 @@ class GameWidget(QWidget):
                 dev_project_dir=dev_project,
             )
             self._godot_bridge.quality = self._qualite_3d
+            # Pack haute définition : installé tout seul en arrière-plan, servira
+            # au prochain lancement du viewer une fois complet.
+            import pack_hd
+            self._godot_bridge.donnees = _persistent_data_dir()
+            pack_hd.demarrer(self._godot_bridge.donnees)
         # Side-view zoom factor. 1.0 = default 850 m window, 0.35 ≈ ~300 m
         # tight, 4.2 ≈ full 3491 m trip. Driver adjusts with +/- or wheel.
         self._profile_zoom = 1.0
