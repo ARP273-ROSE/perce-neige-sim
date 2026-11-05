@@ -55,8 +55,6 @@ uniform vec4 hd_tex;                // nœuds par couche, texels, marge, couches
 uniform vec4 o_xf;                  // photo : x0, z0, pas des nœuds au mètre
 uniform vec4 o_tex;                 // nœuds par couche, marge en nœuds, couches par ligne, dernière ligne
 uniform vec2 hd_nb;                 // dernier nœud (j, i)
-uniform sampler2D detail_hd : filter_linear_mipmap_anisotropic, repeat_enable;
-uniform float a_detail = 0.0;
 """ + _ENTETE_DETAIL + """uniform sampler2DArray ortho_hd : source_color, filter_linear_mipmap_anisotropic, repeat_disable;
 uniform float a_ortho = 0.0;        // 1 : orthophoto au mètre présente
 // Photo au mètre ; au-delà de 16 m par texel, la photo d'ensemble (la marge entre couches ne suffit plus)
