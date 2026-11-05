@@ -32,7 +32,11 @@ var skieur: SkieurJoueur = null
 var lignes: Array = []          # [LigneRemontee, milieu monde]
 var _t_lod: float = 0.0
 ## À bord d'un siège : [ligne, indice du véhicule, place, gare de départ aval ?]
-var a_bord: Array = []
+var a_bord: Array = []:
+	set(val):
+		_charge_joueur(a_bord, false)
+		a_bord = val
+		_charge_joueur(a_bord, true)
 var _repos: float = 0.0          # pas de nouvel embarquement juste après un débarquement
 ## Cabine dont les portes viennent de s'ouvrir : [ligne, véhicule, gare d'arrivée = aval].
 ## S'il y reste quand elle repart, il se rassoit (il restait debout, le temps d'attente
@@ -587,6 +591,13 @@ func _portee_noeud(e: Array, file: Array) -> void:
 		(n as GeometryInstance3D).visibility_range_end_margin = pn * 0.05
 	for k in n.get_children():
 		file.append([c, k, pn])
+
+
+## Monter ou descendre déplace le centre de gravité du véhicule.
+func _charge_joueur(ab: Array, present: bool) -> void:
+	if ab.size() < 3 or not is_instance_valid(ab[0]) or not ab[0].has_method("regler_charge"):
+		return
+	ab[0].regler_charge(int(ab[1]), int(ab[2]), ab.size() > 4 and bool(ab[4]), present)
 
 
 func _ready() -> void:

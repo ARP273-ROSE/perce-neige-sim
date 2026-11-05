@@ -3415,6 +3415,81 @@ func _rail_ouverture(aval: bool) -> void:
 	MeshMerge.merge(r_node, [], "Rail")
 
 
+## Guide évasé à chaque entrée et sortie de gare d'un débrayable : le roulement de la tige y entre, le jeu se
+## referme, et le balancement latéral est rendu à zéro avant le débrayage. Longueur et jeux : estimations, faute
+## de cote constructeur ; seul le principe (entrée évasée qui se resserre) est celui des guides réels.
+const GUIDE_L: float = 4.0
+const GUIDE_GORGE: float = 0.01
+const GUIDE_OUVERT: float = 0.22
+
+
+func guide_psi() -> bool:
+	return not (famille.begins_with("perche") or fixe() or tricable() or vaetvient())
+
+
+## Jeu vertical du roulement à `d` mètres de la gare.
+func _jeu_guide(d: float) -> float:
+	return lerpf(GUIDE_GORGE, GUIDE_OUVERT, smoothstep(0.5, GUIDE_L, d))
+
+
+## Inclinaison latérale que le guide laisse à l'abscisse s ; INF hors du guide.
+func limite_guide(s: float) -> float:
+	if not guide_psi():
+		return INF
+	var lim: float = INF
+	for z in _zones:
+		var d0: float = fposmod(float(z[0]) - s, longueur_boucle)
+		var d1: float = fposmod(s - float(z[1]), longueur_boucle)
+		var d: float = minf(d0, d1)
+		if d < GUIDE_L:
+			lim = minf(lim, _jeu_guide(d) / (VehiculeRemontee.A108_X_ROULEMENT - VehiculeRemontee.A108_PIVOT.x))
+	return lim
+
+
+## Le joueur s'assoit (ou se lève) : la charge qu'il déplace remplace le tirage de ce véhicule.
+func regler_charge(i: int, k: int, avant: bool, a_bord_ici: bool) -> void:
+	if i < 0 or i >= _vehicules.size() or teleski() or vaetvient():
+		return
+	var v: VehiculeRemontee = _vehicules[i][0]
+	v.psi0_joueur = v.psi_place(k, avant) if a_bord_ici else NAN
+	if _noyau != null and _noyau.has_method("set_charge_joueur"):
+		_noyau.set_charge_joueur(i if a_bord_ici else -1, v.psi0_joueur if a_bord_ici else 0.0)
+
+
+func _guide_entonnoir(parent: Node3D, s_bord: float, sens: float) -> void:
+	var x_t: float = VehiculeRemontee.A108_X_ROULEMENT
+	var y_t: float = VehiculeRemontee.A108_PIVOT.y
+	var r: float = VehiculeRemontee.A108_R_ROULEMENT
+	var y_haut: float = _y_plaque() + 2.0 * R_PNEU + 0.16
+	var prec_h: Vector3
+	var prec_b: Vector3
+	var poutre: PackedVector3Array = PackedVector3Array()
+	var k: int = 0
+	var n: int = int(ceil(GUIDE_L / 0.5))
+	while k <= n:
+		var d: float = GUIDE_L * k / n
+		var s: float = fposmod(s_bord + sens * d, longueur_boucle)
+		var p: Vector3 = point(s)[0]
+		var o: Vector3 = _dehors(s)
+		var e: float = _jeu_guide(d) + r + 0.01
+		# plaques décalées vers l'extérieur : elles se rejoignent par les montants, qui passent derrière le roulement
+		var c: Vector3 = p + o * (x_t + 0.02) + Vector3(0, y_t, 0)
+		var h: Vector3 = c + Vector3(0, e, 0)
+		var b: Vector3 = c - Vector3(0, e, 0)
+		var dessus: Vector3 = p + o * _x_plaque() + Vector3(0, y_haut, 0)
+		poutre.append(dessus)
+		if k > 0:
+			RemonteeKit.poutre(parent, prec_h, h, 0.18, 0.012, "acier")
+			RemonteeKit.poutre(parent, prec_b, b, 0.18, 0.012, "acier")
+		if k % 4 == 0:
+			RemonteeKit.barre(parent, b + o * 0.07, h + o * 0.07, 0.014, "acier", 6)
+			RemonteeKit.barre(parent, h, dessus, 0.025, "galva_pylone", 6)
+		prec_h = h
+		prec_b = b
+		k += 1
+	RemonteeKit.tube(parent, poutre, 0.07, "galva_pylone", 6)
+
+
 ## Appui des pneus du lanceur (repère du véhicule : dehors, haut) : la
 ## plaque de friction de la pince ; au 3S, le dessus du chariot.
 func _x_plaque() -> float:
@@ -3465,6 +3540,9 @@ func _lanceurs() -> void:
 			var l_s: float = Y_CAPOT - (_y_plaque() + 2.0 * R_PNEU + 0.16)
 			RemonteeKit.barre(r_node, poutre_haut[k], poutre_haut[k] + Vector3(0, l_s, 0), 0.035, "galva_pylone", 6)
 			k += 6
+		if guide_psi():
+			_guide_entonnoir(r_node, s0, -1.0)
+			_guide_entonnoir(r_node, s0 + l, 1.0)
 		MeshMerge.merge(r_node, [], "Rail")
 		# pneus au pas de 0,62 m
 		var fourches: Node3D = Node3D.new()
@@ -4084,8 +4162,14 @@ func _ajouter_vehicule(s: float, magasin: bool = false) -> void:
 	v.pince_a108 = String(name) in LIGNES_A108
 	_enfant(v)
 	v.construire()
+	v.tirer_charge(hash(String(name)) + _vehicules.size() * 7919)
 	_vehicules.append([v, s])
 	_placer(_vehicules.size() - 1)
+	# déjà à l'équilibre sur le brin montant, sans qu'on voie toute la ligne se mettre à balancer au chargement
+	if not v.cabine and zone(s)[0] == "ligne" and signf(v.position.x) == signf(_x_brin(true)):
+		v.psi = v.psi0_tire
+		if v._susp != null:
+			v._susp.rotation.z = v.psi
 
 
 func nombre_vehicules() -> int:
@@ -4199,6 +4283,8 @@ func _preparer_noyau() -> void:
 		"fixe": fixe(), "sens_droite": sens_droite, "signe_montee": signf(_x_brin(true)),
 		"cabine": v0.cabine, "masse": v0.masse, "charge_montee": 80.0 * places * 0.7,
 		"longueur_pendule": v0.longueur_pendule, "pivot": v0.pivot,
+		"guide_l": GUIDE_L if guide_psi() else 0.0, "guide_gorge": GUIDE_GORGE, "guide_ouvert": GUIDE_OUVERT,
+		"guide_bras": VehiculeRemontee.A108_X_ROULEMENT - VehiculeRemontee.A108_PIVOT.x,
 		"poids_montee": _poids_vehicule(true) / _tension, "poids_descente": _poids_vehicule(false) / _tension,
 		"w_montee": float(_w_veh[0]), "w_descente": float(_w_veh[1]),
 	})
@@ -4219,6 +4305,14 @@ func _preparer_noyau() -> void:
 		ph.append(v.phi)
 		ps.append(v.psi)
 	n.set_vehicules(vs, pi, su, co, ss, ph, ps)
+	if n.has_method("set_charges"):
+		var tires: PackedFloat32Array = PackedFloat32Array()
+		for i in range(_vehicules.size()):
+			var v: VehiculeRemontee = _vehicules[i][0]
+			tires.append(v.psi0_tire)
+			if not is_nan(v.psi0_joueur):
+				n.set_charge_joueur(i, v.psi0_joueur)
+		n.set_charges(tires)
 	n.set_ligne(self)
 	if _tab_s.size() > 1 and n.has_method("set_temps"):
 		n.set_temps(_tab_s)
@@ -5149,6 +5243,11 @@ func _placer(i: int) -> void:
 	if _dt > 0.0:
 		var m0: float = v.masse
 		v.masse = m0 + charge
+		# (véhicule guidé en gare : la pince tient le siège droit ; ailleurs, équilibre sous la charge)
+		v.psi0 = 0.0
+		if z[0] == "ligne" or not guide_psi():
+			v.psi0 = v.psi0_joueur if not is_nan(v.psi0_joueur) else (v.psi0_tire if montee_v else 0.0)
+		v.limite_psi = limite_guide(s)
 		v.balancer(_dt, z[0] != "ligne")
 		v.masse = m0
 	# corps de collision (base directe) : suit aussi le balancement — sur les

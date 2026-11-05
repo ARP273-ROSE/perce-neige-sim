@@ -179,6 +179,8 @@ void NoyauRemontee::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_constantes", "constantes"), &NoyauRemontee::set_constantes);
 	ClassDB::bind_method(D_METHOD("set_vehicules", "vehicules", "pinces", "susps", "corps", "s", "phi", "psi"),
 			&NoyauRemontee::set_vehicules);
+	ClassDB::bind_method(D_METHOD("set_charges", "tires"), &NoyauRemontee::set_charges);
+	ClassDB::bind_method(D_METHOD("set_charge_joueur", "i", "psi0"), &NoyauRemontee::set_charge_joueur);
 	ClassDB::bind_method(D_METHOD("set_vitesse", "vitesse"), &NoyauRemontee::set_vitesse);
 	ClassDB::bind_method(D_METHOD("set_temps", "tab_s"), &NoyauRemontee::set_temps);
 	ClassDB::bind_method(D_METHOD("set_ligne", "ligne"), &NoyauRemontee::set_ligne);
@@ -232,6 +234,10 @@ void NoyauRemontee::set_constantes(const Dictionary &c) {
 	charge_montee = c.get("charge_montee", charge_montee);
 	longueur_pendule = c.get("longueur_pendule", longueur_pendule);
 	pivot = c.get("pivot", pivot);
+	guide_l = c.get("guide_l", guide_l);
+	guide_gorge = c.get("guide_gorge", guide_gorge);
+	guide_ouvert = c.get("guide_ouvert", guide_ouvert);
+	guide_bras = c.get("guide_bras", guide_bras);
 	poids[0] = c.get("poids_montee", poids[0]);
 	poids[1] = c.get("poids_descente", poids[1]);
 	w_veh[0] = c.get("w_montee", w_veh[0]);
@@ -281,6 +287,34 @@ void NoyauRemontee::set_vehicules(const Array &p_vehicules, const Array &p_pince
 }
 
 // --- géométrie ---------------------------------------------------------------
+
+void NoyauRemontee::set_charges(const PackedFloat32Array &p_tires) {
+	psi0_tire.assign(vehicules.size(), 0.0);
+	for (size_t i = 0; i < psi0_tire.size() && (int64_t)i < p_tires.size(); i++) {
+		psi0_tire[i] = p_tires[i];
+	}
+}
+
+// comme LigneRemontee.limite_guide
+double NoyauRemontee::limite_guide(double s) const {
+	double lim = 1e9;
+	if (guide_l <= 0.0) {
+		return lim;
+	}
+	auto positif = [this](double x) {
+		x = std::fmod(x, longueur);
+		return x < 0.0 ? x + longueur : x;
+	};
+	for (size_t k = 0; k < z_debut.size(); k++) {
+		const double d = std::min(positif(z_debut[k] - s), positif(s - z_fin[k]));
+		if (d < guide_l) {
+			const double t = std::clamp((d - 0.5) / (guide_l - 0.5), 0.0, 1.0);
+			const double lisse = t * t * (3.0 - 2.0 * t);
+			lim = std::min(lim, (guide_gorge + (guide_ouvert - guide_gorge) * lisse) / guide_bras);
+		}
+	}
+	return lim;
+}
 
 NoyauRemontee::Zone NoyauRemontee::zone(double s) const {
 	s = std::fmod(s, longueur);
@@ -620,9 +654,17 @@ PackedFloat64Array NoyauRemontee::etape(double dt, double regime, const Vector3 
 					const double zeta = en_gare ? 0.7 : std::clamp(90.0 / m, 0.03, 0.30);
 					const int ns = std::max(1, (int)std::ceil(dt_i / 0.008));
 					const double h = dt_i / ns;
+					double cible = 0.0;
+					if (!en_gare || guide_l <= 0.0) {
+						if ((int)i == i_joueur) {
+							cible = psi0_joueur;
+						} else if (montee_v && i < psi0_tire.size()) {
+							cible = psi0_tire[i];
+						}
+					}
 					for (int k = 0; k < ns; k++) {
 						const double ddphi = -(g2 / L) * std::sin(phi[i]) - (-la.z / L) * std::cos(phi[i]) - 2.0 * zeta * w0 * dphi[i];
-						const double ddpsi = -(g2 / L) * std::sin(psi[i]) - (la.x / L) * std::cos(psi[i]) - 2.0 * zeta * w0 * dpsi[i];
+						const double ddpsi = -(g2 / L) * std::sin(psi[i] - cible) - (la.x / L) * std::cos(psi[i]) - 2.0 * zeta * w0 * dpsi[i];
 						dphi[i] += ddphi * h;
 						dpsi[i] += ddpsi * h;
 						phi[i] += dphi[i] * h;
@@ -630,6 +672,12 @@ PackedFloat64Array NoyauRemontee::etape(double dt, double regime, const Vector3 
 					}
 					phi[i] = std::clamp(phi[i], -0.6, 0.6);
 					psi[i] = std::clamp(psi[i], -0.6, 0.6);
+					// le roulement touche le guide : il garde sa place, et sa vitesse tombe
+					const double lim = limite_guide(s);
+					if (std::abs(psi[i]) > lim) {
+						psi[i] = std::clamp(psi[i], -lim, lim);
+						dpsi[i] = 0.0;
+					}
 					susps[i]->set_rotation(Vector3((real_t)phi[i], 0, (real_t)psi[i]));
 					// recopiés dans le véhicule : lus par le GDScript (collisions des
 					// tronçons jumelés, bancs de l'arrêt d'urgence)

@@ -68,6 +68,12 @@ class NoyauRemontee : public RefCounted {
 	std::vector<double> t_veh;
 	std::vector<double> s_repere;
 	std::vector<double> phi, psi, dphi, dpsi;
+	// équilibre du balancement latéral : passagers tirés au sort, joueur à bord, guide d'entrée de gare
+	std::vector<double> psi0_tire;
+	int i_joueur = -1;
+	double psi0_joueur = 0.0;
+	double guide_l = 0.0, guide_gorge = 0.01, guide_ouvert = 0.22, guide_bras = 0.49;
+	double limite_guide(double s) const;
 	std::vector<Vector3> p_prec, v_prec, a_f;
 	std::vector<int> n_mes;
 	std::vector<float> e_ouv, e_gc, e_porte;   // dernières valeurs envoyées (−1 : jamais)
@@ -119,6 +125,11 @@ public:
 	void set_temps(const PackedFloat32Array &p_tab_s);
 	void set_vehicules(const Array &p_vehicules, const Array &p_pinces, const Array &p_susps, const Array &p_corps,
 			const PackedFloat64Array &s, const PackedFloat32Array &p_phi, const PackedFloat32Array &p_psi);
+	void set_charges(const PackedFloat32Array &p_tires);
+	void set_charge_joueur(int i, double p_psi0) {
+		i_joueur = i;
+		psi0_joueur = p_psi0;
+	}
 	void set_vitesse(double v) { vitesse = v; }
 	void set_ligne(Object *p_ligne) { ligne = p_ligne; }
 

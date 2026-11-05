@@ -22,7 +22,6 @@ extends Node3D
 @export var famille: String = "siege_doppelmayr_e98_6"
 
 var _machoire: Node3D
-var _levier: Node3D
 var _ressorts: Array = []
 var _galets_roul: Array = []      # galets du chariot du 3S (axe local X)
 const R_GALET_CHARIOT: float = 0.17
@@ -69,6 +68,12 @@ var _susp: Node3D = null
 var _pince: Node3D = null
 var phi: float = 0.0
 var psi: float = 0.0
+## Équilibre du balancement latéral sous une charge excentrée. Tirage : passagers du brin montant ;
+## joueur : NAN s'il n'est pas à bord. psi0 et limite_psi sont posés par la ligne avant balancer().
+var psi0_tire: float = 0.0
+var psi0_joueur: float = NAN
+var psi0: float = 0.0
+var limite_psi: float = INF
 var _dphi: float = 0.0
 var _dpsi: float = 0.0
 var _p_prec: Vector3 = Vector3.ZERO
@@ -122,7 +127,7 @@ func constructeur() -> String:
 const VARIANTES: int = 8
 static var _numeros: Dictionary = {}      # type → numéros des variantes
 static var _modeles: Dictionary = {}      # type|numéro → [Node3D hors arbre, références, valeurs]
-const REFS: Array = ["_machoire", "_levier", "_gc", "_bulle", "_susp", "_pince", "_corde", "_perche_tige", "_bras"]
+const REFS: Array = ["_machoire", "_gc", "_bulle", "_susp", "_pince", "_corde", "_perche_tige", "_bras"]
 const LISTES: Array = ["_ressorts", "_galets_roul", "_skis_ranges"]
 const VALEURS: Array = ["places", "cabine", "pivot", "masse", "longueur_pendule", "_gc_releve", "_ressort_l0", "_etat_anim"]
 
@@ -269,7 +274,7 @@ func _fabriquer() -> void:
 ## animées restent à part, chacune fusionnée en elle-même.
 func _fusionner() -> void:
 	var garder: Array = []
-	for n in [_machoire, _levier, _gc, _bulle, _corde, _perche_tige]:
+	for n in [_machoire, _gc, _bulle, _corde, _perche_tige]:
 		if n != null:
 			garder.append(n)
 	for r in _ressorts:
@@ -288,7 +293,7 @@ func _fusionner() -> void:
 	# pièces de détail, invisibles de loin (audit de fluidité, 26/10/2026 : 36 000
 	# objets à dessiner au pied des pistes, 7 sur 10 par siège sont ces pièces) ;
 	# les portes et la bulle restent : sans elles, la cabine serait trouée
-	for n in [_machoire, _levier, _gc] + _ressorts + _galets_roul + _skis_ranges:
+	for n in [_machoire, _gc] + _ressorts + _galets_roul + _skis_ranges:
 		if n != null:
 			(n as Node).set_meta("detail", true)
 
@@ -337,6 +342,13 @@ const A108_ARTICULATION: Vector2 = Vector2(0.10, 0.0)
 const A108_ROUE: Vector3 = Vector3(0.2930, 0.3144, 0)    # 0,43 m le long du bras, depuis l'articulation
 const A108_R_ROUE: float = 0.07
 const A108_OUVERTURE: float = 0.45                        # rad
+## Articulation du bras de suspente : à la hauteur du mors, du côté opposé. Au-dessus du rail de gare, qui
+## passe entre elle et le corps : le siège et le rail ne bougent pas, seul le centre du balancement descend.
+const A108_PIVOT: Vector3 = Vector3(0.30, 0.03, 0)
+## Roulement au bout de la tige, derrière l'articulation : axe le long de la tige, il entre dans le guide
+## évasé de l'entrée de gare, qui ramène le balancement latéral à zéro avant le débrayage.
+const A108_X_ROULEMENT: float = 0.79
+const A108_R_ROULEMENT: float = 0.08
 
 
 func _pince_debrayable() -> void:
@@ -385,17 +397,9 @@ func _pince_debrayable() -> void:
 		p.add_child(r)
 		RemonteeKit.ressort(r, Vector3.ZERO, Vector3.UP, 0.265, 0.062, 0.012, 9, rc)
 		_ressorts.append(r)
-	# bras de suspente : fin, sous les ressorts et entre eux, jusqu'à l'articulation du pendule
-	RemonteeKit.poutre(p, Vector3(0.10, 0.02, 0), Vector3(0.30, 0.14, 0), 0.03, 0.06, "galva_pylone", Vector3.BACK)
-	# levier latéral et son galet, avec le peigne noir de contact
-	_levier = Node3D.new()
-	_levier.name = "Levier"
-	_levier.position = Vector3(0.30, 0.04, 0)
-	p.add_child(_levier)
-	RemonteeKit.poutre(_levier, Vector3.ZERO, Vector3(0.20, -0.02, 0), 0.045, 0.045, "galva_pylone", Vector3.BACK)
-	RemonteeKit.cylindre(_levier, 0.07, 0.07, 0.03, Transform3D(travers, Vector3(0.235, -0.02, 0)), "polyurethane", 16)
-	for k in range(5):
-		RemonteeKit.boite_en(_levier, Vector3(0.012, 0.012, 0.10), Vector3(0.20, -0.06 - k * 0.018, 0), "noir_mat")
+	# chape du bras de suspente : du bas du corps à l'articulation, au niveau du mors et au-dessus du rail
+	RemonteeKit.boite_en(p, Vector3(0.20, 0.05, 0.13), Vector3(0.20, A108_PIVOT.y, 0), "acier_noir")
+	RemonteeKit.cylindre(p, 0.028, 0.028, 0.17, Transform3D(Basis(Vector3.RIGHT, PI * 0.5), A108_PIVOT), "acier", 10)
 	# galets de roulement sur le rail de gare, en tête et en queue
 	for sz in [-1.0, 1.0]:
 		RemonteeKit.cylindre(p, 0.016, 0.016, 0.12, Transform3D(travers, Vector3(A108_X_GALET - 0.05, A108_Y_GALET, sz * 0.19)), corps_m, 8)
@@ -406,6 +410,24 @@ func _pince_debrayable() -> void:
 	RemonteeKit.boite_en(p, Vector3(0.10, 0.025, 0.72), Vector3(A108_X_PATIN, A108_Y_PATIN - 0.0125, 0), "noir_mat")
 	for sz in [-1.0, 1.0]:
 		RemonteeKit.poutre(p, Vector3(A108_X_PATIN, A108_Y_PATIN - 0.03, sz * 0.36), Vector3(A108_X_PATIN, 0.06, sz * 0.52), 0.07, 0.015, "noir_mat", Vector3.UP)
+
+
+## Sur la partie suspendue : épaule du bras, tige galvanisée vers l'extérieur, peigne noir et roulement.
+## Fusionnée avec le reste du véhicule : aucun objet à dessiner de plus.
+func _tige_guidage() -> void:
+	var t: Node3D = Node3D.new()
+	t.name = "Tige"
+	add_child(t)
+	var y: float = A108_PIVOT.y
+	var travers: Basis = Basis(Vector3.FORWARD, PI * 0.5)
+	RemonteeKit.boite_en(t, Vector3(0.19, 0.17, 0.13), Vector3(0.45, y - 0.045, 0), "noir_mat")
+	RemonteeKit.cylindre(t, 0.042, 0.03, 0.22, Transform3D(travers, Vector3(0.645, y, 0)), "galva_pylone", 10)
+	RemonteeKit.cylindre(t, 0.056, 0.056, 0.025, Transform3D(travers, Vector3(0.555, y, 0)), "galva_pylone", 10)
+	# peigne de contact, juste derrière le roulement : semelle et dents pointées vers le bas
+	RemonteeKit.boite_en(t, Vector3(0.03, 0.05, 0.13), Vector3(0.735, y - 0.05, 0), "noir_mat")
+	for k in range(5):
+		RemonteeKit.boite_en(t, Vector3(0.016, 0.05, 0.012), Vector3(0.735, y - 0.10, -0.052 + k * 0.026), "noir_mat")
+	RemonteeKit.cylindre(t, A108_R_ROULEMENT, A108_R_ROULEMENT, 0.06, Transform3D(travers, Vector3(A108_X_ROULEMENT, y, 0)), "polyurethane", 16)
 
 
 ## Numéro lisible À L'ENDROIT : une étiquette d'un seul côté (vue de dos,
@@ -626,8 +648,6 @@ func ouvrir_pince(t: float) -> void:
 	_etat_anim[0] = t
 	if _machoire != null:
 		_machoire.rotation.z = -0.45 * clampf(t, 0.0, 1.0)
-	if _levier != null:
-		_levier.rotation.z = -0.55 * clampf(t, 0.0, 1.0)
 	for r in _ressorts:
 		(r as Node3D).scale = Vector3(1, 1.0 - 0.22 * clampf(t, 0.0, 1.0), 1)
 
@@ -722,14 +742,44 @@ func balancer(dt: float, en_gare: bool) -> void:
 	var h: float = dt / n
 	for k in range(n):
 		var ddphi: float = -(g2 / L) * sin(phi) - (-la.z / L) * cos(phi) - 2.0 * zeta * w0 * _dphi
-		var ddpsi: float = -(g2 / L) * sin(psi) - (la.x / L) * cos(psi) - 2.0 * zeta * w0 * _dpsi
+		var ddpsi: float = -(g2 / L) * sin(psi - psi0) - (la.x / L) * cos(psi) - 2.0 * zeta * w0 * _dpsi
 		_dphi += ddphi * h
 		_dpsi += ddpsi * h
 		phi += _dphi * h
 		psi += _dpsi * h
 	phi = clampf(phi, -0.6, 0.6)
 	psi = clampf(psi, -0.6, 0.6)
+	# le roulement touche le guide : il garde sa place, et sa vitesse tombe
+	if absf(psi) > limite_psi:
+		psi = clampf(psi, -limite_psi, limite_psi)
+		_dpsi = 0.0
 	_susp.rotation = Vector3(phi, 0.0, psi)
+
+
+## Inclinaison d'équilibre pour `n` passagers de 80 kg dont la somme des abscisses vaut `somme_x` :
+## le centre de gravité revient sous l'articulation, atan(m·x / ((M + m)·L)), du côté opposé à la charge.
+func psi_charge(somme_x: float, n: int = 1) -> float:
+	return -atan(80.0 * somme_x / ((masse + 80.0 * n) * longueur_pendule))
+
+
+## Le joueur à la place k (pour un siège, sa moitié de banquette ; dans une cabine, là où il se tient).
+func psi_place(k: int, avant: bool = false) -> float:
+	return psi_charge(place_assise(k, avant).x)
+
+
+## Passagers tirés au sort, de façon reproductible (mêmes chances que la charge moyenne de la ligne).
+func tirer_charge(graine: int) -> void:
+	if cabine or famille.begins_with("perche") or places <= 1:
+		return
+	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
+	rng.seed = graine
+	var somme: float = 0.0
+	var n: int = 0
+	for k in range(places):
+		if rng.randf() < 0.7:
+			somme += place_assise(k).x
+			n += 1
+	psi0_tire = psi_charge(somme, n) if n > 0 else 0.0
 
 
 ## Où poser le skieur assis (repère du véhicule) : origine aux pieds, 0,42 m
@@ -836,9 +886,11 @@ func _siege() -> void:
 	# droit du câble au-dessus du dossier (le véhicule pend sous le câble)
 	var pts: PackedVector3Array = PackedVector3Array()
 	# attache sous le bras de la pince (débrayable) ou sous la monopince (fixe)
-	var x_att: float = 0.30 if not fixe else x0 + 0.10
-	var y_att: float = 0.14 if not fixe else 0.02
+	var x_att: float = A108_PIVOT.x if not fixe else x0 + 0.10
+	var y_att: float = A108_PIVOT.y if not fixe else 0.02
 	pivot = Vector3(x_att, y_att, 0)
+	if not fixe:
+		_tige_guidage()
 	pts.append(Vector3(x_att, y_att, 0))
 	pts.append(Vector3(0.46, y_att - 0.04, 0))
 	pts.append(Vector3(0.52, -0.25, 0))
@@ -869,8 +921,10 @@ func _siege_bmf() -> void:
 	var hs: float = _haut_suspente()
 	var m_alu: String = "alu_pince"
 	var fixe: bool = constructeur() == "fixe"
-	var x_att: float = 0.30 if not fixe else 0.17      # bras de la pince, ou monopince
-	var y_att: float = 0.14 if not fixe else 0.02
+	var x_att: float = A108_PIVOT.x if not fixe else 0.17      # bras de la pince, ou monopince
+	var y_att: float = A108_PIVOT.y if not fixe else 0.02
+	if not fixe:
+		_tige_guidage()
 	pivot = Vector3(x_att, y_att, 0)
 	# siège à bulle (Lanches) : arceau à ~1,55 m au-dessus de l'assise (vidéos
 	# de la ligne), la bulle ouverte se loge dessous → poutre remontée
@@ -1378,14 +1432,15 @@ func bulle(t: float) -> void:
 # --- cabines -------------------------------------------------------------------------
 
 func _cabine() -> void:
-	pivot = Vector3(0.30, 0.14, 0)
+	pivot = A108_PIVOT
+	_tige_guidage()
 	var sus_m: String = "acier_noir" if famille != "cabine_omega4" else "galva"
 	var hs: float = H_SUSP_CABINE
 	# suspente (plans CWA de l'Omega V, Wikimedia Commons) : de la pince elle
 	# descend à l'extérieur, se cintre vers l'intérieur et finit en poutre
 	# horizontale posée sur le toit par deux pieds
 	var arc: PackedVector3Array = PackedVector3Array()
-	var p0: Vector3 = Vector3(0.30, 0.14, 0)
+	var p0: Vector3 = A108_PIVOT
 	var p1: Vector3 = Vector3(0.66, -0.10, 0)
 	var p2: Vector3 = Vector3(0.70, -hs + 0.05, 0)
 	var p3: Vector3 = Vector3(0.22, -hs + 0.10, 0)
