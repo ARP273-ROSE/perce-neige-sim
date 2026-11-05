@@ -1195,6 +1195,9 @@ func _y_lisse_3s(d: float, montee: bool) -> float:
 
 ## Hauteur du câble (chaînette) à la distance d, brin montée ou descente ;
 ## aux nez, raccord parabolique sur 2 h (l'arc de la batterie de galets).
+const SABOT_TPH: float = 6.0
+
+
 func y_cable(d: float, montee: bool = true) -> float:
 	if tricable():
 		return _y_lisse_3s(d, montee)
@@ -1207,6 +1210,14 @@ func y_cable(d: float, montee: bool = true) -> float:
 	if h > 0.0 and L - d < 2.0 * h:
 		var t: float = maxf(L - d, 0.0)
 		return terrain(L) + H_CABLE_GARE + _pente_nez(false, montee) * t * t / (4.0 * h)
+	if vaetvient():
+		for p in pylones:
+			var a_p: float = float(p["d"])
+			if absf(d - a_p) < SABOT_TPH * 0.5:
+				var d0: float = a_p - SABOT_TPH * 0.5
+				var d1: float = a_p + SABOT_TPH * 0.5
+				return _hermite((d - d0) / SABOT_TPH, _y_chainette(d0, montee), _y_chainette(d1, montee),
+					_pente_chainette(d0 - 0.3, montee), _pente_chainette(d1 + 0.3, montee), SABOT_TPH)
 	for r in _raccords[0 if montee else 1]:
 		if d < r[0] - r[1]:
 			break
@@ -3802,6 +3813,10 @@ func _batterie_gare(aval: bool) -> void:
 	py.deviation = dev
 	py.position = Vector3(0, sol_b, -d)
 	py.name = "Batterie%s" % ("Aval" if aval else "Amont")
+	var y_b0: float = py.position.y + py.hauteur_cable()
+	for brin in [true, false]:
+		py.cable_repos[brin] = func(z: float) -> float:
+			return y_cable(d - z, brin) - y_b0
 	_enfant(py)
 	py.construire()
 	MeshMerge.merge(py, py.mobiles, "Batterie")
@@ -4985,7 +5000,7 @@ func _poser_pylones_treillis() -> void:
 		py.sol_z = func(z: float) -> float:
 			return terrain(clampf(d - z, 0.0, longueur_h())) - t
 		# 3S : le sabot au câble lisse, pas au sommet de la chaînette (2,3 m au-dessus au grand pylône, câbles en l'air)
-		py.hauteur = (y_cable(d) if tricable() else _tetes[i]) - t - (py.hauteur_porteurs() - py.hauteur)
+		py.hauteur = (y_cable(d) if tricable() or vaetvient() else _tetes[i]) - t - (py.hauteur_porteurs() - py.hauteur)
 		py.position = Vector3(0, t, -d)
 		var e: float = 6.0
 		py.pente = atan2(y_cable(d + e) - y_cable(d - e), 2.0 * e)

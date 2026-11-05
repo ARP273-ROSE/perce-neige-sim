@@ -4,7 +4,10 @@
 extends SceneTree
 
 const FANTOME_MAX: float = 1.5        # degrés sur 1 m, hors galets
-const RUPTURE_MAX: float = 3.0        # degrés d'écart entre deux supports voisins, en plus de la moitié
+## Seuils : au-delà, le banc échoue. L'état connu (voir CHANGELOG) les atteint sans les dépasser.
+const SIGNES_MAX: int = 6             # pylônes dont la déviation contredit la nature (> 1°)
+const CREUX_MAX: int = 9              # support bien plus plat que ses voisins (crête en dents de scie)
+const ENTREE_MAX: float = 17.0        # degrés, pente du câble à l'entrée d'une gare
 
 var _main: Node = null
 var _f: int = 0
@@ -16,6 +19,9 @@ var _lignes: PackedStringArray = PackedStringArray(["ligne;pylone;d;h;nature;dev
 var _csv: String = ""
 var _pylones_mauvais_signe: int = 0
 var _fantomes: int = 0
+var _creux: Array = []
+var _signes: Array = []
+var _entrees: Array = []
 
 
 func _initialize() -> void:
@@ -79,6 +85,8 @@ func _mesurer(lg: LigneRemontee) -> void:
 		var cmp: bool = nat.begins_with("C") and not nat.contains("S")
 		if (sup and dv < -0.2) or (cmp and dv > 0.2):
 			mauvais += 1
+		if (sup and dv < -1.0) or (cmp and dv > 1.0):
+			_signes.append("%s P%d %.1f" % [lg.name, i + 1, dv])
 		_lignes.append("%s;P%d;%.0f;%.1f;%s;%.2f;" % [lg.name, i + 1, d, lg._tetes[i] - lg.terrain(d), nat, dv])
 	_pylones_mauvais_signe += mauvais
 	# rupture de régularité : un pylône dont la déviation s'écarte fort de ses voisins porteurs
@@ -109,9 +117,16 @@ func _mesurer(lg: LigneRemontee) -> void:
 				pire = a
 				ou = d2
 		d2 += 0.5
+	for i in range(1, n - 1):
+		if _nature(lg.pylones[i]).begins_with("S") and not _nature(lg.pylones[i]).contains("C") and _nature(lg.pylones[i - 1]).begins_with("S") and _nature(lg.pylones[i + 1]).begins_with("S"):
+			var moy2: float = (float(devs[i - 1]) + float(devs[i + 1])) * 0.5
+			if moy2 > 6.0 and float(devs[i]) < 0.25 * moy2:
+				_creux.append("%s P%d %.1f (voisins %.1f)" % [lg.name, i + 1, devs[i], moy2])
 	var nez_a: float = _angle(lg, 0.0, 6.0, true)
 	var nez_b: float = -_angle(lg, L - 6.0, 6.0, true)
 	var dern: float = float(devs[n - 1])
+	if maxf(absf(nez_a), absf(nez_b)) > ENTREE_MAX:
+		_entrees.append("%s %.1f / %.1f" % [lg.name, nez_a, nez_b])
 	if pire > FANTOME_MAX:
 		_fantomes += 1
 	_rangs.append([rupt, String(lg.name), ou_r + 1, pire, ou, mauvais, nez_a, nez_b, float(devs[0]), dern, n])
@@ -127,5 +142,9 @@ func _finir() -> void:
 	print("ligne ; pire rupture de déviation (°) au pylône ; pire cassure hors galets (°) à d ; mauvais signes ; pente sortie aval, arrivée amont (°) ; dév. P1, dernier")
 	for r in _rangs:
 		print("   %-26s %5.1f P%-3d %5.2f à %5.0f  %d  %5.1f %5.1f  %5.1f %5.1f  (%d)" % [r[1], r[0], r[2], r[3], r[4], r[5], r[6], r[7], r[8], r[9], r[10]])
-	print("BENCH_PROFIL_LIGNES OK")
-	FinBanc.quitter(self, _main, 0)
+	print("SEUILS signes %d/%d : %s" % [_signes.size(), SIGNES_MAX, ", ".join(_signes)])
+	print("SEUILS creux %d/%d : %s" % [_creux.size(), CREUX_MAX, ", ".join(_creux)])
+	print("SEUILS entrées > %.0f° : %s" % [ENTREE_MAX, ", ".join(_entrees)])
+	var ok: bool = _signes.size() <= SIGNES_MAX and _creux.size() <= CREUX_MAX and _entrees.is_empty() and _fantomes == 0
+	print("BENCH_PROFIL_LIGNES " + ("OK" if ok else "ECHEC"))
+	FinBanc.quitter(self, _main, 0 if ok else 1)
