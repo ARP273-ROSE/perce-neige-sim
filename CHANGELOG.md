@@ -25,6 +25,12 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 **Câbles et galets** : paires de galets posées au point réel du câble (écart médian 8 → 0 mm au repos, 66 lignes), sabot du 3S au câble lissé (2,3 m → moins de 8 cm), profil des lignes calculé sur la grille à 25 m à tous les crans (Fontaine Froide : entrée en gare 21,3° → 4,2° ; Loyes : crête régulière ; pylônes de mauvais signe 26 → 6 au cran 4). Restent 6 pylônes de mauvais signe. La PWA ne le verra qu'après recuisson.
 
+**Pince et charge** : bras articulé à la hauteur du mors, tige et roulement derrière ; guide d'entrée de gare (longueur et jeux estimés) ; un skieur seul au bout penche le véhicule (siège 6 places 2,5°, cabine 10 places 1,7°).
+
+**Galets** : ceux de ligne tournent à leur vitesse réelle de près (45 m, 25 m sur le web, pas en profil allégé).
+
+**L'Olympique** : chariot à 4 balanciers de 2 galets, porteurs à 0,80 m, rail de gare sur couronne rouge, motrice verticale, poulies bleues sur chevalet rouge, ouvrage à deux poutres cintrées, P1 et P2 d'après photos ; câble calé sur les relevés GPS et les altitudes connues. Valeurs estimées sur photo.
+
 **Ciel** (PC en Vulkan) : le ciel physique gris terne est remplacé par un nuanceur, bleu d'altitude, horizon clair, soleil, nuages immobiles coupés au cran 3 et au-delà et en profil allégé ; coût dans le bruit. PWA et OpenGL inchangés.
 
 **Crêtes et rochers sans le pack** (PC) : normales de la grille à 5 m posées en texture sur le maillage habituel, dès que le relief fin n'est pas affiché ; +82 Mo de mémoire vidéo, GPU presque inchangé sur 5070 Ti. Collisions et sol inchangés. `--sans-normales` le coupe.
