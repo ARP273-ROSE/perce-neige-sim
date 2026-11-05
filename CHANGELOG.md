@@ -5,6 +5,16 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## Version suivante (non publiée)
+
+**F10 pendant un relevé automatique** : le relevé automatique s'annule sans rien envoyer et le vrai démarre.
+
+**Port occupé** : le pupitre prend à chaque lancement la première paire de ports libre ; un ancien viewer n'entend plus rien et se ferme seul en 30 s.
+
+**Relevé automatique et vue cachée** : le délai s'arrête tant que la vue est cachée, et un relevé en cours s'annule sans envoi.
+
+**Parois raides** (pack) : sur les pentes très raides, la photo verticale étirée en traînées est remplacée par sa couleur moyenne et un grain projeté sur les plans verticaux ; +0,1 à +0,27 ms de carte en 4K. Motif fin à 9 m parfois visible sur grande paroi claire.
+
 ## 1.54.1 — 5 novembre 2026
 
 **Pack haute définition installé tout seul** : le simulateur télécharge le pack (819 Mo) en arrière-plan au lancement, le vérifie et le pose dans le dossier de données de l'utilisateur, où les mises à jour ne le touchent pas. Un téléchargement coupé reprend au lancement suivant ; le pack sert au lancement suivant du viewer 3D une fois complet. Le viewer dit d'abord si la machine s'en servirait : pas de téléchargement sans carte dédiée assez fournie, ni sans 1,8 Go de place libre. Aucune barre de progression. Le pack reste hors de la PWA.
