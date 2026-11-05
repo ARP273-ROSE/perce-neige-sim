@@ -5,7 +5,7 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
-## Version suivante (non publiée)
+## 1.54.0 — 5 novembre 2026
 
 **Pack haute définition** (PC, facultatif, environ 780 Mo à poser dans `pack_hd/` à côté de l'exécutable ; sans lui, rien ne change, et la PWA ne le charge jamais). Sol au mètre sur tout le domaine depuis le LiDAR HD de l'IGN, photo aérienne IGN au mètre, 113 376 arbres relevés au LiDAR et retirés des emprises de bâtiments (BD TOPO), détail de neige et de roche à bout de ski, données sous Licence Ouverte Etalab 2.0. Construit par `tools_relief_hd.py`, décodé en C++ sur tous les cœurs au chargement. Le niveau est choisi d'après la mémoire de la machine : sol au mètre (1,45 Go de grille, 1,1 Go de mémoire vidéo), sol à 2,50 m (230 Mo, 300 Mo) ou grille du dépôt. Sous les ouvrages et le long des voies, le sol reste celui de la grille à 5 m : pylônes et câbles n'ont pas bougé.
 
