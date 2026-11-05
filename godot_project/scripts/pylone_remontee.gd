@@ -69,6 +69,8 @@ static func compo_mini(compo: Array) -> Array:
 ## brin : [nœud, position de repos, rotation de repos, z galet aval, z galet amont, s]
 var mobiles: Array = []
 var _paires: Dictionary = {true: [], false: []}
+## Par brin (true : montée) : le câble, comme pour caler(), posé par la ligne avant construire().
+var cable_repos: Dictionary = {}
 
 const R_GALET: float = 0.21                # Ø 420 mm, la norme des débrayables
 const PAS_GALET: float = 0.52              # entraxe de deux galets d'un même balancier
@@ -382,6 +384,13 @@ func _train(montee: bool) -> void:
 			piv.name = "Paire%s%d" % ["S" if s < 0.0 else "C", k2 / 2]
 			var base_pos: Vector3 = Vector3(0, y_axe + s * 0.11 - kappa * zp * zp * 0.5, zp)
 			var base_rot: float = kappa * zp
+			# posée sur le câble lui-même quand la ligne le donne (les têtes sont penchées, et les deux
+			# brins n'ont pas la même chaînette : l'arc ci-dessus s'en écartait jusqu'à 20 cm)
+			var cable_brin: Callable = cable_repos.get(montee, Callable())
+			if cable_brin.is_valid():
+				var pose: Array = _pose_paire(tete.rotation.x, zp, s, cable_brin, absf(za - zb) * 0.5)
+				base_pos = pose[0]
+				base_rot = pose[1]
 			piv.position = base_pos
 			piv.rotation.x = base_rot
 			tete.add_child(piv)
@@ -529,6 +538,36 @@ func repos(montee: bool) -> void:
 var _hors_repos: Dictionary = {true: true, false: true}
 
 
+## Position et bascule d'une paire dont le pivot est au z `zp` de la tête, contre le câble. `cable` : recul
+## horizontal le long de la ligne (+ vers l'aval) → hauteur du câble au-dessus de l'axe de la tête.
+## La tête est penchée : son z n'est pas ce recul, l'écart valait le sinus de la pente sur tout le train.
+func _pose_paire(pente_tete: float, zp: float, sgn: float, cable: Callable, demi: float) -> Array:
+	var cp: float = cos(pente_tete)
+	var sp: float = sin(pente_tete)
+	var zw: float = zp * cp
+	var yw: float = float(cable.call(zw))
+	# point du câble dont le z, dans le repère de la tête, est celui de la paire
+	for _i in range(3):
+		zw = (zp + yw * sp) / maxf(cp, 0.2)
+		yw = float(cable.call(zw))
+	# la corde sous les deux galets de la paire : tous deux touchent, même sur un arc serré
+	# (les galets sont à ± demi LE LONG de la paire : à l'horizontale, moins sur un câble raide)
+	var e: float = maxf(demi, 0.05)
+	var y1: float = float(cable.call(zw + e))
+	var y2: float = float(cable.call(zw - e))
+	for _j in range(2):
+		var e2: float = maxf(demi, 0.05) * cos(atan2(y2 - y1, 2.0 * e))
+		y1 = float(cable.call(zw + e2))
+		y2 = float(cable.call(zw - e2))
+		e = e2
+	if demi > 0.05:
+		yw = (y1 + y2) * 0.5
+	var y_loc: float = yw * cp + zw * sp
+	var pente_loc: float = atan2(y2 - y1, 2.0 * e) - pente_tete
+	var dist: float = R_GALET + R_CABLE + 0.11
+	return [Vector3(0, y_loc + sgn * dist * cos(pente_loc), zp + sgn * dist * sin(pente_loc)), pente_loc]
+
+
 ## Paires calées sur le câble TEL QU'IL EST AFFICHÉ (flèche sous les
 ## véhicules, onde aux arrêts) : le câble rentrait dans les galets aux bouts
 ## des balanciers (retour d'utilisateur, 25/10/2026). `cable` : z local du
@@ -541,19 +580,10 @@ func caler(montee: bool, cable: Callable) -> void:
 	var tete: Node3D = get_node_or_null("TeteMontee" if montee else "TeteDescente")
 	if tete == null:
 		return
-	var cp: float = cos(tete.rotation.x)
-	var sp: float = sin(tete.rotation.x)
 	for e in _paires[montee]:
 		var n: Node3D = e[0]
-		var z: float = (e[1] as Vector3).z
-		var sgn: float = e[5]
-		# hauteur et pente du câble au droit de la paire, dans le repère de la tête
-		var y0: float = float(cable.call(z))
-		var y1: float = float(cable.call(z + 0.26))
-		var y2: float = float(cable.call(z - 0.26))
-		var y_loc: float = (y0 + z * sp) / maxf(cp, 0.2)
-		var pente_loc: float = atan2(y2 - y1, 0.52) - tete.rotation.x
-		_cales[n] = [Vector3(0, y_loc + sgn * (R_GALET + R_CABLE + 0.11), z), pente_loc]
+		var pose: Array = _pose_paire(tete.rotation.x, (e[1] as Vector3).z, e[5], cable, absf(float(e[3]) - float(e[4])) * 0.5)
+		_cales[n] = [pose[0], pose[1]]
 		if e.size() >= 7:
 			e[6] = null
 	_hors_repos[montee] = true
