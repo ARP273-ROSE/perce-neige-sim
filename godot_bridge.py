@@ -68,6 +68,8 @@ class GodotBridge:
         self._abort = False
         # Résolution du binaire à utiliser (cache)
         self._resolved_cmd: Optional[list] = None
+        # Dossier de données : pack_hd.py y installe le pack haute définition
+        self.donnees: Optional[Path] = None
         # Fichier de log : capture stderr du viewer + diagnostic de lancement,
         # car le sim PyInstaller tourne sans console (console=False) → c'est le
         # seul moyen de savoir POURQUOI la vue 3D n'a pas démarré.
@@ -182,6 +184,14 @@ class GodotBridge:
             return ["--display-driver", "x11"]
         return []
 
+    def _args_pack(self) -> list:
+        """Argument du pack haute définition, s'il est installé dans le profil."""
+        if self.donnees is None:
+            return []
+        import pack_hd
+        pret = pack_hd.dossier_si_pret(self.donnees)
+        return [f"--pack-hd={pret}"] if pret is not None else []
+
     def _resolve_command(self, engine_args: Optional[list] = None) -> Optional[list]:
         """Retourne la cmdline complète à exécuter, ou None si rien trouvé.
         Préfère le binaire exporté standalone, fallback sur Godot system + projet.
@@ -195,7 +205,7 @@ class GodotBridge:
         bundled = self._bundled_binary_path()
         if bundled is not None:
             return [str(bundled), *eng, "--", "--client", f"--port={self.port}",
-                    f"--quality={self.quality}"]
+                    f"--quality={self.quality}", *self._args_pack()]
         # 2. Fallback dev : godot system + projet source.
         #    Désactivé en mode frozen (exe PyInstaller distribué) : on ne va
         #    pas chercher un Godot*.exe dans des dossiers inscriptibles par
@@ -208,7 +218,7 @@ class GodotBridge:
             if sys_godot is not None:
                 return [sys_godot, "--path", str(self.dev_project_dir),
                         *eng, "--", "--client", f"--port={self.port}",
-                        f"--quality={self.quality}"]
+                        f"--quality={self.quality}", *self._args_pack()]
         return None
 
     @property
