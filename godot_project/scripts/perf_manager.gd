@@ -654,13 +654,16 @@ func releve_en_cours() -> bool:
 	return _rel_t >= 0.0
 
 
-## Relevé automatique, sans rien afficher : une fois par version et par situation (dans la rame, à ski),
-## pour les machines où personne ne pensera à appuyer sur F10. Le pupitre le demande, et seulement si
-## l'utilisateur a accepté l'envoi des rapports. Appelé une fois par seconde.
+## Relevé automatique, sans rien afficher, pour les machines où personne ne pensera à appuyer sur F10 :
+## une minute après un délai tiré au sort, pour tomber sur des moments différents. Le pupitre le demande
+## (au plus 5 par version, un par situation et par séance), et seulement si l'utilisateur a accepté
+## l'envoi des rapports. Appelé une fois par seconde.
 var _auto_situation: String = ""
 var _auto_vue: String = ""
 var _auto_t0: int = 0
-const RELEVE_AUTO_APRES_MS: int = 30000
+var _auto_delai_ms: int = 0
+const RELEVE_AUTO_MIN_MS: int = 30000
+const RELEVE_AUTO_MAX_MS: int = 240000
 
 
 func essai_releve_auto(voulues: Array) -> void:
@@ -674,8 +677,9 @@ func essai_releve_auto(voulues: Array) -> void:
 	if not voulues.has(vue) or vue != _auto_vue:
 		_auto_vue = vue if voulues.has(vue) else ""
 		_auto_t0 = now
+		_auto_delai_ms = randi_range(RELEVE_AUTO_MIN_MS, RELEVE_AUTO_MAX_MS)
 		return
-	if now - _auto_t0 >= RELEVE_AUTO_APRES_MS:
+	if now - _auto_t0 >= _auto_delai_ms:
 		_auto_situation = vue
 		_auto_vue = ""
 		releve()

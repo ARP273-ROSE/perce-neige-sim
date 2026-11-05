@@ -7414,6 +7414,7 @@ class GameWidget(QWidget):
         self._t_ips_3d = -1e9
         self._t_releves_auto = -1e9
         self._releves_auto_cache: list = []
+        self._releves_auto_seance: list = []
         self._fps_acc = 0.0
         self._show_help = True
         self._show_info = False
@@ -7718,6 +7719,7 @@ class GameWidget(QWidget):
             faits = self._releves_auto_faits()
             faits.append(str(m["releve_auto_fait"]))
             _ecrire_prefs({"releves_auto": {"version": VERSION, "faits": faits}})
+            self._releves_auto_seance.append(str(m["releve_auto_fait"]))
             self._t_releves_auto = -1e9
         elif "hd_possible" in m:
             # la vue 3D dit si cette machine s'en servirait : inutile de télécharger
@@ -16291,9 +16293,12 @@ class GameWidget(QWidget):
             return r["faits"]
         return []
 
+    _RELEVES_AUTO_MAX = 5
+
     def _releves_auto_voulus(self) -> list:
-        """Relevés de fluidité restant à faire pour cette version, si l'envoi des rapports est
-        accepté. (Relu au plus toutes les 5 s : appelé à chaque envoi d'état.)"""
+        """Situations à relever maintenant : au plus 5 relevés par version, un par situation et par
+        séance, si l'envoi des rapports est accepté. (Relu au plus toutes les 5 s : appelé à chaque
+        envoi d'état.)"""
         t = time.monotonic()
         if t - self._t_releves_auto < 5.0:
             return self._releves_auto_cache
@@ -16303,8 +16308,10 @@ class GameWidget(QWidget):
             accepte = reporting.consentement() is True
         except Exception:
             accepte = False
-        faits = self._releves_auto_faits() if accepte else []
-        self._releves_auto_cache = [s for s in ("rame", "skieur") if s not in faits] if accepte else []
+        if accepte and len(self._releves_auto_faits()) < self._RELEVES_AUTO_MAX:
+            self._releves_auto_cache = [s for s in ("rame", "skieur") if s not in self._releves_auto_seance]
+        else:
+            self._releves_auto_cache = []
         return self._releves_auto_cache
 
     def _texte_cadence(self) -> str:
