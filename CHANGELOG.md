@@ -5,7 +5,7 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
-## Version suivante (non publiée)
+## 1.55.0 — 5 novembre 2026
 
 **Olympique (3S), cabine et relief** : la cabine ne traverse plus le sol à l'approche du grand pylône, à tous les crans. Le câble y suit les altitudes du document ; sur la grille à 25 m, une butte qui n'existe pas sur le relevé fin est abaissée localement.
 
