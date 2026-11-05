@@ -57,6 +57,15 @@ uniform vec4 o_tex;                 // nœuds par couche, marge en nœuds, couch
 uniform vec2 hd_nb;                 // dernier nœud (j, i)
 """ + _ENTETE_DETAIL + """uniform sampler2DArray ortho_hd : source_color, filter_linear_mipmap_anisotropic, repeat_disable;
 uniform float a_ortho = 0.0;        // 1 : orthophoto au mètre présente
+const float PAROI_BAS = 0.50;
+const float PAROI_HAUT = 0.72;
+vec3 normale_hd(vec2 p) {
+	vec2 nn = (p - hd_xf.xy) / hd_xf.zw;
+	vec2 t = clamp(floor(nn / hd_tex.x), vec2(0.0), floor((hd_nb - vec2(0.5)) / hd_tex.x));
+	vec2 uv = (nn - t * hd_tex.x + hd_tex.z + 0.5) / hd_tex.y;
+	vec2 g = textureGrad(normal_hd, vec3(uv, t.y * hd_tex.w + t.x), dFdx(nn) / hd_tex.y, dFdy(nn) / hd_tex.y).rg * 2.0 - 1.0;
+	return vec3(g.x, sqrt(max(1.0 - dot(g, g), 0.0)), g.y);
+}
 // Photo au mètre ; au-delà de 16 m par texel, la photo d'ensemble (la marge entre couches ne suffit plus)
 vec3 photo_hd(vec2 p, vec3 c_loin) {
 	if (a_ortho < 0.5) {
@@ -74,14 +83,18 @@ vec3 photo_hd(vec2 p, vec3 c_loin) {
 	float couverts = o_tex.x + 2.0 * o_tex.y;
 	vec2 uv = (nn - t * o_tex.x + o_tex.y + 0.5) / couverts;
 	vec3 c = textureGrad(ortho_hd, vec3(uv, t.y * o_tex.z + t.x), dx_n / couverts, dy_n / couverts).rgb;
+	// paroi raide : la photo, prise d'en haut, s'y étire en traînées. Sa couleur moyenne et un grain
+	// projeté sur les plans verticaux la remplacent ; rien ne change sur les pentes ordinaires.
+	vec3 nf = normale_hd(p);
+	float raide = (1.0 - smoothstep(PAROI_BAS, PAROI_HAUT, nf.y)) * a_detail;
+	if (raide > 0.0) {
+		vec3 fond = textureGrad(ortho_hd, vec3(uv, t.y * o_tex.z + t.x), dx_n * 32.0 / couverts, dy_n * 32.0 / couverts).rgb;
+		float ax = abs(nf.x) / max(abs(nf.x) + abs(nf.z), 0.001);
+		float g = mix(texture(detail_hd, pw.xy / 9.0).a, texture(detail_hd, pw.zy / 9.0).a, ax) - 0.5;
+		g += (mix(texture(detail_hd, pw.xy / 2.3).a, texture(detail_hd, pw.zy / 2.3).a, ax) - 0.5) * 0.5;
+		c = mix(c, fond * (1.0 + g * 1.3), raide);
+	}
 	return mix(c, c_loin, k);
-}
-vec3 normale_hd(vec2 p) {
-	vec2 nn = (p - hd_xf.xy) / hd_xf.zw;
-	vec2 t = clamp(floor(nn / hd_tex.x), vec2(0.0), floor((hd_nb - vec2(0.5)) / hd_tex.x));
-	vec2 uv = (nn - t * hd_tex.x + hd_tex.z + 0.5) / hd_tex.y;
-	vec2 g = textureGrad(normal_hd, vec3(uv, t.y * hd_tex.w + t.x), dFdx(nn) / hd_tex.y, dFdy(nn) / hd_tex.y).rg * 2.0 - 1.0;
-	return vec3(g.x, sqrt(max(1.0 - dot(g, g), 0.0)), g.y);
 }
 """
 ## Sommets d'un anneau : position et altitude lues de sa texture.
