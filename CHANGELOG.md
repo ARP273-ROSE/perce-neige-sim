@@ -23,6 +23,8 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 **Début de relevé** : la recherche des lecteurs audio est étalée, l'à-coup de 47 ms au départ tombe à l'image normale. Le compte des sons sous-estime les premières secondes du relevé.
 
+**Câbles et galets** : paires de galets posées au point réel du câble (écart médian 8 → 0 mm au repos, 66 lignes), sabot du 3S au câble lissé (2,3 m → moins de 8 cm), profil des lignes calculé sur la grille à 25 m à tous les crans (Fontaine Froide : entrée en gare 21,3° → 4,2° ; Loyes : crête régulière ; pylônes de mauvais signe 26 → 6 au cran 4). Restent 6 pylônes de mauvais signe. La PWA ne le verra qu'après recuisson.
+
 **Ciel** (PC en Vulkan) : le ciel physique gris terne est remplacé par un nuanceur, bleu d'altitude, horizon clair, soleil, nuages immobiles coupés au cran 3 et au-delà et en profil allégé ; coût dans le bruit. PWA et OpenGL inchangés.
 
 **Crêtes et rochers sans le pack** (PC) : normales de la grille à 5 m posées en texture sur le maillage habituel, dès que le relief fin n'est pas affiché ; +82 Mo de mémoire vidéo, GPU presque inchangé sur 5070 Ti. Collisions et sol inchangés. `--sans-normales` le coupe.
