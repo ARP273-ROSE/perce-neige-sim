@@ -587,7 +587,7 @@ func _portee_noeud(e: Array, file: Array) -> void:
 
 
 func _ready() -> void:
-	if not OS.has_feature("web") and PerfManager.cran_courant >= PerfManager.CRAN_MAX_PC:
+	if not OS.has_feature("web") and (PerfManager.cran_courant >= PerfManager.CRAN_MAX_PC or PerfManager.allege):
 		set_portees_reduites(true)
 	if OS.has_feature("web"):
 		# (l'iPad se présente en Mac : on le reconnaît au tactile. WebGL y a lâché à 265 Mo, puis à 199 Mo

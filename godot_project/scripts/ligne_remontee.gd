@@ -4427,7 +4427,7 @@ func _lod_preparer() -> void:
 	if _lod_essaye:
 		return
 	_lod_essaye = true
-	if _vehicules.is_empty() or teleski() or not OS.has_feature("web") and "--lod-vehicules" not in OS.get_cmdline_user_args():
+	if _vehicules.is_empty() or teleski() or not LigneRemontee.lod_voulu():
 		return
 	var v0: VehiculeRemontee = _vehicules[0][0]
 	var cle: String = "%s|%s|%s|%s|%s" % [v0.famille, v0.livree, v0.teinte, str(v0.pince_a108), v0.style_tph]
@@ -4468,9 +4468,13 @@ func _lod_preparer() -> void:
 	_lod_qui = [q1, q1.duplicate()]
 
 
+static func lod_voulu() -> bool:
+	return OS.has_feature("web") or PerfManager.allege or "--lod-vehicules" in OS.get_cmdline_user_args()
+
+
 ## PWA : de loin, un maillage allégé à la place du pylône, par les portées de visibilité.
 func _pylone_lod(py: PyloneRemontee) -> void:
-	if not OS.has_feature("web") and "--lod-vehicules" not in OS.get_cmdline_user_args():
+	if not LigneRemontee.lod_voulu():
 		return
 	var m: ArrayMesh = VehiculesLod.pylone(String(name), String(py.name))
 	if m == null:
