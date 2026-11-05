@@ -20,6 +20,7 @@ extends Node3D
 ## dans l'emprise du tube (« trous »). Lampes tous les 12 m. Portail : mur
 ## de tête en béton percé d'un cercle.
 
+const PAS_REMBLAI: float = 4.0
 const R_GAL: float = 1.50                 # rayon du tube
 const H_AXE: float = 1.15                 # axe à 1,15 m au-dessus du sol (sol plat de 1,93 m)
 const PENTE: float = 0.36                 # rampe droite, 36 % (20°)
@@ -334,15 +335,16 @@ func amenagement_relief(relief: ReliefBuilder) -> Dictionary:
 		if l > 0.5:
 			var tt: Vector3 = seg / l
 			var rr: Vector3 = Vector3(tt.z, 0.0, -tt.x).normalized()
-			var y_tube: float = maxf(a.y, b.y) + H_AXE + R_GAL + 1.2
-			var couvert: bool = true
-			for kk in range(i, j + 1):
-				var q: Vector3 = sol[kk]
-				if relief.hauteur(q.x, q.z) < y_tube:
-					couvert = false
-			if not couvert:
-				remblais.append([PackedVector2Array([xz.call(a - rr * 4.5), xz.call(a + rr * 4.5),
-					xz.call(b + rr * 4.5), xz.call(b - rr * 4.5)]), y_tube, 1.5 if fin else 5.0])
+			# par pas de 4 m : un seul palier à l'altitude du haut du tronçon, sur cette pente, faisait
+			# de grands trapèzes sombres dans le versant, jusqu'à des dizaines de mètres de haut
+			var nb_pas: int = maxi(1, int(ceil(l / PAS_REMBLAI)))
+			for kp in range(nb_pas):
+				var pa: Vector3 = a + seg * (float(kp) / nb_pas)
+				var pb: Vector3 = a + seg * (float(kp + 1) / nb_pas)
+				var y_tube: float = maxf(pa.y, pb.y) + H_AXE + R_GAL + 1.2
+				if relief.hauteur(pa.x, pa.z) < y_tube or relief.hauteur(pb.x, pb.z) < y_tube:
+					remblais.append([PackedVector2Array([xz.call(pa - rr * 4.5), xz.call(pa + rr * 4.5),
+						xz.call(pb + rr * 4.5), xz.call(pb - rr * 4.5)]), y_tube, 1.5 if fin and kp == nb_pas - 1 else 5.0])
 		i = j
 	var bb: Rect2 = Rect2(Vector2(portail.x, portail.z), Vector2.ZERO)
 	for p in sol:

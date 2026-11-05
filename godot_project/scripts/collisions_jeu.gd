@@ -25,7 +25,7 @@ const COUCHE_VEHICULE: int = 2
 const COUCHE_SKIEUR: int = 4
 const COUCHE_CAMERA: int = 8            # n'arrête que la caméra, pas le corps
 const COUCHE_CAMERA_BORD: int = 16      # idem, seulement quand on est à bord
-const COUCHE_RELIEF: int = 32           # sol au mètre : collisions à 5 m, à part (le ski lit hauteur_sol, au mètre)
+const COUCHE_RELIEF: int = 32           # sol au mètre, à part : le ski lit hauteur_sol et ne s'y arrête pas
 const DEMI_ZONE_GARE: float = 160.0     # zone des gares (m) : maillages réels
 const R_PAROI: float = 1.64             # rayon intérieur du tube des voitures
 
@@ -145,6 +145,8 @@ func assurer_autour(p: Vector3) -> void:
 	var relief: ReliefBuilder = _main.get("relief")
 	if relief != null and relief.pret:
 		var couvert: bool = false
+		if relief.fin != null and relief.fin.hd:
+			_sol_autour(relief, p)
 		for r in _zones_relief:
 			if (r as Rect2).grow(-80.0).has_point(Vector2(p.x, p.z)):
 				couvert = true
@@ -157,7 +159,9 @@ func assurer_autour(p: Vector3) -> void:
 				for bj in range(4):
 					var bloc: Rect2 = Rect2(r2.position + r2.size * 0.25 * Vector2(bi, bj), r2.size * 0.25)
 					# (relief fin : 25 fois plus de triangles, bloc redécoupé pour tenir dans le budget)
-					if relief.fin != null:
+					if relief.fin != null and relief.fin.hd:
+						pass                  # (le sol autour du joueur, _sol_autour)
+					elif relief.fin != null:
 						for bk in range(16):
 							var sb: Rect2 = Rect2(bloc.position + bloc.size * 0.25 * Vector2(bk % 4, bk / 4), bloc.size * 0.25)
 							_taches.append(_terrain.bind(relief, sb, TERRAIN_GRILLE))
@@ -717,21 +721,102 @@ func _mailles_fines(relief: ReliefBuilder, m: Rect2, faces: PackedVector3Array) 
 	var rf: ReliefFin = relief.fin
 	var j0: int = int(round((m.position.x - ReliefFin.X0) / ReliefFin.PX))
 	var i0: int = int(round((m.position.y - ReliefFin.Z0) / ReliefFin.PZ))
-	# (sol au mètre : collisions à 5 m, un nœud sur cinq, 25 fois moins de triangles)
-	var p: int = ReliefFin.K / ReliefFin.KF
-	for i in range(i0, i0 + ReliefFin.K, p):
-		for j in range(j0, j0 + ReliefFin.K, p):
+	for i in range(i0, i0 + ReliefFin.K):
+		for j in range(j0, j0 + ReliefFin.K):
 			var a: Vector3 = rf.noeud(i, j)
-			var b: Vector3 = rf.noeud(i, j + p)
-			var c: Vector3 = rf.noeud(i + p, j)
-			var d: Vector3 = rf.noeud(i + p, j + p)
+			var b: Vector3 = rf.noeud(i, j + 1)
+			var c: Vector3 = rf.noeud(i + 1, j)
+			var d: Vector3 = rf.noeud(i + 1, j + 1)
 			faces.append_array([a, b, c, b, d, c])
 
 
+## Sol au mètre : un seul morceau de collision, les mêmes triangles que l'affichage, autour du joueur,
+## préparé sur un fil de travail quand il s'est éloigné du centre.
+const SOL_DEMI: int = 32               # mailles de part et d'autre
+const SOL_SAUT: int = 12
+var _sol_forme: CollisionShape3D = null
+var _sol_centre: Vector2i = Vector2i(-1073741824, 0)
+var _sol_tache: int = -1
+var _sol_nouvelle: ConcavePolygonShape3D = null
+var _hd_outil: RefCounted = null
+var _sol_rects: PackedFloat32Array = PackedFloat32Array()
+
+
+func _sol_autour(relief: ReliefBuilder, p: Vector3) -> void:
+	# à ski et en remontée, personne ne marche : le sol vient de hauteur_sol. Remplacer la forme
+	# coûtait 31 ms, une fois par seconde à ski (relevé 4K du 04/11/2026)
+	var sk: SkieurJoueur = _main.get("skieur") as SkieurJoueur
+	if sk != null and _sol_forme != null and (sk.chausse or sk.get("support") != null):
+		return
+	if _sol_tache >= 0 and WorkerThreadPool.is_task_completed(_sol_tache):
+		WorkerThreadPool.wait_for_task_completion(_sol_tache)
+		_sol_tache = -1
+		_poser_sol()
+	var c: Vector2i = Vector2i(int((p.x - ReliefFin.X0) / ReliefFin.PX), int((p.z - ReliefFin.Z0) / ReliefFin.PZ))
+	var loin: bool = absi(c.x - _sol_centre.x) > SOL_SAUT or absi(c.y - _sol_centre.y) > SOL_SAUT
+	if not loin:
+		return
+	var tres_loin: bool = absi(c.x - _sol_centre.x) > SOL_DEMI - 4 or absi(c.y - _sol_centre.y) > SOL_DEMI - 4
+	if _hd_outil == null:
+		_hd_outil = ClassDB.instantiate("ReliefHD")
+		# (mailles à 25 m qui touchent une pièce fine : la pièce y a son propre maillage de collision)
+		for pc in relief._rects_pieces:
+			var r: Rect2 = pc
+			var ax: float = ReliefDonnees.X_OUEST + floor((r.position.x - ReliefDonnees.X_OUEST) / ReliefFin.L_X) * ReliefFin.L_X
+			var az: float = ReliefDonnees.Z_NORD + floor((r.position.y - ReliefDonnees.Z_NORD) / ReliefFin.L_Z) * ReliefFin.L_Z
+			var bx: float = ReliefDonnees.X_OUEST + ceil((r.end.x - ReliefDonnees.X_OUEST) / ReliefFin.L_X) * ReliefFin.L_X
+			var bz: float = ReliefDonnees.Z_NORD + ceil((r.end.y - ReliefDonnees.Z_NORD) / ReliefFin.L_Z) * ReliefFin.L_Z
+			_sol_rects.append_array(PackedFloat32Array([ax, az, bx, bz]))
+	if _sol_tache >= 0:
+		if tres_loin:
+			WorkerThreadPool.wait_for_task_completion(_sol_tache)
+			_sol_tache = -1
+			_poser_sol()
+		else:
+			return
+	var demande: Vector2i = c
+	_sol_centre = c
+	var grille: PackedFloat32Array = relief.fin.noeuds_grille()
+	var calcul: Callable = func() -> void:
+		var faces: PackedVector3Array = _hd_outil.call("facettes", grille, ReliefFin.NJ, ReliefFin.NI, demande.x - SOL_DEMI, demande.y - SOL_DEMI, 2 * SOL_DEMI,
+			ReliefFin.X0, ReliefFin.Z0, ReliefFin.PX, ReliefFin.PZ, _sol_rects)
+		var f: ConcavePolygonShape3D = ConcavePolygonShape3D.new()
+		f.set_faces(faces)
+		f.backface_collision = true
+		_sol_nouvelle = f
+	# (saut, écart au sol du joueur : tout de suite, le joueur ne doit pas passer au travers)
+	if tres_loin or (synchrone_sans_ecran and DisplayServer.get_name() == "headless"):
+		calcul.call()
+		_poser_sol()
+	else:
+		_sol_tache = WorkerThreadPool.add_task(calcul, false, "sol au mètre")
+
+
+func _poser_sol() -> void:
+	if _sol_nouvelle == null:
+		return
+	if _corps_relief == null:
+		_corps_relief = StaticBody3D.new()
+		_corps_relief.name = "SolAuMetre"
+		_corps_relief.collision_layer = COUCHE_RELIEF
+		_corps_relief.collision_mask = 0
+		add_child(_corps_relief)
+		_sol_forme = CollisionShape3D.new()
+		_sol_forme.name = "Sol"
+		_corps_relief.add_child(_sol_forme)
+	_sol_forme.shape = _sol_nouvelle
+	_sol_nouvelle = null
+
+
+func _exit_tree() -> void:
+	if _sol_tache >= 0:
+		WorkerThreadPool.wait_for_task_completion(_sol_tache)
+		_sol_tache = -1
+
+
 func _terrain(relief: ReliefBuilder, r: Rect2, quoi: int = TERRAIN_TOUT) -> void:
-	if quoi == TERRAIN_TOUT and relief.fin != null and relief.fin.hd:
-		_terrain(relief, r, TERRAIN_GRILLE)
-		_terrain(relief, r, TERRAIN_PIECES)
+	if quoi != TERRAIN_PIECES and relief.fin != null and relief.fin.hd:
+		_terrain(relief, r, TERRAIN_PIECES)   # (le reste : _sol_autour)
 		return
 	var faces: PackedVector3Array = PackedVector3Array()
 	var pieces: Array = relief._rects_pieces
@@ -825,14 +910,5 @@ func _terrain(relief: ReliefBuilder, r: Rect2, quoi: int = TERRAIN_TOUT) -> void
 	var cs: CollisionShape3D = CollisionShape3D.new()
 	cs.name = "Relief"
 	cs.shape = f
-	if quoi == TERRAIN_GRILLE and relief.fin != null and relief.fin.hd:
-		if _corps_relief == null:
-			_corps_relief = StaticBody3D.new()
-			_corps_relief.name = "SolAuMetre"
-			_corps_relief.collision_layer = COUCHE_RELIEF
-			_corps_relief.collision_mask = 0
-			add_child(_corps_relief)
-		_corps_relief.add_child(cs)
-	else:
-		_decor.add_child(cs)
+	_decor.add_child(cs)
 	triangles += faces.size() / 3

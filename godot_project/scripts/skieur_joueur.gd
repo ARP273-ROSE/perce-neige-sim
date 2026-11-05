@@ -1027,14 +1027,16 @@ func _anti_piege(delta: float, commande: bool) -> void:
 		return
 	_piege_long += _piege_t
 	_piege_t = 0.0
-	for h in [0.02, MARCHE_MAX]:
-		var ici: Transform3D = global_transform.translated(Vector3.UP * h)
-		if test_move(ici, Vector3.ZERO):
-			continue
-		for k in range(8):
-			var a: float = k * TAU / 8.0
-			if not test_move(ici, Vector3(cos(a), 0.0, sin(a)) * 0.06):
-				return
+	# (corps enfoncé dans un ouvrage : les essais ci-dessous passent, la marche non)
+	if not _corps_enfonce():
+		for h in [0.02, MARCHE_MAX]:
+			var ici: Transform3D = global_transform.translated(Vector3.UP * h)
+			if test_move(ici, Vector3.ZERO):
+				continue
+			for k in range(8):
+				var a: float = k * TAU / 8.0
+				if not test_move(ici, Vector3(cos(a), 0.0, sin(a)) * 0.06):
+					return
 	var ou: Vector3 = _place_libre()
 	if ou == Vector3.ZERO and dernier_sol != Vector3.ZERO and global_position.distance_to(dernier_sol) > 0.3 			and global_position.distance_to(dernier_sol) < REPLI_PROCHE:
 		ou = dernier_sol
@@ -1049,6 +1051,19 @@ func _anti_piege(delta: float, commande: bool) -> void:
 	support = null
 	_piege_long = 0.0
 	degagements += 1
+
+
+## Le corps, aminci de 5 cm et relevé de 15 cm (ni le sol ni un mur longé ne comptent), touche-t-il encore ?
+func _corps_enfonce() -> bool:
+	var c: CapsuleShape3D = CapsuleShape3D.new()
+	c.radius = RAYON - 0.05
+	c.height = maxf(TAILLE - 0.15, c.radius * 2.0)
+	var q: PhysicsShapeQueryParameters3D = PhysicsShapeQueryParameters3D.new()
+	q.shape = c
+	q.transform = Transform3D(Basis.IDENTITY, global_position + Vector3.UP * (0.15 + c.height * 0.5))
+	q.collision_mask = collision_mask
+	q.exclude = [get_rid()]
+	return not get_world_3d().direct_space_state.intersect_shape(q, 1).is_empty()
 
 
 func _place_libre() -> Vector3:
