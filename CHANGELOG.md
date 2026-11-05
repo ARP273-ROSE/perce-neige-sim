@@ -13,6 +13,8 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 **Relevé automatique et vue cachée** : le délai s'arrête tant que la vue est cachée, et un relevé en cours s'annule sans envoi.
 
+**Escalier de la terrasse à maille 50 m** (crans 3 et plus, PWA comprise) : il s'arrêtait 3,90 m au-dessus de la neige, le déblai des gares creusant ~4 m de trop. Les pièces des gares lisent un sol creusé comme à 25 m, agrandies de 25 m avec un fondu de 15 m. PWA : +8 à 11 k primitives, +6 Mo.
+
 **Ciel** (PC en Vulkan) : le ciel physique gris terne est remplacé par un nuanceur, bleu d'altitude, horizon clair, soleil, nuages immobiles coupés au cran 3 et au-delà et en profil allégé ; coût dans le bruit. PWA et OpenGL inchangés.
 
 **Crêtes et rochers sans le pack** (PC) : normales de la grille à 5 m posées en texture sur le maillage habituel, dès que le relief fin n'est pas affiché ; +82 Mo de mémoire vidéo, GPU presque inchangé sur 5070 Ti. Collisions et sol inchangés. `--sans-normales` le coupe.
