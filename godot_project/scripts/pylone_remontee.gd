@@ -568,6 +568,62 @@ func _pose_paire(pente_tete: float, zp: float, sgn: float, cable: Callable, demi
 	return [Vector3(0, y_loc + sgn * dist * cos(pente_loc), zp + sgn * dist * sin(pente_loc)), pente_loc]
 
 
+## Près du point de vue seulement : la roue de la paire devient un nœud qui tourne (loin, elle est fusionnée et
+## fixe, ses bras cachés par un disque). 16 à 30 roues par pylône, moins de 3 pylônes à la fois.
+static var _maillage_roue: ArrayMesh = null
+var _roues: Array = []                     # [nœud, sens de rotation autour de l'axe du galet]
+
+
+func roues_tournantes(actif: bool) -> void:
+	if actif != _roues.is_empty():
+		return
+	if _maillage_roue == null:
+		_maillage_roue = RollerMesh.build_galet(true)
+	var k: float = R_GALET / RollerMesh.R_BANDE
+	for montee in [true, false]:
+		for e in _paires[montee]:
+			var piv: Node3D = e[0]
+			var s: float = e[5]
+			var ancien: Node = piv.get_node_or_null("Roues")
+			for c in piv.get_children():
+				if c is MeshInstance3D:
+					(c as MeshInstance3D).visible = not actif
+			if not actif:
+				if ancien != null:
+					ancien.queue_free()
+				continue
+			var demi: float = (float(e[4]) - float(e[3])) * 0.5
+			var n: Node3D = Node3D.new()
+			n.name = "Roues"
+			piv.add_child(n)
+			# le cadre de la paire, sans ses roues
+			var cadre: Node3D = Node3D.new()
+			n.add_child(cadre)
+			if not MeshMerge.poser_partage(cadre, "cadre|%.1f|%.3f" % [s, demi]):
+				var fy: float = RollerMesh.FLASQUE_Y * R_GALET / RollerMesh.R_BANDE
+				for sx in [-fy, fy]:
+					RemonteeKit.poutre(cadre, Vector3(sx, -s * 0.11, -demi + 0.14), Vector3(sx, -s * 0.11, demi - 0.14), 0.016, 0.13, "acier_noir", Vector3.RIGHT)
+				RemonteeKit.cylindre(cadre, 0.035, 0.035, 0.26, Transform3D(Basis(Vector3.FORWARD, PI * 0.5), Vector3.ZERO), "acier_noir", 10)
+				MeshMerge.fusion_partagee(cadre, "Cadre")
+			for dz in ([-demi, demi] if demi > 0.0 else [0.0]):
+				var mi: MeshInstance3D = MeshInstance3D.new()
+				mi.mesh = _maillage_roue
+				mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+				mi.transform = Transform3D(Basis(Vector3.FORWARD, PI * 0.5).scaled(Vector3(k, k, k)), Vector3(0, -s * 0.11, dz))
+				n.add_child(mi)
+				# le câble file vers l'amont (−Z) sur le brin montant, et touche le haut d'une roue dessous, le bas
+				# d'une roue dessus
+				_roues.append([mi, s if montee else -s])
+	if not actif:
+		_roues.clear()
+
+
+## Le câble a parcouru R·dphi.
+func tourner_roues(dphi: float) -> void:
+	for r in _roues:
+		(r[0] as Node3D).rotate_object_local(Vector3.UP, float(r[1]) * dphi)
+
+
 ## Paires calées sur le câble TEL QU'IL EST AFFICHÉ (flèche sous les
 ## véhicules, onde aux arrêts) : le câble rentrait dans les galets aux bouts
 ## des balanciers (retour d'utilisateur, 25/10/2026). `cable` : z local du

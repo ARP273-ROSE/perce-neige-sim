@@ -202,6 +202,7 @@ func demolir(poubelle: Array) -> void:
 	_vehicules.clear()
 	_corps.clear()
 	_pyl.clear()
+	_roues_vues.clear()
 	_pyl_touches.clear()
 	_poulies.clear()
 	_pneus.clear()
@@ -245,6 +246,7 @@ func construire() -> void:
 			c.queue_free()
 	_vehicules.clear()
 	_pyl.clear()
+	_roues_vues.clear()
 	_pyl_touches.clear()
 	_corps.clear()
 	_portillons_gares.clear()
@@ -3564,8 +3566,8 @@ func _lanceurs() -> void:
 				ame2.append(rail2[q] + Vector3(0, -0.075, 0))
 			RemonteeKit.tube(r_node, rail2, 0.03, "acier", 6)
 			# la couronne rouge qui porte le rail
-			RemonteeKit.tube(r_node, ame1, 0.05, "cabine_rouge", 6)
-			RemonteeKit.tube(r_node, ame2, 0.05, "cabine_rouge", 6)
+			RemonteeKit.tube(r_node, ame1, 0.05, "cabine_rouge", 4)
+			RemonteeKit.tube(r_node, ame2, 0.05, "cabine_rouge", 4)
 		RemonteeKit.tube(r_node, poutre_haut, 0.07, "galva_pylone", 6)
 		# suspentes du lanceur à la charpente, tous les 3 m
 		var k: int = 0
@@ -4111,16 +4113,17 @@ func _cavaliers(parent: Node3D) -> void:
 			var y_tr: float = VehiculeRemontee.Y_TRACTEUR_3S
 			var r_g: float = 0.15
 			for sx in [-1.0, 1.0]:
-				RemonteeKit.boite_en(c, Vector3(0.08, 0.14, 0.16), Vector3(sx * e, -0.05, 0), "acier_noir")
+				RemonteeKit.boite_en(c, Vector3(0.08, 0.14, 0.16), Vector3(sx * e, -0.05, 0), "galva_pylone")
 				for sz in [-0.05, 0.05]:
 					RemonteeKit.poutre(c, Vector3(sx * e, -0.12, sz), Vector3(sx * 0.12, y_tr - 0.12, sz), 0.012, 0.13, "galva_pylone", Vector3.BACK)
-				RemonteeKit.barre(c, Vector3(sx * 0.14, y_tr + 0.08, 0), Vector3(sx * e * 0.72, -0.17, 0), 0.008, "galva", 4)
+				RemonteeKit.barre(c, Vector3(sx * 0.14, y_tr + 0.08, 0), Vector3(sx * e * 0.72, -0.17, 0), 0.008, "galva_pylone", 4)
 			RemonteeKit.boite_en(c, Vector3(0.34, 0.05, 0.16), Vector3(0, y_tr - 0.12, 0), "galva_pylone")
 			RemonteeKit.galet(c, Vector3(0, y_tr - 0.03 - r_g, 0), r_g)
 			var garde: PackedVector3Array = PackedVector3Array()
 			for g in [Vector3(-0.17, y_tr - 0.12, 0), Vector3(-0.09, y_tr - 0.42, 0), Vector3(0.09, y_tr - 0.42, 0), Vector3(0.17, y_tr - 0.12, 0)]:
 				garde.append(g)
-			RemonteeKit.tube(c, garde, 0.008, "galva", 4)
+			RemonteeKit.tube(c, garde, 0.008, "galva_pylone", 4)
+			MeshMerge.merge(c, [], "Cavalier", true)
 
 
 func _porteurs(parent: Node3D) -> void:
@@ -4269,6 +4272,7 @@ func _process_corps(delta: float) -> void:
 	if tricable():
 		_caler_cavaliers()
 	_tourner_pneus(delta)
+	_roues_proches(delta)
 	if _mat_cable != null:
 		var pas: float = 0.45 * diametre_cable / 52.0
 		_phase_cable = fposmod(_phase_cable + vitesse_reelle * delta, pas)
@@ -5247,6 +5251,33 @@ func _caler_galets() -> void:
 				var dp: float = d - z
 				return y_cable(dp, montee) - _fleche(dp, montee) - y_t)
 		_cales_vues[py] = true
+
+
+## Galets des pylônes proches : ils tournent à v/R. Plus loin on ne distingue plus leurs bras.
+static var ROUES_JUSQUA: float = 25.0 if OS.has_feature("web") else 45.0
+var _roues_vues: Array = []
+var _roues_tour: int = 0
+
+
+func _roues_proches(delta: float) -> void:
+	if not vue_active or _pyl.is_empty() or tricable() or PerfManager.allege:
+		return
+	_roues_tour = (_roues_tour + 1) % 8
+	if _roues_tour == 0:
+		for q in _pyl:
+			var py: PyloneRemontee = q[0]
+			if not (py is PyloneRemontee) or py._paires[true].is_empty():
+				continue
+			var pres: bool = Vector2(py.position.x - point_vue.x, py.position.z - point_vue.z).length() < ROUES_JUSQUA
+			if pres != (not py._roues.is_empty()):
+				py.roues_tournantes(pres)
+				if pres:
+					_roues_vues.append(py)
+				else:
+					_roues_vues.erase(py)
+	var dphi: float = maxf(vitesse_reelle, 0.0) * delta / PyloneRemontee.R_GALET
+	for py2 in _roues_vues:
+		(py2 as PyloneRemontee).tourner_roues(dphi)
 
 
 func _placer(i: int) -> void:

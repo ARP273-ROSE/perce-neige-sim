@@ -214,7 +214,9 @@ static func build_galet(detail: bool) -> ArrayMesh:
 			var r0: float = R_MOYEU - 0.01
 			var r1: float = R_JANTE + 0.012
 			var c: Vector3 = dirv * (r0 + r1) * 0.5
-			_boite(st, c, Vector3((r1 - r0) * 0.5, 0.02, 0.022), dirv, Vector3.UP, tang)
+			# un bras plus large : cinq bras égaux se figent ou tournent à l'envers à l'écran dès que la roue
+			# fait plus d'un cinquième de tour par deux images ; là, le motif ne se répète qu'au tour complet
+			_boite(st, c, Vector3((r1 - r0) * 0.5, 0.02, 0.05 if k == 0 else 0.022), dirv, Vector3.UP, tang)
 	else:
 		# loin : l'ouverture des joues est fermée par un disque sombre
 		var fond: PackedVector2Array = PackedVector2Array([
