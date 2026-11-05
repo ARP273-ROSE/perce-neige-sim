@@ -666,6 +666,7 @@ func _finition_pas() -> bool:
 				_k_fin += 1
 				return false
 			_poser_trous()
+			_h25 = PackedFloat32Array()
 			_pas_fin = 2
 		2:
 			_build_flancs()
@@ -695,17 +696,19 @@ func _hauteur_tri(x: float, z: float) -> float:
 	return _tri_sur(_h, x, z)
 
 
-func _tri_sur(grille: PackedFloat32Array, x: float, z: float) -> float:
+func _tri_sur(grille: PackedFloat32Array, x: float, z: float, pas: int = 0) -> float:
+	if pas <= 0:
+		pas = _pas
 	var lim_x: int = ReliefDonnees.NX - 1
 	var lim_z: int = ReliefDonnees.NZ - 1
-	var fx: float = clampf((x - ReliefDonnees.X_OUEST) / _dx, 0.0, lim_x - 0.001) / _pas
-	var fz: float = clampf((z - ReliefDonnees.Z_NORD) / _dz, 0.0, lim_z - 0.001) / _pas
-	var j0: int = int(fx) * _pas
-	var i0: int = int(fz) * _pas
+	var fx: float = clampf((x - ReliefDonnees.X_OUEST) / _dx, 0.0, lim_x - 0.001) / pas
+	var fz: float = clampf((z - ReliefDonnees.Z_NORD) / _dz, 0.0, lim_z - 0.001) / pas
+	var j0: int = int(fx) * pas
+	var i0: int = int(fz) * pas
 	var wx: float = fx - int(fx)
 	var wz: float = fz - int(fz)
-	var j1: int = mini(j0 + _pas, lim_x)
-	var i1: int = mini(i0 + _pas, lim_z)
+	var j1: int = mini(j0 + pas, lim_x)
+	var i1: int = mini(i0 + pas, lim_z)
 	var n: int = ReliefDonnees.NX
 	var a: float = grille[i0 * n + j0]
 	var b: float = grille[i0 * n + j1]
@@ -728,7 +731,22 @@ const DEBLAI_TALUS: float = 1.0        # hauteur par mètre, autour de l'emprise
 const DEBLAI_NON: Array = ["tph_grande_motte", "olympique"]
 
 
+## Maille à 50 m : le déblai couvre des mailles entières, plus large qu'à 25 m (4 m de trop au pied de
+## l'escalier de la terrasse). Les pièces des gares lisent une copie creusée comme à 25 m.
 func _creuser_gares() -> void:
+	if _pas > 1:
+		var h_aff: PackedFloat32Array = _h
+		var pas_aff: int = _pas
+		_h = _h.duplicate()
+		_pas = 1
+		_creuser_gares_corps()
+		_h25 = _h
+		_h = h_aff
+		_pas = pas_aff
+	_creuser_gares_corps()
+
+
+func _creuser_gares_corps() -> void:
 	var interieur: Dictionary = {}
 	for j in RemonteesDomaine.JUMELAGES:
 		interieur[[j[0], false]] = true    # (tronçon bas : gare amont intermédiaire)
@@ -884,8 +902,14 @@ func _poser_trous() -> void:
 		fin.anneaux.poser_trous(sous_pieces + _fosses.values().filter(func(r: Rect2) -> bool: return r != _fosses.get("relief_fin", Rect2())))
 
 
+const FONDU_PIECE: float = 15.0
+const GRANDI_PIECE: float = 25.0
+var _h25: PackedFloat32Array = PackedFloat32Array()
+
+
 func _build_piece(am: Dictionary) -> void:
-	var r: Rect2 = am["rect"]
+	# (maille à 50 m : le fondu vers les tuiles ne doit pas atteindre les ouvrages, ici 8 m d'écart entre les grilles)
+	var r: Rect2 = (am["rect"] as Rect2).grow(GRANDI_PIECE if _pas > 1 else 0.0)
 	var nx: int = int(ceil(r.size.x / PAS_PIECE)) + 1
 	var nz: int = int(ceil(r.size.y / PAS_PIECE)) + 1
 	var lx: float = r.size.x / (nx - 1)
@@ -912,6 +936,11 @@ func _build_piece(am: Dictionary) -> void:
 			var z: float = r.position.y + i * lz
 			var q: Vector2 = Vector2(x, z)
 			var h: float = _hauteur_tri(x, z)
+			# maille à 50 m (crans bas) : l'intérieur de la pièce reste sur la grille à 25 m, celle pour
+			# laquelle les ouvrages sont réglés (la neige montait de 0,9 m au pied de l'escalier de la terrasse)
+			if _pas > 1 and (fin == null or not fin.fine_ici(x, z)):
+				var d_bord: float = minf(minf(x - r.position.x, r.end.x - x), minf(z - r.position.y, r.end.y - z))
+				h = lerpf(h, _tri_sur(_h25, x, z, 1), smoothstep(0.0, FONDU_PIECE, d_bord))
 			# bords de la pièce : exactement le bloc (aucune marche)
 			var bord: bool = i == 0 or j == 0 or i == nz - 1 or j == nx - 1
 			if not bord:
