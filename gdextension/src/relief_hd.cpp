@@ -2,6 +2,8 @@
 
 #include <godot_cpp/classes/file_access.hpp>
 #include <godot_cpp/core/class_db.hpp>
+#include <godot_cpp/variant/packed_int32_array.hpp>
+#include <godot_cpp/variant/packed_vector3_array.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
 
 #include <algorithm>
@@ -116,8 +118,16 @@ inline int64_t taille_bc5(int taille) {
 void ReliefHD::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("decoder", "chemin", "niveau", "nj", "ni"), &ReliefHD::decoder);
 	ClassDB::bind_method(D_METHOD("raccorder", "leve", "ref", "fine_ref", "h", "h0", "nx", "nz", "k_h", "k_r", "capsules", "rects", "r1_rect", "x0", "z0", "px", "pz"), &ReliefHD::raccorder);
-	ClassDB::bind_method(D_METHOD("anneaux", "hn", "nj", "ni", "h", "nx", "nz", "k", "cj", "ci", "m", "niveaux"), &ReliefHD::anneaux);
+	ClassDB::bind_method(D_METHOD("pyramide", "hn", "nj", "ni", "niveaux"), &ReliefHD::pyramide);
+	ClassDB::bind_method(D_METHOD("anneaux", "hn", "pyr", "nj", "ni", "h", "nx", "nz", "k", "cj", "ci", "m", "niveaux"), &ReliefHD::anneaux);
+	ClassDB::bind_method(D_METHOD("facettes", "hn", "nj", "ni", "j0", "i0", "n", "x0", "z0", "px", "pz", "rects"), &ReliefHD::facettes);
 	ClassDB::bind_method(D_METHOD("normales_couche", "hn", "nj", "ni", "ti", "tj", "taille", "marge", "px", "pz"), &ReliefHD::normales_couche);
+	ClassDB::bind_method(D_METHOD("couches", "chemin", "sauter_niveaux"), &ReliefHD::couches);
+	ClassDB::bind_method(D_METHOD("reechantillonner", "src", "sj", "si", "nj", "ni", "rapport"), &ReliefHD::reechantillonner);
+	ClassDB::bind_method(D_METHOD("memoire_video"), &ReliefHD::memoire_video);
+	ClassDB::bind_method(D_METHOD("texture_detail", "taille"), &ReliefHD::texture_detail);
+	ClassDB::bind_method(D_METHOD("quart_anneau", "j0", "i0", "d", "t0", "t1"), &ReliefHD::quart_anneau);
+	ClassDB::bind_method(D_METHOD("foret", "chemin", "hn", "nj", "ni", "x0", "z0", "px", "pz", "capsules", "rects"), &ReliefHD::foret);
 	ClassDB::bind_method(D_METHOD("normales", "hn", "nj", "ni", "tuile", "taille", "marge", "px", "pz"), &ReliefHD::normales);
 }
 
@@ -136,6 +146,10 @@ PackedFloat32Array ReliefHD::decoder(const String &chemin, int niveau, int nj, i
 	std::memcpy(&pack_nj, tete + 32, 4);
 	std::memcpy(&pack_ni, tete + 36, 4);
 	std::memcpy(&n, tete + 44, 4);
+	const int64_t longueur = int64_t(f->get_length());
+	if (int64_t(n) * 36 + 48 > longueur) {
+		return sortie;
+	}
 	const PackedByteArray b_index = f->get_buffer(int64_t(n) * 36);
 	if (b_index.size() != int64_t(n) * 36) {
 		return sortie;
@@ -148,10 +162,21 @@ PackedFloat32Array ReliefHD::decoder(const String &chemin, int niveau, int nj, i
 		return sortie;
 	}
 	std::vector<EntreeTuile> tuiles;
+	// (grille couverte exactement : une tuile absente laisserait des altitudes nulles)
+	int64_t couverts = 0;
 	for (const EntreeTuile &e : index) {
 		if (e.niveau == niveau) {
+			if (int64_t(e.taille) > longueur || int64_t(e.ti) + e.hauteur > ni || int64_t(e.tj) + e.largeur > nj || e.largeur < 2 || e.hauteur < 2
+					|| !(e.pas > 0.0f) || !std::isfinite(e.base)) {
+				return sortie;
+			}
 			tuiles.push_back(e);
+			couverts += int64_t(e.hauteur - (e.ti > 0 ? 1 : 0)) * (e.largeur - (e.tj > 0 ? 1 : 0));
 		}
+	}
+	if (couverts != int64_t(nj) * ni) {
+		UtilityFunctions::print(String::utf8("[ReliefHD] pack incomplet : "), couverts, " / ", int64_t(nj) * ni);
+		return sortie;
 	}
 	sortie.resize(int64_t(nj) * ni);
 	float *ps = sortie.ptrw();
@@ -207,6 +232,22 @@ PackedFloat32Array ReliefHD::decoder(const String &chemin, int niveau, int nj, i
 	if (erreurs.load() > 0) {
 		UtilityFunctions::print("[ReliefHD] tuiles illisibles : ", erreurs.load());
 		return PackedFloat32Array();
+	}
+	// (altitudes du domaine : 1 400 à 3 900 m ; des tuiles décodées mais fausses n'y passent pas)
+	{
+		std::atomic<int64_t> hors(0);
+		en_parallele(ni, [&](int64_t i) {
+			for (int64_t j = 0; j < nj; j += 7) {
+				const float v = ps[i * nj + j];
+				if (!(v > 500.0f && v < 5000.0f)) {
+					hors++;
+				}
+			}
+		});
+		if (hors.load() > int64_t(ni) * nj / 7 / 100) {
+			UtilityFunctions::print(String::utf8("[ReliefHD] altitudes hors du domaine : "), hors.load());
+			return PackedFloat32Array();
+		}
 	}
 	// Aberrations du relevé : quelques nœuds isolés, à des centaines de mètres de leurs voisins
 	// (2636, 1409, 2634 m). Remplacés par la médiane autour d'eux, une barre rocheuse tient.
@@ -405,39 +446,147 @@ Array ReliefHD::raccorder(const PackedFloat32Array &leve, const PackedFloat32Arr
 	return sortie;
 }
 
-Array ReliefHD::anneaux(const PackedFloat32Array &hn, int nj, int ni, const PackedFloat32Array &h, int nx, int nz, int k,
+Array ReliefHD::pyramide(const PackedFloat32Array &hn, int nj, int ni, int niveaux) const {
+	Array sortie;
+	PackedFloat32Array prec = hn;
+	int pj = nj;
+	int pi = ni;
+	for (int n = 1; n < niveaux; n++) {
+		const int qj = (pj - 1) / 2 + 1;
+		const int qi = (pi - 1) / 2 + 1;
+		PackedFloat32Array o;
+		o.resize(int64_t(qj) * qi);
+		float *po = o.ptrw();
+		const float *ps = prec.ptr();
+		const int wj = pj;
+		const int wi = pi;
+		en_parallele(qi, [&](int64_t i) {
+			const int64_t g = std::min<int64_t>(i * 2, wi - 1);
+			const float *l1 = ps + g * wj;
+			const float *l0 = ps + std::max<int64_t>(g - 1, 0) * wj;
+			const float *l2 = ps + std::min<int64_t>(g + 1, wi - 1) * wj;
+			float *out = po + i * qj;
+			for (int j = 0; j < qj; j++) {
+				const int c = std::min(j * 2, wj - 1);
+				const int a = std::max(c - 1, 0);
+				const int b = std::min(c + 1, wj - 1);
+				const float v0 = l0[a] + 2.0f * l0[c] + l0[b];
+				const float v1 = l1[a] + 2.0f * l1[c] + l1[b];
+				const float v2 = l2[a] + 2.0f * l2[c] + l2[b];
+				out[j] = (v0 + 2.0f * v1 + v2) * (1.0f / 16.0f);
+			}
+		});
+		sortie.append(o);
+		prec = o;
+		pj = qj;
+		pi = qi;
+	}
+	return sortie;
+}
+
+Array ReliefHD::anneaux(const PackedFloat32Array &hn, const Array &pyr, int nj, int ni, const PackedFloat32Array &h, int nx, int nz, int k,
 		int cj, int ci, int m, int niveaux) const {
 	Array sortie;
-	const float *ps = hn.ptr();
 	const float *ph = h.ptr();
 	const int w = m + 1;
+	std::vector<PackedFloat32Array> garde;
+	garde.push_back(hn);
+	for (int n = 0; n < pyr.size(); n++) {
+		garde.push_back(pyr[n]);
+	}
 	for (int n = 0; n < niveaux; n++) {
 		const int s = 1 << n;
 		const bool dernier = n == niveaux - 1;
+		const int gj = ((nj - 1) >> n) + 1;
+		const int gi = ((ni - 1) >> n) + 1;
+		const int gj2 = ((nj - 1) >> (n + 1)) + 1;
+		const int gi2 = ((ni - 1) >> (n + 1)) + 1;
+		const float *pn = garde[size_t(n)].ptr();
+		const float *pp = dernier ? nullptr : garde[size_t(n + 1)].ptr();
 		PackedByteArray o;
-		o.resize(int64_t(w) * w * (dernier ? 8 : 4));
+		o.resize(int64_t(w) * w * 8);
 		float *po = reinterpret_cast<float *>(o.ptrw());
-		const int j0 = cj - (m / 2) * s;
-		const int i0 = ci - (m / 2) * s;
+		// nœud de ce niveau (SAUT est multiple de 2^n : le centre tombe sur la grille du niveau)
+		const int j0 = cj / s - m / 2;
+		const int i0 = ci / s - m / 2;
+		const auto fp = [&](int a, int b) {
+			return pp[int64_t(std::min(std::max(a, 0), gi2 - 1)) * gj2 + std::min(std::max(b, 0), gj2 - 1)];
+		};
 		for (int a = 0; a < w; a++) {
-			const int gi = std::min(std::max(i0 + a * s, 0), ni - 1);
-			const float *l = ps + int64_t(gi) * nj;
-			if (!dernier) {
-				float *out = po + size_t(a) * w;
-				for (int b = 0; b < w; b++) {
-					out[b] = l[std::min(std::max(j0 + b * s, 0), nj - 1)];
-				}
-			} else {
-				float *out = po + size_t(a) * w * 2;
-				for (int b = 0; b < w; b++) {
-					const int gj = std::min(std::max(j0 + b * s, 0), nj - 1);
-					out[2 * b] = l[gj];
-					out[2 * b + 1] = ReliefHD::hauteur_tri(ph, nx, nz, double(gj) / k, double(gi) / k);
+			const int ga = i0 + a;
+			const int gc = std::min(std::max(ga, 0), gi - 1);
+			const float *l = pn + int64_t(gc) * gj;
+			float *out = po + size_t(a) * w * 2;
+			for (int b = 0; b < w; b++) {
+				const int gb = j0 + b;
+				out[2 * b] = l[std::min(std::max(gb, 0), gj - 1)];
+				if (dernier) {
+					const int ja = std::min(std::max(gb * s, 0), nj - 1);
+					const int ia = std::min(std::max(ga * s, 0), ni - 1);
+					out[2 * b + 1] = ReliefHD::hauteur_tri(ph, nx, nz, double(ja) / k, double(ia) / k);
+				} else {
+					// même découpe que le maillage du niveau suivant ; un indice négatif reste pair ou impair
+					const int oa = ga & 1;
+					const int ob = gb & 1;
+					const int a2 = (ga - oa) / 2;
+					const int b2 = (gb - ob) / 2;
+					float v;
+					if (oa == 0 && ob == 0) {
+						v = fp(a2, b2);
+					} else if (oa == 0) {
+						v = 0.5f * (fp(a2, b2) + fp(a2, b2 + 1));
+					} else if (ob == 0) {
+						v = 0.5f * (fp(a2, b2) + fp(a2 + 1, b2));
+					} else {
+						v = 0.5f * (fp(a2, b2 + 1) + fp(a2 + 1, b2));
+					}
+					out[2 * b + 1] = v;
 				}
 			}
 		}
 		sortie.append(o);
 	}
+	return sortie;
+}
+
+PackedVector3Array ReliefHD::facettes(const PackedFloat32Array &hn, int nj, int ni, int j0, int i0, int n,
+		double x0, double z0, double px, double pz, const PackedFloat32Array &rects) const {
+	PackedVector3Array sortie;
+	sortie.resize(int64_t(n) * n * 6);
+	Vector3 *o = sortie.ptrw();
+	const float *ps = hn.ptr();
+	int64_t q = 0;
+	for (int i = std::max(i0, 0); i < std::min(i0 + n, ni - 1); i++) {
+		const float z = float(z0 + i * pz);
+		const float z2 = float(z0 + (i + 1) * pz);
+		const float *l = ps + int64_t(i) * nj;
+		for (int j = std::max(j0, 0); j < std::min(j0 + n, nj - 1); j++) {
+			const float x = float(x0 + j * px);
+			const float x2 = float(x0 + (j + 1) * px);
+			bool coupe = false;
+			for (int64_t r = 0; r + 3 < rects.size(); r += 4) {
+				if (x2 > rects[r] && x < rects[r + 2] && z2 > rects[r + 1] && z < rects[r + 3]) {
+					coupe = true;
+					break;
+				}
+			}
+			if (coupe) {
+				continue;
+			}
+			const Vector3 a(x, l[j], z);
+			const Vector3 b(x2, l[j + 1], z);
+			const Vector3 c(x, l[j + nj], z2);
+			const Vector3 d(x2, l[j + nj + 1], z2);
+			o[q] = a;
+			o[q + 1] = b;
+			o[q + 2] = c;
+			o[q + 3] = b;
+			o[q + 4] = d;
+			o[q + 5] = c;
+			q += 6;
+		}
+	}
+	sortie.resize(q);
 	return sortie;
 }
 
@@ -501,6 +650,331 @@ PackedByteArray ReliefHD::normales_couche(const PackedFloat32Array &hn, int nj, 
 			}
 		}
 		w = w2;
+	}
+	return sortie;
+}
+
+PackedFloat32Array ReliefHD::reechantillonner(const PackedFloat32Array &src, int sj, int si, int nj, int ni, double rapport) const {
+	PackedFloat32Array o;
+	o.resize(int64_t(nj) * ni);
+	float *po = o.ptrw();
+	const float *ps = src.ptr();
+	en_parallele(ni, [&](int64_t i) {
+		const double fz = std::min(double(i) * rapport, double(si) - 1.001);
+		const int64_t a = int64_t(fz);
+		const float v = float(fz - double(a));
+		const float *l0 = ps + a * sj;
+		const float *l1 = l0 + sj;
+		float *out = po + i * nj;
+		for (int j = 0; j < nj; j++) {
+			const double fx = std::min(double(j) * rapport, double(sj) - 1.001);
+			const int b = int(fx);
+			const float u = float(fx - double(b));
+			out[j] = (l0[b] * (1.0f - u) + l0[b + 1] * u) * (1.0f - v) + (l1[b] * (1.0f - u) + l1[b + 1] * u) * v;
+		}
+	});
+	return o;
+}
+
+Array ReliefHD::quart_anneau(int j0, int i0, int d, int t0, int t1) const {
+	const int nb = d + 1;
+	PackedVector3Array v;
+	v.resize(int64_t(nb) * nb);
+	Vector3 *pv = v.ptrw();
+	for (int i = 0; i < nb; i++) {
+		for (int j = 0; j < nb; j++) {
+			pv[size_t(i) * nb + j] = Vector3(float(j0 + j), 0.0f, float(i0 + i));
+		}
+	}
+	PackedInt32Array idx;
+	idx.resize(int64_t(d) * d * 6);
+	int32_t *po = idx.ptrw();
+	int64_t o = 0;
+	for (int i = 0; i < d; i++) {
+		const int gi = i0 + i;
+		for (int j = 0; j < d; j++) {
+			const int gj = j0 + j;
+			if (t1 > t0 && gi >= t0 && gi < t1 && gj >= t0 && gj < t1) {
+				continue;
+			}
+			const int a = i * nb + j;
+			po[o] = a;
+			po[o + 1] = a + 1;
+			po[o + 2] = a + nb;
+			po[o + 3] = a + 1;
+			po[o + 4] = a + nb + 1;
+			po[o + 5] = a + nb;
+			o += 6;
+		}
+	}
+	idx.resize(o);
+	Array s;
+	s.append(v);
+	s.append(idx);
+	return s;
+}
+
+PackedByteArray ReliefHD::texture_detail(int taille) const {
+	PackedByteArray o;
+	o.resize(int64_t(taille) * taille * 4);
+	uint8_t *po = o.ptrw();
+	std::vector<float> h(size_t(taille) * taille, 0.0f);
+	const auto alea = [](uint32_t a, uint32_t b, uint32_t c) {
+		uint32_t x = a * 73856093u ^ b * 19349663u ^ c * 83492791u;
+		x ^= x >> 13;
+		x *= 1274126177u;
+		x ^= x >> 16;
+		return float(x & 0xffffu) / 65535.0f;
+	};
+	// bruit raccordable : grilles de 8 à 128 cases sur le côté
+	float poids = 1.0f;
+	float total = 0.0f;
+	for (int per = 8; per <= 128; per *= 2) {
+		for (int i = 0; i < taille; i++) {
+			const float fz = float(i) * per / taille;
+			const int a = int(fz);
+			float v = fz - float(a);
+			v = v * v * (3.0f - 2.0f * v);
+			for (int j = 0; j < taille; j++) {
+				const float fx = float(j) * per / taille;
+				const int b = int(fx);
+				float u = fx - float(b);
+				u = u * u * (3.0f - 2.0f * u);
+				const float c00 = alea(a % per, b % per, per);
+				const float c01 = alea(a % per, (b + 1) % per, per);
+				const float c10 = alea((a + 1) % per, b % per, per);
+				const float c11 = alea((a + 1) % per, (b + 1) % per, per);
+				h[size_t(i) * taille + j] += poids * ((c00 * (1.0f - u) + c01 * u) * (1.0f - v) + (c10 * (1.0f - u) + c11 * u) * v);
+			}
+		}
+		total += poids;
+		poids *= 0.6f;
+	}
+	const float echelle = float(taille) / 8.0f;
+	for (int i = 0; i < taille; i++) {
+		const int im = (i + taille - 1) % taille;
+		const int ip = (i + 1) % taille;
+		for (int j = 0; j < taille; j++) {
+			const int jm = (j + taille - 1) % taille;
+			const int jp = (j + 1) % taille;
+			const float gx = (h[size_t(i) * taille + jp] - h[size_t(i) * taille + jm]) * echelle / total;
+			const float gz = (h[size_t(ip) * taille + j] - h[size_t(im) * taille + j]) * echelle / total;
+			uint8_t *c = po + (size_t(i) * taille + j) * 4;
+			c[0] = uint8_t(std::min(std::max(gx * 127.5f + 127.5f, 0.0f), 255.0f));
+			c[1] = uint8_t(std::min(std::max(gz * 127.5f + 127.5f, 0.0f), 255.0f));
+			c[2] = uint8_t(alea(uint32_t(i), uint32_t(j), 991u) * 255.0f);
+			c[3] = uint8_t(std::min(std::max(h[size_t(i) * taille + j] / total * 255.0f, 0.0f), 255.0f));
+		}
+	}
+	return o;
+}
+
+Array ReliefHD::couches(const String &chemin, int sauter_niveaux) const {
+	Array sortie;
+	Ref<FileAccess> f = FileAccess::open(chemin, FileAccess::READ);
+	if (f.is_null()) {
+		return sortie;
+	}
+	const PackedByteArray b_tete = f->get_buffer(32);
+	if (b_tete.size() != 32 || std::memcmp(b_tete.ptr(), "PNOH", 4) != 0) {
+		return sortie;
+	}
+	uint32_t champs[7];
+	std::memcpy(champs, b_tete.ptr() + 4, 28);
+	const int64_t nb = int64_t(champs[1]) * champs[2];
+	const int64_t longueur = int64_t(f->get_length());
+	if (nb <= 0 || nb * 16 + 32 > longueur || champs[4] != 2048) {
+		return sortie;
+	}
+	const PackedByteArray b_index = f->get_buffer(nb * 16);
+	if (b_index.size() != nb * 16) {
+		return sortie;
+	}
+	const uint64_t corps = uint64_t(32) + uint64_t(nb) * 16;
+	// taille exacte d'une couche BC7 de 2048 texels avec tous ses niveaux (comme le BC5)
+	const uint32_t attendu = uint32_t(taille_bc5(int(champs[4])));
+	std::vector<PackedByteArray> c(static_cast<size_t>(nb));
+	std::atomic<int> erreurs(0);
+	en_parallele(nb, [&](int64_t q) {
+		uint64_t pos;
+		uint32_t taille, brut;
+		std::memcpy(&pos, b_index.ptr() + q * 16, 8);
+		std::memcpy(&taille, b_index.ptr() + q * 16 + 8, 4);
+		std::memcpy(&brut, b_index.ptr() + q * 16 + 12, 4);
+		if (int64_t(taille) > longueur || brut != attendu) {
+			erreurs++;
+			return;
+		}
+		Ref<FileAccess> fk = FileAccess::open(chemin, FileAccess::READ);
+		if (fk.is_null()) {
+			erreurs++;
+			return;
+		}
+		fk->seek(corps + pos);
+		const PackedByteArray z = fk->get_buffer(taille);
+		c[size_t(q)] = z.decompress(brut, FileAccess::COMPRESSION_ZSTD);
+		if (c[size_t(q)].size() != int64_t(brut)) {
+			erreurs++;
+		}
+	});
+	if (erreurs.load() > 0) {
+		return sortie;
+	}
+	sortie.append(int(champs[6]));
+	// BC7 : 16 octets par bloc de 4 × 4 ; les niveaux écartés sont en tête des données
+	int taille = int(champs[4]);
+	int64_t saut = 0;
+	for (int k = 0; k < sauter_niveaux; k++) {
+		const int64_t b = (taille + 3) / 4;
+		saut += b * b * 16;
+		taille /= 2;
+	}
+	sortie.append(taille);
+	for (const PackedByteArray &o : c) {
+		sortie.append(saut > 0 ? o.slice(saut) : o);
+	}
+	return sortie;
+}
+
+Array ReliefHD::foret(const String &chemin, const PackedFloat32Array &hn, int nj, int ni, double x0, double z0, double px, double pz,
+		const PackedFloat32Array &capsules, const PackedFloat32Array &rects) const {
+	Array sortie;
+	Ref<FileAccess> f = FileAccess::open(chemin, FileAccess::READ);
+	if (f.is_null()) {
+		return sortie;
+	}
+	const PackedByteArray b_tete = f->get_buffer(32);
+	if (b_tete.size() != 32 || std::memcmp(b_tete.ptr(), "PNAB", 4) != 0) {
+		return sortie;
+	}
+	double ax0, az0;
+	float cote;
+	uint32_t n;
+	std::memcpy(&ax0, b_tete.ptr() + 8, 8);
+	std::memcpy(&az0, b_tete.ptr() + 16, 8);
+	std::memcpy(&cote, b_tete.ptr() + 24, 4);
+	std::memcpy(&n, b_tete.ptr() + 28, 4);
+	const int64_t longueur = int64_t(f->get_length());
+	if (int64_t(n) * 20 + 32 > longueur || !(cote > 0.0f)) {
+		return sortie;
+	}
+	const PackedByteArray b_index = f->get_buffer(int64_t(n) * 20);
+	if (b_index.size() != int64_t(n) * 20) {
+		return sortie;
+	}
+	const uint64_t corps = uint64_t(32) + uint64_t(n) * 20;
+	const float *ps = hn.ptr();
+	struct Resultat {
+		int cx = 0, cz = 0, nb = 0;
+		PackedFloat32Array tampon;
+	};
+	std::vector<Resultat> res(n);
+	const auto libre = [&](float x, float z) {
+		for (int64_t q = 0; q + 5 < capsules.size(); q += 6) {
+			const float ax = capsules[q], az = capsules[q + 1], bx = capsules[q + 2], bz = capsules[q + 3], r0 = capsules[q + 4];
+			if (x < std::min(ax, bx) - r0 || x > std::max(ax, bx) + r0 || z < std::min(az, bz) - r0 || z > std::max(az, bz) + r0) {
+				continue;
+			}
+			const float ux = bx - ax, uz = bz - az;
+			const float t = std::min(std::max(((x - ax) * ux + (z - az) * uz) / std::max(ux * ux + uz * uz, 1e-6f), 0.0f), 1.0f);
+			const float dx = x - (ax + ux * t), dz = z - (az + uz * t);
+			if (dx * dx + dz * dz < r0 * r0) {
+				return false;
+			}
+		}
+		for (int64_t q = 0; q + 3 < rects.size(); q += 4) {
+			if (x > rects[q] && x < rects[q + 2] && z > rects[q + 1] && z < rects[q + 3]) {
+				return false;
+			}
+		}
+		return true;
+	};
+	en_parallele(n, [&](int64_t k) {
+		const uint8_t *e = b_index.ptr() + k * 20;
+		uint16_t cx, cz;
+		uint32_t nb, taille;
+		uint64_t pos;
+		std::memcpy(&cx, e, 2);
+		std::memcpy(&cz, e + 2, 2);
+		std::memcpy(&nb, e + 4, 4);
+		std::memcpy(&pos, e + 8, 8);
+		std::memcpy(&taille, e + 16, 4);
+		if (int64_t(taille) > longueur || nb > 2000000u) {
+			return;
+		}
+		Ref<FileAccess> fk = FileAccess::open(chemin, FileAccess::READ);
+		if (fk.is_null()) {
+			return;
+		}
+		fk->seek(corps + pos);
+		const PackedByteArray z = fk->get_buffer(taille);
+		const PackedByteArray clair = z.decompress(int64_t(nb) * 7, FileAccess::COMPRESSION_ZSTD);
+		if (clair.size() != int64_t(nb) * 7) {
+			return;
+		}
+		std::vector<float> t;
+		t.reserve(size_t(nb) * 16 * 2);
+		int total = 0;
+		const auto poser = [&](float x, float zz, float h, float r, uint32_t graine) {
+			if (!libre(x, zz)) {
+				return;
+			}
+			const double fx = (x - x0) / px;
+			const double fz = (zz - z0) / pz;
+			if (fx < 0.0 || fz < 0.0 || fx >= nj - 1 || fz >= ni - 1) {
+				return;
+			}
+			const float y = ReliefHD::hauteur_tri(ps, nj, ni, fx, fz) - 0.2f;
+			const float a = float(graine % 628) * 0.01f;
+			const float c = std::cos(a), s = std::sin(a);
+			// lignes de la matrice : base (rotation Y × échelle r, h, r) et origine
+			const float l[16] = { c * r, 0.0f, s * r, x, 0.0f, h, 0.0f, y, -s * r, 0.0f, c * r, zz,
+				0.85f + float((graine >> 10) % 31) * 0.01f, 0.85f + float((graine >> 15) % 31) * 0.01f, 0.85f + float((graine >> 20) % 31) * 0.01f, 1.0f };
+			t.insert(t.end(), l, l + 16);
+			total++;
+		};
+		for (uint32_t q = 0; q < nb; q++) {
+			const uint8_t *a = clair.ptr() + size_t(q) * 7;
+			uint16_t ux, uz;
+			std::memcpy(&ux, a, 2);
+			std::memcpy(&uz, a + 2, 2);
+			const float x = float(ax0 + (double(cx) + double(ux) / 65535.0) * cote);
+			const float zz = float(az0 + (double(cz) + double(uz) / 65535.0) * cote);
+			// (hauteur plafonnée : au-delà de 40 m, des erreurs de la hauteur de végétation)
+			const float h = std::min(float(a[4]) * 0.25f, 40.0f);
+			const float r = std::max(float(a[5]) * 0.1f * 1.25f, 0.6f);
+			if (h < 2.0f) {
+				continue;
+			}
+			uint32_t g = (uint32_t(ux) * 2654435761u) ^ (uint32_t(uz) * 40503u) ^ q;
+			g ^= g >> 13;
+			poser(x, zz, h, r, g);
+			if (h >= 8.0f) {
+				g = g * 2654435761u + 7u;
+				const float ang = float(g % 628) * 0.01f;
+				const float d = r * (1.6f + float((g >> 10) % 100) * 0.012f);
+				const float k = 0.45f + float((g >> 18) % 30) * 0.01f;
+				poser(x + std::cos(ang) * d, zz + std::sin(ang) * d, h * k, r * k, g >> 3);
+			}
+		}
+		Resultat &o = res[size_t(k)];
+		o.cx = cx;
+		o.cz = cz;
+		o.nb = total;
+		o.tampon.resize(int64_t(t.size()));
+		if (!t.empty()) {
+			std::memcpy(o.tampon.ptrw(), t.data(), t.size() * 4);
+		}
+	});
+	for (const Resultat &o : res) {
+		if (o.nb > 0) {
+			Array c;
+			c.append(o.cx);
+			c.append(o.cz);
+			c.append(o.nb);
+			c.append(o.tampon);
+			sortie.append(c);
+		}
 	}
 	return sortie;
 }
