@@ -7,6 +7,12 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## Version suivante (non publiée)
 
+**Installation du décor haute définition** : le pupitre affiche la progression du téléchargement, puis dit quand relancer le simulateur.
+
+**Véhicules des lignes lointaines** (PWA) : ils s'arrêtaient net au-delà de 500 m ; ils avancent maintenant à tour de rôle, 3 lignes par pas.
+
+**Siège fantôme en gare** (PWA) : une ligne en construction montrait déjà ses sièges immobiles et leurs collisions, traversés par les sièges de la version préparée d'avance, et bloquait le skieur. Elle se construit maintenant cachée, plus vite quand il est tout près, avec un message s'il arrive trop tôt.
+
 **F10 pendant un relevé automatique** : le relevé automatique s'annule sans rien envoyer et le vrai démarre.
 
 **Port occupé** : le pupitre prend à chaque lancement la première paire de ports libre ; un ancien viewer n'entend plus rien et se ferme seul en 30 s.
@@ -14,6 +20,10 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 **Relevé automatique et vue cachée** : le délai s'arrête tant que la vue est cachée, et un relevé en cours s'annule sans envoi.
 
 **Escalier de la terrasse à maille 50 m** (crans 3 et plus, PWA comprise) : il s'arrêtait 3,90 m au-dessus de la neige, le déblai des gares creusant ~4 m de trop. Les pièces des gares lisent un sol creusé comme à 25 m, agrandies de 25 m avec un fondu de 15 m. PWA : +8 à 11 k primitives, +6 Mo.
+
+**Début de relevé** : la recherche des lecteurs audio est étalée, l'à-coup de 47 ms au départ tombe à l'image normale. Le compte des sons sous-estime les premières secondes du relevé.
+
+**Câbles et galets** : paires de galets posées au point réel du câble (écart médian 8 → 0 mm au repos, 66 lignes), sabot du 3S au câble lissé (2,3 m → moins de 8 cm), profil des lignes calculé sur la grille à 25 m à tous les crans (Fontaine Froide : entrée en gare 21,3° → 4,2° ; Loyes : crête régulière ; pylônes de mauvais signe 26 → 6 au cran 4). Restent 6 pylônes de mauvais signe. La PWA ne le verra qu'après recuisson.
 
 **Ciel** (PC en Vulkan) : le ciel physique gris terne est remplacé par un nuanceur, bleu d'altitude, horizon clair, soleil, nuages immobiles coupés au cran 3 et au-delà et en profil allégé ; coût dans le bruit. PWA et OpenGL inchangés.
 
