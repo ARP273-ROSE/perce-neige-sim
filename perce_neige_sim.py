@@ -10473,6 +10473,32 @@ class GameWidget(QWidget):
             self._reposition_godot_embed()
         self.update()
 
+    def _hud_en_cache(self, p: QPainter, rect: QRectF, k: float) -> None:
+        """3D affichée : le tableau de bord dessiné une image sur trois (10 Hz) dans une image
+        gardée, copiée le reste du temps. Il prenait 6 ms sur les 10 de chaque repeint."""
+        dpr = self.devicePixelRatioF()
+        lg = math.ceil(rect.width() * k * dpr)
+        ht = math.ceil(rect.height() * k * dpr)
+        pm = getattr(self, "_hud_pm", None)
+        self._hud_n = (getattr(self, "_hud_n", 0) + 1) % 3
+        if pm is None or pm.width() != lg or pm.height() != ht or self._hud_n == 0:
+            if pm is None or pm.width() != lg or pm.height() != ht:
+                pm = QPixmap(lg, ht)
+                pm.setDevicePixelRatio(dpr)
+                self._hud_pm = pm
+            pm.fill(Qt.GlobalColor.transparent)
+            q = QPainter(pm)
+            q.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+            q.setRenderHint(QPainter.RenderHint.TextAntialiasing, True)
+            q.scale(k, k)
+            q.translate(-rect.x(), -rect.y())
+            self._draw_hud(q, rect)
+            q.end()
+        p.save()
+        p.scale(1.0 / k, 1.0 / k)
+        p.drawPixmap(QPointF(rect.x() * k, rect.y() * k), pm)
+        p.restore()
+
     def paintEvent(self, _ev) -> None:  # noqa: N802
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
@@ -10501,7 +10527,10 @@ class GameWidget(QWidget):
             self._draw_world(p, view_rect)
 
         hud_rect = QRectF(w - 410, 20, 390, h - 260)
-        self._draw_hud(p, hud_rect)
+        if self._godot_couvre_vue():
+            self._hud_en_cache(p, hud_rect, k)
+        else:
+            self._draw_hud(p, hud_rect)
 
         # Reserve the bottom-right corner for the auto-exploitation
         # panel when the ops simulator is running — otherwise the event
