@@ -217,7 +217,7 @@ func _cran_de_depart() -> int:
 		"apple":
 			c = 1
 		"integre":
-			# (5700G, 16 Go, parti au cran 1 : 1 à 20 s par image sur son Vega 8, rapport du 24/10/2026.
+			# (puce intégrée partie au cran 1 : 1 à 20 s par image, rapport du 24/10/2026.
 			# Partir bas : le régulateur remonte tout seul s'il reste de la marge.)
 			c = 4
 		"logiciel":
@@ -654,6 +654,33 @@ func releve_en_cours() -> bool:
 	return _rel_t >= 0.0
 
 
+## Relevé automatique, sans rien afficher : une fois par version et par situation (dans la rame, à ski),
+## pour les machines où personne ne pensera à appuyer sur F10. Le pupitre le demande, et seulement si
+## l'utilisateur a accepté l'envoi des rapports. Appelé une fois par seconde.
+var _auto_situation: String = ""
+var _auto_vue: String = ""
+var _auto_t0: int = 0
+const RELEVE_AUTO_APRES_MS: int = 30000
+
+
+func essai_releve_auto(voulues: Array) -> void:
+	if _rel_t >= 0.0 or _retrait != 0 or main == null:
+		return
+	var r: Object = main.get("relief")
+	if r == null or not bool(r.get("pret")):
+		return
+	var vue: String = "skieur" if bool(main.get("mode_skieur")) else "rame"
+	var now: int = Time.get_ticks_msec()
+	if not voulues.has(vue) or vue != _auto_vue:
+		_auto_vue = vue if voulues.has(vue) else ""
+		_auto_t0 = now
+		return
+	if now - _auto_t0 >= RELEVE_AUTO_APRES_MS:
+		_auto_situation = vue
+		_auto_vue = ""
+		releve()
+
+
 func releve() -> void:
 	if _rel_t >= 0.0:
 		_finir_releve()
@@ -669,7 +696,7 @@ func releve() -> void:
 		_lecteurs.append(c)
 	_rel = PackedStringArray(["t_s;image_ms;principal_ms;rendu_ms;gpu_ms;appels;objets;primitives;cran;detail;x;y;z;construit;physique_ms;apres_ms"])
 	_log("[Relevé] enregistrement %d s…" % int(RELEVE_S))
-	if main != null and main.has_method("_flash"):
+	if _auto_situation == "" and main != null and main.has_method("_flash"):
 		main.call("_flash", "Relevé de fluidité : %d s — skiez, prenez une remontée…" % int(RELEVE_S))
 
 
@@ -733,6 +760,7 @@ func _finir_releve() -> void:
 	_rel_t = -1.0
 	Prof.actif = false
 	if n < 10:
+		_auto_situation = ""
 		return
 	var cols: Dictionary = {"image": [], "principal": [], "rendu": [], "gpu": [], "appels": [], "objets": []}
 	for k in range(1, _rel.size()):
@@ -820,6 +848,10 @@ func _envoyer_releve(r: PackedStringArray) -> void:
 		"releve": "\n".join(r),
 		"images_lentes": "\n".join(lentes),
 	}
+	var auto: String = _auto_situation
+	_auto_situation = ""
+	if auto != "":
+		rapport["releve_auto"] = auto
 	var corps: String = JSON.stringify(rapport)
 	if corps.length() > 250000:
 		rapport["images_lentes"] = "\n".join(lentes.slice(0, 400))
@@ -831,7 +863,10 @@ func _envoyer_releve(r: PackedStringArray) -> void:
 		req.queue_free()
 		var ok: bool = code >= 200 and code < 300
 		_log("[Relevé] envoi au NAS : %s (%d)" % ["fait" if ok else "échec", code])
-		if main != null and main.has_method("_flash"):
+		if auto != "":
+			if ok and main != null and main.get("state_receiver") != null:
+				main.state_receiver.envoyer({"releve_auto_fait": auto})
+		elif main != null and main.has_method("_flash"):
 			main.call("_flash", "Relevé de fluidité envoyé — merci !" if ok else "Relevé : envoi impossible (%d)" % code))
 	var en_tetes: PackedStringArray = PackedStringArray([
 		"Content-Type: application/json",
