@@ -625,7 +625,29 @@ var _budget_proche: float = BUDGET_PROCHE
 var _en_cours: LigneRemontee = null
 
 
+const PREPARATION_PROCHE: float = 60.0
+
+
+## Skieur tout près d'une ligne encore en construction : elle passe avant le reste, et il le sait.
+func _presser_construction() -> void:
+	if _en_cours == null or _en_cours.pret or skieur == null or not skieur.actif:
+		return
+	var d: float = _distance_ligne(_en_cours, skieur.global_position)
+	if d < PREPARATION_PROCHE:
+		_en_cours.budget_ms = maxf(_en_cours.budget_ms, 8.0)
+		var t: int = Time.get_ticks_msec()
+		if t - _t_message_preparation > 8000 and d < 25.0:
+			_t_message_preparation = t
+			var m: Node = get_parent()
+			if m != null and m.get("commandes_skieur") != null:
+				m.commandes_skieur.message("Remontée en préparation, encore un instant…", 4.0)
+
+
+var _t_message_preparation: int = -100000
+
+
 func _construire_proches() -> void:
+	_presser_construction()
 	if _en_cours != null or skieur == null or not skieur.actif or _sous_terre:
 		return
 	var p: Vector3 = skieur.global_position
@@ -659,6 +681,7 @@ func _construire_proches() -> void:
 	if best != null:
 		_en_cours = best
 		best.set_meta("lancee", true)
+		best.construction_cachee = _a_cuit(best)
 		best.construire()
 
 
@@ -971,7 +994,13 @@ func _process_corps(delta: float) -> void:
 		elif jm != null:
 			lg.set_process(false)          # il attend son jumeau
 			continue
-		lg.set_process(a_bord_ici or d < VEHICULES_JUSQUA + 50.0)
+		# (ligne à version cuite : ni figée ni sans véhicules entre la portée et sa démolition, où la version
+		# cuite ne les remplace pas ; cabines du 3S figées vues du télésiège voisin, 05/11/2026)
+		var jusqua: float = VEHICULES_JUSQUA
+		if _a_cuit(lg):
+			jusqua = maxf(jusqua, _demolir_au_dela(lg) + 50.0)
+			lg._vehicules_jusqua = jusqua
+		lg.set_process(a_bord_ici or d < jusqua + 50.0)
 		lg.pas_lod = 1 if (a_bord_ici or d < 150.0 * _f_lod) else (2 if d < 300.0 * _f_lod else 4)
 		lg.details_visibles = d < DETAILS_JUSQUA + 50.0
 		lg.collisions_actives = a_bord_ici or d < 120.0

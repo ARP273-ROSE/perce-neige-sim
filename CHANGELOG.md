@@ -11,6 +11,8 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 **Véhicules des lignes lointaines** (PWA) : ils s'arrêtaient net au-delà de 500 m ; ils avancent maintenant à tour de rôle, 3 lignes par pas.
 
+**Siège fantôme en gare** (PWA) : une ligne en construction montrait déjà ses sièges immobiles et leurs collisions, traversés par les sièges de la version préparée d'avance, et bloquait le skieur. Elle se construit maintenant cachée, plus vite quand il est tout près, avec un message s'il arrive trop tôt.
+
 **F10 pendant un relevé automatique** : le relevé automatique s'annule sans rien envoyer et le vrai démarre.
 
 **Port occupé** : le pupitre prend à chaque lancement la première paire de ports libre ; un ancien viewer n'entend plus rien et se ferme seul en 30 s.
