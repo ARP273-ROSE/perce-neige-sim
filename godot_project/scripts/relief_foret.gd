@@ -77,13 +77,6 @@ static func preparer_blocs(cases: Array) -> Array:
 func demarrer(rel: ReliefBuilder, cases: Array, blocs: Array) -> void:
 	name = "ReliefForet"
 	_rel = rel
-	_meshes = [_conifere(9, 9, true), _conifere(3, 6, false), _triangle()]
-	for k in range(3):
-		var m: ShaderMaterial = rel._shader(_SHADER)
-		m.set_shader_parameter("billboard", 1.0 if k == 2 else 0.0)
-		m.set_shader_parameter("hiver", rel._hiver)
-		rel._mats_hiver.append(m)
-		_mats.append(m)
 	for c in cases:
 		nb_arbres += int(c[2])
 		_a_poser.append([1, c[3], c[2], 0.0, PORTEE_PRES])                  # près
@@ -93,7 +86,31 @@ func demarrer(rel: ReliefBuilder, cases: Array, blocs: Array) -> void:
 	print("[ReliefForet] %d arbres, %d cases, %d blocs" % [nb_arbres, cases.size(), blocs.size()])
 
 
+## Une étape par image : maillages et nuanceur réunis faisaient 90 ms en fin de chargement.
+func _preparer_pas() -> void:
+	match _pas_prepa:
+		0:
+			_meshes.append(_conifere(9, 9, true))
+		1:
+			_meshes.append(_conifere(3, 6, false))
+			_meshes.append(_triangle())
+		2:
+			for k in range(3):
+				var m: ShaderMaterial = _rel._shader(_SHADER) if k == 0 else (_mats[0] as ShaderMaterial).duplicate()
+				m.set_shader_parameter("billboard", 1.0 if k == 2 else 0.0)
+				m.set_shader_parameter("hiver", _rel._hiver)
+				_rel._mats_hiver.append(m)
+				_mats.append(m)
+	_pas_prepa += 1
+
+
+var _pas_prepa: int = 0
+
+
 func _process(_dt: float) -> void:
+	if _pas_prepa < 3:
+		_preparer_pas()
+		return
 	if _a_poser.is_empty():
 		set_process(false)
 		return
