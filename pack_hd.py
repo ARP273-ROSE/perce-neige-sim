@@ -37,6 +37,25 @@ MEMOIRE_MINI_GO = 7.5
 PLACE_MINI = 2 * TAILLE + (200 << 20)
 
 
+# État de l'installation, lu par le pupitre (fil de fond : valeurs simples, sans verrou)
+etat: dict = {"phase": "", "fait": 0}
+
+
+def texte_etat(deja_en_service: bool) -> str:
+    """Ligne à afficher au pupitre, vide s'il n'y a rien à dire."""
+    p = etat["phase"]
+    if p == "telechargement":
+        mo, total = etat["fait"] >> 20, TAILLE >> 20
+        return f"Décor haute définition : téléchargement {100 * etat['fait'] // TAILLE} % ({mo} / {total} Mo)"
+    if p == "pose":
+        return "Décor haute définition : installation…"
+    if p == "pret" and not deja_en_service:
+        return "Décor haute définition prêt : relancez le simulateur pour en profiter"
+    if p == "attente":
+        return "Décor haute définition : téléchargement interrompu, nouvel essai au prochain lancement"
+    return ""
+
+
 def dossier(donnees: Path) -> Path:
     return Path(donnees) / "pack_hd"
 
@@ -95,8 +114,11 @@ def _telecharger(partiel: Path) -> None:
     with _ouvrir(urllib.request.Request(URL, headers=entetes)) as r:
         # (un serveur qui ignore la reprise renvoie tout le fichier : 200 et non 206)
         mode = "ab" if deja and r.status == 206 else "wb"
+        etat["fait"] = deja if mode == "ab" else 0
         with open(partiel, mode) as f:
-            shutil.copyfileobj(r, f, BLOC)
+            while bloc := r.read(BLOC):
+                f.write(bloc)
+                etat["fait"] += len(bloc)
 
 
 def _empreinte(chemin: Path) -> str:
@@ -136,6 +158,8 @@ def installer(donnees: Path) -> bool:
     if shutil.disk_usage(donnees).free + deja < PLACE_MINI:
         log.info("Pack HD : pas d'installation, place insuffisante")
         return False
+    etat["phase"] = "telechargement"
+    etat["fait"] = deja
     for essai in range(ESSAIS):
         try:
             _telecharger(partiel)
@@ -146,17 +170,22 @@ def installer(donnees: Path) -> bool:
             continue
         break
     else:
+        etat["phase"] = "attente"
         return False
+    etat["phase"] = "pose"
     if _empreinte(partiel) != EMPREINTE:
         log.warning("Pack HD : empreinte fausse, fichier retiré")
         partiel.unlink(missing_ok=True)
+        etat["phase"] = "attente"
         return False
     try:
         _poser(partiel, donnees)
     except (OSError, zipfile.BadZipFile, KeyError) as e:
         log.warning("Pack HD : pose impossible : %s", e)
+        etat["phase"] = "attente"
         return False
     partiel.unlink(missing_ok=True)
+    etat["phase"] = "pret"
     log.info("Pack HD installé dans %s", dossier(donnees))
     return True
 
@@ -167,5 +196,6 @@ def demarrer(donnees: Path) -> None:
         try:
             installer(donnees)
         except Exception as e:  # une panne ici ne doit pas gêner le jeu
+            etat["phase"] = "attente"
             log.warning("Pack HD : %s", e)
     threading.Thread(target=travail, name="pack-hd", daemon=True).start()

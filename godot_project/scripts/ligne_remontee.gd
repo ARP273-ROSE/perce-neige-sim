@@ -214,7 +214,15 @@ func demolir(poubelle: Array) -> void:
 		jumelee._synchro = false
 
 
+## Construite cachée, derrière sa version cuite : ses sièges encore immobiles et leurs corps, posés dès la
+## construction, se voyaient et bloquaient le skieur en gare, traversés par les sièges cuits qui
+## tournaient (retour d'utilisateur, 05/11/2026 : « un siège fantôme immobile qui me bloquait »).
+var construction_cachee: bool = false
+
+
 func construire() -> void:
+	if construction_cachee:
+		visible = false
 	_noyau = null                  # (ses nœuds vont disparaître)
 	_pn_lots = []
 	_pyl_l2 = []
@@ -482,6 +490,12 @@ func _construire_corps() -> void:
 
 func _finir_construction() -> void:
 	pret = true
+	if construction_cachee:
+		construction_cachee = false
+		visible = true
+		for c in _corps:
+			if c != null:
+				(c[0] as StaticBody3D).collision_layer = CollisionsJeu.COUCHE_VEHICULE if collisions_actives else 0
 	RemonteeKit.vider_primitives()
 	set_process(true)
 	if not _noyau_fil:
@@ -2817,7 +2831,7 @@ func _corps_vehicule(i: int) -> void:
 		return
 	var corps: StaticBody3D = StaticBody3D.new()
 	corps.name = "Corps_%d" % i
-	corps.collision_layer = CollisionsJeu.COUCHE_VEHICULE
+	corps.collision_layer = 0 if construction_cachee else CollisionsJeu.COUCHE_VEHICULE
 	corps.collision_mask = 0
 	corps.set_meta("vehicule", corps)
 	_enfant(corps)
