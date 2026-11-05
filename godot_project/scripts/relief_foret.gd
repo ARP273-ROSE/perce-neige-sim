@@ -8,6 +8,20 @@ extends Node3D
 const PORTEE_PRES: float = 400.0
 const PORTEE_MOYEN: float = 2500.0
 const PORTEE_LOIN: float = 12000.0
+## Grande machine (sol au mètre) : conifères détaillés jusqu'à 1 km, cônes à 5 km. Plus de lisière nette
+## où les cônes pointus prenaient le relais, pour 0,7 ms à 4K et 2,3 M de primitives de plus en forêt.
+const PORTEE_PRES_FORT: float = 1000.0
+const PORTEE_MOYEN_FORT: float = 5000.0
+
+
+static func _pres_base() -> float:
+	return PORTEE_PRES_FORT if ReliefAnneaux.NIVEAUX >= 5 else PORTEE_PRES
+
+
+static func _moyen_base() -> float:
+	return PORTEE_MOYEN_FORT if ReliefAnneaux.NIVEAUX >= 5 else PORTEE_MOYEN
+
+
 const BLOC: int = 4                    # cases de 250 m par bloc lointain, par côté
 const BUDGET_US: int = 2000
 
@@ -79,10 +93,10 @@ func demarrer(rel: ReliefBuilder, cases: Array, blocs: Array) -> void:
 	_rel = rel
 	for c in cases:
 		nb_arbres += int(c[2])
-		_a_poser.append([1, c[3], c[2], 0.0, PORTEE_PRES])                  # près
-		_a_poser.append([2, c[3], c[2], PORTEE_PRES, PORTEE_MOYEN])          # moyen
+		_a_poser.append([1, c[3], c[2], 0.0, _pres_base()])                  # près
+		_a_poser.append([2, c[3], c[2], _pres_base(), _moyen_base()])        # moyen
 	for b in blocs:
-		_a_poser.append([3, b[0], b[1], PORTEE_MOYEN - 200.0, PORTEE_LOIN])
+		_a_poser.append([3, b[0], b[1], _moyen_base() - 200.0, PORTEE_LOIN])
 	print("[ReliefForet] %d arbres, %d cases, %d blocs" % [nb_arbres, cases.size(), blocs.size()])
 
 
@@ -123,8 +137,8 @@ func _process(_dt: float) -> void:
 ## Repli en jeu : 0 tel quel ; 1 sans ombre des arbres, proches à 200 m ; 2 forêt lointaine à 1,2 km et
 ## au-delà jusqu'à 6 km. Sans rechargement, le temps de parcourir les nœuds.
 func regler_repli(n: int) -> void:
-	var pres: float = PORTEE_PRES if n == 0 else 200.0
-	var moyen: float = PORTEE_MOYEN if n < 2 else 1200.0
+	var pres: float = _pres_base() if n == 0 else 200.0
+	var moyen: float = _moyen_base() if n < 2 else 1200.0
 	var loin: float = PORTEE_LOIN if n < 2 else 6000.0
 	for c in get_children():
 		var mi: MultiMeshInstance3D = c as MultiMeshInstance3D
