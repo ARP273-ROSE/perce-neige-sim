@@ -7412,6 +7412,8 @@ class GameWidget(QWidget):
         self._fps = 0.0
         self._ips_3d = 0.0
         self._t_ips_3d = -1e9
+        self._t_releves_auto = -1e9
+        self._releves_auto_cache: list = []
         self._fps_acc = 0.0
         self._show_help = True
         self._show_info = False
@@ -7712,6 +7714,11 @@ class GameWidget(QWidget):
         """Message de la vue 3D embarquée (GodotBridge.poll_messages)."""
         if "pupitre" in m:
             self._pupitre_3d(str(m["pupitre"]), bool(m.get("enfonce", False)))
+        elif "releve_auto_fait" in m:
+            faits = self._releves_auto_faits()
+            faits.append(str(m["releve_auto_fait"]))
+            _ecrire_prefs({"releves_auto": {"version": VERSION, "faits": faits}})
+            self._t_releves_auto = -1e9
         elif "hd_possible" in m:
             # la vue 3D dit si cette machine s'en servirait : inutile de télécharger
             # 819 Mo pour un processeur graphique intégré
@@ -8730,6 +8737,9 @@ class GameWidget(QWidget):
                 state_dict["view3d"] = vue3d
                 state_dict["ext_view"] = vue3d == 1
                 state_dict["qualite_3d"] = self._qualite_3d
+                # relevé de fluidité automatique (viewer : essai_releve_auto)
+                if not getattr(self, "_godot_embed_hidden", False):
+                    state_dict["releve_auto"] = self._releves_auto_voulus()
                 # vue 3D cachée (F4, panneaux, pause) : la 3D cesse de
                 # dessiner — elle occupait la carte graphique à 100 % même
                 # masquée (Manjaro, 13/10/2026)
@@ -16272,6 +16282,30 @@ class GameWidget(QWidget):
                    int(Qt.AlignmentFlag.AlignHCenter),
                    T("Doors, lights, announcements remain available",
                      "Portes, éclairage, annonces restent disponibles"))
+
+    @staticmethod
+    def _releves_auto_faits() -> list:
+        """Situations déjà relevées pour cette version."""
+        r = _lire_prefs().get("releves_auto")
+        if isinstance(r, dict) and r.get("version") == VERSION and isinstance(r.get("faits"), list):
+            return r["faits"]
+        return []
+
+    def _releves_auto_voulus(self) -> list:
+        """Relevés de fluidité restant à faire pour cette version, si l'envoi des rapports est
+        accepté. (Relu au plus toutes les 5 s : appelé à chaque envoi d'état.)"""
+        t = time.monotonic()
+        if t - self._t_releves_auto < 5.0:
+            return self._releves_auto_cache
+        self._t_releves_auto = t
+        try:
+            import reporting
+            accepte = reporting.consentement() is True
+        except Exception:
+            accepte = False
+        faits = self._releves_auto_faits() if accepte else []
+        self._releves_auto_cache = [s for s in ("rame", "skieur") if s not in faits] if accepte else []
+        return self._releves_auto_cache
 
     def _texte_cadence(self) -> str:
         """Version et cadence : celle de la 3D si le viewer tourne, sinon celle du pupitre.

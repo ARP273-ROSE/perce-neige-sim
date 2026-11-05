@@ -75,6 +75,7 @@ func _ready() -> void:
 
 ## Message au PC, une ligne JSON (lu par GodotBridge.poll_messages).
 var _t_ips_envoi: int = 0
+var _releve_auto: Array = []   # situations à relever (pupitre : voir PerfManager.essai_releve_auto)
 var _hd_annonce: bool = false
 
 
@@ -107,6 +108,8 @@ func _process_corps(_delta: float) -> void:
 	var t_ips: int = Time.get_ticks_msec()
 	if t_ips - _t_ips_envoi >= 1000:
 		_t_ips_envoi = t_ips
+		if not _releve_auto.is_empty() and main != null and main.get("perf_manager") != null:
+			main.perf_manager.essai_releve_auto(_releve_auto)
 		# le pupitre n'installe le pack haute définition que si cette machine s'en servirait
 		if not _hd_annonce and main != null and main.get("perf_manager") != null:
 			_hd_annonce = true
@@ -158,6 +161,7 @@ func _apply(d: Dictionary) -> void:
 	# Update direct des champs (la physics locale est court-circuitée)
 	physics.s = _f(d, "s", physics.s)
 	# qualité 3D choisie au PC (menu Affichage) : auto / high / medium / low
+	_releve_auto = d.get("releve_auto", []) if d.get("releve_auto", []) is Array else []
 	if d.has("qualite_3d") and main != null and main.get("perf_manager") != null:
 		main.perf_manager.set_mode(str(d["qualite_3d"]))
 	# vue 3D masquée par le PC (F4 vers la vue dessinée, aide, pause…) : on
