@@ -3662,6 +3662,10 @@ func _poser_pylones() -> void:
 		py.deviation = atan2(_y_chainette(d) - _y_chainette(d - e), e) - atan2(_y_chainette(d + e) - _y_chainette(d), e)
 		py.position = Vector3(0, t, -d)
 		py.name = "P%d" % (i + 1)
+		var y_t0: float = py.position.y + py.hauteur_cable()
+		for brin in [true, false]:
+			py.cable_repos[brin] = func(z: float) -> float:
+				return y_cable(d - z, brin) - y_t0
 		_enfant(py)
 		py.construire()
 		MeshMerge.merge(py, py.mobiles, "Pylone")
