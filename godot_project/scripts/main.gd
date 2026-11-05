@@ -286,7 +286,9 @@ func set_tunnel_lights(on: bool) -> void:
 func _energie_ciel(e: float) -> void:
 	if _env == null or _env.sky == null:
 		return
-	if _env.sky.sky_material is PhysicalSkyMaterial:
+	if _env.sky.sky_material is ShaderMaterial:
+		(_env.sky.sky_material as ShaderMaterial).set_shader_parameter("energie", e)
+	elif _env.sky.sky_material is PhysicalSkyMaterial:
 		(_env.sky.sky_material as PhysicalSkyMaterial).energy_multiplier = e
 	elif _env.sky.sky_material is ProceduralSkyMaterial:
 		(_env.sky.sky_material as ProceduralSkyMaterial).sky_energy_multiplier = e
@@ -739,6 +741,8 @@ func _build_environment() -> void:
 		proc.ground_horizon_color = SOL_CIEL
 		proc.ground_bottom_color = SOL_CIEL
 		sky.sky_material = proc
+	elif not "--ciel-physique" in OS.get_cmdline_user_args():
+		sky.sky_material = CielAlpin.materiau(SOL_CIEL, GareAmont.SOLEIL)
 	env.sky = sky
 	env.background_mode = Environment.BG_SKY
 	env.background_energy_multiplier = 1.0
@@ -1206,7 +1210,9 @@ func _suite_process(delta: float) -> void:
 			if _env.sky != null and etat_sol != _sol_ext:
 				_sol_ext = etat_sol
 				var sol: Color = [SOL_CIEL, SOL_ROCHE, SOL_HIVER][etat_sol]
-				if _env.sky.sky_material is PhysicalSkyMaterial:
+				if _env.sky.sky_material is ShaderMaterial:
+					(_env.sky.sky_material as ShaderMaterial).set_shader_parameter("sol", Vector3(sol.r, sol.g, sol.b))
+				elif _env.sky.sky_material is PhysicalSkyMaterial:
 					(_env.sky.sky_material as PhysicalSkyMaterial).ground_color = sol
 				elif _env.sky.sky_material is ProceduralSkyMaterial:
 					var ps: ProceduralSkyMaterial = _env.sky.sky_material

@@ -98,7 +98,7 @@ func _verifier_chemin(rel: ReliefBuilder, hd: bool) -> void:
 		_ecarts.append("pack attendu, sol sans pack")
 	if _attendu == "sans_hd" and hd:
 		_ecarts.append("sol sans pack attendu, pack en service")
-	if _attendu == "sans_hd" and not rel._detail_seul and ClassDB.class_exists("ReliefHD"):
+	if _attendu == "sans_hd" and not rel._detail_seul and rel._normales_seules == null and ClassDB.class_exists("ReliefHD"):
 		_ecarts.append("détail de neige sans pack inactif")
 	if "--allege" in OS.get_cmdline_user_args() and not PerfManager.allege:
 		_ecarts.append("profil allégé demandé, inactif")
