@@ -744,7 +744,7 @@ func _creuser_gares() -> void:
 		_h = h_aff
 		_pas = pas_aff
 	_creuser_gares_corps()
-	# (relief fin : il a son propre sol. Maille à 50 m : sa copie à 25 m est plafonnée plus haut, pieds et cuissons identiques)
+	# (relief fin : il a son propre sol. Maille à 50 m : seule sa copie à 25 m est plafonnée, plus haut)
 	if _pas == 1 and not ReliefFin.voulu(_cran_depart):
 		_plafonner_grille()
 
