@@ -117,7 +117,7 @@ func setup(p_main: Node, p_env: Environment, p_mode: String) -> void:
 		RenderingServer.viewport_set_measure_render_time(_vp_rid, true)
 	machine = _detecter()
 	var type_gpu: String = machine.get("type", "inconnu")
-	allege = not _web and type_gpu in ["integre", "logiciel"]
+	allege = not _web and (type_gpu in ["integre", "logiciel"] or "--allege" in OS.get_cmdline_user_args())
 	relief_fin_jusqua = 1 if type_gpu == "dedie" else 0
 	cran_min = 0 if _rd else 2
 	var plancher_web: int = 4  # PWA : départ au réglage bas (mesuré sur iPad)
