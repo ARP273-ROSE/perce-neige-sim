@@ -3235,7 +3235,7 @@
    "h_max": 18.0
   },
   {
-   "d": 1790.0,
+   "d": 1784.0,
    "montee": [
     [
      40,
@@ -3251,8 +3251,9 @@
    "forme": "ouvrage",
    "l_aval": 28.0,
    "l_amont": 5.0,
-   "h_min": 14.7,
-   "h_max": 14.7
+   "alt_cable": 2721.5,
+   "appui_aval": 20.0,
+   "appui_alt": 2715.05
   }
  ],
  "balanciers": "remontees-mecaniques.net",

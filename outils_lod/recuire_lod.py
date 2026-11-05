@@ -21,6 +21,7 @@ a.add_argument('--travail', required=True)
 a.add_argument('--web-loin', required=True)
 a.add_argument('--etapes', default='veh,pyl,loin')
 a.add_argument('--fils', type=int, default=14)
+a.add_argument('--lignes', default='', help='seulement ces lignes (pylones et lointaines) ; les autres resultats du dossier de travail restent')
 A = a.parse_args()
 RACINE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PROJET = os.path.join(RACINE, 'godot_project')
@@ -52,6 +53,8 @@ def python(script, *args):
 
 
 LIGNES = [l for l in godot('cuisson_lod_pyl_dump.gd', '--liste', delai=120)[1] if l.startswith('LIGNES ')][0][7:].split(',')
+if A.lignes:
+    LIGNES = A.lignes.split(',')
 journal(len(LIGNES), 'lignes')
 
 if 'veh' in ETAPES:
@@ -73,7 +76,7 @@ if 'pyl' in ETAPES:
     for r in R:
         if 'PYL_OK' not in r:
             print('   ', r[:200], flush=True)
-    python('pyl_lod.py', '25')
+    python('pyl_lod.py', '25', ','.join(LIGNES))
     sortie = os.path.join(DONNEES, 'pylones_lod_25.web.cuit')
     code, o = godot('cuisson_lod_pyl_cuit.gd', '--rel=25', '--web', '--sortie=' + sortie, delai=300)
     journal([l[:90] for l in o if l.startswith('CUIT_PYL')])

@@ -23,6 +23,60 @@ func _initialize() -> void:
 	process_frame.connect(_tick)
 
 
+## Balancement le plus fort admis (0,2 rad : guide RM2 cité sur un forum, source indirecte).
+const BALANCEMENT_PIRE: float = 0.2
+## Relief à 25 m : état mesuré, pas un objectif. Voir le message du banc.
+const GARDE_25_CONNUE: float = -3.0
+## Près des gares la cabine est guidée et descend vers le quai : pas de balancement compté.
+const SANS_BALANCEMENT: float = 30.0
+
+
+## Plus petite garde (m) entre le dessous de la caisse et le sol affiché, coins de la caisse, sur toute la ligne
+## hors gares et dans les deux sens, cabine chargée, balancée de `th` en long et en travers. [garde, d, sens]
+static func garde_detail(lg: LigneRemontee, th: float) -> Array:
+	var pv: Vector3 = Vector3(VehiculeRemontee.X_PIVOT_3S, VehiculeRemontee.Y_PIVOT_3S, 0)
+	var bas: float = -(VehiculeRemontee.H_SUSP_3S + 0.08 + VehiculeRemontee._h_cab("cabine_3s"))
+	var coins: Array = []
+	for sx in [-1.47, 1.47]:
+		for sz in [-1.42, 1.42]:
+			coins.append(Vector3(sx, bas, sz))
+	var bases: Array = [Basis.IDENTITY]
+	if th > 0.0:
+		bases = [Basis(Vector3.BACK, th), Basis(Vector3.BACK, -th), Basis(Vector3.RIGHT, th), Basis(Vector3.RIGHT, -th)]
+	var L: float = lg.longueur_h()
+	var pire: Array = [INF, 0.0, true]
+	for montee in [true, false]:
+		var x0: float = lg._x_brin(montee)
+		var cote: float = signf(x0) if lg.sens_droite else -signf(x0)
+		var d: float = LigneRemontee.NEZ_3S
+		while d < L - LigneRemontee.NEZ_3S:
+			var y: float = lg.y_cable(d, montee)
+			var pres: bool = minf(d, L - d) < SANS_BALANCEMENT
+			for b in ([Basis.IDENTITY] if pres else bases):
+				for c in coins:
+					var q: Vector3 = (b as Basis) * ((c as Vector3) - pv) + pv
+					var g: float = y + q.y - lg._sol(x0 + q.x * cote, -d - q.z)
+					if g < float(pire[0]):
+						pire = [g, d, montee]
+			d += 2.0
+	return pire
+
+
+static func garde_pire(lg: LigneRemontee, th: float) -> float:
+	return float(garde_detail(lg, th)[0])
+
+
+static func garde_rapport(lg: LigneRemontee) -> Array:
+	var o: Array = []
+	var fin: bool = (lg.get_tree().current_scene if lg.get_tree().current_scene != null else lg.get_node("/root/Main")).relief.fin != null
+	for th in [0.0, BALANCEMENT_PIRE]:
+		var r: Array = garde_detail(lg, th)
+		o.append("GARDE_3S relief %s, balancement %.1f : %.2f m à d=%.0f, %s" % ["fin" if fin else "25 m", th, r[0], r[1], "montée" if r[2] else "descente"])
+	for d2 in [691.4, 1090.0, 1433.7, 1570.0, 1770.0, 1790.0]:
+		o.append("GARDE_3S d=%.0f : câble %.1f m, sol %.1f m" % [d2, lg.y_cable(d2) + lg.y_origine, lg.terrain(d2) + lg.y_origine])
+	return o
+
+
 func _verif(label: String, cond: bool, detail: String = "") -> void:
 	print("%s %s%s" % ["[OK]  " if cond else "[ECHEC]", label, (" — " + detail) if detail != "" else ""])
 	_ok = _ok and cond
@@ -68,6 +122,15 @@ func _tick() -> void:
 				if _lg.zone(s)[0] != "ligne":
 					continue
 				n_l += 1
+			for ligne_g in garde_rapport(_lg):
+				print(ligne_g)
+			var g_pire: float = garde_pire(_lg, BALANCEMENT_PIRE)
+			if _main.relief.fin != null:
+				_verif("3S : cabine au-dessus du sol, deux sens, balancement %.1f rad" % BALANCEMENT_PIRE, g_pire >= 0.0, "%.2f m" % g_pire)
+			else:
+				# relief à 25 m (PWA, PC sans pack) : butte sous le brin montant, l'altitude du document ne la franchit pas
+				print("ATTENTION 3S : garde %.2f m sur le relief à 25 m, défaut connu" % g_pire)
+				_verif("3S : garde sur le relief à 25 m pas pire que l'état connu", g_pire >= GARDE_25_CONNUE, "%.2f m" % g_pire)
 			_verif("3S : ligne construite, véhicules en ligne", n_l >= 6, "%d véhicules, %d en ligne" % [_lg.nombre_vehicules(), n_l])
 			_phase = 2
 			_t = 0.0
