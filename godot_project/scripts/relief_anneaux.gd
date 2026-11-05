@@ -15,15 +15,7 @@ const TUILE: int = 2000                # nœuds par couche du tableau de texture
 const TAILLE: int = 2048               # texels par couche, dont
 const MARGE: int = 24                  # la marge prise aux voisines (filtrage, niveaux)
 
-## Ce qui remplace, dans le nuanceur du relief, la normale du sommet et les UV du maillage.
-const _ENTETE_HD: String = """varying vec3 nw;
-uniform sampler2DArray normal_hd : filter_linear_mipmap_anisotropic, repeat_disable;
-uniform vec4 hd_xf;                 // x0, z0, px, pz
-uniform vec4 hd_tex;                // nœuds par couche, texels, marge, couches par ligne
-uniform vec4 o_xf;                  // photo : x0, z0, pas des nœuds au mètre
-uniform vec4 o_tex;                 // nœuds par couche, marge en nœuds, couches par ligne, dernière ligne
-uniform vec2 hd_nb;                 // dernier nœud (j, i)
-uniform sampler2D detail_hd : filter_linear_mipmap_anisotropic, repeat_enable;
+const _ENTETE_DETAIL: String = """uniform sampler2D detail_hd : filter_linear_mipmap_anisotropic, repeat_enable;
 uniform float a_detail = 0.0;
 // Neige de près : pente de bosses à plusieurs échelles et sillons de vent ; xyz normale, w fondu.
 vec4 neige_detail(vec3 p, vec3 n, float d_cam) {
@@ -53,7 +45,17 @@ float paillettes(vec3 p, vec3 n, vec3 cam, float d_cam) {
 	float soleil_vu = max(dot(normalize(v + normalize(soleil)), n), 0.0);
 	return smoothstep(0.965, 0.995, b) * (1.0 - smoothstep(12.0, 50.0, d_cam)) * smoothstep(0.75, 0.97, soleil_vu);
 }
-uniform sampler2DArray ortho_hd : source_color, filter_linear_mipmap_anisotropic, repeat_disable;
+"""
+
+## Ce qui remplace, dans le nuanceur du relief, la normale du sommet et les UV du maillage.
+const _ENTETE_HD: String = """varying vec3 nw;
+uniform sampler2DArray normal_hd : filter_linear_mipmap_anisotropic, repeat_disable;
+uniform vec4 hd_xf;                 // x0, z0, px, pz
+uniform vec4 hd_tex;                // nœuds par couche, texels, marge, couches par ligne
+uniform vec4 o_xf;                  // photo : x0, z0, pas des nœuds au mètre
+uniform vec4 o_tex;                 // nœuds par couche, marge en nœuds, couches par ligne, dernière ligne
+uniform vec2 hd_nb;                 // dernier nœud (j, i)
+""" + _ENTETE_DETAIL + """uniform sampler2DArray ortho_hd : source_color, filter_linear_mipmap_anisotropic, repeat_disable;
 uniform float a_ortho = 0.0;        // 1 : orthophoto au mètre présente
 // Photo au mètre ; au-delà de 16 m par texel, la photo d'ensemble (la marge entre couches ne suffit plus)
 vec3 photo_hd(vec2 p, vec3 c_loin) {
@@ -122,11 +124,23 @@ var nb_recentrages: int = 0
 
 
 ## Le nuanceur du relief, avec les normales du pack et sans les UV du maillage.
+const _L_DETAIL: String = "float l = 0.36 + 0.74 * max(dot(n_fin.xyz, normalize(soleil)), 0.0);"
+const _FIN_DETAIL: String = "blanc += vec3(0.5) * paillettes(pw, n_fin.xyz, cam, d_cam) * neige;\n\t// grain de la roche, sur la photo sombre, près de l'œil\n\tfloat roche = n_fin.w * (1.0 - neige) * (1.0 - smoothstep(0.25, 0.6, grain));\n\tvec3 c_roc = c * (1.0 + roche * ((texture(detail_hd, pw.xz / 5.3).a - 0.5) * 1.1 + (texture(detail_hd, pw.xz / 1.3).a - 0.5) * 0.3));\n\treturn mix(c, mix(c_roc * 0.80, blanc, neige) * l, hiver);"
+
+
+## Sans le pack (PC) : le même détail de neige et de roche, sur la normale du maillage.
+static func code_detail(code: String) -> String:
+	return code.replace("varying vec3 nw;", "varying vec3 nw;\n" + _ENTETE_DETAIL) \
+		.replace("vec3 n = normalize(nw);", "vec3 n = normalize(nw);\n\tfloat d_cam = distance(pw, cam);\n\tvec4 n_fin = neige_detail(pw, n, d_cam);") \
+		.replace("float l = 0.36 + 0.74 * max(dot(n, normalize(soleil)), 0.0);", _L_DETAIL) \
+		.replace("return mix(c, mix(c * 0.80, blanc, neige) * l, hiver);", _FIN_DETAIL)
+
+
 static func code_hd(code: String) -> String:
 	return code.replace("varying vec3 nw;", _ENTETE_HD) \
 		.replace("vec3 n = normalize(nw);", "vec3 n = normale_hd(pw.xz);\n\tfloat d_cam = distance(pw, cam);\n\tvec4 n_fin = neige_detail(pw, n, d_cam);") \
-		.replace("float l = 0.36 + 0.74 * max(dot(n, normalize(soleil)), 0.0);", "float l = 0.36 + 0.74 * max(dot(n_fin.xyz, normalize(soleil)), 0.0);") \
-		.replace("return mix(c, mix(c * 0.80, blanc, neige) * l, hiver);", "blanc += vec3(0.5) * paillettes(pw, n_fin.xyz, cam, d_cam) * neige;\n\t// grain de la roche, sur la photo sombre, près de l'œil\n\tfloat roche = n_fin.w * (1.0 - neige) * (1.0 - smoothstep(0.25, 0.6, grain));\n\tvec3 c_roc = c * (1.0 + roche * ((texture(detail_hd, pw.xz / 5.3).a - 0.5) * 1.1 + (texture(detail_hd, pw.xz / 1.3).a - 0.5) * 0.3));\n\treturn mix(c, mix(c_roc * 0.80, blanc, neige) * l, hiver);") \
+		.replace("float l = 0.36 + 0.74 * max(dot(n, normalize(soleil)), 0.0);", _L_DETAIL) \
+		.replace("return mix(c, mix(c * 0.80, blanc, neige) * l, hiver);", _FIN_DETAIL) \
 		.replace("vec3 c = texture(ortho, UV).rgb;", "vec2 uv_hd = (pw.xz - hd_xf.xy) / (hd_xf.zw * hd_nb);\n\tvec3 c = photo_hd(pw.xz, texture(ortho, uv_hd).rgb);") \
 		.replace("c = en_hiver(c, UV, CAMERA_POSITION_WORLD);", "c = en_hiver(c, uv_hd, CAMERA_POSITION_WORLD);")
 
@@ -148,6 +162,12 @@ static func preparer_detail() -> void:
 	var img: Image = Image.create_from_data(512, 512, false, Image.FORMAT_RGBA8, octets)
 	img.generate_mipmaps()
 	_tex_detail = ImageTexture.create_from_image(img)
+
+
+static func regler_detail_seul(m: ShaderMaterial) -> void:
+	if _tex_detail != null:
+		m.set_shader_parameter("detail_hd", _tex_detail)
+		m.set_shader_parameter("a_detail", 1.0)
 
 
 static func regler_hd(m: ShaderMaterial, normales: Texture2DArrayRD, ortho: Texture2DArrayRD = null) -> void:
