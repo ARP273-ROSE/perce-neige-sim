@@ -8,8 +8,8 @@
  "quartier": "Bellevarde",
  "vitesse": 7.5,
  "places": 30,
- "debit": 3750.0,
- "espacement": 216.0,
+ "debit": 2600.0,
+ "espacement": 311.6,
  "voie": 10.0,
  "sens_droite": true,
  "diametre_cable": 52.5,
@@ -3207,7 +3207,12 @@
      6,
      "S"
     ]
-   ]
+   ],
+   "forme": "plots",
+   "l_aval": 6.0,
+   "l_amont": 6.0,
+   "h_min": 20.0,
+   "h_max": 20.0
   },
   {
    "d": 1433.7,
@@ -3222,10 +3227,15 @@
      10,
      "S"
     ]
-   ]
+   ],
+   "forme": "plots_bas",
+   "l_aval": 7.0,
+   "l_amont": 7.0,
+   "h_min": 18.0,
+   "h_max": 18.0
   },
   {
-   "d": 1775.9,
+   "d": 1790.0,
    "montee": [
     [
      40,
@@ -3237,7 +3247,12 @@
      40,
      "S"
     ]
-   ]
+   ],
+   "forme": "ouvrage",
+   "l_aval": 28.0,
+   "l_amont": 5.0,
+   "h_min": 14.7,
+   "h_max": 14.7
   }
  ],
  "balanciers": "remontees-mecaniques.net",

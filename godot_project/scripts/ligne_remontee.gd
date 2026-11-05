@@ -548,10 +548,11 @@ func masse_vehicule() -> float:
 
 
 ## Tension horizontale (N) du câble qui porte les véhicules : le tracteur,
-## ou au 3S les deux porteurs d'une voie (ancrages fixes, ~75 t chacun).
+## ou au 3S les deux porteurs d'une voie (ancrages fixes). Tension estimée : celle qui donne la flèche relevée
+## au milieu de la grande portée, faute de valeur constructeur.
 func tension_h() -> float:
 	if tricable():
-		return 1500000.0
+		return 1100000.0
 	return 300000.0 * pow(diametre_cable / 47.0, 2.0)
 
 
@@ -1172,8 +1173,19 @@ const NEZ_3S: float = 12.0
 
 
 static func l_sabot_3s(p: Dictionary) -> float:
+	if p.has("l_aval"):
+		return float(p["l_aval"]) + float(p["l_amont"])
 	var n_g: int = int((p.get("montee", [[6, "S"]])[0] as Array)[0])
 	return clampf(n_g * 0.6, 7.0, 26.0)
+
+
+## Bouts d'une poutre de sabot, en abscisse de la ligne ; elle peut être décentrée sur le sommet de la chaînette.
+static func bouts_sabot_3s(p: Dictionary) -> Vector2:
+	var a: float = float(p["d"])
+	if p.has("l_aval"):
+		return Vector2(a - float(p["l_aval"]), a + float(p["l_amont"]))
+	var h: float = l_sabot_3s(p) * 0.5
+	return Vector2(a - h, a + h)
 
 
 func _pente_chainette(d: float, montee: bool) -> float:
@@ -1197,13 +1209,12 @@ func _y_lisse_3s(d: float, montee: bool) -> float:
 		var da: float = L - NEZ_3S
 		return _hermite(clampf((d - da) / NEZ_3S, 0.0, 1.0), _y_chainette(da, montee), y1, _pente_chainette(da, montee), 0.0, NEZ_3S)
 	for p in pylones:
-		var a: float = float(p["d"])
-		var h: float = l_sabot_3s(p) * 0.5
-		if absf(d - a) < h:
-			var d0: float = a - h
-			var d1: float = a + h
-			return _hermite((d - d0) / (2.0 * h), _y_chainette(d0, montee), _y_chainette(d1, montee),
-				_pente_chainette(d0 - 0.3, montee), _pente_chainette(d1 + 0.3, montee), 2.0 * h)
+		var b: Vector2 = bouts_sabot_3s(p)
+		if d > b.x and d < b.y:
+			var d0: float = b.x
+			var d1: float = b.y
+			return _hermite((d - d0) / (d1 - d0), _y_chainette(d0, montee), _y_chainette(d1, montee),
+				_pente_chainette(d0 - 0.3, montee), _pente_chainette(d1 + 0.3, montee), d1 - d0)
 	return _y_chainette(d, montee)
 
 
@@ -1747,7 +1758,8 @@ func _pas_ligne(d: float) -> float:
 		if d < NEZ_3S + 1.0 or d > L - NEZ_3S - 1.0:
 			return 0.5
 		for p in pylones:
-			if absf(d - float(p["d"])) < l_sabot_3s(p) * 0.5 + 1.0:
+			var bs: Vector2 = bouts_sabot_3s(p)
+			if d > bs.x - 1.0 and d < bs.y + 1.0:
 				return 0.5
 		return 3.0
 	if d < 2.0 * _h_nez[0] + 1.0 or d > L - 2.0 * _h_nez[1] - 1.0:
@@ -3521,9 +3533,9 @@ func _lanceurs() -> void:
 	var y_rail: float = VehiculeRemontee.A108_Y_GALET - VehiculeRemontee.A108_R_GALET - 0.047
 	var x_rail: float = VehiculeRemontee.A108_X_GALET
 	if tricable():
-		# rail sous les galets de gare du chariot (de part et d'autre)
-		y_rail = 0.36 - 0.09 - 0.045
-		x_rail = 0.62
+		# les galets du chariot quittent les porteurs pour un rail de même voie, à la même hauteur
+		y_rail = 0.0
+		x_rail = VehiculeRemontee.E_PORTEURS_3S * 0.5
 	for aval in [true, false]:
 		var s0: float = s_gare(aval, 0.0)
 		var l: float = longueur_zone(aval)
@@ -3540,13 +3552,20 @@ func _lanceurs() -> void:
 		var r_node: Node3D = Node3D.new()
 		r_node.name = "Rail" + ("Aval" if aval else "Amont")
 		_enfant(r_node)
-		RemonteeKit.tube(r_node, rail, 0.045, "acier", 6)
+		RemonteeKit.tube(r_node, rail, 0.03 if tricable() else 0.045, "acier", 6)
 		if tricable():
 			var rail2: PackedVector3Array = PackedVector3Array()
+			var ame1: PackedVector3Array = PackedVector3Array()
+			var ame2: PackedVector3Array = PackedVector3Array()
 			for q in range(rail.size()):
 				var s3: float = s0 - 1.0 + 0.5 * q
 				rail2.append(rail[q] - _dehors(s3) * 2.0 * x_rail)
-			RemonteeKit.tube(r_node, rail2, 0.045, "acier", 6)
+				ame1.append(rail[q] + Vector3(0, -0.075, 0))
+				ame2.append(rail2[q] + Vector3(0, -0.075, 0))
+			RemonteeKit.tube(r_node, rail2, 0.03, "acier", 6)
+			# la couronne rouge qui porte le rail
+			RemonteeKit.tube(r_node, ame1, 0.05, "cabine_rouge", 6)
+			RemonteeKit.tube(r_node, ame2, 0.05, "cabine_rouge", 6)
 		RemonteeKit.tube(r_node, poutre_haut, 0.07, "galva_pylone", 6)
 		# suspentes du lanceur à la charpente, tous les 3 m
 		var k: int = 0
@@ -4087,13 +4106,21 @@ func _cavaliers(parent: Node3D) -> void:
 			c.rotation.x = atan2(y_cable(d + 2.0, montee) - y_cable(d - 2.0, montee), 4.0)
 			parent.add_child(c)
 			_cavaliers_n.append([c, d, montee, y])
-			# deux mâchoires serrées sur les porteurs, traverse et bras
+			# en V : deux attaches sur les porteurs, deux plats galvanisés jusqu'à la traverse, galet du tracteur
+			# au centre, tiges de garde sous lui (cotes estimées sur photo, ±15 %)
+			var y_tr: float = VehiculeRemontee.Y_TRACTEUR_3S
+			var r_g: float = 0.15
 			for sx in [-1.0, 1.0]:
-				RemonteeKit.boite_en(c, Vector3(0.10, 0.12, 0.34), Vector3(sx * e, 0.0, 0), "galva_pylone")
-				RemonteeKit.poutre(c, Vector3(sx * e, -0.05, 0), Vector3(sx * 0.10, VehiculeRemontee.Y_TRACTEUR_3S - 0.05, 0), 0.06, 0.06, "galva_pylone")
-			RemonteeKit.boite_en(c, Vector3(0.24, 0.05, 0.30), Vector3(0, VehiculeRemontee.Y_TRACTEUR_3S - 0.08, 0), "galva_pylone")
-			# galet du tracteur, sous lui (axe en travers)
-			RemonteeKit.galet(c, Vector3(0, VehiculeRemontee.Y_TRACTEUR_3S - 0.03 - 0.12, 0), 0.12)
+				RemonteeKit.boite_en(c, Vector3(0.08, 0.14, 0.16), Vector3(sx * e, -0.05, 0), "acier_noir")
+				for sz in [-0.05, 0.05]:
+					RemonteeKit.poutre(c, Vector3(sx * e, -0.12, sz), Vector3(sx * 0.12, y_tr - 0.12, sz), 0.012, 0.13, "galva_pylone", Vector3.BACK)
+				RemonteeKit.barre(c, Vector3(sx * 0.14, y_tr + 0.08, 0), Vector3(sx * e * 0.72, -0.17, 0), 0.008, "galva", 4)
+			RemonteeKit.boite_en(c, Vector3(0.34, 0.05, 0.16), Vector3(0, y_tr - 0.12, 0), "galva_pylone")
+			RemonteeKit.galet(c, Vector3(0, y_tr - 0.03 - r_g, 0), r_g)
+			var garde: PackedVector3Array = PackedVector3Array()
+			for g in [Vector3(-0.17, y_tr - 0.12, 0), Vector3(-0.09, y_tr - 0.42, 0), Vector3(0.09, y_tr - 0.42, 0), Vector3(0.17, y_tr - 0.12, 0)]:
+				garde.append(g)
+			RemonteeKit.tube(c, garde, 0.008, "galva", 4)
 
 
 func _porteurs(parent: Node3D) -> void:
@@ -5105,6 +5132,16 @@ func _poser_pylones_treillis() -> void:
 		# sabots : 7 m, plus longs sur un pylône à grande déviation (le P3
 		# de l'Olympique porte 40 galets par voie)
 		py.l_sabot = 6.0 if vaetvient() else l_sabot_3s(p)
+		if tricable():
+			var bs: Vector2 = bouts_sabot_3s(p)
+			py.forme = String(p.get("forme", "plots_bas"))
+			py.l_aval = d - bs.x
+			py.l_amont = bs.y - d
+			py.x_montee = _x_brin(true)
+			py.cable_y = func(z: float, montee: bool) -> float:
+				return y_cable(d - z, montee) - t
+			py.sol_xz = func(x: float, z: float) -> float:
+				return _sol(x, -d + z) - t
 		py.sol_z = func(z: float) -> float:
 			return terrain(clampf(d - z, 0.0, longueur_h())) - t
 		# 3S : le sabot au câble lisse, pas au sommet de la chaînette (2,3 m au-dessus au grand pylône, câbles en l'air)

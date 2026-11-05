@@ -3,31 +3,29 @@ extends RefCounted
 ## Câble tracteur de l'Olympique dans ses gares (retour d'utilisateur, 25/10/2026,
 ## d'après sa visite : « la salle des machines est en haut, derrière la salle
 ## d'embarquement ; en bas, juste le contrepoids, derrière aussi ») — la fiche
-## technique confirme : motrice amont (deux moteurs à courant continu, 887 kW,
+## technique confirme : motrice amont (deux moteurs à courant continu, 2 × 785 kW,
 ## sous la gare, poulie motrice Ø 4,80 m), tension aval par contrepoids.
 ##
 ## AVAL : le tracteur file derrière le demi-tour des cabines ; une grande
-## poulie rouge verticale (dans l'axe de la ligne) le renvoie à la verticale
+## poulie bleue verticale, sur chevalet rouge (dans l'axe de la ligne) le renvoie à la verticale
 ## vers le bas ; deux poulies du chariot de contrepoids, au plan tourné de 90°
 ## (en travers de la ligne), le font passer à l'horizontale vers l'autre voie
-## puis remonter ; une seconde poulie rouge le remet à l'horizontale sur
+## puis remonter ; une seconde poulie bleue le remet à l'horizontale sur
 ## l'autre voie. Le bloc de contrepoids pend sous le chariot, dans une fosse.
 ##
-## AMONT : au fond de la salle, deux poulies inclinées vers l'intérieur font
-## plonger le câble ; les deux brins se CROISENT en descendant et en
-## remontant et s'enroulent sur plus de 180° autour d'une seule poulie
-## motrice horizontale, sous le plancher, avec ses moteurs.
+## AMONT : au fond de la salle, deux poulies inclinées font plonger le câble vers une seule poulie motrice
+## verticale, sous le plancher, qu'il contourne par le bas, avec son réducteur et ses freins.
 
 var lg: LigneRemontee
 
-const R_ROUGE: float = 1.5            # poulies de renvoi verticales (aval), sommet sous le plafond
+const BLEU: String = "bleu_doppelmayr"
+const R_ROUGE: float = 2.0            # poulies de renvoi verticales (aval), sommet sous le plafond (estimé sur photo, ±20 %)
 const R_CHARIOT: float = 1.5          # poulies du chariot de contrepoids
-const R_INCLINEE: float = 2.0         # poulies de renvoi inclinées (amont)
+const R_INCLINEE: float = 2.0         # poulies de renvoi inclinées (amont, estimé sur photo, ±20 %)
 const R_MOTRICE: float = 2.4          # poulie motrice Ø 4,80 m
 const RECUL: float = 11.0             # du centre du demi-tour aux renvois
-const RECUL_MOTRICE: float = 2.0      # des renvois inclinés à la motrice
 const PROF_FOSSE: float = 7.5         # sous le plancher : fond du chariot de contrepoids
-const PROF_MOTRICE: float = 1.0       # sous le plancher : plan de la poulie motrice (câble plongeant vers 45°)
+const PROF_MOTRICE: float = 0.6       # du plancher au sommet de la poulie motrice
 const H_QUAI: float = 0.25           # quais au niveau du plancher des cabines
 const DEMI_TRANCHEE: float = 1.65     # demi-largeur du chemin des cabines
 const FOND_GARE: float = 17.0        # du centre du demi-tour au fond du bâtiment
@@ -54,6 +52,11 @@ func y_plancher(aval: bool) -> float:
 	return lg.terrain(0.0 if aval else lg.longueur_h())
 
 
+## Centre de la motrice (repère de la ligne).
+func y_motrice() -> float:
+	return y_plancher(false) - PROF_MOTRICE - R_MOTRICE
+
+
 ## Dessous du toit de la gare (repère de la ligne).
 func y_plafond(aval: bool) -> float:
 	return y_plancher(aval) + float(lg._emprise_3s(aval)[3]) - 0.2
@@ -67,9 +70,8 @@ func fosse(aval: bool) -> Array:
 	if aval:
 		var zr: float = zc + sg * RECUL
 		return [-(rp + 0.8), rp + 0.8, zr - R_ROUGE - 0.6, zr + 1.0]
-	var zw: float = zc + sg * (RECUL + RECUL_MOTRICE)
-	var z0: float = zc + sg * (RECUL - 0.5)
-	var z1: float = zw + sg * (R_MOTRICE + 1.0)
+	var z0: float = zc + sg * (RECUL - 3.0)
+	var z1: float = zc + sg * (RECUL + 3.2)
 	return [-(rp + 0.8), rp + 0.8, minf(z0, z1), maxf(z0, z1)]
 
 
@@ -88,45 +90,41 @@ func trace(aval: bool, x_de: float, x_vers: float, poulies: Array) -> PackedVect
 		# sous le plafond (retour d'utilisateur, 25/10/2026)
 		var zr: float = zc + sg * RECUL
 		var yb: float = y_plancher(true) - PROF_FOSSE
-		var yh: float = y_plafond(true) - 0.45
+		var yh: float = y_plafond(true) - 1.05
 		var coins: Array = [
 			[Vector3(x_de, y, zc), 0.0, ""],
-			[Vector3(x_de, yh, zr), R_ROUGE, "cabine_rouge"],
+			[Vector3(x_de, yh, zr), R_ROUGE, BLEU],
 			[Vector3(x_de, yb, zr), R_CHARIOT, "peinture_gris"],
 			[Vector3(x_vers, yb, zr), R_CHARIOT, "peinture_gris"],
-			[Vector3(x_vers, yh, zr), R_ROUGE, "cabine_rouge"],
+			[Vector3(x_vers, yh, zr), R_ROUGE, BLEU],
 			[Vector3(x_vers, y, zc), 0.0, ""],
 		]
 		return _polyligne(coins, poulies)
-	# amont : renvois inclinés, croisement, enroulement sur la motrice
+	# amont : deux renvois inclinés amènent le câble dans le plan de la motrice verticale, qu'il contourne par
+	# le bas ; les brins n'ont pas à se croiser
 	var zs: float = zc + sg * RECUL
-	var zw: float = zc + sg * (RECUL + RECUL_MOTRICE)
-	var yw: float = y_plancher(false) - PROF_MOTRICE
-	var cw: Vector2 = Vector2(0.0, zw)
-	# tangentes en plan depuis chaque renvoi, du côté OPPOSÉ (croisement)
-	var ta: Vector2 = _tangente(Vector2(x_de, zs), cw, R_MOTRICE, -signf(x_de))
-	var tb: Vector2 = _tangente(Vector2(x_vers, zs), cw, R_MOTRICE, -signf(x_vers))
+	var yw: float = y_motrice()
+	var cw: Vector2 = Vector2(0.0, yw)
+	var ta: Vector2 = _tangente(Vector2(x_de, y), cw, R_MOTRICE, signf(x_de))
+	var tb: Vector2 = _tangente(Vector2(x_vers, y), cw, R_MOTRICE, signf(x_vers))
 	var ka: Vector3 = Vector3(x_de, y, zs)
 	var kb: Vector3 = Vector3(x_vers, y, zs)
-	var pa: Vector3 = Vector3(ta.x, yw, ta.y)
-	var pb: Vector3 = Vector3(tb.x, yw, tb.y)
+	var pa: Vector3 = Vector3(ta.x, ta.y, zs)
+	var pb: Vector3 = Vector3(tb.x, tb.y, zs)
 	out.append(Vector3(x_de, y, zc))
-	out.append_array(_conge(ka, Vector3(0, 0, sg), (pa - ka).normalized(), R_INCLINEE, "peinture_gris", poulies))
-	# enroulement : de ta à tb par le fond (côté opposé à la gare), plus de 180°
+	out.append_array(_conge(ka, Vector3(0, 0, sg), (pa - ka).normalized(), R_INCLINEE, BLEU, poulies))
+	# enroulement de ta à tb par le bas
 	var a0: float = atan2(ta.y - cw.y, ta.x - cw.x)
 	var a1: float = atan2(tb.y - cw.y, tb.x - cw.x)
-	var fond: float = atan2(sg, 0.0)                 # direction du fond, en plan
 	var da: float = wrapf(a1 - a0, -PI, PI)
-	# on passe par le fond : si l'arc court ne le contient pas, on prend le long
-	var mid: float = a0 + da * 0.5
-	if absf(wrapf(mid - fond, -PI, PI)) > PI * 0.5:
+	if absf(wrapf(a0 + da * 0.5 + PI * 0.5, -PI, PI)) > PI * 0.5:
 		da = da - signf(da) * TAU
 	var n: int = 40
 	for k in range(n + 1):
 		var a: float = a0 + da * float(k) / n
-		out.append(Vector3(cw.x + cos(a) * R_MOTRICE, yw, cw.y + sin(a) * R_MOTRICE))
-	poulies.append([Vector3(0, yw, zw), Vector3.UP, R_MOTRICE, "peinture_gris", true])
-	out.append_array(_conge(kb, (kb - pb).normalized(), Vector3(0, 0, -sg), R_INCLINEE, "peinture_gris", poulies))
+		out.append(Vector3(cw.x + cos(a) * R_MOTRICE, cw.y + sin(a) * R_MOTRICE, zs))
+	poulies.append([Vector3(0, yw, zs), Vector3.BACK * signf(da), R_MOTRICE, BLEU, true])
+	out.append_array(_conge(kb, (kb - pb).normalized(), Vector3(0, 0, -sg), R_INCLINEE, BLEU, poulies))
 	out.append(Vector3(x_vers, y, zc))
 	return out
 
@@ -193,7 +191,10 @@ func construire(parent: Node3D, poulies: Array) -> Array:
 		var z: Vector3 = x.cross(ax).normalized()
 		nd.transform = Transform3D(Basis(x, ax, z), c)
 		parent.add_child(nd)
-		_roue(nd, r, String(p[3]), bool(p[4]))
+		if String(p[3]) == BLEU:
+			_roue_ajouree(nd, r, BLEU)
+		else:
+			_roue(nd, r, String(p[3]), bool(p[4]))
 		MeshMerge.merge(nd, [], "Roue")
 		tournantes.append([nd, lg.vitesse / r])
 		# axe et paliers (fixes)
@@ -203,6 +204,11 @@ func construire(parent: Node3D, poulies: Array) -> Array:
 		RemonteeKit.cylindre(pal, 0.14, 0.14, 0.9, Transform3D.IDENTITY, "acier", 12)
 		for s in [-1.0, 1.0]:
 			RemonteeKit.boite_en(pal, Vector3(0.5, 0.25, 0.5), Vector3(0, s * 0.42, 0), "peinture_anthracite")
+		if String(p[3]) == BLEU and not bool(p[4]):
+			var aval: bool = c.z > -lg.longueur_h() * 0.5
+			_chevalet(parent, c, ax, r, y_plancher(aval))
+		elif bool(p[4]):
+			_chevalet(parent, c, ax, r, c.y - r - 0.8)
 	return tournantes
 
 
@@ -222,6 +228,73 @@ func _roue(nd: Node3D, r: float, m: String, motrice: bool) -> void:
 		RemonteeKit.tube(nd, RemonteeKit.arc(Vector3(0, -0.35, 0), Vector3.RIGHT, Vector3.BACK, r * 0.7, 0.0, TAU, 48), 0.08, "acier_noir", 8)
 
 
+## Roue dans son plan local XZ : voile bleu à quatre grands trous ovales, jante et gorge. Les trous font voir sa
+## rotation, sens compris, sans objet ni matière de plus.
+func _roue_ajouree(nd: Node3D, r: float, m: String) -> void:
+	var st: SurfaceTool = SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	st.set_smooth_group(-1)
+	var e: float = 0.09
+	var rc: float = r * 0.60
+	var hr: float = r * 0.215
+	var alpha: float = PI * 0.25 * 0.70
+	var pt := func(rho: float, a: float, y: float) -> Vector3:
+		return Vector3(cos(a) * rho, y, sin(a) * rho)
+	var quad := func(a: Vector3, b: Vector3, c: Vector3, d: Vector3) -> void:
+		for v in [a, b, c, a, c, d, a, c, b, a, d, c]:
+			st.add_vertex(v)
+	var bornes := func(a: float) -> Vector2:
+		var u: float = wrapf(a - PI * 0.25, -PI * 0.25, PI * 0.25) if false else wrapf(a, 0.0, PI * 0.5) - PI * 0.25
+		var t: float = absf(u) / alpha
+		if t >= 1.0:
+			return Vector2(rc, rc)
+		var ha: float = hr * sqrt(1.0 - t * t)
+		return Vector2(rc - ha, rc + ha)
+	var nb: int = 64
+	for k in range(nb):
+		var a0: float = TAU * k / nb
+		var a1: float = TAU * (k + 1) / nb
+		var b0: Vector2 = bornes.call(a0)
+		var b1: Vector2 = bornes.call(a1)
+		for y in [-e, e]:
+			quad.call(pt.call(0.0, a0, y), pt.call(b0.x, a0, y), pt.call(b1.x, a1, y), pt.call(0.0, a1, y))
+			quad.call(pt.call(b0.y, a0, y), pt.call(r, a0, y), pt.call(r, a1, y), pt.call(b1.y, a1, y))
+		if b0.y - b0.x > 0.001 or b1.y - b1.x > 0.001:
+			quad.call(pt.call(b0.x, a0, -e), pt.call(b0.x, a0, e), pt.call(b1.x, a1, e), pt.call(b1.x, a1, -e))
+			quad.call(pt.call(b0.y, a0, -e), pt.call(b0.y, a0, e), pt.call(b1.y, a1, e), pt.call(b1.y, a1, -e))
+		quad.call(pt.call(r, a0, -e), pt.call(r, a0, e), pt.call(r, a1, e), pt.call(r, a1, -e))
+	st.generate_normals()
+	var mi: MeshInstance3D = MeshInstance3D.new()
+	mi.mesh = MeshMerge.valider_indexe(st)
+	mi.material_override = RemonteeKit.mat(m)
+	nd.add_child(mi)
+	# flasques rouges de la gorge, garniture noire
+	RemonteeKit.tube(nd, RemonteeKit.arc(Vector3.ZERO, Vector3.RIGHT, Vector3.BACK, r + 0.02, 0.0, TAU, 48), 0.045, "caoutchouc", 6)
+	for dy in [-0.08, 0.08]:
+		RemonteeKit.tube(nd, RemonteeKit.arc(Vector3(0, dy, 0), Vector3.RIGHT, Vector3.BACK, r + 0.05, 0.0, TAU, 48), 0.03, "cabine_rouge", 6)
+	RemonteeKit.cylindre(nd, r * 0.17, r * 0.17, 0.30, Transform3D.IDENTITY, m, 16)
+
+
+## Chevalet rouge en A autour du palier, sur sa traverse : `c` centre de la roue, `ax` son axe, le tout dans le
+## repère de la ligne. Posé sur deux montants jusqu'au plancher `y_sol`, si la roue est au-dessus.
+func _chevalet(parent: Node3D, c: Vector3, ax: Vector3, r: float, y_sol: float) -> void:
+	var u: Vector3 = (Vector3.UP - ax * ax.dot(Vector3.UP)).normalized()
+	var v: Vector3 = ax.cross(u).normalized()
+	var m: String = "cabine_rouge"
+	for s in [-1.0, 1.0]:
+		var o: Vector3 = ax * (s * 0.32)
+		var haut: Vector3 = c + o + u * (r + 0.15)
+		RemonteeKit.poutre(parent, c + o + v * (r * 0.62) - u * 0.08, haut, 0.14, 0.12, m, ax)
+		RemonteeKit.poutre(parent, c + o - v * (r * 0.62) - u * 0.08, haut, 0.14, 0.12, m, ax)
+		RemonteeKit.poutre(parent, c + o - v * (r + 0.55) - u * 0.08, c + o + v * (r + 0.55) - u * 0.08, 0.20, 0.28, m, ax)
+		RemonteeKit.boite_en(parent, Vector3(0.42, 0.42, 0.42), c + o, m)
+	RemonteeKit.poutre(parent, c - ax * 0.40 + u * (r + 0.15), c + ax * 0.40 + u * (r + 0.15), 0.14, 0.14, m, u)
+	if y_sol < c.y - 0.5:
+		for sv in [-1.0, 1.0]:
+			var p: Vector3 = c + v * (sv * (r + 0.40)) - u * 0.08
+			RemonteeKit.barre(parent, p, Vector3(p.x, y_sol, p.z), 0.16, m, 8)
+
+
 ## Chariot et bloc de contrepoids (aval), fosse et garde-corps ; moteurs
 ## et fosse de la motrice (amont). `g` : nœud de la gare (repère de la gare).
 func equipements(g: Node3D, aval: bool) -> void:
@@ -231,7 +304,7 @@ func equipements(g: Node3D, aval: bool) -> void:
 	var x1: float = f[1]
 	var z0: float = f[2]
 	var z1: float = f[3]
-	var prof: float = (PROF_FOSSE + 3.5) if aval else (PROF_MOTRICE + 1.5)
+	var prof: float = (PROF_FOSSE + 3.5) if aval else (PROF_MOTRICE + 2.0 * R_MOTRICE + 1.0)
 	# parois de béton de la fosse, fond
 	var cx: float = (x0 + x1) * 0.5
 	var cz: float = (z0 + z1) * 0.5
@@ -275,32 +348,26 @@ func equipements(g: Node3D, aval: bool) -> void:
 		lab.position = Vector3(0, yb - 2.4, zr - sg * 0.81)
 		lab.rotation.y = 0.0 if sg < 0.0 else PI
 		g.add_child(lab)
-		# bâtis des poulies rouges, sur le plancher
-		var yt: float = y_plafond(true) - 0.45 - y0
-		for sx in [-1.0, 1.0]:
-			var c: Vector3 = Vector3(sx * rp, yt - R_ROUGE, zr - R_ROUGE)
-			RemonteeKit.boite_en(g, Vector3(0.8, yt - R_ROUGE - yp, 0.8), Vector3(sx * (rp + 0.75), yp + (yt - R_ROUGE - yp) * 0.5, c.z), "cabine_rouge")
-			RemonteeKit.boite_en(g, Vector3(1.0, 0.4, 0.9), Vector3(sx * (rp + 0.45), c.y, c.z), "cabine_rouge")
 		return
-	# amont : motrice, réducteur sous la poulie, deux moteurs bleus
-	var zw: float = zc + sg * (RECUL + RECUL_MOTRICE)
-	var yw: float = y_plancher(false) - PROF_MOTRICE - y0
-	RemonteeKit.boite_en(g, Vector3(2.4, 1.0, 2.4), Vector3(0, yw - 1.1, zw), "bleu_doppelmayr")
+	# amont : à côté de la motrice, palier, poulie de frein jaune à chaîne, disque rouge, réducteur et moteurs
+	# bleus ; freins bleus sur bâti rouge de l'autre côté. Simple : c'est la salle des machines.
+	var zw: float = zc + sg * RECUL
+	var yw: float = y_motrice() - y0
+	var tr: Basis = Basis(Vector3.RIGHT, PI * 0.5)
+	RemonteeKit.cylindre(g, 0.95, 0.95, 0.42, Transform3D(tr, Vector3(0, yw, zw + sg * 0.75)), "jaune_securite", 24)
+	RemonteeKit.cylindre(g, 0.70, 0.40, 0.42, Transform3D(tr, Vector3(0, yw, zw + sg * 1.15)), "cabine_rouge", 20)
+	RemonteeKit.boite_en(g, Vector3(2.1, 1.9, 1.3), Vector3(0, yw - 0.3, zw + sg * 2.05), BLEU)
 	for sx in [-1.0, 1.0]:
-		RemonteeKit.cylindre(g, 0.55, 0.55, 1.9, Transform3D(Basis(Vector3.FORWARD, PI * 0.5), Vector3(sx * 2.2, yw - 1.1, zw)), "bleu_doppelmayr", 20)
-		RemonteeKit.boite_en(g, Vector3(0.5, 0.5, 0.9), Vector3(sx * 3.3, yw - 1.1, zw), "peinture_anthracite")
-	# bâtis des renvois inclinés, depuis le plancher
-	var yt2: float = y_tracteur(false) - y0
-	var zs: float = zc + sg * RECUL
-	for sx in [-1.0, 1.0]:
-		RemonteeKit.boite_en(g, Vector3(0.7, yt2 + 0.6 - yp, 0.7), Vector3(sx * (rp + 1.2), yp + (yt2 + 0.6 - yp) * 0.5, zs), "peinture_anthracite")
-		RemonteeKit.poutre(g, Vector3(sx * (rp + 1.2), yt2 + 0.6, zs), Vector3(sx * rp * 0.7, yt2 - 0.6, zs + sg * 0.6), 0.25, 0.25, "peinture_anthracite")
+		RemonteeKit.cylindre(g, 0.45, 0.45, 1.3, Transform3D(tr, Vector3(sx * 0.6, yw + 0.1, zw + sg * 2.75)), BLEU, 16)
+		# freins sur la jante
+		RemonteeKit.boite_en(g, Vector3(0.5, 0.35, 0.45), Vector3(sx * (R_MOTRICE * 0.72), yw - R_MOTRICE * 0.72, zw - sg * 0.40), BLEU)
+		RemonteeKit.boite_en(g, Vector3(0.9, 0.2, 0.9), Vector3(sx * (R_MOTRICE * 0.72), yw - R_MOTRICE * 0.72 - 0.25, zw - sg * 0.40), "cabine_rouge")
 	var lab2: Label3D = Label3D.new()
-	lab2.text = "MOTRICE  887 kW"
+	lab2.text = "MOTRICE  2 × 785 kW"
 	lab2.font_size = 48
 	lab2.pixel_size = 0.004
 	lab2.modulate = Color(0.95, 0.95, 0.95)
-	lab2.position = Vector3(0, yw - 1.1, zw - sg * 1.22)
+	lab2.position = Vector3(0, yw - 1.4, zw + sg * 1.36)
 	lab2.rotation.y = 0.0 if sg < 0.0 else PI
 	g.add_child(lab2)
 
