@@ -721,9 +721,9 @@ func releve() -> void:
 	# moteur : physique, objets physiques, sons qui jouent (relevés de l'iPad du
 	# 27/10/2026 : nos scripts 5 ms sur 37, le reste dans le moteur)
 	_moteur = {"phys": 0.0, "n": 0, "actifs": 0, "paires": 0, "sons": 0.0, "n_sons": 0, "noeuds": 0}
+	# (recherche étalée sur les images : d'un coup, sur 60 000 nœuds, elle faussait le début du relevé)
 	_lecteurs = []
-	for c in get_tree().root.find_children("*", "AudioStreamPlayer", true, false) + get_tree().root.find_children("*", "AudioStreamPlayer3D", true, false):
-		_lecteurs.append(c)
+	_a_parcourir = [get_tree().root]
 	_rel = PackedStringArray(["t_s;image_ms;principal_ms;rendu_ms;gpu_ms;appels;objets;primitives;cran;detail;x;y;z;construit;physique_ms;apres_ms"])
 	_log("[Relevé] enregistrement %d s…" % int(RELEVE_S))
 	if _auto_situation == "" and main != null and main.has_method("_flash"):
@@ -751,9 +751,24 @@ func _noter_pic(dt: float) -> void:
 	Prof.image.clear()
 
 
+var _a_parcourir: Array = []
+
+
+func _parcourir_lecteurs() -> void:
+	var t0: int = Time.get_ticks_usec()
+	while not _a_parcourir.is_empty() and Time.get_ticks_usec() - t0 < 300:
+		var n: Node = _a_parcourir.pop_back()
+		if not is_instance_valid(n):
+			continue
+		if n is AudioStreamPlayer or n is AudioStreamPlayer3D:
+			_lecteurs.append(n)
+		_a_parcourir.append_array(n.get_children())
+
+
 func _releve_image(dt: float) -> void:
 	if _rel_t < 0.0:
 		return
+	_parcourir_lecteurs()
 	_noter_pic(dt)
 	_rel_t += dt
 	_moteur["phys"] = float(_moteur["phys"]) + (_debut_image.phys_ms if _debut_image != null else 0.0)
