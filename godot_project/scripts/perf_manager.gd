@@ -203,8 +203,6 @@ func _cran_de_depart() -> int:
 		"low":
 			return maxi(4, cran_min)
 	var t: String = machine.get("type", "inconnu")
-	var ram: float = machine.get("ram_go", 0.0)
-	var coeurs: int = machine.get("coeurs", 4)
 	var c: int = 1
 	match t:
 		"dedie":
@@ -212,9 +210,9 @@ func _cran_de_depart() -> int:
 		"apple":
 			c = 1
 		"integre":
-			c = 1 if (ram >= 15.0 and coeurs >= 8) else 2
-			if ram > 0.0 and ram < 7.5:
-				c = 3
+			# (5700G, 16 Go, parti au cran 1 : 1 à 20 s par image sur son Vega 8, rapport du 24/10/2026.
+			# Partir bas : le régulateur remonte tout seul s'il reste de la marge.)
+			c = 4
 		"logiciel":
 			c = 5
 		_:

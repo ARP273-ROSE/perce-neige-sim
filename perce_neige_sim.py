@@ -7632,11 +7632,9 @@ class GameWidget(QWidget):
                 dev_project_dir=dev_project,
             )
             self._godot_bridge.quality = self._qualite_3d
-            # Pack haute définition : installé tout seul en arrière-plan, servira
-            # au prochain lancement du viewer une fois complet.
-            import pack_hd
+            # Pack haute définition : servira au prochain lancement du viewer, une
+            # fois installé (voir "hd_possible" dans _message_3d).
             self._godot_bridge.donnees = _persistent_data_dir()
-            pack_hd.demarrer(self._godot_bridge.donnees)
         # Side-view zoom factor. 1.0 = default 850 m window, 0.35 ≈ ~300 m
         # tight, 4.2 ≈ full 3491 m trip. Driver adjusts with +/- or wheel.
         self._profile_zoom = 1.0
@@ -7714,6 +7712,12 @@ class GameWidget(QWidget):
         """Message de la vue 3D embarquée (GodotBridge.poll_messages)."""
         if "pupitre" in m:
             self._pupitre_3d(str(m["pupitre"]), bool(m.get("enfonce", False)))
+        elif "hd_possible" in m:
+            # la vue 3D dit si cette machine s'en servirait : inutile de télécharger
+            # 819 Mo pour un processeur graphique intégré
+            if m["hd_possible"] and self._godot_bridge is not None and self._godot_bridge.donnees is not None:
+                import pack_hd
+                pack_hd.demarrer(self._godot_bridge.donnees)
         elif "ips_3d" in m:
             self._ips_3d = float(m["ips_3d"])
             self._t_ips_3d = time.monotonic()
