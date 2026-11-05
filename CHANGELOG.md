@@ -17,9 +17,11 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 **Skieur coincé dans un ouvrage** : le filet de sécurité voit maintenant un corps enfoncé dans le décor, où ses anciens essais passaient alors que la marche restait bloquée. Touche tous les rendus, PWA comprise.
 
-**Galerie de secours** : remblai par pas de 4 m au lieu d'un seul palier par tronçon, qui faisait de grands trapèzes sombres dans le versant. Touche aussi la PWA.
+**Galerie de secours** : remblai par pas de 4 m au lieu d'un seul palier par tronçon, qui faisait de grands trapèzes sombres dans le versant avec le pack. Sur la PWA, aucune différence aux deux vues comparées : les dents de scie sombres au-dessus du portail, sur le relief à 25 m, étaient déjà là et restent.
 
 **Pilote automatique à ski** : la descente auto du banc passe de 9 min 07 à 11 min sur le sol au mètre. Écart gardé, cause non établie.
+
+**PWA** : à regard fixe sur 8 caps sous WebKit, Tovière 548 k primitives et 412 appels, Leissières 393 k et 195, 321 Mo écrits, aucune perte WebGL : identique à la 1.53.13 (548 k/410, 394 k/196).
 
 **Reste ouvert** : à-coups de 426-456 ms et 219-233 ms au chargement, entrée en skieur jusqu'à 278 ms ; repli automatique peu efficace (0,2 ms environ) ; `bench_coince` passe sur 5 graines sur 8 avec le pack et 8 sur 8 sans, à cause d'un même filet de 0,44 m sous une plateforme du TSD4 Vanoise, jamais de vrai blocage, cause non expliquée.
 
