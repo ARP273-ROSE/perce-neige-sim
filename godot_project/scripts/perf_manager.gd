@@ -217,7 +217,7 @@ func _cran_de_depart() -> int:
 		"apple":
 			c = 1
 		"integre":
-			# (5700G, 16 Go, parti au cran 1 : 1 à 20 s par image sur son Vega 8, rapport du 24/10/2026.
+			# (puce intégrée partie au cran 1 : 1 à 20 s par image, rapport du 24/10/2026.
 			# Partir bas : le régulateur remonte tout seul s'il reste de la marge.)
 			c = 4
 		"logiciel":

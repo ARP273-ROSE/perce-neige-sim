@@ -9,7 +9,11 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 **Pack haute définition installé tout seul** : le simulateur télécharge le pack (819 Mo) en arrière-plan au lancement, le vérifie et le pose dans le dossier de données de l'utilisateur, où les mises à jour ne le touchent pas. Un téléchargement coupé reprend au lancement suivant ; le pack sert au lancement suivant du viewer 3D une fois complet. Le viewer dit d'abord si la machine s'en servirait : pas de téléchargement sans carte dédiée assez fournie, ni sans 1,8 Go de place libre. Aucune barre de progression. Le pack reste hors de la PWA.
 
-**Processeur graphique intégré** : départ au cran 4 au lieu de 1 ou 2, le régulateur remontant s'il reste de la marge (rapport du 24/10 : 1 à 20 s par image sur un Vega 8 en 1.31.1). Non mesuré sur une vraie machine de ce type.
+**Départ selon la machine** : le cran de départ tient compte de la mémoire vidéo et de la résolution (carte dédiée de plus de 7,5 Go : 0 ; 5 à 7,5 Go : 1, ou 3 sur écran plus défini que 2560×1600 ; moins de 5 Go : 3 ou 4 ; puce intégrée : 4). Sur puce intégrée ou rendu logiciel, profil allégé repris de la PWA : à carte égale au cran 4, appels de dessin 490-1394 → 383-1056, primitives 1,2-3,0 M → 0,5-1,2 M. Le relief fin et le pack passent au cran 1 sur carte dédiée. Simulé seulement, sur une seule carte : aucune mesure sur une vraie petite machine (rapport du 24/10 : 1 à 20 s par image sur puce intégrée en 1.31.1).
+
+**À-coups** : entrée en skieur ~280 → 35-41 ms ; fin de chargement 430-450 → 88-91 ms et ~255 → 101-110 ms. Repli automatique refait : les effets passent d'abord, FSR 1 au lieu de FSR 2 aux crans 6 et 7. Reste 210-216 ms au début de la préparation du skieur. PWA inchangée sur l'entrée en skieur.
+
+**Pupitre** : tableau de bord redessiné à 10 Hz quand la 3D est affichée, repeint médian 9,7 → 5,4 ms.
 
 **Compteur en bas du pupitre** : il affichait la cadence du pupitre (minuterie de 16 ms, 62 fps fixes), jamais celle de la 3D. Il montre maintenant `3D n i/s` quand le viewer tourne, et `pupitre n fps` sinon.
 
