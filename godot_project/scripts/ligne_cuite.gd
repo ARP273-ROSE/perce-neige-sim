@@ -23,6 +23,7 @@ var _meshes: Array = []
 var _instances: Array = []
 var _multis: Array = []
 var _veh: Array = []                # MultiMesh des véhicules, un par surface
+var retard: float = 0.0              # temps à rattraper : ligne lointaine, avancée à tour de rôle
 var _cable: Array = []              # ShaderMaterial du câble
 var _visible: bool = true
 var _trajet: PackedFloat32Array = PackedFloat32Array()

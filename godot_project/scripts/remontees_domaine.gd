@@ -721,6 +721,8 @@ var _t_cuit: float = 0.0
 var _t_cuit_veh: float = 0.0
 var _t_cuit_dist: float = 0.0
 var _cuit_sous_terre: bool = false
+var _cuit_tour: int = 0
+const CUITES_LOIN_PAR_TIC: int = 3
 
 
 var _communs_faits: bool = false
@@ -781,6 +783,9 @@ func _gerer_cuites(delta: float) -> void:
 	if bouge:
 		_t_cuit_veh = 0.0
 	var montrer_tout: bool = not _sous_terre
+	# (de loin, les véhicules s'arrêtaient net au-delà de la portée, cabines du 3S figées vues du télésiège
+	# voisin, retour d'utilisateur, 05/11/2026) : quelques lignes lointaines à la fois, chacune rattrape son temps
+	var loin_restant: int = CUITES_LOIN_PAR_TIC
 	for e in lignes:
 		var lg: LigneRemontee = e[0]
 		var nom: String = String(lg.name)
@@ -788,8 +793,24 @@ func _gerer_cuites(delta: float) -> void:
 			continue
 		var lc: LigneCuite = _cuites[nom]
 		lc.montrer(montrer_tout and not lg.pret)
-		if bouge and montrer_tout and not lg.pret and _distance_ligne(lg, p) < VEHICULES_JUSQUA + 50.0:
-			lc.avancer(dt_veh)
+		if bouge and montrer_tout and not lg.pret:
+			if _distance_ligne(lg, p) < VEHICULES_JUSQUA + 50.0:
+				lc.avancer(dt_veh + lc.retard)
+				lc.retard = 0.0
+			else:
+				lc.retard += dt_veh
+	if bouge and montrer_tout:
+		var n_lignes: int = lignes.size()
+		for _k in range(n_lignes):
+			if loin_restant <= 0:
+				break
+			_cuit_tour = (_cuit_tour + 1) % n_lignes
+			var lg2: LigneRemontee = lignes[_cuit_tour][0]
+			var lc2: LigneCuite = _cuites.get(String(lg2.name))
+			if lc2 != null and lc2.retard > 0.0 and not lg2.pret:
+				lc2.avancer(lc2.retard)
+				lc2.retard = 0.0
+				loin_restant -= 1
 	_t_cuit_dist -= delta
 	if _t_cuit_dist > 0.0:
 		return
