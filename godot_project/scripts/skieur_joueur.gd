@@ -298,12 +298,15 @@ static func _squelette_marche(ph: float) -> Dictionary:
 
 # --- activation ------------------------------------------------------------------
 
+const SAUT_LOIN: float = 20.0
+
+
 func activer(position_depart: Vector3, regard: float) -> void:
 	if sur_echelle():
 		_echelle_bas = Vector3.ZERO
 		_echelle_haut = Vector3.ZERO
 		embarque = false
-	global_position = position_depart
+	_poser_sans_balayage(position_depart)
 	velocity = Vector3.ZERO
 	cam_yaw = regard
 	_cap = regard
@@ -315,6 +318,16 @@ func activer(position_depart: Vector3, regard: float) -> void:
 	visible = true
 	set_process(true)
 	camera.make_current()
+
+
+## Saut lointain du corps. Le moteur physique étire la boîte d'un corps cinématique sur tout son déplacement
+## jusqu'au pas suivant : après 2 km depuis l'origine, chaque test_move ramassait des milliers de formes (12 ms
+## pièce, une image de 280 ms à l'entrée). Repasser par le mode statique rend le prochain placement immédiat.
+func _poser_sans_balayage(p: Vector3) -> void:
+	if p.distance_squared_to(global_position) > SAUT_LOIN * SAUT_LOIN and not OS.has_feature("web"):
+		PhysicsServer3D.body_set_mode(get_rid(), PhysicsServer3D.BODY_MODE_STATIC)
+		PhysicsServer3D.body_set_mode(get_rid(), PhysicsServer3D.BODY_MODE_KINEMATIC)
+	global_position = p
 
 
 func desactiver(rester_visible: bool = false) -> void:
