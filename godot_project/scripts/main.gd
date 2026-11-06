@@ -994,13 +994,18 @@ func _maj_souterrain(delta: float) -> void:
 			c = cam.global_position
 			dehors = c.y > relief.hauteur_sol(c.x, c.z) - 1.0
 	var pres_gare: bool = false
+	var pres_haut: bool = false
 	if dehors:
 		for sg in [0.0, PNConstants.LENGTH]:
 			var g: Vector3 = tunnel.transform_at(sg).origin
 			if Vector2(c.x - g.x, c.z - g.z).length() < SOUTERRAIN_LOIN:
 				pres_gare = true
-	for n in [lights, track, machine_room]:
+				pres_haut = pres_haut or sg > 0.0
+	for n in [lights, track]:
 		etat.append([n, dehors and not pres_gare])
+	# la salle des machines est en haut : devant la gare de Val Claret, elle restait dessinée
+	# (~310 appels de dessin, relevé du 06/11/2026)
+	etat.append([machine_room, dehors and not pres_haut])
 	for r in [cabin, cabin_ghost]:
 		etat.append([r, dehors and r != null and (r as Node3D).global_position.distance_to(c) > RAME_LOIN])
 	var cles: String = ""
