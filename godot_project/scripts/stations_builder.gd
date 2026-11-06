@@ -651,6 +651,28 @@ func _build_platform_barrier(s_start: float, s_end: float, s_nez: float, side: f
 		_box(Vector3(platform_width + platform_inner_x - 1.05, y_pal - FLOOR_Y_LOCAL, 1.25), beton_p,
 			s_b + 0.66, side * (platform_inner_x + platform_width + 1.05) * 0.5,
 			(y_pal + FLOOR_Y_LOCAL) * 0.5, "PalierPersonnel")
+		# garde-corps au bout du palier, côté amont (retour d'utilisateur, 06/11/2026 : « quand
+		# j'ai passé la porte du quai je suis tombé ») : tout droit après la porte, on
+		# quittait le palier et tombait de 1,2 m dans le tunnel. Au droit de la tête de
+		# l'escalier de la fosse (jusqu'à PIT_LOW_END + 0,6), le palier va jusqu'au
+		# garde-corps ; l'escalier se prend vers l'aval, le garde-corps ne le gêne pas.
+		var s_gc: float = maxf(s_b + 1.285, PIT_LOW_END + 0.6) - 0.04
+		if s_gc > s_b + 1.3:
+			_box(Vector3(platform_width + platform_inner_x - 1.05, y_pal - FLOOR_Y_LOCAL, s_gc + 0.04 - (s_b + 1.28)),
+				beton_p, (s_b + 1.28 + s_gc + 0.04) * 0.5, side * (platform_inner_x + platform_width + 1.05) * 0.5,
+				(y_pal + FLOOR_Y_LOCAL) * 0.5, "PalierPersonnelSuite")
+		var xf_gc: Transform3D = _xf_at(s_gc)
+		var gc := func(x_: float, h_: float) -> Vector3:
+			return xf_gc.origin + xf_gc.basis.x * x_ + xf_gc.basis.y * (y_pal + h_)
+		var x_gc0: float = side * 1.10
+		_tube(st, [gc.call(x_gc0, 0.0), gc.call(x_gc0, BARRIERE_H), gc.call(x_mur, BARRIERE_H), gc.call(x_mur, 0.0)],
+			BARRIERE_R, BARRIERE_COUDE)
+		for h in BARRIERE_LISSES:
+			_tube(st, [gc.call(x_gc0, h), gc.call(x_mur, h)], BARRIERE_R_LISSE, 0.0)
+		var n_gc: int = maxi(1, int(ceil(absf(x_mur - x_gc0) / BARRIERE_PAS)))
+		for i in range(1, n_gc):
+			var x_i: float = lerpf(x_gc0, x_mur, float(i) / float(n_gc))
+			_tube(st, [gc.call(x_i, 0.0), gc.call(x_i, BARRIERE_H - BARRIERE_R)], BARRIERE_R, 0.0)
 
 	var mi: MeshInstance3D = MeshInstance3D.new()
 	mi.name = "Tubes"

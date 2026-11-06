@@ -15,6 +15,9 @@ void NoyauFuni::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_spline", "noeuds", "pas", "longueur"), &NoyauFuni::set_spline);
 	ClassDB::bind_method(D_METHOD("transform_at", "s"), &NoyauFuni::transform_at);
 	ClassDB::bind_method(D_METHOD("transforms_at", "s"), &NoyauFuni::transforms_at);
+	ClassDB::bind_method(D_METHOD("points_amorce", "att", "x0", "p_att", "p_r1", "xs", "lats", "ys"),
+			&NoyauFuni::points_amorce);
+	ClassDB::bind_method(D_METHOD("tube_amorce", "pts", "xs", "att", "rayon", "ns"), &NoyauFuni::tube_amorce);
 	ClassDB::bind_method(D_METHOD("set_croisement", "debut", "fin", "decal_max"), &NoyauFuni::set_croisement);
 	ClassDB::bind_method(D_METHOD("passing_loop_offset", "s", "cote"), &NoyauFuni::passing_loop_offset);
 	ClassDB::bind_method(D_METHOD("poses_rame", "s_pos", "cote", "nb_voitures", "long_voiture", "demi_bogie"),
@@ -204,4 +207,40 @@ Array NoyauFuni::tube_cable(const PackedVector3Array &pts, const PackedVector3Ar
 	arrays[Mesh::ARRAY_NORMAL] = n_out;
 	arrays[Mesh::ARRAY_TEX_UV] = uv_out;
 	return arrays;
+}
+
+PackedVector3Array NoyauFuni::points_amorce(double att, double x0, const Vector3 &p_att, const Vector3 &p_r1,
+		const PackedFloat64Array &xs, const PackedFloat64Array &lats, const PackedFloat64Array &ys) const {
+	PackedVector3Array r;
+	const int64_t n = xs.size();
+	if (lats.size() != n || ys.size() != n) {
+		return r;
+	}
+	r.resize(n);
+	Vector3 *w = r.ptrw();
+	for (int64_t i = 0; i < n; i++) {
+		const double x = xs[i];
+		const Basis bx = transform_at(att + x).basis;
+		w[i] = p_att.lerp(p_r1, real_t(x / x0)) + bx.get_column(0) * real_t(lats[i]) + bx.get_column(1) * real_t(ys[i]);
+	}
+	return r;
+}
+
+Array NoyauFuni::tube_amorce(const PackedVector3Array &pts, const PackedFloat64Array &xs, double att, double rayon, int ns) const {
+	const int64_t n = pts.size();
+	if (xs.size() != n) {
+		return Array();
+	}
+	PackedVector3Array vx, vy;
+	PackedFloat32Array uv;
+	vx.resize(n);
+	vy.resize(n);
+	uv.resize(n);
+	for (int64_t i = 0; i < n; i++) {
+		const Basis b = transform_at(att + xs[i]).basis;
+		vx.set(i, b.get_column(0));
+		vy.set(i, b.get_column(1));
+		uv.set(i, float(2.0 * (att + xs[i])));
+	}
+	return tube_cable(pts, vx, vy, uv, rayon, ns);
 }

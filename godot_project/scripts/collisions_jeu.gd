@@ -43,6 +43,7 @@ var _t0: int = 0
 var _decor: StaticBody3D = null
 var _corps_relief: StaticBody3D = null
 var _formes: Dictionary = {}            # Mesh → Shape3D (formes partagées)
+var _morceaux: Dictionary = {}          # Mesh → [ConcavePolygonShape3D ou ses triangles], null si vide
 ## Nœuds dont le sous-arbre bouge : un corps à part, accroché à eux.
 var mobiles: Array = []
 var _main: Node = null
@@ -311,26 +312,44 @@ func _multimesh(mmi: MultiMeshInstance3D, zones: Array) -> void:
 
 
 func _ajouter_forme(corps: CollisionObject3D, m: Mesh, xf: Transform3D, nom: String = "") -> void:
-	if not _formes.has(m):
+	if not _morceaux.has(m):
 		# triangles lus côté processeur (create_trimesh_shape relisait la carte
 		# graphique : relevés du PC du 26/10/2026)
 		var tri: PackedVector3Array = MeshMerge.faces(m)
 		if tri.size() < 3:
-			_formes[m] = null
+			_morceaux[m] = null
 			return
-		var f: ConcavePolygonShape3D = ConcavePolygonShape3D.new()
-		f.set_faces(tri)
-		f.backface_collision = true
-		_formes[m] = f
-		triangles += f.get_faces().size() / 3
-	var forme: Shape3D = _formes[m]
-	if forme == null:
+		# par morceaux de RELIEF_MORCEAU triangles, chacun dans sa tâche (06/11/2026 : un
+		# maillage de gare faisait une tâche de 26 ms d'un seul tenant) ; formes partagées
+		# entre les instances du même maillage, construites à la première
+		var liste: Array = []
+		var nv: int = RELIEF_MORCEAU * 3
+		var k: int = 0
+		while k < tri.size():
+			liste.append(tri.slice(k, mini(k + nv, tri.size())))
+			k += nv
+		_morceaux[m] = liste
+		triangles += tri.size() / 3
+	var e: Variant = _morceaux[m]
+	if e == null:
 		return
+	for i in range((e as Array).size() - 1, 0, -1):
+		_taches.push_front(_poser_morceau.bind(corps, m, i, xf, nom))
+	_poser_morceau(corps, m, 0, xf, nom)
+
+
+func _poser_morceau(corps: CollisionObject3D, m: Mesh, i: int, xf: Transform3D, nom: String) -> void:
+	var liste: Array = _morceaux[m]
+	if liste[i] is PackedVector3Array:
+		var f: ConcavePolygonShape3D = ConcavePolygonShape3D.new()
+		f.set_faces(liste[i])
+		f.backface_collision = true
+		liste[i] = f
 	var cs: CollisionShape3D = CollisionShape3D.new()
-	cs.shape = forme
+	cs.shape = liste[i]
 	cs.transform = xf
 	if nom != "":
-		cs.name = nom.replace("@", "").replace("/", "_").replace(":", "_")
+		cs.name = (nom if i == 0 else "%s_%d" % [nom, i]).replace("@", "").replace("/", "_").replace(":", "_")
 	corps.add_child(cs)
 
 
@@ -823,6 +842,30 @@ func _exit_tree() -> void:
 		_sol_tache = -1
 
 
+## Module C++ des collisions du décor (NoyauDecor), pièces des gares chargées ; null sans le
+## module (PWA) ou avec --sans-noyau-decor : chemin GDScript.
+var _nd: RefCounted = null
+var _nd_pieces: int = -1
+
+
+func _noyau_decor(relief: ReliefBuilder) -> RefCounted:
+	if not ClassDB.class_exists("NoyauDecor") or "--sans-noyau-decor" in OS.get_cmdline_user_args():
+		return null
+	if _nd == null:
+		_nd = ClassDB.instantiate("NoyauDecor")
+	if _nd_pieces != relief._pieces.size():
+		_nd_pieces = relief._pieces.size()
+		var liste: Array = []
+		for pc in relief._pieces:
+			var img: Image = pc[4]
+			if img.get_format() != Image.FORMAT_L8:
+				img = img.duplicate()
+				img.convert(Image.FORMAT_L8)
+			liste.append([pc[0], pc[1], pc[2], pc[3], img.get_data(), img.get_width(), img.get_height()])
+		_nd.set_pieces(liste)
+	return _nd
+
+
 func _terrain(relief: ReliefBuilder, r: Rect2, quoi: int = TERRAIN_TOUT) -> void:
 	if quoi != TERRAIN_PIECES and relief.fin != null and relief.fin.hd:
 		_terrain(relief, r, TERRAIN_PIECES)   # (le reste : _sol_autour)
@@ -881,6 +924,20 @@ func _terrain(relief: ReliefBuilder, r: Rect2, quoi: int = TERRAIN_TOUT) -> void
 		var pas: float = ReliefBuilder.PAS_PIECE
 		var nx: int = int(ceil(rp.size.x / pas))
 		var nz: int = int(ceil(rp.size.y / pas))
+		var nd: RefCounted = _noyau_decor(relief)
+		if nd != null:
+			# en C++ (NoyauDecor, 06/11/2026) : 12 à 28 ms d'un seul tenant en GDScript ;
+			# hors des pièces, la hauteur du bloc (_hauteur_tri, relief fin compris)
+			var g: Array = nd.piece_grille(rp, pas, nx, nz)
+			var fin: ReliefFin = relief.fin
+			var ct: Array = nd.completer_tri(g[0], g[2], rp, pas, nx, relief._h, ReliefDonnees.NX, ReliefDonnees.NZ,
+				ReliefDonnees.X_OUEST, ReliefDonnees.Z_NORD, relief._dx, relief._dz, relief._pas,
+				fin._fine if fin != null else PackedByteArray(), ReliefFin.NCX, ReliefFin.NCZ, ReliefFin.L_X, ReliefFin.L_Z)
+			var hc: PackedFloat32Array = ct[0]
+			for k in (ct[1] as PackedInt32Array):
+				hc[k] = relief._hauteur_tri(rp.position.x + (k % (nx + 1)) * pas, rp.position.y + (k / (nx + 1)) * pas)
+			faces.append_array(nd.piece_faces(rp, pas, nx, nz, hc, g[1]))
+			continue
 		var h: PackedFloat32Array = PackedFloat32Array()
 		h.resize((nx + 1) * (nz + 1))
 		var trou: PackedByteArray = PackedByteArray()
@@ -913,6 +970,24 @@ func _terrain(relief: ReliefBuilder, r: Rect2, quoi: int = TERRAIN_TOUT) -> void
 					Vector3(xa + pas, h[d], za + pas), Vector3(xa, h[c3], za + pas)])
 	if faces.is_empty():
 		return
+	# par morceaux de RELIEF_MORCEAU triangles, un par tâche (06/11/2026) : une seule forme
+	# de 22 000 triangles faisait 10 ms de set_faces puis 15 ms d'entrée dans le monde
+	# physique, d'un seul tenant (image figée à l'entrée du skieur). Mêmes triangles.
+	var nv: int = RELIEF_MORCEAU * 3
+	var k: int = 0
+	var morceaux: Array = []
+	while k < faces.size():
+		morceaux.append(faces.slice(k, mini(k + nv, faces.size())))
+		k += nv
+	for i in range(morceaux.size() - 1, 0, -1):
+		_taches.push_front(_forme_relief.bind(morceaux[i]))
+	_forme_relief(morceaux[0])
+
+
+const RELIEF_MORCEAU: int = 3000
+
+
+func _forme_relief(faces: PackedVector3Array) -> void:
 	var f: ConcavePolygonShape3D = ConcavePolygonShape3D.new()
 	f.set_faces(faces)
 	f.backface_collision = true
