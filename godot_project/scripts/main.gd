@@ -894,6 +894,8 @@ func _build_cabin() -> void:
 	add_child(cabin_ghost)
 	cabin_ghost.set_tunnel(tunnel)
 	cabin_ghost.set_physics(physics)
+	for r in [cabin, cabin_ghost]:
+		r.set_pare_brise_simple(PerfManager.cran_courant >= 3)   # (réglé avant que les rames existent)
 
 	# Vue « salle des machines » (O ×2 / bouton VUE) : caméra libre posée
 	# dans la gare amont, elle ne suit pas la rame (demande du 2026-09-30).
