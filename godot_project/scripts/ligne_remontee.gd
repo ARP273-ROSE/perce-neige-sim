@@ -4566,6 +4566,19 @@ func _preparer_noyau() -> void:
 	if not _noyau_annonce:
 		_noyau_annonce = true
 		print("[NoyauRemontee] module C++ actif (première ligne : %s)" % name)
+	_preparer_calages()
+
+
+## Tables du calage des galets pour tous les pylônes, avec le noyau (sur le fil de construction : à la première
+## visite d'un pylône, sur le fil principal, elles faisaient des images de 40 à 150 ms, relevé du 06/11/2026).
+func _preparer_calages() -> void:
+	if _noyau == null or not calage_noyau or not _noyau.has_method("set_calage"):
+		return
+	for k in range(_pyl.size()):
+		var py: Variant = _pyl[k][0]
+		if not (py is PyloneRemontee) or (py as PyloneRemontee)._paires[true].is_empty():
+			continue
+		_preparer_calage(k, py, float(_pyl[k][1]), (py as PyloneRemontee).position.y + (py as PyloneRemontee).hauteur_cable())
 
 
 func _noyau_valide() -> bool:
