@@ -32,6 +32,12 @@ extends Node3D
 
 var tunnel: TunnelBuilder = null
 var lang: String = "fr"
+## Néons du plafond des quais (un tous les 2,8 m, portée 16 m) : une dizaine éclairent chaque point,
+## et chacun coûte ~0,4 ms de carte sur une puce intégrée (Radeon 740M, 06/11/2026). Aux crans
+## bas, un sur deux s'éteint et les autres doublent : même lumière moyenne, moitié moins de calcul.
+var _neons: Array[OmniLight3D] = []
+var _neons_alleges: bool = false
+const NEON_ENERGIE: float = 4.5
 
 # Paramètres plateforme — offsets dans la base locale
 const FLOOR_Y_LOCAL: float = -1.60 # top dalle (cohérent avec track_builder : floor_y_local + slab_thickness = -1.85+0.25 = -1.60)
@@ -1044,6 +1050,20 @@ func _compat() -> bool:
 	return RenderingServer.get_current_rendering_method() == "gl_compatibility"
 
 
+## Un néon sur deux éteint, les autres à double énergie (PC seulement : la PWA a ses propres
+## réglages de lumières, voir KOMPAT).
+func set_neons_alleges(oui: bool) -> void:
+	if oui == _neons_alleges or _compat():
+		return
+	_neons_alleges = oui
+	for i in _neons.size():
+		var l: OmniLight3D = _neons[i]
+		if not is_instance_valid(l):
+			continue
+		l.visible = not oui or i % 2 == 0
+		l.light_energy = NEON_ENERGIE * (2.0 if oui else 1.0)
+
+
 func _build_ceiling_lights(s_start: float, s_end: float) -> void:
 	# entre les poutres (tous les 2,8 m), tubes plus fins
 	var spacing: float = 2.8
@@ -1062,13 +1082,14 @@ func _build_ceiling_lights(s_start: float, s_end: float) -> void:
 		# lampes par objet → néons 2,5 fois plus forts (« la gare du haut
 		# semble dans le noir », iPad 07/10/2026), sauf sur l'intérieur de
 		# la cabine (Cabin.MASQUE_GARE_WEB)
-		light.light_energy = 4.5 * (KOMPAT if _compat() else 1.0)
+		light.light_energy = NEON_ENERGIE * (KOMPAT if _compat() else 1.0)
 		if _compat():
 			light.light_cull_mask = Cabin.MASQUE_GARE_WEB   # pas l'intérieur de la cabine
 		light.omni_range = 16.0
 		light.omni_attenuation = 1.4
 		light.shadow_enabled = false
 		add_child(light)
+		_neons.append(light)
 
 		# Bâtonnet émissif visible (source lumineuse visible dans le brouillard)
 		var neon_mesh: BoxMesh = BoxMesh.new()

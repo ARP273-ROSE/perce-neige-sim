@@ -266,6 +266,10 @@ func _appliquer(c: int, pourquoi: String) -> void:
 		_env.glow_enabled = cran <= (4 if _web else 3)
 	cran_courant = cran
 	_appliquer_ips()
+	# néons des quais : un sur deux dès le cran 3 (puce intégrée, mesuré le 06/11/2026)
+	var st: Node = main.get("stations") as Node if main != null else null
+	if not _web and st != null and st.has_method("set_neons_alleges"):
+		st.call("set_neons_alleges", cran >= 3)
 	# dernier cran (PC à carte intégrée) : portées de la PWA, détail minimal
 	var rm_loin: Node = main.get("remontees") as Node if main != null else null
 	if _env != null and _env.sky != null and _env.sky.sky_material is ShaderMaterial:

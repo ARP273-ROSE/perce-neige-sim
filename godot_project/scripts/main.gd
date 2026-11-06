@@ -679,6 +679,7 @@ func _build_stations() -> void:
 	stations.name = "Stations"
 	add_child(stations)
 	stations.build(tunnel)
+	stations.set_neons_alleges(PerfManager.cran_courant >= 3)   # (le PerfManager règle avant que les gares existent)
 	if OS.has_feature("web"):       # 305 surfaces fixes, ~900 tampons WebGL (mesure 03/11/2026)
 		MeshMerge.merge(stations, [], "Stations")
 	print("[Stations] Val Claret + Grande Motte construites")
