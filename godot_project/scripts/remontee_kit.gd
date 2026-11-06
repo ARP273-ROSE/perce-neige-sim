@@ -16,6 +16,8 @@ const COULEURS: Dictionary = {
 	"caoutchouc": [Color(0.05, 0.05, 0.05), 0.85, 0.0],
 	"beton": [Color(0.66, 0.65, 0.62), 0.95, 0.0],
 	"jaune_securite": [Color(0.95, 0.75, 0.08), 0.6, 0.1],
+	"tapis_clair": [Color(0.66, 0.67, 0.66), 0.92, 0.0],     # tapis d'embarquement (estimé sur vidéo)
+	"tapis_fonce": [Color(0.42, 0.43, 0.43), 0.92, 0.0],
 	"rouge_ressort": [Color(0.72, 0.10, 0.08), 0.5, 0.3],
 	"jaune_ressort": [Color(0.92, 0.78, 0.10), 0.5, 0.3],
 	"bleu_ressort": [Color(0.12, 0.30, 0.72), 0.5, 0.3],
