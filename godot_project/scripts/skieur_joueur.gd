@@ -1159,8 +1159,6 @@ func _monter_marche(pas: Vector3, haut_max: float = MARCHE_MAX, plat_min: float 
 ## place dans sa voiture. Un grand saut (rame replacée ailleurs, nouveau
 ## voyage) ne l'emporte pas.
 func _porter() -> void:
-	if support == null:
-		return
 	if not is_instance_valid(support):
 		support = null
 		return
@@ -1206,7 +1204,8 @@ func _trouver_support() -> void:
 		return
 	var trouve: Node3D = null
 	var o: Object = hit["collider"]
-	if o != null and o is Node and (o as Node).has_meta("vehicule"):
+	if o != null and o is Node and (o as Node).has_meta("vehicule") \
+			and is_instance_valid((o as Node).get_meta("vehicule")):
 		trouve = (o as Node).get_meta("vehicule") as Node3D
 	else:
 		# le quai est au niveau du plancher de la rame : dans la baie d'une
@@ -1219,7 +1218,8 @@ func _trouver_support() -> void:
 		var hv: Dictionary = get_world_3d().direct_space_state.intersect_ray(rq)
 		if not hv.is_empty() and (hv["position"] as Vector3).y > (hit["position"] as Vector3).y - 0.15:
 			var ov: Object = hv["collider"]
-			if ov != null and ov is Node and (ov as Node).has_meta("vehicule"):
+			if ov != null and ov is Node and (ov as Node).has_meta("vehicule") \
+					and is_instance_valid((ov as Node).get_meta("vehicule")):
 				var vv: Node3D = (ov as Node).get_meta("vehicule") as Node3D
 				if absf((vv.global_transform.affine_inverse() * p).x) < 1.70:
 					trouve = vv
@@ -1600,6 +1600,11 @@ func _camera() -> void:
 	pivot.position.z = 0.0
 	# à bord, arrêté sur le seuil ou contre la paroi : l'origine du bras reste dans la
 	# rame, sinon le bras sortait par la porte (il partait de l'autre côté des flancs)
+	# (véhicule d'une ligne démontée ou remplacée par sa version allégée : la référence
+	# survit au nœud — « Trying to cast a freed object », contrôle des nuanceurs, 06/11/2026)
+	# (un objet libéré vaut null à la comparaison : seul is_instance_valid le voit)
+	if not is_instance_valid(support):
+		support = null
 	var sup_cam: Node3D = support as Node3D
 	var decal_voulu: Vector3 = Vector3.ZERO
 	if sup_cam != null and not embarque and not premiere_personne:
