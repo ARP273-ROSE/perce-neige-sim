@@ -4666,6 +4666,49 @@ static func lod_voulu() -> bool:
 	return OS.has_feature("web") or PerfManager.allege or "--lod-vehicules" in OS.get_cmdline_user_args()
 
 
+## Pièces des pylônes vues de loin (portée `portee`, le fût et sa tête : même géométrie de près
+## comme de loin) fusionnées une fois pour toute la ligne, à sa construction, par matériau : quelques
+## appels par ligne au lieu de trois par pylône et par passe (relevé du 06/11/2026 : 358 appels pour
+## 149 pylônes vus en ski). Les pièces de plus courte portée (galets, plaques…) restent aux pylônes.
+## PWA et mode allégé : leurs pylônes cuits, inchangés. Faux pour la cuisson (elle lit les pylônes).
+static var fusion_pylones: bool = true
+
+
+static func fusionner_pylones_loin(racine: Node, portee: float) -> void:
+	if not fusion_pylones or lod_voulu():
+		return
+	var lot: Node3D = Node3D.new()
+	lot.name = "PylonesLoin"
+	var n: int = 0
+	for py in racine.get_children():
+		if not (py is PyloneRemontee or py is PyloneTreillis) or not (py as Node3D).visible:
+			continue
+		for mi0 in (py as Node).find_children("*", "MeshInstance3D", true, false):
+			var mi: MeshInstance3D = mi0
+			if mi.visibility_range_end != portee or not mi.visible or mi.get_child_count() > 0:
+				continue
+			# repère de la racine (hors de la scène pendant la construction : pas de global_transform)
+			var xf: Transform3D = mi.transform
+			var cache: bool = false
+			var p: Node = mi.get_parent()
+			while p != racine and p != null:
+				if p is Node3D:
+					xf = (p as Node3D).transform * xf
+					cache = cache or not (p as Node3D).visible
+				p = p.get_parent()
+			if cache or p == null:
+				continue
+			mi.get_parent().remove_child(mi)
+			mi.transform = xf
+			lot.add_child(mi)
+			n += 1
+	if n == 0:
+		lot.free()
+		return
+	racine.add_child(lot)
+	MeshMerge.merge(lot, [], "PyloneLoin")
+
+
 ## PWA : de loin, un maillage allégé à la place du pylône, par les portées de visibilité.
 func _pylone_lod(py: PyloneRemontee) -> void:
 	if not LigneRemontee.lod_voulu():
