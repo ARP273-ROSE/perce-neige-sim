@@ -315,7 +315,7 @@ func _tick() -> void:
 	var am: MeshInstance3D = tr.get_node_or_null("CulotG_amorce")
 	var sens_ok: bool = false
 	if am != null:
-		var arr: Array = (am.mesh as ImmediateMesh).surface_get_arrays(0)
+		var arr: Array = (am.mesh as Mesh).surface_get_arrays(0)
 		var vx: PackedVector3Array = arr[Mesh.ARRAY_VERTEX]
 		var uvs: PackedVector2Array = arr[Mesh.ARRAY_TEX_UV]
 		var nrm: PackedVector3Array = arr[Mesh.ARRAY_NORMAL]
