@@ -1543,6 +1543,7 @@ const Y_POUTRES_3S: float = 0.40
 const X_PIVOT_3S: float = 0.68
 const Y_PIVOT_3S: float = -0.22
 const Y_TRACTEUR_3S: float = -0.42
+const Y_CORPS_3S: float = 0.13          # corps de la pince, au-dessus du tracteur
 const H_SUSP_3S: float = 2.65        # du chariot au toit de la cabine (mesuré en vidéo : 2,6-2,7)
 
 
@@ -1602,11 +1603,13 @@ func _cabine_zeta() -> void:
 			RemonteeKit.boite_en(ch, Vector3(0.11, 0.08, 0.012), tete + Vector3(-sx * 0.09, 0.0, bz * 0.043), "polyurethane")
 			# traverse au-dessus du porteur, du corps au balancier
 			RemonteeKit.boite_en(ch, Vector3(xb * sx - 0.10, 0.08, 0.12), Vector3(sx * (xb * sx + 0.10) * 0.5, Y_POUTRES_3S, zb), gris)
-	# corps en « U » : quille basse sous le tracteur, deux bras qui remontent de part et d'autre de lui
-	RemonteeKit.boite_en(ch, Vector3(0.26, 0.12, 1.10), Vector3(0, Y_TRACTEUR_3S - 0.15, 0), gris)
+	# corps au-dessus du tracteur : rien ne descend sous lui que les mâchoires, à 3 cm sous son axe, la hauteur du
+	# haut des galets des cavaliers et des pylônes (retour d'utilisateur du 06/11/2026 : la quille, 0,21 m sous le
+	# câble, traversait les galets ; le câble n'est soulevé que de l'épaisseur des mâchoires)
+	RemonteeKit.boite_en(ch, Vector3(0.26, 0.12, 1.10), Vector3(0, Y_TRACTEUR_3S + Y_CORPS_3S, 0), gris)
 	for sz in [-1.0, 1.0]:
 		for sx in [-1.0, 1.0]:
-			RemonteeKit.poutre(ch, Vector3(sx * 0.15, Y_TRACTEUR_3S - 0.15, sz * 0.50), Vector3(sx * 0.15, Y_POUTRES_3S, sz * 0.50), 0.09, 0.20, gris, Vector3.BACK)
+			RemonteeKit.poutre(ch, Vector3(sx * 0.15, Y_TRACTEUR_3S + Y_CORPS_3S, sz * 0.50), Vector3(sx * 0.15, Y_POUTRES_3S, sz * 0.50), 0.09, 0.20, gris, Vector3.BACK)
 			# cale claire en bout de poutre
 			RemonteeKit.boite_en(ch, Vector3(0.13, 0.10, 0.10), Vector3(sx * 0.15, Y_POUTRES_3S + 0.03, sz * 0.92), "polyurethane")
 	# deux poutres carrées à semelle noire crantée : les pneus du lanceur roulent dessus
@@ -1618,13 +1621,13 @@ func _cabine_zeta() -> void:
 	# mâchoires empilées autour du tracteur, entre les deux porteurs
 	for k in range(3):
 		var zm: float = (k - 1.0) * 0.27
-		RemonteeKit.boite_en(ch, Vector3(0.19, 0.11, 0.23), Vector3(0, Y_TRACTEUR_3S - 0.035, zm), "alu_pince")
-		RemonteeKit.boite_en(ch, Vector3(0.09, 0.05, 0.20), Vector3(-0.055, Y_TRACTEUR_3S + 0.04, zm), "alu_pince")
+		RemonteeKit.boite_en(ch, Vector3(0.19, 0.08, 0.23), Vector3(0, Y_TRACTEUR_3S + 0.01, zm), "alu_pince")
+		RemonteeKit.boite_en(ch, Vector3(0.09, 0.05, 0.20), Vector3(-0.055, Y_TRACTEUR_3S + 0.07, zm), "alu_pince")
 	for sz in [-1.0, 1.0]:
 		RemonteeKit.demi_cone(ch, Vector3(0, Y_TRACTEUR_3S, sz * 0.40), Vector3(0, Y_TRACTEUR_3S, sz * 0.68), 0.05, 0.028, "noir_mat", 12)
 		# tige rouge en U autour du tracteur
 		var u: PackedVector3Array = PackedVector3Array()
-		for pt in [Vector3(-0.30, -0.02, 0), Vector3(-0.13, Y_TRACTEUR_3S - 0.02, 0), Vector3(0.13, Y_TRACTEUR_3S - 0.02, 0), Vector3(0.30, -0.02, 0)]:
+		for pt in [Vector3(-0.30, -0.02, 0), Vector3(-0.10, Y_TRACTEUR_3S - 0.015, 0), Vector3(0.10, Y_TRACTEUR_3S - 0.015, 0), Vector3(0.30, -0.02, 0)]:
 			u.append((pt as Vector3) + Vector3(0, 0, sz * 0.68))
 		RemonteeKit.tube(ch, u, 0.012, "cabine_rouge", 6)
 		# petit amortisseur rouge
@@ -1634,7 +1637,7 @@ func _cabine_zeta() -> void:
 		# paire de galets clairs en bout (ils portent sur le rail courbe de la gare)
 		var zp: float = sz * 0.17
 		var pied: Vector3 = Vector3(-0.60, -0.10, zp)
-		RemonteeKit.poutre(ch, Vector3(-0.12, Y_TRACTEUR_3S - 0.05, zp), pied, 0.05, 0.11, "alu_pince", Vector3.BACK)
+		RemonteeKit.poutre(ch, Vector3(-0.12, Y_TRACTEUR_3S + 0.05, zp), pied, 0.05, 0.11, "alu_pince", Vector3.BACK)
 		var d_r: Vector3 = Vector3(-0.72, 0.69, 0).normalized()
 		var r: Node3D = Node3D.new()
 		r.position = pied
@@ -1647,7 +1650,7 @@ func _cabine_zeta() -> void:
 		for dz in [-0.11, 0.11]:
 			RemonteeKit.cylindre(ch, 0.09, 0.09, 0.07, Transform3D(Basis(Vector3.FORWARD, PI * 0.5), bout + Vector3(-0.07, 0.02, dz)), "polyurethane", 16)
 	# grosse articulation ronde, sur le flanc du corps, sous le plan du porteur
-	RemonteeKit.poutre(ch, Vector3(0.10, Y_TRACTEUR_3S - 0.15, 0), Vector3(X_PIVOT_3S, Y_PIVOT_3S, 0), 0.40, 0.14, gris, Vector3.BACK)
+	RemonteeKit.poutre(ch, Vector3(0.10, Y_TRACTEUR_3S + Y_CORPS_3S, 0), Vector3(X_PIVOT_3S, Y_PIVOT_3S, 0), 0.40, 0.14, gris, Vector3.BACK)
 	RemonteeKit.cylindre(ch, 0.17, 0.17, 0.26, Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3(X_PIVOT_3S, Y_PIVOT_3S, 0)), gris, 18)
 	RemonteeKit.cylindre(ch, 0.07, 0.07, 0.28, Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3(X_PIVOT_3S, Y_PIVOT_3S, 0)), "acier_noir", 12)
 	# suspente : caisson coudé, de l'articulation au toit ; elle s'écarte pour laisser passer les porteurs
