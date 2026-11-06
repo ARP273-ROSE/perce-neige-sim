@@ -78,7 +78,9 @@ if 'pyl' in ETAPES:
             print('   ', r[:200], flush=True)
     python('pyl_lod.py', '25', ','.join(LIGNES))
     sortie = os.path.join(DONNEES, 'pylones_lod_25.web.cuit')
-    code, o = godot('cuisson_lod_pyl_cuit.gd', '--rel=25', '--web', '--sortie=' + sortie, delai=300)
+    os.makedirs(A.web_loin, exist_ok=True)
+    # (niveau L1 de chaque ligne à part, déposé avec les lignes cuites : téléchargé par la PWA à la demande)
+    code, o = godot('cuisson_lod_pyl_cuit.gd', '--rel=25', '--web', '--sortie=' + sortie, '--l1-dossier=' + os.path.abspath(A.web_loin), delai=300)
     journal([l[:90] for l in o if l.startswith('CUIT_PYL')])
 
 if 'loin' in ETAPES:
