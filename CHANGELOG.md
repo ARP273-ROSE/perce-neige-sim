@@ -5,6 +5,10 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.56.1 — 7 novembre 2026 (PWA seule)
+
+**Val Claret, porte 2** : sur iPad, passé la porte vitrée de droite, on tombait sur le sol du tunnel, à mi-hauteur de la fosse. Les pièces fixes des quais, fusionnées pour la PWA, réunissaient les deux gares en maillages de 3,3 km, que les collisions écartent comme les panoramas : le palier n'avait plus de sol. Elles sont maintenant fusionnées gare par gare. Vérifié sous WebKit : le skieur passe la porte et monte sur le quai sans tomber.
+
 ## 1.56.0 — 6 novembre 2026
 
 **Réécriture du cœur, première vague** : les calculs refaits à chaque image passent en C++ (module du simulateur), avec le même résultat au bit près ou à quelques centièmes de millimètre, et l'ancien code en repli quand le module manque (PWA). Funiculaire : tracé de la voie (3 fois plus rapide), pose des rames et de leurs voitures (11 fois), bout de câble libre au culot (4 fois). Remontées : calage des galets des pylônes (70 fois), tables préparées à la construction de la ligne au lieu de la première visite (images de 40 à 150 ms supprimées). Sur une puce graphique intégrée, à bord du funiculaire : fil principal médian 4,5 → 3,2 ms.
