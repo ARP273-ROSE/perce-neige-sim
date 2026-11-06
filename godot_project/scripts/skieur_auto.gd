@@ -13,6 +13,7 @@ extends RefCounted
 ## point suivant.
 
 enum Etape { VERS_SALLE, VERS_RAME, A_BORD, VERS_SORTIE, VERS_DEPART, SKI, VERS_GARE }
+var _itineraires: Dictionary = {}     # case de 25 m du départ → itinéraire vers Val Claret
 
 const DESCENTE: int = 3                  # trace n° 4 : part au pied de la gare du glacier
 const DELAI_MAX: Dictionary = {Etape.VERS_SALLE: 90.0, Etape.VERS_RAME: 120.0, Etape.A_BORD: 900.0,
@@ -492,7 +493,15 @@ func _poser(e: int) -> void:
 			var dep_v: Vector3 = ga.point_depart()[0]
 			var pos_sk: Vector3 = sk.global_position
 			var t_it: int = Time.get_ticks_msec()
-			var route: PackedVector2Array = dom.itineraire(Vector2(pos_sk.x, pos_sk.z), Vector2(dep_v.x, dep_v.z))
+			# (77 ms d'un seul tenant à chaque boucle, 06/11/2026 : d'une boucle à l'autre, le départ
+			# tombe dans la même case de 25 m, le même itinéraire est repris)
+			var cle_it: Vector2i = Vector2i(roundi(pos_sk.x / 25.0), roundi(pos_sk.z / 25.0))
+			var route: PackedVector2Array
+			if _itineraires.has(cle_it):
+				route = _itineraires[cle_it]
+			else:
+				route = dom.itineraire(Vector2(pos_sk.x, pos_sk.z), Vector2(dep_v.x, dep_v.z))
+				_itineraires[cle_it] = route
 			print("[SkieurAuto] itinéraire sur les pistes : %d points, %d ms" % [route.size(), Time.get_ticks_msec() - t_it])
 			var trace: Array = []
 			if route.size() >= 2:
