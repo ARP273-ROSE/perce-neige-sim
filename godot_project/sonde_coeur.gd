@@ -17,6 +17,8 @@ var _t_pre: int = 0
 var _t_post: int = 0
 var _lignes: PackedStringArray = PackedStringArray(["t_s;phase;image_ms;principal_ms;physique_ms;dessin_ms;rendu_cpu_ms;gpu_ms;appels;objets;primitives;cran;detail;x;y;z;vram_mo;noeuds;en_cours"])
 var _pics: PackedStringArray = PackedStringArray()
+var _sys: Dictionary = {}            # phase → système → ms de chaque image où il a tourné
+var _n_ph: Dictionary = {}           # phase → images
 var _phase: String = "chargement"
 var _par_phase: Dictionary = {}
 var _prof0: Dictionary = {}
@@ -166,6 +168,20 @@ func _fin_image() -> void:
 			for k in cles.slice(0, 5):
 				h.append("%s %.1f" % [k, float(Prof.image[k]) / 1000.0])
 			_pics.append("%.2f;%s;%.1f;%.1f;%.1f;%.1f;%s;%s" % [float(t - _t0) / 1e6, _phase, im, pr, ph, de, LigneRemontee.derniere_etape, ",".join(h)])
+	if _main != null:
+		_n_ph[_phase] = int(_n_ph.get(_phase, 0)) + 1
+		var tab: Dictionary = _sys.get(_phase, {})
+		_sys[_phase] = tab
+		var tot: int = 0
+		for k in Prof.image:
+			tot += int(Prof.image[k])
+			# (tableau compact : une copie à chaque lecture, on le repose)
+			var a: PackedFloat32Array = tab.get(k, PackedFloat32Array())
+			a.append(float(Prof.image[k]) / 1000.0)
+			tab[k] = a
+		var s0: PackedFloat32Array = tab.get("(scripts)", PackedFloat32Array())
+		s0.append(float(tot) / 1000.0)
+		tab["(scripts)"] = s0
 	Prof.image.clear()
 	_t_post = t
 	_t_phys = 0
@@ -185,4 +201,20 @@ func _ecrire() -> void:
 		cles.sort_custom(func(a: Variant, b: Variant) -> bool: return int(d[a]) > int(d[b]))
 		for k in cles:
 			f.store_line("%s;%s;%d" % [ph, k, d[k]])
+	f.close()
+	# par système et par phase : quantiles sur toutes les images de la phase (0 quand il n'a pas tourné)
+	f = FileAccess.open("%s/%s_systemes.csv" % [_sortie, _etiq], FileAccess.WRITE)
+	f.store_line("phase;systeme;images;moy_ms;p50_ms;p95_ms;p99_ms;max_ms")
+	for ph in _sys:
+		var n: int = int(_n_ph.get(ph, 0))
+		for k in _sys[ph]:
+			var v: PackedFloat32Array = (_sys[ph][k] as PackedFloat32Array).duplicate()
+			var somme: float = 0.0
+			for x in v:
+				somme += x
+			while v.size() < n:
+				v.append(0.0)
+			v.sort()
+			var q: Callable = func(p: float) -> float: return v[mini(v.size() - 1, int(v.size() * p))]
+			f.store_line("%s;%s;%d;%.3f;%.3f;%.3f;%.3f;%.3f" % [ph, k, n, somme / maxf(1.0, n), q.call(0.5), q.call(0.95), q.call(0.99), v[v.size() - 1]])
 	f.close()
