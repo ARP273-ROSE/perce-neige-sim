@@ -7,6 +7,7 @@ var _cle: String = ""
 
 
 func _initialize() -> void:
+	LigneRemontee.fusion_pylones = false      # (la cuisson lit les pièces sur chaque pylône)
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--ligne="):
 			_cle = a.trim_prefix("--ligne=")

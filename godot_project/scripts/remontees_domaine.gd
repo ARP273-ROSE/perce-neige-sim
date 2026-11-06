@@ -514,6 +514,7 @@ func _poser(D: Dictionary) -> void:
 	# milliers d'appels au rendu coûtaient 15 à 35 ms d'un bloc)
 	lg.prepa_contenu = func(racine: Node) -> void:
 		_portees(racine)
+		LigneRemontee.fusionner_pylones_loin(racine, PYLONES_JUSQUA)
 		Cabin.tag_layer(racine, Cabin.LAYER_VOIE)
 	lg.construite.connect(func() -> void:
 		if lg.contenu_prepare:
@@ -522,6 +523,7 @@ func _poser(D: Dictionary) -> void:
 					Cabin.tag_layer(c, Cabin.LAYER_VOIE)
 		else:
 			_portees(lg)
+			LigneRemontee.fusionner_pylones_loin(lg, PYLONES_JUSQUA)
 			Cabin.tag_layer(lg, Cabin.LAYER_VOIE)
 		_en_cours = null)
 	var m: Vector2 = (a + b) * 0.5
