@@ -163,6 +163,26 @@ public:
 
 	// Prototype : positions et directions aux abscisses s : [p0, d0, p1, d1, …]
 	PackedVector3Array points(const PackedFloat32Array &s) const;
+
+	// Calage des paires de galets des pylônes sur le câble affiché (port de PyloneRemontee._pose_paire) :
+	// par pylône i, son abscisse d, la hauteur y_t de l'axe de sa tête, la pente de chaque tête, la hauteur du
+	// câble sans flèche échantillonnée de d0 au pas `pas` pour chaque brin, et ses paires [zp, sgn, demi].
+	void set_calage(int64_t i, double d, double y_t, double pente_m, double pente_d, double dist, double d0, double pas,
+			const PackedFloat32Array &y_m, const PackedFloat32Array &y_d, const PackedVector3Array &paires_m,
+			const PackedVector3Array &paires_d);
+	bool a_calage(int64_t i) const { return i >= 0 && i < (int64_t)calages.size() && calages[i].pret; }
+	// [y, z, pente] de chaque paire, brin montant puis descendant, flèche du moment (onde comprise)
+	PackedFloat32Array caler(int64_t i) const;
+
+private:
+	struct Calage {
+		bool pret = false;
+		double d = 0.0, y_t = 0.0, pente[2] = {0.0, 0.0}, dist = 0.0, d0 = 0.0, pas = 0.05;
+		std::vector<float> y[2];
+		std::vector<Vector3> paires[2];
+	};
+	std::vector<Calage> calages;
+	double cable_calage(const Calage &c, int b, double z) const;
 };
 
 } // namespace godot

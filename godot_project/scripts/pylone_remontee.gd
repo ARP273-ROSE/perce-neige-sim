@@ -670,6 +670,25 @@ func caler(montee: bool, cable: Callable) -> void:
 	_hors_repos[montee] = true
 
 
+## Calage venu du noyau C++ (LigneRemontee._caler_galets) : [y, z, pente] par paire, brin montant puis
+## descendant, dans l'ordre de _paires ; même effet que caler().
+func appliquer_calage(r: PackedFloat32Array) -> void:
+	var o: int = 0
+	for montee in [true, false]:
+		var tete: Node3D = get_node_or_null("TeteMontee" if montee else "TeteDescente")
+		if tete == null:
+			o += 3 * _paires[montee].size()
+			continue
+		for e in _paires[montee]:
+			if o + 2 >= r.size():
+				return
+			_cales[e[0]] = [Vector3(0, r[o], r[o + 1]), r[o + 2]]
+			o += 3
+			if e.size() >= 7:
+				e[6] = null
+		_hors_repos[montee] = true
+
+
 func _base_paire(e: Array) -> Array:
 	return _cales.get(e[0], [e[1], e[2]])
 
