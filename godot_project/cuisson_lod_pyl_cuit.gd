@@ -1,6 +1,9 @@
 ## Pylônes allégés, 3/3 : écrit pylones_lod_<relief>.cuit depuis les JSON de pyl_lod.py.
 extends SceneTree
 var _web: bool = false
+## PWA : le niveau L1 de chaque ligne à part, <ligne>.pyl1.web.cuit, téléchargé quand la ligne est construite
+## (le premier chargement de la PWA n'en porte rien).
+var _l1_dossier: String = ""
 func _initialize() -> void:
 	var rel: String = "25"
 	var sortie: String = ""
@@ -11,6 +14,8 @@ func _initialize() -> void:
 			sortie = a.trim_prefix("--sortie=")
 		if a == "--web":
 			_web = true
+		if a.begins_with("--l1-dossier="):
+			_l1_dossier = a.trim_prefix("--l1-dossier=")
 	var U: String = "user://pyl_lod/%s/" % rel
 	var lignes: Dictionary = {}
 	var nb: int = 0
@@ -26,6 +31,16 @@ func _initialize() -> void:
 				o.append({"nom": p["nom"], "rang": int(p["rang"]), "L1": _niv(p["L1"]), "L2": _niv(p["L2"])})
 			nb += 1
 		lignes[D["ligne"]] = o
+		if _web and _l1_dossier != "":
+			var l1: Array = []
+			for p2 in D["pylones"]:
+				l1.append({"nom": p2["nom"], "L1": _niv(p2["L1"])})
+			var b1: PackedByteArray = var_to_bytes({"version": 1, "relief": rel, "ligne": D["ligne"], "pylones": l1})
+			var z1: PackedByteArray = b1.compress(FileAccess.COMPRESSION_ZSTD)
+			var g1: FileAccess = FileAccess.open(_l1_dossier.path_join("%s.pyl1.web.cuit" % D["ligne"]), FileAccess.WRITE)
+			g1.store_32(b1.size())
+			g1.store_buffer(z1)
+			g1.close()
 	var brut: PackedByteArray = var_to_bytes({"version": 2, "relief": rel, "lignes": lignes})
 	var z: PackedByteArray = brut.compress(FileAccess.COMPRESSION_ZSTD)
 	var g: FileAccess = FileAccess.open(sortie, FileAccess.WRITE)

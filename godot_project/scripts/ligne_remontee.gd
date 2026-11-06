@@ -229,6 +229,9 @@ func construire() -> void:
 	_pyl_l2 = []
 	_pyl_pres = PackedByteArray()
 	_pyl_mi = null
+	_pyl_l1 = []
+	_pyl_mi1 = null
+	_l1_etat = 0
 	# (les MultiMesh allégés partent avec la ligne démolie : à refaire à la reconstruction)
 	_lod_essaye = false
 	_lod_mm = []
@@ -4466,6 +4469,8 @@ func _process_corps(delta: float) -> void:
 	else:
 		_etape_gdscript(delta)
 	_dt = 0.0
+	# (pylônes allégés : les deux chemins — avec le noyau, PC allégé, ils ne basculaient jamais)
+	_pyl_maj(delta)
 	_galets()
 	if tricable():
 		_caler_cavaliers()
@@ -4935,7 +4940,7 @@ func _pyl_reconstruire() -> void:
 	for k in range(_pyl_l2.size()):
 		var py: PyloneRemontee = _pyl_l2[k][0]
 		py.visible = _pyl_pres[k] == 1
-		if _pyl_pres[k] == 1:
+		if _pyl_pres[k] != 0:
 			continue
 		var n0: int = v.size()
 		v.append_array(_pyl_l2[k][1])
@@ -4958,7 +4963,8 @@ func _pyl_reconstruire() -> void:
 	m.surface_set_material(0, VehiculesLod.materiau())
 
 
-## Quatre fois par seconde : quels pylônes sont assez près pour être les vrais ?
+## Quatre fois par seconde : quels pylônes sont assez près pour être les vrais (1), pour le niveau L1 (2), sinon
+## le L2 (0) ?
 func _pyl_maj(delta: float) -> void:
 	if _pyl_l2.is_empty():
 		return
@@ -4966,17 +4972,124 @@ func _pyl_maj(delta: float) -> void:
 	if _pyl_t > 0.0:
 		return
 	_pyl_t = 0.25
+	_demander_l1()
 	var change: bool = false
 	for k in range(_pyl_l2.size()):
 		var q: Vector3 = (_pyl_l2[k][0] as Node3D).position
 		var d2: float = Vector2(q.x - point_vue.x, q.z - point_vue.z).length_squared()
 		var r: float = VehiculesLod.PYLONE_DES + (15.0 if _pyl_pres[k] == 1 else 0.0)
 		var pres: int = 1 if not vue_active or d2 < r * r else 0
+		if pres == 0 and k < _pyl_l1.size() and not (_pyl_l1[k] as Array).is_empty():
+			var r1: float = PYLONE_L1_DES + (15.0 if _pyl_pres[k] == 2 else 0.0)
+			if d2 < r1 * r1:
+				pres = 2
 		if pres != _pyl_pres[k]:
 			_pyl_pres[k] = pres
 			change = true
 	if change:
 		_pyl_reconstruire()
+		_pyl_reconstruire_l1()
+
+
+## PWA : pylônes proches plus détaillés (demande d'utilisateur du 06/11/2026) — le niveau L1 (~1 200 triangles)
+## de 150 m à PYLONE_L1_DES, au lieu du L2, sur les lignes construites. Fichier <ligne>.pyl1.web.cuit à côté des
+## lignes cuites, téléchargé quand la ligne est construite (le premier chargement n'en porte rien). Secours 0
+## seulement ; --pyl1=dossier pour l'essayer sur PC (avec --lod-vehicules).
+const PYLONE_L1_DES: float = 200.0
+var _pyl_l1: Array = []                 # par pylône de _pyl_l2 : [sommets (repère de la ligne), couleurs, indices] ou []
+var _pyl_mi1: MeshInstance3D = null
+var _l1_etat: int = 0                   # 0 rien demandé, 1 en cours, 2 reçu (ou absent)
+
+
+static func _l1_dossier_essai() -> String:
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--pyl1="):
+			return a.trim_prefix("--pyl1=")
+	return ""
+
+
+func _demander_l1() -> void:
+	if _l1_etat != 0:
+		return
+	var essai: String = _l1_dossier_essai()
+	if essai == "" and not (OS.has_feature("web") and PerfManager.secours_web == 0):
+		_l1_etat = 2
+		return
+	_l1_etat = 1
+	if essai != "":
+		_l1_recu(FileAccess.get_file_as_bytes(essai.path_join("%s.pyl1.web.cuit" % name)))
+		return
+	var http: HTTPRequest = HTTPRequest.new()
+	add_child(http)
+	http.request_completed.connect(func(res: int, code: int, _h: PackedStringArray, corps: PackedByteArray) -> void:
+		_l1_recu(corps if res == HTTPRequest.RESULT_SUCCESS and code == 200 else PackedByteArray())
+		http.queue_free())
+	var base: String = str(JavaScriptBridge.eval("new URL('cuites/',location.href).href", true))
+	if http.request("%s%s.pyl1.web.cuit?v=%s" % [base, name, PNConstants.VERSION_APP]) != OK:
+		http.queue_free()
+		_l1_etat = 2
+
+
+func _l1_recu(b: PackedByteArray) -> void:
+	_l1_etat = 2
+	if b.size() < 8 or not is_inside_tree() or _pyl_l2.is_empty():
+		return
+	var n: int = b.decode_u32(0)
+	var d: Variant = bytes_to_var(b.slice(4).decompress(n, FileAccess.COMPRESSION_ZSTD))
+	if not (d is Dictionary) or not (d as Dictionary).has("pylones"):
+		return
+	var par_nom: Dictionary = {}
+	for e in d["pylones"]:
+		par_nom[String(e["nom"])] = e["L1"]
+	_pyl_l1.clear()
+	for k in range(_pyl_l2.size()):
+		var py: PyloneRemontee = _pyl_l2[k][0]
+		var L: Variant = par_nom.get(String(py.name), null)
+		if L == null:
+			_pyl_l1.append([])
+			continue
+		var v: PackedVector3Array = (L["v"] as PackedVector3Array).duplicate()
+		for i in range(v.size()):
+			v[i] = py.transform * v[i]
+		_pyl_l1.append([v, L["c"], L["i"]])
+	_pyl_t = 0.0
+
+
+func _pyl_reconstruire_l1() -> void:
+	if _pyl_l1.is_empty():
+		return
+	if _pyl_mi1 == null:
+		_pyl_mi1 = MeshInstance3D.new()
+		_pyl_mi1.name = "PyloneLod1_ligne"
+		_pyl_mi1.mesh = ArrayMesh.new()
+		_pyl_mi1.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		_pyl_mi1.layers = 1 | Cabin.LAYER_VOIE
+		_enfant(_pyl_mi1)
+	var v: PackedVector3Array = PackedVector3Array()
+	var c: PackedColorArray = PackedColorArray()
+	var ix: PackedInt32Array = PackedInt32Array()
+	for k in range(mini(_pyl_l1.size(), _pyl_pres.size())):
+		if _pyl_pres[k] != 2 or (_pyl_l1[k] as Array).is_empty():
+			continue
+		var n0: int = v.size()
+		v.append_array(_pyl_l1[k][0])
+		c.append_array(_pyl_l1[k][1])
+		var pi2: PackedInt32Array = _pyl_l1[k][2]
+		var i0: int = ix.size()
+		ix.resize(i0 + pi2.size())
+		for j in range(pi2.size()):
+			ix[i0 + j] = pi2[j] + n0
+	var m: ArrayMesh = _pyl_mi1.mesh
+	m.clear_surfaces()
+	if ix.is_empty():
+		return
+	var a: Array = []
+	a.resize(Mesh.ARRAY_MAX)
+	a[Mesh.ARRAY_VERTEX] = v
+	a[Mesh.ARRAY_COLOR] = c
+	a[Mesh.ARRAY_INDEX] = ix
+	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, a)
+	m.surface_set_material(0, VehiculesLod.materiau())
 
 
 ## Pose le véhicule i au niveau `niv` (0 : le vrai ; 1, 2 : allégés ; 3 : rien). Vrai si un tampon a changé.
@@ -5091,7 +5204,6 @@ func _etape_gdscript(delta: float) -> void:
 	# quatre, sans balancement ; près → chaque image
 	_tour = (_tour + 1) % 4
 	_lod_preparer()
-	_pyl_maj(delta)
 	var lod_change: bool = false
 	for i in range(_vehicules.size()):
 		_corps_proche = true
