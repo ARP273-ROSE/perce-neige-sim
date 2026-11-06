@@ -14,7 +14,7 @@ extends RefCounted
 ## l'autre voie. Le bloc de contrepoids pend sous le chariot, dans une fosse.
 ##
 ## AMONT : au fond de la salle, deux poulies inclinées font plonger le câble vers une seule poulie motrice
-## verticale, sous le plancher, qu'il contourne par le bas, avec son réducteur et ses freins.
+## verticale, sous le plancher, qu'il contourne par le bas après s'être croisé en 8, avec son réducteur et ses freins.
 
 var lg: LigneRemontee
 
@@ -29,6 +29,7 @@ const PROF_MOTRICE: float = 0.6       # du plancher au sommet de la poulie motri
 const H_QUAI: float = 0.25           # quais au niveau du plancher des cabines
 const DEMI_TRANCHEE: float = 1.65     # demi-largeur du chemin des cabines
 const FOND_GARE: float = 17.0        # du centre du demi-tour au fond du bâtiment
+const DZ_CROISEMENT: float = 0.07    # demi-écart des deux brins au croisement en 8 (amont)
 
 
 func _init(l: LigneRemontee) -> void:
@@ -100,17 +101,23 @@ func trace(aval: bool, x_de: float, x_vers: float, poulies: Array) -> PackedVect
 			[Vector3(x_vers, y, zc), 0.0, ""],
 		]
 		return _polyligne(coins, poulies)
-	# amont : deux renvois inclinés amènent le câble dans le plan de la motrice verticale, qu'il contourne par
-	# le bas ; les brins n'ont pas à se croiser
+	# amont : deux renvois inclinés amènent le câble dans le plan de la motrice verticale. Les brins se croisent
+	# en 8 entre les renvois et la motrice, chacun tangent à la motrice du côté opposé à sa voie : l'enroulement
+	# passe de 150° à 273° (Olympique), plus de contact pour l'adhérence, et la motrice tourne dans l'autre sens
+	# (retour d'utilisateur, 06/11/2026). Les deux brins sont décalés de ±DZ_CROISEMENT de part et d'autre du
+	# plan de la motrice pour ne pas se toucher au croisement ; chaque renvoi s'incline dans le plan de son brin
+	# (axe à 46° de l'horizontale au lieu de 15°).
 	var zs: float = zc + sg * RECUL
 	var yw: float = y_motrice()
 	var cw: Vector2 = Vector2(0.0, yw)
-	var ta: Vector2 = _tangente(Vector2(x_de, y), cw, R_MOTRICE, signf(x_de))
-	var tb: Vector2 = _tangente(Vector2(x_vers, y), cw, R_MOTRICE, signf(x_vers))
-	var ka: Vector3 = Vector3(x_de, y, zs)
-	var kb: Vector3 = Vector3(x_vers, y, zs)
-	var pa: Vector3 = Vector3(ta.x, ta.y, zs)
-	var pb: Vector3 = Vector3(tb.x, tb.y, zs)
+	var ta: Vector2 = _tangente(Vector2(x_de, y), cw, R_MOTRICE, -signf(x_de))
+	var tb: Vector2 = _tangente(Vector2(x_vers, y), cw, R_MOTRICE, -signf(x_vers))
+	var za: float = zs - sg * DZ_CROISEMENT
+	var zb: float = zs + sg * DZ_CROISEMENT
+	var ka: Vector3 = Vector3(x_de, y, za)
+	var kb: Vector3 = Vector3(x_vers, y, zb)
+	var pa: Vector3 = Vector3(ta.x, ta.y, za)
+	var pb: Vector3 = Vector3(tb.x, tb.y, zb)
 	out.append(Vector3(x_de, y, zc))
 	out.append_array(_conge(ka, Vector3(0, 0, sg), (pa - ka).normalized(), R_INCLINEE, BLEU, poulies))
 	# enroulement de ta à tb par le bas
@@ -122,7 +129,7 @@ func trace(aval: bool, x_de: float, x_vers: float, poulies: Array) -> PackedVect
 	var n: int = 40
 	for k in range(n + 1):
 		var a: float = a0 + da * float(k) / n
-		out.append(Vector3(cw.x + cos(a) * R_MOTRICE, cw.y + sin(a) * R_MOTRICE, zs))
+		out.append(Vector3(cw.x + cos(a) * R_MOTRICE, cw.y + sin(a) * R_MOTRICE, lerpf(za, zb, float(k) / n)))
 	poulies.append([Vector3(0, yw, zs), Vector3.BACK * signf(da), R_MOTRICE, BLEU, true])
 	out.append_array(_conge(kb, (kb - pb).normalized(), Vector3(0, 0, -sg), R_INCLINEE, BLEU, poulies))
 	out.append(Vector3(x_vers, y, zc))
