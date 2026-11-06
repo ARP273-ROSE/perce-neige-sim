@@ -1003,7 +1003,7 @@ func _maj_souterrain(delta: float) -> void:
 			if Vector2(c.x - g.x, c.z - g.z).length() < SOUTERRAIN_LOIN:
 				pres_gare = true
 				pres_haut = pres_haut or sg > 0.0
-	for n in [lights, track]:
+	for n in [lights, track, stations]:      # (quais : souterrains aussi, 355 appels)
 		etat.append([n, dehors and not pres_gare])
 	# la salle des machines est en haut : devant la gare de Val Claret, elle restait dessinée
 	# (~310 appels de dessin, relevé du 06/11/2026)
@@ -1119,6 +1119,11 @@ func _regler_funi_loin() -> void:
 	for n in [tunnel, track, lights, machine_room, cabin, cabin_ghost]:
 		if n != null:
 			(n as Node3D).visible = not loin
+	# _maj_souterrain garde en mémoire ce qu'il a caché : sans cette remise à zéro, au retour près
+	# des gares, tout restait affiché alors qu'il l'avait caché avant (VERS_GARE, ~1 600 appels de
+	# voie, rames et salle des machines invisibles de dehors, relevé du 06/11/2026)
+	_souterrain_cles = ""
+	_t_souterrain = 0.0
 	if machine_room != null:
 		machine_room.set_process(not loin)
 	print("[Funiculaire] %s" % ("loin : souterrain masqué, animation suspendue" if loin else "proche : affiché"))
