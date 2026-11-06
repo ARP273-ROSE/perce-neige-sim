@@ -3933,7 +3933,7 @@ func _poser_pylones() -> void:
 				return y_cable(d - z, brin) - y_t0
 		_enfant(py)
 		py.construire()
-		MeshMerge.merge(py, py.mobiles, "Pylone")
+		MeshMerge.merge(py, py.mobiles, "Pylone", false, _garder_pylones())
 		_pylone_lod(py)
 		for m in py.mobiles:
 			MeshMerge.fusion_partagee(m, "Paire")
@@ -4020,7 +4020,7 @@ func _poser_pylones_teleski() -> void:
 			py.name = "P%d%s" % [i + 1, "" if cote == 0 else ("m" if cote == 1 else "d")]
 			_enfant(py)
 			py.construire()
-			MeshMerge.merge(py, [], "Pylone")
+			MeshMerge.merge(py, [], "Pylone", false, _garder_pylones())
 			_pyl.append([py, d])
 		await _pause("pylônes téléski")
 	# (pas de batterie de nez : au téléski, le câble va droit de la poulie
@@ -4862,7 +4862,12 @@ static func lod_voulu() -> bool:
 ## appels par ligne au lieu de trois par pylône et par passe (relevé du 06/11/2026 : 358 appels pour
 ## 149 pylônes vus en ski). Les pièces de plus courte portée (galets, plaques…) restent aux pylônes.
 ## PWA et mode allégé : leurs pylônes cuits, inchangés. Faux pour la cuisson (elle lit les pylônes).
-static var fusion_pylones: bool = true
+static var fusion_pylones: bool = not "--sans-fusion-pylones" in OS.get_cmdline_user_args()
+
+
+## Copies gardées des fusions de pylônes (la fusion lointaine les relit au lieu de la carte graphique).
+static func _garder_pylones() -> bool:
+	return fusion_pylones and not lod_voulu()
 
 
 static func fusionner_pylones_loin(racine: Node, portee: float) -> void:
@@ -4877,6 +4882,10 @@ static func fusionner_pylones_loin(racine: Node, portee: float) -> void:
 		for mi0 in (py as Node).find_children("*", "MeshInstance3D", true, false):
 			var mi: MeshInstance3D = mi0
 			if mi.visibility_range_end != portee or not mi.visible or mi.get_child_count() > 0:
+				continue
+			# (seulement ce dont on a la copie processeur : relu sur la carte depuis le fil de construction, un
+			# maillage revenait vide et le pylône disparaissait — P1 et P3 de l'Olympique, retour du 06/11/2026)
+			if mi.mesh == null or not MeshMerge.a_copie(mi.mesh):
 				continue
 			# repère de la racine (hors de la scène pendant la construction : pas de global_transform)
 			var xf: Transform3D = mi.transform
@@ -4893,11 +4902,17 @@ static func fusionner_pylones_loin(racine: Node, portee: float) -> void:
 			mi.transform = xf
 			lot.add_child(mi)
 			n += 1
-	if n == 0:
+	if n > 0:
+		racine.add_child(lot)
+		MeshMerge.merge(lot, [], "PyloneLoin")
+	else:
 		lot.free()
-		return
-	racine.add_child(lot)
-	MeshMerge.merge(lot, [], "PyloneLoin")
+	# copies des pièces restées aux pylônes : plus utiles
+	for py2 in racine.get_children():
+		if py2 is PyloneRemontee or py2 is PyloneTreillis:
+			for mi2 in (py2 as Node).find_children("*", "MeshInstance3D", true, false):
+				if (mi2 as MeshInstance3D).mesh != null and String(mi2.name).begins_with("Pylone"):
+					MeshMerge.oublier((mi2 as MeshInstance3D).mesh)
 
 
 ## PWA : de loin, un maillage allégé à la place du pylône, par les portées de visibilité.
@@ -5528,7 +5543,7 @@ func _poser_pylones_treillis() -> void:
 		py.name = "P%d" % (i + 1)
 		_enfant(py)
 		py.construire()
-		MeshMerge.merge(py, [], "Pylone")
+		MeshMerge.merge(py, [], "Pylone", false, _garder_pylones())
 		await _pause("pylônes treillis")
 
 

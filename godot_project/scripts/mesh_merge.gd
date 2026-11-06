@@ -185,6 +185,26 @@ static func _retenir(mesh: Mesh, si: int, arrays: Array) -> void:
 				_cpu.erase(k)
 
 
+## Copie processeur gardée pour ce maillage (toutes ses surfaces) ?
+static func a_copie(mesh: Mesh) -> bool:
+	verrou.lock()
+	var id: int = mesh.get_instance_id()
+	var ok: bool = _cpu.has(id) and (_cpu[id][0] as WeakRef).get_ref() == mesh
+	if ok:
+		var l: Array = _cpu[id][1]
+		for si in range(mesh.get_surface_count()):
+			ok = ok and si < l.size() and l[si] != null
+	verrou.unlock()
+	return ok
+
+
+## Oublie la copie processeur d'un maillage (mémoire).
+static func oublier(mesh: Mesh) -> void:
+	verrou.lock()
+	_cpu.erase(mesh.get_instance_id())
+	verrou.unlock()
+
+
 static func tableaux(mesh: Mesh, si: int) -> Array:
 	verrou.lock()
 	var a: Array = _tableaux(mesh, si)
@@ -371,7 +391,9 @@ static func _retenir_identique(ta: Array, m: ArrayMesh) -> void:
 		_identiques[_empreinte(ta)] = m
 
 
-static func merge(root: Node3D, keep: Array = [], name_prefix: String = "Fusion", une_instance: bool = false) -> int:
+## `garder` : la copie processeur du résultat est gardée (tant que le maillage existe, ou jusqu'à oublier()),
+## pour une seconde fusion sans relire la carte graphique (pylônes : LigneRemontee.fusionner_pylones_loin).
+static func merge(root: Node3D, keep: Array = [], name_prefix: String = "Fusion", une_instance: bool = false, garder: bool = false) -> int:
 	_ctx = name_prefix
 	var groups: Dictionary = {}     # clé → {mat, st, n, shadow}
 	var done: Dictionary = {}       # MeshInstance3D → nb de surfaces fusionnées
@@ -416,8 +438,11 @@ static func merge(root: Node3D, keep: Array = [], name_prefix: String = "Fusion"
 		var nouveau: bool = mesh == null
 		if nouveau:
 			mesh = ArrayMesh.new()
-			mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, _indexes(ta))
+			var tai: Array = _indexes(ta)
+			mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, tai)
 			mesh.surface_set_material(0, g["mat"])
+			if garder:
+				retenir(mesh, 0, tai)
 			_retenir_identique(ta, mesh)
 		var mi: MeshInstance3D = MeshInstance3D.new()
 		mi.name = "%s%d" % [name_prefix, k]
