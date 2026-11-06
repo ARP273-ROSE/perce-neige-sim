@@ -1181,41 +1181,50 @@ func _embarquement() -> void:
 			var q: Vector3 = lg.global_transform * lg.point_embarquement(aval)
 			if p.distance_to(q) > 6.0:
 				continue
-			var i: int = lg.vehicule_a_embarquer(aval)
-			if i < 0:
+			var cands: Array = lg.vehicules_a_embarquer(aval)
+			if cands.is_empty():
 				continue
 			if p.distance_to(q) < 2.5 and (_guet.is_empty() or _guet[0] != lg):
-				_guet = [lg, i, aval]
-			var v: VehiculeRemontee = lg.vehicule(i)
-			var loc: Vector3 = v.global_transform.affine_inverse() * p
-			var place0: Vector3 = v.place_assise(0)
-			var W: float = 0.50 * v.places + 0.20
-			# le siège arrive par derrière : le skieur est devant l'assise
-			if absf(loc.x) < W * 0.5 + 0.15 and loc.z > place0.z - 0.6 and loc.z < place0.z + 0.35 \
-					and absf(loc.y - place0.y) < 1.2:
-				var k: int = clampi(int(floor((absf(loc.x) * signf(loc.x) + W * 0.5 - 0.10) / 0.50)), 0, v.places - 1)
-				# le télésiège se prend chaussé (retour d'utilisateur, 23/10/2026) :
-				# à pied, on chausse au portillon
-				var evt: String = "FRAUDE" if _fraude(lg, aval) else ""
-				if not skieur.chausse:
-					skieur.basculer_ski(true)
-					if evt == "" and not _depose_recente():
-						evt = "PIETON"
-				if evt == "" and not aval:
-					evt = "RESTE" if not _arrivee_siege.is_empty() and _arrivee_siege[0] == lg \
-							and _t - float(_arrivee_siege[1]) < 90.0 else "DESCENTE"
-				_guet = []
-				a_bord = [lg, i, k, aval, false]
-				_etat_bord = lg.etat
-				skieur.support = null
-				skieur.embarque = true
-				skieur.asseoir(_cap(v), true)
-				_suivre_siege()
-				var dest: String = lg.jumelee.nom_ligne if (aval and lg.role == "bas" and lg.traverse(i)) else lg.nom_ligne
-				message.emit("Assis — %s" % dest)
-				if evt != "":
-					_piquer(evt, lg)
-				return
+				_guet = [lg, int(cands[0]), aval]
+			# (fenêtre élargie : elle peut contenir deux sièges, chacun est essayé)
+			for i in cands:
+				if _essayer_siege(lg, int(i), aval, p):
+					return
+
+
+## Le skieur est-il à la place du siège `i` qui arrive ? Si oui, il s'assoit.
+func _essayer_siege(lg: LigneRemontee, i: int, aval: bool, p: Vector3) -> bool:
+	var v: VehiculeRemontee = lg.vehicule(i)
+	var loc: Vector3 = v.global_transform.affine_inverse() * p
+	var place0: Vector3 = v.place_assise(0)
+	var W: float = 0.50 * v.places + 0.20
+	# le siège arrive par derrière : le skieur est devant l'assise
+	if absf(loc.x) < W * 0.5 + 0.15 and loc.z > place0.z - 0.6 and loc.z < place0.z + 0.35 \
+			and absf(loc.y - place0.y) < 1.2:
+		var k: int = clampi(int(floor((absf(loc.x) * signf(loc.x) + W * 0.5 - 0.10) / 0.50)), 0, v.places - 1)
+		# le télésiège se prend chaussé (retour d'utilisateur, 23/10/2026) :
+		# à pied, on chausse au portillon
+		var evt: String = "FRAUDE" if _fraude(lg, aval) else ""
+		if not skieur.chausse:
+			skieur.basculer_ski(true)
+			if evt == "" and not _depose_recente():
+				evt = "PIETON"
+		if evt == "" and not aval:
+			evt = "RESTE" if not _arrivee_siege.is_empty() and _arrivee_siege[0] == lg \
+					and _t - float(_arrivee_siege[1]) < 90.0 else "DESCENTE"
+		_guet = []
+		a_bord = [lg, i, k, aval, false]
+		_etat_bord = lg.etat
+		skieur.support = null
+		skieur.embarque = true
+		skieur.asseoir(_cap(v), true)
+		_suivre_siege()
+		var dest: String = lg.jumelee.nom_ligne if (aval and lg.role == "bas" and lg.traverse(i)) else lg.nom_ligne
+		message.emit("Assis — %s" % dest)
+		if evt != "":
+			_piquer(evt, lg)
+		return true
+	return false
 
 
 ## Pylône dont l'échelle est à portée de main (demande d'utilisateur, 03/11/2026), sinon null.

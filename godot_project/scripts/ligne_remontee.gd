@@ -2017,7 +2017,10 @@ func _gare(aval: bool) -> void:
 		return
 	var xb: float = _x_brin(aval)
 	var l_th: float = 2.0 * l_gare + PI * voie * 0.5
-	RemonteeKit.boite_en(g, Vector3(voie * 0.5 + 0.8, 0.02, 0.12), Vector3(xb * 0.6, 0.01, znez + signf(dz) * (l_th - x_arret(l_th) + 0.5)), "jaune_securite")
+	# (télésièges : plus de bande jaune, c'est le tapis et son « STOP » qui marquent l'arrêt — demande
+	# d'utilisateur du 06/11/2026)
+	if famille.begins_with("cabine"):
+		RemonteeKit.boite_en(g, Vector3(voie * 0.5 + 0.8, 0.02, 0.12), Vector3(xb * 0.6, 0.01, znez + signf(dz) * (l_th - x_arret(l_th) + 0.5)), "jaune_securite")
 	MeshMerge.merge(g, [g.get_node("Poulie")], "Gare")
 
 
@@ -2990,16 +2993,51 @@ func _portillons(aval: bool) -> void:
 	ent.position = Vector3(0, 0, 3.0)
 	g.add_child(ent)
 	PortiqueEntree.construire(ent, self, W * 0.5 + 0.9)
-	# ligne d'arrêt (jaune) au sol
+	# ligne d'arrêt : le bout du tapis, marqué d'un grand « STOP » (plus de bande jaune, demande
+	# d'utilisateur du 06/11/2026)
 	var q: Vector3 = point_embarquement(aval)
 	var ls: Node3D = Node3D.new()
 	ls.transform = Transform3D(Basis.looking_at(dirh, Vector3.UP), Vector3(q.x, y0 + 0.01, q.z))
 	_enfant(ls)
-	RemonteeKit.boite_en(ls, Vector3(W, 0.02, 0.12), Vector3.ZERO, "jaune_securite")
-	RemonteeKit.boite_en(ls, Vector3(W, 0.02, 0.05), Vector3(0, 0, 0.25), "joint")
+	_tapis(ls, absf(q0.z - q.z), W, places)
 	if OS.has_feature("web"):
 		_portillons_fixes(g, vantaux)
 	_portillons_gares.append([aval, vantaux, formes, 99.0, 0.0])
+
+
+## Tapis synthétique d'embarquement, de la ligne d'arrêt (origine de `ls`, sens de marche −Z) jusqu'aux
+## portillons (`long` m derrière) : une voie par place, alignée sur le portillon et la place du siège, gris
+## clair et gris foncé alternés, liserés rouges, « STOP » peint au bout de chaque voie (retour d'utilisateur
+## du 06/11/2026 ; vidéo des Merles : tapis gris clair à bords rouges — couleurs et cotes estimées sur vidéo).
+func _tapis(ls: Node3D, long: float, W: float, places: int) -> void:
+	if long < 1.0:
+		return
+	var t: Node3D = Node3D.new()
+	t.name = "Tapis"
+	ls.add_child(t)
+	var z0: float = -0.10                      # le tapis finit un peu au-delà de la ligne d'arrêt
+	var z1: float = long - 0.15                # devant les portillons
+	var lz: float = z1 - z0
+	var zc: float = (z0 + z1) * 0.5
+	for k in range(places):
+		var xc: float = -W * 0.5 + 0.10 + 0.25 + 0.50 * k
+		RemonteeKit.boite_en(t, Vector3(0.48, 0.012, lz), Vector3(xc, -0.004, zc), "tapis_clair" if k % 2 == 0 else "tapis_fonce")
+	# un grand « STOP » rouge en travers de toutes les voies, au bout, lisible en arrivant des portillons
+	var stop: Label3D = Label3D.new()
+	stop.text = "STOP"
+	stop.font_size = 128
+	stop.pixel_size = W * 0.0027
+	stop.outline_size = 10
+	stop.outline_modulate = Color(1, 1, 1)
+	stop.modulate = Color(0.82, 0.06, 0.06)
+	stop.double_sided = false
+	stop.position = Vector3(0, 0.004, z0 + 0.30 + W * 0.18)
+	stop.rotation.x = -PI * 0.5
+	t.add_child(stop)
+	# liserés rouges entre les voies et sur les bords
+	for k2 in range(places + 1):
+		var xs: float = -W * 0.5 + 0.10 + 0.50 * k2
+		RemonteeKit.boite_en(t, Vector3(0.03, 0.014, lz), Vector3(xs, -0.003, zc), "rouge_val")
 
 
 ## PWA : bornes et portique fusionnés ; au-delà de 60 m, des vantaux immobiles et fermés fusionnés aussi
@@ -3148,9 +3186,32 @@ func vehicule_a_embarquer(aval: bool) -> int:
 		if z[0] == nom:
 			var x: float = z[1]
 			var l: float = z[2]
-			if x > x_arret(l) - 1.4 and x < x_arret(l) + 0.6:
+			# (élargie des deux côtés, retour d'utilisateur du 06/11/2026 : avant, le siège traversait le skieur
+			# sans le prendre ; après, il le poussait)
+			if x > x_arret(l) - 3.0 and x < x_arret(l) + 2.5:
 				return i
 	return -1
+
+
+## Sièges dans la fenêtre d'embarquement d'une gare (télésièges et cabines), le plus près de la ligne d'arrêt
+## d'abord.
+func vehicules_a_embarquer(aval: bool) -> Array:
+	var o: Array = []
+	if teleski() or (role == "haut" and aval):
+		var i0: int = vehicule_a_embarquer(aval)
+		return [i0] if i0 >= 0 else []
+	var nom: String = "gare_aval" if aval else "gare_amont"
+	for i in range(_vehicules.size()):
+		var z: Array = zone(_vehicules[i][1])
+		if z[0] == nom:
+			var ec: float = float(z[1]) - x_arret(float(z[2]))
+			if ec > -3.0 and ec < 2.5:
+				o.append([absf(ec), i])
+	o.sort()
+	var r: Array = []
+	for e in o:
+		r.append(e[1])
+	return r
 
 
 # --- téléskis : départ, magasin des TKD ---------------------------------------------
