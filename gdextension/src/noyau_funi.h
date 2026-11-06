@@ -6,6 +6,7 @@
 #include <godot_cpp/classes/ref_counted.hpp>
 #include <godot_cpp/variant/array.hpp>
 #include <godot_cpp/variant/packed_float32_array.hpp>
+#include <godot_cpp/variant/packed_float64_array.hpp>
 #include <godot_cpp/variant/packed_vector3_array.hpp>
 #include <godot_cpp/variant/transform3d.hpp>
 
@@ -37,6 +38,12 @@ public:
 	// Pose d'une rame (Cabin._process_corps) : [repère de la rame, puis celui de chaque
 	// voiture, posée sur ses deux bogies à ±`demi_bogie` de son centre].
 	Array poses_rame(double s_pos, double cote, int nb_voitures, double long_voiture, double demi_bogie) const;
+	// Points du tronçon libre (TrackBuilder._update_culots, câble intact) : corde p_att → p_r1
+	// plus l'écart latéral `lats` et la hauteur de chaînette `ys` dans le repère de la voie.
+	PackedVector3Array points_amorce(double att, double x0, const Vector3 &p_att, const Vector3 &p_r1,
+			const PackedFloat64Array &xs, const PackedFloat64Array &lats, const PackedFloat64Array &ys) const;
+	// tube_cable avec le repère de la voie et les UV lus sur la spline à att + xs[i].
+	Array tube_amorce(const PackedVector3Array &pts, const PackedFloat64Array &xs, double att, double rayon, int ns) const;
 	// Les mêmes à plusieurs abscisses d'un coup (un seul appel depuis le GDScript).
 	Array transforms_at(const PackedFloat32Array &s) const;
 
