@@ -1644,41 +1644,19 @@ func _process_corps(_delta: float) -> void:
 	# On échantillonne donc la position MONDE de la cabine à s, s+eps et s-eps
 	# (en incluant l'offset latéral à chaque échantillon) pour calculer la
 	# tangente réelle de sa trajectoire.
-	var eps: float = 1.5
-	var s_prev: float = maxf(s_pos - eps, 0.0)
-	var s_next: float = minf(s_pos + eps, PNConstants.LENGTH)
-	var pos_cur: Vector3 = _cabin_world_pos(s_pos)
-	var pos_prev: Vector3 = _cabin_world_pos(s_prev)
-	var pos_next: Vector3 = _cabin_world_pos(s_next)
-	var trajectory_tangent: Vector3 = (pos_next - pos_prev).normalized()
-	if trajectory_tangent.length() < 0.5:
-		trajectory_tangent = Vector3.FORWARD
-
-	var xform: Transform3D = _xform_from(pos_cur, trajectory_tangent)
-	global_transform = xform
-
-	# Articulation : chaque voiture sur la spline à SA propre abscisse.
-	# L'avant de la rame (−Z, voiture 1) pointe toujours vers l'amont (+s).
 	var travel_sign: float = 1.0     # voiture 1 toujours en amont (va-et-vient)
-	var car_len: float = train_length / float(car_count)
-	for idx in range(_car_roots.size()):
-		var z_c: float = (float(idx) - (car_count - 1) * 0.5) * car_len
-		var s_car: float = clampf(s_pos - travel_sign * z_c, 0.0, PNConstants.LENGTH)
-		# Chaque voiture repose sur ses DEUX bogies (à ±6 m de son centre) :
-		# la caisse suit la corde entre les deux appuis, pas la tangente en
-		# son milieu — sinon, sur un changement de pente convexe, les roues
-		# décollaient du rail (retour d'essai 2026-09-27).
-		var bh: float = car_len * 0.5 - TrainBodyBuilder.BOGIE_OFFSET
-		var p_a: Vector3 = _cabin_world_pos(maxf(s_car - bh, 0.0))
-		var p_b: Vector3 = _cabin_world_pos(minf(s_car + bh, PNConstants.LENGTH))
-		var p_c: Vector3 = (p_a + p_b) * 0.5
-		var tg: Vector3 = (p_b - p_a).normalized()
-		if tg.length() < 0.5:
-			tg = trajectory_tangent
-		var xf_car: Transform3D = _xform_from(p_c, tg)
-		(_car_roots[idx] as Node3D).global_transform = xf_car
-		if idx < _interior_cars.size():
-			(_interior_cars[idx] as Node3D).global_transform = xf_car
+	var nf: RefCounted = tunnel._nf
+	if nf != null and _car_roots.size() == car_count:
+		# en C++ (NoyauFuni, 06/11/2026) : mêmes repères, au bit près
+		var poses: Array = nf.poses_rame(s_pos, passing_side, car_count, train_length / float(car_count),
+			train_length / float(car_count) * 0.5 - TrainBodyBuilder.BOGIE_OFFSET)
+		global_transform = poses[0]
+		for idx in range(_car_roots.size()):
+			(_car_roots[idx] as Node3D).global_transform = poses[idx + 1]
+			if idx < _interior_cars.size():
+				(_interior_cars[idx] as Node3D).global_transform = poses[idx + 1]
+	else:
+		_poser_rame_gd(s_pos)
 
 	# Roues : roulement sans glissement autour de l'essieu (axe X de la
 	# voiture), marche avant = −Z → angle −d/R. d = déplacement RÉEL de la
@@ -1909,6 +1887,45 @@ func _xform_from(pos: Vector3, tangent: Vector3) -> Transform3D:
 	# va-et-vient : la caisse garde toujours le nez (voiture 1) vers l'amont
 	# — avant le 12/10/2026 elle était retournée de 180° pour descendre
 	return xform
+
+
+## Pose de la rame et de ses voitures sur la spline (chemin GDScript, sans le module).
+func _poser_rame_gd(s_pos: float) -> void:
+	var eps: float = 1.5
+	var s_prev: float = maxf(s_pos - eps, 0.0)
+	var s_next: float = minf(s_pos + eps, PNConstants.LENGTH)
+	var pos_cur: Vector3 = _cabin_world_pos(s_pos)
+	var pos_prev: Vector3 = _cabin_world_pos(s_prev)
+	var pos_next: Vector3 = _cabin_world_pos(s_next)
+	var trajectory_tangent: Vector3 = (pos_next - pos_prev).normalized()
+	if trajectory_tangent.length() < 0.5:
+		trajectory_tangent = Vector3.FORWARD
+
+	var xform: Transform3D = _xform_from(pos_cur, trajectory_tangent)
+	global_transform = xform
+
+	# Articulation : chaque voiture sur la spline à SA propre abscisse.
+	# L'avant de la rame (−Z, voiture 1) pointe toujours vers l'amont (+s).
+	var travel_sign: float = 1.0     # voiture 1 toujours en amont (va-et-vient)
+	var car_len: float = train_length / float(car_count)
+	for idx in range(_car_roots.size()):
+		var z_c: float = (float(idx) - (car_count - 1) * 0.5) * car_len
+		var s_car: float = clampf(s_pos - travel_sign * z_c, 0.0, PNConstants.LENGTH)
+		# Chaque voiture repose sur ses DEUX bogies (à ±6 m de son centre) :
+		# la caisse suit la corde entre les deux appuis, pas la tangente en
+		# son milieu — sinon, sur un changement de pente convexe, les roues
+		# décollaient du rail (retour d'essai 2026-09-27).
+		var bh: float = car_len * 0.5 - TrainBodyBuilder.BOGIE_OFFSET
+		var p_a: Vector3 = _cabin_world_pos(maxf(s_car - bh, 0.0))
+		var p_b: Vector3 = _cabin_world_pos(minf(s_car + bh, PNConstants.LENGTH))
+		var p_c: Vector3 = (p_a + p_b) * 0.5
+		var tg: Vector3 = (p_b - p_a).normalized()
+		if tg.length() < 0.5:
+			tg = trajectory_tangent
+		var xf_car: Transform3D = _xform_from(p_c, tg)
+		(_car_roots[idx] as Node3D).global_transform = xf_car
+		if idx < _interior_cars.size():
+			(_interior_cars[idx] as Node3D).global_transform = xf_car
 
 
 func _cabin_world_pos(s: float) -> Vector3:

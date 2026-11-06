@@ -71,6 +71,9 @@ var path_curve: Curve3D = null               # spline Catmull-Rom pour sampling 
 # relues par une B-spline cubique uniforme (C2) — cf. transform_at.
 const SMOOTH_H: float = 1.0
 var _smooth_nodes: PackedVector3Array = PackedVector3Array()
+## Même spline en C++ (NoyauFuni, 06/11/2026) : transform_at est appelé des dizaines de
+## fois par image (rames, câble, galets, culots) ; null sans le module (PWA).
+var _nf: RefCounted = null
 
 # Matériau béton partagé par TOUTES les sections de paroi — mémorisé pour
 # pouvoir le rendre translucide en vue extérieure (voir set_wall_see_through).
@@ -1090,6 +1093,8 @@ func transform_at(s: float) -> Transform3D:
 	# 18 m/s² en médiane au lieu de ~0,1 (v²/R), avec des pics de tangage
 	# entre 14 et 30 Hz. La caméra, à 15 m du point de référence, amplifiait
 	# le tangage : la rame « tremblait » en roulant.
+	if _nf != null:
+		return _nf.transform_at(s)
 	s = clampf(s, 0.0, PNConstants.LENGTH)
 	if _smooth_nodes.size() < 4:
 		return Transform3D.IDENTITY
@@ -1151,3 +1156,8 @@ func _build_smooth_path() -> void:
 			_smooth_nodes[j] = b + tb * (s - L)
 		else:
 			_smooth_nodes[j] = _baked_at(s)
+	_nf = null
+	if ClassDB.class_has_method("NoyauFuni", "set_spline") and "--sans-noyau-funi" not in OS.get_cmdline_user_args():
+		_nf = ClassDB.instantiate("NoyauFuni")
+		_nf.set_spline(_smooth_nodes, SMOOTH_H, PNConstants.LENGTH)
+		_nf.set_croisement(PNConstants.PASSING_START, PNConstants.PASSING_END, passing_offset_max)
