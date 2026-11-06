@@ -567,13 +567,32 @@ PackedFloat64Array NoyauRemontee::etape(double dt, double regime, const Vector3 
 		Vector3 p, d3;
 		point_cable(s, p, d3);
 		bool proche = true;
+		bool au_dela = false;          // au-delà de 700 m : MultiMesh seul
 		double dt_i = dt;
+		// lointain (MultiMesh) : nœud caché, pose seule — le balancement et les pièces animées ne se
+		// voient pas à cette distance. Décidé avant de sauter les véhicules au-delà de 700 m : sinon un
+		// nœud resté visible (set_lointains les remontre tous quand la portée change) le restait, figé et
+		// en détail complet, hors du MultiMesh (relevé du 06/11/2026 : 115 sièges des Lanches dessinés en
+		// entier à plus de 700 m)
+		bool loin = false;
+		if (!mm_rid.empty() && vue_active) {
+			const double dx = p.x - vue.x, dz = p.z - vue.z;
+			loin = dx * dx + dz * dz > mm_seuil * mm_seuil;
+		}
+		if ((char)loin != loin_veh[i]) {
+			loin_veh[i] = (char)loin;
+			v->set_visible(!loin);
+		}
 		if (vue_active) {
 			const double dx = p.x - vue.x, dz = p.z - vue.z;
 			const double d2 = dx * dx + dz * dz;
 			proche = d2 < 60.0 * 60.0;
+			// au-delà de 700 m, seul le MultiMesh le dessine, jusqu'à sa portée : sa pose suit, une image sur quatre
 			if (d2 > 700.0 * 700.0) {
-				continue;
+				if (!(loin && d2 < mm_jusqua * mm_jusqua)) {
+					continue;
+				}
+				au_dela = true;
 			}
 			if (d2 > 250.0 * 250.0) {
 				if ((i + tour) % 4 != 0) {
@@ -583,19 +602,8 @@ PackedFloat64Array NoyauRemontee::etape(double dt, double regime, const Vector3 
 			}
 		}
 		const Zone z = zone(s);
-		if (z.idx >= 0) {
+		if (z.idx >= 0 && !au_dela) {
 			gare_derniere.push_back((int)i);
-		}
-		// lointain (MultiMesh) : nœud caché, pose seule — le balancement et les
-		// pièces animées ne se voient pas à cette distance
-		bool loin = false;
-		if (!mm_rid.empty() && vue_active) {
-			const double dx = p.x - vue.x, dz = p.z - vue.z;
-			loin = dx * dx + dz * dz > mm_seuil * mm_seuil;
-		}
-		if ((char)loin != loin_veh[i]) {
-			loin_veh[i] = (char)loin;
-			v->set_visible(!loin);
 		}
 		const bool montee_v = signe(p.x) == signe_montee;
 		if (appuis.size() >= 2 && z.idx < 0) {
