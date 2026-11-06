@@ -195,6 +195,9 @@ void NoyauRemontee::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_portillons", "xa"), &NoyauRemontee::set_portillons);
 	ClassDB::bind_method(D_METHOD("passages"), &NoyauRemontee::passages);
 	ClassDB::bind_method(D_METHOD("set_lointains", "multimeshes", "relatives", "seuil", "jusqua"), &NoyauRemontee::set_lointains);
+	ClassDB::bind_method(D_METHOD("set_calage", "i", "d", "y_t", "pente_m", "pente_d", "dist", "d0", "pas", "y_m", "y_d", "paires_m", "paires_d"), &NoyauRemontee::set_calage);
+	ClassDB::bind_method(D_METHOD("a_calage", "i"), &NoyauRemontee::a_calage);
+	ClassDB::bind_method(D_METHOD("caler", "i"), &NoyauRemontee::caler);
 }
 
 // --- configuration -----------------------------------------------------------
@@ -839,4 +842,85 @@ void NoyauRemontee::set_lointains(const Array &multimeshes, const Array &relativ
 		}
 		loin_veh[i] = 0;
 	}
+}
+
+
+void NoyauRemontee::set_calage(int64_t i, double d, double y_t, double pente_m, double pente_d, double dist, double d0,
+		double pas, const PackedFloat32Array &y_m, const PackedFloat32Array &y_d, const PackedVector3Array &paires_m,
+		const PackedVector3Array &paires_d) {
+	if (i < 0) {
+		return;
+	}
+	if ((int64_t)calages.size() <= i) {
+		calages.resize(i + 1);
+	}
+	Calage &c = calages[i];
+	c.d = d;
+	c.y_t = y_t;
+	c.pente[0] = pente_m;
+	c.pente[1] = pente_d;
+	c.dist = dist;
+	c.d0 = d0;
+	c.pas = std::max(pas, 1e-4);
+	c.y[0].assign(y_m.ptr(), y_m.ptr() + y_m.size());
+	c.y[1].assign(y_d.ptr(), y_d.ptr() + y_d.size());
+	c.paires[0].assign(paires_m.ptr(), paires_m.ptr() + paires_m.size());
+	c.paires[1].assign(paires_d.ptr(), paires_d.ptr() + paires_d.size());
+	c.pret = !c.y[0].empty() && !c.y[1].empty();
+}
+
+// Hauteur du câble affiché au-dessus de l'axe de la tête, à un recul z (+ vers l'aval) : table sans flèche,
+// moins la flèche du moment (comme le Callable de LigneRemontee._caler_galets)
+double NoyauRemontee::cable_calage(const Calage &c, int b, double z) const {
+	const double dp = c.d - z;
+	const std::vector<float> &t = c.y[b];
+	const double u = (dp - c.d0) / c.pas;
+	const int n = (int)t.size();
+	int k = (int)std::floor(u);
+	k = std::clamp(k, 0, n - 2);
+	const double f = std::clamp(u - k, 0.0, 1.0);
+	const double y = t[k] + (t[k + 1] - t[k]) * f;
+	return y - fleche(dp, b == 0, d_onde_amp, d_onde_t, d_a_montee) - c.y_t;
+}
+
+PackedFloat32Array NoyauRemontee::caler(int64_t i) const {
+	PackedFloat32Array out;
+	if (!a_calage(i)) {
+		return out;
+	}
+	const Calage &c = calages[i];
+	out.resize(3 * (c.paires[0].size() + c.paires[1].size()));
+	float *o = out.ptrw();
+	for (int b = 0; b < 2; b++) {
+		const double cp = std::cos(c.pente[b]);
+		const double sp = std::sin(c.pente[b]);
+		for (const Vector3 &pr : c.paires[b]) {
+			const double zp = pr.x, sgn = pr.y, demi = pr.z;
+			double zw = zp * cp;
+			double yw = cable_calage(c, b, zw);
+			for (int it = 0; it < 3; it++) {
+				zw = (zp + yw * sp) / std::max(cp, 0.2);
+				yw = cable_calage(c, b, zw);
+			}
+			double e = std::max(demi, 0.05);
+			double y1 = cable_calage(c, b, zw + e);
+			double y2 = cable_calage(c, b, zw - e);
+			for (int j = 0; j < 2; j++) {
+				const double e2 = std::max(demi, 0.05) * std::cos(std::atan2(y2 - y1, 2.0 * e));
+				y1 = cable_calage(c, b, zw + e2);
+				y2 = cable_calage(c, b, zw - e2);
+				e = e2;
+			}
+			if (demi > 0.05) {
+				yw = (y1 + y2) * 0.5;
+			}
+			const double y_loc = yw * cp + zw * sp;
+			const double pente_loc = std::atan2(y2 - y1, 2.0 * e) - c.pente[b];
+			o[0] = (float)(y_loc + sgn * c.dist * std::cos(pente_loc));
+			o[1] = (float)(zp + sgn * c.dist * std::sin(pente_loc));
+			o[2] = (float)pente_loc;
+			o += 3;
+		}
+	}
+	return out;
 }

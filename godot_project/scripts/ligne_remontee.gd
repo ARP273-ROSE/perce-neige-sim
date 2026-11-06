@@ -5488,11 +5488,48 @@ func _caler_galets() -> void:
 		if vue_active and Vector2(py.position.x - point_vue.x, py.position.z - point_vue.z).length() > CALAGE_JUSQUA:
 			continue
 		var y_t: float = py.position.y + py.hauteur_cable()
-		for montee in [true, false]:
-			py.caler(montee, func(z: float) -> float:
-				var dp: float = d - z
-				return y_cable(dp, montee) - _fleche(dp, montee) - y_t)
+		if calage_noyau and _noyau != null and _noyau_valide() and _noyau.has_method("caler"):
+			# noyau C++ : même calcul (PyloneRemontee._pose_paire), le câble sans flèche échantillonné une fois
+			var k: int = _pyl.find(q)
+			if not _noyau.a_calage(k):
+				_preparer_calage(k, py, d, y_t)
+			py.appliquer_calage(_noyau.caler(k))
+		else:
+			for montee in [true, false]:
+				py.caler(montee, func(z: float) -> float:
+					var dp: float = d - z
+					return y_cable(dp, montee) - _fleche(dp, montee) - y_t)
 		_cales_vues[py] = true
+
+
+## Calage des galets par le noyau (faux : le GDScript, pour comparer). Câble sans flèche échantillonné tous les
+## CALAGE_PAS m sur ± CALAGE_DEMI m autour du pylône, une fois, à sa première visite.
+static var calage_noyau: bool = true
+const CALAGE_PAS: float = 0.05
+const CALAGE_DEMI: float = 9.0
+
+
+func _preparer_calage(k: int, py: PyloneRemontee, d: float, y_t: float) -> void:
+	var d0: float = d - CALAGE_DEMI
+	var n: int = int(ceil(2.0 * CALAGE_DEMI / CALAGE_PAS)) + 1
+	var tabs: Array = []
+	for montee in [true, false]:
+		var t: PackedFloat32Array = PackedFloat32Array()
+		t.resize(n)
+		for j in range(n):
+			t[j] = y_cable(d0 + j * CALAGE_PAS, montee)
+		tabs.append(t)
+	var pp: Array = []
+	var pentes: Array = []
+	for montee2 in [true, false]:
+		var a: PackedVector3Array = PackedVector3Array()
+		for e in py._paires[montee2]:
+			a.append(Vector3((e[1] as Vector3).z, float(e[5]), absf(float(e[3]) - float(e[4])) * 0.5))
+		pp.append(a)
+		var tete: Node3D = py.get_node_or_null("TeteMontee" if montee2 else "TeteDescente")
+		pentes.append(tete.rotation.x if tete != null else 0.0)
+	_noyau.set_calage(k, d, y_t, pentes[0], pentes[1], PyloneRemontee.R_GALET + PyloneRemontee.R_CABLE + 0.11,
+		d0, CALAGE_PAS, tabs[0], tabs[1], pp[0], pp[1])
 
 
 ## Galets des pylônes proches : ils tournent à v/R. Plus loin on ne distingue plus leurs bras.
