@@ -463,6 +463,9 @@ func _construire_corps() -> void:
 			and famille != "cabine_3s" and famille != "cabine_tph":
 		_rail_ouverture(true)
 		_rail_ouverture(false)
+	elif famille == "cabine_3s":
+		_rail_ouverture_3s(true)
+		_rail_ouverture_3s(false)
 	await _pause("rails d'ouverture")
 	await _caler_periode()
 	await _pause("période")
@@ -3526,6 +3529,42 @@ func _rail_ouverture(aval: bool) -> void:
 		RemonteeKit.tube(r_node, pts, 0.022, "acier", 6)
 		for k in [0, pts.size() / 2, pts.size() - 1]:
 			RemonteeKit.barre(r_node, pts[k], Vector3(pts[k].x, y_toit, pts[k].z), 0.018, "galva_pylone", 6)
+	MeshMerge.merge(r_node, [], "Rail")
+
+
+## 3S : rail de débrayage et d'embrayage de la pince (retour d'utilisateur du 06/11/2026 : « comme sur les TSD
+## et les TCD »). Fer plat au-dessus de la paire de galets d'ouverture de la pince (côté intérieur de la boucle,
+## voir VehiculeRemontee._chariot_3s), à chaque bout du lanceur : à 6 cm au-dessus d'eux pince fermée, posé sur
+## eux pince ouverte. Cotes de la pince estimées sur photo ; le tracé du rail suit celui des véhicules en gare.
+func _rail_ouverture_3s(aval: bool) -> void:
+	var s0: float = s_gare(aval, 0.0)
+	var l: float = longueur_zone(aval)
+	var r_node: Node3D = Node3D.new()
+	r_node.name = "RailOuverture" + ("Aval" if aval else "Amont")
+	_enfant(r_node)
+	var bout: float = L_OUVERTURE + L_REFERMETURE + 0.4
+	# galets d'ouverture dans le repère du véhicule (VehiculeRemontee : pied + ressort, puis −0,07 / +0,02),
+	# dessus des galets (rayon 0,09) et demi-épaisseur du fer
+	var gx: float = -0.915
+	var gy: float = 0.155 + 0.09 + 0.022
+	for tr in [[-0.8, bout], [l - bout, l + 0.8]]:
+		var pts: PackedVector3Array = PackedVector3Array()
+		var x: float = tr[0]
+		while x <= float(tr[1]) + 0.001:
+			var p: Vector3 = point(s0 + x)[0]
+			var dirh: Vector3 = (point(s0 + x + 1.5)[0] as Vector3) - (point(s0 + x - 1.5)[0] as Vector3)
+			dirh.y = 0.0
+			if dirh.length() < 0.001:
+				dirh = Vector3.FORWARD
+			var b: Basis = Basis.looking_at(dirh.normalized(), Vector3.UP)
+			if not sens_droite:
+				b = b * Basis.from_scale(Vector3(-1, 1, 1))
+			var ouv: float = ouverture_pince(clampf(x, 0.0, l), l)
+			pts.append(p + b * Vector3(gx, gy + 0.06 * (1.0 - ouv), 0))
+			x += 0.2
+		RemonteeKit.tube(r_node, pts, 0.022, "acier", 6)
+		for k in [0, pts.size() / 2, pts.size() - 1]:
+			RemonteeKit.barre(r_node, pts[k], pts[k] + Vector3(0, 0.9, 0), 0.018, "galva_pylone", 6)
 	MeshMerge.merge(r_node, [], "Rail")
 
 
