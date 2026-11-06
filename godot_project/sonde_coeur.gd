@@ -135,8 +135,14 @@ func _changer(ph: String) -> void:
 	_phase = ph
 
 
+var _pc_prec: Vector4i = Vector4i.ZERO
+
+
 func _fin_image() -> void:
 	var t: int = Time.get_ticks_usec()
+	var pcn: Vector4i = Vector4i(int(Performance.get_monitor(Performance.PIPELINE_COMPILATIONS_SURFACE)),
+		int(Performance.get_monitor(Performance.PIPELINE_COMPILATIONS_MESH)), int(Performance.get_monitor(Performance.PIPELINE_COMPILATIONS_DRAW)),
+		int(Performance.get_monitor(Performance.PIPELINE_COMPILATIONS_SPECIALIZATION)))
 	if _main != null and _t_post != 0 and _t_pre != 0:
 		var debut: int = _t_phys if _t_phys != 0 else _t_proc
 		var im: float = float(t - _t_post) / 1000.0
@@ -167,7 +173,10 @@ func _fin_image() -> void:
 			var h: PackedStringArray = PackedStringArray()
 			for k in cles.slice(0, 5):
 				h.append("%s %.1f" % [k, float(Prof.image[k]) / 1000.0])
-			_pics.append("%.2f;%s;%.1f;%.1f;%.1f;%.1f;%s;%s" % [float(t - _t0) / 1e6, _phase, im, pr, ph, de, LigneRemontee.derniere_etape, ",".join(h)])
+			# compilations de pipeline depuis l'image précédente (surface, maillage, dessin, spécialisation ; les
+			# moniteurs sont cumulés) : un pic de dessin qui en porte est une compilation, pas du calcul
+			var pc: String = "%d/%d/%d/%d" % [pcn.x - _pc_prec.x, pcn.y - _pc_prec.y, pcn.z - _pc_prec.z, pcn.w - _pc_prec.w]
+			_pics.append("%.2f;%s;%.1f;%.1f;%.1f;%.1f;%s;%s;%s" % [float(t - _t0) / 1e6, _phase, im, pr, ph, de, LigneRemontee.derniere_etape, ",".join(h), pc])
 	if _main != null:
 		_n_ph[_phase] = int(_n_ph.get(_phase, 0)) + 1
 		var tab: Dictionary = _sys.get(_phase, {})
@@ -183,6 +192,7 @@ func _fin_image() -> void:
 		s0.append(float(tot) / 1000.0)
 		tab["(scripts)"] = s0
 	Prof.image.clear()
+	_pc_prec = pcn
 	_t_post = t
 	_t_phys = 0
 
