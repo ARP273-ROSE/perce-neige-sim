@@ -1,3 +1,4 @@
+#include "noyau_funi.h"
 #include "noyau_remontee.h"
 #include "outils_maillage.h"
 #include "relief_hd.h"
@@ -13,6 +14,7 @@ void initialiser_module(ModuleInitializationLevel p_level) {
 	if (p_level != MODULE_INITIALIZATION_LEVEL_SCENE) {
 		return;
 	}
+	GDREGISTER_CLASS(NoyauFuni);
 	GDREGISTER_CLASS(NoyauRemontee);
 	GDREGISTER_CLASS(OutilsMaillage);
 	GDREGISTER_CLASS(ReliefHD);
