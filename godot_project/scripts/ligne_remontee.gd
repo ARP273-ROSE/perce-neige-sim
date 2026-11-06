@@ -235,6 +235,8 @@ func construire() -> void:
 	_poulies.clear()
 	_poulies_3s.clear()
 	_cavaliers_n.clear()
+	_cav_galets.clear()
+	_cav_etat.clear()
 	_mat_porteurs = null
 	_terrassements.clear()
 	pret = false
@@ -4201,6 +4203,72 @@ const N_CAVALIERS: int = 10
 var _cavaliers_n: Array = []
 
 
+## Galets des cavaliers (3S) : ils tournent à v/R tant que le tracteur est posé dessus ; au passage d'une pince,
+## qui le soulève de l'épaisseur de ses mâchoires, ils sont libérés et ralentissent seuls, comme les galets du
+## funiculaire (TrackBuilder : ω(t) = (ω0 + a)·e^(−t/τ) − a, mêmes constantes ; retour d'utilisateur du 06/11/2026).
+## Seuls ceux à moins de CAV_TOURNE_JUSQUA du point de vue sont tournés.
+var _cav_galets: Array = []             # [galet, montée, d, rayon]
+var _cav_etat: Array = []               # par galet : [libre, t0, ω0, ω]
+var _cav_horloge: float = 0.0
+const CAV_TOURNE_JUSQUA: float = 80.0
+const CAV_LIBRE: float = 0.55           # m : demi-longueur des mâchoires au-dessus du galet
+static var _galet_tournant: ArrayMesh = null
+
+
+static func _maillage_galet_tournant() -> ArrayMesh:
+	RemonteeKit.verrou.lock()
+	if _galet_tournant == null:
+		_galet_tournant = RollerMesh.build_galet(true)
+	RemonteeKit.verrou.unlock()
+	return _galet_tournant
+
+
+func _tourner_cavaliers(delta: float) -> void:
+	if _cav_galets.is_empty() or delta <= 0.0:
+		return
+	_cav_horloge += delta
+	if _cav_etat.size() != _cav_galets.size():
+		_cav_etat.clear()
+		for k0 in range(_cav_galets.size()):
+			_cav_etat.append([false, 0.0, 0.0, 0.0])
+	# abscisses des pinces, brin par brin
+	var dm: PackedFloat32Array = PackedFloat32Array()
+	var dd: PackedFloat32Array = PackedFloat32Array()
+	var sm: float = signf(_x_brin(true))
+	for e in _vehicules:
+		var v: Node3D = e[0]
+		if signf(v.position.x) == sm:
+			dm.append(-v.position.z)
+		else:
+			dd.append(-v.position.z)
+	var u: float = maxf(vitesse_reelle, 0.0)
+	var a: float = TrackBuilder.GALET_MC / TrackBuilder.GALET_C
+	var tau: float = TrackBuilder.GALET_I / TrackBuilder.GALET_C
+	for k in range(_cav_galets.size()):
+		var g: Array = _cav_galets[k]
+		var st: Array = _cav_etat[k]
+		var d: float = g[2]
+		var w_cable: float = u / float(g[3])
+		var libre: bool = false
+		for dv in (dm if g[1] else dd):
+			if absf(dv - d) < CAV_LIBRE:
+				libre = true
+				break
+		if libre and not st[0]:
+			st[1] = _cav_horloge
+			st[2] = st[3]
+		st[0] = libre
+		if libre:
+			var t: float = _cav_horloge - float(st[1])
+			st[3] = maxf((float(st[2]) + a) * exp(-t / tau) - a, 0.0)
+		else:
+			st[3] = w_cable
+		if vue_active and Vector2(_x_brin(g[1]) - point_vue.x, -d - point_vue.z).length() > CAV_TOURNE_JUSQUA:
+			continue
+		# (axe du maillage : son Y local ; le tracteur file vers l'amont sur le brin montant)
+		(g[0] as Node3D).rotate_object_local(Vector3.UP, float(st[3]) * delta * (1.0 if g[1] else -1.0))
+
+
 func _caler_cavaliers() -> void:
 	for e in _cavaliers_n:
 		var n: Node3D = e[0]
@@ -4245,11 +4313,15 @@ func _cavaliers(parent: Node3D) -> void:
 				RemonteeKit.barre(c, Vector3(sx * 0.14, y_tr + 0.08, 0), Vector3(sx * e * 0.72, -0.17, 0), 0.008, "galva_pylone", 4)
 			RemonteeKit.boite_en(c, Vector3(0.34, 0.05, 0.16), Vector3(0, y_tr - 0.12, 0), "galva_pylone")
 			RemonteeKit.galet(c, Vector3(0, y_tr - 0.03 - r_g, 0), r_g)
+			# le galet reste à part (il tourne), au modèle à rayons pour qu'on le voie tourner
+			var gal: MeshInstance3D = c.get_child(c.get_child_count() - 1)
+			gal.mesh = _maillage_galet_tournant()
+			_cav_galets.append([gal, montee, d, r_g])
 			var garde: PackedVector3Array = PackedVector3Array()
 			for g in [Vector3(-0.17, y_tr - 0.12, 0), Vector3(-0.09, y_tr - 0.42, 0), Vector3(0.09, y_tr - 0.42, 0), Vector3(0.17, y_tr - 0.12, 0)]:
 				garde.append(g)
 			RemonteeKit.tube(c, garde, 0.008, "galva_pylone", 4)
-			MeshMerge.merge(c, [], "Cavalier", true)
+			MeshMerge.merge(c, [gal], "Cavalier", true)
 
 
 func _porteurs(parent: Node3D) -> void:
@@ -4397,6 +4469,7 @@ func _process_corps(delta: float) -> void:
 	_galets()
 	if tricable():
 		_caler_cavaliers()
+		_tourner_cavaliers(delta)
 	_tourner_pneus(delta)
 	_roues_proches(delta)
 	if _mat_cable != null:
