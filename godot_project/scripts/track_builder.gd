@@ -3268,7 +3268,13 @@ func _update_culots(s_rame_g: float, s_rame_d: float) -> void:
 		# hauteur de la chaînette
 		var pts: Array = []
 		var xs: Array = []
-		for i in range((prof.x as Array).size()):
+		var nf: RefCounted = tunnel._nf
+		if nf != null and not (_slack > 0.0 and not _rupture.is_empty()):
+			# en C++ (NoyauFuni, 06/11/2026), au bit près
+			xs = (prof.x as Array).duplicate()
+			pts = Array(nf.points_amorce(att, x0, p_att, p_r1, PackedFloat64Array(xs),
+				PackedFloat64Array(prof.lat), PackedFloat64Array(prof.y)))
+		for i in range(0 if not pts.is_empty() else (prof.x as Array).size()):
 			var x: float = prof.x[i]
 			var s_x: float = att + x
 			var bx: Basis = tunnel.transform_at(s_x).basis
@@ -3326,6 +3332,18 @@ func _tube_amorce_cpp(mi: MeshInstance3D, mat: Material, pts: Array, xs: Array, 
 	am.clear_surfaces()
 	if pts.size() < 2:
 		return
+	var arr: Array
+	if tunnel._nf != null:
+		arr = tunnel._nf.tube_amorce(PackedVector3Array(pts), PackedFloat64Array(xs), att, cable_radius, cable_segments)
+	else:
+		arr = _tube_arrays_gd(pts, xs, att)
+	if arr.is_empty():
+		return
+	am.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
+	am.surface_set_material(0, mat)
+
+
+func _tube_arrays_gd(pts: Array, xs: Array, att: float) -> Array:
 	var vx: PackedVector3Array = PackedVector3Array()
 	var vy: PackedVector3Array = PackedVector3Array()
 	var uv: PackedFloat32Array = PackedFloat32Array()
@@ -3334,11 +3352,7 @@ func _tube_amorce_cpp(mi: MeshInstance3D, mat: Material, pts: Array, xs: Array, 
 		vx.append(bv.x)
 		vy.append(bv.y)
 		uv.append(2.0 * (att + float(xs[i])))
-	var arr: Array = _noyau.tube_cable(PackedVector3Array(pts), vx, vy, uv, cable_radius, cable_segments)
-	if arr.is_empty():
-		return
-	am.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
-	am.surface_set_material(0, mat)
+	return _noyau.tube_cable(PackedVector3Array(pts), vx, vy, uv, cable_radius, cable_segments)
 
 
 ## Tube du tronçon libre (ImmediateMesh refait à chaque image) : UV comme
