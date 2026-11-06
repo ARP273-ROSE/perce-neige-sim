@@ -5,6 +5,26 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.56.0 — 6 novembre 2026
+
+**Réécriture du cœur, première vague** : les calculs refaits à chaque image passent en C++ (module du simulateur), avec le même résultat au bit près ou à quelques centièmes de millimètre, et l'ancien code en repli quand le module manque (PWA). Funiculaire : tracé de la voie (3 fois plus rapide), pose des rames et de leurs voitures (11 fois), bout de câble libre au culot (4 fois). Remontées : calage des galets des pylônes (70 fois), tables préparées à la construction de la ligne au lieu de la première visite (images de 40 à 150 ms supprimées). Sur une puce graphique intégrée, à bord du funiculaire : fil principal médian 4,5 → 3,2 ms.
+
+**Moins d'objets à dessiner** : pièces des pylônes vues de loin fusionnées une fois par ligne et par matériau (−17 % d'appels de dessin à ski), véhicules au-delà de 700 m confiés à un seul maillage par ligne, salle des machines et funiculaire souterrain cachés quand on ne peut pas les voir (devant Val Claret, de 3 600 à 1 600 appels). Au cran 3 et au-delà : un néon de quai sur deux, à double énergie, et pare-brise sans calcul de lumière (−17 % et −19 % de temps de carte au quai sur puce intégrée).
+
+**Entrée du skieur sans à-coup** : les collisions du décor se préparent par morceaux de 3 000 triangles, une tâche par image ; la plus longue passe de 41 à 4 ms.
+
+**Val Claret** : garde-corps au bout du palier, derrière la porte du personnel en haut des quais. Tout droit après la porte, on tombait de 1,2 m dans le tunnel.
+
+**Télésièges** : tapis d'embarquement des portillons à l'arrêt, une voie par place et grand STOP au bout ; plus de bande jaune. Zone d'embarquement élargie (3 m avant, 2,5 m après), chaque siège de la fenêtre essayé : on n'est plus traversé ni poussé par un siège qui n'embarque pas.
+
+**Olympique (3S)** : pince remontée au-dessus du câble tracteur ; rail de débrayage et d'embrayage à chaque bout du lanceur des gares ; galets des cavaliers qui tournent sous le tracteur, libérés au passage d'une pince puis ralentis comme ceux du funiculaire.
+
+**PWA, pylônes proches** : entre 150 et 200 m d'une ligne construite, pylônes au niveau intermédiaire (environ 1 200 triangles, galets visibles), téléchargé à la demande par pylône compressé, en mode normal seulement. Mémoire mesurée sous WebKit au pied de Tovière : tampons +2 Mo, tas inchangé.
+
+**Corrections** : le skieur ne garde plus de référence à un véhicule démonté (erreurs en série au cran 4 allégé avec le décor haute définition) ; la boucle AUTO reprend son itinéraire d'une boucle à l'autre.
+
+Vérifié : 7 chemins de nuanceurs, 61 bancs au PC, 48 bancs sans écran, PWA sous WebKit en secours 0, 1 et 2.
+
 ## 1.55.1 — 5 novembre 2026
 
 Même contenu que la 1.55.0, dont la publication a été arrêtée par le contrôle de confidentialité de la CI (chemin absolu dans un banc). Seul le banc du 3S change.
