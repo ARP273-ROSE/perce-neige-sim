@@ -270,6 +270,10 @@ func _appliquer(c: int, pourquoi: String) -> void:
 	var st: Node = main.get("stations") as Node if main != null else null
 	if not _web and st != null and st.has_method("set_neons_alleges"):
 		st.call("set_neons_alleges", cran >= 3)
+	for nom_rame in ["cabin", "cabin_ghost"]:
+		var rame: Node = main.get(nom_rame) as Node if main != null else null
+		if not _web and rame != null and rame.has_method("set_pare_brise_simple"):
+			rame.call("set_pare_brise_simple", cran >= 3)
 	# dernier cran (PC à carte intégrée) : portées de la PWA, détail minimal
 	var rm_loin: Node = main.get("remontees") as Node if main != null else null
 	if _env != null and _env.sky != null and _env.sky.sky_material is ShaderMaterial:

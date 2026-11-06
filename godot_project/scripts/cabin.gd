@@ -194,6 +194,16 @@ func _ready() -> void:
 		mesh_root.visible = true
 
 
+## Pare-brise sans calcul de lumière aux crans bas (PC) : la vitre teintée couvre une bonne part de
+## l'écran et prenait chaque lampe de la gare pixel par pixel, 19 % du temps de carte au quai de
+## Val Claret sur puce intégrée (Radeon 740M, 06/11/2026). La teinte reste, un peu plus sombre en gare.
+func set_pare_brise_simple(oui: bool) -> void:
+	var ws: StandardMaterial3D = _body_mats.get("windshield") as StandardMaterial3D
+	if ws == null or RenderingServer.get_current_rendering_method() == "gl_compatibility":
+		return
+	ws.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED if oui else BaseMaterial3D.SHADING_MODE_PER_PIXEL
+
+
 func _build_mesh() -> void:
 	mesh_root = Node3D.new()
 	mesh_root.name = "MeshRoot"
