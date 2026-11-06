@@ -4996,7 +4996,7 @@ func _pyl_maj(delta: float) -> void:
 ## lignes cuites, téléchargé quand la ligne est construite (le premier chargement n'en porte rien). Secours 0
 ## seulement ; --pyl1=dossier pour l'essayer sur PC (avec --lod-vehicules).
 const PYLONE_L1_DES: float = 200.0
-var _pyl_l1: Array = []                 # par pylône de _pyl_l2 : [sommets (repère de la ligne), couleurs, indices] ou []
+var _pyl_l1: Array = []                 # par pylône de _pyl_l2 : [taille brute, bloc zstd de son L1] ou []
 var _pyl_mi1: MeshInstance3D = null
 var _l1_etat: int = 0                   # 0 rien demandé, 1 en cours, 2 reçu (ou absent)
 
@@ -5030,28 +5030,21 @@ func _demander_l1() -> void:
 		_l1_etat = 2
 
 
+## (on ne garde que les blocs compressés de chaque pylône : décompressés seulement à la reconstruction, pour
+## les pylônes en L1 — le tas wasm montait d'un palier avec tout le fichier décodé, mesure du 06/11/2026)
 func _l1_recu(b: PackedByteArray) -> void:
 	_l1_etat = 2
 	if b.size() < 8 or not is_inside_tree() or _pyl_l2.is_empty():
 		return
-	var n: int = b.decode_u32(0)
-	var d: Variant = bytes_to_var(b.slice(4).decompress(n, FileAccess.COMPRESSION_ZSTD))
-	if not (d is Dictionary) or not (d as Dictionary).has("pylones"):
+	var d: Variant = bytes_to_var(b)
+	if not (d is Dictionary) or int((d as Dictionary).get("version", 0)) != 2:
 		return
 	var par_nom: Dictionary = {}
 	for e in d["pylones"]:
-		par_nom[String(e["nom"])] = e["L1"]
+		par_nom[String(e["nom"])] = [int(e["n"]), e["z"]]
 	_pyl_l1.clear()
 	for k in range(_pyl_l2.size()):
-		var py: PyloneRemontee = _pyl_l2[k][0]
-		var L: Variant = par_nom.get(String(py.name), null)
-		if L == null:
-			_pyl_l1.append([])
-			continue
-		var v: PackedVector3Array = (L["v"] as PackedVector3Array).duplicate()
-		for i in range(v.size()):
-			v[i] = py.transform * v[i]
-		_pyl_l1.append([v, L["c"], L["i"]])
+		_pyl_l1.append(par_nom.get(String((_pyl_l2[k][0] as Node).name), []))
 	_pyl_t = 0.0
 
 
@@ -5071,10 +5064,16 @@ func _pyl_reconstruire_l1() -> void:
 	for k in range(mini(_pyl_l1.size(), _pyl_pres.size())):
 		if _pyl_pres[k] != 2 or (_pyl_l1[k] as Array).is_empty():
 			continue
+		var L: Variant = bytes_to_var((_pyl_l1[k][1] as PackedByteArray).decompress(int(_pyl_l1[k][0]), FileAccess.COMPRESSION_ZSTD))
+		if not (L is Dictionary):
+			continue
+		var py: PyloneRemontee = _pyl_l2[k][0]
 		var n0: int = v.size()
-		v.append_array(_pyl_l1[k][0])
-		c.append_array(_pyl_l1[k][1])
-		var pi2: PackedInt32Array = _pyl_l1[k][2]
+		var lv: PackedVector3Array = L["v"]
+		for p0 in lv:
+			v.append(py.transform * p0)
+		c.append_array(L["c"])
+		var pi2: PackedInt32Array = L["i"]
 		var i0: int = ix.size()
 		ix.resize(i0 + pi2.size())
 		for j in range(pi2.size()):

@@ -32,14 +32,14 @@ func _initialize() -> void:
 			nb += 1
 		lignes[D["ligne"]] = o
 		if _web and _l1_dossier != "":
+			# version 2 : un bloc zstd par pylône, la liste elle-même non recompressée — la PWA ne garde que les
+			# blocs et ne décompresse que les pylônes affichés en L1 (le tas wasm ne redescend pas)
 			var l1: Array = []
 			for p2 in D["pylones"]:
-				l1.append({"nom": p2["nom"], "L1": _niv(p2["L1"])})
-			var b1: PackedByteArray = var_to_bytes({"version": 1, "relief": rel, "ligne": D["ligne"], "pylones": l1})
-			var z1: PackedByteArray = b1.compress(FileAccess.COMPRESSION_ZSTD)
+				var brut1: PackedByteArray = var_to_bytes(_niv(p2["L1"]))
+				l1.append({"nom": p2["nom"], "n": brut1.size(), "z": brut1.compress(FileAccess.COMPRESSION_ZSTD)})
 			var g1: FileAccess = FileAccess.open(_l1_dossier.path_join("%s.pyl1.web.cuit" % D["ligne"]), FileAccess.WRITE)
-			g1.store_32(b1.size())
-			g1.store_buffer(z1)
+			g1.store_buffer(var_to_bytes({"version": 2, "relief": rel, "ligne": D["ligne"], "pylones": l1}))
 			g1.close()
 	var brut: PackedByteArray = var_to_bytes({"version": 2, "relief": rel, "lignes": lignes})
 	var z: PackedByteArray = brut.compress(FileAccess.COMPRESSION_ZSTD)
