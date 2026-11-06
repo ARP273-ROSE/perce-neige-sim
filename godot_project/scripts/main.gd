@@ -680,9 +680,46 @@ func _build_stations() -> void:
 	add_child(stations)
 	stations.build(tunnel)
 	stations.set_neons_alleges(PerfManager.cran_courant >= 3)   # (le PerfManager règle avant que les gares existent)
-	if OS.has_feature("web"):       # 305 surfaces fixes, ~900 tampons WebGL (mesure 03/11/2026)
-		MeshMerge.merge(stations, [], "Stations")
+	if OS.has_feature("web") or "--fusion-gares" in OS.get_cmdline_user_args():       # 305 surfaces fixes, ~900 tampons WebGL (mesure 03/11/2026)
+		_fusionner_gares()
 	print("[Stations] Val Claret + Grande Motte construites")
+
+
+## Fusion des pièces fixes des quais (PWA), GARE PAR GARE (06/11/2026) : fusionnées ensemble, les
+## deux gares donnaient des maillages de 3,3 km, écartés des collisions comme les panoramas
+## (> 600 m) — sur iPad, on traversait le palier derrière la porte 2 de Val Claret jusqu'au sol du
+## tunnel (retour d'utilisateur, 06/11/2026 : « je tombe toujours sur un plancher fantôme
+## intermédiaire ») ; et un maillage de 3,3 km n'est jamais écarté par le champ de vue.
+func _fusionner_gares() -> void:
+	var o_bas: Vector3 = tunnel.transform_at(0.0).origin
+	var o_haut: Vector3 = tunnel.transform_at(PNConstants.LENGTH).origin
+	var bas: Node3D = Node3D.new()
+	bas.name = "GareBasse"
+	var haut: Node3D = Node3D.new()
+	haut.name = "GareHaute"
+	var enfants: Array = stations.get_children()
+	stations.add_child(bas)
+	stations.add_child(haut)
+	for c in enfants:
+		var p: Variant = _centre_visuel(c)
+		if p == null:
+			continue
+		var cible: Node3D = bas if (p as Vector3).distance_to(o_bas) < (p as Vector3).distance_to(o_haut) else haut
+		(c as Node).reparent(cible, true)
+	MeshMerge.merge(bas, [], "StationsBas")
+	MeshMerge.merge(haut, [], "StationsHaut")
+
+
+## Centre du premier objet visible sous n (n compris), null s'il n'y en a pas.
+func _centre_visuel(n: Node) -> Variant:
+	if n is VisualInstance3D:
+		var vi: VisualInstance3D = n
+		return (vi.global_transform * vi.get_aabb()).get_center()
+	for c in n.get_children():
+		var p: Variant = _centre_visuel(c)
+		if p != null:
+			return p
+	return null
 
 
 ## Gares du funiculaire vues de loin : de Leissières ou Bellevarde, à 6-10 km, 65 000 primitives et
