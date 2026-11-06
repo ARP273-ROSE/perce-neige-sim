@@ -3302,11 +3302,56 @@ func _update_culots(s_rame_g: float, s_rame_d: float) -> void:
 		_tube_amorce(d.amorce as MeshInstance3D, mat, pts.slice(debut), xs.slice(debut), att)
 
 
+## Module C++ du funiculaire (NoyauFuni), null sans le module (PWA) : chemin GDScript.
+static var _noyau: RefCounted = null
+static var _noyau_cherche: bool = false
+
+
+static func _noyau_funi() -> RefCounted:
+	if not _noyau_cherche:
+		_noyau_cherche = true
+		if ClassDB.class_exists("NoyauFuni") and "--sans-noyau-funi" not in OS.get_cmdline_user_args():
+			_noyau = ClassDB.instantiate("NoyauFuni")
+	return _noyau
+
+
+## _tube_amorce en C++ (06/11/2026) : les ~1 100 sommets par brin et par image que le
+## GDScript poussait un à un dans l'ImmediateMesh (l'essentiel des 0,9 ms par image de
+## update_cable_phase, relevé du 740M) ; mêmes anneaux, même sens des faces.
+func _tube_amorce_cpp(mi: MeshInstance3D, mat: Material, pts: Array, xs: Array, att: float) -> void:
+	var am: ArrayMesh = mi.mesh as ArrayMesh
+	if am == null:
+		am = ArrayMesh.new()
+		mi.mesh = am
+	am.clear_surfaces()
+	if pts.size() < 2:
+		return
+	var vx: PackedVector3Array = PackedVector3Array()
+	var vy: PackedVector3Array = PackedVector3Array()
+	var uv: PackedFloat32Array = PackedFloat32Array()
+	for i in range(pts.size()):
+		var bv: Basis = tunnel.transform_at(att + float(xs[i])).basis
+		vx.append(bv.x)
+		vy.append(bv.y)
+		uv.append(2.0 * (att + float(xs[i])))
+	var arr: Array = _noyau.tube_cable(PackedVector3Array(pts), vx, vy, uv, cable_radius, cable_segments)
+	if arr.is_empty():
+		return
+	am.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
+	am.surface_set_material(0, mat)
+
+
 ## Tube du tronçon libre (ImmediateMesh refait à chaque image) : UV comme
 ## les tronçons du câble (UV.x autour, UV.y = 2 × abscisse) pour que les
 ## torons défilent sans raccord au décollage.
 func _tube_amorce(mi: MeshInstance3D, mat: Material, pts: Array, xs: Array, att: float) -> void:
-	var im: ImmediateMesh = mi.mesh
+	if _noyau_funi() != null:
+		_tube_amorce_cpp(mi, mat, pts, xs, att)
+		return
+	var im: ImmediateMesh = mi.mesh as ImmediateMesh
+	if im == null:
+		im = ImmediateMesh.new()
+		mi.mesh = im
 	im.clear_surfaces()
 	if pts.size() < 2:
 		return
