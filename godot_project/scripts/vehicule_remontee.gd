@@ -1569,6 +1569,9 @@ func _cabine() -> void:
 ## porteurs).
 ## Chariot du 3S : cotes estimées sur photo, d'après le Ø connu des porteurs (57 mm), incertitude ±15 %.
 const E_PORTEURS_3S: float = 0.80
+## Téléphériques va-et-vient (Fornet, Grande Motte) : deux porteurs par voie (fiches RM.net) ; écart estimé
+## sur les photos du chariot (deux rangées de galets, une poutre entre elles).
+const E_PORTEURS_TPH: float = 0.70
 const ENTRAXE_GALETS_3S: float = 0.62
 const Z_BALANCIER_3S: float = 0.80        # du milieu du chariot au milieu d'un balancier
 const Y_POUTRES_3S: float = 0.40
@@ -1827,22 +1830,35 @@ func _cabine_tph() -> void:
 	ch.name = "Pince"
 	add_child(ch)
 	var gris: String = "galva_pylone"
-	var rg: float = 0.22
-	# chariot : poutre-caisson, deux bogies de 4 galets (2 balanciers de 2)
-	# sur le porteur, joues latérales, attaches du tracteur aux deux bouts
-	RemonteeKit.boite_en(ch, Vector3(0.44, 0.34, 4.6), Vector3(0, 0.62, 0), gris)
-	for bz in [-1.0, 1.0]:
-		var zb: float = bz * 1.20
-		for sx in [-1.0, 1.0]:
-			RemonteeKit.boite_en(ch, Vector3(0.03, 0.44, 2.0), Vector3(sx * 0.16, rg + 0.10, zb), "galva_patine")
-		for k in range(4):
-			RemonteeKit.galet(ch, Vector3(0, rg + PyloneRemontee.R_CABLE, zb + (k - 1.5) * 0.48), rg)
-		RemonteeKit.cylindre(ch, 0.06, 0.06, 0.46, Transform3D(Basis(Vector3.FORWARD, PI * 0.5), Vector3(0, 0.50, zb)), "acier_noir", 10)
-		RemonteeKit.boite_en(ch, Vector3(0.24, 0.55, 0.34), Vector3(0, 0.08, bz * 2.35), gris)
-		RemonteeKit.cylindre(ch, 0.08, 0.08, 0.30, Transform3D(Basis(Vector3.FORWARD, PI * 0.5), Vector3(0, -0.15, bz * 2.35)), "acier", 10)
-	RemonteeKit.boite_en(ch, Vector3(0.05, 0.10, 0.12), Vector3(0.24, 0.84, 2.0), "cabine_rouge")       # feu
-	var hs: float = H_SUSP_TPH
 	var fornet: bool = style_tph == "fornet"
+	# chariot (fiches RM.net) : deux porteurs par voie, une rangée de galets sur chacun — Fornet 24 galets
+	# (12 par porteur), Grande Motte 12 (6 par porteur) et un frein par porteur, en amont des galets ; galets
+	# par paires sur balanciers, joues de part et d'autre, poutre-caisson en travers des deux rangées,
+	# attaches du tracteur aux deux bouts. Châssis rouge au Fornet (photos).
+	var rg: float = 0.20 if fornet else 0.22
+	var n_g: int = 12 if fornet else 6
+	var pas: float = 0.40 if fornet else 0.52
+	var lr: float = n_g * pas + 0.3                     # longueur d'une rangée
+	var coul: String = "cabine_rouge" if fornet else gris
+	var xr: float = E_PORTEURS_TPH * 0.5
+	for sx in [-1.0, 1.0]:
+		for sj in [-1.0, 1.0]:
+			RemonteeKit.boite_en(ch, Vector3(0.03, 0.42, lr), Vector3(sx * xr + sj * 0.15, rg + 0.10, 0), coul)
+		for k in range(n_g):
+			RemonteeKit.galet(ch, Vector3(sx * xr, rg + PyloneRemontee.R_CABLE, (k - (n_g - 1) * 0.5) * pas), rg)
+		for kb in range(n_g / 2):
+			var zb: float = (2 * kb + 0.5 - (n_g - 1) * 0.5) * pas
+			RemonteeKit.cylindre(ch, 0.05, 0.05, 0.36, Transform3D(Basis(Vector3.FORWARD, PI * 0.5), Vector3(sx * xr, rg + 0.30, zb)), "acier_noir", 8)
+		# frein de chariot : mâchoires sur le porteur, en amont
+		RemonteeKit.boite_en(ch, Vector3(0.36, 0.30, 0.55), Vector3(sx * xr, rg * 0.5, -lr * 0.5 - 0.30), "peinture_anthracite")
+	# poutre maîtresse entre les deux rangées (les galets restent visibles par-dessus, photos du Fornet)
+	RemonteeKit.boite_en(ch, Vector3(0.24, 0.36, lr * 0.85), Vector3(0, rg + 0.12, 0), coul)
+	for bz in [-1.0, 1.0]:
+		RemonteeKit.boite_en(ch, Vector3(E_PORTEURS_TPH + 0.30, 0.22, 0.30), Vector3(0, 0.25, bz * lr * 0.30), coul)
+		RemonteeKit.boite_en(ch, Vector3(0.24, 0.55, 0.34), Vector3(0, 0.08, bz * (lr * 0.5 + 0.15)), gris)
+		RemonteeKit.cylindre(ch, 0.08, 0.08, 0.30, Transform3D(Basis(Vector3.FORWARD, PI * 0.5), Vector3(0, -0.15, bz * (lr * 0.5 + 0.15))), "acier", 10)
+	RemonteeKit.boite_en(ch, Vector3(0.05, 0.10, 0.12), Vector3(xr + 0.24, rg + 0.62, lr * 0.4), "cabine_rouge")       # feu
+	var hs: float = H_SUSP_TPH
 	if fornet:
 		_suspente_fornet(hs)
 	# suspente (photos) : grand bras gris en caisson qui monte d'un côté du

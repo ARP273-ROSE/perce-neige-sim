@@ -284,15 +284,20 @@ func _mats_charges() -> Array:
 	return r
 
 
-## Câbles : un porteur lisse par voie (ancré en gare), le tracteur à torons
-## 0,45 m sous lui, et 8 cavaliers par voie qui le portent.
+## Câbles (fiches RM.net) : DEUX porteurs lisses par voie (ancrés en gare ; Fornet 44 mm), le tracteur à
+## torons 0,45 m sous eux, entre les deux, et des cavaliers qui le portent (Fornet 4 par voie, Grande
+## Motte 8).
 func _cables_tph() -> void:
 	var c: Node3D = Node3D.new()
 	c.name = "Cable"
 	_enfant(c)
-	_mat_cable = RemonteeKit.materiau_cable_tracteur(40.0)
-	_mat_porteurs = RemonteeKit.materiau_cable_tracteur(50.0)
+	var fornet: bool = String(name) == "tph_fornet"
+	_mat_cable = RemonteeKit.materiau_cable_tracteur(30.0 if fornet else 40.0)
+	_mat_porteurs = RemonteeKit.materiau_cable_tracteur(44.0 if fornet else 50.0)
 	_mat_porteurs.set_shader_parameter("lisse", true)
+	var r_por: float = 0.022 if fornet else 0.025
+	var e2: float = VehiculeRemontee.E_PORTEURS_TPH * 0.5
+	var n_cav: int = 4 if fornet else 8
 	var L: float = longueur_h()
 	for montee in [true, false]:
 		var x0: float = _x_brin(montee)
@@ -302,16 +307,20 @@ func _cables_tph() -> void:
 		while d <= L + D_QUAI + 6.0:
 			var dd: float = clampf(d, 0.0, L)
 			var y: float = y_cable(dd, montee) if d > 0.0 and d < L else terrain(0.0 if d <= 0.0 else L) + H_CABLE_GARE
-			por.append(Vector3(x0, y, -d))
+			por.append(Vector3(0, y, -d))
 			tra.append(Vector3(x0, y - 0.45, -d))
 			d += 1.0 if d < 30.0 or d > L - 30.0 else 5.0
-		RemonteeKit.tube(c, por, 0.025, "cable", 8, _mat_porteurs)
-		RemonteeKit.tube(c, tra, 0.020, "cable", 8, _mat_cable)
+		for sx in [-1.0, 1.0]:
+			var p2: PackedVector3Array = PackedVector3Array()
+			for q in por:
+				p2.append(Vector3(x0 + sx * e2, q.y, q.z))
+			RemonteeKit.tube(c, p2, r_por, "cable", 8, _mat_porteurs)
+		RemonteeKit.tube(c, tra, 0.015 if fornet else 0.020, "cable", 8, _mat_cable)
 		# (une tranche pour les câbles d'un brin, une pour ses cavaliers : 11 ms d'un bloc, relevé du 07/11/2026)
 		await _pause("téléphérique : câbles")
 		# cavaliers
-		for k in range(8):
-			var dc: float = L * (k + 0.5) / 8.0
+		for k in range(n_cav):
+			var dc: float = L * (k + 0.5) / float(n_cav)
 			var ok: bool = true
 			for p in pylones:
 				if absf(dc - float(p["d"])) < 30.0:
@@ -322,9 +331,11 @@ func _cables_tph() -> void:
 			cv.position = Vector3(x0, y_cable(dc, montee), -dc)
 			cv.rotation.x = atan2(y_cable(dc + 2.0, montee) - y_cable(dc - 2.0, montee), 4.0)
 			c.add_child(cv)
-			# cavalier (photo du reportage) : sabot serré sur le porteur, deux bras
-			# en V qui descendent de part et d'autre, galet du tracteur à la pointe
-			RemonteeKit.boite_en(cv, Vector3(0.16, 0.16, 0.55), Vector3(0, 0.02, 0), "galva_pylone")
+			# cavalier (photos des reportages) : sabot serré sur chaque porteur, traverse entre eux, deux bras
+			# en V qui descendent au milieu, galet du tracteur à la pointe
+			for sx2 in [-1.0, 1.0]:
+				RemonteeKit.boite_en(cv, Vector3(0.16, 0.16, 0.55), Vector3(sx2 * e2, 0.02, 0), "galva_pylone")
+			RemonteeKit.boite_en(cv, Vector3(2.0 * e2, 0.10, 0.12), Vector3(0, -0.02, 0), "galva_pylone")
 			for sz in [-1.0, 1.0]:
 				RemonteeKit.poutre(cv, Vector3(0.0, -0.05, sz * 0.22), Vector3(0.0, -0.62, 0.0), 0.05, 0.08, "galva_pylone")
 			RemonteeKit.cylindre(cv, 0.035, 0.035, 0.22, Transform3D(Basis(Vector3.FORWARD, PI * 0.5), Vector3(0, -0.60, 0)), "acier_noir", 8)
@@ -370,7 +381,7 @@ func _gare_tph(aval: bool) -> void:
 		RemonteeKit.boite_en(g, Vector3(2.0 * hx + 4.1, 1.6, 18.1), Vector3(0, 6.5, zb), "vitre_teintee")
 		RemonteeKit.boite_en(g, Vector3(2.0 * hx + 4.6, 0.4, 18.6), Vector3(0, 9.2, zb), "peinture_anthracite")
 		var lab: Label3D = Label3D.new()
-		lab.text = "TÉLÉPHÉRIQUE DE LA GRANDE MOTTE"
+		lab.text = nom_ligne.to_upper()        # (gare générique : celle du Fornet portait le nom de la Grande Motte)
 		lab.font_size = 120
 		lab.pixel_size = 0.004
 		lab.modulate = Color(0.1, 0.12, 0.16)
