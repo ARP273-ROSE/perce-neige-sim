@@ -111,10 +111,24 @@ func _poutre_sabot(sx: float, y_c: Callable, m: String) -> void:
 	for k2 in range(2):
 		RemonteeKit.tube(self, dessus[k2], 0.05, "acier_noir", 6)
 	RemonteeKit.tube(self, rampe, 0.022, "galva", 5)
-	# galets du tracteur, sous lui
-	var ng: int = maxi(3, int((z1 - z0) / 2.4))
+	# galets du tracteur, sous lui, à pas régulier le long du sabot (son arc, pas sa projection)
+	var zs: PackedFloat32Array = PackedFloat32Array()
+	var ls: PackedFloat32Array = PackedFloat32Array()
+	var lt: float = 0.0
+	var ns: int = 120
+	for j in range(ns + 1):
+		var zj: float = lerpf(z0 + 0.6, z1 - 0.6, float(j) / ns)
+		if j > 0:
+			lt += Vector2(zj - zs[j - 1], float(y_c.call(zj, montee)) - float(y_c.call(zs[j - 1], montee))).length()
+		zs.append(zj)
+		ls.append(lt)
+	var ng: int = maxi(3, int(lt / 2.4) + 1)
+	var jj: int = 0
 	for k4 in range(ng):
-		var zg: float = lerpf(z0 + 0.6, z1 - 0.6, float(k4) / (ng - 1))
+		var lk: float = lt * float(k4) / (ng - 1)
+		while jj < ns - 1 and ls[jj + 1] < lk:
+			jj += 1
+		var zg: float = lerpf(zs[jj], zs[jj + 1], clampf((lk - ls[jj]) / maxf(ls[jj + 1] - ls[jj], 1e-6), 0.0, 1.0))
 		RemonteeKit.galet(self, Vector3(x0, float(y_c.call(zg, montee)) + VehiculeRemontee.Y_TRACTEUR_3S - 0.03 - 0.21, zg), 0.21)
 
 
