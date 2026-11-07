@@ -182,7 +182,32 @@ func construire(r: ReliefBuilder) -> void:
 		_poser(D)
 	_jumeler()
 	_croisements()
+	_caisses_au_chargement()
 	print("[Remontees] %d lignes posées" % lignes.size())
+
+
+## Sans fil de construction (PWA) : caisses des cabines (VehiculeRemontee._maillage_cabine, une par famille et
+## teinte) calculées au chargement, derrière l'écran de préparation. À la première cabine d'un type, en jeu, elles
+## faisaient 5 ms chacune d'un bloc sur le fil principal, l'aigle 15 à 20 (Zeta du 3S, relevé du 07/11/2026). Sur PC, la construction
+## en fond s'en charge.
+func _caisses_au_chargement() -> void:
+	if LigneRemontee._fil_possible():
+		return
+	# aigle des logos de Tignes, dessiné point par point (15 à 20 ms, à la première cabine marquée)
+	VehiculeRemontee._aigle()
+	var vues: Dictionary = {}
+	for e in lignes:
+		if not (e[0] is LigneRemontee):
+			continue
+		var lg: LigneRemontee = e[0]
+		if not lg.famille.begins_with("cabine"):
+			continue
+		var t: String = LigneRemontee.TEINTES_CABINES.get(String(lg.name), "")
+		var k: String = lg.famille + "#" + t
+		if vues.has(k):
+			continue
+		vues[k] = true
+		VehiculeRemontee._maillage_cabine(lg.famille, t)
 
 
 ## Tronçons jumelés : [bas, haut]. Bollin–Fresse dans sa configuration
