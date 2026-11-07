@@ -2146,7 +2146,12 @@ func _gare(aval: bool) -> void:
 	# (téléski : pas de quai, la gare est posée sur la neige)
 	if not teleski():
 		var tri_t: PackedVector3Array = await _terrassement(aval)
-		g.add_child(await _mesh_terrassement(tri_t, y0))
+		var mt: MeshInstance3D = await _mesh_terrassement(tri_t, y0, _socle_gare(aval))
+		g.add_child(mt)
+		if mt.has_meta("socle"):
+			# (frère, pas enfant : la fusion de la gare libère le terrassement avant de reprendre ses enfants)
+			g.add_child(mt.get_meta("socle"))
+			mt.remove_meta("socle")
 	await _pause("gare : terrassement")
 	# carénage en gélule sur colonnes, cabine du conducteur (photos des
 	# gares BMF du Marmottes Express, retour d'utilisateur, 23/10/2026)
@@ -2295,6 +2300,15 @@ func _sol(x: float, z: float) -> float:
 ## à la collision.
 ## Longueur horizontale maximale d'un talus (au-delà : mur jusqu'au sol).
 const TALUS_MAX: float = 20.0
+## Gares posées sur un socle bâti plutôt que sur un remblai de neige : talus coupé court, puis mur raide
+## jusqu'au sol, flancs dans le matériau du socle. Vallon de l'Iseran, aval : gare accolée à l'arrivée du
+## Fornet sur l'éperon rocheux (bâtiment « Iseran », photos RM.net du Fornet) ; son remblai de neige
+## descendait de 13 m sur 77 m de large (le « prisme blanc »).
+const SOCLES_GARES: Dictionary = {"tcd10_vallon_iseran": {true: ["pierre", 1.5]}}
+
+
+func _socle_gare(aval: bool) -> Array:
+	return (SOCLES_GARES.get(String(name), {}) as Dictionary).get(aval, [])
 
 
 func _terrassement(aval: bool) -> PackedVector3Array:
@@ -2334,11 +2348,13 @@ func _terrassement(aval: bool) -> PackedVector3Array:
 		return y0 - maxf(au_dela, 0.0) * PENTE_RAMPE
 	# pente douce (débarquement) sur L_DESCENTE m au plus, puis talus normal :
 	# sinon, sur un terrain plus raide qu'elle, elle ne le rejoignait jamais
+	var socle: Array = _socle_gare(aval)
+	var t_max: float = float(socle[1]) if not socle.is_empty() else TALUS_MAX
 	var pied := func(p: Vector3, n: Vector3, pente: float) -> Vector3:
-		var l_douce: float = L_DESCENTE if pente > PENTE_TALUS else 0.0
+		var l_douce: float = L_DESCENTE if pente > PENTE_TALUS and socle.is_empty() else 0.0
 		var t: float = 0.0
 		var y: float = p.y
-		while t < TALUS_MAX + l_douce:
+		while t < t_max + l_douce:
 			var q: Vector3 = p + n * t
 			y = p.y - minf(t, l_douce) / pente - maxf(t - l_douce, 0.0) / PENTE_TALUS
 			var g: float = _sol(q.x, q.z)
@@ -2405,9 +2421,14 @@ func _terrassement(aval: bool) -> PackedVector3Array:
 
 ## Maillage du terrassement (neige damée, double face, normales vers le
 ## haut et l'extérieur), dans le repère de la gare (posée à y0).
-func _mesh_terrassement(tri: PackedVector3Array, y0: float) -> MeshInstance3D:
+func _mesh_terrassement(tri: PackedVector3Array, y0: float, socle: Array = []) -> MeshInstance3D:
 	var st: SurfaceTool = SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	# socle bâti : flancs (faces peu inclinées vers le haut) dans son matériau, dessus enneigé
+	var st_f: SurfaceTool = null
+	if not socle.is_empty():
+		st_f = SurfaceTool.new()
+		st_f.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var c: Vector3 = Vector3.ZERO
 	for p in tri:
 		c += p
@@ -2427,9 +2448,10 @@ func _mesh_terrassement(tri: PackedVector3Array, y0: float) -> MeshInstance3D:
 		# Godot : face avant dans le sens HORAIRE vue de la normale — sinon la
 		# face est vue de dos et sa normale retournée (talus noirs)
 		var ordre: Array = [a, b, d] if (b - a).cross(d - a).dot(n) < 0.0 else [a, d, b]
+		var s_t: SurfaceTool = st_f if st_f != null and n.y < 0.6 else st
 		for v in ordre:
-			st.set_normal(n)
-			st.add_vertex(v - Vector3(0, y0, 0))
+			s_t.set_normal(n)
+			s_t.add_vertex(v - Vector3(0, y0, 0))
 	var mi: MeshInstance3D = MeshInstance3D.new()
 	mi.name = "Terrassement"
 	var m2: StandardMaterial3D = (RemonteeKit.mat("neige_damee") as StandardMaterial3D).duplicate()
@@ -2437,6 +2459,14 @@ func _mesh_terrassement(tri: PackedVector3Array, y0: float) -> MeshInstance3D:
 	await _pause("gare : terrassement, maillage")
 	mi.mesh = MeshMerge.valider(st)
 	mi.material_override = m2
+	if st_f != null:
+		var mf: MeshInstance3D = MeshInstance3D.new()
+		mf.name = "Socle"
+		mf.mesh = MeshMerge.valider(st_f)
+		var m3: StandardMaterial3D = (RemonteeKit.mat(String(socle[0])) as StandardMaterial3D).duplicate()
+		m3.cull_mode = BaseMaterial3D.CULL_DISABLED
+		mf.material_override = m3
+		mi.set_meta("socle", mf)
 	return mi
 
 
