@@ -65,6 +65,7 @@ const COULEURS: Dictionary = {
 	"orange_perche": [Color(0.95, 0.40, 0.06), 0.55, 0.05],
 	"vert_treillis": [Color(0.08, 0.36, 0.30), 0.55, 0.30],     # portiques Doppelmayr
 	"filet_bleu": [Color(0.12, 0.34, 0.82), 0.85, 0.0],
+	"filet_orange": [Color(0.93, 0.36, 0.12), 0.85, 0.0],      # filets de couloir des téléskis (photos du Signal, du Montet)
 	"mousse_jaune": [Color(0.92, 0.88, 0.22), 0.85, 0.0],
 	"bois_vert": [Color(0.24, 0.40, 0.33), 0.85, 0.0],          # cabane du perchman
 	"tapis_vert": [Color(0.16, 0.42, 0.20), 0.90, 0.0],
