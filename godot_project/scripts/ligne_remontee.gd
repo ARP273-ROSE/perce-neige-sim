@@ -3538,7 +3538,8 @@ func _poulie(g: Node3D, c: Vector3, R: float, aval: bool) -> void:
 	if not VehiculeRemontee.DESCRIPTIONS.get(famille, ["", 6, ""])[2] == "fixe":
 		_poulie_debrayable(g, c, R, aval)
 		return
-	var m: String = "jaune_poulie"
+	# (téléskis Montaval : poulie blanche, photos du TKE2 du Montet)
+	var m: String = "blanc_plaque" if teleski() and constructeur.to_lower().contains("montaval") else "jaune_poulie"
 	var n: int = 48
 	# gorge garnie (là où passe le câble) et ailes de la jante
 	RemonteeKit.tube(g, RemonteeKit.arc(c, Vector3.RIGHT, Vector3.BACK, R + 0.03, 0.0, TAU, n), 0.045, "caoutchouc", 8)
@@ -3590,7 +3591,8 @@ func _poulie(g: Node3D, c: Vector3, R: float, aval: bool) -> void:
 ## réducteur et moteur en amont) — les pinces débrayées passent en dehors,
 ## sur le rail.
 func _poulie_debrayable(g: Node3D, c: Vector3, R: float, aval: bool) -> void:
-	var m: String = "peinture_anthracite"
+	# (TKD Montaval : poulie bleue, photos du Signal)
+	var m: String = "bleu_doppelmayr" if teleski() and constructeur.to_lower().contains("montaval") else "peinture_anthracite"
 	RemonteeKit.tube(g, RemonteeKit.arc(c, Vector3.RIGHT, Vector3.BACK, R + 0.03, 0.0, TAU, 56), 0.045, "caoutchouc", 8)
 	for dy in [-0.10, 0.10]:
 		RemonteeKit.tube(g, RemonteeKit.arc(c + Vector3(0, dy, 0), Vector3.RIGHT, Vector3.BACK, R + 0.07, 0.0, TAU, 56), 0.025, m, 6)
