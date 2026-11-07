@@ -34,7 +34,7 @@ func _gy(g: Node3D, x: float, z: float) -> float:
 
 func construire(g: Node3D, aval: bool, znez: float, zc: float) -> void:
 	if lg.famille == "perche_debrayable":
-		if aval and montaval():
+		if aval and garage_droit():
 			_charpente_tkd(g, zc)
 			_magasin(g, zc)
 		elif aval:
@@ -134,6 +134,13 @@ func _tour_tkd(g: Node3D, zc: float) -> void:
 ## Téléskis Montaval (Signal, Montet, Savonnette…) : constructeur local, gares d'un autre dessin.
 func montaval() -> bool:
 	return lg.constructeur.to_lower().contains("montaval")
+
+
+## TKD à charpente et garage droit : tous ceux du domaine (reportages RM.net du Signal, du Chardonnet, du
+## Col du Palet, de Combe Folle, du 3000 et du Pays Désert : charpente surélevée, perches en rideau au
+## garage, poulie motrice en tête ; aucun n'a de tour à magasin en hélice).
+func garage_droit() -> bool:
+	return lg.famille == "perche_debrayable"
 
 
 ## Gare de départ d'un TKD Montaval (photos du reportage RM.net du Signal, 2025) : une longue charpente
@@ -255,7 +262,7 @@ func _magasin(g: Node3D, zc: float) -> void:
 	for k2 in range(0, nb + 1, 8):
 		var p: Vector3 = pts[k2]
 		var r: Vector2 = Vector2(p.x, p.z - zc)
-		if montaval():
+		if garage_droit():
 			# garage droit : suspentes jusqu'aux longerons de la charpente
 			if absf(p.y - (H + Y_HAUT_HELICE - 0.2)) < 0.3:
 				RemonteeKit.barre(g, p + Vector3(0, 0.03, 0), Vector3(p.x, H + 1.9, p.z), 0.018, "galva", 5)
@@ -280,7 +287,7 @@ func rail_local(s: float) -> Vector3:
 	var s0: float = lg.S_DEBRAYAGE
 	var s1: float = lg.s_lancement()
 	var u: float = clampf((s - s0) / maxf(s1 - s0, 0.01), 0.0, 1.0)
-	if montaval():
+	if garage_droit():
 		return _rail_garage(u, H, zc)
 	var sd: float = signf(lg._x_brin(false))
 	var a0: float = 0.0 if sd > 0.0 else PI
@@ -312,6 +319,8 @@ func _mat_poma(g: Node3D, aval: bool, zc: float) -> void:
 	while y < H - 0.6:
 		RemonteeKit.barre(g, Vector3(-0.2, y, zc + sg * 0.30), Vector3(0.2, y, zc + sg * 0.30), 0.015, "galva", 5)
 		y += 0.32
+	if not aval and garage_droit():
+		_jambe_et_contrepoids(g, zc, y0)
 	# plate-forme de visite à claire-voie autour de la tête, garde-corps
 	var yp: float = H + 0.78
 	RemonteeKit.boite_en(g, Vector3(2.6, 0.06, 2.6), Vector3(0, yp, zc), "caillebotis")
@@ -321,6 +330,29 @@ func _mat_poma(g: Node3D, aval: bool, zc: float) -> void:
 		var t: Vector3 = Vector3(-sin(a), 0, cos(a))
 		RemonteeKit.barre(g, Vector3(0, yp + 1.0, zc) + u * 1.3 - t * 1.3, Vector3(0, yp + 1.0, zc) + u * 1.3 + t * 1.3, 0.025, "galva", 6)
 		RemonteeKit.barre(g, Vector3(0, yp, zc) + u * 1.3 + t * 1.3, Vector3(0, yp + 1.0, zc) + u * 1.3 + t * 1.3, 0.025, "galva", 6)
+
+
+## Gare amont des TKD (photos du Chardonnet, de Combe Folle, du 3000) : une jambe de force inclinée part du
+## sol, en arrière de la poulie, jusqu'à un cadre en tête qui la relie au fût ; contrepoids de tension (bloc
+## de béton entre deux glissières) le long du fût. Cotes estimées sur photo.
+func _jambe_et_contrepoids(g: Node3D, zc: float, y0: float) -> void:
+	var H: float = lg.H_CABLE_GARE
+	var sg: float = -1.0                                # arrière de la gare amont (−z)
+	var zj: float = zc + sg * (lg.voie * 0.5 + 3.5)
+	var yj: float = _gy(g, 0.0, zj)
+	var haut: Vector3 = Vector3(0, H + 0.75, zc + sg * 0.8)
+	RemonteeKit.boite_en(g, Vector3(1.0, 0.5, 1.0), Vector3(0, yj - 0.1, zj), "beton")
+	RemonteeKit.poutre(g, Vector3(0, yj, zj), haut, 0.32, 0.32, "galva")
+	RemonteeKit.poutre(g, Vector3(0, H + 0.75, zc), haut, 0.22, 0.30, "galva")
+	for sx in [-0.9, 0.9]:
+		RemonteeKit.poutre(g, Vector3(sx, H + 0.75, zc - 0.9), Vector3(sx, H + 0.75, zc + 0.9), 0.14, 0.20, "galva")
+	# contrepoids
+	var xc: float = -0.75
+	var yc: float = lerpf(y0, H, 0.45)
+	for dz in [-0.32, 0.32]:
+		RemonteeKit.barre(g, Vector3(xc, y0 + 0.4, zc + dz), Vector3(xc, H - 0.4, zc + dz), 0.035, "galva", 6)
+	RemonteeKit.boite_en(g, Vector3(0.7, 1.5, 0.55), Vector3(xc, yc, zc), "beton")
+	RemonteeKit.barre(g, Vector3(xc, yc + 0.75, zc), Vector3(xc, H - 0.3, zc), 0.012, "cable", 5)
 
 
 ## Anneau de guidage de la gare amont Poma : les perches tournent avec le
@@ -543,7 +575,7 @@ func _cabane(g: Node3D, c: Vector3, cote: float) -> void:
 	var y: float = _gy(g, c.x, c.z)
 	var t: Vector3 = Vector3(2.0, 2.3, 2.4)
 	var b: Vector3 = Vector3(c.x, y, c.z)
-	if montaval():
+	if montaval() or garage_droit():
 		_chalet(g, b, t, cote)
 		return
 	RemonteeKit.boite_en(g, Vector3(t.x + 0.2, 0.3, t.z + 0.2), b + Vector3(0, 0.0, 0), "beton")
@@ -565,7 +597,7 @@ func collisions(aval: bool) -> Array:
 	var H: float = lg.H_CABLE_GARE
 	var r: Array = []
 	var y0: float = lg.terrain(0.0 if aval else L)
-	if lg.famille == "perche_debrayable" and aval and montaval():
+	if lg.famille == "perche_debrayable" and aval and garage_droit():
 		var xa: float = absf(lg._x_brin(true)) + 0.9
 		for sx3 in [-1.0, 1.0]:
 			for z3 in [zc - L_GARAGE - 1.0, zc, zc + absf(lg._x_brin(true)) + 1.2]:
