@@ -86,6 +86,7 @@ func demi_interieur() -> Vector2:
 
 func construire() -> void:
 	_portillons_tph.clear()              # (nœuds de la construction précédente, libérés avec elle)
+	_lest.clear()
 	_poulies.clear()
 	_terrassements.clear()
 	_mat_porteurs = null
@@ -140,6 +141,7 @@ func _construire_corps() -> void:
 		_vehicules.append([v, 0.0])
 		await _pause("téléphérique : cabine")
 	_s = _x_quai(true)
+	_poser_lest()
 	_maj_positions()
 	_portillons_quai()
 	for i2 in range(2):
@@ -167,6 +169,7 @@ func _maj_positions() -> void:
 	_charges_ponctuelles()
 	for i in range(2):
 		_placer(i)
+	_maj_lest()
 
 
 func _process_corps(delta: float) -> void:
@@ -366,6 +369,90 @@ func _maj_portillons_tph(i: int) -> void:
 		(p[3] as Node3D).visible = not ouvert
 		for cs in p[2]:
 			(cs as CollisionShape3D).disabled = ouvert
+
+
+## Fornet : câble tracteur inférieur (lest, 29 mm, fiche RM.net), du bout aval du chariot de chaque cabine à la
+## poulie de tension de la gare aval ; peu tendu, il pend sous la ligne. Un tube léger par voie, refait quand
+## la cabine a avancé de plus de 4 m (2 à 3 fois par seconde à pleine vitesse).
+var _lest: Array = []                # [MeshInstance3D, montée ?, d au dernier tracé]
+const R_LEST: float = 0.0145
+
+
+func _poser_lest() -> void:
+	_lest.clear()
+	if String(name) != "tph_fornet":
+		return
+	for montee in [true, false]:
+		var mi: MeshInstance3D = MeshInstance3D.new()
+		mi.name = "Lest"
+		mi.mesh = ArrayMesh.new()
+		mi.material_override = RemonteeKit.mat("cable")
+		mi.set_meta(MeshMerge.SANS_FUSION, true)
+		mi.set_meta("sans_collision", true)
+		_enfant(mi)
+		_lest.append([mi, montee, INF])
+
+
+func _maj_lest() -> void:
+	for e in _lest:
+		var mi: MeshInstance3D = e[0]
+		if not is_instance_valid(mi):
+			continue
+		var montee: bool = e[1]
+		var d: float = _vehicules[0 if montee else 1][1]
+		if absf(d - float(e[2])) < 4.0:
+			continue
+		e[2] = d
+		var m: ArrayMesh = mi.mesh
+		m.clear_surfaces()
+		var da: float = -D_QUAI - 4.0                 # poulie de tension, au fond de la gare aval
+		var db: float = d - 2.6                       # bout aval du chariot
+		if db - da < 2.0:
+			continue
+		var x: float = _x_brin(montee)
+		var y_gare: float = terrain(0.0) + H_CABLE_GARE - 1.3
+		var pts: PackedVector3Array = PackedVector3Array()
+		var n: int = clampi(int((db - da) / 8.0), 4, 60)
+		var span: float = db - da
+		for k in range(n + 1):
+			var u: float = float(k) / n
+			var dd: float = lerpf(da, db, u)
+			var y0: float = y_gare if dd <= 0.0 else _y_chariot(dd, montee) - 1.25
+			# flèche : 2 % de la portée au milieu, sans descendre à moins de 1,5 m du sol
+			var y: float = y0 - 0.02 * span * 4.0 * u * (1.0 - u)
+			y = maxf(y, _sol(x, -dd) + 1.5)
+			pts.append(Vector3(x, y, -dd))
+		m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, _tube_lest(pts))
+
+
+## Tube à 6 pans le long de pts (tableaux d'une surface).
+static func _tube_lest(pts: PackedVector3Array) -> Array:
+	var v: PackedVector3Array = PackedVector3Array()
+	var nv: PackedVector3Array = PackedVector3Array()
+	var ix: PackedInt32Array = PackedInt32Array()
+	var seg: int = 6
+	for k in range(pts.size()):
+		var t: Vector3 = (pts[mini(k + 1, pts.size() - 1)] - pts[maxi(k - 1, 0)]).normalized()
+		var a: Vector3 = t.cross(Vector3.UP).normalized()
+		if a.length_squared() < 0.5:
+			a = Vector3.RIGHT
+		var b: Vector3 = t.cross(a).normalized()
+		for s in range(seg):
+			var th: float = TAU * s / seg
+			var n3: Vector3 = a * cos(th) + b * sin(th)
+			v.append(pts[k] + n3 * R_LEST)
+			nv.append(n3)
+	for k2 in range(pts.size() - 1):
+		for s2 in range(seg):
+			var i0: int = k2 * seg + s2
+			var i1: int = k2 * seg + (s2 + 1) % seg
+			ix.append_array([i0, i0 + seg, i1, i1, i0 + seg, i1 + seg])
+	var arr: Array = []
+	arr.resize(Mesh.ARRAY_MAX)
+	arr[Mesh.ARRAY_VERTEX] = v
+	arr[Mesh.ARRAY_NORMAL] = nv
+	arr[Mesh.ARRAY_INDEX] = ix
+	return arr
 
 
 ## Charges : une cabine par voie (60 % de passagers).
