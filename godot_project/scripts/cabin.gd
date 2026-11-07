@@ -170,6 +170,7 @@ var _wheel_dir_applied: int = 0
 
 
 func _ready() -> void:
+	visibility_changed.connect(_sur_visibilite)
 	_build_mesh()
 	if not is_ghost:
 		_build_lights()
@@ -1617,6 +1618,18 @@ func _process(delta: float) -> void:
 func _process_corps(_delta: float) -> void:
 	if tunnel == null or physics == null:
 		return
+	# Rame masquée (skieur loin du funiculaire, ou dehors loin d'elle) : rien
+	# de visible à reposer ; seuls son origine (main._maj_souterrain la
+	# compare à la caméra) et l'état des portes avancent. Au retour en vue,
+	# _sur_visibilite refait tout dans la même image. 0,4-0,5 ms par image
+	# en moins à ski (Radeon 740M, relevé prof2 du 06/11/2026).
+	if not is_visible_in_tree():
+		_avancer_portes(_delta)
+		var s_cache: float = physics.ghost_s_render() + physics.ghost_sag_offset() if is_ghost \
+			else physics.s_render
+		global_position = _cabin_world_pos(s_cache)
+		_s_pos_roues = NAN
+		return
 	_poser_poste()
 	_update_shake(_delta)
 	_update_loupe(_delta)
@@ -1689,12 +1702,7 @@ func _process_corps(_delta: float) -> void:
 	# +Z·sgn pointe vers le bas de la pente → la gauche en regardant vers
 	# le haut est le côté x = −sgn de la caisse.
 	var sgn: float = door_slide_sign(physics.direction, is_ghost)
-	for c in range(2):
-		var feuilles: bool = physics.ghost_door_leaves_open() if is_ghost else physics.door_leaves_open
-		var ouvert: bool = feuilles and (physics.portes_cotes & (1 << c)) != 0
-		_door_frac_cote[c] = move_toward(_door_frac_cote[c], 1.0 if ouvert else 0.0,
-			_delta / PNConstants.DOOR_MOTION_S)
-	_door_frac = maxf(_door_frac_cote[0], _door_frac_cote[1])
+	_avancer_portes(_delta)
 	if not _doors.is_empty():
 		for d in _doors:
 			var f: float = _door_frac_cote[0 if float(d["side"]) * sgn < 0.0 else 1]
@@ -1733,6 +1741,23 @@ func _process_corps(_delta: float) -> void:
 		_apply_wheel_types()
 	if not is_ghost:
 		_apply_cabin_lights(physics.lights_cabin)
+
+
+## Course des portes (état, avance même rame masquée).
+func _avancer_portes(delta: float) -> void:
+	for c in range(2):
+		var feuilles: bool = physics.ghost_door_leaves_open() if is_ghost else physics.door_leaves_open
+		var ouvert: bool = feuilles and (physics.portes_cotes & (1 << c)) != 0
+		_door_frac_cote[c] = move_toward(_door_frac_cote[c], 1.0 if ouvert else 0.0,
+			delta / PNConstants.DOOR_MOTION_S)
+	_door_frac = maxf(_door_frac_cote[0], _door_frac_cote[1])
+
+
+## De nouveau en vue : tout reposer tout de suite (sinon une image avec les
+## voitures à leur ancienne place si la cabine passe avant main).
+func _sur_visibilite() -> void:
+	if is_visible_in_tree() and is_inside_tree():
+		_process_corps(0.0)
 
 
 var _sway_prec: Vector2 = Vector2(INF, INF)
