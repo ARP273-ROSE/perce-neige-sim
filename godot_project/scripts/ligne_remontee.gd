@@ -3159,15 +3159,10 @@ func _portillons(aval: bool) -> void:
 		# plaque rouge « STOP » au milieu du vantail (photo de la Datcha)
 		RemonteeKit.boite_en(v, Vector3(minf(0.36, absf(lb) - 0.04), 0.15, 0.02), Vector3(lb * 0.5, 0.75, 0), "rouge_val")
 		for sz in [-1.0, 1.0]:
-			var stop: Label3D = Label3D.new()
-			stop.text = "STOP"
-			stop.font_size = 64
-			stop.pixel_size = 0.0013
-			stop.outline_size = 0
-			stop.double_sided = false
+			# (maillage de texte partagé, calculé sur le fil de construction : RemonteeKit.texte_fige)
+			var stop: MeshInstance3D = RemonteeKit.texte_fige(v, "STOP", 64, 0.0013, Color(1, 1, 1))
 			stop.position = Vector3(lb * 0.5, 0.75, sz * 0.012)
 			stop.rotation.y = 0.0 if sz > 0.0 else PI
-			v.add_child(stop)
 		vantaux.append(v)
 		var cs: CollisionShape3D = CollisionShape3D.new()
 		var b: BoxShape3D = BoxShape3D.new()
