@@ -296,10 +296,11 @@ func _multimesh(mmi: MultiMeshInstance3D, zones: Array) -> void:
 		if not dedans:
 			continue
 		deja[i] = 1
-		if mm.mesh is BoxMesh:
+		if mm.mesh is BoxMesh or mm.mesh.has_meta(MeshMerge.PRIM_BOITE):
 			if not _formes.has(mm.mesh):
 				var b: BoxShape3D = BoxShape3D.new()
-				b.size = (mm.mesh as BoxMesh).size
+				# (boîtes de RemonteeKit : ArrayMesh, taille en meta)
+				b.size = (mm.mesh as BoxMesh).size if mm.mesh is BoxMesh else mm.mesh.get_meta(MeshMerge.PRIM_BOITE)
 				_formes[mm.mesh] = b
 				triangles += 12
 			var cs: CollisionShape3D = CollisionShape3D.new()

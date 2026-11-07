@@ -167,12 +167,11 @@ static func vider_primitives() -> void:
 static func boite(parent: Node3D, taille: Vector3, xf: Transform3D, m: String) -> MeshInstance3D:
 	var cle: String = "B%.4f|%.4f|%.4f|%s" % [taille.x, taille.y, taille.z, m]
 	verrou.lock()
-	var b: BoxMesh = _primitives.get(cle)
+	var b: ArrayMesh = _primitives.get(cle)
 	verrou.unlock()
 	if b == null:
-		b = BoxMesh.new()
-		b.size = taille
-		b.material = mat(m)
+		b = MeshMerge.maillage_retenu(MeshMerge.arrays_boite(taille), mat(m))
+		b.set_meta(MeshMerge.PRIM_BOITE, taille)
 		_retenir_primitive(cle, b)
 	return _mi(parent, b, xf, m)
 
@@ -186,16 +185,10 @@ static func cylindre(parent: Node3D, r_bas: float, r_haut: float, h: float, xf: 
 		seg: int = 16) -> MeshInstance3D:
 	var cle: String = "C%.4f|%.4f|%.4f|%d|%s" % [r_bas, r_haut, h, seg, m]
 	verrou.lock()
-	var c: CylinderMesh = _primitives.get(cle)
+	var c: ArrayMesh = _primitives.get(cle)
 	verrou.unlock()
 	if c == null:
-		c = CylinderMesh.new()
-		c.bottom_radius = r_bas
-		c.top_radius = r_haut
-		c.height = h
-		c.radial_segments = seg
-		c.rings = 1
-		c.material = mat(m)
+		c = MeshMerge.maillage_retenu(MeshMerge.arrays_cylindre(r_bas, r_haut, h, seg), mat(m))
 		_retenir_primitive(cle, c)
 	return _mi(parent, c, xf, m)
 
