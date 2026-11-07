@@ -1665,8 +1665,10 @@ func synchroniser() -> void:
 	_synchro = true
 	rail_traversee()
 	b.rail_traversee()
+	# positions recalées : le noyau repart d'elles (sa préparation complète, véhicules lointains et tables du calage
+	# comprises, faisait 76 ms d'un bloc sur le fil principal à l'arrivée à Fresse, relevé du 07/11/2026)
 	if _noyau != null:
-		_preparer_noyau()             # (positions recalées : le noyau repart d'elles)
+		_noyau_vehicules(_noyau)
 
 
 ## Rail du contour extérieur (gare du bas de Bollin) : les sièges de Fresse
@@ -4802,23 +4804,7 @@ func _preparer_noyau() -> void:
 		"poids_montee": _poids_vehicule(true) / _tension, "poids_descente": _poids_vehicule(false) / _tension,
 		"w_montee": float(_w_veh[0]), "w_descente": float(_w_veh[1]),
 	})
-	var vs: Array = []
-	var pi: Array = []
-	var su: Array = []
-	var co: Array = []
-	var ss: PackedFloat64Array = PackedFloat64Array()
-	var ph: PackedFloat32Array = PackedFloat32Array()
-	var ps: PackedFloat32Array = PackedFloat32Array()
-	for i in range(_vehicules.size()):
-		var v: VehiculeRemontee = _vehicules[i][0]
-		vs.append(v)
-		pi.append(v._pince)
-		su.append(v._susp)
-		co.append(_corps[i][0] if i < _corps.size() and _corps[i] != null else null)
-		ss.append(_vehicules[i][1])
-		ph.append(v.phi)
-		ps.append(v.psi)
-	n.set_vehicules(vs, pi, su, co, ss, ph, ps)
+	_noyau_vehicules(n)
 	if n.has_method("set_charges"):
 		var tires: PackedFloat32Array = PackedFloat32Array()
 		for i in range(_vehicules.size()):
@@ -4837,6 +4823,28 @@ func _preparer_noyau() -> void:
 		_noyau_annonce = true
 		print("[NoyauRemontee] module C++ actif (première ligne : %s)" % name)
 	_preparer_calages()
+
+
+## Véhicules, leurs nœuds et leurs positions, donnés au noyau (à la préparation, et seuls quand les positions
+## sont recalées : synchroniser()).
+func _noyau_vehicules(n: RefCounted) -> void:
+	var vs: Array = []
+	var pi: Array = []
+	var su: Array = []
+	var co: Array = []
+	var ss: PackedFloat64Array = PackedFloat64Array()
+	var ph: PackedFloat32Array = PackedFloat32Array()
+	var ps: PackedFloat32Array = PackedFloat32Array()
+	for i in range(_vehicules.size()):
+		var v: VehiculeRemontee = _vehicules[i][0]
+		vs.append(v)
+		pi.append(v._pince)
+		su.append(v._susp)
+		co.append(_corps[i][0] if i < _corps.size() and _corps[i] != null else null)
+		ss.append(_vehicules[i][1])
+		ph.append(v.phi)
+		ps.append(v.psi)
+	n.set_vehicules(vs, pi, su, co, ss, ph, ps)
 
 
 ## Tables du calage des galets pour tous les pylônes, avec le noyau (sur le fil de construction : à la première
