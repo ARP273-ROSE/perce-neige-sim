@@ -472,6 +472,7 @@ func _construire_corps() -> void:
 	if not famille.begins_with("perche") and VehiculeRemontee.DESCRIPTIONS.get(famille, ["", 6, ""])[2] != "fixe" \
 			and famille != "cabine_3s" and famille != "cabine_tph":
 		_rail_ouverture(true)
+		await _pause("rails d'ouverture")
 		_rail_ouverture(false)
 	elif famille == "cabine_3s":
 		_rail_ouverture_3s(true)
@@ -2178,6 +2179,7 @@ func _gare(aval: bool) -> void:
 	roue.position = cp
 	g.add_child(roue)
 	_poulie(roue, Vector3.ZERO, rayon_poulie(aval), aval)
+	await _pause("gare : poulie, pièces")
 	var fixes: Array = roue.get_children().slice(_coupe_poulie)
 	for n in fixes:
 		roue.remove_child(n)
@@ -3900,9 +3902,12 @@ func _lanceurs() -> void:
 			RemonteeKit.barre(r_node, poutre_haut[k], poutre_haut[k] + Vector3(0, l_s, 0), 0.035, "galva_pylone", 6)
 			k += 6
 		if guide_psi():
+			await _pause("lanceurs : rails")
 			_guide_entonnoir(r_node, s0, -1.0)
 			_guide_entonnoir(r_node, s0 + l, 1.0)
+		await _pause("lanceurs : rails")
 		MeshMerge.merge(r_node, [], "Rail")
+		await _pause("lanceurs : fusion des rails")
 		# pneus au pas de 0,62 m
 		var fourches: Node3D = Node3D.new()
 		fourches.name = "Fourches"
@@ -3940,7 +3945,9 @@ func _lanceurs() -> void:
 			await _pause("lanceurs")
 		# (un appel par fourche et par pièce de pneu sinon : 600 appels de près d'une gare, relevés du 04/11/2026)
 		MeshMerge.merge(fourches, [], "Fourches")
+		await _pause("lanceurs : fourches")
 		_pneus_fixes(pneus_zone, aval)
+		await _pause("lanceurs : pneus fixes")
 
 
 ## Pneus d'un lanceur en MultiMesh, un appel par pièce. PC : immobiles, de plus loin qu'on ne les voit
@@ -4136,6 +4143,7 @@ func _poser_pylones() -> void:
 		var d: float = float(p["d"])
 		var t: float = minf(terrain(d), _sol(0.0, -d))      # (fût jusqu'au sol affiché : maille à 50 m)
 		var py: PyloneRemontee = PyloneRemontee.new()
+		py.construit_par_la_ligne = true
 		py.numero = numero_pylone(i)
 		py.voie = voie
 		py.sens_montee_droite = sens_droite
@@ -4164,10 +4172,10 @@ func _poser_pylones() -> void:
 			py.cable_repos[brin] = func(z: float) -> float:
 				return y_cable(d - z, brin) - y_t0
 		_enfant(py)
-		py.construire()
 		# (pièces, puis fusion : 12 ms en moyenne d'un bloc par pylône, 22 au pire, relevé du 07/11/2026)
-		await _pause("pylônes : pièces")
-		MeshMerge.merge(py, py.mobiles, "Pylone", false, _garder_pylones())
+		await py.construire_par_tranches(_pause.bind("pylônes : pièces"))
+		# (fusion seule : 7 ms par pylône du modèle 2026, 391 pièces — relevé du 07/11/2026)
+		await MeshMerge.merge_par_tranches(py, py.mobiles, "Pylone", _garder_pylones(), _pause.bind("pylônes : fusion"))
 		await _pause("pylônes : fusion")
 		_pylone_lod(py)
 		await _pause("pylônes : allégé")
@@ -4220,6 +4228,7 @@ func _poser_pylones_teleski() -> void:
 		for po in postes:
 			var cote: int = po[2]
 			var py: PyloneRemontee = PyloneRemontee.new()
+			py.construit_par_la_ligne = true
 			py.style = "teleski"
 			py.numero = numero_pylone(i)
 			py.dessus_traverse = -PyloneRemontee.DESSUS_BRAS_TELESKI
@@ -4281,6 +4290,7 @@ func _batterie_gare(aval: bool) -> void:
 	var nat: String = "C" if dev < 0.0 else "S"
 	var n: int = _galets_batterie(dev)
 	var py: PyloneRemontee = PyloneRemontee.new()
+	py.construit_par_la_ligne = true
 	py.style = "gare"
 	py.voie = voie
 	py.sens_montee_droite = sens_droite
