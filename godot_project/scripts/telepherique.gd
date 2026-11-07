@@ -118,6 +118,8 @@ func _construire_corps() -> void:
 	for aval in [true, false]:
 		if gare_aval_existante:
 			_gares_grande_motte(aval)
+		elif String(name) == "tph_fornet":
+			_gare_fornet(aval)
 		else:
 			_gare_tph(aval)
 		await _pause("téléphérique : gare")
@@ -400,6 +402,119 @@ func _gare_tph(aval: bool) -> void:
 		RemonteeKit.boite_en(g, Vector3(2.0 * hx, 1.2, 8.0), Vector3(0, -0.6, za), "beton")
 		RemonteeKit.boite_en(g, Vector3(3.0, 2.6, 3.0), Vector3(hx - 1.5, 1.3, z0 + sg * (lq - 2.0)), "galva_pylone")
 		RemonteeKit.boite_en(g, Vector3(3.05, 0.8, 3.05), Vector3(hx - 1.5, 2.0, z0 + sg * (lq - 2.0)), "vitre_teintee")
+	MeshMerge.merge(g, [], "Gare")
+
+
+## Gares du Fornet (reportage RM.net, photos de 2017 ; cotes estimées d'après la voie de 8 m).
+## Aval (1944 m, motrice et tensions) : quai à l'étage, au-dessus d'un rez-de-chaussée vitré à poteaux
+## blancs sur socle de pierre (bar-restaurant) ; par voie, un portique de deux grands piliers gris reliés
+## en tête, plate-forme et garde-corps au sommet ; une charpente noire inclinée ramène les porteurs vers
+## les contrepoids ; grands tubes cintrés de part et d'autre ; balcons latéraux ; derrière, le bâtiment
+## bardé anthracite de la machinerie, enseigne blanche côté route.
+## Amont (2327 m, sur un éperon rocheux) : quai en porte-à-faux sur une structure de béton, tour de béton
+## clair au fond, bâtiment bas bardé à côté (accolé à la gare du Vallon).
+func _gare_fornet(aval: bool) -> void:
+	var g: Node3D = Node3D.new()
+	g.name = "GareAval" if aval else "GareAmont"
+	var L: float = longueur_h()
+	var y0: float = terrain(0.0 if aval else L)
+	g.position = Vector3(0, y0, 0)
+	_enfant(g)
+	var sg: float = 1.0 if aval else -1.0               # vers le fond de la gare
+	var z0: float = 0.0 if aval else -L
+	var hx: float = voie * 0.5 + 3.0
+	var lq: float = 2.0 * D_QUAI + 2.0
+	var zq: float = z0 + sg * lq * 0.5
+	var sol := func(x: float, z: float) -> float:
+		return _sol(x, z) - y0
+	# sol le plus bas sous l'emprise du quai (rez-de-chaussée ou voiles jusque-là)
+	var bas: float = 0.0
+	for xi in [-hx, 0.0, hx]:
+		for k in range(5):
+			bas = minf(bas, float(sol.call(float(xi), z0 + sg * lq * float(k) / 4.0)))
+	bas = maxf(bas, -30.0) - 0.5
+	RemonteeKit.boite_en(g, Vector3(2.0 * hx, 0.5, lq), Vector3(0, -0.25, zq), "beton")
+	var hp: float = H_CABLE_GARE + 6.5
+	if aval:
+		# rez-de-chaussée : socle de pierre, poteaux blancs, vitrages, bandeau de bois sous le quai
+		var h_rdc: float = maxf(-bas - 0.5, 3.2)
+		var y_rdc: float = -0.5 - h_rdc
+		RemonteeKit.boite_en(g, Vector3(2.0 * hx, 1.2, lq), Vector3(0, y_rdc + 0.6, zq), "pierre")
+		RemonteeKit.boite_en(g, Vector3(2.0 * hx - 0.6, h_rdc - 1.2, lq - 0.6), Vector3(0, y_rdc + 1.2 + (h_rdc - 1.2) * 0.5, zq), "vitrage_sombre")
+		for xp in [-hx + 0.3, -hx * 0.33, hx * 0.33, hx - 0.3]:
+			RemonteeKit.boite_en(g, Vector3(0.6, h_rdc, 0.6), Vector3(xp, y_rdc + h_rdc * 0.5, z0 + 0.3), "blanc_plaque")
+		RemonteeKit.boite_en(g, Vector3(2.0 * hx + 0.4, 0.35, lq + 0.4), Vector3(0, -0.68, zq), "bois_fonce")
+		# portiques : deux piliers par voie, de part et d'autre de la cabine, reliés en tête et à mi-hauteur
+		var zp: float = z0 + D_QUAI
+		for sx in [-1.0, 1.0]:
+			var xb: float = sx * voie * 0.5
+			for dx in [-2.3, 2.3]:
+				RemonteeKit.boite_en(g, Vector3(0.9, hp, 0.7), Vector3(xb + dx, hp * 0.5, zp), "peinture_gris")
+			for yt in [hp - 0.4, hp * 0.62]:
+				RemonteeKit.boite_en(g, Vector3(5.5, 0.7, 0.7), Vector3(xb, yt, zp), "peinture_gris")
+			# plate-forme et garde-corps au sommet
+			RemonteeKit.boite_en(g, Vector3(5.6, 0.06, 2.4), Vector3(xb, hp + 0.03, zp + 0.6), "caillebotis")
+			for zr in [zp - 0.55, zp + 1.75]:
+				RemonteeKit.barre(g, Vector3(xb - 2.7, hp + 1.1, zr), Vector3(xb + 2.7, hp + 1.1, zr), 0.025, "galva", 6)
+			# charpente noire inclinée : du portique vers les contrepoids, au fond du bâtiment
+			for dx2 in [-0.6, 0.6]:
+				RemonteeKit.poutre(g, Vector3(xb + dx2, hp - 1.0, zp + 0.4), Vector3(xb + dx2, H_CABLE_GARE + 1.5, z0 + lq + 6.0), 0.25, 0.55, "acier_noir")
+			# grand tube cintré qui descend vers le balcon, de chaque côté (guide)
+			var arc: PackedVector3Array = PackedVector3Array()
+			for k2 in range(13):
+				var u: float = float(k2) / 12.0
+				var a2: float = u * PI * 0.5
+				arc.append(Vector3(xb + sx * (2.3 + 5.0 * sin(a2)), hp - 0.5 - 7.5 * (1.0 - cos(a2)), zp - 1.5 * u))
+			RemonteeKit.tube(g, arc, 0.11, "galva", 8)
+		# poutre qui relie les deux portiques
+		RemonteeKit.boite_en(g, Vector3(voie - 4.6 + 0.9, 0.6, 0.6), Vector3(0, hp * 0.62, zp), "peinture_gris")
+		# balcons latéraux, garde-corps gris
+		for sx3 in [-1.0, 1.0]:
+			RemonteeKit.boite_en(g, Vector3(2.4, 0.25, lq * 0.6), Vector3(sx3 * (hx + 1.2), -0.12, z0 + lq * 0.3), "beton")
+			RemonteeKit.barre(g, Vector3(sx3 * (hx + 2.4), 1.0, z0), Vector3(sx3 * (hx + 2.4), 1.0, z0 + lq * 0.6), 0.03, "peinture_gris", 6)
+			for k3 in range(6):
+				var zz: float = z0 + lq * 0.6 * k3 / 5.0
+				RemonteeKit.barre(g, Vector3(sx3 * (hx + 2.4), 0.0, zz), Vector3(sx3 * (hx + 2.4), 1.0, zz), 0.025, "peinture_gris", 6)
+		RemonteeKit.barre(g, Vector3(-hx - 2.4, 1.0, z0), Vector3(hx + 2.4, 1.0, z0), 0.03, "peinture_gris", 6)
+		# bâtiment de la machinerie, bardé anthracite, derrière le quai
+		var lb: float = 20.0
+		var zb: float = z0 + lq + lb * 0.5
+		var hb: float = 11.0
+		RemonteeKit.boite_en(g, Vector3(2.0 * hx + 6.0, hb - bas, lb), Vector3(0, bas + (hb - bas) * 0.5, zb), "peinture_anthracite")
+		RemonteeKit.boite_en(g, Vector3(2.0 * hx + 6.2, 1.2, lb + 0.2), Vector3(0, bas + 0.6, zb), "pierre")
+		RemonteeKit.boite_en(g, Vector3(2.0 * hx + 6.4, 0.3, lb + 0.4), Vector3(0, hb + 0.15, zb), "noir_mat")
+		RemonteeKit.boite_en(g, Vector3(2.0 * hx - 2.0, 4.5, 0.1), Vector3(0, 2.5, z0 + lq + lb + 0.02), "vitrage_sombre")
+		var ens: MeshInstance3D = RemonteeKit.texte_fige(g, "Téléphérique du Fornet", 120, 0.012, Color(0.96, 0.96, 0.96))
+		ens.position = Vector3(0, 6.2, z0 + lq + lb + 0.08)
+		ens.visibility_range_end = 300.0
+	else:
+		# quai en porte-à-faux : voiles de béton jusqu'au rocher, sous le fond du quai seulement
+		for sx4 in [-1.0, 1.0]:
+			var xv: float = sx4 * (hx - 0.4)
+			var zf: float = z0 + sg * (lq - 2.0)
+			var yb: float = float(sol.call(xv, zf)) - 0.5
+			RemonteeKit.boite_en(g, Vector3(0.6, maxf(-yb, 0.5), 5.0), Vector3(xv, yb * 0.5 - 0.5, zf), "beton")
+			RemonteeKit.poutre(g, Vector3(xv, -0.6, z0 + sg * 1.0), Vector3(xv, yb * 0.6, zf - sg * 2.5), 0.5, 0.7, "beton")
+		RemonteeKit.boite_en(g, Vector3(2.0 * hx, 1.2, lq), Vector3(0, -1.1, zq), "beton")
+		# portique d'entrée léger au-dessus des baies (déviation du tracteur)
+		for sx5 in [-1.0, 1.0]:
+			var xb2: float = sx5 * voie * 0.5
+			for dx3 in [-2.0, 2.0]:
+				RemonteeKit.boite_en(g, Vector3(0.6, hp - 1.0, 0.5), Vector3(xb2 + dx3, (hp - 1.0) * 0.5, z0 + sg * D_QUAI), "peinture_gris")
+			RemonteeKit.boite_en(g, Vector3(4.6, 0.6, 0.6), Vector3(xb2, hp - 1.0, z0 + sg * D_QUAI), "peinture_gris")
+			RemonteeKit.galet(g, Vector3(xb2, H_CABLE_GARE - 0.45 - 0.25, z0 + sg * 1.0), 0.25)
+		# tour de béton clair au fond, bâtiment bas bardé à côté
+		var zt: float = z0 + sg * (lq + 4.0)
+		var yt: float = minf(float(sol.call(0.0, zt)), 0.0) - 0.5
+		RemonteeKit.boite_en(g, Vector3(9.0, 15.0 - yt, 8.0), Vector3(-2.0, yt + (15.0 - yt) * 0.5, zt), "crepi")
+		RemonteeKit.boite_en(g, Vector3(9.2, 0.4, 8.2), Vector3(-2.0, 15.2, zt), "noir_mat")
+		RemonteeKit.boite_en(g, Vector3(6.0, 1.6, 0.1), Vector3(-2.0, 11.0, zt - sg * 4.02), "vitrage_sombre")
+		RemonteeKit.boite_en(g, Vector3(14.0, 7.0 - yt, 10.0), Vector3(10.0, yt + (7.0 - yt) * 0.5, zt + sg * 1.0), "peinture_anthracite")
+		RemonteeKit.boite_en(g, Vector3(13.0, 1.4, 0.1), Vector3(10.0, 4.6, zt + sg * 1.0 - sg * 5.02), "vitrage_sombre")
+		RemonteeKit.boite_en(g, Vector3(14.4, 0.3, 10.4), Vector3(10.0, 7.15, zt + sg * 1.0), "toit_brun")
+		# garde-corps du quai
+		for sx6 in [-1.0, 1.0]:
+			RemonteeKit.barre(g, Vector3(sx6 * hx, 1.0, z0), Vector3(sx6 * hx, 1.0, z0 + sg * lq), 0.03, "peinture_gris", 6)
 	MeshMerge.merge(g, [], "Gare")
 
 
