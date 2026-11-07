@@ -1,6 +1,7 @@
 #include "noyau_remontee.h"
 
 #include <godot_cpp/classes/rendering_server.hpp>
+#include <godot_cpp/core/object.hpp>
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/variant/basis.hpp>
 #include <godot_cpp/variant/dictionary.hpp>
@@ -204,6 +205,10 @@ void NoyauRemontee::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("a_calage", "i"), &NoyauRemontee::a_calage);
 	ClassDB::bind_method(D_METHOD("caler", "i"), &NoyauRemontee::caler);
 	ClassDB::bind_method(D_METHOD("chronos"), &NoyauRemontee::chronos);
+	ClassDB::bind_method(D_METHOD("set_pneus", "noeuds", "bases", "aval", "w"), &NoyauRemontee::set_pneus);
+	ClassDB::bind_method(D_METHOD("set_pneus_w", "w"), &NoyauRemontee::set_pneus_w);
+	ClassDB::bind_method(D_METHOD("nombre_pneus"), &NoyauRemontee::nombre_pneus);
+	ClassDB::bind_method(D_METHOD("tourner_pneus", "dt", "regime", "pres_aval", "pres_amont"), &NoyauRemontee::tourner_pneus);
 }
 
 // --- configuration -----------------------------------------------------------
@@ -957,4 +962,50 @@ PackedFloat64Array NoyauRemontee::chronos() {
 		chronos_us[k] = 0.0;
 	}
 	return o;
+}
+
+// --- pneus des lanceurs -------------------------------------------------------
+void NoyauRemontee::set_pneus(const Array &noeuds, const Array &bases, const PackedByteArray &aval, const PackedFloat32Array &w) {
+	const int64_t n = noeuds.size();
+	pn_id.assign(n, 0);
+	pn_base.assign(n, Basis());
+	pn_aval.assign(n, 0);
+	pn_w.assign(n, 0.0);
+	pn_a.assign(n, 0.0);
+	for (int64_t k = 0; k < n; k++) {
+		Object *o = noeuds[k];
+		pn_id[k] = o != nullptr ? o->get_instance_id() : 0;
+		if (k < bases.size()) {
+			pn_base[k] = bases[k];
+		}
+		pn_aval[k] = k < aval.size() ? (char)aval[k] : 0;
+		pn_w[k] = k < w.size() ? (double)w[k] : 0.0;
+	}
+}
+
+void NoyauRemontee::set_pneus_w(const PackedFloat32Array &w) {
+	for (size_t k = 0; k < pn_w.size() && (int64_t)k < w.size(); k++) {
+		pn_w[k] = w[k];
+	}
+}
+
+// même calcul que le GDScript : angle += w·régime·dt modulo 2π, base = repos × rotation autour de y
+void NoyauRemontee::tourner_pneus(double dt, double regime, bool pres_aval, bool pres_amont) {
+	for (size_t k = 0; k < pn_id.size(); k++) {
+		if (!(pn_aval[k] ? pres_aval : pres_amont)) {
+			continue;
+		}
+		double a = std::fmod(pn_a[k] + pn_w[k] * regime * dt, Math_TAU);
+		if (a < 0.0) {
+			a += Math_TAU;
+		}
+		pn_a[k] = a;
+		Node3D *nd = Object::cast_to<Node3D>(ObjectDB::get_instance(ObjectID(pn_id[k])));
+		if (nd == nullptr) {
+			continue;
+		}
+		Transform3D t = nd->get_transform();
+		t.basis = pn_base[k] * Basis(Vector3(0, 1, 0), (real_t)a);
+		nd->set_transform(t);
+	}
 }

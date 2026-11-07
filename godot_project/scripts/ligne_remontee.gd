@@ -204,6 +204,7 @@ func demolir(poubelle: Array) -> void:
 	_pyl.clear()
 	_roues_vues.clear()
 	_pyl_touches.clear()
+	_cales_vues.clear()
 	_poulies.clear()
 	_pneus.clear()
 	_portillons_gares.clear()
@@ -253,6 +254,7 @@ func construire() -> void:
 	_pyl.clear()
 	_roues_vues.clear()
 	_pyl_touches.clear()
+	_cales_vues.clear()
 	_corps.clear()
 	_portillons_gares.clear()
 	_ouv_portillons.clear()
@@ -1771,6 +1773,23 @@ func _sur_traversee(u: float) -> Vector3:
 			var t: float = (cible - _trav_cum[k - 1]) / maxf(_trav_cum[k] - _trav_cum[k - 1], 1e-4)
 			return _trav_pts[k - 1].lerp(_trav_pts[k], t)
 	return _trav_pts[_trav_pts.size() - 1]
+
+
+## Tronçons jumelés, véhicule i en gare : hors de la boucle de sa ligne (contour extérieur de la gare du bas,
+## traversée de l'intermédiaire), là où _pos_vehicule s'écarte de point(). Les autres, le noyau les a déjà posés
+## exactement comme _placer : les reposer en GDScript coûtait 0,41 ms par image à Bollin (relevé du 07/11/2026).
+func _hors_boucle(i: int) -> bool:
+	if jumelee == null or not is_instance_valid(jumelee) or not jumelee.roule:
+		return false
+	var s2: float = fposmod(_vehicules[i][1], longueur_boucle)
+	var g: String = ""
+	for z in _zones:
+		if s2 >= float(z[0]) and s2 <= float(z[1]):
+			g = String(z[2])
+			break
+	if role == "bas" and g == "gare_aval" and contour_exterieur(i):
+		return true
+	return traverse(i) and ((role == "bas" and g == "gare_amont") or (role == "haut" and g == "gare_aval"))
 
 
 ## Position (repère de la ligne) du véhicule i à l'abscisse s, jumelage compris.
@@ -3942,6 +3961,9 @@ func _tourner_pneus(delta: float) -> void:
 	if not (pres_aval or pres_amont):
 		return
 	var reg: float = regime()
+	if _pn_lots.is_empty() and _noyau != null and _noyau_valide() and _noyau.has_method("tourner_pneus"):
+		_pneus_noyau(delta, reg, pres_aval, pres_amont)
+		return
 	for e in _pneus:
 		if e.size() < 5:
 			e.append(zone(e[1])[0] == "gare_aval")
@@ -3961,6 +3983,39 @@ func _tourner_pneus(delta: float) -> void:
 			(e[0] as Node3D).transform.basis = (e[2] as Basis) * Basis(Vector3.UP, e[3])
 	if not _pn_lots.is_empty():
 		_pneus_mm(pres_aval, pres_amont)
+
+
+## Pneus tournés par le noyau C++ (0,29 ms par image en GDScript au pied des pistes, relevé du 07/11/2026) :
+## mêmes vitesses que le GDScript (vitesse_en au droit du pneu, gardée tant que la vitesse ne change pas).
+var _pn_noyau: RefCounted = null
+var _pn_vitesse: float = NAN
+
+
+func _w_pneu(e: Array) -> float:
+	return vitesse_en(e[1]) / R_PNEU * (1.0 if sens_droite else -1.0)
+
+
+func _pneus_noyau(delta: float, reg: float, pres_aval: bool, pres_amont: bool) -> void:
+	if _pn_noyau != _noyau or _noyau.nombre_pneus() != _pneus.size():
+		var noeuds: Array = []
+		var bases: Array = []
+		var aval: PackedByteArray = PackedByteArray()
+		var w: PackedFloat32Array = PackedFloat32Array()
+		for e in _pneus:
+			noeuds.append(e[0])
+			bases.append(e[2])
+			aval.append(1 if zone(e[1])[0] == "gare_aval" else 0)
+			w.append(_w_pneu(e))
+		_noyau.set_pneus(noeuds, bases, aval, w)
+		_pn_noyau = _noyau
+		_pn_vitesse = vitesse
+	elif _pn_vitesse != vitesse:
+		var w2: PackedFloat32Array = PackedFloat32Array()
+		for e2 in _pneus:
+			w2.append(_w_pneu(e2))
+		_noyau.set_pneus_w(w2)
+		_pn_vitesse = vitesse
+	_noyau.tourner_pneus(delta, reg, pres_aval, pres_amont)
 
 
 const V_EMBARQUEMENT_3S: float = 0.5
@@ -4695,7 +4750,9 @@ func _etape_noyau(delta: float) -> void:
 		_dt = 0.0
 		for i2 in _noyau.en_gare():
 			_corps_proche = true
-			_placer(i2)
+			# (véhicule caché par le noyau, au loin : le MultiMesh le dessine, le nœud n'a pas à suivre)
+			if (_vehicules[i2][0] as Node3D).visible and _hors_boucle(i2):
+				_placer(i2)
 		_dt = dt0
 	if actives:
 		var q: PackedFloat32Array = _noyau.get_paquets()
@@ -5653,11 +5710,16 @@ func _galets() -> void:
 			for k0 in _pyl_tri:
 				_pyl_d.append(float(_pyl[k0][1]))
 		var t: PackedFloat32Array = _noyau.touches(_pyl_d, voie)
+		var loin2: float = GALETS_ANIMES_JUSQUA * GALETS_ANIMES_JUSQUA
 		for j in range(0, t.size(), 3):
 			var q0: Array = _pyl[_pyl_tri[int(t[j])]]
 			var mt: bool = t[j + 1] > 0.5
-			(q0[0] as PyloneRemontee).passage(mt, t[j + 2])
-			touches[[q0[0], mt]] = true
+			var py0: PyloneRemontee = q0[0]
+			# paires invisibles au-delà de 150 m (RemonteesDomaine.GALETS_JUSQUA) : gardées « touchées », sans être
+			# reposées (0,27 ms par image au pied des pistes, relevé du 07/11/2026) ; reprises dès le retour en vue
+			if not vue_active or Vector2(py0.position.x - point_vue.x, py0.position.z - point_vue.z).length_squared() < loin2:
+				py0.passage(mt, t[j + 2])
+			touches[[py0, mt]] = true
 		_repos_galets(touches)
 		return
 	var xm: float = _x_brin(true)
@@ -5678,17 +5740,22 @@ func _galets() -> void:
 
 var _pyl_tri: Array = []
 var _pyl_d: PackedFloat32Array = PackedFloat32Array()
+## Au-delà, les paires de galets ne se dessinent plus (150 m, plus la marge de la portée) : pas de passage animé.
+const GALETS_ANIMES_JUSQUA: float = 175.0
 
 
 func _repos_galets(touches: Dictionary) -> void:
 	for k in _pyl_touches:
 		if not touches.has(k):
 			(k[0] as PyloneRemontee).repos(k[1])
-	for q2 in _pyl:
-		if _cales_vues.has(q2[0]):
-			for montee2 in [true, false]:
-				if not touches.has([q2[0], montee2]):
-					(q2[0] as PyloneRemontee).repos(montee2)
+	# (pylônes calés seulement : les autres ne sont pas parcourus)
+	for py2 in _cales_vues:
+		if not is_instance_valid(py2):
+			continue
+		if not touches.has([py2, true]):
+			(py2 as PyloneRemontee).repos(true)
+		if not touches.has([py2, false]):
+			(py2 as PyloneRemontee).repos(false)
 	_pyl_touches = touches
 
 
@@ -5710,7 +5777,8 @@ func _caler_galets() -> void:
 	if _tour_cales != 0:
 		return
 	_cales_vues.clear()
-	for q in _pyl:
+	for k in range(_pyl.size()):
+		var q: Array = _pyl[k]
 		var py: PyloneRemontee = q[0]
 		if py._paires[true].is_empty():
 			continue
@@ -5720,7 +5788,6 @@ func _caler_galets() -> void:
 		var y_t: float = py.position.y + py.hauteur_cable()
 		if calage_noyau and _noyau != null and _noyau_valide() and _noyau.has_method("caler"):
 			# noyau C++ : même calcul (PyloneRemontee._pose_paire), le câble sans flèche échantillonné une fois
-			var k: int = _pyl.find(q)
 			if not _noyau.a_calage(k):
 				_preparer_calage(k, py, d, y_t)
 			py.appliquer_calage(_noyau.caler(k))
