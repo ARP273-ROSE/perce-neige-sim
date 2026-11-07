@@ -163,6 +163,55 @@ static func vider_primitives() -> void:
 	verrou.unlock()
 
 
+
+## Texte posé par le fil de construction. Un Label3D y remet sa mise en forme et
+## son maillage au fil principal, par un appel différé : 41 Label3D « STOP » des
+## portillons faisaient une file différée de 59 ms d'un bloc pendant la
+## construction de Bollin (relevé du 740M, 07/11/2026). Ici, un maillage de
+## texte (TextMesh) calculé une fois, sur le fil qui le crée, figé en ArrayMesh
+## et partagé par texte, taille et couleur. Texte centré, lisible depuis +Z,
+## sans éclairage, comme le Label3D.
+static var _textes_figes: Dictionary = {}
+static var _mats_textes: Dictionary = {}
+
+
+static func texte_fige(parent: Node3D, texte: String, taille: int, px: float, coul: Color) -> MeshInstance3D:
+	var cle: String = "%s|%d|%.5f" % [texte, taille, px]
+	var kc: String = coul.to_html()
+	verrou.lock()
+	var am: ArrayMesh = _textes_figes.get(cle)
+	var m: StandardMaterial3D = _mats_textes.get(kc)
+	verrou.unlock()
+	if am == null:
+		var tm: TextMesh = TextMesh.new()
+		tm.text = texte
+		tm.font_size = taille
+		tm.pixel_size = px
+		tm.depth = 0.0
+		am = ArrayMesh.new()
+		var arr: Array = tm.get_mesh_arrays()
+		if arr.size() > Mesh.ARRAY_VERTEX and arr[Mesh.ARRAY_VERTEX] != null \
+				and not (arr[Mesh.ARRAY_VERTEX] as PackedVector3Array).is_empty():
+			am.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
+			MeshMerge.retenir(am, 0, arr)
+		verrou.lock()
+		_textes_figes[cle] = am
+		verrou.unlock()
+	if m == null:
+		m = StandardMaterial3D.new()
+		m.albedo_color = coul
+		m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+		verrou.lock()
+		_mats_textes[kc] = m
+		verrou.unlock()
+	var mi: MeshInstance3D = MeshInstance3D.new()
+	mi.mesh = am
+	mi.material_override = m
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	mi.set_meta("detail", true)      # de près seulement, comme un Label3D (remontees_domaine)
+	parent.add_child(mi)
+	return mi
+
 ## Boîte de dimensions `taille`, centrée en `xf`.
 static func boite(parent: Node3D, taille: Vector3, xf: Transform3D, m: String) -> MeshInstance3D:
 	var cle: String = "B%.4f|%.4f|%.4f|%s" % [taille.x, taille.y, taille.z, m]
