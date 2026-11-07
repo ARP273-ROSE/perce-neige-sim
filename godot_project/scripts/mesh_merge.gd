@@ -526,6 +526,11 @@ static func merge_par_tranches(root: Node3D, keep: Array, name_prefix: String, g
 
 ## Les MeshInstance3D visibles sous `root` (hors `keep`, sans descendre dans un nœud à script) et leur
 ## transformation dans le repère de `root`.
+## Meta : pièce jamais fusionnée (textes figés : un maillage partagé par texte, au lieu d'une copie dans chaque
+## gare ou pylône fusionné — +4 à 6 Mo de tampons sur la PWA, relevé du NAS du 07/11/2026).
+const SANS_FUSION: StringName = &"sans_fusion"
+
+
 static func _a_fusionner(root: Node3D, keep: Array) -> Array:
 	var r: Array = []
 	var stack: Array = [[root, Transform3D.IDENTITY]]
@@ -539,7 +544,7 @@ static func _a_fusionner(root: Node3D, keep: Array) -> Array:
 			var cxf: Transform3D = xf * (c as Node3D).transform
 			if not (c as Node3D).visible:
 				continue
-			if c is MeshInstance3D:
+			if c is MeshInstance3D and not c.has_meta(SANS_FUSION):
 				r.append([c, cxf])
 			# un nœud à script peut s'animer lui-même : on ne descend pas
 			if c.get_script() == null:

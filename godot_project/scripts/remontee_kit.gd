@@ -194,6 +194,8 @@ static func texte_fige(parent: Node3D, texte: String, taille: int, px: float, co
 	mi.material_override = m
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	mi.set_meta("detail", true)      # de près seulement, comme un Label3D (remontees_domaine)
+	mi.set_meta(MeshMerge.SANS_FUSION, true)
+	mi.set_meta("sans_collision", true)
 	parent.add_child(mi)
 	return mi
 
