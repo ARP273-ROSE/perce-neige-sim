@@ -407,10 +407,14 @@ func _poser(D: Dictionary) -> void:
 		# caillebotis au-dessus du sommet à l'amont
 		prof[0] = Vector2(0.0, TphGrandeMotte.H_QUAI_AVAL)
 		prof[prof.size() - 1] = prof[prof.size() - 1] + Vector2(0.0, TphGrandeMotte.H_QUAI_AMONT)
-	var lg: LigneRemontee = Telepherique.new() if String(D["famille"]) == "cabine_tph" else LigneRemontee.new()
+	# (une seule instance : une LigneRemontee créée puis remplacée par le Funival restait hors de l'arbre, jamais
+	# libérée, et le programme plantait à la fermeture — trouvé par le PC, 08/11/2026)
+	var lg: LigneRemontee = null
 	if String(D["famille"]) == "cabine_funi":
 		lg = Funival.new()
 		(lg as Funival).portail_d = float(D.get("portail_d", 496.2))
+	else:
+		lg = Telepherique.new() if String(D["famille"]) == "cabine_tph" else LigneRemontee.new()
 	if not quai_tph.is_empty():
 		(lg as Telepherique).gare_aval_existante = true
 		# coins du bâtiment dans le repère de la ligne (origine au nez, −Z vers l'amont)
