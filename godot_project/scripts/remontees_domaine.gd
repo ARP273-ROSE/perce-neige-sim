@@ -408,6 +408,9 @@ func _poser(D: Dictionary) -> void:
 		prof[0] = Vector2(0.0, TphGrandeMotte.H_QUAI_AVAL)
 		prof[prof.size() - 1] = prof[prof.size() - 1] + Vector2(0.0, TphGrandeMotte.H_QUAI_AMONT)
 	var lg: LigneRemontee = Telepherique.new() if String(D["famille"]) == "cabine_tph" else LigneRemontee.new()
+	if String(D["famille"]) == "cabine_funi":
+		lg = Funival.new()
+		(lg as Funival).portail_d = float(D.get("portail_d", 496.2))
 	if not quai_tph.is_empty():
 		(lg as Telepherique).gare_aval_existante = true
 		# coins du bâtiment dans le repère de la ligne (origine au nez, −Z vers l'amont)
@@ -572,7 +575,8 @@ func _portees_amorce(racine: Node, file: Array) -> void:
 		# les pylônes proches de ce centre restaient — P2 de l'Olympique visible, P1 et P3 jamais, retour
 		# du 07/11/2026)
 		if not (c is VehiculeRemontee or c is PyloneRemontee or c is PyloneTreillis) and not String(c.name).begins_with("Gare") \
-				and String(c.name) != "Cable" and not (c is StaticBody3D) and not String(c.name).begins_with(LigneRemontee.PYLONES_LOIN):
+				and String(c.name) != "Cable" and not (c is StaticBody3D) and not String(c.name).begins_with(LigneRemontee.PYLONES_LOIN) \
+				and not c.has_meta("portee_loin"):
 			portee = DETAILS_JUSQUA
 		file.append([c, c, portee])
 
@@ -1128,6 +1132,7 @@ func _pres_des_gares(lg: LigneRemontee, p: Vector3, portee: float = PORTEE_GARES
 	var r2: float = portee * portee
 	return Vector2(p.x - a.x, p.z - a.z).length_squared() < r2 or Vector2(p.x - b.x, p.z - b.z).length_squared() < r2
 var _t_loupe: float = -1000.0
+var _t_bord_funi: float = -1000.0
 var _etat_bord: String = "marche"
 
 
@@ -1397,6 +1402,9 @@ func _entrer_cabine(lg: LigneRemontee, p: Vector3) -> bool:
 		var v: VehiculeRemontee = lg.vehicule(i)
 		var loc: Vector3 = v.global_transform.affine_inverse() * p
 		var y_pl: float = v.place_assise(0).y
+		if v is VehiculeFunival:
+			# (Funival : planchers en gradins, celui du compartiment où l'on est)
+			y_pl = VehiculeFunival.y_plancher(loc.z)
 		var lim: Vector2 = lg.demi_interieur()
 		if absf(loc.x) > lim.x or absf(loc.z) > lim.y or loc.y < y_pl - 0.4 or loc.y > y_pl + 1.6:
 			if _guet.is_empty() and Vector2(loc.x, loc.z).length() < maxf(lim.x, lim.y) + 2.5 \
@@ -1409,6 +1417,9 @@ func _entrer_cabine(lg: LigneRemontee, p: Vector3) -> bool:
 		var k: int = clampi(int(round(loc.x / 0.40 + 2.5)), 0, 5) if lg.tricable() else clampi(int(round(loc.x / 0.46)) + 2, 0, 4)
 		if lg.vaetvient():
 			k = clampi(int(round(loc.z / 1.0)) + 2, 0, 4)
+		if v is VehiculeFunival:
+			k = VehiculeFunival.compartiment(loc.z)
+			_t_bord_funi = _t
 		# on monte en cabine à pied : chaussé, on déchausse et les skis vont
 		# au porte-skis, sur les vantaux des portes (retour d'utilisateur, 23/10/2026)
 		var skis: bool = skieur.chausse
@@ -1664,6 +1675,17 @@ func _suivre_siege() -> void:
 	var lg: LigneRemontee = a_bord[0]
 	var i: int = a_bord[1]
 	var v: VehiculeRemontee = lg.vehicule(i)
+	# Funival à quai, portes ouvertes : celui qui marche (après le temps d'entrer) redescend sur le quai, libre
+	# (essai à pied du 08/11/2026 : on restait à bord jusqu'à l'autre gare)
+	if v is VehiculeFunival and lg.zone_vehicule(i) != "ligne" and (lg as Funival).portes_ouvertes() \
+			and _t - _t_bord_funi > 1.5 and (skieur._clavier() != Vector2.ZERO or skieur.entree.length() > 0.12):
+		skieur.embarque = false
+		skieur.lever()
+		skieur.support = null
+		skieur._skis.visible = true
+		a_bord = []
+		_repos = 4.0
+		return
 	skieur.global_position = v.vers_monde(v.place_assise(a_bord[2], a_bord[4]))
 	skieur.velocity = Vector3.ZERO
 	var cap: float = _cap(v, a_bord[4])
