@@ -670,7 +670,7 @@ func _choisir_pylone(sk: Vector3) -> void:
 			var d: float = py.global_position.distance_to(sk)
 			if d < meilleur:
 				meilleur = d
-				_proche = [lg, py, float(q[1]), {}]
+				_proche = [lg, py, float(q[1]), {}, {}]
 
 
 func _pylone_proche() -> void:
@@ -682,10 +682,18 @@ func _pylone_proche() -> void:
 	var py: Node3D = _proche[1]
 	var dp: float = _proche[2]
 	var prec: Dictionary = _proche[3]
+	# un véhicule ne s'approche pas du pylône (en plan) de plus que le câble parcouru : tant que son écart au
+	# pylône, au dernier calcul, dépasse 6 m plus ce chemin, il n'est pas recalculé (lg.point par véhicule et
+	# par image : sr.pylone_proche, 0,12 ms par image en approche de gare)
+	var vu: Dictionary = _proche[4]
 	for i in range(lg.nombre_vehicules()):
 		var s: float = lg._vehicules[i][1]
+		var e: Vector2 = vu.get(i, Vector2(INF, 0.0))
+		if e.x != INF and absf(e.y - dp) - 6.0 > absf(s - e.x):
+			continue
 		var p: Vector3 = lg.point(s)[0]
 		var d: float = -p.z
+		vu[i] = Vector2(s, d)
 		if absf(d - dp) > 6.0:
 			prec.erase(i)
 			continue

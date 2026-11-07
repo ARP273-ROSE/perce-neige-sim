@@ -1059,6 +1059,24 @@ var _valide: Dictionary = {}       # id de la ligne → instant du passage sous 
 var _t_depose: float = -1000.0     # dernier saut de position (dépose depuis la carte)
 var _p_prec: Vector3 = Vector3.INF
 var _guet: Array = []              # [ligne, véhicule] qui peut partir sans lui
+var _gares: Dictionary = {}        # id de la ligne → [repère, bout aval, bout amont] (monde)
+
+## Au-delà, ni embarquement ni portique : les lignes loin de leurs gares ne sont plus parcourues, véhicule par
+## véhicule, à chaque image (rd.embarquement : 0,06 à 0,14 ms par image pour les 66 lignes). Les gares, lanceurs
+## et portiques tiennent largement dans 250 m des bouts de la ligne.
+const PORTEE_GARES: float = 250.0
+
+
+func _pres_des_gares(lg: LigneRemontee, p: Vector3) -> bool:
+	var id: int = lg.get_instance_id()
+	var g: Transform3D = lg.global_transform
+	var c: Array = _gares.get(id, [])
+	if c.is_empty() or c[0] != g:
+		# (bouts de la ligne, gares au-delà : point_embarquement lit des tableaux encore vides sur un
+		# téléphérique en construction, hors limites — le pack de mesure en mourait)
+		c = [g, g * Vector3.ZERO, g * Vector3(0, 0, -lg.longueur_h())]
+		_gares[id] = c
+	return p.distance_squared_to(c[1]) < PORTEE_GARES * PORTEE_GARES or p.distance_squared_to(c[2]) < PORTEE_GARES * PORTEE_GARES
 var _t_loupe: float = -1000.0
 var _etat_bord: String = "marche"
 
@@ -1113,7 +1131,7 @@ func _surveiller_approche(p: Vector3) -> void:
 	_p_prec = p
 	for e in lignes:
 		var lg: LigneRemontee = e[0]
-		if not lg.pret or not lg.is_processing():
+		if not lg.pret or not lg.is_processing() or not _pres_des_gares(lg, p):
 			continue
 		for n in _portiques(lg):
 			var c: Vector3 = (n as Node3D).global_position
@@ -1167,7 +1185,7 @@ func _embarquement() -> void:
 	var p: Vector3 = skieur.global_position
 	for e in lignes:
 		var lg: LigneRemontee = e[0]
-		if not lg.pret or not lg.is_processing():
+		if not lg.pret or not lg.is_processing() or not _pres_des_gares(lg, p):
 			continue
 		if lg.teleski():
 			if _prendre_perche(lg, p):
