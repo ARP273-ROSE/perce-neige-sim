@@ -397,22 +397,8 @@ static func merge(root: Node3D, keep: Array = [], name_prefix: String = "Fusion"
 	_ctx = name_prefix
 	var groups: Dictionary = {}     # clé → {mat, st, n, shadow}
 	var done: Dictionary = {}       # MeshInstance3D → nb de surfaces fusionnées
-	var stack: Array = [[root, Transform3D.IDENTITY]]
-	while not stack.is_empty():
-		var e: Array = stack.pop_back()
-		var node: Node = e[0]
-		var xf: Transform3D = e[1]
-		for c in node.get_children():
-			if c in keep or not (c is Node3D):
-				continue
-			var cxf: Transform3D = xf * (c as Node3D).transform
-			if not (c as Node3D).visible:
-				continue
-			if c is MeshInstance3D:
-				_collect(c as MeshInstance3D, cxf, groups, done)
-			# un nœud à script peut s'animer lui-même : on ne descend pas
-			if c.get_script() == null:
-				stack.append([c, cxf])
+	for e in _a_fusionner(root, keep):
+		_collect(e[0], e[1], groups, done)
 	var removed: int = 0
 	var k: int = 0
 	var multi: Dictionary = {}      # (ombre, portée) → [ArrayMesh, g]
@@ -434,28 +420,9 @@ static func merge(root: Node3D, keep: Array = [], name_prefix: String = "Fusion"
 				for src in g["src"]:
 					done[src] = int(done.get(src, 0)) + 1
 			continue
-		var mesh: ArrayMesh = _maillage_identique(ta)
-		var nouveau: bool = mesh == null
-		if nouveau:
-			mesh = ArrayMesh.new()
-			var tai: Array = _indexes(ta)
-			mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, tai)
-			mesh.surface_set_material(0, g["mat"])
-			if garder:
-				retenir(mesh, 0, tai)
-			_retenir_identique(ta, mesh)
-		var mi: MeshInstance3D = MeshInstance3D.new()
-		mi.name = "%s%d" % [name_prefix, k]
-		mi.mesh = mesh
-		if not nouveau and mesh.surface_get_material(0) != g["mat"]:
-			mi.set_surface_override_material(0, g["mat"])
-		mi.cast_shadow = g["shadow"]
-		mi.visibility_range_end = g["range"]
-		root.add_child(mi)
+		_poser_groupe(root, g, ta, "%s%d" % [name_prefix, k], garder, done)
 		k += 1
 		removed += g["n"] - 1
-		for src in g["src"]:
-			done[src] = int(done.get(src, 0)) + 1
 	for cle2 in multi:
 		var am2: ArrayMesh = multi[cle2][0]
 		if am2.get_surface_count() == 0:
@@ -468,14 +435,99 @@ static func merge(root: Node3D, keep: Array = [], name_prefix: String = "Fusion"
 		mi2.visibility_range_end = g2["range"]
 		root.add_child(mi2)
 		k += 1
-	# retire les sources : un objet n'est collecté que si TOUTES ses
-	# surfaces sont fusionnables (cf. _collect), il est donc entièrement repris
+	_retirer_sources(done)
+	return removed
+
+
+## merge() en plusieurs tranches (construction sur le fil principal, PWA) : `pause` est attendue chaque fois
+## qu'environ `budget_ms` se sont écoulées. Les sources ne partent qu'à la fin : entre deux tranches, le
+## résultat partiel double des pièces encore là (même géométrie, sans effet à l'écran). Pas de une_instance.
+static func merge_par_tranches(root: Node3D, keep: Array, name_prefix: String, garder: bool, pause: Callable,
+		budget_ms: float = 2.5) -> int:
+	var groups: Dictionary = {}
+	var done: Dictionary = {}
+	var t: int = Time.get_ticks_usec()
+	var budget: int = int(budget_ms * 1000.0)
+	for e in _a_fusionner(root, keep):
+		if not is_instance_valid(e[0]):
+			continue
+		_ctx = name_prefix
+		_collect(e[0], e[1], groups, done)
+		if Time.get_ticks_usec() - t > budget:
+			await pause.call()
+			t = Time.get_ticks_usec()
+	var removed: int = 0
+	var k: int = 0
+	for key in groups:
+		var g: Dictionary = groups[key]
+		_ctx = name_prefix
+		var ta: Array = _tableaux_acc(g["acc"])
+		if (ta[Mesh.ARRAY_VERTEX] as PackedVector3Array).is_empty():
+			continue
+		_poser_groupe(root, g, ta, "%s%d" % [name_prefix, k], garder, done)
+		k += 1
+		removed += g["n"] - 1
+		if Time.get_ticks_usec() - t > budget:
+			await pause.call()
+			t = Time.get_ticks_usec()
+	_retirer_sources(done)
+	return removed
+
+
+## Les MeshInstance3D visibles sous `root` (hors `keep`, sans descendre dans un nœud à script) et leur
+## transformation dans le repère de `root`.
+static func _a_fusionner(root: Node3D, keep: Array) -> Array:
+	var r: Array = []
+	var stack: Array = [[root, Transform3D.IDENTITY]]
+	while not stack.is_empty():
+		var e: Array = stack.pop_back()
+		var node: Node = e[0]
+		var xf: Transform3D = e[1]
+		for c in node.get_children():
+			if c in keep or not (c is Node3D):
+				continue
+			var cxf: Transform3D = xf * (c as Node3D).transform
+			if not (c as Node3D).visible:
+				continue
+			if c is MeshInstance3D:
+				r.append([c, cxf])
+			# un nœud à script peut s'animer lui-même : on ne descend pas
+			if c.get_script() == null:
+				stack.append([c, cxf])
+	return r
+
+
+static func _poser_groupe(root: Node3D, g: Dictionary, ta: Array, nom: String, garder: bool, done: Dictionary) -> void:
+	var mesh: ArrayMesh = _maillage_identique(ta)
+	var nouveau: bool = mesh == null
+	if nouveau:
+		mesh = ArrayMesh.new()
+		var tai: Array = _indexes(ta)
+		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, tai)
+		mesh.surface_set_material(0, g["mat"])
+		if garder:
+			retenir(mesh, 0, tai)
+		_retenir_identique(ta, mesh)
+	var mi: MeshInstance3D = MeshInstance3D.new()
+	mi.name = nom
+	mi.mesh = mesh
+	if not nouveau and mesh.surface_get_material(0) != g["mat"]:
+		mi.set_surface_override_material(0, g["mat"])
+	mi.cast_shadow = g["shadow"]
+	mi.visibility_range_end = g["range"]
+	root.add_child(mi)
+	for src in g["src"]:
+		done[src] = int(done.get(src, 0)) + 1
+
+
+## Retire les sources : un objet n'est collecté que si TOUTES ses surfaces sont fusionnables (cf. _collect),
+## il est donc entièrement repris.
+static func _retirer_sources(done: Dictionary) -> void:
 	for mi_any in done.keys():
 		var mi: MeshInstance3D = mi_any
 		if int(done[mi]) == mi.mesh.get_surface_count():
 			mi.get_parent().remove_child(mi)
 			mi.queue_free()
-	return removed
 
 
 static func _material_of(mi: MeshInstance3D, si: int) -> Material:

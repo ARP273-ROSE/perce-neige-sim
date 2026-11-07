@@ -113,8 +113,13 @@ static func inclinaison_pour(p_pente: float) -> float:
 ## Construit à l'entrée dans l'arbre seulement si personne ne l'a fait : un
 ## appel explicite à construire() juste après add_child() le refaisait (tout
 ## en double, et des pièces effacées restaient dans les listes).
+## La ligne le construit elle-même, après l'avoir posé : pas de construction à l'entrée dans l'arbre (sur le fil
+## principal, chaque pylône de ligne était construit deux fois — 3,4 ms de perdues par pylône, relevé du 07/11/2026).
+var construit_par_la_ligne: bool = false
+
+
 func _ready() -> void:
-	if not _construit:
+	if not _construit and not construit_par_la_ligne:
 		construire()
 
 
@@ -133,7 +138,26 @@ func _x_brin(montee: bool) -> float:
 
 
 func construire() -> void:
+	for f in _debut_construction():
+		(f as Callable).call()
+
+
+## construire() en phases, `pause` attendue entre deux (construction sur le fil principal : 3 à 7 ms par pylône
+## d'un seul bloc, relevé du 07/11/2026).
+func construire_par_tranches(pause: Callable) -> void:
+	for f in _debut_construction():
+		(f as Callable).call()
+		await pause.call()
+
+
+## Vide le pylône et pose ce qui est immédiat (téléski, nez de gare) ; pour un pylône de ligne, rend les
+## phases qui restent à appeler dans l'ordre.
+var _trains: Array = []     # (construction en phases) trains posés, en attente de leur structure
+
+
+func _debut_construction() -> Array:
 	_construit = true
+	_trains.clear()
 	for c in get_children():
 		remove_child(c)
 		c.queue_free()
@@ -142,7 +166,7 @@ func construire() -> void:
 	_paires = {true: [], false: []}
 	if style == "teleski":
 		_construire_teleski()
-		return
+		return []
 	if style == "gare":
 		# batterie de galets au nez d'une gare : le câble y passe de
 		# l'horizontale de la gare à la pente de la ligne (retour d'utilisateur,
@@ -152,13 +176,12 @@ func construire() -> void:
 		# porte les deux trains (avant : un poteau sous chaque train, dans le
 		# passage des sièges — retour d'utilisateur, 24/10/2026)
 		# (compression comprise : sans poteau, ses galets restaient en lévitation au-dessus du sol)
-		if true:
-			_massif(0.40)
-			RemonteeKit.cylindre(self, 0.36, 0.32, hauteur - 0.4, Transform3D(Basis.IDENTITY, Vector3(0, (hauteur - 0.4) * 0.5, 0)), "peinture_gris", 18)
-			RemonteeKit.boite_en(self, Vector3(voie + 0.55, 0.40, 0.42), Vector3(0, hauteur - 0.20, 0), "peinture_gris")
+		_massif(0.40)
+		RemonteeKit.cylindre(self, 0.36, 0.32, hauteur - 0.4, Transform3D(Basis.IDENTITY, Vector3(0, (hauteur - 0.4) * 0.5, 0)), "peinture_gris", 18)
+		RemonteeKit.boite_en(self, Vector3(voie + 0.55, 0.40, 0.42), Vector3(0, hauteur - 0.20, 0), "peinture_gris")
 		for montee in [true, false]:
 			_train(montee)
-		return
+		return []
 	var h: float = hauteur
 	var r1: float = 0.40                              # rayon en tête
 	var r0: float = r1 + 0.06 + h * 0.004             # tronçons plus gros vers le pied
@@ -175,26 +198,42 @@ func construire() -> void:
 	socle.name = "Socle"
 	socle.transform = Transform3D(base, pied)
 	add_child(socle)
-	_n = socle
-	_massif(r0)
-	if matelas:
-		# sur la piste : matelas de protection autour du pied
-		RemonteeKit.cylindre(_n, r0 + 0.20, r0 + 0.20, 2.4, Transform3D(Basis.IDENTITY, Vector3(0, 1.4, 0)), "matelas_piste", 14)
 	var mat: Node3D = Node3D.new()
 	mat.name = "Mat"
 	mat.transform = _xf_tete
 	add_child(mat)
-	_n = mat
-	_fut(r0, r1, y_tete)
-	_echelle(r0, r1, y_tete)
-	_chaise_et_traverse(r1, y_tete)
-	_n = self
-	for montee in [true, false]:
-		_train(montee)
-	_n = mat
-	_portique()
-	_plaques(r0, r1, y_tete)
-	_n = self
+	return [
+		func() -> void:
+			_n = socle
+			_massif(r0)
+			if matelas:
+				# sur la piste : matelas de protection autour du pied
+				RemonteeKit.cylindre(_n, r0 + 0.20, r0 + 0.20, 2.4, Transform3D(Basis.IDENTITY, Vector3(0, 1.4, 0)), "matelas_piste", 14)
+			_n = mat
+			_fut(r0, r1, y_tete),
+		func() -> void:
+			_n = mat
+			_echelle(r0, r1, y_tete),
+		func() -> void:
+			_n = mat
+			_chaise_et_traverse(r1, y_tete),
+		func() -> void:
+			_n = self
+			_trains.append(_train_galets(true)),
+		func() -> void:
+			_n = self
+			_trains.append(_train_galets(false)),
+		func() -> void:
+			for t in _trains:
+				_n = self
+				_train_structure(t)
+			_trains.clear(),
+		func() -> void:
+			_n = mat
+			_portique()
+			_plaques(r0, r1, y_tete)
+			_n = self,
+	]
 
 
 ## Massif béton affleurant, platine et tiges d'ancrage.
@@ -402,6 +441,12 @@ func _rambarde(a: Vector3, b: Vector3, ht: float = 1.05) -> void:
 ## compression : au-dessus, pendue au portique). Ramasse-câbles le long, à
 ## l'extérieur ; portique de levage au-dessus ; caillebotis autour.
 func _train(montee: bool) -> void:
+	_train_structure(_train_galets(montee))
+
+
+## Première moitié de _train (les paires de galets, posées sur le câble : le plus long) ; rend ce qu'il faut à
+## _train_structure.
+func _train_galets(montee: bool) -> Array:
 	var x: float = _x_brin(montee)
 	var compo: Array = compo_montee if montee else compo_descente
 	var tete: Node3D = Node3D.new()
@@ -483,6 +528,18 @@ func _train(montee: bool) -> void:
 			var zm: float = (float(zs[k]) + float(zs[k + 1])) * 0.5
 			RemonteeKit.boite_en(tete, Vector3(0.012, 0.30, 0.10), Vector3(ext * 0.15, y_axe + s * 0.02, zm), "galva_patine")
 			RemonteeKit.boite_en(tete, Vector3(0.10, 0.012, 0.10), Vector3(ext * 0.20, y_axe - s * 0.13, zm), "galva_patine")
+	return [x, tete, dessous, dessus, dy, ext, L]
+
+
+## Seconde moitié de _train : console, suspente, passerelles et garde-corps.
+func _train_structure(c: Array) -> void:
+	var x: float = c[0]
+	var tete: Node3D = c[1]
+	var dessous: Array = c[2]
+	var dessus: Array = c[3]
+	var dy: float = c[4]
+	var ext: float = c[5]
+	var L: float = c[6]
 	# console : de la traverse au pivot de la poutre maîtresse (support)
 	var y_trav: float = hauteur - hauteur_cable()           # dessus de traverse, repère de la tête
 	if not dessous.is_empty():
