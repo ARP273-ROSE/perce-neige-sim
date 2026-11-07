@@ -3603,7 +3603,9 @@ func _poulie(g: Node3D, c: Vector3, R: float, aval: bool) -> void:
 	RemonteeKit.cylindre(g, 0.20, 0.20, 0.30, Transform3D(Basis.IDENTITY, c + Vector3(0, 0.38, 0)), "acier", 16)
 	RemonteeKit.cylindre(g, 0.55, 0.55, 0.20, Transform3D(Basis.IDENTITY, c + Vector3(0, 0.62, 0)), "galva_pylone", 24)
 	RemonteeKit.boite_en(g, Vector3(2.0, 0.9, 2.2), c + Vector3(0, 1.17, 0), "galva_pylone")
-	if aval:
+	if teleski():
+		pass         # (TKD : moteur sur la charpente du départ, contrepoids au fût de l'arrivée — TeleskiGare)
+	elif aval:
 		# chariot de tension : glissières et vérin vers l'arrière de la gare
 		for sx in [-0.8, 0.8]:
 			RemonteeKit.poutre(g, c + Vector3(sx, 1.65, -1.8), c + Vector3(sx, 1.65, 2.6), 0.18, 0.22, "galva_pylone")
@@ -3614,6 +3616,21 @@ func _poulie(g: Node3D, c: Vector3, R: float, aval: bool) -> void:
 		RemonteeKit.cylindre(g, 0.45, 0.45, 1.6, Transform3D(Basis(Vector3.FORWARD, PI * 0.5), c + Vector3(1.4, 2.1, 0)), "peinture_anthracite", 20)
 
 
+## Poulies des TKD selon le constructeur (photos RM.net) : Montaval bleue (Signal), Ingélo rouge (3000),
+## Montaz-Mautino blanche (Pays Désert, Combe Folle), les autres anthracite.
+func _couleur_poulie_tkd() -> String:
+	if not teleski():
+		return "peinture_anthracite"
+	var c: String = constructeur.to_lower()
+	if c.contains("montaval"):
+		return "bleu_doppelmayr"
+	if c.contains("ingélo") or c.contains("ingelo"):
+		return "rouge_val"
+	if c.contains("montaz"):
+		return "blanc_plaque"
+	return "peinture_anthracite"
+
+
 ## Poulie d'une gare DÉBRAYABLE (retour d'utilisateur, 22/10/2026 : la roue à rayons
 ## « c'est pour un TS à pince fixe ») : disque plein en deux flasques soudées
 ## avec trous d'allègement, jante à gorge garnie, gros moyeu, enfermée sous
@@ -3621,8 +3638,7 @@ func _poulie(g: Node3D, c: Vector3, R: float, aval: bool) -> void:
 ## réducteur et moteur en amont) — les pinces débrayées passent en dehors,
 ## sur le rail.
 func _poulie_debrayable(g: Node3D, c: Vector3, R: float, aval: bool) -> void:
-	# (TKD Montaval : poulie bleue, photos du Signal)
-	var m: String = "bleu_doppelmayr" if teleski() and constructeur.to_lower().contains("montaval") else "peinture_anthracite"
+	var m: String = _couleur_poulie_tkd()
 	RemonteeKit.tube(g, RemonteeKit.arc(c, Vector3.RIGHT, Vector3.BACK, R + 0.03, 0.0, TAU, 56), 0.045, "caoutchouc", 8)
 	for dy in [-0.10, 0.10]:
 		RemonteeKit.tube(g, RemonteeKit.arc(c + Vector3(0, dy, 0), Vector3.RIGHT, Vector3.BACK, R + 0.07, 0.0, TAU, 56), 0.025, m, 6)
@@ -3641,7 +3657,9 @@ func _poulie_debrayable(g: Node3D, c: Vector3, R: float, aval: bool) -> void:
 	_coupe_poulie = g.get_child_count()          # la suite (arbre, bâti) ne tourne pas
 	RemonteeKit.cylindre(g, 0.20, 0.20, 0.30, Transform3D(Basis.IDENTITY, c + Vector3(0, 0.38, 0)), "acier", 16)
 	RemonteeKit.boite_en(g, Vector3(1.8, 0.7, 2.0), c + Vector3(0, 0.88, 0), "galva_pylone")
-	if aval:
+	if teleski():
+		pass         # (TKD : moteur sur la charpente du départ, contrepoids au fût de l'arrivée — TeleskiGare)
+	elif aval:
 		for sx in [-0.8, 0.8]:
 			RemonteeKit.poutre(g, c + Vector3(sx, 1.30, -1.6), c + Vector3(sx, 1.30, 2.6), 0.18, 0.22, "galva_pylone")
 		RemonteeKit.cylindre(g, 0.09, 0.09, 1.6, Transform3D(Basis(Vector3.RIGHT, PI * 0.5), c + Vector3(0, 1.0, 1.9)), "acier", 12)
