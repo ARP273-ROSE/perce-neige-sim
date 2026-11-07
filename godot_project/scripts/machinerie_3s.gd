@@ -347,14 +347,9 @@ func equipements(g: Node3D, aval: bool) -> void:
 			for sx in [-1.0, 1.0]:
 				RemonteeKit.poutre(g, Vector3(sx * xa, ya, zr + s * 0.45), Vector3(sx * 0.9, yb - 1.6, zr + s * 0.45), 0.16, 0.12, "peinture_anthracite")
 		RemonteeKit.boite_en(g, Vector3(2.6, 2.2, 1.6), Vector3(0, yb - 2.6, zr), "beton")
-		var lab: Label3D = Label3D.new()
-		lab.text = "CONTREPOIDS"
-		lab.font_size = 48
-		lab.pixel_size = 0.004
-		lab.modulate = Color(0.1, 0.1, 0.1)
+		var lab: MeshInstance3D = RemonteeKit.texte_fige(g, "CONTREPOIDS", 48, 0.004, Color(0.1, 0.1, 0.1))
 		lab.position = Vector3(0, yb - 2.4, zr - sg * 0.81)
 		lab.rotation.y = 0.0 if sg < 0.0 else PI
-		g.add_child(lab)
 		return
 	# amont : à côté de la motrice, palier, poulie de frein jaune à chaîne, disque rouge, réducteur et moteurs
 	# bleus ; freins bleus sur bâti rouge de l'autre côté. Simple : c'est la salle des machines.
@@ -369,14 +364,9 @@ func equipements(g: Node3D, aval: bool) -> void:
 		# freins sur la jante
 		RemonteeKit.boite_en(g, Vector3(0.5, 0.35, 0.45), Vector3(sx * (R_MOTRICE * 0.72), yw - R_MOTRICE * 0.72, zw - sg * 0.40), BLEU)
 		RemonteeKit.boite_en(g, Vector3(0.9, 0.2, 0.9), Vector3(sx * (R_MOTRICE * 0.72), yw - R_MOTRICE * 0.72 - 0.25, zw - sg * 0.40), "cabine_rouge")
-	var lab2: Label3D = Label3D.new()
-	lab2.text = "MOTRICE  2 × 785 kW"
-	lab2.font_size = 48
-	lab2.pixel_size = 0.004
-	lab2.modulate = Color(0.95, 0.95, 0.95)
+	var lab2: MeshInstance3D = RemonteeKit.texte_fige(g, "MOTRICE  2 × 785 kW", 48, 0.004, Color(0.95, 0.95, 0.95))
 	lab2.position = Vector3(0, yw - 1.4, zw + sg * 1.36)
 	lab2.rotation.y = 0.0 if sg < 0.0 else PI
-	g.add_child(lab2)
 
 
 # --- quais ------------------------------------------------------------------------------

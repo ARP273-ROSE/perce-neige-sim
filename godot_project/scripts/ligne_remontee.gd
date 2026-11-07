@@ -2563,15 +2563,9 @@ func _capot(g: Node3D, znez: float, zc: float, aval: bool) -> void:
 		RemonteeKit.boite_en(g, Vector3(0.03, 0.30, lz * 0.55), Vector3(sx * (rb + 0.01), y0 + 0.55, (z0 + zc) * 0.5), "plaque_bleue")
 		if nom_ligne == "":
 			continue
-		var lab: Label3D = Label3D.new()
-		lab.text = nom_ligne.to_upper()
-		lab.font_size = 96
-		lab.pixel_size = 0.0028
-		lab.modulate = Color(1, 1, 1)
-		lab.outline_size = 0
+		var lab: MeshInstance3D = RemonteeKit.texte_fige(g, nom_ligne.to_upper(), 96, 0.0028, Color(1, 1, 1))
 		lab.position = Vector3(sx * (rb + 0.03), y0 + 0.55, (z0 + zc) * 0.5)
 		lab.rotation.y = sx * PI * 0.5           # lisible de l'extérieur
-		g.add_child(lab)
 	# bord de l'ouverture côté ligne : un cadre qui suit le profil
 	var cadre: PackedVector3Array = PackedVector3Array()
 	for i in range(prof.size()):
@@ -2673,15 +2667,10 @@ func _gare_3s(g: Node3D, znez: float, zc: float, aval: bool) -> void:
 			var zk: float = lerpf(z_av, z_ar, (k + 0.5) / nz)
 			RemonteeKit.boite(g, Vector3(2.0 * hx - 1.0, 0.05, 1.9), Transform3D(Basis(Vector3.RIGHT, -sg * 0.45), Vector3(0, hr + 0.75, zk)), "panneau_solaire")
 	if nom_ligne != "":
-		var lab: Label3D = Label3D.new()
-		lab.text = "Téléphérique de l'Olympique" if nom_ligne.find("Olympique") >= 0 else nom_ligne
-		lab.font_size = 140
-		lab.pixel_size = 0.0045
-		lab.modulate = Color(1, 1, 1)
-		lab.outline_size = 0
+		var lab: MeshInstance3D = RemonteeKit.texte_fige(g, "Téléphérique de l'Olympique" if nom_ligne.find("Olympique") >= 0 \
+				else nom_ligne, 140, 0.0045, Color(1, 1, 1))
 		lab.position = Vector3(0, hr - 0.45, z_av - sg * 0.93)
 		lab.rotation.y = 0.0 if sg < 0.0 else PI
-		g.add_child(lab)
 	# piliers d'angle et trumeaux en pierre, soubassement en pierre,
 	# verrières entre eux (côtés et fond) ; ouvert côté ligne
 	var piliers: Array = []
@@ -2716,16 +2705,9 @@ func _gare_3s(g: Node3D, znez: float, zc: float, aval: bool) -> void:
 		RemonteeKit.boite_en(g, Vector3(0.5, hr - 2.6, 3.2), Vector3(sx * hx, 2.6 + (hr - 2.6) * 0.5, zpm), "pierre")
 		for zz in zp:
 			RemonteeKit.boite_en(g, Vector3(0.6, 2.6, 0.2), Vector3(sx * hx, 1.3, float(zz)), "noir_mat")
-		var lab: Label3D = Label3D.new()
-		lab.text = "ENTRÉE\nSORTIE"
-		lab.font_size = 40
-		lab.pixel_size = 0.004
-		lab.outline_size = 6
-		lab.modulate = Color(1, 1, 1)
-		lab.outline_modulate = Color(0.55, 0.05, 0.08)
+		var lab: MeshInstance3D = RemonteeKit.texte_fige(g, "ENTRÉE\nSORTIE", 40, 0.004, Color(0.55, 0.05, 0.08))
 		lab.position = Vector3(sx * (hx + 0.27), 3.0, zpm)
 		lab.rotation.y = sx * PI * 0.5
-		g.add_child(lab)
 		var n_m: int = int(lz_v / 1.8)
 		for k in range(n_m + 1):
 			var zz: float = lerpf(z_av, z_cl, float(k) / n_m)
@@ -3209,17 +3191,9 @@ func _tapis(ls: Node3D, long: float, W: float, places: int) -> void:
 		var xc: float = -W * 0.5 + 0.10 + 0.25 + 0.50 * k
 		RemonteeKit.boite_en(t, Vector3(0.48, 0.012, lz), Vector3(xc, -0.004, zc), "tapis_clair" if k % 2 == 0 else "tapis_fonce")
 	# un grand « STOP » rouge en travers de toutes les voies, au bout, lisible en arrivant des portillons
-	var stop: Label3D = Label3D.new()
-	stop.text = "STOP"
-	stop.font_size = 128
-	stop.pixel_size = W * 0.0027
-	stop.outline_size = 10
-	stop.outline_modulate = Color(1, 1, 1)
-	stop.modulate = Color(0.82, 0.06, 0.06)
-	stop.double_sided = false
+	var stop: MeshInstance3D = RemonteeKit.texte_fige(t, "STOP", 128, W * 0.0027, Color(0.82, 0.06, 0.06))
 	stop.position = Vector3(0, 0.004, z0 + 0.30 + W * 0.18)
 	stop.rotation.x = -PI * 0.5
-	t.add_child(stop)
 	# liserés rouges entre les voies et sur les bords
 	for k2 in range(places + 1):
 		var xs: float = -W * 0.5 + 0.10 + 0.50 * k2
@@ -3290,15 +3264,8 @@ func _double_embarquement() -> void:
 		RemonteeKit.boite_en(ent, Vector3(W * 0.8, 0.55, 0.06), c2, "plaque_bleue")
 		for sx in [-1.0, 1.0]:
 			RemonteeKit.barre(ent, c2 + Vector3(sx * W * 0.3, 0.27, 0), c2 + Vector3(sx * W * 0.3, 0.95, 0), 0.015, "acier", 5)
-		var lab: Label3D = Label3D.new()
-		lab.text = "↑ " + String(e[1]).to_upper()
-		lab.font_size = 96
-		lab.pixel_size = 0.0034
-		lab.modulate = Color(1, 1, 1)
-		lab.outline_size = 0
-		lab.double_sided = false
+		var lab: MeshInstance3D = RemonteeKit.texte_fige(ent, "↑ " + String(e[1]).to_upper(), 96, 0.0034, Color(1, 1, 1))
 		lab.position = c2 + Vector3(0, 0, 0.04)
-		ent.add_child(lab)
 
 
 ## Ouverts 0,3 à 3 s après le passage d'un siège à la ligne d'arrêt.

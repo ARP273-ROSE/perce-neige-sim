@@ -20,31 +20,34 @@ const FERMETURE_TIGNES: String = "16:40"
 
 
 static func _txt(parent: Node3D, t: String, pos: Vector3, px: float, coul: Color,
-		aligne: HorizontalAlignment = HORIZONTAL_ALIGNMENT_CENTER, rot: float = 0.0, largeur: float = 0.0) -> Label3D:
-	var lab: Label3D = Label3D.new()
-	lab.text = t
-	lab.font_size = 64
-	lab.pixel_size = px
+		aligne: HorizontalAlignment = HORIZONTAL_ALIGNMENT_CENTER, rot: float = 0.0, largeur: float = 0.0) -> Node3D:
 	# un nom trop long rétrécit pour tenir dans son cadre (largeur d'un
 	# caractère ≈ 0,58 corps)
+	var p: float = px
 	if largeur > 0.0:
 		var n: int = 0
 		for ligne in t.split("\n"):
 			n = maxi(n, ligne.length())
-		lab.pixel_size = minf(px, largeur / maxf(n * 64.0 * 0.58, 1.0))
-	lab.modulate = coul
-	lab.outline_size = 0
-	lab.double_sided = false
-	lab.horizontal_alignment = aligne
+		p = minf(px, largeur / maxf(n * 64.0 * 0.58, 1.0))
+	# (texte figé, calculé sur le fil de construction : un Label3D renvoyait sa mise en forme et ses glyphes au fil
+	# principal)
+	var lab: MeshInstance3D = RemonteeKit.texte_fige(parent, t, 64, p, coul, aligne)
 	lab.position = pos
 	lab.rotation.z = rot
-	parent.add_child(lab)
 	return lab
 
 
 ## Pendule lumineuse : l'heure (de l'appareil) mise à jour chaque seconde.
 static func _pendule(parent: Node3D, pos: Vector3, px: float, coul: Color) -> void:
-	var lab: Label3D = _txt(parent, "", pos, px, coul)
+	# (l'heure change : un Label3D, le seul du portique)
+	var lab: Label3D = Label3D.new()
+	lab.font_size = 64
+	lab.pixel_size = px
+	lab.modulate = coul
+	lab.outline_size = 0
+	lab.double_sided = false
+	lab.position = pos
+	parent.add_child(lab)
 	lab.shaded = false
 	var maj := func() -> void:
 		var t: Dictionary = Time.get_time_dict_from_system()

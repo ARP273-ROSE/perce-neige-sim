@@ -576,8 +576,15 @@ static func _retirer_sources(done: Dictionary) -> void:
 	for mi_any in done.keys():
 		var mi: MeshInstance3D = mi_any
 		if int(done[mi]) == mi.mesh.get_surface_count():
+			var dans_scene: bool = mi.is_inside_tree()
 			mi.get_parent().remove_child(mi)
-			mi.queue_free()
+			# hors de la scène (construction sur un autre fil) : libérée tout de suite, ici. En file de suppression,
+			# des milliers de pièces fusionnées étaient détruites d'un coup par le fil principal (34 à 72 ms d'une
+			# image vers la salle, relevé du PC du 07/11/2026)
+			if dans_scene:
+				mi.queue_free()
+			else:
+				mi.free()
 
 
 static func _material_of(mi: MeshInstance3D, si: int) -> Material:
