@@ -254,16 +254,15 @@ func _construire_panneaux() -> void:
 		(par_piste[ip2][2] as Array).append(Transform3D(Basis(nx, Vector3.UP, nz), pos + nz * 0.021))
 		n_panneaux += 1
 		var xf_num: Transform3D = Transform3D(Basis(nx, Vector3.UP, nz), pos + nz * 0.026)
-		if OS.has_feature("web"):
-			var c_num: Vector2i = _case_numero(xf_num.origin)
-			if not _numeros.has(c_num):
-				_numeros[c_num] = []
-			(_numeros[c_num] as Array).append([xf_num, str(e[4])])
-			continue
-		racine.add_child(_label_numero(xf_num, str(e[4])))
-	if OS.has_feature("web"):
-		_racine_numeros = racine
-		set_process(true)
+		# numéros posés près de la caméra seulement, quelques-uns par image (_process) ;
+		# aussi sur PC : 1 669 Label3D posés d'un coup y renvoyaient leur mise en forme
+		# au fil principal par appel différé, 35 + 22 ms d'un bloc (740M, 07/11/2026)
+		var c_num: Vector2i = _case_numero(xf_num.origin)
+		if not _numeros.has(c_num):
+			_numeros[c_num] = []
+		(_numeros[c_num] as Array).append([xf_num, str(e[4])])
+	_racine_numeros = racine
+	set_process(true)
 	if DisplayServer.get_name() != "headless" and faces_panneaux:
 		_faces_panneaux.call_deferred(par_piste)
 

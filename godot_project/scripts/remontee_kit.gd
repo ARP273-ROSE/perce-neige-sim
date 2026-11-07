@@ -177,7 +177,7 @@ static var _mats_textes: Dictionary = {}
 
 static func texte_fige(parent: Node3D, texte: String, taille: int, px: float, coul: Color,
 		aligne: HorizontalAlignment = HORIZONTAL_ALIGNMENT_CENTER) -> MeshInstance3D:
-	var am: ArrayMesh = maillage_texte(texte, taille, px, 0.5, aligne)
+	var am: ArrayMesh = maillage_texte(texte, taille, px, 4.0, aligne)
 	var kc: String = coul.to_html()
 	verrou.lock()
 	var m: StandardMaterial3D = _mats_textes.get(kc)
@@ -201,7 +201,9 @@ static func texte_fige(parent: Node3D, texte: String, taille: int, px: float, co
 ## alignement, dans la police des Label3D du jeu. Le TextMesh qui le calcule part avec la fonction : sa mise à jour
 ## différée ne passe pas au fil principal (un Label3D y faisait aussi générer ses glyphes MSDF : 41 à 70 ms d'appels
 ## différés vers la salle, relevé du PC du 07/11/2026).
-static func maillage_texte(texte: String, taille: int, px: float, pas_courbe: float = 0.5,
+## Pas des courbes de 4 px par défaut : « STOP » 3 015 → 414 sommets, recopiés dans chaque vantail fusionné
+## (WebKit : +10 Mo de tampons au pas de 0,5, relevé du NAS).
+static func maillage_texte(texte: String, taille: int, px: float, pas_courbe: float = 4.0,
 		aligne: HorizontalAlignment = HORIZONTAL_ALIGNMENT_CENTER) -> ArrayMesh:
 	var cle: String = "%s|%d|%.5f|%.2f|%d" % [texte, taille, px, pas_courbe, aligne]
 	verrou.lock()
