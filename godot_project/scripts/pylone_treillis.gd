@@ -319,12 +319,15 @@ func _construire_vav() -> void:
 	var kappa: float = maxf(deviation, 0.004) / maxf(ls, 1.0)
 	for sx in [-1.0, 1.0]:
 		var x0: float = sx * voie * 0.5
-		var pts: PackedVector3Array = PackedVector3Array()
-		for i2 in range(13):
-			var z: float = lerpf(-ls * 0.5, ls * 0.5, float(i2) / 12.0)
-			pts.append(Vector3(x0, -PyloneRemontee.R_CABLE - 0.05 - kappa * z * z * 0.5, z))
-		RemonteeKit.tube(sab, pts, 0.08, "acier_noir", 8)
-		RemonteeKit.poutre(sab, Vector3(x0, -0.40, -ls * 0.45), Vector3(x0, -0.40, ls * 0.45), 0.30, 0.55, m)
+		# un sabot (gorge) sous chaque porteur de la voie
+		for kp in range(porteurs_par_voie):
+			var xp: float = x0 + (kp - (porteurs_par_voie - 1) * 0.5) * ecart_porteurs
+			var pts: PackedVector3Array = PackedVector3Array()
+			for i2 in range(13):
+				var z: float = lerpf(-ls * 0.5, ls * 0.5, float(i2) / 12.0)
+				pts.append(Vector3(xp, -PyloneRemontee.R_CABLE - 0.05 - kappa * z * z * 0.5, z))
+			RemonteeKit.tube(sab, pts, 0.08, "acier_noir", 8)
+		RemonteeKit.poutre(sab, Vector3(x0, -0.40, -ls * 0.45), Vector3(x0, -0.40, ls * 0.45), 0.30 + (porteurs_par_voie - 1) * ecart_porteurs, 0.55, m)
 		RemonteeKit.poutre(sab, Vector3(x0, -0.75, -ls * 0.30), Vector3(x0, y1 - yp, -0.9), 0.14, 0.14, m)
 		RemonteeKit.poutre(sab, Vector3(x0, -0.75, ls * 0.30), Vector3(x0, y1 - yp, 0.9), 0.14, 0.14, m)
 		for sz2 in [-ls * 0.25, ls * 0.25]:

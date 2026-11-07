@@ -89,15 +89,18 @@ static func _treillis(g: Node3D, a: Vector3, b: Vector3, h: float, m: String = M
 	RemonteeKit.poutre(g, b, b + up, 0.08, 0.08, m)
 
 
-## Sabot du porteur : poutre courbe à gorge, sur la tête d'un portique.
+## Sabot des porteurs : poutre courbe à deux gorges (deux porteurs par voie, fiche RM.net), sur la tête
+## d'un portique.
 static func _sabot(g: Node3D, x: float, y_cable: float, zc: float, l: float) -> void:
-	var pts: PackedVector3Array = PackedVector3Array()
-	for k in range(11):
-		var z: float = zc + lerpf(-l * 0.5, l * 0.5, float(k) / 10.0)
-		var dz: float = z - zc
-		pts.append(Vector3(x, y_cable - 0.08 - dz * dz * 0.006, z))
-	RemonteeKit.tube(g, pts, 0.09, "acier_noir", 8)
-	RemonteeKit.poutre(g, Vector3(x, y_cable - 0.45, zc - l * 0.45), Vector3(x, y_cable - 0.45, zc + l * 0.45), 0.28, 0.45, M)
+	var e: float = VehiculeRemontee.E_PORTEURS_TPH
+	for sx in [-0.5, 0.5]:
+		var pts: PackedVector3Array = PackedVector3Array()
+		for k in range(11):
+			var z: float = zc + lerpf(-l * 0.5, l * 0.5, float(k) / 10.0)
+			var dz: float = z - zc
+			pts.append(Vector3(x + sx * e, y_cable - 0.08 - dz * dz * 0.006, z))
+		RemonteeKit.tube(g, pts, 0.09, "acier_noir", 8)
+	RemonteeKit.poutre(g, Vector3(x, y_cable - 0.45, zc - l * 0.45), Vector3(x, y_cable - 0.45, zc + l * 0.45), 0.28 + e, 0.45, M)
 
 
 # --- gare aval ---------------------------------------------------------------------
@@ -191,7 +194,7 @@ static func _poutres_porteurs(g: Node3D, xv: float, hc: float, z0: float, z1: fl
 	for s in [-1.0, 1.0]:
 		var x: float = s * xv
 		_treillis(g, Vector3(x, y_tr, z0), Vector3(x, y_tr, z1), h_tr)
-		RemonteeKit.boite_en(g, Vector3(0.30, 0.18, absf(z1 - z0)), Vector3(x, hc - 0.55 + 0.09, (z0 + z1) * 0.5), "acier_noir")
+		RemonteeKit.boite_en(g, Vector3(0.30 + VehiculeRemontee.E_PORTEURS_TPH, 0.18, absf(z1 - z0)), Vector3(x, hc - 0.55 + 0.09, (z0 + z1) * 0.5), "acier_noir")
 		var xp: float = x - 2.0
 		for z in zs_poteaux:
 			RemonteeKit.poutre(g, Vector3(xp, 0.0, z), Vector3(xp, y_tr + h_tr, z), 0.30, 0.30, M)
@@ -297,7 +300,9 @@ static func gare_amont(lg: LigneRemontee, g: Node3D, hc: float, sol: Callable) -
 			RemonteeKit.cylindre(g, 3.05 - 0.0, 3.05, 0.08, Transform3D(b, c2 + b.y * (-0.3 + 0.15 * k3)), "cable", 40)
 		RemonteeKit.cylindre(g, 0.5, 0.5, 1.1, Transform3D(b, c2), "acier", 16)
 		# le porteur quitte le sabot, file au-dessus du quai et s'enroule
-		RemonteeKit.barre(g, Vector3(s6 * xv, hc, zf), c2 + b * Vector3(0, 0.4, 3.0), 0.03, "cable", 6)
+		for sp in [-0.5, 0.5]:
+			var xe: float = sp * VehiculeRemontee.E_PORTEURS_TPH
+			RemonteeKit.barre(g, Vector3(s6 * xv + xe, hc, zf), c2 + b * Vector3(xe, 0.4, 3.0), 0.03, "cable", 6)
 	# poste de vigie sous les tambours
 	var pv: Vector3 = Vector3(0, float(sol.call(0.0, zt + 3.5)), zt + 3.5)
 	RemonteeKit.boite_en(g, Vector3(3.2, 2.6, 2.8), pv + Vector3(0, 1.3, 0), "blanc_plaque")

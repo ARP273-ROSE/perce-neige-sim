@@ -5801,7 +5801,9 @@ func _poser_pylones_treillis() -> void:
 		py.voie = voie
 		py.ecart_porteurs = VehiculeRemontee.E_PORTEURS_3S
 		if vaetvient():
-			py.porteurs_par_voie = 1
+			# deux porteurs par voie (fiches RM.net du Fornet et de la Grande Motte)
+			py.porteurs_par_voie = 2
+			py.ecart_porteurs = VehiculeRemontee.E_PORTEURS_TPH
 			py.va_et_vient = true
 			py.l_sabot = 6.0
 		# sabots : 7 m, plus longs sur un pylône à grande déviation (le P3
