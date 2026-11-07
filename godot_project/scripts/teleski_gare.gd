@@ -34,11 +34,8 @@ func _gy(g: Node3D, x: float, z: float) -> float:
 
 func construire(g: Node3D, aval: bool, znez: float, zc: float) -> void:
 	if lg.famille == "perche_debrayable":
-		if aval and garage_droit():
+		if aval:
 			_charpente_tkd(g, zc)
-			_magasin(g, zc)
-		elif aval:
-			_tour_tkd(g, zc)
 			_magasin(g, zc)
 		else:
 			_mat_poma(g, aval, zc)
@@ -54,81 +51,9 @@ func construire(g: Node3D, aval: bool, znez: float, zc: float) -> void:
 
 # --- structures ---------------------------------------------------------------------
 
-## Tour de départ du TKD (vidéos des départs du Chardonnet, du Col du
-## Palet, de la Combe Folle, du 3000, du Signal et du Pays Désert ; retour
-## d'utilisateur, 25/10/2026 : « refaire de zéro la gare de départ d'un téléski
-## débrayable ») : une tour carrée en treillis galvanisé porte la poulie
-## horizontale à son sommet, sous une plate-forme à garde-corps où sont le
-## moteur et le réducteur, échelle à crinoline côté arrière. Autour, le
-## MAGASIN : un rail qui descend en hélice autour de la tour, du point de
-## débrayage (brin descente) jusqu'au lanceur (brin montée), où les perches
-## débrayées pendent serrées en rideau.
-const R_HELICE: float = 2.3          # rayon du rail du magasin autour de la tour
-const TOURS_HELICE: float = 1.5      # demi-tour de la boucle + un tour complet
-const Y_HAUT_HELICE: float = 1.4     # au-dessus du câble au début du rail
-const Y_BAS_HELICE: float = 0.15     # … au lanceur
-
-
-func _tour_tkd(g: Node3D, zc: float) -> void:
-	var H: float = lg.H_CABLE_GARE
-	var m: String = "galva"
-	var b: float = 0.9                                # demi-côté de la tour
-	var yt: float = H - 0.35                          # haut des montants (sous la poulie)
-	var ys: Array = []
-	for sx in [-1.0, 1.0]:
-		for sz in [-1.0, 1.0]:
-			var y0: float = _gy(g, sx * b, zc + sz * b)
-			ys.append(y0)
-			RemonteeKit.boite_en(g, Vector3(0.7, 0.5, 0.7), Vector3(sx * b, y0 - 0.1, zc + sz * b), "beton")
-			RemonteeKit.poutre(g, Vector3(sx * b, y0, zc + sz * b), Vector3(sx * b, yt, zc + sz * b), 0.12, 0.12, m)
-	var y_bas: float = ys.min()
-	# croisillons sur les quatre faces, ceintures
-	var n: int = maxi(2, int((yt - y_bas) / 1.4))
-	for f in range(4):
-		var a: float = PI * 0.5 * f
-		var u: Vector3 = Vector3(cos(a), 0, sin(a))
-		var v: Vector3 = Vector3(-sin(a), 0, cos(a))
-		for k2 in range(n):
-			var ya: float = lerpf(y_bas + 0.3, yt, float(k2) / n)
-			var yb: float = lerpf(y_bas + 0.3, yt, float(k2 + 1) / n)
-			var c: Vector3 = Vector3(0, 0, zc) + u * b
-			RemonteeKit.barre(g, c - v * b + Vector3(0, ya, 0), c + v * b + Vector3(0, yb, 0), 0.03, m, 5)
-			RemonteeKit.barre(g, c + v * b + Vector3(0, ya, 0), c - v * b + Vector3(0, yb, 0), 0.03, m, 5)
-			RemonteeKit.barre(g, c - v * b + Vector3(0, yb, 0), c + v * b + Vector3(0, yb, 0), 0.04, m, 5)
-	# chevêtre sous la poulie : arbre et palier
-	RemonteeKit.boite_en(g, Vector3(2.0 * b + 0.2, 0.25, 2.0 * b + 0.2), Vector3(0, yt, zc), m)
-	# plate-forme au-dessus de la poulie, garde-corps, moteur et réducteur
-	var yp: float = H + 0.55
-	var hp: float = 1.8
-	RemonteeKit.boite_en(g, Vector3(2.0 * hp, 0.06, 2.0 * hp), Vector3(0, yp, zc), "caillebotis")
-	for sx in [-1.0, 1.0]:
-		for sz in [-1.0, 1.0]:
-			RemonteeKit.poutre(g, Vector3(sx * b, yt, zc + sz * b), Vector3(sx * hp, yp, zc + sz * hp), 0.08, 0.08, m)
-	for f2 in range(4):
-		var a2: float = PI * 0.5 * f2
-		var u2: Vector3 = Vector3(cos(a2), 0, sin(a2))
-		var v2: Vector3 = Vector3(-sin(a2), 0, cos(a2))
-		var c2: Vector3 = Vector3(0, yp, zc) + u2 * hp
-		RemonteeKit.barre(g, c2 - v2 * hp + Vector3(0, 1.0, 0), c2 + v2 * hp + Vector3(0, 1.0, 0), 0.025, m, 6)
-		RemonteeKit.barre(g, c2 - v2 * hp + Vector3(0, 0.5, 0), c2 + v2 * hp + Vector3(0, 0.5, 0), 0.02, m, 6)
-		for t in [-1.0, 0.0, 1.0]:
-			RemonteeKit.barre(g, c2 + v2 * hp * t, c2 + v2 * hp * t + Vector3(0, 1.0, 0), 0.025, m, 6)
-	RemonteeKit.boite_en(g, Vector3(1.1, 0.8, 1.4), Vector3(0.4, yp + 0.43, zc + 0.3), "peinture_gris")
-	RemonteeKit.cylindre(g, 0.30, 0.30, 0.9, Transform3D(Basis(Vector3.FORWARD, PI * 0.5), Vector3(-0.55, yp + 0.38, zc + 0.3)), "bleu_doppelmayr", 16)
-	RemonteeKit.boite_en(g, Vector3(0.7, 1.4, 0.5), Vector3(-1.2, yp + 0.73, zc - 1.1), "peinture_gris")     # armoire
-	# échelle à crinoline, face arrière
-	var ze: float = zc + b + 0.25
-	var ye: float = _gy(g, 0.0, ze)
-	for sx2 in [-0.22, 0.22]:
-		RemonteeKit.barre(g, Vector3(sx2, ye, ze), Vector3(sx2, yp + 1.0, ze), 0.02, m, 5)
-	var y2: float = ye + 0.3
-	while y2 < yp:
-		RemonteeKit.barre(g, Vector3(-0.22, y2, ze), Vector3(0.22, y2, ze), 0.015, m, 4)
-		y2 += 0.3
-	var y3: float = ye + 2.3
-	while y3 < yp + 1.0:
-		RemonteeKit.tube(g, RemonteeKit.arc(Vector3(0, y3, ze + 0.35), Vector3.RIGHT, Vector3.BACK, 0.38, PI, TAU, 8), 0.012, m, 4)
-		y3 += 0.8
+## Rail du garage des TKD : au-dessus du câble au débrayage, au ras du câble au lanceur.
+const Y_HAUT_GARAGE: float = 1.4
+const Y_BAS_GARAGE: float = 0.15
 
 
 ## Téléskis Montaval (Signal, Montet, Savonnette…) : constructeur local, gares d'un autre dessin.
@@ -136,10 +61,10 @@ func montaval() -> bool:
 	return lg.constructeur.to_lower().contains("montaval")
 
 
-## TKD à charpente et garage droit : tous ceux du domaine (reportages RM.net du Signal, du Chardonnet, du
-## Col du Palet, de Combe Folle, du 3000 et du Pays Désert : charpente surélevée, perches en rideau au
-## garage, poulie motrice en tête ; aucun n'a de tour à magasin en hélice).
-func garage_droit() -> bool:
+## TKD : tous à charpente et garage droit (reportages RM.net du Signal, du Chardonnet, du Col du Palet, de
+## Combe Folle, du 3000 et du Pays Désert : charpente surélevée, perches en rideau au garage, poulie motrice
+## en tête ; aucun n'a de tour à magasin en hélice).
+func tkd() -> bool:
 	return lg.famille == "perche_debrayable"
 
 
@@ -206,10 +131,10 @@ func _charpente_tkd(g: Node3D, zc: float) -> void:
 func _rail_garage(u: float, H: float, zc: float) -> Vector3:
 	var xd: float = lg._x_brin(false)
 	var xm: float = lg._x_brin(true)
-	var y_h: float = H + Y_HAUT_HELICE - 0.2
+	var y_h: float = H + Y_HAUT_GARAGE - 0.2
 	var za: float = zc - L_GARAGE
 	var debut: Vector3 = Vector3(xd, y_h, zc - 0.5)
-	var fin: Vector3 = Vector3(xm, H + Y_BAS_HELICE, zc - 0.5)
+	var fin: Vector3 = Vector3(xm, H + Y_BAS_GARAGE, zc - 0.5)
 	if u < 0.08:
 		var c0: Vector3 = lg._point_cable(lg.S_DEBRAYAGE)[0]
 		return c0.lerp(debut, smoothstep(0.0, 1.0, u / 0.08))
@@ -230,7 +155,7 @@ func _rail_garage(u: float, H: float, zc: float) -> Vector3:
 		var sd: float = signf(xd - xm)
 		return Vector3(cx + sd * r * cos(a), lerpf(y_h, y_h - 0.3, a / PI), za - r * sin(a))
 	var d2: float = d - l1 - la
-	return Vector3(xm, lerpf(y_h - 0.3, H + Y_BAS_HELICE, d2 / l1), za + d2)
+	return Vector3(xm, lerpf(y_h - 0.3, H + Y_BAS_GARAGE, d2 / l1), za + d2)
 
 
 ## Chalet du préposé Montaval : soubassement de pierre, bardage de mélèze, vitres, toit à deux pans enneigé.
@@ -246,7 +171,7 @@ func _chalet(g: Node3D, b: Vector3, t: Vector3, cote: float) -> void:
 		RemonteeKit.boite(g, Vector3(t.x * 0.60, 0.14, t.z + 0.6), pan.translated_local(Vector3(0, 0.12, 0)), "neige_damee")
 
 
-## Magasin en hélice autour de la tour : rail, bras radiaux et suspentes.
+## Garage des perches débrayées : rail, suspentes et lanceur.
 func _magasin(g: Node3D, zc: float) -> void:
 	var H: float = lg.H_CABLE_GARE
 	var pts: PackedVector3Array = PackedVector3Array()
@@ -257,52 +182,23 @@ func _magasin(g: Node3D, zc: float) -> void:
 		var s: float = lerpf(s0, s1, float(k) / nb)
 		pts.append(rail_local(s) - Vector3(0, g.position.y, 0) + Vector3(0, 0.06, 0))
 	RemonteeKit.tube(g, pts, 0.035, "acier_noir", 6)
-	# bras radiaux depuis le haut de la tour, tous les 30° de l'hélice
-	var yh: float = H + 0.40
+	# suspentes du rail jusqu'aux longerons de la charpente
 	for k2 in range(0, nb + 1, 8):
 		var p: Vector3 = pts[k2]
-		var r: Vector2 = Vector2(p.x, p.z - zc)
-		if garage_droit():
-			# garage droit : suspentes jusqu'aux longerons de la charpente
-			if absf(p.y - (H + Y_HAUT_HELICE - 0.2)) < 0.3:
-				RemonteeKit.barre(g, p + Vector3(0, 0.03, 0), Vector3(p.x, H + 1.9, p.z), 0.018, "galva", 5)
-			continue
-		if r.length() < R_HELICE - 0.3 or r.length() > R_HELICE + 0.3:
-			continue
-		var pied: Vector3 = Vector3(r.normalized().x * 0.9, yh, zc + r.normalized().y * 0.9)
-		RemonteeKit.barre(g, pied, Vector3(p.x, yh, p.z), 0.025, "galva", 5)
-		RemonteeKit.barre(g, Vector3(p.x, yh, p.z), p + Vector3(0, 0.03, 0), 0.018, "galva", 5)
+		if absf(p.y - (H + Y_HAUT_GARAGE - 0.2)) < 0.3:
+			RemonteeKit.barre(g, p + Vector3(0, 0.03, 0), Vector3(p.x, H + 1.9, p.z), 0.018, "galva", 5)
 	# lanceur : boîtier jaune et bras au bout du rail
 	var pl: Vector3 = rail_local(lg.s_lancement()) - Vector3(0, g.position.y, 0)
 	RemonteeKit.boite_en(g, Vector3(0.30, 0.40, 0.55), pl + Vector3(0, 0.42, 0.25), "jaune_securite")
 	RemonteeKit.barre(g, pl + Vector3(0, 0.25, 0.0), pl + Vector3(0, 0.05, -0.45), 0.03, "acier_noir", 6)
 
 
-## Point du rail du magasin à l'abscisse s de la boucle (repère de la ligne) :
-## du câble au point de débrayage, droit jusqu'à l'hélice, hélice descendante
-## autour de la tour, droit jusqu'au câble au lanceur.
+## Point du rail du garage à l'abscisse s de la boucle (repère de la ligne), du débrayage au lanceur.
 func rail_local(s: float) -> Vector3:
 	var H: float = lg.H_CABLE_GARE + lg.terrain(0.0)
-	var zc: float = lg.l_gare
 	var s0: float = lg.S_DEBRAYAGE
 	var s1: float = lg.s_lancement()
-	var u: float = clampf((s - s0) / maxf(s1 - s0, 0.01), 0.0, 1.0)
-	if garage_droit():
-		return _rail_garage(u, H, zc)
-	var sd: float = signf(lg._x_brin(false))
-	var a0: float = 0.0 if sd > 0.0 else PI
-	var a1: float = a0 + sd * PI * 2.0 * TOURS_HELICE
-	var debut: Vector3 = Vector3(cos(a0) * R_HELICE, H + Y_HAUT_HELICE, zc + sin(a0) * R_HELICE)
-	var fin: Vector3 = Vector3(cos(a1) * R_HELICE, H + Y_BAS_HELICE, zc + sin(a1) * R_HELICE)
-	if u < 0.08:
-		var c0: Vector3 = lg._point_cable(s0)[0]
-		return c0.lerp(debut, smoothstep(0.0, 1.0, u / 0.08))
-	if u > 0.92:
-		var c1: Vector3 = lg._point_cable(s1)[0]
-		return fin.lerp(c1, smoothstep(0.0, 1.0, (u - 0.92) / 0.08))
-	var w: float = (u - 0.08) / 0.84
-	var a: float = lerpf(a0, a1, w)
-	return Vector3(cos(a) * R_HELICE, H + lerpf(Y_HAUT_HELICE, Y_BAS_HELICE, w), zc + sin(a) * R_HELICE)
+	return _rail_garage(clampf((s - s0) / maxf(s1 - s0, 0.01), 0.0, 1.0), H, lg.l_gare)
 
 
 ## Mât Poma : fût rond sous la poulie, massif de béton, mousse jaune au pied.
@@ -319,7 +215,7 @@ func _mat_poma(g: Node3D, aval: bool, zc: float) -> void:
 	while y < H - 0.6:
 		RemonteeKit.barre(g, Vector3(-0.2, y, zc + sg * 0.30), Vector3(0.2, y, zc + sg * 0.30), 0.015, "galva", 5)
 		y += 0.32
-	if not aval and garage_droit():
+	if not aval and tkd():
 		_jambe_et_contrepoids(g, zc, y0)
 	# plate-forme de visite à claire-voie autour de la tête, garde-corps
 	var yp: float = H + 0.78
@@ -575,7 +471,7 @@ func _cabane(g: Node3D, c: Vector3, cote: float) -> void:
 	var y: float = _gy(g, c.x, c.z)
 	var t: Vector3 = Vector3(2.0, 2.3, 2.4)
 	var b: Vector3 = Vector3(c.x, y, c.z)
-	if montaval() or garage_droit():
+	if montaval() or tkd():
 		_chalet(g, b, t, cote)
 		return
 	RemonteeKit.boite_en(g, Vector3(t.x + 0.2, 0.3, t.z + 0.2), b + Vector3(0, 0.0, 0), "beton")
@@ -597,7 +493,7 @@ func collisions(aval: bool) -> Array:
 	var H: float = lg.H_CABLE_GARE
 	var r: Array = []
 	var y0: float = lg.terrain(0.0 if aval else L)
-	if lg.famille == "perche_debrayable" and aval and garage_droit():
+	if tkd() and aval:
 		var xa: float = absf(lg._x_brin(true)) + 0.9
 		for sx3 in [-1.0, 1.0]:
 			for z3 in [zc - L_GARAGE - 1.0, zc, zc + absf(lg._x_brin(true)) + 1.2]:
@@ -609,7 +505,7 @@ func collisions(aval: bool) -> Array:
 			r.append([Vector3(0.75, 2.4, 0.75), Vector3(p3.x, ys4 + 1.2, p3.y)])
 	elif lg.famille == "perche_debrayable":
 		var ys: float = lg._sol(0.0, zc)
-		var lt: float = 2.0 if aval else 0.84           # tour du départ, mât à l'arrivée
+		var lt: float = 0.84                            # mât de l'arrivée (le départ : poteaux de la charpente, plus haut)
 		r.append([Vector3(lt, H - ys + y0, lt), Vector3(0, (ys + y0 + H) * 0.5, zc)])
 	else:
 		for sx in [-1.0, 1.0]:
