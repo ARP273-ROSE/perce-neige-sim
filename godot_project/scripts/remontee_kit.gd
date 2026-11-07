@@ -188,6 +188,9 @@ static func texte_fige(parent: Node3D, texte: String, taille: int, px: float, co
 		tm.font_size = taille
 		tm.pixel_size = px
 		tm.depth = 0.0
+		# courbes au pas de 4 px : « STOP » 3 015 → 414 sommets, recopiés dans chaque
+		# vantail fusionné (WebKit : +10 Mo de tampons au pas par défaut)
+		tm.curve_step = 4.0
 		am = ArrayMesh.new()
 		var arr: Array = tm.get_mesh_arrays()
 		if arr.size() > Mesh.ARRAY_VERTEX and arr[Mesh.ARRAY_VERTEX] != null \
