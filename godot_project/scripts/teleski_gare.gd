@@ -323,7 +323,10 @@ func _gare_enrouleurs(g: Node3D, aval: bool, zc: float) -> void:
 	var xc: float = R + 0.9
 	var yb: float = H + 0.55                          # dessous de la poutre
 	if montaval():
-		_futs_montaval(g, zc, yb, xc)
+		if aval:
+			_futs_montaval(g, zc, yb, xc)
+		else:
+			_colonnes_arrivee_montaval(g, zc, yb)
 	for sx in ([] if montaval() else [-1.0, 1.0]):
 		var y0: float = _gy(g, sx * xc, zc)
 		RemonteeKit.boite_en(g, Vector3(0.9, 0.5, 0.9), Vector3(sx * xc, y0 - 0.1, zc), "beton")
@@ -388,6 +391,38 @@ func _futs_montaval(g: Node3D, zc: float, yb: float, xc: float) -> void:
 	var y2: float = ya + 2.2
 	while y2 < yb + 1.5:
 		RemonteeKit.barre(g, Vector3(-0.22, y2, zc - 1.75), Vector3(0.22, y2, zc - 1.75), 0.014, "galva", 4)
+		y2 += 0.3
+
+
+## Arrivée d'un TKE Montaval (photos de la gare amont du Montet) : deux colonnes galvanisées carrées dans l'axe,
+## une à chaque bout du cadre, sans mousse ; portique en tête au-dessus de la plate-forme ; échelle sur la
+## colonne arrière. Cotes estimées sur photo.
+const Z_COLONNES_ARRIVEE: float = 1.9
+
+
+func _colonnes_arrivee_montaval(g: Node3D, zc: float, yb: float) -> void:
+	for sz in [-1.0, 1.0]:
+		var z: float = zc + sz * Z_COLONNES_ARRIVEE
+		var y0: float = _gy(g, 0.0, z)
+		RemonteeKit.boite_en(g, Vector3(1.0, 0.5, 1.0), Vector3(0, y0 - 0.1, z), "beton")
+		RemonteeKit.boite_en(g, Vector3(0.55, yb + 0.5 - y0, 0.55), Vector3(0, (yb + 0.5 + y0) * 0.5, z), "galva")
+		# plats de renfort en tête de colonne
+		RemonteeKit.boite_en(g, Vector3(0.75, 0.5, 0.75), Vector3(0, yb + 0.1, z), "galva")
+	# poutre en long sous la plate-forme, d'une colonne à l'autre
+	RemonteeKit.poutre(g, Vector3(0, yb + 0.25, zc - Z_COLONNES_ARRIVEE), Vector3(0, yb + 0.25, zc + Z_COLONNES_ARRIVEE), 0.4, 0.5, "galva")
+	# portique en tête : deux montants et une traverse au-dessus de la plate-forme
+	var yp: float = yb + 0.55
+	for sx in [-1.4, 1.4]:
+		RemonteeKit.poutre(g, Vector3(sx, yp, zc), Vector3(sx, yp + 2.6, zc), 0.16, 0.16, "galva")
+	RemonteeKit.poutre(g, Vector3(-1.9, yp + 2.6, zc), Vector3(1.9, yp + 2.6, zc), 0.18, 0.24, "galva")
+	# échelle sur la colonne arrière (côté opposé à la ligne : −z à l'amont)
+	var ze: float = zc - Z_COLONNES_ARRIVEE - 0.35
+	var ye: float = _gy(g, 0.0, ze)
+	for dx in [-0.22, 0.22]:
+		RemonteeKit.barre(g, Vector3(dx, ye, ze), Vector3(dx, yp + 1.0, ze), 0.018, "galva", 5)
+	var y2: float = ye + 0.3
+	while y2 < yp:
+		RemonteeKit.barre(g, Vector3(-0.22, y2, ze), Vector3(0.22, y2, ze), 0.014, "galva", 4)
 		y2 += 0.3
 
 
@@ -549,7 +584,9 @@ func collisions(aval: bool) -> Array:
 				var ys3: float = lg._sol(sx3 * xa, z3)
 				r.append([Vector3(0.5, H - ys3 + y0 + 2.0, 0.5), Vector3(sx3 * xa, (ys3 + y0 + H + 2.0) * 0.5, z3)])
 	elif lg.famille != "perche_debrayable" and montaval():
-		for p3 in [Vector2(-(R + 0.9), zc + 1.2), Vector2(R + 0.9, zc + 1.2), Vector2(0.0, zc - 1.4)]:
+		var pts3: Array = [Vector2(-(R + 0.9), zc + 1.2), Vector2(R + 0.9, zc + 1.2), Vector2(0.0, zc - 1.4)] if aval \
+			else [Vector2(0.0, zc - Z_COLONNES_ARRIVEE), Vector2(0.0, zc + Z_COLONNES_ARRIVEE)]
+		for p3 in pts3:
 			var ys4: float = lg._sol(p3.x, p3.y)
 			r.append([Vector3(0.75, 2.4, 0.75), Vector3(p3.x, ys4 + 1.2, p3.y)])
 	elif lg.famille == "perche_debrayable":
