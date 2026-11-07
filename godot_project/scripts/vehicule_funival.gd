@@ -82,10 +82,14 @@ func _caisse() -> void:
 	RemonteeKit.boite_en(self, Vector3(2.0 * W + 0.02, 0.04, L), Vector3(0, 0.76, 0), "cabine_blanche")
 	var hv: float = H_TOIT - 0.9
 	for sx in [-1.0, 1.0]:
-		RemonteeKit.boite_en(self, Vector3(0.03, hv, L), Vector3(sx * (W - 0.02), 0.9 + hv * 0.5, 0), "vitre_teintee")
+		RemonteeKit.boite_en(self, Vector3(0.03, hv, L), Vector3(sx * (W - 0.02), 0.9 + hv * 0.5, 0), "vitre")
+		# montants noirs fins : un entre deux compartiments, un de part et d'autre de chaque porte
 		for k in range(N_COMP + 1):
 			var z: float = DEMI_L - l_comp() * float(k)
-			RemonteeKit.boite_en(self, Vector3(0.08, hv, 0.10), Vector3(sx * W, 0.9 + hv * 0.5, z), "cabine_noire")
+			RemonteeKit.boite_en(self, Vector3(0.07, hv, 0.07), Vector3(sx * W, 0.9 + hv * 0.5, z), "cabine_noire")
+		for k2 in range(N_COMP):
+			var zc: float = z_comp(k2) - L_PORTE * 0.5 - 0.6
+			RemonteeKit.boite_en(self, Vector3(0.06, hv, 0.05), Vector3(sx * W, 0.9 + hv * 0.5, zc), "cabine_noire")
 		RemonteeKit.boite_en(self, Vector3(0.08, 0.14, L), Vector3(sx * W, H_TOIT - 0.07, 0), "cabine_noire")
 	# toit arrondi (deux pans et un faîte)
 	for sx2 in [-1.0, 1.0]:
@@ -99,6 +103,25 @@ func _caisse() -> void:
 				Transform3D(Basis(Vector3.UP, sx3 * sz * 0.35), Vector3(sx3 * W * 0.48, 0.7 + (H_TOIT - 0.7) * 0.5, z0 + sz * 0.22)), "vitrage_sombre")
 		RemonteeKit.boite_en(self, Vector3(0.10, H_TOIT - 0.7, 0.10), Vector3(0, 0.7 + (H_TOIT - 0.7) * 0.5, z0 + sz * 0.42), "cabine_noire")
 		RemonteeKit.boite_en(self, Vector3(2.0 * W, 0.55, 0.5), Vector3(0, 0.62, z0 + sz * 0.2), "cabine_noire")
+		# grand aigle blanc de Val d'Isère sur chaque pan du nez (photos)
+		for sx4 in [-1.0, 1.0]:
+			var mi: MeshInstance3D = MeshInstance3D.new()
+			var q: QuadMesh = QuadMesh.new()
+			q.size = Vector2(1.05, 1.05)
+			mi.mesh = q
+			var m: StandardMaterial3D = StandardMaterial3D.new()
+			m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+			m.albedo_color = Color(0.94, 0.94, 0.94)
+			m.albedo_texture = VehiculeRemontee._aigle()
+			m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
+			m.alpha_scissor_threshold = 0.5
+			mi.material_override = m
+			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			var ang: float = sx4 * sz * 0.35
+			mi.transform = Transform3D(Basis(Vector3.UP, ang + (0.0 if sz > 0.0 else PI)),
+				Vector3(sx4 * W * 0.48, 1.55, z0 + sz * 0.27) + Basis(Vector3.UP, ang) * Vector3(0, 0, sz * 0.03))
+			mi.set_meta(MeshMerge.SANS_FUSION, true)
+			add_child(mi)
 
 
 ## Intérieur : planchers de niveau (caillebotis gris), cloisons blanches entre compartiments, plafond blanc à
