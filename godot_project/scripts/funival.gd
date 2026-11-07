@@ -111,8 +111,8 @@ func _preparer_voie() -> void:
 		if d < portail_d:
 			var y: float = _sol(0.0, -d) + DESSOUS_POUTRE
 			# gare aval : voie en fosse entre les quais, au niveau du sol
-			if d < 40.0:
-				y = lerpf(_y_aval + 0.3, y, smoothstep(25.0, 40.0, d))
+			if d < 75.0:
+				y = lerpf(_sol(0.0, -d) + 0.4, y, smoothstep(45.0, 75.0, d))
 			# approche du portail : rejoint la cote d'entrée du tunnel
 			y = lerpf(y, _y_portail, smoothstep(portail_d - 80.0, portail_d, d))
 			cible[k] = y
@@ -130,7 +130,7 @@ func _preparer_voie() -> void:
 				s += cible[j]
 				c += 1
 			l2[k] = s / float(c)
-		l2[0] = _y_aval + 0.3
+		l2[0] = _sol(0.0, 0.0) + 0.4
 		l2[n - 1] = _y_amont
 		cible = l2
 	_prof = cible
@@ -152,9 +152,13 @@ static func mat_funi(nom: String) -> Material:
 			m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 			m.vertex_color_use_as_albedo = true
 			m.cull_mode = BaseMaterial3D.CULL_DISABLED
+			# (le brouillard volumétrique clair du jeu remplissait le tunnel, d'autant plus que la section est large :
+			# évitement voilé de gris clair, rails compris — captures du 08/11/2026)
+			m.disable_fog = true
 		"lampe":
 			m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 			m.albedo_color = Color(1.0, 0.97, 0.88)
+			m.disable_fog = true
 		"beton_clair":
 			m.albedo_color = Color(0.60, 0.63, 0.67)      # poutre, piles (gris clair froid sur photo ; plus chaud, il virait au beige)
 			m.roughness = 0.95
@@ -167,6 +171,9 @@ static func mat_funi(nom: String) -> Material:
 			m.metallic = 0.4
 		"rocher":
 			m.albedo_color = Color(0.40, 0.39, 0.37)
+			m.roughness = 1.0
+		"moellons":
+			m.albedo_color = Color(0.46, 0.47, 0.47)      # maçonnerie de pierre grise (gare amont)
 			m.roughness = 1.0
 		_:
 			m.albedo_color = Color(1, 0, 1)
@@ -460,15 +467,22 @@ func _gare_aval() -> void:
 		for sx in [-1.0, 1.0]:
 			var larg: float = 6.0 if sx < 0.0 else 3.5
 			var x: float = sx * (W + larg * 0.5)
-			# gradin plein jusqu'au sol (il suit le terrain, sans vide dessous), dessus en caillebotis sombre
+			# sol sous le gradin (pour la première contremarche)
 			var sol: float = minf(_sol(x - larg * 0.4, -d), _sol(x + larg * 0.4, -d)) - 0.3
 			var hm: float = maxf(y - sol, 0.2)
-			var mi_g: MeshInstance3D = RemonteeKit.boite_en(g, Vector3(larg, hm, lc + 0.04), Vector3(x, y - hm * 0.5, -d), "acier_noir")
-			mi_g.material_override = mat_funi("caillebotis_sombre")
-			bardage.append(mi_g)
-			# garde-corps extérieur
-			var xg: float = sx * (W + larg)
+			# marche mince au niveau du plancher du compartiment, contremarche jusqu'à la marche du dessous (ou au sol),
+			# garde-corps en tubes (photos : caillebotis à claire-voie, marches basses)
+			var y_prec: float = VehiculeFunival.y_plancher_monde(self, d - lc) if k > 0 else sol
+			var marche: MeshInstance3D = RemonteeKit.boite_en(g, Vector3(larg, 0.12, lc + 0.04), Vector3(x, y - 0.06, -d), "acier_noir")
+			marche.material_override = mat_funi("caillebotis_sombre")
+			bardage.append(marche)
+			var hc: float = maxf(y - minf(y_prec, sol + hm), 0.1)
+			var cm: MeshInstance3D = RemonteeKit.boite_en(g, Vector3(larg, hc, 0.06), Vector3(x, y - hc * 0.5, -d + lc * 0.5), "acier_noir")
+			cm.material_override = mat_funi("caillebotis_sombre")
+			bardage.append(cm)
+			var xg: float = sx * (W + larg - 0.05)
 			RemonteeKit.boite_en(g, Vector3(0.05, 0.05, lc), Vector3(xg, y + 1.05, -d), "galva")
+			RemonteeKit.boite_en(g, Vector3(0.05, 0.05, lc), Vector3(xg, y + 0.55, -d), "galva")
 			RemonteeKit.boite_en(g, Vector3(0.05, 1.05, 0.05), Vector3(xg, y + 0.52, -d - lc * 0.5), "galva")
 	# bâtiment : à gauche de l'entrée des quais, toit plat débordant
 	var yb: float = VehiculeFunival.y_plancher_monde(self, 3.0)
@@ -553,12 +567,14 @@ func _gare_amont() -> void:
 	pignon.call(0.0, zs, 2.0 * hx + 2.0, 22.0, 8.0, 3.2)
 	RemonteeKit.boite_en(g, Vector3(2.0 * hx + 2.1, 0.9, 22.1), Vector3(0, ys + 6.2, zs), "vitrage_sombre")     # bandeau sous le toit
 	pignon.call(hx + 7.0, zs - 12.0, 12.0, 16.0, 4.5, 2.2)
-	RemonteeKit.boite_en(g, Vector3(6.0, 3.6, 7.0), Vector3(-(hx + 4.0), ys + 1.3, zs + 6.0), "pierre")
+	var moel: MeshInstance3D = RemonteeKit.boite_en(g, Vector3(6.0, 3.6, 7.0), Vector3(-(hx + 4.0), ys + 1.3, zs + 6.0), "pierre")
+	moel.material_override = mat_funi("moellons")
+	moel.set_meta(MeshMerge.SANS_FUSION, true)
 	var ens: MeshInstance3D = RemonteeKit.texte_fige(g, "Funival", 120, 0.016, Color(0.95, 0.95, 0.95))
 	ens.transform = Transform3D(Basis(Vector3.UP, PI * 0.5), Vector3(hx + 1.06, ys + 4.6, zs))
 	var carre: MeshInstance3D = RemonteeKit.boite_en(g, Vector3(0.05, 1.4, 1.4), Vector3(hx + 1.04, ys + 4.6, zs + 5.5), "rouge_val")
 	carre.set_meta(MeshMerge.SANS_FUSION, true)
-	MeshMerge.merge(g, [w1, w2, ens, carre], "Gare")
+	MeshMerge.merge(g, [w1, w2, ens, carre, moel], "Gare")
 
 
 func _collisions_funi() -> void:
