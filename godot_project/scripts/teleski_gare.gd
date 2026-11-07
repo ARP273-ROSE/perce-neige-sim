@@ -37,6 +37,9 @@ func construire(g: Node3D, aval: bool, znez: float, zc: float) -> void:
 		if aval:
 			_charpente_tkd(g, zc)
 			_magasin(g, zc)
+		elif lsp():
+			_arrivee_lsp(g, zc)
+			_anneau_guidage(g, zc)
 		else:
 			_mat_poma(g, aval, zc)
 			_anneau_guidage(g, zc)
@@ -169,6 +172,52 @@ func _chalet(g: Node3D, b: Vector3, t: Vector3, cote: float) -> void:
 		var pan: Transform3D = Transform3D(Basis(Vector3.BACK, -s * 0.45), b + Vector3(s * (t.x * 0.25 + 0.1), t.y + 0.30, 0))
 		RemonteeKit.boite(g, Vector3(t.x * 0.62, 0.12, t.z + 0.7), pan, "toit_brun")
 		RemonteeKit.boite(g, Vector3(t.x * 0.60, 0.14, t.z + 0.6), pan.translated_local(Vector3(0, 0.12, 0)), "neige_damee")
+
+
+## Arrivées « lâcher sous poulie » à poulie flottante (reportages RM.net du Col du Palet et du Pays Désert) :
+## la poulie de tension, sur un fût tubulaire blanc, est tirée vers l'arrière par des câbles qui montent au
+## sommet d'un poussard (mât en treillis incliné vers elle) ; contrepoids cylindrique blanc au pied du
+## poussard ; barres de protection rouges. Cotes estimées sur photo.
+const LIGNES_LSP: Array = ["tkd_col_du_palet", "tkd_pays_desert"]
+
+
+func lsp() -> bool:
+	return String(lg.name) in LIGNES_LSP
+
+
+func _arrivee_lsp(g: Node3D, zc: float) -> void:
+	var H: float = lg.H_CABLE_GARE
+	var R: float = lg.voie * 0.5
+	var y0: float = _gy(g, 0.0, zc)
+	# fût blanc sous la poulie, mousse rouge au pied
+	RemonteeKit.boite_en(g, Vector3(1.0, 0.4, 1.0), Vector3(0, y0 - 0.1, zc), "beton")
+	RemonteeKit.cylindre(g, 0.17, 0.17, H - 0.3 - y0, Transform3D(Basis.IDENTITY, Vector3(0, (H - 0.3 + y0) * 0.5, zc)), "blanc_plaque", 14)
+	RemonteeKit.cylindre(g, 0.30, 0.30, 1.6, Transform3D(Basis.IDENTITY, Vector3(0, y0 + 0.8, zc)), "mousse_rouge", 12)
+	# poussard : deux montants et des barreaux, du sol (en arrière) jusqu'au-dessus de la poulie
+	var zb: float = zc - (R + 3.5)
+	var yb: float = _gy(g, 0.0, zb)
+	var haut: Vector3 = Vector3(0, H + 3.0, zc - (R + 1.6))
+	var bas: Vector3 = Vector3(0, yb, zb)
+	for sx in [-0.28, 0.28]:
+		RemonteeKit.barre(g, bas + Vector3(sx, 0, 0), haut + Vector3(sx * 0.6, 0, 0), 0.05, "galva", 6)
+	var n: int = int(bas.distance_to(haut) / 0.45)
+	for k in range(1, n):
+		var q: Vector3 = bas.lerp(haut, float(k) / n)
+		var e: float = lerpf(0.28, 0.17, float(k) / n)
+		RemonteeKit.barre(g, q - Vector3(e, 0, 0), q + Vector3(e, 0, 0), 0.02, "galva", 4)
+	RemonteeKit.boite_en(g, Vector3(1.0, 0.4, 1.0), Vector3(0, yb - 0.1, zb), "beton")
+	# câbles de tension, du sommet du poussard au chevêtre de la poulie
+	for sx2 in [-0.25, 0.25]:
+		RemonteeKit.barre(g, haut + Vector3(sx2, 0, 0), Vector3(sx2, H + 0.5, zc - 0.4), 0.012, "cable", 5)
+	# contrepoids cylindrique blanc au pied du poussard
+	var xc: float = 1.1
+	var yc: float = _gy(g, xc, zb + 0.4)
+	RemonteeKit.cylindre(g, 0.45, 0.45, 2.4, Transform3D(Basis.IDENTITY, Vector3(xc, yc + 1.2, zb + 0.4)), "blanc_plaque", 18)
+	RemonteeKit.barre(g, haut, Vector3(xc, yc + 2.4, zb + 0.4), 0.012, "cable", 5)
+	# barres de protection rouges, couchées vers la poulie de part et d'autre
+	for sx3 in [-1.0, 1.0]:
+		var pied: Vector3 = Vector3(sx3 * (R + 1.6), _gy(g, sx3 * (R + 1.6), zc - 1.0), zc - 1.0)
+		RemonteeKit.poutre(g, pied, pied + Vector3(-sx3 * 0.9, 1.6, 0.5), 0.24, 0.24, "mousse_rouge")
 
 
 ## Garage des perches débrayées : rail, suspentes et lanceur.
