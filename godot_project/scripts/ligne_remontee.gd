@@ -3781,7 +3781,7 @@ func _guide_entonnoir(parent: Node3D, s_bord: float, sens: float) -> void:
 	var prec_h: Vector3
 	var prec_b: Vector3
 	var poutre: PackedVector3Array = PackedVector3Array()
-	# joue pleine côté extérieur, de la tôle haute à la tôle basse (Kevin, 07/11/2026 : « ton entonnoir n'est
+	# joue pleine côté extérieur, de la tôle haute à la tôle basse (retour d'utilisateur, 07/11/2026 : « ton entonnoir n'est
 	# pas plein » — deux bandes seules laissaient voir au travers)
 	var joue: SurfaceTool = SurfaceTool.new()
 	joue.begin(Mesh.PRIMITIVE_TRIANGLES)
@@ -4130,7 +4130,7 @@ func _poser_pylones() -> void:
 		py.dessus_traverse = PyloneRemontee.DESSUS_TRAVERSE_COMPRESSION if _compression(p) else _dessus_traverse()
 		py.hauteur = y_cable(d) - t - py.dessus_traverse
 		py.matelas = _sur_une_piste(d, t)
-		# (modèle des retours photo de Kevin, 07/11/2026 : télécabines et télésièges, débrayables ou fixes)
+		# (modèle des retours photo d'un utilisateur, 07/11/2026 : télécabines et télésièges, débrayables ou fixes)
 		py.modele_2026 = not teleski() and not tricable() and famille != "cabine_tph"
 		py.compo_montee = p.get("montee", [[8, "S"]])
 		py.compo_descente = p.get("descente", [[8, "S"]])

@@ -81,9 +81,9 @@ const RETRAIT_TRAVERSE: float = 0.45       # bout de la traverse en dedans du c�
 const H_PORTIQUE: float = 1.55             # poutre du portique au-dessus du câble
 ## Le pied est sur une piste : posé par la ligne avant construire().
 var matelas: bool = false
-## Modèle des retours photo de Kevin (07/11/2026), pour les TCD, TSD et TSF : fût continu à
+## Modèle des retours photo d'un utilisateur (07/11/2026), pour les TCD, TSD et TSF : fût continu à
 ## embase raidie, échelle étroite à paliers, second étage de passerelles sous les trains relié par un cadre en
-## trapèze ; rien au-dessus de la potence de tête (Kevin, 07/11/2026 : « ya pas de haubanage ni de mât »).
+## trapèze ; rien au-dessus de la potence de tête (retour d'utilisateur, 07/11/2026 : « ya pas de haubanage ni de mât »).
 var modele_2026: bool = false
 ## Télécabines : traverse remontée au pivot du train support — à 0,95 m,
 ## elle était à hauteur du toit et les cabines passaient au travers
@@ -568,7 +568,7 @@ func _train_structure(c: Array) -> void:
 	var h_r: float = 1.05
 	if modele_2026 and not dessus.is_empty():
 		# compression : caillebotis SOUS le train, garde-corps bas ; posé au-dessus du câble, son garde-corps
-		# enfermait les galets dans une cage (retour de Kevin, 07/11/2026, d'après ses photos du P1)
+		# enfermait les galets dans une cage (retour d'utilisateur, 07/11/2026, d'après ses photos du P1)
 		y_p = hauteur_cable() - 0.85
 		h_r = 0.75
 	_passerelle(Vector3(xp, y_p, 0), Vector3(0.95, 0.0, lc))
@@ -579,7 +579,7 @@ func _train_structure(c: Array) -> void:
 		var y2: float = hauteur - 1.6
 		var xq: float = x - ext * 2.35
 		# (ouvert, sans garde-corps : la passerelle haute et ses montants faisaient une cage vue de dessous —
-		# retour de Kevin, 07/11/2026 : « les cages dessous les galets c'est pas bon »)
+		# retour d'utilisateur, 07/11/2026 : « les cages dessous les galets c'est pas bon »)
 		_passerelle(Vector3(xq, y2, 0), Vector3(0.7, 0.0, lc))
 		for sz in [-1.0, 1.0]:
 			var z1: float = sz * lc * 0.5
@@ -588,7 +588,7 @@ func _train_structure(c: Array) -> void:
 	_n = self
 
 
-## Train de compression du modèle 2026 (photos de Kevin, P1 devant la gare) : selle en V entre deux paires (la
+## Train de compression du modèle 2026 (photos d'un utilisateur, P1 devant la gare) : selle en V entre deux paires (la
 ## pince y passe), corne relevée à chaque bout du train, plaque rattrape-câble pendue sous le câble aux bouts.
 func _details_compression(tete: Node3D, zs: Array, y_axe: float, s: float, ext: float) -> void:
 	var z_haut: float = float(zs[0]) + R_GALET + 0.08
