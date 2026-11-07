@@ -5155,11 +5155,15 @@ static func _garder_pylones() -> bool:
 	return fusion_pylones and not lod_voulu()
 
 
+## Nom du nœud des pylônes fusionnés pour le loin (les portées du domaine le traitent en pylône).
+const PYLONES_LOIN: String = "PylonesLoin"
+
+
 static func fusionner_pylones_loin(racine: Node, portee: float) -> void:
 	if not fusion_pylones or lod_voulu():
 		return
 	var lot: Node3D = Node3D.new()
-	lot.name = "PylonesLoin"
+	lot.name = PYLONES_LOIN
 	var n: int = 0
 	for py in racine.get_children():
 		if not (py is PyloneRemontee or py is PyloneTreillis) or not (py as Node3D).visible:
