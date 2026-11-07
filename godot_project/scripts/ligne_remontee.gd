@@ -1227,15 +1227,105 @@ func _y_lisse_3s(d: float, montee: bool) -> float:
 		return _hermite(clampf((d - da) / NEZ_3S, 0.0, 1.0), _y_chainette(da, montee), y1, _pente_chainette(da, montee), 0.0, NEZ_3S)
 	for p in pylones:
 		var b: Vector2 = bouts_sabot_3s(p)
-		# (à deux appuis, le porte-à-faux aval suit la portée, la courbe part du premier appui)
-		if p.has("appui_aval"):
-			b.x = float(p["d"]) - float(p["appui_aval"])
 		if d > b.x and d < b.y:
-			var d0: float = b.x
-			var d1: float = b.y
-			return _hermite((d - d0) / (d1 - d0), _y_chainette(d0, montee), _y_chainette(d1, montee),
-				_pente_chainette(d0 - 0.3, montee), _pente_chainette(d1 + 0.3, montee), d1 - d0)
+			var arc: Array = arc_sabot_3s(b.x, b.y, montee)
+			if not arc.is_empty():
+				return _y_arc(d, arc)
+			return _hermite((d - b.x) / (b.y - b.x), _y_chainette(b.x, montee), _y_chainette(b.y, montee),
+				_pente_chainette(b.x - 0.3, montee), _pente_chainette(b.y + 0.3, montee), b.y - b.x)
 	return _y_chainette(d, montee)
+
+
+## Sabot du 3S en ARC DE CERCLE de rayon constant (retour d'utilisateur, 06/11/2026, P3 de l'Olympique : « le
+## truc qui porte les câbles et donc les câbles doivent faire une courbe d'arc de cercle, et là ton truc est
+## plat vers la vallée et sa courbure augmente vers la gare amont » — le raccord d'Hermite y concentrait la
+## courbure vers l'amont, et le porte-à-faux aval suivait la portée, presque droit). Le cercle est tangent aux
+## deux tangentes des portées aux bouts du sabot (d0 aval, d1 amont), à égale distance de leur intersection :
+## le bout le plus proche de l'intersection est le point de tangence, l'autre bout est relié à l'arc par sa
+## tangente, droite. Rend [d0, y0, m0, d1, y1, m1, de, ds, cx, cy, r], vide si le sabot n'est pas convexe.
+func arc_sabot_3s(d0: float, d1: float, montee: bool) -> Array:
+	var y0: float = _y_chainette(d0, montee)
+	var y1: float = _y_chainette(d1, montee)
+	var m0: float = _pente_chainette(d0 - 0.3, montee)
+	var m1: float = _pente_chainette(d1 + 0.3, montee)
+	if m0 - m1 < 0.002:
+		return []
+	# intersection des tangentes : y0 + m0 (x - d0) = y1 + m1 (x - d1)
+	var xi: float = (y1 - y0 + m0 * d0 - m1 * d1) / (m0 - m1)
+	if xi <= d0 or xi >= d1:
+		return []
+	var yi: float = y0 + m0 * (xi - d0)
+	var u0: Vector2 = Vector2(1.0, m0).normalized()
+	var u1: Vector2 = Vector2(1.0, m1).normalized()
+	var t: float = minf(Vector2(xi - d0, yi - y0).length(), Vector2(d1 - xi, y1 - yi).length())
+	var e: Vector2 = Vector2(xi, yi) - u0 * t
+	var x: Vector2 = Vector2(xi, yi) + u1 * t
+	var dth: float = u0.angle_to(u1)       # < 0 : le câble tourne vers le bas (convexe)
+	var r: float = t / tan(absf(dth) * 0.5)
+	var c: Vector2 = e + Vector2(u0.y, -u0.x) * r
+	return [d0, y0, m0, d1, y1, m1, e.x, x.x, c.x, c.y, r]
+
+
+## Ouvrage à deux appuis (P3 de l'Olympique) : la portée aval s'arrête à la pointe du sabot (d − l_aval), à
+## l'altitude qui rend l'arc tangent aux deux portées. L'arc est tangent à la portée amont au bout amont du sabot
+## (d + l_amont) ; à la pointe, la tangente de l'arc vaut 2φ − θ1 (φ : pente de la corde). On cherche
+## l'altitude de la pointe où la portée aval (depuis l'appui précédent xa, ya) arrive avec cette pente.
+## Mis en cache par pylône et par brin (les têtes bougent pendant la construction : clé sur elles).
+var _appuis_arc: Dictionary = {}
+
+
+func _appui_arc(i: int, xa: float, ya: float, montee: bool) -> Vector2:
+	var p: Dictionary = pylones[i]
+	var d: float = float(p["d"])
+	var a_c: float = _a_montee if montee else _a_descente
+	var cle: String = "%d|%s|%.3f|%.3f|%.3f|%.3f" % [i, montee, xa, ya, _tetes[i], a_c]
+	if _appuis_arc.has(cle):
+		return _appuis_arc[cle]
+	var xe: float = d - float(p.get("l_aval", p["appui_aval"]))
+	var xx: float = d + float(p.get("l_amont", 0.0))
+	# portée amont : de la tête au support suivant (tête suivante ou nez de la gare amont)
+	var xn: float
+	var yn: float
+	if i + 1 < pylones.size():
+		xn = float(pylones[i + 1]["d"])
+		yn = _tetes[i + 1]
+	else:
+		xn = longueur_h() - _h_nez[1]
+		yn = terrain(longueur_h()) + H_CABLE_GARE
+	var y1: float = chainette(xx, d, _tetes[i], xn, yn, a_c)
+	var th1: float = atan((chainette(xx + 0.25, d, _tetes[i], xn, yn, a_c) - chainette(xx - 0.25, d, _tetes[i], xn, yn, a_c)) / 0.5)
+	var ecart := func(ye: float) -> float:
+		var phi: float = atan2(y1 - ye, xx - xe)
+		var m: float = (chainette(xe + 0.25, xa, ya, xe, ye, a_c) - chainette(xe - 0.25, xa, ya, xe, ye, a_c)) / 0.5
+		return atan(m) - (2.0 * phi - th1)
+	# altitude de la pointe : bornée par la donnée (appui relevé) ± 15 m, résolue par dichotomie
+	var y_ref: float = float(p["appui_alt"]) - y_origine
+	var lo: float = y_ref - 15.0
+	var hi: float = y_ref + 15.0
+	var flo: float = ecart.call(lo)
+	var r: Vector2 = Vector2(d - float(p["appui_aval"]), y_ref)
+	if flo * float(ecart.call(hi)) < 0.0:
+		for k in range(48):
+			var mi: float = (lo + hi) * 0.5
+			var fm: float = ecart.call(mi)
+			if fm * flo <= 0.0:
+				hi = mi
+			else:
+				lo = mi
+				flo = fm
+		r = Vector2(xe, (lo + hi) * 0.5)
+	_appuis_arc[cle] = r
+	return r
+
+
+static func _y_arc(d: float, a: Array) -> float:
+	if d < float(a[6]):
+		return float(a[1]) + float(a[2]) * (d - float(a[0]))
+	if d > float(a[7]):
+		return float(a[4]) + float(a[5]) * (d - float(a[3]))
+	var r: float = a[10]
+	var dx: float = d - float(a[8])
+	return float(a[9]) + sqrt(maxf(r * r - dx * dx, 0.0))
 
 
 ## Hauteur du câble (chaînette) à la distance d, brin montée ou descente ;
@@ -1327,8 +1417,9 @@ func _y_chainette(d: float, montee: bool = true) -> float:
 			yb = _tetes[i]
 			# ouvrage à deux appuis : la portée s'arrête au premier, le câble suit ensuite la poutre (_y_lisse_3s)
 			if pylones[i].has("appui_aval"):
-				xb -= float(pylones[i]["appui_aval"])
-				yb = float(pylones[i]["appui_alt"]) - y_origine
+				var ap: Vector2 = _appui_arc(i, xa, ya, montee)
+				xb = ap.x
+				yb = ap.y
 		else:
 			var L: float = longueur_h()
 			xb = L - _h_nez[1]
