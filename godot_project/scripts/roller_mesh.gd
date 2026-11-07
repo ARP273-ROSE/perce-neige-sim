@@ -54,8 +54,13 @@ static func materiaux() -> Dictionary:
 	culot.albedo_color = Color(0.72, 0.73, 0.72)
 	culot.metallic = 0.7
 	culot.roughness = 0.38
+	# jante zinguée (passivation jaune irisée, d'après les photos de pylônes de télécabine du 07/11/2026)
+	var zinc: StandardMaterial3D = StandardMaterial3D.new()
+	zinc.albedo_color = Color(0.76, 0.77, 0.69)
+	zinc.metallic = 0.75
+	zinc.roughness = 0.32
 	return {"alu": alu, "caoutchouc": caoutchouc, "galva": galva,
-		"acier": acier, "culot": culot}
+		"acier": acier, "culot": culot, "zinc": zinc}
 
 
 # --- Primitives ------------------------------------------------------------
@@ -234,6 +239,53 @@ static func build_galet(detail: bool) -> ArrayMesh:
 	_lathe(st2, _profil_bande(), n_seg, 1.0)
 	MeshMerge.valider(st2, mesh)
 	mesh.surface_set_material(mesh.get_surface_count() - 1, mats["caoutchouc"])
+	return mesh
+
+
+## Galet de ligne de télécabine ou télésiège (modèle 2026) : bandage caoutchouc noir AU POURTOUR, gorge
+## creusée dedans (contact du câble à R_BANDE, comme build_galet), jante zinguée qui le pince, voile et
+## moyeu sombres. Même repère et même rayon de contact que build_galet.
+static func build_galet_ligne(detail: bool) -> ArrayMesh:
+	var mats: Dictionary = materiaux()
+	var n_seg: int = 24 if detail else 16
+	var mesh: ArrayMesh = ArrayMesh.new()
+	# surface 0 : bandage
+	var st: SurfaceTool = SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var hg: float = 0.026
+	var b: PackedVector2Array = PackedVector2Array([Vector2(0.205, -0.05), Vector2(0.268, -0.05),
+		Vector2(0.275, -0.042), Vector2(0.275, -hg)])
+	for i in range(1, 6):
+		var y: float = -hg + 2.0 * hg * float(i) / 6.0
+		b.append(Vector2(R_BANDE + 0.025 * (y / hg) * (y / hg), y))
+	b.append_array(PackedVector2Array([Vector2(0.275, hg), Vector2(0.275, 0.042), Vector2(0.268, 0.05),
+		Vector2(0.205, 0.05), Vector2(0.205, -0.05)]))
+	_lathe(st, b, n_seg, 1.0)
+	MeshMerge.valider(st, mesh)
+	mesh.surface_set_material(mesh.get_surface_count() - 1, mats["caoutchouc"])
+	# surface 1 : jante zinguée (deux joues qui pincent le bandage)
+	st = SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	# (sur les photos, le bandage ne dépasse de la jante que d'un liseré : la joue zinguée occupe la face)
+	_lathe(st, PackedVector2Array([Vector2(0.15, -0.04), Vector2(0.15, -0.058), Vector2(0.256, -0.058),
+		Vector2(0.256, 0.058), Vector2(0.15, 0.058), Vector2(0.15, 0.04)]), n_seg, 1.0)
+	MeshMerge.valider(st, mesh)
+	mesh.surface_set_material(mesh.get_surface_count() - 1, mats["zinc"])
+	# surface 2 : voile et moyeu ; de près, des têtes de boulons sur une joue (on voit la roue tourner)
+	st = SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	_lathe(st, PackedVector2Array([Vector2(0.0, -0.075), Vector2(0.06, -0.075), Vector2(0.065, -0.065),
+		Vector2(0.065, -0.04), Vector2(0.15, -0.04), Vector2(0.15, 0.04), Vector2(0.065, 0.04),
+		Vector2(0.065, 0.065), Vector2(0.06, 0.075), Vector2(0.0, 0.075)]), mini(n_seg, 12), 1.0)
+	if detail:
+		for k in range(3):
+			var a: float = TAU * float(k) / 3.0
+			var dirv: Vector3 = Vector3(cos(a), 0.0, sin(a))
+			for sg in [-1.0, 1.0]:
+				_boite(st, dirv * 0.19 + Vector3(0, sg * 0.062, 0), Vector3(0.014, 0.005, 0.014), dirv, Vector3.UP,
+					Vector3(-sin(a), 0.0, cos(a)))
+	MeshMerge.valider(st, mesh)
+	mesh.surface_set_material(mesh.get_surface_count() - 1, mats["acier"])
 	return mesh
 
 
