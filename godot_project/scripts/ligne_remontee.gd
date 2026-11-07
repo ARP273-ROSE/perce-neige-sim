@@ -5148,7 +5148,8 @@ static func fusionner_pylones_loin(racine: Node, portee: float) -> void:
 			continue
 		for mi0 in (py as Node).find_children("*", "MeshInstance3D", true, false):
 			var mi: MeshInstance3D = mi0
-			if mi.visibility_range_end != portee or not mi.visible or mi.get_child_count() > 0:
+			if mi.visibility_range_end != portee or not mi.visible or mi.get_child_count() > 0 \
+					or mi.has_meta(MeshMerge.SANS_FUSION):
 				continue
 			# (seulement ce dont on a la copie processeur : relu sur la carte depuis le fil de construction, un
 			# maillage revenait vide et le pylône disparaissait — P1 et P3 de l'Olympique, retour du 06/11/2026)
