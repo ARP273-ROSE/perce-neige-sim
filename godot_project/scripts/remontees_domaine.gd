@@ -670,9 +670,17 @@ func _pres_d_une_gare(lg: LigneRemontee, p: Vector3) -> bool:
 var _t_message_preparation: int = -100000
 
 
+var _tour_construire: int = 0
+
+
 func _construire_proches() -> void:
 	_presser_construction()
 	if _en_cours != null or skieur == null or not skieur.actif or _sous_terre:
+		return
+	# (recherche une image sur quatre : 66 lignes parcourues à chaque image, 0,07 à 0,14 ms, pour un départ de
+	# construction avancé de 50 ms au plus ; relevé du 07/11/2026)
+	_tour_construire = (_tour_construire + 1) % 4
+	if _tour_construire != 0:
 		return
 	var p: Vector3 = skieur.global_position
 	var best: LigneRemontee = null
@@ -1067,7 +1075,28 @@ var _gares: Dictionary = {}        # id de la ligne → [repère, bout aval, bou
 const PORTEE_GARES: float = 250.0
 
 
-func _pres_des_gares(lg: LigneRemontee, p: Vector3) -> bool:
+## Lignes dont une gare peut être à moins de PORTEE_GARES du skieur : relevées à PORTEE_GARES + 40 m, et
+## refaites dès qu'il s'est écarté de 40 m du point du relevé (ou chaque seconde). Même filtre que
+## _pres_des_gares sur les 66 lignes à chaque image, deux fois (embarquement, portiques), à 0,1 à 0,15 ms
+## par image (relevé du 07/11/2026).
+var _l_gares: Array = []
+var _p_gares: Vector3 = Vector3.INF
+var _t_gares: float = -1000.0
+const ECART_GARES: float = 40.0
+
+
+func _lignes_gares(p: Vector3) -> Array:
+	if p.distance_squared_to(_p_gares) > ECART_GARES * ECART_GARES or _t - _t_gares > 1.0:
+		_p_gares = p
+		_t_gares = _t
+		_l_gares = []
+		for e in lignes:
+			if _pres_des_gares(e[0], p, PORTEE_GARES + ECART_GARES):
+				_l_gares.append(e[0])
+	return _l_gares
+
+
+func _pres_des_gares(lg: LigneRemontee, p: Vector3, portee: float = PORTEE_GARES) -> bool:
 	var id: int = lg.get_instance_id()
 	var g: Transform3D = lg.global_transform
 	var c: Array = _gares.get(id, [])
@@ -1076,7 +1105,7 @@ func _pres_des_gares(lg: LigneRemontee, p: Vector3) -> bool:
 		# téléphérique en construction, hors limites — le pack de mesure en mourait)
 		c = [g, g * Vector3.ZERO, g * Vector3(0, 0, -lg.longueur_h())]
 		_gares[id] = c
-	return p.distance_squared_to(c[1]) < PORTEE_GARES * PORTEE_GARES or p.distance_squared_to(c[2]) < PORTEE_GARES * PORTEE_GARES
+	return p.distance_squared_to(c[1]) < portee * portee or p.distance_squared_to(c[2]) < portee * portee
 var _t_loupe: float = -1000.0
 var _etat_bord: String = "marche"
 
@@ -1129,8 +1158,8 @@ func _surveiller_approche(p: Vector3) -> void:
 	if _p_prec != Vector3.INF and p.distance_to(_p_prec) > 8.0:
 		_t_depose = _t
 	_p_prec = p
-	for e in lignes:
-		var lg: LigneRemontee = e[0]
+	for lg0 in _lignes_gares(p):
+		var lg: LigneRemontee = lg0
 		if not lg.pret or not lg.is_processing() or not _pres_des_gares(lg, p):
 			continue
 		for n in _portiques(lg):
@@ -1183,8 +1212,8 @@ func _embarquement() -> void:
 	if _repos > 0.0:
 		return
 	var p: Vector3 = skieur.global_position
-	for e in lignes:
-		var lg: LigneRemontee = e[0]
+	for lg0 in _lignes_gares(p):
+		var lg: LigneRemontee = lg0
 		if not lg.pret or not lg.is_processing() or not _pres_des_gares(lg, p):
 			continue
 		if lg.teleski():
@@ -1335,7 +1364,12 @@ func _cap(v: Node3D, avant: bool = false) -> float:
 ## Skieur entré dans une cabine en gare : assis sur la banquette d'où l'on
 ## regarde vers l'amont, à la place la plus proche.
 func _entrer_cabine(lg: LigneRemontee, p: Vector3) -> bool:
-	for i in range(lg.nombre_vehicules()):
+	# (avec le noyau : les cabines en gare de sa dernière étape, dans le même ordre — les autres sont en ligne, ou à
+	# plus de 250 m ; zone_vehicule pour chaque cabine, à chaque image : 0,1 ms à Tovière, relevé du 07/11/2026)
+	var ids: Variant = range(lg.nombre_vehicules())
+	if lg._noyau != null and lg._noyau_valide() and lg.jumelee == null:
+		ids = lg._noyau.en_gare()
+	for i in ids:
 		var zn: String = lg.zone_vehicule(i)
 		if zn == "ligne":
 			continue
