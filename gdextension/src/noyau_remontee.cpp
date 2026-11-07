@@ -7,12 +7,17 @@
 #include <godot_cpp/variant/transform3d.hpp>
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstring>
 
 using namespace godot;
 
 namespace {
+// chronos de l'étape (µs, cumulés jusqu'à la lecture) : avance, poses, appels GDScript, MultiMesh, total
+inline double maintenant_us() {
+	return std::chrono::duration<double, std::micro>(std::chrono::steady_clock::now().time_since_epoch()).count();
+}
 
 const StringName &nom_phi_init() {
 	static StringName n("phi");
@@ -198,6 +203,7 @@ void NoyauRemontee::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_calage", "i", "d", "y_t", "pente_m", "pente_d", "dist", "d0", "pas", "y_m", "y_d", "paires_m", "paires_d"), &NoyauRemontee::set_calage);
 	ClassDB::bind_method(D_METHOD("a_calage", "i"), &NoyauRemontee::a_calage);
 	ClassDB::bind_method(D_METHOD("caler", "i"), &NoyauRemontee::caler);
+	ClassDB::bind_method(D_METHOD("chronos"), &NoyauRemontee::chronos);
 }
 
 // --- configuration -----------------------------------------------------------
@@ -471,6 +477,7 @@ PackedFloat64Array NoyauRemontee::etape(double dt, double regime, const Vector3 
 	d_onde_amp = onde_amp;
 	d_onde_t = onde_t;
 	d_a_montee = a_montee;
+	const double t_debut = maintenant_us();
 	// 1. avance sur la boucle (profil de vitesse des lanceurs) ; passages
 	// devant les portillons (fin du demi-tour)
 	passages_derniers.clear();
@@ -556,6 +563,9 @@ PackedFloat64Array NoyauRemontee::etape(double dt, double regime, const Vector3 
 			q[2 * 32 * 4 + b] = (float)charges[b].size();
 		}
 	}
+	const double t_avance = maintenant_us();
+	chronos_us[0] += t_avance - t_debut;
+	double t_set = 0.0, t_call = 0.0;
 	// 3. poses (niveau de détail selon la distance au point de vue)
 	tour = (tour + 1) % 4;
 	gare_derniere.clear();
@@ -635,7 +645,9 @@ PackedFloat64Array NoyauRemontee::etape(double dt, double regime, const Vector3 
 		if (loin) {
 			continue;
 		}
+		double t0s = maintenant_us();
 		v->set_transform(pose_veh[i]);
+		t_set += maintenant_us() - t0s;
 		if (pinces[i] != nullptr) {
 			Vector3 r = pinces[i]->get_rotation();
 			r.x = (real_t)std::atan2((double)d3.y, (double)Vector2(d3.x, d3.z).length());
@@ -701,7 +713,9 @@ PackedFloat64Array NoyauRemontee::etape(double dt, double regime, const Vector3 
 		if (corps_actifs && proche && corps[i] != nullptr) {
 			const Transform3D bal = Transform3D(Basis::from_euler(Vector3((real_t)phi[i], 0, (real_t)(psi[i] * sx))), pv) *
 					Transform3D(Basis(), -pv);
+			t0s = maintenant_us();
 			corps[i]->set_transform(Transform3D(b, p) * bal);
+			t_set += maintenant_us() - t0s;
 		}
 		// pièces animées en gare : appel seulement quand la valeur change
 		float ouv = 0.0f, gc = 1.0f, porte = 0.0f;
@@ -716,6 +730,7 @@ PackedFloat64Array NoyauRemontee::etape(double dt, double regime, const Vector3 
 				porte = (float)std::clamp((std::min(z.x, z.l - z.x) - l_frein) / 2.0, 0.0, 1.0);
 			}
 		}
+		const double t0c = maintenant_us();
 		if (ouv != e_ouv[i]) {
 			e_ouv[i] = ouv;
 			v->call("ouvrir_pince", ouv);
@@ -734,7 +749,12 @@ PackedFloat64Array NoyauRemontee::etape(double dt, double regime, const Vector3 
 				ligne->call("_portes_corps", (int64_t)i, porte > 0.5f);
 			}
 		}
+		t_call += maintenant_us() - t0c;
 	}
+	const double t_poses = maintenant_us();
+	chronos_us[1] += t_poses - t_avance - t_call;
+	chronos_us[2] += t_call;
+	chronos_us[5] += t_set;
 	// 4. MultiMesh des lointains : seuls les véhicules à dessiner (ni les proches, ni au-delà de `jusqua`)
 	if (!mm_rid.empty()) {
 		RenderingServer *rs = RenderingServer::get_singleton();
@@ -767,6 +787,9 @@ PackedFloat64Array NoyauRemontee::etape(double dt, double regime, const Vector3 
 			rs->multimesh_set_visible_instances(mm_rid[m], nb_vus);
 		}
 	}
+	const double t_mm = maintenant_us();
+	chronos_us[3] += t_mm - t_poses;
+	chronos_us[4] += t_mm - t_debut;
 	PackedFloat64Array out;
 	out.resize(n);
 	double *o = out.ptrw();
@@ -923,4 +946,15 @@ PackedFloat32Array NoyauRemontee::caler(int64_t i) const {
 		}
 	}
 	return out;
+}
+
+// [avance, poses (dont set_transform), appels GDScript, MultiMesh, total, set_transform seuls] en µs cumulés ; remis à zéro
+PackedFloat64Array NoyauRemontee::chronos() {
+	PackedFloat64Array o;
+	o.resize(6);
+	for (int k = 0; k < 6; k++) {
+		o.set(k, chronos_us[k]);
+		chronos_us[k] = 0.0;
+	}
+	return o;
 }
