@@ -107,6 +107,8 @@ const MUSIQUE_BASSE_DB: float = -11.0
 var _musique: Array = [null, null]      # AudioStreamPlayer gare basse, gare haute
 var _musique_chargee: Array = [false, false]
 var _musique_en_cours: int = 0          # 0 aucune, 1 basse, 2 haute
+var _taches_musique: Array[int] = [-1, -1]  # lectures MP3 sur fil de travail (bureau)
+var _flux_prets: Array = [null, null]       # flux rendus par ces tâches
 var _sons_skieur: SonsSkieur = null     # bouffées en gare, vent dehors
 
 
@@ -324,6 +326,8 @@ func _update_musique(delta: float) -> void:
 		_musique_en_cours = voulue
 		if voulue > 0 and not _musique_chargee[voulue - 1]:
 			_charger_musique(voulue)
+	if _taches_musique[0] >= 0 or _taches_musique[1] >= 0:
+		_relever_musique()
 	for k in range(2):
 		var p: AudioStreamPlayer = _musique[k]
 		if p == null or p.stream == null:
@@ -352,14 +356,50 @@ func _charger_musique(gare: int) -> void:
 			req.queue_free()
 		return
 	var chemin: String = ProjectSettings.globalize_path("res://").path_join("../sons/musique/" + nom)
-	if FileAccess.file_exists(chemin):
-		_poser_musique(gare, FileAccess.get_file_as_bytes(chemin))
+	if not FileAccess.file_exists(chemin):
+		return
+	# Lecture (7 Mo) et indexation du MP3 hors du fil principal : 16-18 ms
+	# d'un bloc à l'arrivée en gare sur la 740M.
+	# Le fil de travail ne remplit que sa case ; la pose se fait dans
+	# _update_musique, une fois la tâche finie (pas d'appel différé qui
+	# survivrait à la fermeture).
+	var k: int = gare - 1
+	_taches_musique[k] = WorkerThreadPool.add_task(func() -> void:
+		_flux_prets[k] = _flux_musique(FileAccess.get_file_as_bytes(chemin)), false, "musique de gare")
 
 
-func _poser_musique(gare: int, octets: PackedByteArray) -> void:
+func _relever_musique() -> void:
+	for k in range(2):
+		var t: int = _taches_musique[k]
+		if t >= 0 and WorkerThreadPool.is_task_completed(t):
+			WorkerThreadPool.wait_for_task_completion(t)
+			_taches_musique[k] = -1
+			var st: AudioStreamMP3 = _flux_prets[k]
+			_flux_prets[k] = null
+			if st != null:
+				_poser_flux(k + 1, st)
+
+
+func _exit_tree() -> void:
+	for k in range(2):
+		if _taches_musique[k] >= 0:
+			WorkerThreadPool.wait_for_task_completion(_taches_musique[k])
+			_taches_musique[k] = -1
+		_flux_prets[k] = null
+
+
+static func _flux_musique(octets: PackedByteArray) -> AudioStreamMP3:
 	var st: AudioStreamMP3 = AudioStreamMP3.new()
 	st.data = octets
 	st.loop = true
+	return st
+
+
+func _poser_musique(gare: int, octets: PackedByteArray) -> void:
+	_poser_flux(gare, _flux_musique(octets))
+
+
+func _poser_flux(gare: int, st: AudioStreamMP3) -> void:
 	var p: AudioStreamPlayer = AudioStreamPlayer.new()
 	p.stream = st
 	p.volume_db = -80.0
