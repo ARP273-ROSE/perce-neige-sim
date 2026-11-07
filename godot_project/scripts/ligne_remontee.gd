@@ -492,13 +492,18 @@ func _construire_corps() -> void:
 		# (Fresse, jumelé : on n'embarque pas à l'intermédiaire, les sièges
 		# arrivent pleins de Bollin)
 		if role != "haut":
-			_portillons(true)
-		_portillons(false)
+			await _portillons(true)
+			await _pause("portillons")
+		await _portillons(false)
+		await _pause("portillons")
 		if role == "bas":
-			_double_embarquement()
+			await _double_embarquement()
+			await _pause("double embarquement")
 			_rail_contour()
+			await _pause("rail du contour")
 	if avec_collisions:
 		_collisions_fixes()
+		await _pause("collisions fixes")
 		for i in range(_vehicules.size()):
 			_corps_vehicule(i)
 			await _pause("corps des véhicules")
@@ -3160,7 +3165,10 @@ func _portillons(aval: bool) -> void:
 	ent.name = "Portique"
 	ent.position = Vector3(0, 0, 3.0)
 	g.add_child(ent)
+	# (vantaux, portique, tapis : chacun sa tranche — 16 ms d'un bloc à Bellevarde, relevé du 07/11/2026)
+	await _pause("portillons : vantaux")
 	PortiqueEntree.construire(ent, self, W * 0.5 + 0.9)
+	await _pause("portillons : portique")
 	# ligne d'arrêt : le bout du tapis, marqué d'un grand « STOP » (plus de bande jaune, demande
 	# d'utilisateur du 06/11/2026)
 	var q: Vector3 = point_embarquement(aval)
@@ -3169,6 +3177,7 @@ func _portillons(aval: bool) -> void:
 	_enfant(ls)
 	_tapis(ls, absf(q0.z - q.z), W, places)
 	if OS.has_feature("web"):
+		await _pause("portillons : tapis")
 		_portillons_fixes(g, vantaux)
 	_portillons_gares.append([aval, vantaux, formes, 99.0, 0.0])
 
@@ -3227,7 +3236,7 @@ func _portillons_fixes(g: Node3D, vantaux: Array) -> void:
 func _double_embarquement() -> void:
 	var g0: Node3D = _cont().get_node_or_null("PortillonsAval")
 	var n0: int = _cont().get_child_count()
-	_portillons(true)
+	await _portillons(true)
 	var dh: Vector3 = _dehors(s_gare(true, x_arret(longueur_zone(true)))) * DECAL_CONTOUR
 	for k in range(n0, _cont().get_child_count()):
 		var c: Node3D = _cont().get_child(k)
