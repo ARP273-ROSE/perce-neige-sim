@@ -18,6 +18,23 @@ const L_PORTE: float = 1.0
 const H_PORTE: float = 2.0
 
 static var _mat_interieur: StandardMaterial3D = null
+static var _mat_vitre: StandardMaterial3D = null
+
+
+## Vitrage des flancs : sombre et peu réfléchissant, sans lumière ambiante (dans le tunnel, le vitrage clair des
+## autres cabines prenait la lumière du ciel et voilait tout de blanc — captures du 08/11/2026).
+static func vitre_funi() -> StandardMaterial3D:
+	if _mat_vitre == null:
+		var m: StandardMaterial3D = StandardMaterial3D.new()
+		m.albedo_color = Color(0.06, 0.07, 0.08, 0.22)
+		m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		m.roughness = 0.05
+		m.metallic = 0.2
+		m.metallic_specular = 0.2
+		m.disable_ambient_light = true
+		m.cull_mode = BaseMaterial3D.CULL_DISABLED
+		_mat_vitre = m
+	return _mat_vitre
 
 
 static func l_comp() -> float:
@@ -82,7 +99,9 @@ func _caisse() -> void:
 	RemonteeKit.boite_en(self, Vector3(2.0 * W + 0.02, 0.04, L), Vector3(0, 0.76, 0), "cabine_blanche")
 	var hv: float = H_TOIT - 0.9
 	for sx in [-1.0, 1.0]:
-		RemonteeKit.boite_en(self, Vector3(0.03, hv, L), Vector3(sx * (W - 0.02), 0.9 + hv * 0.5, 0), "vitre")
+		var vit: MeshInstance3D = RemonteeKit.boite_en(self, Vector3(0.03, hv, L), Vector3(sx * (W - 0.02), 0.9 + hv * 0.5, 0), "vitre")
+		vit.material_override = vitre_funi()
+		vit.set_meta(MeshMerge.SANS_FUSION, true)
 		# montants noirs fins : un entre deux compartiments, un de part et d'autre de chaque porte
 		for k in range(N_COMP + 1):
 			var z: float = DEMI_L - l_comp() * float(k)
@@ -98,16 +117,21 @@ func _caisse() -> void:
 	# bouts : nez en dièdre vitré, montants noirs, numéro
 	for sz in [-1.0, 1.0]:
 		var z0: float = sz * DEMI_L
+		var pan_l: float = W / cos(0.6)
+		var pointe: float = W * tan(0.6)
 		for sx3 in [-1.0, 1.0]:
-			RemonteeKit.boite(self, Vector3(W + 0.02, H_TOIT - 0.7, 0.04),
-				Transform3D(Basis(Vector3.UP, sx3 * sz * 0.35), Vector3(sx3 * W * 0.48, 0.7 + (H_TOIT - 0.7) * 0.5, z0 + sz * 0.22)), "vitrage_sombre")
-		RemonteeKit.boite_en(self, Vector3(0.10, H_TOIT - 0.7, 0.10), Vector3(0, 0.7 + (H_TOIT - 0.7) * 0.5, z0 + sz * 0.42), "cabine_noire")
+			RemonteeKit.boite(self, Vector3(pan_l, H_TOIT - 1.2, 0.05),
+				Transform3D(Basis(Vector3.UP, -sx3 * sz * 0.6), Vector3(sx3 * W * 0.5, 1.15 + (H_TOIT - 1.2) * 0.5, z0 + sz * pointe * 0.5)), "vitrage_sombre")
+			# haut arrondi : bandeau noir incliné au-dessus de chaque pan
+			RemonteeKit.boite(self, Vector3(pan_l, 0.45, 0.30),
+				Transform3D(Basis(Vector3.UP, -sx3 * sz * 0.6) * Basis(Vector3.RIGHT, sz * 0.5), Vector3(sx3 * W * 0.5, H_TOIT - 0.15, z0 + sz * pointe * 0.5 - sz * 0.1)), "cabine_noire")
+		RemonteeKit.boite_en(self, Vector3(0.10, H_TOIT - 0.7, 0.10), Vector3(0, 0.7 + (H_TOIT - 0.7) * 0.5, z0 + sz * pointe), "cabine_noire")
 		RemonteeKit.boite_en(self, Vector3(2.0 * W, 0.55, 0.5), Vector3(0, 0.62, z0 + sz * 0.2), "cabine_noire")
 		# grand aigle blanc de Val d'Isère sur chaque pan du nez (photos)
-		for sx4 in [-1.0, 1.0]:
+		for sx4 in [1.0]:
 			var mi: MeshInstance3D = MeshInstance3D.new()
 			var q: QuadMesh = QuadMesh.new()
-			q.size = Vector2(1.05, 1.05)
+			q.size = Vector2(1.5, 1.5)
 			mi.mesh = q
 			var m: StandardMaterial3D = StandardMaterial3D.new()
 			m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
@@ -117,9 +141,10 @@ func _caisse() -> void:
 			m.alpha_scissor_threshold = 0.5
 			mi.material_override = m
 			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-			var ang: float = sx4 * sz * 0.35
+			# un seul grand aigle, sur le pan droit du dièdre (vu de face, à droite de l'arête)
+			var ang: float = -sx4 * sz * 0.6
 			mi.transform = Transform3D(Basis(Vector3.UP, ang + (0.0 if sz > 0.0 else PI)),
-				Vector3(sx4 * W * 0.48, 1.55, z0 + sz * 0.27) + Basis(Vector3.UP, ang) * Vector3(0, 0, sz * 0.03))
+				Vector3(sx4 * W * 0.5, 1.6, z0 + sz * pointe * 0.5) + Basis(Vector3.UP, ang) * Vector3(0, 0, sz * 0.05))
 			mi.set_meta(MeshMerge.SANS_FUSION, true)
 			add_child(mi)
 
