@@ -3801,6 +3801,10 @@ func _guide_entonnoir(parent: Node3D, s_bord: float, sens: float) -> void:
 	var prec_h: Vector3
 	var prec_b: Vector3
 	var poutre: PackedVector3Array = PackedVector3Array()
+	# joue pleine côté extérieur, de la tôle haute à la tôle basse (Kevin, 07/11/2026 : « ton entonnoir n'est
+	# pas plein » — deux bandes seules laissaient voir au travers)
+	var joue: SurfaceTool = SurfaceTool.new()
+	joue.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var k: int = 0
 	var n: int = int(ceil(GUIDE_L / 0.5))
 	while k <= n:
@@ -3818,12 +3822,23 @@ func _guide_entonnoir(parent: Node3D, s_bord: float, sens: float) -> void:
 		if k > 0:
 			RemonteeKit.poutre(parent, prec_h, h, 0.18, 0.012, "acier")
 			RemonteeKit.poutre(parent, prec_b, b, 0.18, 0.012, "acier")
+			var ox: Vector3 = o * 0.11
+			var q: Array = [prec_h + ox, h + ox, b + ox, prec_b + ox]
+			for face in [[0, 1, 2, 0, 2, 3, o], [0, 2, 1, 0, 3, 2, -o]]:
+				joue.set_normal(face[6])
+				for t in range(6):
+					joue.add_vertex(q[face[t]])
 		if k % 4 == 0:
 			RemonteeKit.barre(parent, b + o * 0.07, h + o * 0.07, 0.014, "acier", 6)
 			RemonteeKit.barre(parent, h, dessus, 0.025, "galva_pylone", 6)
 		prec_h = h
 		prec_b = b
 		k += 1
+	var mj: MeshInstance3D = MeshInstance3D.new()
+	mj.name = "JoueEntonnoir"
+	mj.mesh = joue.commit()
+	mj.material_override = RemonteeKit.mat("acier")
+	parent.add_child(mj)
 	RemonteeKit.tube(parent, poutre, 0.07, "galva_pylone", 6)
 
 
@@ -4129,6 +4144,8 @@ func _poser_pylones() -> void:
 		py.dessus_traverse = PyloneRemontee.DESSUS_TRAVERSE_COMPRESSION if _compression(p) else _dessus_traverse()
 		py.hauteur = y_cable(d) - t - py.dessus_traverse
 		py.matelas = _sur_une_piste(d, t)
+		# (modèle des retours photo de Kevin, 07/11/2026 : télécabines et télésièges, débrayables ou fixes)
+		py.modele_2026 = not teleski() and not tricable() and famille != "cabine_tph"
 		py.compo_montee = p.get("montee", [[8, "S"]])
 		py.compo_descente = p.get("descente", [[8, "S"]])
 		var e: float = 4.0

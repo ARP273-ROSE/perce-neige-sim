@@ -81,6 +81,10 @@ const RETRAIT_TRAVERSE: float = 0.45       # bout de la traverse en dedans du c�
 const H_PORTIQUE: float = 1.55             # poutre du portique au-dessus du câble
 ## Le pied est sur une piste : posé par la ligne avant construire().
 var matelas: bool = false
+## Modèle des retours photo de Kevin (07/11/2026), pour les TCD, TSD et TSF : fût continu à
+## embase raidie, échelle étroite à paliers, second étage de passerelles sous les trains relié par un cadre en
+## trapèze ; rien au-dessus de la potence de tête (Kevin, 07/11/2026 : « ya pas de haubanage ni de mât »).
+var modele_2026: bool = false
 ## Télécabines : traverse remontée au pivot du train support — à 0,95 m,
 ## elle était à hauteur du toit et les cabines passaient au travers
 ## (retour d'utilisateur, 22/10/2026).
@@ -158,6 +162,10 @@ func construire() -> void:
 	var h: float = hauteur
 	var r1: float = 0.40                              # rayon en tête
 	var r0: float = r1 + 0.06 + h * 0.004             # tronçons plus gros vers le pied
+	if modele_2026:
+		# fût plus mince, à peine conique (photos)
+		r1 = 0.34
+		r0 = r1 + 0.03 + h * 0.002
 	var y_tete: float = h - 0.75                      # dessous de la chaise de tête
 	var base: Basis = Basis(Vector3.RIGHT, inclinaison)
 	var haut: Vector3 = Vector3(0, h, 0)
@@ -212,6 +220,14 @@ func _massif(r0: float) -> void:
 ## reliés par une couronne boulonnée et un court chanfrein.
 func _fut(r0: float, r1: float, y_tete: float) -> void:
 	var y0: float = _y_pied + 0.31
+	if modele_2026:
+		# un seul tube légèrement conique, sans couronnes ; embase à raidisseurs triangulaires
+		RemonteeKit.cylindre(_n, r0, r1, y_tete - y0, Transform3D(Basis.IDENTITY, Vector3(0, (y0 + y_tete) * 0.5, 0)), "galva_pylone", 24)
+		for k in range(8):
+			var a: float = TAU * (k + 0.5) / 8.0
+			var d: Vector3 = Vector3(cos(a), 0, sin(a))
+			RemonteeKit.poutre(_n, d * (r0 + 0.16) + Vector3(0, y0 + 0.02, 0), d * (r0 - 0.01) + Vector3(0, y0 + 0.62, 0), 0.025, 0.24, "galva_pylone", d)
+		return
 	var manchon: float = minf(1.6, (y_tete - y0) * 0.25)
 	RemonteeKit.cylindre(_n, r0 + 0.10, r0, manchon, Transform3D(Basis.IDENTITY, Vector3(0, y0 + manchon * 0.5, 0)), "galva_pylone", 24)
 	var y1: float = y0 + manchon
@@ -251,12 +267,23 @@ func _echelle(r0: float, r1: float, y_tete: float) -> void:
 	a_echelle = true
 	echelle_bas = _xf_tete * Vector3(0, y0, zr.call(y0))
 	echelle_haut = _xf_tete * Vector3(0, y1, zr.call(y1))
-	for sx in [-0.21, 0.21]:
+	var lx: float = 0.15 if modele_2026 else 0.21
+	for sx in [-lx, lx]:
 		RemonteeKit.poutre(_n, Vector3(sx, y0, zr.call(y0)), Vector3(sx, y1, zr.call(y1)), 0.06, 0.012, "galva_pylone", Vector3.BACK)
 	var y: float = y0 + 0.14
 	while y < y1 - 0.1:
-		RemonteeKit.barre(_n, Vector3(-0.21, y, zr.call(y)), Vector3(0.21, y, zr.call(y)), 0.013, "galva_pylone", 6)
+		RemonteeKit.barre(_n, Vector3(-lx, y, zr.call(y)), Vector3(lx, y, zr.call(y)), 0.013, "galva_pylone", 6)
 		y += 0.28
+	if modele_2026:
+		# paliers de repos tous les 6 m : plateau ajouré sur le côté de l'échelle, garde-corps en arceau
+		var yq: float = y0 + 6.0
+		while yq < y_tete - 2.0:
+			var zq: float = zr.call(yq)
+			_passerelle(Vector3(0.48, yq, zq - 0.05), Vector3(0.6, 0.0, 0.55))
+			RemonteeKit.barre(_n, Vector3(0.78, yq, zq - 0.32), Vector3(0.78, yq + 1.0, zq - 0.32), 0.018, "galva_pylone", 6)
+			RemonteeKit.barre(_n, Vector3(0.78, yq + 1.0, zq - 0.32), Vector3(0.78, yq + 1.0, zq + 0.22), 0.018, "galva_pylone", 6)
+			RemonteeKit.barre(_n, Vector3(0.78, yq, zq + 0.22), Vector3(0.78, yq + 1.0, zq + 0.22), 0.018, "galva_pylone", 6)
+			yq += 6.0
 	# rail antichute au milieu
 	RemonteeKit.poutre(_n, Vector3(0, y0, zr.call(y0) + 0.01), Vector3(0, y1, zr.call(y1) + 0.01), 0.035, 0.02, "galva_patine", Vector3.BACK)
 	# pattes de fixation tous les 1,5 m
@@ -287,12 +314,17 @@ func _chaise_et_traverse(r1: float, y_tete: float) -> void:
 		RemonteeKit.boite_en(_n, Vector3(0.03, 0.46, 0.90), Vector3(sx * (xe + 0.015), h - 0.21, 0), "galva_pylone")
 		RemonteeKit.poutre(_n, Vector3(sx * r1 * 0.6, y_tete + 0.10, 0), Vector3(sx * xe * 0.62, h - 0.42, 0), 0.50, 0.12, "galva_pylone", Vector3.UP)
 	# caillebotis : bande centrale de part et d'autre de la traverse
+	# (modèle 2026, compression : la traverse est au niveau des galets, sans garde-corps — trois étages de
+	# garde-corps faisaient une cage autour du train ; on y travaille depuis le caillebotis sous le train)
+	var rambardes: bool = not (modele_2026 and dessus_traverse < 0.0)
 	for sz in [-1.0, 1.0]:
 		_passerelle(Vector3(0, h + 0.02, sz * 0.80), Vector3(2.0 * xe - 1.2, 0.0, 0.72))
-		_rambarde(Vector3(-xe + 0.6, h + 0.02, sz * 1.14), Vector3(xe - 0.6, h + 0.02, sz * 1.14))
+		if rambardes:
+			_rambarde(Vector3(-xe + 0.6, h + 0.02, sz * 1.14), Vector3(xe - 0.6, h + 0.02, sz * 1.14))
 	# garde-corps refermé aux deux bouts, échelle courte du caisson à la traverse (photos)
 	for sx in [-1.0, 1.0]:
-		_rambarde(Vector3(sx * (xe - 0.6), h + 0.02, -1.14), Vector3(sx * (xe - 0.6), h + 0.02, 1.14))
+		if rambardes:
+			_rambarde(Vector3(sx * (xe - 0.6), h + 0.02, -1.14), Vector3(sx * (xe - 0.6), h + 0.02, 1.14))
 	for sx in [-0.17, 0.17]:
 		RemonteeKit.barre(_n, Vector3(sx, y_tete, r1 + 0.05), Vector3(sx, h + 1.05, 1.18), 0.016, "galva_pylone", 6)
 
@@ -350,14 +382,14 @@ func _poutre_i(a: Vector3, b: Vector3, ht: float, larg: float) -> void:
 
 
 ## Garde-corps : montants, lisse haute et sous-lisse, arceaux aux bouts.
-func _rambarde(a: Vector3, b: Vector3) -> void:
+func _rambarde(a: Vector3, b: Vector3, ht: float = 1.05) -> void:
 	var l: float = a.distance_to(b)
 	var n: int = maxi(1, int(ceil(l / 1.1)))
 	for k in range(n + 1):
 		var p: Vector3 = a.lerp(b, float(k) / n)
-		RemonteeKit.barre(_n, p, p + Vector3(0, 1.05, 0), 0.02, "galva_pylone", 6)
-	RemonteeKit.barre(_n, a + Vector3(0, 1.05, 0), b + Vector3(0, 1.05, 0), 0.024, "galva_pylone", 8)
-	RemonteeKit.barre(_n, a + Vector3(0, 0.55, 0), b + Vector3(0, 0.55, 0), 0.018, "galva_pylone", 6)
+		RemonteeKit.barre(_n, p, p + Vector3(0, ht, 0), 0.02, "galva_pylone", 6)
+	RemonteeKit.barre(_n, a + Vector3(0, ht, 0), b + Vector3(0, ht, 0), 0.024, "galva_pylone", 8)
+	RemonteeKit.barre(_n, a + Vector3(0, ht * 0.52, 0), b + Vector3(0, ht * 0.52, 0), 0.018, "galva_pylone", 6)
 	# plinthe dans le sens de la rambarde (posée toujours en X, elle dépassait en travers des trains de galets)
 	var en_x: bool = absf(b.x - a.x) >= absf(b.z - a.z)
 	RemonteeKit.boite_en(_n, Vector3(l, 0.10, 0.01) if en_x else Vector3(0.01, 0.10, l), (a + b) * 0.5 + Vector3(0, 0.07, 0), "galva_pylone")
@@ -427,20 +459,25 @@ func _train(montee: bool) -> void:
 			piv.rotation.x = base_rot
 			tete.add_child(piv)
 			# même écartement, même sens : même maillage, partagé (MeshMerge.poser_partage)
-			if not MeshMerge.poser_partage(piv, "paire|%.1f|%.3f" % [s, zb - za]):
-				RemonteeKit.galet(piv, Vector3(0, -s * 0.11, za - zp), R_GALET, 0.10, "moyeu", "garniture")
+			if not MeshMerge.poser_partage(piv, "paire|%.1f|%.3f|%d" % [s, zb - za, int(modele_2026)]):
+				RemonteeKit.galet(piv, Vector3(0, -s * 0.11, za - zp), R_GALET, 0.10, "moyeu", "garniture", modele_2026)
 				if zb != za:
-					RemonteeKit.galet(piv, Vector3(0, -s * 0.11, zb - zp), R_GALET, 0.10, "moyeu", "garniture")
-				# flasques de part et d'autre des joues (comme les fourches du funiculaire)
-				var fy: float = RollerMesh.FLASQUE_Y * R_GALET / RollerMesh.R_BANDE
-				for sx in [-fy, fy]:
-					RemonteeKit.poutre(piv, Vector3(sx, -s * 0.11, za - zp + 0.14), Vector3(sx, -s * 0.11, zb - zp - 0.14), 0.016, 0.13, "galva_patine")
+					RemonteeKit.galet(piv, Vector3(0, -s * 0.11, zb - zp), R_GALET, 0.10, "moyeu", "garniture", modele_2026)
+				if modele_2026:
+					_flasques_2026(piv, s, za - zp, zb - zp, "galva_sombre")
+				else:
+					# flasques de part et d'autre des joues (comme les fourches du funiculaire)
+					var fy: float = RollerMesh.FLASQUE_Y * R_GALET / RollerMesh.R_BANDE
+					for sx in [-fy, fy]:
+						RemonteeKit.poutre(piv, Vector3(sx, -s * 0.11, za - zp + 0.14), Vector3(sx, -s * 0.11, zb - zp - 0.14), 0.016, 0.13, "galva_patine")
 				RemonteeKit.cylindre(piv, 0.035, 0.035, 0.26, Transform3D(Basis(Vector3.FORWARD, PI * 0.5), Vector3.ZERO), "acier_noir", 8)
 			mobiles.append(piv)
 			(_paires[montee] as Array).append([piv, base_pos, base_rot, za, zb, s])
 			pivots.append(zp)
 			k2 += 2
 		_palonniers(tete, pivots, y_axe, s)
+		if modele_2026 and s > 0.0:
+			_details_compression(tete, zs, y_axe, s, ext)
 		# ramasse-câbles : plaques échancrées à l'extérieur, entre les galets
 		for k in range(0, zs.size() - 1, 2):
 			var zm: float = (float(zs[k]) + float(zs[k + 1])) * 0.5
@@ -475,9 +512,49 @@ func _train(montee: bool) -> void:
 	var mat_n: Node3D = get_node_or_null("Mat") as Node3D
 	var xp: float = x - ext * 0.62
 	_n = mat_n if mat_n != null else self
-	_passerelle(Vector3(xp, hauteur + 0.02, 0), Vector3(0.95, 0.0, lc))
-	_rambarde(Vector3(xp - ext * 0.47, hauteur + 0.02, -lc * 0.5), Vector3(xp - ext * 0.47, hauteur + 0.02, lc * 0.5))
+	var y_p: float = hauteur + 0.02
+	var h_r: float = 1.05
+	if modele_2026 and not dessus.is_empty():
+		# compression : caillebotis SOUS le train, garde-corps bas ; posé au-dessus du câble, son garde-corps
+		# enfermait les galets dans une cage (retour de Kevin, 07/11/2026, d'après ses photos du P1)
+		y_p = hauteur_cable() - 0.85
+		h_r = 0.75
+	_passerelle(Vector3(xp, y_p, 0), Vector3(0.95, 0.0, lc))
+	_rambarde(Vector3(xp - ext * 0.47, y_p, -lc * 0.5), Vector3(xp - ext * 0.47, y_p, lc * 0.5), h_r)
+	if modele_2026:
+		# second étage, plus bas, côté fût : à plus de 2 m en dedans du câble, hors du passage des sièges et des
+		# cabines qui balancent (jusqu'à 3,2 m de large au 6 places) ; suspendu au premier par un cadre en trapèze
+		var y2: float = hauteur - 1.6
+		var xq: float = x - ext * 2.35
+		# (ouvert, sans garde-corps : la passerelle haute et ses montants faisaient une cage vue de dessous —
+		# retour de Kevin, 07/11/2026 : « les cages dessous les galets c'est pas bon »)
+		_passerelle(Vector3(xq, y2, 0), Vector3(0.7, 0.0, lc))
+		for sz in [-1.0, 1.0]:
+			var z1: float = sz * lc * 0.5
+			RemonteeKit.barre(_n, Vector3(xp - ext * 0.47, hauteur + 0.02, z1), Vector3(xq - ext * 0.35, y2, z1), 0.02, "galva_pylone", 6)
+			RemonteeKit.barre(_n, Vector3(xp + ext * 0.47, hauteur + 0.02, z1), Vector3(xq + ext * 0.35, y2, z1), 0.02, "galva_pylone", 6)
 	_n = self
+
+
+## Train de compression du modèle 2026 (photos de Kevin, P1 devant la gare) : selle en V entre deux paires (la
+## pince y passe), corne relevée à chaque bout du train, plaque rattrape-câble pendue sous le câble aux bouts.
+func _details_compression(tete: Node3D, zs: Array, y_axe: float, s: float, ext: float) -> void:
+	var z_haut: float = float(zs[0]) + R_GALET + 0.08
+	var z_bas: float = float(zs[zs.size() - 1]) - R_GALET - 0.08
+	var y_c: float = y_axe - s * (R_GALET + R_CABLE)          # axe du câble, repère de la tête
+	# selles en V entre les paires
+	for k in range(1, zs.size() - 1, 2):
+		var zm: float = (float(zs[k]) + float(zs[k + 1])) * 0.5
+		for sz in [-1.0, 1.0]:
+			RemonteeKit.poutre(tete, Vector3(0, y_c + s * 0.05, zm), Vector3(0, y_c + s * 0.24, zm + sz * 0.15), 0.10, 0.012, "galva_sombre", Vector3.RIGHT)
+	for e in [[z_haut, 1.0], [z_bas, -1.0]]:
+		var zb: float = e[0]
+		var dz: float = e[1]
+		# corne relevée : la pince entre et sort du train sans accrocher
+		RemonteeKit.poutre(tete, Vector3(0, y_c + s * 0.06, zb), Vector3(0, y_c + s * 0.42, zb + dz * 0.32), 0.12, 0.014, "galva_sombre", Vector3.RIGHT)
+		# rattrape-câble : plaque pendue sous le câble, côté extérieur
+		RemonteeKit.boite_en(tete, Vector3(0.012, 0.32, 0.34), Vector3(ext * 0.07, y_c - s * 0.20, zb - dz * 0.10), "galva_sombre")
+		RemonteeKit.boite_en(tete, Vector3(0.14, 0.012, 0.34), Vector3(0.0, y_c - s * 0.36, zb - dz * 0.10), "galva_sombre")
 
 
 ## Palonniers au-dessus des paires (2, 4, 8 paires…), jusqu'à la poutre
@@ -596,13 +673,26 @@ func _pose_paire(pente_tete: float, zp: float, sgn: float, cable: Callable, demi
 ## Près du point de vue seulement : la roue de la paire devient un nœud qui tourne (loin, elle est fusionnée et
 ## fixe, ses bras cachés par un disque). 16 à 30 roues par pylône, moins de 3 pylônes à la fois.
 static var _maillage_roue: ArrayMesh = null
+static var _maillage_roue_ligne: ArrayMesh = null
+
+
+## Flasques d'une paire, modèle 2026 (photos du 07/11/2026) : deux tôles sombres hautes, décalées du côté
+## opposé au câble (elles couvrent les axes, le bas des galets reste à nu), bouts effilés au-delà des axes.
+func _flasques_2026(n: Node3D, s: float, z0: float, z1: float, m: String) -> void:
+	var yc: float = -s * 0.11 + s * 0.07
+	for sx in [-0.085, 0.085]:
+		RemonteeKit.poutre(n, Vector3(sx, yc, z0), Vector3(sx, yc, z1), 0.016, 0.22, m)
+		RemonteeKit.poutre(n, Vector3(sx, yc + s * 0.03, z0), Vector3(sx, yc + s * 0.03, z0 - 0.17), 0.016, 0.12, m)
+		RemonteeKit.poutre(n, Vector3(sx, yc + s * 0.03, z1), Vector3(sx, yc + s * 0.03, z1 + 0.17), 0.016, 0.12, m)
 var _roues: Array = []                     # [nœud, sens de rotation autour de l'axe du galet]
 
 
 func roues_tournantes(actif: bool) -> void:
 	if actif != _roues.is_empty():
 		return
-	if _maillage_roue == null:
+	if modele_2026 and _maillage_roue_ligne == null:
+		_maillage_roue_ligne = RollerMesh.build_galet_ligne(true)
+	elif not modele_2026 and _maillage_roue == null:
 		_maillage_roue = RollerMesh.build_galet(true)
 	var k: float = R_GALET / RollerMesh.R_BANDE
 	for montee in [true, false]:
@@ -624,15 +714,18 @@ func roues_tournantes(actif: bool) -> void:
 			# le cadre de la paire, sans ses roues
 			var cadre: Node3D = Node3D.new()
 			n.add_child(cadre)
-			if not MeshMerge.poser_partage(cadre, "cadre|%.1f|%.3f" % [s, demi]):
-				var fy: float = RollerMesh.FLASQUE_Y * R_GALET / RollerMesh.R_BANDE
-				for sx in [-fy, fy]:
-					RemonteeKit.poutre(cadre, Vector3(sx, -s * 0.11, -demi + 0.14), Vector3(sx, -s * 0.11, demi - 0.14), 0.016, 0.13, "acier_noir", Vector3.RIGHT)
+			if not MeshMerge.poser_partage(cadre, "cadre|%.1f|%.3f|%d" % [s, demi, int(modele_2026)]):
+				if modele_2026:
+					_flasques_2026(cadre, s, -demi, demi, "galva_sombre")
+				else:
+					var fy: float = RollerMesh.FLASQUE_Y * R_GALET / RollerMesh.R_BANDE
+					for sx in [-fy, fy]:
+						RemonteeKit.poutre(cadre, Vector3(sx, -s * 0.11, -demi + 0.14), Vector3(sx, -s * 0.11, demi - 0.14), 0.016, 0.13, "acier_noir", Vector3.RIGHT)
 				RemonteeKit.cylindre(cadre, 0.035, 0.035, 0.26, Transform3D(Basis(Vector3.FORWARD, PI * 0.5), Vector3.ZERO), "acier_noir", 10)
 				MeshMerge.fusion_partagee(cadre, "Cadre")
 			for dz in ([-demi, demi] if demi > 0.0 else [0.0]):
 				var mi: MeshInstance3D = MeshInstance3D.new()
-				mi.mesh = _maillage_roue
+				mi.mesh = _maillage_roue_ligne if modele_2026 else _maillage_roue
 				mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 				mi.transform = Transform3D(Basis(Vector3.FORWARD, PI * 0.5).scaled(Vector3(k, k, k)), Vector3(0, -s * 0.11, dz))
 				n.add_child(mi)
