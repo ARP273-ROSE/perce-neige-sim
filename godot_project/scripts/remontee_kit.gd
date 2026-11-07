@@ -234,8 +234,12 @@ static func tube(parent: Node3D, pts: PackedVector3Array, r: float, m: String, s
 		matiere: Material = null) -> MeshInstance3D:
 	if pts.size() < 2:
 		return null
+	return tube_de_tableaux(parent, tube_tableaux(pts, r, seg), m, matiere)
+
+
+## Le tube posé, de ses tableaux (tube_tableaux, ou ses plages mises bout à bout).
+static func tube_de_tableaux(parent: Node3D, a: Array, m: String, matiere: Material = null) -> MeshInstance3D:
 	var mesh: ArrayMesh = ArrayMesh.new()
-	var a: Array = tube_tableaux(pts, r, seg)
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, a)
 	MeshMerge.retenir(mesh, 0, a)
 	mesh.surface_set_material(0, matiere if matiere != null else mat(m))
@@ -246,14 +250,24 @@ static func tube(parent: Node3D, pts: PackedVector3Array, r: float, m: String, s
 ## directement — par SurfaceTool, sommet par sommet, le câble de l'Olympique
 ## figeait l'image 70 ms (banc du 27/10/2026). Mêmes sommets, même ordre.
 static func tube_tableaux(pts: PackedVector3Array, r: float, seg: int) -> Array:
+	return tube_tableaux_plage(pts, r, seg, 0, pts.size() - 1, [Vector3.ZERO, 0.0])
+
+
+## Tranches du tube sur les segments [i0, i1[ (les sommets des points i0 à i1) : `etat` = [x du repère au point
+## précédent, abscisse au point i0], mis à jour pour la plage suivante. Mis bout à bout dans l'ordre, les
+## tableaux sont ceux du tube entier (même calcul, mêmes sommets) : le câble d'une ligne se fait ainsi en
+## plusieurs tranches (18 ms d'un bloc à Solaise, relevé du 07/11/2026).
+static func tube_tableaux_plage(pts: PackedVector3Array, r: float, seg: int, i0: int, i1: int, etat: Array) -> Array:
 	var n: int = pts.size()
 	var na: int = seg + 1
+	var m: int = i1 - i0 + 1
 	var ap: PackedVector3Array = PackedVector3Array()
 	var an: PackedVector3Array = PackedVector3Array()
-	ap.resize(n * na)
-	an.resize(n * na)
-	var prec_x: Vector3 = Vector3.ZERO
-	for i in range(n):
+	ap.resize(m * na)
+	an.resize(m * na)
+	var prec_x: Vector3 = etat[0]
+	var x_suite: Vector3 = prec_x
+	for i in range(i0, i1 + 1):
 		var t: Vector3
 		if i == 0:
 			t = pts[1] - pts[0]
@@ -268,13 +282,15 @@ static func tube_tableaux(pts: PackedVector3Array, r: float, seg: int) -> Array:
 		else:
 			x = (prec_x - t * prec_x.dot(t)).normalized()     # transport parallèle
 		prec_x = x
+		if i == i1 - 1:
+			x_suite = x
 		var y: Vector3 = t.cross(x)
 		for k in range(na):
 			var ang: float = TAU * float(k) / seg
 			var nrm: Vector3 = x * cos(ang) + y * sin(ang)
-			ap[i * na + k] = pts[i] + nrm * r
-			an[i * na + k] = nrm
-	var nv: int = (n - 1) * seg * 6
+			ap[(i - i0) * na + k] = pts[i] + nrm * r
+			an[(i - i0) * na + k] = nrm
+	var nv: int = (m - 1) * seg * 6
 	var vs: PackedVector3Array = PackedVector3Array()
 	var ns: PackedVector3Array = PackedVector3Array()
 	var uvs: PackedVector2Array = PackedVector2Array()
@@ -282,10 +298,10 @@ static func tube_tableaux(pts: PackedVector3Array, r: float, seg: int) -> Array:
 	ns.resize(nv)
 	uvs.resize(nv)
 	var w: int = 0
-	var absc: float = 0.0
-	for i in range(n - 1):
+	var absc: float = etat[1]
+	for i in range(m - 1):
 		var v0: float = absc * 2.0
-		absc += pts[i].distance_to(pts[i + 1])
+		absc += pts[i0 + i].distance_to(pts[i0 + i + 1])
 		var v1: float = absc * 2.0
 		for k in range(seg):
 			# (p00, v0) (p10, v1) (p11, v1) (p00, v0) (p11, v1) (p01, v0)
@@ -316,6 +332,8 @@ static func tube_tableaux(pts: PackedVector3Array, r: float, seg: int) -> Array:
 			ns[w + 5] = an[i00 + 1]
 			uvs[w + 5] = Vector2(u1, v0)
 			w += 6
+	etat[0] = x_suite
+	etat[1] = absc
 	var a: Array = []
 	a.resize(Mesh.ARRAY_MAX)
 	a[Mesh.ARRAY_VERTEX] = vs

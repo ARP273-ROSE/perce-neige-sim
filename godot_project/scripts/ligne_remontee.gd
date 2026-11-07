@@ -296,6 +296,7 @@ func construire() -> void:
 		_tache = WorkerThreadPool.add_task(_construire_fil, false, "ligne " + String(name))
 		return
 	await _construire_corps()
+	await _precalculer_calages()
 	await _finir_construction()
 
 
@@ -456,7 +457,9 @@ func _construire_corps() -> void:
 	await _gare(false)
 	await _pause("gare amont")
 	await _poser_pylones()
+	await _precalculer_boucle()
 	_construire_boucle()
+	_yc_boucle = []
 	await _pause("boucle")
 	if tricable():
 		_charpente_3s(true)
@@ -476,7 +479,7 @@ func _construire_corps() -> void:
 	await _pause("rails d'ouverture")
 	await _caler_periode()
 	await _pause("période")
-	_construire_table()
+	await _construire_table()
 	await _pause("table de parcours")
 	await _peupler()
 	if _chantier == null:
@@ -671,7 +674,7 @@ func _calculer_tetes() -> void:
 		await _pause("têtes des pylônes")
 		var garde_bouge: bool = _garde_au_sol(true)
 		_porteurs_convexes()
-		if not _capacite_galets() and not garde_bouge:
+		if not await _capacite_galets() and not garde_bouge:
 			break
 	await _pause("têtes des pylônes")
 	_ajuster_aux_mesures()
@@ -865,6 +868,9 @@ func _garde_mesuree(d: float) -> float:
 ## l'autre bout de la portée qui l'est. Renvoie vrai si une tête a bougé.
 func _garde_au_sol(proteger_c: bool = false) -> bool:
 	var a_bouge: bool = false
+	# (sol et garde exigée aux points d'échantillonnage : ils ne dépendent que des abscisses des appuis, pas des
+	# têtes — relevés une fois par portée, pas à chacune des 80 passes ; ~1 ms par appel au Vallon de l'Iseran)
+	var seuils: Dictionary = {}
 	for it in range(80):
 		var pts: Array = _points_appui()
 		var change: bool = false
@@ -875,16 +881,26 @@ func _garde_au_sol(proteger_c: bool = false) -> bool:
 			var xc: Array = chainette_xm_c(a[0], a[1], b[0], b[1], _a_montee)
 			var xm: float = xc[0]
 			var cc: float = xc[1]
+			var cle: Vector2i = Vector2i(i, 0)
+			var sl: Array = seuils.get(cle, [])
+			if sl.is_empty() or float(sl[0]) != float(a[0]) or float(sl[1]) != float(b[0]):
+				var g: PackedFloat64Array = PackedFloat64Array()
+				for k0 in range(1, 12):
+					var d0: float = lerpf(a[0], b[0], float(k0) / 12.0)
+					# garde pleine en ligne, réduite près des gares où le câble
+					# rejoint la hauteur du quai (sinon le dernier pylône était
+					# relevé jusqu'à la butée de 32 m — retour d'utilisateur, 23/10/2026)
+					# (sol réel sous les deux brins : le profil de l'axe ignore le dévers et le relief fin)
+					g.append(maxf(terrain(d0), maxf(_sol_ligne(voie * 0.5, -d0), _sol_ligne(-voie * 0.5, -d0))) + _garde_exigee(d0))
+				sl = [float(a[0]), float(b[0]), g]
+				seuils[cle] = sl
+			var gs: PackedFloat64Array = sl[2]
 			for k in range(1, 12):
 				var u: float = float(k) / 12.0
 				var d: float = lerpf(a[0], b[0], u)
 				# brin montée (chargé) : la flèche la plus forte
 				var yc: float = _a_montee * cosh((d - xm) / _a_montee) + cc
-				# garde pleine en ligne, réduite près des gares où le câble
-				# rejoint la hauteur du quai (sinon le dernier pylône était
-				# relevé jusqu'à la butée de 32 m — retour d'utilisateur, 23/10/2026)
-				# (sol réel sous les deux brins : le profil de l'axe ignore le dévers et le relief fin)
-				pire = maxf(pire, maxf(terrain(d), maxf(_sol_ligne(voie * 0.5, -d), _sol_ligne(-voie * 0.5, -d))) + _garde_exigee(d) - yc)
+				pire = maxf(pire, gs[k - 1] - yc)
 			if pire > 0.05:
 				var ga: bool = i > 0
 				var dr: bool = i < pts.size() - 2
@@ -1023,6 +1039,10 @@ func _capacite_galets() -> bool:
 		return false
 	var a_bouge: bool = false
 	for it in range(40):
+		# (une passe sur tous les pylônes par tranche : jusqu'à 45 ms d'un bloc pour les 40 passes au Vallon de
+		# l'Iseran, relevé du 07/11/2026)
+		if it > 0:
+			await _pause("têtes des pylônes")
 		var bouge: bool = false
 		for i in range(pylones.size()):
 			var pts: Array = _points_appui()
@@ -1587,11 +1607,19 @@ func _caler_periode() -> void:
 
 func _construire_table() -> void:
 	_tab_s = PackedFloat32Array()
+	# (rempli à part puis posé d'un coup : personne ne lit une table à moitié faite pendant les pauses)
+	var tab: PackedFloat32Array = PackedFloat32Array()
 	var s2: float = 0.0
+	var n: int = 0
 	while s2 < longueur_boucle:
-		_tab_s.append(s2)
+		tab.append(s2)
 		s2 += vitesse_en(s2) * 0.05
-	_tab_s.append(longueur_boucle)
+		# (un pas toutes les 0,05 s sur toute la boucle : jusqu'à 23 ms d'un bloc, relevé du 07/11/2026)
+		n += 1
+		if n % 1500 == 0:
+			await _pause("table de parcours")
+	tab.append(longueur_boucle)
+	_tab_s = tab
 	if _noyau != null and _noyau.has_method("set_temps"):
 		_noyau.set_temps(_tab_s)
 
@@ -1867,9 +1895,15 @@ func _construire_boucle() -> void:
 	_zones.append([s0, _longueur(), "gare_aval"])
 	# 2. brin montée
 	var d: float = _pas_ligne(0.0)
-	while d < L:
-		_ajouter(Vector3(xm + decalage_montee(d), y_cable(d), -d))
-		d += _pas_ligne(d)
+	if _yc_boucle.size() == 4:
+		var dm: PackedFloat64Array = _yc_boucle[0]
+		var ym: PackedFloat64Array = _yc_boucle[1]
+		for j in range(dm.size()):
+			_ajouter(Vector3(xm + decalage_montee(dm[j]), ym[j], -dm[j]))
+	else:
+		while d < L:
+			_ajouter(Vector3(xm + decalage_montee(d), y_cable(d), -d))
+			d += _pas_ligne(d)
 	_ajouter(Vector3(xm, yb, -L))
 	# 3. gare amont
 	var s1: float = _longueur()
@@ -1882,10 +1916,45 @@ func _construire_boucle() -> void:
 	_zones.append([s1, _longueur(), "gare_amont"])
 	# 4. brin descente, jusqu'au nez de la gare aval (le point de départ)
 	d = L - _pas_ligne(L)
-	while d > 0.0:
-		_ajouter(Vector3(xd, y_cable(d, false), -d))
-		d -= _pas_ligne(d)
+	if _yc_boucle.size() == 4:
+		var dd: PackedFloat64Array = _yc_boucle[2]
+		var yd: PackedFloat64Array = _yc_boucle[3]
+		for j2 in range(dd.size()):
+			_ajouter(Vector3(xd, yd[j2], -dd[j2]))
+	else:
+		while d > 0.0:
+			_ajouter(Vector3(xd, y_cable(d, false), -d))
+			d -= _pas_ligne(d)
 	longueur_boucle = _longueur() + _boucle[_boucle.size() - 1].distance_to(_boucle[0])
+
+
+## Hauteurs du câble des deux brins aux abscisses de _construire_boucle, calculées d'avance par tranches (la
+## boucle d'un bloc : jusqu'à 33 ms aux Lanches, relevé du 07/11/2026) ; mêmes abscisses, mêmes appels.
+var _yc_boucle: Array = []
+
+
+func _precalculer_boucle() -> void:
+	_yc_boucle = []
+	var L: float = longueur_h()
+	var dm: PackedFloat64Array = PackedFloat64Array()
+	var ym: PackedFloat64Array = PackedFloat64Array()
+	var dd: PackedFloat64Array = PackedFloat64Array()
+	var yd: PackedFloat64Array = PackedFloat64Array()
+	var d: float = _pas_ligne(0.0)
+	while d < L:
+		dm.append(d)
+		ym.append(y_cable(d))
+		d += _pas_ligne(d)
+		if ym.size() % 150 == 0:
+			await _pause("boucle")
+	d = L - _pas_ligne(L)
+	while d > 0.0:
+		dd.append(d)
+		yd.append(y_cable(d, false))
+		d -= _pas_ligne(d)
+		if yd.size() % 150 == 0:
+			await _pause("boucle")
+	_yc_boucle = [dm, ym, dd, yd]
 
 
 ## Pas d'échantillonnage du câble en ligne : fin dans les raccords des nez.
@@ -4079,8 +4148,12 @@ func _poser_pylones() -> void:
 				return y_cable(d - z, brin) - y_t0
 		_enfant(py)
 		py.construire()
+		# (pièces, puis fusion : 12 ms en moyenne d'un bloc par pylône, 22 au pire, relevé du 07/11/2026)
+		await _pause("pylônes : pièces")
 		MeshMerge.merge(py, py.mobiles, "Pylone", false, _garder_pylones())
+		await _pause("pylônes : fusion")
 		_pylone_lod(py)
+		await _pause("pylônes : allégé")
 		for m in py.mobiles:
 			MeshMerge.fusion_partagee(m, "Paire")
 		_pyl.append([py, d])
@@ -4330,7 +4403,26 @@ func _cable() -> void:
 		await _pause("câble : machinerie 3S")
 	_preparer_charges()
 	await _pause("câble : charges")
-	RemonteeKit.tube(c, pts, diametre_cable * 0.0005, "cable", 8, _mat_cable)
+	# (par plages de 300 points, mises bout à bout : le même tube)
+	var etat: Array = [Vector3.ZERO, 0.0]
+	var vs: PackedVector3Array = PackedVector3Array()
+	var ns: PackedVector3Array = PackedVector3Array()
+	var uvs: PackedVector2Array = PackedVector2Array()
+	var i0: int = 0
+	while i0 < pts.size() - 1:
+		var i1: int = mini(i0 + 300, pts.size() - 1)
+		var ta: Array = RemonteeKit.tube_tableaux_plage(pts, diametre_cable * 0.0005, 8, i0, i1, etat)
+		vs.append_array(ta[Mesh.ARRAY_VERTEX])
+		ns.append_array(ta[Mesh.ARRAY_NORMAL])
+		uvs.append_array(ta[Mesh.ARRAY_TEX_UV])
+		i0 = i1
+		await _pause("câble")
+	var a: Array = []
+	a.resize(Mesh.ARRAY_MAX)
+	a[Mesh.ARRAY_VERTEX] = vs
+	a[Mesh.ARRAY_NORMAL] = ns
+	a[Mesh.ARRAY_TEX_UV] = uvs
+	RemonteeKit.tube_de_tableaux(c, a, "cable", _mat_cable)
 
 
 ## Câbles porteurs du 3S : deux par voie, lisses et immobiles (retour
@@ -4722,6 +4814,34 @@ func _preparer_noyau() -> void:
 
 ## Tables du calage des galets pour tous les pylônes, avec le noyau (sur le fil de construction : à la première
 ## visite d'un pylône, sur le fil principal, elles faisaient des images de 40 à 150 ms, relevé du 06/11/2026).
+## Échantillons du câble pour les tables du calage, calculés d'avance par paquets, avant la fin de la construction
+## hors fil (150 ms d'un bloc aux Lanches dans _preparer_noyau, relevé du 07/11/2026) : mêmes abscisses, mêmes
+## appels que _preparer_calage. Sans noyau à venir (PWA, lignes particulières) : rien.
+var _tabs_calage: Dictionary = {}
+
+
+func _precalculer_calages() -> void:
+	_tabs_calage = {}
+	if noyau_desactive or not calage_noyau or not ClassDB.class_exists("NoyauRemontee") or tricable() 			or vaetvient() or not _au_magasin.is_empty() or _vehicules.is_empty():
+		return
+	var n: int = int(ceil(2.0 * CALAGE_DEMI / CALAGE_PAS)) + 1
+	for k in range(_pyl.size()):
+		var py: Variant = _pyl[k][0]
+		if not (py is PyloneRemontee) or (py as PyloneRemontee)._paires[true].is_empty():
+			continue
+		var d0: float = float(_pyl[k][1]) - CALAGE_DEMI
+		var tabs: Array = []
+		for montee in [true, false]:
+			var t: PackedFloat32Array = PackedFloat32Array()
+			t.resize(n)
+			for j in range(n):
+				t[j] = y_cable(d0 + j * CALAGE_PAS, montee)
+				if j % 120 == 119:
+					await _pause("calage des galets")
+			tabs.append(t)
+		_tabs_calage[k] = tabs
+
+
 func _preparer_calages() -> void:
 	if _noyau == null or not calage_noyau or not _noyau.has_method("set_calage"):
 		return
@@ -4729,7 +4849,9 @@ func _preparer_calages() -> void:
 		var py: Variant = _pyl[k][0]
 		if not (py is PyloneRemontee) or (py as PyloneRemontee)._paires[true].is_empty():
 			continue
-		_preparer_calage(k, py, float(_pyl[k][1]), (py as PyloneRemontee).position.y + (py as PyloneRemontee).hauteur_cable())
+		_preparer_calage(k, py, float(_pyl[k][1]), (py as PyloneRemontee).position.y + (py as PyloneRemontee).hauteur_cable(),
+			_tabs_calage.get(k, []))
+	_tabs_calage = {}
 
 
 func _noyau_valide() -> bool:
@@ -5806,16 +5928,18 @@ const CALAGE_PAS: float = 0.05
 const CALAGE_DEMI: float = 9.0
 
 
-func _preparer_calage(k: int, py: PyloneRemontee, d: float, y_t: float) -> void:
+func _preparer_calage(k: int, py: PyloneRemontee, d: float, y_t: float, tabs_faites: Array = []) -> void:
 	var d0: float = d - CALAGE_DEMI
 	var n: int = int(ceil(2.0 * CALAGE_DEMI / CALAGE_PAS)) + 1
-	var tabs: Array = []
-	for montee in [true, false]:
-		var t: PackedFloat32Array = PackedFloat32Array()
-		t.resize(n)
-		for j in range(n):
-			t[j] = y_cable(d0 + j * CALAGE_PAS, montee)
-		tabs.append(t)
+	var tabs: Array = tabs_faites
+	if tabs.size() != 2:
+		tabs = []
+		for montee in [true, false]:
+			var t: PackedFloat32Array = PackedFloat32Array()
+			t.resize(n)
+			for j in range(n):
+				t[j] = y_cable(d0 + j * CALAGE_PAS, montee)
+			tabs.append(t)
 	var pp: Array = []
 	var pentes: Array = []
 	for montee2 in [true, false]:
