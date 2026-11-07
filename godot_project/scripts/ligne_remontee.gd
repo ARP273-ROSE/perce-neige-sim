@@ -3432,10 +3432,11 @@ func _peupler_magasin() -> void:
 	var cap: int = mini(int((sl - S_DEBRAYAGE) / TeleskiGare.PAS_MAGASIN), 40)
 	var n_desc: int = mini(int(longueur_h() / (espacement * 3.0)), cap / 2)
 	for k in range(cap - n_desc):
-		_ajouter_vehicule(sl - k * TeleskiGare.PAS_MAGASIN, true)
+		await _ajouter_vehicule(sl - k * TeleskiGare.PAS_MAGASIN, true)
+		await _pause("magasin")
 	var s_a: float = float(_zones[1][1]) + 5.0
 	for k in range(n_desc):
-		_ajouter_vehicule(lerpf(s_a, longueur_boucle - 5.0, (k + 0.5) / n_desc))
+		await _ajouter_vehicule(lerpf(s_a, longueur_boucle - 5.0, (k + 0.5) / n_desc))
 		await _pause("magasin")
 
 
@@ -4610,7 +4611,7 @@ func _peupler() -> void:
 		if prochain >= t_fin:
 			break                  # (période imposée : tous posés, la fin de la boucle reste vide)
 		if t >= prochain:
-			_ajouter_vehicule(s)
+			await _ajouter_vehicule(s)
 			prochain += dt_v
 			await _pause("véhicules")
 		var v: float = vitesse_en(s)
@@ -4629,13 +4630,14 @@ func _ajouter_vehicule(s: float, magasin: bool = false) -> void:
 	if famille == "perche_debrayable":
 		_au_magasin.append(s if magasin else -1.0)
 	var v: VehiculeRemontee = VehiculeRemontee.new()
+	v.construit_par_la_ligne = true
 	v.famille = famille
 	v.miroir = not sens_droite
 	v.livree = station
 	v.teinte = TEINTES_CABINES.get(String(name), "")
 	v.pince_a108 = String(name) in LIGNES_A108
 	_enfant(v)
-	v.construire()
+	await v.construire_par_tranches(_pause.bind("véhicules : fabrication"))
 	v.tirer_charge(hash(String(name)) + _vehicules.size() * 7919)
 	_vehicules.append([v, s])
 	_placer(_vehicules.size() - 1)
