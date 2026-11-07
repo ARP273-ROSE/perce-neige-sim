@@ -97,6 +97,7 @@ var _pax_gear_prefix: Array = []   # par voiture : {ski: [int], pole: [int], boa
 var _pax_shown: Array = []      # par voiture : nombre affiché
 var _pax_noeuds: Array = []     # par voiture : nœud parent des passagers
 var _s_pos_roues: float = NAN   # abscisse dessinée à l'image précédente (roues)
+var _s_cache_pos: float = NAN   # abscisse de la racine posée, rame masquée
 var _head_glow: float = 0.0     # phares halogènes : 0 éteint → 1 plein feu
 var _head_mat: StandardMaterial3D = null
 var head_energy: float = 12.0   # énergie du phare à plein feu (faisceau large depuis le 03/10)
@@ -1627,9 +1628,14 @@ func _process_corps(_delta: float) -> void:
 		_avancer_portes(_delta)
 		var s_cache: float = physics.ghost_s_render() + physics.ghost_sag_offset() if is_ghost \
 			else physics.s_render
-		global_position = _cabin_world_pos(s_cache)
+		# au mètre près (seuil de 150 m dans main) : déplacer la racine
+		# repropage la position à toutes les pièces de la rame
+		if is_nan(_s_cache_pos) or absf(s_cache - _s_cache_pos) > 1.0:
+			_s_cache_pos = s_cache
+			global_position = _cabin_world_pos(s_cache)
 		_s_pos_roues = NAN
 		return
+	_s_cache_pos = NAN
 	_poser_poste()
 	_update_shake(_delta)
 	_update_loupe(_delta)
