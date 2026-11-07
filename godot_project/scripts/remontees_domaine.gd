@@ -186,28 +186,14 @@ func construire(r: ReliefBuilder) -> void:
 	print("[Remontees] %d lignes posées" % lignes.size())
 
 
-## Sans fil de construction (PWA) : caisses des cabines (VehiculeRemontee._maillage_cabine, une par famille et
-## teinte) calculées au chargement, derrière l'écran de préparation. À la première cabine d'un type, en jeu, elles
-## faisaient 5 ms chacune d'un bloc sur le fil principal, l'aigle 15 à 20 (Zeta du 3S, relevé du 07/11/2026). Sur PC, la construction
-## en fond s'en charge.
+## Sans fil de construction (PWA) : l'aigle des logos de Tignes, dessiné point par point (15 à 20 ms d'un bloc sur le
+## fil principal à la première cabine marquée, relevé du 07/11/2026), calculé au chargement, derrière l'écran de
+## préparation. (Les caisses des cabines, 5 ms chacune, restent faites à la demande : calculées toutes d'avance,
+## celles des lignes jamais construites gardaient leurs tampons — +1 à 2 Mo sur la PWA, relevé du NAS.)
 func _caisses_au_chargement() -> void:
 	if LigneRemontee._fil_possible():
 		return
-	# aigle des logos de Tignes, dessiné point par point (15 à 20 ms, à la première cabine marquée)
 	VehiculeRemontee._aigle()
-	var vues: Dictionary = {}
-	for e in lignes:
-		if not (e[0] is LigneRemontee):
-			continue
-		var lg: LigneRemontee = e[0]
-		if not lg.famille.begins_with("cabine"):
-			continue
-		var t: String = LigneRemontee.TEINTES_CABINES.get(String(lg.name), "")
-		var k: String = lg.famille + "#" + t
-		if vues.has(k):
-			continue
-		vues[k] = true
-		VehiculeRemontee._maillage_cabine(lg.famille, t)
 
 
 ## Tronçons jumelés : [bas, haut]. Bollin–Fresse dans sa configuration
