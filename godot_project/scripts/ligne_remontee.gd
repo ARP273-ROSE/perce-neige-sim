@@ -2146,7 +2146,7 @@ func _gare(aval: bool) -> void:
 	# (téléski : pas de quai, la gare est posée sur la neige)
 	if not teleski():
 		var tri_t: PackedVector3Array = await _terrassement(aval)
-		g.add_child(_mesh_terrassement(tri_t, y0))
+		g.add_child(await _mesh_terrassement(tri_t, y0))
 	await _pause("gare : terrassement")
 	# carénage en gélule sur colonnes, cabine du conducteur (photos des
 	# gares BMF du Marmottes Express, retour d'utilisateur, 23/10/2026)
@@ -2413,6 +2413,9 @@ func _mesh_terrassement(tri: PackedVector3Array, y0: float) -> MeshInstance3D:
 		c += p
 	c /= maxf(tri.size(), 1)
 	for k in range(0, tri.size(), 3):
+		# (pause tous les 1 500 triangles : 20 ms d'un bloc à l'Olympique, relevé du 07/11/2026)
+		if k > 0 and k % 4500 == 0:
+			await _pause("gare : terrassement, maillage")
 		var a: Vector3 = tri[k]
 		var b: Vector3 = tri[k + 1]
 		var d: Vector3 = tri[k + 2]
@@ -2431,6 +2434,7 @@ func _mesh_terrassement(tri: PackedVector3Array, y0: float) -> MeshInstance3D:
 	mi.name = "Terrassement"
 	var m2: StandardMaterial3D = (RemonteeKit.mat("neige_damee") as StandardMaterial3D).duplicate()
 	m2.cull_mode = BaseMaterial3D.CULL_DISABLED
+	await _pause("gare : terrassement, maillage")
 	mi.mesh = MeshMerge.valider(st)
 	mi.material_override = m2
 	return mi

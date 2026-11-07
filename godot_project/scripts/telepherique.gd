@@ -120,23 +120,27 @@ func _construire_corps() -> void:
 			_gares_grande_motte(aval)
 		else:
 			_gare_tph(aval)
-		await _pause()
+		await _pause("téléphérique : gare")
 	await _poser_pylones_treillis()
-	_cables_tph()
+	await _cables_tph()
+	await _pause("téléphérique : câbles")
 	for k in range(2):
 		var v: VehiculeRemontee = VehiculeRemontee.new()
+		# (construite ici, par étapes : à l'entrée dans l'arbre, elle l'était déjà une première fois)
+		v.construit_par_la_ligne = true
 		v.famille = famille
 		v.numero = k + 1
 		if String(name) == "tph_fornet":
 			v.style_tph = "fornet"
 		_enfant(v)
-		v.construire()
+		await v.construire_par_tranches(_pause.bind("téléphérique : cabine"))
 		_vehicules.append([v, 0.0])
-		await _pause()
+		await _pause("téléphérique : cabine")
 	_s = _x_quai(true)
 	_maj_positions()
 	if avec_collisions:
 		_collisions_tph()
+		await _pause("téléphérique : collisions")
 		for i in range(2):
 			_corps_vehicule(i)
 
@@ -303,6 +307,8 @@ func _cables_tph() -> void:
 			d += 1.0 if d < 30.0 or d > L - 30.0 else 5.0
 		RemonteeKit.tube(c, por, 0.025, "cable", 8, _mat_porteurs)
 		RemonteeKit.tube(c, tra, 0.020, "cable", 8, _mat_cable)
+		# (une tranche pour les câbles d'un brin, une pour ses cavaliers : 11 ms d'un bloc, relevé du 07/11/2026)
+		await _pause("téléphérique : câbles")
 		# cavaliers
 		for k in range(8):
 			var dc: float = L * (k + 0.5) / 8.0
@@ -323,6 +329,7 @@ func _cables_tph() -> void:
 				RemonteeKit.poutre(cv, Vector3(0.0, -0.05, sz * 0.22), Vector3(0.0, -0.62, 0.0), 0.05, 0.08, "galva_pylone")
 			RemonteeKit.cylindre(cv, 0.035, 0.035, 0.22, Transform3D(Basis(Vector3.FORWARD, PI * 0.5), Vector3(0, -0.60, 0)), "acier_noir", 8)
 			RemonteeKit.galet(cv, Vector3(0, -0.45 - 0.02 - 0.12, 0), 0.12)
+		await _pause("téléphérique : câbles")
 	_preparer_charges()
 
 
