@@ -5,6 +5,20 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.57.0 — 7 novembre 2026
+
+**Réécriture du cœur, deuxième vague** : plus d'à-coup en jeu pendant la construction des remontées. Chaque ligne se construit maintenant par petites tranches, sans dépasser quelques millisecondes sur le fil principal : têtes des pylônes (80 → 3 ms), boucle, câble, table de parcours, calage des galets (156 → 7 ms), lanceurs, rails d'ouverture, portillons, téléphériques, 3S. Pylônes et véhicules ne sont plus construits deux fois. Les textes (STOP des portillons, noms de gare, numéros) et les petites pièces sont calculés sur le fil de construction : ils renvoyaient jusqu'ici leur mise en forme au fil principal, d'un bloc (images de 35 à 60 ms supprimées). Il ne reste que quelques pics isolés, une fois par ligne (24 ms au pire).
+
+**Plus léger à chaque image** : pneus des lanceurs tournés par le module C++, rames du funiculaire hors de vue sans pose ni animation, musique de gare chargée sur un autre fil (plus d'à-coup de 16 ms à l'arrivée en gare), numéros de balise posés près du skieur seulement. Sur une puce graphique intégrée, à ski : fil principal médian 2,5 → 2,0 ms, 1 % des pires images 4,2 → 3,4 ms ; à bord du funiculaire 3,3 → 2,8 ms.
+
+**Pylônes 2026** des télécabines et télésièges débrayables et fixes, d'après des photos : fût continu à embase raidie, échelle étroite à paliers, passerelles sans cage, galets à jante zinguée et bandage noir, selles en V, cornes et rattrape-câbles sur les pylônes de compression ; entonnoir de gare plein. Pylônes allégés et pylônes proches de la PWA recuits.
+
+**Olympique (3S)** : sabot des pylônes P1, P2 et P3 en arc de cercle, galets au pas régulier ; machinerie amont croisée en 8.
+
+**Corrections** : lecture hors bornes de l'embarquement sur un téléphérique encore vide (plantage possible en version publiée) ; pylônes du 3S fusionnés sans relire la carte graphique.
+
+Vérifié : 7 chemins de nuanceurs, bancs au PC, 48 bancs sans écran, PWA sous WebKit (3S et Lanches : aucune perte, tampons 100 et 120 Mo).
+
 ## 1.56.1 — 7 novembre 2026 (PWA seule)
 
 **Val Claret, porte 2** : sur iPad, passé la porte vitrée de droite, on tombait sur le sol du tunnel, à mi-hauteur de la fosse. Les pièces fixes des quais, fusionnées pour la PWA, réunissaient les deux gares en maillages de 3,3 km, que les collisions écartent comme les panoramas : le palier n'avait plus de sol. Elles sont maintenant fusionnées gare par gare. Vérifié sous WebKit : le skieur passe la porte et monte sur le quai sans tomber.

@@ -81,7 +81,7 @@ const RETRAIT_TRAVERSE: float = 0.45       # bout de la traverse en dedans du c�
 const H_PORTIQUE: float = 1.55             # poutre du portique au-dessus du câble
 ## Le pied est sur une piste : posé par la ligne avant construire().
 var matelas: bool = false
-## Modèle des retours photo d'utilisateur (07/11/2026), pour les TCD, TSD et TSF : fût continu à
+## Modèle des retours photo d'un utilisateur (07/11/2026), pour les TCD, TSD et TSF : fût continu à
 ## embase raidie, échelle étroite à paliers, second étage de passerelles sous les trains relié par un cadre en
 ## trapèze ; rien au-dessus de la potence de tête (retour d'utilisateur, 07/11/2026 : « ya pas de haubanage ni de mât »).
 var modele_2026: bool = false
@@ -588,7 +588,7 @@ func _train_structure(c: Array) -> void:
 	_n = self
 
 
-## Train de compression du modèle 2026 (photos d'utilisateur, P1 devant la gare) : selle en V entre deux paires (la
+## Train de compression du modèle 2026 (photos d'un utilisateur, P1 devant la gare) : selle en V entre deux paires (la
 ## pince y passe), corne relevée à chaque bout du train, plaque rattrape-câble pendue sous le câble aux bouts.
 func _details_compression(tete: Node3D, zs: Array, y_axe: float, s: float, ext: float) -> void:
 	var z_haut: float = float(zs[0]) + R_GALET + 0.08

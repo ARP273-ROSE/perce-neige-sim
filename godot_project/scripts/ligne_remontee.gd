@@ -4130,7 +4130,7 @@ func _poser_pylones() -> void:
 		py.dessus_traverse = PyloneRemontee.DESSUS_TRAVERSE_COMPRESSION if _compression(p) else _dessus_traverse()
 		py.hauteur = y_cable(d) - t - py.dessus_traverse
 		py.matelas = _sur_une_piste(d, t)
-		# (modèle des retours photo d'utilisateur, 07/11/2026 : télécabines et télésièges, débrayables ou fixes)
+		# (modèle des retours photo d'un utilisateur, 07/11/2026 : télécabines et télésièges, débrayables ou fixes)
 		py.modele_2026 = not teleski() and not tricable() and famille != "cabine_tph"
 		py.compo_montee = p.get("montee", [[8, "S"]])
 		py.compo_descente = p.get("descente", [[8, "S"]])
