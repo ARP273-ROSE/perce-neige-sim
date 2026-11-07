@@ -186,9 +186,12 @@ func _conge(k: Vector3, din: Vector3, dout: Vector3, r: float, m: String, poulie
 ## Poulies (nœuds tournants, axe local Y = axe de la poulie), chariot et
 ## bloc de contrepoids, moteurs, fosses et garde-corps. `parent` : repère
 ## de la ligne. Rend [nœud, vitesse angulaire] des poulies.
-func construire(parent: Node3D, poulies: Array) -> Array:
+## `pause` (facultative) attendue après chaque poulie : 24 ms d'un bloc pour les quatre (relevé du 07/11/2026).
+func construire(parent: Node3D, poulies: Array, pause: Callable = Callable()) -> Array:
 	var tournantes: Array = []
 	for p in poulies:
+		if pause.is_valid() and not tournantes.is_empty():
+			await pause.call()
 		var c: Vector3 = p[0]
 		var ax: Vector3 = p[1]
 		var r: float = p[2]
