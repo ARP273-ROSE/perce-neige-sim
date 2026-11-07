@@ -192,7 +192,7 @@ func _lumiere_tunnel(d: float, cote_lampes: float) -> float:
 	var k: float = fposmod(d - portail_d - 10.0, ECART_LAMPES)
 	var dl: float = minf(k, ECART_LAMPES - k)
 	var flaque: float = exp(-pow(dl / 5.5, 2.0))
-	return 0.11 + flaque * (0.30 + 0.45 * clampf(cote_lampes, 0.0, 1.0))
+	return 0.17 + flaque * (0.30 + 0.45 * clampf(cote_lampes, 0.0, 1.0))
 
 
 ## Teinte de la paroi : béton projeté gris-beige, tronçons de roche sombre, un tronçon à cintres et planches ocre.
@@ -204,7 +204,7 @@ func _teinte_paroi(d: float, k_anneau: int) -> Color:
 		return Color(0.42, 0.40, 0.37)                     # roche
 	if u > 0.12 and u < 0.15:
 		return Color(0.62, 0.45, 0.25) if k_anneau % 2 == 0 else Color(0.32, 0.24, 0.15)    # planches et cintres
-	return Color(0.66, 0.65, 0.61)                          # béton projeté
+	return Color(0.58, 0.58, 0.56)                          # béton projeté (gris, pas beige)
 
 
 # --- construction -----------------------------------------------------------------------
@@ -451,6 +451,60 @@ func _tunnel() -> void:
 	MeshMerge.merge(por, roches, "Portail")
 
 
+const LARG_GRADINS: Array = [6.0, 3.5]     # gare aval : attente (gauche en montant), sortie (droite)
+const MARCHE: float = 0.18                 # hauteur des petites marches entre paliers (0,15-0,20 m sur photo)
+const GIRON: float = 0.28
+
+
+## Gradins d'un côté de la gare aval, en boîtes [taille, centre] (repère de la ligne) : pour chaque compartiment,
+## un palier au niveau de son plancher, devant la porte, et du côté aval une volée de petites marches qui monte du
+## palier précédent (du sol pour le premier).
+func _gradins(sx: float) -> Array:
+	var r: Array = []
+	var dq: float = _x_quai(true)
+	var lq: float = VehiculeFunival.DEMI_L * 2.0 + 2.0
+	var n: int = VehiculeFunival.N_COMP
+	var lc: float = lq / float(n)
+	var W: float = VehiculeFunival.DEMI_LARGEUR + 0.05
+	var larg: float = LARG_GRADINS[0] if sx < 0.0 else LARG_GRADINS[1]
+	var x: float = sx * (W + larg * 0.5)
+	var y_prec: float = minf(_sol(x - larg * 0.4, -(dq - lq * 0.5)), _sol(x + larg * 0.4, -(dq - lq * 0.5)))
+	for k in range(n):
+		var d: float = dq - lq * 0.5 + lc * (float(k) + 0.5)
+		var d_bas: float = d - lc * 0.5
+		var y: float = VehiculeFunival.y_plancher_monde(self, d)
+		var h: float = y - y_prec
+		var ns: int = clampi(int(ceil(absf(h) / MARCHE)), 0, 12)
+		var lf: float = minf(float(ns) * GIRON, lc * 0.5 - 0.6)
+		for j in range(ns):
+			var haut: float = y_prec + h * float(j + 1) / float(ns)
+			var bas: float = minf(y_prec, haut) - 0.12
+			var prof: float = lf / float(ns)
+			r.append([Vector3(larg, haut - bas, prof + 0.01), Vector3(x, (haut + bas) * 0.5, -(d_bas + prof * (float(j) + 0.5)))])
+		r.append([Vector3(larg, 0.12, lc - lf + 0.02), Vector3(x, y - 0.06, -(d_bas + lf + (lc - lf) * 0.5))])
+		y_prec = y
+	return r
+
+
+## Boîte pleine ajoutée à un SurfaceTool (six faces, sommets non partagés).
+static func _boite_st(st: SurfaceTool, taille: Vector3, c: Vector3) -> void:
+	var h: Vector3 = taille * 0.5
+	var faces: Array = [
+		[Vector3(1, 0, 0), Vector3(0, 1, 0), Vector3(0, 0, 1)], [Vector3(-1, 0, 0), Vector3(0, 0, 1), Vector3(0, 1, 0)],
+		[Vector3(0, 1, 0), Vector3(0, 0, 1), Vector3(1, 0, 0)], [Vector3(0, -1, 0), Vector3(1, 0, 0), Vector3(0, 0, 1)],
+		[Vector3(0, 0, 1), Vector3(1, 0, 0), Vector3(0, 1, 0)], [Vector3(0, 0, -1), Vector3(0, 1, 0), Vector3(1, 0, 0)]]
+	for f in faces:
+		var nrm: Vector3 = f[0]
+		var u: Vector3 = f[1]
+		var v: Vector3 = f[2]
+		var o: Vector3 = c + nrm * h
+		var du: Vector3 = u * h
+		var dv: Vector3 = v * h
+		var p: Array = [o - du - dv, o + du - dv, o + du + dv, o - du + dv]
+		for q in [p[0], p[2], p[1], p[0], p[3], p[2]]:
+			st.add_vertex(q)
+
+
 ## Gare aval (La Daille), à l'air libre : voie en fosse entre deux vastes quais en gradins de caillebotis sombre
 ## (attente à gauche en montant, sortie à droite), garde-corps en tubes ; bâtiment bas à toit plat débordant, bardé
 ## de bois gris patiné, enseigne « Funival », bornes de contrôle sous l'auvent.
@@ -464,25 +518,20 @@ func _gare_aval() -> void:
 	var lc: float = lq / float(n)
 	var W: float = VehiculeFunival.DEMI_LARGEUR + 0.05
 	var bardage: Array = []
+	# gradins : palier devant chaque porte, volée de petites marches de caillebotis entre deux paliers (photos)
+	var st: SurfaceTool = SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for sx in [-1.0, 1.0]:
+		for b in _gradins(sx):
+			_boite_st(st, b[0], b[1])
+	var gr: MeshInstance3D = _maillage(st, mat_funi("caillebotis_sombre"), "Gradins")
+	gr.reparent(g)
+	bardage.append(gr)
 	for k in range(n):
 		var d: float = dq - lq * 0.5 + lc * (float(k) + 0.5)
 		var y: float = VehiculeFunival.y_plancher_monde(self, d)
 		for sx in [-1.0, 1.0]:
-			var larg: float = 6.0 if sx < 0.0 else 3.5
-			var x: float = sx * (W + larg * 0.5)
-			# sol sous le gradin (pour la première contremarche)
-			var sol: float = minf(_sol(x - larg * 0.4, -d), _sol(x + larg * 0.4, -d)) - 0.3
-			var hm: float = maxf(y - sol, 0.2)
-			# marche mince au niveau du plancher du compartiment, contremarche jusqu'à la marche du dessous (ou au sol),
-			# garde-corps en tubes (photos : caillebotis à claire-voie, marches basses)
-			var y_prec: float = VehiculeFunival.y_plancher_monde(self, d - lc) if k > 0 else sol
-			var marche: MeshInstance3D = RemonteeKit.boite_en(g, Vector3(larg, 0.12, lc + 0.04), Vector3(x, y - 0.06, -d), "acier_noir")
-			marche.material_override = mat_funi("caillebotis_sombre")
-			bardage.append(marche)
-			var hc: float = maxf(y - minf(y_prec, sol + hm), 0.1)
-			var cm: MeshInstance3D = RemonteeKit.boite_en(g, Vector3(larg, hc, 0.06), Vector3(x, y - hc * 0.5, -d + lc * 0.5), "acier_noir")
-			cm.material_override = mat_funi("caillebotis_sombre")
-			bardage.append(cm)
+			var larg: float = LARG_GRADINS[0] if sx < 0.0 else LARG_GRADINS[1]
 			var xg: float = sx * (W + larg - 0.05)
 			RemonteeKit.boite_en(g, Vector3(0.05, 0.05, lc), Vector3(xg, y + 1.05, -d), "galva")
 			RemonteeKit.boite_en(g, Vector3(0.05, 0.05, lc), Vector3(xg, y + 0.55, -d), "galva")
@@ -603,10 +652,13 @@ func _collisions_funi() -> void:
 		for k in range(n):
 			var d: float = dq - lq * 0.5 + lc * (float(k) + 0.5)
 			var y: float = VehiculeFunival.y_plancher_monde(self, d)
-			var lg: float = 6.0 if aval else 4.0
-			var ld: float = 3.5 if aval else 2.4
-			boite.call(Vector3(lg, 0.4, lc + 0.05), Vector3(-(W + lg * 0.5), y - 0.2, -d))
-			boite.call(Vector3(ld, 0.4, lc + 0.05), Vector3(W + ld * 0.5, y - 0.2, -d))
+			if aval:
+				continue                  # (gradins de la gare aval : leurs marches, plus bas)
+			boite.call(Vector3(4.0, 0.4, lc + 0.05), Vector3(-(W + 2.0), y - 0.2, -d))
+			boite.call(Vector3(2.4, 0.4, lc + 0.05), Vector3(W + 1.2, y - 0.2, -d))
+	for sx3 in [-1.0, 1.0]:
+		for b in _gradins(sx3):
+			boite.call(b[0], b[1])
 	# salle amont : parois, et plancher du bâtiment au débouché
 	var hx: float = W + 4.2
 	for sx in [-1.0, 1.0]:
