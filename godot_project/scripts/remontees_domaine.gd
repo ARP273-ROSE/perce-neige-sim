@@ -1116,7 +1116,13 @@ func _pres_des_gares(lg: LigneRemontee, p: Vector3, portee: float = PORTEE_GARES
 		# téléphérique en construction, hors limites — le pack de mesure en mourait)
 		c = [g, g * Vector3.ZERO, g * Vector3(0, 0, -lg.longueur_h())]
 		_gares[id] = c
-	return p.distance_squared_to(c[1]) < portee * portee or p.distance_squared_to(c[2]) < portee * portee
+	# distance EN PLAN : les bouts sont pris à l'altitude de l'origine (gare aval) ; en 3D, la gare amont d'une
+	# ligne de plus de 250 m de dénivelé n'était jamais « proche » (3S : pas d'embarquement à la descente,
+	# retour d'utilisateur du 08/11/2026)
+	var a: Vector3 = c[1]
+	var b: Vector3 = c[2]
+	var r2: float = portee * portee
+	return Vector2(p.x - a.x, p.z - a.z).length_squared() < r2 or Vector2(p.x - b.x, p.z - b.z).length_squared() < r2
 var _t_loupe: float = -1000.0
 var _etat_bord: String = "marche"
 
