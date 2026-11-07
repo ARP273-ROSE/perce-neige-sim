@@ -57,6 +57,22 @@ static func _compter(mesh: Mesh) -> void:
 ## l'origine, cylindre d'axe Y) ; UV simples par face (matériaux unis). [] si
 ## la primitive sort de ces cas.
 static func _generer(mesh: Mesh) -> Array:
+	if mesh is BoxMesh:
+		var b: BoxMesh = mesh
+		if b.subdivide_width + b.subdivide_height + b.subdivide_depth > 0:
+			return []
+		return _generer_formes(true, b.size, 0.0, 0.0, 0.0, 0, false, false)
+	if mesh is CylinderMesh:
+		var cy: CylinderMesh = mesh
+		if cy.rings != 1 and cy.rings != 0:
+			return []
+		return _generer_formes(false, Vector3.ZERO, cy.bottom_radius, cy.top_radius, cy.height, cy.radial_segments,
+			cy.cap_top, cy.cap_bottom)
+	return []
+
+
+static func _generer_formes(boite: bool, taille: Vector3, r_bas: float, r_haut: float, hauteur: float, segments: int,
+		cap_top: bool, cap_bottom: bool) -> Array:
 	var v: PackedVector3Array = PackedVector3Array()
 	var n: PackedVector3Array = PackedVector3Array()
 	var t: PackedFloat32Array = PackedFloat32Array()
@@ -71,11 +87,8 @@ static func _generer(mesh: Mesh) -> Array:
 			t.append_array(PackedFloat32Array([tg.x, tg.y, tg.z, 1.0]))
 		uv.append_array(PackedVector2Array([Vector2(0, 0), Vector2(1, 0), Vector2(1, 1), Vector2(0, 1)]))
 		ix.append_array(PackedInt32Array([k, k + 1, k + 2, k, k + 2, k + 3]))
-	if mesh is BoxMesh:
-		var b: BoxMesh = mesh
-		if b.subdivide_width + b.subdivide_height + b.subdivide_depth > 0:
-			return []
-		var h: Vector3 = b.size * 0.5
+	if boite:
+		var h: Vector3 = taille * 0.5
 		for ax in range(3):
 			for sg in [1.0, -1.0]:
 				var nrm: Vector3 = Vector3.ZERO
@@ -94,16 +107,13 @@ static func _generer(mesh: Mesh) -> Array:
 				var hu: Vector3 = u * h[iu]
 				var hw: Vector3 = w * h[iw]
 				quad.call(c - hu - hw, c + hu - hw, c + hu + hw, c - hu + hw, [nrm, nrm, nrm, nrm], u)
-	elif mesh is CylinderMesh:
-		var cy: CylinderMesh = mesh
-		if cy.rings != 1 and cy.rings != 0:
-			return []
-		var seg: int = maxi(cy.radial_segments, 3)
-		var y0: float = -cy.height * 0.5
-		var y1: float = cy.height * 0.5
-		var r0: float = cy.bottom_radius
-		var r1: float = cy.top_radius
-		var pente: float = (r0 - r1) / maxf(cy.height, 1e-4)
+	else:
+		var seg: int = maxi(segments, 3)
+		var y0: float = -hauteur * 0.5
+		var y1: float = hauteur * 0.5
+		var r0: float = r_bas
+		var r1: float = r_haut
+		var pente: float = (r0 - r1) / maxf(hauteur, 1e-4)
 		for k in range(seg):
 			var a0: float = TAU * float(k) / seg
 			var a1: float = TAU * float(k + 1) / seg
@@ -114,7 +124,7 @@ static func _generer(mesh: Mesh) -> Array:
 			# flanc (bas k+1, bas k, haut k, haut k+1) : sens horaire vu de dehors
 			quad.call(d1 * r0 + Vector3(0, y0, 0), d0 * r0 + Vector3(0, y0, 0), d0 * r1 + Vector3(0, y1, 0),
 				d1 * r1 + Vector3(0, y1, 0), [n1, n0, n0, n1], Vector3(cos(a0), 0, -sin(a0)))
-			if cy.cap_top and r1 > 0.0:
+			if cap_top and r1 > 0.0:
 				var kt: int = v.size()
 				v.append_array(PackedVector3Array([Vector3(0, y1, 0), d1 * r1 + Vector3(0, y1, 0), d0 * r1 + Vector3(0, y1, 0)]))
 				for q in range(3):
@@ -122,7 +132,7 @@ static func _generer(mesh: Mesh) -> Array:
 					t.append_array(PackedFloat32Array([1, 0, 0, 1]))
 				uv.append_array(PackedVector2Array([Vector2(0.5, 0.5), Vector2(0.5 + d1.x * 0.5, 0.5 + d1.z * 0.5), Vector2(0.5 + d0.x * 0.5, 0.5 + d0.z * 0.5)]))
 				ix.append_array(PackedInt32Array([kt, kt + 1, kt + 2]))
-			if cy.cap_bottom and r0 > 0.0:
+			if cap_bottom and r0 > 0.0:
 				var kb: int = v.size()
 				v.append_array(PackedVector3Array([Vector3(0, y0, 0), d0 * r0 + Vector3(0, y0, 0), d1 * r0 + Vector3(0, y0, 0)]))
 				for q in range(3):
@@ -130,8 +140,6 @@ static func _generer(mesh: Mesh) -> Array:
 					t.append_array(PackedFloat32Array([1, 0, 0, 1]))
 				uv.append_array(PackedVector2Array([Vector2(0.5, 0.5), Vector2(0.5 + d0.x * 0.5, 0.5 + d0.z * 0.5), Vector2(0.5 + d1.x * 0.5, 0.5 + d1.z * 0.5)]))
 				ix.append_array(PackedInt32Array([kb, kb + 1, kb + 2]))
-	else:
-		return []
 	var a: Array = []
 	a.resize(Mesh.ARRAY_MAX)
 	a[Mesh.ARRAY_VERTEX] = v
@@ -140,6 +148,48 @@ static func _generer(mesh: Mesh) -> Array:
 	a[Mesh.ARRAY_TEX_UV] = uv
 	a[Mesh.ARRAY_INDEX] = ix
 	return a
+
+
+## Boîte et cylindre de RemonteeKit en ArrayMesh, tableaux calculés ici (sur le fil de construction) et partagés
+## par dimensions avec _formes : une BoxMesh ou une CylinderMesh créée sur le fil renvoyait sa mise à jour
+## (PrimitiveMesh._update, appel différé) au fil principal, 4 à 15 ms par image vers la salle (relevé du NAS,
+## 07/11/2026). Dimensions en meta (PRIM_BOITE : taille de la boîte), pour collisions_jeu.
+const PRIM_BOITE: StringName = &"prim_boite"
+
+
+static func arrays_boite(taille: Vector3) -> Array:
+	var cle: String = "B|%s|0|0|0" % str(taille)
+	verrou.lock()
+	var a: Variant = _formes.get(cle)
+	verrou.unlock()
+	if a == null:
+		a = _generer_formes(true, taille, 0.0, 0.0, 0.0, 0, false, false)
+		verrou.lock()
+		_formes[cle] = a
+		verrou.unlock()
+	return a
+
+
+static func arrays_cylindre(r_bas: float, r_haut: float, h: float, seg: int) -> Array:
+	var cle: String = "C|%f|%f|%f|%d|%d|%s|%s" % [r_haut, r_bas, h, seg, 1, "true", "true"]
+	verrou.lock()
+	var a: Variant = _formes.get(cle)
+	verrou.unlock()
+	if a == null:
+		a = _generer_formes(false, Vector3.ZERO, r_bas, r_haut, h, seg, true, true)
+		verrou.lock()
+		_formes[cle] = a
+		verrou.unlock()
+	return a
+
+
+## ArrayMesh d'une surface, ses tableaux retenus (fusion et collisions sans relire la carte).
+static func maillage_retenu(a: Array, m: Material) -> ArrayMesh:
+	var am: ArrayMesh = ArrayMesh.new()
+	am.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, a)
+	am.surface_set_material(0, m)
+	retenir(am, 0, a)
+	return am
 
 
 static func _cle_primitive(mesh: Mesh) -> String:
