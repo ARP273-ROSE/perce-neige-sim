@@ -4389,9 +4389,9 @@ func _cable() -> void:
 			pts[k] += Vector3(0, VehiculeRemontee.Y_TRACTEUR_3S, 0)
 		await _pause("câble : tracé")
 		await _porteurs(c)
-		_cavaliers(c)
+		await _cavaliers(c)
 		await _pause("câble : cavaliers 3S")
-		_poulies_3s = m3s.construire(c, poulies_3s)
+		_poulies_3s = await m3s.construire(c, poulies_3s, _pause.bind("câble : machinerie 3S"))
 		await _pause("câble : machinerie 3S")
 	_preparer_charges()
 	await _pause("câble : charges")
@@ -4512,6 +4512,7 @@ func _caler_cavaliers() -> void:
 		n.rotation.x = atan2(y_cable(d + 2.0, e[2]) - y_cable(d - 2.0, e[2]) - f2, 4.0)
 
 
+## (une pause par brin : 9 ms d'un bloc pour les deux, relevé du 07/11/2026)
 func _cavaliers(parent: Node3D) -> void:
 	var L: float = longueur_h()
 	var appuis: Array = [0.0]
@@ -4521,6 +4522,8 @@ func _cavaliers(parent: Node3D) -> void:
 	for montee in [true, false]:
 		var x0: float = _x_brin(montee)
 		var e: float = VehiculeRemontee.E_PORTEURS_3S * 0.5
+		if not montee:
+			await _pause("câble : cavaliers 3S")
 		for k in range(N_CAVALIERS):
 			var d: float = L * (k + 0.5) / N_CAVALIERS
 			var proche: bool = false
@@ -5812,8 +5815,8 @@ func _poser_pylones_treillis() -> void:
 			py.deviation = atan(_pente_chainette(d - hs - 0.3, true)) - atan(_pente_chainette(d + hs + 0.3, true))
 		py.name = "P%d" % (i + 1)
 		_enfant(py)
-		py.construire()
-		MeshMerge.merge(py, [], "Pylone", false, _garder_pylones())
+		await py.construire_par_tranches(_pause.bind("pylônes treillis : pièces"))
+		await MeshMerge.merge_par_tranches(py, [], "Pylone", _garder_pylones(), _pause.bind("pylônes treillis : fusion"))
 		await _pause("pylônes treillis")
 
 

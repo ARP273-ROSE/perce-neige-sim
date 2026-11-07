@@ -31,12 +31,24 @@ var l_aval: float = 6.0
 
 
 func construire() -> void:
+	for f in _debut_construction():
+		(f as Callable).call()
+
+
+## construire() en étapes (sabots, rangs ou fût, têtes), `pause` attendue entre deux : un pylône du 3S faisait 21 ms
+## en moyenne d'un bloc, 42 au pire (relevé du 07/11/2026).
+func construire_par_tranches(pause: Callable) -> void:
+	for f in _debut_construction():
+		(f as Callable).call()
+		await pause.call()
+
+
+func _debut_construction() -> Array:
 	for c in get_children():
 		c.queue_free()
 	if va_et_vient:
-		_construire_vav()
-		return
-	_construire_3s()
+		return [_construire_vav]
+	return _phases_3s()
 
 
 ## Pylônes du 3S. Commun : deux poutres de sabot, une par voie, qui suivent le câble (le porteur repose dessus
@@ -44,29 +56,35 @@ func construire() -> void:
 ## Ouvrage du haut : longues poutres cintrées sur quatre rangées de deux pieds, porte-à-faux plongeant à l'aval.
 ## P1 : quatre montants sur de gros plots ronds, base rouge. P2 : tour élancée sur plots bas.
 ## Cotes estimées sur photo, d'après la voie de 10 m (±15 %).
-func _construire_3s() -> void:
+func _phases_3s() -> Array:
 	var m: String = "galva_pylone"
 	var y_c := func(z: float, montee: bool = true) -> float:
 		return float(cable_y.call(z, montee)) if cable_y.is_valid() else hauteur_porteurs() - z * sin(pente)
 	var ouvrage: bool = forme == "ouvrage"
-	for sx in [-1.0, 1.0]:
-		_poutre_sabot(sx, y_c, m)
 	var rangs: Array = RANGS_OUVRAGE if ouvrage else [-1.2, 1.2]
+	var ph: Array = []
+	for sx in [-1.0, 1.0]:
+		ph.append(func() -> void: _poutre_sabot(sx, y_c, m))
 	if ouvrage:
 		for z in rangs:
-			_rang_ouvrage(float(z), y_c, m)
-		for k in range(rangs.size() - 1):
-			_entre_rangs(float(rangs[k]), float(rangs[k + 1]), y_c, m)
-		for z2 in [rangs[0], rangs[2]]:
-			_tete(float(z2), y_c, m)
-		_escalier(float(rangs[1]) + 2.5, y_c, m)
+			ph.append(func() -> void: _rang_ouvrage(float(z), y_c, m))
+		ph.append(func() -> void:
+			for k in range(rangs.size() - 1):
+				_entre_rangs(float(rangs[k]), float(rangs[k + 1]), y_c, m))
+		ph.append(func() -> void:
+			for z2 in [rangs[0], rangs[2]]:
+				_tete(float(z2), y_c, m)
+			_escalier(float(rangs[1]) + 2.5, y_c, m))
 	else:
-		_fut_3s(y_c, m)
-		for z3 in rangs:
-			_tete(float(z3), y_c, m)
+		ph.append(func() -> void: _fut_3s(y_c, m))
+		ph.append(func() -> void:
+			for z3 in rangs:
+				_tete(float(z3), y_c, m))
 	# plate-forme centrale, sous le portique
-	var zp: float = float(rangs[0])
-	RemonteeKit.boite_en(self, Vector3(3.2, 0.04, 2.6), Vector3(0, float(y_c.call(zp)) - 0.95, zp), "caillebotis")
+	ph.append(func() -> void:
+		var zp: float = float(rangs[0])
+		RemonteeKit.boite_en(self, Vector3(3.2, 0.04, 2.6), Vector3(0, float(y_c.call(zp)) - 0.95, zp), "caillebotis"))
+	return ph
 
 
 const RANGS_OUVRAGE: Array = [-1.0, 6.0, 13.0, 20.0]
