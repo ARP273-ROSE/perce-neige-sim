@@ -112,8 +112,13 @@ var _construit: bool = false
 ## Construit à l'entrée dans l'arbre seulement si personne ne l'a fait : un
 ## appel explicite à construire() juste après add_child() le refaisait (tout
 ## en double, et des pièces effacées restaient dans les listes).
+## La ligne le construit elle-même après l'avoir posé : pas de construction à l'entrée dans l'arbre (sur le fil
+## principal, chaque véhicule était construit deux fois, relevé du 07/11/2026).
+var construit_par_la_ligne: bool = false
+
+
 func _ready() -> void:
-	if not _construit:
+	if not _construit and not construit_par_la_ligne:
 		construire()
 
 
@@ -146,6 +151,28 @@ func _type() -> String:
 
 
 func construire() -> void:
+	var cle: String = _debut_construction()
+	if cle == "":
+		return
+	for f in _phases_fabrication():
+		(f as Callable).call()
+	_modeles[cle] = _modele()
+
+
+## construire() en étapes (pince, corps, fin et fusion), `pause` attendue entre deux : la fabrication d'un modèle
+## faisait 7 à 11 ms d'un bloc sur le fil principal (relevé du 07/11/2026). Une copie de modèle reste d'un trait.
+func construire_par_tranches(pause: Callable) -> void:
+	var cle: String = _debut_construction()
+	if cle == "":
+		return
+	for f in _phases_fabrication():
+		(f as Callable).call()
+		await pause.call()
+	_modeles[cle] = _modele()
+
+
+## Vide le véhicule, tire son numéro ; copie le modèle s'il existe (rend ""), sinon rend la clé du modèle à fabriquer.
+func _debut_construction() -> String:
 	_construit = true
 	for c in get_children():
 		remove_child(c)
@@ -163,9 +190,8 @@ func construire() -> void:
 	var cle: String = "%s|%d" % [_type(), numero]
 	if _modeles.has(cle):
 		_copier(_modeles[cle])
-		return
-	_fabriquer()
-	_modeles[cle] = _modele()
+		return ""
+	return cle
 
 
 ## Copie détachée des pièces, et où retrouver les références.
@@ -219,8 +245,12 @@ func _par_indices(ix: PackedInt32Array) -> Node:
 	return n
 
 
-## Fabrication complète (le premier véhicule de chaque variante).
-func _fabriquer() -> void:
+## Fabrication complète (le premier véhicule de chaque variante), en trois étapes : pince, corps, fin.
+func _phases_fabrication() -> Array:
+	return [_fabriquer_pince, _fabriquer_corps, _fabriquer_fin]
+
+
+func _fabriquer_pince() -> void:
 	_ressorts.clear()
 	_galets_roul.clear()
 	_portes.clear()
@@ -228,20 +258,26 @@ func _fabriquer() -> void:
 	_etat_anim = PackedFloat32Array([-1.0, -1.0, -1.0, -1.0])
 	places = DESCRIPTIONS.get(famille, ["", 6, ""])[1]
 	cabine = famille.begins_with("cabine")
-	var fixe: bool = constructeur() == "fixe"
+	if famille.begins_with("perche") or famille == "cabine_3s" or famille == "cabine_tph":
+		return
+	if constructeur() == "fixe":
+		_pince_fixe()
+	else:
+		_pince_debrayable()
+
+
+func _fabriquer_corps() -> void:
 	if famille.begins_with("perche"):
 		_perche()
 	elif famille == "cabine_3s" or famille == "cabine_tph":
 		_grande_cabine()
+	elif cabine:
+		_cabine()
 	else:
-		if fixe:
-			_pince_fixe()
-		else:
-			_pince_debrayable()
-		if cabine:
-			_cabine()
-		else:
-			_siege()
+		_siege()
+
+
+func _fabriquer_fin() -> void:
 	# partie suspendue sous le pivot
 	_pince = get_node_or_null("Pince") as Node3D
 	_susp = Node3D.new()
