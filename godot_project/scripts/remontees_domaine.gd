@@ -567,8 +567,12 @@ func _portees_amorce(racine: Node, file: Array) -> void:
 		# (les pylônes en treillis du 3S ne sont pas des PyloneRemontee : ils
 		# disparaissaient à 250 m — retour d'utilisateur, 26/10/2026 : « le pylône
 		# qui se matérialise 20 s avant d'y arriver »)
+		# (pylônes fusionnés pour le loin, LigneRemontee.fusionner_pylones_loin : un maillage pour toute la
+		# ligne, portée mesurée depuis son centre ; revus à 125-250 m à chaque changement de détail, seuls
+		# les pylônes proches de ce centre restaient — P2 de l'Olympique visible, P1 et P3 jamais, retour
+		# du 07/11/2026)
 		if not (c is VehiculeRemontee or c is PyloneRemontee or c is PyloneTreillis) and not String(c.name).begins_with("Gare") \
-				and String(c.name) != "Cable" and not (c is StaticBody3D):
+				and String(c.name) != "Cable" and not (c is StaticBody3D) and not String(c.name).begins_with(LigneRemontee.PYLONES_LOIN):
 			portee = DETAILS_JUSQUA
 		file.append([c, c, portee])
 
