@@ -37,6 +37,7 @@ const COULEURS: Dictionary = {
 	# d'après photos de lignes Doppelmayr (Commons, Bürserberg 2024) :
 	"galva_pylone": [Color(0.66, 0.68, 0.69), 0.55, 0.75],     # acier galvanisé brut, mat
 	"galva_patine": [Color(0.55, 0.53, 0.48), 0.75, 0.55],     # flasques ternies, rouille légère
+	"galva_sombre": [Color(0.34, 0.35, 0.35), 0.62, 0.60],     # flasques de balancier patinées (modèle 2026)
 	"garniture": [Color(0.80, 0.78, 0.70), 0.70, 0.0],         # garniture de galet claire
 	"moyeu": [Color(0.74, 0.75, 0.76), 0.30, 0.85],            # jante alu
 	"moyeu_rouge": [Color(0.70, 0.12, 0.12), 0.45, 0.30],
@@ -375,15 +376,23 @@ static var _galet_mesh: ArrayMesh = null
 ## `r` est le rayon au fond de la gorge, là où appuie le câble, comme
 ## RollerMesh.R_BANDE ; l'axe du câble est donc à r + rayon du câble de l'axe
 ## du galet. Axe du galet selon X local, centre en `c`.
+## `ligne` : galet à bandage noir et jante zinguée des pylônes modèle 2026 (RollerMesh.build_galet_ligne),
+## même rayon de contact.
+static var _galet_ligne_mesh: ArrayMesh = null
+
+
 static func galet(parent: Node3D, c: Vector3, r: float = 0.21, _l: float = 0.0, _moyeu: String = "",
-		_garniture: String = "") -> void:
+		_garniture: String = "", ligne: bool = false) -> void:
 	verrou.lock()
-	if _galet_mesh == null:
+	if ligne and _galet_ligne_mesh == null:
+		_galet_ligne_mesh = RollerMesh.build_galet_ligne(false)
+	elif not ligne and _galet_mesh == null:
 		_galet_mesh = RollerMesh.build_galet(false)
+	var gm: ArrayMesh = _galet_ligne_mesh if ligne else _galet_mesh
 	verrou.unlock()
 	var k: float = r / RollerMesh.R_BANDE
 	var mi: MeshInstance3D = MeshInstance3D.new()
-	mi.mesh = _galet_mesh
+	mi.mesh = gm
 	mi.name = "Galet"
 	# axe Y du maillage → X local, mise à l'échelle uniforme
 	mi.transform = Transform3D(Basis(Vector3.FORWARD, PI * 0.5).scaled(Vector3(k, k, k)), c)
