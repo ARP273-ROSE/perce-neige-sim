@@ -5,6 +5,14 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.57.1 — 8 novembre 2026
+
+**Olympique (3S), pylônes P1 et P3 invisibles** dans le programme PC : vus de loin, les pylônes d'une ligne sont réunis en un seul maillage. Quand le niveau de détail changeait en jeu, ce maillage n'était pas reconnu comme un pylône et repassait à une portée de 250 m au plus, mesurée depuis son centre (près de P2) : P2 restait visible, P1 et P3 s'éteignaient. Il garde maintenant la portée des pylônes (3 km). Nouveau banc : chaque pylône de chaque ligne doit être visible de près, à la construction puis aux détails 2 et 0 (66 lignes, avec et sans pack HD).
+
+**Embarquement en gare amont** des remontées de plus de 250 m de dénivelé (PC et PWA) : la gare du haut était cherchée à l'altitude de la gare du bas, donc jamais « proche ». En 3S (858 m de dénivelé), on entrait dans la cabine pour descendre sans être assis ni emporté. La distance aux gares se mesure maintenant en plan. Nouveau banc : descente complète en 3S, assis d'office en gare amont.
+
+Vérifié : 50 bancs sans écran (dont les deux nouveaux, en échec sur la 1.57.0).
+
 ## 1.57.0 — 7 novembre 2026
 
 **Réécriture du cœur, deuxième vague** : plus d'à-coup en jeu pendant la construction des remontées. Chaque ligne se construit maintenant par petites tranches, sans dépasser quelques millisecondes sur le fil principal : têtes des pylônes (80 → 3 ms), boucle, câble, table de parcours, calage des galets (156 → 7 ms), lanceurs, rails d'ouverture, portillons, téléphériques, 3S. Pylônes et véhicules ne sont plus construits deux fois. Les textes (STOP des portillons, noms de gare, numéros) et les petites pièces sont calculés sur le fil de construction : ils renvoyaient jusqu'ici leur mise en forme au fil principal, d'un bloc (images de 35 à 60 ms supprimées). Il ne reste que quelques pics isolés, une fois par ligne (24 ms au pire).
