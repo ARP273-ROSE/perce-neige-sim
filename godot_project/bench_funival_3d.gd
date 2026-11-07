@@ -75,7 +75,7 @@ func _tick() -> void:
 			while d < L - 5.0:
 				var y: float = _lg.y_voie(d)
 				var sol: float = _lg._sol(0.0, -d)
-				if d < _lg.portail_d - 30.0:
+				if d > 80.0 and d < _lg.portail_d - 30.0:      # (gare aval : voie en fosse)
 					pire_dehors = minf(pire_dehors, y - 1.0 - sol)
 				elif d > _lg.portail_d + 30.0 and d < L - 60.0:
 					pire_roche = minf(pire_roche, sol - (y + 2.0 * Funival.R_TUNNEL))
