@@ -1132,6 +1132,7 @@ func _pres_des_gares(lg: LigneRemontee, p: Vector3, portee: float = PORTEE_GARES
 	var r2: float = portee * portee
 	return Vector2(p.x - a.x, p.z - a.z).length_squared() < r2 or Vector2(p.x - b.x, p.z - b.z).length_squared() < r2
 var _t_loupe: float = -1000.0
+var _t_bord_funi: float = -1000.0
 var _etat_bord: String = "marche"
 
 
@@ -1418,6 +1419,7 @@ func _entrer_cabine(lg: LigneRemontee, p: Vector3) -> bool:
 			k = clampi(int(round(loc.z / 1.0)) + 2, 0, 4)
 		if v is VehiculeFunival:
 			k = VehiculeFunival.compartiment(loc.z)
+			_t_bord_funi = _t
 		# on monte en cabine à pied : chaussé, on déchausse et les skis vont
 		# au porte-skis, sur les vantaux des portes (retour d'utilisateur, 23/10/2026)
 		var skis: bool = skieur.chausse
@@ -1673,6 +1675,17 @@ func _suivre_siege() -> void:
 	var lg: LigneRemontee = a_bord[0]
 	var i: int = a_bord[1]
 	var v: VehiculeRemontee = lg.vehicule(i)
+	# Funival à quai, portes ouvertes : celui qui marche (après le temps d'entrer) redescend sur le quai, libre
+	# (essai à pied du 08/11/2026 : on restait à bord jusqu'à l'autre gare)
+	if v is VehiculeFunival and lg.zone_vehicule(i) != "ligne" and (lg as Funival).portes_ouvertes() \
+			and _t - _t_bord_funi > 1.5 and (skieur._clavier() != Vector2.ZERO or skieur.entree.length() > 0.12):
+		skieur.embarque = false
+		skieur.lever()
+		skieur.support = null
+		skieur._skis.visible = true
+		a_bord = []
+		_repos = 4.0
+		return
 	skieur.global_position = v.vers_monde(v.place_assise(a_bord[2], a_bord[4]))
 	skieur.velocity = Vector3.ZERO
 	var cap: float = _cap(v, a_bord[4])

@@ -25,7 +25,7 @@ const PAS_PROFIL: float = 5.0
 const PAS_TUNNEL: float = 2.5           # anneaux du tunnel (l'éclairage est cuit aux sommets)
 const ECART_LAMPES: float = 20.0        # 15-25 m sur photo
 const L_HALL: float = 40.0              # gare amont souterraine (quai d'un véhicule de 32 m, marge)
-const FOSSE_AVAL: float = 1.1           # rails sous le sol en gare aval (plancher ~ au niveau de l'entrée)
+const FOSSE_AVAL: float = 1.0           # rails sous le plus haut du terrain en gare aval (planchers au niveau du sol)
 
 var portail_d: float = 496.2            # (données ; OSM : bout du pont, début du tunnel)
 var _y_portail: float = 0.0
@@ -54,6 +54,11 @@ func zone_vehicule(i: int) -> String:
 	if d >= _x_quai(false) - 1.0:
 		return "gare_amont"
 	return "ligne"
+
+
+## Véhicules à quai, portes ouvertes (on peut entrer et sortir).
+func portes_ouvertes() -> bool:
+	return _phase == "quai" and T_QUAI - _t_quai > 1.5 and _t_quai > 1.5
 
 
 func demi_interieur() -> Vector2:
@@ -105,6 +110,36 @@ func _preparer_voie() -> void:
 	_y_amont = terrain(L)
 	_y_portail = terrain(portail_d) - PROF_PORTAIL
 	var n: int = int(ceil(L / PAS_PROFIL)) + 1
+	# gare aval : une droite ajustée sur le haut du terrain des 50 premiers mètres (moindres carrés), voie en fosse
+	# sous les planchers ; le point OSM du bout tombe dans un creux, et la voie y faisait un saut de 2,4 m
+	var sx_: float = 0.0
+	var sy_: float = 0.0
+	var sxx: float = 0.0
+	var sxy: float = 0.0
+	var m_: int = 0
+	var dd: float = 0.0
+	var W0: float = VehiculeFunival.DEMI_LARGEUR + 0.05
+	while dd <= 50.0:
+		# le plus haut du terrain en travers de la gare (quais compris) : la gare n'est jamais enterrée
+		var ys: float = -INF
+		for xs in [-(W0 + LARG_GRADINS[0]), -(W0 + LARG_GRADINS[0] * 0.5), 0.0, W0 + LARG_GRADINS[1] * 0.5, W0 + LARG_GRADINS[1]]:
+			ys = maxf(ys, _sol(float(xs), -dd))
+		sx_ += dd
+		sy_ += ys
+		sxx += dd * dd
+		sxy += dd * ys
+		m_ += 1
+		dd += 2.5
+	var pente_g: float = (float(m_) * sxy - sx_ * sy_) / maxf(float(m_) * sxx - sx_ * sx_, 1e-6)
+	var y0_g: float = (sy_ - pente_g * sx_) / float(m_)
+	# relevée pour que, sous tout le quai, le plancher ne soit jamais sous le terrain
+	var dep: float = -INF
+	dd = 0.0
+	while dd <= 2.0 * VehiculeFunival.DEMI_L + 2.0:
+		for xs2 in [-(W0 + LARG_GRADINS[0]), -(W0 + LARG_GRADINS[0] * 0.5), 0.0, W0 + LARG_GRADINS[1] * 0.5, W0 + LARG_GRADINS[1]]:
+			dep = maxf(dep, _sol(float(xs2), -dd) - (y0_g + pente_g * dd))
+		dd += 1.0
+	y0_g += maxf(dep, 0.0)
 	var cible: PackedFloat32Array = PackedFloat32Array()
 	cible.resize(n)
 	for k in range(n):
@@ -114,7 +149,7 @@ func _preparer_voie() -> void:
 			# gare aval : voie en fosse entre les quais, au niveau du sol
 			# gare aval : voie en fosse entre les quais (photos), planchers au niveau de l'entrée
 			if d < 75.0:
-				y = lerpf(_sol(0.0, -d) - FOSSE_AVAL, y, smoothstep(45.0, 75.0, d))
+				y = lerpf(y0_g + pente_g * d - FOSSE_AVAL, y, smoothstep(45.0, 75.0, d))
 			# approche du portail : rejoint la cote d'entrée du tunnel
 			y = lerpf(y, _y_portail, smoothstep(portail_d - 80.0, portail_d, d))
 			cible[k] = y
@@ -132,7 +167,10 @@ func _preparer_voie() -> void:
 				s += cible[j]
 				c += 1
 			l2[k] = s / float(c)
-		l2[0] = _sol(0.0, 0.0) - FOSSE_AVAL
+		l2[0] = y0_g - FOSSE_AVAL
+		# (la gare reste droite : pas de lissage sous le quai)
+		for k2 in range(1, mini(n, int(45.0 / PAS_PROFIL) + 1)):
+			l2[k2] = y0_g + pente_g * float(k2) * PAS_PROFIL - FOSSE_AVAL
 		l2[n - 1] = _y_amont
 		cible = l2
 	_prof = cible
@@ -459,7 +497,7 @@ const GIRON: float = 0.28
 ## Gradins d'un côté de la gare aval, en boîtes [taille, centre] (repère de la ligne) : pour chaque compartiment,
 ## un palier au niveau de son plancher, devant la porte, et du côté aval une volée de petites marches qui monte du
 ## palier précédent (du sol pour le premier).
-func _gradins(sx: float) -> Array:
+func _gradins(sx: float, rampes: bool = false) -> Array:
 	var r: Array = []
 	var dq: float = _x_quai(true)
 	var lq: float = VehiculeFunival.DEMI_L * 2.0 + 2.0
@@ -473,15 +511,31 @@ func _gradins(sx: float) -> Array:
 		var d: float = dq - lq * 0.5 + lc * (float(k) + 0.5)
 		var d_bas: float = d - lc * 0.5
 		var y: float = VehiculeFunival.y_plancher_monde(self, d)
+		if k == 0:
+			# premier gradin : la volée part du sol AVANT le bout du quai, assez longue pour rester sous 30°
+			var lf0: float = clampf(absf(y - y_prec) / 0.55, 0.5, 8.0)
+			y_prec = minf(_sol(x - larg * 0.4, -(d_bas - lf0)), _sol(x + larg * 0.4, -(d_bas - lf0)))
+			lf0 = clampf(absf(y - y_prec) / 0.55, 0.5, 8.0)
+			d_bas -= lf0
 		var h: float = y - y_prec
-		var ns: int = clampi(int(ceil(absf(h) / MARCHE)), 0, 12)
+		var ns: int = clampi(int(ceil(absf(h) / MARCHE)), 0, 40)
 		var lf: float = minf(float(ns) * GIRON, lc * 0.5 - 0.6)
-		for j in range(ns):
-			var haut: float = y_prec + h * float(j + 1) / float(ns)
-			var bas: float = minf(y_prec, haut) - 0.12
-			var prof: float = lf / float(ns)
-			r.append([Vector3(larg, haut - bas, prof + 0.01), Vector3(x, (haut + bas) * 0.5, -(d_bas + prof * (float(j) + 0.5)))])
-		r.append([Vector3(larg, 0.12, lc - lf + 0.02), Vector3(x, y - 0.06, -(d_bas + lf + (lc - lf) * 0.5))])
+		if k == 0:
+			lf = d - lc * 0.5 - d_bas
+		if rampes and ns > 0:
+			# [taille, centre, angle] : dalle inclinée du palier précédent au palier du compartiment
+			var lr: float = Vector2(lf, h).length()
+			var a: float = atan2(h, lf)
+			var c: Vector3 = Vector3(x, (y_prec + y) * 0.5, -(d_bas + lf * 0.5)) + Vector3(0, -0.1 * cos(a), -0.1 * sin(a))
+			r.append([Vector3(larg, 0.2, lr + 0.05), c, a])
+		else:
+			for j in range(ns):
+				var haut: float = y_prec + h * float(j + 1) / float(ns)
+				var bas: float = minf(y_prec, haut) - 0.12
+				var prof: float = lf / float(ns)
+				r.append([Vector3(larg, haut - bas, prof + 0.01), Vector3(x, (haut + bas) * 0.5, -(d_bas + prof * (float(j) + 0.5)))])
+		var lp: float = (d + lc * 0.5) - (d_bas + lf)
+		r.append([Vector3(larg, 0.12, lp + 0.02), Vector3(x, y - 0.06, -(d_bas + lf + lp * 0.5))])
 		y_prec = y
 	return r
 
@@ -525,7 +579,7 @@ func _gare_aval() -> void:
 		for b in _gradins(sx):
 			_boite_st(st, b[0], b[1])
 	var gr: MeshInstance3D = _maillage(st, mat_funi("caillebotis_sombre"), "Gradins")
-	gr.reparent(g)
+	gr.reparent(g, false)          # (hors de l'arbre pendant la construction : pas de transformation globale)
 	bardage.append(gr)
 	for k in range(n):
 		var d: float = dq - lq * 0.5 + lc * (float(k) + 0.5)
@@ -657,8 +711,28 @@ func _collisions_funi() -> void:
 			boite.call(Vector3(4.0, 0.4, lc + 0.05), Vector3(-(W + 2.0), y - 0.2, -d))
 			boite.call(Vector3(2.4, 0.4, lc + 0.05), Vector3(W + 1.2, y - 0.2, -d))
 	for sx3 in [-1.0, 1.0]:
-		for b in _gradins(sx3):
-			boite.call(b[0], b[1])
+		for b in _gradins(sx3, true):
+			if b.size() > 2:
+				# rampe sous une volée (les marches de 0,18 m ont un giron plus court que le pas du skieur)
+				var cs: CollisionShape3D = CollisionShape3D.new()
+				var bx: BoxShape3D = BoxShape3D.new()
+				bx.size = b[0]
+				cs.shape = bx
+				cs.transform = Transform3D(Basis(Vector3.RIGHT, b[2]), b[1])
+				corps.add_child(cs)
+			else:
+				boite.call(b[0], b[1])
+		# garde-corps extérieur et jupe côté fosse, sur toute la longueur des gradins
+		var larg3: float = LARG_GRADINS[0] if sx3 < 0.0 else LARG_GRADINS[1]
+		var dq3: float = _x_quai(true)
+		for k3 in range(n):
+			var d3: float = dq3 - lq * 0.5 + lc * (float(k3) + 0.5)
+			var y3: float = VehiculeFunival.y_plancher_monde(self, d3)
+			# garde-corps : du sol au-dessus de la main courante (on passait dessous depuis une volée)
+			var xg3: float = sx3 * (W + larg3 - 0.05)
+			var sol3: float = minf(_sol(xg3, -(d3 - lc * 0.5)), _sol(xg3, -(d3 + lc * 0.5))) - 0.5
+			boite.call(Vector3(0.3, y3 + 1.1 - sol3, lc + 0.05), Vector3(xg3 + sx3 * 0.1, (y3 + 1.1 + sol3) * 0.5, -d3))
+			boite.call(Vector3(0.1, 2.5, lc + 0.05), Vector3(sx3 * (W + 0.02), y3 - 1.3, -d3))
 	# salle amont : parois, et plancher du bâtiment au débouché
 	var hx: float = W + 4.2
 	for sx in [-1.0, 1.0]:
