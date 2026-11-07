@@ -14,6 +14,9 @@ var _lg: Funival = null
 var _y0: float = 0.0
 var _ecart_min: float = INF
 var _t_depart: float = -1.0
+var _y_prec: float = 0.0
+var _chute_max: float = 0.0
+var _yaw_amont: float = 0.0
 
 
 func _initialize() -> void:
