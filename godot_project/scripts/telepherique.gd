@@ -85,6 +85,7 @@ func demi_interieur() -> Vector2:
 
 
 func construire() -> void:
+	_portillons_tph.clear()              # (nœuds de la construction précédente, libérés avec elle)
 	_poulies.clear()
 	_terrassements.clear()
 	_mat_porteurs = null
@@ -140,6 +141,9 @@ func _construire_corps() -> void:
 		await _pause("téléphérique : cabine")
 	_s = _x_quai(true)
 	_maj_positions()
+	_portillons_quai()
+	for i2 in range(2):
+		_maj_portillons_tph(i2)
 	if avec_collisions:
 		_collisions_tph()
 		await _pause("téléphérique : collisions")
@@ -255,6 +259,113 @@ func _placer(i: int) -> void:
 		(_corps[i][0] as Node3D).transform = Transform3D(b, p) * bal
 		for cs in _corps[i][1]:
 			(cs as CollisionShape3D).disabled = porte > 0.5
+	_maj_portillons_tph(i)
+
+
+## Portillons de quai (demande d'utilisateur du 07/11/2026, après la sonde des chutes) : on tombait de 5 à
+## 10 m dans la baie vide de la Grande Motte, ou par l'avant du quai amont du Fornet. Barrière galvanisée à
+## deux lisses le long de chaque bord de baie (Grande Motte) ou en travers de la baie au nez du quai
+## (Fornet, amont) ; collision active cabine absente, ouverte (collision coupée, barrière effacée) quand la
+## cabine de la voie est à moins de D_QUAI + 4 m de sa place à quai. Avant du quai amont du Fornet hors des
+## baies : garde-corps fixe.
+var _portillons_tph: Array = []          # [montée ?, aval ?, formes de collision, visuel, ouvert ?]
+
+
+func _portillons_quai() -> void:
+	_portillons_tph.clear()
+	var racine: Node3D = Node3D.new()
+	racine.name = "Portillons"
+	_enfant(racine)
+	var corps: StaticBody3D = null
+	if avec_collisions:
+		corps = StaticBody3D.new()
+		corps.name = "CollisionsPortillons"
+		corps.collision_layer = CollisionsJeu.COUCHE_DECOR
+		corps.collision_mask = 0
+		_enfant(corps)
+	var L: float = longueur_h()
+	var h: float = 1.1
+	for aval in [true, false]:
+		var y_q: float = terrain(0.0 if aval else L)
+		for montee in [true, false]:
+			var xv: float = _x_brin(montee)
+			var segs: Array = []            # [a, b] dans le repère de la ligne, au niveau du quai
+			if gare_aval_existante:
+				# Grande Motte : les deux bords de la baie, sur la longueur des quais (cf. _collisions_grande_motte)
+				var z_g: float = TphGrandeMotte.Z_NEZ if aval else -L
+				var z0: float = (-2.2 if aval else 0.0) + z_g
+				var zf: float = ((-2.2 - TphGrandeMotte.L_BAIE) if aval else (-TphGrandeMotte.L_BAIE - 1.0)) + z_g
+				for e in [-1.95, 1.95]:
+					segs.append([Vector3(xv + e, y_q, z0), Vector3(xv + e, y_q, zf)])
+			elif String(name) == "tph_fornet" and not aval:
+				# Fornet, amont : en travers de la baie, au nez du quai
+				segs.append([Vector3(xv - 1.6, y_q, -L), Vector3(xv + 1.6, y_q, -L)])
+			if segs.is_empty():
+				continue
+			var vis: Node3D = Node3D.new()
+			racine.add_child(vis)
+			var formes: Array = []
+			for sg in segs:
+				var a: Vector3 = sg[0]
+				var b: Vector3 = sg[1]
+				for yy in [0.55, h]:
+					RemonteeKit.barre(vis, a + Vector3(0, yy, 0), b + Vector3(0, yy, 0), 0.025, "galva", 6)
+				var n: int = maxi(1, int(a.distance_to(b) / 2.5))
+				for k in range(n + 1):
+					var q: Vector3 = a.lerp(b, float(k) / n)
+					RemonteeKit.barre(vis, q, q + Vector3(0, h, 0), 0.03, "galva", 6)
+				if corps != null:
+					var cs: CollisionShape3D = CollisionShape3D.new()
+					var bx: BoxShape3D = BoxShape3D.new()
+					var lg2: float = a.distance_to(b)
+					bx.size = Vector3(0.12, h + 0.6, lg2) if absf(b.z - a.z) > absf(b.x - a.x) else Vector3(lg2, h + 0.6, 0.12)
+					cs.shape = bx
+					cs.position = (a + b) * 0.5 + Vector3(0, (h + 0.6) * 0.5, 0)
+					corps.add_child(cs)
+					formes.append(cs)
+			_portillons_tph.append([montee, aval, formes, vis, false])
+	# Fornet, amont : garde-corps fixe à l'avant du quai, hors des baies
+	if String(name) == "tph_fornet":
+		var y_a: float = terrain(L)
+		var hx: float = voie * 0.5 + 3.0
+		var xs: Array = [-hx]
+		for m2 in [true, false]:
+			xs.append(_x_brin(m2) - 1.6)
+			xs.append(_x_brin(m2) + 1.6)
+		xs.append(hx)
+		xs.sort()
+		for k2 in range(0, xs.size(), 2):
+			var a2: Vector3 = Vector3(float(xs[k2]), y_a, -L)
+			var b2: Vector3 = Vector3(float(xs[k2 + 1]), y_a, -L)
+			if a2.distance_to(b2) < 0.2:
+				continue
+			for yy2 in [0.55, h]:
+				RemonteeKit.barre(racine, a2 + Vector3(0, yy2, 0), b2 + Vector3(0, yy2, 0), 0.025, "peinture_gris", 6)
+			RemonteeKit.barre(racine, a2, a2 + Vector3(0, h, 0), 0.03, "peinture_gris", 6)
+			RemonteeKit.barre(racine, b2, b2 + Vector3(0, h, 0), 0.03, "peinture_gris", 6)
+			if corps != null:
+				var cs2: CollisionShape3D = CollisionShape3D.new()
+				var bx2: BoxShape3D = BoxShape3D.new()
+				bx2.size = Vector3(a2.distance_to(b2), h + 0.6, 0.12)
+				cs2.shape = bx2
+				cs2.position = (a2 + b2) * 0.5 + Vector3(0, (h + 0.6) * 0.5, 0)
+				corps.add_child(cs2)
+
+
+## Ouvre ou ferme les portillons de la voie de la cabine i selon sa distance à sa place à quai.
+func _maj_portillons_tph(i: int) -> void:
+	var montee: bool = i == 0
+	var d: float = _vehicules[i][1]
+	for p in _portillons_tph:
+		if bool(p[0]) != montee:
+			continue
+		var ouvert: bool = absf(d - _x_quai(bool(p[1]))) < D_QUAI + 4.0
+		if ouvert == bool(p[4]) or not is_instance_valid(p[3]):
+			continue
+		p[4] = ouvert
+		(p[3] as Node3D).visible = not ouvert
+		for cs in p[2]:
+			(cs as CollisionShape3D).disabled = ouvert
 
 
 ## Charges : une cabine par voie (60 % de passagers).
@@ -639,7 +750,10 @@ func _collisions_grande_motte(corps: StaticBody3D, aval: bool) -> void:
 	var zf: float = (-2.2 - TphGrandeMotte.L_BAIE) if aval else (-TphGrandeMotte.L_BAIE - 1.0)
 	var z0: float = 0.0
 	if aval:
-		boite.call(Vector3(2.0 * W, 0.4, 2.2), Vector3(0, -0.2, -1.1))
+		# bande avant prolongée de 1 m sous le bâtiment : sa façade est en biais (z de 12,4 à 13,6 m dans le
+		# repère de la ligne), il restait jusqu'à 0,9 m de vide entre le quai et le plancher de l'étage, où l'on
+		# tombait jusqu'au rocher (sonde des chutes du 07/11/2026)
+		boite.call(Vector3(2.0 * W, 0.4, 3.2), Vector3(0, -0.2, -0.6))
 		z0 = -2.2
 	boite.call(Vector3(2.0 * bi, 0.4, absf(zf - z0)), Vector3(0, -0.2, (z0 + zf) * 0.5))
 	for s in [-1.0, 1.0]:
@@ -666,7 +780,19 @@ func _collisions_grande_motte(corps: StaticBody3D, aval: bool) -> void:
 			var long_b: float = (emp[1] - emp[2]).length()
 			var larg_b: float = (emp[0] - emp[1]).length()
 			var rot: Basis = Basis(Vector3.UP, atan2(dehors.x, dehors.y))
-			boite.call(Vector3(larg_b - 0.6, 0.4, long_b - 0.6), Vector3(c.x, -0.2, c.y), rot)
+			boite.call(Vector3(larg_b + 0.2, 0.4, long_b + 0.2), Vector3(c.x, -0.2, c.y), rot)
+			# murs du bâtiment : les deux côtés, et la façade de la porte hors de son ouverture (on sortait du
+			# plancher par le côté et l'on tombait de 9 m)
+			var mur := func(a3: Vector2, b3: Vector2) -> void:
+				var u3: Vector2 = b3 - a3
+				var r3: Basis = Basis(Vector3.UP, atan2(u3.x, u3.y))
+				var m3: Vector2 = (a3 + b3) * 0.5
+				boite.call(Vector3(0.25, 2.6, u3.length()), Vector3(m3.x, 1.3, m3.y), r3)
+			mur.call(emp[1], emp[2])
+			mur.call(emp[3], emp[0])
+			var dir_p: Vector2 = (emp[3] - emp[2]).normalized()
+			mur.call(emp[2], m - dir_p * 0.9)
+			mur.call(m + dir_p * 0.9, emp[3])
 			# escalier extérieur, le long de la façade (comme TphGrandeMotte.escalier_salle)
 			var lat: Vector2 = Vector2(dehors.y, -dehors.x)
 			var palier: Vector2 = m + dehors * 1.4
