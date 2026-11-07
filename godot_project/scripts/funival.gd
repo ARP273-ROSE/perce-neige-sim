@@ -13,6 +13,10 @@ extends Telepherique
 
 const V_FUNI: float = 12.0              # m/s (fiche)
 const A_FUNI: float = 0.6               # accélération / freinage de service (m/s², estimé)
+## Vitesse dans l'évitement (aiguillages passifs et courbes en S) : ralentissement signalé par l'utilisateur
+## (08/11/2026), valeur NON SOURCÉE, calée pour que le trajet retrouve les durées publiées (Wikipédia 4,47 min,
+## OSM 4,8 min, RM.net 5 min) au lieu de 3 min 27 à 12 m/s partout.
+const V_EVIT: float = 4.0
 const ECARTEMENT: float = 1.20          # m (OSM, Wikipédia)
 const E_VOIES: float = 3.75             # entraxe des deux voies dans l'évitement (estimé sur photo : 0,8-1 m entre les caisses de 2,8 m)
 const L_EVITEMENT: float = 200.0        # m (estimé, 150-250 sur les photos)
@@ -778,6 +782,13 @@ func _process_corps(delta: float) -> void:
 				_phase = "route"
 	else:
 		var v_max: float = vitesse * CRANS[cran]
+		# évitement : on y entre à V_EVIT, freinage anticipé (les deux véhicules y entrent ensemble)
+		var c_ev: float = longueur_h() * 0.5
+		var h_ev: float = L_EVITEMENT * 0.5 + L_RACCORD
+		var hors: float = maxf(absf(_s - c_ev) - h_ev, 0.0) * sqrt(1.0 + pow(pente_voie(_s), 2.0))
+		var vers: bool = (_s < c_ev) == (_sens > 0.0) or hors <= 0.0
+		if vers:
+			v_max = minf(v_max, sqrt(V_EVIT * V_EVIT + 2.0 * A_FUNI * hors))
 		# distance restante le long de la voie (freinage jusqu'au quai)
 		var reste: float = absf(but - _s) * sqrt(1.0 + pow(pente_voie(_s), 2.0))
 		v_max = minf(v_max, maxf(sqrt(2.0 * A_FUNI * maxf(reste - 0.3, 0.0)), 0.35))
@@ -799,6 +810,71 @@ func _process_corps(delta: float) -> void:
 	vitesse_reelle = absf(_v)
 	_maj_positions()
 	_dt = 0.0
+
+
+## Câbles, d'après le principe du funiculaire à deux véhicules (et la remarque de l'utilisateur du 08/11/2026 : un
+## petit câble de retour à l'aval, qui empêche l'élasticité du câble) : le tracteur va du bout amont de chaque
+## véhicule à la poulie motrice de la gare amont ; le câble inférieur, plus fin, du bout aval de chaque véhicule à
+## la poulie de tension de la gare aval. Ils courent sur les poulies entre les rails ; au-dessus du véhicule du
+## haut, deux brins du tracteur côte à côte, sous celui du bas, deux brins du câble inférieur.
+## Refaits quand un véhicule a avancé de plus de 3 m (deux maillages, une centaine de sommets).
+var _cables: MeshInstance3D = null
+var _d_cables: float = -1000.0
+var _mat_cables: StandardMaterial3D = null
+const D_TRACTEUR: float = 0.052        # diamètre (estimé ; non publié)
+const D_INFERIEUR: float = 0.032       # (estimé)
+
+
+func _maj_positions() -> void:
+	super._maj_positions()
+	if absf(_s - _d_cables) > 3.0:
+		_d_cables = _s
+		_refaire_cables()
+
+
+func _refaire_cables() -> void:
+	if _mat_cables == null:
+		_mat_cables = StandardMaterial3D.new()
+		_mat_cables.albedo_color = Color(0.22, 0.22, 0.23)
+		_mat_cables.roughness = 0.5
+		_mat_cables.metallic = 0.8
+		_mat_cables.cull_mode = BaseMaterial3D.CULL_DISABLED
+	var L: float = longueur_h()
+	var st: SurfaceTool = SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for i in range(2):
+		var d: float = _vehicules[i][1]
+		var dx: float = (-1.0 if i == 0 else 1.0) * 0.07
+		_ruban(st, d + VehiculeFunival.DEMI_L, L - 1.0, i, dx, D_TRACTEUR, -0.05)
+		_ruban(st, 1.0, d - VehiculeFunival.DEMI_L, i, dx, D_INFERIEUR, -0.07)
+	var mesh: ArrayMesh = st.commit()
+	if mesh.get_surface_count() > 0:
+		mesh.surface_set_material(0, _mat_cables)
+	if _cables == null:
+		_cables = MeshInstance3D.new()
+		_cables.name = "CablesFuni"
+		_cables.set_meta("portee_loin", true)
+		_cables.set_meta(MeshMerge.SANS_FUSION, true)
+		_cables.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		_enfant(_cables)
+	_cables.mesh = mesh
+
+
+## Ruban (deux faces en croix) le long de la voie du véhicule i, de d0 à d1, au-dessus des poulies.
+func _ruban(st: SurfaceTool, d0: float, d1: float, i: int, dx: float, diam: float, dy: float) -> void:
+	if d1 - d0 < 0.5:
+		return
+	var n: int = maxi(1, int(ceil((d1 - d0) / 6.0)))
+	var r: float = diam * 0.5
+	var prec: Vector3 = Vector3.INF
+	for k in range(n + 1):
+		var d: float = d0 + (d1 - d0) * float(k) / float(n)
+		var p: Vector3 = Vector3(x_voie(d, i) + dx, y_voie(d) + dy, -d)
+		if k > 0:
+			for o in [Vector3(r, 0, 0), Vector3(0, r, 0)]:
+				for q in [prec - o, prec + o, p + o, prec - o, p + o, p - o]:
+					st.add_vertex(q)
+		prec = p
 
 
 ## Corps de collision d'un véhicule : planchers en gradins, cloisons, flancs (coupés portes ouvertes), toit.
