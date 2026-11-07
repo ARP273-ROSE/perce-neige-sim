@@ -385,15 +385,10 @@ func _portique() -> void:
 		RemonteeKit.barre(_n, Vector3(-0.21, y, z), Vector3(0.21, y, z), 0.012, "galva_pylone", 5)
 		y += 0.30
 	RemonteeKit.boite_en(_n, Vector3(0.44, 0.28, 0.02), Vector3(0, yb + 0.24, 0.0), "blanc_plaque")
-	var lab: Label3D = Label3D.new()
-	lab.text = "%02d" % numero
-	lab.font_size = 90
-	lab.pixel_size = 0.0024
-	lab.modulate = Color(0.05, 0.05, 0.05)
-	lab.outline_size = 0
+	# (texte figé, calculé sur le fil de construction : un Label3D y renvoyait sa mise en forme au fil principal)
+	var lab: MeshInstance3D = RemonteeKit.texte_fige(_n, "%02d" % numero, 90, 0.0024, Color(0.05, 0.05, 0.05))
 	lab.position = Vector3(0, yb + 0.24, 0.012)
 	lab.name = "NumeroPortique"
-	_n.add_child(lab)
 
 
 ## Passerelle ajourée, à plat, dans le sens le plus long de `taille` : deux longerons et des
@@ -849,15 +844,9 @@ func _plaques(r0: float, r1: float, y_tete: float) -> void:
 	var yp: float = y_tete - 1.0
 	var z: float = r1 + 0.012
 	RemonteeKit.boite_en(_n, Vector3(0.36, 0.30, 0.02), Vector3(0.42, yp, z - 0.06), "plaque_bleue")
-	var lab: Label3D = Label3D.new()
-	lab.text = str(numero)
-	lab.font_size = 110
-	lab.pixel_size = 0.0022
-	lab.modulate = Color(1, 1, 1)
-	lab.outline_size = 0
+	var lab: MeshInstance3D = RemonteeKit.texte_fige(_n, str(numero), 110, 0.0022, Color(1, 1, 1))
 	lab.position = Vector3(0.42, yp, z - 0.045)
 	lab.name = "Numero"
-	_n.add_child(lab)
 	# panneau de consigne (pictogramme bleu sur fond blanc)
 	var y2: float = y_tete - 2.2
 	var r2: float = lerpf(r0, r1, (y2 - _y_pied - 0.31) / (y_tete - _y_pied - 0.31))
@@ -950,10 +939,5 @@ func _construire_teleski() -> void:
 		var xi: float = x - signf(x - x_fut) * 0.12 if absf(x - x_fut) > 0.01 else x + 0.12
 		RemonteeKit.boite_en(self, Vector3(0.04, 0.22, Lt + 0.3), Vector3(xi, yg, 0), "galva")
 		RemonteeKit.boite_en(self, Vector3(0.08, h - 0.16 - (yg - 0.1), 0.10), Vector3(xi, (h - 0.16 + yg - 0.1) * 0.5, 0), "galva")
-	var lab: Label3D = Label3D.new()
-	lab.text = str(numero)
-	lab.font_size = 64
-	lab.pixel_size = 0.003
-	lab.modulate = Color(0.05, 0.05, 0.05)
+	var lab: MeshInstance3D = RemonteeKit.texte_fige(self, str(numero), 64, 0.003, Color(0.05, 0.05, 0.05))
 	lab.position = Vector3(x_fut, minf(3.0, h * 0.5), 0.18)
-	add_child(lab)

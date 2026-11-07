@@ -439,17 +439,10 @@ func _numero(parent: Node3D, texte: String, pos: Vector3, rot: float, taille: in
 	# maillage de texte (TextMesh), partagé par texte et taille, fusionné avec
 	# le véhicule : des centaines de Label3D qui bougent coûtaient ~25 ms par
 	# image au pied de Solaise
-	var cle: String = "%s|%d|%.4f" % [texte, taille, px]
-	if not _textes.has(cle):
-		var tm: TextMesh = TextMesh.new()
-		tm.text = texte
-		tm.font_size = taille
-		tm.pixel_size = px
-		tm.depth = 0.0
-		tm.curve_step = 2.0
-		_textes[cle] = tm
+	# (figé en ArrayMesh sur le fil de construction : un TextMesh gardé renvoyait sa mise en forme au fil
+	# principal, un appel différé par numéro, relevé du 07/11/2026)
 	var mi: MeshInstance3D = MeshInstance3D.new()
-	mi.mesh = _textes[cle]
+	mi.mesh = RemonteeKit.maillage_texte(texte, taille, px, 2.0)
 	mi.material_override = _mat_texte(coul)
 	mi.position = pos
 	mi.rotation = Vector3(incl, rot, 0)
@@ -599,10 +592,8 @@ func _logo_station(cab: Node3D, face_portes: float) -> void:
 			m.albedo_texture = _aigle()
 			m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
 			m.alpha_scissor_threshold = 0.5
-		var q: QuadMesh = QuadMesh.new()
-		q.size = Vector2(e[4], e[5])
 		var mi: MeshInstance3D = MeshInstance3D.new()
-		mi.mesh = q
+		mi.mesh = _quad_logo(Vector2(e[4], e[5]))
 		mi.material_override = m
 		mi.position = e[1]
 		mi.rotation = Vector3(e[3], e[2], 0)
@@ -612,7 +603,20 @@ func _logo_station(cab: Node3D, face_portes: float) -> void:
 		cab.add_child(mi)
 
 
-static var _textes: Dictionary = {}
+static var _quads: Dictionary = {}
+
+
+## QuadMesh partagé par taille (une mise à jour différée par taille, plus une par élément de logo).
+static func _quad_logo(t: Vector2) -> QuadMesh:
+	var k: String = "%.4f|%.4f" % [t.x, t.y]
+	RemonteeKit.verrou.lock()
+	var q: QuadMesh = _quads.get(k)
+	if q == null:
+		q = QuadMesh.new()
+		q.size = t
+		_quads[k] = q
+	RemonteeKit.verrou.unlock()
+	return q
 static var _mats_texte: Dictionary = {}
 
 
@@ -1085,9 +1089,7 @@ func _dossier_d8(g: Node3D, W: float, h: float, xf: Transform3D) -> void:
 	var bas: float = (y_t - ht * 0.5) + h * 0.5
 	RemonteeKit.boite_en(d, Vector3(W - 0.02, haut, e), Vector3(0, h * 0.5 - haut * 0.5, 0), mat)
 	RemonteeKit.boite_en(d, Vector3(W - 0.02, bas, e), Vector3(0, -h * 0.5 + bas * 0.5, 0), mat)
-	var biais: BoxMesh = BoxMesh.new()
-	biais.size = Vector3(0.05, 0.05, e)
-	biais.material = RemonteeKit.mat(mat)
+	var biais: ArrayMesh = RemonteeKit.maillage_boite(Vector3(0.05, 0.05, e), RemonteeKit.mat(mat))
 	for i in range(n + 1):
 		var xm: float = -(W - 0.02) * 0.5 + pas * i
 		var l: float = pas - lt
@@ -1391,13 +1393,8 @@ func _bulle_siege(siege: Node3D, W: float) -> void:
 		var nrm: Vector3 = (_bulle_point(sm, e[1] + 0.02) - _bulle_point(sm, e[1] - 0.02)).cross(_bulle_point(sm + 0.02, e[1]) - _bulle_point(sm - 0.02, e[1])).normalized()
 		if nrm.dot(p0 - _bulle_point(s_b * 0.5, 0.0)) < 0.0:
 			nrm = -nrm
-		var tm: TextMesh = TextMesh.new()
-		tm.text = e[0]
-		tm.font_size = e[2]
-		tm.pixel_size = e[3]
-		tm.depth = 0.0
 		var mt: MeshInstance3D = MeshInstance3D.new()
-		mt.mesh = tm
+		mt.mesh = RemonteeKit.maillage_texte(e[0], e[2], e[3])
 		mt.material_override = _mat_texte(e[4])
 		# le texte regarde le long de la normale, à l'endroit (axe x de la bulle)
 		var z_: Vector3 = nrm
@@ -1406,9 +1403,8 @@ func _bulle_siege(siege: Node3D, W: float) -> void:
 		mt.transform = Transform3D(bs_, p0 + nrm * 0.012 - bs_.y * (0.0 if e[0] == "TIGNES" else 0.06))
 		# plaque blanche sous le texte (centre : 0,60 × 0,22 ; bouts : carré 0,28)
 		var pl: MeshInstance3D = MeshInstance3D.new()
-		var bm: BoxMesh = BoxMesh.new()
-		bm.size = Vector3(0.60, 0.22, 0.008) if e[0] == "TIGNES" else Vector3(0.28, 0.26, 0.008)
-		pl.mesh = bm
+		pl.mesh = RemonteeKit.maillage_boite(Vector3(0.60, 0.22, 0.008) if e[0] == "TIGNES" else Vector3(0.28, 0.26, 0.008),
+			RemonteeKit.mat("blanc_plaque"))
 		pl.material_override = RemonteeKit.mat("blanc_plaque")
 		pl.transform = Transform3D(bs_, p0 + nrm * 0.006)
 		_bulle.add_child(pl)
@@ -1747,9 +1743,7 @@ func _baies_zeta(cab: Node3D) -> void:
 	mc.material_override = noir
 	cab.add_child(mc)
 	# poteaux d'angle, à 45°
-	var pot: BoxMesh = BoxMesh.new()
-	pot.size = Vector3(0.16, hb, 0.03)
-	pot.material = noir
+	var pot: ArrayMesh = RemonteeKit.maillage_boite(Vector3(0.16, hb, 0.03), noir)
 	for sx in [-1.0, 1.0]:
 		for sz in [-1.0, 1.0]:
 			var mi2: MeshInstance3D = MeshInstance3D.new()
@@ -1895,19 +1889,13 @@ func _cabine_tph() -> void:
 	# inscription sous les vitres, sur les quatre faces (photos)
 	for f in [[Vector3(0, -2.05, 2.815), 0.0, 1.0], [Vector3(0, -2.05, -2.815), PI, 1.0], [Vector3(1.535, -2.05, -1.2), PI * 0.5, 0.8],
 			[Vector3(-1.535, -2.05, 0.0), -PI * 0.5, 1.0]]:
-		var l: Label3D = Label3D.new()
-		l.text = "VAL D'ISÈRE" if fornet else "CAPITALE DU SKI D'ÉTÉ"
+		var l: MeshInstance3D = RemonteeKit.texte_fige(cab, "VAL D'ISÈRE" if fornet else "CAPITALE DU SKI D'ÉTÉ", 80,
+			0.0032 * float(f[2]), Color(0.12, 0.25, 0.60) if fornet else Color(0.75, 0.10, 0.12))
 		l.visibility_range_end = 120.0
-		l.font_size = 80
-		l.pixel_size = 0.0032 * float(f[2])
-		l.modulate = Color(0.12, 0.25, 0.60) if fornet else Color(0.75, 0.10, 0.12)
-		l.outline_size = 0
-		l.double_sided = false
 		l.position = f[0]
 		l.rotation.y = f[1]
 		if miroir:
 			l.scale = Vector3(-1, 1, 1)
-		cab.add_child(l)
 
 
 ## Caisse d'après les plans CWA de l'Omega V (Wikimedia Commons, CC BY-SA) et

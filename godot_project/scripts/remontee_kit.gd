@@ -175,28 +175,13 @@ static var _textes_figes: Dictionary = {}
 static var _mats_textes: Dictionary = {}
 
 
-static func texte_fige(parent: Node3D, texte: String, taille: int, px: float, coul: Color) -> MeshInstance3D:
-	var cle: String = "%s|%d|%.5f" % [texte, taille, px]
+static func texte_fige(parent: Node3D, texte: String, taille: int, px: float, coul: Color,
+		aligne: HorizontalAlignment = HORIZONTAL_ALIGNMENT_CENTER) -> MeshInstance3D:
+	var am: ArrayMesh = maillage_texte(texte, taille, px, 0.5, aligne)
 	var kc: String = coul.to_html()
 	verrou.lock()
-	var am: ArrayMesh = _textes_figes.get(cle)
 	var m: StandardMaterial3D = _mats_textes.get(kc)
 	verrou.unlock()
-	if am == null:
-		var tm: TextMesh = TextMesh.new()
-		tm.text = texte
-		tm.font_size = taille
-		tm.pixel_size = px
-		tm.depth = 0.0
-		am = ArrayMesh.new()
-		var arr: Array = tm.get_mesh_arrays()
-		if arr.size() > Mesh.ARRAY_VERTEX and arr[Mesh.ARRAY_VERTEX] != null \
-				and not (arr[Mesh.ARRAY_VERTEX] as PackedVector3Array).is_empty():
-			am.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
-			MeshMerge.retenir(am, 0, arr)
-		verrou.lock()
-		_textes_figes[cle] = am
-		verrou.unlock()
 	if m == null:
 		m = StandardMaterial3D.new()
 		m.albedo_color = coul
@@ -211,6 +196,56 @@ static func texte_fige(parent: Node3D, texte: String, taille: int, px: float, co
 	mi.set_meta("detail", true)      # de près seulement, comme un Label3D (remontees_domaine)
 	parent.add_child(mi)
 	return mi
+
+## Maillage de texte figé (ArrayMesh, tableaux retenus), partagé par texte, taille, pixel, pas de courbe et
+## alignement, dans la police des Label3D du jeu. Le TextMesh qui le calcule part avec la fonction : sa mise à jour
+## différée ne passe pas au fil principal (un Label3D y faisait aussi générer ses glyphes MSDF : 41 à 70 ms d'appels
+## différés vers la salle, relevé du PC du 07/11/2026).
+static func maillage_texte(texte: String, taille: int, px: float, pas_courbe: float = 0.5,
+		aligne: HorizontalAlignment = HORIZONTAL_ALIGNMENT_CENTER) -> ArrayMesh:
+	var cle: String = "%s|%d|%.5f|%.2f|%d" % [texte, taille, px, pas_courbe, aligne]
+	verrou.lock()
+	var am: ArrayMesh = _textes_figes.get(cle)
+	verrou.unlock()
+	if am != null:
+		return am
+	var tm: TextMesh = TextMesh.new()
+	tm.text = texte
+	tm.font_size = taille
+	tm.pixel_size = px
+	tm.depth = 0.0
+	tm.curve_step = pas_courbe
+	tm.horizontal_alignment = aligne
+	tm.font = PolicesJeu.reguliere()
+	am = ArrayMesh.new()
+	var arr: Array = tm.get_mesh_arrays()
+	if arr.size() > Mesh.ARRAY_VERTEX and arr[Mesh.ARRAY_VERTEX] != null \
+			and not (arr[Mesh.ARRAY_VERTEX] as PackedVector3Array).is_empty():
+		am.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
+		MeshMerge.retenir(am, 0, arr)
+	verrou.lock()
+	_textes_figes[cle] = am
+	verrou.unlock()
+	return am
+
+
+## Boîte en ArrayMesh (tableaux de MeshMerge, retenus), partagée par taille et matériau.
+static var _boites_partagees: Dictionary = {}
+
+
+static func maillage_boite(taille: Vector3, m: Material) -> ArrayMesh:
+	var cle: String = "MB%.4f|%.4f|%.4f|%d" % [taille.x, taille.y, taille.z, m.get_instance_id()]
+	verrou.lock()
+	var b: ArrayMesh = _boites_partagees.get(cle)
+	verrou.unlock()
+	if b == null:
+		b = MeshMerge.maillage_retenu(MeshMerge.arrays_boite(taille), m)
+		b.set_meta(MeshMerge.PRIM_BOITE, taille)
+		verrou.lock()
+		_boites_partagees[cle] = b
+		verrou.unlock()
+	return b
+
 
 ## Boîte de dimensions `taille`, centrée en `xf`.
 static func boite(parent: Node3D, taille: Vector3, xf: Transform3D, m: String) -> MeshInstance3D:

@@ -369,16 +369,8 @@ func _depart(g: Node3D, znez: float, zc: float) -> void:
 	RemonteeKit.boite_en(g, Vector3(0.22, 0.22, 0.16), Vector3(xf, yf + 1.15, zf), "jaune_securite")
 	RemonteeKit.cylindre(g, 0.06, 0.06, 0.05, Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3(xf, yf + 1.15, zf + 0.09)), "rouge_val", 12)
 	# panneau « départ » sur le poteau du couloir
-	var lab: Label3D = Label3D.new()
-	lab.text = "DÉPART\n%s" % lg.nom_court()
-	lab.font_size = 56
-	lab.pixel_size = 0.004
-	lab.outline_size = 8
-	lab.modulate = Color(0.95, 0.95, 0.95)
-	lab.outline_modulate = Color(0.08, 0.20, 0.55)
+	var lab: MeshInstance3D = RemonteeKit.texte_fige(g, "DÉPART\n%s" % lg.nom_court(), 56, 0.004, Color(0.08, 0.20, 0.55))
 	lab.position = Vector3(xb + sx * 1.0, _gy(g, xb + sx * 1.0, q.z + 9.0) + 1.6, q.z + 9.0)
-	lab.rotation.y = 0.0
-	g.add_child(lab)
 	_cabane(g, Vector3(xb + sx * 3.2, 0, q.z + 2.5), sx)
 
 
@@ -393,15 +385,8 @@ func _arrivee(g: Node3D, zc: float) -> void:
 		var yp: float = _gy(g, x, zz)
 		RemonteeKit.barre(g, Vector3(x, yp - 0.2, zz), Vector3(x, yp + 1.6, zz), 0.022, "jaune_securite", 5)
 		RemonteeKit.boite_en(g, Vector3(0.02, 0.30, 0.42), Vector3(x, yp + 1.4, zz - 0.21), "rouge_val")
-	var lab: Label3D = Label3D.new()
-	lab.text = "LÂCHEZ\nLA PERCHE"
-	lab.font_size = 48
-	lab.pixel_size = 0.004
-	lab.outline_size = 8
-	lab.modulate = Color(1, 1, 1)
-	lab.outline_modulate = Color(0.65, 0.06, 0.08)
+	var lab: MeshInstance3D = RemonteeKit.texte_fige(g, "LÂCHEZ\nLA PERCHE", 48, 0.004, Color(0.65, 0.06, 0.08))
 	lab.position = Vector3(xb + signf(xb) * 1.4, _gy(g, xb + signf(xb) * 1.4, z + 6.0) + 2.2, z + 6.0 + 0.1)
-	g.add_child(lab)
 	_cabane(g, Vector3(-signf(xb) * (lg.voie * 0.5 + 3.0), 0, zc + 3.0), -signf(xb))
 
 

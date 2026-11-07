@@ -200,15 +200,10 @@ func _cadre(g: Node3D, prof: Array, y0: float, z: float, r: float, m: String, dr
 func _nom(g: Node3D, texte: String, pos: Vector3, rot_y: float, couleur: Color, px: float = 0.0028) -> void:
 	if texte == "":
 		return
-	var lab: Label3D = Label3D.new()
-	lab.text = texte
-	lab.font_size = 96
-	lab.pixel_size = px
-	lab.modulate = couleur
-	lab.outline_size = 0
+	# (texte figé : un Label3D renvoyait sa mise en forme au fil principal)
+	var lab: MeshInstance3D = RemonteeKit.texte_fige(g, texte, 96, px, couleur)
 	lab.position = pos
 	lab.rotation.y = rot_y
-	g.add_child(lab)
 
 
 ## Noms sur les deux flancs (lisibles de l'extérieur) à la hauteur h.
