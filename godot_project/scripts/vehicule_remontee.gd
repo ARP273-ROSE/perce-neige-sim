@@ -1572,6 +1572,9 @@ const E_PORTEURS_3S: float = 0.80
 ## Téléphériques va-et-vient (Fornet, Grande Motte) : deux porteurs par voie (fiches RM.net) ; écart estimé
 ## sur les photos du chariot (deux rangées de galets, une poutre entre elles).
 const E_PORTEURS_TPH: float = 0.70
+## Caisse du Fornet (CWA, photos) : bouts à trois pans, coins coupés (rayon de la Grande Motte + 0,60 m, estimé sur photo).
+const PANS_FORNET: String = "pans_fornet"
+const R_PANS_FORNET: float = 0.60
 const ENTRAXE_GALETS_3S: float = 0.62
 const Z_BALANCIER_3S: float = 0.80        # du milieu du chariot au milieu d'un balancier
 const Y_POUTRES_3S: float = 0.40
@@ -1882,7 +1885,7 @@ func _cabine_tph() -> void:
 	cab.position = Vector3(0, -hs - 0.08, 0)
 	add_child(cab)
 	var H: float = _h_cab(famille)
-	var mailles: Dictionary = _maillage_cabine(famille, teinte)
+	var mailles: Dictionary = _maillage_cabine(famille, PANS_FORNET if fornet else teinte)
 	for cle in ["coque", "vitres"]:
 		var mc: MeshInstance3D = MeshInstance3D.new()
 		mc.mesh = mailles[cle]
@@ -1911,10 +1914,23 @@ func _cabine_tph() -> void:
 					elif ma.resource_name == "remontee_vitre_bleue":
 						(mc2 as MeshInstance3D).set_surface_override_material(k, RemonteeKit.mat("vitre_teintee"))
 	# meneaux des grandes vitres (trois en façade, cinq sur les côtés)
-	for sz2 in [-1.0, 1.0]:
+	# Fornet (photos) : bouts à trois pans (meneau à chaque arête), quatre baies sur une face, trois et la
+	# porte sur l'autre
+	if fornet:
+		var ap: float = 1.52 - 0.16 - R_PANS_FORNET
+		var bp: float = 2.80 - 0.16 - R_PANS_FORNET
+		for sz5 in [-1.0, 1.0]:
+			for sx5 in [-1.0, 1.0]:
+				RemonteeKit.boite_en(cab, Vector3(0.07, 1.35, 0.07), Vector3(sx5 * ap, -0.95, sz5 * 2.80), "cabine_blanche")
+				RemonteeKit.boite_en(cab, Vector3(0.07, 1.35, 0.07), Vector3(sx5 * 1.52, -0.95, sz5 * bp), "cabine_blanche")
+		for zm in [-bp * 0.5, 0.0, bp * 0.5]:
+			RemonteeKit.boite_en(cab, Vector3(0.04, 1.35, 0.06), Vector3(-1.52, -0.95, zm), "cabine_blanche")
+		for zm2 in [-bp * 0.62]:
+			RemonteeKit.boite_en(cab, Vector3(0.04, 1.35, 0.06), Vector3(1.52, -0.95, zm2), "cabine_blanche")
+	for sz2 in ([] if fornet else [-1.0, 1.0]):
 		for xm in [-0.5, 0.5]:
 			RemonteeKit.boite_en(cab, Vector3(0.06, 1.35, 0.04), Vector3(xm, -0.95, sz2 * 2.80), "cabine_blanche")
-	for sx2 in [-1.0, 1.0]:
+	for sx2 in ([] if fornet else [-1.0, 1.0]):
 		for k2 in range(-2, 3):
 			if sx2 > 0.0 and absf(k2) < 1:
 				continue          # baie de la porte
@@ -2048,7 +2064,8 @@ static func _profil_cabine(fam: String) -> Array:
 ## Points du contour (rectangle à coins arrondis), toujours dans le même
 ## ordre : [point, côté X+ ?, abscisse réduite s sur le côté X+ (−1…1),
 ## arête (milieu d'un angle) ?].
-static func _contour(a: float, b: float, r: float) -> Array:
+## `pans` : coins coupés en un pan droit (bouts à trois pans) au lieu d'un arc, mêmes points.
+static func _contour(a: float, b: float, r: float, pans: bool = false) -> Array:
 	var out: Array = []
 	# subdivisions fines aux bords de la baie de porte (s = ±0,75) et au
 	# milieu (jonction des vantaux)
@@ -2070,9 +2087,15 @@ static func _contour(a: float, b: float, r: float) -> Array:
 			out.append([p, c == 0, sv, false])
 		var cx: float = ca[c][0] * (a - r)
 		var cz: float = ca[c][1] * (b - r)
+		var th0: float = ca[c][2]
 		for k in range(nc):
-			var th: float = ca[c][2] + PI * 0.5 * float(k) / nc
-			out.append([Vector3(cx + r * cos(th), 0, cz + r * sin(th)), false, 0.0, k == 3 or k == 4])
+			var th: float = th0 + PI * 0.5 * float(k) / nc
+			var q: Vector3 = Vector3(cx + r * cos(th), 0, cz + r * sin(th))
+			if pans:
+				var q0: Vector3 = Vector3(cx + r * cos(th0), 0, cz + r * sin(th0))
+				var q1: Vector3 = Vector3(cx + r * cos(th0 + PI * 0.5), 0, cz + r * sin(th0 + PI * 0.5))
+				q = q0.lerp(q1, float(k) / nc)
+			out.append([q, false, 0.0, k == 3 or k == 4])
 	return out
 
 
@@ -2128,8 +2151,9 @@ static func _maillage_cabine(fam: String, teinte_: String = "") -> Dictionary:
 	var y_haut_porte: float = -0.19 if fam != "cabine_3s" else -0.15
 	var y_bas_porte: float = -H + 0.12
 	var anneaux: Array = []
+	var pans: bool = teinte_ == PANS_FORNET
 	for r in prof:
-		anneaux.append(_contour(r[1], r[2], r[3]))
+		anneaux.append(_contour(r[1], r[2], r[3] + (R_PANS_FORNET if pans else 0.0), pans))
 	var n: int = anneaux[0].size()
 	var st: Dictionary = {}
 	var st_porte: Dictionary = {1.0: {}, -1.0: {}}
