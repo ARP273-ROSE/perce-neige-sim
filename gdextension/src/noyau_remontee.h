@@ -173,6 +173,9 @@ public:
 	bool a_calage(int64_t i) const { return i >= 0 && i < (int64_t)calages.size() && calages[i].pret; }
 	// [y, z, pente] de chaque paire, brin montant puis descendant, flèche du moment (onde comprise)
 	PackedFloat32Array caler(int64_t i) const;
+	// chronos de etape(), µs cumulés depuis la lecture précédente
+	PackedFloat64Array chronos();
+	double chronos_us[6] = {0, 0, 0, 0, 0, 0};
 
 private:
 	struct Calage {
