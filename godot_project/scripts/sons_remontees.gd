@@ -69,6 +69,15 @@ func _ready() -> void:
 			w.loop_end = maxi(int(w.get_length() * w.mix_rate) - 1, 0)
 			st = w
 		_sons[nom] = st
+	for e in SONS_FUNI:
+		var st2: AudioStream = load("res://sounds/%s.wav" % e[1])
+		if st2 is AudioStreamWAV and bool(e[2]):
+			var w2: AudioStreamWAV = (st2 as AudioStreamWAV).duplicate()
+			w2.loop_mode = AudioStreamWAV.LOOP_FORWARD
+			w2.loop_begin = 0
+			w2.loop_end = maxi(int(w2.get_length() * w2.mix_rate) - 1, 0)
+			st2 = w2
+		_sons[e[0]] = st2
 	for k in range(N_GARES):
 		var p: AudioStreamPlayer3D = AudioStreamPlayer3D.new()
 		p.unit_size = 9.0
@@ -194,6 +203,8 @@ func _choisir_gares(sk: Vector3) -> void:
 			son = "tsf_motrice" if bool(cand[k][3]) else "tsf_arrivee"
 		elif _prises(lg2) == "tph":
 			son = "tph_quai"
+		elif _prises(lg2) == "funi":
+			son = "gare_fixe"            # (gares du Funival : machinerie, comme avant ; les sons du funiculaire sont à bord)
 		elif _prises(lg2) == "tsd":
 			son = "tsd_gare" if bool(cand[k][3]) else "tsd_gare_haut"
 		elif _prises(lg2) != "":
@@ -371,6 +382,8 @@ func _a_bord(delta: float) -> void:
 func _prises(lg: LigneRemontee) -> String:
 	if lg.tricable():
 		return "3s"
+	if lg.famille == "cabine_funi":
+		return "funi"          # (avant le va-et-vient : le Funival en hérite)
 	if lg.name == "tcd10_boisses":
 		return "boisses"
 	if lg.famille.begins_with("siege") and not lg.famille.begins_with("siege_fixe"):
@@ -445,6 +458,9 @@ func _a_bord_3s(delta: float, lg: LigneRemontee, s: float, z: Array, v: float, p
 		z = ["ligne", 0.0, 0.0]
 	if pref == "tph":
 		_a_bord_tph(delta, lg)
+		return
+	if pref == "funi":
+		_a_bord_funi(delta, lg)
 		return
 	if pref == "tsd":
 		var zd: String = "ligne" if z[0] == "ligne" else ("gare" if z[0] == "gare_aval" else "gare_haut")
@@ -563,6 +579,44 @@ func _a_bord_tph(delta: float, lg: LigneRemontee) -> void:
 	if absf(but - d) < 90.0 and absf(tp._v) > 0.5 and _t - _tph_arr > 40.0:
 		_tph_arr = _t
 		_coup(lg, "tph_arrivee")
+
+
+## Funival à bord : les sons du funiculaire Perce-Neige (même famille d'appareil, roulement sur rails) — boucle
+## lente ou de croisière selon la vitesse, buzzer des portes puis leur fermeture avant le départ, et la prise du
+## croisement, longue de 20 s (aiguillage à aiguillage au Perce-Neige), lancée pour que son milieu tombe quand les
+## deux véhicules se croisent.
+const SONS_FUNI: Array = [["funi_lent", "ambient_slow", true], ["funi_croisiere", "ambient_cruise", true],
+	["funi_croisement", "crossing", false], ["funi_buzzer", "door_buzzer", false], ["funi_portes", "door_motion", false]]
+const FUNI_CROISIERE: float = 4.0           # m/s : au-delà, la boucle de croisière
+const FUNI_CLIP_CROISEMENT: float = 20.0    # s (crossing.wav)
+var _funi_crois: float = -100.0
+var _funi_buzz: float = -100.0
+var _funi_portes: float = -100.0
+var _funi_ecart: float = INF                  # écart précédent entre les deux véhicules (ils se rapprochent ?)
+
+
+func _a_bord_funi(delta: float, lg: LigneRemontee) -> void:
+	var tp: Telepherique = lg as Telepherique
+	var v: float = absf(tp._v)
+	_ambiance(delta, lg, "funi_croisiere" if v > FUNI_CROISIERE else "funi_lent", -6.0)
+	if tp._phase == "quai":
+		# buzzer 7 s avant le départ (durée du buzzer du Perce-Neige), puis les portes
+		if tp._t_quai < 7.5 and tp._t_quai > 6.5 and _t - _funi_buzz > 20.0:
+			_funi_buzz = _t
+			_coup(lg, "funi_buzzer")
+		if tp._t_quai < 1.2 and _t - _funi_portes > 20.0:
+			_funi_portes = _t
+			_coup(lg, "funi_portes")
+		return
+	# croisement : les deux véhicules se rapprochent à 2 v ; le milieu de la prise au moment où ils se croisent
+	var d1: float = tp._vehicules[0][1]
+	var d2: float = tp._vehicules[1][1]
+	var ecart: float = absf(d1 - d2)
+	var avant: float = ecart / maxf(2.0 * v, 1.0)
+	if v > 1.0 and ecart < _funi_ecart and avant < FUNI_CLIP_CROISEMENT * 0.5 and _t - _funi_crois > 60.0:
+		_funi_crois = _t
+		_coup(lg, "funi_croisement")
+	_funi_ecart = ecart
 
 
 ## Boucle d'ambiance à bord, changée en fondu ; abaissée pendant les coups,
