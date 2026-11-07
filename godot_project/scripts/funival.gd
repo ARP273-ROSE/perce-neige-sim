@@ -153,10 +153,11 @@ static func mat_funi(nom: String) -> Material:
 		"cuit":
 			m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 			m.vertex_color_use_as_albedo = true
+			# couleurs pensées comme des teintes à l'écran : prises en sRGB (lues en linéaire, elles ressortaient
+			# éclaircies, tunnel gris clair partout — diagnostic du PC, captures du 08/11/2026)
+			m.vertex_color_is_srgb = true
 			m.cull_mode = BaseMaterial3D.CULL_DISABLED
-			# (le brouillard volumétrique clair du jeu remplissait le tunnel, d'autant plus que la section est large :
-			# évitement voilé de gris clair, rails compris — captures du 08/11/2026)
-			m.disable_fog = true
+			m.disable_fog = true             # (pas de brouillard de profondeur dans le tunnel)
 		"lampe":
 			m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 			m.albedo_color = Color(1.0, 0.97, 0.88)
@@ -191,7 +192,7 @@ func _lumiere_tunnel(d: float, cote_lampes: float) -> float:
 	var k: float = fposmod(d - portail_d - 10.0, ECART_LAMPES)
 	var dl: float = minf(k, ECART_LAMPES - k)
 	var flaque: float = exp(-pow(dl / 5.5, 2.0))
-	return 0.07 + flaque * (0.30 + 0.45 * clampf(cote_lampes, 0.0, 1.0))
+	return 0.11 + flaque * (0.30 + 0.45 * clampf(cote_lampes, 0.0, 1.0))
 
 
 ## Teinte de la paroi : béton projeté gris-beige, tronçons de roche sombre, un tronçon à cintres et planches ocre.
@@ -448,37 +449,6 @@ func _tunnel() -> void:
 		mi_r.material_override = mat_funi("rocher")
 		roches.append(mi_r)
 	MeshMerge.merge(por, roches, "Portail")
-	_sans_brouillard()
-
-
-## Le brouillard volumétrique clair du jeu (fait pour le dehors) se calcule dans tout le volume, tunnel compris, et
-## aucun matériau ne peut s'en exclure : des volumes de brouillard à densité négative le long du tunnel et dans la
-## salle amont l'y retirent (captures du 08/11/2026 : évitement voilé de gris clair). Sans effet sur la PWA (pas de
-## brouillard volumétrique en rendu de compatibilité).
-func _sans_brouillard() -> void:
-	if OS.has_feature("web"):
-		return
-	var L: float = longueur_h()
-	var fm: FogMaterial = FogMaterial.new()
-	fm.density = -1.0
-	var pas: float = 150.0
-	var d: float = portail_d
-	while d < L:
-		var d2: float = minf(d + pas, L + 2.0)
-		var y1: float = y_voie(d)
-		var y2: float = y_voie(d2)
-		var long_i: float = Vector2(d2 - d, y2 - y1).length()
-		var a: float = atan2(y2 - y1, d2 - d)
-		var mil: float = (d + d2) * 0.5
-		var rx: float = maxf(lerpf(R_TUNNEL, R_TUNNEL_EVIT, _t_evit(mil)), lerpf(R_TUNNEL, R_TUNNEL_EVIT, maxf(_t_evit(d), _t_evit(d2))))
-		var fv: FogVolume = FogVolume.new()
-		fv.name = "SansBrouillard"
-		fv.shape = RenderingServer.FOG_VOLUME_SHAPE_BOX
-		fv.size = Vector3(2.0 * rx + 1.0, 2.0 * rx + 6.0 if d2 > L - L_HALL else 2.0 * rx + 1.0, long_i + 2.0)
-		fv.material = fm
-		fv.transform = Transform3D(Basis(Vector3.RIGHT, a), Vector3(0, (y1 + y2) * 0.5 + 1.2, -mil))
-		_enfant(fv)
-		d = d2
 
 
 ## Gare aval (La Daille), à l'air libre : voie en fosse entre deux vastes quais en gradins de caillebotis sombre
