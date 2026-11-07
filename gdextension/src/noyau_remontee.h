@@ -177,6 +177,17 @@ public:
 	PackedFloat64Array chronos();
 	double chronos_us[6] = {0, 0, 0, 0, 0, 0};
 
+	// Pneus des lanceurs (port de LigneRemontee._tourner_pneus, chemin sans MultiMesh) : nœuds, base au repos, gare
+	// (1 aval / 0 amont), vitesse angulaire au régime 1 (rad/s, signe de la marche compris) ; angles gardés ici.
+	void set_pneus(const Array &noeuds, const Array &bases, const PackedByteArray &aval, const PackedFloat32Array &w);
+	void set_pneus_w(const PackedFloat32Array &w);
+	int64_t nombre_pneus() const { return (int64_t)pn_id.size(); }
+	void tourner_pneus(double dt, double regime, bool pres_aval, bool pres_amont);
+	std::vector<uint64_t> pn_id;
+	std::vector<Basis> pn_base;
+	std::vector<char> pn_aval;
+	std::vector<double> pn_w, pn_a;
+
 private:
 	struct Calage {
 		bool pret = false;
