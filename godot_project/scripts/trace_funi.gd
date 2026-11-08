@@ -18,10 +18,15 @@ var perce_neige: bool = true
 ## les voies (Funival, demande d'utilisateur du 08/11/2026).
 var deux_tubes: bool = true
 var decal_evitement: float = 3.50          # décalage latéral maximal de chaque voie dans l'évitement (m)
+## Chambre unique (deux_tubes faux) : rayon = rayon du tube + |décalage d'une voie| × ce facteur.
+var elargissement_chambre: float = 1.0
+## Le tube n'est construit qu'à partir de cette abscisse (Funival : portail ; avant, la voie est dehors).
+var tube_debut: float = 0.0
 ## Profil : fonctions (s) → valeur. Par défaut, SlopeProfile.
 var _pente: Callable = Callable()          # angle de pente (rad)
 var _cap: Callable = Callable()            # cap (degrés)
 var _points: Callable = Callable()         # (pas) → Array[Vector3] du tracé, repère de la ligne
+var _decal: Callable = Callable()          # (s) → décalage d'une voie dans l'évitement (m, ≥ 0) ; défaut : sin²
 
 
 static func perce_neige_defaut() -> TraceFuni:
@@ -47,3 +52,9 @@ func points(pas: float) -> Array:
 
 func dans_evitement(s: float) -> bool:
 	return evit_debut <= s and s <= evit_fin
+
+
+## Décalage d'une voie dans l'évitement (m, ≥ 0), ou -INF si le tracé n'en fournit pas (forme sin² du Perce-Neige,
+## calculée par TunnelBuilder).
+func decalage(s: float) -> float:
+	return float(_decal.call(s)) if _decal.is_valid() else -INF

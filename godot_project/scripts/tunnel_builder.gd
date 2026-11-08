@@ -174,6 +174,15 @@ func _build() -> void:
 	# chevauchent → profil « binoculaire » (union des deux cercles) qui se
 	# pince progressivement ; au-delà (d ≥ R), deux tubes circulaires
 	# distincts avec le rocher entre les deux.
+	if not trace.deux_tubes:
+		# une seule chambre élargie, sans mur entre les voies (Funival, demande d'utilisateur du 08/11/2026)
+		_build_tunnel_section(mat, trace.tube_debut, trace.evit_debut, 0.0, "TunnelLow", false)
+		_build_tunnel_section(mat, trace.evit_debut, trace.evit_fin, 0.0, "TunnelPassingChamber", true)
+		_build_tunnel_section(mat, trace.evit_fin, trace.longueur, 0.0, "TunnelHigh", false)
+		_build_wall_cables()
+		if show_debug_path:
+			_draw_debug_path()
+		return
 	var pinch: float = _loop_pinch_ds()
 	var s_pinch_lo: float = trace.evit_debut + pinch
 	var s_pinch_hi: float = trace.evit_fin - pinch
@@ -508,6 +517,8 @@ const SLAB_S0: float = 43.0         # TrackBuilder.pit_low_end (fosse de la gare
 
 
 func _sous_dalle(s: float, x: float, y: float) -> bool:
+	if not trace.perce_neige:
+		return false
 	if y >= FLOOR_CUT_Y or s > trace.longueur + MachineRoomBuilder.PIT_S0 - ring_spacing:
 		return false
 	if s < SLAB_S0 + ring_spacing:
@@ -559,8 +570,8 @@ func _build_tunnel_chunk(
 		# (bord interne, jonction avec le loop plat). Le horseshoe est désactivé
 		# dans la chambre (uniquement circular pour avoir une jonction propre).
 		if is_chamber:
-			cur_radius += absf(passing_loop_offset(s_cur, 1.0))
-			prev_radius += absf(passing_loop_offset(s_prev, 1.0))
+			cur_radius += absf(passing_loop_offset(s_cur, 1.0)) * trace.elargissement_chambre
+			prev_radius += absf(passing_loop_offset(s_prev, 1.0)) * trace.elargissement_chambre
 			cur_blend = 0.0
 			prev_blend = 0.0
 
@@ -571,7 +582,7 @@ func _build_tunnel_chunk(
 		# mètres de la gare haute. Le caisson de la gare (sol à −2,65) la
 		# traversait et coupait la roue aval à plat (retour du 30/09) : dans
 		# les anneaux qui la couvrent, rien sous le dessous de dalle.
-		var cut_s: float = trace.longueur + MachineRoomBuilder.ROOM_S0 - ring_spacing
+		var cut_s: float = trace.longueur + MachineRoomBuilder.ROOM_S0 - ring_spacing if trace.perce_neige else INF
 		var prev_cut: bool = s_prev >= cut_s
 		var cur_cut: bool = s_cur >= cut_s
 		var y_cut: float = MachineRoomBuilder.Y_SLAB_BOTTOM
@@ -590,7 +601,7 @@ func _build_tunnel_chunk(
 			# haut est ouvert sur l'anneau qui la contient, entre −1,45 et
 			# 1,55 m (l'habillage de la salle, StationsBuilder, ne laisse
 			# voir que la porte) : le pan de mur est gardé en deux bandes
-			if s_prev >= _PG_S0 - 0.01 and s_cur <= _PG_S1 + 0.01 \
+			if trace.perce_neige and s_prev >= _PG_S0 - 0.01 and s_cur <= _PG_S1 + 0.01 \
 					and maxf(maxf(prev_0.x, prev_1.x), maxf(cur_0.x, cur_1.x)) < -station_room_half_width + 0.15:
 				for bande in [Vector2(-1000.0, -1.45), Vector2(1.55, 1000.0)]:
 					var pa: Array = _bande_y(prev_0, prev_1, bande)
@@ -686,6 +697,8 @@ func _build_tunnel_chunk(
 ## Ouverture qui touche l'anneau [s_prev, s_cur] sur ce segment du profil
 ## (du côté de l'ouverture) : [s0, s1, y bas, y haut], ou [].
 func _ouverture(s_prev: float, s_cur: float, p0: Vector2, p1: Vector2, c0: Vector2, c1: Vector2) -> Array:
+	if not trace.perce_neige:
+		return []
 	for o in ouvertures:
 		if s_cur <= float(o[0]) or s_prev >= float(o[1]):
 			continue
@@ -876,6 +889,8 @@ func _radius_at(s: float) -> float:
 # 1.0 = pleine salle de gare (section élargie), 0.0 = tube carré standard.
 # Fondu linéaire sur station_room_transition à la jonction salle/tube.
 func _station_room_blend_at(s: float) -> float:
+	if not trace.perce_neige:
+		return 0.0
 	if s <= station_low_end - station_room_transition:
 		return 1.0
 	if s < station_low_end:
@@ -906,6 +921,8 @@ func demi_hauteur_salle(s: float) -> float:
 func _horseshoe_blend_at(s: float) -> float:
 	# Retourne 0.0 = full circular, 1.0 = full horseshoe.
 	# Transitions smooth autour de s=257 (portail bas) et s=3443 (portail haut).
+	if not trace.perce_neige:
+		return 0.0
 	var lo_end: float = trace.carre_bas_fin      # 257
 	var hi_start: float = trace.carre_haut_debut # 3443
 	var t: float = horseshoe_transition
@@ -1065,6 +1082,10 @@ func _draw_debug_path() -> void:
 func passing_loop_offset(s: float, side: float) -> float:
 	if s <= trace.evit_debut or s >= trace.evit_fin:
 		return 0.0
+	if not trace.perce_neige:
+		var dv: float = trace.decalage(s)
+		if dv > -INF:
+			return side * dv
 	var loop_len: float = trace.evit_fin - trace.evit_debut
 	var k: float = (s - trace.evit_debut) / loop_len   # 0 → 1
 	# Forme : MAX · sin²(π·k) = MAX · (1 − cos(2π·k)) / 2.
