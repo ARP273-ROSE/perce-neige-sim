@@ -222,6 +222,8 @@ func _station_list() -> Array:
 		abt.append({"s": trace.evit_debut + o, "sheave": sh})
 		abt.append({"s": trace.evit_fin - o, "sheave": sh})
 	abt.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a.s < b.s)
+	if not trace.perce_neige:
+		return _station_list_reguliere(abt)
 	for i in range(GALETS_REPERES.size()):
 		var n_a: int = GALETS_REPERES[i][0]
 		var s_a: float = GALETS_REPERES[i][1]
@@ -282,6 +284,33 @@ func _station_list() -> Array:
 	return out
 
 
+## Autre ligne que le Perce-Neige : galets de trace.galets_debut à trace.galets_fin au pas le plus régulier possible
+## (près de trace.pas_galets), stations des aiguillages comprises, numérotés de 1 au dernier.
+func _station_list_reguliere(abt: Array) -> Array:
+	var fixes: Array = [trace.galets_debut]
+	var out: Array = [{"s": trace.galets_debut, "sheave": false}]
+	for st in abt:
+		if st.s > trace.galets_debut and st.s < trace.galets_fin:
+			fixes.append(st.s)
+			out.append(st)
+	fixes.append(trace.galets_fin)
+	out.append({"s": trace.galets_fin, "sheave": false})
+	for j in range(fixes.size() - 1):
+		var a: float = fixes[j]
+		var b: float = fixes[j + 1]
+		if _in_abt_zone((a + b) * 0.5):
+			continue
+		var n: int = maxi(int(round((b - a) / trace.pas_galets)), 1)
+		for m in range(1, n):
+			out.append({"s": lerpf(a, b, float(m) / float(n)), "sheave": false})
+	out.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a.s < b.s)
+	for i in range(out.size()):
+		out[i]["num"] = i + 1
+		out[i]["s"] = snappedf(float(out[i].s), sleeper_spacing)
+		out[i]["paired"] = absf(tunnel.passing_loop_offset(out[i].s, 1.0)) < 0.05
+	return out
+
+
 func _roller_axis_y() -> float:
 	# 🔴 Retour d'essai 2026-09-27 : le câble au niveau des blochets (4 cm
 	# au-dessus de leur dessus), pas du sommet du rail. On part de la
@@ -306,8 +335,8 @@ func _roller_tilt(s: float, side: float, span: float) -> float:
 		var x_0: float = tunnel.passing_loop_offset(s, side)
 		var x_p: float = tunnel.passing_loop_offset(s + ds, side)
 		kh += (x_p - 2.0 * x_0 + x_m) / (ds * ds)
-	var t_n: float = PNConstants.T_NOMINAL_DAN * 10.0
-	var w: float = PNConstants.CABLE_KG_M * 9.80665
+	var t_n: float = trace.tension_dan * 10.0
+	var w: float = trace.cable_kg_m * 9.80665
 	var lat: float = t_n * kh * span
 	var ver: float = w * span * cos(trace.pente_angle(s)) \
 		- t_n * trace.pente_courbure(s) * span
@@ -360,7 +389,7 @@ func _strand_free_point(s: float, side: float, y_nom: float) -> Dictionary:
 	var x: float = _track_center_x(s, side) + side * pulley_pair_offset
 	# brin de la rame 2 : il remonte vers les galets qui le font passer
 	# au-dessus du sommet de la roue aval (machine_room_builder)
-	if side > 0.0 and s >= trace.longueur - 1e-6:
+	if trace.perce_neige and side > 0.0 and s >= trace.longueur - 1e-6:
 		y_nom = MachineRoomBuilder.EXIT_Y_END
 	return {"s": s, "p": xf.origin + xf.basis.x * x + xf.basis.y * y_nom, "x": x, "y": y_nom,
 		"tilt": 0.0}
@@ -813,7 +842,7 @@ func _build_slab() -> void:
 	# de la salle des machines (elle la traversait : « un mur en béton dans
 	# la roue », retour du 30/09)
 	_build_slab_section(slab_mat, trace.evit_fin,
-		minf(pit_high_start, trace.longueur + MachineRoomBuilder.PIT_S0), 0.0, "SlabHigh", false)
+		minf(pit_high_start, trace.fin_voie()), 0.0, "SlabHigh", false)
 
 
 # Construit un tronçon de dalle entre s_start et s_end avec un offset latéral.
@@ -989,7 +1018,7 @@ func _trench_ledge(e: Array, y_top: float, y_floor: float) -> Array:
 # au niveau de la dalle sur les derniers mètres avant la fosse de la roue
 # aval (gare haute), sinon son fond traverserait la roue.
 func _trench_depth_at(s: float) -> float:
-	var s_fin: float = trace.longueur + MachineRoomBuilder.PIT_S0
+	var s_fin: float = trace.fin_voie()
 	return trench_depth * clampf((s_fin - 1.5 - s) / 2.5, 0.0, 1.0)
 
 
@@ -1827,7 +1856,7 @@ func _build_cable_beam() -> void:
 	_build_cable_beam_section(mat, pit_low_end, s_fork_lo, 0.0, "CableBeamLow")
 	_build_cable_beam_section(mat, s_fork_lo, s_fork_hi, -1.0, "CableBeamLoopL")
 	_build_cable_beam_section(mat, s_fork_lo, s_fork_hi, +1.0, "CableBeamLoopR")
-	_build_cable_beam_section(mat, s_fork_hi, trace.longueur + MachineRoomBuilder.PIT_S0,
+	_build_cable_beam_section(mat, s_fork_hi, trace.fin_voie(),
 		0.0, "CableBeamHigh")
 
 
@@ -2647,7 +2676,7 @@ func fleche(side_i: int, s: float) -> float:
 func a_chainette(s: float) -> float:
 	if is_nan(_alt_bas):
 		_alt_bas = tunnel.transform_at(0.0).origin.y
-	var w: float = PNConstants.CABLE_KG_M * 9.80665
+	var w: float = trace.cable_kg_m * 9.80665
 	var t: float = TENSION_BAS_N + w * maxf(tunnel.transform_at(s).origin.y - _alt_bas, 0.0)
 	return t / (w * cos(trace.pente_angle(s)))
 const SLACK_TOUCHDOWN_M: float = 1.5   # du sommet du galet à la longrine
@@ -2804,7 +2833,7 @@ func update_cable_visibility(s_driver: float, s_other: float = -1.0) -> void:
 	# `s_other` : position de l'autre rame — LENGTH − s_driver en marche,
 	# figée quand le câble a rompu (TrainPhysics.ghost_s_render).
 	if s_other < 0.0:
-		s_other = PNConstants.miroir(s_driver)
+		s_other = trace.miroir(s_driver)
 	# Où commence chaque brin visible (premier galet que touche le câble de
 	# LA rame qu'il tire) :
 	#   - rame 1 pilotée : brin gauche = sa rame, brin droit = la rame opposée.
@@ -2857,7 +2886,7 @@ func update_cable_phase(s_driver: float, s_other: float = -1.0, s_poulie_r: floa
 		return
 	# `s_other` : position de l'autre rame (figée si le câble a rompu).
 	if s_other < 0.0:
-		s_other = PNConstants.miroir(s_driver)
+		s_other = trace.miroir(s_driver)
 	# Le brin de LA rame pilotée doit apparaître FIXE dans le référentiel de
 	# la cabine (phase = s_driver) ; l'autre brin suit l'autre rame (phase =
 	# s_other − LENGTH, soit −s_driver en marche : il défile ; immobile
@@ -2881,7 +2910,7 @@ func update_cable_phase(s_driver: float, s_other: float = -1.0, s_poulie_r: floa
 	# l'écart élastique de sa rame) ; écart entier à l'attache
 	var effile: bool = s_poulie_r >= 0.0
 	var own_p: float = s_poulie_r
-	var other_p: float = PNConstants.miroir(s_poulie_r) - trace.longueur
+	var other_p: float = trace.miroir(s_poulie_r) - trace.longueur
 	for e in [[cable_left_material, other_p if driver_is_rame2 else own_p, s_left],
 			[cable_right_material, own_p if driver_is_rame2 else other_p, s_right]]:
 		var m: ShaderMaterial = e[0]
@@ -2901,9 +2930,7 @@ func update_cable_phase(s_driver: float, s_other: float = -1.0, s_poulie_r: floa
 # il les heurterait en passant — et le câble descend de lui jusqu'au
 # premier galet en amont, d'où il repart posé de galet en galet.
 # ---------------------------------------------------------------------------
-const ATTACHE_DS: float = PNConstants.CAR_LEN_M * 0.5   # centre de la voiture amont
 const CULOT_DY: float = 0.12        # axe du culot au-dessus de l'axe du câble posé
-const CAISSE_Y: float = -1.16       # fond plat des voitures (TrainBodyBuilder.Y_CUT, monde)
 const CULOT_LONG: float = 0.27      # le câble sort par la pointe
 const AMORCE_ANNEAUX: int = 22
 var _culots: Dictionary = {}        # brin → {culot, tirant, amorce, mat}
@@ -3032,7 +3059,7 @@ func hauteur_sur_galet(side_i: int, s_att: float, p_att: Vector3, p_k: Vector3, 
 ## Renvoie {att, s1, a, x: [], lat: [], y: []} (lat : écart à la corde).
 const Y_HORS_GORGE: float = RollerMesh.R_JOUE - RollerMesh.R_BANDE   # 7 cm
 func amorce_profil(side_i: int, s_rame: float, n: int = AMORCE_ANNEAUX) -> Dictionary:
-	var att: float = attache_s(s_rame)
+	var att: float = _attache(s_rame)
 	var a: float = chainette(att).x
 	var k1: int = premier_appui(side_i, att, a)
 	var s1: float = float(_strand[side_i][k1].s) if k1 > 0 else trace.longueur - 0.3
@@ -3198,15 +3225,21 @@ static func chainette_y(x: float, d: float, h: float, a: float) -> float:
 	return a * (cosh((x - x_m) / a) - cosh(x_m / a)) + h
 
 
+## Attache du câble au Perce-Neige (bancs et prises de vue) : centre de la voiture amont.
 static func attache_s(s_rame: float) -> float:
-	return minf(s_rame + ATTACHE_DS, PNConstants.LENGTH - 0.5)
+	return minf(s_rame + PNConstants.CAR_LEN_M * 0.5, PNConstants.LENGTH - 0.5)
+
+
+## Attache du câble sur la ligne de ce constructeur (trace.attache_ds depuis l'abscisse du véhicule).
+func _attache(s_rame: float) -> float:
+	return minf(s_rame + trace.attache_ds, trace.longueur - 0.5)
 
 
 ## Abscisse où le câble se pose sur les galets : le premier galet touché
 ## (premier_appui). En deçà, il est en l'air (tronçon libre dessiné par
 ## _update_culots) et ne touche pas les galets qu'il survole.
 func coupe_brin(side_i: int, s_rame: float) -> float:
-	var att: float = attache_s(s_rame)
+	var att: float = _attache(s_rame)
 	var k: int = premier_appui(side_i, att, chainette(att).x)
 	if k < 0:
 		return trace.longueur - 0.3
@@ -3251,7 +3284,7 @@ func _update_culots(s_rame_g: float, s_rame_d: float) -> void:
 		# culot de l'autre rame loin de la caméra (moins d'un pixel) : on ne
 		# refait pas son tronçon libre (0,5 ms par image et par brin)
 		var loin: bool = not is_nan(_s_cam_culots) \
-			and absf(attache_s(s_r) - _s_cam_culots) > CULOT_PORTEE
+			and absf(_attache(s_r) - _s_cam_culots) > CULOT_PORTEE
 		for nom in ["culot", "tirant", "amorce"]:
 			(d[nom] as MeshInstance3D).visible = not loin
 		if loin:
@@ -3304,7 +3337,7 @@ func _update_culots(s_rame_g: float, s_rame_d: float) -> void:
 		(d.culot as MeshInstance3D).transform = Transform3D(Basis(xb, yb, z), pos)
 		# chape d'attelage : de l'axe de la chape au fond de la caisse
 		var p_chape: Vector3 = pos - z * 0.085
-		var h: float = maxf(CAISSE_Y - (y_cable + CULOT_DY), 0.02)
+		var h: float = maxf(trace.caisse_y - (y_cable + CULOT_DY), 0.02)   # (fond plat des voitures, TrainBodyBuilder.Y_CUT)
 		(d.tirant as MeshInstance3D).transform = Transform3D(
 			Basis(xb, up, xb.cross(up).normalized()) * Basis.from_scale(Vector3(1.0, h, 1.0)),
 			p_chape + up * (h * 0.5))
@@ -3426,14 +3459,14 @@ func _tube_amorce(mi: MeshInstance3D, mat: Material, pts: Array, xs: Array, att:
 func update_galets_rames(s_driver: float, s_other: float, s_cam: float,
 		delta: float, rupture: bool = false) -> void:
 	if s_other < 0.0:
-		s_other = PNConstants.miroir(s_driver)
+		s_other = trace.miroir(s_driver)
 	var s_g: float = s_other if driver_is_rame2 else s_driver
 	var s_d: float = s_driver if driver_is_rame2 else s_other
 	_s_cam_culots = s_cam
 	var rompu: int = 0
 	if rupture:
 		rompu = 1 if driver_is_rame2 else -1
-	update_galets(attache_s(s_g), attache_s(s_d), s_cam, delta, rompu,
+	update_galets(_attache(s_g), _attache(s_d), s_cam, delta, rompu,
 		coupe_brin(-1, s_g) - 1e-3, coupe_brin(1, s_d) - 1e-3)
 
 
@@ -3484,8 +3517,8 @@ func update_cable_rupture(rupture: bool, s_driver: float, direction: int,
 		var t_n: float = maxf(maxf(tension_dan, _last_tension_dan) * 10.0, RUPTURE_T_MIN_N)
 		_rupture = {
 			"t": 0.0, "s_b": s_b, "s0": s_driver, "ph0": s_driver,
-			"r_up": minf(t_n * (trace.longueur - s_b) / TrainPhysics.CABLE_EA_N, 8.0),
-			"r_lo": minf(t_n * (s_b - s_driver) / TrainPhysics.CABLE_EA_N, 2.0),
+			"r_up": minf(t_n * (trace.longueur - s_b) / trace.cable_ea_n, 8.0),
+			"r_lo": minf(t_n * (s_b - s_driver) / trace.cable_ea_n, 2.0),
 		}
 		print("[Câble] rupture à s = %.1f m (rame à %.1f m), rétraction %.2f m / %.2f m" % [
 			s_b, s_driver, _rupture.r_up, _rupture.r_lo])
@@ -3494,7 +3527,7 @@ func update_cable_rupture(rupture: bool, s_driver: float, direction: int,
 	# Chaque bout recule à vitesse constante u = ε·c (onde de détente,
 	# c = √(EA/ρ) ≈ 3 400 m/s) jusqu'à avoir rendu tout son allongement
 	# ε·L : la durée vaut L/c, le temps que l'onde parcoure le tronçon.
-	var c_onde: float = sqrt(TrainPhysics.CABLE_EA_N / PNConstants.CABLE_KG_M)
+	var c_onde: float = sqrt(trace.cable_ea_n / trace.cable_kg_m)
 	var l_up: float = maxf(trace.longueur - float(_rupture.s_b), 1.0)
 	var l_lo: float = maxf(float(_rupture.s_b) - float(_rupture.s0), 1.0)
 	var k_up: float = minf(1.0, c_onde * t / l_up)
