@@ -17,6 +17,7 @@ var _t_depart: float = -1.0
 var _y_prec: float = 0.0
 var _chute_max: float = 0.0
 var _yaw_amont: float = 0.0
+var _d_pire: float = 0.0
 
 
 func _initialize() -> void:
@@ -78,13 +79,15 @@ func _tick() -> void:
 			while d < L - 5.0:
 				var y: float = _lg.y_voie(d)
 				var sol: float = _lg._sol(0.0, -d)
-				if d > 80.0 and d < _lg.portail_d - 30.0:      # (gare aval : voie en fosse)
+				if d > 120.0 and d < _lg.portail_d - 30.0:     # (gare aval : voie en fosse, puis déblai de sortie de gare)
+					if y - 1.0 - sol < pire_dehors:
+						_d_pire = d
 					pire_dehors = minf(pire_dehors, y - 1.0 - sol)
 				elif d > _lg.portail_d + 30.0 and d < L - 60.0:
 					pire_roche = minf(pire_roche, sol - (y + 2.0 * Funival.R_TUNNEL))
 				d += 2.0
 			print("FUNIVAL L=%.0f m, portail %.0f, voie aval %.1f amont %.1f portail %.1f (repère ligne)" % [L, _lg.portail_d, _lg.y_voie(0.0), _lg.y_voie(L), _lg.y_voie(_lg.portail_d)])
-			_verif("Funival : poutre dehors au-dessus du sol (≥ -1,5 m : déblais courts admis)", pire_dehors > -1.5, "%.2f m" % pire_dehors)
+			_verif("Funival : poutre dehors au-dessus du sol (≥ -1,5 m : déblais courts admis)", pire_dehors > -1.5, "%.2f m à d=%.0f" % [pire_dehors, _d_pire])
 			_verif("Funival : tunnel sous la roche", pire_roche > 0.0, "couverture mini %.2f m" % pire_roche)
 			_phase = 2
 			_t = 0.0
