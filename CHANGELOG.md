@@ -5,6 +5,10 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.58.1 — 8 novembre 2026
+
+Republication de la 1.58.0, au contenu identique : la fabrication des paquets s'était arrêtée sur le contrôle de confidentialité (chemins de machine dans trois commentaires du Funival, retirés). La 1.58.0 n'a pas eu de paquets.
+
 ## 1.58.0 — 8 novembre 2026
 
 **Funival** (La Daille → Bellevarde, 1987), nouvelle ligne du domaine : funiculaire à deux véhicules de 272 places, d'après la fiche technique, le tracé OpenStreetMap, des photos, des vidéos de la montée et une trace GPS d'un passage réel.
