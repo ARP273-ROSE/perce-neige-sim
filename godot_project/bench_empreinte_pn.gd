@@ -2,7 +2,7 @@
 # (sommets, normales, UV, couleurs, index, matériaux) et par MultiMesh (tampon des instances), plus une somme
 # globale. Sert à prouver que la généralisation des constructeurs (Funival, 08/11/2026) ne change pas un sommet du
 # Perce-Neige : empreinte avant, empreinte après, comparaison ligne à ligne.
-#   godot --headless --path godot_project -s bench_empreinte_pn.gd -- [sortie.txt]
+#   godot --headless --path godot_project -s bench_empreinte_pn.gd -- [sortie.txt] [--sans-cpp]
 extends SceneTree
 
 var _tunnel: TunnelBuilder
@@ -22,9 +22,12 @@ func _initialize() -> void:
 
 func _suite() -> void:
 	var out_path: String = OS.get_temp_dir().path_join("empreinte_pn.txt")
-	var args: PackedStringArray = OS.get_cmdline_user_args()
-	if args.size() > 0:
-		out_path = args[0]
+	for a in OS.get_cmdline_user_args():
+		if a == "--sans-cpp":
+			# repli GDScript du module (ExtrusionVoie) : même empreinte attendue qu'avec le module
+			ExtrusionVoie.cpp_desactive = true
+		elif not a.begins_with("--"):
+			out_path = a
 	var tr: TrackBuilder = TrackBuilder.new()
 	tr.keep_instance_xforms = true
 	_root.add_child(tr)
