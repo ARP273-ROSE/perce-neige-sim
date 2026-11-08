@@ -861,6 +861,35 @@ func _collisions_funi() -> void:
 			var sol3: float = minf(_sol(xg3, -(d3 - lc * 0.5)), _sol(xg3, -(d3 + lc * 0.5))) - 0.5
 			boite.call(Vector3(0.3, y3 + 1.1 - sol3, lc + 0.05), Vector3(xg3 + sx3 * 0.1, (y3 + 1.1 + sol3) * 0.5, -d3))
 			boite.call(Vector3(0.1, 2.5, lc + 0.05), Vector3(sx3 * (W + 0.02), y3 - 1.3, -d3))
+	# tunnel : parois pour la caméra seule (à la 3e personne, elle sortait du tube et filmait le relief par-dessous —
+	# capture WebKit du 08/11/2026) ; tronçons de 30 m suivant la pente, plus larges dans l'évitement
+	var cam: StaticBody3D = StaticBody3D.new()
+	cam.name = "CameraTunnel"
+	cam.collision_layer = CollisionsJeu.COUCHE_CAMERA
+	cam.collision_mask = 0
+	_enfant(cam)
+	var dt: float = portail_d + 2.0
+	while dt < L - 2.0:
+		var dt2: float = minf(dt + 30.0, L - 2.0)
+		var ya: float = y_voie(dt)
+		var yb2: float = y_voie(dt2)
+		var a5: float = atan2(yb2 - ya, dt2 - dt)
+		var lg5: float = Vector2(dt2 - dt, yb2 - ya).length() + 0.5
+		var tm: float = maxf(_t_evit(dt), _t_evit(dt2))
+		var rx5: float = lerpf(R_TUNNEL, R_TUNNEL_EVIT, tm) - 0.15
+		var ry5: float = lerpf(R_TUNNEL, R_TUNNEL * 1.2, tm)
+		var c5: Vector3 = Vector3(0, (ya + yb2) * 0.5, -(dt + dt2) * 0.5)
+		var rot5: Basis = Basis(Vector3.RIGHT, a5)
+		var hmur: float = ry5 * 1.6 + 0.5
+		for f5 in [[Vector3(0.3, hmur, lg5), Vector3(-rx5 - 0.15, hmur * 0.5 - 0.5, 0)], [Vector3(0.3, hmur, lg5), Vector3(rx5 + 0.15, hmur * 0.5 - 0.5, 0)],
+				[Vector3(2.0 * rx5 + 0.6, 0.3, lg5), Vector3(0, -0.45 + ry5 * 1.62 + 0.15, 0)]]:
+			var cs5: CollisionShape3D = CollisionShape3D.new()
+			var bx5: BoxShape3D = BoxShape3D.new()
+			bx5.size = f5[0]
+			cs5.shape = bx5
+			cs5.transform = Transform3D(rot5, c5 + rot5 * (f5[1] as Vector3))
+			cam.add_child(cs5)
+		dt = dt2
 	# salle amont : parois, et plancher du bâtiment au débouché
 	var hx: float = W + 4.2
 	for sx in [-1.0, 1.0]:
