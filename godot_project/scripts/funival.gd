@@ -597,6 +597,7 @@ const RAIL_SUR_CENTRE: float = 1.238
 var _s_par_m: PackedFloat32Array = PackedFloat32Array()     # abscisse le long des rails, tous les 1 m en plan
 var tunnel_pn: TunnelBuilder = null
 var voie_pn: TrackBuilder = null
+var lumieres_pn: TunnelLights = null
 
 
 ## (longueur de la courbe de l'axe du tube, décalée de RAIL_SUR_CENTRE sur la normale aux rails : c'est elle que
@@ -736,7 +737,6 @@ func _voie_et_ouvrages() -> void:
 ## sommets). Section élargie dans l'évitement. Anneau de béton au portail, dans un front de rocher.
 func _tunnel() -> void:
 	var L: float = longueur_h()
-	var d1: float = L - L_HALL + 2.0
 	# tube, dalle, blochets, rails, galets numérotés, câble toronné : ceux du Perce-Neige (TunnelBuilder et
 	# TrackBuilder sur le tracé du Funival, demande d'utilisateur du 08/11/2026 : « les mêmes rails, les mêmes
 	# traverses, le même tunnel et les mêmes galets, avec toutes leurs fonctionnalités »)
@@ -760,23 +760,23 @@ func _tunnel() -> void:
 	voie_pn.walkway_side = -1.0            # passerelle-escalier à gauche en montant (vidéos)
 	voie_pn.walkway_s0 = t.tube_debut
 	await voie_pn.build_par_etapes(tunnel_pn, _pause.bind("funival : voie"))
-	for n in [tunnel_pn, voie_pn]:
+	# éclairage du Perce-Neige (TunnelLights : luminaires émissifs et lumières autour des véhicules), en hublots
+	# chauds tous les ECART_LAMPES m sur la paroi gauche, à 1,7 m au-dessus des rails (vidéo de la montée) ; sans
+	# lui, le tube était noir à ambiance égale (protocole du PC, 08/11/2026)
+	lumieres_pn = TunnelLights.new()
+	lumieres_pn.name = "TunnelLightsPN"
+	lumieres_pn.spacing_m = ECART_LAMPES
+	lumieres_pn.un_sur = 1
+	lumieres_pn.neon_color = Color(1.0, 0.86, 0.62)
+	lumieres_pn.neon_taille = Vector3(0.06, 0.20, 0.70)
+	lumieres_pn.wall_offset = R_TUNNEL - 0.10
+	lumieres_pn.height_offset = 1.7 - RAIL_SUR_CENTRE
+	lumieres_pn.build(tunnel_pn)
+	await _pause("funival : tunnel")
+	for n in [tunnel_pn, voie_pn, lumieres_pn]:
 		_marquer_voie(n)
 		_enfant(n)
 	await _pause("funival : tunnel")
-	# câbles de paroi et lampes : un hublot tous les ECART_LAMPES m sur la paroi gauche (en montant), à mi-hauteur
-	var st: SurfaceTool = SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var d2: float = portail_d + 10.0
-	while d2 < d1 - 5.0:
-		var rx2: float = R_TUNNEL + (R_TUNNEL_EVIT - R_TUNNEL) * _t_evit(d2)
-		var p: Vector3 = Vector3(-rx2 + 0.10, y_voie(d2) + 1.7, -d2)
-		for q in [[Vector3(0, -0.10, -0.35), Vector3(0, 0.10, 0.35), Vector3(0, 0.10, -0.35)],
-				[Vector3(0, -0.10, -0.35), Vector3(0, -0.10, 0.35), Vector3(0, 0.10, 0.35)]]:
-			for v in q:
-				st.add_vertex(p + v)
-		d2 += ECART_LAMPES
-	_maillage(st, mat_funi("lampe"), "Lampes", false)
 	await _pause("funival : tunnel")
 	# portail : front de rocher percé, anneau de béton en saillie (huit voussoirs)
 	var por: Node3D = Node3D.new()
@@ -1448,6 +1448,8 @@ func _maj_voie_pn(delta: float) -> void:
 		return
 	var s0: float = s_de_d(_vehicules[0][1])
 	var s1: float = s_de_d(_vehicules[1][1])
+	if lumieres_pn != null:
+		lumieres_pn.update_light_culling(s0, NAN, s1)
 	voie_pn.update_cable_visibility(s0, s1)
 	voie_pn.update_cable_phase(s0, s1, -1.0)
 	var s_cam: float = s0
