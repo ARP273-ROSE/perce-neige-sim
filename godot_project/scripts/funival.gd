@@ -163,13 +163,26 @@ func _preparer_voie() -> void:
 		for xs in [-(W0 + LARG_GRADINS[0]), -(W0 + LARG_GRADINS[0] * 0.5), 0.0, W0 + LARG_GRADINS[1] * 0.5, W0 + LARG_GRADINS[1]]:
 			dep = maxf(dep, _sol(float(xs), -dd) - (RAMPE_S0 * dd + RAMPE_K * dd * dd))
 		dd += 1.0
-	var y0: float = dep - FOSSE_AVAL
+	var y0_g: float = dep - FOSSE_AVAL
+	var y0: float = y0_g
+	# portail : là où la voie entre réellement dans la pente (le haut de l'anneau, ~3,8 m au-dessus des rails, à
+	# fleur du terrain ; le point OSM laissait l'anneau 1,2 m sous le relief et la voie 21 m sous terre avant lui —
+	# captures du PC, 08/11/2026) ; deux passes, la rampe dépendant de la longueur dehors
 	var dp: float = portail_d
-	# et la poutre (dessous à 1 m sous les rails) jamais sous le terrain le long de la rampe
-	var d2: float = 60.0
-	while d2 < dp - 20.0:
-		y0 = maxf(y0, _sol(0.0, -d2) + 0.2 - (RAMPE_S0 * d2 + RAMPE_K * d2 * d2))
-		d2 += 5.0
+	for passe in range(2):
+		y0 = y0_g
+		# la poutre (dessous à 1 m sous les rails) jamais sous le terrain le long de la rampe
+		var d2: float = 60.0
+		while d2 < dp - 20.0:
+			y0 = maxf(y0, _sol(0.0, -d2) + 0.2 - (RAMPE_S0 * d2 + RAMPE_K * d2 * d2))
+			d2 += 5.0
+		var dc: float = 300.0
+		while dc < portail_d + 60.0:
+			if _sol(0.0, -dc) >= y0 + RAMPE_S0 * dc + RAMPE_K * dc * dc + 3.0:
+				break
+			dc += 1.0
+		dp = dc
+	portail_d = dp
 	var yp: float = y0 + RAMPE_S0 * dp + RAMPE_K * dp * dp
 	_s1 = RAMPE_S0 + 2.0 * RAMPE_K * dp
 	_y_portail = yp
@@ -447,12 +460,17 @@ func _voie_et_ouvrages() -> void:
 		var sol: float = _sol(0.0, -d)
 		if y - sol > 0.2:
 			# chevalet sombre : deux jambes fines écartées vers le bas, entretoise, chevêtre (photos)
+			# en A franc : écart au pied ≈ moitié de la hauteur (photo), entretoises sur les hautes piles
 			var h: float = y - sol + 0.6
-			var e: float = 0.9 + h * 0.06
+			var e: float = maxf(0.9, h * 0.25)
 			for sx in [-1.0, 1.0]:
 				RemonteeKit.poutre(ouv, Vector3(sx * e, sol - 0.6, -d), Vector3(sx * 0.85, y - 0.4, -d), 0.32, 0.45, "peinture_anthracite")
-			if h > 4.0:
-				RemonteeKit.poutre(ouv, Vector3(-e * 0.6 - 0.35, sol + h * 0.45, -d), Vector3(e * 0.6 + 0.35, sol + h * 0.45, -d), 0.18, 0.25, "peinture_anthracite")
+			var n_e: int = 0 if h < 5.0 else (1 if h < 9.0 else 2)
+			for ke in range(n_e):
+				var fy: float = float(ke + 1) / float(n_e + 1)
+				var ye: float = lerpf(sol - 0.6, y - 0.4, fy)
+				var xe: float = lerpf(e, 0.85, fy)
+				RemonteeKit.poutre(ouv, Vector3(-xe, ye, -d), Vector3(xe, ye, -d), 0.18, 0.25, "peinture_anthracite")
 			RemonteeKit.boite_en(ouv, Vector3(2.6, 0.45, 0.8), Vector3(0, y - 0.22, -d), "peinture_anthracite")
 		d += 18.0
 	MeshMerge.merge(ouv, [], "Ouvrage")
@@ -815,9 +833,27 @@ func _gare_amont() -> void:
 	# bandeau de fenêtres sous le toit, aile basse à pignon, vitrage en bandeau au rez-de-chaussée, volume de pierre
 	var ys: float = y_voie(L)
 	var toits: Array = []
-	var pignon := func(cx: float, cz: float, larg: float, long_: float, h: float, haut_toit: float) -> void:
-		RemonteeKit.boite_en(g, Vector3(larg, h, long_), Vector3(cx, ys + h * 0.5 - 0.5, cz), "peinture_anthracite")
-		RemonteeKit.boite_en(g, Vector3(larg + 0.1, 1.0, long_ + 0.1), Vector3(cx, ys + 1.2, cz), "vitrage_sombre")
+	# bâtiment creux (murs, toit, porte côté ligne) : plein, il faisait un bloc qu'on ne pouvait que contourner
+	# (captures du PC, lot 12) ; une porte de 3 m dans le pignon aval (+z)
+	var murs := func(cx: float, cz: float, larg: float, long_: float, h: float, y0: float, mat: String, porte: bool) -> void:
+		var ep: float = 0.3
+		for sx3 in [-1.0, 1.0]:
+			RemonteeKit.boite_en(g, Vector3(ep, h, long_), Vector3(cx + sx3 * (larg - ep) * 0.5, y0 + h * 0.5, cz), mat)
+		RemonteeKit.boite_en(g, Vector3(larg, h, ep), Vector3(cx, y0 + h * 0.5, cz - (long_ - ep) * 0.5), mat)
+		if porte:
+			var lp: float = 3.0
+			var hp: float = minf(3.0, h)
+			var lat: float = (larg - lp) * 0.5
+			for sx3 in [-1.0, 1.0]:
+				RemonteeKit.boite_en(g, Vector3(lat, h, ep), Vector3(cx + sx3 * (lp + lat) * 0.5, y0 + h * 0.5, cz + (long_ - ep) * 0.5), mat)
+			if h > hp:
+				RemonteeKit.boite_en(g, Vector3(lp, h - hp, ep), Vector3(cx, y0 + hp + (h - hp) * 0.5, cz + (long_ - ep) * 0.5), mat)
+		else:
+			RemonteeKit.boite_en(g, Vector3(larg, h, ep), Vector3(cx, y0 + h * 0.5, cz + (long_ - ep) * 0.5), mat)
+	var pignon := func(cx: float, cz: float, larg: float, long_: float, h: float, haut_toit: float, porte: bool) -> void:
+		murs.call(cx, cz, larg, long_, h, ys - 0.5, "peinture_anthracite", porte)
+		murs.call(cx, cz, larg + 0.1, long_ + 0.1, 1.0, ys + 0.7, "vitrage_sombre", porte)
+		RemonteeKit.boite_en(g, Vector3(larg, 0.25, long_), Vector3(cx, ys + h - 0.62, cz), "peinture_anthracite")   # plafond
 		var a: float = atan2(haut_toit, larg * 0.5)
 		var pan: float = sqrt(larg * larg * 0.25 + haut_toit * haut_toit) + 0.8
 		for sx2 in [-1.0, 1.0]:
@@ -829,9 +865,9 @@ func _gare_amont() -> void:
 			RemonteeKit.boite_en(g, Vector3(larg * 0.6, haut_toit * 0.6, 0.2), Vector3(cx, ys + h - 0.5 + haut_toit * 0.3, cz + sz2 * long_ * 0.5), "peinture_anthracite")
 	# (au débouché de l'escalier : plus bas, son volume descendait dans la salle et faisait plafond sur le quai)
 	var zs: float = -(L + 10.0)
-	pignon.call(0.0, zs, 2.0 * hx + 2.0, 22.0, 8.0, 3.2)
-	RemonteeKit.boite_en(g, Vector3(2.0 * hx + 2.1, 0.9, 22.1), Vector3(0, ys + 6.2, zs), "vitrage_sombre")     # bandeau sous le toit
-	pignon.call(hx + 7.0, zs - 12.0, 12.0, 16.0, 4.5, 2.2)
+	pignon.call(0.0, zs, 2.0 * hx + 2.0, 22.0, 8.0, 3.2, true)
+	murs.call(0.0, zs, 2.0 * hx + 2.1, 22.1, 0.9, ys + 5.75, "vitrage_sombre", false)     # bandeau sous le toit
+	pignon.call(hx + 7.0, zs - 12.0, 12.0, 16.0, 4.5, 2.2, false)
 	var moel: MeshInstance3D = RemonteeKit.boite_en(g, Vector3(6.0, 3.6, 7.0), Vector3(-(hx + 4.0), ys + 1.3, zs + 6.0), "pierre")
 	moel.material_override = mat_funi("moellons")
 	moel.set_meta(MeshMerge.SANS_FUSION, true)
