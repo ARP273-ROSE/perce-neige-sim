@@ -5,6 +5,26 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.58.0 — 8 novembre 2026
+
+**Funival** (La Daille → Bellevarde, 1987), nouvelle ligne du domaine : funiculaire à deux véhicules de 272 places, d'après la fiche technique, le tracé OpenStreetMap, des photos, des vidéos de la montée et une trace GPS d'un passage réel.
+- Profil : rampe extérieure en courbe régulière (parabole calée sur la trace GPS, 21 → 30 %) sur une poutre en U de béton banché et des chevalets en A ; portail dans sa boîte de béton là où la voie entre dans la pente ; tunnel rectiligne qui monte à 53 %, puis la même variation de pente que le haut du Perce-Neige jusqu'à 30 % en gare amont.
+- Voie, tunnel et éclairage du Perce-Neige, sur le tracé du Funival : dalle, blochets, rails profilés, galets numérotés sur leurs supports, câble toronné qui suit les véhicules, escalier de service, joints d'anneaux ; évitement en une seule chambre, sans mur entre les voies (entraxe 2,35 m) ; hublots chauds tous les 20 m.
+- Véhicules noirs vitrés en gradins (neuf compartiments à plancher de niveau, portes des deux côtés, aigle sur le nez), phares. Démarrage et freinage doux (0,18 m/s², trace GPS), ralentissement dans l'évitement : trajet de 4 min 49.
+- Gare aval à l'air libre, gradins de caillebotis ; gare amont sous le rocher, quai en escalier de béton, « WELCOME TO BELLEVARDE », bâtiment de surface en bac acier, ouvert au haut des escaliers, avec portes et perrons vers les pistes. On y monte à pied, debout dans un compartiment, et l'on peut en ressortir avant le départ.
+- Supports numérotés comme au Perce-Neige : 003 au bout du quai aval, 200 à l'entrée du quai amont, 204 avant la roue motrice.
+- Matières de béton banché, bois et acier sur les gares, le viaduc et le portail. Sons repris du funiculaire (roulement, portes, croisement).
+
+**Téléphériques** (Grande Motte, Fornet) : deux porteurs par voie, chariots à deux rangées de galets, cavaliers ; gares du Fornet refaites d'après photos, cabine à bouts à trois pans, câble de lest ; portillons de quai (on tombait par la baie, cabine absente) et trou de 0,9 m comblé à la gare aval de la Grande Motte. Enseigne du Fornet corrigée.
+
+**Téléskis** : gares de départ de tous les TKD en charpente à garage droit (plus de tour en hélice), chalet du préposé, filets orange ; arrivées à jambe de force et contrepoids, « lâcher sous poulie » au Col du Palet et au Pays Désert ; TKE Montaval au départ sur trois fûts et à l'arrivée sur deux colonnes. Moteur au départ partout.
+
+**Corrections** : socle de la gare aval du Vallon (talus de 20 m remplacé par un soubassement de pierre).
+
+**Technique** : tunnel, voie et éclairage du Perce-Neige rendus paramétrables (un tracé par ligne) ; Perce-Neige vérifié identique au sommet près (empreinte de chaque maillage). Rails de la voie en C++ sur PC, repli identique ailleurs.
+
+Vérifié : tous les bancs sans écran (dont Funival, gradins et portes à pied, empreintes du Perce-Neige et du Funival), PWA sous WebKit ; au PC, protocole de lumière du tunnel, tranches de construction et sortie propre. Les 7 chemins de nuanceurs et les bancs PC avec écran n'ont pas été repassés sur cette version finale.
+
 ## 1.57.1 — 8 novembre 2026
 
 **Olympique (3S), pylônes P1 et P3 invisibles** dans le programme PC : vus de loin, les pylônes d'une ligne sont réunis en un seul maillage. Quand le niveau de détail changeait en jeu, ce maillage n'était pas reconnu comme un pylône et repassait à une portée de 250 m au plus, mesurée depuis son centre (près de P2) : P2 restait visible, P1 et P3 s'éteignaient. Il garde maintenant la portée des pylônes (3 km). Nouveau banc : chaque pylône de chaque ligne doit être visible de près, à la construction puis aux détails 2 et 0 (66 lignes, avec et sans pack HD).
