@@ -1220,7 +1220,9 @@ func _suite_process(delta: float) -> void:
 	# skieur : à l'air libre, c'est le jour (relief, ciel, soleil) ; dans
 	# une rame en plein tunnel, le relief ne sert à rien
 	var dehors: bool = mode_skieur and skieur != null and skieur.dehors(relief)
-	if _ext_light != null and dehors:
+	# (sauf caméra sous la roche du Funival : sa voie et ses véhicules ont la couche de la vue extérieure, que ce soleil
+	# éclaire — le tube était 3 fois plus clair que celui du Perce-Neige, protocole du PC du 08/11/2026)
+	if _ext_light != null and dehors and not _camera_sous_funival():
 		_ext_light.visible = true
 	if _ext_light != null and dehors != _soleil_skieur:
 		_soleil_skieur = dehors
