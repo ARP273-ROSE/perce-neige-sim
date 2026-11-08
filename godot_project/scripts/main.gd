@@ -1287,7 +1287,9 @@ func _suite_process(delta: float) -> void:
 	# monte quand la caméra cabine y entre.
 	if _env != null and cabin != null and physics != null and tunnel != null:
 		var amb: float = AMBIENT_ON if tunnel_lights_on else AMBIENT_OFF
-		if mode_skieur and skieur != null and _soleil_skieur:
+		# (caméra sous la roche du Funival : l'ambiance du tunnel du Perce-Neige, même si le skieur est dehors — sinon
+		# l'ambiance du jour blanchissait le tube, captures du PC du 08/11/2026)
+		if mode_skieur and skieur != null and _soleil_skieur and not _camera_sous_funival():
 			amb = AMBIENT_DEHORS
 		if _compat and (cabin.view_mode == Cabin.ViewMode.FPV or cabin.view_mode == Cabin.ViewMode.SKIEUR):
 			var sr: float = physics.s_render
@@ -2768,6 +2770,12 @@ func _gare_du_skieur() -> int:
 
 
 ## Le skieur est dans une rame en plein tunnel (loin des deux gares).
+func _camera_sous_funival() -> bool:
+	var cam: Camera3D = get_viewport().get_camera_3d()
+	return Funival.actif != null and is_instance_valid(Funival.actif) and cam != null \
+		and Funival.actif.souterrain(cam.global_position)
+
+
 func _skieur_en_tunnel() -> bool:
 	# tunnel du Funival : caméra dans son tube ou sa salle amont
 	var cam_f: Camera3D = get_viewport().get_camera_3d()
