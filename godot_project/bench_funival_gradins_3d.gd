@@ -21,6 +21,7 @@ var _t_depart: float = -1.0
 var _y_prec: float = 0.0
 var _chute_max: float = 0.0
 var _yaw_amont: float = 0.0
+var _yaw_aval: float = 0.0
 var _cote: float = -1.0           # gradins de gauche (attente), puis de droite (sortie)
 
 
@@ -233,6 +234,44 @@ func _tick() -> void:
 			if _t > 30.0:
 				sk.touches_ext = 0
 				var g2: float = sk.global_position.y - _y0
-				_verif("Funival : on monte le quai de Bellevarde à pied", g2 > 8.0, "+%.1f m en 30 s" % g2)
+				var loc2: Vector3 = _lg.global_transform.affine_inverse() * sk.global_position
+				var haut2: float = (_lg.global_transform * Vector3(0, VehiculeFunival.y_plancher_monde(_lg, _lg.longueur_h() - 1.0), 0)).y - _y0
+				_verif("Funival : on monte le quai de Bellevarde à pied, jusqu'en haut", g2 > haut2 - 1.5,
+					"+%.1f m en 30 s (haut du quai +%.1f), arrêté à d=%.0f x=%.1f, %s" % [g2, haut2, -loc2.z, loc2.x, sk.debug_marche])
 				_verif("Funival : sans chute sur le quai amont", _chute_max < 0.25, "plus forte descente par image %.2f m" % _chute_max)
+				_phase = 13
+				_t = 0.0
+		13:
+			# du milieu du bâtiment de Bellevarde, on sort à pied vers les pistes par la porte du pignon du fond
+			var L3: float = _lg.longueur_h()
+			var p3: Vector3 = _lg.global_transform * Vector3(0.0, _lg.sol_batiment() + 0.3, -(L3 + 11.0))
+			if _t < 1.5 / 60.0:
+				sk.activer(p3, 0.0)
+				sk.dernier_sol = p3
+				rm._repos = 60.0
+			if _t > 2.0:
+				sk.touches_ext = 1
+				sk.cam_yaw = _yaw_amont
+			if _t > 14.0:
+				sk.touches_ext = 0
+				var loc3: Vector3 = _lg.global_transform.affine_inverse() * sk.global_position
+				_verif("Funival : on sort du bâtiment de Bellevarde par la porte du fond", -loc3.z > L3 + 23.0,
+					"arrêté à d=%.1f (fond à %.1f) x=%.1f" % [-loc3.z, L3 + 22.0, loc3.x])
+				_phase = 14
+				_t = 0.0
+		14:
+			# et on rentre par le perron (avant : marche de 1,5 à 1,9 m, bloqué au pied du seuil)
+			var L4: float = _lg.longueur_h()
+			if _t < 1.5 / 60.0:
+				var q: Vector3 = _lg.global_transform.basis * Vector3(0, 0, 1)
+				sk.cam_yaw = atan2(-q.x, -q.z)
+				_yaw_aval = sk.cam_yaw
+			sk.touches_ext = 1
+			sk.cam_yaw = _yaw_aval
+			if _t > 12.0:
+				sk.touches_ext = 0
+				var loc4: Vector3 = _lg.global_transform.affine_inverse() * sk.global_position
+				var h4: float = (_lg.global_transform.affine_inverse() * sk.global_position).y - _lg.sol_batiment()
+				_verif("Funival : on rentre dans le bâtiment de Bellevarde par le perron du fond", -loc4.z < L4 + 20.0 and absf(h4) < 0.5,
+					"arrêté à d=%.1f x=%.1f, %.2f m / sol du bâtiment" % [-loc4.z, loc4.x, h4])
 				_fin()

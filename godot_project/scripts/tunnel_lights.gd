@@ -25,6 +25,11 @@ extends Node3D
 # participent toutes au clustering Forward+ et au fog volumétrique chaque
 # frame si on les laisse actives. Au-delà de LIGHT_CULL_DIST des deux rames,
 # la lumière est éteinte (le bâtonnet émissif, lui, reste visible de loin).
+## Autre ligne que le Perce-Neige (tracé tunnel.trace) : teinte, taille du luminaire, un allumé sur `un_sur`.
+@export var neon_color: Color = Color(0.75, 0.85, 1.0)  # blanc-bleuté néon industriel
+@export var neon_taille: Vector3 = Vector3(0.05, 0.08, 1.6)    # tube horizontal 1.6 m
+@export var un_sur: int = 2
+
 const LIGHT_CULL_DIST: float = 450.0
 # Web (rendu Compatibility, iPad) : chaque OmniLight active coûte cher en
 # WebGL2 → rayon de culling réduit. Les bâtonnets émissifs restent
@@ -54,12 +59,14 @@ func build(t: TunnelBuilder) -> void:
 
 
 func _populate() -> void:
-	var neon_color: Color = Color(0.75, 0.85, 1.0)  # blanc-bleuté néon industriel
 	# Commence APRÈS la salle de gare basse et s'arrête AVANT la haute :
 	# dans les salles élargies, un néon à wall_offset du centre flotterait
 	# loin du mur (les gares ont leur propre éclairage plafond).
 	var s: float = tunnel.station_low_end + 4.0
 	var max_s: float = tunnel.station_high_start - 4.0
+	if not tunnel.trace.perce_neige:
+		s = tunnel.trace.tube_debut + 4.0
+		max_s = minf(tunnel.trace.longueur, tunnel.trace.tube_fin) - 4.0
 
 	# Mesh visible du néon lui-même (bâtonnet émissif)
 	var neon_mat: StandardMaterial3D = StandardMaterial3D.new()
@@ -81,11 +88,11 @@ func _populate() -> void:
 	_neon_mat_off = neon_mat_off
 
 	var neon_mesh: BoxMesh = BoxMesh.new()
-	neon_mesh.size = Vector3(0.05, 0.08, 1.6)    # tube horizontal 1.6 m
+	neon_mesh.size = neon_taille
 
 	var idx: int = 0
 	while s < max_s:
-		var lit: bool = (idx % 2) == 0
+		var lit: bool = (idx % un_sur) == 0
 		_add_neon(s, neon_mesh, neon_mat if lit else neon_mat_off,
 			neon_color, lit)
 		# Tube d'évitement DROIT (voie de la rame 2) : sa propre rangée de
@@ -94,7 +101,11 @@ func _populate() -> void:
 		# seulement quand les deux tubes sont réellement séparés (offset
 		# suffisant) ; aux extrémités fusionnées, la rangée principale
 		# éclaire l'espace commun.
-		if absf(tunnel.passing_loop_offset(s, 1.0)) > wall_offset + 0.4:
+		if not tunnel.trace.deux_tubes and absf(tunnel.passing_loop_offset(s, 1.0)) > 0.5:
+			# chambre unique large : une seconde rangée contre sa paroi droite (une seule laissait la paroi gauche
+			# proche dans le noir au milieu de l'évitement — protocole du PC, 08/11/2026)
+			_add_neon(s, neon_mesh, neon_mat if lit else neon_mat_off, neon_color, lit, true)
+		if tunnel.trace.deux_tubes and absf(tunnel.passing_loop_offset(s, 1.0)) > wall_offset + 0.4:
 			_add_neon(s, neon_mesh, neon_mat if lit else neon_mat_off,
 				neon_color, lit, true)
 		idx += 1
@@ -124,10 +135,10 @@ const LIGHT_FADE_M: float = 60.0
 ## autour d'une rame, tube après tube quand elle avance.
 const ZONE_ALLUMEE: float = 300.0
 
-func update_light_culling(s_cabin: float, s_web: float = NAN) -> void:
+func update_light_culling(s_cabin: float, s_web: float = NAN, s_autre: float = NAN) -> void:
 	var web: bool = OS.has_feature("web")
 	var cull: float = LIGHT_CULL_DIST_WEB if web else LIGHT_CULL_DIST
-	var s_ghost: float = PNConstants.miroir(s_cabin)
+	var s_ghost: float = PNConstants.miroir(s_cabin) if is_nan(s_autre) else s_autre
 	_dernier_s = s_cabin
 	_appliquer_zone(s_cabin, s_ghost)
 	if is_nan(s_web):
@@ -180,7 +191,7 @@ func set_enabled(on: bool) -> void:
 		for tube in _tubes_allumes:
 			tube.set_surface_override_material(0, _neon_mat_on if on else _neon_mat_off)
 	else:
-		_appliquer_zone(_dernier_s, PNConstants.miroir(_dernier_s))
+		_appliquer_zone(_dernier_s, tunnel.trace.miroir(_dernier_s))
 	for entry in _lights:
 		var light: OmniLight3D = entry[0]
 		if light.visible and not on:
@@ -198,8 +209,12 @@ func _add_neon(s: float, mesh: BoxMesh, neon_mat: StandardMaterial3D,
 	# `right_tube` : néon du tube d'évitement DROIT — posé sur le flanc
 	# gauche de CE tube (axe à +offset, mur à +offset − wall_offset).
 	var loop_off: float = absf(tunnel.passing_loop_offset(s, 1.0))
+	if not tunnel.trace.deux_tubes:
+		loop_off *= tunnel.trace.elargissement_chambre       # (chambre unique : contre sa paroi)
 	var wall_pos: Vector3
-	if right_tube:
+	if right_tube and not tunnel.trace.deux_tubes:
+		wall_pos = xform.origin + right * (wall_offset + loop_off) + up * height_offset
+	elif right_tube:
 		wall_pos = xform.origin + right * (loop_off - wall_offset) + up * height_offset
 	else:
 		wall_pos = xform.origin - right * (wall_offset + loop_off) + up * height_offset
@@ -229,4 +244,7 @@ func _add_neon(s: float, mesh: BoxMesh, neon_mat: StandardMaterial3D,
 	# Positionner APRÈS add_child (global_transform nécessite d'être dans l'arbre)
 	var neon_xform: Transform3D = xform
 	neon_xform.origin = wall_pos
-	neon.global_transform = neon_xform
+	if is_inside_tree():
+		neon.global_transform = neon_xform
+	else:
+		neon.transform = neon_xform        # (construit hors de l'arbre par une autre ligne, repère identique)

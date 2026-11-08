@@ -60,7 +60,7 @@ extends Node3D
 # Quais raccourcis le 06/10 (PNConstants.QUAI_*) : [3, 42,56] et
 # [3477,56, 3513,52] → n° 1 à 29 traverses (43,79 m, 1,23 m après le
 # quai), n° 238 à 2 303 traverses (3 477,53 m, à l'entrée du quai). Voie
-# rallongée de 40,52 m (PNConstants.LENGTH) : toujours 238 supports, au
+# rallongée de 40,52 m (trace.longueur) : toujours 238 supports, au
 # pas de 14,71 m au lieu de 14,54.
 const SUPPORT_S1: float = 43.79
 const SUPPORT_S_LAST: float = 3477.53
@@ -91,6 +91,8 @@ const SUPPORT_N: int = 238
 # transitions du loop / virages mais monte à 3 m en ligne droite — même
 # fidélité visuelle (déviation < 4 mm), ~6× moins de vertices.
 
+## Tracé (Perce-Neige par défaut ; le Funival fournit le sien).
+var trace: TraceFuni = TraceFuni.new()
 var tunnel: TunnelBuilder = null
 var keep_instance_xforms: bool = false   # bancs headless (cf. _mm_instance)
 
@@ -143,6 +145,19 @@ func build(t: TunnelBuilder) -> void:
 	_build_cable()
 
 
+## Même construction, une étape à la fois, `pause` attendue entre deux (lignes construites sur le fil principal en
+## PWA : la voie du Funival d'un bloc faisait une image de 330 ms au PC, relevé du 08/11/2026).
+func build_par_etapes(t: TunnelBuilder, pause: Callable) -> void:
+	tunnel = t
+	for etape in [_compute_cable_geometry, _build_slab, _build_rails, _build_sleepers, _build_walkway,
+			_build_tunnel_details, _build_cable_beam, _build_guides, _build_abt_sheaves, _build_abt_plates, _build_cable]:
+		if etape == _build_rails:
+			await _build_rails_par_etapes(pause)
+		else:
+			(etape as Callable).call()
+		await pause.call()
+
+
 # ---------------------------------------------------------------------------
 # Câble tendu entre les galets + aiguillage Abt (2026-09-30)
 #
@@ -189,8 +204,8 @@ var _abt: Dictionary = {}       # nez, cœurs en X, fenêtres (cf. _compute_abt)
 
 
 func _in_abt_zone(s: float) -> bool:
-	return (s > PNConstants.PASSING_START - 5.0 and s < PNConstants.PASSING_START + ABT_ZONE) \
-		or (s > PNConstants.PASSING_END - ABT_ZONE and s < PNConstants.PASSING_END + 5.0)
+	return (s > trace.evit_debut - 5.0 and s < trace.evit_debut + ABT_ZONE) \
+		or (s > trace.evit_fin - ABT_ZONE and s < trace.evit_fin + 5.0)
 
 
 # Galets REPÈRES relevés par un utilisateur au compteur de la cabine, dans la vidéo
@@ -217,9 +232,11 @@ func _station_list() -> Array:
 	var abt: Array = []
 	for o in ABT_STATIONS:
 		var sh: bool = ABT_SHEAVE_STATIONS.has(o)
-		abt.append({"s": PNConstants.PASSING_START + o, "sheave": sh})
-		abt.append({"s": PNConstants.PASSING_END - o, "sheave": sh})
+		abt.append({"s": trace.evit_debut + o, "sheave": sh})
+		abt.append({"s": trace.evit_fin - o, "sheave": sh})
 	abt.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a.s < b.s)
+	if not trace.perce_neige:
+		return _station_list_reguliere(abt)
 	for i in range(GALETS_REPERES.size()):
 		var n_a: int = GALETS_REPERES[i][0]
 		var s_a: float = GALETS_REPERES[i][1]
@@ -265,7 +282,7 @@ func _station_list() -> Array:
 	# absolue le perdait quand la voie a été rallongée (v1.15.65)
 	# (liste triée par abscisse : les sommets du câble lui sont indexés)
 	var gare: Array = []
-	var s_g: float = PNConstants.LENGTH + MachineRoomBuilder.S_LAST_TUNNEL_ROLLER
+	var s_g: float = trace.longueur + MachineRoomBuilder.S_LAST_TUNNEL_ROLLER
 	while s_g > SUPPORT_S_LAST + 5.0:
 		gare.push_front({"s": s_g, "sheave": false, "num": 0})
 		s_g -= guide_spacing
@@ -277,6 +294,33 @@ func _station_list() -> Array:
 		st["s"] = snappedf(float(st.s), sleeper_spacing)
 		# support commun aux deux brins tant qu'ils sont côte à côte
 		st["paired"] = absf(tunnel.passing_loop_offset(st.s, 1.0)) < 0.05
+	return out
+
+
+## Autre ligne que le Perce-Neige : galets de trace.galets_debut à trace.galets_fin au pas le plus régulier possible
+## (près de trace.pas_galets), stations des aiguillages comprises, numérotés de 1 au dernier.
+func _station_list_reguliere(abt: Array) -> Array:
+	var fixes: Array = [trace.galets_debut]
+	var out: Array = [{"s": trace.galets_debut, "sheave": false}]
+	for st in abt:
+		if st.s > trace.galets_debut and st.s < trace.galets_fin:
+			fixes.append(st.s)
+			out.append(st)
+	fixes.append(trace.galets_fin)
+	out.append({"s": trace.galets_fin, "sheave": false})
+	for j in range(fixes.size() - 1):
+		var a: float = fixes[j]
+		var b: float = fixes[j + 1]
+		if _in_abt_zone((a + b) * 0.5):
+			continue
+		var n: int = maxi(int(round((b - a) / trace.pas_galets)), 1)
+		for m in range(1, n):
+			out.append({"s": lerpf(a, b, float(m) / float(n)), "sheave": false})
+	out.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a.s < b.s)
+	for i in range(out.size()):
+		out[i]["num"] = i + 1
+		out[i]["s"] = snappedf(float(out[i].s), sleeper_spacing)
+		out[i]["paired"] = absf(tunnel.passing_loop_offset(out[i].s, 1.0)) < 0.05
 	return out
 
 
@@ -298,17 +342,17 @@ func _roller_axis_y() -> float:
 # convention (virage à droite → rotation négative autour de l'avant).
 func _roller_tilt(s: float, side: float, span: float) -> float:
 	var ds: float = 5.0
-	var kh: float = deg_to_rad(SlopeProfile.heading_at(s + ds) - SlopeProfile.heading_at(s - ds)) / (2.0 * ds)
+	var kh: float = deg_to_rad(trace.cap(s + ds) - trace.cap(s - ds)) / (2.0 * ds)
 	if side != 0.0:
 		var x_m: float = tunnel.passing_loop_offset(s - ds, side)
 		var x_0: float = tunnel.passing_loop_offset(s, side)
 		var x_p: float = tunnel.passing_loop_offset(s + ds, side)
 		kh += (x_p - 2.0 * x_0 + x_m) / (ds * ds)
-	var t_n: float = PNConstants.T_NOMINAL_DAN * 10.0
-	var w: float = PNConstants.CABLE_KG_M * 9.80665
+	var t_n: float = trace.tension_dan * 10.0
+	var w: float = trace.cable_kg_m * 9.80665
 	var lat: float = t_n * kh * span
-	var ver: float = w * span * cos(SlopeProfile.slope_angle_at(s)) \
-		- t_n * SlopeProfile.slope_curvature_at(s) * span
+	var ver: float = w * span * cos(trace.pente_angle(s)) \
+		- t_n * trace.pente_courbure(s) * span
 	var phi: float = atan2(lat, maxf(ver, 1.0))
 	return clampf(-phi, -roller_tilt_max, roller_tilt_max)
 
@@ -329,7 +373,7 @@ func _compute_cable_geometry() -> void:
 			var st: Dictionary = _stations[k]
 			var s: float = st.s
 			var s_prev: float = _stations[k - 1].s if k > 0 else 0.0
-			var s_next: float = _stations[k + 1].s if k + 1 < _stations.size() else PNConstants.LENGTH
+			var s_next: float = _stations[k + 1].s if k + 1 < _stations.size() else trace.longueur
 			var xf: Transform3D = tunnel.transform_at(s)
 			var x_nom: float = _track_center_x(s, side) + side * pulley_pair_offset
 			# galet de déviation présent → il prend l'effort latéral, le
@@ -345,7 +389,7 @@ func _compute_cable_geometry() -> void:
 			var rel: Vector3 = p - xf.origin
 			pts.append({"s": s, "p": p, "x": rel.dot(xf.basis.x), "y": rel.dot(xf.basis.y),
 				"tilt": tilt, "center": center, "basis": rb})
-		pts.append(_strand_free_point(PNConstants.LENGTH, side, y_nom))
+		pts.append(_strand_free_point(trace.longueur, side, y_nom))
 		for i in range(1, pts.size() - 1):
 			if _stations[i - 1].sheave:
 				pts[i]["poulie"] = _poulie_deviation(pts, i, side_i)
@@ -358,7 +402,7 @@ func _strand_free_point(s: float, side: float, y_nom: float) -> Dictionary:
 	var x: float = _track_center_x(s, side) + side * pulley_pair_offset
 	# brin de la rame 2 : il remonte vers les galets qui le font passer
 	# au-dessus du sommet de la roue aval (machine_room_builder)
-	if side > 0.0 and s >= PNConstants.LENGTH - 1e-6:
+	if trace.perce_neige and side > 0.0 and s >= trace.longueur - 1e-6:
 		y_nom = MachineRoomBuilder.EXIT_Y_END
 	return {"s": s, "p": xf.origin + xf.basis.x * x + xf.basis.y * y_nom, "x": x, "y": y_nom,
 		"tilt": 0.0}
@@ -401,10 +445,10 @@ func _strand_rail_gap(cable_i: int, rail_i: int, s: float) -> float:
 # Abscisse (depuis la fourche basse) où l'écart de voie vaut dv.
 func _loop_ds_for_offset(dv: float) -> float:
 	var a: float = 0.0
-	var b: float = (PNConstants.PASSING_END - PNConstants.PASSING_START) * 0.5
+	var b: float = (trace.evit_fin - trace.evit_debut) * 0.5
 	for _it in range(50):
 		var m: float = 0.5 * (a + b)
-		if absf(tunnel.passing_loop_offset(PNConstants.PASSING_START + m, 1.0)) < dv:
+		if absf(tunnel.passing_loop_offset(trace.evit_debut + m, 1.0)) < dv:
 			a = m
 		else:
 			b = m
@@ -447,8 +491,8 @@ func _wheel_cable_gap(rail_i: int, s: float) -> float:
 
 func _compute_abt() -> void:
 	var hg: float = gauge_m * 0.5
-	var s0: float = PNConstants.PASSING_START
-	var s1: float = PNConstants.PASSING_END
+	var s0: float = trace.evit_debut
+	var s1: float = trace.evit_fin
 	var ds_x: float = _loop_ds_for_offset(hg)
 	var ds_sw: float = _loop_ds_for_offset(abt_switch_d)
 	_abt = {
@@ -534,7 +578,7 @@ func _scan_gap(rail_i: int, s_from: float, s_to: float, dirn: float, target: flo
 func _gap_zone(piece: Dictionary, s: float) -> String:
 	if piece.kind == "A":
 		return piece.get("zone", "lo")
-	return "lo" if s < 0.5 * (PNConstants.PASSING_START + PNConstants.PASSING_END) else "hi"
+	return "lo" if s < 0.5 * (trace.evit_debut + trace.evit_fin) else "hi"
 
 
 func _gap_of(rail_i: int) -> Dictionary:
@@ -565,9 +609,9 @@ func _piece_x(piece: Dictionary, s: float) -> float:
 		var k: float = 0.012
 		var x: float = ri * 0.5 * (a + b + sqrt((a - b) * (a - b) + k * k))
 		# pointe de langue recourbée vers l'axe de la voie
-		var s_tip: float = PNConstants.PASSING_START - ABT_TONGUE_BACK
+		var s_tip: float = trace.evit_debut - ABT_TONGUE_BACK
 		if z == "hi":
-			s_tip = PNConstants.PASSING_END + ABT_TONGUE_BACK
+			s_tip = trace.evit_fin + ABT_TONGUE_BACK
 		var tt: float = clampf(1.0 - absf(s - s_tip) / 0.9, 0.0, 1.0)
 		return x + ri * 0.04 * tt * tt
 	# B : bout plié parallèle au câble côté évitement, puis ligne de la roue
@@ -735,14 +779,12 @@ func _piece_height(piece: Dictionary, s: float) -> float:
 
 func _commit_rail_chunk(st_rail: SurfaceTool, st_top: SurfaceTool, name: String) -> void:
 	st_rail.generate_normals()
-	st_rail.generate_tangents()
 	var mi: MeshInstance3D = MeshInstance3D.new()
 	mi.name = name
 	mi.mesh = MeshMerge.valider_indexe(st_rail)
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(mi)
 	st_top.generate_normals()
-	st_top.generate_tangents()
 	var mt: MeshInstance3D = MeshInstance3D.new()
 	mt.name = name + "Top"
 	mt.mesh = MeshMerge.valider_indexe(st_top)
@@ -807,13 +849,13 @@ func _build_slab() -> void:
 	# La section "PassingChamber" est CENTRÉE et s'élargit sinusoïdalement
 	# pour couvrir toute la largeur de la chambre, supportant la cabine
 	# pendant qu'elle suit sa courbe latérale.
-	_build_slab_section(slab_mat, pit_low_end, PNConstants.PASSING_START, 0.0, "SlabLow", false)
-	_build_slab_section(slab_mat, PNConstants.PASSING_START, PNConstants.PASSING_END, 0.0, "SlabPassingChamber", true)
+	_build_slab_section(slab_mat, pit_low_end, trace.evit_debut, 0.0, "SlabLow", false)
+	_build_slab_section(slab_mat, trace.evit_debut, trace.evit_fin, 0.0, "SlabPassingChamber", true)
 	# en haut, la dalle s'arrête au bord de la fosse où émerge la roue aval
 	# de la salle des machines (elle la traversait : « un mur en béton dans
 	# la roue », retour du 30/09)
-	_build_slab_section(slab_mat, PNConstants.PASSING_END,
-		minf(pit_high_start, PNConstants.LENGTH + MachineRoomBuilder.PIT_S0), 0.0, "SlabHigh", false)
+	_build_slab_section(slab_mat, trace.evit_fin,
+		minf(pit_high_start, trace.fin_voie()), 0.0, "SlabHigh", false)
 
 
 # Construit un tronçon de dalle entre s_start et s_end avec un offset latéral.
@@ -953,7 +995,6 @@ func _build_slab_chunk(
 		prev_half_w = cur_half_w
 
 	st.generate_normals()
-	st.generate_tangents()
 	var mi: MeshInstance3D = MeshInstance3D.new()
 	mi.name = name
 	mi.mesh = MeshMerge.valider_indexe(st)
@@ -990,7 +1031,7 @@ func _trench_ledge(e: Array, y_top: float, y_floor: float) -> Array:
 # au niveau de la dalle sur les derniers mètres avant la fosse de la roue
 # aval (gare haute), sinon son fond traverserait la roue.
 func _trench_depth_at(s: float) -> float:
-	var s_fin: float = PNConstants.LENGTH + MachineRoomBuilder.PIT_S0
+	var s_fin: float = trace.fin_voie()
 	return trench_depth * clampf((s_fin - 1.5 - s) / 2.5, 0.0, 1.0)
 
 
@@ -1040,6 +1081,40 @@ func _adaptive_s_list(s_start: float, s_end: float, side: float) -> Array:
 # ---------------------------------------------------------------------------
 
 func _build_rails() -> void:
+	var mats: Array = _rail_mats()
+	var hg: float = gauge_m * 0.5
+	# Les 2 rails extérieurs (continus) suivent le tube correspondant ±hg ; rails intérieurs de l'évitement en
+	# tronçons : langues, lames, lacunes où passe le câble opposé, cœur en X (cf. _compute_abt).
+	_build_rail_strip(
+		mats[0], mats[1], 0.0, trace.longueur, -1.0, -hg, "RailFarLeft",
+	)
+	_build_rail_strip(
+		mats[0], mats[1], 0.0, trace.longueur, +1.0, +hg, "RailFarRight",
+	)
+	for piece in _abt.pieces:
+		_build_rail_piece(mats[0], mats[1], piece)
+
+
+## Les mêmes rails, un tronçon de chunk_length à la fois, `pause` attendue entre deux (120 ms d'un bloc pour la voie
+## du Funival, relevé du PC du 08/11/2026).
+func _build_rails_par_etapes(pause: Callable) -> void:
+	var mats: Array = _rail_mats()
+	var hg: float = gauge_m * 0.5
+	for f in [[-1.0, -hg, "RailFarLeft"], [1.0, hg, "RailFarRight"]]:
+		var c_start: float = 0.0
+		var chunk_i: int = 0
+		while c_start < trace.longueur - 0.001:
+			var c_end: float = minf(c_start + chunk_length, trace.longueur)
+			_build_rail_chunk(mats[0], mats[1], c_start, c_end, f[0], f[1], "%s_%d" % [f[2], chunk_i])
+			c_start = c_end
+			chunk_i += 1
+			await pause.call()
+	for piece in _abt.pieces:
+		_build_rail_piece(mats[0], mats[1], piece)
+		await pause.call()
+
+
+func _rail_mats() -> Array:
 	var rail_mat: StandardMaterial3D = StandardMaterial3D.new()
 	rail_mat.albedo_color = Color(0.48, 0.46, 0.44)
 	rail_mat.roughness = 0.45
@@ -1052,18 +1127,7 @@ func _build_rails() -> void:
 	rail_top_mat.metallic = 0.95
 	rail_top_mat.metallic_specular = 1.0
 
-	var hg: float = gauge_m * 0.5
-	# Les 2 rails extérieurs (continus) suivent le tube correspondant ±hg
-	_build_rail_strip(
-		rail_mat, rail_top_mat, 0.0, PNConstants.LENGTH, -1.0, -hg, "RailFarLeft",
-	)
-	_build_rail_strip(
-		rail_mat, rail_top_mat, 0.0, PNConstants.LENGTH, +1.0, +hg, "RailFarRight",
-	)
-	# Rails intérieurs de l'évitement en tronçons : langues, lames,
-	# lacunes où passe le câble opposé, cœur en X (cf. _compute_abt).
-	for piece in _abt.pieces:
-		_build_rail_piece(rail_mat, rail_top_mat, piece)
+	return [rail_mat, rail_top_mat]
 
 
 # Construit un rail entre s_start et s_end, x_local = passing_loop_offset(s, side) + hg_signed.
@@ -1087,14 +1151,6 @@ func _build_rail_chunk(
 	rail_mat: StandardMaterial3D, rail_top_mat: StandardMaterial3D,
 	s_start: float, s_end: float, side: float, hg_signed: float, name: String,
 ) -> void:
-	var st_rail: SurfaceTool = SurfaceTool.new()
-	st_rail.begin(Mesh.PRIMITIVE_TRIANGLES)
-	st_rail.set_material(rail_mat)
-
-	var st_top: SurfaceTool = SurfaceTool.new()
-	st_top.begin(Mesh.PRIMITIVE_TRIANGLES)
-	st_top.set_material(rail_top_mat)
-
 	# Offsets verticaux profil UIC-60 simplifié.
 	# Le patin du rail repose sur le HAUT des traverses, pas dans la dalle.
 	# Sleeper top = floor_y_local + slab_thickness + sleeper_height − 0.01
@@ -1114,51 +1170,28 @@ func _build_rail_chunk(
 
 	var s_list: Array = _adaptive_s_list(s_start, s_end, side)
 
-	var prev_s: float = s_list[0]
-	var prev_xform: Transform3D = tunnel.transform_at(prev_s)
-	var prev_cx: float = _track_center_x(prev_s, side) + hg_signed
-	for i in range(1, s_list.size()):
-		var s_cur: float = s_list[i]
-		var cur_xform: Transform3D = tunnel.transform_at(s_cur)
-		var cur_cx: float = _track_center_x(s_cur, side) + hg_signed
-
-		var p0: Vector3 = prev_xform.origin
-		var p1: Vector3 = cur_xform.origin
-		var r0: Vector3 = prev_xform.basis.x
-		var r1: Vector3 = cur_xform.basis.x
-		var u0: Vector3 = prev_xform.basis.y
-		var u1: Vector3 = cur_xform.basis.y
-
-		var v0: float = prev_s
-		var v1: float = s_cur
-
-		# Foot
-		_emit_rail_step_xv(
-			st_rail, p0, r0, u0, p1, r1, u1,
-			prev_cx, cur_cx, foot_y0, foot_y1, foot_w, foot_w, v0, v1,
-		)
-		# Web
-		_emit_rail_step_xv(
-			st_rail, p0, r0, u0, p1, r1, u1,
-			prev_cx, cur_cx, web_y0, web_y1, web_w, web_w, v0, v1,
-		)
-		# Head base
-		_emit_rail_step_xv(
-			st_rail, p0, r0, u0, p1, r1, u1,
-			prev_cx, cur_cx, head_y0, head_y1 - 0.012, head_w, head_w, v0, v1,
-		)
-		# Head top (brillant)
-		_emit_rail_step_xv(
-			st_top, p0, r0, u0, p1, r1, u1,
-			prev_cx, cur_cx, head_y1 - 0.012, head_y1, head_w, head_w, v0, v1,
-		)
-
-		prev_s = s_cur
-		prev_xform = cur_xform
-		prev_cx = cur_cx
+	# Sections du tronçon, puis sommets et UV des bandes (patin, âme, champignon ; dessus brillant à part) en un appel :
+	# ExtrusionVoie (module C++, ou le même calcul en GDScript sans lui), mêmes sommets dans le même ordre que
+	# l'émission par _emit_rail_step_xv qu'elle remplace (120 ms d'un bloc pour les rails du Funival, PC, 08/11/2026).
+	var org: PackedVector3Array = PackedVector3Array()
+	var dro: PackedVector3Array = PackedVector3Array()
+	var hau: PackedVector3Array = PackedVector3Array()
+	var cxs: PackedFloat64Array = PackedFloat64Array()
+	var ss: PackedFloat64Array = PackedFloat64Array()
+	for s_k in s_list:
+		var xf_k: Transform3D = tunnel.transform_at(s_k)
+		org.append(xf_k.origin)
+		dro.append(xf_k.basis.x)
+		hau.append(xf_k.basis.y)
+		cxs.append(_track_center_x(s_k, side) + hg_signed)
+		ss.append(s_k)
+	var bandes_corps: PackedFloat64Array = PackedFloat64Array([foot_y0, foot_y1, foot_w, foot_w, web_y0, web_y1, web_w, web_w,
+		head_y0, head_y1 - 0.012, head_w, head_w])
+	var bandes_dessus: PackedFloat64Array = PackedFloat64Array([head_y1 - 0.012, head_y1, head_w, head_w])
+	var st_rail: SurfaceTool = ExtrusionVoie.surface(ExtrusionVoie.bandes(org, dro, hau, cxs, ss, bandes_corps), rail_mat)
+	var st_top: SurfaceTool = ExtrusionVoie.surface(ExtrusionVoie.bandes(org, dro, hau, cxs, ss, bandes_dessus), rail_top_mat)
 
 	st_rail.generate_normals()
-	st_rail.generate_tangents()
 	var mi_rail: MeshInstance3D = MeshInstance3D.new()
 	mi_rail.name = name
 	mi_rail.mesh = MeshMerge.valider_indexe(st_rail)
@@ -1166,7 +1199,6 @@ func _build_rail_chunk(
 	add_child(mi_rail)
 
 	st_top.generate_normals()
-	st_top.generate_tangents()
 	var mi_top: MeshInstance3D = MeshInstance3D.new()
 	mi_top.name = name + "Top"
 	mi_top.mesh = MeshMerge.valider_indexe(st_top)
@@ -1301,12 +1333,12 @@ func _build_sleepers() -> void:
 	#   tunnel.passing_loop_offset(s, ±1) → 4 blochets
 	var hg: float = gauge_m * 0.5
 	var positions: Array = []  # [{s: float, off: float}, ...] — off = centre du blochet
-	var n_total: int = int(PNConstants.LENGTH / sleeper_spacing)
+	var n_total: int = int(trace.longueur / sleeper_spacing)
 	for i in range(n_total):
 		var s: float = (float(i) + 0.5) * sleeper_spacing
 		if s < pit_low_end or s > pit_high_start:
 			continue   # au-dessus des fosses de gare, les rails sont sur poutres
-		if s < PNConstants.PASSING_START - ABT_TONGUE_BACK or s > PNConstants.PASSING_END + ABT_TONGUE_BACK:
+		if s < trace.evit_debut - ABT_TONGUE_BACK or s > trace.evit_fin + ABT_TONGUE_BACK:
 			positions.append({"s": s, "off": -hg, "w": block_width})
 			positions.append({"s": s, "off": hg, "w": block_width})
 			continue
@@ -1365,12 +1397,13 @@ func _build_sleepers() -> void:
 # fosse de la gare basse sur toute la longueur des quais (retour d'utilisateur, 07/10/2026 :
 # « la fosse doit être plus profonde pour que la tête soit sous les rails »)
 @export var pit_low_end: float = 43.0
-@export var pit_high_start: float = PNConstants.LENGTH   # pas de fosse en haut
+@export var pit_high_start: float = trace.longueur   # pas de fosse en haut
 @export var walkway_side: float = 1.0        # +1 = droite en montant (vidéo)
 @export var walkway_x: float = 1.02          # décalage latéral du milieu de l'escalier
 @export var walkway_step_s: float = 0.45     # espacement des marches le long de s
 @export var walkway_post_s: float = 3.0      # espacement des potelets
 @export var walkway_handrail: bool = false   # pas de rambarde sur le vrai escalier
+@export var walkway_s0: float = -INF         # début de l'escalier, s'il commence après la fosse (Funival : au portail)
 
 
 ## Point monde sur l'escalier de service (passerelle), 35 cm au-dessus des
@@ -1383,7 +1416,7 @@ func _walkway_frame(s: float) -> Transform3D:
 	# repère de pose : origine sur le bord, X = travers, Y = monde haut
 	var xf: Transform3D = tunnel.transform_at(s)
 	var off: float = _track_center_x(s, walkway_side) if (
-		s >= PNConstants.PASSING_START - 60.0 and s <= PNConstants.PASSING_END + 60.0) else 0.0
+		s >= trace.evit_debut - 60.0 and s <= trace.evit_fin + 60.0) else 0.0
 	var origin: Vector3 = xf.origin + xf.basis.x * (off + walkway_side * walkway_x) \
 		+ xf.basis.y * (floor_y_local + slab_thickness + 0.08)
 	var fwd: Vector3 = -xf.basis.z
@@ -1478,14 +1511,14 @@ func _build_walkway() -> void:
 	var stringers: Array = []
 	var posts: Array = []
 	var cables: Array = []
-	var s: float = pit_low_end + 0.3
+	var s: float = maxf(pit_low_end, walkway_s0) + 0.3
 	while s < pit_high_start - 0.3:
 		var fr: Transform3D = _walkway_frame(s)
 		treads.append(fr)
 		# limons alignés sur la pente (repère spline)
 		var xf: Transform3D = tunnel.transform_at(s)
 		var off: float = _track_center_x(s, walkway_side) if (
-			s >= PNConstants.PASSING_START - 60.0 and s <= PNConstants.PASSING_END + 60.0) else 0.0
+			s >= trace.evit_debut - 60.0 and s <= trace.evit_fin + 60.0) else 0.0
 		for dx in [-0.24, 0.24]:
 			var st_xf: Transform3D = xf
 			st_xf.origin += xf.basis.x * (off + walkway_side * walkway_x + dx) \
@@ -1493,14 +1526,14 @@ func _build_walkway() -> void:
 			stringers.append(st_xf)
 		s += walkway_step_s
 	s = 1.5
-	while s < PNConstants.LENGTH - 1.5:
+	while s < trace.longueur - 1.5:
 		var fr2: Transform3D = _walkway_frame(s)
 		var p: Transform3D = fr2
 		p.origin += Vector3.UP * 0.5 + fr2.basis.x * (walkway_side * 0.24)
 		posts.append(p)
 		var xf2: Transform3D = tunnel.transform_at(s + walkway_post_s * 0.5)
 		var off2: float = _track_center_x(s + walkway_post_s * 0.5, walkway_side) if (
-			s >= PNConstants.PASSING_START - 60.0 and s <= PNConstants.PASSING_END + 60.0) else 0.0
+			s >= trace.evit_debut - 60.0 and s <= trace.evit_fin + 60.0) else 0.0
 		var cx: Transform3D = xf2
 		cx.origin += xf2.basis.x * (off2 + walkway_side * (walkway_x + 0.24)) \
 			+ xf2.basis.y * (floor_y_local + slab_thickness + 0.08 + 1.0)
@@ -1521,8 +1554,8 @@ func _build_walkway() -> void:
 	boxmat.roughness = 0.7
 	boxm.material = boxmat
 	var boxes: Array = []
-	s = 12.0
-	while s < PNConstants.LENGTH - 12.0:
+	s = 12.0 if trace.perce_neige else trace.tube_debut + 12.0
+	while s < minf(trace.longueur, trace.tube_fin) - 12.0:
 		# pas dans les salles des gares : le boîtier y flottait loin de
 		# tout mur (retour d'un utilisateur du 06/10/2026, gare du bas)
 		if s < tunnel.station_low_end + 1.0 or s > tunnel.station_high_start - 1.0:
@@ -1530,7 +1563,7 @@ func _build_walkway() -> void:
 			continue
 		var xf3: Transform3D = tunnel.transform_at(s)
 		var off3: float = _track_center_x(s, -walkway_side) if (
-			s >= PNConstants.PASSING_START - 60.0 and s <= PNConstants.PASSING_END + 60.0) else 0.0
+			s >= trace.evit_debut - 60.0 and s <= trace.evit_fin + 60.0) else 0.0
 		var bx: Transform3D = xf3
 		bx.origin += xf3.basis.x * (off3 - walkway_side * 1.48) + xf3.basis.y * 0.42
 		boxes.append(bx)
@@ -1559,8 +1592,13 @@ func _build_walkway() -> void:
 
 ## Dans l'évitement (deux tubes) : les joints et la canalisation y suivent
 ## chacun leur tube (_build_loop_lining) au lieu de l'axe unique.
+## Rayon de la chambre unique d'évitement (deux_tubes faux), comme TunnelBuilder.
+func _rayon_chambre(s: float) -> float:
+	return tunnel.tunnel_radius + absf(tunnel.passing_loop_offset(s, 1.0)) * trace.elargissement_chambre
+
+
 func _in_loop_zone(s: float) -> bool:
-	return s > PNConstants.PASSING_START and s < PNConstants.PASSING_END
+	return s > trace.evit_debut and s < trace.evit_fin
 
 
 func _build_tunnel_details() -> void:
@@ -1593,11 +1631,17 @@ func _build_tunnel_details() -> void:
 	# centrale de la voie sous le niveau de la dalle)
 	var ring: ArrayMesh = _ring_arc_mesh(joint_mat)
 	var rings: Array = []
-	var s: float = PNConstants.SQUARE_SECTION_LOW_END + 0.7
-	while s < PNConstants.SQUARE_SECTION_HIGH_START:
+	var s: float = trace.carre_bas_fin + 0.7
+	while s < trace.carre_haut_debut:
 		if not _in_loop_zone(s):
 			var xf: Transform3D = tunnel.transform_at(s)
 			rings.append(Transform3D(xf.basis, xf.origin))
+		elif not trace.deux_tubes:
+			# chambre unique : l'anneau au rayon de la chambre (les deux cercles des deux tubes s'y recoupaient « en
+			# cœur » — captures du PC, lot 19)
+			var xfc: Transform3D = tunnel.transform_at(s)
+			var kc: float = _rayon_chambre(s) / tunnel.tunnel_radius
+			rings.append(Transform3D(xfc.basis.scaled_local(Vector3(kc, kc, 1.0)), xfc.origin))
 		s += ring_joint_spacing
 	_mm_instance(ring, rings, "SegmentRings", 250.0)
 
@@ -1606,14 +1650,19 @@ func _build_tunnel_details() -> void:
 	pipe.size = Vector3(0.07, 0.07, 4.06)
 	pipe.material = pipe_mat
 	var pipes: Array = []
-	s = PNConstants.SQUARE_SECTION_LOW_END + 2.0
-	while s < PNConstants.SQUARE_SECTION_HIGH_START - 2.0:
+	s = trace.carre_bas_fin + 2.0
+	while s < trace.carre_haut_debut - 2.0:
 		if not _in_loop_zone(s):
 			var xf2: Transform3D = tunnel.transform_at(s)
 			var tr2: Transform3D = xf2
 			var rr: float = tunnel.tunnel_radius - 0.06
 			tr2.origin += xf2.basis.x * (rr * sin(deg_to_rad(42.0))) + xf2.basis.y * (rr * cos(deg_to_rad(42.0)))
 			pipes.append(tr2)
+		elif not trace.deux_tubes:
+			var xfc2: Transform3D = tunnel.transform_at(s)
+			var rc2: float = _rayon_chambre(s) - 0.06
+			xfc2.origin += xfc2.basis.x * (rc2 * sin(deg_to_rad(42.0))) + xfc2.basis.y * (rc2 * cos(deg_to_rad(42.0)))
+			pipes.append(xfc2)
 		else:
 			# évitement : la canalisation suit la voûte droite du tube DROIT
 			# (continue avec celle du tube unique, où d = 0) — chaque
@@ -1625,14 +1674,15 @@ func _build_tunnel_details() -> void:
 			pipes.append(Transform3D(Basis.looking_at(p1 - p0, up2), (p0 + p1) * 0.5))
 		s += 4.0
 	_mm_instance(pipe, pipes, "CrownPipe", 400.0)
-	_build_loop_rings(joint_mat)
+	if trace.deux_tubes:
+		_build_loop_rings(joint_mat)
 
 	# --- joints horizontaux des galeries carrées (banches), hors salles de gare
 	var hj: BoxMesh = BoxMesh.new()
 	hj.size = Vector3(0.025, 0.025, 3.02)
 	hj.material = joint_mat
 	var hjs: Array = []
-	for rng in [[tunnel.station_low_end + 3.0, PNConstants.SQUARE_SECTION_LOW_END - 1.0]]:
+	for rng in ([[tunnel.station_low_end + 3.0, trace.carre_bas_fin - 1.0]] if trace.perce_neige else []):
 		s = rng[0]
 		while s < rng[1]:
 			var xf3: Transform3D = tunnel.transform_at(s)
@@ -1664,8 +1714,8 @@ func _build_tunnel_details() -> void:
 	lamp.material = lamp_mat
 	_loop_lamp_mesh = lamp
 	var lamps: Array = []
-	s = PNConstants.PASSING_START - 40.0
-	while s < PNConstants.PASSING_END + 40.0:
+	s = trace.evit_debut - 40.0
+	while s < trace.evit_fin + 40.0:
 		var xf6: Transform3D = tunnel.transform_at(s)
 		for side in [-1.0, 1.0]:
 			var off: float = _track_center_x(s, side)
@@ -1731,12 +1781,12 @@ func _build_loop_rings(joint_mat: StandardMaterial3D) -> void:
 	var h: float = 0.015          # saillie vers l'intérieur
 	var mat: StandardMaterial3D = joint_mat.duplicate()
 	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
-	var s0: float = PNConstants.SQUARE_SECTION_LOW_END + 0.7
-	var s: float = s0 + ceil((PNConstants.PASSING_START - s0) / ring_joint_spacing) * ring_joint_spacing
+	var s0: float = trace.carre_bas_fin + 0.7
+	var s: float = s0 + ceil((trace.evit_debut - s0) / ring_joint_spacing) * ring_joint_spacing
 	var st: SurfaceTool = null
 	var s_chunk: float = s
 	var n_chunk: int = 0
-	while s < PNConstants.PASSING_END:
+	while s < trace.evit_fin:
 		if st == null:
 			st = SurfaceTool.new()
 			st.begin(Mesh.PRIMITIVE_TRIANGLES)
@@ -1776,7 +1826,7 @@ func _build_loop_rings(joint_mat: StandardMaterial3D) -> void:
 						st.set_normal(nr)
 						st.add_vertex(v)
 		s += ring_joint_spacing
-		if s - s_chunk > 40.0 or s >= PNConstants.PASSING_END:
+		if s - s_chunk > 40.0 or s >= trace.evit_fin:
 			var mi: MeshInstance3D = MeshInstance3D.new()
 			mi.name = "LoopRings_%d" % n_chunk
 			mi.mesh = MeshMerge.valider_indexe(st)
@@ -1824,13 +1874,13 @@ func _build_cable_beam() -> void:
 	# se superposeraient au centre (z-fighting) ; après, elles sont
 	# disjointes et prolongent proprement la face de fin de la centrale.
 	var fork_ds: float = _beam_fork_ds()
-	var s_fork_lo: float = PNConstants.PASSING_START + fork_ds
-	var s_fork_hi: float = PNConstants.PASSING_END - fork_ds
+	var s_fork_lo: float = trace.evit_debut + fork_ds
+	var s_fork_hi: float = trace.evit_fin - fork_ds
 	# (pas dans la fosse de la gare basse : elle y flottait à mi-hauteur)
 	_build_cable_beam_section(mat, pit_low_end, s_fork_lo, 0.0, "CableBeamLow")
 	_build_cable_beam_section(mat, s_fork_lo, s_fork_hi, -1.0, "CableBeamLoopL")
 	_build_cable_beam_section(mat, s_fork_lo, s_fork_hi, +1.0, "CableBeamLoopR")
-	_build_cable_beam_section(mat, s_fork_hi, PNConstants.LENGTH + MachineRoomBuilder.PIT_S0,
+	_build_cable_beam_section(mat, s_fork_hi, trace.fin_voie(),
 		0.0, "CableBeamHigh")
 
 
@@ -1840,7 +1890,7 @@ func _beam_fork_ds() -> float:
 	var target: float = cable_beam_width * 0.5 + 0.02
 	var ds: float = 0.0
 	while ds < 100.0:
-		if absf(tunnel.passing_loop_offset(PNConstants.PASSING_START + ds, 1.0)) >= target:
+		if absf(tunnel.passing_loop_offset(trace.evit_debut + ds, 1.0)) >= target:
 			return ds
 		ds += 0.5
 	return 20.0  # fallback théorique (jamais atteint avec l'offset sin²)
@@ -1931,7 +1981,6 @@ func _build_cable_beam_chunk(
 		prev_off = cur_off
 
 	st.generate_normals()
-	st.generate_tangents()
 	var mi: MeshInstance3D = MeshInstance3D.new()
 	mi.name = name
 	mi.mesh = MeshMerge.valider_indexe(st)
@@ -2600,7 +2649,7 @@ func _build_cable() -> void:
 
 	cable_left_segments.clear()
 	cable_right_segments.clear()
-	var total_len: float = PNConstants.LENGTH
+	var total_len: float = trace.longueur
 	if OS.has_feature("web"):       # PWA : 3 tampons par segment, deux fois moins (coupe au câble à 30 m près)
 		cable_segment_length = 30.0
 	var n_seg: int = int(ceil(total_len / cable_segment_length))
@@ -2651,9 +2700,9 @@ func fleche(side_i: int, s: float) -> float:
 func a_chainette(s: float) -> float:
 	if is_nan(_alt_bas):
 		_alt_bas = tunnel.transform_at(0.0).origin.y
-	var w: float = PNConstants.CABLE_KG_M * 9.80665
+	var w: float = trace.cable_kg_m * 9.80665
 	var t: float = TENSION_BAS_N + w * maxf(tunnel.transform_at(s).origin.y - _alt_bas, 0.0)
-	return t / (w * cos(SlopeProfile.slope_angle_at(s)))
+	return t / (w * cos(trace.pente_angle(s)))
 const SLACK_TOUCHDOWN_M: float = 1.5   # du sommet du galet à la longrine
 var _support_s: Dictionary = {}       # côté → abscisses des appuis (galets)
 
@@ -2676,7 +2725,7 @@ func _slack_drop(side_i: int, s: float) -> float:
 		d_appui = minf(d_appui, sup[k] - s)
 	if k > 0:
 		d_appui = minf(d_appui, s - sup[k - 1])
-	var bouts: float = smoothstep(15.0, 30.0, minf(s, PNConstants.LENGTH - s))
+	var bouts: float = smoothstep(15.0, 30.0, minf(s, trace.longueur - s))
 	return _slack_drop_max() * smoothstep(0.0, SLACK_TOUCHDOWN_M, d_appui) * bouts
 
 
@@ -2686,14 +2735,14 @@ func _slack_drop(side_i: int, s: float) -> float:
 func _build_cable_segment(
 	mat: Material, side_i: int, s_start: float, s_end: float, name: String,
 ) -> MeshInstance3D:
-	var st: SurfaceTool = SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	st.set_material(mat)
-
 	var chain: Array = [{"s": s_start, "p": strand_point(side_i, s_start)}]
-	for v in _strand[side_i]:
-		if v.s > s_start + 1e-4 and v.s < s_end - 1e-4:
-			chain.append({"s": v.s, "p": v.p})
+	# (galets du segment par dichotomie : chaque segment reparcourait tout le brin)
+	var sup: PackedFloat64Array = _appuis(side_i)
+	var brin: Array = _strand[side_i]
+	var j0: int = sup.bsearch(s_start + 1e-4, false)
+	while j0 < sup.size() and sup[j0] < s_end - 1e-4:
+		chain.append({"s": brin[j0].s, "p": brin[j0].p})
+		j0 += 1
 	chain.append({"s": s_end, "p": strand_point(side_i, s_end)})
 
 	# repère de chaque anneau : tangente = moyenne des cordes voisines,
@@ -2737,43 +2786,57 @@ func _build_cable_segment(
 	rings.append({"s": chain[last].s, "p": chain[last].p - ups[last] * fl_l, "r": rights[last], "u": ups[last],
 		"d": maxf(_slack_drop(side_i, chain[last].s) - fl_l, 0.0)})
 
+	# Tube en tableaux indexés : un anneau de cable_segments + 1 sommets par anneau (couture des UV), normales
+	# radiales (vers l'axe : sens que donnait generate_normals, rendu inchangé) ; mêmes UV (u par secteur, v = 2 s), UV2 (descente, poids) et COLOR (droite de la voie) que
+	# l'émission par SurfaceTool, qui faisait 6 sommets × 4 appels par secteur, puis normales et indexation
+	# (le plus gros du coût du câble, relevé du 08/11/2026).
+	var ns: int = cable_segments
+	var dmax: float = maxf(_slack_drop_max(), 1e-3)
+	var vtx: PackedVector3Array = PackedVector3Array()
+	var nrm: PackedVector3Array = PackedVector3Array()
+	var uv: PackedVector2Array = PackedVector2Array()
+	var uv2: PackedVector2Array = PackedVector2Array()
+	var col: PackedColorArray = PackedColorArray()
+	var idx: PackedInt32Array = PackedInt32Array()
+	var cs: PackedFloat32Array = PackedFloat32Array()
+	var sn: PackedFloat32Array = PackedFloat32Array()
+	for k in range(ns + 1):
+		var a: float = float(k) / float(ns) * TAU
+		cs.append(cos(a))
+		sn.append(sin(a))
+	for i in range(rings.size()):
+		var c: Vector3 = rings[i].p
+		var r: Vector3 = rings[i].r
+		var u: Vector3 = rings[i].u
+		var v_uv: float = float(rings[i].s) * 2.0
+		var d: Vector2 = Vector2(rings[i].d, rings[i].d / dmax)
+		var cl: Color = Color(0.5 + 0.5 * r.x, 0.5 + 0.5 * r.y, 0.5 + 0.5 * r.z)
+		for k in range(ns + 1):
+			var n: Vector3 = r * cs[k] + u * sn[k]
+			vtx.append(c + n * cable_radius)
+			nrm.append(-n.normalized())       # (vers l'axe, comme les normales que donnait generate_normals sur ce tube)
+			uv.append(Vector2(float(k) / float(ns), v_uv))
+			uv2.append(d)
+			col.append(cl)
 	for i in range(rings.size() - 1):
-		var c0: Vector3 = rings[i].p
-		var c1: Vector3 = rings[i + 1].p
-		var r0: Vector3 = rings[i].r
-		var r1: Vector3 = rings[i + 1].r
-		var u0: Vector3 = rings[i].u
-		var u1: Vector3 = rings[i + 1].u
-		var v0_uv: float = float(rings[i].s) * 2.0
-		var v1_uv: float = float(rings[i + 1].s) * 2.0
-		# UV2 = (descente sur la longrine, poids 0 au galet → 1 posé) ;
-		# COLOR = direction « droite » de la voie, pour l'ondulation latérale
-		# du câble lâche (cable_shader.gdshader)
-		var d0: Vector2 = Vector2(rings[i].d, rings[i].d / maxf(_slack_drop_max(), 1e-3))
-		var d1: Vector2 = Vector2(rings[i + 1].d, rings[i + 1].d / maxf(_slack_drop_max(), 1e-3))
-		var col0: Color = Color(0.5 + 0.5 * r0.x, 0.5 + 0.5 * r0.y, 0.5 + 0.5 * r0.z)
-		var col1: Color = Color(0.5 + 0.5 * r1.x, 0.5 + 0.5 * r1.y, 0.5 + 0.5 * r1.z)
-		for k in range(cable_segments):
-			var a0: float = float(k) / float(cable_segments) * TAU
-			var a1: float = float(k + 1) / float(cable_segments) * TAU
-			var p00: Vector3 = c0 + r0 * cos(a0) * cable_radius + u0 * sin(a0) * cable_radius
-			var p01: Vector3 = c0 + r0 * cos(a1) * cable_radius + u0 * sin(a1) * cable_radius
-			var p10: Vector3 = c1 + r1 * cos(a0) * cable_radius + u1 * sin(a0) * cable_radius
-			var p11: Vector3 = c1 + r1 * cos(a1) * cable_radius + u1 * sin(a1) * cable_radius
-			var u0_uv: float = float(k) / float(cable_segments)
-			var u1_uv: float = float(k + 1) / float(cable_segments)
-			st.set_color(col0); st.set_uv(Vector2(u0_uv, v0_uv)); st.set_uv2(d0); st.add_vertex(p00)
-			st.set_color(col1); st.set_uv(Vector2(u0_uv, v1_uv)); st.set_uv2(d1); st.add_vertex(p10)
-			st.set_color(col1); st.set_uv(Vector2(u1_uv, v1_uv)); st.set_uv2(d1); st.add_vertex(p11)
-			st.set_color(col0); st.set_uv(Vector2(u0_uv, v0_uv)); st.set_uv2(d0); st.add_vertex(p00)
-			st.set_color(col1); st.set_uv(Vector2(u1_uv, v1_uv)); st.set_uv2(d1); st.add_vertex(p11)
-			st.set_color(col0); st.set_uv(Vector2(u1_uv, v0_uv)); st.set_uv2(d0); st.add_vertex(p01)
-
-	# (pas de tangentes : le shader du câble n'a pas de carte de normales)
-	st.generate_normals()
+		var b0: int = i * (ns + 1)
+		var b1: int = b0 + ns + 1
+		for k in range(ns):
+			idx.append_array(PackedInt32Array([b0 + k, b1 + k, b1 + k + 1, b0 + k, b1 + k + 1, b0 + k + 1]))
+	var arr: Array = []
+	arr.resize(Mesh.ARRAY_MAX)
+	arr[Mesh.ARRAY_VERTEX] = vtx
+	arr[Mesh.ARRAY_NORMAL] = nrm
+	arr[Mesh.ARRAY_TEX_UV] = uv
+	arr[Mesh.ARRAY_TEX_UV2] = uv2
+	arr[Mesh.ARRAY_COLOR] = col
+	arr[Mesh.ARRAY_INDEX] = idx
+	var am: ArrayMesh = ArrayMesh.new()
+	am.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
+	am.surface_set_material(0, mat)
 	var mi: MeshInstance3D = MeshInstance3D.new()
 	mi.name = name
-	mi.mesh = MeshMerge.valider_indexe(st)
+	mi.mesh = am
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(mi)
 	return mi
@@ -2794,7 +2857,7 @@ func update_cable_visibility(s_driver: float, s_other: float = -1.0) -> void:
 	# `s_other` : position de l'autre rame — LENGTH − s_driver en marche,
 	# figée quand le câble a rompu (TrainPhysics.ghost_s_render).
 	if s_other < 0.0:
-		s_other = PNConstants.miroir(s_driver)
+		s_other = trace.miroir(s_driver)
 	# Où commence chaque brin visible (premier galet que touche le câble de
 	# LA rame qu'il tire) :
 	#   - rame 1 pilotée : brin gauche = sa rame, brin droit = la rame opposée.
@@ -2847,14 +2910,14 @@ func update_cable_phase(s_driver: float, s_other: float = -1.0, s_poulie_r: floa
 		return
 	# `s_other` : position de l'autre rame (figée si le câble a rompu).
 	if s_other < 0.0:
-		s_other = PNConstants.miroir(s_driver)
+		s_other = trace.miroir(s_driver)
 	# Le brin de LA rame pilotée doit apparaître FIXE dans le référentiel de
 	# la cabine (phase = s_driver) ; l'autre brin suit l'autre rame (phase =
 	# s_other − LENGTH, soit −s_driver en marche : il défile ; immobile
 	# quand l'autre rame est clouée par son parachute).
 	# Selon rame 1 / rame 2, ce n'est pas le même brin qui est « le sien ».
 	var own_phase: float = s_driver
-	var other_phase: float = s_other - PNConstants.LENGTH
+	var other_phase: float = s_other - trace.longueur
 	cable_left_material.set_shader_parameter("cable_phase",
 		other_phase if driver_is_rame2 else own_phase)
 	cable_right_material.set_shader_parameter("cable_phase",
@@ -2871,14 +2934,14 @@ func update_cable_phase(s_driver: float, s_other: float = -1.0, s_poulie_r: floa
 	# l'écart élastique de sa rame) ; écart entier à l'attache
 	var effile: bool = s_poulie_r >= 0.0
 	var own_p: float = s_poulie_r
-	var other_p: float = PNConstants.miroir(s_poulie_r) - PNConstants.LENGTH
+	var other_p: float = trace.miroir(s_poulie_r) - trace.longueur
 	for e in [[cable_left_material, other_p if driver_is_rame2 else own_p, s_left],
 			[cable_right_material, own_p if driver_is_rame2 else other_p, s_right]]:
 		var m: ShaderMaterial = e[0]
 		m.set_shader_parameter("effile", effile)
 		m.set_shader_parameter("phase_poulie", e[1])
 		m.set_shader_parameter("s_attache", e[2])
-		m.set_shader_parameter("s_poulie", PNConstants.LENGTH)
+		m.set_shader_parameter("s_poulie", trace.longueur)
 	_update_culots(s_other if driver_is_rame2 else s_driver,
 		s_driver if driver_is_rame2 else s_other)
 
@@ -2891,9 +2954,7 @@ func update_cable_phase(s_driver: float, s_other: float = -1.0, s_poulie_r: floa
 # il les heurterait en passant — et le câble descend de lui jusqu'au
 # premier galet en amont, d'où il repart posé de galet en galet.
 # ---------------------------------------------------------------------------
-const ATTACHE_DS: float = PNConstants.CAR_LEN_M * 0.5   # centre de la voiture amont
 const CULOT_DY: float = 0.12        # axe du culot au-dessus de l'axe du câble posé
-const CAISSE_Y: float = -1.16       # fond plat des voitures (TrainBodyBuilder.Y_CUT, monde)
 const CULOT_LONG: float = 0.27      # le câble sort par la pointe
 const AMORCE_ANNEAUX: int = 22
 var _culots: Dictionary = {}        # brin → {culot, tirant, amorce, mat}
@@ -2954,7 +3015,7 @@ func _premier_appui(side_i: int, s_att: float, a: float, pts: Array) -> int:
 	var p_att: Vector3 = strand_point(side_i, s_att)
 	var premier: int = maxi(_appuis(side_i).bsearch(s_att + 0.5, false), 1)
 	var dernier: int = pts.size() - 2          # dernier galet ([fin] = point libre)
-	var s_fin: float = PNConstants.LENGTH - 0.3
+	var s_fin: float = trace.longueur - 0.3
 	for k in range(premier, dernier + 1):
 		var d: float = float(pts[k].s) - s_att
 		# un galet intermédiaire plus haut que la chaînette : le câble
@@ -3022,10 +3083,10 @@ func hauteur_sur_galet(side_i: int, s_att: float, p_att: Vector3, p_k: Vector3, 
 ## Renvoie {att, s1, a, x: [], lat: [], y: []} (lat : écart à la corde).
 const Y_HORS_GORGE: float = RollerMesh.R_JOUE - RollerMesh.R_BANDE   # 7 cm
 func amorce_profil(side_i: int, s_rame: float, n: int = AMORCE_ANNEAUX) -> Dictionary:
-	var att: float = attache_s(s_rame)
+	var att: float = _attache(s_rame)
 	var a: float = chainette(att).x
 	var k1: int = premier_appui(side_i, att, a)
-	var s1: float = float(_strand[side_i][k1].s) if k1 > 0 else PNConstants.LENGTH - 0.3
+	var s1: float = float(_strand[side_i][k1].s) if k1 > 0 else trace.longueur - 0.3
 	var d: float = maxf(s1 - att, 0.5)
 	var p_att: Vector3 = strand_point(side_i, att)
 	var p_r1: Vector3 = strand_point(side_i, s1)
@@ -3188,18 +3249,24 @@ static func chainette_y(x: float, d: float, h: float, a: float) -> float:
 	return a * (cosh((x - x_m) / a) - cosh(x_m / a)) + h
 
 
+## Attache du câble au Perce-Neige (bancs et prises de vue) : centre de la voiture amont.
 static func attache_s(s_rame: float) -> float:
-	return minf(s_rame + ATTACHE_DS, PNConstants.LENGTH - 0.5)
+	return minf(s_rame + PNConstants.CAR_LEN_M * 0.5, PNConstants.LENGTH - 0.5)
+
+
+## Attache du câble sur la ligne de ce constructeur (trace.attache_ds depuis l'abscisse du véhicule).
+func _attache(s_rame: float) -> float:
+	return minf(s_rame + trace.attache_ds, trace.longueur - 0.5)
 
 
 ## Abscisse où le câble se pose sur les galets : le premier galet touché
 ## (premier_appui). En deçà, il est en l'air (tronçon libre dessiné par
 ## _update_culots) et ne touche pas les galets qu'il survole.
 func coupe_brin(side_i: int, s_rame: float) -> float:
-	var att: float = attache_s(s_rame)
+	var att: float = _attache(s_rame)
 	var k: int = premier_appui(side_i, att, chainette(att).x)
 	if k < 0:
-		return PNConstants.LENGTH - 0.3
+		return trace.longueur - 0.3
 	return float(_strand[side_i][k].s)
 
 
@@ -3241,7 +3308,7 @@ func _update_culots(s_rame_g: float, s_rame_d: float) -> void:
 		# culot de l'autre rame loin de la caméra (moins d'un pixel) : on ne
 		# refait pas son tronçon libre (0,5 ms par image et par brin)
 		var loin: bool = not is_nan(_s_cam_culots) \
-			and absf(attache_s(s_r) - _s_cam_culots) > CULOT_PORTEE
+			and absf(_attache(s_r) - _s_cam_culots) > CULOT_PORTEE
 		for nom in ["culot", "tirant", "amorce"]:
 			(d[nom] as MeshInstance3D).visible = not loin
 		if loin:
@@ -3294,7 +3361,7 @@ func _update_culots(s_rame_g: float, s_rame_d: float) -> void:
 		(d.culot as MeshInstance3D).transform = Transform3D(Basis(xb, yb, z), pos)
 		# chape d'attelage : de l'axe de la chape au fond de la caisse
 		var p_chape: Vector3 = pos - z * 0.085
-		var h: float = maxf(CAISSE_Y - (y_cable + CULOT_DY), 0.02)
+		var h: float = maxf(trace.caisse_y - (y_cable + CULOT_DY), 0.02)   # (fond plat des voitures, TrainBodyBuilder.Y_CUT)
 		(d.tirant as MeshInstance3D).transform = Transform3D(
 			Basis(xb, up, xb.cross(up).normalized()) * Basis.from_scale(Vector3(1.0, h, 1.0)),
 			p_chape + up * (h * 0.5))
@@ -3416,14 +3483,14 @@ func _tube_amorce(mi: MeshInstance3D, mat: Material, pts: Array, xs: Array, att:
 func update_galets_rames(s_driver: float, s_other: float, s_cam: float,
 		delta: float, rupture: bool = false) -> void:
 	if s_other < 0.0:
-		s_other = PNConstants.miroir(s_driver)
+		s_other = trace.miroir(s_driver)
 	var s_g: float = s_other if driver_is_rame2 else s_driver
 	var s_d: float = s_driver if driver_is_rame2 else s_other
 	_s_cam_culots = s_cam
 	var rompu: int = 0
 	if rupture:
 		rompu = 1 if driver_is_rame2 else -1
-	update_galets(attache_s(s_g), attache_s(s_d), s_cam, delta, rompu,
+	update_galets(_attache(s_g), _attache(s_d), s_cam, delta, rompu,
 		coupe_brin(-1, s_g) - 1e-3, coupe_brin(1, s_d) - 1e-3)
 
 
@@ -3469,13 +3536,13 @@ func update_cable_rupture(rupture: bool, s_driver: float, direction: int,
 	if _rupture.is_empty():
 		var ecart: float = randf_range(25.0, 80.0) if direction > 0 \
 			else randf_range(20.0, 50.0)
-		var s_b: float = minf(s_driver + ecart, PNConstants.LENGTH - 15.0)
+		var s_b: float = minf(s_driver + ecart, trace.longueur - 15.0)
 		s_b = maxf(s_b, s_driver + 1.0)
 		var t_n: float = maxf(maxf(tension_dan, _last_tension_dan) * 10.0, RUPTURE_T_MIN_N)
 		_rupture = {
 			"t": 0.0, "s_b": s_b, "s0": s_driver, "ph0": s_driver,
-			"r_up": minf(t_n * (PNConstants.LENGTH - s_b) / TrainPhysics.CABLE_EA_N, 8.0),
-			"r_lo": minf(t_n * (s_b - s_driver) / TrainPhysics.CABLE_EA_N, 2.0),
+			"r_up": minf(t_n * (trace.longueur - s_b) / trace.cable_ea_n, 8.0),
+			"r_lo": minf(t_n * (s_b - s_driver) / trace.cable_ea_n, 2.0),
 		}
 		print("[Câble] rupture à s = %.1f m (rame à %.1f m), rétraction %.2f m / %.2f m" % [
 			s_b, s_driver, _rupture.r_up, _rupture.r_lo])
@@ -3484,8 +3551,8 @@ func update_cable_rupture(rupture: bool, s_driver: float, direction: int,
 	# Chaque bout recule à vitesse constante u = ε·c (onde de détente,
 	# c = √(EA/ρ) ≈ 3 400 m/s) jusqu'à avoir rendu tout son allongement
 	# ε·L : la durée vaut L/c, le temps que l'onde parcoure le tronçon.
-	var c_onde: float = sqrt(TrainPhysics.CABLE_EA_N / PNConstants.CABLE_KG_M)
-	var l_up: float = maxf(PNConstants.LENGTH - float(_rupture.s_b), 1.0)
+	var c_onde: float = sqrt(trace.cable_ea_n / trace.cable_kg_m)
+	var l_up: float = maxf(trace.longueur - float(_rupture.s_b), 1.0)
 	var l_lo: float = maxf(float(_rupture.s_b) - float(_rupture.s0), 1.0)
 	var k_up: float = minf(1.0, c_onde * t / l_up)
 	var k_lo: float = minf(1.0, c_onde * t / l_lo)

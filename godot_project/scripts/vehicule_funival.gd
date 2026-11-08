@@ -9,9 +9,9 @@ extends VehiculeRemontee
 ## (le véhicule est incliné comme elle par la ligne).
 
 const DEMI_L: float = 16.0              # longueur 30-34 m (estimé)
-const DEMI_LARGEUR: float = 1.40        # largeur 2,7-2,9 m (estimé)
+const DEMI_LARGEUR: float = 1.075       # 2,15 m : croisement à ~0,2 m de jeu avec l'entraxe de 2,35 m de l'évitement
 const N_COMP: int = 9                   # ~9 baies par flanc (estimé)
-const PENTE_GRADINS: float = 0.45       # pente pour laquelle les planchers sont de niveau (tunnel 48 %, dehors 27 %)
+const PENTE_GRADINS: float = 0.30       # pente pour laquelle les planchers sont de niveau = pente en gare amont (utilisateur, 08/11/2026)
 const H_PLANCHER: float = 1.05          # plancher au milieu d'un compartiment, au-dessus des rails
 const H_TOIT: float = 4.05              # toit, perpendiculairement à la voie
 const L_PORTE: float = 1.0
@@ -91,11 +91,11 @@ func _phares() -> void:
 	for sz in [-1.0, 1.0]:
 		var sp: SpotLight3D = SpotLight3D.new()
 		sp.name = "Phare_amont" if sz < 0.0 else "Phare_aval"
-		sp.light_color = Color(1.0, 0.84, 0.60)
-		sp.light_energy = 6.0
-		sp.spot_range = 70.0
-		sp.spot_angle = 30.0
-		sp.spot_attenuation = 0.8
+		sp.light_color = Color(1.0, 0.94, 0.84)      # blanc légèrement chaud (l'ocre saturait la paroi)
+		sp.light_energy = 3.5
+		sp.spot_range = 60.0
+		sp.spot_angle = 50.0
+		sp.spot_attenuation = 1.0
 		sp.shadow_enabled = false
 		sp.visible = false
 		# SpotLight3D éclaire vers son −Z : vers l'amont tel quel, vers l'aval retourné

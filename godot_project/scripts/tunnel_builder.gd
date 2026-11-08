@@ -2,7 +2,7 @@ class_name TunnelBuilder
 extends Node3D
 ## Génère le mesh 3D du tunnel Perce-Neige via SurfaceTool.
 ##
-## Le tunnel suit la spline calculée par SlopeProfile.build_path_points()
+## Le tunnel suit la spline calculée par trace.points()
 ## (gradient + courbes horizontales). Section circulaire sur toute la
 ## longueur pour le MVP ; extrémités horseshoe à ajouter en v2.
 ##
@@ -63,6 +63,8 @@ const _PG_S1: float = 3483.0
 @export var wall_cable_y1: float = 0.35
 @export var wall_cable_y2: float = 0.55
 
+## Tracé (Perce-Neige par défaut ; le Funival fournit le sien).
+var trace: TraceFuni = TraceFuni.new()
 var path_points: Array = []                  # Vector3[] — positions monde
 var path_tangents: Array = []                # Vector3[] — direction locale
 var path_curve: Curve3D = null               # spline Catmull-Rom pour sampling smooth
@@ -120,9 +122,15 @@ func _apply_see_through(mat: StandardMaterial3D, on: bool) -> void:
 	mat.albedo_color = c
 
 
+var _construit: bool = false     # (construit hors de l'arbre par une autre ligne, puis ajouté : une fois)
+
+
 func _build() -> void:
+	if _construit:
+		return
+	_construit = true
 	# Génère les points de la spline
-	path_points = SlopeProfile.build_path_points(ring_spacing)
+	path_points = trace.points(ring_spacing)
 	_compute_tangents()
 	_build_curve3d()
 	_build_smooth_path()
@@ -172,15 +180,24 @@ func _build() -> void:
 	# chevauchent → profil « binoculaire » (union des deux cercles) qui se
 	# pince progressivement ; au-delà (d ≥ R), deux tubes circulaires
 	# distincts avec le rocher entre les deux.
+	if not trace.deux_tubes:
+		# une seule chambre élargie, sans mur entre les voies (Funival, demande d'utilisateur du 08/11/2026)
+		_build_tunnel_section(mat, trace.tube_debut, trace.evit_debut, 0.0, "TunnelLow", false)
+		_build_tunnel_section(mat, trace.evit_debut, trace.evit_fin, 0.0, "TunnelPassingChamber", true)
+		_build_tunnel_section(mat, trace.evit_fin, minf(trace.longueur, trace.tube_fin), 0.0, "TunnelHigh", false)
+		_build_wall_cables()
+		if show_debug_path:
+			_draw_debug_path()
+		return
 	var pinch: float = _loop_pinch_ds()
-	var s_pinch_lo: float = PNConstants.PASSING_START + pinch
-	var s_pinch_hi: float = PNConstants.PASSING_END - pinch
-	_build_tunnel_section(mat, 0.0, PNConstants.PASSING_START, 0.0, "TunnelLow", false)
-	_build_tunnel_fusion(mat, PNConstants.PASSING_START, s_pinch_lo, "TunnelFusionLow")
+	var s_pinch_lo: float = trace.evit_debut + pinch
+	var s_pinch_hi: float = trace.evit_fin - pinch
+	_build_tunnel_section(mat, 0.0, trace.evit_debut, 0.0, "TunnelLow", false)
+	_build_tunnel_fusion(mat, trace.evit_debut, s_pinch_lo, "TunnelFusionLow")
 	_build_tunnel_section(mat, s_pinch_lo, s_pinch_hi, -1.0, "TunnelLoopL", false)
 	_build_tunnel_section(mat, s_pinch_lo, s_pinch_hi, +1.0, "TunnelLoopR", false)
-	_build_tunnel_fusion(mat, s_pinch_hi, PNConstants.PASSING_END, "TunnelFusionHigh")
-	_build_tunnel_section(mat, PNConstants.PASSING_END, PNConstants.LENGTH, 0.0, "TunnelHigh", false)
+	_build_tunnel_fusion(mat, s_pinch_hi, trace.evit_fin, "TunnelFusionHigh")
+	_build_tunnel_section(mat, trace.evit_fin, trace.longueur, 0.0, "TunnelHigh", false)
 
 	# Câbles électriques le long du flanc gauche du tunnel (visibles sur
 	# toutes les frames intérieures du vrai funiculaire). 2 câbles
@@ -506,14 +523,16 @@ const SLAB_S0: float = 43.0         # TrackBuilder.pit_low_end (fosse de la gare
 
 
 func _sous_dalle(s: float, x: float, y: float) -> bool:
-	if y >= FLOOR_CUT_Y or s > PNConstants.LENGTH + MachineRoomBuilder.PIT_S0 - ring_spacing:
+	if not trace.perce_neige:
+		return false
+	if y >= FLOOR_CUT_Y or s > trace.longueur + MachineRoomBuilder.PIT_S0 - ring_spacing:
 		return false
 	if s < SLAB_S0 + ring_spacing:
 		# fosse de la gare basse (StationsBuilder._build_pit) : pas de faux
 		# plancher sous son ouverture
 		return absf(x) < 1.55
 	var hw: float = SLAB_HALF_W - 0.05
-	if s > PNConstants.PASSING_START and s < PNConstants.PASSING_END:
+	if s > trace.evit_debut and s < trace.evit_fin:
 		hw += absf(passing_loop_offset(s, 1.0))
 	return absf(x) < hw
 
@@ -557,8 +576,8 @@ func _build_tunnel_chunk(
 		# (bord interne, jonction avec le loop plat). Le horseshoe est désactivé
 		# dans la chambre (uniquement circular pour avoir une jonction propre).
 		if is_chamber:
-			cur_radius += absf(passing_loop_offset(s_cur, 1.0))
-			prev_radius += absf(passing_loop_offset(s_prev, 1.0))
+			cur_radius += absf(passing_loop_offset(s_cur, 1.0)) * trace.elargissement_chambre
+			prev_radius += absf(passing_loop_offset(s_prev, 1.0)) * trace.elargissement_chambre
 			cur_blend = 0.0
 			prev_blend = 0.0
 
@@ -569,7 +588,7 @@ func _build_tunnel_chunk(
 		# mètres de la gare haute. Le caisson de la gare (sol à −2,65) la
 		# traversait et coupait la roue aval à plat (retour du 30/09) : dans
 		# les anneaux qui la couvrent, rien sous le dessous de dalle.
-		var cut_s: float = PNConstants.LENGTH + MachineRoomBuilder.ROOM_S0 - ring_spacing
+		var cut_s: float = trace.longueur + MachineRoomBuilder.ROOM_S0 - ring_spacing if trace.perce_neige else INF
 		var prev_cut: bool = s_prev >= cut_s
 		var cur_cut: bool = s_cur >= cut_s
 		var y_cut: float = MachineRoomBuilder.Y_SLAB_BOTTOM
@@ -588,7 +607,7 @@ func _build_tunnel_chunk(
 			# haut est ouvert sur l'anneau qui la contient, entre −1,45 et
 			# 1,55 m (l'habillage de la salle, StationsBuilder, ne laisse
 			# voir que la porte) : le pan de mur est gardé en deux bandes
-			if s_prev >= _PG_S0 - 0.01 and s_cur <= _PG_S1 + 0.01 \
+			if trace.perce_neige and s_prev >= _PG_S0 - 0.01 and s_cur <= _PG_S1 + 0.01 \
 					and maxf(maxf(prev_0.x, prev_1.x), maxf(cur_0.x, cur_1.x)) < -station_room_half_width + 0.15:
 				for bande in [Vector2(-1000.0, -1.45), Vector2(1.55, 1000.0)]:
 					var pa: Array = _bande_y(prev_0, prev_1, bande)
@@ -674,7 +693,6 @@ func _build_tunnel_chunk(
 			st.set_uv(Vector2(u1, v0)); st.add_vertex(p_prev_1)
 
 	st.generate_normals()
-	st.generate_tangents()
 	var mi: MeshInstance3D = MeshInstance3D.new()
 	mi.name = name
 	mi.mesh = MeshMerge.valider_indexe(st)
@@ -685,6 +703,8 @@ func _build_tunnel_chunk(
 ## Ouverture qui touche l'anneau [s_prev, s_cur] sur ce segment du profil
 ## (du côté de l'ouverture) : [s0, s1, y bas, y haut], ou [].
 func _ouverture(s_prev: float, s_cur: float, p0: Vector2, p1: Vector2, c0: Vector2, c1: Vector2) -> Array:
+	if not trace.perce_neige:
+		return []
 	for o in ouvertures:
 		if s_cur <= float(o[0]) or s_prev >= float(o[1]):
 			continue
@@ -712,7 +732,7 @@ static func _bande_y(a: Vector2, b: Vector2, bande: Vector2) -> Array:
 func _loop_pinch_ds() -> float:
 	var ds: float = 0.0
 	while ds < 120.0:
-		if absf(passing_loop_offset(PNConstants.PASSING_START + ds, 1.0)) >= tunnel_radius:
+		if absf(passing_loop_offset(trace.evit_debut + ds, 1.0)) >= tunnel_radius:
 			return ds
 		ds += 0.5
 	return 60.0  # fallback théorique
@@ -803,7 +823,6 @@ func _build_tunnel_fusion(
 			st.set_uv(Vector2(u1, v0)); st.add_vertex(p_prev_1)
 
 	st.generate_normals()
-	st.generate_tangents()
 	var mi: MeshInstance3D = MeshInstance3D.new()
 	mi.name = name
 	mi.mesh = MeshMerge.valider_indexe(st)
@@ -876,6 +895,8 @@ func _radius_at(s: float) -> float:
 # 1.0 = pleine salle de gare (section élargie), 0.0 = tube carré standard.
 # Fondu linéaire sur station_room_transition à la jonction salle/tube.
 func _station_room_blend_at(s: float) -> float:
+	if not trace.perce_neige:
+		return 0.0
 	if s <= station_low_end - station_room_transition:
 		return 1.0
 	if s < station_low_end:
@@ -900,14 +921,16 @@ func _horseshoe_dims_at(s: float) -> Vector2:
 
 ## Demi-hauteur de la salle de gare à l'abscisse s (gare basse ou haute).
 func demi_hauteur_salle(s: float) -> float:
-	return station_room_half_height_haut if s > PNConstants.LENGTH * 0.5 else station_room_half_height
+	return station_room_half_height_haut if s > trace.longueur * 0.5 else station_room_half_height
 
 
 func _horseshoe_blend_at(s: float) -> float:
 	# Retourne 0.0 = full circular, 1.0 = full horseshoe.
 	# Transitions smooth autour de s=257 (portail bas) et s=3443 (portail haut).
-	var lo_end: float = PNConstants.SQUARE_SECTION_LOW_END      # 257
-	var hi_start: float = PNConstants.SQUARE_SECTION_HIGH_START # 3443
+	if not trace.perce_neige:
+		return 0.0
+	var lo_end: float = trace.carre_bas_fin      # 257
+	var hi_start: float = trace.carre_haut_debut # 3443
 	var t: float = horseshoe_transition
 	if s <= lo_end - t:
 		return 1.0
@@ -1063,10 +1086,14 @@ func _draw_debug_path() -> void:
 # ---------------------------------------------------------------------------
 
 func passing_loop_offset(s: float, side: float) -> float:
-	if s <= PNConstants.PASSING_START or s >= PNConstants.PASSING_END:
+	if s <= trace.evit_debut or s >= trace.evit_fin:
 		return 0.0
-	var loop_len: float = PNConstants.PASSING_END - PNConstants.PASSING_START
-	var k: float = (s - PNConstants.PASSING_START) / loop_len   # 0 → 1
+	if not trace.perce_neige:
+		var dv: float = trace.decalage(s)
+		if dv > -INF:
+			return side * dv
+	var loop_len: float = trace.evit_fin - trace.evit_debut
+	var k: float = (s - trace.evit_debut) / loop_len   # 0 → 1
 	# Forme : MAX · sin²(π·k) = MAX · (1 − cos(2π·k)) / 2.
 	# C¹ continu PARTOUT (y compris à la séparation et à la réunion des voies) :
 	# - À k=0 (PASSING_START) : amt=0 et pente=0 → jonction LISSE avec voie unique
@@ -1095,7 +1122,7 @@ func transform_at(s: float) -> Transform3D:
 	# le tangage : la rame « tremblait » en roulant.
 	if _nf != null:
 		return _nf.transform_at(s)
-	s = clampf(s, 0.0, PNConstants.LENGTH)
+	s = clampf(s, 0.0, trace.longueur)
 	if _smooth_nodes.size() < 4:
 		return Transform3D.IDENTITY
 	var u: float = s / SMOOTH_H + 1.0
@@ -1133,7 +1160,7 @@ func _baked_at(s: float) -> Vector3:
 	var baked_len: float = path_curve.get_baked_length()
 	var acc: Vector3 = Vector3.ZERO
 	for k in range(-2, 3):
-		var off: float = clampf((s + 0.1 * float(k)) / PNConstants.LENGTH * baked_len, 0.0, baked_len)
+		var off: float = clampf((s + 0.1 * float(k)) / trace.longueur * baked_len, 0.0, baked_len)
 		acc += path_curve.sample_baked(off, true)
 	return acc / 5.0
 
@@ -1141,7 +1168,7 @@ func _baked_at(s: float) -> Vector3:
 ## Nœuds de la B-spline : un point tous les SMOOTH_H mètres, plus un nœud
 ## prolongé en ligne droite de chaque côté (bouts de ligne).
 func _build_smooth_path() -> void:
-	var L: float = PNConstants.LENGTH
+	var L: float = trace.longueur
 	var n: int = int(ceil(L / SMOOTH_H))
 	var a: Vector3 = path_curve.sample_baked(0.0, true)
 	var ta: Vector3 = (_baked_at(SMOOTH_H) - a).normalized()
@@ -1159,5 +1186,5 @@ func _build_smooth_path() -> void:
 	_nf = null
 	if ClassDB.class_has_method("NoyauFuni", "set_spline") and "--sans-noyau-funi" not in OS.get_cmdline_user_args():
 		_nf = ClassDB.instantiate("NoyauFuni")
-		_nf.set_spline(_smooth_nodes, SMOOTH_H, PNConstants.LENGTH)
-		_nf.set_croisement(PNConstants.PASSING_START, PNConstants.PASSING_END, passing_offset_max)
+		_nf.set_spline(_smooth_nodes, SMOOTH_H, trace.longueur)
+		_nf.set_croisement(trace.evit_debut, trace.evit_fin, passing_offset_max)

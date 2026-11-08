@@ -1220,7 +1220,9 @@ func _suite_process(delta: float) -> void:
 	# skieur : à l'air libre, c'est le jour (relief, ciel, soleil) ; dans
 	# une rame en plein tunnel, le relief ne sert à rien
 	var dehors: bool = mode_skieur and skieur != null and skieur.dehors(relief)
-	if _ext_light != null and dehors:
+	# (sauf caméra sous la roche du Funival : sa voie et ses véhicules ont la couche de la vue extérieure, que ce soleil
+	# éclaire — le tube était 3 fois plus clair que celui du Perce-Neige, protocole du PC du 08/11/2026)
+	if _ext_light != null and dehors and not _camera_sous_funival():
 		_ext_light.visible = true
 	if _ext_light != null and dehors != _soleil_skieur:
 		_soleil_skieur = dehors
@@ -1287,7 +1289,9 @@ func _suite_process(delta: float) -> void:
 	# monte quand la caméra cabine y entre.
 	if _env != null and cabin != null and physics != null and tunnel != null:
 		var amb: float = AMBIENT_ON if tunnel_lights_on else AMBIENT_OFF
-		if mode_skieur and skieur != null and _soleil_skieur:
+		# (caméra sous la roche du Funival : l'ambiance du tunnel du Perce-Neige, même si le skieur est dehors — sinon
+		# l'ambiance du jour blanchissait le tube, captures du PC du 08/11/2026)
+		if mode_skieur and skieur != null and _soleil_skieur and not _camera_sous_funival():
 			amb = AMBIENT_DEHORS
 		if _compat and (cabin.view_mode == Cabin.ViewMode.FPV or cabin.view_mode == Cabin.ViewMode.SKIEUR):
 			var sr: float = physics.s_render
@@ -2768,7 +2772,17 @@ func _gare_du_skieur() -> int:
 
 
 ## Le skieur est dans une rame en plein tunnel (loin des deux gares).
+func _camera_sous_funival() -> bool:
+	var cam: Camera3D = get_viewport().get_camera_3d()
+	return Funival.actif != null and is_instance_valid(Funival.actif) and cam != null \
+		and Funival.actif.souterrain(cam.global_position)
+
+
 func _skieur_en_tunnel() -> bool:
+	# tunnel du Funival : caméra dans son tube ou sa salle amont
+	var cam_f: Camera3D = get_viewport().get_camera_3d()
+	if Funival.actif != null and is_instance_valid(Funival.actif) and cam_f != null and Funival.actif.souterrain(cam_f.global_position):
+		return true
 	if skieur == null or skieur.support == null:
 		return false
 	var s_r: float = physics.s_render if cabin.is_ancestor_of(skieur.support) else physics.ghost_s_render()
