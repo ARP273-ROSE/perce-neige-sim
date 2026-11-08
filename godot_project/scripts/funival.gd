@@ -296,6 +296,7 @@ func _teinte_paroi(d: float, k_anneau: int) -> Color:
 # --- construction -----------------------------------------------------------------------
 
 func construire() -> void:
+	actif = self
 	vitesse = V_FUNI
 	await super.construire()
 
@@ -919,6 +920,21 @@ func _placer(i: int) -> void:
 		(_corps[i][0] as Node3D).transform = Transform3D(b, p)
 		for cs in _corps[i][1]:
 			(cs as CollisionShape3D).disabled = porte > 0.5
+
+
+## Le Funival du domaine (un seul) : main._skieur_en_tunnel l'interroge pour masquer le relief quand la caméra est
+## dans son tube ou sa salle amont (couverture d'une dizaine de mètres : le relief grossier de la PWA traversait le
+## tube — capture WebKit du 08/11/2026).
+static var actif: Funival = null
+
+
+func souterrain(p: Vector3) -> bool:
+	if not pret or not is_inside_tree():
+		return false
+	var loc: Vector3 = global_transform.affine_inverse() * p
+	var d: float = -loc.z
+	return d > portail_d + 3.0 and d < longueur_h() + 1.0 \
+		and absf(loc.x) < lerpf(R_TUNNEL, R_TUNNEL_EVIT, _t_evit(d)) + 3.0 and absf(loc.y - y_voie(d) - 1.0) < 6.0
 
 
 ## Mouvement : celui du téléphérique, mais la vitesse s'entend LE LONG DE LA VOIE (12 m/s sur une pente de 27 à 48 %) ;
