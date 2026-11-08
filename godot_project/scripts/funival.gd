@@ -188,7 +188,42 @@ func _preparer_voie() -> void:
 
 ## Matériaux propres au Funival. « cuit » : sans éclairage, couleur des sommets (tunnel, gare souterraine : la
 ## lumière du ciel n'y entre pas ; les lampes sont peintes dans les couleurs).
+static var _mat_cuit: ShaderMaterial = null
+## Matériau « cuit » : la couleur des sommets (lumière des lampes peinte, teintes d'écran en sRGB) est rendue telle
+## quelle ; la surface reçoit en plus les seules lumières locales — les phares des véhicules (vidéos : parois
+## jaune-beige très éclairées devant le véhicule) —, ni soleil, ni ciel, ni brouillard.
+const NUANCEUR_CUIT: String = """
+shader_type spatial;
+render_mode cull_disabled, ambient_light_disabled, fog_disabled, specular_disabled;
+varying vec3 lin;
+vec3 vers_lineaire(vec3 c) {
+	return mix(pow((c + 0.055) / 1.055, vec3(2.4)), c / 12.92, step(c, vec3(0.04045)));
+}
+void fragment() {
+	lin = vers_lineaire(COLOR.rgb);
+	EMISSION = lin;
+	// teinte de la paroi sous les phares : la couleur cuite ramenée à un pouvoir réfléchissant de 0,6
+	ALBEDO = lin / max(max(lin.r, lin.g), max(lin.b, 0.002)) * 0.6;
+	ROUGHNESS = 0.95;
+}
+void light() {
+	if (!LIGHT_IS_DIRECTIONAL) {
+		DIFFUSE_LIGHT += abs(dot(NORMAL, LIGHT)) * ATTENUATION * LIGHT_COLOR / PI;
+	}
+}
+"""
+
+
 static func mat_funi(nom: String) -> Material:
+	if nom == "cuit":
+		RemonteeKit.verrou.lock()
+		if _mat_cuit == null:
+			var sh: Shader = Shader.new()
+			sh.code = NUANCEUR_CUIT
+			_mat_cuit = ShaderMaterial.new()
+			_mat_cuit.shader = sh
+		RemonteeKit.verrou.unlock()
+		return _mat_cuit
 	RemonteeKit.verrou.lock()
 	var m: StandardMaterial3D = _mats_funi.get(nom)
 	RemonteeKit.verrou.unlock()
@@ -196,14 +231,6 @@ static func mat_funi(nom: String) -> Material:
 		return m
 	m = StandardMaterial3D.new()
 	match nom:
-		"cuit":
-			m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-			m.vertex_color_use_as_albedo = true
-			# couleurs pensées comme des teintes à l'écran : prises en sRGB (lues en linéaire, elles ressortaient
-			# éclaircies, tunnel gris clair partout — diagnostic du PC, captures du 08/11/2026)
-			m.vertex_color_is_srgb = true
-			m.cull_mode = BaseMaterial3D.CULL_DISABLED
-			m.disable_fog = true             # (pas de brouillard de profondeur dans le tunnel)
 		"lampe":
 			m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 			m.albedo_color = Color(1.0, 0.97, 0.88)
@@ -271,6 +298,7 @@ func _construire_corps() -> void:
 	_gare_aval()
 	await _pause("funival : gare aval")
 	_gare_amont()
+	_butoir_et_poulie()
 	await _pause("funival : gare amont")
 	for k in range(2):
 		var v: VehiculeFunival = VehiculeFunival.new()
@@ -510,6 +538,7 @@ func _tunnel() -> void:
 
 
 const LARG_GRADINS: Array = [6.0, 3.5]     # gare aval : attente (gauche en montant), sortie (droite)
+const LARG_AMONT: Array = [2.4, 4.0]       # gare amont : escaliers de béton des deux côtés (vidéos)
 const MARCHE: float = 0.18                 # hauteur des petites marches entre paliers (0,15-0,20 m sur photo)
 const GIRON: float = 0.28
 
@@ -517,21 +546,41 @@ const GIRON: float = 0.28
 ## Gradins d'un côté de la gare aval, en boîtes [taille, centre] (repère de la ligne) : pour chaque compartiment,
 ## un palier au niveau de son plancher, devant la porte, et du côté aval une volée de petites marches qui monte du
 ## palier précédent (du sol pour le premier).
-func _gradins(sx: float, rampes: bool = false) -> Array:
+func _gradins(sx: float, rampes: bool = false, aval: bool = true) -> Array:
 	var r: Array = []
-	var dq: float = _x_quai(true)
+	var dq: float = _x_quai(aval)
 	var lq: float = VehiculeFunival.DEMI_L * 2.0 + 2.0
 	var n: int = VehiculeFunival.N_COMP
 	var lc: float = lq / float(n)
 	var W: float = VehiculeFunival.DEMI_LARGEUR + 0.05
-	var larg: float = LARG_GRADINS[0] if sx < 0.0 else LARG_GRADINS[1]
+	var larg: float = (LARG_GRADINS[0] if sx < 0.0 else LARG_GRADINS[1]) if aval else (LARG_AMONT[0] if sx < 0.0 else LARG_AMONT[1])
 	var x: float = sx * (W + larg * 0.5)
 	var y_prec: float = minf(_sol(x - larg * 0.4, -(dq - lq * 0.5)), _sol(x + larg * 0.4, -(dq - lq * 0.5)))
+	if not aval:
+		# salle amont : escalier de béton à PENTE CONSTANTE le long de la caisse (photos), du plancher du compartiment
+		# du bas à celui du haut, prolongé jusqu'au bâtiment ; marches de MARCHE (ou une rampe pour les collisions)
+		var d0: float = dq - lq * 0.5
+		var d1: float = longueur_h() - 0.5
+		var y0: float = VehiculeFunival.y_plancher_monde(self, dq - lq * 0.5 + lc * 0.5) - (lc * 0.5) * pente_voie(dq)
+		var y1: float = VehiculeFunival.y_plancher_monde(self, longueur_h() - 1.0)
+		if rampes:
+			var lr: float = Vector2(d1 - d0, y1 - y0).length()
+			var a0: float = atan2(y1 - y0, d1 - d0)
+			var c0: Vector3 = Vector3(x, (y0 + y1) * 0.5, -(d0 + d1) * 0.5) + Vector3(0, -0.1 * cos(a0), -0.1 * sin(a0))
+			r.append([Vector3(larg, 0.2, lr + 0.05), c0, a0])
+			return r
+		var nm: int = int(ceil((y1 - y0) / MARCHE))
+		var giron: float = (d1 - d0) / float(nm)
+		for j0 in range(nm):
+			var haut0: float = y0 + (y1 - y0) * float(j0 + 1) / float(nm)
+			var bas0: float = y0 + (y1 - y0) * float(j0) / float(nm) - 0.3
+			r.append([Vector3(larg, haut0 - bas0, giron + 0.01), Vector3(x, (haut0 + bas0) * 0.5, -(d0 + giron * (float(j0) + 0.5)))])
+		return r
 	for k in range(n):
 		var d: float = dq - lq * 0.5 + lc * (float(k) + 0.5)
 		var d_bas: float = d - lc * 0.5
 		var y: float = VehiculeFunival.y_plancher_monde(self, d)
-		if k == 0:
+		if k == 0 and aval:
 			# premier gradin : la volée part du sol AVANT le bout du quai, assez longue pour rester sous 30°
 			var lf0: float = clampf(absf(y - y_prec) / 0.55, 0.5, 8.0)
 			y_prec = minf(_sol(x - larg * 0.4, -(d_bas - lf0)), _sol(x + larg * 0.4, -(d_bas - lf0)))
@@ -540,7 +589,7 @@ func _gradins(sx: float, rampes: bool = false) -> Array:
 		var h: float = y - y_prec
 		var ns: int = clampi(int(ceil(absf(h) / MARCHE)), 0, 40)
 		var lf: float = minf(float(ns) * GIRON, lc * 0.5 - 0.6)
-		if k == 0:
+		if k == 0 and aval:
 			lf = d - lc * 0.5 - d_bas
 		if rampes and ns > 0:
 			# [taille, centre, angle] : dalle inclinée du palier précédent au palier du compartiment
@@ -630,6 +679,28 @@ func _gare_aval() -> void:
 	MeshMerge.merge(g, [ens] + bardage, "Gare")
 
 
+## Butoir rouge au bout de la voie de la gare aval, poulie motrice bleue au bout de la salle amont (vidéo de la
+## descente : grande roue bleue à pièces rouges derrière un garde-corps galvanisé).
+func _butoir_et_poulie() -> void:
+	var g: Node3D = Node3D.new()
+	g.name = "GareMachines"
+	_enfant(g)
+	RemonteeKit.boite_en(g, Vector3(1.8, 0.9, 0.7), Vector3(0, y_voie(0.3) + 0.45, -0.3), "rouge_val")
+	var L: float = longueur_h()
+	var yp: float = y_voie(L) + 3.2
+	var zp: float = -(L + 0.6)
+	var axe: Basis = Basis(Vector3.RIGHT, PI * 0.5)
+	RemonteeKit.cylindre(g, 2.6, 2.6, 0.35, Transform3D(axe, Vector3(0, yp, zp)), "bleu_doppelmayr", 32)
+	RemonteeKit.cylindre(g, 0.55, 0.55, 0.7, Transform3D(axe, Vector3(0, yp, zp)), "rouge_val", 16)
+	for k in range(6):
+		var a2: float = TAU * float(k) / 6.0
+		RemonteeKit.boite(g, Vector3(0.22, 2.2, 0.2), Transform3D(Basis(Vector3.BACK, a2), Vector3(0, yp, zp + 0.25) + Basis(Vector3.BACK, a2) * Vector3(0, 1.3, 0)), "bleu_doppelmayr")
+	for sx in [-1.0, 1.0]:
+		RemonteeKit.boite_en(g, Vector3(0.06, 1.1, 0.06), Vector3(sx * 2.8, y_voie(L) + 0.55, zp + 1.6), "galva")
+	RemonteeKit.boite_en(g, Vector3(5.6, 0.05, 0.05), Vector3(0, y_voie(L) + 1.1, zp + 1.6), "galva")
+	MeshMerge.merge(g, [], "Machines")
+
+
 ## Gare amont (Bellevarde) : la voie arrive dans une salle creusée sous le rocher (quai en escalier de béton d'un
 ## côté, escalier en caillebotis à rampe rouge de l'autre, plafond blanc, mur de pierre « WELCOME TO BELLEVARDE »),
 ## qui débouche en haut dans le bâtiment de surface : bardage anthracite, deux volumes à pignon, bandeau vitré,
@@ -660,14 +731,24 @@ func _gare_amont() -> void:
 	for k in range(n):
 		var d: float = dq - lq * 0.5 + lc * (float(k) + 0.5)
 		var y: float = VehiculeFunival.y_plancher_monde(self, d)
-		# quai en escalier de béton (droite), caillebotis à rampe rouge (gauche)
-		var sol: float = y_voie(d) - 0.5
-		RemonteeKit.boite_en(g, Vector3(4.0, y - sol, lc + 0.04), Vector3(W + 2.0, sol + (y - sol) * 0.5, -d), "beton")
-		# (vidéo de la montée : longs escaliers de béton clair des deux côtés, voie bordée d'une structure rouge)
-		RemonteeKit.boite_en(g, Vector3(2.4, y - sol, lc + 0.04), Vector3(-(W + 1.2), sol + (y - sol) * 0.5, -d), "beton")
-		RemonteeKit.boite_en(g, Vector3(0.05, 0.05, lc), Vector3(-(W + 2.4), y + 1.0, -d), "rouge_val")
-		for sxr in [-1.0, 1.0]:
-			RemonteeKit.boite_en(g, Vector3(0.25, 0.45, lc + 0.04), Vector3(sxr * (W - 0.15), y_voie(d) + 0.1, -d), "rouge_val")
+		# main courante rouge à gauche (photos)
+		RemonteeKit.boite_en(g, Vector3(0.05, 0.05, lc), Vector3(-(W + LARG_AMONT[0]), y + 1.0, -d), "rouge_val")
+	# escaliers de béton clair des deux côtés (paliers et volées, comme à La Daille) et jupes rouges le long de la
+	# voie (vidéos : voie bordée d'une structure rouge), dans le maillage cuit de la salle
+	var st2: SurfaceTool = SurfaceTool.new()
+	st2.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for sx2 in [-1.0, 1.0]:
+		for b in _gradins(sx2, false, false):
+			st2.set_color(Color(0.80, 0.79, 0.76))
+			_boite_st(st2, b[0], b[1])
+		for k2 in range(n):
+			var d2: float = dq - lq * 0.5 + lc * (float(k2) + 0.5)
+			var y2: float = VehiculeFunival.y_plancher_monde(self, d2)
+			var yb: float = y_voie(d2) - 0.4
+			st2.set_color(Color(0.72, 0.10, 0.08))
+			_boite_st(st2, Vector3(0.12, y2 - yb, lc + 0.02), Vector3(sx2 * (W + 0.06), (y2 + yb) * 0.5, -d2))
+	var esc: MeshInstance3D = _maillage(st2, mat_funi("cuit"), "EscaliersAmont", false)
+	esc.reparent(g, false)
 	# mur de pierre et enseignes, à droite, au milieu du quai
 	var dm: float = dq
 	var ym: float = VehiculeFunival.y_plancher_monde(self, dm)
@@ -703,7 +784,7 @@ func _gare_amont() -> void:
 	ens.transform = Transform3D(Basis(Vector3.UP, PI * 0.5), Vector3(hx + 1.06, ys + 4.6, zs))
 	var carre: MeshInstance3D = RemonteeKit.boite_en(g, Vector3(0.05, 1.4, 1.4), Vector3(hx + 1.04, ys + 4.6, zs + 5.5), "rouge_val")
 	carre.set_meta(MeshMerge.SANS_FUSION, true)
-	MeshMerge.merge(g, [w1, w2, ens, carre, moel], "Gare")
+	MeshMerge.merge(g, [w1, w2, ens, carre, moel, esc], "Gare")
 
 
 func _collisions_funi() -> void:
@@ -729,10 +810,21 @@ func _collisions_funi() -> void:
 		for k in range(n):
 			var d: float = dq - lq * 0.5 + lc * (float(k) + 0.5)
 			var y: float = VehiculeFunival.y_plancher_monde(self, d)
-			if aval:
-				continue                  # (gradins de la gare aval : leurs marches, plus bas)
-			boite.call(Vector3(4.0, 0.4, lc + 0.05), Vector3(-(W + 2.0), y - 0.2, -d))
-			boite.call(Vector3(2.4, 0.4, lc + 0.05), Vector3(W + 1.2, y - 0.2, -d))
+			if not aval:
+				# jupe le long de la voie (on ne glisse pas sous le véhicule)
+				for sxj in [-1.0, 1.0]:
+					boite.call(Vector3(0.1, 2.5, lc + 0.05), Vector3(sxj * (W + 0.02), y - 1.3, -d))
+	for sx4 in [-1.0, 1.0]:
+		for b in _gradins(sx4, true, false):
+			if b.size() > 2:
+				var cs2: CollisionShape3D = CollisionShape3D.new()
+				var bx2: BoxShape3D = BoxShape3D.new()
+				bx2.size = b[0]
+				cs2.shape = bx2
+				cs2.transform = Transform3D(Basis(Vector3.RIGHT, b[2]), b[1])
+				corps.add_child(cs2)
+			else:
+				boite.call(b[0], b[1])
 	for sx3 in [-1.0, 1.0]:
 		for b in _gradins(sx3, true):
 			if b.size() > 2:
@@ -776,6 +868,9 @@ func _placer(i: int) -> void:
 	if _phase == "quai" and zone_vehicule(i) != "ligne":
 		porte = clampf(minf(T_QUAI - _t_quai, _t_quai) / 1.5, 0.0, 1.0)
 	v.portes(porte)
+	# phares vers l'avant du mouvement ; à quai, vers la ligne
+	var monte: bool = (_v * (1.0 if i == 0 else -1.0)) > 0.05 or (absf(_v) <= 0.05 and zone_vehicule(i) == "gare_aval")
+	(v as VehiculeFunival).phares(monte, zone_vehicule(i) == "ligne" or absf(_v) <= 0.05)
 	if collisions_actives and i < _corps.size() and _corps[i] != null:
 		(_corps[i][0] as Node3D).transform = Transform3D(b, p)
 		for cs in _corps[i][1]:
