@@ -145,6 +145,16 @@ func build(t: TunnelBuilder) -> void:
 	_build_cable()
 
 
+## Même construction, une étape à la fois, `pause` attendue entre deux (lignes construites sur le fil principal en
+## PWA : la voie du Funival d'un bloc faisait une image de 330 ms au PC, relevé du 08/11/2026).
+func build_par_etapes(t: TunnelBuilder, pause: Callable) -> void:
+	tunnel = t
+	for etape in [_compute_cable_geometry, _build_slab, _build_rails, _build_sleepers, _build_walkway,
+			_build_tunnel_details, _build_cable_beam, _build_guides, _build_abt_sheaves, _build_abt_plates, _build_cable]:
+		(etape as Callable).call()
+		await pause.call()
+
+
 # ---------------------------------------------------------------------------
 # Câble tendu entre les galets + aiguillage Abt (2026-09-30)
 #
