@@ -1397,6 +1397,7 @@ func _build_sleepers() -> void:
 @export var walkway_step_s: float = 0.45     # espacement des marches le long de s
 @export var walkway_post_s: float = 3.0      # espacement des potelets
 @export var walkway_handrail: bool = false   # pas de rambarde sur le vrai escalier
+@export var walkway_s0: float = -INF         # début de l'escalier, s'il commence après la fosse (Funival : au portail)
 
 
 ## Point monde sur l'escalier de service (passerelle), 35 cm au-dessus des
@@ -1504,7 +1505,7 @@ func _build_walkway() -> void:
 	var stringers: Array = []
 	var posts: Array = []
 	var cables: Array = []
-	var s: float = pit_low_end + 0.3
+	var s: float = maxf(pit_low_end, walkway_s0) + 0.3
 	while s < pit_high_start - 0.3:
 		var fr: Transform3D = _walkway_frame(s)
 		treads.append(fr)

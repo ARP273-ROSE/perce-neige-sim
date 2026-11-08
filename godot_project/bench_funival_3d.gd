@@ -116,7 +116,21 @@ func _tick() -> void:
 					"entraxe mini %.2f m" % _ecart_min)
 				_verif("Funival : trajet de 4 min 40 à 5 min 20 (vidéo de la montée ≈ 304 s ; RM.net 5 min), ralenti dans l'évitement", duree > 280.0 and duree < 320.0, "%.0f s" % duree)
 				var cm: Mesh = _lg._cables.mesh if _lg._cables != null else null
-				_verif("Funival : câbles tracteur et inférieur posés", cm != null and cm.get_surface_count() > 0 and (cm.surface_get_arrays(0)[Mesh.ARRAY_VERTEX] as PackedVector3Array).size() > 100)
+				_verif("Funival : câble inférieur posé", cm != null and cm.get_surface_count() > 0 and (cm.surface_get_arrays(0)[Mesh.ARRAY_VERTEX] as PackedVector3Array).size() > 50)
+				# voie du Perce-Neige : câble tracteur, galets, et rails de TrackBuilder sur ceux où roulent les véhicules
+				var vp: TrackBuilder = _lg.voie_pn
+				_verif("Funival : voie du Perce-Neige (câble toronné, galets)", vp != null and vp.cable_left_segments.size() > 10
+					and vp.galets_count() > 50, "%d tronçons de câble, %d galets" % [vp.cable_left_segments.size() if vp != null else 0,
+					vp.galets_count() if vp != null else 0])
+				var ecart_rails: float = 0.0
+				var dd: float = 5.0
+				while dd < _lg.longueur_h() - 5.0:
+					var xf: Transform3D = _lg.tunnel_pn.transform_at(_lg.s_de_d(dd))
+					var pr: Vector3 = xf.origin - xf.basis.y * Funival.RAIL_SUR_CENTRE
+					var er: Vector3 = pr - Vector3(0.0, _lg.y_voie(dd), -dd)
+					ecart_rails = maxf(ecart_rails, er.length())
+					dd += 10.0
+				_verif("Funival : rails du Perce-Neige sous les roues (≤ 5 cm)", ecart_rails < 0.05, "écart maxi %.3f m" % ecart_rails)
 				_phase = 3
 				_t = 0.0
 			elif _t > 700.0:

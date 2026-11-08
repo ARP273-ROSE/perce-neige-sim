@@ -122,7 +122,13 @@ func _apply_see_through(mat: StandardMaterial3D, on: bool) -> void:
 	mat.albedo_color = c
 
 
+var _construit: bool = false     # (construit hors de l'arbre par une autre ligne, puis ajouté : une fois)
+
+
 func _build() -> void:
+	if _construit:
+		return
+	_construit = true
 	# Génère les points de la spline
 	path_points = trace.points(ring_spacing)
 	_compute_tangents()
@@ -178,7 +184,7 @@ func _build() -> void:
 		# une seule chambre élargie, sans mur entre les voies (Funival, demande d'utilisateur du 08/11/2026)
 		_build_tunnel_section(mat, trace.tube_debut, trace.evit_debut, 0.0, "TunnelLow", false)
 		_build_tunnel_section(mat, trace.evit_debut, trace.evit_fin, 0.0, "TunnelPassingChamber", true)
-		_build_tunnel_section(mat, trace.evit_fin, trace.longueur, 0.0, "TunnelHigh", false)
+		_build_tunnel_section(mat, trace.evit_fin, minf(trace.longueur, trace.tube_fin), 0.0, "TunnelHigh", false)
 		_build_wall_cables()
 		if show_debug_path:
 			_draw_debug_path()
