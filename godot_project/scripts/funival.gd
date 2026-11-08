@@ -14,7 +14,7 @@ extends Telepherique
 const V_FUNI: float = 12.0              # m/s (fiche)
 ## Accélération et freinage de service : 0,18 m/s² en moyenne de 0 à 10 m/s, mesurés sur la trace GPS d'un
 ## passage réel (26/04/2026, départ de La Daille : 56 s pour atteindre 10 m/s ; calcul Sage
-## /mnt/apps_pool/sage/funival/trace.sage). Freinage pris égal (non mesuré : tunnel sans GPS).
+## « trace.sage » du Funival). Freinage pris égal (non mesuré : tunnel sans GPS).
 const A_FUNI: float = 0.18
 ## Vitesse dans l'évitement (aiguillages passifs et courbes en S) : ralentissement signalé par l'utilisateur
 ## (08/11/2026), valeur NON SOURCÉE, calée pour que le trajet retrouve la durée d'une vidéo de la montée en cabine de
@@ -112,7 +112,7 @@ func dans_tunnel(d: float) -> bool:
 
 ## Profil de la voie, courbe régulière :
 ## - dehors, une parabole ajustée sur la trace GPS altimétrique d'un passage réel (26/04/2026, 68 points projetés sur
-##   l'axe, résidu ≤ 4,3 m ; calcul /mnt/apps_pool/sage/funival/rampe.sage) : 20,8 % au départ, 29,7 % au portail ; le
+##   l'axe, résidu ≤ 4,3 m ; calcul Sage du Funival rampe.sage) : 20,8 % au départ, 29,7 % au portail ; le
 ##   viaduc ne suit pas le terrain, il est porté par des piles (photos : hautes et fines) ;
 ## - dans le tunnel, la pente monte progressivement jusqu'au maximum de la fiche (53 %, funiculaires-france.fr), s'y
 ##   tient, et se réduit seulement à la toute fin, en gare amont, où elle reste prononcée (comme au Perce-Neige ;
@@ -130,7 +130,7 @@ const PENTE_GARE_AMONT: float = VehiculeFunival.PENTE_GRADINS
 const L_QUAI_AMONT: float = 35.0          # en plan, à PENTE_GARE_AMONT
 ## Haut du tracé : MÊME DÉRIVÉE de pente que le haut du Perce-Neige (SlopeProfile.SLOPE_PROFILE : sous le quai de la
 ## gare haute, 10 % → 18 % sur 57,01 m puis 18 % → 27 % sur 52 m le long de la pente), depuis la sortie du quai amont,
-## taux prolongé jusqu'à 53 % (demande d'utilisateur, 08/11/2026) : 144 m. Contrôle : /mnt/apps_pool/sage/funival/haut2.sage.
+## taux prolongé jusqu'à 53 % (demande d'utilisateur, 08/11/2026) : 144 m. Contrôle : calcul Sage du Funival haut2.sage.
 const TAUX_HAUT_PN: Array = [[0.08 / 57.01, 57.01], [0.09 / 52.0, 52.0]]   # [points par mètre de pente, longueur]
 var _pente_haut: PackedFloat32Array = PackedFloat32Array()   # pente tous les 1 m en plan sous le quai amont
 var _rampe_bas: float = 0.0                                   # montée 29,7 % → 53 % depuis le portail (m en plan)
