@@ -882,7 +882,9 @@ func _collisions_funi() -> void:
 		var rot5: Basis = Basis(Vector3.RIGHT, a5)
 		var hmur: float = ry5 * 1.6 + 0.5
 		for f5 in [[Vector3(0.3, hmur, lg5), Vector3(-rx5 - 0.15, hmur * 0.5 - 0.5, 0)], [Vector3(0.3, hmur, lg5), Vector3(rx5 + 0.15, hmur * 0.5 - 0.5, 0)],
-				[Vector3(2.0 * rx5 + 0.6, 0.3, lg5), Vector3(0, -0.45 + ry5 * 1.62 + 0.15, 0)]]:
+				[Vector3(2.0 * rx5 + 0.6, 0.3, lg5), Vector3(0, -0.45 + ry5 * 1.62 + 0.15, 0)],
+				# plancher : à 48 %, la caméra placée derrière le skieur passait sous le radier (capture WebKit)
+				[Vector3(2.0 * rx5 + 0.6, 0.3, lg5), Vector3(0, -0.65, 0)]]:
 			var cs5: CollisionShape3D = CollisionShape3D.new()
 			var bx5: BoxShape3D = BoxShape3D.new()
 			bx5.size = f5[0]

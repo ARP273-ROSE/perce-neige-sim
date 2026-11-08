@@ -60,7 +60,7 @@ extends Node3D
 # Quais raccourcis le 06/10 (PNConstants.QUAI_*) : [3, 42,56] et
 # [3477,56, 3513,52] → n° 1 à 29 traverses (43,79 m, 1,23 m après le
 # quai), n° 238 à 2 303 traverses (3 477,53 m, à l'entrée du quai). Voie
-# rallongée de 40,52 m (PNConstants.LENGTH) : toujours 238 supports, au
+# rallongée de 40,52 m (trace.longueur) : toujours 238 supports, au
 # pas de 14,71 m au lieu de 14,54.
 const SUPPORT_S1: float = 43.79
 const SUPPORT_S_LAST: float = 3477.53
@@ -91,6 +91,8 @@ const SUPPORT_N: int = 238
 # transitions du loop / virages mais monte à 3 m en ligne droite — même
 # fidélité visuelle (déviation < 4 mm), ~6× moins de vertices.
 
+## Tracé (Perce-Neige par défaut ; le Funival fournit le sien).
+var trace: TraceFuni = TraceFuni.new()
 var tunnel: TunnelBuilder = null
 var keep_instance_xforms: bool = false   # bancs headless (cf. _mm_instance)
 
@@ -189,8 +191,8 @@ var _abt: Dictionary = {}       # nez, cœurs en X, fenêtres (cf. _compute_abt)
 
 
 func _in_abt_zone(s: float) -> bool:
-	return (s > PNConstants.PASSING_START - 5.0 and s < PNConstants.PASSING_START + ABT_ZONE) \
-		or (s > PNConstants.PASSING_END - ABT_ZONE and s < PNConstants.PASSING_END + 5.0)
+	return (s > trace.evit_debut - 5.0 and s < trace.evit_debut + ABT_ZONE) \
+		or (s > trace.evit_fin - ABT_ZONE and s < trace.evit_fin + 5.0)
 
 
 # Galets REPÈRES relevés par un utilisateur au compteur de la cabine, dans la vidéo
@@ -217,8 +219,8 @@ func _station_list() -> Array:
 	var abt: Array = []
 	for o in ABT_STATIONS:
 		var sh: bool = ABT_SHEAVE_STATIONS.has(o)
-		abt.append({"s": PNConstants.PASSING_START + o, "sheave": sh})
-		abt.append({"s": PNConstants.PASSING_END - o, "sheave": sh})
+		abt.append({"s": trace.evit_debut + o, "sheave": sh})
+		abt.append({"s": trace.evit_fin - o, "sheave": sh})
 	abt.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a.s < b.s)
 	for i in range(GALETS_REPERES.size()):
 		var n_a: int = GALETS_REPERES[i][0]
@@ -265,7 +267,7 @@ func _station_list() -> Array:
 	# absolue le perdait quand la voie a été rallongée (v1.15.65)
 	# (liste triée par abscisse : les sommets du câble lui sont indexés)
 	var gare: Array = []
-	var s_g: float = PNConstants.LENGTH + MachineRoomBuilder.S_LAST_TUNNEL_ROLLER
+	var s_g: float = trace.longueur + MachineRoomBuilder.S_LAST_TUNNEL_ROLLER
 	while s_g > SUPPORT_S_LAST + 5.0:
 		gare.push_front({"s": s_g, "sheave": false, "num": 0})
 		s_g -= guide_spacing
@@ -298,7 +300,7 @@ func _roller_axis_y() -> float:
 # convention (virage à droite → rotation négative autour de l'avant).
 func _roller_tilt(s: float, side: float, span: float) -> float:
 	var ds: float = 5.0
-	var kh: float = deg_to_rad(SlopeProfile.heading_at(s + ds) - SlopeProfile.heading_at(s - ds)) / (2.0 * ds)
+	var kh: float = deg_to_rad(trace.cap(s + ds) - trace.cap(s - ds)) / (2.0 * ds)
 	if side != 0.0:
 		var x_m: float = tunnel.passing_loop_offset(s - ds, side)
 		var x_0: float = tunnel.passing_loop_offset(s, side)
@@ -307,8 +309,8 @@ func _roller_tilt(s: float, side: float, span: float) -> float:
 	var t_n: float = PNConstants.T_NOMINAL_DAN * 10.0
 	var w: float = PNConstants.CABLE_KG_M * 9.80665
 	var lat: float = t_n * kh * span
-	var ver: float = w * span * cos(SlopeProfile.slope_angle_at(s)) \
-		- t_n * SlopeProfile.slope_curvature_at(s) * span
+	var ver: float = w * span * cos(trace.pente_angle(s)) \
+		- t_n * trace.pente_courbure(s) * span
 	var phi: float = atan2(lat, maxf(ver, 1.0))
 	return clampf(-phi, -roller_tilt_max, roller_tilt_max)
 
@@ -329,7 +331,7 @@ func _compute_cable_geometry() -> void:
 			var st: Dictionary = _stations[k]
 			var s: float = st.s
 			var s_prev: float = _stations[k - 1].s if k > 0 else 0.0
-			var s_next: float = _stations[k + 1].s if k + 1 < _stations.size() else PNConstants.LENGTH
+			var s_next: float = _stations[k + 1].s if k + 1 < _stations.size() else trace.longueur
 			var xf: Transform3D = tunnel.transform_at(s)
 			var x_nom: float = _track_center_x(s, side) + side * pulley_pair_offset
 			# galet de déviation présent → il prend l'effort latéral, le
@@ -345,7 +347,7 @@ func _compute_cable_geometry() -> void:
 			var rel: Vector3 = p - xf.origin
 			pts.append({"s": s, "p": p, "x": rel.dot(xf.basis.x), "y": rel.dot(xf.basis.y),
 				"tilt": tilt, "center": center, "basis": rb})
-		pts.append(_strand_free_point(PNConstants.LENGTH, side, y_nom))
+		pts.append(_strand_free_point(trace.longueur, side, y_nom))
 		for i in range(1, pts.size() - 1):
 			if _stations[i - 1].sheave:
 				pts[i]["poulie"] = _poulie_deviation(pts, i, side_i)
@@ -358,7 +360,7 @@ func _strand_free_point(s: float, side: float, y_nom: float) -> Dictionary:
 	var x: float = _track_center_x(s, side) + side * pulley_pair_offset
 	# brin de la rame 2 : il remonte vers les galets qui le font passer
 	# au-dessus du sommet de la roue aval (machine_room_builder)
-	if side > 0.0 and s >= PNConstants.LENGTH - 1e-6:
+	if side > 0.0 and s >= trace.longueur - 1e-6:
 		y_nom = MachineRoomBuilder.EXIT_Y_END
 	return {"s": s, "p": xf.origin + xf.basis.x * x + xf.basis.y * y_nom, "x": x, "y": y_nom,
 		"tilt": 0.0}
@@ -401,10 +403,10 @@ func _strand_rail_gap(cable_i: int, rail_i: int, s: float) -> float:
 # Abscisse (depuis la fourche basse) où l'écart de voie vaut dv.
 func _loop_ds_for_offset(dv: float) -> float:
 	var a: float = 0.0
-	var b: float = (PNConstants.PASSING_END - PNConstants.PASSING_START) * 0.5
+	var b: float = (trace.evit_fin - trace.evit_debut) * 0.5
 	for _it in range(50):
 		var m: float = 0.5 * (a + b)
-		if absf(tunnel.passing_loop_offset(PNConstants.PASSING_START + m, 1.0)) < dv:
+		if absf(tunnel.passing_loop_offset(trace.evit_debut + m, 1.0)) < dv:
 			a = m
 		else:
 			b = m
@@ -447,8 +449,8 @@ func _wheel_cable_gap(rail_i: int, s: float) -> float:
 
 func _compute_abt() -> void:
 	var hg: float = gauge_m * 0.5
-	var s0: float = PNConstants.PASSING_START
-	var s1: float = PNConstants.PASSING_END
+	var s0: float = trace.evit_debut
+	var s1: float = trace.evit_fin
 	var ds_x: float = _loop_ds_for_offset(hg)
 	var ds_sw: float = _loop_ds_for_offset(abt_switch_d)
 	_abt = {
@@ -534,7 +536,7 @@ func _scan_gap(rail_i: int, s_from: float, s_to: float, dirn: float, target: flo
 func _gap_zone(piece: Dictionary, s: float) -> String:
 	if piece.kind == "A":
 		return piece.get("zone", "lo")
-	return "lo" if s < 0.5 * (PNConstants.PASSING_START + PNConstants.PASSING_END) else "hi"
+	return "lo" if s < 0.5 * (trace.evit_debut + trace.evit_fin) else "hi"
 
 
 func _gap_of(rail_i: int) -> Dictionary:
@@ -565,9 +567,9 @@ func _piece_x(piece: Dictionary, s: float) -> float:
 		var k: float = 0.012
 		var x: float = ri * 0.5 * (a + b + sqrt((a - b) * (a - b) + k * k))
 		# pointe de langue recourbée vers l'axe de la voie
-		var s_tip: float = PNConstants.PASSING_START - ABT_TONGUE_BACK
+		var s_tip: float = trace.evit_debut - ABT_TONGUE_BACK
 		if z == "hi":
-			s_tip = PNConstants.PASSING_END + ABT_TONGUE_BACK
+			s_tip = trace.evit_fin + ABT_TONGUE_BACK
 		var tt: float = clampf(1.0 - absf(s - s_tip) / 0.9, 0.0, 1.0)
 		return x + ri * 0.04 * tt * tt
 	# B : bout plié parallèle au câble côté évitement, puis ligne de la roue
@@ -807,13 +809,13 @@ func _build_slab() -> void:
 	# La section "PassingChamber" est CENTRÉE et s'élargit sinusoïdalement
 	# pour couvrir toute la largeur de la chambre, supportant la cabine
 	# pendant qu'elle suit sa courbe latérale.
-	_build_slab_section(slab_mat, pit_low_end, PNConstants.PASSING_START, 0.0, "SlabLow", false)
-	_build_slab_section(slab_mat, PNConstants.PASSING_START, PNConstants.PASSING_END, 0.0, "SlabPassingChamber", true)
+	_build_slab_section(slab_mat, pit_low_end, trace.evit_debut, 0.0, "SlabLow", false)
+	_build_slab_section(slab_mat, trace.evit_debut, trace.evit_fin, 0.0, "SlabPassingChamber", true)
 	# en haut, la dalle s'arrête au bord de la fosse où émerge la roue aval
 	# de la salle des machines (elle la traversait : « un mur en béton dans
 	# la roue », retour du 30/09)
-	_build_slab_section(slab_mat, PNConstants.PASSING_END,
-		minf(pit_high_start, PNConstants.LENGTH + MachineRoomBuilder.PIT_S0), 0.0, "SlabHigh", false)
+	_build_slab_section(slab_mat, trace.evit_fin,
+		minf(pit_high_start, trace.longueur + MachineRoomBuilder.PIT_S0), 0.0, "SlabHigh", false)
 
 
 # Construit un tronçon de dalle entre s_start et s_end avec un offset latéral.
@@ -990,7 +992,7 @@ func _trench_ledge(e: Array, y_top: float, y_floor: float) -> Array:
 # au niveau de la dalle sur les derniers mètres avant la fosse de la roue
 # aval (gare haute), sinon son fond traverserait la roue.
 func _trench_depth_at(s: float) -> float:
-	var s_fin: float = PNConstants.LENGTH + MachineRoomBuilder.PIT_S0
+	var s_fin: float = trace.longueur + MachineRoomBuilder.PIT_S0
 	return trench_depth * clampf((s_fin - 1.5 - s) / 2.5, 0.0, 1.0)
 
 
@@ -1055,10 +1057,10 @@ func _build_rails() -> void:
 	var hg: float = gauge_m * 0.5
 	# Les 2 rails extérieurs (continus) suivent le tube correspondant ±hg
 	_build_rail_strip(
-		rail_mat, rail_top_mat, 0.0, PNConstants.LENGTH, -1.0, -hg, "RailFarLeft",
+		rail_mat, rail_top_mat, 0.0, trace.longueur, -1.0, -hg, "RailFarLeft",
 	)
 	_build_rail_strip(
-		rail_mat, rail_top_mat, 0.0, PNConstants.LENGTH, +1.0, +hg, "RailFarRight",
+		rail_mat, rail_top_mat, 0.0, trace.longueur, +1.0, +hg, "RailFarRight",
 	)
 	# Rails intérieurs de l'évitement en tronçons : langues, lames,
 	# lacunes où passe le câble opposé, cœur en X (cf. _compute_abt).
@@ -1301,12 +1303,12 @@ func _build_sleepers() -> void:
 	#   tunnel.passing_loop_offset(s, ±1) → 4 blochets
 	var hg: float = gauge_m * 0.5
 	var positions: Array = []  # [{s: float, off: float}, ...] — off = centre du blochet
-	var n_total: int = int(PNConstants.LENGTH / sleeper_spacing)
+	var n_total: int = int(trace.longueur / sleeper_spacing)
 	for i in range(n_total):
 		var s: float = (float(i) + 0.5) * sleeper_spacing
 		if s < pit_low_end or s > pit_high_start:
 			continue   # au-dessus des fosses de gare, les rails sont sur poutres
-		if s < PNConstants.PASSING_START - ABT_TONGUE_BACK or s > PNConstants.PASSING_END + ABT_TONGUE_BACK:
+		if s < trace.evit_debut - ABT_TONGUE_BACK or s > trace.evit_fin + ABT_TONGUE_BACK:
 			positions.append({"s": s, "off": -hg, "w": block_width})
 			positions.append({"s": s, "off": hg, "w": block_width})
 			continue
@@ -1365,7 +1367,7 @@ func _build_sleepers() -> void:
 # fosse de la gare basse sur toute la longueur des quais (retour d'utilisateur, 07/10/2026 :
 # « la fosse doit être plus profonde pour que la tête soit sous les rails »)
 @export var pit_low_end: float = 43.0
-@export var pit_high_start: float = PNConstants.LENGTH   # pas de fosse en haut
+@export var pit_high_start: float = trace.longueur   # pas de fosse en haut
 @export var walkway_side: float = 1.0        # +1 = droite en montant (vidéo)
 @export var walkway_x: float = 1.02          # décalage latéral du milieu de l'escalier
 @export var walkway_step_s: float = 0.45     # espacement des marches le long de s
@@ -1383,7 +1385,7 @@ func _walkway_frame(s: float) -> Transform3D:
 	# repère de pose : origine sur le bord, X = travers, Y = monde haut
 	var xf: Transform3D = tunnel.transform_at(s)
 	var off: float = _track_center_x(s, walkway_side) if (
-		s >= PNConstants.PASSING_START - 60.0 and s <= PNConstants.PASSING_END + 60.0) else 0.0
+		s >= trace.evit_debut - 60.0 and s <= trace.evit_fin + 60.0) else 0.0
 	var origin: Vector3 = xf.origin + xf.basis.x * (off + walkway_side * walkway_x) \
 		+ xf.basis.y * (floor_y_local + slab_thickness + 0.08)
 	var fwd: Vector3 = -xf.basis.z
@@ -1485,7 +1487,7 @@ func _build_walkway() -> void:
 		# limons alignés sur la pente (repère spline)
 		var xf: Transform3D = tunnel.transform_at(s)
 		var off: float = _track_center_x(s, walkway_side) if (
-			s >= PNConstants.PASSING_START - 60.0 and s <= PNConstants.PASSING_END + 60.0) else 0.0
+			s >= trace.evit_debut - 60.0 and s <= trace.evit_fin + 60.0) else 0.0
 		for dx in [-0.24, 0.24]:
 			var st_xf: Transform3D = xf
 			st_xf.origin += xf.basis.x * (off + walkway_side * walkway_x + dx) \
@@ -1493,14 +1495,14 @@ func _build_walkway() -> void:
 			stringers.append(st_xf)
 		s += walkway_step_s
 	s = 1.5
-	while s < PNConstants.LENGTH - 1.5:
+	while s < trace.longueur - 1.5:
 		var fr2: Transform3D = _walkway_frame(s)
 		var p: Transform3D = fr2
 		p.origin += Vector3.UP * 0.5 + fr2.basis.x * (walkway_side * 0.24)
 		posts.append(p)
 		var xf2: Transform3D = tunnel.transform_at(s + walkway_post_s * 0.5)
 		var off2: float = _track_center_x(s + walkway_post_s * 0.5, walkway_side) if (
-			s >= PNConstants.PASSING_START - 60.0 and s <= PNConstants.PASSING_END + 60.0) else 0.0
+			s >= trace.evit_debut - 60.0 and s <= trace.evit_fin + 60.0) else 0.0
 		var cx: Transform3D = xf2
 		cx.origin += xf2.basis.x * (off2 + walkway_side * (walkway_x + 0.24)) \
 			+ xf2.basis.y * (floor_y_local + slab_thickness + 0.08 + 1.0)
@@ -1522,7 +1524,7 @@ func _build_walkway() -> void:
 	boxm.material = boxmat
 	var boxes: Array = []
 	s = 12.0
-	while s < PNConstants.LENGTH - 12.0:
+	while s < trace.longueur - 12.0:
 		# pas dans les salles des gares : le boîtier y flottait loin de
 		# tout mur (retour d'un utilisateur du 06/10/2026, gare du bas)
 		if s < tunnel.station_low_end + 1.0 or s > tunnel.station_high_start - 1.0:
@@ -1530,7 +1532,7 @@ func _build_walkway() -> void:
 			continue
 		var xf3: Transform3D = tunnel.transform_at(s)
 		var off3: float = _track_center_x(s, -walkway_side) if (
-			s >= PNConstants.PASSING_START - 60.0 and s <= PNConstants.PASSING_END + 60.0) else 0.0
+			s >= trace.evit_debut - 60.0 and s <= trace.evit_fin + 60.0) else 0.0
 		var bx: Transform3D = xf3
 		bx.origin += xf3.basis.x * (off3 - walkway_side * 1.48) + xf3.basis.y * 0.42
 		boxes.append(bx)
@@ -1560,7 +1562,7 @@ func _build_walkway() -> void:
 ## Dans l'évitement (deux tubes) : les joints et la canalisation y suivent
 ## chacun leur tube (_build_loop_lining) au lieu de l'axe unique.
 func _in_loop_zone(s: float) -> bool:
-	return s > PNConstants.PASSING_START and s < PNConstants.PASSING_END
+	return s > trace.evit_debut and s < trace.evit_fin
 
 
 func _build_tunnel_details() -> void:
@@ -1593,8 +1595,8 @@ func _build_tunnel_details() -> void:
 	# centrale de la voie sous le niveau de la dalle)
 	var ring: ArrayMesh = _ring_arc_mesh(joint_mat)
 	var rings: Array = []
-	var s: float = PNConstants.SQUARE_SECTION_LOW_END + 0.7
-	while s < PNConstants.SQUARE_SECTION_HIGH_START:
+	var s: float = trace.carre_bas_fin + 0.7
+	while s < trace.carre_haut_debut:
 		if not _in_loop_zone(s):
 			var xf: Transform3D = tunnel.transform_at(s)
 			rings.append(Transform3D(xf.basis, xf.origin))
@@ -1606,8 +1608,8 @@ func _build_tunnel_details() -> void:
 	pipe.size = Vector3(0.07, 0.07, 4.06)
 	pipe.material = pipe_mat
 	var pipes: Array = []
-	s = PNConstants.SQUARE_SECTION_LOW_END + 2.0
-	while s < PNConstants.SQUARE_SECTION_HIGH_START - 2.0:
+	s = trace.carre_bas_fin + 2.0
+	while s < trace.carre_haut_debut - 2.0:
 		if not _in_loop_zone(s):
 			var xf2: Transform3D = tunnel.transform_at(s)
 			var tr2: Transform3D = xf2
@@ -1632,7 +1634,7 @@ func _build_tunnel_details() -> void:
 	hj.size = Vector3(0.025, 0.025, 3.02)
 	hj.material = joint_mat
 	var hjs: Array = []
-	for rng in [[tunnel.station_low_end + 3.0, PNConstants.SQUARE_SECTION_LOW_END - 1.0]]:
+	for rng in [[tunnel.station_low_end + 3.0, trace.carre_bas_fin - 1.0]]:
 		s = rng[0]
 		while s < rng[1]:
 			var xf3: Transform3D = tunnel.transform_at(s)
@@ -1664,8 +1666,8 @@ func _build_tunnel_details() -> void:
 	lamp.material = lamp_mat
 	_loop_lamp_mesh = lamp
 	var lamps: Array = []
-	s = PNConstants.PASSING_START - 40.0
-	while s < PNConstants.PASSING_END + 40.0:
+	s = trace.evit_debut - 40.0
+	while s < trace.evit_fin + 40.0:
 		var xf6: Transform3D = tunnel.transform_at(s)
 		for side in [-1.0, 1.0]:
 			var off: float = _track_center_x(s, side)
@@ -1731,12 +1733,12 @@ func _build_loop_rings(joint_mat: StandardMaterial3D) -> void:
 	var h: float = 0.015          # saillie vers l'intérieur
 	var mat: StandardMaterial3D = joint_mat.duplicate()
 	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
-	var s0: float = PNConstants.SQUARE_SECTION_LOW_END + 0.7
-	var s: float = s0 + ceil((PNConstants.PASSING_START - s0) / ring_joint_spacing) * ring_joint_spacing
+	var s0: float = trace.carre_bas_fin + 0.7
+	var s: float = s0 + ceil((trace.evit_debut - s0) / ring_joint_spacing) * ring_joint_spacing
 	var st: SurfaceTool = null
 	var s_chunk: float = s
 	var n_chunk: int = 0
-	while s < PNConstants.PASSING_END:
+	while s < trace.evit_fin:
 		if st == null:
 			st = SurfaceTool.new()
 			st.begin(Mesh.PRIMITIVE_TRIANGLES)
@@ -1776,7 +1778,7 @@ func _build_loop_rings(joint_mat: StandardMaterial3D) -> void:
 						st.set_normal(nr)
 						st.add_vertex(v)
 		s += ring_joint_spacing
-		if s - s_chunk > 40.0 or s >= PNConstants.PASSING_END:
+		if s - s_chunk > 40.0 or s >= trace.evit_fin:
 			var mi: MeshInstance3D = MeshInstance3D.new()
 			mi.name = "LoopRings_%d" % n_chunk
 			mi.mesh = MeshMerge.valider_indexe(st)
@@ -1824,13 +1826,13 @@ func _build_cable_beam() -> void:
 	# se superposeraient au centre (z-fighting) ; après, elles sont
 	# disjointes et prolongent proprement la face de fin de la centrale.
 	var fork_ds: float = _beam_fork_ds()
-	var s_fork_lo: float = PNConstants.PASSING_START + fork_ds
-	var s_fork_hi: float = PNConstants.PASSING_END - fork_ds
+	var s_fork_lo: float = trace.evit_debut + fork_ds
+	var s_fork_hi: float = trace.evit_fin - fork_ds
 	# (pas dans la fosse de la gare basse : elle y flottait à mi-hauteur)
 	_build_cable_beam_section(mat, pit_low_end, s_fork_lo, 0.0, "CableBeamLow")
 	_build_cable_beam_section(mat, s_fork_lo, s_fork_hi, -1.0, "CableBeamLoopL")
 	_build_cable_beam_section(mat, s_fork_lo, s_fork_hi, +1.0, "CableBeamLoopR")
-	_build_cable_beam_section(mat, s_fork_hi, PNConstants.LENGTH + MachineRoomBuilder.PIT_S0,
+	_build_cable_beam_section(mat, s_fork_hi, trace.longueur + MachineRoomBuilder.PIT_S0,
 		0.0, "CableBeamHigh")
 
 
@@ -1840,7 +1842,7 @@ func _beam_fork_ds() -> float:
 	var target: float = cable_beam_width * 0.5 + 0.02
 	var ds: float = 0.0
 	while ds < 100.0:
-		if absf(tunnel.passing_loop_offset(PNConstants.PASSING_START + ds, 1.0)) >= target:
+		if absf(tunnel.passing_loop_offset(trace.evit_debut + ds, 1.0)) >= target:
 			return ds
 		ds += 0.5
 	return 20.0  # fallback théorique (jamais atteint avec l'offset sin²)
@@ -2600,7 +2602,7 @@ func _build_cable() -> void:
 
 	cable_left_segments.clear()
 	cable_right_segments.clear()
-	var total_len: float = PNConstants.LENGTH
+	var total_len: float = trace.longueur
 	if OS.has_feature("web"):       # PWA : 3 tampons par segment, deux fois moins (coupe au câble à 30 m près)
 		cable_segment_length = 30.0
 	var n_seg: int = int(ceil(total_len / cable_segment_length))
@@ -2653,7 +2655,7 @@ func a_chainette(s: float) -> float:
 		_alt_bas = tunnel.transform_at(0.0).origin.y
 	var w: float = PNConstants.CABLE_KG_M * 9.80665
 	var t: float = TENSION_BAS_N + w * maxf(tunnel.transform_at(s).origin.y - _alt_bas, 0.0)
-	return t / (w * cos(SlopeProfile.slope_angle_at(s)))
+	return t / (w * cos(trace.pente_angle(s)))
 const SLACK_TOUCHDOWN_M: float = 1.5   # du sommet du galet à la longrine
 var _support_s: Dictionary = {}       # côté → abscisses des appuis (galets)
 
@@ -2676,7 +2678,7 @@ func _slack_drop(side_i: int, s: float) -> float:
 		d_appui = minf(d_appui, sup[k] - s)
 	if k > 0:
 		d_appui = minf(d_appui, s - sup[k - 1])
-	var bouts: float = smoothstep(15.0, 30.0, minf(s, PNConstants.LENGTH - s))
+	var bouts: float = smoothstep(15.0, 30.0, minf(s, trace.longueur - s))
 	return _slack_drop_max() * smoothstep(0.0, SLACK_TOUCHDOWN_M, d_appui) * bouts
 
 
@@ -2854,7 +2856,7 @@ func update_cable_phase(s_driver: float, s_other: float = -1.0, s_poulie_r: floa
 	# quand l'autre rame est clouée par son parachute).
 	# Selon rame 1 / rame 2, ce n'est pas le même brin qui est « le sien ».
 	var own_phase: float = s_driver
-	var other_phase: float = s_other - PNConstants.LENGTH
+	var other_phase: float = s_other - trace.longueur
 	cable_left_material.set_shader_parameter("cable_phase",
 		other_phase if driver_is_rame2 else own_phase)
 	cable_right_material.set_shader_parameter("cable_phase",
@@ -2871,14 +2873,14 @@ func update_cable_phase(s_driver: float, s_other: float = -1.0, s_poulie_r: floa
 	# l'écart élastique de sa rame) ; écart entier à l'attache
 	var effile: bool = s_poulie_r >= 0.0
 	var own_p: float = s_poulie_r
-	var other_p: float = PNConstants.miroir(s_poulie_r) - PNConstants.LENGTH
+	var other_p: float = PNConstants.miroir(s_poulie_r) - trace.longueur
 	for e in [[cable_left_material, other_p if driver_is_rame2 else own_p, s_left],
 			[cable_right_material, own_p if driver_is_rame2 else other_p, s_right]]:
 		var m: ShaderMaterial = e[0]
 		m.set_shader_parameter("effile", effile)
 		m.set_shader_parameter("phase_poulie", e[1])
 		m.set_shader_parameter("s_attache", e[2])
-		m.set_shader_parameter("s_poulie", PNConstants.LENGTH)
+		m.set_shader_parameter("s_poulie", trace.longueur)
 	_update_culots(s_other if driver_is_rame2 else s_driver,
 		s_driver if driver_is_rame2 else s_other)
 
@@ -2954,7 +2956,7 @@ func _premier_appui(side_i: int, s_att: float, a: float, pts: Array) -> int:
 	var p_att: Vector3 = strand_point(side_i, s_att)
 	var premier: int = maxi(_appuis(side_i).bsearch(s_att + 0.5, false), 1)
 	var dernier: int = pts.size() - 2          # dernier galet ([fin] = point libre)
-	var s_fin: float = PNConstants.LENGTH - 0.3
+	var s_fin: float = trace.longueur - 0.3
 	for k in range(premier, dernier + 1):
 		var d: float = float(pts[k].s) - s_att
 		# un galet intermédiaire plus haut que la chaînette : le câble
@@ -3025,7 +3027,7 @@ func amorce_profil(side_i: int, s_rame: float, n: int = AMORCE_ANNEAUX) -> Dicti
 	var att: float = attache_s(s_rame)
 	var a: float = chainette(att).x
 	var k1: int = premier_appui(side_i, att, a)
-	var s1: float = float(_strand[side_i][k1].s) if k1 > 0 else PNConstants.LENGTH - 0.3
+	var s1: float = float(_strand[side_i][k1].s) if k1 > 0 else trace.longueur - 0.3
 	var d: float = maxf(s1 - att, 0.5)
 	var p_att: Vector3 = strand_point(side_i, att)
 	var p_r1: Vector3 = strand_point(side_i, s1)
@@ -3199,7 +3201,7 @@ func coupe_brin(side_i: int, s_rame: float) -> float:
 	var att: float = attache_s(s_rame)
 	var k: int = premier_appui(side_i, att, chainette(att).x)
 	if k < 0:
-		return PNConstants.LENGTH - 0.3
+		return trace.longueur - 0.3
 	return float(_strand[side_i][k].s)
 
 
@@ -3469,12 +3471,12 @@ func update_cable_rupture(rupture: bool, s_driver: float, direction: int,
 	if _rupture.is_empty():
 		var ecart: float = randf_range(25.0, 80.0) if direction > 0 \
 			else randf_range(20.0, 50.0)
-		var s_b: float = minf(s_driver + ecart, PNConstants.LENGTH - 15.0)
+		var s_b: float = minf(s_driver + ecart, trace.longueur - 15.0)
 		s_b = maxf(s_b, s_driver + 1.0)
 		var t_n: float = maxf(maxf(tension_dan, _last_tension_dan) * 10.0, RUPTURE_T_MIN_N)
 		_rupture = {
 			"t": 0.0, "s_b": s_b, "s0": s_driver, "ph0": s_driver,
-			"r_up": minf(t_n * (PNConstants.LENGTH - s_b) / TrainPhysics.CABLE_EA_N, 8.0),
+			"r_up": minf(t_n * (trace.longueur - s_b) / TrainPhysics.CABLE_EA_N, 8.0),
 			"r_lo": minf(t_n * (s_b - s_driver) / TrainPhysics.CABLE_EA_N, 2.0),
 		}
 		print("[Câble] rupture à s = %.1f m (rame à %.1f m), rétraction %.2f m / %.2f m" % [
@@ -3485,7 +3487,7 @@ func update_cable_rupture(rupture: bool, s_driver: float, direction: int,
 	# c = √(EA/ρ) ≈ 3 400 m/s) jusqu'à avoir rendu tout son allongement
 	# ε·L : la durée vaut L/c, le temps que l'onde parcoure le tronçon.
 	var c_onde: float = sqrt(TrainPhysics.CABLE_EA_N / PNConstants.CABLE_KG_M)
-	var l_up: float = maxf(PNConstants.LENGTH - float(_rupture.s_b), 1.0)
+	var l_up: float = maxf(trace.longueur - float(_rupture.s_b), 1.0)
 	var l_lo: float = maxf(float(_rupture.s_b) - float(_rupture.s0), 1.0)
 	var k_up: float = minf(1.0, c_onde * t / l_up)
 	var k_lo: float = minf(1.0, c_onde * t / l_lo)
