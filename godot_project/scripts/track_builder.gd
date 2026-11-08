@@ -737,14 +737,12 @@ func _piece_height(piece: Dictionary, s: float) -> float:
 
 func _commit_rail_chunk(st_rail: SurfaceTool, st_top: SurfaceTool, name: String) -> void:
 	st_rail.generate_normals()
-	st_rail.generate_tangents()
 	var mi: MeshInstance3D = MeshInstance3D.new()
 	mi.name = name
 	mi.mesh = MeshMerge.valider_indexe(st_rail)
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(mi)
 	st_top.generate_normals()
-	st_top.generate_tangents()
 	var mt: MeshInstance3D = MeshInstance3D.new()
 	mt.name = name + "Top"
 	mt.mesh = MeshMerge.valider_indexe(st_top)
@@ -955,7 +953,6 @@ func _build_slab_chunk(
 		prev_half_w = cur_half_w
 
 	st.generate_normals()
-	st.generate_tangents()
 	var mi: MeshInstance3D = MeshInstance3D.new()
 	mi.name = name
 	mi.mesh = MeshMerge.valider_indexe(st)
@@ -1160,7 +1157,6 @@ func _build_rail_chunk(
 		prev_cx = cur_cx
 
 	st_rail.generate_normals()
-	st_rail.generate_tangents()
 	var mi_rail: MeshInstance3D = MeshInstance3D.new()
 	mi_rail.name = name
 	mi_rail.mesh = MeshMerge.valider_indexe(st_rail)
@@ -1168,7 +1164,6 @@ func _build_rail_chunk(
 	add_child(mi_rail)
 
 	st_top.generate_normals()
-	st_top.generate_tangents()
 	var mi_top: MeshInstance3D = MeshInstance3D.new()
 	mi_top.name = name + "Top"
 	mi_top.mesh = MeshMerge.valider_indexe(st_top)
@@ -1933,7 +1928,6 @@ func _build_cable_beam_chunk(
 		prev_off = cur_off
 
 	st.generate_normals()
-	st.generate_tangents()
 	var mi: MeshInstance3D = MeshInstance3D.new()
 	mi.name = name
 	mi.mesh = MeshMerge.valider_indexe(st)
@@ -2688,14 +2682,14 @@ func _slack_drop(side_i: int, s: float) -> float:
 func _build_cable_segment(
 	mat: Material, side_i: int, s_start: float, s_end: float, name: String,
 ) -> MeshInstance3D:
-	var st: SurfaceTool = SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	st.set_material(mat)
-
 	var chain: Array = [{"s": s_start, "p": strand_point(side_i, s_start)}]
-	for v in _strand[side_i]:
-		if v.s > s_start + 1e-4 and v.s < s_end - 1e-4:
-			chain.append({"s": v.s, "p": v.p})
+	# (galets du segment par dichotomie : chaque segment reparcourait tout le brin)
+	var sup: PackedFloat64Array = _appuis(side_i)
+	var brin: Array = _strand[side_i]
+	var j0: int = sup.bsearch(s_start + 1e-4, false)
+	while j0 < sup.size() and sup[j0] < s_end - 1e-4:
+		chain.append({"s": brin[j0].s, "p": brin[j0].p})
+		j0 += 1
 	chain.append({"s": s_end, "p": strand_point(side_i, s_end)})
 
 	# repère de chaque anneau : tangente = moyenne des cordes voisines,
@@ -2739,43 +2733,57 @@ func _build_cable_segment(
 	rings.append({"s": chain[last].s, "p": chain[last].p - ups[last] * fl_l, "r": rights[last], "u": ups[last],
 		"d": maxf(_slack_drop(side_i, chain[last].s) - fl_l, 0.0)})
 
+	# Tube en tableaux indexés : un anneau de cable_segments + 1 sommets par anneau (couture des UV), normales
+	# radiales (vers l'axe : sens que donnait generate_normals, rendu inchangé) ; mêmes UV (u par secteur, v = 2 s), UV2 (descente, poids) et COLOR (droite de la voie) que
+	# l'émission par SurfaceTool, qui faisait 6 sommets × 4 appels par secteur, puis normales et indexation
+	# (le plus gros du coût du câble, relevé du 08/11/2026).
+	var ns: int = cable_segments
+	var dmax: float = maxf(_slack_drop_max(), 1e-3)
+	var vtx: PackedVector3Array = PackedVector3Array()
+	var nrm: PackedVector3Array = PackedVector3Array()
+	var uv: PackedVector2Array = PackedVector2Array()
+	var uv2: PackedVector2Array = PackedVector2Array()
+	var col: PackedColorArray = PackedColorArray()
+	var idx: PackedInt32Array = PackedInt32Array()
+	var cs: PackedFloat32Array = PackedFloat32Array()
+	var sn: PackedFloat32Array = PackedFloat32Array()
+	for k in range(ns + 1):
+		var a: float = float(k) / float(ns) * TAU
+		cs.append(cos(a))
+		sn.append(sin(a))
+	for i in range(rings.size()):
+		var c: Vector3 = rings[i].p
+		var r: Vector3 = rings[i].r
+		var u: Vector3 = rings[i].u
+		var v_uv: float = float(rings[i].s) * 2.0
+		var d: Vector2 = Vector2(rings[i].d, rings[i].d / dmax)
+		var cl: Color = Color(0.5 + 0.5 * r.x, 0.5 + 0.5 * r.y, 0.5 + 0.5 * r.z)
+		for k in range(ns + 1):
+			var n: Vector3 = r * cs[k] + u * sn[k]
+			vtx.append(c + n * cable_radius)
+			nrm.append(-n.normalized())       # (vers l'axe, comme les normales que donnait generate_normals sur ce tube)
+			uv.append(Vector2(float(k) / float(ns), v_uv))
+			uv2.append(d)
+			col.append(cl)
 	for i in range(rings.size() - 1):
-		var c0: Vector3 = rings[i].p
-		var c1: Vector3 = rings[i + 1].p
-		var r0: Vector3 = rings[i].r
-		var r1: Vector3 = rings[i + 1].r
-		var u0: Vector3 = rings[i].u
-		var u1: Vector3 = rings[i + 1].u
-		var v0_uv: float = float(rings[i].s) * 2.0
-		var v1_uv: float = float(rings[i + 1].s) * 2.0
-		# UV2 = (descente sur la longrine, poids 0 au galet → 1 posé) ;
-		# COLOR = direction « droite » de la voie, pour l'ondulation latérale
-		# du câble lâche (cable_shader.gdshader)
-		var d0: Vector2 = Vector2(rings[i].d, rings[i].d / maxf(_slack_drop_max(), 1e-3))
-		var d1: Vector2 = Vector2(rings[i + 1].d, rings[i + 1].d / maxf(_slack_drop_max(), 1e-3))
-		var col0: Color = Color(0.5 + 0.5 * r0.x, 0.5 + 0.5 * r0.y, 0.5 + 0.5 * r0.z)
-		var col1: Color = Color(0.5 + 0.5 * r1.x, 0.5 + 0.5 * r1.y, 0.5 + 0.5 * r1.z)
-		for k in range(cable_segments):
-			var a0: float = float(k) / float(cable_segments) * TAU
-			var a1: float = float(k + 1) / float(cable_segments) * TAU
-			var p00: Vector3 = c0 + r0 * cos(a0) * cable_radius + u0 * sin(a0) * cable_radius
-			var p01: Vector3 = c0 + r0 * cos(a1) * cable_radius + u0 * sin(a1) * cable_radius
-			var p10: Vector3 = c1 + r1 * cos(a0) * cable_radius + u1 * sin(a0) * cable_radius
-			var p11: Vector3 = c1 + r1 * cos(a1) * cable_radius + u1 * sin(a1) * cable_radius
-			var u0_uv: float = float(k) / float(cable_segments)
-			var u1_uv: float = float(k + 1) / float(cable_segments)
-			st.set_color(col0); st.set_uv(Vector2(u0_uv, v0_uv)); st.set_uv2(d0); st.add_vertex(p00)
-			st.set_color(col1); st.set_uv(Vector2(u0_uv, v1_uv)); st.set_uv2(d1); st.add_vertex(p10)
-			st.set_color(col1); st.set_uv(Vector2(u1_uv, v1_uv)); st.set_uv2(d1); st.add_vertex(p11)
-			st.set_color(col0); st.set_uv(Vector2(u0_uv, v0_uv)); st.set_uv2(d0); st.add_vertex(p00)
-			st.set_color(col1); st.set_uv(Vector2(u1_uv, v1_uv)); st.set_uv2(d1); st.add_vertex(p11)
-			st.set_color(col0); st.set_uv(Vector2(u1_uv, v0_uv)); st.set_uv2(d0); st.add_vertex(p01)
-
-	# (pas de tangentes : le shader du câble n'a pas de carte de normales)
-	st.generate_normals()
+		var b0: int = i * (ns + 1)
+		var b1: int = b0 + ns + 1
+		for k in range(ns):
+			idx.append_array(PackedInt32Array([b0 + k, b1 + k, b1 + k + 1, b0 + k, b1 + k + 1, b0 + k + 1]))
+	var arr: Array = []
+	arr.resize(Mesh.ARRAY_MAX)
+	arr[Mesh.ARRAY_VERTEX] = vtx
+	arr[Mesh.ARRAY_NORMAL] = nrm
+	arr[Mesh.ARRAY_TEX_UV] = uv
+	arr[Mesh.ARRAY_TEX_UV2] = uv2
+	arr[Mesh.ARRAY_COLOR] = col
+	arr[Mesh.ARRAY_INDEX] = idx
+	var am: ArrayMesh = ArrayMesh.new()
+	am.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
+	am.surface_set_material(0, mat)
 	var mi: MeshInstance3D = MeshInstance3D.new()
 	mi.name = name
-	mi.mesh = MeshMerge.valider_indexe(st)
+	mi.mesh = am
 	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	add_child(mi)
 	return mi
