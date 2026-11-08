@@ -22,7 +22,7 @@ const A_FUNI: float = 0.18
 ## 6 m/s → 296 s.
 const V_EVIT: float = 6.0
 const ECARTEMENT: float = 1.20          # m (OSM, Wikipédia)
-const E_VOIES: float = 2.70             # entraxe mesuré sur la vidéo de descente (rails intérieurs à ≈ 1,51 m, écartement 1,20 m pour l'échelle, 08/11/2026)
+const E_VOIES: float = 2.60             # entraxe mesuré sur la vidéo de descente : médiane 2,62 m de 601 mesures (OpenCV, écartement 1,20 m pour l'échelle ; /mnt/apps_pool/pylab/funival/mesure_evit.py)
 const L_EVITEMENT: float = 200.0        # m (estimé, 150-250 sur les photos)
 const L_RACCORD: float = 45.0           # m, aiguillage passif et courbe en S
 const R_TUNNEL: float = 2.20            # m (diamètre estimé 4-4,5 m)

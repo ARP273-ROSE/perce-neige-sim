@@ -9,7 +9,7 @@ extends VehiculeRemontee
 ## (le véhicule est incliné comme elle par la ligne).
 
 const DEMI_L: float = 16.0              # longueur 30-34 m (estimé)
-const DEMI_LARGEUR: float = 1.20        # 2,40 m : l'entraxe de 2,70 m mesuré à l'évitement exclut les 2,7-2,9 m estimés sur photo
+const DEMI_LARGEUR: float = 1.20        # 2,40 m : l'entraxe de 2,60 m mesuré à l'évitement exclut les 2,7-2,9 m estimés sur photo (croisement serré, vidéo)
 const N_COMP: int = 9                   # ~9 baies par flanc (estimé)
 const PENTE_GRADINS: float = 0.30       # pente pour laquelle les planchers sont de niveau = pente en gare amont (utilisateur, 08/11/2026)
 const H_PLANCHER: float = 1.05          # plancher au milieu d'un compartiment, au-dessus des rails
