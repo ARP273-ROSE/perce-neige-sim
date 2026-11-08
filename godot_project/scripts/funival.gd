@@ -306,27 +306,161 @@ static func mat_funi(nom: String) -> Material:
 			m.albedo_color = Color(1.0, 0.97, 0.88)
 			m.disable_fog = true
 		"beton_clair":
-			m.albedo_color = Color(0.60, 0.63, 0.67)      # poutre, piles (gris clair froid sur photo ; plus chaud, il virait au beige)
-			m.roughness = 0.95
+			# poutre, piles (gris clair froid sur photo ; plus chaud, il virait au beige) : béton banché
+			_matiere(m, _tex_beton(Color(0.60, 0.63, 0.67), 11), 2.5, 0.95)
+		"beton_banche":
+			_matiere(m, _tex_beton(Color(0.56, 0.57, 0.57), 23), 2.5, 0.95)
 		"bois_gris":
-			m.albedo_color = Color(0.64, 0.62, 0.58)      # bardage de bois gris patiné (gare aval)
-			m.roughness = 0.9
+			# bardage de bois gris patiné (gare aval) : lames verticales de 12 cm, veinées
+			_matiere(m, _tex_lames(Color(0.64, 0.62, 0.58), Color(0.30, 0.29, 0.27), 8, 0.12, 31), 0.96, 0.9)
+		"bardage_anthracite":
+			# bâtiment de Bellevarde : bac acier anthracite, nervures tous les 30 cm
+			_matiere(m, _tex_lames(Color(0.21, 0.22, 0.23), Color(0.09, 0.09, 0.10), 4, 0.06, 7), 1.2, 0.55)
+			m.metallic = 0.35
+		"acier_galva":
+			_matiere(m, _tex_bruit(Color(0.58, 0.60, 0.61), 0.06, 0.08, 5), 0.6, 0.45)
+			m.metallic = 0.65
 		"caillebotis_sombre":
 			m.albedo_color = Color(0.22, 0.23, 0.24)
 			m.roughness = 0.75
 			m.metallic = 0.4
 		"rocher":
-			m.albedo_color = Color(0.40, 0.39, 0.37)
-			m.roughness = 1.0
+			_matiere(m, _tex_bruit(Color(0.40, 0.39, 0.37), 0.22, 0.02, 13), 6.0, 1.0)
 		"moellons":
-			m.albedo_color = Color(0.46, 0.47, 0.47)      # maçonnerie de pierre grise (gare amont)
-			m.roughness = 1.0
+			# maçonnerie de pierre grise (gare amont) : moellons irréguliers, joints de mortier clair
+			_matiere(m, _tex_moellons(Color(0.46, 0.47, 0.47), Color(0.66, 0.65, 0.62), 17), 2.0, 1.0)
 		_:
 			m.albedo_color = Color(1, 0, 1)
 	RemonteeKit.verrou.lock()
 	_mats_funi[nom] = m
 	RemonteeKit.verrou.unlock()
 	return m
+
+
+## --- Matières procédurales (gares, viaduc, portail ; demande d'utilisateur du 08/11/2026 : « dessins grossiers par
+## rapport au Perce-Neige ») : textures calculées, plaquées en triplanaire (les boîtes n'ont pas d'UV en mètres),
+## une période de texture tous les `periode` m.
+static func _matiere(m: StandardMaterial3D, tex: Texture2D, periode: float, rugosite: float) -> void:
+	m.albedo_texture = tex
+	m.uv1_triplanar = true
+	m.uv1_scale = Vector3.ONE / periode
+	m.roughness = rugosite
+	m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+
+
+static func _bruit(graine: int, freq: float, taille: int) -> Image:
+	var fn: FastNoiseLite = FastNoiseLite.new()
+	fn.seed = graine
+	fn.frequency = freq
+	fn.fractal_octaves = 4
+	return fn.get_seamless_image(taille, taille)
+
+
+static func _texture(img: Image) -> ImageTexture:
+	img.generate_mipmaps()
+	return ImageTexture.create_from_image(img)
+
+
+## Teinte bruitée : ±amp à grande échelle, ±grain au pixel.
+static func _tex_bruit(c: Color, amp: float, grain: float, graine: int) -> ImageTexture:
+	var n: int = 128
+	var b: Image = _bruit(graine, 0.02, n)
+	var img: Image = Image.create(n, n, false, Image.FORMAT_RGB8)
+	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
+	rng.seed = graine
+	for y in range(n):
+		for x in range(n):
+			var k: float = 1.0 + (b.get_pixel(x, y).r - 0.5) * 2.0 * amp + rng.randf_range(-grain, grain)
+			img.set_pixel(x, y, Color(c.r * k, c.g * k, c.b * k))
+	return _texture(img)
+
+
+## Béton banché : nuances, banches de 2,5 × 1,25 m aux joints sombres, trous d'entretoise (une période = 2,5 m).
+static func _tex_beton(c: Color, graine: int) -> ImageTexture:
+	var n: int = 256
+	var b: Image = _bruit(graine, 0.015, n)
+	var img: Image = Image.create(n, n, false, Image.FORMAT_RGB8)
+	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
+	rng.seed = graine
+	for y in range(n):
+		for x in range(n):
+			var k: float = 1.0 + (b.get_pixel(x, y).r - 0.5) * 0.14 + rng.randf_range(-0.03, 0.03)
+			if y % 128 < 2 or x < 2:
+				k *= 0.80                                   # joints de banche
+			var tx: int = (x + 32) % 64
+			var ty: int = (y + 32) % 64
+			if absi(tx - 32) < 2 and absi(ty - 32) < 2:
+				k *= 0.70                                   # trous d'entretoise
+			img.set_pixel(x, y, Color(c.r * k, c.g * k, c.b * k))
+	return _texture(img)
+
+
+## Lames verticales : n_lames par période, joint de la teinte `joint` sur la fraction `joint_f`, veinage léger.
+static func _tex_lames(c: Color, joint: Color, n_lames: int, joint_f: float, graine: int) -> ImageTexture:
+	var n: int = 128
+	var b: Image = _bruit(graine, 0.05, n)
+	var img: Image = Image.create(n, n, false, Image.FORMAT_RGB8)
+	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
+	rng.seed = graine
+	var teintes: Array = []
+	for _i in range(n_lames):
+		teintes.append(rng.randf_range(0.93, 1.06))
+	var w: float = float(n) / float(n_lames)
+	for y in range(n):
+		for x in range(n):
+			var li: int = int(float(x) / w)
+			var u: float = fmod(float(x), w) / w
+			var col: Color
+			if u < joint_f:
+				col = joint
+			else:
+				var k: float = float(teintes[li]) * (1.0 + (b.get_pixel(li * 7 % n, y).r - 0.5) * 0.08)
+				col = Color(c.r * k, c.g * k, c.b * k)
+			img.set_pixel(x, y, col)
+	return _texture(img)
+
+
+## Moellons : cellules de Voronoï, joints de mortier là où deux cellules se touchent (une période = 2 m).
+static func _tex_moellons(c: Color, mortier: Color, graine: int) -> ImageTexture:
+	var n: int = 256
+	var fn: FastNoiseLite = FastNoiseLite.new()
+	fn.seed = graine
+	fn.noise_type = FastNoiseLite.TYPE_CELLULAR
+	fn.frequency = 0.035
+	fn.cellular_return_type = FastNoiseLite.RETURN_DISTANCE2_SUB
+	var j: Image = fn.get_seamless_image(n, n)
+	fn.cellular_return_type = FastNoiseLite.RETURN_CELL_VALUE
+	var v: Image = fn.get_seamless_image(n, n)
+	var img: Image = Image.create(n, n, false, Image.FORMAT_RGB8)
+	for y in range(n):
+		for x in range(n):
+			if j.get_pixel(x, y).r < 0.06:
+				img.set_pixel(x, y, mortier)
+			else:
+				var k: float = 0.80 + v.get_pixel(x, y).r * 0.40
+				img.set_pixel(x, y, Color(c.r * k, c.g * k, c.b * k))
+	return _texture(img)
+
+
+## Habillage : les matières unies de RemonteeKit (partagées par toutes les lignes) remplacées, sur les pièces du
+## Funival, par ses matières procédurales.
+const HABILLAGE: Dictionary = {
+	"remontee_peinture_anthracite": "bardage_anthracite",
+	"remontee_beton": "beton_banche",
+	"remontee_galva": "acier_galva",
+	"remontee_galva_sombre": "acier_galva",
+	"remontee_pierre": "moellons",
+}
+
+
+func _habiller(racine: Node) -> void:
+	for mi in racine.find_children("*", "MeshInstance3D", true, false):
+		if mi is MeshInstance3D and (mi as MeshInstance3D).mesh != null:
+			var me: Mesh = (mi as MeshInstance3D).mesh
+			for k in range(me.get_surface_count()):
+				var sm: Material = me.surface_get_material(k)
+				if sm != null and HABILLAGE.has(sm.resource_name):
+					(mi as MeshInstance3D).set_surface_override_material(k, mat_funi(HABILLAGE[sm.resource_name]))
 
 
 ## Éclairage cuit du tunnel en (d, angle autour de l'axe ; π = paroi gauche en montant) : un faible fond, et une
@@ -371,6 +505,8 @@ func _construire_corps() -> void:
 	_gare_amont()
 	_butoir_et_poulie()
 	await _pause("funival : gare amont")
+	_habiller(_chantier if _chantier != null else self)
+	await _pause("funival : matières")
 	for k in range(2):
 		var v: VehiculeFunival = VehiculeFunival.new()
 		v.construit_par_la_ligne = true
