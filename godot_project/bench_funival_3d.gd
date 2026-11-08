@@ -17,6 +17,7 @@ var _t_depart: float = -1.0
 var _y_prec: float = 0.0
 var _chute_max: float = 0.0
 var _yaw_amont: float = 0.0
+var _d_pire: float = 0.0
 
 
 func _initialize() -> void:
@@ -28,6 +29,15 @@ func _initialize() -> void:
 func _verif(label: String, cond: bool, detail: String = "") -> void:
 	print("%s %s%s" % ["[OK]  " if cond else "[ECHEC]", label, (" — " + detail) if detail != "" else ""])
 	_ok = _ok and cond
+
+
+func _pente_max_voie() -> float:
+	var m: float = 0.0
+	var d: float = 5.0
+	while d < _lg.longueur_h() - 5.0:
+		m = maxf(m, _lg.pente_voie(d))
+		d += 5.0
+	return m
 
 
 func _fin() -> void:
@@ -78,13 +88,15 @@ func _tick() -> void:
 			while d < L - 5.0:
 				var y: float = _lg.y_voie(d)
 				var sol: float = _lg._sol(0.0, -d)
-				if d > 80.0 and d < _lg.portail_d - 30.0:      # (gare aval : voie en fosse)
+				if d > 120.0 and d < _lg.portail_d - 30.0:     # (gare aval : voie en fosse, puis déblai de sortie de gare)
+					if y - 1.0 - sol < pire_dehors:
+						_d_pire = d
 					pire_dehors = minf(pire_dehors, y - 1.0 - sol)
 				elif d > _lg.portail_d + 30.0 and d < L - 60.0:
 					pire_roche = minf(pire_roche, sol - (y + 2.0 * Funival.R_TUNNEL))
 				d += 2.0
-			print("FUNIVAL L=%.0f m, portail %.0f, voie aval %.1f amont %.1f portail %.1f (repère ligne)" % [L, _lg.portail_d, _lg.y_voie(0.0), _lg.y_voie(L), _lg.y_voie(_lg.portail_d)])
-			_verif("Funival : poutre dehors au-dessus du sol (≥ -1,5 m : déblais courts admis)", pire_dehors > -1.5, "%.2f m" % pire_dehors)
+			print("FUNIVAL L=%.0f m, portail %.0f, voie aval %.1f amont %.1f (gare %.1f) portail %.1f ; montée basse %.0f m, 53 %% jusqu'à d=%.0f ; pente max %.1f %%" % [L, _lg.portail_d, _lg.y_voie(0.0), _lg.y_voie(L), _lg._y_amont, _lg.y_voie(_lg.portail_d), _lg._rampe_bas, _lg._d53_fin, 100.0 * _pente_max_voie()])
+			_verif("Funival : poutre dehors au-dessus du sol (≥ -1,5 m : déblais courts admis)", pire_dehors > -1.5, "%.2f m à d=%.0f" % [pire_dehors, _d_pire])
 			_verif("Funival : tunnel sous la roche", pire_roche > 0.0, "couverture mini %.2f m" % pire_roche)
 			_phase = 2
 			_t = 0.0
@@ -104,7 +116,21 @@ func _tick() -> void:
 					"entraxe mini %.2f m" % _ecart_min)
 				_verif("Funival : trajet de 4 min 40 à 5 min 20 (vidéo de la montée ≈ 304 s ; RM.net 5 min), ralenti dans l'évitement", duree > 280.0 and duree < 320.0, "%.0f s" % duree)
 				var cm: Mesh = _lg._cables.mesh if _lg._cables != null else null
-				_verif("Funival : câbles tracteur et inférieur posés", cm != null and cm.get_surface_count() > 0 and (cm.surface_get_arrays(0)[Mesh.ARRAY_VERTEX] as PackedVector3Array).size() > 100)
+				_verif("Funival : câble inférieur posé", cm != null and cm.get_surface_count() > 0 and (cm.surface_get_arrays(0)[Mesh.ARRAY_VERTEX] as PackedVector3Array).size() > 50)
+				# voie du Perce-Neige : câble tracteur, galets, et rails de TrackBuilder sur ceux où roulent les véhicules
+				var vp: TrackBuilder = _lg.voie_pn
+				_verif("Funival : voie du Perce-Neige (câble toronné, galets)", vp != null and vp.cable_left_segments.size() > 10
+					and vp.galets_count() > 50, "%d tronçons de câble, %d galets" % [vp.cable_left_segments.size() if vp != null else 0,
+					vp.galets_count() if vp != null else 0])
+				var ecart_rails: float = 0.0
+				var dd: float = 5.0
+				while dd < _lg.longueur_h() - 5.0:
+					var xf: Transform3D = _lg.tunnel_pn.transform_at(_lg.s_de_d(dd))
+					var pr: Vector3 = xf.origin - xf.basis.y * Funival.RAIL_SUR_CENTRE
+					var er: Vector3 = pr - Vector3(0.0, _lg.y_voie(dd), -dd)
+					ecart_rails = maxf(ecart_rails, er.length())
+					dd += 10.0
+				_verif("Funival : rails du Perce-Neige sous les roues (≤ 5 cm)", ecart_rails < 0.05, "écart maxi %.3f m" % ecart_rails)
 				_phase = 3
 				_t = 0.0
 			elif _t > 700.0:
