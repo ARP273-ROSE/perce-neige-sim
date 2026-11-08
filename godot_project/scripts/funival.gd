@@ -155,6 +155,12 @@ func _preparer_voie() -> void:
 		dd += 1.0
 	var y0: float = dep - FOSSE_AVAL
 	var dp: float = portail_d
+	# et la poutre (dessous à 1 m sous les rails) jamais sous le terrain le long de la rampe (la forme vient du
+	# baromètre de la montre, un peu plus basse que le relief IGN sur la première moitié)
+	var d2: float = 60.0
+	while d2 < dp - 20.0:
+		y0 = maxf(y0, _sol(0.0, -d2) + 0.2 - (RAMPE_S0 * d2 + RAMPE_K * d2 * d2))
+		d2 += 5.0
 	var yp: float = y0 + RAMPE_S0 * dp + RAMPE_K * dp * dp
 	var s1: float = RAMPE_S0 + 2.0 * RAMPE_K * dp
 	# montée a (s1 → 53 %), palier h, réduction b = L_REDUCTION ; a tel que l'aire sous la pente = dénivelé restant
@@ -412,9 +418,14 @@ func _voie_et_ouvrages() -> void:
 		var y: float = y_voie(d) - 1.0
 		var sol: float = _sol(0.0, -d)
 		if y - sol > 0.2:
+			# chevalet sombre : deux jambes fines écartées vers le bas, entretoise, chevêtre (photos)
 			var h: float = y - sol + 0.6
-			RemonteeKit.boite_en(ouv, Vector3(0.9, h, 0.7), Vector3(0, sol - 0.6 + h * 0.5, -d), "beton")
-			RemonteeKit.boite_en(ouv, Vector3(3.3, 0.45, 1.0), Vector3(0, y - 0.22, -d), "beton")
+			var e: float = 0.9 + h * 0.06
+			for sx in [-1.0, 1.0]:
+				RemonteeKit.poutre(ouv, Vector3(sx * e, sol - 0.6, -d), Vector3(sx * 0.85, y - 0.4, -d), 0.32, 0.45, "peinture_anthracite")
+			if h > 4.0:
+				RemonteeKit.poutre(ouv, Vector3(-e * 0.6 - 0.35, sol + h * 0.45, -d), Vector3(e * 0.6 + 0.35, sol + h * 0.45, -d), 0.18, 0.25, "peinture_anthracite")
+			RemonteeKit.boite_en(ouv, Vector3(2.6, 0.45, 0.8), Vector3(0, y - 0.22, -d), "peinture_anthracite")
 		d += 18.0
 	MeshMerge.merge(ouv, [], "Ouvrage")
 	st = SurfaceTool.new()
