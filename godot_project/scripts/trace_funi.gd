@@ -22,6 +22,18 @@ var decal_evitement: float = 3.50          # décalage latéral maximal de chaqu
 var elargissement_chambre: float = 1.0
 ## Le tube n'est construit qu'à partir de cette abscisse (Funival : portail ; avant, la voie est dehors).
 var tube_debut: float = 0.0
+## Câble et véhicules (TrackBuilder) : tension nominale, masse linéique, raideur, point de l'autre véhicule, attache
+## du câble depuis l'abscisse du véhicule, fond de caisse (culot), pas des galets hors Perce-Neige.
+var tension_dan: float = PNConstants.T_NOMINAL_DAN
+var cable_kg_m: float = PNConstants.CABLE_KG_M
+var cable_ea_n: float = TrainPhysics.CABLE_EA_N
+var miroir_s: float = PNConstants.MIROIR_S
+var attache_ds: float = PNConstants.CAR_LEN_M * 0.5
+var caisse_y: float = -1.16
+var pas_galets: float = 14.6
+## Galets : premier et dernier (hors Perce-Neige, qui a ses repères numérotés).
+var galets_debut: float = 0.0
+var galets_fin: float = 0.0
 ## Profil : fonctions (s) → valeur. Par défaut, SlopeProfile.
 var _pente: Callable = Callable()          # angle de pente (rad)
 var _cap: Callable = Callable()            # cap (degrés)
@@ -58,3 +70,14 @@ func dans_evitement(s: float) -> bool:
 ## calculée par TunnelBuilder).
 func decalage(s: float) -> float:
 	return float(_decal.call(s)) if _decal.is_valid() else -INF
+
+
+## Abscisse de l'autre véhicule quand celui-ci est en s (va-et-vient symétrique).
+func miroir(s: float) -> float:
+	return miroir_s - s
+
+
+## Fin de la voie (dalle, fosse, longrine) : au Perce-Neige, le bord de la fosse de la roue aval de la salle des
+## machines ; ailleurs, le bout de la ligne.
+func fin_voie() -> float:
+	return longueur + MachineRoomBuilder.PIT_S0 if perce_neige else longueur
