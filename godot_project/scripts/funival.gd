@@ -779,14 +779,16 @@ func _butoir_et_poulie() -> void:
 	var L: float = longueur_h()
 	# poulie de renvoi en fosse au bout de la voie, sous le plancher du bâtiment : à 3,2 m au-dessus des rails, son
 	# disque bleu sortait dans le bâtiment de surface, au milieu du pignon (PC, lot 16)
+	# dressée dans le plan de la voie (axe transversal) : le câble arrive dans l'axe par-dessus et repart par-dessous
+	# (remarque du PC, lot 17) ; centre 2,6 m au-delà du bout de la voie, sous le bâtiment, jeu ≥ 0,5 m avec le nez
 	var yp: float = y_voie(L) - 2.2
-	var zp: float = -(L - 0.3)
-	var axe: Basis = Basis(Vector3.RIGHT, PI * 0.5)
+	var zp: float = -(L + 2.4)
+	var axe: Basis = Basis(Vector3.BACK, PI * 0.5)
 	RemonteeKit.cylindre(g, 2.6, 2.6, 0.35, Transform3D(axe, Vector3(0, yp, zp)), "bleu_doppelmayr", 32)
 	RemonteeKit.cylindre(g, 0.55, 0.55, 0.7, Transform3D(axe, Vector3(0, yp, zp)), "rouge_val", 16)
 	for k in range(6):
 		var a2: float = TAU * float(k) / 6.0
-		RemonteeKit.boite(g, Vector3(0.22, 2.2, 0.2), Transform3D(Basis(Vector3.BACK, a2), Vector3(0, yp, zp + 0.25) + Basis(Vector3.BACK, a2) * Vector3(0, 1.3, 0)), "bleu_doppelmayr")
+		RemonteeKit.boite(g, Vector3(0.2, 2.2, 0.22), Transform3D(Basis(Vector3.RIGHT, a2), Vector3(0.25, yp, zp) + Basis(Vector3.RIGHT, a2) * Vector3(0, 1.3, 0)), "bleu_doppelmayr")
 	for sx in [-1.0, 1.0]:
 		RemonteeKit.boite_en(g, Vector3(0.06, 1.1, 0.06), Vector3(sx * 2.8, y_voie(L) + 0.55, zp + 1.6), "galva")
 	RemonteeKit.boite_en(g, Vector3(5.6, 0.05, 0.05), Vector3(0, y_voie(L) + 1.1, zp + 1.6), "galva")
