@@ -2769,6 +2769,10 @@ func _gare_du_skieur() -> int:
 
 ## Le skieur est dans une rame en plein tunnel (loin des deux gares).
 func _skieur_en_tunnel() -> bool:
+	# tunnel du Funival : caméra dans son tube ou sa salle amont
+	var cam_f: Camera3D = get_viewport().get_camera_3d()
+	if Funival.actif != null and is_instance_valid(Funival.actif) and cam_f != null and Funival.actif.souterrain(cam_f.global_position):
+		return true
 	if skieur == null or skieur.support == null:
 		return false
 	var s_r: float = physics.s_render if cabin.is_ancestor_of(skieur.support) else physics.ghost_s_render()
