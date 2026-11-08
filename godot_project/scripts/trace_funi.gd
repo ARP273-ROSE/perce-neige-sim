@@ -32,6 +32,9 @@ var miroir_s: float = PNConstants.MIROIR_S
 var attache_ds: float = PNConstants.CAR_LEN_M * 0.5
 var caisse_y: float = TrackBuilder.CAISSE_Y
 var pas_galets: float = 14.6
+## Galets numérotés hors Perce-Neige : repères [numéro, s] (les autres répartis entre eux au pas le plus régulier
+## possible, comme au Perce-Neige) ; vide : de galets_debut à galets_fin au pas pas_galets.
+var galets_reperes: Array = []
 ## Galets : premier et dernier (hors Perce-Neige, qui a ses repères numérotés).
 var galets_debut: float = 0.0
 var galets_fin: float = 0.0

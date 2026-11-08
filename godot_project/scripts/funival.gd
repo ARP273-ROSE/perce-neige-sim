@@ -654,8 +654,17 @@ func trace_voie() -> TraceFuni:
 	t.miroir_s = s_de_d(_x_quai(true)) + s_de_d(_x_quai(false))
 	t.attache_ds = VehiculeFunival.DEMI_L
 	t.caisse_y = -RAIL_SUR_CENTRE + 0.35
-	t.galets_debut = s_de_d(2.0 * VehiculeFunival.DEMI_L + 4.0)
-	t.galets_fin = s_de_d(L - 2.0 * VehiculeFunival.DEMI_L - 4.0)
+	# supports numérotés (relevé d'utilisateur du 08/11/2026) : 003 au bout du quai aval, côté amont ; 200 à l'entrée du
+	# quai amont ; 204, le dernier avant la roue motrice, au bout du quai amont. 001 et 002 sur le quai aval, au pas du
+	# quai amont (4 intervalles sur sa longueur).
+	var lq: float = 2.0 * VehiculeFunival.DEMI_L + 2.0
+	var s3: float = s_de_d(lq)
+	var s200: float = s_de_d(L - lq)
+	var s204: float = s_de_d(L - 1.0)
+	var pas_q: float = (s204 - s200) / 4.0
+	t.galets_reperes = [[1, s3 - 2.0 * pas_q], [3, s3], [200, s200], [204, s204]]
+	t.galets_debut = s3 - 2.0 * pas_q
+	t.galets_fin = s204
 	t._decal = func(s: float) -> float: return E_VOIES * 0.5 * _t_evit(d_de_s(s))
 	t._pente = func(s: float) -> float: return atan(pente_voie(d_de_s(s)))
 	t._cap = func(_s: float) -> float: return 0.0
