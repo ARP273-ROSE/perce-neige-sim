@@ -262,7 +262,7 @@ func _construire_corps() -> void:
 	H_CABLE_GARE = 0.0
 	_voie_et_ouvrages()
 	await _pause("funival : voie")
-	_tunnel()
+	await _tunnel()
 	await _pause("funival : tunnel")
 	_gare_aval()
 	await _pause("funival : gare aval")
@@ -328,6 +328,9 @@ func _maillage(st: SurfaceTool, m: Material, nom: String, ombre: bool = true) ->
 	mi.mesh = mesh
 	mi.set_meta("portee_loin", true)       # (voie et tunnel : vus de loin, pas des détails à 250 m)
 	mi.set_meta(MeshMerge.SANS_FUSION, true)
+	# (pas de collision en maillage par CollisionsJeu : voie, tunnel et câbles hors d'atteinte ; gradins et salle
+	# ont les leurs, en boîtes)
+	mi.set_meta("sans_collision", true)
 	if not ombre:
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	_enfant(mi)
@@ -416,6 +419,11 @@ func _tunnel() -> void:
 					st.add_vertex(e[0])
 		prec = cour
 		cprec = ccour
+		# (par tranches : sur le fil principal — PWA, sans écran — le tunnel faisait 50 ms d'un bloc, relevé du PC
+		# du 08/11/2026)
+		if k % 80 == 79:
+			await _pause("funival : tunnel")
+	await _pause("funival : tunnel")
 	var gris_rail: Color = Color(0.55, 0.56, 0.58)
 	var radier: Color = Color(0.40, 0.39, 0.37)
 	var teinte := func(c: Color) -> Callable:
@@ -428,6 +436,7 @@ func _tunnel() -> void:
 			_extruder(st, _rail_profil(xr), tr[0], tr[1], 5.0, tr[2], false, teinte.call(gris_rail))
 		_extruder(st, PackedVector2Array([Vector2(-1.0, -0.16), Vector2(1.0, -0.16)]), tr[0], tr[1], 5.0, tr[2], false,
 			teinte.call(radier))
+	await _pause("funival : tunnel")
 	# passerelle-escalier de service le long de la paroi gauche, chemin de câbles au-dessus
 	var cail: Color = Color(0.45, 0.46, 0.47)
 	_extruder(st, PackedVector2Array([Vector2(-R_TUNNEL + 0.15, 0.55), Vector2(-R_TUNNEL + 0.95, 0.55)]), d0, c_ev - h_ev, 5.0,
@@ -450,7 +459,9 @@ func _tunnel() -> void:
 					st.set_color(c2)
 					st.add_vertex(Vector3(v.x, yp + v.y, -dp))
 		dp += 12.0
+	await _pause("funival : tunnel")
 	var tun: MeshInstance3D = _maillage(st, mat_funi("cuit"), "Tunnel", false)
+	await _pause("funival : tunnel")
 	tun.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	# lampes : un hublot tous les ECART_LAMPES m sur la paroi gauche (en montant), à mi-hauteur
 	st = SurfaceTool.new()
@@ -465,6 +476,7 @@ func _tunnel() -> void:
 				st.add_vertex(p + v)
 		d2 += ECART_LAMPES
 	_maillage(st, mat_funi("lampe"), "Lampes", false)
+	await _pause("funival : tunnel")
 	# portail : front de rocher percé, anneau de béton en saillie (huit voussoirs)
 	var por: Node3D = Node3D.new()
 	por.name = "Portail"
@@ -855,6 +867,7 @@ func _refaire_cables() -> void:
 		_cables.name = "CablesFuni"
 		_cables.set_meta("portee_loin", true)
 		_cables.set_meta(MeshMerge.SANS_FUSION, true)
+		_cables.set_meta("sans_collision", true)
 		_cables.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		_enfant(_cables)
 	_cables.mesh = mesh
