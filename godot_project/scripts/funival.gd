@@ -136,6 +136,13 @@ var _pente_haut: PackedFloat32Array = PackedFloat32Array()   # pente tous les 1 
 var _rampe_bas: float = 0.0                                   # montée 29,7 % → 53 % depuis le portail (m en plan)
 var _d53_fin: float = 0.0                                     # fin du palier à 53 % (début de la variation du haut)
 var _s1: float = 0.0
+var _murs_bat: Array = []        # murs du bâtiment de Bellevarde [taille, centre], pour les collisions
+
+
+## Sol du rez-de-chaussée du bâtiment de Bellevarde : au niveau du haut de la rampe des escaliers (le plancher du
+## dernier compartiment la dépassait de 0,14 m — ressaut mesuré par le PC, lot 13).
+func sol_batiment() -> float:
+	return VehiculeFunival.y_plancher_monde(self, longueur_h() - 1.0) - 0.14
 
 
 ## Pente de la voie dans le tunnel et en gare amont, en d (plan).
@@ -165,9 +172,10 @@ func _preparer_voie() -> void:
 		dd += 1.0
 	var y0_g: float = dep - FOSSE_AVAL
 	var y0: float = y0_g
-	# portail : là où la voie entre réellement dans la pente (le haut de l'anneau, ~3,8 m au-dessus des rails, à
-	# fleur du terrain ; le point OSM laissait l'anneau 1,2 m sous le relief et la voie 21 m sous terre avant lui —
-	# captures du PC, 08/11/2026) ; deux passes, la rampe dépendant de la longueur dehors
+	# portail : là où la poutre touche le terrain (rails à 0,3 m sous le sol) ; l'anneau sort alors de ~4 m, dans sa
+	# boîte de béton (photos) ; calé sur « haut de l'anneau à fleur », il ne sortait que de 0,5 m et la poutre
+	# plongeait 8 m dans la neige avant (captures du PC, lots 12 et 13) ; deux passes, la rampe dépendant de la
+	# longueur dehors
 	var dp: float = portail_d
 	for passe in range(2):
 		y0 = y0_g
@@ -178,7 +186,7 @@ func _preparer_voie() -> void:
 			d2 += 5.0
 		var dc: float = 300.0
 		while dc < portail_d + 60.0:
-			if _sol(0.0, -dc) >= y0 + RAMPE_S0 * dc + RAMPE_K * dc * dc + 3.0:
+			if _sol(0.0, -dc) >= y0 + RAMPE_S0 * dc + RAMPE_K * dc * dc - 0.3:
 				break
 			dc += 1.0
 		dp = dc
@@ -606,6 +614,15 @@ func _tunnel() -> void:
 			Transform3D(rot * Basis(Vector3.BACK, b0[4]) * Basis(Vector3.UP, b0[4] * 0.5), c3 + rot * Vector3(b0[0], b0[1], -4.2)), "pierre")
 		mi_r.material_override = mat_funi("rocher")
 		roches.append(mi_r)
+	# boîte de béton du portail (photos : anneau « STVI » dans une boîte carrée) : couvre le tube sur 12 m là où la
+	# roche est mince ; le tube n'a que des faces intérieures
+	var lb: float = 12.0
+	var cb: Vector3 = Vector3(0, y_voie(portail_d + lb * 0.5) - 0.45 + R_TUNNEL * 0.62, -(portail_d + lb * 0.5))
+	var lgb: float = lb / cos(pente) + 0.2
+	var cote: float = 2.0 * (R_TUNNEL + 0.7)
+	for f in [[Vector3(cote, 0.5, lgb), Vector3(0, R_TUNNEL + 0.45, 0)], [Vector3(0.5, cote, lgb), Vector3(-(R_TUNNEL + 0.45), -0.35, 0)],
+			[Vector3(0.5, cote, lgb), Vector3(R_TUNNEL + 0.45, -0.35, 0)]]:
+		RemonteeKit.boite(por, f[0], Transform3D(rot, cb + rot * (f[1] as Vector3)), "beton")
 	MeshMerge.merge(por, roches, "Portail")
 
 
@@ -832,24 +849,45 @@ func _gare_amont() -> void:
 	# bâtiment de surface au débouché (photos ; ~38 m de long, estimé) : volume haut à pignon au-dessus de la salle,
 	# bandeau de fenêtres sous le toit, aile basse à pignon, vitrage en bandeau au rez-de-chaussée, volume de pierre
 	var ys: float = y_voie(L)
+	var ys_sol: float = sol_batiment()
+	_murs_bat.clear()
 	var toits: Array = []
-	# bâtiment creux (murs, toit, porte côté ligne) : plein, il faisait un bloc qu'on ne pouvait que contourner
-	# (captures du PC, lot 12) ; une porte de 3 m dans le pignon aval (+z)
+	# bâtiment creux (murs, plafond, toit) ; dans le pignon aval (+z), une baie de 3 m de haut au débouché de chaque
+	# escalier et un trumeau plein devant la voie (captures du PC, lot 13 : la porte unique était dans l'axe de la
+	# voie, les escaliers butaient sur le mur) ; murs avec collisions (_murs_bat), dalle au niveau du haut des escaliers
+	var W2: float = W + 0.1
+	var baies: Array = [[-(W + LARG_AMONT[0] + 0.2), -W2], [W2, W + LARG_AMONT[1] + 0.2]]
+	var mur := func(taille: Vector3, centre: Vector3, mat: String, solide: bool) -> void:
+		RemonteeKit.boite_en(g, taille, centre, mat)
+		if solide:
+			_murs_bat.append([taille, centre])
 	var murs := func(cx: float, cz: float, larg: float, long_: float, h: float, y0: float, mat: String, porte: bool) -> void:
 		var ep: float = 0.3
+		var solide: bool = mat != "vitrage_sombre"
 		for sx3 in [-1.0, 1.0]:
-			RemonteeKit.boite_en(g, Vector3(ep, h, long_), Vector3(cx + sx3 * (larg - ep) * 0.5, y0 + h * 0.5, cz), mat)
-		RemonteeKit.boite_en(g, Vector3(larg, h, ep), Vector3(cx, y0 + h * 0.5, cz - (long_ - ep) * 0.5), mat)
-		if porte:
-			var lp: float = 3.0
-			var hp: float = minf(3.0, h)
-			var lat: float = (larg - lp) * 0.5
-			for sx3 in [-1.0, 1.0]:
-				RemonteeKit.boite_en(g, Vector3(lat, h, ep), Vector3(cx + sx3 * (lp + lat) * 0.5, y0 + h * 0.5, cz + (long_ - ep) * 0.5), mat)
-			if h > hp:
-				RemonteeKit.boite_en(g, Vector3(lp, h - hp, ep), Vector3(cx, y0 + hp + (h - hp) * 0.5, cz + (long_ - ep) * 0.5), mat)
-		else:
-			RemonteeKit.boite_en(g, Vector3(larg, h, ep), Vector3(cx, y0 + h * 0.5, cz + (long_ - ep) * 0.5), mat)
+			mur.call(Vector3(ep, h, long_), Vector3(cx + sx3 * (larg - ep) * 0.5, y0 + h * 0.5, cz), mat, solide)
+		mur.call(Vector3(larg, h, ep), Vector3(cx, y0 + h * 0.5, cz - (long_ - ep) * 0.5), mat, solide)
+		var zf: float = cz + (long_ - ep) * 0.5
+		if not porte:
+			mur.call(Vector3(larg, h, ep), Vector3(cx, y0 + h * 0.5, zf), mat, solide)
+			return
+		# trumeaux pleins entre les baies, linteaux au-dessus
+		var bords: Array = [cx - larg * 0.5]
+		for b2 in baies:
+			bords.append(cx + float(b2[0]))
+			bords.append(cx + float(b2[1]))
+		bords.append(cx + larg * 0.5)
+		for k4 in range(0, bords.size(), 2):
+			var x0: float = bords[k4]
+			var x1: float = bords[k4 + 1]
+			if x1 - x0 > 0.01:
+				mur.call(Vector3(x1 - x0, h, ep), Vector3((x0 + x1) * 0.5, y0 + h * 0.5, zf), mat, solide)
+		var ybaie: float = ys_sol + 3.0
+		if y0 + h > ybaie:
+			var bas: float = maxf(y0, ybaie)
+			for b2 in baies:
+				var lb2: float = float(b2[1]) - float(b2[0])
+				mur.call(Vector3(lb2, y0 + h - bas, ep), Vector3(cx + (float(b2[0]) + float(b2[1])) * 0.5, (bas + y0 + h) * 0.5, zf), mat, solide)
 	var pignon := func(cx: float, cz: float, larg: float, long_: float, h: float, haut_toit: float, porte: bool) -> void:
 		murs.call(cx, cz, larg, long_, h, ys - 0.5, "peinture_anthracite", porte)
 		murs.call(cx, cz, larg + 0.1, long_ + 0.1, 1.0, ys + 0.7, "vitrage_sombre", porte)
@@ -865,6 +903,8 @@ func _gare_amont() -> void:
 			RemonteeKit.boite_en(g, Vector3(larg * 0.6, haut_toit * 0.6, 0.2), Vector3(cx, ys + h - 0.5 + haut_toit * 0.3, cz + sz2 * long_ * 0.5), "peinture_anthracite")
 	# (au débouché de l'escalier : plus bas, son volume descendait dans la salle et faisait plafond sur le quai)
 	var zs: float = -(L + 10.0)
+	# dalle du rez-de-chaussée (le sol était la neige du relief)
+	RemonteeKit.boite_en(g, Vector3(2.0 * hx + 1.4, 0.3, 21.4), Vector3(0, ys_sol - 0.15, zs), "beton")
 	pignon.call(0.0, zs, 2.0 * hx + 2.0, 22.0, 8.0, 3.2, true)
 	murs.call(0.0, zs, 2.0 * hx + 2.1, 22.1, 0.9, ys + 5.75, "vitrage_sombre", false)     # bandeau sous le toit
 	pignon.call(hx + 7.0, zs - 12.0, 12.0, 16.0, 4.5, 2.2, false)
@@ -975,7 +1015,9 @@ func _collisions_funi() -> void:
 	for sx in [-1.0, 1.0]:
 		var dmil: float = L - L_HALL * 0.5
 		boite.call(Vector3(0.4, 14.0, L_HALL), Vector3(sx * (hx + 0.2), y_voie(dmil) + 3.0, -dmil))
-	boite.call(Vector3(2.0 * hx, 0.4, 10.0), Vector3(0, VehiculeFunival.y_plancher_monde(self, L - 1.0) - 0.2, -(L + 4.0)))
+	boite.call(Vector3(2.0 * hx + 1.4, 0.4, 21.4), Vector3(0, sol_batiment() - 0.2, -(L + 10.0)))
+	for m in _murs_bat:
+		boite.call(m[0], m[1])
 
 
 ## Véhicule sur sa voie, incliné comme elle ; portes et collisions des parois.

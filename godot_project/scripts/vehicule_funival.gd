@@ -94,8 +94,8 @@ func _phares() -> void:
 		sp.light_color = Color(1.0, 0.94, 0.84)      # blanc légèrement chaud (l'ocre saturait la paroi)
 		sp.light_energy = 3.5
 		sp.spot_range = 60.0
-		sp.spot_angle = 30.0
-		sp.spot_attenuation = 1.6
+		sp.spot_angle = 50.0
+		sp.spot_attenuation = 1.0
 		sp.shadow_enabled = false
 		sp.visible = false
 		# SpotLight3D éclaire vers son −Z : vers l'amont tel quel, vers l'aval retourné
