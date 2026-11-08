@@ -79,7 +79,37 @@ func _phases() -> Array:
 	cabine = true
 	places = 272
 	masse = 21840.0
-	return [_caisse, _interieur, _portes_funi, func() -> void: MeshMerge.merge(self, _portes_noeuds(), "Funi")]
+	return [_caisse, _interieur, _portes_funi, _phares, func() -> void: MeshMerge.merge(self, _portes_noeuds() + _phares_l, "Funi")]
+
+
+## Phares : un projecteur chaud à chaque nez (vidéos : parois très éclairées devant le véhicule), sans ombre.
+var _phares_l: Array = []
+
+
+func _phares() -> void:
+	_phares_l.clear()
+	for sz in [-1.0, 1.0]:
+		var sp: SpotLight3D = SpotLight3D.new()
+		sp.name = "Phare_amont" if sz < 0.0 else "Phare_aval"
+		sp.light_color = Color(1.0, 0.84, 0.60)
+		sp.light_energy = 6.0
+		sp.spot_range = 70.0
+		sp.spot_angle = 30.0
+		sp.spot_attenuation = 0.8
+		sp.shadow_enabled = false
+		sp.visible = false
+		# SpotLight3D éclaire vers son −Z : vers l'amont tel quel, vers l'aval retourné
+		sp.transform = Transform3D(Basis.IDENTITY if sz < 0.0 else Basis(Vector3.UP, PI), Vector3(0, 1.4, sz * (DEMI_L + 1.0)))
+		add_child(sp)
+		_phares_l.append(sp)
+
+
+## Allume le phare du côté amont (vers_amont) ou aval ; `oui` faux : éteints.
+func phares(vers_amont: bool, oui: bool) -> void:
+	if _phares_l.size() < 2:
+		return
+	(_phares_l[0] as Node3D).visible = oui and vers_amont
+	(_phares_l[1] as Node3D).visible = oui and not vers_amont
 
 
 func _portes_noeuds() -> Array:
