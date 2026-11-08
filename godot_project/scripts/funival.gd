@@ -676,64 +676,6 @@ func trace_voie() -> TraceFuni:
 	return t
 
 
-## Sous la roche, pas de lumière ambiante (ciel) : paroi et équipements éclairés par les phares et les hublots
-## seulement (le tube gris était presque blanc à bord, 113 à 180 de luminosité contre 18 à 49 au Perce-Neige —
-## captures du PC, lot 19). Matières dupliquées (celles de RollerMesh sont partagées avec le Perce-Neige) ; dehors,
-## sur le viaduc, la voie garde l'ambiance du jour.
-func _assombrir_tunnel() -> void:
-	tunnel_pn.wall_material.disable_ambient_light = true
-	var copies: Dictionary = {}
-	var maillages: Dictionary = {}
-	var sombre := func(m: Material) -> Material:
-		if not (m is StandardMaterial3D):
-			return m
-		if not copies.has(m):
-			var c: StandardMaterial3D = (m as StandardMaterial3D).duplicate()
-			c.disable_ambient_light = true
-			copies[m] = c
-		return copies[m]
-	var pile: Array = [[voie_pn, Transform3D.IDENTITY]]
-	while not pile.is_empty():
-		var e: Array = pile.pop_back()
-		var n: Node = e[0]
-		var xf: Transform3D = e[1]
-		for c in n.get_children():
-			if c is Node3D:
-				pile.append([c, xf * (c as Node3D).transform])
-		var gi: GeometryInstance3D = n as GeometryInstance3D
-		if gi == null:
-			continue
-		var centre: Vector3 = xf * gi.get_aabb().get_center()
-		if -centre.z < portail_d + 2.0:
-			continue
-		if gi is MeshInstance3D and (gi as MeshInstance3D).mesh != null:
-			var mi: MeshInstance3D = gi
-			for k in range(mi.mesh.get_surface_count()):
-				var sm: Material = mi.get_surface_override_material(k)
-				if sm == null:
-					sm = mi.mesh.surface_get_material(k)
-				if sm != null:
-					mi.set_surface_override_material(k, sombre.call(sm))
-		elif gi is MultiMeshInstance3D and (gi as MultiMeshInstance3D).multimesh != null:
-			var mm: MultiMesh = (gi as MultiMeshInstance3D).multimesh
-			if mm.mesh == null:
-				continue
-			if gi.material_override != null:
-				gi.material_override = sombre.call(gi.material_override)
-				continue
-			if not maillages.has(mm.mesh):
-				var me: Mesh = mm.mesh.duplicate()
-				if me is PrimitiveMesh:
-					(me as PrimitiveMesh).material = sombre.call((me as PrimitiveMesh).material)
-				elif me is ArrayMesh:
-					for k in range(me.get_surface_count()):
-						var sm2: Material = me.surface_get_material(k)
-						if sm2 != null:
-							(me as ArrayMesh).surface_set_material(k, sombre.call(sm2))
-				maillages[mm.mesh] = me
-			mm.mesh = maillages[mm.mesh]
-
-
 ## Voie et tunnel du Perce-Neige : vus de loin (pas des détails à 250 m), sans collision en maillage.
 func _marquer_voie(n: Node) -> void:
 	n.set_meta("portee_loin", true)
@@ -818,7 +760,6 @@ func _tunnel() -> void:
 	voie_pn.walkway_side = -1.0            # passerelle-escalier à gauche en montant (vidéos)
 	voie_pn.walkway_s0 = t.tube_debut
 	await voie_pn.build_par_etapes(tunnel_pn, _pause.bind("funival : voie"))
-	_assombrir_tunnel()
 	for n in [tunnel_pn, voie_pn]:
 		_marquer_voie(n)
 		_enfant(n)
