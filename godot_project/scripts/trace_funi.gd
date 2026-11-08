@@ -30,7 +30,7 @@ var cable_kg_m: float = PNConstants.CABLE_KG_M
 var cable_ea_n: float = TrainPhysics.CABLE_EA_N
 var miroir_s: float = PNConstants.MIROIR_S
 var attache_ds: float = PNConstants.CAR_LEN_M * 0.5
-var caisse_y: float = -1.16
+var caisse_y: float = TrackBuilder.CAISSE_Y
 var pas_galets: float = 14.6
 ## Galets : premier et dernier (hors Perce-Neige, qui a ses repères numérotés).
 var galets_debut: float = 0.0
