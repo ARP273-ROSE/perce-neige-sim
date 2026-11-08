@@ -348,58 +348,68 @@ static func _matiere(m: StandardMaterial3D, tex: Texture2D, periode: float, rugo
 	m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
 
 
-static func _bruit(graine: int, freq: float, taille: int) -> Image:
+## (calculées dans des tableaux d'octets : en set_pixel, les 7 textures prenaient 132 ms au PC — relevé du lot 19)
+static func _bruit(graine: int, freq: float, taille: int) -> PackedByteArray:
 	var fn: FastNoiseLite = FastNoiseLite.new()
 	fn.seed = graine
 	fn.frequency = freq
 	fn.fractal_octaves = 4
-	return fn.get_seamless_image(taille, taille)
+	var img: Image = fn.get_seamless_image(taille, taille)
+	img.convert(Image.FORMAT_L8)
+	return img.get_data()
 
 
-static func _texture(img: Image) -> ImageTexture:
+static func _texture(n: int, px: PackedByteArray) -> ImageTexture:
+	var img: Image = Image.create_from_data(n, n, false, Image.FORMAT_RGB8, px)
 	img.generate_mipmaps()
 	return ImageTexture.create_from_image(img)
+
+
+static func _poser(px: PackedByteArray, i: int, c: Color, k: float) -> void:
+	px[i * 3] = clampi(int(c.r * k * 255.0), 0, 255)
+	px[i * 3 + 1] = clampi(int(c.g * k * 255.0), 0, 255)
+	px[i * 3 + 2] = clampi(int(c.b * k * 255.0), 0, 255)
 
 
 ## Teinte bruitée : ±amp à grande échelle, ±grain au pixel.
 static func _tex_bruit(c: Color, amp: float, grain: float, graine: int) -> ImageTexture:
 	var n: int = 128
-	var b: Image = _bruit(graine, 0.02, n)
-	var img: Image = Image.create(n, n, false, Image.FORMAT_RGB8)
+	var b: PackedByteArray = _bruit(graine, 0.02, n)
+	var px: PackedByteArray = PackedByteArray()
+	px.resize(n * n * 3)
 	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
 	rng.seed = graine
-	for y in range(n):
-		for x in range(n):
-			var k: float = 1.0 + (b.get_pixel(x, y).r - 0.5) * 2.0 * amp + rng.randf_range(-grain, grain)
-			img.set_pixel(x, y, Color(c.r * k, c.g * k, c.b * k))
-	return _texture(img)
+	for i in range(n * n):
+		_poser(px, i, c, 1.0 + (float(b[i]) / 255.0 - 0.5) * 2.0 * amp + rng.randf_range(-grain, grain))
+	return _texture(n, px)
 
 
 ## Béton banché : nuances, banches de 2,5 × 1,25 m aux joints sombres, trous d'entretoise (une période = 2,5 m).
 static func _tex_beton(c: Color, graine: int) -> ImageTexture:
 	var n: int = 256
-	var b: Image = _bruit(graine, 0.015, n)
-	var img: Image = Image.create(n, n, false, Image.FORMAT_RGB8)
+	var b: PackedByteArray = _bruit(graine, 0.015, n)
+	var px: PackedByteArray = PackedByteArray()
+	px.resize(n * n * 3)
 	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
 	rng.seed = graine
 	for y in range(n):
 		for x in range(n):
-			var k: float = 1.0 + (b.get_pixel(x, y).r - 0.5) * 0.14 + rng.randf_range(-0.03, 0.03)
+			var i: int = y * n + x
+			var k: float = 1.0 + (float(b[i]) / 255.0 - 0.5) * 0.14 + rng.randf_range(-0.03, 0.03)
 			if y % 128 < 2 or x < 2:
 				k *= 0.80                                   # joints de banche
-			var tx: int = (x + 32) % 64
-			var ty: int = (y + 32) % 64
-			if absi(tx - 32) < 2 and absi(ty - 32) < 2:
+			if absi((x + 32) % 64 - 32) < 2 and absi((y + 32) % 64 - 32) < 2:
 				k *= 0.70                                   # trous d'entretoise
-			img.set_pixel(x, y, Color(c.r * k, c.g * k, c.b * k))
-	return _texture(img)
+			_poser(px, i, c, k)
+	return _texture(n, px)
 
 
 ## Lames verticales : n_lames par période, joint de la teinte `joint` sur la fraction `joint_f`, veinage léger.
 static func _tex_lames(c: Color, joint: Color, n_lames: int, joint_f: float, graine: int) -> ImageTexture:
 	var n: int = 128
-	var b: Image = _bruit(graine, 0.05, n)
-	var img: Image = Image.create(n, n, false, Image.FORMAT_RGB8)
+	var b: PackedByteArray = _bruit(graine, 0.05, n)
+	var px: PackedByteArray = PackedByteArray()
+	px.resize(n * n * 3)
 	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
 	rng.seed = graine
 	var teintes: Array = []
@@ -409,15 +419,11 @@ static func _tex_lames(c: Color, joint: Color, n_lames: int, joint_f: float, gra
 	for y in range(n):
 		for x in range(n):
 			var li: int = int(float(x) / w)
-			var u: float = fmod(float(x), w) / w
-			var col: Color
-			if u < joint_f:
-				col = joint
+			if fmod(float(x), w) / w < joint_f:
+				_poser(px, y * n + x, joint, 1.0)
 			else:
-				var k: float = float(teintes[li]) * (1.0 + (b.get_pixel(li * 7 % n, y).r - 0.5) * 0.08)
-				col = Color(c.r * k, c.g * k, c.b * k)
-			img.set_pixel(x, y, col)
-	return _texture(img)
+				_poser(px, y * n + x, c, float(teintes[li]) * (1.0 + (float(b[y * n + li * 7 % n]) / 255.0 - 0.5) * 0.08))
+	return _texture(n, px)
 
 
 ## Moellons : cellules de Voronoï, joints de mortier là où deux cellules se touchent (une période = 2 m).
@@ -428,18 +434,21 @@ static func _tex_moellons(c: Color, mortier: Color, graine: int) -> ImageTexture
 	fn.noise_type = FastNoiseLite.TYPE_CELLULAR
 	fn.frequency = 0.035
 	fn.cellular_return_type = FastNoiseLite.RETURN_DISTANCE2_SUB
-	var j: Image = fn.get_seamless_image(n, n)
+	var ji: Image = fn.get_seamless_image(n, n)
+	ji.convert(Image.FORMAT_L8)
+	var j: PackedByteArray = ji.get_data()
 	fn.cellular_return_type = FastNoiseLite.RETURN_CELL_VALUE
-	var v: Image = fn.get_seamless_image(n, n)
-	var img: Image = Image.create(n, n, false, Image.FORMAT_RGB8)
-	for y in range(n):
-		for x in range(n):
-			if j.get_pixel(x, y).r < 0.06:
-				img.set_pixel(x, y, mortier)
-			else:
-				var k: float = 0.80 + v.get_pixel(x, y).r * 0.40
-				img.set_pixel(x, y, Color(c.r * k, c.g * k, c.b * k))
-	return _texture(img)
+	var vi: Image = fn.get_seamless_image(n, n)
+	vi.convert(Image.FORMAT_L8)
+	var v: PackedByteArray = vi.get_data()
+	var px: PackedByteArray = PackedByteArray()
+	px.resize(n * n * 3)
+	for i in range(n * n):
+		if j[i] < 15:
+			_poser(px, i, mortier, 1.0)
+		else:
+			_poser(px, i, c, 0.80 + float(v[i]) / 255.0 * 0.40)
+	return _texture(n, px)
 
 
 ## Habillage : les matières unies de RemonteeKit (partagées par toutes les lignes) remplacées, sur les pièces du
@@ -667,6 +676,64 @@ func trace_voie() -> TraceFuni:
 	return t
 
 
+## Sous la roche, pas de lumière ambiante (ciel) : paroi et équipements éclairés par les phares et les hublots
+## seulement (le tube gris était presque blanc à bord, 113 à 180 de luminosité contre 18 à 49 au Perce-Neige —
+## captures du PC, lot 19). Matières dupliquées (celles de RollerMesh sont partagées avec le Perce-Neige) ; dehors,
+## sur le viaduc, la voie garde l'ambiance du jour.
+func _assombrir_tunnel() -> void:
+	tunnel_pn.wall_material.disable_ambient_light = true
+	var copies: Dictionary = {}
+	var maillages: Dictionary = {}
+	var sombre := func(m: Material) -> Material:
+		if not (m is StandardMaterial3D):
+			return m
+		if not copies.has(m):
+			var c: StandardMaterial3D = (m as StandardMaterial3D).duplicate()
+			c.disable_ambient_light = true
+			copies[m] = c
+		return copies[m]
+	var pile: Array = [[voie_pn, Transform3D.IDENTITY]]
+	while not pile.is_empty():
+		var e: Array = pile.pop_back()
+		var n: Node = e[0]
+		var xf: Transform3D = e[1]
+		for c in n.get_children():
+			if c is Node3D:
+				pile.append([c, xf * (c as Node3D).transform])
+		var gi: GeometryInstance3D = n as GeometryInstance3D
+		if gi == null:
+			continue
+		var centre: Vector3 = xf * gi.get_aabb().get_center()
+		if -centre.z < portail_d + 2.0:
+			continue
+		if gi is MeshInstance3D and (gi as MeshInstance3D).mesh != null:
+			var mi: MeshInstance3D = gi
+			for k in range(mi.mesh.get_surface_count()):
+				var sm: Material = mi.get_surface_override_material(k)
+				if sm == null:
+					sm = mi.mesh.surface_get_material(k)
+				if sm != null:
+					mi.set_surface_override_material(k, sombre.call(sm))
+		elif gi is MultiMeshInstance3D and (gi as MultiMeshInstance3D).multimesh != null:
+			var mm: MultiMesh = (gi as MultiMeshInstance3D).multimesh
+			if mm.mesh == null:
+				continue
+			if gi.material_override != null:
+				gi.material_override = sombre.call(gi.material_override)
+				continue
+			if not maillages.has(mm.mesh):
+				var me: Mesh = mm.mesh.duplicate()
+				if me is PrimitiveMesh:
+					(me as PrimitiveMesh).material = sombre.call((me as PrimitiveMesh).material)
+				elif me is ArrayMesh:
+					for k in range(me.get_surface_count()):
+						var sm2: Material = me.surface_get_material(k)
+						if sm2 != null:
+							(me as ArrayMesh).surface_set_material(k, sombre.call(sm2))
+				maillages[mm.mesh] = me
+			mm.mesh = maillages[mm.mesh]
+
+
 ## Voie et tunnel du Perce-Neige : vus de loin (pas des détails à 250 m), sans collision en maillage.
 func _marquer_voie(n: Node) -> void:
 	n.set_meta("portee_loin", true)
@@ -751,6 +818,7 @@ func _tunnel() -> void:
 	voie_pn.walkway_side = -1.0            # passerelle-escalier à gauche en montant (vidéos)
 	voie_pn.walkway_s0 = t.tube_debut
 	await voie_pn.build_par_etapes(tunnel_pn, _pause.bind("funival : voie"))
+	_assombrir_tunnel()
 	for n in [tunnel_pn, voie_pn]:
 		_marquer_voie(n)
 		_enfant(n)
@@ -996,6 +1064,39 @@ func _gare_amont() -> void:
 	var clair := func(_d: float, j: int) -> Color:
 		return Color(0.80, 0.80, 0.78) if j == 1 or j == 2 else Color(0.62, 0.61, 0.58)
 	_extruder(st, salle, L - L_HALL, L, 2.5, -1, false, clair, true)      # (fermée par le pignon du bâtiment, à L)
+	# voile d'about : ferme la salle autour de la bouche du tube (on voyait le ciel et la neige autour — PC, lot 19).
+	# Coupe verticale du tube incliné : ellipse de demi-axes R et R / cos(pente), centrée RAIL_SUR_CENTRE / cos au-dessus
+	# des rails.
+	var d0: float = L - L_HALL
+	var a0: float = atan(pente_voie(d0))
+	var y0r: float = y_voie(d0)
+	var yc: float = y0r + RAIL_SUR_CENTRE / cos(a0)
+	var rv: float = R_TUNNEL / cos(a0)
+	var n_v: int = 40
+	var bord := func(th: float) -> Vector2:
+		var dx: float = cos(th)
+		var dy: float = sin(th)
+		var t: float = INF
+		if absf(dx) > 1e-5:
+			t = minf(t, hx / absf(dx))
+		if dy > 1e-5:
+			t = minf(t, (y0r + 6.5 - yc) / dy)
+		elif dy < -1e-5:
+			t = minf(t, (yc - (y0r - 0.6)) / -dy)
+		return Vector2(dx * t, yc + dy * t)
+	var dedans := func(th: float) -> Vector2:
+		return Vector2(cos(th) * R_TUNNEL, maxf(yc + sin(th) * rv, y0r - 0.6))
+	st.set_color(Color(0.62, 0.61, 0.58))
+	for k in range(n_v):
+		var th0: float = TAU * float(k) / float(n_v)
+		var th1: float = TAU * float(k + 1) / float(n_v)
+		var e0: Vector2 = bord.call(th0)
+		var e1: Vector2 = bord.call(th1)
+		var i0: Vector2 = dedans.call(th0)
+		var i1: Vector2 = dedans.call(th1)
+		for tri in [[i0, e0, e1], [i0, e1, i1], [i0, e1, e0], [i0, i1, e1]]:
+			for v in tri:
+				st.add_vertex(Vector3((v as Vector2).x, (v as Vector2).y, -d0))
 	# (dalle, blochets et rails : TrackBuilder, jusqu'au bout de la voie)
 	_maillage(st, mat_funi("cuit"), "SalleAmont", false)
 	for k in range(n):
@@ -1409,6 +1510,8 @@ func _maj_voie_pn(delta: float) -> void:
 	voie_pn.update_cable_visibility(s0, s1)
 	voie_pn.update_cable_phase(s0, s1, -1.0)
 	var s_cam: float = s0
+	if _chantier != null or OS.get_thread_caller_id() != OS.get_main_thread_id():
+		return                      # (pendant la construction, sur son fil : ni caméra ni maillages vivants)
 	var vp: Viewport = get_viewport()
 	var cam: Camera3D = vp.get_camera_3d() if vp != null else null
 	if cam != null and is_inside_tree():
