@@ -128,18 +128,14 @@ const PENTE_MAX: float = 0.53             # fiche (funiculaires-france.fr)
 ## une seule valeur : 30 % (utilisateur, 08/11/2026).
 const PENTE_GARE_AMONT: float = VehiculeFunival.PENTE_GRADINS
 const L_QUAI_AMONT: float = 35.0          # en plan, à PENTE_GARE_AMONT
-## Haut du tracé : la variation de pente du haut du Perce-Neige (SlopeProfile.SLOPE_PROFILE, du quai de la gare haute
-## vers l'aval : 10 % → 29,5 %), mise à l'échelle de 30 % → 53 % (demande d'utilisateur, 08/11/2026).
-## [s le long de la pente au Perce-Neige, pente] ; calcul de contrôle : /mnt/apps_pool/sage/funival/haut.sage.
-const VARIATION_HAUT_PN: Array = [[3477.53, 0.10], [3420.52, 0.18], [3368.52, 0.27], [3240.52, 0.28], [3040.52, 0.29], [2440.52, 0.295]]
+## Haut du tracé : MÊME DÉRIVÉE de pente que le haut du Perce-Neige (SlopeProfile.SLOPE_PROFILE : sous le quai de la
+## gare haute, 10 % → 18 % sur 57,01 m puis 18 % → 27 % sur 52 m le long de la pente), depuis la sortie du quai amont,
+## taux prolongé jusqu'à 53 % (demande d'utilisateur, 08/11/2026) : 144 m. Contrôle : /mnt/apps_pool/sage/funival/haut2.sage.
+const TAUX_HAUT_PN: Array = [[0.08 / 57.01, 57.01], [0.09 / 52.0, 52.0]]   # [points par mètre de pente, longueur]
 var _pente_haut: PackedFloat32Array = PackedFloat32Array()   # pente tous les 1 m en plan sous le quai amont
 var _rampe_bas: float = 0.0                                   # montée 29,7 % → 53 % depuis le portail (m en plan)
 var _d53_fin: float = 0.0                                     # fin du palier à 53 % (début de la variation du haut)
 var _s1: float = 0.0
-
-
-static func _echelle_haut(g: float) -> float:
-	return PENTE_GARE_AMONT + (g - 0.10) / (0.295 - 0.10) * (PENTE_MAX - PENTE_GARE_AMONT)
 
 
 ## Pente de la voie dans le tunnel et en gare amont, en d (plan).
@@ -179,25 +175,25 @@ func _preparer_voie() -> void:
 	_y_portail = yp
 	# variation du haut, descendue depuis le bas du quai amont : pente tous les 1 m en plan, et dénivelé
 	_pente_haut = PackedFloat32Array()
-	var s_pn: float = VARIATION_HAUT_PN[0][0]
+	var pt: float = PENTE_GARE_AMONT
 	var u: float = 0.0
 	var chute: float = PENTE_GARE_AMONT * L_QUAI_AMONT
-	var i: int = 0
+	var k_t: int = 0
+	var reste_t: float = float(TAUX_HAUT_PN[0][1])
 	var u_suiv: float = 0.0
-	while s_pn > VARIATION_HAUT_PN[VARIATION_HAUT_PN.size() - 1][0]:
-		while i + 1 < VARIATION_HAUT_PN.size() and s_pn <= float(VARIATION_HAUT_PN[i + 1][0]):
-			i += 1
-		var a0: Array = VARIATION_HAUT_PN[i]
-		var b0: Array = VARIATION_HAUT_PN[mini(i + 1, VARIATION_HAUT_PN.size() - 1)]
-		var g: float = lerpf(float(a0[1]), float(b0[1]), (s_pn - float(a0[0])) / minf(float(b0[0]) - float(a0[0]), -0.001))
-		var pt: float = _echelle_haut(g)
-		var du: float = 0.5 / sqrt(1.0 + pt * pt)
+	while pt < PENTE_MAX:
+		var r_t: float = float(TAUX_HAUT_PN[mini(k_t, TAUX_HAUT_PN.size() - 1)][0])
+		reste_t -= 0.25
+		if reste_t <= 0.0 and k_t + 1 < TAUX_HAUT_PN.size():
+			k_t += 1
+			reste_t = float(TAUX_HAUT_PN[k_t][1])
+		var du: float = 0.25 / sqrt(1.0 + pt * pt)
 		while u >= u_suiv:
 			_pente_haut.append(pt)
 			u_suiv += 1.0
 		u += du
 		chute += pt * du
-		s_pn -= 0.5
+		pt = minf(pt + r_t * 0.25, PENTE_MAX)
 	_d53_fin = L - L_QUAI_AMONT - u
 	# montée basse 29,7 % → 53 % depuis le portail, longueur telle que le profil rejoigne la sortie connue
 	var y53_fin: float = _y_amont - chute
