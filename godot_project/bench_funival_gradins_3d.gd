@@ -238,4 +238,22 @@ func _tick() -> void:
 				_verif("Funival : on monte le quai de Bellevarde à pied, jusqu'en haut", g2 > haut2 - 1.5,
 					"+%.1f m en 30 s (haut du quai +%.1f), arrêté à d=%.0f x=%.1f, %s" % [g2, haut2, -loc2.z, loc2.x, sk.debug_marche])
 				_verif("Funival : sans chute sur le quai amont", _chute_max < 0.25, "plus forte descente par image %.2f m" % _chute_max)
+				_phase = 13
+				_t = 0.0
+		13:
+			# du milieu du bâtiment de Bellevarde, on sort à pied vers les pistes par la porte du pignon du fond
+			var L3: float = _lg.longueur_h()
+			var p3: Vector3 = _lg.global_transform * Vector3(0.0, _lg.sol_batiment() + 0.3, -(L3 + 11.0))
+			if _t < 1.5 / 60.0:
+				sk.activer(p3, 0.0)
+				sk.dernier_sol = p3
+				rm._repos = 60.0
+			if _t > 2.0:
+				sk.touches_ext = 1
+				sk.cam_yaw = _yaw_amont
+			if _t > 14.0:
+				sk.touches_ext = 0
+				var loc3: Vector3 = _lg.global_transform.affine_inverse() * sk.global_position
+				_verif("Funival : on sort du bâtiment de Bellevarde par la porte du fond", -loc3.z > L3 + 23.0,
+					"arrêté à d=%.1f (fond à %.1f) x=%.1f" % [-loc3.z, L3 + 22.0, loc3.x])
 				_fin()

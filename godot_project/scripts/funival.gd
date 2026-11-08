@@ -861,33 +861,43 @@ func _gare_amont() -> void:
 		RemonteeKit.boite_en(g, taille, centre, mat)
 		if solide:
 			_murs_bat.append([taille, centre])
+	# une face de mur le long de x (pignons) ou de z (long-pans), percée d'ouvertures [début, fin] de 3 m de haut
+	var face := func(le_long_x: bool, fixe: float, a0: float, a1: float, ouv: Array, h: float, y0: float, mat: String, solide: bool) -> void:
+		var ep: float = 0.3
+		var seg := func(u0: float, u1: float, yb: float, yh: float) -> void:
+			if u1 - u0 < 0.01 or yh - yb < 0.01:
+				return
+			var t: Vector3 = Vector3(u1 - u0, yh - yb, ep) if le_long_x else Vector3(ep, yh - yb, u1 - u0)
+			var c: Vector3 = Vector3((u0 + u1) * 0.5, (yb + yh) * 0.5, fixe) if le_long_x else Vector3(fixe, (yb + yh) * 0.5, (u0 + u1) * 0.5)
+			mur.call(t, c, mat, solide)
+		var u: float = a0
+		var ybaie: float = maxf(y0, ys_sol + 3.0)
+		for o in ouv:
+			seg.call(u, float(o[0]), y0, y0 + h)
+			seg.call(float(o[0]), float(o[1]), ybaie, y0 + h)      # linteau
+			u = float(o[1])
+		seg.call(u, a1, y0, y0 + h)
+	# porte : baies au débouché des escaliers dans le pignon aval (trumeau plein devant la voie), et deux portes vers
+	# les pistes (pignon du fond, long-pan gauche) — sans elles on ne ressortait plus (PC, lot 14)
 	var murs := func(cx: float, cz: float, larg: float, long_: float, h: float, y0: float, mat: String, porte: bool) -> void:
 		var ep: float = 0.3
 		var solide: bool = mat != "vitrage_sombre"
-		for sx3 in [-1.0, 1.0]:
-			mur.call(Vector3(ep, h, long_), Vector3(cx + sx3 * (larg - ep) * 0.5, y0 + h * 0.5, cz), mat, solide)
-		mur.call(Vector3(larg, h, ep), Vector3(cx, y0 + h * 0.5, cz - (long_ - ep) * 0.5), mat, solide)
-		var zf: float = cz + (long_ - ep) * 0.5
-		if not porte:
-			mur.call(Vector3(larg, h, ep), Vector3(cx, y0 + h * 0.5, zf), mat, solide)
-			return
-		# trumeaux pleins entre les baies, linteaux au-dessus
-		var bords: Array = [cx - larg * 0.5]
-		for b2 in baies:
-			bords.append(cx + float(b2[0]))
-			bords.append(cx + float(b2[1]))
-		bords.append(cx + larg * 0.5)
-		for k4 in range(0, bords.size(), 2):
-			var x0: float = bords[k4]
-			var x1: float = bords[k4 + 1]
-			if x1 - x0 > 0.01:
-				mur.call(Vector3(x1 - x0, h, ep), Vector3((x0 + x1) * 0.5, y0 + h * 0.5, zf), mat, solide)
-		var ybaie: float = ys_sol + 3.0
-		if y0 + h > ybaie:
-			var bas: float = maxf(y0, ybaie)
+		var xg: float = cx - larg * 0.5
+		var xd: float = cx + larg * 0.5
+		var zf: float = cz + long_ * 0.5
+		var zb: float = cz - long_ * 0.5
+		var av: Array = []
+		var fond: Array = []
+		var gauche: Array = []
+		if porte:
 			for b2 in baies:
-				var lb2: float = float(b2[1]) - float(b2[0])
-				mur.call(Vector3(lb2, y0 + h - bas, ep), Vector3(cx + (float(b2[0]) + float(b2[1])) * 0.5, (bas + y0 + h) * 0.5, zf), mat, solide)
+				av.append([cx + float(b2[0]), cx + float(b2[1])])
+			fond = [[cx - 1.5, cx + 1.5]]
+			gauche = [[cz - 1.5, cz + 1.5]]
+		face.call(true, zf - ep * 0.5, xg, xd, av, h, y0, mat, solide)
+		face.call(true, zb + ep * 0.5, xg, xd, fond, h, y0, mat, solide)
+		face.call(false, xg + ep * 0.5, zb + ep, zf - ep, gauche, h, y0, mat, solide)
+		face.call(false, xd - ep * 0.5, zb + ep, zf - ep, [], h, y0, mat, solide)
 	var pignon := func(cx: float, cz: float, larg: float, long_: float, h: float, haut_toit: float, porte: bool) -> void:
 		murs.call(cx, cz, larg, long_, h, ys - 0.5, "peinture_anthracite", porte)
 		murs.call(cx, cz, larg + 0.1, long_ + 0.1, 1.0, ys + 0.7, "vitrage_sombre", porte)
@@ -902,9 +912,10 @@ func _gare_amont() -> void:
 		for sz2 in [-1.0, 1.0]:
 			RemonteeKit.boite_en(g, Vector3(larg * 0.6, haut_toit * 0.6, 0.2), Vector3(cx, ys + h - 0.5 + haut_toit * 0.3, cz + sz2 * long_ * 0.5), "peinture_anthracite")
 	# (au débouché de l'escalier : plus bas, son volume descendait dans la salle et faisait plafond sur le quai)
-	var zs: float = -(L + 10.0)
+	# pignon aval 1 m au-delà du bout de la voie : le nez arrondi du véhicule à quai dépassait dans le bâtiment (PC, lot 14)
+	var zs: float = -(L + 11.0)
 	# dalle du rez-de-chaussée (le sol était la neige du relief)
-	RemonteeKit.boite_en(g, Vector3(2.0 * hx + 1.4, 0.3, 21.4), Vector3(0, ys_sol - 0.15, zs), "beton")
+	RemonteeKit.boite_en(g, Vector3(2.0 * hx + 1.4, 0.3, 21.7), Vector3(0, ys_sol - 0.15, zs), "beton")
 	pignon.call(0.0, zs, 2.0 * hx + 2.0, 22.0, 8.0, 3.2, true)
 	murs.call(0.0, zs, 2.0 * hx + 2.1, 22.1, 0.9, ys + 5.75, "vitrage_sombre", false)     # bandeau sous le toit
 	pignon.call(hx + 7.0, zs - 12.0, 12.0, 16.0, 4.5, 2.2, false)
@@ -1015,7 +1026,7 @@ func _collisions_funi() -> void:
 	for sx in [-1.0, 1.0]:
 		var dmil: float = L - L_HALL * 0.5
 		boite.call(Vector3(0.4, 14.0, L_HALL), Vector3(sx * (hx + 0.2), y_voie(dmil) + 3.0, -dmil))
-	boite.call(Vector3(2.0 * hx + 1.4, 0.4, 21.4), Vector3(0, sol_batiment() - 0.2, -(L + 10.0)))
+	boite.call(Vector3(2.0 * hx + 1.4, 0.4, 22.6), Vector3(0, sol_batiment() - 0.2, -(L + 10.5)))     # (de L − 0,8 à L + 21,8 ; le bâtiment va de L à L + 22)
 	for m in _murs_bat:
 		boite.call(m[0], m[1])
 
