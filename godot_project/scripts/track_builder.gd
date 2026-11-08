@@ -1151,14 +1151,6 @@ func _build_rail_chunk(
 	rail_mat: StandardMaterial3D, rail_top_mat: StandardMaterial3D,
 	s_start: float, s_end: float, side: float, hg_signed: float, name: String,
 ) -> void:
-	var st_rail: SurfaceTool = SurfaceTool.new()
-	st_rail.begin(Mesh.PRIMITIVE_TRIANGLES)
-	st_rail.set_material(rail_mat)
-
-	var st_top: SurfaceTool = SurfaceTool.new()
-	st_top.begin(Mesh.PRIMITIVE_TRIANGLES)
-	st_top.set_material(rail_top_mat)
-
 	# Offsets verticaux profil UIC-60 simplifié.
 	# Le patin du rail repose sur le HAUT des traverses, pas dans la dalle.
 	# Sleeper top = floor_y_local + slab_thickness + sleeper_height − 0.01
@@ -1178,48 +1170,26 @@ func _build_rail_chunk(
 
 	var s_list: Array = _adaptive_s_list(s_start, s_end, side)
 
-	var prev_s: float = s_list[0]
-	var prev_xform: Transform3D = tunnel.transform_at(prev_s)
-	var prev_cx: float = _track_center_x(prev_s, side) + hg_signed
-	for i in range(1, s_list.size()):
-		var s_cur: float = s_list[i]
-		var cur_xform: Transform3D = tunnel.transform_at(s_cur)
-		var cur_cx: float = _track_center_x(s_cur, side) + hg_signed
-
-		var p0: Vector3 = prev_xform.origin
-		var p1: Vector3 = cur_xform.origin
-		var r0: Vector3 = prev_xform.basis.x
-		var r1: Vector3 = cur_xform.basis.x
-		var u0: Vector3 = prev_xform.basis.y
-		var u1: Vector3 = cur_xform.basis.y
-
-		var v0: float = prev_s
-		var v1: float = s_cur
-
-		# Foot
-		_emit_rail_step_xv(
-			st_rail, p0, r0, u0, p1, r1, u1,
-			prev_cx, cur_cx, foot_y0, foot_y1, foot_w, foot_w, v0, v1,
-		)
-		# Web
-		_emit_rail_step_xv(
-			st_rail, p0, r0, u0, p1, r1, u1,
-			prev_cx, cur_cx, web_y0, web_y1, web_w, web_w, v0, v1,
-		)
-		# Head base
-		_emit_rail_step_xv(
-			st_rail, p0, r0, u0, p1, r1, u1,
-			prev_cx, cur_cx, head_y0, head_y1 - 0.012, head_w, head_w, v0, v1,
-		)
-		# Head top (brillant)
-		_emit_rail_step_xv(
-			st_top, p0, r0, u0, p1, r1, u1,
-			prev_cx, cur_cx, head_y1 - 0.012, head_y1, head_w, head_w, v0, v1,
-		)
-
-		prev_s = s_cur
-		prev_xform = cur_xform
-		prev_cx = cur_cx
+	# Sections du tronçon, puis sommets et UV des bandes (patin, âme, champignon ; dessus brillant à part) en un appel :
+	# ExtrusionVoie (module C++, ou le même calcul en GDScript sans lui), mêmes sommets dans le même ordre que
+	# l'émission par _emit_rail_step_xv qu'elle remplace (120 ms d'un bloc pour les rails du Funival, PC, 08/11/2026).
+	var org: PackedVector3Array = PackedVector3Array()
+	var dro: PackedVector3Array = PackedVector3Array()
+	var hau: PackedVector3Array = PackedVector3Array()
+	var cxs: PackedFloat64Array = PackedFloat64Array()
+	var ss: PackedFloat64Array = PackedFloat64Array()
+	for s_k in s_list:
+		var xf_k: Transform3D = tunnel.transform_at(s_k)
+		org.append(xf_k.origin)
+		dro.append(xf_k.basis.x)
+		hau.append(xf_k.basis.y)
+		cxs.append(_track_center_x(s_k, side) + hg_signed)
+		ss.append(s_k)
+	var bandes_corps: PackedFloat64Array = PackedFloat64Array([foot_y0, foot_y1, foot_w, foot_w, web_y0, web_y1, web_w, web_w,
+		head_y0, head_y1 - 0.012, head_w, head_w])
+	var bandes_dessus: PackedFloat64Array = PackedFloat64Array([head_y1 - 0.012, head_y1, head_w, head_w])
+	var st_rail: SurfaceTool = ExtrusionVoie.surface(ExtrusionVoie.bandes(org, dro, hau, cxs, ss, bandes_corps), rail_mat)
+	var st_top: SurfaceTool = ExtrusionVoie.surface(ExtrusionVoie.bandes(org, dro, hau, cxs, ss, bandes_dessus), rail_top_mat)
 
 	st_rail.generate_normals()
 	var mi_rail: MeshInstance3D = MeshInstance3D.new()
