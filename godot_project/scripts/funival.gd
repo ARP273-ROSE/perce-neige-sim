@@ -202,14 +202,25 @@ vec3 vers_lineaire(vec3 c) {
 void fragment() {
 	lin = vers_lineaire(COLOR.rgb);
 	EMISSION = lin;
-	// teinte de la paroi sous les phares : la couleur cuite ramenée à un pouvoir réfléchissant de 0,6
-	ALBEDO = lin / max(max(lin.r, lin.g), max(lin.b, 0.002)) * 0.6;
+	// paroi sous les phares : béton gris (photos), à peine teinté de la couleur cuite, réflectance 0,5
+	vec3 n = lin / max(max(lin.r, lin.g), max(lin.b, 0.002));
+	ALBEDO = mix(vec3(dot(n, vec3(0.333))), n, 0.3) * 0.5;
 	ROUGHNESS = 0.95;
 }
 void light() {
 	if (!LIGHT_IS_DIRECTIONAL) {
 		DIFFUSE_LIGHT += abs(dot(NORMAL, LIGHT)) * ATTENUATION * LIGHT_COLOR / PI;
 	}
+}
+"""
+## Rendu de compatibilité (PWA, OpenGL) : l'émission d'un nuanceur à light() personnalisé n'y passe pas (tunnel
+## entièrement noir, captures OpenGL du PC du 08/11/2026) ; on y garde la seule lumière cuite, sans phares.
+const NUANCEUR_CUIT_COMPAT: String = """
+shader_type spatial;
+render_mode unshaded, cull_disabled, fog_disabled;
+void fragment() {
+	vec3 c = COLOR.rgb;
+	ALBEDO = mix(pow((c + 0.055) / 1.055, vec3(2.4)), c / 12.92, step(c, vec3(0.04045)));
 }
 """
 
@@ -219,7 +230,9 @@ static func mat_funi(nom: String) -> Material:
 		RemonteeKit.verrou.lock()
 		if _mat_cuit == null:
 			var sh: Shader = Shader.new()
-			sh.code = NUANCEUR_CUIT
+			var compat: bool = String(ProjectSettings.get_setting_with_override("rendering/renderer/rendering_method")) == "gl_compatibility" \
+				or OS.has_feature("web") or RenderingServer.get_current_rendering_method() == "gl_compatibility"
+			sh.code = NUANCEUR_CUIT_COMPAT if compat else NUANCEUR_CUIT
 			_mat_cuit = ShaderMaterial.new()
 			_mat_cuit.shader = sh
 		RemonteeKit.verrou.unlock()
