@@ -22,6 +22,7 @@ var decal_evitement: float = 3.50          # décalage latéral maximal de chaqu
 var elargissement_chambre: float = 1.0
 ## Le tube n'est construit qu'à partir de cette abscisse (Funival : portail ; avant, la voie est dehors).
 var tube_debut: float = 0.0
+var tube_fin: float = INF
 ## Câble et véhicules (TrackBuilder) : tension nominale, masse linéique, raideur, point de l'autre véhicule, attache
 ## du câble depuis l'abscisse du véhicule, fond de caisse (culot), pas des galets hors Perce-Neige.
 var tension_dan: float = PNConstants.T_NOMINAL_DAN

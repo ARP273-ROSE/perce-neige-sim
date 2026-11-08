@@ -445,18 +445,106 @@ func _rail_profil(xr: float) -> PackedVector2Array:
 		Vector2(xr + 0.035, -0.15)])
 
 
-## Dehors : rails, poutre en U de béton gris clair sur piles courtes à chevêtre, passerelle de service en caillebotis
+## --- Voie du Perce-Neige sur le tracé du Funival ---
+## Dessus des rails sous l'axe du tube de TunnelBuilder (TrackBuilder : dalle −1,85 + 0,25, blochet 0,20 − 0,01,
+## rail UIC 0,172).
+const RAIL_SUR_CENTRE: float = 1.238
+var _s_par_m: PackedFloat32Array = PackedFloat32Array()     # abscisse le long des rails, tous les 1 m en plan
+var tunnel_pn: TunnelBuilder = null
+var voie_pn: TrackBuilder = null
+
+
+## (longueur de la courbe de l'axe du tube, décalée de RAIL_SUR_CENTRE sur la normale aux rails : c'est elle que
+## TunnelBuilder paramètre ; celle des rails donnait jusqu'à 1,1 m d'écart le long de la voie)
+func _table_s() -> void:
+	var n: int = int(ceil(longueur_h())) + 3
+	_s_par_m.resize(n)
+	_s_par_m[0] = 0.0
+	var prec: Vector2 = _axe_tube(0.0)
+	for k in range(1, n):
+		var q: Vector2 = _axe_tube(float(k))
+		_s_par_m[k] = _s_par_m[k - 1] + q.distance_to(prec)
+		prec = q
+
+
+## Axe du tube au droit de la distance en plan d : (z, y) dans le repère de la ligne.
+func _axe_tube(d: float) -> Vector2:
+	var a: float = atan(pente_voie(d))
+	return Vector2(-d + RAIL_SUR_CENTRE * sin(a), y_voie(d) + RAIL_SUR_CENTRE * cos(a))
+
+
+## Abscisse le long des rails (TraceFuni, TrackBuilder) de la distance en plan d.
+func s_de_d(d: float) -> float:
+	var dc: float = clampf(d, 0.0, float(_s_par_m.size()) - 1.001)
+	var k: int = int(dc)
+	return lerpf(_s_par_m[k], _s_par_m[k + 1], dc - float(k))
+
+
+func d_de_s(s: float) -> float:
+	var k: int = clampi(_s_par_m.bsearch(s) - 1, 0, _s_par_m.size() - 2)
+	var a: float = _s_par_m[k]
+	var b: float = _s_par_m[k + 1]
+	return float(k) + clampf((s - a) / maxf(b - a, 1e-6), 0.0, 1.0)
+
+
+## Tracé du Funival pour TunnelBuilder et TrackBuilder : toute la ligne (le tube à partir du portail), droit en
+## plan, profil de y_voie, évitement en une chambre sans mur, décalage des voies de x_voie.
+func trace_voie() -> TraceFuni:
+	var t: TraceFuni = TraceFuni.new()
+	var L: float = longueur_h()
+	t.perce_neige = false
+	t.deux_tubes = false
+	t.longueur = s_de_d(L)
+	t.tube_debut = s_de_d(portail_d - 1.0)
+	t.tube_fin = s_de_d(L - L_HALL + 1.0)          # (ensuite, la salle de Bellevarde)
+	var c: float = L * 0.5
+	var h: float = L_EVITEMENT * 0.5 + L_RACCORD
+	t.evit_debut = s_de_d(c - h)
+	t.evit_fin = s_de_d(c + h)
+	t.decal_evitement = E_VOIES * 0.5
+	t.elargissement_chambre = (R_TUNNEL_EVIT - R_TUNNEL) / (E_VOIES * 0.5)
+	t.carre_bas_fin = t.tube_debut
+	t.carre_haut_debut = s_de_d(L - L_HALL)
+	t.miroir_s = s_de_d(_x_quai(true)) + s_de_d(_x_quai(false))
+	t.attache_ds = VehiculeFunival.DEMI_L
+	t.caisse_y = -RAIL_SUR_CENTRE + 0.35
+	t.galets_debut = s_de_d(2.0 * VehiculeFunival.DEMI_L + 4.0)
+	t.galets_fin = s_de_d(L - 2.0 * VehiculeFunival.DEMI_L - 4.0)
+	t._decal = func(s: float) -> float: return E_VOIES * 0.5 * _t_evit(d_de_s(s))
+	t._pente = func(s: float) -> float: return atan(pente_voie(d_de_s(s)))
+	t._cap = func(_s: float) -> float: return 0.0
+	t._points = func(pas: float) -> Array:
+		var pts: Array = []
+		var n: int = int(t.longueur / pas)
+		for k in range(n + 1):
+			var q: Vector2 = _axe_tube(d_de_s(float(k) * pas))
+			pts.append(Vector3(0.0, q.y, q.x))
+		# dernier point au bout exact (la courbe précuite est ramenée à trace.longueur : tronquée au pas, elle
+		# étirait toute la voie)
+		if t.longueur - float(n) * pas > 0.01:
+			var qf: Vector2 = _axe_tube(d_de_s(t.longueur))
+			pts.append(Vector3(0.0, qf.y, qf.x))
+		return pts
+	return t
+
+
+## Voie et tunnel du Perce-Neige : vus de loin (pas des détails à 250 m), sans collision en maillage.
+func _marquer_voie(n: Node) -> void:
+	n.set_meta("portee_loin", true)
+	n.set_meta(MeshMerge.SANS_FUSION, true)
+	for c in n.find_children("*", "GeometryInstance3D", true, false):
+		c.set_meta("sans_collision", true)
+		c.set_meta(MeshMerge.SANS_FUSION, true)
+
+
+## Dehors : poutre en U de béton gris clair sur piles courtes à chevêtre, passerelle de service en caillebotis
 ## d'un côté, main courante. (Dans le tunnel, rails et radier sont dans le maillage cuit.)
 func _voie_et_ouvrages() -> void:
 	var st: SurfaceTool = SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	for xr in [-ECARTEMENT * 0.5, ECARTEMENT * 0.5]:
-		_extruder(st, _rail_profil(xr), 0.0, portail_d + 2.0, PAS_PROFIL)
-	_maillage(st, RemonteeKit.mat("acier"), "Rails")
-	st = SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var u: PackedVector2Array = PackedVector2Array([Vector2(-1.75, 0.55), Vector2(-1.75, -1.0), Vector2(1.75, -1.0),
-		Vector2(1.75, 0.55), Vector2(1.55, 0.55), Vector2(1.55, -0.45), Vector2(-1.55, -0.45), Vector2(-1.55, 0.55)])
+	# (rails, blochets, dalle et galets : TrackBuilder, dans _tunnel ; poutre plus profonde pour la fosse des galets)
+	var u: PackedVector2Array = PackedVector2Array([Vector2(-1.75, 0.55), Vector2(-1.75, -1.3), Vector2(1.75, -1.3),
+		Vector2(1.75, 0.55), Vector2(1.6, 0.55), Vector2(1.6, -1.15), Vector2(-1.6, -1.15), Vector2(-1.6, 0.55)])
 	_extruder(st, u, 30.0, portail_d + 2.0, PAS_PROFIL, -1, true)
 	_maillage(st, mat_funi("beton_clair"), "Poutre")
 	var ouv: Node3D = Node3D.new()
@@ -500,88 +588,41 @@ func _voie_et_ouvrages() -> void:
 ## sommets). Section élargie dans l'évitement. Anneau de béton au portail, dans un front de rocher.
 func _tunnel() -> void:
 	var L: float = longueur_h()
-	var d0: float = portail_d - 1.0
 	var d1: float = L - L_HALL + 2.0
+	# tube, dalle, blochets, rails, galets numérotés, câble toronné : ceux du Perce-Neige (TunnelBuilder et
+	# TrackBuilder sur le tracé du Funival, demande d'utilisateur du 08/11/2026 : « les mêmes rails, les mêmes
+	# traverses, le même tunnel et les mêmes galets, avec toutes leurs fonctionnalités »)
+	_table_s()
+	var t: TraceFuni = trace_voie()
+	tunnel_pn = TunnelBuilder.new()
+	tunnel_pn.name = "TunnelPN"
+	tunnel_pn.trace = t
+	tunnel_pn.ring_spacing = 3.0
+	tunnel_pn.ring_segments = 20
+	tunnel_pn.tunnel_radius = R_TUNNEL
+	tunnel_pn.passing_offset_max = E_VOIES * 0.5
+	tunnel_pn.wall_cable_x_local = -(R_TUNNEL - 0.11)
+	tunnel_pn._build()                      # (hors de l'arbre : sur le fil de construction)
+	await _pause("funival : tunnel")
+	voie_pn = TrackBuilder.new()
+	voie_pn.name = "VoiePN"
+	voie_pn.trace = t
+	voie_pn.pit_low_end = 0.0
+	voie_pn.pit_high_start = t.longueur
+	voie_pn.walkway_side = -1.0            # passerelle-escalier à gauche en montant (vidéos)
+	voie_pn.walkway_s0 = t.tube_debut
+	voie_pn.build(tunnel_pn)
+	await _pause("funival : voie")
+	for n in [tunnel_pn, voie_pn]:
+		_marquer_voie(n)
+		_enfant(n)
+	await _pause("funival : tunnel")
+	# câbles de paroi et lampes : un hublot tous les ECART_LAMPES m sur la paroi gauche (en montant), à mi-hauteur
 	var st: SurfaceTool = SurfaceTool.new()
-	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	# paroi : anneau elliptique à 14 côtés, radier plat
-	var cotes: int = 14
-	var n: int = int(ceil((d1 - d0) / PAS_TUNNEL))
-	var prec: PackedVector3Array = PackedVector3Array()
-	var cprec: PackedColorArray = PackedColorArray()
-	for k in range(n + 1):
-		var d: float = d0 + (d1 - d0) * float(k) / float(n)
-		var t: float = _t_evit(d)
-		var rx: float = lerpf(R_TUNNEL, R_TUNNEL_EVIT, t)
-		var ry: float = lerpf(R_TUNNEL, R_TUNNEL * 1.2, t)
-		var y0: float = y_voie(d) - 0.45 + ry * 0.62
-		var base: Color = _teinte_paroi(d, k)
-		var cour: PackedVector3Array = PackedVector3Array()
-		var ccour: PackedColorArray = PackedColorArray()
-		for j in range(cotes):
-			var a: float = TAU * float(j) / float(cotes)
-			var p: Vector3 = Vector3(cos(a) * rx, maxf(y0 + sin(a) * ry, y_voie(d) - 0.45), -d)
-			cour.append(p)
-			ccour.append(base * _lumiere_tunnel(d, -cos(a)))
-		if k > 0:
-			for j in range(cotes):
-				var j2: int = (j + 1) % cotes
-				for e in [[prec[j], cprec[j]], [cour[j2], ccour[j2]], [prec[j2], cprec[j2]],
-						[prec[j], cprec[j]], [cour[j], ccour[j]], [cour[j2], ccour[j2]]]:
-					st.set_color(e[1])
-					st.add_vertex(e[0])
-		prec = cour
-		cprec = ccour
-		# (par tranches : sur le fil principal — PWA, sans écran — le tunnel faisait 50 ms d'un bloc, relevé du PC
-		# du 08/11/2026)
-		if k % 80 == 79:
-			await _pause("funival : tunnel")
-	await _pause("funival : tunnel")
-	var gris_rail: Color = Color(0.55, 0.56, 0.58)
-	var radier: Color = Color(0.40, 0.39, 0.37)
-	var teinte := func(c: Color) -> Callable:
-		return func(d2: float, _j: int) -> Color: return c * (_lumiere_tunnel(d2, 0.4) * 1.3)
-	var c_ev: float = L * 0.5
-	var h_ev: float = L_EVITEMENT * 0.5 + L_RACCORD
-	var troncons: Array = [[d0, c_ev - h_ev, -1], [c_ev + h_ev, d1, -1], [c_ev - h_ev, c_ev + h_ev, 0], [c_ev - h_ev, c_ev + h_ev, 1]]
-	for tr in troncons:
-		for xr in [-ECARTEMENT * 0.5, ECARTEMENT * 0.5]:
-			_extruder(st, _rail_profil(xr), tr[0], tr[1], 5.0, tr[2], false, teinte.call(gris_rail))
-		_extruder(st, PackedVector2Array([Vector2(-1.0, -0.16), Vector2(1.0, -0.16)]), tr[0], tr[1], 5.0, tr[2], false,
-			teinte.call(radier))
-	await _pause("funival : tunnel")
-	# passerelle-escalier de service le long de la paroi gauche, chemin de câbles au-dessus
-	var cail: Color = Color(0.45, 0.46, 0.47)
-	_extruder(st, PackedVector2Array([Vector2(-R_TUNNEL + 0.15, 0.55), Vector2(-R_TUNNEL + 0.95, 0.55)]), d0, c_ev - h_ev, 5.0,
-		-1, false, teinte.call(cail))
-	_extruder(st, PackedVector2Array([Vector2(-R_TUNNEL + 0.15, 0.55), Vector2(-R_TUNNEL + 0.95, 0.55)]), c_ev + h_ev, d1, 5.0,
-		-1, false, teinte.call(cail))
-	_extruder(st, PackedVector2Array([Vector2(-R_TUNNEL + 0.25, 2.3), Vector2(-R_TUNNEL + 0.25, 2.5)]), d0, c_ev - h_ev, 5.0,
-		-1, false, teinte.call(Color(0.12, 0.12, 0.12)))
-	_extruder(st, PackedVector2Array([Vector2(-R_TUNNEL + 0.25, 2.3), Vector2(-R_TUNNEL + 0.25, 2.5)]), c_ev + h_ev, d1, 5.0,
-		-1, false, teinte.call(Color(0.12, 0.12, 0.12)))
-	# poulies du câble entre les rails, toutes les 12 m (hors évitement)
-	var dp: float = d0 + 6.0
-	while dp < d1:
-		if absf(dp - c_ev) > h_ev:
-			var yp: float = y_voie(dp)
-			var c2: Color = Color(0.30, 0.30, 0.31) * (_lumiere_tunnel(dp, 0.4) * 1.3)
-			for q in [[Vector3(-0.18, -0.15, 0.0), Vector3(-0.18, 0.05, 0.0), Vector3(0.18, 0.05, 0.0)],
-					[Vector3(-0.18, -0.15, 0.0), Vector3(0.18, 0.05, 0.0), Vector3(0.18, -0.15, 0.0)]]:
-				for v in q:
-					st.set_color(c2)
-					st.add_vertex(Vector3(v.x, yp + v.y, -dp))
-		dp += 12.0
-	await _pause("funival : tunnel")
-	var tun: MeshInstance3D = _maillage(st, mat_funi("cuit"), "Tunnel", false)
-	await _pause("funival : tunnel")
-	tun.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	# lampes : un hublot tous les ECART_LAMPES m sur la paroi gauche (en montant), à mi-hauteur
-	st = SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var d2: float = portail_d + 10.0
 	while d2 < d1 - 5.0:
-		var rx2: float = lerpf(R_TUNNEL, R_TUNNEL_EVIT, _t_evit(d2))
+		var rx2: float = R_TUNNEL + (R_TUNNEL_EVIT - R_TUNNEL) * _t_evit(d2)
 		var p: Vector3 = Vector3(-rx2 + 0.10, y_voie(d2) + 1.7, -d2)
 		for q in [[Vector3(0, -0.10, -0.35), Vector3(0, 0.10, 0.35), Vector3(0, 0.10, -0.35)],
 				[Vector3(0, -0.10, -0.35), Vector3(0, -0.10, 0.35), Vector3(0, 0.10, 0.35)]]:
@@ -817,10 +858,7 @@ func _gare_amont() -> void:
 	var clair := func(_d: float, j: int) -> Color:
 		return Color(0.80, 0.80, 0.78) if j == 1 or j == 2 else Color(0.62, 0.61, 0.58)
 	_extruder(st, salle, L - L_HALL, L, 2.5, -1, false, clair, true)      # (fermée par le pignon du bâtiment, à L)
-	_extruder(st, PackedVector2Array([Vector2(-1.0, -0.16), Vector2(1.0, -0.16)]), L - L_HALL, L, 5.0, -1, false,
-		func(_d: float, _j: int) -> Color: return Color(0.38, 0.37, 0.35))
-	for xr in [-ECARTEMENT * 0.5, ECARTEMENT * 0.5]:
-		_extruder(st, _rail_profil(xr), L - L_HALL, L, 5.0, -1, false, func(_d: float, _j: int) -> Color: return Color(0.55, 0.56, 0.58))
+	# (dalle, blochets et rails : TrackBuilder, jusqu'au bout de la voie)
 	_maillage(st, mat_funi("cuit"), "SalleAmont", false)
 	for k in range(n):
 		var d: float = dq - lq * 0.5 + lc * (float(k) + 0.5)
@@ -1217,9 +1255,27 @@ const D_INFERIEUR: float = 0.025       # câble tracteur aval 25 mm, 42 870 daN,
 
 func _maj_positions() -> void:
 	super._maj_positions()
+	_maj_voie_pn(_dt)
 	if absf(_s - _d_cables) > 3.0:
 		_d_cables = _s
 		_refaire_cables()
+
+
+## Câble tracteur et galets du Perce-Neige : brins coupés à l'attache de chaque véhicule (nez amont), torons qui
+## défilent, galets qui tournent autour de la caméra.
+func _maj_voie_pn(delta: float) -> void:
+	if voie_pn == null or _s_par_m.is_empty() or _vehicules.size() < 2:
+		return
+	var s0: float = s_de_d(_vehicules[0][1])
+	var s1: float = s_de_d(_vehicules[1][1])
+	voie_pn.update_cable_visibility(s0, s1)
+	voie_pn.update_cable_phase(s0, s1, -1.0)
+	var s_cam: float = s0
+	var vp: Viewport = get_viewport()
+	var cam: Camera3D = vp.get_camera_3d() if vp != null else null
+	if cam != null and is_inside_tree():
+		s_cam = s_de_d(-to_local(cam.global_position).z)
+	voie_pn.update_galets_rames(s0, s1, s_cam, delta)
 
 
 func _refaire_cables() -> void:
@@ -1235,7 +1291,6 @@ func _refaire_cables() -> void:
 	for i in range(2):
 		var d: float = _vehicules[i][1]
 		var dx: float = (-1.0 if i == 0 else 1.0) * 0.07
-		_ruban(st, d + VehiculeFunival.DEMI_L, L - 1.0, i, dx, D_TRACTEUR, -0.05)
 		_ruban(st, 1.0, d - VehiculeFunival.DEMI_L, i, dx, D_INFERIEUR, -0.07)
 	var mesh: ArrayMesh = st.commit()
 	if mesh.get_surface_count() > 0:
