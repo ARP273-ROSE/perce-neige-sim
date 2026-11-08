@@ -777,8 +777,10 @@ func _butoir_et_poulie() -> void:
 	_enfant(g)
 	RemonteeKit.boite_en(g, Vector3(1.8, 0.9, 0.7), Vector3(0, y_voie(0.3) + 0.45, -0.3), "rouge_val")
 	var L: float = longueur_h()
-	var yp: float = y_voie(L) + 3.2
-	var zp: float = -(L + 0.6)
+	# poulie de renvoi en fosse au bout de la voie, sous le plancher du bâtiment : à 3,2 m au-dessus des rails, son
+	# disque bleu sortait dans le bâtiment de surface, au milieu du pignon (PC, lot 16)
+	var yp: float = y_voie(L) - 2.2
+	var zp: float = -(L - 0.3)
 	var axe: Basis = Basis(Vector3.RIGHT, PI * 0.5)
 	RemonteeKit.cylindre(g, 2.6, 2.6, 0.35, Transform3D(axe, Vector3(0, yp, zp)), "bleu_doppelmayr", 32)
 	RemonteeKit.cylindre(g, 0.55, 0.55, 0.7, Transform3D(axe, Vector3(0, yp, zp)), "rouge_val", 16)
@@ -812,7 +814,7 @@ func _gare_amont() -> void:
 	var salle: PackedVector2Array = PackedVector2Array([Vector2(hx, -0.6), Vector2(hx, 6.5), Vector2(-hx, 6.5), Vector2(-hx, -0.6)])
 	var clair := func(_d: float, j: int) -> Color:
 		return Color(0.80, 0.80, 0.78) if j == 1 or j == 2 else Color(0.62, 0.61, 0.58)
-	_extruder(st, salle, L - L_HALL, L + 1.0, 2.5, -1, false, clair, true)
+	_extruder(st, salle, L - L_HALL, L, 2.5, -1, false, clair, true)      # (fermée par le pignon du bâtiment, à L)
 	_extruder(st, PackedVector2Array([Vector2(-1.0, -0.16), Vector2(1.0, -0.16)]), L - L_HALL, L, 5.0, -1, false,
 		func(_d: float, _j: int) -> Color: return Color(0.38, 0.37, 0.35))
 	for xr in [-ECARTEMENT * 0.5, ECARTEMENT * 0.5]:
