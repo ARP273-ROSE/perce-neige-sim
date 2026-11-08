@@ -2954,6 +2954,7 @@ func update_cable_phase(s_driver: float, s_other: float = -1.0, s_poulie_r: floa
 # il les heurterait en passant — et le câble descend de lui jusqu'au
 # premier galet en amont, d'où il repart posé de galet en galet.
 # ---------------------------------------------------------------------------
+const CAISSE_Y: float = -1.16       # fond plat des voitures du Perce-Neige (TrainBodyBuilder.Y_CUT, monde) ; ailleurs trace.caisse_y
 const CULOT_DY: float = 0.12        # axe du culot au-dessus de l'axe du câble posé
 const CULOT_LONG: float = 0.27      # le câble sort par la pointe
 const AMORCE_ANNEAUX: int = 22
