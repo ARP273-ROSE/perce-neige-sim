@@ -676,7 +676,6 @@ func _build_tunnel_chunk(
 			st.set_uv(Vector2(u1, v0)); st.add_vertex(p_prev_1)
 
 	st.generate_normals()
-	st.generate_tangents()
 	var mi: MeshInstance3D = MeshInstance3D.new()
 	mi.name = name
 	mi.mesh = MeshMerge.valider_indexe(st)
@@ -805,7 +804,6 @@ func _build_tunnel_fusion(
 			st.set_uv(Vector2(u1, v0)); st.add_vertex(p_prev_1)
 
 	st.generate_normals()
-	st.generate_tangents()
 	var mi: MeshInstance3D = MeshInstance3D.new()
 	mi.name = name
 	mi.mesh = MeshMerge.valider_indexe(st)
