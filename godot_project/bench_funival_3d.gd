@@ -122,6 +122,19 @@ func _tick() -> void:
 				_verif("Funival : voie du Perce-Neige (câble toronné, galets)", vp != null and vp.cable_left_segments.size() > 10
 					and vp.galets_count() > 50, "%d tronçons de câble, %d galets" % [vp.cable_left_segments.size() if vp != null else 0,
 					vp.galets_count() if vp != null else 0])
+				# supports numérotés (relevé d'utilisateur) : 003 au bout du quai aval, 200 à l'entrée du quai amont, 204 au
+				# bout du quai amont
+				var sts: Array = vp.station_list() if vp != null else []
+				var lq3: float = 2.0 * VehiculeFunival.DEMI_L + 2.0
+				var pos: Dictionary = {}
+				for st in sts:
+					if int(st.get("num", 0)) in [3, 200, 204]:
+						pos[int(st.num)] = _lg.d_de_s(float(st.s))
+				var Lh: float = _lg.longueur_h()
+				_verif("Funival : supports 003, 200 et 204 aux bouts des quais, 204 au total", sts.size() == 204 and pos.size() == 3
+					and absf(pos[3] - lq3) < 1.6 and absf(pos[200] - (Lh - lq3)) < 1.6 and absf(pos[204] - (Lh - 1.0)) < 1.6,
+					"%d supports ; 003 à d=%.1f (quai %.1f), 200 à %.1f (%.1f), 204 à %.1f (%.1f)" % [sts.size(), pos.get(3, -1.0), lq3,
+					pos.get(200, -1.0), Lh - lq3, pos.get(204, -1.0), Lh - 1.0])
 				var ecart_rails: float = 0.0
 				var dd: float = 5.0
 				while dd < _lg.longueur_h() - 5.0:
