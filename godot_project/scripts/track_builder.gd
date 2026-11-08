@@ -235,16 +235,17 @@ func _station_list() -> Array:
 		abt.append({"s": trace.evit_debut + o, "sheave": sh})
 		abt.append({"s": trace.evit_fin - o, "sheave": sh})
 	abt.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a.s < b.s)
-	if not trace.perce_neige:
+	var reperes: Array = GALETS_REPERES if trace.perce_neige else trace.galets_reperes
+	if reperes.is_empty():
 		return _station_list_reguliere(abt)
-	for i in range(GALETS_REPERES.size()):
-		var n_a: int = GALETS_REPERES[i][0]
-		var s_a: float = GALETS_REPERES[i][1]
+	for i in range(reperes.size()):
+		var n_a: int = reperes[i][0]
+		var s_a: float = reperes[i][1]
 		out.append({"s": s_a, "sheave": false})
-		if i == GALETS_REPERES.size() - 1:
+		if i == reperes.size() - 1:
 			break
-		var n_b: int = GALETS_REPERES[i + 1][0]
-		var s_b: float = GALETS_REPERES[i + 1][1]
+		var n_b: int = reperes[i + 1][0]
+		var s_b: float = reperes[i + 1][1]
 		# points fixes de l'intervalle : les deux repères et les stations
 		# d'aiguillage qui s'y trouvent
 		var fixes: Array = [s_a]
@@ -273,7 +274,7 @@ func _station_list() -> Array:
 	out.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a.s < b.s)
 	for i in range(out.size()):
 		out[i]["num"] = i + 1
-	for r in GALETS_REPERES:
+	for r in reperes:
 		if absf(float(out[int(r[0]) - 1].s) - float(r[1])) > 0.01:
 			push_error("galet repère n° %d attendu à %.2f, posé à %.2f" % [r[0], r[1], out[int(r[0]) - 1].s])
 	# gare amont : galets non numérotés, au pas de l'ancienne grille, comptés
@@ -283,7 +284,7 @@ func _station_list() -> Array:
 	# (liste triée par abscisse : les sommets du câble lui sont indexés)
 	var gare: Array = []
 	var s_g: float = trace.longueur + MachineRoomBuilder.S_LAST_TUNNEL_ROLLER
-	while s_g > SUPPORT_S_LAST + 5.0:
+	while trace.perce_neige and s_g > SUPPORT_S_LAST + 5.0:
 		gare.push_front({"s": s_g, "sheave": false, "num": 0})
 		s_g -= guide_spacing
 	out.append_array(gare)
