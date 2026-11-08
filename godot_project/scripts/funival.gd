@@ -110,78 +110,79 @@ func dans_tunnel(d: float) -> bool:
 	return d > portail_d
 
 
-## Profil de la voie : dehors, le sol + 1,8 m lissé sur ±30 m (la poutre suit le terrain sur piles courtes) ; au
-## portail, 4 m sous le terrain ; dans le tunnel, une droite jusqu'au quai amont ; raccords lissés.
+## Profil de la voie, courbe régulière :
+## - dehors, une parabole ajustée sur la trace GPS altimétrique d'un passage réel (26/04/2026, 68 points projetés sur
+##   l'axe, résidu ≤ 4,3 m ; calcul /mnt/apps_pool/sage/funival/rampe.sage) : 20,8 % au départ, 29,7 % au portail ; le
+##   viaduc ne suit pas le terrain, il est porté par des piles (photos : hautes et fines) ;
+## - dans le tunnel, la pente monte progressivement jusqu'au maximum de la fiche (53 %, funiculaires-france.fr), s'y
+##   tient, et se réduit seulement à la toute fin, en gare amont, où elle reste prononcée (comme au Perce-Neige ;
+##   utilisateur, 08/11/2026) ; pente en gare ESTIMÉE (45 %) ; la longueur de la montée vers 53 % se déduit de
+##   l'altitude de la gare amont.
+## Calée à l'aval sur le haut du terrain de la gare (planchers au niveau du sol, voie en fosse).
+const RAMPE_S0: float = 0.207756          # pente au départ (trace GPS)
+const RAMPE_K: float = 8.985184e-05       # y = s0·d + k·d²
+const RACCORD_TUNNEL: float = 150.0
+const PENTE_MAX: float = 0.53             # fiche
+const PENTE_GARE_AMONT: float = 0.45      # ESTIMÉE : « reste prononcée » (utilisateur) ; non mesurable sur les vidéos
+const L_REDUCTION: float = 50.0           # réduction courte, en toute fin (ESTIMÉE)
+var _pente_tunnel: PackedFloat32Array = PackedFloat32Array()   # [d0, a, h, b, s1] : pente par morceaux dans le tunnel
+
+
+## Pente dans le tunnel en u = d − portail : s1 → PENTE_MAX sur a, palier sur h, → PENTE_GARE_AMONT sur b.
+func _pente_tunnel_en(u: float) -> float:
+	var a: float = _pente_tunnel[1]
+	var h: float = _pente_tunnel[2]
+	var b: float = _pente_tunnel[3]
+	var s1: float = _pente_tunnel[4]
+	if u <= a:
+		return lerpf(s1, PENTE_MAX, u / a)
+	if u <= a + h:
+		return PENTE_MAX
+	return lerpf(PENTE_MAX, PENTE_GARE_AMONT, clampf((u - a - h) / maxf(b, 1.0), 0.0, 1.0))
+
+
 func _preparer_voie() -> void:
 	var L: float = longueur_h()
 	_y_aval = terrain(0.0)
 	_y_amont = terrain(L)
-	_y_portail = terrain(portail_d) - PROF_PORTAIL
-	var n: int = int(ceil(L / PAS_PROFIL)) + 1
-	# gare aval : une droite ajustée sur le haut du terrain des 50 premiers mètres (moindres carrés), voie en fosse
-	# sous les planchers ; le point OSM du bout tombe dans un creux, et la voie y faisait un saut de 2,4 m
-	var sx_: float = 0.0
-	var sy_: float = 0.0
-	var sxx: float = 0.0
-	var sxy: float = 0.0
-	var m_: int = 0
-	var dd: float = 0.0
+	# ancrage aval : le plancher du compartiment le plus enterré au niveau du terrain (quais compris)
 	var W0: float = VehiculeFunival.DEMI_LARGEUR + 0.05
-	while dd <= 50.0:
-		# le plus haut du terrain en travers de la gare (quais compris) : la gare n'est jamais enterrée
-		var ys: float = -INF
-		for xs in [-(W0 + LARG_GRADINS[0]), -(W0 + LARG_GRADINS[0] * 0.5), 0.0, W0 + LARG_GRADINS[1] * 0.5, W0 + LARG_GRADINS[1]]:
-			ys = maxf(ys, _sol(float(xs), -dd))
-		sx_ += dd
-		sy_ += ys
-		sxx += dd * dd
-		sxy += dd * ys
-		m_ += 1
-		dd += 2.5
-	var pente_g: float = (float(m_) * sxy - sx_ * sy_) / maxf(float(m_) * sxx - sx_ * sx_, 1e-6)
-	var y0_g: float = (sy_ - pente_g * sx_) / float(m_)
-	# relevée pour que, sous tout le quai, le plancher ne soit jamais sous le terrain
 	var dep: float = -INF
-	dd = 0.0
+	var dd: float = 0.0
 	while dd <= 2.0 * VehiculeFunival.DEMI_L + 2.0:
-		for xs2 in [-(W0 + LARG_GRADINS[0]), -(W0 + LARG_GRADINS[0] * 0.5), 0.0, W0 + LARG_GRADINS[1] * 0.5, W0 + LARG_GRADINS[1]]:
-			dep = maxf(dep, _sol(float(xs2), -dd) - (y0_g + pente_g * dd))
+		for xs in [-(W0 + LARG_GRADINS[0]), -(W0 + LARG_GRADINS[0] * 0.5), 0.0, W0 + LARG_GRADINS[1] * 0.5, W0 + LARG_GRADINS[1]]:
+			dep = maxf(dep, _sol(float(xs), -dd) - (RAMPE_S0 * dd + RAMPE_K * dd * dd))
 		dd += 1.0
-	y0_g += maxf(dep, 0.0)
-	var cible: PackedFloat32Array = PackedFloat32Array()
-	cible.resize(n)
+	var y0: float = dep - FOSSE_AVAL
+	var dp: float = portail_d
+	var yp: float = y0 + RAMPE_S0 * dp + RAMPE_K * dp * dp
+	var s1: float = RAMPE_S0 + 2.0 * RAMPE_K * dp
+	# montée a (s1 → 53 %), palier h, réduction b = L_REDUCTION ; a tel que l'aire sous la pente = dénivelé restant
+	var reste: float = L - dp
+	var b: float = L_REDUCTION
+	var dh: float = _y_amont - yp
+	var a: float = (PENTE_MAX * (reste - b) + (PENTE_MAX + PENTE_GARE_AMONT) * 0.5 * b - dh) / (PENTE_MAX - (s1 + PENTE_MAX) * 0.5)
+	a = clampf(a, RACCORD_TUNNEL, reste - b)
+	_pente_tunnel = PackedFloat32Array([dp, a, reste - b - a, b, s1])
+	_y_portail = yp
+	var n: int = int(ceil(L / PAS_PROFIL)) + 1
+	var prof: PackedFloat32Array = PackedFloat32Array()
+	prof.resize(n)
+	var y_t: float = yp
 	for k in range(n):
 		var d: float = minf(float(k) * PAS_PROFIL, L)
-		if d < portail_d:
-			var y: float = _sol(0.0, -d) + DESSOUS_POUTRE
-			# gare aval : voie en fosse entre les quais, au niveau du sol
-			# gare aval : voie en fosse entre les quais (photos), planchers au niveau de l'entrée
-			if d < 75.0:
-				y = lerpf(y0_g + pente_g * d - FOSSE_AVAL, y, smoothstep(45.0, 75.0, d))
-			# approche du portail : rejoint la cote d'entrée du tunnel
-			y = lerpf(y, _y_portail, smoothstep(portail_d - 80.0, portail_d, d))
-			cible[k] = y
+		var y: float
+		if d <= dp:
+			y = y0 + RAMPE_S0 * d + RAMPE_K * d * d
+			y_t = yp
 		else:
-			cible[k] = _y_portail + (_y_amont - _y_portail) * (d - portail_d) / (L - portail_d)
-	# lissage (deux passes de ±30 m dehors, ±15 m dans le tunnel), bouts tenus
-	for passe in range(2):
-		var l2: PackedFloat32Array = cible.duplicate()
-		for k in range(1, n - 1):
-			var d2: float = float(k) * PAS_PROFIL
-			var r: int = int((30.0 if d2 < portail_d + 40.0 else 15.0) / PAS_PROFIL)
-			var s: float = 0.0
-			var c: int = 0
-			for j in range(maxi(0, k - r), mini(n, k + r + 1)):
-				s += cible[j]
-				c += 1
-			l2[k] = s / float(c)
-		l2[0] = y0_g - FOSSE_AVAL
-		# (la gare reste droite : pas de lissage sous le quai)
-		for k2 in range(1, mini(n, int(45.0 / PAS_PROFIL) + 1)):
-			l2[k2] = y0_g + pente_g * float(k2) * PAS_PROFIL - FOSSE_AVAL
-		l2[n - 1] = _y_amont
-		cible = l2
-	_prof = cible
+			# intégration de la pente par pas de PAS_PROFIL (trapèzes)
+			var u0: float = maxf(d - PAS_PROFIL, dp) - dp
+			var u1: float = d - dp
+			y_t += (_pente_tunnel_en(u0) + _pente_tunnel_en(u1)) * 0.5 * (u1 - u0)
+			y = y_t
+		prof[k] = y
+	_prof = prof
 
 
 # --- matériaux ----------------------------------------------------------------------------
@@ -996,7 +997,7 @@ var _cables: MeshInstance3D = null
 var _d_cables: float = -1000.0
 var _mat_cables: StandardMaterial3D = null
 const D_TRACTEUR: float = 0.052        # diamètre (estimé ; non publié)
-const D_INFERIEUR: float = 0.032       # (estimé)
+const D_INFERIEUR: float = 0.025       # câble tracteur aval 25 mm, 42 870 daN, Tréfileurope 1987 (funiculaires-france.fr)
 
 
 func _maj_positions() -> void:
@@ -1077,7 +1078,9 @@ func _corps_vehicule(i: int) -> void:
 	_placer(i)
 
 
+## Moteur à courant continu de 484 kW (funiculaires-france.fr) : puissance au prorata de la vitesse.
+const P_MOTEUR_KW: float = 484.0
+
+
 func puissance_kw() -> float:
-	var L: float = longueur_h()
-	var p_nom: float = (masse_vehicule() + 272.0 * 80.0) * 9.81 * (_y_amont - _y_aval) / L * V_FUNI
-	return 0.12 * p_nom * absf(_v) / V_FUNI / 1000.0
+	return P_MOTEUR_KW * clampf(absf(_v) / V_FUNI, 0.0, 1.0)
