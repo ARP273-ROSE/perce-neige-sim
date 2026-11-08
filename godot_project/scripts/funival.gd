@@ -122,34 +122,45 @@ func dans_tunnel(d: float) -> bool:
 const RAMPE_S0: float = 0.207756          # pente au départ (trace GPS)
 const RAMPE_K: float = 8.985184e-05       # y = s0·d + k·d²
 const RACCORD_TUNNEL: float = 150.0
-const PENTE_MAX: float = 0.53             # fiche
+const PENTE_MAX: float = 0.53             # fiche (funiculaires-france.fr)
 ## En gare amont, les marches des compartiments et celles des quais sont horizontales (photos, utilisateur 08/11/2026) :
 ## la pente en gare est celle pour laquelle les compartiments sont de niveau (VehiculeFunival.PENTE_GRADINS) —
 ## une seule valeur : 30 % (utilisateur, 08/11/2026).
 const PENTE_GARE_AMONT: float = VehiculeFunival.PENTE_GRADINS
-const L_REDUCTION: float = 50.0           # réduction courte, en toute fin (ESTIMÉE)
-var _pente_tunnel: PackedFloat32Array = PackedFloat32Array()   # [d0, a, h, b, s1] : pente par morceaux dans le tunnel
+const L_QUAI_AMONT: float = 35.0          # en plan, à PENTE_GARE_AMONT
+## Haut du tracé : la variation de pente du haut du Perce-Neige (SlopeProfile.SLOPE_PROFILE, du quai de la gare haute
+## vers l'aval : 10 % → 29,5 %), mise à l'échelle de 30 % → 53 % (demande d'utilisateur, 08/11/2026).
+## [s le long de la pente au Perce-Neige, pente] ; calcul de contrôle : /mnt/apps_pool/sage/funival/haut.sage.
+const VARIATION_HAUT_PN: Array = [[3477.53, 0.10], [3420.52, 0.18], [3368.52, 0.27], [3240.52, 0.28], [3040.52, 0.29], [2440.52, 0.295]]
+var _pente_haut: PackedFloat32Array = PackedFloat32Array()   # pente tous les 1 m en plan sous le quai amont
+var _rampe_bas: float = 0.0                                   # montée 29,7 % → 53 % depuis le portail (m en plan)
+var _d53_fin: float = 0.0                                     # fin du palier à 53 % (début de la variation du haut)
+var _s1: float = 0.0
 
 
-## Pente dans le tunnel en u = d − portail : s1 → PENTE_MAX sur a, palier sur h, → PENTE_GARE_AMONT sur b.
-func _pente_tunnel_en(u: float) -> float:
-	var a: float = _pente_tunnel[1]
-	var h: float = _pente_tunnel[2]
-	var b: float = _pente_tunnel[3]
-	var s1: float = _pente_tunnel[4]
-	if u <= a:
-		return lerpf(s1, PENTE_MAX, u / a)
-	if u <= a + h:
+static func _echelle_haut(g: float) -> float:
+	return PENTE_GARE_AMONT + (g - 0.10) / (0.295 - 0.10) * (PENTE_MAX - PENTE_GARE_AMONT)
+
+
+## Pente de la voie dans le tunnel et en gare amont, en d (plan).
+func _pente_tunnel_en_d(d: float) -> float:
+	var L: float = longueur_h()
+	if d >= L - L_QUAI_AMONT:
+		return PENTE_GARE_AMONT
+	if d >= _d53_fin:
+		var k: int = clampi(int(L - L_QUAI_AMONT - d), 0, _pente_haut.size() - 1)
+		return _pente_haut[k]
+	if d >= portail_d + _rampe_bas:
 		return PENTE_MAX
-	return lerpf(PENTE_MAX, PENTE_GARE_AMONT, clampf((u - a - h) / maxf(b, 1.0), 0.0, 1.0))
+	return lerpf(_s1, PENTE_MAX, (d - portail_d) / maxf(_rampe_bas, 1.0))
 
 
 func _preparer_voie() -> void:
 	var L: float = longueur_h()
 	_y_aval = terrain(0.0)
 	_y_amont = terrain(L)
-	# ancrage aval : le plancher du compartiment le plus enterré au niveau du terrain (quais compris)
 	var W0: float = VehiculeFunival.DEMI_LARGEUR + 0.05
+	# ancrage aval : le plancher du compartiment le plus enterré au niveau du terrain (quais compris)
 	var dep: float = -INF
 	var dd: float = 0.0
 	while dd <= 2.0 * VehiculeFunival.DEMI_L + 2.0:
@@ -158,22 +169,41 @@ func _preparer_voie() -> void:
 		dd += 1.0
 	var y0: float = dep - FOSSE_AVAL
 	var dp: float = portail_d
-	# et la poutre (dessous à 1 m sous les rails) jamais sous le terrain le long de la rampe (la forme vient du
-	# baromètre de la montre, un peu plus basse que le relief IGN sur la première moitié)
+	# et la poutre (dessous à 1 m sous les rails) jamais sous le terrain le long de la rampe
 	var d2: float = 60.0
 	while d2 < dp - 20.0:
 		y0 = maxf(y0, _sol(0.0, -d2) + 0.2 - (RAMPE_S0 * d2 + RAMPE_K * d2 * d2))
 		d2 += 5.0
 	var yp: float = y0 + RAMPE_S0 * dp + RAMPE_K * dp * dp
-	var s1: float = RAMPE_S0 + 2.0 * RAMPE_K * dp
-	# montée a (s1 → 53 %), palier h, réduction b = L_REDUCTION ; a tel que l'aire sous la pente = dénivelé restant
-	var reste: float = L - dp
-	var b: float = L_REDUCTION
-	var dh: float = _y_amont - yp
-	var a: float = (PENTE_MAX * (reste - b) + (PENTE_MAX + PENTE_GARE_AMONT) * 0.5 * b - dh) / (PENTE_MAX - (s1 + PENTE_MAX) * 0.5)
-	a = clampf(a, RACCORD_TUNNEL, reste - b)
-	_pente_tunnel = PackedFloat32Array([dp, a, reste - b - a, b, s1])
+	_s1 = RAMPE_S0 + 2.0 * RAMPE_K * dp
 	_y_portail = yp
+	# variation du haut, descendue depuis le bas du quai amont : pente tous les 1 m en plan, et dénivelé
+	_pente_haut = PackedFloat32Array()
+	var s_pn: float = VARIATION_HAUT_PN[0][0]
+	var u: float = 0.0
+	var chute: float = PENTE_GARE_AMONT * L_QUAI_AMONT
+	var i: int = 0
+	var u_suiv: float = 0.0
+	while s_pn > VARIATION_HAUT_PN[VARIATION_HAUT_PN.size() - 1][0]:
+		while i + 1 < VARIATION_HAUT_PN.size() and s_pn <= float(VARIATION_HAUT_PN[i + 1][0]):
+			i += 1
+		var a0: Array = VARIATION_HAUT_PN[i]
+		var b0: Array = VARIATION_HAUT_PN[mini(i + 1, VARIATION_HAUT_PN.size() - 1)]
+		var g: float = lerpf(float(a0[1]), float(b0[1]), (s_pn - float(a0[0])) / minf(float(b0[0]) - float(a0[0]), -0.001))
+		var pt: float = _echelle_haut(g)
+		var du: float = 0.5 / sqrt(1.0 + pt * pt)
+		while u >= u_suiv:
+			_pente_haut.append(pt)
+			u_suiv += 1.0
+		u += du
+		chute += pt * du
+		s_pn -= 0.5
+	_d53_fin = L - L_QUAI_AMONT - u
+	# montée basse 29,7 % → 53 % depuis le portail, longueur telle que le profil rejoigne la sortie connue
+	var y53_fin: float = _y_amont - chute
+	var montee: float = y53_fin - yp
+	var lg53: float = _d53_fin - dp
+	_rampe_bas = clampf((PENTE_MAX * lg53 - montee) * 2.0 / (PENTE_MAX - _s1), RACCORD_TUNNEL, lg53)
 	var n: int = int(ceil(L / PAS_PROFIL)) + 1
 	var prof: PackedFloat32Array = PackedFloat32Array()
 	prof.resize(n)
@@ -186,9 +216,8 @@ func _preparer_voie() -> void:
 			y_t = yp
 		else:
 			# intégration de la pente par pas de PAS_PROFIL (trapèzes)
-			var u0: float = maxf(d - PAS_PROFIL, dp) - dp
-			var u1: float = d - dp
-			y_t += (_pente_tunnel_en(u0) + _pente_tunnel_en(u1)) * 0.5 * (u1 - u0)
+			var da: float = maxf(d - PAS_PROFIL, dp)
+			y_t += (_pente_tunnel_en_d(da) + _pente_tunnel_en_d(d)) * 0.5 * (d - da)
 			y = y_t
 		prof[k] = y
 	_prof = prof
@@ -802,7 +831,8 @@ func _gare_amont() -> void:
 		# pignons pleins (triangles approchés par deux boîtes)
 		for sz2 in [-1.0, 1.0]:
 			RemonteeKit.boite_en(g, Vector3(larg * 0.6, haut_toit * 0.6, 0.2), Vector3(cx, ys + h - 0.5 + haut_toit * 0.3, cz + sz2 * long_ * 0.5), "peinture_anthracite")
-	var zs: float = -(L - 8.0)
+	# (au débouché de l'escalier : plus bas, son volume descendait dans la salle et faisait plafond sur le quai)
+	var zs: float = -(L + 10.0)
 	pignon.call(0.0, zs, 2.0 * hx + 2.0, 22.0, 8.0, 3.2)
 	RemonteeKit.boite_en(g, Vector3(2.0 * hx + 2.1, 0.9, 22.1), Vector3(0, ys + 6.2, zs), "vitrage_sombre")     # bandeau sous le toit
 	pignon.call(hx + 7.0, zs - 12.0, 12.0, 16.0, 4.5, 2.2)
@@ -819,7 +849,7 @@ func _gare_amont() -> void:
 func _collisions_funi() -> void:
 	var corps: StaticBody3D = StaticBody3D.new()
 	corps.name = "CollisionsLigne"
-	corps.collision_layer = CollisionsJeu.COUCHE_DECOR
+	corps.collision_layer = CollisionsJeu.COUCHE_DECOR | COUCHE_SOUTERRAIN
 	corps.collision_mask = 0
 	_enfant(corps)
 	var boite := func(taille: Vector3, centre: Vector3) -> void:
@@ -943,13 +973,44 @@ func _placer(i: int) -> void:
 static var actif: Funival = null
 
 
+## Dans le souterrain (salle amont, dont le haut est à moins de 2 m sous la surface : le terrain descend vers la gare
+## quand la voie monte), le relief faisait plafond sur l'escalier : le corps du skieur l'ignore tant qu'il y est
+## (l'escalier et la salle ont leurs collisions ; le relief y est déjà masqué à l'écran).
+var _relief_ote: bool = false
+var _masque_avant: int = 0
+## Couche propre aux collisions du Funival (quais, escaliers, salle) : dans le souterrain, le corps du skieur ne voit
+## qu'elle et les véhicules — le relief, et les pièces fines du terrain des gares (corps Decor), y faisaient plafond.
+const COUCHE_SOUTERRAIN: int = 64
+
+
+func _maj_corps_skieur() -> void:
+	if not is_inside_tree():
+		return
+	# (scène principale : current_scene en jeu ; dans les bancs, ajoutée à la racine sous le nom « Main »)
+	var mn: Node = get_tree().current_scene if get_tree().current_scene != null else get_tree().root.get_node_or_null("Main")
+	var sk: Node = mn.get("skieur") if mn != null else null
+	if sk == null or not (sk is CharacterBody3D):
+		return
+	var dedans: bool = souterrain((sk as Node3D).global_position)
+	var cb: CharacterBody3D = sk
+	if dedans and not _relief_ote:
+		_masque_avant = cb.collision_mask
+		cb.collision_mask = COUCHE_SOUTERRAIN | CollisionsJeu.COUCHE_VEHICULE
+		_relief_ote = true
+	elif not dedans and _relief_ote:
+		cb.collision_mask = _masque_avant
+		_relief_ote = false
+
+
 func souterrain(p: Vector3) -> bool:
 	if not pret or not is_inside_tree():
 		return false
 	var loc: Vector3 = global_transform.affine_inverse() * p
 	var d: float = -loc.z
-	return d > portail_d + 3.0 and d < longueur_h() + 1.0 \
-		and absf(loc.x) < lerpf(R_TUNNEL, R_TUNNEL_EVIT, _t_evit(d)) + 3.0 and absf(loc.y - y_voie(d) - 1.0) < 6.0
+	var demi: float = lerpf(R_TUNNEL, R_TUNNEL_EVIT, _t_evit(d)) + 3.0
+	if d > longueur_h() - L_HALL - 2.0:
+		demi = VehiculeFunival.DEMI_LARGEUR + 0.05 + 4.2 + 1.0       # salle amont, murs compris
+	return d > portail_d + 3.0 and d < longueur_h() + 1.0 and absf(loc.x) < demi and absf(loc.y - y_voie(d) - 1.0) < 8.0
 
 
 ## Mouvement : celui du téléphérique, mais la vitesse s'entend LE LONG DE LA VOIE (12 m/s sur une pente de 27 à 48 %) ;
@@ -998,6 +1059,7 @@ func _process_corps(delta: float) -> void:
 			etat = "arret"
 	vitesse_reelle = absf(_v)
 	_maj_positions()
+	_maj_corps_skieur()
 	_dt = 0.0
 
 

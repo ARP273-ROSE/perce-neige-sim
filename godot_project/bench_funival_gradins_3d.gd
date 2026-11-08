@@ -233,6 +233,9 @@ func _tick() -> void:
 			if _t > 30.0:
 				sk.touches_ext = 0
 				var g2: float = sk.global_position.y - _y0
-				_verif("Funival : on monte le quai de Bellevarde à pied", g2 > 8.0, "+%.1f m en 30 s" % g2)
+				var loc2: Vector3 = _lg.global_transform.affine_inverse() * sk.global_position
+				var haut2: float = (_lg.global_transform * Vector3(0, VehiculeFunival.y_plancher_monde(_lg, _lg.longueur_h() - 1.0), 0)).y - _y0
+				_verif("Funival : on monte le quai de Bellevarde à pied, jusqu'en haut", g2 > haut2 - 1.5,
+					"+%.1f m en 30 s (haut du quai +%.1f), arrêté à d=%.0f x=%.1f, %s" % [g2, haut2, -loc2.z, loc2.x, sk.debug_marche])
 				_verif("Funival : sans chute sur le quai amont", _chute_max < 0.25, "plus forte descente par image %.2f m" % _chute_max)
 				_fin()

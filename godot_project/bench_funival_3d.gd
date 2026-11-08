@@ -31,6 +31,15 @@ func _verif(label: String, cond: bool, detail: String = "") -> void:
 	_ok = _ok and cond
 
 
+func _pente_max_voie() -> float:
+	var m: float = 0.0
+	var d: float = 5.0
+	while d < _lg.longueur_h() - 5.0:
+		m = maxf(m, _lg.pente_voie(d))
+		d += 5.0
+	return m
+
+
 func _fin() -> void:
 	print("BENCH_FUNIVAL " + ("OK" if _ok else "ECHEC"))
 	quit(0 if _ok else 1)
@@ -86,7 +95,7 @@ func _tick() -> void:
 				elif d > _lg.portail_d + 30.0 and d < L - 60.0:
 					pire_roche = minf(pire_roche, sol - (y + 2.0 * Funival.R_TUNNEL))
 				d += 2.0
-			print("FUNIVAL L=%.0f m, portail %.0f, voie aval %.1f amont %.1f portail %.1f (repère ligne)" % [L, _lg.portail_d, _lg.y_voie(0.0), _lg.y_voie(L), _lg.y_voie(_lg.portail_d)])
+			print("FUNIVAL L=%.0f m, portail %.0f, voie aval %.1f amont %.1f (gare %.1f) portail %.1f ; montée basse %.0f m, 53 %% jusqu'à d=%.0f ; pente max %.1f %%" % [L, _lg.portail_d, _lg.y_voie(0.0), _lg.y_voie(L), _lg._y_amont, _lg.y_voie(_lg.portail_d), _lg._rampe_bas, _lg._d53_fin, 100.0 * _pente_max_voie()])
 			_verif("Funival : poutre dehors au-dessus du sol (≥ -1,5 m : déblais courts admis)", pire_dehors > -1.5, "%.2f m à d=%.0f" % [pire_dehors, _d_pire])
 			_verif("Funival : tunnel sous la roche", pire_roche > 0.0, "couverture mini %.2f m" % pire_roche)
 			_phase = 2
