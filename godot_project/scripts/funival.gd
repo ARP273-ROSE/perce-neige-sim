@@ -125,7 +125,7 @@ const RACCORD_TUNNEL: float = 150.0
 const PENTE_MAX: float = 0.53             # fiche
 ## En gare amont, les marches des compartiments et celles des quais sont horizontales (photos, utilisateur 08/11/2026) :
 ## la pente en gare est celle pour laquelle les compartiments sont de niveau (VehiculeFunival.PENTE_GRADINS) —
-## une seule valeur, ESTIMÉE à 45 % (« reste prononcée » ; non mesurable sur les photos, prises en perspective).
+## une seule valeur : 30 % (utilisateur, 08/11/2026).
 const PENTE_GARE_AMONT: float = VehiculeFunival.PENTE_GRADINS
 const L_REDUCTION: float = 50.0           # réduction courte, en toute fin (ESTIMÉE)
 var _pente_tunnel: PackedFloat32Array = PackedFloat32Array()   # [d0, a, h, b, s1] : pente par morceaux dans le tunnel
