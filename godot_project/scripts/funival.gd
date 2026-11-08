@@ -12,11 +12,15 @@ extends Telepherique
 ## d : distance horizontale depuis la gare aval ; −Z vers l'amont, comme les autres lignes.
 
 const V_FUNI: float = 12.0              # m/s (fiche)
-const A_FUNI: float = 0.6               # accélération / freinage de service (m/s², estimé)
+## Accélération et freinage de service : 0,18 m/s² en moyenne de 0 à 10 m/s, mesurés sur la trace GPS d'un
+## passage réel (26/04/2026, départ de La Daille : 56 s pour atteindre 10 m/s ; calcul Sage
+## /mnt/apps_pool/sage/funival/trace.sage). Freinage pris égal (non mesuré : tunnel sans GPS).
+const A_FUNI: float = 0.18
 ## Vitesse dans l'évitement (aiguillages passifs et courbes en S) : ralentissement signalé par l'utilisateur
-## (08/11/2026), valeur NON SOURCÉE, calée pour que le trajet retrouve les durées publiées (Wikipédia 4,47 min,
-## OSM 4,8 min, RM.net 5 min) au lieu de 3 min 27 à 12 m/s partout.
-const V_EVIT: float = 4.0
+## (08/11/2026), valeur NON SOURCÉE, calée pour que le trajet retrouve la durée d'une vidéo de la montée en cabine de
+## conduite (départ de La Daille → arrêt à Bellevarde ≈ 304 s ; fiche RM.net 5 min) avec l'accélération mesurée :
+## 6 m/s → 296 s.
+const V_EVIT: float = 6.0
 const ECARTEMENT: float = 1.20          # m (OSM, Wikipédia)
 const E_VOIES: float = 3.75             # entraxe des deux voies dans l'évitement (estimé sur photo : 0,8-1 m entre les caisses de 2,8 m)
 const L_EVITEMENT: float = 200.0        # m (estimé, 150-250 sur les photos)
@@ -246,7 +250,7 @@ func _teinte_paroi(d: float, k_anneau: int) -> Color:
 		return Color(0.42, 0.40, 0.37)                     # roche
 	if u > 0.12 and u < 0.15:
 		return Color(0.62, 0.45, 0.25) if k_anneau % 2 == 0 else Color(0.32, 0.24, 0.15)    # planches et cintres
-	return Color(0.58, 0.58, 0.56)                          # béton projeté (gris, pas beige)
+	return Color(0.66, 0.58, 0.44)                          # béton projeté sous un éclairage chaud (vidéo de la montée)
 
 
 # --- construction -----------------------------------------------------------------------
@@ -659,8 +663,11 @@ func _gare_amont() -> void:
 		# quai en escalier de béton (droite), caillebotis à rampe rouge (gauche)
 		var sol: float = y_voie(d) - 0.5
 		RemonteeKit.boite_en(g, Vector3(4.0, y - sol, lc + 0.04), Vector3(W + 2.0, sol + (y - sol) * 0.5, -d), "beton")
-		RemonteeKit.boite_en(g, Vector3(2.4, 0.10, lc + 0.04), Vector3(-(W + 1.2), y - 0.05, -d), "caillebotis")
+		# (vidéo de la montée : longs escaliers de béton clair des deux côtés, voie bordée d'une structure rouge)
+		RemonteeKit.boite_en(g, Vector3(2.4, y - sol, lc + 0.04), Vector3(-(W + 1.2), sol + (y - sol) * 0.5, -d), "beton")
 		RemonteeKit.boite_en(g, Vector3(0.05, 0.05, lc), Vector3(-(W + 2.4), y + 1.0, -d), "rouge_val")
+		for sxr in [-1.0, 1.0]:
+			RemonteeKit.boite_en(g, Vector3(0.25, 0.45, lc + 0.04), Vector3(sxr * (W - 0.15), y_voie(d) + 0.1, -d), "rouge_val")
 	# mur de pierre et enseignes, à droite, au milieu du quai
 	var dm: float = dq
 	var ym: float = VehiculeFunival.y_plancher_monde(self, dm)

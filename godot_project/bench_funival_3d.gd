@@ -102,7 +102,7 @@ func _tick() -> void:
 				var duree: float = _t - _t_depart
 				_verif("Funival : croisement dans l'évitement sans contact", _ecart_min > VehiculeFunival.DEMI_LARGEUR * 2.0 + 0.1,
 					"entraxe mini %.2f m" % _ecart_min)
-				_verif("Funival : trajet de 4 min 15 à 5 min 10 (Wikipédia 4,47 min ; OSM 4,8 ; RM.net 5), ralenti dans l'évitement", duree > 255.0 and duree < 310.0, "%.0f s" % duree)
+				_verif("Funival : trajet de 4 min 40 à 5 min 20 (vidéo de la montée ≈ 304 s ; RM.net 5 min), ralenti dans l'évitement", duree > 280.0 and duree < 320.0, "%.0f s" % duree)
 				var cm: Mesh = _lg._cables.mesh if _lg._cables != null else null
 				_verif("Funival : câbles tracteur et inférieur posés", cm != null and cm.get_surface_count() > 0 and (cm.surface_get_arrays(0)[Mesh.ARRAY_VERTEX] as PackedVector3Array).size() > 100)
 				_phase = 3
