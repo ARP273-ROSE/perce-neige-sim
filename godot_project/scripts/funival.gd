@@ -328,6 +328,9 @@ func _maillage(st: SurfaceTool, m: Material, nom: String, ombre: bool = true) ->
 	mi.mesh = mesh
 	mi.set_meta("portee_loin", true)       # (voie et tunnel : vus de loin, pas des détails à 250 m)
 	mi.set_meta(MeshMerge.SANS_FUSION, true)
+	# (pas de collision en maillage par CollisionsJeu : voie, tunnel et câbles hors d'atteinte ; gradins et salle
+	# ont les leurs, en boîtes)
+	mi.set_meta("sans_collision", true)
 	if not ombre:
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	_enfant(mi)
@@ -855,6 +858,7 @@ func _refaire_cables() -> void:
 		_cables.name = "CablesFuni"
 		_cables.set_meta("portee_loin", true)
 		_cables.set_meta(MeshMerge.SANS_FUSION, true)
+		_cables.set_meta("sans_collision", true)
 		_cables.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		_enfant(_cables)
 	_cables.mesh = mesh
