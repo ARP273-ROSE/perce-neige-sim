@@ -101,6 +101,10 @@ func _populate() -> void:
 		# seulement quand les deux tubes sont réellement séparés (offset
 		# suffisant) ; aux extrémités fusionnées, la rangée principale
 		# éclaire l'espace commun.
+		if not tunnel.trace.deux_tubes and absf(tunnel.passing_loop_offset(s, 1.0)) > 0.5:
+			# chambre unique large : une seconde rangée contre sa paroi droite (une seule laissait la paroi gauche
+			# proche dans le noir au milieu de l'évitement — protocole du PC, 08/11/2026)
+			_add_neon(s, neon_mesh, neon_mat if lit else neon_mat_off, neon_color, lit, true)
 		if tunnel.trace.deux_tubes and absf(tunnel.passing_loop_offset(s, 1.0)) > wall_offset + 0.4:
 			_add_neon(s, neon_mesh, neon_mat if lit else neon_mat_off,
 				neon_color, lit, true)
@@ -208,7 +212,9 @@ func _add_neon(s: float, mesh: BoxMesh, neon_mat: StandardMaterial3D,
 	if not tunnel.trace.deux_tubes:
 		loop_off *= tunnel.trace.elargissement_chambre       # (chambre unique : contre sa paroi)
 	var wall_pos: Vector3
-	if right_tube:
+	if right_tube and not tunnel.trace.deux_tubes:
+		wall_pos = xform.origin + right * (wall_offset + loop_off) + up * height_offset
+	elif right_tube:
 		wall_pos = xform.origin + right * (loop_off - wall_offset) + up * height_offset
 	else:
 		wall_pos = xform.origin - right * (wall_offset + loop_off) + up * height_offset

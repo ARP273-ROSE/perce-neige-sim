@@ -771,6 +771,7 @@ func _tunnel() -> void:
 	lumieres_pn.neon_taille = Vector3(0.06, 0.20, 0.70)
 	lumieres_pn.wall_offset = R_TUNNEL - 0.10
 	lumieres_pn.height_offset = 1.7 - RAIL_SUR_CENTRE
+	lumieres_pn.light_energy = 4.0          # (tous allumés : à 8 comme au PN, un sur deux, le tube était 1,8 fois plus clair)
 	lumieres_pn.build(tunnel_pn)
 	await _pause("funival : tunnel")
 	for n in [tunnel_pn, voie_pn, lumieres_pn]:
