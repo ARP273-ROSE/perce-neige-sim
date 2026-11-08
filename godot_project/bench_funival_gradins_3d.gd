@@ -205,4 +205,34 @@ func _tick() -> void:
 				sk.touches_ext = 0
 				_verif("Funival : sortie à pied avant le départ", rm.a_bord.is_empty() and not sk.embarque,
 					"a_bord %s" % str(not rm.a_bord.is_empty()))
+				_phase = 11
+				_t = 0.0
+		11:
+			# gare amont : posé en bas des escaliers de droite (deux fois, le temps que les collisions se chargent)
+			var W2: float = VehiculeFunival.DEMI_LARGEUR + 0.05
+			var dq2: float = _lg._x_quai(false) - VehiculeFunival.DEMI_L + 1.0
+			var p2: Vector3 = _lg.global_transform * Vector3(W2 + 2.0, VehiculeFunival.y_plancher_monde(_lg, dq2) + 0.3, -dq2)
+			if _t < 1.5 / 60.0 or (_t > 8.0 and _t < 8.0 + 1.5 / 60.0):
+				sk.activer(p2, 0.0)
+				sk.dernier_sol = p2
+				rm._repos = 60.0
+			if _t > 9.0:
+				_y0 = sk.global_position.y
+				_y_prec = _y0
+				_chute_max = 0.0
+				var amont2: Vector3 = _lg.global_transform.basis * Vector3(0, 0, -1)
+				_yaw_amont = atan2(-amont2.x, -amont2.z)
+				_phase = 12
+				_t = 0.0
+		12:
+			sk.touches_ext = 1
+			sk.cam_yaw = _yaw_amont
+			if _t > 0.5:
+				_chute_max = maxf(_chute_max, _y_prec - sk.global_position.y)
+			_y_prec = sk.global_position.y
+			if _t > 30.0:
+				sk.touches_ext = 0
+				var g2: float = sk.global_position.y - _y0
+				_verif("Funival : on monte le quai de Bellevarde à pied", g2 > 8.0, "+%.1f m en 30 s" % g2)
+				_verif("Funival : sans chute sur le quai amont", _chute_max < 0.25, "plus forte descente par image %.2f m" % _chute_max)
 				_fin()
