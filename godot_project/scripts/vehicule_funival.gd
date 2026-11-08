@@ -11,7 +11,7 @@ extends VehiculeRemontee
 const DEMI_L: float = 16.0              # longueur 30-34 m (estimé)
 const DEMI_LARGEUR: float = 1.40        # largeur 2,7-2,9 m (estimé)
 const N_COMP: int = 9                   # ~9 baies par flanc (estimé)
-const PENTE_GRADINS: float = 0.45       # pente pour laquelle les planchers sont de niveau (tunnel 48 %, dehors 27 %)
+const PENTE_GRADINS: float = 0.30       # pente pour laquelle les planchers sont de niveau = pente en gare amont (utilisateur, 08/11/2026)
 const H_PLANCHER: float = 1.05          # plancher au milieu d'un compartiment, au-dessus des rails
 const H_TOIT: float = 4.05              # toit, perpendiculairement à la voie
 const L_PORTE: float = 1.0
