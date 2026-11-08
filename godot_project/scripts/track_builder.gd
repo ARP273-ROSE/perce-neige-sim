@@ -151,7 +151,10 @@ func build_par_etapes(t: TunnelBuilder, pause: Callable) -> void:
 	tunnel = t
 	for etape in [_compute_cable_geometry, _build_slab, _build_rails, _build_sleepers, _build_walkway,
 			_build_tunnel_details, _build_cable_beam, _build_guides, _build_abt_sheaves, _build_abt_plates, _build_cable]:
-		(etape as Callable).call()
+		if etape == _build_rails:
+			await _build_rails_par_etapes(pause)
+		else:
+			(etape as Callable).call()
 		await pause.call()
 
 
@@ -1078,6 +1081,40 @@ func _adaptive_s_list(s_start: float, s_end: float, side: float) -> Array:
 # ---------------------------------------------------------------------------
 
 func _build_rails() -> void:
+	var mats: Array = _rail_mats()
+	var hg: float = gauge_m * 0.5
+	# Les 2 rails extérieurs (continus) suivent le tube correspondant ±hg ; rails intérieurs de l'évitement en
+	# tronçons : langues, lames, lacunes où passe le câble opposé, cœur en X (cf. _compute_abt).
+	_build_rail_strip(
+		mats[0], mats[1], 0.0, trace.longueur, -1.0, -hg, "RailFarLeft",
+	)
+	_build_rail_strip(
+		mats[0], mats[1], 0.0, trace.longueur, +1.0, +hg, "RailFarRight",
+	)
+	for piece in _abt.pieces:
+		_build_rail_piece(mats[0], mats[1], piece)
+
+
+## Les mêmes rails, un tronçon de chunk_length à la fois, `pause` attendue entre deux (120 ms d'un bloc pour la voie
+## du Funival, relevé du PC du 08/11/2026).
+func _build_rails_par_etapes(pause: Callable) -> void:
+	var mats: Array = _rail_mats()
+	var hg: float = gauge_m * 0.5
+	for f in [[-1.0, -hg, "RailFarLeft"], [1.0, hg, "RailFarRight"]]:
+		var c_start: float = 0.0
+		var chunk_i: int = 0
+		while c_start < trace.longueur - 0.001:
+			var c_end: float = minf(c_start + chunk_length, trace.longueur)
+			_build_rail_chunk(mats[0], mats[1], c_start, c_end, f[0], f[1], "%s_%d" % [f[2], chunk_i])
+			c_start = c_end
+			chunk_i += 1
+			await pause.call()
+	for piece in _abt.pieces:
+		_build_rail_piece(mats[0], mats[1], piece)
+		await pause.call()
+
+
+func _rail_mats() -> Array:
 	var rail_mat: StandardMaterial3D = StandardMaterial3D.new()
 	rail_mat.albedo_color = Color(0.48, 0.46, 0.44)
 	rail_mat.roughness = 0.45
@@ -1090,18 +1127,7 @@ func _build_rails() -> void:
 	rail_top_mat.metallic = 0.95
 	rail_top_mat.metallic_specular = 1.0
 
-	var hg: float = gauge_m * 0.5
-	# Les 2 rails extérieurs (continus) suivent le tube correspondant ±hg
-	_build_rail_strip(
-		rail_mat, rail_top_mat, 0.0, trace.longueur, -1.0, -hg, "RailFarLeft",
-	)
-	_build_rail_strip(
-		rail_mat, rail_top_mat, 0.0, trace.longueur, +1.0, +hg, "RailFarRight",
-	)
-	# Rails intérieurs de l'évitement en tronçons : langues, lames,
-	# lacunes où passe le câble opposé, cœur en X (cf. _compute_abt).
-	for piece in _abt.pieces:
-		_build_rail_piece(rail_mat, rail_top_mat, piece)
+	return [rail_mat, rail_top_mat]
 
 
 # Construit un rail entre s_start et s_end, x_local = passing_loop_offset(s, side) + hg_signed.
@@ -1558,8 +1584,8 @@ func _build_walkway() -> void:
 	boxmat.roughness = 0.7
 	boxm.material = boxmat
 	var boxes: Array = []
-	s = 12.0
-	while s < trace.longueur - 12.0:
+	s = 12.0 if trace.perce_neige else trace.tube_debut + 12.0
+	while s < minf(trace.longueur, trace.tube_fin) - 12.0:
 		# pas dans les salles des gares : le boîtier y flottait loin de
 		# tout mur (retour d'un utilisateur du 06/10/2026, gare du bas)
 		if s < tunnel.station_low_end + 1.0 or s > tunnel.station_high_start - 1.0:
@@ -1596,6 +1622,11 @@ func _build_walkway() -> void:
 
 ## Dans l'évitement (deux tubes) : les joints et la canalisation y suivent
 ## chacun leur tube (_build_loop_lining) au lieu de l'axe unique.
+## Rayon de la chambre unique d'évitement (deux_tubes faux), comme TunnelBuilder.
+func _rayon_chambre(s: float) -> float:
+	return tunnel.tunnel_radius + absf(tunnel.passing_loop_offset(s, 1.0)) * trace.elargissement_chambre
+
+
 func _in_loop_zone(s: float) -> bool:
 	return s > trace.evit_debut and s < trace.evit_fin
 
@@ -1635,6 +1666,12 @@ func _build_tunnel_details() -> void:
 		if not _in_loop_zone(s):
 			var xf: Transform3D = tunnel.transform_at(s)
 			rings.append(Transform3D(xf.basis, xf.origin))
+		elif not trace.deux_tubes:
+			# chambre unique : l'anneau au rayon de la chambre (les deux cercles des deux tubes s'y recoupaient « en
+			# cœur » — captures du PC, lot 19)
+			var xfc: Transform3D = tunnel.transform_at(s)
+			var kc: float = _rayon_chambre(s) / tunnel.tunnel_radius
+			rings.append(Transform3D(xfc.basis.scaled_local(Vector3(kc, kc, 1.0)), xfc.origin))
 		s += ring_joint_spacing
 	_mm_instance(ring, rings, "SegmentRings", 250.0)
 
@@ -1651,6 +1688,11 @@ func _build_tunnel_details() -> void:
 			var rr: float = tunnel.tunnel_radius - 0.06
 			tr2.origin += xf2.basis.x * (rr * sin(deg_to_rad(42.0))) + xf2.basis.y * (rr * cos(deg_to_rad(42.0)))
 			pipes.append(tr2)
+		elif not trace.deux_tubes:
+			var xfc2: Transform3D = tunnel.transform_at(s)
+			var rc2: float = _rayon_chambre(s) - 0.06
+			xfc2.origin += xfc2.basis.x * (rc2 * sin(deg_to_rad(42.0))) + xfc2.basis.y * (rc2 * cos(deg_to_rad(42.0)))
+			pipes.append(xfc2)
 		else:
 			# évitement : la canalisation suit la voûte droite du tube DROIT
 			# (continue avec celle du tube unique, où d = 0) — chaque
@@ -1662,14 +1704,15 @@ func _build_tunnel_details() -> void:
 			pipes.append(Transform3D(Basis.looking_at(p1 - p0, up2), (p0 + p1) * 0.5))
 		s += 4.0
 	_mm_instance(pipe, pipes, "CrownPipe", 400.0)
-	_build_loop_rings(joint_mat)
+	if trace.deux_tubes:
+		_build_loop_rings(joint_mat)
 
 	# --- joints horizontaux des galeries carrées (banches), hors salles de gare
 	var hj: BoxMesh = BoxMesh.new()
 	hj.size = Vector3(0.025, 0.025, 3.02)
 	hj.material = joint_mat
 	var hjs: Array = []
-	for rng in [[tunnel.station_low_end + 3.0, trace.carre_bas_fin - 1.0]]:
+	for rng in ([[tunnel.station_low_end + 3.0, trace.carre_bas_fin - 1.0]] if trace.perce_neige else []):
 		s = rng[0]
 		while s < rng[1]:
 			var xf3: Transform3D = tunnel.transform_at(s)
