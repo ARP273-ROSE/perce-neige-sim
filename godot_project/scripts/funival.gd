@@ -649,16 +649,19 @@ func trace_voie() -> TraceFuni:
 	t._decal = func(s: float) -> float: return E_VOIES * 0.5 * _t_evit(d_de_s(s))
 	t._pente = func(s: float) -> float: return atan(pente_voie(d_de_s(s)))
 	t._cap = func(_s: float) -> float: return 0.0
+	# (longueur lue avant : capturer `t` dans sa propre lambda faisait un cycle jamais libéré — fuite, et plantage à
+	# la fermeture sur le PC, bissection du 08/11/2026)
+	var lg_t: float = t.longueur
 	t._points = func(pas: float) -> Array:
 		var pts: Array = []
-		var n: int = int(t.longueur / pas)
+		var n: int = int(lg_t / pas)
 		for k in range(n + 1):
 			var q: Vector2 = _axe_tube(d_de_s(float(k) * pas))
 			pts.append(Vector3(0.0, q.y, q.x))
 		# dernier point au bout exact (la courbe précuite est ramenée à trace.longueur : tronquée au pas, elle
 		# étirait toute la voie)
-		if t.longueur - float(n) * pas > 0.01:
-			var qf: Vector2 = _axe_tube(d_de_s(t.longueur))
+		if lg_t - float(n) * pas > 0.01:
+			var qf: Vector2 = _axe_tube(d_de_s(lg_t))
 			pts.append(Vector3(0.0, qf.y, qf.x))
 		return pts
 	return t
@@ -747,8 +750,7 @@ func _tunnel() -> void:
 	voie_pn.pit_high_start = t.longueur
 	voie_pn.walkway_side = -1.0            # passerelle-escalier à gauche en montant (vidéos)
 	voie_pn.walkway_s0 = t.tube_debut
-	voie_pn.build(tunnel_pn)
-	await _pause("funival : voie")
+	await voie_pn.build_par_etapes(tunnel_pn, _pause.bind("funival : voie"))
 	for n in [tunnel_pn, voie_pn]:
 		_marquer_voie(n)
 		_enfant(n)
