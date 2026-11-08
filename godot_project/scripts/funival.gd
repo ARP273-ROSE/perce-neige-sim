@@ -136,7 +136,8 @@ var _pente_haut: PackedFloat32Array = PackedFloat32Array()   # pente tous les 1 
 var _rampe_bas: float = 0.0                                   # montée 29,7 % → 53 % depuis le portail (m en plan)
 var _d53_fin: float = 0.0                                     # fin du palier à 53 % (début de la variation du haut)
 var _s1: float = 0.0
-var _murs_bat: Array = []        # murs du bâtiment de Bellevarde [taille, centre], pour les collisions
+var _murs_bat: Array = []
+var _perron_col: Array = []      # perrons du bâtiment [taille, Transform3D], pour les collisions        # murs du bâtiment de Bellevarde [taille, centre], pour les collisions
 
 
 ## Sol du rez-de-chaussée du bâtiment de Bellevarde : au niveau du haut de la rampe des escaliers (le plancher du
@@ -926,7 +927,49 @@ func _gare_amont() -> void:
 	ens.transform = Transform3D(Basis(Vector3.UP, PI * 0.5), Vector3(hx + 1.06, ys + 4.6, zs))
 	var carre: MeshInstance3D = RemonteeKit.boite_en(g, Vector3(0.05, 1.4, 1.4), Vector3(hx + 1.04, ys + 4.6, zs + 5.5), "rouge_val")
 	carre.set_meta(MeshMerge.SANS_FUSION, true)
+	# perrons de béton devant les deux portes vers les pistes, jusqu'au terrain (porte du fond : 1,5 à 1,9 m de
+	# marche, on ne pouvait plus rentrer — PC, lot 15)
+	_perron_col.clear()
+	var stp: SurfaceTool = SurfaceTool.new()
+	stp.begin(Mesh.PRIMITIVE_TRIANGLES)
+	_perron(stp, Vector3(0.0, ys_sol, zs - 11.0), Vector3(0, 0, -1), 3.4)
+	_perron(stp, Vector3(-(hx + 1.0), ys_sol, zs), Vector3(-1, 0, 0), 3.4)
+	var per: MeshInstance3D = _maillage(stp, mat_funi("cuit"), "Perrons", false)
+	per.reparent(g, false)
 	MeshMerge.merge(g, [w1, w2, ens, carre, moel, esc], "Gare")
+
+
+## Perron d'une porte : marches de 0,18 × 0,30 m depuis le seuil (repère de la ligne) dans la direction dir
+## (horizontale, selon un axe), jusqu'au terrain ; les blocs descendent sous le sol. Collisions : les marches et une
+## rampe inclinée par-dessus (le giron est plus court que le pas du skieur, comme aux gradins).
+func _perron(st: SurfaceTool, seuil: Vector3, dir: Vector3, larg: float) -> void:
+	var rise: float = 0.18
+	var run: float = 0.30
+	var lat: Vector3 = Vector3(dir.z, 0.0, -dir.x)
+	var axe: Vector3 = Vector3(absf(dir.x), 0.0, absf(dir.z))
+	var axe_l: Vector3 = Vector3(absf(lat.x), 0.0, absf(lat.z))
+	var n: int = 0
+	for k in range(1, 30):
+		var top: float = seuil.y - rise * float(k)
+		var c: Vector3 = seuil + dir * (run * (float(k) - 0.5))
+		var t: float = maxf(_sol(c.x + lat.x * larg * 0.5, c.z + lat.z * larg * 0.5), _sol(c.x - lat.x * larg * 0.5, c.z - lat.z * larg * 0.5))
+		if top < t - 0.02:
+			break
+		var bas: float = minf(t, top) - 0.6
+		var taille: Vector3 = axe * run + axe_l * larg + Vector3(0, top - bas, 0)
+		var centre: Vector3 = Vector3(c.x, (top + bas) * 0.5, c.z)
+		st.set_color(Color(0.74, 0.73, 0.70))
+		_boite_st(st, taille, centre)
+		_perron_col.append([taille, Transform3D(Basis(), centre)])
+		n = k
+	if n == 0:
+		return
+	var fin: Vector3 = seuil + dir * (run * float(n)) - Vector3(0, rise * float(n), 0)
+	var f: Vector3 = (fin - seuil).normalized()
+	var y_ax: Vector3 = f.cross(lat)
+	# (pas de débord côté seuil : relevée par la pente, la rampe y faisait une bordure de 0,1 m où l'on butait)
+	var lg: float = seuil.distance_to(fin) + 0.3
+	_perron_col.append([Vector3(larg, 0.1, lg), Transform3D(Basis(lat, y_ax, f), (seuil + fin) * 0.5 + f * 0.15 - y_ax * 0.06)])
 
 
 func _collisions_funi() -> void:
@@ -1029,6 +1072,13 @@ func _collisions_funi() -> void:
 	boite.call(Vector3(2.0 * hx + 1.4, 0.4, 22.6), Vector3(0, sol_batiment() - 0.2, -(L + 10.5)))     # (de L − 0,8 à L + 21,8 ; le bâtiment va de L à L + 22)
 	for m in _murs_bat:
 		boite.call(m[0], m[1])
+	for pc in _perron_col:
+		var csp: CollisionShape3D = CollisionShape3D.new()
+		var bxp: BoxShape3D = BoxShape3D.new()
+		bxp.size = pc[0]
+		csp.shape = bxp
+		csp.transform = pc[1]
+		corps.add_child(csp)
 
 
 ## Véhicule sur sa voie, incliné comme elle ; portes et collisions des parois.
