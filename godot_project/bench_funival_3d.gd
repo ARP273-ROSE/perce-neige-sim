@@ -20,6 +20,10 @@ var _yaw_amont: float = 0.0
 var _d_pire: float = 0.0
 var _t_quai_atteint: float = -1.0
 var _v_quai: float = -1.0
+var _v_croisement: float = -1.0
+var _v_ligne_avant: float = 0.0
+var _v_ligne_apres: float = 0.0
+var _v_dans_croisement: float = 0.0
 var _i_veh: int = 0
 var _z_bord: float = 0.0
 var _yaw_bord: float = 0.0
@@ -117,7 +121,17 @@ func _tick() -> void:
 			# nez au début du quai d'arrivée : instant et vitesse (Perce-Neige : V_CREEP)
 			if _t_depart >= 0.0 and _t_quai_atteint < 0.0 and _lg._phase == "route":
 				var but: float = _lg._x_quai(false) if _lg._sens > 0.0 else _lg._x_quai(true)
-				if absf(but - _lg._s) <= VehiculeFunival.DEMI_L * 2.0 + 2.0:
+				# vitesses en ligne et à l'attaque du croisement
+				var d_ev: float = absf(_lg._s - _lg.longueur_h() * 0.5) - (Funival.L_EVITEMENT * 0.5 + Funival.L_RACCORD + VehiculeFunival.DEMI_L)
+				if d_ev <= 0.0:
+					if _v_croisement < 0.0:
+						_v_croisement = absf(_lg._v)
+					_v_dans_croisement = maxf(_v_dans_croisement, absf(_lg._v))
+				elif _v_croisement < 0.0:
+					_v_ligne_avant = maxf(_v_ligne_avant, absf(_lg._v))
+				else:
+					_v_ligne_apres = maxf(_v_ligne_apres, absf(_lg._v))
+				if absf(but - _lg._s) <= _lg.longueur_quai_nez():
 					_t_quai_atteint = _t - _t_depart
 					_v_quai = absf(_lg._v)
 			if absf(d0 - d1) < VehiculeFunival.DEMI_L * 2.0 + 2.0:
@@ -128,12 +142,13 @@ func _tick() -> void:
 				var duree: float = _t - _t_depart
 				_verif("Funival : croisement dans l'évitement sans contact", _ecart_min > VehiculeFunival.DEMI_LARGEUR * 2.0 + 0.1,
 					"entraxe mini %.2f m" % _ecart_min)
-				# vidéo de la montée (KxhTv7cGK-I) : départ 0:08, nez au début du quai amont 4:50 → 282 s ; entrée au pas
-				# comme au Perce-Neige (0,75 m/s, demande d'utilisateur du 09/11/2026)
-				_verif("Funival : début du quai atteint en 4 min 32 à 4 min 52 (vidéo de la montée : 282 s), ralenti dans l'évitement",
-					_t_quai_atteint > 272.0 and _t_quai_atteint < 292.0, "%.0f s, arrêt à %.0f s" % [_t_quai_atteint, duree])
-				_verif("Funival : quai parcouru en 17 à 24 s (vidéo de la montée : 19-20 s)", duree - _t_quai_atteint > 17.0 and duree - _t_quai_atteint < 24.0,
-					"%.1f s, entrée à %.2f m/s" % [duree - _t_quai_atteint, _v_quai])
+				# consigne d'utilisateur du 10/11/2026 : 12 m/s, 8 m/s à l'attaque du croisement, retour à 12, 1 m/s au début du quai
+				_verif("Funival : 12 m/s en ligne avant et après le croisement", _v_ligne_avant > 11.9 and _v_ligne_avant <= 12.01 and _v_ligne_apres > 11.9 and _v_ligne_apres <= 12.01,
+					"%.2f puis %.2f m/s" % [_v_ligne_avant, _v_ligne_apres])
+				_verif("Funival : croisement attaqué et parcouru à 8 m/s", absf(_v_croisement - 8.0) < 0.3 and _v_dans_croisement < 8.3,
+					"attaque %.2f, maxi %.2f m/s" % [_v_croisement, _v_dans_croisement])
+				_verif("Funival : début du quai à 1 m/s", absf(_v_quai - 1.0) < 0.15, "%.2f m/s" % _v_quai)
+				print("FUNIVAL durée : début du quai %.0f s, arrêt %.0f s" % [_t_quai_atteint, duree])
 				var cm: Mesh = _lg._cables.mesh if _lg._cables != null else null
 				_verif("Funival : câble inférieur posé", cm != null and cm.get_surface_count() > 0 and (cm.surface_get_arrays(0)[Mesh.ARRAY_VERTEX] as PackedVector3Array).size() > 50)
 				# voie du Perce-Neige : câble tracteur, galets, et rails de TrackBuilder sur ceux où roulent les véhicules
