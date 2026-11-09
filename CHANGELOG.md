@@ -5,6 +5,22 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.60.0 — 10 novembre 2026
+
+Retours d'essai de la 1.59.
+
+**Funival, marche** : 12 m/s en ligne, ralenti pour attaquer le croisement à 8 m/s, maintenu jusqu'à la sortie des aiguillages, retour à 12 m/s, puis ralenti pour arriver à 1 m/s au début du quai. Départ retenu, jusqu'à 2 min 30 à quai au total, tant que le skieur marche en gare (on a le temps d'aller jusqu'en tête).
+
+**Funival, à bord** : on marche librement dans la rame, à quai comme en roulant, et elle porte le skieur (dérive corrigée à grande distance de l'origine). On ne passe plus à travers le plancher.
+
+**Funival, véhicules refaits d'après les photos** : flancs rentrants, gouttière inox, dos arrondi, nez bombé avec le grand aigle ; portes extérieures coulissantes avec traverses, « Val d'Isère » et bas noir à vagues ; intérieur à arceaux rouges, plafond rouge, bandeau lumineux, nez de marche inox, extincteurs et banquettes de bout. Caisse ramenée à 3,65 m de haut.
+
+**Funival, tunnel et gare amont** : tube porté à 2,65 m de rayon (la caisse perçait la voûte). Plus de plaque grise dans la salle (la gare voisine du Marmottes Express y entrait, masquée quand on est dedans) ; le décor reste affiché en haut des escaliers.
+
+**3S, gare aval** : le terrain ne dépasse plus dans la salle (replat et dalle de béton autour de la fosse).
+
+Vérifié : bancs sans écran au NAS sur la 7dcef86 pour le Funival et ses gradins (vitesses 12, 8, 12 et 1 m/s, marche à bord, sortie à pied), sur la be43eb7 pour les autres ; empreinte du Perce-Neige inchangée. Non vérifié : iPad, WebKit et PC. La téléportation signalée à bord du 3S n'a pas été reproduite (18 cabines essayées) et n'est donc pas corrigée.
+
 ## 1.59.0 — 9 novembre 2026
 
 Retours d'essai sur iPad de la 1.58.
