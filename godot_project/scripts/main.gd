@@ -118,6 +118,10 @@ const SOL_ROCHE: Color = Color(0.17, 0.17, 0.18)
 ## renvoie la lumière).
 const SOL_HIVER: Color = Color(0.78, 0.83, 0.90)
 const AMBIENT_DEHORS: float = 1.0
+## PWA : ambiante en couleur seule (70 % de celle du PC, la part hors ciel) ; skieur dehors, + la part du ciel du PC
+## (30 %, moitié ciel bleu, moitié sol de neige SOL_HIVER)
+const AMBIANCE_WEB: Color = Color(0.315, 0.35, 0.42, 1.0)
+const AMBIANCE_WEB_NEIGE: Color = Color(0.17, 0.19, 0.22, 0.0)
 var _sol_ext: int = 0                  # 0 ciel, 1 roche (vue extérieure), 2 hiver (skieur dehors)
 var _soleil_skieur: bool = false
 var _soleil_relief: DirectionalLight3D = null
@@ -795,7 +799,7 @@ func _build_environment() -> void:
 	# de la seule couleur, au même niveau (70 % : la part hors ciel)
 	if _compat:
 		env.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-		env.ambient_light_color = Color(0.45, 0.50, 0.60) * 0.7
+		env.ambient_light_color = AMBIANCE_WEB
 
 	# --- SDFGI (global illumination) -------------------------------------
 	# Le poste GPU le plus cher de tout le pipeline — coupé sous high.
@@ -1270,6 +1274,9 @@ func _suite_process(delta: float) -> void:
 					var ps: ProceduralSkyMaterial = _env.sky.sky_material
 					ps.ground_bottom_color = sol
 					ps.ground_horizon_color = sol
+				# PWA : l'ambiante n'y lit pas le ciel ; dehors, on lui rend la part que le PC tire du ciel et de la neige
+				if _compat:
+					_env.ambient_light_color = AMBIANCE_WEB + (AMBIANCE_WEB_NEIGE if etat_sol == 2 else Color(0, 0, 0, 0))
 			# dehors il fait jour, même tunnel éteint
 			var ciel: float = 1.0 if (ext or tunnel_lights_on) else 0.0
 			if _env.background_energy_multiplier != ciel:
@@ -1293,7 +1300,10 @@ func _suite_process(delta: float) -> void:
 		# l'ambiance du jour blanchissait le tube, captures du PC du 08/11/2026)
 		if mode_skieur and skieur != null and _soleil_skieur and not _camera_sous_funival():
 			amb = AMBIENT_DEHORS
-		if _compat and (cabin.view_mode == Cabin.ViewMode.FPV or cabin.view_mode == Cabin.ViewMode.SKIEUR):
+		# (pas pour le skieur dehors : la rame à quai ramenait sinon tout le domaine à 0,40 — bardage du Funival presque
+		# noir à l'ombre sur la PWA, captures du PC du 08/11/2026)
+		if _compat and (cabin.view_mode == Cabin.ViewMode.FPV or cabin.view_mode == Cabin.ViewMode.SKIEUR) \
+				and not (mode_skieur and _soleil_skieur):
 			var sr: float = physics.s_render
 			if sr > tunnel.station_high_start - 20.0 or sr < tunnel.station_low_end + 20.0:
 				amb = AMBIENT_GARE_WEB
