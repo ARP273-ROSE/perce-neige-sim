@@ -16,18 +16,12 @@ const V_FUNI: float = 12.0              # m/s (fiche)
 ## passage réel (26/04/2026, départ de La Daille : 56 s pour atteindre 10 m/s ; calcul Sage
 ## « trace.sage » du Funival). Freinage pris égal (non mesuré : tunnel sans GPS).
 const A_FUNI: float = 0.18
-## Vitesse dans l'évitement (aiguillages passifs et courbes en S) : ralentissement signalé par l'utilisateur
-## (08/11/2026), valeur NON SOURCÉE, calée pour que le trajet retrouve la durée d'une vidéo de la montée en cabine de
-## conduite (départ de La Daille → arrêt à Bellevarde ≈ 304 s ; fiche RM.net 5 min) avec l'accélération mesurée :
-## 6 m/s → 296 s. Recalée le 09/11/2026 avec l'évitement mesuré (16,5 s d'aiguillage à aiguillage) et l'arrivée au
-## début du quai à 4:50 sur la même vidéo (282 s après le départ) : 6 m/s.
-const V_EVIT: float = 6.0
-## Marche réelle sur la vidéo de la montée (départ 0:08, début du quai 4:50, arrêt 5:09) : 10,5 m/s en ligne, pour 12 de fiche.
-const V_VIDEO: float = 10.5
-## Entrée en gare d'après la vidéo de la montée (KxhTv7cGK-I : nez au début du quai à 4:50, arrêt à 5:09, soit ~34 m en
-## 19-20 s ; demande d'utilisateur du 09/11/2026 au soir : « suis la vidéo ») : freinage de service continu jusqu'à
-## l'arrêt, sans palier au pas (2·34/19,5 = 3,5 m/s au début du quai, 0,18 m/s² : le freinage de la trace GPS).
-## Accostage au dernier mètre à A_ACCOSTAGE.
+## Marche en ligne à V_FUNI (12 m/s de la fiche), ralentie à V_EVIT pour attaquer le croisement, reprise à V_FUNI une fois
+## le véhicule sorti des aiguillages, puis ralentie pour arriver à V_QUAI au début du quai (consigne d'utilisateur du
+## 10/11/2026, qui prime sur le calage sur la durée de la vidéo de la montée).
+const V_EVIT: float = 8.0
+const V_QUAI: float = 1.0
+## Accostage au dernier mètre.
 const A_ACCOSTAGE: float = 0.30
 ## Courbe de freinage tracée à 85 % du freinage de service : à 100 %, le véhicule la suivait en retard.
 const K_COURBE: float = 0.85
@@ -39,7 +33,7 @@ const ECARTEMENT: float = 1.20          # m (OSM, Wikipédia)
 const E_VOIES: float = 2.35             # entraxe : rails intérieurs à ~1,15 m, au plus l'écartement (1,20 m), un peu moins (utilisateur, à l'œil sur la vidéo de descente, 08/11/2026)
 ## Évitement mesuré sur la vidéo de la montée en cabine de conduite (KxhTv7cGK-I, demande d'utilisateur du 09/11/2026 :
 ## « l'évitement est beaucoup trop long ») : aiguillage du bas à 2:26,5, voies parallèles de 2:32 à 2:41,5, aiguillage
-## du haut à 2:43, à V_EVIT → 99 m d'aiguillage à aiguillage (290 avant).
+## du haut à 2:43, à 6 m/s → 99 m d'aiguillage à aiguillage (290 avant).
 const L_EVITEMENT: float = 57.0         # m, voies parallèles (9,5 s à 6 m/s)
 const L_RACCORD: float = 21.0           # m, aiguillage passif et courbe en S (3,5 s à 6 m/s)
 const R_TUNNEL: float = 2.65            # m (retour d'utilisateur du 09/11/2026 : tube trop petit pour le véhicule ; 3,89 m de hauteur libre au-dessus des rails pour 3,65 de caisse)
@@ -66,6 +60,11 @@ func masse_vehicule() -> float:
 
 func tension_h() -> float:
 	return 200000.0
+
+
+## Distance entre le centre du véhicule et son point d'arrêt quand le nez atteint le début du quai.
+func longueur_quai_nez() -> float:
+	return VehiculeFunival.DEMI_L * 2.0 + 2.0
 
 
 func _x_quai(aval: bool) -> float:
@@ -1697,7 +1696,7 @@ func _process_corps(delta: float) -> void:
 				_phase = "route"
 				_t_quai_tot = 0.0
 	else:
-		var v_max: float = minf(vitesse, V_VIDEO) * CRANS[cran]
+		var v_max: float = vitesse * CRANS[cran]
 		# évitement : on y entre à V_EVIT, freinage anticipé (les deux véhicules y entrent ensemble)
 		var c_ev: float = longueur_h() * 0.5
 		# (tant qu'une partie du véhicule est sur les aiguillages)
@@ -1706,10 +1705,12 @@ func _process_corps(delta: float) -> void:
 		var vers: bool = (_s < c_ev) == (_sens > 0.0) or hors <= 0.0
 		if vers:
 			v_max = minf(v_max, sqrt(V_EVIT * V_EVIT + 2.0 * A_FUNI * hors))
-		# distance restante le long de la voie : freinage de service continu jusqu'à l'arrêt, accostage au dernier mètre
+		# distance restante le long de la voie : freinage jusqu'à V_QUAI au début du quai (nez du véhicule), au pas le long
+		# du quai, accostage au dernier mètre
 		var k_p: float = sqrt(1.0 + pow(pente_voie(_s), 2.0))
 		var reste: float = absf(but - _s) * k_p
-		var v_gare: float = sqrt(2.0 * A_FUNI * K_COURBE * maxf(reste, 0.0))
+		var avant_quai: float = maxf(absf(but - _s) - longueur_quai_nez(), 0.0) * k_p
+		var v_gare: float = sqrt(V_QUAI * V_QUAI + 2.0 * A_FUNI * K_COURBE * avant_quai)
 		v_gare = minf(v_gare, maxf(sqrt(2.0 * A_ACCOSTAGE * maxf(reste - 0.05, 0.0)), 0.12))
 		v_max = minf(v_max, v_gare)
 		if etat != "marche":
