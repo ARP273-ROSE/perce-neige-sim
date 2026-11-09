@@ -20,6 +20,12 @@ var _yaw_amont: float = 0.0
 var _d_pire: float = 0.0
 var _t_quai_atteint: float = -1.0
 var _v_quai: float = -1.0
+var _i_veh: int = 0
+var _z_bord: float = 0.0
+var _yaw_bord: float = 0.0
+var _roule_vu: bool = false
+var _t_marche: float = 0.0
+var _y_sortie: float = 0.0
 
 
 func _initialize() -> void:
@@ -126,7 +132,8 @@ func _tick() -> void:
 				# comme au Perce-Neige (0,75 m/s, demande d'utilisateur du 09/11/2026)
 				_verif("Funival : début du quai atteint en 4 min 32 à 4 min 52 (vidéo de la montée : 282 s), ralenti dans l'évitement",
 					_t_quai_atteint > 272.0 and _t_quai_atteint < 292.0, "%.0f s, arrêt à %.0f s" % [_t_quai_atteint, duree])
-				_verif("Funival : entrée au quai à 0,75 m/s (Perce-Neige)", absf(_v_quai - Funival.V_CREEP) < 0.1, "%.2f m/s" % _v_quai)
+				_verif("Funival : quai parcouru en 17 à 24 s (vidéo de la montée : 19-20 s)", duree - _t_quai_atteint > 17.0 and duree - _t_quai_atteint < 24.0,
+					"%.1f s, entrée à %.2f m/s" % [duree - _t_quai_atteint, _v_quai])
 				var cm: Mesh = _lg._cables.mesh if _lg._cables != null else null
 				_verif("Funival : câble inférieur posé", cm != null and cm.get_surface_count() > 0 and (cm.surface_get_arrays(0)[Mesh.ARRAY_VERTEX] as PackedVector3Array).size() > 50)
 				# voie du Perce-Neige : câble tracteur, galets, et rails de TrackBuilder sur ceux où roulent les véhicules
@@ -170,6 +177,7 @@ func _tick() -> void:
 					var dedans: Vector3 = v.global_transform * (v.place_assise(4) + Vector3(0, 0.05, 0))
 					sk.activer(dedans, 0.0)
 					_y0 = dedans.y
+					_i_veh = i
 					_phase = 4
 					_t = 0.0
 					return
@@ -177,23 +185,50 @@ func _tick() -> void:
 				_verif("Funival : un véhicule à quai en gare aval", false)
 				_fin()
 		4:
+			# à bord, on marche librement (porté par le véhicule, comme dans le Perce-Neige)
+			var v4: VehiculeFunival = _lg.vehicule(_i_veh)
+			var loc4: Vector3 = v4.global_transform.affine_inverse() * sk.global_position
 			if _t > 1.0 and _t < 1.0 + 1.0 / 60.0:
-				_verif("Funival : à bord, debout dans un compartiment", not rm.a_bord.is_empty() and rm.a_bord[0] == _lg,
-					"a_bord %s" % str(not rm.a_bord.is_empty()))
-				if rm.a_bord.is_empty():
-					_fin()
-					return
-			if _t > 1.5 and rm.a_bord.is_empty():
-				_verif("Funival : emporté jusqu'en haut, sorti portes ouvertes", not sk.embarque and sk.global_position.y > _y0 + 800.0,
-					"%.0f s, +%.0f m" % [_t, sk.global_position.y - _y0])
-				# il tient debout sur le quai quelques secondes après (pas de chute dans la fosse)
+				_z_bord = loc4.z
+				var av4: Vector3 = v4.global_transform.basis.z * -1.0
+				_yaw_bord = atan2(-av4.x, -av4.z)
+			if _t > 1.0 and _t < 4.0:
+				sk.touches_ext = 1
+				sk.cam_yaw = _yaw_bord
+			elif _t >= 4.0 and _t < 4.0 + 1.0 / 60.0:
+				sk.touches_ext = 0
+				_verif("Funival : on marche dans le véhicule à quai", absf(loc4.z - _z_bord) > 1.5, "%.1f m en 3 s" % absf(loc4.z - _z_bord))
+				_verif("Funival : pas de place assignée", rm.a_bord.is_empty() and not sk.embarque)
+			if _lg._phase == "route" and absf(_lg._v) > 5.0 and not _roule_vu:
+				_roule_vu = true
+				_z_bord = loc4.z
+				_verif("Funival : porté par le véhicule qui roule", sk.support == _lg._corps[_i_veh][0], "support %s" % str(sk.support))
+			if _roule_vu and _t_marche < 3.0 and _lg._phase == "route":
+				_t_marche += 1.0 / 60.0
+				sk.touches_ext = 2
+				sk.cam_yaw = _yaw_bord
+				if _t_marche >= 3.0:
+					sk.touches_ext = 0
+					_verif("Funival : on marche dans le véhicule en roulant", absf(loc4.z - _z_bord) > 1.5, "%.1f m en 3 s à %.1f m/s" % [absf(loc4.z - _z_bord), absf(_lg._v)])
+			if _roule_vu and _lg._phase == "quai" and _lg.portes_ouvertes():
+				var dy: float = loc4.y - VehiculeFunival.y_plancher(loc4.z)
+				_verif("Funival : emporté jusqu'en haut, sur le plancher", sk.global_position.y > _y0 + 800.0 and absf(dy) < 0.4,
+					"%.0f s, +%.0f m, %.2f m au-dessus du plancher" % [_t, sk.global_position.y - _y0, dy])
+				var cote4: Vector3 = v4.global_transform.basis.x
+				_yaw_bord = atan2(-cote4.x, -cote4.z)
+				_y_sortie = sk.global_position.y
 				_phase = 5
 				_t = 0.0
 			elif _t > 700.0:
-				_verif("Funival : arrivé en haut", false, "toujours à bord")
+				_verif("Funival : arrivé en haut", false, "phase %s" % _lg._phase)
 				_fin()
 		5:
-			if _t > 4.0:
-				_verif("Funival : debout sur le quai amont après la sortie", sk.global_position.y > _y0 + 795.0,
-					"+%.0f m" % (sk.global_position.y - _y0))
+			# sortie à pied, côté +x du véhicule : vers le quai, sans chute
+			var v5: VehiculeFunival = _lg.vehicule(_i_veh)
+			sk.touches_ext = 1 if _t < 4.0 else 0
+			sk.cam_yaw = _yaw_bord
+			if _t > 5.0:
+				var loc5: Vector3 = v5.global_transform.affine_inverse() * sk.global_position
+				_verif("Funival : sorti à pied sur le quai amont, sans chute", absf(loc5.x) > VehiculeFunival.DEMI_LARGEUR and sk.global_position.y > _y_sortie - 1.0,
+					"x local %.2f, %.2f m sous la sortie" % [loc5.x, _y_sortie - sk.global_position.y])
 				_fin()

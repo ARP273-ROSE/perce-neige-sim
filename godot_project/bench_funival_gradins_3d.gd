@@ -106,7 +106,7 @@ func _tick() -> void:
 					var dedans: Vector3 = v.global_transform * (v.place_assise(4) + Vector3(0, 0.05, 0))
 					sk.activer(dedans, 0.0)
 					_y0 = dedans.y
-					_phase = 4
+					_phase = 6        # (le trajet à bord : bench_funival_3d)
 					_t = 0.0
 					return
 			if _t > 700.0:
@@ -231,13 +231,14 @@ func _tick() -> void:
 			if _t > 0.5:
 				_chute_max = maxf(_chute_max, _y_prec - sk.global_position.y)
 			_y_prec = sk.global_position.y
-			if _t > 30.0:
+			if _t > 42.0:
 				sk.touches_ext = 0
 				var g2: float = sk.global_position.y - _y0
 				var loc2: Vector3 = _lg.global_transform.affine_inverse() * sk.global_position
 				var haut2: float = (_lg.global_transform * Vector3(0, VehiculeFunival.y_plancher_monde(_lg, _lg.longueur_h() - 1.0), 0)).y - _y0
 				_verif("Funival : on monte le quai de Bellevarde à pied, jusqu'en haut", g2 > haut2 - 1.5,
 					"+%.1f m en 30 s (haut du quai +%.1f), arrêté à d=%.0f x=%.1f, %s" % [g2, haut2, -loc2.z, loc2.x, sk.debug_marche])
+				_verif("Funival : du haut des escaliers, on entre dans le bâtiment", -loc2.z > _lg.longueur_h() + 2.0, "d=%.1f (L=%.1f)" % [-loc2.z, _lg.longueur_h()])
 				_verif("Funival : sans chute sur le quai amont", _chute_max < 0.25, "plus forte descente par image %.2f m" % _chute_max)
 				_phase = 13
 				_t = 0.0

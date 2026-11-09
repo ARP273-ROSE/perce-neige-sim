@@ -1013,7 +1013,8 @@ func _process_corps(delta: float) -> void:
 	# sous terre (trajet en funiculaire, galerie) : rien des remontées n'est
 	# visible — tout est caché et figé (le défilement du tunnel n'était pas
 	# fluide sur la PWA, retour d'utilisateur, 24/10/2026)
-	_sous_terre = relief != null and p.y < relief.hauteur_sol(p.x, p.z) - 6.0 and a_bord.is_empty()
+	_sous_terre = relief != null and p.y < relief.hauteur_sol(p.x, p.z) - 6.0 and a_bord.is_empty() \
+		and not (Funival.actif != null and is_instance_valid(Funival.actif) and Funival.actif.skieur_dedans(skieur.global_position))
 	if _sous_terre:
 		if _lignes_montrees:
 			_montrer_lignes(false, p)
@@ -1029,6 +1030,7 @@ func _process_corps(delta: float) -> void:
 	for e in lignes:
 		var lg: LigneRemontee = e[0]
 		if lg.pret and lg != _en_cours and (a_bord.is_empty() or (a_bord[0] != lg and a_bord[0] != lg.jumelee)) \
+				and not (lg is Funival and (lg as Funival).skieur_dedans(skieur.global_position)) \
 				and _distance_ligne(lg, p) > _demolir_au_dela(lg) \
 				and (lg.jumelee == null or _distance_ligne(lg.jumelee, p) > _demolir_au_dela(lg.jumelee)):
 			lg.demolir(_poubelle)
@@ -1037,7 +1039,7 @@ func _process_corps(delta: float) -> void:
 		if not lg.roule:
 			continue
 		var d: float = _distance_ligne(lg, p)
-		var a_bord_ici: bool = not a_bord.is_empty() and a_bord[0] == lg
+		var a_bord_ici: bool = (not a_bord.is_empty() and a_bord[0] == lg) or (lg is Funival and (lg as Funival).skieur_dedans(skieur.global_position))
 		# tronçons jumelés : ils tournent ensemble, au même pas (sinon les
 		# sièges qui passent de l'un à l'autre se décalent)
 		var jm: LigneRemontee = lg.jumelee
@@ -1136,7 +1138,6 @@ func _pres_des_gares(lg: LigneRemontee, p: Vector3, portee: float = PORTEE_GARES
 	var r2: float = portee * portee
 	return Vector2(p.x - a.x, p.z - a.z).length_squared() < r2 or Vector2(p.x - b.x, p.z - b.z).length_squared() < r2
 var _t_loupe: float = -1000.0
-var _t_bord_funi: float = -1000.0
 var _etat_bord: String = "marche"
 
 
@@ -1240,17 +1241,14 @@ func _embarquement() -> void:
 		return
 	_repos = maxf(0.0, _repos - get_process_delta_time())
 	var p: Vector3 = skieur.global_position
-	# Funival : dans un véhicule qui ferme ses portes ou roule, il est porté, même juste après en être « sorti »
-	# (sinon la caisse, déplacée chaque image, partait sans lui et il passait au travers du plancher — iPad, 08/11/2026)
-	var fu: Funival = Funival.actif
-	if fu != null and is_instance_valid(fu) and fu.pret and fu.is_inside_tree() and not fu.portes_ouvertes() \
-			and _entrer_cabine(fu, p, true):
-		return
 	if _repos > 0.0:
 		return
 	for lg0 in _lignes_gares(p):
 		var lg: LigneRemontee = lg0
 		if not lg.pret or not lg.is_processing() or not _pres_des_gares(lg, p):
+			continue
+		# (Funival : on y marche librement, porté par le véhicule comme dans le Perce-Neige — pas de place assignée)
+		if lg is Funival:
 			continue
 		if lg.teleski():
 			if _prendre_perche(lg, p):
@@ -1399,7 +1397,7 @@ func _cap(v: Node3D, avant: bool = false) -> float:
 
 ## Skieur entré dans une cabine en gare : assis sur la banquette d'où l'on
 ## regarde vers l'amont, à la place la plus proche.
-func _entrer_cabine(lg: LigneRemontee, p: Vector3, rattraper: bool = false) -> bool:
+func _entrer_cabine(lg: LigneRemontee, p: Vector3) -> bool:
 	# (avec le noyau : les cabines en gare de sa dernière étape, dans le même ordre — les autres sont en ligne, ou à
 	# plus de 250 m ; zone_vehicule pour chaque cabine, à chaque image : 0,1 ms à Tovière, relevé du 07/11/2026)
 	var ids: Variant = range(lg.nombre_vehicules())
@@ -1407,22 +1405,13 @@ func _entrer_cabine(lg: LigneRemontee, p: Vector3, rattraper: bool = false) -> b
 		ids = lg._noyau.en_gare()
 	for i in ids:
 		var zn: String = lg.zone_vehicule(i)
-		if zn == "ligne" and not rattraper:
+		if zn == "ligne":
 			continue
 		var v: VehiculeRemontee = lg.vehicule(i)
-		if rattraper and zn == "ligne":
-			# (en ligne : sens de marche, comme s'il était monté à la gare de départ)
-			var monte: bool = (lg as Funival)._v * (1.0 if i == 0 else -1.0) >= 0.0
-			zn = "gare_aval" if monte else "gare_amont"
 		var loc: Vector3 = v.global_transform.affine_inverse() * p
 		var y_pl: float = v.place_assise(0).y
-		if v is VehiculeFunival:
-			# (Funival : planchers en gradins, celui du compartiment où l'on est)
-			y_pl = VehiculeFunival.y_plancher(loc.z)
 		var lim: Vector2 = lg.demi_interieur()
 		if absf(loc.x) > lim.x or absf(loc.z) > lim.y or loc.y < y_pl - 0.4 or loc.y > y_pl + 1.6:
-			if rattraper:
-				continue
 			if _guet.is_empty() and Vector2(loc.x, loc.z).length() < maxf(lim.x, lim.y) + 2.5 \
 					and absf(loc.y - y_pl) < 2.0 and lg.regime() > 0.3:
 				_guet = [lg, i, zn == "gare_aval"]
@@ -1433,9 +1422,6 @@ func _entrer_cabine(lg: LigneRemontee, p: Vector3, rattraper: bool = false) -> b
 		var k: int = clampi(int(round(loc.x / 0.40 + 2.5)), 0, 5) if lg.tricable() else clampi(int(round(loc.x / 0.46)) + 2, 0, 4)
 		if lg.vaetvient():
 			k = clampi(int(round(loc.z / 1.0)) + 2, 0, 4)
-		if v is VehiculeFunival:
-			k = VehiculeFunival.compartiment(loc.z)
-			_t_bord_funi = _t
 		# on monte en cabine à pied : chaussé, on déchausse et les skis vont
 		# au porte-skis, sur les vantaux des portes (retour d'utilisateur, 23/10/2026)
 		var skis: bool = skieur.chausse
@@ -1691,17 +1677,6 @@ func _suivre_siege() -> void:
 	var lg: LigneRemontee = a_bord[0]
 	var i: int = a_bord[1]
 	var v: VehiculeRemontee = lg.vehicule(i)
-	# Funival à quai, portes ouvertes : celui qui marche (après le temps d'entrer) redescend sur le quai, libre
-	# (essai à pied du 08/11/2026 : on restait à bord jusqu'à l'autre gare)
-	if v is VehiculeFunival and lg.zone_vehicule(i) != "ligne" and (lg as Funival).portes_ouvertes() \
-			and _t - _t_bord_funi > 1.5 and (skieur._clavier() != Vector2.ZERO or skieur.entree.length() > 0.12):
-		skieur.embarque = false
-		skieur.lever()
-		skieur.support = null
-		skieur._skis.visible = true
-		a_bord = []
-		_repos = 4.0
-		return
 	skieur.global_position = v.vers_monde(v.place_assise(a_bord[2], a_bord[4]))
 	skieur.velocity = Vector3.ZERO
 	var cap: float = _cap(v, a_bord[4])

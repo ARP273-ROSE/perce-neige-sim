@@ -2678,6 +2678,19 @@ func _gare_3s(g: Node3D, znez: float, zc: float, aval: bool) -> void:
 	var sg: float = e[4]
 	var zm: float = (z_av + z_ar) * 0.5
 	var lz: float = absf(z_ar - z_av)
+	# dalle de béton de la salle, sous les quais, autour de la fosse (sinon la neige du terrassement y entrait)
+	if aval:
+		var fo: Array = Machinerie3S.new(self).fosse(true)
+		var z0_d: float = minf(z_av, z_ar)
+		var z1_d: float = maxf(z_av, z_ar)
+		var x0_f: float = float(fo[0])
+		var x1_f: float = float(fo[1])
+		var z0_f: float = clampf(float(fo[2]), z0_d, z1_d)
+		var z1_f: float = clampf(float(fo[3]), z0_d, z1_d)
+		for bd in [[-hx, x0_f, z0_d, z1_d], [x1_f, hx, z0_d, z1_d], [x0_f, x1_f, z0_d, z0_f], [x0_f, x1_f, z1_f, z1_d]]:
+			if float(bd[1]) - float(bd[0]) > 0.01 and float(bd[3]) - float(bd[2]) > 0.01:
+				RemonteeKit.boite_en(g, Vector3(float(bd[1]) - float(bd[0]), 0.06, float(bd[3]) - float(bd[2])),
+					Vector3((float(bd[0]) + float(bd[1])) * 0.5, 0.0, (float(bd[2]) + float(bd[3])) * 0.5), "beton")
 	# (vidéos de la ligne) — aval : chalet à deux
 	# pignons, pierre en bas, bardage bois en haut, toits bruns ; amont :
 	# volume sombre à toit plat couvert de panneaux solaires

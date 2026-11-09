@@ -22,14 +22,19 @@ const A_FUNI: float = 0.18
 ## 6 m/s → 296 s. Recalée le 09/11/2026 avec l'évitement mesuré (16,5 s d'aiguillage à aiguillage) et l'arrivée au
 ## début du quai à 4:50 sur la même vidéo (282 s après le départ) : 6 m/s.
 const V_EVIT: float = 6.0
-## Entrée en gare comme au Perce-Neige (Constants.V_CREEP, demande d'utilisateur du 09/11/2026 : « il doit arriver au
-## début du quai à 0,75 m/s et pas 4 ») : le nez du véhicule passe le début du quai à V_CREEP, qu'il garde jusqu'à
-## l'accostage (dernier mètre à A_ACCOSTAGE).
-const V_CREEP: float = 0.75
+## Marche réelle sur la vidéo de la montée (départ 0:08, début du quai 4:50, arrêt 5:09) : 10,5 m/s en ligne, pour 12 de fiche.
+const V_VIDEO: float = 10.5
+## Entrée en gare d'après la vidéo de la montée (KxhTv7cGK-I : nez au début du quai à 4:50, arrêt à 5:09, soit ~34 m en
+## 19-20 s ; demande d'utilisateur du 09/11/2026 au soir : « suis la vidéo ») : freinage de service continu jusqu'à
+## l'arrêt, sans palier au pas (2·34/19,5 = 3,5 m/s au début du quai, 0,18 m/s² : le freinage de la trace GPS).
+## Accostage au dernier mètre à A_ACCOSTAGE.
 const A_ACCOSTAGE: float = 0.30
-## Courbe de freinage tracée à 85 % du freinage de service : à 100 %, le véhicule la suivait en retard (entrée au quai à
-## 1,6 m/s au lieu de 0,75, simulation du 09/11/2026).
+## Courbe de freinage tracée à 85 % du freinage de service : à 100 %, le véhicule la suivait en retard.
 const K_COURBE: float = 0.85
+## Attente à quai : 45 s (téléphérique), prolongée tant que le skieur marche dans le véhicule ou sur ses quais, portes
+## ouvertes, jusqu'à T_QUAI_MAX (« le funi part trop vite quand on monte l'escalier en gare aval, pas le temps d'aller
+## jusqu'en tête », 09/11/2026).
+const T_QUAI_MAX: float = 150.0
 const ECARTEMENT: float = 1.20          # m (OSM, Wikipédia)
 const E_VOIES: float = 2.35             # entraxe : rails intérieurs à ~1,15 m, au plus l'écartement (1,20 m), un peu moins (utilisateur, à l'œil sur la vidéo de descente, 08/11/2026)
 ## Évitement mesuré sur la vidéo de la montée en cabine de conduite (KxhTv7cGK-I, demande d'utilisateur du 09/11/2026 :
@@ -37,7 +42,7 @@ const E_VOIES: float = 2.35             # entraxe : rails intérieurs à ~1,15 m
 ## du haut à 2:43, à V_EVIT → 99 m d'aiguillage à aiguillage (290 avant).
 const L_EVITEMENT: float = 57.0         # m, voies parallèles (9,5 s à 6 m/s)
 const L_RACCORD: float = 21.0           # m, aiguillage passif et courbe en S (3,5 s à 6 m/s)
-const R_TUNNEL: float = 2.20            # m (diamètre estimé 4-4,5 m)
+const R_TUNNEL: float = 2.65            # m (retour d'utilisateur du 09/11/2026 : tube trop petit pour le véhicule ; 3,89 m de hauteur libre au-dessus des rails pour 3,65 de caisse)
 const R_TUNNEL_EVIT: float = 3.90       # m (section élargie à deux voies)
 const PROF_PORTAIL: float = 4.0         # voie sous le terrain au droit du portail (m)
 const DESSOUS_POUTRE: float = 2.8       # dessus des rails au-dessus du sol dehors (dessous de la poutre à 1,5-2 m du sol sur photo)
@@ -1557,6 +1562,8 @@ func _maj_corps_skieur() -> void:
 		return
 	var dedans: bool = souterrain((sk as Node3D).global_position)
 	var cb: CharacterBody3D = sk
+	_garde_plancher(cb)
+	_masquer_voisines()
 	if dedans and not _relief_ote:
 		_masque_avant = cb.collision_mask
 		cb.collision_mask = COUCHE_SOUTERRAIN | CollisionsJeu.COUCHE_VEHICULE
@@ -1564,6 +1571,97 @@ func _maj_corps_skieur() -> void:
 	elif not dedans and _relief_ote:
 		cb.collision_mask = _masque_avant
 		_relief_ote = false
+
+
+var _t_quai_tot: float = 0.0
+
+
+## Skieur qui marche dans une gare (quais, escaliers) ou dans un véhicule à quai.
+func _skieur_marche_en_gare() -> bool:
+	if not is_inside_tree():
+		return false
+	var mn: Node = get_tree().current_scene if get_tree().current_scene != null else get_tree().root.get_node_or_null("Main")
+	var sk: Node = mn.get("skieur") if mn != null else null
+	if sk == null or not (sk is CharacterBody3D):
+		return false
+	var cb: CharacterBody3D = sk
+	if Vector2(cb.velocity.x, cb.velocity.z).length() < 0.3:
+		return false
+	var loc: Vector3 = global_transform.affine_inverse() * cb.global_position
+	var d: float = -loc.z
+	var lq: float = VehiculeFunival.DEMI_L + 8.0
+	for aval in [true, false]:
+		if absf(d - _x_quai(aval)) < lq and absf(loc.x) < 12.0 and absf(loc.y - y_voie(clampf(d, 0.0, longueur_h()))) < 8.0:
+			return true
+	return false
+
+
+## À bord (on y marche librement, porté comme dans le Perce-Neige) : dans la caisse d'un véhicule, le skieur a toujours
+## ce véhicule pour support dès qu'il roule, et n'en traverse jamais le plancher (à 12 m/s, un à-coup d'images sur iPad
+## suffisait — essai du 08/11/2026).
+func _garde_plancher(cb: CharacterBody3D) -> void:
+	if not collisions_actives or not cb.get("actif"):
+		return
+	for i in range(mini(_corps.size(), _vehicules.size())):
+		if _corps[i] == null:
+			continue
+		var v: VehiculeFunival = _vehicules[i][0]
+		var loc: Vector3 = v.global_transform.affine_inverse() * cb.global_position
+		if absf(loc.x) > VehiculeFunival.DEMI_LARGEUR - 0.02 or absf(loc.z) > VehiculeFunival.DEMI_L - 0.2:
+			continue
+		var y_pl: float = VehiculeFunival.y_plancher(loc.z)
+		if loc.y < y_pl - 1.5 or loc.y > y_pl + 3.0:
+			continue
+		if loc.y < y_pl - 0.25:
+			loc.y = y_pl + 0.03
+			cb.global_position = v.global_transform * loc
+			cb.velocity = Vector3.ZERO
+		var corps: Node3D = _corps[i][0]
+		if absf(_v) > 0.01 and cb.get("support") != corps:
+			cb.set("support", corps)
+			cb.set("_support_xf", corps.global_transform)
+		return
+
+
+## Caméra dans le souterrain : le relief y est masqué (main._skieur_en_tunnel), pas les gares des lignes voisines : celle
+## de l'arrivée du Marmottes Express, au-dessus de la salle, la coupait en deux (« une plaque grise », iPad 08-09/11/2026).
+var _voisines_cachees: Array = []
+
+
+func _masquer_voisines() -> void:
+	var cam: Camera3D = get_viewport().get_camera_3d() if is_inside_tree() else null
+	var sous: bool = cam != null and souterrain(cam.global_position)
+	if sous == not _voisines_cachees.is_empty() or get_parent() == null:
+		return
+	if sous:
+		for n in get_parent().get_children():
+			if n != self and n is Node3D and (n as Node3D).visible:
+				(n as Node3D).visible = false
+				_voisines_cachees.append(n)
+	else:
+		for n2 in _voisines_cachees:
+			if is_instance_valid(n2):
+				(n2 as Node3D).visible = true
+		_voisines_cachees.clear()
+
+
+## Caméra sous la roche (masque le relief) : pas dans la partie de la salle qui sort du versant, dont le terrain est raboté
+## sous le plancher — sinon le décor disparaissait en sortant par le haut des escaliers (09/11/2026).
+func sous_la_roche(p: Vector3) -> bool:
+	if not souterrain(p):
+		return false
+	return -(global_transform.affine_inverse() * p).z < _salle_emerge_d + 2.0
+
+
+## Le point p (monde) est dans la caisse d'un véhicule : le skieur y est porté, la ligne doit tourner à pleine cadence, collisions comprises.
+func skieur_dedans(p: Vector3) -> bool:
+	if not pret:
+		return false
+	for e in _vehicules:
+		var loc: Vector3 = (e[0] as Node3D).global_transform.affine_inverse() * p
+		if absf(loc.x) < VehiculeFunival.DEMI_LARGEUR + 0.1 and absf(loc.z) < VehiculeFunival.DEMI_L and loc.y > 0.0 and loc.y < VehiculeFunival.H_TOIT:
+			return true
+	return false
 
 
 func souterrain(p: Vector3) -> bool:
@@ -1591,11 +1689,15 @@ func _process_corps(delta: float) -> void:
 		_v = 0.0
 		vitesse_reelle = 0.0
 		if etat == "marche":
-			_t_quai -= delta
+			_t_quai_tot += delta
+			# (portes encore ouvertes et skieur qui marche à quai ou à bord : on l'attend)
+			if not (_t_quai - delta < 2.0 and _t_quai_tot < T_QUAI_MAX and _skieur_marche_en_gare()):
+				_t_quai -= delta
 			if _t_quai <= 0.0:
 				_phase = "route"
+				_t_quai_tot = 0.0
 	else:
-		var v_max: float = vitesse * CRANS[cran]
+		var v_max: float = minf(vitesse, V_VIDEO) * CRANS[cran]
 		# évitement : on y entre à V_EVIT, freinage anticipé (les deux véhicules y entrent ensemble)
 		var c_ev: float = longueur_h() * 0.5
 		# (tant qu'une partie du véhicule est sur les aiguillages)
@@ -1604,12 +1706,10 @@ func _process_corps(delta: float) -> void:
 		var vers: bool = (_s < c_ev) == (_sens > 0.0) or hors <= 0.0
 		if vers:
 			v_max = minf(v_max, sqrt(V_EVIT * V_EVIT + 2.0 * A_FUNI * hors))
-		# distance restante le long de la voie : freinage jusqu'à V_CREEP au début du quai (nez du véhicule), puis au pas
-		# sur toute sa longueur, accostage au dernier mètre
+		# distance restante le long de la voie : freinage de service continu jusqu'à l'arrêt, accostage au dernier mètre
 		var k_p: float = sqrt(1.0 + pow(pente_voie(_s), 2.0))
 		var reste: float = absf(but - _s) * k_p
-		var l_quai: float = (VehiculeFunival.DEMI_L * 2.0 + 2.0) * k_p
-		var v_gare: float = sqrt(V_CREEP * V_CREEP + 2.0 * A_FUNI * K_COURBE * maxf(reste - l_quai, 0.0))
+		var v_gare: float = sqrt(2.0 * A_FUNI * K_COURBE * maxf(reste, 0.0))
 		v_gare = minf(v_gare, maxf(sqrt(2.0 * A_ACCOSTAGE * maxf(reste - 0.05, 0.0)), 0.12))
 		v_max = minf(v_max, v_gare)
 		if etat != "marche":
@@ -1777,6 +1877,7 @@ func _corps_vehicule(i: int) -> void:
 	corps.collision_layer = 0 if construction_cachee else CollisionsJeu.COUCHE_VEHICULE
 	corps.collision_mask = 0
 	corps.set_meta("vehicule", corps)
+	corps.set_meta("funival", true)
 	_enfant(corps)
 	var portes: Array = []
 	for f in v.formes_funi():

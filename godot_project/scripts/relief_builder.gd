@@ -779,7 +779,10 @@ func _creuser_gares_corps() -> void:
 ## sommet de Bellevarde, arrivées du 3S (2690 m) et de Fontaine Froide (2688,2 m) de plain-pied. Le relief y descendait
 ## de 2 à 6 m sous la gare du 3S (remblai blanc de 10 m de haut) et le déblai de Fontaine Froide l'avait mise à 2677 m.
 ## [[clé, aval ?, recul derrière la gare (m)]..., altitude du replat, demi-largeur ajoutée, raccord (m)]
-const REPLATS: Array = [[[["olympique", false, 30.0], ["tsd6_fontaine_froide", false, 8.0]], 2689.5, 6.0, 25.0]]
+## Gare aval du 3S (« le sol rentre à l'intérieur de la gare aval », 09/11/2026) : le relief y dépassait de 0,2 m la dalle,
+## qui suit son altitude au nez de la gare (DEBLAI_NON : pas de déblai).
+const REPLATS: Array = [[[["olympique", false, 30.0], ["tsd6_fontaine_froide", false, 8.0]], 2689.5, 6.0, 25.0],
+	[[["olympique", true, 8.0]], 1832.30, 4.0, 14.0]]
 
 
 func _sur_replat(cle: String, aval: bool) -> bool:

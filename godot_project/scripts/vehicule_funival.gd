@@ -13,15 +13,22 @@ const DEMI_LARGEUR: float = 1.075       # 2,15 m : croisement à ~0,2 m de jeu a
 const N_COMP: int = 9                   # ~9 baies par flanc (estimé)
 const PENTE_GRADINS: float = 0.30       # pente pour laquelle les planchers sont de niveau = pente en gare amont (utilisateur, 08/11/2026)
 const H_PLANCHER: float = 1.05          # plancher au milieu d'un compartiment, au-dessus des rails
-const H_TOIT: float = 4.05              # toit, perpendiculairement à la voie
-const L_PORTE: float = 1.2              # vantail vitré (photos de quai : ~1,2 m, estimé)
-const H_PORTE: float = 2.3
-## Section (photos ok-44, ok-45 et quai amont) : flancs droits, épaule arrondie de R_EPAULE, toit plat ; nez en face
-## unique inclinée vers l'arrière de NEZ_RECUL entre le haut du bas de caisse et le toit, vitrée sur presque toute sa
-## hauteur (on voit devant depuis la caisse — remarque d'utilisateur du 09/11/2026).
-const R_EPAULE: float = 0.55
-const NEZ_RECUL: float = 1.0
-const Y_VITRE: float = 1.1              # bas des vitrages (dessus du bas de caisse noir)
+const H_TOIT: float = 3.65              # toit, perpendiculairement à la voie (2,6 m au-dessus du plancher : ok-36, ok-45, quai amont)
+## Porte (photos de quai amont, ok-47) : vantail extérieur coulissant, posé devant la caisse, de la hauteur de la baie
+## (linteau sous la gouttière) ; garé devant le panneau fixe vers l'amont.
+const L_PORTE: float = 1.35
+const H_PORTE: float = 2.10
+const L_JAMBAGE: float = 0.10
+## Section (ok-44, ok-45, nez_escalier_metal) : flancs rentrants au-dessus de la ceinture, gouttière, dos arrondi.
+const Y_CEINTURE: float = 1.15          # plus grande largeur
+const Y_GOUTTIERE: float = 3.17         # haut des flancs, gouttière inox
+const RENTRE: float = 0.17              # le flanc rentre d'autant de la ceinture à la gouttière
+## Nez (ok-44, ok-45, ok-46) : bombé en plan, fuyant en profil.
+const NEZ_RECUL: float = 1.0            # recul du haut du nez
+const NEZ_PLAN: float = 0.20            # recul des coins en plan
+const Y_NEZ: float = 0.75               # le nez commence à fuir au-dessus
+const Y_VITRE: float = 1.70             # bas des vitrages des flancs et des portes (le bas est noir, à vagues)
+const Y_VITRE_NEZ: float = 1.32         # bas du pare-brise
 ## Intérieur (ok-50, ok-51) : pas de cloison ; un palier devant chaque porte, une volée de N_MARCHES marches entre deux
 ## paliers, cadres de barres rouges.
 const L_PALIER: float = 1.6
@@ -74,10 +81,26 @@ static func y_plancher(z: float) -> float:
 	return H_PLANCHER + (lerpf(-bord, bord, t) if dz < 0.0 else lerpf(bord, -bord, t))
 
 
-## Bout de la caisse (z) à la hauteur y : nez incliné vers l'arrière au-dessus du bas de caisse.
-static func z_bout(y: float, sz: float) -> float:
-	var t: float = clampf((y - (Y_VITRE - 0.1)) / (H_TOIT - (Y_VITRE - 0.1)), 0.0, 1.0)
-	return sz * (DEMI_L - NEZ_RECUL * t)
+## Demi-largeur du flanc à la hauteur y (jusqu'à la gouttière), puis du dos arrondi.
+static func demi_l_y(y: float) -> float:
+	if y <= Y_CEINTURE:
+		return DEMI_LARGEUR
+	var a_g: float = DEMI_LARGEUR - RENTRE
+	if y <= Y_GOUTTIERE:
+		return lerpf(DEMI_LARGEUR, a_g, (y - Y_CEINTURE) / (Y_GOUTTIERE - Y_CEINTURE))
+	var t: float = clampf((y - Y_GOUTTIERE) / (H_TOIT - Y_GOUTTIERE), 0.0, 1.0)
+	return a_g * sqrt(maxf(1.0 - t * t, 0.0))
+
+
+## Recul du nez à la hauteur y (profil fuyant et bombé).
+static func recul_nez(y: float) -> float:
+	var t: float = clampf((y - Y_NEZ) / (H_TOIT - Y_NEZ), 0.0, 1.0)
+	return NEZ_RECUL * pow(t, 1.6)
+
+
+## Bout de la caisse (z) à la hauteur y ; u : position en travers (0 au milieu, ±1 aux coins).
+static func z_bout(y: float, sz: float, u: float = 1.0) -> float:
+	return sz * (DEMI_L - recul_nez(y) - NEZ_PLAN * u * u)
 
 
 ## Repère « de niveau » des gradins : un plan horizontal quand la voie a la pente PENTE_GRADINS (gare amont).
@@ -153,78 +176,159 @@ func _portes_noeuds() -> Array:
 	return r
 
 
-## Caisse : châssis, bas de caisse noir à liseré rouge et blanc, flancs vitrés à montants noirs (le vitrage s'arrête
-## au droit des portes), épaules arrondies et toit plat noirs, nez incliné vitré, grand aigle.
+## Angle d'inclinaison du flanc (entre la ceinture et la gouttière).
+static func _th_flanc() -> float:
+	return atan(RENTRE / (Y_GOUTTIERE - Y_CEINTURE))
+
+
+## Vagues du bas de caisse (quai amont, ok-47) : blanche, grise et rouge, qui courent d'un bout à l'autre et se croisent.
+static func y_vague(z: float, n: int) -> float:
+	var ph: float = TAU * z / 7.11
+	match n:
+		0:
+			return 1.34 + 0.20 * sin(ph + 0.4)
+		1:
+			return 1.20 + 0.15 * sin(ph + 1.7)
+		_:
+			return 1.16 + 0.27 * sin(ph + 2.7)
+
+
+const VAGUES: Array = [["cabine_blanche", 0.075], ["galva", 0.045], ["rouge_val", 0.065]]
+
+
+## Vagues posées par courts tronçons entre z0 et z1 (zc : abscisse locale de `parent` ; y0 : son origine en hauteur).
+static func _vagues(parent: Node3D, b: Basis, x: float, z0: float, z1: float, zc: float, y0: float, y_max: float) -> void:
+	var n: int = maxi(int(ceil((z1 - z0) / 0.28)), 1)
+	for iv in range(VAGUES.size()):
+		for j in range(n):
+			var za: float = lerpf(z0, z1, float(j) / float(n))
+			var zb: float = lerpf(z0, z1, float(j + 1) / float(n))
+			var ya: float = minf(y_vague(za, iv), y_max)
+			var yb: float = minf(y_vague(zb, iv), y_max)
+			var lg: float = Vector2(zb - za, yb - ya).length()
+			var pente: Basis = Basis(Vector3.RIGHT, -atan2(yb - ya, zb - za))
+			RemonteeKit.boite(parent, Vector3(0.008, float(VAGUES[iv][1]), lg + 0.01),
+				Transform3D(b * pente, Vector3(x, (ya + yb) * 0.5 - y0, (za + zb) * 0.5 - zc)), String(VAGUES[iv][0]))
+
+
+## Profil d'une demi-section, de bas en haut.
+static func _profil() -> Array:
+	var prof: Array = [Vector2(DEMI_LARGEUR, 0.45), Vector2(DEMI_LARGEUR, Y_CEINTURE), Vector2(DEMI_LARGEUR - RENTRE, Y_GOUTTIERE)]
+	var a_g: float = DEMI_LARGEUR - RENTRE
+	var b_g: float = H_TOIT - Y_GOUTTIERE
+	for a in range(1, 9):
+		var ph: float = PI * 0.5 * float(a) / 8.0
+		prof.append(Vector2(a_g * cos(ph), Y_GOUTTIERE + b_g * sin(ph)))
+	return prof
+
+
+## Intervalles des baies de porte sur z, triés : [zmin, zmax].
+static func _baies() -> Array:
+	var r: Array = []
+	for k in range(N_COMP):
+		r.append([z_comp(k) - L_PORTE * 0.5, z_comp(k) + L_PORTE * 0.5])
+	r.sort_custom(func(u, v): return u[0] < v[0])
+	return r
+
+
+## Caisse (ok-44 à ok-47, quai amont) : flancs rentrants, gouttière inox, dos arrondi noir ; à chaque compartiment une baie
+## de porte à jambages blancs et linteau rouge, puis un panneau fixe (vitrage haut, bas noir à vagues) devant lequel le
+## vantail se gare ; nez bombé et fuyant, pare-brise cerclé de noir, grand aigle blanc sur le bas du nez.
 func _caisse() -> void:
 	var L: float = DEMI_L * 2.0
 	var W: float = DEMI_LARGEUR
-	RemonteeKit.boite_en(self, Vector3(1.9, 0.45, L - 1.0), Vector3(0, 0.30, 0), "acier_noir")           # châssis, bogies cachés
-	RemonteeKit.boite_en(self, Vector3(2.0 * W + 0.02, 0.06, L - 0.1), Vector3(0, 0.84, 0), "rouge_val")  # liseré
-	RemonteeKit.boite_en(self, Vector3(2.0 * W + 0.02, 0.04, L - 0.1), Vector3(0, 0.76, 0), "cabine_blanche")
-	# profil d'une demi-section, de bas en haut (x, y)
-	var prof: Array = [Vector2(W, 0.45), Vector2(W, Y_VITRE), Vector2(W, H_TOIT - R_EPAULE)]
-	for a in range(1, 7):
-		var th: float = PI * 0.5 * float(a) / 6.0
-		prof.append(Vector2(W - R_EPAULE + R_EPAULE * cos(th), H_TOIT - R_EPAULE + R_EPAULE * sin(th)))
-	prof.append(Vector2(0.0, H_TOIT))
+	var prof: Array = _profil()
 	var noir: SurfaceTool = SurfaceTool.new()
 	noir.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var verre: SurfaceTool = SurfaceTool.new()
 	verre.begin(Mesh.PRIMITIVE_TRIANGLES)
-	# coque : chaque segment du profil balayé d'un bout à l'autre (sauf les flancs vitrés, posés par compartiment)
+	RemonteeKit.boite_en(self, Vector3(1.9, 0.45, L - 1.0), Vector3(0, 0.30, 0), "acier_noir")           # châssis, bogies cachés
+	var th: float = _th_flanc()
+	var baies: Array = _baies()
 	for sx in [-1.0, 1.0]:
-		for i in range(prof.size() - 1):
+		var bf: Basis = Basis(Vector3.BACK, sx * th)
+		# dos arrondi : d'un nez à l'autre
+		for i in range(2, prof.size() - 1):
 			var a0: Vector2 = prof[i]
 			var a1: Vector2 = prof[i + 1]
-			if i == 1:
-				continue
 			_quad(noir, Vector3(sx * a0.x, a0.y, z_bout(a0.y, 1.0)), Vector3(sx * a0.x, a0.y, z_bout(a0.y, -1.0)),
 				Vector3(sx * a1.x, a1.y, z_bout(a1.y, -1.0)), Vector3(sx * a1.x, a1.y, z_bout(a1.y, 1.0)))
-		# flancs vitrés : coupés au droit de chaque porte (vitrage au-dessus seulement)
-		var y0: float = Y_VITRE
-		var y1: float = H_TOIT - R_EPAULE
-		var coupes: Array = []
-		for k in range(N_COMP):
-			coupes.append([z_comp(k) - L_PORTE * 0.5, z_comp(k) + L_PORTE * 0.5])
-		coupes.sort_custom(func(u, v): return u[0] < v[0])
+		# gouttière
+		RemonteeKit.boite(self, Vector3(0.09, 0.05, L - 2.0 * (NEZ_RECUL * 0.8 + NEZ_PLAN)), Transform3D(bf,
+			Vector3(sx * (demi_l_y(Y_GOUTTIERE) + 0.02), Y_GOUTTIERE + 0.02, 0)), "acier")
+		# bas de caisse sous les seuils, sur toute la longueur
+		_panneau(noir, sx, -INF, INF, 0.45, H_PLANCHER - 0.26)
+		# liseré bas rouge et blanc
+		RemonteeKit.boite_en(self, Vector3(0.01, 0.06, L - 0.5), Vector3(sx * (W + 0.006), 0.62, 0), "rouge_val")
+		RemonteeKit.boite_en(self, Vector3(0.01, 0.04, L - 0.5), Vector3(sx * (W + 0.006), 0.54, 0), "cabine_blanche")
 		var z_prec: float = -INF
-		for c in coupes + [[INF, INF]]:
+		for c in baies + [[INF, INF]]:
 			var za: float = z_prec
 			var zb: float = float(c[0])
-			_flanc(verre, sx, za, zb, y0, y1)
+			# panneau fixe : bas noir, vitrage
+			_panneau(noir, sx, za, zb, H_PLANCHER - 0.26, Y_VITRE)
+			_panneau(verre, sx, za, zb, Y_VITRE, Y_GOUTTIERE)
+			var z0p: float = maxf(za, z_bout(Y_VITRE, -1.0))
+			var z1p: float = minf(zb, z_bout(Y_VITRE, 1.0))
+			_vagues(self, Basis.IDENTITY, sx * (W + 0.006), z0p + 0.02, z1p - 0.02, 0.0, 0.0, Y_VITRE - 0.06)
+			# doublure blanche sous les vitres
+			RemonteeKit.boite(self, Vector3(0.04, Y_VITRE - H_PLANCHER + 0.26, z1p - z0p), Transform3D(Basis.IDENTITY,
+				Vector3(sx * (W - 0.07), (Y_VITRE + H_PLANCHER - 0.26) * 0.5, (z0p + z1p) * 0.5)), "cabine_blanche")
+			# cadres : traverses haute et basse, montant central du panneau
+			var zmil: float = (z0p + z1p) * 0.5
+			var lgp: float = z1p - z0p
+			for yt in [Y_VITRE, Y_GOUTTIERE - 0.05]:
+				RemonteeKit.boite(self, Vector3(0.05, 0.07, lgp), Transform3D(bf, Vector3(sx * demi_l_y(yt), yt, zmil)), "cabine_noire")
+			if lgp > 1.2:
+				_montant(sx, zmil, bf, 0.05)
 			if c[0] != INF:
-				var yh: float = H_PLANCHER + H_PORTE + 0.05
-				_flanc(verre, sx, float(c[0]), float(c[1]), yh, y1)
-				# montants du cadre de la baie de porte
-				for zm in [float(c[0]), float(c[1])]:
-					RemonteeKit.boite_en(self, Vector3(0.07, y1 - y0, 0.07), Vector3(sx * W, (y0 + y1) * 0.5, zm), "cabine_noire")
-			z_prec = float(c[1])
-		# montants entre compartiments, lisse haute sous l'épaule
-		for k in range(1, N_COMP):
-			var z: float = DEMI_L - l_comp() * float(k)
-			RemonteeKit.boite_en(self, Vector3(0.07, y1 - y0, 0.07), Vector3(sx * W, (y0 + y1) * 0.5, z), "cabine_noire")
-		RemonteeKit.boite_en(self, Vector3(0.08, 0.10, L - 2.0 * NEZ_RECUL), Vector3(sx * W, y1, 0), "cabine_noire")
-	# nez : face inclinée, bas noir, vitrage jusque sous le toit, cadre noir
+				var z0b: float = float(c[0])
+				var z1b: float = float(c[1])
+				# linteau noir, jambages noirs à dehors, blancs à dedans, seuil inox et plinthe à grille
+				var yl: float = H_PLANCHER + H_PORTE
+				_panneau(noir, sx, z0b, z1b, yl, Y_GOUTTIERE)
+				for zj in [z0b, z1b]:
+					_montant(sx, zj, bf, 0.11)
+					RemonteeKit.boite(self, Vector3(0.16, H_PORTE + 0.30, L_JAMBAGE), Transform3D(bf,
+						Vector3(sx * (demi_l_y(2.0) - 0.08), H_PLANCHER + (H_PORTE - 0.30) * 0.5, zj + signf((z0b + z1b) * 0.5 - zj) * 0.05)), "cabine_blanche")
+				var zm_b: float = (z0b + z1b) * 0.5
+				RemonteeKit.boite_en(self, Vector3(0.22, 0.03, z1b - z0b), Vector3(sx * (W - 0.05), H_PLANCHER - 0.25, zm_b), "acier")
+				RemonteeKit.boite_en(self, Vector3(0.03, 0.24, z1b - z0b), Vector3(sx * (W - 0.02), H_PLANCHER - 0.38, zm_b), "acier")
+				for ng in [-1.0, 1.0]:
+					RemonteeKit.boite_en(self, Vector3(0.01, 0.13, 0.42), Vector3(sx * (W - 0.002), H_PLANCHER - 0.38, zm_b + ng * 0.33), "acier_noir")
+				# linteau rouge à l'intérieur
+				RemonteeKit.boite_en(self, Vector3(0.45, 0.05, z1b - z0b), Vector3(sx * (W - 0.32), yl - 0.03, zm_b), "rouge_val")
+				z_prec = z1b
+			else:
+				z_prec = INF
+	# nez : surface bombée en grille, vitrée au milieu
+	const NU: int = 14
 	for sz in [-1.0, 1.0]:
 		for i in range(prof.size() - 1):
 			var a0: Vector2 = prof[i]
 			var a1: Vector2 = prof[i + 1]
 			var ym: float = (a0.y + a1.y) * 0.5
-			var st: SurfaceTool = verre if (ym > Y_VITRE and ym < H_TOIT - 0.3) else noir
-			_quad(st, Vector3(-a0.x, a0.y, z_bout(a0.y, sz)), Vector3(a0.x, a0.y, z_bout(a0.y, sz)),
-				Vector3(a1.x, a1.y, z_bout(a1.y, sz)), Vector3(-a1.x, a1.y, z_bout(a1.y, sz)))
-		var phi: float = atan(NEZ_RECUL / (H_TOIT - Y_VITRE + 0.1))
-		var b_nez: Basis = (Basis.IDENTITY if sz > 0.0 else Basis(Vector3.UP, PI)) * Basis(Vector3.RIGHT, -phi)
-		# cadre : montant central et traverse basse
-		var ym2: float = (Y_VITRE + H_TOIT - 0.3) * 0.5
-		RemonteeKit.boite(self, Vector3(0.08, (H_TOIT - 0.3 - Y_VITRE) / cos(phi), 0.06),
-			Transform3D(b_nez, Vector3(0, ym2, z_bout(ym2, sz) + sz * 0.02)), "cabine_noire")
-		RemonteeKit.boite(self, Vector3(2.0 * W, 0.10, 0.06), Transform3D(b_nez, Vector3(0, Y_VITRE, z_bout(Y_VITRE, sz) + sz * 0.02)), "cabine_noire")
-		RemonteeKit.boite_en(self, Vector3(2.0 * W, 0.55, 0.4), Vector3(0, 0.62, sz * (DEMI_L - 0.2)), "cabine_noire")
-		# grand aigle blanc de Val d'Isère sur la face avant (photos), sur le vitrage
+			for j in range(NU):
+				var u0: float = -1.0 + 2.0 * float(j) / float(NU)
+				var u1: float = -1.0 + 2.0 * float(j + 1) / float(NU)
+				var um: float = (u0 + u1) * 0.5
+				var vitre: bool = absf(um) < 0.86 and ym > Y_VITRE_NEZ and ym < Y_GOUTTIERE + 0.12
+				_quad(verre if vitre else noir,
+					Vector3(a0.x * u0, a0.y, z_bout(a0.y, sz, u0)), Vector3(a0.x * u1, a0.y, z_bout(a0.y, sz, u1)),
+					Vector3(a1.x * u1, a1.y, z_bout(a1.y, sz, u1)), Vector3(a1.x * u0, a1.y, z_bout(a1.y, sz, u0)))
+		# bas du nez et butée
+		RemonteeKit.boite_en(self, Vector3(2.0 * W - 0.1, 0.30, 0.25), Vector3(0, 0.60, sz * (DEMI_L - 0.15)), "cabine_noire")
+		# doublure blanche autour de la baie de tête (ok-48, ok-54) : allège, imposte et piédroits ; la vitre reste libre
+		var z_d: float = sz * (DEMI_L - 0.92)
+		var cb0: Vector3 = _palier_niv(0 if sz > 0.0 else N_COMP - 1)
+		RemonteeKit.boite_en(self, Vector3(2.0 * W - 0.25, 1.40 - cb0.y + 0.2, 0.04), Vector3(0, (1.40 + cb0.y - 0.2) * 0.5, z_d), "cabine_blanche")
+		RemonteeKit.boite_en(self, Vector3(2.0 * W - 0.55, 0.22, 0.04), Vector3(0, 3.10, z_d), "cabine_blanche")
+		for su in [-1.0, 1.0]:
+			RemonteeKit.boite_en(self, Vector3(0.20, 1.60, 0.04), Vector3(su * (W - 0.24), 2.20, z_d), "cabine_blanche")
+		# grand aigle blanc sur le bas du nez (ok-45, ok-46), dépassant sur le pare-brise
 		var mi: MeshInstance3D = MeshInstance3D.new()
 		var q: QuadMesh = QuadMesh.new()
-		q.size = Vector2(1.4, 1.4)
+		q.size = Vector2(1.35, 1.35)
 		mi.mesh = q
 		var m: StandardMaterial3D = StandardMaterial3D.new()
 		m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
@@ -234,8 +338,10 @@ func _caisse() -> void:
 		m.alpha_scissor_threshold = 0.5
 		mi.material_override = m
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		var ya: float = 1.85
-		mi.transform = Transform3D(b_nez, Vector3(-sz * W * 0.45, ya, z_bout(ya, sz) + sz * 0.03))
+		var ya: float = 1.18
+		var ph2: float = atan2(recul_nez(ya + 0.3) - recul_nez(ya - 0.3), 0.6)
+		var b_nez: Basis = (Basis.IDENTITY if sz > 0.0 else Basis(Vector3.UP, PI)) * Basis(Vector3.RIGHT, -ph2)
+		mi.transform = Transform3D(b_nez, Vector3(0.0, ya, z_bout(ya, sz, 0.0) + sz * 0.05))
 		mi.set_meta(MeshMerge.SANS_FUSION, true)
 		add_child(mi)
 	var mn: MeshInstance3D = MeshInstance3D.new()
@@ -256,34 +362,50 @@ func _caisse() -> void:
 	add_child(mv)
 
 
+## Montant noir du flanc, de la ceinture de vitrage à la gouttière (bas compris si `large`).
+func _montant(sx: float, z: float, bf: Basis, large: float) -> void:
+	var y0: float = H_PLANCHER - 0.26
+	var y1: float = Y_GOUTTIERE
+	if z < z_bout(y1, -1.0) or z > z_bout(y1, 1.0):
+		return
+	RemonteeKit.boite(self, Vector3(0.06, y1 - y0, large), Transform3D(bf, Vector3(sx * demi_l_y((y0 + y1) * 0.5), (y0 + y1) * 0.5, z)), "cabine_noire")
+
+
 ## Quadrilatère (coque mince : matières sans face cachée, vue de dedans comme de dehors).
 static func _quad(st: SurfaceTool, a: Vector3, b: Vector3, c: Vector3, d: Vector3) -> void:
 	for v in [a, b, c, a, c, d]:
 		st.add_vertex(v)
 
 
-## Vitrage du flanc sx entre za et zb (bornés par le nez incliné), de y0 à y1.
-static func _flanc(st: SurfaceTool, sx: float, za: float, zb: float, y0: float, y1: float) -> void:
-	var W: float = DEMI_LARGEUR
-	var a0: float = maxf(za, z_bout(y0, -1.0))
-	var a1: float = maxf(za, z_bout(y1, -1.0))
-	var b0: float = minf(zb, z_bout(y0, 1.0))
-	var b1: float = minf(zb, z_bout(y1, 1.0))
-	if b0 - a0 < 0.01 and b1 - a1 < 0.01:
-		return
-	_quad(st, Vector3(sx * W, y0, a0), Vector3(sx * W, y0, b0), Vector3(sx * W, y1, b1), Vector3(sx * W, y1, a1))
+## Panneau du flanc sx entre za et zb (bornés par le nez), de y0 à y1, suivant le rentrant du flanc.
+static func _panneau(st: SurfaceTool, sx: float, za: float, zb: float, y0: float, y1: float) -> void:
+	var ys: Array = [y0, y1]
+	if y0 < Y_CEINTURE and y1 > Y_CEINTURE:
+		ys = [y0, Y_CEINTURE, y1]
+	for i in range(ys.size() - 1):
+		var ya: float = ys[i]
+		var yb: float = ys[i + 1]
+		var a0: float = maxf(za, z_bout(ya, -1.0))
+		var a1: float = maxf(za, z_bout(yb, -1.0))
+		var b0: float = minf(zb, z_bout(ya, 1.0))
+		var b1: float = minf(zb, z_bout(yb, 1.0))
+		if b0 - a0 < 0.01 and b1 - a1 < 0.01:
+			continue
+		var wa: float = demi_l_y(ya)
+		var wb: float = demi_l_y(yb)
+		_quad(st, Vector3(sx * wa, ya, a0), Vector3(sx * wa, ya, b0), Vector3(sx * wb, yb, b1), Vector3(sx * wb, yb, a1))
 
 
-## Intérieur (ok-50 à ok-54) : sans cloison — paliers de caillebotis devant les portes et volées de marches entre eux,
-## doublure blanche sous les vitres, plafond blanc à pans rouges, cadres de barres rouges en haut de chaque palier,
-## banquette garnie sous la vitre de chaque bout.
+## Intérieur (ok-50 à ok-54, quai amont) : sans cloison — paliers et volées de marches gris acier ; à chaque palier, un
+## cadre de barres rouges à deux poteaux et deux lisses, un arceau rouge dans chaque baie de porte, une lisse en long de
+## chaque côté ; plafond blanc à bandeau lumineux, grands pans rouges sous le dos arrondi ; banquette de moquette grise
+## dans chaque bout, sous la baie de tête ; extincteurs en housse rouge.
 func _interieur() -> void:
 	var R: Basis = _niveau()
 	var W: float = DEMI_LARGEUR
 	var lw: float = 2.0 * W - 0.1
 	for k in range(N_COMP):
 		var c: Vector3 = _palier_niv(k)
-		# palier (plein jusqu'à 1 m dessous ; les bouts vont jusqu'au nez)
 		var z0: float = c.z - L_PALIER * 0.5
 		var z1: float = c.z + L_PALIER * 0.5
 		if k == 0:
@@ -291,7 +413,6 @@ func _interieur() -> void:
 		if k == N_COMP - 1:
 			z0 = c.z - l_comp() * 0.5
 		RemonteeKit.boite(self, Vector3(lw, 1.0, z1 - z0), Transform3D(R, R * Vector3(0, c.y - 0.5, (z0 + z1) * 0.5)), "caillebotis")
-		# volée vers le palier suivant (amont)
 		if k + 1 < N_COMP:
 			var e1: Vector3 = c + Vector3(0, 0, -L_PALIER * 0.5)
 			var e2: Vector3 = _palier_niv(k + 1) + Vector3(0, 0, L_PALIER * 0.5)
@@ -303,32 +424,57 @@ func _interieur() -> void:
 				var h: float = haut - (e1.y - 1.0)
 				RemonteeKit.boite(self, Vector3(lw, h, course / float(N_MARCHES) + 0.01),
 					Transform3D(R, R * Vector3(0, haut - h * 0.5, zc)), "caillebotis")
-		# cadre de barres rouges au bord amont du palier : deux poteaux, deux lisses de chaque côté (passage au milieu)
+				# nez de marche inox
+				RemonteeKit.boite(self, Vector3(lw, 0.012, 0.05), Transform3D(R, R * Vector3(0, haut + 0.006, zc + course / float(N_MARCHES) * 0.5 - 0.03)), "acier")
+		# cadre au bord amont du palier : deux poteaux du sol au plafond, lisses vers les flancs (passage au milieu)
 		var e: Vector3 = c + Vector3(0, 0, -L_PALIER * 0.5 + 0.05)
 		for sx in [-1.0, 1.0]:
-			RemonteeKit.barre(self, R * (e + Vector3(sx * 0.40, 0.0, 0)), R * (e + Vector3(sx * 0.40, 2.1, 0)), 0.022, "rouge_val", 6)
-			for hb in [1.0, 2.0]:
-				RemonteeKit.barre(self, R * (e + Vector3(sx * 0.40, hb, 0)), R * (e + Vector3(sx * (W - 0.10), hb, 0)), 0.02, "rouge_val", 6)
-	# doublure blanche sous les vitres, plafond blanc, pans rouges sous les épaules
-	var long_i: float = DEMI_L * 2.0 - 2.0 * NEZ_RECUL
+			RemonteeKit.barre(self, R * (e + Vector3(sx * 0.38, 0.0, 0)), R * (e + Vector3(sx * 0.38, 2.25, 0)), 0.024, "rouge_val", 6)
+			for hb in [1.05, 1.95]:
+				RemonteeKit.barre(self, R * (e + Vector3(sx * 0.38, hb, 0)), R * (e + Vector3(sx * (W - 0.14), hb, 0)), 0.02, "rouge_val", 6)
+			# arceau dans la baie de porte (ok-46, quai amont) : deux montants et un dessus arrondi, le côté aval de la baie
+			var ax: float = sx * (W - 0.34)
+			var zh0: float = c.z + L_PORTE * 0.5 - 0.10
+			var zh1: float = c.z + 0.05
+			var pts: Array = [Vector3(ax, 0.0, zh0), Vector3(ax, 0.95, zh0), Vector3(ax, 1.08, zh0 - 0.10), Vector3(ax, 1.12, zh0 - 0.26),
+				Vector3(ax, 1.12, zh1 + 0.26), Vector3(ax, 1.08, zh1 + 0.10), Vector3(ax, 0.95, zh1), Vector3(ax, 0.0, zh1)]
+			var cf: Vector3 = Vector3(0, c.y, 0)
+			for ip in range(pts.size() - 1):
+				RemonteeKit.barre(self, R * (cf + pts[ip]), R * (cf + pts[ip + 1]), 0.022, "rouge_val", 6)
+		# extincteur en housse rouge, un compartiment sur trois (ok-52)
+		if k % 3 == 1:
+			RemonteeKit.boite(self, Vector3(0.22, 0.55, 0.26), Transform3D(R, R * (c + Vector3(-(W - 0.22), 0.30, -L_PALIER * 0.5 - 0.35))), "rouge_val")
+	var long_i: float = DEMI_L * 2.0 - 2.0 * (NEZ_RECUL + NEZ_PLAN)
+	# plafond : blanc, bandeau lumineux au milieu, pans rouges sous le dos arrondi, de chaque côté
+	RemonteeKit.boite_en(self, Vector3(1.1, 0.03, long_i), Vector3(0, H_TOIT - 0.10, 0), "cabine_blanche")
+	var lampe: MeshInstance3D = RemonteeKit.boite_en(self, Vector3(0.16, 0.02, long_i), Vector3(0, H_TOIT - 0.125, 0), "cabine_blanche")
+	var ml: StandardMaterial3D = RemonteeKit.mat("cabine_blanche").duplicate()
+	ml.emission_enabled = true
+	ml.emission = Color(1.0, 0.97, 0.90)
+	ml.emission_energy_multiplier = 1.4
+	lampe.material_override = ml
+	lampe.set_meta(MeshMerge.SANS_FUSION, true)
 	for sx in [-1.0, 1.0]:
-		RemonteeKit.boite_en(self, Vector3(0.04, Y_VITRE - 0.5, long_i), Vector3(sx * (W - 0.05), (Y_VITRE + 0.5) * 0.5, 0), "cabine_blanche")
-		RemonteeKit.boite(self, Vector3(0.55, 0.03, long_i), Transform3D(Basis(Vector3.BACK, -sx * 0.7),
-			Vector3(sx * (W - 0.32), H_TOIT - 0.30, 0)), "rouge_val")
-	RemonteeKit.boite_en(self, Vector3(2.0 * W - 0.9, 0.03, long_i), Vector3(0, H_TOIT - 0.06, 0), "cabine_blanche")
-	# banquettes de bout, garnies de moquette grise, dos au nez
+		RemonteeKit.boite(self, Vector3(0.62, 0.03, long_i), Transform3D(Basis(Vector3.BACK, -sx * 0.52),
+			Vector3(sx * (W - 0.46), H_TOIT - 0.34, 0)), "rouge_val")
+		# lisse en long sous les vitres, de chaque côté
+		RemonteeKit.boite(self, Vector3(0.04, 0.04, long_i), Transform3D(R, R * Vector3(sx * (W - 0.11), H_PLANCHER + 1.0, 0)), "rouge_val")
+	# banquettes de bout : assise et dossier en moquette grise, dos au nez (ok-54)
 	for sz in [-1.0, 1.0]:
 		var k2: int = 0 if sz > 0.0 else N_COMP - 1
 		var cb: Vector3 = _palier_niv(k2)
-		var zb: float = cb.z + sz * (l_comp() * 0.5 - 0.55)
-		RemonteeKit.boite(self, Vector3(2.0 * W - 0.3, 0.45, 0.5), Transform3D(R, R * Vector3(0, cb.y + 0.225, zb)), "acier_noir")
+		var zb: float = cb.z + sz * (l_comp() * 0.5 - 0.75)
+		RemonteeKit.boite(self, Vector3(2.0 * W - 0.5, 0.42, 0.75), Transform3D(R, R * Vector3(0, cb.y + 0.21, zb)), "galva_sombre")
+		RemonteeKit.boite(self, Vector3(2.0 * W - 0.5, 0.75, 0.10), Transform3D(R, R * Vector3(0, cb.y + 0.75, zb + sz * 0.42)), "galva_sombre")
 
 
-## Portes : un grand vantail vitré à cadre noir par compartiment et par côté (photos de quai : traverse au milieu,
-## virgule rouge et blanche en bas), qui coulisse vers l'aval le long de la caisse.
+## Portes (quai amont, ok-47) : vantail extérieur à cadre noir, posé devant la caisse ; bas noir à vagues, vitrage haut
+## barré de deux traverses boulonnées, « Val d'Isère » et petit aigle entre elles ; il coulisse vers l'amont, devant le panneau fixe.
 func _portes_funi() -> void:
 	var W: float = DEMI_LARGEUR
+	var th: float = _th_flanc()
 	for sx in [-1.0, 1.0]:
+		var b: Basis = Basis(Vector3.BACK, sx * th)
 		for k in range(N_COMP):
 			var z: float = z_comp(k)
 			var p: Node3D = Node3D.new()
@@ -336,20 +482,37 @@ func _portes_funi() -> void:
 			add_child(p)
 			var hl: float = H_PORTE * 0.5
 			var ll: float = L_PORTE * 0.5
-			for zm in [-ll + 0.03, ll - 0.03]:
-				RemonteeKit.boite_en(p, Vector3(0.05, H_PORTE, 0.06), Vector3(0, 0, zm), "cabine_noire")
-			for ym in [-hl + 0.04, hl - 0.03, -0.1]:
-				RemonteeKit.boite_en(p, Vector3(0.05, 0.07 if ym != -hl + 0.04 else 0.12, L_PORTE), Vector3(0, ym, 0), "cabine_noire")
-			# virgule rouge et blanche en bas du vitrage
-			RemonteeKit.boite(p, Vector3(0.012, 0.05, L_PORTE * 0.9), Transform3D(Basis(Vector3.RIGHT, 0.18), Vector3(sx * 0.03, -hl + 0.35, 0)), "rouge_val")
-			RemonteeKit.boite(p, Vector3(0.012, 0.035, L_PORTE * 0.8), Transform3D(Basis(Vector3.RIGHT, 0.12), Vector3(sx * 0.03, -hl + 0.24, 0.05)), "cabine_blanche")
-			var v: MeshInstance3D = RemonteeKit.boite_en(p, Vector3(0.02, H_PORTE - 0.12, L_PORTE - 0.1), Vector3.ZERO, "vitre")
+			var y_ctr: float = H_PLANCHER + hl
+			var yv: float = Y_VITRE - y_ctr              # bas du vitrage, repère du vantail
+			# cadre
+			for zm in [-ll + 0.035, ll - 0.035]:
+				RemonteeKit.boite_en(p, Vector3(0.05, H_PORTE, 0.07), Vector3(0, 0, zm), "cabine_noire")
+			RemonteeKit.boite_en(p, Vector3(0.05, 0.08, L_PORTE), Vector3(0, hl - 0.04, 0), "cabine_noire")
+			RemonteeKit.boite_en(p, Vector3(0.05, 0.08, L_PORTE), Vector3(0, yv, 0), "cabine_noire")
+			# bas noir et vagues (continues avec celles des panneaux, porte fermée)
+			RemonteeKit.boite_en(p, Vector3(0.03, yv + hl, L_PORTE - 0.04), Vector3(0, (yv - hl) * 0.5, 0), "cabine_noire")
+			_vagues(p, Basis.IDENTITY, sx * 0.02, z - ll + 0.05, z + ll - 0.05, z, y_ctr, Y_VITRE - 0.08)
+			# vitrage, traverses boulonnées
+			var hv: float = hl - 0.08 - yv
+			var ymv: float = (hl - 0.08 + yv) * 0.5
+			var v: MeshInstance3D = RemonteeKit.boite_en(p, Vector3(0.015, hv, L_PORTE - 0.12), Vector3(0, ymv, 0), "vitre")
 			v.material_override = vitre_funi()
 			v.set_meta(MeshMerge.SANS_FUSION, true)
-			MeshMerge.merge(p, [v], "Porte")
-			var ferme: Vector3 = Vector3(sx * (W + 0.05), H_PLANCHER + hl, z)
+			var y_tr: Array = [yv + hv * 0.36, yv + hv * 0.67]
+			for yt in y_tr:
+				RemonteeKit.boite_en(p, Vector3(0.035, 0.04, L_PORTE - 0.10), Vector3(sx * 0.012, yt, 0), "cabine_noire")
+				for zb in [-ll + 0.10, ll - 0.10]:
+					RemonteeKit.boite_en(p, Vector3(0.012, 0.025, 0.025), Vector3(sx * 0.035, yt, zb), "acier")
+			var lab: MeshInstance3D = RemonteeKit.texte_fige(p, "Val d'Isère", 64, 0.0026, Color(0.93, 0.93, 0.93))
+			lab.transform = Transform3D(Basis(Vector3.UP, sx * PI * 0.5), Vector3(sx * 0.035, (y_tr[0] + y_tr[1]) * 0.5, 0))
+			lab.visibility_range_end = 50.0
+			lab.set_meta(MeshMerge.SANS_FUSION, true)
+			MeshMerge.merge(p, [v, lab], "Porte")
+			var y_x: float = demi_l_y(y_ctr)
+			var ferme: Vector3 = Vector3(sx * (y_x + 0.07), y_ctr, z)
+			p.basis = b
 			p.position = ferme
-			_portes.append([p, ferme, Vector3(0, 0, L_PORTE * 0.95)])
+			_portes.append([p, ferme, Vector3(0, 0, -(L_PORTE + 0.04))])
 
 
 ## Debout au milieu du compartiment i, sur son plancher.
