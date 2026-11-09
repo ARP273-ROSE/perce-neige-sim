@@ -616,6 +616,8 @@ func _construire_corps() -> void:
 	await _gare_amont()
 	_butoir_et_poulie()
 	await _pause("funival : gare amont")
+	# terrain de la gare amont (fil principal : il crée une pièce du relief)
+	_amenager_relief_amont.call_deferred()
 	_habiller(_chantier if _chantier != null else self)
 	await _pause("funival : habillage")
 	for k in range(2):
@@ -1276,6 +1278,94 @@ func _gare_amont() -> void:
 	per.reparent(g, false)
 	await _pause("funival : gare amont")
 	MeshMerge.merge(g, [w1, w2, ens, carre, moel, esc], "Gare")
+
+
+## Terrain de la gare amont (remarques d'utilisateur, iPad du 08/11/2026 : « en gare du haut une plaque grise coupe
+## la gare en deux », « le bâtiment de la gare supérieure est en lévitation totale ») : au sommet, le relief n'est qu'à
+## 4,6 m au-dessus du quai pour une salle de 6,5 m de haut, et descend à 3,7 m sous le plancher du bâtiment. Une pièce
+## fine du relief (ReliefBuilder) : terrain raboté sous le plancher de la salle là où elle sort du sol (elle est alors
+## habillée de bardage), remonté au niveau du plancher autour du bâtiment.
+func _amenager_relief_amont() -> void:
+	var rel: ReliefBuilder = relief_trous
+	if rel == null or not is_instance_valid(rel) or not is_inside_tree() or rel.has_meta("funival_amont"):
+		return
+	rel.set_meta("funival_amont", true)
+	var xf: Transform3D = global_transform
+	var monde := func(pts: Array) -> PackedVector2Array:
+		var out: PackedVector2Array = PackedVector2Array()
+		for v in pts:
+			var w: Vector3 = xf * Vector3((v as Vector2).x, 0.0, (v as Vector2).y)
+			out.append(Vector2(w.x, w.z))
+		return out
+	var rect := func(cx: float, cz: float, lx: float, lz: float) -> Array:
+		return [Vector2(cx - lx * 0.5, cz - lz * 0.5), Vector2(cx + lx * 0.5, cz - lz * 0.5),
+			Vector2(cx + lx * 0.5, cz + lz * 0.5), Vector2(cx - lx * 0.5, cz + lz * 0.5)]
+	var L: float = longueur_h()
+	var hx: float = VehiculeFunival.DEMI_LARGEUR + 0.05 + 4.2
+	var zs: float = -(L + 11.0)
+	var y0: float = xf.origin.y
+	var rabots: Array = []
+	var d: float = L - L_HALL
+	while d < L - 0.01:
+		var d2: float = minf(d + 4.0, L)
+		var dm: float = (d + d2) * 0.5
+		var c: Vector3 = xf * Vector3(0.0, 0.0, -dm)
+		var toit: float = y_voie(d2) + 6.5
+		if rel.hauteur_sol(c.x, c.z) - y0 < toit + 1.5:
+			rabots.append([monde.call(rect.call(0.0, -dm, 2.0 * hx + 1.2, d2 - d)), y0 + y_voie(d) - 1.0, 2.0])
+			_salle_emerge_d = minf(_salle_emerge_d, d)
+		d = d2
+	var bat: Array = [rect.call(0.0, zs, 2.0 * hx + 3.0, 23.0), rect.call(hx + 7.0, zs - 12.0, 13.0, 17.0),
+		rect.call(-(hx + 4.0), zs + 6.0, 7.0, 8.0)]
+	var remblais: Array = []
+	var trous: Array = []
+	for r2 in bat:
+		remblais.append([monde.call(r2), y0 + sol_batiment() - 0.05, 10.0])
+	var bb: Rect2 = Rect2()
+	var prem: bool = true
+	for r3 in rabots.map(func(x): return x[0]) + remblais.map(func(x): return x[0]):
+		for v in r3:
+			if prem:
+				bb = Rect2(v, Vector2.ZERO)
+				prem = false
+			else:
+				bb = bb.expand(v)
+	rel._build_piece({"rect": bb.grow(14.0), "trous": trous, "remblais": remblais, "rabots": rabots})
+	rel._poser_trous()
+	_habiller_salle()
+
+
+## Début (d) de la partie de la salle amont qui sort du terrain (INF : enterrée).
+var _salle_emerge_d: float = INF
+
+
+## Habillage de la salle amont là où elle sort du terrain : murs et toit de bardage anthracite, comme le bâtiment.
+func _habiller_salle() -> void:
+	if _salle_emerge_d == INF:
+		return
+	var L: float = longueur_h()
+	var hx: float = VehiculeFunival.DEMI_LARGEUR + 0.05 + 4.2
+	var d0: float = maxf(_salle_emerge_d - 2.0, L - L_HALL)
+	var g: Node3D = Node3D.new()
+	g.name = "HabillageSalle"
+	add_child(g)
+	var bard: Material = mat_funi("bardage_anthracite")
+	# par tranches de 4 m qui suivent la voie (d'un bloc, le toit plongeait dans la salle où la pente change)
+	var d: float = d0
+	while d < L - 0.01:
+		var d2: float = minf(d + 4.0, L)
+		var dm: float = (d + d2) * 0.5
+		var p: float = (y_voie(d2) - y_voie(d)) / (d2 - d)
+		var b_p: Basis = Basis(Vector3.RIGHT, atan(p))
+		var lg_t: float = (d2 - d) * sqrt(1.0 + p * p) + 0.05
+		var pieces: Array = []
+		for sx in [-1.0, 1.0]:
+			pieces.append(RemonteeKit.boite(g, Vector3(0.3, 8.6, lg_t), Transform3D(b_p, Vector3(sx * (hx + 0.40), y_voie(dm) + 2.75, -dm)), "beton"))
+		pieces.append(RemonteeKit.boite(g, Vector3(2.0 * hx + 1.4, 0.35, lg_t), Transform3D(b_p, Vector3(0, y_voie(dm) + 6.95, -dm)), "beton"))
+		for mi in pieces:
+			(mi as MeshInstance3D).material_override = bard
+		d = d2
+	MeshMerge.merge(g, [], "HabillageSalle")
 
 
 ## Perron d'une porte : marches de 0,18 × 0,30 m depuis le seuil (repère de la ligne) dans la direction dir
