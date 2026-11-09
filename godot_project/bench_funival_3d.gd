@@ -18,6 +18,8 @@ var _y_prec: float = 0.0
 var _chute_max: float = 0.0
 var _yaw_amont: float = 0.0
 var _d_pire: float = 0.0
+var _t_quai_atteint: float = -1.0
+var _v_quai: float = -1.0
 
 
 func _initialize() -> void:
@@ -106,6 +108,12 @@ func _tick() -> void:
 			var d1: float = _lg._vehicules[1][1]
 			if _t_depart < 0.0 and _lg._phase == "route":
 				_t_depart = _t
+			# nez au début du quai d'arrivée : instant et vitesse (Perce-Neige : V_CREEP)
+			if _t_depart >= 0.0 and _t_quai_atteint < 0.0 and _lg._phase == "route":
+				var but: float = _lg._x_quai(false) if _lg._sens > 0.0 else _lg._x_quai(true)
+				if absf(but - _lg._s) <= VehiculeFunival.DEMI_L * 2.0 + 2.0:
+					_t_quai_atteint = _t - _t_depart
+					_v_quai = absf(_lg._v)
 			if absf(d0 - d1) < VehiculeFunival.DEMI_L * 2.0 + 2.0:
 				var p0: Vector3 = (_lg.vehicule(0) as Node3D).position
 				var p1: Vector3 = (_lg.vehicule(1) as Node3D).position
@@ -114,7 +122,11 @@ func _tick() -> void:
 				var duree: float = _t - _t_depart
 				_verif("Funival : croisement dans l'évitement sans contact", _ecart_min > VehiculeFunival.DEMI_LARGEUR * 2.0 + 0.1,
 					"entraxe mini %.2f m" % _ecart_min)
-				_verif("Funival : trajet de 4 min 40 à 5 min 20 (vidéo de la montée ≈ 304 s ; RM.net 5 min), ralenti dans l'évitement", duree > 280.0 and duree < 320.0, "%.0f s" % duree)
+				# vidéo de la montée (KxhTv7cGK-I) : départ 0:08, nez au début du quai amont 4:50 → 282 s ; entrée au pas
+				# comme au Perce-Neige (0,75 m/s, demande d'utilisateur du 09/11/2026)
+				_verif("Funival : début du quai atteint en 4 min 32 à 4 min 52 (vidéo de la montée : 282 s), ralenti dans l'évitement",
+					_t_quai_atteint > 272.0 and _t_quai_atteint < 292.0, "%.0f s, arrêt à %.0f s" % [_t_quai_atteint, duree])
+				_verif("Funival : entrée au quai à 0,75 m/s (Perce-Neige)", absf(_v_quai - Funival.V_CREEP) < 0.1, "%.2f m/s" % _v_quai)
 				var cm: Mesh = _lg._cables.mesh if _lg._cables != null else null
 				_verif("Funival : câble inférieur posé", cm != null and cm.get_surface_count() > 0 and (cm.surface_get_arrays(0)[Mesh.ARRAY_VERTEX] as PackedVector3Array).size() > 50)
 				# voie du Perce-Neige : câble tracteur, galets, et rails de TrackBuilder sur ceux où roulent les véhicules

@@ -19,12 +19,24 @@ const A_FUNI: float = 0.18
 ## Vitesse dans l'évitement (aiguillages passifs et courbes en S) : ralentissement signalé par l'utilisateur
 ## (08/11/2026), valeur NON SOURCÉE, calée pour que le trajet retrouve la durée d'une vidéo de la montée en cabine de
 ## conduite (départ de La Daille → arrêt à Bellevarde ≈ 304 s ; fiche RM.net 5 min) avec l'accélération mesurée :
-## 6 m/s → 296 s.
+## 6 m/s → 296 s. Recalée le 09/11/2026 avec l'évitement mesuré (16,5 s d'aiguillage à aiguillage) et l'arrivée au
+## début du quai à 4:50 sur la même vidéo (282 s après le départ) : 6 m/s.
 const V_EVIT: float = 6.0
+## Entrée en gare comme au Perce-Neige (Constants.V_CREEP, demande d'utilisateur du 09/11/2026 : « il doit arriver au
+## début du quai à 0,75 m/s et pas 4 ») : le nez du véhicule passe le début du quai à V_CREEP, qu'il garde jusqu'à
+## l'accostage (dernier mètre à A_ACCOSTAGE).
+const V_CREEP: float = 0.75
+const A_ACCOSTAGE: float = 0.30
+## Courbe de freinage tracée à 85 % du freinage de service : à 100 %, le véhicule la suivait en retard (entrée au quai à
+## 1,6 m/s au lieu de 0,75, simulation du 09/11/2026).
+const K_COURBE: float = 0.85
 const ECARTEMENT: float = 1.20          # m (OSM, Wikipédia)
 const E_VOIES: float = 2.35             # entraxe : rails intérieurs à ~1,15 m, au plus l'écartement (1,20 m), un peu moins (utilisateur, à l'œil sur la vidéo de descente, 08/11/2026)
-const L_EVITEMENT: float = 200.0        # m (estimé, 150-250 sur les photos)
-const L_RACCORD: float = 45.0           # m, aiguillage passif et courbe en S
+## Évitement mesuré sur la vidéo de la montée en cabine de conduite (KxhTv7cGK-I, demande d'utilisateur du 09/11/2026 :
+## « l'évitement est beaucoup trop long ») : aiguillage du bas à 2:26,5, voies parallèles de 2:32 à 2:41,5, aiguillage
+## du haut à 2:43, à V_EVIT → 99 m d'aiguillage à aiguillage (290 avant).
+const L_EVITEMENT: float = 57.0         # m, voies parallèles (9,5 s à 6 m/s)
+const L_RACCORD: float = 21.0           # m, aiguillage passif et courbe en S (3,5 s à 6 m/s)
 const R_TUNNEL: float = 2.20            # m (diamètre estimé 4-4,5 m)
 const R_TUNNEL_EVIT: float = 3.90       # m (section élargie à deux voies)
 const PROF_PORTAIL: float = 4.0         # voie sous le terrain au droit du portail (m)
@@ -102,7 +114,7 @@ func x_voie(d: float, i: int) -> float:
 func _t_evit(d: float) -> float:
 	var e: float = absf(d - longueur_h() * 0.5)
 	var h: float = L_EVITEMENT * 0.5
-	var t: float = 1.0 if e <= h else (0.0 if e >= h + L_RACCORD else 1.0 - (e - h) / L_RACCORD)
+	var t: float = 1.0 - smoothstep(h, h + L_RACCORD, e)
 	return t * t * (3.0 - 2.0 * t)
 
 
@@ -1496,14 +1508,20 @@ func _process_corps(delta: float) -> void:
 		var v_max: float = vitesse * CRANS[cran]
 		# évitement : on y entre à V_EVIT, freinage anticipé (les deux véhicules y entrent ensemble)
 		var c_ev: float = longueur_h() * 0.5
-		var h_ev: float = L_EVITEMENT * 0.5 + L_RACCORD
+		# (tant qu'une partie du véhicule est sur les aiguillages)
+		var h_ev: float = L_EVITEMENT * 0.5 + L_RACCORD + VehiculeFunival.DEMI_L
 		var hors: float = maxf(absf(_s - c_ev) - h_ev, 0.0) * sqrt(1.0 + pow(pente_voie(_s), 2.0))
 		var vers: bool = (_s < c_ev) == (_sens > 0.0) or hors <= 0.0
 		if vers:
 			v_max = minf(v_max, sqrt(V_EVIT * V_EVIT + 2.0 * A_FUNI * hors))
-		# distance restante le long de la voie (freinage jusqu'au quai)
-		var reste: float = absf(but - _s) * sqrt(1.0 + pow(pente_voie(_s), 2.0))
-		v_max = minf(v_max, maxf(sqrt(2.0 * A_FUNI * maxf(reste - 0.3, 0.0)), 0.35))
+		# distance restante le long de la voie : freinage jusqu'à V_CREEP au début du quai (nez du véhicule), puis au pas
+		# sur toute sa longueur, accostage au dernier mètre
+		var k_p: float = sqrt(1.0 + pow(pente_voie(_s), 2.0))
+		var reste: float = absf(but - _s) * k_p
+		var l_quai: float = (VehiculeFunival.DEMI_L * 2.0 + 2.0) * k_p
+		var v_gare: float = sqrt(V_CREEP * V_CREEP + 2.0 * A_FUNI * K_COURBE * maxf(reste - l_quai, 0.0))
+		v_gare = minf(v_gare, maxf(sqrt(2.0 * A_ACCOSTAGE * maxf(reste - 0.05, 0.0)), 0.12))
+		v_max = minf(v_max, v_gare)
 		if etat != "marche":
 			v_max = 0.0
 		var a_frein: float = A_URGENCE if etat == "urgence" else A_FUNI
@@ -1535,6 +1553,10 @@ var _cables: MeshInstance3D = null
 var _d_cables: float = -1000.0
 var _mat_cables: StandardMaterial3D = null
 const D_TRACTEUR: float = 0.052        # diamètre (estimé ; non publié)
+## Attache du câble inférieur sous le châssis (au-dessus des rails, estimé) et paramètre de sa chaînette T/w : ~15 kN
+## sur ~2,6 kg/m (25 mm), estimés.
+const H_ATTACHE_INF: float = 0.12
+const A_CHAINETTE_INF: float = 600.0
 const D_INFERIEUR: float = 0.025       # câble tracteur aval 25 mm, 42 870 daN, Tréfileurope 1987 (funiculaires-france.fr)
 
 
@@ -1557,6 +1579,9 @@ func _maj_voie_pn(delta: float) -> void:
 		lumieres_pn.update_light_culling(s0, NAN, s1)
 	voie_pn.update_cable_visibility(s0, s1)
 	voie_pn.update_cable_phase(s0, s1, -1.0)
+	# câble de retour : du bout aval de chaque véhicule à la gare aval, dans la gorge des galets
+	voie_pn.retour_jusqua[-1] = s_de_d(_vehicules[0][1] - VehiculeFunival.DEMI_L)
+	voie_pn.retour_jusqua[1] = s_de_d(_vehicules[1][1] - VehiculeFunival.DEMI_L)
 	var s_cam: float = s0
 	if _chantier != null or OS.get_thread_caller_id() != OS.get_main_thread_id():
 		return                      # (pendant la construction, sur son fil : ni caméra ni maillages vivants)
@@ -1579,8 +1604,7 @@ func _refaire_cables() -> void:
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
 	for i in range(2):
 		var d: float = _vehicules[i][1]
-		var dx: float = (-1.0 if i == 0 else 1.0) * 0.07
-		_ruban(st, 1.0, d - VehiculeFunival.DEMI_L, i, dx, D_INFERIEUR, -0.07)
+		_ruban_galets(st, 1.0, d - VehiculeFunival.DEMI_L, i)
 	var mesh: ArrayMesh = st.commit()
 	if mesh.get_surface_count() > 0:
 		mesh.surface_set_material(0, _mat_cables)
@@ -1593,6 +1617,49 @@ func _refaire_cables() -> void:
 		_cables.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		_enfant(_cables)
 	_cables.mesh = mesh
+
+
+## Câble de retour du véhicule i, de d0 à d1 : dans la gorge des galets de son brin (VoiePN), au fond comme le
+## câble tracteur (son centre plus bas de la différence des rayons) ; ruban en croix entre deux galets.
+func _ruban_galets(st: SurfaceTool, d0: float, d1: float, i: int) -> void:
+	if voie_pn == null or d1 - d0 < 0.5:
+		_ruban(st, d0, d1, i, (-1.0 if i == 0 else 1.0) * 0.07, D_INFERIEUR, -0.07)
+		return
+	var pts: Array = voie_pn.strand_vertices(-1 if i == 0 else 1)
+	var s0: float = s_de_d(d0)
+	var s1: float = s_de_d(d1)
+	var xf: Transform3D = voie_pn.transform
+	var r: float = D_INFERIEUR * 0.5
+	var bas: float = voie_pn.cable_radius - r
+	var chemin: PackedVector3Array = PackedVector3Array()
+	for v in pts:
+		var s: float = float(v.s)
+		if s < s0 or s > s1:
+			continue
+		var p: Vector3 = v.p
+		if v.has("basis"):
+			p -= (v.basis as Basis).y.normalized() * bas
+		chemin.append(xf * p)
+	if chemin.size() < 2:
+		_ruban(st, d0, d1, i, (-1.0 if i == 0 else 1.0) * 0.07, D_INFERIEUR, -0.07)
+		return
+	# tronçon libre, du dernier galet à l'attache sous le bout aval du véhicule : une chaînette, comme le câble du
+	# Perce-Neige (TrackBuilder.chainette_y ; demande d'utilisateur du 09/11/2026)
+	var dern: Vector3 = chemin[chemin.size() - 1]
+	var att: Vector3 = Vector3(dern.x, y_voie(d1) + H_ATTACHE_INF, -d1)
+	var portee: float = Vector2(att.x - dern.x, att.z - dern.z).length()
+	if portee > 0.05:
+		for k in range(1, 9):
+			var t: float = float(k) / 8.0
+			var q: Vector3 = dern.lerp(att, t)
+			q.y = dern.y + TrackBuilder.chainette_y(t * portee, portee, att.y - dern.y, A_CHAINETTE_INF)
+			chemin.append(q)
+	for k in range(1, chemin.size()):
+		var a: Vector3 = chemin[k - 1]
+		var b2: Vector3 = chemin[k]
+		for o in [Vector3(r, 0, 0), Vector3(0, r, 0)]:
+			for q in [a - o, a + o, b2 + o, a - o, b2 + o, b2 - o]:
+				st.add_vertex(q)
 
 
 ## Ruban (deux faces en croix) le long de la voie du véhicule i, de d0 à d1, au-dessus des poulies.
