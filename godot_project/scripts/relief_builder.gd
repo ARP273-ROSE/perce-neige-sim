@@ -767,10 +767,77 @@ func _creuser_gares_corps() -> void:
 			var demi: float = float(D["voie"]) * 0.5 + 1.5
 			var lg: float = LigneRemontee.l_gare_pour(String(D["famille"])) + 2.0
 			for bout in [[true, a, -dirh], [false, b, dirh]]:
-				if interieur.has([cle, bout[0]]):
+				if interieur.has([cle, bout[0]]) or _sur_replat(cle, bout[0]):
 					continue
 				_creuser_gare(bout[1], bout[2], demi, lg)
 	_araser_cretes()
+	_poser_replats()
+
+
+## Replats communs à plusieurs gares (remarque d'utilisateur, iPad du 08/11/2026 : « le socle de la gare amont du 3S
+## est complètement délirant et irréaliste, elle est posée au sol, c'est level avec l'arrivée de Fontaine Froide ») :
+## sommet de Bellevarde, arrivées du 3S (2690 m) et de Fontaine Froide (2688,2 m) de plain-pied. Le relief y descendait
+## de 2 à 6 m sous la gare du 3S (remblai blanc de 10 m de haut) et le déblai de Fontaine Froide l'avait mise à 2677 m.
+## [[clé, aval ?, recul derrière la gare (m)]..., altitude du replat, demi-largeur ajoutée, raccord (m)]
+const REPLATS: Array = [[[["olympique", false, 30.0], ["tsd6_fontaine_froide", false, 8.0]], 2689.5, 6.0, 25.0]]
+
+
+func _sur_replat(cle: String, aval: bool) -> bool:
+	for rp in REPLATS:
+		for g in rp[0]:
+			if String(g[0]) == cle and bool(g[1]) == aval:
+				return true
+	return false
+
+
+## Terrain mis au niveau du replat sous l'emprise de chaque gare (remblai comme déblai), raccord doux autour.
+func _poser_replats() -> void:
+	for rp in REPLATS:
+		var rects: Array = []        # [centre, axe, demi-longueur, demi-largeur]
+		for g in rp[0]:
+			for D in RemonteesDonnees.LIGNES:
+				if String(D["cle"]) != String(g[0]):
+					continue
+				var a: Vector2 = RemonteesDomaine.monde(float(D["aval"][0]), float(D["aval"][1]))
+				var b: Vector2 = RemonteesDomaine.monde(float(D["amont"][0]), float(D["amont"][1]))
+				var u: Vector2 = (b - a).normalized()
+				var o: Vector2 = a if bool(g[1]) else b
+				var vers: Vector2 = -u if bool(g[1]) else u          # vers l'arrière de la gare
+				var lg: float = LigneRemontee.l_gare_pour(String(D["famille"])) + 2.0
+				var arr: float = float(g[2])
+				var devant: float = 8.0                            # (devant le quai : la maille de 25 m y mêlait la pente)
+				var c: Vector2 = o + vers * ((lg + arr - devant) * 0.5)
+				rects.append([c, u, (lg + arr + devant) * 0.5, float(D["voie"]) * 0.5 + float(rp[2])])
+		if rects.is_empty():
+			continue
+		var y: float = float(rp[1])
+		var fondu: float = float(rp[3])
+		var r_max: float = 0.0
+		var bb: Rect2 = Rect2(rects[0][0], Vector2.ZERO)
+		for rc in rects:
+			r_max = maxf(r_max, maxf(rc[2], rc[3]))
+			bb = bb.expand(rc[0])
+		bb = bb.grow(r_max + fondu + maxf(_dx, _dz) * _pas)
+		var n: int = ReliefDonnees.NX
+		var j0: int = clampi(int((bb.position.x - ReliefDonnees.X_OUEST) / _dx), 0, n - 1)
+		var j1: int = clampi(int((bb.end.x - ReliefDonnees.X_OUEST) / _dx) + 1, 0, n - 1)
+		var i0: int = clampi(int((bb.position.y - ReliefDonnees.Z_NORD) / _dz), 0, ReliefDonnees.NZ - 1)
+		var i1: int = clampi(int((bb.end.y - ReliefDonnees.Z_NORD) / _dz) + 1, 0, ReliefDonnees.NZ - 1)
+		var m_c: float = maxf(_dx, _dz) * _pas
+		for i in range(i0, i1 + 1):
+			for j in range(j0, j1 + 1):
+				var q: Vector2 = Vector2(ReliefDonnees.X_OUEST + j * _dx, ReliefDonnees.Z_NORD + i * _dz)
+				var dist: float = INF
+				for rc in rects:
+					var v: Vector2 = q - (rc[0] as Vector2)
+					var uu: Vector2 = rc[1]
+					var lat: Vector2 = Vector2(-uu.y, uu.x)
+					dist = minf(dist, Vector2(maxf(absf(v.dot(uu)) - float(rc[2]), 0.0), maxf(absf(v.dot(lat)) - float(rc[3]), 0.0)).length())
+				# (toute la maille qui touche l'emprise est au niveau, puis le raccord)
+				var w: float = 1.0 - smoothstep(0.0, fondu, maxf(dist - m_c, 0.0))
+				if w > 0.0:
+					var k: int = i * n + j
+					_h[k] = lerpf(_h[k], y, w)
 
 
 ## Crêtes terrassées pour une ligne : sommet pointu du relevé remplacé par un replat (retour
