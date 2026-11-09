@@ -128,6 +128,22 @@ var _construit: bool = false     # (construit hors de l'arbre par une autre lign
 func _build() -> void:
 	if _construit:
 		return
+	for t in _taches():
+		(t as Callable).call()
+
+
+## Même construction que _build(), une pause entre deux tronçons (Funival sur le chemin sans fil — PWA : le tunnel
+## d'un bloc prenait 76 ms au NAS, relevé du 09/11/2026).
+func build_par_etapes(pause: Callable) -> void:
+	if _construit:
+		return
+	for t in _taches():
+		(t as Callable).call()
+		await pause.call()
+
+
+## Préparation (tracé, matière), puis la liste des tronçons à construire, dans l'ordre.
+func _taches() -> Array:
 	_construit = true
 	# Génère les points de la spline
 	path_points = trace.points(ring_spacing)
@@ -180,33 +196,35 @@ func _build() -> void:
 	# chevauchent → profil « binoculaire » (union des deux cercles) qui se
 	# pince progressivement ; au-delà (d ≥ R), deux tubes circulaires
 	# distincts avec le rocher entre les deux.
+	var taches: Array = []
 	if not trace.deux_tubes:
 		# une seule chambre élargie, sans mur entre les voies (Funival, demande d'utilisateur du 08/11/2026)
-		_build_tunnel_section(mat, trace.tube_debut, trace.evit_debut, 0.0, "TunnelLow", false)
-		_build_tunnel_section(mat, trace.evit_debut, trace.evit_fin, 0.0, "TunnelPassingChamber", true)
-		_build_tunnel_section(mat, trace.evit_fin, minf(trace.longueur, trace.tube_fin), 0.0, "TunnelHigh", false)
-		_build_wall_cables()
+		taches += _section_taches(mat, trace.tube_debut, trace.evit_debut, 0.0, "TunnelLow", false)
+		taches += _section_taches(mat, trace.evit_debut, trace.evit_fin, 0.0, "TunnelPassingChamber", true)
+		taches += _section_taches(mat, trace.evit_fin, minf(trace.longueur, trace.tube_fin), 0.0, "TunnelHigh", false)
+		taches.append(_build_wall_cables)
 		if show_debug_path:
-			_draw_debug_path()
-		return
+			taches.append(_draw_debug_path)
+		return taches
 	var pinch: float = _loop_pinch_ds()
 	var s_pinch_lo: float = trace.evit_debut + pinch
 	var s_pinch_hi: float = trace.evit_fin - pinch
-	_build_tunnel_section(mat, 0.0, trace.evit_debut, 0.0, "TunnelLow", false)
-	_build_tunnel_fusion(mat, trace.evit_debut, s_pinch_lo, "TunnelFusionLow")
-	_build_tunnel_section(mat, s_pinch_lo, s_pinch_hi, -1.0, "TunnelLoopL", false)
-	_build_tunnel_section(mat, s_pinch_lo, s_pinch_hi, +1.0, "TunnelLoopR", false)
-	_build_tunnel_fusion(mat, s_pinch_hi, trace.evit_fin, "TunnelFusionHigh")
-	_build_tunnel_section(mat, trace.evit_fin, trace.longueur, 0.0, "TunnelHigh", false)
+	taches += _section_taches(mat, 0.0, trace.evit_debut, 0.0, "TunnelLow", false)
+	taches.append(_build_tunnel_fusion.bind(mat, trace.evit_debut, s_pinch_lo, "TunnelFusionLow"))
+	taches += _section_taches(mat, s_pinch_lo, s_pinch_hi, -1.0, "TunnelLoopL", false)
+	taches += _section_taches(mat, s_pinch_lo, s_pinch_hi, +1.0, "TunnelLoopR", false)
+	taches.append(_build_tunnel_fusion.bind(mat, s_pinch_hi, trace.evit_fin, "TunnelFusionHigh"))
+	taches += _section_taches(mat, trace.evit_fin, trace.longueur, 0.0, "TunnelHigh", false)
 
 	# Câbles électriques le long du flanc gauche du tunnel (visibles sur
 	# toutes les frames intérieures du vrai funiculaire). 2 câbles
 	# parallèles, fixés à mi-hauteur, fins (~25 mm) et noirs.
-	_build_wall_cables()
-	_build_sortie_secours()
+	taches.append(_build_wall_cables)
+	taches.append(_build_sortie_secours)
 
 	if show_debug_path:
-		_draw_debug_path()
+		taches.append(_draw_debug_path)
+	return taches
 
 
 # Sortie de secours (fait d'un utilisateur, 06/10/2026, vidéo de montée :
@@ -488,10 +506,12 @@ func _wall_cable_x_at(s: float) -> float:
 #   loop). side doit valoir 0 (centré). Le rayon est augmenté de
 #   abs(passing_loop_offset(s, 1.0)), ce qui fait croître la chambre du rayon
 #   standard à `tunnel_radius + passing_offset_max` au bord du loop plat.
-func _build_tunnel_section(
+## Les tronçons d'une section (découpés pour le frustum culling), un appel chacun.
+func _section_taches(
 	mat: StandardMaterial3D, s_start: float, s_end: float,
 	side: float, name: String, is_chamber: bool = false,
-) -> void:
+) -> Array:
+	var taches: Array = []
 	# Indices de rings encadrants (on prend le ring juste avant s_start et juste
 	# après s_end pour assurer une fermeture visuelle aux extrémités)
 	var n_rings_total: int = path_points.size()
@@ -506,10 +526,11 @@ func _build_tunnel_section(
 	var chunk_i: int = 0
 	while c_start < idx_end:
 		var c_end: int = mini(c_start + rings_per_chunk, idx_end)
-		_build_tunnel_chunk(mat, c_start, c_end, side,
-			"%s_%d" % [name, chunk_i], is_chamber)
+		taches.append(_build_tunnel_chunk.bind(mat, c_start, c_end, side,
+			"%s_%d" % [name, chunk_i], is_chamber))
 		c_start = c_end
 		chunk_i += 1
+	return taches
 
 
 # Dessus de la dalle de voie (TrackBuilder.floor_y_local + slab_thickness) et
