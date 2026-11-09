@@ -2239,9 +2239,13 @@ func update_galets(att_g: float, att_d: float, s_cam: float, delta: float,
 		_gal_pose_prec[side_i] = pose
 		var idx: PackedInt32Array = _gal_par_brin[side_i]
 		var ss: PackedFloat64Array = _gal_s_brin[side_i]
-		# galets dont l'état (câble posé ou non) a pu changer
+		# galets dont l'état (câble posé ou non) a pu changer (avec le câble de retour, qui suit le véhicule)
 		var lo: float = minf(pose_prec, pose)
 		var hi: float = maxf(pose_prec, pose)
+		if retour_jusqua.has(side_i):
+			var r_s: float = float(retour_jusqua[side_i])
+			lo = minf(lo, r_s - 40.0 * delta - 1.0)
+			hi = maxf(hi, r_s + 40.0 * delta + 1.0)
 		var k0: int = ss.bsearch(lo)
 		while k0 < ss.size() and ss[k0] <= hi + 1e-6:
 			_galet_etat(idx[k0], side_i, pose, rompu_brin == side_i)
@@ -2266,8 +2270,15 @@ func update_galets(att_g: float, att_d: float, s_cam: float, delta: float,
 				Transform3D(loc.basis * Basis(Vector3.UP, _gal_theta[q]), loc.origin))
 
 
+## Câble de retour sous chaque véhicule (Funival : un câble inférieur du bout aval du véhicule à la gare aval, posé
+## dans la gorge des mêmes galets — remarque d'utilisateur du 09/11/2026 : « dans la réalité il les touche ») : côté
+## (−1 / +1) → abscisse au-dessous de laquelle les galets le portent. Vide : pas de câble de retour (Perce-Neige).
+var retour_jusqua: Dictionary = {}
+
+
 func _galet_etat(q: int, side_i: int, pose: float, rompu: bool) -> void:
-	var porte: int = 1 if (float(_galets[q].s) > pose and not rompu) else 0
+	var s_q: float = float(_galets[q].s)
+	var porte: int = 1 if ((s_q > pose or s_q < float(retour_jusqua.get(side_i, -INF))) and not rompu) else 0
 	if porte == _gal_cable[q]:
 		return
 	if porte == 0:
