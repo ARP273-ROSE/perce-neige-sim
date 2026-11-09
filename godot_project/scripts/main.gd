@@ -2785,13 +2785,13 @@ func _gare_du_skieur() -> int:
 func _camera_sous_funival() -> bool:
 	var cam: Camera3D = get_viewport().get_camera_3d()
 	return Funival.actif != null and is_instance_valid(Funival.actif) and cam != null \
-		and Funival.actif.souterrain(cam.global_position)
+		and Funival.actif.sous_la_roche(cam.global_position)
 
 
 func _skieur_en_tunnel() -> bool:
 	# tunnel du Funival : caméra dans son tube ou sa salle amont
 	var cam_f: Camera3D = get_viewport().get_camera_3d()
-	if Funival.actif != null and is_instance_valid(Funival.actif) and cam_f != null and Funival.actif.souterrain(cam_f.global_position):
+	if Funival.actif != null and is_instance_valid(Funival.actif) and cam_f != null and Funival.actif.sous_la_roche(cam_f.global_position):
 		return true
 	if skieur == null or skieur.support == null:
 		return false

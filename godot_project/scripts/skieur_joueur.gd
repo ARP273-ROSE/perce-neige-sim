@@ -896,6 +896,11 @@ var _marche_t: float = 0.0
 
 
 func _marcher(delta: float, dir: Vector3, vite: bool) -> void:
+	# (immobile sur le plancher du Funival, porté par son véhicule : pas de pas de physique — le sol en gradins, vu de la
+	# capsule inclinée, le faisait glisser vers les portes ouvertes et il restait sur le quai — 09/11/2026)
+	if support != null and support.has_meta("funival") and dir.length() < 0.05 and is_on_floor():
+		velocity = Vector3.ZERO
+		return
 	var v_cible: Vector3 = dir * (V_COURSE if vite else V_MARCHE)
 	var vh: Vector3 = Vector3(velocity.x, 0.0, velocity.z).move_toward(v_cible, ACCEL * delta)
 	velocity.x = vh.x
@@ -1163,8 +1168,10 @@ func _porter() -> void:
 		support = null
 		return
 	var xf: Transform3D = support.global_transform
-	var d: Transform3D = xf * _support_xf.affine_inverse()
-	var p: Vector3 = d * global_position
+	# (par différences au support : à 5 km de l'origine, comme le Funival, composer les transformées en flottants 32 bits
+	# faisait dériver le skieur immobile de 2,5 cm/s vers les portes)
+	var d: Transform3D = Transform3D(xf.basis * _support_xf.basis.inverse(), Vector3.ZERO)
+	var p: Vector3 = xf.origin + d.basis * (global_position - _support_xf.origin)
 	if p.distance_to(global_position) < 60.0:
 		global_position = p
 		var dl: float = wrapf(atan2(d.basis.z.x, d.basis.z.z), -PI, PI)
