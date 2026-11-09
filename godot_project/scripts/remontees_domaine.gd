@@ -1239,9 +1239,15 @@ func _embarquement() -> void:
 	if not a_bord.is_empty():
 		return
 	_repos = maxf(0.0, _repos - get_process_delta_time())
+	var p: Vector3 = skieur.global_position
+	# Funival : dans un véhicule qui ferme ses portes ou roule, il est porté, même juste après en être « sorti »
+	# (sinon la caisse, déplacée chaque image, partait sans lui et il passait au travers du plancher — iPad, 08/11/2026)
+	var fu: Funival = Funival.actif
+	if fu != null and is_instance_valid(fu) and fu.pret and fu.is_inside_tree() and not fu.portes_ouvertes() \
+			and _entrer_cabine(fu, p, true):
+		return
 	if _repos > 0.0:
 		return
-	var p: Vector3 = skieur.global_position
 	for lg0 in _lignes_gares(p):
 		var lg: LigneRemontee = lg0
 		if not lg.pret or not lg.is_processing() or not _pres_des_gares(lg, p):
@@ -1393,7 +1399,7 @@ func _cap(v: Node3D, avant: bool = false) -> float:
 
 ## Skieur entré dans une cabine en gare : assis sur la banquette d'où l'on
 ## regarde vers l'amont, à la place la plus proche.
-func _entrer_cabine(lg: LigneRemontee, p: Vector3) -> bool:
+func _entrer_cabine(lg: LigneRemontee, p: Vector3, rattraper: bool = false) -> bool:
 	# (avec le noyau : les cabines en gare de sa dernière étape, dans le même ordre — les autres sont en ligne, ou à
 	# plus de 250 m ; zone_vehicule pour chaque cabine, à chaque image : 0,1 ms à Tovière, relevé du 07/11/2026)
 	var ids: Variant = range(lg.nombre_vehicules())
@@ -1401,9 +1407,13 @@ func _entrer_cabine(lg: LigneRemontee, p: Vector3) -> bool:
 		ids = lg._noyau.en_gare()
 	for i in ids:
 		var zn: String = lg.zone_vehicule(i)
-		if zn == "ligne":
+		if zn == "ligne" and not rattraper:
 			continue
 		var v: VehiculeRemontee = lg.vehicule(i)
+		if rattraper and zn == "ligne":
+			# (en ligne : sens de marche, comme s'il était monté à la gare de départ)
+			var monte: bool = (lg as Funival)._v * (1.0 if i == 0 else -1.0) >= 0.0
+			zn = "gare_aval" if monte else "gare_amont"
 		var loc: Vector3 = v.global_transform.affine_inverse() * p
 		var y_pl: float = v.place_assise(0).y
 		if v is VehiculeFunival:
@@ -1411,6 +1421,8 @@ func _entrer_cabine(lg: LigneRemontee, p: Vector3) -> bool:
 			y_pl = VehiculeFunival.y_plancher(loc.z)
 		var lim: Vector2 = lg.demi_interieur()
 		if absf(loc.x) > lim.x or absf(loc.z) > lim.y or loc.y < y_pl - 0.4 or loc.y > y_pl + 1.6:
+			if rattraper:
+				continue
 			if _guet.is_empty() and Vector2(loc.x, loc.z).length() < maxf(lim.x, lim.y) + 2.5 \
 					and absf(loc.y - y_pl) < 2.0 and lg.regime() > 0.3:
 				_guet = [lg, i, zn == "gare_aval"]
