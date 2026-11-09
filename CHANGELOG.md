@@ -5,6 +5,24 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.59.0 — 9 novembre 2026
+
+Retours d'essai sur iPad de la 1.58.
+
+**Funival, véhicules refaits d'après les photos** : section en arche (et non plus en V), nez incliné entièrement vitré (on voit devant depuis l'intérieur), grandes portes vitrées à cadre noir avec la virgule rouge et blanche ; intérieur sans cloison, en paliers et volées de marches, cadres de barres rouges, plafond blanc. Plancher épaissi ; le skieur resté dans la rame est remis à bord quand elle ferme ses portes ou roule (on pouvait passer au travers du plancher).
+
+**Funival, marche** : arrivée au début du quai à 0,75 m/s, comme le Perce-Neige (3,96 m/s avant). Évitement raccourci d'après la vidéo de la montée : 99 m entre aiguillages (290 m avant), raccords en S, 6 m/s tant qu'une partie du véhicule est sur les aiguillages. Trajet : début du quai à 4 min 41 (vidéo : 4 min 42), arrêt à 5 min 28.
+
+**Funival, câble inférieur** : posé dans la gorge des galets, avec une chaînette jusqu'à l'attache sous le véhicule ; les galets qu'il porte tournent.
+
+**Funival, gare amont** : plus de plaque grise dans la salle ni de bâtiment en lévitation ; terrain raboté sous la salle là où elle sort du versant, remonté au plancher autour du bâtiment ; partie émergée habillée de bardage.
+
+**Sommet de Bellevarde** : arrivées du 3S et du TSD Fontaine Froide de plain-pied sur un replat à 2689,5 m (le 3S reposait sur un remblai blanc, Fontaine Froide était creusée 11 m trop bas).
+
+**PWA** : bardages et bois presque noirs à l'ombre quand la rame du Perce-Neige était à quai (éclairage d'ambiance de gare appliqué à tout le domaine) ; corrigé, rendu proche du PC. Construction du Funival découpée en tranches plus courtes (pire tranche 76 → 29 ms au NAS), construction identique au maillage près.
+
+Vérifié : 54 bancs sans écran au NAS, dont Funival (vitesse d'entrée au quai, évitement, à bord jusqu'en haut) ; bancs avec écran 3S, 3S en descente, coincé, téléskis, effets et toutes lignes au NAS. Non vérifié sur cette version : les 7 chemins de nuanceurs et les bancs au PC, l'iPad réel, le replat avec le pack HD.
+
 ## 1.58.1 — 8 novembre 2026
 
 Republication de la 1.58.0, au contenu identique : la fabrication des paquets s'était arrêtée sur le contrôle de confidentialité (chemins de machine dans trois commentaires du Funival, retirés). La 1.58.0 n'a pas eu de paquets.
