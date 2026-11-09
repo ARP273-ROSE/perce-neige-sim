@@ -307,28 +307,28 @@ static func mat_funi(nom: String) -> Material:
 			m.disable_fog = true
 		"beton_clair":
 			# poutre, piles (gris clair froid sur photo ; plus chaud, il virait au beige) : béton banché
-			_matiere(m, _tex_beton(Color(0.60, 0.63, 0.67), 11), 2.5, 0.95)
+			_matiere(m, _tex("beton_clair"), 2.5, 0.95)
 		"beton_banche":
-			_matiere(m, _tex_beton(Color(0.56, 0.57, 0.57), 23), 2.5, 0.95)
+			_matiere(m, _tex("beton_banche"), 2.5, 0.95)
 		"bois_gris":
 			# bardage de bois gris patiné (gare aval) : lames verticales de 12 cm, veinées
-			_matiere(m, _tex_lames(Color(0.64, 0.62, 0.58), Color(0.30, 0.29, 0.27), 8, 0.12, 31), 0.96, 0.9)
+			_matiere(m, _tex("bois_gris"), 0.96, 0.9)
 		"bardage_anthracite":
 			# bâtiment de Bellevarde : bac acier anthracite, nervures tous les 30 cm
-			_matiere(m, _tex_lames(Color(0.21, 0.22, 0.23), Color(0.09, 0.09, 0.10), 4, 0.06, 7), 1.2, 0.55)
+			_matiere(m, _tex("bardage_anthracite"), 1.2, 0.55)
 			m.metallic = 0.35
 		"acier_galva":
-			_matiere(m, _tex_bruit(Color(0.58, 0.60, 0.61), 0.06, 0.08, 5), 0.6, 0.45)
+			_matiere(m, _tex("acier_galva"), 0.6, 0.45)
 			m.metallic = 0.65
 		"caillebotis_sombre":
 			m.albedo_color = Color(0.22, 0.23, 0.24)
 			m.roughness = 0.75
 			m.metallic = 0.4
 		"rocher":
-			_matiere(m, _tex_bruit(Color(0.40, 0.39, 0.37), 0.22, 0.02, 13), 6.0, 1.0)
+			_matiere(m, _tex("rocher"), 6.0, 1.0)
 		"moellons":
 			# maçonnerie de pierre grise (gare amont) : moellons irréguliers, joints de mortier clair
-			_matiere(m, _tex_moellons(Color(0.46, 0.47, 0.47), Color(0.66, 0.65, 0.62), 17), 2.0, 1.0)
+			_matiere(m, _tex("moellons"), 2.0, 1.0)
 		_:
 			m.albedo_color = Color(1, 0, 1)
 	RemonteeKit.verrou.lock()
@@ -359,6 +359,85 @@ static func _bruit(graine: int, freq: float, taille: int) -> PackedByteArray:
 	return img.get_data()
 
 
+## Textures du Funival : recette (sorte, paramètres) par nom ; calculées une fois, gardées pour toutes les lignes.
+const TEXTURES: Dictionary = {
+	"beton_clair": ["beton", [Color(0.60, 0.63, 0.67), 11]],
+	"beton_banche": ["beton", [Color(0.56, 0.57, 0.57), 23]],
+	"bois_gris": ["lames", [Color(0.64, 0.62, 0.58), Color(0.30, 0.29, 0.27), 8, 0.12, 31]],
+	"bardage_anthracite": ["lames", [Color(0.21, 0.22, 0.23), Color(0.09, 0.09, 0.10), 4, 0.06, 7]],
+	"acier_galva": ["bruit", [Color(0.58, 0.60, 0.61), 0.06, 0.08, 5]],
+	"rocher": ["bruit", [Color(0.40, 0.39, 0.37), 0.22, 0.02, 13]],
+	"moellons": ["moellons", [Color(0.46, 0.47, 0.47), Color(0.66, 0.65, 0.62), 17]],
+}
+## Lignes de pixels par tranche quand on les calcule par bandes (256 lignes de moellons d'un bloc : 72 ms au NAS)
+const BANDE_TEX: int = 32
+static var _textures: Dictionary = {}
+
+
+static func _tex(nom: String) -> ImageTexture:
+	RemonteeKit.verrou.lock()
+	var t: ImageTexture = _textures.get(nom)
+	RemonteeKit.verrou.unlock()
+	if t != null:
+		return t
+	var r: Array = _recette(nom)
+	for e in r[2]:
+		(e as Callable).call()
+	var px: PackedByteArray = (r[1] as Callable).call(0, int(r[0]))
+	return _garder(nom, int(r[0]), px)
+
+
+## Les textures calculées par bandes de BANDE_TEX lignes, une pause entre deux (chemin sans fil, PWA).
+static func cuire_textures(pause: Callable) -> void:
+	for nom in TEXTURES:
+		RemonteeKit.verrou.lock()
+		var deja: bool = _textures.has(nom)
+		RemonteeKit.verrou.unlock()
+		if deja:
+			continue
+		var r: Array = _recette(nom)
+		await pause.call()
+		for e in r[2]:
+			(e as Callable).call()
+			await pause.call()
+		var n: int = int(r[0])
+		var px: PackedByteArray = PackedByteArray()
+		var y: int = 0
+		while y < n:
+			px.append_array((r[1] as Callable).call(y, mini(y + BANDE_TEX, n)))
+			y += BANDE_TEX
+			await pause.call()
+		_garder(nom, n, px)
+		await pause.call()
+
+
+static func _garder(nom: String, n: int, px: PackedByteArray) -> ImageTexture:
+	var t: ImageTexture = _texture(n, px)
+	RemonteeKit.verrou.lock()
+	if _textures.has(nom):
+		t = _textures[nom]
+	else:
+		_textures[nom] = t
+	RemonteeKit.verrou.unlock()
+	return t
+
+
+## [taille, bande(y0, y1) → octets RGB des lignes y0 à y1 − 1, étapes préalables] ; les étapes s'appellent d'abord,
+## puis les bandes dans l'ordre (tirages aléatoires en séquence).
+static func _recette(nom: String) -> Array:
+	var r: Array = TEXTURES[nom]
+	var a: Array = r[1]
+	match String(r[0]):
+		"beton":
+			return _r_beton(a[0], a[1]) + [[]]
+		"lames":
+			return _r_lames(a[0], a[1], a[2], a[3], a[4]) + [[]]
+		"bruit":
+			return _r_bruit(a[0], a[1], a[2], a[3]) + [[]]
+		_:
+			return _r_moellons(a[0], a[1], a[2])
+
+
 static func _texture(n: int, px: PackedByteArray) -> ImageTexture:
 	var img: Image = Image.create_from_data(n, n, false, Image.FORMAT_RGB8, px)
 	img.generate_mipmaps()
@@ -371,84 +450,92 @@ static func _poser(px: PackedByteArray, i: int, c: Color, k: float) -> void:
 	px[i * 3 + 2] = clampi(int(c.b * k * 255.0), 0, 255)
 
 
+static func _bande(n: int, y0: int, y1: int) -> PackedByteArray:
+	var px: PackedByteArray = PackedByteArray()
+	px.resize((y1 - y0) * n * 3)
+	return px
+
+
 ## Teinte bruitée : ±amp à grande échelle, ±grain au pixel.
-static func _tex_bruit(c: Color, amp: float, grain: float, graine: int) -> ImageTexture:
+static func _r_bruit(c: Color, amp: float, grain: float, graine: int) -> Array:
 	var n: int = 128
 	var b: PackedByteArray = _bruit(graine, 0.02, n)
-	var px: PackedByteArray = PackedByteArray()
-	px.resize(n * n * 3)
 	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
 	rng.seed = graine
-	for i in range(n * n):
-		_poser(px, i, c, 1.0 + (float(b[i]) / 255.0 - 0.5) * 2.0 * amp + rng.randf_range(-grain, grain))
-	return _texture(n, px)
+	return [n, func(y0: int, y1: int) -> PackedByteArray:
+		var px: PackedByteArray = _bande(n, y0, y1)
+		for i in range(y0 * n, y1 * n):
+			_poser(px, i - y0 * n, c, 1.0 + (float(b[i]) / 255.0 - 0.5) * 2.0 * amp + rng.randf_range(-grain, grain))
+		return px]
 
 
 ## Béton banché : nuances, banches de 2,5 × 1,25 m aux joints sombres, trous d'entretoise (une période = 2,5 m).
-static func _tex_beton(c: Color, graine: int) -> ImageTexture:
+static func _r_beton(c: Color, graine: int) -> Array:
 	var n: int = 256
 	var b: PackedByteArray = _bruit(graine, 0.015, n)
-	var px: PackedByteArray = PackedByteArray()
-	px.resize(n * n * 3)
 	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
 	rng.seed = graine
-	for y in range(n):
-		for x in range(n):
-			var i: int = y * n + x
-			var k: float = 1.0 + (float(b[i]) / 255.0 - 0.5) * 0.14 + rng.randf_range(-0.03, 0.03)
-			if y % 128 < 2 or x < 2:
-				k *= 0.80                                   # joints de banche
-			if absi((x + 32) % 64 - 32) < 2 and absi((y + 32) % 64 - 32) < 2:
-				k *= 0.70                                   # trous d'entretoise
-			_poser(px, i, c, k)
-	return _texture(n, px)
+	return [n, func(y0: int, y1: int) -> PackedByteArray:
+		var px: PackedByteArray = _bande(n, y0, y1)
+		for y in range(y0, y1):
+			for x in range(n):
+				var i: int = y * n + x
+				var k: float = 1.0 + (float(b[i]) / 255.0 - 0.5) * 0.14 + rng.randf_range(-0.03, 0.03)
+				if y % 128 < 2 or x < 2:
+					k *= 0.80                                   # joints de banche
+				if absi((x + 32) % 64 - 32) < 2 and absi((y + 32) % 64 - 32) < 2:
+					k *= 0.70                                   # trous d'entretoise
+				_poser(px, i - y0 * n, c, k)
+		return px]
 
 
 ## Lames verticales : n_lames par période, joint de la teinte `joint` sur la fraction `joint_f`, veinage léger.
-static func _tex_lames(c: Color, joint: Color, n_lames: int, joint_f: float, graine: int) -> ImageTexture:
+static func _r_lames(c: Color, joint: Color, n_lames: int, joint_f: float, graine: int) -> Array:
 	var n: int = 128
 	var b: PackedByteArray = _bruit(graine, 0.05, n)
-	var px: PackedByteArray = PackedByteArray()
-	px.resize(n * n * 3)
 	var rng: RandomNumberGenerator = RandomNumberGenerator.new()
 	rng.seed = graine
 	var teintes: Array = []
 	for _i in range(n_lames):
 		teintes.append(rng.randf_range(0.93, 1.06))
 	var w: float = float(n) / float(n_lames)
-	for y in range(n):
-		for x in range(n):
-			var li: int = int(float(x) / w)
-			if fmod(float(x), w) / w < joint_f:
-				_poser(px, y * n + x, joint, 1.0)
-			else:
-				_poser(px, y * n + x, c, float(teintes[li]) * (1.0 + (float(b[y * n + li * 7 % n]) / 255.0 - 0.5) * 0.08))
-	return _texture(n, px)
+	return [n, func(y0: int, y1: int) -> PackedByteArray:
+		var px: PackedByteArray = _bande(n, y0, y1)
+		for y in range(y0, y1):
+			for x in range(n):
+				var li: int = int(float(x) / w)
+				if fmod(float(x), w) / w < joint_f:
+					_poser(px, (y - y0) * n + x, joint, 1.0)
+				else:
+					_poser(px, (y - y0) * n + x, c, float(teintes[li]) * (1.0 + (float(b[y * n + li * 7 % n]) / 255.0 - 0.5) * 0.08))
+		return px]
 
 
-## Moellons : cellules de Voronoï, joints de mortier là où deux cellules se touchent (une période = 2 m).
-static func _tex_moellons(c: Color, mortier: Color, graine: int) -> ImageTexture:
+## Moellons : cellules de Voronoï, joints de mortier là où deux cellules se touchent (une période = 2 m). Les deux
+## bruits cellulaires en deux étapes (16 ms chacun au NAS).
+static func _r_moellons(c: Color, mortier: Color, graine: int) -> Array:
 	var n: int = 256
-	var fn: FastNoiseLite = FastNoiseLite.new()
-	fn.seed = graine
-	fn.noise_type = FastNoiseLite.TYPE_CELLULAR
-	fn.frequency = 0.035
-	fn.cellular_return_type = FastNoiseLite.RETURN_DISTANCE2_SUB
-	var ji: Image = fn.get_seamless_image(n, n)
-	ji.convert(Image.FORMAT_L8)
-	var j: PackedByteArray = ji.get_data()
-	fn.cellular_return_type = FastNoiseLite.RETURN_CELL_VALUE
-	var vi: Image = fn.get_seamless_image(n, n)
-	vi.convert(Image.FORMAT_L8)
-	var v: PackedByteArray = vi.get_data()
-	var px: PackedByteArray = PackedByteArray()
-	px.resize(n * n * 3)
-	for i in range(n * n):
-		if j[i] < 15:
-			_poser(px, i, mortier, 1.0)
-		else:
-			_poser(px, i, c, 0.80 + float(v[i]) / 255.0 * 0.40)
-	return _texture(n, px)
+	var bruits: Dictionary = {}
+	var cellulaire := func(sorte: int, cle: String) -> void:
+		var fn: FastNoiseLite = FastNoiseLite.new()
+		fn.seed = graine
+		fn.noise_type = FastNoiseLite.TYPE_CELLULAR
+		fn.frequency = 0.035
+		fn.cellular_return_type = sorte
+		var im: Image = fn.get_seamless_image(n, n)
+		im.convert(Image.FORMAT_L8)
+		bruits[cle] = im.get_data()
+	var etapes: Array = [cellulaire.bind(FastNoiseLite.RETURN_DISTANCE2_SUB, "j"), cellulaire.bind(FastNoiseLite.RETURN_CELL_VALUE, "v")]
+	return [n, func(y0: int, y1: int) -> PackedByteArray:
+		var j: PackedByteArray = bruits["j"]
+		var v: PackedByteArray = bruits["v"]
+		var px: PackedByteArray = _bande(n, y0, y1)
+		for i in range(y0 * n, y1 * n):
+			if j[i] < 15:
+				_poser(px, i - y0 * n, mortier, 1.0)
+			else:
+				_poser(px, i - y0 * n, c, 0.80 + float(v[i]) / 255.0 * 0.40)
+		return px, etapes]
 
 
 ## Habillage : les matières unies de RemonteeKit (partagées par toutes les lignes) remplacées, sur les pièces du
@@ -505,17 +592,20 @@ func _construire_corps() -> void:
 	_preparer_voie()
 	voie = 0.0
 	H_CABLE_GARE = 0.0
+	await _pause("funival : tracé")
+	# textures calculées des matières (viaduc, portail, gares), par bandes : d'un bloc, 160 ms sans fil au NAS
+	await cuire_textures(_pause.bind("funival : matières"))
 	_voie_et_ouvrages()
 	await _pause("funival : voie")
 	await _tunnel()
 	await _pause("funival : tunnel")
 	_gare_aval()
 	await _pause("funival : gare aval")
-	_gare_amont()
+	await _gare_amont()
 	_butoir_et_poulie()
 	await _pause("funival : gare amont")
 	_habiller(_chantier if _chantier != null else self)
-	await _pause("funival : matières")
+	await _pause("funival : habillage")
 	for k in range(2):
 		var v: VehiculeFunival = VehiculeFunival.new()
 		v.construit_par_la_ligne = true
@@ -759,8 +849,8 @@ func _tunnel() -> void:
 	tunnel_pn.tunnel_radius = R_TUNNEL
 	tunnel_pn.passing_offset_max = E_VOIES * 0.5
 	tunnel_pn.wall_cable_x_local = -(R_TUNNEL - 0.11)
-	tunnel_pn._build()                      # (hors de l'arbre : sur le fil de construction)
-	await _pause("funival : tunnel")
+	# (hors de l'arbre : sur le fil de construction ; sans fil — PWA —, une pause par tronçon de tube)
+	await tunnel_pn.build_par_etapes(_pause.bind("funival : tunnel"))
 	voie_pn = TrackBuilder.new()
 	voie_pn.name = "VoiePN"
 	voie_pn.trace = t
@@ -996,7 +1086,7 @@ func _butoir_et_poulie() -> void:
 ## Gare amont (Bellevarde) : la voie arrive dans une salle creusée sous le rocher (quai en escalier de béton d'un
 ## côté, escalier en caillebotis à rampe rouge de l'autre, plafond blanc, mur de pierre « WELCOME TO BELLEVARDE »),
 ## qui débouche en haut dans le bâtiment de surface : bardage anthracite, deux volumes à pignon, bandeau vitré,
-## volume de pierre accolé.
+## volume de pierre accolé. (Une pause entre les grandes pièces : d'un bloc, 68 ms sans fil au NAS.)
 func _gare_amont() -> void:
 	var g: Node3D = Node3D.new()
 	g.name = "GareAmont"
@@ -1050,6 +1140,7 @@ func _gare_amont() -> void:
 				st.add_vertex(Vector3((v as Vector2).x, (v as Vector2).y, -d0))
 	# (dalle, blochets et rails : TrackBuilder, jusqu'au bout de la voie)
 	_maillage(st, mat_funi("cuit"), "SalleAmont", false)
+	await _pause("funival : gare amont")
 	for k in range(n):
 		var d: float = dq - lq * 0.5 + lc * (float(k) + 0.5)
 		var y: float = VehiculeFunival.y_plancher_monde(self, d)
@@ -1071,6 +1162,7 @@ func _gare_amont() -> void:
 			_boite_st(st2, Vector3(0.12, y2 - yb, lc + 0.02), Vector3(sx2 * (W + 0.06), (y2 + yb) * 0.5, -d2))
 	var esc: MeshInstance3D = _maillage(st2, mat_funi("cuit"), "EscaliersAmont", false)
 	esc.reparent(g, false)
+	await _pause("funival : gare amont")
 	# mur de pierre et enseignes, à droite, au milieu du quai
 	var dm: float = dq
 	var ym: float = VehiculeFunival.y_plancher_monde(self, dm)
@@ -1079,6 +1171,7 @@ func _gare_amont() -> void:
 	w1.transform = Transform3D(Basis(Vector3.UP, -PI * 0.5), Vector3(hx - 0.37, ym + 2.8, -dm))
 	var w2: MeshInstance3D = RemonteeKit.texte_fige(g, "Respirez, vous êtes à 2690 m !", 48, 0.008, Color(0.85, 0.10, 0.10))
 	w2.transform = Transform3D(Basis(Vector3.UP, -PI * 0.5), Vector3(hx - 0.37, ym + 3.6, -dm + 9.0))
+	await _pause("funival : gare amont")
 	# bâtiment de surface au débouché (photos ; ~38 m de long, estimé) : volume haut à pignon au-dessus de la salle,
 	# bandeau de fenêtres sous le toit, aile basse à pignon, vitrage en bandeau au rez-de-chaussée, volume de pierre
 	var ys: float = y_voie(L)
@@ -1159,6 +1252,7 @@ func _gare_amont() -> void:
 	ens.transform = Transform3D(Basis(Vector3.UP, PI * 0.5), Vector3(hx + 1.06, ys + 4.6, zs))
 	var carre: MeshInstance3D = RemonteeKit.boite_en(g, Vector3(0.05, 1.4, 1.4), Vector3(hx + 1.04, ys + 4.6, zs + 5.5), "rouge_val")
 	carre.set_meta(MeshMerge.SANS_FUSION, true)
+	await _pause("funival : gare amont")
 	# perrons de béton devant les deux portes vers les pistes, jusqu'au terrain (porte du fond : 1,5 à 1,9 m de
 	# marche, on ne pouvait plus rentrer — PC, lot 15)
 	_perron_col.clear()
@@ -1168,6 +1262,7 @@ func _gare_amont() -> void:
 	_perron(stp, Vector3(-(hx + 1.0), ys_sol, zs), Vector3(-1, 0, 0), 3.4)
 	var per: MeshInstance3D = _maillage(stp, mat_funi("cuit"), "Perrons", false)
 	per.reparent(g, false)
+	await _pause("funival : gare amont")
 	MeshMerge.merge(g, [w1, w2, ens, carre, moel, esc], "Gare")
 
 
