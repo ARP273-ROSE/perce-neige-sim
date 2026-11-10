@@ -903,6 +903,20 @@ func _terrain(relief: ReliefBuilder, r: Rect2, quoi: int = TERRAIN_TOUT) -> void
 			if relief.fin != null and relief.fin.fine_ici(x0 + dx * 0.5, z0 + dz * 0.5):
 				_mailles_fines(relief, maille, faces)
 				continue
+			if relief.raffine_maille(i, j):
+				# maille redécoupée à 25 m autour d'une gare (le sol affiché)
+				var ex: float = relief._dx
+				var ez: float = relief._dz
+				for si in range(p):
+					for sj in range(p):
+						var ki: int = i * p + si
+						var kj: int = j * p + sj
+						var qa: Vector3 = Vector3(x0 + sj * ex, relief._h[ki * n + kj], z0 + si * ez)
+						var qb: Vector3 = Vector3(x0 + (sj + 1) * ex, relief._h[ki * n + kj + 1], z0 + si * ez)
+						var qc: Vector3 = Vector3(x0 + sj * ex, relief._h[(ki + 1) * n + kj], z0 + (si + 1) * ez)
+						var qd: Vector3 = Vector3(x0 + (sj + 1) * ex, relief._h[(ki + 1) * n + kj + 1], z0 + (si + 1) * ez)
+						faces.append_array([qa, qb, qc, qb, qd, qc])
+				continue
 			var pa: Vector3 = Vector3(x0, relief._h[(i * p) * n + j * p], z0)
 			var pb: Vector3 = Vector3(x0 + dx, relief._h[(i * p) * n + (j + 1) * p], z0)
 			var pc2: Vector3 = Vector3(x0, relief._h[((i + 1) * p) * n + j * p], z0 + dz)

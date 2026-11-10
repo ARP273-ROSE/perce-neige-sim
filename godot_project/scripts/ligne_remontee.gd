@@ -3542,6 +3542,14 @@ func vehicule(i: int) -> VehiculeRemontee:
 	return _vehicules[i][0]
 
 
+## Le nœud du véhicule i est-il à sa vraie place ? En version allégée (PWA, mode allégé), un véhicule à plus de
+## 60 m du skieur est dessiné par le MultiMesh et son nœud, caché, reste où il était : une cabine figée sur le
+## quai aval y était prise pour celle qu'on voyait, et l'on se retrouvait à bord à sa vraie place, à l'arrivée
+## de la gare amont (retour d'utilisateur du 10/11/2026, 3S sur la PWA).
+func vehicule_a_jour(i: int) -> bool:
+	return i >= _lod_niv.size() or _lod_niv[i] == 0
+
+
 ## Point (local) de la ligne d'arrêt : sur le quai, au droit du passage
 ## des véhicules, là où l'on attend le siège.
 func point_embarquement(aval: bool) -> Vector3:
@@ -5138,6 +5146,17 @@ func _maillage_miroir(m: Mesh) -> Mesh:
 	return out
 
 
+## Corps de collision du véhicule i actif ou non : un corps qui ne suit plus son véhicule (au loin, ou véhicule
+## allégé) restait où il était, invisible, et l'on s'y cognait ou s'y faisait emporter.
+func _corps_actif(i: int, actif: bool) -> void:
+	if i >= _corps.size() or _corps[i] == null:
+		return
+	var co: StaticBody3D = _corps[i][0]
+	var couche: int = CollisionsJeu.COUCHE_VEHICULE if actif and not construction_cachee else 0
+	if co.collision_layer != couche:
+		co.collision_layer = couche
+
+
 ## Portes d'une cabine ouvertes ou fermées : collisions des vantaux (noyau C++).
 func _portes_corps(i: int, ouvert: bool) -> void:
 	if i < _corps.size() and _corps[i] != null:
@@ -5467,6 +5486,8 @@ func _lod_niveau(i: int, niv: int, d2: float) -> bool:
 	if ancien != niv:
 		_lod_niv[i] = niv
 		v.visible = niv == 0
+		if niv != 0:
+			_corps_actif(i, false)
 		if ancien == 1 or ancien == 2:
 			_lod_oter(i, ancien - 1)
 			change = true
@@ -5586,6 +5607,9 @@ func _etape_gdscript(delta: float) -> void:
 					niv = 2
 				elif d2 > VehiculesLod.DES_L1 * VehiculesLod.DES_L1:
 					niv = 1
+				# en gare, à l'approche : les vraies cabines, pas les allégées (retour d'utilisateur du 10/11/2026)
+				if niv > 0 and d2 < VehiculesLod.DES_L2 * VehiculesLod.DES_L2 and zone(_vehicules[i][1])[0] != "ligne":
+					niv = 0
 				if _lod_niveau(i, niv, d2):
 					lod_change = true
 				if niv > 0:
@@ -6125,6 +6149,9 @@ func _placer(i: int) -> void:
 		var pv: Vector3 = Vector3(v.pivot.x * sx, v.pivot.y, v.pivot.z)
 		var bal: Transform3D = Transform3D(Basis.from_euler(Vector3(v.phi, 0.0, v.psi * sx)), pv) * Transform3D(Basis.IDENTITY, -pv)
 		(_corps[i][0] as Node3D).transform = Transform3D(b, pt[0]) * bal
+		_corps_actif(i, true)
+	else:
+		_corps_actif(i, false)
 	# pièces animées selon la place dans la gare
 	var ouverture: float = 0.0
 	var gc: float = 1.0

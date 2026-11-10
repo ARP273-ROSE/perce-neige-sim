@@ -1275,6 +1275,8 @@ func _embarquement() -> void:
 
 ## Le skieur est-il à la place du siège `i` qui arrive ? Si oui, il s'assoit.
 func _essayer_siege(lg: LigneRemontee, i: int, aval: bool, p: Vector3) -> bool:
+	if not lg.vehicule_a_jour(i):
+		return false
 	var v: VehiculeRemontee = lg.vehicule(i)
 	var loc: Vector3 = v.global_transform.affine_inverse() * p
 	var place0: Vector3 = v.place_assise(0)
@@ -1405,7 +1407,7 @@ func _entrer_cabine(lg: LigneRemontee, p: Vector3) -> bool:
 		ids = lg._noyau.en_gare()
 	for i in ids:
 		var zn: String = lg.zone_vehicule(i)
-		if zn == "ligne":
+		if zn == "ligne" or not lg.vehicule_a_jour(i):
 			continue
 		var v: VehiculeRemontee = lg.vehicule(i)
 		var loc: Vector3 = v.global_transform.affine_inverse() * p

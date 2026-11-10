@@ -320,8 +320,15 @@ func _caisse() -> void:
 		RemonteeKit.boite_en(self, Vector3(2.0 * W - 0.1, 0.30, 0.25), Vector3(0, 0.60, sz * (DEMI_L - 0.15)), "cabine_noire")
 		# doublure blanche autour de la baie de tête (ok-48, ok-54) : allège, imposte et piédroits ; la vitre reste libre
 		var z_d: float = sz * (DEMI_L - 0.92)
+		# (plancher du palier de bout au droit de la doublure, dans le repère de la caisse : la hauteur du palier dans
+		# le repère de niveau, prise telle quelle, montait l'allège à 4,9 m, au-dessus du toit — retour d'utilisateur du
+		# 10/11/2026, « truc gris qui dépasse au-dessus de l'avant du wagon »)
 		var cb0: Vector3 = _palier_niv(0 if sz > 0.0 else N_COMP - 1)
-		RemonteeKit.boite_en(self, Vector3(2.0 * W - 0.25, 1.40 - cb0.y + 0.2, 0.04), Vector3(0, (1.40 + cb0.y - 0.2) * 0.5, z_d), "cabine_blanche")
+		var Rn: Basis = _niveau()
+		var py: Vector3 = Rn * Vector3(0, cb0.y, 0)
+		var pz: Vector3 = Rn * Vector3(0, 0, 1)
+		var y_sol: float = py.y + (z_d - py.z) / pz.z * pz.y
+		RemonteeKit.boite_en(self, Vector3(2.0 * W - 0.25, 1.40 - y_sol + 0.2, 0.04), Vector3(0, (1.40 + y_sol - 0.2) * 0.5, z_d), "cabine_blanche")
 		RemonteeKit.boite_en(self, Vector3(2.0 * W - 0.55, 0.22, 0.04), Vector3(0, 3.10, z_d), "cabine_blanche")
 		for su in [-1.0, 1.0]:
 			RemonteeKit.boite_en(self, Vector3(0.20, 1.60, 0.04), Vector3(su * (W - 0.24), 2.20, z_d), "cabine_blanche")
@@ -458,7 +465,9 @@ func _interieur() -> void:
 		RemonteeKit.boite(self, Vector3(0.62, 0.03, long_i), Transform3D(Basis(Vector3.BACK, -sx * 0.52),
 			Vector3(sx * (W - 0.46), H_TOIT - 0.34, 0)), "rouge_val")
 		# lisse en long sous les vitres, de chaque côté
-		RemonteeKit.boite(self, Vector3(0.04, 0.04, long_i), Transform3D(R, R * Vector3(sx * (W - 0.11), H_PLANCHER + 1.0, 0)), "rouge_val")
+		# (le long de la caisse, pas de niveau : posée de niveau sur 29 m, elle sortait par le toit d'un bout et par le
+		# plancher de l'autre — les deux longs traits rouges, retour d'utilisateur du 10/11/2026)
+		RemonteeKit.boite_en(self, Vector3(0.04, 0.04, long_i), Vector3(sx * (W - 0.11), H_PLANCHER + 1.0, 0), "rouge_val")
 	# banquettes de bout : assise et dossier en moquette grise, dos au nez (ok-54)
 	for sz in [-1.0, 1.0]:
 		var k2: int = 0 if sz > 0.0 else N_COMP - 1
