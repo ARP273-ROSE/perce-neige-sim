@@ -64,7 +64,7 @@ func _phases_3s() -> Array:
 	var rangs: Array = RANGS_OUVRAGE if ouvrage else [-1.2, 1.2]
 	var ph: Array = []
 	for sx in [-1.0, 1.0]:
-		ph.append(func() -> void: _poutre_sabot(sx, y_c, m))
+		ph.append_array(_phases_poutre_sabot(sx, y_c, m))
 	if ouvrage:
 		for z in rangs:
 			ph.append(func() -> void: _rang_ouvrage(float(z), y_c, m))
@@ -100,16 +100,41 @@ func _sol(x: float, z: float) -> float:
 	return float(sol_z.call(z)) if sol_z.is_valid() else 0.0
 
 
+## La poutre de sabot en étapes : les segments par paquets de SEGMENTS_PAR_ETAPE, puis tubes et galets (17 ms d'un
+## bloc par poutre à l'ouvrage du 3S, relevé du 10/11/2026). Mêmes pièces, dans le même ordre, qu'en une fois.
+const SEGMENTS_PAR_ETAPE: int = 12
+
+
+func _phases_poutre_sabot(sx: float, y_c: Callable, m: String) -> Array:
+	var e: Dictionary = {"montee": signf(sx) == signf(x_montee), "x0": sx * voie * 0.5, "z0": -l_amont, "z1": l_aval,
+		"dessus": [PackedVector3Array(), PackedVector3Array()], "rampe": PackedVector3Array(), "prec": []}
+	var n: int = maxi(6, int((float(e["z1"]) - float(e["z0"])) / 1.5))
+	e["n"] = n
+	var ph: Array = []
+	var i0: int = 0
+	while i0 <= n:
+		var i1: int = mini(i0 + SEGMENTS_PAR_ETAPE, n + 1)
+		ph.append(_sabot_segments.bind(e, sx, y_c, m, i0, i1))
+		i0 = i1
+	ph.append(_sabot_fin.bind(e, y_c))
+	return ph
+
+
 func _poutre_sabot(sx: float, y_c: Callable, m: String) -> void:
-	var montee: bool = signf(sx) == signf(x_montee)
-	var x0: float = sx * voie * 0.5
-	var z0: float = -l_amont
-	var z1: float = l_aval
-	var n: int = maxi(6, int((z1 - z0) / 1.5))
-	var dessus: Array = [PackedVector3Array(), PackedVector3Array()]
-	var rampe: PackedVector3Array = PackedVector3Array()
-	var prec: Array = []
-	for i in range(n + 1):
+	for f in _phases_poutre_sabot(sx, y_c, m):
+		(f as Callable).call()
+
+
+func _sabot_segments(e: Dictionary, sx: float, y_c: Callable, m: String, i_debut: int, i_fin: int) -> void:
+	var montee: bool = e["montee"]
+	var x0: float = e["x0"]
+	var z0: float = e["z0"]
+	var z1: float = e["z1"]
+	var n: int = e["n"]
+	var dessus: Array = e["dessus"]
+	var rampe: PackedVector3Array = e["rampe"]
+	var prec: Array = e["prec"]
+	for i in range(i_debut, i_fin):
 		var z: float = lerpf(z0, z1, float(i) / n)
 		var y: float = float(y_c.call(z, montee))
 		for k in range(2):
@@ -126,6 +151,17 @@ func _poutre_sabot(sx: float, y_c: Callable, m: String) -> void:
 				RemonteeKit.boite_en(self, Vector3(0.07, 0.86, 0.10), Vector3(x0 + k3 * ecart_porteurs, y - 0.54, z), m)
 			RemonteeKit.barre(self, Vector3(x0 - sx * 1.42, y - 0.98, z), Vector3(x0 - sx * 1.42, y + 0.10, z), 0.02, "galva", 5)
 		prec = [c, p]
+	e["rampe"] = rampe
+	e["prec"] = prec
+
+
+func _sabot_fin(e: Dictionary, y_c: Callable) -> void:
+	var montee: bool = e["montee"]
+	var x0: float = e["x0"]
+	var z0: float = e["z0"]
+	var z1: float = e["z1"]
+	var dessus: Array = e["dessus"]
+	var rampe: PackedVector3Array = e["rampe"]
 	for k2 in range(2):
 		RemonteeKit.tube(self, dessus[k2], 0.05, "acier_noir", 6)
 	RemonteeKit.tube(self, rampe, 0.022, "galva", 5)

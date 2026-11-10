@@ -451,7 +451,7 @@ func _construire_corps() -> void:
 	await _calculer_tetes()
 	_preparer_nez()
 	if teleski() or tricable():
-		_construire_boucle()       # (magasin, départ, quais du 3S se posent dessus)
+		await _construire_boucle(true)       # (magasin, départ, quais du 3S se posent dessus)
 	await _gare(true)
 	await _pause("gare aval")
 	await _gare(false)
@@ -1868,7 +1868,9 @@ func decalage_montee(d: float) -> float:
 const L_EVASE: float = 6.0
 
 
-func _construire_boucle() -> void:
+## `pauses` : une pause tous les 64 points de la ligne (premier tracé, avant le précalcul des hauteurs du câble :
+## 20 ms d'un bloc à l'Olympique, relevé du 10/11/2026).
+func _construire_boucle(pauses: bool = false) -> void:
 	_preparer_raccords()
 	_boucle = PackedVector3Array()
 	_zones.clear()
@@ -1909,9 +1911,13 @@ func _construire_boucle() -> void:
 		for j in range(dm.size()):
 			_ajouter(Vector3(xm + decalage_montee(dm[j]), ym[j], -dm[j]))
 	else:
+		var n_m: int = 0
 		while d < L:
 			_ajouter(Vector3(xm + decalage_montee(d), y_cable(d), -d))
 			d += _pas_ligne(d)
+			n_m += 1
+			if pauses and n_m % 64 == 0:
+				await _pause("boucle : tracé")
 	_ajouter(Vector3(xm, yb, -L))
 	# 3. gare amont
 	var s1: float = _longueur()
@@ -1930,9 +1936,13 @@ func _construire_boucle() -> void:
 		for j2 in range(dd.size()):
 			_ajouter(Vector3(xd, yd[j2], -dd[j2]))
 	else:
+		var n_d: int = 0
 		while d > 0.0:
 			_ajouter(Vector3(xd, y_cable(d, false), -d))
 			d -= _pas_ligne(d)
+			n_d += 1
+			if pauses and n_d % 64 == 0:
+				await _pause("boucle : tracé")
 	longueur_boucle = _longueur() + _boucle[_boucle.size() - 1].distance_to(_boucle[0])
 
 
