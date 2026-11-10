@@ -26,6 +26,7 @@ func _suite() -> void:
 		if a == "--sans-cpp":
 			# repli GDScript du module (ExtrusionVoie) : même empreinte attendue qu'avec le module
 			ExtrusionVoie.cpp_desactive = true
+			RemonteeKit.tube_cpp_desactive = true
 		elif not a.begins_with("--"):
 			out_path = a
 	var tr: TrackBuilder = TrackBuilder.new()

@@ -14,6 +14,7 @@
 #include <godot_cpp/variant/packed_int32_array.hpp>
 #include <godot_cpp/variant/packed_vector3_array.hpp>
 #include <godot_cpp/variant/array.hpp>
+#include <godot_cpp/variant/vector3.hpp>
 
 namespace godot {
 
@@ -29,6 +30,13 @@ public:
 	// par xf, normales par l'inverse transposée (normalisées), tangentes par la
 	// base (normalisées), couleurs et UV recopiées, indices décalés.
 	Array fusionner(const Array &surfaces, const Array &transformations) const;
+
+	// Tube le long de `pts` (RemonteeKit.tube_tableaux_plage) : tranches des segments [i0, i1[, triangles non
+	// indexés, normales radiales, UV (tour, 2 × abscisse). Mêmes opérations, dans le même ordre, que le GDScript
+	// (scalaires en double, vecteurs en float). Rend [sommets, normales, uv, x du repère pour la plage suivante,
+	// abscisse à la fin].
+	Array tube_plage(const PackedVector3Array &pts, double r, int64_t seg, int64_t i0, int64_t i1,
+			const Vector3 &prec_x, double absc) const;
 };
 
 } // namespace godot
