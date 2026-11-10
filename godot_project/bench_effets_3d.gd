@@ -88,6 +88,13 @@ func _montagnes(on: bool) -> void:
 			(c as MeshInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON if on else GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 
 
+func _lointains(on: bool) -> void:
+	for e in _main.remontees.lignes:
+		for c in (e[0] as Node).get_children():
+			if c is MultiMeshInstance3D and String(c.name).begins_with("VehiculesLoin"):
+				(c as Node3D).visible = on
+
+
 func _soleil(dir: Vector3) -> void:
 	var b: Basis = Basis.looking_at(-dir.normalized(), Vector3.UP)
 	_main._soleil_relief.basis = b
@@ -131,6 +138,18 @@ func _effets() -> Array:
 			func(): _vp.anisotropic_filtering_level = Viewport.ANISOTROPY_4X],
 		["msaa8", func(): _vp.msaa_3d = Viewport.MSAA_8X, func(): _vp.msaa_3d = Viewport.MSAA_4X],
 		["sans_glow", func(): _env.glow_enabled = false, func(): _env.glow_enabled = true],
+		# (plafond du gain sur les véhicules lointains : tous masqués ; mesure seulement)
+		["sans_loin", func(): _lointains(false), func(): _lointains(true)],
+		["ombres_objets_sans_loin", func():
+			_main.ombres_relief_permises = true
+			_lum.shadow_enabled = true
+			_lum.directional_shadow_max_distance = 600.0
+			_lum.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
+			_lointains(false),
+			func():
+				_lointains(true)
+				_sans_ombres()
+				_lum.shadow_enabled = false],
 		["sans_msaa", func(): _vp.msaa_3d = Viewport.MSAA_DISABLED, func(): _vp.msaa_3d = Viewport.MSAA_4X],
 		["sans_sdfgi", func(): _env.sdfgi_enabled = false, func(): _env.sdfgi_enabled = true],
 		["sans_volum", func(): _env.volumetric_fog_enabled = false, func(): _env.volumetric_fog_enabled = true],
