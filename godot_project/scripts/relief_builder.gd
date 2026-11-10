@@ -731,7 +731,10 @@ func _hauteur_tri(x: float, z: float) -> float:
 ## terre à quai, terrassements absurdes (retours d'utilisateur sur la PWA, 10/11/2026). Les nœuds au bord de
 ## la zone gardent le sol à 50 m : pas de fente avec les mailles voisines.
 const RAFFINE_PLEIN: float = 8.0       # m autour de l'emprise de la gare : sol à 25 m
-const RAFFINE_FONDU: float = 30.0      # m de raccord vers le sol à 50 m
+const RAFFINE_FONDU: float = 30.0
+## Sous les lignes : écart toléré entre sol affiché à 50 m et sol à 25 m (m), pas d'échantillonnage (m).
+const RAFFINE_ECART: float = 0.5
+const RAFFINE_ECHANT: float = 10.0      # m de raccord vers le sol à 50 m
 var _raffine: PackedByteArray = PackedByteArray()     # par maille de 50 m : 1 si redécoupée
 var _raff_nx: int = 0
 
@@ -750,12 +753,20 @@ func raffine_maille(ci: int, cj: int) -> bool:
 
 
 func _raffiner_gares() -> void:
+	var t_us: int = Time.get_ticks_usec()
 	var n: int = ReliefDonnees.NX
 	var nz: int = ReliefDonnees.NZ
 	var p: int = _pas
 	var w: PackedFloat32Array = PackedFloat32Array()
 	w.resize(n * nz)
+	# mailles de 50 m entières (la dernière colonne, d'une seule maille à 25 m, reste telle quelle),
+	# marquées par _marquer_raffine dès qu'un de leurs nœuds a un poids
+	_raff_nx = (n - 1) / p
+	var raff_nz: int = (nz - 1) / p
+	_raffine = PackedByteArray()
+	_raffine.resize(_raff_nx * raff_nz)
 	var exclus: Array = []
+	var nb_l: int = 0
 	for am in amenagements:
 		exclus.append((am["rect"] as Rect2).grow(60.0))
 	for D in RemonteesDonnees.LIGNES:
@@ -769,44 +780,33 @@ func _raffiner_gares() -> void:
 		for bout in [[a, -u], [b, u]]:
 			var o: Vector2 = bout[0]
 			var vers: Vector2 = bout[1]               # vers l'arrière de la gare
-			var p0: Vector2 = o - vers * 12.0
-			var p1: Vector2 = o + vers * (lg + 12.0)
-			var r: float = demi + RAFFINE_FONDU
-			var j0: int = clampi(int((minf(p0.x, p1.x) - r - ReliefDonnees.X_OUEST) / _dx), 0, n - 1)
-			var j1: int = clampi(int((maxf(p0.x, p1.x) + r - ReliefDonnees.X_OUEST) / _dx) + 1, 0, n - 1)
-			var i0: int = clampi(int((minf(p0.y, p1.y) - r - ReliefDonnees.Z_NORD) / _dz), 0, nz - 1)
-			var i1: int = clampi(int((maxf(p0.y, p1.y) + r - ReliefDonnees.Z_NORD) / _dz) + 1, 0, nz - 1)
-			for i in range(i0, i1 + 1):
-				for j in range(j0, j1 + 1):
-					var q: Vector2 = Vector2(ReliefDonnees.X_OUEST + j * _dx, ReliefDonnees.Z_NORD + i * _dz)
-					var t: float = clampf((q - p0).dot(p1 - p0) / maxf((p1 - p0).length_squared(), 1.0), 0.0, 1.0)
-					var dist: float = q.distance_to(p0.lerp(p1, t)) - demi
-					var poids: float = 1.0 - smoothstep(0.0, RAFFINE_FONDU, dist)
-					if poids <= 0.0:
-						continue
-					var hors: bool = false
-					for ex in exclus:
-						if (ex as Rect2).has_point(q):
-							hors = true
-							break
-					if not hors:
-						w[i * n + j] = maxf(w[i * n + j], poids)
-	# mailles de 50 m entières (la dernière colonne, d'une seule maille à 25 m, reste telle quelle)
-	_raff_nx = (n - 1) / p
-	var raff_nz: int = (nz - 1) / p
-	_raffine = PackedByteArray()
-	_raffine.resize(_raff_nx * raff_nz)
-	var nb: int = 0
-	for ci in range(raff_nz):
-		for cj in range(_raff_nx):
-			var touche: bool = false
-			for di in range(p + 1):
-				for dj in range(p + 1):
-					if w[(ci * p + di) * n + cj * p + dj] > 0.0:
-						touche = true
-			if touche:
-				_raffine[ci * _raff_nx + cj] = 1
-				nb += 1
+			_marquer_raffine(w, o - vers * 12.0, o + vers * (lg + 12.0), demi, exclus)
+		# sous la ligne : la ligne est calée sur le sol à 25 m (hauteur_ligne) ; là où le sol affiché à 50 m
+		# passe au-dessus, la cabine frôle le sol (3S : 1,70 m de garde au lieu de 3 m). Redécoupé là seulement.
+		var L: float = a.distance_to(b)
+		var nrm: Vector2 = Vector2(-u.y, u.x)
+		var bord: float = float(D["voie"]) * 0.5 + 3.0
+		var n_s: int = maxi(int(L / RAFFINE_ECHANT), 2)
+		var debut: Vector2 = Vector2.INF                # points consécutifs au-dessus : un seul segment
+		var fin: Vector2 = Vector2.INF
+		for k in range(1, n_s + 1):
+			var c: Vector2 = a + u * (L * float(k) / float(n_s))
+			var au_dessus: bool = false
+			if k < n_s:
+				for off in [-bord, 0.0, bord]:
+					var q2: Vector2 = c + nrm * float(off)
+					if _tri_sur(_h, q2.x, q2.y, p) - _tri_sur(_h25, q2.x, q2.y, 1) > RAFFINE_ECART:
+						au_dessus = true
+						break
+			if au_dessus:
+				nb_l += 1
+				if debut == Vector2.INF:
+					debut = c
+				fin = c
+			elif debut != Vector2.INF:
+				_marquer_raffine(w, debut, fin, demi, exclus)
+				debut = Vector2.INF
+	var nb: int = _raffine.count(1)
 	# altitudes : sol à 50 m d'origine (ses triangles) fondu vers la grille à 25 m ; les nœuds d'une maille
 	# restée à 50 m ont un poids nul, donc le bord de la zone reste exactement sur le sol à 50 m
 	var h0: PackedFloat32Array = _h.duplicate()
@@ -822,7 +822,38 @@ func _raffiner_gares() -> void:
 					var base: float = h0[k] if (di % p == 0 and dj % p == 0) else \
 						_tri_sur(h0, ReliefDonnees.X_OUEST + j * _dx, ReliefDonnees.Z_NORD + i * _dz, p)
 					_h[k] = lerpf(base, _h25[k], w[k])
-	print("[Relief] maille 50 m : %d mailles redécoupées à 25 m autour des gares" % nb)
+	print("[Relief] maille 50 m : %d mailles redécoupées à 25 m autour des gares et sous les lignes (%d points de ligne), %.0f ms" % [nb, nb_l, (Time.get_ticks_usec() - t_us) / 1000.0])
+
+
+
+## Poids de redécoupage (0..1) des nœuds autour du segment p0-p1 : plein jusqu'à `demi`, fondu sur RAFFINE_FONDU.
+func _marquer_raffine(w: PackedFloat32Array, p0: Vector2, p1: Vector2, demi: float, exclus: Array) -> void:
+	var n: int = ReliefDonnees.NX
+	var nz: int = ReliefDonnees.NZ
+	var r: float = demi + RAFFINE_FONDU
+	var rz: int = (nz - 1) / _pas
+	var j0: int = clampi(int((minf(p0.x, p1.x) - r - ReliefDonnees.X_OUEST) / _dx), 0, n - 1)
+	var j1: int = clampi(int((maxf(p0.x, p1.x) + r - ReliefDonnees.X_OUEST) / _dx) + 1, 0, n - 1)
+	var i0: int = clampi(int((minf(p0.y, p1.y) - r - ReliefDonnees.Z_NORD) / _dz), 0, nz - 1)
+	var i1: int = clampi(int((maxf(p0.y, p1.y) + r - ReliefDonnees.Z_NORD) / _dz) + 1, 0, nz - 1)
+	for i in range(i0, i1 + 1):
+		for j in range(j0, j1 + 1):
+			var q: Vector2 = Vector2(ReliefDonnees.X_OUEST + j * _dx, ReliefDonnees.Z_NORD + i * _dz)
+			var t: float = clampf((q - p0).dot(p1 - p0) / maxf((p1 - p0).length_squared(), 1.0), 0.0, 1.0)
+			var dist: float = q.distance_to(p0.lerp(p1, t)) - demi
+			var poids: float = 1.0 - smoothstep(0.0, RAFFINE_FONDU, dist)
+			if poids <= 0.0:
+				continue
+			var hors: bool = false
+			for ex in exclus:
+				if (ex as Rect2).has_point(q):
+					hors = true
+					break
+			if not hors:
+				w[i * n + j] = maxf(w[i * n + j], poids)
+				for ci in range(maxi((i - 1) / _pas, 0), mini(i / _pas, rz - 1) + 1):
+					for cj in range(maxi((j - 1) / _pas, 0), mini(j / _pas, _raff_nx - 1) + 1):
+						_raffine[ci * _raff_nx + cj] = 1
 
 
 func _tri_sur(grille: PackedFloat32Array, x: float, z: float, pas: int = 0) -> float:
