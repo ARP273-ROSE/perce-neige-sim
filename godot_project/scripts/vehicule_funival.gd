@@ -15,7 +15,7 @@ const PENTE_GRADINS: float = 0.30       # pente pour laquelle les planchers sont
 const H_PLANCHER: float = 1.05          # plancher au milieu d'un compartiment, au-dessus des rails
 const H_TOIT: float = 3.65              # toit, perpendiculairement à la voie (2,6 m au-dessus du plancher : ok-36, ok-45, quai amont)
 ## Porte (photos de quai amont, ok-47) : vantail extérieur coulissant, posé devant la caisse, de la hauteur de la baie
-## (linteau sous la gouttière) ; garé devant le panneau fixe vers l'amont.
+## (linteau sous la gouttière) ; garé devant le panneau fixe vers l'aval.
 const L_PORTE: float = 1.35
 const H_PORTE: float = 2.10
 const L_JAMBAGE: float = 0.10
@@ -54,17 +54,32 @@ static func vitre_funi() -> StandardMaterial3D:
 	return _mat_vitre
 
 
+## Portes (retour d'utilisateur du 11/11/2026 : « les portes s'ouvrent vers l'aval et se ferment vers l'amont, et ne
+## dépassent pas dans le vide au-delà des extrémités des rames ») : le vantail se gare à l'aval de sa baie. Baies et
+## paliers sont donc répartis sur la longueur utile (la caisse moins le recul du nez à hauteur de porte), la première
+## baie au ras du nez amont, le vantail ouvert de la dernière au ras du nez aval : pas un peu plus court que
+## 32 m / 9, baies décalées vers l'amont.
+const Z_UTILE: float = 15.0              # |z| du nez à hauteur du haut des portes (recul du nez ≈ 0,95 m)
+const COURSE_PORTE: float = L_PORTE + 0.04
+
+
+## Pas des paliers (et des portes).
 static func l_comp() -> float:
-	return DEMI_L * 2.0 / float(N_COMP)
+	return (2.0 * Z_UTILE - (L_PORTE + COURSE_PORTE)) / float(N_COMP - 1)
 
 
-## Milieu (z) du compartiment k, 0 en bas (aval, +Z).
+## Milieu (z) du palier et de la baie de porte du compartiment k, 0 en bas (aval, +Z).
 static func z_comp(k: int) -> float:
-	return DEMI_L - l_comp() * (float(k) + 0.5)
+	return Z_UTILE - COURSE_PORTE - L_PORTE * 0.5 - l_comp() * float(k)
 
 
 static func compartiment(z: float) -> int:
-	return clampi(int(floor((DEMI_L - z) / l_comp())), 0, N_COMP - 1)
+	return clampi(int(round((z_comp(0) - z) / l_comp())), 0, N_COMP - 1)
+
+
+## Prolongement du palier de bout jusqu'au nez (depuis son milieu), côté aval (k = 0) ou amont (k = N_COMP − 1).
+static func bout_palier(aval: bool) -> float:
+	return (DEMI_L - 0.25 - z_comp(0)) if aval else (DEMI_L - 0.25 + z_comp(N_COMP - 1))
 
 
 ## Hauteur du plancher (repère du véhicule) au droit de z : palier de niveau (pente des gradins) devant la porte,
@@ -283,7 +298,12 @@ func _caisse() -> void:
 			var zmil: float = (z0p + z1p) * 0.5
 			var lgp: float = z1p - z0p
 			for yt in [Y_VITRE, Y_GOUTTIERE - 0.05]:
-				RemonteeKit.boite(self, Vector3(0.05, 0.07, lgp), Transform3D(bf, Vector3(sx * demi_l_y(yt), yt, zmil)), "cabine_noire")
+				# (bornée au nez à SA hauteur : le nez recule en montant, la traverse haute des panneaux de bout dépassait
+				# de 0,7 m dans le vide)
+				var za_t: float = maxf(z0p, z_bout(yt, -1.0) + 0.03)
+				var zb_t: float = minf(z1p, z_bout(yt, 1.0) - 0.03)
+				if zb_t - za_t > 0.05:
+					RemonteeKit.boite(self, Vector3(0.05, 0.07, zb_t - za_t), Transform3D(bf, Vector3(sx * demi_l_y(yt), yt, (za_t + zb_t) * 0.5)), "cabine_noire")
 			if lgp > 1.2:
 				_montant(sx, zmil, bf, 0.05)
 			if c[0] != INF:
@@ -485,9 +505,9 @@ func _interieur() -> void:
 		var z0: float = c.z - L_PALIER * 0.5
 		var z1: float = c.z + L_PALIER * 0.5
 		if k == 0:
-			z1 = c.z + l_comp() * 0.5
+			z1 = c.z + bout_palier(true)
 		if k == N_COMP - 1:
-			z0 = c.z - l_comp() * 0.5
+			z0 = c.z - bout_palier(false)
 		# (épaisseur bornée au-dessus du fond de caisse : épais de 1 m et inclinés, paliers et marches sortaient sous la
 		# caisse et la traversaient entre les bogies — retour d'utilisateur du 11/11/2026)
 		var ep: float = _epaisseur_sur_fond(R, c.y, z0, z1, 1.0)
@@ -545,13 +565,13 @@ func _interieur() -> void:
 	for sz in [-1.0, 1.0]:
 		var k2: int = 0 if sz > 0.0 else N_COMP - 1
 		var cb: Vector3 = _palier_niv(k2)
-		var zb: float = cb.z + sz * (l_comp() * 0.5 - 0.75)
+		var zb: float = cb.z + sz * (bout_palier(sz > 0.0) - 0.55)
 		RemonteeKit.boite(self, Vector3(2.0 * W - 0.5, 0.42, 0.75), Transform3D(R, R * Vector3(0, cb.y + 0.21, zb)), "galva_sombre")
 		RemonteeKit.boite(self, Vector3(2.0 * W - 0.5, 0.75, 0.10), Transform3D(R, R * Vector3(0, cb.y + 0.75, zb + sz * 0.42)), "galva_sombre")
 
 
 ## Portes (quai amont, ok-47) : vantail extérieur à cadre noir, posé devant la caisse ; bas noir à vagues, vitrage haut
-## barré de deux traverses boulonnées, « Val d'Isère » et petit aigle entre elles ; il coulisse vers l'amont, devant le panneau fixe.
+## barré de deux traverses boulonnées, « Val d'Isère » et petit aigle entre elles ; il coulisse vers l'aval, devant le panneau fixe.
 func _portes_funi() -> void:
 	var W: float = DEMI_LARGEUR
 	var th: float = _th_flanc()
@@ -594,7 +614,7 @@ func _portes_funi() -> void:
 			var ferme: Vector3 = Vector3(sx * (y_x + 0.07), y_ctr, z)
 			p.basis = b
 			p.position = ferme
-			_portes.append([p, ferme, Vector3(0, 0, -(L_PORTE + 0.04))])
+			_portes.append([p, ferme, Vector3(0, 0, COURSE_PORTE)])      # (vers l'aval)
 
 
 ## Debout au milieu du compartiment i, sur son plancher.
@@ -625,9 +645,9 @@ func formes_funi() -> Array:
 		var z0: float = c.z - L_PALIER * 0.5
 		var z1: float = c.z + L_PALIER * 0.5
 		if k == 0:
-			z1 = c.z + l_comp() * 0.5
+			z1 = c.z + bout_palier(true)
 		if k == N_COMP - 1:
-			z0 = c.z - l_comp() * 0.5
+			z0 = c.z - bout_palier(false)
 		r.append([Vector3(2.0 * W, ep, z1 - z0), Transform3D(R, R * Vector3(0, c.y - ep * 0.5, (z0 + z1) * 0.5)), false])
 		if k + 1 < N_COMP:
 			var e1: Vector3 = c + Vector3(0, 0, -L_PALIER * 0.5)

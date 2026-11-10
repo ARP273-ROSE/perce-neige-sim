@@ -350,6 +350,19 @@ static func mat_funi(nom: String) -> Material:
 		"moellons":
 			# maçonnerie de pierre grise (gare amont) : moellons irréguliers, joints de mortier clair
 			_matiere(m, _tex("moellons"), 2.0, 1.0)
+		"jour":
+			# fenêtres vues de dedans : jour clair, sans lumière ni brouillard
+			m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+			m.albedo_color = Color(0.86, 0.91, 0.97)
+			m.disable_fog = true
+		"verre_porte":
+			m.albedo_color = Color(0.55, 0.62, 0.66, 0.30)
+			m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+			m.roughness = 0.1
+			m.metallic_specular = 0.8
+		"voyant_vert":
+			m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+			m.albedo_color = Color(0.1, 0.95, 0.3)
 		"ardoise":
 			# mur de plaquettes de pierre sombre du quai de Bellevarde (photos de l'utilisateur)
 			_matiere(m, _tex("ardoise"), 1.4, 0.9)
@@ -992,7 +1005,7 @@ func _gradins(sx: float, rampes: bool = false, aval: bool = true) -> Array:
 	var dq: float = _x_quai(aval)
 	var lq: float = VehiculeFunival.DEMI_L * 2.0 + 2.0
 	var n: int = VehiculeFunival.N_COMP
-	var lc: float = lq / float(n)
+	var lc: float = VehiculeFunival.l_comp()      # (pas des portes et des paliers du véhicule)
 	var W: float = VehiculeFunival.DEMI_LARGEUR + 0.05
 	var larg: float = (LARG_GRADINS[0] if sx < 0.0 else LARG_GRADINS[1]) if aval else (LARG_AMONT[0] if sx < 0.0 else LARG_AMONT[1])
 	var x: float = sx * (W + larg * 0.5)
@@ -1018,7 +1031,7 @@ func _gradins(sx: float, rampes: bool = false, aval: bool = true) -> Array:
 			r.append([Vector3(larg, haut0 - bas0, giron + 0.01), Vector3(x, (haut0 + bas0) * 0.5, -(d0 + giron * (float(j0) + 0.5)))])
 		return r
 	for k in range(n):
-		var d: float = dq - lq * 0.5 + lc * (float(k) + 0.5)
+		var d: float = dq - VehiculeFunival.z_comp(k)
 		var d_bas: float = d - lc * 0.5
 		var y: float = VehiculeFunival.y_plancher_monde(self, d)
 		if k == 0 and aval:
@@ -1101,7 +1114,7 @@ func _gare_aval() -> void:
 	var dq: float = _x_quai(true)
 	var lq: float = VehiculeFunival.DEMI_L * 2.0 + 2.0
 	var n: int = VehiculeFunival.N_COMP
-	var lc: float = lq / float(n)
+	var lc: float = VehiculeFunival.l_comp()      # (pas des portes et des paliers du véhicule)
 	var W: float = VehiculeFunival.DEMI_LARGEUR + 0.05
 	var bardage: Array = []
 	# gradins : palier devant chaque porte, volée de petites marches de caillebotis entre deux paliers (photos)
@@ -1123,7 +1136,7 @@ func _gare_aval() -> void:
 	nz.reparent(g, false)
 	bardage.append(nz)
 	for k in range(n):
-		var d: float = dq - lq * 0.5 + lc * (float(k) + 0.5)
+		var d: float = dq - VehiculeFunival.z_comp(k)
 		var y: float = VehiculeFunival.y_plancher_monde(self, d)
 		for sx in [-1.0, 1.0]:
 			var larg: float = LARG_GRADINS[0] if sx < 0.0 else LARG_GRADINS[1]
@@ -1189,7 +1202,7 @@ func _gare_amont() -> void:
 	var dq: float = _x_quai(false)
 	var lq: float = VehiculeFunival.DEMI_L * 2.0 + 2.0
 	var n: int = VehiculeFunival.N_COMP
-	var lc: float = lq / float(n)
+	var lc: float = VehiculeFunival.l_comp()      # (pas des portes et des paliers du véhicule)
 	var W: float = VehiculeFunival.DEMI_LARGEUR + 0.05
 	# salle : boîte cuite vue de l'intérieur, de la fin du tunnel au bâtiment
 	var st: SurfaceTool = SurfaceTool.new()
@@ -1408,14 +1421,24 @@ func _gare_amont() -> void:
 		face.call(false, xd - ep * 0.5, zb + ep, zf - ep, [], h, y0, mat, solide)
 	var pignon := func(cx: float, cz: float, larg: float, long_: float, h: float, haut_toit: float, porte: bool) -> void:
 		murs.call(cx, cz, larg, long_, h, ys - 0.5, "peinture_anthracite", porte)
-		murs.call(cx, cz, larg + 0.1, long_ + 0.1, 1.0, ys + 0.7, "vitrage_sombre", porte)
+		# grand bandeau vitré au rez-de-chaussée (photos ok-4 à ok-7 : ~1,6 m, cadres gris clair)
+		murs.call(cx, cz, larg + 0.1, long_ + 0.1, 1.6, ys + 0.6, "vitrage_sombre", porte)
 		RemonteeKit.boite_en(g, Vector3(larg, 0.25, long_), Vector3(cx, ys + h - 0.62, cz), "peinture_anthracite")   # plafond
 		var a: float = atan2(haut_toit, larg * 0.5)
 		var pan: float = sqrt(larg * larg * 0.25 + haut_toit * haut_toit) + 0.8
 		for sx2 in [-1.0, 1.0]:
-			var mi_t: MeshInstance3D = RemonteeKit.boite(g, Vector3(pan, 0.22, long_ + 1.6), Transform3D(Basis(Vector3.BACK, -sx2 * a),
-				Vector3(cx + sx2 * larg * 0.25, ys + h - 0.5 + haut_toit * 0.5, cz)), "galva_sombre")
+			var b_t: Basis = Basis(Vector3.BACK, -sx2 * a)
+			var c_t: Vector3 = Vector3(cx + sx2 * larg * 0.25, ys + h - 0.5 + haut_toit * 0.5, cz)
+			var mi_t: MeshInstance3D = RemonteeKit.boite(g, Vector3(pan, 0.22, long_ + 1.6), Transform3D(b_t, c_t), "galva_sombre")
 			toits.append(mi_t)
+			# neige sur le pan (photos d'hiver) et rive blanche au bas du pan
+			RemonteeKit.boite(g, Vector3(pan - 0.5, 0.28, long_ + 1.2), Transform3D(b_t, c_t + b_t * Vector3(-sx2 * 0.15, 0.24, 0)), "neige_damee")
+			RemonteeKit.boite(g, Vector3(0.12, 0.30, long_ + 1.6), Transform3D(b_t, c_t + b_t * Vector3(sx2 * pan * 0.5, -0.02, 0)), "cabine_blanche")
+		# rives blanches des pignons
+		for sz3 in [-1.0, 1.0]:
+			for sx3 in [-1.0, 1.0]:
+				RemonteeKit.boite(g, Vector3(sqrt(larg * larg * 0.25 + haut_toit * haut_toit) + 0.8, 0.30, 0.10), Transform3D(Basis(Vector3.BACK, -sx3 * a),
+					Vector3(cx + sx3 * larg * 0.25, ys + h - 0.5 + haut_toit * 0.5, cz + sz3 * (long_ * 0.5 + 0.8))), "cabine_blanche")
 		# pignons pleins (triangles approchés par deux boîtes)
 		for sz2 in [-1.0, 1.0]:
 			RemonteeKit.boite_en(g, Vector3(larg * 0.6, haut_toit * 0.6, 0.2), Vector3(cx, ys + h - 0.5 + haut_toit * 0.3, cz + sz2 * long_ * 0.5), "peinture_anthracite")
@@ -1427,7 +1450,8 @@ func _gare_amont() -> void:
 	pignon.call(0.0, zs, 2.0 * hx + 2.0, 22.0, 8.0, 3.2, true)
 	murs.call(0.0, zs, 2.0 * hx + 2.1, 22.1, 0.9, ys + 5.75, "vitrage_sombre", false)     # bandeau sous le toit
 	pignon.call(hx + 7.0, zs - 12.0, 12.0, 16.0, 4.5, 2.2, false)
-	var moel: MeshInstance3D = RemonteeKit.boite_en(g, Vector3(6.0, 3.6, 7.0), Vector3(-(hx + 4.0), ys + 1.3, zs + 6.0), "pierre")
+	# volume de pierre sur deux niveaux (photos ok-4, ok-5 : aussi haut que l'avant-toit du bâtiment)
+	var moel: MeshInstance3D = RemonteeKit.boite_en(g, Vector3(6.0, 5.6, 7.0), Vector3(-(hx + 4.0), ys + 2.3, zs + 6.0), "pierre")
 	moel.material_override = mat_funi("moellons")
 	moel.set_meta(MeshMerge.SANS_FUSION, true)
 	var ens: MeshInstance3D = RemonteeKit.texte_fige(g, "Funival", 120, 0.016, Color(0.95, 0.95, 0.95))
@@ -1445,7 +1469,180 @@ func _gare_amont() -> void:
 	var per: MeshInstance3D = _maillage(stp, mat_funi("cuit"), "Perrons", false)
 	per.reparent(g, false)
 	await _pause("funival : gare amont")
-	MeshMerge.merge(g, [w1, w2, w3, ban, mur_p, ens, carre, moel, esc, escm], "Gare")
+	var garder: Array = _amenager_batiment(g, ys, ys_sol, zs, hx, W)
+	await _pause("funival : gare amont")
+	MeshMerge.merge(g, [w1, w2, w3, ban, mur_p, ens, carre, moel, esc, escm] + garder, "Gare")
+
+
+## Bâtiment de Bellevarde, dedans et aux portes (retour d'utilisateur du 11/11/2026 : « le design quand on quitte le
+## quai pour traverser le bâtiment pour sortir dehors c'est 0 ») : d'après les photos du quai et de la fiche —
+## soubassement clair, bandeaux de fenêtres, charpente métallique noire à contrefiches sous un plafond sombre, tubes
+## lumineux, portes vitrées à cadre noir, portillons de contrôle pour la descente (à gauche ; la sortie reste libre à
+## droite), râteliers à skis, bancs, panneaux Sortie / Descente ; dehors, marquises et enseignes au-dessus des portes,
+## volume de pierre couvert avec sa porte. Rend les textes, à garder hors de la fusion.
+func _amenager_batiment(g: Node3D, ys: float, ys_sol: float, zs: float, hx: float, W: float) -> Array:
+	var garder: Array = []
+	var xi: float = hx + 1.0 - 0.32            # face intérieure des longs-pans
+	var zf: float = zs - 11.0 + 0.32           # face intérieure du pignon du fond (sortie)
+	var za: float = zs + 11.0 - 0.32           # face intérieure du pignon aval (escaliers)
+	var y0: float = ys_sol
+	var jour: Material = mat_funi("jour")
+	var lampe: Material = mat_funi("lampe")
+	var b := func(t: Vector3, c: Vector3, m: String) -> MeshInstance3D:
+		return RemonteeKit.boite_en(g, t, c, m)
+	var bm := func(t: Vector3, c: Vector3, m: Material) -> void:
+		var mi: MeshInstance3D = RemonteeKit.boite_en(g, t, c, "crepi")
+		mi.material_override = m
+		mi.set_meta(MeshMerge.SANS_FUSION, true)
+		garder.append(mi)
+	# murs : segments [début, fin] le long de chaque face, ouvertures ôtées
+	var faces: Array = [
+		[true, zf, -xi, xi, [[-1.7, 1.7]], 1.0],                                   # fond, porte de sortie
+		[true, za, -xi, xi, [[-(W + LARG_AMONT[0] + 0.3), W + LARG_AMONT[1] + 0.3]], -1.0],   # aval, débouché des escaliers
+		[false, -xi, zf, za, [[zs - 1.7, zs + 1.7]], 1.0],                         # long-pan gauche, porte
+		[false, xi, zf, za, [], -1.0]]
+	for f in faces:
+		var lx: bool = f[0]
+		var fixe: float = f[1]
+		var u: float = f[2]
+		var trous: Array = f[4]
+		var nrm: float = f[5]
+		var segs: Array = []
+		for o in trous:
+			segs.append([u, float(o[0])])
+			u = float(o[1])
+		segs.append([u, f[3]])
+		for sg in segs:
+			var u0: float = sg[0]
+			var u1: float = sg[1]
+			if u1 - u0 < 0.1:
+				continue
+			var um: float = (u0 + u1) * 0.5
+			var lu: float = u1 - u0
+			var pos := func(y: float, off: float) -> Vector3:
+				return Vector3(um, y, fixe + nrm * off) if lx else Vector3(fixe + nrm * off, y, um)
+			var tl := func(h: float, e: float) -> Vector3:
+				return Vector3(lu, h, e) if lx else Vector3(e, h, lu)
+			# plinthe noire, fenêtres basses (jour), soubassement clair au-dessus jusqu'à 3 m, bandeau haut (jour)
+			b.call(tl.call(0.12, 0.03), pos.call(y0 + 0.06, 0.03), "noir_mat")
+			bm.call(tl.call(1.5, 0.02), pos.call(y0 + 0.85, 0.02), jour)
+			b.call(tl.call(1.3, 0.03), pos.call(y0 + 2.3, 0.03), "crepi")
+			b.call(tl.call(0.06, 0.05), pos.call(y0 + 1.62, 0.05), "acier_noir")
+			bm.call(tl.call(0.8, 0.02), pos.call(ys + 6.2, 0.02), jour)
+			# montants des fenêtres, tous les 1,5 m
+			var k: float = u0 + 0.75
+			while k < u1 - 0.3:
+				var pm: Vector3 = Vector3(k, 0, fixe + nrm * 0.04) if lx else Vector3(fixe + nrm * 0.04, 0, k)
+				b.call(Vector3(0.06, 1.5, 0.05) if lx else Vector3(0.05, 1.5, 0.06), pm + Vector3(0, y0 + 0.85, 0), "acier_noir")
+				b.call(Vector3(0.06, 0.8, 0.05) if lx else Vector3(0.05, 0.8, 0.06), pm + Vector3(0, ys + 6.2, 0), "acier_noir")
+				k += 1.5
+	# charpente : poutres en travers tous les 3 m sous le plafond, contrefiches vers les murs, tubes lumineux
+	var yp: float = ys + 7.38 - 0.13
+	var zc: float = zs - 9.5
+	while zc < zs + 10.0:
+		b.call(Vector3(2.0 * xi, 0.40, 0.20), Vector3(0, yp - 0.20, zc), "acier_noir")
+		for sxc in [-1.0, 1.0]:
+			RemonteeKit.poutre(g, Vector3(sxc * (xi - 0.1), ys + 5.4, zc), Vector3(sxc * (xi - 2.0), yp - 0.35, zc), 0.12, 0.12, "acier_noir")
+			bm.call(Vector3(1.4, 0.05, 0.12), Vector3(sxc * 3.0, yp - 0.45, zc), lampe)
+		zc += 3.0
+	for sxl in [-1.0, 0.0, 1.0]:
+		b.call(Vector3(0.12, 0.25, 21.0), Vector3(sxl * (xi - 3.5), yp - 0.55, zs), "acier_noir")     # pannes
+	# sol : chemin de sortie en caoutchouc noir, des escaliers aux deux portes
+	b.call(Vector3(3.0, 0.02, 21.0), Vector3(0, y0 + 0.01, zs), "toit_bardeaux")
+	b.call(Vector3(xi, 0.02, 3.0), Vector3(-xi * 0.5, y0 + 0.012, zs), "toit_bardeaux")
+	# portes vitrées à cadre noir (ouvertes : cadres, imposte et vantaux repliés contre les tableaux)
+	var porte := func(c: Vector3, le_long_x: bool, larg: float) -> void:
+		var ax: Vector3 = Vector3.RIGHT if le_long_x else Vector3.BACK
+		for sp in [-1.0, 1.0]:
+			b.call(Vector3(0.10, 3.0, 0.10), c + ax * (sp * larg * 0.5) + Vector3(0, 1.5, 0), "acier_noir")
+			# vantail ouvert, perpendiculaire au mur
+			var nv: Vector3 = Vector3.BACK if le_long_x else Vector3.RIGHT
+			var cv: Vector3 = c + ax * (sp * (larg * 0.5 - 0.05)) + nv * 0.48 + Vector3(0, 1.1, 0)
+			b.call((Vector3(0.05, 2.2, 0.9) if le_long_x else Vector3(0.9, 2.2, 0.05)), cv, "acier_noir")
+			bm.call((Vector3(0.02, 1.9, 0.75) if le_long_x else Vector3(0.75, 1.9, 0.02)), cv, mat_funi("verre_porte"))
+		b.call((Vector3(larg, 0.12, 0.12) if le_long_x else Vector3(0.12, 0.12, larg)), c + Vector3(0, 2.25, 0), "acier_noir")
+	porte.call(Vector3(0, y0, zf - 0.15), true, 3.0)
+	porte.call(Vector3(-xi + 0.15, y0, zs), false, 3.0)
+	# portillons de contrôle pour la descente, à gauche en allant vers les escaliers ; couloirs à lisses galvanisées
+	var zp: float = zs + 6.5
+	for kp in range(5):
+		var xp: float = -xi + 1.2 + float(kp) * 1.15
+		b.call(Vector3(0.28, 1.0, 0.55), Vector3(xp, y0 + 0.5, zp), "peinture_gris")
+		b.call(Vector3(0.20, 0.14, 0.02), Vector3(xp, y0 + 0.92, zp - 0.28), "noir_mat")
+		bm.call(Vector3(0.05, 0.05, 0.02), Vector3(xp + 0.07, y0 + 1.03, zp - 0.28), mat_funi("voyant_vert"))
+		RemonteeKit.poutre(g, Vector3(xp + 0.14, y0 + 0.85, zp - 0.05), Vector3(xp + 0.60, y0 + 0.85, zp - 0.05), 0.03, 0.03, "galva")
+		b.call(Vector3(0.05, 1.0, 2.6), Vector3(xp - 0.45, y0 + 0.5, zp + 1.0), "galva")
+	# panneaux suspendus : « Sortie / Exit » au-dessus des portes, « Descente / Way down » vers les escaliers
+	var panneau := func(texte: String, c: Vector3, rot: float, fond: String, coul: Color, larg: float) -> void:
+		var pb: MeshInstance3D = RemonteeKit.boite(g, Vector3(larg, 0.45, 0.04), Transform3D(Basis(Vector3.UP, rot), c), fond)
+		pb.set_meta(MeshMerge.SANS_FUSION, true)
+		garder.append(pb)
+		var tx: MeshInstance3D = RemonteeKit.texte_fige(g, texte, 48, 0.0055, coul)
+		tx.transform = Transform3D(Basis(Vector3.UP, rot), c + Basis(Vector3.UP, rot) * Vector3(0, -0.02, 0.03))
+		garder.append(tx)
+	panneau.call("SORTIE  ·  EXIT", Vector3(0, y0 + 2.9, zf + 0.3), 0.0, "vert_sortie", Color(0.97, 0.97, 0.97), 2.4)
+	panneau.call("SORTIE  ·  EXIT", Vector3(-xi + 0.3, y0 + 2.9, zs), PI * 0.5, "vert_sortie", Color(0.97, 0.97, 0.97), 2.4)
+	panneau.call("DESCENTE  ·  WAY DOWN", Vector3(-(W + 1.4), y0 + 3.3, za - 0.4), PI, "plaque_bleue", Color(0.97, 0.97, 0.97), 3.0)
+	var logo: MeshInstance3D = RemonteeKit.texte_fige(g, "Funival", 120, 0.014, Color(0.93, 0.93, 0.93))
+	logo.transform = Transform3D(Basis(Vector3.UP, -PI * 0.5), Vector3(xi - 0.05, y0 + 3.7, zs))
+	garder.append(logo)
+	var alt: MeshInstance3D = RemonteeKit.texte_fige(g, "Rocher de Bellevarde · 2690 m", 48, 0.006, Color(0.80, 0.08, 0.08))
+	alt.transform = Transform3D(Basis(Vector3.UP, -PI * 0.5), Vector3(xi - 0.05, y0 + 3.0, zs))
+	garder.append(alt)
+	# râteliers à skis de part et d'autre de la porte de sortie, bancs contre le mur droit
+	for sxr in [-1.0, 1.0]:
+		var xr0: float = sxr * 3.2
+		b.call(Vector3(2.6, 0.05, 0.05), Vector3(xr0, y0 + 1.15, zf + 0.6), "galva")
+		b.call(Vector3(2.6, 0.05, 0.05), Vector3(xr0, y0 + 0.45, zf + 0.6), "galva")
+		for kr in range(9):
+			b.call(Vector3(0.03, 1.2, 0.03), Vector3(xr0 - 1.2 + kr * 0.3, y0 + 0.6, zf + 0.6), "galva")
+	for zbn in [zs - 6.0, zs - 1.0]:
+		b.call(Vector3(0.45, 0.07, 2.2), Vector3(xi - 0.35, y0 + 0.46, zbn), "bois_meleze")
+		for dzb in [-0.9, 0.9]:
+			b.call(Vector3(0.40, 0.42, 0.06), Vector3(xi - 0.35, y0 + 0.21, zbn + dzb), "acier_noir")
+	# extincteurs
+	for ze in [zs + 9.5, zs - 9.5]:
+		b.call(Vector3(0.16, 0.5, 0.16), Vector3(-xi + 0.12, y0 + 1.05, ze), "rouge_val")
+	# dehors : marquises et enseignes au-dessus des portes, lampes
+	b.call(Vector3(5.0, 0.16, 2.2), Vector3(0, y0 + 3.45, zs - 11.0 - 1.1), "peinture_anthracite")
+	b.call(Vector3(2.2, 0.16, 5.0), Vector3(-(hx + 1.0) - 1.1, y0 + 3.45, zs), "peinture_anthracite")
+	var ext1: MeshInstance3D = RemonteeKit.texte_fige(g, "DESCENTE  ·  WAY DOWN", 64, 0.008, Color(0.95, 0.95, 0.95))
+	ext1.transform = Transform3D(Basis(Vector3.UP, PI), Vector3(0, y0 + 4.1, zs - 11.0 - 0.17))
+	garder.append(ext1)
+	var ext2: MeshInstance3D = RemonteeKit.texte_fige(g, "DESCENTE  ·  WAY DOWN", 64, 0.008, Color(0.95, 0.95, 0.95))
+	ext2.transform = Transform3D(Basis(Vector3.UP, -PI * 0.5), Vector3(-(hx + 1.0) - 0.17, y0 + 4.1, zs))
+	garder.append(ext2)
+	for xl in [-2.0, 2.0]:
+		bm.call(Vector3(0.3, 0.06, 0.3), Vector3(xl, y0 + 3.36, zs - 11.0 - 1.6), lampe)
+	# volume de pierre : toit à deux pans à forte avancée, rives de bois, porte sombre, petite fenêtre (photos)
+	var xv: float = -(hx + 4.0)
+	for svt in [-1.0, 1.0]:
+		var bvt: Basis = Basis(Vector3.RIGHT, svt * 0.38)
+		RemonteeKit.boite(g, Vector3(7.0, 0.2, 4.6), Transform3D(bvt, Vector3(xv, ys + 5.85, zs + 6.0 + svt * 1.95)), "galva_sombre")
+		RemonteeKit.boite(g, Vector3(6.4, 0.25, 4.0), Transform3D(bvt, Vector3(xv, ys + 6.05, zs + 6.0 + svt * 1.85)), "neige_damee")
+		RemonteeKit.boite(g, Vector3(7.1, 0.25, 0.12), Transform3D(bvt, Vector3(xv, ys + 5.8, zs + 6.0 + svt * 4.2)), "bois_fonce")
+	b.call(Vector3(0.06, 2.3, 1.2), Vector3(xv - 3.03, y0 + 1.15, zs + 6.0), "acier_noir")
+	b.call(Vector3(0.06, 0.9, 0.9), Vector3(xv - 3.03, y0 + 3.4, zs + 7.8), "vitrage_sombre")
+	# cadres gris clair du bandeau vitré, dehors, tous les 1,2 m (longs-pans et pignon du fond, portes ôtées)
+	var xe: float = hx + 1.0 + 0.10
+	for sxe in [-1.0, 1.0]:
+		var zk: float = zs - 10.4
+		while zk < zs + 10.6:
+			if not (sxe < 0.0 and absf(zk - zs) < 1.8):
+				b.call(Vector3(0.07, 1.6, 0.08), Vector3(sxe * xe, ys + 1.4, zk), "galva")
+			zk += 1.2
+		b.call(Vector3(0.08, 0.08, 21.6), Vector3(sxe * xe, ys + 2.2, zs), "galva")
+	var xk: float = -(hx + 0.4)
+	while xk < hx + 0.6:
+		if absf(xk) > 1.8:
+			b.call(Vector3(0.08, 1.6, 0.07), Vector3(xk, ys + 1.4, zs - 11.0 - 0.10), "galva")
+		xk += 1.2
+	# skis posés contre la façade près de la porte du fond (ok-7)
+	for ks in range(7):
+		var xs2: float = 2.6 + float(ks) * 0.35
+		RemonteeKit.boite(g, Vector3(0.08, 1.75, 0.02), Transform3D(Basis(Vector3.RIGHT, -0.22) * Basis(Vector3.BACK, (float(ks % 3) - 1.0) * 0.06),
+			Vector3(xs2, y0 + 0.86, zs - 11.0 - 0.38)), ["rouge_val", "noir_mat", "cabine_blanche", "bleu_doppelmayr"][ks % 4])
+	return garder
 
 
 ## Terrain de la gare amont (remarques d'utilisateur, iPad du 08/11/2026 : « en gare du haut une plaque grise coupe
@@ -1613,11 +1810,11 @@ func _collisions_funi() -> void:
 	var W: float = VehiculeFunival.DEMI_LARGEUR + 0.05
 	var lq: float = VehiculeFunival.DEMI_L * 2.0 + 2.0
 	var n: int = VehiculeFunival.N_COMP
-	var lc: float = lq / float(n)
+	var lc: float = VehiculeFunival.l_comp()      # (pas des portes et des paliers du véhicule)
 	for aval in [true, false]:
 		var dq: float = _x_quai(aval)
 		for k in range(n):
-			var d: float = dq - lq * 0.5 + lc * (float(k) + 0.5)
+			var d: float = dq - VehiculeFunival.z_comp(k)
 			var y: float = VehiculeFunival.y_plancher_monde(self, d)
 			if not aval:
 				# jupe le long de la voie (on ne glisse pas sous le véhicule)
@@ -1650,7 +1847,7 @@ func _collisions_funi() -> void:
 		var larg3: float = LARG_GRADINS[0] if sx3 < 0.0 else LARG_GRADINS[1]
 		var dq3: float = _x_quai(true)
 		for k3 in range(n):
-			var d3: float = dq3 - lq * 0.5 + lc * (float(k3) + 0.5)
+			var d3: float = dq3 - VehiculeFunival.z_comp(k3)
 			var y3: float = VehiculeFunival.y_plancher_monde(self, d3)
 			# garde-corps : du sol au-dessus de la main courante (on passait dessous depuis une volée)
 			var xg3: float = sx3 * (W + larg3 - 0.05)

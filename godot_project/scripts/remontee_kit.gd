@@ -70,6 +70,7 @@ const COULEURS: Dictionary = {
 	"bois_vert": [Color(0.24, 0.40, 0.33), 0.85, 0.0],          # cabane du perchman
 	"tapis_vert": [Color(0.16, 0.42, 0.20), 0.90, 0.0],
 	"feu_vert": [Color(0.10, 0.85, 0.25), 0.30, 0.0],
+	"vert_sortie": [Color(0.0, 0.52, 0.24), 0.60, 0.0],          # panneaux « Sortie » (gare de Bellevarde)
 	"rouille": [Color(0.36, 0.20, 0.12), 0.80, 0.45],          # cerces du tunnel de piste
 	# gares de l'Olympique (vidéos de la ligne) : chalet aval, gare amont
 	"toit_brun": [Color(0.30, 0.22, 0.17), 0.85, 0.0],

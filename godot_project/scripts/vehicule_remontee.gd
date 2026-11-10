@@ -534,7 +534,7 @@ static func _aigle() -> ImageTexture:
 		return _tex_aigle
 	var n: int = 128
 	var img: Image = Image.create(n, n, false, Image.FORMAT_RGBA8)
-	img.fill(Color(0, 0, 0, 0))
+	img.fill(Color(1, 1, 1, 0))      # (blanc transparent : pas de liseré sombre une fois adouci)
 	# polygones en coordonnées 0..1 (y vers le bas), symétriques
 	var formes: Array = []
 	var aile: PackedVector2Array = PackedVector2Array([Vector2(0.50, 0.30), Vector2(0.38, 0.22), Vector2(0.20, 0.12),
@@ -559,6 +559,8 @@ static func _aigle() -> ImageTexture:
 				if Geometry2D.is_point_in_polygon(q2, f):
 					img.set_pixel(i, j, Color.WHITE)
 					break
+	# agrandi en interpolation cubique : bords adoucis (en 128 px nets, l'aigle du Funival était crénelé de près)
+	img.resize(512, 512, Image.INTERPOLATE_CUBIC)
 	img.generate_mipmaps()
 	_tex_aigle = ImageTexture.create_from_image(img)
 	return _tex_aigle
