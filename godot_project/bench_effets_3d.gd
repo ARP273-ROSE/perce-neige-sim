@@ -1,6 +1,8 @@
 ## Effets graphiques au cran 0, un à la fois, sur des vues fixes : temps de la carte graphique
 ## et captures. Avec écran seulement, rien d'autre ne doit tourner.
 ##   godot --fullscreen --path godot_project -s bench_effets_3d.gd -- --sortie=C:/chemin/ [--effets=base,ombres]
+## Mode cran par cran (relevés d'une machine à l'autre) : --crans=0-5 [--etiq=machine] ; chaque cran du jeu appliqué
+## tel quel (PerfManager), mêmes vues, médianes GPU, rendu CPU et image ; tableau court dans <sortie>/crans_<etiq>.txt.
 extends SceneTree
 
 const IMAGES_CALME: int = 150        # l'éclairage indirect et les caches se posent
@@ -16,6 +18,8 @@ var _env: Environment
 var _lum: DirectionalLight3D
 var _vp: Viewport
 var _vues: Array = []                # [nom, position caméra, cible, position du skieur]
+var _crans: Array = []               # mode cran par cran : crans à relever
+var _etiq: String = "machine"
 var _res: Array = []
 
 
@@ -31,6 +35,12 @@ func _initialize() -> void:
 			_filtre_vues = a.substr(7)
 		if a.begins_with("--effets="):
 			_filtre = a.substr(9).split(",")
+		if a.begins_with("--crans="):
+			var bornes: PackedStringArray = a.substr(8).split("-")
+			for c in range(int(bornes[0]), int(bornes[bornes.size() - 1]) + 1):
+				_crans.append(c)
+		if a.begins_with("--etiq="):
+			_etiq = a.substr(7)
 	DirAccess.make_dir_recursive_absolute(_out)
 	_main = load("res://scenes/main.tscn").instantiate()
 	get_root().add_child(_main)
@@ -120,11 +130,99 @@ func _effets() -> Array:
 		["aniso16", func(): _vp.anisotropic_filtering_level = Viewport.ANISOTROPY_16X,
 			func(): _vp.anisotropic_filtering_level = Viewport.ANISOTROPY_4X],
 		["msaa8", func(): _vp.msaa_3d = Viewport.MSAA_8X, func(): _vp.msaa_3d = Viewport.MSAA_4X],
+		["sans_glow", func(): _env.glow_enabled = false, func(): _env.glow_enabled = true],
 		["sans_msaa", func(): _vp.msaa_3d = Viewport.MSAA_DISABLED, func(): _vp.msaa_3d = Viewport.MSAA_4X],
 		["sans_sdfgi", func(): _env.sdfgi_enabled = false, func(): _env.sdfgi_enabled = true],
 		["sans_volum", func(): _env.volumetric_fog_enabled = false, func(): _env.volumetric_fog_enabled = true],
 		["sans_ssr", func(): _env.ssr_enabled = false, func(): _env.ssr_enabled = true],
 	]
+
+
+## Scène stable (constructions finies), puis IMAGES_MESURE images : [gpu méd, gpu p95, gpu max, rendu CPU méd,
+## image méd (ms entre deux images), primitives, appels].
+func _mesurer_vue(sk: SkieurJoueur, v: Array) -> Array:
+	# (les lignes proches se construisent et les lointaines se démolissent : scène stable d'abord)
+	var calme: int = 0
+	var attente: int = 0
+	while calme < IMAGES_CALME and attente < 3600:
+		sk.global_position = v[3]
+		sk.velocity = Vector3.ZERO
+		_cam.global_position = v[1]
+		_cam.look_at(v[2], Vector3.UP)
+		await process_frame
+		attente += 1
+		calme = 0 if _main.remontees.get("_en_cours") != null or (v[4] != null and not (v[4] as LigneRemontee).pret) else calme + 1
+		# véhicules arrêtés : mêmes images d'un effet à l'autre
+		for e2 in _main.remontees.lignes:
+			(e2[0] as LigneRemontee).roule = false
+	var g: PackedFloat32Array = PackedFloat32Array()
+	var r: PackedFloat32Array = PackedFloat32Array()
+	var im: PackedFloat32Array = PackedFloat32Array()
+	var t: int = Time.get_ticks_usec()
+	for i in IMAGES_MESURE:
+		sk.global_position = v[3]
+		sk.velocity = Vector3.ZERO
+		await process_frame
+		var t2: int = Time.get_ticks_usec()
+		im.append((t2 - t) / 1000.0)
+		t = t2
+		g.append(RenderingServer.viewport_get_measured_render_time_gpu(_vp.get_viewport_rid()))
+		r.append(RenderingServer.viewport_get_measured_render_time_cpu(_vp.get_viewport_rid()))
+	return [_quantile(g, 0.5), _quantile(g, 0.95), _quantile(g, 1.0), _quantile(r, 0.5), _quantile(im, 0.5),
+		Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME),
+		Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)]
+
+
+## Crans du jeu un à un (PerfManager._appliquer), mêmes vues : tableau court, comparable d'une machine à l'autre.
+func _releve_crans(sk: SkieurJoueur) -> void:
+	var pm: Node = _main.perf_manager
+	var cran0: int = int(pm.get("cran"))
+	# sans vsync : l'intervalle entre deux images est celui de la machine, pas celui de l'écran
+	var vsync0: DisplayServer.VSyncMode = DisplayServer.window_get_vsync_mode()
+	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
+	var res: Dictionary = {}       # cran → vue → [gpu, cpu, image, prim, appels]
+	for c in _crans:
+		pm.call("_appliquer", int(c), "banc cran par cran")
+		for v in _vues:
+			var m: Array = await _mesurer_vue(sk, v)
+			print("CRAN %d %s : gpu med %.2f ; rendu cpu %.2f ; image %.2f ; primitives %.0f appels %.0f" % [c, v[0], m[0], m[3], m[4], m[5], m[6]])
+			if not res.has(c):
+				res[c] = {}
+			res[c][v[0]] = [m[0], m[3], m[4], m[5], m[6]]
+	pm.call("_appliquer", cran0, "fin du banc")
+	DisplayServer.window_set_vsync_mode(vsync0)
+	var vs: Vector2i = DisplayServer.window_get_size()
+	var o: PackedStringArray = PackedStringArray()
+	o.append("# relevé cran par cran — %s — %s, %d cœurs — %s — %s — fenêtre %dx%d — %s" % [_etiq, OS.get_processor_name(),
+		OS.get_processor_count(), RenderingServer.get_video_adapter_name(), RenderingServer.get_current_rendering_method(),
+		vs.x, vs.y, Time.get_datetime_string_from_system()])
+	o.append("# médianes sur %d images par vue, sans vsync ; gpu = temps de la carte, cpu = rendu côté processeur, image = intervalle entre deux images (ms) ; cran 5 = 30 i/s imposées" % IMAGES_MESURE)
+	var ligne: String = "%-28s" % "vue"
+	for c in _crans:
+		ligne += " | cran %d gpu   cpu  image" % c
+	o.append(ligne)
+	for v in _vues:
+		ligne = "%-28s" % v[0]
+		for c in _crans:
+			var x: Array = res[c][v[0]]
+			ligne += " | %8.2f %5.2f %6.2f" % [x[0], x[1], x[2]]
+		o.append(ligne)
+	ligne = "%-28s" % "médiane des vues"
+	for c in _crans:
+		var gg: PackedFloat32Array = PackedFloat32Array()
+		var cc: PackedFloat32Array = PackedFloat32Array()
+		var ii: PackedFloat32Array = PackedFloat32Array()
+		for v in _vues:
+			gg.append(res[c][v[0]][0])
+			cc.append(res[c][v[0]][1])
+			ii.append(res[c][v[0]][2])
+		ligne += " | %8.2f %5.2f %6.2f" % [_quantile(gg, 0.5), _quantile(cc, 0.5), _quantile(ii, 0.5)]
+	o.append(ligne)
+	var f: FileAccess = FileAccess.open(_out.path_join("crans_%s.txt" % _etiq), FileAccess.WRITE)
+	f.store_string("\n".join(o) + "\n")
+	f.close()
+	for l in o:
+		print(l)
 
 
 func _quantile(a: PackedFloat32Array, q: float) -> float:
@@ -195,36 +293,18 @@ func _suite() -> void:
 	_cam.make_current()
 	# (le skieur reste là pour que le jeu construise autour de lui, mais sa tête masquait la vue)
 	sk.visible = false
+	if not _crans.is_empty():
+		await _releve_crans(sk)
+		print("BENCH_EFFETS FIN")
+		FinBanc.quitter(self, _main, 0)
+		return
 	for e in _effets():
 		if not _filtre.is_empty() and not _filtre.has(String(e[0])):
 			continue
 		e[1].call()
 		for v in _vues:
-			# (les lignes proches se construisent et les lointaines se démolissent : scène stable d'abord)
-			var calme: int = 0
-			var attente: int = 0
-			while calme < IMAGES_CALME and attente < 3600:
-				sk.global_position = v[3]
-				sk.velocity = Vector3.ZERO
-				_cam.global_position = v[1]
-				_cam.look_at(v[2], Vector3.UP)
-				await process_frame
-				attente += 1
-				calme = 0 if _main.remontees.get("_en_cours") != null or (v[4] != null and not (v[4] as LigneRemontee).pret) else calme + 1
-				# véhicules arrêtés : mêmes images d'un effet à l'autre
-				for e2 in _main.remontees.lignes:
-					(e2[0] as LigneRemontee).roule = false
-			var g: PackedFloat32Array = PackedFloat32Array()
-			var r: PackedFloat32Array = PackedFloat32Array()
-			for i in IMAGES_MESURE:
-				sk.global_position = v[3]
-				sk.velocity = Vector3.ZERO
-				await process_frame
-				g.append(RenderingServer.viewport_get_measured_render_time_gpu(_vp.get_viewport_rid()))
-				r.append(RenderingServer.viewport_get_measured_render_time_cpu(_vp.get_viewport_rid()))
-			var prim: float = Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME)
-			var app: float = Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)
-			print("EFFETS %s %s : gpu med %.2f p95 %.2f max %.2f ; rendu med %.2f ; primitives %.0f appels %.0f video %.0f Mo" % [e[0], v[0], _quantile(g, 0.5), _quantile(g, 0.95), _quantile(g, 1.0), _quantile(r, 0.5), prim, app, Performance.get_monitor(Performance.RENDER_VIDEO_MEM_USED) / 1048576.0])
+			var m: Array = await _mesurer_vue(sk, v)
+			print("EFFETS %s %s : gpu med %.2f p95 %.2f max %.2f ; rendu med %.2f ; primitives %.0f appels %.0f video %.0f Mo" % [e[0], v[0], m[0], m[1], m[2], m[3], m[5], m[6], Performance.get_monitor(Performance.RENDER_VIDEO_MEM_USED) / 1048576.0])
 			var im: Image = _vp.get_texture().get_image()
 			im.save_jpg(_out + "%s__%s.jpg" % [v[0], e[0]], 0.95)
 		e[2].call()
