@@ -5,6 +5,20 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.61.0 — 10 novembre 2026
+
+Fluidité sur PC, garde au sol des téléskis et du 3S.
+
+**Téléskis, câble trop bas** : le câble était calé sur le profil au milieu de la trace, vérifié en 16 points par portée ; à côté, sous les brins, il passait à 2,1 m de la neige à la Legettaz et à 2,6 m au Col du Palet, et les perches qui redescendent traînaient au sol. Il est maintenant calé sur le sol réel sous les deux brins, vérifié tous les 3 m, à 3,8 m au moins. Là où des pylônes de 9 m ne suffisent pas (au-delà, la perche n'atteindrait plus le skieur), un pylône est intercalé, aussi sur les lignes relevées : Chardonnet, Col du Palet, Legettaz et Termignon 1 en gagnent un à trois. Sur le relief fin, les couloirs des téléskis sont rabotés à 1 m au plus au-dessus du sol à 25 m (crête du Col du Palet).
+
+**PWA, 3S** : le sol dessiné à mailles de 50 m passait au-dessus de la ligne, calée sur la grille à 25 m ; une cabine frôlait le sol à 1,70 m à 300 m de la gare amont. Le relief est maintenant redécoupé à 25 m sous les lignes, là où les deux mailles s'écartent de plus de 0,5 m : 3,36 m de garde.
+
+**PC, à-coups pendant la construction des lignes** : une image sur quatre ou cinq durait 48 ms pendant que les remontées se construisaient en fond. Cause : des maillages déjà envoyés à la carte graphique étaient relus, ce qui attend les images en cours. Les textes et les tubes sont construits dans le module C++ et les copies gardées ; véhicules, portique, Funival (voie, tunnel, câbles), 3S, téléphérique de la Grande Motte et Zeta se construisent par étapes plus fines. Pire image par ligne : 47 → 20 ms en médiane ; images de plus de 25 ms sur un parcours de référence : 224 → 33.
+
+**Entrée en skieur** : domaine et remontées posés sur plusieurs images, skieur, fantôme et sons préparés en fond ; l'image d'entrée passe de 130-160 ms à 35 ms.
+
+Vérifié : 61 bancs sans écran au NAS, avec et sans le module C++ ; empreintes du Perce-Neige et du Funival inchangées ; banc du 3S en réglages PWA ; mémoire de la PWA sous WebKit inchangée (3S 100 Mo, Lanches 119 Mo, aucune perte). Mesures de fluidité faites au PC avec écran. Non vérifié : iPad, petites machines.
+
 ## 1.60.1 — 10 novembre 2026
 
 Retours d'essai de la 1.60 sur la PWA.
