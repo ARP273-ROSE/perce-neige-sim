@@ -2,12 +2,19 @@
 
 #include <godot_cpp/classes/mesh.hpp>
 #include <godot_cpp/core/class_db.hpp>
+#include <godot_cpp/variant/utility_functions.hpp>
 #include <godot_cpp/variant/packed_vector2_array.hpp>
 
 #include <cmath>
 #include <vector>
 
 using namespace godot;
+
+// sin, cos et atan2 du moteur : ceux de la bibliothèque du compilateur diffèrent d'un ulp (sin(π)), et le repli
+// GDScript appelle ceux du moteur
+static inline double m_sin(double x) { return UtilityFunctions::sin(x); }
+static inline double m_cos(double x) { return UtilityFunctions::cos(x); }
+static inline double m_atan2(double y, double x) { return UtilityFunctions::atan2(y, x); }
 
 void NoyauFuni::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("tube_cable", "pts", "voie_x", "voie_y", "uv_v", "rayon", "ns"),
@@ -35,7 +42,7 @@ double NoyauFuni::passing_loop_offset(double s, double cote) const {
 		return 0.0;
 	}
 	const double k = (s - croise_debut) / (croise_fin - croise_debut);
-	const double s_pi = std::sin(3.14159265358979323846 * k);
+	const double s_pi = m_sin(3.14159265358979323846 * k);
 	return cote * croise_max * (s_pi * s_pi);
 }
 
@@ -151,6 +158,13 @@ Array NoyauFuni::tube_cable(const PackedVector3Array &pts, const PackedVector3Ar
 	std::vector<Vector3> pos(n * na), nor(n * na);
 	std::vector<Vector2> uv(n * na);
 	const double tau = 6.28318530717958647692;
+	// cosinus et sinus du tour, ceux du moteur (comme le GDScript : ceux du compilateur diffèrent d'un ulp)
+	std::vector<real_t> co(na), si(na);
+	for (int64_t j = 0; j < na; j++) {
+		const double ph = tau * double(j) / double(ns);
+		co[j] = real_t(m_cos(ph));
+		si[j] = real_t(m_sin(ph));
+	}
 	for (int64_t i = 0; i < n; i++) {
 		const Vector3 p0 = pts[i > 0 ? i - 1 : 0];
 		const Vector3 p1 = pts[i + 1 < n ? i + 1 : n - 1];
@@ -161,8 +175,7 @@ Array NoyauFuni::tube_cable(const PackedVector3Array &pts, const PackedVector3Ar
 		Vector3 by = bvy - t * bvy.dot(t);
 		by = (by - bx * by.dot(bx)).normalized();
 		for (int64_t j = 0; j < na; j++) {
-			const double ph = tau * double(j) / double(ns);
-			const Vector3 nn = bx * real_t(std::cos(ph)) + by * real_t(std::sin(ph));
+			const Vector3 nn = bx * co[j] + by * si[j];
 			pos[i * na + j] = pts[i] + nn * real_t(rayon);
 			nor[i * na + j] = nn;
 			uv[i * na + j] = Vector2(real_t(double(j) / double(ns)), uv_v[i]);

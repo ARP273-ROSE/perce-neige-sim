@@ -336,11 +336,41 @@ static func tube_tableaux(pts: PackedVector3Array, r: float, seg: int) -> Array:
 	return tube_tableaux_plage(pts, r, seg, 0, pts.size() - 1, [Vector3.ZERO, 0.0])
 
 
+## Module C++ (OutilsMaillage.tube_plage, mêmes sommets) ; sans lui (PWA) ou `tube_cpp_desactive`, le GDScript ci-dessous.
+static var tube_cpp_desactive: bool = false
+static var _om_tube: Object = null
+static var _om_tube_cherche: bool = false
+
+
+static func _outils_tube() -> Object:
+	if tube_cpp_desactive:
+		return null
+	if not _om_tube_cherche:
+		verrou.lock()          # (premier appel possible sur le fil de construction)
+		if not _om_tube_cherche:
+			if ClassDB.class_exists("OutilsMaillage") and ClassDB.class_has_method("OutilsMaillage", "tube_plage"):
+				_om_tube = ClassDB.instantiate("OutilsMaillage")
+			_om_tube_cherche = true
+		verrou.unlock()
+	return _om_tube
+
+
 ## Tranches du tube sur les segments [i0, i1[ (les sommets des points i0 à i1) : `etat` = [x du repère au point
 ## précédent, abscisse au point i0], mis à jour pour la plage suivante. Mis bout à bout dans l'ordre, les
 ## tableaux sont ceux du tube entier (même calcul, mêmes sommets) : le câble d'une ligne se fait ainsi en
 ## plusieurs tranches (18 ms d'un bloc à Solaise, relevé du 07/11/2026).
 static func tube_tableaux_plage(pts: PackedVector3Array, r: float, seg: int, i0: int, i1: int, etat: Array) -> Array:
+	var om: Object = _outils_tube()
+	if om != null:
+		var c: Array = om.tube_plage(pts, r, seg, i0, i1, etat[0], etat[1])
+		etat[0] = c[3]
+		etat[1] = c[4]
+		var ac: Array = []
+		ac.resize(Mesh.ARRAY_MAX)
+		ac[Mesh.ARRAY_VERTEX] = c[0]
+		ac[Mesh.ARRAY_NORMAL] = c[1]
+		ac[Mesh.ARRAY_TEX_UV] = c[2]
+		return ac
 	var n: int = pts.size()
 	var na: int = seg + 1
 	var m: int = i1 - i0 + 1

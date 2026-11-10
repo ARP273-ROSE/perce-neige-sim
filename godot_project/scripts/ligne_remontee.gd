@@ -3214,7 +3214,7 @@ func _portillons(aval: bool) -> void:
 	g.add_child(ent)
 	# (vantaux, portique, tapis : chacun sa tranche — 16 ms d'un bloc à Bellevarde, relevé du 07/11/2026)
 	await _pause("portillons : vantaux")
-	PortiqueEntree.construire(ent, self, W * 0.5 + 0.9)
+	await PortiqueEntree.construire(ent, self, W * 0.5 + 0.9, _pause.bind("portillons : portique"))
 	await _pause("portillons : portique")
 	# ligne d'arrêt : le bout du tapis, marqué d'un grand « STOP » (plus de bande jaune, demande
 	# d'utilisateur du 06/11/2026)

@@ -71,19 +71,21 @@ static func _plan(parent: Node3D, c: Vector3, l: float, h: float) -> void:
 		RemonteeKit.poutre(parent, a, b, 0.025, 0.004, t[0], Vector3.BACK)
 
 
-static func construire(ent: Node3D, lg: LigneRemontee, la: float) -> void:
+## `pause` (facultative) attendue après chaque texte : leur mise en forme se calcule à la construction (14 ms d'un
+## bloc pour le portique de Bellevarde, relevé du 08/11/2026).
+static func construire(ent: Node3D, lg: LigneRemontee, la: float, pause: Callable = Callable()) -> void:
 	var L: float = lg.longueur_h()
 	var alt0: float = lg.altitude_aval
 	var alt1: float = alt0 + lg.terrain(L) - lg.terrain(0.0)
 	var specs: String = "Alt. départ %d m · Alt. arrivée %d m · Débit %d pers/h · Vitesse %s m/s" % [
 		roundi(alt0), roundi(alt1), roundi(lg.debit / 100.0) * 100, String.num(lg.vitesse, 1).replace(".", ",")]
 	if lg.station.find("Val") >= 0:
-		_val(ent, lg, la, specs)
+		await _val(ent, lg, la, specs, pause)
 	else:
-		_tignes(ent, lg, la, roundi(alt0), roundi(alt1))
+		await _tignes(ent, lg, la, roundi(alt0), roundi(alt1), pause)
 
 
-static func _val(ent: Node3D, lg: LigneRemontee, la: float, specs: String) -> void:
+static func _val(ent: Node3D, lg: LigneRemontee, la: float, specs: String, pause: Callable) -> void:
 	var hp: float = 3.6
 	var z: float = 0.30            # face avant des panneaux
 	for sx in [-1.0, 1.0]:
@@ -96,14 +98,17 @@ static func _val(ent: Node3D, lg: LigneRemontee, la: float, specs: String) -> vo
 	# poteau gauche : secteur à la verticale, pictogrammes
 	var xg: float = -la
 	_txt(ent, lg.quartier, Vector3(xg - 0.12, 2.45, z), 0.0042, Color(0.95, 0.95, 0.95), HORIZONTAL_ALIGNMENT_CENTER, PI * 0.5, 2.3)
+	await _attendre(pause)
 	for k in range(2):
 		RemonteeKit.boite_en(ent, Vector3(0.20, 0.20, 0.02), Vector3(xg + 0.16, 2.55 - 0.28 * k, z), "plaque_bleue")
 	# poteau droit : station, pendule, plan des pistes, pictogrammes
 	var xd: float = la
 	_txt(ent, "Val d'Isère", Vector3(xd, 3.25, z), 0.0030, Color(0.97, 0.97, 0.97), HORIZONTAL_ALIGNMENT_CENTER, 0.0, 0.62)
+	await _attendre(pause)
 	RemonteeKit.boite_en(ent, Vector3(0.52, 0.20, 0.03), Vector3(xd, 2.82, z), "noir_mat")
 	_pendule(ent, Vector3(xd, 2.82, z + 0.025), 0.0026, Color(1.0, 0.22, 0.15))
 	_plan(ent, Vector3(xd, 2.20, z), 0.56, 0.75)
+	await _attendre(pause)
 	for k in range(2):
 		RemonteeKit.cylindre(ent, 0.09, 0.09, 0.02, Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3(xd - 0.14 + 0.28 * k, 1.55, z)), "blanc_plaque", 16)
 	# bandeau blanc (épais, toit enneigé) entre les poteaux
@@ -114,22 +119,27 @@ static func _val(ent: Node3D, lg: LigneRemontee, la: float, specs: String) -> vo
 	RemonteeKit.boite_en(ent, Vector3(lb * 0.30, 0.14, 0.02), Vector3(lb * 0.35, yb - 0.38, 0.21), "rouge_val")
 	RemonteeKit.boite_en(ent, Vector3(lb * 0.22, 0.14, 0.02), Vector3(-lb * 0.37, yb - 0.38, 0.21), "noir_mat")
 	_txt(ent, "école de ski / ski school ↓", Vector3(-lb * 0.37, yb - 0.38, 0.225), 0.0011, Color(0.95, 0.95, 0.95))
+	await _attendre(pause)
 	# pictogramme du télésiège, nom, caractéristiques
 	RemonteeKit.cylindre(ent, 0.17, 0.17, 0.02, Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3(-lb * 0.5 + 0.35, yb + 0.12, 0.21)), "noir_mat", 20)
 	RemonteeKit.cylindre(ent, 0.14, 0.14, 0.022, Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3(-lb * 0.5 + 0.35, yb + 0.12, 0.21)), "blanc_plaque", 20)
 	_txt(ent, lg.titre(), Vector3(-lb * 0.5 + 0.62, yb + 0.12, 0.215), 0.0062, Color(0.20, 0.21, 0.24), HORIZONTAL_ALIGNMENT_LEFT, 0.0, lb - 2.0)
+	await _attendre(pause)
 	_txt(ent, specs, Vector3(-lb * 0.5 + 0.62, yb - 0.17, 0.215), 0.0010, Color(0.30, 0.31, 0.34), HORIZONTAL_ALIGNMENT_LEFT, 0.0, lb - 2.0)
+	await _attendre(pause)
 	# horaires
 	var xh: float = lb * 0.5 - 0.42
 	for k in range(2):
 		var yh: float = yb + 0.18 - 0.26 * k
 		RemonteeKit.boite_en(ent, Vector3(0.52, 0.18, 0.02), Vector3(xh, yh, 0.21), "noir_mat")
 		_txt(ent, OUVERTURE_VAL if k == 0 else FERMETURE_VAL, Vector3(xh + 0.05, yh, 0.225), 0.0022, Color(0.97, 0.97, 0.97))
+		await _attendre(pause)
 		_txt(ent, "ouvert / open" if k == 0 else "fermé / closed", Vector3(xh - 0.30, yh, 0.225), 0.0010, Color(0.25, 0.26, 0.30), HORIZONTAL_ALIGNMENT_RIGHT)
+		await _attendre(pause)
 	_cordes(ent, la)
 
 
-static func _tignes(ent: Node3D, lg: LigneRemontee, la: float, alt0: int, alt1: int) -> void:
+static func _tignes(ent: Node3D, lg: LigneRemontee, la: float, alt0: int, alt1: int, pause: Callable) -> void:
 	var hp: float = 3.3
 	for sx in [-1.0, 1.0]:
 		var x: float = sx * (la - 0.2)
@@ -143,20 +153,31 @@ static func _tignes(ent: Node3D, lg: LigneRemontee, la: float, alt0: int, alt1: 
 	RemonteeKit.boite_en(ent, Vector3(lb, 0.26, 0.10), Vector3(0, yb - 0.55, 0), "noir_mat")
 	var x0: float = -lb * 0.5
 	_txt(ent, "%d M\n%d M" % [alt1, alt0], Vector3(x0 + 0.12, yb + 0.05, z + 0.005), 0.0026, Color(0.96, 0.96, 0.96), HORIZONTAL_ALIGNMENT_LEFT)
+	await _attendre(pause)
 	_txt(ent, "OUVERT  %s\nFERMÉ   %s" % [OUVERTURE_TIGNES.replace(":", "h"), FERMETURE_TIGNES.replace(":", "h")], Vector3(x0 + 0.95, yb + 0.15, z + 0.005), 0.0016, Color(0.55, 0.95, 0.45), HORIZONTAL_ALIGNMENT_LEFT)
+	await _attendre(pause)
 	RemonteeKit.boite_en(ent, Vector3(0.48, 0.17, 0.02), Vector3(x0 + 1.25, yb - 0.20, z), "acier_noir")
 	_pendule(ent, Vector3(x0 + 1.25, yb - 0.20, z + 0.015), 0.0024, Color(1.0, 0.18, 0.12))
 	# pictogramme et nom en grand
 	RemonteeKit.boite_en(ent, Vector3(0.40, 0.40, 0.02), Vector3(x0 + 1.95, yb + 0.03, z), "blanc_plaque")
 	_txt(ent, lg.titre().to_upper(), Vector3(x0 + 2.25, yb + 0.03, z + 0.005), 0.0055, Color(0.97, 0.97, 0.97), HORIZONTAL_ALIGNMENT_LEFT, 0.0, lb - 2.4)
+	await _attendre(pause)
 	_txt(ent, "➜  " + lg.quartier.to_upper(), Vector3(0, yb - 0.55, 0.055), 0.0016, Color(0.95, 0.95, 0.95))
+	await _attendre(pause)
 	# totem à droite : maîtrisez votre vitesse, plan des pistes
 	var xt: float = la + 0.75
 	RemonteeKit.boite_en(ent, Vector3(0.95, 3.2, 0.22), Vector3(xt, 1.6, 0), "acier_noir")
 	RemonteeKit.boite_en(ent, Vector3(0.80, 0.62, 0.02), Vector3(xt, 2.70, 0.115), "blanc_plaque")
 	_txt(ent, "Maîtrisez\nvotre vitesse\n\nControl\nyour speed", Vector3(xt, 2.70, 0.13), 0.0011, Color(0.20, 0.15, 0.40))
+	await _attendre(pause)
 	_plan(ent, Vector3(xt, 1.85, 0.115), 0.70, 0.80)
+	await _attendre(pause)
 	_cordes(ent, la)
+
+
+static func _attendre(pause: Callable) -> void:
+	if pause.is_valid():
+		await pause.call()
 
 
 ## Cordes noires de la file, des poteaux vers l'arrière.

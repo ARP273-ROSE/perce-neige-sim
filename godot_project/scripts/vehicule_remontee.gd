@@ -246,8 +246,31 @@ func _par_indices(ix: PackedInt32Array) -> Node:
 
 
 ## Fabrication complète (le premier véhicule de chaque variante), en trois étapes : pince, corps, fin.
+## (fusion en trois étapes, et la Zeta du 3S en deux : 24 ms d'un bloc pour sa fabrication, relevé du 08/11/2026)
 func _phases_fabrication() -> Array:
-	return [_fabriquer_pince, _fabriquer_corps, _fabriquer_fin]
+	var corps: Array = [_zeta_chariot, _zeta_caisse] if famille == "cabine_3s" else [_fabriquer_corps]
+	return [_fabriquer_pince] + _phases_caisse() + corps + [_fabriquer_fin, _fusion_pince, _fusion_suspendu, _fusion_pieces]
+
+
+## Caches de la caisse calculés d'avance, chacun dans sa propre étape : maillage de la caisse, numéro, nom de la
+## station, aigle. Le premier modèle d'une ligne les faisait dans la même tranche que la caisse (26,7 ms d'un bloc
+## pour la première cabine de la Daille, relevé du 10/11/2026 ; un texte seul : 5 à 9 ms). Rien n'est posé ici :
+## les pièces viennent ensuite des mêmes caches, à l'identique.
+func _phases_caisse() -> Array:
+	if not famille.begins_with("cabine") or famille == "cabine_tph":
+		return []
+	var ph: Array = [_maillage_cabine.bind(famille, teinte)]
+	var px_no: float = 0.0034 if famille == "cabine_3s" else 0.0018
+	ph.append(RemonteeKit.maillage_texte.bind(("%d" if famille == "cabine_3s" else "%02d") % numero, 56, px_no, 2.0))
+	if livree != "Val d'Isère" and livree != "Tignes":
+		return ph
+	var nom: String = "TIGNES" if livree == "Tignes" else "Val d'Isère"
+	for e in logo_elements(famille, livree, -1.0):
+		if String(e[0]) == "nom":
+			ph.append(RemonteeKit.maillage_texte.bind(nom, 64, _px_pour(nom, e[4]), 2.0))
+		elif String(e[0]) == "aigle":
+			ph.append(_aigle)
+	return ph
 
 
 func _fabriquer_pince() -> void:
@@ -305,12 +328,10 @@ func _fabriquer_fin() -> void:
 	garde_corps(1.0)
 	bulle(1.0)
 	portes(0.0)
-	_fusionner()
 
 
-## Fusion des pièces fixes (un appel de dessin par matériau) ; les pièces
-## animées restent à part, chacune fusionnée en elle-même.
-func _fusionner() -> void:
+## Pièces animées, gardées hors de la fusion des pièces fixes.
+func _a_garder() -> Array:
 	var garder: Array = []
 	for n in [_machoire, _gc, _bulle, _corde, _perche_tige]:
 		if n != null:
@@ -321,10 +342,22 @@ func _fusionner() -> void:
 		garder.append(g)
 	for p in _portes:
 		garder.append(p[0])
+	return garder
+
+
+## Fusion des pièces fixes (un appel de dessin par matériau) ; les pièces
+## animées restent à part, chacune fusionnée en elle-même.
+func _fusion_pince() -> void:
 	if _pince != null:
-		MeshMerge.merge(_pince, garder, "Pince", true)
-	MeshMerge.merge(_susp, garder, "Vehicule", true)
-	for n in garder:
+		MeshMerge.merge(_pince, _a_garder(), "Pince", true)
+
+
+func _fusion_suspendu() -> void:
+	MeshMerge.merge(_susp, _a_garder(), "Vehicule", true)
+
+
+func _fusion_pieces() -> void:
+	for n in _a_garder():
 		MeshMerge.merge(n, _skis_ranges, "Piece", true)      # skis rangés : affichés à la demande
 	for n in _skis_ranges:
 		MeshMerge.merge(n, [], "Skis", true)
@@ -1606,6 +1639,11 @@ func _galet_chariot(n: Node3D) -> void:
 ## ses ressorts ; suspente unique en caisson gris foncé, coudée ; cabine
 ## CWA Zeta 30 places (24 assises), portes coulissantes côté quai.
 func _cabine_zeta() -> void:
+	_zeta_chariot()
+	_zeta_caisse()
+
+
+func _zeta_chariot() -> void:
 	# le chariot roule sur les porteurs (nœud « Pince », fixe) ; suspente et cabine balancent autour de la
 	# grosse articulation, sur le flanc du corps et sous le plan des porteurs
 	pivot = Vector3(X_PIVOT_3S, Y_PIVOT_3S, 0)
@@ -1691,6 +1729,11 @@ func _cabine_zeta() -> void:
 	RemonteeKit.poutre(ch, Vector3(0.10, Y_TRACTEUR_3S + Y_CORPS_3S, 0), Vector3(X_PIVOT_3S, Y_PIVOT_3S, 0), 0.40, 0.14, gris, Vector3.BACK)
 	RemonteeKit.cylindre(ch, 0.17, 0.17, 0.26, Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3(X_PIVOT_3S, Y_PIVOT_3S, 0)), gris, 18)
 	RemonteeKit.cylindre(ch, 0.07, 0.07, 0.28, Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3(X_PIVOT_3S, Y_PIVOT_3S, 0)), "acier_noir", 12)
+
+
+## Suspente, caisse, intérieur et baies de la Zeta (après le chariot).
+func _zeta_caisse() -> void:
+	var gris: String = "peinture_anthracite"
 	# suspente : caisson coudé, de l'articulation au toit ; elle s'écarte pour laisser passer les porteurs
 	# puis revient au-dessus du centre de la cabine
 	var hs: float = H_SUSP_3S

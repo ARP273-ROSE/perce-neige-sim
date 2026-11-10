@@ -3,6 +3,7 @@
 #include <godot_cpp/classes/rendering_server.hpp>
 #include <godot_cpp/core/object.hpp>
 #include <godot_cpp/core/class_db.hpp>
+#include <godot_cpp/variant/utility_functions.hpp>
 #include <godot_cpp/variant/basis.hpp>
 #include <godot_cpp/variant/dictionary.hpp>
 #include <godot_cpp/variant/transform3d.hpp>
@@ -13,6 +14,12 @@
 #include <cstring>
 
 using namespace godot;
+
+// sin, cos et atan2 du moteur : ceux de la bibliothèque du compilateur diffèrent d'un ulp (sin(π)), et le repli
+// GDScript appelle ceux du moteur
+static inline double m_sin(double x) { return UtilityFunctions::sin(x); }
+static inline double m_cos(double x) { return UtilityFunctions::cos(x); }
+static inline double m_atan2(double y, double x) { return UtilityFunctions::atan2(y, x); }
 
 namespace {
 // chronos de l'étape (µs, cumulés jusqu'à la lecture) : avance, poses, appels GDScript, MultiMesh, total
@@ -421,7 +428,7 @@ double NoyauRemontee::fleche(double d, bool montee, double onde_amp, double onde
 	if (onde_amp > 0.0) {
 		const double w = Math_PI * std::sqrt(9.81 * a_montee) / l;
 		const double ph = montee ? 0.0 : 1.5708;
-		f += onde_amp * (montee ? 1.0 : 0.5) * std::sin(w * onde_t + ph) * std::sin(Math_PI * (d - x1) / l);
+		f += onde_amp * (montee ? 1.0 : 0.5) * m_sin(w * onde_t + ph) * m_sin(Math_PI * (d - x1) / l);
 	}
 	return f;
 }
@@ -655,7 +662,7 @@ PackedFloat64Array NoyauRemontee::etape(double dt, double regime, const Vector3 
 		t_set += maintenant_us() - t0s;
 		if (pinces[i] != nullptr) {
 			Vector3 r = pinces[i]->get_rotation();
-			r.x = (real_t)std::atan2((double)d3.y, (double)Vector2(d3.x, d3.z).length());
+			r.x = (real_t)m_atan2((double)d3.y, (double)Vector2(d3.x, d3.z).length());
 			pinces[i]->set_rotation(r);
 		}
 		// balancement (pendule amorti), comme VehiculeRemontee.balancer
@@ -691,8 +698,8 @@ PackedFloat64Array NoyauRemontee::etape(double dt, double regime, const Vector3 
 						}
 					}
 					for (int k = 0; k < ns; k++) {
-						const double ddphi = -(g2 / L) * std::sin(phi[i]) - (-la.z / L) * std::cos(phi[i]) - 2.0 * zeta * w0 * dphi[i];
-						const double ddpsi = -(g2 / L) * std::sin(psi[i] - cible) - (la.x / L) * std::cos(psi[i]) - 2.0 * zeta * w0 * dpsi[i];
+						const double ddphi = -(g2 / L) * m_sin(phi[i]) - (-la.z / L) * m_cos(phi[i]) - 2.0 * zeta * w0 * dphi[i];
+						const double ddpsi = -(g2 / L) * m_sin(psi[i] - cible) - (la.x / L) * m_cos(psi[i]) - 2.0 * zeta * w0 * dpsi[i];
 						dphi[i] += ddphi * h;
 						dpsi[i] += ddpsi * h;
 						phi[i] += dphi[i] * h;
@@ -920,8 +927,8 @@ PackedFloat32Array NoyauRemontee::caler(int64_t i) const {
 	out.resize(3 * (c.paires[0].size() + c.paires[1].size()));
 	float *o = out.ptrw();
 	for (int b = 0; b < 2; b++) {
-		const double cp = std::cos(c.pente[b]);
-		const double sp = std::sin(c.pente[b]);
+		const double cp = m_cos(c.pente[b]);
+		const double sp = m_sin(c.pente[b]);
 		for (const Vector3 &pr : c.paires[b]) {
 			const double zp = pr.x, sgn = pr.y, demi = pr.z;
 			double zw = zp * cp;
@@ -934,7 +941,7 @@ PackedFloat32Array NoyauRemontee::caler(int64_t i) const {
 			double y1 = cable_calage(c, b, zw + e);
 			double y2 = cable_calage(c, b, zw - e);
 			for (int j = 0; j < 2; j++) {
-				const double e2 = std::max(demi, 0.05) * std::cos(std::atan2(y2 - y1, 2.0 * e));
+				const double e2 = std::max(demi, 0.05) * m_cos(m_atan2(y2 - y1, 2.0 * e));
 				y1 = cable_calage(c, b, zw + e2);
 				y2 = cable_calage(c, b, zw - e2);
 				e = e2;
@@ -943,9 +950,9 @@ PackedFloat32Array NoyauRemontee::caler(int64_t i) const {
 				yw = (y1 + y2) * 0.5;
 			}
 			const double y_loc = yw * cp + zw * sp;
-			const double pente_loc = std::atan2(y2 - y1, 2.0 * e) - c.pente[b];
-			o[0] = (float)(y_loc + sgn * c.dist * std::cos(pente_loc));
-			o[1] = (float)(zp + sgn * c.dist * std::sin(pente_loc));
+			const double pente_loc = m_atan2(y2 - y1, 2.0 * e) - c.pente[b];
+			o[0] = (float)(y_loc + sgn * c.dist * m_cos(pente_loc));
+			o[1] = (float)(zp + sgn * c.dist * m_sin(pente_loc));
 			o[2] = (float)pente_loc;
 			o += 3;
 		}

@@ -2,13 +2,18 @@
 
 #include <godot_cpp/classes/mesh.hpp>
 #include <godot_cpp/core/class_db.hpp>
+#include <godot_cpp/variant/utility_functions.hpp>
 #include <godot_cpp/variant/packed_color_array.hpp>
 #include <godot_cpp/variant/packed_vector2_array.hpp>
+
+#include <cmath>
+#include <vector>
 
 using namespace godot;
 
 void OutilsMaillage::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("fusionner", "surfaces", "transformations"), &OutilsMaillage::fusionner);
+	ClassDB::bind_method(D_METHOD("tube_plage", "pts", "r", "seg", "i0", "i1", "prec_x", "absc"), &OutilsMaillage::tube_plage);
 }
 
 Array OutilsMaillage::fusionner(const Array &surfaces, const Array &transformations) const {
@@ -147,4 +152,102 @@ Array OutilsMaillage::fusionner(const Array &surfaces, const Array &transformati
 		out[Mesh::ARRAY_INDEX] = di;
 	}
 	return out;
+}
+
+Array OutilsMaillage::tube_plage(const PackedVector3Array &pts, double r, int64_t seg, int64_t i0, int64_t i1,
+		const Vector3 &prec_x_in, double absc) const {
+	const int64_t n = pts.size();
+	const int64_t na = seg + 1;
+	const int64_t m = i1 - i0 + 1;
+	const Vector3 *p = pts.ptr();
+	PackedVector3Array ap, an;
+	ap.resize(m * na);
+	an.resize(m * na);
+	Vector3 *wap = ap.ptrw();
+	Vector3 *wan = an.ptrw();
+	Vector3 prec_x = prec_x_in;
+	Vector3 x_suite = prec_x;
+	const real_t rf = (real_t)r;
+	// cosinus et sinus du tour, ceux du moteur (ceux de la bibliothèque du compilateur diffèrent d'un ulp, sin(π)),
+	// angle en double et converti au produit par un vecteur, comme le GDScript
+	std::vector<real_t> co(na), si(na);
+	for (int64_t k = 0; k < na; k++) {
+		const double ang = Math_TAU * (double)k / (double)seg;
+		co[k] = (real_t)UtilityFunctions::cos(ang);
+		si[k] = (real_t)UtilityFunctions::sin(ang);
+	}
+	for (int64_t i = i0; i <= i1; i++) {
+		Vector3 t;
+		if (i == 0) {
+			t = p[1] - p[0];
+		} else if (i == n - 1) {
+			t = p[n - 1] - p[n - 2];
+		} else {
+			t = p[i + 1] - p[i - 1];
+		}
+		t = t.normalized();
+		Vector3 x;
+		if (i == 0) {
+			x = t.cross(std::abs((double)t.y) < 0.95 ? Vector3(0, 1, 0) : Vector3(1, 0, 0)).normalized();
+		} else {
+			x = (prec_x - t * prec_x.dot(t)).normalized();
+		}
+		prec_x = x;
+		if (i == i1 - 1) {
+			x_suite = x;
+		}
+		const Vector3 y = t.cross(x);
+		for (int64_t k = 0; k < na; k++) {
+			const Vector3 nrm = x * co[k] + y * si[k];
+			wap[(i - i0) * na + k] = p[i] + nrm * rf;
+			wan[(i - i0) * na + k] = nrm;
+		}
+	}
+	const int64_t nv = (m - 1) * seg * 6;
+	PackedVector3Array vs, ns;
+	PackedVector2Array uvs;
+	vs.resize(nv);
+	ns.resize(nv);
+	uvs.resize(nv);
+	Vector3 *wv = vs.ptrw();
+	Vector3 *wn = ns.ptrw();
+	Vector2 *wu = uvs.ptrw();
+	int64_t w = 0;
+	for (int64_t i = 0; i < m - 1; i++) {
+		const real_t v0 = (real_t)(absc * 2.0);
+		absc += (double)p[i0 + i].distance_to(p[i0 + i + 1]);
+		const real_t v1 = (real_t)(absc * 2.0);
+		for (int64_t k = 0; k < seg; k++) {
+			const int64_t i00 = i * na + k;
+			const int64_t i10 = i00 + na;
+			const real_t u0 = (real_t)((double)k / (double)seg);
+			const real_t u1 = (real_t)((double)(k + 1) / (double)seg);
+			wv[w] = wap[i00];
+			wn[w] = wan[i00];
+			wu[w] = Vector2(u0, v0);
+			wv[w + 1] = wap[i10];
+			wn[w + 1] = wan[i10];
+			wu[w + 1] = Vector2(u0, v1);
+			wv[w + 2] = wap[i10 + 1];
+			wn[w + 2] = wan[i10 + 1];
+			wu[w + 2] = Vector2(u1, v1);
+			wv[w + 3] = wap[i00];
+			wn[w + 3] = wan[i00];
+			wu[w + 3] = Vector2(u0, v0);
+			wv[w + 4] = wap[i10 + 1];
+			wn[w + 4] = wan[i10 + 1];
+			wu[w + 4] = Vector2(u1, v1);
+			wv[w + 5] = wap[i00 + 1];
+			wn[w + 5] = wan[i00 + 1];
+			wu[w + 5] = Vector2(u1, v0);
+			w += 6;
+		}
+	}
+	Array res;
+	res.append(vs);
+	res.append(ns);
+	res.append(uvs);
+	res.append(x_suite);
+	res.append(absc);
+	return res;
 }
