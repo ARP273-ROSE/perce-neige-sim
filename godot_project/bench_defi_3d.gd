@@ -224,7 +224,7 @@ func _initialize() -> void:
 	ok = _test_pannes() and ok
 
 	print("\n%s" % ["TOUS LES TESTS PASSENT" if ok else "ECHECS — voir ci-dessus"])
-	quit(0 if ok else 1)
+	FinBanc.quitter(self, get("_main"), 0 if ok else 1)
 
 
 # Reproduit la formule de notation de Challenge (0,40 confort + 0,35

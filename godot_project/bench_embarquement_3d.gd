@@ -46,7 +46,7 @@ func _ligne(cle: String) -> LigneRemontee:
 
 func _fin() -> void:
 	print("BENCH_EMBARQUEMENT " + ("OK" if _ok else "ECHEC"))
-	quit(0 if _ok else 1)
+	FinBanc.quitter(self, get("_main"), 0 if _ok else 1)
 
 
 func _tick() -> void:

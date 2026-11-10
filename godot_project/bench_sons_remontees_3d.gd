@@ -32,7 +32,7 @@ func _verif(label: String, cond: bool, detail: String = "") -> void:
 
 func _fin() -> void:
 	print("BENCH_SONS_REMONTEES " + ("OK" if _ok else "ECHEC"))
-	quit(0 if _ok else 1)
+	FinBanc.quitter(self, get("_main"), 0 if _ok else 1)
 
 
 func _gare_audible(so: SonsRemontees) -> bool:

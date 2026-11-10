@@ -104,7 +104,7 @@ func _initialize() -> void:
 	ok = _effets_de_panne() and ok
 
 	print("BENCH_3D " + ("OK" if ok else "ECHEC"))
-	quit(0 if ok else 1)
+	FinBanc.quitter(self, get("_main"), 0 if ok else 1)
 
 
 func _check(label: String, cond: bool, detail: String) -> bool:

@@ -113,4 +113,4 @@ func _fin() -> void:
 	_verif("boucle bouclée", _main.skieur_auto != null and _main.skieur_auto.boucles >= 1,
 		"descente %s, gare %s" % [DomaineSkiable._mmss(_t_gare - _t_ski) if _t_gare > 0 else "-", DomaineSkiable._mmss(_t)])
 	print("BENCH_SKI_EXPERT " + ("OK" if _ok else "ECHEC"))
-	quit(0 if _ok else 1)
+	FinBanc.quitter(self, get("_main"), 0 if _ok else 1)

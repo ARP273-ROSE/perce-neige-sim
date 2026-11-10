@@ -39,7 +39,7 @@ func _tick() -> void:
 		if _f > 20000:
 			print("[ECHEC] skieur ou collisions pas prêts")
 			print("BENCH_ESCALIER_VOIE ECHEC")
-			quit(1)
+			FinBanc.quitter(self, get("_main"), 1)
 		return
 	var side: float = CAS[_cas]
 	var S0: float = StationsBuilder.ESC_VOIE_S0

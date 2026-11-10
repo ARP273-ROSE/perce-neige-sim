@@ -50,7 +50,7 @@ func _suite() -> void:
 	var f: FileAccess = FileAccess.open(out_path, FileAccess.WRITE)
 	if f == null:
 		push_error("écriture impossible : " + out_path)
-		quit(1)
+		FinBanc.quitter(self, get("_main"), 1)
 		return
 	var n_tri: int = 0
 	for holder in [mr, st, _track, _tunnel]:
@@ -251,7 +251,7 @@ func _suite() -> void:
 		"émergent de s = %.2f à %.2f (fosse jusqu'à %.2f, mur du fond %.2f)" % [e0, e1,
 			MachineRoomBuilder.PIT_S1, MachineRoomBuilder.HALL_DEPTH]) and ok
 	print("BENCH_SALLE_MACHINES " + ("OK" if ok else "ECHEC"))
-	quit(0 if ok else 1)
+	FinBanc.quitter(self, get("_main"), 0 if ok else 1)
 
 
 func _check(label: String, cond: bool, detail: String) -> bool:

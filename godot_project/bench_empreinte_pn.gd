@@ -53,7 +53,7 @@ func _suite() -> void:
 	f.store_string(tout + "\n")
 	f.close()
 	print("EMPREINTE %d lignes, globale %s → %s" % [lignes.size(), _sha(tout.to_utf8_buffer()), out_path])
-	quit(0)
+	FinBanc.quitter(self, get("_main"), 0)
 
 
 func _parcourir(n: Node, lignes: Array) -> void:

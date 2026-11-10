@@ -171,4 +171,4 @@ func _tick() -> void:
 	ph.ghost_locked_s = -1.0
 	_pas(1)
 	print("BENCH_RUPTURE " + ("OK" if _ok else "ECHEC"))
-	quit(0 if _ok else 1)
+	FinBanc.quitter(self, get("_main"), 0 if _ok else 1)

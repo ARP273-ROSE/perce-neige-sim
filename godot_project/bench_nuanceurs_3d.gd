@@ -15,7 +15,7 @@ var _ecarts: PackedStringArray = PackedStringArray()
 func _initialize() -> void:
 	if DisplayServer.get_name() == "headless":
 		print("NUANCEURS_ECHEC il faut un écran : sans lui, rien n'est compilé")
-		quit(1)
+		FinBanc.quitter(self, get("_main"), 1)
 		return
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--attendu="):
@@ -89,7 +89,7 @@ func _suite() -> void:
 	for e in _ecarts:
 		print("NUANCEURS_ECHEC " + e)
 	print("NUANCEURS_FIN" if _ecarts.is_empty() else "NUANCEURS_ECHEC %d écarts" % _ecarts.size())
-	quit(0 if _ecarts.is_empty() else 1)
+	FinBanc.quitter(self, get("_main"), 0 if _ecarts.is_empty() else 1)
 
 
 ## Un chemin de rendu resté inactif ne prouverait rien.
