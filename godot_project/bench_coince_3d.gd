@@ -27,6 +27,7 @@ var _coinces: int = 0
 var _essais: int = 0
 var _dir_k: int = 0
 var _p_fuite: Vector3
+var _tenu: int = 0
 var _fuite_max: float = 0.0
 var _etapes: int = 0
 var _attente: int = 0
@@ -220,9 +221,20 @@ func _tick() -> void:
 		sk.global_position = Vector3(-575.87, 3031.05, 3158.3)
 		sk.velocity = Vector3.ZERO
 		_p_fuite = sk.global_position
+		# (comme un saut du jeu : collisions demandées autour du point ; avec écran, elles se construisent sur
+		# plusieurs images : posé avant elles, il tombait et repartait au dernier sol, à 3,4 km)
+		_main.collisions.assurer_autour(_p_fuite)
 		return
 	match _st:
 		10:
+			# tenu en place 1 s au moins, et tant que des collisions restent à poser : lâché tout de suite, il
+			# tombait parfois avant que le décor ne soit là (selon la vitesse de l'image) et repartait au dernier sol
+			_tenu += 1
+			if not _main.collisions._taches.is_empty() or _tenu < 60:
+				sk.global_position = _p_fuite
+				sk.velocity = Vector3.ZERO
+				_t = 0.0
+				return
 			_t += 1.0 / 60.0
 			sk.chausse = false
 			_viser(sk, sk.global_position + Vector3.FORWARD, 0.85)

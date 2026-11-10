@@ -86,7 +86,7 @@ func _tick() -> void:
 		_main.basculer_skieur()
 		(_main.remontees as RemonteesDomaine).pique.connect(func(e: String, _l: LigneRemontee) -> void: _piques.append(e))
 		return
-	if _f < _t0 + 60:
+	if _f < _t0 + 60 or not _main.mode_skieur:
 		return
 	var sk: SkieurJoueur = _main.skieur
 	var rm: RemonteesDomaine = _main.remontees
