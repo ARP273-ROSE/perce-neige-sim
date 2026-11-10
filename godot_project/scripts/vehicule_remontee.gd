@@ -1824,7 +1824,7 @@ func _baies_zeta(cab: Node3D) -> void:
 				coin.call(o + t * (su * hw) + Vector3(0, yv, 0), t * (-su * d_c), vers_bas)
 	st.generate_normals()
 	var mc: MeshInstance3D = MeshInstance3D.new()
-	mc.mesh = MeshMerge.valider_indexe(st)
+	mc.mesh = MeshMerge.valider_indexe_retenu(st)
 	mc.material_override = noir
 	cab.add_child(mc)
 	# poteaux d'angle, à 45°

@@ -68,7 +68,70 @@ static func _generer(mesh: Mesh) -> Array:
 			return []
 		return _generer_formes(false, Vector3.ZERO, cy.bottom_radius, cy.top_radius, cy.height, cy.radial_segments,
 			cy.cap_top, cy.cap_bottom)
+	if mesh is QuadMesh:
+		return _generer_quad(mesh as QuadMesh)
 	return []
+
+
+## QuadMesh (face Z, sans subdivision) comme PlaneMesh._create_mesh_array du moteur 4.6, normale et tangente passées
+## par la compression du serveur de rendu (octaèdre 2 × 16 bits) : les tableaux qu'en rendait la relecture sur la
+## carte, octet pour octet (logos des cabines : une relecture, 32 ms de blocage, par taille ; relevé du 10/11/2026).
+## [] dans les autres cas (relu sur la carte, une fois par dimensions).
+static func _generer_quad(q: QuadMesh) -> Array:
+	if q.orientation != PlaneMesh.FACE_Z or q.subdivide_width != 0 or q.subdivide_depth != 0 or q.flip_faces or q.add_uv2:
+		return []
+	var start: Vector2 = q.size * -0.5
+	var pts: PackedVector3Array = PackedVector3Array()
+	var uvs: PackedVector2Array = PackedVector2Array()
+	var z: float = start.y
+	for j in range(2):
+		var x: float = start.x
+		for i in range(2):
+			pts.append(Vector3(-x, z, 0.0) + q.center_offset)
+			uvs.append(Vector2(1.0 - float(i), 1.0 - float(j)))
+			x = _f32(x + q.size.x / 1.0)
+		z = _f32(z + q.size.y / 1.0)
+	var nq: Vector3 = _normale_serveur(Vector3(0.0, 0.0, 1.0))
+	var tq: Array = _tangente_serveur(Vector3(1.0, 0.0, 0.0), 1.0)
+	var ns: PackedVector3Array = PackedVector3Array([nq, nq, nq, nq])
+	var ts: PackedFloat32Array = PackedFloat32Array()
+	for _k in range(4):
+		ts.append_array(PackedFloat32Array([tq[0].x, tq[0].y, tq[0].z, tq[1]]))
+	var a: Array = []
+	a.resize(Mesh.ARRAY_MAX)
+	a[Mesh.ARRAY_VERTEX] = pts
+	a[Mesh.ARRAY_NORMAL] = ns
+	a[Mesh.ARRAY_TANGENT] = ts
+	a[Mesh.ARRAY_TEX_UV] = uvs
+	a[Mesh.ARRAY_INDEX] = PackedInt32Array([0, 1, 2, 1, 3, 2])
+	return a
+
+
+## Arrondi en réel simple (calcul du moteur en float).
+static func _f32(v: float) -> float:
+	return PackedFloat32Array([v])[0]
+
+
+static func _normale_serveur(n: Vector3) -> Vector3:
+	var o: Vector2 = n.octahedron_encode()
+	var v0: int = int(clampf(_f32(o.x * 65535.0), 0.0, 65535.0))
+	var v1: int = int(clampf(_f32(o.y * 65535.0), 0.0, 65535.0))
+	return Vector3.octahedron_decode(Vector2(v0 / 65535.0, v1 / 65535.0))
+
+
+## [tangente, signe] après l'aller-retour du serveur de rendu (Vector3.octahedron_tangent_encode / _decode).
+static func _tangente_serveur(t: Vector3, signe: float) -> Array:
+	var o: Vector2 = t.octahedron_encode()
+	var y: float = maxf(o.y, _f32(1.0 / 32767.0))
+	y = _f32(_f32(y * 0.5) + 0.5)
+	y = y if signe >= 0.0 else _f32(1.0 - y)
+	var v0: int = int(clampf(_f32(o.x * 65535.0), 0.0, 65535.0))
+	var v1: int = int(clampf(_f32(y * 65535.0), 0.0, 65535.0))
+	if v0 == 0 and v1 == 65535:
+		v0 = 65535
+	var oy: float = _f32(_f32(float(v1) / 65535.0) * 2.0 - 1.0)
+	var s: float = 1.0 if oy >= 0.0 else -1.0
+	return [Vector3.octahedron_decode(Vector2(v0 / 65535.0, absf(oy))), s]
 
 
 static func _generer_formes(boite: bool, taille: Vector3, r_bas: float, r_haut: float, hauteur: float, segments: int,
