@@ -5,6 +5,18 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.60.1 — 10 novembre 2026
+
+Retours d'essai de la 1.60 sur la PWA.
+
+**3S, téléportation** : sur la PWA, une cabine éloignée est dessinée en version allégée et sa vraie cabine, cachée, restait figée là où elle était, parfois sur le quai aval ; on pouvait y monter et se retrouver aussitôt à sa vraie place, au début du quai de la gare amont. On n'embarque plus que dans une cabine à jour, une cabine figée ne bloque ni n'emporte plus, et les vraies cabines remplacent les allégées en gare dès qu'on s'en approche.
+
+**PWA, sol des gares** : le relief y est dessiné à mailles de 50 m, les gares et les lignes sont réglées sur la grille à 25 m ; le sol bombait de plusieurs mètres dans les gares (sol dans la gare aval du 3S, sièges et cabines sous terre, terrassements absurdes). Autour de chaque gare, le relief est redécoupé à 25 m, sans fente avec le reste : sur les 132 gares, le sol ne dépasse plus le quai de plus de 0,27 m (2 m avant, 14 gares au-delà de 0,5 m).
+
+**Funival, rame** : les lisses rouges sous les vitres, posées de niveau sur 29 m, sortaient par le toit (longs traits rouges jusqu'au ciel, en gare amont comme en gare aval) ; l'allège blanche de bout montait au-dessus du toit. Les deux suivent la caisse.
+
+Vérifié : 57 bancs sans écran au NAS, empreinte du Perce-Neige inchangée, embarquements tardifs rejoués en réglages PWA sans saut. Non vérifié : iPad et PC. Connu : en réglages PWA, une cabine du 3S passe à 1,70 m du sol à 300 m de la gare amont (banc du 3S en échec, déjà avant).
+
 ## 1.60.0 — 10 novembre 2026
 
 Retours d'essai de la 1.59.
