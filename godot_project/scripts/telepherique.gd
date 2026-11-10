@@ -119,7 +119,7 @@ func _construire_corps() -> void:
 	_preparer_nez()
 	for aval in [true, false]:
 		if gare_aval_existante:
-			_gares_grande_motte(aval)
+			await _gares_grande_motte(aval)
 		elif String(name) == "tph_fornet":
 			_gare_fornet(aval)
 		else:
@@ -736,6 +736,7 @@ func _gares_grande_motte(aval: bool) -> void:
 		return _sol(x, z + z_g) - y_q
 	if aval:
 		TphGrandeMotte.tete_aval(self, g, H_CABLE_GARE, sol)
+		await _pause("téléphérique : gare")
 		# plancher de l'étage dans le bâtiment, au niveau du quai
 		if emprise_batiment.size() == 4:
 			var c: Vector2 = Vector2.ZERO
@@ -767,7 +768,9 @@ func _gares_grande_motte(aval: bool) -> void:
 			TphGrandeMotte.escalier_salle(g, Vector3(m.x, 0.0, m.y), Vector3(dehors.x, 0, dehors.y), sol)
 	else:
 		TphGrandeMotte.gare_amont(self, g, H_CABLE_GARE, sol)
-	MeshMerge.merge(g, [], "Gare")
+	# (en tranches : la gare d'un bloc, fusion comprise, faisait 13,5 ms sans fil, relevé du 10/11/2026)
+	await _pause("téléphérique : gare")
+	await MeshMerge.merge_par_tranches(g, [], "Gare", false, _pause.bind("téléphérique : gare, fusion"))
 
 
 ## Profondeur du terrain le plus bas sous le quai (m sous la dalle).
