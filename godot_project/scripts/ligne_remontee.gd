@@ -727,7 +727,8 @@ const GARDE_TELESKI: float = 3.8
 
 
 func _tetes_teleski() -> void:
-	for ajout in range(4):
+	_sol_tk.clear()
+	for ajout in range(6):
 		_tetes.clear()
 		for p in pylones:
 			_tetes.append(terrain(float(p["d"])) + H_TELESKI)
@@ -743,11 +744,11 @@ func _tetes_teleski() -> void:
 					bouge = true
 			if not bouge:
 				break
-		# pylônes ESTIMÉS (pas de position relevée) : là où le câble touche
-		# encore — une cassure de pente sous une gare sur un replat —, on
-		# intercale le pylône qui y serait (Signal, Combe Folle, Col du Palet)
-		if not balanciers_estimes:
-			break
+		# là où le câble touche encore, têtes à 9 m — une cassure de pente sous
+		# une gare, une bosse du relief entre deux pylônes —, on intercale le
+		# pylône qui y serait (Signal, Combe Folle, Col du Palet) ; aussi sur les
+		# lignes relevées : le relief n'y est pas celui de la trace damée, et le
+		# câble passait à 2 m de la neige (Legettaz, Palet, retour d'utilisateur, 10/11/2026)
 		var pts2: Array = _points_appui()
 		var pire: Array = [0.3, 0.0]
 		for k in range(pts2.size() - 1):
@@ -771,13 +772,28 @@ func _tetes_teleski() -> void:
 func _pire_portee_teleski(a: Array, b: Array) -> Array:
 	var pire: float = 0.0
 	var dp: float = 0.0
-	for j in range(1, 16):
-		var d: float = lerpf(a[0], b[0], float(j) / 16.0)
-		var e: float = terrain(d) + GARDE_TELESKI - chainette(d, a[0], a[1], b[0], b[1], _a_montee)
+	# (tous les 3 m : 16 points par portée laissaient passer une bosse)
+	var n: int = maxi(16, int(absf(b[0] - a[0]) / 3.0))
+	for j in range(1, n):
+		var d: float = lerpf(a[0], b[0], float(j) / float(n))
+		var e: float = _sol_teleski(d) + GARDE_TELESKI - chainette(d, a[0], a[1], b[0], b[1], _a_montee)
 		if e > pire:
 			pire = e
 			dp = d
 	return [pire, dp]
+
+
+## Sol sous les deux brins d'un téléski en d (le profil de l'axe ignore le dévers et le relief :
+## le câble passait à 2 m de la neige à la Legettaz, retour d'utilisateur, 10/11/2026), mis en cache.
+var _sol_tk: Dictionary = {}
+
+
+func _sol_teleski(d: float) -> float:
+	var s: Variant = _sol_tk.get(d)
+	if s == null:
+		s = maxf(terrain(d), maxf(_sol_ligne(voie * 0.5, -d), _sol_ligne(-voie * 0.5, -d)))
+		_sol_tk[d] = s
+	return float(s)
 
 
 ## Hauteur exigée du câble chargé au-dessus du sol en d : la mesure GPS où
