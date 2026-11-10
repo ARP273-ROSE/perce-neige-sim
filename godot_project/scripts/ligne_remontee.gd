@@ -3887,7 +3887,12 @@ func _guide_entonnoir(parent: Node3D, s_bord: float, sens: float) -> void:
 		k += 1
 	var mj: MeshInstance3D = MeshInstance3D.new()
 	mj.name = "JoueEntonnoir"
-	mj.mesh = joue.commit()
+	# (tableaux gardés : la fusion des rails les relisait sur la carte, ~32 ms de blocage du fil principal)
+	var aj: Array = joue.commit_to_arrays()
+	var mjm: ArrayMesh = ArrayMesh.new()
+	mjm.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, aj)
+	MeshMerge.retenir(mjm, 0, aj)
+	mj.mesh = mjm
 	mj.material_override = RemonteeKit.mat("acier")
 	parent.add_child(mj)
 	RemonteeKit.tube(parent, poutre, 0.07, "galva_pylone", 6)

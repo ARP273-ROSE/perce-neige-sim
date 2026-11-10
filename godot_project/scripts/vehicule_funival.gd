@@ -354,7 +354,7 @@ func _caisse() -> void:
 	var mn: MeshInstance3D = MeshInstance3D.new()
 	mn.name = "Coque"
 	noir.generate_normals()
-	mn.mesh = noir.commit()
+	mn.mesh = MeshMerge.commit_retenu(noir)
 	if _mat_coque == null:
 		_mat_coque = RemonteeKit.mat("cabine_noire").duplicate()
 		_mat_coque.cull_mode = BaseMaterial3D.CULL_DISABLED
@@ -363,7 +363,7 @@ func _caisse() -> void:
 	var mv: MeshInstance3D = MeshInstance3D.new()
 	mv.name = "Vitrages"
 	verre.generate_normals()
-	mv.mesh = verre.commit()
+	mv.mesh = MeshMerge.commit_retenu(verre)
 	mv.material_override = vitre_funi()
 	mv.set_meta(MeshMerge.SANS_FUSION, true)
 	add_child(mv)

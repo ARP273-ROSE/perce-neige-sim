@@ -275,7 +275,7 @@ func _roue_ajouree(nd: Node3D, r: float, m: String) -> void:
 		quad.call(pt.call(r, a0, -e), pt.call(r, a0, e), pt.call(r, a1, e), pt.call(r, a1, -e))
 	st.generate_normals()
 	var mi: MeshInstance3D = MeshInstance3D.new()
-	mi.mesh = MeshMerge.valider_indexe(st)
+	mi.mesh = MeshMerge.valider_indexe_retenu(st)
 	mi.material_override = RemonteeKit.mat(m)
 	nd.add_child(mi)
 	# flasques rouges de la gorge, garniture noire

@@ -200,6 +200,28 @@ static func texte_fige(parent: Node3D, texte: String, taille: int, px: float, co
 	parent.add_child(mi)
 	return mi
 
+## Module C++ (OutilsTexte.maillage : mêmes tableaux que le TextMesh, octet pour octet, sans passer par la carte
+## graphique) ; sans lui (PWA) ou `texte_cpp_desactive`, le TextMesh. Son get_mesh_arrays() relit le maillage sur la
+## carte : sur le fil de construction, chaque nouveau texte bloquait le fil principal ~32 ms (une image de 48 ms sur
+## quatre ou cinq près d'une ligne en construction, relevé du PC du 10/11/2026).
+static var texte_cpp_desactive: bool = false
+static var _ot: Object = null
+static var _ot_cherche: bool = false
+
+
+static func _outils_texte() -> Object:
+	if texte_cpp_desactive:
+		return null
+	if not _ot_cherche:
+		verrou.lock()
+		if not _ot_cherche:
+			if ClassDB.class_exists("OutilsTexte"):
+				_ot = ClassDB.instantiate("OutilsTexte")
+			_ot_cherche = true
+		verrou.unlock()
+	return _ot
+
+
 ## Maillage de texte figé (ArrayMesh, tableaux retenus), partagé par texte, taille, pixel, pas de courbe et
 ## alignement, dans la police des Label3D du jeu. Le TextMesh qui le calcule part avec la fonction : sa mise à jour
 ## différée ne passe pas au fil principal (un Label3D y faisait aussi générer ses glyphes MSDF : 41 à 70 ms d'appels
@@ -214,16 +236,21 @@ static func maillage_texte(texte: String, taille: int, px: float, pas_courbe: fl
 	verrou.unlock()
 	if am != null:
 		return am
-	var tm: TextMesh = TextMesh.new()
-	tm.text = texte
-	tm.font_size = taille
-	tm.pixel_size = px
-	tm.depth = 0.0
-	tm.curve_step = pas_courbe
-	tm.horizontal_alignment = aligne
-	tm.font = PolicesJeu.reguliere()
 	am = ArrayMesh.new()
-	var arr: Array = tm.get_mesh_arrays()
+	var arr: Array = []
+	var ot: Object = _outils_texte()
+	if ot != null:
+		arr = ot.maillage(PolicesJeu.reguliere(), texte, taille, px, pas_courbe, aligne, TranslationServer.get_tool_locale())
+	if arr.is_empty():
+		var tm: TextMesh = TextMesh.new()
+		tm.text = texte
+		tm.font_size = taille
+		tm.pixel_size = px
+		tm.depth = 0.0
+		tm.curve_step = pas_courbe
+		tm.horizontal_alignment = aligne
+		tm.font = PolicesJeu.reguliere()
+		arr = tm.get_mesh_arrays()
 	if arr.size() > Mesh.ARRAY_VERTEX and arr[Mesh.ARRAY_VERTEX] != null \
 			and not (arr[Mesh.ARRAY_VERTEX] as PackedVector3Array).is_empty():
 		am.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
