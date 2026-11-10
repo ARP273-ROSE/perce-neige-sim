@@ -653,6 +653,23 @@ static func _a_fusionner(root: Node3D, keep: Array) -> Array:
 	return r
 
 
+## Chargement (PC) : copies processeur des fusions gardées jusqu'à ce que les collisions du skieur les aient lues
+## (CollisionsJeu), puis oubliées d'un coup. Sans elles, l'entrée en skieur relisait ces maillages sur la carte : trois
+## images de 130 à 160 ms (relevé du 10/11/2026).
+static var garder_chargement: bool = false
+static var _gardes_chargement: Array = []
+
+
+static func oublier_chargement() -> void:
+	verrou.lock()
+	for w in _gardes_chargement:
+		var m: Object = (w as WeakRef).get_ref()
+		if m != null:
+			_cpu.erase(m.get_instance_id())
+	_gardes_chargement.clear()
+	verrou.unlock()
+
+
 static func _poser_groupe(root: Node3D, g: Dictionary, ta: Array, nom: String, garder: bool, done: Dictionary) -> void:
 	var mesh: ArrayMesh = _maillage_identique(ta)
 	var nouveau: bool = mesh == null
@@ -661,8 +678,12 @@ static func _poser_groupe(root: Node3D, g: Dictionary, ta: Array, nom: String, g
 		var tai: Array = _indexes(ta)
 		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, tai)
 		mesh.surface_set_material(0, g["mat"])
-		if garder:
+		if garder or garder_chargement:
 			retenir(mesh, 0, tai)
+			if not garder:
+				verrou.lock()
+				_gardes_chargement.append(weakref(mesh))
+				verrou.unlock()
 		_retenir_identique(ta, mesh)
 	var mi: MeshInstance3D = MeshInstance3D.new()
 	mi.name = nom

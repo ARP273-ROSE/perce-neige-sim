@@ -171,6 +171,10 @@ static func monde(lat: float, lon: float) -> Vector2:
 var sons: SonsRemontees = null
 
 
+## Lignes posées, jumelées, croisements faits.
+var pret: bool = false
+
+
 func construire(r: ReliefBuilder) -> void:
 	relief = r
 	# sons des remontées (gares, à bord, lanceurs, pylônes, arrêts)
@@ -178,11 +182,18 @@ func construire(r: ReliefBuilder) -> void:
 	sons.name = "Sons"
 	sons.domaine = self
 	add_child(sons)
+	# (avec écran, une pause dès 4 ms de travail dans l'image : 150 ms d'un bloc à l'entrée en skieur, relevé du
+	# 10/11/2026 ; sans écran, d'un trait)
+	var t0: int = Time.get_ticks_usec()
 	for D in RemonteesDonnees.LIGNES:
 		_poser(D)
+		if DisplayServer.get_name() != "headless" and Time.get_ticks_usec() - t0 > 4000:
+			await get_tree().process_frame
+			t0 = Time.get_ticks_usec()
 	_jumeler()
 	_croisements()
 	_caisses_au_chargement()
+	pret = true
 	print("[Remontees] %d lignes posées" % lignes.size())
 
 
@@ -990,6 +1001,8 @@ func _process(delta: float) -> void:
 
 
 func _process_corps(delta: float) -> void:
+	if not pret:
+		return
 	_suivre_cran()
 	_gerer_cuites(delta)
 	_revoir_portees()

@@ -15,8 +15,25 @@ var _corps: Node3D = null
 var _nom: Label3D = null
 
 
-func _ready() -> void:
+## Ses deux maillages précalculés sur un fil de travail dès le chargement (PC) : 42 ms d'un bloc sur le fil
+## principal à l'entrée en skieur sinon (relevé du 10/11/2026). Mêmes appels, mêmes maillages.
+static var _pre: Array = []
+static var _pre_tache: int = -1
+
+
+static func precalculer() -> void:
+	if _pre_tache >= 0 or not _pre.is_empty():
+		return
+	_pre_tache = WorkerThreadPool.add_task(_calculer.bind(_pre), false, "fantôme")
+
+
+static func _calculer(d: Array) -> void:
 	var mat: Material = SkieurMesh.materiau()
+	d.append_array([SkieurMesh.passager_squelette(SkieurMesh.squelette_glisse(), "libre", "casque", mat),
+			SkieurMesh.skis_aux_pieds(mat)])
+
+
+func _ready() -> void:
 	var verre: StandardMaterial3D = StandardMaterial3D.new()
 	verre.albedo_color = Color(0.15, 0.45, 1.0, 0.55)   # bleu vif : se voit sur la neige
 	verre.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
@@ -24,8 +41,16 @@ func _ready() -> void:
 	verre.no_depth_test = false
 	_corps = Node3D.new()
 	add_child(_corps)
-	for m in [SkieurMesh.passager_squelette(SkieurMesh.squelette_glisse(), "libre", "casque", mat),
-			SkieurMesh.skis_aux_pieds(mat)]:
+	if _pre_tache >= 0:
+		WorkerThreadPool.wait_for_task_completion(_pre_tache)
+		_pre_tache = -1
+	var maillages: Array = []
+	if not _pre.is_empty():
+		maillages = _pre.duplicate()
+		_pre.clear()
+	else:
+		_calculer(maillages)
+	for m in maillages:
 		var mi: MeshInstance3D = MeshInstance3D.new()
 		mi.mesh = m
 		mi.material_override = verre

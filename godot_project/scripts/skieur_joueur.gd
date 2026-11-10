@@ -252,27 +252,63 @@ func _mm(m: Mesh, couleurs: Color) -> MultiMeshInstance3D:
 	return mi
 
 
-func _construire_apparence() -> void:
+## Maillages du skieur précalculés sur un fil de travail dès le chargement (PC) : 144 ms d'un bloc sur le fil
+## principal à l'entrée en skieur sinon (relevé du 10/11/2026). Mêmes appels, mêmes maillages.
+static var _pre: Dictionary = {}
+static var _pre_tache: int = -1
+
+
+static func precalculer_apparence() -> void:
+	if _pre_tache >= 0 or not _pre.is_empty():
+		return
+	_pre_tache = WorkerThreadPool.add_task(_calculer_apparence.bind(_pre), false, "apparence du skieur")
+
+
+static func _calculer_apparence(d: Dictionary) -> void:
 	var mat: Material = SkieurMesh.materiau()
+	var images: Array = [SkieurMesh.passager("skis", "casque", mat)]
+	for i in range(N_IMAGES):
+		images.append(SkieurMesh.passager_squelette(_squelette_marche(TAU * i / N_IMAGES),
+			"skis", "casque", mat))
+	d["images"] = images
+	d["skis_main"] = SkieurMesh.skis(mat)
+	# chaussé : posture de glisse, skis aux pieds, deux bâtons
+	d["glisse"] = SkieurMesh.passager_squelette(SkieurMesh.squelette_glisse(), "libre", "casque", mat)
+	d["schuss"] = SkieurMesh.passager_squelette(SkieurMesh.squelette_schuss(), "libre", "casque", mat)
+	d["chasse"] = SkieurMesh.passager_squelette(SkieurMesh.squelette_chasse(), "libre", "casque", mat)
+	var poussee: Array = []
+	for k in range(4):
+		poussee.append(SkieurMesh.passager_squelette(SkieurMesh.squelette_poussee(k), "libre", "casque", mat))
+	d["poussee"] = poussee
+	d["skis_pieds"] = SkieurMesh.skis_aux_pieds(mat)
+	d["skis_pieds_v"] = SkieurMesh.skis_aux_pieds(mat, SkieurMesh.CHASSE_ANGLE)
+	d["baton"] = SkieurMesh.baton(mat)
+
+
+func _construire_apparence() -> void:
+	var d: Dictionary = {}
+	if _pre_tache >= 0:
+		WorkerThreadPool.wait_for_task_completion(_pre_tache)
+		_pre_tache = -1
+	if not _pre.is_empty():
+		d = _pre.duplicate()
+		_pre.clear()             # (une apparence d'avance : un second skieur recalcule la sienne)
+	else:
+		_calculer_apparence(d)
 	# graines de couleurs : veste rouge, casque blanc… (fixes)
 	var graine: Color = Color(0.21, 0.63, 0.37, 1.0)
-	_images.append(SkieurMesh.passager("skis", "casque", mat))
-	for i in range(N_IMAGES):
-		_images.append(SkieurMesh.passager_squelette(_squelette_marche(TAU * i / N_IMAGES),
-			"skis", "casque", mat))
+	_images.append_array(d["images"])
 	_corps = _mm(_images[0], graine)
-	_skis_main = SkieurMesh.skis(mat)
+	_skis_main = d["skis_main"]
 	_skis = _mm(_skis_main, Color(0.55, 0.30, 0.80, 1.0))
 	_skis.position = SkieurMesh.ANCRE_SKIS
-	# chaussé : posture de glisse, skis aux pieds, deux bâtons
-	_image_glisse = SkieurMesh.passager_squelette(SkieurMesh.squelette_glisse(), "libre", "casque", mat)
-	_image_schuss = SkieurMesh.passager_squelette(SkieurMesh.squelette_schuss(), "libre", "casque", mat)
-	_image_chasse = SkieurMesh.passager_squelette(SkieurMesh.squelette_chasse(), "libre", "casque", mat)
-	for k in range(4):
-		_images_poussee.append(SkieurMesh.passager_squelette(SkieurMesh.squelette_poussee(k), "libre", "casque", mat))
-	_skis_pieds = SkieurMesh.skis_aux_pieds(mat)
-	_skis_pieds_v = SkieurMesh.skis_aux_pieds(mat, SkieurMesh.CHASSE_ANGLE)
-	_batons = _mm(SkieurMesh.baton(mat), Color(0.55, 0.30, 0.80, 1.0))
+	_image_glisse = d["glisse"]
+	_image_schuss = d["schuss"]
+	_image_chasse = d["chasse"]
+	_images_poussee.append_array(d["poussee"])
+	_skis_pieds = d["skis_pieds"]
+	_skis_pieds_v = d["skis_pieds_v"]
+	_batons = _mm(d["baton"], Color(0.55, 0.30, 0.80, 1.0))
 	_batons.multimesh.instance_count = 2
 	_poser_batons(0)
 	for k in range(2):
