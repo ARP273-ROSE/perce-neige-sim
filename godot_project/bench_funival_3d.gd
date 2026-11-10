@@ -54,7 +54,7 @@ func _pente_max_voie() -> float:
 
 func _fin() -> void:
 	print("BENCH_FUNIVAL " + ("OK" if _ok else "ECHEC"))
-	quit(0 if _ok else 1)
+	FinBanc.quitter(self, get("_main"), 0 if _ok else 1)
 
 
 func _tick() -> void:

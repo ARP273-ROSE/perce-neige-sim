@@ -76,7 +76,7 @@ func _suite(ph: TrainPhysics, au: TrainAudio) -> void:
 	var l: Vector2 = TrainAudio.machine_room_levels(0.2)
 	_check("fondu sous 0,3 m/s", l.x > 0.0 and l.x < 0.2, "gain %.3f à 0,2 m/s" % l.x)
 	print("BENCH_SON_SALLE " + ("OK" if _ok else "ECHEC"))
-	quit(0 if _ok else 1)
+	FinBanc.quitter(self, get("_main"), 0 if _ok else 1)
 
 
 func _check(label: String, cond: bool, detail: String) -> void:

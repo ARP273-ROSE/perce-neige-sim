@@ -119,4 +119,4 @@ func _tick() -> void:
 
 func _fin() -> void:
 	print("BENCH_RELIEF " + ("OK" if _ok else "ECHEC"))
-	quit(0 if _ok else 1)
+	FinBanc.quitter(self, get("_main"), 0 if _ok else 1)

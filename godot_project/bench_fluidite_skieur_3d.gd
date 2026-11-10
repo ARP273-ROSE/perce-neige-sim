@@ -311,4 +311,4 @@ func _fin() -> void:
 	if f != null:
 		f.store_string("\n".join(sortie))
 		print("écrit : " + ProjectSettings.globalize_path(f.get_path()))
-	quit(0)
+	FinBanc.quitter(self, get("_main"), 0)

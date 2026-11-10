@@ -14,7 +14,7 @@ func _initialize() -> void:
 		print("\n===== ARRIVÉE %s =====" % ("EN HAUT (montée)" if direction > 0 else "EN BAS (descente)"))
 		_run(direction)
 	print("BENCH_AUTO " + ("OK" if _ok else "ECHEC"))
-	quit(0 if _ok else 1)
+	FinBanc.quitter(self, get("_main"), 0 if _ok else 1)
 
 
 func _run(direction: int) -> void:

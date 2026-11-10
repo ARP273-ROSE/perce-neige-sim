@@ -107,7 +107,7 @@ func _initialize() -> void:
 	ok = _bouton_portes() and ok
 	ok = _debarquement() and ok
 	print("BENCH_PORTES " + ("OK" if ok else "ECHEC"))
-	quit(0 if ok else 1)
+	FinBanc.quitter(self, get("_main"), 0 if ok else 1)
 
 
 func _verif(label: String, cond: bool, detail: String = "") -> bool:

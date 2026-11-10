@@ -302,7 +302,7 @@ func _tick() -> void:
 				if not bon and _coinces == 0 and sk.pieges_sans_issue == 0 and _filet_ok and _echecs * 100 <= _i:
 					print("(échec dû au seul filet, %d sur %d segments ; taux de base connu 0,07 %% : voir la note ci-dessus dans le banc)" % [sk.degagements, _i])
 				print("BENCH_COINCE " + ("OK" if bon else "ECHEC"))
-				quit(0 if bon else 1)
+				FinBanc.quitter(self, get("_main"), 0 if bon else 1)
 				return
 			sk.entree = Vector2.ZERO
 			_attente += 1

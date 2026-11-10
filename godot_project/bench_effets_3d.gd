@@ -22,7 +22,7 @@ var _res: Array = []
 func _initialize() -> void:
 	if DisplayServer.get_name() == "headless":
 		print("BENCH_EFFETS sauté : il faut un écran")
-		quit(0)
+		FinBanc.quitter(self, get("_main"), 0)
 		return
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--sortie="):

@@ -16,7 +16,7 @@ func _initialize() -> void:
 	var f: FileAccess = FileAccess.open(out_path, FileAccess.WRITE)
 	if f == null:
 		push_error("écriture impossible : " + out_path)
-		quit(1)
+		FinBanc.quitter(self, get("_main"), 1)
 		return
 	var n_tri: int = 0
 	var y_min: float = 99.0
@@ -91,4 +91,4 @@ func _initialize() -> void:
 	if absf(z_min + 16.0) > 0.05 or absf(z_max - 16.0) > 0.05:
 		print("  ECHEC : longueur visuelle ≠ 32 m (%.2f → %.2f)" % [z_min, z_max]); ok = false
 	print("BENCH_RAME " + ("OK" if ok else "ECHEC") + " → " + out_path)
-	quit(0 if ok else 1)
+	FinBanc.quitter(self, get("_main"), 0 if ok else 1)

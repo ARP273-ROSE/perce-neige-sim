@@ -181,7 +181,7 @@ func _suite() -> void:
 
 	_export(tr, out_path, s0)
 	print("BENCH_AIGUILLAGE " + ("OK" if _ok else "ECHEC"))
-	quit(0 if _ok else 1)
+	FinBanc.quitter(self, get("_main"), 0 if _ok else 1)
 
 
 func _in_window(abt: Dictionary, rail_i: int, s: float, part: String) -> bool:
@@ -200,7 +200,7 @@ func _export(tr: TrackBuilder, out_path: String, s_ref: float) -> void:
 	var f: FileAccess = FileAccess.open(out_path, FileAccess.WRITE)
 	if f == null:
 		push_error("écriture impossible : " + out_path)
-		quit(1)
+		FinBanc.quitter(self, get("_main"), 1)
 		return
 	var n_tri: int = 0
 	var stack: Array = [tr]

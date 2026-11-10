@@ -170,4 +170,4 @@ func _initialize() -> void:
 			dmax > 0.01 and dmax < 0.05 and mob.position.distance_to(base) < 1e-4, "déplacement maxi %.1f mm" % (dmax * 1000.0))
 		lg.queue_free()
 	print("BENCH_REMONTEE_DYNAMIQUE " + ("OK" if _ok else "ECHEC"))
-	quit(0 if _ok else 1)
+	FinBanc.quitter(self, get("_main"), 0 if _ok else 1)

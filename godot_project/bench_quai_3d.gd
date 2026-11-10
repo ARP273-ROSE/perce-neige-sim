@@ -36,7 +36,7 @@ func _tick() -> void:
 		if _f > 20000:
 			print("[ECHEC] skieur ou collisions pas prêts")
 			print("BENCH_QUAI ECHEC")
-			quit(1)
+			FinBanc.quitter(self, get("_main"), 1)
 		return
 	_main.physics.doors_open = false
 	_main.physics.door_leaves_open = false
@@ -66,4 +66,4 @@ func _tick() -> void:
 		_sc += 1
 		if _sc >= CAS.size():
 			print("BENCH_QUAI " + ("OK" if _ok else "ECHEC"))
-			quit(0 if _ok else 1)
+			FinBanc.quitter(self, get("_main"), 0 if _ok else 1)

@@ -70,4 +70,4 @@ func _initialize() -> void:
 	_voyage("descente_pleine_vide", -1, 334, 0)
 	_voyage("montee_pleine_pleine", 1, 334, 334)
 	print("BENCH_VOYAGES " + ("OK" if _ok else "ECHEC"))
-	quit(0 if _ok else 1)
+	FinBanc.quitter(self, get("_main"), 0 if _ok else 1)

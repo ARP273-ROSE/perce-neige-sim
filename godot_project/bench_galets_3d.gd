@@ -330,4 +330,4 @@ func _tick() -> void:
 			sens_ok = nrm[best].dot(tun.transform_at(s7).basis.x) > 0.9
 	_check("torons du tronçon libre dans le sens du câble posé", sens_ok, "")
 	print("BENCH_GALETS %s" % ("OK" if _ok else "ÉCHEC"))
-	quit(0 if _ok else 1)
+	FinBanc.quitter(self, get("_main"), 0 if _ok else 1)

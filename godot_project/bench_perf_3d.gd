@@ -94,4 +94,4 @@ func _initialize() -> void:
 	_check("retour : cadence libre", Engine.max_fps == 0, "max_fps %d" % Engine.max_fps)
 
 	print("BENCH_PERF %s" % ("OK" if _ok else "ECHEC"))
-	quit(0 if _ok else 1)
+	FinBanc.quitter(self, get("_main"), 0 if _ok else 1)

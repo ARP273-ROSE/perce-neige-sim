@@ -232,7 +232,7 @@ func _tick() -> void:
 			and t_ferme < t_dep, "fermées à %.1f s, départ à %.1f s" % [t_ferme, t_dep])
 		_verif("gare aval : panneau des départs renseigné", (ga._panneau[1] as Label3D).text.contains("FUNICULA"))
 	print("BENCH_PUPITRE " + ("OK" if _ok else "ECHEC"))
-	quit(0 if _ok else 1)
+	FinBanc.quitter(self, get("_main"), 0 if _ok else 1)
 
 
 ## Arrêt électrique en ligne (port du PC) : de 12 m/s, la consigne redescend
