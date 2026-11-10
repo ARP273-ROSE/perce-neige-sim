@@ -153,6 +153,9 @@ func build_par_etapes(t: TunnelBuilder, pause: Callable) -> void:
 			_build_tunnel_details, _build_cable_beam, _build_guides, _build_abt_sheaves, _build_abt_plates, _build_cable]:
 		if etape == _build_rails:
 			await _build_rails_par_etapes(pause)
+		elif etape in [_build_slab, _build_cable_beam, _build_cable]:
+			# (une pause par tronçon : d'un bloc, 33, 17 et 46 ms pour le Funival sans fil, relevé du 10/11/2026)
+			await (etape as Callable).call(pause)
 		else:
 			(etape as Callable).call()
 		await pause.call()
@@ -839,7 +842,7 @@ func _emit_cap(st: SurfaceTool, p: Vector3, r: Vector3, u: Vector3,
 # Dalle béton — découpée en 4 sections pour suivre les 2 tubes du passing loop
 # ---------------------------------------------------------------------------
 
-func _build_slab() -> void:
+func _build_slab(pause: Callable = Callable()) -> void:
 	var slab_mat: StandardMaterial3D = StandardMaterial3D.new()
 	slab_mat.albedo_color = Color(0.38, 0.36, 0.33)
 	slab_mat.roughness = 0.92
@@ -850,13 +853,13 @@ func _build_slab() -> void:
 	# La section "PassingChamber" est CENTRÉE et s'élargit sinusoïdalement
 	# pour couvrir toute la largeur de la chambre, supportant la cabine
 	# pendant qu'elle suit sa courbe latérale.
-	_build_slab_section(slab_mat, pit_low_end, trace.evit_debut, 0.0, "SlabLow", false)
-	_build_slab_section(slab_mat, trace.evit_debut, trace.evit_fin, 0.0, "SlabPassingChamber", true)
+	await _build_slab_section(slab_mat, pit_low_end, trace.evit_debut, 0.0, "SlabLow", false, pause)
+	await _build_slab_section(slab_mat, trace.evit_debut, trace.evit_fin, 0.0, "SlabPassingChamber", true, pause)
 	# en haut, la dalle s'arrête au bord de la fosse où émerge la roue aval
 	# de la salle des machines (elle la traversait : « un mur en béton dans
 	# la roue », retour du 30/09)
-	_build_slab_section(slab_mat, trace.evit_fin,
-		minf(pit_high_start, trace.fin_voie()), 0.0, "SlabHigh", false)
+	await _build_slab_section(slab_mat, trace.evit_fin,
+		minf(pit_high_start, trace.fin_voie()), 0.0, "SlabHigh", false, pause)
 
 
 # Construit un tronçon de dalle entre s_start et s_end avec un offset latéral.
@@ -866,7 +869,7 @@ func _build_slab() -> void:
 # à slab_width/2 + abs(passing_loop_offset(s, 1.0)).
 func _build_slab_section(
 	mat: StandardMaterial3D, s_start: float, s_end: float,
-	side: float, name: String, is_chamber: bool = false,
+	side: float, name: String, is_chamber: bool = false, pause: Callable = Callable(),
 ) -> void:
 	# Découpage en tronçons de chunk_length pour un frustum culling efficace.
 	var c_start: float = s_start
@@ -877,6 +880,8 @@ func _build_slab_section(
 			"%s_%d" % [name, chunk_i], is_chamber)
 		c_start = c_end
 		chunk_i += 1
+		if pause.is_valid():
+			await pause.call()
 
 
 func _build_slab_chunk(
@@ -1862,7 +1867,7 @@ func set_loop_lamps(on: bool) -> void:
 # _build_guides posent dessus.
 # ---------------------------------------------------------------------------
 
-func _build_cable_beam() -> void:
+func _build_cable_beam(pause: Callable = Callable()) -> void:
 	var mat: StandardMaterial3D = StandardMaterial3D.new()
 	mat.albedo_color = Color(0.34, 0.33, 0.31)   # béton, plus sombre que la dalle
 	mat.roughness = 0.90
@@ -1878,11 +1883,11 @@ func _build_cable_beam() -> void:
 	var s_fork_lo: float = trace.evit_debut + fork_ds
 	var s_fork_hi: float = trace.evit_fin - fork_ds
 	# (pas dans la fosse de la gare basse : elle y flottait à mi-hauteur)
-	_build_cable_beam_section(mat, pit_low_end, s_fork_lo, 0.0, "CableBeamLow")
-	_build_cable_beam_section(mat, s_fork_lo, s_fork_hi, -1.0, "CableBeamLoopL")
-	_build_cable_beam_section(mat, s_fork_lo, s_fork_hi, +1.0, "CableBeamLoopR")
-	_build_cable_beam_section(mat, s_fork_hi, trace.fin_voie(),
-		0.0, "CableBeamHigh")
+	await _build_cable_beam_section(mat, pit_low_end, s_fork_lo, 0.0, "CableBeamLow", pause)
+	await _build_cable_beam_section(mat, s_fork_lo, s_fork_hi, -1.0, "CableBeamLoopL", pause)
+	await _build_cable_beam_section(mat, s_fork_lo, s_fork_hi, +1.0, "CableBeamLoopR", pause)
+	await _build_cable_beam_section(mat, s_fork_hi, trace.fin_voie(),
+		0.0, "CableBeamHigh", pause)
 
 
 # Distance (depuis PASSING_START) à laquelle l'écartement des voies
@@ -1899,7 +1904,7 @@ func _beam_fork_ds() -> float:
 
 func _build_cable_beam_section(
 	mat: StandardMaterial3D, s_start: float, s_end: float,
-	side: float, name: String,
+	side: float, name: String, pause: Callable = Callable(),
 ) -> void:
 	var c_start: float = s_start
 	var chunk_i: int = 0
@@ -1909,6 +1914,8 @@ func _build_cable_beam_section(
 			"%s_%d" % [name, chunk_i])
 		c_start = c_end
 		chunk_i += 1
+		if pause.is_valid():
+			await pause.call()
 
 
 func _build_cable_beam_chunk(
@@ -2646,7 +2653,7 @@ var _cable_top_y: float = -0.6  # fixé par _build_guides(), utilisé par _build
 # la rame qu'il tire et la poulie en haut).
 # ---------------------------------------------------------------------------
 
-func _build_cable() -> void:
+func _build_cable(pause: Callable = Callable()) -> void:
 	# ShaderMaterial pour chaque brin — bandes hélicoïdales animées via
 	# l'uniform cable_phase. Les 2 matériaux sont distincts pour pouvoir
 	# animer les 2 brins avec des phases opposées (brin gauche fixe vs
@@ -2674,6 +2681,8 @@ func _build_cable() -> void:
 		var mi_right: MeshInstance3D = _build_cable_segment(
 			cable_right_material, 1, s_start, s_end, "CableRight_%d" % i)
 		cable_right_segments.append({"s_start": s_start, "s_end": s_end, "mesh": mi_right})
+		if pause.is_valid():
+			await pause.call()
 
 
 # Rupture : pas des anneaux du tube et posé du câble détendu.
@@ -2804,6 +2813,31 @@ func _build_cable_segment(
 	# (le plus gros du coût du câble, relevé du 08/11/2026).
 	var ns: int = cable_segments
 	var dmax: float = maxf(_slack_drop_max(), 1e-3)
+	var arr: Array = []
+	arr.resize(Mesh.ARRAY_MAX)
+	# en C++ (OutilsVoie.tube_brin, mêmes tableaux octet pour octet) : 46 ms d'un bloc pour le câble du Funival sans
+	# fil (relevé du 10/11/2026)
+	var ov: RefCounted = ExtrusionVoie._outils_cpp()
+	if ov != null and ov.has_method("tube_brin"):
+		var ce: PackedVector3Array = PackedVector3Array()
+		var dr: PackedVector3Array = PackedVector3Array()
+		var ha: PackedVector3Array = PackedVector3Array()
+		var ab: PackedFloat64Array = PackedFloat64Array()
+		var de: PackedFloat64Array = PackedFloat64Array()
+		for rg in rings:
+			ce.append(rg.p)
+			dr.append(rg.r)
+			ha.append(rg.u)
+			ab.append(rg.s)
+			de.append(rg.d)
+		var t: Array = ov.call("tube_brin", ce, dr, ha, ab, de, ns, cable_radius, dmax)
+		arr[Mesh.ARRAY_VERTEX] = t[0]
+		arr[Mesh.ARRAY_NORMAL] = t[1]
+		arr[Mesh.ARRAY_TEX_UV] = t[2]
+		arr[Mesh.ARRAY_TEX_UV2] = t[3]
+		arr[Mesh.ARRAY_COLOR] = t[4]
+		arr[Mesh.ARRAY_INDEX] = t[5]
+		return _poser_segment_cable(arr, mat, name)
 	var vtx: PackedVector3Array = PackedVector3Array()
 	var nrm: PackedVector3Array = PackedVector3Array()
 	var uv: PackedVector2Array = PackedVector2Array()
@@ -2835,14 +2869,16 @@ func _build_cable_segment(
 		var b1: int = b0 + ns + 1
 		for k in range(ns):
 			idx.append_array(PackedInt32Array([b0 + k, b1 + k, b1 + k + 1, b0 + k, b1 + k + 1, b0 + k + 1]))
-	var arr: Array = []
-	arr.resize(Mesh.ARRAY_MAX)
 	arr[Mesh.ARRAY_VERTEX] = vtx
 	arr[Mesh.ARRAY_NORMAL] = nrm
 	arr[Mesh.ARRAY_TEX_UV] = uv
 	arr[Mesh.ARRAY_TEX_UV2] = uv2
 	arr[Mesh.ARRAY_COLOR] = col
 	arr[Mesh.ARRAY_INDEX] = idx
+	return _poser_segment_cable(arr, mat, name)
+
+
+func _poser_segment_cable(arr: Array, mat: Material, name: String) -> MeshInstance3D:
 	var am: ArrayMesh = ArrayMesh.new()
 	am.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
 	am.surface_set_material(0, mat)

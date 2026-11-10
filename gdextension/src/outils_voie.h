@@ -27,6 +27,14 @@ public:
 	Array extruder_bandes(const PackedVector3Array &origines, const PackedVector3Array &droites,
 			const PackedVector3Array &hauts, const PackedFloat64Array &cx, const PackedFloat64Array &s,
 			const PackedFloat64Array &bandes) const;
+
+	// Tube d'un tronçon de brin du câble (TrackBuilder._build_cable_segment) à partir de ses anneaux (centre, droite,
+	// haut, abscisse s, descente détendue d) : ns + 1 sommets par anneau, normales vers l'axe, UV (secteur, 2 s), UV2
+	// (descente, descente / dmax), COLOR (droite de la voie), indices. Mêmes opérations que le repli GDScript
+	// (cos et sin du moteur ; scalaires en double, vecteurs en float). Rend [sommets, normales, uv, uv2, couleurs,
+	// indices].
+	Array tube_brin(const PackedVector3Array &centres, const PackedVector3Array &droites, const PackedVector3Array &hauts,
+			const PackedFloat64Array &s, const PackedFloat64Array &d, int64_t ns, double rayon, double dmax) const;
 };
 
 } // namespace godot

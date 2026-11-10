@@ -4,10 +4,19 @@
 #include <godot_cpp/variant/packed_vector2_array.hpp>
 #include <godot_cpp/variant/vector2.hpp>
 #include <godot_cpp/variant/vector3.hpp>
+#include <godot_cpp/variant/color.hpp>
+#include <godot_cpp/variant/packed_color_array.hpp>
+#include <godot_cpp/variant/packed_float32_array.hpp>
+#include <godot_cpp/variant/packed_int32_array.hpp>
+#include <godot_cpp/variant/utility_functions.hpp>
+
+#include <vector>
 
 using namespace godot;
 
 void OutilsVoie::_bind_methods() {
+	ClassDB::bind_method(D_METHOD("tube_brin", "centres", "droites", "hauts", "s", "d", "ns", "rayon", "dmax"),
+			&OutilsVoie::tube_brin);
 	ClassDB::bind_method(D_METHOD("extruder_bandes", "origines", "droites", "hauts", "cx", "s", "bandes"),
 			&OutilsVoie::extruder_bandes);
 }
@@ -86,4 +95,74 @@ Array OutilsVoie::extruder_bandes(const PackedVector3Array &origines, const Pack
 	r.append(dv);
 	r.append(du);
 	return r;
+}
+
+Array OutilsVoie::tube_brin(const PackedVector3Array &centres, const PackedVector3Array &droites,
+		const PackedVector3Array &hauts, const PackedFloat64Array &s, const PackedFloat64Array &d, int64_t ns,
+		double rayon, double dmax) const {
+	const int64_t nr = centres.size();
+	const int64_t na = ns + 1;
+	// (PackedFloat32Array du GDScript : cos et sin du moteur, rangés en réels simples)
+	std::vector<float> cs(na), sn(na);
+	for (int64_t k = 0; k < na; k++) {
+		const double a = double(k) / double(ns) * Math_TAU;
+		cs[k] = (float)UtilityFunctions::cos(a);
+		sn[k] = (float)UtilityFunctions::sin(a);
+	}
+	PackedVector3Array vtx, nrm;
+	PackedVector2Array uv, uv2;
+	PackedColorArray col;
+	PackedInt32Array idx;
+	vtx.resize(nr * na);
+	nrm.resize(nr * na);
+	uv.resize(nr * na);
+	uv2.resize(nr * na);
+	col.resize(nr * na);
+	idx.resize(nr > 1 ? (nr - 1) * ns * 6 : 0);
+	Vector3 *wv = vtx.ptrw();
+	Vector3 *wn = nrm.ptrw();
+	Vector2 *wu = uv.ptrw();
+	Vector2 *wu2 = uv2.ptrw();
+	Color *wc = col.ptrw();
+	int32_t *wi = idx.ptrw();
+	const real_t rr = (real_t)rayon;
+	int64_t w = 0;
+	for (int64_t i = 0; i < nr; i++) {
+		const Vector3 c = centres[i];
+		const Vector3 r = droites[i];
+		const Vector3 u = hauts[i];
+		const real_t v_uv = (real_t)(s[i] * 2.0);
+		const Vector2 dd = Vector2((real_t)d[i], (real_t)(d[i] / dmax));
+		const Color cl = Color((float)(0.5 + 0.5 * (double)r.x), (float)(0.5 + 0.5 * (double)r.y), (float)(0.5 + 0.5 * (double)r.z));
+		for (int64_t k = 0; k < na; k++) {
+			const Vector3 n = r * cs[k] + u * sn[k];
+			wv[w] = c + n * rr;
+			wn[w] = -n.normalized();
+			wu[w] = Vector2((real_t)(double(k) / double(ns)), v_uv);
+			wu2[w] = dd;
+			wc[w] = cl;
+			w++;
+		}
+	}
+	int64_t q = 0;
+	for (int64_t i = 0; i < nr - 1; i++) {
+		const int32_t b0 = (int32_t)(i * na);
+		const int32_t b1 = (int32_t)(b0 + na);
+		for (int32_t k = 0; k < ns; k++) {
+			wi[q++] = b0 + k;
+			wi[q++] = b1 + k;
+			wi[q++] = b1 + k + 1;
+			wi[q++] = b0 + k;
+			wi[q++] = b1 + k + 1;
+			wi[q++] = b0 + k + 1;
+		}
+	}
+	Array res;
+	res.append(vtx);
+	res.append(nrm);
+	res.append(uv);
+	res.append(uv2);
+	res.append(col);
+	res.append(idx);
+	return res;
 }
