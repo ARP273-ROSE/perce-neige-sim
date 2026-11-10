@@ -48,17 +48,30 @@ var _etats: Dictionary = {}            # ligne → dernier état (arrêt d'urgen
 var _proche: Array = []                # [ligne, pylône, d, {i véhicule → d précédent}]
 
 
+## Sons des remontées (fichiers de DOSSIER), chargés à l'entrée en skieur.
+const NOMS: Array = ["gare_debrayable", "gare_fixe", "lanceur", "ligne_siege", "ligne_cabine", "ligne_3s", "teleski",
+	"galet_support", "galet_compression", "arret_urgence",
+	"3s_gare", "3s_ligne", "3s_motrice", "3s_lanceur_acc", "3s_lanceur_dec", "3s_pylone",
+	"tcd_gare", "tcd_ligne", "tcd_lanceur_acc", "tcd_lanceur_dec", "tcd_pyl_s", "tcd_pyl_c", "tcd_pyl_cc", "tcd_pyl_sc",
+	"tkd_gare", "tkd_ligne", "tkd_depart", "tkd_lacher", "tkd_pyl_s", "tkd_pyl_c",
+	"tsf_motrice", "tsf_arrivee", "tsf_ligne", "tsf_arret", "tsf_redemarrage", "tsf_embarquement", "tsf_pyl_s", "tsf_pyl_c",
+	"tsf_ruisseau",
+	"tsd_forfait", "tsd_gare", "tsd_portillons", "tsd_embarquement", "tsd_pyl_cc", "tsd_pyl_s", "tsd_ligne", "tsd_arret", "tsd_arrete", "tsd_redemarrage", "tsd_arrivee", "tsd_debarquement", "tsd_gare_haut", "boisses_gare", "boisses_lanceur_acc", "boisses_ligne", "boisses_pyl_s", "boisses_lanceur_dec", "file_huees",
+	"tke_gare", "tke_depart", "tke_ligne", "tke_pyl_s", "tke_pyl_c", "tke_arrivee",
+	"tph_quai", "tph_ligne", "tph_croisement", "tph_arrivee"]
+
+
+## Chargement d'avance, en tâche de fond, dès le démarrage (PC) : à l'entrée en skieur, load() les trouve prêts
+## (58 ms d'un bloc sur le fil principal sinon, relevé du 10/11/2026). Mêmes ressources.
+static func precharger() -> void:
+	for nom in NOMS:
+		ResourceLoader.load_threaded_request(DOSSIER + nom + ".wav")
+	for e in SONS_FUNI:
+		ResourceLoader.load_threaded_request("res://sounds/%s.wav" % e[1])
+
+
 func _ready() -> void:
-	for nom in ["gare_debrayable", "gare_fixe", "lanceur", "ligne_siege", "ligne_cabine", "ligne_3s", "teleski",
-			"galet_support", "galet_compression", "arret_urgence",
-			"3s_gare", "3s_ligne", "3s_motrice", "3s_lanceur_acc", "3s_lanceur_dec", "3s_pylone",
-			"tcd_gare", "tcd_ligne", "tcd_lanceur_acc", "tcd_lanceur_dec", "tcd_pyl_s", "tcd_pyl_c", "tcd_pyl_cc", "tcd_pyl_sc",
-			"tkd_gare", "tkd_ligne", "tkd_depart", "tkd_lacher", "tkd_pyl_s", "tkd_pyl_c",
-			"tsf_motrice", "tsf_arrivee", "tsf_ligne", "tsf_arret", "tsf_redemarrage", "tsf_embarquement", "tsf_pyl_s", "tsf_pyl_c",
-			"tsf_ruisseau",
-			"tsd_forfait", "tsd_gare", "tsd_portillons", "tsd_embarquement", "tsd_pyl_cc", "tsd_pyl_s", "tsd_ligne", "tsd_arret", "tsd_arrete", "tsd_redemarrage", "tsd_arrivee", "tsd_debarquement", "tsd_gare_haut", "boisses_gare", "boisses_lanceur_acc", "boisses_ligne", "boisses_pyl_s", "boisses_lanceur_dec", "file_huees",
-			"tke_gare", "tke_depart", "tke_ligne", "tke_pyl_s", "tke_pyl_c", "tke_arrivee",
-			"tph_quai", "tph_ligne", "tph_croisement", "tph_arrivee"]:
+	for nom in NOMS:
 		var st: AudioStream = load(DOSSIER + nom + ".wav")
 		if st is AudioStreamWAV and nom in ["gare_debrayable", "gare_fixe", "lanceur", "ligne_siege", "ligne_cabine",
 				"ligne_3s", "teleski", "3s_gare", "3s_ligne", "3s_motrice", "tcd_gare", "tcd_ligne", "tkd_gare", "tkd_ligne", "tsf_motrice", "tsf_arrivee", "tsf_ligne", "tsf_ruisseau",

@@ -172,6 +172,12 @@ func _ready() -> void:
 		print("[PerceNeige3D] Préréglage rendu : %s" % quality)
 
 	print("[PerceNeige3D] Build starting…")
+	MeshMerge.garder_chargement = not OS.has_feature("web") and not client_mode
+	# (préparé en tâche de fond pendant le chargement, prêt à l'entrée en skieur ; pas sans fil : PWA, bancs sans écran)
+	if LigneRemontee._fil_possible() and not client_mode:
+		SkieurJoueur.precalculer_apparence()
+		FantomeSki.precalculer()
+		SonsRemontees.precharger()
 	_build_environment()
 	# Réglages selon la machine (cran de départ) puis ajustement en direct.
 	# L'environnement est construit avec tous les effets (qualité haute) en
@@ -1319,7 +1325,8 @@ func _suite_process(delta: float) -> void:
 			and not mode_skieur
 			and (d_hall < 150.0 or (cabin.view_mode == Cabin.ViewMode.FPV and d_hall < 450.0)))
 	if _skieur_en_attente and collisions != null:
-		if collisions.pret:
+		# (domaine et remontées se posent sur plusieurs images : on entre quand tout est là)
+		if collisions.pret and domaine != null and domaine.pret and remontees != null and remontees.pret and skieur != null:
 			_entrer_skieur()
 		else:
 			# pendant la préparation des collisions, une chose par image : posés

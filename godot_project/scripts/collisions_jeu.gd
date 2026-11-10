@@ -60,6 +60,7 @@ var issues: Dictionary = {}
 ## relief (le reste du massif n'a pas de sol).
 func construire(main: Node, zones_terrain: Array, synchrone: bool = false) -> void:
 	_t0 = Time.get_ticks_msec()
+	MeshMerge.garder_chargement = false       # (ce qui se fusionne ensuite n'est pas lu ici)
 	_main = main
 	_decor = StaticBody3D.new()
 	_decor.name = "Decor"
@@ -131,6 +132,7 @@ func _avancer(fin_us: int) -> void:
 	set_process(false)
 	if not pret:
 		pret = true
+		MeshMerge.oublier_chargement()
 		print("[Collisions] %d triangles de décor, %d ms" % [triangles, Time.get_ticks_msec() - _t0])
 
 

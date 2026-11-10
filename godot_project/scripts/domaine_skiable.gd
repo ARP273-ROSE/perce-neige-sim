@@ -36,6 +36,16 @@ const R_ARRIVEE: float = 200.0
 var relief: ReliefBuilder = null
 var fantome: FantomeSki = null
 var _construit: bool = false
+## Construction finie (avec écran, elle s'étale sur plusieurs images : 100 ms d'un bloc à l'entrée en skieur,
+## relevé du 10/11/2026 ; sans écran, d'un trait).
+var pret: bool = false
+var _t_tranche: int = 0
+
+
+func _tranche() -> void:
+	if DisplayServer.get_name() != "headless" and Time.get_ticks_usec() - _t_tranche > 4000:
+		await get_tree().process_frame
+		_t_tranche = Time.get_ticks_usec()
 var _axes: Array = []                  # axes des pistes (PackedVector2Array)
 var _cadres: Array = []                # leur emprise (Rect2), pour ne tester que les voisines
 var _t_piste: float = 0.0
@@ -51,6 +61,7 @@ func construire(r: ReliefBuilder) -> void:
 	if _construit or relief == null or not relief.pret:
 		return
 	_construit = true
+	_t_tranche = Time.get_ticks_usec()
 	var cases: Dictionary = {}          # Vector3i(case x, case z, couleur) → [Transform3D]
 	_axes.clear()
 	_cadres.clear()
@@ -92,7 +103,9 @@ func construire(r: ReliefBuilder) -> void:
 					(cases[cle] as Array).append(Transform3D(Basis.IDENTITY, Vector3(j.x, y + H_JALON * 0.5, j.y)))
 				u += PAS_JALON
 			reste = u - l
-	_construire_panneaux()
+		await _tranche()
+	await _construire_panneaux()
+	await _tranche()
 	var mesh: CylinderMesh = CylinderMesh.new()
 	mesh.top_radius = 0.028
 	mesh.bottom_radius = 0.034
@@ -127,11 +140,13 @@ func construire(r: ReliefBuilder) -> void:
 		mi.layers = 1 | Cabin.LAYER_VOIE
 		add_child(mi)
 		n += xs.size()
+		await _tranche()
 	fantome = FantomeSki.new()
 	fantome.name = "Fantome"
 	fantome.relief = relief
 	add_child(fantome)
 	print("[Domaine] %d jalons, %d panneaux, %d fantômes" % [n, n_panneaux, FantomesDonnees.DESCENTES.size()])
+	pret = true
 
 
 ## Panneaux ronds : poteaux et disques en MultiMesh par couleur ; face
@@ -172,6 +187,7 @@ func _construire_panneaux() -> void:
 	# piste, tous les 3 piquets un panneau au sommet ». Le sens d'un tracé OSM
 	# n'est pas garanti : la descente se lit à l'altitude de ses deux bouts.
 	for ip in _piquets:
+		await _tranche()
 		var c: int = PistesDonnees.PISTES[ip][1]
 		var nom: String = PistesDonnees.PISTES[ip][0]
 		if c < 0 or nom == "":
