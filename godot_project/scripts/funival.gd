@@ -340,6 +340,11 @@ static func mat_funi(nom: String) -> Material:
 			m.albedo_color = Color(0.22, 0.23, 0.24)
 			m.roughness = 0.75
 			m.metallic = 0.4
+		"caillebotis_galva":
+			# marches des quais de La Daille : caillebotis galvanisé gris clair (vidéos de la montée et de la descente :
+			# plats porteurs serrés, on voit au travers), une période tous les 0,36 m
+			_matiere(m, _tex("caillebotis"), 0.36, 0.55)
+			m.metallic = 0.55
 		"rocher":
 			_matiere(m, _tex("rocher"), 6.0, 1.0)
 		"moellons":
@@ -387,6 +392,7 @@ const TEXTURES: Dictionary = {
 	"acier_galva": ["bruit", [Color(0.58, 0.60, 0.61), 0.06, 0.08, 5]],
 	"rocher": ["bruit", [Color(0.40, 0.39, 0.37), 0.22, 0.02, 13]],
 	"moellons": ["moellons", [Color(0.46, 0.47, 0.47), Color(0.66, 0.65, 0.62), 17]],
+	"caillebotis": ["grille", [Color(0.66, 0.68, 0.69), Color(0.10, 0.10, 0.11), 12, 4, 0.30]],
 	"ardoise": ["moellons", [Color(0.27, 0.27, 0.28), Color(0.12, 0.12, 0.13), 29]],
 }
 ## Lignes de pixels par tranche quand on les calcule par bandes (256 lignes de moellons d'un bloc : 72 ms au NAS)
@@ -454,6 +460,8 @@ static func _recette(nom: String) -> Array:
 			return _r_lames(a[0], a[1], a[2], a[3], a[4]) + [[]]
 		"bruit":
 			return _r_bruit(a[0], a[1], a[2], a[3]) + [[]]
+		"grille":
+			return _r_grille(a[0], a[1], a[2], a[3], a[4]) + [[]]
 		_:
 			return _r_moellons(a[0], a[1], a[2])
 
@@ -528,6 +536,23 @@ static func _r_lames(c: Color, joint: Color, n_lames: int, joint_f: float, grain
 					_poser(px, (y - y0) * n + x, joint, 1.0)
 				else:
 					_poser(px, (y - y0) * n + x, c, float(teintes[li]) * (1.0 + (float(b[y * n + li * 7 % n]) / 255.0 - 0.5) * 0.08))
+		return px]
+
+
+## Caillebotis : plats porteurs (nx par période) et entretoises (ny), vides sombres entre eux.
+static func _r_grille(c: Color, vide: Color, nx: int, ny: int, f: float) -> Array:
+	var n: int = 128
+	var wx: float = float(n) / float(nx)
+	var wy: float = float(n) / float(ny)
+	return [n, func(y0: int, y1: int) -> PackedByteArray:
+		var px: PackedByteArray = _bande(n, y0, y1)
+		for y in range(y0, y1):
+			var barre_y: bool = fmod(float(y), wy) / wy < f * 0.5
+			for x in range(n):
+				if barre_y or fmod(float(x), wx) / wx < f:
+					_poser(px, (y - y0) * n + x, c, 1.0 - 0.10 * float(barre_y))
+				else:
+					_poser(px, (y - y0) * n + x, vide, 1.0)
 		return px]
 
 
@@ -765,7 +790,7 @@ func trace_voie() -> TraceFuni:
 	t.carre_haut_debut = s_de_d(L - L_HALL)
 	t.miroir_s = s_de_d(_x_quai(true)) + s_de_d(_x_quai(false))
 	t.attache_ds = VehiculeFunival.DEMI_L
-	t.caisse_y = -RAIL_SUR_CENTRE + 0.35
+	t.caisse_y = -RAIL_SUR_CENTRE + VehiculeFunival.Y_FOND      # (tirant du culot jusqu'au fond de caisse)
 	# supports numérotés (relevé d'utilisateur du 08/11/2026) : 003 au bout du quai aval, côté amont ; 200 à l'entrée du
 	# quai amont ; 204, le dernier avant la roue motrice, au bout du quai amont. 001 et 002 sur le quai aval, au pas du
 	# quai amont (4 intervalles sur sa longueur).
@@ -817,6 +842,16 @@ func _voie_et_ouvrages() -> void:
 		Vector2(1.75, 0.55), Vector2(1.6, 0.55), Vector2(1.6, -1.15), Vector2(-1.6, -1.15), Vector2(-1.6, 0.55)])
 	_extruder(st, u, 30.0, portail_d + 2.0, PAS_PROFIL, -1, true)
 	_maillage(st, mat_funi("beton_clair"), "Poutre")
+	# longrines sous les rails, du fond de la poutre au patin (photos : « deux rails sur longrines, pas de traverses
+	# visibles à l'extérieur » ; les blochets du tunnel y faisaient de gros blocs noirs — retour d'utilisateur du 10/11/2026)
+	st = SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var hr: float = 0.172 + 0.005
+	for sxl in [-1.0, 1.0]:
+		var xc: float = sxl * ECARTEMENT * 0.5
+		_extruder(st, PackedVector2Array([Vector2(xc - 0.20, -hr), Vector2(xc - 0.24, -1.15), Vector2(xc + 0.24, -1.15),
+			Vector2(xc + 0.20, -hr)]), 30.0, portail_d + 1.0, PAS_PROFIL, -1, true)
+	_maillage(st, mat_funi("beton_banche"), "Longrines")
 	var ouv: Node3D = Node3D.new()
 	ouv.name = "Ouvrages"
 	ouv.set_meta("portee_loin", true)
@@ -884,6 +919,7 @@ func _tunnel() -> void:
 	voie_pn.pit_high_start = t.longueur
 	voie_pn.walkway_side = -1.0            # passerelle-escalier à gauche en montant (vidéos)
 	voie_pn.walkway_s0 = t.tube_debut
+	voie_pn.sleepers_s0 = t.tube_debut          # (dehors : longrines, posées avec la poutre)
 	voie_pn.walkway_s1 = s_de_d(L - L_HALL)     # (dans la salle amont, une lame blanche le long de la voie entre les escaliers)
 	await voie_pn.build_par_etapes(tunnel_pn, _pause.bind("funival : voie"))
 	# éclairage du Perce-Neige (TunnelLights : luminaires émissifs et lumières autour des véhicules), en hublots
@@ -1071,12 +1107,21 @@ func _gare_aval() -> void:
 	# gradins : palier devant chaque porte, volée de petites marches de caillebotis entre deux paliers (photos)
 	var st: SurfaceTool = SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var stn: SurfaceTool = SurfaceTool.new()
+	stn.begin(Mesh.PRIMITIVE_TRIANGLES)
 	for sx in [-1.0, 1.0]:
 		for b in _gradins(sx):
 			_boite_st(st, b[0], b[1])
-	var gr: MeshInstance3D = _maillage(st, mat_funi("caillebotis_sombre"), "Gradins")
+			# nez de marche : cornière claire au bord aval de chaque marche et palier (vidéos : arêtes blanches)
+			var t: Vector3 = b[0]
+			var c: Vector3 = b[1]
+			_boite_st(stn, Vector3(t.x, 0.05, 0.06), Vector3(c.x, c.y + t.y * 0.5 - 0.02, c.z + t.z * 0.5 - 0.025))
+	var gr: MeshInstance3D = _maillage(st, mat_funi("caillebotis_galva"), "Gradins")
 	gr.reparent(g, false)          # (hors de l'arbre pendant la construction : pas de transformation globale)
 	bardage.append(gr)
+	var nz: MeshInstance3D = _maillage(stn, RemonteeKit.mat("cabine_blanche"), "NezMarches")
+	nz.reparent(g, false)
+	bardage.append(nz)
 	for k in range(n):
 		var d: float = dq - lq * 0.5 + lc * (float(k) + 0.5)
 		var y: float = VehiculeFunival.y_plancher_monde(self, d)
@@ -1203,12 +1248,22 @@ func _gare_amont() -> void:
 	var e_y1: float = VehiculeFunival.y_plancher_monde(self, L - 1.0)
 	var y_esc := func(d: float) -> float:
 		return lerpf(e_y0, e_y1, clampf((d - e_d0) / (e_d1 - e_d0), 0.0, 1.0))
+	# en haut à droite, le long du nez à quai : escalier en caillebotis galvanisé à rampe rouge (photo de l'utilisateur
+	# « nez_escalier_metal »)
+	var stc: SurfaceTool = SurfaceTool.new()
+	stc.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var d_metal: float = L - 9.0
 	for sx2 in [-1.0, 1.0]:
 		var larg2: float = LARG_AMONT[0] if sx2 < 0.0 else LARG_AMONT[1]
 		var xm: float = sx2 * (W + larg2 * 0.5)
 		for b in _gradins(sx2, false, false):
 			var t: Vector3 = b[0]
 			var c: Vector3 = b[1]
+			if sx2 > 0.0 and -c.z > d_metal:
+				# marche de caillebotis mince sur limons, nez clair
+				_boite_st(stc, Vector3(t.x, 0.05, t.z), Vector3(c.x, c.y + t.y * 0.5 - 0.025, c.z))
+				_boite_ombree(st2, Vector3(t.x, 0.03, 0.04), Vector3(c.x, c.y + t.y * 0.5 - 0.01, c.z + t.z * 0.5 - 0.02), Color(0.85, 0.85, 0.83))
+				continue
 			_boite_ombree(st2, t, c, Color(0.78, 0.77, 0.74))
 			# nez de marche : bande sombre au bord aval du giron
 			_boite_ombree(st2, Vector3(t.x, 0.035, 0.05), Vector3(c.x, c.y + t.y * 0.5 - 0.012, c.z + t.z * 0.5 - 0.03), Color(0.36, 0.36, 0.35))
@@ -1238,6 +1293,18 @@ func _gare_amont() -> void:
 	while dpo < e_d1:
 		RemonteeKit.boite_en(g, Vector3(0.04, 0.9, 0.04), Vector3(xr, y_esc.call(dpo) + 0.45, -dpo), "rouge_val")
 		dpo += 3.0
+	# dalle de béton gris sous les escaliers et devant la bouche du tube, de part et d'autre de la voie (le fond de la
+	# salle paraissait blanc comme la neige)
+	var dsl: float = L - L_HALL
+	st2.set_color(Color(0.50, 0.50, 0.48))
+	while dsl < L - 0.01:
+		var dsl2: float = minf(dsl + 2.0, L)
+		for sxs in [-1.0, 1.0]:
+			var qs: Array = [Vector3(sxs * W, y_voie(dsl) - 0.4, -dsl), Vector3(sxs * hx, y_voie(dsl) - 0.4, -dsl),
+				Vector3(sxs * hx, y_voie(dsl2) - 0.4, -dsl2), Vector3(sxs * W, y_voie(dsl2) - 0.4, -dsl2)]
+			for iv in [0, 1, 2, 0, 2, 3]:
+				st2.add_vertex(qs[iv])
+		dsl = dsl2
 	# poutres blanches du plafond, en travers, tous les 2,5 m (photos : plafond blanc à poutres)
 	var dbp: float = L - L_HALL + 1.25
 	while dbp < L:
@@ -1250,6 +1317,20 @@ func _gare_amont() -> void:
 		dbp += 2.5
 	var esc: MeshInstance3D = _maillage(st2, mat_funi("cuit"), "EscaliersAmont", false)
 	esc.reparent(g, false)
+	var escm: MeshInstance3D = _maillage(stc, mat_funi("caillebotis_galva"), "EscalierMetal", false)
+	escm.reparent(g, false)
+	# limons de l'escalier métallique et rampe rouge côté véhicule, sur potelets
+	var yq0: float = y_esc.call(d_metal)
+	var yq1: float = y_esc.call(e_d1)
+	for xl in [W + 0.08, W + LARG_AMONT[1] - 0.08]:
+		RemonteeKit.poutre(g, Vector3(xl, yq0 - 0.25, -d_metal), Vector3(xl, yq1 - 0.25, -e_d1), 0.06, 0.25, "galva")
+	var xv: float = W + 0.35
+	RemonteeKit.poutre(g, Vector3(xv, yq0 + 1.0, -d_metal), Vector3(xv, yq1 + 1.0, -e_d1), 0.05, 0.05, "rouge_val")
+	RemonteeKit.poutre(g, Vector3(xv, yq0 + 0.5, -d_metal), Vector3(xv, yq1 + 0.5, -e_d1), 0.04, 0.04, "rouge_val")
+	var dpm: float = d_metal
+	while dpm <= e_d1:
+		RemonteeKit.boite_en(g, Vector3(0.05, 1.0, 0.05), Vector3(xv, y_esc.call(dpm) + 0.5, -dpm), "rouge_val")
+		dpm += 2.2
 	await _pause("funival : gare amont")
 	# mur de pierre en plaquettes sombres sur tout le mur droit (photos : « WELCOME TO BELLEVARDE » en lettres
 	# métalliques), et bannière « Respirez » suspendue au plafond au-dessus des portes
@@ -1364,7 +1445,7 @@ func _gare_amont() -> void:
 	var per: MeshInstance3D = _maillage(stp, mat_funi("cuit"), "Perrons", false)
 	per.reparent(g, false)
 	await _pause("funival : gare amont")
-	MeshMerge.merge(g, [w1, w2, w3, ban, mur_p, ens, carre, moel, esc], "Gare")
+	MeshMerge.merge(g, [w1, w2, w3, ban, mur_p, ens, carre, moel, esc, escm], "Gare")
 
 
 ## Terrain de la gare amont (remarques d'utilisateur, iPad du 08/11/2026 : « en gare du haut une plaque grise coupe
@@ -1636,6 +1717,7 @@ func _placer(i: int) -> void:
 	if _phase == "quai" and zone_vehicule(i) != "ligne":
 		porte = clampf(minf(T_QUAI - _t_quai, _t_quai) / 1.5, 0.0, 1.0)
 	v.portes(porte)
+	(v as VehiculeFunival).tourner_roues(s_de_d(d) if not _s_par_m.is_empty() else d)
 	# phares vers l'avant du mouvement ; à quai, vers la ligne
 	var monte: bool = (_v * (1.0 if i == 0 else -1.0)) > 0.05 or (absf(_v) <= 0.05 and zone_vehicule(i) == "gare_aval")
 	(v as VehiculeFunival).phares(monte, zone_vehicule(i) == "ligne" or absf(_v) <= 0.05)
