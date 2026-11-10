@@ -138,7 +138,10 @@ func build_par_etapes(pause: Callable) -> void:
 	if _construit:
 		return
 	for t in _taches():
-		(t as Callable).call()
+		if t == _build_wall_cables:
+			await _build_wall_cables(pause)   # (27 ms d'un bloc pour le Funival sans fil, relevé du 10/11/2026)
+		else:
+			(t as Callable).call()
 		await pause.call()
 
 
@@ -404,7 +407,7 @@ func _build_sortie_secours() -> void:
 # v1_11, v1_15…). Mesh continu via SurfaceTool, suit la spline avec un
 # sample tous les 4 m → ~870 segments × 2 câbles × 8 faces = peu de
 # vertices au total.
-func _build_wall_cables() -> void:
+func _build_wall_cables(pause: Callable = Callable()) -> void:
 	var mat: StandardMaterial3D = StandardMaterial3D.new()
 	mat.albedo_color = Color(0.08, 0.08, 0.09)
 	mat.roughness = 0.55
@@ -426,6 +429,8 @@ func _build_wall_cables() -> void:
 				"WallCable_%d_%d" % [which, chunk_i])
 			c_start = c_end
 			chunk_i += 1
+			if pause.is_valid():
+				await pause.call()
 
 
 func _build_wall_cable_chunk(
