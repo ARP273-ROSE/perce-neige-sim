@@ -1410,6 +1410,7 @@ func _build_sleepers() -> void:
 @export var walkway_post_s: float = 3.0      # espacement des potelets
 @export var walkway_handrail: bool = false   # pas de rambarde sur le vrai escalier
 @export var walkway_s0: float = -INF         # début de l'escalier, s'il commence après la fosse (Funival : au portail)
+@export var walkway_s1: float = INF          # fin de l'escalier, s'il s'arrête avant la fosse haute (Funival : à la salle amont)
 
 
 ## Point monde sur l'escalier de service (passerelle), 35 cm au-dessus des
@@ -1518,7 +1519,7 @@ func _build_walkway() -> void:
 	var posts: Array = []
 	var cables: Array = []
 	var s: float = maxf(pit_low_end, walkway_s0) + 0.3
-	while s < pit_high_start - 0.3:
+	while s < minf(pit_high_start, walkway_s1) - 0.3:
 		var fr: Transform3D = _walkway_frame(s)
 		treads.append(fr)
 		# limons alignés sur la pente (repère spline)
@@ -1532,7 +1533,7 @@ func _build_walkway() -> void:
 			stringers.append(st_xf)
 		s += walkway_step_s
 	s = 1.5
-	while s < trace.longueur - 1.5:
+	while s < minf(trace.longueur - 1.5, walkway_s1):
 		var fr2: Transform3D = _walkway_frame(s)
 		var p: Transform3D = fr2
 		p.origin += Vector3.UP * 0.5 + fr2.basis.x * (walkway_side * 0.24)
