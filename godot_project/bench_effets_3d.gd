@@ -120,6 +120,7 @@ func _effets() -> Array:
 		["aniso16", func(): _vp.anisotropic_filtering_level = Viewport.ANISOTROPY_16X,
 			func(): _vp.anisotropic_filtering_level = Viewport.ANISOTROPY_4X],
 		["msaa8", func(): _vp.msaa_3d = Viewport.MSAA_8X, func(): _vp.msaa_3d = Viewport.MSAA_4X],
+		["sans_msaa", func(): _vp.msaa_3d = Viewport.MSAA_DISABLED, func(): _vp.msaa_3d = Viewport.MSAA_4X],
 		["sans_sdfgi", func(): _env.sdfgi_enabled = false, func(): _env.sdfgi_enabled = true],
 		["sans_volum", func(): _env.volumetric_fog_enabled = false, func(): _env.volumetric_fog_enabled = true],
 		["sans_ssr", func(): _env.ssr_enabled = false, func(): _env.ssr_enabled = true],
