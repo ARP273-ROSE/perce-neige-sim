@@ -203,6 +203,10 @@ static func _cle_primitive(mesh: Mesh) -> String:
 	if mesh is SphereMesh:
 		var sp: SphereMesh = mesh
 		return "S|%f|%f|%d|%d|%s" % [sp.radius, sp.height, sp.radial_segments, sp.rings, str(sp.is_hemisphere)]
+	if mesh is QuadMesh:
+		# (skis rangés des véhicules : relus sur la carte à chaque modèle, 32 ms de blocage, relevé du 10/11/2026)
+		var qm: QuadMesh = mesh
+		return "Q|%s|%s|%d|%d|%d" % [str(qm.size), str(qm.center_offset), qm.subdivide_width, qm.subdivide_depth, qm.orientation]
 	return ""
 
 
@@ -401,6 +405,34 @@ static func _indexes(ta: Array) -> Array:
 
 
 ## `st.commit()`, sommets soudés sur la PWA.
+## commit() d'un SurfaceTool sans matériau, copie processeur gardée (mêmes tableaux ; voir valider_indexe_retenu).
+static func commit_retenu(st: SurfaceTool) -> ArrayMesh:
+	var a: Array = st.commit_to_arrays()
+	var m: ArrayMesh = ArrayMesh.new()
+	if a.is_empty() or a[Mesh.ARRAY_VERTEX] == null or (a[Mesh.ARRAY_VERTEX] as PackedVector3Array).is_empty():
+		return m
+	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, a)
+	retenir(m, 0, a)
+	return m
+
+
+## valider_indexe, copie processeur gardée (maillage refusionné ensuite : sans elle, la fusion le relisait sur la
+## carte et bloquait le fil principal ~32 ms ; relevé du 10/11/2026). Pour un SurfaceTool sans matériau : mêmes
+## tableaux que commit().
+static func valider_indexe_retenu(st: SurfaceTool) -> ArrayMesh:
+	if indexer:
+		var t0: int = Time.get_ticks_usec()
+		st.index()
+		index_us += Time.get_ticks_usec() - t0
+	var a: Array = st.commit_to_arrays()
+	var m: ArrayMesh = ArrayMesh.new()
+	if a.is_empty() or a[Mesh.ARRAY_VERTEX] == null or (a[Mesh.ARRAY_VERTEX] as PackedVector3Array).is_empty():
+		return m
+	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, a)
+	retenir(m, 0, a)
+	return m
+
+
 static func valider_indexe(st: SurfaceTool, mesh: ArrayMesh = null) -> ArrayMesh:
 	if indexer:
 		var t0: int = Time.get_ticks_usec()
@@ -463,9 +495,15 @@ static func merge(root: Node3D, keep: Array = [], name_prefix: String = "Fusion"
 				multi[cle] = [ArrayMesh.new(), g]
 			var am: ArrayMesh = multi[cle][0]
 			var n0: int = am.get_surface_count()
-			am.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, _indexes(ta))
+			var ti: Array = _indexes(ta)
+			am.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, ti)
 			if am.get_surface_count() > n0:
 				am.surface_set_material(n0, g["mat"])
+				# copie gardée (PC) : les véhicules lointains (_maillage_miroir) relisaient sinon ces fusions sur
+				# la carte, et chaque relecture bloquait le fil principal ~32 ms (relevé du 10/11/2026) ; la PWA garde
+				# sa mémoire
+				if not OS.has_feature("web"):
+					retenir(am, n0, ti)
 				removed += g["n"] - 1
 				for src in g["src"]:
 					done[src] = int(done.get(src, 0)) + 1

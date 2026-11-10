@@ -2,6 +2,7 @@
 #include "noyau_funi.h"
 #include "noyau_remontee.h"
 #include "outils_maillage.h"
+#include "outils_texte.h"
 #include "outils_voie.h"
 #include "relief_hd.h"
 
@@ -20,6 +21,7 @@ void initialiser_module(ModuleInitializationLevel p_level) {
 	GDREGISTER_CLASS(NoyauFuni);
 	GDREGISTER_CLASS(NoyauRemontee);
 	GDREGISTER_CLASS(OutilsMaillage);
+	GDREGISTER_CLASS(OutilsTexte);
 	GDREGISTER_CLASS(OutilsVoie);
 	GDREGISTER_CLASS(ReliefHD);
 }
