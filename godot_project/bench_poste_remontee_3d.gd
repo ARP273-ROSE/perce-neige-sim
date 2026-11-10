@@ -53,7 +53,7 @@ func _tick() -> void:
 		_t0 = _f
 		_main.basculer_skieur()
 		return
-	if _f < _t0 + 60:
+	if _f < _t0 + 60 or not _main.mode_skieur:
 		return
 	var cmd: CommandesSkieur = _main.commandes_skieur
 	_t += 1.0 / 60.0
