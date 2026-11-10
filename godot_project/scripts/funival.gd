@@ -345,6 +345,9 @@ static func mat_funi(nom: String) -> Material:
 		"moellons":
 			# maçonnerie de pierre grise (gare amont) : moellons irréguliers, joints de mortier clair
 			_matiere(m, _tex("moellons"), 2.0, 1.0)
+		"ardoise":
+			# mur de plaquettes de pierre sombre du quai de Bellevarde (photos de l'utilisateur)
+			_matiere(m, _tex("ardoise"), 1.4, 0.9)
 		_:
 			m.albedo_color = Color(1, 0, 1)
 	RemonteeKit.verrou.lock()
@@ -384,6 +387,7 @@ const TEXTURES: Dictionary = {
 	"acier_galva": ["bruit", [Color(0.58, 0.60, 0.61), 0.06, 0.08, 5]],
 	"rocher": ["bruit", [Color(0.40, 0.39, 0.37), 0.22, 0.02, 13]],
 	"moellons": ["moellons", [Color(0.46, 0.47, 0.47), Color(0.66, 0.65, 0.62), 17]],
+	"ardoise": ["moellons", [Color(0.27, 0.27, 0.28), Color(0.12, 0.12, 0.13), 29]],
 }
 ## Lignes de pixels par tranche quand on les calcule par bandes (256 lignes de moellons d'un bloc : 72 ms au NAS)
 const BANDE_TEX: int = 32
@@ -867,6 +871,10 @@ func _tunnel() -> void:
 	tunnel_pn.tunnel_radius = R_TUNNEL
 	tunnel_pn.passing_offset_max = E_VOIES * 0.5
 	tunnel_pn.wall_cable_x_local = -(R_TUNNEL - 0.11)
+	# câbles de paroi dans le seul tube : par défaut (bornes du Perce-Neige), ils flottaient au-dessus du viaduc et
+	# traversaient en diagonale l'escalier de la salle amont
+	tunnel_pn.station_low_end = t.tube_debut
+	tunnel_pn.station_high_start = s_de_d(longueur_h() - L_HALL)
 	# (hors de l'arbre : sur le fil de construction ; sans fil — PWA —, une pause par tronçon de tube)
 	await tunnel_pn.build_par_etapes(_pause.bind("funival : tunnel"))
 	voie_pn = TrackBuilder.new()
@@ -876,6 +884,7 @@ func _tunnel() -> void:
 	voie_pn.pit_high_start = t.longueur
 	voie_pn.walkway_side = -1.0            # passerelle-escalier à gauche en montant (vidéos)
 	voie_pn.walkway_s0 = t.tube_debut
+	voie_pn.walkway_s1 = s_de_d(L - L_HALL)     # (dans la salle amont, une lame blanche le long de la voie entre les escaliers)
 	await voie_pn.build_par_etapes(tunnel_pn, _pause.bind("funival : voie"))
 	# éclairage du Perce-Neige (TunnelLights : luminaires émissifs et lumières autour des véhicules), en hublots
 	# chauds tous les ECART_LAMPES m sur la paroi gauche, à 1,7 m au-dessus des rails (vidéo de la montée) ; sans
@@ -1003,6 +1012,28 @@ func _gradins(sx: float, rampes: bool = false, aval: bool = true) -> Array:
 		r.append([Vector3(larg, 0.12, lp + 0.02), Vector3(x, y - 0.06, -(d_bas + lf + lp * 0.5))])
 		y_prec = y
 	return r
+
+
+## Boîte ombrée dans un maillage cuit (sans éclairage) : dessus de la teinte c, faces en long un peu plus sombres,
+## faces en travers (contremarches) plus sombres encore, dessous sombre — le relief se lit sans lumière.
+static func _boite_ombree(st: SurfaceTool, taille: Vector3, c: Vector3, col: Color) -> void:
+	var h: Vector3 = taille * 0.5
+	var faces: Array = [
+		[Vector3(1, 0, 0), Vector3(0, 1, 0), Vector3(0, 0, 1), 0.86], [Vector3(-1, 0, 0), Vector3(0, 0, 1), Vector3(0, 1, 0), 0.86],
+		[Vector3(0, 1, 0), Vector3(0, 0, 1), Vector3(1, 0, 0), 1.0], [Vector3(0, -1, 0), Vector3(1, 0, 0), Vector3(0, 0, 1), 0.55],
+		[Vector3(0, 0, 1), Vector3(1, 0, 0), Vector3(0, 1, 0), 0.70], [Vector3(0, 0, -1), Vector3(0, 1, 0), Vector3(1, 0, 0), 0.80]]
+	for f in faces:
+		var nrm: Vector3 = f[0]
+		var u: Vector3 = f[1]
+		var v: Vector3 = f[2]
+		var k: float = f[3]
+		st.set_color(Color(col.r * k, col.g * k, col.b * k))
+		var o: Vector3 = c + nrm * h
+		var du: Vector3 = u * h
+		var dv: Vector3 = v * h
+		var p: Array = [o - du - dv, o + du - dv, o + du + dv, o - du + dv]
+		for q in [p[0], p[2], p[1], p[0], p[3], p[2]]:
+			st.add_vertex(q)
 
 
 ## Boîte pleine ajoutée à un SurfaceTool (six faces, sommets non partagés).
@@ -1159,36 +1190,88 @@ func _gare_amont() -> void:
 	# (dalle, blochets et rails : TrackBuilder, jusqu'au bout de la voie)
 	_maillage(st, mat_funi("cuit"), "SalleAmont", false)
 	await _pause("funival : gare amont")
-	for k in range(n):
-		var d: float = dq - lq * 0.5 + lc * (float(k) + 0.5)
-		var y: float = VehiculeFunival.y_plancher_monde(self, d)
-		# main courante rouge à gauche (photos)
-		RemonteeKit.boite_en(g, Vector3(0.05, 0.05, lc), Vector3(-(W + LARG_AMONT[0]), y + 1.0, -d), "rouge_val")
-	# escaliers de béton clair des deux côtés (paliers et volées, comme à La Daille) et jupes rouges le long de la
-	# voie (vidéos : voie bordée d'une structure rouge), dans le maillage cuit de la salle
+	# escaliers de béton clair des deux côtés, à pente constante (photos de l'utilisateur) : marches ombrées dans le
+	# maillage cuit (dessus clair, contremarche plus sombre, nez de marche gris foncé — d'une seule teinte, on ne
+	# distinguait pas les marches : « finesse du dessin ultra basique », 10/11/2026) ; le long de la voie, jupes rouges
+	# à la pente de l'escalier (vidéos : voie bordée de rouge ; en marches d'un compartiment, elles faisaient des
+	# dents de scie) ; plafond blanc à poutres en travers, poteaux noirs, main courante rouge (photos)
 	var st2: SurfaceTool = SurfaceTool.new()
 	st2.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var e_d0: float = dq - lq * 0.5
+	var e_d1: float = L - 0.5
+	var e_y0: float = VehiculeFunival.y_plancher_monde(self, dq - lq * 0.5 + lc * 0.5) - (lc * 0.5) * pente_voie(dq)
+	var e_y1: float = VehiculeFunival.y_plancher_monde(self, L - 1.0)
+	var y_esc := func(d: float) -> float:
+		return lerpf(e_y0, e_y1, clampf((d - e_d0) / (e_d1 - e_d0), 0.0, 1.0))
 	for sx2 in [-1.0, 1.0]:
+		var larg2: float = LARG_AMONT[0] if sx2 < 0.0 else LARG_AMONT[1]
+		var xm: float = sx2 * (W + larg2 * 0.5)
 		for b in _gradins(sx2, false, false):
-			st2.set_color(Color(0.80, 0.79, 0.76))
-			_boite_st(st2, b[0], b[1])
-		for k2 in range(n):
-			var d2: float = dq - lq * 0.5 + lc * (float(k2) + 0.5)
-			var y2: float = VehiculeFunival.y_plancher_monde(self, d2)
-			var yb: float = y_voie(d2) - 0.4
-			st2.set_color(Color(0.72, 0.10, 0.08))
-			_boite_st(st2, Vector3(0.12, y2 - yb, lc + 0.02), Vector3(sx2 * (W + 0.06), (y2 + yb) * 0.5, -d2))
+			var t: Vector3 = b[0]
+			var c: Vector3 = b[1]
+			_boite_ombree(st2, t, c, Color(0.78, 0.77, 0.74))
+			# nez de marche : bande sombre au bord aval du giron
+			_boite_ombree(st2, Vector3(t.x, 0.035, 0.05), Vector3(c.x, c.y + t.y * 0.5 - 0.012, c.z + t.z * 0.5 - 0.03), Color(0.36, 0.36, 0.35))
+		# jupe rouge : du radier au bord de l'escalier, à sa pente
+		var xj: float = sx2 * (W + 0.06)
+		var dj: float = e_d0
+		while dj < e_d1 - 0.01:
+			var dj2: float = minf(dj + 2.0, e_d1)
+			var q: Array = [Vector3(xj, y_voie(dj) - 0.4, -dj), Vector3(xj, y_esc.call(dj) - 0.02, -dj),
+				Vector3(xj, y_esc.call(dj2) - 0.02, -dj2), Vector3(xj, y_voie(dj2) - 0.4, -dj2)]
+			for tri in [[0, 1, 2], [0, 2, 3], [0, 2, 1], [0, 3, 2]]:
+				st2.set_color(Color(0.52, 0.07, 0.06))
+				for iv in tri:
+					st2.add_vertex(q[iv])
+			dj = dj2
+		# poteaux noirs contre le mur, tous les 6 m, de la marche au plafond
+		var dp: float = e_d0 + 3.0
+		while dp < e_d1 - 1.0:
+			var yb2: float = y_esc.call(dp)
+			var yh2: float = y_voie(dp) + 6.5
+			RemonteeKit.boite_en(g, Vector3(0.35, yh2 - yb2, 0.35), Vector3(sx2 * (hx - 0.25), (yb2 + yh2) * 0.5, -dp), "peinture_anthracite")
+			dp += 6.0
+	# main courante rouge le long du mur droit, à 0,9 m de l'escalier, sur potelets tous les 3 m
+	var xr: float = hx - 0.6
+	RemonteeKit.poutre(g, Vector3(xr, e_y0 + 0.9, -e_d0), Vector3(xr, e_y1 + 0.9, -e_d1), 0.05, 0.05, "rouge_val")
+	var dpo: float = e_d0 + 1.5
+	while dpo < e_d1:
+		RemonteeKit.boite_en(g, Vector3(0.04, 0.9, 0.04), Vector3(xr, y_esc.call(dpo) + 0.45, -dpo), "rouge_val")
+		dpo += 3.0
+	# poutres blanches du plafond, en travers, tous les 2,5 m (photos : plafond blanc à poutres)
+	var dbp: float = L - L_HALL + 1.25
+	while dbp < L:
+		var yp: float = y_voie(dbp) + 6.5 - 0.30
+		_boite_ombree(st2, Vector3(2.0 * hx, 0.55, 0.40), Vector3(0.0, yp, -dbp), Color(0.93, 0.93, 0.91))
+		# tube d'éclairage sous une poutre sur deux
+		if int((dbp - (L - L_HALL)) / 2.5) % 2 == 0:
+			for sxl in [-1.0, 1.0]:
+				_boite_ombree(st2, Vector3(1.6, 0.06, 0.10), Vector3(sxl * (W + 1.6), yp - 0.31, -dbp), Color(1.0, 0.98, 0.92))
+		dbp += 2.5
 	var esc: MeshInstance3D = _maillage(st2, mat_funi("cuit"), "EscaliersAmont", false)
 	esc.reparent(g, false)
 	await _pause("funival : gare amont")
-	# mur de pierre et enseignes, à droite, au milieu du quai
+	# mur de pierre en plaquettes sombres sur tout le mur droit (photos : « WELCOME TO BELLEVARDE » en lettres
+	# métalliques), et bannière « Respirez » suspendue au plafond au-dessus des portes
 	var dm: float = dq
 	var ym: float = VehiculeFunival.y_plancher_monde(self, dm)
-	RemonteeKit.boite_en(g, Vector3(0.3, 4.0, 14.0), Vector3(hx - 0.2, ym + 2.0, -dm), "pierre")
+	var d_m0: float = L - L_HALL + 2.0
+	var p_m: float = (y_voie(L) - y_voie(d_m0)) / (L - d_m0)
+	var mur_p: MeshInstance3D = RemonteeKit.boite(g, Vector3(0.25, 6.2, (L - d_m0) * sqrt(1.0 + p_m * p_m)),
+		Transform3D(Basis(Vector3.RIGHT, atan(p_m)), Vector3(hx - 0.14, (y_voie(d_m0) + y_voie(L)) * 0.5 + 3.4, -(d_m0 + L) * 0.5)), "pierre")
+	mur_p.material_override = mat_funi("ardoise")
+	mur_p.set_meta(MeshMerge.SANS_FUSION, true)
 	var w1: MeshInstance3D = RemonteeKit.texte_fige(g, "WELCOME TO BELLEVARDE", 64, 0.010, Color(0.80, 0.80, 0.78))
-	w1.transform = Transform3D(Basis(Vector3.UP, -PI * 0.5), Vector3(hx - 0.37, ym + 2.8, -dm))
-	var w2: MeshInstance3D = RemonteeKit.texte_fige(g, "Respirez, vous êtes à 2690 m !", 48, 0.008, Color(0.85, 0.10, 0.10))
-	w2.transform = Transform3D(Basis(Vector3.UP, -PI * 0.5), Vector3(hx - 0.37, ym + 3.6, -dm + 9.0))
+	w1.transform = Transform3D(Basis(Vector3.UP, -PI * 0.5), Vector3(hx - 0.30, ym + 2.8, -dm))
+	# (au niveau du plafond EN CET ENDROIT : calée sur le milieu du quai, 9 m plus bas, elle traversait l'escalier)
+	var db: float = dm + 6.0
+	var yb3: float = y_voie(db) + 6.5 - 1.05
+	var ban: MeshInstance3D = RemonteeKit.boite_en(g, Vector3(0.03, 0.9, 6.0), Vector3(-(W + 0.35), yb3, -db), "crepi")
+	ban.set_meta(MeshMerge.SANS_FUSION, true)
+	var w2: MeshInstance3D = RemonteeKit.texte_fige(g, "Respirez, vous êtes à 2690 m !", 48, 0.008, Color(0.10, 0.10, 0.10))
+	w2.transform = Transform3D(Basis(Vector3.UP, -PI * 0.5), Vector3(-(W + 0.37), yb3 + 0.15, -db))
+	var w3: MeshInstance3D = RemonteeKit.texte_fige(g, "Breath, you are at 2690m!", 40, 0.006, Color(0.80, 0.08, 0.08))
+	w3.transform = Transform3D(Basis(Vector3.UP, -PI * 0.5), Vector3(-(W + 0.37), yb3 - 0.2, -db))
 	await _pause("funival : gare amont")
 	# bâtiment de surface au débouché (photos ; ~38 m de long, estimé) : volume haut à pignon au-dessus de la salle,
 	# bandeau de fenêtres sous le toit, aile basse à pignon, vitrage en bandeau au rez-de-chaussée, volume de pierre
@@ -1281,7 +1364,7 @@ func _gare_amont() -> void:
 	var per: MeshInstance3D = _maillage(stp, mat_funi("cuit"), "Perrons", false)
 	per.reparent(g, false)
 	await _pause("funival : gare amont")
-	MeshMerge.merge(g, [w1, w2, ens, carre, moel, esc], "Gare")
+	MeshMerge.merge(g, [w1, w2, w3, ban, mur_p, ens, carre, moel, esc], "Gare")
 
 
 ## Terrain de la gare amont (remarques d'utilisateur, iPad du 08/11/2026 : « en gare du haut une plaque grise coupe
@@ -1308,21 +1391,36 @@ func _amenager_relief_amont() -> void:
 	var hx: float = VehiculeFunival.DEMI_LARGEUR + 0.05 + 4.2
 	var zs: float = -(L + 11.0)
 	var y0: float = xf.origin.y
+	# salle rasée sur TOUTE sa longueur, couverte par son habillage (retour d'utilisateur du 10/11/2026 : « sur le quai
+	# amont sans cabine, les rails s'arrêtent à l'entrée du tunnel, on voit rien après ») : rasée seulement là où elle
+	# sortait du terrain, le relief, champ de hauteurs, redescendait du dessus du plafond au-dessous du plancher en
+	# travers de la salle, mur de neige à 16 m de la bouche du tube. La marche est maintenant au voile d'about, derrière
+	# lui, et l'habillage monte jusqu'au terrain d'origine (relevé ici avant le rabotage).
 	var rabots: Array = []
+	_haut_orig.clear()
 	var d: float = L - L_HALL
 	while d < L - 0.01:
 		var d2: float = minf(d + 4.0, L)
 		var dm: float = (d + d2) * 0.5
-		var c: Vector3 = xf * Vector3(0.0, 0.0, -dm)
-		var toit: float = y_voie(d2) + 6.5
-		if rel.hauteur_sol(c.x, c.z) - y0 < toit + 1.5:
-			rabots.append([monde.call(rect.call(0.0, -dm, 2.0 * hx + 1.2, d2 - d)), y0 + y_voie(d) - 1.0, 2.0])
-			_salle_emerge_d = minf(_salle_emerge_d, d)
+		var h_max: float = -INF
+		for sx in [-1.0, 0.0, 1.0]:
+			for dd in [d, d2]:
+				var c: Vector3 = xf * Vector3(sx * (hx + 2.6), 0.0, -dd)
+				h_max = maxf(h_max, rel.hauteur_sol(c.x, c.z) - y0)
+		_haut_orig.append(h_max)
+		# (jusque sous les murs épais de l'habillage : plus étroit, les triangles du relief entre sommets rasés et non
+		# rasés pointaient dans la salle, pointes de neige le long des parois)
+		rabots.append([monde.call(rect.call(0.0, -dm, 2.0 * hx + 5.0, d2 - d)), y0 + y_voie(d) - 1.0, 2.0])
 		d = d2
+	_salle_emerge_d = L - L_HALL
 	var bat: Array = [rect.call(0.0, zs, 2.0 * hx + 3.0, 23.0), rect.call(hx + 7.0, zs - 12.0, 13.0, 17.0),
 		rect.call(-(hx + 4.0), zs + 6.0, 7.0, 8.0)]
 	var remblais: Array = []
-	var trous: Array = []
+	# trou au-dessus de la bouche du tube : le talus du rabotage, de la salle rasée au terrain d'origine, traversait
+	# le tube et le bouchait (vu du quai : un disque de neige) ; caché dessus par la dalle de l'habillage
+	# (de 3,4 m sous la bouche à 3 m dans la salle : la grille du relief, 2 m alignés sur le monde et non sur la
+	# ligne, a des triangles qui portent le talus jusqu'à 2,8 m plus loin — pointes de neige devant la bouche)
+	var trous: Array = [monde.call(rect.call(0.0, -(L - L_HALL - 0.2), 2.0 * hx + 9.0, 6.4))]
 	for r2 in bat:
 		remblais.append([monde.call(r2), y0 + sol_batiment() - 0.05, 10.0])
 	var bb: Rect2 = Rect2()
@@ -1341,6 +1439,9 @@ func _amenager_relief_amont() -> void:
 
 ## Début (d) de la partie de la salle amont qui sort du terrain (INF : enterrée).
 var _salle_emerge_d: float = INF
+## Terrain d'origine (le plus haut, sur l'emprise élargie de 2,6 m) au-dessus de chaque tranche de 4 m de la salle,
+## en hauteur de la ligne, relevé avant le rabotage.
+var _haut_orig: Array = []
 
 
 ## Habillage de la salle amont là où elle sort du terrain : murs et toit de bardage anthracite, comme le bâtiment.
@@ -1349,25 +1450,34 @@ func _habiller_salle() -> void:
 		return
 	var L: float = longueur_h()
 	var hx: float = VehiculeFunival.DEMI_LARGEUR + 0.05 + 4.2
-	var d0: float = maxf(_salle_emerge_d - 2.0, L - L_HALL)
+	var d0: float = L - L_HALL
 	var g: Node3D = Node3D.new()
 	g.name = "HabillageSalle"
 	add_child(g)
 	var bard: Material = mat_funi("bardage_anthracite")
-	# par tranches de 4 m qui suivent la voie (d'un bloc, le toit plongeait dans la salle où la pente change)
-	var d: float = d0
+	var beton: Material = mat_funi("beton_banche")
+	# par tranches de 4 m qui suivent la voie (d'un bloc, le toit plongeait dans la salle où la pente change) ; la
+	# première déborde de 4 m vers l'aval sur le tube (trou du relief au-dessus de sa bouche, talus du rabotage).
+	# Murs épais de 2,4 m (ils couvrent le talus du rabotage) et toit montés jusqu'au terrain d'origine : bardage là
+	# où la salle sort du sol, béton là où elle était enterrée.
+	var d: float = d0 - 4.0
 	while d < L - 0.01:
-		var d2: float = minf(d + 4.0, L)
+		var d2: float = minf(d + 4.0, L) if d >= d0 else d0 + 2.0
 		var dm: float = (d + d2) * 0.5
 		var p: float = (y_voie(d2) - y_voie(d)) / (d2 - d)
 		var b_p: Basis = Basis(Vector3.RIGHT, atan(p))
 		var lg_t: float = (d2 - d) * sqrt(1.0 + p * p) + 0.05
+		var yv: float = y_voie(dm)
+		var h_o: float = float(_haut_orig[clampi(int((dm - d0) / 4.0), 0, _haut_orig.size() - 1)]) if not _haut_orig.is_empty() else -INF
+		var haut: float = maxf(yv + 7.05, h_o + 0.3)
+		var enterre: bool = h_o > yv + 7.6
 		var pieces: Array = []
 		for sx in [-1.0, 1.0]:
-			pieces.append(RemonteeKit.boite(g, Vector3(0.3, 8.6, lg_t), Transform3D(b_p, Vector3(sx * (hx + 0.40), y_voie(dm) + 2.75, -dm)), "beton"))
-		pieces.append(RemonteeKit.boite(g, Vector3(2.0 * hx + 1.4, 0.35, lg_t), Transform3D(b_p, Vector3(0, y_voie(dm) + 6.95, -dm)), "beton"))
+			pieces.append(RemonteeKit.boite(g, Vector3(2.4, haut - (yv - 1.55), lg_t), Transform3D(b_p, Vector3(sx * (hx + 1.45), (haut + yv - 1.55) * 0.5, -dm)), "beton"))
+		var h_toit: float = maxf(0.35, haut - (yv + 6.78))
+		pieces.append(RemonteeKit.boite(g, Vector3(2.0 * hx + 5.2, h_toit, lg_t), Transform3D(b_p, Vector3(0, yv + 6.78 + h_toit * 0.5, -dm)), "beton"))
 		for mi in pieces:
-			(mi as MeshInstance3D).material_override = bard
+			(mi as MeshInstance3D).material_override = beton if enterre else bard
 		d = d2
 	MeshMerge.merge(g, [], "HabillageSalle")
 
