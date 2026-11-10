@@ -199,6 +199,7 @@ func preparer(r: ReliefBuilder, h0: PackedFloat32Array) -> void:
 	_fine = res[1]
 	var h_retouche: PackedFloat32Array = r._h
 	r._h = res[2]
+	_raboter_teleskis(r, h_retouche)
 	pret = true
 	print("[ReliefFin] %.1f M de nœuds : lecture %d ms, fusion %d ms" % [NI * NJ / 1.0e6, (t_lu - debut) / 1000, (Time.get_ticks_usec() - t_lu) / 1000])
 	var niveau: int = niveau_hd()
@@ -211,6 +212,45 @@ func preparer(r: ReliefBuilder, h0: PackedFloat32Array) -> void:
 			var q2: Rect2 = (am["rect"] as Rect2).grow(FONDU + RACCORD_GARE)
 			rects.append_array(PackedFloat32Array([q2.position.x, q2.position.y, q2.end.x, q2.end.y]))
 		_preparer_hd(r, h0, h_retouche, rects, niveau)
+
+
+## Couloir des téléskis (câble bas) : le relevé fin ne monte pas à plus de MARGE_TELESKI au-dessus du sol à 25 m
+## sur lequel la ligne est calée, comme une trace damée ; fondu sur RACCORD_LARGEUR au-delà du couloir. Crête de 4 m
+## sur 30 m, invisible à 25 m, au TKD du Col du Palet : le câble y passait à 0,11 m du sol fin (relevé du NAS du
+## 10/11/2026). Le profil des lignes et la grille à 25 m (PWA) ne changent pas.
+const MARGE_TELESKI: float = 1.0
+var noeuds_rabotes: int = 0
+
+
+func _raboter_teleskis(r: ReliefBuilder, h25: PackedFloat32Array) -> void:
+	for D in RemonteesDonnees.LIGNES:
+		if not String(D["famille"]).begins_with("perche"):
+			continue
+		var a: Vector2 = RemonteesDomaine.monde(float(D["aval"][0]), float(D["aval"][1]))
+		var b: Vector2 = RemonteesDomaine.monde(float(D["amont"][0]), float(D["amont"][1]))
+		if a.distance_to(b) < 1.0:
+			continue
+		var r0: float = float(D["voie"]) * 0.5 + RACCORD_R0
+		var r1: float = r0 + RACCORD_LARGEUR
+		var j0: int = clampi(int((minf(a.x, b.x) - r1 - X0) / PX), 0, NJ - 1)
+		var j1: int = clampi(int((maxf(a.x, b.x) + r1 - X0) / PX) + 1, 0, NJ - 1)
+		var i0: int = clampi(int((minf(a.y, b.y) - r1 - Z0) / PZ), 0, NI - 1)
+		var i1: int = clampi(int((maxf(a.y, b.y) + r1 - Z0) / PZ) + 1, 0, NI - 1)
+		for i in range(i0, i1 + 1):
+			for j in range(j0, j1 + 1):
+				var p: Vector2 = Vector2(X0 + j * PX, Z0 + i * PZ)
+				var dist: float = p.distance_to(Geometry2D.get_closest_point_to_segment(p, a, b))
+				if dist >= r1:
+					continue
+				var k: int = i * NJ + j
+				var lim: float = r._tri_sur(h25, p.x, p.y, 1) + MARGE_TELESKI
+				if _hn[k] <= lim:
+					continue
+				_hn[k] = lerpf(_hn[k], lim, 1.0 - smoothstep(r0, r1, dist))
+				noeuds_rabotes += 1
+				# (pas la grille à 25 m : _h25, sur lequel les lignes sont calées au PC comme sur la PWA, en est tiré)
+	if noeuds_rabotes > 0:
+		print("[ReliefFin] couloirs des téléskis : %d nœuds rabotés" % noeuds_rabotes)
 
 
 ## Sol au mètre : le relevé LiDAR du pack, sauf sous les ouvrages, où reste la grille à 5 m sur

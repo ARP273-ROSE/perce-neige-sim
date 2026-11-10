@@ -99,7 +99,9 @@ func _ligne(lg: LigneRemontee) -> String:
 		var y: float = lg.y_cable(dv)
 		axe = maxf(axe, absf(lg.terrain(dv) - lg._sol(0.0, -dv)))
 		for x in [-lg.voie * 0.5, lg.voie * 0.5]:
-			var m: float = y - lg._sol(x, -dv) - lg._garde_exigee(dv)
+			# (téléski : garde de 3,8 m, celle sur laquelle son câble est calé ; GARDE (5 m) signalait tous les téléskis)
+			var exigee: float = minf(lg._garde_exigee(dv), LigneRemontee.GARDE_TELESKI) if lg.teleski() else lg._garde_exigee(dv)
+			var m: float = y - lg._sol(x, -dv) - exigee
 			if m < greel:
 				greel = m
 				dreel = dv
