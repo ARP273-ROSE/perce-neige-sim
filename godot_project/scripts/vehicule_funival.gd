@@ -133,10 +133,11 @@ func _phases() -> Array:
 	for c in get_children():
 		c.queue_free()
 	_portes.clear()
+	_roues.clear()
 	cabine = true
 	places = 272
 	masse = 21840.0
-	return [_caisse, _interieur, _portes_funi, _phares, func() -> void: MeshMerge.merge(self, _portes_noeuds() + _phares_l, "Funi")]
+	return [_caisse, _interieur, _portes_funi, _phares, func() -> void: MeshMerge.merge(self, _portes_noeuds() + _phares_l + _roues, "Funi")]
 
 
 ## Phares : un projecteur chaud à chaque nez (vidéos : parois très éclairées devant le véhicule), sans ombre.
@@ -242,7 +243,11 @@ func _caisse() -> void:
 	noir.begin(Mesh.PRIMITIVE_TRIANGLES)
 	var verre: SurfaceTool = SurfaceTool.new()
 	verre.begin(Mesh.PRIMITIVE_TRIANGLES)
-	RemonteeKit.boite_en(self, Vector3(1.9, 0.45, L - 1.0), Vector3(0, 0.30, 0), "acier_noir")           # châssis, bogies cachés
+	# fond de caisse et deux bogies à roues Abt, comme au Perce-Neige (retour d'utilisateur du 11/11/2026 : « le dessous
+	# de la rame c'est comme Perce-Neige avec des roues différentes en fonction de la rame », pas un caisson plein)
+	RemonteeKit.boite_en(self, Vector3(2.0 * W - 0.1, 0.06, L - 1.4), Vector3(0, Y_FOND, 0), "acier_noir")
+	for zb in [-(DEMI_L - Z_BOGIE), DEMI_L - Z_BOGIE]:
+		_bogie(zb)
 	var th: float = _th_flanc()
 	var baies: Array = _baies()
 	for sx in [-1.0, 1.0]:
@@ -317,7 +322,8 @@ func _caisse() -> void:
 					Vector3(a0.x * u0, a0.y, z_bout(a0.y, sz, u0)), Vector3(a0.x * u1, a0.y, z_bout(a0.y, sz, u1)),
 					Vector3(a1.x * u1, a1.y, z_bout(a1.y, sz, u1)), Vector3(a1.x * u0, a1.y, z_bout(a1.y, sz, u0)))
 		# bas du nez et butée
-		RemonteeKit.boite_en(self, Vector3(2.0 * W - 0.1, 0.30, 0.25), Vector3(0, 0.60, sz * (DEMI_L - 0.15)), "cabine_noire")
+		# (sous l'aigle, en noir mat : brillante à 0,6 m, elle barrait l'aigle d'une bande grise vue de derrière)
+		RemonteeKit.boite_en(self, Vector3(2.0 * W - 0.1, 0.22, 0.25), Vector3(0, 0.50, sz * (DEMI_L - 0.15)), "acier_noir")
 		# doublure blanche autour de la baie de tête (ok-48, ok-54) : allège, imposte et piédroits ; la vitre reste libre
 		var z_d: float = sz * (DEMI_L - 0.92)
 		# (plancher du palier de bout au droit de la doublure, dans le repère de la caisse : la hauteur du palier dans
@@ -328,7 +334,10 @@ func _caisse() -> void:
 		var py: Vector3 = Rn * Vector3(0, cb0.y, 0)
 		var pz: Vector3 = Rn * Vector3(0, 0, 1)
 		var y_sol: float = py.y + (z_d - py.z) / pz.z * pz.y
-		RemonteeKit.boite_en(self, Vector3(2.0 * W - 0.25, 1.40 - y_sol + 0.2, 0.04), Vector3(0, (1.40 + y_sol - 0.2) * 0.5, z_d), "cabine_blanche")
+		# (bas borné au-dessus du bas de caisse : le palier de bout est sous la caisse côté aval, l'allège descendait sous
+		# les rails et faisait un panneau gris sous le nez, vu de derrière — retour d'utilisateur du 10/11/2026)
+		var y_all: float = maxf(y_sol - 0.2, 0.55)
+		RemonteeKit.boite_en(self, Vector3(2.0 * W - 0.25, 1.40 - y_all, 0.04), Vector3(0, (1.40 + y_all) * 0.5, z_d), "cabine_blanche")
 		RemonteeKit.boite_en(self, Vector3(2.0 * W - 0.55, 0.22, 0.04), Vector3(0, 3.10, z_d), "cabine_blanche")
 		for su in [-1.0, 1.0]:
 			RemonteeKit.boite_en(self, Vector3(0.20, 1.60, 0.04), Vector3(su * (W - 0.24), 2.20, z_d), "cabine_blanche")
@@ -341,8 +350,9 @@ func _caisse() -> void:
 		m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 		m.albedo_color = Color(0.94, 0.94, 0.94)
 		m.albedo_texture = VehiculeRemontee._aigle()
-		m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA_SCISSOR
-		m.alpha_scissor_threshold = 0.5
+		# (bords lissés : en découpe nette, l'aigle de 128 px était déchiqueté)
+		m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+		m.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR
 		mi.material_override = m
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		var ya: float = 1.18
@@ -367,6 +377,65 @@ func _caisse() -> void:
 	mv.material_override = vitre_funi()
 	mv.set_meta(MeshMerge.SANS_FUSION, true)
 	add_child(mv)
+
+
+## Épaisseur d'un bloc du plancher (dessus à y_haut dans le repère de niveau, de z0 à z1) pour que son dessous reste
+## au-dessus du fond de caisse dans le repère du véhicule ; au plus `maxi`, au moins 0,05 m.
+static func _epaisseur_sur_fond(R: Basis, y_haut: float, z0: float, z1: float, maxi: float) -> float:
+	var ky: float = (R * Vector3.UP).y
+	var t: float = maxi
+	for z in [z0, z1]:
+		t = minf(t, ((R * Vector3(0, y_haut, z)).y - (Y_FOND + 0.03)) / ky)
+	return clampf(t, 0.05, maxi)
+
+
+## Bogie : longerons, traverse, deux essieux et leurs boîtes, quatre roues sur pivots (tournées par tourner_roues).
+## Système Abt : le véhicule 1 (voie de gauche dans l'évitement) est guidé par ses roues de gauche, à double boudin
+## sur le rail extérieur ; ses roues de droite sont des cylindres larges sans boudin qui passent l'aiguillage ;
+## l'inverse pour le véhicule 2. La caisse n'est jamais retournée : le côté guidé ne change pas.
+const R_ROUE: float = 0.30
+const Z_BOGIE: float = 4.0               # centre du bogie depuis le bout de la caisse (estimé)
+const Y_FOND: float = 0.45               # fond de caisse au-dessus des rails : bas des flancs (les roues montent dans la caisse)
+var _roues: Array = []
+
+
+func _bogie(zc: float) -> void:
+	var y_ax: float = R_ROUE
+	for sx in [-0.86, 0.86]:
+		RemonteeKit.boite_en(self, Vector3(0.12, 0.18, 2.7), Vector3(sx, y_ax + 0.16, zc), "acier_noir")
+	RemonteeKit.boite_en(self, Vector3(1.84, 0.20, 0.30), Vector3(0, y_ax + 0.20, zc), "acier_noir")
+	var guide_gauche: bool = numero != 2
+	var axe: Basis = Basis(Vector3.BACK, PI * 0.5)
+	for dz in [-0.95, 0.95]:
+		RemonteeKit.boite_en(self, Vector3(1.50, 0.08, 0.08), Vector3(0, y_ax, zc + dz), "acier")
+		for sx in [-0.86, 0.86]:
+			RemonteeKit.boite_en(self, Vector3(0.16, 0.24, 0.28), Vector3(sx, y_ax + 0.02, zc + dz), "acier_noir")
+		for sx in [-1.0, 1.0]:
+			var piv: Node3D = Node3D.new()
+			piv.name = "Roue"
+			piv.position = Vector3(sx * ECART_ROUES, y_ax, zc + dz)
+			add_child(piv)
+			_roues.append(piv)
+			var ext: float = sx * 0.07
+			if (sx < 0.0) == guide_gauche:
+				# double boudin : bandage étroit entre deux flasques qui enserrent le rail
+				RemonteeKit.cylindre(piv, R_ROUE, R_ROUE, 0.10, Transform3D(axe, Vector3.ZERO), "acier", 20)
+				for fx in [-0.065, 0.065]:
+					RemonteeKit.cylindre(piv, R_ROUE + 0.035, R_ROUE + 0.035, 0.025, Transform3D(axe, Vector3(fx, 0, 0)), "acier", 20)
+			else:
+				ext = sx * 0.13
+				RemonteeKit.cylindre(piv, R_ROUE, R_ROUE, 0.24, Transform3D(axe, Vector3.ZERO), "acier", 20)
+			# moyeu clair et barre radiale sur la face extérieure : une roue lisse qui tourne ne se voit pas
+			RemonteeKit.cylindre(piv, 0.09, 0.09, 0.02, Transform3D(axe, Vector3(ext, 0, 0)), "galva", 12)
+			RemonteeKit.boite_en(piv, Vector3(0.015, 2.0 * R_ROUE - 0.08, 0.05), Vector3(ext, 0, 0), "galva")
+			MeshMerge.merge(piv, [], "Roue")
+const ECART_ROUES: float = 0.60          # demi-écartement (voie de 1,20 m)
+
+
+## Roues tournées de la distance parcourue d (m) le long de la voie.
+func tourner_roues(d: float) -> void:
+	for piv in _roues:
+		(piv as Node3D).rotation.x = -d / R_ROUE
 
 
 ## Montant noir du flanc, de la ceinture de vitrage à la gouttière (bas compris si `large`).
@@ -419,7 +488,10 @@ func _interieur() -> void:
 			z1 = c.z + l_comp() * 0.5
 		if k == N_COMP - 1:
 			z0 = c.z - l_comp() * 0.5
-		RemonteeKit.boite(self, Vector3(lw, 1.0, z1 - z0), Transform3D(R, R * Vector3(0, c.y - 0.5, (z0 + z1) * 0.5)), "caillebotis")
+		# (épaisseur bornée au-dessus du fond de caisse : épais de 1 m et inclinés, paliers et marches sortaient sous la
+		# caisse et la traversaient entre les bogies — retour d'utilisateur du 11/11/2026)
+		var ep: float = _epaisseur_sur_fond(R, c.y, z0, z1, 1.0)
+		RemonteeKit.boite(self, Vector3(lw, ep, z1 - z0), Transform3D(R, R * Vector3(0, c.y - ep * 0.5, (z0 + z1) * 0.5)), "caillebotis")
 		if k + 1 < N_COMP:
 			var e1: Vector3 = c + Vector3(0, 0, -L_PALIER * 0.5)
 			var e2: Vector3 = _palier_niv(k + 1) + Vector3(0, 0, L_PALIER * 0.5)
@@ -428,7 +500,8 @@ func _interieur() -> void:
 			for j in range(1, N_MARCHES + 1):
 				var haut: float = e1.y + mont * float(j) / float(N_MARCHES)
 				var zc: float = e1.z - course * (float(j) - 0.5) / float(N_MARCHES)
-				var h: float = haut - (e1.y - 1.0)
+				var run: float = course / float(N_MARCHES)
+				var h: float = _epaisseur_sur_fond(R, haut, zc - run * 0.5, zc + run * 0.5, haut - (e1.y - 1.0))
 				RemonteeKit.boite(self, Vector3(lw, h, course / float(N_MARCHES) + 0.01),
 					Transform3D(R, R * Vector3(0, haut - h * 0.5, zc)), "caillebotis")
 				# nez de marche inox

@@ -1342,7 +1342,7 @@ func _build_sleepers() -> void:
 	var n_total: int = int(trace.longueur / sleeper_spacing)
 	for i in range(n_total):
 		var s: float = (float(i) + 0.5) * sleeper_spacing
-		if s < pit_low_end or s > pit_high_start:
+		if s < pit_low_end or s > pit_high_start or s < sleepers_s0:
 			continue   # au-dessus des fosses de gare, les rails sont sur poutres
 		if s < trace.evit_debut - ABT_TONGUE_BACK or s > trace.evit_fin + ABT_TONGUE_BACK:
 			positions.append({"s": s, "off": -hg, "w": block_width})
@@ -1410,6 +1410,7 @@ func _build_sleepers() -> void:
 @export var walkway_post_s: float = 3.0      # espacement des potelets
 @export var walkway_handrail: bool = false   # pas de rambarde sur le vrai escalier
 @export var walkway_s0: float = -INF         # début de l'escalier, s'il commence après la fosse (Funival : au portail)
+@export var sleepers_s0: float = -INF         # premiers blochets (Funival : au portail ; dehors, rails sur longrines)
 @export var walkway_s1: float = INF          # fin de l'escalier, s'il s'arrête avant la fosse haute (Funival : à la salle amont)
 
 
