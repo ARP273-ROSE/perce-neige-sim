@@ -5,6 +5,26 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.62.0 — 11 novembre 2026
+
+Funival redessiné d'après les photos et les vidéos, sons des pylônes au galet près, chariot du 3S.
+
+**Funival, gare amont** : depuis le quai, on voit maintenant le tunnel et la voie au-delà de la bouche (un mur de neige la fermait : le relief traversait la salle). Escaliers ombrés à nez de marche, jupes rouges dans la pente, plafond à poutres blanches et tubes lumineux, poteaux noirs, main courante rouge, mur de pierre sombre, bannière « Respirez » sous le plafond ; les 9 derniers mètres côté nez en caillebotis galvanisé à rampe rouge.
+
+**Funival, bâtiment de Bellevarde** : on traverse maintenant une vraie gare pour sortir : bandeaux vitrés, charpente noire à lampes, portillons à voyant vert, panneaux SORTIE et DESCENTE, logo et « Rocher de Bellevarde · 2690 m », râteliers à skis, bancs, extincteurs, portes vitrées. Dehors : marquises, enseignes « DESCENTE · WAY DOWN », volume de pierre à toit à deux pans, neige et rives blanches sur les toits, skis contre la façade.
+
+**Funival, rames** : dessous à deux bogies à roues Abt, différentes d'une rame à l'autre (double boudin du côté guidé), qui tournent avec la marche, et attache du câble ; les paliers intérieurs ne traversent plus le fond de la caisse. Portes ouvertes vers l'aval, sans dépasser des nez ; arrière refait (aigle net, butée basse noire).
+
+**Funival, voie et gare aval** : longrines de béton sous les rails du viaduc, traverses seulement dans le tube, câbles de paroi et passerelle bornés au tunnel ; quai aval en caillebotis galvanisé à nez de marche clairs.
+
+**Funival, sons** : bips et fermeture des portes, roulement sur le viaduc et dans le tunnel, croisement, ralentissement et salle des machines de Bellevarde sont tirés des vidéos de la montée et de la descente (et non plus empruntés au Perce-Neige).
+
+**Pylônes, sons des galets** : les prises de compression étaient décalées (le train de chocs tombait 1,5 s après le passage) et se doublaient. Chaque passage joue maintenant un choc réel par galet du balancier, au rythme du pas des galets divisé par la vitesse ; les ambiances des gares des télésièges, télécabines, téléskis et du 3S suivent la vitesse réelle de l'installation.
+
+**3S, chariot** : le bras de la cabine s'articule au niveau des galets, entre les deux de devant et les deux de derrière ; la pince du câble tracteur remonte (bras du V raccourcis de 2/5) et passe au-dessus des galets ; après la cabine, le tracteur se repose sur les galets en chaînette.
+
+Vérifié au NAS : 59 bancs sur 59, empreinte du Perce-Neige inchangée, banc des sons (8 chocs à 0,095 s), garde du 3S à 3,00 m.
+
 ## 1.61.0 — 10 novembre 2026
 
 Fluidité sur PC, garde au sol des téléskis et du 3S.
