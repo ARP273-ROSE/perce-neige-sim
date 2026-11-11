@@ -5,6 +5,18 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.63.0 — 11 novembre 2026
+
+Téléphérique du Fornet : façade de la gare aval actuelle.
+
+**Fornet, gare aval** : la façade côté route reprend le bâtiment d'aujourd'hui : bardage noir à lames horizontales, bandeau vitré sur socle de pierre, treillis de mélèze, entrée en retrait, enseigne « Téléphérique du Fornet » et plaque « Val d'Isère », barrières en rondins, lampadaire et mât. Les portiques du quai passent en gris anthracite.
+
+**Fornet, gare amont** : l'annexe est bardée de bois gris, avec une grille de fenêtres, un toit noir et un garde-corps rouge ; une bande vitrée et un panneau noir sur la tour.
+
+**Cabines des téléphériques** : main courante tout autour, plinthes, sol en tapis sombre, plafonnier.
+
+Vérifié au NAS : 59 bancs sur 59, empreintes du Perce-Neige et du Funival inchangées.
+
 ## 1.62.0 — 11 novembre 2026
 
 Funival redessiné d'après les photos et les vidéos, sons des pylônes au galet près, chariot du 3S.
