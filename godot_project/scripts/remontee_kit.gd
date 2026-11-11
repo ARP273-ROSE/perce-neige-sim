@@ -75,6 +75,7 @@ const COULEURS: Dictionary = {
 	# gares de l'Olympique (vidéos de la ligne) : chalet aval, gare amont
 	"toit_brun": [Color(0.30, 0.22, 0.17), 0.85, 0.0],
 	"bois_fonce": [Color(0.36, 0.22, 0.14), 0.85, 0.0],
+	"bois_grise": [Color(0.47, 0.44, 0.40), 0.85, 0.0],       # bardage de mélèze vieilli (Fornet amont)
 	"panneau_solaire": [Color(0.08, 0.10, 0.16), 0.25, 0.6],
 }
 

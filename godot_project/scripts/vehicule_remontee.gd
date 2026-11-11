@@ -1999,7 +1999,21 @@ func _cabine_tph() -> void:
 	RemonteeKit.boite_en(cab, Vector3(0.8, 0.06, 0.8), Vector3(-0.5, 0.03, -1.6), "galva_pylone")
 	# intérieur : plancher, poste du conducteur à l'avant, barres de maintien
 	var yp: float = -H + 0.12
-	RemonteeKit.boite_en(cab, Vector3(2.85, 0.03, 5.4), Vector3(0, yp, 0), "noir_mat")
+	RemonteeKit.boite_en(cab, Vector3(2.85, 0.03, 5.4), Vector3(0, yp, 0), "tapis_fonce")
+	# main courante tout autour, sous les vitres, et plinthe sombre (photos d'intérieur des cabines Von Roll)
+	var xi: float = 1.38
+	var zi: float = 2.62
+	var yh: float = yp + 1.0
+	for sxi in [-1.0, 1.0]:
+		RemonteeKit.barre(cab, Vector3(sxi * xi, yh, -zi + 0.45), Vector3(sxi * xi, yh, zi - 0.45), 0.022, "acier", 6)
+		RemonteeKit.barre(cab, Vector3(-xi + 0.45, yh, sxi * zi), Vector3(xi - 0.45, yh, sxi * zi), 0.022, "acier", 6)
+		RemonteeKit.boite_en(cab, Vector3(0.03, 0.16, 5.3), Vector3(sxi * (xi + 0.06), yp + 0.09, 0), "peinture_anthracite")
+		RemonteeKit.boite_en(cab, Vector3(2.8, 0.16, 0.03), Vector3(0, yp + 0.09, sxi * (zi + 0.10)), "peinture_anthracite")
+		for kz in range(4):
+			var zz2: float = -zi + 0.6 + kz * (2.0 * zi - 1.2) / 3.0
+			RemonteeKit.barre(cab, Vector3(sxi * xi, yh, zz2), Vector3(sxi * (xi + 0.06), yh, zz2), 0.015, "acier", 4)
+	# rampe lumineuse au plafond
+	RemonteeKit.boite_en(cab, Vector3(0.25, 0.04, 4.6), Vector3(0, -0.30, 0), "blanc_plaque")
 	RemonteeKit.boite_en(cab, Vector3(1.2, 1.0, 0.6), Vector3(-0.6, yp + 0.5, -2.35), "peinture_anthracite")
 	RemonteeKit.boite_en(cab, Vector3(1.1, 0.04, 0.5), Vector3(-0.6, yp + 1.02, -2.35), "noir_mat")
 	for k in range(5):

@@ -647,7 +647,7 @@ func _gare_fornet(aval: bool) -> void:
 		for sx in [-1.0, 1.0]:
 			var xb: float = sx * voie * 0.5
 			for dx in [-2.3, 2.3]:
-				RemonteeKit.boite_en(g, Vector3(0.9, hp, 0.7), Vector3(xb + dx, hp * 0.5, zp), "peinture_gris")
+				RemonteeKit.boite_en(g, Vector3(0.9, hp, 0.7), Vector3(xb + dx, hp * 0.5, zp), "peinture_anthracite")
 			for yt in [hp - 0.4, hp * 0.62]:
 				RemonteeKit.boite_en(g, Vector3(5.5, 0.7, 0.7), Vector3(xb, yt, zp), "peinture_gris")
 			# plate-forme et garde-corps au sommet
@@ -681,10 +681,8 @@ func _gare_fornet(aval: bool) -> void:
 		RemonteeKit.boite_en(g, Vector3(2.0 * hx + 6.0, hb - bas, lb), Vector3(0, bas + (hb - bas) * 0.5, zb), "peinture_anthracite")
 		RemonteeKit.boite_en(g, Vector3(2.0 * hx + 6.2, 1.2, lb + 0.2), Vector3(0, bas + 0.6, zb), "pierre")
 		RemonteeKit.boite_en(g, Vector3(2.0 * hx + 6.4, 0.3, lb + 0.4), Vector3(0, hb + 0.15, zb), "noir_mat")
-		RemonteeKit.boite_en(g, Vector3(2.0 * hx - 2.0, 4.5, 0.1), Vector3(0, 2.5, z0 + lq + lb + 0.02), "vitrage_sombre")
-		var ens: MeshInstance3D = RemonteeKit.texte_fige(g, "Téléphérique du Fornet", 120, 0.012, Color(0.96, 0.96, 0.96))
-		ens.position = Vector3(0, 6.2, z0 + lq + lb + 0.08)
-		ens.visibility_range_end = 300.0
+		_facade_fornet(g, z0 + lq + lb, 2.0 * hx + 6.0, hb, float(sol.call(0.0, z0 + lq + lb + 3.0)))
+		# portiques : piliers d'acier sombre (photos de la gare actuelle)
 	else:
 		# quai en porte-à-faux : voiles de béton jusqu'au rocher, sous le fond du quai seulement
 		for sx4 in [-1.0, 1.0]:
@@ -707,13 +705,102 @@ func _gare_fornet(aval: bool) -> void:
 		RemonteeKit.boite_en(g, Vector3(9.0, 15.0 - yt, 8.0), Vector3(-2.0, yt + (15.0 - yt) * 0.5, zt), "crepi")
 		RemonteeKit.boite_en(g, Vector3(9.2, 0.4, 8.2), Vector3(-2.0, 15.2, zt), "noir_mat")
 		RemonteeKit.boite_en(g, Vector3(6.0, 1.6, 0.1), Vector3(-2.0, 11.0, zt - sg * 4.02), "vitrage_sombre")
-		RemonteeKit.boite_en(g, Vector3(14.0, 7.0 - yt, 10.0), Vector3(10.0, yt + (7.0 - yt) * 0.5, zt + sg * 1.0), "peinture_anthracite")
-		RemonteeKit.boite_en(g, Vector3(13.0, 1.4, 0.1), Vector3(10.0, 4.6, zt + sg * 1.0 - sg * 5.02), "vitrage_sombre")
-		RemonteeKit.boite_en(g, Vector3(14.4, 0.3, 10.4), Vector3(10.0, 7.15, zt + sg * 1.0), "toit_brun")
+		# bâtiment accolé (photos) : bardage de bois gris sur trois niveaux, fenêtres carrées à cadre clair,
+		# toit plat à garde-corps rouges ; bande vitrée verticale sur la tour
+		var hn: float = 10.0
+		RemonteeKit.boite_en(g, Vector3(14.0, hn - yt, 10.0), Vector3(10.0, yt + (hn - yt) * 0.5, zt + sg * 1.0), "bois_grise")
+		RemonteeKit.boite_en(g, Vector3(14.4, 0.3, 10.4), Vector3(10.0, hn + 0.15, zt + sg * 1.0), "noir_mat")
+		var zfa: float = zt + sg * 1.0 - sg * 5.03
+		for niv in range(3):
+			var yn: float = 1.6 + niv * 3.0
+			if yn < yt + 0.8:
+				continue
+			for kf in range(5):
+				var xf2: float = 4.6 + kf * 2.7
+				RemonteeKit.boite_en(g, Vector3(1.25, 1.35, 0.06), Vector3(xf2, yn, zfa), "blanc_plaque")
+				RemonteeKit.boite_en(g, Vector3(1.0, 1.1, 0.08), Vector3(xf2, yn, zfa - sg * 0.01), "vitrage_sombre")
+		for kr in range(8):
+			var xr: float = 3.2 + kr * 1.95
+			RemonteeKit.barre(g, Vector3(xr, hn + 0.3, zfa), Vector3(xr, hn + 1.3, zfa), 0.03, "cabine_rouge", 6)
+		RemonteeKit.barre(g, Vector3(3.2, hn + 1.3, zfa), Vector3(16.8, hn + 1.3, zfa), 0.035, "cabine_rouge", 6)
+		RemonteeKit.boite_en(g, Vector3(1.4, 12.0, 0.1), Vector3(-4.6, 7.0, zt - sg * 4.03), "vitrage_sombre")
+		RemonteeKit.boite_en(g, Vector3(2.6, 0.9, 0.1), Vector3(-0.2, 13.2, zt - sg * 4.05), "noir_mat")
 		# garde-corps du quai
 		for sx6 in [-1.0, 1.0]:
 			RemonteeKit.barre(g, Vector3(sx6 * hx, 1.0, z0), Vector3(sx6 * hx, 1.0, z0 + sg * lq), 0.03, "peinture_gris", 6)
 	MeshMerge.merge(g, [], "Gare")
+
+
+## Façade côté route de la gare aval du Fornet (photos de la gare actuelle, Wikimedia Commons) :
+## bardage de planches noires, socle de pierre, grand vitrage derrière un treillis de mélèze en
+## branches d'arbres, entrée en retrait à cadre de bois, enseigne blanche, pastille rouge de la
+## station ; devant, barrières de rondins, lampadaire et mât.
+func _facade_fornet(g: Node3D, zf: float, wf: float, hb: float, yr: float) -> void:
+	var z: float = zf + 0.02
+	var y0: float = yr + 1.2                       # au-dessus du socle de pierre
+	var hv: float = 4.6
+	var xg: float = -wf * 0.5 + 0.8
+	var xd: float = wf * 0.5 - 0.8
+	# planches horizontales du bardage, au-dessus du vitrage
+	var yb: float = y0 + hv + 0.2
+	while yb < hb - 0.2:
+		RemonteeKit.boite_en(g, Vector3(wf + 0.02, 0.025, 0.04), Vector3(0, yb, z + 0.01), "noir_mat")
+		yb += 0.32
+	RemonteeKit.boite_en(g, Vector3(xd - xg, hv, 0.08), Vector3((xg + xd) * 0.5, y0 + hv * 0.5, z + 0.02), "vitrage_sombre")
+	# entrée en retrait, cadre de bois doré
+	var xe: float = wf * 0.18
+	var le: float = 5.6
+	var he: float = 3.2
+	RemonteeKit.boite_en(g, Vector3(le, he, 0.12), Vector3(xe, yr + he * 0.5, z + 0.05), "noir_mat")
+	for sxe in [-1.0, 1.0]:
+		RemonteeKit.boite_en(g, Vector3(0.35, he + 0.35, 0.9), Vector3(xe + sxe * (le * 0.5 + 0.17), yr + (he + 0.35) * 0.5, z + 0.45), "bois_meleze")
+	RemonteeKit.boite_en(g, Vector3(le + 0.7, 0.35, 0.9), Vector3(xe, yr + he + 0.17, z + 0.45), "bois_meleze")
+	# treillis : meneaux de mélèze et branches (motif fixe, tiré du sinus pour rester stable)
+	var n_b: int = int((xd - xg) / 1.15)
+	for k in range(n_b + 1):
+		var x: float = xg + k * (xd - xg) / float(n_b)
+		if absf(x - xe) < le * 0.5 + 0.3:
+			continue
+		RemonteeKit.boite_en(g, Vector3(0.10, hv, 0.10), Vector3(x, y0 + hv * 0.5, z + 0.10), "bois_meleze")
+		if k == n_b:
+			continue
+		var xm: float = x + (xd - xg) / float(n_b) * 0.5
+		if absf(xm - xe) < le * 0.5 + 0.5:
+			continue
+		var r1: float = sin(k * 12.9898) * 0.5
+		var tronc_h: float = y0 + 1.2 + absf(r1)
+		RemonteeKit.barre(g, Vector3(xm + r1 * 0.2, y0, z + 0.12), Vector3(xm, tronc_h, z + 0.12), 0.05, "bois_fonce", 5)
+		for sb in [-1.0, 1.0]:
+			var bx: float = xm + sb * (0.40 + 0.1 * r1)
+			RemonteeKit.barre(g, Vector3(xm, tronc_h, z + 0.12), Vector3(bx, y0 + hv - 0.3 - 0.6 * absf(r1 + sb * 0.3), z + 0.12), 0.03, "bois_fonce", 5)
+			RemonteeKit.barre(g, Vector3(xm + sb * 0.18, tronc_h + 0.9, z + 0.12), Vector3(xm + sb * 0.05, y0 + hv - 0.15, z + 0.12), 0.02, "bois_fonce", 5)
+	# enseigne : texte blanc, pastille blanche à gauche, plaque rouge de la station à droite
+	var ye: float = minf(y0 + hv + 1.4, hb - 1.0)
+	var ens: MeshInstance3D = RemonteeKit.texte_fige(g, "Téléphérique du Fornet", 120, 0.0105, Color(0.96, 0.96, 0.96))
+	ens.position = Vector3(0.6, ye, z + 0.08)
+	ens.visibility_range_end = 300.0
+	RemonteeKit.cylindre(g, 0.55, 0.55, 0.05, Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3(-wf * 0.5 + 1.5, ye, z + 0.06)), "blanc_plaque", 20)
+	RemonteeKit.boite_en(g, Vector3(1.3, 1.9, 0.08), Vector3(wf * 0.5 - 1.4, ye - 0.1, z + 0.06), "cabine_rouge")
+	var vi: MeshInstance3D = RemonteeKit.texte_fige(g, "Val d'Isère", 60, 0.006, Color(0.97, 0.97, 0.97))
+	vi.position = Vector3(wf * 0.5 - 1.4, ye - 0.5, z + 0.11)
+	vi.visibility_range_end = 120.0
+	# devant : barrières de rondins (deux rondins sur deux poteaux), lampadaire noir, mât blanc
+	for kb in range(4):
+		var xb: float = -wf * 0.5 + 2.5 + kb * (wf - 5.0) / 3.0
+		var zb: float = z + 7.5 + 1.5 * sin(kb * 3.7)
+		var yg: float = _sol(xb, zb) - g.position.y
+		for yl in [0.25, 0.62]:
+			RemonteeKit.cylindre(g, 0.17, 0.17, 2.6, Transform3D(Basis(Vector3.BACK, PI * 0.5), Vector3(xb, yg + yl, zb)), "bois_grise", 10)
+		for sp in [-1.0, 1.0]:
+			RemonteeKit.boite_en(g, Vector3(0.16, 0.95, 0.16), Vector3(xb + sp * 0.95, yg + 0.47, zb), "bois_fonce")
+	var xl: float = wf * 0.5 + 1.5
+	var yl2: float = _sol(xl, z + 2.0) - g.position.y
+	RemonteeKit.barre(g, Vector3(xl, yl2, z + 2.0), Vector3(xl, yl2 + 5.0, z + 2.0), 0.07, "noir_mat", 8)
+	RemonteeKit.boite_en(g, Vector3(0.40, 0.55, 0.40), Vector3(xl - 0.45, yl2 + 4.7, z + 2.0), "noir_mat")
+	RemonteeKit.barre(g, Vector3(xl, yl2 + 5.0, z + 2.0), Vector3(xl - 0.45, yl2 + 5.0, z + 2.0), 0.03, "noir_mat", 6)
+	var xm2: float = -wf * 0.1
+	var ym: float = _sol(xm2, z + 3.0) - g.position.y
+	RemonteeKit.barre(g, Vector3(xm2, ym, z + 3.0), Vector3(xm2, ym + 9.0, z + 3.0), 0.06, "blanc_plaque", 8)
 
 
 ## Gares de la Grande Motte (TphGrandeMotte, d'après les photos) : à l'aval,
