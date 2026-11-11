@@ -97,8 +97,8 @@ func _tick() -> void:
 					if absf(float(_lg._vehicules[_cab][1]) - float(p["d"])) < 3.0:
 						_v_pyl = _lg.vitesse_reelle
 			if _t > 1.5 and rm.a_bord.is_empty():
-				# marche relevée au GPS (Telepherique.PROFILS) : 9,5 m/s au plus, ~6,4 m/s au pylône
-				_verif("TPH : 9,5 m/s en ligne, 6,4 m/s au pylône (GPS)", absf(_v_max - 9.5) < 0.1 and absf(_v_pyl - 6.4) < 0.15,
+				# marche (Telepherique.PROFILS) : 10 m/s de bout en bout, pylône compris
+				_verif("TPH : 10 m/s en ligne et au pylône", absf(_v_max - 10.0) < 0.1 and absf(_v_pyl - 10.0) < 0.15,
 					"maxi %.2f m/s, au pylône %.2f m/s" % [_v_max, _v_pyl])
 				var haut: Vector3 = _lg.global_transform * Vector3(0, _lg.terrain(_lg.longueur_h()), -_lg.longueur_h())
 				var d: float = Vector2(sk.global_position.x - haut.x, sk.global_position.z - haut.z).length()
