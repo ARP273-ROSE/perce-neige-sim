@@ -5,6 +5,24 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.64.0 — 12 novembre 2026
+
+Téléphériques refaits : physique, suspentes, chariots, pylône et quais de la Grande Motte et du Fornet.
+
+**Les cabines ne flottent plus** : le chariot roule sur le câble chargé, comme le câble dessiné (il pouvait passer jusqu'à 24 m au-dessus). Deux porteurs par voie, tensions recalées sur des traces GPS barométriques de montées réelles : Grande Motte 1,3 MN (4 montées, 2,7 m d'écart moyen sur le profil en long), Fornet 1,1 MN ; le pylône de la Grande Motte est avancé de 28 m vers l'amont, là où les traces cassent de pente.
+
+**Marche** : 10 m/s sur les deux lignes, démarrage et freinage plus francs, seulement les derniers mètres au pas.
+
+**Suspentes** : un Λ accroché au flanc extérieur du chariot, hors de la paire de porteurs (entre les deux câbles, il ne passerait pas le pylône) ; jambes droites rivetées et échelle à la Grande Motte, jambes qui s'évasent vers un caisson de toit au Fornet. **Chariots** : 12 galets par porteur, par paires sur balanciers ; balanciers rouges et corps cylindrique gris au Fornet.
+
+**Pylône de la Grande Motte**, aux cotes des photos : fût en treillis presque droit (10 m au pied le long de la ligne), étroit en travers entre les deux passages de cabine, tête plate avec sabots cintrés de 16 m, passerelles, mâts et poutres de levage au-dessus des câbles, guides anti-collision le long du passage des cabines. Écartement des voies porté à 9 m.
+
+**Quais** : baies à la taille de la cabine (4 cm de jeu), barrières le long des baies et portillons qui coulissent avec les portes ; plus de trous ni de bords sans garde-corps, y compris en haut des escaliers latéraux. Sabots de gare sous les deux porteurs, côté extérieur dégagé pour la suspente.
+
+**Grande Motte, gare aval** : façade d'entrée d'après photo, grand escalier central, kiosques vitrés, auvent, bandeau de fenêtres, enseigne « TELEPHERIQUE / DE LA GRANDE MOTTE ».
+
+Vérifié au NAS : 59 bancs sur 59, empreintes du Perce-Neige et du Funival inchangées ; sonde des quais (sol porteur partout, pourtour fermé) ; trajet complet à la Grande Motte sous WebKit en signature tablette, 60 à 71 Mo de tampons, aucune perte du contexte graphique.
+
 ## 1.63.0 — 11 novembre 2026
 
 Téléphérique du Fornet : façade de la gare aval actuelle.

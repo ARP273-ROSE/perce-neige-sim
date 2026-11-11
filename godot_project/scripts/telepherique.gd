@@ -36,10 +36,13 @@ func masse_vehicule() -> float:
 	return 4500.0                       # caisse Swoboda, chariot et suspente
 
 
-## Tension horizontale d'une voie (deux porteurs, contrepoids aval ; estimée) : 1,2 MN donnent une flèche
-## de 4 à 6 % de la portée, cabine chargée à mi-portée, comme sur les photos.
+## Tension horizontale d'une voie (deux porteurs, contrepoids aval) : 1,2 MN donnent une flèche de 4 à 6 %
+## de la portée, cabine chargée à mi-portée, comme sur les photos ; ajustée sur le profil en long des montées
+## enregistrées (traces GPS barométriques d'avril 2026) : Grande Motte 1,3 MN (4 montées, écart moyen 2,7 m,
+## pylône recalé de 28 m vers l'amont sur la cassure de pente), Fornet 1,1 MN (une montée ; 1,0 MN collait
+## mieux mais laissait 1,8 m sous l'éperon amont du relief).
 func tension_h() -> float:
-	return 1200000.0
+	return 1300000.0 if String(name) == "tph_grande_motte" else 1100000.0
 
 
 ## Places d'une cabine (fiches) : 80 au Fornet, 115 à la Grande Motte.
@@ -134,7 +137,9 @@ func construire() -> void:
 	_vehicules.clear()
 	_corps.clear()
 	_pyl.clear()
-	voie = VOIE_TPH
+	# Grande Motte : 9 m (photos d'utilisateur du 11/11/2026 : tête du pylône ~9,7 m de large, arrêtée sous les
+	# porteurs extérieurs ; fût de ~9,5 m au pied, entre les deux passages de cabine) ; Fornet : 8 m
+	voie = 9.0 if String(name) == "tph_grande_motte" else VOIE_TPH
 	espacement = longueur_h() * 4.0
 	H_CABLE_GARE = VehiculeRemontee.hauteur_cable_gare(famille)
 	contenu_prepare = false
@@ -316,13 +321,14 @@ func _placer(i: int) -> void:
 	if _phase == "quai" and zone_vehicule(i) != "ligne":
 		porte = clampf(minf(T_QUAI - _t_quai, _t_quai) / 1.5, 0.0, 1.0)
 	v.portes(porte)
+	_porte_i = porte
 	if collisions_actives and i < _corps.size() and _corps[i] != null:
 		var pv: Vector3 = v.pivot
 		var bal: Transform3D = Transform3D(Basis.from_euler(Vector3(v.phi, 0.0, v.psi)), pv) * Transform3D(Basis.IDENTITY, -pv)
 		(_corps[i][0] as Node3D).transform = Transform3D(b, p) * bal
 		for cs in _corps[i][1]:
 			(cs as CollisionShape3D).disabled = porte > 0.5
-	_maj_portillons_tph(i)
+	_maj_portillons_tph(i, _porte_i)
 
 
 ## Portillons de quai (demande d'utilisateur du 07/11/2026, après la sonde des chutes) : on tombait de 5 à
@@ -331,7 +337,8 @@ func _placer(i: int) -> void:
 ## (Fornet, amont) ; collision active cabine absente, ouverte (collision coupée, barrière effacée) quand la
 ## cabine de la voie est à moins de D_QUAI + 4 m de sa place à quai. Avant du quai amont du Fornet hors des
 ## baies : garde-corps fixe.
-var _portillons_tph: Array = []          # [montée ?, aval ?, formes de collision, visuel, ouvert ?]
+var _portillons_tph: Array = []          # [montée ?, aval ?, formes de collision, visuel, ouverture, coulissant ?]
+var _porte_i: float = 0.0
 
 
 func _portillons_quai() -> void:
@@ -354,15 +361,17 @@ func _portillons_quai() -> void:
 			var xv: float = _x_brin(montee)
 			var segs: Array = []            # [a, b] dans le repère de la ligne, au niveau du quai
 			if gare_aval_existante:
-				# Grande Motte : les deux bords de la baie, sur la longueur des quais (cf. _collisions_grande_motte)
+				# Grande Motte : portillon coulissant devant la porte de la cabine à quai (côté +x de la caisse) ;
+				# les barrières fixes le long des baies sont du plan du quai (TphGrandeMotte.plan_quai)
 				var z_g: float = TphGrandeMotte.Z_NEZ if aval else -L
-				var z0: float = (-2.2 if aval else 0.0) + z_g
-				var zf: float = ((-2.2 - TphGrandeMotte.L_BAIE) if aval else (-TphGrandeMotte.L_BAIE - 1.0)) + z_g
-				for e in [-1.95, 1.95]:
-					segs.append([Vector3(xv + e, y_q, z0), Vector3(xv + e, y_q, zf)])
-			elif String(name) == "tph_fornet" and not aval:
-				# Fornet, amont : en travers de la baie, au nez du quai
-				segs.append([Vector3(xv - 1.6, y_q, -L), Vector3(xv + 1.6, y_q, -L)])
+				var z_c: float = ((-TphGrandeMotte.Z_NEZ + D_QUAI) if aval else -D_QUAI) + z_g
+				var xg: float = xv + TphGrandeMotte.DEMI_BAIE + TphGrandeMotte.RETRAIT_BARRIERE + 0.08   # (côté quai de la barrière fixe)
+				segs.append([Vector3(xg, y_q, z_c - TphGrandeMotte.DEMI_PORTE), Vector3(xg, y_q, z_c + TphGrandeMotte.DEMI_PORTE)])
+			elif String(name) == "tph_fornet":
+				# Fornet : portillon coulissant devant la porte, comme à la Grande Motte
+				var z_cf: float = (D_QUAI) if aval else (-L - D_QUAI)
+				var xgf: float = xv + TphGrandeMotte.DEMI_BAIE + TphGrandeMotte.RETRAIT_BARRIERE + 0.08
+				segs.append([Vector3(xgf, y_q, z_cf - TphGrandeMotte.DEMI_PORTE), Vector3(xgf, y_q, z_cf + TphGrandeMotte.DEMI_PORTE)])
 			if segs.is_empty():
 				continue
 			var vis: Node3D = Node3D.new()
@@ -386,49 +395,35 @@ func _portillons_quai() -> void:
 					cs.position = (a + b) * 0.5 + Vector3(0, (h + 0.6) * 0.5, 0)
 					corps.add_child(cs)
 					formes.append(cs)
-			_portillons_tph.append([montee, aval, formes, vis, false])
-	# Fornet, amont : garde-corps fixe à l'avant du quai, hors des baies
-	if String(name) == "tph_fornet":
-		var y_a: float = terrain(L)
-		var hx: float = voie * 0.5 + 3.0
-		var xs: Array = [-hx]
-		for m2 in [true, false]:
-			xs.append(_x_brin(m2) - 1.6)
-			xs.append(_x_brin(m2) + 1.6)
-		xs.append(hx)
-		xs.sort()
-		for k2 in range(0, xs.size(), 2):
-			var a2: Vector3 = Vector3(float(xs[k2]), y_a, -L)
-			var b2: Vector3 = Vector3(float(xs[k2 + 1]), y_a, -L)
-			if a2.distance_to(b2) < 0.2:
-				continue
-			for yy2 in [0.55, h]:
-				RemonteeKit.barre(racine, a2 + Vector3(0, yy2, 0), b2 + Vector3(0, yy2, 0), 0.025, "peinture_gris", 6)
-			RemonteeKit.barre(racine, a2, a2 + Vector3(0, h, 0), 0.03, "peinture_gris", 6)
-			RemonteeKit.barre(racine, b2, b2 + Vector3(0, h, 0), 0.03, "peinture_gris", 6)
-			if corps != null:
-				var cs2: CollisionShape3D = CollisionShape3D.new()
-				var bx2: BoxShape3D = BoxShape3D.new()
-				bx2.size = Vector3(a2.distance_to(b2), h + 0.6, 0.12)
-				cs2.shape = bx2
-				cs2.position = (a2 + b2) * 0.5 + Vector3(0, (h + 0.6) * 0.5, 0)
-				corps.add_child(cs2)
+			_portillons_tph.append([montee, aval, formes, vis, -1.0, gare_aval_existante or String(name) == "tph_fornet"])
 
 
-## Ouvre ou ferme les portillons de la voie de la cabine i selon sa distance à sa place à quai.
-func _maj_portillons_tph(i: int) -> void:
+## Portillons de la voie de la cabine i. Grande Motte : ils coulissent avec les portes de la cabine (`porte`,
+## 0 fermées → 1 ouvertes ; retour d'utilisateur du 11/11/2026 : « en face des portes des cabines, des barrières
+## coulissantes qui se ferment et s'ouvrent avec les portes ») ; ailleurs, ouverts quand la cabine est à quai.
+func _maj_portillons_tph(i: int, porte: float = 0.0) -> void:
 	var montee: bool = i == 0
 	var d: float = _vehicules[i][1]
+	var zn: String = zone_vehicule(i)
 	for p in _portillons_tph:
-		if bool(p[0]) != montee:
+		if bool(p[0]) != montee or not is_instance_valid(p[3]):
 			continue
-		var ouvert: bool = absf(d - _x_quai(bool(p[1]))) < D_QUAI + 4.0
-		if ouvert == bool(p[4]) or not is_instance_valid(p[3]):
+		var t: float
+		if bool(p[5]):
+			var ici: bool = (zn == "gare_aval") == bool(p[1]) and zn != "ligne"
+			t = porte if ici else 0.0
+		else:
+			t = 1.0 if absf(d - _x_quai(bool(p[1]))) < D_QUAI + 4.0 else 0.0
+		if absf(t - float(p[4])) < 0.002:
 			continue
-		p[4] = ouvert
-		(p[3] as Node3D).visible = not ouvert
+		p[4] = t
+		if bool(p[5]):
+			# le vantail glisse le long de la barrière fixe, vers l'avant du quai
+			(p[3] as Node3D).position = Vector3(0, 0, -(2.0 * TphGrandeMotte.DEMI_PORTE - 0.1) * t * (1.0 if bool(p[1]) else -1.0))
+		else:
+			(p[3] as Node3D).visible = t < 0.5
 		for cs in p[2]:
-			(cs as CollisionShape3D).disabled = ouvert
+			(cs as CollisionShape3D).disabled = t > 0.5
 
 
 ## Fornet : câble tracteur inférieur (lest, 29 mm, fiche RM.net), du bout aval du chariot de chaque cabine à la
@@ -702,7 +697,14 @@ func _gare_fornet(aval: bool) -> void:
 		for k in range(5):
 			bas = minf(bas, float(sol.call(float(xi), z0 + sg * lq * float(k) / 4.0)))
 	bas = maxf(bas, -30.0) - 0.5
-	RemonteeKit.boite_en(g, Vector3(2.0 * hx, 0.5, lq), Vector3(0, -0.25, zq), "beton")
+	var PQ: Dictionary = _plan_quai_fornet(aval)
+	for r in PQ["dalles"]:
+		var rc: Rect2 = r
+		RemonteeKit.boite_en(g, Vector3(rc.size.x, 0.5, rc.size.y), Vector3(rc.get_center().x, -0.25, rc.get_center().y), "beton")
+	for e in PQ["garde_corps"]:
+		_dessin_gc(g, e[0], e[1], 1.1, "peinture_gris")
+	for e2 in PQ["barrieres"]:
+		_dessin_gc(g, e2[0], e2[1], 1.2, "galva")
 	if aval:
 		# rez-de-chaussée : socle de pierre, poteaux blancs, vitrages, bandeau de bois sous le quai
 		var h_rdc: float = maxf(-bas - 0.5, 3.2)
@@ -714,14 +716,7 @@ func _gare_fornet(aval: bool) -> void:
 		RemonteeKit.boite_en(g, Vector3(2.0 * hx + 0.4, 0.35, lq + 0.4), Vector3(0, -0.68, zq), "bois_fonce")
 		# sabots des porteurs sur poteaux noirs à consoles grises (photos de la gare actuelle)
 		_sabots_fornet(g, true, y0, "peinture_gris", "peinture_anthracite")
-		# balcons latéraux, garde-corps gris
-		for sx3 in [-1.0, 1.0]:
-			RemonteeKit.boite_en(g, Vector3(2.4, 0.25, lq * 0.6), Vector3(sx3 * (hx + 1.2), -0.12, z0 + lq * 0.3), "beton")
-			RemonteeKit.barre(g, Vector3(sx3 * (hx + 2.4), 1.0, z0), Vector3(sx3 * (hx + 2.4), 1.0, z0 + lq * 0.6), 0.03, "peinture_gris", 6)
-			for k3 in range(6):
-				var zz: float = z0 + lq * 0.6 * k3 / 5.0
-				RemonteeKit.barre(g, Vector3(sx3 * (hx + 2.4), 0.0, zz), Vector3(sx3 * (hx + 2.4), 1.0, zz), 0.025, "peinture_gris", 6)
-		RemonteeKit.barre(g, Vector3(-hx - 2.4, 1.0, z0), Vector3(hx + 2.4, 1.0, z0), 0.03, "peinture_gris", 6)
+		# (balcons latéraux et garde-corps : plan du quai)
 		# bâtiment de la machinerie, bardé anthracite, derrière le quai
 		var lb: float = 20.0
 		var zb: float = z0 + lq + lb * 0.5
@@ -767,10 +762,72 @@ func _gare_fornet(aval: bool) -> void:
 		RemonteeKit.barre(g, Vector3(3.2, hn + 1.3, zfa), Vector3(16.8, hn + 1.3, zfa), 0.035, "cabine_rouge", 6)
 		RemonteeKit.boite_en(g, Vector3(1.4, 12.0, 0.1), Vector3(-4.6, 7.0, zt - sg * 4.03), "vitrage_sombre")
 		RemonteeKit.boite_en(g, Vector3(2.6, 0.9, 0.1), Vector3(-0.2, 13.2, zt - sg * 4.05), "noir_mat")
-		# garde-corps du quai
-		for sx6 in [-1.0, 1.0]:
-			RemonteeKit.barre(g, Vector3(sx6 * hx, 1.0, z0), Vector3(sx6 * hx, 1.0, z0 + sg * lq), 0.03, "peinture_gris", 6)
 	MeshMerge.merge(g, [], "Gare")
+
+
+## Plan du quai du Fornet, repère de la ligne (même règle que TphGrandeMotte.plan_quai ; retours d'utilisateur
+## du 11/11/2026 sur les quais : trous, barrières des baies, portillons coulissants, pas de jour quai / cabine).
+## u : distance au nez, vers le fond de la gare ; baies ajustées à la caisse depuis le nez jusque derrière la
+## cabine à quai ; aval : balcons latéraux sur les 60 % avant ; le fond du quai reste ouvert (accès).
+func _plan_quai_fornet(aval: bool) -> Dictionary:
+	var L: float = longueur_h()
+	var sg: float = 1.0 if aval else -1.0
+	var z0: float = 0.0 if aval else -L
+	var x0: float = absf(_x_brin(true))
+	var W: float = voie * 0.5 + 3.0
+	var lq: float = 2.0 * D_QUAI + 2.0
+	var db: float = TphGrandeMotte.DEMI_BAIE
+	var bi: float = x0 - db
+	var be: float = x0 + db
+	var u_ar: float = D_QUAI + TphGrandeMotte.DEMI_CAISSE_LONG + 0.05
+	var R := func(xa: float, xb: float, ua: float, ub: float) -> Rect2:
+		var za: float = z0 + sg * ua
+		var zb: float = z0 + sg * ub
+		return Rect2(minf(xa, xb), minf(za, zb), absf(xb - xa), absf(zb - za))
+	var V := func(x: float, u: float) -> Vector2:
+		return Vector2(x, z0 + sg * u)
+	var dalles: Array = [R.call(-W, W, u_ar, lq), R.call(-bi, bi, 0.0, u_ar)]
+	var gc: Array = [[V.call(-bi, 0.0), V.call(bi, 0.0)]]
+	var lbal: float = lq * 0.6
+	for sx in [-1.0, 1.0]:
+		dalles.append(R.call(sx * be, sx * W, 0.0, u_ar))
+		if aval:
+			dalles.append(R.call(sx * W, sx * (W + 2.4), 0.0, lbal))
+			gc.append([V.call(sx * be, 0.0), V.call(sx * (W + 2.4), 0.0)])
+			gc.append([V.call(sx * (W + 2.4), 0.0), V.call(sx * (W + 2.4), lbal)])
+			gc.append([V.call(sx * W, lbal), V.call(sx * (W + 2.4), lbal)])
+			gc.append([V.call(sx * W, lbal), V.call(sx * W, lq)])
+		else:
+			gc.append([V.call(sx * be, 0.0), V.call(sx * W, 0.0)])
+			gc.append([V.call(sx * W, 0.0), V.call(sx * W, lq)])
+	var bar: Array = []
+	var port: Array = []
+	var dp: float = TphGrandeMotte.DEMI_PORTE
+	for montee in [true, false]:
+		var xv: float = _x_brin(montee)
+		for sb in [-1.0, 1.0]:
+			var xb: float = xv + sb * (db + TphGrandeMotte.RETRAIT_BARRIERE)
+			if sb > 0.0:
+				bar.append([V.call(xb, 0.0), V.call(xb, D_QUAI - dp)])
+				bar.append([V.call(xb, D_QUAI + dp), V.call(xb, u_ar)])
+				port.append([xb, z0 + sg * D_QUAI])
+			else:
+				bar.append([V.call(xb, 0.0), V.call(xb, u_ar)])
+		var ur: float = u_ar + TphGrandeMotte.RETRAIT_BARRIERE
+		bar.append([V.call(xv - db - TphGrandeMotte.RETRAIT_BARRIERE, ur), V.call(xv + db + TphGrandeMotte.RETRAIT_BARRIERE, ur)])
+	return {"dalles": dalles, "garde_corps": gc, "barrieres": bar, "portillons": port, "W": W, "lq": lq}
+
+
+## Garde-corps d'un plan de quai (dessin) : deux lisses et des potelets, ou trois lisses (barrières de baie).
+func _dessin_gc(g: Node3D, a: Vector2, b: Vector2, h: float, m: String) -> void:
+	var pa: Vector3 = Vector3(a.x, 0, a.y)
+	var pb: Vector3 = Vector3(b.x, 0, b.y)
+	for yy in [h * 0.5, h]:
+		RemonteeKit.barre(g, pa + Vector3(0, yy, 0), pb + Vector3(0, yy, 0), 0.03, m, 6)
+	var n: int = maxi(1, int(pa.distance_to(pb) / 1.2))
+	for k in range(n + 1):
+		var q: Vector3 = pa.lerp(pb, float(k) / n)
+		RemonteeKit.barre(g, q, q + Vector3(0, h, 0), 0.025, m, 6)
 
 
 ## Sabots de gare du Fornet (photos Commons ; retour d'utilisateur du 11/11/2026 : « design des supports de
@@ -957,12 +1014,7 @@ func _gares_grande_motte(aval: bool) -> void:
 			mi.mesh = MeshMerge.valider(st)
 			mi.material_override = RemonteeKit.mat("beton")
 			g.add_child(mi)
-			# escalier extérieur : de la porte de la façade côté funiculaire
-			var a: Vector2 = emp[2]
-			var b: Vector2 = emp[3]
-			var m: Vector2 = (a + b) * 0.5
-			var dehors: Vector2 = (m - c).normalized()
-			TphGrandeMotte.escalier_salle(g, Vector3(m.x, 0.0, m.y), Vector3(dehors.x, 0, dehors.y), sol)
+			# (escalier d'entrée : grand escalier central de la façade, posé avec le bâtiment par GareAmont)
 	else:
 		TphGrandeMotte.gare_amont(self, g, H_CABLE_GARE, sol)
 	_sabots_tph(g, aval, y_q, z_g, (TphGrandeMotte.Z_NEZ - 0.6) if aval else (TphGrandeMotte.L_BAIE + 1.0),
@@ -1011,6 +1063,25 @@ func _collisions_tph() -> void:
 		if gare_aval_existante:
 			_collisions_grande_motte(corps, aval)
 			continue
+		if String(name) == "tph_fornet":
+			var PQ: Dictionary = _plan_quai_fornet(aval)
+			for r in PQ["dalles"]:
+				var rc: Rect2 = r
+				boite.call(Vector3(rc.size.x, 0.4, rc.size.y), Vector3(rc.get_center().x, y0 - 0.2, rc.get_center().y))
+			boite.call(Vector3(2.0 * hx, 6.0, lq), Vector3(0, y0 - 0.5 - 3.0, z0 + sg * lq * 0.5))     # fond des baies
+			for e in PQ["garde_corps"] + PQ["barrieres"]:
+				var a2: Vector2 = e[0]
+				var b2: Vector2 = e[1]
+				var u2: Vector2 = b2 - a2
+				if u2.length() < 0.05:
+					continue
+				var cs2: CollisionShape3D = CollisionShape3D.new()
+				var bx2: BoxShape3D = BoxShape3D.new()
+				bx2.size = Vector3(0.12, 1.3, u2.length() + 0.1)
+				cs2.shape = bx2
+				cs2.transform = Transform3D(Basis(Vector3.UP, atan2(u2.x, u2.y)), Vector3((a2.x + b2.x) * 0.5, y0 + 0.65, (a2.y + b2.y) * 0.5))
+				corps.add_child(cs2)
+			continue
 		boite.call(Vector3(2.0 * hx, 6.0, lq), Vector3(0, y0 - 3.0, z0 + sg * lq * 0.5))
 	for i in range(pylones.size()):
 		var d: float = float(pylones[i]["d"])
@@ -1032,28 +1103,33 @@ func _collisions_grande_motte(corps: StaticBody3D, aval: bool) -> void:
 		cs.shape = bx
 		cs.transform = Transform3D(b, centre + Vector3(0, y_q, z_g))
 		corps.add_child(cs)
-	var xv: float = voie * 0.5
-	var bi: float = xv - 1.95
-	var be: float = xv + 1.95
-	var W: float = be + (1.6 if aval else 1.4)
-	var zf: float = (-2.2 - TphGrandeMotte.L_BAIE) if aval else (-TphGrandeMotte.L_BAIE - 1.0)
-	var z0: float = 0.0
+	# quai d'après son plan (TphGrandeMotte.plan_quai, le même que le dessin) : dalles, garde-corps et
+	# barrières de baie en murs de 1,3 m, rampes des escaliers avec leur garde-corps extérieur
+	var P: Dictionary = TphGrandeMotte.plan_quai(aval, [_x_brin(true), _x_brin(false)] if _x_brin(true) < 0.0 else [_x_brin(false), _x_brin(true)],
+		(-TphGrandeMotte.Z_NEZ + D_QUAI) if aval else -D_QUAI)
+	for r in P["dalles"]:
+		var rc: Rect2 = r
+		boite.call(Vector3(rc.size.x, 0.4, rc.size.y), Vector3(rc.get_center().x, -0.2, rc.get_center().y))
+	for e in P["garde_corps"] + P["barrieres"]:
+		var a2: Vector2 = e[0]
+		var b2: Vector2 = e[1]
+		var u2: Vector2 = b2 - a2
+		if u2.length() < 0.05:
+			continue
+		var m2: Vector2 = (a2 + b2) * 0.5
+		boite.call(Vector3(0.12, 1.3, u2.length() + 0.1), Vector3(m2.x, 0.65, m2.y), Basis(Vector3.UP, atan2(u2.x, u2.y)))
+	for es in P["escaliers"]:
+		var x_e: float = es[0]
+		var z_h: float = es[1]
+		var sens: float = es[2]
+		var z_b: float = z_h + sens * 9.0
+		var y_b: float = _sol(x_e, z_b + z_g) - y_q
+		var pente: float = atan2(-y_b, 9.0)
+		var b_r: Basis = Basis(Vector3.RIGHT, pente * sens)     # (+z vers le bas si l'escalier descend vers +z)
+		boite.call(Vector3(1.4, 0.2, sqrt(81.0 + y_b * y_b)), Vector3(x_e, y_b * 0.5 - 0.1, (z_h + z_b) * 0.5), b_r)
+		var x_ext: float = x_e + signf(x_e) * 0.75
+		boite.call(Vector3(0.12, 1.3, sqrt(81.0 + y_b * y_b)), Vector3(x_ext, y_b * 0.5 + 0.55, (z_h + z_b) * 0.5), b_r)
 	if aval:
-		# bande avant prolongée de 1 m sous le bâtiment : sa façade est en biais (z de 12,4 à 13,6 m dans le
-		# repère de la ligne), il restait jusqu'à 0,9 m de vide entre le quai et le plancher de l'étage, où l'on
-		# tombait jusqu'au rocher (sonde des chutes du 07/11/2026)
-		boite.call(Vector3(2.0 * W, 0.4, 3.2), Vector3(0, -0.2, -0.6))
-		z0 = -2.2
-	boite.call(Vector3(2.0 * bi, 0.4, absf(zf - z0)), Vector3(0, -0.2, (z0 + zf) * 0.5))
-	for s in [-1.0, 1.0]:
-		boite.call(Vector3(W - be, 0.4, absf(zf - z0)), Vector3(s * (be + W) * 0.5, -0.2, (z0 + zf) * 0.5))
-	if aval:
-		# escaliers latéraux : rampes de 7,5 m vers la neige
-		for s2 in [-1.0, 1.0]:
-			var x: float = s2 * (W + 0.75)
-			var yb: float = _sol(x, -8.7 + z_g) - y_q
-			var pente: float = atan2(-yb, 7.5)
-			boite.call(Vector3(1.3, 0.2, sqrt(7.5 * 7.5 + yb * yb)), Vector3(x, yb * 0.5, -1.2 - 3.75), Basis(Vector3.RIGHT, -pente))
 		if emprise_batiment.size() == 4:
 			var emp: PackedVector2Array = PackedVector2Array()
 			for v0 in emprise_batiment:
@@ -1082,21 +1158,17 @@ func _collisions_grande_motte(corps: StaticBody3D, aval: bool) -> void:
 			var dir_p: Vector2 = (emp[3] - emp[2]).normalized()
 			mur.call(emp[2], m - dir_p * 0.9)
 			mur.call(m + dir_p * 0.9, emp[3])
-			# escalier extérieur, le long de la façade (comme TphGrandeMotte.escalier_salle)
-			var lat: Vector2 = Vector2(dehors.y, -dehors.x)
-			var palier: Vector2 = m + dehors * 1.4
-			var depart: Vector2 = palier + lat * 1.5
-			var y_bas: float = _sol(depart.x + lat.x * 8.0, depart.y + lat.y * 8.0 + z_g) - y_q
-			var lg2: float = maxf(absf(y_bas) / 0.62, 2.0)
-			var bas2: Vector2 = depart + lat * lg2
-			var yb2: float = _sol(bas2.x, bas2.y + z_g) - y_q
-			var pente2: float = atan2(-yb2, lg2)
-			var cen: Vector2 = (depart + bas2) * 0.5
-			var rot2: Basis = Basis(Vector3.UP, atan2(lat.x, lat.y))
-			boite.call(Vector3(2.2, 0.2, sqrt(lg2 * lg2 + yb2 * yb2)), Vector3(cen.x, yb2 * 0.5, cen.y), rot2 * Basis(Vector3.RIGHT, pente2))
-			boite.call(Vector3(3.0, 0.2, 2.6), Vector3(palier.x, -0.1, palier.y), rot)
-	else:
-		boite.call(Vector3(2.0 * W, 0.4, 2.4), Vector3(0, -0.2, zf - 1.2))
+			# grand escalier central de la façade d'entrée (GareAmont._telepherique) : palier de 2 m devant la
+			# porte, puis 31 marches de 0,178 × 0,29 m jusqu'au sol du bâtiment
+			var rot_e: Basis = Basis(Vector3.UP, atan2(dehors.x, dehors.y))
+			var palier: Vector2 = m + dehors * 1.0
+			boite.call(Vector3(4.2, 0.2, 2.0), Vector3(palier.x, -0.1, palier.y), rot_e)
+			var h_e: float = TphGrandeMotte.H_QUAI_AVAL
+			var run: float = 0.29 * ceilf(h_e / 0.178)
+			var cen: Vector2 = m + dehors * (2.0 + run * 0.5)
+			var pente: float = atan2(h_e, run)
+			boite.call(Vector3(4.0, 0.2, sqrt(run * run + h_e * h_e)), Vector3(cen.x, -h_e * 0.5 - 0.1, cen.y), rot_e * Basis(Vector3.RIGHT, pente))
+
 
 
 ## Puissance au câble (kW) : la cabine qui monte contre celle qui descend
