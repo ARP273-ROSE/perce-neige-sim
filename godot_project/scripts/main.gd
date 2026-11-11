@@ -2867,6 +2867,12 @@ func _maj_skieur() -> void:
 			if remontees != null and not remontees.a_bord.is_empty():
 				ligne = remontees.a_bord[0]
 				v_ms = ligne.vitesse_en(ligne._vehicules[int(remontees.a_bord[1])][1]) * ligne.regime()
+			elif remontees != null:
+				# Funival : dans une rame, la vitesse de la rame (on y monte à pied, sans `a_bord`)
+				var fu: LigneRemontee = remontees.funival_ou(skieur.global_position, true)
+				if fu != null:
+					ligne = fu
+					v_ms = absf(fu.vitesse_reelle)
 			var info: String = "%d km/h · %d m" % [roundi(v_ms * 3.6), roundi(skieur.global_position.y)]
 			if ligne != null:
 				info += " · %s" % ligne.nom_ligne

@@ -1341,9 +1341,25 @@ func echelle_proche(p: Vector3) -> PyloneRemontee:
 
 ## Remontée « courante » pour le poste de commande : celle où l'on est
 ## assis, sinon celle dont une gare est la plus proche, à moins de 400 m.
+## Funival où se trouve le skieur (dans une rame, ou sous terre dans sa voie et ses gares) : on y monte à pied,
+## la rame le porte, sans passer par `a_bord` (retour d'utilisateur du 12/11/2026 : « dedans, tu ne m'affiches
+## pas le bon poste de conduite, tu gardes la vitesse à 0 »).
+func funival_ou(p: Vector3, dans_rame_seulement: bool = false) -> LigneRemontee:
+	for e in lignes:
+		var lg: LigneRemontee = e[0]
+		if lg is Funival and lg.pret:
+			var fu: Funival = lg
+			if fu.skieur_dedans(p) or (not dans_rame_seulement and fu.souterrain(p)):
+				return lg
+	return null
+
+
 func ligne_courante(p: Vector3) -> LigneRemontee:
 	if not a_bord.is_empty():
 		return a_bord[0]
+	var fu: LigneRemontee = funival_ou(p)
+	if fu != null:
+		return fu
 	var best: LigneRemontee = null
 	var dm: float = 400.0
 	for e in lignes:
@@ -1352,7 +1368,8 @@ func ligne_courante(p: Vector3) -> LigneRemontee:
 			continue
 		var xf: Transform3D = lg.global_transform
 		for d in [0.0, lg.longueur_h()]:
-			var g: Vector3 = xf * Vector3(0, lg.terrain(d), -d)
+			# (Funival : gares au niveau de la voie, sous le relief)
+			var g: Vector3 = xf * Vector3(0, (lg as Funival).y_voie(d) if lg is Funival else lg.terrain(d), -d)
 			var dd: float = g.distance_to(p)
 			if dd < dm:
 				dm = dd
