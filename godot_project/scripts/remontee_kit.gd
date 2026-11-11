@@ -76,6 +76,8 @@ const COULEURS: Dictionary = {
 	"toit_brun": [Color(0.30, 0.22, 0.17), 0.85, 0.0],
 	"bois_fonce": [Color(0.36, 0.22, 0.14), 0.85, 0.0],
 	"bois_grise": [Color(0.47, 0.44, 0.40), 0.85, 0.0],       # bardage de mélèze vieilli (Fornet amont)
+	"bleu_ardoise": [Color(0.30, 0.36, 0.43), 0.60, 0.35],     # charpente des sabots de gare (Fornet amont)
+	"orange_sabot": [Color(0.78, 0.33, 0.18), 0.70, 0.10],     # garnitures des sabots de porteurs
 	"panneau_solaire": [Color(0.08, 0.10, 0.16), 0.25, 0.6],
 }
 
