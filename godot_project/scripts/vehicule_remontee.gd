@@ -1921,9 +1921,10 @@ func _suspente_grande_motte(hs: float) -> void:
 	RemonteeKit.boite_en(self, Vector3(0.24, 0.42, 0.46), Vector3(0, -0.26, 0), m)
 	# coude de tête : de l'articulation au fût
 	var p0: Vector3 = Vector3(0.0, -0.40, 0)
-	var p1: Vector3 = Vector3(xc * 0.75, -0.45, 0)
-	var p2: Vector3 = Vector3(xc, -0.75, 0)
-	var p3: Vector3 = Vector3(xc, -1.35, 0)
+	# (coude bas : il passe sous le rail-sabot mince du porteur extérieur en gare, Telepherique._sabots_tph)
+	var p1: Vector3 = Vector3(xc * 0.35, -0.80, 0)
+	var p2: Vector3 = Vector3(xc, -0.85, 0)
+	var p3: Vector3 = Vector3(xc, -1.55, 0)
 	var arc: PackedVector3Array = PackedVector3Array()
 	for k in range(13):
 		var t: float = float(k) / 12.0
@@ -1932,7 +1933,7 @@ func _suspente_grande_motte(hs: float) -> void:
 	RemonteeKit.caisson(self, arc, 0.34, lf, pf, m, Vector3.BACK)
 	# fût droit
 	var y_cong: float = y_toit + 2.2                      # haut du congé
-	RemonteeKit.boite_en(self, Vector3(lf, -1.35 - y_cong + 0.02, pf), Vector3(xc, (-1.35 + y_cong) * 0.5, 0), m)
+	RemonteeKit.boite_en(self, Vector3(lf, -1.55 - y_cong + 0.02, pf), Vector3(xc, (-1.55 + y_cong) * 0.5, 0), m)
 	# congé : tranches dont le bord intérieur suit un quart d'ellipse jusqu'au milieu du toit
 	var n: int = 14
 	var c: float = cote_tph

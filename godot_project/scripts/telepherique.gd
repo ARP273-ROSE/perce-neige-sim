@@ -259,15 +259,14 @@ func _process_corps(delta: float) -> void:
 
 
 ## Marche relevée au GPS (traces du 26 au 28/04/2026, 4 montées à la Grande Motte, 1 au Fornet ; retour
-## d'utilisateur du 11/11/2026 : « courbe de vitesse de la trace GPS pas respectée »). Vitesse (m/s) selon la
-## fraction de la ligne parcourue par la cabine qui monte ; démarrage, freinage final et entrée en gare au pas.
-## Grande Motte : ~7 m/s jusqu'à 23 %, ~9,5 m/s jusqu'à 72 %, ~6,4 m/s ensuite (pylône, approche) ; freinage
-## de 6,5 à 0,9 m/s sur 65 m, puis ~25 m au pas. Fornet : ~8 m/s, freinage doux dès 83 % (0,23 m/s²), puis
-## ~30 m à 0,5 m/s.
+## d'utilisateur du 11/11/2026 : « courbe de vitesse de la trace GPS pas respectée »), puis relevée à la demande
+## (« roule à 10 m/s les deux et accélère un peu le mouvement à l'entrée en gare ») : 10 m/s de bout en bout,
+## sans ralenti au pylône ; démarrage et freinage plus francs que ceux relevés (0,45 / 0,31 m/s² à la Grande
+## Motte, 0,30 / 0,23 au Fornet), et seulement les derniers mètres au pas. Vitesse (m/s) selon la fraction de
+## la ligne parcourue par la cabine qui monte.
 const PROFILS: Dictionary = {
-	"tph_grande_motte": {"pts": [[0.0, 7.0], [0.231, 7.0], [0.262, 9.5], [0.717, 9.5], [0.748, 6.4], [1.0, 6.4]],
-		"a_dem": 0.45, "a_frein": 0.31, "v_pas": 0.7, "d_pas": 25.0},
-	"tph_fornet": {"pts": [[0.0, 8.0], [1.0, 8.0]], "a_dem": 0.30, "a_frein": 0.23, "v_pas": 0.5, "d_pas": 30.0},
+	"tph_grande_motte": {"pts": [[0.0, 10.0], [1.0, 10.0]], "a_dem": 0.60, "a_frein": 0.55, "v_pas": 1.2, "d_pas": 8.0},
+	"tph_fornet": {"pts": [[0.0, 10.0], [1.0, 10.0]], "a_dem": 0.60, "a_frein": 0.55, "v_pas": 1.2, "d_pas": 8.0},
 }
 const PROFIL_DEFAUT: Dictionary = {"pts": [[0.0, 10.0], [1.0, 10.0]], "a_dem": A_ROUTE, "a_frein": A_ROUTE, "v_pas": 0.6, "d_pas": 15.0}
 
@@ -781,47 +780,68 @@ func _gare_fornet(aval: bool) -> void:
 ## tête de la suspente : chacune est tenue par l'extérieur, par des consoles sur deux poteaux, au nez et au
 ## fond du quai, que relie une traverse haute au-dessus du chariot.
 func _sabots_fornet(g: Node3D, aval: bool, y0: float, m_poutre: String, m_poteau: String) -> void:
+	_sabots_tph(g, aval, y0, 0.0, 2.0 * D_QUAI + 2.0, m_poutre, m_poteau, false, true)
+
+
+## Sabots des porteurs en gare (retour d'utilisateur du 11/11/2026 : « design des supports de câble en gare
+## pas bon ») : sous chaque porteur un rail garni (le porteur y repose) qui suit le câble du fond du quai au
+## bout du sabot cintré ; le milieu entre les deux porteurs d'une voie reste LIBRE pour la tête de suspente ;
+## les rails sont tenus de côté par des consoles sur des poteaux reliés en tête au-dessus du chariot (au fond
+## du quai, au nez, et au bout du sabot quand il s'avance hors de la gare). `z_g` : z de g dans le repère de
+## la ligne ; `lq` : du nez au fond des rails ; `coude` : la suspente se coude vers l'extérieur sous le
+## porteur extérieur (Grande Motte), dont le rail est alors mince ; `galet` : poulie de renvoi du tracteur au
+## fond du quai.
+func _sabots_tph(g: Node3D, aval: bool, y0: float, z_g: float, lq: float, m_poutre: String, m_poteau: String,
+		coude: bool, galet: bool) -> void:
 	var L: float = longueur_h()
-	var lq: float = 2.0 * D_QUAI + 2.0
 	var e2: float = VehiculeRemontee.E_PORTEURS_TPH * 0.5
 	var hn: float = float(_h_nez[0 if aval else 1])
-	var h_p: float = 0.75                                   # hauteur des caissons
+	var t_bout: float = 2.0 * hn + 0.3
+	var y_rail := func(t: float, montee: bool) -> float:
+		var d: float = t if aval else L - t
+		return (y_cable(clampf(d, 0.0, L), montee) if t > 0.0 else terrain(0.0 if aval else L) + H_CABLE_GARE) - y0
+	var z_loc := func(t: float) -> float:
+		return -(t if aval else L - t) - z_g
 	for montee in [true, false]:
 		var x0: float = _x_brin(montee)
-		# fil des porteurs, du fond du quai au bout du sabot (d le long de la ligne, d < 0 dans la gare aval)
+		var ext: float = signf(x0)                                  # côté du coude de la suspente
 		var pts: Array = []
-		var k: int = 0
-		while k <= 24:
-			var u: float = float(k) / 24.0
-			var t: float = lerpf(-(lq + 1.0), 2.0 * hn + 0.3, u)       # distance depuis le nez, + vers la ligne
-			var d: float = t if aval else L - t
-			var y: float = (y_cable(clampf(d, 0.0, L), montee) if t > 0.0 else terrain(0.0 if aval else L) + H_CABLE_GARE) - y0
-			pts.append(Vector3(0, y, -d))
-			k += 1
+		for k in range(25):
+			var t: float = lerpf(-lq, t_bout, float(k) / 24.0)
+			pts.append(Vector3(0, float(y_rail.call(t, montee)), float(z_loc.call(t))))
 		for side in [-1.0, 1.0]:
 			var xb: float = x0 + side * e2
+			var h_p: float = 0.22 if coude and side == ext else 0.75
 			for i in range(pts.size() - 1):
 				var pa: Vector3 = pts[i] + Vector3(xb, 0, 0)
 				var pb: Vector3 = pts[i + 1] + Vector3(xb, 0, 0)
-				# garniture du sabot (le porteur y repose), puis le caisson dessous
 				RemonteeKit.poutre(g, pa + Vector3(0, -0.10, 0), pb + Vector3(0, -0.10, 0), 0.13, 0.10, "orange_sabot")
 				RemonteeKit.poutre(g, pa + Vector3(0, -0.15 - h_p * 0.5, 0), pb + Vector3(0, -0.15 - h_p * 0.5, 0), 0.24, h_p, m_poutre)
-		# poteaux et consoles : au nez et au fond du quai, de part et d'autre de la voie
-		var y_c: float = H_CABLE_GARE - 0.15 - h_p * 0.5
-		var y_t: float = H_CABLE_GARE + 1.9                          # traverse haute, au-dessus du chariot
-		for t2 in [-0.6, -(lq - 0.6)]:
-			var z: float = -(t2 if aval else L - t2)
+		# portiques : fond du quai, nez, bout du sabot s'il s'avance de plus de 4 m
+		var ts: Array = [-(lq - 0.6), -0.6]
+		if t_bout > 4.0:
+			ts.append(t_bout - 0.4)
+		for t2 in ts:
+			var z: float = float(z_loc.call(t2))
+			var yr: float = float(y_rail.call(t2, montee))
+			var y_t: float = yr + 1.9                              # traverse haute, au-dessus du chariot
 			for side2 in [-1.0, 1.0]:
 				var xp: float = x0 + side2 * 2.15
-				RemonteeKit.boite_en(g, Vector3(0.55, y_t + 0.3, 0.55), Vector3(xp, (y_t + 0.3) * 0.5, z), m_poteau)
-				# console : du poteau au caisson de son côté (le vide du milieu reste libre)
+				var yb: float = minf(0.0, _sol(xp, z + z_g) - y0) if t2 > 0.0 else 0.0
+				RemonteeKit.boite_en(g, Vector3(0.55, y_t + 0.3 - yb, 0.55), Vector3(xp, (y_t + 0.3 + yb) * 0.5, z), m_poteau)
+				if yb < -0.5:
+					RemonteeKit.boite_en(g, Vector3(1.1, 0.5, 1.1), Vector3(xp, yb - 0.1, z), "beton")
+				# console : du poteau au rail de son côté, sous la garniture (le vide du milieu reste libre)
+				var mince: bool = coude and side2 == ext
+				var h_c: float = 0.20 if mince else 0.45
+				var y_c: float = yr - 0.15 - (0.11 if mince else 0.375)
 				var xi: float = x0 + side2 * e2
-				RemonteeKit.boite_en(g, Vector3(absf(xp - xi), 0.45, 0.40), Vector3((xp + xi) * 0.5, y_c, z), m_poutre)
+				RemonteeKit.boite_en(g, Vector3(absf(xp - xi), h_c, 0.40), Vector3((xp + xi) * 0.5, y_c, z), m_poutre)
 			RemonteeKit.boite_en(g, Vector3(4.85, 0.50, 0.50), Vector3(x0, y_t, z), m_poutre)
 		# poulie de renvoi du tracteur au fond du quai, derrière le chariot à quai (le tracteur est attaché
 		# aux deux bouts du chariot : rien ne doit pendre sur le passage de la suspente)
-		var zr: float = (lq + 0.5) if aval else -(L + lq + 0.5)
-		RemonteeKit.galet(g, Vector3(x0, H_CABLE_GARE - 0.45 - 0.25, zr), 0.25)
+		if galet:
+			RemonteeKit.galet(g, Vector3(x0, H_CABLE_GARE - 0.45 - 0.25, float(z_loc.call(-(lq + 0.5)))), 0.25)
 
 
 ## Façade côté route de la gare aval du Fornet (photos de la gare actuelle, Wikimedia Commons) :
@@ -948,6 +968,8 @@ func _gares_grande_motte(aval: bool) -> void:
 			TphGrandeMotte.escalier_salle(g, Vector3(m.x, 0.0, m.y), Vector3(dehors.x, 0, dehors.y), sol)
 	else:
 		TphGrandeMotte.gare_amont(self, g, H_CABLE_GARE, sol)
+	_sabots_tph(g, aval, y_q, z_g, (TphGrandeMotte.Z_NEZ - 0.6) if aval else (TphGrandeMotte.L_BAIE + 1.0),
+		"galva_pylone", "galva_pylone", true, aval)
 	# (en tranches : la gare d'un bloc, fusion comprise, faisait 13,5 ms sans fil, relevé du 10/11/2026)
 	await _pause("téléphérique : gare")
 	await MeshMerge.merge_par_tranches(g, [], "Gare", false, _pause.bind("téléphérique : gare, fusion"))
