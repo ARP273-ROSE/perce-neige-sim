@@ -1374,7 +1374,7 @@ static func _y_arc(d: float, a: Array) -> float:
 
 ## Hauteur du câble (chaînette) à la distance d, brin montée ou descente ;
 ## aux nez, raccord parabolique sur 2 h (l'arc de la batterie de galets).
-const SABOT_TPH: float = 6.0
+const SABOT_TPH: float = 16.0   # sabot de pylône des va-et-vient (photo de profil de la Grande Motte : ~17 m)
 
 
 func y_cable(d: float, montee: bool = true) -> float:
@@ -5991,10 +5991,10 @@ func _poser_pylones_treillis() -> void:
 			py.porteurs_par_voie = 2
 			py.ecart_porteurs = VehiculeRemontee.E_PORTEURS_TPH
 			py.va_et_vient = true
-			py.l_sabot = 6.0
+			py.l_sabot = SABOT_TPH
 		# sabots : 7 m, plus longs sur un pylône à grande déviation (le P3
 		# de l'Olympique porte 40 galets par voie)
-		py.l_sabot = 6.0 if vaetvient() else l_sabot_3s(p)
+		py.l_sabot = SABOT_TPH if vaetvient() else l_sabot_3s(p)
 		if tricable():
 			var bs: Vector2 = bouts_sabot_3s(p)
 			py.forme = String(p.get("forme", "plots_bas"))
@@ -6013,7 +6013,7 @@ func _poser_pylones_treillis() -> void:
 		var e: float = 6.0
 		py.pente = atan2(y_cable(d + e) - y_cable(d - e), 2.0 * e)
 		py.deviation = atan2(y_cable(d) - y_cable(d - e), e) - atan2(y_cable(d + e) - y_cable(d), e)
-		if tricable():
+		if tricable() or vaetvient():
 			# sabot cintré de toute la déviation, d'un bout à l'autre
 			var hs: float = py.l_sabot * 0.5
 			py.pente = atan((y_cable(d + 0.25) - y_cable(d - 0.25)) / 0.5)

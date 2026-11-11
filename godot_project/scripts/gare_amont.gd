@@ -934,7 +934,10 @@ func _telepherique() -> void:
 			var t: Vector2 = (b2 - a2).normalized()
 			var rot: float = atan2(t.y, t.x)
 			_boite("vitre", q.x, q.y, H_TPH_SOL + 8.0, 2.4, 0.08, 1.6, rot)
-	# inscriptions sur la façade tournée vers la gare du funiculaire
+	# façade d'entrée, tournée vers la gare du funiculaire (photo d'utilisateur du 11/11/2026) : grand escalier
+	# droit au milieu jusqu'à l'entrée de l'étage (niveau du quai), deux kiosques vitrés de part et d'autre,
+	# auvent ; au-dessus, bandeau de fenêtres, enseigne blanche « TELEPHERIQUE / DE LA GRANDE MOTTE », toit
+	# plat débordant
 	var a3: Vector2 = p[2]
 	var b3: Vector2 = p[3]
 	var m3: Vector2 = (a3 + b3) * 0.5
@@ -942,10 +945,63 @@ func _telepherique() -> void:
 	var n3: Vector2 = Vector2(-t3.y, t3.x)
 	if n3.dot(-m3) < 0.0:
 		n3 = -n3
+	var lf3: float = (b3 - a3).length()
+	var rot3: float = atan2(t3.y, t3.x)
 	var nrm: Vector3 = (_x * n3.x + _d * n3.y).normalized()
-	_texte_n("TELEPHERIQUE DE LA GRANDE MOTTE", _p2(m3 + n3 * 0.1, H_TPH_SOL + 10.3), 72, Color("2a3550"), 0.012, nrm)
-	_boite("bleu_nuit", m3.x + n3.x * 0.08, m3.y + n3.y * 0.08, H_TPH_SOL + 4.2, 8.0, 0.08, 0.9, atan2(t3.y, t3.x))
-	_texte_n("GRANDE MOTTE", _p2(m3 + n3 * 0.15, H_TPH_SOL + 4.2), 72, Color.WHITE, 0.010, nrm)
+	var Q := func(u: float, v: float) -> Vector2:
+		return m3 + t3 * u + n3 * v
+	var ye: float = H_TPH_SOL + TphGrandeMotte.H_QUAI_AVAL        # entrée (niveau du quai)
+	# kiosques vitrés, en saillie, sur un socle bardé
+	for sk in [-1.0, 1.0]:
+		var qk: Vector2 = Q.call(sk * 3.95, 0.8)
+		_boite("tph_gris", qk.x, qk.y, (H_TPH_SOL + ye) * 0.5, 3.7, 1.6, ye - H_TPH_SOL, rot3)
+		_boite("blanc", qk.x, qk.y, ye + 0.25, 3.7, 1.7, 0.5, rot3)
+		_boite("vitre", qk.x, qk.y, ye + 1.65, 3.6, 1.6, 2.3, rot3)
+		_boite("blanc", qk.x, qk.y, ye + 2.95, 3.8, 1.8, 0.3, rot3)
+		for km in range(5):
+			var qm: Vector2 = Q.call(sk * 3.95 + (km - 2) * 0.88, 1.62)
+			_boite("blanc", qm.x, qm.y, ye + 1.65, 0.07, 0.06, 2.3, rot3)
+	# palier d'entrée, auvent, panneau d'affichage
+	var qp: Vector2 = Q.call(0.0, 1.0)
+	_boite("caillebotis", qp.x, qp.y, ye - 0.04, 4.2, 2.0, 0.08, rot3)
+	var qa: Vector2 = Q.call(0.0, 1.1)
+	_boite("bois_tete", qa.x, qa.y, ye + 3.15, 4.4, 2.2, 0.22, rot3)
+	var qd: Vector2 = Q.call(0.0, 0.12)
+	_boite("noir", qd.x, qd.y, ye + 2.6, 2.4, 0.08, 0.45, rot3)
+	# grand escalier droit, du palier au sol
+	var n_m: int = int(ceil((ye - H_TPH_SOL) / 0.178))
+	var giron: float = 0.29
+	for k3 in range(n_m):
+		var qs: Vector2 = Q.call(0.0, 2.0 + giron * (k3 + 0.5))
+		_boite("caillebotis", qs.x, qs.y, ye - 0.178 * (k3 + 1) + 0.02, 4.0, giron + 0.02, 0.05, rot3)
+	var run: float = giron * n_m
+	for su in [-2.05, 0.0, 2.05]:
+		var h_l: Vector3 = _p2(Q.call(su, 2.0), ye)
+		var b_l: Vector3 = _p2(Q.call(su, 2.0 + run), H_TPH_SOL)
+		if absf(su) > 0.1:
+			_quad("galva", h_l + Vector3.DOWN * 0.05, b_l + Vector3.DOWN * 0.05, b_l + Vector3.DOWN * 0.30, h_l + Vector3.DOWN * 0.30)
+		# main courante en bois sur potelets
+		_quad("bois_resto", h_l + Vector3.UP * 0.95, b_l + Vector3.UP * 0.95, b_l + Vector3.UP * 1.05, h_l + Vector3.UP * 1.05)
+		for kp in range(6):
+			var u2: float = float(kp) / 5.0
+			var qq: Vector2 = Q.call(su, 2.0 + run * u2)
+			_boite("galva", qq.x, qq.y, lerpf(ye, H_TPH_SOL, u2) + 0.5, 0.05, 0.05, 1.0, rot3)
+	# bandeau de fenêtres de l'étage
+	var n_f: int = 10
+	for kf in range(n_f):
+		var qf: Vector2 = Q.call((kf - (n_f - 1) * 0.5) * (lf3 - 1.2) / n_f, 0.05)
+		_boite("vitre", qf.x, qf.y, ye + 4.55, (lf3 - 1.2) / n_f - 0.14, 0.06, 2.0, rot3)
+	var qb: Vector2 = Q.call(0.0, 0.06)
+	_boite("blanc", qb.x, qb.y, ye + 3.45, lf3 - 0.8, 0.10, 0.18, rot3)
+	# enseigne
+	var y_ens: float = h_bas - 1.0
+	var qe: Vector2 = Q.call(0.0, 0.10)
+	_boite("blanc", qe.x, qe.y, y_ens, 8.8, 0.08, 1.35, rot3)
+	_texte_n("TELEPHERIQUE", _p2(Q.call(0.0, 0.15), y_ens + 0.28), 72, Color("2a3550"), 0.011, nrm)
+	_texte_n("DE LA GRANDE MOTTE", _p2(Q.call(0.0, 0.15), y_ens - 0.30), 72, Color("2a3550"), 0.0085, nrm)
+	# toit plat débordant
+	var qt: Vector2 = Q.call(0.0, 0.55)
+	_boite("toit_blanc", qt.x, qt.y, h_bas + 0.15, lf3 + 1.2, 1.5, 0.35, rot3)
 
 
 ## Mur de a à b (bas y0, haut de y1a à y1b) percé d'une ouverture
