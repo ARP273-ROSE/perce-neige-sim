@@ -82,7 +82,8 @@ tph — le téléphérique du Fornet (vue avant), pour les téléphériques :
   tph_croisement   1:36–1:48   les deux cabines se croisent
   tph_arrivee      2:21–2:30   approche de la gare du haut
 funi — le Funival lui-même (vidéo de la montée, vue depuis la cabine de conduite ; les voix des passagers
-évitées, spectrogramme du 11/11/2026) :
+évitées, spectrogramme du 11/11/2026 ; vidéos de la montée et de la descente reprises avec l'accord
+de leur auteur) :
   funi_buzzer      0:01–0:06,5 bips de fermeture des portes, à quai en gare aval
   funi_portes      0:06–0:08,5 fermeture des portes (deux claquements)
   funi_dehors      1:10–1:20   en ligne sur le viaduc, à pleine vitesse   (boucle)
