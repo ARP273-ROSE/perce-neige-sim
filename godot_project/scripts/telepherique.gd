@@ -780,23 +780,23 @@ func _gare_fornet(aval: bool) -> void:
 ## tête de la suspente : chacune est tenue par l'extérieur, par des consoles sur deux poteaux, au nez et au
 ## fond du quai, que relie une traverse haute au-dessus du chariot.
 func _sabots_fornet(g: Node3D, aval: bool, y0: float, m_poutre: String, m_poteau: String) -> void:
-	_sabots_tph(g, aval, y0, 0.0, 2.0 * D_QUAI + 2.0, m_poutre, m_poteau, false, true)
+	_sabots_tph(g, aval, y0, 0.0, 2.0 * D_QUAI + 2.0, m_poutre, m_poteau, true)
 
 
-## Sabots des porteurs en gare (retour d'utilisateur du 11/11/2026 : « design des supports de câble en gare
-## pas bon ») : sous chaque porteur un rail garni (le porteur y repose) qui suit le câble du fond du quai au
-## bout du sabot cintré ; le milieu entre les deux porteurs d'une voie reste LIBRE pour la tête de suspente ;
-## les rails sont tenus de côté par des consoles sur des poteaux reliés en tête au-dessus du chariot (au fond
-## du quai, au nez, et au bout du sabot quand il s'avance hors de la gare). `z_g` : z de g dans le repère de
-## la ligne ; `lq` : du nez au fond des rails ; `coude` : la suspente se coude vers l'extérieur sous le
-## porteur extérieur (Grande Motte), dont le rail est alors mince ; `galet` : poulie de renvoi du tracteur au
-## fond du quai.
+## Sabots des porteurs en gare (retours d'utilisateur du 11/11/2026 : « design des supports de câble en gare
+## pas bon » ; « le support se fixe au droit du chariot […] sinon ça ne passe pas le pylône ») : sous chaque
+## porteur une garniture (le porteur y repose) qui suit le câble du fond du quai au bout du sabot cintré, sur
+## un caisson unique sous la paire de porteurs ; le côté EXTÉRIEUR reste libre pour le bras de suspente, le
+## caisson est tenu par des consoles du côté intérieur, sur des poteaux reliés en tête au-dessus du chariot (au
+## fond du quai, au nez, et au bout du sabot quand il s'avance hors de la gare). `z_g` : z de g dans le repère
+## de la ligne ; `lq` : du nez au fond des rails ; `galet` : poulie de renvoi du tracteur au fond du quai.
 func _sabots_tph(g: Node3D, aval: bool, y0: float, z_g: float, lq: float, m_poutre: String, m_poteau: String,
-		coude: bool, galet: bool) -> void:
+		galet: bool) -> void:
 	var L: float = longueur_h()
 	var e2: float = VehiculeRemontee.E_PORTEURS_TPH * 0.5
 	var hn: float = float(_h_nez[0 if aval else 1])
 	var t_bout: float = 2.0 * hn + 0.3
+	var h_p: float = 0.75                                   # hauteur du caisson
 	var y_rail := func(t: float, montee: bool) -> float:
 		var d: float = t if aval else L - t
 		return (y_cable(clampf(d, 0.0, L), montee) if t > 0.0 else terrain(0.0 if aval else L) + H_CABLE_GARE) - y0
@@ -804,19 +804,19 @@ func _sabots_tph(g: Node3D, aval: bool, y0: float, z_g: float, lq: float, m_pout
 		return -(t if aval else L - t) - z_g
 	for montee in [true, false]:
 		var x0: float = _x_brin(montee)
-		var ext: float = signf(x0)                                  # côté du coude de la suspente
+		var dedans: float = -signf(x0)                          # côté intérieur de la ligne
 		var pts: Array = []
 		for k in range(25):
 			var t: float = lerpf(-lq, t_bout, float(k) / 24.0)
-			pts.append(Vector3(0, float(y_rail.call(t, montee)), float(z_loc.call(t))))
-		for side in [-1.0, 1.0]:
-			var xb: float = x0 + side * e2
-			var h_p: float = 0.22 if coude and side == ext else 0.75
-			for i in range(pts.size() - 1):
-				var pa: Vector3 = pts[i] + Vector3(xb, 0, 0)
-				var pb: Vector3 = pts[i + 1] + Vector3(xb, 0, 0)
-				RemonteeKit.poutre(g, pa + Vector3(0, -0.10, 0), pb + Vector3(0, -0.10, 0), 0.13, 0.10, "orange_sabot")
-				RemonteeKit.poutre(g, pa + Vector3(0, -0.15 - h_p * 0.5, 0), pb + Vector3(0, -0.15 - h_p * 0.5, 0), 0.24, h_p, m_poutre)
+			pts.append(Vector3(x0, float(y_rail.call(t, montee)), float(z_loc.call(t))))
+		for i in range(pts.size() - 1):
+			var pa: Vector3 = pts[i]
+			var pb: Vector3 = pts[i + 1]
+			for side in [-1.0, 1.0]:
+				var o: Vector3 = Vector3(side * e2, -0.10, 0)
+				RemonteeKit.poutre(g, pa + o, pb + o, 0.13, 0.10, "orange_sabot")
+			var oc: Vector3 = Vector3(0, -0.15 - h_p * 0.5, 0)
+			RemonteeKit.poutre(g, pa + oc, pb + oc, 2.0 * e2 + 0.24, h_p, m_poutre)
 		# portiques : fond du quai, nez, bout du sabot s'il s'avance de plus de 4 m
 		var ts: Array = [-(lq - 0.6), -0.6]
 		if t_bout > 4.0:
@@ -831,15 +831,12 @@ func _sabots_tph(g: Node3D, aval: bool, y0: float, z_g: float, lq: float, m_pout
 				RemonteeKit.boite_en(g, Vector3(0.55, y_t + 0.3 - yb, 0.55), Vector3(xp, (y_t + 0.3 + yb) * 0.5, z), m_poteau)
 				if yb < -0.5:
 					RemonteeKit.boite_en(g, Vector3(1.1, 0.5, 1.1), Vector3(xp, yb - 0.1, z), "beton")
-				# console : du poteau au rail de son côté, sous la garniture (le vide du milieu reste libre)
-				var mince: bool = coude and side2 == ext
-				var h_c: float = 0.20 if mince else 0.45
-				var y_c: float = yr - 0.15 - (0.11 if mince else 0.375)
-				var xi: float = x0 + side2 * e2
-				RemonteeKit.boite_en(g, Vector3(absf(xp - xi), h_c, 0.40), Vector3((xp + xi) * 0.5, y_c, z), m_poutre)
+			# console : du poteau intérieur au caisson
+			var xpi: float = x0 + dedans * 2.15
+			var xci: float = x0 + dedans * (e2 + 0.12)
+			RemonteeKit.boite_en(g, Vector3(absf(xpi - xci), 0.45, 0.40), Vector3((xpi + xci) * 0.5, yr - 0.15 - h_p * 0.5, z), m_poutre)
 			RemonteeKit.boite_en(g, Vector3(4.85, 0.50, 0.50), Vector3(x0, y_t, z), m_poutre)
-		# poulie de renvoi du tracteur au fond du quai, derrière le chariot à quai (le tracteur est attaché
-		# aux deux bouts du chariot : rien ne doit pendre sur le passage de la suspente)
+		# poulie de renvoi du tracteur au fond du quai, derrière le chariot à quai
 		if galet:
 			RemonteeKit.galet(g, Vector3(x0, H_CABLE_GARE - 0.45 - 0.25, float(z_loc.call(-(lq + 0.5)))), 0.25)
 
@@ -969,7 +966,7 @@ func _gares_grande_motte(aval: bool) -> void:
 	else:
 		TphGrandeMotte.gare_amont(self, g, H_CABLE_GARE, sol)
 	_sabots_tph(g, aval, y_q, z_g, (TphGrandeMotte.Z_NEZ - 0.6) if aval else (TphGrandeMotte.L_BAIE + 1.0),
-		"galva_pylone", "galva_pylone", true, aval)
+		"galva_pylone", "galva_pylone", aval)
 	# (en tranches : la gare d'un bloc, fusion comprise, faisait 13,5 ms sans fil, relevé du 10/11/2026)
 	await _pause("téléphérique : gare")
 	await MeshMerge.merge_par_tranches(g, [], "Gare", false, _pause.bind("téléphérique : gare, fusion"))
