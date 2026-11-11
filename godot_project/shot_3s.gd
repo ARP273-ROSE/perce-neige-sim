@@ -85,6 +85,8 @@ func _initialize() -> void:
 		["cabine_face", Vector3(xc, yp - 2.2, 1.0), Vector3(xc, yp - 2.4, 9)],
 		["portes", Vector3(xc + 6.5, yp - 2.8, 18.0), Vector3(xc, yp - 3.0, 18)],
 		["chariot", Vector3(xc + 2.0, yp + 0.8, 7.2), Vector3(xc, yp, 9)],
+		["chariot_profil", Vector3(xc + 3.2, yp - 0.25, 9.0), Vector3(xc, yp - 0.25, 9.0)],
+		["tracteur_apres", Vector3(xc + 2.5, yp - 0.4, 2.0), Vector3(xc, yp - 0.5, 9.0)],
 		["chariot_dessous", Vector3(xc + 1.2, yp - 1.6, 7.5), Vector3(xc, yp, 9)],
 		["tph_34", Vector3(38, 6.5, 13), Vector3(30, 5.0, 0)],
 		["tph_face", Vector3(30, 4.5, 14), Vector3(30, 5.0, 0)],
@@ -108,5 +110,6 @@ func _tick() -> void:
 		_cam.global_position = v[1]
 		_cam.look_at(v[2], Vector3.UP)
 	elif _f % 6 == 5:
+		RenderingServer.force_draw(false)       # (sans écran, sous weston, l'image rendue n'était plus refaite)
 		get_root().get_texture().get_image().save_png("%s_%s.png" % [_pre, v[0]])
 		_i += 1

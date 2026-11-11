@@ -81,6 +81,22 @@ tph — le téléphérique du Fornet (vue avant), pour les téléphériques :
   tph_ligne        0:57–1:06   en ligne (le passage où l'on parle le moins) (boucle)
   tph_croisement   1:36–1:48   les deux cabines se croisent
   tph_arrivee      2:21–2:30   approche de la gare du haut
+funi — le Funival lui-même (vidéo de la montée, vue depuis la cabine de conduite ; les voix des passagers
+évitées, spectrogramme du 11/11/2026) :
+  funi_buzzer      0:01–0:06,5 bips de fermeture des portes, à quai en gare aval
+  funi_portes      0:06–0:08,5 fermeture des portes (deux claquements)
+  funi_dehors      1:10–1:20   en ligne sur le viaduc, à pleine vitesse   (boucle)
+  funi_tunnel      2:46–2:58   en ligne dans le tunnel, à pleine vitesse (boucle)
+  funi_croisement  2:38–2:50   passage de l'évitement
+  funi_ralenti     4:40–4:50   ralentissement à l'approche de la gare amont
+funi_machines — la salle des machines de Bellevarde (vidéo de la descente, piste prise en salle des machines) :
+  funi_machines    1:10–1:40   treuil à pleine vitesse                    (boucle)
+  funi_machines_dem 0:28–0:45  démarrage du treuil
+Passages uniques recoupés dans les prises ci-dessus (11/11/2026, instants relus au spectrogramme : le son des
+compressions était décalé et doublé) :
+  tsd_pyl_c   = tsd_pyl_cc  1,45–3,40 s (1:06,45–1:08,40) : le premier train de chocs seul, choc à 0,30 s
+  tke_pyl_c1  = tke_pyl_c   1,70–3,00 s (2:52,70–2:54,00) : les galets, sans la perche qui redescend, choc à 0,30 s
+  tcd_pyl_c1  = tcd_pyl_cc  0,25–1,95 s (0:17,25–0:18,95) : le premier des deux pylônes rapprochés, choc à 0,25 s
 Les niveaux relatifs d'un même profil sont conservés (un seul gain par profil).
 """
 import os
@@ -157,6 +173,18 @@ PROFILS = {
         ("tke_pyl_s", 105.0, 108.0, False),
         ("tke_pyl_c", 171.0, 175.0, False),
         ("tke_arrivee", 349.0, 355.0, False),
+    ],
+    "funi": [
+        ("funi_buzzer", 1.0, 6.5, False),
+        ("funi_portes", 6.0, 8.5, False),
+        ("funi_dehors", 70.0, 80.0, True),
+        ("funi_tunnel", 166.0, 178.0, True),
+        ("funi_croisement", 158.0, 170.0, False),
+        ("funi_ralenti", 280.0, 290.0, False),
+    ],
+    "funi_machines": [
+        ("funi_machines", 70.0, 100.0, True),
+        ("funi_machines_dem", 28.0, 45.0, False),
     ],
     "tph": [
         ("tph_quai", 0.0, 28.0, True),

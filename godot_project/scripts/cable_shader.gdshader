@@ -81,6 +81,12 @@ uniform vec4 charges_d[32];       // brin descente
 uniform float onde_amp = 0.0;     // arrêt : onde de portée amortie (LigneRemontee._onde)
 uniform float onde_t = 0.0;
 uniform float onde_c = 88.0;
+// 3S : le tracteur soulevé par chaque pince (remontée au-dessus des galets) et reposé de part et d'autre sur le galet
+// d'appui suivant par une chaînette : (d de la pince, levée, longueur vers l'aval, vers l'amont), par brin
+uniform int n_levees_m = 0;
+uniform vec4 levees_m[48];
+uniform int n_levees_d = 0;
+uniform vec4 levees_d[48];
 uniform float w_m = 0.0;          // charge répartie / H (1/m), brin montée
 uniform float w_d = 0.0;
 
@@ -127,6 +133,22 @@ float fleche_points(float d, bool montee) {
 	return f;
 }
 
+// levée du tracteur en d : cosh qui part de la pince et arrive tangente au galet (pente nulle) à la longueur l
+float levee(float d, bool montee) {
+	int n = montee ? n_levees_m : n_levees_d;
+	float h = 0.0;
+	for (int j = 0; j < n; j++) {
+		vec4 q = montee ? levees_m[j] : levees_d[j];
+		float x = d - q.x;
+		float l = x < 0.0 ? q.z : q.w;
+		float u = abs(x) / max(l, 0.05);
+		if (u < 1.0) {
+			h = max(h, q.y * (cosh(2.0 * (1.0 - u)) - 1.0) / (cosh(2.0) - 1.0));
+		}
+	}
+	return h;
+}
+
 float phase_brin(float s) {
 	if (!effile) {
 		return cable_phase;
@@ -160,6 +182,9 @@ void vertex() {
 	if (n_appuis >= 2) {
 		bool montee = sign(VERTEX.x) == signe_montee;
 		VERTEX.y -= fleche_points(-VERTEX.z, montee);
+	}
+	if (n_levees_m + n_levees_d > 0) {
+		VERTEX.y += levee(-VERTEX.z, sign(VERTEX.x) == signe_montee);
 	}
 }
 

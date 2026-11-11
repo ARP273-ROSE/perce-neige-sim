@@ -52,7 +52,9 @@ var _proche: Array = []                # [ligne, pylône, d, {i véhicule → d 
 const NOMS: Array = ["gare_debrayable", "gare_fixe", "lanceur", "ligne_siege", "ligne_cabine", "ligne_3s", "teleski",
 	"galet_support", "galet_compression", "arret_urgence",
 	"3s_gare", "3s_ligne", "3s_motrice", "3s_lanceur_acc", "3s_lanceur_dec", "3s_pylone",
-	"tcd_gare", "tcd_ligne", "tcd_lanceur_acc", "tcd_lanceur_dec", "tcd_pyl_s", "tcd_pyl_c", "tcd_pyl_cc", "tcd_pyl_sc",
+	"tcd_gare", "tcd_ligne", "tcd_lanceur_acc", "tcd_lanceur_dec", "tcd_pyl_s", "tcd_pyl_c", "tcd_pyl_cc", "tcd_pyl_sc", "tcd_pyl_c1", "tsd_pyl_c", "tke_pyl_c1",
+	"tsd_galet_c", "tsd_galet_s", "tcd_galet_c", "tcd_galet_s", "tsf_galet_c", "tsf_galet_s", "tkd_galet_c", "tkd_galet_s",
+	"tke_galet_c", "boisses_galet_s",
 	"tkd_gare", "tkd_ligne", "tkd_depart", "tkd_lacher", "tkd_pyl_s", "tkd_pyl_c",
 	"tsf_motrice", "tsf_arrivee", "tsf_ligne", "tsf_arret", "tsf_redemarrage", "tsf_embarquement", "tsf_pyl_s", "tsf_pyl_c",
 	"tsf_ruisseau",
@@ -217,7 +219,8 @@ func _choisir_gares(sk: Vector3) -> void:
 		elif _prises(lg2) == "tph":
 			son = "tph_quai"
 		elif _prises(lg2) == "funi":
-			son = "gare_fixe"            # (gares du Funival : machinerie, comme avant ; les sons du funiculaire sont à bord)
+			# (gare amont : la salle des machines, prise réelle ; gare aval : poulie de renvoi, sans moteur)
+			son = "gare_fixe" if bool(cand[k][3]) else "funi_machines"
 		elif _prises(lg2) == "tsd":
 			son = "tsd_gare" if bool(cand[k][3]) else "tsd_gare_haut"
 		elif _prises(lg2) != "":
@@ -422,27 +425,23 @@ func _prise_pylone(lg: LigneRemontee, k: int, montee: bool, pref: String) -> Arr
 		return ["3s_pylone", 1.6]
 	if pref == "boisses":
 		var pr0: Array = _prise_pylone(lg, k, montee, "tcd")
-		return pr0 if String(pr0[0]) != "tcd_pyl_s" else ["boisses_pyl_s", 1.9]
+		return pr0 if String(pr0[0]) != "tcd_pyl_s" else ["boisses_pyl_s", 1.7]
 	if pref == "tsd":
-		# compressions : la prise des deux pylônes, une seule fois pour deux pylônes
-		# rapprochés. Avant : seulement au premier pylône de la ligne, et support-compression
-		# muet (retour d'utilisateur, 28/10/2026 : « compression pas synchro ou absente, SC absent »)
+		# compressions : UN passage par pylône (retour d'utilisateur du 11/11/2026 : « le son des galets compression
+		# sur pylône est décalé et en double ») — la prise des deux pylônes n'avait pas de choc repéré : calée à
+		# 0,3 s, ses galets ne sonnaient qu'à 1,75 s (spectrogramme), et la fin (souffle) faisait un second
+		# passage ; tsd_pyl_c = son premier train de chocs seul, choc à 0,3 s
 		var nat0: Array = lg.pylones[k].get("montee" if montee else "descente", []).map(func(g1): return String(g1[1]))
-		if "S" in nat0 or "SC" in nat0:
-			return ["tsd_pyl_s", 1.6]
-		if "C" not in nat0:
-			return ["tsd_pyl_s", 1.6]
-		var k_prec: int = k - 1 if montee else k + 1
-		if k_prec >= 0 and k_prec < lg.pylones.size() and absf(float(lg.pylones[k_prec]["d"]) - float(lg.pylones[k]["d"])) < 40.0:
-			for g3 in lg.pylones[k_prec].get("montee" if montee else "descente", []):
-				if String(g3[1]) == "C":
-					return ["", 0.0]
-		return ["tsd_pyl_cc", 0.3]
+		if "C" in nat0 and not ("S" in nat0 or "SC" in nat0):
+			return ["tsd_pyl_c", 0.3]
+		return ["tsd_pyl_s", 1.15]
 	if pref == "tkd" or pref == "tsf" or pref == "tke":
-		var chocs: Dictionary = {"tkd": [0.3, 0.5], "tsf": [T_PYL_C_TSF, 1.65], "tke": [2.95, 1.52]}
+		# (instants des chocs relus au spectrogramme, 11/11/2026 : téléski à enrouleurs, galets à 2,0 s et non 2,95 —
+		# la perche qui redescend, à 3,4 s, faisait un second passage : prise réduite aux galets, tke_pyl_c1)
+		var chocs: Dictionary = {"tkd": [0.3, 0.42], "tsf": [T_PYL_C_TSF, 1.65], "tke": [0.3, 1.52]}
 		for g0 in lg.pylones[k].get("montee" if montee else "descente", []):
 			if String(g0[1]) in ["C", "SC"]:
-				return [pref + "_pyl_c", chocs[pref][0]]
+				return [pref + ("_pyl_c1" if pref == "tke" else "_pyl_c"), chocs[pref][0]]
 		return [pref + "_pyl_s", chocs[pref][1]]
 	var p: Dictionary = lg.pylones[k]
 	var s_: bool = false
@@ -459,8 +458,10 @@ func _prise_pylone(lg: LigneRemontee, k: int, montee: bool, pref: String) -> Arr
 			if k2 >= 0 and k2 < lg.pylones.size() and absf(float(lg.pylones[k2]["d"]) - float(p["d"])) < 40.0:
 				for g2 in lg.pylones[k2].get("montee" if montee else "descente", []):
 					if String(g2[1]) == "C":
-						return ["tcd_pyl_cc", 2.9] if (k2 > k) == montee else ["", 0.0]
-		return ["tcd_pyl_c", 6.8]
+						# (un passage court par pylône : la prise des deux pylônes, déclenchée au premier avec son second
+						# train à 2,9 s, ne tombait sur le second qu'à une vitesse et un écart donnés)
+						return ["tcd_pyl_c1", 0.25]
+		return ["tcd_pyl_c", 6.15]      # (galets de 6,1 à 7,7 s au spectrogramme ; 6,8 tombait au milieu)
 	return ["tcd_pyl_s", 1.1]
 
 
@@ -514,6 +515,7 @@ func _a_bord_3s(delta: float, lg: LigneRemontee, s: float, z: Array, v: float, p
 	# la cabine vibre de plus en plus à l'approche d'un pylône (retour d'utilisateur,
 	# 25/10/2026) : l'ambiance monte de 5 dB dans les 2 s qui précèdent
 	cible += 5.0 * _approche
+	cible += _accord_vitesse(lg, son)[0]
 	if lg.regime() < 0.02 and zone == "ligne":
 		cible = -24.0 + GAIN_AMBIANCE         # arrêté en ligne : le vent, la cabine qui grince
 	if _ligne.stream != _sons[son]:
@@ -526,7 +528,7 @@ func _a_bord_3s(delta: float, lg: LigneRemontee, s: float, z: Array, v: float, p
 		_ligne.play(randf() * 3.0)
 	else:
 		_ligne.volume_db = move_toward(_ligne.volume_db, cible, delta * 20.0)
-	_ligne.pitch_scale = 1.0
+	_ligne.pitch_scale = _accord_vitesse(lg, son)[1] if not (lg.regime() < 0.02 and zone == "ligne") else 1.0
 	# pylônes : la prise démarre 1,6 s avant le pylône (à la vitesse du moment)
 	if zone != "ligne" or v < 0.5:
 		return
@@ -540,14 +542,30 @@ func _a_bord_3s(delta: float, lg: LigneRemontee, s: float, z: Array, v: float, p
 		if ecart <= 0.0:
 			continue
 		_approche = maxf(_approche, clampf(1.0 - (ecart / v) / 2.0, 0.0, 1.0))
+		if ecart / v > 8.0:
+			continue            # (la plus longue avance d'une prise : 6,15 s ; plus loin, rien à décider à cette image)
 		var pr: Array = _prise_pylone(lg, k, monte, pref)
 		if String(pr[0]) == "":
 			continue
 		var cle: String = "%s_%d" % [lg.name, int(dp)]
-		if ecart / v < float(pr[1]):
+		# télécabines : un choc réel par galet (comme _pylones_reels) ; le 3S garde sa prise (pas de chocs isolables)
+		var liste: Array = _galets_pylone(lg, k, monte, pref) if pref != "3s" else []
+		if not liste.is_empty():
+			var pas: float = PAS_GALET
+			var avance: float = (float(liste.size() - 1) * 0.5 * pas) / v + 0.05
+			if ecart / v < avance and (not _pyl3s.has(cle) or _t - float(_pyl3s[cle]) > 20.0):
+				_pyl3s[cle] = _t
+				var t0: float = _t + maxf(ecart / v - avance + 0.05, 0.0)
+				for j in range(liste.size()):
+					_file.append([t0 + float(j) * pas / v, liste[j], false, Vector3.ZERO, randf_range(-6.0, -3.0), randf_range(0.95, 1.05)])
+			continue
+		# prise enregistrée à pleine vitesse : au ralenti, rejouée plus lentement (chocs des galets espacés comme sur le
+		# câble), son choc d'autant plus tard
+		var hp: float = clampf(lg.regime(), 0.5, 1.0)
+		if ecart / v < float(pr[1]) / hp:
 			if not _pyl3s.has(cle) or _t - float(_pyl3s[cle]) > 20.0:
 				_pyl3s[cle] = _t
-				_coup(lg, pr[0])
+				_coup(lg, pr[0], hp)
 
 
 func _maj_ruisseau(delta: float, lg: LigneRemontee, s: float) -> void:
@@ -594,24 +612,40 @@ func _a_bord_tph(delta: float, lg: LigneRemontee) -> void:
 		_coup(lg, "tph_arrivee")
 
 
-## Funival à bord : les sons du funiculaire Perce-Neige (même famille d'appareil, roulement sur rails) — boucle
-## lente ou de croisière selon la vitesse, buzzer des portes puis leur fermeture avant le départ, et la prise du
-## croisement, longue de 20 s (aiguillage à aiguillage au Perce-Neige), lancée pour que son milieu tombe quand les
-## deux véhicules se croisent.
-const SONS_FUNI: Array = [["funi_lent", "ambient_slow", true], ["funi_croisiere", "ambient_cruise", true],
-	["funi_croisement", "crossing", false], ["funi_buzzer", "door_buzzer", false], ["funi_portes", "door_motion", false]]
-const FUNI_CROISIERE: float = 4.0           # m/s : au-delà, la boucle de croisière
-const FUNI_CLIP_CROISEMENT: float = 20.0    # s (crossing.wav)
+## Funival à bord : ses propres sons, tirés des vidéos de la montée (vue cabine) et de la descente (salle des machines)
+## — retour d'utilisateur du 11/11/2026 : « extraire les sons des différentes étapes et ambiances du Funival des vidéos
+## au lieu de copier Perce-Neige » (tools_sons_reels.py, profils funi et funi_machines) : en ligne sur le viaduc ou
+## dans le tunnel (hauteur et force selon la vitesse réelle), ralentissement à l'approche de la gare amont, passage de
+## l'évitement (prise de 12 s, son milieu au croisement), bips puis fermeture des portes avant le départ ; la salle des
+## machines s'entend autour de la gare amont.
+const SONS_FUNI: Array = [["funi_dehors", "remontees/funi_dehors", true], ["funi_tunnel", "remontees/funi_tunnel", true],
+	["funi_croisement", "remontees/funi_croisement", false], ["funi_buzzer", "remontees/funi_buzzer", false],
+	["funi_portes", "remontees/funi_portes", false], ["funi_ralenti", "remontees/funi_ralenti", false],
+	["funi_machines", "remontees/funi_machines", true]]
+const FUNI_CLIP_CROISEMENT: float = 12.0    # s (funi_croisement.wav)
+const FUNI_CLIP_RALENTI: float = 10.0       # s : la prise du ralentissement finit à l'arrêt en gare
 var _funi_crois: float = -100.0
 var _funi_buzz: float = -100.0
 var _funi_portes: float = -100.0
+var _funi_ral: float = -100.0
 var _funi_ecart: float = INF                  # écart précédent entre les deux véhicules (ils se rapprochent ?)
 
 
 func _a_bord_funi(delta: float, lg: LigneRemontee) -> void:
 	var tp: Telepherique = lg as Telepherique
 	var v: float = absf(tp._v)
-	_ambiance(delta, lg, "funi_croisiere" if v > FUNI_CROISIERE else "funi_lent", -6.0)
+	var fv: Funival = lg as Funival
+	var ab: Array = domaine.a_bord
+	var i_v: int = int(ab[1]) if ab.size() > 1 else 0
+	var d_v: float = float(tp._vehicules[i_v][1])
+	var dedans: bool = fv != null and fv.dans_tunnel(d_v)
+	_ambiance(delta, lg, "funi_tunnel" if dedans else "funi_dehors", -6.0)
+	# ralentissement : la prise finit quand le véhicule s'arrête au quai d'arrivée
+	var monte: bool = (tp._sens > 0.0) == (i_v == 0)
+	var but: float = tp._x_quai(not monte)
+	if tp._phase != "quai" and v > 0.5 and absf(but - d_v) / maxf(v, 0.5) < FUNI_CLIP_RALENTI * 0.6 and _t - _funi_ral > 60.0:
+		_funi_ral = _t
+		_coup(lg, "funi_ralenti")
 	if tp._phase == "quai":
 		# buzzer 7 s avant le départ (durée du buzzer du Perce-Neige), puis les portes
 		if tp._t_quai < 7.5 and tp._t_quai > 6.5 and _t - _funi_buzz > 20.0:
@@ -639,6 +673,7 @@ func _ambiance(delta: float, lg: LigneRemontee, son: String, base: float) -> voi
 	if _coup3s.playing or _coup3s_b.playing:
 		cible = base - 14.0
 	cible += 5.0 * _approche
+	cible += _accord_vitesse(lg, son)[0]
 	if lg.regime() < 0.02 and not son.ends_with("_arrete"):
 		cible = base - 20.0
 	if _ligne.stream != _sons[son]:
@@ -651,7 +686,21 @@ func _ambiance(delta: float, lg: LigneRemontee, son: String, base: float) -> voi
 		_ligne.play(randf() * 3.0)
 	else:
 		_ligne.volume_db = move_toward(_ligne.volume_db, cible, delta * 20.0)
-	_ligne.pitch_scale = 1.0
+	_ligne.pitch_scale = _accord_vitesse(lg, son)[1]
+
+
+## Ambiance qui suit la vitesse RÉELLE de l'installation (retour d'utilisateur du 11/11/2026 : « adapter le bruit
+## ambiant des gares TS, TC, TK et 3S en fonction de la vitesse réelle ») : les prises sont enregistrées à pleine
+## vitesse ; au cran réduit, au démarrage et au freinage, la machinerie et les pneus des lanceurs tournent moins vite —
+## gares : plus grave (jusqu'à 0,6) et plus faible (20·log du régime) ; en ligne : un peu plus grave, un peu plus
+## faible (vent, câble). [décalage de volume (dB), hauteur]
+func _accord_vitesse(lg: LigneRemontee, son: String) -> Array:
+	if son.ends_with("_arrete") or son.begins_with("tph"):
+		return [0.0, 1.0]
+	var r: float = clampf(lg.regime(), 0.0, 1.0)
+	if son.contains("gare") or son.contains("motrice") or son.contains("arrivee"):
+		return [20.0 * log(maxf(r, 0.08)) / log(10.0), lerpf(0.6, 1.0, r)]
+	return [10.0 * log(maxf(r, 0.1)) / log(10.0), lerpf(0.8, 1.0, r)]
 
 
 ## Prises des pylônes, déclenchées pour que leur choc tombe au droit du pylône.
@@ -668,24 +717,61 @@ func _pylones_reels(lg: LigneRemontee, s: float, v: float, pref: String, en_lign
 		if ecart <= 0.0:
 			continue
 		_approche = maxf(_approche, clampf(1.0 - (ecart / v) / 2.0, 0.0, 1.0))
+		if ecart / v > 8.0:
+			continue            # (la plus longue avance d'une prise : 6,15 s ; plus loin, rien à décider à cette image)
 		var pr: Array = _prise_pylone(lg, k, monte, pref)
 		if String(pr[0]) == "":
 			continue
 		var cle: String = "%s_%d" % [lg.name, int(dp)]
-		if ecart / v < float(pr[1]):
+		# un choc réel par galet du balancier, au pas des galets et à la vitesse du câble (retour d'utilisateur du
+		# 11/11/2026 : « compter le nombre de galets passés et adapter le son en fonction des galets et de la vitesse ») ;
+		# le premier galet est à la moitié du balancier avant l'axe du pylône
+		var liste: Array = _galets_pylone(lg, k, monte, pref)
+		if not liste.is_empty():
+			var pas: float = PAS_GALET if not lg.teleski() else 0.36
+			var avance: float = (float(liste.size() - 1) * 0.5 * pas) / v + 0.05
+			if ecart / v < avance and (not _pyl3s.has(cle) or _t - float(_pyl3s[cle]) > 20.0):
+				_pyl3s[cle] = _t
+				var t0: float = _t + maxf(ecart / v - avance + 0.05, 0.0)
+				for j in range(liste.size()):
+					_file.append([t0 + float(j) * pas / v, liste[j], false, Vector3.ZERO, randf_range(-2.5, 0.5), randf_range(0.95, 1.05)])
+			continue
+		var hp: float = clampf(lg.regime(), 0.5, 1.0)        # (prise de pleine vitesse rejouée à la vitesse du câble)
+		if ecart / v < float(pr[1]) / hp:
 			if not _pyl3s.has(cle) or _t - float(_pyl3s[cle]) > 20.0:
 				_pyl3s[cle] = _t
-				_coup(lg, pr[0])
+				_coup(lg, pr[0], hp)
+
+
+## Chocs de galets réels d'un pylône, dans l'ordre de passage : un par galet de chaque balancier du brin (porteur,
+## compression ; un porteur-compresseur alterne les deux), pris dans la vidéo de l'appareil du même type (un choc net
+## relevé dans le train de chocs d'un passage, spectrogramme du 11/11/2026). Vide : pas de chocs réels pour ce type.
+func _galets_pylone(lg: LigneRemontee, k: int, montee: bool, pref: String) -> Array:
+	var s_nom: String = pref + "_galet_s"
+	var c_nom: String = pref + "_galet_c"
+	if pref == "tke":
+		s_nom = "tke_galet_c"
+	elif pref == "boisses":
+		c_nom = "tcd_galet_c"
+	if not (_sons.has(s_nom) and _sons.has(c_nom)):
+		return []
+	var r: Array = []
+	for g in lg.pylones[k].get("montee" if montee else "descente", []):
+		var n: int = int(g[0]) if g[0] != null else 4
+		var nat: String = String(g[1])
+		for j in range(n if nat != "SC" else maxi(n / 2, 1)):
+			r.append(c_nom if nat == "C" else (s_nom if nat == "S" else (s_nom if j % 2 == 0 else c_nom)))
+	return r
 
 
 var _approche: float = 0.0
 var _tk_prec: LigneRemontee = null
 var _tsf_prec: LigneRemontee = null
 var _tsd_prec: LigneRemontee = null
-const T_PYL_C_TSF: float = 3.7
+const T_PYL_C_TSF: float = 2.8         # début du train de chocs (spectrogramme, 11/11/2026 ; 3,7 en tombait au milieu)
 
 
-func _coup(_lg: LigneRemontee, nom: String) -> void:
+func _coup(_lg: LigneRemontee, nom: String, hauteur: float = 1.0) -> void:
 	# deux joueurs : la prise la plus ancienne cède la place
 	var p: AudioStreamPlayer = _coup3s
 	if _coup3s.playing and not _coup3s_b.playing:
@@ -694,6 +780,7 @@ func _coup(_lg: LigneRemontee, nom: String) -> void:
 		p = _coup3s if _coup3s.get_playback_position() > _coup3s_b.get_playback_position() else _coup3s_b
 	p.stream = _sons[nom]
 	p.volume_db = 0.0
+	p.pitch_scale = hauteur
 	p.play()
 
 
@@ -710,6 +797,12 @@ func _salve(lg: LigneRemontee, py: Node, montee: bool, v: float, en3d: bool, pos
 		var nat: String = String(g[1])
 		for k in range(n if nat != "SC" else n / 2):
 			liste.append("galet_compression" if nat == "C" else ("galet_support" if nat == "S" else ("galet_support" if k % 2 == 0 else "galet_compression")))
+	# (chocs réels de l'appareil du même type quand il y en a, au lieu des chocs de synthèse)
+	var pref_s: String = _prises(lg)
+	var reel_s: String = (pref_s + "_galet_s") if pref_s != "tke" else "tke_galet_c"
+	var reel_c: String = (pref_s + "_galet_c") if pref_s != "boisses" else "tcd_galet_c"
+	if _sons.has(reel_s) and _sons.has(reel_c):
+		liste = liste.map(func(n0: String) -> String: return reel_c if n0 == "galet_compression" else reel_s)
 	if liste.is_empty():
 		liste = ["galet_support", "galet_support", "galet_support", "galet_support"]
 	var pas: float = PAS_GALET if not lg.teleski() else 0.36

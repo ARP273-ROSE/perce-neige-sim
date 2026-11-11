@@ -4617,6 +4617,73 @@ func _tourner_cavaliers(delta: float) -> void:
 		(g[0] as Node3D).rotate_object_local(Vector3.UP, float(st[3]) * delta * (1.0 if g[1] else -1.0))
 
 
+## 3S : appuis du tracteur sur un brin (d croissants) — galets des cavaliers, galets des sabots des pylônes (sur toute
+## leur longueur, tous les mètres), nez des gares.
+var _appuis_tr: Dictionary = {}
+
+
+func _appuis_tracteur(montee: bool) -> PackedFloat32Array:
+	if _appuis_tr.has(montee):
+		return _appuis_tr[montee]
+	var a: Array = [0.0, longueur_h()]
+	for e in _cavaliers_n:
+		if bool(e[2]) == montee:
+			a.append(float(e[1]))
+	for p in pylones:
+		var hs: float = l_sabot_3s(p) * 0.5
+		var x: float = float(p["d"]) - hs
+		while x <= float(p["d"]) + hs + 0.01:
+			a.append(x)
+			x += 1.0
+	a.sort()
+	var r: PackedFloat32Array = PackedFloat32Array(a)
+	_appuis_tr[montee] = r
+	return r
+
+
+## 3S : le tracteur, serré dans la pince remontée (VehiculeRemontee.Y_PINCE_3S), est soulevé au droit de chaque
+## véhicule en ligne et redescend de part et d'autre jusqu'au galet d'appui suivant, en cosh, tangent au galet
+## (retour d'utilisateur du 11/11/2026 : « le cosh après passage cabine redépose le tracteur sur le galet ») ;
+## au-dessus d'un galet, la levée ne couvre que la longueur des mâchoires. Nuanceur du câble : levee().
+const LEVEE_3S: float = VehiculeRemontee.Y_PINCE_3S - VehiculeRemontee.Y_TRACTEUR_3S
+const LEVEE_PORTEE: float = 400.0
+var _levees_vides: bool = false
+
+
+func _lever_tracteur_3s() -> void:
+	if _mat_cable == null:
+		return
+	var L: float = longueur_h()
+	var sm: float = signf(_x_brin(true))
+	var lv: Dictionary = {true: [], false: []}
+	for e in _vehicules:
+		var v: Node3D = e[0]
+		var d: float = -v.position.z
+		if d <= 1.0 or d >= L - 1.0:
+			continue            # (en gare : pince ouverte, tracteur sur les poulies)
+		# (une levée de 0,28 m ne se voit plus au-delà de LEVEE_PORTEE du point de vue)
+		if vue_active and Vector2(v.position.x - point_vue.x, v.position.z - point_vue.z).length() > LEVEE_PORTEE:
+			continue
+		var montee: bool = signf(v.position.x) == sm
+		var ap: PackedFloat32Array = _appuis_tracteur(montee)
+		var i: int = ap.bsearch(d)
+		var g: float = ap[maxi(i - 1, 0)]
+		var dr: float = ap[mini(i, ap.size() - 1)]
+		var l_av: float = maxf(d - g, CAV_LIBRE)
+		var l_am: float = maxf(dr - d, CAV_LIBRE)
+		if (lv[montee] as Array).size() < 48:
+			(lv[montee] as Array).append(Vector4(d, LEVEE_3S, l_av, l_am))
+	if (lv[true] as Array).is_empty() and (lv[false] as Array).is_empty() and _levees_vides:
+		return              # (rien à soulever, déjà transmis : pas de tableaux envoyés au nuanceur à chaque image)
+	_levees_vides = (lv[true] as Array).is_empty() and (lv[false] as Array).is_empty()
+	for montee in [true, false]:
+		var arr: Array = lv[montee]
+		var packs: PackedVector4Array = PackedVector4Array(arr)
+		packs.resize(48)
+		_mat_cable.set_shader_parameter("levees_m" if montee else "levees_d", packs)
+		_mat_cable.set_shader_parameter("n_levees_m" if montee else "n_levees_d", arr.size())
+
+
 func _caler_cavaliers() -> void:
 	for e in _cavaliers_n:
 		var n: Node3D = e[0]
@@ -4824,6 +4891,7 @@ func _process_corps(delta: float) -> void:
 	if tricable():
 		_caler_cavaliers()
 		_tourner_cavaliers(delta)
+		_lever_tracteur_3s()
 	_tourner_pneus(delta)
 	_roues_proches(delta)
 	if _mat_cable != null:

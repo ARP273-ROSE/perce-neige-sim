@@ -17,6 +17,8 @@ var _salves: int = 0
 var _chocs: int = 0
 var _n_file: int = 0
 var _joues: Dictionary = {}
+var _galets_max: Array = []
+var _v_salve: float = 0.0
 
 
 func _initialize() -> void:
@@ -87,15 +89,24 @@ func _tick() -> void:
 				_fin()
 		3:
 			# prises réelles du TSD : on note ce qui a été joué
-			for pl in [so._coup3s, so._coup3s_b, so._ligne]:
+			for pl in [so._coup3s, so._coup3s_b, so._ligne] + so._coups:
 				if pl.playing and pl.stream != null:
 					for nom in so._sons:
 						if so._sons[nom] == pl.stream:
 							_joues[nom] = true
+			# salves de galets en file : instants et nombre (un choc par galet, au pas des galets / vitesse)
+			var gal: Array = so._file.filter(func(c): return String(c[1]).begins_with("tsd_galet_"))
+			if gal.size() > _galets_max.size():
+				_galets_max = gal.duplicate()
+				_v_salve = _lg.vitesse_reelle
 			if _t > 60.0:
 				_verif("embarquement et lanceur (prise réelle)", _joues.has("tsd_embarquement"), str(_joues.keys()))
 				_verif("à bord : ambiance de ligne", _joues.has("tsd_ligne"))
-				_verif("pylône franchi", _joues.has("tsd_pyl_s") or _joues.has("tsd_pyl_cc"))
+				var pas_t: float = (float(_galets_max[1][0]) - float(_galets_max[0][0])) if _galets_max.size() > 1 else 0.0
+				_verif("pylône franchi : un choc réel par galet, espacés du pas des galets à la vitesse du câble",
+					(_joues.has("tsd_galet_s") or _joues.has("tsd_galet_c")) and _galets_max.size() >= 4
+					and absf(pas_t - SonsRemontees.PAS_GALET / maxf(_v_salve, 0.1)) < 0.01,
+					"%d chocs dans la salve, %.3f s entre deux (attendu %.3f)" % [_galets_max.size(), pas_t, SonsRemontees.PAS_GALET / maxf(_v_salve, 0.1)])
 				_lg.arret_urgence()
 				_phase = 4
 				_t = 0.0
