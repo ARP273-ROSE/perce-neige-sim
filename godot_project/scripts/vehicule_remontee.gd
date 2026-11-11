@@ -147,7 +147,7 @@ static func vider_modeles() -> void:
 
 
 func _type() -> String:
-	return "%s|%s|%s|%s|%s|%s" % [famille, str(miroir), livree, teinte, str(pince_a108), style_tph]
+	return "%s|%s|%s|%s|%s|%s|%s" % [famille, str(miroir), livree, teinte, str(pince_a108), style_tph, str(cote_tph)]
 
 
 func construire() -> void:
@@ -1859,24 +1859,93 @@ func _baies_zeta(cab: Node3D) -> void:
 const H_SUSP_TPH: float = 5.2         # mesuré en vidéo : Fornet 5,1, Grande Motte 5,7
 
 
-## Suspente du Fornet (photos) : cadre en A dans le plan de la ligne, centré, deux jambes de métal nu
-## du chariot au toit, entretoises, caisson long au milieu du toit.
+## Suspente du Fornet (photos Commons « Téléphérique du Fornet », retour d'utilisateur du 11/11/2026 : « les
+## trucs qui relient la cabine au chariot pas bons ») : grand Λ d'aluminium nu dans le plan de la ligne,
+## tête articulée sous le milieu du chariot, jambes droites ouvertes presque sur toute la longueur du toit,
+## une entretoise au tiers bas, échelle le long d'une jambe, longeron sur le toit d'un pied à l'autre.
 var style_tph: String = ""
+## Côté (signe de x) du fût de la suspente de la Grande Motte : vers l'extérieur de la ligne, posé par la ligne
+## (retour d'utilisateur du 11/11/2026 : « support chariot vers cabine du mauvais côté »).
+var cote_tph: float = 1.0
 
 
 func _suspente_fornet(hs: float) -> void:
 	var y_toit: float = -hs - 0.02
-	var ecart: float = 1.05
-	RemonteeKit.boite_en(self, Vector3(0.50, 0.18, 2.0), Vector3(0, y_toit + 0.09, 0), "galva_pylone")
+	var zp: float = 2.05                                  # pieds : presque aux bouts du toit (5,6 m)
+	var m: String = "alu_pince"
+	# tête : bloc d'articulation entre les flasques du chariot
+	RemonteeKit.boite_en(self, Vector3(0.24, 0.42, 0.46), Vector3(0, -0.26, 0), m)
+	var tete: Array = []
+	var pied: Array = []
 	for sz in [-1.0, 1.0]:
-		var bas: Vector3 = Vector3(0, y_toit + 0.15, sz * ecart)
-		var genou: Vector3 = Vector3(0, y_toit + 1.05, sz * ecart * 0.82)
-		RemonteeKit.poutre(self, Vector3(0, 0.05, sz * 0.10), genou, 0.22, 0.34, "acier", Vector3.RIGHT)
-		RemonteeKit.poutre(self, genou, bas, 0.26, 0.40, "acier", Vector3.RIGHT)
-	for u in [0.35, 0.60, 0.82]:
-		var y: float = lerpf(0.05, y_toit + 1.05, u)
-		var z: float = lerpf(0.10, ecart * 0.82, u)
-		RemonteeKit.boite_en(self, Vector3(0.14, 0.12, 2.0 * z), Vector3(0, y, 0), "acier")
+		var t: Vector3 = Vector3(0, -0.40, sz * 0.14)
+		var p: Vector3 = Vector3(0, y_toit + 0.22, sz * zp)
+		tete.append(t)
+		pied.append(p)
+		RemonteeKit.poutre(self, t, p, 0.24, 0.20, m, Vector3.RIGHT)
+		# sabot du pied, boulonné sur le longeron
+		RemonteeKit.boite_en(self, Vector3(0.34, 0.20, 0.55), Vector3(0, y_toit + 0.12, sz * zp), m)
+	# entretoise au tiers bas, fine
+	var u: float = 0.66
+	RemonteeKit.barre(self, (tete[0] as Vector3).lerp(pied[0], u), (tete[1] as Vector3).lerp(pied[1], u), 0.035, m, 8)
+	# échelle le long d'une jambe : deux montants et des barreaux, côté extérieur
+	var dir: Vector3 = ((pied[1] as Vector3) - (tete[1] as Vector3)).normalized()
+	var nrm: Vector3 = Vector3(0, dir.z, -dir.y)              # perpendiculaire dans le plan de la ligne
+	if nrm.z < 0.0:
+		nrm = -nrm
+	var ta: Vector3 = (tete[1] as Vector3) + dir * 0.6 + nrm * 0.22
+	var pa: Vector3 = (pied[1] as Vector3) - dir * 0.3 + nrm * 0.22
+	for sx in [-0.17, 0.17]:
+		RemonteeKit.barre(self, ta + Vector3(sx, 0, 0), pa + Vector3(sx, 0, 0), 0.018, m, 6)
+	var n_b: int = int(ta.distance_to(pa) / 0.30)
+	for k in range(n_b + 1):
+		var q: Vector3 = ta.lerp(pa, float(k) / n_b)
+		RemonteeKit.barre(self, q + Vector3(-0.17, 0, 0), q + Vector3(0.17, 0, 0), 0.013, m, 6)
+		if k % 3 == 0:
+			RemonteeKit.barre(self, q, q - nrm * 0.22, 0.012, m, 4)
+	# longeron sur le toit et coffret au pied du Λ
+	RemonteeKit.boite_en(self, Vector3(0.30, 0.10, 2.0 * zp + 0.5), Vector3(0, y_toit + 0.05, 0), m)
+	RemonteeKit.boite_en(self, Vector3(0.9, 0.30, 0.9), Vector3(0, y_toit + 0.15, 0), "galva_pylone")
+
+
+## Suspente de la Grande Motte (photos Commons « 2017-01 Grande Motte Tignes ») : caisson unique gris
+## clair ; de la tête articulée sous le chariot il se coude vers l'extérieur (le tracteur, attaché aux
+## bouts du chariot, passe au milieu), descend droit le long d'un côté et s'évase vers le milieu du toit
+## par un grand congé, le bord extérieur restant vertical.
+func _suspente_grande_motte(hs: float) -> void:
+	var m: String = "galva_pylone"
+	var xc: float = 0.62 * cote_tph                       # axe du fût vertical
+	var lf: float = 0.42                                  # largeur du fût (en travers)
+	var pf: float = 0.66                                  # profondeur (dans le sens de la ligne)
+	var y_toit: float = -hs - 0.02
+	RemonteeKit.boite_en(self, Vector3(0.24, 0.42, 0.46), Vector3(0, -0.26, 0), m)
+	# coude de tête : de l'articulation au fût
+	var p0: Vector3 = Vector3(0.0, -0.40, 0)
+	var p1: Vector3 = Vector3(xc * 0.75, -0.45, 0)
+	var p2: Vector3 = Vector3(xc, -0.75, 0)
+	var p3: Vector3 = Vector3(xc, -1.35, 0)
+	var arc: PackedVector3Array = PackedVector3Array()
+	for k in range(13):
+		var t: float = float(k) / 12.0
+		var v: float = 1.0 - t
+		arc.append(p0 * v * v * v + p1 * 3.0 * v * v * t + p2 * 3.0 * v * t * t + p3 * t * t * t)
+	RemonteeKit.caisson(self, arc, 0.34, lf, pf, m, Vector3.BACK)
+	# fût droit
+	var y_cong: float = y_toit + 2.2                      # haut du congé
+	RemonteeKit.boite_en(self, Vector3(lf, -1.35 - y_cong + 0.02, pf), Vector3(xc, (-1.35 + y_cong) * 0.5, 0), m)
+	# congé : tranches dont le bord intérieur suit un quart d'ellipse jusqu'au milieu du toit
+	var n: int = 14
+	var c: float = cote_tph
+	var x_ext: float = absf(xc) + lf * 0.5                # (côté +x, puis multiplié par c)
+	for k2 in range(n):
+		var ya: float = lerpf(y_cong, y_toit + 0.10, float(k2) / n)
+		var yb: float = lerpf(y_cong, y_toit + 0.10, float(k2 + 1) / n)
+		var ang: float = PI * 0.5 * (float(k2) + 0.5) / n
+		var x_int: float = (absf(xc) - lf * 0.5) - (absf(xc) - lf * 0.5 + 0.25) * (1.0 - cos(ang))
+		RemonteeKit.boite_en(self, Vector3(x_ext - x_int, ya - yb + 0.01, pf + 0.12 * float(k2) / n),
+			Vector3(c * (x_ext + x_int) * 0.5, (ya + yb) * 0.5, 0), m)
+	# semelle sur le toit
+	RemonteeKit.boite_en(self, Vector3(x_ext + 0.40, 0.12, 1.1), Vector3(c * (x_ext - 0.40) * 0.5, y_toit + 0.06, 0), m)
 
 
 func _cabine_tph() -> void:
@@ -1914,23 +1983,14 @@ func _cabine_tph() -> void:
 		RemonteeKit.cylindre(ch, 0.08, 0.08, 0.30, Transform3D(Basis(Vector3.FORWARD, PI * 0.5), Vector3(0, -0.15, bz * (lr * 0.5 + 0.15))), "acier", 10)
 	RemonteeKit.boite_en(ch, Vector3(0.05, 0.10, 0.12), Vector3(xr + 0.24, rg + 0.62, lr * 0.4), "cabine_rouge")       # feu
 	var hs: float = H_SUSP_TPH
+	# flasques d'articulation sous la poutre maîtresse, axe en travers (la tête de la suspente est entre)
+	for sxf in [-1.0, 1.0]:
+		RemonteeKit.boite_en(ch, Vector3(0.04, 0.50, 0.60), Vector3(sxf * 0.15, -0.08, 0), coul)
+	RemonteeKit.cylindre(ch, 0.06, 0.06, 0.40, Transform3D(Basis(Vector3.FORWARD, PI * 0.5), Vector3(0, -0.16, 0)), "acier", 12)
 	if fornet:
 		_suspente_fornet(hs)
-	# suspente (photos) : grand bras gris en caisson qui monte d'un côté du
-	# toit et se recourbe au-dessus du centre de la cabine jusqu'au chariot
-	var p0: Vector3 = Vector3(0.0, 0.40, 0)
-	var p1: Vector3 = Vector3(1.55, 0.30, 0)
-	var p2: Vector3 = Vector3(1.10, -hs + 0.9, 0)
-	var p3: Vector3 = Vector3(1.05, -hs + 0.05, 0)
-	var arc_t: PackedVector3Array = PackedVector3Array()
-	for k in range(25):
-		var t: float = float(k) / 24.0
-		var u: float = 1.0 - t
-		arc_t.append(p0 * u * u * u + p1 * 3.0 * u * u * t + p2 * 3.0 * u * t * t + p3 * t * t * t)
-	# caisson qui s'élargit vers le toit (photos)
-	if not fornet:
-		RemonteeKit.caisson(self, arc_t, 0.40, 0.55, 1.1, "acier", Vector3.BACK)
-		RemonteeKit.boite_en(self, Vector3(0.9, 0.14, 1.6), Vector3(1.05, -hs - 0.02, 0), gris)
+	else:
+		_suspente_grande_motte(hs)
 	# caisse
 	var cab: Node3D = Node3D.new()
 	cab.name = "Caisse"
