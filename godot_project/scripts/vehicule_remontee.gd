@@ -1867,39 +1867,43 @@ var cote_tph: float = 1.0
 
 ## Suspente des deux téléphériques (photos Commons « 2017-01 Grande Motte Tignes » ; retours d'utilisateur du
 ## 11/11/2026 : « le support se fixe au droit du chariot et pas entre les deux câbles à la verticale, sinon ça
-## ne passe pas le pylône » ; « au Fornet le bras a la même forme qu'à la Grande Motte ») : un caisson unique
-## accroché au FLANC EXTÉRIEUR du chariot, tête coupée à plat à hauteur du chariot (pas de crosse), descend droit
-## à l'extérieur de la paire de porteurs (sabots de pylône et de gare restent dessous, entre ou sous les
-## porteurs) et s'évase vers le milieu du toit par un grand congé, le bord extérieur restant vertical.
-func _suspente_tph(hs: float, m: String, m_chariot: String) -> void:
+## ne passe pas le pylône » ; « au Fornet le bras a la même forme qu'à la Grande Motte » ; « le bras est en V
+## inversé ») : un Λ de caissons dans un plan vertical parallèle à la ligne, À L'EXTÉRIEUR de la paire de
+## porteurs ; tête coupée à plat à hauteur du chariot, accrochée à son flanc ; tronc commun droit, puis deux
+## jambes qui s'écartent vers l'avant et l'arrière du toit en s'incurvant (vues d'en dessous, la jambe proche
+## semble « s'évaser vers le milieu du toit »).
+func _suspente_tph(hs: float, m: String, m_chariot: String, zp: float) -> void:
 	var c: float = cote_tph
-	var xa: float = 0.85                                  # axe du fût (|x|), hors des sabots (±0,50)
-	var lf: float = 0.36                                  # largeur du fût (en travers)
-	var pf: float = 0.62                                  # profondeur (dans le sens de la ligne)
+	var xa: float = 0.85                                  # plan du Λ (|x|), hors des sabots (±0,50)
+	var lf: float = 0.32                                  # épaisseur en travers
 	var y_toit: float = -hs - 0.02
-	# fût droit, de la tête (à hauteur du chariot, coupée à plat) au haut du congé (photos : pas de crosse)
 	var y_tete: float = 0.50
-	var y_cong: float = y_toit + 2.2                      # haut du congé
-	RemonteeKit.boite_en(self, Vector3(lf, y_tete - y_cong, pf), Vector3(c * xa, (y_tete + y_cong) * 0.5, 0), m)
-	# coffret posé sur la tête
-	RemonteeKit.boite_en(self, Vector3(0.30, 0.18, 0.34), Vector3(c * xa, y_tete + 0.09, 0), "peinture_anthracite")
+	var y_f: float = -1.2                                 # bas du tronc commun, départ des jambes
+	# tronc : de la tête au départ des jambes
+	RemonteeKit.boite_en(self, Vector3(lf, y_tete - y_f, 0.62), Vector3(c * xa, (y_tete + y_f) * 0.5, 0), m)
+	RemonteeKit.boite_en(self, Vector3(0.28, 0.18, 0.34), Vector3(c * xa, y_tete + 0.09, 0), "peinture_anthracite")
 	# attache latérale au flanc du chariot : deux flasques et l'axe d'articulation, en travers
 	for sz in [-1.0, 1.0]:
 		RemonteeKit.boite_en(self, Vector3(xa - lf * 0.5 - 0.48, 0.40, 0.05), Vector3(c * (0.48 + xa - lf * 0.5) * 0.5, 0.26, sz * 0.22), m_chariot)
 	RemonteeKit.cylindre(self, 0.06, 0.06, 0.34, Transform3D(Basis(Vector3.FORWARD, PI * 0.5), Vector3(c * (xa - lf * 0.5 - 0.10), 0.26, 0)), "acier", 12)
-	# congé : tranches dont le bord intérieur suit un quart d'ellipse jusqu'au milieu du toit
-	var n: int = 14
-	var x_ext: float = xa + lf * 0.5
-	for k2 in range(n):
-		var ya: float = lerpf(y_cong, y_toit + 0.10, float(k2) / n)
-		var yb: float = lerpf(y_cong, y_toit + 0.10, float(k2 + 1) / n)
-		var ang: float = PI * 0.5 * (float(k2) + 0.5) / n
-		var x_int: float = (xa - lf * 0.5) - (xa - lf * 0.5 + 0.25) * (1.0 - cos(ang))
-		RemonteeKit.boite_en(self, Vector3(x_ext - x_int, ya - yb + 0.01, pf + 0.12 * float(k2) / n),
-			Vector3(c * (x_ext + x_int) * 0.5, (ya + yb) * 0.5, 0), m)
-	# semelle sur le toit
-	RemonteeKit.boite_en(self, Vector3(x_ext + 0.40, 0.12, 1.1), Vector3(c * (x_ext - 0.40) * 0.5, y_toit + 0.06, 0), m)
-
+	# jambes : droites sous le tronc, puis incurvées vers les bouts du toit
+	for sz in [-1.0, 1.0]:
+		var p0: Vector3 = Vector3(c * xa, y_f + 0.05, sz * 0.16)
+		var p1: Vector3 = Vector3(c * xa, lerpf(y_f, y_toit, 0.55), sz * 0.30)
+		var p2: Vector3 = Vector3(c * xa, y_toit + 0.6, sz * zp * 0.70)
+		var p3: Vector3 = Vector3(c * xa, y_toit + 0.12, sz * zp)
+		var arc: PackedVector3Array = PackedVector3Array()
+		for k in range(17):
+			var t: float = float(k) / 16.0
+			var v: float = 1.0 - t
+			arc.append(p0 * v * v * v + p1 * 3.0 * v * v * t + p2 * 3.0 * v * t * t + p3 * t * t * t)
+		RemonteeKit.caisson(self, arc, 0.30, 0.42, lf, m, Vector3.RIGHT)
+		# sabot du pied, boulonné sur le toit
+		RemonteeKit.boite_en(self, Vector3(lf + 0.12, 0.14, 0.60), Vector3(c * xa, y_toit + 0.07, sz * zp), m)
+	# entretoise entre les jambes, et longeron sur le toit d'un pied à l'autre
+	var y_e: float = lerpf(y_f, y_toit, 0.62)
+	RemonteeKit.boite_en(self, Vector3(lf * 0.8, 0.16, 1.0), Vector3(c * xa, y_e, 0), m)
+	RemonteeKit.boite_en(self, Vector3(lf, 0.10, 2.0 * zp), Vector3(c * xa, y_toit + 0.05, 0), m)
 
 
 func _cabine_tph() -> void:
@@ -1937,7 +1941,7 @@ func _cabine_tph() -> void:
 		RemonteeKit.cylindre(ch, 0.08, 0.08, 0.30, Transform3D(Basis(Vector3.FORWARD, PI * 0.5), Vector3(0, -0.15, bz * (lr * 0.5 + 0.15))), "acier", 10)
 	RemonteeKit.boite_en(ch, Vector3(0.05, 0.10, 0.12), Vector3(xr + 0.24, rg + 0.62, lr * 0.4), "cabine_rouge")       # feu
 	var hs: float = H_SUSP_TPH
-	_suspente_tph(hs, "alu_pince" if fornet else gris, coul)
+	_suspente_tph(hs, "alu_pince" if fornet else gris, coul, 2.05 if fornet else 2.55)
 	# caisse
 	var cab: Node3D = Node3D.new()
 	cab.name = "Caisse"
