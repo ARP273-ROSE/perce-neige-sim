@@ -335,7 +335,9 @@ func _construire_vav() -> void:
 	var b0: float = clampf(hauteur * 0.15, 3.5, 9.0)
 	var b1: float = 2.4
 	_fut(b0, b1, hf, m)
-	var xe: float = voie * 0.5 + 0.6
+	# tête arrêtée sous le porteur extérieur : le bras de suspente des cabines descend à l'extérieur de la
+	# paire de porteurs (retour d'utilisateur du 11/11/2026 : « sinon ça ne passe pas le pylône »)
+	var xe: float = voie * 0.5 + VehiculeRemontee.E_PORTEURS_TPH * 0.5
 	var y1: float = hauteur
 	# évasement : quatre membrures du sommet du fût aux bouts de la tête
 	for sx in [-1.0, 1.0]:
@@ -370,13 +372,15 @@ func _construire_vav() -> void:
 			RemonteeKit.galet(sab, Vector3(x0, -0.45 - 0.03 - 0.20 - kappa * sz2 * sz2 * 0.5, sz2), 0.20)
 		# portique de levage au-dessus du sabot (photos)
 		for sz3 in [-1.0, 1.0]:
-			RemonteeKit.poutre(sab, Vector3(x0 - sx * 0.6, -0.1, sz3 * 1.2), Vector3(x0, 2.6, sz3 * 0.5), 0.10, 0.10, m)
+			RemonteeKit.poutre(sab, Vector3(x0 - sx * 0.9, -0.1, sz3 * 1.2), Vector3(x0, 2.6, sz3 * 0.5), 0.10, 0.10, m)   # (pied à 0,9 m : à 0,6 il frôlait le flanc du chariot)
 		RemonteeKit.poutre(sab, Vector3(x0, 2.6, -0.6), Vector3(x0, 2.6, 0.6), 0.16, 0.16, m)
 	RemonteeKit.poutre(sab, Vector3(-voie * 0.5, 2.6, 0), Vector3(voie * 0.5, 2.6, 0), 0.14, 0.14, m)
 	# plate-forme et garde-corps sur la tête
 	RemonteeKit.boite_en(self, Vector3(2.0 * xe, 0.04, 2.6), Vector3(0, y1 + 0.27, 0), "caillebotis")
+	# garde-corps entre les voies seulement (à 0,1 m au-dessus des porteurs, il barrait le passage des chariots)
+	var xg: float = voie * 0.5 - 0.7
 	for sz4 in [-1.3, 1.3]:
-		RemonteeKit.barre(self, Vector3(-xe, y1 + 1.3, sz4), Vector3(xe, y1 + 1.3, sz4), 0.025, "galva", 6)
+		RemonteeKit.barre(self, Vector3(-xg, y1 + 1.3, sz4), Vector3(xg, y1 + 1.3, sz4), 0.025, "galva", 6)
 	# échelle le long d'une membrure
 	RemonteeKit.barre(self, Vector3(b0 * 0.5 + 0.3, 0.3, b0 * 0.5), Vector3(b1 * 0.5 + 0.3, hf, b1 * 0.5), 0.03, "galva", 6)
 
