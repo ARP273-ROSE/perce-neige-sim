@@ -133,17 +133,22 @@ float fleche_points(float d, bool montee) {
 	return f;
 }
 
-// levée du tracteur en d : cosh qui part de la pince et arrive tangente au galet (pente nulle) à la longueur l
+// levée du tracteur en d : câble tendu tiré par la pince, donc presque droit de la pince au galet, raccordé au galet
+// sur son dernier quart par une parabole tangente (pente nulle sur le galet) — retour d'utilisateur du 12/11/2026 :
+// « le câble tracteur reste collé aux galets jusqu'au dernier moment » (le cosh restait à 20 % de la levée à mi-chemin)
 float levee(float d, bool montee) {
 	int n = montee ? n_levees_m : n_levees_d;
 	float h = 0.0;
+	const float W = 0.25;
+	const float K = 1.0 / (1.0 - W * 0.5);
 	for (int j = 0; j < n; j++) {
 		vec4 q = montee ? levees_m[j] : levees_d[j];
 		float x = d - q.x;
 		float l = x < 0.0 ? q.z : q.w;
 		float u = abs(x) / max(l, 0.05);
 		if (u < 1.0) {
-			h = max(h, q.y * (cosh(2.0 * (1.0 - u)) - 1.0) / (cosh(2.0) - 1.0));
+			float g = u < 1.0 - W ? 1.0 - K * u : K * 0.5 / W * (1.0 - u) * (1.0 - u);
+			h = max(h, q.y * g);
 		}
 	}
 	return h;

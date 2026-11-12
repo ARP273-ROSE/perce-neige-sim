@@ -1621,11 +1621,8 @@ const Y_PIVOT_3S: float = 0.19 + 0.0285
 ## Pince du tracteur, remontée (retour d'utilisateur du 11/11/2026 : « diminue la longueur des bras du V de 2/5 pour
 ## remonter la pince d'accroche du tracteur, ça ira mieux pour passer au-dessus des galets ») : le V des poutres au
 ## corps, de Y_POUTRES_3S au corps, raccourci de 2/5 ; la pince soulève le tracteur d'autant au-dessus des galets.
-const Y_PINCE_3S: float = -0.42 + 0.4 * (0.40 - (-0.42 + 0.13))
-## Tracteur posé sur les galets (cavaliers, pylônes, gares) juste sous la pince : elle ne le soulève que de l'épaisseur
-## de ses mâchoires (retour d'utilisateur du 12/11/2026 : « le câble est collé au galet et se décolle juste avant qu'on
-## arrive dessus, ça fait ridicule » — il posait 0,28 m plus bas et la pince l'arrachait de chaque galet).
-const Y_TRACTEUR_3S: float = Y_PINCE_3S - 0.04
+const Y_TRACTEUR_3S: float = -0.42         # tracteur posé sur les galets (cavaliers, pylônes, gares)
+const Y_PINCE_3S: float = Y_TRACTEUR_3S + 0.4 * (0.40 - (Y_TRACTEUR_3S + 0.13))
 const Y_CORPS_3S: float = 0.13          # corps de la pince, au-dessus du tracteur
 const H_SUSP_3S: float = 2.63        # du chariot au toit de la cabine (mesuré en vidéo : 2,6-2,7 ; 2,63 depuis que l'articulation est au niveau des galets, 11/11/2026 : le pendule plus long descendait le coin de la cabine de 1 cm au pire balancement)
 
@@ -2049,9 +2046,8 @@ func _cabine_tph() -> void:
 			if sx2 > 0.0 and absf(k2) < 1:
 				continue          # baie de la porte
 			RemonteeKit.boite_en(cab, Vector3(0.04, 1.35, 0.06), Vector3(sx2 * 1.52, -0.95, k2 * 0.95), "cabine_blanche")
-	# Fornet (photos) : pas de garde-corps sur le toit, châssis rouge vif sous le plancher
-	if fornet:
-		RemonteeKit.boite_en(cab, Vector3(2.7, 0.14, 5.2), Vector3(0, -H - 0.07, 0), "cabine_rouge")
+	# Fornet (photos) : pas de garde-corps sur le toit (le châssis rouge plat sous le plancher est retiré, demande
+	# d'utilisateur du 12/11/2026 : « enlève le rectangle sous la cabine »)
 	# toit : plate-forme de service, garde-corps, trappe
 	for sx3 in ([] if fornet else [-1.0, 1.0]):
 		RemonteeKit.barre(cab, Vector3(sx3 * 1.30, 0.55, -2.55), Vector3(sx3 * 1.30, 0.55, 2.55), 0.025, "galva", 6)
@@ -2066,14 +2062,27 @@ func _cabine_tph() -> void:
 	var xi: float = 1.38
 	var zi: float = 2.62
 	var yh: float = yp + 1.0
+	# (côté portes, +x : main courante et plinthe coupées au droit de la baie, entre ses deux montants à ±0,95 m —
+	# retour d'utilisateur du 12/11/2026 : « la rambarde ne s'interrompt pas quand t'ouvres les portes »)
+	var zb: float = 0.95
 	for sxi in [-1.0, 1.0]:
-		RemonteeKit.barre(cab, Vector3(sxi * xi, yh, -zi + 0.45), Vector3(sxi * xi, yh, zi - 0.45), 0.022, "acier", 6)
+		var trons: Array = [[-zi + 0.45, zi - 0.45]] if sxi < 0.0 else [[-zi + 0.45, -zb], [zb, zi - 0.45]]
+		for tr in trons:
+			RemonteeKit.barre(cab, Vector3(sxi * xi, yh, tr[0]), Vector3(sxi * xi, yh, tr[1]), 0.022, "acier", 6)
+			var zp0: float = -zi + 0.05 if float(tr[0]) < -zi + 1.0 else float(tr[0])
+			var zp1: float = zi - 0.05 if float(tr[1]) > zi - 1.0 else float(tr[1])
+			RemonteeKit.boite_en(cab, Vector3(0.03, 0.16, zp1 - zp0), Vector3(sxi * (xi + 0.06), yp + 0.09, (zp0 + zp1) * 0.5), "peinture_anthracite")
 		RemonteeKit.barre(cab, Vector3(-xi + 0.45, yh, sxi * zi), Vector3(xi - 0.45, yh, sxi * zi), 0.022, "acier", 6)
-		RemonteeKit.boite_en(cab, Vector3(0.03, 0.16, 5.3), Vector3(sxi * (xi + 0.06), yp + 0.09, 0), "peinture_anthracite")
 		RemonteeKit.boite_en(cab, Vector3(2.8, 0.16, 0.03), Vector3(0, yp + 0.09, sxi * (zi + 0.10)), "peinture_anthracite")
 		for kz in range(4):
 			var zz2: float = -zi + 0.6 + kz * (2.0 * zi - 1.2) / 3.0
+			if sxi > 0.0 and absf(zz2) < zb:
+				continue
 			RemonteeKit.barre(cab, Vector3(sxi * xi, yh, zz2), Vector3(sxi * (xi + 0.06), yh, zz2), 0.015, "acier", 4)
+		if sxi > 0.0:
+			# bouts de la main courante coupée : retour vers la paroi
+			for sz3 in [-1.0, 1.0]:
+				RemonteeKit.barre(cab, Vector3(xi, yh, sz3 * zb), Vector3(xi + 0.06, yh, sz3 * zb), 0.015, "acier", 4)
 	# rampe lumineuse au plafond
 	RemonteeKit.boite_en(cab, Vector3(0.25, 0.04, 4.6), Vector3(0, -0.30, 0), "blanc_plaque")
 	RemonteeKit.boite_en(cab, Vector3(1.2, 1.0, 0.6), Vector3(-0.6, yp + 0.5, -2.35), "peinture_anthracite")
