@@ -5,6 +5,16 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.66.0 — 12 novembre 2026
+
+Grimper partout, construction plus douce.
+
+**Échelles** : on grimpe maintenant aussi aux pylônes en treillis (touche G ou bouton GRIMPER, déchaussé, au pied) : 3S de l'Olympique (échelle au milieu du fût de P1 et P2, le long de l'escalier de l'ouvrage du haut), téléphérique de la Grande Motte (échelle du fût, 23 m). On reprend pied à la hauteur d'où l'on est parti. Le Fornet n'a pas de pylône (une seule portée).
+
+**Moins d'à-coups pendant que les remontées se construisent** (surtout sur la PWA, où tout se fait sur le fil principal) : bruits des textures du Funival calculés une fois pour toutes (10 à 17 ms d'un bloc chacun, désormais lus d'un fichier de 450 Ko), véhicule du Funival et pièce de relief de sa gare amont posés par tranches (14 et 28 ms d'un bloc), têtes des pylônes des téléskis et tracé de la boucle avec pauses (19 ms au Col du Palet), gare du Fornet découpée (15,7 → 8,5 ms). Pire tranche de construction au NAS : 19-25 → 12 ms. Le bouton GRIMPER, testé à chaque image, ne parcourt plus les pylônes des lignes lointaines.
+
+Vérifié : 60 bancs OK (nouveau : échelles des pylônes en treillis, monter et redescendre sur quatre pylônes), empreintes du funiculaire et du Funival inchangées (textures au pixel), LOD des pylônes recuits.
+
 ## 1.65.0 — 12 novembre 2026
 
 Câbles et galets, d'après les essais de la 1.64.
