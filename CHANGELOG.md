@@ -5,6 +5,22 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.67.0 — 13 novembre 2026
+
+Retours d'essai de la 1.66 : téléphériques, 3S, Fornet, Funival, Solaise.
+
+**Double tapis de Solaise** (nouveau) : deux bandes jumelles de 232,8 m montent à la gare amont de la TCD de Solaise, à 1,0 m/s, à pied ou à skis. Tracé et vitesse relevés sur deux montées enregistrées au GPS (une sur chaque bande). À pied, on peut marcher dessus pour aller plus vite ; au bout, on est déposé sur la neige.
+
+**3S** : galets des cavaliers et des pylônes revenus à leur hauteur d'avant ; levée du tracteur presque droite de la pince au galet.
+
+**Téléphériques** : les cabines avancent à vitesse constante le long du câble, et plus à l'horizontale ; la cassure de pente au pylône relance le balancement (±3° environ). Grande Motte : marche selon la montre (10 m/s au plus, 6,7 m/s au pylône, arrivée en gare à 1 m/s). Cavaliers du 3S sur les porteurs fléchis sous la cabine ; main courante intérieure coupée devant les portes. Fornet : châssis rouge sous la cabine retiré, sortie sur la neige au fond du quai amont.
+
+**Fornet et Vallon de plain-pied** : arrivée du téléphérique et départ de la TCD du Vallon sur un palier commun à 2322,9 m (le quai du Fornet était 6,3 m plus bas, le Vallon enfermé sur son socle). Terrain fin à 2 m ; devant le nez du Fornet, la pente d'origine reste, les cabines en sortent avec plus de 20 m de vide.
+
+**Funival** : l'habillage de la salle amont (murs, toit) est refait quand la ligne est reconstruite après avoir été démolie au loin. Sans lui, on voyait le talus du terrain traverser la gare du haut (surtout sur la PWA, où les lignes sont démolies dès 650 m).
+
+Vérifié : 61 bancs (nouveau : double tapis, à pied et à skis), empreintes du funiculaire et du Funival inchangées, trajet à pied du Fornet au Vallon, démolition puis reconstruction du Funival, LOD des pylônes recuits.
+
 ## 1.66.0 — 12 novembre 2026
 
 Grimper partout, construction plus douce.
