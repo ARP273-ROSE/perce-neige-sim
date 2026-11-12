@@ -1618,11 +1618,14 @@ const X_PIVOT_3S: float = 0.68
 ## (retour d'utilisateur du 11/11/2026 : « le bras qui porte la cabine s'accroche au niveau des galets entre les deux
 ## de devant et les deux de derrière, et pas en dessous » ; elle était à 0,22 m sous le plan des porteurs).
 const Y_PIVOT_3S: float = 0.19 + 0.0285
-const Y_TRACTEUR_3S: float = -0.42         # tracteur posé sur les galets (cavaliers, pylônes, gares)
 ## Pince du tracteur, remontée (retour d'utilisateur du 11/11/2026 : « diminue la longueur des bras du V de 2/5 pour
 ## remonter la pince d'accroche du tracteur, ça ira mieux pour passer au-dessus des galets ») : le V des poutres au
 ## corps, de Y_POUTRES_3S au corps, raccourci de 2/5 ; la pince soulève le tracteur d'autant au-dessus des galets.
-const Y_PINCE_3S: float = Y_TRACTEUR_3S + 0.4 * (0.40 - (Y_TRACTEUR_3S + 0.13))
+const Y_PINCE_3S: float = -0.42 + 0.4 * (0.40 - (-0.42 + 0.13))
+## Tracteur posé sur les galets (cavaliers, pylônes, gares) juste sous la pince : elle ne le soulève que de l'épaisseur
+## de ses mâchoires (retour d'utilisateur du 12/11/2026 : « le câble est collé au galet et se décolle juste avant qu'on
+## arrive dessus, ça fait ridicule » — il posait 0,28 m plus bas et la pince l'arrachait de chaque galet).
+const Y_TRACTEUR_3S: float = Y_PINCE_3S - 0.04
 const Y_CORPS_3S: float = 0.13          # corps de la pince, au-dessus du tracteur
 const H_SUSP_3S: float = 2.63        # du chariot au toit de la cabine (mesuré en vidéo : 2,6-2,7 ; 2,63 depuis que l'articulation est au niveau des galets, 11/11/2026 : le pendule plus long descendait le coin de la cabine de 1 cm au pire balancement)
 

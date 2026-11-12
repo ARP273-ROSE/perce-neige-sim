@@ -450,6 +450,9 @@ func _fil_fini() -> void:
 func _construire_corps() -> void:
 	await _calculer_tetes()
 	_preparer_nez()
+	# (les nez des gares bougent les premières et dernières portées : le pylône de compression qui les suit était
+	# creux au calcul des têtes et saillant une fois les nez posés — P2 du TCD de la Daille, +1°)
+	_compressions_appuyees()
 	if teleski() or tricable():
 		await _construire_boucle(true)       # (magasin, départ, quais du 3S se posent dessus)
 	await _gare(true)
@@ -618,6 +621,7 @@ func _calculer_tetes() -> void:
 		var t0_g: int = Time.get_ticks_usec()
 		_garde_au_sol(true)
 		garde_pire_us = maxi(garde_pire_us, Time.get_ticks_usec() - t0_g)
+		_compressions_appuyees()
 		return
 	# lignes relevées au GPS : chaque tête part de la hauteur MESURÉE du câble
 	# au droit du pylône (siège mesuré + suspente) ; sinon 9 m
@@ -685,6 +689,7 @@ func _calculer_tetes() -> void:
 	await _pause("têtes des pylônes")
 	_ajuster_aux_mesures()
 	_bornes_tetes()
+	_compressions_appuyees()
 
 
 ## Têtes précalculées présentes pour tous les pylônes.
@@ -991,6 +996,33 @@ func _choisir_balanciers() -> void:
 			p["montee"] = [[n, "S"]]
 			p["descente"] = [[n, "S"]]
 		pylones[i] = p
+
+
+## Pylônes de COMPRESSION où la ligne reste saillante sur un brin : le câble y décollerait des galets (il passe
+## sous eux et doit les pousser vers le haut). Physique du câble (retour d'utilisateur du 12/11/2026, pylône 2 du
+## TCD de la Daille : « le câble est collé sous les galets en lévitation », +1° sur le brin montée chargé) : la
+## tête descend jusqu'à ce que les deux brins fassent un angle creux, le câble appuie alors vraiment sur les galets.
+func _compressions_appuyees() -> void:
+	if tricable() or vaetvient() or teleski():
+		return
+	for it in range(20):
+		var bouge: bool = false
+		var pts: Array = _points_appui()
+		for i in range(pylones.size()):
+			if not _compression(pylones[i]):
+				continue
+			var dev: float = maxf(deviation_pylone(i, true), deviation_pylone(i, false))
+			if dev <= -DEVIATION_MIN * 0.4:
+				continue
+			var d: float = float(pylones[i]["d"])
+			var a: float = maxf(d - float(pts[i][0]), 1.0)
+			var b: float = maxf(float(pts[i + 2][0]) - d, 1.0)
+			var h: float = maxf(_tetes[i] - (dev + DEVIATION_MIN * 0.6) / (1.0 / a + 1.0 / b), terrain(d) + 4.0)
+			if h < _tetes[i] - 0.01:
+				_tetes[i] = h
+				bouge = true
+		if not bouge:
+			break
 
 
 func _porteurs_convexes() -> void:

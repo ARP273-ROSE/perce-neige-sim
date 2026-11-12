@@ -183,7 +183,12 @@ func _sabot_fin(e: Dictionary, y_c: Callable) -> void:
 		while jj < ns - 1 and ls[jj + 1] < lk:
 			jj += 1
 		var zg: float = lerpf(zs[jj], zs[jj + 1], clampf((lk - ls[jj]) / maxf(ls[jj + 1] - ls[jj], 1e-6), 0.0, 1.0))
-		RemonteeKit.galet(self, Vector3(x0, float(y_c.call(zg, montee)) + VehiculeRemontee.Y_TRACTEUR_3S - 0.03 - 0.21, zg), 0.21)
+		var y_cz: float = float(y_c.call(zg, montee))
+		var yg: float = y_cz + VehiculeRemontee.Y_TRACTEUR_3S - 0.03 - 0.21
+		RemonteeKit.galet(self, Vector3(x0, yg, zg), 0.21)
+		# chape : deux flasques du dessus de la poutre (y − 0,975) à l'axe du galet, relevé sous la pince (12/11/2026)
+		for sxc in [-0.09, 0.09]:
+			RemonteeKit.boite_en(self, Vector3(0.02, yg - (y_cz - 0.975), 0.14), Vector3(x0 + sxc, (yg + y_cz - 0.975) * 0.5, zg), "galva_pylone")
 
 
 ## Tête en T : traverse sous les poutres, centre qui monte au portique, haubans jusqu'à son bout.
@@ -507,15 +512,29 @@ func _construire_vav() -> void:
 				var z2: float = lerpf(-ls * 0.5, ls * 0.5, float(i2) / 16.0)
 				pts2.append(Vector3(xp, -PyloneRemontee.R_CABLE - 0.05 - kappa * z2 * z2 * 0.5, z2))
 			RemonteeKit.tube(sab, pts2, 0.08, "acier_noir", 8)
-		var arc: PackedVector3Array = PackedVector3Array()
-		for i3b in range(17):
-			var z3: float = lerpf(-ls * 0.48, ls * 0.48, float(i3b) / 16.0)
-			arc.append(Vector3(x0b, -0.42 - kappa * z3 * z3 * 0.5, z3))
-		RemonteeKit.caisson(sab, arc, 0.60, 0.60, 0.30 + (porteurs_par_voie - 1) * ecart_porteurs, m, Vector3.RIGHT)
-		for sz5 in [-ls * 0.30, 0.0, ls * 0.30]:
-			RemonteeKit.galet(sab, Vector3(x0b, -0.45 - 0.03 - 0.20 - kappa * sz5 * sz5 * 0.5 - 0.30, sz5), 0.20)
+		# une joue cintrée sous chaque porteur ; le tracteur (0,45 m sous les porteurs) file dans la fente entre
+		# les deux, posé sur des galets à pas régulier (retour d'utilisateur du 12/11/2026 : « le câble fin ne
+		# se pose pas aux galets mais passe au plafond » — un caisson plein l'avalait, galets 0,3 m plus bas)
+		var e_j: float = (porteurs_par_voie - 1) * ecart_porteurs * 0.5
+		for sj in ([-1.0, 1.0] if porteurs_par_voie > 1 else [0.0]):
+			var arc: PackedVector3Array = PackedVector3Array()
+			for i3b in range(17):
+				var z3: float = lerpf(-ls * 0.48, ls * 0.48, float(i3b) / 16.0)
+				arc.append(Vector3(x0b + sj * e_j, -0.42 - kappa * z3 * z3 * 0.5, z3))
+			RemonteeKit.caisson(sab, arc, 0.60, 0.60, 0.22, m, Vector3.RIGHT)
+		var r_t: float = 0.20
+		var n_t: int = maxi(3, int(ls / 2.0) + 1)
+		for k5 in range(n_t):
+			var sz5: float = lerpf(-ls * 0.46, ls * 0.46, float(k5) / (n_t - 1))
+			var yg: float = -0.45 - 0.02 - r_t - kappa * sz5 * sz5 * 0.5
+			RemonteeKit.galet(sab, Vector3(x0b, yg, sz5), r_t)
+			if porteurs_par_voie > 1:
+				# axe du galet d'une joue à l'autre
+				RemonteeKit.cylindre(sab, 0.025, 0.025, 2.0 * e_j, Transform3D(Basis(Vector3.FORWARD, PI * 0.5), Vector3(x0b, yg, sz5)), "acier_noir", 8)
 		for sz6 in [-lt * 0.35, lt * 0.35]:
-			RemonteeKit.poutre(sab, Vector3(x0b, -0.72 - kappa * sz6 * sz6 * 0.5, sz6), Vector3(x0b, y_s - yc, sz6 * 0.9), 0.30, 0.30, m)
+			# entretoise sous la fente, d'une joue à l'autre, puis la jambe jusqu'à la tête
+			RemonteeKit.boite_en(sab, Vector3(2.0 * e_j + 0.22, 0.14, 0.30), Vector3(x0b, -0.97 - kappa * sz6 * sz6 * 0.5, sz6), m)
+			RemonteeKit.poutre(sab, Vector3(x0b, -0.98 - kappa * sz6 * sz6 * 0.5, sz6), Vector3(x0b, y_s - yc, sz6 * 0.9), 0.30, 0.30, m)
 
 
 ## Hauteur (locale) d'appui des porteurs.

@@ -242,47 +242,59 @@ static func build_galet(detail: bool) -> ArrayMesh:
 	return mesh
 
 
-## Galet de ligne de télécabine ou télésiège (modèle 2026) : bandage caoutchouc noir AU POURTOUR, gorge
-## creusée dedans (contact du câble à R_BANDE, comme build_galet), jante zinguée qui le pince, voile et
-## moyeu sombres. Même repère et même rayon de contact que build_galet.
+## Galet de ligne de télécabine ou télésiège (modèle 2026), même repère et même rayon de contact que build_galet
+## (R_BANDE). Comme celui du funiculaire (retour d'utilisateur du 12/11/2026 : « le caoutchouc est au fond de la
+## gorge et pas sur les côtés ; les galets du funi sont très bien » ; et « trop étroits par rapport à ceux
+## d'avant ») : deux joues zinguées qui dépassent la garniture, le caoutchouc noir seulement au fond, entre elles,
+## gorge creusée dedans ; 18 cm de joue à joue (11,6 avant).
+const DEMI_LARG_LIGNE: float = 0.09     # demi-largeur, de joue à joue
+const R_JOUE_LIGNE: float = 0.29        # bord des joues, au-dessus de la garniture
+const DEMI_GARN_LIGNE: float = 0.075    # demi-largeur de la garniture, entre les joues
+
+
 static func build_galet_ligne(detail: bool) -> ArrayMesh:
 	var mats: Dictionary = materiaux()
-	var n_seg: int = 24 if detail else 16
+	# (de près, les galets qui tournent : 48 pans, le bord à 24 se voyait polygonal — retour d'utilisateur du 12/11/2026)
+	var n_seg: int = 48 if detail else 16
 	var mesh: ArrayMesh = ArrayMesh.new()
-	# surface 0 : bandage
+	var w: float = DEMI_LARG_LIGNE
+	var g: float = DEMI_GARN_LIGNE
+	# surface 0 : garniture caoutchouc, au fond, entre les joues : épaulements à 0,262, gorge jusqu'à R_BANDE
 	var st: SurfaceTool = SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	var hg: float = 0.026
-	var b: PackedVector2Array = PackedVector2Array([Vector2(0.205, -0.05), Vector2(0.268, -0.05),
-		Vector2(0.275, -0.042), Vector2(0.275, -hg)])
+	var hg: float = 0.03
+	var b: PackedVector2Array = PackedVector2Array([Vector2(0.215, -g), Vector2(0.262, -g), Vector2(0.262, -hg)])
 	for i in range(1, 6):
 		var y: float = -hg + 2.0 * hg * float(i) / 6.0
-		b.append(Vector2(R_BANDE + 0.025 * (y / hg) * (y / hg), y))
-	b.append_array(PackedVector2Array([Vector2(0.275, hg), Vector2(0.275, 0.042), Vector2(0.268, 0.05),
-		Vector2(0.205, 0.05), Vector2(0.205, -0.05)]))
+		b.append(Vector2(R_BANDE + 0.012 * (y / hg) * (y / hg), y))
+	b.append_array(PackedVector2Array([Vector2(0.262, hg), Vector2(0.262, g), Vector2(0.215, g)]))
 	_lathe(st, b, n_seg, 1.0)
 	MeshMerge.valider(st, mesh)
 	mesh.surface_set_material(mesh.get_surface_count() - 1, mats["caoutchouc"])
-	# surface 1 : jante zinguée (deux joues qui pincent le bandage)
+	# surface 1 : joues zinguées, du voile au bord (qui dépasse la garniture), arrondies en tête
 	st = SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	# (sur les photos, le bandage ne dépasse de la jante que d'un liseré : la joue zinguée occupe la face)
-	_lathe(st, PackedVector2Array([Vector2(0.15, -0.04), Vector2(0.15, -0.058), Vector2(0.256, -0.058),
-		Vector2(0.256, 0.058), Vector2(0.15, 0.058), Vector2(0.15, 0.04)]), n_seg, 1.0)
+	for sg in [-1.0, 1.0]:
+		var pj: PackedVector2Array = PackedVector2Array([Vector2(0.15, sg * g), Vector2(R_JOUE_LIGNE - 0.006, sg * g),
+			Vector2(R_JOUE_LIGNE, sg * (g + 0.004)), Vector2(R_JOUE_LIGNE, sg * (w - 0.004)),
+			Vector2(R_JOUE_LIGNE - 0.006, sg * w), Vector2(0.15, sg * w)])
+		if sg < 0.0:
+			pj.reverse()
+		_lathe(st, pj, n_seg, 1.0)
 	MeshMerge.valider(st, mesh)
 	mesh.surface_set_material(mesh.get_surface_count() - 1, mats["zinc"])
 	# surface 2 : voile et moyeu ; de près, des têtes de boulons sur une joue (on voit la roue tourner)
 	st = SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
-	_lathe(st, PackedVector2Array([Vector2(0.0, -0.075), Vector2(0.06, -0.075), Vector2(0.065, -0.065),
+	_lathe(st, PackedVector2Array([Vector2(0.0, -w - 0.02), Vector2(0.06, -w - 0.02), Vector2(0.065, -w - 0.01),
 		Vector2(0.065, -0.04), Vector2(0.15, -0.04), Vector2(0.15, 0.04), Vector2(0.065, 0.04),
-		Vector2(0.065, 0.065), Vector2(0.06, 0.075), Vector2(0.0, 0.075)]), mini(n_seg, 12), 1.0)
+		Vector2(0.065, w + 0.01), Vector2(0.06, w + 0.02), Vector2(0.0, w + 0.02)]), mini(n_seg, 12), 1.0)
 	if detail:
 		for k in range(3):
 			var a: float = TAU * float(k) / 3.0
 			var dirv: Vector3 = Vector3(cos(a), 0.0, sin(a))
-			for sg in [-1.0, 1.0]:
-				_boite(st, dirv * 0.19 + Vector3(0, sg * 0.062, 0), Vector3(0.014, 0.005, 0.014), dirv, Vector3.UP,
+			for sg2 in [-1.0, 1.0]:
+				_boite(st, dirv * 0.19 + Vector3(0, sg2 * (w + 0.003), 0), Vector3(0.014, 0.005, 0.014), dirv, Vector3.UP,
 					Vector3(-sin(a), 0.0, cos(a)))
 	MeshMerge.valider(st, mesh)
 	mesh.surface_set_material(mesh.get_surface_count() - 1, mats["acier"])
