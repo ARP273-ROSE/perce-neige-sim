@@ -22,6 +22,7 @@ const VOIE_TPH: float = 8.0            # écart des deux voies (photos du pylôn
 
 var _sens: float = 1.0                 # +1 : la cabine 0 monte
 var _s: float = 0.0                    # position de la cabine 0 (d)
+var _s_cab1: float = NAN                   # position de la cabine 1 (d), intégrée à part (voir _avancer)
 var _v: float = 0.0                    # vitesse signée de la cabine 0 (m/s)
 var _phase: String = "quai"            # quai, route
 var _t_quai: float = 20.0
@@ -206,8 +207,11 @@ func _finir_construction() -> void:
 func _maj_positions() -> void:
 	var a: float = _x_quai(true)
 	var b: float = _x_quai(false)
+	# (cabine 1 recalée si on a déplacé la cabine 0 d'un bloc : sonde, chargement)
+	if is_nan(_s_cab1) or absf(_s_cab1 - (a + b - _s)) > 5.0:
+		_s_cab1 = a + b - _s
 	_vehicules[0][1] = _s
-	_vehicules[1][1] = a + b - _s
+	_vehicules[1][1] = _s_cab1
 	_charges_ponctuelles()
 	for i in range(2):
 		_placer(i)
@@ -246,9 +250,10 @@ func _process_corps(delta: float) -> void:
 		var va: float = absf(_v)
 		va = move_toward(va, v_max, (float(pr["a_dem"]) if v_max > va else a_frein) * delta)
 		_v = va * _sens
-		_s += _v * delta
+		_avancer(_v * delta)
 		if (_sens > 0.0 and _s >= but) or (_sens < 0.0 and _s <= but):
 			_s = but
+			_s_cab1 = a + b - but
 			_v = 0.0
 			_phase = "quai"
 			_t_quai = T_QUAI
@@ -257,10 +262,30 @@ func _process_corps(delta: float) -> void:
 			etat = "arret"
 	vitesse_reelle = absf(_v)
 	_maj_positions()
+	if _v != 0.0:
+		sens_tracteur = signf(_v)
+	_caler_cavaliers()
+	_tourner_cavaliers(delta)
 	if _mat_cable != null:
 		_phase_cable = fposmod(_phase_cable + _v * delta, 0.45)
 		_mat_cable.set_shader_parameter("cable_phase", _phase_cable)
 	_dt = 0.0
+
+
+## Le câble tracteur avance de `ds` (m, le long du câble) : chaque cabine avance d'autant SUR SA VOIE, soit
+## ds·cos θ en horizontale, θ pente du chemin du chariot sous elle (retour d'utilisateur du 12/11/2026 : « tu ne
+## respectes pas le balancement de la cabine au passage du pylône » — l'abscisse horizontale avançait à vitesse
+## constante, la vitesse le long du câble sautait au pylône sans pousser le pendule : 0° relevé au passage ; à
+## vitesse de câble constante, la cassure de pente de 20° de la Grande Motte rend 1 m/s de vitesse horizontale au
+## chariot sur la longueur du sabot, ~7° de balancement attendus).
+func _avancer(ds: float) -> void:
+	_s += ds * _cos_voie(_s, true)
+	_s_cab1 -= ds * _cos_voie(_s_cab1, false)
+
+
+func _cos_voie(d: float, montee: bool) -> float:
+	var p: float = (_y_chariot(d + 0.5, montee) - _y_chariot(d - 0.5, montee))
+	return 1.0 / sqrt(1.0 + p * p)
 
 
 ## Marche relevée au GPS (traces du 26 au 28/04/2026, 4 montées à la Grande Motte, 1 au Fornet ; retour
@@ -270,7 +295,11 @@ func _process_corps(delta: float) -> void:
 ## Motte, 0,30 / 0,23 au Fornet), et seulement les derniers mètres au pas. Vitesse (m/s) selon la fraction de
 ## la ligne parcourue par la cabine qui monte.
 const PROFILS: Dictionary = {
-	"tph_grande_motte": {"pts": [[0.0, 10.0], [1.0, 10.0]], "a_dem": 0.60, "a_frein": 0.55, "v_pas": 1.2, "d_pas": 8.0},
+	# Grande Motte : la courbe de la montre (7 m/s jusqu'à 23 %, plein régime jusqu'à 72 %, 6,4 m/s ensuite par le
+	# pylône et l'approche), plein régime porté à 10 m/s et le reste au prorata, arrivée en gare à 1 m/s (demande
+	# d'utilisateur du 12/11/2026)
+	"tph_grande_motte": {"pts": [[0.0, 7.4], [0.231, 7.4], [0.262, 10.0], [0.717, 10.0], [0.748, 6.7], [1.0, 6.7]],
+		"a_dem": 0.45, "a_frein": 0.31, "v_pas": 1.0, "d_pas": 20.0},
 	"tph_fornet": {"pts": [[0.0, 10.0], [1.0, 10.0]], "a_dem": 0.60, "a_frein": 0.55, "v_pas": 1.2, "d_pas": 8.0},
 }
 const PROFIL_DEFAUT: Dictionary = {"pts": [[0.0, 10.0], [1.0, 10.0]], "a_dem": A_ROUTE, "a_frein": A_ROUTE, "v_pas": 0.6, "d_pas": 15.0}
@@ -597,19 +626,9 @@ func _cables_tph() -> void:
 					ok = false
 			if not ok:
 				dc += 40.0
-			var cv: Node3D = Node3D.new()
-			cv.position = Vector3(x0, y_cable(dc, montee), -dc)
-			cv.rotation.x = atan2(y_cable(dc + 2.0, montee) - y_cable(dc - 2.0, montee), 4.0)
-			c.add_child(cv)
-			# cavalier (photos des reportages) : sabot serré sur chaque porteur, traverse entre eux, deux bras
-			# en V qui descendent au milieu, galet du tracteur à la pointe
-			for sx2 in [-1.0, 1.0]:
-				RemonteeKit.boite_en(cv, Vector3(0.16, 0.16, 0.55), Vector3(sx2 * e2, 0.02, 0), "galva_pylone")
-			RemonteeKit.boite_en(cv, Vector3(2.0 * e2, 0.10, 0.12), Vector3(0, -0.02, 0), "galva_pylone")
-			for sz in [-1.0, 1.0]:
-				RemonteeKit.poutre(cv, Vector3(0.0, -0.05, sz * 0.22), Vector3(0.0, -0.62, 0.0), 0.05, 0.08, "galva_pylone")
-			RemonteeKit.cylindre(cv, 0.035, 0.035, 0.22, Transform3D(Basis(Vector3.FORWARD, PI * 0.5), Vector3(0, -0.60, 0)), "acier_noir", 8)
-			RemonteeKit.galet(cv, Vector3(0, -0.45 - 0.02 - 0.12, 0), 0.12)
+			# cavalier du 3S (demande d'utilisateur du 12/11/2026), recalé à chaque image sur les porteurs fléchis
+			# sous la cabine (il restait à la hauteur du câble à vide : « dans l'hyperespace »)
+			_cavalier(c, x0, dc, montee, e2, -Y_TRACTEUR_TPH)
 		await _pause("téléphérique : câbles")
 	_preparer_charges()
 
@@ -803,6 +822,9 @@ func _gare_fornet(aval: bool) -> void:
 ## du 11/11/2026 sur les quais : trous, barrières des baies, portillons coulissants, pas de jour quai / cabine).
 ## u : distance au nez, vers le fond de la gare ; baies ajustées à la caisse depuis le nez jusque derrière la
 ## cabine à quai ; aval : balcons latéraux sur les 60 % avant ; le fond du quai reste ouvert (accès).
+const SORTIE_FORNET_AMONT: float = 3.0
+
+
 func _plan_quai_fornet(aval: bool) -> Dictionary:
 	var L: float = longueur_h()
 	var sg: float = 1.0 if aval else -1.0
@@ -833,7 +855,9 @@ func _plan_quai_fornet(aval: bool) -> Dictionary:
 			gc.append([V.call(sx * W, lbal), V.call(sx * W, lq)])
 		else:
 			gc.append([V.call(sx * be, 0.0), V.call(sx * W, 0.0)])
-			gc.append([V.call(sx * W, 0.0), V.call(sx * W, lq)])
+			# sortie sur la neige des deux côtés, au fond du quai, vers la TCD du Vallon (retour d'utilisateur du
+			# 12/11/2026 : « quand on arrive en haut, impossible d'aller au TCD Vallon »)
+			gc.append([V.call(sx * W, 0.0), V.call(sx * W, lq - SORTIE_FORNET_AMONT)])
 	var bar: Array = []
 	var port: Array = []
 	var dp: float = TphGrandeMotte.DEMI_PORTE

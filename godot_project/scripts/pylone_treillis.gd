@@ -226,7 +226,7 @@ func _sabot_fin(e: Dictionary, y_c: Callable) -> void:
 		var y_cz: float = float(y_c.call(zg, montee))
 		var yg: float = y_cz + VehiculeRemontee.Y_TRACTEUR_3S - 0.03 - 0.21
 		RemonteeKit.galet(self, Vector3(x0, yg, zg), 0.21)
-		# chape : deux flasques du dessus de la poutre (y − 0,975) à l'axe du galet, relevé sous la pince (12/11/2026)
+		# chape : deux flasques du dessus de la poutre (y − 0,975) à l'axe du galet (12/11/2026)
 		for sxc in [-0.09, 0.09]:
 			RemonteeKit.boite_en(self, Vector3(0.02, yg - (y_cz - 0.975), 0.14), Vector3(x0 + sxc, (yg + y_cz - 0.975) * 0.5, zg), "galva_pylone")
 

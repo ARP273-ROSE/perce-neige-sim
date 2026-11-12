@@ -193,6 +193,8 @@ func construire(r: ReliefBuilder) -> void:
 	_jumeler()
 	_croisements()
 	_caisses_au_chargement()
+	# double tapis de la tête de Solaise (demande d'utilisateur du 12/11/2026)
+	TapisRoulant.poser_tous(self, relief)
 	pret = true
 	print("[Remontees] %d lignes posées" % lignes.size())
 

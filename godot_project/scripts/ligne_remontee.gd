@@ -2216,6 +2216,10 @@ func _gare(aval: bool) -> void:
 			# (frère, pas enfant : la fusion de la gare libère le terrassement avant de reprendre ses enfants)
 			g.add_child(mt.get_meta("socle"))
 			mt.remove_meta("socle")
+		if _escaliers_socle.has(aval):
+			var es: Array = _escaliers_socle[aval]
+			TphGrandeMotte._escalier(g, (es[0] as Vector3) - Vector3(0, y0 - 0.02, 0), (es[1] as Vector3) - Vector3(0, y0 - 0.02, 0),
+				2.0 * DEMI_LARG_ESCALIER_SOCLE)
 	await _pause("gare : terrassement")
 	# carénage en gélule sur colonnes, cabine du conducteur (photos des
 	# gares BMF du Marmottes Express, retour d'utilisateur, 23/10/2026)
@@ -2368,7 +2372,13 @@ const TALUS_MAX: float = 20.0
 ## jusqu'au sol, flancs dans le matériau du socle. Vallon de l'Iseran, aval : gare accolée à l'arrivée du
 ## Fornet sur l'éperon rocheux (bâtiment « Iseran », photos RM.net du Fornet) ; son remblai de neige
 ## descendait de 13 m sur 77 m de large (le « prisme blanc »).
-const SOCLES_GARES: Dictionary = {"tcd10_vallon_iseran": {true: ["pierre", 1.5]}}
+## Troisième terme : un escalier d'accès au dos du socle, du quai au sol (Vallon : on arrive du Fornet par
+## l'arrière, 6 m plus bas — retour d'utilisateur du 12/11/2026 : « impossible d'aller au TCD Vallon, il est
+## enfermé dans son socle »).
+const SOCLES_GARES: Dictionary = {"tcd10_vallon_iseran": {true: ["pierre", 1.5, true]}}
+const PENTE_ESCALIER_SOCLE: float = 0.62        # hauteur / longueur (marches de 18 × 29 cm)
+const DEMI_LARG_ESCALIER_SOCLE: float = 1.1
+var _escaliers_socle: Dictionary = {}           # aval → [haut, bas] (repère de la ligne)
 
 
 func _socle_gare(aval: bool) -> Array:
@@ -2479,8 +2489,40 @@ func _terrassement(aval: bool) -> PackedVector3Array:
 		var d0: Array = pieds_cote[1][bout[0]]
 		tri.append_array(PackedVector3Array([pts2[0][0], pts2[0][1], g0[1]]))
 		tri.append_array(PackedVector3Array([pts2[pts2.size() - 1][0], pts2[pts2.size() - 1][1], d0[1]]))
+	if socle.size() > 2 and bool(socle[2]):
+		_escalier_socle(tri, aval, haut.call(zs[zs.size() - 1]), float(zs[zs.size() - 1]), sgr)
 	_terrassements[aval] = tri
 	return tri
+
+
+## Escalier au dos d'un socle (axe de la gare) : rampe pleine du bord du quai, en `z_bord`, jusqu'au sol, flancs
+## jusqu'au terrain ; elle porte la collision, les marches et les mains courantes sont dessinées par-dessus.
+func _escalier_socle(tri: PackedVector3Array, aval: bool, y_h: float, z_bord: float, sgr: float) -> void:
+	var t: float = 0.0
+	var fin: float = 0.0
+	while t < 40.0:
+		var y: float = y_h - t * PENTE_ESCALIER_SOCLE
+		var g: float = maxf(_sol(-DEMI_LARG_ESCALIER_SOCLE, z_bord + sgr * t), _sol(DEMI_LARG_ESCALIER_SOCLE, z_bord + sgr * t))
+		if y <= g:
+			fin = t
+			break
+		t += 0.25
+	if fin <= 0.5:
+		return
+	var y_b: float = y_h - fin * PENTE_ESCALIER_SOCLE
+	var z_b: float = z_bord + sgr * fin
+	var e: float = DEMI_LARG_ESCALIER_SOCLE
+	var hg: Vector3 = Vector3(-e, y_h, z_bord)
+	var hd: Vector3 = Vector3(e, y_h, z_bord)
+	var bg: Vector3 = Vector3(-e, y_b, z_b)
+	var bd: Vector3 = Vector3(e, y_b, z_b)
+	tri.append_array(PackedVector3Array([hg, hd, bd, hg, bd, bg]))
+	for c in [[hg, bg], [hd, bd]]:
+		var a: Vector3 = c[0]
+		var b: Vector3 = c[1]
+		var pa: Vector3 = Vector3(a.x, _sol(a.x, a.z) - 0.4, a.z)
+		tri.append_array(PackedVector3Array([a, b, pa]))
+	_escaliers_socle[aval] = [Vector3(0, y_h, z_bord), Vector3(0, y_b, z_b)]
 
 
 ## Maillage du terrassement (neige damée, double face, normales vers le
@@ -4596,6 +4638,7 @@ var _cavaliers_n: Array = []
 var _cav_galets: Array = []             # [galet, montée, d, rayon]
 var _cav_etat: Array = []               # par galet : [libre, t0, ω0, ω]
 var _cav_horloge: float = 0.0
+var sens_tracteur: float = 1.0         # téléphériques : −1 quand la cabine 0 descend
 const CAV_TOURNE_JUSQUA: float = 80.0
 const CAV_LIBRE: float = 0.55           # m : demi-longueur des mâchoires au-dessus du galet
 static var _galet_tournant: ArrayMesh = null
@@ -4652,7 +4695,7 @@ func _tourner_cavaliers(delta: float) -> void:
 		if vue_active and Vector2(_x_brin(g[1]) - point_vue.x, -d - point_vue.z).length() > CAV_TOURNE_JUSQUA:
 			continue
 		# (axe du maillage : son Y local ; le tracteur file vers l'amont sur le brin montant)
-		(g[0] as Node3D).rotate_object_local(Vector3.UP, float(st[3]) * delta * (1.0 if g[1] else -1.0))
+		(g[0] as Node3D).rotate_object_local(Vector3.UP, float(st[3]) * delta * (1.0 if g[1] else -1.0) * sens_tracteur)
 
 
 ## 3S : appuis du tracteur sur un brin (d croissants) — galets des cavaliers, galets des sabots des pylônes (sur toute
@@ -4680,7 +4723,7 @@ func _appuis_tracteur(montee: bool) -> PackedFloat32Array:
 
 
 ## 3S : le tracteur, serré dans la pince remontée (VehiculeRemontee.Y_PINCE_3S), est soulevé au droit de chaque
-## véhicule en ligne et redescend de part et d'autre jusqu'au galet d'appui suivant, en cosh, tangent au galet
+## véhicule en ligne et redescend de part et d'autre jusqu'au galet d'appui suivant, presque droit, raccordé tangent au galet
 ## (retour d'utilisateur du 11/11/2026 : « le cosh après passage cabine redépose le tracteur sur le galet ») ;
 ## au-dessus d'un galet, la levée ne couvre que la longueur des mâchoires. Nuanceur du câble : levee().
 const LEVEE_3S: float = VehiculeRemontee.Y_PINCE_3S - VehiculeRemontee.Y_TRACTEUR_3S
@@ -4752,32 +4795,38 @@ func _cavaliers(parent: Node3D) -> void:
 					proche = true
 			if proche:
 				d += 30.0
-			var y: float = y_cable(d, montee)
-			var c: Node3D = Node3D.new()
-			c.position = Vector3(x0, y, -d)
-			c.rotation.x = atan2(y_cable(d + 2.0, montee) - y_cable(d - 2.0, montee), 4.0)
-			parent.add_child(c)
-			_cavaliers_n.append([c, d, montee, y])
-			# en V : deux attaches sur les porteurs, deux plats galvanisés jusqu'à la traverse, galet du tracteur
-			# au centre, tiges de garde sous lui (cotes estimées sur photo, ±15 %)
-			var y_tr: float = VehiculeRemontee.Y_TRACTEUR_3S
-			var r_g: float = 0.15
-			for sx in [-1.0, 1.0]:
-				RemonteeKit.boite_en(c, Vector3(0.08, 0.14, 0.16), Vector3(sx * e, -0.05, 0), "galva_pylone")
-				for sz in [-0.05, 0.05]:
-					RemonteeKit.poutre(c, Vector3(sx * e, -0.12, sz), Vector3(sx * 0.12, y_tr - 0.12, sz), 0.012, 0.13, "galva_pylone", Vector3.BACK)
-				RemonteeKit.barre(c, Vector3(sx * 0.14, y_tr + 0.08, 0), Vector3(sx * e * 0.72, -0.17, 0), 0.008, "galva_pylone", 4)
-			RemonteeKit.boite_en(c, Vector3(0.34, 0.05, 0.16), Vector3(0, y_tr - 0.12, 0), "galva_pylone")
-			RemonteeKit.galet(c, Vector3(0, y_tr - 0.03 - r_g, 0), r_g)
-			# le galet reste à part (il tourne), au modèle à rayons pour qu'on le voie tourner
-			var gal: MeshInstance3D = c.get_child(c.get_child_count() - 1)
-			gal.mesh = _maillage_galet_tournant()
-			_cav_galets.append([gal, montee, d, r_g])
-			var garde: PackedVector3Array = PackedVector3Array()
-			for g in [Vector3(-0.17, y_tr - 0.12, 0), Vector3(-0.09, y_tr - 0.42, 0), Vector3(0.09, y_tr - 0.42, 0), Vector3(0.17, y_tr - 0.12, 0)]:
-				garde.append(g)
-			RemonteeKit.tube(c, garde, 0.008, "galva_pylone", 4)
-			MeshMerge.merge(c, [gal], "Cavalier", true)
+			_cavalier(parent, x0, d, montee, e, VehiculeRemontee.Y_TRACTEUR_3S)
+
+
+## Un cavalier en V sur les deux porteurs d'une voie (demi-écart `e`), galet du tracteur (axe à `y_tr` sous les
+## porteurs) à la pointe : 3S, et téléphériques depuis le 12/11/2026 (« mets les cavaliers du 3S »). Recalé à chaque
+## image par _caler_cavaliers, son galet tourné par _tourner_cavaliers.
+func _cavalier(parent: Node3D, x0: float, d: float, montee: bool, e: float, y_tr: float) -> void:
+	var y: float = y_cable(d, montee)
+	var c: Node3D = Node3D.new()
+	c.position = Vector3(x0, y, -d)
+	c.rotation.x = atan2(y_cable(d + 2.0, montee) - y_cable(d - 2.0, montee), 4.0)
+	parent.add_child(c)
+	_cavaliers_n.append([c, d, montee, y])
+	# en V : deux attaches sous les porteurs, deux plats galvanisés jusqu'à la traverse, galet du tracteur
+	# au centre, tiges de garde sous lui (cotes estimées sur photo, ±15 %)
+	var r_g: float = 0.15
+	for sx in [-1.0, 1.0]:
+		RemonteeKit.boite_en(c, Vector3(0.08, 0.14, 0.16), Vector3(sx * e, -0.05, 0), "galva_pylone")
+		for sz in [-0.05, 0.05]:
+			RemonteeKit.poutre(c, Vector3(sx * e, -0.12, sz), Vector3(sx * 0.12, y_tr - 0.12, sz), 0.012, 0.13, "galva_pylone", Vector3.BACK)
+		RemonteeKit.barre(c, Vector3(sx * 0.14, y_tr + 0.08, 0), Vector3(sx * e * 0.72, -0.17, 0), 0.008, "galva_pylone", 4)
+	RemonteeKit.boite_en(c, Vector3(0.34, 0.05, 0.16), Vector3(0, y_tr - 0.12, 0), "galva_pylone")
+	RemonteeKit.galet(c, Vector3(0, y_tr - 0.03 - r_g, 0), r_g)
+	# le galet reste à part (il tourne), au modèle à rayons pour qu'on le voie tourner
+	var gal: MeshInstance3D = c.get_child(c.get_child_count() - 1)
+	gal.mesh = _maillage_galet_tournant()
+	_cav_galets.append([gal, montee, d, r_g])
+	var garde: PackedVector3Array = PackedVector3Array()
+	for g in [Vector3(-0.17, y_tr - 0.12, 0), Vector3(-0.09, y_tr - 0.42, 0), Vector3(0.09, y_tr - 0.42, 0), Vector3(0.17, y_tr - 0.12, 0)]:
+		garde.append(g)
+	RemonteeKit.tube(c, garde, 0.008, "galva_pylone", 4)
+	MeshMerge.merge(c, [gal], "Cavalier", true)
 
 
 func _porteurs(parent: Node3D) -> void:
