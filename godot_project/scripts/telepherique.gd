@@ -162,7 +162,7 @@ func _construire_corps() -> void:
 		if gare_aval_existante:
 			await _gares_grande_motte(aval)
 		elif String(name) == "tph_fornet":
-			_gare_fornet(aval)
+			await _gare_fornet(aval)
 		else:
 			_gare_tph(aval)
 		await _pause("téléphérique : gare")
@@ -747,7 +747,7 @@ func _gare_fornet(aval: bool) -> void:
 			RemonteeKit.boite_en(g, Vector3(0.6, h_rdc, 0.6), Vector3(xp, y_rdc + h_rdc * 0.5, z0 + 0.3), "blanc_plaque")
 		RemonteeKit.boite_en(g, Vector3(2.0 * hx + 0.4, 0.35, lq + 0.4), Vector3(0, -0.68, zq), "bois_fonce")
 		# sabots des porteurs sur poteaux noirs à consoles grises (photos de la gare actuelle)
-		_sabots_fornet(g, true, y0, "peinture_gris", "peinture_anthracite")
+		await _sabots_fornet(g, true, y0, "peinture_gris", "peinture_anthracite")
 		# (balcons latéraux et garde-corps : plan du quai)
 		# bâtiment de la machinerie, bardé anthracite, derrière le quai
 		var lb: float = 20.0
@@ -756,7 +756,9 @@ func _gare_fornet(aval: bool) -> void:
 		RemonteeKit.boite_en(g, Vector3(2.0 * hx + 6.0, hb - bas, lb), Vector3(0, bas + (hb - bas) * 0.5, zb), "peinture_anthracite")
 		RemonteeKit.boite_en(g, Vector3(2.0 * hx + 6.2, 1.2, lb + 0.2), Vector3(0, bas + 0.6, zb), "pierre")
 		RemonteeKit.boite_en(g, Vector3(2.0 * hx + 6.4, 0.3, lb + 0.4), Vector3(0, hb + 0.15, zb), "noir_mat")
+		await _pause("téléphérique : gare")
 		_facade_fornet(g, z0 + lq + lb, 2.0 * hx + 6.0, hb, float(sol.call(0.0, z0 + lq + lb + 3.0)))
+		await _pause("téléphérique : façade")
 	else:
 		# quai en porte-à-faux : voiles de béton jusqu'au rocher, sous le fond du quai seulement
 		for sx4 in [-1.0, 1.0]:
@@ -767,7 +769,7 @@ func _gare_fornet(aval: bool) -> void:
 			RemonteeKit.poutre(g, Vector3(xv, -0.6, z0 + sg * 1.0), Vector3(xv, yb * 0.6, zf - sg * 2.5), 0.5, 0.7, "beton")
 		RemonteeKit.boite_en(g, Vector3(2.0 * hx, 1.2, lq), Vector3(0, -1.1, zq), "beton")
 		# sabots des porteurs : poutres-caissons gris-bleu cintrées en porte-à-faux au-delà du quai (photos)
-		_sabots_fornet(g, false, y0, "bleu_ardoise", "bleu_ardoise")
+		await _sabots_fornet(g, false, y0, "bleu_ardoise", "bleu_ardoise")
 		# tour de béton clair au fond, bâtiment bas bardé à côté
 		var zt: float = z0 + sg * (lq + 4.0)
 		var yt: float = minf(float(sol.call(0.0, zt)), 0.0) - 0.5
@@ -869,7 +871,7 @@ func _dessin_gc(g: Node3D, a: Vector2, b: Vector2, h: float, m: String) -> void:
 ## tête de la suspente : chacune est tenue par l'extérieur, par des consoles sur deux poteaux, au nez et au
 ## fond du quai, que relie une traverse haute au-dessus du chariot.
 func _sabots_fornet(g: Node3D, aval: bool, y0: float, m_poutre: String, m_poteau: String) -> void:
-	_sabots_tph(g, aval, y0, 0.0, _lq_tph(aval), m_poutre, m_poteau, true)
+	await _sabots_tph(g, aval, y0, 0.0, _lq_tph(aval), m_poutre, m_poteau, true)
 
 
 ## Tracteur : 0,45 m sous les porteurs ; poulie de renvoi au fond du quai (rayon).
@@ -954,6 +956,7 @@ func _sabots_tph(g: Node3D, aval: bool, y0: float, z_g: float, lq: float, m_pout
 		if galet:
 			var yr2: float = float(y_rail.call(-lq, montee))
 			RemonteeKit.galet(g, Vector3(x0, yr2 - Y_TRACTEUR_TPH - 0.02 - R_RENVOI_TPH, float(z_loc.call(-(lq + R_RENVOI_TPH)))), R_RENVOI_TPH)
+		await _pause("téléphérique : sabots")
 
 
 ## Façade côté route de la gare aval du Fornet (photos de la gare actuelle, Wikimedia Commons) :
@@ -1075,7 +1078,7 @@ func _gares_grande_motte(aval: bool) -> void:
 			# (escalier d'entrée : grand escalier central de la façade, posé avec le bâtiment par GareAmont)
 	else:
 		TphGrandeMotte.gare_amont(self, g, H_CABLE_GARE, sol)
-	_sabots_tph(g, aval, y_q, z_g, _lq_tph(aval), "galva_pylone", "galva_pylone", true)
+	await _sabots_tph(g, aval, y_q, z_g, _lq_tph(aval), "galva_pylone", "galva_pylone", true)
 	# (en tranches : la gare d'un bloc, fusion comprise, faisait 13,5 ms sans fil, relevé du 10/11/2026)
 	await _pause("téléphérique : gare")
 	await MeshMerge.merge_par_tranches(g, [], "Gare", false, _pause.bind("téléphérique : gare, fusion"))

@@ -607,7 +607,7 @@ func _calculer_tetes() -> void:
 	_parametres_chainette()
 	_tetes.clear()
 	if teleski():
-		_tetes_teleski()
+		await _tetes_teleski()
 		return
 	# géométrie calculée une fois pour toutes (outils/precalcul_geometrie.gd :
 	# capacité des galets, garde au sol, mesures GPS, réglés ensemble) : le
@@ -738,6 +738,8 @@ func _tetes_teleski() -> void:
 		for p in pylones:
 			_tetes.append(terrain(float(p["d"])) + H_TELESKI)
 		for it in range(15):
+			# (une pause par passe : jusqu'à 15 ms d'un bloc au Col du Palet, relevé du 12/11/2026)
+			await _pause("têtes des pylônes")
 			var bouge: bool = false
 			var pts: Array = _points_appui()
 			for k in range(pts.size() - 1):
@@ -1920,6 +1922,8 @@ const L_EVASE: float = 6.0
 ## 20 ms d'un bloc à l'Olympique, relevé du 10/11/2026).
 func _construire_boucle(pauses: bool = false) -> void:
 	_preparer_raccords()
+	if pauses:
+		await _pause("boucle : raccords")
 	_boucle = PackedVector3Array()
 	_zones.clear()
 	var L: float = longueur_h()
@@ -1964,7 +1968,7 @@ func _construire_boucle(pauses: bool = false) -> void:
 			_ajouter(Vector3(xm + decalage_montee(d), y_cable(d), -d))
 			d += _pas_ligne(d)
 			n_m += 1
-			if pauses and n_m % 64 == 0:
+			if pauses and n_m % 8 == 0:
 				await _pause("boucle : tracé")
 	_ajouter(Vector3(xm, yb, -L))
 	# 3. gare amont
@@ -1989,7 +1993,7 @@ func _construire_boucle(pauses: bool = false) -> void:
 			_ajouter(Vector3(xd, y_cable(d, false), -d))
 			d -= _pas_ligne(d)
 			n_d += 1
-			if pauses and n_d % 64 == 0:
+			if pauses and n_d % 8 == 0:
 				await _pause("boucle : tracé")
 	longueur_boucle = _longueur() + _boucle[_boucle.size() - 1].distance_to(_boucle[0])
 
