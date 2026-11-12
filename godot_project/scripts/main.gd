@@ -2149,7 +2149,7 @@ func basculer_echelle() -> void:
 		return
 	if skieur.embarque or skieur.support != null or skieur.assis:
 		return
-	var py: PyloneRemontee = remontees.echelle_proche(skieur.global_position)
+	var py: Node3D = remontees.echelle_proche(skieur.global_position)
 	if py == null:
 		return
 	if skieur.chausse:

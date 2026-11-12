@@ -1177,7 +1177,10 @@ const GRANDI_PIECE: float = 25.0
 var _h25: PackedFloat32Array = PackedFloat32Array()
 
 
-func _build_piece(am: Dictionary) -> void:
+## `pause` (facultative) : attendue toutes les quelques rangées de la grille et entre les étapes, pour une pièce
+## posée en jeu sur le fil principal (gare amont du Funival : 28 ms d'un bloc, relevé du 12/11/2026). Sans elle,
+## tout se fait d'un bloc, comme avant.
+func _build_piece(am: Dictionary, pause: Callable = Callable()) -> void:
 	# (maille à 50 m : le fondu vers les tuiles ne doit pas atteindre les ouvrages, ici 8 m d'écart entre les grilles)
 	var r: Rect2 = (am["rect"] as Rect2).grow(GRANDI_PIECE if _pas > 1 else 0.0)
 	var nx: int = int(ceil(r.size.x / PAS_PIECE)) + 1
@@ -1201,6 +1204,8 @@ func _build_piece(am: Dictionary) -> void:
 	var uvs: PackedVector2Array = PackedVector2Array()
 	var idx: PackedInt32Array = PackedInt32Array()
 	for i in range(nz):
+		if pause.is_valid() and i % 3 == 0:
+			await pause.call()
 		for j in range(nx):
 			var x: float = r.position.x + j * lx
 			var z: float = r.position.y + i * lz
@@ -1269,6 +1274,8 @@ func _build_piece(am: Dictionary) -> void:
 	arr[Mesh.ARRAY_NORMAL] = normales
 	arr[Mesh.ARRAY_TEX_UV] = uvs
 	arr[Mesh.ARRAY_INDEX] = idx
+	if pause.is_valid():
+		await pause.call()
 	var mesh: ArrayMesh = ArrayMesh.new()
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
 	# masque des bâtiments (0,25 m par pixel)
@@ -1288,6 +1295,8 @@ func _build_piece(am: Dictionary) -> void:
 				var q: Vector2 = r.position + Vector2((j + 0.5) / 4.0, (i + 0.5) / 4.0)
 				if Geometry2D.is_point_in_polygon(q, poly):
 					img.set_pixel(j, i, Color.WHITE)
+	if pause.is_valid():
+		await pause.call()
 	# (pack haute définition : même photo et mêmes normales que le sol alentour)
 	var hd_piece: bool = _tex_normales != null and ((fin != null and fin.hd) or _normales_seules != null)
 	var mat: ShaderMaterial = _mat_terrain.duplicate() if hd_piece or _detail_seul else _shader(SHADER_TERRAIN)

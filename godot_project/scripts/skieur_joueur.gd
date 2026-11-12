@@ -678,7 +678,7 @@ func echelle_en_haut() -> bool:
 
 
 ## Prend l'échelle là où l'on est et monte, dans l'axe de l'échelle.
-func prendre_echelle(py: PyloneRemontee) -> void:
+func prendre_echelle(py) -> void:    # PyloneRemontee ou PyloneTreillis (même contrat d'échelle)
 	var n: Vector3 = (py.global_transform.basis.z * Vector3(1, 0, 1)).normalized() * RECUL_ECHELLE
 	_echelle_haut = (py.global_transform * py.echelle_haut) + n
 	_echelle_bas = py.echelle_a_hauteur(global_position.y) + n

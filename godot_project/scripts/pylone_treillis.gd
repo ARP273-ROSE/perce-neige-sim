@@ -30,6 +30,38 @@ var l_amont: float = 6.0
 var l_aval: float = 6.0
 
 
+## Échelle (même contrat que PyloneRemontee : RemonteesDomaine.echelle_proche, SkieurJoueur.prendre_echelle) : bas et haut
+## dans le repère du pylône ; on grimpe face à −Z, le corps à RECUL_ECHELLE en +Z.
+var a_echelle: bool = false
+var echelle_bas: Vector3 = Vector3.ZERO
+var echelle_haut: Vector3 = Vector3.ZERO
+
+
+## Point de l'échelle à l'altitude y : on la prend (et on la lâche) à la hauteur où l'on se tient — le pied
+## calculé sur le sol de la ligne pouvait être sous le relief affiché (P1 de l'Olympique : 1,8 m sous la neige).
+func echelle_a_hauteur(y: float) -> Vector3:
+	var b: Vector3 = global_transform * echelle_bas
+	var u: Vector3 = (global_transform * echelle_haut) - b
+	return b + u * minf((y - b.y) / maxf(u.y, 0.01), 0.8)
+
+
+## Rayon de prise : on se tient entre les membrures du fût, parfois repoussé à ~2 m de l'échelle.
+const RAYON_ECHELLE: float = 2.5
+
+
+## Échelle droite à deux montants et barreaux tous les 35 cm, de `a` à `b` (repère du pylône), prenable.
+func _echelle(a: Vector3, b: Vector3) -> void:
+	a_echelle = true
+	echelle_bas = a
+	echelle_haut = b
+	for sx in [-0.2, 0.2]:
+		RemonteeKit.barre(self, a + Vector3(sx, 0, 0), b + Vector3(sx, 0, 0), 0.025, "galva", 6)
+	var n: int = int((b.y - a.y) / 0.35)
+	for k in range(n + 1):
+		var p: Vector3 = a.lerp(b, float(k) / maxf(n, 1))
+		RemonteeKit.barre(self, p + Vector3(-0.2, 0, 0), p + Vector3(0.2, 0, 0), 0.016, "galva", 4)
+
+
 func construire() -> void:
 	for f in _debut_construction():
 		(f as Callable).call()
@@ -74,12 +106,20 @@ func _phases_3s() -> Array:
 		ph.append(func() -> void:
 			for z2 in [rangs[0], rangs[2]]:
 				_tete(float(z2), y_c, m)
-			_escalier(float(rangs[1]) + 2.5, y_c, m))
+			var z_e: float = float(rangs[1]) + 2.5
+			_escalier(z_e, y_c, m)
+			# on grimpe le long de l'escalier, dans son axe (pas de collisions sur ses volées)
+			a_echelle = true
+			echelle_bas = Vector3(0, _sol(0.0, z_e) + 0.2, z_e)
+			echelle_haut = Vector3(0, float(y_c.call(z_e)) - 1.0, z_e))
 	else:
 		ph.append(func() -> void: _fut_3s(y_c, m))
 		ph.append(func() -> void:
 			for z3 in rangs:
-				_tete(float(z3), y_c, m))
+				_tete(float(z3), y_c, m)
+			# échelle au milieu du fût, jusqu'à la plate-forme sous le portique
+			var zp0: float = float(rangs[0])
+			_echelle(Vector3(0, _sol(0.0, 0.3) + 0.3, 0.3), Vector3(0, float(y_c.call(zp0)) - 0.93, 0.3)))
 	# plate-forme centrale, sous le portique
 	ph.append(func() -> void:
 		var zp: float = float(rangs[0])
@@ -402,8 +442,11 @@ func _construire_vav() -> void:
 			var s0: Array = COINS[i3 % 4]
 			var s1: Array = COINS[(i3 + 2) % 4]
 			RemonteeKit.poutre(self, coin.call(s0[0], s0[1], yb), coin.call(s1[0], s1[1], yb), 0.10, 0.10, m)
-	# échelle au milieu du fût, paliers de repos
+	# échelle au milieu du fût, paliers de repos ; prenable (retour d'utilisateur du 12/11/2026)
 	var y_e: float = 0.4
+	a_echelle = true
+	echelle_bas = Vector3(0, y_e, 0)
+	echelle_haut = Vector3(0, yt, 0)
 	RemonteeKit.barre(self, Vector3(-0.2, y_e, 0), Vector3(-0.2, yt, 0), 0.025, "galva", 6)
 	RemonteeKit.barre(self, Vector3(0.2, y_e, 0), Vector3(0.2, yt, 0), 0.025, "galva", 6)
 	var y_r: float = y_e
