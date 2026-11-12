@@ -5,6 +5,22 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.65.0 — 12 novembre 2026
+
+Câbles et galets, d'après les essais de la 1.64.
+
+**Funival** : le poste de conduite et la vitesse du HUD suivent la rame quand on est dedans ou sous terre (on y monte à pied : le poste montrait une autre remontée, la vitesse restait à 0). Le câble inférieur, plus fin, reste dans la gorge des galets jusqu'à la rame ; il suivait le tracteur jusqu'à la poulie motrice, sous le plafond de la gare amont (2,3 m au-dessus des rails).
+
+**3S** : le tracteur est posé sur les galets juste sous la pince, qui ne le soulève plus que de l'épaisseur de ses mâchoires (4 cm au lieu de 28) : il ne décolle plus de chaque galet à l'approche de la cabine.
+
+**Pylônes de compression** : la tête est recalée une fois les nez des gares posés, pour que le câble y fasse un angle creux et appuie vraiment sur les galets (P2 de la Daille : +1° sur le brin montant, câble collé sous des galets qu'il aurait quittés ; tête abaissée de 1,2 m).
+
+**Galets de ligne des télécabines et télésièges** : joues zinguées qui dépassent, caoutchouc au fond de la gorge seulement, comme ceux du funiculaire ; 18 cm de joue à joue au lieu de 11,6 ; 48 pans de près au lieu de 24.
+
+**Téléphériques** : sabots ouverts au pylône et en gare, une joue sous chaque porteur ; le tracteur roule dans la fente sur ses galets (il traversait un caisson plein) et s'enroule en gare sur la poulie de renvoi, à sa hauteur, avant de plonger sous le quai.
+
+Vérifié : sondes de hauteur du câble du Funival sur tout le trajet, déviations des pylônes de la Daille, captures des pylônes (Daille, Grande Motte, Olympique) ; 59 bancs OK, empreintes du funiculaire et du Funival inchangées ; LOD des pylônes recuits.
+
 ## 1.64.0 — 12 novembre 2026
 
 Téléphériques refaits : physique, suspentes, chariots, pylône et quais de la Grande Motte et du Fornet.
