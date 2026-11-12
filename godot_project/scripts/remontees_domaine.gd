@@ -1324,19 +1324,30 @@ func _essayer_siege(lg: LigneRemontee, i: int, aval: bool, p: Vector3) -> bool:
 
 
 ## Pylône dont l'échelle est à portée de main (demande d'utilisateur, 03/11/2026), sinon null.
-func echelle_proche(p: Vector3) -> PyloneRemontee:
+## Pylônes tubulaires (PyloneRemontee) et en treillis (PyloneTreillis : 3S, téléphériques), même contrat.
+## Appelée à chaque image (bouton GRIMPER) : les lignes dont on est loin sont écartées sur leur repère, sans
+## parcourir leurs pylônes ni rien allouer.
+func echelle_proche(p: Vector3) -> Node3D:
 	for e in lignes:
 		var lg: LigneRemontee = e[0]
 		if not lg.pret:
 			continue
+		var lp: Vector3 = lg.global_transform.affine_inverse() * p
+		if lp.z > 60.0 or -lp.z > lg.longueur_h() + 60.0 or absf(lp.x) > 60.0:
+			continue
 		for q in lg._pyl:
 			var py: PyloneRemontee = q[0]
-			if not py.a_echelle:
-				continue
-			var b: Vector3 = py.echelle_a_hauteur(p.y)
-			if Vector2(p.x - b.x, p.z - b.z).length() < 1.8 and absf(p.y - b.y) < 4.0:
+			if py.a_echelle and _echelle_a_portee(p, py.echelle_a_hauteur(p.y), 1.8):
 				return py
+		for py2 in lg._pyl_treillis:
+			var pt: PyloneTreillis = py2
+			if is_instance_valid(pt) and pt.a_echelle and _echelle_a_portee(p, pt.echelle_a_hauteur(p.y), PyloneTreillis.RAYON_ECHELLE):
+				return pt
 	return null
+
+
+static func _echelle_a_portee(p: Vector3, b: Vector3, rayon: float) -> bool:
+	return Vector2(p.x - b.x, p.z - b.z).length() < rayon and absf(p.y - b.y) < 4.0
 
 
 ## Remontée « courante » pour le poste de commande : celle où l'on est

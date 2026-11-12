@@ -202,6 +202,7 @@ func demolir(poubelle: Array) -> void:
 	_vehicules.clear()
 	_corps.clear()
 	_pyl.clear()
+	_pyl_treillis.clear()
 	_roues_vues.clear()
 	_pyl_touches.clear()
 	_cales_vues.clear()
@@ -252,6 +253,7 @@ func construire() -> void:
 			c.queue_free()
 	_vehicules.clear()
 	_pyl.clear()
+	_pyl_treillis.clear()
 	_roues_vues.clear()
 	_pyl_touches.clear()
 	_cales_vues.clear()
@@ -4875,6 +4877,8 @@ func nombre_vehicules() -> int:
 
 var _dt: float = 0.0
 var _pyl: Array = []            # [PyloneRemontee, d]
+## Pylônes en treillis (3S, téléphériques), pour leurs échelles (retour d'utilisateur du 12/11/2026 : « je veux grimper partout »).
+var _pyl_treillis: Array = []
 var _pyl_touches: Dictionary = {}
 
 
@@ -6056,6 +6060,7 @@ func _poser_pylones_treillis() -> void:
 			py.deviation = atan(_pente_chainette(d - hs - 0.3, true)) - atan(_pente_chainette(d + hs + 0.3, true))
 		py.name = "P%d" % (i + 1)
 		_enfant(py)
+		_pyl_treillis.append(py)
 		await py.construire_par_tranches(_pause.bind("pylônes treillis : pièces"))
 		await MeshMerge.merge_par_tranches(py, [], "Pylone", _garder_pylones(), _pause.bind("pylônes treillis : fusion"))
 		await _pause("pylônes treillis")

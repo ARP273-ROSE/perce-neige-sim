@@ -1752,8 +1752,17 @@ func _amenager_relief_amont() -> void:
 				prem = false
 			else:
 				bb = bb.expand(v)
-	rel._build_piece({"rect": bb.grow(14.0), "trous": trous, "remblais": remblais, "rabots": rabots})
+	# (sur le fil principal, en jeu : par tranches de 4 ms — 28 ms d'un bloc, relevé du 12/11/2026)
+	var t_deb: Array = [Time.get_ticks_usec()]
+	var pause := func() -> void:
+		if Time.get_ticks_usec() - int(t_deb[0]) > 4000 and is_inside_tree():
+			await get_tree().process_frame
+			t_deb[0] = Time.get_ticks_usec()
+	await rel._build_piece({"rect": bb.grow(14.0), "trous": trous, "remblais": remblais, "rabots": rabots}, pause)
+	if not is_instance_valid(rel) or not is_inside_tree():
+		return
 	rel._poser_trous()
+	await pause.call()
 	_habiller_salle()
 
 
