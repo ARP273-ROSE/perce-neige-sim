@@ -732,7 +732,7 @@ static var _maillage_roue_ligne: ArrayMesh = null
 ## opposé au câble (elles couvrent les axes, le bas des galets reste à nu), bouts effilés au-delà des axes.
 func _flasques_2026(n: Node3D, s: float, z0: float, z1: float, m: String) -> void:
 	var yc: float = -s * 0.11 + s * 0.07
-	for sx in [-0.085, 0.085]:
+	for sx in [-0.105, 0.105]:          # (écartées pour les galets de 18 cm, RollerMesh.DEMI_LARG_LIGNE)
 		RemonteeKit.poutre(n, Vector3(sx, yc, z0), Vector3(sx, yc, z1), 0.016, 0.22, m)
 		RemonteeKit.poutre(n, Vector3(sx, yc + s * 0.03, z0), Vector3(sx, yc + s * 0.03, z0 - 0.17), 0.016, 0.12, m)
 		RemonteeKit.poutre(n, Vector3(sx, yc + s * 0.03, z1), Vector3(sx, yc + s * 0.03, z1 + 0.17), 0.016, 0.12, m)

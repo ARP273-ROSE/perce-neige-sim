@@ -2219,7 +2219,13 @@ func _ruban_galets(st: SurfaceTool, d0: float, d1: float, i: int) -> void:
 		var p: Vector3 = v.p
 		if v.has("basis"):
 			p -= (v.basis as Basis).y.normalized() * bas
-		chemin.append(xf * p)
+		var pw: Vector3 = xf * p
+		if pw.y - y_voie(-pw.z) > 0.35:
+			# le brin du tracteur quitte la voie vers la poulie motrice, sous le plafond de la gare amont : le câble
+			# inférieur, lui, reste sur les galets (retour d'utilisateur du 12/11/2026 : « le câble fin retour va au
+			# plafond » — il suivait ce tracé jusqu'à 2,3 m au-dessus des rails) : sommet sauté
+			continue
+		chemin.append(pw)
 	if chemin.size() < 2:
 		_ruban(st, d0, d1, i, (-1.0 if i == 0 else 1.0) * 0.07, D_INFERIEUR, -0.07)
 		return
@@ -2229,10 +2235,16 @@ func _ruban_galets(st: SurfaceTool, d0: float, d1: float, i: int) -> void:
 	var att: Vector3 = Vector3(dern.x, y_voie(d1) + H_ATTACHE_INF, -d1)
 	var portee: float = Vector2(att.x - dern.x, att.z - dern.z).length()
 	if portee > 0.05:
-		for k in range(1, 9):
-			var t: float = float(k) / 8.0
+		# (hauteurs prises au-dessus des rails : la voie est courbe en long, une corde droite sur des dizaines de
+		# mètres passait 0,8 à 1,3 m au-dessus d'eux)
+		var h0: float = dern.y - y_voie(-dern.z)
+		var h1: float = att.y - y_voie(-att.z)
+		var n_l: int = clampi(int(portee / 3.0), 8, 200)
+		for k in range(1, n_l + 1):
+			var t: float = float(k) / n_l
 			var q: Vector3 = dern.lerp(att, t)
-			q.y = dern.y + TrackBuilder.chainette_y(t * portee, portee, att.y - dern.y, A_CHAINETTE_INF)
+			var plat: float = TrackBuilder.chainette_y(t * portee, portee, h1 - h0, A_CHAINETTE_INF) - (h1 - h0) * t
+			q.y = y_voie(-q.z) + lerpf(h0, h1, t) + plat
 			chemin.append(q)
 	for k in range(1, chemin.size()):
 		var a: Vector3 = chemin[k - 1]

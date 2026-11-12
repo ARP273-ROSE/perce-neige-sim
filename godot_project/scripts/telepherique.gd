@@ -574,8 +574,12 @@ func _cables_tph() -> void:
 			var dd: float = clampf(d, 0.0, L)
 			var y: float = y_cable(dd, montee) if d > 0.0 and d < L else terrain(0.0 if d <= 0.0 else L) + H_CABLE_GARE
 			por.append(Vector3(0, y, -d))
-			tra.append(Vector3(x0, y - 0.45, -d))
+			if d >= -_lq_tph(true) - R_RENVOI_TPH and d <= L + _lq_tph(false) + R_RENVOI_TPH:
+				tra.append(Vector3(x0, y - Y_TRACTEUR_TPH, -d))
 			d += 1.0 if d < 30.0 or d > L - 30.0 else 5.0
+		# bouts du tracteur : posé sur la poulie de renvoi au fond du quai, il s'y enroule d'un quart de tour et
+		# plonge sous le quai, vers la machinerie (il filait tout droit dans le fond de la gare)
+		tra = _renvoi_tracteur(tra, x0)
 		for sx in [-1.0, 1.0]:
 			var p2: PackedVector3Array = PackedVector3Array()
 			for q in por:
@@ -608,6 +612,34 @@ func _cables_tph() -> void:
 			RemonteeKit.galet(cv, Vector3(0, -0.45 - 0.02 - 0.12, 0), 0.12)
 		await _pause("téléphérique : câbles")
 	_preparer_charges()
+
+
+## Ajoute aux deux bouts du tracteur `tra` (d croissants, z = −d) le quart de tour sur la poulie de renvoi et la
+## descente sous le quai.
+func _renvoi_tracteur(tra: PackedVector3Array, x0: float) -> PackedVector3Array:
+	var L: float = longueur_h()
+	var r: float = R_RENVOI_TPH + 0.02
+	var bouts: Array = []
+	for aval in [true, false]:
+		var sens: float = -1.0 if aval else 1.0                 # vers le fond de la gare, en d
+		var dc: float = (-_lq_tph(true) - R_RENVOI_TPH) if aval else (L + _lq_tph(false) + R_RENVOI_TPH)
+		var y_st: float = terrain(0.0 if aval else L)
+		var yc: float = y_st + H_CABLE_GARE - Y_TRACTEUR_TPH - r
+		var b: PackedVector3Array = PackedVector3Array()
+		for k in range(9):
+			var a: float = PI * 0.5 * (1.0 - float(k) / 8.0)
+			b.append(Vector3(x0, yc + r * sin(a), -(dc + sens * r * cos(a))))
+		b.append(Vector3(x0, y_st - 1.5, -(dc + sens * r)))
+		bouts.append(b)
+	var out: PackedVector3Array = PackedVector3Array()
+	var b0: PackedVector3Array = bouts[0]
+	for k2 in range(b0.size() - 1, -1, -1):
+		out.append(b0[k2])
+	for q in tra:
+		if -q.z > (bouts[0] as PackedVector3Array)[0].z * -1.0 + 0.05 and -q.z < -(bouts[1] as PackedVector3Array)[0].z - 0.05:
+			out.append(q)
+	out.append_array(bouts[1])
+	return out
 
 
 ## Gares : quai de béton à hauteur du plancher des cabines, deux baies.
@@ -837,7 +869,19 @@ func _dessin_gc(g: Node3D, a: Vector2, b: Vector2, h: float, m: String) -> void:
 ## tête de la suspente : chacune est tenue par l'extérieur, par des consoles sur deux poteaux, au nez et au
 ## fond du quai, que relie une traverse haute au-dessus du chariot.
 func _sabots_fornet(g: Node3D, aval: bool, y0: float, m_poutre: String, m_poteau: String) -> void:
-	_sabots_tph(g, aval, y0, 0.0, 2.0 * D_QUAI + 2.0, m_poutre, m_poteau, true)
+	_sabots_tph(g, aval, y0, 0.0, _lq_tph(aval), m_poutre, m_poteau, true)
+
+
+## Tracteur : 0,45 m sous les porteurs ; poulie de renvoi au fond du quai (rayon).
+const Y_TRACTEUR_TPH: float = 0.45
+const R_RENVOI_TPH: float = 0.30
+
+
+## Du nez de gare au fond des rails des sabots.
+func _lq_tph(aval: bool) -> float:
+	if String(name) == "tph_grande_motte":
+		return (TphGrandeMotte.Z_NEZ - 0.6) if aval else (TphGrandeMotte.L_BAIE + 1.0)
+	return 2.0 * D_QUAI + 2.0
 
 
 ## Sabots des porteurs en gare (retours d'utilisateur du 11/11/2026 : « design des supports de câble en gare
@@ -872,8 +916,20 @@ func _sabots_tph(g: Node3D, aval: bool, y0: float, z_g: float, lq: float, m_pout
 			for side in [-1.0, 1.0]:
 				var o: Vector3 = Vector3(side * e2, -0.10, 0)
 				RemonteeKit.poutre(g, pa + o, pb + o, 0.13, 0.10, "orange_sabot")
-			var oc: Vector3 = Vector3(0, -0.15 - h_p * 0.5, 0)
-			RemonteeKit.poutre(g, pa + oc, pb + oc, 2.0 * e2 + 0.24, h_p, m_poutre)
+			# deux joues, une sous chaque porteur : le tracteur file dans la fente entre elles, sur ses galets
+			# (retour d'utilisateur du 12/11/2026 : un caisson plein l'avalait, « il passe au plafond »)
+			for side3 in [-1.0, 1.0]:
+				var oc: Vector3 = Vector3(side3 * e2, -0.15 - h_p * 0.5, 0)
+				RemonteeKit.poutre(g, pa + oc, pb + oc, 0.24, h_p, m_poutre)
+		# galets du tracteur dans la fente, axe d'une joue à l'autre ; entretoises dessous
+		var t_g: float = -lq + 1.5
+		while t_g < t_bout - 0.5:
+			var yg: float = float(y_rail.call(t_g, montee)) - Y_TRACTEUR_TPH - 0.02 - 0.15
+			var zg: float = float(z_loc.call(t_g))
+			RemonteeKit.galet(g, Vector3(x0, yg, zg), 0.15)
+			RemonteeKit.cylindre(g, 0.02, 0.02, 2.0 * e2, Transform3D(Basis(Vector3.FORWARD, PI * 0.5), Vector3(x0, yg, zg)), "acier_noir", 8)
+			RemonteeKit.boite_en(g, Vector3(2.0 * e2 + 0.24, 0.10, 0.20), Vector3(x0, float(y_rail.call(t_g + 1.5, montee)) - 0.15 - h_p + 0.05, float(z_loc.call(t_g + 1.5))), m_poutre)
+			t_g += 3.0
 		# portiques : fond du quai, nez, bout du sabot s'il s'avance de plus de 4 m
 		var ts: Array = [-(lq - 0.6), -0.6]
 		if t_bout > 4.0:
@@ -893,9 +949,11 @@ func _sabots_tph(g: Node3D, aval: bool, y0: float, z_g: float, lq: float, m_pout
 			var xci: float = x0 + dedans * (e2 + 0.12)
 			RemonteeKit.boite_en(g, Vector3(absf(xpi - xci), 0.45, 0.40), Vector3((xpi + xci) * 0.5, yr - 0.15 - h_p * 0.5, z), m_poutre)
 			RemonteeKit.boite_en(g, Vector3(4.85, 0.50, 0.50), Vector3(x0, y_t, z), m_poutre)
-		# poulie de renvoi du tracteur au fond du quai, derrière le chariot à quai
+		# poulie de renvoi du tracteur au fond du quai, derrière le chariot à quai : le tracteur arrive dessus et
+		# plonge sous le quai (_cables_tph), elle est à sa hauteur (elle était au niveau du quai, sous lui)
 		if galet:
-			RemonteeKit.galet(g, Vector3(x0, H_CABLE_GARE - 0.45 - 0.25, float(z_loc.call(-(lq + 0.5)))), 0.25)
+			var yr2: float = float(y_rail.call(-lq, montee))
+			RemonteeKit.galet(g, Vector3(x0, yr2 - Y_TRACTEUR_TPH - 0.02 - R_RENVOI_TPH, float(z_loc.call(-(lq + R_RENVOI_TPH)))), R_RENVOI_TPH)
 
 
 ## Façade côté route de la gare aval du Fornet (photos de la gare actuelle, Wikimedia Commons) :
@@ -1017,8 +1075,7 @@ func _gares_grande_motte(aval: bool) -> void:
 			# (escalier d'entrée : grand escalier central de la façade, posé avec le bâtiment par GareAmont)
 	else:
 		TphGrandeMotte.gare_amont(self, g, H_CABLE_GARE, sol)
-	_sabots_tph(g, aval, y_q, z_g, (TphGrandeMotte.Z_NEZ - 0.6) if aval else (TphGrandeMotte.L_BAIE + 1.0),
-		"galva_pylone", "galva_pylone", aval)
+	_sabots_tph(g, aval, y_q, z_g, _lq_tph(aval), "galva_pylone", "galva_pylone", true)
 	# (en tranches : la gare d'un bloc, fusion comprise, faisait 13,5 ms sans fil, relevé du 10/11/2026)
 	await _pause("téléphérique : gare")
 	await MeshMerge.merge_par_tranches(g, [], "Gare", false, _pause.bind("téléphérique : gare, fusion"))
