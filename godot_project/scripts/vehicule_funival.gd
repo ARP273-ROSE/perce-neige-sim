@@ -139,9 +139,13 @@ func construire() -> void:
 
 
 func construire_par_tranches(pause: Callable) -> void:
-	for f in _phases():
-		(f as Callable).call()
+	var ph: Array = _phases()
+	for k in range(ph.size() - 1):
+		(ph[k] as Callable).call()
 		await pause.call()
+	# fusion par tranches, comme les pylônes (d'un bloc : 14-19 ms au NAS, relevé du 12/11/2026)
+	await MeshMerge.merge_par_tranches(self, _portes_noeuds() + _phares_l + _roues, "Funi", false, pause)
+	await pause.call()
 
 
 func _phases() -> Array:

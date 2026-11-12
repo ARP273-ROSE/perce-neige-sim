@@ -387,12 +387,17 @@ static func _matiere(m: StandardMaterial3D, tex: Texture2D, periode: float, rugo
 
 ## (calculées dans des tableaux d'octets : en set_pixel, les 7 textures prenaient 132 ms au PC — relevé du lot 19)
 static func _bruit(graine: int, freq: float, taille: int) -> PackedByteArray:
+	var cle: String = "s%d|%.4f|%d" % [graine, freq, taille]
+	var cuit: PackedByteArray = _bruit_cuit(cle)
+	if cuit.size() == taille * taille:
+		return cuit
 	var fn: FastNoiseLite = FastNoiseLite.new()
 	fn.seed = graine
 	fn.frequency = freq
 	fn.fractal_octaves = 4
 	var img: Image = fn.get_seamless_image(taille, taille)
 	img.convert(Image.FORMAT_L8)
+	_noter_bruit(cle, img.get_data())
 	return img.get_data()
 
 
@@ -571,10 +576,46 @@ static func _r_grille(c: Color, vide: Color, nx: int, ny: int, f: float) -> Arra
 
 ## Moellons : cellules de Voronoï, joints de mortier là où deux cellules se touchent (une période = 2 m). Les deux
 ## bruits cellulaires en deux étapes (16 ms chacun au NAS).
+## Bruits des textures (FastNoiseLite.get_seamless_image), calculés une fois pour toutes (outil :
+## bruits_funival.gd) : chacun prenait 10 à 17 ms d'un bloc sur le fil principal (PWA, relevé du 12/11/2026).
+## Fichier : suite de [clé (u16 + UTF-8), octets (u32 + L8)]. Repli : le calcul, si le fichier manque.
+const FICHIER_BRUITS: String = "res://data/remontees/funival_bruits.bin"
+static var _bruits_cuits: Dictionary = {}
+static var _bruits_lus: bool = false
+static var enregistrer_bruits: bool = false     # (outil : garde chaque bruit calculé dans bruits_calcules)
+static var bruits_calcules: Dictionary = {}
+
+
+static func _bruit_cuit(cle: String) -> PackedByteArray:
+	RemonteeKit.verrou.lock()
+	if not _bruits_lus:
+		_bruits_lus = true
+		if not enregistrer_bruits and FileAccess.file_exists(FICHIER_BRUITS):
+			var f := FileAccess.open(FICHIER_BRUITS, FileAccess.READ)
+			while f.get_position() < f.get_length():
+				var k: String = f.get_buffer(f.get_16()).get_string_from_utf8()
+				_bruits_cuits[k] = f.get_buffer(f.get_32())
+	var r: PackedByteArray = _bruits_cuits.get(cle, PackedByteArray())
+	RemonteeKit.verrou.unlock()
+	return r
+
+
+static func _noter_bruit(cle: String, octets: PackedByteArray) -> void:
+	if enregistrer_bruits:
+		RemonteeKit.verrou.lock()
+		bruits_calcules[cle] = octets
+		RemonteeKit.verrou.unlock()
+
+
 static func _r_moellons(c: Color, mortier: Color, graine: int) -> Array:
 	var n: int = 256
 	var bruits: Dictionary = {}
 	var cellulaire := func(sorte: int, cle: String) -> void:
+		var cle_c: String = "c%d|%d|%d" % [graine, sorte, n]
+		var cuit: PackedByteArray = _bruit_cuit(cle_c)
+		if cuit.size() == n * n:
+			bruits[cle] = cuit
+			return
 		var fn: FastNoiseLite = FastNoiseLite.new()
 		fn.seed = graine
 		fn.noise_type = FastNoiseLite.TYPE_CELLULAR
@@ -583,6 +624,7 @@ static func _r_moellons(c: Color, mortier: Color, graine: int) -> Array:
 		var im: Image = fn.get_seamless_image(n, n)
 		im.convert(Image.FORMAT_L8)
 		bruits[cle] = im.get_data()
+		_noter_bruit(cle_c, bruits[cle])
 	var etapes: Array = [cellulaire.bind(FastNoiseLite.RETURN_DISTANCE2_SUB, "j"), cellulaire.bind(FastNoiseLite.RETURN_CELL_VALUE, "v")]
 	return [n, func(y0: int, y1: int) -> PackedByteArray:
 		var j: PackedByteArray = bruits["j"]
