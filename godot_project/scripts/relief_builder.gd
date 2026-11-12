@@ -42,7 +42,7 @@ uniform sampler2D ortho : source_color, filter_linear_mipmap, repeat_disable;
 uniform sampler2D trous : filter_nearest, repeat_disable;
 uniform float gamma = 1.0;
 uniform vec3 brume = vec3(0.50, 0.62, 0.78);
-uniform vec4 pieces[8];
+uniform vec4 pieces[12];
 uniform int n_pieces = 0;
 uniform float piece = 0.0;
 uniform vec4 emprise = vec4(0.0, 0.0, 1.0, 1.0);
@@ -288,6 +288,8 @@ var _pieces: Array = []               # [rect, nx, nz, hauteurs, masque] (bancs)
 
 func build(t: TunnelBuilder, cran: int = 0) -> void:
 	tunnel = t
+	for k in range(PALIERS.size()):
+		amenageurs.append(_amenagement_palier.bind(k))
 	_cran_depart = cran
 	_pas = 1 if cran <= 2 else 2
 	# 21 km d'emprise depuis le 09/10/2026 (Tignes – Val d'Isère) : 4096 px =
@@ -956,6 +958,48 @@ func _sur_replat(cle: String, aval: bool) -> bool:
 	return false
 
 
+## Paliers fins (pièce à 2 m) communs à des gares de plain-pied, quand l'une d'elles est au bord d'un à-pic : la
+## grille de 25 m d'un replat (REPLATS) relevait la neige jusqu'à 50 m devant son nez. Le Fornet : arrivée du
+## téléphérique et départ du Vallon (retour d'utilisateur, iPad du 13/11/2026 : « le TCD Vallon est au même niveau
+## que le Fornet, ça passe tout seul sans monter » ; données : 2321,9 et 2324,8 m). Le relief mettait le quai du
+## Fornet à 2316,6 m et celui du Vallon, sur son éperon, à 2322,9 m ; on y montait par un escalier.
+## [[clé, aval ?, recul derrière la gare (m), à pic ?]..., altitude, demi-largeur ajoutée, raccord (m)]. À pic : le
+## palier commence à un raccord derrière le nez, le terrain d'origine reste devant (les cabines en sortent).
+const PALIERS: Array = [[[["tph_fornet", false, 10.0, true], ["tcd10_vallon_iseran", true, 30.0, false]], 2322.9, 5.0, 10.0]]
+
+
+func _amenagement_palier(k: int) -> Dictionary:
+	var pl: Array = PALIERS[k]
+	var y: float = float(pl[1])
+	var fondu: float = float(pl[3])
+	var coins: PackedVector2Array = PackedVector2Array()
+	for g in pl[0]:
+		for D in RemonteesDonnees.LIGNES:
+			if String(D["cle"]) != String(g[0]):
+				continue
+			var a: Vector2 = RemonteesDomaine.monde(float(D["aval"][0]), float(D["aval"][1]))
+			var b: Vector2 = RemonteesDomaine.monde(float(D["amont"][0]), float(D["amont"][1]))
+			var u: Vector2 = (b - a).normalized()
+			var lat: Vector2 = Vector2(-u.y, u.x)
+			# (gares avancées ou reculées sur leur axe : le Vallon, 42 m)
+			var o: Vector2 = a + u * float(RemonteesDomaine.AVANCES_AVAL.get(String(g[0]), 0.0)) if bool(g[1]) \
+					else b - u * float(RemonteesDomaine.RECULS_AMONT.get(String(g[0]), 0.0))
+			var vers: Vector2 = -u if bool(g[1]) else u          # vers l'arrière de la gare
+			var t0: float = fondu if bool(g[3]) else -8.0
+			var t1: float = LigneRemontee.l_gare_pour(String(D["famille"])) + 2.0 + float(g[2])
+			var hl: float = float(D["voie"]) * 0.5 + float(pl[2])
+			for t in [t0, t1]:
+				for sx in [-1.0, 1.0]:
+					coins.append(o + vers * t + lat * (sx * hl))
+	if coins.size() < 3:
+		return {}
+	var poly: PackedVector2Array = Geometry2D.convex_hull(coins)
+	var bb: Rect2 = Rect2(poly[0], Vector2.ZERO)
+	for v in poly:
+		bb = bb.expand(v)
+	return {"rect": bb.grow(fondu + 6.0), "plats": [[poly, y, fondu]]}
+
+
 ## Terrain mis au niveau du replat sous l'emprise de chaque gare (remblai comme déblai), raccord doux autour.
 func _poser_replats() -> void:
 	for rp in REPLATS:
@@ -1155,16 +1199,22 @@ func reboucher(cle: String) -> void:
 		_poser_trous()
 
 
+## Emprises percées dans les tuiles (pièces fines, fosses) : taille du tableau `pieces` des shaders du relief.
+const MAX_PIECES: int = 12
+
+
 func _poser_trous() -> void:
 	if _mat_terrain == null:
 		return
 	var v: Array = []
 	for r in _rects_pieces + _fosses.values():
 		v.append(Vector4(r.position.x, r.position.y, r.end.x, r.end.y))
-	var n: int = mini(v.size(), 8)
-	while v.size() < 8:
+	var n: int = mini(v.size(), MAX_PIECES)
+	if v.size() > MAX_PIECES:
+		push_warning("relief : %d pièces et fosses, %d au plus — les dernières restent couvertes" % [v.size(), MAX_PIECES])
+	while v.size() < MAX_PIECES:
 		v.append(Vector4.ZERO)
-	_mat_terrain.set_shader_parameter("pieces", v.slice(0, 8))
+	_mat_terrain.set_shader_parameter("pieces", v.slice(0, MAX_PIECES))
 	_mat_terrain.set_shader_parameter("n_pieces", n)
 	if fin != null and fin.anneaux != null:
 		# (anneaux sous le bord des pièces fines : de même surface, et plus de points de ciel à la jonction)

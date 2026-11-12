@@ -2,23 +2,24 @@ class_name TapisRoulant
 extends Node3D
 ## Tapis roulant (« magic carpet ») : une bande de caoutchouc au ras de la neige qui monte les skieurs à pied ou à
 ## skis. Demande d'utilisateur du 12/11/2026 : « fais-moi le double tapis pour remonter sur la tête de Solaise ».
-## Tracé : OpenStreetMap (aerialway=magic_carpet, « Pim » et « Pam », deux bandes jumelles de 231 m qui montent du
-## plateau à la gare amont de la TCD de Solaise) ; largeur, vitesse et joues estimées (tapis courants : bande de
-## 0,8 m, 0,6 à 0,8 m/s).
+## Tracé et vitesse : deux montées enregistrées au GPS (avril 2026, une sur chaque bande ; retour d'utilisateur du
+## 13/11/2026 : « les tapis de Solaise doivent être au GPX ») — droite ajustée sur les deux traces, cap −39,3°,
+## bandes à 1,5 m d'axe en axe, 232,8 m du bas au haut, parcourus en 227 s (1,0 m/s). Noms « Pim » et « Pam » :
+## OpenStreetMap. Largeur et joues estimées (bande courante de 0,8 m).
 ##
 ## Le skieur posé sur la bande avance avec elle (il peut y marcher pour aller plus vite) ; au bout, il est déposé
 ## sur la neige.
 
 const LARGEUR: float = 0.80
-const VITESSE: float = 0.80                  # m/s
+const VITESSE: float = 1.0                   # m/s (GPS : 232,8 m en 227 s)
 const PAS: float = 1.0                       # échantillonnage du profil (m)
 const H_BANDE: float = 0.03                  # dessus de la bande au-dessus de la neige
 const PERIODE_RAYURES: float = 0.40          # m : une rayure claire tous les 40 cm (on la voit avancer)
 
-## [nom, [lat, lon] du bas, [lat, lon] du haut] — OpenStreetMap (ODbL), coordonnées seules.
+## [nom, [lat, lon] du bas, [lat, lon] du haut] — relevé GPS (embarquement et débarquement).
 const TAPIS: Array = [
-	["Pim", [45.4302038, 6.9957115], [45.4318232, 6.9938587]],
-	["Pam", [45.4301946, 6.9956928], [45.4318138, 6.9938401]],
+	["Pim", [45.4302006, 6.9957608], [45.4318184, 6.9938724]],
+	["Pam", [45.4301921, 6.9957460], [45.4318098, 6.9938576]],
 ]
 const CONSTRUIRE_JUSQUA: float = 900.0
 

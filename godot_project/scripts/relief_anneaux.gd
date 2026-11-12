@@ -384,11 +384,11 @@ func poser_trous(rects: Array) -> void:
 	var v: Array = []
 	for r in rects:
 		v.append(Vector4((r as Rect2).position.x, (r as Rect2).position.y, (r as Rect2).end.x, (r as Rect2).end.y))
-	var n: int = mini(v.size(), 8)
-	while v.size() < 8:
+	var n: int = mini(v.size(), ReliefBuilder.MAX_PIECES)
+	while v.size() < ReliefBuilder.MAX_PIECES:
 		v.append(Vector4.ZERO)
 	for m in _mats:
-		(m as ShaderMaterial).set_shader_parameter("pieces", v.slice(0, 8))
+		(m as ShaderMaterial).set_shader_parameter("pieces", v.slice(0, ReliefBuilder.MAX_PIECES))
 		(m as ShaderMaterial).set_shader_parameter("n_pieces", n)
 
 

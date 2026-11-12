@@ -1694,9 +1694,18 @@ func _amenager_batiment(g: Node3D, ys: float, ys_sol: float, zs: float, hx: floa
 ## habillée de bardage), remonté au niveau du plancher autour du bâtiment.
 func _amenager_relief_amont() -> void:
 	var rel: ReliefBuilder = relief_trous
-	if rel == null or not is_instance_valid(rel) or not is_inside_tree() or rel.has_meta("funival_amont"):
+	if rel == null or not is_instance_valid(rel) or not is_inside_tree():
 		return
-	rel.set_meta("funival_amont", true)
+	if rel.has_meta("funival_amont"):
+		# ligne démolie au loin puis reconstruite : la pièce du relief est restée, mais l'habillage de la salle (murs
+		# épais, toit) était à la ligne et partait avec elle — on voyait le talus du rabotage en travers de la salle,
+		# sans plafond (retour d'utilisateur, iPad du 13/11/2026 : « le sol traverse la rame en gare du haut »).
+		# (en cours : la première pose habillera la salle en finissant)
+		if bool(rel.get_meta("funival_amont")):
+			rel._poser_trous()
+			_habiller_salle()
+		return
+	rel.set_meta("funival_amont", false)
 	var xf: Transform3D = global_transform
 	var monde := func(pts: Array) -> PackedVector2Array:
 		var out: PackedVector2Array = PackedVector2Array()
@@ -1759,15 +1768,17 @@ func _amenager_relief_amont() -> void:
 			await get_tree().process_frame
 			t_deb[0] = Time.get_ticks_usec()
 	await rel._build_piece({"rect": bb.grow(14.0), "trous": trous, "remblais": remblais, "rabots": rabots}, pause)
-	if not is_instance_valid(rel) or not is_inside_tree():
+	if not is_instance_valid(rel):
 		return
 	rel._poser_trous()
+	rel.set_meta("funival_amont", true)
 	await pause.call()
 	_habiller_salle()
 
 
 ## Début (d) de la partie de la salle amont qui sort du terrain (INF : enterrée).
 var _salle_emerge_d: float = INF
+var _habillage_salle: Node3D = null
 ## Terrain d'origine (le plus haut, sur l'emprise élargie de 2,6 m) au-dessus de chaque tranche de 4 m de la salle,
 ## en hauteur de la ligne, relevé avant le rabotage.
 var _haut_orig: Array = []
@@ -1777,12 +1788,16 @@ var _haut_orig: Array = []
 func _habiller_salle() -> void:
 	if _salle_emerge_d == INF:
 		return
+	# (une seule : une démolition cache les enfants de la ligne avant de les libérer)
+	if is_instance_valid(_habillage_salle) and _habillage_salle.get_parent() == self and _habillage_salle.visible:
+		return
 	var L: float = longueur_h()
 	var hx: float = VehiculeFunival.DEMI_LARGEUR + 0.05 + 4.2
 	var d0: float = L - L_HALL
 	var g: Node3D = Node3D.new()
 	g.name = "HabillageSalle"
 	add_child(g)
+	_habillage_salle = g
 	var bard: Material = mat_funi("bardage_anthracite")
 	var beton: Material = mat_funi("beton_banche")
 	# par tranches de 4 m qui suivent la voie (d'un bloc, le toit plongeait dans la salle où la pente change) ; la
