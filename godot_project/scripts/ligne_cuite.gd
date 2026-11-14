@@ -244,7 +244,7 @@ func _pause() -> void:
 
 func _attendre_image() -> void:
 	var f0: int = Engine.get_process_frames()
-	while Engine.get_process_frames() == f0 and not abandon:
+	while Engine.get_process_frames() == f0 and not abandon and not LigneRemontee.fermeture:
 		OS.delay_msec(1)
 	_t_fil = Time.get_ticks_usec()
 	_octets = 0

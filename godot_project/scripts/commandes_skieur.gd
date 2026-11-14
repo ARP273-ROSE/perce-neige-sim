@@ -260,6 +260,10 @@ func set_auto(on: bool) -> void:
 
 
 ## Chaussé ou pas : libellés CHAUSSER / DÉCHAUSSER, COURIR / SCHUSS.
+func chausse_affiche() -> bool:
+	return _chausse
+
+
 func set_chausse(oui: bool) -> void:
 	_chausse = oui
 	_maj_carte()

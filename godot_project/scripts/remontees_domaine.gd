@@ -1608,6 +1608,8 @@ func _attendre_perche() -> void:
 			_attente_tk = null
 			a_bord = [lg, i, 0, true, false, "perche"]
 			_etat_bord = lg.etat
+			_perche_x = 0.3
+			_perche_vs = 0.0
 			_suivre_perche()
 			message.emit("Perche prise — %s" % lg.nom_ligne)
 			return
@@ -1619,6 +1621,15 @@ func _attendre_perche() -> void:
 
 
 const RECUL_PERCHE: float = 2.2
+## Départ à l'enrouleur (audit du 14/11/2026 : le skieur passait de 0 à la vitesse du câble en une
+## image) : la corde se déroule, son ressort et le frein du tambour l'emmènent en ~2 s (1,6 m/s² au
+## plus), puis il se tient à RECUL_PERCHE derrière la pince, où le ressort équilibre la pente.
+## Ressort-amortisseur sur l'écart à cette place : x'' = −ω²·e − 2ζω·e', e = recul − RECUL_PERCHE.
+const PERCHE_W: float = 1.32
+const PERCHE_ZETA: float = 0.7
+const PERCHE_A_MAX: float = 1.6
+var _perche_x: float = RECUL_PERCHE     # recul du skieur derrière la pince (m)
+var _perche_vs: float = -1.0            # vitesse du skieur (m/s) ; < 0 : régime établi
 
 
 func _suivre_perche() -> void:
@@ -1634,7 +1645,22 @@ func _suivre_perche() -> void:
 	# 2,2 m derrière la pince : corde et perche en biais jusqu'à lui (vidéo
 	# du Montet, retour d'utilisateur, 25/10/2026 — il était presque sous le câble,
 	# perche verticale et archet devant lui)
-	var pos: Vector3 = pc + arriere * RECUL_PERCHE
+	var dt_p: float = get_process_delta_time()
+	if _perche_vs >= 0.0 and dt_p > 0.0:
+		var vc: float = maxf(lg.vitesse_reelle, 0.0)
+		var nsp: int = maxi(1, int(ceil(dt_p / 0.01)))
+		var hp: float = dt_p / nsp
+		for _k in range(nsp):
+			var a_s: float = PERCHE_W * PERCHE_W * (_perche_x - RECUL_PERCHE) + 2.0 * PERCHE_ZETA * PERCHE_W * (vc - _perche_vs)
+			a_s = clampf(a_s, -3.8, PERCHE_A_MAX)
+			if _perche_vs <= 0.0 and a_s < 0.0:
+				a_s = 0.0                   # (il ne recule pas sur la neige à l'arrêt)
+			_perche_vs += a_s * hp
+			_perche_x = clampf(_perche_x + (vc - _perche_vs) * hp, 0.0, 6.0)
+		if absf(_perche_x - RECUL_PERCHE) < 0.02 and absf(_perche_vs - vc) < 0.02:
+			_perche_vs = -1.0               # établi : on suit la pince
+			_perche_x = RECUL_PERCHE
+	var pos: Vector3 = pc + arriere * _perche_x
 	var loc: Vector3 = lg.global_transform.affine_inverse() * pos
 	var yl: float = lg.terrain(clampf(-loc.z, 0.0, lg.longueur_h()))
 	var y: float = (lg.global_transform * Vector3(loc.x, yl, loc.z)).y

@@ -24,6 +24,7 @@ var profil: PackedVector2Array = PackedVector2Array([Vector2(0, 0), Vector2(1500
 	set(v):
 		profil = v
 		_profil_x = PackedFloat32Array()
+		_ligne_moy = Vector2.ZERO
 ## Abscisses du profil (recherche par dichotomie dans terrain()).
 var _profil_x: PackedFloat32Array = PackedFloat32Array()
 var pylones: Array = []          # [{d, montee:[[n,"S"],…], descente:[…]}]
@@ -367,13 +368,16 @@ func _cont() -> Node3D:
 ## du 28/10/2026 : ni scripts, ni physique, ni nœuds rattachés).
 const FIL_US: int = 4000
 var _abandon: bool = false
+## Fermeture du jeu demandée : les fils de construction cessent d'attendre les images
+## (le fil principal, lui, n'en produira plus) et finissent d'un trait.
+static var fermeture: bool = false
 
 
 func _pause_fil() -> void:
 	if Time.get_ticks_usec() - _t_tranche < FIL_US:
 		return
 	var f0: int = Engine.get_process_frames()
-	while Engine.get_process_frames() == f0 and not _abandon:
+	while Engine.get_process_frames() == f0 and not _abandon and not fermeture:
 		OS.delay_msec(1)
 	_t_tranche = Time.get_ticks_usec()
 
@@ -555,25 +559,67 @@ func _points_appui() -> Array:
 ## (+ 80 kg par place sur le brin montée), répartis à l'espacement.
 func _parametres_chainette() -> void:
 	var g: float = 9.81
-	var w_cable: float = 0.0039 * diametre_cable * diametre_cable * g      # N/m
+	# téléskis : les fiches gardent souvent le 47 mm par défaut ; un câble de téléski fait 14-20 mm
+	var d_c: float = 16.0 if teleski() and diametre_cable >= 30.0 else diametre_cable
+	var w_cable: float = 0.0039 * d_c * d_c * g                            # N/m
 	var places: int = VehiculeRemontee.DESCRIPTIONS.get(famille, ["", 6, ""])[1]
 	var m_v: float = masse_vehicule()                                      # kg à vide, pince comprise
 	var e: float = maxf(espacement, 8.0)
 	var w_desc: float = w_cable + m_v * g / e
-	var w_mont: float = w_desc + 80.0 * places * g / e
+	# 70 % d'occupation en montée, comme le pendule et la puissance (audit du 14/11/2026 : 100 % ici)
+	# (Funival : câble sur galets, géométrie calée telle quelle — inchangé)
+	var occ: float = 1.0 if self is Funival else OCCUPATION
+	var w_mont: float = w_desc + 80.0 * places * occ * g / e
 	var H: float = tension_h()
 	if tricable():
-		# les véhicules roulent sur les porteurs (57 mm, 2 par voie)
-		w_desc = 2.0 * 0.0039 * 57.0 * 57.0 * g + m_v * g / e
-		w_mont = w_desc + 80.0 * places * g / e
+		# les véhicules roulent sur les porteurs (57 mm, 2 par voie) ; leur poids est compté à part, en
+		# charges ponctuelles (_charges_ponctuelles) : la chaînette ne porte que les câbles
+		w_desc = 2.0 * 0.0039 * 57.0 * 57.0 * g
+		w_mont = w_desc
 	_a_montee = H / w_mont
 	_a_descente = H / w_desc
 
 
 ## Masse d'un véhicule à vide (kg), pince ou chariot compris.
+const OCCUPATION: float = 0.7          # passagers en montée, part des places
+
+## Vent (audit du 14/11/2026 : seules les accélérations faisaient pencher les véhicules) : un vent de
+## nord-ouest de ~6 m/s en moyenne, avec rafales (sommes de sinus, sans hasard : mêmes images d'une
+## partie à l'autre). Une télécabine penche de ~0,4° à 6 m/s, ~1,1° à 10 m/s, ~4° à 20 m/s.
+static var vent_actif: bool = true
+static func vent_monde(t: float) -> Vector3:
+	if not vent_actif:
+		return Vector3.ZERO
+	var v: float = 6.0 + 2.5 * sin(0.13 * t) + 1.5 * sin(0.71 * t + 1.0) + 1.0 * sin(1.9 * t + 2.0)
+	var cap: float = deg_to_rad(120.0 + 15.0 * sin(0.021 * t))     # vers le sud-est
+	return Vector3(sin(cap), 0.0, -cos(cap)) * maxf(v, 0.0)
+
+
+var _vent_local: Vector3 = Vector3.ZERO
+var _k_aire: float = 0.0
+
+
+## ½·ρ·Cx·S (kg/m) d'un véhicule, ρ = 1,0 en altitude.
+func _aire_vent() -> float:
+	if teleski():
+		return 0.0
+	if tricable():
+		return 0.5 * 1.0 * 1.2 * 9.0
+	if famille.begins_with("cabine"):
+		return 0.5 * 1.0 * 1.2 * 4.4
+	return 0.5 * 1.0 * 1.0 * 2.5          # siège, passagers compris
+
+
+func _maj_vent() -> void:
+	_k_aire = _aire_vent()
+	_vent_local = global_basis.inverse() * vent_monde(Time.get_ticks_msec() / 1000.0)
+
+
 func masse_vehicule() -> float:
 	if tricable():
 		return 2950.0                       # Zeta du 3S (fiche technique)
+	if teleski():
+		return 25.0                         # perche ou arbalète, enrouleur compris (175 kg avant)
 	var places: int = VehiculeRemontee.DESCRIPTIONS.get(famille, ["", 6, ""])[1]
 	return 850.0 if famille.begins_with("cabine") else 95.0 * places + 80.0
 
@@ -584,6 +630,8 @@ func masse_vehicule() -> float:
 func tension_h() -> float:
 	if tricable():
 		return 1100000.0
+	if teleski():
+		return 30000.0                      # téléski : 20 à 40 kN (câble de 14-20 mm), flèche ~4 % sur 100 m
 	return 300000.0 * pow(diametre_cable / 47.0, 2.0)
 
 
@@ -790,7 +838,7 @@ func _pire_portee_teleski(a: Array, b: Array) -> Array:
 	var n: int = maxi(16, int(absf(b[0] - a[0]) / 3.0))
 	for j in range(1, n):
 		var d: float = lerpf(a[0], b[0], float(j) / float(n))
-		var e: float = _sol_teleski(d) + GARDE_TELESKI - chainette(d, a[0], a[1], b[0], b[1], _a_montee)
+		var e: float = _sol_teleski(d) + GARDE_TELESKI - chainette(d, a[0], a[1], b[0], b[1], _a_portee(a[0], a[1], b[0], b[1], true))
 		if e > pire:
 			pire = e
 			dp = d
@@ -837,12 +885,13 @@ func _ajuster_aux_mesures() -> void:
 			for sp in [[pts[i], pts[i + 1]], [pts[i + 1], pts[i + 2]]]:
 				var a: Array = sp[0]
 				var b: Array = sp[1]
-				var xc: Array = chainette_xm_c(a[0], a[1], b[0], b[1], _a_montee)
+				var a_p: float = _a_portee(a[0], a[1], b[0], b[1], true)
+				var xc: Array = chainette_xm_c(a[0], a[1], b[0], b[1], a_p)
 				var xm: float = xc[0]
 				var cc: float = xc[1]
 				for k in range(1, 16):
 					var d: float = lerpf(a[0], b[0], float(k) / 16.0)
-					var yc: float = _a_montee * cosh((d - xm) / _a_montee) + cc
+					var yc: float = a_p * cosh((d - xm) / a_p) + cc
 					marge = minf(marge, yc - terrain(d) - _garde_exigee(d))
 			if marge < 0.8:
 				continue
@@ -914,7 +963,8 @@ func _garde_au_sol(proteger_c: bool = false) -> bool:
 			var a: Array = pts[i]
 			var b: Array = pts[i + 1]
 			var pire: float = 0.0
-			var xc: Array = chainette_xm_c(a[0], a[1], b[0], b[1], _a_montee)
+			var a_p: float = _a_portee(a[0], a[1], b[0], b[1], true)
+			var xc: Array = chainette_xm_c(a[0], a[1], b[0], b[1], a_p)
 			var xm: float = xc[0]
 			var cc: float = xc[1]
 			var cle: Vector2i = Vector2i(i, 0)
@@ -935,7 +985,7 @@ func _garde_au_sol(proteger_c: bool = false) -> bool:
 				var u: float = float(k) / 12.0
 				var d: float = lerpf(a[0], b[0], u)
 				# brin montée (chargé) : la flèche la plus forte
-				var yc: float = _a_montee * cosh((d - xm) / _a_montee) + cc
+				var yc: float = a_p * cosh((d - xm) / a_p) + cc
 				pire = maxf(pire, gs[k - 1] - yc)
 			if pire > 0.05:
 				var ga: bool = i > 0
@@ -1156,11 +1206,12 @@ func _garde_portee(k: int) -> float:
 	var pts: Array = _points_appui()
 	var a: Array = pts[k]
 	var b: Array = pts[k + 1]
-	var xc: Array = chainette_xm_c(a[0], a[1], b[0], b[1], _a_montee)
+	var a_p: float = _a_portee(a[0], a[1], b[0], b[1], true)
+	var xc: Array = chainette_xm_c(a[0], a[1], b[0], b[1], a_p)
 	var m: float = INF
 	for j in range(1, 20):
 		var x: float = lerpf(a[0], b[0], float(j) / 20.0)
-		m = minf(m, _a_montee * cosh((x - float(xc[0])) / _a_montee) + float(xc[1]) - terrain(x) - _garde_exigee(x))
+		m = minf(m, a_p * cosh((x - float(xc[0])) / a_p) + float(xc[1]) - terrain(x) - _garde_exigee(x))
 	return m
 
 
@@ -1490,6 +1541,25 @@ func _preparer_raccords() -> void:
 
 ## (Mêmes appuis que _points_appui, parcourus sans recopier la liste : appelé
 ## des milliers de fois par le calcul des têtes.)
+## Tension du câble le long de la ligne (audit du 14/11/2026 : la même partout) : T(y) = T0 + w·y, le câble
+## est plus tendu en haut qu'en bas (Grattalu : 121 kN d'écart, 40 % de H) ; et H = T·cos θ dans les
+## portées en pente. Paramètre de chaînette de la portée, la moyenne de la ligne gardée (calage inchangé
+## en moyenne : les têtes sont recalées par _calculer_tetes). Monocâbles seulement.
+func _a_portee(xa: float, ya: float, xb: float, yb: float, montee: bool) -> float:
+	var a: float = _a_montee if montee else _a_descente
+	if tricable() or vaetvient():
+		return a
+	if _ligne_moy.x <= 0.0:
+		var L: float = longueur_h()
+		_ligne_moy = Vector2(cos(atan2(terrain(L) - terrain(0.0), maxf(L, 1.0))), 0.5 * (terrain(0.0) + terrain(L)))
+	var cos_p: float = cos(atan2(yb - ya, maxf(xb - xa, 0.1)))
+	var dy: float = 0.5 * (ya + yb) - _ligne_moy.y
+	return maxf((a / _ligne_moy.x + dy) * cos_p, 0.3 * a)
+
+
+var _ligne_moy: Vector2 = Vector2.ZERO        # cos de la pente moyenne, altitude moyenne des gares
+
+
 func _y_chainette(d: float, montee: bool = true) -> float:
 	var n: int = pylones.size()
 	var xa: float = _h_nez[0]
@@ -1510,7 +1580,7 @@ func _y_chainette(d: float, montee: bool = true) -> float:
 			xb = L - _h_nez[1]
 			yb = terrain(L) + H_CABLE_GARE
 		if d <= xb or i == n:
-			return chainette(clampf(d, xa, xb), xa, ya, xb, yb, _a_montee if montee else _a_descente)
+			return chainette(clampf(d, xa, xb), xa, ya, xb, yb, _a_portee(xa, ya, xb, yb, montee))
 		if i < n:
 			xb = float(pylones[i]["d"])
 			yb = _tetes[i]
@@ -1628,7 +1698,7 @@ func _temps_boucle(v: float) -> float:
 				t += 0.05
 			continue
 		var tt: float = clampf(minf(x, l - x) / L_FREIN, 0.0, 1.0)
-		var lisse: float = tt * tt * tt * (tt * (tt * 6.0 - 15.0) + 10.0)
+		var lisse: float = profil_lanceur(tt)
 		s2 += sqrt(vv - ve * lisse) * 0.05
 		t += 0.05
 	return t
@@ -2179,8 +2249,8 @@ func vitesse_en(s: float) -> float:
 	var z: Array = zone(s)
 	if z[0] == "ligne" or fixe():
 		return vitesse
-	# sur toute la longueur du lanceur, la vitesse suit une courbe « smootherstep »
-	# (6t⁵ − 15t⁴ + 10t³) : dérivée nulle aux deux bouts, donc accélération
+	# sur toute la longueur du lanceur, la vitesse suit profil_lanceur (avant le 14/11/2026, un
+	# « smootherstep ») : dérivée nulle aux deux bouts, donc accélération
 	# nulle à l'entrée et à la sortie, continue et régulière entre les deux —
 	# pas d'à-coup à l'entrée du lanceur ni à l'embrayage (retour d'utilisateur, 22/10/2026)
 	var x: float = z[1]
@@ -2188,8 +2258,30 @@ func vitesse_en(s: float) -> float:
 	# (profil sur l'énergie cinétique v² : la décélération est la plus forte
 	# au milieu du lanceur, pas près de l'entrée où la vitesse est grande)
 	var t: float = clampf(minf(x, l - x) / L_FREIN, 0.0, 1.0)
-	var lisse: float = t * t * t * (t * (t * 6.0 - 15.0) + 10.0)
+	var lisse: float = profil_lanceur(t)
 	return sqrt(vitesse * vitesse - (vitesse * vitesse - v_embarquement * v_embarquement) * lisse)
+
+
+## Part de l'énergie cinétique perdue à la fraction t du lanceur : décélération constante au milieu,
+## raccordée en douceur (rampes « smoothstep » sur 20 % à chaque bout : accélération et à-coup continus).
+## Pic 1,25 × la moyenne au lieu de 1,875 × avec l'ancien « smootherstep » (audit du 14/11/2026 :
+## 2,55 m/s² au Vallon, 2,92 au 3S, pour 1 à 1,5 dans les vraies gares) — sans allonger les gares.
+const RAMPE_LANCEUR: float = 0.2
+
+
+static func profil_lanceur(t: float) -> float:
+	var r: float = RAMPE_LANCEUR
+	t = clampf(t, 0.0, 1.0)
+	var f: float
+	if t < r:
+		var u: float = t / r
+		f = r * (u * u * u - 0.5 * u * u * u * u)
+	elif t <= 1.0 - r:
+		f = 0.5 * r + (t - r)
+	else:
+		var u2: float = (1.0 - t) / r
+		f = (1.0 - r) - r * (u2 * u2 * u2 - 0.5 * u2 * u2 * u2 * u2)
+	return f / (1.0 - r)
 
 
 # --- gares, pylônes, câble ----------------------------------------------------------
@@ -4933,6 +5025,7 @@ func _process_corps(delta: float) -> void:
 	delta = _tic_lod(delta)
 	if delta < 0.0:
 		return
+	_maj_vent()
 	_regler_vitesse(delta)
 	_maj_onde(delta)
 	_maj_portillons(delta)
@@ -5010,6 +5103,8 @@ func _preparer_noyau() -> void:
 		"guide_bras": VehiculeRemontee.A108_X_ROULEMENT - VehiculeRemontee.A108_PIVOT.x,
 		"poids_montee": _poids_vehicule(true) / _tension, "poids_descente": _poids_vehicule(false) / _tension,
 		"w_montee": float(_w_veh[0]), "w_descente": float(_w_veh[1]),
+		"sabots_impairs": tricable() or sabots_tph(),
+		"amort": v0.amortissement(),
 	})
 	_noyau_vehicules(n)
 	if n.has_method("set_charges"):
@@ -5102,7 +5197,9 @@ func _noyau_valide() -> bool:
 
 func _etape_noyau(delta: float) -> void:
 	_noyau.set_vitesse(vitesse)
-	var actives: bool = CHARGES_PONCTUELLES and _mat_cable != null and _n_appuis >= 2
+	if _noyau.has_method("set_vent"):
+		_noyau.set_vent(_vent_local, _k_aire)
+	var actives: bool = charges_ponctuelles_actives() and _mat_cable != null and _n_appuis >= 2
 	var ss: PackedFloat64Array = _noyau.etape(delta, regime(), point_vue, vue_active, collisions_actives,
 		_onde_amp, _onde_t, _a_montee, actives)
 	for i in range(mini(ss.size(), _vehicules.size())):
@@ -5793,15 +5890,27 @@ func _etape_gdscript(delta: float) -> void:
 ## Appuis du câble (nez des gares, têtes de pylônes) et charges moyennes,
 ## pour la flèche locale sous chaque véhicule (retour d'utilisateur, 23/10/2026 :
 ## « tenir compte du poids ponctuel et local de chaque siège et cabine »).
+## Va-et-vient à pylônes (Grande Motte, Fornet) : la flèche des porteurs s'appuie aux bouts des sabots.
+func sabots_tph() -> bool:
+	return vaetvient() and not (self is Funival) and not pylones.is_empty()
+
+
+## Portée `ip` d'appuis posés aux bouts des sabots : les impaires sont les sabots eux-mêmes.
+func portee_sur_sabot(ip: int) -> bool:
+	return (tricable() or sabots_tph()) and ip % 2 == 1
+
+
 func _preparer_charges() -> void:
 	_appuis = PackedFloat32Array()
 	for p in _points_appui():
 		_appuis.append(float(p[0]))
-	if tricable():
-		# le porteur repose sur tout le sabot : pas de flèche sur sa longueur
+	if tricable() or sabots_tph():
+		# le porteur repose sur tout le sabot : pas de flèche sur sa longueur. Téléphériques aussi (audit
+		# du 14/11/2026 : appuyée au centre du pylône, la flèche passait le chariot 0,59 m sous le sabot et
+		# le chemin de la cabine y faisait un coude de 2P/H = 8,7°, 4-5° de balancement parasite)
 		_appuis = PackedFloat32Array([0.0])
 		for p2 in pylones:
-			var hs2: float = l_sabot_3s(p2) * 0.5
+			var hs2: float = (l_sabot_3s(p2) if tricable() else SABOT_TPH) * 0.5
 			_appuis.append(float(p2["d"]) - hs2)
 			_appuis.append(float(p2["d"]) + hs2)
 		_appuis.append(longueur_h())
@@ -5835,13 +5944,20 @@ func _mats_charges() -> Array:
 ## que la chaînette (_parametres_chainette).
 func _poids_vehicule(montee: bool) -> float:
 	var places: int = VehiculeRemontee.DESCRIPTIONS.get(famille, ["", 6, ""])[1]
-	return (masse_vehicule() + (80.0 * places if montee else 0.0)) * 9.81
+	return (masse_vehicule() + (80.0 * places * OCCUPATION if montee else 0.0)) * 9.81
 
 
 const CHARGES_PONCTUELLES: bool = false
+## 3S : 1 à 3 cabines par portée de 700 m, chacune creuse les porteurs de plusieurs mètres (8,9 m pour une
+## cabine pleine au milieu de la portée de 742 m) : charges ponctuelles, comme au téléphérique, au lieu
+## d'un poids réparti (audit du 14/11/2026). Les monocâbles gardent le poids réparti (câble immobile).
+func charges_ponctuelles_actives() -> bool:
+	return CHARGES_PONCTUELLES or tricable()
+
+
 ## Charges du moment : chaque véhicule en ligne, sur son brin.
 func _charges_ponctuelles() -> void:
-	if not CHARGES_PONCTUELLES or _mat_cable == null or _n_appuis < 2:
+	if not charges_ponctuelles_actives() or _mat_cable == null or _n_appuis < 2:
 		return
 	var xm: float = signf(_x_brin(true))
 	var listes: Array = [[], []]
@@ -5850,6 +5966,8 @@ func _charges_ponctuelles() -> void:
 		if zone(s)[0] != "ligne":
 			continue
 		var p: Vector3 = _point_cable(s)[0]
+		if portee_sur_sabot(_portee_de(-p.z)):
+			continue                  # (portée par le sabot du pylône)
 		var montee: bool = signf(p.x) == xm
 		var l: Array = listes[0 if montee else 1]
 		if l.size() < 64:
@@ -6299,8 +6417,12 @@ func _placer(i: int) -> void:
 		v.psi0 = 0.0
 		if z[0] == "ligne" or not guide_psi():
 			v.psi0 = v.psi0_joueur if not is_nan(v.psi0_joueur) else (v.psi0_tire if montee_v else 0.0)
+		if z[0] == "ligne" and _k_aire > 0.0:
+			var vx: float = (v.transform.basis.inverse() * _vent_local).x
+			v.psi0 += atan(_k_aire * vx * absf(vx) / (v.masse * 9.81))
 		v.limite_psi = limite_guide(s)
-		v.balancer(_dt, z[0] != "ligne")
+		# siège à pince fixe : pas de guide en gare, il balance librement autour de la poulie
+		v.balancer(_dt, z[0] != "ligne", fixe())
 		v.masse = m0
 	# corps de collision (base directe) : suit aussi le balancement — sur les
 	# lignes proches seulement (déplacer des centaines de corps à chaque

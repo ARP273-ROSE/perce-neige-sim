@@ -365,7 +365,7 @@ func _charger_musique(gare: int) -> void:
 	# survivrait à la fermeture).
 	var k: int = gare - 1
 	_taches_musique[k] = WorkerThreadPool.add_task(func() -> void:
-		_flux_prets[k] = _flux_musique(FileAccess.get_file_as_bytes(chemin)), false, "musique de gare")
+		_flux_prets[k] = _flux_musique(FileAccess.get_file_as_bytes(chemin)), true, "musique de gare")
 
 
 func _relever_musique() -> void:
@@ -383,7 +383,8 @@ func _relever_musique() -> void:
 func _exit_tree() -> void:
 	for k in range(2):
 		if _taches_musique[k] >= 0:
-			WorkerThreadPool.wait_for_task_completion(_taches_musique[k])
+			LigneRemontee.fermeture = true
+			LigneRemontee.attendre_fil(_taches_musique[k])
 			_taches_musique[k] = -1
 		_flux_prets[k] = null
 

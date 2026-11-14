@@ -48,8 +48,14 @@ const IPS_ARRIERE_PLAN: int = 20
 static var cran_courant: int = 0
 ## PC sans carte graphique dédiée : remontées aux portées courtes et véhicules allégés, à tous les crans.
 static var allege: bool = false
-## Dernier cran de départ qui garde le relief fin et le pack : 1 sur carte dédiée, 0 ailleurs.
+## Dernier cran qui garde le relief fin et le pack. Décidé par la machine et non plus par le cran
+## de départ (audit du 14/11/2026 : partie au cran 2, une GTX 1060 perdait le HD ; une puce
+## intégrée ne l'avait jamais) : tous les crans, ou aucun.
 static var relief_fin_jusqua: int = 0
+## Type de carte détecté (« dedie », « integre », « apple », « logiciel », « inconnu »).
+static var type_gpu: String = "inconnu"
+## Choix du joueur au PC (--decor-hd=auto|oui|non, case du menu Affichage).
+static var decor_hd: String = "auto"
 ## PWA : niveau de secours après une perte du contexte WebGL (0, 1 ou 2), posé
 ## par la page (window.__pn_secours) et gardé pour cette version et cet appareil.
 static var secours_web: int = 0
@@ -123,7 +129,11 @@ func setup(p_main: Node, p_env: Environment, p_mode: String) -> void:
 	machine = _detecter()
 	var type_gpu: String = machine.get("type", "inconnu")
 	allege = not _web and (type_gpu in ["integre", "logiciel"] or "--allege" in OS.get_cmdline_user_args())
-	relief_fin_jusqua = 1 if type_gpu == "dedie" else 0
+	PerfManager.type_gpu = type_gpu
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--decor-hd="):
+			decor_hd = a.trim_prefix("--decor-hd=")
+	relief_fin_jusqua = CRAN_MAX_PC if hd_par_machine(type_gpu, machine) else -1
 	cran_min = 0 if _rd else 2
 	var plancher_web: int = 4  # PWA : départ au réglage bas (mesuré sur iPad)
 	if _web:
@@ -144,6 +154,25 @@ func setup(p_main: Node, p_env: Environment, p_mode: String) -> void:
 			_fige = true      # cran imposé : _evaluer ne touche plus à rien
 	_appliquer(depart, "profil de départ")
 	_log("[Perf] machine : %s" % _resume_machine())
+
+
+## Décor HD (relief fin et pack) : carte dédiée oui ; puce intégrée seulement avec 16 Go de mémoire
+## et 8 fils (le 5700G du père : oui, en anneaux allégés) ; rendu logiciel jamais. « oui » / « non »
+## du joueur l'emportent (sauf rendu logiciel).
+static func hd_par_machine(t: String, m: Dictionary) -> bool:
+	if decor_hd == "non" or t == "logiciel":
+		return false
+	if decor_hd == "oui":
+		return true
+	# sans écran (bancs) : relief à 25 m, sauf --relief-fin (ReliefFin.voulu) — comme avant
+	if DisplayServer.get_name() == "headless":
+		return false
+	if t == "dedie" or t == "apple" or t == "inconnu":
+		return true
+	if t == "integre":
+		# (16 Go physiques moins la réserve de la puce graphique : ~14-15 Go vus)
+		return float(m.get("ram_go", 0.0)) >= 13.0 and int(m.get("coeurs", 0)) >= 8
+	return false
 
 
 func set_mode(p_mode: String) -> void:
@@ -295,6 +324,16 @@ func _appliquer(c: int, pourquoi: String) -> void:
 			# PC du père : « crénelage net au réglage haute ») — on ne se fie
 			# plus à la valeur lue sur la fenêtre, on l'impose
 			vp.msaa_3d = maxi(_msaa_origine, Viewport.MSAA_4X) if cran <= 2 else Viewport.MSAA_DISABLED
+			# puce intégrée : ×2 suffit (bande passante de la mémoire partagée)
+			if cran <= 2 and type_gpu == "integre":
+				vp.msaa_3d = Viewport.MSAA_2X
+			# sans MSAA : anticrénelage d'écran plutôt que rien (crénelage reproché le 08/10/2026),
+			# SMAA en Vulkan, FXAA en OpenGL ; ~0,3-0,5 ms
+			# filtrage anisotrope ×4 sur puce intégrée (le projet impose ×8)
+			if type_gpu == "integre" and "anisotropic_filtering_level" in vp:
+				vp.set("anisotropic_filtering_level", Viewport.ANISOTROPY_4X)
+			vp.screen_space_aa = Viewport.SCREEN_SPACE_AA_DISABLED if vp.msaa_3d != Viewport.MSAA_DISABLED \
+				else (Viewport.SCREEN_SPACE_AA_SMAA if _rd else Viewport.SCREEN_SPACE_AA_FXAA)
 		if _web:
 			# jamais plus de ×2 sur le web : le ×4 prenait 60 Mo de tampons à
 			# 1671×1167, et il ne s'éteignait à aucun cran
@@ -363,6 +402,10 @@ var _ips_base: int = 0
 
 func _appliquer_ips() -> void:
 	var ips: int = 30 if cran >= (6 if _web else 5) else 0
+	# puce intégrée sur un écran à plus de 60 Hz : 60 i/s au plus (chaleur, ventilateur, mémoire
+	# partagée avec le processeur ; au-delà, le gain ne se voit pas sur ce type de machine)
+	if ips == 0 and not _web and type_gpu == "integre" and float(machine.get("hz", 60.0)) > 61.0:
+		ips = 60
 	if _ips_base > 0:
 		ips = _ips_base if ips == 0 else mini(ips, _ips_base)
 	if _retrait == 2:
@@ -383,12 +426,25 @@ func _notification(what: int) -> void:
 var banc: bool = false
 
 
+## Vue 3D embarquée dans le PC : c'est le PC qui sait si sa fenêtre est derrière une autre
+## application ou réduite (champ « arriere_plan » de l'état, StateReceiver) — avant, rien ne
+## bridait la 3D embarquée, qui dessinait plein pot derrière un navigateur.
+func set_arriere_plan_pc(oui: bool) -> void:
+	if _arriere_plan_pc != oui:
+		_arriere_plan_pc = oui
+		_verifier_retrait()
+
+
+var _arriere_plan_pc: bool = false
+
+
 func _verifier_retrait() -> void:
-	if _web or main == null or bool(main.get("client_mode")) \
-			or DisplayServer.get_name() == "headless" or banc:
+	if _web or main == null or DisplayServer.get_name() == "headless" or banc:
 		return
 	var r: int = 0
-	if DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_MINIMIZED:
+	if bool(main.get("client_mode")):
+		r = 1 if _arriere_plan_pc else 0
+	elif DisplayServer.window_get_mode() == DisplayServer.WINDOW_MODE_MINIMIZED:
 		r = 2
 	elif not DisplayServer.window_is_focused():
 		r = 1
@@ -563,6 +619,15 @@ func _evaluer() -> void:
 		ips, taux * 100.0, p99 * 1000.0, princ_ms, rendu_ms, gpu_ms]
 	if _fige:
 		return
+	# mémoire vidéo presque pleine (budget du système, Windows) : on allège avant le débordement,
+	# qui ne se voit pas en saccades mais en images de plusieurs secondes (24/10/2026, Vega 8)
+	if _memoire_saturee():
+		var fin_m: ReliefFin = main.get("relief").fin if main != null and main.get("relief") != null else null
+		if fin_m != null and fin_m.hd and fin_m.baisser_repli():
+			_log("[Perf] mémoire vidéo à %.1f / %.1f Go : décor HD allégé" % [_vram[1], _vram[0]])
+		elif cran < _cran_max():
+			_appliquer(cran + 1, "mémoire vidéo %.1f / %.1f Go" % [_vram[1], _vram[0]])
+		return
 	var mauvais: bool = ips < 0.83 * cible_ips or taux > 0.03 or p99 > 3.0 * budget
 	var rm: Node = main.get("remontees") if main != null else null
 	if mauvais:
@@ -586,7 +651,14 @@ func _evaluer() -> void:
 				# 0 à 7 % du temps de la carte, contre 36 à 48 % pour le seul cran 1, et les trois
 				# étapes retardaient de 16 s le premier gain
 				var fin_hd: ReliefFin = main.get("relief").fin if main != null and main.get("relief") != null else null
-				if cran < _cran_max():
+				# le cran verrouillé à 30 i/s seulement en vraie lenteur : 45-49 i/s réguliers y
+				# faisaient tomber (audit du 14/11/2026) — sinon on allège le décor HD
+				var vers_30: bool = cran + 1 >= (6 if _web else 5)
+				var vraie_lenteur: bool = ips < 40.0 or taux > 0.05
+				if vers_30 and not vraie_lenteur:
+					if fin_hd != null and fin_hd.hd and fin_hd.baisser_repli():
+						_t_chauffe = maxf(_t_chauffe, APRES_CHANGEMENT_S)
+				elif cran < _cran_max():
 					if _cran_avant_montee >= 0 and _horloge - _derniere_montee_t < 20.0:
 						_echecs[cran] = _horloge + ECHEC_INTERDIT_S
 						_cran_avant_montee = -1
@@ -641,6 +713,20 @@ func _evaluer() -> void:
 	_cran_avant_montee = cran
 	_derniere_montee_t = _horloge
 	_appliquer(vise, "marge")
+
+
+var _vram: PackedFloat32Array = PackedFloat32Array([0.0, 0.0])
+var _t_vram: float = -100.0
+
+
+## Toutes les 10 s : usage au-delà de 92 % du budget accordé par le système.
+func _memoire_saturee() -> bool:
+	if _web or not ClassDB.class_has_method("ReliefHD", "budget_video"):
+		return false
+	if _horloge - _t_vram >= 10.0:
+		_t_vram = _horloge
+		_vram = ClassDB.instantiate("ReliefHD").call("budget_video")
+	return _vram.size() == 2 and _vram[0] > 0.5 and _vram[1] > 0.92 * _vram[0]
 
 
 func _repli_a_rendre() -> bool:
@@ -819,6 +905,7 @@ func _releve_image(dt: float) -> void:
 
 func _finir_releve() -> void:
 	var n: int = _rel.size() - 1
+	var duree_rel: float = minf(_rel_t, RELEVE_S)
 	_rel_t = -1.0
 	Prof.actif = false
 	if n < 10:
@@ -839,7 +926,8 @@ func _finir_releve() -> void:
 	if f != null:
 		f.store_string("\n".join(_rel))
 	var r: PackedStringArray = PackedStringArray()
-	r.append("Relevé de fluidité — %s — %d images en %.0f s" % [_resume_machine(), n, RELEVE_S])
+	# durée réelle : un relevé arrêté par F10 au bout de 2 s se disait « en 60 s »
+	r.append("Relevé de fluidité — %s — %d images en %.1f s" % [_resume_machine(), n, duree_rel])
 	r.append("cran %d/%d — %s" % [cran, _cran_max(), libelle(cran)])
 	r.append("noyau C++ des remontées : %s" % ("oui" if ClassDB.class_exists("NoyauRemontee") else "non (GDScript)"))
 	for nom in ["image", "principal", "rendu", "gpu"]:

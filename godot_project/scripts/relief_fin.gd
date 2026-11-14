@@ -90,6 +90,10 @@ static func voulu_sans_forcer(cran: int) -> bool:
 
 ## Pack haute définition : un fichier optionnel à côté de l'exécutable (dossier pack_hd).
 ## Absent, le jeu tourne comme avant. --pack-hd=dossier pour les essais.
+## Pack présent mais illisible (téléchargement tronqué, disque) : signalé au PC par StateReceiver.
+static var pack_abime: bool = false
+
+
 static func dossier_pack() -> String:
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--pack-hd="):
@@ -118,7 +122,13 @@ static func niveau_machine() -> int:
 	var ram: float = float(OS.get_memory_info().get("physical", 0)) / 1073741824.0
 	var vram: float = float(ClassDB.instantiate("ReliefHD").call("memoire_video"))
 	var coeurs: int = OS.get_processor_count()
-	if ram >= 15.0 and coeurs >= 8 and (vram >= 6.0 or vram == 0.0):
+	# puce intégrée : la « mémoire vidéo » lue n'est que la réserve du BIOS (512 Mo à 2 Go), la vraie est
+	# la mémoire vive partagée → niveau 1 (230 Mo de grille, 300 Mo de textures) avec 16 Go
+	if PerfManager.type_gpu == "integre":
+		return 1 if ram >= 13.0 else 0
+	# niveau 2 : la règle des 8 fils retombe à 4 (i5-6600K + GTX 1060 6 Go : 1,45 Go de grille, 1,1 Go de
+	# mémoire vidéo, ça tient ; le chargement prend un peu plus longtemps)
+	if ram >= 15.0 and coeurs >= 4 and (vram >= 5.5 or vram == 0.0):
 		return 2
 	if ram >= 7.5 and (vram >= 3.0 or vram == 0.0):
 		return 1
@@ -275,6 +285,7 @@ func _preparer_hd(r: ReliefBuilder, h0: PackedFloat32Array, h_retouche: PackedFl
 			leve = n.call("reechantillonner", deux, sj, si, nj1, ni1, float(KHD) / kv / 2.0)
 	if leve.is_empty():
 		print("[ReliefHD] pack illisible : grille à 5 m")
+		pack_abime = true          # (le PC efface le marqueur et le retélécharge)
 		return
 	var t1: int = Time.get_ticks_usec()
 	var caps: PackedFloat32Array = PackedFloat32Array()
@@ -498,6 +509,10 @@ func _ready() -> void:
 		anneaux.demarrer(self, rel)
 		if not _cases_arbres.is_empty():
 			foret = ReliefForet.new()
+			# puce intégrée : forêt sans ombres, proches à 200 m, d'office (cran HD allégé)
+			if PerfManager.type_gpu == "integre":
+				foret.repli_voulu = 1
+				repli = 1
 			add_child(foret)
 			foret.demarrer(rel, _cases_arbres, blocs_arbres)
 			_cases_arbres = []
@@ -543,7 +558,7 @@ func _relancer(p: Vector2) -> void:
 	p.y = clampf(snappedf(p.y, 32.0), zone.position.y, zone.end.y)
 	_demande = p
 	_centre = p
-	_tache = WorkerThreadPool.add_task(_calculer, false, "relief fin")
+	_tache = WorkerThreadPool.add_task(_calculer, true, "relief fin")   # attendue par le fil principal : jamais derrière une construction
 
 
 func _calculer() -> void:
@@ -641,5 +656,6 @@ func _exit_tree() -> void:
 	_rids = []
 	# (la grille HD reste K = 25 d'une scène à l'autre tant que preparer ne la remet pas)
 	if _tache >= 0:
-		WorkerThreadPool.wait_for_task_completion(_tache)
+		LigneRemontee.fermeture = true
+		LigneRemontee.attendre_fil(_tache)
 		_tache = -1

@@ -252,6 +252,23 @@ func _mm(m: Mesh, couleurs: Color) -> MultiMeshInstance3D:
 	return mi
 
 
+var _mat_coupe: ShaderMaterial = null
+static var _shader_coupe: Shader = null
+
+
+## Le nuanceur des skieurs, coupé au-dessus de `coupe` (hauteur dans le repère du modèle, m).
+static func _materiau_coupe() -> ShaderMaterial:
+	if _shader_coupe == null:
+		var code: String = (load("res://scripts/skieur.gdshader") as Shader).code
+		code = code.replace("void vertex() {", "uniform float coupe = 1000.0;\nvarying float v_y_modele;\nvoid vertex() {\n\tv_y_modele = VERTEX.y;")
+		code = code.replace("void fragment() {", "void fragment() {\n\tif (v_y_modele > coupe) {\n\t\tdiscard;\n\t}")
+		_shader_coupe = Shader.new()
+		_shader_coupe.code = code
+	var m: ShaderMaterial = ShaderMaterial.new()
+	m.shader = _shader_coupe
+	return m
+
+
 ## Maillages du skieur précalculés sur un fil de travail dès le chargement (PC) : 144 ms d'un bloc sur le fil
 ## principal à l'entrée en skieur sinon (relevé du 10/11/2026). Mêmes appels, mêmes maillages.
 static var _pre: Dictionary = {}
@@ -301,6 +318,11 @@ func _construire_apparence() -> void:
 	_corps = _mm(_images[0], graine)
 	_skis_main = d["skis_main"]
 	_skis = _mm(_skis_main, Color(0.55, 0.30, 0.80, 1.0))
+	# première personne : on voit ses jambes et ses skis, pas l'intérieur de sa tête (matériau à lui : les
+	# autres skieurs gardent le nuanceur commun, sans « discard »)
+	_mat_coupe = _materiau_coupe()
+	_corps.material_override = _mat_coupe
+	_skis.material_override = _mat_coupe
 	_skis.position = SkieurMesh.ANCRE_SKIS
 	_image_glisse = d["glisse"]
 	_image_schuss = d["schuss"]
@@ -1370,7 +1392,8 @@ func _glisser(delta: float, cmd: Vector2, schuss: bool) -> void:
 	velocity = v
 	_cap = _cap_ski
 	_visuel.rotation = Vector3(0.0, _cap_ski, _penche)
-	_visuel.visible = not premiere_personne
+	if not premiere_personne:
+		_visuel.visible = true          # (1re personne : _camera() décide, jambes et skis visibles)
 
 
 ## Sol sous les skis en (x, z) : [hauteur, normale]. Le relief, ou plus
@@ -1620,7 +1643,8 @@ func _animer(delta: float, dir: Vector3) -> void:
 		_corps.multimesh.mesh = _images[image]
 	# skis portés à la main : soulevés en marchant
 	_skis.position = SkieurMesh.ANCRE_SKIS + Vector3(0.0, 0.14 if image > 0 else 0.0, 0.0)
-	_visuel.visible = not premiere_personne
+	if not premiere_personne:
+		_visuel.visible = true          # (1re personne : _camera() décide, jambes et skis visibles)
 
 
 func _camera() -> void:
@@ -1658,14 +1682,20 @@ func _camera() -> void:
 	_decal_bras = _decal_bras.move_toward(decal_voulu, 2.0 * get_process_delta_time())
 	pivot.position += global_basis.inverse() * _decal_bras
 	if premiere_personne:
-		# on ne se voit pas soi-même, à pied, à ski ou en remontée (retour
-		# d'utilisateur, 23/10/2026 : « à la première personne sur le TS je me vois »)
-		_visuel.visible = false
+		# en regardant vers le bas, on voit ses jambes et ses skis, comme dans les jeux ; le haut du corps
+		# (tête, cou, épaules) est coupé : on ne voit pas l'intérieur de sa tête (retours d'utilisateur,
+		# 23/10/2026 « à la première personne sur le TS je me vois » ; 14/11/2026 « je ne me vois pas ni
+		# mes skis »)
+		_visuel.visible = _chute_t <= 0.0
+		if _mat_coupe != null:
+			_mat_coupe.set_shader_parameter("coupe", (Y_YEUX_ASSIS - 0.22) if assis else (Y_YEUX - 0.24))
 		if assis:
 			# yeux du passager assis : au-dessus du bassin (en arrière des
 			# pieds), à 1,25 m au-dessus des pieds
 			pivot.position = Vector3(_visuel.position.x * 0.9, Y_YEUX_ASSIS, _visuel.position.z * 0.9)
 	elif _chute_t <= 0.0:
+		if _mat_coupe != null:
+			_mat_coupe.set_shader_parameter("coupe", 1000.0)
 		# caméra plaquée contre lui : on verrait l'intérieur de sa tête
 		_visuel.visible = bras.get_hit_length() > BRAS_CORPS_MIN
 

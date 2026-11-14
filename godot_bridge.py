@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import json
 import os
+import secrets
 import shutil
 import socket
 import subprocess
@@ -51,9 +52,23 @@ class GodotBridge:
         self.dev_project_dir = Path(dev_project_dir).expanduser().resolve() if dev_project_dir else None
         self.port = port
         self._port_base = port
+        # Jeton de séance : chaque paquet UDP (aller et retour) le porte ; un
+        # autre programme de la machine ne peut plus piloter la 3D ni simuler
+        # ses boutons (audit du 14/11/2026)
+        self.jeton = secrets.token_hex(12)
         # Qualité 3D : « auto » = le viewer détecte la machine et s'ajuste
         # en direct ; high / medium / low = forcée (menu Affichage du sim)
         self.quality = "auto"
+        # Décor haute définition : auto / oui / non (menu Affichage du sim),
+        # lu par la 3D au lancement (PerfManager.decor_hd)
+        self.decor_hd = "auto"
+        # Repli après un plantage ou un gel de la 3D (posé par le sim) :
+        # 0 = réglages choisis, 1 = qualité « low », 2 = « low » en OpenGL
+        self.secours = 0
+        # Dernier message reçu de la 3D (horloge monotone) et nombre de
+        # messages depuis le lancement : sert à la vigie de gel du sim.
+        self.t_dernier_message = 0.0
+        self.messages_recus = 0
         self._proc: Optional[subprocess.Popen] = None
         self._sock: Optional[socket.socket] = None
         self._addr = ("127.0.0.1", port)
@@ -186,6 +201,11 @@ class GodotBridge:
             return ["--display-driver", "x11"]
         return []
 
+    def _args_utilisateur(self) -> list:
+        """Arguments du jeu après « -- » : décor HD choisi, puis pack HD."""
+        d = self.decor_hd if self.decor_hd in ("auto", "oui", "non") else "auto"
+        return [f"--decor-hd={d}", *self._args_pack()]
+
     def _args_pack(self) -> list:
         """Argument du pack haute définition, s'il est installé dans le profil."""
         if self.donnees is None:
@@ -208,7 +228,7 @@ class GodotBridge:
         bundled = self._bundled_binary_path()
         if bundled is not None:
             return [str(bundled), *eng, "--", "--client", f"--port={self.port}",
-                    f"--quality={self.quality}", *self._args_pack()]
+                    f"--quality={self.qualite_effective()}", f"--jeton={self.jeton}", *self._args_utilisateur()]
         # 2. Fallback dev : godot system + projet source.
         #    Désactivé en mode frozen (exe PyInstaller distribué) : on ne va
         #    pas chercher un Godot*.exe dans des dossiers inscriptibles par
@@ -221,8 +241,30 @@ class GodotBridge:
             if sys_godot is not None:
                 return [sys_godot, "--path", str(self.dev_project_dir),
                         *eng, "--", "--client", f"--port={self.port}",
-                        f"--quality={self.quality}", *self._args_pack()]
+                        f"--quality={self.qualite_effective()}", f"--jeton={self.jeton}", *self._args_utilisateur()]
         return None
+
+    def qualite_effective(self) -> str:
+        """Qualité transmise à la 3D : celle du menu, ou « low » en repli."""
+        return "low" if self.secours >= 1 else self.quality
+
+    def code_sortie(self) -> Optional[int]:
+        """Code de sortie du viewer s'il est mort, None s'il tourne (ou
+        s'il n'a jamais été lancé)."""
+        if self._proc is None:
+            return None
+        return self._proc.poll()
+
+    def journal_fin(self, lignes: int = 30) -> str:
+        """Les dernières lignes du journal du viewer ('' s'il n'y en a pas)."""
+        try:
+            with open(self._logfile, "rb") as f:
+                f.seek(0, 2)
+                f.seek(max(0, f.tell() - 8000))
+                texte = f.read().decode("utf-8", "replace").splitlines()[1:]
+            return "\n".join(texte[-lignes:])
+        except OSError:
+            return ""
 
     @property
     def logfile(self) -> Path:
@@ -434,6 +476,9 @@ class GodotBridge:
              ["--rendering-method", "gl_compatibility",
               "--rendering-driver", "opengl3"]),
         ]
+        # repli après deux plantages ou gels : directement en OpenGL
+        if self.secours >= 2:
+            attempts = attempts[1:]
         started = False
         for label, eng_args in attempts:
             c = self._resolve_command(engine_args=eng_args) if eng_args else cmd
@@ -442,6 +487,8 @@ class GodotBridge:
             self._log(f"[start] tentative : {label}")
             if self._spawn(c):
                 self._resolved_cmd = c
+                self.t_dernier_message = 0.0
+                self.messages_recus = 0
                 started = True
                 self._log(f"[start] OK ({label}, PID={self._proc.pid})")
                 break
@@ -480,6 +527,18 @@ class GodotBridge:
         if sys.platform.startswith("linux"):
             self._xid = self.find_window_id(timeout_s=20.0)
         return True
+
+    def tuer(self) -> None:
+        """Tue le viewer sur-le-champ (gel), sans rien attendre ni toucher
+        aux sockets : appelable depuis un autre fil. Le sim voit ensuite le
+        viewer mort et applique la même suite qu'après un plantage."""
+        proc = self._proc
+        if proc is None:
+            return
+        try:
+            proc.kill()
+        except Exception:
+            pass
 
     def stop(self) -> None:
         self._abort = True
@@ -538,8 +597,13 @@ class GodotBridge:
                 d = json.loads(data.decode("utf-8").strip())
             except (ValueError, UnicodeDecodeError):
                 continue
-            if isinstance(d, dict):
+            # (paquet d'un autre programme : pas le jeton de cette séance)
+            if isinstance(d, dict) and d.pop("jeton", None) == self.jeton:
                 out.append(d)
+        if out:
+            import time
+            self.t_dernier_message = time.monotonic()
+            self.messages_recus += len(out)
         return out
 
     def is_running(self) -> bool:
@@ -626,7 +690,7 @@ class GodotBridge:
         if self._sock is None or not self.is_running():
             return
         try:
-            payload = (json.dumps(state, separators=(",", ":")) + "\n").encode("utf-8")
+            payload = (json.dumps({**state, "jeton": self.jeton}, separators=(",", ":")) + "\n").encode("utf-8")
             self._sock.sendto(payload, self._addr)
         except (BlockingIOError, OSError):
             # Buffer plein ou socket fermé : on ignore (next frame réessaiera)

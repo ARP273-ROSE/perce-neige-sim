@@ -37,6 +37,15 @@ class FauxPont:
         self.a_poster = []
         self.etats = []
         self.bundled_dir = None
+        self.quality = "auto"
+        self.messages_recus = 0
+        self.t_dernier_message = 0.0
+
+    def qualite_effective(self):
+        return self.quality
+
+    def code_sortie(self):
+        return None
 
     def is_running(self):
         return True
@@ -331,3 +340,43 @@ def test_clic_pupitre_ne_fait_pas_marcher_le_skieur(fenetre):
     g._virtual_key(Qt.Key.Key_D)
     assert g._skieur_touches() == 0
     g._sortir_skieur()
+
+
+def test_vigie_tue_une_3d_muette_et_la_relance(fenetre):
+    """Audit du 14/11/2026 : une 3D visible et muette plus de 5 s est tuée ;
+    à sa mort, un rapport « plantage_3d » part et elle est relancée en
+    qualité basse ; l'état envoyé dit si la fenêtre est en arrière-plan."""
+    win, clock = fenetre
+    g = _depart_a_quai(win, clock)
+    pont = _brancher(g)
+    tues, rapports, relances = [], [], []
+    pont.tuer = lambda: tues.append(1)
+    pont.log = lambda m: None
+    pont.messages_recus = 1
+    pont.t_dernier_message = clock[0]
+    g._godot_child_hwnd = 1234
+    g._godot_embed_hidden = False
+    g.window().isMinimized = lambda: False
+    _step(win, clock, 3.0)
+    assert not tues
+    assert "arriere_plan" in pont.etats[-1]
+    _step(win, clock, 3.0)
+    assert tues and g._godot_mort_motif == "gel"
+    # la 3D est morte : rapport, puis relance avec un cran de repli
+    import reporting
+    pont.secours = 0
+    pont.pack_en_service = False
+    pont._resolved_cmd = []
+    pont.journal_fin = lambda n=30: "dernière ligne"
+    pont.code_sortie = lambda: 1
+    anc = reporting.envoyer
+    reporting.envoyer = lambda genre, **c: rapports.append((genre, c))
+    try:
+        assert g._signaler_mort_3d() is True
+    finally:
+        reporting.envoyer = anc
+    assert rapports and rapports[0][0] == "plantage_3d"
+    assert rapports[0][1]["motif"] == "gel" and rapports[0][1]["code_sortie"] == 1
+    assert pont.secours == 1
+    g._godot_child_hwnd = None
+    del g.window().isMinimized

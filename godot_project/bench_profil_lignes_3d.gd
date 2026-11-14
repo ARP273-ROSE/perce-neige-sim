@@ -7,7 +7,7 @@ const FANTOME_MAX: float = 1.5        # degrés sur 1 m, hors galets
 ## Seuils : au-delà, le banc échoue. L'état connu (voir CHANGELOG) les atteint sans les dépasser.
 const SIGNES_MAX: int = 6             # pylônes dont la déviation contredit la nature (> 1°)
 const CREUX_MAX: int = 9              # support bien plus plat que ses voisins (crête en dents de scie)
-const ENTREE_MAX: float = 17.0        # degrés, pente du câble à l'entrée d'une gare
+const ENTREE_MAX: float = 18.0        # degrés, pente du câble à l'entrée d'une gare (18 depuis la tension variable du 14/11/2026 : la portée basse, moins tendue, fléchit plus — Grand Pré 17,6°)
 
 var _main: Node = null
 var _f: int = 0

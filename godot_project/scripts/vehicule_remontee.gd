@@ -316,8 +316,10 @@ func _fabriquer_fin() -> void:
 		(c as Node3D).position -= pivot
 	# masse à vide (pince comprise) et longueur du pendule jusqu'au centre de gravité
 	if cabine or famille == "cabine_3s" or famille == "cabine_tph":
-		masse = 2950.0 if famille == "cabine_3s" else (9000.0 if famille == "cabine_tph" else 850.0)
-		longueur_pendule = 3.85 if famille == "cabine_3s" else (5.6 if famille == "cabine_tph" else 2.65)
+		# masse : la même que pour le câble (TPH 4 500 kg, Telepherique.masse_vehicule) ; longueur jusqu'au
+		# centre de gravité du pendule composé (suspente + demi-caisse + giration, audit du 14/11/2026)
+		masse = 2950.0 if famille == "cabine_3s" else (4500.0 if famille == "cabine_tph" else 850.0)
+		longueur_pendule = 4.36 if famille == "cabine_3s" else (7.0 if famille == "cabine_tph" else 3.0)
 	elif famille.begins_with("perche"):
 		masse = 25.0
 		longueur_pendule = 1.6
@@ -789,7 +791,7 @@ func pendule_repos() -> void:
 ## travers ; g' = g + accélération verticale. Amortissement réduit ζ ∝ 1/masse
 ## (le frottement de l'articulation et l'air pèsent moins sur un véhicule
 ## lourd) ; `en_gare` : véhicule guidé, fortement amorti.
-func balancer(dt: float, en_gare: bool) -> void:
+func balancer(dt: float, en_gare: bool, libre: bool = false) -> void:
 	if _susp == null:
 		return
 	# repère de la LIGNE (parent) : immobile, et tourné seulement autour de
@@ -814,7 +816,9 @@ func balancer(dt: float, en_gare: bool) -> void:
 	var g2: float = 9.81 + _a_f.y
 	var L: float = longueur_pendule
 	var w0: float = sqrt(9.81 / L)
-	var zeta: float = 0.7 if en_gare else clampf(90.0 / masse, 0.03, 0.30)
+	# sans amortisseur, un siège oscille 5 à 10 périodes (ζ ≈ 0,02-0,05) : 40 / masse au lieu de 90 ; les
+	# cabines gardent 90 / masse (ζ ≈ 0,1 pour une télécabine, 0,03 pour les lourdes : jugé juste par l'audit)
+	var zeta: float = 0.7 if en_gare and not libre else clampf(amortissement() / masse, 0.02, 0.30)
 	var n: int = maxi(1, int(ceil(dt / 0.008)))
 	var h: float = dt / n
 	for k in range(n):
@@ -831,6 +835,11 @@ func balancer(dt: float, en_gare: bool) -> void:
 		psi = clampf(psi, -limite_psi, limite_psi)
 		_dpsi = 0.0
 	_susp.rotation = Vector3(phi, 0.0, psi)
+
+
+## Numérateur de ζ = k / masse : sièges 40, cabines (télécabines, 3S, téléphériques) 90.
+func amortissement() -> float:
+	return 90.0 if cabine or famille.begins_with("cabine") else 40.0
 
 
 ## Inclinaison d'équilibre pour `n` passagers de 80 kg dont la somme des abscisses vaut `somme_x` :

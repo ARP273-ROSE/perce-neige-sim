@@ -26,7 +26,9 @@ void en_parallele(int64_t n, const std::function<void(int64_t)> &f) {
 		f(k);
 	}
 #else
-	const int nb = std::max(1, int(std::thread::hardware_concurrency()));
+	// un cœur laissé libre (fil principal, pilote graphique) : sur 4 fils, le chargement
+	// du pack saturait toute la machine et l'image se figeait
+	const int nb = std::max(1, int(std::thread::hardware_concurrency()) - 1);
 	std::atomic<int64_t> suivant(0);
 	std::vector<std::thread> fils;
 	auto travail = [&]() {
@@ -125,6 +127,7 @@ void ReliefHD::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("couches", "chemin", "sauter_niveaux"), &ReliefHD::couches);
 	ClassDB::bind_method(D_METHOD("reechantillonner", "src", "sj", "si", "nj", "ni", "rapport"), &ReliefHD::reechantillonner);
 	ClassDB::bind_method(D_METHOD("memoire_video"), &ReliefHD::memoire_video);
+	ClassDB::bind_method(D_METHOD("budget_video"), &ReliefHD::budget_video);
 	ClassDB::bind_method(D_METHOD("texture_detail", "taille"), &ReliefHD::texture_detail);
 	ClassDB::bind_method(D_METHOD("quart_anneau", "j0", "i0", "d", "t0", "t1"), &ReliefHD::quart_anneau);
 	ClassDB::bind_method(D_METHOD("foret", "chemin", "hn", "nj", "ni", "x0", "z0", "px", "pz", "capsules", "rects"), &ReliefHD::foret);

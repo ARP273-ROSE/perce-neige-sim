@@ -248,7 +248,8 @@ def check(current_version):
 
 def _decrire(tag, asset, data):
     """La mise a jour retenue, avec de quoi verifier son integrite : taille
-    annoncee par l'API et, si la Release le publie, le fichier SHA256SUMS."""
+    annoncee par l'API et fichier SHA256SUMS (obligatoire, voir
+    verifier_integrite)."""
     sommes = [a for a in data.get('assets', []) if (a.get('name') or '') == 'SHA256SUMS']
     return {
         'version': tag,
@@ -268,21 +269,35 @@ def verifier_integrite(update, archive, taille):
     attendu = int(update.get('size') or 0)
     if attendu and taille != attendu:
         raise RuntimeError(f"Archive tronquee : {taille} octets recus sur {attendu}")
+    # Sans empreinte, l'archive est refusee : toutes les Releases publient
+    # SHA256SUMS, son absence signale une Release incomplete ou alteree.
     if not update.get('sha256sums_url') or not update.get('nom'):
-        return                       # Release sans SHA256SUMS (anciennes versions)
+        raise RuntimeError("Mise a jour refusee : la version publiee n'a pas "
+                           "de fichier SHA256SUMS pour verifier l'archive")
     import hashlib
     with _open(update['sha256sums_url']) as r:
         sommes = r.read(1 << 20).decode('utf-8', 'replace')
     ligne = [l.split() for l in sommes.splitlines()
-             if l.split() and l.split()[-1].lstrip('*') == update['nom']]
-    if not ligne:
-        return
+             if len(l.split()) >= 2 and l.split()[-1].lstrip('*') == update['nom']]
+    if not ligne or len(ligne[0][0]) != 64:
+        raise RuntimeError("Mise a jour refusee : SHA256SUMS ne contient pas "
+                           f"d'empreinte pour {update['nom']}")
     h = hashlib.sha256()
     with open(archive, 'rb') as f:
         for bloc in iter(lambda: f.read(1 << 20), b''):
             h.update(bloc)
     if h.hexdigest().lower() != ligne[0][0].lower():
         raise RuntimeError("Empreinte SHA-256 differente de SHA256SUMS : archive refusee")
+
+
+def hors_du_dossier(dossier, membre):
+    """Vrai si le membre d'archive `membre`, extrait dans `dossier`, en
+    sortirait (chemin absolu, « .. », lecteur Windows)."""
+    base = Path(dossier).resolve()
+    if not membre or '\x00' in membre:
+        return True
+    dest = (base / membre).resolve()
+    return not dest.is_relative_to(base)
 
 
 def download_and_apply(update, progress=None):
@@ -314,11 +329,16 @@ def download_and_apply(update, progress=None):
 
         extracted = tmpdir / 'contenu'
         with zipfile.ZipFile(archive) as z:
-            # Refuse les chemins qui sortent du dossier d'extraction.
+            # Refuse les chemins qui sortent du dossier d'extraction (une
+            # comparaison de chaines laisserait passer « contenu-bis/… ») et
+            # les liens symboliques.
             for member in z.namelist():
-                dest = (extracted / member).resolve()
-                if not str(dest).startswith(str(extracted.resolve())):
-                    raise RuntimeError(f"Archive suspecte : {member}")
+                if not hors_du_dossier(extracted, member):
+                    continue
+                raise RuntimeError(f"Archive suspecte : {member}")
+            for info in z.infolist():
+                if (info.external_attr >> 16) & 0o170000 == 0o120000:
+                    raise RuntimeError(f"Archive suspecte : {info.filename}")
             z.extractall(extracted)
             # zipfile ne restitue pas le bit d'execution. Sous Windows cela
             # n'a aucune importance ; ailleurs, le lanceur et l'interpreteur

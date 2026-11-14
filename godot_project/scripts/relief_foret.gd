@@ -119,6 +119,8 @@ func _preparer_pas() -> void:
 
 
 var _pas_prepa: int = 0
+## Repli de départ, appliqué une fois la forêt posée (puce intégrée : 1, sans ombres des arbres).
+var repli_voulu: int = 0
 
 
 func _process(_dt: float) -> void:
@@ -127,6 +129,8 @@ func _process(_dt: float) -> void:
 		return
 	if _a_poser.is_empty():
 		set_process(false)
+		if repli_voulu > 0:
+			regler_repli(repli_voulu)      # posée en entier : le repli de départ s'applique à tout
 		return
 	var fin: int = Time.get_ticks_usec() + BUDGET_US
 	while not _a_poser.is_empty() and Time.get_ticks_usec() < fin:

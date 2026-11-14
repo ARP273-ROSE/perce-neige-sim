@@ -47,6 +47,7 @@ public:
 
 	// Mémoire vidéo dédiée de la plus grosse carte (Go), 0 si elle n'est pas connue.
 	double memoire_video() const;
+	PackedFloat32Array budget_video() const;
 
 	// Altitude sur les triangles de la grille (mêmes diagonales que le maillage).
 	static float hauteur_tri(const float *g, int64_t nj, int64_t ni, double fx, double fz);

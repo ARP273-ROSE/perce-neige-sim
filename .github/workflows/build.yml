@@ -97,14 +97,38 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # module C++ : à côté de son .gdextension, embarqué par l'export
+      # module C++ : à côté de son .gdextension, embarqué par l'export.
+      # Plus de « continue-on-error » : une Release sans le module (ni le
+      # décor HD qui en dépend) partait sans que personne ne le voie.
       - name: Module C++
         uses: actions/download-artifact@v4
         with:
           pattern: gdext-*
           path: godot_project/bin
           merge-multiple: true
-        continue-on-error: true
+
+      # Garde-fou : les bibliothèques des paquets de bureau doivent être là.
+      # Linux et Windows sont exigées ; macOS et web (le paquet web se
+      # construit ailleurs) ne font qu'avertir.
+      - name: Contrôle du module C++
+        shell: bash
+        run: |
+          set -e
+          ls -l godot_project/bin/
+          manque=0
+          for f in libperce_neige.linux.template_release.x86_64.so \
+                   libperce_neige.linux.template_debug.x86_64.so \
+                   libperce_neige.windows.template_release.x86_64.dll; do
+            if [ ! -s "godot_project/bin/$f" ]; then
+              echo "::error::module C++ absent : $f"
+              manque=1
+            fi
+          done
+          for f in libperce_neige.macos.template_release.universal.dylib \
+                   libperce_neige.web.template_release.wasm32.nothreads.wasm; do
+            [ -s "godot_project/bin/$f" ] || echo "::warning::module C++ absent : $f"
+          done
+          exit $manque
 
       - name: Cache Godot binary + templates
         id: godot-cache
@@ -138,6 +162,15 @@ jobs:
           V=$(tr -d ' \r\n' < VERSION)
           sed -i "s|^const VERSION_APP: String = .*|const VERSION_APP: String = \"$V\"|" godot_project/scripts/constants.gd
           grep -n "VERSION_APP" godot_project/scripts/constants.gd
+
+      # Import explicite : il écrit .godot/extension_list.cfg. Sans cette
+      # liste, le jeu exporté ne charge pas le module, même présent.
+      - name: Import du projet et contrôle de extension_list.cfg
+        run: |
+          ~/godot/godot --headless --path godot_project --import || true
+          test -f godot_project/.godot/extension_list.cfg || (echo "::error::extension_list.cfg absent après l'import"; exit 1)
+          cat godot_project/.godot/extension_list.cfg
+          grep -q "perce_neige.gdextension" godot_project/.godot/extension_list.cfg || (echo "::error::le module C++ n'est pas dans extension_list.cfg"; exit 1)
 
       # Note : l'export Godot headless peut retourner un code non nul malgré
       # un export réussi (warnings) → on ne teste pas le code retour mais la

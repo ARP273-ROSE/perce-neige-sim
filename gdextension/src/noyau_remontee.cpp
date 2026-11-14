@@ -194,6 +194,7 @@ void NoyauRemontee::_bind_methods() {
 			&NoyauRemontee::set_vehicules);
 	ClassDB::bind_method(D_METHOD("set_charges", "tires"), &NoyauRemontee::set_charges);
 	ClassDB::bind_method(D_METHOD("set_charge_joueur", "i", "psi0"), &NoyauRemontee::set_charge_joueur);
+	ClassDB::bind_method(D_METHOD("set_vent", "vent", "k_aire"), &NoyauRemontee::set_vent);
 	ClassDB::bind_method(D_METHOD("set_vitesse", "vitesse"), &NoyauRemontee::set_vitesse);
 	ClassDB::bind_method(D_METHOD("set_temps", "tab_s"), &NoyauRemontee::set_temps);
 	ClassDB::bind_method(D_METHOD("set_ligne", "ligne"), &NoyauRemontee::set_ligne);
@@ -263,6 +264,8 @@ void NoyauRemontee::set_constantes(const Dictionary &c) {
 	poids[1] = c.get("poids_descente", poids[1]);
 	w_veh[0] = c.get("w_montee", w_veh[0]);
 	w_veh[1] = c.get("w_descente", w_veh[1]);
+	sabots_impairs = c.get("sabots_impairs", sabots_impairs);
+	amort = c.get("amort", amort);
 }
 
 void NoyauRemontee::set_vehicules(const Array &p_vehicules, const Array &p_pinces, const Array &p_susps, const Array &p_corps,
@@ -355,8 +358,20 @@ double NoyauRemontee::vitesse_en(double s) const {
 	if (z.idx < 0 || fixe) {
 		return vitesse;
 	}
+	// même profil que LigneRemontee.profil_lanceur : décélération constante, rampes douces de 20 %
 	const double t = std::clamp(std::min(z.x, z.l - z.x) / l_frein, 0.0, 1.0);
-	const double lisse = t * t * t * (t * (t * 6.0 - 15.0) + 10.0);
+	const double r = 0.2;
+	double f;
+	if (t < r) {
+		const double u = t / r;
+		f = r * (u * u * u - 0.5 * u * u * u * u);
+	} else if (t <= 1.0 - r) {
+		f = 0.5 * r + (t - r);
+	} else {
+		const double u = (1.0 - t) / r;
+		f = (1.0 - r) - r * (u * u * u - 0.5 * u * u * u * u);
+	}
+	const double lisse = f / (1.0 - r);
 	return std::sqrt(std::max(0.0, vitesse * vitesse - (vitesse * vitesse - v_emb * v_emb) * lisse));
 }
 
@@ -546,6 +561,10 @@ PackedFloat64Array NoyauRemontee::etape(double dt, double regime, const Vector3 
 			}
 			Vector3 p, d;
 			point_cable(s_veh[i], p, d);
+			// (appuis aux bouts des sabots : les portées impaires sont les sabots, qui portent le véhicule)
+			if (sabots_impairs && (portee_de(-p.z) % 2) == 1) {
+				continue;
+			}
 			const int b = signe(p.x) == signe_montee ? 0 : 1;
 			if (charges[b].size() < 64) {
 				charges[b].push_back(Vector2(-p.z, poids[b]));
@@ -624,6 +643,7 @@ PackedFloat64Array NoyauRemontee::etape(double dt, double regime, const Vector3 
 					continue;
 				}
 				dt_i = 0.0;
+				n_mes[i] = 0;          // (mesure reprise à zéro, comme le GDScript : sinon vitesse aberrante au retour)
 			}
 		}
 		const Zone z = zone(s);
@@ -655,6 +675,7 @@ PackedFloat64Array NoyauRemontee::etape(double dt, double regime, const Vector3 
 		}
 		pose_veh[i] = Transform3D(bv, p);
 		if (loin) {
+			n_mes[i] = 0;
 			continue;
 		}
 		double t0s = maintenant_us();
@@ -667,7 +688,9 @@ PackedFloat64Array NoyauRemontee::etape(double dt, double regime, const Vector3 
 		}
 		// balancement (pendule amorti), comme VehiculeRemontee.balancer
 		if (dt_i > 0.0 && susps[i] != nullptr) {
+			// siège à pince fixe : pas de guide en gare, il balance librement autour de la poulie
 			const bool en_gare = z.idx >= 0;
+			const bool guide = en_gare && !fixe;
 			const double m = masse + ((montee_v && !cabine) ? charge_montee : 0.0);
 			if (n_mes[i] == 0) {
 				p_prec[i] = p;
@@ -686,7 +709,7 @@ PackedFloat64Array NoyauRemontee::etape(double dt, double regime, const Vector3 
 					const double g2 = 9.81 + a_f[i].y;
 					const double L = longueur_pendule;
 					const double w0 = std::sqrt(9.81 / L);
-					const double zeta = en_gare ? 0.7 : std::clamp(90.0 / m, 0.03, 0.30);
+					const double zeta = guide ? 0.7 : std::clamp(amort / m, 0.02, 0.30);
 					const int ns = std::max(1, (int)std::ceil(dt_i / 0.008));
 					const double h = dt_i / ns;
 					double cible = 0.0;
@@ -696,6 +719,11 @@ PackedFloat64Array NoyauRemontee::etape(double dt, double regime, const Vector3 
 						} else if (montee_v && i < psi0_tire.size()) {
 							cible = psi0_tire[i];
 						}
+					}
+					// vent de travers, en ligne : la caisse penche sous le vent, atan(F / (m·g))
+					if (!en_gare && k_aire > 0.0) {
+						const double vx = bv.inverse().xform(vent).x;
+						cible += std::atan(k_aire * vx * std::abs(vx) / (m * 9.81));
 					}
 					for (int k = 0; k < ns; k++) {
 						const double ddphi = -(g2 / L) * m_sin(phi[i]) - (-la.z / L) * m_cos(phi[i]) - 2.0 * zeta * w0 * dphi[i];

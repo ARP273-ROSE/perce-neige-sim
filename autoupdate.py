@@ -638,7 +638,7 @@ def _extraire_tar_sur(archive: Path, dest: Path) -> None:
     with tarfile.open(archive, "r:gz") as tf:
         for m in tf.getmembers():
             cible = (dest / m.name).resolve()
-            if not str(cible).startswith(str(base)) or m.issym() and os.path.isabs(m.linkname):
+            if not cible.is_relative_to(base) or m.issym() and os.path.isabs(m.linkname):
                 raise RuntimeError(f"chemin refusé dans l'archive : {m.name}")
             if m.isdev():
                 raise RuntimeError(f"entrée refusée dans l'archive : {m.name}")
