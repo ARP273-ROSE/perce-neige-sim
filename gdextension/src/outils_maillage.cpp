@@ -14,6 +14,10 @@ using namespace godot;
 void OutilsMaillage::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("fusionner", "surfaces", "transformations"), &OutilsMaillage::fusionner);
 	ClassDB::bind_method(D_METHOD("tube_plage", "pts", "r", "seg", "i0", "i1", "prec_x", "absc"), &OutilsMaillage::tube_plage);
+	ClassDB::bind_method(D_METHOD("parcourir", "root", "keep"), &OutilsMaillage::parcourir);
+	ClassDB::bind_method(D_METHOD("collecter", "elements", "debut", "budget_us", "groups", "cpu", "verrou", "repli"),
+			&OutilsMaillage::collecter);
+	ClassDB::bind_method(D_METHOD("retirer", "done"), &OutilsMaillage::retirer);
 }
 
 Array OutilsMaillage::fusionner(const Array &surfaces, const Array &transformations) const {
