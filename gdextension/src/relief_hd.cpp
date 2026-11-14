@@ -130,6 +130,7 @@ void ReliefHD::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("budget_video"), &ReliefHD::budget_video);
 	ClassDB::bind_method(D_METHOD("texture_detail", "taille"), &ReliefHD::texture_detail);
 	ClassDB::bind_method(D_METHOD("quart_anneau", "j0", "i0", "d", "t0", "t1"), &ReliefHD::quart_anneau);
+	ClassDB::bind_method(D_METHOD("bornes_anneau", "o", "w", "pas"), &ReliefHD::bornes_anneau);
 	ClassDB::bind_method(D_METHOD("foret", "chemin", "hn", "nj", "ni", "x0", "z0", "px", "pz", "capsules", "rects"), &ReliefHD::foret);
 	ClassDB::bind_method(D_METHOD("normales", "hn", "nj", "ni", "tuile", "taille", "marge", "px", "pz"), &ReliefHD::normales);
 }
@@ -715,6 +716,36 @@ Array ReliefHD::quart_anneau(int j0, int i0, int d, int t0, int t1) const {
 	s.append(v);
 	s.append(idx);
 	return s;
+}
+
+// Altitudes mini et maxi (les deux canaux : niveau et morphing) de chaque morceau de pas × pas mailles d'un
+// anneau de w × w nœuds (sortie de anneaux) : boîtes englobantes serrées pour le cadrage des morceaux.
+// Sortie : (w - 1) / pas morceaux par côté, ligne par ligne, [mini, maxi] chacun.
+PackedFloat32Array ReliefHD::bornes_anneau(const PackedByteArray &o, int w, int pas) const {
+	PackedFloat32Array r;
+	if (pas <= 0 || o.size() < int64_t(w) * w * 8) {
+		return r;
+	}
+	const int nm = (w - 1) / pas;
+	r.resize(int64_t(nm) * nm * 2);
+	float *pr = r.ptrw();
+	const float *p = reinterpret_cast<const float *>(o.ptr());
+	for (int b = 0; b < nm; b++) {
+		for (int a = 0; a < nm; a++) {
+			float lo = 1e30f;
+			float hi = -1e30f;
+			for (int i = b * pas; i <= (b + 1) * pas; i++) {
+				const float *l = p + (size_t(i) * w + size_t(a) * pas) * 2;
+				for (int j = 0; j <= 2 * pas + 1; j++) {
+					lo = std::min(lo, l[j]);
+					hi = std::max(hi, l[j]);
+				}
+			}
+			pr[(size_t(b) * nm + a) * 2] = lo;
+			pr[(size_t(b) * nm + a) * 2 + 1] = hi;
+		}
+	}
+	return r;
 }
 
 PackedByteArray ReliefHD::texture_detail(int taille) const {
