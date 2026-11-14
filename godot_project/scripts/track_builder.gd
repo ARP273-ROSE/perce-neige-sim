@@ -2884,6 +2884,7 @@ func _poser_segment_cable(arr: Array, mat: Material, name: String) -> MeshInstan
 	var am: ArrayMesh = ArrayMesh.new()
 	am.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
 	am.surface_set_material(0, mat)
+	MeshMerge.retenir_chargement(am, 0, arr)     # (collisions de l'entrée en skieur sans relire la carte)
 	var mi: MeshInstance3D = MeshInstance3D.new()
 	mi.name = name
 	mi.mesh = am

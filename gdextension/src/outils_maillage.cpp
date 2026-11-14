@@ -18,6 +18,7 @@ void OutilsMaillage::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("collecter", "elements", "debut", "budget_us", "groups", "cpu", "verrou", "repli"),
 			&OutilsMaillage::collecter);
 	ClassDB::bind_method(D_METHOD("retirer", "done"), &OutilsMaillage::retirer);
+	ClassDB::bind_method(D_METHOD("faces_primitive", "prim"), &OutilsMaillage::faces_primitive);
 }
 
 Array OutilsMaillage::fusionner(const Array &surfaces, const Array &transformations) const {
