@@ -5,6 +5,12 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.68.1 — 14 novembre 2026
+
+La 1.68.0 n'a pas pu produire ses paquets (contrôle de confidentialité de la CI sur un exemple de chemin en commentaire) : elle est reprise ici, avec les pylônes des téléskis débrayables refaits.
+
+**Pylônes des TKD** (photos du Chardonnet) : fût rond qui dépasse au-dessus du bras, entre les deux brins quand il les porte tous les deux, bras en treillis de chaque côté avec sa jambe de force, une grande poulie verticale (Ø 0,80 m) par brin, pendue sous le bras dans sa chape ; mousse orange au pied. Au premier pylône, la poulie du brin retour est inclinée pour le rentrer vers la poulie motrice. Versions allégées des pylônes recalculées (PWA).
+
 ## 1.68.0 — 14 novembre 2026
 
 Audit complet du simulateur, retours d'essai sur le PC et l'iPad, gare de départ des téléskis débrayables refaite.
