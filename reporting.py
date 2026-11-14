@@ -212,7 +212,7 @@ def anonymiser(texte: str | None) -> str:
         if variante and len(variante) > 3:
             texte = texte.replace(variante, '~')
     # Dossiers personnels d'un autre compte, ou écrits autrement (casse,
-    # séparateurs) : C:\Users\nom, /home/nom, /Users/nom  ->  ~
+    # séparateurs), sous Windows, Linux ou macOS  ->  ~
     texte = re.sub(r'(?i)[A-Z]:[\\/]+(?:Users|Documents and Settings)[\\/]+[^\\/\n"\']+',
                    '~', texte)
     texte = re.sub(r'/(?:home|Users)/[^/\n"\']+', '~', texte)
