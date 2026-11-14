@@ -2014,6 +2014,43 @@ func _construire_boucle(pauses: bool = false) -> void:
 	var R: float = voie * 0.5
 	# 1. gare aval : du nez de gare (brin descente) autour de la poulie au nez (brin montée)
 	var s0: float = 0.0
+	if famille == "perche_debrayable":
+		# TKD : roue motrice haute et inclinée, décalée côté montée (x_poulie) ; brin retour sous la grande poulie
+		var cx: float = x_poulie(true)
+		var Rp: float = R_POULIE_TKD
+		var sm: float = signf(xm)
+		var th: float = atan(PENTE_TKD)
+		var yr: float = ya + dz_roue_tkd()
+		var pc: Vector3 = poulie_retour_tkd()
+		var xr: float = pc.x
+		# sous la grande poulie : du point bas au point où la tangente monte vers la roue
+		_ajouter(Vector3(xr, ya, 0.0))
+		for k in range(1, 7):
+			var a1: float = th * float(k) / 6.0
+			_ajouter(Vector3(xr, pc.y - cos(a1) * Rp, sin(a1) * Rp))
+		# montée vers la roue, puis demi-tour dans le plan incliné (l'arrière plus haut)
+		_ajouter(Vector3(xr, yr, l_gare))
+		for k in range(1, 24):
+			var a0: float = PI * float(k) / 24.0
+			var r: float = sin(a0) * Rp
+			_ajouter(Vector3(cx - cos(a0) * Rp * sm, yr + r * sin(th), l_gare + r * cos(th)))
+		_ajouter(Vector3(xm, yr, l_gare))
+		# brin montée : droit, le long du magasin, jusqu'au nez
+		var nb: int = 14
+		for k in range(1, nb + 1):
+			var z: float = l_gare * (1.0 - float(k) / nb)
+			_ajouter(Vector3(xm, ya + PENTE_TKD * z, z))
+		_zones.append([s0, _longueur(), "gare_aval"])
+	else:
+		_boucle_gare_aval(xm, xd, ya, R)
+	if pauses:
+		await _boucle_ligne(pauses, L, xm, xd, yb, R)
+	else:
+		_boucle_ligne(pauses, L, xm, xd, yb, R)
+
+
+func _boucle_gare_aval(xm: float, xd: float, ya: float, R: float) -> void:
+	var s0: float = 0.0
 	_ajouter(Vector3(xd, ya, 0.0))
 	var Rt: float = rayon_tour(true)
 	var evase: bool = Rt > R + 0.001
@@ -2035,6 +2072,9 @@ func _construire_boucle(pauses: bool = false) -> void:
 		_ajouter(Vector3(xm, ya, l_gare))
 	_ajouter(Vector3(xm, ya, 0.0))
 	_zones.append([s0, _longueur(), "gare_aval"])
+
+
+func _boucle_ligne(pauses: bool, L: float, xm: float, xd: float, yb: float, R: float) -> void:
 	# 2. brin montée
 	var d: float = _pas_ligne(0.0)
 	if _yc_boucle.size() == 4:
@@ -2066,11 +2106,11 @@ func _construire_boucle(pauses: bool = false) -> void:
 		var dd: PackedFloat64Array = _yc_boucle[2]
 		var yd: PackedFloat64Array = _yc_boucle[3]
 		for j2 in range(dd.size()):
-			_ajouter(Vector3(xd, yd[j2], -dd[j2]))
+			_ajouter(Vector3(xd + decalage_descente(dd[j2]), yd[j2], -dd[j2]))
 	else:
 		var n_d: int = 0
 		while d > 0.0:
-			_ajouter(Vector3(xd, y_cable(d, false), -d))
+			_ajouter(Vector3(xd + decalage_descente(d), y_cable(d, false), -d))
 			d -= _pas_ligne(d)
 			n_d += 1
 			if pauses and n_d % 8 == 0:
@@ -2165,6 +2205,45 @@ const RETRAIT_POULIE: float = 0.45
 const Z_DEVIATION: float = 2.5
 
 
+## TKD (description d'un utilisateur, 14/11/2026) : au départ, la poulie motrice est bien plus étroite que la
+## voie (Ø 1,8 m pour 2,6 m). Elle est décalée côté montée : le brin montée file droit sous le magasin, tangent
+## à la poulie ; le brin retour, rentré au dernier pylône par un galet incliné, arrive en biais.
+const R_POULIE_TKD: float = 0.9
+## La roue motrice d'un TKD est en haut, au niveau du rail du magasin, inclinée vers l'avant dans l'axe du câble :
+## le brin montée en descend le long du rail jusqu'au skieur, au nez de la gare (photos du Chardonnet). Le brin
+## retour passe sous une grande poulie verticale (même diamètre), au nez, qui le remet en pente montante vers
+## la roue.
+const PENTE_TKD: float = 0.25
+
+
+## Dénivelé de la roue motrice d'un TKD au-dessus du câble au nez de la gare.
+func dz_roue_tkd() -> float:
+	return PENTE_TKD * l_gare
+
+
+## Point bas du brin retour sous la grande poulie (z), et centre de celle-ci, repère de la ligne.
+func poulie_retour_tkd() -> Vector3:
+	var xr: float = x_poulie(true) - signf(_x_brin(true)) * R_POULIE_TKD
+	return Vector3(xr, terrain(0.0) + H_CABLE_GARE + R_POULIE_TKD, 0.0)
+
+
+## Centre (x) de la poulie motrice d'un TKD, repère de la ligne ; 0 ailleurs.
+func x_poulie(aval: bool) -> float:
+	if not aval or famille != "perche_debrayable":
+		return 0.0
+	return signf(_x_brin(true)) * (voie * 0.5 - R_POULIE_TKD)
+
+
+## Rentrée latérale du brin retour d'un TKD, de 0 au dernier pylône à 2·(voie/2 − R) au nez de la gare.
+func decalage_descente(d: float) -> float:
+	if famille != "perche_debrayable":
+		return 0.0
+	var d1: float = float(pylones[0]["d"]) if pylones.size() > 0 else longueur_h()
+	if d >= d1:
+		return 0.0
+	return signf(_x_brin(true)) * 2.0 * (voie * 0.5 - R_POULIE_TKD) * (1.0 - d / maxf(d1, 0.01))
+
+
 ## Diamètres relevés [aval, amont] quand les deux poulies diffèrent (reportage de l'appareil).
 const DIAMETRES_POULIES: Dictionary = {"tsd8_tommeuses": [7.20, 6.10]}
 
@@ -2179,6 +2258,8 @@ func rayon_tour(aval: bool) -> float:
 
 
 func rayon_poulie(aval: bool = true) -> float:
+	if aval and famille == "perche_debrayable":
+		return R_POULIE_TKD
 	if fixe():
 		return voie * 0.5           # le câble porte les sièges : poulie = voie
 	if DIAMETRES_POULIES.has(String(name)):
@@ -2349,18 +2430,29 @@ func _gare(aval: bool) -> void:
 	# poulie de demi-tour (motrice en amont, retour-tension en aval)
 	var R: float = voie * 0.5
 	# la roue tourne (nœud à part) ; arbre et bâti restent dans la gare
-	var cp: Vector3 = Vector3(0, H_CABLE_GARE, zc)
+	var cp: Vector3 = Vector3(x_poulie(aval), H_CABLE_GARE, zc)
+	var pivot: Node3D = g
+	var bas_roue: Basis = Basis.IDENTITY
+	if aval and famille == "perche_debrayable":
+		# TKD : roue haute, inclinée vers l'avant dans l'axe du brin montée
+		cp.y += dz_roue_tkd()
+		bas_roue = Basis(Vector3.RIGHT, -atan(PENTE_TKD))
+		pivot = Node3D.new()
+		pivot.name = "Inclinaison"
+		pivot.transform = Transform3D(bas_roue, cp)
+		g.add_child(pivot)
 	var roue: Node3D = Node3D.new()
 	roue.name = "Poulie"
-	roue.position = cp
-	g.add_child(roue)
+	roue.position = cp if pivot == g else Vector3.ZERO
+	pivot.add_child(roue)
 	_poulie(roue, Vector3.ZERO, rayon_poulie(aval), aval)
 	await _pause("gare : poulie, pièces")
 	var fixes: Array = roue.get_children().slice(_coupe_poulie)
 	for n in fixes:
 		roue.remove_child(n)
-		g.add_child(n)
-		(n as Node3D).position += cp
+		pivot.add_child(n)
+		if pivot == g:
+			(n as Node3D).position += cp
 	MeshMerge.merge(roue, [], "Roue")
 	await _pause("gare : poulie")
 	# vitesse du câble en ligne, au rayon de la gorge ; sens de la boucle
@@ -2378,7 +2470,7 @@ func _gare(aval: bool) -> void:
 			RemonteeKit.boite_en(g, Vector3(0.10, 1.4, 0.10), Vector3(xd, H_CABLE_GARE + 0.86, zd), "galva_pylone")
 	# ligne d'embarquement (bande jaune) côté montée en aval, côté descente en amont
 	if teleski():
-		MeshMerge.merge(g, [g.get_node("Poulie")], "Gare")
+		MeshMerge.merge(g, [g.get_node("Inclinaison") if g.has_node("Inclinaison") else g.get_node("Poulie")], "Gare")
 		return
 	var xb: float = _x_brin(aval)
 	var l_th: float = 2.0 * l_gare + PI * voie * 0.5
@@ -2386,7 +2478,7 @@ func _gare(aval: bool) -> void:
 	# d'utilisateur du 06/11/2026)
 	if famille.begins_with("cabine"):
 		RemonteeKit.boite_en(g, Vector3(voie * 0.5 + 0.8, 0.02, 0.12), Vector3(xb * 0.6, 0.01, znez + signf(dz) * (l_th - x_arret(l_th) + 0.5)), "jaune_securite")
-	MeshMerge.merge(g, [g.get_node("Poulie")], "Gare")
+	MeshMerge.merge(g, [g.get_node("Inclinaison") if g.has_node("Inclinaison") else g.get_node("Poulie")], "Gare")
 
 
 # --- plate-forme de gare -----------------------------------------------------------
@@ -3637,7 +3729,7 @@ func _maj_magasin(delta: float) -> void:
 	var sl: float = s_lancement()
 	for k in range(file.size()):
 		var i: int = file[k]
-		var cible: float = maxf(sl - k * TeleskiGare.PAS_MAGASIN, s_debrayage())
+		var cible: float = maxf(sl - TeleskiGare.recul_magasin(k), s_debrayage())
 		var s2: float = move_toward(_au_magasin[i], cible, 1.2 * delta)
 		_au_magasin[i] = s2
 		_vehicules[i][1] = s2
@@ -3658,10 +3750,10 @@ func _maj_magasin(delta: float) -> void:
 ## redescendent (lancées par les skieurs précédents).
 func _peupler_magasin() -> void:
 	var sl: float = s_lancement()
-	var cap: int = mini(int((sl - s_debrayage()) / TeleskiGare.PAS_MAGASIN), 40)
+	var cap: int = mini(int((sl - s_debrayage() - TeleskiGare.ECART_PREMIERE) / TeleskiGare.PAS_MAGASIN) + 1, 40)
 	var n_desc: int = mini(int(longueur_h() / (espacement * 3.0)), cap / 2)
 	for k in range(cap - n_desc):
-		await _ajouter_vehicule(sl - k * TeleskiGare.PAS_MAGASIN, true)
+		await _ajouter_vehicule(sl - TeleskiGare.recul_magasin(k), true)
 		await _pause("magasin")
 	var s_a: float = float(_zones[1][1]) + 5.0
 	for k in range(n_desc):
@@ -3796,7 +3888,8 @@ func _poulie(g: Node3D, c: Vector3, R: float, aval: bool) -> void:
 	_coupe_poulie = g.get_child_count()          # la suite (arbre, bâti) ne tourne pas
 	RemonteeKit.cylindre(g, 0.20, 0.20, 0.30, Transform3D(Basis.IDENTITY, c + Vector3(0, 0.38, 0)), "acier", 16)
 	RemonteeKit.cylindre(g, 0.55, 0.55, 0.20, Transform3D(Basis.IDENTITY, c + Vector3(0, 0.62, 0)), "galva_pylone", 24)
-	RemonteeKit.boite_en(g, Vector3(2.0, 0.9, 2.2), c + Vector3(0, 1.17, 0), "galva_pylone")
+	if not (aval and famille == "perche_debrayable"):           # (TKD : tête du fût, TeleskiGare)
+		RemonteeKit.boite_en(g, Vector3(2.0, 0.9, 2.2), c + Vector3(0, 1.17, 0), "galva_pylone")
 	if teleski():
 		pass         # (TKD : moteur sur la charpente du départ, contrepoids au fût de l'arrivée — TeleskiGare)
 	elif aval:
@@ -4463,6 +4556,11 @@ func _poser_pylones_teleski() -> void:
 			py.en_t = not constructeur.to_lower().contains("poma")
 			py.compo_montee = p.get("montee", [[4, "S"]])
 			py.compo_descente = p.get("descente", [[4, "S"]])
+			if i == 0 and famille == "perche_debrayable" and cote != 1:
+				# galet incliné : la résultante penche de la rentrée latérale vers la cassure verticale
+				var a_lat: float = absf(atan2(2.0 * (voie * 0.5 - R_POULIE_TKD), maxf(d, 1.0)))
+				var a_ver: float = absf((y_cable(d + 1.0, false) - y_cable(d, false)) - (y_cable(d, false) - y_cable(maxf(d - 1.0, 0.0), false)))
+				py.incline_descente = -signf(xd) * clampf(atan2(a_lat, maxf(a_ver, 1e-4)), 0.15, 0.6)
 			var xc: float
 			if cote == 0:
 				xc = (float(po[0]) + float(po[1])) * 0.5
@@ -4631,6 +4729,8 @@ func _cable() -> void:
 			var zc: float = st[1]
 			var dz: float = zc - znez
 			var u: float = (q.z - znez) / dz
+			if znez == 0.0 and famille == "perche_debrayable":
+				continue          # TKD : la boucle suit déjà la poulie motrice (x_poulie)
 			if u > 0.0 and absf(q.z - znez) <= absf(dz) + 0.01:
 				q.x = signf(q.x) * _x_rentre(absf(q.z - znez), znez == 0.0) if absf(q.x) > 0.01 else q.x
 			elif u > 1.0:
