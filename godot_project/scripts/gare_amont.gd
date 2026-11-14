@@ -300,6 +300,7 @@ func _valider() -> void:
 		var mesh: ArrayMesh = ArrayMesh.new()
 		mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
 		mesh.surface_set_material(0, _mats[nom])
+		MeshMerge.retenir_chargement(mesh, 0, arr)     # (collisions de l'entrée en skieur sans relire la carte)
 		var mi: MeshInstance3D = MeshInstance3D.new()
 		mi.name = "GareAmont_" + nom
 		mi.mesh = mesh
