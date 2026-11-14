@@ -54,6 +54,12 @@ func _tick() -> void:
 	if _main == null:
 		_main = get_tree().current_scene
 		return
+	# fenêtre sans focus (consoles, installeurs) : pas de bridage à 20 i/s (passes faussées le 14/11/2026)
+	var pm: Node = _main.get("perf_manager")
+	if pm != null and not bool(pm.get("banc")):
+		pm.set("banc", true)
+		pm.set("_retrait", 0)
+		pm.call("_appliquer_ips")
 	var r: Variant = _main.get("relief")
 	if not _lance and r != null and r.pret and _f > 60:
 		_lance = true
