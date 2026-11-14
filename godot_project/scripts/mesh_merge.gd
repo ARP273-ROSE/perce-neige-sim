@@ -501,7 +501,19 @@ static func valider_indexe(st: SurfaceTool, mesh: ArrayMesh = null) -> ArrayMesh
 		var t0: int = Time.get_ticks_usec()
 		st.index()
 		index_us += Time.get_ticks_usec() - t0
-	return st.commit(mesh)
+	if not garder_chargement:
+		return st.commit(mesh)
+	# chargement (PC) : copie gardée jusqu'aux collisions du skieur (voir garder_chargement) — sans elle, l'entrée en
+	# skieur relisait sur la carte la voie, le tunnel et les gares (165 relectures au banc de fluidité, 14/11/2026).
+	# commit() pose les tableaux de commit_to_arrays() : même maillage.
+	var a: Array = st.commit_to_arrays()
+	var m: ArrayMesh = st.commit(mesh)
+	if not a.is_empty() and a[Mesh.ARRAY_VERTEX] != null and not (a[Mesh.ARRAY_VERTEX] as PackedVector3Array).is_empty():
+		retenir(m, m.get_surface_count() - 1, a)
+		verrou.lock()
+		_gardes_chargement.append(weakref(m))
+		verrou.unlock()
+	return m
 
 
 ## Partage des fusions à géométrie identique (PWA : les deux rames et leurs voitures
