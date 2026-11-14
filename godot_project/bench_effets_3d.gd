@@ -3,6 +3,9 @@
 ##   godot --fullscreen --path godot_project -s bench_effets_3d.gd -- --sortie=C:/chemin/ [--effets=base,ombres]
 ## Mode cran par cran (relevés d'une machine à l'autre) : --crans=0-5 [--etiq=machine] ; chaque cran du jeu appliqué
 ## tel quel (PerfManager), mêmes vues, médianes GPU, rendu CPU et image ; tableau court dans <sortie>/crans_<etiq>.txt.
+## Mode effet par effet : --decoupe [--etiq=machine] ; part du cran 0 et coupe les effets un à un, en cumulant, dans
+## l'ordre du régulateur (éclairage indirect, brouillard, anti-crénelage, néons, pare-brise, nuages, halo), puis une
+## seconde chaîne qui coupe l'anti-crénelage AVANT le brouillard ; gain de chaque coupure dans <sortie>/decoupe_<etiq>.txt.
 extends SceneTree
 
 const IMAGES_CALME: int = 150        # l'éclairage indirect et les caches se posent
@@ -20,6 +23,7 @@ var _vp: Viewport
 var _vues: Array = []                # [nom, position caméra, cible, position du skieur]
 var _crans: Array = []               # mode cran par cran : crans à relever
 var _etiq: String = "machine"
+var _decoupe: bool = false
 var _res: Array = []
 
 
@@ -41,6 +45,8 @@ func _initialize() -> void:
 				_crans.append(c)
 		if a.begins_with("--etiq="):
 			_etiq = a.substr(7)
+		if a == "--decoupe":
+			_decoupe = true
 	DirAccess.make_dir_recursive_absolute(_out)
 	_main = load("res://scenes/main.tscn").instantiate()
 	get_root().add_child(_main)
@@ -244,6 +250,106 @@ func _releve_crans(sk: SkieurJoueur) -> void:
 		print(l)
 
 
+## Coupures du régulateur une à une (mêmes réglages que PerfManager._appliquer), cumulées.
+func _coupures() -> Dictionary:
+	var st: Node = _main.get("stations") as Node
+	var sky_mat: ShaderMaterial = _env.sky.sky_material as ShaderMaterial if _env.sky != null else null
+	return {
+		"eclairage_indirect": func(): _env.sdfgi_enabled = false,
+		"brouillard": func(): _env.volumetric_fog_enabled = false,
+		"msaa_vers_smaa": func():
+			_vp.msaa_3d = Viewport.MSAA_DISABLED
+			_vp.screen_space_aa = Viewport.SCREEN_SPACE_AA_SMAA,
+		"neons_alleges": func():
+			if st != null and st.has_method("set_neons_alleges"):
+				st.call("set_neons_alleges", true),
+		"pare_brise_simple": func():
+			for nom in ["cabin", "cabin_ghost"]:
+				var r: Node = _main.get(nom) as Node
+				if r != null and r.has_method("set_pare_brise_simple"):
+					r.call("set_pare_brise_simple", true),
+		"nuages": func():
+			if sky_mat != null:
+				sky_mat.set_shader_parameter("nuages", 0.0),
+		"halo": func(): _env.glow_enabled = false,
+	}
+
+
+func _releve_decoupe(sk: SkieurJoueur) -> void:
+	var pm: Node = _main.perf_manager
+	var cran0: int = int(pm.get("cran"))
+	var vsync0: DisplayServer.VSyncMode = DisplayServer.window_get_vsync_mode()
+	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
+	var cp: Dictionary = _coupures()
+	var chaines: Array = [
+		["regulateur", ["eclairage_indirect", "brouillard", "msaa_vers_smaa", "neons_alleges", "pare_brise_simple", "nuages", "halo"]],
+		["msaa_avant_brouillard", ["eclairage_indirect", "msaa_vers_smaa", "brouillard"]],
+	]
+	var o: PackedStringArray = PackedStringArray()
+	var vs: Vector2i = DisplayServer.window_get_size()
+	o.append("# relevé effet par effet — %s — %s, %d cœurs — %s — %s — fenêtre %dx%d — %s" % [_etiq, OS.get_processor_name(),
+		OS.get_processor_count(), RenderingServer.get_video_adapter_name(), RenderingServer.get_current_rendering_method(),
+		vs.x, vs.y, Time.get_datetime_string_from_system()])
+	o.append("# médianes sur %d images par vue, sans vsync ; coupures cumulées depuis le cran 0 ; gpu en ms ; gain = gpu avant − gpu après (ms et %% du cran 0)" % IMAGES_MESURE)
+	for ch in chaines:
+		pm.call("_appliquer", 0, "banc effet par effet")
+		var etapes: Array = ["cran0"] + ch[1]
+		var res: Dictionary = {}     # étape → vue → gpu
+		for i in etapes.size():
+			if i > 0:
+				(cp[etapes[i]] as Callable).call()
+			res[etapes[i]] = {}
+			for v in _vues:
+				var m: Array = await _mesurer_vue(sk, v)
+				res[etapes[i]][v[0]] = m[0]
+				print("DECOUPE %s %s %s : gpu med %.2f ; rendu cpu %.2f ; image %.2f ; primitives %.0f appels %.0f" % [ch[0], etapes[i], v[0], m[0], m[3], m[4], m[5], m[6]])
+		o.append("")
+		o.append("## chaîne %s" % ch[0])
+		var ligne: String = "%-28s" % "vue"
+		for e in etapes:
+			ligne += " | %18s" % e
+		o.append(ligne)
+		var lignes_vues: Array = []
+		for v in _vues:
+			lignes_vues.append(v[0])
+		lignes_vues.append("médiane des vues")
+		for nv in lignes_vues:
+			ligne = "%-28s" % nv
+			var prec: float = 0.0
+			var base: float = 0.0
+			for i in etapes.size():
+				var g: float = 0.0
+				if nv == "médiane des vues":
+					var gg: PackedFloat32Array = PackedFloat32Array()
+					for v in _vues:
+						gg.append(res[etapes[i]][v[0]])
+					g = _quantile(gg, 0.5)
+				else:
+					g = res[etapes[i]][nv]
+				if i == 0:
+					base = g
+					ligne += " | %18s" % ("%.2f" % g)
+				else:
+					ligne += " | %18s" % ("%.2f (−%.2f %3.0f%%)" % [g, prec - g, 100.0 * (prec - g) / maxf(base, 0.001)])
+				prec = g
+			o.append(ligne)
+		pm.call("_appliquer", cran0, "fin de chaîne")
+		# (le régulateur ne remet pas les néons, le pare-brise ni les nuages au cran 0 s'ils n'ont pas changé)
+		var st: Node = _main.get("stations") as Node
+		if st != null and st.has_method("set_neons_alleges"):
+			st.call("set_neons_alleges", false)
+		for nom in ["cabin", "cabin_ghost"]:
+			var r: Node = _main.get(nom) as Node
+			if r != null and r.has_method("set_pare_brise_simple"):
+				r.call("set_pare_brise_simple", false)
+	DisplayServer.window_set_vsync_mode(vsync0)
+	var f: FileAccess = FileAccess.open(_out.path_join("decoupe_%s.txt" % _etiq), FileAccess.WRITE)
+	f.store_string("\n".join(o) + "\n")
+	f.close()
+	for l in o:
+		print(l)
+
+
 func _quantile(a: PackedFloat32Array, q: float) -> float:
 	var b: Array = Array(a)
 	b.sort()
@@ -312,6 +418,11 @@ func _suite() -> void:
 	_cam.make_current()
 	# (le skieur reste là pour que le jeu construise autour de lui, mais sa tête masquait la vue)
 	sk.visible = false
+	if _decoupe:
+		await _releve_decoupe(sk)
+		print("BENCH_EFFETS FIN")
+		FinBanc.quitter(self, _main, 0)
+		return
 	if not _crans.is_empty():
 		await _releve_crans(sk)
 		print("BENCH_EFFETS FIN")
