@@ -863,6 +863,9 @@ var x_fut: float = 0.0          # position du fût (repère du pylône)
 ## Pylône en T (fût entre les deux brins, traverse des deux côtés) : téléskis
 ## autres que Poma (vidéos des Montets et du Col du Palet) ; sinon potence.
 var en_t: bool = false
+## Dernier pylône avant le départ d'un TKD : le train du brin retour est incliné (rad, autour de l'axe du câble)
+## pour le rentrer vers la petite poulie motrice (LigneRemontee.decalage_descente).
+var incline_descente: float = 0.0
 const DESSUS_BRAS_TELESKI: float = 0.75   # bras au-dessus du câble
 
 
@@ -933,8 +936,16 @@ func _construire_teleski() -> void:
 		var yc2: float = h - DESSUS_BRAS_TELESKI
 		# galets sous le câble (support) ; en compression, au-dessus
 		var yg: float = yc2 + (0.14 if dessus else -0.14)
+		var tilt: float = incline_descente if not montee else 0.0
 		for k in range(n):
-			RemonteeKit.galet(self, Vector3(x, yg, Lt * 0.5 - k * 0.36), 0.14, 0.06)
+			var cg: Vector3 = Vector3(x, yg, Lt * 0.5 - k * 0.36)
+			if tilt != 0.0:
+				# galet incliné sous le câble : le point d'appui reste sous lui, la normale penche vers l'extérieur
+				cg = Vector3(x, yc2, cg.z) - Vector3(-sin(tilt), cos(tilt), 0.0) * 0.14
+			RemonteeKit.galet(self, cg, 0.14, 0.06)
+			if tilt != 0.0:
+				var gi: Node3D = get_child(get_child_count() - 1)
+				gi.transform.basis = Basis(Vector3.BACK, tilt) * gi.transform.basis
 		# flasques du train et suspente côté intérieur, jusqu'au bras
 		var xi: float = x - signf(x - x_fut) * 0.12 if absf(x - x_fut) > 0.01 else x + 0.12
 		RemonteeKit.boite_en(self, Vector3(0.04, 0.22, Lt + 0.3), Vector3(xi, yg, 0), "galva")
