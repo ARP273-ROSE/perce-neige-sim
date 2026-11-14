@@ -935,7 +935,7 @@ func _grande_poulie_tkd(c: Vector3, tilt: float, y_bras: float) -> void:
 func _construire_teleski() -> void:
 	var h: float = hauteur
 	var yc: float = h - DESSUS_BRAS_TELESKI        # câble
-	if cote == 0 and not en_t:
+	if cote == 0 and not en_t and not tkd:
 		var xd: float = _x_brin(false)
 		x_fut = xd + signf(xd) * 0.9
 	else:
@@ -965,7 +965,9 @@ func _construire_teleski() -> void:
 	else:
 		RemonteeKit.cylindre(self, 0.26, 0.26, 1.8, Transform3D(Basis.IDENTITY, Vector3(x_fut, 0.9, 0)), "mousse_rouge", 14)
 	if tkd:
-		_bras_treillis_tkd(h, x_loin + signf(x_loin - x_fut) * 0.25, xs)
+		# fût entre les deux brins quand il les porte tous les deux : un bras de chaque côté
+		for xb in xs:
+			_bras_treillis_tkd(h, float(xb) + signf(float(xb) - x_fut) * 0.25, [xb])
 	elif cote == 0 and en_t:
 		# traverse en T, des deux côtés du fût, au-delà des deux brins
 		var xt: float = voie * 0.5 + 0.25
