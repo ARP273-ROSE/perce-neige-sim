@@ -8,6 +8,7 @@
 #pragma once
 
 #include <godot_cpp/classes/node3d.hpp>
+#include <godot_cpp/classes/primitive_mesh.hpp>
 #include <godot_cpp/classes/ref_counted.hpp>
 #include <godot_cpp/variant/callable.hpp>
 #include <godot_cpp/variant/dictionary.hpp>
@@ -50,6 +51,9 @@ public:
 			const Dictionary &cpu, const Variant &verrou, const Callable &repli) const;
 	// _retirer_sources : pièces entièrement fusionnées retirées (libérées hors de la scène).
 	void retirer(const Dictionary &done) const;
+	// Triangles (soupe, comme MeshMerge.faces) d'un cylindre, d'une sphère ou d'un tore, calculés comme le moteur ;
+	// vide pour une autre primitive.
+	PackedVector3Array faces_primitive(const Ref<PrimitiveMesh> &prim) const;
 };
 
 } // namespace godot

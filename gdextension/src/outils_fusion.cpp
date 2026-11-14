@@ -14,7 +14,10 @@
 #include <godot_cpp/classes/mutex.hpp>
 #include <godot_cpp/classes/node.hpp>
 #include <godot_cpp/classes/node3d.hpp>
+#include <godot_cpp/classes/cylinder_mesh.hpp>
 #include <godot_cpp/classes/point_mesh.hpp>
+#include <godot_cpp/classes/sphere_mesh.hpp>
+#include <godot_cpp/classes/torus_mesh.hpp>
 #include <godot_cpp/classes/primitive_mesh.hpp>
 #include <godot_cpp/classes/skin.hpp>
 #include <godot_cpp/classes/time.hpp>
@@ -22,6 +25,7 @@
 #include <godot_cpp/core/memory.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
 
+#include <cmath>
 #include <utility>
 #include <vector>
 
@@ -270,4 +274,171 @@ void OutilsMaillage::retirer(const Dictionary &done) const {
 			memdelete(mi);
 		}
 	}
+}
+
+// --- Triangles des primitives (collisions sans relire la carte) ------------------------------------------------
+// PrimitiveMesh.get_mesh_arrays() n'est qu'un surface_get_arrays(0) : relu sur la carte graphique (à l'écran, ~32 ms
+// de blocage du fil principal). Les positions et les indices des cylindres, sphères et tores sont recalculés ici
+// comme dans le moteur 4.6 (scene/resources/3d/primitive_meshes.cpp : mêmes types float / double, même ordre ;
+// sin et cos du moteur pour les calculs en double), retournement des faces compris. Rend la soupe de triangles
+// (comme MeshMerge.faces), vide pour une autre primitive.
+
+namespace {
+
+void soupe(const std::vector<Vector3> &pts, std::vector<int> &ix, bool flip, PackedVector3Array &out) {
+	if (flip) {
+		for (size_t i = 0; i + 2 < ix.size(); i += 3) {
+			std::swap(ix[i], ix[i + 1]);
+		}
+	}
+	out.resize((int64_t)ix.size());
+	Vector3 *w = out.ptrw();
+	for (size_t i = 0; i < ix.size(); i++) {
+		w[i] = pts[ix[i]];
+	}
+}
+
+inline float dsin(double a) { return (float)UtilityFunctions::sin(a); }
+inline float dcos(double a) { return (float)UtilityFunctions::cos(a); }
+
+} // namespace
+
+PackedVector3Array OutilsMaillage::faces_primitive(const Ref<PrimitiveMesh> &prim) const {
+	PackedVector3Array out;
+	std::vector<Vector3> pts;
+	std::vector<int> ix;
+	if (CylinderMesh *c = Object::cast_to<CylinderMesh>(prim.ptr())) {
+		const float top_radius = c->get_top_radius(), bottom_radius = c->get_bottom_radius(), height = c->get_height();
+		const int radial_segments = c->get_radial_segments(), rings = c->get_rings();
+		int i, j, prevrow = 0, thisrow = 0, point = 0;
+		float x, y, z, v, radius;
+		for (j = 0; j <= (rings + 1); j++) {
+			v = j;
+			v /= (rings + 1);
+			radius = top_radius + ((bottom_radius - top_radius) * v);
+			y = height * v;
+			y = (height * 0.5) - y;
+			for (i = 0; i <= radial_segments; i++) {
+				float u = i;
+				u /= radial_segments;
+				if (i == radial_segments) {
+					x = 0.0;
+					z = 1.0;
+				} else {
+					x = dsin(u * Math_TAU);
+					z = dcos(u * Math_TAU);
+				}
+				pts.push_back(Vector3(x * radius, y, z * radius));
+				point++;
+				if (i > 0 && j > 0) {
+					ix.insert(ix.end(), { prevrow + i - 1, prevrow + i, thisrow + i - 1, prevrow + i, thisrow + i, thisrow + i - 1 });
+				}
+			}
+			prevrow = thisrow;
+			thisrow = point;
+		}
+		for (int cap = 0; cap < 2; cap++) {
+			const bool haut = cap == 0;
+			const float rr = haut ? top_radius : bottom_radius;
+			if (!((haut ? c->is_cap_top() : c->is_cap_bottom()) && rr > 0.0)) {
+				continue;
+			}
+			y = height * (haut ? 0.5 : -0.5);
+			thisrow = point;
+			pts.push_back(Vector3(0.0, y, 0.0));
+			point++;
+			for (i = 0; i <= radial_segments; i++) {
+				float r = i;
+				r /= radial_segments;
+				if (i == radial_segments) {
+					x = 0.0;
+					z = 1.0;
+				} else {
+					x = dsin(r * Math_TAU);
+					z = dcos(r * Math_TAU);
+				}
+				pts.push_back(Vector3(x * rr, y, z * rr));
+				point++;
+				if (i > 0) {
+					if (haut) {
+						ix.insert(ix.end(), { thisrow, point - 1, point - 2 });
+					} else {
+						ix.insert(ix.end(), { thisrow, point - 2, point - 1 });
+					}
+				}
+			}
+		}
+	} else if (SphereMesh *s = Object::cast_to<SphereMesh>(prim.ptr())) {
+		const float radius = s->get_radius(), height = s->get_height();
+		const int radial_segments = s->get_radial_segments(), rings = s->get_rings();
+		const bool is_hemisphere = s->get_is_hemisphere();
+		int i, j, prevrow = 0, thisrow = 0, point = 0;
+		float x, y, z;
+		const float scale = height / radius * (is_hemisphere ? 1.0 : 0.5);
+		for (j = 0; j <= (rings + 1); j++) {
+			float v = j;
+			float w;
+			v /= (rings + 1);
+			if (j == (rings + 1)) {
+				w = 0.0;
+				y = -1.0;
+			} else {
+				w = dsin(Math_PI * v);
+				y = dcos(Math_PI * v);
+			}
+			for (i = 0; i <= radial_segments; i++) {
+				float u = i;
+				u /= radial_segments;
+				if (i == radial_segments) {
+					x = 0.0;
+					z = 1.0;
+				} else {
+					x = dsin(u * Math_TAU);
+					z = dcos(u * Math_TAU);
+				}
+				if (is_hemisphere && y < 0.0) {
+					pts.push_back(Vector3(x * radius * w, 0.0, z * radius * w));
+				} else {
+					pts.push_back(Vector3(x * w, y * scale, z * w) * radius);
+				}
+				point++;
+				if (i > 0 && j > 0) {
+					ix.insert(ix.end(), { prevrow + i - 1, prevrow + i, thisrow + i - 1, prevrow + i, thisrow + i, thisrow + i - 1 });
+				}
+			}
+			prevrow = thisrow;
+			thisrow = point;
+		}
+	} else if (TorusMesh *t = Object::cast_to<TorusMesh>(prim.ptr())) {
+		float min_radius = t->get_inner_radius(), max_radius = t->get_outer_radius();
+		const int rings = t->get_rings(), ring_segments = t->get_ring_segments();
+		if (min_radius == max_radius) {
+			return out;
+		}
+		if (min_radius > max_radius) {
+			std::swap(min_radius, max_radius);
+		}
+		const float radius = (max_radius - min_radius) * 0.5;
+		for (int i = 0; i <= rings; i++) {
+			const int prevrow = (i - 1) * (ring_segments + 1);
+			const int thisrow = i * (ring_segments + 1);
+			const float inci = float(i) / rings;
+			const float angi = inci * Math_TAU;
+			const Vector2 normali = (i == rings) ? Vector2(0.0, -1.0) : Vector2(-std::sin(angi), -std::cos(angi));
+			for (int j = 0; j <= ring_segments; j++) {
+				const float incj = float(j) / ring_segments;
+				const float angj = incj * Math_TAU;
+				const Vector2 normalj = (j == ring_segments) ? Vector2(-1.0, 0.0) : Vector2(-std::cos(angj), std::sin(angj));
+				const Vector2 normalk = normalj * radius + Vector2(min_radius + radius, 0);
+				pts.push_back(Vector3(normali.x * normalk.x, normalk.y, normali.y * normalk.x));
+				if (i > 0 && j > 0) {
+					ix.insert(ix.end(), { thisrow + j - 1, prevrow + j, prevrow + j - 1, thisrow + j - 1, thisrow + j, prevrow + j });
+				}
+			}
+		}
+	} else {
+		return out;
+	}
+	soupe(pts, ix, prim->get_flip_faces(), out);
+	return out;
 }
