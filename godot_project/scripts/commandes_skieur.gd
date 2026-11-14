@@ -29,6 +29,7 @@ var _pos_joy_defaut: Vector2 = Vector2.ZERO   # base du joystick au repos (bas �
 var _b_conduire: Button = null
 var _b_courir: Button = null
 var _b_vue: Button = null
+var _b_vue_ligne: Button = null         # vues de la remontée (touche T), à bord seulement
 var _b_ski: Button = null
 var _b_echelle: Button = null
 var _b_mesure: Button = null
@@ -161,6 +162,12 @@ func _ready() -> void:
 	_b_vue = _bouton("1re PERS.", "Vue à la première ou à la troisième personne (touche V)")
 	_b_vue.pressed.connect(basculer_vue)
 	col.add_child(_b_vue)
+	_b_vue_ligne = _bouton("VUE LIGNE", "À bord d'une remontée : vue orbitale, depuis le pylône, depuis la gare, travelling, drone (touche T) ; glisser et molette en orbite")
+	_b_vue_ligne.visible = false
+	_b_vue_ligne.pressed.connect(func() -> void:
+		if main != null:
+			main.basculer_vue_ligne())
+	col.add_child(_b_vue_ligne)
 	var b_q: Button = _bouton("QUITTER", "Revenir à la conduite")
 	b_q.pressed.connect(func() -> void:
 		if main != null:
@@ -340,6 +347,18 @@ func _process_corps(delta: float) -> void:
 
 
 ## Le bouton ÉVACUER n'apparaît que dans une rame arrêtée en tunnel.
+## Bouton VUE LIGNE : nom de la vue en cours, caché hors remontée ("").
+func set_vue_ligne(nom: String) -> void:
+	if _b_vue_ligne == null:
+		return
+	var oui: bool = nom != ""
+	if _b_vue_ligne.visible != oui:
+		_b_vue_ligne.visible = oui
+	var t: String = "VUE LIGNE" if nom == "" or nom == "SKIEUR" else nom
+	if oui and _b_vue_ligne.text != t:
+		_b_vue_ligne.text = t
+
+
 func set_evacuation_possible(oui: bool) -> void:
 	if _b_evac != null and _b_evac.visible != oui:
 		_b_evac.visible = oui
@@ -359,6 +378,9 @@ func _dessiner_joy() -> void:
 
 
 func _sur_un_bouton(p: Vector2) -> bool:
+	# la carte se glisse au doigt : elle ne doit pas tourner la vue en même temps
+	if carte != null and carte.is_visible_in_tree() and carte.get_global_rect().has_point(p):
+		return true
 	for b in _boutons:
 		if (b as Button).visible and (b as Button).get_global_rect().has_point(p):
 			return true

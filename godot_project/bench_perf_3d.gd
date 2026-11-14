@@ -80,11 +80,21 @@ func _initialize() -> void:
 		_fenetre(pm, 60.0, 0)
 	_check("retenté après 3 min", pm.cran == 2, "cran %d" % pm.cran)
 
-	# 5. Mode forcé : pas d'ajustement
+	# 5. Mode du menu : départ et plafond, le régulateur allège encore si ça saccade
 	pm.set_mode("high")
 	_check("mode haute : cran 0", pm.cran == 0, "cran %d" % pm.cran)
 	_fenetre(pm, 20.0, 30)
-	_check("mode forcé : pas de baisse", pm.cran == 0, pm.dernier_bilan)
+	_check("mode haute : allège quand ça saccade", pm.cran == 1, pm.dernier_bilan)
+	pm.set_mode("medium")
+	_check("mode moyenne : cran 2", pm.cran == 2, "cran %d" % pm.cran)
+	for _k in range(12):
+		_fenetre(pm, 60.0, 0)
+	_check("mode moyenne : jamais au-dessus du réglage", pm.cran == 2, "cran %d" % pm.cran)
+	pm._fige = true
+	pm._appliquer(0, "test")
+	_fenetre(pm, 20.0, 30)
+	_check("cran imposé (--cran) : pas de baisse", pm.cran == 0, pm.dernier_bilan)
+	pm._fige = false
 	pm.set_mode("auto")
 
 	# 6. Cadence verrouillée au dernier cran

@@ -77,6 +77,7 @@ var _env: Environment = null
 var skieur: SkieurJoueur = null
 var collisions: CollisionsJeu = null
 var commandes_skieur: CommandesSkieur = null
+var vues_remontee: VuesRemontee = null       # vues de la remontée où l'on est (touche T)
 var mode_skieur: bool = false
 ## vue 3D embarquée dans le PC : sons du quai et du dehors (le PC joue ceux
 ## de la rame), dernier état du skieur envoyé au PC
@@ -1712,6 +1713,9 @@ func _unhandled_input(event: InputEvent) -> void:
 				and commandes_skieur.carte.visible and event.keycode in [KEY_PLUS, KEY_KP_ADD, KEY_EQUAL, KEY_MINUS, KEY_KP_SUBTRACT]:
 			commandes_skieur.carte.zoomer(1.4 if event.keycode in [KEY_PLUS, KEY_KP_ADD, KEY_EQUAL] else 1.0 / 1.4)
 			return
+		if mode_skieur and event.keycode == KEY_T:     # T : vues de la remontée où l'on est
+			basculer_vue_ligne()
+			return
 		if mode_skieur and event.keycode == KEY_U:     # U : issUe de secours (I = inverser le sens)
 			evacuer()
 			return
@@ -2328,6 +2332,22 @@ func _creer_skieur() -> void:
 	add_child(commandes_skieur)
 	if not mode_skieur:
 		commandes_skieur.visible = false
+	vues_remontee = VuesRemontee.new()
+	vues_remontee.name = "VuesRemontee"
+	vues_remontee.main = self
+	vues_remontee.skieur = skieur
+	add_child(vues_remontee)
+
+
+## Vue suivante sur la remontée où l'on est assis (bouton VUE LIGNE, touche T).
+func basculer_vue_ligne() -> void:
+	if vues_remontee == null or commandes_skieur == null:
+		return
+	var n: String = vues_remontee.suivante()
+	if n == "":
+		commandes_skieur.message("Vues de la ligne : seulement à bord d'une remontée", 3.0)
+	else:
+		commandes_skieur.message("Vue : " + n.to_lower(), 2.0)
 
 
 ## Remontées mécaniques du domaine (lignes exportées du dossier des
@@ -2894,7 +2914,11 @@ func _maj_skieur() -> void:
 	_gare_skieur = _gare_du_skieur()
 	var en_gare: bool = _gare_skieur > 0
 	var dedans: bool = false
-	if skieur.support != null:
+	# porté par un siège, une cabine ou une perche d'une AUTRE remontée : ni
+	# dans la rame ni à l'écoute du funiculaire (l'exploitation du PC le
+	# croyait à bord et la sono de la rame le suivait sur un télésiège)
+	var sur_rame: bool = skieur.support != null and _rame_du_skieur() != null
+	if sur_rame:
 		var loc: Vector3 = skieur.support.global_transform.affine_inverse() * skieur.global_position
 		dedans = absf(loc.x) < SKIEUR_DEDANS_X
 	# à pied dans le tunnel (évacuation) : la rame reste là tant qu'il n'a
@@ -2938,12 +2962,16 @@ func _maj_skieur() -> void:
 	_piques_occasions(get_process_delta_time(), en_gare, a_pied_tunnel)
 	_securite_skieur()
 	commandes_skieur.set_evacuation_possible(evacuation_possible())
+	if vues_remontee != null:
+		commandes_skieur.set_vue_ligne(vues_remontee.nom() if vues_remontee.possible() else "")
 	commandes_skieur.set_exploitation(_exploitation_pc if client_mode else (auto_operator != null and auto_operator.enabled))
 	var retenue: bool = (not dedans and (skieur.support != null or en_gare)) \
 		or a_pied_tunnel or (skieur_auto != null and skieur_auto.descend())
 	# ce qu'il entend : 0 rame, 1 gare basse, 2 dehors, 3 gare haute, 4 tunnel
 	var ec: int = 0
-	if skieur.support == null:
+	if skieur.support != null and not sur_rame:
+		ec = 2
+	elif skieur.support == null:
 		ec = 4 if a_pied_tunnel else (3 if _gare_skieur == 2 else (1 if _gare_skieur == 1 else 2))
 	if auto_operator != null:
 		auto_operator.a_bord = dedans

@@ -6,6 +6,7 @@ extends Control
 ## couleurs, leur nom et leurs tracés autour de moi, avec zoom / dézoom »).
 ## Nord en haut, centrée sur le skieur (flèche = sa direction) ; gares du
 ## funiculaire marquées. Zoom : boutons + / −, molette, touches + / −.
+## Glisser déplace la carte ; le bouton ◎ la ramène sur le skieur.
 ## Tracés : © contributeurs OpenStreetMap (ODbL), via PistesDonnees.
 
 const TAILLE: Vector2 = Vector2(340, 340)
@@ -24,6 +25,13 @@ var main: Node = null
 var echelle: float = 0.18
 var _t: float = 0.0
 var _police: Font = null
+## Décalage du centre de la carte par rapport au skieur, en mètres (glisser).
+var decalage: Vector2 = Vector2.ZERO
+var _appui: bool = false                 # bouton ou doigt posé sur la carte
+var _glisse: bool = false                # le geste en cours est un glissement
+var _pos_appui: Vector2 = Vector2.ZERO
+const SEUIL_GLISSE: float = 8.0          # px avant qu'un toucher devienne un glissement
+var _b_centre: Button = null
 
 
 func _ready() -> void:
@@ -42,6 +50,31 @@ func _ready() -> void:
 		b.size = Vector2(40, 40)
 		b.pressed.connect(zoomer.bind(1.4 if k == 0 else 1.0 / 1.4))
 		add_child(b)
+	# ramener la carte sur le skieur après l'avoir déplacée
+	_b_centre = Button.new()
+	_b_centre.text = "◎"
+	_b_centre.tooltip_text = "Revenir au skieur"
+	_b_centre.focus_mode = Control.FOCUS_NONE
+	_b_centre.custom_minimum_size = Vector2(40, 40)
+	_b_centre.add_theme_font_size_override("font_size", 22)
+	_b_centre.position = Vector2(TAILLE.x - 46, 6 + 46 * 2)
+	_b_centre.size = Vector2(40, 40)
+	_b_centre.visible = false
+	_b_centre.pressed.connect(recentrer)
+	add_child(_b_centre)
+
+
+func recentrer() -> void:
+	decalage = Vector2.ZERO
+	_b_centre.visible = false
+	queue_redraw()
+
+
+## Centre de la carte, en mètres (x, z monde).
+func _centre() -> Vector2:
+	if skieur == null:
+		return decalage
+	return Vector2(skieur.global_position.x, skieur.global_position.z) + decalage
 
 
 func zoomer(f: float) -> void:
@@ -50,16 +83,45 @@ func zoomer(f: float) -> void:
 
 
 func _gui_input(ev: InputEvent) -> void:
-	# « aller à » : un toucher ou un clic sur une remontée dépose le skieur au
-	# pied de sa gare aval (retour d'utilisateur, 22/10/2026)
-	if (ev is InputEventScreenTouch and ev.pressed) or \
-			(ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_LEFT):
-		var lg: LigneRemontee = remontee_sous(ev.position)
-		if lg != null and main != null and main.has_method("aller_a_remontee"):
-			main.aller_a_remontee(lg)
+	# appui : on attend de savoir si c'est un toucher (« aller à ») ou un
+	# glissement (déplacer la carte, retour d'utilisateur, 14/11/2026 : « la carte
+	# est bloquée sur le skieur au centre »). Un doigt arrive deux fois (toucher
+	# et souris émulée) : le toucher décide de « aller à », la souris émulée ne
+	# sert qu'au glissement.
+	var doigt: bool = ev is InputEventScreenTouch and ev.index == 0
+	var souris: bool = ev is InputEventMouseButton and ev.button_index == MOUSE_BUTTON_LEFT
+	if doigt or souris:
+		var emulee: bool = souris and ev.device == InputEvent.DEVICE_ID_EMULATION
+		if ev.pressed:
+			if not (_appui and emulee):
+				_appui = true
+				_glisse = false
+				_pos_appui = ev.position
+		elif not emulee and _appui:
+			_appui = false
+			if not _glisse:
+				# « aller à » : un toucher ou un clic sur une remontée dépose le
+				# skieur au pied de sa gare aval (retour d'utilisateur, 22/10/2026)
+				var lg: LigneRemontee = remontee_sous(ev.position)
+				if lg != null and main != null and main.has_method("aller_a_remontee"):
+					main.aller_a_remontee(lg)
+					recentrer()
+			_glisse = false
+		accept_event()
+		return
+	var depl: Vector2 = Vector2.ZERO
+	if ev is InputEventMouseMotion and _appui:
+		depl = ev.relative
+	if depl != Vector2.ZERO:
+		if not _glisse and ev.position.distance_to(_pos_appui) > SEUIL_GLISSE:
+			_glisse = true
+			depl = ev.position - _pos_appui      # le bout de geste avant le seuil
+		if _glisse:
+			decalage -= depl / echelle
+			_b_centre.visible = true
 			queue_redraw()
-			accept_event()
-			return
+		accept_event()
+		return
 	if ev is InputEventMouseButton and ev.pressed:
 		if ev.button_index == MOUSE_BUTTON_WHEEL_UP:
 			zoomer(1.15)
@@ -67,9 +129,19 @@ func _gui_input(ev: InputEvent) -> void:
 		elif ev.button_index == MOUSE_BUTTON_WHEEL_DOWN:
 			zoomer(1.0 / 1.15)
 			accept_event()
+		elif ev.button_index == MOUSE_BUTTON_MIDDLE or ev.button_index == MOUSE_BUTTON_RIGHT:
+			recentrer()
+			accept_event()
 	elif ev is InputEventMagnifyGesture:
 		zoomer(ev.factor)
 		accept_event()
+
+
+func _notification(what: int) -> void:
+	# la souris quitte la carte bouton tenu : le relâché n'arrivera pas ici
+	if what == NOTIFICATION_MOUSE_EXIT and _appui and _glisse:
+		_appui = false
+		_glisse = false
 
 
 func _process(delta: float) -> void:
@@ -117,7 +189,7 @@ var _rang_toucher: int = 0
 func remontee_sous(pos: Vector2) -> LigneRemontee:
 	if skieur == null:
 		return null
-	var c: Vector2 = Vector2(skieur.global_position.x, skieur.global_position.z)
+	var c: Vector2 = _centre()
 	var o: Vector2 = TAILLE * 0.5
 	var cands: Array = []
 	for r in _remontees():
@@ -223,7 +295,7 @@ func _draw() -> void:
 	if domaine == null or skieur == null:
 		return
 	var p: Vector3 = skieur.global_position
-	var c: Vector2 = Vector2(p.x, p.z)
+	var c: Vector2 = _centre()
 	var o: Vector2 = TAILLE * 0.5
 	var demi: Vector2 = TAILLE * 0.5 / echelle
 	var vue: Rect2 = Rect2(c - demi, demi * 2.0).grow(PistesDonnees.LARGEUR)
@@ -277,15 +349,29 @@ func _draw() -> void:
 		draw_string_outline(_police, pos + Vector2(4, -4), n[0], HORIZONTAL_ALIGNMENT_LEFT, -1, 13, 4,
 			Color(0, 0, 0, 0.85))
 		draw_string(_police, pos + Vector2(4, -4), n[0], HORIZONTAL_ALIGNMENT_LEFT, -1, 13, Color(1, 1, 1))
-	# le skieur : flèche dans sa direction (avant = −z local)
+	# le skieur : flèche dans sa direction (avant = −z local), à sa place sur
+	# la carte déplacée ; hors cadre, un repère sur le bord montre où il est
 	var cap: float = skieur._visuel.global_rotation.y if skieur.get("_visuel") != null else 0.0
 	var av: Vector2 = Vector2(-sin(cap), -cos(cap))
 	var dr: Vector2 = Vector2(-av.y, av.x)
-	var fl: PackedVector2Array = PackedVector2Array([o + av * 11.0, o - av * 7.0 + dr * 7.0,
-		o - av * 3.0, o - av * 7.0 - dr * 7.0])
-	draw_colored_polygon(fl, Color(1.0, 0.25, 0.15, 1.0))
-	for i in range(4):
-		HUD.segment(self, fl[i], fl[(i + 1) % 4], Color(1, 1, 1), 1.5)
+	var ps: Vector2 = _carte(Vector2(p.x, p.z), c, o)
+	var cadre: Rect2 = Rect2(Vector2.ZERO, TAILLE).grow(-12.0)
+	if cadre.has_point(ps):
+		var fl: PackedVector2Array = PackedVector2Array([ps + av * 11.0, ps - av * 7.0 + dr * 7.0,
+			ps - av * 3.0, ps - av * 7.0 - dr * 7.0])
+		draw_colored_polygon(fl, Color(1.0, 0.25, 0.15, 1.0))
+		for i in range(4):
+			HUD.segment(self, fl[i], fl[(i + 1) % 4], Color(1, 1, 1), 1.5)
+	else:
+		var u: Vector2 = (ps - o).normalized()
+		var k: float = minf(absf(cadre.size.x * 0.5 / maxf(absf(u.x), 1e-4)),
+			absf(cadre.size.y * 0.5 / maxf(absf(u.y), 1e-4)))
+		var q: Vector2 = o + u * k
+		var n: Vector2 = Vector2(-u.y, u.x)
+		var tri: PackedVector2Array = PackedVector2Array([q + u * 8.0, q - u * 6.0 + n * 7.0, q - u * 6.0 - n * 7.0])
+		draw_colored_polygon(tri, Color(1.0, 0.25, 0.15, 1.0))
+		for i in range(3):
+			HUD.segment(self, tri[i], tri[(i + 1) % 3], Color(1, 1, 1), 1.5)
 	# échelle
 	var m: float = 100.0
 	for cand in [50.0, 100.0, 200.0, 500.0, 1000.0, 2000.0, 5000.0]:

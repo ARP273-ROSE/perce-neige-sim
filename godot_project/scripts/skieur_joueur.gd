@@ -261,7 +261,7 @@ static var _pre_tache: int = -1
 static func precalculer_apparence() -> void:
 	if _pre_tache >= 0 or not _pre.is_empty():
 		return
-	_pre_tache = WorkerThreadPool.add_task(_calculer_apparence.bind(_pre), false, "apparence du skieur")
+	_pre_tache = WorkerThreadPool.add_task(_calculer_apparence.bind(_pre), true, "apparence du skieur")
 
 
 static func _calculer_apparence(d: Dictionary) -> void:

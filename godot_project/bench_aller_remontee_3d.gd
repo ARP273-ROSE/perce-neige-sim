@@ -62,6 +62,11 @@ func _tick() -> void:
 			ev.pressed = true
 			ev.position = pos
 			carte._gui_input(ev)
+			# le toucher agit au relâché (un glissement déplace la carte)
+			var ev2: InputEventScreenTouch = InputEventScreenTouch.new()
+			ev2.pressed = false
+			ev2.position = pos
+			carte._gui_input(ev2)
 			if _main._depose_remontee == _lg or (_lg.role == "haut" and _main._depose_remontee == _lg.jumelee):
 				break
 		# (Fresse : on est déposé au départ de Bollin, où l'on embarque)
