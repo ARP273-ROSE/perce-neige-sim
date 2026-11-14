@@ -2405,19 +2405,30 @@ var _perche_tige: Node3D
 ## rigide télescopique à assiette.
 func _perche() -> void:
 	if famille == "perche_debrayable":
-		# douille auto-coinçante + perche télescopique
-		RemonteeKit.boite_en(self, Vector3(0.10, 0.12, 0.22), Vector3(0, 0.02, 0), "galva")
-		RemonteeKit.cylindre(self, 0.03, 0.03, 0.10, Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3(0, 0.10, 0.06)), "caoutchouc", 10)
+		# Attache Poma (brevet US 4 154 171, photo Commons « Poma cable grip ») : une DOUILLE enfilée sur le
+		# câble (manchon de ~7 cm, profil intérieur en V renversé), sans mâchoires ni ressort ; sous la traction
+		# de la perche elle pivote et se coince sur le câble. Un levier en lame cintrée part de la douille vers
+		# l'arrière et le bas jusqu'à l'articulation de la perche. Perche : tube gris, boîtier noir du ressort
+		# freiné, partie télescopique, assiette noire de ~20 cm (photos du Chardonnet).
+		RemonteeKit.cylindre(self, 0.032, 0.032, 0.075, Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3.ZERO), "galva", 12)
+		RemonteeKit.cylindre(self, 0.036, 0.036, 0.012, Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3(0, 0, -0.04)), "acier", 12)
+		RemonteeKit.cylindre(self, 0.036, 0.036, 0.012, Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3(0, 0, 0.04)), "acier", 12)
+		var lame: PackedVector3Array = PackedVector3Array([Vector3(0, -0.025, 0.02), Vector3(0, -0.07, 0.07),
+			Vector3(0, -0.14, 0.10), Vector3(0, -0.21, 0.10)])
+		RemonteeKit.tube(self, lame, 0.012, "acier", 6)
+		RemonteeKit.cylindre(self, 0.018, 0.018, 0.06, Transform3D(Basis(Vector3.FORWARD, PI * 0.5), Vector3(0, -0.22, 0.10)), "acier_noir", 8)
 		_bras = Node3D.new()
 		_bras.name = "Bras"
+		_bras.position = Vector3(0, -0.22, 0.10)
 		add_child(_bras)
 		_perche_tige = Node3D.new()
 		_perche_tige.name = "Perche"
 		_bras.add_child(_perche_tige)
-		RemonteeKit.barre(_perche_tige, Vector3(0, -0.05, 0), Vector3(0, -1.7, 0), 0.026, "acier", 8)
-		RemonteeKit.barre(_perche_tige, Vector3(0, -1.7, 0), Vector3(0, -3.4, 0), 0.020, "galva", 8)
-		RemonteeKit.cylindre(_perche_tige, 0.035, 0.035, 0.30, Transform3D(Basis.IDENTITY, Vector3(0, -1.65, 0)), "acier_noir", 10)
-		RemonteeKit.cylindre(_perche_tige, 0.13, 0.13, 0.05, Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3(0, -3.45, 0)), "jaune_securite", 18)
+		RemonteeKit.barre(_perche_tige, Vector3(0, 0, 0), Vector3(0, -1.30, 0), 0.020, "galva", 8)
+		RemonteeKit.cylindre(_perche_tige, 0.030, 0.030, 0.80, Transform3D(Basis.IDENTITY, Vector3(0, -1.70, 0)), "noir_mat", 10)
+		RemonteeKit.barre(_perche_tige, Vector3(0, -2.10, 0), Vector3(0, -3.20, 0), 0.016, "galva", 8)
+		RemonteeKit.cylindre(_perche_tige, 0.022, 0.022, 0.10, Transform3D(Basis.IDENTITY, Vector3(0, -3.18, 0)), "noir_mat", 8)
+		RemonteeKit.cylindre(_perche_tige, 0.10, 0.09, 0.045, Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3(0, -3.25, 0)), "noir_mat", 18)
 		return
 	# enrouleur : pince fixe sur le câble, étrier en C qui le contourne par
 	# l'extérieur (photo Commons « Tellerliftbügel »), boîtier à tambour
@@ -2468,7 +2479,7 @@ func longueur_perche(d: float) -> void:
 	if d <= 0.0 and _bras != null:
 		_bras.rotation = Vector3.ZERO
 	if famille == "perche_debrayable":
-		var k: float = clampf(d / 3.45, 0.35, 2.4) if d > 0.0 else 1.0
+		var k: float = clampf(d / 3.25, 0.35, 2.4) if d > 0.0 else 1.0
 		_perche_tige.scale = Vector3(1, k, 1)
 		return
 	deroule(0.0 if d <= 0.0 else (d - 0.45 - 1.12 - 0.25) / (3.6 - 0.25))
@@ -2496,7 +2507,7 @@ func tendre_perche(cible: Vector3) -> void:
 		return
 	_bras.rotation = Vector3(-atan2(v.z, -v.y), 0.0, 0.0)
 	if famille == "perche_debrayable":
-		_perche_tige.scale = Vector3(1, clampf(dist / 3.45, 0.35, 2.4), 1)
+		_perche_tige.scale = Vector3(1, clampf(dist / 3.25, 0.35, 2.4), 1)
 	else:
 		var l: float = clampf(dist - 1.15, 0.25, 6.0)
 		_corde.scale = Vector3(1, l, 1)

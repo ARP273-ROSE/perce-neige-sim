@@ -20,7 +20,7 @@ extends RefCounted
 
 var lg: LigneRemontee
 
-const PAS_MAGASIN: float = 0.25       # entraxe des perches au magasin : un rideau (vidéos)
+const PAS_MAGASIN: float = 0.12       # entraxe des perches à la glissière : un rideau serré (photos du Chardonnet)
 
 
 func _init(l: LigneRemontee) -> void:
@@ -35,8 +35,8 @@ func _gy(g: Node3D, x: float, z: float) -> float:
 func construire(g: Node3D, aval: bool, znez: float, zc: float) -> void:
 	if lg.famille == "perche_debrayable":
 		if aval:
-			_charpente_tkd(g, zc)
-			_magasin(g, zc)
+			_portique_tkd(g, zc)
+			_glissiere(g, zc)
 		elif lsp():
 			_arrivee_lsp(g, zc)
 			_anneau_guidage(g, zc)
@@ -54,9 +54,6 @@ func construire(g: Node3D, aval: bool, znez: float, zc: float) -> void:
 
 # --- structures ---------------------------------------------------------------------
 
-## Rail du garage des TKD : au-dessus du câble au débrayage, au ras du câble au lanceur.
-const Y_HAUT_GARAGE: float = 1.4
-const Y_BAS_GARAGE: float = 0.15
 
 
 ## Téléskis Montaval (Signal, Montet, Savonnette…) : constructeur local, gares d'un autre dessin.
@@ -71,94 +68,117 @@ func tkd() -> bool:
 	return lg.famille == "perche_debrayable"
 
 
-## Gare de départ d'un TKD Montaval (photos du reportage RM.net du Signal, 2025) : une longue charpente
-## rectangulaire en acier galvanisé sur quatre poteaux à mousses rouges, longerons en tête au-dessus des
-## deux brins ; les perches débrayées pendent en rideau du rail du garage, qui file le long de la charpente
-## côté descente, fait demi-tour derrière la poulie et revient côté montée jusqu'au lanceur. La poulie
-## motrice (bleue) est en tête, sous une plate-forme à garde-corps qui porte le moteur ; échelle au poteau
-## arrière. Cotes estimées sur photo.
-const L_GARAGE: float = 6.0          # longueur droite du garage, en avant de la poulie
-const H_CHARPENTE: float = 2.1       # longerons au-dessus du câble
+## Gare de départ (motrice) d'un TKD, refaite le 14/11/2026 d'après les photos du Chardonnet (reportage
+## RM.net, copie locale), la gare motrice « glissière » de Wikimedia Commons (CC BY-SA 4.0) et les brevets Poma
+## US 4 154 171 et Schippers US 3 868 907. Portique en tubes carrés galvanisés ; en tête, au-dessus de la poulie
+## motrice horizontale (blanche, à rayons), une plate-forme à garde-corps qui porte le moteur (bleu) et le
+## réducteur ; un tube-guide en demi-cercle tient les perches qui contournent la poulie ; côté montée, la
+## glissière droite descend en pente douce vers l'avant, les perches y pendent en rideau serré jusqu'au
+## déclencheur, au-dessus du skieur ; escalier incliné vers l'avant, échelle au poteau arrière, mousses
+## orange. Cotes estimées sur photo (portique ~5,5 m, plate-forme ~3 × 4 m).
+const H_PORTIQUE: float = 1.45       # longerons au-dessus du câble
+const PENTE_GLISSIERE: float = 0.15  # pente de la glissière (brevets : 15 à 20 %)
+const Y_GLISSIERE: float = 0.80      # haut de la glissière au-dessus du câble, au débrayage
 
 
-func _charpente_tkd(g: Node3D, zc: float) -> void:
+func _portique_tkd(g: Node3D, zc: float) -> void:
 	var H: float = lg.H_CABLE_GARE
+	var R: float = lg.voie * 0.5
 	var m: String = "galva"
-	var xa: float = absf(lg._x_brin(true)) + 0.9
-	var za: float = zc - L_GARAGE - 1.0                # avant (vers la ligne)
-	var zr: float = zc + absf(lg._x_brin(true)) + 1.2  # arrière, derrière la poulie
-	var yl: float = H + H_CHARPENTE
+	var xm: float = lg._x_brin(true)
+	var sm: float = signf(xm)
+	var xa: float = absf(xm) + 0.75
+	var zb: float = zc + R + 0.6                # arrière, derrière la poulie
+	var zf: float = 0.35                       # avant, devant le déclencheur
+	var yl: float = H + H_PORTIQUE
 	for sx in [-1.0, 1.0]:
-		for z in [za, zc, zr]:
+		for z in [zf, zc - 1.6, zb]:
 			var y0: float = _gy(g, sx * xa, z)
-			RemonteeKit.boite_en(g, Vector3(0.6, 0.4, 0.6), Vector3(sx * xa, y0 - 0.1, z), "beton")
-			RemonteeKit.poutre(g, Vector3(sx * xa, y0, z), Vector3(sx * xa, yl, z), 0.20, 0.20, m)
-			# mousse rouge au pied (protection, photos)
-			RemonteeKit.cylindre(g, 0.24, 0.24, 1.6, Transform3D(Basis.IDENTITY, Vector3(sx * xa, y0 + 0.8, z)), "mousse_rouge", 12)
-		# longeron et lisse basse, diagonales
-		RemonteeKit.poutre(g, Vector3(sx * xa, yl, za), Vector3(sx * xa, yl, zr), 0.18, 0.30, m)
-		RemonteeKit.poutre(g, Vector3(sx * xa, H + 0.9, za), Vector3(sx * xa, H + 0.9, zr), 0.10, 0.12, m)
-		for k in range(4):
-			var z0: float = lerpf(za, zr, k / 4.0)
-			var z1: float = lerpf(za, zr, (k + 1) / 4.0)
-			RemonteeKit.barre(g, Vector3(sx * xa, H + 0.9, z0), Vector3(sx * xa, yl, z1), 0.04, m, 5)
+			RemonteeKit.boite_en(g, Vector3(0.55, 0.35, 0.55), Vector3(sx * xa, y0 - 0.12, z), "beton")
+			RemonteeKit.poutre(g, Vector3(sx * xa, y0, z), Vector3(sx * xa, yl + 0.15, z), 0.18, 0.18, m)
+			# mousse orange au pied, côté piste (photos)
+			if z != zb:
+				RemonteeKit.boite_en(g, Vector3(0.42, 1.7, 0.42), Vector3(sx * xa, y0 + 0.85, z), "mousse_orange")
+		# longeron en tête, lisse à mi-hauteur, croix de Saint-André entre les poteaux
+		RemonteeKit.poutre(g, Vector3(sx * xa, yl, zf), Vector3(sx * xa, yl, zb), 0.16, 0.22, m)
+		var ym: float = H - 1.2
+		RemonteeKit.poutre(g, Vector3(sx * xa, ym, zc - 1.6), Vector3(sx * xa, ym, zb), 0.10, 0.10, m)
+		RemonteeKit.barre(g, Vector3(sx * xa, ym, zc - 1.6), Vector3(sx * xa, yl, zb), 0.035, m, 5)
+		RemonteeKit.barre(g, Vector3(sx * xa, ym, zb), Vector3(sx * xa, yl, zc - 1.6), 0.035, m, 5)
 	# traverses en tête
-	for z2 in [za, zc - L_GARAGE * 0.5, zc, zr]:
-		RemonteeKit.poutre(g, Vector3(-xa, yl, z2), Vector3(xa, yl, z2), 0.16, 0.24, m)
-	# chevêtre de la poulie : arbre pendu sous les traverses
-	RemonteeKit.boite_en(g, Vector3(2.0 * xa, 0.30, 0.6), Vector3(0, yl - 0.3, zc), m)
-	RemonteeKit.cylindre(g, 0.14, 0.14, yl - H - 0.1, Transform3D(Basis.IDENTITY, Vector3(0, (yl + H) * 0.5 + 0.1, zc)), "acier", 12)
-	# plate-forme en tête, garde-corps, moteur et armoire
-	var yp: float = yl + 0.2
-	RemonteeKit.boite_en(g, Vector3(2.0 * xa + 0.6, 0.06, 3.2), Vector3(0, yp, zc), "caillebotis")
-	for sz in [-1.6, 1.6]:
-		RemonteeKit.barre(g, Vector3(-xa - 0.3, yp + 1.0, zc + sz), Vector3(xa + 0.3, yp + 1.0, zc + sz), 0.025, m, 6)
+	for z2 in [zf, zc - 1.6, zc + 0.9, zb]:
+		RemonteeKit.poutre(g, Vector3(-xa, yl, z2), Vector3(xa, yl, z2), 0.14, 0.20, m)
+	# longeron de la glissière, au-dessus du brin montée
+	RemonteeKit.poutre(g, Vector3(xm, yl - 0.05, zf), Vector3(xm, yl - 0.05, zc - 1.6), 0.12, 0.16, m)
+	# arbre de la poulie, jusqu'au réducteur sur la plate-forme
+	RemonteeKit.cylindre(g, 0.12, 0.12, yl - H, Transform3D(Basis.IDENTITY, Vector3(0, (yl + H) * 0.5, zc)), "acier", 12)
+	# plate-forme au-dessus de la poulie : caillebotis, garde-corps tubulaire, moteur et réducteur
+	var yp: float = yl + 0.18
+	var z0: float = zc - 1.6
+	var z1: float = zb + 0.25
+	RemonteeKit.boite_en(g, Vector3(2.0 * xa + 0.5, 0.05, z1 - z0), Vector3(0, yp, (z0 + z1) * 0.5), "caillebotis")
 	for sx2 in [-1.0, 1.0]:
-		RemonteeKit.barre(g, Vector3(sx2 * (xa + 0.3), yp + 1.0, zc - 1.6), Vector3(sx2 * (xa + 0.3), yp + 1.0, zc + 1.6), 0.025, m, 6)
-	RemonteeKit.boite_en(g, Vector3(1.0, 0.7, 1.2), Vector3(0.5, yp + 0.38, zc), "blanc_plaque")
-	RemonteeKit.cylindre(g, 0.28, 0.28, 0.8, Transform3D(Basis(Vector3.FORWARD, PI * 0.5), Vector3(-0.5, yp + 0.33, zc)), "bleu_doppelmayr", 16)
-	# échelle au poteau arrière
-	var xe: float = xa + 0.35
-	var ye: float = _gy(g, xe, zr)
+		var xg: float = sx2 * (xa + 0.25)
+		RemonteeKit.barre(g, Vector3(xg, yp + 1.05, z0), Vector3(xg, yp + 1.05, z1), 0.025, m, 6)
+		RemonteeKit.barre(g, Vector3(xg, yp + 0.55, z0), Vector3(xg, yp + 0.55, z1), 0.018, m, 5)
+		for k in range(4):
+			var zz: float = lerpf(z0, z1, k / 3.0)
+			RemonteeKit.barre(g, Vector3(xg, yp, zz), Vector3(xg, yp + 1.05, zz), 0.022, m, 5)
+	RemonteeKit.barre(g, Vector3(-xa - 0.25, yp + 1.05, z1), Vector3(xa + 0.25, yp + 1.05, z1), 0.025, m, 6)
+	RemonteeKit.boite_en(g, Vector3(0.75, 0.55, 0.9), Vector3(0, yp + 0.30, zc), "blanc_plaque")             # réducteur
+	RemonteeKit.cylindre(g, 0.26, 0.26, 0.85, Transform3D(Basis(Vector3.FORWARD, PI * 0.5), Vector3(-sm * 0.75, yp + 0.33, zc)), "bleu_doppelmayr", 16)
+	RemonteeKit.boite_en(g, Vector3(0.5, 0.9, 0.35), Vector3(sm * (xa - 0.1), yp + 0.48, zb - 0.1), "blanc_plaque")  # armoire
+	# tube-guide en demi-cercle derrière la poulie : les perches qui la contournent y glissent
+	var c: Vector3 = Vector3(0, H - 0.55, zc)
+	RemonteeKit.tube(g, RemonteeKit.arc(c, Vector3.RIGHT, Vector3.BACK, R + 0.55, -0.15, PI + 0.15, 24), 0.05, m, 8)
+	for a in [0.2, PI * 0.5, PI - 0.2]:
+		var q: Vector3 = c + Vector3(cos(a), 0, sin(a)) * (R + 0.55)
+		RemonteeKit.barre(g, q, Vector3(q.x, yl, q.z), 0.03, m, 5)
+	# escalier incliné vers l'avant, côté descente, de la plate-forme à la neige ; mousse orange à son pied
+	var xs: float = -sm * (xa + 0.65)
+	var haut: Vector3 = Vector3(xs, yp, z0 + 0.2)
+	var zpied: float = z0 + 0.2 - (yp - _gy(g, xs, z0 - 3.0)) * 0.85
+	var bas: Vector3 = Vector3(xs, _gy(g, xs, zpied), zpied)
+	for dx in [-0.35, 0.35]:
+		RemonteeKit.poutre(g, bas + Vector3(dx, 0, 0), haut + Vector3(dx, 0, 0), 0.06, 0.16, m)
+		RemonteeKit.barre(g, bas + Vector3(dx, 0.95, 0), haut + Vector3(dx, 0.95, 0), 0.022, m, 5)
+	var n: int = int((haut.y - bas.y) / 0.24)
+	for k2 in range(1, n):
+		var q2: Vector3 = bas.lerp(haut, float(k2) / n)
+		RemonteeKit.boite_en(g, Vector3(0.70, 0.03, 0.22), q2, "caillebotis")
+	RemonteeKit.boite_en(g, Vector3(0.9, 1.7, 0.6), bas + Vector3(0, 0.85, -0.2), "mousse_orange")
+	RemonteeKit.barre(g, haut, Vector3(-sm * xa, yp, z0 + 0.2), 0.05, m, 6)
+	# échelle au poteau arrière, côté montée
+	var xe: float = sm * (xa + 0.3)
+	var ye: float = _gy(g, xe, zb)
 	for dz in [-0.22, 0.22]:
-		RemonteeKit.barre(g, Vector3(xe, ye, zr + dz), Vector3(xe, yp + 1.0, zr + dz), 0.02, m, 5)
+		RemonteeKit.barre(g, Vector3(xe, ye, zb + dz), Vector3(xe, yp + 1.0, zb + dz), 0.02, m, 5)
 	var y2: float = ye + 0.3
 	while y2 < yp:
-		RemonteeKit.barre(g, Vector3(xe, y2, zr - 0.22), Vector3(xe, y2, zr + 0.22), 0.015, m, 4)
+		RemonteeKit.barre(g, Vector3(xe, y2, zb - 0.22), Vector3(xe, y2, zb + 0.22), 0.015, m, 4)
 		y2 += 0.3
+	# panneau de la ligne sur le poteau avant, côté descente
+	var lab: MeshInstance3D = RemonteeKit.texte_fige(g, lg.nom_court().to_upper(), 64, 0.004, Color(0.08, 0.20, 0.55))
+	lab.position = Vector3(-sm * (xa + 0.12), H - 0.6, zf)
+	lab.rotation = Vector3(0, PI * 0.5 * -sm, 0)
 
 
-## Rail du garage Montaval à u (0 : débrayage, 1 : lanceur), repère de la ligne : du câble descente au
-## longeron, droit le long de la charpente vers l'avant, demi-tour en avant (sous les traverses), retour
-## côté montée en descendant jusqu'au lanceur.
-func _rail_garage(u: float, H: float, zc: float) -> Vector3:
-	var xd: float = lg._x_brin(false)
+## Point de la glissière à u (0 : débrayage, à la sortie de la poulie ; 1 : déclencheur), repère de la ligne.
+## Rampe d'entrée qui soulève la douille hors du câble, puis pente douce jusqu'au déclencheur, où la douille
+## retombe sur le câble.
+func _rail_glissiere(u: float, Hc: float, zc: float) -> Vector3:
 	var xm: float = lg._x_brin(true)
-	var y_h: float = H + Y_HAUT_GARAGE - 0.2
-	var za: float = zc - L_GARAGE
-	var debut: Vector3 = Vector3(xd, y_h, zc - 0.5)
-	var fin: Vector3 = Vector3(xm, H + Y_BAS_GARAGE, zc - 0.5)
-	if u < 0.08:
-		var c0: Vector3 = lg._point_cable(lg.S_DEBRAYAGE)[0]
-		return c0.lerp(debut, smoothstep(0.0, 1.0, u / 0.08))
-	if u > 0.92:
-		var c1: Vector3 = lg._point_cable(lg.s_lancement())[0]
-		return fin.lerp(c1, smoothstep(0.0, 1.0, (u - 0.92) / 0.08))
-	var w: float = (u - 0.08) / 0.84
-	var r: float = absf(xd - xm) * 0.5
-	var l1: float = zc - 0.5 - za
-	var la: float = PI * r
-	var lt: float = 2.0 * l1 + la
-	var d: float = w * lt
-	if d < l1:
-		return Vector3(xd, y_h, zc - 0.5 - d)
-	if d < l1 + la:
-		var a: float = (d - l1) / r                        # demi-tour en avant, de xd vers xm
-		var cx: float = (xd + xm) * 0.5
-		var sd: float = signf(xd - xm)
-		return Vector3(cx + sd * r * cos(a), lerpf(y_h, y_h - 0.3, a / PI), za - r * sin(a))
-	var d2: float = d - l1 - la
-	return Vector3(xm, lerpf(y_h - 0.3, H + Y_BAS_GARAGE, d2 / l1), za + d2)
+	var zd: float = zc - 0.6
+	var zl: float = 1.2
+	var z: float = lerpf(zd, zl, u)
+	var y_haut: float = Hc + Y_GLISSIERE
+	var y_bas: float = Hc + 0.06
+	var y: float
+	if u < 0.12:
+		y = lerpf(Hc, y_haut, smoothstep(0.0, 1.0, u / 0.12))
+	else:
+		y = lerpf(y_haut, y_bas, (u - 0.12) / 0.88)
+	return Vector3(xm, y, z)
 
 
 ## Chalet du préposé Montaval : soubassement de pierre, bardage de mélèze, vitres, toit à deux pans enneigé.
@@ -220,34 +240,44 @@ func _arrivee_lsp(g: Node3D, zc: float) -> void:
 		RemonteeKit.poutre(g, pied, pied + Vector3(-sx3 * 0.9, 1.6, 0.5), 0.24, 0.24, "mousse_rouge")
 
 
-## Garage des perches débrayées : rail, suspentes et lanceur.
-func _magasin(g: Node3D, zc: float) -> void:
+## Glissière des perches débrayées : deux fers plats en V (la douille y frotte), suspentes au longeron,
+## déclencheur double au bout, au-dessus du skieur (boîtier et couteaux, poteau bleu jusqu'au sol).
+func _glissiere(g: Node3D, zc: float) -> void:
 	var H: float = lg.H_CABLE_GARE
 	var pts: PackedVector3Array = PackedVector3Array()
-	var s0: float = lg.S_DEBRAYAGE
+	var s0: float = lg.s_debrayage()
 	var s1: float = lg.s_lancement()
-	var nb: int = 240
+	var nb: int = 60
 	for k in range(nb + 1):
 		var s: float = lerpf(s0, s1, float(k) / nb)
-		pts.append(rail_local(s) - Vector3(0, g.position.y, 0) + Vector3(0, 0.06, 0))
-	RemonteeKit.tube(g, pts, 0.035, "acier_noir", 6)
-	# suspentes du rail jusqu'aux longerons de la charpente
-	for k2 in range(0, nb + 1, 8):
-		var p: Vector3 = pts[k2]
-		if absf(p.y - (H + Y_HAUT_GARAGE - 0.2)) < 0.3:
-			RemonteeKit.barre(g, p + Vector3(0, 0.03, 0), Vector3(p.x, H + 1.9, p.z), 0.018, "galva", 5)
-	# lanceur : boîtier jaune et bras au bout du rail
-	var pl: Vector3 = rail_local(lg.s_lancement()) - Vector3(0, g.position.y, 0)
-	RemonteeKit.boite_en(g, Vector3(0.30, 0.40, 0.55), pl + Vector3(0, 0.42, 0.25), "jaune_securite")
-	RemonteeKit.barre(g, pl + Vector3(0, 0.25, 0.0), pl + Vector3(0, 0.05, -0.45), 0.03, "acier_noir", 6)
+		pts.append(rail_local(s) - Vector3(0, g.position.y, 0) + Vector3(0, 0.10, 0))
+	for dx in [-0.035, 0.035]:
+		var pts2: PackedVector3Array = PackedVector3Array()
+		for p in pts:
+			pts2.append(p + Vector3(dx, 0, 0))
+		RemonteeKit.tube(g, pts2, 0.018, "acier", 5)
+	var yl: float = H + H_PORTIQUE - 0.05
+	for k2 in range(6, nb + 1, 10):
+		var p2: Vector3 = pts[k2]
+		RemonteeKit.barre(g, p2 + Vector3(0, 0.03, 0), Vector3(p2.x, yl, p2.z), 0.014, "galva", 5)
+	# déclencheur : boîtier sous le bout de la glissière, poteau jusqu'à la neige à côté du départ
+	var pl: Vector3 = pts[nb]
+	var sm: float = signf(lg._x_brin(true))
+	RemonteeKit.boite_en(g, Vector3(0.22, 0.30, 0.40), pl + Vector3(sm * 0.20, 0.10, 0.0), "jaune_securite")
+	RemonteeKit.barre(g, pl + Vector3(sm * 0.10, -0.02, 0.15), pl + Vector3(-sm * 0.05, -0.02, 0.15), 0.012, "acier_noir", 4)
+	RemonteeKit.barre(g, pl + Vector3(sm * 0.10, -0.02, -0.12), pl + Vector3(-sm * 0.05, -0.02, -0.12), 0.012, "acier_noir", 4)
+	var xp: float = pl.x + sm * 0.55
+	var yp0: float = _gy(g, xp, pl.z)
+	RemonteeKit.barre(g, Vector3(xp, yp0, pl.z), Vector3(xp, pl.y + 0.2, pl.z), 0.045, "bleu_doppelmayr", 8)
+	RemonteeKit.barre(g, Vector3(xp, pl.y + 0.2, pl.z), pl + Vector3(sm * 0.30, 0.2, 0.0), 0.03, "bleu_doppelmayr", 6)
 
 
-## Point du rail du garage à l'abscisse s de la boucle (repère de la ligne), du débrayage au lanceur.
+## Point de la glissière à l'abscisse s de la boucle (repère de la ligne), du débrayage au déclencheur.
 func rail_local(s: float) -> Vector3:
-	var H: float = lg.H_CABLE_GARE + lg.terrain(0.0)
-	var s0: float = lg.S_DEBRAYAGE
+	var Hc: float = lg.H_CABLE_GARE + lg.terrain(0.0)
+	var s0: float = lg.s_debrayage()
 	var s1: float = lg.s_lancement()
-	return _rail_garage(clampf((s - s0) / maxf(s1 - s0, 0.01), 0.0, 1.0), H, lg.l_gare)
+	return _rail_glissiere(clampf((s - s0) / maxf(s1 - s0, 0.01), 0.0, 1.0), Hc, lg.l_gare)
 
 
 ## Mât Poma : fût rond sous la poulie, massif de béton, mousse jaune au pied.
@@ -578,9 +608,9 @@ func collisions(aval: bool) -> Array:
 	var r: Array = []
 	var y0: float = lg.terrain(0.0 if aval else L)
 	if tkd() and aval:
-		var xa: float = absf(lg._x_brin(true)) + 0.9
+		var xa: float = absf(lg._x_brin(true)) + 0.75
 		for sx3 in [-1.0, 1.0]:
-			for z3 in [zc - L_GARAGE - 1.0, zc, zc + absf(lg._x_brin(true)) + 1.2]:
+			for z3 in [0.35, zc - 1.6, zc + R + 0.6]:          # poteaux du portique (_portique_tkd)
 				var ys3: float = lg._sol(sx3 * xa, z3)
 				r.append([Vector3(0.5, H - ys3 + y0 + 2.0, 0.5), Vector3(sx3 * xa, (ys3 + y0 + H + 2.0) * 0.5, z3)])
 	elif lg.famille != "perche_debrayable" and montaval():
