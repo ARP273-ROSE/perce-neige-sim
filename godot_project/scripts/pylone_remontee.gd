@@ -866,7 +866,70 @@ var en_t: bool = false
 ## Dernier pylône avant le départ d'un TKD : le train du brin retour est incliné (rad, autour de l'axe du câble)
 ## pour le rentrer vers la petite poulie motrice (LigneRemontee.decalage_descente).
 var incline_descente: float = 0.0
+## Pylône de TKD (photos du Chardonnet) : fût rond qui dépasse au-dessus du bras, bras en treillis, jambe de
+## force, trains pendus sous le bras, mousse orange.
+var tkd: bool = false
 const DESSUS_BRAS_TELESKI: float = 0.75   # bras au-dessus du câble
+
+
+const BRAS_TKD: float = 0.45      # hauteur du treillis du bras des TKD (membrure basse sous le dessus)
+
+
+## Bras en treillis d'un pylône de TKD : membrures haute et basse en tubes carrés, montants aux bouts et
+## au droit de chaque brin, diagonales en zigzag, jambe de force du fût au bras.
+func _bras_treillis_tkd(h: float, bout: float, xs: Array) -> void:
+	var m: String = "galva"
+	var x0: float = x_fut + signf(bout - x_fut) * 0.15
+	var yb: float = h - BRAS_TKD
+	RemonteeKit.poutre(self, Vector3(x0, h - 0.04, 0), Vector3(bout, h - 0.04, 0), 0.08, 0.08, m)
+	RemonteeKit.poutre(self, Vector3(x0, yb, 0), Vector3(bout, yb, 0), 0.08, 0.08, m)
+	var montants: Array = [x0, bout]
+	for x in xs:
+		montants.append(float(x) - signf(float(x) - x_fut) * 0.12)
+	montants.sort()
+	for k in range(montants.size()):
+		var xm: float = montants[k]
+		RemonteeKit.poutre(self, Vector3(xm, yb, 0), Vector3(xm, h - 0.04, 0), 0.06, 0.06, m)
+		if k > 0:
+			var xp: float = montants[k - 1]
+			if absf(xm - xp) > 0.3:
+				var haut_gauche: bool = k % 2 == 0
+				RemonteeKit.barre(self, Vector3(xp, yb if haut_gauche else h - 0.04, 0), Vector3(xm, h - 0.04 if haut_gauche else yb, 0), 0.025, m, 5)
+	# jambe de force : du fût, 1,4 m sous le bras, aux deux tiers du bras
+	var xj: float = lerpf(x_fut, bout, 0.65)
+	RemonteeKit.poutre(self, Vector3(x_fut + signf(bout - x_fut) * 0.14, yb - 1.4, 0), Vector3(xj, yb, 0), 0.07, 0.07, m)
+	# platines de fixation au fût
+	for y in [yb, h - 0.04]:
+		RemonteeKit.boite_en(self, Vector3(0.32, 0.14, 0.30), Vector3(x_fut, y, 0), m)
+
+
+const R_POULIE_PYL_TKD: float = 0.40
+
+
+## Grande poulie de pylône d'un TKD sous le câble (point d'appui `c`), dans le plan vertical de la ligne,
+## inclinée de `tilt` autour du câble (rentrée du brin retour au premier pylône) ; chape jusqu'au bras en `y_bras`.
+func _grande_poulie_tkd(c: Vector3, tilt: float, y_bras: float) -> void:
+	var R: float = R_POULIE_PYL_TKD
+	var n: Node3D = Node3D.new()
+	n.name = "PoulieTKD"
+	n.transform = Transform3D(Basis(Vector3.BACK, tilt), c)
+	add_child(n)
+	var o: Vector3 = Vector3(0, -R - 0.012, 0)          # centre : le câble repose au fond de la gorge
+	RemonteeKit.tube(n, RemonteeKit.arc(o, Vector3.BACK, Vector3.UP, R, 0.0, TAU, 36), 0.03, "caoutchouc", 8)
+	for dx in [-0.045, 0.045]:
+		RemonteeKit.tube(n, RemonteeKit.arc(o + Vector3(dx, 0, 0), Vector3.BACK, Vector3.UP, R + 0.035, 0.0, TAU, 36), 0.018, "galva", 6)
+	for k in range(6):
+		var a: float = TAU * (k + 0.5) / 6.0
+		RemonteeKit.barre(n, o + Vector3(0, sin(a), cos(a)) * 0.08, o + Vector3(0, sin(a), cos(a)) * (R - 0.02), 0.022, "galva", 5)
+	RemonteeKit.cylindre(n, 0.08, 0.08, 0.13, Transform3D(Basis(Vector3.BACK, PI * 0.5), o), "galva", 14)
+	RemonteeKit.cylindre(n, 0.025, 0.025, 0.30, Transform3D(Basis(Vector3.BACK, PI * 0.5), o), "acier_noir", 8)
+	# chape : deux joues de part et d'autre, de l'axe au-dessus de la poulie, puis suspente jusqu'au bras
+	var yh: float = 0.12
+	for dx2 in [-0.13, 0.13]:
+		RemonteeKit.boite_en(n, Vector3(0.02, yh - o.y, 0.14), Vector3(dx2, (yh + o.y) * 0.5, 0), "galva")
+	RemonteeKit.boite_en(n, Vector3(0.30, 0.04, 0.14), Vector3(0, yh, 0), "galva")
+	var haut: float = y_bras - c.y
+	RemonteeKit.boite_en(self, Vector3(0.08, haut - yh, 0.10), c + Vector3(0, (haut + yh) * 0.5, 0), "galva")
 
 
 func _construire_teleski() -> void:
@@ -878,9 +941,13 @@ func _construire_teleski() -> void:
 	else:
 		x_fut = 0.0
 	RemonteeKit.boite_en(self, Vector3(1.0, 0.5, 1.0), Vector3(x_fut, -0.1, 0), "beton")
-	RemonteeKit.cylindre(self, 0.17, 0.13, h, Transform3D(Basis.IDENTITY, Vector3(x_fut, h * 0.5, 0)), "galva", 14)
+	var h_fut: float = h + (1.7 if tkd else 0.0)
+	RemonteeKit.cylindre(self, 0.17, 0.13, h_fut, Transform3D(Basis.IDENTITY, Vector3(x_fut, h_fut * 0.5, 0)), "galva", 14)
+	if tkd:
+		RemonteeKit.cylindre(self, 0.14, 0.14, 0.04, Transform3D(Basis.IDENTITY, Vector3(x_fut, h_fut + 0.02, 0)), "galva", 14)
+		RemonteeKit.boite_en(self, Vector3(0.14, 0.14, 0.01), Vector3(x_fut, h - 1.3, -0.16), "jaune_securite")
 	var y: float = 2.2
-	while y < h - 0.4:
+	while y < h - 0.4 and not tkd:
 		RemonteeKit.barre(self, Vector3(x_fut - 0.18, y, 0.15), Vector3(x_fut + 0.18, y, 0.15), 0.012, "galva", 5)
 		y += 0.32
 	# bras jusqu'au-delà du brin le plus loin, jambe de force en triangle
@@ -893,8 +960,13 @@ func _construire_teleski() -> void:
 		if absf(x - x_fut) > absf(x_loin - x_fut):
 			x_loin = x
 	# mousse de protection au pied du fût (vidéos de la ligne)
-	RemonteeKit.cylindre(self, 0.26, 0.26, 1.8, Transform3D(Basis.IDENTITY, Vector3(x_fut, 0.9, 0)), "mousse_rouge", 14)
-	if cote == 0 and en_t:
+	if tkd:
+		RemonteeKit.cylindre(self, 0.27, 0.27, 1.7, Transform3D(Basis.IDENTITY, Vector3(x_fut, 0.85, 0)), "mousse_orange", 14)
+	else:
+		RemonteeKit.cylindre(self, 0.26, 0.26, 1.8, Transform3D(Basis.IDENTITY, Vector3(x_fut, 0.9, 0)), "mousse_rouge", 14)
+	if tkd:
+		_bras_treillis_tkd(h, x_loin + signf(x_loin - x_fut) * 0.25, xs)
+	elif cote == 0 and en_t:
 		# traverse en T, des deux côtés du fût, au-delà des deux brins
 		var xt: float = voie * 0.5 + 0.25
 		RemonteeKit.boite_en(self, Vector3(2.0 * xt, 0.16, 0.16), Vector3(0, h - 0.08, 0), "galva")
@@ -937,6 +1009,10 @@ func _construire_teleski() -> void:
 		# galets sous le câble (support) ; en compression, au-dessus
 		var yg: float = yc2 + (0.14 if dessus else -0.14)
 		var tilt: float = incline_descente if not montee else 0.0
+		if tkd and not dessus:
+			# TKD (photos du Chardonnet) : une grande poulie verticale par brin, chape pendue au bras
+			_grande_poulie_tkd(Vector3(x, yc2, 0), tilt, h - BRAS_TKD)
+			continue
 		for k in range(n):
 			var cg: Vector3 = Vector3(x, yg, Lt * 0.5 - k * 0.36)
 			if tilt != 0.0:
@@ -949,6 +1025,7 @@ func _construire_teleski() -> void:
 		# flasques du train et suspente côté intérieur, jusqu'au bras
 		var xi: float = x - signf(x - x_fut) * 0.12 if absf(x - x_fut) > 0.01 else x + 0.12
 		RemonteeKit.boite_en(self, Vector3(0.04, 0.22, Lt + 0.3), Vector3(xi, yg, 0), "galva")
-		RemonteeKit.boite_en(self, Vector3(0.08, h - 0.16 - (yg - 0.1), 0.10), Vector3(xi, (h - 0.16 + yg - 0.1) * 0.5, 0), "galva")
+		var y_bras: float = h - BRAS_TKD if tkd else h - 0.16
+		RemonteeKit.boite_en(self, Vector3(0.08, y_bras - (yg - 0.1), 0.10), Vector3(xi, (y_bras + yg - 0.1) * 0.5, 0), "galva")
 	var lab: MeshInstance3D = RemonteeKit.texte_fige(self, str(numero), 64, 0.003, Color(0.05, 0.05, 0.05))
 	lab.position = Vector3(x_fut, minf(3.0, h * 0.5), 0.18)

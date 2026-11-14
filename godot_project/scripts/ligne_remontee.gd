@@ -4553,7 +4553,8 @@ func _poser_pylones_teleski() -> void:
 			py.numero = numero_pylone(i)
 			py.dessus_traverse = -PyloneRemontee.DESSUS_BRAS_TELESKI
 			py.cote = cote
-			py.en_t = not constructeur.to_lower().contains("poma")
+			py.tkd = famille == "perche_debrayable"
+			py.en_t = not constructeur.to_lower().contains("poma") and not py.tkd
 			py.compo_montee = p.get("montee", [[4, "S"]])
 			py.compo_descente = p.get("descente", [[4, "S"]])
 			if i == 0 and famille == "perche_debrayable" and cote != 1:
