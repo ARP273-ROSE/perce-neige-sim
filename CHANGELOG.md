@@ -5,6 +5,24 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.68.0 — 14 novembre 2026
+
+Audit complet du simulateur, retours d'essai sur le PC et l'iPad, gare de départ des téléskis débrayables refaite.
+
+**Carte des pistes** : on la fait glisser au doigt ou à la souris ; le bouton ◎ (ou clic droit) ramène au skieur, un repère rouge au bord indique où il est quand il sort du cadre.
+
+**Vues de la remontée** (bouton VUE LIGNE, touche T au PC) : sur n'importe quelle remontée où l'on est assis, vues orbite, pylône, gare, travelling et drone, comme au funiculaire.
+
+**PC** : la vue 3D passe en plein cadre quand le skieur est loin du Perce-Neige (F12 pour basculer) ; décor HD décidé selon la machine (puce intégrée 16 Go comprise : anneaux allégés, MSAA ×2 ou SMAA), case Décor HD au menu ; régulateur qui tient compte de la mémoire vidéo, 30 i/s seulement en vraie lenteur, 3D bridée en arrière-plan ; viewer planté ou figé : rapport puis relance allégée ; mise à jour refusée sans sommes de contrôle ; nom du poste haché dans les rapports.
+
+**Téléskis débrayables, gare de départ** (description d'un utilisateur et photos du Chardonnet) : la roue motrice, petite (1,8 m) et décalée côté montée, est en haut, au niveau du magasin, inclinée vers l'avant dans l'axe du câble ; le brin montée en descend le long du magasin jusqu'au skieur, à l'extérieur de la gare. Les perches débrayées glissent serrées dans le rail fendu ; la première attend seule au bout, détachée du paquet. Au nez, une grande poulie verticale de même taille remet le brin retour en pente montante vers la roue ; ce brin est rentré au dernier pylône par des galets inclinés. Un seul fût rond, en arrière de la roue, porte tout (poutre et haubans). Perche refaite (douille, lame cintrée, ressort et assiette noirs).
+
+**Physique des remontées** : flèche des téléphériques appuyée aux bouts des sabots, élasticité du câble tracteur, charges ponctuelles du 3S, tension variable des monocâbles, freinage des lanceurs à décélération constante, sièges fixes libres en gare, vent avec rafales ; le Funival ne balance pas (câble inférieur).
+
+**Skieur** : bouton CHAUSSER toujours à jour ; à la première personne, on voit ses jambes, ses mains et ses skis.
+
+**Fluidité** : fils de travail mieux partagés, fin de construction d'une ligne en tranches, fermeture sans blocage.
+
 ## 1.67.0 — 13 novembre 2026
 
 Retours d'essai de la 1.66 : téléphériques, 3S, Fornet, Funival, Solaise.
