@@ -362,6 +362,12 @@ static func _tableaux(mesh: Mesh, si: int) -> Array:
 ## Triangles d'un maillage (pour une forme de collision) sans relire la
 ## carte graphique — create_trimesh_shape() la relisait, surface par surface.
 static func faces(mesh: Mesh) -> PackedVector3Array:
+	if mesh is PrimitiveMesh and _outils_cpp() != null and _relirait(mesh as PrimitiveMesh):
+		# cylindres à plusieurs anneaux, sphères, tores : triangles calculés comme le moteur (OutilsMaillage), sans
+		# relire la carte (collisions de l'entrée en skieur : ~20 relectures, 14/11/2026)
+		var fp: PackedVector3Array = _outils.faces_primitive(mesh)
+		if not fp.is_empty():
+			return fp
 	var out: PackedVector3Array = PackedVector3Array()
 	for si in range(mesh.get_surface_count()):
 		if mesh is ArrayMesh and (mesh as ArrayMesh).surface_get_primitive_type(si) != Mesh.PRIMITIVE_TRIANGLES:
@@ -377,6 +383,19 @@ static func faces(mesh: Mesh) -> PackedVector3Array:
 		else:
 			out.append_array(v)
 	return out
+
+
+## Vrai si tableaux() relirait cette primitive sur la carte (ni copie gardée, ni forme connue ou calculable ici).
+static func _relirait(mesh: PrimitiveMesh) -> bool:
+	if a_copie(mesh):
+		return false
+	var cp: String = _cle_primitive(mesh)
+	if cp == "":
+		return true
+	verrou.lock()
+	var connue: bool = _formes.has(cp)
+	verrou.unlock()
+	return not connue and _generer(mesh).is_empty()
 
 
 ## `st.commit()` qui garde la copie côté processeur (à refusionner sans relire
@@ -509,11 +528,19 @@ static func valider_indexe(st: SurfaceTool, mesh: ArrayMesh = null) -> ArrayMesh
 	var a: Array = st.commit_to_arrays()
 	var m: ArrayMesh = st.commit(mesh)
 	if not a.is_empty() and a[Mesh.ARRAY_VERTEX] != null and not (a[Mesh.ARRAY_VERTEX] as PackedVector3Array).is_empty():
-		retenir(m, m.get_surface_count() - 1, a)
-		verrou.lock()
-		_gardes_chargement.append(weakref(m))
-		verrou.unlock()
+		retenir_chargement(m, m.get_surface_count() - 1, a)
 	return m
+
+
+## Pendant le chargement (garder_chargement, PC) : copie processeur de la surface `si` gardée jusqu'aux collisions du
+## skieur, puis oubliée (oublier_chargement). Sans effet sinon. Pour les maillages posés hors de valider_indexe.
+static func retenir_chargement(mesh: Mesh, si: int, arrays: Array) -> void:
+	if not garder_chargement:
+		return
+	retenir(mesh, si, arrays)
+	verrou.lock()
+	_gardes_chargement.append(weakref(mesh))
+	verrou.unlock()
 
 
 ## Partage des fusions à géométrie identique (PWA : les deux rames et leurs voitures
