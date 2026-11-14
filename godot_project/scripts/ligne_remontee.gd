@@ -531,10 +531,13 @@ func _finir_construction() -> void:
 		for c in _corps:
 			if c != null:
 				(c[0] as StaticBody3D).collision_layer = CollisionsJeu.COUCHE_VEHICULE if collisions_actives else 0
+	# en tranches (relevé du PC du 14/11/2026 : 103 ms d'un bloc à cette étape, VERS_DEPART)
 	RemonteeKit.vider_primitives()
-	set_process(true)
+	await _pause("fin : primitives")
 	if not _noyau_fil:
 		_preparer_noyau()
+	set_process(true)
+	await _pause("fin : noyau")
 	_percer_fosses()
 	await _pause("fin (portillons, collisions fixes, fosses)")
 	construite.emit()
@@ -3589,7 +3592,13 @@ func vehicules_a_embarquer(aval: bool) -> Array:
 
 ## Point de débrayage des TKD (abscisse de boucle) : juste après le nez de la
 ## gare aval, sur le brin descente.
-const S_DEBRAYAGE: float = 1.0
+## TKD (recherche du 14/11/2026 : brevets Poma US 4 154 171 et Schippers US 3 868 907, photos de la gare
+## du Chardonnet) : la perche qui redescend contourne la poulie motrice encore accrochée, puis, à la sortie
+## de la poulie côté montée, sa douille monte sur la glissière ; elle y glisse en pente douce vers l'avant
+## jusqu'au déclencheur, au-dessus du skieur, qui la rend au câble. Abscisses sur la boucle de la gare aval
+## (montée : z = longueur_zone − s).
+func s_debrayage() -> float:
+	return longueur_zone(true) - (l_gare - 0.6)
 var _au_magasin: PackedFloat32Array = PackedFloat32Array()   # par perche : abscisse sur le rail, −1 sur le câble
 var _a_lancer: bool = false
 
@@ -3597,6 +3606,8 @@ var _a_lancer: bool = false
 ## Abscisse (boucle) du lanceur des TKD, et du passage des perches au droit
 ## du tapis de départ des téléskis à enrouleurs : 1 m après la poulie.
 func s_lancement() -> float:
+	if famille == "perche_debrayable":
+		return longueur_zone(true) - 1.2         # bout de la glissière, 1,2 m derrière le nez
 	return s_gare(true, x_arret(longueur_zone(true)))
 
 
@@ -3626,7 +3637,7 @@ func _maj_magasin(delta: float) -> void:
 	var sl: float = s_lancement()
 	for k in range(file.size()):
 		var i: int = file[k]
-		var cible: float = maxf(sl - k * TeleskiGare.PAS_MAGASIN, S_DEBRAYAGE)
+		var cible: float = maxf(sl - k * TeleskiGare.PAS_MAGASIN, s_debrayage())
 		var s2: float = move_toward(_au_magasin[i], cible, 1.2 * delta)
 		_au_magasin[i] = s2
 		_vehicules[i][1] = s2
@@ -3647,7 +3658,7 @@ func _maj_magasin(delta: float) -> void:
 ## redescendent (lancées par les skieurs précédents).
 func _peupler_magasin() -> void:
 	var sl: float = s_lancement()
-	var cap: int = mini(int((sl - S_DEBRAYAGE) / TeleskiGare.PAS_MAGASIN), 40)
+	var cap: int = mini(int((sl - s_debrayage()) / TeleskiGare.PAS_MAGASIN), 40)
 	var n_desc: int = mini(int(longueur_h() / (espacement * 3.0)), cap / 2)
 	for k in range(cap - n_desc):
 		await _ajouter_vehicule(sl - k * TeleskiGare.PAS_MAGASIN, true)
@@ -5830,11 +5841,12 @@ func _etape_gdscript(delta: float) -> void:
 			_temps_s[i] = s_t
 			continue
 		var ds: float = vitesse_en(s) * regime() * delta
-		# TKD : la perche qui redescend se débraye juste après le nez de la
-		# gare aval et glisse sur le rail du magasin
-		if tkd and fposmod(S_DEBRAYAGE - s, longueur_boucle) <= ds:
-			_au_magasin[i] = S_DEBRAYAGE
-			_vehicules[i][1] = S_DEBRAYAGE
+		# TKD : la perche qui redescend a contourné la poulie ; à sa sortie, côté montée, elle se débraye
+		# sur la glissière du magasin
+		var s_deb: float = s_debrayage()
+		if tkd and fposmod(s_deb - s, longueur_boucle) <= ds:
+			_au_magasin[i] = s_deb
+			_vehicules[i][1] = s_deb
 			continue
 		_vehicules[i][1] = fposmod(s + ds, longueur_boucle)
 	if tkd:
