@@ -77,6 +77,10 @@ pause={
 ]
 }
 
+[threading]
+
+worker_pool/low_priority_thread_ratio=0.5
+
 [rendering]
 
 driver/depth_prepass/enable.web=false

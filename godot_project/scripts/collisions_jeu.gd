@@ -820,7 +820,7 @@ func _sol_autour(relief: ReliefBuilder, p: Vector3) -> void:
 		calcul.call()
 		_poser_sol()
 	else:
-		_sol_tache = WorkerThreadPool.add_task(calcul, false, "sol au mètre")
+		_sol_tache = WorkerThreadPool.add_task(calcul, true, "sol au mètre")   # courte et attendue : jamais derrière une construction (4 fils = 1 tâche de basse priorité à la fois)
 
 
 func _poser_sol() -> void:

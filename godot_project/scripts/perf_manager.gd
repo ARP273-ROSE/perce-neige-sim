@@ -64,6 +64,11 @@ var main: Node = null
 var mode: String = "auto"           # auto | high | medium | low
 var cran: int = 0
 var cran_min: int = 0               # plafond de qualité (rendu OpenGL, web)
+## --cran=N (captures, bancs) : aucun ajustement. Les modes du menu (haute, moyenne, basse)
+## ne figent plus rien : ils donnent le départ et le plafond de qualité, et le régulateur
+## peut encore alléger quand ça saccade (14/11/2026 : chez le père, « haute » tenait le
+## cran 0 avec tous les effets sur la Vega 8, p95 33 ms, sans que rien ne bouge).
+var _fige: bool = false
 var machine: Dictionary = {}
 var _env: Environment = null
 var _rd: bool = true                # renderer RenderingDevice (Forward+/Mobile)
@@ -135,7 +140,8 @@ func setup(p_main: Node, p_env: Environment, p_mode: String) -> void:
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--cran="):
 			depart = int(a.substr(7))
-			mode = "high"     # mode fixe : _evaluer ne touche plus à rien
+			mode = "high"
+			_fige = true      # cran imposé : _evaluer ne touche plus à rien
 	_appliquer(depart, "profil de départ")
 	_log("[Perf] machine : %s" % _resume_machine())
 
@@ -555,7 +561,7 @@ func _evaluer() -> void:
 	var b_ms: float = budget * 1000.0
 	dernier_bilan = "%.0f i/s, à-coups %.1f %%, 1 %% pires %.0f ms — principal %.1f / rendu %.1f / GPU %.1f ms" % [
 		ips, taux * 100.0, p99 * 1000.0, princ_ms, rendu_ms, gpu_ms]
-	if mode != "auto":
+	if _fige:
 		return
 	var mauvais: bool = ips < 0.83 * cible_ips or taux > 0.03 or p99 > 3.0 * budget
 	var rm: Node = main.get("remontees") if main != null else null
@@ -628,6 +634,9 @@ func _evaluer() -> void:
 		return
 	var vise: int = cran - 1
 	if _echecs.get(vise, -1.0) > _horloge:
+		return
+	# mode choisi au menu : on revient jusqu'à lui, jamais au-delà
+	if mode != "auto" and vise < _cran_de_depart():
 		return
 	_cran_avant_montee = cran
 	_derniere_montee_t = _horloge

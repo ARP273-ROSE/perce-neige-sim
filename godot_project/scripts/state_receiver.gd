@@ -35,6 +35,7 @@ var _last_skieur_vue: int = -1
 var _last_skieur_ski: int = -1
 var _last_skieur_evac: int = -1
 var _last_skieur_auto: int = -1
+var _last_vue_ligne: int = -1
 var port: int = DEFAULT_PORT
 var physics: TrainPhysics = null
 var fault_manager: FaultManager = null
@@ -229,7 +230,7 @@ func _apply(d: Dictionary) -> void:
 			physics.ghost_locked_s = _f(d, "ghost_s", PNConstants.miroir(physics.s))
 		elif physics.ghost_locked_s < 0.0:
 			physics.ghost_locked_s = PNConstants.miroir(physics.s)
-	# Mute global relayé par le sim PC (touche N) : le viewer embarqué a
+	# Mute global relayé par le sim PC (touche T) : le viewer embarqué a
 	# son propre moteur audio — sans ce relais, couper le son côté PC
 	# laissait la 3D sonore. Bus Master muté/démuté, la lecture continue.
 	if d.has("muted"):
@@ -316,6 +317,12 @@ func _apply(d: Dictionary) -> void:
 				and main.mode_skieur:
 			main.commandes_skieur.basculer_vue()
 		_last_skieur_vue = nv
+	# vues de la remontée (touche T du PC en mode skieur) : compteur d'appuis
+	var nl: int = _i(d, "skieur_vue_ligne", 0)
+	if nl != _last_vue_ligne:
+		if _last_vue_ligne >= 0 and main != null and main.mode_skieur and main.has_method("basculer_vue_ligne"):
+			main.basculer_vue_ligne()
+		_last_vue_ligne = nl
 	# Panne active : déclenche localement pour effet visuel + son
 	if d.has("active_fault") and fault_manager != null and d["active_fault"] is String:
 		var fid: String = d["active_fault"]

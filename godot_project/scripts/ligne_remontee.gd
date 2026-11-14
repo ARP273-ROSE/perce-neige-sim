@@ -200,6 +200,11 @@ func demolir(poubelle: Array) -> void:
 		c.process_mode = Node.PROCESS_MODE_DISABLED
 		poubelle.append(c)
 	_vehicules.clear()
+	# cavaliers du 3S et du TPH : nœuds partis à la poubelle avec la ligne (« previously
+	# freed instance » à chaque image après une démolition au loin)
+	_cavaliers_n.clear()
+	_cav_galets.clear()
+	_cav_etat.clear()
 	_corps.clear()
 	_pyl.clear()
 	_pyl_treillis.clear()
@@ -4904,8 +4909,12 @@ func _tic_lod(delta: float) -> float:
 	if _lod_k < pas_lod:
 		return -1.0
 	_lod_k = 0
+	# pas borné à 0,25 s, mais le reste est rendu aux images suivantes : jeté, il
+	# décalait les lignes entre elles (Bollin / Fresse, calées une fois, se
+	# désaccordaient à la gare intermédiaire sous ~16 i/s). Retard rattrapé
+	# borné à 2 s (après un gel, on ne rejoue pas la minute perdue).
 	var d: float = minf(_lod_acc, 0.25)
-	_lod_acc = 0.0
+	_lod_acc = minf(_lod_acc - d, 2.0)
 	return d
 
 
@@ -6020,6 +6029,10 @@ func puissance_kw() -> float:
 	for c in _charges[1]:
 		pd += (c as Vector2).y * _tension
 	var p_nom: float = (_poids_vehicule(true) - _poids_vehicule(false)) * (long_c / maxf(espacement, 8.0)) * dh / long_c * vitesse
+	if _charges[0].is_empty() and _charges[1].is_empty():
+		# monocâbles : pas de charges ponctuelles (CHARGES_PONCTUELLES faux), le poste
+		# n'affichait que les pertes — charge moyenne des deux brins à la place
+		return (p_nom * vitesse_reelle / maxf(vitesse, 0.1) + 0.1 * p_nom * regime()) / 1000.0
 	return ((pm - pd) * dh / long_c * vitesse_reelle + 0.1 * p_nom * regime()) / 1000.0
 
 

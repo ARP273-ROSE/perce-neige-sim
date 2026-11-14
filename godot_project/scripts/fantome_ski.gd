@@ -24,7 +24,7 @@ static var _pre_tache: int = -1
 static func precalculer() -> void:
 	if _pre_tache >= 0 or not _pre.is_empty():
 		return
-	_pre_tache = WorkerThreadPool.add_task(_calculer.bind(_pre), false, "fantôme")
+	_pre_tache = WorkerThreadPool.add_task(_calculer.bind(_pre), true, "fantôme")
 
 
 static func _calculer(d: Array) -> void:
