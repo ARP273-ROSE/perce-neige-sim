@@ -7345,16 +7345,71 @@ class FaultPickerDialog(QDialog):
         self.accept()
 
 
+class BoutonHud(QPushButton):
+    """Bouton de la barre du plein cadre, dans le style du HUD tactile de la
+    3D (EXPLOIT., CARTE…) : fond gris bleuté arrondi, liseré bleu clair,
+    libellé court en majuscules, raccourci clavier en petit dessous."""
+
+    def __init__(self, parent: QWidget) -> None:
+        super().__init__(parent)
+        self.libelle = ""
+        self.raccourci = ""
+        self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.setCursor(Qt.CursorShape.PointingHandCursor)
+
+    def regler(self, libelle: str, raccourci: str) -> None:
+        if (libelle, raccourci) != (self.libelle, self.raccourci):
+            self.libelle, self.raccourci = libelle, raccourci
+            self.setToolTip(raccourci)
+            self.update()
+
+    def paintEvent(self, ev) -> None:  # noqa: N802
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        r = QRectF(self.rect()).adjusted(1.5, 1.5, -1.5, -1.5)
+        h = r.height()
+        if self.isDown():
+            fond = QColor(120, 150, 190, 235)
+        elif self.underMouse():
+            fond = QColor(110, 125, 150, 225)
+        else:
+            fond = QColor(92, 104, 126, 205)
+        p.setPen(QPen(QColor(150, 190, 240, 230), max(1.5, h * 0.03)))
+        p.setBrush(fond)
+        p.drawRoundedRect(r, h * 0.14, h * 0.14)
+        p.setPen(QColor(238, 242, 248))
+        f = QFont(self.font())
+        f.setBold(True)
+        f.setPixelSize(max(10, int(h * 0.30)))
+        p.setFont(f)
+        haut = QRectF(r.x(), r.y() + h * 0.08, r.width(), h * 0.50)
+        p.drawText(haut, int(Qt.AlignmentFlag.AlignCenter), self.libelle)
+        if self.raccourci:
+            f2 = QFont(self.font())
+            f2.setPixelSize(max(9, int(h * 0.19)))
+            p.setFont(f2)
+            p.setPen(QColor(200, 215, 235, 220))
+            bas = QRectF(r.x(), r.y() + h * 0.56, r.width(), h * 0.34)
+            p.drawText(bas, int(Qt.AlignmentFlag.AlignCenter), self.raccourci)
+        p.end()
+
+
 class BarrePleinCadre(QWidget):
     """Boutons à l'écran de la vue 3D plein cadre (F12 ou skieur loin du
-    funiculaire), pour piloter sans clavier.
+    funiculaire), pour piloter sans clavier, au doigt comme à la souris.
 
     La 3D embarquée est une fenêtre native enfant (HWND Godot) : elle passe
     au-dessus de tout ce que la fenêtre Qt peint (airspace Win32, voir
     _reposition_godot_embed). La barre est donc une petite fenêtre de premier
     niveau POSSÉDÉE par la fenêtre du simulateur : toujours au-dessus d'elle
     et de la 3D, cachée avec elle quand on la réduit, et qui ne prend ni
-    l'activation ni le focus clavier (le clavier reste au skieur)."""
+    l'activation ni le focus clavier (le clavier reste au skieur).
+
+    Colonne en haut à gauche : la colonne de droite du HUD du skieur, le
+    compteur du haut et la manette en bas à gauche restent dégagés. Taille
+    proportionnelle à la hauteur de la vue, comme les boutons du HUD."""
+
+    CLES = ("ecran", "poste", "skieur", "ligne", "pause", "aide")
 
     def __init__(self, jeu: "GameWidget") -> None:
         super().__init__(jeu.window(),
@@ -7366,53 +7421,47 @@ class BarrePleinCadre(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
         self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        self.setStyleSheet(
-            "QPushButton { color: #f4f4f4; background: rgba(20, 24, 30, 175);"
-            " border: 1px solid rgba(255, 255, 255, 70); border-radius: 6px;"
-            " padding: 7px 14px; font-size: 15px; }"
-            "QPushButton:hover { background: rgba(60, 80, 105, 210); }"
-            "QPushButton:pressed { background: rgba(90, 120, 160, 230); }")
-        lay = QHBoxLayout(self)
-        lay.setContentsMargins(6, 6, 6, 6)
-        lay.setSpacing(6)
-        self._boutons: dict[str, QPushButton] = {}
-        # (1re / 3e personne et CHAUSSER sont déjà dans le HUD tactile du
-        # skieur, dessiné par la 3D : pas de doublon ici)
-        for cle in ("ecran", "poste", "skieur", "ligne", "pause", "aide"):
-            b = QPushButton(self)
-            b.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-            b.setCursor(Qt.CursorShape.PointingHandCursor)
-            b.clicked.connect(lambda _on=False, c=cle: self._jeu._bouton_plein_cadre(c))
-            lay.addWidget(b)
-            self._boutons[cle] = b
+        self._lay = QVBoxLayout(self)
+        self._lay.setContentsMargins(0, 0, 0, 0)
+        self._boutons: dict[str, BoutonHud] = {}
+        for cle in self.CLES:
+            bt = BoutonHud(self)
+            bt.clicked.connect(lambda _on=False, c=cle: self._jeu._bouton_plein_cadre(c))
+            self._lay.addWidget(bt)
+            self._boutons[cle] = bt
         self._vu: tuple | None = None
+        self._haut_bouton = 0
 
     def maj(self, etat: tuple) -> None:
-        """Textes et boutons visibles selon l'état (appelé à chaque image,
+        """Libellés et boutons visibles selon l'état (appelé à chaque image,
         ne touche aux widgets que si l'état change)."""
         if etat == self._vu:
             return
         self._vu = etat
         plein, skieur, pause, aide, _lang = etat
         b = self._boutons
-        b["ecran"].setText(T("Window (Esc)", "Fenêtre (Échap)") if plein
-                           else T("Full screen", "Plein écran"))
-        b["poste"].setText(T("Driving desk (F12)", "Poste de conduite (F12)"))
-        b["skieur"].setText(T("Drive (F9)", "Conduire (F9)") if skieur
-                            else T("Skier (F9)", "Skieur (F9)"))
-        b["ligne"].setText(T("Lift views (T)", "Vues de la remontée (T)"))
-        b["pause"].setText(T("Resume (P)", "Reprendre (P)") if pause
-                           else T("Pause (P)", "Pause (P)"))
-        b["aide"].setText(T("Close help (F1)", "Fermer l'aide (F1)") if aide
-                          else T("Help (F1)", "Aide (F1)"))
+        b["ecran"].regler(T("WINDOW", "FENÊTRE") if plein else T("FULL SCREEN", "PLEIN ÉCRAN"),
+                          T("Esc", "Échap") if plein else "")
+        b["poste"].regler(T("DESK", "POSTE"), "F12")
+        b["skieur"].regler(T("DRIVE", "CONDUIRE") if skieur else T("SKIER", "SKIEUR"), "F9")
+        b["ligne"].regler(T("VIEWS", "VUES"), "T")
+        b["pause"].regler(T("RESUME", "REPRENDRE") if pause else T("PAUSE", "PAUSE"), "P")
+        b["aide"].regler(T("CLOSE", "FERMER") if aide else T("HELP", "AIDE"), "F1")
         b["ligne"].setVisible(skieur)
-        self.adjustSize()
+        self._haut_bouton = 0          # retaille au prochain placer()
 
     def placer(self, zone) -> None:
-        """En haut à droite de la zone 3D (coordonnées écran)."""
-        self.adjustSize()
-        x = zone.x() + zone.width() - self.width() - 10
-        y = zone.y() + 10
+        """En haut à gauche de la zone 3D (coordonnées écran)."""
+        h = int(max(44, min(120, zone.height() * 0.072)))
+        if h != self._haut_bouton:
+            self._haut_bouton = h
+            w = int(h * 2.3)
+            self._lay.setSpacing(int(h * 0.20))
+            for bt in self._boutons.values():
+                bt.setFixedSize(w, h)
+            self.adjustSize()
+        m = int(h * 0.25)
+        x, y = zone.x() + m, zone.y() + m
         if self.pos().x() != x or self.pos().y() != y:
             self.move(x, y)
 
