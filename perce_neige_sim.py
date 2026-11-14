@@ -494,6 +494,9 @@ def _reprendre_donnees_kit(d: Path) -> None:
 # Préférences de l'utilisateur (qualité 3D…), dans le dossier qui survit aux
 # mises à jour.
 QUALITES_3D = ("auto", "high", "medium", "low")
+# Décor haute définition (menu Affichage) : « auto » = la 3D décide selon la
+# machine ; « oui » / « non » = forcé. Lu par la 3D au lancement (--decor-hd).
+DECORS_HD = ("auto", "oui", "non")
 # Taille de l'interface peinte (menu Affichage) : facteur sur l'échelle
 # automatique ; « plus grande » reste bornée par ce qui tient à l'écran.
 TAILLES_UI = {"small": 0.85, "normal": 1.0, "large": 1.15, "xlarge": 1.3}
@@ -7392,6 +7395,8 @@ class GameWidget(QWidget):
         # machine et s'ajuste en direct (PerfManager côté Godot).
         q = _lire_prefs().get("qualite_3d", "auto")
         self._qualite_3d = q if q in QUALITES_3D else "auto"
+        d = _lire_prefs().get("decor_hd", "auto")
+        self._decor_hd = d if d in DECORS_HD else "auto"
         # Taille de l'interface (menu Affichage) : facteur appliqué à
         # l'échelle automatique, cf. _ui_k.
         t = _lire_prefs().get("taille_ui", 1.0)
@@ -7635,6 +7640,7 @@ class GameWidget(QWidget):
                 dev_project_dir=dev_project,
             )
             self._godot_bridge.quality = self._qualite_3d
+            self._godot_bridge.decor_hd = self._decor_hd
             # Pack haute définition : servira au prochain lancement du viewer, une
             # fois installé (voir "hd_possible" dans _message_3d).
             self._godot_bridge.donnees = _persistent_data_dir()
@@ -7731,9 +7737,22 @@ class GameWidget(QWidget):
         elif "hd_possible" in m:
             # la vue 3D dit si cette machine s'en servirait : inutile de télécharger
             # 819 Mo pour un processeur graphique intégré
-            if m["hd_possible"] and self._godot_bridge is not None and self._godot_bridge.donnees is not None:
+            # (décor HD refusé au menu Affichage : rien à télécharger)
+            if (m["hd_possible"] and self._decor_hd != "non"
+                    and self._godot_bridge is not None and self._godot_bridge.donnees is not None):
                 import pack_hd
                 pack_hd.demarrer(self._godot_bridge.donnees)
+        elif m.get("pack_hd_abime") or m.get("hd_illisible"):
+            # la vue 3D n'a pas su lire le pack installé (fichier abîmé) : le
+            # marqueur ne revérifie rien, sans ceci le repli sur le relief
+            # habituel durerait toujours → on efface et on retélécharge
+            if self._godot_bridge is not None and self._godot_bridge.donnees is not None:
+                import pack_hd
+                if pack_hd.reparer(self._godot_bridge.donnees):
+                    add_event(self.state, "pack_hd",
+                              "HD scenery unreadable: downloading it again",
+                              "Décor haute définition illisible : nouveau téléchargement",
+                              "info")
         elif "ips_3d" in m:
             self._ips_3d = float(m["ips_3d"])
             self._t_ips_3d = time.monotonic()
@@ -8707,8 +8726,13 @@ class GameWidget(QWidget):
                          or self._godot_embed_widget is not None)):
                 print("[GodotBridge] viewer 3D mort — fallback vue procédurale")
                 was_active = self._cabin_view_state == 2
+                relancer = self._signaler_mort_3d()
                 self._release_godot_embed()
-                if was_active:
+                if was_active and relancer:
+                    # relance avec des réglages plus sobres (qualité basse,
+                    # puis OpenGL) plutôt que de rester sur la vue dessinée
+                    self._begin_godot_launch()
+                elif was_active:
                     self._godot_fallback_to_procedural()
             # Heartbeat 1 Hz hors MODE_RUN (en MODE_RUN l'état part à 60 Hz) :
             # le viewer s'auto-ferme sur silence prolongé → pas d'orphelin si
@@ -8722,6 +8746,7 @@ class GameWidget(QWidget):
             if _g_running:
                 for msg in self._godot_bridge.poll_messages():
                     self._message_3d(msg)
+                self._vigie_3d_tick()
             # plus de vue 3D (F4, viewer fermé) : fin du mode skieur
             if self._skieur and (not _g_running or self._cabin_view_state != 2):
                 self._sortir_skieur()
@@ -8747,7 +8772,12 @@ class GameWidget(QWidget):
                 vue3d = int(getattr(self, "_godot_view3d", 0))
                 state_dict["view3d"] = vue3d
                 state_dict["ext_view"] = vue3d == 1
-                state_dict["qualite_3d"] = self._qualite_3d
+                # qualité basse imposée après un plantage (repli) : sinon le
+                # flux d'état remettrait aussitôt celle du menu
+                state_dict["qualite_3d"] = self._godot_bridge.qualite_effective()
+                # fenêtre réduite ou autre application au premier plan : la
+                # 3D peut baisser sa cadence
+                state_dict["arriere_plan"] = self._en_arriere_plan()
                 # relevé de fluidité automatique (viewer : essai_releve_auto)
                 if not getattr(self, "_godot_embed_hidden", False) and not self.window().isMinimized():
                     state_dict["releve_auto"] = self._releves_auto_voulus()
@@ -12931,6 +12961,163 @@ class GameWidget(QWidget):
         poll.start()
         prog.show()
 
+    # ----- plantage et gel de la vue 3D embarquée -----------------------
+
+    # silence de la 3D (aucun message) au-delà duquel on la tient pour figée
+    _GEL_3D_S = 5.0
+
+    def _signaler_mort_3d(self) -> bool:
+        """Le viewer 3D est mort (plantage, ou tué par la vigie de gel) :
+        rapport d'incident « plantage_3d », puis un cran de repli pour le
+        lancement suivant (qualité basse, puis OpenGL). Vrai s'il faut le
+        relancer tout de suite. Rien si c'est nous qui l'avons arrêté."""
+        b = self._godot_bridge
+        if b is None:
+            return False
+        rc = b.code_sortie()
+        motif = getattr(self, "_godot_mort_motif", "") or "plantage"
+        detail = getattr(self, "_godot_mort_detail", "")
+        self._godot_mort_motif = ""
+        self._godot_mort_detail = ""
+        if rc is None:
+            return False                     # arrêt voulu (stop()) : rien à signaler
+        if rc == 0 and motif != "gel":
+            return False                     # sortie normale (silence du PC, fermeture)
+        secours = b.secours
+        try:
+            import reporting
+            reporting.envoyer(
+                "plantage_3d", motif=motif, detail=detail,
+                resume=f"vue 3D {motif}, code de sortie {rc} ({rc & 0xFFFFFFFF:#010x})",
+                code_sortie=rc,
+                journal_3d=b.journal_fin(30)[-4000:],
+                qualite_3d=self._qualite_3d,
+                qualite_effective=b.qualite_effective(),
+                decor_hd=getattr(self, "_decor_hd", "auto"),
+                secours=secours,
+                opengl="opengl3" in (b._resolved_cmd or []),
+                pack_hd=bool(b.pack_en_service),
+                vue_3d=int(getattr(self, "_godot_view3d", 0)),
+                skieur=bool(self._skieur),
+                duree_s=round(time.monotonic() - getattr(self, "_godot_launch_t0", time.monotonic()), 1))
+        except Exception:
+            pass
+        b.log(f"[vigie] vue 3D {motif} (code {rc}) — repli {secours} → {min(2, secours + 1)}")
+        if secours >= 2:
+            return False                     # déjà en OpenGL : vue dessinée
+        b.secours = secours + 1
+        add_event(self.state, "godot_relance",
+                  "3D view crashed: restarting it with lighter settings",
+                  "Vue 3D plantée : relance avec des réglages plus légers",
+                  "warn" if motif == "gel" else "info")
+        return True
+
+    def _tuer_3d_figee(self, detail: str) -> None:
+        """Vue 3D figée : on la tue (sans rien attendre ; appelable depuis le
+        fil de la vigie). Le chien de garde du tick la voit morte ensuite,
+        envoie le rapport et la relance."""
+        b = self._godot_bridge
+        if b is None or getattr(self, "_godot_mort_motif", ""):
+            return
+        self._godot_mort_motif = "gel"
+        self._godot_mort_detail = detail
+        b.log(f"[vigie] vue 3D figée ({detail}) → arrêt forcé")
+        b.tuer()
+
+    def _vigie_3d_tick(self) -> None:
+        """Vigie de gel, fil de l'interface : la 3D envoie au moins un message
+        par seconde (ips_3d). Visible, embarquée et muette plus de 5 s → figée.
+        Armée seulement après son premier message (le chargement est long)."""
+        b = self._godot_bridge
+        visible = bool(self._cabin_view_state == 2
+                       and not self._godot_embed_hidden
+                       and (self._godot_child_hwnd or self._godot_embed_widget is not None)
+                       and not self.window().isMinimized())
+        self._fenetre_3d_visible = visible
+        maintenant = time.monotonic()
+        if not visible or b is None or b.messages_recus == 0:
+            self._vigie_3d_depuis = None
+            return
+        if getattr(self, "_vigie_3d_depuis", None) is None:
+            self._vigie_3d_depuis = maintenant
+        silence = maintenant - max(b.t_dernier_message, self._vigie_3d_depuis)
+        if silence > self._GEL_3D_S:
+            self._tuer_3d_figee(f"aucun message depuis {silence:.1f} s")
+        self._demarrer_vigie_3d_fil()
+
+    def _demarrer_vigie_3d_fil(self) -> None:
+        """Windows : la fenêtre 3D, enfant d'un autre processus, partage la
+        file d'entrée de la nôtre ; figée, elle fige l'interface, et le tick
+        ne tourne plus. Un fil de fond la sonde donc lui-même (WM_NULL avec
+        délai) et la tue au-delà de 5 s sans réponse."""
+        if sys.platform != "win32" or getattr(self, "_vigie_3d_fil", None) is not None:
+            return
+
+        def boucle() -> None:
+            import ctypes
+            from ctypes import wintypes
+            fige_depuis = None
+            while True:
+                time.sleep(0.5)
+                try:
+                    b = self._godot_bridge
+                    hwnd = self._godot_child_hwnd
+                    if (b is None or not hwnd or not b.is_running()
+                            or not getattr(self, "_fenetre_3d_visible", False)):
+                        fige_depuis = None
+                        continue
+                    res = ctypes.c_size_t(0)
+                    ok = ctypes.windll.user32.SendMessageTimeoutW(
+                        wintypes.HWND(hwnd), 0x0000, 0, 0, 0x0002, 1000,
+                        ctypes.byref(res))
+                    if ok:
+                        fige_depuis = None
+                        continue
+                    maintenant = time.monotonic()
+                    if fige_depuis is None:
+                        fige_depuis = maintenant
+                    elif maintenant - fige_depuis > self._GEL_3D_S:
+                        fige_depuis = None
+                        self._tuer_3d_figee("fenêtre sans réponse depuis plus de 5 s")
+                except Exception:
+                    fige_depuis = None
+
+        self._vigie_3d_fil = threading.Thread(target=boucle, name="vigie-3d", daemon=True)
+        self._vigie_3d_fil.start()
+
+    def _en_arriere_plan(self) -> bool:
+        """Fenêtre réduite, ou une autre application au premier plan. La
+        fenêtre 3D elle-même au premier plan (mode skieur, fenêtre possédée
+        quand l'embarquement a échoué) ne compte pas comme arrière-plan."""
+        try:
+            fen = self.window()
+            if fen.isMinimized():
+                return True
+            if fen.isActiveWindow():
+                return False
+            if sys.platform == "win32":
+                import ctypes
+                from ctypes import wintypes
+                u = ctypes.windll.user32
+                fg = u.GetForegroundWindow()
+                if not fg:
+                    return True
+                if self._godot_child_hwnd and fg == self._godot_child_hwnd:
+                    return False
+                pid = wintypes.DWORD(0)
+                u.GetWindowThreadProcessId(wintypes.HWND(fg), ctypes.byref(pid))
+                proc = getattr(self._godot_bridge, "_proc", None)
+                if pid.value in (os.getpid(), getattr(proc, "pid", -1)):
+                    return False
+                return True
+            # X11 : le focus passe dans la fenêtre 3D embarquée sans que Qt
+            # la sache active ; on ne conclut que si elle n'est pas embarquée
+            if self._godot_embed_widget is not None:
+                return False
+            return QApplication.applicationState() != Qt.ApplicationState.ApplicationActive
+        except Exception:
+            return False
+
     def _godot_fallback_to_procedural(self) -> None:
         """Échec du viewer 3D → bascule propre sur la vue cabine procédurale
         (état 1) plutôt que de laisser un écran vide."""
@@ -13234,11 +13421,23 @@ class GameWidget(QWidget):
                                   ctypes.POINTER(ctypes.c_size_t)]
                 envoi.restype = wt.LPARAM
                 reponse = ctypes.c_size_t(0)
-                vivant = envoi(self._godot_child_hwnd, 0, 0, 0, 0x0002, 200, ctypes.byref(reponse))
-                if vivant:
-                    ctypes.windll.user32.SetParent(self._godot_child_hwnd, 0)
-                elif self._godot_bridge is not None:
-                    self._godot_bridge.stop()
+                b = self._godot_bridge
+                hwnd = self._godot_child_hwnd
+                if b is not None and not b.is_running():
+                    pass        # processus mort : sa fenêtre est partie avec lui
+                elif envoi(hwnd, 0, 0, 0, 0x0002, 200, ctypes.byref(reponse)):
+                    # la 3D peut encore figer entre la sonde et SetParent :
+                    # on détache depuis un fil, attendu 300 ms au plus ; au-
+                    # delà, on la tue, ce qui libère SetParent
+                    fil = threading.Thread(
+                        target=lambda: ctypes.windll.user32.SetParent(hwnd, 0),
+                        name="godot-detacher", daemon=True)
+                    fil.start()
+                    fil.join(0.3)
+                    if fil.is_alive() and b is not None:
+                        b.stop()
+                elif b is not None:
+                    b.stop()
             except Exception:
                 pass
             self._godot_child_hwnd = None
@@ -17192,6 +17391,21 @@ class MainWindow(QMainWindow):
             act.setChecked(self.game._qualite_3d == q)
             groupe.addAction(act)
             act.triggered.connect(lambda _on=False, q=q: self._choisir_qualite_3d(q))
+        sous_hd = menu.addMenu(self._tr("HD scenery", "Décor HD"))
+        groupe_hd = QActionGroup(self)
+        groupe_hd.setExclusive(True)
+        libelles_hd = {
+            "auto": ("Automatic (if this computer can)",
+                     "Automatique (si cet ordinateur le peut)"),
+            "oui": ("Yes", "Oui"),
+            "non": ("No", "Non"),
+        }
+        for d in DECORS_HD:
+            act = sous_hd.addAction(self._tr(*libelles_hd[d]))
+            act.setCheckable(True)
+            act.setChecked(self.game._decor_hd == d)
+            groupe_hd.addAction(act)
+            act.triggered.connect(lambda _on=False, d=d: self._choisir_decor_hd(d))
         sous_t = menu.addMenu(self._tr("Interface size", "Taille de l'interface"))
         groupe_t = QActionGroup(self)
         groupe_t.setExclusive(True)
@@ -17260,6 +17474,18 @@ class MainWindow(QMainWindow):
         if self.game._godot_bridge is not None:
             self.game._godot_bridge.quality = q     # au prochain lancement
         # (la vue 3D en cours la reçoit dans le flux d'état, sans relancer)
+
+    def _choisir_decor_hd(self, d: str) -> None:
+        if d not in DECORS_HD or d == self.game._decor_hd:
+            return
+        self.game._decor_hd = d
+        _ecrire_prefs({"decor_hd": d})
+        if self.game._godot_bridge is not None:
+            self.game._godot_bridge.decor_hd = d     # au prochain lancement
+        add_event(self.game.state, "decor_hd",
+                  "HD scenery: takes effect the next time the 3D view starts",
+                  "Décor HD : pris en compte au prochain lancement de la vue 3D",
+                  "info")
 
     def _install_help_menu(self) -> None:
         bar = self.menuBar()

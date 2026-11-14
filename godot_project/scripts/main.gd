@@ -135,6 +135,7 @@ var speed_cmd_rate: float = 0.4    # variation par seconde du setpoint
 
 
 func _ready() -> void:
+	LigneRemontee.fermeture = false      # (une scène relancée dans le même processus)
 	# tous les textes en 3D en police VECTORIELLE (PolicesJeu, MSDF) : ceux
 	# déjà là et tous ceux créés ensuite (09/10/2026)
 	get_tree().node_added.connect(func(nd: Node) -> void:
@@ -1668,6 +1669,12 @@ func _commande_pupitre(nom: String, enfonce: bool) -> void:
 			toggle_cabin_lights()
 
 
+## Fenêtre fermée : les fils de construction cessent d'attendre des images qui ne viendront plus.
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_WM_CLOSE_REQUEST or what == NOTIFICATION_PREDELETE:
+		LigneRemontee.fermeture = true
+
+
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT:
 		if _pupitre_clic(event.position, event.pressed):
@@ -2962,6 +2969,10 @@ func _maj_skieur() -> void:
 	_piques_occasions(get_process_delta_time(), en_gare, a_pied_tunnel)
 	_securite_skieur()
 	commandes_skieur.set_evacuation_possible(evacuation_possible())
+	# chaussé ou déchaussé sans le bouton (boucle auto, lâcher de perche, chute, arrivée en gare…) : le
+	# bouton suit l'état réel (retour d'utilisateur, 14/11/2026 : « le bouton ne change pas tout seul »)
+	if commandes_skieur.chausse_affiche() != skieur.chausse:
+		commandes_skieur.set_chausse(skieur.chausse)
 	if vues_remontee != null:
 		commandes_skieur.set_vue_ligne(vues_remontee.nom() if vues_remontee.possible() else "")
 	commandes_skieur.set_exploitation(_exploitation_pc if client_mode else (auto_operator != null and auto_operator.enabled))

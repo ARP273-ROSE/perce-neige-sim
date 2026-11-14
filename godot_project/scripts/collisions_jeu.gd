@@ -841,7 +841,8 @@ func _poser_sol() -> void:
 
 func _exit_tree() -> void:
 	if _sol_tache >= 0:
-		WorkerThreadPool.wait_for_task_completion(_sol_tache)
+		LigneRemontee.fermeture = true
+		LigneRemontee.attendre_fil(_sol_tache)
 		_sol_tache = -1
 
 

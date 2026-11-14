@@ -36,6 +36,8 @@ var _last_skieur_ski: int = -1
 var _last_skieur_evac: int = -1
 var _last_skieur_auto: int = -1
 var _last_vue_ligne: int = -1
+var _abime_annonce: bool = false
+var _jeton: String = ""             # --jeton=… : jeton de séance du PC
 var port: int = DEFAULT_PORT
 var physics: TrainPhysics = null
 var fault_manager: FaultManager = null
@@ -56,6 +58,8 @@ func _ready() -> void:
 	# Parse les args projet (après --)
 	var args: PackedStringArray = OS.get_cmdline_user_args()
 	for arg in args:
+		if arg.begins_with("--jeton="):
+			_jeton = arg.substr(8)
 		if arg.begins_with("--port="):
 			var p: int = int(arg.substr(7))
 			if p >= 1024 and p <= 65535:
@@ -82,6 +86,9 @@ var _hd_annonce: bool = false
 
 func envoyer(d: Dictionary) -> void:
 	if _retour != null:
+		if _jeton != "":
+			d = d.duplicate()
+			d["jeton"] = _jeton
 		_retour.put_packet((JSON.stringify(d) + "\n").to_utf8_buffer())
 
 
@@ -119,6 +126,9 @@ func _process_corps(_delta: float) -> void:
 			_hd_annonce = true
 			envoyer({"hd_possible": ReliefFin.voulu_sans_forcer(main.perf_manager._cran_de_depart()) and ReliefFin.niveau_machine() > 0})
 		envoyer({"ips_3d": Engine.get_frames_per_second()})
+		if ReliefFin.pack_abime and not _abime_annonce:
+			_abime_annonce = true
+			envoyer({"pack_hd_abime": true})
 	# Vide la file UDP, applique le DERNIER packet (anti-lag : si plusieurs
 	# packets sont en attente, seul le plus récent est appliqué)
 	var latest: Dictionary = {}
@@ -128,7 +138,8 @@ func _process_corps(_delta: float) -> void:
 		if line.is_empty():
 			continue
 		var parsed: Variant = JSON.parse_string(line)
-		if parsed is Dictionary:
+		# jeton de la séance (GodotBridge) : un paquet sans lui vient d'un autre programme
+		if parsed is Dictionary and (_jeton == "" or str((parsed as Dictionary).get("jeton", "")) == _jeton):
 			latest = parsed
 			_packet_count += 1
 	if not latest.is_empty():
@@ -318,6 +329,9 @@ func _apply(d: Dictionary) -> void:
 			main.commandes_skieur.basculer_vue()
 		_last_skieur_vue = nv
 	# vues de la remontée (touche T du PC en mode skieur) : compteur d'appuis
+	# fenêtre du PC derrière une autre application ou réduite : 3D bridée à 20 i/s
+	if d.has("arriere_plan") and main != null and main.get("perf_manager") != null:
+		main.perf_manager.set_arriere_plan_pc(_b(d, "arriere_plan", false))
 	var nl: int = _i(d, "skieur_vue_ligne", 0)
 	if nl != _last_vue_ligne:
 		if _last_vue_ligne >= 0 and main != null and main.mode_skieur and main.has_method("basculer_vue_ligne"):
@@ -340,6 +354,7 @@ func _update_link_status() -> void:
 	var silence: float = now - _last_packet_time
 	if silence > LINK_QUIT_S:
 		print("[StateReceiver] silence UDP > %d s — fermeture du viewer" % int(LINK_QUIT_S))
+		LigneRemontee.fermeture = true
 		get_tree().quit()
 		return
 	var warn: bool = _packet_count > 0 and silence > LINK_WARN_S

@@ -210,8 +210,8 @@ func _maj_positions() -> void:
 	# (cabine 1 recalée si on a déplacé la cabine 0 d'un bloc : sonde, chargement)
 	if is_nan(_s_cab1) or absf(_s_cab1 - (a + b - _s)) > 5.0:
 		_s_cab1 = a + b - _s
-	_vehicules[0][1] = _s
-	_vehicules[1][1] = _s_cab1
+	_vehicules[0][1] = _s + _u[0]
+	_vehicules[1][1] = _s_cab1 - _u[1]
 	_charges_ponctuelles()
 	for i in range(2):
 		_placer(i)
@@ -261,6 +261,7 @@ func _process_corps(delta: float) -> void:
 		if etat == "arret_normal" and va <= 0.0:
 			etat = "arret"
 	vitesse_reelle = absf(_v)
+	_rebond(delta)
 	_maj_positions()
 	if _v != 0.0:
 		sens_tracteur = signf(_v)
@@ -270,6 +271,43 @@ func _process_corps(delta: float) -> void:
 		_phase_cable = fposmod(_phase_cable + _v * delta, 0.45)
 		_mat_cable.set_shader_parameter("cable_phase", _phase_cable)
 	_dt = 0.0
+
+
+## Élasticité du câble tracteur (audit du 14/11/2026) : chaque cabine est une masse au bout d'un ressort
+## k = EA / L, L la longueur de tracteur jusqu'à la poulie motrice. Aux freinages et à l'arrêt d'urgence
+## elle continue un peu, revient, et oscille quelques secondes (Grande Motte : T ≈ 3,6 s, ~0,5 m à
+## 1,5 m/s² ; Fornet : ~2,6 s, ~0,25 m). Écart de rendu le long de la voie, borné à 1,5 m.
+const EA_TRACTEUR: float = 1.5e8        # N (tracteur à torons, deux brins)
+const ZETA_TRACTEUR: float = 0.08
+var _u: PackedFloat32Array = PackedFloat32Array([0.0, 0.0])
+var _du: PackedFloat32Array = PackedFloat32Array([0.0, 0.0])
+var _v_prec: float = 0.0
+
+
+func _motrice_amont() -> bool:
+	return String(name) != "tph_fornet"      # Fornet : motrice et tensions à l'aval
+
+
+func _rebond(delta: float) -> void:
+	if delta <= 0.0:
+		return
+	var a_s: float = (_v - _v_prec) / delta    # accélération du tracteur, dans le sens de _s
+	_v_prec = _v
+	var L: float = longueur_h()
+	var m: float = masse_vehicule() + 80.0 * places_cabine() * 0.6 + 6000.0   # + part du câble entraîné
+	var n: int = maxi(1, int(ceil(delta / 0.01)))
+	var h: float = delta / n
+	for i in range(2):
+		var d: float = _s if i == 0 else _s_cab1
+		var l_m: float = maxf((L - d) if _motrice_amont() else d, 50.0) + 200.0   # (+ boucle en gare)
+		var w: float = sqrt(EA_TRACTEUR / l_m / m)
+		# cabine 1 : son abscisse décroît quand _s croît
+		var a_i: float = a_s if i == 0 else -a_s
+		for _k in range(n):
+			var acc: float = -w * w * _u[i] - 2.0 * ZETA_TRACTEUR * w * _du[i] - a_i
+			_du[i] += acc * h
+			_u[i] += _du[i] * h
+		_u[i] = clampf(_u[i], -1.5, 1.5)
 
 
 ## Le câble tracteur avance de `ds` (m, le long du câble) : chaque cabine avance d'autant SUR SA VOIE, soit
@@ -546,7 +584,8 @@ func _charges_ponctuelles() -> void:
 	var listes: Array = [[], []]
 	for i in range(2):
 		var d: float = _vehicules[i][1]
-		if d > 0.0 and d < longueur_h():
+		# sur un sabot, la cabine est portée par le sabot : pas de flèche (ni pour le chariot ni pour le câble)
+		if d > 0.0 and d < longueur_h() and not portee_sur_sabot(_portee_de(d)):
 			listes[i].append(Vector2(d, poids_cabine() / _tension))
 	_charges = listes
 	# même flèche pour le chariot (_fleche) que pour le câble dessiné (nuanceur) : les cabines flottaient

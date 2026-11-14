@@ -8,7 +8,7 @@ extends Node3D
 ## Altitudes des anneaux filtrées d'un niveau à l'autre : sans crénelage sur les barres rocheuses.
 ## L'ombrage vient d'un tableau de textures de normales au mètre, valable à toute distance.
 
-const M: int = 512                     # mailles par côté d'un anneau, multiple de 4
+static var M: int = 512                # mailles par côté d'un anneau, multiple de 4 (256 sur puce intégrée)
 static var NIVEAUX: int = 5
 static var SAUT: int = 32              # les anneaux se déplacent ensemble, de 2^NIVEAUX nœuds
 const TUILE: int = 2000                # nœuds par couche du tableau de textures
@@ -159,8 +159,15 @@ static func code_hd(code: String) -> String:
 
 
 ## Voie moyenne : un anneau de moins, la grille est déjà 2,5 fois plus grosse.
+## Puce intégrée (Vega 8, Radeon 740M) : anneaux deux fois moins fins et un de plus, même portée,
+## −70 % de triangles (1,7 → 0,5 M) ; le détail proche reste au pas du pack (audit du 14/11/2026 :
+## le pack ajoutait +50 % de temps de carte à ski, tout en sommets).
 static func regler_niveaux(niveau: int) -> void:
 	NIVEAUX = 5 if niveau >= 2 else 4
+	M = 512
+	if PerfManager.type_gpu == "integre" or "--anneaux-legers" in OS.get_cmdline_user_args():
+		M = 256
+		NIVEAUX += 1
 	SAUT = 1 << NIVEAUX
 
 
@@ -250,7 +257,7 @@ func _installer_pas() -> void:
 	if _n_installe < 0:
 		_code_anneau = _code_des_anneaux()
 		_demande = _noeud_vue()
-		_tache = WorkerThreadPool.add_task(_calculer, false, "anneaux du relief")
+		_tache = WorkerThreadPool.add_task(_calculer, true, "anneaux du relief")
 		_n_installe = 0
 	elif _n_installe < NIVEAUX:
 		_installer_niveau(_n_installe)
@@ -356,7 +363,7 @@ func _process(_dt: float) -> void:
 	var c: Vector2i = _noeud_vue()
 	if c.x != _cj or c.y != _ci:
 		_demande = c
-		_tache = WorkerThreadPool.add_task(_calculer, false, "anneaux du relief")
+		_tache = WorkerThreadPool.add_task(_calculer, true, "anneaux du relief")
 
 
 func _calculer() -> void:
@@ -394,5 +401,6 @@ func poser_trous(rects: Array) -> void:
 
 func _exit_tree() -> void:
 	if _tache >= 0:
-		WorkerThreadPool.wait_for_task_completion(_tache)
+		LigneRemontee.fermeture = true
+		LigneRemontee.attendre_fil(_tache)
 		_tache = -1

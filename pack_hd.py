@@ -190,12 +190,53 @@ def installer(donnees: Path) -> bool:
     return True
 
 
+_fil: Optional[threading.Thread] = None
+
+
 def demarrer(donnees: Path) -> None:
     """Lance l'installation en arrière-plan. Ne bloque jamais et n'échoue jamais."""
+    global _fil
+    if _fil is not None and _fil.is_alive():
+        return                       # une installation tourne déjà
     def travail() -> None:
         try:
             installer(donnees)
         except Exception as e:  # une panne ici ne doit pas gêner le jeu
             etat["phase"] = "attente"
             log.warning("Pack HD : %s", e)
-    threading.Thread(target=travail, name="pack-hd", daemon=True).start()
+    _fil = threading.Thread(target=travail, name="pack-hd", daemon=True)
+    _fil.start()
+
+
+def _temoin_reparation(donnees: Path) -> Path:
+    return Path(donnees) / "pack_hd.repare"
+
+
+def reparer(donnees: Path) -> bool:
+    """Pack abîmé (la vue 3D ne sait pas le lire) : efface le marqueur et
+    relance le téléchargement. Une seule fois par version du pack, témoin à
+    l'appui : un pack qui reste illisible après un nouveau téléchargement ne
+    doit pas coûter 819 Mo à chaque lancement. Vrai si le téléchargement est
+    relancé. N'échoue jamais."""
+    donnees = Path(donnees)
+    temoin = _temoin_reparation(donnees)
+    try:
+        if temoin.read_text(encoding="ascii").strip() == EMPREINTE:
+            log.warning("Pack HD illisible, déjà retéléchargé une fois : repli sur le relief habituel")
+            return False
+    except OSError:
+        pass
+    try:
+        _marque(donnees).unlink(missing_ok=True)
+    except OSError as e:
+        log.warning("Pack HD : marqueur impossible à effacer : %s", e)
+        return False
+    try:
+        temoin.write_text(EMPREINTE, encoding="ascii")
+    except OSError:
+        pass
+    log.warning("Pack HD illisible : marqueur effacé, nouveau téléchargement")
+    etat["phase"] = ""
+    etat["fait"] = 0
+    demarrer(donnees)
+    return True

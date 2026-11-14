@@ -48,6 +48,10 @@ class NoyauRemontee : public RefCounted {
 	double l_frein = 18.0;
 	double l_ouverture = 2.5;
 	bool fixe = false;
+	bool sabots_impairs = false;
+	double amort = 90.0;            // ζ = amort / masse (sièges 40, cabines 90)
+	Vector3 vent;
+	double k_aire = 0.0;   // appuis aux bouts des sabots (3S, téléphériques)
 	bool sens_droite = true;
 	double signe_montee = 1.0;            // signe de _x_brin(true)
 	bool cabine = false;
@@ -131,6 +135,11 @@ public:
 		psi0_joueur = p_psi0;
 	}
 	void set_vitesse(double v) { vitesse = v; }
+	// vent dans le repère de la ligne (m/s) et ½·ρ·Cx·S du véhicule (kg/m)
+	void set_vent(const Vector3 &p_vent, double p_k_aire) {
+		vent = p_vent;
+		k_aire = p_k_aire;
+	}
 	void set_ligne(Object *p_ligne) { ligne = p_ligne; }
 
 	// Une image : avance (dt_avance), charges, poses ; renvoie les abscisses

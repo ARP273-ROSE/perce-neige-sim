@@ -26,6 +26,7 @@ var _pire_lanceur: float = 0.0
 
 func _initialize() -> void:
 	LigneRemontee.noyau_desactive = "--sans-noyau" in OS.get_cmdline_user_args()
+	LigneRemontee.vent_actif = false      # (équilibre sous la seule charge excentrée)
 	_main = load("res://scenes/main.tscn").instantiate()
 	get_root().add_child(_main)
 	process_frame.connect(_tick)

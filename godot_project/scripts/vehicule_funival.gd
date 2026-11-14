@@ -632,7 +632,7 @@ func inclinaison(_a: float) -> void:
 	pass
 
 
-func balancer(_dt: float, _en_gare: bool) -> void:
+func balancer(_dt: float, _en_gare: bool, _libre: bool = false) -> void:
 	pass
 
 

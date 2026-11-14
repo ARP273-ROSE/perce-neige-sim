@@ -154,6 +154,46 @@ def definir_consentement(accepte: bool) -> None:
 # Anonymisation
 # ---------------------------------------------------------------------------
 
+# Sel fixe de l'empreinte du poste : la même machine donne toujours la même
+# empreinte (pour regrouper ses rapports), sans que son nom ne parte.
+_SEL_POSTE = 'rapports-poste-2026-11'
+
+
+def _nom_poste() -> str:
+    try:
+        return platform.node() or ''
+    except Exception:
+        return ''
+
+
+def _nom_compte() -> str:
+    try:
+        import getpass
+        return getpass.getuser() or ''
+    except Exception:
+        return os.environ.get('USERNAME') or os.environ.get('USER') or ''
+
+
+def empreinte_poste() -> str:
+    """Empreinte courte et stable du nom du poste (10 caractères hexa)."""
+    import hashlib
+    nom = _nom_poste().strip().lower()
+    if not nom:
+        return '?'
+    return hashlib.sha256((_SEL_POSTE + '\0' + nom).encode('utf-8')).hexdigest()[:10]
+
+
+def _anonymiser_valeur(valeur):
+    """anonymiser() appliqué aux textes, y compris dans les dict et listes."""
+    if isinstance(valeur, str):
+        return anonymiser(valeur)
+    if isinstance(valeur, dict):
+        return {k: _anonymiser_valeur(v) for k, v in valeur.items()}
+    if isinstance(valeur, (list, tuple)):
+        return [_anonymiser_valeur(v) for v in valeur]
+    return valeur
+
+
 def anonymiser(texte: str | None) -> str:
     """Retire ce qui identifie la machine et son propriétaire.
 
@@ -164,10 +204,23 @@ def anonymiser(texte: str | None) -> str:
     if not texte:
         return ''
     import re
-    home = str(Path.home())
+    try:
+        home = str(Path.home())
+    except Exception:
+        home = ''
     for variante in (home.replace('\\', '/'), home, home.lower()):
-        if variante:
+        if variante and len(variante) > 3:
             texte = texte.replace(variante, '~')
+    # Dossiers personnels d'un autre compte, ou écrits autrement (casse,
+    # séparateurs) : C:\Users\nom, /home/nom, /Users/nom  ->  ~
+    texte = re.sub(r'(?i)[A-Z]:[\\/]+(?:Users|Documents and Settings)[\\/]+[^\\/\n"\']+',
+                   '~', texte)
+    texte = re.sub(r'/(?:home|Users)/[^/\n"\']+', '~', texte)
+    # Nom du poste et nom du compte, où qu'ils apparaissent encore.
+    for nom, remplacement in ((_nom_poste(), '<poste>'), (_nom_compte(), '<compte>')):
+        if nom and len(nom) > 2:
+            texte = re.sub(r'(?<![\w])' + re.escape(nom) + r'(?![\w])',
+                           remplacement, texte, flags=re.IGNORECASE)
     # C:\Musique\Artiste\Album\03 Titre.mp3  ->  C:\Musique\…\03 Titre.mp3
     texte = re.sub(r'([A-Za-z]:\\[^\\\n"\']{1,30})(\\[^\\\n"\']{1,60}){2,}\\',
                    r'\1\\…\\', texte)
@@ -225,7 +278,9 @@ def _place_libre_go(dossier) -> float:
 def _machine() -> dict:
     """Le strict nécessaire pour reproduire un problème."""
     infos = {
-        'poste': platform.node() or '?',
+        # Jamais le nom du PC : une empreinte salée suffit à regrouper les
+        # rapports d'une même machine.
+        'poste': empreinte_poste(),
         'os': f"{platform.system()} {platform.release()}",
         'os_detail': platform.version(),
         'arch': platform.machine(),
@@ -405,9 +460,7 @@ def envoyer(genre: str, **champs) -> dict:
     rapport['genre'] = genre
     rapport['horodatage'] = time.strftime('%Y-%m-%d %H:%M:%S')
     for cle, valeur in champs.items():
-        if isinstance(valeur, str):
-            valeur = anonymiser(valeur)
-        rapport[cle] = valeur
+        rapport[cle] = _anonymiser_valeur(valeur)
 
     if consentement() is not True:
         # Pas d'accord : on garde quand même une trace locale, pour que le
