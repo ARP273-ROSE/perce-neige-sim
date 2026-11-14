@@ -7,7 +7,10 @@
 // Basis::xform, Vector3::normalized) que le GDScript qu'elle remplace.
 #pragma once
 
+#include <godot_cpp/classes/node3d.hpp>
 #include <godot_cpp/classes/ref_counted.hpp>
+#include <godot_cpp/variant/callable.hpp>
+#include <godot_cpp/variant/dictionary.hpp>
 #include <godot_cpp/variant/basis.hpp>
 #include <godot_cpp/variant/transform3d.hpp>
 #include <godot_cpp/variant/packed_float32_array.hpp>
@@ -37,6 +40,16 @@ public:
 	// abscisse à la fin].
 	Array tube_plage(const PackedVector3Array &pts, double r, int64_t seg, int64_t i0, int64_t i1,
 			const Vector3 &prec_x, double absc) const;
+
+	// MeshMerge en C++ (outils_fusion.cpp) — mêmes résultats que le GDScript :
+	// _a_fusionner : [MeshInstance3D, transformation dans le repère de root, identifiant] des pièces à fusionner.
+	Array parcourir(Node3D *root, const Array &keep) const;
+	// _collect sur elements[debut..] jusqu'à épuisement de budget_us (0 : sans limite), au moins une pièce ;
+	// rend l'indice suivant. cpu, verrou, repli : MeshMerge._cpu, MeshMerge.verrou, MeshMerge.tableaux.
+	int64_t collecter(const Array &elements, int64_t debut, int64_t budget_us, Dictionary groups,
+			const Dictionary &cpu, const Variant &verrou, const Callable &repli) const;
+	// _retirer_sources : pièces entièrement fusionnées retirées (libérées hors de la scène).
+	void retirer(const Dictionary &done) const;
 };
 
 } // namespace godot
