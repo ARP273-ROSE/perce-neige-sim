@@ -549,7 +549,9 @@ func _a_bord_3s(delta: float, lg: LigneRemontee, s: float, z: Array, v: float, p
 			continue
 		var cle: String = "%s_%d" % [lg.name, int(dp)]
 		# télécabines : un choc réel par galet (comme _pylones_reels) ; le 3S garde sa prise (pas de chocs isolables)
-		var liste: Array = _galets_pylone(lg, k, monte, pref) if pref != "3s" else []
+		# (prises entières, telles que données : retour d'utilisateur du 14/11/2026, « pas les traiter comme ça ou on
+		# entend plus rien » — plus de salve d'un choc extrait par galet)
+		var liste: Array = []
 		if not liste.is_empty():
 			var pas: float = PAS_GALET
 			var avance: float = (float(liste.size() - 1) * 0.5 * pas) / v + 0.05
@@ -726,7 +728,7 @@ func _pylones_reels(lg: LigneRemontee, s: float, v: float, pref: String, en_lign
 		# un choc réel par galet du balancier, au pas des galets et à la vitesse du câble (retour d'utilisateur du
 		# 11/11/2026 : « compter le nombre de galets passés et adapter le son en fonction des galets et de la vitesse ») ;
 		# le premier galet est à la moitié du balancier avant l'axe du pylône
-		var liste: Array = _galets_pylone(lg, k, monte, pref)
+		var liste: Array = []          # (prises entières, retour d'utilisateur du 14/11/2026)
 		if not liste.is_empty():
 			var pas: float = PAS_GALET if not lg.teleski() else 0.36
 			var avance: float = (float(liste.size() - 1) * 0.5 * pas) / v + 0.05
@@ -784,10 +786,29 @@ func _coup(_lg: LigneRemontee, nom: String, hauteur: float = 1.0) -> void:
 	p.play()
 
 
+## Indice dans lg.pylones du pylône à l'abscisse d (m), −1 sinon.
+func _indice_pylone(lg: LigneRemontee, d: float) -> int:
+	for k in range(lg.pylones.size()):
+		if absf(float(lg.pylones[k]["d"]) - d) < 1.0:
+			return k
+	return -1
+
+
 ## Salve de chocs au passage d'un balancier : un par galet, au pas des galets.
 func _salve(lg: LigneRemontee, py: Node, montee: bool, v: float, en3d: bool, pos: Vector3) -> void:
 	if v < 0.2:
 		return
+	# prise entière du passage de pylône de l'appareil, telle que donnée, jouée à partir de son choc (le véhicule est
+	# au droit du pylône) — retour d'utilisateur du 14/11/2026
+	var pref_p: String = _prises(lg)
+	if pref_p != "" and pref_p != "3s" and pref_p != "funi" and pref_p != "tph" and py is Node3D:
+		var k0: int = _indice_pylone(lg, -(py as Node3D).position.z)
+		if k0 >= 0:
+			var pr: Array = _prise_pylone(lg, k0, montee, pref_p)
+			if String(pr[0]) != "" and _sons.has(pr[0]):
+				var hp: float = clampf(lg.regime(), 0.5, 1.0)
+				_file.append([_t, pr[0], en3d, pos, -4.0 if en3d else 0.0, hp, maxf(float(pr[1]) - 0.05, 0.0)])
+				return
 	var compo: Array = []
 	if py is PyloneRemontee:
 		compo = (py as PyloneRemontee).compo_montee if montee else (py as PyloneRemontee).compo_descente
@@ -929,12 +950,12 @@ func _jouer_file() -> void:
 			p3.global_position = c[3]
 			p3.volume_db = c[4]
 			p3.pitch_scale = c[5]
-			p3.play()
+			p3.play(float(c[6]) if c.size() > 6 else 0.0)
 		else:
 			var p: AudioStreamPlayer = _coups.pop_front()
 			_coups.append(p)
 			p.stream = _sons[c[1]]
 			p.volume_db = c[4]
 			p.pitch_scale = c[5]
-			p.play()
+			p.play(float(c[6]) if c.size() > 6 else 0.0)
 	_file = reste

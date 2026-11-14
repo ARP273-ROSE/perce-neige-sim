@@ -102,11 +102,10 @@ func _tick() -> void:
 			if _t > 60.0:
 				_verif("embarquement et lanceur (prise réelle)", _joues.has("tsd_embarquement"), str(_joues.keys()))
 				_verif("à bord : ambiance de ligne", _joues.has("tsd_ligne"))
-				var pas_t: float = (float(_galets_max[1][0]) - float(_galets_max[0][0])) if _galets_max.size() > 1 else 0.0
-				_verif("pylône franchi : un choc réel par galet, espacés du pas des galets à la vitesse du câble",
-					(_joues.has("tsd_galet_s") or _joues.has("tsd_galet_c")) and _galets_max.size() >= 4
-					and absf(pas_t - SonsRemontees.PAS_GALET / maxf(_v_salve, 0.1)) < 0.01,
-					"%d chocs dans la salve, %.3f s entre deux (attendu %.3f)" % [_galets_max.size(), pas_t, SonsRemontees.PAS_GALET / maxf(_v_salve, 0.1)])
+				# (prises entières des passages de pylône, telles que données : plus de salves de chocs extraits —
+				# retour d'utilisateur du 14/11/2026)
+				_verif("pylône franchi : prise entière du passage (tsd_pyl_s ou tsd_pyl_c), pas de salve de chocs",
+					(_joues.has("tsd_pyl_s") or _joues.has("tsd_pyl_c")) and _galets_max.is_empty(), str(_joues.keys()))
 				_lg.arret_urgence()
 				_phase = 4
 				_t = 0.0
