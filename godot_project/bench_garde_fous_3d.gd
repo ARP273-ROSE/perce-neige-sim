@@ -116,7 +116,9 @@ func _sonder(lg: LigneRemontee, c: Vector3, nom: String) -> int:
 				continue                      # le terrain est juste là
 			n += 1
 			if vus.size() < 6:
-				vus.append(lg.global_transform.affine_inverse() * ps)
+				# point (repère de la ligne), direction du vide (x, z locaux), hauteur au-dessus du terrain au point d'arrivée
+				vus.append([lg.global_transform.affine_inverse() * ps, Vector2(cos(a), sin(a)).snapped(Vector2(0.1, 0.1)),
+					snappedf(q.y - relief.hauteur_sol(q.x, q.z), 0.1)])
 			break
 	_bilan.append([n, "%s %s" % [lg.name, nom]])
 	if n > 0:

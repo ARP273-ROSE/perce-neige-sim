@@ -1890,6 +1890,17 @@ func _collisions_funi() -> void:
 				cs2.shape = bx2
 				cs2.transform = Transform3D(Basis(Vector3.RIGHT, b[2]), b[1])
 				corps.add_child(cs2)
+				# garde-fou au bord extérieur de l'escalier quand il ne va pas jusqu'au mur de la salle (16/11/2026, sonde
+				# bench_garde_fous : à gauche, 1,8 m sans sol entre l'escalier de 2,4 m et le mur — on y tombait)
+				var larg_a: float = LARG_AMONT[0] if sx4 < 0.0 else LARG_AMONT[1]
+				if larg_a < 4.0:
+					var cs2g: CollisionShape3D = CollisionShape3D.new()
+					var bx2g: BoxShape3D = BoxShape3D.new()
+					bx2g.size = Vector3(0.2, 2.6, (b[0] as Vector3).z)
+					cs2g.shape = bx2g
+					var rot_g: Basis = Basis(Vector3.RIGHT, b[2])
+					cs2g.transform = Transform3D(rot_g, (b[1] as Vector3) + Vector3(sx4 * (larg_a * 0.5 + 0.1), 0, 0) + rot_g * Vector3(0, 1.3, 0))
+					corps.add_child(cs2g)
 			else:
 				boite.call(b[0], b[1])
 	for sx3 in [-1.0, 1.0]:
@@ -1914,6 +1925,12 @@ func _collisions_funi() -> void:
 			var xg3: float = sx3 * (W + larg3 - 0.05)
 			var sol3: float = minf(_sol(xg3, -(d3 - lc * 0.5)), _sol(xg3, -(d3 + lc * 0.5))) - 0.5
 			boite.call(Vector3(0.3, y3 + 1.1 - sol3, lc + 0.05), Vector3(xg3 + sx3 * 0.1, (y3 + 1.1 + sol3) * 0.5, -d3))
+			if k3 == 0:
+				# la première volée part du sol avant le bout du quai : son bord extérieur aussi (16/11/2026, sonde
+				# bench_garde_fous : 1,4 à 2 m de vide sur le côté)
+				var d_v: float = d3 - lc * 0.5 - 4.5
+				var sol_v: float = minf(_sol(xg3, -(d_v - 4.5)), _sol(xg3, -(d_v + 4.5))) - 0.5
+				boite.call(Vector3(0.3, y3 + 1.1 - sol_v, 9.0), Vector3(xg3 + sx3 * 0.1, (y3 + 1.1 + sol_v) * 0.5, -d_v))
 			boite.call(Vector3(0.1, 2.5, lc + 0.05), Vector3(sx3 * (W + 0.02), y3 - 1.3, -d3))
 	# tunnel : parois pour la caméra seule (à la 3e personne, elle sortait du tube et filmait le relief par-dessous —
 	# capture WebKit du 08/11/2026) ; tronçons de 30 m suivant la pente, plus larges dans l'évitement
