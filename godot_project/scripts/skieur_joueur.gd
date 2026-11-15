@@ -658,9 +658,12 @@ func zoomer(rapport: float) -> void:
 	cam_dist = clampf(cam_dist * rapport, DIST_MIN, DIST_MAX)
 
 
-## La vue suit le skieur dans ses virages en gardant l'angle qu'elle a avec sa marche (retour
-## d'utilisateur, 04/11/2026 : la vue gardait son axe et on ne voyait plus où il allait). L'angle est
-## repris au départ et après chaque rotation de la vue à la main.
+## La vue revient DERRIÈRE le skieur qui marche (retour d'utilisateur, 16/11/2026, iPad : « quand je pivote à l'arrêt
+## la caméra ne suit pas, au bout d'un moment j'avance de travers avec la caméra qui regarde pas où va le skieur,
+## du coup je me prends des murs ou j'arrive pas à monter des escaliers »). Avant, elle gardait l'angle qu'elle
+## avait avec la marche au départ : pouce poussé de côté, il marchait de côté, la vue restait à 90° pour toujours.
+## Pas de suivi pendant VUE_MAIN_PAUSE après une rotation à la main (on regarde où l'on veut), ni quand il
+## marche vers la caméra (elle ferait un demi-tour).
 const SUIVI_RAIDEUR: float = 3.0        # s⁻¹
 const SUIVI_V_MAX: float = deg_to_rad(90.0)
 var _ecart_vue: float = 0.0
@@ -668,16 +671,16 @@ var _ecart_a_reprendre: bool = true
 var _vue_main_ski: bool = false
 
 
+const SUIVI_DEMI_TOUR: float = deg_to_rad(125.0)
+
+
 func _suivre_marche(delta: float, dir: Vector3) -> void:
-	if dir.length() < 0.08:
-		_ecart_a_reprendre = true
+	if dir.length() < 0.08 or _vue_libre < VUE_MAIN_PAUSE:
 		return
 	var cap_marche: float = atan2(-dir.x, -dir.z)
-	if _ecart_a_reprendre:
-		_ecart_vue = wrapf(cam_yaw - cap_marche, -PI, PI)
-		_ecart_a_reprendre = false
+	var e: float = wrapf(cap_marche - cam_yaw, -PI, PI)
+	if absf(e) > SUIVI_DEMI_TOUR:
 		return
-	var e: float = wrapf(cap_marche + _ecart_vue - cam_yaw, -PI, PI)
 	cam_yaw += clampf(e * minf(1.0, delta * SUIVI_RAIDEUR), -SUIVI_V_MAX * delta, SUIVI_V_MAX * delta)
 
 
@@ -1452,10 +1455,14 @@ func _mur_devant(p: Vector3, dp: Vector3) -> Vector3:
 ## lissé (avant : par à-coups).
 func _camera_ski(delta: float) -> void:
 	var vh: Vector3 = Vector3(_v_ski.x, 0.0, _v_ski.z)
-	if vh.length() > 1.5 and _vue_libre > VUE_MAIN_PAUSE:
+	# (à l'arrêt aussi quand on dirige : les skis pivotaient sous le pouce et la vue restait figée —
+	# « quand je pivote à l'arrêt la caméra ne suit pas », 16/11/2026)
+	var dirige: bool = entree.length() > 0.12 or _clavier().length() > 0.0
+	if (vh.length() > 1.5 or dirige) and _vue_libre > VUE_MAIN_PAUSE:
 		# (l'angle choisi à la main est gardé ; sans rotation à la main, juste derrière le skieur)
 		if _ecart_a_reprendre:
-			_ecart_vue = wrapf(cam_yaw - _cap_ski, -PI, PI) if _vue_main_ski else 0.0
+			# (derrière les skis, toujours : l'angle choisi à la main n'est gardé que VUE_MAIN_PAUSE — 16/11/2026)
+			_ecart_vue = 0.0
 			_ecart_a_reprendre = false
 		var e: float = wrapf(_cap_ski + _ecart_vue - cam_yaw, -PI, PI)
 		_cam_v += (CAM_OMEGA * CAM_OMEGA * e - 2.0 * CAM_OMEGA * _cam_v) * delta
