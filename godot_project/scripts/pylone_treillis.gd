@@ -531,15 +531,18 @@ func _construire_vav() -> void:
 		for sz3 in [-1.0, 1.0]:
 			tp_.call(Vector3(sx2 * bx1 * 0.5, yt, sz3 * zt), Vector3(xi, y_lb, sz3 * lb * 0.5), 0.14, 0.14, m)
 			tp_.call(Vector3(xi, y_lb, sz3 * lb * 0.5), Vector3(xi, y_s - 0.2, sz3 * (ls + 3.0) * 0.5), 0.10, 0.10, m)
-		# au-dessus des porteurs : rien ne passe au-dessus de la voie (retour d'utilisateur du 16/11/2026 : « la cage
-		# en métal au-dessus de la bande de roulement, ça n'existe pas » ; photos RM.net du pylône 1, de profil et depuis
-		# la cabine : long sabot cintré posé sur la tête, quelques potelets fins au-dessus, pas de portique). Trois
-		# potelets côté intérieur, le long de la passerelle, et un paratonnerre.
-		var y_h: float = yc + 1.3
-		for zm in [-ls * 0.4, 0.0, ls * 0.4]:
-			tp_.call(Vector3(xi, y_s, zm), Vector3(xi, y_h, zm), 0.10, 0.10, m)
-		tb_.call(Vector3(xi, y_h, -ls * 0.4), Vector3(xi, y_h, ls * 0.4), 0.025, "galva", 6)
-		tp_.call(Vector3(xi, y_h, 0.0), Vector3(xi, y_h + 1.4, 0.0), 0.06, 0.06, m)   # (paratonnerre, photo)
+		# au-dessus des porteurs (photos RM.net du pylône 1, de profil et depuis la cabine ; retours d'utilisateur du
+		# 16/11/2026 : « la cage en métal au-dessus de la bande de roulement, ça n'existe pas », puis « il y a une
+		# structure au sommet du pylône que tu ne reproduis pas ») : pas de cadre le long de la voie, mais une couronne
+		# au centre du pylône — quatre poteaux entre les voies et deux poutres de levage EN TRAVERS, qui débordent
+		# au-dessus de chaque sabot, 2,3 m au-dessus des porteurs ; posée après la boucle (voir plus bas).
+		var y_h: float = yc + 2.3
+		for zm in [-1.6, 1.6]:
+			tp_.call(Vector3(xi, y_s, zm), Vector3(xi, y_h, zm), 0.16, 0.16, m)
+			# jambe de force vers le bout de la poutre, au-dessus de la voie
+			tp_.call(Vector3(xi, y_s + 1.1, zm), Vector3(sx2 * (x0 + 0.2), y_h - 0.12, zm), 0.08, 0.08, m)
+		tp_.call(Vector3(xi, y_h, -1.6), Vector3(xi, y_h, 1.6), 0.12, 0.12, m)
+		tp_.call(Vector3(xi, y_s + 0.2, -1.6), Vector3(xi, y_h, 1.6), 0.07, 0.07, m)
 		# guides anti-collision : lisses le long du passage des cabines, à 0,25 m des faces du fût, becs
 		# recourbés vers l'axe aux deux bouts
 		var yg0: float = yc - 8.0
@@ -560,6 +563,13 @@ func _construire_vav() -> void:
 			for gy in [[yg0, xg0], [yg1, xg1]]:
 				var hc: Vector2 = demi.call(float(gy[0]))
 				tp_.call(Vector3(sx2 * hc.x, float(gy[0]), sz4 * hc.y), Vector3(float(gy[1]), float(gy[0]), sz4 * lg2 * 0.35), 0.10, 0.10, m)
+	# couronne : poutres de levage en travers, de part et d'autre du centre, et mât d'antenne avec son échelle rouge
+	for zc in [-1.6, 1.6]:
+		tp_.call(Vector3(-x0 - 0.9, yc + 2.3, zc), Vector3(x0 + 0.9, yc + 2.3, zc), 0.20, 0.30, m)
+	tp_.call(Vector3(0, yc + 2.3, -1.6), Vector3(0, yc + 2.3, 1.6), 0.10, 0.10, m)
+	tb_.call(Vector3(0.0, yc + 2.3, 0.0), Vector3(0.0, yc + 4.6, 0.0), 0.03, "galva", 6)
+	for se in [-0.15, 0.15]:
+		tb_.call(Vector3(-0.9 + se, y_s + 0.3, 1.6), Vector3(-0.9 + se, yc + 2.9, 1.6), 0.018, "rouge_ressort", 4)
 	# plate-forme entre les voies, garde-corps
 	tp_.call(Vector3(0, y_s + 0.25, -(bz1 + 1.0) * 0.5), Vector3(0, y_s + 0.25, (bz1 + 1.0) * 0.5), 2.0 * (x0 - 1.75), 0.04, "caillebotis")
 	# --- sabots : poutre cintrée de toute la déviation sous chaque paire de porteurs --------------------------
