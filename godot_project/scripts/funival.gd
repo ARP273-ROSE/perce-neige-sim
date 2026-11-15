@@ -2071,6 +2071,10 @@ func _skieur_marche_quai() -> bool:
 	return _skieur_marche_en_gare()
 
 
+func _demi_caisse() -> Vector2:
+	return Vector2(VehiculeFunival.DEMI_LARGEUR, VehiculeFunival.DEMI_L)
+
+
 func _skieur_marche_en_gare() -> bool:
 	if not is_inside_tree():
 		return false

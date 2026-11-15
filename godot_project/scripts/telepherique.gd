@@ -141,11 +141,34 @@ func portes_ouvertes() -> bool:
 
 
 func _attendre_skieur(delta: float) -> bool:
-	if _skieur_attendu() or _skieur_marche_quai():
+	if _skieur_attendu() or _skieur_marche_quai() or _skieur_dans_porte():
 		_t_attente = 3.0
 	else:
 		_t_attente = maxf(_t_attente - delta, 0.0)
 	return _t_attente > 0.0
+
+
+## Demi-largeur et demi-longueur de la caisse (embrasure des portes).
+func _demi_caisse() -> Vector2:
+	return Vector2(1.51, 2.80)
+
+
+## Skieur dans l'embrasure d'une porte, même immobile (retour d'utilisateur du 16/11/2026 : « j'ai essayé de rentrer
+## dans le Funival, ça a saccadé et je me suis fait éjecter ») : les portes ne se referment pas sur lui — la paroi
+## qui revenait le repoussait dehors.
+func _skieur_dans_porte() -> bool:
+	if not is_inside_tree():
+		return false
+	var mn: Node = get_tree().current_scene if get_tree().current_scene != null else get_tree().root.get_node_or_null("Main")
+	var sk: Node = mn.get("skieur") if mn != null else null
+	if sk == null or not (sk is CharacterBody3D) or not sk.get("actif"):
+		return false
+	var dc: Vector2 = _demi_caisse()
+	for e in _vehicules:
+		var loc: Vector3 = (e[0] as Node3D).global_transform.affine_inverse() * (sk as Node3D).global_position
+		if absf(loc.z) < dc.y and absf(loc.x) > dc.x - 0.55 and absf(loc.x) < dc.x + 0.75 and loc.y > -10.0 and loc.y < 4.0:
+			return true
+	return false
 
 
 ## Skieur qui marche sur un quai ou à bord (Funival : quais souterrains, voir son override).
