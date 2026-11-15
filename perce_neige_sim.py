@@ -9545,7 +9545,7 @@ class GameWidget(QWidget):
                 sp.show()
                 sp.raise_()
             maintenant = time.monotonic()
-            if maintenant - self._t_surimpression >= 0.1:
+            if maintenant - self._t_surimpression >= 0.2:       # (5 images par seconde au plus)
                 self._t_surimpression = maintenant
                 if sp.signature() != sp._sig:
                     sp.update()
@@ -11082,8 +11082,9 @@ class GameWidget(QWidget):
             return
         view_rect = QRectF(20, 20, w - 440, h - 260)
         if self._godot_couvre_vue():
-            # la 3D embarquée couvre ce rectangle : rien à y dessiner
-            p.fillRect(view_rect, QColor(0, 0, 0))
+            # la 3D embarquée couvre ce rectangle : rien à y dessiner (le noir qu'on y peignait, 0,2 ms par
+            # peinture en 4K, ne se voyait jamais)
+            pass
         elif self._cabin_view and self.state.mode == MODE_RUN:
             self._draw_cabin_view(p, view_rect)
         else:
@@ -11363,10 +11364,12 @@ class GameWidget(QWidget):
         date_txt = (f"{days[now.weekday()]} {now.day} "
                     f"{months[now.month - 1]} {now.year}")
         time_txt = now.strftime("%H:%M:%S")
-        pad = 10
-        pill_w = 196
-        pill_h = 32
-        pill = QRectF(w / 2 - pill_w / 2, 6, pill_w, pill_h)
+        pill = QRectF(w / 2 - 196 / 2, 6, 196, 32)
+        # (une image par seconde au lieu d'un dégradé et de deux textes à chaque peinture : 0,25 ms)
+        self._puce_unique(p, "horloge", (time_txt, date_txt), pill,
+                          lambda q, r: self._draw_clock_direct(q, r, time_txt, date_txt))
+
+    def _draw_clock_direct(self, p: QPainter, pill: QRectF, time_txt: str, date_txt: str) -> None:
         grad = QLinearGradient(pill.x(), pill.y(),
                                pill.x(), pill.y() + pill.height())
         grad.setColorAt(0.0, QColor(14, 20, 32, 220))
@@ -16473,6 +16476,40 @@ class GameWidget(QWidget):
         p.setPen(_cached_pen(QColor(255, 240, 240) if on else COLOR_TEXT_DIM))
         p.drawText(r, int(Qt.AlignmentFlag.AlignCenter), texte)
 
+    def _puce_unique(self, p: QPainter, emplacement: str, cle: tuple, rect: QRectF, dessin) -> None:
+        """Comme _puce, mais une seule image gardée par emplacement (journal, horloge : un contenu chasse
+        l'autre, pas d'accumulation)."""
+        t = p.worldTransform()
+        dev = p.device()
+        k = abs(t.m11()) * (dev.devicePixelRatioF() if dev is not None else 1.0)
+        if t.isRotating() or rect.width() <= 0 or rect.height() <= 0:
+            dessin(p, rect)
+            return
+        slots = self.__dict__.setdefault("_puces_uniques", {})
+        cle_k = (cle, round(k, 3), round(rect.width(), 1), round(rect.height(), 1))
+        e = slots.get(emplacement)
+        if e is None or e[0] != cle_k:
+            m = 2.0
+            pm = QPixmap(max(1, math.ceil((rect.width() + 2 * m) * k)), max(1, math.ceil((rect.height() + 2 * m) * k)))
+            pm.setDevicePixelRatio(k)
+            pm.fill(Qt.GlobalColor.transparent)
+            q = QPainter(pm)
+            q.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+            q.setRenderHint(QPainter.RenderHint.TextAntialiasing, True)
+            q.translate(m - rect.x(), m - rect.y())
+            dessin(q, rect)
+            q.end()
+            e = (cle_k, pm)
+            slots[emplacement] = e
+        pm = e[1]
+        dd = dev.devicePixelRatioF() if dev is not None else 1.0
+        o = t.map(QPointF(rect.x() - 2.0, rect.y() - 2.0))
+        p.save()
+        p.resetTransform()
+        p.drawPixmap(QRectF(round(o.x() * dd) / dd, round(o.y() * dd) / dd, pm.width() / dd, pm.height() / dd),
+                     pm, QRectF(0, 0, pm.width(), pm.height()))
+        p.restore()
+
     def _puce(self, p: QPainter, cle: tuple, rect: QRectF, dessin, source: bool = False) -> None:
         """Dessin de `rect` rendu une fois dans une image (par clé et par échelle du peintre), puis recopié pixel
         pour pixel. Pour ce qui ne change qu'avec l'état : boutons, voyants, fonds de cadrans, panneau de panne."""
@@ -17026,6 +17063,14 @@ class GameWidget(QWidget):
     # ----- event log -------------------------------------------------------
 
     def _draw_eventlog(self, p: QPainter, rect: QRectF) -> None:
+        # (rendu une fois par contenu : 0,8 ms à chaque peinture pour dix lignes qui changent rarement — profil
+        # du fil Qt du 16/11/2026)
+        evs = self.state.events[-10:]
+        cle = (tuple((ev.timestamp, ev.severity, ev.message_fr if LANG == "fr" else ev.message_en) for ev in evs),
+               round(rect.width(), 1), round(rect.height(), 1), LANG)
+        self._puce_unique(p, "journal", cle, rect, lambda q, r: self._draw_eventlog_direct(q, r))
+
+    def _draw_eventlog_direct(self, p: QPainter, rect: QRectF) -> None:
         p.setBrush(QBrush(COLOR_HUD_BG))
         p.setPen(_cached_pen(COLOR_HUD_BORDER, 2))
         p.drawRoundedRect(rect, 10, 10)
