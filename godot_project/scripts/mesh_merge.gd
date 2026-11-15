@@ -522,6 +522,11 @@ static func valider_indexe(st: SurfaceTool, mesh: ArrayMesh = null) -> ArrayMesh
 		index_us += Time.get_ticks_usec() - t0
 	if not garder_chargement:
 		return st.commit(mesh)
+	# (surface vide — une couche sans face, sur certaines voitures de la rame : commit_to_arrays() signalait
+	# « index_array.is_empty() » à chaque chargement ; rien à garder, commit() n'ajoute rien)
+	var b: AABB = st.get_aabb()
+	if b.size == Vector3.ZERO and b.position == Vector3.ZERO:
+		return st.commit(mesh)
 	# chargement (PC) : copie gardée jusqu'aux collisions du skieur (voir garder_chargement) — sans elle, l'entrée en
 	# skieur relisait sur la carte la voie, le tunnel et les gares (165 relectures au banc de fluidité, 14/11/2026).
 	# commit() pose les tableaux de commit_to_arrays() : même maillage.
