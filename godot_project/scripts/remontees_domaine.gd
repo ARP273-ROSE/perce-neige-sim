@@ -215,6 +215,18 @@ func _caisses_au_chargement() -> void:
 const JUMELAGES: Array = [["tsd6_bollin", "tsd6_fresse"]]
 
 
+## Décalage latéral de l'axe d'un téléski coudé au droit de d (points [d, x], interpolés).
+static func _x_coude(coude: Array, d: float) -> float:
+	if coude.is_empty():
+		return 0.0
+	for k in range(1, coude.size()):
+		var p0: Vector2 = coude[k - 1]
+		var p1: Vector2 = coude[k]
+		if d <= p1.x:
+			return lerpf(p0.y, p1.y, clampf((d - p0.x) / maxf(p1.x - p0.x, 0.01), 0.0, 1.0))
+	return 0.0
+
+
 func _ligne_nommee(cle: String) -> LigneRemontee:
 	for e in lignes:
 		if (e[0] as Node).name == cle:
@@ -367,9 +379,17 @@ func _poser(D: Dictionary) -> void:
 	# profil sous l'axe, pris sur le relief AFFICHÉ (pas l'IGN) : pylônes et
 	# gares posés sur le sol que l'on voit
 	var prof: PackedVector2Array = PackedVector2Array()
+	# téléski coudé : profil pris sous l'axe coudé (décalé de x à chaque pylône, nul aux gares)
+	var coude: Array = []
+	if bool(D.get("axe_coude", false)):
+		coude.append(Vector2(0.0, 0.0))
+		for pc in D["pylones"]:
+			coude.append(Vector2(float(pc["d"]), float((pc as Dictionary).get("x", 0.0))))
+		coude.append(Vector2(L, 0.0))
+	var lat_m: Vector2 = Vector2(-dirh.y, dirh.x)     # +X local du repère de la ligne
 	var d: float = 0.0
 	while d < L:
-		var p: Vector2 = a + dirh * d
+		var p: Vector2 = a + dirh * d + lat_m * _x_coude(coude, d)
 		prof.append(Vector2(d, relief.hauteur_ligne(p.x, p.y) - h0))
 		d += 10.0
 	prof.append(Vector2(L, relief.hauteur_ligne(b.x, b.y) - h0))
@@ -440,6 +460,7 @@ func _poser(D: Dictionary) -> void:
 	lg.name = String(D["cle"])
 	lg.profil = prof
 	lg.rampes = rampes
+	lg.axe_coude = not coude.is_empty()
 	# sol réel sous la gare (terrassements) : relief affiché, repère de la ligne
 	var xf0: Transform3D = Transform3D(Basis.looking_at(Vector3(dirh.x, 0.0, dirh.y), Vector3.UP), Vector3(a.x, h0, a.y))
 	lg.relief_trous = relief
