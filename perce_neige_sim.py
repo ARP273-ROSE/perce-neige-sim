@@ -7442,7 +7442,9 @@ class BarrePleinCadre(QWidget):
         b = self._boutons
         b["ecran"].regler(T("WINDOW", "FENÊTRE") if plein else T("FULL SCREEN", "PLEIN ÉCRAN"),
                           T("Esc", "Échap") if plein else "")
-        b["poste"].regler(T("DESK", "POSTE"), "F12")
+        # « PUPITRE » et pas « POSTE » : le HUD du skieur a déjà un bouton
+        # POSTE (poste de commande de la remontée), qui fait autre chose
+        b["poste"].regler(T("FUNI DESK", "PUPITRE"), "F12")
         b["skieur"].regler(T("DRIVE", "CONDUIRE") if skieur else T("SKIER", "SKIEUR"), "F9")
         b["ligne"].regler(T("VIEWS", "VUES"), "T")
         b["pause"].regler(T("RESUME", "REPRENDRE") if pause else T("PAUSE", "PAUSE"), "P")
