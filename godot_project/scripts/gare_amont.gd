@@ -57,10 +57,18 @@ const H_TPH_SOL: float = -5.4         # 3025,3 m (+ 0,6 m de recalage)
 const H_TPH_TOIT: float = 10.9        # 3041,6 m
 const ANNEXES: Array = [Vector2(7.5, -13.0), Vector2(35.0, -13.0), Vector2(35.0, -45.0),
 	Vector2(7.5, -45.0)]
-# restaurant Le Panoramic : deux volumes de chalet le long du côté nord-
-# ouest de la terrasse (emprise LiDAR x 10-42, d −17 à +47)
-const RESTO_A: Rect2 = Rect2(11.0, -15.0, 25.0, 23.0)      # x, d, largeur, profondeur
-const RESTO_B: Rect2 = Rect2(22.5, 8.0, 14.0, 34.0)
+# Restaurant Le Panoramic, refait le 16/11/2026 (retour d'utilisateur : « il y a un trou béant entre la terrasse et le
+# restaurant ») : emprise relevée sur l'orthophoto IGN (bâtiment à toits de métal bleu-gris, à facettes), recalée
+# comme le reste ; sa façade sur la terrasse SUIT le bord de la terrasse (sommets 10 → 4 de TERRASSE : mêmes points,
+# aucun vide) ; côté aval il s'adosse aux annexes (d = −13), côté sud-est au hall. Les deux anciens rectangles
+# laissaient un vide de 0,6 à 9 m le long de la terrasse.
+const RESTO: Array = [Vector2(9.8, 0.7), Vector2(10.8, 4.8), Vector2(20.0, 8.8), Vector2(21.9, 28.6), Vector2(13.4, 34.4),
+	Vector2(14.3, 44.8), Vector2(27.1, 50.6), Vector2(38.7, 57.6), Vector2(51.9, 48.0), Vector2(55.5, 40.2),
+	Vector2(45.2, 23.1), Vector2(46.9, -1.9), Vector2(35.0, -13.0), Vector2(9.8, -13.0)]
+const RESTO_COTES_TERRASSE: int = 6      # les six premiers côtés donnent sur la terrasse
+# faîtages (x, d, hauteur au-dessus de la terrasse ; LiDAR : toits de 3035 à 3037,7 m)
+const RESTO_FAITES: Array = [Vector3(27.0, 4.0, 7.0), Vector3(33.0, 24.0, 6.6), Vector3(36.0, 44.0, 7.0)]
+const RESTO_H_MUR: float = 4.2
 const SOLEIL: Vector3 = Vector3(0.40, 0.78, 0.48)          # vers le soleil (monde)
 
 var tunnel: TunnelBuilder = null
@@ -863,44 +871,60 @@ func _annexes() -> void:
 	_boite("bleu", 24.0, -45.06, 1.5, 4.0, 0.06, 3.4)
 
 
-## Restaurant Le Panoramic : chalet de bois brun foncé, toits à deux pans
-## en métal gris (LiDAR : 3035 à 3037,7 m), baies sur la terrasse.
+## Restaurant Le Panoramic (orthophoto IGN, LiDAR) : murs de bois brun foncé sur l'emprise RESTO, grand toit de métal
+## gris-bleu à facettes (chaque bord de toit monte vers le faîtage le plus proche), baies et portes sur la terrasse.
 func _restaurant() -> void:
-	for r in [RESTO_A, RESTO_B]:
-		var a: Vector2 = r.position
-		var b: Vector2 = Vector2(r.end.x, r.position.y)
-		var c: Vector2 = r.end
-		var d: Vector2 = Vector2(r.position.x, r.end.y)
-		var h_mur: float = 3.4
-		var h_faite: float = 6.4
-		for e in [[a, b], [b, c], [c, d], [d, a]]:
-			_mur("bois_resto", e[0], e[1], H_BAS * 0.5, h_mur, h_mur)
-		# toit à deux pans, faîtage le long du grand côté
-		var long_d: bool = r.size.y >= r.size.x
-		var deb: float = 0.6
-		if long_d:
-			var xm: float = r.position.x + r.size.x * 0.5
-			for sx in [r.position.x - deb, r.end.x + deb]:
-				_quad("toit_gris", _p(sx, r.position.y - deb, h_mur - 0.2), _p(sx, r.end.y + deb, h_mur - 0.2),
-					_p(xm, r.end.y + deb, h_faite), _p(xm, r.position.y - deb, h_faite))
-			for dd in [r.position.y, r.end.y]:
-				_tri("bois_resto", _p(r.position.x, dd, h_mur), _p(r.end.x, dd, h_mur), _p(xm, dd, h_faite))
+	var n: int = RESTO.size()
+	var faite := func(v: Vector2) -> Vector3:
+		var best: Vector3 = RESTO_FAITES[0]
+		for f in RESTO_FAITES:
+			if Vector2(f.x, f.y).distance_to(v) < Vector2(best.x, best.y).distance_to(v):
+				best = f
+		return best
+	for i in range(n):
+		var a: Vector2 = RESTO[i]
+		var b: Vector2 = RESTO[(i + 1) % n]
+		_mur("bois_resto", a, b, H_BAS * 0.5, RESTO_H_MUR, RESTO_H_MUR)
+		# toit : du bord (avec 0,5 m de débord vers l'extérieur) au faîtage
+		var u: Vector2 = (b - a).normalized()
+		var dehors: Vector2 = Vector2(u.y, -u.x)
+		if Geometry2D.is_point_in_polygon((a + b) * 0.5 + dehors * 0.3, PackedVector2Array(RESTO)):
+			dehors = -dehors
+		var ea: Vector3 = _p2(a + dehors * 0.5, RESTO_H_MUR - 0.15)
+		var eb: Vector3 = _p2(b + dehors * 0.5, RESTO_H_MUR - 0.15)
+		var fa: Vector3 = faite.call(a)
+		var fb: Vector3 = faite.call(b)
+		var pa: Vector3 = _p(fa.x, fa.y, fa.z)
+		var pb: Vector3 = _p(fb.x, fb.y, fb.z)
+		if fa == fb:
+			_tri("toit_gris", ea, eb, pa)
 		else:
-			var dm: float = r.position.y + r.size.y * 0.5
-			for sd in [r.position.y - deb, r.end.y + deb]:
-				_quad("toit_gris", _p(r.position.x - deb, sd, h_mur - 0.2), _p(r.end.x + deb, sd, h_mur - 0.2),
-					_p(r.end.x + deb, dm, h_faite), _p(r.position.x - deb, dm, h_faite))
-			for xx in [r.position.x, r.end.x]:
-				_tri("bois_resto", _p(xx, r.position.y, h_mur), _p(xx, r.end.y, h_mur), _p(xx, dm, h_faite))
-	# baies sur la terrasse (côté sud-est du volume B, côté sud-ouest du A)
-	var d_b: float = RESTO_B.position.y + 2.0
-	while d_b < RESTO_B.end.y - 2.0:
-		_boite("vitre", RESTO_B.position.x - 0.04, d_b, 1.6, 0.04, 2.2, 1.9)
-		d_b += 3.0
-	var x_b: float = RESTO_A.position.x + 2.0
-	while x_b < RESTO_A.end.x - 2.0:
-		_boite("vitre", x_b, RESTO_A.end.y + 0.04, 1.6, 2.2, 0.04, 1.9)
-		x_b += 3.0
+			_quad("toit_gris", ea, eb, pb, pa)
+		# sur la terrasse : baies vitrées tous les 3 m, une porte au milieu des grands côtés
+		if i < RESTO_COTES_TERRASSE:
+			var lg: float = a.distance_to(b)
+			var rot: float = atan2(u.y, u.x)
+			var k: int = 0
+			var t: float = 1.6
+			while t < lg - 1.4:
+				var q: Vector2 = a + u * t + dehors * 0.05
+				var porte: bool = lg > 9.0 and absf(t - lg * 0.5) < 1.5
+				if porte:
+					_boite("vitre", q.x, q.y, 1.1, 1.6, 0.05, 2.2, rot)
+					_boite("noir", q.x, q.y, 2.26, 1.8, 0.07, 0.10, rot)
+				else:
+					_boite("vitre", q.x, q.y, 1.65, 2.2, 0.05, 1.9, rot)
+				t += 3.0
+				k += 1
+	# faîtières : d'un faîtage au suivant
+	for k2 in range(RESTO_FAITES.size() - 1):
+		var f0: Vector3 = RESTO_FAITES[k2]
+		var f1: Vector3 = RESTO_FAITES[k2 + 1]
+		var m0: Vector3 = _p(f0.x, f0.y, f0.z)
+		var m1: Vector3 = _p(f1.x, f1.y, f1.z)
+		_barre("toit_gris", m0, m1, 0.5, 0.12)
+	# cheminée (orthophoto : un petit volume sombre sur le toit)
+	_boite("noir", 30.0, 8.0, 7.3, 1.2, 1.2, 1.4)
 
 
 ## Gare aval du téléphérique de la Grande Motte (BD TOPO 527642, 107 m à
@@ -1112,7 +1136,7 @@ func amenagement_relief() -> Dictionary:
 	var hall: Array = [Vector2(-DEMI_HALL - 0.2, 0.3), Vector2(DEMI_HALL + 0.2, 0.3),
 		Vector2(DEMI_HALL + 0.2, -_long - 0.2), Vector2(-DEMI_HALL - 0.2, -_long - 0.2)]
 	var pts: PackedVector2Array = PackedVector2Array()
-	for e in [hall, TERRASSE, ANNEXES, TPH, rect.call(RESTO_A), rect.call(RESTO_B)]:
+	for e in [hall, TERRASSE, ANNEXES, TPH, RESTO]:
 		pts.append_array(monde.call(e))
 	var bb: Rect2 = Rect2(pts[0], Vector2.ZERO)
 	for v in pts:
@@ -1121,8 +1145,7 @@ func amenagement_relief() -> Dictionary:
 	bb = bb.expand(Vector2(a3440.x, a3440.z))
 	return {
 		"rect": bb.grow(18.0),
-		"trous": [monde.call(hall), monde.call(ANNEXES), monde.call(TPH),
-			monde.call(rect.call(RESTO_A)), monde.call(rect.call(RESTO_B))],
+		"trous": [monde.call(hall), monde.call(ANNEXES), monde.call(TPH), monde.call(RESTO)],
 		"rabots": [[monde.call(TERRASSE), _o.y - 0.4, 3.0]],
 		# pied de l'escalier du bout de la terrasse : neige à la dernière
 		# contremarche
