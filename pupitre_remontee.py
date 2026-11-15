@@ -111,6 +111,8 @@ class ModeleRemontee:
             self.d["mode"] = "manuel"
         elif cmd == "mode":
             self.d["mode"] = arg
+        elif cmd == "depanner":
+            self.d["mode"] = "auto"
 
     def a_envoyer(self, maintenant: float | None = None) -> list:
         maintenant = time.monotonic() if maintenant is None else maintenant
@@ -285,6 +287,12 @@ class FauxEmetteur:
             self._evt("commande", "Moteur de secours en service" if self.secours else "Retour au moteur principal")
         elif cmd == "evacuer":
             self._evt("alerte", "Évacuation de la ligne lancée")
+        elif cmd == "depanner":
+            self.pannes = []
+            self.hors_service = False
+            self.etat = "marche"
+            self.mode = "auto"
+            self._evt("info", "Tout réparé : pannes soldées, sécurités réarmées, retour en auto")
         elif cmd == "remise_service":
             self.hors_service = False
             self.pannes = []
