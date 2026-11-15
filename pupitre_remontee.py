@@ -383,8 +383,10 @@ class FauxEmetteur:
                         "vent": self.vent > 12.0, "secu_ligne": "deraillement_cable" in ids or "perche_coincee" in ids,
                         "moteur": "moteur_chaud" in ids or "coupure_reseau" in ids, "frein": "frein_urgence" in ids,
                         "portes": "portes" in ids},
-            "pannes": [{k: p[k] for k in ("id", "gravite", "nom", "quoi", "faire", "interdit", "phase", "t")}
+            "pannes": [{**{k: p[k] for k in ("id", "gravite", "nom", "quoi", "faire", "interdit", "phase", "t")},
+                        "acquittable": p["phase"] == "active" and p["gravite"] != "grave", "reste": -1}
                        for p in self.pannes],
+            "secours_possible": "coupure_reseau" in ids or self.secours,
             "va_et_vient": vv, "evts": self.evts, "ack": self.ack,
         }
         self._t_cat += dt
