@@ -58,10 +58,15 @@ func _initialize() -> void:
 	_check("fluide : on garde", pm.cran == 1, pm.dernier_bilan)
 	_fenetre(pm, 58.0, 8)        # 8 à-coups sur 116 images (7 %)
 	_check("à-coups : un cran de moins", pm.cran == 2, pm.dernier_bilan)
-	_check("effets coupés au cran 2", not env.volumetric_fog_enabled and not env.ssr_enabled
-		and not env.sdfgi_enabled, "fog=%s ssr=%s" % [env.volumetric_fog_enabled, env.ssr_enabled])
+	# cran 2 : MSAA coupé avant le brouillard (15/11/2026 : MSAA 10-12 % de la
+	# carte, brouillard ≤ 2 %) ; le brouillard part au cran 3
+	_check("effets coupés au cran 2", not env.ssr_enabled and not env.sdfgi_enabled
+		and env.volumetric_fog_enabled == pm._rd,
+		"fog=%s ssr=%s" % [env.volumetric_fog_enabled, env.ssr_enabled])
+	_check("libellé du cran 2 = anti-crénelage", not pm._rd or pm.libelle(2).contains("SMAA"), pm.libelle(2))
 	_fenetre(pm, 38.0, 0)
 	_check("trop lent : encore un cran", pm.cran == 3, pm.dernier_bilan)
+	_check("brouillard coupé au cran 3", not env.volumetric_fog_enabled, "fog=%s" % env.volumetric_fog_enabled)
 
 	# 3. Marge durable → on remonte (sans temps GPU : 20 fenêtres = 40 s)
 	for i in range(19):

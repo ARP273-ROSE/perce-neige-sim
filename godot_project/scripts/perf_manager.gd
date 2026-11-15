@@ -22,8 +22,11 @@ extends Node
 ## cadence à 30 i/s, lisible :
 ##   0 tout : SDFGI, brouillard volumétrique, MSAA (×4), halo, rendu 100 %
 ##   1 sans SDFGI (éclairage indirect)
-##   2 + sans brouillard volumétrique
-##   3 + sans MSAA
+##   2 + sans MSAA (SMAA à la place)
+##   3 + sans brouillard volumétrique
+## (15/11/2026, mesuré au banc --decoupe, 15 vues : le MSAA coûte 10-12 % du
+## temps de carte, le brouillard ≤ 2 % → le MSAA part avant ; OpenGL : MSAA
+## coupé au cran 3 comme avant, il n'a pas de brouillard)
 ##   4 + sans halo (glow)
 ##   5 + cadence verrouillée à 30 i/s (régulière plutôt que 40-55 en dents de scie)
 ##   6 + rendu 3D à 85 % (FSR 1 en Vulkan, bilinéaire en OpenGL)
@@ -296,7 +299,7 @@ func _appliquer(c: int, pourquoi: String) -> void:
 	cran = clampi(maxi(c, cran_min), 0, _cran_max())
 	if _env != null and _rd:
 		_env.sdfgi_enabled = cran <= 0
-		_env.volumetric_fog_enabled = cran <= 1
+		_env.volumetric_fog_enabled = cran <= 2
 	if _env != null:
 		_env.glow_enabled = cran <= (4 if _web else 3)
 	cran_courant = cran
@@ -323,9 +326,10 @@ func _appliquer(c: int, pourquoi: String) -> void:
 			# MSAA ×4 garanti aux crans 0-2 (diagnostic du 08/10/2026 sur le
 			# PC du père : « crénelage net au réglage haute ») — on ne se fie
 			# plus à la valeur lue sur la fenêtre, on l'impose
-			vp.msaa_3d = maxi(_msaa_origine, Viewport.MSAA_4X) if cran <= 2 else Viewport.MSAA_DISABLED
+			var cran_msaa: int = 1 if _rd else 2
+			vp.msaa_3d = maxi(_msaa_origine, Viewport.MSAA_4X) if cran <= cran_msaa else Viewport.MSAA_DISABLED
 			# puce intégrée : ×2 suffit (bande passante de la mémoire partagée)
-			if cran <= 2 and type_gpu == "integre":
+			if cran <= cran_msaa and type_gpu == "integre":
 				vp.msaa_3d = Viewport.MSAA_2X
 			# sans MSAA : anticrénelage d'écran plutôt que rien (crénelage reproché le 08/10/2026),
 			# SMAA en Vulkan, FXAA en OpenGL ; ~0,3-0,5 ms
@@ -391,6 +395,10 @@ func libelle(c: int) -> String:
 		return ["tout", "sans éclairage indirect", "sans brouillard ni reflets",
 			"rendu 85 %", "rendu 75 %", "rendu 70 %, sans halo",
 			"30 i/s, sans anti-crénelage"][c]
+	if _rd:
+		return ["tout", "sans éclairage indirect", "anti-crénelage léger (SMAA)",
+			"sans brouillard", "sans halo", "30 i/s", "rendu à 85 %",
+			"rendu à 70 %, remontées proches seulement"][c]
 	return ["tout", "sans éclairage indirect", "sans brouillard ni reflets",
 		"sans anti-crénelage", "sans halo", "30 i/s", "rendu à 85 %",
 		"rendu à 70 %, remontées proches seulement"][c]
