@@ -16674,6 +16674,11 @@ class GameWidget(QWidget):
             boutons.append((T("EVACUATE", "ÉVACUER"), "evacuer", None, False, COLOR_ALARM))
         if d.get("hors_service"):
             boutons.append((T("NEW SERVICE", "REMISE EN SERVICE"), "remise_service", None, False, COLOR_GOOD))
+        # TOUT RÉPARER (commande d'exploitation « depanner » de la 3D : pannes soldées, réarmement, retour en
+        # auto) : dès qu'il y a quelque chose à réparer
+        if (any(isinstance(q, dict) and q.get("phase", "active") != "traitee" for q in d.get("pannes") or [])
+                or d.get("etat") in ("arret", "urgence") or d.get("hors_service")):
+            boutons.append((T("REPAIR ALL", "TOUT RÉPARER"), "depanner", None, False, COLOR_GOOD))
         for i, (lb, cmd, arg, on, cl) in enumerate(boutons):
             r = QRectF(x0 + 16 + (i % 3) * (bw + 4), y + (i // 3) * (bh + 4), bw, bh)
             if (cmd == "portes" and not d.get("a_quai")) or (
