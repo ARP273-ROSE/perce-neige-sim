@@ -1280,6 +1280,7 @@ const PALIERS: Array = [[[["tph_fornet", false, 10.0, true], ["tcd10_vallon_iser
 ## Pas pour : téléskis (pas de quai), téléphériques et Funival (bâtiments), replats et paliers communs, gares
 ## intermédiaires des lignes jumelées (une pièce pour les deux).
 const SEUIL_PLAIN_PIED: float = 2.0
+const SEUIL_CREUX: float = 1.2          # terrain des abords (à 8 m) au-dessus de la gare
 
 
 func _amenagements_gares_plain_pied() -> Dictionary:
@@ -1324,11 +1325,32 @@ func _amenagements_gares_plain_pied() -> Dictionary:
 					mn = minf(mn, h)
 					mx = maxf(mx, h)
 				t += 3.0
-			if mx - mn < SEUIL_PLAIN_PIED:
-				continue
+			# gare en creux (retour d'utilisateur du 16/11/2026 : « le bas de l'Aiguille Percée m'a l'air sous terre ») :
+			# sol presque plat sous la gare, mais terrain plus haut autour (versant en travers, déblai de la grille) —
+			# la gare garde son niveau, les abords sont raccordés en pente douce
+			var y_plat: float = (mn + mx) * 0.5
+			var denivelee: float = mx - mn
+			if denivelee < SEUIL_PLAIN_PIED:
+				var haut: float = -INF
+				var ta: float = t0g - 8.0
+				while ta <= t1 + 8.0:
+					for sx in [-1.0, 1.0]:
+						var qa: Vector2 = o + vers * ta + lat * (sx * (hl + 8.0))
+						haut = maxf(haut, _hauteur_tri(qa.x, qa.y))
+					ta += 4.0
+				for kx2 in range(-2, 3):
+					for tb in [t0g - 8.0, t1 + 8.0]:
+						var qb: Vector2 = o + vers * tb + lat * ((hl + 8.0) * kx2 * 0.5)
+						haut = maxf(haut, _hauteur_tri(qb.x, qb.y))
+				if haut - mx < SEUIL_CREUX:
+					if "--liste-plain-pied" in OS.get_cmdline_user_args():
+						print("PLAIN_PIED_NON %-26s %-5s sol %.1f à %.1f m, abords %.1f" % [cle, "aval" if aval else "amont", mn, mx, haut])
+					continue
+				y_plat = mx
+				denivelee = haut - mx
 			# raccord en racine de la dénivelée : courbure bornée (à 1,5 fois la dénivelée, un raccord de 10 m pour 5 m
 			# de haut laissait 6 cm entre le sol affiché et la collision, au pas de 2 m — bench_ski)
-			var fondu: float = clampf(8.5 * sqrt(mx - mn), 12.0, 30.0)
+			var fondu: float = clampf(8.5 * sqrt(denivelee), 12.0, 30.0)
 			var poly: PackedVector2Array = PackedVector2Array([o + vers * t0g - lat * hl, o + vers * t0g + lat * hl,
 				o + vers * t1 + lat * hl, o + vers * t1 - lat * hl])
 			var bb: Rect2 = Rect2(poly[0], Vector2.ZERO)
@@ -1343,8 +1365,12 @@ func _amenagements_gares_plain_pied() -> Dictionary:
 					libre = false
 					break
 			if not libre:
+				if "--liste-plain-pied" in OS.get_cmdline_user_args():
+					print("PLAIN_PIED_NON %-26s %-5s sur un autre aménagement" % [cle, "aval" if aval else "amont"])
 				continue
-			amenagements.append({"rect": r_am, "plats": [[poly, (mn + mx) * 0.5, fondu]], "masque": true})
+			amenagements.append({"rect": r_am, "plats": [[poly, y_plat, fondu]], "masque": true})
+			if "--liste-plain-pied" in OS.get_cmdline_user_args():
+				print("PLAIN_PIED %-26s %-5s sol %.1f à %.1f m → %.1f, raccord %.0f m" % [cle, "aval" if aval else "amont", mn, mx, y_plat, fondu])
 			gares_plain_pied += 1
 	print("[Relief] gares de plain-pied : %d pièces" % gares_plain_pied)
 	return {}
