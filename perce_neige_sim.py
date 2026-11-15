@@ -7530,6 +7530,9 @@ class PupitreSurimpression(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
         self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        # transparence faite par le compositeur de Windows (fenêtre en couches) : rien à mêler à la peinture
+        # (setOpacity sur chaque trait : 4 à 10 ms ; une passe sur l'image : ~1 ms de plus par image refaite)
+        self.setWindowOpacity(self.OPACITE)
         self.replie = False
         self._s = 1.0
         self._geo = None
@@ -7541,7 +7544,7 @@ class PupitreSurimpression(QWidget):
         s = max(0.45, min(zone.height() * 0.66 / self.HAUTEUR, zone.width() * 0.21 / self.LARGEUR))
         w = int(self.LARGEUR * s)
         h = int((self.BANDEAU if self.replie else self.HAUTEUR) * s)
-        x = int(zone.x() + zone.width() - w - zone.width() * 0.075)
+        x = int(zone.x() + zone.width() - w - zone.width() * 0.115)      # (colonne de boutons du skieur : ~11 %)
         y = int(zone.y() + zone.height() * 0.06)
         g = (x, y, w, h)
         if g != self._geo:
@@ -7577,10 +7580,6 @@ class PupitreSurimpression(QWidget):
                 self._jeu._draw_bandeau_pupitre(q, QRectF(0, 0, self.LARGEUR, self.BANDEAU))
             else:
                 self._jeu._draw_hud(q, QRectF(0, 0, self.LARGEUR, self.HAUTEUR))
-            # transparence appliquée une fois à l'image (une copie avec opacité mêlait chaque pixel : ~3 ms)
-            q.resetTransform()
-            q.setCompositionMode(QPainter.CompositionMode.CompositionMode_DestinationIn)
-            q.fillRect(QRectF(0, 0, self.width(), self.height()), QColor(0, 0, 0, round(255 * self.OPACITE)))
             q.end()
         p = QPainter(self)
         p.setCompositionMode(QPainter.CompositionMode.CompositionMode_Source)
@@ -9443,10 +9442,20 @@ class GameWidget(QWidget):
         # le processeur va à la 3D (retour du 04/10 : « sur un PC moins
         # puissant ça saccade »).
         if self._godot_couvre_vue():
-            self._repeint_impair = not getattr(self, "_repeint_impair", False)
-            if self._repeint_impair:
-                self.update()
+            if (self._plein_cadre_3d() and not self._show_help and not self._show_info
+                    and self.state.mode != MODE_PAUSED):
+                # 3D plein cadre sans rien par-dessus : la fenêtre Qt n'a rien de visible, une seule peinture
+                # (fond noir) suffit — elle coûtait ~100 ms par seconde en 4K (essai du 15/11/2026)
+                if not getattr(self, "_plein_cadre_peint", False):
+                    self._plein_cadre_peint = True
+                    self.update()
+            else:
+                self._plein_cadre_peint = False
+                self._repeint_impair = not getattr(self, "_repeint_impair", False)
+                if self._repeint_impair:
+                    self.update()
         else:
+            self._plein_cadre_peint = False
             self.update()
 
     def _plein_cadre_3d(self) -> bool:
