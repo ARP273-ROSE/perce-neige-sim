@@ -18,7 +18,8 @@
     "updater.py",
     "interface_kit.py",
     "profil_coupe.py",
-    "pack_hd.py"
+    "pack_hd.py",
+    "pupitre_remontee.py"
   ],
   "paquets": [],
   "assets": [
