@@ -462,28 +462,41 @@ func _releve_groupes(sk: SkieurJoueur) -> void:
 	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
 	pm.call("_appliquer", int(_crans[0]) if not _crans.is_empty() else 7, "banc par groupe")
 	var groupes: Array = []
+	# enfants de main (le relief entier compris), puis chaque ligne de remontée
 	for c in _main.get_children():
-		if c is Node3D and (c as Node3D).visible and c != _main.relief:
+		if c is Node3D and (c as Node3D).visible:
 			groupes.append(c)
-	for c in _main.relief.get_children():
+	for c in _main.remontees.get_children():
 		if c is Node3D and (c as Node3D).visible:
 			groupes.append(c)
 	var o: PackedStringArray = PackedStringArray()
 	o.append("# par groupe — %s — %s — cran %d — gpu ms (gain si caché), primitives, appels" % [_etiq,
 		RenderingServer.get_video_adapter_name(), int(pm.get("cran"))])
 	for v in _vues:
+		await _mesurer_vue(sk, v)               # (scène posée après le changement de cran)
 		var m0: Array = await _mesurer_vue(sk, v)
 		o.append("%s : tout %.2f ms, %.0fk prim, %d appels" % [v[0], m0[0], m0[5] / 1000.0, int(m0[6])])
 		print("GROUPES ", o[o.size() - 1])
 		for g in groupes:
 			var n3: Node3D = g
+			# tri rapide : un groupe sans primitives ni appels à l'écran n'est pas mesuré
+			n3.visible = false
+			await _attend(3)
+			var p_sans: float = Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME)
+			var a_sans: float = Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)
+			n3.visible = true
+			await _attend(3)
+			if absf(Performance.get_monitor(Performance.RENDER_TOTAL_PRIMITIVES_IN_FRAME) - p_sans) < 5000.0 \
+					and absf(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME) - a_sans) < 5.0:
+				continue
+			# mesure appariée : sans, puis avec (la scène bouge d'une mesure à l'autre)
 			n3.visible = false
 			var m: Array = await _mesurer_vue(sk, v)
 			n3.visible = true
-			var l: String = "   %-28s −%.2f ms  −%.0fk prim  −%d appels" % [String(n3.name), m0[0] - m[0], (m0[5] - m[5]) / 1000.0, int(m0[6] - m[6])]
-			if m0[0] - m[0] > 0.15 or m0[5] - m[5] > 20000.0 or m0[6] - m[6] > 30:
-				o.append(l)
-				print("GROUPES ", l)
+			var m1: Array = await _mesurer_vue(sk, v)
+			var l: String = "   %-28s −%.2f ms  −%.0fk prim  −%d appels" % [String(n3.name), m1[0] - m[0], (m1[5] - m[5]) / 1000.0, int(m1[6] - m[6])]
+			o.append(l)
+			print("GROUPES ", l)
 	var f: FileAccess = FileAccess.open(_out.path_join("groupes_%s.txt" % _etiq), FileAccess.WRITE)
 	if f != null:
 		f.store_string("\n".join(o) + "\n")
