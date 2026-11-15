@@ -574,13 +574,15 @@ func _portillons_quai() -> void:
 				# les barrières fixes le long des baies sont du plan du quai (TphGrandeMotte.plan_quai)
 				var z_g: float = TphGrandeMotte.Z_NEZ if aval else -L
 				var z_c: float = ((-TphGrandeMotte.Z_NEZ + D_QUAI) if aval else -D_QUAI) + z_g
-				var xg: float = xv + TphGrandeMotte.DEMI_BAIE + TphGrandeMotte.RETRAIT_BARRIERE + 0.08   # (côté quai de la barrière fixe)
-				segs.append([Vector3(xg, y_q, z_c - TphGrandeMotte.DEMI_PORTE), Vector3(xg, y_q, z_c + TphGrandeMotte.DEMI_PORTE)])
+				for sp in [-1.0, 1.0]:          # (portes des deux côtés de la cabine)
+					var xg: float = xv + sp * (TphGrandeMotte.DEMI_BAIE + TphGrandeMotte.RETRAIT_BARRIERE + 0.08)   # (côté quai de la barrière fixe)
+					segs.append([Vector3(xg, y_q, z_c - TphGrandeMotte.DEMI_PORTE), Vector3(xg, y_q, z_c + TphGrandeMotte.DEMI_PORTE)])
 			elif String(name) == "tph_fornet":
 				# Fornet : portillon coulissant devant la porte, comme à la Grande Motte
 				var z_cf: float = (D_QUAI) if aval else (-L - D_QUAI)
-				var xgf: float = xv + TphGrandeMotte.DEMI_BAIE + TphGrandeMotte.RETRAIT_BARRIERE + 0.08
-				segs.append([Vector3(xgf, y_q, z_cf - TphGrandeMotte.DEMI_PORTE), Vector3(xgf, y_q, z_cf + TphGrandeMotte.DEMI_PORTE)])
+				for spf in [-1.0, 1.0]:
+					var xgf: float = xv + spf * (TphGrandeMotte.DEMI_BAIE + TphGrandeMotte.RETRAIT_BARRIERE + 0.08)
+					segs.append([Vector3(xgf, y_q, z_cf - TphGrandeMotte.DEMI_PORTE), Vector3(xgf, y_q, z_cf + TphGrandeMotte.DEMI_PORTE)])
 			if segs.is_empty():
 				continue
 			var vis: Node3D = Node3D.new()
@@ -1046,12 +1048,10 @@ func _plan_quai_fornet(aval: bool) -> Dictionary:
 		var xv: float = _x_brin(montee)
 		for sb in [-1.0, 1.0]:
 			var xb: float = xv + sb * (db + TphGrandeMotte.RETRAIT_BARRIERE)
-			if sb > 0.0:
-				bar.append([V.call(xb, 0.0), V.call(xb, D_QUAI - dp)])
-				bar.append([V.call(xb, D_QUAI + dp), V.call(xb, u_ar)])
-				port.append([xb, z0 + sg * D_QUAI])
-			else:
-				bar.append([V.call(xb, 0.0), V.call(xb, u_ar)])
+			# (portes des deux côtés de la cabine, 16/11/2026)
+			bar.append([V.call(xb, 0.0), V.call(xb, D_QUAI - dp)])
+			bar.append([V.call(xb, D_QUAI + dp), V.call(xb, u_ar)])
+			port.append([xb, z0 + sg * D_QUAI])
 		var ur: float = u_ar + TphGrandeMotte.RETRAIT_BARRIERE
 		bar.append([V.call(xv - db - TphGrandeMotte.RETRAIT_BARRIERE, ur), V.call(xv + db + TphGrandeMotte.RETRAIT_BARRIERE, ur)])
 	return {"dalles": dalles, "garde_corps": gc, "barrieres": bar, "portillons": port, "W": W, "lq": lq}

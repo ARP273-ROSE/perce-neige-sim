@@ -176,12 +176,10 @@ static func plan_quai(aval: bool, xs: Array, z_cab: float) -> Dictionary:
 		var x0: float = float(xs[i])
 		for sb in [-1.0, 1.0]:
 			var xb: float = x0 + sb * (DEMI_BAIE + RETRAIT_BARRIERE)
-			if sb > 0.0:
-				bar.append([Vector2(xb, zlo), Vector2(xb, minf(z_cab - DEMI_PORTE, zhi))])
-				bar.append([Vector2(xb, z_cab + DEMI_PORTE), Vector2(xb, zhi)])
-				port.append([xb, z_cab - DEMI_PORTE, z_cab + DEMI_PORTE, i])
-			else:
-				bar.append([Vector2(xb, zlo), Vector2(xb, zhi)])
+			# (portes des deux côtés de la cabine, 16/11/2026 : un portillon de chaque côté de la baie)
+			bar.append([Vector2(xb, zlo), Vector2(xb, minf(z_cab - DEMI_PORTE, zhi))])
+			bar.append([Vector2(xb, z_cab + DEMI_PORTE), Vector2(xb, zhi)])
+			port.append([xb, z_cab - DEMI_PORTE, z_cab + DEMI_PORTE, i])
 		# fond de baie, derrière la cabine
 		var zr: float = z_ar + (RETRAIT_BARRIERE if aval else -RETRAIT_BARRIERE)
 		bar.append([Vector2(x0 - DEMI_BAIE - RETRAIT_BARRIERE, zr), Vector2(x0 + DEMI_BAIE + RETRAIT_BARRIERE, zr)])

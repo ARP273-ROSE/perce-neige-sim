@@ -919,7 +919,7 @@ func formes_collision(cote_ext: float) -> Array:
 		f.append([Vector3(3.0, 0.10, 5.6), Vector3(0, -H_SUSP_TPH - 0.12, 0), false])
 		f.append([Vector3(3.0, 2.5, 0.06), Vector3(0, yt + 1.25, -2.79), false])
 		f.append([Vector3(3.0, 2.5, 0.06), Vector3(0, yt + 1.25, 2.79), false])
-		f.append([Vector3(0.06, 2.5, 5.6), Vector3(-cote_ext * 1.51, yt + 1.25, 0), false])
+		f.append([Vector3(0.06, 2.5, 5.6), Vector3(-cote_ext * 1.51, yt + 1.25, 0), true])      # (portes des deux côtés)
 		f.append([Vector3(0.06, 2.5, 5.6), Vector3(cote_ext * 1.51, yt + 1.25, 0), true])
 		return f
 	if famille == "cabine_3s":
@@ -2025,6 +2025,16 @@ func _cabine_tph() -> void:
 			m2.mesh = mailles[cle2 + ("_p" if sz > 0 else "_m")]
 			v.add_child(m2)
 		_portes.append([v, Vector3.ZERO, Vector3(0.06, 0, sz * 0.75)])
+		# face X− : les mêmes vantaux, en miroir
+		var vm: Node3D = Node3D.new()
+		vm.name = "PorteMiroir"
+		vm.transform = Transform3D(Basis.IDENTITY.scaled(Vector3(-1, 1, 1)), Vector3.ZERO)
+		cab.add_child(vm)
+		for cle3 in ["porte_coque", "porte_vitre"]:
+			var m3: MeshInstance3D = MeshInstance3D.new()
+			m3.mesh = mailles[cle3 + ("_p" if sz > 0 else "_m")]
+			vm.add_child(m3)
+		_portes.append([vm, Vector3.ZERO, Vector3(-0.06, 0, sz * 0.75)])
 	# deux cabines différentes (fiche RM.net) : la n° 1 Swoboda 1993, toit et
 	# liseré bleus, vitrage bleuté ; la n° 2 CWA Varos 2003, liseré gris
 	# argent, vitrage sombre
@@ -2050,7 +2060,7 @@ func _cabine_tph() -> void:
 			for sx5 in [-1.0, 1.0]:
 				RemonteeKit.boite_en(cab, Vector3(0.07, 1.35, 0.07), Vector3(sx5 * ap, -0.95, sz5 * 2.80), "cabine_blanche")
 				RemonteeKit.boite_en(cab, Vector3(0.07, 1.35, 0.07), Vector3(sx5 * 1.52, -0.95, sz5 * bp), "cabine_blanche")
-		for zm in [-bp * 0.5, 0.0, bp * 0.5]:
+		for zm in [-bp * 0.62]:
 			RemonteeKit.boite_en(cab, Vector3(0.04, 1.35, 0.06), Vector3(-1.52, -0.95, zm), "cabine_blanche")
 		for zm2 in [-bp * 0.62]:
 			RemonteeKit.boite_en(cab, Vector3(0.04, 1.35, 0.06), Vector3(1.52, -0.95, zm2), "cabine_blanche")
@@ -2059,8 +2069,8 @@ func _cabine_tph() -> void:
 			RemonteeKit.boite_en(cab, Vector3(0.06, 1.35, 0.04), Vector3(xm, -0.95, sz2 * 2.80), "cabine_blanche")
 	for sx2 in ([] if fornet else [-1.0, 1.0]):
 		for k2 in range(-2, 3):
-			if sx2 > 0.0 and absf(k2) < 1:
-				continue          # baie de la porte
+			if absf(k2) < 1:
+				continue          # baie de la porte (une de chaque côté)
 			RemonteeKit.boite_en(cab, Vector3(0.04, 1.35, 0.06), Vector3(sx2 * 1.52, -0.95, k2 * 0.95), "cabine_blanche")
 	# Fornet (photos) : pas de garde-corps sur le toit (le châssis rouge plat sous le plancher est retiré, demande
 	# d'utilisateur du 12/11/2026 : « enlève le rectangle sous la cabine »)
@@ -2082,7 +2092,7 @@ func _cabine_tph() -> void:
 	# retour d'utilisateur du 12/11/2026 : « la rambarde ne s'interrompt pas quand t'ouvres les portes »)
 	var zb: float = 0.95
 	for sxi in [-1.0, 1.0]:
-		var trons: Array = [[-zi + 0.45, zi - 0.45]] if sxi < 0.0 else [[-zi + 0.45, -zb], [zb, zi - 0.45]]
+		var trons: Array = [[-zi + 0.45, -zb], [zb, zi - 0.45]]          # (une porte de chaque côté)
 		for tr in trons:
 			RemonteeKit.barre(cab, Vector3(sxi * xi, yh, tr[0]), Vector3(sxi * xi, yh, tr[1]), 0.022, "acier", 6)
 			var zp0: float = -zi + 0.05 if float(tr[0]) < -zi + 1.0 else float(tr[0])
@@ -2092,24 +2102,26 @@ func _cabine_tph() -> void:
 		RemonteeKit.boite_en(cab, Vector3(2.8, 0.16, 0.03), Vector3(0, yp + 0.09, sxi * (zi + 0.10)), "peinture_anthracite")
 		for kz in range(4):
 			var zz2: float = -zi + 0.6 + kz * (2.0 * zi - 1.2) / 3.0
-			if sxi > 0.0 and absf(zz2) < zb:
+			if absf(zz2) < zb:
 				continue
 			RemonteeKit.barre(cab, Vector3(sxi * xi, yh, zz2), Vector3(sxi * (xi + 0.06), yh, zz2), 0.015, "acier", 4)
-		if sxi > 0.0:
-			# bouts de la main courante coupée : retour vers la paroi
-			for sz3 in [-1.0, 1.0]:
-				RemonteeKit.barre(cab, Vector3(xi, yh, sz3 * zb), Vector3(xi + 0.06, yh, sz3 * zb), 0.015, "acier", 4)
+		# bouts de la main courante coupée : retour vers la paroi
+		for sz3 in [-1.0, 1.0]:
+			RemonteeKit.barre(cab, Vector3(sxi * xi, yh, sz3 * zb), Vector3(sxi * (xi + 0.06), yh, sz3 * zb), 0.015, "acier", 4)
 	# rampe lumineuse au plafond
 	RemonteeKit.boite_en(cab, Vector3(0.25, 0.04, 4.6), Vector3(0, -0.30, 0), "blanc_plaque")
 	RemonteeKit.boite_en(cab, Vector3(1.2, 1.0, 0.6), Vector3(-0.6, yp + 0.5, -2.35), "peinture_anthracite")
 	RemonteeKit.boite_en(cab, Vector3(1.1, 0.04, 0.5), Vector3(-0.6, yp + 1.02, -2.35), "noir_mat")
+	# barres de maintien : au plafond partout ; colonnes hors du passage entre les deux portes (retour d'utilisateur
+	# du 16/11/2026 : « que la main courante ne soit pas au milieu du chemin » — une colonne était dans l'axe de la porte)
 	for k in range(5):
 		var z: float = -1.8 + k * 0.9
 		RemonteeKit.barre(cab, Vector3(-1.2, -0.45, z), Vector3(1.2, -0.45, z), 0.02, "acier", 6)
-		RemonteeKit.barre(cab, Vector3(0, yp, z), Vector3(0, -0.45, z), 0.025, "acier", 6)
+	for z_col in [-1.9, -1.25, 1.25, 1.9]:
+		RemonteeKit.barre(cab, Vector3(0, yp, z_col), Vector3(0, -0.45, z_col), 0.025, "acier", 6)
 	# inscription sous les vitres, sur les quatre faces (photos)
 	for f in [[Vector3(0, -2.05, 2.815), 0.0, 1.0], [Vector3(0, -2.05, -2.815), PI, 1.0], [Vector3(1.535, -2.05, -1.2), PI * 0.5, 0.8],
-			[Vector3(-1.535, -2.05, 0.0), -PI * 0.5, 1.0]]:
+			[Vector3(-1.535, -2.05, 1.2), -PI * 0.5, 0.8]]:
 		var l: MeshInstance3D = RemonteeKit.texte_fige(cab, "VAL D'ISÈRE" if fornet else "CAPITALE DU SKI D'ÉTÉ", 80,
 			0.0032 * float(f[2]), Color(0.12, 0.25, 0.60) if fornet else Color(0.75, 0.10, 0.12))
 		l.visibility_range_end = 120.0
@@ -2237,7 +2249,7 @@ static func _contour(a: float, b: float, r: float, pans: bool = false) -> Array:
 					p = Vector3(-a, 0, -sv * (b - r))
 				3:
 					p = Vector3(sv * (a - r), 0, -b)
-			out.append([p, c == 0, sv, false])
+			out.append([p, c == 0, sv, false, c == 2])
 		var cx: float = ca[c][0] * (a - r)
 		var cz: float = ca[c][1] * (b - r)
 		var th0: float = ca[c][2]
@@ -2248,7 +2260,7 @@ static func _contour(a: float, b: float, r: float, pans: bool = false) -> Array:
 				var q0: Vector3 = Vector3(cx + r * cos(th0), 0, cz + r * sin(th0))
 				var q1: Vector3 = Vector3(cx + r * cos(th0 + PI * 0.5), 0, cz + r * sin(th0 + PI * 0.5))
 				q = q0.lerp(q1, float(k) / nc)
-			out.append([q, false, 0.0, k == 3 or k == 4])
+			out.append([q, false, 0.0, k == 3 or k == 4, false])
 	return out
 
 
@@ -2341,6 +2353,11 @@ static func _maillage_cabine(fam: String, teinte_: String = "") -> Dictionary:
 			var s_mid: float = (float(a0[2]) + float(a1[2])) * 0.5
 			var dans_baie: bool = a0[1] and a1[1] and absf(s_mid) < _s_porte(fam) and y0 <= y_haut_porte + 0.001 \
 				and y1 >= y_bas_porte - 0.001
+			# téléphériques : la même baie sur la face X− (retour d'utilisateur du 16/11/2026 : « il faut que les portes
+			# des TPH s'ouvrent des deux côtés ») ; ses vantaux sont ceux de la face X+, en miroir
+			if fam == "cabine_tph" and a0[4] and a1[4] and absf(s_mid) < _s_porte(fam) and y0 <= y_haut_porte + 0.001 \
+					and y1 >= y_bas_porte - 0.001:
+				continue
 			if dans_baie:
 				var cote: float = 1.0 if s_mid > 0.0 else -1.0
 				var mp: String = "vitre" if y1 > -H + 0.45 else "cadre"
