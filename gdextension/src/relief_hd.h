@@ -40,6 +40,7 @@ public:
 	// Quart d'anneau, depuis le nœud (j0, i0), d mailles de côté : [sommets, indices], sans les mailles
 	// du carré [t0, t1[ si t1 > t0.
 	Array quart_anneau(int j0, int i0, int d, int t0, int t1) const;
+	PackedFloat32Array bornes_anneau(const PackedByteArray &o, int w, int pas) const;
 
 	// Texture de détail de la neige, calculée au chargement (rien dans le dépôt) : RGBA8 raccordable, côté
 	// `taille`. R, G : pente d'un bruit à plusieurs échelles ; B : grain fin ; A : le bruit lui-même.

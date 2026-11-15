@@ -11,6 +11,11 @@ extends Node3D
 static var M: int = 512                # mailles par côté d'un anneau, multiple de 4 (256 sur puce intégrée)
 static var NIVEAUX: int = 5
 static var SAUT: int = 32              # les anneaux se déplacent ensemble, de 2^NIVEAUX nœuds
+## Morceaux par côté d'un quart d'anneau : la caméra est au coin commun des quatre quarts, si bien
+## qu'un quart entier n'était jamais écarté par le cadrage (2,1 M primitives dans toutes les vues).
+## En morceaux, ce qui est derrière la caméra n'est plus dessiné ; maillage et rendu inchangés.
+## « --anneaux-decoupe=N » pour les bancs (1 : quarts entiers, comme avant).
+static var DECOUPE: int = 4
 const TUILE: int = 2000                # nœuds par couche du tableau de textures
 const TAILLE: int = 2048               # texels par couche, dont
 const MARGE: int = 24                  # la marge prise aux voisines (filtrage, niveaux)
@@ -124,11 +129,13 @@ var _installe: bool = false
 var _images: Array = []
 var _textures: Array = []
 var _mats: Array = []
-var _instances: Array = []             # [niveau, quart, MeshInstance3D]
+var _instances: Array = []             # [niveau, j0, i0, côté (mailles de l'anneau), MeshInstance3D]
 var _cj: int = 0
 var _ci: int = 0
 var _demande: Vector2i = Vector2i.ZERO
 var _resultat: Array = []
+var _bornes: Array = []                # par niveau : [mini, maxi] de chaque morceau (boîtes serrées)
+var _cote_morceau: int = 0
 var _tache: int = -1
 ## Banc : durée des mises à jour sur le fil principal et sur le fil de travail (µs)
 var dernier_calcul_us: int = 0
@@ -208,14 +215,32 @@ static func regler_hd(m: ShaderMaterial, normales: Texture2DArrayRD, ortho: Text
 ## Fil de préparation : les tableaux des quarts d'anneaux, sans trou puis avec le trou de l'anneau
 ## précédent (une maille de recouvrement : au bord, l'anneau précédent est sur la même surface, et
 ## sans lui les jonctions en T laissaient passer des points de ciel).
+## Chaque quart : liste de morceaux [sommets, indices, j0, i0, côté] (morceaux vides, dans le trou, omis).
 static func preparer_quarts() -> Array:
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--anneaux-decoupe="):
+			DECOUPE = maxi(1, int(a.substr(18)))
 	var hd: RefCounted = ClassDB.instantiate("ReliefHD")
 	var r: Array = []
 	var d: int = M / 2
+	var s: int = DECOUPE
+	while s > 1 and (d % s != 0 or d / s < 16):
+		s -= 1
+	var dc: int = d / s
 	for avec_trou in [false, true]:
+		var t0: int = M / 4 + 1 if avec_trou else 0
+		var t1: int = 3 * M / 4 - 1 if avec_trou else 0
 		for k in range(4):
-			r.append(hd.call("quart_anneau", d if k & 1 else 0, d if k & 2 else 0, d,
-				M / 4 + 1 if avec_trou else 0, 3 * M / 4 - 1 if avec_trou else 0))
+			var morceaux: Array = []
+			for b in range(s):
+				for a in range(s):
+					var j0: int = (d if k & 1 else 0) + a * dc
+					var i0: int = (d if k & 2 else 0) + b * dc
+					var t: Array = hd.call("quart_anneau", j0, i0, dc, t0, t1)
+					if (t[1] as PackedInt32Array).is_empty():
+						continue
+					morceaux.append([t[0], t[1], j0, i0, dc])
+			r.append(morceaux)
 	return r
 
 
@@ -228,16 +253,19 @@ func demarrer(fin: ReliefFin, rel: ReliefBuilder) -> void:
 	fin.quarts_anneaux = []
 
 
-## Une surface par image : 66 000 sommets chacune, envoyées une par une.
+## Un quart par image (66 000 sommets en tout, en morceaux), envoyés un par un.
 func _mailler_un() -> void:
-	var t: Array = _a_mailler.pop_front()
-	var arr: Array = []
-	arr.resize(Mesh.ARRAY_MAX)
-	arr[Mesh.ARRAY_VERTEX] = t[0]
-	arr[Mesh.ARRAY_INDEX] = t[1]
-	var m: ArrayMesh = ArrayMesh.new()
-	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
-	_quarts.append(m)
+	var q: Array = _a_mailler.pop_front()
+	var morceaux: Array = []
+	for t in q:
+		var arr: Array = []
+		arr.resize(Mesh.ARRAY_MAX)
+		arr[Mesh.ARRAY_VERTEX] = t[0]
+		arr[Mesh.ARRAY_INDEX] = t[1]
+		var m: ArrayMesh = ArrayMesh.new()
+		m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
+		morceaux.append([m, t[2], t[3], t[4]])
+	_quarts.append(morceaux)
 	_a_installer = _a_mailler.is_empty()
 
 
@@ -294,15 +322,19 @@ func _installer_niveau(n: int) -> void:
 	rel._hiver_mat(mat, true)
 	_mats.append(mat)
 	for k in range(4):
-		var mi: MeshInstance3D = MeshInstance3D.new()
-		mi.name = "Anneau%d_%d" % [n, k]
-		mi.mesh = _quarts[(0 if n == 0 else 4) + k]
-		mi.material_override = mat
-		mi.layers = 1 | Cabin.LAYER_RELIEF
-		mi.set_meta("sans_collision", true)
-		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-		add_child(mi)
-		_instances.append([n, k, mi])
+		var q: Array = _quarts[(0 if n == 0 else 4) + k]
+		for p in q.size():
+			var mo: Array = q[p]
+			var mi: MeshInstance3D = MeshInstance3D.new()
+			mi.name = "Anneau%d_%d" % [n, k] if q.size() == 1 else "Anneau%d_%d_%d" % [n, k, p]
+			mi.mesh = mo[0]
+			mi.material_override = mat
+			mi.layers = 1 | Cabin.LAYER_RELIEF
+			mi.set_meta("sans_collision", true)
+			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			add_child(mi)
+			_instances.append([n, mo[1], mo[2], mo[3], mi])
+			_cote_morceau = mo[3]
 ## Repli en jeu : sans le détail de la neige. Les anneaux restent posés.
 func regler_detail(actif: bool) -> void:
 	var v: float = 1.0 if actif and _tex_detail != null else 0.0
@@ -330,14 +362,23 @@ func _regler_uniformes() -> void:
 		m.set_shader_parameter("a_m", Vector2(m1 - 0.25 * demi, m1))
 	for e in _instances:
 		var n: int = e[0]
-		var k: int = e[1]
 		var s: int = 1 << n
-		var d: int = M / 2 * s
-		var j0: int = _cj - d + (d if k & 1 else 0)
-		var i0: int = _ci - d + (d if k & 2 else 0)
-		var mi: MeshInstance3D = e[2]
-		mi.custom_aabb = AABB(Vector3(ReliefFin.X0 + j0 * ReliefFin.PX, 0.0, ReliefFin.Z0 + i0 * ReliefFin.PZ),
-			Vector3(d * ReliefFin.PX, 6000.0, d * ReliefFin.PZ))
+		var j0: int = _cj - (M / 2) * s + int(e[1]) * s
+		var i0: int = _ci - (M / 2) * s + int(e[2]) * s
+		var d: int = int(e[3]) * s
+		var mi: MeshInstance3D = e[4]
+		# hauteur serrée au morceau (sans elle, le cadrage ne gagne rien quand le regard plonge ou monte)
+		var y0: float = 0.0
+		var hy: float = 6000.0
+		if n < _bornes.size() and int(e[3]) == _cote_morceau:
+			var bn: PackedFloat32Array = _bornes[n]
+			var nm: int = M / _cote_morceau
+			var q: int = (int(e[2]) / _cote_morceau * nm + int(e[1]) / _cote_morceau) * 2
+			if q + 1 < bn.size():
+				y0 = bn[q] - 2.0
+				hy = bn[q + 1] - bn[q] + 4.0
+		mi.custom_aabb = AABB(Vector3(ReliefFin.X0 + j0 * ReliefFin.PX, y0, ReliefFin.Z0 + i0 * ReliefFin.PZ),
+			Vector3(d * ReliefFin.PX, hy, d * ReliefFin.PZ))
 	# le relief à 25 m s'efface sous le dernier anneau
 	var dn: int = (M / 2) << (NIVEAUX - 1)
 	var ja: int = maxi(_cj - dn, 0)
@@ -369,6 +410,11 @@ func _process(_dt: float) -> void:
 func _calculer() -> void:
 	var t0: int = Time.get_ticks_usec()
 	_resultat = _hd.call("anneaux", _fin.noeuds_grille(), _fin.pyramide, ReliefFin.NJ, ReliefFin.NI, _rel._h, ReliefDonnees.NX, ReliefDonnees.NZ, ReliefFin.K, _demande.x, _demande.y, M, NIVEAUX)
+	var b: Array = []
+	if _cote_morceau > 0 and _hd.has_method("bornes_anneau"):
+		for o in _resultat:
+			b.append(_hd.call("bornes_anneau", o, M + 1, _cote_morceau))
+	_bornes = b
 	dernier_calcul_us = Time.get_ticks_usec() - t0
 
 
