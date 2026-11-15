@@ -6418,7 +6418,7 @@ func _poser_pylones_treillis() -> void:
 		_enfant(py)
 		_pyl_treillis.append(py)
 		await py.construire_par_tranches(_pause.bind("pylônes treillis : pièces"))
-		await MeshMerge.merge_par_tranches(py, [], "Pylone", _garder_pylones(), _pause.bind("pylônes treillis : fusion"))
+		await MeshMerge.merge_par_tranches(py, py.mobiles, "Pylone", _garder_pylones(), _pause.bind("pylônes treillis : fusion"))
 		await _pause("pylônes treillis")
 
 

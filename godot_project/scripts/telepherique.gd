@@ -400,6 +400,9 @@ func _process_corps(delta: float) -> void:
 		if etat == "arret_normal" and va <= 0.0:
 			etat = "arret"
 	vitesse_reelle = absf(_v)
+	if _v != 0.0 and details_visibles:
+		for pyt in _pyl_treillis:
+			(pyt as PyloneTreillis).tourner_galets(_v * delta)
 	_rebond(delta)
 	_maj_positions()
 	if _v != 0.0:
