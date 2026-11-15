@@ -827,6 +827,9 @@ func _escalier() -> void:
 		# main courante noire à 0,95 m au-dessus des nez de marche, poteaux
 		var lat_r: Vector2 = t * cote * (ESC_LARG * 0.5 + 0.06)
 		_barre("noir", _p2(m + lat_r, 0.95), _p2(m + lat_r + n * course, -ESC_HAUT + 0.95), 0.05, 0.05)
+		# remplissage sous la main courante (retour d'utilisateur du 16/11/2026 : « des garde-fous pour éviter que je tombe
+		# d'un escalier ») : on passait sous la lisse, 2,85 m de vide
+		_barre("galva", _p2(m + lat_r, 0.50), _p2(m + lat_r + n * course, -ESC_HAUT + 0.50), 0.015, 0.85)
 		for k in [1, 6, 11, ESC_MARCHES - 1]:
 			var q: Vector2 = m + lat_r + n * ((k - 0.5) * ESC_GIRON)
 			var y_k: float = -k * h

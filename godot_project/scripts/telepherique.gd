@@ -1394,6 +1394,10 @@ func _collisions_grande_motte(corps: StaticBody3D, aval: bool) -> void:
 		boite.call(Vector3(1.4, 0.2, sqrt(81.0 + y_b * y_b)), Vector3(x_e, y_b * 0.5 - 0.1, (z_h + z_b) * 0.5), b_r)
 		var x_ext: float = x_e + signf(x_e) * 0.75
 		boite.call(Vector3(0.12, 1.3, sqrt(81.0 + y_b * y_b)), Vector3(x_ext, y_b * 0.5 + 0.55, (z_h + z_b) * 0.5), b_r)
+		# garde-corps côté quai aussi (retour d'utilisateur du 16/11/2026 : « des rambardes et des garde-fous un peu partout » —
+		# sous le niveau du quai, ce côté de l'escalier était ouvert : on glissait sous le plancher)
+		var x_int: float = x_e - signf(x_e) * 0.75
+		boite.call(Vector3(0.12, 1.3, sqrt(81.0 + y_b * y_b)), Vector3(x_int, y_b * 0.5 + 0.55, (z_h + z_b) * 0.5), b_r)
 	if aval:
 		if emprise_batiment.size() == 4:
 			var emp: PackedVector2Array = PackedVector2Array()
