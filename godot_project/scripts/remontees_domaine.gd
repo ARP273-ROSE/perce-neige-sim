@@ -1855,6 +1855,7 @@ func _commencer_corde(lg: LigneRemontee) -> void:
 	if v.cabine:
 		v.porte_skis(false)
 	message.emit("Secouriste à bord — triangle d'évacuation en place, descente à la corde (%d m)" % roundi(p.y - sol))
+	_piquer("CORDE", lg)
 
 
 func _descendre_corde(delta: float) -> void:
@@ -1886,6 +1887,7 @@ func _descendre_corde(delta: float) -> void:
 		skieur.support = null
 		skieur._skis.visible = true
 		message.emit("Au sol — évacué à la corde (%s)" % lg.nom_ligne)
+		_piquer("CORDE_SOL", lg)
 		a_bord = []
 		_repos = 6.0
 		_finir_corde()

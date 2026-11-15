@@ -6264,7 +6264,15 @@ var _exploit: ExploitationRemontee = null
 func exploitation() -> ExploitationRemontee:
 	if _exploit == null:
 		_exploit = ExploitationRemontee.new(self)
+		_exploit.sur_pique = _pique_exploitation
 	return _exploit
+
+
+## Pique d'une panne ou d'une situation d'exploitation (ligne suivie par le skieur) : relayée par RemonteesDomaine.
+func _pique_exploitation(evt: String) -> void:
+	var rd: Node = get_parent()
+	if rd is RemonteesDomaine:
+		(rd as RemonteesDomaine)._piquer(evt, self)
 
 
 ## Plafond de vitesse des pannes et du moteur de secours (fraction du nominal).
