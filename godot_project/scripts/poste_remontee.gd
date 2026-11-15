@@ -20,6 +20,7 @@ var _b_rearmer: Button
 var _b_auto: Button
 var _b_secours: Button
 var _b_remise: Button
+var _b_reparer: Button
 var _b_portes: Button
 var _panne: Label
 var _journal: Label
@@ -100,6 +101,11 @@ func _ready() -> void:
 	_b_remise = _bouton(l_e, "REMISE EN SERVICE", Color(0.15, 0.40, 0.30))
 	_b_remise.pressed.connect(func() -> void:
 		_cmd("remise_service"))
+	# un seul bouton pour tout solder et repartir (« c'est la galère pour réarmer les pannes », 16/11/2026)
+	_b_reparer = _bouton(col, "TOUT RÉPARER ET REPARTIR", Color(0.10, 0.50, 0.25))
+	_b_reparer.custom_minimum_size = Vector2(240, 64)
+	_b_reparer.pressed.connect(func() -> void:
+		_cmd("depanner"))
 	# portes à la main (téléphériques, Funival : à quai, en manuel)
 	_b_portes = _bouton(l_e, "PORTES", Color(0.25, 0.35, 0.55))
 	_b_portes.pressed.connect(func() -> void:
@@ -191,6 +197,8 @@ func _process_corps(_delta: float) -> void:
 	_b_auto.text = "AUTO" if ex.mode == "auto" else "MANUEL"
 	_b_secours.visible = _a_coupure(ex) and not ex.secours
 	_b_remise.visible = ex.hors_service()
+	_b_reparer.visible = not ex.pannes.is_empty() or (ex.mode == "manuel" and ligne.etat != "marche")
+	_b_reparer.text = "TOUT RÉPARER ET REPARTIR" if not ex.pannes.is_empty() else "REPARTIR EN AUTO"
 	_b_portes.visible = ligne.has_method("ouverture_portes")
 	if _b_portes.visible:
 		_b_portes.text = "FERMER PORTES" if float(ligne.call("ouverture_portes")) > 0.5 else "OUVRIR PORTES"
@@ -200,6 +208,9 @@ func _process_corps(_delta: float) -> void:
 		if dp.is_empty():
 			continue
 		t_p += "⚠ %s — %s\n%s\n" % [ex._tr(dp["nom"]), ex._tr(PannesRemontees.LIBELLES_GRAVITE[dp["grav"]]), ex._tr(dp["faire"])]
+		var rs: float = ex._reste(p)
+		if ex.mode == "auto" and rs > 0.0:
+			t_p += "   (auto : réglé dans %d s)\n" % ceili(rs)
 	if ex.secours:
 		t_p += "Moteur de secours : 30 %\n"
 	_panne.text = t_p.strip_edges()

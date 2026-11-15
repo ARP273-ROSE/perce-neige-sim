@@ -125,7 +125,46 @@ func _tick() -> void:
 				ph = p["phase"]
 			if ph == "hors_service":
 				_verif("ligne hors service une fois tout le monde au sol", true)
-				_fin()
+				# 2e partie : corde à la demande (16/11/2026), ligne arrêtée par l'utilisateur, sans panne
+				_lg.exploitation().commande("depanner")
+				Engine.time_scale = 1.0
+				var q2: Vector3 = _lg.global_transform * _lg.point_embarquement(true)
+				sk.activer(q2 + Vector3(0, 0.1, 0), 0.0)
+				sk.basculer_ski(true)
+				sk.dernier_sol = q2
+				rm._repos = 0.0
+				_phase = 7
+				_t = 0.0
 			elif _t > 200.0:
 				_verif("ligne hors service une fois tout le monde au sol", false, ph)
+				_fin()
+		7:
+			if not rm.a_bord.is_empty():
+				var h7: float = sk.global_position.y - relief.hauteur_sol(sk.global_position.x, sk.global_position.z)
+				if _lg.zone_vehicule(rm.a_bord[1]) == "ligne" and h7 > 6.0:
+					_verif("en marche : pas de corde", not rm.corde_possible())
+					_lg.exploitation().commande("arreter")
+					_phase = 8
+					_t = 0.0
+			if _t > 300.0:
+				_verif("rassis après dépannage", false, "etat %s" % _lg.etat)
+				_fin()
+		8:
+			if _lg.vitesse_reelle <= 0.0 and _t > 1.0:
+				_verif("ligne arrêtée par l'utilisateur : corde possible", rm.corde_possible())
+				rm.descendre_corde()
+				_verif("descente commencée", not rm.get("_corde").is_empty())
+				Engine.time_scale = 4.0
+				_phase = 9
+				_t = 0.0
+			elif _t > 60.0:
+				_verif("ligne arrêtée", false)
+				_fin()
+		9:
+			if rm.a_bord.is_empty():
+				var sol9: float = relief.hauteur_sol(sk.global_position.x, sk.global_position.z)
+				_verif("à la demande : au sol, à pied", absf(sk.global_position.y - sol9) < 0.2 and not sk.embarque)
+				_fin()
+			elif _t > 200.0:
+				_verif("à la demande : au sol", false)
 				_fin()
