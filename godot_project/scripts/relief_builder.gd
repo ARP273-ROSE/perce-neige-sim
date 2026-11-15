@@ -44,6 +44,9 @@ uniform float gamma = 1.0;
 uniform vec3 brume = vec3(0.50, 0.62, 0.78);
 uniform vec4 pieces[12];
 uniform int n_pieces = 0;
+uniform sampler2D masque_gares : filter_nearest, repeat_disable;
+uniform vec4 bloc_masque = vec4(0.0, 0.0, 1.0, 1.0);
+uniform float avec_masque = 0.0;
 uniform float piece = 0.0;
 uniform vec4 emprise = vec4(0.0, 0.0, 1.0, 1.0);
 varying vec3 pw;
@@ -95,6 +98,9 @@ void fragment() {
 			if (pw.x > r.x && pw.x < r.z && pw.z > r.y && pw.z < r.w) {
 				discard;
 			}
+		}
+		if (avec_masque > 0.5 && texture(masque_gares, (pw.xz - bloc_masque.xy) / (bloc_masque.zw - bloc_masque.xy)).r > 0.5) {
+			discard;
 		}
 	} else if (texture(trous, (pw.xz - emprise.xy) / (emprise.zw - emprise.xy)).r > 0.5) {
 		discard;
@@ -279,6 +285,7 @@ var amenagements_poses: bool = false    # les gares du funiculaire y sont
 ## Callables appelés au fil principal juste avant les pièces fines, quand
 ## hauteur() répond : chacun rend un aménagement (ou {}).
 var amenageurs: Array = []
+var gares_plain_pied: int = 0
 var _trait: Node3D = null
 var _trait_on: bool = true
 const PAS_PIECE: float = 2.0
@@ -290,6 +297,7 @@ func build(t: TunnelBuilder, cran: int = 0) -> void:
 	tunnel = t
 	for k in range(PALIERS.size()):
 		amenageurs.append(_amenagement_palier.bind(k))
+	amenageurs.append(_amenagements_gares_plain_pied)
 	_cran_depart = cran
 	_pas = 1 if cran <= 2 else 2
 	# 21 km d'emprise depuis le 09/10/2026 (Tignes – Val d'Isère) : 4096 px =
@@ -688,6 +696,7 @@ func _finition_pas() -> bool:
 				return false
 			amenageurs.clear()
 			_rects_pieces.clear()
+			_rects_masque.clear()
 			_k_fin = 0
 			_pas_fin = 1
 		1:
@@ -968,6 +977,84 @@ func _sur_replat(cle: String, aval: bool) -> bool:
 const PALIERS: Array = [[[["tph_fornet", false, 10.0, true], ["tcd10_vallon_iseran", true, 30.0, false]], 2322.9, 5.0, 10.0]]
 
 
+## Gares de plain-pied (retour d'utilisateur du 16/11/2026 : « tes terrassements où on est super haut ; en vrai on
+## arrive de plain-pied ») : la gare était posée au plus haut du terrain sous son quai et le reste comblé par un
+## remblai de neige (jusqu'à 10 m aux Boisses, plus de 3 m sur une vingtaine de gares). Quand le terrain varie de plus
+## de SEUIL_PLAIN_PIED sous l'emprise, une pièce fine le met à plat à mi-hauteur (autant de déblai que de remblai)
+## sous le quai, l'aire d'attente et le débarquement, raccordée à la pente sur 12 à 30 m.
+## Pas pour : téléskis (pas de quai), téléphériques et Funival (bâtiments), replats et paliers communs, gares
+## intermédiaires des lignes jumelées (une pièce pour les deux).
+const SEUIL_PLAIN_PIED: float = 2.0
+
+
+func _amenagements_gares_plain_pied() -> Dictionary:
+	var hors: Dictionary = {}
+	# gare intermédiaire de deux lignes jumelées : une seule pièce, sous les deux gares dos à dos
+	var double: Dictionary = {}
+	for j in RemonteesDomaine.JUMELAGES:
+		double[[j[0], false]] = true
+		hors[[j[1], true]] = true
+	for pl in PALIERS:
+		for g in pl[0]:
+			hors[[String(g[0]), bool(g[1])]] = true
+	for D in RemonteesDonnees.LIGNES:
+		var cle: String = String(D["cle"])
+		var fam: String = String(D["famille"])
+		if cle in DEBLAI_NON or fam.begins_with("perche") or fam == "cabine_funi" or fam == "cabine_tph":
+			continue
+		var a: Vector2 = RemonteesDomaine.monde(float(D["aval"][0]), float(D["aval"][1]))
+		var b: Vector2 = RemonteesDomaine.monde(float(D["amont"][0]), float(D["amont"][1]))
+		if a.distance_to(b) < 10.0:
+			continue
+		var u: Vector2 = (b - a).normalized()
+		var lat: Vector2 = Vector2(-u.y, u.x)
+		a += u * float(RemonteesDomaine.AVANCES_AVAL.get(cle, 0.0))
+		b -= u * float(RemonteesDomaine.RECULS_AMONT.get(cle, 0.0))
+		var hl: float = float(D["voie"]) * 0.5 + 4.0
+		var t0: float = -6.0
+		var t1: float = LigneRemontee.l_gare_pour(fam) + 10.0
+		for aval in [true, false]:
+			if hors.has([cle, aval]) or _sur_replat(cle, aval):
+				continue
+			var o: Vector2 = a if aval else b
+			var vers: Vector2 = -u if aval else u
+			var mn: float = INF
+			var mx: float = -INF
+			var t0g: float = -t1 if double.has([cle, aval]) else t0
+			var t: float = t0g
+			while t <= t1:
+				for kx in range(-2, 3):
+					var q: Vector2 = o + vers * t + lat * (hl * kx * 0.5)
+					var h: float = _hauteur_tri(q.x, q.y)
+					mn = minf(mn, h)
+					mx = maxf(mx, h)
+				t += 3.0
+			if mx - mn < SEUIL_PLAIN_PIED:
+				continue
+			# raccord en racine de la dénivelée : courbure bornée (à 1,5 fois la dénivelée, un raccord de 10 m pour 5 m
+			# de haut laissait 6 cm entre le sol affiché et la collision, au pas de 2 m — bench_ski)
+			var fondu: float = clampf(8.5 * sqrt(mx - mn), 12.0, 30.0)
+			var poly: PackedVector2Array = PackedVector2Array([o + vers * t0g - lat * hl, o + vers * t0g + lat * hl,
+				o + vers * t1 + lat * hl, o + vers * t1 - lat * hl])
+			var bb: Rect2 = Rect2(poly[0], Vector2.ZERO)
+			for v in poly:
+				bb = bb.expand(v)
+			# pas sur un aménagement déjà posé (palier du Fornet à côté du départ des Pyramides : le socle du Vallon se
+			# retrouvait à nu, 35 bords ouverts à bench_garde_fous) ni sur une autre gare de plain-pied
+			var r_am: Rect2 = bb.grow(fondu + 6.0)
+			var libre: bool = true
+			for am0 in amenagements:
+				if ((am0 as Dictionary)["rect"] as Rect2).grow(GRANDI_PIECE).intersects(r_am):
+					libre = false
+					break
+			if not libre:
+				continue
+			amenagements.append({"rect": r_am, "plats": [[poly, (mn + mx) * 0.5, fondu]], "masque": true})
+			gares_plain_pied += 1
+	print("[Relief] gares de plain-pied : %d pièces" % gares_plain_pied)
+	return {}
+
+
 func _amenagement_palier(k: int) -> Dictionary:
 	var pl: Array = PALIERS[k]
 	var y: float = float(pl[1])
@@ -1201,6 +1288,35 @@ func reboucher(cle: String) -> void:
 
 ## Emprises percées dans les tuiles (pièces fines, fosses) : taille du tableau `pieces` des shaders du relief.
 const MAX_PIECES: int = 12
+## Au-delà (gares de plain-pied : 34 pièces) : masque sur toute l'emprise du bloc, un pixel = 10,3 × 8,4 m, lu au plus
+## proche — une lecture de texture par point du sol au lieu d'une boucle sur les rectangles.
+const MASQUE_GARES: int = 2048
+var _rects_masque: Array = []
+var _tex_masque: ImageTexture = null
+
+
+func _poser_masque() -> void:
+	if _rects_masque.is_empty() or _mat_terrain == null:
+		return
+	var img: Image = Image.create(MASQUE_GARES, MASQUE_GARES, false, Image.FORMAT_L8)
+	var px: float = (ReliefDonnees.X_EST - ReliefDonnees.X_OUEST) / MASQUE_GARES
+	var pz: float = (ReliefDonnees.Z_SUD - ReliefDonnees.Z_NORD) / MASQUE_GARES
+	for r in _rects_masque:
+		var j0: int = clampi(int(round((r.position.x - ReliefDonnees.X_OUEST) / px)), 0, MASQUE_GARES)
+		var j1: int = clampi(int(round((r.end.x - ReliefDonnees.X_OUEST) / px)), 0, MASQUE_GARES)
+		var i0: int = clampi(int(round((r.position.y - ReliefDonnees.Z_NORD) / pz)), 0, MASQUE_GARES)
+		var i1: int = clampi(int(round((r.end.y - ReliefDonnees.Z_NORD) / pz)), 0, MASQUE_GARES)
+		if j1 > j0 and i1 > i0:
+			img.fill_rect(Rect2i(j0, i0, j1 - j0, i1 - i0), Color.WHITE)
+	_tex_masque = ImageTexture.create_from_image(img)
+	var bloc: Vector4 = Vector4(ReliefDonnees.X_OUEST, ReliefDonnees.Z_NORD, ReliefDonnees.X_EST, ReliefDonnees.Z_SUD)
+	var mats: Array = [_mat_terrain]
+	if fin != null and fin.anneaux != null:
+		mats.append_array(fin.anneaux.get("_mats"))
+	for m in mats:
+		(m as ShaderMaterial).set_shader_parameter("masque_gares", _tex_masque)
+		(m as ShaderMaterial).set_shader_parameter("bloc_masque", bloc)
+		(m as ShaderMaterial).set_shader_parameter("avec_masque", 1.0)
 
 
 func _poser_trous() -> void:
@@ -1216,6 +1332,7 @@ func _poser_trous() -> void:
 		v.append(Vector4.ZERO)
 	_mat_terrain.set_shader_parameter("pieces", v.slice(0, MAX_PIECES))
 	_mat_terrain.set_shader_parameter("n_pieces", n)
+	_poser_masque()
 	if fin != null and fin.anneaux != null:
 		# (anneaux sous le bord des pièces fines : de même surface, et plus de points de ciel à la jonction)
 		var sous_pieces: Array = _rects_pieces.map(func(r: Rect2) -> Rect2: return r.grow(-1.5))
@@ -1233,6 +1350,16 @@ var _h25: PackedFloat32Array = PackedFloat32Array()
 func _build_piece(am: Dictionary, pause: Callable = Callable()) -> void:
 	# (maille à 50 m : le fondu vers les tuiles ne doit pas atteindre les ouvrages, ici 8 m d'écart entre les grilles)
 	var r: Rect2 = (am["rect"] as Rect2).grow(GRANDI_PIECE if _pas > 1 else 0.0)
+	var au_masque: bool = bool(am.get("masque", false))
+	if au_masque:
+		# percée par le masque des gares : rectangle élargi aux pixels du masque (lecture au plus proche = bord exact)
+		var px: float = (ReliefDonnees.X_EST - ReliefDonnees.X_OUEST) / MASQUE_GARES
+		var pz: float = (ReliefDonnees.Z_SUD - ReliefDonnees.Z_NORD) / MASQUE_GARES
+		var x0: float = ReliefDonnees.X_OUEST + floorf((r.position.x - ReliefDonnees.X_OUEST) / px) * px
+		var z0: float = ReliefDonnees.Z_NORD + floorf((r.position.y - ReliefDonnees.Z_NORD) / pz) * pz
+		var x1: float = ReliefDonnees.X_OUEST + ceilf((r.end.x - ReliefDonnees.X_OUEST) / px) * px
+		var z1: float = ReliefDonnees.Z_NORD + ceilf((r.end.y - ReliefDonnees.Z_NORD) / pz) * pz
+		r = Rect2(x0, z0, x1 - x0, z1 - z0)
 	var nx: int = int(ceil(r.size.x / PAS_PIECE)) + 1
 	var nz: int = int(ceil(r.size.y / PAS_PIECE)) + 1
 	var lx: float = r.size.x / (nx - 1)
@@ -1329,8 +1456,9 @@ func _build_piece(am: Dictionary, pause: Callable = Callable()) -> void:
 	var mesh: ArrayMesh = ArrayMesh.new()
 	mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
 	# masque des bâtiments (0,25 m par pixel)
-	var mw: int = int(ceil(r.size.x * 4.0))
-	var mh: int = int(ceil(r.size.y * 4.0))
+	# (pièce sans bâtiment : masque d'un pixel, une texture de moins par gare)
+	var mw: int = 1 if am.get("trous", []).is_empty() else int(ceil(r.size.x * 4.0))
+	var mh: int = 1 if am.get("trous", []).is_empty() else int(ceil(r.size.y * 4.0))
 	var img: Image = Image.create(mw, mh, false, Image.FORMAT_L8)
 	for poly in am.get("trous", []):
 		var bb: Rect2 = Rect2(poly[0], Vector2.ZERO)
@@ -1359,7 +1487,10 @@ func _build_piece(am: Dictionary, pause: Callable = Callable()) -> void:
 	_hiver_mat(mat, true)
 	mesh.surface_set_material(0, mat)
 	_instance(mesh, "PieceGare")
-	_rects_pieces.append(r)
+	if au_masque:
+		_rects_masque.append(r)
+	else:
+		_rects_pieces.append(r)
 	var hs: PackedFloat32Array = PackedFloat32Array()
 	for v in verts:
 		hs.append(v.y)
@@ -1385,6 +1516,8 @@ func terrain_piece(x: float, z: float) -> Array:
 		var h: float = lerpf(lerpf(hs[i * nx + j], hs[i * nx + j + 1], u),
 			lerpf(hs[(i + 1) * nx + j], hs[(i + 1) * nx + j + 1], u), v)
 		var img: Image = pc[4]
+		if img.get_width() <= 1:
+			return [h, false]
 		var mx: int = clampi(int((x - r.position.x) * 4.0), 0, img.get_width() - 1)
 		var mz: int = clampi(int((z - r.position.y) * 4.0), 0, img.get_height() - 1)
 		return [h, img.get_pixel(mx, mz).r > 0.5]

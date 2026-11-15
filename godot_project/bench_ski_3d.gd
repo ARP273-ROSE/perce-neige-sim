@@ -104,7 +104,7 @@ func _tick() -> void:
 				var ecart: float = absf(p.y - relief.hauteur_sol(p.x, p.z))
 				var marge: float = relief._dx * relief._pas
 				var pres_gare: bool = false
-				for r_p in relief._rects_pieces:
+				for r_p in relief._rects_pieces + relief._rects_masque:
 					pres_gare = pres_gare or (r_p as Rect2).grow(marge).has_point(Vector2(p.x, p.z))
 				if pres_gare:
 					_ecart_gares = maxf(_ecart_gares, ecart)

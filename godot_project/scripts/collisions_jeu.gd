@@ -791,7 +791,7 @@ func _sol_autour(relief: ReliefBuilder, p: Vector3) -> void:
 	if _hd_outil == null:
 		_hd_outil = ClassDB.instantiate("ReliefHD")
 		# (mailles à 25 m qui touchent une pièce fine : la pièce y a son propre maillage de collision)
-		for pc in relief._rects_pieces:
+		for pc in relief._rects_pieces + relief._rects_masque:
 			var r: Rect2 = pc
 			var ax: float = ReliefDonnees.X_OUEST + floor((r.position.x - ReliefDonnees.X_OUEST) / ReliefFin.L_X) * ReliefFin.L_X
 			var az: float = ReliefDonnees.Z_NORD + floor((r.position.y - ReliefDonnees.Z_NORD) / ReliefFin.L_Z) * ReliefFin.L_Z
@@ -875,7 +875,7 @@ func _terrain(relief: ReliefBuilder, r: Rect2, quoi: int = TERRAIN_TOUT) -> void
 		_terrain(relief, r, TERRAIN_PIECES)   # (le reste : _sol_autour)
 		return
 	var faces: PackedVector3Array = PackedVector3Array()
-	var pieces: Array = relief._rects_pieces
+	var pieces: Array = relief._rects_pieces + relief._rects_masque     # (gares de plain-pied comprises)
 	# bloc : nœuds de la grille (pas d'affichage _pas)
 	var dx: float = relief._dx * relief._pas
 	var dz: float = relief._dz * relief._pas
