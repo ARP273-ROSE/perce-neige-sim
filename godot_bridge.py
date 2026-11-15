@@ -590,7 +590,7 @@ class GodotBridge:
             return out
         for _ in range(64):
             try:
-                data, _src = self._rsock.recvfrom(4096)
+                data, _src = self._rsock.recvfrom(65535)    # (télémesure des remontées : plusieurs Ko)
             except (BlockingIOError, OSError):
                 break
             try:
