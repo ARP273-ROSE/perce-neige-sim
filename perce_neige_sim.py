@@ -7260,6 +7260,8 @@ class PannesRemonteeDialog(QDialog):
     par bouton, et « au hasard ». La 3D déclenche ; le pupitre affiche ce qu'elle renvoie."""
 
     _COULEURS = {"avis": "#3c78b4", "degrade": "#b48c28", "arret": "#c85a1e", "grave": "#b41e1e"}
+    # (pannes à évacuation, si le catalogue n'a pas le champ "evac")
+    DERAILLEMENTS = ("sortie_cable", "deraillement_tph", "frein_porteur", "sortie_cable_tk")
 
     def __init__(self, nom: str, catalogue: list, choisir, parent: QWidget | None = None):
         super().__init__(parent)
@@ -7271,6 +7273,16 @@ class PannesRemonteeDialog(QDialog):
                        f"<b>{nom}</b> — choisissez une panne à déclencher maintenant."))
         lbl.setWordWrap(True)
         lay.addWidget(lbl)
+        # déraillement (évacuation à la corde, ou à ski pour un téléski) : en tête, bien visible
+        for c in catalogue:
+            if c.get("evac") in ("corde", "ski") or c.get("id") in self.DERAILLEMENTS:
+                corde = c.get("evac", "corde") != "ski"
+                btn = QPushButton(T("Derailment", "Déraillement") + " — " + str(c.get("nom", c["id"])) + "  ·  "
+                                  + (T("rope evacuation", "évacuation à la corde") if corde
+                                     else T("skiers let go", "les skieurs lâchent la perche")), self)
+                btn.setStyleSheet("QPushButton { border-left: 6px solid #b41e1e; padding: 8px; font-weight: bold; text-align: left; }")
+                btn.clicked.connect(lambda _=False, pid=c["id"]: (choisir("panne", pid), self.accept()))
+                lay.addWidget(btn)
         grid = QHBoxLayout()
         col_a, col_b = QVBoxLayout(), QVBoxLayout()
         for i, c in enumerate(catalogue):
@@ -16438,6 +16450,15 @@ class GameWidget(QWidget):
         elif action[0] == "cmd":
             self._commande_remontee(action[1], action[2])
 
+    @staticmethod
+    def _panne_acquittable(q: dict) -> bool:
+        """« acquittable » de la 3D ; sans ce champ (télémesure plus ancienne) : phase active et pas grave."""
+        if not q:
+            return False
+        if "acquittable" in q:
+            return bool(q.get("acquittable"))
+        return q.get("gravite") != "grave" and q.get("phase", "active") == "active"
+
     def _draw_voyant(self, p: QPainter, r: QRectF, texte: str, on: bool) -> None:
         p.setBrush(QBrush(COLOR_ALARM if on else QColor(40, 46, 58)))
         p.setPen(_cached_pen(QColor(14, 16, 20), 1))
@@ -16649,7 +16670,8 @@ class GameWidget(QWidget):
             boutons.append((T("NEW SERVICE", "REMISE EN SERVICE"), "remise_service", None, False, COLOR_GOOD))
         for i, (lb, cmd, arg, on, cl) in enumerate(boutons):
             r = QRectF(x0 + 16 + (i % 3) * (bw + 4), y + (i // 3) * (bh + 4), bw, bh)
-            if cmd == "portes" and not d.get("a_quai"):
+            if (cmd == "portes" and not d.get("a_quai")) or (
+                    cmd == "secours" and d.get("secours_possible") is False and not d.get("secours")):
                 # (hors quai : bouton éteint, sans effet)
                 p.save()
                 p.setOpacity(p.opacity() * 0.4)
@@ -16677,9 +16699,10 @@ class GameWidget(QWidget):
         q0 = actives[0] if actives else {}
         cle_p = ("panne", str(q0.get("id", "")), str(q0.get("phase", "")), str(q0.get("gravite", "")),
                  str(q0.get("nom", "")), str(q0.get("quoi", "")), str(q0.get("faire", "")), str(q0.get("interdit", "")),
-                 len(actives), round(rp.width(), 1), round(rp.height(), 1), T("en", "fr"))
+                 len(actives), round(rp.width(), 1), round(rp.height(), 1), T("en", "fr"),
+                 bool(self._panne_acquittable(q0)), int(float(q0.get("reste", -1) or -1)))
         self._puce(p, cle_p, rp, lambda qq, rr: self._draw_panne_remontee(qq, rr, actives))
-        if actives and q0.get("gravite") != "grave" and q0.get("phase", "active") == "active":
+        if actives and self._panne_acquittable(q0):
             rb = QRectF(rp.right() - 130, rp.bottom() - 34, 120, 26)
             self._zone_remontee(rb, ("cmd", "acquitter", q0.get("id")))
 
@@ -16717,10 +16740,40 @@ class GameWidget(QWidget):
             self._draw_wrapped(p, str(q.get(cle, "")), QRectF(rp.x() + 78, yy, rp.width() - 88, haut),
                                _cached_font("Segoe UI", 8))
             yy += haut
-        if q.get("gravite") != "grave" and q.get("phase", "active") == "active":
-            rb = QRectF(rp.right() - 130, rp.bottom() - 34, 120, 26)
+        rb = QRectF(rp.right() - 130, rp.bottom() - 34, 120, 26)
+        if q.get("phase") == "evacuation":
+            # évacuation verticale : progression d'après « reste », rapporté à sa valeur au début de l'étape
+            reste = float(q.get("reste", -1) or -1)
+            cle_e = (str(q.get("id")), str(q.get("t", "")))
+            debuts = self.__dict__.setdefault("_evac_debut", {})
+            if reste >= 0 and (cle_e not in debuts or reste > debuts[cle_e]):
+                debuts[cle_e] = reste
+            total = debuts.get(cle_e, 0.0)
+            f = 1.0 - reste / total if total > 0 and reste >= 0 else 0.0
+            corde = q.get("evac", "corde") != "ski"
+            rbar = QRectF(rp.x() + 10, rb.y() + 4, rp.width() - 20, 18)
+            p.setBrush(QBrush(QColor(40, 46, 58)))
+            p.setPen(_cached_pen(COLOR_TEXT_DIM, 1))
+            p.drawRoundedRect(rbar, 4, 4)
+            p.setBrush(QBrush(QColor(230, 120, 40)))
+            p.setPen(Qt.PenStyle.NoPen)
+            p.drawRoundedRect(QRectF(rbar.x(), rbar.y(), rbar.width() * max(0.0, min(1.0, f)), rbar.height()), 4, 4)
+            p.setFont(_cached_font("Segoe UI", 8, QFont.Weight.Bold))
+            p.setPen(_cached_pen(QColor(255, 245, 235)))
+            p.drawText(rbar, int(Qt.AlignmentFlag.AlignCenter),
+                       (T("Vertical evacuation in progress", "Évacuation verticale en cours") if corde
+                        else T("Evacuation: skiers going down", "Évacuation : les skieurs redescendent"))
+                       + (f" — {f * 100:.0f} %" if total > 0 else "")
+                       + (T(f" ({reste:.0f} s left)", f" (encore {reste:.0f} s)") if reste >= 0 else ""))
+        elif self._panne_acquittable(q):
             self._draw_button_direct(p, rb.x(), rb.y(), rb.width(), rb.height(), T("FAULT DEALT WITH", "PANNE TRAITÉE"),
                                      False, COLOR_GOOD, QColor(10, 10, 10))
+        elif float(q.get("reste", -1) or -1) >= 0:
+            p.setFont(_cached_font("Segoe UI", 8, QFont.Weight.Bold))
+            p.setPen(_cached_pen(COLOR_WARN))
+            p.drawText(QRectF(rp.x() + 10, rb.y(), rp.width() - 20, rb.height()),
+                       int(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter),
+                       T(f"being dealt with: {float(q.get('reste')):.0f} s", f"traitement en cours : {float(q.get('reste')):.0f} s"))
 
     def _draw_volume(self, p: QPainter, r: QRectF) -> None:
         """Jauge du volume général : − [niveau] +. Les deux pavés passent
@@ -18147,6 +18200,14 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(f"{APP_NAME}  v{VERSION}")
         self.game = GameWidget(self)
         self.setCentralWidget(self.game)
+        # Tab replie le pupitre en surimpression (plein cadre) quel que soit le widget qui a le clavier : par
+        # GameWidget.event seul, Tab tapée pendant que le focus était ailleurs dans la fenêtre n'arrivait pas
+        # (essai du 15/11/2026)
+        from PyQt6.QtGui import QShortcut, QKeySequence
+        self._raccourci_tab = QShortcut(QKeySequence(Qt.Key.Key_Tab), self)
+        self._raccourci_tab.setContext(Qt.ShortcutContext.WindowShortcut)
+        self._raccourci_tab.activated.connect(
+            lambda: self.game.basculer_pupitre() if self.game._plein_cadre_3d() else None)
         self._placer_fenetre()
         ico = _resource_path("logo.ico")
         if ico.exists():
