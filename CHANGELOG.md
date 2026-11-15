@@ -5,6 +5,34 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.70.0 — 16 novembre 2026
+
+Retours d'essai sur iPad : pannes, évacuation, portes et quais des téléphériques, garde-fous, conduite du skieur.
+
+**Pannes des autres remontées** : au poste de chaque ligne, un bouton « TOUT RÉPARER ET REPARTIR » remet la ligne en service d'un geste (réarmement, remise, redémarrage).
+
+**Descente à la corde** : à bord d'une cabine ou d'un siège arrêté (panne ou arrêt demandé), le bouton CORDE fait descendre le skieur jusqu'au sol sous son véhicule.
+
+**Skieur** : la caméra suit le corps quand on pivote à l'arrêt et quand on marche ; on ne part plus de travers.
+
+**Téléphériques** : portes des deux côtés de la cabine, portillons de quai des deux côtés, main courante hors du passage ; à la Grande Motte, le portique qui barrait la bande de roulement est retiré, la tête du pylône suit la pente du câble, porte sa couronne (poteaux, traverses, mât, échelle) et ses galets tournent au passage.
+
+**Funival** : la voie porte le skieur de la gare aval au fond de la salle amont (on ne tombe plus sous le tunnel) ; la rame garde ses portes ouvertes pour celui qui entre ; fosse fermée aux deux bouts.
+
+**Garde-fous** : une sonde parcourt les quais et plates-formes des 136 gares (dont celles du Perce-Neige) et cherche les bords d'où l'on peut tomber ; corrigés : escaliers de la Grande Motte, escalier et pied de façade de la terrasse du haut du Perce-Neige (on tombait dans une fente de 2 à 9 m le long du mur), escaliers et bouts de voie du Funival, quais du Fornet. Plus aucun bord ouvert.
+
+**Restaurant Le Panoramic** : emprise relevée sur l'orthophoto, façade collée à la terrasse (plus de vide entre les deux), toit à facettes.
+
+**PC** : pupitre Qt allégé (23 → 14 % d'un cœur), bouton de réparation au pupitre, relais des versions allégées des véhicules sur puce intégrée.
+
+**Gares de plain-pied** : le terrain est nivelé sous les gares posées sur un versant (35 gares) : on arrive au niveau de la neige au lieu de monter sur un remblai ; les gares en creux ont leurs abords raccordés en pente douce.
+
+**PWA, relief plus détaillé autour de soi** : le sol est redécoupé deux fois plus fin dans un rayon de 800 m autour du point de vue, au fil du déplacement (jalons et panneaux reposés sur ce sol).
+
+**Piques** : 162 phrases de plus pour les pannes de chaque type de remontée, la reprise, le moteur de secours, l'évacuation, la descente à la corde, le dépannage d'un bouton, le départ refusé et la cabine qui attend.
+
+**Téléphérique du Fornet** : plus de sol sous les baies des cabines.
+
 ## 1.69.1 — 15 novembre 2026
 
 **Carte des pistes sur iPad** : toucher une remontée y redépose de nouveau le skieur. Depuis la 1.68, seul le premier doigt « numéro 0 » était pris en compte, alors que Safari numérote les doigts autrement : la carte ne réagissait plus au doigt sur la PWA.
