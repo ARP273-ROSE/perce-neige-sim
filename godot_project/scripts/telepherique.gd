@@ -17,6 +17,12 @@ const D_QUAI: float = 7.0              # du nez de gare au centre de la cabine �
 ## seul un quai est posé dedans.
 var gare_aval_existante: bool = false
 const T_QUAI: float = 45.0             # attente à quai (embarquement), s
+## Le véhicule attend le skieur qui arrive (question d'utilisateur du 15/11/2026 : « les TPH ou le Funival peuvent
+## m'attendre ? ») : portes ouvertes, tant qu'il se déplace à moins de R_ATTENTE m d'un quai, jusqu'à T_QUAI_MAX.
+const T_QUAI_MAX: float = 150.0
+const R_ATTENTE: float = 60.0
+var _t_quai_tot: float = 0.0
+var _t_attente: float = 0.0            # l'attente tient 3 s après le dernier signe du skieur (demi-tour, pause)
 const A_ROUTE: float = 0.6             # accélération / freinage de service (m/s²)
 const VOIE_TPH: float = 8.0            # écart des deux voies (photos du pylône)
 
@@ -132,6 +138,40 @@ func ouverture_portes() -> float:
 
 func portes_ouvertes() -> bool:
 	return ouverture_portes() > 0.5
+
+
+func _attendre_skieur(delta: float) -> bool:
+	if _skieur_attendu() or _skieur_marche_quai():
+		_t_attente = 3.0
+	else:
+		_t_attente = maxf(_t_attente - delta, 0.0)
+	return _t_attente > 0.0
+
+
+## Skieur qui marche sur un quai ou à bord (Funival : quais souterrains, voir son override).
+func _skieur_marche_quai() -> bool:
+	return false
+
+
+## Le skieur arrive vers un quai : il se déplace (à pied ou à ski, pas assis sur une autre remontée) à moins de
+## R_ATTENTE m (à plat) d'un quai et à moins de 25 m de sa hauteur.
+func _skieur_attendu() -> bool:
+	if not is_inside_tree():
+		return false
+	var mn: Node = get_tree().current_scene if get_tree().current_scene != null else get_tree().root.get_node_or_null("Main")
+	var sk: Node = mn.get("skieur") if mn != null else null
+	if sk == null or not (sk is CharacterBody3D) or not sk.get("actif") or sk.get("embarque"):
+		return false
+	var cb: CharacterBody3D = sk
+	if Vector2(cb.velocity.x, cb.velocity.z).length() < 0.3:
+		return false
+	var loc: Vector3 = global_transform.affine_inverse() * cb.global_position
+	var L: float = longueur_h()
+	for aval in [true, false]:
+		var x: float = _x_quai(aval)
+		if Vector2(loc.x, -loc.z - x).length() < R_ATTENTE and absf(loc.y - terrain(clampf(x, 0.0, L))) < 25.0:
+			return true
+	return false
 
 
 ## Passage auto ↔ manuel (ExploitationRemontee) : les portes reprennent là où elles en sont.
@@ -300,9 +340,13 @@ func _process_corps(delta: float) -> void:
 				_depart_demande = false
 				_phase = "route"
 		elif etat == "marche" and not depart_refuse():
-			_t_quai -= delta
+			_t_quai_tot += delta
+			# (portes encore ouvertes et skieur qui arrive : on l'attend)
+			if not (_t_quai - delta < 2.0 and _t_quai_tot < T_QUAI_MAX and _attendre_skieur(delta)):
+				_t_quai -= delta
 			if _t_quai <= 0.0:
 				_phase = "route"
+				_t_quai_tot = 0.0
 	else:
 		# vitesse permise : consigne, profil relevé au GPS (position de la cabine qui monte), freinage
 		# jusqu'au quai puis entrée en gare au pas
@@ -325,6 +369,7 @@ func _process_corps(delta: float) -> void:
 			_v = 0.0
 			_phase = "quai"
 			_t_quai = T_QUAI
+			_t_quai_tot = 0.0
 			_porte_anim = 0.0
 			_porte_cible = 0.0
 			_depart_demande = false
