@@ -823,6 +823,10 @@ func _tetes_teleski() -> void:
 		if pire[1] <= 0.0:
 			break
 		var nv: Dictionary = {"d": pire[1], "montee": [[4, "S"]], "descente": [[4, "S"]], "reconstitue": true}
+		# (ligne en virage : le pylône intercalé prend le décalage de l'axe à cet endroit, sinon decalage_montee
+		# ne trouvait plus de "x" partout et toute la ligne revenait droite)
+		if not pylones.is_empty() and (pylones[0] as Dictionary).has("x"):
+			nv["x"] = decalage_montee(pire[1])
 		var j: int = 0
 		while j < pylones.size() and float(pylones[j]["d"]) < pire[1]:
 			j += 1
@@ -1994,6 +1998,18 @@ func decalage_montee(d: float) -> float:
 	return lerpf(x0, 0.0, clampf((d - d0) / maxf(L - d0, 0.01), 0.0, 1.0))
 
 
+## Décalage du brin descente au droit de d : celui de l'axe pour un téléski coudé, nul sinon.
+func decalage_axe(d: float) -> float:
+	return decalage_montee(d) if axe_coude else 0.0
+
+
+## Cap local de l'axe au droit de d (radians, 0 : droit vers l'amont ; positif : vers +X).
+func cap_axe(d: float) -> float:
+	if not axe_coude:
+		return 0.0
+	return atan2(decalage_montee(d + 1.0) - decalage_montee(d - 1.0), 2.0)
+
+
 ## Longueur de l'évasement du rail avant le demi-tour.
 const L_EVASE: float = 6.0
 
@@ -2106,11 +2122,11 @@ func _boucle_ligne(pauses: bool, L: float, xm: float, xd: float, yb: float, R: f
 		var dd: PackedFloat64Array = _yc_boucle[2]
 		var yd: PackedFloat64Array = _yc_boucle[3]
 		for j2 in range(dd.size()):
-			_ajouter(Vector3(xd + decalage_descente(dd[j2]), yd[j2], -dd[j2]))
+			_ajouter(Vector3(xd + decalage_descente(dd[j2]) + decalage_axe(dd[j2]), yd[j2], -dd[j2]))
 	else:
 		var n_d: int = 0
 		while d > 0.0:
-			_ajouter(Vector3(xd + decalage_descente(d), y_cable(d, false), -d))
+			_ajouter(Vector3(xd + decalage_descente(d) + decalage_axe(d), y_cable(d, false), -d))
 			d -= _pas_ligne(d)
 			n_d += 1
 			if pauses and n_d % 8 == 0:
@@ -2488,6 +2504,10 @@ const PENTE_RAMPE: float = 0.10     # rampe d'accès côté portillons (10 %)
 ## par RemonteesDomaine d'après le relief, pour que la piste arrive à
 ## niveau du quai côté portillons (retour d'utilisateur, 23/10/2026).
 var rampes: Array = [0.0, 0.0]
+## Téléski à tracé coudé (TKD du 3000, orthophoto IGN) : les "x" des pylônes décalent l'AXE, les deux brins le
+## suivent et les pylônes portent les deux brins, tournés sur la bissectrice ; sans lui, seul le brin montée se
+## décale et la descente coupe le virage (24/10/2026).
+var axe_coude: bool = false
 
 
 ## Distance du nez de la gare au bout du quai, côté portillons.
@@ -4540,7 +4560,9 @@ func _poser_pylones_teleski() -> void:
 		var dx: float = float(p.get("x", 0.0))
 		var y_c: float = y_cable(float(p["d"]))
 		var postes: Array = []          # [x du câble montée, x du câble descente, côté]
-		if absf(dx) < 2.0:
+		if axe_coude:
+			postes.append([xm + dx, xd + dx, 0])
+		elif absf(dx) < 2.0:
 			postes.append([xm + dx, xd, 0])
 		else:
 			postes.append([xm + dx, 0.0, 1])
@@ -4588,6 +4610,17 @@ func _poser_pylones_teleski() -> void:
 			var t: float = float(sol_local.call(xc, -d)) if sol_local.is_valid() else terrain(d)
 			py.hauteur = y_c - t - py.dessus_traverse
 			py.position = Vector3(xc, t, -d)
+			if axe_coude:
+				# tourné sur la bissectrice du coude (traverse d'équerre à l'axe) ; virage : galets horizontaux
+				var dp2: float = float(pylones[i - 1]["d"]) if i > 0 else 0.0
+				var xp2: float = float(pylones[i - 1].get("x", 0.0)) if i > 0 else 0.0
+				var dn2: float = float(pylones[i + 1]["d"]) if i < pylones.size() - 1 else L
+				var xn2: float = float(pylones[i + 1].get("x", 0.0)) if i < pylones.size() - 1 else 0.0
+				var a_in: float = atan2(dx - xp2, maxf(d - dp2, 0.01))
+				var a_out: float = atan2(xn2 - dx, maxf(dn2 - d, 0.01))
+				py.rotation.y = -(a_in + a_out) * 0.5
+				py.virage = absf(a_out - a_in)
+				py.cote_corde = signf(a_in - a_out)
 			py.name = "P%d%s" % [i + 1, "" if cote == 0 else ("m" if cote == 1 else "d")]
 			_enfant(py)
 			py.construire()
