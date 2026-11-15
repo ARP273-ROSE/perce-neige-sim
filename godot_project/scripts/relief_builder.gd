@@ -804,13 +804,14 @@ var _raff_nx: int = 0
 ## Demande d'utilisateur (16/11/2026) : « plus de détail du relief au moins autour de la position sur la PWA ». Les
 ## mailles de 50 m à moins de FENETRE m de la caméra sont redécoupées à 25 m comme autour des gares (même
 ## coutures : sol fondu vers la grille à 25 m, poids nul au bord, pas de fente), les tuiles touchées refaites
-## par tranches de BUDGET_US quand la caméra s'est déplacée de plus d'un tiers du rayon. Désactivée par défaut :
+## par tranches de BUDGET_US quand la caméra s'est déplacée de plus d'un tiers du rayon. PWA : FENETRE_WEB par défaut ;
 ## --relief-fenetre=R (PC, maille à 50 m : crans ≥ 3) ou window.__pn_relief_fenetre = R (PWA).
 static var FENETRE: float = _fenetre_voulue()
 ## Sol affiché changé dans `rect` (monde, x/z) : les objets posés au sol une fois pour toutes (jalons, panneaux) s'y
 ## reposent, d'après ecart_sol.
 signal sol_modifie(rect: Rect2)
 const FENETRE_FONDU: float = 150.0
+const FENETRE_WEB: int = 800
 ## Bancs : point visé au lieu de la caméra (Vector3.INF : la caméra).
 static var cible_fenetre: Vector3 = Vector3.INF
 var _f_active: bool = false
@@ -830,7 +831,9 @@ static func _fenetre_voulue() -> float:
 		if a.begins_with("--relief-fenetre="):
 			return maxf(0.0, float(a.substr(17)))
 	if OS.has_feature("web"):
-		return maxf(0.0, float(JavaScriptBridge.eval("window.__pn_relief_fenetre||0", true)))
+		# (800 m par défaut depuis le 16/11/2026 : essai WebKit tactile à 1 000 m, 106 Mo de tampons avec comme sans,
+		# aucune perte de contexte ; window.__pn_relief_fenetre = 0 la coupe)
+		return maxf(0.0, float(JavaScriptBridge.eval("window.__pn_relief_fenetre ?? %d" % FENETRE_WEB, true)))
 	return 0.0
 
 
