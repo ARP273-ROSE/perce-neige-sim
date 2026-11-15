@@ -304,9 +304,17 @@ func _sur_sol_modifie(rect: Rect2) -> void:
 	for lot in _lots_sol:
 		if not (lot[0] as Rect2).has_area() or (lot[0] as Rect2).intersects(r):
 			_repose.append(["mm", r, lot[1], lot[2], 0])
-	_repose.append(["pan", r])
-	_repose.append(["num", r])
+	_repose.append(["pan", r, null, 0])
+	_repose.append(["num", r, null, 0])
 	set_process(true)
+
+
+func _cases_dans(cases: Dictionary, r: Rect2) -> Array:
+	var l: Array = []
+	for q in cases:
+		if Rect2(Vector2(q) * CASE_NUMERO, Vector2.ONE * CASE_NUMERO).intersects(r):
+			l.append(q)
+	return l
 
 
 func _decale(xf: Transform3D) -> Transform3D:
@@ -333,21 +341,27 @@ func _reposer_pas(fin_us: int) -> void:
 				if int(e[4]) < xs.size():
 					break
 			"pan":
-				# panneaux près de la caméra (faces comprises) : transformation d'origine gardée en 3e place
-				for q in _pan_cases:
-					var cq: Rect2 = Rect2(Vector2(q) * CASE_NUMERO, Vector2.ONE * CASE_NUMERO)
-					if not cq.intersects(r):
-						continue
+				# panneaux près de la caméra (faces comprises) : transformation d'origine gardée en 3e place ; case par case
+				if e[2] == null:
+					e[2] = _cases_dans(_pan_cases, r)
+				while int(e[3]) < (e[2] as Array).size():
+					var q = e[2][e[3]]
+					e[3] = int(e[3]) + 1
 					for p in _pan_cases[q]:
 						if (p as Array).size() < 3:
 							(p as Array).append(p[1])
 						p[1] = _decale(p[2])
-				_pan_sale = true
+					_pan_sale = true
+					if Time.get_ticks_usec() > fin_us:
+						break
+				if int(e[3]) < (e[2] as Array).size():
+					break
 			"num":
-				for q2 in _numeros:
-					var cq2: Rect2 = Rect2(Vector2(q2) * CASE_NUMERO, Vector2.ONE * CASE_NUMERO)
-					if not cq2.intersects(r):
-						continue
+				if e[2] == null:
+					e[2] = _cases_dans(_numeros, r)
+				while int(e[3]) < (e[2] as Array).size():
+					var q2 = e[2][e[3]]
+					e[3] = int(e[3]) + 1
 					for n in _numeros[q2]:
 						if (n as Array).size() < 3:
 							(n as Array).append(n[0])
@@ -358,6 +372,10 @@ func _reposer_pas(fin_us: int) -> void:
 							(l as Node).queue_free()
 						_cases_posees.erase(q2)
 						_case_cam = Vector2i(1 << 30, 0)
+					if Time.get_ticks_usec() > fin_us:
+						break
+				if int(e[3]) < (e[2] as Array).size():
+					break
 		_repose.pop_front()
 		if Time.get_ticks_usec() > fin_us:
 			break
