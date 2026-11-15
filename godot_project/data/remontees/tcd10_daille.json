@@ -11,7 +11,7 @@
  "debit": 2500.0,
  "espacement": 86.4,
  "voie": 6.1,
- "sens_droite": true,
+ "sens_droite": false,
  "diametre_cable": 52.0,
  "famille": "cabine_symphony",
  "aval": [

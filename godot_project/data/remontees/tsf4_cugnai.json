@@ -11,7 +11,7 @@
  "debit": 1200.0,
  "espacement": 27.6,
  "voie": 4.5,
- "sens_droite": true,
+ "sens_droite": false,
  "diametre_cable": 47.0,
  "famille": "siege_fixe_4",
  "aval": [

@@ -11,7 +11,7 @@
  "debit": 3000.0,
  "espacement": 60.0,
  "voie": 6.1,
- "sens_droite": true,
+ "sens_droite": false,
  "diametre_cable": 40.0,
  "famille": "siege_poma_ocr6",
  "aval": [
@@ -1372,7 +1372,7 @@
    ]
   },
   {
-   "d": 797.0,
+   "d": 809.0,
    "montee": [
     [
      6,
@@ -1387,7 +1387,7 @@
    ]
   },
   {
-   "d": 839.0,
+   "d": 848.0,
    "montee": [
     [
      8,

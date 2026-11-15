@@ -726,6 +726,9 @@ func _texte(t: String, pos: Vector3, taille: int, c: Color, px: float, normale: 
 func _terrasse() -> void:
 	_poly_plat("caillebotis", TERRASSE, -0.02)
 	_poly_plat("noir", TERRASSE, -0.25)
+	# plancher jusqu'au pied de la façade de tête (bench_garde_fous, 16/11/2026 : la terrasse s'arrêtait à 0,7 m du mur,
+	# une fente où le skieur tombait de 2 à 9 m de part et d'autre des portes)
+	_boite("caillebotis", 1.05, 0.42, -0.075, 17.5, 0.80, 0.10)
 	var poly: PackedVector2Array = PackedVector2Array(TERRASSE)
 	# pilotis tous les 5 m
 	var bb: Rect2 = Rect2(poly[0], Vector2.ZERO)
