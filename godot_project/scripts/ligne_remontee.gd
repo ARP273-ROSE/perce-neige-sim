@@ -5357,6 +5357,73 @@ func _etape_noyau(delta: float) -> void:
 static var LOINTAINS_DES: float = 120.0
 var _lointains: Array = []
 
+## Maillages des véhicules lointains simplifiés (relevé du 15/11/2026 : l'assise d'un siège 4 places
+## pesait 4 912 triangles, celle d'un 6 places 6 308, la cabine de la Tovière 10 172 ; dessinés tels
+## quels de 120 à 700 m, 46 sièges du Rosset faisaient 230 000 primitives, 100 du Palafour 630 000).
+## Simplification par meshoptimizer (ImporterMesh.generate_lods), le niveau le plus léger dont l'écart
+## reste sous LOINTAINS_ECART (en mètres, unité de Godot : environ deux fois l'écart géométrique) :
+## à 120 m, 5 cm d'écart font un demi-pixel en 4K. Mêmes matériaux, même éclairage. PWA inchangée
+## (elle n'a pas de noyau ; garde-fou en plus). --loin-complet : maillages complets, pour comparer.
+static var LOINTAINS_ECART: float = 0.05
+static var LOINTAINS_TRI_MIN: int = 300          # en deçà, rien à gagner
+static var _loin_allege: bool = not OS.has_feature("web") and not "--loin-complet" in OS.get_cmdline_user_args()
+static var _alleges: Dictionary = {}             # id du maillage → [maillage, allégé]
+static var _alleges_verrou: Mutex = Mutex.new()
+
+
+## Maillage simplifié pour le loin (ou `m` lui-même s'il n'y a rien à gagner).
+static func _maillage_loin(m: Mesh) -> Mesh:
+	if not _loin_allege or m == null:
+		return m
+	var cle: int = m.get_instance_id()
+	_alleges_verrou.lock()
+	var deja: Array = _alleges.get(cle, [])
+	_alleges_verrou.unlock()
+	if not deja.is_empty() and is_instance_valid(deja[0]) and deja[0] == m:
+		return deja[1]
+	var out: ArrayMesh = ArrayMesh.new()
+	var gagne: bool = false
+	var tabs: Array = []
+	for si in range(m.get_surface_count()):
+		var a: Array = MeshMerge.tableaux(m, si).duplicate()
+		if a.is_empty() or a[Mesh.ARRAY_VERTEX] == null:
+			return m
+		if a[Mesh.ARRAY_INDEX] == null:
+			# (pièces non indexées : soudées d'abord, sinon rien ne se simplifie)
+			var st: SurfaceTool = SurfaceTool.new()
+			st.create_from_arrays(a)
+			st.index()
+			a = st.commit_to_arrays()
+		var n0: int = (a[Mesh.ARRAY_INDEX] as PackedInt32Array).size()
+		var ix: PackedInt32Array = a[Mesh.ARRAY_INDEX]
+		if n0 / 3 >= LOINTAINS_TRI_MIN:
+			var im: ImporterMesh = ImporterMesh.new()
+			im.add_surface(Mesh.PRIMITIVE_TRIANGLES, a)
+			im.generate_lods(25.0, 60.0, [])
+			for l in range(im.get_surface_lod_count(0)):
+				if im.get_surface_lod_size(0, l) > LOINTAINS_ECART:
+					break
+				var li: PackedInt32Array = im.get_surface_lod_indices(0, l)
+				if li.size() >= 3 and li.size() < ix.size():
+					ix = li
+			if ix.size() < n0:
+				# (les niveaux renvoient aux sommets de la surface telle que generate_lods l'a laissée)
+				a = im.get_surface_arrays(0)
+				gagne = true
+		a[Mesh.ARRAY_INDEX] = ix
+		tabs.append(a)
+		out.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, a)
+		out.surface_set_material(si, m.surface_get_material(si))
+	var res: Mesh = out if gagne else m
+	if gagne:
+		# (copie processeur gardée : le miroir relit les tableaux, sans passer par la carte)
+		for si2 in range(tabs.size()):
+			MeshMerge.retenir(out, si2, tabs[si2])
+	_alleges_verrou.lock()
+	_alleges[cle] = [m, res]
+	_alleges_verrou.unlock()
+	return res
+
 
 func _creer_lointains() -> void:
 	for m in _lointains:
@@ -5382,7 +5449,8 @@ func _creer_lointains() -> void:
 			continue
 		var mm: MultiMesh = MultiMesh.new()
 		mm.transform_format = MultiMesh.TRANSFORM_3D
-		mm.mesh = mi.mesh if sens_droite else _maillage_miroir(mi.mesh)
+		var m_loin: Mesh = LigneRemontee._maillage_loin(mi.mesh)
+		mm.mesh = m_loin if sens_droite else _maillage_miroir(m_loin)
 		mm.instance_count = _vehicules.size()
 		# rien de dessiné tant que le noyau n'a pas tourné : le tampon neuf n'est pas initialisé, et
 		# une ligne construite trop loin pour tourner affichait la mémoire GPU réutilisée (silhouettes
@@ -5419,6 +5487,7 @@ func _creer_lointains() -> void:
 
 var _rids_loin: Array = []
 var _rels_loin: Array = []
+
 
 
 ## Portée des véhicules changée en jeu (régulateur) : la ligne et son noyau.
