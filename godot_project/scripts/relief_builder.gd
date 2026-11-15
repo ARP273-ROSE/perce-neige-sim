@@ -367,7 +367,10 @@ func _process(delta: float) -> void:
 
 func _process_corps(_delta: float) -> void:
 	if _etape >= 3:
-		set_process(false)
+		if _f_active:
+			_fenetre_pas(_delta)
+		else:
+			set_process(false)
 		return
 	if _tache >= 0:
 		if not WorkerThreadPool.is_task_completed(_tache):
@@ -454,11 +457,14 @@ func _decoder_ligne_lointaine(i: int) -> void:
 
 
 func _tableaux_tuile(t: Array) -> Array:
-	var nx: int = ReliefDonnees.NX
-	var nz: int = ReliefDonnees.NZ
-	var verts: PackedVector3Array = PackedVector3Array()
-	var uvs: PackedVector2Array = PackedVector2Array()
-	var idx: PackedInt32Array = PackedInt32Array()
+	var st: Dictionary = _tuile_debut(t)
+	_tuile_pas(st, 1 << 62)
+	return _tuile_fin(st)
+
+
+## Tuile du bloc détaillé en étapes reprenables (fenêtre fine de la PWA : par tranches de BUDGET_US) :
+## _tuile_debut, puis _tuile_pas jusqu'à vrai, puis _tuile_fin.
+func _tuile_debut(t: Array) -> Dictionary:
 	var lignes: Array = []
 	var cols: Array = []
 	var i: int = t[0]
@@ -473,52 +479,92 @@ func _tableaux_tuile(t: Array) -> Array:
 		if j >= t[3]:
 			break
 		j = mini(j + _pas, t[3])
+	return {"lignes": lignes, "cols": cols, "verts": PackedVector3Array(), "uvs": PackedVector2Array(),
+		"normales": PackedVector3Array(), "idx": PackedInt32Array(), "extra": {}, "ph": 0, "r": 0}
+
+
+func _tuile_pas(st: Dictionary, fin_us: int) -> bool:
+	var nx: int = ReliefDonnees.NX
+	var nz: int = ReliefDonnees.NZ
+	var lignes: Array = st["lignes"]
+	var cols: Array = st["cols"]
 	var w: int = cols.size()
-	var normales: PackedVector3Array = PackedVector3Array()
-	for ii in lignes:
-		for jj in cols:
-			verts.append(Vector3(ReliefDonnees.X_OUEST + jj * _dx, _h[ii * nx + jj],
-				ReliefDonnees.Z_NORD + ii * _dz))
-			uvs.append(Vector2(float(jj) / (nx - 1), float(ii) / (nz - 1)))
-			normales.append(_normale_grille(_h, nx, nz, ii, jj, _dx, _dz))
-	var extra: Dictionary = {}          # nœud intermédiaire (mailles redécoupées) → sommet
-	for a_i in range(lignes.size() - 1):
-		for a_j in range(w - 1):
-			var a: int = a_i * w + a_j
-			var ia: int = lignes[a_i]
-			var ja: int = cols[a_j]
-			if _pas > 1 and lignes[a_i + 1] - ia == _pas and cols[a_j + 1] - ja == _pas \
-					and raffine_maille(ia / _pas, ja / _pas):
-				# maille redécoupée : quatre carrés de 25 m, même découpe
-				var ids: Array = []
-				for di in range(_pas + 1):
-					for dj in range(_pas + 1):
-						if di % _pas == 0 and dj % _pas == 0:
-							ids.append(a + (di / _pas) * w + dj / _pas)
-							continue
-						var kk: int = (ia + di) * nx + ja + dj
-						if not extra.has(kk):
-							extra[kk] = verts.size()
-							verts.append(Vector3(ReliefDonnees.X_OUEST + (ja + dj) * _dx, _h[kk], ReliefDonnees.Z_NORD + (ia + di) * _dz))
-							uvs.append(Vector2(float(ja + dj) / (nx - 1), float(ia + di) / (nz - 1)))
-							normales.append(_normale_grille(_h, nx, nz, ia + di, ja + dj, _dx, _dz))
-						ids.append(extra[kk])
-				var m: int = _pas + 1
-				for si in range(_pas):
-					for sj in range(_pas):
-						var q0: int = ids[si * m + sj]
-						var q1: int = ids[si * m + sj + 1]
-						var q2: int = ids[(si + 1) * m + sj]
-						var q3: int = ids[(si + 1) * m + sj + 1]
-						idx.append_array(PackedInt32Array([q0, q1, q2, q1, q3, q2]))
-				continue
-			idx.append_array(PackedInt32Array([a, a + 1, a + w, a + 1, a + w + 1, a + w]))
+	var verts: PackedVector3Array = st["verts"]
+	var uvs: PackedVector2Array = st["uvs"]
+	var normales: PackedVector3Array = st["normales"]
+	var idx: PackedInt32Array = st["idx"]
+	var extra: Dictionary = st["extra"]          # nœud intermédiaire (mailles redécoupées) → sommet
+	# (sorties de l'état le temps du pas : sinon chaque ajout recopiait le tableau partagé)
+	st["verts"] = null
+	st["uvs"] = null
+	st["normales"] = null
+	st["idx"] = null
+	var fini: bool = false
+	while true:
+		if st["ph"] == 0:
+			# sommets de la grille de la tuile, une ligne à la fois
+			var ii: int = lignes[st["r"]]
+			for jj in cols:
+				verts.append(Vector3(ReliefDonnees.X_OUEST + jj * _dx, _h[ii * nx + jj],
+					ReliefDonnees.Z_NORD + ii * _dz))
+				uvs.append(Vector2(float(jj) / (nx - 1), float(ii) / (nz - 1)))
+				normales.append(_normale_grille(_h, nx, nz, ii, jj, _dx, _dz))
+			st["r"] += 1
+			if st["r"] >= lignes.size():
+				st["ph"] = 1
+				st["r"] = 0
+		else:
+			if st["r"] >= lignes.size() - 1:
+				fini = true
+				break
+			var a_i: int = st["r"]
+			for a_j in range(w - 1):
+				var a: int = a_i * w + a_j
+				var ia: int = lignes[a_i]
+				var ja: int = cols[a_j]
+				if _pas > 1 and lignes[a_i + 1] - ia == _pas and cols[a_j + 1] - ja == _pas \
+						and raffine_maille(ia / _pas, ja / _pas):
+					# maille redécoupée : quatre carrés de 25 m, même découpe
+					var ids: Array = []
+					for di in range(_pas + 1):
+						for dj in range(_pas + 1):
+							if di % _pas == 0 and dj % _pas == 0:
+								ids.append(a + (di / _pas) * w + dj / _pas)
+								continue
+							var kk: int = (ia + di) * nx + ja + dj
+							if not extra.has(kk):
+								extra[kk] = verts.size()
+								verts.append(Vector3(ReliefDonnees.X_OUEST + (ja + dj) * _dx, _h[kk], ReliefDonnees.Z_NORD + (ia + di) * _dz))
+								uvs.append(Vector2(float(ja + dj) / (nx - 1), float(ia + di) / (nz - 1)))
+								normales.append(_normale_grille(_h, nx, nz, ia + di, ja + dj, _dx, _dz))
+							ids.append(extra[kk])
+					var m: int = _pas + 1
+					for si in range(_pas):
+						for sj in range(_pas):
+							var q0: int = ids[si * m + sj]
+							var q1: int = ids[si * m + sj + 1]
+							var q2: int = ids[(si + 1) * m + sj]
+							var q3: int = ids[(si + 1) * m + sj + 1]
+							idx.append_array(PackedInt32Array([q0, q1, q2, q1, q3, q2]))
+					continue
+				idx.append_array(PackedInt32Array([a, a + 1, a + w, a + 1, a + w + 1, a + w]))
+			st["r"] += 1
+		if Time.get_ticks_usec() > fin_us:
+			break
+	st["verts"] = verts
+	st["uvs"] = uvs
+	st["normales"] = normales
+	st["idx"] = idx
+	return fini
+
+
+func _tuile_fin(st: Dictionary) -> Array:
 	var arr: Array = []
 	arr.resize(Mesh.ARRAY_MAX)
-	arr[Mesh.ARRAY_VERTEX] = verts
-	arr[Mesh.ARRAY_NORMAL] = normales
-	arr[Mesh.ARRAY_TEX_UV] = uvs
-	arr[Mesh.ARRAY_INDEX] = idx
+	arr[Mesh.ARRAY_VERTEX] = st["verts"]
+	arr[Mesh.ARRAY_NORMAL] = st["normales"]
+	arr[Mesh.ARRAY_TEX_UV] = st["uvs"]
+	arr[Mesh.ARRAY_INDEX] = st["idx"]
 	return arr
 
 
@@ -613,6 +659,10 @@ func _creer_maillages(fin_us: int) -> void:
 			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 			mi.layers = 1 | Cabin.LAYER_RELIEF
 			add_child(mi)
+			if FENETRE > 0.0:
+				if _mi_tuiles.size() != _tuiles.size():
+					_mi_tuiles.resize(_tuiles.size())
+				_mi_tuiles[_k] = mi
 		_tableaux[_k] = null
 		_k += 1
 		if Time.get_ticks_usec() > fin_us:
@@ -748,6 +798,211 @@ const RAFFINE_ECART: float = 0.5
 const RAFFINE_ECHANT: float = 10.0      # m de raccord vers le sol à 50 m
 var _raffine: PackedByteArray = PackedByteArray()     # par maille de 50 m : 1 si redécoupée
 var _raff_nx: int = 0
+
+
+## --- Fenêtre fine autour du point de vue (PWA, maille à 50 m) -----------------------------------------------
+## Demande d'utilisateur (16/11/2026) : « plus de détail du relief au moins autour de la position sur la PWA ». Les
+## mailles de 50 m à moins de FENETRE m de la caméra sont redécoupées à 25 m comme autour des gares (même
+## coutures : sol fondu vers la grille à 25 m, poids nul au bord, pas de fente), les tuiles touchées refaites
+## par tranches de BUDGET_US quand la caméra s'est déplacée de plus d'un tiers du rayon. Désactivée par défaut :
+## --relief-fenetre=R (PC, maille à 50 m : crans ≥ 3) ou window.__pn_relief_fenetre = R (PWA).
+static var FENETRE: float = _fenetre_voulue()
+const FENETRE_FONDU: float = 150.0
+## Bancs : point visé au lieu de la caméra (Vector3.INF : la caméra).
+static var cible_fenetre: Vector3 = Vector3.INF
+var _f_active: bool = false
+var _h_aff0: PackedFloat32Array = PackedFloat32Array()     # sol affiché après les gares (référence)
+var _raffine0: PackedByteArray = PackedByteArray()
+var _mi_tuiles: Array = []
+var _f_centre: Vector2 = Vector2.INF
+var _f_cellules: PackedInt32Array = PackedInt32Array()       # mailles de 50 m de la fenêtre en place
+var _f_job: Dictionary = {}
+var _f_t: float = 0.0
+## Relevés (bancs) : dernière reconstruction.
+var fenetre_stats: Dictionary = {}
+
+
+static func _fenetre_voulue() -> float:
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--relief-fenetre="):
+			return maxf(0.0, float(a.substr(17)))
+	if OS.has_feature("web"):
+		return maxf(0.0, float(JavaScriptBridge.eval("window.__pn_relief_fenetre||0", true)))
+	return 0.0
+
+
+func _fenetre_initialiser() -> void:
+	var p: int = _pas
+	_raff_nx = (ReliefDonnees.NX - 1) / p
+	var raff_nz: int = (ReliefDonnees.NZ - 1) / p
+	if _raffine.size() != _raff_nx * raff_nz:
+		_raffine = PackedByteArray()
+		_raffine.resize(_raff_nx * raff_nz)
+	_h_aff0 = _h.duplicate()
+	_raffine0 = _raffine.duplicate()
+	_f_active = true
+
+
+func _cible_fenetre() -> Vector2:
+	if cible_fenetre != Vector3.INF:
+		return Vector2(cible_fenetre.x, cible_fenetre.z)
+	var cam: Camera3D = get_viewport().get_camera_3d() if get_viewport() != null else null
+	if cam == null:
+		return Vector2.INF
+	return Vector2(cam.global_position.x, cam.global_position.z)
+
+
+func _fenetre_pas(delta: float) -> void:
+	var fin: int = Time.get_ticks_usec() + BUDGET_US
+	if _f_job.is_empty():
+		_f_t += delta
+		if _f_t < 0.5 and cible_fenetre == Vector3.INF:
+			return
+		_f_t = 0.0
+		var c: Vector2 = _cible_fenetre()
+		if c == Vector2.INF or (_f_centre != Vector2.INF and c.distance_to(_f_centre) < FENETRE / 3.0):
+			return
+		_f_job = _fenetre_preparer(c)
+	var t0: int = Time.get_ticks_usec()
+	_fenetre_avancer(fin)
+	var dt: float = (Time.get_ticks_usec() - t0) / 1000.0
+	if not _f_job.is_empty():
+		_f_job["pire_ms"] = maxf(float(_f_job["pire_ms"]), dt)
+		_f_job["images"] = int(_f_job["images"]) + 1
+
+
+func _fenetre_preparer(c: Vector2) -> Dictionary:
+	var t0: int = Time.get_ticks_usec()
+	var p: int = _pas
+	var raff_nz: int = (ReliefDonnees.NZ - 1) / p
+	var taille: float = _dx * p
+	var r: float = FENETRE + taille
+	var ci0: int = clampi(int((c.y - r - ReliefDonnees.Z_NORD) / (_dz * p)), 0, raff_nz - 1)
+	var ci1: int = clampi(int((c.y + r - ReliefDonnees.Z_NORD) / (_dz * p)), 0, raff_nz - 1)
+	var cj0: int = clampi(int((c.x - r - ReliefDonnees.X_OUEST) / taille), 0, _raff_nx - 1)
+	var cj1: int = clampi(int((c.x + r - ReliefDonnees.X_OUEST) / taille), 0, _raff_nx - 1)
+	var nouv: PackedInt32Array = PackedInt32Array()
+	for ci in range(ci0, ci1 + 1):
+		for cj in range(cj0, cj1 + 1):
+			var cc: Vector2 = Vector2(ReliefDonnees.X_OUEST + (cj + 0.5) * taille, ReliefDonnees.Z_NORD + (ci + 0.5) * _dz * p)
+			if cc.distance_to(c) < FENETRE + taille * 0.75:
+				nouv.append(ci * _raff_nx + cj)
+	# mailles à reprendre : l'ancienne fenêtre et la nouvelle
+	var dans_nouv: Dictionary = {}
+	for k in nouv:
+		dans_nouv[k] = true
+	var toutes: Dictionary = dans_nouv.duplicate()
+	for k2 in _f_cellules:
+		toutes[k2] = true
+	return {"centre": c, "nouv": nouv, "dans_nouv": dans_nouv, "cellules": PackedInt32Array(toutes.keys()),
+		"i": 0, "tuiles": [], "it": 0, "st": {}, "pire_ms": (Time.get_ticks_usec() - t0) / 1000.0, "images": 1,
+		"t0": t0, "noeuds": 0, "imin": 1 << 30, "imax": -1, "jmin": 1 << 30, "jmax": -1}
+
+
+## Altitude affichée d'un nœud d'une maille de la nouvelle fenêtre : sol de référence (gares comprises, sinon
+## sol à 50 m sous ses triangles) fondu vers la grille à 25 m ; poids nul au bord de la fenêtre.
+func _fenetre_noeud(i: int, j: int, c: Vector2) -> float:
+	var n: int = ReliefDonnees.NX
+	var p: int = _pas
+	var k: int = i * n + j
+	var x: float = ReliefDonnees.X_OUEST + j * _dx
+	var z: float = ReliefDonnees.Z_NORD + i * _dz
+	var poids: float = 1.0 - smoothstep(FENETRE - FENETRE_FONDU, FENETRE, Vector2(x, z).distance_to(c))
+	var base: float = _h_aff0[k]
+	if not (i % p == 0 and j % p == 0) and not _noeud_raffine0(i, j):
+		base = _tri_sur(_h_aff0, x, z, p)
+	return lerpf(base, _h25[k], poids)
+
+
+func _noeud_raffine0(i: int, j: int) -> bool:
+	var p: int = _pas
+	var raff_nz: int = (ReliefDonnees.NZ - 1) / p
+	for ci in [i / p, (i - 1) / p]:
+		for cj in [j / p, (j - 1) / p]:
+			if ci >= 0 and cj >= 0 and ci < raff_nz and cj < _raff_nx and _raffine0[ci * _raff_nx + cj] == 1:
+				return true
+	return false
+
+
+func _fenetre_avancer(fin_us: int) -> void:
+	var job: Dictionary = _f_job
+	var n: int = ReliefDonnees.NX
+	var p: int = _pas
+	var c: Vector2 = job["centre"]
+	var cellules: PackedInt32Array = job["cellules"]
+	var dans_nouv: Dictionary = job["dans_nouv"]
+	# 1. altitudes et marques des mailles reprises
+	while job["i"] < cellules.size():
+		var kc: int = cellules[job["i"]]
+		job["i"] += 1
+		var ci: int = kc / _raff_nx
+		var cj: int = kc % _raff_nx
+		var garder: bool = dans_nouv.has(kc)
+		for di in range(p + 1):
+			for dj in range(p + 1):
+				var i: int = ci * p + di
+				var j: int = cj * p + dj
+				if i >= ReliefDonnees.NZ or j >= n:
+					continue
+				# (nœud partagé avec une maille de la nouvelle fenêtre : c'est elle qui décide)
+				var dedans: bool = garder or _noeud_dans(i, j, dans_nouv)
+				_h[i * n + j] = _fenetre_noeud(i, j, c) if dedans else _h_aff0[i * n + j]
+				job["noeuds"] += 1
+		_raffine[kc] = 1 if garder else _raffine0[kc]
+		job["imin"] = mini(int(job["imin"]), ci * p)
+		job["imax"] = maxi(int(job["imax"]), ci * p + p)
+		job["jmin"] = mini(int(job["jmin"]), cj * p)
+		job["jmax"] = maxi(int(job["jmax"]), cj * p + p)
+		if Time.get_ticks_usec() > fin_us:
+			return
+	# 2. tuiles touchées, refaites une à une par tranches
+	if job["tuiles"].is_empty() and job["it"] == 0:
+		# tuiles du bloc qui croisent l'étendue des nœuds repris (bornes comprises : une tuile voisine partage
+		# ses nœuds de bord) — la recherche maille par maille faisait une image de 30 ms
+		var tl: Dictionary = {}
+		for k in range(_tuiles.size()):
+			var t: Array = _tuiles[k]
+			if not t[4] and int(job["imin"]) <= t[1] and int(job["imax"]) >= t[0] and int(job["jmin"]) <= t[3] and int(job["jmax"]) >= t[2]:
+				tl[k] = true
+		job["tuiles"] = tl.keys()
+	while job["it"] < (job["tuiles"] as Array).size():
+		var kt: int = job["tuiles"][job["it"]]
+		if (job["st"] as Dictionary).is_empty():
+			job["st"] = _tuile_debut(_tuiles[kt])
+		if not _tuile_pas(job["st"], fin_us):
+			return
+		var arr: Array = _tuile_fin(job["st"])
+		job["st"] = {}
+		job["it"] += 1
+		if kt < _mi_tuiles.size() and _mi_tuiles[kt] != null:
+			var mesh: ArrayMesh = ArrayMesh.new()
+			mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
+			mesh.surface_set_material(0, _mat_terrain)
+			(_mi_tuiles[kt] as MeshInstance3D).mesh = mesh
+		if Time.get_ticks_usec() > fin_us:
+			return
+	# 3. fini
+	_f_centre = c
+	_f_cellules = job["nouv"]
+	var tri: int = 0
+	for mi in _mi_tuiles:
+		if mi != null and (mi as MeshInstance3D).mesh != null:
+			tri += (mi as MeshInstance3D).mesh.surface_get_array_index_len(0) / 3
+	fenetre_stats = {"mailles": (job["nouv"] as PackedInt32Array).size(), "reprises": cellules.size(),
+		"noeuds": job["noeuds"], "tuiles": (job["tuiles"] as Array).size(), "images": job["images"],
+		"pire_ms": job["pire_ms"], "total_ms": (Time.get_ticks_usec() - int(job["t0"])) / 1000.0, "triangles_bloc": tri}
+	print("[Relief] fenêtre à 25 m autour de (%.0f, %.0f) : %d mailles de 50 m redécoupées, %d tuiles refaites en %d images (pire %.1f ms), %d triangles dans le bloc" % [
+		c.x, c.y, fenetre_stats["mailles"], fenetre_stats["tuiles"], fenetre_stats["images"], fenetre_stats["pire_ms"], tri])
+	_f_job = {}
+
+
+func _noeud_dans(i: int, j: int, dans_nouv: Dictionary) -> bool:
+	var p: int = _pas
+	for ci in [i / p, (i - 1) / p]:
+		for cj in [j / p, (j - 1) / p]:
+			if ci >= 0 and cj >= 0 and cj < _raff_nx and dans_nouv.has(ci * _raff_nx + cj):
+				return true
+	return false
 
 
 func raffine_ici(x: float, z: float) -> bool:
@@ -918,6 +1173,8 @@ func _creuser_gares() -> void:
 	_creuser_gares_corps()
 	if _pas > 1 and not _h25.is_empty() and not "--sans-raffine" in OS.get_cmdline_user_args():
 		_raffiner_gares()
+	if FENETRE > 0.0 and _pas > 1 and not _h25.is_empty():
+		_fenetre_initialiser()
 	# (relief fin : il a son propre sol. Maille à 50 m : seule sa copie à 25 m est plafonnée, plus haut)
 	if _pas == 1 and not ReliefFin.voulu(_cran_depart):
 		_plafonner_grille()
