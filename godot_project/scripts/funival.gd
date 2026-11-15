@@ -27,8 +27,7 @@ const A_ACCOSTAGE: float = 0.30
 const K_COURBE: float = 0.85
 ## Attente à quai : 45 s (téléphérique), prolongée tant que le skieur marche dans le véhicule ou sur ses quais, portes
 ## ouvertes, jusqu'à T_QUAI_MAX (« le funi part trop vite quand on monte l'escalier en gare aval, pas le temps d'aller
-## jusqu'en tête », 09/11/2026).
-const T_QUAI_MAX: float = 150.0
+## jusqu'en tête », 09/11/2026) ; et tant qu'il arrive vers un quai (Telepherique._skieur_attendu, 15/11/2026).
 const ECARTEMENT: float = 1.20          # m (OSM, Wikipédia)
 const E_VOIES: float = 2.35             # entraxe : rails intérieurs à ~1,15 m, au plus l'écartement (1,20 m), un peu moins (utilisateur, à l'œil sur la vidéo de descente, 08/11/2026)
 ## Évitement mesuré sur la vidéo de la montée en cabine de conduite (KxhTv7cGK-I, demande d'utilisateur du 09/11/2026 :
@@ -2023,10 +2022,13 @@ func _maj_corps_skieur() -> void:
 		_relief_ote = false
 
 
-var _t_quai_tot: float = 0.0
 
 
 ## Skieur qui marche dans une gare (quais, escaliers) ou dans un véhicule à quai.
+func _skieur_marche_quai() -> bool:
+	return _skieur_marche_en_gare()
+
+
 func _skieur_marche_en_gare() -> bool:
 	if not is_inside_tree():
 		return false
@@ -2149,7 +2151,7 @@ func _process_corps(delta: float) -> void:
 		elif etat == "marche" and not (depart_refuse() and _t_quai <= 0.5):
 			_t_quai_tot += delta
 			# (portes encore ouvertes et skieur qui marche à quai ou à bord : on l'attend)
-			if not (_t_quai - delta < 2.0 and _t_quai_tot < T_QUAI_MAX and _skieur_marche_en_gare()):
+			if not (_t_quai - delta < 2.0 and _t_quai_tot < T_QUAI_MAX and _attendre_skieur(delta)):
 				_t_quai -= delta
 			if _t_quai <= 0.0:
 				_phase = "route"
