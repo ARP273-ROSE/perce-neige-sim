@@ -44,6 +44,18 @@ func _vues_de(lg: LigneRemontee) -> Array:
 		v.append([n + "_tete_dessus", xf * Vector3(0.0, yc + 7.0, -dd + 11.0), xf * Vector3(0, yc - 1.0, -dd - 3.0)])
 		v.append([n + "_tete_cote", xf * Vector3(-13.0, yc + 1.5, -dd + 3.0), xf * Vector3(0, yc - 0.5, -dd)])
 		v.append([n + "_tete_voie", xf * Vector3(lg.voie * 0.5 + 0.2, yc + 1.2, -dd + 9.0), xf * Vector3(lg.voie * 0.5, yc - 0.3, -dd)])
+	# va-et-vient : la cabine à quai, des deux côtés (portes), et son intérieur
+	if lg is Telepherique and not (lg is Funival) and lg.nombre_vehicules() > 0:
+		for i in range(lg.nombre_vehicules()):
+			if lg.zone_vehicule(i) == "ligne":
+				continue
+			var cv: Vector3 = lg.vehicule(i).global_position + Vector3(0, -VehiculeRemontee.H_SUSP_TPH - 1.5, 0)
+			var bx: Vector3 = lg.global_transform.basis.x
+			var bz: Vector3 = lg.global_transform.basis.z
+			v.append([n + "_cabine_droite", cv + bx * 7.5 + bz * 3.0 + Vector3(0, 1.0, 0), cv])
+			v.append([n + "_cabine_gauche", cv - bx * 7.5 + bz * 3.0 + Vector3(0, 1.0, 0), cv])
+			v.append([n + "_cabine_dedans", cv + bz * 2.3 + Vector3(0, 0.4, 0), cv - bz * 2.0 + bx * 0.8 - Vector3(0, 0.3, 0)])
+			break
 	v.append([n + "_ensemble", xf * Vector3(-L * 0.45, lg.terrain(L * 0.5) + L * 0.2, -L * 0.25),
 		xf * Vector3(0, lg.terrain(L * 0.5) + 15, -L * 0.5)])
 	v.append([n + "_gare_amont", xf * Vector3(16, lg.terrain(L - 30.0) + 6.0, -L + 30.0),

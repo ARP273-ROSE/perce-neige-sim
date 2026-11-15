@@ -128,8 +128,10 @@ func _tick() -> void:
 				var zc: float = -L4 - Telepherique.D_QUAI
 				var zf: float = -L4 - TphGrandeMotte.L_BAIE - 3.4
 				var W4: float = 4.5 + TphGrandeMotte.DEMI_BAIE + 1.4
+				# --gauche : par l'autre porte (face −x de la cabine, 16/11/2026)
+				var cote4: float = -1.0 if "--gauche" in OS.get_cmdline_user_args() else 1.0
 				# par la porte, le long du quai, au fond, palier de l'escalier (à gauche), bas de l'escalier
-				var pts: Array = [Vector3(cx + 2.3, yq + 0.2, zc), Vector3(cx + 2.3, yq + 0.2, zc - 3.2), Vector3(cx + 2.3, yq + 0.2, zf + 1.1), Vector3(-W4 - 0.8, yq + 0.2, zf + 1.1),
+				var pts: Array = [Vector3(cx + cote4 * 2.3, yq + 0.2, zc), Vector3(cx + cote4 * 2.3, yq + 0.2, zc - 3.2), Vector3(cx + cote4 * 2.3, yq + 0.2, zf + 1.1), Vector3(-W4 - 0.8, yq + 0.2, zf + 1.1),
 					Vector3(-W4 - 0.8, yq + 0.2, zf + 2.4), Vector3(-W4 - 0.8, yq, zf + 2.2 + 10.5)]
 				sk.chemin = [_lg.global_transform * pts[_etape]]
 				_etape += 1
