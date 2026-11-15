@@ -213,6 +213,10 @@ func _tick() -> void:
 			var rz: Array = [Rect2(o.x - 12.0, o.z - 12.0, 24.0, 24.0), o.y + 8.0]
 			for _k in range(max(1, relief._rects_pieces.size() / 6)):
 				_zones.append(rz)
+		# --palier : seulement le replat du Fornet et du Vallon (2 322,9 m), pour l'examiner seul
+		if "--palier" in OS.get_cmdline_user_args():
+			_zones = _zones.filter(func(z): return (z[0] as Rect2).grow(30.0).has_point(Vector2(9285.0, 1058.0)))
+			print("PALIER zones : ", _zones)
 		sk.chausser(false) if sk.has_method("chausser") else null
 		sk.chausse = false
 		_st = 10
