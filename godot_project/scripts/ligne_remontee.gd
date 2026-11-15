@@ -5309,6 +5309,9 @@ func _noyau_valide() -> bool:
 	return _noyau_n == _vehicules.size() and not noyau_desactive
 
 
+var _paquets_prec: PackedFloat32Array = PackedFloat32Array()
+
+
 func _etape_noyau(delta: float) -> void:
 	_noyau.set_vitesse(vitesse)
 	if _noyau.has_method("set_vent"):
@@ -5331,7 +5334,10 @@ func _etape_noyau(delta: float) -> void:
 		_dt = dt0
 	if actives:
 		var q: PackedFloat32Array = _noyau.get_paquets()
-		if q.size() >= 258:
+		# (rien de changé — ligne arrêtée, véhicules en gare — : ni paquets ni uniformes à reposer ; audit du
+		# 16/11/2026 : 64 Vector4 et deux uniformes par matériau reposés à chaque image)
+		if q.size() >= 258 and q != _paquets_prec:
+			_paquets_prec = q
 			var listes: Array = [[], []]
 			for k in range(2):
 				var packs: PackedVector4Array = PackedVector4Array()
