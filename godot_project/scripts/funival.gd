@@ -2138,11 +2138,13 @@ func _process_corps(delta: float) -> void:
 	if delta < 0.0:
 		return
 	_dt = delta
+	if _exploit != null:
+		_exploit.avancer(delta)
 	var but: float = _x_quai(false) if _sens > 0.0 else _x_quai(true)
 	if _phase == "quai":
 		_v = 0.0
 		vitesse_reelle = 0.0
-		if etat == "marche":
+		if etat == "marche" and not (depart_refuse() and _t_quai <= 0.5):
 			_t_quai_tot += delta
 			# (portes encore ouvertes et skieur qui marche à quai ou à bord : on l'attend)
 			if not (_t_quai - delta < 2.0 and _t_quai_tot < T_QUAI_MAX and _skieur_marche_en_gare()):
@@ -2151,7 +2153,7 @@ func _process_corps(delta: float) -> void:
 				_phase = "route"
 				_t_quai_tot = 0.0
 	else:
-		var v_max: float = vitesse * CRANS[cran]
+		var v_max: float = vitesse * CRANS[cran] * cap_exploitation()
 		# évitement : on y entre à V_EVIT, freinage anticipé (les deux véhicules y entrent ensemble)
 		var c_ev: float = longueur_h() * 0.5
 		# (tant qu'une partie du véhicule est sur les aiguillages)

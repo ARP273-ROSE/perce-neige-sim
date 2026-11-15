@@ -102,6 +102,11 @@ func _skieur_prep(texte: String, ms: int = -1) -> void:
 var _paliers_en_gare: bool = true
 var _seuils_fermes: int = -1            # seuils des portes en collision (portes fermées) ; -1 inconnu
 var _skieur_etat_envoye: Array = []
+# Télémesure du pupitre de la remontée vers le PC (_cuites/chantier_pupitres/SPEC.md) : ~5 paquets/s, catalogue des
+# pannes à l'arrivée sur une ligne puis toutes les 5 s, {"remontee": null} quand on s'en éloigne
+var _t_remontee: float = 0.0
+var _t_catalogue: float = 0.0
+var _remontee_envoyee: String = ""
 var _skieur_place: bool = false        # déjà posé une fois (on le retrouve où on l'a laissé)
 var _skieur_au_poste: bool = false     # assis au poste : la vue cabine est la sienne
 var _skieur_voiture: Node3D = null     # voiture où il était en quittant la vue skieur
@@ -1690,6 +1695,15 @@ func _unhandled_input(event: InputEvent) -> void:
 			and _relayer_touche_pc(event):
 		get_viewport().set_input_as_handled()
 		return
+	# Skieur dans la vue 3D du PC (le clavier est dans la fenêtre 3D) : les touches de l'écran du PC lui reviennent —
+	# Tab replie le pupitre en surimpression, F12 / F11 / Échap règlent le plein écran (15/11/2026)
+	if client_mode and mode_skieur and event is InputEventKey and not event.echo and state_receiver != null:
+		var nom_ecran: String = {KEY_TAB: "Tab", KEY_F12: "F12", KEY_F11: "F11", KEY_ESCAPE: "Escape"}.get(
+			(event as InputEventKey).keycode, "")
+		if nom_ecran != "":
+			state_receiver.envoyer({"cle": nom_ecran, "enfonce": event.pressed})
+			get_viewport().set_input_as_handled()
+			return
 	# Pannes + auto-exploitation + inversion de sens
 	if event is InputEventKey and event.pressed and not event.echo:
 		# K dans la PWA ; F9 dans la vue 3D du PC (K y est le klaxon)
@@ -3019,8 +3033,30 @@ func _maj_skieur() -> void:
 		if etat != _skieur_etat_envoye:
 			_skieur_etat_envoye = etat
 			state_receiver.envoyer({"skieur_etat": etat})
+		_envoyer_remontee(get_process_delta_time())
 	# CONDUIRE : à côté du siège du poste de la rame pilotée
 	var pres: bool = false
 	if skieur.support != null and cabin.is_ancestor_of(skieur.support):
 		pres = skieur.global_position.distance_to(_position_poste()) < 1.8
 	commandes_skieur.set_conduite_possible(pres)
+
+
+func _envoyer_remontee(delta: float) -> void:
+	_t_remontee -= delta
+	_t_catalogue -= delta
+	if _t_remontee > 0.0:
+		return
+	_t_remontee = 0.2
+	var lg: LigneRemontee = commandes_skieur.ligne_suivie if commandes_skieur != null and mode_skieur else null
+	if lg == null or not is_instance_valid(lg) or not lg.pret:
+		if _remontee_envoyee != "":
+			_remontee_envoyee = ""
+			state_receiver.envoyer({"remontee": null})
+		return
+	var id: String = String(lg.name)
+	var cat: bool = id != _remontee_envoyee or _t_catalogue <= 0.0
+	if cat:
+		_t_catalogue = 5.0
+	_remontee_envoyee = id
+	var a_bord: bool = remontees != null and lg in remontees.a_bord
+	state_receiver.envoyer({"remontee": lg.exploitation().etat_pupitre(a_bord, cat)})

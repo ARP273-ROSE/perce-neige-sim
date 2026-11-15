@@ -17,6 +17,11 @@ var _puissance: Label
 var _freins: Label
 var _crans: Array = []
 var _b_rearmer: Button
+var _b_auto: Button
+var _b_secours: Button
+var _b_remise: Button
+var _panne: Label
+var _journal: Label
 
 
 func _ready() -> void:
@@ -58,31 +63,49 @@ func _ready() -> void:
 		b.toggle_mode = true
 		var kk: int = k
 		b.pressed.connect(func() -> void:
-			if ligne != null:
-				ligne.regler_cran(kk))
+			_cmd("cran", kk))
 		_crans.append(b)
 	# marche / arrêt
 	var l_m: HBoxContainer = HBoxContainer.new()
 	l_m.add_theme_constant_override("separation", 8)
 	col.add_child(l_m)
 	_bouton(l_m, "DÉMARRER", Color(0.15, 0.55, 0.25)).pressed.connect(func() -> void:
-		if ligne != null:
-			ligne.demarrer())
+		_cmd("demarrer"))
 	_bouton(l_m, "ARRÊT", Color(0.75, 0.50, 0.05)).pressed.connect(func() -> void:
-		if ligne != null:
-			ligne.arreter())
+		_cmd("arreter"))
 	var l_u: HBoxContainer = HBoxContainer.new()
 	l_u.add_theme_constant_override("separation", 8)
 	col.add_child(l_u)
 	var b_u: Button = _bouton(l_u, "ARRÊT D'URGENCE", Color(0.80, 0.08, 0.08))
 	b_u.custom_minimum_size = Vector2(240, 64)
 	b_u.pressed.connect(func() -> void:
-		if ligne != null:
-			ligne.arret_urgence())
+		_cmd("urgence"))
 	_b_rearmer = _bouton(l_u, "RÉARMER", Color(0.35, 0.35, 0.40))
 	_b_rearmer.pressed.connect(func() -> void:
-		if ligne != null:
-			ligne.rearmer())
+		_cmd("rearmer"))
+	# exploitation : auto / manuel, panne au hasard, secours, remise en service (15/11/2026)
+	var l_e: HBoxContainer = HBoxContainer.new()
+	l_e.add_theme_constant_override("separation", 8)
+	col.add_child(l_e)
+	_b_auto = _bouton(l_e, "AUTO", Color(0.20, 0.45, 0.75))
+	_b_auto.toggle_mode = true
+	_b_auto.pressed.connect(func() -> void:
+		_cmd("mode", "auto" if _b_auto.button_pressed else "manuel"))
+	_bouton(l_e, "PANNE", Color(0.55, 0.30, 0.05)).pressed.connect(func() -> void:
+		_cmd("panne_hasard"))
+	_b_secours = _bouton(l_e, "SECOURS", Color(0.45, 0.35, 0.10))
+	_b_secours.pressed.connect(func() -> void:
+		_cmd("secours"))
+	_b_remise = _bouton(l_e, "REMISE EN SERVICE", Color(0.15, 0.40, 0.30))
+	_b_remise.pressed.connect(func() -> void:
+		_cmd("remise_service"))
+	_panne = _texte(col, 15, Color(1.0, 0.80, 0.55), true)
+	_journal = _texte(col, 14, Color(0.75, 0.82, 0.92), true)
+
+
+func _cmd(nom: String, arg: Variant = null) -> void:
+	if ligne != null and is_instance_valid(ligne):
+		ligne.exploitation().commande(nom, arg)
 
 
 static func _fini(x: float) -> float:
@@ -157,3 +180,26 @@ func _process_corps(_delta: float) -> void:
 	for k in range(_crans.size()):
 		(_crans[k] as Button).set_pressed_no_signal(k == ligne.cran)
 	_b_rearmer.disabled = not (ligne.etat == "urgence" and v <= 0.0)
+	var ex: ExploitationRemontee = ligne.exploitation()
+	_b_auto.set_pressed_no_signal(ex.mode == "auto")
+	_b_auto.text = "AUTO" if ex.mode == "auto" else "MANUEL"
+	_b_secours.visible = _a_coupure(ex) and not ex.secours
+	_b_remise.visible = ex.hors_service()
+	var t_p: String = ""
+	for p in ex.pannes:
+		var dp: Dictionary = PannesRemontees.P.get(p["id"], {})
+		if dp.is_empty():
+			continue
+		t_p += "⚠ %s — %s\n%s\n" % [ex._tr(dp["nom"]), ex._tr(PannesRemontees.LIBELLES_GRAVITE[dp["grav"]]), ex._tr(dp["faire"])]
+	if ex.secours:
+		t_p += "Moteur de secours : 30 %\n"
+	_panne.text = t_p.strip_edges()
+	_panne.visible = t_p != ""
+	_journal.text = String(ex._evts[-1][3]) if not ex._evts.is_empty() else ""
+
+
+func _a_coupure(ex: ExploitationRemontee) -> bool:
+	for p in ex.pannes:
+		if PannesRemontees.P.get(p["id"], {}).get("secours", false) and not p["resolue"]:
+			return true
+	return false
