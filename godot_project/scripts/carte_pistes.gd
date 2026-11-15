@@ -30,6 +30,8 @@ var decalage: Vector2 = Vector2.ZERO
 var _appui: bool = false                 # bouton ou doigt posé sur la carte
 var _glisse: bool = false                # le geste en cours est un glissement
 var _pos_appui: Vector2 = Vector2.ZERO
+var _doigt: int = -1                     # numéro du doigt du geste (Safari : de grands numéros, pas 0)
+var _toucher_vu: bool = false            # le geste a aussi son toucher : la souris émulée ne décide pas
 const SEUIL_GLISSE: float = 8.0          # px avant qu'un toucher devienne un glissement
 var _b_centre: Button = null
 
@@ -85,20 +87,32 @@ func zoomer(f: float) -> void:
 func _gui_input(ev: InputEvent) -> void:
 	# appui : on attend de savoir si c'est un toucher (« aller à ») ou un
 	# glissement (déplacer la carte, retour d'utilisateur, 14/11/2026 : « la carte
-	# est bloquée sur le skieur au centre »). Un doigt arrive deux fois (toucher
-	# et souris émulée) : le toucher décide de « aller à », la souris émulée ne
-	# sert qu'au glissement.
-	var doigt: bool = ev is InputEventScreenTouch and ev.index == 0
+	# est bloquée sur le skieur au centre »). Un doigt arrive deux fois (souris
+	# émulée, puis toucher) : quand le toucher arrive, c'est lui qui décide de
+	# « aller à » au relâché ; la souris émulée sert au glissement. Le doigt n'est
+	# pas forcément le n° 0 : Safari (iPad) numérote les doigts avec de grands
+	# identifiants — la carte ne réagissait plus au doigt sur la PWA (15/11/2026).
+	var toucher: bool = ev is InputEventScreenTouch
 	var souris: bool = ev is InputEventMouseButton and ev.button_index == MOUSE_BUTTON_LEFT
-	if doigt or souris:
+	if toucher or souris:
 		var emulee: bool = souris and ev.device == InputEvent.DEVICE_ID_EMULATION
 		if ev.pressed:
-			if not (_appui and emulee):
+			if toucher:
+				if _doigt >= 0 and ev.index != _doigt:
+					accept_event()       # deuxième doigt : ignoré
+					return
+				_doigt = ev.index
+				_toucher_vu = true
+			if not _appui:
 				_appui = true
 				_glisse = false
 				_pos_appui = ev.position
-		elif not emulee and _appui:
+				if souris:
+					_toucher_vu = false
+		elif _appui and ((toucher and ev.index == _doigt) or (souris and not (emulee and _toucher_vu))):
 			_appui = false
+			_doigt = -1
+			_toucher_vu = false
 			if not _glisse:
 				# « aller à » : un toucher ou un clic sur une remontée dépose le
 				# skieur au pied de sa gare aval (retour d'utilisateur, 22/10/2026)
@@ -142,6 +156,8 @@ func _notification(what: int) -> void:
 	if what == NOTIFICATION_MOUSE_EXIT and _appui and _glisse:
 		_appui = false
 		_glisse = false
+		_doigt = -1
+		_toucher_vu = false
 
 
 func _process(delta: float) -> void:

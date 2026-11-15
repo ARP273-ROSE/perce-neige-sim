@@ -24,6 +24,7 @@ var _vues: Array = []                # [nom, position caméra, cible, position d
 var _crans: Array = []               # mode cran par cran : crans à relever
 var _etiq: String = "machine"
 var _decoupe: bool = false
+var _groupes: bool = false
 var _res: Array = []
 
 
@@ -47,6 +48,8 @@ func _initialize() -> void:
 			_etiq = a.substr(7)
 		if a == "--decoupe":
 			_decoupe = true
+		if a == "--groupes":
+			_groupes = true
 	DirAccess.make_dir_recursive_absolute(_out)
 	_main = load("res://scenes/main.tscn").instantiate()
 	get_root().add_child(_main)
@@ -423,6 +426,11 @@ func _suite() -> void:
 	_cam.make_current()
 	# (le skieur reste là pour que le jeu construise autour de lui, mais sa tête masquait la vue)
 	sk.visible = false
+	if _groupes:
+		await _releve_groupes(sk)
+		print("BENCH_EFFETS FIN")
+		FinBanc.quitter(self, _main, 0)
+		return
 	if _decoupe:
 		await _releve_decoupe(sk)
 		print("BENCH_EFFETS FIN")
@@ -445,3 +453,37 @@ func _suite() -> void:
 		e[2].call()
 	print("BENCH_EFFETS FIN")
 	FinBanc.quitter(self, _main, 0)
+
+
+## Mode par groupe : --groupes [--crans=N] [--vues=préfixe] ; au cran N (7 par défaut), chaque groupe de la scène
+## (enfants 3D de main, et ceux du relief : anneaux, forêt…) caché à son tour : ce qu'il coûte en GPU, primitives, appels.
+func _releve_groupes(sk: SkieurJoueur) -> void:
+	var pm: Node = _main.perf_manager
+	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
+	pm.call("_appliquer", int(_crans[0]) if not _crans.is_empty() else 7, "banc par groupe")
+	var groupes: Array = []
+	for c in _main.get_children():
+		if c is Node3D and (c as Node3D).visible and c != _main.relief:
+			groupes.append(c)
+	for c in _main.relief.get_children():
+		if c is Node3D and (c as Node3D).visible:
+			groupes.append(c)
+	var o: PackedStringArray = PackedStringArray()
+	o.append("# par groupe — %s — %s — cran %d — gpu ms (gain si caché), primitives, appels" % [_etiq,
+		RenderingServer.get_video_adapter_name(), int(pm.get("cran"))])
+	for v in _vues:
+		var m0: Array = await _mesurer_vue(sk, v)
+		o.append("%s : tout %.2f ms, %.0fk prim, %d appels" % [v[0], m0[0], m0[5] / 1000.0, int(m0[6])])
+		print("GROUPES ", o[o.size() - 1])
+		for g in groupes:
+			var n3: Node3D = g
+			n3.visible = false
+			var m: Array = await _mesurer_vue(sk, v)
+			n3.visible = true
+			var l: String = "   %-28s −%.2f ms  −%.0fk prim  −%d appels" % [String(n3.name), m0[0] - m[0], (m0[5] - m[5]) / 1000.0, int(m0[6] - m[6])]
+			if m0[0] - m[0] > 0.15 or m0[5] - m[5] > 20000.0 or m0[6] - m[6] > 30:
+				o.append(l)
+				print("GROUPES ", l)
+	var f: FileAccess = FileAccess.open(_out.path_join("groupes_%s.txt" % _etiq), FileAccess.WRITE)
+	if f != null:
+		f.store_string("\n".join(o) + "\n")
