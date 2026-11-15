@@ -85,12 +85,33 @@ const P: Dictionary = {
 			"The tension carriage reached its end stop: rope tension is no longer guaranteed."],
 		"faire": ["Recaler le vérin de tension, RÉARMER puis DÉMARRER.", "Reset the tension ram, RESET then START."],
 		"interdit": ["Démarrage avant le recalage.", "Start before the reset."]},
-	"sortie_cable": {"g": ["tsd", "tsf", "tcd", "tk", "tkd"], "grav": "grave", "cap": 0.0, "stop": "urgence", "duree": 0.0,
-		"voyant": "cable", "poids": 0.0, "nom": ["Déraillement du câble", "Rope derailment"],
-		"quoi": ["Le câble a quitté les galets d'un pylône et repose sur le ramasse-câble. Ligne bloquée.",
-			"The rope left a tower's sheaves and rests on the catcher. Line blocked."],
-		"faire": ["1) Ne pas redémarrer  2) Prévenir les passagers  3) Évacuation verticale par les pisteurs  4) Remise en service après réparation.",
-			"1) Do not restart  2) Inform the passengers  3) Vertical evacuation by the ski patrol  4) Back in service after repair."],
+	# Déraillement (question d'utilisateur du 15/11/2026 : « si TS, TC, TPH ou 3S déraille, il faut descendre à la
+	# corde ») : un câble hors de ses galets interdit toute marche de récupération ou de secours (conditions du plan
+	# d'évacuation : ligne sans déraillement, câble et pinces intacts) ; reste l'évacuation verticale. Binôme de
+	# secouristes : l'un monte au pylône, se longe au câble sur un chariot à galets et rejoint les véhicules, l'autre
+	# assure du sol ; chaque passager est équipé d'un triangle d'évacuation et descendu à la corde, environ 15 min par
+	# siège de deux en comptant l'accès ; décision dans les 30 min, tout le monde au sol en 3 h 30 au plus.
+	# (remontees-mecaniques.net, dossier « L'évacuation » ; fiche secouriste « évacuation télésiège » ; Petzl, procédure
+	# du téléphérique du Pic du Midi.) Les durées du jeu sont comprimées (ExploitationRemontee.T_*).
+	"sortie_cable": {"g": ["tsd", "tsf", "tcd", "3s"], "grav": "grave", "cap": 0.0, "stop": "urgence", "duree": 0.0,
+		"voyant": "cable", "poids": 0.0, "evac": "corde", "nom": ["Déraillement du câble", "Rope derailment"],
+		"quoi": ["Le câble a quitté les galets d'un pylône et repose sur le ramasse-câble : aucune marche de récupération possible.",
+			"The rope left a tower's sheaves and rests on the catcher: no recovery run is possible."],
+		"faire": ["1) Ne pas redémarrer  2) Annonce aux passagers : rester assis, barre baissée  3) Évacuation verticale : secouristes au pylône, chariot sur le câble, triangle d'évacuation, descente à la corde  4) Remise en service après réparation.",
+			"1) Do not restart  2) Announce: stay seated, bar down  3) Vertical evacuation: rescuers up the tower, trolley on the rope, evacuation triangle, lowered on a rope  4) Back in service after repair."],
+		"interdit": ["Toute remise en marche, même de récupération.", "Any restart, even a recovery run."]},
+	"deraillement_tph": {"g": ["tph"], "grav": "grave", "cap": 0.0, "stop": "urgence", "duree": 0.0, "voyant": "cable",
+		"poids": 0.0, "evac": "corde", "nom": ["Déraillement du chariot", "Carriage derailment"],
+		"quoi": ["Des galets du chariot ont quitté le câble porteur : cabine immobilisée en ligne, pas de rapatriement possible.",
+			"Carriage wheels left the track rope: cabin stuck on the line, it cannot be brought back."],
+		"faire": ["1) Ne pas redémarrer  2) Annonce aux passagers  3) Évacuation verticale : secouristes sur la cabine, passagers équipés un par un et descendus à la corde (hélicoptère en appoint de jour)  4) Remise en service après expertise.",
+			"1) Do not restart  2) Passenger announcement  3) Vertical evacuation: rescuers on the cabin, passengers harnessed one by one and lowered on a rope (helicopter as a back-up by day)  4) Back in service after inspection."],
+		"interdit": ["Tout mouvement de la cabine.", "Any cabin movement."]},
+	"sortie_cable_tk": {"g": ["tk", "tkd"], "grav": "grave", "cap": 0.0, "stop": "urgence", "duree": 0.0, "voyant": "cable",
+		"poids": 0.0, "evac": "ski", "nom": ["Déraillement du câble", "Rope derailment"],
+		"quoi": ["Le câble a quitté les galets d'un pylône : ligne bloquée.", "The rope left a tower's sheaves: line blocked."],
+		"faire": ["1) Ne pas redémarrer  2) Les skieurs lâchent la perche et redescendent à ski hors de la trace  3) Remise en service après réparation.",
+			"1) Do not restart  2) Skiers let go of the bar and ski down away from the track  3) Back in service after repair."],
 		"interdit": ["Tout redémarrage.", "Any restart."]},
 	# --- débrayables ----------------------------------------------------------------------------------------------
 	"pince": {"g": DEBRAYABLES, "grav": "arret", "cap": 0.0, "stop": "normal", "duree": 45.0, "voyant": "pince",
@@ -134,8 +155,9 @@ const P: Dictionary = {
 		"poids": 0.0, "nom": ["Frein sur câble porteur", "Track-rope brake"],
 		"quoi": ["Le frein de chariot s'est serré sur le câble porteur : cabine immobilisée en ligne.",
 			"The carriage brake clamped the track rope: cabin stuck on the line."],
-		"faire": ["1) Ne pas redémarrer  2) Annonce aux passagers  3) Évacuation par la cabine de secours  4) Remise en service après contrôle.",
-			"1) Do not restart  2) Passenger announcement  3) Evacuation by the rescue cabin  4) Back in service after inspection."],
+		"evac": "corde",
+		"faire": ["1) Ne pas redémarrer  2) Annonce aux passagers  3) Évacuation verticale à la corde (ou nacelle de secours si l'installation en a une)  4) Remise en service après contrôle.",
+			"1) Do not restart  2) Passenger announcement  3) Vertical evacuation on a rope (or rescue nacelle where fitted)  4) Back in service after inspection."],
 		"interdit": ["Tout redémarrage.", "Any restart."]},
 	# --- Funival (repris du Perce-Neige) -------------------------------------------------------------------------
 	"f_tension": {"g": ["funival"], "grav": "avis", "cap": 1.0, "stop": "", "duree": 25.0, "voyant": "cable", "poids": 2.0,

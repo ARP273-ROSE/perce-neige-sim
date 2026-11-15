@@ -1545,6 +1545,7 @@ func quitter() -> void:
 		_repos = 3.0
 	if a_bord.is_empty():
 		return
+	_finir_corde()
 	var lg: LigneRemontee = a_bord[0]
 	if is_instance_valid(lg) and lg.zone_vehicule(a_bord[1]) == "ligne":
 		_piquer("SAUT", lg)
@@ -1737,6 +1738,108 @@ func _lacher_perche(en_ligne: bool) -> void:
 	_repos = 4.0
 
 
+# --- évacuation d'une ligne déraillée ------------------------------------------------------------------------------
+## Question d'utilisateur du 15/11/2026 : « si TS, TC, TPH ou 3S déraille, il faut descendre à la corde ». Le skieur à
+## bord attend les secouristes (passage réparti le long de la ligne : ExploitationRemontee.tour_evacuation), puis il
+## est descendu à la corde, assis dans le triangle d'évacuation, à la vitesse d'un descendeur, jusqu'au sol ; sur une
+## perche, il la lâche et redescend à ski.
+const V_DESCENTE_CORDE: float = 0.9          # m/s, descente contrôlée au descendeur
+var _corde: Dictionary = {}
+var _corde_mi: MeshInstance3D = null
+var _evac_annonce: String = ""
+
+
+func _evacuer_skieur(lg: LigneRemontee) -> bool:
+	var ex: ExploitationRemontee = lg._exploit
+	if ex == null or ex.evacuation() == "":
+		_evac_annonce = ""
+		return false
+	if lg.zone_vehicule(a_bord[1]) != "ligne":
+		return false
+	var cle: String = String(lg.name) + ex.evacuation()
+	if _evac_annonce != cle:
+		_evac_annonce = cle
+		if ex.evacuation() == "corde":
+			message.emit("Ligne déraillée — restez assis, barre baissée : les secouristes arrivent")
+	var av: float = ex.avancement_evacuation()
+	if ex.evacuation() == "ski":
+		if a_bord.size() > 5 and av > 0.0:
+			_lacher_perche(true)
+			message.emit("Ligne arrêtée — perche lâchée, redescendez à ski hors de la trace")
+			return true
+		return false
+	if ex.evacuation() == "corde" and a_bord.size() <= 5 and av >= ExploitationRemontee.tour_evacuation(int(a_bord[1])):
+		_commencer_corde(lg)
+		return true
+	return false
+
+
+func _commencer_corde(lg: LigneRemontee) -> void:
+	var v: VehiculeRemontee = lg.vehicule(a_bord[1])
+	var p: Vector3 = skieur.global_position
+	var sol: float = relief.hauteur_sol(p.x, p.z) if relief != null else p.y - 10.0
+	_corde = {"lg": lg, "i": a_bord[1], "y": p.y, "sol": sol, "cap": skieur._cap, "cabine": v.cabine}
+	if _corde_mi == null:
+		_corde_mi = MeshInstance3D.new()
+		_corde_mi.name = "CordeEvacuation"
+		var cy: CylinderMesh = CylinderMesh.new()
+		cy.top_radius = 0.011
+		cy.bottom_radius = 0.011
+		cy.height = 1.0
+		cy.radial_segments = 6
+		cy.rings = 1
+		var m: StandardMaterial3D = StandardMaterial3D.new()
+		m.albedo_color = Color(0.95, 0.35, 0.10)      # corde statique orange
+		cy.material = m
+		_corde_mi.mesh = cy
+		_corde_mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(_corde_mi)
+	_corde_mi.visible = true
+	if v.cabine:
+		v.porte_skis(false)
+	message.emit("Secouriste à bord — triangle d'évacuation en place, descente à la corde (%d m)" % roundi(p.y - sol))
+
+
+func _descendre_corde(delta: float) -> void:
+	var lg: LigneRemontee = _corde["lg"]
+	if not is_instance_valid(lg) or not is_instance_valid(skieur):
+		_finir_corde()
+		return
+	var v: VehiculeRemontee = lg.vehicule(_corde["i"])
+	var haut: Vector3 = v.vers_monde(v.place_assise(a_bord[2], a_bord[4])) + Vector3(0, 0.25 if not _corde["cabine"] else -0.2, 0)
+	_corde["y"] = maxf(float(_corde["y"]) - V_DESCENTE_CORDE * delta, float(_corde["sol"]))
+	var p: Vector3 = Vector3(haut.x, float(_corde["y"]), haut.z)
+	skieur.global_position = p
+	skieur.velocity = Vector3.ZERO
+	skieur._visuel.basis = Basis(Vector3.UP, float(_corde["cap"]))
+	# corde du point d'ancrage (siège ou plancher de la cabine) au mousqueton du triangle, au-dessus de la tête
+	var bas: Vector3 = p + Vector3(0, 1.35, 0)
+	var l: float = haut.y - bas.y
+	if l > 0.05:
+		_corde_mi.visible = true
+		_corde_mi.global_transform = Transform3D(Basis.IDENTITY.scaled(Vector3(1.0, l, 1.0)), (haut + bas) * 0.5)
+	else:
+		_corde_mi.visible = false
+	if float(_corde["y"]) <= float(_corde["sol"]) + 0.001:
+		var pied: Vector3 = Vector3(p.x, float(_corde["sol"]) + 0.02, p.z)
+		skieur.embarque = false
+		skieur.lever()
+		skieur.global_position = pied
+		skieur.dernier_sol = pied
+		skieur.support = null
+		skieur._skis.visible = true
+		message.emit("Au sol — évacué à la corde (%s)" % lg.nom_ligne)
+		a_bord = []
+		_repos = 6.0
+		_finir_corde()
+
+
+func _finir_corde() -> void:
+	_corde = {}
+	if _corde_mi != null:
+		_corde_mi.visible = false
+
+
 ## Tiré par une perche, en ligne : on peut la lâcher.
 func sur_perche() -> bool:
 	return a_bord.size() > 5 and is_instance_valid(a_bord[0])
@@ -1748,11 +1851,16 @@ func lacher_perche() -> void:
 
 
 func _suivre_siege() -> void:
+	if not _corde.is_empty():
+		_descendre_corde(get_process_delta_time())
+		return
 	var lg0: LigneRemontee = a_bord[0]
 	if is_instance_valid(lg0):
 		if lg0.etat != "marche" and _etat_bord == "marche" and lg0.zone_vehicule(a_bord[1]) == "ligne":
 			_piquer("ARRET", lg0)
 		_etat_bord = lg0.etat
+		if _evacuer_skieur(lg0):
+			return
 	if a_bord.size() > 5:
 		_suivre_perche()
 		return
