@@ -807,6 +807,9 @@ var _raff_nx: int = 0
 ## par tranches de BUDGET_US quand la caméra s'est déplacée de plus d'un tiers du rayon. Désactivée par défaut :
 ## --relief-fenetre=R (PC, maille à 50 m : crans ≥ 3) ou window.__pn_relief_fenetre = R (PWA).
 static var FENETRE: float = _fenetre_voulue()
+## Sol affiché changé dans `rect` (monde, x/z) : les objets posés au sol une fois pour toutes (jalons, panneaux) s'y
+## reposent, d'après ecart_sol.
+signal sol_modifie(rect: Rect2)
 const FENETRE_FONDU: float = 150.0
 ## Bancs : point visé au lieu de la caméra (Vector3.INF : la caméra).
 static var cible_fenetre: Vector3 = Vector3.INF
@@ -993,7 +996,42 @@ func _fenetre_avancer(fin_us: int) -> void:
 		"pire_ms": job["pire_ms"], "total_ms": (Time.get_ticks_usec() - int(job["t0"])) / 1000.0, "triangles_bloc": tri}
 	print("[Relief] fenêtre à 25 m autour de (%.0f, %.0f) : %d mailles de 50 m redécoupées, %d tuiles refaites en %d images (pire %.1f ms), %d triangles dans le bloc" % [
 		c.x, c.y, fenetre_stats["mailles"], fenetre_stats["tuiles"], fenetre_stats["images"], fenetre_stats["pire_ms"], tri])
+	var r0: Vector2 = Vector2(ReliefDonnees.X_OUEST + int(job["jmin"]) * _dx, ReliefDonnees.Z_NORD + int(job["imin"]) * _dz)
+	var r1: Vector2 = Vector2(ReliefDonnees.X_OUEST + int(job["jmax"]) * _dx, ReliefDonnees.Z_NORD + int(job["imax"]) * _dz)
 	_f_job = {}
+	sol_modifie.emit(Rect2(r0, r1 - r0).grow(_dx))
+
+
+## Sol sans la fenêtre fine (celui sur lequel les objets du domaine sont posés au chargement).
+func hauteur_sol_ref(x: float, z: float) -> float:
+	if not _f_active or _h_aff0.is_empty():
+		return hauteur_sol(x, z)
+	for pc in _pieces:
+		if (pc[0] as Rect2).has_point(Vector2(x, z)):
+			var tp: Array = terrain_piece(x, z)
+			if not is_nan(float(tp[0])):
+				return float(tp[0])
+	if fin != null and fin.fine_ici(x, z):
+		return fin.hauteur(x, z)
+	var cj: int = int((x - ReliefDonnees.X_OUEST) / (_dx * _pas))
+	var ci: int = int((z - ReliefDonnees.Z_NORD) / (_dz * _pas))
+	if ci >= 0 and cj >= 0 and cj < _raff_nx and ci * _raff_nx + cj < _raffine0.size() and _raffine0[ci * _raff_nx + cj] == 1:
+		return _tri_sur(_h_aff0, x, z, 1)
+	return _tri_sur(_h_aff0, x, z)
+
+
+## Écart du sol affiché au sol de référence (0 hors de la fenêtre fine).
+func ecart_sol(x: float, z: float) -> float:
+	if not _f_active or _h_aff0.is_empty():
+		return 0.0
+	return hauteur_sol(x, z) - hauteur_sol_ref(x, z)
+
+
+## Rectangle (monde) de la fenêtre en place, ou vide.
+func rect_fenetre() -> Rect2:
+	if _f_centre == Vector2.INF:
+		return Rect2()
+	return Rect2(_f_centre - Vector2.ONE * (FENETRE + 60.0), Vector2.ONE * 2.0 * (FENETRE + 60.0))
 
 
 func _noeud_dans(i: int, j: int, dans_nouv: Dictionary) -> bool:
