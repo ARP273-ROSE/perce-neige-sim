@@ -37,6 +37,7 @@ var _b_echelle: Button = null
 var _b_mesure: Button = null
 var _b_auto: Button = null
 var _b_evac: Button = null
+var _b_corde: Button = null
 var _b_exploit: Button = null
 var _boutons: Array = []
 var _info: Label = null                 # vitesse et piste, à ski
@@ -86,6 +87,13 @@ func _ready() -> void:
 		if main != null:
 			main.evacuer())
 	col.add_child(_b_evac)
+	_b_corde = _bouton("CORDE", "Remontée à l'arrêt en ligne : descendre à la corde du siège ou de la cabine jusqu'au sol")
+	_b_corde.visible = false
+	_b_corde.pressed.connect(func() -> void:
+		var rm_c: RemonteesDomaine = main.get("remontees") if main != null else null
+		if rm_c != null:
+			rm_c.descendre_corde())
+	col.add_child(_b_corde)
 	_b_exploit = _bouton("EXPLOIT.", "EXPLOITATION AUTO : tout le service du funiculaire (embarquements, départs enchaînés), marche / arrêt, même en skieur (touche X ; Web : aussi F3 ou EXPLOIT. du tableau de bord)")
 	_b_exploit.toggle_mode = true
 	_b_exploit.toggled.connect(func(on: bool) -> void:
@@ -341,6 +349,7 @@ func _process_corps(delta: float) -> void:
 			var t_m: String = "MESURE…" if bool(pm2.call("releve_en_cours")) else "MESURE"
 			if _b_mesure.text != t_m:
 				_b_mesure.text = t_m
+		_b_corde.visible = rm != null and rm.corde_possible()
 		# sur une perche, CHAUSSER devient LÂCHER (lâcher la perche en ligne)
 		var perche: bool = rm != null and rm.sur_perche()
 		var t_ski: String = "LÂCHER" if perche else ("DÉCHAUSSER" if _chausse else "CHAUSSER")

@@ -1774,6 +1774,24 @@ func _evacuer_skieur(lg: LigneRemontee) -> bool:
 	return false
 
 
+## Évacuation à la demande (retour d'utilisateur du 16/11/2026 : « évacuer la cabine ou le siège où je suis par la
+## corde dès que je suis à l'arrêt, que ce soit par une panne ou moi qui ai arrêté ») : assis ou debout à bord d'un
+## siège ou d'une cabine, en ligne, ligne à l'arrêt, au-dessus du sol.
+func corde_possible() -> bool:
+	if a_bord.is_empty() or a_bord.size() > 5 or not _corde.is_empty() or skieur == null:
+		return false
+	var lg: LigneRemontee = a_bord[0]
+	if not is_instance_valid(lg) or lg.vitesse_reelle > 0.01 or lg.zone_vehicule(a_bord[1]) != "ligne":
+		return false
+	var p: Vector3 = skieur.global_position
+	return relief == null or p.y - relief.hauteur_sol(p.x, p.z) > 1.0
+
+
+func descendre_corde() -> void:
+	if corde_possible():
+		_commencer_corde(a_bord[0])
+
+
 func _commencer_corde(lg: LigneRemontee) -> void:
 	var v: VehiculeRemontee = lg.vehicule(a_bord[1])
 	var p: Vector3 = skieur.global_position
