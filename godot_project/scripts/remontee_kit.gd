@@ -182,8 +182,8 @@ static var _mats_textes: Dictionary = {}
 
 
 static func texte_fige(parent: Node3D, texte: String, taille: int, px: float, coul: Color,
-		aligne: HorizontalAlignment = HORIZONTAL_ALIGNMENT_CENTER) -> MeshInstance3D:
-	var am: ArrayMesh = maillage_texte(texte, taille, px, 4.0, aligne)
+		aligne: HorizontalAlignment = HORIZONTAL_ALIGNMENT_CENTER, gras: bool = false) -> MeshInstance3D:
+	var am: ArrayMesh = maillage_texte(texte, taille, px, 4.0, aligne, gras)
 	var kc: String = coul.to_html()
 	verrou.lock()
 	var m: StandardMaterial3D = _mats_textes.get(kc)
@@ -234,8 +234,9 @@ static func _outils_texte() -> Object:
 ## Pas des courbes de 4 px par défaut : « STOP » 3 015 → 414 sommets, recopiés dans chaque vantail fusionné
 ## (WebKit : +10 Mo de tampons au pas de 0,5, relevé du NAS).
 static func maillage_texte(texte: String, taille: int, px: float, pas_courbe: float = 4.0,
-		aligne: HorizontalAlignment = HORIZONTAL_ALIGNMENT_CENTER) -> ArrayMesh:
-	var cle: String = "%s|%d|%.5f|%.2f|%d" % [texte, taille, px, pas_courbe, aligne]
+		aligne: HorizontalAlignment = HORIZONTAL_ALIGNMENT_CENTER, gras: bool = false) -> ArrayMesh:
+	var cle: String = "%s|%d|%.5f|%.2f|%d" % [texte, taille, px, pas_courbe, aligne] + ("|g" if gras else "")
+	var police: Font = PolicesJeu.grasse() if gras else PolicesJeu.reguliere()
 	verrou.lock()
 	var am: ArrayMesh = _textes_figes.get(cle)
 	verrou.unlock()
@@ -245,7 +246,7 @@ static func maillage_texte(texte: String, taille: int, px: float, pas_courbe: fl
 	var arr: Array = []
 	var ot: Object = _outils_texte()
 	if ot != null:
-		arr = ot.maillage(PolicesJeu.reguliere(), texte, taille, px, pas_courbe, aligne, TranslationServer.get_tool_locale())
+		arr = ot.maillage(police, texte, taille, px, pas_courbe, aligne, TranslationServer.get_tool_locale())
 	if arr.is_empty():
 		var tm: TextMesh = TextMesh.new()
 		tm.text = texte
@@ -254,7 +255,7 @@ static func maillage_texte(texte: String, taille: int, px: float, pas_courbe: fl
 		tm.depth = 0.0
 		tm.curve_step = pas_courbe
 		tm.horizontal_alignment = aligne
-		tm.font = PolicesJeu.reguliere()
+		tm.font = police
 		arr = tm.get_mesh_arrays()
 	if arr.size() > Mesh.ARRAY_VERTEX and arr[Mesh.ARRAY_VERTEX] != null \
 			and not (arr[Mesh.ARRAY_VERTEX] as PackedVector3Array).is_empty():
