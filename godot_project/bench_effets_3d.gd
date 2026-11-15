@@ -365,6 +365,11 @@ func _suite() -> void:
 		await process_frame
 	await _attend(240)
 	_main.perf_manager.mode = "fige"
+	# premier plan forcé : sous weston headless la fenêtre n'a jamais le focus, le jeu se bridait à
+	# 20 i/s (arrière-plan) et la puce restait à sa fréquence basse : temps GPU gonflés (15/11/2026)
+	_main.perf_manager.banc = true
+	_main.perf_manager.set("_retrait", 0)
+	_main.perf_manager.call("_appliquer_ips")
 	_main.ombres_relief_permises = false
 	_env = _main._env
 	_lum = _main._ext_light
