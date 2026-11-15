@@ -5138,6 +5138,8 @@ func _process_corps(delta: float) -> void:
 	if delta < 0.0:
 		return
 	_maj_vent()
+	if _exploit != null:
+		_exploit.avancer(delta)
 	_regler_vitesse(delta)
 	_maj_onde(delta)
 	_maj_portillons(delta)
@@ -6242,11 +6244,37 @@ func regime() -> float:
 func _regler_vitesse(delta: float) -> void:
 	if vitesse_reelle < 0.0:
 		vitesse_reelle = vitesse * CRANS[cran]
-	var cible: float = vitesse * CRANS[cran] if etat == "marche" else 0.0
+	var cible: float = vitesse * CRANS[cran] * cap_exploitation() if etat == "marche" else 0.0
 	var a: float = vitesse / T_DEMARRAGE if cible > vitesse_reelle else (A_URGENCE if etat == "urgence" else A_ARRET)
 	vitesse_reelle = move_toward(vitesse_reelle, cible, a * delta)
 	if etat == "arret_normal" and vitesse_reelle <= 0.0:
 		etat = "arret"
+
+
+## Exploitation (mode auto/manuel, pannes : ExploitationRemontee), créée à la première demande (pupitre, ligne
+## suivie par le skieur) ; avancée ensuite à chaque image où la ligne tourne.
+var _exploit: ExploitationRemontee = null
+
+
+func exploitation() -> ExploitationRemontee:
+	if _exploit == null:
+		_exploit = ExploitationRemontee.new(self)
+	return _exploit
+
+
+## Plafond de vitesse des pannes et du moteur de secours (fraction du nominal).
+func cap_exploitation() -> float:
+	return _exploit.cap() if _exploit != null else 1.0
+
+
+## Départ refusé par une panne (portes, frein de parking, panne d'arrêt non traitée…).
+func depart_refuse() -> bool:
+	return _exploit != null and _exploit.refus_depart() != ""
+
+
+## Vent en ligne (m/s), pour le pupitre.
+func vent_ligne() -> float:
+	return _vent_local.length()
 
 
 func demarrer() -> void:

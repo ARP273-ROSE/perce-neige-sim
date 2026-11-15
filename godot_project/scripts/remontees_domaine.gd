@@ -1360,6 +1360,15 @@ static func _echelle_a_portee(p: Vector3, b: Vector3, rayon: float) -> bool:
 ## Funival où se trouve le skieur (dans une rame, ou sous terre dans sa voie et ses gares) : on y monte à pied,
 ## la rame le porte, sans passer par `a_bord` (retour d'utilisateur du 12/11/2026 : « dedans, tu ne m'affiches
 ## pas le bon poste de conduite, tu gardes la vitesse à 0 »).
+## Ligne par son nom de nœud (commandes du pupitre du PC).
+func ligne_par_id(id: String) -> LigneRemontee:
+	for e in lignes:
+		var lg: LigneRemontee = e[0]
+		if is_instance_valid(lg) and String(lg.name) == id:
+			return lg
+	return null
+
+
 func funival_ou(p: Vector3, dans_rame_seulement: bool = false) -> LigneRemontee:
 	for e in lignes:
 		var lg: LigneRemontee = e[0]

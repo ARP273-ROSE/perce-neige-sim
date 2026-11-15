@@ -225,13 +225,15 @@ func _process_corps(delta: float) -> void:
 	if delta < 0.0:
 		return
 	_dt = delta
+	if _exploit != null:
+		_exploit.avancer(delta)
 	var a: float = _x_quai(true)
 	var b: float = _x_quai(false)
 	var but: float = b if _sens > 0.0 else a
 	if _phase == "quai":
 		_v = 0.0
 		vitesse_reelle = 0.0
-		if etat == "marche":
+		if etat == "marche" and not depart_refuse():
 			_t_quai -= delta
 			if _t_quai <= 0.0:
 				_phase = "route"
@@ -239,7 +241,7 @@ func _process_corps(delta: float) -> void:
 		# vitesse permise : consigne, profil relevé au GPS (position de la cabine qui monte), freinage
 		# jusqu'au quai puis entrée en gare au pas
 		var pr: Dictionary = _profil()
-		var v_max: float = minf(vitesse * CRANS[cran], _v_profil(_vehicules[0 if _sens > 0.0 else 1][1], pr))
+		var v_max: float = minf(vitesse * CRANS[cran] * cap_exploitation(), _v_profil(_vehicules[0 if _sens > 0.0 else 1][1], pr))
 		var reste: float = absf(but - _s)
 		var a_f: float = float(pr["a_frein"])
 		v_max = minf(v_max, sqrt(pow(float(pr["v_pas"]), 2.0) + 2.0 * a_f * maxf(reste - float(pr["d_pas"]), 0.0)))
@@ -1301,3 +1303,12 @@ func puissance_kw() -> float:
 	var dh: float = terrain(L) - terrain(0.0)
 	var p_nom: float = (masse_vehicule() + 115.0 * 80.0) * 9.81 * dh / L * vitesse
 	return 0.15 * p_nom * absf(_v) / maxf(vitesse, 0.1) / 1000.0
+
+
+## Pupitre (ExploitationRemontee) : positions relatives des deux cabines, vitesses, à quai, sens, portes.
+func etat_va_et_vient() -> Dictionary:
+	var L: float = maxf(longueur_h(), 1.0)
+	var aq: bool = _phase == "quai"
+	var po: String = "ouvertes" if has_method("portes_ouvertes") and bool(call("portes_ouvertes")) else "fermees"
+	return {"pos": [snappedf(clampf(_s / L, 0.0, 1.0), 0.001), snappedf(clampf(_s_cab1 / L, 0.0, 1.0), 0.001) if is_finite(_s_cab1) else 0.0],
+		"v": [snappedf(_v, 0.01), snappedf(-_v, 0.01)], "quai": [aq, aq], "sens": int(_sens), "portes": [po, po]}

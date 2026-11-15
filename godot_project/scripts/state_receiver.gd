@@ -337,6 +337,25 @@ func _apply(d: Dictionary) -> void:
 		if _last_vue_ligne >= 0 and main != null and main.mode_skieur and main.has_method("basculer_vue_ligne"):
 			main.basculer_vue_ligne()
 		_last_vue_ligne = nl
+	# Pupitre d'une remontée (PC) : [id, numéro, commande, argument] ; doublons ignorés (le paquet d'état est renvoyé à
+	# chaque image tant que la commande n'est pas acquittée)
+	if d.get("remontee_cmd") is Array and main != null and main.get("remontees") != null:
+		for c in d["remontee_cmd"]:
+			if not (c is Array) or (c as Array).size() < 3:
+				continue
+			var lg: LigneRemontee = main.remontees.ligne_par_id(String(c[0]))
+			if lg == null:
+				continue
+			var ex: ExploitationRemontee = lg.exploitation()
+			var n: int = int(c[1])
+			if n <= ex.ack:
+				continue
+			ex.ack = n
+			var refus: String = ex.commande(String(c[2]), c[3] if (c as Array).size() > 3 else null)
+			if refus != "" and refus != "?":
+				pass   # (le refus est dans les événements de la ligne)
+	if d.get("lang") is String and main != null and main.get("remontees") != null:
+		ExploitationRemontee.lang_pc = String(d["lang"])
 	# Panne active : déclenche localement pour effet visuel + son
 	if d.has("active_fault") and fault_manager != null and d["active_fault"] is String:
 		var fid: String = d["active_fault"]

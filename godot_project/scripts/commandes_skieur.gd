@@ -14,6 +14,8 @@ var skieur: SkieurJoueur = null
 var main: Node = null
 var poste: PosteRemontee = null
 var _b_poste: Button = null
+## Remontée du pupitre (celle où l'on est, ou la plus proche) : lue par main.gd pour la télémesure du PC.
+var ligne_suivie: LigneRemontee = null
 var _t_poste: float = 0.0
 var _racine: Control = null
 var _joy: Control = null
@@ -322,6 +324,13 @@ func _process_corps(delta: float) -> void:
 		var lg: LigneRemontee = rm.ligne_courante(skieur.global_position) if rm != null else null
 		_b_poste.visible = lg != null
 		poste.ligne = lg
+		# ligne suivie : pannes au hasard, télémesure vers le pupitre du PC
+		if lg != ligne_suivie:
+			if ligne_suivie != null and is_instance_valid(ligne_suivie):
+				ligne_suivie.exploitation().suivie = false
+			ligne_suivie = lg
+			if lg != null:
+				lg.exploitation().suivie = true
 		var sur_e: bool = skieur.sur_echelle()
 		_b_echelle.visible = sur_e or (rm != null and not skieur.chausse and not skieur.embarque and rm.echelle_proche(skieur.global_position) != null)
 		if _b_echelle.visible:
