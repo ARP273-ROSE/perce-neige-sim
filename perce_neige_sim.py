@@ -9918,6 +9918,11 @@ class GameWidget(QWidget):
             self.basculer_skieur()
             ev.accept()
             return
+        if k == Qt.Key.Key_Tab and not ev.isAutoRepeat() and self._plein_cadre_3d():
+            # (Tab tapée dans la fenêtre 3D, renvoyée par le pont : elle arrive ici, pas par event())
+            self.basculer_pupitre()
+            ev.accept()
+            return
         if (k == Qt.Key.Key_F10 and self._faux_groupes and not ev.isAutoRepeat()
                 and ev.modifiers() & Qt.KeyboardModifier.ControlModifier):
             # (développement) ligne simulée suivante ; après la dernière : aucune (pupitre du PN)
