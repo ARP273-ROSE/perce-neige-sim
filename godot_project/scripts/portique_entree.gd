@@ -37,9 +37,53 @@ static func _txt(parent: Node3D, t: String, pos: Vector3, px: float, coul: Color
 	return lab
 
 
+## Chiffres de la pendule : courbes fines (pas de 4 : 0, 5 et 8 en segments visibles de près) ; 11 glyphes seulement.
+const PAS_COURBE_PENDULE: float = 0.5
+
+
 ## Pendule lumineuse : l'heure (de l'appareil) mise à jour chaque seconde.
+## Chiffres en textes figés (un maillage par caractère, calculés sur le fil de construction et gardés) : le Label3D
+## d'avant, posé hors de la scène sur le fil, renvoyait sa mise en forme et ses glyphes au fil principal par appel
+## différé, une image de 36 à 40 ms comptée « physique » au début de chaque séance (relevé du PC du 15/11/2026).
+## Sans le module C++ (PWA, construction sur le fil principal), le Label3D reste.
 static func _pendule(parent: Node3D, pos: Vector3, px: float, coul: Color) -> void:
-	# (l'heure change : un Label3D, le seul du portique)
+	if RemonteeKit._outils_texte() == null:
+		_pendule_label(parent, pos, px, coul)
+		return
+	for c in "0123456789:":
+		RemonteeKit.maillage_texte(c, 64, px, PAS_COURBE_PENDULE, HORIZONTAL_ALIGNMENT_CENTER, true)
+	var w0: float = RemonteeKit.maillage_texte("0", 64, px, PAS_COURBE_PENDULE, HORIZONTAL_ALIGNMENT_CENTER, true).get_aabb().size.x
+	var wc: float = RemonteeKit.maillage_texte(":", 64, px, PAS_COURBE_PENDULE, HORIZONTAL_ALIGNMENT_CENTER, true).get_aabb().size.x
+	var pas: float = w0 * 1.15
+	var pas_c: float = maxf(wc * 2.5, w0 * 0.6)
+	var xs: Array = [-1.5 * pas - 0.5 * pas_c, -0.5 * pas - 0.5 * pas_c, 0.0, 0.5 * pas + 0.5 * pas_c, 1.5 * pas + 0.5 * pas_c]
+	var p: Node3D = Node3D.new()
+	p.name = "Pendule"
+	p.position = pos
+	parent.add_child(p)
+	var cases: Array = []
+	for i in 5:
+		var mi: MeshInstance3D = RemonteeKit.texte_fige(p, ":" if i == 2 else "0", 64, px, coul, HORIZONTAL_ALIGNMENT_CENTER, true)
+		mi.position = Vector3(xs[i], 0.0, 0.0)
+		cases.append(mi)
+	var vu: Array = [""]
+	var maj := func() -> void:
+		var t: Dictionary = Time.get_time_dict_from_system()
+		var h: String = "%02d:%02d" % [t["hour"], t["minute"]]
+		if h == vu[0]:
+			return
+		vu[0] = h
+		for i in 5:
+			(cases[i] as MeshInstance3D).mesh = RemonteeKit.maillage_texte(h[i], 64, px, PAS_COURBE_PENDULE, HORIZONTAL_ALIGNMENT_CENTER, true)
+	maj.call()
+	var tm: Timer = Timer.new()
+	tm.wait_time = 1.0
+	tm.autostart = true
+	tm.timeout.connect(maj)
+	parent.add_child(tm)
+
+
+static func _pendule_label(parent: Node3D, pos: Vector3, px: float, coul: Color) -> void:
 	var lab: Label3D = Label3D.new()
 	lab.font_size = 64
 	lab.pixel_size = px

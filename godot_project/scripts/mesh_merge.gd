@@ -362,6 +362,12 @@ static func _tableaux(mesh: Mesh, si: int) -> Array:
 ## Triangles d'un maillage (pour une forme de collision) sans relire la
 ## carte graphique — create_trimesh_shape() la relisait, surface par surface.
 static func faces(mesh: Mesh) -> PackedVector3Array:
+	if mesh is PrimitiveMesh and _outils_cpp() != null and _relirait(mesh as PrimitiveMesh):
+		# cylindres à plusieurs anneaux, sphères, tores : triangles calculés comme le moteur (OutilsMaillage), sans
+		# relire la carte (collisions de l'entrée en skieur : ~20 relectures, 14/11/2026)
+		var fp: PackedVector3Array = _outils.faces_primitive(mesh)
+		if not fp.is_empty():
+			return fp
 	var out: PackedVector3Array = PackedVector3Array()
 	for si in range(mesh.get_surface_count()):
 		if mesh is ArrayMesh and (mesh as ArrayMesh).surface_get_primitive_type(si) != Mesh.PRIMITIVE_TRIANGLES:
@@ -377,6 +383,19 @@ static func faces(mesh: Mesh) -> PackedVector3Array:
 		else:
 			out.append_array(v)
 	return out
+
+
+## Vrai si tableaux() relirait cette primitive sur la carte (ni copie gardée, ni forme connue ou calculable ici).
+static func _relirait(mesh: PrimitiveMesh) -> bool:
+	if a_copie(mesh):
+		return false
+	var cp: String = _cle_primitive(mesh)
+	if cp == "":
+		return true
+	verrou.lock()
+	var connue: bool = _formes.has(cp)
+	verrou.unlock()
+	return not connue and _generer(mesh).is_empty()
 
 
 ## `st.commit()` qui garde la copie côté processeur (à refusionner sans relire
@@ -501,7 +520,27 @@ static func valider_indexe(st: SurfaceTool, mesh: ArrayMesh = null) -> ArrayMesh
 		var t0: int = Time.get_ticks_usec()
 		st.index()
 		index_us += Time.get_ticks_usec() - t0
-	return st.commit(mesh)
+	if not garder_chargement:
+		return st.commit(mesh)
+	# chargement (PC) : copie gardée jusqu'aux collisions du skieur (voir garder_chargement) — sans elle, l'entrée en
+	# skieur relisait sur la carte la voie, le tunnel et les gares (165 relectures au banc de fluidité, 14/11/2026).
+	# commit() pose les tableaux de commit_to_arrays() : même maillage.
+	var a: Array = st.commit_to_arrays()
+	var m: ArrayMesh = st.commit(mesh)
+	if not a.is_empty() and a[Mesh.ARRAY_VERTEX] != null and not (a[Mesh.ARRAY_VERTEX] as PackedVector3Array).is_empty():
+		retenir_chargement(m, m.get_surface_count() - 1, a)
+	return m
+
+
+## Pendant le chargement (garder_chargement, PC) : copie processeur de la surface `si` gardée jusqu'aux collisions du
+## skieur, puis oubliée (oublier_chargement). Sans effet sinon. Pour les maillages posés hors de valider_indexe.
+static func retenir_chargement(mesh: Mesh, si: int, arrays: Array) -> void:
+	if not garder_chargement:
+		return
+	retenir(mesh, si, arrays)
+	verrou.lock()
+	_gardes_chargement.append(weakref(mesh))
+	verrou.unlock()
 
 
 ## Partage des fusions à géométrie identique (PWA : les deux rames et leurs voitures
@@ -542,8 +581,8 @@ static func merge(root: Node3D, keep: Array = [], name_prefix: String = "Fusion"
 	_ctx = name_prefix
 	var groups: Dictionary = {}     # clé → {mat, st, n, shadow}
 	var done: Dictionary = {}       # MeshInstance3D → nb de surfaces fusionnées
-	for e in _a_fusionner(root, keep):
-		_collect(e[0], e[1], groups, done)
+	var t_us: int = Time.get_ticks_usec()
+	_collecter(_a_fusionner(root, keep), 0, 0, groups, done)
 	var removed: int = 0
 	var k: int = 0
 	var multi: Dictionary = {}      # (ombre, portée) → [ArrayMesh, g]
@@ -587,6 +626,7 @@ static func merge(root: Node3D, keep: Array = [], name_prefix: String = "Fusion"
 		root.add_child(mi2)
 		k += 1
 	_retirer_sources(done)
+	fusion_us += Time.get_ticks_usec() - t_us
 	return removed
 
 
@@ -599,14 +639,17 @@ static func merge_par_tranches(root: Node3D, keep: Array, name_prefix: String, g
 	var done: Dictionary = {}
 	var t: int = Time.get_ticks_usec()
 	var budget: int = int(budget_ms * 1000.0)
-	for e in _a_fusionner(root, keep):
-		if not is_instance_valid(e[0]):
-			continue
+	var t_us: int = t
+	var l: Array = _a_fusionner(root, keep)
+	var i: int = 0
+	while i < l.size():
 		_ctx = name_prefix
-		_collect(e[0], e[1], groups, done)
+		i = _collecter(l, i, maxi(budget - (Time.get_ticks_usec() - t), 1), groups, done)
 		if Time.get_ticks_usec() - t > budget:
+			fusion_us += Time.get_ticks_usec() - t_us
 			await pause.call()
 			t = Time.get_ticks_usec()
+			t_us = t
 	var removed: int = 0
 	var k: int = 0
 	for key in groups:
@@ -619,9 +662,12 @@ static func merge_par_tranches(root: Node3D, keep: Array, name_prefix: String, g
 		k += 1
 		removed += g["n"] - 1
 		if Time.get_ticks_usec() - t > budget:
+			fusion_us += Time.get_ticks_usec() - t_us
 			await pause.call()
 			t = Time.get_ticks_usec()
+			t_us = t
 	_retirer_sources(done)
+	fusion_us += Time.get_ticks_usec() - t_us
 	return removed
 
 
@@ -633,6 +679,15 @@ const SANS_FUSION: StringName = &"sans_fusion"
 
 
 static func _a_fusionner(root: Node3D, keep: Array) -> Array:
+	if _outils_cpp() != null and collecte_cpp:
+		var l: Array = _outils.parcourir(root, keep)
+		if verifier_cpp:
+			_verifier_parcours(l, _a_fusionner_gd(root, keep))
+		return l
+	return _a_fusionner_gd(root, keep)
+
+
+static func _a_fusionner_gd(root: Node3D, keep: Array) -> Array:
 	var r: Array = []
 	var stack: Array = [[root, Transform3D.IDENTITY]]
 	while not stack.is_empty():
@@ -697,9 +752,73 @@ static func _poser_groupe(root: Node3D, g: Dictionary, ta: Array, nom: String, g
 		done[src] = int(done.get(src, 0)) + 1
 
 
+## _collect sur l[i0..] ; avec `budget_us` > 0, s'arrête dès qu'il est dépassé (au moins une pièce). Rend
+## l'indice suivant. Module chargé (hors palette) : en C++ (OutilsMaillage.collecter, mêmes groupes).
+static func _collecter(l: Array, i0: int, budget_us: int, groups: Dictionary, done: Dictionary) -> int:
+	if _outils_cpp() != null and collecte_cpp and not palette:
+		if verifier_cpp:
+			return _collecter_verifie(l, i0, groups, done)
+		return _outils.collecter(l, i0, budget_us, groups, _cpu, verrou, _repli_tableaux)
+	return _collecter_gd(l, i0, budget_us, groups, done)
+
+
+static func _collecter_gd(l: Array, i0: int, budget_us: int, groups: Dictionary, done: Dictionary) -> int:
+	var t0: int = Time.get_ticks_usec()
+	var i: int = i0
+	while i < l.size():
+		var e: Array = l[i]
+		i += 1
+		if is_instance_valid(e[0]):
+			_collect(e[0], e[1], groups, done)
+		if budget_us > 0 and Time.get_ticks_usec() - t0 > budget_us:
+			break
+	return i
+
+
+## Bancs : temps passé dans merge / merge_par_tranches (hors attentes), en µs. --collecte-gd : parcours,
+## regroupement et retrait en GDScript (assemblage toujours en C++), pour comparer.
+static var fusion_us: int = 0
+static var collecte_cpp: bool = not ("--collecte-gd" in OS.get_cmdline_user_args())
+## Bancs (--verifier-fusion) : chaque parcours et chaque regroupement faits en C++ ET en GDScript sur les mêmes
+## pièces, comparés (pièces, transformations, groupes, ordre des clés, tableaux) ; écarts comptés.
+static var verifier_cpp: bool = "--verifier-fusion" in OS.get_cmdline_user_args()
+static var verif_appels: int = 0
+static var verif_ecarts: int = 0
+
+
+static func _verifier_parcours(l_cpp: Array, l_gd: Array) -> void:
+	var ok: bool = l_cpp.size() == l_gd.size()
+	var i: int = 0
+	while ok and i < l_gd.size():
+		ok = l_cpp[i][0] == l_gd[i][0] and l_cpp[i][1] == l_gd[i][1]
+		i += 1
+	verif_appels += 1
+	if not ok:
+		verif_ecarts += 1
+		push_warning("MeshMerge : parcours C++ ≠ GDScript (%s, %d / %d pièces, écart à %d)" % [_ctx, l_cpp.size(), l_gd.size(), i - 1])
+
+
+static func _collecter_verifie(l: Array, i0: int, groups: Dictionary, done: Dictionary) -> int:
+	var g_gd: Dictionary = {}
+	var g_cpp: Dictionary = {}
+	_collecter_gd(l, i0, 0, g_gd, done)
+	_outils.collecter(l, i0, 0, g_cpp, _cpu, verrou, _repli_tableaux)
+	verif_appels += 1
+	if g_gd.keys() != g_cpp.keys() or g_gd != g_cpp:
+		verif_ecarts += 1
+		push_warning("MeshMerge : groupes C++ ≠ GDScript (%s) : %s / %s" % [_ctx, str(g_cpp.keys()), str(g_gd.keys())])
+	for k in g_cpp:
+		groups[k] = g_cpp[k]
+	return l.size()
+static var _repli_tableaux: Callable = func(mesh: Mesh, si: int) -> Array: return tableaux(mesh, si)
+
+
 ## Retire les sources : un objet n'est collecté que si TOUTES ses surfaces sont fusionnables (cf. _collect),
 ## il est donc entièrement repris.
 static func _retirer_sources(done: Dictionary) -> void:
+	if _outils_cpp() != null and collecte_cpp:
+		_outils.retirer(done)
+		return
 	for mi_any in done.keys():
 		var mi: MeshInstance3D = mi_any
 		if int(done[mi]) == mi.mesh.get_surface_count():
