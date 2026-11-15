@@ -5447,7 +5447,7 @@ func _creer_lointains() -> void:
 	var rels: Array = []
 	for mi0 in v0.find_children("*", "MeshInstance3D", true, false):
 		var mi: MeshInstance3D = mi0
-		if mi.mesh == null or not _visible_sous(mi, v0) or _sous_detail(mi, v0):
+		if mi.mesh == null or not _visible_sous(mi, v0) or _sous_detail(mi, v0) or mi.has_meta("relais_lod"):
 			continue
 		var mm: MultiMesh = MultiMesh.new()
 		mm.transform_format = MultiMesh.TRANSFORM_3D
@@ -5661,6 +5661,11 @@ func _lod_preparer() -> void:
 	var q1: PackedInt32Array = PackedInt32Array()
 	q1.resize(_vehicules.size())
 	_lod_qui = [q1, q1.duplicate()]
+
+
+## La PWA (et son mode allégé du web) : véhicules lointains par VehiculesLod, pas de relais par véhicule.
+static func lod_voulu_pwa() -> bool:
+	return OS.has_feature("web")
 
 
 static func lod_voulu() -> bool:
