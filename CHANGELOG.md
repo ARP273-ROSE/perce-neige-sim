@@ -5,6 +5,22 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.69.0 — 15 novembre 2026
+
+Pupitre de conduite pour toutes les remontées, exploitation automatique par défaut, pannes et évacuation, plein écran immersif au PC, et allègements pour les petites machines.
+
+**Exploitation de toutes les remontées** : chaque ligne a son mode AUTO (par défaut : reprise seule après une panne d'arrêt, moteur de secours à 30 % sur coupure du réseau, remise en service après une panne grave) et son mode MANUEL (démarrer, arrêter, réarmer, crans de vitesse, secours à la main). Catalogue de pannes par famille (télésièges fixes et débrayables, télécabines, téléskis, téléphériques, 3S ; le Funival reprend celles du Perce-Neige) avec leurs effets sur la vitesse et le départ, ce qu'il faut faire et ce qui est interdit. Poste 3D enrichi (AUTO/MANUEL, PANNE, SECOURS, REMISE EN SERVICE).
+
+**Portes des va-et-vient** : au téléphérique et au Funival, en manuel, le bouton PORTES ouvre et ferme à quai ; départ refusé portes ouvertes.
+
+**Déraillement** : sur un télésiège, une télécabine, un téléphérique ou le 3S, arrêt d'urgence puis évacuation verticale : les secouristes arrivent, le skieur à bord est descendu à la corde, assis dans le triangle, à la vitesse d'un descendeur, jusqu'au sol sous son véhicule ; la ligne reste hors service. Sur un téléski, la perche est lâchée et l'on redescend à ski.
+
+**PC, pupitre de chaque remontée** : le pupitre s'adapte à la remontée où l'on se trouve (voyants, pannes, portes, secours, évacuation en cours) ; plein écran immersif = la vue 3D sur tout l'écran, le pupitre en surimpression repliable (Tab) et une barre de boutons (FENÊTRE, PUPITRE, ÉCRANS, SKIEUR, VUES, PAUSE, AIDE).
+
+**Sons** : les passages de pylône sont des prises entières, calées sur le choc.
+
+**Petites machines** : fusion des maillages en C++, relief découpé plus fin, sièges lointains simplifiés, véhicules lointains des lignes à l'arrêt masqués, anti-crénelage léger avant de couper le brouillard ; sur puce intégrée, forêt moyenne limitée à 1,2 km (−19 % de temps de rendu en moyenne, mesuré sur Radeon 740M en 1080p : 60 i/s tenus).
+
 ## 1.68.1 — 14 novembre 2026
 
 La 1.68.0 n'a pas pu produire ses paquets (contrôle de confidentialité de la CI sur un exemple de chemin en commentaire) : elle est reprise ici, avec les pylônes des téléskis débrayables refaits.
