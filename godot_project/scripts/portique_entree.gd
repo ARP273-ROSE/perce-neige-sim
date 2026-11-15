@@ -37,6 +37,10 @@ static func _txt(parent: Node3D, t: String, pos: Vector3, px: float, coul: Color
 	return lab
 
 
+## Chiffres de la pendule : courbes fines (pas de 4 : 0, 5 et 8 en segments visibles de près) ; 11 glyphes seulement.
+const PAS_COURBE_PENDULE: float = 0.5
+
+
 ## Pendule lumineuse : l'heure (de l'appareil) mise à jour chaque seconde.
 ## Chiffres en textes figés (un maillage par caractère, calculés sur le fil de construction et gardés) : le Label3D
 ## d'avant, posé hors de la scène sur le fil, renvoyait sa mise en forme et ses glyphes au fil principal par appel
@@ -47,9 +51,9 @@ static func _pendule(parent: Node3D, pos: Vector3, px: float, coul: Color) -> vo
 		_pendule_label(parent, pos, px, coul)
 		return
 	for c in "0123456789:":
-		RemonteeKit.maillage_texte(c, 64, px, 4.0, HORIZONTAL_ALIGNMENT_CENTER, true)
-	var w0: float = RemonteeKit.maillage_texte("0", 64, px, 4.0, HORIZONTAL_ALIGNMENT_CENTER, true).get_aabb().size.x
-	var wc: float = RemonteeKit.maillage_texte(":", 64, px, 4.0, HORIZONTAL_ALIGNMENT_CENTER, true).get_aabb().size.x
+		RemonteeKit.maillage_texte(c, 64, px, PAS_COURBE_PENDULE, HORIZONTAL_ALIGNMENT_CENTER, true)
+	var w0: float = RemonteeKit.maillage_texte("0", 64, px, PAS_COURBE_PENDULE, HORIZONTAL_ALIGNMENT_CENTER, true).get_aabb().size.x
+	var wc: float = RemonteeKit.maillage_texte(":", 64, px, PAS_COURBE_PENDULE, HORIZONTAL_ALIGNMENT_CENTER, true).get_aabb().size.x
 	var pas: float = w0 * 1.15
 	var pas_c: float = maxf(wc * 2.5, w0 * 0.6)
 	var xs: Array = [-1.5 * pas - 0.5 * pas_c, -0.5 * pas - 0.5 * pas_c, 0.0, 0.5 * pas + 0.5 * pas_c, 1.5 * pas + 0.5 * pas_c]
@@ -70,7 +74,7 @@ static func _pendule(parent: Node3D, pos: Vector3, px: float, coul: Color) -> vo
 			return
 		vu[0] = h
 		for i in 5:
-			(cases[i] as MeshInstance3D).mesh = RemonteeKit.maillage_texte(h[i], 64, px, 4.0, HORIZONTAL_ALIGNMENT_CENTER, true)
+			(cases[i] as MeshInstance3D).mesh = RemonteeKit.maillage_texte(h[i], 64, px, PAS_COURBE_PENDULE, HORIZONTAL_ALIGNMENT_CENTER, true)
 	maj.call()
 	var tm: Timer = Timer.new()
 	tm.wait_time = 1.0
