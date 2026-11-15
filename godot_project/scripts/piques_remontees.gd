@@ -274,6 +274,269 @@ const ARRIVEE_BAS_COMMUN: Array = [
 	["Vous voilà où tout le monde arrive à ski, avec moins de mérite.", "You're where everyone ends up on skis, with less merit."],
 ]
 
+## Pannes et situations d'exploitation (retour d'utilisateur du 16/11/2026 : « un stock de phrases sarcastiques pour
+## toutes les nouvelles situations et pannes sur les remontées ») : une liste par panne du catalogue
+## (PANNE_<identifiant>, repli sur PANNE), puis reprise automatique, moteur de secours, remise en service, dépannage
+## d'un bouton, départ refusé, intervention, évacuation, hors service, descente à la corde, véhicule qui attend.
+const PANNE_COMMUN: Array = [
+	["Une panne. Le voyant est rouge, l'ambiance aussi.", "A fault. The light is red, and so is the mood."],
+	["Ça clignote au poste. Ce n'est pas Noël.", "Something's flashing in the hut. It isn't Christmas."],
+	["La remontée fait un caprice. Elle a le droit, elle a quarante ans.", "The lift is throwing a tantrum. Fair enough, it's forty."],
+	["Défaut signalé. Le technicien soupire déjà, on l'entend d'ici.", "Fault reported. You can hear the technician sighing from here."],
+	["Un capteur s'est vexé. On négocie.", "A sensor took offence. Negotiations are under way."],
+	["Panne. Le mot que le service commercial appelle « aléa d'exploitation ».", "A breakdown. Marketing calls it an 'operational variance'."],
+	["La machine a dit non. Poliment, mais non.", "The machine said no. Politely, but no."],
+	["Incident technique. Votre forfait, lui, continue de tourner.", "Technical incident. Your pass, however, keeps running."],
+]
+const PANNE_VENT_FORT_COMMUN: Array = [
+	["Vent fort : on roule à moitié. Deux fois plus de temps pour avoir deux fois plus froid.", "Strong wind: half speed. Twice the time to get twice as cold."],
+	["Ça souffle. La ligne ralentit, vos convictions aussi.", "It's blowing. The line slows down, and so does your resolve."],
+	["Vent fort. Tenez votre bonnet, personne n'ira le chercher.", "Strong wind. Hold on to your hat, nobody's fetching it."],
+	["L'anémomètre s'affole. Lui, au moins, il fait du sport.", "The anemometer is going wild. At least something's getting exercise."],
+]
+const PANNE_VENT_FORT_TS: Array = [
+	["Vent fort sur le siège : ça balance, c'est gratuit, c'est le manège.", "Strong wind on the chair: it swings, it's free, it's a fairground ride."],
+	["Le siège penche. C'est le vent, pas votre voisin. Enfin, pas seulement.", "The chair is leaning. It's the wind, not your neighbour. Not only, anyway."],
+]
+const PANNE_TEMPETE_COMMUN: Array = [
+	["Seuil de vent dépassé : tout s'arrête. Éole a gagné, comme d'habitude.", "Wind limit exceeded: everything stops. The wind wins, as usual."],
+	["Tempête. La remontée est fermée, votre bouche devrait l'être aussi : ça givre.", "Storm. The lift is closed; your mouth should be too, it's freezing in."],
+	["Arrêt pour vent. Le drapeau de la gare est à l'horizontale, et il a peur.", "Stopped for wind. The station flag is horizontal, and frightened."],
+	["On ne discute pas avec une rafale à 90. On attend, et on fait semblant d'aimer ça.", "You don't argue with a 90 km/h gust. You wait and pretend to enjoy it."],
+]
+const PANNE_COUPURE_RESEAU_COMMUN: Array = [
+	["Coupure de courant. Quelqu'un en vallée a branché un grille-pain de trop.", "Power cut. Someone in the valley plugged in one toaster too many."],
+	["Plus de réseau. La montagne redevient ce qu'elle était : haute et sans moteur.", "Mains gone. The mountain is back to what it was: tall and engineless."],
+	["Le réseau est tombé. Le diesel de secours tousse, il arrive.", "The grid is down. The back-up diesel is coughing its way over."],
+	["Panne d'électricité. Pour les réclamations, écrire à la foudre.", "Power failure. Complaints may be addressed to the lightning."],
+]
+const PANNE_VARIATEUR_COMMUN: Array = [
+	["Défaut du variateur. Il variait, il ne varie plus.", "Drive fault. It used to vary. It no longer does."],
+	["Le variateur boude. Une armoire électrique a ses humeurs.", "The drive is sulking. Electrical cabinets have moods."],
+	["Variateur en défaut : on éteint, on rallume. Oui, comme votre box.", "Drive fault: off, then on again. Yes, like your router."],
+]
+const PANNE_SURCHAUFFE_COMMUN: Array = [
+	["Le réducteur chauffe. Il est le seul à avoir chaud ici.", "The gearbox is overheating. It's the only thing here that's warm."],
+	["Surchauffe : on lève le pied. La mécanique transpire pour vous.", "Overheating: easing off. The machinery is sweating on your behalf."],
+	["Ça sent l'huile chaude au local. Vitesse réduite, nez bouchés.", "Smells of hot oil in the machine room. Reduced speed, pinched noses."],
+]
+const PANNE_FREIN_SERVICE_COMMUN: Array = [
+	["Défaut du frein de service. Rassurez-vous : il a freiné. C'est après que ça se complique.", "Service brake fault. Relax, it braked. It's afterwards that gets complicated."],
+	["Le frein a serré tout seul. Il est consciencieux, lui.", "The brake applied itself. Conscientious little thing."],
+	["Frein en défaut. On ne repart pas tant qu'il n'a pas présenté ses excuses.", "Brake fault. We're not leaving until it apologises."],
+]
+const PANNE_SECU_LIGNE_COMMUN: Array = [
+	["La boucle de sécurité s'est ouverte. Quelque part, un fil s'ennuie.", "The safety circuit opened. Somewhere, a wire got bored."],
+	["Sécurité de ligne : un pylône a quelque chose à dire. On l'écoute.", "Line safety: a tower has something to say. We're listening."],
+	["Un capteur de pylône a déclenché. C'est peut-être un corbeau. C'est souvent un corbeau.", "A tower sensor tripped. Could be a crow. It's often a crow."],
+]
+const PANNE_GIVRE_COMMUN: Array = [
+	["Givre sur le câble. C'est joli, ça brille, ça ralentit.", "Rime on the rope. Pretty, sparkly, slow."],
+	["Le câble a mis son manteau blanc. On roule doucement pour ne pas le froisser.", "The rope put its white coat on. We go gently so as not to crease it."],
+	["Givre : les galets patinent, vous patientez.", "Rime: the sheaves slip, you wait."],
+]
+const PANNE_TENSION_COMMUN: Array = [
+	["Le contrepoids est en bout de course. Quinze tonnes de béton qui disent stop.", "The counterweight ran out of travel. Fifteen tonnes of concrete saying stop."],
+	["Tension du câble hors limite. Il s'est détendu ; vous, non.", "Rope tension out of range. It relaxed. You didn't."],
+	["Course du contrepoids : le câble a pris un centimètre, la direction un cachet.", "Counterweight travel: the rope gained an inch, management took an aspirin."],
+]
+const PANNE_SORTIE_CABLE_COMMUN: Array = [
+	["Le câble est sorti des galets. Ce n'est pas prévu au programme. Ni au forfait.", "The rope left the sheaves. Not on the programme. Nor in the pass."],
+	["Déraillement. Le mot que personne ne voulait lire aujourd'hui.", "Deropement. The word nobody wanted to read today."],
+	["Câble déraillé : on ne bouge plus, on ne saute pas, on attend la corde.", "Rope off the sheaves: don't move, don't jump, wait for the rescue rope."],
+	["Le rattrape-câble a fait son travail. C'est le seul aujourd'hui.", "The rope catcher did its job. The only one that did today."],
+]
+const PANNE_DERAILLEMENT_TPH_COMMUN: Array = [
+	["Le chariot a quitté son câble porteur. Les secouristes ont posé leur café.", "The carriage left its track rope. The rescuers have put their coffee down."],
+	["Déraillement du chariot. La cabine ne tombe pas : le frein tient. La conversation, moins.", "Carriage derailed. The cabin isn't falling: the brake holds. The conversation doesn't."],
+	["Immobilisés entre deux gares. Le cabinier relit la notice, à voix haute, pour rassurer.", "Stuck between stations. The attendant is reading the manual aloud, to reassure."],
+]
+const PANNE_SORTIE_CABLE_TK_COMMUN: Array = [
+	["Le câble du téléski a déraillé. Lâchez la perche, la descente est offerte.", "The drag lift rope came off. Let go of the pole, the run down is on the house."],
+	["Déraillement : la perche ne tire plus. Vos cuisses reprennent le service.", "Rope off: the pole stopped pulling. Your thighs are back on duty."],
+	["Plus de câble, plus de montée. Il reste la pente, et elle est dans le bon sens.", "No rope, no uphill. There's still the slope, and it points the right way."],
+]
+const PANNE_PINCE_COMMUN: Array = [
+	["Contrôle de pince : une pince a un doute. On ne part pas avec une pince qui doute.", "Grip check: one grip has doubts. We don't leave with a doubting grip."],
+	["La pince n'a pas serré comme il faut. Elle repassera l'examen.", "The grip didn't clamp properly. It will resit the exam."],
+	["Défaut de pince. Une pièce de quinze kilos tient votre vie ; on la laisse se concentrer.", "Grip fault. A fifteen-kilo part holds your life; let it concentrate."],
+]
+const PANNE_ESPACEMENT_COMMUN: Array = [
+	["Défaut d'espacement : deux véhicules se suivent de trop près. Comme sur l'autoroute, mais en l'air.", "Spacing fault: two carriers too close. Like the motorway, but airborne."],
+	["Les sièges se collent. On remet de la distance, comme en 2020.", "The chairs are bunching up. Back to distancing, 2020 style."],
+	["Espacement hors tolérance. La gare recompte ses moutons.", "Spacing out of tolerance. The station is recounting its sheep."],
+]
+const PANNE_PORTES_COMMUN: Array = [
+	["Porte non verrouillée. Quelqu'un a encore voulu monter avec son sac à dos de l'Everest.", "Door not locked. Someone tried to board with an Everest rucksack again."],
+	["Une porte bâille. On ne part pas la bouche ouverte.", "A door is yawning. We don't leave with our mouth open."],
+	["Porte mal fermée. Le cabinier pousse, la porte résiste, le public commente.", "Door ajar. The attendant pushes, the door resists, the audience comments."],
+]
+const PANNE_CHUTE_COMMUN: Array = [
+	["Chute à l'embarquement. Applaudissements dans la file.", "Fall at loading. Applause from the queue."],
+	["Quelqu'un s'est assis à côté du siège. C'est une technique. Mauvaise.", "Someone sat down next to the chair. It's a technique. A bad one."],
+	["Chute au départ : un ski ici, un ski là, la dignité plus loin.", "Fall at the start: one ski here, one there, dignity further off."],
+]
+const PANNE_CHUTE_TK: Array = [
+	["Chute au téléski : il a lâché la perche, la perche ne l'a pas regretté.", "Drag lift fall: he let go of the pole. The pole had no regrets."],
+	["Un débutant en travers de la trace. On arrête, on le ramasse, on recommence.", "A beginner across the track. Stop, scoop, start again."],
+]
+const PANNE_DEPASSEMENT_COMMUN: Array = [
+	["Sécurité de dépassement : quelqu'un a oublié de descendre. Il visite la poulie.", "Overrun safety: someone forgot to get off. They're touring the bullwheel."],
+	["Il n'a pas lâché à l'arrivée. La barrette de sécurité, elle, a lâché.", "He didn't let go at the top. The safety gate did."],
+	["Dépassement en gare amont. Le perchman lève les yeux au ciel, qui est tout près.", "Overrun at the top. The operator rolls his eyes to heaven, which is close by."],
+]
+const PANNE_ENROULEUR_COMMUN: Array = [
+	["Un enrouleur est bloqué : une perche pend, molle, vexée.", "A retractor jammed: one pole hangs limp and offended."],
+	["Enrouleur coincé. Prenez la perche suivante, celle-ci fait grève.", "Retractor stuck. Take the next pole, this one is on strike."],
+	["La perche ne remonte plus. Elle traîne, comme vous en fin de journée.", "The pole won't retract. It drags, like you at the end of the day."],
+]
+const PANNE_FREIN_PORTEUR_COMMUN: Array = [
+	["Frein sur câble porteur serré. La cabine est accrochée comme une moule à son rocher.", "Track rope brake applied. The cabin clings like a mussel to its rock."],
+	["Le frein de chariot a mordu le porteur. Il ne lâchera pas. C'est sa seule qualité.", "The carriage brake bit the track rope. It won't let go. Its only virtue."],
+	["Frein de secours déclenché. On ne tombera pas. On ne montera pas non plus.", "Emergency brake tripped. We won't fall. We won't go up either."],
+]
+const PANNE_F_TENSION_COMMUN: Array = [
+	["Pic de tension du câble. Il s'est tendu, comme tout le monde à bord.", "Rope tension spike. It tensed up, like everyone on board."],
+	["Le câble a eu un sursaut. Rien de grave : lui aussi a ses nerfs.", "The rope flinched. Nothing serious: it has nerves too."],
+]
+const PANNE_F_PORTE_COMMUN: Array = [
+	["Capteur de porte : une porte se croit ouverte. Elle est fermée. Elle insiste.", "Door sensor: a door thinks it's open. It's shut. It insists."],
+	["Une porte en défaut. Trois cents personnes regardent la même porte.", "One door at fault. Three hundred people staring at the same door."],
+]
+const PANNE_F_THERMIQUE_COMMUN: Array = [
+	["Surchauffe moteur. Sous terre, à 3 000 m, il a trouvé le moyen d'avoir chaud.", "Motor overheating. Underground at 3,000 m, and it managed to get hot."],
+	["Le moteur demande une pause. On monte aux deux tiers, il souffle.", "The motor wants a break. Two-thirds speed while it catches its breath."],
+]
+const PANNE_F_RAIL_MOUILLE_COMMUN: Array = [
+	["Rail mouillé : on roule à mi-vitesse. Le tunnel suinte, la rame se méfie.", "Wet rail: half speed. The tunnel drips, the train is wary."],
+	["De l'eau sur le rail. Un funiculaire qui patine, ça ferait désordre.", "Water on the rail. A skidding funicular would look untidy."],
+]
+const PANNE_F_MOTEUR_COMMUN: Array = [
+	["Un groupe moteur est hors service. Il en reste. On compte dessus.", "One drive unit is out. There are others. We're counting on them."],
+	["Moteur en moins : on monte, mais sans se vanter.", "One motor down: we're climbing, just not bragging."],
+]
+const PANNE_F_ALIM_COMMUN: Array = [
+	["Perte des auxiliaires. La lumière baisse, les voix aussi.", "Auxiliaries lost. The lights dim, and so do the voices."],
+	["Plus d'auxiliaires : arrêt en tunnel. C'est le moment de se découvrir un voisin.", "No auxiliaries: stopped in the tunnel. Time to meet your neighbour."],
+]
+const PANNE_F_FREIN_PARKING_COMMUN: Array = [
+	["Frein de parking collé. La rame veut bien partir ; le frein, non.", "Parking brake stuck. The train is willing; the brake isn't."],
+	["On ne part pas : le frein de parking s'accroche à la gare. Il s'y plaît.", "Not leaving: the parking brake is clinging to the station. It likes it here."],
+]
+const PANNE_F_RUPTURE_COMMUN: Array = [
+	["Rupture du câble tracteur. Les freins sur rail ont serré. C'est pour ça qu'on les a mis.", "Haul rope failure. The rail brakes clamped. That's what they're for."],
+	["Le câble a lâché, les freins non. Respirez. Puis attendez longtemps.", "The rope let go; the brakes didn't. Breathe. Then wait a long time."],
+]
+const PANNE_F_FREIN_SERVICE_COMMUN: Array = [
+	["Frein de service défaillant. Il en reste deux autres. La redondance, ça rassure après coup.", "Service brake failed. Two more remain. Redundancy is comforting in hindsight."],
+	["Le frein de service a rendu son tablier. Arrêt d'urgence, par principe.", "The service brake resigned. Emergency stop, on principle."],
+]
+const PANNE_F_INONDATION_COMMUN: Array = [
+	["De l'eau dans le tunnel. On avance au pas, comme dans une cave inondée, mais en pente.", "Water in the tunnel. Crawling, like a flooded cellar, only steeper."],
+	["Infiltration : le glacier nous rend visite par le plafond.", "Seepage: the glacier is dropping in through the ceiling."],
+]
+const PANNE_F_COMMS_COMMUN: Array = [
+	["Plus de communications. Le conducteur parle tout seul ; ça ne change pas grand-chose.", "Communications lost. The driver is talking to himself. Not much has changed."],
+	["Liaison perdue avec la gare. On se fait signe par la pensée.", "Link to the station lost. We're signalling by thought."],
+]
+const PANNE_F_AIGUILLAGE_COMMUN: Array = [
+	["Aiguillage de l'évitement en défaut. Deux rames, une voie : on réfléchit avant.", "Passing loop switch fault. Two trains, one track: think first."],
+	["L'aiguillage hésite. À cet endroit précis, on préfère qu'il soit sûr de lui.", "The switch is hesitating. At that exact spot, we'd rather it were sure."],
+]
+const PANNE_F_INCENDIE_COMMUN: Array = [
+	["Détection de fumée. Ce n'est pas la raclette. Évacuation.", "Smoke detected. It isn't the raclette. Evacuate."],
+	["Fumée en tunnel : on arrête tout et on sort à pied. Le sarcasme reprendra dehors.", "Smoke in the tunnel: stop everything, walk out. Sarcasm resumes outside."],
+]
+const REPRISE_COMMUN: Array = [
+	["Ça repart tout seul. L'automate a plus de sang-froid que vous.", "It restarted by itself. The controller is calmer than you are."],
+	["Redémarrage automatique. Ne remerciez personne, c'est un logiciel.", "Automatic restart. Thank nobody, it's software."],
+	["Et ça remonte. Comme si de rien n'était. La montagne oublie vite.", "And up we go. As if nothing happened. Mountains forget quickly."],
+	["Reprise. Le silence gêné à bord peut cesser.", "Moving again. The awkward silence on board may end."],
+	["La ligne redémarre. Vos doigts de pied, plus tard.", "The line restarts. Your toes, later."],
+	["C'est reparti. Jusqu'à la prochaine fois, c'est-à-dire bientôt.", "Off we go. Until next time, which is soon."],
+]
+const SECOURS_COMMUN: Array = [
+	["Moteur thermique de secours : 30 % de la vitesse, 100 % de l'odeur de gasoil.", "Back-up diesel: 30 % of the speed, 100 % of the diesel smell."],
+	["On finit au diesel. C'est lent, ça fume, mais ça ramène tout le monde.", "Finishing on diesel. Slow, smoky, but it gets everyone home."],
+	["Secours en marche. À cette allure, vous auriez le temps de lire le règlement.", "Back-up drive running. At this pace you could read the regulations."],
+	["Le thermique ronronne. Enfin, il tousse. Mais il tourne.", "The diesel is purring. Well, coughing. But it's turning."],
+	["Marche de secours : le paysage défile au ralenti, pour une fois qu'on a le temps.", "Rescue drive: the scenery in slow motion, now that we have the time."],
+]
+const REMISE_COMMUN: Array = [
+	["Remise en service. La ligne revient d'entre les pannes.", "Back in service. The line returns from the land of faults."],
+	["C'est réparé. Le technicien range ses clés et son air supérieur.", "It's fixed. The technician packs his spanners and his superior look."],
+	["Ligne rouverte. Les premiers de la file font semblant de ne pas avoir attendu.", "Line reopened. The front of the queue pretends they never waited."],
+	["Remise en service : essais à vide réussis. Maintenant on essaie avec vous.", "Back in service: empty runs passed. Now we try with you."],
+	["De nouveau en service. On ne dit pas « comme neuve », on dit « comme avant ».", "In service again. Not 'good as new'. 'Same as before'."],
+]
+const DEPANNAGE_COMMUN: Array = [
+	["Tout réparé d'un seul bouton. Si seulement c'était comme ça en vrai.", "Everything fixed with one button. If only real life worked like that."],
+	["Dépannage express. Un mécanicien, quelque part, vient de perdre son emploi.", "Express repair. Somewhere a mechanic just lost his job."],
+	["Réparé. Vous n'avez même pas sali vos gants.", "Repaired. You didn't even get your gloves dirty."],
+	["Un clic, plus de panne. Le constructeur aimerait connaître votre secret.", "One click, no more fault. The manufacturer would love to know your secret."],
+	["Tout est réarmé, remis, relancé. La baguette magique n'est pas fournie avec le forfait.", "All reset, restored, restarted. Magic wand not included in the pass."],
+	["La ligne repart. Trois heures de procédure résumées en un doigt.", "The line restarts. Three hours of procedure summed up in one finger."],
+]
+const REFUS_COMMUN: Array = [
+	["Départ refusé. La machine a lu la notice ; elle.", "Start refused. The machine has read the manual. Unlike some."],
+	["Ça ne part pas. Il y a une raison, elle est affichée, elle est en rouge.", "It won't start. There's a reason, it's displayed, it's in red."],
+	["Non. Pas tant que ce défaut est là. On ne force pas un automate de sécurité.", "No. Not with that fault up. You don't bully a safety controller."],
+	["Refus de départ. Appuyer plus fort ne change rien, on a vérifié.", "Start refused. Pressing harder doesn't help; we checked."],
+	["Le bouton vert reste sourd. Le rouge, lui, vous écoute toujours.", "The green button is deaf. The red one always listens."],
+]
+const REFUS_TPH: Array = [
+	["On ne part pas portes ouvertes. Même en simulation, même pour rire.", "We don't leave with the doors open. Not even in a simulator. Not even for fun."],
+	["Portes ouvertes, départ refusé. La cabine tient à ses passagers.", "Doors open, start refused. The cabin likes to keep its passengers."],
+]
+const INTERVENTION_COMMUN: Array = [
+	["Les secouristes sont en route. À pied, dans la neige, avec cent mètres de corde. Soyez aimable.", "Rescuers are on their way. On foot, in snow, with 100 m of rope. Be nice."],
+	["Intervention en cours. Restez assis : vous n'êtes pas le plus pressé de tomber.", "Intervention under way. Stay seated: you're in no hurry to fall."],
+	["On vient vous chercher. Par en dessous. C'est original.", "They're coming for you. From underneath. How novel."],
+	["Les pisteurs grimpent au pylône. Ils ont l'air de savoir. Espérons.", "Patrollers are climbing the tower. They look like they know. Let's hope."],
+]
+const EVACUATION_COMMUN: Array = [
+	["Évacuation verticale. Le mot « verticale » est important.", "Vertical evacuation. The word 'vertical' matters."],
+	["On descend tout le monde à la corde. Quinze minutes par siège. Vous êtes le quarante-deuxième.", "Everyone comes down by rope. Fifteen minutes per chair. You're number forty-two."],
+	["Évacuation en cours. Souriez, quelqu'un filme forcément.", "Evacuation under way. Smile, someone is bound to be filming."],
+	["Les passagers descendent un par un, comme des jambons.", "Passengers are being lowered one by one, like hams."],
+	["Évacuation : trois heures et demie au plus, dit le règlement. Il fait moins douze, dit le thermomètre.", "Evacuation: three and a half hours at most, say the rules. Minus twelve, says the thermometer."],
+]
+const EVACUATION_TK: Array = [
+	["Évacuation du téléski : lâchez la perche et skiez. C'est le plan. Il est simple.", "Drag lift evacuation: let go and ski down. That's the plan. It's simple."],
+	["Tout le monde redescend à ski. Vous êtes venu pour ça, non ?", "Everybody skis down. That's what you came for, isn't it?"],
+]
+const HORS_SERVICE_COMMUN: Array = [
+	["Ligne hors service. Le panneau lumineux l'annonce avec une joie mal dissimulée.", "Line out of service. The sign announces it with ill-concealed glee."],
+	["Fermé. Il reste les autres remontées, la marche, et la philosophie.", "Closed. That leaves the other lifts, walking, and philosophy."],
+	["Hors service jusqu'à nouvel ordre. L'ordre n'est pas pressé.", "Out of service until further notice. The notice is in no hurry."],
+	["Tous les passagers sont au sol. La remontée, elle, est au tapis.", "All passengers on the ground. The lift is down for the count."],
+]
+const CORDE_COMMUN: Array = [
+	["Descente à la corde. Asseyez-vous dans le triangle et ne regardez pas en bas. Trop tard.", "Rope descent. Sit in the triangle and don't look down. Too late."],
+	["Vous voilà pendu à dix millimètres de polyamide. Ils tiennent deux tonnes. Vous, moins.", "There you hang from ten millimetres of nylon. It holds two tonnes. You weigh less."],
+	["La corde file. Le secouriste gère. Vous, contentez-vous d'être un colis.", "The rope pays out. The rescuer has it. Your job is to be a parcel."],
+	["Descente verticale. C'est la seule piste noire sans bosses.", "Vertical descent. The only black run with no moguls."],
+	["Suspendu comme un jambon de Savoie. La dignité attendra en bas.", "Dangling like a cured ham. Dignity will be waiting at the bottom."],
+	["On vous descend. Doucement. Si ça va vite, ce n'est pas la corde.", "You're being lowered. Slowly. If it's fast, that's not the rope."],
+	["Vous avez demandé la corde. Dans la vraie vie, on appelle ça une très longue journée.", "You asked for the rope. In real life that's called a very long day."],
+	["Le triangle d'évacuation : un fauteuil sans fond, sans dossier et sans vue rassurante.", "The rescue triangle: a seat with no bottom, no back and no reassuring view."],
+]
+const CORDE_SOL_COMMUN: Array = [
+	["Au sol. Les jambes tremblent : c'est le froid. On dira que c'est le froid.", "On the ground. Legs shaking: it's the cold. We'll say it's the cold."],
+	["Posé. Rendez le triangle, gardez le souvenir.", "Down. Return the triangle, keep the memory."],
+	["Vous touchez la neige. Elle ne vous a jamais paru aussi sympathique.", "You touch the snow. It has never seemed so friendly."],
+	["Arrivé en bas par le chemin le plus court. Et le plus étroit.", "Reached the bottom by the shortest route. And the narrowest."],
+	["Sain et sauf. La remontée, elle, n'a toujours pas bougé.", "Safe and sound. The lift still hasn't moved."],
+]
+const ATTENTE_COMMUN: Array = [
+	["La cabine vous attend, portes ouvertes. Quarante personnes vous regardent arriver.", "The cabin is waiting, doors open. Forty people are watching you arrive."],
+	["On vous attend. Ne courez pas en chaussures de ski, c'est ridicule. Si, courez.", "They're waiting. Don't run in ski boots, it looks silly. Actually, run."],
+	["Le cabinier tient la porte. Il compte dans sa tête. Il en est à douze.", "The attendant is holding the door. Counting in his head. He's at twelve."],
+	["Départ retardé pour vous. Dans la vraie vie, la porte se ferme sous votre nez.", "Departure held for you. In real life, the door shuts in your face."],
+	["Prenez votre temps. Non, je plaisante : ils ont un horaire.", "Take your time. Just kidding: they have a timetable."],
+	["Le véhicule patiente. Vous êtes officiellement « le client qu'on attend ».", "The vehicle is waiting. You are officially 'that passenger'."],
+]
+const EVENEMENTS_EXPLOITATION: Array = ["PANNE", "REPRISE", "SECOURS", "REMISE", "DEPANNAGE", "REFUS", "INTERVENTION", "EVACUATION", "HORS_SERVICE", "CORDE", "CORDE_SOL", "ATTENTE"]
 const EVENEMENTS: Array = ["ARRET", "FRAUDE", "CHAUSSE", "PIETON", "LOUPE", "SAUT", "DESCENTE", "ARRIVEE", "RESTE", "ARRIVEE_BAS"]
 
 
@@ -328,6 +591,9 @@ static func pique(evt: String, lg: LigneRemontee, lang: String = "fr") -> String
 	_charger()
 	var fam: String = famille(lg)
 	var l: Array = _liste(evt, fam)
+	if l.is_empty() and evt.begins_with("PANNE_"):
+		evt = "PANNE"                    # panne sans liste à elle : piques communes aux pannes
+		l = _liste(evt, fam)
 	if l.is_empty():
 		return ""
 	var cle: String = evt + "_" + fam

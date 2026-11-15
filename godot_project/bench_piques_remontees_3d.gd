@@ -46,7 +46,7 @@ func _banque() -> void:
 	var n: int = 0
 	var mal: Array = []
 	for k in c:
-		if c[k] is Array and k != "EVENEMENTS":
+		if c[k] is Array and not String(k).begins_with("EVENEMENTS"):
 			for q in c[k]:
 				n += 1
 				if not (q is Array and q.size() == 2 and String(q[0]) != "" and String(q[1]) != ""):
@@ -57,8 +57,11 @@ func _banque() -> void:
 	for fam in ["siege_doppelmayr_e98_6", "siege_fixe_4", "cabine_omega4", "perche_enrouleur", "cabine_3s", "cabine_tph"]:
 		var lg: LigneRemontee = LigneRemontee.new()
 		lg.famille = fam
-		for evt in PiquesRemontees.EVENEMENTS:
+		var pannes: Array = (PannesRemontees.P as Dictionary).keys().map(func(id) -> String: return "PANNE_" + String(id).to_upper())
+		for evt in PiquesRemontees.EVENEMENTS + PiquesRemontees.EVENEMENTS_EXPLOITATION + pannes:
 			var l: Array = PiquesRemontees._liste(evt, PiquesRemontees.famille(lg))
+			if l.is_empty() and evt.begins_with("PANNE_"):
+				l = PiquesRemontees._liste("PANNE", PiquesRemontees.famille(lg))      # (repli de pique())
 			if l.is_empty():
 				vides.append("%s/%s" % [evt, fam])
 				continue

@@ -140,8 +140,15 @@ func portes_ouvertes() -> bool:
 	return ouverture_portes() > 0.5
 
 
+var _t_pique_attente: int = -1000000
+
+
 func _attendre_skieur(delta: float) -> bool:
 	if _skieur_attendu() or _skieur_marche_quai() or _skieur_dans_porte():
+		# (une pique quand l'attente commence, pas plus d'une toutes les deux minutes)
+		if _t_attente <= 0.0 and Time.get_ticks_msec() - _t_pique_attente > 120000:
+			_t_pique_attente = Time.get_ticks_msec()
+			_pique_exploitation("ATTENTE")
 		_t_attente = 3.0
 	else:
 		_t_attente = maxf(_t_attente - delta, 0.0)
