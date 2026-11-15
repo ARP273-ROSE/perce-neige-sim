@@ -51,6 +51,7 @@ class ModeleRemontee:
         self._attente: list[list] = []            # [id, n, cmd, arg, t]
         self.paquets = 0
         self.octets_max = 0
+        self.version = 0                          # avance quand ce qui est affiché peut avoir changé
 
     # --- réception ---
     def recevoir(self, d: dict | None, maintenant: float | None = None, octets: int = 0) -> list:
@@ -59,8 +60,13 @@ class ModeleRemontee:
         self.paquets += 1
         self.octets_max = max(self.octets_max, octets)
         if not isinstance(d, dict) or not d.get("id"):
+            if self.d is not None:
+                self.version += 1
             self.d = None
             return []
+        if d != self.d:
+            # (paquet identique au précédent : rien à redessiner)
+            self.version += 1
         self.d = d
         self.t_recu = maintenant
         lid = str(d["id"])
@@ -99,6 +105,7 @@ class ModeleRemontee:
         maintenant = time.monotonic() if maintenant is None else maintenant
         self._n += 1
         self._attente.append([str(self.d["id"]), self._n, cmd, arg, maintenant])
+        self.version += 1
         # retour immédiat à l'écran (la télémesure confirmera)
         if cmd in COMMANDES_CONDUITE:
             self.d["mode"] = "manuel"
@@ -197,6 +204,9 @@ class FauxEmetteur:
         # va-et-vient : position de la cabine 1 sur la ligne (0..1), la 2 en face
         self.x = 0.15
         self.sens = 1
+        self.portes_pilotables = groupe_va_et_vient(self.g)
+        self.a_quai = False
+        self.refus = ""
         self._quai_t = 0.0
 
     # --- journal ---
@@ -215,11 +225,18 @@ class FauxEmetteur:
             self.mode = "auto" if arg == "auto" else "manuel"
             self._evt("commande", "Mode automatique" if self.mode == "auto" else "Mode manuel")
         elif cmd == "demarrer":
-            if self.hors_service:
+            if self.portes_pilotables and self.portes == "ouvertes":
+                self.refus = "portes ouvertes"
+                self._evt("alerte", "Départ refusé : portes ouvertes")
+            elif self.hors_service:
                 self._evt("alerte", "Démarrage refusé : ligne hors service")
             elif self.etat in ("urgence",) or any(p["gravite"] in ("arret", "grave") and p["phase"] == "active" for p in self.pannes):
                 self._evt("alerte", "Démarrage refusé : défaut non réarmé")
             else:
+                self.refus = ""
+                if self.a_quai and groupe_va_et_vient(self.g):
+                    self.sens = 1 if self.x <= 0.0 else -1
+                    self.x += self.sens * 0.001
                 self.etat = "marche"
                 self._evt("commande", "Démarrage")
         elif cmd == "arreter":
@@ -256,8 +273,10 @@ class FauxEmetteur:
                     self._evt("fin_panne", f"Panne traitée : {p['nom']}")
             self.pannes = [p for p in self.pannes if p["phase"] == "active"]
         elif cmd == "portes" and self.portes is not None:
-            if self.v > 0.05:
-                self._evt("alerte", "Portes : véhicule en mouvement")
+            if not self.portes_pilotables:
+                self._evt("alerte", "Portes automatiques : pas de commande")
+            elif not self.a_quai or self.v > 0.05:
+                self._evt("alerte", "Portes : véhicule hors quai")
             else:
                 self.portes = "ouvertes" if arg == "ouvrir" else "fermees"
                 self._evt("commande", "Portes ouvertes" if self.portes == "ouvertes" else "Portes fermées")
@@ -333,8 +352,13 @@ class FauxEmetteur:
         if groupe_va_et_vient(self.g):
             self.x += self.sens * self.v * dt / 2000.0
             quai = [self.x <= 0.0 or self.x >= 1.0, self.x <= 0.0 or self.x >= 1.0]
+            self.a_quai = quai[0]
             if self.x >= 1.0 or self.x <= 0.0:
                 self.x = min(1.0, max(0.0, self.x))
+                if self.mode != "auto" and self.etat == "marche":
+                    # manuel : arrivé à quai, le véhicule attend, portes fermées
+                    self.etat = "arret_normal"
+                    self.v = 0.0
                 if self.mode == "auto" and self.etat == "marche":
                     self._quai_t += dt
                     self.portes = "ouvertes" if 3.0 < self._quai_t < 15.0 else "fermees"
@@ -351,7 +375,8 @@ class FauxEmetteur:
             "vehicules": self.nveh, "v_nom": self.v_nom, "v": round(self.v, 2),
             "v_consigne": round(cible, 2), "cran": self.cran, "crans": self.crans,
             "etat": self.etat, "mode": self.mode, "kw": round(self.kw_max * 0.15 + self.kw_max * 0.7 * self.v / self.v_nom),
-            "kw_max": self.kw_max, "frein_service": self.etat != "marche" and self.v < 0.05,
+            "kw_max": 0, "portes_pilotables": self.portes_pilotables, "a_quai": self.a_quai,
+            "refus_depart": self.refus, "frein_service": self.etat != "marche" and self.v < 0.05,
             "frein_urgence": self.etat == "urgence", "vent": round(self.vent, 1), "portes": self.portes,
             "a_bord": False, "secours": self.secours, "hors_service": self.hors_service,
             "voyants": {"cable": "deraillement_cable" in ids, "pince": "defaut_pince" in ids,
