@@ -396,7 +396,7 @@ func _construire_vav() -> void:
 	#    cabines de 3 m : la paroi intérieure passe à 1,5 m de l'axe), presque droit dans le sens de la ligne ;
 	#    ceintures, croix de Saint-André sur chaque face, contreventement en plan, échelle au milieu ;
 	#  - tête : deux fermes en travers sous les poutres de sabot, porte-à-faux le long de la ligne, passerelles
-	#    côté intérieur ; au-dessus des porteurs, mâts et poutres de levage, montant extérieur suspendu ;
+	#    côté intérieur ; au-dessus des porteurs, quelques potelets seulement (pas de portique : photos) ;
 	#  - guides anti-collision : lisses verticales le long du passage des cabines, becs recourbés aux bouts ;
 	#  - sabots de 12 m cintrés de toute la déviation, sur la tête.
 	# Rien ne passe dans le gabarit du chariot (|x − x0| < 0,6 m au-dessus de −0,3 m), du bras de suspente
@@ -531,19 +531,15 @@ func _construire_vav() -> void:
 		for sz3 in [-1.0, 1.0]:
 			tp_.call(Vector3(sx2 * bx1 * 0.5, yt, sz3 * zt), Vector3(xi, y_lb, sz3 * lb * 0.5), 0.14, 0.14, m)
 			tp_.call(Vector3(xi, y_lb, sz3 * lb * 0.5), Vector3(xi, y_s - 0.2, sz3 * (ls + 3.0) * 0.5), 0.10, 0.10, m)
-		# au-dessus des porteurs : mâts côté intérieur, poutres de levage en travers au-dessus de la voie,
-		# poutres hautes le long de la ligne, montant extérieur suspendu au droit du pylône
-		var y_h: float = yc + 2.6
-		var xo: float = sx2 * (x0 + 2.2)
+		# au-dessus des porteurs : rien ne passe au-dessus de la voie (retour d'utilisateur du 16/11/2026 : « la cage
+		# en métal au-dessus de la bande de roulement, ça n'existe pas » ; photos RM.net du pylône 1, de profil et depuis
+		# la cabine : long sabot cintré posé sur la tête, quelques potelets fins au-dessus, pas de portique). Trois
+		# potelets côté intérieur, le long de la passerelle, et un paratonnerre.
+		var y_h: float = yc + 1.3
 		for zm in [-ls * 0.4, 0.0, ls * 0.4]:
-			tp_.call(Vector3(xi, y_s, zm), Vector3(xi, y_h, zm), 0.20, 0.20, m)
-			tp_.call(Vector3(xi, y_h, zm), Vector3(xo, y_h, zm), 0.18, 0.26, m)
-		tp_.call(Vector3(xi, y_h, -ls * 0.4), Vector3(xi, y_h, ls * 0.4), 0.16, 0.16, m)
-		tp_.call(Vector3(xo, y_h, -ls * 0.4), Vector3(xo, y_h, ls * 0.4), 0.16, 0.16, m)
-		tp_.call(Vector3(xo, y_h, 0.0), Vector3(xo, yc - 2.6, 0.0), 0.18, 0.18, m)
-		tp_.call(Vector3(xo, y_h, -2.0), Vector3(xo, yc - 1.0, 0.0), 0.10, 0.10, m)
-		tp_.call(Vector3(xo, y_h, 2.0), Vector3(xo, yc - 1.0, 0.0), 0.10, 0.10, m)
-		tp_.call(Vector3(xi, y_h, 0.0), Vector3(xi, y_h + 0.9, 0.0), 0.10, 0.10, m)   # (paratonnerre, photo)
+			tp_.call(Vector3(xi, y_s, zm), Vector3(xi, y_h, zm), 0.10, 0.10, m)
+		tb_.call(Vector3(xi, y_h, -ls * 0.4), Vector3(xi, y_h, ls * 0.4), 0.025, "galva", 6)
+		tp_.call(Vector3(xi, y_h, 0.0), Vector3(xi, y_h + 1.4, 0.0), 0.06, 0.06, m)   # (paratonnerre, photo)
 		# guides anti-collision : lisses le long du passage des cabines, à 0,25 m des faces du fût, becs
 		# recourbés vers l'axe aux deux bouts
 		var yg0: float = yc - 8.0
