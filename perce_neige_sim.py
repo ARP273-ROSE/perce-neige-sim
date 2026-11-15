@@ -7579,6 +7579,7 @@ class PupitreSurimpression(QWidget):
             if self.replie:
                 self._jeu._draw_bandeau_pupitre(q, QRectF(0, 0, self.LARGEUR, self.BANDEAU))
             else:
+                self._jeu._cible_vierge = True
                 self._jeu._draw_hud(q, QRectF(0, 0, self.LARGEUR, self.HAUTEUR))
             q.end()
         p = QPainter(self)
@@ -11023,6 +11024,7 @@ class GameWidget(QWidget):
             q.setRenderHint(QPainter.RenderHint.TextAntialiasing, True)
             q.scale(k, k)
             q.translate(-rect.x(), -rect.y())
+            self._cible_vierge = True
             self._draw_hud(q, rect)
             q.end()
         p.save()
@@ -16444,7 +16446,7 @@ class GameWidget(QWidget):
         p.setPen(_cached_pen(QColor(255, 240, 240) if on else COLOR_TEXT_DIM))
         p.drawText(r, int(Qt.AlignmentFlag.AlignCenter), texte)
 
-    def _puce(self, p: QPainter, cle: tuple, rect: QRectF, dessin) -> None:
+    def _puce(self, p: QPainter, cle: tuple, rect: QRectF, dessin, source: bool = False) -> None:
         """Dessin de `rect` rendu une fois dans une image (par clé et par échelle du peintre), puis recopié pixel
         pour pixel. Pour ce qui ne change qu'avec l'état : boutons, voyants, fonds de cadrans, panneau de panne."""
         t = p.worldTransform()
@@ -16470,7 +16472,18 @@ class GameWidget(QWidget):
             if len(cles) > 800:
                 cles.clear()
             cles[cle_k] = pm
-        p.drawPixmap(QPointF(rect.x() - 2.0, rect.y() - 2.0), pm)
+        # recopie pixel pour pixel, à une position entière, sans transformation : le chemin rapide de Qt (avec
+        # l'échelle de la surimpression, la copie passait par l'interpolation : ~2 ms par image refaite)
+        dd = dev.devicePixelRatioF() if dev is not None else 1.0
+        o = t.map(QPointF(rect.x() - 2.0, rect.y() - 2.0))
+        p.save()
+        p.resetTransform()
+        if source:
+            # (première couche sur une image vierge : recopie sans mélange, même résultat, ~1 ms de moins en 4K)
+            p.setCompositionMode(QPainter.CompositionMode.CompositionMode_Source)
+        p.drawPixmap(QRectF(round(o.x() * dd) / dd, round(o.y() * dd) / dd, pm.width() / dd, pm.height() / dd),
+                     pm, QRectF(0, 0, pm.width(), pm.height()))
+        p.restore()
 
     def _draw_fond_remontee(self, p: QPainter, rect: QRectF, titre: str, sous_titre: str) -> None:
         x0, y0, wr = rect.x(), rect.y(), rect.width()
@@ -16499,8 +16512,10 @@ class GameWidget(QWidget):
         titre = T("Panel — ", "Pupitre — ") + str(d.get("nom", ""))
         sous_titre = str(d.get("desc", "")) + (f" · {d.get('vehicules')} " + T("vehicles", "véhicules")
                                                if d.get("vehicules") and not pr.groupe_va_et_vient(g) else "")
+        vierge = bool(getattr(self, "_cible_vierge", False))
+        self._cible_vierge = False
         self._puce(p, ("fond_remontee", titre, sous_titre, round(wr, 1), round(rect.height(), 1)), rect,
-                   lambda q, r: self._draw_fond_remontee(q, r, titre, sous_titre))
+                   lambda q, r: self._draw_fond_remontee(q, r, titre, sous_titre), source=vierge)
         auto = d.get("mode") == "auto"
         rm = QRectF(x0 + wr - 112, y0 + 10, 98, 32)
         self._draw_button(p, rm.x(), rm.y(), rm.width(), rm.height(), T("AUTO", "AUTO") if auto else T("MANUAL", "MANUEL"),
