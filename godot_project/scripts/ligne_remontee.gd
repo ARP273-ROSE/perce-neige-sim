@@ -5489,6 +5489,13 @@ var _rids_loin: Array = []
 var _rels_loin: Array = []
 
 
+## Ligne qui s'arrête de tourner (au-delà de la portée des véhicules) : ses véhicules lointains ne se dessinent
+## plus. Le noyau ne réécrit plus les MultiMesh : les sièges de sa dernière image restaient affichés à toute
+## distance, jusqu'à la démolition de la ligne (relevé du 15/11/2026). Au retour, le noyau les repose.
+func lointains_au_repos() -> void:
+	for rid in _rids_loin:
+		RenderingServer.multimesh_set_visible_instances(rid, 0)
+
 
 ## Portée des véhicules changée en jeu (régulateur) : la ligne et son noyau.
 func regler_portee_vehicules(d: float) -> void:
