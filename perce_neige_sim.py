@@ -7255,6 +7255,43 @@ class DocsDownloadDialog(QDialog):
         QTimer.singleShot(150, sonder)
 
 
+class PannesRemonteeDialog(QDialog):
+    """Menu PANNES d'une remontée (comme celui du Perce-Neige) : le catalogue reçu de la vue 3D, une panne
+    par bouton, et « au hasard ». La 3D déclenche ; le pupitre affiche ce qu'elle renvoie."""
+
+    _COULEURS = {"avis": "#3c78b4", "degrade": "#b48c28", "arret": "#c85a1e", "grave": "#b41e1e"}
+
+    def __init__(self, nom: str, catalogue: list, choisir, parent: QWidget | None = None):
+        super().__init__(parent)
+        self.setWindowTitle(T(f"Faults — {nom}", f"Pannes — {nom}"))
+        self.setModal(True)
+        self.setMinimumWidth(460)
+        lay = QVBoxLayout(self)
+        lbl = QLabel(T(f"<b>{nom}</b> — pick a fault to trigger now.",
+                       f"<b>{nom}</b> — choisissez une panne à déclencher maintenant."))
+        lbl.setWordWrap(True)
+        lay.addWidget(lbl)
+        grid = QHBoxLayout()
+        col_a, col_b = QVBoxLayout(), QVBoxLayout()
+        for i, c in enumerate(catalogue):
+            g = str(c.get("gravite", "avis"))
+            btn = QPushButton(f"{c.get('nom', c['id'])}  ·  {g}", self)
+            btn.setStyleSheet(f"QPushButton {{ border-left: 6px solid {self._COULEURS.get(g, '#888')}; padding: 6px; text-align: left; }}")
+            btn.clicked.connect(lambda _=False, pid=c["id"]: (choisir("panne", pid), self.accept()))
+            (col_a if i % 2 == 0 else col_b).addWidget(btn)
+        grid.addLayout(col_a)
+        grid.addLayout(col_b)
+        lay.addLayout(grid)
+        if not catalogue:
+            lay.addWidget(QLabel(T("(catalogue not received yet)", "(catalogue pas encore reçu)")))
+        hasard = QPushButton(T("Random fault", "Panne au hasard"), self)
+        hasard.clicked.connect(lambda: (choisir("panne_hasard", None), self.accept()))
+        lay.addWidget(hasard)
+        close = QPushButton(T("Close", "Fermer"), self)
+        close.clicked.connect(self.accept)
+        lay.addWidget(close)
+
+
 class FaultPickerDialog(QDialog):
     """Manual fault picker used in 'panne' mode. Lists every fault kind
     with a button, plus a toggle for the auto-scheduler. Fires the chosen
@@ -7555,6 +7592,18 @@ class GameWidget(QWidget):
         # is (rect, key_to_simulate, hold_flag). A click hit-tests this
         # list and dispatches the corresponding key press / release.
         self._hit_zones: list[tuple[QRectF, int, bool]] = []
+        # pupitre des autres remontées (télémesure de la vue 3D, pupitre_remontee.py)
+        import pupitre_remontee
+        self._remontee = pupitre_remontee.ModeleRemontee()
+        self._zones_remontee: list[tuple[QRectF, tuple]] = []
+        self._faux_remontee = None
+        self._faux_groupes: list = []
+        for _a in sys.argv[1:]:
+            # développement : ligne simulée au protocole de la vue 3D (Ctrl+F10 : famille suivante)
+            if _a == "--faux-remontee" or _a.startswith("--faux-remontee="):
+                self._faux_groupes = list(pupitre_remontee.GROUPES)
+                g0 = _a.split("=", 1)[1] if "=" in _a else "tsd"
+                self._faux_remontee = pupitre_remontee.FauxEmetteur(g0, LANG)
         # Bilingual tooltips keyed by Qt.Key — shown on hover over any
         # clickable hit zone. Text is picked at display time from the
         # current LANG so the language toggle (L) flips tooltips live.
@@ -7855,6 +7904,10 @@ class GameWidget(QWidget):
 
     def _message_3d(self, m: dict) -> None:
         """Message de la vue 3D embarquée (GodotBridge.poll_messages)."""
+        if "remontee" in m:
+            if self._faux_remontee is None:
+                self._recevoir_remontee(m["remontee"])
+            return
         if "pupitre" in m:
             self._pupitre_3d(str(m["pupitre"]), bool(m.get("enfonce", False)))
         elif "releve_auto_fait" in m:
@@ -8880,6 +8933,12 @@ class GameWidget(QWidget):
             if self._skieur and (not _g_running or self._cabin_view_state != 2):
                 self._sortir_skieur()
 
+        if self._faux_remontee is not None:
+            self._faux_acc = getattr(self, "_faux_acc", 0.0) + dt
+            if self._faux_acc >= 0.2:          # ~5 paquets/s, comme la vue 3D
+                d = self._faux_remontee.tick(self._faux_acc, self._remontee.a_envoyer())
+                self._faux_acc = 0.0
+                self._recevoir_remontee(d, getattr(self._faux_remontee, "octets", 0))
         if st.mode == MODE_RUN:
             self._apply_keys(dt)
             self.physics.step(dt)
@@ -8888,6 +8947,10 @@ class GameWidget(QWidget):
             if (self._godot_bridge is not None
                     and self._godot_bridge.is_running()):
                 state_dict = physics_to_state_dict(st.train, st)
+                if self._faux_remontee is None:
+                    cmds = self._remontee.a_envoyer()
+                    if cmds:
+                        state_dict["remontee_cmd"] = cmds
                 # Relaye le mute N au viewer 3D (il a son propre audio).
                 state_dict["muted"] = bool(self.sounds.muted)
                 # … et le volume général (gain linéaire, bus Master)
@@ -9753,6 +9816,19 @@ class GameWidget(QWidget):
             self.basculer_skieur()
             ev.accept()
             return
+        if (k == Qt.Key.Key_F10 and self._faux_groupes and not ev.isAutoRepeat()
+                and ev.modifiers() & Qt.KeyboardModifier.ControlModifier):
+            # (développement) ligne simulée suivante ; après la dernière : aucune (pupitre du PN)
+            import pupitre_remontee
+            g = self._faux_remontee.g if self._faux_remontee is not None else None
+            i = self._faux_groupes.index(g) + 1 if g in self._faux_groupes else 0
+            if i < len(self._faux_groupes):
+                self._faux_remontee = pupitre_remontee.FauxEmetteur(self._faux_groupes[i], T("en", "fr"))
+            else:
+                self._faux_remontee = None
+                self._recevoir_remontee(None)
+            ev.accept()
+            return
         if k == Qt.Key.Key_F12 and not ev.isAutoRepeat():
             self.basculer_plein_cadre()
             ev.accept()
@@ -10616,6 +10692,11 @@ class GameWidget(QWidget):
                     return
             # Click outside any zone on the title screen — ignore.
             return
+        for rect, action in reversed(self._zones_remontee):
+            if rect.contains(pos):
+                self._action_remontee(action)
+                ev.accept()
+                return
         # Reverse-iterate so later buttons win (none overlap currently, but
         # future overlays might be drawn on top).
         for rect, qk, hold in reversed(self._hit_zones):
@@ -15621,6 +15702,10 @@ class GameWidget(QWidget):
         # Reset hit zones for this frame — repopulated below as we draw
         # each clickable control. .clear() reuses the list (no realloc).
         self._hit_zones.clear()
+        self._zones_remontee = []
+        if self._remontee_affichee():
+            self._draw_hud_remontee(p, rect)
+            return
         p.setBrush(QBrush(COLOR_HUD_BG))
         p.setPen(_cached_pen(COLOR_HUD_BORDER, 2))
         p.drawRoundedRect(rect, 10, 10)
@@ -16078,6 +16163,261 @@ class GameWidget(QWidget):
             p.setPen(_cached_pen(COLOR_TEXT if on else COLOR_TEXT_DIM))
             p.drawText(QRectF(x, ly, 64, 22),
                        int(Qt.AlignmentFlag.AlignCenter), name)
+
+    # --- pupitre des autres remontées (télémesure de la vue 3D) ----------------------------------
+    _ETATS_REMONTEE = {
+        "marche": (("RUNNING", "EN MARCHE"), COLOR_GOOD),
+        "arret_normal": (("STOPPED", "ARRÊT NORMAL"), COLOR_TEXT),
+        "arret": (("SAFETY STOP", "ARRÊT SÉCURITÉ"), COLOR_WARN),
+        "urgence": (("EMERGENCY STOP", "ARRÊT D'URGENCE"), COLOR_ALARM),
+    }
+    _GRAVITES_REMONTEE = {
+        "avis": (("NOTICE", "AVIS"), QColor(70, 130, 200)),
+        "degrade": (("DEGRADED", "DÉGRADÉ"), COLOR_WARN),
+        "arret": (("STOP", "ARRÊT"), QColor(230, 120, 40)),
+        "grave": (("SEVERE", "GRAVE"), COLOR_ALARM),
+    }
+    _VOYANTS_REMONTEE = (("cable", ("ROPE", "CÂBLE")), ("pince", ("GRIP", "PINCE")), ("vent", ("WIND", "VENT")),
+                         ("secu_ligne", ("LINE SAF.", "SÉCU LIGNE")), ("moteur", ("MOTOR", "MOTEUR")),
+                         ("frein", ("BRAKE", "FREIN")), ("portes", ("DOORS", "PORTES")))
+
+    def _remontee_affichee(self) -> bool:
+        """Pupitre de la remontée plutôt que celui du PN : une ligne envoie sa télémesure (le skieur y est,
+        ou à moins de 400 m) ; sur le PN ou loin de tout, la 3D envoie null."""
+        return self._remontee.actif()
+
+    def _recevoir_remontee(self, d, octets: int = 0) -> None:
+        avant = self._remontee.d["id"] if self._remontee.d else None
+        nouveaux = self._remontee.recevoir(d, None, octets)
+        apres = self._remontee.d["id"] if self._remontee.d else None
+        if apres != avant:
+            if apres:
+                nom = str(self._remontee.d.get("nom", apres))
+                add_event(self.state, "remontee", f"Control panel: {nom}", f"Pupitre : {nom}", "info")
+            else:
+                add_event(self.state, "remontee", "Control panel: Perce-Neige", "Pupitre : Perce-Neige", "info")
+        for genre, texte, nom in nouveaux:
+            sev = {"panne": "alarm", "alerte": "warn"}.get(genre, "info")
+            add_event(self.state, "remontee", f"{nom}: {texte}", f"{nom} : {texte}", sev)
+        self.update()
+
+    def _commande_remontee(self, cmd: str, arg=None) -> None:
+        if self._remontee.d is None:
+            return
+        self._remontee.commander(cmd, arg)
+        self.update()
+
+    def _action_remontee(self, action: tuple) -> None:
+        if action[0] == "menu_pannes":
+            if self._remontee.d is None:
+                return
+            dlg = PannesRemonteeDialog(str(self._remontee.d.get("nom", "")), self._remontee.catalogue_courant(),
+                                       self._commande_remontee, self)
+            dlg.exec()
+        elif action[0] == "cmd":
+            self._commande_remontee(action[1], action[2])
+
+    def _zone_remontee(self, r: QRectF, action: tuple) -> None:
+        self._zones_remontee.append((QRectF(r), action))
+
+    def _draw_hud_remontee(self, p: QPainter, rect: QRectF, compact: bool = False) -> None:
+        """Pupitre d'une remontée, dans le style de celui du PN : cadrans, état, voyants, crans, commandes,
+        panne en cours (quoi / à faire / interdit). Toutes les familles ; le Funival et les téléphériques ont
+        en plus le schéma du va-et-vient."""
+        import pupitre_remontee as pr
+        d = self._remontee.d or {}
+        g = str(d.get("groupe", ""))
+        x0, y0, wr = rect.x(), rect.y(), rect.width()
+        p.setBrush(QBrush(COLOR_HUD_BG))
+        p.setPen(_cached_pen(COLOR_HUD_BORDER, 2))
+        p.drawRoundedRect(rect, 10, 10)
+        # en-tête : nom, famille, mode
+        p.setPen(_cached_pen(COLOR_TEXT))
+        p.setFont(_cached_font("Segoe UI", 13, QFont.Weight.DemiBold))
+        p.drawText(QRectF(x0 + 14, y0 + 8, wr - 130, 22), int(Qt.AlignmentFlag.AlignLeft),
+                   T("Panel — ", "Pupitre — ") + str(d.get("nom", "")))
+        p.setPen(_cached_pen(COLOR_TEXT_DIM))
+        p.setFont(_cached_font("Segoe UI", 8))
+        p.drawText(QRectF(x0 + 14, y0 + 30, wr - 130, 16), int(Qt.AlignmentFlag.AlignLeft),
+                   str(d.get("desc", "")) + (f" · {d.get('vehicules')} " + T("vehicles", "véhicules")
+                                             if d.get("vehicules") and not pr.groupe_va_et_vient(g) else ""))
+        auto = d.get("mode") == "auto"
+        rm = QRectF(x0 + wr - 112, y0 + 10, 98, 32)
+        self._draw_button(p, rm.x(), rm.y(), rm.width(), rm.height(), T("AUTO", "AUTO") if auto else T("MANUAL", "MANUEL"),
+                          True, COLOR_GOOD if auto else COLOR_WARN, QColor(10, 20, 10))
+        self._zone_remontee(rm, ("cmd", "mode", "manuel" if auto else "auto"))
+        y = y0 + 50
+        # cadrans : vitesse au câble, puissance
+        v = float(d.get("v", 0.0) or 0.0)
+        vnom = max(0.1, float(d.get("v_nom", 5.0) or 5.0))
+        tg = 118.0 if compact else 152.0
+        self._draw_gauge(p, QRectF(x0 + 26, y, tg, tg), value=abs(v), maxv=vnom * 1.25,
+                         label=f"m/s  ({abs(v) * 3.6:4.1f} km/h)", big_text=f"{abs(v):5.2f}",
+                         warn=vnom * 1.02, crit=vnom * 1.12)
+        kw = float(d.get("kw", 0.0) or 0.0)
+        kwm = max(1.0, float(d.get("kw_max", 100.0) or 100.0))
+        self._draw_gauge(p, QRectF(x0 + wr - 26 - tg, y, tg, tg), value=kw, maxv=kwm, label="kW",
+                         big_text=f"{kw:5.0f}", warn=kwm * 0.85, crit=kwm * 0.97,
+                         title=T("Power", "Puissance") + (T(" (backup)", " (secours)") if d.get("secours") else ""))
+        y += tg + 6
+        # va-et-vient (téléphérique, Funival) : les deux véhicules sur la ligne
+        vv = d.get("va_et_vient")
+        if isinstance(vv, dict) and not compact:
+            rv = QRectF(x0 + 16, y, wr - 32, 46)
+            p.setPen(_cached_pen(COLOR_TEXT_DIM, 1))
+            p.setBrush(QBrush(QColor(12, 15, 22)))
+            p.drawRoundedRect(rv, 5, 5)
+            xa, xb, ym = rv.x() + 26, rv.right() - 26, rv.center().y() + 4
+            p.setPen(_cached_pen(QColor(150, 160, 175), 2))
+            p.drawLine(QPointF(xa, ym), QPointF(xb, ym))
+            if g == "funival":
+                # évitement au milieu (comme au PN)
+                xm = (xa + xb) / 2
+                p.drawLine(QPointF(xm - 30, ym), QPointF(xm - 18, ym - 7))
+                p.drawLine(QPointF(xm - 18, ym - 7), QPointF(xm + 18, ym - 7))
+                p.drawLine(QPointF(xm + 18, ym - 7), QPointF(xm + 30, ym))
+            p.setFont(_cached_font("Segoe UI", 7))
+            p.setPen(_cached_pen(COLOR_TEXT_DIM))
+            p.drawText(QRectF(rv.x() + 3, rv.y() + 2, 60, 12), int(Qt.AlignmentFlag.AlignLeft), T("lower", "aval"))
+            p.drawText(QRectF(rv.right() - 63, rv.y() + 2, 60, 12), int(Qt.AlignmentFlag.AlignRight), T("upper", "amont"))
+            pos = list(vv.get("pos") or [0.0, 1.0])
+            portes = vv.get("portes") or [d.get("portes"), d.get("portes")]
+            for i in range(min(2, len(pos))):
+                xc = xa + (xb - xa) * max(0.0, min(1.0, float(pos[i])))
+                yc = ym - (7 if g == "funival" and i == 1 and 0.35 < float(pos[i]) < 0.65 else 0)
+                c = QColor(230, 200, 60) if i == 0 else QColor(120, 180, 240)
+                p.setBrush(QBrush(c))
+                p.setPen(_cached_pen(QColor(10, 10, 10), 1))
+                p.drawRoundedRect(QRectF(xc - 11, yc - 8, 22, 12), 3, 3)
+                p.setPen(_cached_pen(QColor(10, 10, 10)))
+                p.drawText(QRectF(xc - 11, yc - 8, 22, 12), int(Qt.AlignmentFlag.AlignCenter), str(i + 1))
+                if i < len(portes) and portes[i] == "ouvertes":
+                    p.setPen(_cached_pen(COLOR_WARN))
+                    p.drawText(QRectF(xc - 30, yc + 5, 60, 12), int(Qt.AlignmentFlag.AlignCenter), T("doors open", "portes ouv."))
+            y += 52
+        # état, vent, freins
+        (lib, coul) = self._ETATS_REMONTEE.get(str(d.get("etat", "")), ((str(d.get("etat", "")),) * 2, COLOR_TEXT))
+        if d.get("hors_service"):
+            lib, coul = ("OUT OF SERVICE", "HORS SERVICE"), COLOR_ALARM
+        p.setFont(_cached_font("Segoe UI", 12, QFont.Weight.Bold))
+        p.setPen(_cached_pen(coul))
+        p.drawText(QRectF(x0 + 16, y, wr - 32, 20), int(Qt.AlignmentFlag.AlignLeft), T(lib[0], lib[1]))
+        p.setFont(_cached_font("Consolas", 9))
+        p.setPen(_cached_pen(COLOR_TEXT_DIM))
+        vent = float(d.get("vent", 0.0) or 0.0)
+        info = T("wind", "vent") + f" {vent:4.1f} m/s"
+        if d.get("frein_urgence"):
+            info += T(" · EMERG. BRAKE", " · FREIN URG.")
+        elif d.get("frein_service"):
+            info += T(" · service brake", " · frein service")
+        p.drawText(QRectF(x0 + 16, y, wr - 32, 20), int(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter), info)
+        y += 24
+        # voyants
+        voy = d.get("voyants") or {}
+        cles = [c for c in self._VOYANTS_REMONTEE if c[0] in voy
+                and not (c[0] == "portes" and not pr.groupe_a_portes(g))
+                and not (c[0] == "pince" and g in ("tph", "funival", "tsf", "tk"))]
+        if cles:
+            nc = 4
+            lw = (wr - 32) / nc
+            for i, (cle, lb) in enumerate(cles):
+                r = QRectF(x0 + 16 + (i % nc) * lw, y + (i // nc) * 20, lw - 4, 17)
+                on = bool(voy.get(cle))
+                p.setBrush(QBrush(COLOR_ALARM if on else QColor(40, 46, 58)))
+                p.setPen(_cached_pen(QColor(14, 16, 20), 1))
+                p.drawRoundedRect(r, 3, 3)
+                p.setFont(_cached_font("Segoe UI", 7, QFont.Weight.Bold))
+                p.setPen(_cached_pen(QColor(255, 240, 240) if on else COLOR_TEXT_DIM))
+                p.drawText(r, int(Qt.AlignmentFlag.AlignCenter), T(lb[0], lb[1]))
+            y += ((len(cles) + nc - 1) // nc) * 20 + 6
+        # crans
+        crans = list(d.get("crans") or [])
+        if crans:
+            p.setFont(_cached_font("Segoe UI", 8))
+            p.setPen(_cached_pen(COLOR_TEXT_DIM))
+            p.drawText(QRectF(x0 + 16, y, 80, 22), int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter),
+                       T("Speed", "Vitesse"))
+            cw = (wr - 32 - 64) / len(crans)
+            for i, nom_c in enumerate(crans):
+                r = QRectF(x0 + 16 + 64 + i * cw, y, cw - 4, 24)
+                on = int(d.get("cran", -1)) == i
+                self._draw_button(p, r.x(), r.y(), r.width(), r.height(), str(nom_c), on, QColor(90, 160, 230), QColor(5, 15, 30))
+                self._zone_remontee(r, ("cmd", "cran", i))
+            y += 30
+        # commandes
+        bw = (wr - 32 - 8) / 3
+        bh = 30
+        boutons = [
+            (T("START", "DÉMARRER"), "demarrer", None, d.get("etat") == "marche", COLOR_GOOD),
+            (T("STOP", "ARRÊT"), "arreter", None, d.get("etat") == "arret_normal", QColor(200, 200, 210)),
+            (T("RESET", "RÉARMER"), "rearmer", None, d.get("etat") in ("arret", "urgence"), COLOR_WARN),
+            (T("FAULTS", "PANNES"), "menu_pannes", None, False, QColor(200, 120, 60)),
+            (T("BACKUP", "SECOURS"), "secours", None, bool(d.get("secours")), COLOR_WARN),
+        ]
+        if pr.groupe_a_portes(g):
+            ouv = d.get("portes") == "ouvertes"
+            boutons.append((T("CLOSE DOORS", "FERMER PORTES") if ouv else T("OPEN DOORS", "OUVRIR PORTES"),
+                            "portes", "fermer" if ouv else "ouvrir", ouv, COLOR_WARN))
+        if pr.groupe_evacuation(g):
+            boutons.append((T("EVACUATE", "ÉVACUER"), "evacuer", None, False, COLOR_ALARM))
+        if d.get("hors_service"):
+            boutons.append((T("NEW SERVICE", "REMISE EN SERVICE"), "remise_service", None, False, COLOR_GOOD))
+        for i, (lb, cmd, arg, on, cl) in enumerate(boutons):
+            r = QRectF(x0 + 16 + (i % 3) * (bw + 4), y + (i // 3) * (bh + 4), bw, bh)
+            self._draw_button(p, r.x(), r.y(), r.width(), r.height(), lb, on, cl, QColor(10, 10, 10))
+            self._zone_remontee(r, ("menu_pannes",) if cmd == "menu_pannes" else ("cmd", cmd, arg))
+        y += ((len(boutons) + 2) // 3) * (bh + 4) + 2
+        # arrêt d'urgence (champignon)
+        ra = QRectF(x0 + 16, y, wr - 32, 40)
+        self._draw_button(p, ra.x(), ra.y(), ra.width(), ra.height(), T("EMERGENCY STOP", "ARRÊT D'URGENCE"),
+                          d.get("etat") == "urgence", COLOR_ALARM, QColor(255, 235, 235), mushroom=True)
+        self._zone_remontee(ra, ("cmd", "urgence", None))
+        y += 48
+        if compact:
+            return
+        # panne en cours : quoi / à faire / interdit (comme au PN)
+        actives = [q for q in (d.get("pannes") or []) if isinstance(q, dict) and q.get("phase", "active") == "active"]
+        ordre = {"grave": 0, "arret": 1, "degrade": 2, "avis": 3}
+        actives.sort(key=lambda q: ordre.get(str(q.get("gravite")), 9))
+        rp = QRectF(x0 + 12, y, wr - 24, rect.bottom() - 10 - y)
+        if rp.height() < 60:
+            return
+        p.setBrush(QBrush(QColor(12, 15, 22, 230)))
+        p.setPen(_cached_pen(COLOR_TEXT_DIM, 1))
+        p.drawRoundedRect(rp, 6, 6)
+        if not actives:
+            p.setFont(_cached_font("Segoe UI", 9))
+            p.setPen(_cached_pen(COLOR_TEXT_DIM))
+            p.drawText(rp, int(Qt.AlignmentFlag.AlignCenter), T("No fault", "Aucune panne"))
+            return
+        q = actives[0]
+        (lg, cg) = self._GRAVITES_REMONTEE.get(str(q.get("gravite")), (("?", "?"), COLOR_TEXT))
+        badge = QRectF(rp.x() + 8, rp.y() + 8, 74, 18)
+        p.setBrush(QBrush(cg))
+        p.setPen(_cached_pen(QColor(10, 10, 10), 1))
+        p.drawRoundedRect(badge, 4, 4)
+        p.setFont(_cached_font("Segoe UI", 8, QFont.Weight.Bold))
+        p.setPen(_cached_pen(QColor(10, 10, 10)))
+        p.drawText(badge, int(Qt.AlignmentFlag.AlignCenter), T(lg[0], lg[1]))
+        p.setFont(_cached_font("Segoe UI", 10, QFont.Weight.Bold))
+        p.setPen(_cached_pen(COLOR_TEXT))
+        p.drawText(QRectF(rp.x() + 90, rp.y() + 6, rp.width() - 100, 22), int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter),
+                   str(q.get("nom", q.get("id", ""))) + (f"  (+{len(actives) - 1})" if len(actives) > 1 else ""))
+        yy = rp.y() + 32
+        haut = (rp.bottom() - 40 - yy) / 3
+        for titre, cle, cl in ((T("What", "Quoi"), "quoi", COLOR_TEXT), (T("To do", "À faire"), "faire", COLOR_GOOD),
+                               (T("Forbidden", "Interdit"), "interdit", COLOR_ALARM)):
+            p.setFont(_cached_font("Segoe UI", 8, QFont.Weight.Bold))
+            p.setPen(_cached_pen(cl))
+            p.drawText(QRectF(rp.x() + 10, yy, 70, 14), int(Qt.AlignmentFlag.AlignLeft), titre)
+            self._draw_wrapped(p, str(q.get(cle, "")), QRectF(rp.x() + 78, yy, rp.width() - 88, haut),
+                               _cached_font("Segoe UI", 8))
+            yy += haut
+        if q.get("gravite") != "grave":
+            rb = QRectF(rp.right() - 130, rp.bottom() - 34, 120, 26)
+            self._draw_button(p, rb.x(), rb.y(), rb.width(), rb.height(), T("FAULT DEALT WITH", "PANNE TRAITÉE"),
+                              False, COLOR_GOOD, QColor(10, 10, 10))
+            self._zone_remontee(rb, ("cmd", "acquitter", q.get("id")))
 
     def _draw_volume(self, p: QPainter, r: QRectF) -> None:
         """Jauge du volume général : − [niveau] +. Les deux pavés passent
