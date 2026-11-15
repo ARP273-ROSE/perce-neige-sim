@@ -7446,7 +7446,7 @@ class BarrePleinCadre(QWidget):
     compteur du haut et la manette en bas à gauche restent dégagés. Taille
     proportionnelle à la hauteur de la vue, comme les boutons du HUD."""
 
-    CLES = ("ecran", "poste", "skieur", "ligne", "pause", "aide")
+    CLES = ("ecran", "pupitre", "poste", "skieur", "ligne", "pause", "aide")
 
     def __init__(self, jeu: "GameWidget") -> None:
         super().__init__(jeu.window(),
@@ -7479,7 +7479,10 @@ class BarrePleinCadre(QWidget):
         b = self._boutons
         b["ecran"].regler(T("WINDOW", "FENÊTRE") if plein else T("FULL SCREEN", "PLEIN ÉCRAN"),
                           T("Esc", "Échap") if plein else "")
-        b["poste"].regler(T("DESK", "POSTE"), "F12")
+        # PUPITRE : replie ou déplie le pupitre en surimpression ; ÉCRANS : retour au poste complet (vue en plan,
+        # machinerie, journal) — « POSTE » se confondait avec le POSTE du HUD du skieur
+        b["pupitre"].regler(T("PANEL", "PUPITRE"), "Tab")
+        b["poste"].regler(T("SCREENS", "ÉCRANS"), "F12")
         b["skieur"].regler(T("DRIVE", "CONDUIRE") if skieur else T("SKIER", "SKIEUR"), "F9")
         b["ligne"].regler(T("VIEWS", "VUES"), "T")
         b["pause"].regler(T("RESUME", "REPRENDRE") if pause else T("PAUSE", "PAUSE"), "P")
@@ -7501,6 +7504,75 @@ class BarrePleinCadre(QWidget):
         x, y = zone.x() + m, zone.y() + m
         if self.pos().x() != x or self.pos().y() != y:
             self.move(x, y)
+
+
+class PupitreSurimpression(QWidget):
+    """Pupitre courant (Perce-Neige ou remontée) par-dessus la 3D plein cadre : le même dessin que le pupitre
+    du poste, réduit et semi-transparent. Comme la barre de boutons, une fenêtre de premier niveau POSSÉDÉE
+    par celle du simulateur (la 3D embarquée passe au-dessus de tout ce que la fenêtre Qt peint), qui ne prend
+    ni l'activation ni le clavier. Repliable (Tab, bouton PUPITRE, clic sur le bandeau) : il ne reste alors
+    qu'un bandeau avec la vitesse, l'état et les alarmes.
+
+    À droite, décalé de la colonne de boutons du HUD du skieur ; la barre est en haut à gauche."""
+
+    LARGEUR = 390.0          # toile du pupitre (comme dans le poste)
+    HAUTEUR = 740.0
+    BANDEAU = 46.0
+    OPACITE = 0.88
+
+    def __init__(self, jeu: "GameWidget") -> None:
+        super().__init__(jeu.window(),
+                         Qt.WindowType.Tool
+                         | Qt.WindowType.FramelessWindowHint
+                         | Qt.WindowType.WindowDoesNotAcceptFocus
+                         | Qt.WindowType.NoDropShadowWindowHint)
+        self._jeu = jeu
+        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
+        self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.replie = False
+        self._s = 1.0
+        self._geo = None
+
+    def placer(self, zone) -> None:
+        s = max(0.45, min(zone.height() * 0.66 / self.HAUTEUR, zone.width() * 0.21 / self.LARGEUR))
+        w = int(self.LARGEUR * s)
+        h = int((self.BANDEAU if self.replie else self.HAUTEUR) * s)
+        x = int(zone.x() + zone.width() - w - zone.width() * 0.075)
+        y = int(zone.y() + zone.height() * 0.06)
+        g = (x, y, w, h)
+        if g != self._geo:
+            self._geo = g
+            self._s = s
+            self.setGeometry(x, y, w, h)
+            self.update()
+
+    def paintEvent(self, _ev) -> None:  # noqa: N802
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        p.setRenderHint(QPainter.RenderHint.TextAntialiasing, True)
+        p.setOpacity(self.OPACITE)
+        p.scale(self._s, self._s)
+        if self.replie:
+            self._jeu._draw_bandeau_pupitre(p, QRectF(0, 0, self.LARGEUR, self.BANDEAU))
+        else:
+            self._jeu._draw_hud(p, QRectF(0, 0, self.LARGEUR, self.HAUTEUR))
+        p.end()
+
+    def mousePressEvent(self, ev: QMouseEvent) -> None:  # noqa: N802
+        if ev.button() != Qt.MouseButton.LeftButton:
+            return
+        pos = ev.position() / self._s
+        if self.replie or (pos.y() < 44 and pos.x() < self.LARGEUR - 125):
+            # bandeau ou en-tête (hors bouton AUTO / MANUEL) : replier / déplier
+            self._jeu.basculer_pupitre()
+        else:
+            self._jeu._clic_hud(pos)
+        ev.accept()
+
+    def mouseReleaseEvent(self, ev: QMouseEvent) -> None:  # noqa: N802
+        self._jeu._relacher_hud()
+        ev.accept()
 
 
 class GameWidget(QWidget):
@@ -7845,6 +7917,9 @@ class GameWidget(QWidget):
         # Remis à False dès que le plein cadre se termine.
         self._plein_ecran_3d = False
         self._barre_3d: BarrePleinCadre | None = None
+        self._surimpression: PupitreSurimpression | None = None
+        self._pupitre_replie = False
+        self._t_surimpression = 0.0
         self._skieur_prep_txt = ""              # préparation du décor 3D en cours (texte)
         # dedans, retenue, écoute (0 rame, 1 gare basse, 2 dehors, 3 gare
         # haute, 4 tunnel à pied), gain de la machinerie entendu (gare haute)
@@ -9380,10 +9455,15 @@ class GameWidget(QWidget):
                      or bool(self._godot_child_hwnd))
                 and self.window().isVisible() and not self.window().isMinimized())
         b = self._barre_3d
+        sp = self._surimpression
         if not voir:
             if b is not None and b.isVisible():
                 b.hide()
+            if sp is not None and sp.isVisible():
+                sp.hide()
             return
+        if sp is None:
+            sp = self._surimpression = PupitreSurimpression(self)
         if b is None:
             b = self._barre_3d = BarrePleinCadre(self)
         fen = self.window()
@@ -9395,6 +9475,20 @@ class GameWidget(QWidget):
         if not b.isVisible():
             b.show()
             b.raise_()
+        # pupitre en surimpression : caché sous l'aide (elle prend l'écran), repeint à 10 Hz
+        if self._show_help:
+            if sp.isVisible():
+                sp.hide()
+        else:
+            sp.replie = self._pupitre_replie
+            sp.placer(QRect(coin.x(), coin.y(), self.width(), self.height()))
+            if not sp.isVisible():
+                sp.show()
+                sp.raise_()
+            maintenant = time.monotonic()
+            if maintenant - self._t_surimpression >= 0.1:
+                self._t_surimpression = maintenant
+                sp.update()
 
     def _bouton_plein_cadre(self, cle: str) -> None:
         """Clic sur un bouton de la barre du plein cadre : même effet que la
@@ -9404,6 +9498,8 @@ class GameWidget(QWidget):
             self._plein_ecran_3d = not bool(fen.isFullScreen())
             if fen.isFullScreen() and not getattr(fen, "_plein_par_3d", False):
                 fen.basculer_plein_ecran()          # plein écran de F11
+        elif cle == "pupitre":
+            self.basculer_pupitre()
         elif cle == "poste":
             if self._plein_cadre_3d():
                 self.basculer_plein_cadre()
@@ -9417,6 +9513,12 @@ class GameWidget(QWidget):
             self._virtual_key(Qt.Key.Key_F1)
         self._maj_plein_cadre()
         self.update()
+
+    def basculer_pupitre(self) -> None:
+        """Tab, bouton PUPITRE, clic sur l'en-tête : replie ou déplie le pupitre en surimpression."""
+        self._pupitre_replie = not self._pupitre_replie
+        self._t_surimpression = 0.0
+        self._maj_barre_3d()
 
     def basculer_plein_cadre(self) -> None:
         """F12 : vue 3D plein cadre (en plein écran) ↔ poste de conduite."""
@@ -10623,6 +10725,11 @@ class GameWidget(QWidget):
         )
 
     def event(self, ev):  # type: ignore[override]
+        if (ev.type() == QEvent.Type.KeyPress and ev.key() == Qt.Key.Key_Tab
+                and not ev.isAutoRepeat() and self._plein_cadre_3d()):
+            # (Qt s'en sert pour passer d'un widget à l'autre : intercepté ici)
+            self.basculer_pupitre()
+            return True
         # Bilingual hover tooltips over every clickable hit zone. Qt
         # delivers QEvent.Type.ToolTip after ~700 ms of mouse hover;
         # we hit-test in reverse (top-most drawn wins) just like clicks,
@@ -10692,11 +10799,15 @@ class GameWidget(QWidget):
                     return
             # Click outside any zone on the title screen — ignore.
             return
+        if self._clic_hud(pos):
+            ev.accept()
+
+    def _clic_hud(self, pos: QPointF) -> bool:
+        """Clic sur le pupitre (coordonnées de sa toile) : poste ou surimpression du plein cadre."""
         for rect, action in reversed(self._zones_remontee):
             if rect.contains(pos):
                 self._action_remontee(action)
-                ev.accept()
-                return
+                return True
         # Reverse-iterate so later buttons win (none overlap currently, but
         # future overlays might be drawn on top).
         for rect, qk, hold in reversed(self._hit_zones):
@@ -10705,16 +10816,24 @@ class GameWidget(QWidget):
                 # the same auto-ops lockout as the keyboard path.
                 if (self.auto_ops.enabled
                         and int(qk) not in self.AUTO_OPS_META_KEYS):
-                    ev.accept()
-                    return
+                    return True
                 if hold:
                     self._mouse_hold.add(qk)
                 self._sim_press(qk)
                 if not hold:
                     # bouton simple : appui ponctuel, jamais « tenu »
                     self._key_state.discard(qk)
-                ev.accept()
-                return
+                return True
+        return False
+
+    def _relacher_hud(self) -> bool:
+        if not self._mouse_hold:
+            return False
+        to_clear = list(self._mouse_hold)
+        self._mouse_hold.clear()
+        for qk in to_clear:
+            self._sim_release(qk)
+        return True
 
     def wheelEvent(self, ev: QWheelEvent) -> None:  # noqa: N802
         # Molette sur la jauge du volume (à côté de SON) : ±10 % par cran.
@@ -10738,13 +10857,8 @@ class GameWidget(QWidget):
     def mouseReleaseEvent(self, ev: QMouseEvent) -> None:  # noqa: N802
         if ev.button() != Qt.MouseButton.LeftButton:
             return
-        if not self._mouse_hold:
-            return
-        to_clear = list(self._mouse_hold)
-        self._mouse_hold.clear()
-        for qk in to_clear:
-            self._sim_release(qk)
-        ev.accept()
+        if self._relacher_hud():
+            ev.accept()
 
     # ----- painting --------------------------------------------------------
 
@@ -16180,6 +16294,49 @@ class GameWidget(QWidget):
     _VOYANTS_REMONTEE = (("cable", ("ROPE", "CÂBLE")), ("pince", ("GRIP", "PINCE")), ("vent", ("WIND", "VENT")),
                          ("secu_ligne", ("LINE SAF.", "SÉCU LIGNE")), ("moteur", ("MOTOR", "MOTEUR")),
                          ("frein", ("BRAKE", "FREIN")), ("portes", ("DOORS", "PORTES")))
+
+    def _draw_bandeau_pupitre(self, p: QPainter, rect: QRectF) -> None:
+        """Pupitre replié (plein cadre) : nom, vitesse, état, mode, alarmes ; un clic ou Tab le déplie."""
+        self._hit_zones.clear()
+        self._zones_remontee = []
+        p.setBrush(QBrush(COLOR_HUD_BG))
+        p.setPen(_cached_pen(COLOR_HUD_BORDER, 2))
+        p.drawRoundedRect(rect.adjusted(1, 1, -1, -1), 10, 10)
+        st = self.state
+        if self._remontee_affichee():
+            d = self._remontee.d or {}
+            nom = str(d.get("nom", ""))
+            v = abs(float(d.get("v", 0.0) or 0.0))
+            (lib, coul) = self._ETATS_REMONTEE.get(str(d.get("etat", "")), ((str(d.get("etat", "")),) * 2, COLOR_TEXT))
+            if d.get("hors_service"):
+                lib, coul = ("OUT OF SERVICE", "HORS SERVICE"), COLOR_ALARM
+            etat = T(lib[0], lib[1])
+            mode = T("AUTO", "AUTO") if d.get("mode") == "auto" else T("MANUAL", "MANUEL")
+            alarme = any((d.get("voyants") or {}).values()) or any(
+                isinstance(q, dict) and q.get("phase", "active") == "active" for q in d.get("pannes") or [])
+        else:
+            nom = "Perce-Neige"
+            v = abs(vitesse_roues(st))
+            etat, coul = (T("FAULT", "PANNE"), COLOR_ALARM) if st.panne_active else ("", COLOR_TEXT)
+            mode = T("AUTO", "AUTO") if self.auto_ops.enabled else ""
+            alarme = bool(st.panne_active)
+        p.setFont(_cached_font("Segoe UI", 11, QFont.Weight.DemiBold))
+        p.setPen(_cached_pen(COLOR_TEXT))
+        p.drawText(QRectF(rect.x() + 14, rect.y(), 150, rect.height()), int(Qt.AlignmentFlag.AlignVCenter), nom)
+        p.setFont(_cached_font("Consolas", 12, QFont.Weight.Bold))
+        p.setPen(_cached_pen(COLOR_NEEDLE))
+        p.drawText(QRectF(rect.x() + 150, rect.y(), 100, rect.height()), int(Qt.AlignmentFlag.AlignVCenter),
+                   f"{v:5.2f} m/s")
+        p.setFont(_cached_font("Segoe UI", 8, QFont.Weight.Bold))
+        p.setPen(_cached_pen(coul))
+        p.drawText(QRectF(rect.x() + 250, rect.y() + 4, 130, 18), int(Qt.AlignmentFlag.AlignRight), etat)
+        p.setPen(_cached_pen(COLOR_TEXT_DIM))
+        p.drawText(QRectF(rect.x() + 250, rect.y() + 22, 130, 18), int(Qt.AlignmentFlag.AlignRight),
+                   (mode + "  " if mode else "") + T("PANEL ▸ Tab", "PUPITRE ▸ Tab"))
+        if alarme and int(time.monotonic() * 2) % 2 == 0:
+            p.setBrush(QBrush(COLOR_ALARM))
+            p.setPen(Qt.PenStyle.NoPen)
+            p.drawEllipse(QPointF(rect.x() + 7, rect.center().y()), 4, 4)
 
     def _remontee_affichee(self) -> bool:
         """Pupitre de la remontée plutôt que celui du PN : une ligne envoie sa télémesure (le skieur y est,
