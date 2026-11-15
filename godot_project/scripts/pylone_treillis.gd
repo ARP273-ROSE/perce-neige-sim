@@ -62,6 +62,19 @@ func _echelle(a: Vector3, b: Vector3) -> void:
 		RemonteeKit.barre(self, p + Vector3(-0.2, 0, 0), p + Vector3(0.2, 0, 0), 0.016, "galva", 4)
 
 
+## Galets du câble tracteur (va-et-vient) : nœuds gardés hors de la fusion du pylône, ils tournent.
+var mobiles: Array = []
+var _galets: Array = []                  # [nœud, voie (±1), rayon]
+static var _maillage_galet: ArrayMesh = null
+
+
+## Le tracteur a avancé de ds (m, compté sur la voie +x ; l'autre brin va en sens inverse).
+func tourner_galets(ds: float) -> void:
+	for g in _galets:
+		if is_instance_valid(g[0]):
+			(g[0] as Node3D).rotate_object_local(Vector3.UP, float(g[1]) * ds / float(g[2]))
+
+
 func construire() -> void:
 	for f in _debut_construction():
 		(f as Callable).call()
@@ -78,6 +91,8 @@ func construire_par_tranches(pause: Callable) -> void:
 func _debut_construction() -> Array:
 	for c in get_children():
 		c.queue_free()
+	mobiles.clear()
+	_galets.clear()
 	if va_et_vient:
 		return [_construire_vav]
 	return _phases_3s()
@@ -456,6 +471,17 @@ func _construire_vav() -> void:
 	for i4 in range(2, niv.size() - 1, 3):
 		RemonteeKit.boite_en(self, Vector3(1.0, 0.04, 1.0), Vector3(0, float(niv[i4]), 0.0), "caillebotis")
 	# --- tête --------------------------------------------------------------------------------------------
+	# La tête suit la pente du sabot (retour d'utilisateur du 16/11/2026 : « une structure du pylône traverse la bande
+	# de roulement » — tête horizontale sous un sabot incliné de la pente de la ligne : côté aval, fermes et poutres
+	# coupaient les porteurs et le passage du chariot). Chaque point est décalé en hauteur de −z·tan(pente), en entier
+	# au niveau de la tête et au-dessus, pas du tout au sommet du fût.
+	var tg_p: float = tan(pente)
+	var th_ := func(v: Vector3) -> Vector3:
+		return Vector3(v.x, v.y - v.z * tg_p * clampf((v.y - yt) / maxf(y_s - 0.25 - yt, 0.1), 0.0, 1.0), v.z)
+	var tp_ := func(a: Vector3, b: Vector3, w: float, e: float, mm: String) -> void:
+		RemonteeKit.poutre(self, th_.call(a), th_.call(b), w, e, mm)
+	var tb_ := func(a: Vector3, b: Vector3, r: float, mm: String, seg: int = 8) -> void:
+		RemonteeKit.barre(self, th_.call(a), th_.call(b), r, mm, seg)
 	var ls: float = l_sabot
 	var lt: float = ls * 0.85
 	var zt: float = bz1 * 0.5
@@ -463,61 +489,61 @@ func _construire_vav() -> void:
 	var y_bc: float = yc - 3.4                        # membrure basse au droit des voies (garde-corps du toit à yc − 4,2)
 	for sz in [-1.0, 1.0]:
 		var z: float = sz * zt
-		RemonteeKit.poutre(self, Vector3(-xb, y_s, z), Vector3(xb, y_s, z), 0.32, 0.45, m)
+		tp_.call(Vector3(-xb, y_s, z), Vector3(xb, y_s, z), 0.32, 0.45, m)
 		for sx in [-1.0, 1.0]:
 			var pt: Vector3 = Vector3(sx * bx1 * 0.5, yt, z)
 			var pe: Vector3 = Vector3(sx * xb, y_bc, z)
-			RemonteeKit.poutre(self, pt, pe, 0.24, 0.24, m)
-			RemonteeKit.poutre(self, pe, Vector3(sx * xb, y_s, z), 0.20, 0.20, m)
+			tp_.call(pt, pe, 0.24, 0.24, m)
+			tp_.call(pe, Vector3(sx * xb, y_s, z), 0.20, 0.20, m)
 			# montants et diagonales de la ferme
 			for u in [0.35, 0.7]:
 				var q: Vector3 = pt.lerp(pe, u)
-				RemonteeKit.poutre(self, q, Vector3(q.x, y_s, z), 0.12, 0.12, m)
-				RemonteeKit.poutre(self, pt.lerp(pe, u - 0.35), Vector3(q.x, y_s, z), 0.10, 0.10, m)
-			RemonteeKit.poutre(self, Vector3(sx * bx1 * 0.5, yt, z), Vector3(sx * bx1 * 0.5, y_s, z), 0.16, 0.16, m)
-		RemonteeKit.poutre(self, Vector3(-bx1 * 0.5, yt, z), Vector3(bx1 * 0.5, y_s, z), 0.12, 0.12, m)
+				tp_.call(q, Vector3(q.x, y_s, z), 0.12, 0.12, m)
+				tp_.call(pt.lerp(pe, u - 0.35), Vector3(q.x, y_s, z), 0.10, 0.10, m)
+			tp_.call(Vector3(sx * bx1 * 0.5, yt, z), Vector3(sx * bx1 * 0.5, y_s, z), 0.16, 0.16, m)
+		tp_.call(Vector3(-bx1 * 0.5, yt, z), Vector3(bx1 * 0.5, y_s, z), 0.12, 0.12, m)
 	for sx2 in [-1.0, 1.0]:
 		var xv: float = sx2 * x0
 		# poutre longitudinale sous le sabot, et porte-à-faux le long de la ligne (membrure basse et diagonales)
-		RemonteeKit.poutre(self, Vector3(xv, y_s, -lt * 0.5), Vector3(xv, y_s, lt * 0.5), 0.40, 0.55, m)
+		tp_.call(Vector3(xv, y_s, -lt * 0.5), Vector3(xv, y_s, lt * 0.5), 0.40, 0.55, m)
 		for sz2 in [-1.0, 1.0]:
 			var pa: Vector3 = Vector3(xv, y_bc, sz2 * zt)
 			var pz: Vector3 = Vector3(xv, y_s - 0.25, sz2 * lt * 0.5)
-			RemonteeKit.poutre(self, pa, pz, 0.20, 0.20, m)
+			tp_.call(pa, pz, 0.20, 0.20, m)
 			for u3 in [0.33, 0.66]:
 				var q3: Vector3 = pa.lerp(pz, u3)
-				RemonteeKit.poutre(self, q3, Vector3(xv, y_s, q3.z), 0.10, 0.10, m)
-				RemonteeKit.poutre(self, pa.lerp(pz, u3 - 0.33), Vector3(xv, y_s, q3.z), 0.08, 0.08, m)
+				tp_.call(q3, Vector3(xv, y_s, q3.z), 0.10, 0.10, m)
+				tp_.call(pa.lerp(pz, u3 - 0.33), Vector3(xv, y_s, q3.z), 0.08, 0.08, m)
 		# passerelle côté intérieur, le long de la ligne, au-delà des sabots ; et cadre bas en porte-à-faux
 		var xi: float = sx2 * (x0 - 1.9)                 # en dedans de la paroi des cabines (x0 − 1,5)
 		var lc: float = ls + 3.0
-		RemonteeKit.boite_en(self, Vector3(0.8, 0.05, lc), Vector3(xi, y_s - 0.05, 0), "caillebotis")
-		RemonteeKit.poutre(self, Vector3(xi, y_s - 0.2, -lc * 0.5), Vector3(xi, y_s - 0.2, lc * 0.5), 0.14, 0.22, m)
-		RemonteeKit.barre(self, Vector3(xi - sx2 * 0.4, y_s + 1.1, -lc * 0.5), Vector3(xi - sx2 * 0.4, y_s + 1.1, lc * 0.5), 0.025, "galva", 6)
+		tp_.call(Vector3(xi, y_s - 0.05, -lc * 0.5), Vector3(xi, y_s - 0.05, lc * 0.5), 0.8, 0.05, "caillebotis")
+		tp_.call(Vector3(xi, y_s - 0.2, -lc * 0.5), Vector3(xi, y_s - 0.2, lc * 0.5), 0.14, 0.22, m)
+		tb_.call(Vector3(xi - sx2 * 0.4, y_s + 1.1, -lc * 0.5), Vector3(xi - sx2 * 0.4, y_s + 1.1, lc * 0.5), 0.025, "galva", 6)
 		for kz in range(7):
 			var zz: float = lerpf(-lc * 0.5, lc * 0.5, float(kz) / 6.0)
-			RemonteeKit.barre(self, Vector3(xi - sx2 * 0.4, y_s, zz), Vector3(xi - sx2 * 0.4, y_s + 1.1, zz), 0.022, "galva", 6)
+			tb_.call(Vector3(xi - sx2 * 0.4, y_s, zz), Vector3(xi - sx2 * 0.4, y_s + 1.1, zz), 0.022, "galva", 6)
 		for zz2 in [-zt, zt]:
-			RemonteeKit.poutre(self, Vector3(sx2 * bx1 * 0.5, y_s - 0.2, zz2), Vector3(xi, y_s - 0.2, zz2), 0.12, 0.12, m)
+			tp_.call(Vector3(sx2 * bx1 * 0.5, y_s - 0.2, zz2), Vector3(xi, y_s - 0.2, zz2), 0.12, 0.12, m)
 		var lb: float = ls + 4.0
 		var y_lb: float = yc - 4.6
-		RemonteeKit.poutre(self, Vector3(xi, y_lb, -lb * 0.5), Vector3(xi, y_lb, lb * 0.5), 0.16, 0.16, m)
+		tp_.call(Vector3(xi, y_lb, -lb * 0.5), Vector3(xi, y_lb, lb * 0.5), 0.16, 0.16, m)
 		for sz3 in [-1.0, 1.0]:
-			RemonteeKit.poutre(self, Vector3(sx2 * bx1 * 0.5, yt, sz3 * zt), Vector3(xi, y_lb, sz3 * lb * 0.5), 0.14, 0.14, m)
-			RemonteeKit.poutre(self, Vector3(xi, y_lb, sz3 * lb * 0.5), Vector3(xi, y_s - 0.2, sz3 * (ls + 3.0) * 0.5), 0.10, 0.10, m)
+			tp_.call(Vector3(sx2 * bx1 * 0.5, yt, sz3 * zt), Vector3(xi, y_lb, sz3 * lb * 0.5), 0.14, 0.14, m)
+			tp_.call(Vector3(xi, y_lb, sz3 * lb * 0.5), Vector3(xi, y_s - 0.2, sz3 * (ls + 3.0) * 0.5), 0.10, 0.10, m)
 		# au-dessus des porteurs : mâts côté intérieur, poutres de levage en travers au-dessus de la voie,
 		# poutres hautes le long de la ligne, montant extérieur suspendu au droit du pylône
 		var y_h: float = yc + 2.6
 		var xo: float = sx2 * (x0 + 2.2)
 		for zm in [-ls * 0.4, 0.0, ls * 0.4]:
-			RemonteeKit.poutre(self, Vector3(xi, y_s, zm), Vector3(xi, y_h, zm), 0.20, 0.20, m)
-			RemonteeKit.poutre(self, Vector3(xi, y_h, zm), Vector3(xo, y_h, zm), 0.18, 0.26, m)
-		RemonteeKit.poutre(self, Vector3(xi, y_h, -ls * 0.4), Vector3(xi, y_h, ls * 0.4), 0.16, 0.16, m)
-		RemonteeKit.poutre(self, Vector3(xo, y_h, -ls * 0.4), Vector3(xo, y_h, ls * 0.4), 0.16, 0.16, m)
-		RemonteeKit.poutre(self, Vector3(xo, y_h, 0.0), Vector3(xo, yc - 2.6, 0.0), 0.18, 0.18, m)
-		RemonteeKit.poutre(self, Vector3(xo, y_h, -2.0), Vector3(xo, yc - 1.0, 0.0), 0.10, 0.10, m)
-		RemonteeKit.poutre(self, Vector3(xo, y_h, 2.0), Vector3(xo, yc - 1.0, 0.0), 0.10, 0.10, m)
-		RemonteeKit.poutre(self, Vector3(xi, y_h, 0.0), Vector3(xi, y_h + 0.9, 0.0), 0.10, 0.10, m)   # (paratonnerre, photo)
+			tp_.call(Vector3(xi, y_s, zm), Vector3(xi, y_h, zm), 0.20, 0.20, m)
+			tp_.call(Vector3(xi, y_h, zm), Vector3(xo, y_h, zm), 0.18, 0.26, m)
+		tp_.call(Vector3(xi, y_h, -ls * 0.4), Vector3(xi, y_h, ls * 0.4), 0.16, 0.16, m)
+		tp_.call(Vector3(xo, y_h, -ls * 0.4), Vector3(xo, y_h, ls * 0.4), 0.16, 0.16, m)
+		tp_.call(Vector3(xo, y_h, 0.0), Vector3(xo, yc - 2.6, 0.0), 0.18, 0.18, m)
+		tp_.call(Vector3(xo, y_h, -2.0), Vector3(xo, yc - 1.0, 0.0), 0.10, 0.10, m)
+		tp_.call(Vector3(xo, y_h, 2.0), Vector3(xo, yc - 1.0, 0.0), 0.10, 0.10, m)
+		tp_.call(Vector3(xi, y_h, 0.0), Vector3(xi, y_h + 0.9, 0.0), 0.10, 0.10, m)   # (paratonnerre, photo)
 		# guides anti-collision : lisses le long du passage des cabines, à 0,25 m des faces du fût, becs
 		# recourbés vers l'axe aux deux bouts
 		var yg0: float = yc - 8.0
@@ -530,16 +556,16 @@ func _construire_vav() -> void:
 			for kk in range(13):
 				var w: float = lerpf(-1.0, 1.0, float(kk) / 12.0)
 				var bec: float = maxf(absf(w) - 0.7, 0.0) / 0.3
-				pts.append(Vector3(float(gg[1]) - sx2 * 0.45 * bec * bec, float(gg[0]), w * lg2 * 0.5))
+				pts.append(th_.call(Vector3(float(gg[1]) - sx2 * 0.45 * bec * bec, float(gg[0]), w * lg2 * 0.5)))
 			RemonteeKit.tube(self, pts, 0.07, m, 8)
 		for zg in [-lg2 * 0.35, 0.0, lg2 * 0.35]:
-			RemonteeKit.poutre(self, Vector3(xg0, yg0, zg), Vector3(xg1, yg1, zg), 0.09, 0.09, m)
+			tp_.call(Vector3(xg0, yg0, zg), Vector3(xg1, yg1, zg), 0.09, 0.09, m)
 		for sz4 in [-1.0, 1.0]:
 			for gy in [[yg0, xg0], [yg1, xg1]]:
 				var hc: Vector2 = demi.call(float(gy[0]))
-				RemonteeKit.poutre(self, Vector3(sx2 * hc.x, float(gy[0]), sz4 * hc.y), Vector3(float(gy[1]), float(gy[0]), sz4 * lg2 * 0.35), 0.10, 0.10, m)
+				tp_.call(Vector3(sx2 * hc.x, float(gy[0]), sz4 * hc.y), Vector3(float(gy[1]), float(gy[0]), sz4 * lg2 * 0.35), 0.10, 0.10, m)
 	# plate-forme entre les voies, garde-corps
-	RemonteeKit.boite_en(self, Vector3(2.0 * (x0 - 1.75), 0.04, bz1 + 1.0), Vector3(0, y_s + 0.25, 0), "caillebotis")
+	tp_.call(Vector3(0, y_s + 0.25, -(bz1 + 1.0) * 0.5), Vector3(0, y_s + 0.25, (bz1 + 1.0) * 0.5), 2.0 * (x0 - 1.75), 0.04, "caillebotis")
 	# --- sabots : poutre cintrée de toute la déviation sous chaque paire de porteurs --------------------------
 	var sab: Node3D = Node3D.new()
 	sab.position = Vector3(0, yc, 0)
@@ -570,14 +596,26 @@ func _construire_vav() -> void:
 		for k5 in range(n_t):
 			var sz5: float = lerpf(-ls * 0.46, ls * 0.46, float(k5) / (n_t - 1))
 			var yg: float = -0.45 - 0.02 - r_t - kappa * sz5 * sz5 * 0.5
-			RemonteeKit.galet(sab, Vector3(x0b, yg, sz5), r_t)
+			# galet à rayons, gardé hors de la fusion : il tourne avec le tracteur (retour d'utilisateur du 16/11/2026 :
+			# « les galets ne tournent pas »)
+			if _maillage_galet == null:
+				_maillage_galet = RollerMesh.build_galet(true)
+			var kg: float = r_t / RollerMesh.R_BANDE
+			var gmi: MeshInstance3D = MeshInstance3D.new()
+			gmi.name = "GaletTracteur"
+			gmi.mesh = _maillage_galet
+			gmi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			gmi.transform = Transform3D(Basis(Vector3.FORWARD, PI * 0.5).scaled(Vector3(kg, kg, kg)), Vector3(x0b, yg, sz5))
+			sab.add_child(gmi)
+			mobiles.append(gmi)
+			_galets.append([gmi, sx, r_t])
 			if porteurs_par_voie > 1:
 				# axe du galet d'une joue à l'autre
 				RemonteeKit.cylindre(sab, 0.025, 0.025, 2.0 * e_j, Transform3D(Basis(Vector3.FORWARD, PI * 0.5), Vector3(x0b, yg, sz5)), "acier_noir", 8)
 		for sz6 in [-lt * 0.35, lt * 0.35]:
 			# entretoise sous la fente, d'une joue à l'autre, puis la jambe jusqu'à la tête
 			RemonteeKit.boite_en(sab, Vector3(2.0 * e_j + 0.22, 0.14, 0.30), Vector3(x0b, -0.97 - kappa * sz6 * sz6 * 0.5, sz6), m)
-			RemonteeKit.poutre(sab, Vector3(x0b, -0.98 - kappa * sz6 * sz6 * 0.5, sz6), Vector3(x0b, y_s - yc, sz6 * 0.9), 0.30, 0.30, m)
+			RemonteeKit.poutre(sab, Vector3(x0b, -0.98 - kappa * sz6 * sz6 * 0.5, sz6), Vector3(x0b, (y_s - yc) * cos(pente), sz6), 0.30, 0.30, m)
 
 
 ## Hauteur (locale) d'appui des porteurs.

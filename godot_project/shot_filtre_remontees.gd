@@ -37,6 +37,13 @@ func _vues_de(lg: LigneRemontee) -> Array:
 	v.append([n + "_gare_aval", xf * Vector3(-14, lg.terrain(-12.0) + 5.0, 12.0), c3])
 	var d: float = float(lg.pylones[mini(1, lg.pylones.size() - 1)]["d"]) if not lg.pylones.is_empty() else L * 0.3
 	v.append([n + "_pylone", xf * Vector3(-22, lg.terrain(d + 25) + 4, -d - 25), xf * Vector3(0, lg.y_cable(d) - 3.0, -d)])
+	# tête du dernier pylône : de dessus (comme du toit d'une cabine), de côté, et de dessous
+	if not lg.pylones.is_empty():
+		var dd: float = float(lg.pylones[lg.pylones.size() - 1]["d"])
+		var yc: float = lg.y_cable(dd)
+		v.append([n + "_tete_dessus", xf * Vector3(0.0, yc + 7.0, -dd + 11.0), xf * Vector3(0, yc - 1.0, -dd - 3.0)])
+		v.append([n + "_tete_cote", xf * Vector3(-13.0, yc + 1.5, -dd + 3.0), xf * Vector3(0, yc - 0.5, -dd)])
+		v.append([n + "_tete_voie", xf * Vector3(lg.voie * 0.5 + 0.2, yc + 1.2, -dd + 9.0), xf * Vector3(lg.voie * 0.5, yc - 0.3, -dd)])
 	v.append([n + "_ensemble", xf * Vector3(-L * 0.45, lg.terrain(L * 0.5) + L * 0.2, -L * 0.25),
 		xf * Vector3(0, lg.terrain(L * 0.5) + 15, -L * 0.5)])
 	v.append([n + "_gare_amont", xf * Vector3(16, lg.terrain(L - 30.0) + 6.0, -L + 30.0),
