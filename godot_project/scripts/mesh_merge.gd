@@ -964,80 +964,134 @@ static func _outils_cpp() -> RefCounted:
 	return _outils
 
 
-## Concatène une surface (tableaux) transformée par `xf` dans l'accumulateur.
+## Garde une surface (tableaux) et sa transformation dans l'accumulateur ; assemblées d'un coup dans _tableaux_acc.
 static func _ajouter(acc: Dictionary, a: Array, xf: Transform3D) -> void:
-	var v: PackedVector3Array = a[Mesh.ARRAY_VERTEX]
-	var n0: int = int(acc.get("n", 0))
-	if _outils_cpp() != null:
-		# (module : les surfaces sont assemblées d'un coup, dans _tableaux_acc)
-		if not acc.has("surfaces"):
-			acc["surfaces"] = []
-			acc["xfs"] = []
-		(acc["surfaces"] as Array).append(a)
-		(acc["xfs"] as Array).append(xf)
-		return
-	if not acc.has("v"):
-		acc["v"] = PackedVector3Array()
-	var dv: PackedVector3Array = acc["v"]
-	var k0: int = dv.size()
-	dv.resize(k0 + v.size())
-	for i in range(v.size()):
-		dv[k0 + i] = xf * v[i]
-	acc["v"] = dv
-	var nb: Basis = xf.basis.inverse().transposed()
-	if a[Mesh.ARRAY_NORMAL] != null:
-		var nn: PackedVector3Array = a[Mesh.ARRAY_NORMAL]
-		var dn: PackedVector3Array = acc.get("nor", PackedVector3Array())
-		var k1: int = dn.size()
-		dn.resize(k1 + nn.size())
-		for i in range(nn.size()):
-			dn[k1 + i] = (nb * nn[i]).normalized()
-		acc["nor"] = dn
-	if a[Mesh.ARRAY_TANGENT] != null:
-		var tt: PackedFloat32Array = a[Mesh.ARRAY_TANGENT]
-		var dt: PackedFloat32Array = acc.get("tan", PackedFloat32Array())
-		var k2: int = dt.size()
-		dt.resize(k2 + tt.size())
-		for i in range(0, tt.size(), 4):
-			var t3: Vector3 = (xf.basis * Vector3(tt[i], tt[i + 1], tt[i + 2])).normalized()
-			dt[k2 + i] = t3.x
-			dt[k2 + i + 1] = t3.y
-			dt[k2 + i + 2] = t3.z
-			dt[k2 + i + 3] = tt[i + 3]
-		acc["tan"] = dt
-	_ajouter_attributs(acc, a)
-	if a[Mesh.ARRAY_INDEX] != null:
-		var ix: PackedInt32Array = a[Mesh.ARRAY_INDEX]
-		var di: PackedInt32Array = acc.get("ix", PackedInt32Array())
-		var k3: int = di.size()
-		di.resize(k3 + ix.size())
-		for i in range(ix.size()):
-			di[k3 + i] = ix[i] + n0
-		acc["ix"] = di
-	acc["n"] = n0 + v.size()
-
-
-## Couleurs et UV : recopiés tels quels.
-static func _ajouter_attributs(acc: Dictionary, a: Array) -> void:
-	for e in [[Mesh.ARRAY_COLOR, "col"], [Mesh.ARRAY_TEX_UV, "uv"], [Mesh.ARRAY_TEX_UV2, "uv2"]]:
-		if a[e[0]] != null:
-			if not acc.has(e[1]):
-				acc[e[1]] = a[e[0]].duplicate()
-			else:
-				acc[e[1]].append_array(a[e[0]])
+	if not acc.has("surfaces"):
+		acc["surfaces"] = []
+		acc["xfs"] = []
+	(acc["surfaces"] as Array).append(a)
+	(acc["xfs"] as Array).append(xf)
 
 
 static func _tableaux_acc(acc: Dictionary) -> Array:
-	if acc.has("surfaces"):
+	if not acc.has("surfaces"):
+		var vide: Array = []
+		vide.resize(Mesh.ARRAY_MAX)
+		vide[Mesh.ARRAY_VERTEX] = PackedVector3Array()
+		return vide
+	if _outils_cpp() != null:
 		return _outils_cpp().fusionner(acc["surfaces"], acc["xfs"])
-	var a: Array = []
-	a.resize(Mesh.ARRAY_MAX)
-	a[Mesh.ARRAY_VERTEX] = acc.get("v", PackedVector3Array())
-	for e in [[Mesh.ARRAY_NORMAL, "nor"], [Mesh.ARRAY_TANGENT, "tan"], [Mesh.ARRAY_COLOR, "col"],
-			[Mesh.ARRAY_TEX_UV, "uv"], [Mesh.ARRAY_TEX_UV2, "uv2"], [Mesh.ARRAY_INDEX, "ix"]]:
-		if acc.has(e[1]):
-			a[e[0]] = acc[e[1]]
-	return a
+	return _fusionner_gd(acc["surfaces"], acc["xfs"])
+
+
+## Repli GDScript d'OutilsMaillage.fusionner, mêmes règles et mêmes calculs (bancs --sans-cpp, et sans module) :
+## un attribut présent sur une partie seulement des surfaces est complété par une valeur neutre (normale vers le
+## haut, couleur blanche, UV nuls), une surface sans indices reçoit 0..n-1, les tangentes seulement si toutes en ont.
+## Sans cela les tableaux n'avaient plus la longueur des sommets et le rendu refusait la surface : pylônes lointains
+## vides en GDScript (PyloneLoin de l'Olympique et du Col du Palet, empreinte de fusion du 15/11/2026), comme le
+## C++ avant le 06/11.
+static func _fusionner_gd(surfaces: Array, xfs: Array) -> Array:
+	var ns: int = surfaces.size()
+	var nv: int = 0
+	var ni: int = 0
+	var a_n: bool = false
+	var a_t: bool = true
+	var a_c: bool = false
+	var a_u: bool = false
+	var a_u2: bool = false
+	var a_i: bool = false
+	for a in surfaces:
+		var n: int = (a[Mesh.ARRAY_VERTEX] as PackedVector3Array).size()
+		nv += n
+		a_n = a_n or a[Mesh.ARRAY_NORMAL] != null
+		a_t = a_t and a[Mesh.ARRAY_TANGENT] != null
+		a_c = a_c or a[Mesh.ARRAY_COLOR] != null
+		a_u = a_u or a[Mesh.ARRAY_TEX_UV] != null
+		a_u2 = a_u2 or a[Mesh.ARRAY_TEX_UV2] != null
+		if a[Mesh.ARRAY_INDEX] != null:
+			a_i = true
+			ni += (a[Mesh.ARRAY_INDEX] as PackedInt32Array).size()
+		else:
+			ni += n
+	a_t = a_t and ns > 0
+	var dv: PackedVector3Array = PackedVector3Array()
+	var dn: PackedVector3Array = PackedVector3Array()
+	var dt: PackedFloat32Array = PackedFloat32Array()
+	var dc: PackedColorArray = PackedColorArray()
+	var du: PackedVector2Array = PackedVector2Array()
+	var du2: PackedVector2Array = PackedVector2Array()
+	var di: PackedInt32Array = PackedInt32Array()
+	dv.resize(nv)
+	dn.resize(nv if a_n else 0)
+	dt.resize(nv * 4 if a_t else 0)
+	dc.resize(nv if a_c else 0)
+	du.resize(nv if a_u else 0)
+	du2.resize(nv if a_u2 else 0)
+	di.resize(ni if a_i else 0)
+	var kv: int = 0
+	var ki: int = 0
+	for k in range(ns):
+		var a: Array = surfaces[k]
+		var xf: Transform3D = xfs[k]
+		var n0: int = kv
+		var v: PackedVector3Array = a[Mesh.ARRAY_VERTEX]
+		var n: int = v.size()
+		for i in range(n):
+			dv[n0 + i] = xf * v[i]
+		if a_n:
+			var nb: Basis = xf.basis.inverse().transposed()
+			var s: PackedVector3Array = a[Mesh.ARRAY_NORMAL] if a[Mesh.ARRAY_NORMAL] != null else PackedVector3Array()
+			var haut: Vector3 = (nb * Vector3(0, 1, 0)).normalized()
+			for i in range(n):
+				dn[n0 + i] = (nb * s[i]).normalized() if i < s.size() else haut
+		if a_t:
+			var st: PackedFloat32Array = a[Mesh.ARRAY_TANGENT]
+			for i in range(n):
+				var ok: bool = i * 4 + 3 < st.size()
+				var t3: Vector3 = (xf.basis * (Vector3(st[i * 4], st[i * 4 + 1], st[i * 4 + 2]) if ok else Vector3(1, 0, 0))).normalized()
+				dt[(n0 + i) * 4] = t3.x
+				dt[(n0 + i) * 4 + 1] = t3.y
+				dt[(n0 + i) * 4 + 2] = t3.z
+				dt[(n0 + i) * 4 + 3] = st[i * 4 + 3] if ok else 1.0
+		if a_c:
+			var sc: PackedColorArray = a[Mesh.ARRAY_COLOR] if a[Mesh.ARRAY_COLOR] != null else PackedColorArray()
+			for i in range(n):
+				dc[n0 + i] = sc[i] if i < sc.size() else Color(1, 1, 1, 1)
+		if a_u:
+			var su: PackedVector2Array = a[Mesh.ARRAY_TEX_UV] if a[Mesh.ARRAY_TEX_UV] != null else PackedVector2Array()
+			for i in range(n):
+				du[n0 + i] = su[i] if i < su.size() else Vector2()
+		if a_u2:
+			var su2: PackedVector2Array = a[Mesh.ARRAY_TEX_UV2] if a[Mesh.ARRAY_TEX_UV2] != null else PackedVector2Array()
+			for i in range(n):
+				du2[n0 + i] = su2[i] if i < su2.size() else Vector2()
+		if a_i:
+			if a[Mesh.ARRAY_INDEX] != null:
+				var sx: PackedInt32Array = a[Mesh.ARRAY_INDEX]
+				for i in range(sx.size()):
+					di[ki] = sx[i] + n0
+					ki += 1
+			else:
+				for i in range(n):
+					di[ki] = n0 + i
+					ki += 1
+		kv += n
+	var out: Array = []
+	out.resize(Mesh.ARRAY_MAX)
+	out[Mesh.ARRAY_VERTEX] = dv
+	if a_n:
+		out[Mesh.ARRAY_NORMAL] = dn
+	if a_t:
+		out[Mesh.ARRAY_TANGENT] = dt
+	if a_c:
+		out[Mesh.ARRAY_COLOR] = dc
+	if a_u:
+		out[Mesh.ARRAY_TEX_UV] = du
+	if a_u2:
+		out[Mesh.ARRAY_TEX_UV2] = du2
+	if a_i:
+		out[Mesh.ARRAY_INDEX] = di
+	return out
 
 
 static func _format(mesh: Mesh, si: int) -> int:

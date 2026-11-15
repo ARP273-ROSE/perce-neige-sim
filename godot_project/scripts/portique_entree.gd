@@ -39,6 +39,15 @@ static func _txt(parent: Node3D, t: String, pos: Vector3, px: float, coul: Color
 
 ## Chiffres de la pendule : courbes fines (pas de 4 : 0, 5 et 8 en segments visibles de près) ; 11 glyphes seulement.
 const PAS_COURBE_PENDULE: float = 0.5
+## Bancs (empreintes) : heure affichée fixe, « HH:MM » ; vide en jeu (l'heure de l'appareil).
+static var HEURE_FIGEE: String = ""
+
+
+static func _heure() -> String:
+	if HEURE_FIGEE != "":
+		return HEURE_FIGEE
+	var t: Dictionary = Time.get_time_dict_from_system()
+	return "%02d:%02d" % [t["hour"], t["minute"]]
 
 
 ## Pendule lumineuse : l'heure (de l'appareil) mise à jour chaque seconde.
@@ -68,8 +77,7 @@ static func _pendule(parent: Node3D, pos: Vector3, px: float, coul: Color) -> vo
 		cases.append(mi)
 	var vu: Array = [""]
 	var maj := func() -> void:
-		var t: Dictionary = Time.get_time_dict_from_system()
-		var h: String = "%02d:%02d" % [t["hour"], t["minute"]]
+		var h: String = _heure()
 		if h == vu[0]:
 			return
 		vu[0] = h
@@ -94,8 +102,7 @@ static func _pendule_label(parent: Node3D, pos: Vector3, px: float, coul: Color)
 	parent.add_child(lab)
 	lab.shaded = false
 	var maj := func() -> void:
-		var t: Dictionary = Time.get_time_dict_from_system()
-		lab.text = "%02d:%02d" % [t["hour"], t["minute"]]
+		lab.text = _heure()
 	maj.call()
 	var tm: Timer = Timer.new()
 	tm.wait_time = 1.0
