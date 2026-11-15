@@ -98,6 +98,12 @@ func _fin() -> void:
 func _parcourir(n: Node, racine: Node, pre: String) -> void:
 	if n is VehiculeRemontee:
 		return
+	# galets tournants des pylônes proches (PyloneRemontee.roues_tournantes) : posés et retirés selon le point de
+	# vue (moins de ROUES_JUSQUA), pas par la fusion ; présents ou non selon le moment où l'on hache (passe
+	# GDScript plus lente au NAS : 48 lignes de plus sous P1 du Solaise, 15/11/2026)
+	if String(n.name) == "Roues" and n.get_parent() != null and n.get_parent().get_parent() != null \
+			and String(n.get_parent().name).begins_with("Paire"):
+		return
 	if n is MeshInstance3D and (n as MeshInstance3D).mesh != null:
 		var mi: MeshInstance3D = n
 		lignes_ajouter("%s/%s %s %d %.1f" % [pre, racine.get_path_to(n), _sha_mesh(mi.mesh), mi.cast_shadow, mi.visibility_range_end])
