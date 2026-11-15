@@ -1946,6 +1946,48 @@ func _collisions_funi() -> void:
 			cs5.transform = Transform3D(rot5, c5 + rot5 * (f5[1] as Vector3))
 			cam.add_child(cs5)
 		dt = dt2
+	# la voie elle-même, de la gare aval au fond de la salle amont (retour d'utilisateur du 16/11/2026 : « si je marche
+	# sur la voie du Funival, je finis au centre de la terre » — dans le souterrain, le corps du skieur ignore le
+	# relief et rien ne le portait hors des quais) : radier par tronçons de 12 m suivant la pente ; dans le tunnel,
+	# parois et voûte (couche du souterrain seule : en surface, au-dessus, elles n'arrêtent personne)
+	var voie_c: StaticBody3D = StaticBody3D.new()
+	voie_c.name = "VoieFunival"
+	voie_c.collision_layer = CollisionsJeu.COUCHE_DECOR | COUCHE_SOUTERRAIN
+	voie_c.collision_mask = 0
+	_enfant(voie_c)
+	var tube_c: StaticBody3D = StaticBody3D.new()
+	tube_c.name = "TubeFunival"
+	tube_c.collision_layer = COUCHE_SOUTERRAIN
+	tube_c.collision_mask = 0
+	_enfant(tube_c)
+	var dv: float = _x_quai(true) - VehiculeFunival.DEMI_L - 2.0
+	while dv < L - 0.5:
+		var dv2: float = minf(dv + 12.0, L - 0.5)
+		var yv: float = y_voie(dv)
+		var yv2: float = y_voie(dv2)
+		var av: float = atan2(yv2 - yv, dv2 - dv)
+		var lgv: float = Vector2(dv2 - dv, yv2 - yv).length() + 0.3
+		var tunnel_v: bool = dv2 > portail_d + 2.0
+		var tv: float = maxf(_t_evit(dv), _t_evit(dv2))
+		var rxv: float = lerpf(R_TUNNEL, R_TUNNEL_EVIT, tv) - 0.15
+		var ryv: float = lerpf(R_TUNNEL, R_TUNNEL * 1.2, tv)
+		var demi_v: float = rxv if tunnel_v else W + 0.8
+		var cv: Vector3 = Vector3(0, (yv + yv2) * 0.5, -(dv + dv2) * 0.5)
+		var rotv: Basis = Basis(Vector3.RIGHT, av)
+		var formes_v: Array = [[voie_c, Vector3(2.0 * demi_v + 0.6, 0.3, lgv), Vector3(0, -0.60, 0)]]
+		if tunnel_v and dv2 < L - L_HALL:
+			var hm: float = ryv * 1.6 + 0.5
+			formes_v.append([tube_c, Vector3(0.3, hm, lgv), Vector3(-rxv - 0.15, hm * 0.5 - 0.5, 0)])
+			formes_v.append([tube_c, Vector3(0.3, hm, lgv), Vector3(rxv + 0.15, hm * 0.5 - 0.5, 0)])
+			formes_v.append([tube_c, Vector3(2.0 * rxv + 0.6, 0.3, lgv), Vector3(0, -0.45 + ryv * 1.62 + 0.15, 0)])
+		for fv in formes_v:
+			var csv: CollisionShape3D = CollisionShape3D.new()
+			var bxv: BoxShape3D = BoxShape3D.new()
+			bxv.size = fv[1]
+			csv.shape = bxv
+			csv.transform = Transform3D(rotv, cv + rotv * (fv[2] as Vector3))
+			(fv[0] as StaticBody3D).add_child(csv)
+		dv = dv2
 	# salle amont : parois, et plancher du bâtiment au débouché
 	var hx: float = W + 4.2
 	for sx in [-1.0, 1.0]:
