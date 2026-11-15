@@ -16,6 +16,7 @@ var _y0: float = 0.0
 var _cab: int = -1
 var _v_max: float = 0.0
 var _v_pyl: float = -1.0
+var _etape: int = 0
 
 
 func _initialize() -> void:
@@ -76,7 +77,8 @@ func _tick() -> void:
 			for i in range(_lg._vehicules.size()):
 				if _lg.zone_vehicule(i) == "gare_aval" and _lg._corps[i] != null and (_lg._corps[i][1][0] as CollisionShape3D).disabled \
 						and rm._repos <= 0.0:
-					if true:
+					# --autre : la cabine de l'autre voie (un cycle de plus)
+					if not ("--autre" in OS.get_cmdline_user_args()) or i == 1:
 						_cab = i
 						var v: VehiculeRemontee = _lg.vehicule(i)
 						var dedans: Vector3 = v.global_transform * (v.place_assise(2) + Vector3(0, 0.05, 0))
@@ -85,7 +87,7 @@ func _tick() -> void:
 						_phase = 3
 						_t = 0.0
 						return
-			if _t > 200.0:
+			if _t > 900.0:
 				_verif("TPH : une cabine à quai, portes ouvertes", false)
 				_fin()
 		3:
@@ -104,6 +106,44 @@ func _tick() -> void:
 				var d: float = Vector2(sk.global_position.x - haut.x, sk.global_position.z - haut.z).length()
 				_verif("TPH : emporté jusqu'en haut, sorti portes ouvertes", not sk.embarque and d < 40.0
 					and sk.global_position.y > _y0 + 350.0, "%.0f s de trajet, %.1f m de la gare amont, +%.0f m" % [_t, d, sk.global_position.y - _y0])
+				_phase = 4
+				_t = 0.0
+				var inv: Transform3D = _lg.global_transform.affine_inverse()
+				var l0: Vector3 = inv * sk.global_position
+				print("SONDE sortie : local ", l0, " quai y ", _lg.terrain(_lg.longueur_h()), " L ", _lg.longueur_h(), " x_brin ", _lg._x_brin(true), " ", _lg._x_brin(false))
+				var v4: VehiculeRemontee = _lg.vehicule(_cab)
+				print("SONDE cabine locale : ", inv * v4.global_position, " base x ", inv.basis * v4.global_transform.basis.x)
+		4:
+			var inv2: Transform3D = _lg.global_transform.affine_inverse()
+			var l: Vector3 = inv2 * sk.global_position
+			# (un coup de joystick le libère de la cabine, comme en jeu)
+			sk.entree = Vector2(0, -0.5) if _t < 0.3 else Vector2.ZERO
+			if _f % 60 == 0:
+				print("SONDE t %.1f local %s sol %s support %s chemin %d" % [_t, l, sk.is_on_floor(), sk.support, sk.chemin.size()])
+			var L4: float = _lg.longueur_h()
+			var yq: float = _lg.terrain(L4)
+			if _t > 1.0 and sk.chemin.is_empty() and _etape < 6:
+				var v5: VehiculeRemontee = _lg.vehicule(_cab)
+				var cx: float = (inv2 * v5.global_position).x
+				var zc: float = -L4 - Telepherique.D_QUAI
+				var zf: float = -L4 - TphGrandeMotte.L_BAIE - 3.4
+				var W4: float = 4.5 + TphGrandeMotte.DEMI_BAIE + 1.4
+				# par la porte, le long du quai, au fond, palier de l'escalier (à gauche), bas de l'escalier
+				var pts: Array = [Vector3(cx + 2.3, yq + 0.2, zc), Vector3(cx + 2.3, yq + 0.2, zc - 3.2), Vector3(cx + 2.3, yq + 0.2, zf + 1.1), Vector3(-W4 - 0.8, yq + 0.2, zf + 1.1),
+					Vector3(-W4 - 0.8, yq + 0.2, zf + 2.4), Vector3(-W4 - 0.8, yq, zf + 2.2 + 10.5)]
+				sk.chemin = [_lg.global_transform * pts[_etape]]
+				_etape += 1
+				print("SONDE étape ", _etape, " local ", l)
+			# sol attendu : le quai, ou la rampe de l'escalier
+			var y_min: float = yq - 1.0
+			if l.x < -7.5 and l.z > -L4 - TphGrandeMotte.L_BAIE - 3.4 + 2.2:
+				y_min = _lg._sol(l.x, l.z) - 0.5
+			if l.y < y_min:
+				_verif("TPH : sorti de la cabine sans tomber du quai", false, "à %.1f s, local %s" % [_t, l])
+				_fin()
+			elif _t > 60.0 or (_etape >= 6 and sk.chemin.is_empty()):
+				_verif("TPH : de la cabine au bas de l'escalier du quai amont, sans tomber", _etape >= 6 and sk.chemin.is_empty()
+					and absf(l.y - _lg._sol(l.x, l.z)) < 0.6, "étape %d, %.0f s, local %s, sol %.1f" % [_etape, _t, l, _lg._sol(l.x, l.z)])
 				_fin()
 			elif _t > 400.0:
 				_verif("TPH : emporté jusqu'en haut", false, "toujours à bord après 700 s")
