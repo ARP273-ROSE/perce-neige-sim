@@ -20,6 +20,7 @@ var _b_rearmer: Button
 var _b_auto: Button
 var _b_secours: Button
 var _b_remise: Button
+var _b_portes: Button
 var _panne: Label
 var _journal: Label
 
@@ -99,6 +100,11 @@ func _ready() -> void:
 	_b_remise = _bouton(l_e, "REMISE EN SERVICE", Color(0.15, 0.40, 0.30))
 	_b_remise.pressed.connect(func() -> void:
 		_cmd("remise_service"))
+	# portes à la main (téléphériques, Funival : à quai, en manuel)
+	_b_portes = _bouton(l_e, "PORTES", Color(0.25, 0.35, 0.55))
+	_b_portes.pressed.connect(func() -> void:
+		if ligne != null and is_instance_valid(ligne) and ligne.has_method("ouverture_portes"):
+			_cmd("portes", "fermer" if float(ligne.call("ouverture_portes")) > 0.5 else "ouvrir"))
 	_panne = _texte(col, 15, Color(1.0, 0.80, 0.55), true)
 	_journal = _texte(col, 14, Color(0.75, 0.82, 0.92), true)
 
@@ -185,6 +191,9 @@ func _process_corps(_delta: float) -> void:
 	_b_auto.text = "AUTO" if ex.mode == "auto" else "MANUEL"
 	_b_secours.visible = _a_coupure(ex) and not ex.secours
 	_b_remise.visible = ex.hors_service()
+	_b_portes.visible = ligne.has_method("ouverture_portes")
+	if _b_portes.visible:
+		_b_portes.text = "FERMER PORTES" if float(ligne.call("ouverture_portes")) > 0.5 else "OUVRIR PORTES"
 	var t_p: String = ""
 	for p in ex.pannes:
 		var dp: Dictionary = PannesRemontees.P.get(p["id"], {})

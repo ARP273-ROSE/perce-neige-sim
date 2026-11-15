@@ -110,9 +110,70 @@ func zone(s: float) -> Array:
 	return ["ligne", 0.0, 0.0]
 
 
+## Portes à la main (question d'utilisateur du 15/11/2026 : « le TPH, je peux ouvrir et fermer les portes ? ») : en
+## exploitation manuelle, l'agent ouvre et ferme les portes à quai (PORTES du pupitre) et donne le départ (DÉMARRER),
+## refusé portes ouvertes ; en auto, le cycle de quai les ouvre et les ferme seul (T_QUAI).
+var portes_manu: bool = false
+var fermetures_manu: int = 0           # compteur de fermetures demandées (buzzer et bruit des portes)
+var _porte_cible: float = 0.0
+var _porte_anim: float = 0.0
+var _depart_demande: bool = false
+const T_PORTES: float = 1.5            # s pour ouvrir ou fermer
+
+
+## Ouverture des portes à quai (0 fermées, 1 ouvertes).
+func ouverture_portes() -> float:
+	if _phase != "quai":
+		return 0.0
+	if portes_manu:
+		return _porte_anim
+	return clampf(minf(T_QUAI - _t_quai, _t_quai) / T_PORTES, 0.0, 1.0)
+
+
+func portes_ouvertes() -> bool:
+	return ouverture_portes() > 0.5
+
+
+## Passage auto ↔ manuel (ExploitationRemontee) : les portes reprennent là où elles en sont.
+func regler_portes_manu(oui: bool) -> void:
+	if oui == portes_manu:
+		return
+	var o: float = ouverture_portes()
+	portes_manu = oui
+	_depart_demande = false
+	if oui:
+		_porte_anim = o
+		_porte_cible = 1.0 if o > 0.5 else 0.0
+	elif _phase == "quai":
+		# (portes ouvertes : le cycle reprend portes ouvertes ; fermées : un nouveau cycle de quai)
+		_t_quai = T_QUAI - T_PORTES * o if o > 0.0 else T_QUAI
+
+
+## PORTES du pupitre (à quai seulement). Renvoie un refus, "" si fait.
+func cycler_portes(ouvrir: bool) -> String:
+	if _phase != "quai":
+		return "Portes : seulement à quai" if ExploitationRemontee.lang_pc != "en" else "Doors: at the platform only"
+	if not portes_manu:
+		regler_portes_manu(true)
+	_porte_cible = 1.0 if ouvrir else 0.0
+	if not ouvrir:
+		fermetures_manu += 1
+	return ""
+
+
+## DÉMARRER à quai en manuel : départ portes fermées seulement.
+func depart_quai() -> String:
+	if not portes_manu or _phase != "quai":
+		return ""
+	if _porte_cible > 0.0 or _porte_anim > 0.0:
+		return "Portes ouvertes" if ExploitationRemontee.lang_pc != "en" else "Doors open"
+	_depart_demande = true
+	return ""
+
+
 ## Cabine i arrivée à quai, portes ouvertes : [gare aval ?] ou [].
 func arrivee_cabine(i: int) -> Array:
-	if _phase != "quai" or T_QUAI - _t_quai < 2.0:
+	if _phase != "quai" or (T_QUAI - _t_quai < 2.0 if not portes_manu else _porte_anim < 0.9):
 		return []
 	var zn: String = zone_vehicule(i)
 	if zn == "ligne":
@@ -233,7 +294,12 @@ func _process_corps(delta: float) -> void:
 	if _phase == "quai":
 		_v = 0.0
 		vitesse_reelle = 0.0
-		if etat == "marche" and not depart_refuse():
+		if portes_manu:
+			_porte_anim = move_toward(_porte_anim, _porte_cible, delta / T_PORTES)
+			if _depart_demande and etat == "marche" and _porte_anim <= 0.0 and not depart_refuse():
+				_depart_demande = false
+				_phase = "route"
+		elif etat == "marche" and not depart_refuse():
 			_t_quai -= delta
 			if _t_quai <= 0.0:
 				_phase = "route"
@@ -259,6 +325,9 @@ func _process_corps(delta: float) -> void:
 			_v = 0.0
 			_phase = "quai"
 			_t_quai = T_QUAI
+			_porte_anim = 0.0
+			_porte_cible = 0.0
+			_depart_demande = false
 			_sens = -_sens
 		if etat == "arret_normal" and va <= 0.0:
 			etat = "arret"
@@ -387,8 +456,8 @@ func _placer(i: int) -> void:
 		v.balancer(_dt, zone_vehicule(i) != "ligne")
 		v.masse = m0
 	var porte: float = 0.0
-	if _phase == "quai" and zone_vehicule(i) != "ligne":
-		porte = clampf(minf(T_QUAI - _t_quai, _t_quai) / 1.5, 0.0, 1.0)
+	if zone_vehicule(i) != "ligne":
+		porte = ouverture_portes()
 	v.portes(porte)
 	_porte_i = porte
 	if collisions_actives and i < _corps.size() and _corps[i] != null:

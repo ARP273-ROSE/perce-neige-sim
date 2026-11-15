@@ -81,10 +81,6 @@ func zone_vehicule(i: int) -> String:
 
 
 ## Véhicules à quai, portes ouvertes (on peut entrer et sortir).
-func portes_ouvertes() -> bool:
-	return _phase == "quai" and T_QUAI - _t_quai > 1.5 and _t_quai > 1.5
-
-
 func demi_interieur() -> Vector2:
 	return Vector2(VehiculeFunival.DEMI_LARGEUR - 0.15, VehiculeFunival.DEMI_L - 0.4)
 
@@ -1977,8 +1973,8 @@ func _placer(i: int) -> void:
 	var b: Basis = Basis(Vector3.RIGHT, a)
 	v.transform = Transform3D(b, p)
 	var porte: float = 0.0
-	if _phase == "quai" and zone_vehicule(i) != "ligne":
-		porte = clampf(minf(T_QUAI - _t_quai, _t_quai) / 1.5, 0.0, 1.0)
+	if zone_vehicule(i) != "ligne":
+		porte = ouverture_portes()
 	v.portes(porte)
 	(v as VehiculeFunival).tourner_roues(s_de_d(d) if not _s_par_m.is_empty() else d)
 	# phares vers l'avant du mouvement ; à quai, vers la ligne
@@ -2144,7 +2140,13 @@ func _process_corps(delta: float) -> void:
 	if _phase == "quai":
 		_v = 0.0
 		vitesse_reelle = 0.0
-		if etat == "marche" and not (depart_refuse() and _t_quai <= 0.5):
+		if portes_manu:
+			_porte_anim = move_toward(_porte_anim, _porte_cible, delta / T_PORTES)
+			if _depart_demande and etat == "marche" and _porte_anim <= 0.0 and not depart_refuse():
+				_depart_demande = false
+				_phase = "route"
+				_t_quai_tot = 0.0
+		elif etat == "marche" and not (depart_refuse() and _t_quai <= 0.5):
 			_t_quai_tot += delta
 			# (portes encore ouvertes et skieur qui marche à quai ou à bord : on l'attend)
 			if not (_t_quai - delta < 2.0 and _t_quai_tot < T_QUAI_MAX and _skieur_marche_en_gare()):
@@ -2182,6 +2184,9 @@ func _process_corps(delta: float) -> void:
 			_v = 0.0
 			_phase = "quai"
 			_t_quai = T_QUAI
+			_porte_anim = 0.0
+			_porte_cible = 0.0
+			_depart_demande = false
 			_sens = -_sens
 		if etat == "arret_normal" and va <= 0.0:
 			etat = "arret"

@@ -629,6 +629,7 @@ const FUNI_CLIP_RALENTI: float = 10.0       # s : la prise du ralentissement fin
 var _funi_crois: float = -100.0
 var _funi_buzz: float = -100.0
 var _funi_portes: float = -100.0
+var _funi_ferm_vu: int = 0
 var _funi_ral: float = -100.0
 var _funi_ecart: float = INF                  # écart précédent entre les deux véhicules (ils se rapprochent ?)
 
@@ -649,6 +650,14 @@ func _a_bord_funi(delta: float, lg: LigneRemontee) -> void:
 		_funi_ral = _t
 		_coup(lg, "funi_ralenti")
 	if tp._phase == "quai":
+		# portes à la main (exploitation manuelle) : buzzer et portes à chaque fermeture demandée
+		if tp.portes_manu:
+			if tp.fermetures_manu != _funi_ferm_vu:
+				_funi_ferm_vu = tp.fermetures_manu
+				_coup(lg, "funi_buzzer")
+				_coup(lg, "funi_portes")
+			return
+		_funi_ferm_vu = tp.fermetures_manu
 		# buzzer 7 s avant le départ (durée du buzzer du Perce-Neige), puis les portes
 		if tp._t_quai < 7.5 and tp._t_quai > 6.5 and _t - _funi_buzz > 20.0:
 			_funi_buzz = _t
