@@ -17,11 +17,15 @@ var _lg: Node = null
 var _sortie: String = ""
 var _lignes: Array = []
 var _t0: int = 0
+var _construite: bool = false
 var _re_nom: RegEx = RegEx.create_from_string("@([A-Za-z0-9]+)@[0-9]+|_([A-Z][A-Za-z0-9]+)_[0-9]+")
 
 
 func _initialize() -> void:
 	_sortie = OS.get_temp_dir().path_join("empreinte_fusion.txt")
+	# (empreinte répétable : heure de la pendule des portiques et numéros des véhicules figés)
+	PortiqueEntree.HEURE_FIGEE = "12:00"
+	VehiculeRemontee.NUMEROS_FIXES = true
 	for a in OS.get_cmdline_user_args():
 		if a == "--sans-cpp":
 			MeshMerge.cpp_desactive = true
@@ -57,11 +61,17 @@ func _tick() -> void:
 				push_error("ligne absente : " + LIGNES[_k])
 				_k += 1
 				return
+			# construction finie, pas seulement « prête » : sans fil (headless), pret passe à vrai au début de la
+			# fin de construction, le noyau et les véhicules lointains viennent après une pause (présents ou
+			# absents d'une passe à l'autre selon la machine)
+			_construite = (_lg as LigneRemontee).pret
+			if not _construite:
+				_lg.construite.connect(func() -> void: _construite = true, CONNECT_ONE_SHOT)
 			_main.aller_a_remontee(_lg)
 			_t0 = Time.get_ticks_msec()
 			_etat = 3
 		3:
-			if _lg.pret:
+			if _lg.pret and _construite:
 				var avant: int = _lignes.size()
 				_parcourir(_lg, _lg, String(_lg.name))
 				print("  %s : %d maillages" % [_lg.name, _lignes.size() - avant])
