@@ -1072,7 +1072,10 @@ func _process_corps(delta: float) -> void:
 		if _a_cuit(lg):
 			jusqua = maxf(jusqua, _demolir_au_dela(lg) + 50.0)
 			lg._vehicules_jusqua = jusqua
-		lg.set_process(a_bord_ici or d < jusqua + 50.0)
+		var actif: bool = a_bord_ici or d < jusqua + 50.0
+		if not actif and lg.is_processing():
+			lg.lointains_au_repos()
+		lg.set_process(actif)
 		lg.pas_lod = 1 if (a_bord_ici or d < 150.0 * _f_lod) else (2 if d < 300.0 * _f_lod else 4)
 		lg.details_visibles = d < DETAILS_JUSQUA + 50.0
 		lg.collisions_actives = a_bord_ici or d < 120.0
