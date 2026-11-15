@@ -93,7 +93,8 @@ func construire(r: ReliefBuilder) -> void:
 					var j: Vector2 = q + nrm * sg * (PistesDonnees.LARGEUR * 0.5)
 					if not relief.dans_le_bloc(j.x, j.y):
 						continue
-					var y: float = relief.hauteur_sol(j.x, j.y)
+					# (sol sans la fenêtre fine de la PWA : la repose suit, _sur_sol_modifie)
+					var y: float = relief.hauteur_sol_ref(j.x, j.y) if relief.has_method("hauteur_sol_ref") else relief.hauteur_sol(j.x, j.y)
 					if not _piquets.has(ip):
 						_piquets[ip] = [[], []]
 					(_piquets[ip][0 if sg < 0.0 else 1] as Array).append([Vector3(j.x, y, j.y), t])
@@ -134,6 +135,7 @@ func construire(r: ReliefBuilder) -> void:
 		var mi: MultiMeshInstance3D = MultiMeshInstance3D.new()
 		mi.name = "Jalons"
 		mi.multimesh = mm
+		_lots_sol.append([Rect2(Vector2((cle as Vector3i).x, (cle as Vector3i).y) * CASE, Vector2.ONE * CASE), mm, xs])
 		mi.material_override = mats[(cle as Vector3i).z]
 		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 		mi.visibility_range_end = 900.0   # jalons : lots par case de terrain, portée mesurée à leur centre
@@ -279,8 +281,87 @@ func _construire_panneaux() -> void:
 		(_numeros[c_num] as Array).append([xf_num, str(e[4])])
 	_racine_numeros = racine
 	set_process(true)
+	if relief != null and relief.has_signal("sol_modifie"):
+		relief.sol_modifie.connect(_sur_sol_modifie)
+		if relief.has_method("rect_fenetre") and relief.rect_fenetre().has_area():
+			_sur_sol_modifie(relief.rect_fenetre())
 	if DisplayServer.get_name() != "headless" and faces_panneaux:
 		_faces_panneaux.call_deferred(par_piste)
+
+
+## --- Repose sur le sol de la fenêtre fine (PWA) ---------------------------------------------------------------
+## Jalons et panneaux sont posés au chargement sur le sol de référence ; quand la fenêtre fine change le sol affiché
+## (ReliefBuilder.sol_modifie), chacun est reposé depuis sa position d'origine, décalé de ReliefBuilder.ecart_sol —
+## sinon ils s'enfonçaient sous le sol à 25 m ou flottaient au-dessus (essai du 16/11/2026). Par tranches.
+const REPOSE_US: int = 1500
+var _lots_sol: Array = []                 # [Rect2 de la case (vide : instance par instance), MultiMesh, [Transform3D d'origine]]
+var _repose: Array = []                   # étapes en cours : [genre, …]
+var repose_max_us: int = 0
+
+
+func _sur_sol_modifie(rect: Rect2) -> void:
+	var r: Rect2 = rect.grow(5.0)
+	for lot in _lots_sol:
+		if not (lot[0] as Rect2).has_area() or (lot[0] as Rect2).intersects(r):
+			_repose.append(["mm", r, lot[1], lot[2], 0])
+	_repose.append(["pan", r])
+	_repose.append(["num", r])
+	set_process(true)
+
+
+func _decale(xf: Transform3D) -> Transform3D:
+	return xf.translated(Vector3(0.0, relief.ecart_sol(xf.origin.x, xf.origin.z), 0.0))
+
+
+func _reposer_pas(fin_us: int) -> void:
+	var t0: int = Time.get_ticks_usec()
+	while not _repose.is_empty():
+		var e: Array = _repose[0]
+		var r: Rect2 = e[1]
+		match String(e[0]):
+			"mm":
+				var mm: MultiMesh = e[2]
+				var xs: Array = e[3]
+				while int(e[4]) < xs.size():
+					var k: int = e[4]
+					e[4] = k + 1
+					var xf: Transform3D = xs[k]
+					if r.has_point(Vector2(xf.origin.x, xf.origin.z)):
+						mm.set_instance_transform(k, _decale(xf))
+					if k % 32 == 0 and Time.get_ticks_usec() > fin_us:
+						break
+				if int(e[4]) < xs.size():
+					break
+			"pan":
+				# panneaux près de la caméra (faces comprises) : transformation d'origine gardée en 3e place
+				for q in _pan_cases:
+					var cq: Rect2 = Rect2(Vector2(q) * CASE_NUMERO, Vector2.ONE * CASE_NUMERO)
+					if not cq.intersects(r):
+						continue
+					for p in _pan_cases[q]:
+						if (p as Array).size() < 3:
+							(p as Array).append(p[1])
+						p[1] = _decale(p[2])
+				_pan_sale = true
+			"num":
+				for q2 in _numeros:
+					var cq2: Rect2 = Rect2(Vector2(q2) * CASE_NUMERO, Vector2.ONE * CASE_NUMERO)
+					if not cq2.intersects(r):
+						continue
+					for n in _numeros[q2]:
+						if (n as Array).size() < 3:
+							(n as Array).append(n[0])
+						n[0] = _decale(n[2])
+					# numéros déjà posés : refaits au prochain passage
+					if _cases_posees.has(q2):
+						for l in _cases_posees[q2]:
+							(l as Node).queue_free()
+						_cases_posees.erase(q2)
+						_case_cam = Vector2i(1 << 30, 0)
+		_repose.pop_front()
+		if Time.get_ticks_usec() > fin_us:
+			break
+	repose_max_us = maxi(repose_max_us, Time.get_ticks_usec() - t0)
 
 
 ## PWA : les numéros de balise ne vivent que près de la caméra. Chaque Label3D coûte
@@ -319,8 +400,11 @@ func _poser_panneaux_loin(xs: Array, col: Color) -> void:
 	mm.transform_format = MultiMesh.TRANSFORM_3D
 	mm.mesh = st.commit()
 	mm.instance_count = xs.size()
+	var xl: Array = []
 	for i in range(xs.size()):
 		mm.set_instance_transform(i, xs[i][1])
+		xl.append(xs[i][1])
+	_lots_sol.append([Rect2(), mm, xl])        # (Rect2 vide : instance par instance)
 	var mi: MultiMeshInstance3D = MultiMeshInstance3D.new()
 	mi.name = "PanneauxLoin"
 	mi.multimesh = mm
@@ -387,6 +471,8 @@ func _label_numero(xf: Transform3D, texte: String) -> Label3D:
 
 
 func _process(_delta: float) -> void:
+	if not _repose.is_empty():
+		_reposer_pas(Time.get_ticks_usec() + REPOSE_US)
 	if _racine_numeros == null:
 		return
 	var cam: Camera3D = get_viewport().get_camera_3d()
