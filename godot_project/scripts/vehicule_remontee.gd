@@ -172,6 +172,11 @@ func construire_par_tranches(pause: Callable) -> void:
 
 
 ## Vide le véhicule, tire son numéro ; copie le modèle s'il existe (rend ""), sinon rend la clé du modèle à fabriquer.
+## Bancs (empreintes) : numéros non tirés au sort (tous 1). Le modèle des véhicules lointains reprend le premier
+## véhicule de la ligne, numéro compris : tiré au sort, il changeait l'empreinte d'une passe à l'autre.
+static var NUMEROS_FIXES: bool = false
+
+
 func _debut_construction() -> String:
 	_construit = true
 	for c in get_children():
@@ -179,6 +184,8 @@ func _debut_construction() -> String:
 		c.queue_free()
 	# un seul numéro par véhicule, sur la pince comme sur le siège (la pince
 	# en portait un autre — retour d'utilisateur, 23/10/2026 : « numéro fantôme »)
+	if numero <= 0 and NUMEROS_FIXES:
+		numero = 1
 	if numero <= 0:
 		var ty: String = _type()
 		if not _numeros.has(ty):
