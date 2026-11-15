@@ -38,9 +38,12 @@ func _tick() -> void:
 	var relief = _main.get("relief")
 	if relief == null or not relief.pret or _f < 30:
 		return
-	if _f == 40:
-		_main.basculer_skieur()
-	if _f < 100:
+	# (bascule quand le relief est prêt, pas à une image fixe : avec les pièces des gares de plain-pied il finit plus tard)
+	if not _main.mode_skieur:
+		if _f % 60 == 0:
+			_main.basculer_skieur()
+		return
+	if _f < 100 or _main.get("remontees") == null:
 		return
 	_t += 1.0 / 60.0
 	if _lg == null or _lg.pret or _t > 120.0:

@@ -1333,12 +1333,9 @@ func _collisions_tph() -> void:
 			for r in PQ["dalles"]:
 				var rc: Rect2 = r
 				boite.call(Vector3(rc.size.x, 0.4, rc.size.y), Vector3(rc.get_center().x, y0 - 0.2, rc.get_center().y))
-			boite.call(Vector3(2.0 * hx, 6.0, lq), Vector3(0, y0 - 0.5 - 3.0, z0 + sg * lq * 0.5))     # fond des baies
-			# seuil au nez de chaque baie, sous le plancher de la cabine (bench_garde_fous, 16/11/2026 : du fond de la
-			# baie, 0,5 m sous le quai, on sortait par le nez — 10 m de vide en gare amont) ; la cabine passe au-dessus
-			var x0f: float = absf(_x_brin(true))
-			for sxf in [-1.0, 1.0]:
-				boite.call(Vector3(2.0 * TphGrandeMotte.DEMI_BAIE + 0.4, 0.45, 0.2), Vector3(sxf * x0f, y0 - 0.275, z0 + sg * 0.1))
+			# (pas de sol sous les baies — retour d'utilisateur du 16/11/2026 : « il n'y a pas de sol sous la baie où est la
+			# cabine en gare, sinon ça va toucher quand elle va rentrer » : le vide est gardé par les barrières et les
+			# portillons, comme à la Grande Motte)
 			for e in PQ["garde_corps"] + PQ["barrieres"]:
 				var a2: Vector2 = e[0]
 				var b2: Vector2 = e[1]

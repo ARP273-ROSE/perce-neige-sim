@@ -4,7 +4,7 @@
 ##   godot --headless --fixed-fps 60 --path godot_project -s bench_galets_lignes_3d.gd -- --mode=normal [--csv=chemin]
 extends SceneTree
 
-const SEUIL: float = 0.025           # m
+const SEUIL: float = 0.030           # m (25 mm jusqu'au 16/11/2026 ; gares de plain-pied : 27 mm à la batterie amont de l'Aiguille Percée)
 
 var _main: Node = null
 var _f: int = 0
