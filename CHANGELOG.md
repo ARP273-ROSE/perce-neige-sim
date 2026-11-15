@@ -5,6 +5,12 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.69.1 — 15 novembre 2026
+
+**Carte des pistes sur iPad** : toucher une remontée y redépose de nouveau le skieur. Depuis la 1.68, seul le premier doigt « numéro 0 » était pris en compte, alors que Safari numérote les doigts autrement : la carte ne réagissait plus au doigt sur la PWA.
+
+**Téléphériques et Funival** : en exploitation automatique, le véhicule attend le skieur qui arrive (en mouvement à moins de 60 m d'un quai, ou qui marche sur les quais du Funival) : portes ouvertes au-delà de l'attente normale, jusqu'à 2 min 30 ; départ quelques secondes après qu'il s'est arrêté.
+
 ## 1.69.0 — 15 novembre 2026
 
 Pupitre de conduite pour toutes les remontées, exploitation automatique par défaut, pannes et évacuation, plein écran immersif au PC, et allègements pour les petites machines.
