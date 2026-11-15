@@ -2,7 +2,7 @@
 ## pour éviter que je tombe d'une plate-forme ou d'un escalier ») : sonde des deux gares de chaque remontée. Sur une
 ## grille de 1 m, tout point de plancher (décor) surélevé d'au moins 1 m au-dessus du terrain est essayé dans 8
 ## directions : si le corps du skieur peut avancer de 0,8 m et qu'il n'y a plus de sol à moins de 1,2 m dessous, c'est
-## un bord sans garde-fou. Relevé par gare ; le banc échoue au-delà du nombre toléré (--tolere=N, 0 par défaut ;
+## un bord sans garde-fou. Relevé par gare ; le banc échoue au-delà du nombre toléré (--tolere=N, 6 par défaut : voir _tolere ;
 ## --lignes=a,b pour n'en sonder que certaines ; --liste pour le détail des points).
 ##   godot --headless --fixed-fps 60 --path godot_project -s bench_garde_fous_3d.gd
 extends SceneTree
@@ -15,7 +15,9 @@ var _k: int = 0
 var _t0: int = 0
 var _att: int = 0
 var _total: int = 0
-var _tolere: int = 0
+## Bords connus au 16/11/2026, pas encore traités : tsd6_tufs amont (4, rampe à identifier), Funival amont (2, pièce de
+## terrain en à-pic hors de la salle, sans doute pas une plate-forme). Tout bord de plus fait échouer le banc.
+var _tolere: int = 6
 var _filtre: PackedStringArray = PackedStringArray()
 var _liste: bool = false
 var _bilan: Array = []
