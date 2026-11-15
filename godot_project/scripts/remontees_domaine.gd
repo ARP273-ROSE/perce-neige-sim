@@ -544,7 +544,7 @@ func _poser(D: Dictionary) -> void:
 	# avant son entrée dans la scène, sur ce fil-là (sur le fil principal, ces
 	# milliers d'appels au rendu coûtaient 15 à 35 ms d'un bloc)
 	lg.prepa_contenu = func(racine: Node) -> void:
-		_portees(racine)
+		_portees(racine, lg)
 		LigneRemontee.fusionner_pylones_loin(racine, PYLONES_JUSQUA)
 		Cabin.tag_layer(racine, Cabin.LAYER_VOIE)
 	lg.construite.connect(func() -> void:
@@ -553,7 +553,7 @@ func _poser(D: Dictionary) -> void:
 				if c is MultiMeshInstance3D:           # (véhicules lointains, posés à la fin)
 					Cabin.tag_layer(c, Cabin.LAYER_VOIE)
 		else:
-			_portees(lg)
+			_portees(lg, lg)
 			LigneRemontee.fusionner_pylones_loin(lg, PYLONES_JUSQUA)
 			Cabin.tag_layer(lg, Cabin.LAYER_VOIE)
 		_en_cours = null)
@@ -563,11 +563,50 @@ func _poser(D: Dictionary) -> void:
 
 ## Distances de visibilité : véhicules proches seulement, pylônes et câble loin.
 ## (`racine` : la ligne, ou le contenu en construction hors de la scène)
-func _portees(racine: Node) -> void:
+func _portees(racine: Node, lg: LigneRemontee = null) -> void:
 	var file: Array = []
 	_portees_amorce(racine, file)
 	while not file.is_empty():
 		_portee_noeud(file.pop_back(), file)
+	if lg != null and relais_vehicules():
+		for c in racine.get_children():
+			if c is VehiculeRemontee:
+				_relais_vehicule(c as VehiculeRemontee, lg)
+
+
+## PC à puce intégrée : au-delà de RELAIS_DES, le véhicule allégé de la PWA (un maillage, un appel) à la place du
+## véhicule complet (7 000 à 9 000 triangles, 20 à 29 appels). Relevé du 15/11/2026, quai du funi en puce
+## intégrée simulée : une vingtaine de sièges du Bollin en gare, à 110-150 m, dessinés complets — le noyau ne
+## remplace que les véhicules en ligne. Par les portées de visibilité, sans rien à suivre. Carte dédiée et PWA :
+## rien ne change.
+const RELAIS_DES: float = 80.0
+
+
+static func relais_vehicules() -> bool:
+	return PerfManager.type_gpu == "integre" and not OS.has_feature("web") and not LigneRemontee.lod_voulu_pwa() \
+			and not "--sans-relais" in OS.get_cmdline_user_args()
+
+
+func _relais_vehicule(v: VehiculeRemontee, lg: LigneRemontee) -> void:
+	var cle: String = "%s|%s|%s|%s|%s" % [v.famille, v.livree, v.teinte, str(v.pince_a108), v.style_tph]
+	var m: ArrayMesh = VehiculesLod.maillage(cle, "L1", not lg.sens_droite)
+	if m == null or v.has_node("RelaisLod"):
+		return
+	for g0 in v.find_children("*", "GeometryInstance3D", true, false):
+		var g: GeometryInstance3D = g0
+		if g.visibility_range_end <= 0.0 or g.visibility_range_end > RELAIS_DES:
+			g.visibility_range_end = RELAIS_DES
+			g.visibility_range_end_margin = 4.0
+	var mi: MeshInstance3D = MeshInstance3D.new()
+	mi.name = "RelaisLod"
+	mi.mesh = m
+	mi.set_meta("relais_lod", true)
+	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	mi.visibility_range_begin = RELAIS_DES
+	mi.visibility_range_begin_margin = 4.0
+	mi.visibility_range_end = VEHICULES_JUSQUA
+	mi.visibility_range_end_margin = VEHICULES_JUSQUA * 0.05
+	v.add_child(mi)
 
 
 func _portees_amorce(racine: Node, file: Array) -> void:
