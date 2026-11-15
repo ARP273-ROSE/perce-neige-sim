@@ -509,10 +509,17 @@ func _ready() -> void:
 		anneaux.demarrer(self, rel)
 		if not _cases_arbres.is_empty():
 			foret = ReliefForet.new()
-			# puce intégrée : forêt sans ombres, proches à 200 m, d'office (cran HD allégé)
+			# puce intégrée : forêt sans ombres, proches à 200 m, et conifères moyens jusqu'à 1,2 km (panneaux au-delà),
+			# d'office (cran HD allégé). Au repli 1, les conifères moyens allaient à 2,5 km : 1,47 M primitives et
+			# 1,5 ms sur les 2,0 ms du quai de la Tovière, souvent derrière le relief (banc 1080p en puce intégrée
+			# simulée, 15/11/2026 : pire vue 1,64 → 0,88 ms, médiane 0,72 → 0,50 ms). --foret-repli=N (bancs)
 			if PerfManager.type_gpu == "integre":
-				foret.repli_voulu = 1
-				repli = 1
+				foret.repli_voulu = 2
+				repli = 2
+			for a in OS.get_cmdline_user_args():
+				if a.begins_with("--foret-repli="):
+					foret.repli_voulu = int(a.substr(14))
+					repli = foret.repli_voulu
 			add_child(foret)
 			foret.demarrer(rel, _cases_arbres, blocs_arbres)
 			_cases_arbres = []

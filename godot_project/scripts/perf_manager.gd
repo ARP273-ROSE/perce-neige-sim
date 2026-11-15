@@ -127,6 +127,10 @@ func setup(p_main: Node, p_env: Environment, p_mode: String) -> void:
 	if _mesure_gpu:
 		RenderingServer.viewport_set_measure_render_time(_vp_rid, true)
 	machine = _detecter()
+	# bancs : se faire passer pour une puce intégrée (Vega 8 du 5700G, Radeon 740M) sur une carte dédiée
+	if "--simuler-integre" in OS.get_cmdline_user_args():
+		machine["type"] = "integre"
+		machine["ram_go"] = maxf(float(machine.get("ram_go", 0.0)), 15.0)
 	var type_gpu: String = machine.get("type", "inconnu")
 	allege = not _web and (type_gpu in ["integre", "logiciel"] or "--allege" in OS.get_cmdline_user_args())
 	PerfManager.type_gpu = type_gpu
@@ -285,6 +289,10 @@ func _cran_carte_dediee() -> int:
 
 
 func _memoire_video_go() -> float:
+	# bancs : --simuler-vram=6 (GTX 1060 6 Go)
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--simuler-vram="):
+			return float(a.substr(15))
 	if not ClassDB.class_exists("ReliefHD"):
 		return 0.0
 	return float(ClassDB.instantiate("ReliefHD").call("memoire_video"))
