@@ -1977,7 +1977,9 @@ func _collisions_funi() -> void:
 	tube_c.collision_layer = COUCHE_SOUTERRAIN
 	tube_c.collision_mask = 0
 	_enfant(tube_c)
-	var dv: float = _x_quai(true) - VehiculeFunival.DEMI_L - 2.0
+	# (départ 4 m derrière le bout de la rame aval : la fosse entre les quais continuait sans radier — bench_garde_fous)
+	var dv: float = minf(_x_quai(true) - VehiculeFunival.DEMI_L - 2.0, -4.0)
+	var dv_debut: float = dv
 	while dv < L - 0.5:
 		var dv2: float = minf(dv + 12.0, L - 0.5)
 		var yv: float = y_voie(dv)
@@ -2005,6 +2007,16 @@ func _collisions_funi() -> void:
 			csv.transform = Transform3D(rotv, cv + rotv * (fv[2] as Vector3))
 			(fv[0] as StaticBody3D).add_child(csv)
 		dv = dv2
+	# bouts de la fosse (bench_garde_fous, 16/11/2026) : mur de fond en gare aval ; en gare amont, mur sous le plancher
+	# du bâtiment (on passait dessous, puis dans le vide) et garde-fou au bord de ce plancher, 2,7 m au-dessus de la voie
+	boite.call(Vector3(2.0 * (W + 0.8) + 0.6, 3.0, 0.3), Vector3(0, y_voie(dv_debut) + 0.9, -dv_debut + 0.15))
+	boite.call(Vector3(2.0 * (W + 0.8) + 0.6, 3.6, 0.3), Vector3(0, y_voie(L - 0.5) + 1.2, -(L - 0.35)))
+	boite.call(Vector3(3.4, 1.2, 0.15), Vector3(0, sol_batiment() + 0.6, -(L - 0.72)))
+	for kq in range(2):
+		# (même bord, entre un quai étroit et le mur de la salle : 1,8 m sans sol à gauche)
+		var x_ext: float = W + float(LARG_AMONT[kq])
+		if W + 4.2 - x_ext > 0.5:
+			boite.call(Vector3(W + 4.2 - x_ext + 0.2, 1.2, 0.15), Vector3((-1.0 if kq == 0 else 1.0) * (x_ext + W + 4.2) * 0.5, sol_batiment() + 0.6, -(L - 0.72)))
 	# salle amont : parois, et plancher du bâtiment au débouché
 	var hx: float = W + 4.2
 	for sx in [-1.0, 1.0]:

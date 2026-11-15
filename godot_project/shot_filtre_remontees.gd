@@ -15,12 +15,18 @@ var _etat: int = 0
 var _att: int = 0
 var _vues: Array = []
 var _i: int = 0
+## --vue=x,y,z,tx,ty,tz (repère de la ligne) : vues en plus, nommées <ligne>_vueN
+var _plus: Array = []
 
 
 func _initialize() -> void:
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--filtre="):
 			_filtre = a.substr(9)
+		elif a.begins_with("--vue="):
+			var t: PackedFloat64Array = a.substr(6).split_floats(",")
+			if t.size() == 6:
+				_plus.append(t)
 		elif not a.begins_with("--"):
 			_pre = a
 	_main = load("res://scenes/main.tscn").instantiate()
@@ -60,6 +66,9 @@ func _vues_de(lg: LigneRemontee) -> Array:
 		xf * Vector3(0, lg.terrain(L * 0.5) + 15, -L * 0.5)])
 	v.append([n + "_gare_amont", xf * Vector3(16, lg.terrain(L - 30.0) + 6.0, -L + 30.0),
 		xf * Vector3(0, lg.terrain(L - 5.0) + 2.5, -L + 5.0)])
+	for j in range(_plus.size()):
+		var t: PackedFloat64Array = _plus[j]
+		v.append([n + "_vue%d" % j, xf * Vector3(t[0], t[1], t[2]), xf * Vector3(t[3], t[4], t[5])])
 	return v
 
 
