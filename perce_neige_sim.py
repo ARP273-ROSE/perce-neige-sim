@@ -581,6 +581,11 @@ def T(en: str, fr: str) -> str:
     return fr if LANG == "fr" else en
 
 
+def _nom_panne(d: dict) -> str:
+    """Nom d'une panne reçu de la 3D, déjà dans la langue du PC (télémesure « lang »)."""
+    return str(d.get("nom") or d.get("id") or "")
+
+
 # ---------------------------------------------------------------------------
 # Physical constants and real funicular specifications
 # ---------------------------------------------------------------------------
@@ -7277,7 +7282,8 @@ class PannesRemonteeDialog(QDialog):
         for c in catalogue:
             if c.get("evac") in ("corde", "ski") or c.get("id") in self.DERAILLEMENTS:
                 corde = c.get("evac", "corde") != "ski"
-                btn = QPushButton(T("Derailment", "Déraillement") + " — " + str(c.get("nom", c["id"])) + "  ·  "
+                nom_p = _nom_panne(c)
+                btn = QPushButton(T("Derailment", "Déraillement") + " — " + nom_p + "  ·  "
                                   + (T("rope evacuation", "évacuation à la corde") if corde
                                      else T("skiers let go", "les skieurs lâchent la perche")), self)
                 btn.setStyleSheet("QPushButton { border-left: 6px solid #b41e1e; padding: 8px; font-weight: bold; text-align: left; }")
@@ -16727,8 +16733,9 @@ class GameWidget(QWidget):
         p.setFont(_cached_font("Segoe UI", 10, QFont.Weight.Bold))
         p.setPen(_cached_pen(COLOR_TEXT))
         ph = self._PHASES_PANNE.get(str(q.get("phase", "")))
+        nom_p = _nom_panne(q)
         p.drawText(QRectF(rp.x() + 90, rp.y() + 6, rp.width() - 100, 22), int(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter),
-                   str(q.get("nom", q.get("id", ""))) + (f"  (+{len(actives) - 1})" if len(actives) > 1 else "")
+                   nom_p + (f"  (+{len(actives) - 1})" if len(actives) > 1 else "")
                    + (f"  · {T(ph[0], ph[1])}" if ph else ""))
         yy = rp.y() + 32
         haut = (rp.bottom() - 40 - yy) / 3
