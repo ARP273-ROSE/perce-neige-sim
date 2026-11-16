@@ -922,6 +922,11 @@ func _restaurant() -> void:
 					_boite("vitre", q.x, q.y, 1.65, 2.2, 0.05, 1.9, rot)
 				t += 3.0
 				k += 1
+	# plancher au niveau de la terrasse : le terrain est percé sous toute l'emprise du restaurant, qui n'avait que ses
+	# murs et son toit — vide sans fond à l'intérieur (banc bench_sol_sans_trou, 16/11/2026 : 264 rayons sans aucune
+	# collision dans son emprise). Le plancher dessiné devient aussi sa collision (CollisionsJeu, maillages des gares).
+	# (élargi de 30 cm sous les murs : le masque des trous est au pas de 25 cm, il déborde un peu de l'emprise)
+	_poly_plat("noir", Array(Geometry2D.offset_polygon(PackedVector2Array(RESTO), 0.3)[0]), -0.02)
 	# faîtières : d'un faîtage au suivant
 	for k2 in range(RESTO_FAITES.size() - 1):
 		var f0: Vector3 = RESTO_FAITES[k2]
