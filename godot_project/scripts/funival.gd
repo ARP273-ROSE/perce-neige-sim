@@ -1968,7 +1968,14 @@ func _collisions_funi() -> void:
 				for sxj in [-1.0, 1.0]:
 					boite.call(Vector3(0.1, 2.5, lc + 0.05), Vector3(sxj * (W + 0.02), y - 1.3, -d))
 	for sx4 in [-1.0, 1.0]:
-		for b in _gradins(sx4, true, false):
+		# (escalier arrêté à moins de 0,5 m du mur de la salle : dans ce jour de 0,2 m, le pied s'engageait et le corps se
+		# coinçait — sonde de parcours des gares, 16/11/2026 ; sa collision va jusqu'au mur)
+		var jour: float = 4.2 - float(LARG_AMONT[0] if sx4 < 0.0 else LARG_AMONT[1])
+		var combler: bool = jour > 0.0 and jour < 0.5
+		for b0 in _gradins(sx4, true, false):
+			var b: Array = b0
+			if combler:
+				b = [(b0[0] as Vector3) + Vector3(jour, 0, 0), (b0[1] as Vector3) + Vector3(sx4 * jour * 0.5, 0, 0)] + (b0 as Array).slice(2)
 			if b.size() > 2:
 				var cs2: CollisionShape3D = CollisionShape3D.new()
 				var bx2: BoxShape3D = BoxShape3D.new()
@@ -2096,7 +2103,11 @@ func _collisions_funi() -> void:
 	# bouts de la fosse (bench_garde_fous, 16/11/2026) : mur de fond en gare aval ; en gare amont, mur sous le plancher
 	# du bâtiment (on passait dessous, puis dans le vide) et garde-fou au bord de ce plancher, 2,7 m au-dessus de la voie
 	boite.call(Vector3(2.0 * (W + 0.8) + 0.6, 3.0, 0.3), Vector3(0, y_voie(dv_debut) + 0.9, -dv_debut + 0.15))
-	boite.call(Vector3(2.0 * (W + 0.8) + 0.6, 3.6, 0.3), Vector3(0, y_voie(L - 0.5) + 1.2, -(L - 0.35)))
+	# (jusqu'au plancher, pas au-dessus : il en dépassait de 2,3 m et laissait 0,2 m entre lui et le trumeau du pignon,
+	# où le corps s'engageait et se coinçait — sonde de parcours des gares, 16/11/2026 ; le garde-fou est la boîte suivante)
+	var y_mf0: float = y_voie(L - 0.5) - 0.6
+	var y_mf1: float = sol_batiment()
+	boite.call(Vector3(2.0 * (W + 0.8) + 0.6, y_mf1 - y_mf0, 0.3), Vector3(0, (y_mf0 + y_mf1) * 0.5, -(L - 0.35)))
 	boite.call(Vector3(3.4, 1.2, 0.15), Vector3(0, sol_batiment() + 0.6, -(L - 0.72)))
 	for kq in range(2):
 		# (même bord, entre un quai étroit et le mur de la salle : 1,8 m sans sol à gauche)
