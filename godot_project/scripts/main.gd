@@ -2026,6 +2026,11 @@ func aller_a_remontee(lg: LigneRemontee) -> void:
 		remontees.quitter()
 	var xf: Transform3D = lg.global_transform
 	var cote: float = signf(lg._x_brin(true))
+	# télécabine à chalet de gare (GareCarenage.emprise_batiment, côté embarquement) : déposé de l'autre côté du quai
+	# — de ce côté, la dépose tombait 0,95 m dans le chalet, et le rayon de dépose le posait sur son toit (chute de
+	# 4 m au départ de Solaise, sonde de parcours du 16/11/2026)
+	if lg.famille.begins_with("cabine") and lg.style_gare() != "bmf" and not lg.vaetvient():
+		cote = -cote
 	# (téléski : plus à l'écart de la trace, sinon la perche suivante
 	# l'emmène aussitôt déposé)
 	var ecart: float = 7.0 if lg.teleski() else 3.5
@@ -2035,7 +2040,9 @@ func aller_a_remontee(lg: LigneRemontee) -> void:
 		# la gare, on tombait dans la tour du téléski voisin — Signal 1 et 2)
 		var qd: Vector3 = lg.point_depart_teleski() if not lg._zones.is_empty() \
 			else Vector3(lg._x_brin(true), 0.0, LigneRemontee.l_gare_pour(lg.famille))
-		p = xf * Vector3(qd.x, 0.0, qd.z + 11.0)
+		# (TKD : la file d'attente est à côté de l'axe du départ, sous lequel pend le magasin des perches)
+		var dx_file: float = signf(qd.x) * (TeleskiGare.DECALE_FILE_TKD + 1.0) if lg.famille == "perche_debrayable" else 0.0
+		p = xf * Vector3(qd.x + dx_file, 0.0, qd.z + 11.0)
 	p.y = relief.hauteur_sol(p.x, p.z) + 0.1
 	var amont: Vector3 = -xf.basis.z
 	# collisions du relief autour du point d'arrivée (elles se construisent à
