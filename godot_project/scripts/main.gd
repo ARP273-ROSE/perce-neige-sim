@@ -2174,6 +2174,13 @@ func _remonter_skieur() -> void:
 	var rq: PhysicsRayQueryParameters3D = PhysicsRayQueryParameters3D.create(
 		p + Vector3(0, 40, 0), p + Vector3(0, -2, 0), CollisionsJeu.COUCHE_DECOR | CollisionsJeu.COUCHE_RELIEF)
 	var hit: Dictionary = get_world_3d().direct_space_state.intersect_ray(rq)
+	# pas plus de 3 m au-dessus des pieds : au-delà, c'est un toit ou le dessus d'un mur, pas le sol sur lequel il
+	# aurait dû être posé (posé sur le linteau d'une porte du Funival amont, 7 m plus haut, puis chute ; sur le toit
+	# du chalet de Solaise — sonde de parcours du 16/11/2026). Le premier impact au-dessous de cette hauteur.
+	if not hit.is_empty() and (hit["position"] as Vector3).y > p.y + 3.0:
+		var rq2: PhysicsRayQueryParameters3D = PhysicsRayQueryParameters3D.create(
+			p + Vector3(0, 3.0, 0), p + Vector3(0, -2, 0), CollisionsJeu.COUCHE_DECOR | CollisionsJeu.COUCHE_RELIEF)
+		hit = get_world_3d().direct_space_state.intersect_ray(rq2)
 	if not hit.is_empty() and (hit["position"] as Vector3).y > p.y + (0.15 if _depose_remontee == null else -0.05):
 		var q: Vector3 = (hit["position"] as Vector3) + Vector3(0, 0.1, 0)
 		skieur.global_position = q
