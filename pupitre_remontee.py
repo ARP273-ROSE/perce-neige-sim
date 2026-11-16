@@ -52,6 +52,8 @@ class ModeleRemontee:
         self.paquets = 0
         self.octets_max = 0
         self.version = 0                          # avance quand ce qui est affiché peut avoir changé
+        self.pique: tuple | None = None           # (n, fr, en, ligne, instant de réception)
+        self._n_pique = -1
 
     # --- réception ---
     def recevoir(self, d: dict | None, maintenant: float | None = None, octets: int = 0) -> list:
@@ -90,6 +92,35 @@ class ModeleRemontee:
                 vu = int(e[0])
         self._evts_vus[lid] = vu
         return nouveaux
+
+    # --- piques (message {"pique_remontee": {n, evt, ligne, fr, en}} de la 3D) ---
+    PIQUE_S = 8.0           # affichée au pupitre pendant
+
+    def recevoir_pique(self, d, maintenant: float | None = None) -> bool:
+        """Pique tirée par la 3D (les deux langues) ; vrai si elle est nouvelle (pas un renvoi du même numéro)."""
+        maintenant = time.monotonic() if maintenant is None else maintenant
+        if not isinstance(d, dict):
+            return False
+        fr = str(d.get("fr") or "").strip()
+        en = str(d.get("en") or "").strip()
+        if not fr and not en:
+            return False
+        n = d.get("n")
+        n = int(n) if isinstance(n, (int, float)) else None
+        if n is not None and n == self._n_pique:
+            return False
+        if n is not None:
+            self._n_pique = n
+        self.pique = (n, fr or en, en or fr, str(d.get("ligne") or ""), maintenant)
+        self.version += 1
+        return True
+
+    def pique_active(self, maintenant: float | None = None) -> tuple | None:
+        """(fr, en, ligne) de la pique encore à l'écran, sinon None."""
+        maintenant = time.monotonic() if maintenant is None else maintenant
+        if self.pique is None or maintenant - self.pique[4] > self.PIQUE_S:
+            return None
+        return self.pique[1], self.pique[2], self.pique[3]
 
     def actif(self, maintenant: float | None = None) -> bool:
         maintenant = time.monotonic() if maintenant is None else maintenant
