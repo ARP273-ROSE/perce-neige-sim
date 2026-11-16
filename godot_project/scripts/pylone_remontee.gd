@@ -988,7 +988,10 @@ func _construire_teleski() -> void:
 		# TKD (retour d'utilisateur du 16/11/2026 : « les pylônes sont entre le câble de montée et le câble de
 		# descente, et la ligne de descente est plus haute ») : fût au milieu des deux brins, un bras de chaque
 		# côté, celui du retour plus haut de dy_retour
-		x_fut = (_x_brin(true) + _x_brin(false)) * 0.5
+		# (photos du Chardonnet, pylône 1 vu de la piste : le fût est juste en dedans du brin retour, qui passe
+		# haut contre lui ; le long bras en treillis va jusqu'au brin de montée)
+		var xr: float = _x_brin(false)
+		x_fut = xr - signf(xr - _x_brin(true)) * 0.6
 	else:
 		x_fut = 0.0
 	RemonteeKit.boite_en(self, Vector3(1.0, 0.5, 1.0), Vector3(x_fut, -0.1, 0), "beton")
