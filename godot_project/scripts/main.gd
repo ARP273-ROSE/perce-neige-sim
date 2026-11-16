@@ -2083,7 +2083,7 @@ func _poser_sur_gare() -> void:
 			_remonter_skieur()
 		# (les gares voisines viennent de se construire : l'une d'elles peut enfermer la caméra)
 		if _t_depose <= 0.0:
-			_regard_libre()
+			_regard_libre(true)
 	var lg: LigneRemontee = _depose_remontee
 	if lg == null or not is_instance_valid(lg) or not lg.pret or skieur == null:
 		return
@@ -2105,7 +2105,10 @@ const REGARD_ECART_MAX: float = 2.0
 ## Après une dépose : la caméra, 5 m derrière le skieur, tombait dans le bâtiment de la gare, sans
 ## collision à cet endroit (écran tout gris ou brun à Tichot, aux Merles). On garde le premier des
 ## quatre regards dont la caméra et la vue sont hors des gares ; sinon, le moins gêné.
-func _regard_libre() -> void:
+var _yaw_regard: float = INF
+
+
+func _regard_libre(expiration: bool = false) -> void:
 	var lg0: LigneRemontee = _derniere_depose if is_instance_valid(_derniere_depose) else null
 	if skieur == null or remontees == null or skieur.embarque or skieur.support != null:
 		return
@@ -2118,6 +2121,11 @@ func _regard_libre() -> void:
 				var g: Node = lg.get_node_or_null(nom)
 				if g != null:
 					_boites_sous(g, p, boites)
+	# (à l'expiration des 10 s : si le joueur a tourné la vue depuis la dépose et qu'elle n'est pas dans un
+	# bâtiment, on la lui laisse — elle était remise d'office, sa rotation annulée)
+	if expiration and _yaw_regard != INF and absf(angle_difference(skieur.cam_yaw, _yaw_regard)) > 0.05 \
+			and int(_note_regard(p, skieur.cam_yaw, boites)) < 100:
+		return
 	var r: Array = _meilleur_regard(p, boites)
 	# (il a quitté le point de dépose : c'est lui qui marche, on ne le déplace plus)
 	var base: Vector3 = _point_depose if _point_depose != Vector3.ZERO else p
@@ -2142,34 +2150,41 @@ func _regard_libre() -> void:
 				r = r2
 				break
 	skieur.cam_yaw = r[0]
+	_yaw_regard = r[0]
 
 
 ## [regard, note] : 100 par boîte autour de la caméra, 1 par boîte sur la vue, à 8 et 16 m devant.
 func _meilleur_regard(p: Vector3, boites: Array) -> Array:
 	var meilleur: float = skieur.cam_yaw
 	var mini_n: int = 1 << 30
-	var yeux: Vector3 = p + Vector3.UP * SkieurJoueur.Y_YEUX
 	for da in [0.0, PI * 0.5, -PI * 0.5, PI]:
 		var y: float = skieur.cam_yaw + da
-		var ry: Basis = Basis(Vector3.UP, y)
-		var q: Vector3 = yeux + ry * (Basis(Vector3.RIGHT, skieur.cam_pitch) * Vector3(0.0, 0.0, skieur.cam_dist))
-		var devant1: Vector3 = yeux + ry * Vector3(0.0, 0.0, -8.0)
-		var devant2: Vector3 = yeux + ry * Vector3(0.0, 0.0, -16.0)
-		var n: int = 0
-		for b in boites:
-			var ab: AABB = b
-			if ab.has_point(q):
-				n += 100
-			if ab.has_point(devant1):
-				n += 1
-			if ab.has_point(devant2):
-				n += 1
+		var n: int = _note_regard(p, y, boites)
 		if n < mini_n:
 			mini_n = n
 			meilleur = y
 		if n == 0:
 			break
 	return [meilleur, mini_n]
+
+
+## Note d'un regard de cap y : 100 par boîte autour de la caméra, 1 par boîte sur la vue à 8 et 16 m devant.
+func _note_regard(p: Vector3, y: float, boites: Array) -> int:
+	var yeux: Vector3 = p + Vector3.UP * SkieurJoueur.Y_YEUX
+	var ry: Basis = Basis(Vector3.UP, y)
+	var q: Vector3 = yeux + ry * (Basis(Vector3.RIGHT, skieur.cam_pitch) * Vector3(0.0, 0.0, skieur.cam_dist))
+	var devant1: Vector3 = yeux + ry * Vector3(0.0, 0.0, -8.0)
+	var devant2: Vector3 = yeux + ry * Vector3(0.0, 0.0, -16.0)
+	var n: int = 0
+	for b in boites:
+		var ab: AABB = b
+		if ab.has_point(q):
+			n += 100
+		if ab.has_point(devant1):
+			n += 1
+		if ab.has_point(devant2):
+			n += 1
+	return n
 
 
 func _boites_sous(n: Node, p: Vector3, o: Array) -> void:
