@@ -1033,6 +1033,7 @@ const LARG_GRADINS: Array = [6.0, 3.5]     # gare aval : attente (gauche en mont
 const LARG_AMONT: Array = [2.4, 4.0]       # gare amont : escaliers de béton des deux côtés (vidéos)
 const MARCHE: float = 0.18                 # hauteur des petites marches entre paliers (0,15-0,20 m sur photo)
 const GIRON: float = 0.28
+const PENTE_VOLEE_BAS: float = 0.75      # volée du bas des escaliers de la salle amont (0,18 / 0,24)
 
 
 ## Gradins d'un côté de la gare aval, en boîtes [taille, centre] (repère de la ligne) : pour chaque compartiment,
@@ -1055,6 +1056,23 @@ func _gradins(sx: float, rampes: bool = false, aval: bool = true) -> Array:
 		var d1: float = longueur_h() - 0.5
 		var y0: float = VehiculeFunival.y_plancher_monde(self, dq - lq * 0.5 + lc * 0.5) - (lc * 0.5) * pente_voie(dq)
 		var y1: float = VehiculeFunival.y_plancher_monde(self, longueur_h() - 1.0)
+		# volée du bas (banc de parcours des gares et sol_sans_trou, 16/11/2026) : l'escalier s'arrêtait au plancher du
+		# compartiment du bas, ~1,5 m au-dessus du sol de la salle (on y marchait dans le vide, ou on en tombait) ; une
+		# volée raide (0,18 / 0,24) le ramène au sol de la salle, qui descend avec la voie
+		var lv: float = 0.3
+		for _it in range(5):
+			lv = clampf((y0 - (y_voie(d0 - lv) - 0.6)) / PENTE_VOLEE_BAS, 0.3, d0 - (longueur_h() - L_HALL) - 0.6)
+		var yf: float = y_voie(d0 - lv) - 0.6
+		if rampes:
+			var lr_v: float = Vector2(lv, y0 - yf).length()
+			var a_v: float = atan2(y0 - yf, lv)
+			var c_v: Vector3 = Vector3(x, (yf + y0) * 0.5, -(d0 - lv * 0.5)) + Vector3(0, -0.1 * cos(a_v), -0.1 * sin(a_v))
+			r.append([Vector3(larg, 0.2, lr_v + 0.05), c_v, a_v])
+		else:
+			var nv: int = maxi(int(ceil((y0 - yf) / MARCHE)), 1)
+			for jv in range(nv):
+				var haut_v: float = yf + (y0 - yf) * float(jv + 1) / float(nv)
+				r.append([Vector3(larg, haut_v - yf + 0.3, lv / float(nv) + 0.01), Vector3(x, (haut_v + yf - 0.3) * 0.5, -(d0 - lv + lv / float(nv) * (float(jv) + 0.5)))])
 		if rampes:
 			var lr: float = Vector2(d1 - d0, y1 - y0).length()
 			var a0: float = atan2(y1 - y0, d1 - d0)
@@ -2087,14 +2105,38 @@ func _collisions_funi() -> void:
 			boite.call(Vector3(W + 4.2 - x_ext + 0.2, 1.2, 0.15), Vector3((-1.0 if kq == 0 else 1.0) * (x_ext + W + 4.2) * 0.5, sol_batiment() + 0.6, -(L - 0.72)))
 	# salle amont : parois, et plancher du bâtiment au débouché
 	var hx: float = W + 4.2
+	# (murs par tranches de 4 m à la hauteur de la voie : d'un bloc, avec 30 % de pente sur 40 m, ils laissaient 2 m de
+	# vide dessous au bas de la salle — banc sol_sans_trou étendu à la salle, 16/11/2026)
+	var mur_salle := func(ep: float, x: float) -> void:
+		var dm: float = L - L_HALL
+		while dm < L - 0.01:
+			var dm2: float = minf(dm + 4.0, L)
+			boite.call(Vector3(ep, 14.0, dm2 - dm + 0.02), Vector3(x, y_voie((dm + dm2) * 0.5) + 3.0, -(dm + dm2) * 0.5))
+			dm = dm2
 	for sx in [-1.0, 1.0]:
-		var dmil: float = L - L_HALL * 0.5
-		boite.call(Vector3(0.4, 14.0, L_HALL), Vector3(sx * (hx + 0.2), y_voie(dmil) + 3.0, -dmil))
+		mur_salle.call(0.4, sx * (hx + 0.2))
 	# banc de parcours des gares (16/11/2026) : au bout aval de la salle, la salle est plus large que le tube :
 	# murs de fond entre le tube et ses murs (on sortait de la salle par le côté, dans la roche, et on tombait sans fin) ;
 	# et bord extérieur du quai étroit (1,8 m sans sol jusqu'au mur, sur toute la longueur de la salle)
 	var d_bout: float = L - L_HALL
 	var rx_bout: float = R_TUNNEL + 0.15
+	# sol de la salle sur toute sa largeur, du mur du bout au pied des escaliers (banc sol_sans_trou étendu à la salle,
+	# 16/11/2026 : seul le radier de la voie, 2,2 m de part et d'autre de l'axe, portait ; entre lui et les murs, au bas
+	# de la salle, on tombait sans fin), au niveau du sol dessiné (0,6 m sous les rails), par tranches de 2 m à la pente
+	var d_pied: float = _x_quai(false) - (VehiculeFunival.DEMI_L * 2.0 + 2.0) * 0.5 + 0.5
+	var ds: float = d_bout
+	while ds < d_pied - 0.01:
+		var ds2: float = minf(ds + 2.0, d_pied)
+		var a_s: float = atan2(y_voie(ds2) - y_voie(ds), ds2 - ds)
+		var rot_s: Basis = Basis(Vector3.RIGHT, a_s)
+		var c_s: Vector3 = Vector3(0, (y_voie(ds) + y_voie(ds2)) * 0.5, -(ds + ds2) * 0.5)
+		var cs_s: CollisionShape3D = CollisionShape3D.new()
+		var bx_s: BoxShape3D = BoxShape3D.new()
+		bx_s.size = Vector3(2.0 * hx, 0.3, Vector2(ds2 - ds, y_voie(ds2) - y_voie(ds)).length() + 0.05)
+		cs_s.shape = bx_s
+		cs_s.transform = Transform3D(rot_s, c_s + rot_s * Vector3(0, -0.75, 0))
+		corps.add_child(cs_s)
+		ds = ds2
 	for sx2 in [-1.0, 1.0]:
 		boite.call(Vector3(hx - rx_bout + 0.4, 14.0, 0.4), Vector3(sx2 * (hx + rx_bout) * 0.5, y_voie(d_bout) + 3.0, -d_bout))
 	for kq2 in range(2):
@@ -2102,7 +2144,7 @@ func _collisions_funi() -> void:
 		if hx - x_ext2 > 0.5:
 			var sg2: float = -1.0 if kq2 == 0 else 1.0
 			var dm2: float = L - L_HALL * 0.5
-			boite.call(Vector3(0.2, 14.0, L_HALL), Vector3(sg2 * (x_ext2 + 0.1), y_voie(dm2) + 3.0, -dm2))
+			mur_salle.call(0.2, sg2 * (x_ext2 + 0.1))
 	boite.call(Vector3(2.0 * hx + 1.4, 0.4, 22.6), Vector3(0, sol_batiment() - 0.2, -(L + 10.5)))     # (de L − 0,8 à L + 21,8 ; le bâtiment va de L à L + 22)
 	# jupe sous le bord de ce plancher, sur toute la largeur : entre le quai et le dessous de la dalle restait une fente
 	# d'un demi-mètre où le corps s'engageait et se coinçait (banc de parcours des gares, 16/11/2026 : filet de dégagement
@@ -2167,7 +2209,7 @@ func _maj_corps_skieur() -> void:
 	var sk: Node = mn.get("skieur") if mn != null else null
 	if sk == null or not (sk is CharacterBody3D):
 		return
-	var dedans: bool = souterrain((sk as Node3D).global_position)
+	var dedans: bool = souterrain_corps((sk as Node3D).global_position)
 	var cb: CharacterBody3D = sk
 	_garde_plancher(cb)
 	_masquer_voisines()
@@ -2276,6 +2318,21 @@ func skieur_dedans(p: Vector3) -> bool:
 		if absf(loc.x) < VehiculeFunival.DEMI_LARGEUR + 0.1 and absf(loc.z) < VehiculeFunival.DEMI_L and loc.y > 0.0 and loc.y < VehiculeFunival.H_TOIT:
 			return true
 	return false
+
+
+## Pour le corps du skieur seulement (le masque sans le relief) : dans la salle, ENTRE ses murs et SOUS son plafond.
+## souterrain() déborde d'un mètre hors des murs et monte à 9 m au-dessus de la voie, assez pour la caméra ; mais la
+## salle est à moins de 2 m sous la surface : marchant dehors sur le terrain, au-dessus ou le long de la salle, le
+## skieur perdait le relief et tombait dans la roche, sauvé puis retombant sans fin (sonde de parcours des gares,
+## graine 5, 16/11/2026 : 24 chutes à 6,3 m de l'axe).
+func souterrain_corps(p: Vector3) -> bool:
+	if not souterrain(p):
+		return false
+	var loc: Vector3 = global_transform.affine_inverse() * p
+	var d: float = -loc.z
+	if d <= longueur_h() - L_HALL - 2.0:
+		return true
+	return absf(loc.x) < VehiculeFunival.DEMI_LARGEUR + 0.05 + 4.2 and loc.y < y_voie(minf(d, longueur_h())) + 6.0
 
 
 func souterrain(p: Vector3) -> bool:

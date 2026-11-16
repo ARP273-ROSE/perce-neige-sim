@@ -39,6 +39,23 @@ var _filtre: String = ""
 var _p_avant_filet: Vector3 = Vector3.ZERO
 var _embarques: int = 0
 var _p_sol: Vector3 = Vector3.ZERO     # dernière position au sol (départ d'une chute)
+var _trace: Array = []                 # [t, position, au sol, collision portante] toutes les 0,1 s, 5 s
+
+
+## Collision qui porte le skieur (normale vers le haut) : chemin court du corps et nom de la forme.
+func _portant(sk: SkieurJoueur) -> String:
+	for i in range(sk.get_slide_collision_count()):
+		var c: KinematicCollision3D = sk.get_slide_collision(i)
+		if c.get_normal().y > 0.6:
+			var o: Object = c.get_collider()
+			var forme: Object = c.get_collider_shape()
+			var n: String = String((o as Node).get_path()) if o is Node else str(o)
+			var parts: PackedStringArray = n.split("/")
+			n = "/".join(parts.slice(maxi(0, parts.size() - 3)))
+			if forme is Node:
+				n += " [%s]" % (forme as Node).name
+			return n
+	return "-"
 
 
 ## Point monde, et dans le repère de la ligne de la gare en cours (x, z, hauteur au-dessus du sol affiché).
@@ -167,7 +184,9 @@ func _aller() -> void:
 	var p: Vector3
 	if lg is Funival:
 		var fu = lg
-		p = xf * Vector3(0, fu.sol_batiment() + 0.2, -(L - 0.72) + 6.0)
+		# (dans le bâtiment, 6 m après le bord de son plancher : le signe était inversé et posait le skieur 6 m AVANT,
+		# en l'air au-dessus de la voie de la salle — chutes de la sonde, pas du jeu, 16/11/2026)
+		p = xf * Vector3(0, fu.sol_batiment() + 0.2, -(L - 0.72) - 6.0)
 	else:
 		var cote: float = signf(lg._x_brin(true))
 		p = xf * Vector3(cote * (lg.voie * 0.5 + 12.0), 0.0, -L + 10.0)
@@ -235,6 +254,10 @@ func _marche(sk: SkieurJoueur, dt: float) -> void:
 	var p: Vector3 = sk.global_position
 	if sk.is_on_floor():
 		_p_sol = p
+	if int(_t * 60.0) % 6 == 0:
+		_trace.append([_t, p, sk.is_on_floor(), _portant(sk)])
+		while not _trace.is_empty() and _t - float(_trace[0][0]) > 5.0:
+			_trace.pop_front()
 	# mur traversé : rayon à hauteur de buste entre les deux dernières positions (décor fixe seulement)
 	# (remonté d'un coup à la verticale : le jeu repose le skieur sur la gare après la dépose, ce n'est pas une traversée)
 	var vertical: bool = Vector2(p.x - _p_prec.x, p.z - _p_prec.z).length() < 0.3 and absf(p.y - _p_prec.y) > 1.0
@@ -265,6 +288,8 @@ func _marche(sk: SkieurJoueur, dt: float) -> void:
 	if not _hist.is_empty() and float(_hist[0][1]) - p.y > 4.0:
 		_bilan[1] += 1
 		print("   CHUTE %s : détectée à %s ; dernier sol %s" % [_gares[_ig][0], _ou(p), _ou(_p_sol)])
+		for e in _trace:
+			print("      t %.1f  %s  sol %s  porté par %s" % [e[0], _ou(e[1]), "oui" if e[2] else "non", e[3]])
 		_hist = []
 	# bloqué : on tourne de 90° ; quatre fois de suite, coincé
 	if _t_bloc > BLOQUE_S:
