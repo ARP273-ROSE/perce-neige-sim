@@ -5,6 +5,26 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.71.0 — 16 novembre 2026
+
+Téléskis débrayables refaits sur photos, lignes recalées sur l'orthophoto, gares mieux posées, et un jeu plus fluide.
+
+**Téléskis débrayables** : gare de départ refaite (charpente à deux portiques au milieu de la gare, passerelle en caillebotis au niveau du rail du magasin, escalier vers l'amont, roue motrice en porte-à-faux avec son arceau et sa plate-forme d'entretien) ; le brin retour arrive haut du premier pylône et passe sous une grande poulie de renvoi 1 m avant la roue ; pylônes en potence, fût sur le côté de la piste. La file d'attente passe à côté du rideau des perches, plus dessous. Le téléski du 3000 suit son tracé coudé.
+
+**Lignes recalées sur l'orthophoto et les traces GPS** : la Daille, la Madeleine et Cugnaï montent du bon côté ; pylônes replacés à la Grande Motte (1 335 m), à la Madeleine, à Tovière, à la Datcha, aux Merles et sur les téléskis du Signal, du Lavachet, de Legettaz et de la Savonnette (trois pylônes).
+
+**Gares** : remblais encore réduits ; dès 0,6 m de dévers sous une gare, le terrain monte en pente douce jusqu'au quai (bas de l'Aiguille Percée : plus de plateau au rebord franc) ; sur PC, le dessus des terrassements prend la neige du relief (plus de dalles blanches au pied d'une quinzaine de gares) ; cabine du conducteur posée sur le sol à l'arrivée de l'Aiguille Percée ; garde-fous du Funival dessinés.
+
+**Fluidité** : sur PC, relief allégé sur les petites machines (environ −20 % de temps de carte graphique sur puce intégrée) ; rames et tunnel du funiculaire non dessinés quand on skie à plus de 60 m des gares ; ombres portées coupées pour les petites pièces qui n'en donnaient pas de visible ; véhicules lointains regroupés par matériau (au sommet de Tovière, 3 037 → 2 232 appels de dessin).
+
+**Tapis de Solaise** : refaits d'après la fiche du constructeur et les photos : deux bandes droites à pente continue (15,4 %, 1,2 m/s), chacune sous son tube translucide, portail noir à l'embarquement, gare haute fermée commune ; le terrain est mis à la pente sous elles.
+
+**Plus de chute sans fin** : un banc balaie le sol autour des 137 gares et ne trouve plus aucun trou ; corrigés : pied du téléphérique de la Grande Motte, restaurant du Panoramic (plancher), tête du tunnel de piste du 3000, pied du hall de Val Claret, salle de la gare haute du Funival (sol sur toute la largeur, escaliers jusqu'en bas, murs) ; on n'est plus posé sur un toit ou le haut d'un mur en arrivant à une remontée (départ de Solaise, porte du Funival) ; on ne peut plus escalader les garde-corps des quais du Funival.
+
+**Pupitre des remontées (PC)** : la phrase du moment s'affiche en bas du pupitre, dans la langue du PC, et au journal.
+
+**PC** : texte du bouton COMMENCER centré ; la vue 3D s'intègre de nouveau dans la fenêtre quand le simulateur est lancé avec sa sortie redirigée (elle restait noire, la 3D partant dans une fenêtre séparée).
+
 ## 1.70.0 — 16 novembre 2026
 
 Retours d'essai sur iPad : pannes, évacuation, portes et quais des téléphériques, garde-fous, conduite du skieur.
