@@ -97,7 +97,20 @@ const MU_NEIGE: float = 0.05            # frottement ski / neige damée
 const MU_ARRET: float = 0.12            # immobile, il tient sur une pente douce (≈ 7°)
 const K_AIR: float = 0.0032             # traînée ½ρ·Cx·S / m, debout (1/m)
 const K_AIR_SCHUSS: float = 0.0018      # recroquevillé (schuss)
-const OMEGA_SKI: float = 1.8            # rad/s : pivot des skis à basse vitesse
+const OMEGA_SKI: float = 1.8            # rad/s : pivot des skis à basse vitesse (pilote)
+## Direction du joueur (16/11/2026, retour d'utilisateur : « quand je demande à tourner avec le joystick ou le
+## clavier, ça tourne mais de moins en moins jusqu'à aller tout droit alors que j'ai encore une instruction à
+## tourner. Du coup quand je remets au neutre ça part en virage à l'envers, la vue fait n'importe quoi »).
+## Gauche / droite (touches, joystick en x) commandent une VITESSE de rotation du cap, tenue tant que l'ordre est
+## tenu ; au neutre le cap ne bouge plus. À ski, les skis pivotent à OMEGA_PIVOT, borné à haute vitesse par la
+## latérale que tiennent les carres (A_PIVOT / v) ; la trajectoire suit les skis par l'adhérence des carres.
+## À pied, le cap est celui de la vue : gauche / droite tournent la vue, avancer va là où l'on regarde.
+## La caméra tourne exactement du même angle que le cap à chaque image (aucun ressort, aucun retard).
+const OMEGA_PIVOT: float = 1.0           # rad/s (57 °/s) : pivot des skis commandé
+const A_PIVOT: float = 16.0              # m/s² (1,6 g) : au-delà de 16 m/s, le pivot ralentit en a/v
+const OMEGA_MARCHE: float = deg_to_rad(100.0)
+const ECART_VUE_TAU: float = 0.8         # s : retour de la vue derrière les skis après une rotation à la main
+var _pivot_vue: float = 0.0              # pivot commandé des skis depuis l'image précédente (la vue tourne d'autant)
 const A_VIRAGE: float = 6.5             # m/s² : accélération latérale d'un virage coupé
 const ADHERENCE: float = 5.0            # 1/s : la carre absorbe la vitesse en travers
 const DEC_CHASSE: float = 3.2           # m/s² : chasse-neige à fond
@@ -435,6 +448,7 @@ func basculer_ski(forcer: bool = false) -> String:
 	chausse = true
 	chemin.clear()
 	_cap_ski = _cap
+	_pivot_vue = 0.0
 	_v_ski = Vector3.ZERO
 	# le sol sous les pieds, quai de gare compris : sur le relief, on passait
 	# SOUS un quai surélevé et le siège ne nous prenait plus (Leissières en
@@ -823,6 +837,8 @@ func _process_corps(delta: float) -> void:
 			_camera()
 			return
 		lever()
+	if chemin.is_empty():
+		cam_yaw -= cmd.x * OMEGA_MARCHE * delta
 	var dir: Vector3 = _direction(cmd)
 	# horizon : en marchant, la vue revient doucement à l'horizontale 3 s
 	# après qu'on l'a tournée à la main
@@ -832,8 +848,6 @@ func _process_corps(delta: float) -> void:
 	if not chemin.is_empty():
 		dir = _suivre_chemin()
 		vite = course_auto
-	if chemin.is_empty():
-		_suivre_marche(delta, dir)
 	_marcher(delta, dir, vite)
 	_anti_piege(delta, dir.length() > 0.05)
 	_trouver_support()
@@ -859,12 +873,9 @@ func _maj_pouce(delta: float, cmd: Vector2) -> void:
 ## Direction voulue (monde, horizontale) d'après la commande et la vue —
 ## celle du moment où l'on a posé le pouce (_maj_pouce).
 func _direction(cmd: Vector2) -> Vector3:
-	if cmd.length() < 0.08:
+	if absf(cmd.y) < 0.08:
 		return Vector3.ZERO
-	var y: float = _ref_pouce if _pouce_tenu else cam_yaw
-	var av: Vector3 = Vector3(-sin(y), 0.0, -cos(y))
-	var dr: Vector3 = Vector3(cos(y), 0.0, -sin(y))
-	return (av * cmd.y + dr * cmd.x).limit_length(1.0)
+	return Vector3(-sin(cam_yaw), 0.0, -cos(cam_yaw)) * clampf(cmd.y, -1.0, 1.0)
 
 
 var _pt_prec: Vector3 = Vector3.ZERO     # dernier point atteint (pour reculer)
@@ -1334,6 +1345,9 @@ func _glisser(delta: float, cmd: Vector2, schuss: bool) -> void:
 		_poser_posture(1 if (schuss and vit > 3.0) else 0)
 	# virage : les skis pivotent, d'autant moins vite qu'on va vite
 	var omega: float = minf(OMEGA_SKI, (A_VIRAGE_EXPERT if expert else A_VIRAGE) / maxf(vit, 0.1))
+	if chemin.is_empty():
+		omega = minf(OMEGA_PIVOT, A_PIVOT / maxf(vit, 0.1))
+		_pivot_vue -= cmd.x * omega * delta
 	_cap_ski -= cmd.x * omega * delta
 	var av_h: Vector3 = Vector3(-sin(_cap_ski), 0.0, -cos(_cap_ski))
 	var d: Vector3 = (av_h - n * av_h.dot(n)).normalized()
@@ -1455,6 +1469,11 @@ func _mur_devant(p: Vector3, dp: Vector3) -> Vector3:
 ## lissé (avant : par à-coups).
 func _camera_ski(delta: float) -> void:
 	var vh: Vector3 = Vector3(_v_ski.x, 0.0, _v_ski.z)
+	# la vue tourne du même angle que le pivot commandé des skis, à chaque image (joueur) : pas de retard, rien
+	# après le neutre (un cap posé d'office — débarquement, perche lâchée — pose aussi la vue lui-même)
+	if chemin.is_empty():
+		cam_yaw += _pivot_vue
+	_pivot_vue = 0.0
 	# (à l'arrêt aussi quand on dirige : les skis pivotaient sous le pouce et la vue restait figée —
 	# « quand je pivote à l'arrêt la caméra ne suit pas », 16/11/2026)
 	var dirige: bool = entree.length() > 0.12 or _clavier().length() > 0.0
@@ -1464,12 +1483,17 @@ func _camera_ski(delta: float) -> void:
 			# (derrière les skis, toujours : l'angle choisi à la main n'est gardé que VUE_MAIN_PAUSE — 16/11/2026)
 			_ecart_vue = 0.0
 			_ecart_a_reprendre = false
-		var e: float = wrapf(_cap_ski + _ecart_vue - cam_yaw, -PI, PI)
-		_cam_v += (CAM_OMEGA * CAM_OMEGA * e - 2.0 * CAM_OMEGA * _cam_v) * delta
-		_cam_v = clampf(_cam_v, -CAM_V_MAX, CAM_V_MAX)
-		cam_yaw += _cam_v * delta
+		if chemin.is_empty():
+			# écart pris à la main : il revient de lui-même, sans dépasser
+			var ecart: float = wrapf(cam_yaw - _cap_ski, -PI, PI)
+			cam_yaw -= ecart * (1.0 - exp(-delta / ECART_VUE_TAU))
+		else:
+			var e: float = wrapf(_cap_ski + _ecart_vue - cam_yaw, -PI, PI)
+			_cam_v += (CAM_OMEGA * CAM_OMEGA * e - 2.0 * CAM_OMEGA * _cam_v) * delta
+			_cam_v = clampf(_cam_v, -CAM_V_MAX, CAM_V_MAX)
+			cam_yaw += _cam_v * delta
 		cam_pitch = lerpf(cam_pitch, -0.30, minf(1.0, delta * 0.8))
-	else:
+	elif not chemin.is_empty():
 		_cam_v = move_toward(_cam_v, 0.0, CAM_V_MAX * delta * 4.0)
 		cam_yaw += _cam_v * delta
 	# jamais sous la pente derrière lui (le relief n'a de collisions
@@ -1495,16 +1519,11 @@ func _camera_ski(delta: float) -> void:
 ## caméra suivait, tenu à droite on faisait des cercles). Tiré vers soi :
 ## chasse-neige. Poussé vers le haut à l'arrêt : on pousse sur les bâtons.
 func _cmd_joystick_ski() -> Vector2:
-	var a: float = atan2(entree.x, entree.y)          # 0 haut, + droite
-	var force: float = clampf((entree.length() - 0.12) / 0.88, 0.0, 1.0)
-	if absf(a) > 2.3:
-		return Vector2(0.0, -force)                   # vers soi : chasse-neige
-	var cap_voulu: float = (_ref_pouce if _pouce_tenu else cam_yaw) - a
-	var e: float = wrapf(cap_voulu - _cap_ski, -PI, PI)
-	var y: float = 0.0
-	if _v_ski.length() < 3.0 and absf(a) < 0.8:
-		y = force                                     # à l'arrêt : pousser
-	return Vector2(clampf(-e * 2.2, -1.0, 1.0) * maxf(force, 0.35), y)
+	var n: float = entree.length()
+	if n < 0.12:
+		return Vector2.ZERO
+	var e: Vector2 = entree * (clampf((n - 0.12) / 0.88, 0.0, 1.0) / n)
+	return Vector2(clampf(e.x, -1.0, 1.0), clampf(e.y, -1.0, 1.0))
 
 
 ## Pilote à ski (bancs, mode AUTO) : vise le point suivant de `chemin`,
@@ -1631,9 +1650,12 @@ func _pilote_ski() -> Vector2:
 func _animer(delta: float, dir: Vector3) -> void:
 	var vh: Vector3 = Vector3(velocity.x, 0.0, velocity.z)
 	var vitesse: float = vh.length()
-	if dir.length() > 0.05:
-		var cap_voulu: float = atan2(-dir.x, -dir.z)
-		_cap = lerp_angle(_cap, cap_voulu, minf(1.0, delta * 10.0))
+	if not chemin.is_empty():
+		if dir.length() > 0.05:
+			_cap = lerp_angle(_cap, atan2(-dir.x, -dir.z), minf(1.0, delta * 10.0))
+	else:
+		# (le cap à pied est celui de la vue ; à reculons il regarde devant lui)
+		_cap = cam_yaw
 	_visuel.rotation = Vector3(0.0, _cap, 0.0)
 	var image: int = 0
 	if vitesse > 0.15 and is_on_floor():
