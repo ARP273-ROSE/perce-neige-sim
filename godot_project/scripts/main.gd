@@ -1030,6 +1030,11 @@ func _process(delta: float) -> void:
 ## l'iPad du 27/10/2026 : le dessin y coûte 12 à 13 ms).
 const SOUTERRAIN_LOIN: float = 30.0
 const RAME_LOIN: float = 150.0
+## Rames et tube du tunnel : cachés dehors à plus de RAME_GARE m des deux gares. Diagnostic du 16/11/2026, rames
+## retirées tout autour des deux gares de 15 à 150 m (cran 1, bruit d'image soustrait) : au-delà de 35 m, plus un
+## pixel de rame ; seule la règle des 150 m les gardait — 1 077 appels de dessin et 0,45 ms de préparation du rendu
+## devant la gare de Val Claret, pour rien.
+const RAME_GARE: float = 60.0
 var _t_souterrain: float = 0.0
 var _souterrain_cles: String = ""
 
@@ -1051,19 +1056,23 @@ func _maj_souterrain(delta: float) -> void:
 			dehors = c.y > relief.hauteur_sol(c.x, c.z) - 1.0
 	var pres_gare: bool = false
 	var pres_haut: bool = false
+	var abords_gare: bool = false
 	if dehors:
 		for sg in [0.0, PNConstants.LENGTH]:
 			var g: Vector3 = tunnel.transform_at(sg).origin
-			if Vector2(c.x - g.x, c.z - g.z).length() < SOUTERRAIN_LOIN:
+			var dg: float = Vector2(c.x - g.x, c.z - g.z).length()
+			if dg < SOUTERRAIN_LOIN:
 				pres_gare = true
 				pres_haut = pres_haut or sg > 0.0
+			abords_gare = abords_gare or dg < RAME_GARE
 	for n in [lights, track, stations]:      # (quais : souterrains aussi, 355 appels)
 		etat.append([n, dehors and not pres_gare])
 	# la salle des machines est en haut : devant la gare de Val Claret, elle restait dessinée
 	# (~310 appels de dessin, relevé du 06/11/2026)
 	etat.append([machine_room, dehors and not pres_haut])
 	for r in [cabin, cabin_ghost]:
-		etat.append([r, dehors and r != null and (r as Node3D).global_position.distance_to(c) > RAME_LOIN])
+		etat.append([r, dehors and r != null and (not abords_gare or (r as Node3D).global_position.distance_to(c) > RAME_LOIN)])
+	etat.append([tunnel, dehors and not abords_gare])
 	var cles: String = ""
 	for e in etat:
 		cles += "1" if e[1] else "0"
