@@ -16085,7 +16085,12 @@ class GameWidget(QWidget):
         # Plus de bouton DÉPART (retour d'utilisateur, 08/10/2026 : « dans la vraie vie on
         # met PRÊT et ça part quand tout est bon, comme pour la PWA ») : le
         # départ suit tout seul, l'autre rame prête — _depart_si_pret.
-        if st.trip_started:
+        # (à quai, trajet fini : trip_started reste vrai jusqu'au prochain
+        # départ — le bouton affichait encore « en route » après l'arrivée)
+        if st.trip_started and st.finished:
+            ready_col = QColor(140, 160, 190)
+            ready_lbl = T("READY [V] — at platform", "PRÊT [V] — à quai")
+        elif st.trip_started:
             ready_col = QColor(100, 160, 120)
             ready_lbl = T("READY [V] — under way", "PRÊT [V] — en route")
         elif tr.ready and st.ghost_ready:
