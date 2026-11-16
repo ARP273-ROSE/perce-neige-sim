@@ -6,6 +6,11 @@
 ## 50 × 50 cm). Les rayons perdus isolés (fentes de moins de 25 cm au bord d'une emprise de bâtiment, au pas du masque)
 ## ne peuvent pas avaler la capsule du skieur (60 cm) : signalés, pas en échec.
 ## Sortie : nombre de rayons perdus et trous regroupés au mètre (monde et repère de la ligne), par gare.
+## Salle amont du Funival (souterraine : le relief au-dessus arrête les rayons tirés du ciel) : grille au pas de 0,25 m
+## sur toute la salle et le bas du bâtiment, rayons tirés sous le plafond de la salle, avec le masque du skieur dans le
+## souterrain (sans les véhicules, qui bougent). Échec : trou praticable (même critère), ou bord sans garde-corps :
+## deux points voisins dont les sols diffèrent de plus de 1 m, sans collision entre les deux à 0,6 m au-dessus du
+## plus haut (on y marche dans le vide).
 ##   godot --headless --fixed-fps 60 --path godot_project -s bench_sol_sans_trou_3d.gd -- [--filtre=tph] [--pas=0.25]
 extends SceneTree
 
@@ -77,6 +82,10 @@ func _tick() -> void:
 					_gares.append([String(lg.name) + ("_amont" if am else "_aval"), lg, am, Vector3.ZERO])
 			if _filtre != "":
 				_gares = _gares.filter(func(g): return String(g[0]).contains(_filtre))
+			if _filtre == "" or "funival_salle".contains(_filtre):
+				for e in _main.remontees.lignes:
+					if e[0] is Funival:
+						_gares.append(["funival_salle", e[0], true, Vector3.ZERO])
 			print("SOL %d gares, %d rayons par gare (pas %.2f m, rayon %.0f m)" % [_gares.size(), _pts.size(), _pas, RAYON])
 			_suivante()
 		"place":
@@ -88,6 +97,11 @@ func _tick() -> void:
 				return
 			if _att >= 6000:
 				print("   (attente dépassée : %s)" % g[0])
+			if String(g[0]) == "funival_salle":
+				_salle()
+				_bilan_salle()
+				_suivante()
+				return
 			_y_haut = _main.relief.hauteur_sol(g[3].x, g[3].z) + 40.0
 			_k = 0
 			_trous = {}
@@ -186,3 +200,121 @@ func _bilan_gare() -> void:
 			loc = " ligne x %.1f z %.1f" % [q.x, q.z]
 		l.append("(%d, %d)%s ×%d" % [cl.x, cl.y, loc, _trous[cl]])
 	print("[ECHEC] %s — %d rayons sans collision, %d m² touchés : %s" % [g[0], _n_trous, _trous.size(), " ; ".join(l)])
+
+
+# --- salle amont du Funival --------------------------------------------------------------------------------------
+
+var _s_sol: Dictionary = {}       # Vector2i (x, d) → hauteur du sol (repère de la ligne), ou NAN si rayon perdu
+var _s_x0: float = 0.0
+var _s_d0: float = 0.0
+
+
+func _salle() -> void:
+	var fu: Funival = _gares[_ig][1]
+	var xf: Transform3D = fu.global_transform
+	var sp: PhysicsDirectSpaceState3D = _main.skieur.get_world_3d().direct_space_state
+	var L: float = fu.longueur_h()
+	var hx: float = VehiculeFunival.DEMI_LARGEUR + 0.05 + 4.2
+	_s_x0 = -hx + 0.3
+	_s_d0 = L - Funival.L_HALL + 0.3
+	_s_sol = {}
+	var q := PhysicsRayQueryParameters3D.new()
+	q.collision_mask = Funival.COUCHE_SOUTERRAIN
+	var ix: int = 0
+	var x: float = _s_x0
+	while x <= hx - 0.3 + 0.001:
+		var jd: int = 0
+		var d: float = _s_d0
+		while d <= L + 3.0:
+			var y_h: float = maxf(fu.y_voie(minf(d, L)) + 6.0, fu.sol_batiment() + 2.0) if d > L - 1.0 else fu.y_voie(d) + 6.0
+			q.from = xf * Vector3(x + 0.0137, y_h, -(d + 0.0091))
+			q.to = xf * Vector3(x + 0.0137, y_h - 30.0, -(d + 0.0091))
+			var h: Dictionary = sp.intersect_ray(q)
+			_s_sol[Vector2i(ix, jd)] = NAN if h.is_empty() else (xf.affine_inverse() * (h["position"] as Vector3)).y
+			jd += 1
+			d += _pas
+		ix += 1
+		x += _pas
+
+
+func _bilan_salle() -> void:
+	var fu: Funival = _gares[_ig][1]
+	var xf: Transform3D = fu.global_transform
+	var sp: PhysicsDirectSpaceState3D = _main.skieur.get_world_3d().direct_space_state
+	var L: float = fu.longueur_h()
+	var W: float = VehiculeFunival.DEMI_LARGEUR + 0.05
+	var q := PhysicsRayQueryParameters3D.new()
+	q.collision_mask = Funival.COUCHE_SOUTERRAIN
+	var pos := func(v: Vector2i, y: float) -> Vector3:
+		return Vector3(_s_x0 + v.x * _pas + 0.0137, y, -(_s_d0 + v.y * _pas + 0.0091))
+	# parcours de proche en proche depuis le rez-de-chaussée du bâtiment : on passe d'un point à son voisin si rien ne
+	# l'arrête à 0,6 et 1,2 m au-dessus du sol de départ et si la marche à monter fait moins de 0,45 m
+	var depart: Vector2i = Vector2i(roundi(-_s_x0 / _pas), roundi((L + 2.0 - _s_d0) / _pas))
+	var vu: Dictionary = {depart: true}
+	var parent: Dictionary = {}
+	var chemin_vu: bool = false
+	var file: Array = [depart]
+	var trous: Dictionary = {}
+	var bords: Dictionary = {}
+	var quai: Dictionary = {}
+	while not file.is_empty():
+		var v: Vector2i = file.pop_back()
+		var y1: float = _s_sol[v]
+		for dv in [Vector2i(1, 0), Vector2i(0, 1), Vector2i(-1, 0), Vector2i(0, -1)]:
+			var w: Vector2i = v + dv
+			if vu.has(w) or not _s_sol.has(w):
+				continue
+			var a: Vector3 = pos.call(v, y1)
+			var b: Vector3 = pos.call(w, y1)
+			var bloque: bool = false
+			for hh in [0.6, 1.2]:
+				q.from = xf * (a + Vector3(0, hh, 0))
+				q.to = xf * (b + (b - a) * 0.6 + Vector3(0, hh, 0))
+				if not sp.intersect_ray(q).is_empty():
+					bloque = true
+					break
+			if bloque:
+				continue
+			var y2: float = _s_sol[w]
+			var cle: Vector2i = Vector2i(floori(b.x), floori(L + b.z))
+			if is_nan(y2):
+				trous[cle] = int(trous.get(cle, 0)) + 1
+				if OS.get_environment("PN_CHEMIN") != "" and not chemin_vu:
+					chemin_vu = true
+					var u: Vector2i = v
+					var ch: PackedStringArray = PackedStringArray()
+					while parent.has(u) and ch.size() < 60:
+						var pu: Vector3 = pos.call(u, _s_sol[u])
+						ch.append("(%.2f, L-d %.2f, y %.2f)" % [pu.x, L + pu.z, pu.y])
+						for _s in range(8):
+							if parent.has(u):
+								u = parent[u]
+					print("CHEMIN vers le trou ", cle, " : ", " <- ".join(ch))
+				continue
+			if y2 - y1 > 0.45:
+				continue
+			if y1 - y2 > 1.0:
+				# bord de quai côté voie (la caisse s'y range) : signalé à part
+				var cible: Dictionary = quai if absf(b.x) < W + 0.3 else bords
+				var e: Array = cible.get(cle, [0, 0.0])
+				cible[cle] = [int(e[0]) + 1, maxf(float(e[1]), y1 - y2)]
+			vu[w] = true
+			parent[w] = v
+			file.append(w)
+	_total += _s_sol.size()
+	var fmt := func(dct: Dictionary, chute: bool) -> String:
+		var l: PackedStringArray = PackedStringArray()
+		var cles: Array = dct.keys()
+		cles.sort_custom(func(a, b): return (dct[a][0] if chute else dct[a]) > (dct[b][0] if chute else dct[b]))
+		for c in cles.slice(0, 12):
+			l.append(("x %d L-d %d ×%d (chute %.1f m)" % [c.x, c.y, dct[c][0], dct[c][1]]) if chute else ("x %d L-d %d ×%d" % [c.x, c.y, dct[c]]))
+		return " ; ".join(l)
+	var info: String = "%d points atteints sur %d" % [vu.size(), _s_sol.size()]
+	if not quai.is_empty():
+		info += " ; bords de quai côté voie (normaux) : %d m² : %s" % [quai.size(), fmt.call(quai, true)]
+	if trous.is_empty() and bords.is_empty():
+		print("[OK]   funival_salle — 0 trou, 0 bord sans garde-corps atteint (%s)" % info)
+		return
+	_ok = false
+	_gares_ko += 1
+	print("[ECHEC] funival_salle — trous atteints, %d m² : %s | bords sans garde-corps, %d m² : %s | %s" % [trous.size(), fmt.call(trous, false), bords.size(), fmt.call(bords, true), info])
