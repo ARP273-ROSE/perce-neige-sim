@@ -2090,7 +2090,26 @@ func _collisions_funi() -> void:
 	for sx in [-1.0, 1.0]:
 		var dmil: float = L - L_HALL * 0.5
 		boite.call(Vector3(0.4, 14.0, L_HALL), Vector3(sx * (hx + 0.2), y_voie(dmil) + 3.0, -dmil))
+	# banc de parcours des gares (16/11/2026) : au bout aval de la salle, la salle est plus large que le tube :
+	# murs de fond entre le tube et ses murs (on sortait de la salle par le côté, dans la roche, et on tombait sans fin) ;
+	# et bord extérieur du quai étroit (1,8 m sans sol jusqu'au mur, sur toute la longueur de la salle)
+	var d_bout: float = L - L_HALL
+	var rx_bout: float = R_TUNNEL + 0.15
+	for sx2 in [-1.0, 1.0]:
+		boite.call(Vector3(hx - rx_bout + 0.4, 14.0, 0.4), Vector3(sx2 * (hx + rx_bout) * 0.5, y_voie(d_bout) + 3.0, -d_bout))
+	for kq2 in range(2):
+		var x_ext2: float = W + float(LARG_AMONT[kq2])
+		if hx - x_ext2 > 0.5:
+			var sg2: float = -1.0 if kq2 == 0 else 1.0
+			var dm2: float = L - L_HALL * 0.5
+			boite.call(Vector3(0.2, 14.0, L_HALL), Vector3(sg2 * (x_ext2 + 0.1), y_voie(dm2) + 3.0, -dm2))
 	boite.call(Vector3(2.0 * hx + 1.4, 0.4, 22.6), Vector3(0, sol_batiment() - 0.2, -(L + 10.5)))     # (de L − 0,8 à L + 21,8 ; le bâtiment va de L à L + 22)
+	# jupe sous le bord de ce plancher, sur toute la largeur : entre le quai et le dessous de la dalle restait une fente
+	# d'un demi-mètre où le corps s'engageait et se coinçait (banc de parcours des gares, 16/11/2026 : filet de dégagement
+	# au bout du quai, à 5 m de l'axe)
+	var y_jupe0: float = y_voie(L - 0.5) - 0.6
+	var y_jupe1: float = sol_batiment() - 0.35
+	boite.call(Vector3(2.0 * hx + 1.4, y_jupe1 - y_jupe0, 0.3), Vector3(0, (y_jupe0 + y_jupe1) * 0.5, -(L - 0.95)))
 	for m in _murs_bat:
 		boite.call(m[0], m[1])
 	for pc in _perron_col:
