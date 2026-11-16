@@ -2,14 +2,12 @@
 ## « c'est infernal de diriger le skieur, avec en plus une vue qui bouge à
 ## chaque mouvement de joystick ou de virage »). Un joueur simulé tient le
 ## joystick ou les touches comme un humain et l'on mesure :
-##  - DÉRIVE : de combien le cap des skis tourne quand le pouce reste
-##    immobile (une visée fixe doit donner un cap fixe, pas une spirale) ;
-##  - ERREUR : écart entre le cap visé (par rapport à la vue au moment où
-##    l'on pose le pouce) et le cap obtenu ;
+##  - VIRAGE TENU : pouce tenu de côté, les skis tournent à vitesse constante — le virage ne s'éteint
+##    pas (16/11/2026, retour d'utilisateur : « ça tourne mais de moins en moins jusqu'à aller tout droit alors que
+##    j'ai encore une instruction à tourner » ; avant, le pouce visait un cap fixe) ;
 ##  - VUE : vitesse de rotation de la caméra (p95 et maxi, °/s) — au-delà
 ##    de ~90 °/s, une rotation qu'on n'a pas commandée donne le tournis ;
-##  - À PIED : la direction de marche ne doit pas changer quand on tourne la
-##    vue sans bouger le pouce.
+##  - À PIED : le cap est celui de la vue — tournée au doigt ou à la souris, il va là où l'on regarde.
 ##   godot --headless --fixed-fps 60 --path godot_project -s bench_ergonomie_3d.gd -- --mode=normal
 ## --mesure : affiche sans juger (comparaison avant / après).
 extends SceneTree
@@ -218,23 +216,20 @@ func _tick() -> void:
 	var mx: float = _p(_taux, 1.0)
 	match nom:
 		"visee_15", "visee_90":
+			# vitesse de rotation des skis sur la 1re et la 2e moitié du virage tenu
 			var n: int = _caps.size()
-			var derive: float = rad_to_deg(absf(wrapf(_caps[n - 1] - _caps[n / 2], -PI, PI)))
-			var em: float = 0.0
-			for e in _err:
-				em += e
-			em /= maxf(1.0, _err.size())
-			_verif("pouce immobile à %s : cap stable (pas de spirale)" % ("15°" if nom == "visee_15" else "90°"),
-				derive < 15.0 and em < 15.0,
-				"dérive %.0f° sur 6 s, erreur moyenne %.0f°, vue p95 %.0f °/s, maxi %.0f °/s" % [derive, em, p95, mx])
+			var w1: float = rad_to_deg(absf(wrapf(_caps[n / 2] - _caps[0], -PI, PI) if n > 2 else 0.0))
+			var w2: float = 0.0
+			var prec: float = _caps[n / 2]
+			for k in range(n / 2 + 1, n):
+				w2 += rad_to_deg(absf(wrapf(_caps[k] - prec, -PI, PI)))
+				prec = _caps[k]
+			_verif("pouce tenu à %s : le virage ne s'éteint pas, la vue suit sans tournis" % ("15°" if nom == "visee_15" else "90°"),
+				w1 > 5.0 and w2 >= 0.7 * w1 and p95 < 90.0,
+				"%.0f° puis %.0f° sur deux moitiés égales, vue p95 %.0f °/s, maxi %.0f °/s" % [w1, w2, p95, mx])
 		"slalom":
-			var em2: float = 0.0
-			for e in _err:
-				em2 += e
-			em2 /= maxf(1.0, _err.size())
-			_verif("slalom au pouce : la vue suit sans donner le tournis",
-				em2 < 20.0 and p95 < 60.0 and mx < 120.0,
-				"erreur moyenne %.0f°, vue p95 %.0f °/s, maxi %.0f °/s" % [em2, p95, mx])
+			_verif("slalom au pouce : la vue suit sans donner le tournis", p95 < 60.0 and mx < 120.0,
+				"vue p95 %.0f °/s, maxi %.0f °/s" % [p95, mx])
 		"clavier":
 			_verif("clavier Q/D : vue douce", p95 < 60.0 and mx < 120.0,
 				"vue p95 %.0f °/s, maxi %.0f °/s" % [p95, mx])
@@ -253,7 +248,7 @@ func _tick() -> void:
 			var dm: float = 0.0
 			if _dir_marche.size() > 2:
 				dm = rad_to_deg(absf(wrapf(_dir_marche[_dir_marche.size() - 1] - _dir_marche[0], -PI, PI)))
-			_verif("à pied, vue tournée sans lâcher le pouce : il garde son cap", dm < 10.0,
+			_verif("à pied, pouce vers l'avant, vue tournée de 90° au doigt — il suit la vue", absf(dm - 90.0) < 15.0,
 				"cap de marche changé de %.0f°" % dm)
 	_sc += 1
 	if _sc >= SCENARIOS.size():

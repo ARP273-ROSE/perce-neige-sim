@@ -3,6 +3,8 @@
 ## rame à quai portes fermées, le skieur longe la voiture 2 en poussant un
 ## peu vers elle, vers l'amont puis vers l'aval — il doit avancer (avant :
 ## 1,4 m en 8 s, arrêté devant chaque marche et au bord de chaque baie).
+## (16/11/2026 : gauche / droite tournent la vue et le cap ; « pousser vers elle » = la vue tournée d'autant vers
+## la rame, pouce vers l'avant ou l'arrière.)
 ##   godot --headless --fixed-fps 60 --path godot_project -s bench_quai_3d.gd -- --mode=normal
 extends SceneTree
 
@@ -49,11 +51,14 @@ func _tick() -> void:
 		var z_dep: float = 2.0 if float(CAS[_sc][0]) > 0.0 else -4.0
 		sk.activer(v.global_transform * Vector3(cote * 2.3, TrainBodyBuilder.Y_FLOOR + 0.6, z_dep), 0.0)
 		var av: Vector3 = -v.global_transform.basis.z
-		sk.cam_yaw = atan2(-av.x, -av.z)
+		var dr: Vector3 = v.global_transform.basis.x
+		# (même direction de marche qu'avant : vers l'amont ou l'aval, et un peu vers la rame)
+		var marche: Vector3 = (av * float(CAS[_sc][0]) + dr * (-cote * float(CAS[_sc][1]))).normalized() * float(CAS[_sc][0])
+		sk.cam_yaw = atan2(-marche.x, -marche.z)
 		_z0 = (v.global_transform.affine_inverse() * sk.global_position).z
 	_t += 1.0 / 60.0
 	var cas: Array = CAS[_sc]
-	sk.entree = Vector2(-cote * float(cas[1]), float(cas[0])).normalized() * 0.9
+	sk.entree = Vector2(0.0, float(cas[0]) * 0.9)
 	if _t > 8.0:
 		var loc: Vector3 = v.global_transform.affine_inverse() * sk.global_position
 		var fait: float = absf(loc.z - _z0)
