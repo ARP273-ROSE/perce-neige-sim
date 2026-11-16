@@ -955,6 +955,7 @@ func _terrain(relief: ReliefBuilder, r: Rect2, quoi: int = TERRAIN_TOUT) -> void
 			for k in (ct[1] as PackedInt32Array):
 				hc[k] = relief._hauteur_tri(rp.position.x + (k % (nx + 1)) * pas, rp.position.y + (k / (nx + 1)) * pas)
 			faces.append_array(nd.piece_faces(rp, pas, nx, nz, hc, g[1]))
+			_bords_trous(relief, rp, pas, nx, nz, hc, g[1], faces)
 			continue
 		var h: PackedFloat32Array = PackedFloat32Array()
 		h.resize((nx + 1) * (nz + 1))
@@ -986,6 +987,7 @@ func _terrain(relief: ReliefBuilder, r: Rect2, quoi: int = TERRAIN_TOUT) -> void
 				faces.append_array([Vector3(xa, h[a], za), Vector3(xa + pas, h[b], za),
 					Vector3(xa, h[c3], za + pas), Vector3(xa + pas, h[b], za),
 					Vector3(xa + pas, h[d], za + pas), Vector3(xa, h[c3], za + pas)])
+		_bords_trous(relief, rp, pas, nx, nz, h, trou, faces)
 	if faces.is_empty():
 		return
 	# par morceaux de RELIEF_MORCEAU triangles, un par tâche (06/11/2026) : une seule forme
@@ -1000,6 +1002,47 @@ func _terrain(relief: ReliefBuilder, r: Rect2, quoi: int = TERRAIN_TOUT) -> void
 	for i in range(morceaux.size() - 1, 0, -1):
 		_taches.push_front(_forme_relief.bind(morceaux[i]))
 	_forme_relief(morceaux[0])
+
+
+## Mailles de 2 m retirées parce que leur centre est dans un bâtiment, mais qui débordent du bâtiment : la part
+## hors du bâtiment restait sans aucun sol, jusqu'à 1 m au pied des murs (triangles vides le long des murs en
+## biais de la gare aval du téléphérique de la Grande Motte : chute sans fin du skieur, sonde de parcours du
+## 16/11/2026). Ces mailles sont redécoupées en carreaux de 25 cm (le pas du masque des bâtiments), gardés quand leur centre est hors du bâtiment.
+const SOUS_MAILLES: int = 8
+
+
+func _bords_trous(relief: ReliefBuilder, rp: Rect2, pas: float, nx: int, nz: int, h: PackedFloat32Array,
+		trou: PackedByteArray, faces: PackedVector3Array) -> void:
+	var e: float = pas / SOUS_MAILLES
+	for jj in range(nz):
+		for ii in range(nx):
+			var a: int = jj * (nx + 1) + ii
+			var b: int = a + 1
+			var c3: int = a + nx + 1
+			var d: int = c3 + 1
+			var nt: int = trou[a] + trou[b] + trou[c3] + trou[d]
+			if nt == 0:
+				continue
+			var xa: float = rp.position.x + ii * pas
+			var za: float = rp.position.y + jj * pas
+			if not bool(relief.terrain_piece(xa + pas * 0.5, za + pas * 0.5)[1]):
+				continue                     # maille gardée entière
+			for sj in range(SOUS_MAILLES):
+				for si in range(SOUS_MAILLES):
+					var x0: float = xa + si * e
+					var z0: float = za + sj * e
+					if bool(relief.terrain_piece(x0 + e * 0.5, z0 + e * 0.5)[1]):
+						continue
+					var u0: float = float(si) / SOUS_MAILLES
+					var u1: float = float(si + 1) / SOUS_MAILLES
+					var v0: float = float(sj) / SOUS_MAILLES
+					var v1: float = float(sj + 1) / SOUS_MAILLES
+					var y00: float = lerpf(lerpf(h[a], h[b], u0), lerpf(h[c3], h[d], u0), v0)
+					var y10: float = lerpf(lerpf(h[a], h[b], u1), lerpf(h[c3], h[d], u1), v0)
+					var y01: float = lerpf(lerpf(h[a], h[b], u0), lerpf(h[c3], h[d], u0), v1)
+					var y11: float = lerpf(lerpf(h[a], h[b], u1), lerpf(h[c3], h[d], u1), v1)
+					faces.append_array([Vector3(x0, y00, z0), Vector3(x0 + e, y10, z0), Vector3(x0, y01, z0 + e),
+						Vector3(x0 + e, y10, z0), Vector3(x0 + e, y11, z0 + e), Vector3(x0, y01, z0 + e)])
 
 
 const RELIEF_MORCEAU: int = 3000

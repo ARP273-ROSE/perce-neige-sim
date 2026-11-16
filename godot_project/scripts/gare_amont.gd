@@ -1151,11 +1151,15 @@ func amenagement_relief() -> Dictionary:
 	bb = bb.expand(Vector2(a3440.x, a3440.z))
 	return {
 		"rect": bb.grow(18.0),
-		"trous": [monde.call(hall), monde.call(ANNEXES), monde.call(TPH), monde.call(RESTO)],
+		# (pas de trou sous le bâtiment du téléphérique : son quai est à 6 m du sol, sans plancher dessous — percé, le
+		# terrain laissait des triangles sans sol au pied de ses murs en biais et un vide sans fond sous les baies des
+		# cabines : chutes sans fin du skieur, sonde de parcours du 16/11/2026. Le terrain y est aplani au niveau de
+		# son rez-de-chaussée.)
+		"trous": [monde.call(hall), monde.call(ANNEXES), monde.call(RESTO)],
 		"rabots": [[monde.call(TERRASSE), _o.y - 0.4, 3.0]],
 		# pied de l'escalier du bout de la terrasse : neige à la dernière
 		# contremarche
-		"plats": [[monde.call(_pied_escalier()), _o.y - ESC_HAUT, 2.0]],
+		"plats": [[monde.call(_pied_escalier()), _o.y - ESC_HAUT, 2.0], [monde.call(TPH), _o.y + H_TPH_SOL, 3.0]],
 		# neige au niveau du seuil de la porte Génépy (retour d'utilisateur : « tu me montes
 		# le terrain jusque-là »)
 		"remblais": [[monde.call(rect.call(Rect2(-DEMI_HALL - 9.0, _pg_d.x - 4.0, 8.8, _pg_d.y - _pg_d.x + 8.0))),

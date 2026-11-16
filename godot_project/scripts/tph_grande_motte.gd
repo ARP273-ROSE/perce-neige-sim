@@ -122,7 +122,8 @@ static func plan_quai(aval: bool, xs: Array, z_cab: float) -> Dictionary:
 	# partie pleine derrière les baies, bandes entre et hors des baies
 	if aval:
 		dalles.append(Rect2(-W, z_ar, 2.0 * W, z_fond - z_ar))
-		dalles.append(Rect2(-6.3, z_fond, 12.6, 1.0))        # sous le bâtiment (façade en biais, 12,9 m de large)
+		dalles.append(Rect2(-6.3, z_fond, 12.6, 1.8))        # sous le bâtiment (façade en biais, 12,9 m de large) ; 1,8 m : à 1,0 m
+		# il restait une fente de 0 à 50 cm entre la dalle et le mur en biais, sans aucun sol dessous (chute sans fin)
 	else:
 		dalles.append(Rect2(-W, z_fond, 2.0 * W, z_ar - z_fond))
 	dalles.append(Rect2(-bi, zlo, 2.0 * bi, zhi - zlo))
