@@ -16,6 +16,8 @@ var _y0: float = 0.0
 var _cab: int = -1
 var _v_max: float = 0.0
 var _v_pyl: float = -1.0
+var _v_pyl2: float = -1.0
+var _v_apres: float = -1.0
 var _etape: int = 0
 
 
@@ -98,10 +100,23 @@ func _tick() -> void:
 				for p in _lg.pylones:
 					if absf(float(_lg._vehicules[_cab][1]) - float(p["d"])) < 3.0:
 						_v_pyl = _lg.vitesse_reelle
+					# (l'autre cabine, qui descend, au pylône)
+					if absf(float(_lg._vehicules[1 - _cab][1]) - float(p["d"])) < 3.0:
+						_v_pyl2 = _lg.vitesse_reelle
+				# 80 m après que la cabine descendante a quitté le sabot : déjà repartie vers 10 m/s
+				var zs: Array = _lg._zones_sabots()
+				if not zs.is_empty() and _v_apres < 0.0:
+					var dd: float = float(_lg._vehicules[1 - _cab][1])
+					if dd < float(zs[0][0]) - 80.0:
+						_v_apres = _lg.vitesse_reelle
+				if int(_t * 2.0) != int((_t - 1.0 / 60.0) * 2.0) and int(_t) % 10 == 0:
+					print("PROFIL t %.0f d %.0f v %.2f" % [_t, float(_lg._vehicules[_cab][1]), _lg.vitesse_reelle])
 			if _t > 1.5 and rm.a_bord.is_empty():
-				# marche (Telepherique.PROFILS) : courbe de la montre, 10 m/s au plus, 6,7 m/s au pylône (82 % de la ligne)
-				_verif("TPH : 10 m/s en ligne, 6,7 au pylône", absf(_v_max - 10.0) < 0.1 and absf(_v_pyl - 6.7) < 0.15,
-					"maxi %.2f m/s, au pylône %.2f m/s" % [_v_max, _v_pyl])
+				# marche (Telepherique.PROFILS, retour d'utilisateur du 16/11/2026) : 10 m/s au plus, 7,4 m/s aux deux
+				# passages du pylône, reprise dès que la cabine descendante a quitté le sabot
+				_verif("TPH : 10 m/s en ligne, 7,4 aux deux passages du pylône, reprise aussitôt après",
+					absf(_v_max - 10.0) < 0.1 and absf(_v_pyl - 7.4) < 0.15 and absf(_v_pyl2 - 7.4) < 0.15 and _v_apres > 9.5,
+					"maxi %.2f m/s, au pylône %.2f (montante) et %.2f (descendante), 80 m après %.2f" % [_v_max, _v_pyl, _v_pyl2, _v_apres])
 				var haut: Vector3 = _lg.global_transform * Vector3(0, _lg.terrain(_lg.longueur_h()), -_lg.longueur_h())
 				var d: float = Vector2(sk.global_position.x - haut.x, sk.global_position.z - haut.z).length()
 				_verif("TPH : emporté jusqu'en haut, sorti portes ouvertes", not sk.embarque and d < 40.0
