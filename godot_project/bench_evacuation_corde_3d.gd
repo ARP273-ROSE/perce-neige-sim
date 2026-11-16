@@ -154,6 +154,7 @@ func _tick() -> void:
 				_verif("ligne arrêtée par l'utilisateur : corde possible", rm.corde_possible())
 				rm.descendre_corde()
 				_verif("descente commencée", not rm.get("_corde").is_empty())
+				_corde_vue = false
 				Engine.time_scale = 4.0
 				_phase = 9
 				_t = 0.0
@@ -161,6 +162,21 @@ func _tick() -> void:
 				_verif("ligne arrêtée", false)
 				_fin()
 		9:
+			# (retour d'utilisateur du 16/11/2026) pendu sous le véhicule : la ligne ne repart pas, la corde touche
+			# le sol, l'évacué reste sous son ancrage
+			if not rm.get("_corde").is_empty() and _t > 2.0 and _t < 2.0 + 1.0 / 60.0 * 4.0:
+				_lg.demarrer()
+				_lg.exploitation().commande("demarrer")
+			if not rm.get("_corde").is_empty() and _t > 6.0 and not _corde_vue:
+				_corde_vue = true
+				var mi9: MeshInstance3D = rm.get("_corde_mi")
+				var bas9: float = mi9.global_transform.origin.y - mi9.global_transform.basis.y.length() * 0.5
+				var sol_c: float = relief.hauteur_sol(sk.global_position.x, sk.global_position.z)
+				_verif("pendu à la corde : la ligne ne repart pas", _lg.vitesse_reelle <= 0.01, "%.2f m/s" % _lg.vitesse_reelle)
+				_verif("la corde descend jusqu'au sol", absf(bas9 - sol_c) < 0.3, "bas de corde %.1f, sol %.1f" % [bas9, sol_c])
+				var v9: VehiculeRemontee = _lg.vehicule(rm.a_bord[1])
+				_verif("l'évacué reste sous son véhicule", sk.global_position.y < v9.global_position.y,
+					"skieur %.1f, véhicule %.1f" % [sk.global_position.y, v9.global_position.y])
 			if rm.a_bord.is_empty():
 				var sol9: float = relief.hauteur_sol(sk.global_position.x, sk.global_position.z)
 				_verif("à la demande : au sol, à pied", absf(sk.global_position.y - sol9) < 0.2 and not sk.embarque)
