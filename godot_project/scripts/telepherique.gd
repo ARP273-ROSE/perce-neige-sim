@@ -87,6 +87,8 @@ func _maj_passagers_cabines(delta: float) -> void:
 		return
 	_pax_dessin_t = 0.0
 	for i in range(mini(2, _vehicules.size())):
+		if not is_instance_valid(_vehicules[i][0]):
+			continue
 		var v: VehiculeRemontee = _vehicules[i][0]
 		if v == null:
 			continue

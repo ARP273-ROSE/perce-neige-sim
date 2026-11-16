@@ -46,6 +46,8 @@ func _choisir() -> void:
 			k = "tph"
 		elif lg.tricable():
 			k = "3s"
+		elif lg.famille == "perche_debrayable":
+			k = "tkd"
 		elif lg.teleski():
 			k = ""
 		elif lg.famille.begins_with("cabine"):
@@ -54,7 +56,7 @@ func _choisir() -> void:
 			k = "tsd"
 		if k != "" and not voulus.has(k):
 			voulus[k] = lg
-	for k in ["tsd", "tcd", "3s", "tph", "funival"]:
+	for k in ["tsd", "tcd", "3s", "tph", "funival", "tkd"]:
 		if voulus.has(k):
 			_lignes.append([k, voulus[k]])
 
@@ -94,7 +96,7 @@ func _tick() -> void:
 		if _main.get("remontees") == null or not _main.remontees.pret:
 			return
 		_choisir()
-		_verif("lignes de chaque genre trouvées", _lignes.size() == 5, str(_lignes.map(func(x): return x[0] + " " + String(x[1].name))))
+		_verif("lignes de chaque genre trouvées", _lignes.size() == 6, str(_lignes.map(func(x): return x[0] + " " + String(x[1].name))))
 		_e = 1
 		_t = 0.0
 		return
@@ -121,12 +123,55 @@ func _tick() -> void:
 				_il += 1
 				_e = 2
 				return
+			if k == "tkd":
+				_e = 5
+				_t = 0.0
+				OccupationRemontees.heure_forcee = 10.25
+				lg._occ_t = 1.0e9
+				return
 			_mesurer(k, lg)
 			# évacuation à la corde, à 10 h 15 (montée chargée) : la ligne s'arrête et ne repart pas
 			OccupationRemontees.heure_forcee = 10.25
 			lg._occ_t = 1.0e9
 			lg.corde_en_cours = true
 			_e = 4
+			_t = 0.0
+		5:
+			# TKD : skieurs tirés sous le brin de montée, skis sur la neige (le retour passe DY_RETOUR_TKD plus haut)
+			if _t < 20.0:
+				return
+			# (sans écran, le serveur de rendu ne garde pas les transformées des MultiMesh : la ligne les garde)
+			var n: int = lg.tires_positions.size()
+			var relief2: ReliefBuilder = _main.get("relief")
+			var sol_max: float = 0.0
+			var hors_brin: int = 0
+			var xb: float = lg._x_brin(true)
+			for j in range(n):
+				var p: Vector3 = lg.tires_positions[j]
+				sol_max = maxf(sol_max, absf(p.y - 0.02 - relief2.hauteur_sol(p.x, p.z)))
+				# dans l'axe de sa pince, et cette pince sur le brin montée (plus près des pinces montantes que des
+				# descendantes à la même distance)
+				var inv: Transform3D = lg.global_transform.affine_inverse()
+				var loc: Vector3 = inv * p
+				var lp: Vector3 = inv * lg.tires_pinces[j]
+				var x_m: float = INF
+				var x_d: float = INF
+				for e in lg._vehicules:
+					if not is_instance_valid(e[0]):
+						continue
+					var lv: Vector3 = (e[0] as Node3D).position
+					if absf(lv.z - lp.z) < 15.0:
+						if signf(lv.x) == signf(xb):
+							x_m = minf(x_m, absf(lv.x - lp.x))
+						else:
+							x_d = minf(x_d, absf(lv.x - lp.x))
+				if absf(loc.x - lp.x) > 1.0 or x_m > x_d:
+					hors_brin += 1
+			_verif("tkd : skieurs tirés au sol, sous le brin de montée (retour %.1f m plus haut)" % LigneRemontee.DY_RETOUR_TKD,
+				n > 0 and sol_max < 0.05 and hors_brin == 0,
+				"%d skieurs tirés près de la caméra, écart au sol maxi %.2f m, %d hors du brin montée ; le premier à d %.0f m, %.1f m de sa pince à la hauteur de l'assiette (perche de 7,8 m au plus)" % [n, sol_max, hors_brin, -(lg.global_transform.affine_inverse() * lg.tires_positions[0]).z if n > 0 else 0.0, (lg.tires_pinces[0] - lg.tires_positions[0] - Vector3(0, 0.72, 0)).length() if n > 0 else 0.0])
+			_il += 1
+			_e = 2
 			_t = 0.0
 		4:
 			if _t < 40.0:
