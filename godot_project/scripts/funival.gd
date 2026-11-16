@@ -698,6 +698,7 @@ func _construire_corps() -> void:
 	await _pause("funival : gare aval")
 	await _gare_amont()
 	_butoir_et_poulie()
+	_garde_fous_dessines()
 	await _pause("funival : gare amont")
 	# terrain de la gare amont (fil principal : il crée une pièce du relief)
 	_amenager_relief_amont.call_deferred()
@@ -1852,6 +1853,73 @@ func _perron(st: SurfaceTool, seuil: Vector3, dir: Vector3, larg: float) -> void
 	# (pas de débord côté seuil : relevée par la pente, la rampe y faisait une bordure de 0,1 m où l'on butait)
 	var lg: float = seuil.distance_to(fin) + 0.3
 	_perron_col.append([Vector3(larg, 0.1, lg), Transform3D(Basis(lat, y_ax, f), (seuil + fin) * 0.5 + f * 0.15 - y_ax * 0.06)])
+
+
+## Garde-fous posés par la sonde (bench_garde_fous, 16/11/2026) qui n'étaient que des collisions : dessinés en
+## garde-corps galvanisés comme ceux des gradins (lisses à 1,05 et 0,55 m, poteaux), murs de fond de la fosse en béton.
+## Mêmes cotes que _collisions_funi ; aucun autre ouvrage ne bouge.
+func _garde_fous_dessines() -> void:
+	var ga: Node3D = Node3D.new()
+	ga.name = "GardeFousAval"
+	_enfant(ga)
+	var gm: Node3D = Node3D.new()
+	gm.name = "GardeFousAmont"
+	_enfant(gm)
+	var L: float = longueur_h()
+	var W: float = VehiculeFunival.DEMI_LARGEUR + 0.05
+	var lc: float = VehiculeFunival.l_comp()
+	# garde-corps le long d'un segment (pied a → pied b) : deux lisses et des poteaux tous les 1,5 m au plus
+	var rampe := func(g: Node3D, a: Vector3, b: Vector3) -> void:
+		for hl in [1.05, 0.55]:
+			RemonteeKit.poutre(g, a + Vector3.UP * hl, b + Vector3.UP * hl, 0.05, 0.05, "galva")
+		var np: int = maxi(int(ceil(a.distance_to(b) / 1.5)), 1)
+		for kp in range(np + 1):
+			var p: Vector3 = a.lerp(b, float(kp) / float(np))
+			RemonteeKit.boite_en(g, Vector3(0.05, 1.08, 0.05), p + Vector3.UP * 0.53, "galva")
+	# dessus d'une dalle inclinée de _gradins (rampes) : ses deux bouts, au bord x
+	var bouts := func(b: Array, x: float) -> Array:
+		var rot: Basis = Basis(Vector3.RIGHT, float(b[2]))
+		var c: Vector3 = (b[1] as Vector3) + rot * Vector3(0, 0.1, 0)
+		var dz: Vector3 = rot * Vector3(0, 0, (b[0] as Vector3).z * 0.5)
+		return [Vector3(x, (c + dz).y, (c + dz).z), Vector3(x, (c - dz).y, (c - dz).z)]
+	for sx in [-1.0, 1.0]:
+		# gare aval : première volée, partie du sol avant le bout du quai (son bord extérieur)
+		var gr: Array = _gradins(sx, true)
+		if not gr.is_empty() and (gr[0] as Array).size() > 2:
+			var larg3: float = LARG_GRADINS[0] if sx < 0.0 else LARG_GRADINS[1]
+			var e: Array = bouts.call(gr[0], sx * (W + larg3 - 0.05))
+			rampe.call(ga, e[0], e[1])
+		# gare amont : escalier étroit, bord extérieur quand il ne va pas jusqu'au mur de la salle
+		var larg_a: float = LARG_AMONT[0] if sx < 0.0 else LARG_AMONT[1]
+		if larg_a < 4.0:
+			for b in _gradins(sx, true, false):
+				if (b as Array).size() > 2:
+					var e2: Array = bouts.call(b, (b[1] as Vector3).x + sx * (larg_a * 0.5 + 0.05))
+					rampe.call(gm, e2[0], e2[1])
+	# fosse : murs de fond, en béton jusqu'au sol (la collision monte plus haut : au-dessus du sol, un garde-corps) ;
+	# gare aval derrière le radier, gare amont sous le plancher du bâtiment
+	var dv: float = minf(_x_quai(true) - VehiculeFunival.DEMI_L - 2.0, -4.0)
+	var lf: float = 2.0 * (W + 0.8) + 0.6
+	var y_bas: float = y_voie(dv) - 0.6
+	var y_sol: float = clampf(minf(_sol(-lf * 0.5, -dv), _sol(lf * 0.5, -dv)), y_bas + 0.3, y_voie(dv) + 2.4)
+	RemonteeKit.boite_en(ga, Vector3(lf, y_sol - y_bas, 0.3), Vector3(0, (y_sol + y_bas) * 0.5, -dv + 0.15), "beton")
+	if y_voie(dv) + 2.4 - y_sol > 0.5:
+		rampe.call(ga, Vector3(-lf * 0.5, y_sol, -dv + 0.15), Vector3(lf * 0.5, y_sol, -dv + 0.15))
+	var y_bas2: float = y_voie(L - 0.5) - 0.6
+	var y_haut2: float = sol_batiment() - 0.02
+	RemonteeKit.boite_en(gm, Vector3(lf, y_haut2 - y_bas2, 0.3), Vector3(0, (y_haut2 + y_bas2) * 0.5, -(L - 0.35)), "beton")
+	# bord du plancher du bâtiment amont, 2,7 m au-dessus de la voie : au droit de la fosse, et entre un quai étroit et
+	# le mur de la salle
+	var yb: float = sol_batiment()
+	var zg: float = -(L - 0.72)
+	rampe.call(gm, Vector3(-1.7, yb, zg), Vector3(1.7, yb, zg))
+	for kq in range(2):
+		var x_ext: float = W + float(LARG_AMONT[kq])
+		if W + 4.2 - x_ext > 0.5:
+			var sg: float = -1.0 if kq == 0 else 1.0
+			rampe.call(gm, Vector3(sg * x_ext, yb, zg), Vector3(sg * (W + 4.2), yb, zg))
+	MeshMerge.merge(ga, [], "GardeFous")
+	MeshMerge.merge(gm, [], "GardeFous")
 
 
 func _collisions_funi() -> void:
