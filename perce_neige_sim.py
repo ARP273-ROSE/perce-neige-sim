@@ -13628,7 +13628,16 @@ class GameWidget(QWidget):
         sans ça, un échec de SetParent est parfaitement muet — c'est ce qui
         rendait indiagnosticable le « Godot en fenêtre séparée » de
         Windows 10 (retour d'essai 2026-08-03)."""
-        print(f"[GodotEmbed] {msg}")
+        # (jamais d'exception ici : sortie redirigée vers un fichier sous Windows, en cp1252, la flèche de « SetParent …
+        # → parent=… » levait UnicodeEncodeError au milieu de l'embarquement, qui échouait — la 3D restait en fenêtre
+        # séparée derrière le simulateur, zone 3D noire ; essai de l'exe de bout en bout du 16/11/2026)
+        try:
+            print(f"[GodotEmbed] {msg}")
+        except (UnicodeEncodeError, OSError, ValueError):
+            try:
+                print(f"[GodotEmbed] {msg}".encode("ascii", "replace").decode("ascii"))
+            except (OSError, ValueError):
+                pass
         if self._godot_bridge is not None:
             try:
                 self._godot_bridge.log(f"[embed] {msg}")
