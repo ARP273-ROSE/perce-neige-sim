@@ -1247,8 +1247,9 @@ func _porter() -> void:
 	if p.distance_to(global_position) < 60.0:
 		global_position = p
 		var dl: float = wrapf(atan2(d.basis.z.x, d.basis.z.z), -PI, PI)
-		cam_yaw += dl
-		_cap += dl
+		if is_finite(dl):
+			cam_yaw += dl
+			_cap += dl
 	else:
 		support = null
 	_support_xf = xf
@@ -1677,6 +1678,14 @@ func _animer(delta: float, dir: Vector3) -> void:
 
 
 func _camera() -> void:
+	# (garde : un angle non fini — rotation d'un support dégénérée — figeait la vue pour toujours, NaN + x = NaN ;
+	# retour d'utilisateur du 16/11/2026 : orientation de la vue perdue en marchant dans le Perce-Neige)
+	if not is_finite(cam_yaw):
+		cam_yaw = _cap if is_finite(_cap) else 0.0
+	if not is_finite(_cap):
+		_cap = cam_yaw
+	if not is_finite(cam_pitch):
+		cam_pitch = 0.0
 	cam_pitch = clampf(cam_pitch, _pitch_min(), _pitch_max())
 	pivot.rotation = Vector3(clampf(cam_pitch - _pitch_sol, _pitch_min(), _pitch_max()), cam_yaw, 0.0)
 	# le bras se raccourcit aussitôt (il ne doit pas traverser les parois) mais ne se
