@@ -588,6 +588,15 @@ static func _sauver() -> void:
 ## Une pique pour l'événement `evt` sur la ligne `lg` (langue "fr"/"en") :
 ## les deux tiers des dernières tirées de cette liste ne ressortent pas.
 static func pique(evt: String, lg: LigneRemontee, lang: String = "fr") -> String:
+	var p: Array = pique_paire(evt, lg)
+	if p.is_empty():
+		return ""
+	return String(p[1]) if lang == "en" else String(p[0])
+
+
+## La pique tirée, dans les deux langues [français, anglais] ; [] sans pique pour cet évènement. Le pupitre du PC
+## l'affiche dans sa propre langue, qui peut différer de celle de la vue 3D.
+static func pique_paire(evt: String, lg: LigneRemontee) -> Array:
 	_charger()
 	var fam: String = famille(lg)
 	var l: Array = _liste(evt, fam)
@@ -595,7 +604,7 @@ static func pique(evt: String, lg: LigneRemontee, lang: String = "fr") -> String
 		evt = "PANNE"                    # panne sans liste à elle : piques communes aux pannes
 		l = _liste(evt, fam)
 	if l.is_empty():
-		return ""
+		return []
 	var cle: String = evt + "_" + fam
 	var vus: Array = _vus.get(cle, [])
 	var libres: Array = []
@@ -610,4 +619,4 @@ static func pique(evt: String, lg: LigneRemontee, lang: String = "fr") -> String
 		vus.pop_front()
 	_vus[cle] = vus
 	_sauver()
-	return l[k][1] if lang == "en" else l[k][0]
+	return [String(l[k][0]), String(l[k][1])]

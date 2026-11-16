@@ -8032,6 +8032,9 @@ class GameWidget(QWidget):
             if self._faux_remontee is None:
                 self._recevoir_remontee(m["remontee"])
             return
+        if "pique_remontee" in m:
+            self._recevoir_pique_remontee(m["pique_remontee"])
+            return
         if "pupitre" in m:
             self._pupitre_3d(str(m["pupitre"]), bool(m.get("enfonce", False)))
         elif "releve_auto_fait" in m:
@@ -16443,6 +16446,16 @@ class GameWidget(QWidget):
             add_event(self.state, "remontee", f"{nom}: {texte}", f"{nom} : {texte}", sev)
         self.update()
 
+    def _recevoir_pique_remontee(self, d) -> None:
+        """Pique de la 3D (remontées) : au journal, et quelques secondes en bas du pupitre de la remontée."""
+        if not self._remontee.recevoir_pique(d):
+            return
+        fr, en, ligne = self._remontee.pique_active() or ("", "", "")
+        pre_en = f"{ligne}: " if ligne else ""
+        pre_fr = f"{ligne} : " if ligne else ""
+        add_event(self.state, "pique", pre_en + en, pre_fr + fr, "info")
+        self.update()
+
     def _commande_remontee(self, cmd: str, arg=None) -> None:
         if self._remontee.d is None:
             return
@@ -16735,6 +16748,20 @@ class GameWidget(QWidget):
                           d.get("etat") == "urgence", COLOR_ALARM, QColor(255, 235, 235), mushroom=True)
         self._zone_remontee(ra, ("cmd", "urgence", None))
         y += 48
+        # pique du moment (la 3D envoie les deux langues ; ici celle du PC)
+        pq = self._remontee.pique_active()
+        if pq is not None and y + 40 < rect.bottom():
+            rq = QRectF(x0 + 16, y, wr - 32, 36)
+            p.setPen(_cached_pen(QColor(120, 110, 70), 1))
+            p.setBrush(QBrush(QColor(28, 26, 18)))
+            p.drawRoundedRect(rq, 5, 5)
+            f = QFont(_cached_font("Segoe UI", 9))   # copie : la police du cache est partagée
+            f.setItalic(True)
+            p.setFont(f)
+            p.setPen(_cached_pen(QColor(235, 215, 140)))
+            p.drawText(rq.adjusted(8, 2, -8, -2), int(Qt.AlignmentFlag.AlignVCenter | Qt.TextFlag.TextWordWrap),
+                       "« " + T(pq[1], pq[0]) + " »")
+            y += 42
         if compact:
             return
         # panne en cours : quoi / à faire / interdit (comme au PN)
