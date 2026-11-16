@@ -613,6 +613,117 @@ func passagers(i: int, montee: bool) -> int:
 	return int(e[2])
 
 
+## Skieurs tirés par les perches (téléskis) : sur chaque perche montante en ligne, proche, que la ligne a chargée
+## (passagers), un skieur en position de glisse, skis sur la neige à RemonteesDomaine.RECUL_PERCHE derrière la
+## pince comme le skieur joueur, la perche tendue jusqu'à lui (tendre_perche, sans toucher à sa géométrie) ; deux
+## côte à côte à l'archet biplace. La perche du joueur (perche_joueur) est laissée à son code. Corps et skis dans
+## un MultiMesh par ligne, en coordonnées du monde, mis à jour à chaque image pour les seules perches proches.
+var perche_joueur: int = -1
+var _tires_mmi: Array = []                 # [corps casque, corps bonnet, skis]
+var _tires_tendues: Dictionary = {}        # index des perches tendues pour un skieur dessiné
+var tires_positions: PackedVector3Array = PackedVector3Array()   # pieds des skieurs tirés dessinés (bancs)
+var tires_pinces: PackedVector3Array = PackedVector3Array()      # pince de leur perche, même ordre
+const TIRES_MAX: int = 48
+
+
+func _preparer_tires() -> void:
+	var mat: ShaderMaterial = SkieurMesh.materiau()
+	var sq: Dictionary = SkieurMesh.squelette_glisse()
+	var mesh: Array = [SkieurMesh.passager_squelette(sq, "skis", "casque", mat),
+		SkieurMesh.passager_squelette(sq, "skis", "bonnet", mat), SkieurMesh.skis_aux_pieds(mat)]
+	for k in range(3):
+		var mm := MultiMesh.new()
+		mm.transform_format = MultiMesh.TRANSFORM_3D
+		mm.use_custom_data = true
+		mm.mesh = mesh[k]
+		mm.instance_count = TIRES_MAX
+		var rng := RandomNumberGenerator.new()
+		rng.seed = hash([String(name), k])
+		for j in range(TIRES_MAX):
+			mm.set_instance_custom_data(j, Color(rng.randf(), rng.randf(), rng.randf(), 1.0))
+		mm.visible_instance_count = 0
+		var mi := MultiMeshInstance3D.new()
+		mi.name = "SkieursTires%d" % k
+		mi.top_level = true
+		mi.multimesh = mm
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(mi)
+		mi.global_transform = Transform3D.IDENTITY
+		_tires_mmi.append(mi)
+
+
+func _maj_skieurs_perches() -> void:
+	if not is_inside_tree():
+		return
+	var cam: Camera3D = get_viewport().get_camera_3d()
+	if cam == null:
+		return
+	# (la ligne reconstruite libère ses enfants : on les refait)
+	if _tires_mmi.is_empty() or not is_instance_valid(_tires_mmi[0]):
+		_tires_mmi.clear()
+		_tires_tendues.clear()
+		_preparer_tires()
+	var p_cam: Vector3 = cam.global_position
+	var portee: float = minf(VehiculeRemontee.portee_passagers(), 110.0)
+	var xm: float = signf(_x_brin(true))
+	var rd: Node = get_parent()
+	var relief: ReliefBuilder = rd.get("relief") if rd != null else null
+	var tbar: bool = famille == "perche_tbar"
+	var n_c: Array = [0, 0, 0]
+	var vues: Dictionary = {}
+	tires_positions.clear()
+	tires_pinces.clear()
+	for i in range(_vehicules.size()):
+		if i == perche_joueur:
+			continue
+		if not is_instance_valid(_vehicules[i][0]):
+			continue
+		var v: VehiculeRemontee = _vehicules[i][0]
+		if v == null or not v.visible or v.global_position.distance_to(p_cam) > portee:
+			continue
+		var s: float = _vehicules[i][1]
+		if signf(v.position.x) != xm or String(zone(s)[0]) != "ligne":
+			continue
+		if not _au_magasin.is_empty() and float(_au_magasin[i]) >= 0.0:
+			continue
+		var n: int = passagers(i, true)
+		if n <= 0:
+			continue
+		# (derrière la pince dans l'axe du véhicule, comme le skieur joueur : la perche ne pivote que dans ce plan)
+		var arriere: Vector3 = v.global_transform.basis.z
+		arriere.y = 0.0
+		arriere = arriere.normalized()
+		var pos: Vector3 = v.global_position + arriere * RemonteesDomaine.RECUL_PERCHE
+		var loc: Vector3 = global_transform.affine_inverse() * pos
+		pos.y = (global_transform * Vector3(loc.x, terrain(clampf(-loc.z, 0.0, longueur_h())), loc.z)).y
+		if relief != null:
+			pos.y = relief.hauteur_sol(pos.x, pos.z)
+		pos.y += 0.02
+		v.tendre_perche(v.to_local(pos + Vector3.UP * (0.62 if tbar else 0.72)))
+		vues[i] = true
+		var cap: float = atan2(arriere.x, arriere.z)
+		var lat: Vector3 = Vector3(cos(cap), 0.0, -sin(cap))
+		for k2 in range(mini(n, 2 if tbar else 1)):
+			var o: Vector3 = pos + lat * ((0.38 if k2 == 0 else -0.38) if tbar and n > 1 else 0.0)
+			var b: Basis = Basis(Vector3.UP, cap)
+			var cle: int = 0 if hash([i, k2]) % 4 != 0 else 1
+			if n_c[cle] < TIRES_MAX:
+				(_tires_mmi[cle] as MultiMeshInstance3D).multimesh.set_instance_transform(n_c[cle], Transform3D(b, o))
+				n_c[cle] += 1
+			if n_c[2] < TIRES_MAX:
+				(_tires_mmi[2] as MultiMeshInstance3D).multimesh.set_instance_transform(n_c[2], Transform3D(b, o))
+				n_c[2] += 1
+				tires_positions.append(o)
+				tires_pinces.append(v.global_position)
+	# perches lâchées par un skieur dessiné (sorties de la portée, arrivées) : repliées
+	for i2 in _tires_tendues.keys():
+		if not vues.has(i2) and int(i2) != perche_joueur and int(i2) < _vehicules.size() and is_instance_valid(_vehicules[int(i2)][0]):
+			(_vehicules[int(i2)][0] as VehiculeRemontee).longueur_perche(0.0)
+	_tires_tendues = vues
+	for k3 in range(3):
+		(_tires_mmi[k3] as MultiMeshInstance3D).multimesh.visible_instance_count = n_c[k3]
+
+
 ## Passagers dessinés des véhicules proches (VehiculeRemontee.poser_passagers), toutes les 0,3 s : ceux que la
 ## ligne a tirés pour le véhicule (passagers), personne dans la gare où l'on descend (montants en gare amont,
 ## descendants en gare aval).
@@ -620,8 +731,11 @@ var _pax_dessin_t: float = 0.0
 
 
 func _maj_passagers_dessines(delta: float) -> void:
+	if teleski():
+		_maj_skieurs_perches()
+		return
 	_pax_dessin_t += delta
-	if _pax_dessin_t < 0.3 or teleski():
+	if _pax_dessin_t < 0.3:
 		return
 	_pax_dessin_t = 0.0
 	var cam: Camera3D = get_viewport().get_camera_3d() if is_inside_tree() else null
@@ -631,6 +745,8 @@ func _maj_passagers_dessines(delta: float) -> void:
 	var portee: float = VehiculeRemontee.portee_passagers() + 30.0
 	var xm: float = signf(_x_brin(true))
 	for i in range(_vehicules.size()):
+		if not is_instance_valid(_vehicules[i][0]):
+			continue
 		var v: VehiculeRemontee = _vehicules[i][0]
 		if v == null or not v.visible or v.global_position.distance_to(p_cam) > portee:
 			continue
@@ -5433,7 +5549,6 @@ func _process_corps(delta: float) -> void:
 		return
 	_maj_vent()
 	_maj_occupation(delta)
-	_maj_passagers_dessines(delta)
 	if _exploit != null:
 		_exploit.avancer(delta)
 	_regler_vitesse(delta)
@@ -5462,6 +5577,8 @@ func _process_corps(delta: float) -> void:
 		(pl[0] as Node3D).rotation.y = fposmod((pl[0] as Node3D).rotation.y + float(pl[1]) * regime() * delta, TAU)
 	for pl2 in _poulies_3s:
 		(pl2[0] as Node3D).rotate_object_local(Vector3.UP, float(pl2[1]) * regime() * delta)
+	# (après la pose des véhicules : la perche tendue vers un skieur dessiné n'est plus reprise par la ligne)
+	_maj_passagers_dessines(delta)
 
 
 # --- noyau C++ ----------------------------------------------------------------------
