@@ -688,8 +688,32 @@ func _portee_noeud(e: Array, file: Array) -> void:
 	if n is GeometryInstance3D:
 		(n as GeometryInstance3D).visibility_range_end = pn
 		(n as GeometryInstance3D).visibility_range_end_margin = pn * 0.05
+		if _sans_ombre(c, n):
+			(n as GeometryInstance3D).cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	for k in n.get_children():
 		file.append([c, k, pn])
+
+
+## Pièces dont l'ombre portée ne se voit pas (le soleil des ombres n'éclaire que la neige) : pneus et fourches des
+## lanceurs, sous le toit des gares ; paires de galets ; pince, mâchoires et vantaux des véhicules, que la caisse
+## ombrage déjà. Au sommet de la Tovière, 1 700 des 2 700 surfaces portant ombre dans les 600 m du soleil, chacune
+## redessinée dans jusqu'à 4 tranches (audit du moteur, 16/11/2026).
+const _PIECES_SANS_OMBRE: Array = ["Pince", "MachoireMobile", "VantailAvant", "VantailArriere", "Fourches", "PneusFixes"]
+
+
+static func _sans_ombre(c: Node, n: Node) -> bool:
+	if c.has_meta("pneu_tourne") or String(n.name).begins_with("Paire"):
+		return true
+	var p: Node = n
+	for _i in range(3):
+		if p == null:
+			break
+		var nom: String = String(p.name)
+		for k in _PIECES_SANS_OMBRE:
+			if nom.begins_with(k):
+				return true
+		p = p.get_parent()
+	return false
 
 
 ## Monter ou descendre déplace le centre de gravité du véhicule.
