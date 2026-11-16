@@ -2156,7 +2156,11 @@ func _collisions_funi() -> void:
 			var sg2: float = -1.0 if kq2 == 0 else 1.0
 			var dm2: float = L - L_HALL * 0.5
 			mur_salle.call(0.2, sg2 * (x_ext2 + 0.1))
-	boite.call(Vector3(2.0 * hx + 1.4, 0.4, 22.6), Vector3(0, sol_batiment() - 0.2, -(L + 10.5)))     # (de L − 0,8 à L + 21,8 ; le bâtiment va de L à L + 22)
+	boite.call(Vector3(2.0 * hx + 1.4, 0.4, 21.8), Vector3(0, sol_batiment() - 0.2, -(L + 10.9)))     # (de L à L + 21,8 ; le bâtiment va de L à L + 22)
+	# débord de 0,8 m au-dessus du bout de la salle, dans sa largeur seulement : sur toute la largeur de la dalle, il
+	# flottait dehors au-dessus du terrain, à 1,76 m du sol au coin gauche, et le corps s'y coinçait contre le mur de
+	# la salle (sonde de parcours des gares, 16/11/2026, graine 2)
+	boite.call(Vector3(2.0 * hx, 0.4, 0.82), Vector3(0, sol_batiment() - 0.2, -(L - 0.4)))
 	# jupe sous le bord de ce plancher, sur toute la largeur : entre le quai et le dessous de la dalle restait une fente
 	# d'un demi-mètre où le corps s'engageait et se coinçait (banc de parcours des gares, 16/11/2026 : filet de dégagement
 	# au bout du quai, à 5 m de l'axe)
