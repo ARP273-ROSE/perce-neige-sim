@@ -386,6 +386,8 @@ func _process_corps(delta: float) -> void:
 		var a_f: float = float(pr["a_frein"])
 		v_max = minf(v_max, sqrt(pow(float(pr["v_pas"]), 2.0) + 2.0 * a_f * maxf(reste - float(pr["d_pas"]), 0.0)))
 		v_max = minf(v_max, maxf(sqrt(2.0 * 0.3 * maxf(reste - 0.05, 0.0)), 0.08))
+		if pr.has("v_pylone"):
+			v_max = minf(v_max, _v_pylones(pr, a_f))
 		if etat != "marche":
 			v_max = 0.0
 		var a_frein: float = A_URGENCE if etat == "urgence" else maxf(a_f, A_ROUTE)
@@ -485,7 +487,12 @@ const PROFILS: Dictionary = {
 	# Grande Motte : la courbe de la montre (7 m/s jusqu'à 23 %, plein régime jusqu'à 72 %, 6,4 m/s ensuite par le
 	# pylône et l'approche), plein régime porté à 10 m/s et le reste au prorata, arrivée en gare à 1 m/s (demande
 	# d'utilisateur du 12/11/2026)
-	"tph_grande_motte": {"pts": [[0.0, 7.4], [0.231, 7.4], [0.262, 10.0], [0.717, 10.0], [0.748, 6.7], [1.0, 6.7]],
+	# Retour d'utilisateur du 16/11/2026 : « après le départ tu vas à 7,4 m/s jusqu'au pylône, mais ça accélère
+	# immédiatement vers 10 m/s dès que la cabine descendante a quitté le pylône ; et la cabine montante passe le
+	# pylône à 6,7 et pas 7,4 » → le ralenti suit la position RÉELLE des cabines sur le sabot du pylône
+	# (`v_pylone`, mêmes 7,4 m/s aux deux passages), plus un pourcentage figé de la ligne ; la cabine montante,
+	# le pylône passé, garde ce pas jusqu'à l'approche (la montre ne montre pas de reprise).
+	"tph_grande_motte": {"pts": [[0.0, 10.0], [1.0, 10.0]], "v_pylone": 7.4, "garde_apres_pylone": true,
 		"a_dem": 0.45, "a_frein": 0.31, "v_pas": 1.0, "d_pas": 20.0},
 	"tph_fornet": {"pts": [[0.0, 10.0], [1.0, 10.0]], "a_dem": 0.60, "a_frein": 0.55, "v_pas": 1.2, "d_pas": 8.0},
 }
@@ -494,6 +501,64 @@ const PROFIL_DEFAUT: Dictionary = {"pts": [[0.0, 10.0], [1.0, 10.0]], "a_dem": A
 
 func _profil() -> Dictionary:
 	return PROFILS.get(String(name), PROFIL_DEFAUT)
+
+
+## Marge de part et d'autre d'un sabot de pylône : la cabine (chariot et suspente) doit l'avoir quitté tout
+## entière avant que la vitesse reprenne.
+const MARGE_SABOT: float = 6.0
+
+
+## Sabots des pylônes : [début, fin] en abscisse horizontale (portées impaires des appuis).
+func _zones_sabots() -> Array:
+	var z: Array = []
+	for ip in range(1, _n_appuis - 1, 2):
+		if portee_sur_sabot(ip):
+			z.append([_appuis[ip] - MARGE_SABOT, _appuis[ip + 1] + MARGE_SABOT])
+	return z
+
+
+## Vitesse permise par les pylônes : `v_pylone` tant qu'une des deux cabines est sur un sabot, freinage
+## (a_f) pour y arriver à ce pas, reprise dès que la cabine l'a quitté ; avec `garde_apres_pylone`, la cabine
+## montante garde ce pas une fois le dernier pylône passé.
+func _v_pylones(pr: Dictionary, a_f: float) -> float:
+	var vp: float = float(pr["v_pylone"])
+	var v: float = INF
+	var zones: Array = _zones_sabots()
+	if zones.is_empty():
+		return v
+	for i in range(2):
+		var d: float = _s if i == 0 else _s_cab1
+		# sens de marche de la cabine i : la 0 avance avec _sens, la 1 à l'opposé
+		var sg: float = _sens if i == 0 else -_sens
+		for zn in zones:
+			var za: float = float(zn[0])
+			var zb: float = float(zn[1])
+			if d >= za and d <= zb:
+				v = minf(v, vp)
+			else:
+				var reste: float = (za - d) if sg > 0.0 else (d - zb)
+				if reste > 0.0:
+					v = minf(v, sqrt(vp * vp + 2.0 * a_f * reste))
+					# déjà au pas du pylône et trop près pour que la reprise vaille la peine (accélérer, rouler
+					# T_REPRISE_MIN au plein, refreiner) : on le garde — au départ de la Grande Motte, la cabine
+					# descendante est à moins de 300 m du pylône, on roule à 7,4 jusqu'à ce qu'elle l'ait passé
+					if absf(_v) <= vp + 0.1 and reste < _d_reprise(pr, vp, a_f):
+						v = minf(v, vp)
+		if bool(pr.get("garde_apres_pylone", false)) and sg > 0.0 and d > float(zones[zones.size() - 1][1]):
+			v = minf(v, vp)
+	return v
+
+
+const T_REPRISE_MIN: float = 15.0
+
+
+## Distance en dessous de laquelle repartir au-dessus du pas d'un pylône ne vaut pas la peine.
+func _d_reprise(pr: Dictionary, vp: float, a_f: float) -> float:
+	var vm: float = vitesse * CRANS[cran]
+	if vm <= vp:
+		return 0.0
+	var a_d: float = float(pr["a_dem"])
+	return (vm * vm - vp * vp) / (2.0 * a_d) + (vm * vm - vp * vp) / (2.0 * a_f) + vm * T_REPRISE_MIN
 
 
 ## Vitesse du profil quand la cabine qui monte est en d.
