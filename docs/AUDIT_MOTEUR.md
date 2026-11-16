@@ -101,7 +101,7 @@ Côté CPU, retirer les remontées fait gagner sur le rendu CPU **0,6 à 1,45 ms
 
 #### Ombres du soleil sur le relief (cran 0 seulement, Forward+ 1440p)
 
-| Point | base : image / rendu CPU / appels | portée 300 m | 2 tranches | relief seul porteur d'ombre |
+| Point | base : image / rendu CPU / appels | portée 300 m | 2 tranches | aucun porteur d'ombre (le relief ne porte pas d'ombre : `cast_shadow` coupé) |
 |---|---|---|---|---|
 | Val Claret | 2,43 ms / 0,84 / 1155 | −0,03 ms / −30 appels | −0,05 ms / −146 | −0,09 ms / −448 |
 | Tignes le Lac | 3,43 / 1,31 / 1664 | −0,16 / −217 | −0,20 / −246 | **−0,56 / −950** |
@@ -152,7 +152,7 @@ Le total des scripts va de 0,4 à 1,3 ms par image selon le point, soit 15 à 25
 | # | Correction | Gain mesuré ou borné | Qui en profite |
 |---|---|---|---|
 | 1 | **Moins d'appels pour les remontées** : pylônes, sièges, véhicules et gares lointaines regroupés par ligne (MultiMesh ou maillage fusionné par tronçon) | Les remontées font 85 à 95 % des appels. Les retirer fait gagner 0,6 à 1,45 ms de rendu CPU au cran 0 et 0,15 à 0,64 ms au cran 4 sur ce PC. Avec 2 cœurs, le rendu CPU monte de 30 à 35 %. Gain attendu en divisant les appels par 2 : 0,3 à 0,7 ms ici, environ le double sur un processeur modeste | Toutes les machines, surtout les processeurs modestes |
-| 2 | **Ombre portée réservée au relief et au décor proche** : `cast_shadow` coupé pour les objets des remontées à plus de 150 à 200 m, ou ombres en 2 tranches | Relief seul porteur d'ombre : −1,17 ms à la Tovière (4,75 → 3,58 ms, −1 959 appels, −6,2 M primitives), −0,56 ms à Tignes. En 2 tranches : −0,47 ms à la Tovière | Cran 0 (cartes de 8 Go et plus) |
+| 2 | **Ombre portée réservée au relief et au décor proche** : `cast_shadow` coupé pour les objets des remontées à plus de 150 à 200 m, ou ombres en 2 tranches | Aucun porteur d'ombre (le relief n'en porte pas) : −1,17 ms à la Tovière (4,75 → 3,58 ms, −1 959 appels, −6,2 M primitives), −0,56 ms à Tignes. En 2 tranches : −0,47 ms à la Tovière | Cran 0 (cartes de 8 Go et plus) |
 | 3 | **Nuanceur du relief allégé aux crans ≥ 3** (chantier pc-relief-leger) | Le relief fait 25 à 30 % de la carte au cran 0, 30 à 40 % au cran 4 ici, et 2,5 à 4,4 ms sur puce intégrée. Gain attendu : 30 à 50 % du coût du relief | Puces intégrées, petites cartes |
 | 4 | **Éclairage indirect seulement en 1440p et moins** : en 4K, partir au cran 1 sauf marge mesurée | En 4K, sans les effets, on passe de 3,9 à 2,2 ms de carte à Val Claret, dont environ 1,3 ms pour l’éclairage indirect (le reste : halo et brouillard). En 1440p, environ 0,9 ms | Écrans 4K avec une carte moyenne |
 | 5 | **Scripts** : sortir de `_process` ce qui ne change pas à chaque image (main.gd, remontees_domaine.gd, skieur_joueur.gd), plutôt que de tout passer en C++ | 0,4 à 1,3 ms au total, sans pic ; gain réaliste 0,2 à 0,4 ms | Processeurs modestes |
@@ -163,6 +163,11 @@ Le total des scripts va de 0,4 à 1,3 ms par image selon le point, soit 15 à 25
   - 1 440p, cran 0 : 1 972 → 797 appels, image 4,17 → 2,94 ms (240 → 340 i/s) ;
   - 1 080p, cran 4 : 1 005 → 481 appels, image 3,13 → 2,35 ms.
 - Les images avant et après sont identiques.
+
+**Fait : moins d'appels pour les remontées** (branche pc-appels-remontees).
+1. Plus d'ombre portée pour les pièces dont l'ombre ne se voit pas : pneus et fourches des lanceurs (sous le toit des gares), paires de galets, pince, mâchoires et vantaux des véhicules. Le soleil des ombres n'éclaire que la neige. À la Tovière au cran 0, les porteurs d'ombre passent de 2 711 à 983 surfaces : 3 037 → 2 435 appels, image 5,39 → 4,97 ms.
+2. Les véhicules lointains sont fondus en un maillage par matériau, au lieu d'une MultiMesh par pièce : 8 → 2 MultiMesh pour une télécabine. À la Tovière : 2 515 → 2 232 appels au cran 0, 1 065 → 1 001 au cran 4 (image 3,09 → 2,89 ms).
+3. En tout, à la Tovière au cran 0 : 3 037 → 2 232 appels (−27 %), image 5,39 → 4,36 ms (−19 %). Images inchangées.
 
 ## Rejouer les mesures
 

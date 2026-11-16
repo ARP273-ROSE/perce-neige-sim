@@ -5525,13 +5525,23 @@ func _creer_lointains() -> void:
 	var miroir: Transform3D = Transform3D(Basis.from_scale(Vector3(-1, 1, 1)), Vector3.ZERO)
 	var rids: Array = []
 	var rels: Array = []
+	# pièces du véhicule fondues en un maillage par matériau d'ensemble et réglage d'ombre, dans le repère du véhicule :
+	# une MultiMesh par pièce faisait un appel de dessin par pièce et par ligne (8 pour une télécabine ; ~100 appels
+	# au sommet de la Tovière, audit du moteur du 16/11/2026)
+	var groupes: Dictionary = {}
 	for mi0 in v0.find_children("*", "MeshInstance3D", true, false):
 		var mi: MeshInstance3D = mi0
 		if mi.mesh == null or not _visible_sous(mi, v0) or _sous_detail(mi, v0) or mi.has_meta("relais_lod"):
 			continue
+		var cle_g: String = "%d_%d" % [mi.material_override.get_instance_id() if mi.material_override != null else 0, mi.cast_shadow]
+		if not groupes.has(cle_g):
+			groupes[cle_g] = [mi, []]
+		groupes[cle_g][1].append([LigneRemontee._maillage_loin(mi.mesh), _relatif(v0, mi)])
+	for cle_g in groupes:
+		var mi: MeshInstance3D = groupes[cle_g][0]
+		var m_loin: Mesh = LigneRemontee._fondre_pieces(groupes[cle_g][1])
 		var mm: MultiMesh = MultiMesh.new()
 		mm.transform_format = MultiMesh.TRANSFORM_3D
-		var m_loin: Mesh = LigneRemontee._maillage_loin(mi.mesh)
 		mm.mesh = m_loin if sens_droite else _maillage_miroir(m_loin)
 		mm.instance_count = _vehicules.size()
 		# rien de dessiné tant que le noyau n'a pas tourné : le tampon neuf n'est pas initialisé, et
@@ -5556,8 +5566,7 @@ func _creer_lointains() -> void:
 		_enfant(mmi)
 		_lointains.append(mmi)
 		rids.append(mm.get_rid())
-		var rel: Transform3D = _relatif(v0, mi)
-		rels.append(rel if sens_droite else rel * miroir)
+		rels.append(Transform3D.IDENTITY if sens_droite else miroir)
 	if v0._susp != null:
 		v0._susp.rotation = r_susp
 	if v0._pince != null:
@@ -5569,6 +5578,82 @@ func _creer_lointains() -> void:
 
 var _rids_loin: Array = []
 var _rels_loin: Array = []
+
+
+## Pièces [maillage, repère dans le véhicule] fondues en un maillage, une surface par matériau. Même famille de
+## véhicules sur plusieurs lignes : un seul calcul (clé : maillages et repères).
+static var _fondus: Dictionary = {}
+static var _fondus_verrou: Mutex = Mutex.new()
+
+
+static func _fondre_pieces(pieces: Array) -> Mesh:
+	if pieces.size() == 1 and (pieces[0][1] as Transform3D).is_equal_approx(Transform3D.IDENTITY):
+		return pieces[0][0]
+	var cle: String = ""
+	for p in pieces:
+		cle += "%d%s;" % [(p[0] as Mesh).get_instance_id(), str(p[1])]
+	_fondus_verrou.lock()
+	var deja: Mesh = _fondus.get(cle, null)
+	_fondus_verrou.unlock()
+	if deja != null:
+		return deja
+	var par_mat: Dictionary = {}          # matériau → [sommets, normales, tangentes, uv, indices]
+	var mats: Dictionary = {}
+	for p in pieces:
+		var m: Mesh = p[0]
+		var xf: Transform3D = p[1]
+		var bn: Basis = xf.basis.inverse().transposed()
+		for si in range(m.get_surface_count()):
+			var a: Array = MeshMerge.tableaux(m, si)
+			if a.is_empty() or a[Mesh.ARRAY_VERTEX] == null:
+				continue
+			var mt: Material = m.surface_get_material(si)
+			var k: int = mt.get_instance_id() if mt != null else 0
+			if not par_mat.has(k):
+				par_mat[k] = [PackedVector3Array(), PackedVector3Array(), PackedFloat32Array(), PackedVector2Array(), PackedInt32Array()]
+				mats[k] = mt
+			var acc: Array = par_mat[k]
+			var v: PackedVector3Array = a[Mesh.ARRAY_VERTEX]
+			var base: int = (acc[0] as PackedVector3Array).size()
+			var nn = a[Mesh.ARRAY_NORMAL]
+			var tg = a[Mesh.ARRAY_TANGENT]
+			var uv = a[Mesh.ARRAY_TEX_UV]
+			for i in range(v.size()):
+				acc[0].append(xf * v[i])
+				acc[1].append((bn * (nn[i] as Vector3)).normalized() if nn != null else Vector3.UP)
+				if tg != null:
+					var t3: Vector3 = (xf.basis * Vector3(tg[i * 4], tg[i * 4 + 1], tg[i * 4 + 2])).normalized()
+					acc[2].append_array(PackedFloat32Array([t3.x, t3.y, t3.z, tg[i * 4 + 3]]))
+				else:
+					acc[2].append_array(PackedFloat32Array([1.0, 0.0, 0.0, 1.0]))
+				acc[3].append(uv[i] if uv != null else Vector2.ZERO)
+			var ix = a[Mesh.ARRAY_INDEX]
+			if ix != null:
+				for i in (ix as PackedInt32Array):
+					acc[4].append(base + i)
+			else:
+				for i in range(v.size()):
+					acc[4].append(base + i)
+	var out: ArrayMesh = ArrayMesh.new()
+	var si2: int = 0
+	for k in par_mat:
+		var acc: Array = par_mat[k]
+		var arr: Array = []
+		arr.resize(Mesh.ARRAY_MAX)
+		arr[Mesh.ARRAY_VERTEX] = acc[0]
+		arr[Mesh.ARRAY_NORMAL] = acc[1]
+		arr[Mesh.ARRAY_TANGENT] = acc[2]
+		arr[Mesh.ARRAY_TEX_UV] = acc[3]
+		arr[Mesh.ARRAY_INDEX] = acc[4]
+		out.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
+		out.surface_set_material(si2, mats[k])
+		# (copie processeur gardée : le miroir relit les tableaux)
+		MeshMerge.retenir(out, si2, arr)
+		si2 += 1
+	_fondus_verrou.lock()
+	_fondus[cle] = out
+	_fondus_verrou.unlock()
+	return out
 
 
 ## Ligne qui s'arrête de tourner (au-delà de la portée des véhicules) : ses véhicules lointains ne se dessinent
