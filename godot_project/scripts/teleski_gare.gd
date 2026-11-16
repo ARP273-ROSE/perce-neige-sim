@@ -199,6 +199,19 @@ func _portique_tkd(g: Node3D, zc: float) -> void:
 	RemonteeKit.tube(g, arceau, 0.03, m, 6)
 	RemonteeKit.barre(g, arceau[0], Vector3(arceau[0].x, _y_passerelle(z1) + 1.05, z1), 0.03, m, 6)
 	RemonteeKit.barre(g, arceau[12], Vector3(arceau[12].x, _y_passerelle(z1) + 1.05, z1), 0.03, m, 6)
+	# l'arceau redescend jusqu'au sol derrière la roue (photo de la roue vue de l'arrière)
+	var ar: Vector3 = arceau[6]
+	RemonteeKit.barre(g, ar, Vector3(ar.x, _gy(g, ar.x, ar.z), ar.z), 0.03, m, 6)
+	# petite plate-forme d'entretien au-dessus du réducteur : caillebotis et garde-corps sur trois côtés
+	var pf: Vector3 = c + Vector3(0, 0.95, 0.15)
+	RemonteeKit.boite_en(g, Vector3(1.0, 0.03, 1.0), pf, "caillebotis")
+	for q8 in [Vector3(-0.5, 0, -0.5), Vector3(-0.5, 0, 0.5), Vector3(0.5, 0, 0.5), Vector3(0.5, 0, -0.5)]:
+		RemonteeKit.barre(g, pf + q8, pf + q8 + Vector3(0, 0.95, 0), 0.016, m, 5)
+	for y8 in [0.5, 0.95]:
+		RemonteeKit.barre(g, pf + Vector3(-0.5, y8, -0.5), pf + Vector3(-0.5, y8, 0.5), 0.016, m, 5)
+		RemonteeKit.barre(g, pf + Vector3(-0.5, y8, 0.5), pf + Vector3(0.5, y8, 0.5), 0.016, m, 5)
+		RemonteeKit.barre(g, pf + Vector3(0.5, y8, 0.5), pf + Vector3(0.5, y8, -0.5), 0.016, m, 5)
+	RemonteeKit.barre(g, pb + Vector3(0, 0, 0), pf + Vector3(0, 0, -0.5), 0.03, m, 6)       # échelle d'accès (montant)
 	# --- grande poulie de renvoi du brin retour, sur le flanc de la passerelle : chape et jambe de force ---
 	var pc: Vector3 = lg.poulie_retour_tkd() - Vector3(0, g.position.y, 0)
 	_poulie_verticale(g, pc, Rp)
