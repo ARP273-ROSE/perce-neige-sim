@@ -3008,6 +3008,9 @@ func _maj_skieur() -> void:
 	# me suis pris l'autre rame en pleine tête »)
 	# hors des gares, à pied : il peut se hisser sur un rebord (GRIMPE_MAX)
 	skieur.grimpe = skieur.support == null and not en_gare
+	# (ni dans les gares du Funival : quais en gradins à garde-corps, salle amont)
+	if skieur.grimpe and Funival.actif != null and is_instance_valid(Funival.actif) and Funival.actif.zone_gare(skieur.global_position):
+		skieur.grimpe = false
 	if a_pied_tunnel != _voie_occupee:
 		# sorti du tunnel à pied, au grand air (galerie de secours) : une pique
 		if not a_pied_tunnel and skieur.support == null and not en_gare and skieur.dehors(relief):
