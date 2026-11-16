@@ -16971,7 +16971,15 @@ class GameWidget(QWidget):
         # Label
         p.setFont(_cached_font("Segoe UI", 9, QFont.Weight.Bold))
         p.setPen(_cached_pen(dark_color if on else COLOR_TEXT_DIM))
-        rt = QRectF(x, y + (h - 14) - (6 if mushroom else 0), w, 14)
+        # grands boutons : texte centré sur toute la hauteur (la bande de 14 px du bas le mettait au ras du bord :
+        # COMMENCER de l'écran d'aide, retour d'utilisateur du 16/11/2026) ; les petits boutons du pupitre gardent
+        # le texte en bas, sous leur voyant, et le champignon son dôme en haut
+        if mushroom:
+            rt = QRectF(x, y + (h - 14) - 6, w, 14)
+        elif h >= 30.0:
+            rt = QRectF(x, y, w, h)
+        else:
+            rt = QRectF(x, y + (h - 14), w, 14)
         p.drawText(rt, int(Qt.AlignmentFlag.AlignCenter), label)
 
     def _draw_gauge(
