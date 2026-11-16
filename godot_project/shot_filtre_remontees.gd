@@ -1,6 +1,8 @@
 ## Captures des remontées dont le nom contient un filtre (vue d'ensemble, gare aval, pylône, gare amont),
 ## chacune construite sur place (aller_a_remontee) : rendu réel, relief, forêt.
 ##   godot --path godot_project --resolution 1920x1080 -s shot_filtre_remontees.gd -- --filtre=tkd préfixe
+## --tour : six vues par ligne pour le tour des gares (gare aval des deux côtés, premier et dernier pylône, gare
+##   amont de côté et de derrière) ; --filtre= vide : toutes les lignes ; --echelle=1.5 : rendu 3D à 150 %
 extends SceneTree
 
 var _main: Node = null
@@ -17,12 +19,18 @@ var _vues: Array = []
 var _i: int = 0
 ## --vue=x,y,z,tx,ty,tz (repère de la ligne) : vues en plus, nommées <ligne>_vueN
 var _plus: Array = []
+var _tour: bool = false
+var _echelle: float = 1.0
 
 
 func _initialize() -> void:
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--filtre="):
 			_filtre = a.substr(9)
+		elif a == "--tour":
+			_tour = true
+		elif a.begins_with("--echelle="):
+			_echelle = float(a.substr(10))
 		elif a.begins_with("--vue="):
 			var t: PackedFloat64Array = a.substr(6).split_floats(",")
 			if t.size() == 6:
@@ -34,7 +42,46 @@ func _initialize() -> void:
 	process_frame.connect(_tick)
 
 
+## Tour des gares : gares vues des deux côtés et de derrière, premier et dernier pylône de trois quarts. Recul selon
+## la taille de la gare (bâtiments des télécabines et téléphériques), caméra toujours au-dessus du sol affiché.
+func _vues_tour(lg: LigneRemontee) -> Array:
+	var xf: Transform3D = lg.global_transform
+	var L: float = lg.longueur_h()
+	var n: String = String(lg.name)
+	var v: Array = []
+	var grand: bool = lg.famille.begins_with("cabine") or lg is Telepherique or lg.tricable()
+	var r: float = 42.0 if grand else 18.0
+	var hz: float = 12.0 if grand else 5.0
+	var c_av: Vector3 = xf * Vector3(0, lg.terrain(8.0) + 2.5, -8.0)
+	v.append([n + "_1_gare_aval", _sur_sol(xf * Vector3(-r, lg.terrain(-r * 0.8) + hz, r * 0.8)), c_av])
+	v.append([n + "_2_gare_aval_dos", _sur_sol(xf * Vector3(r, lg.terrain(-r * 0.6) + hz, r * 0.6)), c_av])
+	if not lg.pylones.is_empty() and not (lg is Funival):
+		var d0: float = float(lg.pylones[0]["d"])
+		var c0: Vector3 = xf * Vector3(0, (lg.terrain(d0) + lg.y_cable(d0)) * 0.5, -d0)
+		v.append([n + "_3_pylone_premier", _sur_sol(xf * Vector3(-24, lg.terrain(maxf(d0 - 20.0, 0.0)) + 4.0, -maxf(d0 - 20.0, 0.0))), c0])
+		var d1: float = float(lg.pylones[lg.pylones.size() - 1]["d"])
+		var c1: Vector3 = xf * Vector3(0, (lg.terrain(d1) + lg.y_cable(d1)) * 0.5, -d1)
+		v.append([n + "_4_pylone_dernier", _sur_sol(xf * Vector3(24, lg.terrain(maxf(d1 - 30.0, 0.0)) + 5.0, -maxf(d1 - 30.0, 0.0))), c1])
+	var c_am: Vector3 = xf * Vector3(0, lg.terrain(L - 5.0) + 2.5, -L + 5.0)
+	v.append([n + "_5_gare_amont", _sur_sol(xf * Vector3(r, lg.terrain(L - r * 0.8) + hz, -L + r * 0.8)), c_am])
+	v.append([n + "_6_gare_amont_dos", _sur_sol(xf * Vector3(-r * 0.5, lg.terrain(L + r) + hz, -L - r)), c_am])
+	for j in range(_plus.size()):
+		var t: PackedFloat64Array = _plus[j]
+		v.append([n + "_vue%d" % j, xf * Vector3(t[0], t[1], t[2]), xf * Vector3(t[3], t[4], t[5])])
+	return v
+
+
+## Caméra au moins 2,5 m au-dessus du sol affiché (le profil de la ligne ne suit que son axe).
+func _sur_sol(p: Vector3) -> Vector3:
+	var rel = _main.get("relief")
+	if rel != null:
+		p.y = maxf(p.y, float(rel.hauteur_sol(p.x, p.z)) + 2.5)
+	return p
+
+
 func _vues_de(lg: LigneRemontee) -> Array:
+	if _tour:
+		return _vues_tour(lg)
 	var xf: Transform3D = lg.global_transform
 	var L: float = lg.longueur_h()
 	var n: String = String(lg.name)
@@ -87,13 +134,17 @@ func _tick() -> void:
 	match _etat:
 		0:
 			for e in rm.lignes:
-				if String(e[0].name).contains(_filtre):
+				if _filtre == "" or String(e[0].name).contains(_filtre):
 					_lignes.append(e[0])
 			print("SHOT lignes : ", _lignes.map(func(l): return String(l.name)))
 			if _lignes.is_empty():
 				quit(1)
 				return
 			_main.perf_manager.mode = "fige"
+			_main.perf_manager.banc = true
+			if _echelle != 1.0:
+				get_root().scaling_3d_mode = Viewport.SCALING_3D_MODE_BILINEAR
+				get_root().scaling_3d_scale = _echelle
 			_cam = Camera3D.new()
 			_cam.fov = 55
 			_cam.far = 8000
