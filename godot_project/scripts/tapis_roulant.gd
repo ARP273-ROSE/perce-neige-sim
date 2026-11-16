@@ -7,6 +7,12 @@ extends Node3D
 ## bandes à 1,5 m d'axe en axe, 232,8 m du bas au haut, parcourus en 227 s (1,0 m/s). Noms « Pim » et « Pam » :
 ## OpenStreetMap. Largeur et joues estimées (bande courante de 0,8 m).
 ##
+## Retour d'utilisateur du 16/11/2026 : « ton double tapis est nul à Solaise, il suit le terrain au lieu d'avoir une
+## pente continue ; les tapis sont couverts ». Les bandes sont maintenant droites, à pente constante du bas au haut
+## (14,5 %) ; le terrain est mis à cette pente sous elles (aménagement « rampes » du relief : déblai jusqu'à 2,7 m,
+## remblai jusqu'à 1,3 m) ; une galerie couverte commune aux deux bandes les abrite : arceaux galvanisés tous les
+## 2 m, panneaux translucides, côtés fermés, ouverte aux deux bouts (forme estimée, sans photo).
+##
 ## Le skieur posé sur la bande avance avec elle (il peut y marcher pour aller plus vite) ; au bout, il est déposé
 ## sur la neige.
 
@@ -22,6 +28,42 @@ const TAPIS: Array = [
 	["Pam", [45.4301921, 6.9957460], [45.4318098, 6.9938576]],
 ]
 const CONSTRUIRE_JUSQUA: float = 900.0
+const DEMI_GALERIE: float = 1.80            # demi-largeur intérieure de la galerie (deux bandes à 1,5 m d'axe en axe)
+const H_PIED_GALERIE: float = 1.55           # hauteur des côtés droits
+const H_GALERIE: float = 2.45                # sous la clé de l'arc
+const PAS_ARCEAU: float = 2.0
+const DEPASSE: float = 1.2                   # la galerie s'arrête 1,2 m avant les bouts des bandes (embarquement à l'air libre)
+
+
+## Axe commun des deux bandes (milieu), bas et haut, monde (x, z).
+static func _axe_commun() -> Array:
+	var a0: Vector2 = Vector2.ZERO
+	var b0: Vector2 = Vector2.ZERO
+	for t in TAPIS:
+		a0 += RemonteesDomaine.monde(float(t[1][0]), float(t[1][1])) / TAPIS.size()
+		b0 += RemonteesDomaine.monde(float(t[2][0]), float(t[2][1])) / TAPIS.size()
+	return [a0, b0]
+
+
+## Terrassement sous les tapis (appelé par le relief avant ses pièces fines) : couloir à la pente continue du bas
+## au haut, sol relevé aux deux bouts sur la neige d'origine.
+static func amenagement_relief(r: ReliefBuilder) -> Dictionary:
+	if r == null:
+		return {}
+	var ax: Array = _axe_commun()
+	var a0: Vector2 = ax[0]
+	var b0: Vector2 = ax[1]
+	var u: Vector2 = (b0 - a0).normalized()
+	# un peu avant et après les bouts : aires d'embarquement et de débarquement à plat sur la pente
+	var pa: Vector2 = a0 - u * 3.0
+	var pb: Vector2 = b0 + u * 3.0
+	var ya: float = r.hauteur(pa.x, pa.y)
+	var yb: float = r.hauteur(pb.x, pb.y)
+	var bb: Rect2 = Rect2(pa, Vector2.ZERO).expand(pb)
+	var demi: float = DEMI_GALERIE + 1.5
+	var fondu: float = 6.0
+	return {"rect": bb.grow(demi + fondu + 6.0), "rampes": [[Vector3(pa.x, ya, pa.y), Vector3(pb.x, yb, pb.y), demi, fondu]],
+		"masque": true}
 
 var relief: ReliefBuilder = null
 var domaine: RemonteesDomaine = null        # (son skieur, posé après la construction)
@@ -151,14 +193,17 @@ func _construire() -> void:
 		var h1: float = relief.hauteur_sol(q.x - _w.x * LARGEUR * 0.5, q.y - _w.y * LARGEUR * 0.5)
 		brut[k] = maxf(h0, h1)
 	_brut = brut
+	# pente continue du bas au haut (le terrain y est mis par l'aménagement « rampes ») ; posée sur la neige relevée
+	# aux deux bouts, et jamais sous la neige ailleurs (si le terrassement n'est pas là : cuisson, relief grossier)
 	_ys.resize(n)
+	var y0: float = brut[0]
+	var y1: float = brut[n - 1]
+	var leve: float = 0.0
 	for k2 in range(n):
-		var somme: float = 0.0
-		var c: int = 0
-		for j in range(maxi(0, k2 - 2), mini(n, k2 + 3)):
-			somme += brut[j]
-			c += 1
-		_ys[k2] = maxf(somme / c, brut[k2]) + H_BANDE
+		leve = maxf(leve, brut[k2] - lerpf(y0, y1, float(k2) / float(n - 1)))
+	leve = minf(leve, 0.25)
+	for k2 in range(n):
+		_ys[k2] = lerpf(y0, y1, float(k2) / float(n - 1)) + leve + H_BANDE
 	# bande : un ruban, V le long de la bande (en mètres / PERIODE_RAYURES), rayures défilantes
 	var st: SurfaceTool = SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
@@ -211,6 +256,105 @@ func _construire() -> void:
 		# bout : tambour sous un carter (dessus 10 cm au-dessus de la neige)
 		RemonteeKit.boite(joues, Vector3(LARGEUR + 0.32, 0.12, 0.30), Transform3D(Basis.looking_at(dir, Vector3.UP), c0 + dir * (-0.85 if bas else 0.85) + Vector3(0, 0.02, 0)), "peinture_anthracite")
 	MeshMerge.merge(joues, [], "Joues", true)
+	if nom == String(TAPIS[0][0]):
+		_galerie()
+
+
+## Galerie couverte commune aux deux bandes (posée par la première) : arceaux, panneaux translucides, côtés
+## fermés ; collisions des côtés et du toit (on y entre par les bouts).
+func _galerie() -> void:
+	var ax: Array = _axe_commun()
+	var a0: Vector2 = ax[0]
+	var b0: Vector2 = ax[1]
+	var lg: float = a0.distance_to(b0)
+	var u2: Vector2 = (b0 - a0) / maxf(lg, 0.01)
+	var w2: Vector2 = Vector2(u2.y, -u2.x)
+	var o: Vector3 = global_position
+	var pt := func(s: float, w: float, y: float) -> Vector3:
+		var q: Vector2 = a0 + u2 * s + w2 * w
+		# (dessus de la bande de ce tapis à la même abscisse : la galerie suit la pente)
+		return Vector3(q.x, y_bande(clampf(s, 0.0, _long)) + y, q.y) - o
+	var g: Node3D = Node3D.new()
+	g.name = "Galerie"
+	add_child(g)
+	var prof: Array = []           # demi-section : [w, y] du pied à la clé
+	prof.append([DEMI_GALERIE, -0.05])
+	prof.append([DEMI_GALERIE, H_PIED_GALERIE])
+	for k in range(1, 9):
+		var ang: float = PI * 0.5 * float(k) / 8.0
+		prof.append([DEMI_GALERIE * cos(ang), H_PIED_GALERIE + (H_GALERIE - H_PIED_GALERIE) * sin(ang)])
+	var sec: Array = []
+	for p in prof:
+		sec.append([p[0], p[1]])
+	for k2 in range(prof.size() - 2, -1, -1):
+		sec.append([-float(prof[k2][0]), prof[k2][1]])
+	var s0: float = DEPASSE
+	var s1: float = lg - DEPASSE
+	# panneaux : un ruban translucide le long de la section, coupé par tronçon
+	var st: SurfaceTool = SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var s: float = s0
+	while s < s1 - 0.01:
+		var sn: float = minf(s + PAS_ARCEAU, s1)
+		for k3 in range(sec.size() - 1):
+			var p00: Vector3 = pt.call(s, sec[k3][0], sec[k3][1])
+			var p01: Vector3 = pt.call(s, sec[k3 + 1][0], sec[k3 + 1][1])
+			var p10: Vector3 = pt.call(sn, sec[k3][0], sec[k3][1])
+			var p11: Vector3 = pt.call(sn, sec[k3 + 1][0], sec[k3 + 1][1])
+			var nm: Vector3 = (p10 - p00).cross(p01 - p00).normalized()
+			for v in [p00, p10, p11, p00, p11, p01]:
+				st.set_normal(nm)
+				st.add_vertex(v)
+		s = sn
+	var m: StandardMaterial3D = StandardMaterial3D.new()
+	m.albedo_color = Color(0.86, 0.90, 0.94, 0.38)
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.roughness = 0.25
+	m.cull_mode = BaseMaterial3D.CULL_DISABLED
+	var pan: MeshInstance3D = MeshInstance3D.new()
+	pan.name = "Panneaux"
+	pan.mesh = st.commit()
+	pan.material_override = m
+	pan.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	g.add_child(pan)
+	# arceaux et lisses basses
+	var ar: Node3D = Node3D.new()
+	ar.name = "Arceaux"
+	g.add_child(ar)
+	s = s0
+	while s <= s1 + 0.01:
+		var pts: PackedVector3Array = PackedVector3Array()
+		for e in sec:
+			pts.append(pt.call(s, e[0] * 1.01, e[1] + 0.01))
+		RemonteeKit.tube(ar, pts, 0.035, "galva", 6)
+		s += PAS_ARCEAU
+	for sw in [-1.0, 1.0]:
+		for yl in [0.05, H_PIED_GALERIE]:
+			var pa: Vector3 = pt.call(s0, sw * DEMI_GALERIE * 1.01, yl)
+			var pb: Vector3 = pt.call(s1, sw * DEMI_GALERIE * 1.01, yl)
+			RemonteeKit.barre(ar, pa, pb, 0.03, "galva", 5)
+	MeshMerge.merge(ar, [], "Arceaux", true)
+	# collisions : côtés et toit (boîtes inclinées par tronçon)
+	var corps: StaticBody3D = StaticBody3D.new()
+	corps.name = "CollisionsGalerie"
+	corps.collision_layer = CollisionsJeu.COUCHE_DECOR
+	corps.collision_mask = 0
+	g.add_child(corps)
+	s = s0
+	while s < s1 - 0.01:
+		var sn2: float = minf(s + PAS_ARCEAU, s1)
+		for e2 in [[DEMI_GALERIE + 0.05, H_PIED_GALERIE * 0.5, 0.1, H_PIED_GALERIE + 0.1], [0.0, H_GALERIE + 0.05, DEMI_GALERIE * 2.0, 0.1]]:
+			for sw2 in ([-1.0, 1.0] if float(e2[0]) > 0.0 else [1.0]):
+				var c0: Vector3 = pt.call(s, sw2 * float(e2[0]), float(e2[1]))
+				var c1: Vector3 = pt.call(sn2, sw2 * float(e2[0]), float(e2[1]))
+				var dir: Vector3 = (c1 - c0).normalized()
+				var cs: CollisionShape3D = CollisionShape3D.new()
+				var bs: BoxShape3D = BoxShape3D.new()
+				bs.size = Vector3(float(e2[2]), float(e2[3]), c0.distance_to(c1) + 0.02)
+				cs.shape = bs
+				cs.transform = Transform3D(Basis.looking_at(dir, Vector3.UP), (c0 + c1) * 0.5)
+				corps.add_child(cs)
+		s = sn2
 
 
 ## Bande grise à rayures claires (une période sur la hauteur de l'image).

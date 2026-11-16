@@ -661,6 +661,7 @@ func _build_relief() -> void:
 	add_child(relief)
 	relief.amenageurs.append(_amenagement_sortie_secours)
 	relief.amenageurs.append(_amenagement_tunnel_piste)
+	relief.amenageurs.append(func() -> Dictionary: return TapisRoulant.amenagement_relief(relief))
 	relief.build(tunnel, perf_manager.cran if perf_manager != null else 0)
 	print("[Relief] massif 3D IGN (RGE ALTI + orthophoto) du lac de Tignes à la Grande Motte : lancé en %d ms"
 		% (Time.get_ticks_msec() - t0))
