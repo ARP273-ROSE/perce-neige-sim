@@ -626,11 +626,59 @@ func _maj_occupation(delta: float) -> void:
 	_occupation_changee()
 
 
-## Nouvelle occupation moyenne : le noyau C++ (pendule, charges) la reçoit.
+## Nouvelle occupation moyenne : la flèche des brins (nuanceur du câble, pinces) et le noyau C++ (pendule,
+## charges) la reçoivent.
 func _occupation_changee() -> void:
-	if _noyau != null and _noyau.has_method("set_constantes") and _tension > 0.0:
+	if _tension <= 0.0:
+		return
+	_w_veh = _w_charge()
+	for m in _mats_charges():
+		m.set_shader_parameter("w_m", _w_veh[0])
+		m.set_shader_parameter("w_d", _w_veh[1])
+	if _noyau != null and _noyau.has_method("set_constantes"):
 		_noyau.set_constantes({"charge_montee": OccupationRemontees.PAX_KG * places_vehicule() * occupation(true),
-			"poids_montee": _poids_vehicule(true) / _tension, "poids_descente": _poids_vehicule(false) / _tension})
+			"poids_montee": _poids_vehicule(true) / _tension, "poids_descente": _poids_vehicule(false) / _tension,
+			"w_montee": float(_w_veh[0]), "w_descente": float(_w_veh[1])})
+
+
+## Flèche due à la charge du moment (monocâbles) : la géométrie précalculée est celle de la charge de référence
+## (OCCUPATION en montée, vide en descente) ; l'écart de charge répartie Δw creuse (ou relève) chaque portée
+## d'une parabole Δw·(d − x1)(x2 − d)/(2H), à tension constante (lest ou vérins). Plafonnée, brin par brin, à
+## ce que laisse la garde au sol de la portée la plus juste (_dw_max) : la ligne réelle est calculée pour
+## passer pleine, la nôtre l'est à la référence.
+var _dw_max: Array = [INF, INF]
+
+
+func _flechit_a_la_charge() -> bool:
+	return not teleski() and not tricable() and not vaetvient()
+
+
+func _w_charge() -> Array:
+	if not _flechit_a_la_charge() or _tension <= 0.0:
+		return [0.0, 0.0]
+	var k: float = OccupationRemontees.PAX_KG * places_vehicule() * 9.81 / maxf(espacement, 8.0)
+	var dwm: float = minf(k * (occupation(true) - OCCUPATION), float(_dw_max[0]))
+	var dwd: float = minf(k * occupation(false), float(_dw_max[1]))
+	return [dwm / _tension, dwd / _tension]
+
+
+func _calculer_dw_max() -> void:
+	_dw_max = [INF, INF]
+	if not _flechit_a_la_charge() or _n_appuis < 2:
+		return
+	for b in range(2):
+		var montee: bool = b == 0
+		var m: float = INF
+		for j in range(_n_appuis - 1):
+			var x1: float = _appuis[j]
+			var x2: float = _appuis[j + 1]
+			if x2 - x1 < 5.0:
+				continue
+			for t in [0.25, 0.5, 0.75]:
+				var d: float = lerpf(x1, x2, t)
+				var marge: float = y_cable(d, montee) - terrain(d) - _garde_exigee(d)
+				m = minf(m, 2.0 * _tension * maxf(marge, 0.0) / ((d - x1) * (x2 - d)))
+		_dw_max[b] = m
 
 
 ## Masse en mouvement de la ligne (kg) : véhicules, passagers, câble (boucle entière).
@@ -6426,6 +6474,8 @@ func _preparer_charges() -> void:
 	# fixes, tantôt au-dessus, tantôt en dessous) : plus de flèche locale par véhicule ; seule
 	# reste l'onde des arrêts. Les véhicules sont sur le câble tel qu'il est dessiné.
 	_w_veh = [0.0, 0.0]
+	_calculer_dw_max()
+	_w_veh = _w_charge()
 	var packs: Array = []
 	for k in range(12):
 		var q: Vector4 = Vector4.ZERO

@@ -167,6 +167,28 @@ func _mesurer(k: String, lg: LigneRemontee) -> void:
 	var p_soir: float = _puissance(lg, 19.0)
 	_verif("%s : puissance plus forte la montée chargée" % k, p_matin > p_soir + 1.0,
 		"%.0f kW à 10 h 15, %.0f kW à vide" % [p_matin, p_soir])
+	# flèche (monocâbles) : brin montée plus creusé chargé, garde au sol tenue
+	if lg._flechit_a_la_charge() and lg._n_appuis >= 2:
+		var jm: int = 0
+		for j in range(lg._n_appuis - 1):
+			if lg._appuis[j + 1] - lg._appuis[j] > lg._appuis[jm + 1] - lg._appuis[jm]:
+				jm = j
+		var dm: float = (lg._appuis[jm] + lg._appuis[jm + 1]) * 0.5
+		var fl: Array = []
+		var garde_min: float = INF
+		for h2 in [10.25, 19.0]:
+			OccupationRemontees.heure_forcee = h2
+			lg._occ_t = 1.0e9
+			lg._maj_occupation(0.0)
+			fl.append(lg._fleche(dm, true))
+			if h2 == 10.25:
+				for j2 in range(lg._n_appuis - 1):
+					for t2 in [0.25, 0.5, 0.75]:
+						var d2: float = lerpf(lg._appuis[j2], lg._appuis[j2 + 1], t2)
+						garde_min = minf(garde_min, lg.y_cable(d2, true) + lg._fleche(d2, true) - lg.terrain(d2) - lg._garde_exigee(d2))
+		_verif("%s : flèche du brin montée plus creuse chargé, garde au sol tenue" % k, fl[0] < fl[1] and garde_min > -0.05,
+			"milieu de la plus grande portée (%.0f m) : %.2f m chargé, %.2f m à vide ; marge mini sur la garde %.2f m" % [
+				lg._appuis[jm + 1] - lg._appuis[jm], fl[0], fl[1], garde_min])
 	# freinage d'urgence (monocâbles)
 	if not (lg is Telepherique):
 		OccupationRemontees.heure_forcee = 10.25
