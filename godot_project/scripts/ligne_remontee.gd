@@ -6474,7 +6474,14 @@ func _pique_exploitation(evt: String) -> void:
 
 ## Plafond de vitesse des pannes et du moteur de secours (fraction du nominal).
 func cap_exploitation() -> float:
+	if corde_en_cours:
+		return 0.0
 	return _exploit.cap() if _exploit != null else 1.0
+
+
+## Évacuation à la corde en cours sous un véhicule de la ligne (retour d'utilisateur du 16/11/2026 : « le TPH est
+## reparti alors que j'étais pendu en dessous ») : la ligne ne repart pas tant que l'évacué n'a pas touché le sol.
+var corde_en_cours: bool = false
 
 
 ## Départ refusé par une panne (portes, frein de parking, panne d'arrêt non traitée…).

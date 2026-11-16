@@ -1880,7 +1880,11 @@ func _commencer_corde(lg: LigneRemontee) -> void:
 	var v: VehiculeRemontee = lg.vehicule(a_bord[1])
 	var p: Vector3 = skieur.global_position
 	var sol: float = relief.hauteur_sol(p.x, p.z) if relief != null else p.y - 10.0
-	_corde = {"lg": lg, "i": a_bord[1], "y": p.y, "sol": sol, "cap": skieur._cap, "cabine": v.cabine}
+	# descente comptée SOUS le point d'ancrage (retour d'utilisateur du 16/11/2026 : resté à l'altitude de l'arrêt
+	# pendant que le téléphérique continuait à descendre, il lévitait au-dessus) ; la ligne est tenue à l'arrêt
+	var haut0: Vector3 = _ancrage_corde(lg, a_bord[1], v.cabine)
+	_corde = {"lg": lg, "i": a_bord[1], "sous": maxf(haut0.y - p.y, 0.0), "sol": sol, "cap": skieur._cap, "cabine": v.cabine}
+	lg.corde_en_cours = true
 	if _corde_mi == null:
 		_corde_mi = MeshInstance3D.new()
 		_corde_mi.name = "CordeEvacuation"
@@ -1908,22 +1912,26 @@ func _descendre_corde(delta: float) -> void:
 	if not is_instance_valid(lg) or not is_instance_valid(skieur):
 		_finir_corde()
 		return
-	var v: VehiculeRemontee = lg.vehicule(_corde["i"])
-	var haut: Vector3 = v.vers_monde(v.place_assise(a_bord[2], a_bord[4])) + Vector3(0, 0.25 if not _corde["cabine"] else -0.2, 0)
-	_corde["y"] = maxf(float(_corde["y"]) - V_DESCENTE_CORDE * delta, float(_corde["sol"]))
-	var p: Vector3 = Vector3(haut.x, float(_corde["y"]), haut.z)
+	var haut: Vector3 = _ancrage_corde(lg, int(_corde["i"]), bool(_corde["cabine"]))
+	var sol: float = relief.hauteur_sol(haut.x, haut.z) if relief != null else float(_corde["sol"])
+	_corde["sol"] = sol
+	_corde["sous"] = float(_corde["sous"]) + V_DESCENTE_CORDE * delta
+	var y: float = maxf(haut.y - float(_corde["sous"]), sol)
+	var p: Vector3 = Vector3(haut.x, y, haut.z)
 	skieur.global_position = p
 	skieur.velocity = Vector3.ZERO
 	skieur._visuel.basis = Basis(Vector3.UP, float(_corde["cap"]))
-	# corde du point d'ancrage (siège ou plancher de la cabine) au mousqueton du triangle, au-dessus de la tête
-	var bas: Vector3 = p + Vector3(0, 1.35, 0)
+	# corde statique de toute sa longueur, de l'ancrage (siège ou plancher de la cabine) jusqu'au sol où le
+	# secouriste l'a jetée (sac à corde au pied) ; l'évacué y glisse au descendeur (retour d'utilisateur du
+	# 16/11/2026 : « la corde était 10 fois trop courte pour atteindre le sol »)
+	var bas: Vector3 = Vector3(haut.x, sol, haut.z)
 	var l: float = haut.y - bas.y
 	if l > 0.05:
 		_corde_mi.visible = true
 		_corde_mi.global_transform = Transform3D(Basis.IDENTITY.scaled(Vector3(1.0, l, 1.0)), (haut + bas) * 0.5)
 	else:
 		_corde_mi.visible = false
-	if float(_corde["y"]) <= float(_corde["sol"]) + 0.001:
+	if y <= sol + 0.001:
 		var pied: Vector3 = Vector3(p.x, float(_corde["sol"]) + 0.02, p.z)
 		skieur.embarque = false
 		skieur.lever()
@@ -1938,7 +1946,15 @@ func _descendre_corde(delta: float) -> void:
 		_finir_corde()
 
 
+## Point d'ancrage de la corde : sous le siège, ou trappe au plancher de la cabine.
+func _ancrage_corde(lg: LigneRemontee, i: int, cabine: bool) -> Vector3:
+	var v: VehiculeRemontee = lg.vehicule(i)
+	return v.vers_monde(v.place_assise(a_bord[2], a_bord[4])) + Vector3(0, 0.25 if not cabine else -0.2, 0)
+
+
 func _finir_corde() -> void:
+	if not _corde.is_empty() and is_instance_valid(_corde.get("lg")):
+		(_corde["lg"] as LigneRemontee).corde_en_cours = false
 	_corde = {}
 	if _corde_mi != null:
 		_corde_mi.visible = false
