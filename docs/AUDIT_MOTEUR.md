@@ -157,7 +157,12 @@ Le total des scripts va de 0,4 à 1,3 ms par image selon le point, soit 15 à 25
 | 4 | **Éclairage indirect seulement en 1440p et moins** : en 4K, partir au cran 1 sauf marge mesurée | En 4K, sans les effets, on passe de 3,9 à 2,2 ms de carte à Val Claret, dont environ 1,3 ms pour l’éclairage indirect (le reste : halo et brouillard). En 1440p, environ 0,9 ms | Écrans 4K avec une carte moyenne |
 | 5 | **Scripts** : sortir de `_process` ce qui ne change pas à chaque image (main.gd, remontees_domaine.gd, skieur_joueur.gd), plutôt que de tout passer en C++ | 0,4 à 1,3 ms au total, sans pic ; gain réaliste 0,2 à 0,4 ms | Processeurs modestes |
 
-Le funiculaire caché vu des pistes (chantier pc-perf-7) n'entre pas dans les 5. Tout masquer ne fait rien gagner au pied du Funival quand le regard est tourné vers l'amont : les éléments sont déjà hors champ. On gagne seulement 86 à 101 appels à Tignes le Lac. Le gain réel se compte quand la gare du Perce-Neige est dans le champ : 609 appels et 1,3 ms mesurés sur puce intégrée, d'après le relevé fait sur la base du dépôt.
+**Fait : le funiculaire caché vu des pistes** (branche pc-perf-8). Dehors, à plus de 60 m des deux gares, les rames et le tube du tunnel ne sont plus dessinés.
+- Un diagnostic par différence de pixels, tout autour des deux gares de 15 à 150 m, ne montre plus aucune trace de rame au-delà de 35 m.
+- Devant la gare de Val Claret (point `gare_pn` de la sonde) :
+  - 1 440p, cran 0 : 1 972 → 797 appels, image 4,17 → 2,94 ms (240 → 340 i/s) ;
+  - 1 080p, cran 4 : 1 005 → 481 appels, image 3,13 → 2,35 ms.
+- Les images avant et après sont identiques.
 
 ## Rejouer les mesures
 
