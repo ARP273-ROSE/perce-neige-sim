@@ -1260,6 +1260,8 @@ func _suite_process(delta: float) -> void:
 		var permises: bool = ombres_relief_permises and perf_manager.cran == 0 and not OS.has_feature("web") 			and RenderingServer.get_current_rendering_method() == "forward_plus"
 		_soleil_relief.visible = permises and dehors
 		relief.set_ombres_portees(permises, permises and dehors)
+		# relief léger dès le cran 3 (PC) : son nuanceur pèse 30 à 40 % de la carte à ces crans (audit du moteur, 16/11/2026)
+		relief.set_leger(not OS.has_feature("web") and perf_manager.cran >= 3)
 	if relief != null and cabin != null:
 		var vue_ext: bool = cabin.view_mode == Cabin.ViewMode.EXTERIOR
 		var ext: bool = (vue_ext or dehors) and relief.pret
