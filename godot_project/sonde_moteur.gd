@@ -203,7 +203,7 @@ func _point_suivant() -> void:
 		if not _main.mode_skieur:
 			_main.basculer_skieur()
 		_cle = {"val_claret": "funival", "tignes_lac": "tsd6_palafour", "toviere": "tcd10_toviere",
-			"solaise": "tcd10_solaise"}[nom]
+			"solaise": "tcd10_solaise", "gare_pn": "funival"}[nom]
 		_att = 0
 		_etat = "aller"
 		return
@@ -214,6 +214,21 @@ func _point_suivant() -> void:
 func _placer(nom: String) -> void:
 	if nom in ["val_claret", "tignes_lac"]:
 		_main.aller_a_remontee(_lg)
+		return
+	if nom == "gare_pn":
+		# devant la gare aval du Perce-Neige, à 80 m en aval de l'entrée du tunnel, regard vers elle
+		var g: Vector3 = _main.tunnel.transform_at(0.0).origin
+		var g2: Vector3 = _main.tunnel.transform_at(60.0).origin
+		var amont_pn: Vector3 = Vector3(g2.x - g.x, 0.0, g2.z - g.z).normalized()
+		var q: Vector3 = g - amont_pn * 80.0
+		q.y = _main.relief.hauteur_sol(q.x, q.z) + 0.1
+		_main.remontees.quitter()
+		if _main.collisions != null:
+			_main.collisions.assurer_autour(q)
+		_main.skieur.activer(q, atan2(-amont_pn.x, -amont_pn.z))
+		_main.skieur.support = null
+		_main.skieur.refuge = q
+		_main.skieur.dernier_sol = q
 		return
 	# sommets : à côté de la gare amont, regard vers la vallée (le long de la ligne)
 	var xf: Transform3D = _lg.global_transform
