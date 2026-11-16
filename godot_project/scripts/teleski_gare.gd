@@ -20,6 +20,7 @@ extends RefCounted
 
 var lg: LigneRemontee
 
+const DECALE_FILE_TKD: float = 0.55   # bord intérieur de la file des TKD, à côté de l'axe du départ (sous le magasin)
 const PAS_MAGASIN: float = 0.12       # entraxe des perches à la glissière : un rideau serré (photos du Chardonnet)
 const ECART_PREMIERE: float = 0.55   # la première perche, seule au bout, détachée du paquet
 
@@ -602,13 +603,20 @@ func _depart(g: Node3D, znez: float, zc: float) -> void:
 	# tapis de caoutchouc vert sous les skis
 	RemonteeKit.boite_en(g, Vector3(1.0, 0.04, 2.2), Vector3(xb, y + 0.01, q.z + 0.6), "tapis_vert")
 	# couloir : de 1 m avant le tapis à 9 m derrière (filets orange sur piquets noirs, photos du Signal et du
-	# Montet)
-	for cote in [-1.0, 1.0]:
-		var x: float = xb + cote * 1.0
-		var za: float = q.z - 0.5
+	# Montet). TKD : le magasin des perches pend au-dessus de l'axe du départ ; la file attend À CÔTÉ, côté extérieur,
+	# séparée du rideau des perches, et rejoint le tapis par l'avant (photos du Chardonnet ; mesures du 16/11/2026 :
+	# le couloir passait sous 5 à 17 perches, à 1,2-1,6 m du sol, et autour du pied de l'arceau de la roue)
+	var c_int: float = xb - sx * 1.0
+	var c_ext: float = xb + sx * 1.0
+	var za_int: float = q.z - 0.5
+	if tkd():
+		c_int = xb + sx * DECALE_FILE_TKD
+		c_ext = xb + sx * (DECALE_FILE_TKD + 2.0)
+		za_int = q.z + 1.6
+	for cote in [c_int, c_ext]:
+		var x: float = cote
+		var za: float = za_int if cote == c_int else q.z - 0.5
 		var zb: float = q.z + 9.0
-		if tkd() and cote == -sx:
-			za = Z_PORTIQUES[1] + 0.8          # côté charpente : le filet commence derrière les portiques
 		var n: int = 6
 		for k in range(n + 1):
 			var z: float = lerpf(za, zb, float(k) / n)
@@ -620,10 +628,17 @@ func _depart(g: Node3D, znez: float, zc: float) -> void:
 				var mid: Vector3 = Vector3(x, (yp + y2) * 0.5 + 0.6, (z + z2) * 0.5)
 				var pan: Transform3D = Transform3D(Basis(Vector3.RIGHT, atan2(y2 - yp, -(z2 - z))), mid)
 				RemonteeKit.boite(g, Vector3(0.02, 0.85, absf(z2 - z)), pan, "filet_orange")
-	# portillon de départ : poteau jaune et barre basculante au bord du tapis
-	var yp2: float = _gy(g, xb + sx * 0.75, q.z + 1.4)
-	RemonteeKit.cylindre(g, 0.08, 0.08, 1.0, Transform3D(Basis.IDENTITY, Vector3(xb + sx * 0.75, yp2 + 0.5, q.z + 1.4)), "mousse_jaune", 10)
-	RemonteeKit.barre(g, Vector3(xb + sx * 0.75, yp2 + 0.6, q.z + 1.4), Vector3(xb - sx * 0.55, yp2 + 0.6, q.z + 1.4), 0.03, "rouge_val", 6)
+	# portillon de départ : poteau jaune et barre basculante, en tête de la file
+	var xpo: float = xb + sx * 0.75
+	var xbar: float = xb - sx * 0.55
+	var zpo: float = q.z + 1.4
+	if tkd():
+		xpo = c_ext
+		xbar = c_int + sx * 0.1
+		zpo = za_int
+	var yp2: float = _gy(g, xpo, zpo)
+	RemonteeKit.cylindre(g, 0.08, 0.08, 1.0, Transform3D(Basis.IDENTITY, Vector3(xpo, yp2 + 0.5, zpo)), "mousse_jaune", 10)
+	RemonteeKit.barre(g, Vector3(xpo, yp2 + 0.6, zpo), Vector3(xbar, yp2 + 0.6, zpo), 0.03, "rouge_val", 6)
 	# feu vert / rouge et coup-de-poing d'arrêt sur un poteau au bord de la trace
 	var xf: float = xb - sx * 1.1
 	var zf: float = q.z - 0.8
@@ -636,8 +651,8 @@ func _depart(g: Node3D, znez: float, zc: float) -> void:
 	RemonteeKit.cylindre(g, 0.06, 0.06, 0.05, Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3(xf, yf + 1.15, zf + 0.09)), "rouge_val", 12)
 	# panneau « départ » sur le poteau du couloir
 	var lab: MeshInstance3D = RemonteeKit.texte_fige(g, "DÉPART\n%s" % lg.nom_court(), 56, 0.004, Color(0.08, 0.20, 0.55))
-	lab.position = Vector3(xb + sx * 1.0, _gy(g, xb + sx * 1.0, q.z + 9.0) + 1.6, q.z + 9.0)
-	_cabane(g, Vector3(xb + sx * 3.2, 0, q.z + 2.5), sx)
+	lab.position = Vector3(c_ext, _gy(g, c_ext, q.z + 9.0) + 1.6, q.z + 9.0)
+	_cabane(g, Vector3(xb + sx * x_cabane(), 0, q.z + 2.5), sx)
 
 
 ## Arrivée : fanions de l'aire de lâcher et panneau « lâchez la perche ».
@@ -675,6 +690,11 @@ func _cabane(g: Node3D, c: Vector3, cote: float) -> void:
 	RemonteeKit.boite(g, Vector3(t.x + 0.6, 0.10, t.z + 0.6), toit, "toit_noir")
 
 
+## Écart latéral de la cabane du perchman à l'axe du départ (TKD : au-delà de la file d'attente décalée).
+func x_cabane() -> float:
+	return DECALE_FILE_TKD + 3.3 if tkd() else 3.2
+
+
 ## Emprises à protéger d'une collision (centres, tailles) dans le repère de
 ## la ligne : mât ou jambes, cabane.
 func collisions(aval: bool) -> Array:
@@ -710,7 +730,7 @@ func collisions(aval: bool) -> Array:
 	var xb: float = lg._x_brin(true)
 	if aval:
 		var q: Vector3 = lg.point_depart_teleski()
-		c = Vector3(q.x + signf(q.x) * 3.2, 0, q.z + 2.5)
+		c = Vector3(q.x + signf(q.x) * x_cabane(), 0, q.z + 2.5)
 	else:
 		c = Vector3(-signf(xb) * (lg.voie * 0.5 + 3.0), 0, zc + 3.0)
 	var yc: float = lg._sol(c.x, c.z)
