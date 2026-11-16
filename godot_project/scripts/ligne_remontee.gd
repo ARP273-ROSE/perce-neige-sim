@@ -1478,7 +1478,7 @@ const SABOT_TPH: float = 16.0   # sabot de pylône des va-et-vient (photo de pro
 
 func y_cable(d: float, montee: bool = true) -> float:
 	if not montee and famille == "perche_debrayable":
-		return _y_cable_brut(d, false) + leve_retour_tkd(d)
+		return _y_cable_brut(d, false) + surhausse_retour_tkd(d) + leve_retour_tkd(d)
 	return _y_cable_brut(d, montee)
 
 
@@ -2048,7 +2048,7 @@ func _construire_boucle(pauses: bool = false) -> void:
 		# brin retour : du nez (relevé : leve_retour_tkd) jusque sous la grande poulie de renvoi, 1 m avant la roue,
 		# qui le remet dans le plan incliné de la roue
 		var a_in: float = atan(_pente_retour_tkd())
-		_ajouter(Vector3(xr, ya + leve_retour_tkd(0.0), 0.0))
+		_ajouter(Vector3(xr, ya + surhausse_retour_tkd(0.0) + leve_retour_tkd(0.0), 0.0))
 		for k in range(0, 7):
 			var a1: float = lerpf(a_in, th, float(k) / 6.0)
 			_ajouter(Vector3(xr, pc.y - cos(a1) * Rp, pc.z + sin(a1) * Rp))
@@ -2263,6 +2263,28 @@ func _pente_retour_tkd() -> float:
 	return leve_retour_tkd(0.0) / d1 if d1 > 1.0 else 0.0
 
 
+## Point du câble d'un brin en d, repère de la ligne (comme le tracé de la boucle).
+func _point_brin(d: float, montee: bool) -> Vector3:
+	if montee:
+		return Vector3(_x_brin(true) + decalage_montee(d), y_cable(d), -d)
+	return Vector3(_x_brin(false) + decalage_descente(d) + decalage_axe(d), y_cable(d, false), -d)
+
+
+## Brin retour d'un TKD plus haut que celui de montée sur toute la ligne (retour d'utilisateur du 16/11/2026 :
+## « les pylônes sont entre le câble de montée et le câble de descente et la ligne de descente est plus haute que
+## celle de montée ») : DY_RETOUR_TKD du départ au dernier pylône, puis raccord droit jusqu'à la poulie de retour
+## de la gare amont, horizontale, où les deux brins se rejoignent.
+const DY_RETOUR_TKD: float = 1.5
+func surhausse_retour_tkd(d: float) -> float:
+	if famille != "perche_debrayable" or pylones.is_empty():
+		return 0.0
+	var L: float = longueur_h()
+	var dn: float = float(pylones[pylones.size() - 1]["d"])
+	if d <= dn:
+		return DY_RETOUR_TKD
+	return DY_RETOUR_TKD * clampf((L - d) / maxf(L - dn, 1.0), 0.0, 1.0)
+
+
 ## Relevé du brin retour d'un TKD au-dessus du profil de la ligne : nul au premier pylône, maximal au nez, tel
 ## que le câble file droit du pylône jusque sous la grande poulie de renvoi.
 var _leve_tkd: float = -1.0
@@ -2274,7 +2296,7 @@ func leve_retour_tkd(d: float) -> float:
 		return 0.0
 	if _leve_tkd < 0.0:
 		var pc: Vector3 = poulie_retour_tkd()
-		var hc: float = pc.y - terrain(0.0) - H_CABLE_GARE
+		var hc: float = pc.y - terrain(0.0) - H_CABLE_GARE - surhausse_retour_tkd(0.0)
 		var l0: float = 0.0
 		for _i in range(6):
 			var a: float = l0 / d1
@@ -3810,6 +3832,11 @@ func lancer_perche() -> void:
 	_a_lancer = true
 
 
+## Le skieur a pris sa perche : plus rien à lancer pour lui.
+func annuler_lancer() -> void:
+	_a_lancer = false
+
+
 ## Perches au magasin : chacune glisse vers sa place dans la file, la
 ## première au lanceur ; une perche demandée part quand la voie est libre.
 func _maj_magasin(delta: float) -> void:
@@ -4694,6 +4721,14 @@ func _poser_pylones_teleski() -> void:
 				py.rotation.y = -(a_in + a_out) * 0.5
 				py.virage = absf(a_out - a_in)
 				py.cote_corde = signf(a_in - a_out)
+			if py.tkd:
+				py.dy_retour = y_cable(d, false) - y_c
+				var inv: Basis = Basis.from_euler(py.rotation).inverse()
+				for brin in [true, false]:
+					var pa: Vector3 = _point_brin(maxf(d - 3.0, 0.0), brin)
+					var pm: Vector3 = _point_brin(d, brin)
+					var pb: Vector3 = _point_brin(minf(d + 3.0, L), brin)
+					py.dirs_cable[brin] = [inv * (pm - pa), inv * (pb - pm)]
 			py.name = "P%d%s" % [i + 1, "" if cote == 0 else ("m" if cote == 1 else "d")]
 			_enfant(py)
 			py.construire()

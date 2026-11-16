@@ -17,6 +17,7 @@ var _y0: float = 0.0
 var _au_sol: bool = true
 var _ecart_max: float = 0.0
 var _perche_ok: bool = false
+var _perches_derriere: int = 0
 var CLE: String = "tke_legettaz"     # autre ligne : -- cle (ex. tkd_3000, en virage)
 
 
@@ -105,6 +106,17 @@ func _tick() -> void:
 				var loc: Vector3 = _lg.global_transform.affine_inverse() * p
 				if -loc.z > 15.0 and -loc.z < _lg.longueur_h() - 15.0:
 					_ecart_max = maxf(_ecart_max, e2)
+				# TKD : une seule perche lancée pour lui (retour d'utilisateur du 16/11/2026 : une deuxième partait
+				# dans son dos) — dans ses 20 premières secondes, aucune autre perche sortie du magasin
+				if _lg.famille == "perche_debrayable" and _t < 20.0:
+					var hors: int = 0
+					var sl: float = _lg.s_lancement()
+					for k in range(_lg._vehicules.size()):
+						if k != int(rm.a_bord[1]) and _lg._au_magasin[k] < 0.0:
+							var ds: float = fposmod(float(_lg._vehicules[k][1]) - sl, _lg.longueur_boucle)
+							if ds < 60.0:
+								hors += 1
+					_perches_derriere = maxi(_perches_derriere, hors)
 				# perche déroulée jusqu'au skieur
 				var v: VehiculeRemontee = _lg.vehicule(rm.a_bord[1])
 				# enrouleur : la corde se déroule ; TKD : la perche télescopique s'allonge
@@ -115,6 +127,8 @@ func _tick() -> void:
 				var d: float = Vector2(sk.global_position.x - haut.x, sk.global_position.z - haut.z).length()
 				_verif("téléski : tracté skis au sol", _ecart_max < 0.6, "écart maxi au relief %.2f m" % _ecart_max)
 				_verif("téléski : la perche se déroule jusqu'au skieur", _perche_ok)
+				if _lg.famille == "perche_debrayable":
+					_verif("TKD : pas de deuxième perche lancée derrière le skieur", _perches_derriere == 0, "%d perche(s)" % _perches_derriere)
 				_verif("téléski : perche lâchée en haut", not sk.embarque and d < 20.0 and sk.global_position.y > _y0 + 20.0,
 					"%.0f s de trajet, %.1f m de la gare amont, +%.0f m" % [_t, d, sk.global_position.y - _y0])
 				_phase = 4

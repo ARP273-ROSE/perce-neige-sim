@@ -1669,8 +1669,12 @@ func _prendre_perche(lg: LigneRemontee, p: Vector3) -> bool:
 	skieur._v_ski = Vector3.ZERO
 	_attente_tk = lg
 	_t_attente = 0.0
+	_perche_demandee = false
 	message.emit("Départ — %s : attendez la perche" % lg.nom_ligne)
 	return true
+
+
+var _perche_demandee: bool = false
 
 
 func _attendre_perche() -> void:
@@ -1699,9 +1703,16 @@ func _attendre_perche() -> void:
 	skieur._cap_ski = cap
 	var en_place: bool = Vector2(p.x - q.x, p.z - q.z).length() < 0.3
 	if en_place:
-		lg.lancer_perche()
+		# une seule demande par skieur (retour d'utilisateur du 16/11/2026 : « à chaque fois tu me fais partir une
+		# deuxième perche dans mon dos » — la demande était refaite à chaque image tant qu'il était en place, et
+		# restait armée après qu'il eut pris la sienne : la suivante partait 4 m derrière lui)
+		if not _perche_demandee:
+			_perche_demandee = true
+			lg.lancer_perche()
 		var i: int = lg.vehicule_a_embarquer(true)
 		if i >= 0:
+			_perche_demandee = false
+			lg.annuler_lancer()
 			_attente_tk = null
 			a_bord = [lg, i, 0, true, false, "perche"]
 			_etat_bord = lg.etat
