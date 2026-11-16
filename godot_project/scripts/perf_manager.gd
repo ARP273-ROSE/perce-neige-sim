@@ -600,6 +600,8 @@ func _process_corps(delta: float) -> void:
 		_t_rendu.append(RenderingServer.viewport_get_measured_render_time_cpu(_vp_rid))
 		_t_gpu.append(RenderingServer.viewport_get_measured_render_time_gpu(_vp_rid))
 	_releve_image(dt)
+	if _web:
+		_auto_web(dt)
 	_t_fen += dt
 	if _t_fen < FENETRE_S:
 		return
@@ -810,6 +812,47 @@ func essai_releve_auto(voulues: Array) -> void:
 		_auto_situation = vue
 		_auto_vue = ""
 		releve()
+
+
+## PWA : pas de pupitre pour demander le relevé automatique. Un relevé par situation (rame, skieur) et par
+## version de l'appli sur cet appareil, noté dans user://releves_auto.cfg une fois reçu par le point de
+## collecte ; au plus un essai par situation et par séance. Même relevé que le bouton MESURE, sans message.
+const AUTO_WEB_FICHIER: String = "user://releves_auto.cfg"
+var _auto_web_t: float = 0.0
+var _auto_web_faits: Array = []
+var _auto_web_lu: bool = false
+var _auto_web_seance: Array = []
+
+
+func _auto_web(dt: float) -> void:
+	_auto_web_t += dt
+	if _auto_web_t < 1.0:
+		return
+	_auto_web_t = 0.0
+	if not _auto_web_lu:
+		_auto_web_lu = true
+		var cf: ConfigFile = ConfigFile.new()
+		if cf.load(AUTO_WEB_FICHIER) == OK:
+			_auto_web_faits = cf.get_value("faits", PNConstants.VERSION_APP, [])
+	if _rel_t >= 0.0:
+		if _auto_situation != "" and not _auto_web_seance.has(_auto_situation):
+			_auto_web_seance.append(_auto_situation)
+		return
+	var voulues: Array = []
+	for sit in ["rame", "skieur"]:
+		if not _auto_web_faits.has(sit) and not _auto_web_seance.has(sit):
+			voulues.append(sit)
+	if voulues.is_empty():
+		return
+	essai_releve_auto(voulues)
+
+
+func _auto_web_noter(situation: String) -> void:
+	if not _auto_web_faits.has(situation):
+		_auto_web_faits.append(situation)
+	var cf: ConfigFile = ConfigFile.new()
+	cf.set_value("faits", PNConstants.VERSION_APP, _auto_web_faits)
+	cf.save(AUTO_WEB_FICHIER)
 
 
 ## Vue cachée, pause, fenêtre réduite, ou plus rien à relever : un relevé automatique en cours ne
@@ -1030,7 +1073,9 @@ func _envoyer_releve(r: PackedStringArray) -> void:
 		var ok: bool = code >= 200 and code < 300
 		_log("[Relevé] envoi au NAS : %s (%d)" % ["fait" if ok else "échec", code])
 		if auto != "":
-			if ok and main != null and main.get("state_receiver") != null:
+			if ok and _web:
+				_auto_web_noter(auto)
+			elif ok and main != null and main.get("state_receiver") != null:
 				main.state_receiver.envoyer({"releve_auto_fait": auto})
 		elif main != null and main.has_method("_flash"):
 			main.call("_flash", "Relevé de fluidité envoyé — merci !" if ok else "Relevé : envoi impossible (%d)" % code))
