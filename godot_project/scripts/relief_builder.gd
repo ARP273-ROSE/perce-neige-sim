@@ -51,6 +51,7 @@ uniform float piece = 0.0;
 uniform vec4 emprise = vec4(0.0, 0.0, 1.0, 1.0);
 varying vec3 pw;
 uniform float hiver = 0.0;          // skieur : neige, relief ombré
+uniform float leger = 0.0;          // crans ≥ 3 : sans grain ni détail de près
 uniform sampler2D pistes : filter_linear, repeat_disable;
 uniform float avec_pistes = 0.0;
 uniform vec3 soleil = vec3(0.40, 0.78, 0.48);
@@ -85,10 +86,13 @@ vec3 en_hiver(vec3 c, vec2 uv, vec3 cam) {
 	vec3 poudre = vec3(0.74, 0.79, 0.88) * (0.74 + 0.36 * grain);
 	vec3 blanc = mix(poudre, vec3(0.97, 0.98, 1.0), dam);
 	// grain de la neige près de l'œil (sensation de vitesse), effacé au loin
-	vec2 q = mod(pw.xz, 1024.0);
-	float g = 0.5 * bruit(q * 0.5) + 0.3 * bruit(q * 2.0) + 0.2 * bruit(q * 0.07);
-	float pres = clamp(1.0 - distance(pw, cam) / 350.0, 0.0, 1.0);
-	blanc *= 1.0 + (g - 0.5) * 0.16 * pres;
+	// (12 sinus par pixel : calculé seulement à moins de 350 m, et pas en mode léger)
+	float pres = clamp(1.0 - distance(pw, cam) / 350.0, 0.0, 1.0) * (1.0 - leger);
+	if (pres > 0.0) {
+		vec2 q = mod(pw.xz, 1024.0);
+		float g = 0.5 * bruit(q * 0.5) + 0.3 * bruit(q * 2.0) + 0.2 * bruit(q * 0.07);
+		blanc *= 1.0 + (g - 0.5) * 0.16 * pres;
+	}
 	return mix(c, mix(c * 0.80, blanc, neige) * l, hiver);
 }
 void fragment() {
@@ -147,6 +151,7 @@ uniform float gamma = 1.0;
 uniform vec3 brume = vec3(0.50, 0.62, 0.78);
 varying vec3 pw;
 uniform float hiver = 0.0;          // skieur : neige, relief ombré
+uniform float leger = 0.0;          // crans ≥ 3 : sans grain ni détail de près
 uniform sampler2D pistes : filter_linear, repeat_disable;
 uniform float avec_pistes = 0.0;
 uniform vec3 soleil = vec3(0.40, 0.78, 0.48);
@@ -181,10 +186,13 @@ vec3 en_hiver(vec3 c, vec2 uv, vec3 cam) {
 	vec3 poudre = vec3(0.74, 0.79, 0.88) * (0.74 + 0.36 * grain);
 	vec3 blanc = mix(poudre, vec3(0.97, 0.98, 1.0), dam);
 	// grain de la neige près de l'œil (sensation de vitesse), effacé au loin
-	vec2 q = mod(pw.xz, 1024.0);
-	float g = 0.5 * bruit(q * 0.5) + 0.3 * bruit(q * 2.0) + 0.2 * bruit(q * 0.07);
-	float pres = clamp(1.0 - distance(pw, cam) / 350.0, 0.0, 1.0);
-	blanc *= 1.0 + (g - 0.5) * 0.16 * pres;
+	// (12 sinus par pixel : calculé seulement à moins de 350 m, et pas en mode léger)
+	float pres = clamp(1.0 - distance(pw, cam) / 350.0, 0.0, 1.0) * (1.0 - leger);
+	if (pres > 0.0) {
+		vec2 q = mod(pw.xz, 1024.0);
+		float g = 0.5 * bruit(q * 0.5) + 0.3 * bruit(q * 2.0) + 0.2 * bruit(q * 0.07);
+		blanc *= 1.0 + (g - 0.5) * 0.16 * pres;
+	}
 	return mix(c, mix(c * 0.80, blanc, neige) * l, hiver);
 }
 void fragment() {
@@ -2224,6 +2232,7 @@ func _hiver_mat(m: ShaderMaterial, pistes_ok: bool) -> void:
 		m.set_shader_parameter("pistes", _tex_pistes)
 		m.set_shader_parameter("avec_pistes", 1.0)
 	m.set_shader_parameter("hiver", _hiver)
+	m.set_shader_parameter("leger", 1.0 if _leger else 0.0)
 	_mats_hiver.append(m)
 	_ombres_sur(m)
 
@@ -2291,6 +2300,27 @@ func set_ombres_portees(permises: bool, actives: bool) -> void:
 					break
 		else:
 			_ombres_sur(mat)
+
+
+## Relief léger (crans ≥ 3, puces intégrées et petites cartes) : ni grain procédural de la neige, ni détail de près
+## (bosses, sillons, paillettes, grain de roche et de paroi). La photo, les normales et l'ombrage restent : le relief
+## garde sa lecture, il perd le grain qu'on ne voit qu'à quelques mètres.
+var _leger: bool = false
+
+
+func set_leger(oui: bool) -> void:
+	if oui == _leger:
+		return
+	_leger = oui
+	for m in _mats_hiver:
+		(m as ShaderMaterial).set_shader_parameter("leger", 1.0 if oui else 0.0)
+	if fin != null and fin.anneaux != null:
+		fin.anneaux.regler_detail(not oui and fin.repli < ReliefFin.REPLI_MAX)
+	elif _mat_terrain != null and not oui:
+		_mat_terrain.set_shader_parameter("a_detail", 1.0 if ReliefAnneaux._tex_detail != null else 0.0)
+	if _mat_terrain != null and oui:
+		_mat_terrain.set_shader_parameter("a_detail", 0.0)
+	print("[Relief] %s" % ("léger : sans grain ni détail de près" if oui else "détail complet"))
 
 
 func set_hiver(f: float) -> void:
