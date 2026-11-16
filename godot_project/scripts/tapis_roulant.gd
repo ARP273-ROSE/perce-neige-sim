@@ -9,15 +9,19 @@ extends Node3D
 ##
 ## Retour d'utilisateur du 16/11/2026 : « ton double tapis est nul à Solaise, il suit le terrain au lieu d'avoir une
 ## pente continue ; les tapis sont couverts ». Les bandes sont maintenant droites, à pente constante du bas au haut
-## (14,5 %) ; le terrain est mis à cette pente sous elles (aménagement « rampes » du relief : déblai jusqu'à 2,7 m,
-## remblai jusqu'à 1,3 m) ; une galerie couverte commune aux deux bandes les abrite : arceaux galvanisés tous les
-## 2 m, panneaux translucides, côtés fermés, ouverte aux deux bouts (forme estimée, sans photo).
+## (14,5 % d'après le relief IGN aux deux bouts ; 15,4 % sur la fiche du constructeur) ; le terrain est mis à cette pente
+## sous elles (aménagement « rampes » du relief : déblai jusqu'à 2,7 m, remblai jusqu'à 1,3 m). Couverture d'après les
+## photos publiques et la fiche du constructeur (Funbelt, 2015 : galerie aluminium élargie au débarquement) : un tube
+## étroit par bande (arceaux ronds tous les 1,5 m, panneaux translucides, plinthe de planches au pied), portail arqué
+## noir à l'embarquement avec le nom en vertical, gare haute fermée commune aux deux bandes, coque argent sur une base
+## bardée de bois.
 ##
 ## Le skieur posé sur la bande avance avec elle (il peut y marcher pour aller plus vite) ; au bout, il est déposé
 ## sur la neige.
 
 const LARGEUR: float = 0.80
-const VITESSE: float = 1.0                   # m/s (GPS : 232,8 m en 227 s)
+const VITESSE: float = 1.2                   # m/s, fiche du constructeur (choix d'utilisateur du 16/11/2026 ; GPS : 232,8 m en 227 s)
+const PENTE: float = 0.154                   # fiche du constructeur : 35 m pour 230 m (le relief IGN aux deux bouts donnait 14,5 %)
 const PAS: float = 1.0                       # échantillonnage du profil (m)
 const H_BANDE: float = 0.03                  # dessus de la bande au-dessus de la neige
 const PERIODE_RAYURES: float = 0.40          # m : une rayure claire tous les 40 cm (on la voit avancer)
@@ -28,11 +32,12 @@ const TAPIS: Array = [
 	["Pam", [45.4301921, 6.9957460], [45.4318098, 6.9938576]],
 ]
 const CONSTRUIRE_JUSQUA: float = 900.0
-const DEMI_GALERIE: float = 1.80            # demi-largeur intérieure de la galerie (deux bandes à 1,5 m d'axe en axe)
-const H_PIED_GALERIE: float = 1.55           # hauteur des côtés droits
-const H_GALERIE: float = 2.45                # sous la clé de l'arc
-const PAS_ARCEAU: float = 2.0
-const DEPASSE: float = 1.2                   # la galerie s'arrête 1,2 m avant les bouts des bandes (embarquement à l'air libre)
+const DEMI_GALERIE: float = 0.70            # demi-largeur intérieure d'un tube (bandes à 1,5 m d'axe en axe : tubes accolés)
+const H_PIED_GALERIE: float = 1.70           # hauteur des côtés droits
+const H_GALERIE: float = 2.40                # sous la clé de l'arc (un adulte à skis y tient debout)
+const PAS_ARCEAU: float = 1.5
+const L_GARE_HAUTE: float = 6.0              # gare haute fermée : de L − 6 m à L + 3 m
+const RECUL_PORTAIL: float = 0.4             # portail du bas, 0,4 m avant le début de la bande
 
 
 ## Axe commun des deux bandes (milieu), bas et haut, monde (x, z).
@@ -57,8 +62,9 @@ static func amenagement_relief(r: ReliefBuilder) -> Dictionary:
 	# un peu avant et après les bouts : aires d'embarquement et de débarquement à plat sur la pente
 	var pa: Vector2 = a0 - u * 3.0
 	var pb: Vector2 = b0 + u * 3.0
+	# pente du constructeur depuis la neige du bas : le haut est relevé (ou creusé) d'autant, le relief s'y raccorde
 	var ya: float = r.hauteur(pa.x, pa.y)
-	var yb: float = r.hauteur(pb.x, pb.y)
+	var yb: float = ya + PENTE * pa.distance_to(pb)
 	var bb: Rect2 = Rect2(pa, Vector2.ZERO).expand(pb)
 	var demi: float = DEMI_GALERIE + 1.5
 	var fondu: float = 6.0
@@ -197,7 +203,7 @@ func _construire() -> void:
 	# aux deux bouts, et jamais sous la neige ailleurs (si le terrassement n'est pas là : cuisson, relief grossier)
 	_ys.resize(n)
 	var y0: float = brut[0]
-	var y1: float = brut[n - 1]
+	var y1: float = y0 + PENTE * _long
 	var leve: float = 0.0
 	for k2 in range(n):
 		leve = maxf(leve, brut[k2] - lerpf(y0, y1, float(k2) / float(n - 1)))
@@ -256,24 +262,24 @@ func _construire() -> void:
 		# bout : tambour sous un carter (dessus 10 cm au-dessus de la neige)
 		RemonteeKit.boite(joues, Vector3(LARGEUR + 0.32, 0.12, 0.30), Transform3D(Basis.looking_at(dir, Vector3.UP), c0 + dir * (-0.85 if bas else 0.85) + Vector3(0, 0.02, 0)), "peinture_anthracite")
 	MeshMerge.merge(joues, [], "Joues", true)
+	_galerie()
 	if nom == String(TAPIS[0][0]):
-		_galerie()
+		_gare_haute()
 
 
 ## Galerie couverte commune aux deux bandes (posée par la première) : arceaux, panneaux translucides, côtés
 ## fermés ; collisions des côtés et du toit (on y entre par les bouts).
 func _galerie() -> void:
-	var ax: Array = _axe_commun()
-	var a0: Vector2 = ax[0]
-	var b0: Vector2 = ax[1]
-	var lg: float = a0.distance_to(b0)
-	var u2: Vector2 = (b0 - a0) / maxf(lg, 0.01)
-	var w2: Vector2 = Vector2(u2.y, -u2.x)
+	var a0: Vector2 = a
+	var lg: float = _long
+	var u2: Vector2 = _u
+	var w2: Vector2 = _w
 	var o: Vector3 = global_position
+	var pente: float = (y_bande(_long) - y_bande(0.0)) / maxf(_long, 0.01)
 	var pt := func(s: float, w: float, y: float) -> Vector3:
 		var q: Vector2 = a0 + u2 * s + w2 * w
-		# (dessus de la bande de ce tapis à la même abscisse : la galerie suit la pente)
-		return Vector3(q.x, y_bande(clampf(s, 0.0, _long)) + y, q.y) - o
+		# (dessus de la bande à la même abscisse, prolongé à la même pente au-delà des bouts)
+		return Vector3(q.x, y_bande(clampf(s, 0.0, _long)) + pente * (s - clampf(s, 0.0, _long)) + y, q.y) - o
 	var g: Node3D = Node3D.new()
 	g.name = "Galerie"
 	add_child(g)
@@ -288,8 +294,8 @@ func _galerie() -> void:
 		sec.append([p[0], p[1]])
 	for k2 in range(prof.size() - 2, -1, -1):
 		sec.append([-float(prof[k2][0]), prof[k2][1]])
-	var s0: float = DEPASSE
-	var s1: float = lg - DEPASSE
+	var s0: float = -RECUL_PORTAIL
+	var s1: float = lg - L_GARE_HAUTE + 0.5
 	# panneaux : un ruban translucide le long de la section, coupé par tronçon
 	var st: SurfaceTool = SurfaceTool.new()
 	st.begin(Mesh.PRIMITIVE_TRIANGLES)
@@ -333,7 +339,30 @@ func _galerie() -> void:
 			var pa: Vector3 = pt.call(s0, sw * DEMI_GALERIE * 1.01, yl)
 			var pb: Vector3 = pt.call(s1, sw * DEMI_GALERIE * 1.01, yl)
 			RemonteeKit.barre(ar, pa, pb, 0.03, "galva", 5)
+	# plinthe de planches au pied des deux côtés
+	for sw3 in [-1.0, 1.0]:
+		var s3: float = s0
+		while s3 < s1 - 0.01:
+			var s4: float = minf(s3 + 3.0, s1)
+			RemonteeKit.poutre(ar, pt.call(s3, sw3 * (DEMI_GALERIE + 0.03), 0.15), pt.call(s4, sw3 * (DEMI_GALERIE + 0.03), 0.15), 0.03, 0.30, "bois_fonce")
+			s3 = s4
 	MeshMerge.merge(ar, [], "Arceaux", true)
+	# portail du bas : arc noir opaque plus large que le tube, nom en vertical sur le montant extérieur
+	var por: Node3D = Node3D.new()
+	por.name = "Portail"
+	g.add_child(por)
+	var cadre: PackedVector3Array = PackedVector3Array()
+	for e3 in sec:
+		cadre.append(pt.call(s0, float(e3[0]) * 1.12, float(e3[1]) * 1.06 + 0.02))
+	RemonteeKit.tube(por, cadre, 0.16, "noir_mat", 8)
+	var cote_ext: float = signf((a - _axe_commun()[0]).dot(_w))
+	if cote_ext == 0.0:
+		cote_ext = 1.0
+	var pm: Vector3 = pt.call(s0 - 0.05, cote_ext * (DEMI_GALERIE + 0.22), 1.25)
+	RemonteeKit.boite(por, Vector3(0.10, 2.3, 0.55), Transform3D(Basis.looking_at(Vector3(u2.x, 0, u2.y), Vector3.UP), pm), "noir_mat")
+	var lab: MeshInstance3D = RemonteeKit.texte_fige(por, "\n".join(nom.to_upper().split("")), 48, 0.0042, Color(0.98, 0.98, 0.98))
+	lab.position = pt.call(s0 - 0.33, cote_ext * (DEMI_GALERIE + 0.22), 1.55)
+	lab.rotation = Vector3(0, atan2(-u2.x, -u2.y), 0)
 	# collisions : côtés et toit (boîtes inclinées par tronçon)
 	var corps: StaticBody3D = StaticBody3D.new()
 	corps.name = "CollisionsGalerie"
@@ -355,6 +384,56 @@ func _galerie() -> void:
 				cs.transform = Transform3D(Basis.looking_at(dir, Vector3.UP), (c0 + c1) * 0.5)
 				corps.add_child(cs)
 		s = sn2
+
+
+## Gare haute commune aux deux bandes : coque argent fermée sur une base bardée de bois, plus large que les deux tubes,
+## ouverte vers l'amont (sortie frontale) ; collisions des côtés et du toit.
+func _gare_haute() -> void:
+	var ax: Array = _axe_commun()
+	var a0: Vector2 = ax[0]
+	var b0: Vector2 = ax[1]
+	var lg: float = a0.distance_to(b0)
+	var u2: Vector2 = (b0 - a0) / maxf(lg, 0.01)
+	var o: Vector3 = global_position
+	var y_haut: float = y_bande(_long)
+	var pente: float = (y_bande(_long) - y_bande(0.0)) / maxf(_long, 0.01)
+	var z0: float = lg - L_GARE_HAUTE
+	var z1: float = lg + 3.0
+	var demi: float = 0.75 + DEMI_GALERIE + 0.45
+	var h: float = 3.2
+	var base: float = 1.0
+	var g: Node3D = Node3D.new()
+	g.name = "GareHaute"
+	add_child(g)
+	var bas: Basis = Basis.looking_at(Vector3(u2.x, 0, u2.y), Vector3.UP)
+	var w2: Vector2 = Vector2(u2.y, -u2.x)
+	var corps: StaticBody3D = StaticBody3D.new()
+	corps.name = "CollisionsGareHaute"
+	corps.collision_layer = CollisionsJeu.COUCHE_DECOR
+	corps.collision_mask = 0
+	g.add_child(corps)
+	var piece := func(taille: Vector3, wq: float, sq: float, yq: float, m: String, col: bool) -> void:
+		var q: Vector2 = a0 + u2 * sq + w2 * wq
+		var y: float = y_haut + pente * minf(sq - lg, 0.0) + yq
+		var c: Vector3 = Vector3(q.x, y, q.y) - o
+		RemonteeKit.boite(g, taille, Transform3D(bas, c), m)
+		if col:
+			var cs: CollisionShape3D = CollisionShape3D.new()
+			var bs: BoxShape3D = BoxShape3D.new()
+			bs.size = taille
+			cs.shape = bs
+			cs.transform = Transform3D(bas, c)
+			corps.add_child(cs)
+	var lz: float = z1 - z0
+	var zm: float = (z0 + z1) * 0.5
+	for sw in [-1.0, 1.0]:
+		piece.call(Vector3(0.12, base, lz), sw * demi, zm, base * 0.5 - 0.1, "bois_meleze", true)
+		piece.call(Vector3(0.10, h - base, lz), sw * demi, zm, base + (h - base) * 0.5 - 0.1, "blanc_plaque", true)
+	# toit bombé : trois pans argent
+	for k in [-1, 0, 1]:
+		piece.call(Vector3(demi * 0.72, 0.10, lz + 0.4), float(k) * demi * 0.66, zm, h + (0.18 if k == 0 else 0.0), "alu_pince", k == 0)
+	# fond côté aval : mur au-dessus des deux tubes qui entrent
+	piece.call(Vector3(demi * 2.0, h - H_GALERIE - 0.2, 0.12), 0.0, z0, H_GALERIE + 0.2 + (h - H_GALERIE - 0.2) * 0.5, "blanc_plaque", false)
 
 
 ## Bande grise à rayures claires (une période sur la hauteur de l'image).
