@@ -218,6 +218,8 @@ func _depart(sk: SkieurJoueur) -> void:
 	_t_bloc = 0.0
 	_tours = 0
 	_hist = []
+	_y_img = NAN
+	_trace = []          # (sinon la trace d'une chute mêlait les dernières secondes de la gare précédente)
 	_d0 = sk.degagements
 	_chutes = 0
 	_embarques = 0
@@ -236,7 +238,21 @@ func _nouveau_cap(sk: SkieurJoueur) -> void:
 	_touche(KEY_SHIFT, _rng.randf() < 0.3)
 
 
+var _y_img: float = NAN
+
+
 func _marche(sk: SkieurJoueur, dt: float) -> void:
+	# saut vers le haut de plus de 0,6 m en une image (ni marche ni escalier) : qui l'a porté là ?
+	var yi: float = sk.global_position.y
+	if not is_nan(_y_img) and yi - _y_img > 0.6:
+		var cols: PackedStringArray = PackedStringArray()
+		for i in range(sk.get_slide_collision_count()):
+			var c: KinematicCollision3D = sk.get_slide_collision(i)
+			cols.append("%s n(%.2f, %.2f, %.2f)" % [(c.get_collider_shape() as Node).name if c.get_collider_shape() is Node else "?",
+				c.get_normal().x, c.get_normal().y, c.get_normal().z])
+		print("   SAUT %s : +%.2f m en une image à %s ; marche « %s », support %s, au sol %s, collisions %s" % [_gares[_ig][0],
+			yi - _y_img, _ou(sk.global_position), sk.debug_marche, sk.support, sk.is_on_floor(), ", ".join(cols)])
+	_y_img = yi
 	_t += dt
 	_t_bloc += dt
 	sk.cam_yaw = lerp_angle(sk.cam_yaw, _cap, 0.15)
