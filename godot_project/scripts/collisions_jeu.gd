@@ -1031,7 +1031,15 @@ func _bords_trous(relief: ReliefBuilder, rp: Rect2, pas: float, nx: int, nz: int
 				for si in range(SOUS_MAILLES):
 					var x0: float = xa + si * e
 					var z0: float = za + sj * e
-					if bool(relief.terrain_piece(x0 + e * 0.5, z0 + e * 0.5)[1]):
+					# gardé dès qu'un coin ou le centre est hors du bâtiment : le masque (25 cm) n'est pas calé sur ces
+					# carreaux, un carreau à moitié dehors pouvait avoir son centre dedans (fentes de 25 à 50 cm au pied
+					# du hall de Val Claret, bench_sol_sans_trou) ; le mur du bâtiment arrête le skieur
+					var dedans: bool = true
+					for cq in [Vector2(0.5, 0.5), Vector2(0, 0), Vector2(1, 0), Vector2(0, 1), Vector2(1, 1)]:
+						if not bool(relief.terrain_piece(x0 + e * cq.x, z0 + e * cq.y)[1]):
+							dedans = false
+							break
+					if dedans:
 						continue
 					var u0: float = float(si) / SOUS_MAILLES
 					var u1: float = float(si + 1) / SOUS_MAILLES

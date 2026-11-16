@@ -248,6 +248,18 @@ func _construire() -> void:
 			mi.transform = Transform3D(bas, centre)
 			add_child(mi)
 	boite.call(Vector3(DEMI * 2.0, 0.4, lg), c - Vector3.UP * 0.2, neige)
+	# sol sous toute la largeur du trou du relief aux têtes (R_TUBE + 0,4 m de chaque côté), et voûte en collision :
+	# entre la paroi du tube et le bord du trou, et au-dessus de la voûte, il n'y avait aucun sol (banc
+	# bench_sol_sans_trou, tête amont du tunnel du 3000, 16/11/2026)
+	boite.call(Vector3((R_TUBE + 0.5) * 2.0, 0.4, lg), c - Vector3.UP * 0.21, null)
+	var fv: PackedVector3Array = tube.mesh.get_faces()
+	fv.append_array(tole_mi.mesh.get_faces())
+	var cv: ConcavePolygonShape3D = ConcavePolygonShape3D.new()
+	cv.set_faces(fv)
+	cv.backface_collision = true
+	var csv: CollisionShape3D = CollisionShape3D.new()
+	csv.shape = cv
+	corps.add_child(csv)
 	for sx in [-1.0, 1.0]:
 		boite.call(Vector3(0.3, H_PIED, lg), c + r * (sx * (DEMI + 0.15)) + Vector3.UP * (H_PIED * 0.5), null)
 	# têtes : sortie ouest sous une bâche, entrée est par des portes
