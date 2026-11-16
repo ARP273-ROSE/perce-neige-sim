@@ -1,10 +1,10 @@
 {
  "cle": "tkd_3000",
  "nom": "TKD du 3000",
- "type": "t\u00e9l\u00e9ski d\u00e9brayable (assiettes)",
- "constructeur": "Ing\u00e9lo/Montagner",
+ "type": "téléski débrayable (assiettes)",
+ "constructeur": "Ingélo/Montagner",
  "annee": 2018,
- "station": "Val d'Is\u00e8re",
+ "station": "Val d'Isère",
  "quartier": "Pissaillas",
  "vitesse": 2.0,
  "places": 1,
@@ -644,13 +644,13 @@
  "pylones": [
   {
    "d": 64.0,
-   "montee": [
+   "descente": [
     [
      4,
      "S"
     ]
    ],
-   "descente": [
+   "montee": [
     [
      4,
      "S"
@@ -660,13 +660,13 @@
   },
   {
    "d": 251.0,
-   "montee": [
+   "descente": [
     [
      4,
      "S"
     ]
    ],
-   "descente": [
+   "montee": [
     [
      4,
      "S"
@@ -676,13 +676,13 @@
   },
   {
    "d": 304.0,
-   "montee": [
+   "descente": [
     [
      4,
      "S"
     ]
    ],
-   "descente": [
+   "montee": [
     [
      4,
      "S"
@@ -692,13 +692,13 @@
   },
   {
    "d": 349.0,
-   "montee": [
+   "descente": [
     [
      4,
      "S"
     ]
    ],
-   "descente": [
+   "montee": [
     [
      4,
      "S"
@@ -707,7 +707,7 @@
    "x": -3.0
   }
  ],
- "balanciers": "estim\u00e9s",
+ "balanciers": "estimés",
  "gps": [],
  "axe_coude": true
 }
