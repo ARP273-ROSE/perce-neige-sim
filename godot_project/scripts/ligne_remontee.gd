@@ -1477,6 +1477,12 @@ const SABOT_TPH: float = 16.0   # sabot de pylône des va-et-vient (photo de pro
 
 
 func y_cable(d: float, montee: bool = true) -> float:
+	if not montee and famille == "perche_debrayable":
+		return _y_cable_brut(d, false) + leve_retour_tkd(d)
+	return _y_cable_brut(d, montee)
+
+
+func _y_cable_brut(d: float, montee: bool = true) -> float:
 	if tricable():
 		return _y_lisse_3s(d, montee)
 	var L: float = longueur_h()
@@ -2039,11 +2045,13 @@ func _construire_boucle(pauses: bool = false) -> void:
 		var yr: float = ya + dz_roue_tkd()
 		var pc: Vector3 = poulie_retour_tkd()
 		var xr: float = pc.x
-		# sous la grande poulie : du point bas au point où la tangente monte vers la roue
-		_ajouter(Vector3(xr, ya, 0.0))
-		for k in range(1, 7):
-			var a1: float = th * float(k) / 6.0
-			_ajouter(Vector3(xr, pc.y - cos(a1) * Rp, sin(a1) * Rp))
+		# brin retour : du nez (relevé : leve_retour_tkd) jusque sous la grande poulie de renvoi, 1 m avant la roue,
+		# qui le remet dans le plan incliné de la roue
+		var a_in: float = atan(_pente_retour_tkd())
+		_ajouter(Vector3(xr, ya + leve_retour_tkd(0.0), 0.0))
+		for k in range(0, 7):
+			var a1: float = lerpf(a_in, th, float(k) / 6.0)
+			_ajouter(Vector3(xr, pc.y - cos(a1) * Rp, pc.z + sin(a1) * Rp))
 		# montée vers la roue, puis demi-tour dans le plan incliné (l'arrière plus haut)
 		_ajouter(Vector3(xr, yr, l_gare))
 		for k in range(1, 24):
@@ -2227,8 +2235,8 @@ const Z_DEVIATION: float = 2.5
 const R_POULIE_TKD: float = 0.9
 ## La roue motrice d'un TKD est en haut, au niveau du rail du magasin, inclinée vers l'avant dans l'axe du câble :
 ## le brin montée en descend le long du rail jusqu'au skieur, au nez de la gare (photos du Chardonnet). Le brin
-## retour passe sous une grande poulie verticale (même diamètre), au nez, qui le remet en pente montante vers
-## la roue.
+## retour arrive haut du premier pylône et passe sous une grande poulie verticale (même diamètre), 1 m avant
+## la roue, qui le remet dans le plan incliné de la roue (retour d'utilisateur, 16/11/2026).
 const PENTE_TKD: float = 0.25
 
 
@@ -2237,10 +2245,42 @@ func dz_roue_tkd() -> float:
 	return PENTE_TKD * l_gare
 
 
-## Point bas du brin retour sous la grande poulie (z), et centre de celle-ci, repère de la ligne.
+## Centre de la grande poulie de renvoi du brin retour, repère de la ligne : son bas touche le plan incliné de
+## la roue, sa jante est à JEU_RENVOI_TKD de celle de la roue.
+const JEU_RENVOI_TKD: float = 1.0
 func poulie_retour_tkd() -> Vector3:
 	var xr: float = x_poulie(true) - signf(_x_brin(true)) * R_POULIE_TKD
-	return Vector3(xr, terrain(0.0) + H_CABLE_GARE + R_POULIE_TKD, 0.0)
+	var th: float = atan(PENTE_TKD)
+	var z: float = l_gare - 2.0 * R_POULIE_TKD - JEU_RENVOI_TKD
+	var zt: float = z + sin(th) * R_POULIE_TKD          # point de tangence côté roue, sur le plan de la roue
+	return Vector3(xr, terrain(0.0) + H_CABLE_GARE + PENTE_TKD * zt + cos(th) * R_POULIE_TKD, z)
+
+
+## Pente (vers l'arrière) du brin retour entre le nez et la grande poulie : celle du câble qui descend du
+## premier pylône, visé droit sous la poulie.
+func _pente_retour_tkd() -> float:
+	var d1: float = float(pylones[0]["d"]) if pylones.size() > 0 else 0.0
+	return leve_retour_tkd(0.0) / d1 if d1 > 1.0 else 0.0
+
+
+## Relevé du brin retour d'un TKD au-dessus du profil de la ligne : nul au premier pylône, maximal au nez, tel
+## que le câble file droit du pylône jusque sous la grande poulie de renvoi.
+var _leve_tkd: float = -1.0
+func leve_retour_tkd(d: float) -> float:
+	if pylones.is_empty():
+		return 0.0
+	var d1: float = float(pylones[0]["d"])
+	if d >= d1 or d1 <= 1.0:
+		return 0.0
+	if _leve_tkd < 0.0:
+		var pc: Vector3 = poulie_retour_tkd()
+		var hc: float = pc.y - terrain(0.0) - H_CABLE_GARE
+		var l0: float = 0.0
+		for _i in range(6):
+			var a: float = l0 / d1
+			l0 = maxf((hc - R_POULIE_TKD * sqrt(1.0 + a * a)) / (1.0 + pc.z / d1), 0.0)
+		_leve_tkd = l0
+	return _leve_tkd * (1.0 - maxf(d, 0.0) / d1)
 
 
 ## Centre (x) de la poulie motrice d'un TKD, repère de la ligne ; 0 ailleurs.
@@ -3963,7 +4003,8 @@ func _poulie_debrayable(g: Node3D, c: Vector3, R: float, aval: bool) -> void:
 		RemonteeKit.cylindre(g, 0.025, 0.025, 0.50, Transform3D(Basis.IDENTITY, c + Vector3(cos(a2), 0, sin(a2)) * 0.40), "acier", 6)
 	_coupe_poulie = g.get_child_count()          # la suite (arbre, bâti) ne tourne pas
 	RemonteeKit.cylindre(g, 0.20, 0.20, 0.30, Transform3D(Basis.IDENTITY, c + Vector3(0, 0.38, 0)), "acier", 16)
-	RemonteeKit.boite_en(g, Vector3(1.8, 0.7, 2.0), c + Vector3(0, 0.88, 0), "galva_pylone")
+	if not (famille == "perche_debrayable" and aval):       # (TKD au départ : réducteur posé sur la roue — TeleskiGare)
+		RemonteeKit.boite_en(g, Vector3(1.8, 0.7, 2.0), c + Vector3(0, 0.88, 0), "galva_pylone")
 	if teleski():
 		pass         # (TKD : moteur sur la charpente du départ, contrepoids au fût de l'arrivée — TeleskiGare)
 	elif aval:

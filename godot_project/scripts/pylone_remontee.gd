@@ -896,7 +896,7 @@ func _bras_treillis_tkd(h: float, bout: float, xs: Array) -> void:
 				var haut_gauche: bool = k % 2 == 0
 				RemonteeKit.barre(self, Vector3(xp, yb if haut_gauche else h - 0.04, 0), Vector3(xm, h - 0.04 if haut_gauche else yb, 0), 0.025, m, 5)
 	# jambe de force : du fût, 1,4 m sous le bras, aux deux tiers du bras
-	var xj: float = lerpf(x_fut, bout, 0.65)
+	var xj: float = lerpf(x_fut, bout, 0.92)
 	RemonteeKit.poutre(self, Vector3(x_fut + signf(bout - x_fut) * 0.14, yb - 1.4, 0), Vector3(xj, yb, 0), 0.07, 0.07, m)
 	# platines de fixation au fût
 	for y in [yb, h - 0.04]:
@@ -938,6 +938,11 @@ func _construire_teleski() -> void:
 	if cote == 0 and not en_t and not tkd:
 		var xd: float = _x_brin(false)
 		x_fut = xd + signf(xd) * 0.9
+	elif cote == 0 and tkd:
+		# TKD (photos du Chardonnet, vues de la piste et du départ) : potence, fût sur le côté de la piste de
+		# montée, au ras du brin retour ; un seul bras passe au-dessus des deux brins
+		var xd2: float = _x_brin(false)
+		x_fut = xd2 + signf(xd2) * 0.45
 	else:
 		x_fut = 0.0
 	RemonteeKit.boite_en(self, Vector3(1.0, 0.5, 1.0), Vector3(x_fut, -0.1, 0), "beton")
@@ -965,9 +970,11 @@ func _construire_teleski() -> void:
 	else:
 		RemonteeKit.cylindre(self, 0.26, 0.26, 1.8, Transform3D(Basis.IDENTITY, Vector3(x_fut, 0.9, 0)), "mousse_rouge", 14)
 	if tkd:
-		# fût entre les deux brins quand il les porte tous les deux : un bras de chaque côté
-		for xb in xs:
-			_bras_treillis_tkd(h, float(xb) + signf(float(xb) - x_fut) * 0.25, [xb])
+		# un seul bras, du fût jusqu'au-delà du brin le plus loin
+		_bras_treillis_tkd(h, x_loin + signf(x_loin - x_fut) * 0.25, xs)
+		# panneau rond d'interdiction sur le fût, face à la montée
+		RemonteeKit.cylindre(self, 0.20, 0.20, 0.015, Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3(x_fut, 2.35, 0.16)), "blanc_plaque", 20)
+		RemonteeKit.tube(self, RemonteeKit.arc(Vector3(x_fut, 2.35, 0.17), Vector3.RIGHT, Vector3.UP, 0.18, 0.0, TAU, 24), 0.018, "mousse_rouge", 5)
 	elif cote == 0 and en_t:
 		# traverse en T, des deux côtés du fût, au-delà des deux brins
 		var xt: float = voie * 0.5 + 0.25
