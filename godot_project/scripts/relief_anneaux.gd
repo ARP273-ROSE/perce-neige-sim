@@ -90,6 +90,10 @@ vec3 photo_hd(vec2 p, vec3 c_loin) {
 	vec3 c = textureGrad(ortho_hd, vec3(uv, t.y * o_tex.z + t.x), dx_n / couverts, dy_n / couverts).rgb;
 	// paroi raide : la photo, prise d'en haut, s'y étire en traînées. Sa couleur moyenne et un grain
 	// projeté sur les plans verticaux la remplacent ; rien ne change sur les pentes ordinaires.
+	// sans le détail, ni seconde normale ni grain de paroi (cinq lectures de texture)
+	if (a_detail <= 0.0) {
+		return mix(c, c_loin, k);
+	}
 	vec3 nf = normale_hd(p);
 	float raide = (1.0 - smoothstep(PAROI_BAS, PAROI_HAUT, nf.y)) * a_detail;
 	if (raide > 0.0) {
@@ -145,7 +149,7 @@ var nb_recentrages: int = 0
 
 ## Le nuanceur du relief, avec les normales du pack et sans les UV du maillage.
 const _L_DETAIL: String = "float l = 0.36 + 0.74 * max(dot(n_fin.xyz, normalize(soleil)), 0.0);"
-const _FIN_DETAIL: String = "blanc += vec3(0.5) * paillettes(pw, n_fin.xyz, cam, d_cam) * neige;\n\t// grain de la roche, sur la photo sombre, près de l'œil\n\tfloat roche = n_fin.w * (1.0 - neige) * (1.0 - smoothstep(0.25, 0.6, grain));\n\tvec3 c_roc = c * (1.0 + roche * ((texture(detail_hd, pw.xz / 5.3).a - 0.5) * 1.1 + (texture(detail_hd, pw.xz / 1.3).a - 0.5) * 0.3));\n\treturn mix(c, mix(c_roc * 0.80, blanc, neige) * l, hiver);"
+const _FIN_DETAIL: String = "blanc += vec3(0.5) * paillettes(pw, n_fin.xyz, cam, d_cam) * neige;\n\t// grain de la roche, sur la photo sombre, près de l'œil\n\tfloat roche = n_fin.w * (1.0 - neige) * (1.0 - smoothstep(0.25, 0.6, grain));\n\tvec3 c_roc = c;\n\tif (roche > 0.0) {\n\t\tc_roc = c * (1.0 + roche * ((texture(detail_hd, pw.xz / 5.3).a - 0.5) * 1.1 + (texture(detail_hd, pw.xz / 1.3).a - 0.5) * 0.3));\n\t}\n\treturn mix(c, mix(c_roc * 0.80, blanc, neige) * l, hiver);"
 
 
 ## Sans le pack (PC) : le même détail de neige et de roche, sur la normale du maillage.
