@@ -2395,7 +2395,19 @@ func _poser_remontees() -> void:
 	remontees.construire(relief)
 	remontees.message.connect(func(t: String) -> void: commandes_skieur.message(t, 3.0))
 	remontees.pique.connect(func(evt: String, lg: LigneRemontee) -> void:
-		commandes_skieur.pique(PiquesRemontees.pique(evt, lg, challenge.lang if challenge != null else "fr")))
+		var paire: Array = PiquesRemontees.pique_paire(evt, lg)
+		if paire.is_empty():
+			return
+		var lang: String = challenge.lang if challenge != null else "fr"
+		commandes_skieur.pique(String(paire[1]) if lang == "en" else String(paire[0]))
+		# le pupitre du PC l'affiche aussi, dans sa langue (les deux sont envoyées)
+		if state_receiver != null and state_receiver.has_method("envoyer"):
+			_n_pique += 1
+			state_receiver.envoyer({"pique_remontee": {"n": _n_pique, "evt": evt, "ligne": lg.nom_ligne,
+				"fr": paire[0], "en": paire[1]}}))
+
+
+var _n_pique: int = 0
 
 
 func _entrer_skieur() -> void:
