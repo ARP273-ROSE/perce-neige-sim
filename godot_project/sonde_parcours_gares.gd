@@ -38,6 +38,17 @@ var _bilan: Array = []
 var _filtre: String = ""
 var _p_avant_filet: Vector3 = Vector3.ZERO
 var _embarques: int = 0
+var _p_sol: Vector3 = Vector3.ZERO     # dernière position au sol (départ d'une chute)
+
+
+## Point monde, et dans le repère de la ligne de la gare en cours (x, z, hauteur au-dessus du sol affiché).
+func _ou(p: Vector3) -> String:
+	var t: String = str(p.snapped(Vector3.ONE * 0.01))
+	var lg: LigneRemontee = _ligne(String(_gares[_ig][1])) if String(_gares[_ig][1]) != "" else null
+	if lg != null:
+		var q: Vector3 = lg.global_transform.affine_inverse() * p
+		t += " [ligne x %.2f, z %.2f (L-d %.2f), y %.2f]" % [q.x, q.z, lg.longueur_h() + q.z, q.y]
+	return t
 
 
 ## Collisions qui touchent une sphère de 0,4 m au buste et aux pieds du skieur en p (noms des corps et de leurs parents).
@@ -184,6 +195,7 @@ func _depart(sk: SkieurJoueur) -> void:
 	_nouveau_cap(sk)
 	_p_prec = sk.global_position
 	_p_bloc = sk.global_position
+	_p_sol = sk.global_position
 	_t_bloc = 0.0
 	_tours = 0
 	_hist = []
@@ -221,6 +233,8 @@ func _marche(sk: SkieurJoueur, dt: float) -> void:
 		_d0 = sk.degagements - _bilan[3]
 		return
 	var p: Vector3 = sk.global_position
+	if sk.is_on_floor():
+		_p_sol = p
 	# mur traversé : rayon à hauteur de buste entre les deux dernières positions (décor fixe seulement)
 	# (remonté d'un coup à la verticale : le jeu repose le skieur sur la gare après la dépose, ce n'est pas une traversée)
 	var vertical: bool = Vector2(p.x - _p_prec.x, p.z - _p_prec.z).length() < 0.3 and absf(p.y - _p_prec.y) > 1.0
@@ -243,14 +257,14 @@ func _marche(sk: SkieurJoueur, dt: float) -> void:
 	# filet du jeu
 	if sk.degagements > _d0 + _bilan[3]:
 		_bilan[3] += 1
-		print("   FILET %s à %s, avant %s ; touché : %s" % [_gares[_ig][0], p.snapped(Vector3.ONE * 0.01), _p_avant_filet.snapped(Vector3.ONE * 0.01), _touches(sk, _p_avant_filet)])
+		print("   FILET %s : à %s ; avant %s ; touché : %s" % [_gares[_ig][0], _ou(p), _ou(_p_avant_filet), _touches(sk, _p_avant_filet)])
 	# chute : plus de 4 m perdus en une seconde
 	_hist.append([_t, p.y])
 	while _hist.size() > 0 and _t - float(_hist[0][0]) > 1.0:
 		_hist.pop_front()
 	if not _hist.is_empty() and float(_hist[0][1]) - p.y > 4.0:
 		_bilan[1] += 1
-		print("   CHUTE %s à %s" % [_gares[_ig][0], p.snapped(Vector3.ONE * 0.01)])
+		print("   CHUTE %s : détectée à %s ; dernier sol %s" % [_gares[_ig][0], _ou(p), _ou(_p_sol)])
 		_hist = []
 	# bloqué : on tourne de 90° ; quatre fois de suite, coincé
 	if _t_bloc > BLOQUE_S:
