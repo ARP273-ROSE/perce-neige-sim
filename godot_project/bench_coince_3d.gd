@@ -36,6 +36,10 @@ var _d_prec: int = 0
 var _q_prec: Vector3 = Vector3.ZERO
 const P_PLATEFORME: Vector3 = Vector3(-639.19, 3029.91, 3163.47)
 var _p_filet: Vector3 = P_PLATEFORME
+var _graine_fixee: bool = false
+var _rejeu: PackedFloat64Array = PackedFloat64Array()
+var _fige: bool = false
+var _p_tenu: Vector3 = Vector3.INF
 
 
 func _initialize() -> void:
@@ -44,6 +48,14 @@ func _initialize() -> void:
 			_n = int(String(a).substr(4))
 		if String(a).begins_with("--graine="):
 			_rng.seed = int(String(a).substr(9))
+			_graine_fixee = true
+		if String(a).begins_with("--segment="):
+			_rejeu = String(a).substr(10).split_floats(",")
+	if not _graine_fixee:
+		_rng.seed = 1          # (sans --graine : la même suite à chaque passage — le banc échouait au hasard)
+	# répétable : lignes construites d'un bloc sur le fil principal (sur un fil, ou par tranches au temps, elles
+	# apparaissaient à des images différentes d'un passage à l'autre et le skieur ne marchait plus au même endroit)
+	LigneRemontee.construction_en_fond = false
 	_main = load("res://scenes/main.tscn").instantiate()
 	get_root().add_child(_main)
 	process_frame.connect(_tick)
@@ -138,6 +150,7 @@ func _graine() -> void:
 	sk.velocity = Vector3.ZERO
 	sk.support = null
 	_etapes = 0
+	_p_tenu = p
 
 
 func _tirer() -> bool:
@@ -189,6 +202,7 @@ func _tick() -> void:
 			if sk0.degagements > _d_prec and _st != 10 and _st != 12:
 				print("DEGAGE de %s vers %s, %.2f m ; segment %s → %s ; marche[%s] ; chaussé %s" % [_q_prec, sk0.global_position,
 					_q_prec.distance_to(sk0.global_position), _a, _b, sk0.debug_marche, sk0.chausse])
+				_obstacles(_q_prec)
 			_d_prec = sk0.degagements
 		_q_prec = sk0.global_position
 	var relief = _main.get("relief")
@@ -285,8 +299,21 @@ func _tick() -> void:
 			# on ne marche qu'une fois les remontées proches construites : leurs plateformes
 			# apparaîtraient sinon autour de lui, ce qui n'est pas le cas en jeu (construites
 			# à 2 km) et reste couvert par le test du filet ci-dessus
-			if _main.remontees._en_cours != null and _i < _n:
+			if not _fige:
+				_fige = true
+				_main.perf_manager.mode = "fige"
+				for e in _main.remontees.lignes:
+					(e[0] as LigneRemontee).progressif = false
+			# tenu en place tant que le décor se construit autour de lui (collisions par tranches au temps)
+			if (_main.remontees._en_cours != null or not _main.collisions._taches.is_empty()) and _i < _n:
 				sk.entree = Vector2.ZERO
+				if _p_tenu != Vector3.INF:
+					sk.global_position = _p_tenu
+					sk.velocity = Vector3.ZERO
+				return
+			_p_tenu = Vector3.INF
+			if _rejeu.size() == 7:
+				_rejouer(sk)
 				return
 			# posé par le tirage avant que la plateforme n'apparaisse : retiré, pas de marche d'ici
 			if _i < _n and _etapes == 0 and sk.is_on_floor() and not _libre(sk.global_position):
@@ -294,7 +321,7 @@ func _tick() -> void:
 				return
 			if _i >= _n:
 				print("dégagements du filet pendant la marche : %d, sans issue : %d" % [sk.degagements, sk.pieges_sans_issue])
-				print("BILAN %d segments praticables : %d pas au bout, dont %d vraiment coincés (%d tirages)" % [_i, _echecs, _coinces, _essais])
+				print("BILAN %d segments praticables : %d pas au bout, dont %d vraiment coincés (%d tirages, %d pris par une remontée)" % [_i, _echecs, _coinces, _essais, _embarques])
 				# vraiment coincé : jamais. Arrêts (tombé dans une fosse au bord du segment, rame qui
 				# gêne, temps dépassé) : tolérés à 1 %.
 				# un déclenchement du filet en marche est un blocage
@@ -328,6 +355,16 @@ func _tick() -> void:
 		3:
 			_t += 1.0 / 60.0
 			sk.chausse = false
+			# pris par une remontée en traversant sa zone d'embarquement (télésiège des Pyramides : 40 segments « pas au
+			# bout » d'affilée, à 29 m l'un de l'autre, le long de la ligne) : voulu en jeu, hors sujet ici — on descend,
+			# on repart d'une autre graine, le segment ne compte pas
+			if not (_main.remontees.a_bord as Array).is_empty() or sk.support is VehiculeRemontee:
+				_main.remontees.quitter()
+				sk.entree = Vector2.ZERO
+				_embarques += 1
+				_graine()
+				_st = 2
+				return
 			var d: Vector3 = _b - sk.global_position
 			if Vector2(d.x, d.z).length() < 0.35 and absf(d.y) < 0.8:
 				sk.entree = Vector2.ZERO
@@ -366,6 +403,70 @@ func _tick() -> void:
 					_i += 1
 					_etapes = 99
 					_st = 2
+
+
+## --segment=ax,ay,az,bx,by,bz,course : rejoue un segment (arrêt d'un passage) et décrit le sol le long.
+var _rj: int = 0
+var _embarques: int = 0
+var _p_rj: Vector3 = Vector3.ZERO
+func _rejouer(sk: SkieurJoueur) -> void:
+	var a: Vector3 = Vector3(_rejeu[0], _rejeu[1], _rejeu[2])
+	var b: Vector3 = Vector3(_rejeu[3], _rejeu[4], _rejeu[5])
+	if _rj == 0:
+		_main.collisions.assurer_autour(a)
+		sk.global_position = a + Vector3.UP * 0.05
+		sk.velocity = Vector3.ZERO
+		_p_rj = sk.global_position
+		_rj = 1
+		var cap: Vector3 = Vector3(b.x - a.x, 0.0, b.z - a.z).normalized()
+		var l: float = Vector2(b.x - a.x, b.z - a.z).length()
+		var y: float = a.y
+		var d: float = 0.0
+		while d < l:
+			var q: Vector3 = a + cap * d
+			var h: Dictionary = _rayon(Vector3(q.x, y + 1.0, q.z), Vector3(q.x, y - 1.0, q.z))
+			var t: String = "—"
+			if not h.is_empty():
+				t = "sol %.3f (%+.3f) n %.2f %s libre %s" % [(h["position"] as Vector3).y, (h["position"] as Vector3).y - y,
+					(h["normal"] as Vector3).y, _nom_sol(h), _libre(h["position"])]
+				y = (h["position"] as Vector3).y
+			print("REJEU d %.2f  %s" % [d, t])
+			d += 0.05
+		return
+	_rj += 1
+	if _rj < 60:
+		sk.global_position = _p_rj
+		sk.velocity = Vector3.ZERO
+		return
+	sk.chausse = false
+	_viser(sk, b, 1.0 if _rejeu[6] > 0.5 else 0.85)
+	if _rj % 10 == 0:
+		print("REJEU t %d pos %s marche[%s] mur %s" % [_rj, sk.global_position, sk.debug_marche, sk.is_on_wall()])
+		if sk.debug_marche.begins_with("plafond") or sk.degagements > 0:
+			_obstacles(sk.global_position)
+	if _rj > 60 + 600 or Vector2(b.x - sk.global_position.x, b.z - sk.global_position.z).length() < 0.35:
+		print("REJEU fin à %.2f m du but" % Vector2(b.x - sk.global_position.x, b.z - sk.global_position.z).length())
+		quit()
+
+
+## Formes que le corps toucherait à `p` (diagnostic d'un dégagement ou d'un arrêt).
+func _obstacles(p: Vector3) -> void:
+	var sk: SkieurJoueur = _main.skieur
+	var c := CapsuleShape3D.new()
+	c.radius = SkieurJoueur.RAYON + 0.05
+	c.height = SkieurJoueur.TAILLE
+	var q := PhysicsShapeQueryParameters3D.new()
+	q.shape = c
+	q.transform = Transform3D(Basis.IDENTITY, p + Vector3.UP * (SkieurJoueur.TAILLE * 0.5 + 0.05))
+	q.collision_mask = sk.collision_mask
+	q.exclude = [sk.get_rid()]
+	for r in _espace().intersect_shape(q, 8):
+		var co: CollisionObject3D = r["collider"]
+		var ow: Node = co.shape_owner_get_owner(co.shape_find_owner(r["shape"]))
+		var info: String = ""
+		if ow is CollisionShape3D and (ow as CollisionShape3D).shape is BoxShape3D:
+			info = "boîte %s centre %s" % [((ow as CollisionShape3D).shape as BoxShape3D).size, (ow as CollisionShape3D).global_transform.origin]
+		print("OBSTACLE %s / %s %s" % [co.get_path(), ow.get_path() if ow else "?", info])
 
 
 func _ligne(cle: String) -> LigneRemontee:
