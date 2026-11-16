@@ -584,7 +584,83 @@ func _parametres_chainette() -> void:
 
 
 ## Masse d'un véhicule à vide (kg), pince ou chariot compris.
-const OCCUPATION: float = 0.7          # passagers en montée, part des places
+const OCCUPATION: float = 0.7          # passagers en montée, part des places : référence de la géométrie précalculée
+
+## Occupation réelle (OccupationRemontees : heure, sens, genre de ligne), part des places [montée, descente] ;
+## mise à jour toutes les 30 s. Elle charge la tension, la puissance, le freinage et le pendule ; la géométrie
+## précalculée (chaînette, têtes de pylônes) reste à OCCUPATION.
+var _occ: Array = [OCCUPATION, 0.0]
+var _occ_t: float = 1.0e9
+## Passagers par véhicule : index → [montée, tour, nombre], tirés au passage en gare (OccupationRemontees.occupants).
+var _pax_veh: Dictionary = {}
+
+
+func occupation(montee: bool) -> float:
+	return float(_occ[0 if montee else 1])
+
+
+func places_vehicule() -> int:
+	return VehiculeRemontee.DESCRIPTIONS.get(famille, ["", 6, ""])[1]
+
+
+## Passagers du véhicule i (sens donné) : un nouveau tirage à chaque passage en gare (changement de sens).
+func passagers(i: int, montee: bool) -> int:
+	var e: Array = _pax_veh.get(i, [])
+	if e.is_empty() or bool(e[0]) != montee:
+		var tour: int = (int(e[1]) + 1) if not e.is_empty() else int(OccupationRemontees.heure() * 6.0)
+		e = [montee, tour, OccupationRemontees.occupants(self, places_vehicule(), i, tour, montee)]
+		_pax_veh[i] = e
+	return int(e[2])
+
+
+func _maj_occupation(delta: float) -> void:
+	_occ_t += delta
+	if _occ_t < 30.0:
+		return
+	_occ_t = 0.0
+	var om: float = OccupationRemontees.taux(self, true)
+	var od: float = OccupationRemontees.taux(self, false)
+	if absf(om - float(_occ[0])) < 0.005 and absf(od - float(_occ[1])) < 0.005:
+		return
+	_occ = [om, od]
+	_occupation_changee()
+
+
+## Nouvelle occupation moyenne : le noyau C++ (pendule, charges) la reçoit.
+func _occupation_changee() -> void:
+	if _noyau != null and _noyau.has_method("set_constantes") and _tension > 0.0:
+		_noyau.set_constantes({"charge_montee": OccupationRemontees.PAX_KG * places_vehicule() * occupation(true),
+			"poids_montee": _poids_vehicule(true) / _tension, "poids_descente": _poids_vehicule(false) / _tension})
+
+
+## Masse en mouvement de la ligne (kg) : véhicules, passagers, câble (boucle entière).
+func masse_en_mouvement() -> float:
+	return _masse_base() + OccupationRemontees.PAX_KG * places_vehicule() * (occupation(true) + occupation(false)) * _n_par_brin()
+
+
+func _n_par_brin() -> float:
+	return float(maxi(_vehicules.size(), 1)) * 0.5
+
+
+func _masse_base() -> float:
+	var L: float = longueur_h()
+	return float(maxi(_vehicules.size(), 1)) * masse_vehicule() + 2.0 * L * 0.0039 * diametre_cable * diametre_cable
+
+
+## Freinage d'urgence (m/s²) : le frein donne A_URGENCE à la charge de référence (OCCUPATION en montée, vide en
+## descente) ; plus chargée en montée, la ligne s'arrête plus court (la pesanteur aide), plus lourde, plus long.
+func a_urgence() -> float:
+	if teleski() or _vehicules.is_empty():
+		return A_URGENCE
+	var L: float = longueur_h()
+	var dh: float = terrain(L) - terrain(0.0)
+	var sin_p: float = dh / maxf(sqrt(L * L + dh * dh), 1.0)
+	var pax_brin: float = OccupationRemontees.PAX_KG * places_vehicule() * _n_par_brin()      # kg, brin plein
+	var m_ref: float = _masse_base() + pax_brin * OCCUPATION
+	var f_frein: float = A_URGENCE * m_ref - pax_brin * OCCUPATION * 9.81 * sin_p
+	var f_g: float = pax_brin * (occupation(true) - occupation(false)) * 9.81 * sin_p
+	return clampf((f_frein + f_g) / masse_en_mouvement(), 0.5 * A_URGENCE, 2.0 * A_URGENCE)
+
 
 ## Vent (audit du 14/11/2026 : seules les accélérations faisaient pencher les véhicules) : un vent de
 ## nord-ouest de ~6 m/s en moyenne, avec rafales (sommes de sinus, sans hasard : mêmes images d'une
@@ -5279,6 +5355,7 @@ func _process_corps(delta: float) -> void:
 	if delta < 0.0:
 		return
 	_maj_vent()
+	_maj_occupation(delta)
 	if _exploit != null:
 		_exploit.avancer(delta)
 	_regler_vitesse(delta)
@@ -5352,7 +5429,7 @@ func _preparer_noyau() -> void:
 	n.set_constantes({
 		"vitesse": vitesse, "v_embarquement": v_embarquement, "l_frein": L_FREIN, "l_ouverture": L_OUVERTURE,
 		"fixe": fixe(), "sens_droite": sens_droite, "signe_montee": signf(_x_brin(true)),
-		"cabine": v0.cabine, "masse": v0.masse, "charge_montee": 80.0 * places * 0.7,
+		"cabine": v0.cabine, "masse": v0.masse, "charge_montee": OccupationRemontees.PAX_KG * places * occupation(true),
 		"longueur_pendule": v0.longueur_pendule, "pivot": v0.pivot,
 		"guide_l": GUIDE_L if guide_psi() else 0.0, "guide_gorge": GUIDE_GORGE, "guide_ouvert": GUIDE_OUVERT,
 		"guide_bras": VehiculeRemontee.A108_X_ROULEMENT - VehiculeRemontee.A108_PIVOT.x,
@@ -6371,8 +6448,7 @@ func _mats_charges() -> Array:
 ## Poids d'un véhicule (N), passagers compris en montée — mêmes charges
 ## que la chaînette (_parametres_chainette).
 func _poids_vehicule(montee: bool) -> float:
-	var places: int = VehiculeRemontee.DESCRIPTIONS.get(famille, ["", 6, ""])[1]
-	return (masse_vehicule() + (80.0 * places * OCCUPATION if montee else 0.0)) * 9.81
+	return (masse_vehicule() + OccupationRemontees.PAX_KG * places_vehicule() * occupation(montee)) * 9.81
 
 
 const CHARGES_PONCTUELLES: bool = false
@@ -6482,7 +6558,7 @@ func _regler_vitesse(delta: float) -> void:
 	if vitesse_reelle < 0.0:
 		vitesse_reelle = vitesse * CRANS[cran]
 	var cible: float = vitesse * CRANS[cran] * cap_exploitation() if etat == "marche" else 0.0
-	var a: float = vitesse / T_DEMARRAGE if cible > vitesse_reelle else (A_URGENCE if etat == "urgence" else A_ARRET)
+	var a: float = vitesse / T_DEMARRAGE if cible > vitesse_reelle else (a_urgence() if etat == "urgence" else A_ARRET)
 	vitesse_reelle = move_toward(vitesse_reelle, cible, a * delta)
 	if etat == "arret_normal" and vitesse_reelle <= 0.0:
 		etat = "arret"
@@ -6615,12 +6691,15 @@ func puissance_kw() -> float:
 		pm += (c as Vector2).y * _tension
 	for c in _charges[1]:
 		pd += (c as Vector2).y * _tension
-	var p_nom: float = (_poids_vehicule(true) - _poids_vehicule(false)) * (long_c / maxf(espacement, 8.0)) * dh / long_c * vitesse
+	var n_brin: float = long_c / maxf(espacement, 8.0)
+	var p_nom: float = (_poids_vehicule(true) - _poids_vehicule(false)) * n_brin * dh / long_c * vitesse
+	# pertes : un dixième de la puissance nominale (charge de référence, OCCUPATION en montée), même à vide
+	var p_ref: float = OccupationRemontees.PAX_KG * places_vehicule() * OCCUPATION * 9.81 * n_brin * dh / long_c * vitesse
 	if _charges[0].is_empty() and _charges[1].is_empty():
 		# monocâbles : pas de charges ponctuelles (CHARGES_PONCTUELLES faux), le poste
 		# n'affichait que les pertes — charge moyenne des deux brins à la place
-		return (p_nom * vitesse_reelle / maxf(vitesse, 0.1) + 0.1 * p_nom * regime()) / 1000.0
-	return ((pm - pd) * dh / long_c * vitesse_reelle + 0.1 * p_nom * regime()) / 1000.0
+		return (p_nom * vitesse_reelle / maxf(vitesse, 0.1) + 0.1 * p_ref * regime()) / 1000.0
+	return ((pm - pd) * dh / long_c * vitesse_reelle + 0.1 * p_ref * regime()) / 1000.0
 
 
 ## Galets mobiles : la pince qui passe sur un train de galets fait descendre
@@ -6878,7 +6957,7 @@ func _placer(i: int) -> void:
 	var montee_v: bool = signf((pt[0] as Vector3).x) == signf(_x_brin(true))
 	if tricable() and _dt > 0.0 and _corps_proche:
 		v.rouler(vitesse_en(s) * regime() * _dt)
-	var charge: float = 80.0 * v.places * 0.7 if (montee_v and not v.cabine) else 0.0
+	var charge: float = OccupationRemontees.PAX_KG * passagers(i, montee_v) if not teleski() else 0.0
 	if _dt > 0.0:
 		var m0: float = v.masse
 		v.masse = m0 + charge
