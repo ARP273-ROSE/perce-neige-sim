@@ -55,6 +55,10 @@ var _b_carte: Button = null
 
 
 func _ready() -> void:
+	# (commandes masquées : les doigts posés ne seront pas vus se lever)
+	visibility_changed.connect(func() -> void:
+		if not visible:
+			oublier_doigts())
 	layer = 91
 	_racine = Control.new()
 	_racine.set_anchors_preset(Control.PRESET_FULL_RECT)
@@ -409,9 +413,56 @@ func _sur_un_bouton(p: Vector2) -> bool:
 	return false
 
 
+## Doigt levé : son emplacement (joystick, vue, pincement) est libéré.
+func _lacher(i: int) -> void:
+	_doigts.erase(i)
+	if skieur != null:
+		skieur.doigts = _doigts.size()
+	if i == _doigt_joy:
+		_doigt_joy = -1
+		_bouton_pos = Vector2.ZERO
+		if skieur != null:
+			skieur.entree = Vector2.ZERO
+		if _pos_joy_defaut != Vector2.ZERO:
+			_joy.position = _pos_joy_defaut
+		_joy.queue_redraw()
+	elif i == _doigt_vue:
+		_doigt_vue = _doigt_zoom
+		_pos_vue = _pos_zoom
+		_doigt_zoom = -1
+	elif i == _doigt_zoom:
+		_doigt_zoom = -1
+
+
+## Tous les doigts oubliés (commandes masquées : on ne verra pas leur relâché).
+func oublier_doigts() -> void:
+	for i in _doigts.keys():
+		_lacher(int(i))
+	for i in [_doigt_joy, _doigt_vue, _doigt_zoom]:
+		if i >= 0:
+			_lacher(i)
+	_doigts.clear()
+	if skieur != null:
+		skieur.doigts = 0
+
+
 func _input(event: InputEvent) -> void:
+	# (vue figée, retour d'utilisateur du 16/11/2026 : « au bout d'un certain temps impossible d'orienter la vue, elle
+	# est restée figée à un angle ») : un doigt levé pendant que les commandes étaient masquées (remontée, carte, vue
+	# changée) ou le skieur inactif n'était jamais vu — sa place « vue » restait prise, chaque doigt suivant devenait
+	# le second d'un pincement et ne tournait plus la vue, et le skieur ignorait la souris (doigts > 0). Le relâché
+	# est donc toujours pris en compte, et un doigt « reposé » sans avoir été levé repart de zéro.
+	if event is InputEventScreenTouch and not (event as InputEventScreenTouch).pressed:
+		if (event as InputEventScreenTouch).index in _doigts or (event as InputEventScreenTouch).index in [_doigt_joy, _doigt_vue, _doigt_zoom]:
+			if skieur == null or not skieur.actif or not visible:
+				_lacher((event as InputEventScreenTouch).index)
+				return
 	if skieur == null or not skieur.actif or not visible:
 		return
+	if event is InputEventScreenTouch and (event as InputEventScreenTouch).pressed:
+		var ir: int = (event as InputEventScreenTouch).index
+		if ir in _doigts or ir in [_doigt_joy, _doigt_vue, _doigt_zoom]:
+			_lacher(ir)
 	if event is InputEventScreenTouch or event is InputEventScreenDrag:
 		# le skieur ignore la « souris » tant qu'un doigt est posé (iPad :
 		# le pouce du joystick arrivait aussi en souris et tournait la vue)
@@ -420,8 +471,6 @@ func _input(event: InputEvent) -> void:
 		var t: InputEventScreenTouch = event
 		if t.pressed:
 			_doigts[t.index] = true
-		else:
-			_doigts.erase(t.index)
 		skieur.doigts = _doigts.size()
 		# comme dans les jeux (retour d'utilisateur, 08/10/2026 : « ça fait tourner la vue
 		# en même temps, c'est le bazar ») : joystick FLOTTANT — il naît là
@@ -451,20 +500,10 @@ func _input(event: InputEvent) -> void:
 				_doigt_zoom = t.index
 				_pos_zoom = t.position
 		else:
-			if t.index == _doigt_joy:
-				_doigt_joy = -1
-				_bouton_pos = Vector2.ZERO
-				skieur.entree = Vector2.ZERO
-				if _pos_joy_defaut != Vector2.ZERO:
-					_joy.position = _pos_joy_defaut
-				_joy.queue_redraw()
+			var etait_joy: bool = t.index == _doigt_joy
+			_lacher(t.index)
+			if etait_joy:
 				get_viewport().set_input_as_handled()
-			elif t.index == _doigt_vue:
-				_doigt_vue = _doigt_zoom
-				_pos_vue = _pos_zoom
-				_doigt_zoom = -1
-			elif t.index == _doigt_zoom:
-				_doigt_zoom = -1
 	elif event is InputEventScreenDrag:
 		var d: InputEventScreenDrag = event
 		if d.index == _doigt_joy:
