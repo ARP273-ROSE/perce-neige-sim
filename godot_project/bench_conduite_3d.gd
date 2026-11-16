@@ -4,7 +4,8 @@
 ## Les doigts passent par le vrai chemin (Input.parse_input_event → CommandesSkieur) : pouce du joystick flottant à
 ## gauche, doigt de la vue à droite. On mesure :
 ##  - PIVOT : pouce poussé de côté à l'arrêt — la vue doit revenir derrière la marche (écart final < 20°) ;
-##  - DIAGONALE : pouce tenu à 45° — vue derrière la marche, cap stable (pas de spirale) ;
+##  - DIAGONALE : pouce tenu à 45° — il avance en tournant à vitesse constante, la vue derrière la marche
+##    (16/11/2026 : l'ordre de tourner tenu fait tourner tant qu'il est tenu ; avant, le pouce visait un cap fixe) ;
 ##  - VUE PUIS AVANT : vue tournée au doigt, lâchée, puis pouce vers l'avant — il part où regarde la vue ;
 ##  - SKI À L'ARRÊT : skis pivotés au pouce — la vue suit le cap des skis ;
 ##  - ESCALIER : de la place, pouce vers l'avant — il monte l'escalier de la gare du funi jusqu'au palier ;
@@ -156,10 +157,19 @@ func _tick() -> void:
 				(_etat["caps"] as Array).append(cap_marche)
 			if _t > 6.0:
 				var caps: Array = _etat["caps"]
-				var derive: float = _deg(caps[caps.size() - 1] - caps[0])
+				var m: int = caps.size() / 2
+				var w1: float = 0.0
+				var w2: float = 0.0
+				for k in range(1, caps.size()):
+					var d: float = _deg(float(caps[k]) - float(caps[k - 1]))
+					if k <= m:
+						w1 += d
+					else:
+						w2 += d
 				var ecart: float = _deg(sk.cam_yaw - cap_marche)
-				_verif("%s : pouce à 45°, vue derrière, cap stable" % tag, ecart < 15.0 and derive < 10.0,
-					"écart vue / marche %.0f°, dérive du cap %.0f° sur 4 s" % [ecart, derive])
+				_verif("%s : pouce à 45°, il tourne à vitesse constante, vue derrière" % tag,
+					ecart < 15.0 and w1 > 20.0 and w2 >= 0.7 * w1 and w2 <= 1.3 * w1,
+					"écart vue / marche %.0f°, %.0f° puis %.0f° sur deux fois 2 s" % [ecart, w1, w2])
 				_suivant(sk)
 		"pied_vue_puis_avant":
 			var c1: Vector2 = Vector2(_taille().x * 0.6, _taille().y * 0.25)
