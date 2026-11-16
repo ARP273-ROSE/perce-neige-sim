@@ -57,9 +57,33 @@ func places_cabine() -> int:
 	return 80 if String(name) == "tph_fornet" else 115
 
 
-## Poids d'une cabine en ligne (N), 60 % de passagers.
-func poids_cabine() -> float:
-	return (masse_vehicule() + 80.0 * places_cabine() * 0.6) * 9.81
+## Passagers des deux cabines, tirés à chaque départ du quai (OccupationRemontees : heure, sens) ; la cabine 0
+## monte quand _sens > 0.
+var _pax_cab: Array = [0, 0]
+var _tour_cab: int = -1
+
+
+func _tirer_cabines() -> void:
+	if _tour_cab < 0:
+		_tour_cab = int(OccupationRemontees.heure() * 6.0)
+	for i in range(2):
+		var montee: bool = (_sens > 0.0) == (i == 0)
+		_pax_cab[i] = OccupationRemontees.occupants(self, places_cabine(), i, _tour_cab, montee)
+
+
+func passagers_cabine(i: int) -> int:
+	if _tour_cab < 0:
+		_tirer_cabines()
+	return int(_pax_cab[clampi(i, 0, 1)])
+
+
+func masse_cabine(i: int) -> float:
+	return masse_vehicule() + OccupationRemontees.PAX_KG * passagers_cabine(i)
+
+
+## Poids d'une cabine en ligne (N), ses passagers compris.
+func poids_cabine(i: int = 0) -> float:
+	return masse_cabine(i) * 9.81
 
 
 ## Chaînette à vide d'une voie (retour d'utilisateur, 11/11/2026 : « physique pas bonne ») : ce sont les
@@ -406,6 +430,9 @@ func _process_corps(delta: float) -> void:
 			_porte_cible = 0.0
 			_depart_demande = false
 			_sens = -_sens
+			# (nouveau voyage : les cabines se vident et se remplissent pour le sens qu'elles vont prendre)
+			_tour_cab = maxi(_tour_cab, 0) + 1
+			_tirer_cabines()
 		if etat == "arret_normal" and va <= 0.0:
 			etat = "arret"
 	vitesse_reelle = absf(_v)
@@ -445,10 +472,10 @@ func _rebond(delta: float) -> void:
 	var a_s: float = (_v - _v_prec) / delta    # accélération du tracteur, dans le sens de _s
 	_v_prec = _v
 	var L: float = longueur_h()
-	var m: float = masse_vehicule() + 80.0 * places_cabine() * 0.6 + 6000.0   # + part du câble entraîné
 	var n: int = maxi(1, int(ceil(delta / 0.01)))
 	var h: float = delta / n
 	for i in range(2):
+		var m: float = masse_cabine(i) + 6000.0   # + part du câble entraîné
 		var d: float = _s if i == 0 else _s_cab1
 		var l_m: float = maxf((L - d) if _motrice_amont() else d, 50.0) + 200.0   # (+ boucle en gare)
 		var w: float = sqrt(EA_TRACTEUR / l_m / m)
@@ -595,7 +622,7 @@ func _placer(i: int) -> void:
 	v.inclinaison(pente)
 	if _dt > 0.0:
 		var m0: float = v.masse
-		v.masse = m0 + 80.0 * places_cabine() * 0.6
+		v.masse = m0 + OccupationRemontees.PAX_KG * passagers_cabine(i)
 		v.balancer(_dt, zone_vehicule(i) != "ligne")
 		v.masse = m0
 	var porte: float = 0.0
@@ -802,7 +829,7 @@ func _charges_ponctuelles() -> void:
 		var d: float = _vehicules[i][1]
 		# sur un sabot, la cabine est portée par le sabot : pas de flèche (ni pour le chariot ni pour le câble)
 		if d > 0.0 and d < longueur_h() and not portee_sur_sabot(_portee_de(d)):
-			listes[i].append(Vector2(d, poids_cabine() / _tension))
+			listes[i].append(Vector2(d, poids_cabine(i) / _tension))
 	_charges = listes
 	# même flèche pour le chariot (_fleche) que pour le câble dessiné (nuanceur) : les cabines flottaient
 	# jusqu'à 24 m au-dessus des porteurs à mi-portée (retour d'utilisateur, 11/11/2026)
@@ -1514,13 +1541,15 @@ func _collisions_grande_motte(corps: StaticBody3D, aval: bool) -> void:
 
 
 
-## Puissance au câble (kW) : la cabine qui monte contre celle qui descend
-## (même charge : seules la pente et les pertes comptent ici).
+## Puissance au câble (kW) : la cabine qui monte contre celle qui descend — l'écart de leurs charges
+## (passagers) remonté à la vitesse du câble, plus les pertes (15 % de la puissance à pleine charge).
 func puissance_kw() -> float:
 	var L: float = longueur_h()
 	var dh: float = terrain(L) - terrain(0.0)
 	var p_nom: float = (masse_vehicule() + 115.0 * 80.0) * 9.81 * dh / L * vitesse
-	return 0.15 * p_nom * absf(_v) / maxf(vitesse, 0.1) / 1000.0
+	var i_m: int = 0 if _sens > 0.0 else 1
+	var p_g: float = (masse_cabine(i_m) - masse_cabine(1 - i_m)) * 9.81 * dh / L * absf(_v)
+	return (p_g + 0.15 * p_nom * absf(_v) / maxf(vitesse, 0.1)) / 1000.0
 
 
 ## Pupitre (ExploitationRemontee) : positions relatives des deux cabines, vitesses, à quai, sens, portes.
