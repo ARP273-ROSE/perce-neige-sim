@@ -77,6 +77,25 @@ func passagers_cabine(i: int) -> int:
 	return int(_pax_cab[clampi(i, 0, 1)])
 
 
+## Passagers dessinés des deux cabines : à quai, la cabine arrivée se vide pendant la première moitié de
+## l'attente, puis se remplit pour le voyage suivant (minuterie : _pax_dessin_t, de LigneRemontee).
+
+
+func _maj_passagers_cabines(delta: float) -> void:
+	_pax_dessin_t += delta
+	if _pax_dessin_t < 0.3 or self is Funival:
+		return
+	_pax_dessin_t = 0.0
+	for i in range(mini(2, _vehicules.size())):
+		var v: VehiculeRemontee = _vehicules[i][0]
+		if v == null:
+			continue
+		var n: int = passagers_cabine(i)
+		if _phase == "quai" and _t_quai > T_QUAI * 0.5:
+			n = 0
+		v.poser_passagers(n, hash([String(name), i]))
+
+
 func masse_cabine(i: int) -> float:
 	return masse_vehicule() + OccupationRemontees.PAX_KG * passagers_cabine(i)
 
@@ -380,6 +399,7 @@ func _process_corps(delta: float) -> void:
 	if delta < 0.0:
 		return
 	_dt = delta
+	_maj_passagers_cabines(delta)
 	if _exploit != null:
 		_exploit.avancer(delta)
 	var a: float = _x_quai(true)
