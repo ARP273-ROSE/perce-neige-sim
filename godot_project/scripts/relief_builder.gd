@@ -284,6 +284,8 @@ var _mat_trait: ShaderMaterial = null
 ## remonté à y, jamais abaissé),
 ## "rabots": [[PackedVector2Array, y, fondu]] (terrasse : terrain rasé
 ## au-dessous de y),
+## "rampes": [[Vector3 bas, Vector3 haut, demi_largeur, fondu]] (tapis couverts : terrain mis à la pente continue
+## du bas au haut dans le couloir, raccordé sur `fondu` m),
 ## "couloirs": [[s0, s1, demi_largeur, couverture, fondu = 10 m]] (quais
 ## souterrains : terrain relevé à au moins `couverture` m au-dessus du
 ## plafond de la salle)}. Le relief IGN maillé à 25 m traversait les bâtiments et les
@@ -1997,6 +1999,20 @@ func _build_piece(am: Dictionary, pause: Callable = Callable()) -> void:
 						var d: float = _dist_poly(q, pl[0])
 						var w2: float = 1.0 - smoothstep(0.0, pl[2], d)
 						h = lerpf(h, pl[1], w2)
+				# rampes (tapis couverts de Solaise) : terrain mis à la pente continue de la rampe dans son couloir
+				for rp in am.get("rampes", []):
+					var ra: Vector3 = rp[0]
+					var rb2: Vector3 = rp[1]
+					var ab: Vector2 = Vector2(rb2.x - ra.x, rb2.z - ra.z)
+					var lab: float = ab.length()
+					var tr: float = (q - Vector2(ra.x, ra.z)).dot(ab) / maxf(lab * lab, 0.01)
+					var tc: float = clampf(tr, 0.0, 1.0)
+					var pc: Vector2 = Vector2(ra.x, ra.z) + ab * tc
+					var lat: float = q.distance_to(pc)
+					var dehors: float = maxf(-tr, tr - 1.0) * lab
+					var w6: float = (1.0 - smoothstep(float(rp[2]), float(rp[2]) + float(rp[3]), lat)) \
+						* (1.0 - smoothstep(0.0, float(rp[3]), maxf(dehors, 0.0)))
+					h = lerpf(h, lerpf(ra.y, rb2.y, tc), w6)
 				# remblai (porte Génépy) : terrain remonté jusqu'au niveau,
 				# jamais abaissé (le tunnel reste couvert)
 				for rm in am.get("remblais", []):
