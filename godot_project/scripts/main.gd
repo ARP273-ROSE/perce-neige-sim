@@ -2864,6 +2864,13 @@ func _skieur_en_gare() -> bool:
 	return _gare_du_skieur() > 0
 
 
+## Le skieur est au Perce-Neige : dans une de ses gares ou à bord d'une rame (retour d'utilisateur du 16/11/2026 :
+## « arrivé en haut du funi Perce-Neige pour descendre avec, il croyait que j'étais dans le TSD Vanoise à côté » —
+## le poste prenait la remontée la plus proche, la gare du Vanoise étant à quelques dizaines de mètres).
+func skieur_au_perce_neige() -> bool:
+	return _skieur_en_gare() or _rame_du_skieur() != null
+
+
 func _gare_du_skieur() -> int:
 	if skieur == null or tunnel == null:
 		return 0

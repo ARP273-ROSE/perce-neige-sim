@@ -330,6 +330,9 @@ func _process_corps(delta: float) -> void:
 		_t_poste = 0.5
 		var rm: RemonteesDomaine = main.get("remontees")
 		var lg: LigneRemontee = rm.ligne_courante(skieur.global_position) if rm != null else null
+		# au Perce-Neige (gare ou rame), pas à bord d'une autre remontée : c'est lui, pas la voisine
+		if lg != null and rm.a_bord.is_empty() and bool(main.call("skieur_au_perce_neige")):
+			lg = null
 		_b_poste.visible = lg != null
 		poste.ligne = lg
 		# ligne suivie : pannes au hasard, télémesure vers le pupitre du PC
