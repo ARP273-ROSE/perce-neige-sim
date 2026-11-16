@@ -286,6 +286,7 @@ var amenagements_poses: bool = false    # les gares du funiculaire y sont
 ## hauteur() répond : chacun rend un aménagement (ou {}).
 var amenageurs: Array = []
 var gares_plain_pied: int = 0
+var pieces_groupees: int = 0
 var _trait: Node3D = null
 var _trait_on: bool = true
 const PAS_PIECE: float = 2.0
@@ -731,6 +732,26 @@ func _materiaux_pas() -> void:
 
 ## Fin du chargement, un morceau à la fois (ensemble : une image de 430 ms). Vrai quand tout est posé.
 var _pas_fin: int = 0
+var _pieces_us: int = 0
+var _pieces_pire_us: int = 0
+var _piece_en_cours: bool = false
+var _t_piece: int = 0
+const PIECE_US: int = 6000
+
+
+func _piece_etalee(am: Dictionary) -> void:
+	await _build_piece(am, _pause_piece)
+	_pieces_us += Time.get_ticks_usec() - _t_piece
+	_pieces_pire_us = maxi(_pieces_pire_us, Time.get_ticks_usec() - _t_piece)
+	_piece_en_cours = false
+
+
+func _pause_piece() -> void:
+	if Time.get_ticks_usec() - _t_piece > PIECE_US:
+		_pieces_us += Time.get_ticks_usec() - _t_piece
+		_pieces_pire_us = maxi(_pieces_pire_us, Time.get_ticks_usec() - _t_piece)
+		await get_tree().process_frame
+		_t_piece = Time.get_ticks_usec()
 var _k_fin: int = 0
 
 
@@ -750,10 +771,17 @@ func _finition_pas() -> bool:
 			_k_fin = 0
 			_pas_fin = 1
 		1:
+			if _piece_en_cours:
+				return false
 			if _k_fin < amenagements.size():
-				_build_piece(amenagements[_k_fin])
+				# étalée sur plusieurs images (PIECE_US au plus par image) : la pièce commune de cinq gares voisines
+				# prenait 109 ms d'un bloc sur ce PC
+				_piece_en_cours = true
+				_t_piece = Time.get_ticks_usec()
+				_piece_etalee(amenagements[_k_fin])
 				_k_fin += 1
 				return false
+			print("[Relief] pièces fines : %d, %.0f ms en tout, pire tranche %.1f ms" % [amenagements.size(), _pieces_us / 1000.0, _pieces_pire_us / 1000.0])
 			_poser_trous()
 			_pas_fin = 2
 		2:
@@ -1257,6 +1285,21 @@ const REPLATS: Array = [[[["olympique", false, 30.0], ["tsd6_fontaine_froide", f
 	[[["olympique", true, 8.0]], 1832.30, 4.0, 14.0]]
 
 
+static func _bb_poly(poly: PackedVector2Array) -> Rect2:
+	var bb: Rect2 = Rect2(poly[0], Vector2.ZERO)
+	for v in poly:
+		bb = bb.expand(v)
+	return bb
+
+
+func _y_replat(cle: String, aval: bool) -> float:
+	for rp in REPLATS:
+		for g in rp[0]:
+			if String(g[0]) == cle and bool(g[1]) == aval:
+				return float(rp[1])
+	return NAN
+
+
 func _sur_replat(cle: String, aval: bool) -> bool:
 	for rp in REPLATS:
 		for g in rp[0]:
@@ -1279,11 +1322,14 @@ const PALIERS: Array = [[[["tph_fornet", false, 10.0, true], ["tcd10_vallon_iser
 ## arrive de plain-pied ») : la gare était posée au plus haut du terrain sous son quai et le reste comblé par un
 ## remblai de neige (jusqu'à 10 m aux Boisses, plus de 3 m sur une vingtaine de gares). Quand le terrain varie de plus
 ## de SEUIL_PLAIN_PIED sous l'emprise, une pièce fine le met à plat à mi-hauteur (autant de déblai que de remblai)
-## sous le quai, l'aire d'attente et le débarquement, raccordée à la pente sur 12 à 30 m.
+## sous toute la largeur du quai, l'aire d'attente, le débarquement et l'aire d'arrivée à pied (plus de rampe),
+## raccordée à la pente sur 12 à 30 m. Gares voisines : une seule pièce.
 ## Pas pour : téléskis (pas de quai), téléphériques et Funival (bâtiments), replats et paliers communs, gares
 ## intermédiaires des lignes jumelées (une pièce pour les deux).
 const SEUIL_PLAIN_PIED: float = 2.0
 const SEUIL_CREUX: float = 1.2          # terrain des abords (à 8 m) au-dessus de la gare
+## Longueur de l'aire d'arrivée à pied, à plat, derrière le bout du quai (m).
+const ACCES_PLAIN_PIED: float = 12.0
 
 
 func _amenagements_gares_plain_pied() -> Dictionary:
@@ -1296,10 +1342,12 @@ func _amenagements_gares_plain_pied() -> Dictionary:
 	for pl in PALIERS:
 		for g in pl[0]:
 			hors[[String(g[0]), bool(g[1])]] = true
+	var liste: bool = "--liste-plain-pied" in OS.get_cmdline_user_args()
+	var cands: Array = []           # {rect, plat, seul} : `seul` faux = posée seulement si une voisine l'atteint
 	for D in RemonteesDonnees.LIGNES:
 		var cle: String = String(D["cle"])
 		var fam: String = String(D["famille"])
-		if cle in DEBLAI_NON or fam.begins_with("perche") or fam == "cabine_funi" or fam == "cabine_tph":
+		if fam.begins_with("perche") or fam == "cabine_funi" or fam == "cabine_tph":
 			continue
 		var a: Vector2 = RemonteesDomaine.monde(float(D["aval"][0]), float(D["aval"][1]))
 		var b: Vector2 = RemonteesDomaine.monde(float(D["amont"][0]), float(D["amont"][1]))
@@ -1309,73 +1357,245 @@ func _amenagements_gares_plain_pied() -> Dictionary:
 		var lat: Vector2 = Vector2(-u.y, u.x)
 		a += u * float(RemonteesDomaine.AVANCES_AVAL.get(cle, 0.0))
 		b -= u * float(RemonteesDomaine.RECULS_AMONT.get(cle, 0.0))
-		var hl: float = float(D["voie"]) * 0.5 + 4.0
+		# toute la largeur du quai et de ses talus (quai : voie / 2 + 5 m, plus le contour extérieur du double
+		# embarquement), et derrière, l'aire d'arrivée à pied côté portillons : à voie / 2 + 4 m et l_gare + 10 m, les
+		# bords du quai et la rampe d'accès des télésièges (jusqu'à 40 m) sortaient de la pièce, sur des remblais de
+		# 2 à 7 m (retour d'utilisateur : « tes terrassements où on est super haut ; en vrai on arrive de plain-pied »)
+		var jum: bool = false
+		for jg in RemonteesDomaine.JUMELAGES:
+			jum = jum or cle in jg
+		var hl: float = float(D["voie"]) * 0.5 + 8.0 + (LigneRemontee.DECAL_CONTOUR if jum else 0.0)
 		var t0: float = -6.0
-		var t1: float = LigneRemontee.l_gare_pour(fam) + 10.0
+		var lgg: float = LigneRemontee.l_gare_pour(fam)
+		var bq: float = lgg + float(D["voie"]) * 0.25 + 8.25          # bout du quai (RemonteesDomaine, rampes)
+		var t1: float = maxf(lgg + 10.0, bq + ACCES_PLAIN_PIED)
+		var hln: float = float(D["voie"]) * 0.5 + 4.0                # emprise de la gare seule
+		var t1n: float = lgg + 10.0
 		for aval in [true, false]:
-			if hors.has([cle, aval]) or _sur_replat(cle, aval):
+			if hors.has([cle, aval]):
 				continue
 			var o: Vector2 = a if aval else b
 			var vers: Vector2 = -u if aval else u
 			var mn: float = INF
 			var mx: float = -INF
 			var t0g: float = -t1 if double.has([cle, aval]) else t0
-			var t: float = t0g
-			while t <= t1:
+			# niveau mesuré sous l'emprise de la gare seule (quai, poulie) : la mettre à plat sur l'aire d'arrivée suffit à
+			# supprimer la rampe ; l'abaisser vers cette aire raidissait la sortie du câble (Cugnai aval, 19,5°) et changeait
+			# le sens de déviation de pylônes voisins (bench_profil_lignes)
+			var t0n: float = -t1n if double.has([cle, aval]) else t0
+			var t: float = t0n
+			while t <= t1n:
 				for kx in range(-2, 3):
-					var q: Vector2 = o + vers * t + lat * (hl * kx * 0.5)
+					var q: Vector2 = o + vers * t + lat * (hln * kx * 0.5)
 					var h: float = _hauteur_tri(q.x, q.y)
 					mn = minf(mn, h)
 					mx = maxf(mx, h)
 				t += 3.0
-			# gare en creux (retour d'utilisateur du 16/11/2026 : « le bas de l'Aiguille Percée m'a l'air sous terre ») :
-			# sol presque plat sous la gare, mais terrain plus haut autour (versant en travers, déblai de la grille) —
-			# la gare garde son niveau, les abords sont raccordés en pente douce
+			# à mi-hauteur (autant de déblai que de remblai) ; gares sans déblai (DEBLAI_NON) : au plus haut, comme avant
 			var y_plat: float = (mn + mx) * 0.5
+			# gare sur un replat (sommet de Bellevarde) : à son niveau, posée seulement si une voisine l'atteint, pour
+			# que le raccord de celle-ci ne creuse pas le replat (Olympique : 1,8 m de remblai sinon)
+			var y_rp: float = _y_replat(cle, aval)
 			var denivelee: float = mx - mn
-			if denivelee < SEUIL_PLAIN_PIED:
+			var seul: bool = denivelee >= SEUIL_PLAIN_PIED and cle not in DEBLAI_NON and is_nan(y_rp)
+			if not is_nan(y_rp):
+				y_plat = y_rp
+			elif cle in DEBLAI_NON:
+				y_plat = mx
+			elif denivelee < SEUIL_PLAIN_PIED:
+				# gare en creux (retour d'utilisateur du 16/11/2026 : « le bas de l'Aiguille Percée m'a l'air sous
+				# terre ») : sol presque plat sous la gare, mais terrain plus haut autour (versant en travers, déblai de
+				# la grille) — la gare garde son niveau, les abords sont raccordés en pente douce
 				var haut: float = -INF
-				var ta: float = t0g - 8.0
-				while ta <= t1 + 8.0:
+				var ta: float = t0n - 8.0
+				while ta <= t1n + 8.0:
 					for sx in [-1.0, 1.0]:
-						var qa: Vector2 = o + vers * ta + lat * (sx * (hl + 8.0))
+						var qa: Vector2 = o + vers * ta + lat * (sx * (hln + 8.0))
 						haut = maxf(haut, _hauteur_tri(qa.x, qa.y))
 					ta += 4.0
 				for kx2 in range(-2, 3):
-					for tb in [t0g - 8.0, t1 + 8.0]:
-						var qb: Vector2 = o + vers * tb + lat * ((hl + 8.0) * kx2 * 0.5)
+					for tb in [t0n - 8.0, t1n + 8.0]:
+						var qb: Vector2 = o + vers * tb + lat * ((hln + 8.0) * kx2 * 0.5)
 						haut = maxf(haut, _hauteur_tri(qb.x, qb.y))
-				if haut - mx < SEUIL_CREUX:
-					if "--liste-plain-pied" in OS.get_cmdline_user_args():
-						print("PLAIN_PIED_NON %-26s %-5s sol %.1f à %.1f m, abords %.1f" % [cle, "aval" if aval else "amont", mn, mx, haut])
-					continue
 				y_plat = mx
-				denivelee = haut - mx
+				if haut - mx >= SEUIL_CREUX:
+					seul = true
+					denivelee = haut - mx
 			# raccord en racine de la dénivelée : courbure bornée (à 1,5 fois la dénivelée, un raccord de 10 m pour 5 m
 			# de haut laissait 6 cm entre le sol affiché et la collision, au pas de 2 m — bench_ski)
-			var fondu: float = clampf(8.5 * sqrt(denivelee), 12.0, 30.0)
+			var fondu: float = clampf(8.5 * sqrt(maxf(denivelee, 0.0)), 12.0, 30.0)
 			var poly: PackedVector2Array = PackedVector2Array([o + vers * t0g - lat * hl, o + vers * t0g + lat * hl,
 				o + vers * t1 + lat * hl, o + vers * t1 - lat * hl])
 			var bb: Rect2 = Rect2(poly[0], Vector2.ZERO)
 			for v in poly:
 				bb = bb.expand(v)
-			# pas sur un aménagement déjà posé (palier du Fornet à côté du départ des Pyramides : le socle du Vallon se
-			# retrouvait à nu, 35 bords ouverts à bench_garde_fous) ni sur une autre gare de plain-pied
-			var r_am: Rect2 = bb.grow(fondu + 6.0)
-			var libre: bool = true
-			for am0 in amenagements:
-				if ((am0 as Dictionary)["rect"] as Rect2).grow(GRANDI_PIECE).intersects(r_am):
-					libre = false
+			# niveau de la gare telle que RemonteesDomaine la pose sans pièce : au plus haut du sol des lignes sous le quai
+			var y_gare: float = -INF
+			var tg: float = -2.0
+			while tg <= lgg + 2.0:
+				for xg in [-1.0, 0.0, 1.0]:
+					var qg: Vector2 = o + vers * tg + lat * (xg * (float(D["voie"]) * 0.5 + 1.5))
+					y_gare = maxf(y_gare, hauteur_ligne(qg.x, qg.y))
+				tg += 3.0
+			# rectangle de la pièce de la gare seule (règle d'origine : emprise de la gare, premier arrivé)
+			var pn: Rect2 = Rect2(o + vers * t0n, Vector2.ZERO).expand(o + vers * t0n + lat * hln).expand(o + vers * t0n - lat * hln) 				.expand(o + vers * t1n + lat * hln).expand(o + vers * t1n - lat * hln)
+			cands.append({"rect": bb.grow(fondu + 6.0), "plat": [poly, y_plat, fondu], "seul": seul, "y_gare": y_gare, "replat": not is_nan(y_rp),
+				"r_seule": pn.grow(fondu + 6.0),
+				"nom": "%-26s %-5s sol %.1f à %.1f m → %.1f, raccord %.0f m" % [cle, "aval" if aval else "amont", mn, mx, y_plat, fondu]})
+	# pas sur un aménagement déjà posé (palier du Fornet à côté du départ des Pyramides : le socle du Vallon se
+	# retrouvait à nu, 35 bords ouverts à bench_garde_fous)
+	var deja: Array = amenagements.duplicate()
+	# gares qui avaient déjà leur pièce seules (premier arrivé, sans recouvrement) : à mi-hauteur. Les autres (sur un
+	# aménagement, sur une voisine) gardent le niveau où RemonteesDomaine les posait, et c'est le terrain qui monte
+	# jusqu'au quai : les câbles ne bougent pas (abaissées à mi-hauteur, Tufs, Marais, Pyramides changeaient le sens
+	# de déviation de pylônes voisins — bench_profil_lignes)
+	var seules: Array = []
+	for c in cands:
+		var accepte: bool = bool(c["seul"])
+		if accepte:
+			for am0 in deja:
+				if ((am0 as Dictionary)["rect"] as Rect2).grow(GRANDI_PIECE).intersects(c["r_seule"]):
+					accepte = false
 					break
-			if not libre:
-				if "--liste-plain-pied" in OS.get_cmdline_user_args():
-					print("PLAIN_PIED_NON %-26s %-5s sur un autre aménagement" % [cle, "aval" if aval else "amont"])
-				continue
-			amenagements.append({"rect": r_am, "plats": [[poly, y_plat, fondu]], "masque": true})
-			if "--liste-plain-pied" in OS.get_cmdline_user_args():
-				print("PLAIN_PIED %-26s %-5s sol %.1f à %.1f m → %.1f, raccord %.0f m" % [cle, "aval" if aval else "amont", mn, mx, y_plat, fondu])
+		if accepte:
+			for r0 in seules:
+				if (r0 as Rect2).grow(GRANDI_PIECE).intersects(c["r_seule"]):
+					accepte = false
+					break
+		if accepte:
+			seules.append(c["r_seule"])
+		c["seule"] = accepte
+	var ecartees: Array = []        # emprises (rectangle du plat) des gares laissées comme avant
+	# ni sur le haut du Funival, aménagé plus tard en jeu par la ligne elle-même (salle rasée, bâtiment : 7 bords
+	# ouverts à bench_garde_fous quand la pièce commune du sommet de Bellevarde l'atteignait)
+	for D2 in RemonteesDonnees.LIGNES:
+		if String(D2["famille"]) == "cabine_funi":
+			var bf: Vector2 = RemonteesDomaine.monde(float(D2["amont"][0]), float(D2["amont"][1]))
+			cands = cands.filter(func(c: Dictionary) -> bool:
+				var hors_funi: bool = not Rect2(bf - Vector2.ONE * 75.0, Vector2.ONE * 150.0).grow(GRANDI_PIECE).intersects(c["rect"])
+				if not hors_funi:
+					ecartees.append(_bb_poly(c["plat"][0]))
+					if liste and bool(c["seul"]):
+						print("PLAIN_PIED_NON %s : sur le haut du Funival" % c["nom"])
+				return hors_funi)
+	# … sauf sur un aménagement fait seulement de plats (palier du Fornet et départ des Pyramides, 6,8 m de remblai) :
+	# la gare y ajoute le sien, mêlé comme entre gares voisines
+	for c in cands:
+		if not bool(c["seul"]):
+			continue
+		var touche: Array = deja.filter(func(am0: Dictionary) -> bool: return (am0["rect"] as Rect2).grow(GRANDI_PIECE).intersects(c["rect"]))
+		if touche.size() != 1 or not (touche[0] as Dictionary).keys().all(func(k2) -> bool: return k2 in ["rect", "plats", "masque", "melange"]):
+			continue
+		var am1: Dictionary = touche[0]
+		var r1: Rect2 = (am1["rect"] as Rect2).merge(c["rect"])
+		if deja.any(func(am0: Dictionary) -> bool: return am0 != am1 and (am0["rect"] as Rect2).grow(GRANDI_PIECE).intersects(r1)):
+			continue
+		am1["rect"] = r1
+		(am1["plats"] as Array).append(c["plat"])
+		am1["melange"] = true
+		c["fondue"] = true
+		gares_plain_pied += 1
+		if liste:
+			print("PLAIN_PIED %s, mêlée à l'aménagement voisin" % c["nom"])
+	cands = cands.filter(func(c: Dictionary) -> bool:
+		if c.has("fondue"):
+			return false
+		for am0 in deja:
+			if ((am0 as Dictionary)["rect"] as Rect2).grow(GRANDI_PIECE).intersects(c["rect"]):
+				ecartees.append(_bb_poly(c["plat"][0]))
+				if liste and bool(c["seul"]):
+					print("PLAIN_PIED_NON %s : sur un autre aménagement" % c["nom"])
+				return false
+		return true)
+	# ni sur l'emprise d'une gare écartée : son raccord la mettait en remblai (Marmottes amont, 2,2 m, à côté du groupe
+	# du sommet de Bellevarde)
+	cands = cands.filter(func(c: Dictionary) -> bool:
+		for re in ecartees:
+			if (re as Rect2).grow(2.0).intersects(c["rect"]):
+				if liste and bool(c["seul"]):
+					print("PLAIN_PIED_NON %s : touche une gare écartée" % c["nom"])
+				return false
+		return true)
+	# gares voisines (sommet de Bellevarde, Marais et Leissières…) : une seule pièce, un plat par gare, mêlés
+	# par l'inverse de la distance (chaque quai reste à son niveau) ; avant, la première posée gardait sa pièce et
+	# les autres restaient sur leur remblai, et une voisine sans pièce voyait son sol bouger sous le raccord
+	var grp: Array = range(cands.size())
+	var racine := func(i: int) -> int:
+		while grp[i] != i:
+			i = grp[i]
+		return i
+	for i in range(cands.size()):
+		for j in range(i + 1, cands.size()):
+			if (cands[i]["rect"] as Rect2).grow(GRANDI_PIECE).intersects(cands[j]["rect"]):
+				grp[racine.call(j)] = racine.call(i)
+	var groupes: Dictionary = {}
+	for i in range(cands.size()):
+		var k: int = racine.call(i)
+		if not groupes.has(k):
+			groupes[k] = []
+		groupes[k].append(cands[i])
+	var n_pieces: int = 0
+	for k in groupes:
+		var membres: Array = groupes[k]
+		if not membres.any(func(c: Dictionary) -> bool: return bool(c["seul"])):
+			continue
+		if liste:
+			for c in membres:
+				print("PLAIN_PIED %s%s" % [c["nom"], "" if membres.size() == 1 else " (groupe de %d)" % membres.size()])
+		if membres.size() == 1:
+			amenagements.append({"rect": membres[0]["rect"], "plats": [membres[0]["plat"]], "masque": true})
 			gares_plain_pied += 1
-	print("[Relief] gares de plain-pied : %d pièces" % gares_plain_pied)
+			n_pieces += 1
+			continue
+		# plats qui se recouvrent (gares dos à dos : Brévières amont et Boisses aval, 7,8 m d'écart) : celui de la gare qui
+		# avait déjà sa pièce reste entier, l'autre est rogné ; mêlés, les deux quais restaient sur 4 m de remblai, et au
+		# même niveau, le câble de l'une changeait de profil (bench_profil_lignes)
+		for i in range(membres.size()):
+			if not bool(membres[i]["seule"]):
+				continue
+			for j in range(membres.size()):
+				if i == j or bool(membres[j]["seule"]):
+					continue
+				var pj: PackedVector2Array = membres[j]["plat"][0]
+				if Geometry2D.intersect_polygons(membres[i]["plat"][0], pj).is_empty():
+					continue
+				var reste: Array = Geometry2D.clip_polygons(pj, membres[i]["plat"][0])
+				var meilleur: PackedVector2Array = PackedVector2Array()
+				var aire: float = 0.0
+				for rp in reste:
+					if Geometry2D.is_polygon_clockwise(rp):
+						continue
+					var bbr: Rect2 = _bb_poly(rp)
+					if bbr.get_area() > aire:
+						aire = bbr.get_area()
+						meilleur = rp
+				if not meilleur.is_empty():
+					membres[j]["plat"][0] = meilleur
+		var r_g: Rect2 = membres[0]["rect"]
+		var plats: Array = []
+		for c in membres:
+			r_g = r_g.merge(c["rect"])
+			plats.append(c["plat"])
+		var libre: bool = true
+		for am0 in deja:
+			if ((am0 as Dictionary)["rect"] as Rect2).grow(GRANDI_PIECE).intersects(r_g):
+				libre = false
+		if not libre:
+			# (rectangle commun sur un autre aménagement : comme avant, la première gare garde sa pièce)
+			var poses: Array = []
+			for c in membres:
+				if not bool(c["seul"]) or poses.any(func(r0: Rect2) -> bool: return r0.grow(GRANDI_PIECE).intersects(c["rect"])):
+					continue
+				poses.append(c["rect"])
+				amenagements.append({"rect": c["rect"], "plats": [c["plat"]], "masque": true})
+				gares_plain_pied += 1
+				n_pieces += 1
+			continue
+		amenagements.append({"rect": r_g, "plats": plats, "masque": true, "melange": true})
+		gares_plain_pied += membres.size()
+		n_pieces += 1
+		pieces_groupees += 1
+	print("[Relief] gares de plain-pied : %d gares, %d pièces (%d groupées)" % [gares_plain_pied, n_pieces, pieces_groupees])
 	return {}
 
 
@@ -1700,6 +1920,8 @@ func _build_piece(am: Dictionary, pause: Callable = Callable()) -> void:
 			var p: Vector3 = xf.origin + t * (s - sc)
 			pts.append([s, p])
 			s += 2.0
+			if pause.is_valid() and pts.size() % 64 == 0:
+				await pause.call()
 		axes.append([c, pts])
 	var verts: PackedVector3Array = PackedVector3Array()
 	var uvs: PackedVector2Array = PackedVector2Array()
@@ -1741,10 +1963,26 @@ func _build_piece(am: Dictionary, pause: Callable = Callable()) -> void:
 					var cible: float = (bp[1] as Vector3).y + sect + c[3]
 					h += maxf(cible - h, 0.0) * w
 				# place, escalier : aplanis
-				for pl in am.get("plats", []):
-					var d: float = _dist_poly(q, pl[0])
-					var w2: float = 1.0 - smoothstep(0.0, pl[2], d)
-					h = lerpf(h, pl[1], w2)
+				if am.get("melange", false):
+					# gares voisines : chaque plat pèse l'inverse du carré de sa distance (exact sur chaque quai)
+					var sw: float = 0.0
+					var sy: float = 0.0
+					var wmax: float = 0.0
+					for pl in am["plats"]:
+						var d5: float = _dist_poly(q, pl[0])
+						var w5: float = 1.0 - smoothstep(0.0, pl[2], d5)
+						if w5 > 0.0:
+							var k5: float = w5 / (d5 * d5 + 0.01)
+							sw += k5
+							sy += k5 * float(pl[1])
+							wmax = maxf(wmax, w5)
+					if sw > 0.0:
+						h = lerpf(h, sy / sw, wmax)
+				else:
+					for pl in am.get("plats", []):
+						var d: float = _dist_poly(q, pl[0])
+						var w2: float = 1.0 - smoothstep(0.0, pl[2], d)
+						h = lerpf(h, pl[1], w2)
 				# remblai (porte Génépy) : terrain remonté jusqu'au niveau,
 				# jamais abaissé (le tunnel reste couvert)
 				for rm in am.get("remblais", []):
@@ -1759,6 +1997,8 @@ func _build_piece(am: Dictionary, pause: Callable = Callable()) -> void:
 			uvs.append(Vector2((x - ReliefDonnees.X_OUEST) / (ReliefDonnees.X_EST - ReliefDonnees.X_OUEST),
 				(z - ReliefDonnees.Z_NORD) / (ReliefDonnees.Z_SUD - ReliefDonnees.Z_NORD)))
 	for i in range(nz - 1):
+		if pause.is_valid() and i % 16 == 0:
+			await pause.call()
 		for j in range(nx - 1):
 			var a: int = i * nx + j
 			idx.append_array(PackedInt32Array([a, a + 1, a + nx, a + 1, a + nx + 1, a + nx]))
@@ -1767,6 +2007,8 @@ func _build_piece(am: Dictionary, pause: Callable = Callable()) -> void:
 		hp.append(v.y)
 	var normales: PackedVector3Array = PackedVector3Array()
 	for i in range(nz):
+		if pause.is_valid() and i % 8 == 0:
+			await pause.call()
 		for j in range(nx):
 			normales.append(_normale_grille(hp, nx, nz, i, j, lx, lz))
 	var arr: Array = []
@@ -1793,6 +2035,8 @@ func _build_piece(am: Dictionary, pause: Callable = Callable()) -> void:
 		var j0: int = clampi(int((bb.position.x - r.position.x) * 4.0), 0, mw - 1)
 		var j1: int = clampi(int((bb.end.x - r.position.x) * 4.0) + 1, 0, mw - 1)
 		for i in range(i0, i1 + 1):
+			if pause.is_valid() and i % 16 == 0:
+				await pause.call()
 			for j in range(j0, j1 + 1):
 				var q: Vector2 = r.position + Vector2((j + 0.5) / 4.0, (i + 0.5) / 4.0)
 				if Geometry2D.is_point_in_polygon(q, poly):
