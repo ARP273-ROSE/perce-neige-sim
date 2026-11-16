@@ -425,8 +425,13 @@ func _appliquer_repli(n: int) -> void:
 	if foret != null:
 		foret.regler_repli(mini(n, 2))
 	if anneaux != null:
-		anneaux.regler_detail(n < 3)
+		anneaux.regler_detail(n < 3 and not _rel_leger())
 	print("[ReliefHD] repli %d/%d" % [n, REPLI_MAX])
+
+
+func _rel_leger() -> bool:
+	var r: Node = get_parent()
+	return r != null and bool(r.get("_leger"))
 
 
 func noeuds_grille() -> PackedFloat32Array:
