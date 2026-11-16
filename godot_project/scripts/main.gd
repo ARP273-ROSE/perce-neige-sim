@@ -2063,6 +2063,7 @@ func aller_a_remontee(lg: LigneRemontee) -> void:
 	# quai (le terrassement domine souvent le relief — il était dedans)
 	_depose_remontee = lg
 	_derniere_depose = lg
+	_point_depose = p
 
 
 var _depose_remontee: LigneRemontee = null
@@ -2094,6 +2095,11 @@ func _poser_sur_gare() -> void:
 
 var _t_depose: float = 0.0
 var _derniere_depose: LigneRemontee = null
+var _point_depose: Vector3 = Vector3.ZERO
+## Au-delà de cette distance horizontale du point de dépose, le joueur a déjà marché : on ne l'écarte plus,
+## on tourne seulement la caméra (sonde de parcours du 16/11/2026 : entré dans la gare de la Grande Motte
+## dans les 10 s, il était écarté de 5 m à travers un mur, de 10 m au Fornet).
+const REGARD_ECART_MAX: float = 2.0
 
 
 ## Après une dépose : la caméra, 5 m derrière le skieur, tombait dans le bâtiment de la gare, sans
@@ -2113,11 +2119,15 @@ func _regard_libre() -> void:
 				if g != null:
 					_boites_sous(g, p, boites)
 	var r: Array = _meilleur_regard(p, boites)
+	# (il a quitté le point de dépose : c'est lui qui marche, on ne le déplace plus)
+	var base: Vector3 = _point_depose if _point_depose != Vector3.ZERO else p
+	var parti: bool = Vector2(p.x - base.x, p.z - base.z).length() > REGARD_ECART_MAX
 	# même le meilleur regard est dans un bâtiment : le skieur en est trop près, on l'écarte
-	if int(r[1]) >= 100 and lg0 != null:
+	# (candidats comptés depuis le point de dépose, pas depuis là où il est arrivé)
+	if int(r[1]) >= 100 and lg0 != null and not parti:
 		var cote: Vector3 = lg0.global_transform.basis.x * signf(lg0._x_brin(true))
 		for d in [5.0, 10.0, 15.0, 20.0]:
-			var q: Vector3 = p + cote * float(d)
+			var q: Vector3 = base + cote * float(d)
 			q.y = relief.hauteur_sol(q.x, q.z) + 0.1
 			var r2: Array = _meilleur_regard(q, boites)
 			if int(r2[1]) < 100:
@@ -2125,6 +2135,8 @@ func _regard_libre() -> void:
 				skieur.velocity = Vector3.ZERO
 				skieur.refuge = q
 				skieur.dernier_sol = q
+				# (c'est désormais là qu'il a été déposé : à l'expiration des 10 s, l'écart se compte d'ici)
+				_point_depose = q
 				if collisions != null:
 					collisions.assurer_autour(q)
 				r = r2
