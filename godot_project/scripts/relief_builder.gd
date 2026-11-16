@@ -1335,6 +1335,7 @@ const PALIERS: Array = [[[["tph_fornet", false, 10.0, true], ["tcd10_vallon_iser
 ## Pas pour : téléskis (pas de quai), téléphériques et Funival (bâtiments), replats et paliers communs, gares
 ## intermédiaires des lignes jumelées (une pièce pour les deux).
 const SEUIL_PLAIN_PIED: float = 2.0
+const SEUIL_REBORD: float = 0.6        # dévers sous une gare à partir duquel ses abords sont raccordés
 const SEUIL_CREUX: float = 1.2          # terrain des abords (à 8 m) au-dessus de la gare
 ## Longueur de l'aire d'arrivée à pied, à plat, derrière le bout du quai (m).
 const ACCES_PLAIN_PIED: float = 12.0
@@ -1429,6 +1430,11 @@ func _amenagements_gares_plain_pied() -> Dictionary:
 				if haut - mx >= SEUIL_CREUX:
 					seul = true
 					denivelee = haut - mx
+				elif denivelee >= SEUIL_REBORD:
+					# sol en léger dévers sous la gare (bas de l'Aiguille Percée, tour des gares du 16/11/2026 : gare
+					# sur un plateau au rebord franc d'un mètre) : la gare garde son niveau, le terrain monte jusqu'à
+					# elle et se raccorde en pente douce
+					seul = true
 			# raccord en racine de la dénivelée : courbure bornée (à 1,5 fois la dénivelée, un raccord de 10 m pour 5 m
 			# de haut laissait 6 cm entre le sol affiché et la collision, au pas de 2 m — bench_ski)
 			var fondu: float = clampf(8.5 * sqrt(maxf(denivelee, 0.0)), 12.0, 30.0)
