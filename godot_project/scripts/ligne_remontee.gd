@@ -2776,6 +2776,12 @@ func _mesh_terrassement(tri: PackedVector3Array, y0: float, socle: Array = []) -
 	await _pause("gare : terrassement, maillage")
 	mi.mesh = MeshMerge.valider(st)
 	mi.material_override = m2
+	# PC : la neige du relief elle-même (photo, neige, pistes, ombrage, été / hiver) ; la neige damée, blanche et
+	# éclairée, faisait de chaque quai une dalle d'un blanc net aux bords francs sur la neige gris bleuté du relief
+	# (tour des gares du 16/11/2026 : Rogoney, Cema, Madeleine, Merles, Marmottes Express…)
+	var m_rel: ShaderMaterial = _neige_du_relief()
+	if m_rel != null:
+		mi.material_override = m_rel
 	if st_f != null:
 		var mf: MeshInstance3D = MeshInstance3D.new()
 		mf.name = "Socle"
@@ -2785,6 +2791,29 @@ func _mesh_terrassement(tri: PackedVector3Array, y0: float, socle: Array = []) -
 		mf.material_override = m3
 		mi.set_meta("socle", mf)
 	return mi
+
+
+## Matériau du sol du relief pour le dessus des terrassements (PC) : celui des pièces fines, sans trou ; null sur le
+## web ou hors du jeu (cuissons, bancs sans relief).
+static var _trou_vide: ImageTexture = null
+
+
+func _neige_du_relief() -> ShaderMaterial:
+	if OS.has_feature("web") or relief_trous == null or not is_instance_valid(relief_trous):
+		return null
+	var mt: Variant = relief_trous.get("_mat_terrain")
+	if mt == null or not (mt is ShaderMaterial):
+		return null
+	if _trou_vide == null:
+		var img: Image = Image.create(1, 1, false, Image.FORMAT_L8)
+		img.fill(Color.BLACK)
+		_trou_vide = ImageTexture.create_from_image(img)
+	var m: ShaderMaterial = (mt as ShaderMaterial).duplicate()
+	m.set_shader_parameter("piece", 1.0)
+	m.set_shader_parameter("trous", _trou_vide)
+	m.set_shader_parameter("emprise", Vector4(-1.0e6, -1.0e6, 1.0e6, 1.0e6))
+	relief_trous.call("_hiver_mat", m, true)
+	return m
 
 
 # --- carénage de gare ------------------------------------------------------------
