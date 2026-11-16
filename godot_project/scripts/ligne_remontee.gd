@@ -2766,9 +2766,12 @@ func _mesh_terrassement(tri: PackedVector3Array, y0: float, socle: Array = []) -
 		# face est vue de dos et sa normale retournée (talus noirs)
 		var ordre: Array = [a, b, d] if (b - a).cross(d - a).dot(n) < 0.0 else [a, d, b]
 		var s_t: SurfaceTool = st_f if st_f != null and n.y < 0.6 else st
+		# dessus du terrassement 5 cm sous son niveau : là où le relief est nivelé jusqu'au quai (pièces de plain-pied),
+		# les deux surfaces étaient confondues et se disputaient l'affichage (plaques grises au pied de l'Aiguille Percée)
+		var bas: float = 0.05 if s_t == st else 0.0
 		for v in ordre:
 			s_t.set_normal(n)
-			s_t.add_vertex(v - Vector3(0, y0, 0))
+			s_t.add_vertex(v - Vector3(0, y0 + bas, 0))
 	var mi: MeshInstance3D = MeshInstance3D.new()
 	mi.name = "Terrassement"
 	var m2: StandardMaterial3D = (RemonteeKit.mat("neige_damee") as StandardMaterial3D).duplicate()
