@@ -2233,6 +2233,21 @@ func _demi_caisse() -> Vector2:
 	return Vector2(VehiculeFunival.DEMI_LARGEUR, VehiculeFunival.DEMI_L)
 
 
+## Dans une des deux gares (quais, gradins, salle amont), en p : on ne s'y hisse pas sur un rebord (main, GRIMPE_MAX) —
+## au bord des gradins aval, le skieur se hissait sur le garde-corps (1,1 m) puis tombait de 4 m de l'autre côté
+## (sonde de parcours des gares, 16/11/2026).
+func zone_gare(p: Vector3) -> bool:
+	if not pret or not is_inside_tree():
+		return false
+	var loc: Vector3 = global_transform.affine_inverse() * p
+	var d: float = -loc.z
+	var lq: float = VehiculeFunival.DEMI_L + 8.0
+	for aval in [true, false]:
+		if absf(d - _x_quai(aval)) < lq and absf(loc.x) < 12.0 and absf(loc.y - y_voie(clampf(d, 0.0, longueur_h()))) < 8.0:
+			return true
+	return false
+
+
 func _skieur_marche_en_gare() -> bool:
 	if not is_inside_tree():
 		return false
