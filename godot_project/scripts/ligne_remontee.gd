@@ -613,6 +613,35 @@ func passagers(i: int, montee: bool) -> int:
 	return int(e[2])
 
 
+## Passagers dessinés des véhicules proches (VehiculeRemontee.poser_passagers), toutes les 0,3 s : ceux que la
+## ligne a tirés pour le véhicule (passagers), personne dans la gare où l'on descend (montants en gare amont,
+## descendants en gare aval).
+var _pax_dessin_t: float = 0.0
+
+
+func _maj_passagers_dessines(delta: float) -> void:
+	_pax_dessin_t += delta
+	if _pax_dessin_t < 0.3 or teleski():
+		return
+	_pax_dessin_t = 0.0
+	var cam: Camera3D = get_viewport().get_camera_3d() if is_inside_tree() else null
+	if cam == null:
+		return
+	var p_cam: Vector3 = cam.global_position
+	var portee: float = VehiculeRemontee.portee_passagers() + 30.0
+	var xm: float = signf(_x_brin(true))
+	for i in range(_vehicules.size()):
+		var v: VehiculeRemontee = _vehicules[i][0]
+		if v == null or not v.visible or v.global_position.distance_to(p_cam) > portee:
+			continue
+		var montee: bool = signf(v.position.x) == xm
+		var z: String = String(zone(float(_vehicules[i][1]))[0])
+		var n: int = passagers(i, montee)
+		if (z == "gare_amont" and montee) or (z == "gare_aval" and not montee):
+			n = 0
+		v.poser_passagers(n, hash([String(name), i]))
+
+
 func _maj_occupation(delta: float) -> void:
 	_occ_t += delta
 	if _occ_t < 30.0:
@@ -5404,6 +5433,7 @@ func _process_corps(delta: float) -> void:
 		return
 	_maj_vent()
 	_maj_occupation(delta)
+	_maj_passagers_dessines(delta)
 	if _exploit != null:
 		_exploit.avancer(delta)
 	_regler_vitesse(delta)

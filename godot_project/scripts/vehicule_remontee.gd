@@ -875,6 +875,158 @@ func tirer_charge(graine: int) -> void:
 	psi0_tire = psi_charge(somme, n) if n > 0 else 0.0
 
 
+## Passagers dessinés (16/11/2026, retour d'utilisateur : « on met des gens que dans le funi Perce-Neige et nulle
+## part ailleurs ») : sous la suspente qui balance, un MultiMesh par maillage (passager assis ou debout, casque ou
+## bonnet, skis), toutes les places préparées une fois, dans un ordre mélangé ; seul le nombre affiché change
+## (visible_instance_count) quand la ligne tire les passagers du véhicule. Rien au-delà de portee_passagers().
+## Sièges : skis aux pieds ; cabines : assis sur les banquettes, face à face ; 3S : banquettes puis debout ;
+## téléphérique : debout, skis à la main.
+static var _pax_maillages: Dictionary = {}
+var _pax_mmi: Dictionary = {}           # clé de maillage → MultiMeshInstance3D
+var _pax_pre: Dictionary = {}           # clé → [nombre d'instances parmi les k premières places]
+var _pax_n: int = -1
+var _pax_places: int = 0
+
+
+static func _maillages_passagers() -> Dictionary:
+	if not _pax_maillages.is_empty():
+		return _pax_maillages
+	var mat: ShaderMaterial = SkieurMesh.materiau()
+	var m: Dictionary = {}
+	for pose in ["assis", "skis"]:
+		for coiffe in ["casque", "bonnet"]:
+			m["p:%s:%s" % [pose, coiffe]] = SkieurMesh.passager(pose, coiffe, mat)
+	m["g:skis_pieds"] = SkieurMesh.skis_aux_pieds(mat)
+	m["g:skis"] = SkieurMesh.skis(mat)
+	_pax_maillages = m
+	return m
+
+
+## Distance d'affichage des passagers (m) : moins loin sur les petites machines et le Web.
+static func portee_passagers() -> float:
+	if PerfManager.allege or OS.has_feature("web"):
+		return 70.0
+	if PerfManager.cran_courant >= 5:
+		return 100.0
+	return 160.0
+
+
+## Places dessinées : [transformée (repère du véhicule, origine aux pieds), assis].
+func _places_passagers() -> Array:
+	var out: Array = []
+	if famille.begins_with("perche") or self is VehiculeFunival:
+		return out
+	if famille == "cabine_tph":
+		var yt: float = -H_SUSP_TPH - 0.08 - 2.70 + 0.12
+		for iz in range(12):
+			for ix in range(6):
+				out.append([Transform3D(Basis.IDENTITY, Vector3(-1.0 + 0.40 * ix, yt, -2.2 + 0.40 * iz)), false])
+		return out
+	if famille == "cabine_3s":
+		for avant in [false, true]:
+			for i in range(6):
+				out.append([Transform3D(Basis(Vector3.UP, PI) if avant else Basis.IDENTITY, place_assise(i, avant)), true])
+		var yp: float = -H_SUSP_3S - 0.08 - _h_cab("cabine_3s") + 0.22
+		for iz in range(3):
+			for ix in range(6):
+				out.append([Transform3D(Basis.IDENTITY, Vector3(-1.1 + 0.44 * ix, yp, -0.36 + 0.36 * iz)), false])
+		return out
+	if cabine:
+		for avant in [false, true]:
+			for i in range(places / 2):
+				out.append([Transform3D(Basis(Vector3.UP, PI) if avant else Basis.IDENTITY, place_assise(i, avant)), true])
+		return out
+	for k in range(places):
+		out.append([Transform3D(Basis.IDENTITY, place_assise(k)), true])
+	return out
+
+
+func _creer_passagers(graine: int) -> void:
+	var places_d: Array = _places_passagers()
+	_pax_places = places_d.size()
+	if places_d.is_empty():
+		return
+	var rng := RandomNumberGenerator.new()
+	rng.seed = graine
+	for i in range(places_d.size() - 1, 0, -1):
+		var j: int = rng.randi_range(0, i)
+		var t: Array = places_d[i]
+		places_d[i] = places_d[j]
+		places_d[j] = t
+	var maill: Dictionary = _maillages_passagers()
+	var xf: Dictionary = {}
+	var cu: Dictionary = {}
+	for cle in maill:
+		xf[cle] = []
+		cu[cle] = []
+		_pax_pre[cle] = [0]
+	var siege: bool = not cabine
+	for pl in places_d:
+		var t0: Transform3D = pl[0]
+		t0.origin -= pivot if _susp != null else Vector3.ZERO
+		var assis: bool = pl[1]
+		if assis:
+			# (place_assise : les pieds, 0,42 m devant le bassin ; le corps recule d'autant, comme le skieur assis)
+			t0.origin += t0.basis * Vector3(0.0, 0.0, SkieurJoueur.RECUL_ASSIS)
+		var taille: float = rng.randf_range(0.94, 1.06)
+		var base: Transform3D = t0 * Transform3D(Basis.IDENTITY.scaled(Vector3.ONE * taille), Vector3.ZERO)
+		if not assis:
+			base = base * Transform3D(Basis(Vector3.UP, rng.randf_range(-0.6, 0.6)), Vector3.ZERO)
+		var cle_p: String = "p:%s:%s" % ["assis" if assis else "skis", "casque" if rng.randf() < 0.72 else "bonnet"]
+		(xf[cle_p] as Array).append(base)
+		(cu[cle_p] as Array).append(Color(rng.randf(), rng.randf(), rng.randf(), 1.0))
+		var g_mat: Color = Color(rng.randf(), rng.randf(), rng.randf(), 1.0)
+		if siege:
+			# skis aux pieds, sous le siège (chevilles du skieur assis : 0,11 m de haut, 0,43 m devant)
+			(xf["g:skis_pieds"] as Array).append(base * Transform3D(Basis(Vector3.RIGHT, -0.25), Vector3(0.0, 0.06, -0.38)))
+			(cu["g:skis_pieds"] as Array).append(g_mat)
+		elif not assis and rng.randf() < 0.75:
+			(xf["g:skis"] as Array).append(base * Transform3D(Basis.IDENTITY, SkieurMesh.ANCRE_SKIS))
+			(cu["g:skis"] as Array).append(g_mat)
+		for cle2 in maill:
+			(_pax_pre[cle2] as Array).append((xf[cle2] as Array).size())
+	var parent: Node3D = _susp if _susp != null else self
+	var noeud := Node3D.new()
+	noeud.name = "Passagers"
+	parent.add_child(noeud)
+	var fin: float = portee_passagers()
+	for cle3 in maill:
+		var liste: Array = xf[cle3]
+		if liste.is_empty():
+			continue
+		var mm := MultiMesh.new()
+		mm.transform_format = MultiMesh.TRANSFORM_3D
+		mm.use_custom_data = true
+		mm.mesh = maill[cle3]
+		mm.instance_count = liste.size()
+		for k in range(liste.size()):
+			mm.set_instance_transform(k, liste[k])
+			mm.set_instance_custom_data(k, cu[cle3][k])
+		mm.visible_instance_count = 0
+		var mi := MultiMeshInstance3D.new()
+		mi.name = cle3.replace(":", "_")
+		mi.multimesh = mm
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		mi.visibility_range_end = fin
+		mi.visibility_range_end_margin = 10.0
+		noeud.add_child(mi)
+		_pax_mmi[cle3] = mi
+
+
+## `n` passagers à bord (au-delà des places dessinées : toutes affichées).
+func poser_passagers(n: int, graine: int) -> void:
+	if famille.begins_with("perche"):
+		return
+	if _pax_mmi.is_empty() and _pax_places == 0:
+		_creer_passagers(graine)
+	n = clampi(n, 0, _pax_places)
+	if n == _pax_n:
+		return
+	_pax_n = n
+	for cle in _pax_mmi:
+		(_pax_mmi[cle] as MultiMeshInstance3D).multimesh.visible_instance_count = int(_pax_pre[cle][n])
+
+
 ## Où poser le skieur assis (repère du véhicule) : origine aux pieds, 0,42 m
 ## devant le bassin (convention de SkieurJoueur.asseoir), tourné vers −Z.
 ## Siège : place `i` ; cabine : banquette arrière, face à l'amont.
