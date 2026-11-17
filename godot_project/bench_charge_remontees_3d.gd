@@ -101,7 +101,7 @@ func _tick() -> void:
 		_t = 0.0
 		return
 	if _il >= _lignes.size():
-		_fin()
+		_skieurs_pistes()
 		return
 	var k: String = _lignes[_il][0]
 	var lg: LigneRemontee = _lignes[_il][1]
@@ -234,6 +234,21 @@ func _mesurer(k: String, lg: LigneRemontee) -> void:
 		_verif("%s : flèche du brin montée plus creuse chargé, garde au sol tenue" % k, fl[0] < fl[1] and garde_min > -0.05,
 			"milieu de la plus grande portée (%.0f m) : %.2f m chargé, %.2f m à vide ; marge mini sur la garde %.2f m" % [
 				lg._appuis[jm + 1] - lg._appuis[jm], fl[0], fl[1], garde_min])
+	# Funival : places dessinées (debout dans la caisse) et passagers affichés
+	if lg is Funival and lg._vehicules.size() >= 1 and is_instance_valid(lg._vehicules[0][0]):
+		var vf: VehiculeRemontee = lg._vehicules[0][0]
+		var pl: Array = vf._places_passagers()
+		var dehors: int = 0
+		for e in pl:
+			var o: Vector3 = (e[0] as Transform3D).origin
+			if absf(o.x) > VehiculeFunival.DEMI_LARGEUR - 0.15 or absf(o.z) > VehiculeFunival.Z_UTILE + 0.5:
+				dehors += 1
+		OccupationRemontees.heure_forcee = 10.25
+		(lg as Telepherique)._tirer_cabines()
+		vf.poser_passagers((lg as Telepherique).passagers_cabine(0), 1)
+		_verif("funival : %d places debout dans la caisse, passagers posés" % pl.size(),
+			pl.size() >= 272 and dehors == 0 and vf._pax_n == mini((lg as Telepherique).passagers_cabine(0), pl.size()),
+			"%d places hors de la caisse ; %d passagers affichés pour %d" % [dehors, vf._pax_n, (lg as Telepherique).passagers_cabine(0)])
 	# freinage d'urgence (monocâbles)
 	if not (lg is Telepherique):
 		OccupationRemontees.heure_forcee = 10.25
@@ -246,3 +261,72 @@ func _mesurer(k: String, lg: LigneRemontee) -> void:
 		var a0: float = lg.a_urgence()
 		_verif("%s : arrêt d'urgence plus court la montée chargée" % k, a1 > a0,
 			"%.2f m/s² chargée, %.2f m/s² à vide (référence %.2f)" % [a1, a0, LigneRemontee.A_URGENCE])
+
+
+## Skieurs sur les pistes : à 11 h, autour de la caméra, au sol, sur les pistes, en descente ; à 19 h, personne.
+var _sp_e: int = 0
+var _sp_t: float = 0.0
+var _sp_y0: Dictionary = {}
+
+
+func _skieurs_pistes() -> void:
+	var sp: SkieursPistes = _main.domaine.skieurs if _main.get("domaine") != null else null
+	if sp == null:
+		_verif("skieurs sur les pistes : présents", false, "pas de SkieursPistes")
+		_fin()
+		return
+	_sp_t += 1.0 / 60.0
+	match _sp_e:
+		0:
+			OccupationRemontees.heure_forcee = 11.0
+			sp._t_maj = 0.0
+			_sp_e = 1
+			_sp_t = 0.0
+		1:
+			if _sp_t < 8.0:
+				return
+			var cam: Vector3 = get_root().get_camera_3d().global_position
+			var relief: ReliefBuilder = _main.get("relief")
+			var loin: int = 0
+			var sol: float = 0.0
+			var hors: int = 0
+			for p in sp.positions:
+				if Vector2(p.x - cam.x, p.z - cam.z).length() > SkieursPistes.PORTEE + 25.0:
+					loin += 1
+				sol = maxf(sol, absf(p.y - 0.02 - relief.hauteur_sol(p.x, p.z)))
+				if _main.domaine.hors_piste(p):
+					hors += 1
+			_verif("skieurs sur les pistes à 11 h : présents autour de la caméra, au sol, sur les pistes",
+				sp.positions.size() >= 5 and loin == 0 and sol < 0.05 and hors <= sp.positions.size() / 10,
+				"%d skieurs (voulus %d sur %d), %d au-delà de %.0f m, écart au sol maxi %.2f m, %d hors piste" % [
+					sp.positions.size(), sp.n_voulu, SkieursPistes.n_max(), loin, SkieursPistes.PORTEE, sol, hors])
+			_sp_y0.clear()
+			for k in range(sp._agents.size()):
+				_sp_y0[int(sp._agents[k]["id"])] = sp._hauteur(sp._point(int(sp._agents[k]["i"]), float(sp._agents[k]["s"])))
+			_sp_e = 2
+			_sp_t = 0.0
+		2:
+			if _sp_t < 3.0:
+				return
+			var desc: int = 0
+			var mont: int = 0
+			for ag in sp._agents:
+				if not _sp_y0.has(int(ag["id"])):
+					continue
+				var y1: float = sp._hauteur(sp._point(int(ag["i"]), float(ag["s"])))
+				if y1 < float(_sp_y0[int(ag["id"])]) - 0.5:
+					desc += 1
+				elif y1 > float(_sp_y0[int(ag["id"])]) + 0.5:
+					mont += 1
+			_verif("skieurs sur les pistes : ils descendent", desc > 0 and mont <= desc / 10,
+				"en 3 s, %d descendus, %d montés" % [desc, mont])
+			OccupationRemontees.heure_forcee = 19.0
+			sp._t_maj = 0.0
+			_sp_e = 3
+			_sp_t = 0.0
+		3:
+			if _sp_t < 1.0:
+				return
+			_verif("skieurs sur les pistes à 19 h : personne", sp.positions.is_empty(), "%d skieurs" % sp.positions.size())
+			_fin()
+

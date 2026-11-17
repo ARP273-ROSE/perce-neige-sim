@@ -2385,6 +2385,7 @@ func _process_corps(delta: float) -> void:
 	if delta < 0.0:
 		return
 	_dt = delta
+	_maj_passagers_cabines(delta)
 	if _exploit != null:
 		_exploit.avancer(delta)
 	var but: float = _x_quai(false) if _sens > 0.0 else _x_quai(true)

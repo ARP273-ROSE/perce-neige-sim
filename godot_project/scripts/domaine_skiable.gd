@@ -35,6 +35,7 @@ const R_ARRIVEE: float = 200.0
 
 var relief: ReliefBuilder = null
 var fantome: FantomeSki = null
+var skieurs: SkieursPistes = null
 var _construit: bool = false
 ## Construction finie (avec écran, elle s'étale sur plusieurs images : 100 ms d'un bloc à l'entrée en skieur,
 ## relevé du 10/11/2026 ; sans écran, d'un trait).
@@ -147,6 +148,11 @@ func construire(r: ReliefBuilder) -> void:
 	fantome.name = "Fantome"
 	fantome.relief = relief
 	add_child(fantome)
+	# skieurs sur les pistes autour de la caméra (affluence selon l'heure)
+	skieurs = SkieursPistes.new()
+	skieurs.name = "SkieursPistes"
+	skieurs.preparer(relief)
+	add_child(skieurs)
 	print("[Domaine] %d jalons, %d panneaux, %d fantômes" % [n, n_panneaux, FantomesDonnees.DESCENTES.size()])
 	pret = true
 

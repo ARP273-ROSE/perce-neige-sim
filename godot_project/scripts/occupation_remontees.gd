@@ -97,3 +97,16 @@ static func occupants(lg: Node, places: int, idx: int, tour: int, montee: bool, 
 ## Masse moyenne de passagers par véhicule (kg) dans un sens.
 static func charge_kg(lg: Node, places: int, montee: bool, h: float = -1.0) -> float:
 	return PAX_KG * float(places) * taux(lg, montee, h)
+
+
+## Affluence sur les pistes (0..1) : on skie de 9 h à 17 h, plein en fin de matinée et l'après-midi, creux
+## à l'heure du déjeuner.
+static func affluence_pistes(h: float = -1.0) -> float:
+	if h < 0.0:
+		h = heure()
+	if h < 9.0 or h > 17.0:
+		return 0.0
+	var matin: float = smoothstep(9.0, 10.5, h)
+	var midi: float = 1.0 - 0.45 * maxf(0.0, 1.0 - absf(h - 12.75) / 0.9)
+	var soir: float = 1.0 - smoothstep(16.0, 17.0, h)
+	return clampf(matin * midi * soir, 0.0, 1.0)
