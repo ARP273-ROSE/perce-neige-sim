@@ -57,6 +57,10 @@ func masse_vehicule() -> float:
 	return 21840.0                      # plaque Cwa
 
 
+func places_cabine() -> int:
+	return 272                          # « 272 + 1 pers. »
+
+
 func tension_h() -> float:
 	return 200000.0
 
@@ -2385,6 +2389,7 @@ func _process_corps(delta: float) -> void:
 	if delta < 0.0:
 		return
 	_dt = delta
+	_maj_passagers_cabines(delta)
 	if _exploit != null:
 		_exploit.avancer(delta)
 	var but: float = _x_quai(false) if _sens > 0.0 else _x_quai(true)
@@ -2439,6 +2444,9 @@ func _process_corps(delta: float) -> void:
 			_porte_cible = 0.0
 			_depart_demande = false
 			_sens = -_sens
+			# (nouveau voyage : les cabines se vident et se remplissent pour le sens qu'elles vont prendre)
+			_tour_cab = maxi(_tour_cab, 0) + 1
+			_tirer_cabines()
 		if etat == "arret_normal" and va <= 0.0:
 			etat = "arret"
 	vitesse_reelle = absf(_v)
@@ -2625,5 +2633,21 @@ func _corps_vehicule(i: int) -> void:
 const P_MOTEUR_KW: float = 484.0
 
 
+## Puissance à la poulie (kW) : le véhicule qui monte contre celui qui descend — l'écart de leurs masses
+## (passagers) sur la pente sous chacun, à la vitesse du câble, plus le roulement (1,5 % du poids des deux, sur
+## galets et rails) ; rendement de l'entraînement 0,9. Avant : 484 kW au prorata de la vitesse, sans la charge.
 func puissance_kw() -> float:
-	return P_MOTEUR_KW * clampf(absf(_v) / V_FUNI, 0.0, 1.0)
+	var v: float = absf(_v)
+	if v <= 0.0:
+		return 0.0
+	var i_m: int = 0 if _sens > 0.0 else 1
+	var d0: float = _s
+	var d1: float = _s_cab1 if is_finite(_s_cab1) else longueur_h() - _s
+	var sin0: float = sin(atan(pente_voie(d0)))
+	var sin1: float = sin(atan(pente_voie(d1)))
+	var m0: float = masse_cabine(0)
+	var m1: float = masse_cabine(1)
+	# (cabine qui monte : son poids freine ; celle qui descend : le sien entraîne)
+	var f_g: float = (m0 * sin0 - m1 * sin1) * 9.81 * (1.0 if i_m == 0 else -1.0)
+	var f_r: float = 0.015 * (m0 + m1) * 9.81
+	return (f_g + f_r) * v / 0.9 / 1000.0

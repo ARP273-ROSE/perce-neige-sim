@@ -128,6 +128,21 @@ static func _palier_niv(k: int) -> Vector3:
 	return _niveau().inverse() * Vector3(0, H_PLANCHER, z_comp(k))
 
 
+## Places dessinées des passagers (VehiculeRemontee.poser_passagers) : debout, sur toute la longueur de chaque
+## compartiment (paliers et volées), au plancher du point, d'aplomb quand la voie a la pente des gradins ;
+## 8 rangées de 4 par compartiment, 288 places pour 272.
+func places_debout() -> Array:
+	var out: Array = []
+	var lc: float = l_comp()
+	for k in range(N_COMP):
+		for iz in range(8):
+			var z: float = clampf(z_comp(k) + lc * (-0.5 + (float(iz) + 0.5) / 8.0), -(Z_UTILE - 0.3), Z_UTILE - 0.3)
+			for ix in range(4):
+				var x: float = (-0.72 + 0.48 * float(ix)) * (DEMI_LARGEUR - 0.25) / 0.85
+				out.append([Transform3D(_niveau(), Vector3(x, y_plancher(z), z)), false])
+	return out
+
+
 ## Plancher du compartiment au droit de d, véhicule à quai (repère de la ligne) : pour les quais en gradins.
 static func y_plancher_monde(lg: Funival, d: float) -> float:
 	return lg.y_voie(d) + H_PLANCHER / sqrt(1.0 + pow(lg.pente_voie(d), 2.0))
