@@ -44,9 +44,66 @@ var _t_tranche: int = 0
 
 
 func _tranche() -> void:
+	if _abandon:
+		return
 	if DisplayServer.get_name() != "headless" and Time.get_ticks_usec() - _t_tranche > 4000:
-		await get_tree().process_frame
+		await _attendre_image(false)
 		_t_tranche = Time.get_ticks_usec()
+
+
+## Attente de l'image suivante (process_frame, ou frame_post_draw pour relire les faces dessinées) par un signal du
+## domaine relayé : à la fermeture, _exit_tree le déclenche et la construction s'arrête là. Une chaîne de coroutines
+## suspendue à la libération de son nœud fuit dans Godot 4.6 (frame_post_draw : le RenderingServer survit même à la
+## scène), et la sortie du jeu plantait sous Windows — 0xC0000005 en fermant la fenêtre peu après l'entrée en
+## skieur (17/11/2026).
+signal _image
+signal _dessin
+var _abandon: bool = false
+var _attentes: Array = [0, 0]          # [images, dessins] attendus (la pose des faces et la suite vont de front)
+
+
+func _attendre_image(apres_dessin: bool) -> void:
+	if _abandon:
+		return
+	# (relais permanent tant qu'on attend, qui se retire ensuite de lui-même : deux chaînes vont de front, un relais
+	# à un coup partagé échouait — « already connected » — et laissait l'une en plan ; deux signaux, la relecture des
+	# faces doit suivre le dessin)
+	var k: int = 1 if apres_dessin else 0
+	var src: Signal = RenderingServer.frame_post_draw if apres_dessin else get_tree().process_frame
+	var cb: Callable = _relayer_dessin if apres_dessin else _relayer_image
+	if not src.is_connected(cb):
+		src.connect(cb)
+	_attentes[k] += 1
+	if apres_dessin:
+		await _dessin
+	else:
+		await _image
+	_attentes[k] -= 1
+
+
+func _relayer_image() -> void:
+	if int(_attentes[0]) == 0:
+		get_tree().process_frame.disconnect(_relayer_image)
+	else:
+		_image.emit.call_deferred()        # (en différé : hors de l'émission du signal relayé)
+
+
+func _relayer_dessin() -> void:
+	if int(_attentes[1]) == 0:
+		RenderingServer.frame_post_draw.disconnect(_relayer_dessin)
+	else:
+		_dessin.emit.call_deferred()
+
+
+func _exit_tree() -> void:
+	if RenderingServer.frame_post_draw.is_connected(_relayer_dessin):
+		RenderingServer.frame_post_draw.disconnect(_relayer_dessin)
+	if get_tree().process_frame.is_connected(_relayer_image):
+		get_tree().process_frame.disconnect(_relayer_image)
+	if int(_attentes[0]) + int(_attentes[1]) > 0:
+		_abandon = true
+		_image.emit()
+		_dessin.emit()
 var _axes: Array = []                  # axes des pistes (PackedVector2Array)
 var _cadres: Array = []                # leur emprise (Rect2), pour ne tester que les voisines
 var _t_piste: float = 0.0
@@ -106,8 +163,14 @@ func construire(r: ReliefBuilder) -> void:
 				u += PAS_JALON
 			reste = u - l
 		await _tranche()
+		if _abandon:
+			return
 	await _construire_panneaux()
+	if _abandon:
+		return
 	await _tranche()
+	if _abandon:
+		return
 	var mesh: CylinderMesh = CylinderMesh.new()
 	mesh.top_radius = 0.028
 	mesh.bottom_radius = 0.034
@@ -144,6 +207,8 @@ func construire(r: ReliefBuilder) -> void:
 		add_child(mi)
 		n += xs.size()
 		await _tranche()
+		if _abandon:
+			return
 	fantome = FantomeSki.new()
 	fantome.name = "Fantome"
 	fantome.relief = relief
@@ -196,6 +261,8 @@ func _construire_panneaux() -> void:
 	# n'est pas garanti : la descente se lit à l'altitude de ses deux bouts.
 	for ip in _piquets:
 		await _tranche()
+		if _abandon:
+			return
 		var c: int = PistesDonnees.PISTES[ip][1]
 		var nom: String = PistesDonnees.PISTES[ip][0]
 		if c < 0 or nom == "":
@@ -590,9 +657,13 @@ func _faces_panneaux(par_piste: Dictionary) -> void:
 		lot.append([ip, sv])
 		if lot.size() >= LOT_FACES:
 			await _poser_faces(lot, par_piste, quad)
+			if _abandon:
+				return
 			lot = []
 	if not lot.is_empty():
 		await _poser_faces(lot, par_piste, quad)
+		if _abandon:
+			return
 
 
 ## PWA : faces tirées d'un atlas fabriqué d'avance (bake_panneaux_web.gd). Dessiner et
@@ -611,8 +682,10 @@ func _faces_atlas(par_piste: Dictionary, quad: Mesh) -> void:
 
 
 func _poser_faces(lot: Array, par_piste: Dictionary, quad: Mesh) -> void:
-	await RenderingServer.frame_post_draw
-	await RenderingServer.frame_post_draw
+	await _attendre_image(true)
+	await _attendre_image(true)
+	if _abandon:
+		return
 	for e in lot:
 		var sv: SubViewport = e[1]
 		var img: Image = sv.get_texture().get_image()

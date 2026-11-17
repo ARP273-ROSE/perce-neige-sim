@@ -375,6 +375,11 @@ func _octets_png(chemin: String) -> PackedByteArray:
 ## pour toujours. D'où la boucle, qui les laisse passer.)
 func _exit_tree() -> void:
 	amenagements_poses = true
+	if _piece_en_cours:
+		_pieces_abandon = true
+		if get_tree().process_frame.is_connected(_emettre_image_piece):
+			get_tree().process_frame.disconnect(_emettre_image_piece)
+		_image_piece.emit()
 	if _tache >= 0:
 		while not WorkerThreadPool.is_task_completed(_tache):
 			RenderingServer.force_sync()
@@ -799,11 +804,29 @@ func _piece_etalee(am: Dictionary) -> void:
 
 
 func _pause_piece() -> void:
+	if _pieces_abandon:
+		return
 	if Time.get_ticks_usec() - _t_piece > PIECE_US:
 		_pieces_us += Time.get_ticks_usec() - _t_piece
 		_pieces_pire_us = maxi(_pieces_pire_us, Time.get_ticks_usec() - _t_piece)
-		await get_tree().process_frame
+		if not get_tree().process_frame.is_connected(_emettre_image_piece):
+			get_tree().process_frame.connect(_emettre_image_piece, CONNECT_ONE_SHOT)
+		await _image_piece
 		_t_piece = Time.get_ticks_usec()
+
+
+## Pièce fine en cours à la fermeture : comme LigneRemontee._image_suivante, l'image suivante est attendue par un
+## signal du relief, que _exit_tree déclenche pour finir la chaîne (_build_piece → _pause_piece) sans poser la
+## pièce — une chaîne de coroutines suspendue à la libération du nœud fuit dans Godot 4.6, et la sortie du
+## processus plantait sous Windows (banc pupitre, 17/11/2026).
+signal _image_piece
+var _pieces_abandon: bool = false
+
+
+func _emettre_image_piece() -> void:
+	# (en différé : émis pendant l'émission du signal relayé, la reprise attendait de nouveau avant que la connexion
+	# à un coup soit retirée — « already connected », et la coroutine restait en plan)
+	_image_piece.emit.call_deferred()
 var _k_fin: int = 0
 
 
@@ -2168,6 +2191,8 @@ func _build_piece(am: Dictionary, pause: Callable = Callable()) -> void:
 					img.set_pixel(j, i, Color.WHITE)
 	if pause.is_valid():
 		await pause.call()
+	if _pieces_abandon:
+		return
 	mesh.surface_set_material(0, _materiau_piece(r, img))
 	_instance(mesh, "PieceGare")
 	if au_masque:
