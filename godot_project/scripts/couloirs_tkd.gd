@@ -4,12 +4,12 @@
 ## raccord au relief), par tronçons le long de la polyligne : pas de grille pleine sur l'emprise d'une ligne en
 ## diagonale (une pièce fine rectangulaire coûtait ~84 000 sommets et 3 s de construction pour les 7 TKD).
 ## Niveau de la trace : le câble de référence, posé sur les SEULS pylônes réels (têtes à TETE du terrain, flèche
-## d'un câble de téléski), moins SOUS ; le terrain n'est relevé que pour la part au-delà d'une zone morte (MORTE) et
-## de BORNE au plus — un remblai : les creux sont comblés, les bosses restent (un pylône intercalé y garde le
-## câble à hauteur, LigneRemontee._tetes_teleski). Sans déblai, le relief de base n'a pas à être percé (son masque
-## à ~10 m par pixel ne suit pas une trace de 4 m en biais) : le couloir passe juste au-dessus de lui.
-## hauteur_sol, hauteur_ligne et les collisions du décor prennent le plus haut du relief et du couloir. Les gares
-## priment : pas de couloir dans leurs pièces fines.
+## d'un câble de téléski), moins SOUS ; le terrain n'est déplacé que pour la part de l'écart au-delà d'une zone morte
+## (MORTE), de BORNE au plus — en remblai dans les creux, en déblai sous les bosses (17/11/2026). Le relief de base
+## est percé sous le couloir par un masque en coordonnées d'axe (masque() : une bande par TKD, le long de l'axe et en
+## travers, ~0,35 × 0,5 m par pixel), lu par le nuanceur du relief et de ses anneaux ; le masque s'arrête un peu
+## en deçà du bord du maillage, qui le recouvre donc toujours. hauteur_sol, hauteur_ligne et les collisions du décor
+## prennent la hauteur du couloir. Les gares priment : pas de couloir dans leurs pièces fines.
 class_name CouloirsTkd
 extends RefCounted
 
@@ -86,6 +86,7 @@ func _preparer_ligne(D: Dictionary, interdits: Array) -> void:
 	var pts: PackedVector2Array = PackedVector2Array()
 	var gs: PackedFloat32Array = PackedFloat32Array()
 	var tv: PackedFloat32Array = PackedFloat32Array()
+	var cabs: PackedFloat32Array = PackedFloat32Array()
 	var d: float = 15.0
 	var k: int = 0
 	while d <= L - 15.0:
@@ -99,9 +100,16 @@ func _preparer_ligne(D: Dictionary, interdits: Array) -> void:
 		var g: float = _base(q.x, q.y)
 		pts.append(q)
 		gs.append(g)
-		tv.append(g + clampf(cab - SOUS - g - MORTE, 0.0, BORNE))
+		var off: float = cab - SOUS - g
+		# (au pied des pylônes réels, le terrain reste le leur : leur tête est posée à TETE au-dessus, comme le câble
+		# de référence ; la trace ne se déforme qu'entre eux)
+		var pres_pyl: float = 1.0
+		for ap in appuis:
+			pres_pyl = minf(pres_pyl, smoothstep(4.0, 12.0, absf(d - float(ap[0]))))
+		cabs.append(cab)
+		tv.append(g + clampf(signf(off) * maxf(absf(off) - MORTE, 0.0), -BORNE, BORNE) * pres_pyl)
 		d += PAS
-	# lissé sur ±15 m (le dessus reste un remblai : jamais sous le terrain)
+	# lissé sur ±15 m, toujours dans ±BORNE du terrain
 	var t: PackedFloat32Array = PackedFloat32Array()
 	t.resize(tv.size())
 	for i in range(tv.size()):
@@ -110,7 +118,16 @@ func _preparer_ligne(D: Dictionary, interdits: Array) -> void:
 		for j in range(maxi(i - 3, 0), mini(i + 4, tv.size())):
 			sm += tv[j]
 			nm += 1
-		t[i] = clampf(sm / nm, gs[i], gs[i] + BORNE)
+		# (le lissage ne doit pas ramener la trace dans la zone morte sous le câble : une bosse rabotée entre deux
+		# remblais remontait, et le câble passait à 2,8 m de la neige au Signal 1, 17/11/2026)
+		var haut: float = maxf(gs[i] - BORNE, cabs[i] - SOUS + MORTE)
+		var bas: float = minf(gs[i] + BORNE, cabs[i] - SOUS - MORTE)
+		t[i] = clampf(clampf(sm / nm, bas, haut), gs[i] - BORNE, gs[i] + BORNE)
+		# (le lissage ne doit pas ramener de déplacement au pied des pylônes)
+		var dd: float = 15.0 + PAS * i
+		for ap2 in appuis:
+			if absf(dd - float(ap2[0])) < 4.0:
+				t[i] = gs[i]
 	# rien là où le relèvement est négligeable, ni dans une pièce de gare (la gare prime)
 	var rel: float = 0.0
 	var l_rel: float = 0.0
@@ -120,16 +137,17 @@ func _preparer_ligne(D: Dictionary, interdits: Array) -> void:
 			if (r as Rect2).grow(DEMI_TRACE + TALUS).has_point(pts[i2]):
 				dans_gare = true
 				break
-		if dans_gare or t[i2] - gs[i2] < 0.15:
+		if dans_gare or absf(t[i2] - gs[i2]) < 0.15:
 			t[i2] = NAN
 		else:
-			rel = maxf(rel, t[i2] - gs[i2])
+			rel = maxf(rel, absf(t[i2] - gs[i2]))
 			l_rel += PAS
 	var bb: Rect2 = Rect2(pts[0], Vector2.ZERO)
 	for v in pts:
 		bb = bb.expand(v)
 	var ic: int = couloirs.size()
-	couloirs.append({"cle": cle, "pts": pts, "t": t, "rect": bb.grow(DEMI_TRACE + TALUS + 1.0)})
+	couloirs.append({"cle": cle, "pts": pts, "t": t, "rect": bb.grow(DEMI_TRACE + TALUS + 1.0), "a": a, "dir": dirh,
+		"L": L, "coude": coude, "troncons": []})
 	resume.append([cle, l_rel, rel])
 	for s in range(pts.size() - 1):
 		if is_nan(t[s]) and is_nan(t[s + 1]):
@@ -150,6 +168,7 @@ func hauteur(x: float, z: float, base: float) -> float:
 		return NAN
 	var q: Vector2 = Vector2(x, z)
 	var best: float = NAN
+	var best_lat: float = INF
 	for e in lst:
 		var c: Dictionary = couloirs[int(e[0])]
 		var s: int = e[1]
@@ -174,13 +193,16 @@ func hauteur(x: float, z: float, base: float) -> float:
 		else:
 			niv = lerpf(t0, t1, u)
 		var w: float = 1.0 - smoothstep(DEMI_TRACE, DEMI_TRACE + TALUS, lat)
-		var h: float = lerpf(base, maxf(niv, base), w)
-		if is_nan(best) or h > best:
+		var h: float = lerpf(base, niv, w)
+		# (le segment le plus proche : le bout du segment voisin, pris pour un talus, imposait son niveau à 5 m de
+		# là — dents de scie de 2 à 3 m le long de la trace)
+		if lat < best_lat - 1e-4:
+			best_lat = lat
 			best = h
 	return best
 
 
-## Relève les hauteurs d'une grille (collisions du décor) là où passe un couloir.
+## Hauteurs d'une grille (collisions du décor) prises au couloir là où il passe.
 func relever_grille(rp: Rect2, pas: float, nx: int, nz: int, hc: PackedFloat32Array) -> void:
 	if not _rect_touche(rp):
 		return
@@ -190,7 +212,7 @@ func relever_grille(rp: Rect2, pas: float, nx: int, nz: int, hc: PackedFloat32Ar
 			var z: float = rp.position.y + jj * pas
 			var k: int = jj * (nx + 1) + ii
 			var h: float = hauteur(x, z, hc[k])
-			if not is_nan(h) and h > hc[k]:
+			if not is_nan(h):
 				hc[k] = h
 
 
@@ -223,6 +245,7 @@ func maillages() -> Array:
 				i1 += 1
 			i1 = mini(i1 + 1, pts.size() - 1)
 			bandes.append(_bande(pts, i0, i1, travers))
+			(c["troncons"] as Array).append([i0, i1])
 			i = i1 + 1 if i1 > i else i + 1
 		if bandes.is_empty():
 			continue
@@ -263,7 +286,7 @@ func _bande(pts: PackedVector2Array, i0: int, i1: int, travers: Array) -> Array:
 			if is_nan(h):
 				h = base
 			var bord: bool = k == 0 or k == nt - 1 or i == i0 or i == i1
-			verts.append(Vector3(q.x, h + (-0.05 if bord else LEVE), q.y))
+			verts.append(Vector3(q.x, h + (-0.02 if bord else LEVE), q.y))
 			uvs.append(Vector2((q.x - ReliefDonnees.X_OUEST) / (ReliefDonnees.X_EST - ReliefDonnees.X_OUEST),
 				(q.y - ReliefDonnees.Z_NORD) / (ReliefDonnees.Z_SUD - ReliefDonnees.Z_NORD)))
 			bb = bb.expand(q)
@@ -275,3 +298,58 @@ func _bande(pts: PackedVector2Array, i0: int, i1: int, travers: Array) -> Array:
 	n_sommets += verts.size()
 	n_troncons += 1
 	return [verts, uvs, idx, bb]
+
+
+## Masque du relief de base sous les couloirs, en coordonnées d'axe : une bande par TKD dans une texture commune
+## (L8, LONG_MASQUE colonnes le long de l'axe, LARG_MASQUE rangées en travers sur ±DEMI_MASQUE). Blanc là où le
+## couloir est maillé, à MARGE_MASQUE en deçà de son bord (latéral et bouts des tronçons). Rend [Image, axes
+## (origine x, z, direction x, z), dimensions (longueur, demi-largeur, v0, v1)].
+const LONG_MASQUE: int = 4096
+const LARG_MASQUE: int = 96
+const DEMI_MASQUE: float = 24.0
+const MARGE_MASQUE: float = 0.5
+const MAX_TKD: int = 8
+
+
+func masque() -> Array:
+	var nb: int = mini(couloirs.size(), MAX_TKD)
+	if nb == 0:
+		return []
+	var img: Image = Image.create(LONG_MASQUE, LARG_MASQUE * nb, false, Image.FORMAT_L8)
+	var axes: Array = []
+	var dims: Array = []
+	var px_t: float = 2.0 * DEMI_MASQUE / LARG_MASQUE
+	for ic in range(nb):
+		var c: Dictionary = couloirs[ic]
+		var a: Vector2 = c["a"]
+		var dirh: Vector2 = c["dir"]
+		var L: float = c["L"]
+		var lat_m: Vector2 = Vector2(-dirh.y, dirh.x)
+		var pts: PackedVector2Array = c["pts"]
+		var px_s: float = L / LONG_MASQUE
+		var y0: int = ic * LARG_MASQUE
+		axes.append(Vector4(a.x, a.y, dirh.x, dirh.y))
+		dims.append(Vector4(L, DEMI_MASQUE, float(y0) / float(LARG_MASQUE * nb), float(y0 + LARG_MASQUE) / float(LARG_MASQUE * nb)))
+		for tr in c["troncons"]:
+			# axe du couloir en coordonnées d'axe : (s, décalage en travers) aux points de la polyligne
+			var i0: int = tr[0]
+			var i1: int = tr[1]
+			var s0: float = (pts[i0] - a).dot(dirh) + PAS * 0.5 + MARGE_MASQUE
+			var s1: float = (pts[i1] - a).dot(dirh) - PAS * 0.5 - MARGE_MASQUE
+			var j0: int = clampi(int(ceil(s0 / px_s)), 0, LONG_MASQUE - 1)
+			var j1: int = clampi(int(floor(s1 / px_s)), 0, LONG_MASQUE - 1)
+			var k: int = i0
+			for j in range(j0, j1 + 1):
+				var sj: float = (float(j) + 0.5) * px_s
+				while k < i1 - 1 and (pts[k + 1] - a).dot(dirh) < sj:
+					k += 1
+				var sa: float = (pts[k] - a).dot(dirh)
+				var sb: float = (pts[k + 1] - a).dot(dirh)
+				var u: float = clampf((sj - sa) / maxf(sb - sa, 0.01), 0.0, 1.0)
+				var xc: float = lerpf((pts[k] - a).dot(lat_m), (pts[k + 1] - a).dot(lat_m), u)
+				var demi: float = DEMI_TRACE + TALUS - MARGE_MASQUE
+				var r0: int = clampi(int(ceil((xc - demi + DEMI_MASQUE) / px_t)), 0, LARG_MASQUE - 1)
+				var r1: int = clampi(int(floor((xc + demi + DEMI_MASQUE) / px_t)), 0, LARG_MASQUE - 1)
+				if r1 >= r0:
+					img.fill_rect(Rect2i(j, y0 + r0, 1, r1 - r0 + 1), Color.WHITE)
+	return [img, axes, dims]
