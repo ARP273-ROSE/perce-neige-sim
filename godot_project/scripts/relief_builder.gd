@@ -44,6 +44,10 @@ uniform float gamma = 1.0;
 uniform vec3 brume = vec3(0.50, 0.62, 0.78);
 uniform vec4 pieces[12];
 uniform int n_pieces = 0;
+uniform sampler2D masque_tkd : filter_nearest, repeat_disable;
+uniform vec4 tkd_axe[8];            // traces damées des TKD (CouloirsTkd) : origine x, z, direction x, z
+uniform vec4 tkd_dim[8];            // longueur, demi-largeur de la bande, rangées de l'atlas (v0, v1)
+uniform int n_tkd = 0;
 uniform sampler2D masque_gares : filter_nearest, repeat_disable;
 uniform vec4 bloc_masque = vec4(0.0, 0.0, 1.0, 1.0);
 uniform float avec_masque = 0.0;
@@ -105,6 +109,18 @@ void fragment() {
 		}
 		if (avec_masque > 0.5 && texture(masque_gares, (pw.xz - bloc_masque.xy) / (bloc_masque.zw - bloc_masque.xy)).r > 0.5) {
 			discard;
+		}
+		// sous les traces damées des TKD (déblai) : le couloir prend la place
+		for (int i = 0; i < n_tkd; i++) {
+			vec2 o = pw.xz - tkd_axe[i].xy;
+			float sa = dot(o, tkd_axe[i].zw);
+			float ta = dot(o, vec2(-tkd_axe[i].w, tkd_axe[i].z));
+			if (sa > 0.0 && sa < tkd_dim[i].x && abs(ta) < tkd_dim[i].y) {
+				vec2 uvm = vec2(sa / tkd_dim[i].x, mix(tkd_dim[i].z, tkd_dim[i].w, ta / tkd_dim[i].y * 0.5 + 0.5));
+				if (texture(masque_tkd, uvm).r > 0.5) {
+					discard;
+				}
+			}
 		}
 	} else if (texture(trous, (pw.xz - emprise.xy) / (emprise.zw - emprise.xy)).r > 0.5) {
 		discard;
@@ -842,6 +858,7 @@ func _finition_pas() -> bool:
 				print("[Relief] traces damées des TKD : %d maillages, %d tronçons, %d sommets, %.0f ms en tout, pire tranche %.1f ms" % [
 					couloirs.n_pieces, couloirs.n_troncons, couloirs.n_sommets, _couloirs_us / 1000.0, _couloirs_pire_us / 1000.0])
 			_bandes_couloirs = []
+			_poser_masque_tkd()
 			_pas_fin = 2
 		2:
 			_build_flancs()
@@ -1928,6 +1945,34 @@ func _poser_masque() -> void:
 		(m as ShaderMaterial).set_shader_parameter("avec_masque", 1.0)
 
 
+## Masque des traces damées des TKD (CouloirsTkd.masque) sur le relief et ses anneaux.
+var _masque_tkd: Array = []
+
+
+func _poser_masque_tkd() -> void:
+	if _mat_terrain == null or couloirs == null or couloirs.n_pieces == 0:
+		return
+	if _masque_tkd.is_empty():
+		var m: Array = couloirs.masque()
+		if m.is_empty():
+			return
+		_masque_tkd = [ImageTexture.create_from_image(m[0]), m[1], m[2]]
+	var axes: Array = (_masque_tkd[1] as Array).duplicate()
+	var dims: Array = (_masque_tkd[2] as Array).duplicate()
+	var n: int = axes.size()
+	while axes.size() < CouloirsTkd.MAX_TKD:
+		axes.append(Vector4.ZERO)
+		dims.append(Vector4.ZERO)
+	var mats: Array = [_mat_terrain]
+	if fin != null and fin.anneaux != null:
+		mats.append_array(fin.anneaux.get("_mats"))
+	for mt in mats:
+		(mt as ShaderMaterial).set_shader_parameter("masque_tkd", _masque_tkd[0])
+		(mt as ShaderMaterial).set_shader_parameter("tkd_axe", axes)
+		(mt as ShaderMaterial).set_shader_parameter("tkd_dim", dims)
+		(mt as ShaderMaterial).set_shader_parameter("n_tkd", n)
+
+
 func _poser_trous() -> void:
 	if _mat_terrain == null:
 		return
@@ -1942,6 +1987,7 @@ func _poser_trous() -> void:
 	_mat_terrain.set_shader_parameter("pieces", v.slice(0, MAX_PIECES))
 	_mat_terrain.set_shader_parameter("n_pieces", n)
 	_poser_masque()
+	_poser_masque_tkd()
 	if fin != null and fin.anneaux != null:
 		# (anneaux sous le bord des pièces fines : de même surface, et plus de points de ciel à la jonction)
 		var sous_pieces: Array = _rects_pieces.map(func(r: Rect2) -> Rect2: return r.grow(-1.5))
@@ -2423,7 +2469,7 @@ func hauteur_ligne(x: float, z: float) -> float:
 	if couloirs != null:
 		var hc2: float = couloirs.hauteur(x, z, h25)
 		if not is_nan(hc2):
-			return maxf(h25, hc2)
+			return hc2
 	return h25
 
 
@@ -2437,10 +2483,10 @@ func hauteur_sol(x: float, z: float) -> float:
 				return float(tp[0])
 	var hb: float = _hauteur_tri(x, z)
 	if couloirs != null:
-		# (trace damée d'un TKD : remblai au-dessus du relief)
+		# (trace damée d'un TKD : déblai et remblai, le relief de base percé dessous)
 		var hc: float = couloirs.hauteur(x, z, hb)
 		if not is_nan(hc):
-			return maxf(hb, hc)
+			return hc
 	return hb
 
 

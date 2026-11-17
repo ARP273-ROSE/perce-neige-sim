@@ -372,8 +372,14 @@ func _tkd_suivant() -> void:
 			var hs: Array = []
 			var L: float = lg.longueur_h()
 			var d: float = 20.0
+			var d_min: float = 0.0
+			var v_min: float = INF
 			while d < L - 20.0:
-				hs.append(lg.y_cable(d, true) + lg._fleche(d, true) - lg.sol_montee_tkd(d))
+				var hv: float = lg.y_cable(d, true) + lg._fleche(d, true) - lg.sol_montee_tkd(d)
+				hs.append(hv)
+				if hv < v_min:
+					v_min = hv
+					d_min = d
 				d += 5.0
 			hs.sort()
 			var h_min: float = hs[0] if not hs.is_empty() else 0.0
@@ -396,7 +402,7 @@ func _tkd_suivant() -> void:
 					continue
 				contact = maxf(contact, vt.assiette_monde().distance_to(lg.tires_positions[j] + Vector3(0, 0.72, 0)))
 			var pylones_n: int = lg.pylones.size()
-			_verif("%s : câble de montée à %.1f / %.1f / %.1f m de la trace (min / médiane / max), assiette au contact du skieur tiré" % [lg.name, h_min, h_med, h_max],
+			_verif("%s : câble de montée à %.1f / %.1f / %.1f m de la trace (min / médiane / max ; au plus bas à %.0f m), assiette au contact du skieur tiré" % [lg.name, h_min, h_med, h_max, d_min],
 				h_min >= LigneRemontee.GARDE_TKD - 0.2 and h_max <= LigneRemontee.PLAFOND_TKD + 0.6 and n > 0 and contact < 0.15 and def_max < 0.01,
 				"%d skieurs tirés (%d sous un câble hors de portée), assiette à %.2f m au pire des autres, déformée de %.1f %%, perche %.2f m au plus (course %.1f m) ; %d pylônes, dont %d intercalés" % [
 					n, suspendus, contact, def_max * 100.0, l_max, l_course, pylones_n, lg.pylones.filter(func(p) -> bool: return bool((p as Dictionary).get("reconstitue", false))).size()])

@@ -1113,7 +1113,9 @@ func _tetes_teleski() -> void:
 		var cands: Array = []
 		for k in range(pts2.size() - 1):
 			var r2: Array = _pire_portee_teleski(pts2[k], pts2[k + 1])
-			if r2[0] > 0.3:
+			# (TKD : 0,15 m sous la garde au plus, comme le banc des charges ; 0,3 laissait le câble à 2,8 m de la trace
+			# au Signal 1 une fois les bosses rabotées, 17/11/2026)
+			if r2[0] > (0.15 if famille == "perche_debrayable" else 0.3):
 				cands.append([r2[0], r2[1], false])
 			if famille == "perche_debrayable":
 				var r3: Array = _trop_haut_portee_tkd(pts2[k], pts2[k + 1])
@@ -1237,7 +1239,8 @@ func _pire_portee_teleski(a: Array, b: Array) -> Array:
 	var pire: float = 0.0
 	var dp: float = 0.0
 	# (tous les 3 m : 16 points par portée laissaient passer une bosse)
-	var n: int = maxi(16, int(absf(b[0] - a[0]) / 3.0))
+	# (TKD : tous les mètres, les crêtes du déblai de la trace damée sont étroites — 0,2 m manqués au Signal 1)
+	var n: int = maxi(16, int(absf(b[0] - a[0]) / (1.0 if famille == "perche_debrayable" else 3.0)))
 	for j in range(1, n):
 		var d: float = lerpf(a[0], b[0], float(j) / float(n))
 		var sol_g: float = _sol_teleski(d) + _garde_teleski()
