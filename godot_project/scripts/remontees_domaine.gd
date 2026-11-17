@@ -1715,6 +1715,7 @@ func _attendre_perche() -> void:
 			lg.annuler_lancer()
 			_attente_tk = null
 			a_bord = [lg, i, 0, true, false, "perche"]
+			lg.perche_joueur = i
 			_etat_bord = lg.etat
 			_perche_x = 0.3
 			_perche_vs = 0.0
@@ -1805,6 +1806,7 @@ func _lacher_perche(en_ligne: bool) -> void:
 	var lg: LigneRemontee = a_bord[0]
 	var v: VehiculeRemontee = lg.vehicule(a_bord[1])
 	v.longueur_perche(0.0)
+	lg.perche_joueur = -1
 	skieur.embarque = false
 	var dehors: Vector3 = lg.global_transform.basis.x * signf(lg._x_brin(true))
 	if en_ligne:

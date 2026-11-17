@@ -584,7 +584,276 @@ func _parametres_chainette() -> void:
 
 
 ## Masse d'un véhicule à vide (kg), pince ou chariot compris.
-const OCCUPATION: float = 0.7          # passagers en montée, part des places
+const OCCUPATION: float = 0.7          # passagers en montée, part des places : référence de la géométrie précalculée
+
+## Occupation réelle (OccupationRemontees : heure, sens, genre de ligne), part des places [montée, descente] ;
+## mise à jour toutes les 30 s. Elle charge la tension, la puissance, le freinage et le pendule ; la géométrie
+## précalculée (chaînette, têtes de pylônes) reste à OCCUPATION.
+var _occ: Array = [OCCUPATION, 0.0]
+var _occ_t: float = 1.0e9
+## Passagers par véhicule : index → [montée, tour, nombre], tirés au passage en gare (OccupationRemontees.occupants).
+var _pax_veh: Dictionary = {}
+
+
+func occupation(montee: bool) -> float:
+	return float(_occ[0 if montee else 1])
+
+
+func places_vehicule() -> int:
+	return VehiculeRemontee.DESCRIPTIONS.get(famille, ["", 6, ""])[1]
+
+
+## Passagers du véhicule i (sens donné) : un nouveau tirage à chaque passage en gare (changement de sens).
+func passagers(i: int, montee: bool) -> int:
+	var e: Array = _pax_veh.get(i, [])
+	if e.is_empty() or bool(e[0]) != montee:
+		var tour: int = (int(e[1]) + 1) if not e.is_empty() else int(OccupationRemontees.heure() * 6.0)
+		e = [montee, tour, OccupationRemontees.occupants(self, places_vehicule(), i, tour, montee)]
+		_pax_veh[i] = e
+	return int(e[2])
+
+
+## Skieurs tirés par les perches (téléskis) : sur chaque perche montante en ligne, proche, que la ligne a chargée
+## (passagers), un skieur en position de glisse, skis sur la neige à RemonteesDomaine.RECUL_PERCHE derrière la
+## pince comme le skieur joueur, la perche tendue jusqu'à lui (tendre_perche, sans toucher à sa géométrie) ; deux
+## côte à côte à l'archet biplace. La perche du joueur (perche_joueur) est laissée à son code. Corps et skis dans
+## un MultiMesh par ligne, en coordonnées du monde, mis à jour à chaque image pour les seules perches proches.
+var perche_joueur: int = -1
+var _tires_mmi: Array = []                 # [corps casque, corps bonnet, skis]
+var _tires_tendues: Dictionary = {}        # index des perches tendues pour un skieur dessiné
+var tires_positions: PackedVector3Array = PackedVector3Array()   # pieds des skieurs tirés dessinés (bancs)
+var tires_pinces: PackedVector3Array = PackedVector3Array()      # pince de leur perche, même ordre
+const TIRES_MAX: int = 48
+
+
+func _preparer_tires() -> void:
+	var mat: ShaderMaterial = SkieurMesh.materiau()
+	var sq: Dictionary = SkieurMesh.squelette_glisse()
+	var mesh: Array = [SkieurMesh.passager_squelette(sq, "skis", "casque", mat),
+		SkieurMesh.passager_squelette(sq, "skis", "bonnet", mat), SkieurMesh.skis_aux_pieds(mat)]
+	for k in range(3):
+		var mm := MultiMesh.new()
+		mm.transform_format = MultiMesh.TRANSFORM_3D
+		mm.use_custom_data = true
+		mm.mesh = mesh[k]
+		mm.instance_count = TIRES_MAX
+		var rng := RandomNumberGenerator.new()
+		rng.seed = hash([String(name), k])
+		for j in range(TIRES_MAX):
+			mm.set_instance_custom_data(j, Color(rng.randf(), rng.randf(), rng.randf(), 1.0))
+		mm.visible_instance_count = 0
+		var mi := MultiMeshInstance3D.new()
+		mi.name = "SkieursTires%d" % k
+		mi.top_level = true
+		mi.multimesh = mm
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		add_child(mi)
+		mi.global_transform = Transform3D.IDENTITY
+		_tires_mmi.append(mi)
+
+
+func _maj_skieurs_perches() -> void:
+	if not is_inside_tree():
+		return
+	var cam: Camera3D = get_viewport().get_camera_3d()
+	if cam == null:
+		return
+	# (la ligne reconstruite libère ses enfants : on les refait)
+	if _tires_mmi.is_empty() or not is_instance_valid(_tires_mmi[0]):
+		_tires_mmi.clear()
+		_tires_tendues.clear()
+		_preparer_tires()
+	var p_cam: Vector3 = cam.global_position
+	var portee: float = minf(VehiculeRemontee.portee_passagers(), 110.0)
+	var xm: float = signf(_x_brin(true))
+	var rd: Node = get_parent()
+	var relief: ReliefBuilder = rd.get("relief") if rd != null else null
+	var tbar: bool = famille == "perche_tbar"
+	var n_c: Array = [0, 0, 0]
+	var vues: Dictionary = {}
+	tires_positions.clear()
+	tires_pinces.clear()
+	for i in range(_vehicules.size()):
+		if i == perche_joueur:
+			continue
+		if not is_instance_valid(_vehicules[i][0]):
+			continue
+		var v: VehiculeRemontee = _vehicules[i][0]
+		if v == null or not v.visible or v.global_position.distance_to(p_cam) > portee:
+			continue
+		var s: float = _vehicules[i][1]
+		if signf(v.position.x) != xm or String(zone(s)[0]) != "ligne":
+			continue
+		if not _au_magasin.is_empty() and float(_au_magasin[i]) >= 0.0:
+			continue
+		var n: int = passagers(i, true)
+		if n <= 0:
+			continue
+		# (derrière la pince dans l'axe du véhicule, comme le skieur joueur : la perche ne pivote que dans ce plan)
+		var arriere: Vector3 = v.global_transform.basis.z
+		arriere.y = 0.0
+		arriere = arriere.normalized()
+		var pos: Vector3 = v.global_position + arriere * RemonteesDomaine.RECUL_PERCHE
+		var loc: Vector3 = global_transform.affine_inverse() * pos
+		pos.y = (global_transform * Vector3(loc.x, terrain(clampf(-loc.z, 0.0, longueur_h())), loc.z)).y
+		if relief != null:
+			pos.y = relief.hauteur_sol(pos.x, pos.z)
+		pos.y += 0.02
+		v.tendre_perche(v.to_local(pos + Vector3.UP * (0.62 if tbar else 0.72)))
+		vues[i] = true
+		var cap: float = atan2(arriere.x, arriere.z)
+		var lat: Vector3 = Vector3(cos(cap), 0.0, -sin(cap))
+		for k2 in range(mini(n, 2 if tbar else 1)):
+			var o: Vector3 = pos + lat * ((0.38 if k2 == 0 else -0.38) if tbar and n > 1 else 0.0)
+			var b: Basis = Basis(Vector3.UP, cap)
+			var cle: int = 0 if hash([i, k2]) % 4 != 0 else 1
+			if n_c[cle] < TIRES_MAX:
+				(_tires_mmi[cle] as MultiMeshInstance3D).multimesh.set_instance_transform(n_c[cle], Transform3D(b, o))
+				n_c[cle] += 1
+			if n_c[2] < TIRES_MAX:
+				(_tires_mmi[2] as MultiMeshInstance3D).multimesh.set_instance_transform(n_c[2], Transform3D(b, o))
+				n_c[2] += 1
+				tires_positions.append(o)
+				tires_pinces.append(v.global_position)
+	# perches lâchées par un skieur dessiné (sorties de la portée, arrivées) : repliées
+	for i2 in _tires_tendues.keys():
+		if not vues.has(i2) and int(i2) != perche_joueur and int(i2) < _vehicules.size() and is_instance_valid(_vehicules[int(i2)][0]):
+			(_vehicules[int(i2)][0] as VehiculeRemontee).longueur_perche(0.0)
+	_tires_tendues = vues
+	for k3 in range(3):
+		(_tires_mmi[k3] as MultiMeshInstance3D).multimesh.visible_instance_count = n_c[k3]
+
+
+## Passagers dessinés des véhicules proches (VehiculeRemontee.poser_passagers), toutes les 0,3 s : ceux que la
+## ligne a tirés pour le véhicule (passagers), personne dans la gare où l'on descend (montants en gare amont,
+## descendants en gare aval).
+var _pax_dessin_t: float = 0.0
+
+
+func _maj_passagers_dessines(delta: float) -> void:
+	if teleski():
+		_maj_skieurs_perches()
+		return
+	_pax_dessin_t += delta
+	if _pax_dessin_t < 0.3:
+		return
+	_pax_dessin_t = 0.0
+	var cam: Camera3D = get_viewport().get_camera_3d() if is_inside_tree() else null
+	if cam == null:
+		return
+	var p_cam: Vector3 = cam.global_position
+	var portee: float = VehiculeRemontee.portee_passagers() + 30.0
+	var xm: float = signf(_x_brin(true))
+	for i in range(_vehicules.size()):
+		if not is_instance_valid(_vehicules[i][0]):
+			continue
+		var v: VehiculeRemontee = _vehicules[i][0]
+		if v == null or not v.visible or v.global_position.distance_to(p_cam) > portee:
+			continue
+		var montee: bool = signf(v.position.x) == xm
+		var z: String = String(zone(float(_vehicules[i][1]))[0])
+		var n: int = passagers(i, montee)
+		if (z == "gare_amont" and montee) or (z == "gare_aval" and not montee):
+			n = 0
+		v.poser_passagers(n, hash([String(name), i]))
+
+
+func _maj_occupation(delta: float) -> void:
+	_occ_t += delta
+	if _occ_t < 30.0:
+		return
+	_occ_t = 0.0
+	var om: float = OccupationRemontees.taux(self, true)
+	var od: float = OccupationRemontees.taux(self, false)
+	if absf(om - float(_occ[0])) < 0.005 and absf(od - float(_occ[1])) < 0.005:
+		return
+	_occ = [om, od]
+	_occupation_changee()
+
+
+## Nouvelle occupation moyenne : la flèche des brins (nuanceur du câble, pinces) et le noyau C++ (pendule,
+## charges) la reçoivent.
+func _occupation_changee() -> void:
+	if _tension <= 0.0:
+		return
+	_w_veh = _w_charge()
+	for m in _mats_charges():
+		m.set_shader_parameter("w_m", _w_veh[0])
+		m.set_shader_parameter("w_d", _w_veh[1])
+	if _noyau != null and _noyau.has_method("set_constantes"):
+		_noyau.set_constantes({"charge_montee": OccupationRemontees.PAX_KG * places_vehicule() * occupation(true),
+			"poids_montee": _poids_vehicule(true) / _tension, "poids_descente": _poids_vehicule(false) / _tension,
+			"w_montee": float(_w_veh[0]), "w_descente": float(_w_veh[1])})
+
+
+## Flèche due à la charge du moment (monocâbles) : la géométrie précalculée est celle de la charge de référence
+## (OCCUPATION en montée, vide en descente) ; l'écart de charge répartie Δw creuse (ou relève) chaque portée
+## d'une parabole Δw·(d − x1)(x2 − d)/(2H), à tension constante (lest ou vérins). Plafonnée, brin par brin, à
+## ce que laisse la garde au sol de la portée la plus juste (_dw_max) : la ligne réelle est calculée pour
+## passer pleine, la nôtre l'est à la référence.
+var _dw_max: Array = [INF, INF]
+
+
+func _flechit_a_la_charge() -> bool:
+	return not teleski() and not tricable() and not vaetvient()
+
+
+func _w_charge() -> Array:
+	if not _flechit_a_la_charge() or _tension <= 0.0:
+		return [0.0, 0.0]
+	var k: float = OccupationRemontees.PAX_KG * places_vehicule() * 9.81 / maxf(espacement, 8.0)
+	var dwm: float = minf(k * (occupation(true) - OCCUPATION), float(_dw_max[0]))
+	var dwd: float = minf(k * occupation(false), float(_dw_max[1]))
+	return [dwm / _tension, dwd / _tension]
+
+
+func _calculer_dw_max() -> void:
+	_dw_max = [INF, INF]
+	if not _flechit_a_la_charge() or _n_appuis < 2:
+		return
+	for b in range(2):
+		var montee: bool = b == 0
+		var m: float = INF
+		for j in range(_n_appuis - 1):
+			var x1: float = _appuis[j]
+			var x2: float = _appuis[j + 1]
+			if x2 - x1 < 5.0:
+				continue
+			for t in [0.25, 0.5, 0.75]:
+				var d: float = lerpf(x1, x2, t)
+				var marge: float = y_cable(d, montee) - terrain(d) - _garde_exigee(d)
+				m = minf(m, 2.0 * _tension * maxf(marge, 0.0) / ((d - x1) * (x2 - d)))
+		_dw_max[b] = m
+
+
+## Masse en mouvement de la ligne (kg) : véhicules, passagers, câble (boucle entière).
+func masse_en_mouvement() -> float:
+	return _masse_base() + OccupationRemontees.PAX_KG * places_vehicule() * (occupation(true) + occupation(false)) * _n_par_brin()
+
+
+func _n_par_brin() -> float:
+	return float(maxi(_vehicules.size(), 1)) * 0.5
+
+
+func _masse_base() -> float:
+	var L: float = longueur_h()
+	return float(maxi(_vehicules.size(), 1)) * masse_vehicule() + 2.0 * L * 0.0039 * diametre_cable * diametre_cable
+
+
+## Freinage d'urgence (m/s²) : le frein donne A_URGENCE à la charge de référence (OCCUPATION en montée, vide en
+## descente) ; plus chargée en montée, la ligne s'arrête plus court (la pesanteur aide), plus lourde, plus long.
+func a_urgence() -> float:
+	if teleski() or _vehicules.is_empty():
+		return A_URGENCE
+	var L: float = longueur_h()
+	var dh: float = terrain(L) - terrain(0.0)
+	var sin_p: float = dh / maxf(sqrt(L * L + dh * dh), 1.0)
+	var pax_brin: float = OccupationRemontees.PAX_KG * places_vehicule() * _n_par_brin()      # kg, brin plein
+	var m_ref: float = _masse_base() + pax_brin * OCCUPATION
+	var f_frein: float = A_URGENCE * m_ref - pax_brin * OCCUPATION * 9.81 * sin_p
+	var f_g: float = pax_brin * (occupation(true) - occupation(false)) * 9.81 * sin_p
+	return clampf((f_frein + f_g) / masse_en_mouvement(), 0.5 * A_URGENCE, 2.0 * A_URGENCE)
+
 
 ## Vent (audit du 14/11/2026 : seules les accélérations faisaient pencher les véhicules) : un vent de
 ## nord-ouest de ~6 m/s en moyenne, avec rafales (sommes de sinus, sans hasard : mêmes images d'une
@@ -5279,6 +5548,7 @@ func _process_corps(delta: float) -> void:
 	if delta < 0.0:
 		return
 	_maj_vent()
+	_maj_occupation(delta)
 	if _exploit != null:
 		_exploit.avancer(delta)
 	_regler_vitesse(delta)
@@ -5307,6 +5577,8 @@ func _process_corps(delta: float) -> void:
 		(pl[0] as Node3D).rotation.y = fposmod((pl[0] as Node3D).rotation.y + float(pl[1]) * regime() * delta, TAU)
 	for pl2 in _poulies_3s:
 		(pl2[0] as Node3D).rotate_object_local(Vector3.UP, float(pl2[1]) * regime() * delta)
+	# (après la pose des véhicules : la perche tendue vers un skieur dessiné n'est plus reprise par la ligne)
+	_maj_passagers_dessines(delta)
 
 
 # --- noyau C++ ----------------------------------------------------------------------
@@ -5352,7 +5624,7 @@ func _preparer_noyau() -> void:
 	n.set_constantes({
 		"vitesse": vitesse, "v_embarquement": v_embarquement, "l_frein": L_FREIN, "l_ouverture": L_OUVERTURE,
 		"fixe": fixe(), "sens_droite": sens_droite, "signe_montee": signf(_x_brin(true)),
-		"cabine": v0.cabine, "masse": v0.masse, "charge_montee": 80.0 * places * 0.7,
+		"cabine": v0.cabine, "masse": v0.masse, "charge_montee": OccupationRemontees.PAX_KG * places * occupation(true),
 		"longueur_pendule": v0.longueur_pendule, "pivot": v0.pivot,
 		"guide_l": GUIDE_L if guide_psi() else 0.0, "guide_gorge": GUIDE_GORGE, "guide_ouvert": GUIDE_OUVERT,
 		"guide_bras": VehiculeRemontee.A108_X_ROULEMENT - VehiculeRemontee.A108_PIVOT.x,
@@ -6349,6 +6621,8 @@ func _preparer_charges() -> void:
 	# fixes, tantôt au-dessus, tantôt en dessous) : plus de flèche locale par véhicule ; seule
 	# reste l'onde des arrêts. Les véhicules sont sur le câble tel qu'il est dessiné.
 	_w_veh = [0.0, 0.0]
+	_calculer_dw_max()
+	_w_veh = _w_charge()
 	var packs: Array = []
 	for k in range(12):
 		var q: Vector4 = Vector4.ZERO
@@ -6371,8 +6645,7 @@ func _mats_charges() -> Array:
 ## Poids d'un véhicule (N), passagers compris en montée — mêmes charges
 ## que la chaînette (_parametres_chainette).
 func _poids_vehicule(montee: bool) -> float:
-	var places: int = VehiculeRemontee.DESCRIPTIONS.get(famille, ["", 6, ""])[1]
-	return (masse_vehicule() + (80.0 * places * OCCUPATION if montee else 0.0)) * 9.81
+	return (masse_vehicule() + OccupationRemontees.PAX_KG * places_vehicule() * occupation(montee)) * 9.81
 
 
 const CHARGES_PONCTUELLES: bool = false
@@ -6482,7 +6755,7 @@ func _regler_vitesse(delta: float) -> void:
 	if vitesse_reelle < 0.0:
 		vitesse_reelle = vitesse * CRANS[cran]
 	var cible: float = vitesse * CRANS[cran] * cap_exploitation() if etat == "marche" else 0.0
-	var a: float = vitesse / T_DEMARRAGE if cible > vitesse_reelle else (A_URGENCE if etat == "urgence" else A_ARRET)
+	var a: float = vitesse / T_DEMARRAGE if cible > vitesse_reelle else (a_urgence() if etat == "urgence" else A_ARRET)
 	vitesse_reelle = move_toward(vitesse_reelle, cible, a * delta)
 	if etat == "arret_normal" and vitesse_reelle <= 0.0:
 		etat = "arret"
@@ -6615,12 +6888,15 @@ func puissance_kw() -> float:
 		pm += (c as Vector2).y * _tension
 	for c in _charges[1]:
 		pd += (c as Vector2).y * _tension
-	var p_nom: float = (_poids_vehicule(true) - _poids_vehicule(false)) * (long_c / maxf(espacement, 8.0)) * dh / long_c * vitesse
+	var n_brin: float = long_c / maxf(espacement, 8.0)
+	var p_nom: float = (_poids_vehicule(true) - _poids_vehicule(false)) * n_brin * dh / long_c * vitesse
+	# pertes : un dixième de la puissance nominale (charge de référence, OCCUPATION en montée), même à vide
+	var p_ref: float = OccupationRemontees.PAX_KG * places_vehicule() * OCCUPATION * 9.81 * n_brin * dh / long_c * vitesse
 	if _charges[0].is_empty() and _charges[1].is_empty():
 		# monocâbles : pas de charges ponctuelles (CHARGES_PONCTUELLES faux), le poste
 		# n'affichait que les pertes — charge moyenne des deux brins à la place
-		return (p_nom * vitesse_reelle / maxf(vitesse, 0.1) + 0.1 * p_nom * regime()) / 1000.0
-	return ((pm - pd) * dh / long_c * vitesse_reelle + 0.1 * p_nom * regime()) / 1000.0
+		return (p_nom * vitesse_reelle / maxf(vitesse, 0.1) + 0.1 * p_ref * regime()) / 1000.0
+	return ((pm - pd) * dh / long_c * vitesse_reelle + 0.1 * p_ref * regime()) / 1000.0
 
 
 ## Galets mobiles : la pince qui passe sur un train de galets fait descendre
@@ -6878,7 +7154,7 @@ func _placer(i: int) -> void:
 	var montee_v: bool = signf((pt[0] as Vector3).x) == signf(_x_brin(true))
 	if tricable() and _dt > 0.0 and _corps_proche:
 		v.rouler(vitesse_en(s) * regime() * _dt)
-	var charge: float = 80.0 * v.places * 0.7 if (montee_v and not v.cabine) else 0.0
+	var charge: float = OccupationRemontees.PAX_KG * passagers(i, montee_v) if not teleski() else 0.0
 	if _dt > 0.0:
 		var m0: float = v.masse
 		v.masse = m0 + charge
