@@ -5,6 +5,30 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.72.0 — 17 novembre 2026
+
+Retours d'essai : téléphérique de la Grande Motte, descente à la corde, téléskis débrayables, conduite du skieur ; et du monde sur toutes les remontées et les pistes.
+
+**Téléphérique de la Grande Motte** : au départ, 7,4 m/s jusqu'à ce que la cabine descendante ait quitté le pylône, puis reprise immédiate vers 10 m/s ; la cabine montante passe le pylône à 7,4 m/s (et non plus 6,7). Le ralenti suit la position réelle des cabines sur le sabot.
+
+**Descente à la corde** : la corde va jusqu'au sol dès le début ; on descend sous son siège ou sa cabine même s'il bouge ; la ligne ne repart plus tant que l'évacué n'a pas touché le sol.
+
+**Téléskis débrayables** : pylônes à fût entre les deux brins, un bras de chaque côté ; brin retour 1,5 m plus haut que la montée sur toute la ligne ; poulies de pylône dans le plan du câble ; une seule perche lancée par skieur (une deuxième partait dans son dos).
+
+**Perce-Neige** : en gare haute, le poste n'est plus celui du TSD Vanoise voisin.
+
+**Skieur** : on ne traverse plus un mur quand on entre dans une gare juste après y avoir été déposé.
+
+**Pupitre (PC)** : le bouton PRÊT affiche « à quai » après l'arrivée.
+
+**Conduite du skieur, refaite** : gauche et droite font tourner à vitesse constante tant qu'on les tient (à ski, environ 57 °/s, bornée par l'adhérence des carres au-delà de 16 m/s) ; au neutre, le cap ne bouge plus ; la vue suit exactement, sans ressort ni virage à l'envers ; à pied, on avance là où l'on regarde. Le joystick tactile devient un volant. Vue qui restait figée après un changement de mode avec un doigt posé : corrigée. La vue tournée juste après une dépose n'est plus remise d'office.
+
+**Funival** : deux recoins des escaliers de la gare haute où le skieur restait coincé, fermés.
+
+**Vue figée** : la vue ne se bloque plus quand on lève un doigt pendant un changement de mode (sortie du skieur, carte, vue, conduite), cas rencontré en marchant dans le Perce-Neige.
+
+**Du monde partout, et son poids** : les remontées se remplissent selon l'heure et le sens (pointe vers 10 h 15 à la montée, reprise vers 14 h, rien avant 8 h 45 ni après 16 h 45 ; descente presque vide ; piétons qui redescendent en fin de journée par les téléphériques, le 3S et le Funival). La charge entre dans la puissance, le balancement des véhicules, le freinage d'urgence et la flèche du câble (garde au sol respectée). Passagers dessinés sur les véhicules proches : assis en télésiège, face à face en télécabine, debout en téléphérique, au 3S et dans les compartiments du Funival (272 places, corrigé). Skieurs tirés par les perches des téléskis, au sol sous le brin de montée ; la perche du TKD s'allonge jusqu'à ~10 m pour les atteindre. Skieurs sur les pistes autour de soi (de 9 h à 17 h, creux au déjeuner, rien au-delà de 300 m).
+
 ## 1.71.0 — 16 novembre 2026
 
 Téléskis débrayables refaits sur photos, lignes recalées sur l'orthophoto, gares mieux posées, et un jeu plus fluide.
