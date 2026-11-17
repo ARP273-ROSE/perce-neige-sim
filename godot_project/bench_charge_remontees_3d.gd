@@ -54,6 +54,8 @@ func _choisir() -> void:
 			k = "tcd"
 		elif lg.famille.begins_with("siege") and not lg.fixe():
 			k = "tsd"
+		if lg.famille == "perche_debrayable":
+			_tkd_tous.append(lg)
 		if k != "" and not voulus.has(k):
 			voulus[k] = lg
 	for k in ["tsd", "tcd", "3s", "tph", "funival", "tkd"]:
@@ -101,6 +103,9 @@ func _tick() -> void:
 		_t = 0.0
 		return
 	if _il >= _lignes.size():
+		if _it < _tkd_tous.size():
+			_tkd_suivant()
+			return
 		_skieurs_pistes()
 		return
 	var k: String = _lignes[_il][0]
@@ -339,4 +344,55 @@ func _skieurs_pistes() -> void:
 				return
 			_verif("skieurs sur les pistes à 19 h : personne", sp.positions.is_empty(), "%d skieurs" % sp.positions.size())
 			_fin()
+
+
+## Les 7 TKD : hauteur du câble de montée au-dessus de la trace (min, médiane, max, tous les 5 m hors des gares) ;
+## assiette du skieur tiré au contact, de taille constante, perche dans sa course (5 m au plus).
+var _tkd_tous: Array = []
+var _it: int = 0
+var _it_e: int = 0
+var _it_t: float = 0.0
+
+
+func _tkd_suivant() -> void:
+	var lg: LigneRemontee = _tkd_tous[_it]
+	_it_t += 1.0 / 60.0
+	match _it_e:
+		0:
+			OccupationRemontees.heure_forcee = 10.25
+			_main.aller_a_remontee(lg)
+			_it_e = 1
+			_it_t = 0.0
+		1:
+			if not lg.pret and _it_t < 120.0:
+				return
+			if lg.tires_positions.is_empty() and _it_t < 60.0:
+				return
+			var hs: Array = []
+			var L: float = lg.longueur_h()
+			var d: float = 20.0
+			while d < L - 20.0:
+				hs.append(lg.y_cable(d, true) + lg._fleche(d, true) - lg.sol_montee_tkd(d))
+				d += 5.0
+			hs.sort()
+			var h_min: float = hs[0] if not hs.is_empty() else 0.0
+			var h_med: float = hs[hs.size() / 2] if not hs.is_empty() else 0.0
+			var h_max: float = hs[hs.size() - 1] if not hs.is_empty() else 0.0
+			var n: int = lg.tires_positions.size()
+			var contact: float = 0.0
+			var def_max: float = 0.0
+			var l_max: float = 0.0
+			for j in range(n):
+				var vt: VehiculeRemontee = lg._vehicules[lg.tires_indices[j]][0]
+				var ech: Vector3 = vt._assiette.global_transform.basis.get_scale()
+				def_max = maxf(def_max, maxf(absf(absf(ech.x) - 1.0), maxf(absf(absf(ech.y) - 1.0), absf(absf(ech.z) - 1.0))))
+				contact = maxf(contact, vt.assiette_monde().distance_to(lg.tires_positions[j] + Vector3(0, 0.72, 0)))
+				l_max = maxf(l_max, vt.longueur_tkd)
+			var pylones_n: int = lg.pylones.size()
+			_verif("%s : câble de montée à %.1f / %.1f / %.1f m de la trace (min / médiane / max), assiette au contact du skieur tiré" % [lg.name, h_min, h_med, h_max],
+				h_min >= LigneRemontee.GARDE_TKD - 0.2 and h_max <= LigneRemontee.PLAFOND_TKD + 0.4 and n > 0 and contact < 0.15 and def_max < 0.01,
+				"%d skieurs tirés, assiette à %.2f m au pire, déformée de %.1f %%, perche %.2f m au plus (course jusqu'à %.1f m) ; %d pylônes" % [
+					n, contact, def_max * 100.0, l_max, 3.25 * VehiculeRemontee.PERCHE_TKD_MAX, pylones_n])
+			_it += 1
+			_it_e = 0
 
