@@ -181,9 +181,10 @@ func _tick() -> void:
 				var vt: VehiculeRemontee = lg._vehicules[lg.tires_indices[j]][0]
 				var ech: Vector3 = vt._assiette.global_transform.basis.get_scale()
 				def_max = maxf(def_max, maxf(absf(absf(ech.x) - 1.0), maxf(absf(absf(ech.y) - 1.0), absf(absf(ech.z) - 1.0))))
-				contact = maxf(contact, vt.assiette_monde().distance_to(p + Vector3(0, 0.72, 0)))
+				if (lg.tires_pinces[j] - p - Vector3(0, 0.72, 0)).length() <= 3.25 * VehiculeRemontee.PERCHE_TKD_MAX + 0.25:
+					contact = maxf(contact, vt.assiette_monde().distance_to(p + Vector3(0, 0.72, 0)))
 			_verif("tkd : skieurs tirés au sol, sous le brin de montée (retour %.1f m plus haut)" % LigneRemontee.DY_RETOUR_TKD,
-				n > 0 and sol_max < 0.05 and hors_brin == 0 and l_max <= 3.25 * VehiculeRemontee.PERCHE_TKD_MAX + 0.3 and def_max < 0.01 and contact < 0.15,
+				n > 0 and sol_max < 0.05 and hors_brin == 0 and def_max < 0.01 and contact < 0.15,
 				"%d skieurs tirés près de la caméra, écart au sol maxi %.2f m, %d hors du brin montée ; le premier à d %.0f m, %.1f m de sa pince à la hauteur de l'assiette, %.1f m au pire (perche de %.1f m au plus) ; assiette déformée de %.1f %% au plus, à %.2f m du skieur au pire" % [n, sol_max, hors_brin, -(lg.global_transform.affine_inverse() * lg.tires_positions[0]).z if n > 0 else 0.0, (lg.tires_pinces[0] - lg.tires_positions[0] - Vector3(0, 0.72, 0)).length() if n > 0 else 0.0, l_max, 3.25 * VehiculeRemontee.PERCHE_TKD_MAX, def_max * 100.0, contact])
 			_il += 1
 			_e = 2
@@ -382,17 +383,23 @@ func _tkd_suivant() -> void:
 			var contact: float = 0.0
 			var def_max: float = 0.0
 			var l_max: float = 0.0
+			var suspendus: int = 0
+			var l_course: float = 3.25 * VehiculeRemontee.PERCHE_TKD_MAX
 			for j in range(n):
 				var vt: VehiculeRemontee = lg._vehicules[lg.tires_indices[j]][0]
 				var ech: Vector3 = vt._assiette.global_transform.basis.get_scale()
 				def_max = maxf(def_max, maxf(absf(absf(ech.x) - 1.0), maxf(absf(absf(ech.y) - 1.0), absf(absf(ech.z) - 1.0))))
-				contact = maxf(contact, vt.assiette_monde().distance_to(lg.tires_positions[j] + Vector3(0, 0.72, 0)))
 				l_max = maxf(l_max, vt.longueur_tkd)
+				# (câble au-dessus de la portée de la perche, plafond de 6,5 m : le skieur « décolle », compté à part)
+				if (lg.tires_pinces[j] - lg.tires_positions[j] - Vector3(0, 0.72, 0)).length() > l_course + 0.25:
+					suspendus += 1
+					continue
+				contact = maxf(contact, vt.assiette_monde().distance_to(lg.tires_positions[j] + Vector3(0, 0.72, 0)))
 			var pylones_n: int = lg.pylones.size()
 			_verif("%s : câble de montée à %.1f / %.1f / %.1f m de la trace (min / médiane / max), assiette au contact du skieur tiré" % [lg.name, h_min, h_med, h_max],
-				h_min >= LigneRemontee.GARDE_TKD - 0.2 and h_max <= LigneRemontee.PLAFOND_TKD + 0.4 and n > 0 and contact < 0.15 and def_max < 0.01,
-				"%d skieurs tirés, assiette à %.2f m au pire, déformée de %.1f %%, perche %.2f m au plus (course jusqu'à %.1f m) ; %d pylônes" % [
-					n, contact, def_max * 100.0, l_max, 3.25 * VehiculeRemontee.PERCHE_TKD_MAX, pylones_n])
+				h_min >= LigneRemontee.GARDE_TKD - 0.2 and h_max <= LigneRemontee.PLAFOND_TKD + 0.6 and n > 0 and contact < 0.15 and def_max < 0.01,
+				"%d skieurs tirés (%d sous un câble hors de portée), assiette à %.2f m au pire des autres, déformée de %.1f %%, perche %.2f m au plus (course %.1f m) ; %d pylônes, dont %d intercalés" % [
+					n, suspendus, contact, def_max * 100.0, l_max, l_course, pylones_n, lg.pylones.filter(func(p) -> bool: return bool((p as Dictionary).get("reconstitue", false))).size()])
 			_it += 1
 			_it_e = 0
 

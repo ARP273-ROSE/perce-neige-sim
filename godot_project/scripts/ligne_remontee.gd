@@ -1069,14 +1069,15 @@ const H_TELESKI: float = 6.0
 const GARDE_TELESKI: float = 3.8
 ## Téléskis débrayables (perche_debrayable, Poma) : câble de montée à ~4,3 m de la neige au pylône 1 du
 ## Chardonnet (photo, échelle par la protection orange du fût), perche du skieur tiré ~4,2 m. La perche
-## (TKD_REPOS = 3,25 m au repos, 5 m au plus) doit atteindre le skieur à RECUL_PERCHE derrière la pince, bassin
-## à 0,72 m (recul_perche : redressée sous un câble haut, en biais sous un câble bas) : câble entre ~3 et ~5,8 m de
-## la trace. Têtes visées à 4,6 m ;
-## au-delà du plafond on intercale un pylône plutôt que de relever la tête (retour d'utilisateur, 17/11/2026 :
-## câble à 9 m au-dessus de la trace du 3000, perche de 10 m).
+## (TKD_REPOS = 3,25 m au repos, 5 m au plus, un seul coulissant) tient le skieur à recul_perche() derrière la pince :
+## redressée sous un câble haut, en biais sous un câble bas. Têtes visées à H_TKD au-dessus du sol sous le brin de
+## montée ; un pylône intercalé si le câble passe sous GARDE_TKD, ou (compression) au-dessus de PLAFOND_TKD dans un
+## creux. Le relief à 25 m n'étant pas la piste damée, un plafond plus bas multipliait les pylônes (jusqu'à 2,5 fois
+## le réel) : à 6,5 m, la perche n'atteint plus le skieur au-delà de ~5,9 m — il « décolle » dans les creux
+## (17/11/2026 ; avant, câble jusqu'à 9 m et perche de 10,4 m).
 const H_TKD: float = 4.6
 const GARDE_TKD: float = 3.0
-const PLAFOND_TKD: float = 5.6
+const PLAFOND_TKD: float = 6.5
 const MIN_TKD: float = 4.0
 
 
