@@ -83,7 +83,7 @@ func passagers_cabine(i: int) -> int:
 
 func _maj_passagers_cabines(delta: float) -> void:
 	_pax_dessin_t += delta
-	if _pax_dessin_t < 0.3 or self is Funival:
+	if _pax_dessin_t < 0.3:
 		return
 	_pax_dessin_t = 0.0
 	for i in range(mini(2, _vehicules.size())):

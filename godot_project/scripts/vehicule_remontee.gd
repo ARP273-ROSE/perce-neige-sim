@@ -914,8 +914,10 @@ static func portee_passagers() -> float:
 ## Places dessinées : [transformée (repère du véhicule, origine aux pieds), assis].
 func _places_passagers() -> Array:
 	var out: Array = []
-	if famille.begins_with("perche") or self is VehiculeFunival:
+	if famille.begins_with("perche"):
 		return out
+	if has_method("places_debout"):
+		return call("places_debout")
 	if famille == "cabine_tph":
 		var yt: float = -H_SUSP_TPH - 0.08 - 2.70 + 0.12
 		for iz in range(12):
@@ -929,7 +931,7 @@ func _places_passagers() -> Array:
 		var yp: float = -H_SUSP_3S - 0.08 - _h_cab("cabine_3s") + 0.22
 		for iz in range(3):
 			for ix in range(6):
-				out.append([Transform3D(Basis.IDENTITY, Vector3(-1.1 + 0.44 * ix, yp, -0.36 + 0.36 * iz)), false])
+				out.append([Transform3D(Basis.IDENTITY, Vector3(-0.85 + 0.34 * ix, yp, -0.36 + 0.36 * iz)), false])
 		return out
 	if cabine:
 		for avant in [false, true]:
@@ -971,7 +973,8 @@ func _creer_passagers(graine: int) -> void:
 		var taille: float = rng.randf_range(0.94, 1.06)
 		var base: Transform3D = t0 * Transform3D(Basis.IDENTITY.scaled(Vector3.ONE * taille), Vector3.ZERO)
 		if not assis:
-			base = base * Transform3D(Basis(Vector3.UP, rng.randf_range(-0.6, 0.6)), Vector3.ZERO)
+			# (peu tourné : les skis tenus à la main, 0,34 m sur le côté, ne doivent pas sortir des parois)
+			base = base * Transform3D(Basis(Vector3.UP, rng.randf_range(-0.3, 0.3)), Vector3.ZERO)
 		var cle_p: String = "p:%s:%s" % ["assis" if assis else "skis", "casque" if rng.randf() < 0.72 else "bonnet"]
 		(xf[cle_p] as Array).append(base)
 		(cu[cle_p] as Array).append(Color(rng.randf(), rng.randf(), rng.randf(), 1.0))
