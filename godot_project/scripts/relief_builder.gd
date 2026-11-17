@@ -749,6 +749,32 @@ var _t_piece: int = 0
 const PIECE_US: int = 6000
 
 
+var couloirs: CouloirsTkd = null
+var _rects_couloirs: Array = []          # emprises des tronçons de trace (collisions : maillage fin à 2 m)
+var _bandes_couloirs: Array = []
+var _couloirs_us: int = 0
+var _couloirs_pire_us: int = 0
+
+
+## Une bande de trace damée (CouloirsTkd.maillages) : même matériau que les pièces fines.
+func _build_bande_couloir(bd: Array) -> void:
+	var st: SurfaceTool = SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var verts: PackedVector3Array = bd[0]
+	var uvs: PackedVector2Array = bd[1]
+	for i in range(verts.size()):
+		st.set_uv(uvs[i])
+		st.add_vertex(verts[i])
+	for k in (bd[2] as PackedInt32Array):
+		st.add_index(k)
+	st.generate_normals()
+	var mesh: ArrayMesh = st.commit()
+	var r: Rect2 = bd[3]
+	mesh.surface_set_material(0, _materiau_piece(r, Image.create(1, 1, false, Image.FORMAT_L8)))
+	_instance(mesh, "TraceTkd")
+	_rects_couloirs.append_array(bd[4])
+
+
 func _piece_etalee(am: Dictionary) -> void:
 	await _build_piece(am, _pause_piece)
 	_pieces_us += Time.get_ticks_usec() - _t_piece
@@ -778,6 +804,12 @@ func _finition_pas() -> bool:
 			amenageurs.clear()
 			_rects_pieces.clear()
 			_rects_masque.clear()
+			# traces damées des TKD (couloirs le long de leur axe), hors des pièces des gares
+			var t0_c: int = Time.get_ticks_usec()
+			couloirs = CouloirsTkd.new()
+			couloirs.preparer(self, amenagements.map(func(am0: Dictionary) -> Rect2: return am0["rect"]))
+			_couloirs_us = Time.get_ticks_usec() - t0_c
+			_couloirs_pire_us = _couloirs_us
 			_k_fin = 0
 			_pas_fin = 1
 		1:
@@ -793,6 +825,23 @@ func _finition_pas() -> bool:
 				return false
 			print("[Relief] pièces fines : %d, %.0f ms en tout, pire tranche %.1f ms" % [amenagements.size(), _pieces_us / 1000.0, _pieces_pire_us / 1000.0])
 			_poser_trous()
+			_bandes_couloirs = couloirs.maillages() if couloirs != null else []
+			_k_fin = 0
+			_pas_fin = 7
+		7:
+			# un tronçon de trace damée par image
+			if _k_fin < _bandes_couloirs.size():
+				var t0_b: int = Time.get_ticks_usec()
+				_build_bande_couloir(_bandes_couloirs[_k_fin])
+				var dt_b: int = Time.get_ticks_usec() - t0_b
+				_couloirs_us += dt_b
+				_couloirs_pire_us = maxi(_couloirs_pire_us, dt_b)
+				_k_fin += 1
+				return false
+			if couloirs != null:
+				print("[Relief] traces damées des TKD : %d maillages, %d tronçons, %d sommets, %.0f ms en tout, pire tranche %.1f ms" % [
+					couloirs.n_pieces, couloirs.n_troncons, couloirs.n_sommets, _couloirs_us / 1000.0, _couloirs_pire_us / 1000.0])
+			_bandes_couloirs = []
 			_pas_fin = 2
 		2:
 			_build_flancs()
@@ -2073,6 +2122,20 @@ func _build_piece(am: Dictionary, pause: Callable = Callable()) -> void:
 					img.set_pixel(j, i, Color.WHITE)
 	if pause.is_valid():
 		await pause.call()
+	mesh.surface_set_material(0, _materiau_piece(r, img))
+	_instance(mesh, "PieceGare")
+	if au_masque:
+		_rects_masque.append(r)
+	else:
+		_rects_pieces.append(r)
+	var hs: PackedFloat32Array = PackedFloat32Array()
+	for v in verts:
+		hs.append(v.y)
+	_pieces.append([r, nx, nz, hs, img])
+
+
+## Matériau d'une pièce fine (et des traces damées) : celui du relief, emprise et masque des bâtiments.
+func _materiau_piece(r: Rect2, img: Image) -> ShaderMaterial:
 	# (pack haute définition : même photo et mêmes normales que le sol alentour)
 	var hd_piece: bool = _tex_normales != null and ((fin != null and fin.hd) or _normales_seules != null)
 	var mat: ShaderMaterial = _mat_terrain.duplicate() if hd_piece or _detail_seul else _shader(SHADER_TERRAIN)
@@ -2083,16 +2146,7 @@ func _build_piece(am: Dictionary, pause: Callable = Callable()) -> void:
 	mat.set_shader_parameter("trous", ImageTexture.create_from_image(img))
 	mat.set_shader_parameter("emprise", Vector4(r.position.x, r.position.y, r.end.x, r.end.y))
 	_hiver_mat(mat, true)
-	mesh.surface_set_material(0, mat)
-	_instance(mesh, "PieceGare")
-	if au_masque:
-		_rects_masque.append(r)
-	else:
-		_rects_pieces.append(r)
-	var hs: PackedFloat32Array = PackedFloat32Array()
-	for v in verts:
-		hs.append(v.y)
-	_pieces.append([r, nx, nz, hs, img])
+	return mat
 
 
 ## Terrain affiché en (x, z) dans une pièce fine : [altitude, retiré (dans
@@ -2365,7 +2419,12 @@ func hauteur_ligne(x: float, z: float) -> float:
 	for pc in _pieces:
 		if (pc[0] as Rect2).has_point(Vector2(x, z)):
 			return hauteur_sol(x, z)
-	return _tri_sur(_h25, x, z, 1)
+	var h25: float = _tri_sur(_h25, x, z, 1)
+	if couloirs != null:
+		var hc2: float = couloirs.hauteur(x, z, h25)
+		if not is_nan(hc2):
+			return maxf(h25, hc2)
+	return h25
 
 
 func hauteur_sol(x: float, z: float) -> float:
@@ -2376,7 +2435,13 @@ func hauteur_sol(x: float, z: float) -> float:
 			var tp: Array = terrain_piece(x, z)
 			if not is_nan(float(tp[0])):
 				return float(tp[0])
-	return _hauteur_tri(x, z)
+	var hb: float = _hauteur_tri(x, z)
+	if couloirs != null:
+		# (trace damée d'un TKD : remblai au-dessus du relief)
+		var hc: float = couloirs.hauteur(x, z, hb)
+		if not is_nan(hc):
+			return maxf(hb, hc)
+	return hb
 
 
 ## Normale lissée du sol (différences centrées sur ± e mètres).
