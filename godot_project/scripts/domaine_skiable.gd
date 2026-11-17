@@ -220,6 +220,8 @@ func construire(r: ReliefBuilder) -> void:
 	add_child(skieurs)
 	print("[Domaine] %d jalons, %d panneaux, %d fantômes" % [n, n_panneaux, FantomesDonnees.DESCENTES.size()])
 	pret = true
+	# (graphe des itinéraires de la BOUCLE, en fond : il coûtait 80 ms d'un bloc au départ de la descente)
+	await _preparer_graphe()
 
 
 ## Panneaux ronds : poteaux et disques en MultiMesh par couleur ; face
@@ -786,11 +788,59 @@ func _interdit(q: Vector2) -> bool:
 	return false
 
 
-func itineraire(depart: Vector2, arrivee: Vector2) -> PackedVector2Array:
-	var pos: PackedVector2Array = PackedVector2Array()
-	var haut: PackedFloat32Array = PackedFloat32Array()
-	var voisins: Array = []
+## Graphe des pistes de l'itinéraire, fait une fois (il ne dépend que des axes et des zones interdites) :
+## 80 ms d'un bloc à chaque itinéraire, au départ de la descente de la BOUCLE (relevé du cœur, 17/11/2026).
+var _graphe_itin: Array = []
+var _graphe_cle: String = ""
+
+
+func _graphe_cle_actuelle() -> String:
+	return "%d|%s" % [_axes.size(), str(zones_interdites)]
+
+
+func _graphe_itineraire() -> Array:
+	var cle: String = _graphe_cle_actuelle()
+	if cle == _graphe_cle and not _graphe_itin.is_empty():
+		return _graphe_itin
+	# (pas encore préparé en fond : d'un trait)
+	var g: Dictionary = _graphe_debut()
+	_graphe_axe(g, 0, _axes.size())
+	_graphe_grille(g)
+	_graphe_liens(g, 0, (g["pos"] as PackedVector2Array).size())
+	return _graphe_fin(g, cle)
+
+
+## Le même graphe, préparé par tranches à la fin de la construction du domaine (4 ms par image au plus).
+func _preparer_graphe() -> void:
+	var cle: String = _graphe_cle_actuelle()
+	var g: Dictionary = _graphe_debut()
 	for k in range(_axes.size()):
+		_graphe_axe(g, k, k + 1)
+		await _tranche()
+		if _abandon:
+			return
+	_graphe_grille(g)
+	var n: int = 0
+	var nb: int = (g["pos"] as PackedVector2Array).size()
+	while n < nb:
+		_graphe_liens(g, n, mini(n + 400, nb))
+		n += 400
+		await _tranche()
+		if _abandon:
+			return
+	if cle == _graphe_cle_actuelle():
+		_graphe_fin(g, cle)
+
+
+func _graphe_debut() -> Dictionary:
+	return {"pos": PackedVector2Array(), "haut": PackedFloat32Array(), "voisins": [], "grille": {}}
+
+
+func _graphe_axe(g: Dictionary, k0: int, k1: int) -> void:
+	var pos: PackedVector2Array = g["pos"]
+	var haut: PackedFloat32Array = g["haut"]
+	var voisins: Array = g["voisins"]
+	for k in range(k0, k1):
 		var pts: PackedVector2Array = _axes[k]
 		var prec: int = -1
 		for i in range(pts.size()):
@@ -812,22 +862,46 @@ func itineraire(depart: Vector2, arrivee: Vector2) -> PackedVector2Array:
 					voisins[prec].append(n)
 					voisins[n].append(prec)
 				prec = n
-	# liaisons entre pistes (grille de 35 m)
-	var grille: Dictionary = {}
+	g["pos"] = pos
+	g["haut"] = haut
+
+
+## Liaisons entre pistes (grille de 35 m).
+func _graphe_grille(g: Dictionary) -> void:
+	var pos: PackedVector2Array = g["pos"]
+	var grille: Dictionary = g["grille"]
 	for n in range(pos.size()):
 		var c: Vector2i = Vector2i(floori(pos[n].x / 35.0), floori(pos[n].y / 35.0))
 		if not grille.has(c):
 			grille[c] = []
 		grille[c].append(n)
-	for n in range(pos.size()):
+
+
+func _graphe_liens(g: Dictionary, n0: int, n1: int) -> void:
+	var pos: PackedVector2Array = g["pos"]
+	var voisins: Array = g["voisins"]
+	var grille: Dictionary = g["grille"]
+	for n in range(n0, n1):
 		var c: Vector2i = Vector2i(floori(pos[n].x / 35.0), floori(pos[n].y / 35.0))
 		for dx in [-1, 0, 1]:
 			for dz in [-1, 0, 1]:
 				for m in grille.get(c + Vector2i(dx, dz), []):
-					if m > n and pos[m].distance_to(pos[n]) < 35.0 and not m in voisins[n] \
-							and not _interdit((pos[m] + pos[n]) * 0.5):
+					if m > n and pos[m].distance_to(pos[n]) < 35.0 and not m in voisins[n] 							and not _interdit((pos[m] + pos[n]) * 0.5):
 						voisins[n].append(m)
 						voisins[m].append(n)
+
+
+func _graphe_fin(g: Dictionary, cle: String) -> Array:
+	_graphe_itin = [g["pos"], g["haut"], g["voisins"]]
+	_graphe_cle = cle
+	return _graphe_itin
+
+
+func itineraire(depart: Vector2, arrivee: Vector2) -> PackedVector2Array:
+	var g: Array = _graphe_itineraire()
+	var pos: PackedVector2Array = g[0]
+	var haut: PackedFloat32Array = g[1]
+	var voisins: Array = g[2]
 	# extrémités : les nœuds les plus proches
 	var i_dep: int = -1
 	var i_arr: int = -1

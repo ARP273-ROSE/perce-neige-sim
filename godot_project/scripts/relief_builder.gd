@@ -1136,8 +1136,8 @@ func _fenetre_avancer(fin_us: int) -> void:
 func hauteur_sol_ref(x: float, z: float) -> float:
 	if not _f_active or _h_aff0.is_empty():
 		return hauteur_sol(x, z)
-	for pc in _pieces:
-		if (pc[0] as Rect2).has_point(Vector2(x, z)):
+	for k in _pieces_case(x, z):
+		if (_pieces[k][0] as Rect2).has_point(Vector2(x, z)):
 			var tp: Array = terrain_piece(x, z)
 			if not is_nan(float(tp[0])):
 				return float(tp[0])
@@ -2220,10 +2220,36 @@ func _materiau_piece(r: Rect2, img: Image) -> ShaderMaterial:
 	return mat
 
 
+## Pièces fines qui touchent la case de (x, z), dans l'ordre de _pieces : hauteur_sol en testait les ~65
+## rectangles à chaque appel (skieurs des pistes, perches, joueur : ~5 µs l'appel, relevé du 17/11/2026).
+const CASE_PIECES: float = 200.0
+var _pieces_cases: Dictionary = {}     # Vector2i → PackedInt32Array
+var _pieces_cases_n: int = -1
+const _AUCUNE_PIECE: PackedInt32Array = []
+
+
+func _pieces_case(x: float, z: float) -> PackedInt32Array:
+	if _pieces_cases_n != _pieces.size():
+		_pieces_cases.clear()
+		for k in range(_pieces.size()):
+			var r: Rect2 = _pieces[k][0]
+			for cx in range(floori(r.position.x / CASE_PIECES), floori(r.end.x / CASE_PIECES) + 1):
+				for cz in range(floori(r.position.y / CASE_PIECES), floori(r.end.y / CASE_PIECES) + 1):
+					var c: Vector2i = Vector2i(cx, cz)
+					if not _pieces_cases.has(c):
+						_pieces_cases[c] = PackedInt32Array()
+					var l: PackedInt32Array = _pieces_cases[c]
+					l.append(k)
+					_pieces_cases[c] = l
+		_pieces_cases_n = _pieces.size()
+	return _pieces_cases.get(Vector2i(floori(x / CASE_PIECES), floori(z / CASE_PIECES)), _AUCUNE_PIECE)
+
+
 ## Terrain affiché en (x, z) dans une pièce fine : [altitude, retiré (dans
 ## un bâtiment)] ; [NAN, false] hors des pièces. Pour les bancs.
 func terrain_piece(x: float, z: float) -> Array:
-	for pc in _pieces:
+	for k in _pieces_case(x, z):
+		var pc: Array = _pieces[k]
 		var r: Rect2 = pc[0]
 		if not r.has_point(Vector2(x, z)):
 			continue
@@ -2487,8 +2513,8 @@ func set_hiver(f: float) -> void:
 func hauteur_ligne(x: float, z: float) -> float:
 	if _pas <= 1 or _h25.is_empty() or _etape < 1:
 		return hauteur_sol(x, z)
-	for pc in _pieces:
-		if (pc[0] as Rect2).has_point(Vector2(x, z)):
+	for k in _pieces_case(x, z):
+		if (_pieces[k][0] as Rect2).has_point(Vector2(x, z)):
 			return hauteur_sol(x, z)
 	var h25: float = _tri_sur(_h25, x, z, 1)
 	if couloirs != null:
@@ -2501,8 +2527,8 @@ func hauteur_ligne(x: float, z: float) -> float:
 func hauteur_sol(x: float, z: float) -> float:
 	if _etape < 1:
 		return -INF
-	for pc in _pieces:
-		if (pc[0] as Rect2).has_point(Vector2(x, z)):
+	for k in _pieces_case(x, z):
+		if (_pieces[k][0] as Rect2).has_point(Vector2(x, z)):
 			var tp: Array = terrain_piece(x, z)
 			if not is_nan(float(tp[0])):
 				return float(tp[0])

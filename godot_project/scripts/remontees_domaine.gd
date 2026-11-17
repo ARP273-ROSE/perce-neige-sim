@@ -192,6 +192,7 @@ func construire(r: ReliefBuilder) -> void:
 			t0 = Time.get_ticks_usec()
 	_jumeler()
 	_croisements()
+	LigneRemontee.prechauffer_maillages()
 	_caisses_au_chargement()
 	# double tapis de la tête de Solaise (demande d'utilisateur du 12/11/2026)
 	TapisRoulant.poser_tous(self, relief)
@@ -1073,6 +1074,7 @@ func _exit_tree() -> void:
 		(_cuites[k] as LigneCuite).liberer()
 	_cuites.clear()
 	VehiculeRemontee.vider_modeles()
+	LigneRemontee._tires_maillages = []
 	MeshMerge.vider_partages()
 	RemonteeKit.vider_primitives()
 

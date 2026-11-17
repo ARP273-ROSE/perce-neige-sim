@@ -677,11 +677,29 @@ var tires_indices: PackedInt32Array = PackedInt32Array()         # index du véh
 const TIRES_MAX: int = 48
 
 
+## Maillages des skieurs tirés, communs à tous les téléskis : chaque ligne refaisait les siens (squelette et
+## niveaux de détail), 15 à 30 ms d'une image à sa première image près de la caméra (relevé du cœur, 17/11/2026).
+static var _tires_maillages: Array = []
+
+
+## Maillages des skieurs tirés et des passagers faits d'avance, à la préparation du domaine (écran d'attente du
+## skieur) : leur première fabrication faisait encore une image de 17 à 38 ms près de la première ligne.
+static func prechauffer_maillages() -> void:
+	if _tires_maillages.is_empty():
+		var mat: ShaderMaterial = SkieurMesh.materiau()
+		var sq: Dictionary = SkieurMesh.squelette_glisse()
+		_tires_maillages = [SkieurMesh.passager_squelette(sq, "skis", "casque", mat),
+			SkieurMesh.passager_squelette(sq, "skis", "bonnet", mat), SkieurMesh.skis_aux_pieds(mat)]
+	VehiculeRemontee._maillages_passagers()
+
+
 func _preparer_tires() -> void:
-	var mat: ShaderMaterial = SkieurMesh.materiau()
-	var sq: Dictionary = SkieurMesh.squelette_glisse()
-	var mesh: Array = [SkieurMesh.passager_squelette(sq, "skis", "casque", mat),
-		SkieurMesh.passager_squelette(sq, "skis", "bonnet", mat), SkieurMesh.skis_aux_pieds(mat)]
+	if _tires_maillages.is_empty():
+		var mat: ShaderMaterial = SkieurMesh.materiau()
+		var sq: Dictionary = SkieurMesh.squelette_glisse()
+		_tires_maillages = [SkieurMesh.passager_squelette(sq, "skis", "casque", mat),
+			SkieurMesh.passager_squelette(sq, "skis", "bonnet", mat), SkieurMesh.skis_aux_pieds(mat)]
+	var mesh: Array = _tires_maillages
 	for k in range(3):
 		var mm := MultiMesh.new()
 		mm.transform_format = MultiMesh.TRANSFORM_3D
@@ -786,6 +804,7 @@ func _maj_skieurs_perches() -> void:
 ## ligne a tirés pour le véhicule (passagers), personne dans la gare où l'on descend (montants en gare amont,
 ## descendants en gare aval).
 var _pax_dessin_t: float = 0.0
+const PAX_CREATION_US: int = 2000
 
 
 func _maj_passagers_dessines(delta: float) -> void:
@@ -802,11 +821,18 @@ func _maj_passagers_dessines(delta: float) -> void:
 	var p_cam: Vector3 = cam.global_position
 	var portee: float = VehiculeRemontee.portee_passagers() + 30.0
 	var xm: float = signf(_x_brin(true))
+	# (création des passagers étalée : 40 véhicules d'un coup à la fin d'une construction, 15 à 31 ms d'une image —
+	# relevé du cœur, 5070 Ti, 17/11/2026 ; PAX_CREATION_US au plus par image, la suite à l'image suivante)
+	var t0: int = Time.get_ticks_usec()
+	var reste: bool = false
 	for i in range(_vehicules.size()):
 		if not is_instance_valid(_vehicules[i][0]):
 			continue
 		var v: VehiculeRemontee = _vehicules[i][0]
 		if v == null or not v.visible or v.global_position.distance_to(p_cam) > portee:
+			continue
+		if v.passagers_a_creer() and Time.get_ticks_usec() - t0 > PAX_CREATION_US:
+			reste = true
 			continue
 		var montee: bool = signf(v.position.x) == xm
 		var z: String = String(zone(float(_vehicules[i][1]))[0])
@@ -814,6 +840,8 @@ func _maj_passagers_dessines(delta: float) -> void:
 		if (z == "gare_amont" and montee) or (z == "gare_aval" and not montee):
 			n = 0
 		v.poser_passagers(n, hash([String(name), i]))
+	if reste:
+		_pax_dessin_t = 0.3
 
 
 func _maj_occupation(delta: float) -> void:

@@ -24,6 +24,9 @@ var _t_maj: float = 0.0
 var n_voulu: int = 0
 var _n_ids: int = 0
 var positions: PackedVector3Array = PackedVector3Array()     # pieds des skieurs dessinés (bancs)
+## Tampons des MultiMesh (12 flottants de transformée + 4 de couleur par place), écrits d'un coup à chaque image :
+## deux set_instance_transform par skieur pesaient autant que le reste (relevé du cœur, 17/11/2026).
+var _tampons: Array = []
 
 
 static func n_max() -> int:
@@ -65,8 +68,19 @@ func preparer(r: ReliefBuilder) -> void:
 		mm.use_custom_data = true
 		mm.mesh = maill[k]
 		mm.instance_count = nm
+		var tp: PackedFloat32Array = PackedFloat32Array()
+		tp.resize(nm * 16)
 		for j in range(nm):
-			mm.set_instance_custom_data(j, Color(_rng.randf(), _rng.randf(), _rng.randf(), 1.0))
+			var cj: Color = Color(_rng.randf(), _rng.randf(), _rng.randf(), 1.0)
+			mm.set_instance_custom_data(j, cj)
+			tp[j * 16] = 1.0
+			tp[j * 16 + 5] = 1.0
+			tp[j * 16 + 10] = 1.0
+			tp[j * 16 + 12] = cj.r
+			tp[j * 16 + 13] = cj.g
+			tp[j * 16 + 14] = cj.b
+			tp[j * 16 + 15] = cj.a
+		_tampons.append(tp)
 		mm.visible_instance_count = 0
 		var mi := MultiMeshInstance3D.new()
 		mi.name = "Skieurs%d" % k
@@ -152,6 +166,15 @@ func _enchainer(ag: Dictionary) -> bool:
 
 
 func _process(delta: float) -> void:
+	if Prof.actif:
+		var t0_prof: int = Time.get_ticks_usec()
+		_process_corps(delta)
+		Prof.ajouter("skieurs_pistes", t0_prof)
+	else:
+		_process_corps(delta)
+
+
+func _process_corps(delta: float) -> void:
 	if relief == null or _mmi.is_empty() or not is_inside_tree():
 		return
 	var cam: Camera3D = get_viewport().get_camera_3d()
@@ -166,7 +189,8 @@ func _process(delta: float) -> void:
 			(_mmi[2] as MultiMeshInstance3D).multimesh.instance_count)
 	# trop loin ou en trop : retirés ; manquants : ajoutés hors de la vue proche
 	for k in range(_agents.size() - 1, -1, -1):
-		var q0: Vector2 = _point(int(_agents[k]["i"]), float(_agents[k]["s"]))
+		# (position de l'image précédente, gardée au dessin)
+		var q0: Vector2 = _agents[k]["q"] if _agents[k].has("q") else _point(int(_agents[k]["i"]), float(_agents[k]["s"]))
 		if q0.distance_to(c) > PORTEE + 20.0 or k >= n_voulu:
 			_agents.remove_at(k)
 	var essais: int = 0
@@ -190,8 +214,13 @@ func _process(delta: float) -> void:
 			continue
 		ag2["s"] = s
 		var sg: float = float(ag2["sens"])
-		var q: Vector2 = _point(i, s)
-		var q2: Vector2 = _point(i, s + sg * 2.0)
+		# point et tangente d'une seule recherche dans l'axe (2 m plus loin sur le même segment : sa direction)
+		var a: PackedVector2Array = _axes[i]
+		var kk: int = clampi(l.bsearch(s, true) - 1, 0, a.size() - 2)
+		var q: Vector2 = a[kk].lerp(a[kk + 1], (s - l[kk]) / maxf(l[kk + 1] - l[kk], 1e-3))
+		var s2: float = clampf(s + sg * 2.0, 0.0, l[l.size() - 1])
+		var q2: Vector2 = q + (a[kk + 1] - a[kk]) * ((s2 - s) / maxf(l[kk + 1] - l[kk], 1e-3)) 			if s2 >= l[kk] and s2 <= l[kk + 1] else _point(i, s2)
+		ag2["q"] = q
 		var tg: Vector2 = (q2 - q).normalized() if q2.distance_to(q) > 1e-3 else Vector2(0, -1)
 		var nrm: Vector2 = Vector2(-tg.y, tg.x)
 		var w: float = TAU / float(ag2["per"])
@@ -207,12 +236,31 @@ func _process(delta: float) -> void:
 		var roll: float = clampf(atan(float(ag2["v"]) * float(ag2["v"]) * kappa / 9.81), -0.6, 0.6)
 		var pos: Vector3 = Vector3(p2.x, _hauteur(p2) + 0.02, p2.y)
 		var b: Basis = Basis(Vector3.UP, cap) * Basis(Vector3.BACK, roll)
-		var xf: Transform3D = Transform3D(b, pos)
 		var cle: int = 0 if bool(ag2["casque"]) else 1
-		(_mmi[cle] as MultiMeshInstance3D).multimesh.set_instance_transform(n_c[cle], xf)
+		_ecrire(_tampons[cle], n_c[cle], b, pos)
 		n_c[cle] += 1
-		(_mmi[2] as MultiMeshInstance3D).multimesh.set_instance_transform(n_c[2], xf)
+		_ecrire(_tampons[2], n_c[2], b, pos)
 		n_c[2] += 1
 		positions.append(pos)
 	for k3 in range(3):
-		(_mmi[k3] as MultiMeshInstance3D).multimesh.visible_instance_count = n_c[k3]
+		var mm3: MultiMesh = (_mmi[k3] as MultiMeshInstance3D).multimesh
+		if n_c[k3] > 0:
+			mm3.buffer = _tampons[k3]
+		mm3.visible_instance_count = n_c[k3]
+
+
+## Transformée de la place j dans un tampon de MultiMesh (lignes de la matrice 3 × 4).
+static func _ecrire(tp: PackedFloat32Array, j: int, b: Basis, o: Vector3) -> void:
+	var k: int = j * 16
+	tp[k] = b.x.x
+	tp[k + 1] = b.y.x
+	tp[k + 2] = b.z.x
+	tp[k + 3] = o.x
+	tp[k + 4] = b.x.y
+	tp[k + 5] = b.y.y
+	tp[k + 6] = b.z.y
+	tp[k + 7] = o.y
+	tp[k + 8] = b.x.z
+	tp[k + 9] = b.y.z
+	tp[k + 10] = b.z.z
+	tp[k + 11] = o.z
