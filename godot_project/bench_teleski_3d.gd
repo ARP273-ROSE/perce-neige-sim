@@ -120,7 +120,7 @@ func _tick() -> void:
 				# perche déroulée jusqu'au skieur
 				var v: VehiculeRemontee = _lg.vehicule(rm.a_bord[1])
 				# enrouleur : la corde se déroule ; TKD : la perche télescopique s'allonge
-				if (v._corde != null and v._corde.scale.y > 1.0) or (v._corde == null and v._perche_tige != null and absf(v._perche_tige.scale.y - 1.0) > 0.05):
+				if (v._corde != null and v._corde.scale.y > 1.0) or (v._corde == null and v.longueur_tkd > VehiculeRemontee.TKD_REPOS + 0.05):
 					_perche_ok = true
 			else:
 				var haut: Vector3 = _lg.global_transform * Vector3(0, _lg.terrain(_lg.longueur_h()), -_lg.longueur_h())

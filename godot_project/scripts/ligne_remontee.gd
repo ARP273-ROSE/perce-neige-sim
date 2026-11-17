@@ -623,6 +623,7 @@ var _tires_mmi: Array = []                 # [corps casque, corps bonnet, skis]
 var _tires_tendues: Dictionary = {}        # index des perches tendues pour un skieur dessiné
 var tires_positions: PackedVector3Array = PackedVector3Array()   # pieds des skieurs tirés dessinés (bancs)
 var tires_pinces: PackedVector3Array = PackedVector3Array()      # pince de leur perche, même ordre
+var tires_indices: PackedInt32Array = PackedInt32Array()         # index du véhicule, même ordre
 const TIRES_MAX: int = 48
 
 
@@ -673,6 +674,7 @@ func _maj_skieurs_perches() -> void:
 	var vues: Dictionary = {}
 	tires_positions.clear()
 	tires_pinces.clear()
+	tires_indices.clear()
 	for i in range(_vehicules.size()):
 		if i == perche_joueur:
 			continue
@@ -715,6 +717,7 @@ func _maj_skieurs_perches() -> void:
 				n_c[2] += 1
 				tires_positions.append(o)
 				tires_pinces.append(v.global_position)
+				tires_indices.append(i)
 	# perches lâchées par un skieur dessiné (sorties de la portée, arrivées) : repliées
 	for i2 in _tires_tendues.keys():
 		if not vues.has(i2) and int(i2) != perche_joueur and int(i2) < _vehicules.size() and is_instance_valid(_vehicules[int(i2)][0]):

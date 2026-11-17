@@ -134,8 +134,8 @@ func constructeur() -> String:
 const VARIANTES: int = 8
 static var _numeros: Dictionary = {}      # type → numéros des variantes
 static var _modeles: Dictionary = {}      # type|numéro → [Node3D hors arbre, références, valeurs]
-const REFS: Array = ["_machoire", "_gc", "_bulle", "_susp", "_pince", "_corde", "_perche_tige", "_bras"]
-const LISTES: Array = ["_ressorts", "_galets_roul", "_skis_ranges"]
+const REFS: Array = ["_machoire", "_gc", "_bulle", "_susp", "_pince", "_corde", "_perche_tige", "_bras", "_assiette"]
+const LISTES: Array = ["_ressorts", "_galets_roul", "_skis_ranges", "_coulisses"]
 const VALEURS: Array = ["places", "cabine", "pivot", "masse", "longueur_pendule", "_gc_releve", "_ressort_l0", "_etat_anim"]
 
 
@@ -351,6 +351,11 @@ func _a_garder() -> Array:
 		garder.append(g)
 	for p in _portes:
 		garder.append(p[0])
+	# perche télescopique du TKD : chaque élément coulisse dans le précédent, l'assiette au bout
+	for c in _coulisses:
+		garder.append(c)
+	if _assiette != null:
+		garder.append(_assiette)
 	return garder
 
 
@@ -366,8 +371,15 @@ func _fusion_suspendu() -> void:
 
 
 func _fusion_pieces() -> void:
-	for n in _a_garder():
-		MeshMerge.merge(n, _skis_ranges, "Piece", true)      # skis rangés : affichés à la demande
+	var gardees: Array = _a_garder()
+	for n in gardees:
+		# (skis rangés : affichés à la demande ; les autres pièces gardées qu'elle contient restent à part —
+		# les éléments emboîtés de la perche télescopique)
+		var garde_n: Array = _skis_ranges.duplicate()
+		for g2 in gardees:
+			if g2 != n:
+				garde_n.append(g2)
+		MeshMerge.merge(n, garde_n, "Piece", true)
 	for n in _skis_ranges:
 		MeshMerge.merge(n, [], "Skis", true)
 	# pièces de détail, invisibles de loin (audit de fluidité, 26/10/2026 : 36 000
@@ -2608,11 +2620,34 @@ func _perche() -> void:
 		_perche_tige = Node3D.new()
 		_perche_tige.name = "Perche"
 		_bras.add_child(_perche_tige)
-		RemonteeKit.barre(_perche_tige, Vector3(0, 0, 0), Vector3(0, -1.30, 0), 0.020, "galva", 8)
-		RemonteeKit.cylindre(_perche_tige, 0.030, 0.030, 0.80, Transform3D(Basis.IDENTITY, Vector3(0, -1.70, 0)), "noir_mat", 10)
-		RemonteeKit.barre(_perche_tige, Vector3(0, -2.10, 0), Vector3(0, -3.20, 0), 0.016, "galva", 8)
-		RemonteeKit.cylindre(_perche_tige, 0.022, 0.022, 0.10, Transform3D(Basis.IDENTITY, Vector3(0, -3.18, 0)), "noir_mat", 8)
-		RemonteeKit.cylindre(_perche_tige, 0.10, 0.09, 0.045, Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3(0, -3.25, 0)), "noir_mat", 18)
+		# partie fixe : tube gris et boîtier noir du ressort freiné, de taille constante
+		RemonteeKit.barre(_perche_tige, Vector3(0, 0, 0), Vector3(0, -TKD_TUBE, 0), 0.020, "galva", 8)
+		RemonteeKit.cylindre(_perche_tige, 0.030, 0.030, TKD_BOITIER, Transform3D(Basis.IDENTITY,
+			Vector3(0, -TKD_TUBE - TKD_BOITIER * 0.5, 0)), "noir_mat", 10)
+		# partie télescopique : éléments emboîtés qui coulissent hors du boîtier, puis les uns hors des autres ;
+		# la tige du bout porte l'embout et l'assiette, de taille constante
+		_coulisses.clear()
+		var parent: Node3D = _perche_tige
+		var n: int = nb_coulisses_tkd()
+		for k in range(n):
+			var c := Node3D.new()
+			c.name = "Coulisse%d" % (k + 1)
+			parent.add_child(c)
+			var r: float = 0.017 - 0.0015 * float(k) if k < n - 1 else 0.016 - 0.0015 * float(maxi(k - 1, 0))
+			RemonteeKit.barre(c, Vector3(0, 0, 0), Vector3(0, -TKD_ELEMENT, 0), maxf(r, 0.008), "galva", 8)
+			if k < n - 1:
+				# bague noire au bout de chaque élément (butée)
+				RemonteeKit.cylindre(c, maxf(r, 0.008) + 0.004, maxf(r, 0.008) + 0.004, 0.05, Transform3D(Basis.IDENTITY,
+					Vector3(0, -TKD_ELEMENT + 0.025, 0)), "noir_mat", 8)
+			_coulisses.append(c)
+			parent = c
+		_assiette = Node3D.new()
+		_assiette.name = "Assiette"
+		parent.add_child(_assiette)
+		_assiette.position = Vector3(0, -TKD_ELEMENT, 0)
+		RemonteeKit.cylindre(_assiette, 0.022, 0.022, 0.10, Transform3D(Basis.IDENTITY, Vector3(0, 0.02, 0)), "noir_mat", 8)
+		RemonteeKit.cylindre(_assiette, 0.10, 0.09, 0.045, Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3(0, -0.05, 0)), "noir_mat", 18)
+		_telescoper(TKD_REPOS)
 		return
 	# enrouleur : pince fixe sur le câble, étrier en C qui le contourne par
 	# l'extérieur (photo Commons « Tellerliftbügel »), boîtier à tambour
@@ -2663,8 +2698,7 @@ func longueur_perche(d: float) -> void:
 	if d <= 0.0 and _bras != null:
 		_bras.rotation = Vector3.ZERO
 	if famille == "perche_debrayable":
-		var k: float = clampf(d / 3.25, 0.35, PERCHE_TKD_MAX) if d > 0.0 else 1.0
-		_perche_tige.scale = Vector3(1, k, 1)
+		_telescoper(d if d > 0.0 else TKD_REPOS)
 		return
 	deroule(0.0 if d <= 0.0 else (d - 0.45 - 1.12 - 0.25) / (3.6 - 0.25))
 
@@ -2675,6 +2709,55 @@ func deroule(t: float) -> void:
 	var l: float = lerpf(0.25, 3.6, clampf(t, 0.0, 1.6))
 	_corde.scale = Vector3(1, l, 1)
 	_perche_tige.position = Vector3(0, -l, 0)
+
+
+## Perche télescopique du TKD (16/11/2026 : toute la tige était étirée en y — à 3×, boîtier et assiette
+## déformés). Longueurs des photos du Chardonnet : tube gris 1,30 m, boîtier noir du ressort 0,80 m, tige 1,10 m
+## au repos, assiette de ~20 cm ; 3,25 m de l'articulation à l'assiette. Au-delà, des éléments emboîtés de
+## TKD_ELEMENT m coulissent (la tige du bout d'abord), chacun sortant au plus de TKD_ELEMENT − TKD_RECOUVREMENT ;
+## leur nombre suit la longueur maximale (3,25 × PERCHE_TKD_MAX). Rien n'est mis à l'échelle.
+const TKD_TUBE: float = 1.30
+const TKD_BOITIER: float = 0.80
+const TKD_FIXE: float = TKD_TUBE + TKD_BOITIER
+const TKD_REPOS: float = 3.25
+const TKD_ELEMENT: float = 1.90
+const TKD_RECOUVREMENT: float = 0.25
+var _coulisses: Array = []                 # éléments emboîtés, du boîtier vers l'assiette (copiés : LISTES)
+var _assiette: Node3D = null
+var longueur_tkd: float = TKD_REPOS
+
+
+static func nb_coulisses_tkd() -> int:
+	var sortie_max: float = 3.25 * PERCHE_TKD_MAX - TKD_FIXE
+	return maxi(1, int(ceil(sortie_max / (TKD_ELEMENT - TKD_RECOUVREMENT))))
+
+
+## Longueur de l'articulation à l'assiette (m), bornée au repos et à la longueur maximale.
+func _telescoper(l: float) -> void:
+	if _coulisses.is_empty():
+		return
+	l = clampf(l, TKD_REPOS, 3.25 * PERCHE_TKD_MAX)
+	longueur_tkd = l
+	var e_tot: float = l - TKD_FIXE
+	var e_max: float = TKD_ELEMENT - TKD_RECOUVREMENT
+	# (la tige du bout sort d'abord, puis l'élément qui la porte, etc.)
+	var sorties: Array = []
+	sorties.resize(_coulisses.size())
+	for k in range(_coulisses.size() - 1, -1, -1):
+		var e: float = minf(e_tot, e_max)
+		sorties[k] = e
+		e_tot -= e
+	for k2 in range(_coulisses.size()):
+		var c: Node3D = _coulisses[k2]
+		# l'élément sort de son parent (le boîtier, ou l'élément précédent) de `sorties` : son bas est à
+		# la sortie du parent − sortie
+		var y_sortie: float = -TKD_FIXE if k2 == 0 else -TKD_ELEMENT
+		c.position = Vector3(0, y_sortie - float(sorties[k2]) + TKD_ELEMENT, 0)
+
+
+## Assiette dans le monde (bancs, skieurs tirés).
+func assiette_monde() -> Vector3:
+	return _assiette.global_position if _assiette != null else global_position
 
 
 ## Perche tendue vers `cible` (repère du véhicule) : la rondelle ou l'archet
@@ -2691,7 +2774,7 @@ func tendre_perche(cible: Vector3) -> void:
 		return
 	_bras.rotation = Vector3(-atan2(v.z, -v.y), 0.0, 0.0)
 	if famille == "perche_debrayable":
-		_perche_tige.scale = Vector3(1, clampf(dist / 3.25, 0.35, PERCHE_TKD_MAX), 1)
+		_telescoper(dist)
 	else:
 		var l: float = clampf(dist - 1.15, 0.25, 6.0)
 		_corde.scale = Vector3(1, l, 1)
