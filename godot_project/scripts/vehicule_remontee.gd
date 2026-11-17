@@ -1028,6 +1028,11 @@ func _creer_passagers(graine: int) -> void:
 		_pax_mmi[cle3] = mi
 
 
+## Passagers dessinés pas encore créés (leurs MultiMesh se font au premier poser_passagers).
+func passagers_a_creer() -> bool:
+	return not famille.begins_with("perche") and _pax_mmi.is_empty() and _pax_places == 0
+
+
 ## `n` passagers à bord (au-delà des places dessinées : toutes affichées).
 func poser_passagers(n: int, graine: int) -> void:
 	if famille.begins_with("perche"):

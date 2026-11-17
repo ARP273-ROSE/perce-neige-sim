@@ -2377,13 +2377,13 @@ func _poser_domaine() -> void:
 	domaine = DomaineSkiable.new()
 	domaine.name = "DomaineSkiable"
 	add_child(domaine)
-	domaine.construire(relief)
 	# emprise de la gare du haut (relief évidé sous le bâtiment) : les
 	# itinéraires à ski l'évitent — la BOUCLE partie de la terrasse y
-	# tombait (retour d'utilisateur, 13/10/2026)
+	# tombait (retour d'utilisateur, 13/10/2026) ; posée avant la construction, qui en prépare le graphe
 	var xh: Transform3D = tunnel.transform_at(PNConstants.LENGTH)
 	var ax: Vector2 = Vector2(-xh.basis.z.x, -xh.basis.z.z).normalized()
 	domaine.zones_interdites = [[Vector2(xh.origin.x, xh.origin.z), ax, 55.0, 32.0]]
+	domaine.construire(relief)
 
 
 ## Skieur (invisible et immobile jusqu'à activer()) et ses commandes à
