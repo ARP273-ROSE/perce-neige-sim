@@ -2575,6 +2575,11 @@ func portes(t: float) -> void:
 # --- téléskis ----------------------------------------------------------------------
 
 var _corde: Node3D               # enrouleur : corde et perche (s'étirent en montée)
+## TKD : allongement maxi de la perche télescopique (ressort freiné + tube coulissant), en multiple de sa
+## longueur au repos (3,25 m) : ~10,4 m. Les têtes de téléski montent jusqu'à 9 m au-dessus de la trace
+## (H_TELESKI, _tetes_teleski) ; à 2,4 (7,8 m), l'assiette restait ~1 m devant et au-dessus du skieur tiré
+## (banc des charges, TKD 3000, 17/11/2026).
+const PERCHE_TKD_MAX: float = 3.2
 var _perche_tige: Node3D
 
 
@@ -2658,7 +2663,7 @@ func longueur_perche(d: float) -> void:
 	if d <= 0.0 and _bras != null:
 		_bras.rotation = Vector3.ZERO
 	if famille == "perche_debrayable":
-		var k: float = clampf(d / 3.25, 0.35, 2.4) if d > 0.0 else 1.0
+		var k: float = clampf(d / 3.25, 0.35, PERCHE_TKD_MAX) if d > 0.0 else 1.0
 		_perche_tige.scale = Vector3(1, k, 1)
 		return
 	deroule(0.0 if d <= 0.0 else (d - 0.45 - 1.12 - 0.25) / (3.6 - 0.25))
@@ -2686,7 +2691,7 @@ func tendre_perche(cible: Vector3) -> void:
 		return
 	_bras.rotation = Vector3(-atan2(v.z, -v.y), 0.0, 0.0)
 	if famille == "perche_debrayable":
-		_perche_tige.scale = Vector3(1, clampf(dist / 3.25, 0.35, 2.4), 1)
+		_perche_tige.scale = Vector3(1, clampf(dist / 3.25, 0.35, PERCHE_TKD_MAX), 1)
 	else:
 		var l: float = clampf(dist - 1.15, 0.25, 6.0)
 		_corde.scale = Vector3(1, l, 1)

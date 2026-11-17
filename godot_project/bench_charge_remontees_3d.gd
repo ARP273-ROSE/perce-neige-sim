@@ -145,6 +145,7 @@ func _tick() -> void:
 			var relief2: ReliefBuilder = _main.get("relief")
 			var sol_max: float = 0.0
 			var hors_brin: int = 0
+			var l_max: float = 0.0
 			var xb: float = lg._x_brin(true)
 			for j in range(n):
 				var p: Vector3 = lg.tires_positions[j]
@@ -167,9 +168,11 @@ func _tick() -> void:
 							x_d = minf(x_d, absf(lv.x - lp.x))
 				if absf(loc.x - lp.x) > 1.0 or x_m > x_d:
 					hors_brin += 1
+				# (la perche télescopique doit atteindre l'assiette sous les fesses du skieur)
+				l_max = maxf(l_max, (lg.tires_pinces[j] - p - Vector3(0, 0.72, 0)).length())
 			_verif("tkd : skieurs tirés au sol, sous le brin de montée (retour %.1f m plus haut)" % LigneRemontee.DY_RETOUR_TKD,
-				n > 0 and sol_max < 0.05 and hors_brin == 0,
-				"%d skieurs tirés près de la caméra, écart au sol maxi %.2f m, %d hors du brin montée ; le premier à d %.0f m, %.1f m de sa pince à la hauteur de l'assiette (perche de 7,8 m au plus)" % [n, sol_max, hors_brin, -(lg.global_transform.affine_inverse() * lg.tires_positions[0]).z if n > 0 else 0.0, (lg.tires_pinces[0] - lg.tires_positions[0] - Vector3(0, 0.72, 0)).length() if n > 0 else 0.0])
+				n > 0 and sol_max < 0.05 and hors_brin == 0 and l_max <= 3.25 * VehiculeRemontee.PERCHE_TKD_MAX + 0.3,
+				"%d skieurs tirés près de la caméra, écart au sol maxi %.2f m, %d hors du brin montée ; le premier à d %.0f m, %.1f m de sa pince à la hauteur de l'assiette, %.1f m au pire (perche de %.1f m au plus)" % [n, sol_max, hors_brin, -(lg.global_transform.affine_inverse() * lg.tires_positions[0]).z if n > 0 else 0.0, (lg.tires_pinces[0] - lg.tires_positions[0] - Vector3(0, 0.72, 0)).length() if n > 0 else 0.0, l_max, 3.25 * VehiculeRemontee.PERCHE_TKD_MAX])
 			_il += 1
 			_e = 2
 			_t = 0.0
