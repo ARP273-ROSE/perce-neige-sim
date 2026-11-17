@@ -1755,20 +1755,25 @@ func _suivre_perche() -> void:
 	# du Montet, retour d'utilisateur, 25/10/2026 — il était presque sous le câble,
 	# perche verticale et archet devant lui)
 	var dt_p: float = get_process_delta_time()
+	# (TKD sous un câble haut : la perche à fond se redresse, la place d'équilibre se rapproche de la pince)
+	var y_sol_p: float = relief.hauteur_sol(pc.x + arriere.x * RECUL_PERCHE, pc.z + arriere.z * RECUL_PERCHE) if relief != null else pc.y - 5.0
+	var recul_c: float = lg.recul_perche(pc.y, y_sol_p)
 	if _perche_vs >= 0.0 and dt_p > 0.0:
 		var vc: float = maxf(lg.vitesse_reelle, 0.0)
 		var nsp: int = maxi(1, int(ceil(dt_p / 0.01)))
 		var hp: float = dt_p / nsp
 		for _k in range(nsp):
-			var a_s: float = PERCHE_W * PERCHE_W * (_perche_x - RECUL_PERCHE) + 2.0 * PERCHE_ZETA * PERCHE_W * (vc - _perche_vs)
+			var a_s: float = PERCHE_W * PERCHE_W * (_perche_x - recul_c) + 2.0 * PERCHE_ZETA * PERCHE_W * (vc - _perche_vs)
 			a_s = clampf(a_s, -3.8, PERCHE_A_MAX)
 			if _perche_vs <= 0.0 and a_s < 0.0:
 				a_s = 0.0                   # (il ne recule pas sur la neige à l'arrêt)
 			_perche_vs += a_s * hp
 			_perche_x = clampf(_perche_x + (vc - _perche_vs) * hp, 0.0, 6.0)
-		if absf(_perche_x - RECUL_PERCHE) < 0.02 and absf(_perche_vs - vc) < 0.02:
+		if absf(_perche_x - recul_c) < 0.02 and absf(_perche_vs - vc) < 0.02:
 			_perche_vs = -1.0               # établi : on suit la pince
-			_perche_x = RECUL_PERCHE
+			_perche_x = recul_c
+	elif _perche_vs < 0.0:
+		_perche_x = move_toward(_perche_x, recul_c, 1.0 * dt_p)     # établi : la place suit la hauteur du câble
 	var pos: Vector3 = pc + arriere * _perche_x
 	var loc: Vector3 = lg.global_transform.affine_inverse() * pos
 	var yl: float = lg.terrain(clampf(-loc.z, 0.0, lg.longueur_h()))

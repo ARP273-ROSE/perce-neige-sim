@@ -2588,10 +2588,10 @@ func portes(t: float) -> void:
 
 var _corde: Node3D               # enrouleur : corde et perche (s'étirent en montée)
 ## TKD : allongement maxi de la perche télescopique (ressort freiné + tube coulissant), en multiple de sa
-## longueur au repos (3,25 m) : ~10,4 m. Les têtes de téléski montent jusqu'à 9 m au-dessus de la trace
-## (H_TELESKI, _tetes_teleski) ; à 2,4 (7,8 m), l'assiette restait ~1 m devant et au-dessus du skieur tiré
-## (banc des charges, TKD 3000, 17/11/2026).
-const PERCHE_TKD_MAX: float = 3.2
+## longueur au repos (3,25 m) : 5 m, un seul coulissant (perches Poma ; photo du Chardonnet : ~4,2 m tirée sous
+## un câble à ~4,3 m). Le câble des TKD reste donc à 3,5-5,4 m de la trace (LigneRemontee.H_TKD, PLAFOND_TKD,
+## pylônes intercalés) ; avant, il montait à 9 m et la perche à 10,4 m (17/11/2026).
+const PERCHE_TKD_MAX: float = 5.0 / 3.25
 var _perche_tige: Node3D
 
 
@@ -2713,15 +2713,15 @@ func deroule(t: float) -> void:
 
 ## Perche télescopique du TKD (16/11/2026 : toute la tige était étirée en y — à 3×, boîtier et assiette
 ## déformés). Longueurs des photos du Chardonnet : tube gris 1,30 m, boîtier noir du ressort 0,80 m, tige 1,10 m
-## au repos, assiette de ~20 cm ; 3,25 m de l'articulation à l'assiette. Au-delà, des éléments emboîtés de
-## TKD_ELEMENT m coulissent (la tige du bout d'abord), chacun sortant au plus de TKD_ELEMENT − TKD_RECOUVREMENT ;
-## leur nombre suit la longueur maximale (3,25 × PERCHE_TKD_MAX). Rien n'est mis à l'échelle.
+## au repos, assiette de ~20 cm ; 3,25 m de l'articulation à l'assiette. Au-delà, le coulissant de TKD_ELEMENT m
+## sort du boîtier (au plus de TKD_ELEMENT − TKD_RECOUVREMENT) ; s'il fallait plus long, des éléments emboîtés
+## de plus : leur nombre suit la longueur maximale (3,25 × PERCHE_TKD_MAX). Rien n'est mis à l'échelle.
 const TKD_TUBE: float = 1.30
 const TKD_BOITIER: float = 0.80
 const TKD_FIXE: float = TKD_TUBE + TKD_BOITIER
 const TKD_REPOS: float = 3.25
-const TKD_ELEMENT: float = 1.90
-const TKD_RECOUVREMENT: float = 0.25
+const TKD_ELEMENT: float = 3.20
+const TKD_RECOUVREMENT: float = 0.30
 var _coulisses: Array = []                 # éléments emboîtés, du boîtier vers l'assiette (copiés : LISTES)
 var _assiette: Node3D = null
 var longueur_tkd: float = TKD_REPOS

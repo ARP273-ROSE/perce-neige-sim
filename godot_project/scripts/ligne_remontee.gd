@@ -605,6 +605,9 @@ func places_vehicule() -> int:
 
 ## Passagers du véhicule i (sens donné) : un nouveau tirage à chaque passage en gare (changement de sens).
 func passagers(i: int, montee: bool) -> int:
+	# (TKD : une perche ne part du magasin que pour un skieur — l'affluence règle la cadence des lancers)
+	if famille == "perche_debrayable":
+		return 1 if montee else 0
 	var e: Array = _pax_veh.get(i, [])
 	if e.is_empty() or bool(e[0]) != montee:
 		var tour: int = (int(e[1]) + 1) if not e.is_empty() else int(OccupationRemontees.heure() * 6.0)
@@ -700,6 +703,11 @@ func _maj_skieurs_perches() -> void:
 		pos.y = (global_transform * Vector3(loc.x, terrain(clampf(-loc.z, 0.0, longueur_h())), loc.z)).y
 		if relief != null:
 			pos.y = relief.hauteur_sol(pos.x, pos.z)
+		# (TKD sous un câble haut : perche redressée, skieur plus près sous la pince)
+		var recul: float = recul_perche(v.global_position.y, pos.y)
+		if recul < RemonteesDomaine.RECUL_PERCHE - 0.01:
+			pos = v.global_position + arriere * recul
+			pos.y = relief.hauteur_sol(pos.x, pos.z) if relief != null else pos.y
 		pos.y += 0.02
 		v.tendre_perche(v.to_local(pos + Vector3.UP * (0.62 if tbar else 0.72)))
 		vues[i] = true
@@ -1059,42 +1067,76 @@ func _bornes_tetes() -> void:
 ## retour d'utilisateur, 25/10/2026 : le câble passait à 12 m.
 const H_TELESKI: float = 6.0
 const GARDE_TELESKI: float = 3.8
+## Téléskis débrayables (perche_debrayable, Poma) : câble de montée à ~4,3 m de la neige au pylône 1 du
+## Chardonnet (photo, échelle par la protection orange du fût), perche du skieur tiré ~4,2 m. La perche
+## (TKD_REPOS = 3,25 m au repos, 5 m au plus) doit atteindre le skieur à RECUL_PERCHE derrière la pince, bassin
+## à 0,72 m (recul_perche : redressée sous un câble haut, en biais sous un câble bas) : câble entre ~3 et ~5,8 m de
+## la trace. Têtes visées à 4,6 m ;
+## au-delà du plafond on intercale un pylône plutôt que de relever la tête (retour d'utilisateur, 17/11/2026 :
+## câble à 9 m au-dessus de la trace du 3000, perche de 10 m).
+const H_TKD: float = 4.6
+const GARDE_TKD: float = 3.0
+const PLAFOND_TKD: float = 5.6
+const MIN_TKD: float = 4.0
+
+
+func _h_teleski() -> float:
+	return H_TKD if famille == "perche_debrayable" else H_TELESKI
+
+
+func _plafond_teleski() -> float:
+	return PLAFOND_TKD if famille == "perche_debrayable" else 9.0
+
+
+func _garde_teleski() -> float:
+	return GARDE_TKD if famille == "perche_debrayable" else GARDE_TELESKI
 
 
 func _tetes_teleski() -> void:
 	_sol_tk.clear()
-	for ajout in range(6):
-		_tetes.clear()
-		for p in pylones:
-			_tetes.append(terrain(float(p["d"])) + H_TELESKI)
-		for it in range(15):
-			# (une pause par passe : jusqu'à 15 ms d'un bloc au Col du Palet, relevé du 12/11/2026)
-			await _pause("têtes des pylônes")
-			var bouge: bool = false
-			var pts: Array = _points_appui()
-			for k in range(pts.size() - 1):
-				var r: Array = _pire_portee_teleski(pts[k], pts[k + 1])
-				if r[0] > 0.05:
-					for i in [k - 1, k]:
-						if i >= 0 and i < _tetes.size():
-							_tetes[i] = minf(_tetes[i] + r[0] + 0.1, terrain(float(pylones[i]["d"])) + 9.0)
-					bouge = true
-			if not bouge:
-				break
+	_sol_m_tk.clear()
+	var n_ajouts: int = 24 if famille == "perche_debrayable" else 6
+	for ajout in range(n_ajouts + 1):
+		await _relever_tetes_teleski()
+		if ajout == n_ajouts:
+			break               # (têtes refaites après le dernier pylône intercalé : autant de têtes que de pylônes)
 		# là où le câble touche encore, têtes à 9 m — une cassure de pente sous
 		# une gare, une bosse du relief entre deux pylônes —, on intercale le
 		# pylône qui y serait (Signal, Combe Folle, Col du Palet) ; aussi sur les
 		# lignes relevées : le relief n'y est pas celui de la trace damée, et le
 		# câble passait à 2 m de la neige (Legettaz, Palet, retour d'utilisateur, 10/11/2026)
 		var pts2: Array = _points_appui()
-		var pire: Array = [0.3, 0.0]
+		# pires points de chaque portée — câble trop bas, et (TKD) trop haut au-dessus de la trace : creux du
+		# relief où la perche n'atteindrait plus le skieur, d'où un pylône de compression —, du pire au moindre ;
+		# on prend le premier qui n'est pas contre un pylône existant (en remettre un au même endroit ne change rien)
+		var cands: Array = []
 		for k in range(pts2.size() - 1):
 			var r2: Array = _pire_portee_teleski(pts2[k], pts2[k + 1])
-			if r2[0] > pire[0]:
-				pire = r2
+			if r2[0] > 0.3:
+				cands.append([r2[0], r2[1], false])
+			if famille == "perche_debrayable":
+				var r3: Array = _trop_haut_portee_tkd(pts2[k], pts2[k + 1])
+				if r3[0] > 0.3:
+					cands.append([r3[0], r3[1], true])
+		cands.sort_custom(func(x: Array, y: Array) -> bool: return float(x[0]) > float(y[0]))
+		var pire: Array = [0.0, 0.0]
+		var trop_haut: bool = false
+		for c in cands:
+			var libre: bool = true
+			for p3 in pylones:
+				if absf(float(p3["d"]) - float(c[1])) < 8.0:
+					libre = false
+					break
+			if libre:
+				pire = [c[0], c[1]]
+				trop_haut = c[2]
+				break
 		if pire[1] <= 0.0:
 			break
-		var nv: Dictionary = {"d": pire[1], "montee": [[4, "S"]], "descente": [[4, "S"]], "reconstitue": true}
+		var genre: String = "S"
+		if trop_haut:
+			genre = "C"
+		var nv: Dictionary = {"d": pire[1], "montee": [[4, genre]], "descente": [[4, genre]], "reconstitue": true}
 		# (ligne en virage : le pylône intercalé prend le décalage de l'axe à cet endroit, sinon decalage_montee
 		# ne trouvait plus de "x" partout et toute la ligne revenait droite)
 		if not pylones.is_empty() and (pylones[0] as Dictionary).has("x"):
@@ -1104,8 +1146,88 @@ func _tetes_teleski() -> void:
 			j += 1
 		pylones.insert(j, nv)
 	for i in range(_tetes.size()):
-		var t: float = terrain(float(pylones[i]["d"]))
-		_tetes[i] = clampf(_tetes[i], t + 4.5, t + 9.0)
+		var t: float = _base_tete_tk(float(pylones[i]["d"]))
+		_tetes[i] = clampf(_tetes[i], t + (MIN_TKD if famille == "perche_debrayable" else 4.5), t + _plafond_teleski())
+
+
+## Têtes des pylônes de téléski à _h_teleski() au-dessus du sol, relevées (jusqu'au plafond) là où le câble chargé
+## passe sous la garde.
+func _relever_tetes_teleski() -> void:
+	_tetes.clear()
+	for p in pylones:
+		_tetes.append(_base_tete_tk(float(p["d"])) + _h_teleski())
+	for it in range(15):
+		# (une pause par passe : jusqu'à 15 ms d'un bloc au Col du Palet, relevé du 12/11/2026)
+		await _pause("têtes des pylônes")
+		var bouge: bool = false
+		var pts: Array = _points_appui()
+		for k in range(pts.size() - 1):
+			var r: Array = _pire_portee_teleski(pts[k], pts[k + 1])
+			if r[0] > 0.05:
+				for i in [k - 1, k]:
+					if i >= 0 and i < _tetes.size():
+						var plafond: float = _base_tete_tk(float(pylones[i]["d"])) + _plafond_teleski()
+						if _tetes[i] < plafond - 0.01:
+							_tetes[i] = minf(_tetes[i] + r[0] + 0.1, plafond)
+							bouge = true
+		if not bouge:
+			break
+
+
+## Base des têtes de téléski : le sol sous les deux brins pour les TKD (dévers, bourrelets), l'axe sinon.
+## Recul du skieur tiré derrière la pince (m) : RemonteesDomaine.RECUL_PERCHE, sauf au TKD sous un câble haut —
+## la perche à ressort, tirée à fond (5 m), se redresse et le skieur passe plus près sous la pince :
+## √(L² − Δy²), Δy de la pince aux hanches (0,72 m au-dessus de la neige). Avec 2,2 m de recul, la perche
+## n'atteignait plus un câble à plus de ~5,4 m ; ainsi jusqu'à ~5,9 m.
+func recul_perche(y_pince: float, y_sol: float) -> float:
+	if famille != "perche_debrayable":
+		return RemonteesDomaine.RECUL_PERCHE
+	var dy: float = y_pince - (y_sol + 0.72)
+	var l: float = 3.25 * VehiculeRemontee.PERCHE_TKD_MAX - 0.05
+	var r_haut: float = sqrt(maxf(l * l - dy * dy, 0.0))
+	if r_haut < RemonteesDomaine.RECUL_PERCHE:
+		return maxf(r_haut, 0.8)
+	# (câble bas : la perche ne rentre pas sous sa longueur au repos, le skieur est tiré plus en biais)
+	var l0: float = VehiculeRemontee.TKD_REPOS + 0.05
+	return clampf(sqrt(maxf(l0 * l0 - dy * dy, 0.0)), RemonteesDomaine.RECUL_PERCHE, 2.9)
+
+
+func _base_tete_tk(d: float) -> float:
+	return sol_montee_tkd(d) if famille == "perche_debrayable" else terrain(d)
+
+
+## TKD : sol sous le brin de montée (où sont les skieurs tirés), mis en cache.
+var _sol_m_tk: Dictionary = {}
+
+
+func sol_montee_tkd(d: float) -> float:
+	var s: Variant = _sol_m_tk.get(d)
+	if s == null:
+		s = _sol_ligne(_x_brin(true), -d)
+		_sol_m_tk[d] = s
+	return float(s)
+
+
+## TKD : sol sous le brin de retour.
+func _sol_retour_tkd(d: float) -> float:
+	return _sol_ligne(_x_brin(false), -d)
+
+
+## TKD : [dépassement maxi du câble chargé au-dessus de PLAFOND_TKD (+0,2 m) du sol sous le brin de montée, d où il a lieu] sur une portée.
+func _trop_haut_portee_tkd(a: Array, b: Array) -> Array:
+	var pire: float = 0.0
+	var dp: float = 0.0
+	var n: int = maxi(16, int(absf(b[0] - a[0]) / 3.0))
+	for j in range(1, n):
+		var d: float = lerpf(a[0], b[0], float(j) / float(n))
+		# (pas contre les gares : le câble y monte à la poulie et au magasin, par construction)
+		if d < 12.0 or d > longueur_h() - 25.0:
+			continue
+		var e: float = chainette(d, a[0], a[1], b[0], b[1], _a_portee(a[0], a[1], b[0], b[1], true)) - sol_montee_tkd(d) - (PLAFOND_TKD + 0.2)
+		if e > pire:
+			pire = e
+			dp = d
+	return [pire, dp]
 
 
 ## [enfoncement maxi du câble chargé sous la garde, d où il a lieu] sur une
@@ -1117,7 +1239,11 @@ func _pire_portee_teleski(a: Array, b: Array) -> Array:
 	var n: int = maxi(16, int(absf(b[0] - a[0]) / 3.0))
 	for j in range(1, n):
 		var d: float = lerpf(a[0], b[0], float(j) / float(n))
-		var e: float = _sol_teleski(d) + GARDE_TELESKI - chainette(d, a[0], a[1], b[0], b[1], _a_portee(a[0], a[1], b[0], b[1], true))
+		var sol_g: float = _sol_teleski(d) + _garde_teleski()
+		if famille == "perche_debrayable":
+			# (montée au-dessus de son sol ; retour, DY_RETOUR_TKD plus haut, au-dessus du sien, perches repliées)
+			sol_g = maxf(sol_montee_tkd(d) + GARDE_TKD, _sol_retour_tkd(d) + 3.6 - DY_RETOUR_TKD)
+		var e: float = sol_g - chainette(d, a[0], a[1], b[0], b[1], _a_portee(a[0], a[1], b[0], b[1], true))
 		if e > pire:
 			pire = e
 			dp = d
@@ -4111,7 +4237,20 @@ func annuler_lancer() -> void:
 
 ## Perches au magasin : chacune glisse vers sa place dans la file, la
 ## première au lanceur ; une perche demandée part quand la voie est libre.
+## Lancers des skieurs du domaine (pas le joueur) : une perche à la cadence de l'affluence — intervalle de
+## passage des perches divisé par l'occupation du moment (OccupationRemontees), rien hors des heures d'ouverture.
+var _t_lancer_pnj: float = 0.0
+
+
 func _maj_magasin(delta: float) -> void:
+	if famille == "perche_debrayable" and not _a_lancer:
+		_t_lancer_pnj += delta
+		var taux: float = occupation(true)
+		if taux > 0.02:
+			var periode: float = clampf(maxf(espacement, 8.0) / maxf(vitesse, 0.5) / taux, 4.0, 90.0)
+			if _t_lancer_pnj >= periode:
+				_t_lancer_pnj = 0.0
+				_a_lancer = true
 	var file: Array = []
 	for i in range(_vehicules.size()):
 		if _au_magasin[i] >= 0.0:
@@ -4143,8 +4282,16 @@ func _peupler_magasin() -> void:
 	var sl: float = s_lancement()
 	var cap: int = mini(int((sl - s_debrayage() - TeleskiGare.ECART_PREMIERE) / TeleskiGare.PAS_MAGASIN) + 1, 40)
 	var n_desc: int = mini(int(longueur_h() / (espacement * 3.0)), cap / 2)
-	for k in range(cap - n_desc):
+	# (et autant sur la montée, chacune avec son skieur, selon l'affluence du moment)
+	var n_mont: int = mini(int(round(float(n_desc) * clampf(OccupationRemontees.taux(self, true) / 0.6, 0.0, 1.3))),
+		maxi(cap - n_desc - 4, 0)) if famille == "perche_debrayable" else 0
+	for k in range(cap - n_desc - n_mont):
 		await _ajouter_vehicule(sl - TeleskiGare.recul_magasin(k), true)
+		await _pause("magasin")
+	var s_m0: float = sl + 8.0
+	var s_m1: float = float(_zones[1][0]) - 5.0
+	for k3 in range(n_mont):
+		await _ajouter_vehicule(lerpf(s_m0, s_m1, (k3 + 0.5) / n_mont))
 		await _pause("magasin")
 	var s_a: float = float(_zones[1][1]) + 5.0
 	for k in range(n_desc):
