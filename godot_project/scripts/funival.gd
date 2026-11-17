@@ -1782,8 +1782,12 @@ func _amenager_relief_amont() -> void:
 	# (sur le fil principal, en jeu : par tranches de 4 ms — 28 ms d'un bloc, relevé du 12/11/2026)
 	var t_deb: Array = [Time.get_ticks_usec()]
 	var pause := func() -> void:
+		# (l'image suivante par le signal de la ligne : à la fermeture, la chaîne finit d'un trait — _image_suivante)
+		if _abandon:
+			rel._pieces_abandon = true
+			return
 		if Time.get_ticks_usec() - int(t_deb[0]) > 4000 and is_inside_tree():
-			await get_tree().process_frame
+			await _image_suivante()
 			t_deb[0] = Time.get_ticks_usec()
 	await rel._build_piece({"rect": bb.grow(14.0), "trous": trous, "remblais": remblais, "rabots": rabots}, pause)
 	if not is_instance_valid(rel):

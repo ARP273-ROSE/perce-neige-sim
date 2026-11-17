@@ -177,9 +177,34 @@ func _pause(etape: String = "") -> void:
 	if not progressif:
 		return
 	if Time.get_ticks_usec() - _t_tranche > int(budget_ms * 1000.0):
-		await get_tree().process_frame
+		await _image_suivante()
 		_t_tranche = Time.get_ticks_usec()
 		_t_mesure = _t_tranche
+
+
+## Construction par tranches sur le fil principal (sans écran, PWA) : on attend l'image suivante par un signal de
+## la ligne, relayé de process_frame, et non process_frame lui-même — à la fermeture, _exit_tree le déclenche pour
+## finir la chaîne d'un trait. Godot 4.6 laisse fuir les états d'une chaîne de coroutines imbriquées (2 niveaux et
+## plus) suspendue quand son nœud est libéré ; ils gardent ligne_remontee.gd en vie après le nettoyage du moteur,
+## et sa destruction à la sortie du processus plantait sous Windows (0xC0000005, bancs souterrain, pupitre… ;
+## quitter pendant la construction d'une remontée, 3 fois sur 3 — 17/11/2026).
+signal _tranche
+var _construit_ici: bool = false
+
+
+func _image_suivante() -> void:
+	var t: SceneTree = get_tree()
+	if t == null:
+		return
+	if not t.process_frame.is_connected(_emettre_tranche):
+		t.process_frame.connect(_emettre_tranche, CONNECT_ONE_SHOT)
+	await _tranche
+
+
+func _emettre_tranche() -> void:
+	# (en différé : émis pendant l'émission du signal relayé, la reprise attendait de nouveau avant que la connexion
+	# à un coup soit retirée — « already connected », et la coroutine restait en plan)
+	_tranche.emit.call_deferred()
 
 
 ## Démontage d'une ligne loin du skieur (mémoire de l'iPad : la PWA était
@@ -303,9 +328,17 @@ func construire() -> void:
 		_chantier = Node3D.new()
 		_tache = WorkerThreadPool.add_task(_construire_fil, false, "ligne " + String(name))
 		return
+	_construit_ici = true
 	await _construire_corps()
+	if _abandon:
+		_construit_ici = false
+		return
 	await _precalculer_calages()
+	if _abandon:
+		_construit_ici = false
+		return
 	await _finir_construction()
+	_construit_ici = false
 
 
 ## Construction d'une ligne sur un autre fil (PC : les à-coups de 20 à 150 ms
@@ -413,6 +446,20 @@ static func attendre_fil(tache: int) -> void:
 
 
 func _exit_tree() -> void:
+	if _construit_ici and _chantier == null:
+		# construction sur le fil principal en cours : la suite se pose hors de la scène (comme sur un fil, _pause
+		# n'attend plus), la chaîne reprend et finit d'un trait, et son contenu est jeté
+		_abandon = true
+		_chantier = Node3D.new()
+		var t: SceneTree = get_tree()
+		if t != null and t.process_frame.is_connected(_emettre_tranche):
+			t.process_frame.disconnect(_emettre_tranche)
+		_tranche.emit()
+		if _chantier != null:
+			_chantier.free()
+			_chantier = null
+		_abandon = false
+		_construit_ici = false
 	if _tache >= 0:
 		_abandon = true            # (le fil n'attend plus les images : il finit d'un trait)
 		attendre_fil(_tache)
