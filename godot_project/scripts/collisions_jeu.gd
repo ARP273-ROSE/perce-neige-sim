@@ -791,7 +791,7 @@ func _sol_autour(relief: ReliefBuilder, p: Vector3) -> void:
 	if _hd_outil == null:
 		_hd_outil = ClassDB.instantiate("ReliefHD")
 		# (mailles à 25 m qui touchent une pièce fine : la pièce y a son propre maillage de collision)
-		for pc in relief._rects_pieces + relief._rects_masque:
+		for pc in relief._rects_pieces + relief._rects_masque + relief._rects_couloirs:
 			var r: Rect2 = pc
 			var ax: float = ReliefDonnees.X_OUEST + floor((r.position.x - ReliefDonnees.X_OUEST) / ReliefFin.L_X) * ReliefFin.L_X
 			var az: float = ReliefDonnees.Z_NORD + floor((r.position.y - ReliefDonnees.Z_NORD) / ReliefFin.L_Z) * ReliefFin.L_Z
@@ -875,7 +875,8 @@ func _terrain(relief: ReliefBuilder, r: Rect2, quoi: int = TERRAIN_TOUT) -> void
 		_terrain(relief, r, TERRAIN_PIECES)   # (le reste : _sol_autour)
 		return
 	var faces: PackedVector3Array = PackedVector3Array()
-	var pieces: Array = relief._rects_pieces + relief._rects_masque     # (gares de plain-pied comprises)
+	# (gares de plain-pied comprises ; et les traces damées des TKD, relevées par leur couloir)
+	var pieces: Array = relief._rects_pieces + relief._rects_masque + relief._rects_couloirs
 	# bloc : nœuds de la grille (pas d'affichage _pas)
 	var dx: float = relief._dx * relief._pas
 	var dz: float = relief._dz * relief._pas
@@ -954,6 +955,8 @@ func _terrain(relief: ReliefBuilder, r: Rect2, quoi: int = TERRAIN_TOUT) -> void
 			var hc: PackedFloat32Array = ct[0]
 			for k in (ct[1] as PackedInt32Array):
 				hc[k] = relief._hauteur_tri(rp.position.x + (k % (nx + 1)) * pas, rp.position.y + (k / (nx + 1)) * pas)
+			if relief.couloirs != null:
+				relief.couloirs.relever_grille(rp, pas, nx, nz, hc)
 			faces.append_array(nd.piece_faces(rp, pas, nx, nz, hc, g[1]))
 			_bords_trous(relief, rp, pas, nx, nz, hc, g[1], faces)
 			continue
@@ -971,6 +974,8 @@ func _terrain(relief: ReliefBuilder, r: Rect2, quoi: int = TERRAIN_TOUT) -> void
 					hh = relief._hauteur_tri(x, z)
 				h[jj * (nx + 1) + ii] = hh
 				trou[jj * (nx + 1) + ii] = 1 if bool(tp[1]) else 0
+		if relief.couloirs != null:
+			relief.couloirs.relever_grille(rp, pas, nx, nz, h)
 		for jj in range(nz):
 			for ii in range(nx):
 				var a: int = jj * (nx + 1) + ii
