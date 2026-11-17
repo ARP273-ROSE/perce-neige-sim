@@ -5,6 +5,23 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.73.0 — 17 novembre 2026
+
+Retours d'essai sur les téléskis débrayables, plantage à la fermeture sous Windows, à-coups relevés en jeu.
+
+**Téléskis débrayables à la bonne hauteur** : chaque TKD a sa trace damée de 4 m sous le brin de montée, terrassée en déblai et en remblai jusqu'à 3 m avec des talus doux. Le câble passe à 4 à 5 m de la neige sur les pylônes réels. Il ne reste que 9 pylônes ajoutés, là où le terrassement ne suffit pas, contre 26. Perche fidèle : un seul élément qui coulisse, 5 m au plus. Le boîtier et l'assiette gardent leur taille, et l'assiette touche le skieur tiré, plus ou moins penché selon la hauteur du câble. Les TKD lancent leurs perches selon l'affluence : on voit des skieurs tirés même sans y monter.
+
+**Fermeture sous Windows** : le jeu pouvait planter en se fermant, environ une fois sur quatre si l'on quittait peu après l'entrée en skieur. Une construction de remontée, de relief ou de panneaux, interrompue par la fermeture, laissait des tâches en suspens que Windows ne savait pas détruire. Elles se terminent maintenant proprement. Vérifié sur l'exécutable exporté : 15 fermetures sur 15 sans erreur.
+
+**Moins d'à-coups** (relevé en jeu, carte dédiée en 4K) :
+- départ de la descente : pire image de 98 à 22 ms. Le graphe des pistes est préparé pendant le chargement au lieu d'être refait à chaque itinéraire ;
+- approche d'un téléski : les skieurs tirés partagent leurs maillages, faits pendant l'écran de préparation (15 à 38 ms d'une image auparavant). Les passagers des véhicules apparaissent sur plusieurs images au lieu d'une ;
+- au ski, pire image du programme de 18 à 8 ms ; à bord, de 25 à 14 ms ;
+- hauteur du sol trois fois plus rapide, résultat identique sur 200 000 points ;
+- skieurs des pistes un tiers moins coûteux.
+
+Vérifié : 76 bancs, et bancs des nuanceurs en vrai rendu sans erreur.
+
 ## 1.72.0 — 17 novembre 2026
 
 Retours d'essai : téléphérique de la Grande Motte, descente à la corde, téléskis débrayables, conduite du skieur ; et du monde sur toutes les remontées et les pistes.
