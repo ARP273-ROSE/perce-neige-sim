@@ -2203,6 +2203,7 @@ func _build_piece(am: Dictionary, pause: Callable = Callable()) -> void:
 	for v in verts:
 		hs.append(v.y)
 	_pieces.append([r, nx, nz, hs, img])
+	_indexer_pieces()
 
 
 ## Matériau d'une pièce fine (et des traces damées) : celui du relief, emprise et masque des bâtiments.
@@ -2224,24 +2225,26 @@ func _materiau_piece(r: Rect2, img: Image) -> ShaderMaterial:
 ## rectangles à chaque appel (skieurs des pistes, perches, joueur : ~5 µs l'appel, relevé du 17/11/2026).
 const CASE_PIECES: float = 200.0
 var _pieces_cases: Dictionary = {}     # Vector2i → PackedInt32Array
-var _pieces_cases_n: int = -1
 const _AUCUNE_PIECE: PackedInt32Array = []
 
 
+## Index refait d'un coup par l'unique écrivain, juste après l'ajout de la pièce, puis échangé : les lignes qui se
+## construisent sur un fil appellent hauteur_sol en même temps, et ne doivent jamais lire un index en cours de
+## remplissage (un index refait à la demande, au premier appel venu, pouvait l'être par deux fils à la fois).
+func _indexer_pieces() -> void:
+	var d: Dictionary = {}
+	for k in range(_pieces.size()):
+		var r: Rect2 = _pieces[k][0]
+		for cx in range(floori(r.position.x / CASE_PIECES), floori(r.end.x / CASE_PIECES) + 1):
+			for cz in range(floori(r.position.y / CASE_PIECES), floori(r.end.y / CASE_PIECES) + 1):
+				var c: Vector2i = Vector2i(cx, cz)
+				var l: PackedInt32Array = d.get(c, PackedInt32Array())
+				l.append(k)
+				d[c] = l
+	_pieces_cases = d
+
+
 func _pieces_case(x: float, z: float) -> PackedInt32Array:
-	if _pieces_cases_n != _pieces.size():
-		_pieces_cases.clear()
-		for k in range(_pieces.size()):
-			var r: Rect2 = _pieces[k][0]
-			for cx in range(floori(r.position.x / CASE_PIECES), floori(r.end.x / CASE_PIECES) + 1):
-				for cz in range(floori(r.position.y / CASE_PIECES), floori(r.end.y / CASE_PIECES) + 1):
-					var c: Vector2i = Vector2i(cx, cz)
-					if not _pieces_cases.has(c):
-						_pieces_cases[c] = PackedInt32Array()
-					var l: PackedInt32Array = _pieces_cases[c]
-					l.append(k)
-					_pieces_cases[c] = l
-		_pieces_cases_n = _pieces.size()
 	return _pieces_cases.get(Vector2i(floori(x / CASE_PIECES), floori(z / CASE_PIECES)), _AUCUNE_PIECE)
 
 
