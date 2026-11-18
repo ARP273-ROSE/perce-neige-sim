@@ -1077,8 +1077,6 @@ func _construire_teleski() -> void:
 		var Lt: float = (n - 1) * 0.36
 		var dyb: float = dy_retour if (tkd and not montee) else 0.0
 		var yc2: float = h - DESSUS_BRAS_TELESKI + dyb
-		# galets sous le câble (support) ; en compression, au-dessus
-		var yg: float = yc2 + (0.14 if dessus else -0.14)
 		var tilt: float = incline_descente if not montee else 0.0
 		if tkd and not dessus:
 			# TKD (photos du Chardonnet) : une grande poulie par brin, chape pendue au bras ; posée dans le plan que
@@ -1098,6 +1096,14 @@ func _construire_teleski() -> void:
 			var do_: Vector3 = dirs_cable[montee][1]
 			q_av = di.y / di.z if absf(di.z) > 1e-4 else 0.0
 			q_am = do_.y / do_.z if absf(do_.z) > 1e-4 else 0.0
+		# un train est tout support ou tout compression, jamais mélangé (retour d'utilisateur du 18/11/2026 :
+		# « c'est 4 supports ou 4 compressions ») : le coude du câble décide — sommet (pente amont > pente aval,
+		# z > 0 vers l'aval) : il appuie dessus, galets dessous ; creux : il tire vers le haut, galets dessus
+		if dirs_cable.has(montee):
+			dessus = q_av > q_am + 1e-4
+		for k in range(genres.size()):
+			genres[k] = "C" if dessus else "S"
+		var yg: float = yc2 + (0.14 if dessus else -0.14)
 		var y_c := func(z: float) -> float: return yc2 + z * (q_av if z > 0.0 else q_am)
 		for k in range(n):
 			var zk: float = Lt * 0.5 - k * 0.36
