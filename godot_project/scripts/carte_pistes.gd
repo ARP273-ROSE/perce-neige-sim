@@ -178,6 +178,21 @@ func _process_corps(delta: float) -> void:
 		queue_redraw()
 
 
+## Tapis roulants (TapisRoulant, hors des lignes) : [nom, bas (x, z), haut (x, z)] — retour d'utilisateur du
+## 19/11/2026 : « les tapis Plum ne sont pas sur la carte ».
+func _tapis() -> Array:
+	var out: Array = []
+	if main == null:
+		return out
+	var rm: Node = main.get("remontees")
+	if rm == null:
+		return out
+	for t in rm.get_children():
+		if t is TapisRoulant:
+			out.append([(t as TapisRoulant).nom, (t as TapisRoulant).a, (t as TapisRoulant).b])
+	return out
+
+
 ## Remontées posées dans le monde : [ligne, aval (x, z), amont (x, z)].
 func _remontees() -> Array:
 	var out: Array = []
@@ -288,7 +303,20 @@ func _refaire_fond(remontees: Array) -> void:
 		_ajouter_trait(v, cols, a, b, 2.5, Color(0.08, 0.08, 0.10, 0.95))
 		_ajouter_disque(v, cols, a, 6.5, Color(1, 1, 1, 0.95))
 		_ajouter_disque(v, cols, a, 5.0, Color(0.78, 0.06, 0.18, 1.0))
-		_ajouter_disque(v, cols, b, 3.5, Color(0.08, 0.08, 0.10, 0.95))
+		if String((r[0] as Node).name) in RemonteesDomaine.DEUX_SENS:
+			# on embarque aux deux bouts (Leissières) : une gare de départ à chaque extrémité
+			_ajouter_disque(v, cols, b, 6.5, Color(1, 1, 1, 0.95))
+			_ajouter_disque(v, cols, b, 5.0, Color(0.78, 0.06, 0.18, 1.0))
+		else:
+			_ajouter_disque(v, cols, b, 3.5, Color(0.08, 0.08, 0.10, 0.95))
+	for t in _tapis():
+		var a: Vector2 = t[1] * echelle
+		var b: Vector2 = t[2] * echelle
+		_ajouter_trait(v, cols, a, b, 4.0, Color(1, 1, 1, 0.8))
+		_ajouter_trait(v, cols, a, b, 2.0, Color(0.08, 0.08, 0.10, 0.95))
+		_ajouter_disque(v, cols, a, 5.0, Color(1, 1, 1, 0.95))
+		_ajouter_disque(v, cols, a, 3.8, Color(0.78, 0.06, 0.18, 1.0))
+		_ajouter_disque(v, cols, b, 2.8, Color(0.08, 0.08, 0.10, 0.95))
 	if trace_funi.size() >= 2:
 		# en souterrain : tireté noir et jaune le long du vrai tracé
 		for i in range(trace_funi.size() - 1):
@@ -316,7 +344,7 @@ func _draw() -> void:
 	var demi: Vector2 = TAILLE * 0.5 / echelle
 	var vue: Rect2 = Rect2(c - demi, demi * 2.0).grow(PistesDonnees.LARGEUR)
 	var remontees: Array = _remontees()
-	var cle: String = "%f|%d|%d" % [echelle, remontees.size(), trace_funi.size()]
+	var cle: String = "%f|%d|%d|%d" % [echelle, remontees.size(), trace_funi.size(), _tapis().size()]
 	if cle != _cle_fond:
 		_cle_fond = cle
 		_refaire_fond(remontees)
@@ -330,6 +358,15 @@ func _draw() -> void:
 		var a: Vector2 = _carte(r[1], c, o)
 		if Rect2(Vector2.ZERO, TAILLE).has_point(a):
 			noms.append([(r[0] as LigneRemontee).nom_ligne + " »", a + Vector2(0, -12), Color(1, 1, 1)])
+	# tapis jumeaux (Pim et Pam, accolés) : un seul nom
+	var tp: Dictionary = {}
+	for t in _tapis():
+		var a: Vector2 = _carte(t[1], c, o)
+		var k: Vector2i = Vector2i(a / 20.0)
+		tp[k] = [(tp[k][0] + " et " + String(t[0])) if tp.has(k) else ("Tapis " + String(t[0])), a]
+	for k in tp:
+		if Rect2(Vector2.ZERO, TAILLE).has_point(tp[k][1]):
+			noms.append([tp[k][0], tp[k][1] + Vector2(0, -10), Color(1, 1, 1)])
 	# gares du funiculaire
 	for g in gares:
 		var gp: Vector2 = _carte(Vector2((g as Vector3).x, (g as Vector3).z), c, o)

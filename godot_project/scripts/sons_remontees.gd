@@ -483,7 +483,13 @@ func _a_bord_3s(delta: float, lg: LigneRemontee, s: float, z: Array, v: float, p
 		if _zone3s == "ligne" and zd != "ligne" and zd != "arrete":
 			_coup(lg, "tsd_arrivee")
 		_zone3s = zd
-		_ambiance(delta, lg, "tsd_" + zd, -2.0 if zd != "arrete" else 0.0)
+		if zd == "gare" or zd == "gare_haut":
+			# en gare, c'est la gare qu'on entend (son 3D, le même qu'à pied) : la même prise rejouée à bord, sans
+			# atténuation et à un autre instant, faisait un saut net à l'assise (retour d'utilisateur du 19/11/2026 :
+			# « entre debout sur la marque stop et assis, le changement sonore est brutal alors que c'est pareil »)
+			_sans_ambiance(delta)
+		else:
+			_ambiance(delta, lg, "tsd_" + zd, -2.0 if zd != "arrete" else 0.0)
 		# (dès la gare : les compressions de sortie de gare sont passées avant le
 		# début de la zone « ligne », leur prise arrivait trop tard — retour
 		# d'utilisateur, 27/10/2026)
@@ -491,7 +497,10 @@ func _a_bord_3s(delta: float, lg: LigneRemontee, s: float, z: Array, v: float, p
 		return
 	if pref == "tsf":
 		var zt: String = "ligne" if z[0] == "ligne" else ("motrice" if z[0] == "gare_aval" else "arrivee")
-		_ambiance(delta, lg, pref + "_" + zt, -2.0)
+		if zt == "ligne":
+			_ambiance(delta, lg, pref + "_" + zt, -2.0)
+		else:
+			_sans_ambiance(delta)          # (la gare, en 3D : comme au TSD)
 		_pylones_reels(lg, s, v, pref, zt == "ligne")
 		return
 	if z[0] == "gare_aval":
@@ -529,8 +538,9 @@ func _a_bord_3s(delta: float, lg: LigneRemontee, s: float, z: Array, v: float, p
 	else:
 		_ligne.volume_db = move_toward(_ligne.volume_db, cible, delta * 20.0)
 	_ligne.pitch_scale = _accord_vitesse(lg, son)[1] if not (lg.regime() < 0.02 and zone == "ligne") else 1.0
-	# pylônes : la prise démarre 1,6 s avant le pylône (à la vitesse du moment)
-	if zone != "ligne" or v < 0.5:
+	# pylônes : la prise démarre avant le pylône, au temps qu'il faut pour l'atteindre ; dès le lanceur de départ (les
+	# compressions de sortie de gare sont à moins de 30 m du nez)
+	if lg.regime() < 0.05 or v < 0.1:
 		return
 	var p: Vector3 = lg.point(s)[0]
 	var d: float = -p.z
@@ -541,9 +551,12 @@ func _a_bord_3s(delta: float, lg: LigneRemontee, s: float, z: Array, v: float, p
 		var ecart: float = (dp - d) if monte else (d - dp)
 		if ecart <= 0.0:
 			continue
-		_approche = maxf(_approche, clampf(1.0 - (ecart / v) / 2.0, 0.0, 1.0))
-		if ecart / v > 8.0:
+		if ecart / maxf(lg.vitesse * lg.regime(), 0.05) > 8.0:
 			continue            # (la plus longue avance d'une prise : 6,15 s ; plus loin, rien à décider à cette image)
+		var te: float = _temps_avant(lg, s, ecart)
+		_approche = maxf(_approche, clampf(1.0 - te / 2.0, 0.0, 1.0))
+		if te > 8.0:
+			continue
 		var pr: Array = _prise_pylone(lg, k, monte, pref)
 		if String(pr[0]) == "":
 			continue
@@ -555,16 +568,16 @@ func _a_bord_3s(delta: float, lg: LigneRemontee, s: float, z: Array, v: float, p
 		if not liste.is_empty():
 			var pas: float = PAS_GALET
 			var avance: float = (float(liste.size() - 1) * 0.5 * pas) / v + 0.05
-			if ecart / v < avance and (not _pyl3s.has(cle) or _t - float(_pyl3s[cle]) > 20.0):
+			if te < avance and (not _pyl3s.has(cle) or _t - float(_pyl3s[cle]) > 20.0):
 				_pyl3s[cle] = _t
-				var t0: float = _t + maxf(ecart / v - avance + 0.05, 0.0)
+				var t0: float = _t + maxf(te - avance + 0.05, 0.0)
 				for j in range(liste.size()):
 					_file.append([t0 + float(j) * pas / v, liste[j], false, Vector3.ZERO, randf_range(-6.0, -3.0), randf_range(0.95, 1.05)])
 			continue
 		# prise enregistrée à pleine vitesse : au ralenti, rejouée plus lentement (chocs des galets espacés comme sur le
 		# câble), son choc d'autant plus tard
 		var hp: float = clampf(lg.regime(), 0.5, 1.0)
-		if ecart / v < float(pr[1]) / hp:
+		if te < float(pr[1]) / hp:
 			if not _pyl3s.has(cle) or _t - float(_pyl3s[cle]) > 20.0:
 				_pyl3s[cle] = _t
 				_coup(lg, pr[0], hp)
@@ -679,6 +692,13 @@ func _a_bord_funi(delta: float, lg: LigneRemontee) -> void:
 
 ## Boucle d'ambiance à bord, changée en fondu ; abaissée pendant les coups,
 ## montée à l'approche d'un pylône.
+## Ambiance de bord éteinte en douceur (la gare, en 3D, prend le relais).
+func _sans_ambiance(delta: float) -> void:
+	_ligne.volume_db = move_toward(_ligne.volume_db, -60.0, delta * 20.0)
+	if _ligne.volume_db <= -59.0 and _ligne.playing:
+		_ligne.stop()
+
+
 func _ambiance(delta: float, lg: LigneRemontee, son: String, base: float) -> void:
 	var cible: float = base + GAIN_AMBIANCE
 	if _coup3s.playing or _coup3s_b.playing:
@@ -714,6 +734,36 @@ func _accord_vitesse(lg: LigneRemontee, son: String) -> Array:
 	return [10.0 * log(maxf(r, 0.1)) / log(10.0), lerpf(0.8, 1.0, r)]
 
 
+## Temps (s) que met le véhicule en s à parcourir `ecart` mètres de ligne (horizontaux), au profil de vitesse
+## de la boucle (lanceur compris) : à la sortie du lanceur, la vitesse du moment est encore faible et la prise du
+## premier pylône partait bien trop tard (retour d'utilisateur du 19/11/2026, TCD Brévières : « le son du premier
+## pylône compression à la sortie du lanceur arrive super tard, ça le fait pour les autres aussi »).
+func _temps_avant(lg: LigneRemontee, s: float, ecart: float) -> float:
+	var reg: float = maxf(lg.regime(), 0.05)
+	if lg.zone(s)[0] == "ligne":
+		var vl: float = lg.vitesse_en(s) * reg
+		return ecart / maxf(vl, 0.05)
+	var t: float = 0.0
+	var fait: float = 0.0
+	var pas: float = 1.0
+	var d0: float = -(lg.point(s)[0] as Vector3).z
+	var q: float = s
+	var n: int = 0
+	while fait < ecart and n < 400:
+		var vq: float = maxf(lg.vitesse_en(fmod(q, lg.longueur_boucle)) * reg, 0.05)
+		t += pas / vq
+		q += pas
+		n += 1
+		if n % 4 == 0 or lg.zone(fmod(q, lg.longueur_boucle))[0] == "ligne":
+			var d1: float = -(lg.point(fmod(q, lg.longueur_boucle))[0] as Vector3).z
+			fait = absf(d1 - d0)
+			if lg.zone(fmod(q, lg.longueur_boucle))[0] == "ligne":
+				return t + maxf(ecart - fait, 0.0) / maxf(lg.vitesse * reg, 0.05)
+		if t > 30.0:
+			return t
+	return t
+
+
 ## Prises des pylônes, déclenchées pour que leur choc tombe au droit du pylône.
 func _pylones_reels(lg: LigneRemontee, s: float, v: float, pref: String, en_ligne: bool) -> void:
 	_approche = 0.0
@@ -727,9 +777,12 @@ func _pylones_reels(lg: LigneRemontee, s: float, v: float, pref: String, en_lign
 		var ecart: float = (dp - d) if monte else (d - dp)
 		if ecart <= 0.0:
 			continue
-		_approche = maxf(_approche, clampf(1.0 - (ecart / v) / 2.0, 0.0, 1.0))
-		if ecart / v > 8.0:
+		if ecart / maxf(lg.vitesse * lg.regime(), 0.05) > 8.0:
 			continue            # (la plus longue avance d'une prise : 6,15 s ; plus loin, rien à décider à cette image)
+		var te: float = _temps_avant(lg, s, ecart)
+		_approche = maxf(_approche, clampf(1.0 - te / 2.0, 0.0, 1.0))
+		if te > 8.0:
+			continue
 		var pr: Array = _prise_pylone(lg, k, monte, pref)
 		if String(pr[0]) == "":
 			continue
@@ -741,14 +794,14 @@ func _pylones_reels(lg: LigneRemontee, s: float, v: float, pref: String, en_lign
 		if not liste.is_empty():
 			var pas: float = PAS_GALET if not lg.teleski() else 0.36
 			var avance: float = (float(liste.size() - 1) * 0.5 * pas) / v + 0.05
-			if ecart / v < avance and (not _pyl3s.has(cle) or _t - float(_pyl3s[cle]) > 20.0):
+			if te < avance and (not _pyl3s.has(cle) or _t - float(_pyl3s[cle]) > 20.0):
 				_pyl3s[cle] = _t
-				var t0: float = _t + maxf(ecart / v - avance + 0.05, 0.0)
+				var t0: float = _t + maxf(te - avance + 0.05, 0.0)
 				for j in range(liste.size()):
 					_file.append([t0 + float(j) * pas / v, liste[j], false, Vector3.ZERO, randf_range(-2.5, 0.5), randf_range(0.95, 1.05)])
 			continue
 		var hp: float = clampf(lg.regime(), 0.5, 1.0)        # (prise de pleine vitesse rejouée à la vitesse du câble)
-		if ecart / v < float(pr[1]) / hp:
+		if te < float(pr[1]) / hp:
 			if not _pyl3s.has(cle) or _t - float(_pyl3s[cle]) > 20.0:
 				_pyl3s[cle] = _t
 				_coup(lg, pr[0], hp)

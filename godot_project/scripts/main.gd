@@ -1273,6 +1273,7 @@ func _suite_process(delta: float) -> void:
 		# seulement — pas pour le skieur (retour d'utilisateur, 09/10/2026 : « en mode
 		# skieur on voit le trait orange du trajet du funi »)
 		relief.montrer_trait(vue_ext and not mode_skieur)
+		relief.montrer_lieux((vue_ext and not mode_skieur) or (mode_skieur and relief.visible), mode_skieur)
 		# le tunnel se voit à travers le relief opaque (trait ambre) ; plus
 		# de silhouette des rames (« enlève complètement cette silhouette
 		# jaune, ça laisse des traces », 07/10/2026)
