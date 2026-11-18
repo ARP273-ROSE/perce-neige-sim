@@ -458,18 +458,27 @@ func _construire_vav() -> void:
 			var s1: Array = COINS[(i3 + 2) % 4]
 			RemonteeKit.poutre(self, coin.call(s0[0], s0[1], yb), coin.call(s1[0], s1[1], yb), 0.10, 0.10, m)
 	# échelle au milieu du fût, paliers de repos ; prenable (retour d'utilisateur du 12/11/2026)
+	# (jusqu'aux passerelles de la tête, pas seulement au haut du fût 3 m dessous : « on ne peut pas grimper jusqu'en
+	# haut », retour d'utilisateur du 18/11/2026) ; montants prolongés en main courante au-dessus du palier
 	var y_e: float = 0.4
+	var y_h: float = yc - 1.2
 	a_echelle = true
 	echelle_bas = Vector3(0, y_e, 0)
-	echelle_haut = Vector3(0, yt, 0)
-	RemonteeKit.barre(self, Vector3(-0.2, y_e, 0), Vector3(-0.2, yt, 0), 0.025, "galva", 6)
-	RemonteeKit.barre(self, Vector3(0.2, y_e, 0), Vector3(0.2, yt, 0), 0.025, "galva", 6)
+	echelle_haut = Vector3(0, y_h, 0)
+	RemonteeKit.barre(self, Vector3(-0.2, y_e, 0), Vector3(-0.2, y_h + 1.0, 0), 0.025, "galva", 6)
+	RemonteeKit.barre(self, Vector3(0.2, y_e, 0), Vector3(0.2, y_h + 1.0, 0), 0.025, "galva", 6)
 	var y_r: float = y_e
-	while y_r < yt:
+	while y_r < y_h:
 		RemonteeKit.barre(self, Vector3(-0.2, y_r, 0), Vector3(0.2, y_r, 0), 0.016, "galva", 4)
 		y_r += 0.35
 	for i4 in range(2, niv.size() - 1, 3):
 		RemonteeKit.boite_en(self, Vector3(1.0, 0.04, 1.0), Vector3(0, float(niv[i4]), 0.0), "caillebotis")
+	# palier en haut de l'échelle, en travers, jusqu'aux passerelles intérieures (au droit de l'échelle, z = 0 : la
+	# tête n'y est pas décalée par la pente du sabot) ; trémie ouverte devant l'échelle
+	var xi0: float = voie * 0.5 - 1.9
+	for sxp in [-1.0, 1.0]:
+		RemonteeKit.boite_en(self, Vector3(xi0 - 0.3, 0.05, 1.0), Vector3(sxp * (0.3 + (xi0 - 0.3) * 0.5), y_h - 0.05, 0.0), "caillebotis")
+	RemonteeKit.boite_en(self, Vector3(0.6, 0.05, 0.5), Vector3(0, y_h - 0.05, -0.45), "caillebotis")
 	# --- tête --------------------------------------------------------------------------------------------
 	# La tête suit la pente du sabot (retour d'utilisateur du 16/11/2026 : « une structure du pylône traverse la bande
 	# de roulement » — tête horizontale sous un sabot incliné de la pente de la ligne : côté aval, fermes et poutres
