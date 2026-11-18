@@ -1064,10 +1064,16 @@ func _construire_teleski() -> void:
 		var compo: Array = compo_montee if montee else compo_descente
 		var n: int = 0
 		var dessus: bool = false
+		var genres: Array = []           # S (sous le câble) ou C (dessus), galet par galet, de l'aval vers l'amont
 		for g in compo:
-			n += int(g[0]) if g[0] != null else 2
+			var ng: int = int(g[0]) if g[0] != null else 2
+			n += ng
 			dessus = dessus or String(g[1]) == "C"
+			for _j in range(ng):
+				genres.append(String(g[1]))
 		n = maxi(n, 2)
+		while genres.size() < n:
+			genres.append("C" if dessus else "S")
 		var Lt: float = (n - 1) * 0.36
 		var dyb: float = dy_retour if (tkd and not montee) else 0.0
 		var yc2: float = h - DESSUS_BRAS_TELESKI + dyb
@@ -1083,18 +1089,32 @@ func _construire_teleski() -> void:
 			else:
 				_grande_poulie_tkd(Vector3(x, yc2, 0), tilt, h + dyb - BRAS_TKD)
 			continue
+		# hauteur du câble le long du train (z > 0 vers l'aval) : droit de part et d'autre du pylône, selon le câble
+		# qui arrive et celui qui repart (LigneRemontee : dirs_cable)
+		var q_av: float = 0.0
+		var q_am: float = 0.0
+		if dirs_cable.has(montee):
+			var di: Vector3 = dirs_cable[montee][0]
+			var do_: Vector3 = dirs_cable[montee][1]
+			q_av = di.y / di.z if absf(di.z) > 1e-4 else 0.0
+			q_am = do_.y / do_.z if absf(do_.z) > 1e-4 else 0.0
+		var y_c := func(z: float) -> float: return yc2 + z * (q_av if z > 0.0 else q_am)
 		for k in range(n):
-			var cg: Vector3 = Vector3(x, yg, Lt * 0.5 - k * 0.36)
+			var zk: float = Lt * 0.5 - k * 0.36
+			var cg: Vector3 = Vector3(x, float(y_c.call(zk)) + (0.14 if String(genres[k]) == "C" else -0.14), zk)
 			if tilt != 0.0:
 				# galet incliné sous le câble : le point d'appui reste sous lui, la normale penche vers l'extérieur
-				cg = Vector3(x, yc2, cg.z) - Vector3(-sin(tilt), cos(tilt), 0.0) * 0.14
+				cg = Vector3(x, float(y_c.call(zk)), cg.z) - Vector3(-sin(tilt), cos(tilt), 0.0) * 0.14
 			RemonteeKit.galet(self, cg, 0.14, 0.06)
 			if tilt != 0.0:
 				var gi: Node3D = get_child(get_child_count() - 1)
 				gi.transform.basis = Basis(Vector3.BACK, tilt) * gi.transform.basis
-		# flasques du train et suspente côté intérieur, jusqu'au bras
+		# flasques du train (penchées comme le câble) et suspente côté intérieur, jusqu'au bras
 		var xi: float = x - signf(x - x_fut) * 0.12 if absf(x - x_fut) > 0.01 else x + 0.12
+		var pente_t: float = atan(0.5 * (q_av + q_am))
 		RemonteeKit.boite_en(self, Vector3(0.04, 0.22, Lt + 0.3), Vector3(xi, yg, 0), "galva")
+		var fl: Node3D = get_child(get_child_count() - 1)
+		fl.rotation.x = -pente_t
 		var y_bras: float = h + dyb - BRAS_TKD if tkd else h - 0.16
 		RemonteeKit.boite_en(self, Vector3(0.08, y_bras - (yg - 0.1), 0.10), Vector3(xi, (y_bras + yg - 0.1) * 0.5, 0), "galva")
 	var lab: MeshInstance3D = RemonteeKit.texte_fige(self, str(numero), 64, 0.003, Color(0.05, 0.05, 0.05))

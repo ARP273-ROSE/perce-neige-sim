@@ -5242,8 +5242,12 @@ func _poser_pylones_teleski() -> void:
 				py.rotation.y = -(a_in + a_out) * 0.5
 				py.virage = absf(a_out - a_in)
 				py.cote_corde = signf(a_in - a_out)
+			# (tous les téléskis : les galets suivent le câble qui arrive et celui qui repart — retour d'utilisateur
+			# du 18/11/2026 : « les pylônes de TKE, les galets ne suivent pas du tout le câble », train horizontal
+			# sous un câble à 20 %)
 			if py.tkd:
 				py.dy_retour = y_cable(d, false) - y_c
+			if true:
 				var inv: Basis = Basis.from_euler(py.rotation).inverse()
 				for brin in [true, false]:
 					var pa: Vector3 = _point_brin(maxf(d - 3.0, 0.0), brin)
