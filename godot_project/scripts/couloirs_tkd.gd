@@ -15,10 +15,12 @@ extends RefCounted
 
 const TETE: float = 4.6
 const SOUS: float = 4.4
-const BORNE: float = 3.0
-const MORTE: float = 1.2
+## (8 m : la trace terrassée tient seule le câble entre les pylônes réels, sans pylône intercalé — retour
+## d'utilisateur du 18/11/2026 : « enlève les pylônes sup bidons » ; à 3 m, il en fallait 9)
+const BORNE: float = 8.0
+const MORTE: float = 0.6
 const DEMI_TRACE: float = 2.0
-const TALUS: float = 8.0
+const TALUS: float = 12.0
 const PAS: float = 5.0
 const CASE: float = 50.0
 const LEVE: float = 0.04                    # le dessus du couloir, juste au-dessus du relief (pas de scintillement)
@@ -83,6 +85,11 @@ func _preparer_ligne(D: Dictionary, interdits: Array) -> void:
 	var e: float = maxf(float(D.get("espacement", 12.0)), 8.0)
 	var w_l: float = 0.0039 * 16.0 * 16.0 * 9.81 + (25.0 + 80.0 * 0.7) * 9.81 / e
 	var H: float = 30000.0
+	var a_c: float = H / w_l
+	var g0: float = _base(a.x, a.y)
+	var gL: float = _base(b.x, b.y)
+	var cos_moy: float = cos(atan2(gL - g0, maxf(L, 1.0)))
+	var y_moy: float = 0.5 * (g0 + gL)
 	var pts: PackedVector2Array = PackedVector2Array()
 	var gs: PackedFloat32Array = PackedFloat32Array()
 	var tv: PackedFloat32Array = PackedFloat32Array()
@@ -95,7 +102,14 @@ func _preparer_ligne(D: Dictionary, interdits: Array) -> void:
 		var x1: float = appuis[k][0]
 		var x2: float = appuis[k + 1][0]
 		var u: float = clampf((d - x1) / maxf(x2 - x1, 0.01), 0.0, 1.0)
-		var cab: float = lerpf(float(appuis[k][1]), float(appuis[k + 1][1]), u) - w_l * (d - x1) * (x2 - d) / (2.0 * H)
+		# (même chaînette que la ligne, paramètre corrigé de l'altitude de la portée comme LigneRemontee._a_portee : la
+		# tension baisse vers le bas de la ligne, le câble s'y creuse davantage — avec une flèche constante, la trace
+		# laissait le câble à 2,8 m de la neige au bas du 3000, 18/11/2026)
+		var y1: float = float(appuis[k][1])
+		var y2: float = float(appuis[k + 1][1])
+		var cos_p: float = cos(atan2(y2 - y1, maxf(x2 - x1, 0.1)))
+		var a_p: float = maxf((a_c / cos_moy + 0.5 * (y1 + y2) - y_moy) * cos_p, 0.3 * a_c)
+		var cab: float = LigneRemontee.chainette(clampf(d, x1, x2), x1, y1, x2, y2, a_p) if u > 0.0 and u < 1.0 else lerpf(y1, y2, u)
 		var q: Vector2 = pt.call(d)
 		var g: float = _base(q.x, q.y)
 		pts.append(q)
