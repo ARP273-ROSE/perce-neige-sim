@@ -545,13 +545,13 @@ func _construire_vav() -> void:
 		# structure au sommet du pylône que tu ne reproduis pas ») : pas de cadre le long de la voie, mais une couronne
 		# au centre du pylône — quatre poteaux entre les voies et deux poutres de levage EN TRAVERS, qui débordent
 		# au-dessus de chaque sabot, 2,3 m au-dessus des porteurs ; posée après la boucle (voir plus bas).
-		var y_h: float = yc + 2.3
+		var y_cour: float = yc + 2.3
 		for zm in [-1.6, 1.6]:
-			tp_.call(Vector3(xi, y_s, zm), Vector3(xi, y_h, zm), 0.16, 0.16, m)
+			tp_.call(Vector3(xi, y_s, zm), Vector3(xi, y_cour, zm), 0.16, 0.16, m)
 			# jambe de force vers le bout de la poutre, au-dessus de la voie
-			tp_.call(Vector3(xi, y_s + 1.1, zm), Vector3(sx2 * (x0 + 0.2), y_h - 0.12, zm), 0.08, 0.08, m)
-		tp_.call(Vector3(xi, y_h, -1.6), Vector3(xi, y_h, 1.6), 0.12, 0.12, m)
-		tp_.call(Vector3(xi, y_s + 0.2, -1.6), Vector3(xi, y_h, 1.6), 0.07, 0.07, m)
+			tp_.call(Vector3(xi, y_s + 1.1, zm), Vector3(sx2 * (x0 + 0.2), y_cour - 0.12, zm), 0.08, 0.08, m)
+		tp_.call(Vector3(xi, y_cour, -1.6), Vector3(xi, y_cour, 1.6), 0.12, 0.12, m)
+		tp_.call(Vector3(xi, y_s + 0.2, -1.6), Vector3(xi, y_cour, 1.6), 0.07, 0.07, m)
 		# guides anti-collision : lisses le long du passage des cabines, à 0,25 m des faces du fût, becs
 		# recourbés vers l'axe aux deux bouts
 		var yg0: float = yc - 8.0
