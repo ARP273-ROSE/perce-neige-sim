@@ -1959,7 +1959,13 @@ const SABOT_TPH: float = 16.0   # sabot de pylône des va-et-vient (photo de pro
 
 func y_cable(d: float, montee: bool = true) -> float:
 	if not montee and famille == "perche_debrayable":
-		return _y_cable_brut(d, false) + surhausse_retour_tkd(d) + leve_retour_tkd(d)
+		if not pylones.is_empty() and d < float(pylones[0]["d"]):
+			# (droit du premier pylône jusque sous la grande poulie de renvoi : le coude est sur la poulie, pas devant
+			# la gare — retour d'utilisateur du 18/11/2026)
+			var d1: float = float(pylones[0]["d"])
+			var rt: Vector2 = _retour_tkd()
+			return lerpf(rt.x, _y_cable_brut(d1, false) + surhausse_retour_tkd(d1), clampf(maxf(d, 0.0) / d1, 0.0, 1.0))
+		return _y_cable_brut(d, false) + surhausse_retour_tkd(d)
 	return _y_cable_brut(d, montee)
 
 
@@ -2528,8 +2534,9 @@ func _construire_boucle(pauses: bool = false) -> void:
 		var xr: float = pc.x
 		# brin retour : du nez (relevé : leve_retour_tkd) jusque sous la grande poulie de renvoi, 1 m avant la roue,
 		# qui le remet dans le plan incliné de la roue
+		_retour_tkd_c = Vector2(NAN, NAN)
 		var a_in: float = atan(_pente_retour_tkd())
-		_ajouter(Vector3(xr, ya + surhausse_retour_tkd(0.0) + leve_retour_tkd(0.0), 0.0))
+		_ajouter(Vector3(xr, y_cable(0.0, false), 0.0))
 		for k in range(0, 7):
 			var a1: float = lerpf(a_in, th, float(k) / 6.0)
 			_ajouter(Vector3(xr, pc.y - cos(a1) * Rp, pc.z + sin(a1) * Rp))
@@ -2737,11 +2744,34 @@ func poulie_retour_tkd() -> Vector3:
 	return Vector3(xr, terrain(0.0) + H_CABLE_GARE + PENTE_TKD * zt + cos(th) * R_POULIE_TKD, z)
 
 
-## Pente (vers l'arrière) du brin retour entre le nez et la grande poulie : celle du câble qui descend du
-## premier pylône, visé droit sous la poulie.
+## Pente (vers l'arrière, dy/dz) du brin retour entre le nez et la grande poulie : celle du câble droit qui vient
+## du premier pylône, tangent au bas de la poulie.
 func _pente_retour_tkd() -> float:
-	var d1: float = float(pylones[0]["d"]) if pylones.size() > 0 else 0.0
-	return leve_retour_tkd(0.0) / d1 if d1 > 1.0 else 0.0
+	return _retour_tkd().y
+
+
+## Brin retour d'un TKD entre le premier pylône et la grande poulie de renvoi : la tangente au bas de la poulie
+## menée de la tête du premier pylône (retour d'utilisateur du 18/11/2026 : « le coude du câble retour ne coïncide
+## pas avec la poulie verticale en gare aval » — le relevé linéaire ajouté à la courbe du nez supposait la tête du
+## premier pylône à la hauteur de la gare, et le câble s'y cassait). [hauteur au nez (d = 0), pente dy/dz].
+## Refait à chaque tracé de la boucle (les têtes sont alors définitives).
+var _retour_tkd_c: Vector2 = Vector2(NAN, NAN)
+func _retour_tkd() -> Vector2:
+	if not is_nan(_retour_tkd_c.x):
+		return _retour_tkd_c
+	var d1: float = float(pylones[0]["d"]) if not pylones.is_empty() else 0.0
+	var pc: Vector3 = poulie_retour_tkd()
+	if d1 <= 1.0:
+		_retour_tkd_c = Vector2(pc.y - R_POULIE_TKD, 0.0)
+		return _retour_tkd_c
+	var y1: float = _y_cable_brut(d1, false) + surhausse_retour_tkd(d1)
+	# repère (z vers la gare, y) : tête en (−d1, y1), centre de la poulie en (pc.z, pc.y) ; la tangente passe
+	# SOUS la poulie (le centre à gauche du sens de marche vers +z)
+	var v: Vector2 = Vector2(pc.z + d1, pc.y - y1)
+	var D: float = v.length()
+	var a: float = atan2(v.y, v.x) - asin(clampf(R_POULIE_TKD / maxf(D, 1e-3), -1.0, 1.0))
+	_retour_tkd_c = Vector2(y1 + tan(a) * d1, tan(a))
+	return _retour_tkd_c
 
 
 ## Point du câble d'un brin en d, repère de la ligne (comme le tracé de la boucle).
@@ -2766,24 +2796,11 @@ func surhausse_retour_tkd(d: float) -> float:
 	return DY_RETOUR_TKD * clampf((L - d) / maxf(L - dn, 1.0), 0.0, 1.0)
 
 
-## Relevé du brin retour d'un TKD au-dessus du profil de la ligne : nul au premier pylône, maximal au nez, tel
-## que le câble file droit du pylône jusque sous la grande poulie de renvoi.
-var _leve_tkd: float = -1.0
+## Relevé du brin retour d'un TKD au-dessus de son tracé brut (bancs, diagnostics).
 func leve_retour_tkd(d: float) -> float:
-	if pylones.is_empty():
+	if pylones.is_empty() or d >= float(pylones[0]["d"]):
 		return 0.0
-	var d1: float = float(pylones[0]["d"])
-	if d >= d1 or d1 <= 1.0:
-		return 0.0
-	if _leve_tkd < 0.0:
-		var pc: Vector3 = poulie_retour_tkd()
-		var hc: float = pc.y - terrain(0.0) - H_CABLE_GARE - surhausse_retour_tkd(0.0)
-		var l0: float = 0.0
-		for _i in range(6):
-			var a: float = l0 / d1
-			l0 = maxf((hc - R_POULIE_TKD * sqrt(1.0 + a * a)) / (1.0 + pc.z / d1), 0.0)
-		_leve_tkd = l0
-	return _leve_tkd * (1.0 - maxf(d, 0.0) / d1)
+	return y_cable(d, false) - _y_cable_brut(d, false) - surhausse_retour_tkd(d)
 
 
 ## Centre (x) de la poulie motrice d'un TKD, repère de la ligne ; 0 ailleurs.
