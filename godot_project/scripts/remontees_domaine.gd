@@ -42,6 +42,12 @@ var _repos: float = 0.0          # pas de nouvel embarquement juste après un d�
 ## S'il y reste quand elle repart, il se rassoit (il restait debout, le temps d'attente
 ## d'après débarquement passant après le départ — retour d'utilisateur, 02/11/2026).
 var _reste_cabine: Array = []
+## Sorti de sa place à l'arrivée et libre de ses mouvements, mais encore dans la cabine : [ligne, i, gare aval ?].
+## Tant que la cabine est en gare, il n'y est pas rassis (retour d'utilisateur du 18/11/2026, 3S en gare haute :
+## « je n'ai pas été levé que déjà j'étais forcé assis pour redescendre, impossible de sortir » — le délai fixe de
+## 8 s expiré, la cabine encore à quai portes ouvertes le reprenait comme un skieur qui monte) ; s'il y est encore
+## quand elle quitte la gare, il repart assis.
+var _sortie_cabine: Array = []
 const TSF_DEBUTANTS: Array = ["tsf4_rosset", "tsf3_panoramic", "tsf4_village", "tsf4_almes", "tsf4_cema"]
 ## Siège : [ligne, instant d'arrivée] pour reconnaître qui reprend aussitôt le siège en sens inverse.
 var _arrivee_siege: Array = []
@@ -1344,6 +1350,7 @@ func _embarquement() -> void:
 		_attendre_perche()
 		return
 	_surveiller_reste_cabine()
+	_surveiller_sortie_cabine()
 	if not a_bord.is_empty():
 		return
 	_repos = maxf(0.0, _repos - get_process_delta_time())
@@ -1505,6 +1512,7 @@ func _surveiller_reste_cabine() -> void:
 	# lui, ou le poussait sur le quai) ; au premier pas, il est libre de sortir
 	# (clavier ou joystick : sur iPad, le joystick n'était pas vu et le skieur restait prisonnier de la cabine)
 	if skieur._clavier() != Vector2.ZERO or skieur.entree.length() > 0.12:
+		_sortie_cabine = [lg, i, _reste_cabine[2]]
 		_reste_cabine = []
 		skieur.embarque = false
 		return
@@ -1517,10 +1525,17 @@ func _surveiller_reste_cabine() -> void:
 	if lg.zone_vehicule(i) != "ligne":
 		return
 	var aval: bool = _reste_cabine[2]
+	_reste_cabine = []
+	_rasseoir_reste(lg, i, aval, loc)
+
+
+## Encore dans la cabine quand elle quitte la gare : assis pour le retour, avec le commentaire de rigueur.
+func _rasseoir_reste(lg: LigneRemontee, i: int, aval: bool, loc: Vector3) -> void:
+	var v: VehiculeRemontee = lg.vehicule(i)
 	var k: int = clampi(int(round(loc.x / 0.40 + 2.5)), 0, 5) if lg.tricable() else clampi(int(round(loc.x / 0.46)) + 2, 0, 4)
 	if lg.vaetvient():
 		k = clampi(int(round(loc.z / 1.0)) + 2, 0, 4)
-	_reste_cabine = []
+	_sortie_cabine = []
 	_guet = []
 	_etat_bord = lg.etat
 	v.porte_skis(false)
@@ -1534,6 +1549,25 @@ func _surveiller_reste_cabine() -> void:
 	skieur._skis.visible = false
 	_suivre_siege()
 	_piquer("RESTE", lg)
+
+
+func _surveiller_sortie_cabine() -> void:
+	if _sortie_cabine.is_empty():
+		return
+	var lg: LigneRemontee = _sortie_cabine[0]
+	if not is_instance_valid(lg) or not lg.pret:
+		_sortie_cabine = []
+		return
+	var i: int = _sortie_cabine[1]
+	var v: VehiculeRemontee = lg.vehicule(i)
+	var loc: Vector3 = v.global_transform.affine_inverse() * skieur.global_position
+	var lim: Vector2 = lg.demi_interieur()
+	var y_pl: float = v.place_assise(0).y
+	if absf(loc.x) > lim.x + 0.3 or absf(loc.z) > lim.y + 0.3 or loc.y < y_pl - 1.0 or loc.y > y_pl + 2.0:
+		_sortie_cabine = []          # sorti
+		return
+	if lg.zone_vehicule(i) == "ligne":
+		_rasseoir_reste(lg, i, bool(_sortie_cabine[2]), loc)
 
 
 func _cap(v: Node3D, avant: bool = false) -> float:
@@ -1553,6 +1587,9 @@ func _entrer_cabine(lg: LigneRemontee, p: Vector3) -> bool:
 		var zn: String = lg.zone_vehicule(i)
 		if zn == "ligne" or not lg.vehicule_a_jour(i):
 			continue
+		if (not _sortie_cabine.is_empty() and _sortie_cabine[0] == lg and int(_sortie_cabine[1]) == i) \
+				or (not _reste_cabine.is_empty() and _reste_cabine[0] == lg and int(_reste_cabine[1]) == i):
+			continue          # (la cabine qu'il quitte : rassis seulement quand elle sort de la gare, pas à quai)
 		var v: VehiculeRemontee = lg.vehicule(i)
 		var loc: Vector3 = v.global_transform.affine_inverse() * p
 		var y_pl: float = v.place_assise(0).y
@@ -2036,6 +2073,11 @@ func _suivre_siege() -> void:
 			v.porte_skis(false)
 			skieur.embarque = false
 			skieur.lever()
+			if not lg.vaetvient():
+				# debout face aux portes du côté du quai (extérieur du brin d'arrivée) : il sort droit devant
+				# (retour d'utilisateur du 18/11/2026 : face à la paroi, il ne sortait pas du 3S en gare haute)
+				var dir: Vector3 = lg.global_transform.basis.x * cote
+				skieur._cap = atan2(-dir.x, -dir.z)
 			var pied: Vector3 = v.vers_monde(v.place_assise(a_bord[2], a_bord[4])) + Vector3(0, 0.05, 0)
 			skieur.global_position = pied
 			skieur.dernier_sol = pied
