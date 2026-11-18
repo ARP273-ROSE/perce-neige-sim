@@ -53,6 +53,8 @@ uniform vec4 bloc_masque = vec4(0.0, 0.0, 1.0, 1.0);
 uniform float avec_masque = 0.0;
 uniform float piece = 0.0;
 uniform vec4 emprise = vec4(0.0, 0.0, 1.0, 1.0);
+uniform vec4 volumes[24];           // volumes percés (ReliefBuilder.percer_volume) : 3 lignes affines par volume
+uniform int n_volumes = 0;
 varying vec3 pw;
 uniform float hiver = 0.0;          // skieur : neige, relief ombré
 uniform float leger = 0.0;          // crans ≥ 3 : sans grain ni détail de près
@@ -100,6 +102,12 @@ vec3 en_hiver(vec3 c, vec2 uv, vec3 cam) {
 	return mix(c, mix(c * 0.80, blanc, neige) * l, hiver);
 }
 void fragment() {
+	for (int i = 0; i < n_volumes; i++) {
+		vec4 p4 = vec4(pw, 1.0);
+		if (abs(dot(volumes[3 * i], p4)) < 1.0 && abs(dot(volumes[3 * i + 1], p4)) < 1.0 && abs(dot(volumes[3 * i + 2], p4)) < 1.0) {
+			discard;
+		}
+	}
 	if (piece < 0.5) {
 		for (int i = 0; i < n_pieces; i++) {
 			vec4 r = pieces[i];
@@ -1925,6 +1933,42 @@ static func _dist_poly(q: Vector2, poly: PackedVector2Array) -> float:
 var _fosses: Dictionary = {}          # clé → Rect2
 
 
+## Volumes percés : boîtes orientées (transformée du cube [-1, 1]³ dans le monde) où AUCUNE surface du relief n'est
+## dessinée — tuiles, pièces fines, grille fine, anneaux. Tranchée couverte du portail du Funival : le terrain en
+## dévers traversait le tube sur 25 m, et la grille fine (non HD) ne voit pas les trous des pièces (18/11/2026).
+const MAX_VOLUMES: int = 8
+var _volumes: Dictionary = {}           # clé → [Transform3D]
+
+
+func percer_volume(cle: String, boites: Array) -> void:
+	_volumes[cle] = boites
+	for m in _mats_hiver:
+		_poser_volumes_sur(m)
+
+
+func reboucher_volume(cle: String) -> void:
+	if _volumes.erase(cle):
+		for m in _mats_hiver:
+			_poser_volumes_sur(m)
+
+
+func _poser_volumes_sur(m: ShaderMaterial) -> void:
+	var lignes: Array = []
+	for l in _volumes.values():
+		for xf in l:
+			if lignes.size() >= 3 * MAX_VOLUMES:
+				break
+			var inv: Transform3D = (xf as Transform3D).affine_inverse()
+			for k in range(3):
+				var r: Vector3 = Vector3(inv.basis.x[k], inv.basis.y[k], inv.basis.z[k])
+				lignes.append(Vector4(r.x, r.y, r.z, inv.origin[k]))
+	var n: int = lignes.size() / 3
+	while lignes.size() < 3 * MAX_VOLUMES:
+		lignes.append(Vector4.ZERO)
+	m.set_shader_parameter("volumes", lignes)
+	m.set_shader_parameter("n_volumes", n)
+
+
 func percer(cle: String, r: Rect2) -> void:
 	_fosses[cle] = r
 	_poser_trous()
@@ -2410,6 +2454,8 @@ func _hiver_mat(m: ShaderMaterial, pistes_ok: bool) -> void:
 	m.set_shader_parameter("hiver", _hiver)
 	m.set_shader_parameter("leger", 1.0 if _leger else 0.0)
 	_mats_hiver.append(m)
+	if not _volumes.is_empty():
+		_poser_volumes_sur(m)
 	_ombres_sur(m)
 
 

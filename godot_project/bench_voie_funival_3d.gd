@@ -59,7 +59,7 @@ func _tick() -> void:
 				_lg.exploitation().commande("arreter")      # (véhicules à l'arrêt : la voie est libre)
 				var L: float = _lg.longueur_h()
 				_pts = [["pont", _lg.portail_d * 0.5], ["portail", _lg.portail_d + 6.0], ["tunnel", _lg.portail_d + 300.0],
-					["évitement", L * 0.5 + 40.0], ["haut du tunnel", L - Funival.L_HALL - 40.0]]
+					["évitement", _lg.centre_evitement() + 40.0], ["haut du tunnel", L - Funival.L_HALL - 40.0]]
 				_etat = 3
 			elif Time.get_ticks_msec() - _t0 > 240000:
 				_verif("Funival construit", false)
