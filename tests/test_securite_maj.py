@@ -103,6 +103,9 @@ def test_archive_evadee_refusee_sans_rien_ecrire(tmp_path, monkeypatch):
 
     monkeypatch.setattr(updater, "_open", ouvrir)
     monkeypatch.setattr(updater, "app_dir", lambda: cible)
+    # La signature a son propre essai (test_signature_maj.py) : ici, l'extraction.
+    sans_cle = {k: v for k, v in updater._kit().items() if k != "cle_publique_maj"}
+    monkeypatch.setattr(updater, "_kit", lambda: sans_cle)
     with pytest.raises(RuntimeError, match="suspecte"):
         updater.download_and_apply(_maj(nom, taille=len(donnees)))
     assert (cible / "existant.py").read_text() == "garde\n"

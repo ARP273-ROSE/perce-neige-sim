@@ -177,7 +177,7 @@ jobs:
             libxcb-randr0 libxcb-render-util0 libxcb-shape0 libxcb-xinerama0 libxcb-cursor0 \
             libxcb-xkb1 libpulse0 libasound2t64 \
             libnss3 libxcomposite1 libxdamage1 libxrandr2 libxtst6 libxkbfile1 libxshmfence1 libgbm1 libminizip1
-          pip install -q pytest -r "${{ steps.kit.outputs.requirements }}"
+          pip install -q pytest cryptography -r "${{ steps.kit.outputs.requirements }}"
       - name: Essais
         if: steps.kit.outputs.cibles != ''
         env:
@@ -642,6 +642,45 @@ jobs:
       # langue en tete : une ancienne version de l'application, qui affiche
       # le debut des notes tel quel, montre alors la bonne langue. Les
       # journaux publics declares dans kit.json fournissent « Ce qui change ».
+      # Signature des archives de mise a jour (gabarits/signature_maj.py). Le
+      # manifeste donne la version et le SHA-256 de chaque archive .zip ; il
+      # est signe par la cle Ed25519 du secret MAJ_CLE_SIGNATURE (cle du kit,
+      # la meme pour toutes les applications). Une application dont kit.json
+      # porte « cle_publique_maj » refuse toute archive absente d'un manifeste
+      # signe : sans le secret, la publication s'arrete ici plutot que de
+      # publier une version que personne ne pourrait installer.
+      - name: Signer les archives de mise a jour
+        shell: bash
+        env:
+          MAJ_CLE_SIGNATURE: ${{ secrets.MAJ_CLE_SIGNATURE }}
+        run: |
+          CLE_PUB=$(python -c "import json;print(json.load(open('kit.json', encoding='utf-8')).get('cle_publique_maj',''))")
+          if [ -z "$CLE_PUB" ]; then echo "pas de cle publique declaree : pas de signature"; exit 0; fi
+          if [ -z "$MAJ_CLE_SIGNATURE" ]; then echo "::error::secret MAJ_CLE_SIGNATURE absent"; exit 1; fi
+          python -m pip install --quiet cryptography
+          V="${{ steps.version.outputs.value }}" NT="${{ steps.kit.outputs.nom_technique }}" DOSSIER="publication" python - <<'PY'
+          import base64, glob, hashlib, json, os
+          from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+          from cryptography.hazmat.primitives import serialization as ser
+          V, NT, D = os.environ['V'], os.environ['NT'], os.environ['DOSSIER']
+          fichiers = {}
+          for chemin in sorted(glob.glob(os.path.join(D, '*.zip'))):
+              with open(chemin, 'rb') as f:
+                  fichiers[os.path.basename(chemin)] = hashlib.sha256(f.read()).hexdigest()
+          if not fichiers:
+              raise SystemExit('aucune archive de mise a jour a signer')
+          cle = Ed25519PrivateKey.from_private_bytes(base64.b64decode(os.environ['MAJ_CLE_SIGNATURE'].strip()))
+          pub = base64.b64encode(cle.public_key().public_bytes(ser.Encoding.Raw, ser.PublicFormat.Raw)).decode()
+          if pub != json.load(open('kit.json', encoding='utf-8'))['cle_publique_maj']:
+              raise SystemExit('le secret ne correspond pas a la cle publique de kit.json')
+          texte = json.dumps({'version': V, 'fichiers': fichiers}, sort_keys=True)
+          signature = base64.b64encode(cle.sign(texte.encode('utf-8'))).decode()
+          sortie = os.path.join(D, f'{NT}-signature-{V}.json')
+          with open(sortie, 'w', encoding='utf-8') as f:
+              json.dump({'manifeste': texte, 'signature': signature}, f)
+          print('signe :', ', '.join(fichiers), '->', sortie)
+          PY
+
       - name: Rediger les notes
         shell: bash
         env:
