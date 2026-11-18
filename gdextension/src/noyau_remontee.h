@@ -61,6 +61,14 @@ class NoyauRemontee : public RefCounted {
 	Vector3 pivot;                        // pivot du balancier (corps de collision)
 	double poids[2] = {0.0, 0.0};         // poids d'un véhicule / tension (montée, descente)
 	double w_veh[2] = {0.0, 0.0};         // charge répartie / tension
+	// monocâbles (18/11/2026) : chaque véhicule fléchit le câble à sa place, de son poids réel, sur les portées
+	// proches du point de vue (zone locale) ; la géométrie précalculée porte déjà la charge de référence w_ref,
+	// retirée dans ces portées. Ailleurs : l'écart de charge réparti (w_veh).
+	bool zone_mode = false;
+	double w_ref[2] = {0.0, 0.0};         // charge de référence des véhicules / tension (montée, descente)
+	double zone_lo = 1.0, zone_hi = 0.0;  // portées [zone_lo, zone_hi] chargées véhicule par véhicule
+	std::vector<double> poids_veh;        // poids réel de chaque véhicule / tension (vide : poids[b])
+	bool portee_locale(double x1, double x2) const { return zone_mode && x1 >= zone_lo - 1e-3 && x2 <= zone_hi + 1e-3; }
 
 	// --- nœuds -----------------------------------------------------------------
 	std::vector<Node3D *> vehicules, pinces, susps, corps;
@@ -85,7 +93,7 @@ class NoyauRemontee : public RefCounted {
 	// --- charges ponctuelles (par brin, puis par portée) ------------------------
 	std::vector<Vector2> charges[2];
 	std::vector<std::vector<Vector2>> charges_portee[2];
-	PackedFloat32Array paquets;           // pour le shader du câble : 2 × 32 × 4 + 2
+	PackedFloat32Array paquets;           // pour le shader du câble : 2 × 32 × 4 + 2 (nombres) + 2 (zone locale)
 
 	int tour = 0;
 	std::vector<int> gare_derniere;
@@ -126,6 +134,7 @@ public:
 			const PackedFloat32Array &x_haut, const PackedFloat32Array &x_bas);
 	void set_appuis(const PackedFloat32Array &p_appuis);
 	void set_constantes(const Dictionary &c);
+	void set_poids_vehicules(const PackedFloat32Array &p);
 	void set_temps(const PackedFloat32Array &p_tab_s);
 	void set_vehicules(const Array &p_vehicules, const Array &p_pinces, const Array &p_susps, const Array &p_corps,
 			const PackedFloat64Array &s, const PackedFloat32Array &p_phi, const PackedFloat32Array &p_psi);

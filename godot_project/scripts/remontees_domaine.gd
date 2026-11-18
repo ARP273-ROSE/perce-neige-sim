@@ -1162,7 +1162,10 @@ func _process_corps(delta: float) -> void:
 		if not actif and lg.is_processing():
 			lg.lointains_au_repos()
 		lg.set_process(actif)
-		lg.pas_lod = 1 if (a_bord_ici or d < 150.0 * _f_lod) else (2 if d < 300.0 * _f_lod else 4)
+		# (téléphériques : deux cabines seulement, et des portées de plus d'un kilomètre qui se voient de loin — mis à
+		# jour une image sur 2 ou 4, leurs câbles fléchis sous la cabine avançaient par saccades : « les câbles
+		# oscillent encore pour les TPH », retour d'utilisateur du 18/11/2026)
+		lg.pas_lod = 1 if (a_bord_ici or lg.vaetvient() or d < 150.0 * _f_lod) else (2 if d < 300.0 * _f_lod else 4)
 		lg.details_visibles = d < DETAILS_JUSQUA + 50.0
 		lg.collisions_actives = a_bord_ici or d < 120.0
 		lg.point_vue = lg.global_transform.affine_inverse() * p

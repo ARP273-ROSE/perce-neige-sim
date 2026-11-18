@@ -890,7 +890,9 @@ func _w_charge() -> Array:
 	var k: float = OccupationRemontees.PAX_KG * places_vehicule() * 9.81 / maxf(espacement, 8.0)
 	var dwm: float = minf(k * (occupation(true) - OCCUPATION), float(_dw_max[0]))
 	var dwd: float = minf(k * occupation(false), float(_dw_max[1]))
-	return [dwm / _tension, dwd / _tension]
+	# (comptée vers le HAUT dans _fleche, le nuanceur et le noyau : f = −w·(d − x1)(x2 − d)/2 ; un surcroît de
+	# charge relevait le câble au lieu de le creuser, 18/11/2026)
+	return [-dwm / _tension, -dwd / _tension]
 
 
 func _calculer_dw_max() -> void:
@@ -5799,6 +5801,7 @@ func _process_corps(delta: float) -> void:
 		return
 	_maj_vent()
 	_maj_occupation(delta)
+	_maj_poids_vehicules(delta)
 	if _exploit != null:
 		_exploit.avancer(delta)
 	_regler_vitesse(delta)
@@ -5880,6 +5883,7 @@ func _preparer_noyau() -> void:
 		"guide_bras": VehiculeRemontee.A108_X_ROULEMENT - VehiculeRemontee.A108_PIVOT.x,
 		"poids_montee": _poids_vehicule(true) / _tension, "poids_descente": _poids_vehicule(false) / _tension,
 		"w_montee": float(_w_veh[0]), "w_descente": float(_w_veh[1]),
+		"zone_locale": zone_locale(), "w_ref_montee": float(_w_ref[0]), "w_ref_descente": float(_w_ref[1]),
 		"sabots_impairs": tricable() or sabots_tph(),
 		"amort": v0.amortissement(),
 	})
@@ -6015,6 +6019,10 @@ func _etape_noyau(delta: float) -> void:
 				for m in _mats_charges():
 					m.set_shader_parameter("charges_m" if k == 0 else "charges_d", packs)
 					m.set_shader_parameter("n_charges_m" if k == 0 else "n_charges_d", nk)
+			if q.size() >= 260:
+				_zone_loc = Vector2(q[258], q[259])
+				for m2 in _mats_charges():
+					m2.set_shader_parameter("zone_loc", _zone_loc)
 			_charges = listes
 
 
@@ -6867,12 +6875,12 @@ func _preparer_charges() -> void:
 	_n_appuis = mini(_appuis.size(), 48)
 	_tension = tension_h()
 	var e: float = maxf(espacement, 8.0)
-	# câble immobile (retour d'utilisateur, 02/11/2026 : il oscillait sous les pinces, qui restaient
-	# fixes, tantôt au-dessus, tantôt en dessous) : plus de flèche locale par véhicule ; seule
-	# reste l'onde des arrêts. Les véhicules sont sur le câble tel qu'il est dessiné.
+	# (flèche locale par véhicule près du point de vue : zone_locale ; le câble, les pinces et les véhicules
+	# suivent la même flèche)
 	_w_veh = [0.0, 0.0]
 	_calculer_dw_max()
 	_w_veh = _w_charge()
+	_calculer_w_ref()
 	var packs: Array = []
 	for k in range(12):
 		var q: Vector4 = Vector4.ZERO
@@ -6886,6 +6894,10 @@ func _preparer_charges() -> void:
 		m.set_shader_parameter("signe_montee", signf(_x_brin(true)))
 		m.set_shader_parameter("w_m", _w_veh[0])
 		m.set_shader_parameter("w_d", _w_veh[1])
+		m.set_shader_parameter("zone_mode", zone_locale())
+		m.set_shader_parameter("w_ref_m", _w_ref[0])
+		m.set_shader_parameter("w_ref_d", _w_ref[1])
+		m.set_shader_parameter("zone_loc", _zone_loc)
 
 
 func _mats_charges() -> Array:
@@ -6903,7 +6915,50 @@ const CHARGES_PONCTUELLES: bool = false
 ## cabine pleine au milieu de la portée de 742 m) : charges ponctuelles, comme au téléphérique, au lieu
 ## d'un poids réparti (audit du 14/11/2026). Les monocâbles gardent le poids réparti (câble immobile).
 func charges_ponctuelles_actives() -> bool:
-	return CHARGES_PONCTUELLES or tricable()
+	return CHARGES_PONCTUELLES or tricable() or zone_locale()
+
+
+## Monocâbles (sièges, cabines, pinces fixes ou débrayables) : retour d'utilisateur du 18/11/2026 — « la courbe du
+## câble n'est pas affectée localement par le poids des cabines ou sièges présents à l'endroit avec leur poids
+## réel ». Près du point de vue, chaque véhicule fléchit le câble à sa place, de son poids (passagers dessinés
+## compris) ; la géométrie précalculée portant déjà la charge de référence répartie (_w_ref), elle est retirée
+## dans ces portées : en moyenne la même ligne, localement un câble cassé à chaque pince et relevé entre elles.
+## Plus loin, l'écart de charge réparti (_w_veh). Le câble dessiné (nuanceur), les pinces et les véhicules (noyau
+## C++ ou _fleche) suivent la même flèche — la raison qui avait fait couper les charges ponctuelles le 02/11
+## (« il oscillait sous les pinces, qui restaient fixes ») ne tient plus.
+func zone_locale() -> bool:
+	return not tricable() and not vaetvient() and not teleski() and not (self is Funival)
+
+
+var _w_ref: Array = [0.0, 0.0]         # charge de référence des véhicules / H (1/m), géométrie précalculée
+var _zone_loc: Vector2 = Vector2(1.0, 0.0)
+
+
+func _calculer_w_ref() -> void:
+	_w_ref = [0.0, 0.0]
+	if not zone_locale() or _tension <= 0.0:
+		return
+	var e: float = maxf(espacement, 8.0)
+	var m_v: float = masse_vehicule()
+	_w_ref = [(m_v + 80.0 * places_vehicule() * OCCUPATION) * 9.81 / e / _tension, m_v * 9.81 / e / _tension]
+
+
+## Poids réel de chaque véhicule (passagers dessinés), pour le noyau : refait toutes les 2 s.
+var _poids_t: float = 99.0
+func _maj_poids_vehicules(delta: float) -> void:
+	_poids_t += delta
+	if _poids_t < 2.0 or _noyau == null or not zone_locale() or not _noyau.has_method("set_poids_vehicules"):
+		return
+	_poids_t = 0.0
+	var xm: float = signf(_x_brin(true))
+	var p: PackedFloat32Array = PackedFloat32Array()
+	p.resize(_vehicules.size())
+	var m_v: float = masse_vehicule()
+	for i in range(_vehicules.size()):
+		var pc: Vector3 = _point_cable(float(_vehicules[i][1]))[0]
+		var montee: bool = signf(pc.x) == xm
+		p[i] = (m_v + OccupationRemontees.PAX_KG * passagers(i, montee)) * 9.81 / _tension
+	_noyau.set_poids_vehicules(p)
 
 
 ## Charges du moment : chaque véhicule en ligne, sur son brin.
@@ -6912,17 +6967,66 @@ func _charges_ponctuelles() -> void:
 		return
 	var xm: float = signf(_x_brin(true))
 	var listes: Array = [[], []]
-	for e in _vehicules:
-		var s: float = e[1]
+	var en_ligne: Array = []          # [d, brin, poids / H]
+	for i0 in range(_vehicules.size()):
+		var s: float = _vehicules[i0][1]
 		if zone(s)[0] != "ligne":
 			continue
 		var p: Vector3 = _point_cable(s)[0]
 		if portee_sur_sabot(_portee_de(-p.z)):
 			continue                  # (portée par le sabot du pylône)
 		var montee: bool = signf(p.x) == xm
-		var l: Array = listes[0 if montee else 1]
+		var w: float = _poids_vehicule(montee) / _tension
+		if zone_locale():
+			w = (masse_vehicule() + OccupationRemontees.PAX_KG * passagers(i0, montee)) * 9.81 / _tension
+		en_ligne.append([-p.z, 0 if montee else 1, w])
+	# (même zone locale que le noyau : portées autour du point de vue, 64 véhicules par brin au plus, 600 m)
+	var lo_i: int = 0
+	var hi_i: int = _n_appuis - 2
+	if zone_locale():
+		var np: int = _n_appuis - 1
+		var nb: Array = [[], []]
+		for b0 in range(2):
+			nb[b0].resize(np)
+			nb[b0].fill(0)
+		for e0 in en_ligne:
+			var ip0: int = _portee_de(float(e0[0]))
+			if ip0 >= 0:
+				nb[int(e0[1])][ip0] += 1
+		var dv: float = clampf(-point_vue.z, _appuis[0] + 0.01, _appuis[_n_appuis - 1] - 0.01)
+		var i1: int = maxi(_portee_de(dv), 0)
+		var cm: int = nb[0][i1]
+		var cd: int = nb[1][i1]
+		lo_i = i1
+		hi_i = i1
+		if cm > 64 or cd > 64:
+			lo_i = 1
+			hi_i = 0
+		else:
+			while true:
+				var g: float = dv - _appuis[lo_i] if lo_i > 0 else 1e18
+				var dr: float = _appuis[hi_i + 1] - dv if hi_i < np - 1 else 1e18
+				var gauche: bool = g <= dr
+				var j: int = lo_i - 1 if gauche else hi_i + 1
+				if minf(g, dr) > 600.0 or j < 0 or j >= np or cm + int(nb[0][j]) > 64 or cd + int(nb[1][j]) > 64:
+					break
+				cm += int(nb[0][j])
+				cd += int(nb[1][j])
+				if gauche:
+					lo_i = j
+				else:
+					hi_i = j
+		_zone_loc = Vector2(_appuis[lo_i], _appuis[hi_i + 1]) if lo_i <= hi_i else Vector2(1.0, 0.0)
+		for m0 in _mats_charges():
+			m0.set_shader_parameter("zone_loc", _zone_loc)
+	for e1 in en_ligne:
+		if zone_locale():
+			var ip1: int = _portee_de(float(e1[0]))
+			if ip1 < lo_i or ip1 > hi_i:
+				continue
+		var l: Array = listes[int(e1[1])]
 		if l.size() < 64:
-			l.append(Vector2(-p.z, _poids_vehicule(montee) / _tension))
+			l.append(Vector2(float(e1[0]), float(e1[2])))
 	_charges = listes
 	# par portée : chaque véhicule ne tient compte que des charges de la
 	# sienne (avant : toutes les charges du brin, pour chaque véhicule)
@@ -6948,6 +7052,14 @@ func _charges_ponctuelles() -> void:
 var _charges_portee: Array = [{}, {}]
 
 
+## Flèche (vers le bas) de l'écart de charge réparti seul en d : celle des portées hors de la zone locale (bancs).
+func fleche_repartie(d: float, montee: bool) -> float:
+	var ip: int = _portee_de(d)
+	if ip < 0:
+		return 0.0
+	return -float(_w_veh[0 if montee else 1]) * (d - _appuis[ip]) * (_appuis[ip + 1] - d) * 0.5
+
+
 ## Indice de la portée (entre deux appuis) qui contient d, ou −1.
 func _portee_de(d: float) -> int:
 	for i in range(_n_appuis - 1):
@@ -6969,12 +7081,15 @@ func _fleche(d: float, montee: bool) -> float:
 	var x1: float = _appuis[ip]
 	var x2: float = _appuis[ip + 1]
 	var l: float = maxf(x2 - x1, 0.01)
-	var f: float = -float(_w_veh[0 if montee else 1]) * (d - x1) * (x2 - d) * 0.5
-	for c in _charges_portee[0 if montee else 1].get(ip, []):
-		var a: float = (c as Vector2).x
-		if a <= x1 or a >= x2:
-			continue
-		f += (c as Vector2).y * ((d - x1) * (x2 - a) if d < a else (a - x1) * (x2 - d)) / l
+	var zm: bool = zone_locale()
+	var locale: bool = zm and x1 >= _zone_loc.x - 1e-3 and x2 <= _zone_loc.y + 1e-3
+	var f: float = -float((_w_ref if locale else _w_veh)[0 if montee else 1]) * (d - x1) * (x2 - d) * 0.5
+	if not zm or locale:
+		for c in _charges_portee[0 if montee else 1].get(ip, []):
+			var a: float = (c as Vector2).x
+			if a <= x1 or a >= x2:
+				continue
+			f += (c as Vector2).y * ((d - x1) * (x2 - a) if d < a else (a - x1) * (x2 - d)) / l
 	return f + _onde(d, x1, l, montee)
 
 
@@ -7142,7 +7257,8 @@ func puissance_kw() -> float:
 	var p_nom: float = (_poids_vehicule(true) - _poids_vehicule(false)) * n_brin * dh / long_c * vitesse
 	# pertes : un dixième de la puissance nominale (charge de référence, OCCUPATION en montée), même à vide
 	var p_ref: float = OccupationRemontees.PAX_KG * places_vehicule() * OCCUPATION * 9.81 * n_brin * dh / long_c * vitesse
-	if _charges[0].is_empty() and _charges[1].is_empty():
+	# (monocâbles : les charges ponctuelles ne couvrent que la zone locale, près du point de vue)
+	if zone_locale() or (_charges[0].is_empty() and _charges[1].is_empty()):
 		# monocâbles : pas de charges ponctuelles (CHARGES_PONCTUELLES faux), le poste
 		# n'affichait que les pertes — charge moyenne des deux brins à la place
 		return (p_nom * vitesse_reelle / maxf(vitesse, 0.1) + 0.1 * p_ref * regime()) / 1000.0
