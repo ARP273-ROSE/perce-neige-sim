@@ -241,15 +241,42 @@ func _mesurer(k: String, lg: LigneRemontee) -> void:
 			OccupationRemontees.heure_forcee = h2
 			lg._occ_t = 1.0e9
 			lg._maj_occupation(0.0)
-			fl.append(lg._fleche(dm, true))
+			# (câble dessiné à y_cable − flèche, comme le nuanceur et le noyau ; avant le 18/11/2026, le banc ajoutait
+			# la flèche et validait un surcroît de charge qui relevait le câble)
+			fl.append(lg.fleche_repartie(dm, true))
 			if h2 == 10.25:
 				for j2 in range(lg._n_appuis - 1):
 					for t2 in [0.25, 0.5, 0.75]:
 						var d2: float = lerpf(lg._appuis[j2], lg._appuis[j2 + 1], t2)
-						garde_min = minf(garde_min, lg.y_cable(d2, true) + lg._fleche(d2, true) - lg.terrain(d2) - lg._garde_exigee(d2))
-		_verif("%s : flèche du brin montée plus creuse chargé, garde au sol tenue" % k, fl[0] < fl[1] and garde_min > -0.05,
-			"milieu de la plus grande portée (%.0f m) : %.2f m chargé, %.2f m à vide ; marge mini sur la garde %.2f m" % [
+						var f2: float = maxf(lg.fleche_repartie(d2, true), lg._fleche(d2, true))
+						garde_min = minf(garde_min, lg.y_cable(d2, true) - f2 - lg.terrain(d2) - lg._garde_exigee(d2))
+		_verif("%s : flèche du brin montée plus creuse chargé, garde au sol tenue" % k, fl[0] > fl[1] and garde_min > -0.05,
+			"milieu de la plus grande portée (%.0f m), écart réparti : %.2f m chargé, %.2f m à vide (vers le bas) ; marge mini sur la garde %.2f m" % [
 				lg._appuis[jm + 1] - lg._appuis[jm], fl[0], fl[1], garde_min])
+		OccupationRemontees.heure_forcee = 10.25
+		lg._occ_t = 1.0e9
+		lg._maj_occupation(0.0)
+	# monocâbles : près du point de vue, le câble est cassé vers le bas sous chaque véhicule (son poids réel) et droit
+	# entre deux : seconde différence de la flèche à ±1 m de la pince ≈ P/H (P le poids du véhicule)
+	if lg.zone_locale() and lg._charges[0].size() >= 2:
+		var n_v: int = 0
+		var n_ok: int = 0
+		var pire: float = INF
+		var ecart: float = 0.0
+		for c3 in lg._charges[0]:
+			var da: float = (c3 as Vector2).x
+			var ip3: int = lg._portee_de(da)
+			if ip3 < 0 or da - lg._appuis[ip3] < 2.0 or lg._appuis[ip3 + 1] - da < 2.0:
+				continue
+			n_v += 1
+			var k2: float = 2.0 * lg._fleche(da, true) - lg._fleche(da - 1.0, true) - lg._fleche(da + 1.0, true)
+			pire = minf(pire, k2)
+			ecart = maxf(ecart, absf(k2 - (c3 as Vector2).y))
+			if k2 > 0.5 * (c3 as Vector2).y:
+				n_ok += 1
+		_verif("%s : câble cassé sous chaque véhicule proche, de son poids" % k, n_v > 0 and n_ok == n_v,
+			"%d véhicules dans la zone locale [%.0f, %.0f] m, %d avec la cassure attendue (P/H) ; plus faible %.4f, écart maxi à P/H %.4f" % [
+				n_v, lg._zone_loc.x, lg._zone_loc.y, n_ok, pire, ecart])
 	# Funival : places dessinées (debout dans la caisse) et passagers affichés
 	if lg is Funival and lg._vehicules.size() >= 1 and is_instance_valid(lg._vehicules[0][0]):
 		var vf: VehiculeRemontee = lg._vehicules[0][0]

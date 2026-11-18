@@ -384,8 +384,9 @@ func _maj_positions() -> void:
 	var a: float = _x_quai(true)
 	var b: float = _x_quai(false)
 	# (cabine 1 recalée si on a déplacé la cabine 0 d'un bloc : sonde, chargement)
-	if is_nan(_s_cab1) or absf(_s_cab1 - (a + b - _s)) > 5.0:
-		_s_cab1 = a + b - _s
+	var ef: float = (a + b - _s) if self is Funival else _en_face(_s)
+	if is_nan(_s_cab1) or absf(_s_cab1 - ef) > 5.0:
+		_s_cab1 = ef
 	_vehicules[0][1] = _s + _u[0]
 	_vehicules[1][1] = _s_cab1 - _u[1]
 	_charges_ponctuelles()
@@ -516,9 +517,73 @@ func _rebond(delta: float) -> void:
 ## constante, la vitesse le long du câble sautait au pylône sans pousser le pendule : 0° relevé au passage ; à
 ## vitesse de câble constante, la cassure de pente de 20° de la Grande Motte rend 1 m/s de vitesse horizontale au
 ## chariot sur la longueur du sabot, ~7° de balancement attendus).
+## La cabine d'en face est sur la MÊME boucle de tracteur : elle est placée à la même fraction de longueur de câble
+## de sa gare d'arrivée (retour d'utilisateur du 18/11/2026 : « quand les cabines s'arrêtent en gare, juste après
+## l'arrêt elles se remettent à la bonne place » — chacune intégrait ds·cos θ sur sa voie, de profil différent ;
+## à l'arrivée de la cabine montante, l'autre avait dépassé son quai de 3,45 m à la Grande Motte et y était
+## ramenée d'un bloc).
 func _avancer(ds: float) -> void:
 	_s += ds * _cos_voie(_s, true)
-	_s_cab1 -= ds * _cos_voie(_s_cab1, false)
+	if self is Funival:
+		# (Funival : les deux rames sur le même profil de voie, chacune suit sa pente)
+		_s_cab1 -= ds * _cos_voie(_s_cab1, false)
+	else:
+		_s_cab1 = _en_face(_s)
+
+
+## Abscisse de la cabine 1 quand la cabine 0 est en `s0` : même part du câble parcourue depuis le quai aval.
+func _en_face(s0: float) -> float:
+	_preparer_arcs()
+	var b: float = _x_quai(false)
+	var l0: float = _arc_de(b, 0)
+	var l1: float = _arc_de(b, 1)
+	return _d_de_arc(l1 * (1.0 - _arc_de(s0, 0) / maxf(l0, 1.0)), 1)
+
+
+## Longueur du chemin du chariot depuis le quai aval, par voie, tous les mètres (câble à vide).
+var _arcs: Array = []
+func _preparer_arcs() -> void:
+	if not _arcs.is_empty():
+		return
+	var a: float = _x_quai(true)
+	var b: float = _x_quai(false)
+	var n: int = int(ceil(b - a)) + 1
+	for k in range(2):
+		var t: PackedFloat32Array = PackedFloat32Array()
+		t.resize(n)
+		var acc: float = 0.0
+		var y0: float = _y_voie_vide(a, k == 0)
+		t[0] = 0.0
+		for j in range(1, n):
+			# (pas uniforme d'un mètre, au-delà du quai amont au besoin : la lecture interpole par mètre)
+			var y1: float = _y_voie_vide(a + j, k == 0)
+			acc += sqrt(1.0 + pow(y1 - y0, 2.0))
+			y0 = y1
+			t[j] = acc
+		_arcs.append(t)
+
+
+func _y_voie_vide(d: float, montee: bool) -> float:
+	var L: float = longueur_h()
+	if d <= 0.0:
+		return terrain(0.0) + H_CABLE_GARE
+	if d >= L:
+		return terrain(L) + H_CABLE_GARE
+	return y_cable(d, montee)
+
+
+func _arc_de(d: float, k: int) -> float:
+	var t: PackedFloat32Array = _arcs[k]
+	var x: float = clampf(d - _x_quai(true), 0.0, float(t.size() - 1))
+	var j: int = mini(int(x), t.size() - 2)
+	return lerpf(t[j], t[j + 1], x - j)
+
+
+func _d_de_arc(arc: float, k: int) -> float:
+	var t: PackedFloat32Array = _arcs[k]
+	var j: int = clampi(t.bsearch(arc) - 1, 0, t.size() - 2)
+	var u: float = clampf((arc - t[j]) / maxf(t[j + 1] - t[j], 1e-4), 0.0, 1.0)
+	return minf(_x_quai(true) + j + u, _x_quai(false))
 
 
 func _cos_voie(d: float, montee: bool) -> float:
@@ -542,8 +607,10 @@ const PROFILS: Dictionary = {
 	# (`v_pylone`, mêmes 7,4 m/s aux deux passages), plus un pourcentage figé de la ligne ; la cabine montante,
 	# le pylône passé, garde ce pas jusqu'à l'approche (la montre ne montre pas de reprise).
 	"tph_grande_motte": {"pts": [[0.0, 10.0], [1.0, 10.0]], "v_pylone": 7.4, "garde_apres_pylone": true,
-		"a_dem": 0.45, "a_frein": 0.31, "v_pas": 1.0, "d_pas": 20.0},
-	"tph_fornet": {"pts": [[0.0, 10.0], [1.0, 10.0]], "a_dem": 0.60, "a_frein": 0.55, "v_pas": 1.2, "d_pas": 8.0},
+		"a_dem": 0.45, "a_frein": 0.31, "v_pas": 1.0, "d_pas": 6.0},
+	# (au pas sur 6 et 4 m seulement : 20 m à 1 m/s faisaient 20 s d'approche, « c'est trop long », retour
+	# d'utilisateur du 18/11/2026)
+	"tph_fornet": {"pts": [[0.0, 10.0], [1.0, 10.0]], "a_dem": 0.60, "a_frein": 0.55, "v_pas": 1.2, "d_pas": 4.0},
 }
 const PROFIL_DEFAUT: Dictionary = {"pts": [[0.0, 10.0], [1.0, 10.0]], "a_dem": A_ROUTE, "a_frein": A_ROUTE, "v_pas": 0.6, "d_pas": 15.0}
 

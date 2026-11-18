@@ -88,6 +88,12 @@ uniform vec4 levees_m[48];
 uniform int n_levees_d = 0;
 uniform vec4 levees_d[48];
 uniform float w_m = 0.0;          // charge répartie / H (1/m), brin montée
+// monocâbles (LigneRemontee.zone_locale) : portées [zone_loc.x, zone_loc.y] chargées véhicule par véhicule, la
+// charge de référence de la géométrie (w_ref) retirée ; ailleurs, l'écart de charge réparti (w_m, w_d)
+uniform bool zone_mode = false;
+uniform vec2 zone_loc = vec2(1.0, 0.0);
+uniform float w_ref_m = 0.0;
+uniform float w_ref_d = 0.0;
 uniform float w_d = 0.0;
 
 float appui(int i) {
@@ -115,8 +121,9 @@ float fleche_points(float d, bool montee) {
 		}
 	}
 	float l = max(x2 - x1, 0.01);
-	float f = -(montee ? w_m : w_d) * (d - x1) * (x2 - d) * 0.5;
-	int n = montee ? n_charges_m : n_charges_d;
+	bool locale = zone_mode && x1 >= zone_loc.x - 1e-3 && x2 <= zone_loc.y + 1e-3;
+	float f = -(locale ? (montee ? w_ref_m : w_ref_d) : (montee ? w_m : w_d)) * (d - x1) * (x2 - d) * 0.5;
+	int n = (zone_mode && !locale) ? 0 : (montee ? n_charges_m : n_charges_d);
 	for (int j = 0; j < n; j++) {
 		vec4 c = montee ? charges_m[j / 2] : charges_d[j / 2];
 		vec2 q = (j - (j / 2) * 2) == 0 ? c.xy : c.zw;

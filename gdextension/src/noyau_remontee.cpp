@@ -189,6 +189,7 @@ void NoyauRemontee::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_boucle", "boucle", "cumul", "longueur"), &NoyauRemontee::set_boucle);
 	ClassDB::bind_method(D_METHOD("set_zones", "debut", "fin", "code", "x_haut", "x_bas"), &NoyauRemontee::set_zones);
 	ClassDB::bind_method(D_METHOD("set_appuis", "appuis"), &NoyauRemontee::set_appuis);
+	ClassDB::bind_method(D_METHOD("set_poids_vehicules", "poids"), &NoyauRemontee::set_poids_vehicules);
 	ClassDB::bind_method(D_METHOD("set_constantes", "constantes"), &NoyauRemontee::set_constantes);
 	ClassDB::bind_method(D_METHOD("set_vehicules", "vehicules", "pinces", "susps", "corps", "s", "phi", "psi"),
 			&NoyauRemontee::set_vehicules);
@@ -265,7 +266,14 @@ void NoyauRemontee::set_constantes(const Dictionary &c) {
 	w_veh[0] = c.get("w_montee", w_veh[0]);
 	w_veh[1] = c.get("w_descente", w_veh[1]);
 	sabots_impairs = c.get("sabots_impairs", sabots_impairs);
+	zone_mode = c.get("zone_locale", zone_mode);
+	w_ref[0] = c.get("w_ref_montee", w_ref[0]);
+	w_ref[1] = c.get("w_ref_descente", w_ref[1]);
 	amort = c.get("amort", amort);
+}
+
+void NoyauRemontee::set_poids_vehicules(const PackedFloat32Array &p) {
+	poids_veh.assign(p.ptr(), p.ptr() + p.size());
 }
 
 void NoyauRemontee::set_vehicules(const Array &p_vehicules, const Array &p_pinces, const Array &p_susps, const Array &p_corps,
@@ -432,13 +440,18 @@ double NoyauRemontee::fleche(double d, bool montee, double onde_amp, double onde
 	const double x1 = appuis[ip];
 	const double x2 = appuis[ip + 1];
 	const double l = std::max(x2 - x1, 0.01);
-	double f = -w_veh[b] * (d - x1) * (x2 - d) * 0.5;
-	for (const Vector2 &c : charges_portee[b][ip]) {
-		const double a = c.x;
-		if (a <= x1 || a >= x2) {
-			continue;
+	// (f vers le bas) zone locale : chaque véhicule, moins la charge de référence de la géométrie ; ailleurs :
+	// l'écart de charge réparti (w_veh, compté vers le haut)
+	const bool locale = portee_locale(x1, x2);
+	double f = (locale ? -w_ref[b] : -w_veh[b]) * (d - x1) * (x2 - d) * 0.5;
+	if (!zone_mode || locale) {
+		for (const Vector2 &c : charges_portee[b][ip]) {
+			const double a = c.x;
+			if (a <= x1 || a >= x2) {
+				continue;
+			}
+			f += c.y * (d < a ? (d - x1) * (x2 - a) : (a - x1) * (x2 - d)) / l;
 		}
-		f += c.y * (d < a ? (d - x1) * (x2 - a) : (a - x1) * (x2 - d)) / l;
 	}
 	if (onde_amp > 0.0) {
 		const double w = Math_PI * std::sqrt(9.81 * a_montee) / l;
@@ -555,6 +568,9 @@ PackedFloat64Array NoyauRemontee::etape(double dt, double regime, const Vector3 
 				l.clear();
 			}
 		}
+		// véhicules en ligne : [d, brin, poids / tension]
+		std::vector<Vector3> en_ligne;
+		en_ligne.reserve(n);
 		for (size_t i = 0; i < n; i++) {
 			if (zone(s_veh[i]).idx >= 0) {
 				continue;
@@ -566,8 +582,55 @@ PackedFloat64Array NoyauRemontee::etape(double dt, double regime, const Vector3 
 				continue;
 			}
 			const int b = signe(p.x) == signe_montee ? 0 : 1;
+			const double w = poids_veh.size() == n ? poids_veh[i] : poids[b];
+			en_ligne.push_back(Vector3(-p.z, (real_t)b, w));
+		}
+		int lo_i = 0, hi_i = (int)appuis.size() - 2;
+		if (zone_mode) {
+			// portées autour du point de vue, ajoutées de la plus proche à la plus lointaine tant que chaque brin
+			// garde au plus 64 véhicules (taille des tableaux du nuanceur) et à moins de 600 m
+			const int np = (int)appuis.size() - 1;
+			std::vector<int> nb[2] = {std::vector<int>(np, 0), std::vector<int>(np, 0)};
+			for (const Vector3 &e : en_ligne) {
+				const int ip = portee_de(e.x);
+				if (ip >= 0) {
+					nb[(int)e.y][ip]++;
+				}
+			}
+			const double dv = std::clamp((double)-vue.z, appuis[0] + 0.01, appuis[appuis.size() - 1] - 0.01);
+			const int i0 = std::max(portee_de(dv), 0);
+			int cm = nb[0][i0], cd = nb[1][i0];
+			lo_i = hi_i = i0;
+			if (cm > 64 || cd > 64) {
+				lo_i = 1;
+				hi_i = 0;           // (portée trop chargée : pas de zone locale)
+			} else {
+				while (true) {
+					const double g = lo_i > 0 ? dv - appuis[lo_i] : 1e18;
+					const double dr = hi_i < np - 1 ? appuis[hi_i + 1] - dv : 1e18;
+					const bool a_gauche = g <= dr;
+					const int j = a_gauche ? lo_i - 1 : hi_i + 1;
+					if (std::min(g, dr) > 600.0 || j < 0 || j >= np || cm + nb[0][j] > 64 || cd + nb[1][j] > 64) {
+						break;
+					}
+					cm += nb[0][j];
+					cd += nb[1][j];
+					(a_gauche ? lo_i : hi_i) = j;
+				}
+			}
+			zone_lo = lo_i <= hi_i ? appuis[lo_i] : 1.0;
+			zone_hi = lo_i <= hi_i ? appuis[hi_i + 1] : 0.0;
+		}
+		for (const Vector3 &e : en_ligne) {
+			const int b = (int)e.y;
+			if (zone_mode) {
+				const int ip = portee_de(e.x);
+				if (ip < lo_i || ip > hi_i) {
+					continue;
+				}
+			}
 			if (charges[b].size() < 64) {
-				charges[b].push_back(Vector2(-p.z, poids[b]));
+				charges[b].push_back(Vector2(e.x, e.z));
 			}
 		}
 		for (int b = 0; b < 2; b++) {
@@ -578,7 +641,7 @@ PackedFloat64Array NoyauRemontee::etape(double dt, double regime, const Vector3 
 				}
 			}
 		}
-		paquets.resize(2 * 32 * 4 + 2);
+		paquets.resize(2 * 32 * 4 + 4);
 		float *q = paquets.ptrw();
 		for (int b = 0; b < 2; b++) {
 			for (int j = 0; j < 32; j++) {
@@ -593,6 +656,8 @@ PackedFloat64Array NoyauRemontee::etape(double dt, double regime, const Vector3 
 			}
 			q[2 * 32 * 4 + b] = (float)charges[b].size();
 		}
+		q[2 * 32 * 4 + 2] = zone_mode ? (float)zone_lo : -1.0e9f;
+		q[2 * 32 * 4 + 3] = zone_mode ? (float)zone_hi : 1.0e9f;
 	}
 	const double t_avance = maintenant_us();
 	chronos_us[0] += t_avance - t_debut;
