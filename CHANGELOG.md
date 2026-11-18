@@ -24,7 +24,7 @@ Douze retours d'essai : physique des câbles, téléphériques, Funival, télés
 - l'arrêt final est adouci (à-coup borné).
 
 **Téléskis** :
-- les galets des pylônes suivent le câble qui arrive et celui qui repart, supports dessous, compressions dessus ;
+- les galets des pylônes suivent le câble qui arrive et celui qui repart. Chaque train est tout support (dessous) ou tout compression (dessus), selon le coude du câble au pylône ;
 - les pylônes ajoutés des TKD sont retirés. La trace terrassée suit la même chaînette que le câble, et le sol est pris sous l'axe coudé réel : au 3000, il était 21 m à côté ;
 - le brin retour des TKD part droit du premier pylône et vient s'enrouler sur la grande poulie de renvoi de la gare aval.
 
