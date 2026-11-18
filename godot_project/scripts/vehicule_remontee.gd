@@ -2140,7 +2140,8 @@ func _cabine_tph() -> void:
 		# (plus de joues sur toute la longueur : elles cachaient les galets ; balanciers par paire, photos)
 		if fornet:
 			# photos d'utilisateur du 11/11/2026 : 6 paires de grands galets à rayons par porteur, chaque paire sur
-			# un balancier rouge en U (deux flasques, axe central), long corps cylindrique gris au-dessus
+			# un balancier rouge en U (deux flasques, axe central) ; pas de corps au-dessus des galets (retour
+			# d'utilisateur du 18/11/2026 : la barre cylindrique n'existe pas)
 			var n_pf: int = n_g / 2
 			for kpf in range(n_pf):
 				var zpf: float = (kpf - (n_pf - 1) * 0.5) * 0.84
@@ -2149,7 +2150,6 @@ func _cabine_tph() -> void:
 				for sfl in [-1.0, 1.0]:
 					RemonteeKit.boite_en(ch, Vector3(0.03, 0.20, 0.74), Vector3(sx * xr + sfl * 0.10, rg + PyloneRemontee.R_CABLE, zpf), "cabine_rouge")
 				RemonteeKit.cylindre(ch, 0.07, 0.07, 0.30, Transform3D(Basis(Vector3.FORWARD, PI * 0.5), Vector3(sx * xr, rg + PyloneRemontee.R_CABLE + 0.02, zpf)), "acier", 10)
-			RemonteeKit.cylindre(ch, 0.20, 0.20, lr * 0.92, Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3(sx * xr, rg + 0.62, 0)), "peinture_gris", 14)
 		else:
 			var n_p: int = n_g / 2
 			for kp in range(n_p):
@@ -2159,8 +2159,7 @@ func _cabine_tph() -> void:
 				# balancier de la paire, et son axe sur le longeron
 				RemonteeKit.boite_en(ch, Vector3(0.26, 0.10, 0.56), Vector3(sx * xr, rg + PyloneRemontee.R_CABLE + rg + 0.08, zp0), gris)
 				RemonteeKit.cylindre(ch, 0.05, 0.05, 0.36, Transform3D(Basis(Vector3.FORWARD, PI * 0.5), Vector3(sx * xr, rg + 0.34, zp0)), "acier_noir", 8)
-			# longeron-caisson de la rangée, au-dessus des balanciers
-			RemonteeKit.boite_en(ch, Vector3(0.30, 0.22, lr * 0.96), Vector3(sx * xr, rg + 0.58, 0), gris)
+			# (pas de longeron au-dessus des balanciers : il n'existe pas, retour d'utilisateur du 18/11/2026)
 		# frein de chariot : mâchoires sur le porteur, en amont
 		RemonteeKit.boite_en(ch, Vector3(0.36, 0.30, 0.55), Vector3(sx * xr, rg * 0.5, -lr * 0.5 - 0.30), "peinture_anthracite")
 	if not fornet:
