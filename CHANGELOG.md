@@ -5,6 +5,33 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.74.0 — 18 novembre 2026
+
+Douze retours d'essai : physique des câbles, téléphériques, Funival, téléskis, cabines en gare.
+
+**Câbles fléchis sous chaque véhicule** : sur les télésièges et télécabines, le câble se casse sous chaque siège ou cabine proche du joueur, selon son poids réel (vide ou chargé de ses passagers). Plus loin, la flèche moyenne est gardée. Le calcul est fait dans le module C++, le nuanceur et le GDScript de secours, avec les mêmes résultats : la cassure mesurée sous chaque véhicule vaut son poids divisé par la tension, à 0,13 % près.
+
+**Téléphériques** :
+- les cabines arrivent en gare en même temps et ne sont plus recalées de 3,45 m juste après l'arrêt. La cabine d'en face est placée à la même longueur de câble, et non plus à la même distance horizontale ;
+- l'approche au pas est raccourcie : 6 m au lieu de 20 à la Grande Motte, 4 m au lieu de 8 au Fornet ;
+- les cabines sont mises à jour à chaque image, ce qui supprime l'oscillation des câbles à distance ;
+- les barres qui n'existent pas au-dessus des galets du chariot sont retirées (Fornet, Grande Motte) ;
+- Grande Motte : l'échelle du pylône monte jusqu'aux passerelles de la tête, avec un palier.
+
+**Funival** :
+- la rame d'en face est suivie à chaque image, et non plus une fois par seconde, au croisement ;
+- le passage de l'extérieur au tunnel est une tranchée couverte percée dans le relief : on ne traverse plus rien ;
+- l'arrêt final est adouci (à-coup borné).
+
+**Téléskis** :
+- les galets des pylônes suivent le câble qui arrive et celui qui repart, supports dessous, compressions dessus ;
+- les pylônes ajoutés des TKD sont retirés. La trace terrassée suit la même chaînette que le câble, et le sol est pris sous l'axe coudé réel : au 3000, il était 21 m à côté ;
+- le brin retour des TKD part droit du premier pylône et vient s'enrouler sur la grande poulie de renvoi de la gare aval.
+
+**Cabines en gare d'arrivée** : on se lève face aux portes et on n'est plus rassis tant que la cabine est à quai. Au 3S, en gare haute, on était rassis au bout de 8 s et l'on ne pouvait pas sortir. On n'est rassis que si l'on est encore à bord quand la cabine repart.
+
+Vérifié : 76 bancs, dont un nouvel essai de la cassure du câble sous chaque véhicule, et bancs des nuanceurs en vrai rendu.
+
 ## 1.73.0 — 17 novembre 2026
 
 Retours d'essai sur les téléskis débrayables, plantage à la fermeture sous Windows, à-coups relevés en jeu.
