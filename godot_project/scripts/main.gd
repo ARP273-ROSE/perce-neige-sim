@@ -2913,9 +2913,12 @@ func _skieur_en_tunnel() -> bool:
 	var cam_f: Camera3D = get_viewport().get_camera_3d()
 	if Funival.actif != null and is_instance_valid(Funival.actif) and cam_f != null and Funival.actif.sous_la_roche(cam_f.global_position):
 		return true
-	if skieur == null or skieur.support == null:
+	# rames du Perce-Neige : le skieur porté par une autre (Funival, cabine) n'y est pas — la rame fantôme du PN, prise
+	# par défaut, cachait le relief pendant tout le trajet du Funival dès qu'elle était dans son tunnel (18/11/2026)
+	var rame: Cabin = _rame_du_skieur()
+	if rame == null:
 		return false
-	var s_r: float = physics.s_render if cabin.is_ancestor_of(skieur.support) else physics.ghost_s_render()
+	var s_r: float = physics.s_render if rame == cabin else physics.ghost_s_render()
 	return s_r > 80.0 and s_r < PNConstants.LENGTH - 80.0
 
 
