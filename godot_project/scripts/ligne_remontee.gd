@@ -1171,7 +1171,8 @@ func _garde_teleski() -> float:
 func _tetes_teleski() -> void:
 	_sol_tk.clear()
 	_sol_m_tk.clear()
-	var n_ajouts: int = 24 if famille == "perche_debrayable" else 6
+	# (TKD : aucun pylône intercalé, la trace damée terrassée tient le câble — retour d'utilisateur du 18/11/2026)
+	var n_ajouts: int = 0 if famille == "perche_debrayable" else 6
 	for ajout in range(n_ajouts + 1):
 		await _relever_tetes_teleski()
 		if ajout == n_ajouts:
@@ -1281,14 +1282,14 @@ var _sol_m_tk: Dictionary = {}
 func sol_montee_tkd(d: float) -> float:
 	var s: Variant = _sol_m_tk.get(d)
 	if s == null:
-		s = _sol_ligne(_x_brin(true), -d)
+		s = _sol_ligne(_x_brin(true) + decalage_axe(d), -d)
 		_sol_m_tk[d] = s
 	return float(s)
 
 
 ## TKD : sol sous le brin de retour.
 func _sol_retour_tkd(d: float) -> float:
-	return _sol_ligne(_x_brin(false), -d)
+	return _sol_ligne(_x_brin(false) + decalage_axe(d), -d)
 
 
 ## TKD : [dépassement maxi du câble chargé au-dessus de PLAFOND_TKD (+0,2 m) du sol sous le brin de montée, d où il a lieu] sur une portée.
@@ -1337,7 +1338,10 @@ var _sol_tk: Dictionary = {}
 func _sol_teleski(d: float) -> float:
 	var s: Variant = _sol_tk.get(d)
 	if s == null:
-		s = maxf(terrain(d), maxf(_sol_ligne(voie * 0.5, -d), _sol_ligne(-voie * 0.5, -d)))
+		# (téléski coudé : sous les brins réels, décalés de l'axe — sous l'axe droit, le sol du 3000 était pris jusqu'à
+		# 21 m à côté du câble, hors de la trace damée, 18/11/2026)
+		var dx: float = decalage_axe(d)
+		s = maxf(terrain(d), maxf(_sol_ligne(voie * 0.5 + dx, -d), _sol_ligne(-voie * 0.5 + dx, -d)))
 		_sol_tk[d] = s
 	return float(s)
 
@@ -1461,7 +1465,7 @@ func _garde_au_sol(proteger_c: bool = false) -> bool:
 					# rejoint la hauteur du quai (sinon le dernier pylône était
 					# relevé jusqu'à la butée de 32 m — retour d'utilisateur, 23/10/2026)
 					# (sol réel sous les deux brins : le profil de l'axe ignore le dévers et le relief fin)
-					g.append(maxf(terrain(d0), maxf(_sol_ligne(voie * 0.5, -d0), _sol_ligne(-voie * 0.5, -d0))) + _garde_exigee(d0))
+					g.append(maxf(terrain(d0), maxf(_sol_ligne(voie * 0.5 + decalage_axe(d0), -d0), _sol_ligne(-voie * 0.5 + decalage_axe(d0), -d0))) + _garde_exigee(d0))
 				sl = [float(a[0]), float(b[0]), g]
 				seuils[cle] = sl
 			var gs: PackedFloat64Array = sl[2]
