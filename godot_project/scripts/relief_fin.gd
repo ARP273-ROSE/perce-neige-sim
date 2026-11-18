@@ -537,6 +537,7 @@ func _ready() -> void:
 	_mat.set_shader_parameter("piece", 1.0)
 	_mat.set_shader_parameter("emprise", Vector4(zone.position.x, zone.position.y, zone.end.x, zone.end.y))
 	rel._mats_hiver.append(_mat)
+	rel._poser_volumes_sur(_mat)
 	_mat.set_shader_parameter("hiver", rel._hiver)
 	for k in range(3):
 		var mi: MeshInstance3D = MeshInstance3D.new()

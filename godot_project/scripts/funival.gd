@@ -21,8 +21,20 @@ const A_FUNI: float = 0.18
 ## 10/11/2026, qui prime sur le calage sur la durée de la vidéo de la montée).
 const V_EVIT: float = 8.0
 const V_QUAI: float = 1.0
-## Accostage au dernier mètre.
+## Accostage (retour d'utilisateur du 18/11/2026 : « l'arrêt final du Funival est encore trop brusque ») : le freinage
+## de service (A_FUNI, 0,18 m/s²) bornait la décélération alors que la courbe d'accostage en demandait 0,30 ; le véhicule
+## la suivait en retard et touchait le point d'arrêt à 0,62 m/s, remis à zéro d'une image à l'autre (37 m/s² sur une
+## image, relevé de la sonde d'arrêt). Désormais, comme un entraînement de funiculaire : 1 m/s le long du quai,
+## freinage à 0,30 m/s² jusqu'au pas d'approche V_APPROCHE tenu L_APPROCHE m, puis arrêt à à-coup borné (la
+## décélération monte puis retombe à zéro en J_ACCOSTAGE m/s³ : 0,3 m/s → 0 en 2 s sur 0,30 m, nulle à l'arrêt).
 const A_ACCOSTAGE: float = 0.30
+const V_APPROCHE: float = 0.30
+const L_APPROCHE: float = 1.5
+const J_ACCOSTAGE: float = 0.30
+## Toute la marche est à à-coup borné (J_SERVICE, confort d'un voyageur debout) : l'accélération suit la consigne
+## (courbes de vitesse, avec leur anticipation) sans saut ; T_SUIVI, temps de rattrapage d'un écart de vitesse.
+const J_SERVICE: float = 0.40
+const T_SUIVI: float = 0.5
 ## Courbe de freinage tracée à 85 % du freinage de service : à 100 %, le véhicule la suivait en retard.
 const K_COURBE: float = 0.85
 ## Attente à quai : 45 s (téléphérique), prolongée tant que le skieur marche dans le véhicule ou sur ses quais, portes
@@ -113,9 +125,18 @@ func x_voie(d: float, i: int) -> float:
 	return (-1.0 if i == 0 else 1.0) * E_VOIES * 0.5 * _t_evit(d)
 
 
+## Centre de l'évitement, en plan : au milieu de la voie LE LONG DES RAILS, là où les deux véhicules, tenus par le même
+## câble, se croisent (la voie monte moins vite dehors que dans le tunnel : le milieu en plan est 28 m plus bas).
+var _c_evit: float = NAN
+
+
+func centre_evitement() -> float:
+	return longueur_h() * 0.5 if is_nan(_c_evit) else _c_evit
+
+
 ## 0 hors évitement, 1 dedans, raccord en S.
 func _t_evit(d: float) -> float:
-	var e: float = absf(d - longueur_h() * 0.5)
+	var e: float = absf(d - centre_evitement())
 	var h: float = L_EVITEMENT * 0.5
 	var t: float = 1.0 - smoothstep(h, h + L_RACCORD, e)
 	return t * t * (3.0 - 2.0 * t)
@@ -254,6 +275,8 @@ func _preparer_voie() -> void:
 			y = y_t
 		prof[k] = y
 	_prof = prof
+	# (abscisse le long des rails dès le profil connu : le centre de l'évitement en dépend, et tout ce qui le place)
+	_table_s()
 
 
 # --- matériaux ----------------------------------------------------------------------------
@@ -705,7 +728,7 @@ func _construire_corps() -> void:
 	_garde_fous_dessines()
 	await _pause("funival : gare amont")
 	# terrain de la gare amont (fil principal : il crée une pièce du relief)
-	_amenager_relief_amont.call_deferred()
+	_amenager_relief.call_deferred()
 	_habiller(_chantier if _chantier != null else self)
 	await _pause("funival : habillage")
 	for k in range(2):
@@ -803,6 +826,7 @@ func _table_s() -> void:
 		var q: Vector2 = _axe_tube(float(k))
 		_s_par_m[k] = _s_par_m[k - 1] + q.distance_to(prec)
 		prec = q
+	_c_evit = d_de_s((s_de_d(_x_quai(true)) + s_de_d(_x_quai(false))) * 0.5)
 
 
 ## Axe du tube au droit de la distance en plan d : (z, y) dans le repère de la ligne.
@@ -835,7 +859,7 @@ func trace_voie() -> TraceFuni:
 	t.longueur = s_de_d(L)
 	t.tube_debut = s_de_d(portail_d - 1.0)
 	t.tube_fin = s_de_d(L - L_HALL + 1.0)          # (ensuite, la salle de Bellevarde)
-	var c: float = L * 0.5
+	var c: float = centre_evitement()
 	var h: float = L_EVITEMENT * 0.5 + L_RACCORD
 	t.evit_debut = s_de_d(c - h)
 	t.evit_fin = s_de_d(c + h)
@@ -951,7 +975,6 @@ func _tunnel() -> void:
 	# tube, dalle, blochets, rails, galets numérotés, câble toronné : ceux du Perce-Neige (TunnelBuilder et
 	# TrackBuilder sur le tracé du Funival, demande d'utilisateur du 08/11/2026 : « les mêmes rails, les mêmes
 	# traverses, le même tunnel et les mêmes galets, avec toutes leurs fonctionnalités »)
-	_table_s()
 	var t: TraceFuni = trace_voie()
 	tunnel_pn = TunnelBuilder.new()
 	tunnel_pn.name = "TunnelPN"
@@ -1011,26 +1034,126 @@ func _tunnel() -> void:
 		var pv: Vector3 = Vector3(cos(a2) * r2, sin(a2) * r2, 0.0)
 		RemonteeKit.boite(por, Vector3(1.6, 0.7, 2.4), Transform3D(rot * Basis(Vector3.BACK, a2 + PI * 0.5), c3 + rot * pv),
 			"beton")
-	# front de rocher : blocs posés autour de l'anneau, enfoncés dans la pente (la falaise des photos ; le relief
-	# du jeu reste lisse), teinte de roche sombre
+	# tranchée couverte : la boîte de béton du portail (photos : anneau « STVI » dans une boîte carrée) couvre le tube
+	# du portail jusqu'où le terrain passe au-dessus de son toit sur toute sa largeur. Retour d'utilisateur du
+	# 18/11/2026 : « la transition du Funival de l'extérieur au tunnel est merdique, on passe dans plein de trucs » —
+	# la boîte faisait 12 m, le terrain (en dévers) traversait le tube sur 25 m au-delà du portail, et les blocs du
+	# front de rocher entraient de 1 m dans le tube sur 8 m : la caméra de tête les traversait tous. Le terrain qui
+	# tombe dans la boîte est percé (_volumes_portail), la boîte est posée par tronçons sur l'axe du tube.
+	_d_tranchee = _fin_tranchee()
+	var hb: float = R_TUNNEL + 0.45                  # plan moyen des murs (0,5 m d'épaisseur)
+	var cote: float = 2.0 * (R_TUNNEL + 0.7)
+	var dd: float = portail_d - 0.5
+	while dd < _d_tranchee - 0.01:
+		var d2: float = minf(dd + 4.0, _d_tranchee)
+		var dm: float = (dd + d2) * 0.5
+		var am: float = atan(pente_voie(dm))
+		var rm: Basis = Basis(Vector3.RIGHT, am)
+		var qa: Vector2 = _axe_tube(dm)
+		var cm: Vector3 = Vector3(0.0, qa.y, qa.x)
+		var lgb: float = (d2 - dd) / cos(am) + 0.1
+		for f in [[Vector3(cote, 0.5, lgb), Vector3(0, hb, 0)], [Vector3(0.5, cote, lgb), Vector3(-hb, -0.35, 0)],
+				[Vector3(0.5, cote, lgb), Vector3(hb, -0.35, 0)]]:
+			RemonteeKit.boite(por, f[0], Transform3D(rm, cm + rm * (f[1] as Vector3)), "beton")
+		dd = d2
+	# tête de la boîte : voile percé du tube (sans lui, on voyait par les coins, entre le tube et les murs, l'intérieur
+	# du tube, qui n'a que des faces intérieures, et sous le radier le terrain percé)
+	var cp: Vector3 = Vector3(0.0, _axe_tube(portail_d - 0.5).y, _axe_tube(portail_d - 0.5).x)
+	var tete: MeshInstance3D = _voile_tete(Transform3D(rot, cp), R_TUNNEL, R_TUNNEL + 0.7, -0.35 - cote * 0.5)
+	por.add_child(tete)
+	# front de rocher : blocs posés autour de la boîte, enfoncés dans la pente (la falaise des photos ; le relief
+	# du jeu reste lisse), teinte de roche sombre ; [x, y, largeur, hauteur, roulis] dans le plan de la tête, repoussés
+	# hors de la boîte (leur emprise inclinée au-delà des murs ou du toit)
 	var roches: Array = []
 	var blocs: Array = [[-4.6, 0.5, 6.0, 7.0, 0.25], [4.8, 0.2, 6.5, 6.5, -0.2], [-1.5, 4.6, 7.5, 4.0, 0.1], [2.8, 4.2, 6.0, 4.5, -0.15],
 		[-7.5, -1.0, 5.0, 6.0, 0.4], [8.0, -1.2, 5.5, 5.5, -0.35]]
+	var ext: float = R_TUNNEL + 0.7 + 0.05
 	for b0 in blocs:
+		var bx: float = b0[0]
+		var by: float = b0[1]
+		var ex: float = float(b0[2]) * 0.5 * absf(cos(b0[4])) + float(b0[3]) * 0.5 * absf(sin(b0[4]))
+		var ey: float = float(b0[2]) * 0.5 * absf(sin(b0[4])) + float(b0[3]) * 0.5 * absf(cos(b0[4]))
+		if absf(bx) >= absf(by):
+			bx = signf(bx) * maxf(absf(bx), ext + ex)
+		else:
+			by = maxf(by, ext + ey)
 		var mi_r: MeshInstance3D = RemonteeKit.boite(por, Vector3(b0[2], b0[3], 8.0),
-			Transform3D(rot * Basis(Vector3.BACK, b0[4]) * Basis(Vector3.UP, b0[4] * 0.5), c3 + rot * Vector3(b0[0], b0[1], -4.2)), "pierre")
+			Transform3D(rot * Basis(Vector3.BACK, b0[4]), cp + rot * Vector3(bx, by, -4.2)), "pierre")
 		mi_r.material_override = mat_funi("rocher")
 		roches.append(mi_r)
-	# boîte de béton du portail (photos : anneau « STVI » dans une boîte carrée) : couvre le tube sur 12 m là où la
-	# roche est mince ; le tube n'a que des faces intérieures
-	var lb: float = 12.0
-	var cb: Vector3 = Vector3(0, y_voie(portail_d + lb * 0.5) - 0.45 + R_TUNNEL * 0.62, -(portail_d + lb * 0.5))
-	var lgb: float = lb / cos(pente) + 0.2
-	var cote: float = 2.0 * (R_TUNNEL + 0.7)
-	for f in [[Vector3(cote, 0.5, lgb), Vector3(0, R_TUNNEL + 0.45, 0)], [Vector3(0.5, cote, lgb), Vector3(-(R_TUNNEL + 0.45), -0.35, 0)],
-			[Vector3(0.5, cote, lgb), Vector3(R_TUNNEL + 0.45, -0.35, 0)]]:
-		RemonteeKit.boite(por, f[0], Transform3D(rot, cb + rot * (f[1] as Vector3)), "beton")
 	MeshMerge.merge(por, roches, "Portail")
+
+
+## Fin de la tranchée couverte (d) : le terrain y passe au-dessus du toit de la boîte (+0,3 m) sur toute sa largeur,
+## pour 3 m de suite ; au moins les 12 m des photos.
+var _d_tranchee: float = 0.0
+
+
+func _fin_tranchee() -> float:
+	var hb: float = R_TUNNEL + 0.7
+	var suite: float = 0.0
+	var d: float = portail_d + 12.0
+	while d < portail_d + 80.0:
+		var toit: float = _axe_tube(d).y + hb + 0.3
+		var couvert: bool = true
+		var x: float = -hb
+		while x <= hb + 0.01:
+			if _sol(x, -d) < toit:
+				couvert = false
+				break
+			x += 0.5
+		suite = suite + 0.5 if couvert else 0.0
+		if suite >= 3.0:
+			return d
+		d += 0.5
+	return d
+
+
+## Voile de tête d'un tube de rayon r dans un cadre carré (demi-largeur e, du bas y_bas au haut +e), dans le plan
+## xy du repère xf : faces des deux côtés.
+func _voile_tete(xf: Transform3D, r: float, e: float, y_bas: float) -> MeshInstance3D:
+	var st: SurfaceTool = SurfaceTool.new()
+	st.begin(Mesh.PRIMITIVE_TRIANGLES)
+	var n: int = 48
+	var bord := func(a: float) -> Vector3:
+		var c: float = cos(a)
+		var sn: float = sin(a)
+		var t: float = INF
+		if absf(c) > 1e-5:
+			t = e / absf(c)
+		if sn > 1e-5:
+			t = minf(t, e / sn)
+		elif sn < -1e-5:
+			t = minf(t, -y_bas / -sn)
+		return Vector3(c * t, sn * t, 0.0)
+	for k in range(n):
+		var a0: float = TAU * float(k) / float(n)
+		var a1: float = TAU * float(k + 1) / float(n)
+		var i0: Vector3 = Vector3(cos(a0) * r, sin(a0) * r, 0.0)
+		var i1: Vector3 = Vector3(cos(a1) * r, sin(a1) * r, 0.0)
+		var o0: Vector3 = bord.call(a0)
+		var o1: Vector3 = bord.call(a1)
+		# (coin du cadre entre deux rayons : le quadrilatère suit le bord, triangle de plus au coin)
+		var coins: Array = []
+		for cn in [Vector3(e, e, 0), Vector3(-e, e, 0), Vector3(-e, y_bas, 0), Vector3(e, y_bas, 0)]:
+			var ac: float = atan2(cn.y, cn.x)
+			if fposmod(ac - a0, TAU) < fposmod(a1 - a0, TAU):
+				coins.append(cn)
+		var tris: Array = [[i0, o0, i1], [i1, o0, o1]]
+		for cn2 in coins:
+			tris = [[i0, o0, cn2], [i0, cn2, i1], [i1, cn2, o1]]
+		for tr in tris:
+			for sens in [1.0, -1.0]:
+				var nrm: Vector3 = xf.basis * Vector3(0, 0, sens)
+				var ordre: Array = [tr[0], tr[1], tr[2]] if sens > 0.0 else [tr[0], tr[2], tr[1]]
+				for pt in ordre:
+					st.set_normal(nrm)
+					st.add_vertex(xf * (pt as Vector3))
+	var mi: MeshInstance3D = MeshInstance3D.new()
+	mi.name = "VoileTete"
+	st.set_material(RemonteeKit.mat("beton"))
+	mi.mesh = st.commit()
+	return mi
 
 
 const LARG_GRADINS: Array = [6.0, 3.5]     # gare aval : attente (gauche en montant), sortie (droite)
@@ -1703,6 +1826,54 @@ func _amenager_batiment(g: Node3D, ys: float, ys_sol: float, zs: float, hx: floa
 		RemonteeKit.boite(g, Vector3(0.08, 1.75, 0.02), Transform3D(Basis(Vector3.RIGHT, -0.22) * Basis(Vector3.BACK, (float(ks % 3) - 1.0) * 0.06),
 			Vector3(xs2, y0 + 0.86, zs - 11.0 - 0.38)), ["rouge_val", "noir_mat", "cabine_blanche", "bleu_doppelmayr"][ks % 4])
 	return garder
+
+
+func _amenager_relief() -> void:
+	_percer_portail()
+	await _amenager_relief_amont()
+
+
+## Terrain percé dans la tranchée couverte du portail : en dévers, il passait de 1,2 m sous les rails à 0,4 m au-dessus
+## au portail, et restait dans le tube 25 m plus haut (relevé du 18/11/2026) ; la boîte, ses murs et son toit en
+## tiennent lieu. Volume percé (ReliefBuilder.percer_volume) tronçon par tronçon de la boîte, entre le plan moyen des
+## murs, sous le radier et jusqu'au-dessus du toit : plus haut (remblai sur la boîte) ou plus bas (sol sous la voie),
+## le terrain reste. Toutes les surfaces du relief en tiennent compte, grille fine comprise (les trous d'une pièce
+## fine, eux, ne la percent pas).
+func _volumes_portail() -> Array:
+	var xf: Transform3D = global_transform
+	var l: Array = []
+	var hb: float = R_TUNNEL + 0.45
+	var y_bas: float = -(RAIL_SUR_CENTRE + 1.7)          # sous le radier du tube (rails à RAIL_SUR_CENTRE sous l'axe)
+	var y_haut: float = R_TUNNEL + 0.7 + 0.05            # dessus du toit
+	# (tronçons de 4 m environ, ReliefBuilder.MAX_VOLUMES au plus)
+	var d0: float = portail_d - 0.5
+	var n: int = clampi(int(ceil((_d_tranchee - d0) / 4.0)), 1, ReliefBuilder.MAX_VOLUMES)
+	for k in range(n):
+		var d: float = lerpf(d0, _d_tranchee, float(k) / float(n))
+		var d2: float = lerpf(d0, _d_tranchee, float(k + 1) / float(n))
+		var dm: float = (d + d2) * 0.5
+		var a: float = atan(pente_voie(dm))
+		var q: Vector2 = _axe_tube(dm)
+		var b: Basis = Basis(Vector3.RIGHT, a)
+		var c: Vector3 = Vector3(0.0, q.y, q.x) + b * Vector3(0.0, (y_bas + y_haut) * 0.5, 0.0)
+		var demi_l: float = (d2 - d) * 0.5 / cos(a) + 0.02
+		var bs: Basis = b * Basis.from_scale(Vector3(hb, (y_haut - y_bas) * 0.5, demi_l))
+		l.append(xf * Transform3D(bs, c))
+	return l
+
+
+func _percer_portail() -> void:
+	var rel: ReliefBuilder = relief_trous
+	if rel == null or not is_instance_valid(rel) or not is_inside_tree() or _d_tranchee <= portail_d:
+		return
+	rel.percer_volume("%s_portail" % name, _volumes_portail())
+
+
+## (ligne démolie au loin : la boîte part avec elle, le terrain se referme)
+func _reboucher_fosses() -> void:
+	super._reboucher_fosses()
+	if relief_trous != null and is_instance_valid(relief_trous):
+		relief_trous.reboucher_volume("%s_portail" % name)
 
 
 ## Terrain de la gare amont (remarques d'utilisateur, iPad du 08/11/2026 : « en gare du haut une plaque grise coupe
@@ -2384,8 +2555,11 @@ func souterrain(p: Vector3) -> bool:
 	return d > portail_d + 3.0 and d < longueur_h() + 1.0 and absf(loc.x) < demi and absf(loc.y - y_voie(d) - 1.0) < 8.0
 
 
-## Mouvement : celui du téléphérique, mais la vitesse s'entend LE LONG DE LA VOIE (12 m/s sur une pente de 27 à 48 %) ;
-## d avance de v·cos(pente).
+## Mouvement : celui du téléphérique, mais la vitesse s'entend LE LONG DE LA VOIE (12 m/s sur une pente de 27 à 48 %) :
+## la cabine 0 avance de v·dt le long des rails, la cabine 1 lui répond le long des rails (_s_cab1_attendu).
+var _a: float = 0.0                    # accélération le long de la voie (m/s²), à à-coup borné
+
+
 func _process_corps(delta: float) -> void:
 	if not pret:
 		return
@@ -2399,6 +2573,7 @@ func _process_corps(delta: float) -> void:
 	var but: float = _x_quai(false) if _sens > 0.0 else _x_quai(true)
 	if _phase == "quai":
 		_v = 0.0
+		_a = 0.0
 		vitesse_reelle = 0.0
 		if portes_manu:
 			_porte_anim = move_toward(_porte_anim, _porte_cible, delta / T_PORTES)
@@ -2415,33 +2590,44 @@ func _process_corps(delta: float) -> void:
 				_phase = "route"
 				_t_quai_tot = 0.0
 	else:
-		var v_max: float = vitesse * CRANS[cran] * cap_exploitation()
-		# évitement : on y entre à V_EVIT, freinage anticipé (les deux véhicules y entrent ensemble)
-		var c_ev: float = longueur_h() * 0.5
-		# (tant qu'une partie du véhicule est sur les aiguillages)
-		var h_ev: float = L_EVITEMENT * 0.5 + L_RACCORD + VehiculeFunival.DEMI_L
-		var hors: float = maxf(absf(_s - c_ev) - h_ev, 0.0) * sqrt(1.0 + pow(pente_voie(_s), 2.0))
-		var vers: bool = (_s < c_ev) == (_sens > 0.0) or hors <= 0.0
-		if vers:
-			v_max = minf(v_max, sqrt(V_EVIT * V_EVIT + 2.0 * A_FUNI * hors))
-		# distance restante le long de la voie : freinage jusqu'à V_QUAI au début du quai (nez du véhicule), au pas le long
-		# du quai, accostage au dernier mètre
-		var k_p: float = sqrt(1.0 + pow(pente_voie(_s), 2.0))
-		var reste: float = absf(but - _s) * k_p
-		var avant_quai: float = maxf(absf(but - _s) - longueur_quai_nez(), 0.0) * k_p
-		var v_gare: float = sqrt(V_QUAI * V_QUAI + 2.0 * A_FUNI * K_COURBE * avant_quai)
-		v_gare = minf(v_gare, maxf(sqrt(2.0 * A_ACCOSTAGE * maxf(reste - 0.05, 0.0)), 0.12))
-		v_max = minf(v_max, v_gare)
-		if etat != "marche":
-			v_max = 0.0
-		var a_frein: float = A_URGENCE if etat == "urgence" else A_FUNI
+		var s_but: float = s_de_d(but)
+		var sr: float = s_de_d(_s)
+		var reste: float = absf(s_but - sr)
 		var va: float = absf(_v)
-		va = move_toward(va, v_max, (A_FUNI if v_max > va else a_frein) * delta)
+		var arrive: bool = false
+		if etat == "urgence":
+			va = move_toward(va, 0.0, A_URGENCE * delta)
+			_a = -A_URGENCE if va > 0.0 else 0.0
+			sr += _sens * va * delta
+		elif etat == "marche" and reste <= _r_arret() and va >= _v_arret(_tau_arret(reste)) - 0.02:
+			# arrêt final, dans le temps : la loi d'arrêt est suivie exactement jusqu'à v = 0 et a = 0
+			var tau: float = maxf(_tau_arret(reste) - delta, 0.0)
+			va = _v_arret(tau)
+			_a = _a_arret(tau)
+			sr = s_but - _sens * _r_arret_tau(tau)
+			arrive = tau <= 0.0
+		else:
+			var vc: float = _v_permise(sr, but) if etat == "marche" else 0.0
+			# anticipation : pente de la consigne là où l'on sera à la prochaine image (sans elle, le véhicule suit la
+			# courbe de freinage avec un retard de a·T_SUIVI)
+			var a_ff: float = 0.0
+			if etat == "marche" and va > 0.0:
+				a_ff = (_v_permise(sr + _sens * va * delta, but) - vc) / delta
+			var a_frein: float = A_ACCOSTAGE if reste <= longueur_quai_nez() + 1.0 else A_FUNI
+			var a_vise: float = clampf(a_ff + (vc - va) / T_SUIVI, -a_frein, A_FUNI)
+			_a = move_toward(_a, a_vise, J_SERVICE * delta)
+			va = maxf(va + _a * delta, 0.0)
+			if vc <= 0.0 and va < 0.01:
+				va = 0.0
+			if va <= 0.0:
+				_a = maxf(_a, 0.0)
+			sr += _sens * va * delta
 		_v = va * _sens
-		_s += _v * delta / sqrt(1.0 + pow(pente_voie(_s), 2.0))
-		if (_sens > 0.0 and _s >= but) or (_sens < 0.0 and _s <= but):
+		_s = d_de_s(sr)
+		if arrive or (_sens > 0.0 and _s >= but) or (_sens < 0.0 and _s <= but):
 			_s = but
 			_v = 0.0
+			_a = 0.0
 			_phase = "quai"
 			_t_quai = T_QUAI
 			_porte_anim = 0.0
@@ -2457,6 +2643,88 @@ func _process_corps(delta: float) -> void:
 	_maj_positions()
 	_maj_corps_skieur()
 	_dt = 0.0
+
+
+## Vitesse permise (m/s, le long de la voie) à la cabine 0 en sr (abscisse le long des rails), vers le quai `but` :
+## consigne de marche ; évitement attaqué à V_EVIT (freinage anticipé : les deux véhicules y entrent ensemble ; tant
+## qu'une partie du véhicule est sur les aiguillages) ; V_QUAI au début du quai (nez du véhicule) ; V_APPROCHE pour
+## les L_APPROCHE derniers mètres avant l'arrêt final.
+func _v_permise(sr: float, but: float) -> float:
+	var v_max: float = vitesse * CRANS[cran] * cap_exploitation()
+	var s_c: float = s_de_d(centre_evitement())
+	var h_ev: float = L_EVITEMENT * 0.5 + L_RACCORD + VehiculeFunival.DEMI_L
+	var h_r: float = (s_de_d(centre_evitement() + h_ev) - s_de_d(centre_evitement() - h_ev)) * 0.5
+	var hors: float = maxf(absf(sr - s_c) - h_r, 0.0)
+	if (sr < s_c) == (_sens > 0.0) or hors <= 0.0:
+		v_max = minf(v_max, sqrt(V_EVIT * V_EVIT + 2.0 * A_FUNI * hors))
+	var s_but: float = s_de_d(but)
+	var reste: float = maxf((s_but - sr) * _sens, 0.0)
+	var l_quai: float = absf(s_but - s_de_d(but - _sens * longueur_quai_nez()))
+	v_max = minf(v_max, sqrt(V_QUAI * V_QUAI + 2.0 * A_FUNI * K_COURBE * maxf(reste - l_quai, 0.0)))
+	v_max = minf(v_max, sqrt(V_APPROCHE * V_APPROCHE + 2.0 * A_ACCOSTAGE * K_COURBE * maxf(reste - _r_arret() - L_APPROCHE, 0.0)))
+	return v_max
+
+
+## Loi d'arrêt depuis V_APPROCHE, en τ (s avant l'arrêt) : décélération qui croît puis décroît à J_ACCOSTAGE m/s³
+## (profil triangulaire, maxi J·τ1 avec τ1 = √(V/J)) ; vitesse, décélération et distance restante.
+func _tau1_arret() -> float:
+	return sqrt(V_APPROCHE / J_ACCOSTAGE)
+
+
+func _r_arret() -> float:
+	return V_APPROCHE * _tau1_arret()
+
+
+func _v_arret(tau: float) -> float:
+	var t1: float = _tau1_arret()
+	if tau <= t1:
+		return J_ACCOSTAGE * tau * tau * 0.5
+	var u: float = maxf(2.0 * t1 - tau, 0.0)
+	return V_APPROCHE - J_ACCOSTAGE * u * u * 0.5
+
+
+func _a_arret(tau: float) -> float:
+	var t1: float = _tau1_arret()
+	return -J_ACCOSTAGE * (tau if tau <= t1 else maxf(2.0 * t1 - tau, 0.0))
+
+
+func _r_arret_tau(tau: float) -> float:
+	var t1: float = _tau1_arret()
+	if tau <= t1:
+		return J_ACCOSTAGE * tau * tau * tau / 6.0
+	var u: float = maxf(2.0 * t1 - tau, 0.0)
+	return _r_arret() - (V_APPROCHE * u - J_ACCOSTAGE * u * u * u / 6.0)
+
+
+## τ de la distance restante r (inverse de _r_arret_tau, croissante).
+func _tau_arret(r: float) -> float:
+	var t1: float = _tau1_arret()
+	if r >= _r_arret():
+		return 2.0 * t1
+	if r <= J_ACCOSTAGE * t1 * t1 * t1 / 6.0:
+		return pow(6.0 * maxf(r, 0.0) / J_ACCOSTAGE, 1.0 / 3.0)
+	var lo: float = 0.0
+	var hi: float = t1
+	var cible: float = _r_arret() - r
+	for _k in range(30):
+		var m: float = (lo + hi) * 0.5
+		if V_APPROCHE * m - J_ACCOSTAGE * m * m * m / 6.0 < cible:
+			lo = m
+		else:
+			hi = m
+	return 2.0 * t1 - (lo + hi) * 0.5
+
+
+## Au croisement, la rame opposée changeait de place une fois par seconde (retour d'utilisateur du 18/11/2026 : « au
+## croisement du Funival la rame opposée change de position une fois par seconde seulement ») : le téléphérique
+## (19c55b6, 12/11) intègre la cabine 1 à part dans son _avancer, que le Funival n'appelle pas — elle restait figée
+## jusqu'à 5 m d'écart, puis sautait. Ici elle répond à la cabine 0 à chaque image : même longueur de câble de part et
+## d'autre, donc symétrique LE LONG DES RAILS (et non en plan : 56 m d'écart à mi-ligne, la voie montant moins vite
+## dehors que dans le tunnel).
+func _s_cab1_attendu(a: float, b: float) -> float:
+	if _s_par_m.is_empty():
+		return a + b - _s
+	return d_de_s(s_de_d(a) + s_de_d(b) - s_de_d(_s))
 
 
 ## Câbles, d'après le principe du funiculaire à deux véhicules (et la remarque de l'utilisateur du 08/11/2026 : un
@@ -2477,6 +2745,7 @@ const D_INFERIEUR: float = 0.025       # câble tracteur aval 25 mm, 42 870 daN,
 
 
 func _maj_positions() -> void:
+	_s_cab1 = _s_cab1_attendu(_x_quai(true), _x_quai(false))
 	super._maj_positions()
 	_maj_voie_pn(_dt)
 	if absf(_s - _d_cables) > 3.0:

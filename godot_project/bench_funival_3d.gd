@@ -122,7 +122,7 @@ func _tick() -> void:
 			if _t_depart >= 0.0 and _t_quai_atteint < 0.0 and _lg._phase == "route":
 				var but: float = _lg._x_quai(false) if _lg._sens > 0.0 else _lg._x_quai(true)
 				# vitesses en ligne et à l'attaque du croisement
-				var d_ev: float = absf(_lg._s - _lg.longueur_h() * 0.5) - (Funival.L_EVITEMENT * 0.5 + Funival.L_RACCORD + VehiculeFunival.DEMI_L)
+				var d_ev: float = absf(_lg._s - _lg.centre_evitement()) - (Funival.L_EVITEMENT * 0.5 + Funival.L_RACCORD + VehiculeFunival.DEMI_L)
 				if d_ev <= 0.0:
 					if _v_croisement < 0.0:
 						_v_croisement = absf(_lg._v)

@@ -384,15 +384,22 @@ func _maj_positions() -> void:
 	var a: float = _x_quai(true)
 	var b: float = _x_quai(false)
 	# (cabine 1 recalée si on a déplacé la cabine 0 d'un bloc : sonde, chargement)
-	var ef: float = (a + b - _s) if self is Funival else _en_face(_s)
-	if is_nan(_s_cab1) or absf(_s_cab1 - ef) > 5.0:
-		_s_cab1 = ef
+	var s1_att: float = _s_cab1_attendu(a, b)
+	if is_nan(_s_cab1) or absf(_s_cab1 - s1_att) > 5.0:
+		_s_cab1 = s1_att
 	_vehicules[0][1] = _s + _u[0]
 	_vehicules[1][1] = _s_cab1 - _u[1]
 	_charges_ponctuelles()
 	for i in range(2):
 		_placer(i)
 	_maj_lest()
+
+
+## Position de la cabine 1 qui répond à celle de la cabine 0 (même longueur de câble de part et d'autre) : la même
+## part du chemin du chariot (_en_face) ; le Funival la prend le long des rails (sa voie ne monte pas pareil des deux
+## côtés).
+func _s_cab1_attendu(a: float, b: float) -> float:
+	return _en_face(_s)
 
 
 func _process_corps(delta: float) -> void:

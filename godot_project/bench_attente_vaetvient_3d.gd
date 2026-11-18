@@ -10,6 +10,7 @@ var _f: int = 0
 var _etat: int = 0
 var _k: int = 0
 var _lg: Telepherique = null
+var _yaw0: float = 0.0
 var _t: float = 0.0
 var _t0: int = 0
 var _ok: bool = true
@@ -54,8 +55,13 @@ func _tick() -> void:
 	_t += dt
 	var sk: SkieurJoueur = _main.skieur
 	if sk != null:
-		# marche en rond (sens changé toutes les 2 s) : reste près du quai
-		sk.entree = Vector2(sin(_t * 1.6), cos(_t * 1.6)) if _marche else Vector2.ZERO
+		# marche en rond (cap qui tourne de 1,6 rad/s, ~2 m de rayon) : reste près du quai. Avant (18/11/2026), la
+		# commande tournait (avance et virage alternés, la vue suivant la marche) : le skieur dérivait, sortait de la gare
+		# aval du Funival et s'arrêtait à 64 m du quai vers 58 s — l'essai ne passait qu'à 0,6 s près, selon l'instant
+		# d'arrivée du véhicule.
+		sk.entree = Vector2(0.0, 1.0) if _marche else Vector2.ZERO
+		if _marche:
+			sk.cam_yaw = _yaw0 + _t * 1.6
 	match _etat:
 		0:
 			_main.basculer_skieur()
@@ -102,6 +108,7 @@ func _tick() -> void:
 				var q: Vector3 = _quai()
 				sk.global_position = q + _lg.global_transform.basis.x * 3.0
 				sk.velocity = Vector3.ZERO
+				_yaw0 = sk.cam_yaw
 				_marche = true
 				_t = 0.0
 				_etat = 6
