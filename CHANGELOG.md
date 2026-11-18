@@ -5,6 +5,14 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.74.1 — 18 novembre 2026
+
+**Mises à jour signées** : chaque version publie un manifeste (numéro de version et empreinte SHA-256 de chaque
+archive de mise à jour) signé par une clé Ed25519 qui n'est pas sur GitHub. Le simulateur n'installe plus une
+mise à jour que si son archive figure dans un manifeste signé par cette clé : un accès GitHub volé ne peut plus
+pousser de code sur les postes installés. Vérification en Python pur (`signature_maj.py`, kit commun) ; l'adresse
+atteinte après les redirections est vérifiée elle aussi. Rien d'autre ne change.
+
 ## 1.74.0 — 18 novembre 2026
 
 Douze retours d'essai : physique des câbles, téléphériques, Funival, téléskis, cabines en gare.

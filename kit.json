@@ -16,6 +16,7 @@
     "piques_avis.py",
     "reporting.py",
     "updater.py",
+    "signature_maj.py",
     "interface_kit.py",
     "profil_coupe.py",
     "pack_hd.py",
@@ -137,5 +138,6 @@
     "tests"
   ],
   "journal_technique": "CHANGELOG.md",
-  "langue_principale": "fr"
+  "langue_principale": "fr",
+  "cle_publique_maj": "kHjUuLfq9BPw5+cmaBXwqFGMR4J9Jq5r0wBQLybZN0s="
 }
