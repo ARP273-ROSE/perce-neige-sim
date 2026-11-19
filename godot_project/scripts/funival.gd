@@ -1859,7 +1859,7 @@ func _volumes_portail() -> Array:
 	var y_haut: float = R_TUNNEL + 0.7 + 0.05            # dessus du toit
 	# (tronçons de 4 m environ, ReliefBuilder.MAX_VOLUMES au plus)
 	var d0: float = portail_d - 0.5
-	var n: int = clampi(int(ceil((_d_tranchee - d0) / 4.0)), 1, ReliefBuilder.MAX_VOLUMES)
+	var n: int = clampi(int(ceil((_d_tranchee - d0) / 4.0)), 1, ReliefBuilder.MAX_VOLUMES - N_VOLUMES_SALLE)
 	for k in range(n):
 		var d: float = lerpf(d0, _d_tranchee, float(k) / float(n))
 		var d2: float = lerpf(d0, _d_tranchee, float(k + 1) / float(n))
@@ -1881,11 +1881,35 @@ func _percer_portail() -> void:
 	rel.percer_volume("%s_portail" % name, _volumes_portail())
 
 
+## Intérieur de la salle amont percé dans toutes les surfaces du relief (retour d'utilisateur, iPad du 19/11/2026 :
+## « film blanc à traverser au milieu de la gare supérieure ») : la grille fine ne voit pas les trous de la pièce de
+## _amenager_relief_amont et gardait le terrain d'origine, remonté au plancher du bâtiment sur ses 10 m de fondu,
+## jusqu'à 1,5 m au-dessus des marches sur les 14 m du haut du quai. Tronçons de la coupe verticale de la salle
+## (celle de _extruder : x ±hx, de 0,6 m sous la voie à 6,5 m au-dessus), parallélépipèdes cisaillés sur la pente.
+const N_VOLUMES_SALLE: int = 4
+func _volumes_salle() -> Array:
+	var xf: Transform3D = global_transform
+	var L: float = longueur_h()
+	var hx: float = VehiculeFunival.DEMI_LARGEUR + 0.05 + 4.2 - 0.02
+	var l: Array = []
+	for k in range(N_VOLUMES_SALLE):
+		var d: float = lerpf(L - L_HALL, L, float(k) / float(N_VOLUMES_SALLE)) - 0.02
+		var d2: float = lerpf(L - L_HALL, L, float(k + 1) / float(N_VOLUMES_SALLE)) + 0.02
+		var y1: float = y_voie(d)
+		var y2: float = y_voie(d2)
+		var bs: Basis = Basis(Vector3(hx, 0.0, 0.0), Vector3(0.0, (6.5 + 0.6) * 0.5, 0.0),
+			Vector3(0.0, (y2 - y1) * 0.5, -(d2 - d) * 0.5))
+		var c: Vector3 = Vector3(0.0, (y1 + y2) * 0.5 + (6.5 - 0.6) * 0.5, -(d + d2) * 0.5)
+		l.append(xf * Transform3D(bs, c))
+	return l
+
+
 ## (ligne démolie au loin : la boîte part avec elle, le terrain se referme)
 func _reboucher_fosses() -> void:
 	super._reboucher_fosses()
 	if relief_trous != null and is_instance_valid(relief_trous):
 		relief_trous.reboucher_volume("%s_portail" % name)
+		relief_trous.reboucher_volume("%s_salle" % name)
 
 
 ## Terrain de la gare amont (remarques d'utilisateur, iPad du 08/11/2026 : « en gare du haut une plaque grise coupe
@@ -1897,6 +1921,7 @@ func _amenager_relief_amont() -> void:
 	var rel: ReliefBuilder = relief_trous
 	if rel == null or not is_instance_valid(rel) or not is_inside_tree():
 		return
+	rel.percer_volume("%s_salle" % name, _volumes_salle())
 	if rel.has_meta("funival_amont"):
 		# ligne démolie au loin puis reconstruite : la pièce du relief est restée, mais l'habillage de la salle (murs
 		# épais, toit) était à la ligne et partait avec elle — on voyait le talus du rabotage en travers de la salle,
