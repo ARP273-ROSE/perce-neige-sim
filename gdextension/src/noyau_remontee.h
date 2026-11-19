@@ -120,6 +120,9 @@ class NoyauRemontee : public RefCounted {
 	void point_cable(double s, Vector3 &p, Vector3 &d) const;
 	int portee_de(double d) const;
 	double fleche(double d, bool montee, double onde_amp, double onde_t, double a_montee) const;
+	// flèche du câble TEL QU'IL EST DESSINÉ : interpolée entre les sommets du tube (abscisses relevées sur la boucle)
+	double fleche_affichee(double d, bool montee, double onde_amp, double onde_t, double a_montee);
+	std::vector<double> sommets[2];       // abscisses d des sommets du câble, brin montant / descendant, croissantes
 
 protected:
 	static void _bind_methods();

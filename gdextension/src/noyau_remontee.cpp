@@ -226,6 +226,34 @@ void NoyauRemontee::set_boucle(const PackedVector3Array &p_boucle, const PackedF
 	boucle = p_boucle;
 	cumul = p_cumul;
 	longueur = p_longueur;
+	sommets[0].clear();
+	sommets[1].clear();
+}
+
+// (le nuanceur ne déplace que les sommets du tube, tous les 3 m en ligne, et la carte graphique trace un segment droit
+// entre eux : posée sur la flèche exacte, la pince passait sous le câble dessiné puis le rejoignait au sommet suivant —
+// le câble semblait monter et descendre dans la pince, vers 1 Hz à la vitesse des sièges ; retour d'utilisateur du
+// 19/11/2026. Même calcul que LigneRemontee._fleche_affichee.)
+double NoyauRemontee::fleche_affichee(double d, bool montee, double onde_amp, double onde_t, double a_montee) {
+	if (sommets[0].empty() && sommets[1].empty()) {
+		for (int64_t k = 0; k < boucle.size(); k++) {
+			const Vector3 q = boucle[k];
+			if (std::abs(q.x) > 0.01) {
+				sommets[signe(q.x) == signe_montee ? 0 : 1].push_back(-q.z);
+			}
+		}
+		std::sort(sommets[0].begin(), sommets[0].end());
+		std::sort(sommets[1].begin(), sommets[1].end());
+	}
+	const std::vector<double> &t = sommets[montee ? 0 : 1];
+	const auto it = std::lower_bound(t.begin(), t.end(), d);
+	const size_t j = (size_t)(it - t.begin());
+	if (j == 0 || j >= t.size() || t[j] - t[j - 1] < 1e-4) {
+		return fleche(d, montee, onde_amp, onde_t, a_montee);
+	}
+	const double f0 = fleche(t[j - 1], montee, onde_amp, onde_t, a_montee);
+	const double f1 = fleche(t[j], montee, onde_amp, onde_t, a_montee);
+	return f0 + (f1 - f0) * (d - t[j - 1]) / (t[j] - t[j - 1]);
 }
 
 void NoyauRemontee::set_zones(const PackedFloat32Array &debut, const PackedFloat32Array &fin, const PackedInt32Array &code,
@@ -717,7 +745,7 @@ PackedFloat64Array NoyauRemontee::etape(double dt, double regime, const Vector3 
 		}
 		const bool montee_v = signe(p.x) == signe_montee;
 		if (appuis.size() >= 2 && z.idx < 0) {
-			p.y -= (real_t)fleche(-p.z, montee_v, onde_amp, onde_t, a_montee);
+			p.y -= (real_t)fleche_affichee(-p.z, montee_v, onde_amp, onde_t, a_montee);
 		}
 		// cap : en ligne la tangente, en gare la corde de 3 m
 		Vector3 dirh;
