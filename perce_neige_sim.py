@@ -7260,6 +7260,64 @@ class DocsDownloadDialog(QDialog):
         QTimer.singleShot(150, sonder)
 
 
+ACCELERATIONS_HEURE = (1, 10, 60, 360)
+
+
+def heure_jeu_texte(h: dict) -> str:
+    """Heure de jeu envoyée à la vue 3D (HeureJeu côté Godot) : « reelle », ou
+    « AAAA-MM-JJTHH:MM|accélération|n° de réglage » (le numéro fait reprendre
+    l'heure de départ à chaque nouveau réglage, même identique)."""
+    if not h or h.get("mode") != "choisie" or not h.get("depart"):
+        return "reelle"
+    acc = h.get("acc", 1)
+    acc = acc if acc in ACCELERATIONS_HEURE else 1
+    return f"{h['depart']}|{acc}|{int(h.get('n', 0))}"
+
+
+class HeureJeuDialog(QDialog):
+    """Affichage → Heure de jeu : l'heure réelle de Tignes, ou une date et une
+    heure choisies, qui avancent ensuite à ×1, ×10, ×60 ou ×360 (soleil, nuit,
+    affluence, dameuses de la vue 3D)."""
+
+    def __init__(self, actuelle: dict, parent: QWidget | None = None):
+        super().__init__(parent)
+        from PyQt6.QtCore import QDateTime
+        from PyQt6.QtWidgets import QComboBox, QDateTimeEdit, QRadioButton
+        self.setWindowTitle(T("Game time", "Heure de jeu"))
+        self.setModal(True)
+        lay = QVBoxLayout(self)
+        self.r_reelle = QRadioButton(T("Real time (Tignes)", "Heure réelle (Tignes)"), self)
+        self.r_choisie = QRadioButton(T("Chosen date and time", "Date et heure choisies"), self)
+        lay.addWidget(self.r_reelle)
+        lay.addWidget(self.r_choisie)
+        ligne = QHBoxLayout()
+        self.dt = QDateTimeEdit(self)
+        self.dt.setDisplayFormat("dd/MM/yyyy HH:mm")
+        self.dt.setCalendarPopup(True)
+        dep = QDateTime.fromString(str(actuelle.get("depart", "")), "yyyy-MM-ddTHH:mm")
+        self.dt.setDateTime(dep if dep.isValid() else QDateTime.currentDateTime())
+        ligne.addWidget(self.dt)
+        self.acc = QComboBox(self)
+        for a in ACCELERATIONS_HEURE:
+            self.acc.addItem(f"×{a}", a)
+        acc = actuelle.get("acc", 1)
+        self.acc.setCurrentIndex(ACCELERATIONS_HEURE.index(acc) if acc in ACCELERATIONS_HEURE else 0)
+        ligne.addWidget(QLabel(T("speed", "temps"), self))
+        ligne.addWidget(self.acc)
+        lay.addLayout(ligne)
+        (self.r_choisie if actuelle.get("mode") == "choisie" else self.r_reelle).setChecked(True)
+        boutons = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel, self)
+        boutons.accepted.connect(self.accept)
+        boutons.rejected.connect(self.reject)
+        lay.addWidget(boutons)
+
+    def valeur(self, n: int = 0) -> dict:
+        if self.r_reelle.isChecked():
+            return {"mode": "reelle"}
+        return {"mode": "choisie", "depart": self.dt.dateTime().toString("yyyy-MM-ddTHH:mm"),
+                "acc": int(self.acc.currentData()), "n": n}
+
+
 class PannesRemonteeDialog(QDialog):
     """Menu PANNES d'une remontée (comme celui du Perce-Neige) : le catalogue reçu de la vue 3D, une panne
     par bouton, et « au hasard ». La 3D déclenche ; le pupitre affiche ce qu'elle renvoie."""
@@ -7676,6 +7734,9 @@ class GameWidget(QWidget):
         self._qualite_3d = q if q in QUALITES_3D else "auto"
         d = _lire_prefs().get("decor_hd", "auto")
         self._decor_hd = d if d in DECORS_HD else "auto"
+        # Heure de jeu (menu Affichage) : réelle, ou date et heure choisies
+        h = _lire_prefs().get("heure_jeu", {"mode": "reelle"})
+        self._heure_jeu = h if isinstance(h, dict) else {"mode": "reelle"}
         # Taille de l'interface (menu Affichage) : facteur appliqué à
         # l'échelle automatique, cf. _ui_k.
         t = _lire_prefs().get("taille_ui", 1.0)
@@ -9094,6 +9155,8 @@ class GameWidget(QWidget):
                 # qualité basse imposée après un plantage (repli) : sinon le
                 # flux d'état remettrait aussitôt celle du menu
                 state_dict["qualite_3d"] = self._godot_bridge.qualite_effective()
+                # heure de jeu (menu Affichage) : la vue 3D la reprend quand elle change
+                state_dict["heure_jeu"] = heure_jeu_texte(self._heure_jeu)
                 # fenêtre réduite ou autre application au premier plan : la
                 # 3D peut baisser sa cadence
                 state_dict["arriere_plan"] = self._en_arriere_plan()
@@ -18493,6 +18556,8 @@ class MainWindow(QMainWindow):
             act.setChecked(self._lang() == code)
             groupe_l.addAction(act)
             act.triggered.connect(lambda _on=False, c=code: self._choisir_langue(c))
+        act_h = menu.addAction(self._tr("Game time…", "Heure de jeu…"))
+        act_h.triggered.connect(lambda _on=False: self._choisir_heure_jeu())
         menu.addSeparator()
         self._act_plein = menu.addAction(self._tr("Full screen", "Plein écran"))
         self._act_plein.setCheckable(True)
@@ -18559,6 +18624,17 @@ class MainWindow(QMainWindow):
         if self.game._godot_bridge is not None:
             self.game._godot_bridge.quality = q     # au prochain lancement
         # (la vue 3D en cours la reçoit dans le flux d'état, sans relancer)
+
+    def _choisir_heure_jeu(self) -> None:
+        """Affichage → Heure de jeu : appliquée tout de suite à la vue 3D (flux d'état) et retenue."""
+        dlg = HeureJeuDialog(self.game._heure_jeu, self)
+        if dlg.exec() != QDialog.DialogCode.Accepted:
+            return
+        h = dlg.valeur(int(self.game._heure_jeu.get("n", 0)) + 1)
+        self.game._heure_jeu = h
+        _ecrire_prefs({"heure_jeu": h})
+        add_event(self.game.state, "heure_jeu", "Game time: " + heure_jeu_texte(h).split("|")[0],
+                  "Heure de jeu : " + heure_jeu_texte(h).split("|")[0].replace("reelle", "réelle"), "info")
 
     def _choisir_decor_hd(self, d: str) -> None:
         if d not in DECORS_HD or d == self.game._decor_hd:

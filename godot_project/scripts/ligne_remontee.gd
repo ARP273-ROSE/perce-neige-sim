@@ -6587,7 +6587,7 @@ func _pyl_reconstruire() -> void:
 	a[Mesh.ARRAY_COLOR] = c
 	a[Mesh.ARRAY_INDEX] = ix
 	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, a)
-	m.surface_set_material(0, VehiculesLod.materiau())
+	m.surface_set_material(0, VehiculesLod.materiau_pylones())
 
 
 ## Quatre fois par seconde : quels pylônes sont assez près pour être les vrais (1), pour le niveau L1 (2), sinon
@@ -6715,7 +6715,7 @@ func _pyl_reconstruire_l1() -> void:
 	a[Mesh.ARRAY_COLOR] = c
 	a[Mesh.ARRAY_INDEX] = ix
 	m.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, a)
-	m.surface_set_material(0, VehiculesLod.materiau())
+	m.surface_set_material(0, VehiculesLod.materiau_pylones())
 
 
 ## Pose le véhicule i au niveau `niv` (0 : le vrai ; 1, 2 : allégés ; 3 : rien). Vrai si un tampon a changé.

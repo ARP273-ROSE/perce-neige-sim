@@ -39,6 +39,18 @@ static func materiau() -> StandardMaterial3D:
 	return _materiau
 
 
+static var _materiau_pyl: StandardMaterial3D = null
+
+
+## Même matériau pour les pylônes lointains, séparé (la nuit, les cabines allégées prennent une lueur chaude, pas
+## les pylônes : main._maj_jour).
+static func materiau_pylones() -> StandardMaterial3D:
+	if _materiau_pyl == null:
+		_materiau_pyl = materiau().duplicate()
+		_materiau_pyl.resource_name = "pylones_lod"
+	return _materiau_pyl
+
+
 ## Maillage du niveau `niveau` ("L1", "L2") pour ce type de véhicule, ou null s'il n'a pas été cuit.
 static func maillage(cle: String, niveau: String, miroir: bool) -> ArrayMesh:
 	if not _lu:

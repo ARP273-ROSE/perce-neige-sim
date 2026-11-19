@@ -172,6 +172,9 @@ static func _b(d: Dictionary, k: String, cur: bool) -> bool:
 	return bool(v) if v is bool else cur
 
 
+var _heure_jeu_recue: String = ""
+
+
 func _apply(d: Dictionary) -> void:
 	# Update direct des champs (la physics locale est court-circuitée)
 	physics.s = _f(d, "s", physics.s)
@@ -179,6 +182,17 @@ func _apply(d: Dictionary) -> void:
 	_releve_auto = d.get("releve_auto", []) if d.get("releve_auto", []) is Array else []
 	if d.has("qualite_3d") and main != null and main.get("perf_manager") != null:
 		main.perf_manager.set_mode(str(d["qualite_3d"]))
+	# heure de jeu choisie au PC (menu Affichage → Heure de jeu) : « reelle » ou « départ|accélération|n° » ;
+	# reprise seulement quand elle change (le bouton HEURE du skieur reste maître entre deux réglages du PC)
+	if d.has("heure_jeu") and str(d["heure_jeu"]) != _heure_jeu_recue:
+		_heure_jeu_recue = str(d["heure_jeu"])
+		var hp: PackedStringArray = _heure_jeu_recue.split("|")
+		if hp[0] == "reelle" or hp[0] == "":
+			HeureJeu.revenir_reelle(false)
+		else:
+			HeureJeu.regler_texte(hp[0], float(hp[1]) if hp.size() > 1 else 1.0, false)
+		if main != null:
+			main.set("_t_jour", 0.0)
 	# vue 3D masquée par le PC (F4 vers la vue dessinée, aide, pause…) : on
 	# ne dessine plus rien — sous Manjaro/XWayland la 3D cachée occupait
 	# la carte graphique à 100 % et faisait ramer tout le bureau (13/10/2026)

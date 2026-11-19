@@ -1252,6 +1252,14 @@ func _pres_des_gares(lg: LigneRemontee, p: Vector3, portee: float = PORTEE_GARES
 	return Vector2(p.x - a.x, p.z - a.z).length_squared() < r2 or Vector2(p.x - b.x, p.z - b.z).length_squared() < r2
 var _t_loupe: float = -1000.0
 var _etat_bord: String = "marche"
+var _arret_guet: bool = false        # ligne passée à l'arrêt : pique quand elle est immobile
+
+
+## Vitesse de la ligne (m/s) : câble, ou cabine d'un téléphérique / funiculaire.
+static func vitesse_ligne(lg: LigneRemontee) -> float:
+	if lg is Telepherique:
+		return (lg as Telepherique)._v
+	return maxf(lg.vitesse_reelle, 0.0)
 
 
 ## Remontées qui se prennent dans les deux sens : pas de pique « à la descente »
@@ -2036,8 +2044,15 @@ func _suivre_siege() -> void:
 		return
 	var lg0: LigneRemontee = a_bord[0]
 	if is_instance_valid(lg0):
+		# pique d'arrêt quand le véhicule est ARRÊTÉ, pas dès qu'il ralentit (retour d'utilisateur du 19/11/2026)
 		if lg0.etat != "marche" and _etat_bord == "marche" and lg0.zone_vehicule(a_bord[1]) == "ligne":
-			_piquer("ARRET", lg0)
+			_arret_guet = true
+		if _arret_guet:
+			if lg0.etat == "marche":
+				_arret_guet = false
+			elif absf(vitesse_ligne(lg0)) < 0.05:
+				_arret_guet = false
+				_piquer("ARRET", lg0)
 		_etat_bord = lg0.etat
 		if _evacuer_skieur(lg0):
 			return
