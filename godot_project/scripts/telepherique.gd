@@ -374,6 +374,14 @@ func _construire_corps() -> void:
 
 func _finir_construction() -> void:
 	pret = true
+	# construite cachée derrière sa version cuite (PWA) : ses corps de cabine, posés sans couche, reprennent la leur —
+	# sans cela le plancher des cabines n'arrêtait rien et l'on tombait en sortant (retour d'utilisateur du 19/11/2026)
+	if construction_cachee:
+		construction_cachee = false
+		visible = true
+		for c in _corps:
+			if c != null:
+				(c[0] as StaticBody3D).collision_layer = CollisionsJeu.COUCHE_VEHICULE if collisions_actives else 0
 	roule = true
 	set_process(true)
 	construite.emit()

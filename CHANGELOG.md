@@ -5,6 +5,38 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.74.2 — 19 novembre 2026
+
+Retours d'essai sur la PWA : galets, téléphériques, gares, carte, sons, télécabines.
+
+**Galets des pylônes** : de près, un galet sur deux manquait sur tous les balanciers de télésiège (à moins de 25 m sur la PWA, de 45 m sur PC). Un écart toujours négatif ne posait qu'une roue au milieu de chaque paire.
+
+**Téléphériques sur la PWA** : on passait à travers le plancher en sortant de la cabine de la Grande Motte en gare amont. Sur la PWA, la ligne est construite à l'abri de sa version précalculée, et les corps des cabines y restaient sans collision jusqu'au bout.
+
+**Véhicules invisibles qui bloquent** : un siège ou une cabine dessiné en version allégée gardait parfois un corps actif là où il était passé. Le skieur pouvait s'y cogner sans rien voir, par exemple sur le tapis d'embarquement d'un télésiège. Seuls les véhicules dessinés en entier ont maintenant un corps.
+
+**Câble et pince** : la pince est posée sur le câble tel qu'il est dessiné (un sommet tous les 3 m), et non sur la courbe exacte. Le câble ne monte et ne descend plus dans la pince immobile.
+
+**Gares de niveau** : l'arrivée du TCD Brévières et le départ du TCD Boisses, dos à dos, sont sur un même palier. Avant, une rampe à 35 % séparait les deux quais, à 7,8 m d'écart. Même chose pour les départs voisins des TSD Marais et Aiguille Rouge, qui avaient 1,4 m d'écart. Les pylônes de ces quatre lignes sont recalculés pour leurs nouvelles gares.
+
+**Télécabines** :
+- arche d'accueil derrière chaque gare, côté embarquement, comme aux télésièges ;
+- le bâtiment de départ devient un chalet : soubassement de pierre, mélèze, balcon, volets, toit débordant, cheminée. Il est écarté des cabines de 4,5 m au lieu de 1,2.
+
+**Téléphérique de la Grande Motte** : le câble tracteur est tenu par une attache au milieu du chariot. Il passait 0,45 m sous les porteurs, sans attache ; il est maintenant à 0,32 m.
+
+**Sons** :
+- le passage d'un pylône est déclenché au temps réel d'arrivée, calculé sur le profil de vitesse, dès le lanceur. La compression qui suit la sortie de gare se faisait entendre bien après le pylône ;
+- au télésiège, plus de saut de son en s'asseyant : en gare, on entend la gare seule, et l'ambiance de bord monte une fois en ligne.
+
+**Carte** : les tapis Pim et Pam y figurent. Leissières, où l'on embarque aux deux bouts, a une gare de départ à chaque extrémité.
+
+**Noms des sommets** : visibles aussi pour le skieur, avec leur altitude. Ils sont cachés par ce qui est devant eux.
+
+**Poste** : distance parcourue et restante, le long du câble, d'après la position du véhicule à bord, ou celle du skieur.
+
+Vérifié : 76 bancs.
+
 ## 1.74.1 — 18 novembre 2026
 
 **Mises à jour signées** : chaque version publie un manifeste (numéro de version et empreinte SHA-256 de chaque
