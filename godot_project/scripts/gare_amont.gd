@@ -135,7 +135,9 @@ uniform vec4 couleur : source_color = vec4(1.0);
 uniform sampler2D motif : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform float avec_motif = 0.0;
 uniform vec2 periode = vec2(1.0, 1.0);
-uniform vec3 soleil = vec3(0.40, 0.78, 0.48);
+global uniform vec3 pn_soleil;      // vers la lumière du décor : Soleil ou Lune (main._maj_jour)
+global uniform vec3 pn_jour;        // teinte du jour, de l'aube, du crépuscule et de la nuit (CycleJour)
+#define soleil pn_soleil
 uniform float gamma = 1.0;
 varying vec3 pw;
 varying vec3 nw;
@@ -155,7 +157,7 @@ void fragment() {
 		c *= texture(motif, uv / periode).rgb;
 	}
 	float l = 0.58 + 0.42 * max(dot(n, normalize(soleil)), 0.0) + 0.06 * n.y;
-	ALBEDO = pow(c * l, vec3(gamma));
+	ALBEDO = pow(c * l * pn_jour, vec3(gamma));
 }
 """
 

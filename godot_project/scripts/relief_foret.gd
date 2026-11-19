@@ -30,7 +30,9 @@ render_mode unshaded, fog_disabled, cull_disabled;
 uniform float gamma = 1.0;
 uniform vec3 brume = vec3(0.50, 0.62, 0.78);
 uniform float hiver = 0.0;
-uniform vec3 soleil = vec3(0.40, 0.78, 0.48);
+global uniform vec3 pn_soleil;      // vers la lumière du décor : Soleil ou Lune (main._maj_jour)
+global uniform vec3 pn_jour;        // teinte du jour, de l'aube, du crépuscule et de la nuit (CycleJour)
+#define soleil pn_soleil
 uniform float billboard = 0.0;
 varying float lum;
 varying float neige;
@@ -58,7 +60,7 @@ void fragment() {
 	vec3 c = mix(base, vec3(0.72, 0.76, 0.82), clamp(neige, 0.0, 1.0) * 0.55 * hiver);
 	c *= lum;
 	float d = distance(pw, CAMERA_POSITION_WORLD);
-	ALBEDO = pow(max(mix(c, brume, clamp(1.0 - exp(-d / 28000.0), 0.0, 0.7)), vec3(0.0)), vec3(gamma));
+	ALBEDO = pow(max(mix(c, brume, clamp(1.0 - exp(-d / 28000.0), 0.0, 0.7)) * pn_jour, vec3(0.0)), vec3(gamma));
 }
 """
 

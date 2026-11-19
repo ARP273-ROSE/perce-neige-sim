@@ -60,7 +60,9 @@ uniform float hiver = 0.0;          // skieur : neige, relief ombré
 uniform float leger = 0.0;          // crans ≥ 3 : sans grain ni détail de près
 uniform sampler2D pistes : filter_linear, repeat_disable;
 uniform float avec_pistes = 0.0;
-uniform vec3 soleil = vec3(0.40, 0.78, 0.48);
+global uniform vec3 pn_soleil;      // vers la lumière du décor : Soleil ou Lune (main._maj_jour)
+global uniform vec3 pn_jour;        // teinte du jour, de l'aube, du crépuscule et de la nuit (CycleJour)
+#define soleil pn_soleil
 varying vec3 nw;
 void vertex() {
 	pw = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
@@ -101,6 +103,58 @@ vec3 en_hiver(vec3 c, vec2 uv, vec3 cam) {
 	}
 	return mix(c, mix(c * 0.80, blanc, neige) * l, hiver);
 }
+global uniform int pn_lampes_n;
+global uniform vec4 pn_lampe_p0;
+global uniform vec4 pn_lampe_c0;
+global uniform vec4 pn_lampe_d0;
+global uniform vec4 pn_lampe_p1;
+global uniform vec4 pn_lampe_c1;
+global uniform vec4 pn_lampe_d1;
+global uniform vec4 pn_lampe_p2;
+global uniform vec4 pn_lampe_c2;
+global uniform vec4 pn_lampe_d2;
+global uniform vec4 pn_lampe_p3;
+global uniform vec4 pn_lampe_c3;
+global uniform vec4 pn_lampe_d3;
+global uniform vec4 pn_lampe_p4;
+global uniform vec4 pn_lampe_c4;
+global uniform vec4 pn_lampe_d4;
+global uniform vec4 pn_lampe_p5;
+global uniform vec4 pn_lampe_c5;
+global uniform vec4 pn_lampe_d5;
+global uniform vec4 pn_lampe_p6;
+global uniform vec4 pn_lampe_c6;
+global uniform vec4 pn_lampe_d6;
+global uniform vec4 pn_lampe_p7;
+global uniform vec4 pn_lampe_c7;
+global uniform vec4 pn_lampe_d7;
+// lampes du décor (LampesDecor) : frontales, phares des dameuses, candélabres des gares, la nuit
+vec3 une_lampe(vec3 p, vec3 n, vec4 lp, vec4 lc, vec4 ld) {
+	vec3 v = lp.xyz - p;
+	float d = length(v);
+	if (lp.w <= 0.0 || d > lp.w) {
+		return vec3(0.0);
+	}
+	vec3 l = v / max(d, 0.01);
+	float att = 1.0 - d / lp.w;
+	att *= att;
+	float cone = lc.w > -1.5 ? smoothstep(lc.w, mix(lc.w, 1.0, 0.6), dot(-l, ld.xyz)) : 1.0;
+	return lc.rgb * (att * cone * max(dot(n, l), 0.0));
+}
+vec3 lampes_decor(vec3 p, vec3 n) {
+	vec3 s = vec3(0.0);
+	if (pn_lampes_n > 0) {
+		s += une_lampe(p, n, pn_lampe_p0, pn_lampe_c0, pn_lampe_d0);
+		if (pn_lampes_n > 1) s += une_lampe(p, n, pn_lampe_p1, pn_lampe_c1, pn_lampe_d1);
+		if (pn_lampes_n > 2) s += une_lampe(p, n, pn_lampe_p2, pn_lampe_c2, pn_lampe_d2);
+		if (pn_lampes_n > 3) s += une_lampe(p, n, pn_lampe_p3, pn_lampe_c3, pn_lampe_d3);
+		if (pn_lampes_n > 4) s += une_lampe(p, n, pn_lampe_p4, pn_lampe_c4, pn_lampe_d4);
+		if (pn_lampes_n > 5) s += une_lampe(p, n, pn_lampe_p5, pn_lampe_c5, pn_lampe_d5);
+		if (pn_lampes_n > 6) s += une_lampe(p, n, pn_lampe_p6, pn_lampe_c6, pn_lampe_d6);
+		if (pn_lampes_n > 7) s += une_lampe(p, n, pn_lampe_p7, pn_lampe_c7, pn_lampe_d7);
+	}
+	return s;
+}
 void fragment() {
 	for (int i = 0; i < n_volumes; i++) {
 		vec4 p4 = vec4(pw, 1.0);
@@ -137,11 +191,13 @@ void fragment() {
 	if (hiver > 0.0) {
 		c = en_hiver(c, UV, CAMERA_POSITION_WORLD);
 	}
+	// lampes du décor : ajoutées à la lumière du jour (pn_jour), qui multiplie ensuite le tout
+	c *= 1.0 + lampes_decor(pw, normalize(nw)) / max(pn_jour, vec3(0.01));
 	if (!FRONT_FACING) {
 		c *= 0.45;                     // dessous du relief (caméra sous la surface)
 	}
 	float d = distance(pw, CAMERA_POSITION_WORLD);
-	ALBEDO = pow(mix(c, brume, clamp(1.0 - exp(-d / 28000.0), 0.0, 0.7)), vec3(gamma));
+	ALBEDO = pow(mix(c, brume, clamp(1.0 - exp(-d / 28000.0), 0.0, 0.7)) * pn_jour, vec3(gamma));
 }
 """
 ## Flancs du bloc détaillé : prolongent sa bordure (couleur de l'orthophoto
@@ -156,6 +212,7 @@ void vertex() {
 	pw = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
 }
 uniform vec4 bloc;                 // emprise du bloc détaillé
+global uniform vec3 pn_jour;
 void fragment() {
 	// caméra dans le bloc (sous la montagne) : on les verrait de l'intérieur
 	vec3 cam = CAMERA_POSITION_WORLD;
@@ -163,7 +220,7 @@ void fragment() {
 		discard;
 	}
 	float d = distance(pw, cam);
-	ALBEDO = pow(mix(texture(ortho, UV).rgb * 0.85, brume, clamp(1.0 - exp(-d / 28000.0), 0.0, 0.7)),
+	ALBEDO = pow(mix(texture(ortho, UV).rgb * 0.85, brume, clamp(1.0 - exp(-d / 28000.0), 0.0, 0.7)) * pn_jour,
 		vec3(gamma));
 }
 """
@@ -178,7 +235,9 @@ uniform float hiver = 0.0;          // skieur : neige, relief ombré
 uniform float leger = 0.0;          // crans ≥ 3 : sans grain ni détail de près
 uniform sampler2D pistes : filter_linear, repeat_disable;
 uniform float avec_pistes = 0.0;
-uniform vec3 soleil = vec3(0.40, 0.78, 0.48);
+global uniform vec3 pn_soleil;      // vers la lumière du décor : Soleil ou Lune (main._maj_jour)
+global uniform vec3 pn_jour;        // teinte du jour, de l'aube, du crépuscule et de la nuit (CycleJour)
+#define soleil pn_soleil
 varying vec3 nw;
 void vertex() {
 	pw = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
@@ -231,7 +290,7 @@ void fragment() {
 		c *= 0.45;
 	}
 	float d = distance(pw, CAMERA_POSITION_WORLD);
-	ALBEDO = pow(mix(c, brume, clamp(1.0 - exp(-d / 28000.0), 0.0, 0.7)), vec3(gamma));
+	ALBEDO = pow(mix(c, brume, clamp(1.0 - exp(-d / 28000.0), 0.0, 0.7)) * pn_jour, vec3(gamma));
 }
 """
 ## Trait du tunnel : ruban tourné vers la caméra le long de l'axe (sommets
@@ -2484,7 +2543,7 @@ func _hiver_mat(m: ShaderMaterial, pistes_ok: bool) -> void:
 ## Ombres portées sur la neige (PC, cran 0) : le relief garde son aspect, sans éclairage ; une
 ## part de sa couleur passe en albédo, et le soleil dédié ne rend que cette part, sauf à l'ombre.
 const OMBRE_FORCE: float = 0.45
-const _ALBEDO_TERRAIN: String = "ALBEDO = pow(mix(c, brume, clamp(1.0 - exp(-d / 28000.0), 0.0, 0.7)), vec3(gamma));"
+const _ALBEDO_TERRAIN: String = "ALBEDO = pow(mix(c, brume, clamp(1.0 - exp(-d / 28000.0), 0.0, 0.7)) * pn_jour, vec3(gamma));"
 var _shaders_ombres: Dictionary = {}     # shader d'origine → version qui reçoit l'ombre
 var _ombres_permises: bool = false
 var _ombres_force: float = 0.0
@@ -2500,7 +2559,7 @@ func _shader_ombres(sh: Shader) -> Shader:
 	code = code.replace("render_mode unshaded, fog_disabled, cull_disabled;",
 		"render_mode fog_disabled, cull_disabled, ambient_light_disabled, specular_disabled;
 uniform float ombre_k = 0.0;")
-	code = code.replace(_ALBEDO_TERRAIN, "vec3 c_fin = pow(mix(c, brume, clamp(1.0 - exp(-d / 28000.0), 0.0, 0.7)), vec3(gamma));
+	code = code.replace(_ALBEDO_TERRAIN, "vec3 c_fin = pow(mix(c, brume, clamp(1.0 - exp(-d / 28000.0), 0.0, 0.7)) * pn_jour, vec3(gamma));
 	ALBEDO = c_fin * ombre_k;
 	EMISSION = c_fin * (1.0 - ombre_k);
 	ROUGHNESS = 1.0;")

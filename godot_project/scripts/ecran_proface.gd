@@ -100,7 +100,7 @@ func signature_fond() -> String:
 
 ## Signature des valeurs : date et heure à la seconde, vitesse, distance.
 func signature_valeurs() -> String:
-	var dt: Dictionary = PNConstants.heure_locale()
+	var dt: Dictionary = HeureJeu.maintenant()
 	return "%02d%02d%04d%02d%02d%02d|%.2f|%d" % [dt.day, dt.month, dt.year, dt.hour,
 		dt.minute, dt.second, vitesse, int(round(distance))]
 
@@ -129,7 +129,7 @@ func _dessiner() -> void:
 func _bandeau_haut() -> void:
 	draw_rect(Rect2(4, 4, L - 8, 36), C_BLEU)
 	# date et heure (fond sombre, chiffres jaunes)
-	# heure LOCALE de l'appareil, à la seconde (PNConstants.heure_locale)
+	# heure de jeu à Tignes, à la seconde (HeureJeu)
 	draw_rect(Rect2(8, 7, 70, 30), Color(0.30, 0.30, 0.30))
 	# voyants d'état
 	var cases: Array = [["ARRÊT\nFREIN DE\nSERVICE", arret_frein_service, Color(0.95, 0.15, 0.15)],
@@ -242,9 +242,9 @@ func _bandeau_bas() -> void:
 	draw_rect(Rect2(440, y0 + 3, 32, 26), Color(0.40, 0.52, 0.66))
 	HUD.contour(self, Rect2(448, y0 + 9, 16, 14), Color(0.95, 0.96, 0.98), 2.0)
 ## Date et heure (heure LOCALE de l'appareil, à la seconde :
-## PNConstants.heure_locale), vitesse (m/s, au centième) et distance (m).
+## HeureJeu), vitesse (m/s, au centième) et distance (m).
 func _valeurs() -> void:
-	var dt: Dictionary = PNConstants.heure_locale()
+	var dt: Dictionary = HeureJeu.maintenant()
 	_texte(Vector2(10, 19), "%02d/%02d/%04d" % [dt.day, dt.month, dt.year], 10, C_JAUNE, 66,
 		HORIZONTAL_ALIGNMENT_CENTER)
 	_texte(Vector2(10, 33), "%02d:%02d:%02d" % [dt.hour, dt.minute, dt.second], 11, C_JAUNE, 66,

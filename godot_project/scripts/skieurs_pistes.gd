@@ -27,6 +27,23 @@ var positions: PackedVector3Array = PackedVector3Array()     # pieds des skieurs
 ## Tampons des MultiMesh (12 flottants de transformée + 4 de couleur par place), écrits d'un coup à chaque image :
 ## deux set_instance_transform par skieur pesaient autant que le reste (relevé du cœur, 17/11/2026).
 var _tampons: Array = []
+## Nuit (0..1, posé par main : CycleJour « eclairage ») : pistes fermées, mais un ou deux skieurs nocturnes, rares,
+## descendent quand même, frontale allumée (19/11/2026).
+var nuit: float = 0.0
+## Forcer n skieurs nocturnes (bancs, captures) ; −1 : selon l'heure.
+var nocturnes_forces: int = -1
+var _frontales: Array = []                # Frontale (lumière sur le plus proche seulement)
+
+
+## Skieurs nocturnes voulus : un tirage par tranche de 20 min (sans hasard d'une partie à l'autre), souvent aucun,
+## parfois un, rarement deux.
+func n_nocturnes() -> int:
+	if nocturnes_forces >= 0:
+		return nocturnes_forces
+	if nuit < 0.5:
+		return 0
+	var r: float = float(hash(int(HeureJeu.unix_utc() / 1200.0)) & 0xFFFF) / 65535.0
+	return 2 if r < 0.12 else (1 if r < 0.45 else 0)
 
 
 static func n_max() -> int:
@@ -187,6 +204,8 @@ func _process_corps(delta: float) -> void:
 		_t_maj = 2.0
 		n_voulu = mini(int(round(float(n_max()) * OccupationRemontees.affluence_pistes())),
 			(_mmi[2] as MultiMeshInstance3D).multimesh.instance_count)
+		if n_voulu == 0:
+			n_voulu = n_nocturnes()
 	# trop loin ou en trop : retirés ; manquants : ajoutés hors de la vue proche
 	for k in range(_agents.size() - 1, -1, -1):
 		# (position de l'image précédente, gardée au dessin)
@@ -202,6 +221,9 @@ func _process_corps(delta: float) -> void:
 	# avance et dessin
 	var n_c: Array = [0, 0, 0]
 	positions.clear()
+	var n_front: int = 0
+	var d_front: float = 160.0
+	var front_proche: int = -1
 	for k2 in range(_agents.size() - 1, -1, -1):
 		var ag2: Dictionary = _agents[k2]
 		var i: int = ag2["i"]
@@ -242,6 +264,27 @@ func _process_corps(delta: float) -> void:
 		_ecrire(_tampons[2], n_c[2], b, pos)
 		n_c[2] += 1
 		positions.append(pos)
+		# frontale des skieurs nocturnes (casque : à 1,72 m, un peu en avant)
+		if nuit > 0.3 and n_front < 2:
+			if _frontales.size() <= n_front:
+				var fr := Frontale.new(true)
+				fr.top_level = true
+				add_child(fr)
+				_frontales.append(fr)
+			var f: Frontale = _frontales[n_front]
+			f.global_transform = Transform3D(b, pos + b * Vector3(0.0, Frontale.HAUTEUR, -0.13))
+			f.allumer(true)
+			var dcam: float = pos.distance_to(pc)
+			if dcam < d_front:
+				d_front = dcam
+				front_proche = n_front
+			n_front += 1
+	for j in range(_frontales.size()):
+		var fj: Frontale = _frontales[j]
+		if j >= n_front:
+			fj.allumer(false)
+		elif fj.lampe != null:
+			fj.lampe.visible = j == front_proche
 	for k3 in range(3):
 		var mm3: MultiMesh = (_mmi[k3] as MultiMeshInstance3D).multimesh
 		if n_c[k3] > 0:
