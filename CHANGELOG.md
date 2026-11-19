@@ -5,7 +5,7 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
-## 1.75.2 — 19 novembre 2026 (non publiée)
+## 1.75.2 — 19 novembre 2026
 
 **Film blanc dans la gare amont du Funival** (retour d'essai PWA, capture de l'iPad) : une nappe de neige traversait la salle sur les 14 m du haut du quai, jusqu'à 1,5 m au-dessus des marches. Le véhicule y était coupé à mi-hauteur. Cette neige venait de la grille fine du relief, autour de la caméra. Cette grille ne voit pas les trous des pièces fines. Elle gardait donc le terrain d'origine, remonté au niveau du plancher du bâtiment sur 10 m de fondu. L'intérieur de la salle est maintenant percé dans toutes les surfaces du relief : tuiles, pièces, grille fine et anneaux. C'est fait par 4 volumes qui suivent la pente (`ReliefBuilder.percer_volume`, comme la tranchée du portail), et la limite passe de 8 à 12 volumes. Vérifié par captures en OpenGL et en Vulkan : quai, escalier, bouche du tube, bâtiment et terrain dehors.
 
