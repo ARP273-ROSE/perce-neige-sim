@@ -5,7 +5,7 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
-## 1.75.1 — 19 novembre 2026 (branche « nuit », non publiée)
+## 1.75.1 — 19 novembre 2026
 
 Retours d'essai de la 1.75.0 sur la PWA (iPad) et relevé de fluidité.
 
