@@ -1274,8 +1274,8 @@ func _sabots_fornet(g: Node3D, aval: bool, y0: float, m_poutre: String, m_poteau
 	await _sabots_tph(g, aval, y0, 0.0, _lq_tph(aval), m_poutre, m_poteau, true)
 
 
-## Tracteur : 0,45 m sous les porteurs ; poulie de renvoi au fond du quai (rayon).
-const Y_TRACTEUR_TPH: float = 0.45
+## Tracteur : 0,32 m sous les porteurs ; poulie de renvoi au fond du quai (rayon).
+const Y_TRACTEUR_TPH: float = 0.32         # (0,45 avant le 19/11/2026 : « un peu plus haut », pris par l'attache du milieu)
 const R_RENVOI_TPH: float = 0.30
 
 

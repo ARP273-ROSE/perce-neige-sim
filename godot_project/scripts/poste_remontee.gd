@@ -24,6 +24,10 @@ var _b_reparer: Button
 var _b_portes: Button
 var _panne: Label
 var _journal: Label
+var _trajet: Label
+var _d_prec: float = NAN
+var _descend: bool = false
+var _long_cache: Dictionary = {}     # [ligne, montée] → abscisses et longueurs cumulées le long du câble
 
 
 func _ready() -> void:
@@ -56,6 +60,7 @@ func _ready() -> void:
 	_jauge.custom_minimum_size = Vector2(0, 14)
 	col.add_child(_jauge)
 	_freins = _texte(col, 16, Color(0.85, 0.88, 0.95), true)
+	_trajet = _texte(col, 18, Color(1.0, 0.92, 0.55), true)
 	# référence de vitesse
 	var l_c: HBoxContainer = HBoxContainer.new()
 	l_c.add_theme_constant_override("separation", 8)
@@ -187,6 +192,7 @@ func _process_corps(_delta: float) -> void:
 		ligne.vitesse * LigneRemontee.CRANS[ligne.cran], roundi(_fini(ligne.puissance_kw()))]
 	var fs: bool = ligne.etat != "marche" and v <= 0.0
 	var fp: bool = ligne.etat == "urgence"
+	_trajet.text = _texte_trajet()
 	_freins.text = "Frein de service : %s · Frein de poulie : %s" % ["SERRÉ" if fs or ligne.etat == "arret_normal" else "desserré",
 		"SERRÉ" if fp else "desserré"]
 	for k in range(_crans.size()):
@@ -223,3 +229,67 @@ func _a_coupure(ex: ExploitationRemontee) -> bool:
 		if PannesRemontees.P.get(p["id"], {}).get("secours", false) and not p["resolue"]:
 			return true
 	return false
+
+
+## Distance parcourue et restante sur la remontée, le long du câble, d'après notre position (demande d'utilisateur du
+## 19/11/2026) : à bord, celle du véhicule ; à pied ou à ski, le skieur projeté sur l'axe de la ligne.
+func _texte_trajet() -> String:
+	var dom: Node = ligne.get_parent()
+	var sk: Node3D = dom.get("skieur") if dom != null else null
+	var L: float = ligne.longueur_h()
+	if L < 1.0:
+		return ""
+	var d: float = NAN
+	var montee: bool = true
+	var ab: Array = dom.get("a_bord") if dom != null else []
+	if not ab.is_empty() and ab[0] == ligne and int(ab[1]) < ligne.nombre_vehicules():
+		if ligne.vaetvient():
+			# (va-et-vient : abscisse du véhicule = d ; le sens, d'après son déplacement)
+			d = float(ligne._vehicules[int(ab[1])][1])
+			if not is_nan(_d_prec) and absf(d - _d_prec) > 0.01:
+				_descend = d < _d_prec
+			_d_prec = d
+			montee = not _descend
+		else:
+			var p: Vector3 = ligne.point(float(ligne._vehicules[int(ab[1])][1]))[0]
+			d = -p.z
+			montee = signf(p.x) == signf(ligne._x_brin(true))
+	elif sk != null:
+		var q: Vector3 = ligne.to_local(sk.global_position)
+		if absf(q.x) > 60.0 or -q.z < -60.0 or -q.z > L + 60.0:
+			return "Trajet : %s le long du câble" % _m(_longueur(true, L))
+		d = -q.z
+	if is_nan(d) or not is_finite(d):
+		return ""
+	d = clampf(d, 0.0, L)
+	var brin: bool = true if ligne.vaetvient() else montee
+	var fait: float = _longueur(brin, d)
+	var tout: float = _longueur(brin, L)
+	if not montee:
+		fait = tout - fait
+	return "Parcouru %s · reste %s (sur %s)" % [_m(fait), _m(maxf(tout - fait, 0.0)), _m(tout)]
+
+
+func _m(x: float) -> String:
+	return ("%d m" % roundi(x)) if x < 1000.0 else ("%.2f km" % (x / 1000.0)).replace(".", ",")
+
+
+## Longueur de câble de la gare aval jusqu'à l'abscisse horizontale d (brin montant ou descendant), par pas de 5 m.
+func _longueur(montee: bool, d: float) -> float:
+	var cle: String = "%d|%s" % [ligne.get_instance_id(), montee]
+	if not _long_cache.has(cle):
+		var L: float = ligne.longueur_h()
+		var cum: PackedFloat32Array = PackedFloat32Array([0.0])
+		var y0: float = ligne.y_cable(0.0, montee)
+		var x: float = 0.0
+		while x < L:
+			var x1: float = minf(x + 5.0, L)
+			var y1: float = ligne.y_cable(x1, montee)
+			cum.append(cum[cum.size() - 1] + Vector2(x1 - x, y1 - y0).length())
+			x = x1
+			y0 = y1
+		_long_cache[cle] = cum
+	var c: PackedFloat32Array = _long_cache[cle]
+	var f: float = clampf(d / 5.0, 0.0, float(c.size() - 1))
+	var i: int = mini(int(f), c.size() - 2)
+	return lerpf(c[i], c[i + 1], f - i) if c.size() > 1 else 0.0

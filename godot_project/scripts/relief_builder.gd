@@ -1424,9 +1424,14 @@ func _sur_replat(cle: String, aval: bool) -> bool:
 ## palier commence à un raccord derrière le nez, le terrain d'origine reste devant (les cabines en sortent).
 ## Arrivée du TCD Brévières et départ du TCD Boisses, dos à dos (retour d'utilisateur du 19/11/2026 : « un step de
 ## la mort entre la gare amont de Brévières et l'aval de Boisses alors que c'est level » ; données : 1772 et 1770 m) :
-## le relief les mettait à 7,8 m d'écart, sur une rampe à 35 % ; palier commun au niveau du quai des Boisses.
+## le relief les mettait à 7,8 m d'écart, sur une rampe à 35 % ; palier commun au niveau du quai de Brévières (au niveau des
+## Boisses, le dernier pylône de Brévières passait en creux : bench_profil_lignes).
 const PALIERS: Array = [[[["tph_fornet", false, 10.0, true], ["tcd10_vallon_iseran", true, 30.0, false]], 2322.9, 5.0, 10.0],
-	[[["tcd8_brevieres", false, 10.0, false], ["tcd10_boisses", true, 10.0, false]], 1759.4, 5.0, 10.0]]
+	[[["tcd8_brevieres", false, 10.0, false], ["tcd10_boisses", true, 10.0, false]], 1755.0, 5.0, 10.0],
+	# départs des TSD Marais et Aiguille Rouge, côte à côte (retour d'utilisateur du 19/11/2026 : « le terrassement de
+	# la gare aval de Marais recouvre le départ d'Aiguille Rouge, Marais un peu plus haut ; les deux doivent être
+	# level ») : quais à 2161,96 et 2163,39 m, palier commun à mi-hauteur
+	[[["tsd6_marais", true, 10.0, false], ["tsd6_aiguille_rouge", true, 10.0, false]], 2162.7, 5.0, 10.0]]
 
 
 ## Gares de plain-pied (retour d'utilisateur du 16/11/2026 : « tes terrassements où on est super haut ; en vrai on

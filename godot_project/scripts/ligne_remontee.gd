@@ -562,6 +562,11 @@ func _construire_corps() -> void:
 			await _pause("double embarquement")
 			_rail_contour()
 			await _pause("rail du contour")
+	elif famille.begins_with("cabine") and not tricable() and not vaetvient():
+		# télécabines : l'arche d'accueil des télésièges, sans portillons (retour d'utilisateur du 19/11/2026 : « pour
+		# les TC il n'y a pas l'arche d'accueil, comme aux TS »)
+		for aval in [true, false]:
+			await _arche_accueil(aval)
 	if avec_collisions:
 		_collisions_fixes()
 		await _pause("collisions fixes")
@@ -4000,6 +4005,22 @@ var _portillons_gares: Array = []      # [aval, [vantaux], [formes de collision]
 ## brin de départ, DERRIÈRE la poulie, à 2 m au-delà de l'extrémité
 ## extérieure du siège qui fait demi-tour (retour d'utilisateur, 22/10/2026) — on
 ## y attend hors du passage des sièges, puis on traverse jusqu'à l'arrêt.
+## Arche d'accueil d'une télécabine : derrière la gare, côté embarquement (brin montant en bas, descendant en haut),
+## face au skieur qui arrive. Nommée autrement que « Portique » : sans portillons, on entre aussi par ailleurs
+## (pas de fraude ni de bip du forfait).
+func _arche_accueil(aval: bool) -> void:
+	var L: float = longueur_h()
+	var x: float = _x_brin(aval)
+	var z: float = (l_gare + 11.0) if aval else (-L - l_gare - 11.0)       # (à 5 m, sous le demi-tour des cabines)
+	var ent: Node3D = Node3D.new()
+	ent.name = "ArcheAccueil"
+	ent.position = Vector3(x + signf(x) * 0.5, terrain(0.0 if aval else L), z)
+	ent.rotation.y = 0.0 if aval else PI
+	_enfant(ent)
+	await PortiqueEntree.construire(ent, self, 2.2, _pause.bind("arche d'accueil"))
+	await _pause("arche d'accueil")
+
+
 func position_portillons(aval: bool) -> Vector3:
 	var L: float = longueur_h()
 	var zc: float = l_gare if aval else -L - l_gare
