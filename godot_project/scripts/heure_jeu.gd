@@ -91,6 +91,11 @@ static func heure() -> float:
 ## Règle la date et l'heure de jeu (à Tignes) ; elles avancent ensuite à `acc` fois le temps réel.
 static func regler(an: int, mois: int, jour: int, h: int, mn: int, acc: float = 1.0, sauver_: bool = true) -> void:
 	_pret = true
+	# (31 février choisi dans l'écran : ramené au dernier jour du mois)
+	mois = clampi(mois, 1, 12)
+	var j_max: int = [31, 29 if (an % 4 == 0 and (an % 100 != 0 or an % 400 == 0)) else 28, 31, 30, 31, 30, 31, 31,
+		30, 31, 30, 31][mois - 1]
+	jour = clampi(jour, 1, j_max)
 	var loc: int = Time.get_unix_time_from_datetime_dict({"year": an, "month": mois, "day": jour,
 		"hour": h, "minute": mn, "second": 0})
 	# l'heure locale vaut UTC + décalage ; le décalage dépend de l'instant UTC (deux essais suffisent)
