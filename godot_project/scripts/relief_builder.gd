@@ -53,7 +53,7 @@ uniform vec4 bloc_masque = vec4(0.0, 0.0, 1.0, 1.0);
 uniform float avec_masque = 0.0;
 uniform float piece = 0.0;
 uniform vec4 emprise = vec4(0.0, 0.0, 1.0, 1.0);
-uniform vec4 volumes[24];           // volumes percés (ReliefBuilder.percer_volume) : 3 lignes affines par volume
+uniform vec4 volumes[36];           // volumes percés (ReliefBuilder.percer_volume) : 3 lignes affines par volume
 uniform int n_volumes = 0;
 varying vec3 pw;
 uniform float hiver = 0.0;          // skieur : neige, relief ombré
@@ -2004,7 +2004,7 @@ var _fosses: Dictionary = {}          # clé → Rect2
 ## Volumes percés : boîtes orientées (transformée du cube [-1, 1]³ dans le monde) où AUCUNE surface du relief n'est
 ## dessinée — tuiles, pièces fines, grille fine, anneaux. Tranchée couverte du portail du Funival : le terrain en
 ## dévers traversait le tube sur 25 m, et la grille fine (non HD) ne voit pas les trous des pièces (18/11/2026).
-const MAX_VOLUMES: int = 8
+const MAX_VOLUMES: int = 12
 var _volumes: Dictionary = {}           # clé → [Transform3D]
 
 
