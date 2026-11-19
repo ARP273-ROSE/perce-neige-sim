@@ -3,6 +3,10 @@
 ## puis déplacée de 1 km ; relevés : pire temps d'une image de reconstruction, nombre d'images, triangles du bloc ;
 ## sol au centre = grille à 25 m, sol loin de la fenêtre = sol de référence.
 ##   godot --headless --path godot_project -s bench_relief_fenetre_3d.gd -- --cran=5 [--relief-fenetre=1500]
+## Sans argument (suite des bancs) : se relance lui-même au cran 5 avec la fenêtre de la PWA (800 m).
+## Pendant chaque reprise, à chaque image : pas de fente entre tuiles (sommets de même position, même hauteur), et le
+## sol du skieur (hauteur_sol) reste celui qui est affiché jusqu'à l'échange (retour d'essai du 19/11/2026, PWA :
+## « des trous partout autour de Borsat / Marmottes » — les tuiles étaient refaites et montrées une à une).
 extends SceneTree
 
 var _main: Node = null
@@ -14,6 +18,18 @@ var _loin: Vector2 = Vector2(5000.0, -3000.0)
 
 
 func _initialize() -> void:
+	if OS.get_cmdline_user_args().is_empty():
+		var sortie: Array = []
+		var code: int = OS.execute(OS.get_executable_path(), ["--headless", "--fixed-fps", "60", "--path",
+			ProjectSettings.globalize_path("res://"), "-s", "bench_relief_fenetre_3d.gd", "--", "--cran=5",
+			"--relief-fenetre=%d" % ReliefBuilder.FENETRE_WEB], sortie, true)
+		for l in String(sortie[0] if not sortie.is_empty() else "").split("\n"):
+			if l.begins_with("[OK]") or l.begins_with("[ECHEC]") or l.begins_with("BANC") or l.begins_with("BENCH") \
+					or l.contains("SCRIPT ERROR") or l.contains("Parse Error"):
+				print(l)
+		print("BENCH_RELIEF_FENETRE (cran 5, fenêtre %d m) code %d" % [ReliefBuilder.FENETRE_WEB, code])
+		quit(code)
+		return
 	_main = load("res://scenes/main.tscn").instantiate()
 	get_root().add_child(_main)
 	process_frame.connect(_tick)
@@ -62,8 +78,20 @@ func _tick() -> void:
 			_t0 = Time.get_ticks_msec()
 			_etat = 1
 		1, 2:
-			if not r._f_job.is_empty() or r._f_centre == Vector2.INF:
+			if not r._f_job.is_empty():
+				_pendant_reprise(r)
 				return
+			if r._f_centre == Vector2.INF:
+				return
+			if _n_reprise > 0:
+				_verif("fenêtre %d : aucune fente entre tuiles pendant la reprise" % _etat, _pire_fente < 0.02,
+					"%d images vérifiées, pire écart %.3f m" % [_n_reprise, _pire_fente])
+				_verif("fenêtre %d : sol du skieur inchangé avant l'échange" % _etat, _pire_sol < 0.001,
+					"pire écart %.4f m" % _pire_sol)
+				_n_reprise = 0
+				_pire_fente = 0.0
+				_pire_sol = 0.0
+				_sol_avant.clear()
 			var dom: Node = _main.get("domaine")
 			if dom != null and not (dom.get("_repose") as Array).is_empty():
 				return
@@ -109,6 +137,44 @@ func _tick() -> void:
 				_etat = 2
 			else:
 				_fin()
+
+
+var _n_reprise: int = 0
+var _pire_fente: float = 0.0
+var _pire_sol: float = 0.0
+var _sol_avant: Dictionary = {}
+
+
+## Une image de reprise : sommets partagés entre tuiles du bloc près de la fenêtre (même position → même hauteur),
+## et sol du skieur aux mêmes points qu'avant la reprise.
+func _pendant_reprise(r: ReliefBuilder) -> void:
+	var c: Vector2 = (r._f_job["centre"] as Vector2)
+	var vus: Dictionary = {}
+	for k in range(r._mi_tuiles.size()):
+		var mi: MeshInstance3D = r._mi_tuiles[k]
+		if mi == null or r._tuiles[k][4] or mi.mesh == null:
+			continue
+		var t: Array = r._tuiles[k]
+		var cx: float = ReliefDonnees.X_OUEST + (int(t[2]) + int(t[3])) * 0.5 * r._dx
+		var cz: float = ReliefDonnees.Z_NORD + (int(t[0]) + int(t[1])) * 0.5 * r._dz
+		if Vector2(cx, cz).distance_to(c) > ReliefBuilder.FENETRE + 64.0 * r._dx * 2.0:
+			continue
+		var vs: PackedVector3Array = (mi.mesh as ArrayMesh).surface_get_arrays(0)[Mesh.ARRAY_VERTEX]
+		for v in vs:
+			var cle: Vector2i = Vector2i(roundi(v.x * 4.0), roundi(v.z * 4.0))
+			if vus.has(cle):
+				_pire_fente = maxf(_pire_fente, absf(float(vus[cle]) - v.y))
+			else:
+				vus[cle] = v.y
+	_n_reprise += 1
+	for gx in range(-6, 7):
+		for gz in range(-6, 7):
+			var q: Vector2 = c + Vector2(gx, gz) * (ReliefBuilder.FENETRE / 6.0)
+			var h: float = r.hauteur_sol(q.x, q.y)
+			if not _sol_avant.has(Vector2i(gx, gz)):
+				_sol_avant[Vector2i(gx, gz)] = h
+			else:
+				_pire_sol = maxf(_pire_sol, absf(h - float(_sol_avant[Vector2i(gx, gz)])))
 
 
 func _fin() -> void:

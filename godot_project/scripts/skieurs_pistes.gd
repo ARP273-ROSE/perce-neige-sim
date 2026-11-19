@@ -253,9 +253,12 @@ func _process_corps(delta: float) -> void:
 		var d_lat: float = float(ag2["amp"]) * w * cos(arg)
 		var dir: Vector2 = (tg + nrm * d_lat).normalized()
 		var cap: float = atan2(-dir.x, -dir.y)
-		# penché dans le virage : v²·courbure
+		# penché dans le virage, VERS L'INTÉRIEUR : v²·courbure. kappa > 0 = la trace tourne à droite (nrm est la
+		# droite du skieur) ; une rotation positive autour de +Z (Basis(BACK, roll)) porte la tête vers -X, sa
+		# gauche : il faut donc l'opposé (retour d'essai du 19/11/2026 : « tes skieurs automatiques ne s'inclinent pas
+		# du bon côté dans les virages » — ils penchaient vers l'extérieur)
 		var kappa: float = -float(ag2["amp"]) * w * w * sin(arg)
-		var roll: float = clampf(atan(float(ag2["v"]) * float(ag2["v"]) * kappa / 9.81), -0.6, 0.6)
+		var roll: float = -clampf(atan(float(ag2["v"]) * float(ag2["v"]) * kappa / 9.81), -0.6, 0.6)
 		var pos: Vector3 = Vector3(p2.x, _hauteur(p2) + 0.02, p2.y)
 		var b: Basis = Basis(Vector3.UP, cap) * Basis(Vector3.BACK, roll)
 		var cle: int = 0 if bool(ag2["casque"]) else 1

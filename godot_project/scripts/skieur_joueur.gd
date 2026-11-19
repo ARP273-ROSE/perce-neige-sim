@@ -57,6 +57,7 @@ var assis: bool = false
 ## RemonteesDomaine, il ne marche ni ne glisse (retour d'utilisateur, 22/10/2026)
 var embarque: bool = false
 const Y_YEUX_ASSIS: float = 1.25          # yeux du passager assis, au-dessus des pieds
+const COUPE_1RE_PERSONNE: float = 0.80    # 1re personne, debout : rien au-dessus des hanches (ni buste ni tête)
 const RECUL_ASSIS: float = 0.42          # pieds devant le banc, bassin au-dessus de l'assise
 var _image_assise: Mesh = null
 ## Touches de marche tenues dans le simulateur PC (vue 3D embarquée, le
@@ -1726,7 +1727,10 @@ func _camera() -> void:
 		# mes skis »)
 		_visuel.visible = _chute_t <= 0.0
 		if _mat_coupe != null:
-			_mat_coupe.set_shader_parameter("coupe", (Y_YEUX_ASSIS - 0.22) if assis else (Y_YEUX - 0.24))
+			# (debout, coupé aux hanches : en glisse, schuss ou chasse-neige, le buste penché passait sous l'ancienne
+			# coupe à 1,38 m et la tête apparaissait, énorme, devant la caméra — retour d'utilisateur PC du 19/11/2026 ;
+			# on garde les jambes et les skis)
+			_mat_coupe.set_shader_parameter("coupe", (Y_YEUX_ASSIS - 0.22) if assis else COUPE_1RE_PERSONNE)
 		if assis:
 			# yeux du passager assis : au-dessus du bassin (en arrière des
 			# pieds), à 1,25 m au-dessus des pieds

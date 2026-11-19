@@ -1165,8 +1165,13 @@ func _process_corps(delta: float) -> void:
 			jusqua = maxf(jusqua, _demolir_au_dela(lg) + 50.0)
 			lg._vehicules_jusqua = jusqua
 		var actif: bool = a_bord_ici or d < jusqua + 50.0
-		if not actif and lg.is_processing():
+		# (aussi une ligne jamais avancée depuis sa construction : ses véhicules, posés au départ, restaient dessinés
+		# et figés sur la PWA — LigneRemontee.lointains_au_repos)
+		if not actif and (lg.is_processing() or not lg.get_meta("au_repos", false)):
 			lg.lointains_au_repos()
+			lg.set_meta("au_repos", true)
+		elif actif:
+			lg.set_meta("au_repos", false)
 		lg.set_process(actif)
 		# (téléphériques : deux cabines seulement, et des portées de plus d'un kilomètre qui se voient de loin — mis à
 		# jour une image sur 2 ou 4, leurs câbles fléchis sous la cabine avançaient par saccades : « les câbles

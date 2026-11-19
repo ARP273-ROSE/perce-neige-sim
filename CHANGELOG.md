@@ -16,6 +16,36 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 **Plus d'oscillation verticale des câbles à ~1 Hz** (retour d'essai : « c'est relou ton oscillation verticale de 1 Hz de tous les câbles, enlève ce truc ») : la flèche locale par véhicule des monocâbles, ajoutée en 1.74.2 (`zone_locale`), est coupée. Le câble se cassait à chaque pince et se relevait entre deux pinces. En un point fixe, il montait et descendait à chaque passage de véhicule. Le câble ne porte plus que le poids réparti, immobile en marche normale. Le code reste en place, éteint, et le noyau C++ suit par le même indicateur, sans recompilation. L'onde d'arrêt d'urgence reste. Sonde sur la TCD10 de la Daille et le TSD6 Grattalu, avec le noyau C++ comme en GDScript seul : au milieu d'une portée, le câble avait une amplitude de 0,78 m, il n'en a plus aucune. L'écart pince − câble est nul, et l'accélération verticale des pinces tombe de 17 m/s² à 0,02 m/s² (99e centile).
 
+**Trous dans le relief de la PWA** (retour d'essai sur tablette Android, autour de Borsat et des Marmottes : « des trous partout ») : autour de la caméra, la PWA redécoupe le relief à 25 m sur 800 m. Elle refaisait les tuiles touchées une à une, chacune affichée dès qu'elle était prête, et changeait aussitôt les altitudes, qui sont aussi le sol du skieur. Pendant la reprise, une tuile refaite et sa voisine pas encore refaite n'avaient plus les mêmes hauteurs sur leur bord commun : des fentes jusqu'à 1,7 m de haut, à chaque reprise (tous les ~270 m), d'autant plus longues que l'appareil est lent. Maintenant les nouvelles altitudes vont dans des copies, les tuiles sont bâties dessus et gardées à part, et tout est échangé dans la même image. Une sonde à 10 m/s, de l'arrivée de Tovière à Borsat puis aux Marmottes et retour, mesurait 15 relevés avec fente, jusqu'à 4,6 m : il n'y en a plus aucun. `bench_relief_fenetre` se relance lui-même au cran 5 avec la fenêtre de la PWA, et vérifie à chaque image de reprise qu'aucune fente n'apparaît et que le sol du skieur ne bouge pas avant l'échange. Avec l'ancien code, il échoue : fente de 11,3 m, sol décalé de 23 m.
+
+**Skieurs des pistes penchés du bon côté** (retour d'essai : « tes skieurs automatiques ne s'inclinent pas du bon côté dans les virages ») : l'inclinaison avait le mauvais signe, ils penchaient vers l'extérieur. Nouveau banc `bench_skieurs_virage` : il compare, image par image, l'axe du corps et l'accélération en virage. Résultat : 99,3 % des relevés penchés vers l'intérieur, contre 0,7 % avant.
+
+**Véhicules au loin sur la PWA** (« les sièges et les cabines s'empilent, certains avancent, d'autres restent figés en milieu de ligne ») : c'est le chemin GDScript, celui de la PWA sans module, qui était en cause.
+- Au-delà de la portée des véhicules, un véhicule n'était plus posé mais restait affiché à sa dernière place. Tous ceux qui passaient la limite s'y empilaient : à Tichot, Grattalu ou au Col des Ves, des paires de sièges à moins de 2 m.
+- Une ligne trop loin pour être avancée gardait ses véhicules visibles et figés, même quand elle n'avait jamais roulé depuis sa construction.
+- Maintenant les deux cas sont cachés et reparaissent à leur place. Nouveau banc `bench_vehicules_lointains`, en GDScript seul, 90 s : aucun véhicule figé, aucun empilé, comme avec le noyau C++.
+
+**Bollin et Fresse couplés** : les deux tronçons jumelés s'échangent leurs sièges à la gare intermédiaire, où leurs brins se croisent. Ils ont maintenant un seul régime :
+- même cible, la plus basse des deux ;
+- même montée en vitesse au démarrage ;
+- au freinage, celui qui freine le moins prend le régime de l'autre.
+
+Un arrêt d'urgence, un arrêt normal, une consigne ou une panne sur l'un arrête l'autre au même régime, en C++ comme en GDScript. Avant, un arrêt d'urgence de Fresse laissait Bollin à pleine vitesse. Nouveau banc `bench_jumelage` :
+- arrêt d'urgence de Fresse ;
+- réarmement et redémarrage ;
+- arrêt de Bollin ;
+- à chaque image, au plus 0,5 % d'écart de régime et 3,6 m au moins entre deux sièges.
+
+**Retours PC** :
+- **Boutons en double** : VUES est retiré de la barre de la fenêtre, la 3D a VUE LIGNE. QUITTER est retiré de la 3D sur le PC, la barre a CONDUIRE.
+- **Pupitre du funiculaire** : en skieur, loin du Perce-Neige et de toute remontée, le pupitre en surimpression du funiculaire (INVERSER, PHARES, CABINE, TUNNEL…) et son bouton PUPITRE ne s'affichent plus.
+- **POSTE** : un seul poste de conduite à la fois, comme décrit plus haut.
+- **Plein écran en conduite** : quand le clavier est dans la fenêtre 3D, F11, F12 et Tab passent maintenant aussi au PC en conduite, pas seulement en skieur.
+- **Ciel de nuit** : plus de nuages du crépuscule civil à la nuit, le ciel est dégagé pour les étoiles.
+- **Lune** : terminateur net, un peu dentelé. Mers placées comme sur la face visible, avec un grain de cratères, Tycho et Copernic. Léger assombrissement du bord. Lumière cendrée bleutée, plus visible au croissant.
+- **Funival** : on y monte à pied, sans être « assis à bord », donc les vues de la ligne ne s'ouvraient jamais (« je suis enfermé dedans »). Maintenant VUE LIGNE y propose orbite, tunnel (sur la voie, 30 m devant la rame), gare (sur le quai d'arrivée), et dehors travelling et drone. Sous terre, la caméra reste dans le tube, au lieu d'être remontée au-dessus du relief.
+- **1re personne** : debout, le corps est coupé aux hanches. En glisse, en schuss ou en chasse-neige, le buste penché passait sous l'ancienne coupe et la tête apparaissait, énorme, devant la caméra.
+
 ## 1.75.2 — 19 novembre 2026
 
 **Film blanc dans la gare amont du Funival** (retour d'essai PWA, capture de l'iPad) : une nappe de neige traversait la salle sur les 14 m du haut du quai, jusqu'à 1,5 m au-dessus des marches. Le véhicule y était coupé à mi-hauteur. Cette neige venait de la grille fine du relief, autour de la caméra. Cette grille ne voit pas les trous des pièces fines. Elle gardait donc le terrain d'origine, remonté au niveau du plancher du bâtiment sur 10 m de fondu. L'intérieur de la salle est maintenant percé dans toutes les surfaces du relief : tuiles, pièces, grille fine et anneaux. C'est fait par 4 volumes qui suivent la pente (`ReliefBuilder.percer_volume`, comme la tranchée du portail), et la limite passe de 8 à 12 volumes. Vérifié par captures en OpenGL et en Vulkan : quai, escalier, bouche du tube, bâtiment et terrain dehors.

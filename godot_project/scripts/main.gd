@@ -1649,6 +1649,11 @@ func _relayer_touche_pc(event: InputEventKey) -> bool:
 		nom = OS.get_keycode_string(kc)
 	elif kc >= KEY_F1 and kc <= KEY_F8:
 		nom = OS.get_keycode_string(kc)
+	elif kc in [KEY_F11, KEY_F12, KEY_TAB]:
+		# plein écran (F11), vue 3D plein cadre (F12), pupitre en surimpression (Tab) : aussi en conduite, le clavier
+		# étant dans la fenêtre 3D (retour d'utilisateur du 19/11/2026 : « le plein écran marche en skieur, pas en
+		# conduite du Perce-Neige »)
+		nom = {KEY_F11: "F11", KEY_F12: "F12", KEY_TAB: "Tab"}[kc]
 	else:
 		nom = {KEY_UP: "Up", KEY_DOWN: "Down", KEY_LEFT: "Left", KEY_RIGHT: "Right",
 			KEY_SPACE: "Space", KEY_SHIFT: "Shift", KEY_PLUS: "Plus",
@@ -3337,6 +3342,8 @@ func _appliquer_ciel(decor: Color, ext_vue: bool) -> void:
 		sm.set_shader_parameter("teinte_soleil", Vector3(cs.r / CycleJour.LUMIERE_JOUR.r, cs.g / CycleJour.LUMIERE_JOUR.g,
 			cs.b / CycleJour.LUMIERE_JOUR.b) * smoothstep(-0.02, 0.02, ds.y))
 		sm.set_shader_parameter("teinte_nuages", Vector3(decor.r, decor.g, decor.b))
+		# (nuages effacés du crépuscule civil à la nuit : ciel dégagé pour les étoiles, retour d'utilisateur du 19/11/2026)
+		sm.set_shader_parameter("nuages_jour", smoothstep(-0.12, -0.02, ds.y))
 	elif mat is ProceduralSkyMaterial:
 		# PWA : mêmes rapports que le ciel du PC, appliqués à son ciel procédural
 		var ps: ProceduralSkyMaterial = mat

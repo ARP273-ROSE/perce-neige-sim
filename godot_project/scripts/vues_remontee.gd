@@ -14,19 +14,23 @@ extends Node3D
 ##   3 gare        : depuis la gare d'arrivée, regard vers la ligne ;
 ##   4 travelling  : de côté, à hauteur du câble, la portée et sa flèche ;
 ##   5 drone       : au-dessus et en arrière, la ligne devant soi.
-## Funival (souterrain) : skieur et orbite rapprochée seulement.
+##   6 tunnel     : Funival, sur la voie 30 m devant le véhicule, regard vers lui.
+## Funival (souterrain : retour d'utilisateur du 19/11/2026, « pas de vues extérieures, je suis enfermé dedans ») :
+## orbite rapprochée, tunnel, gare (sur le quai d'arrivée) ; dehors (viaduc), aussi travelling et drone. Sous terre,
+## la caméra n'est plus remontée au-dessus du relief (elle sortait sur le versant, loin du véhicule).
 ##
 ## Tout est calculé par différences à partir des positions monde (pas de
 ## composition de Transform3D en float32 loin de l'origine, cf. PLAN_COEUR
 ## 09/11). La caméra skieur reprend la main dès qu'on quitte la remontée.
 
-const NOMS: Array = ["SKIEUR", "ORBITE", "PYLÔNE", "GARE", "TRAVELLING", "DRONE"]
+const NOMS: Array = ["SKIEUR", "ORBITE", "PYLÔNE", "GARE", "TRAVELLING", "DRONE", "TUNNEL"]
 const SKIEUR: int = 0
 const ORBITE: int = 1
 const PYLONE: int = 2
 const GARE: int = 3
 const TRAVELLING: int = 4
 const DRONE: int = 5
+const TUNNEL: int = 6
 
 var main: Node = null
 var skieur: SkieurJoueur = null
@@ -59,14 +63,31 @@ func _porteur() -> Array:
 		return [null, -1]
 	var ab: Array = rm.get("a_bord")
 	if ab.is_empty() or not (ab[0] is LigneRemontee) or not is_instance_valid(ab[0]):
+		# Funival : on y monte à pied, debout dans la rame, sans `a_bord` — les vues ne s'ouvraient jamais
+		# (retour d'utilisateur du 19/11/2026 : « je suis enfermé dedans »)
+		if skieur != null and rm.has_method("funival_ou"):
+			var fu: LigneRemontee = rm.funival_ou(skieur.global_position, true)
+			if fu != null:
+				var best: int = -1
+				var dm: float = INF
+				for i in range(fu.nombre_vehicules()):
+					var dd: float = fu.vehicule(i).global_position.distance_to(skieur.global_position)
+					if dd < dm:
+						dm = dd
+						best = i
+				if best >= 0:
+					return [fu, best]
 		return [null, -1]
 	return [ab[0], int(ab[1])]
 
 
-## Vues proposées pour la ligne : le Funival, sous terre, n'a que l'orbite rapprochée.
+## Vues proposées pour la ligne. Funival : orbite rapprochée, tunnel, gare ; dehors, aussi travelling et drone.
 func _vues_possibles(lg: LigneRemontee) -> Array:
 	if lg is Funival:
-		return [SKIEUR, ORBITE]
+		var vf: Array = [SKIEUR, ORBITE, TUNNEL, GARE]
+		if skieur != null and not _sous_terre(skieur.global_position):
+			vf.append_array([TRAVELLING, DRONE])
+		return vf
 	var v: Array = [SKIEUR, ORBITE]
 	if not lg.pylones.is_empty():
 		v.append(PYLONE)
@@ -162,6 +183,16 @@ func _process(delta: float) -> void:
 			pos = cible + Vector3(sin(yaw) * cos(elev), sin(elev), cos(yaw) * cos(elev)) * dist
 			regard = cible + Vector3(0, 0.5, 0)
 			lisser = false
+			if lg is Funival and _sous_terre(cible):
+				# sous terre : l'orbite reste dans le tube (le long de la voie, de côté et en hauteur bornés) — elle
+				# sortait dans la roche et montrait le dehors de la montagne
+				var ax: Vector3 = -lg.global_basis.z.normalized()
+				var lat: Vector3 = lg.global_basis.x.normalized()
+				var o: Vector3 = pos - cible
+				var a_long: float = o.dot(ax)
+				var pente: float = (lg as Funival).pente_voie(-lg.to_local(cible).z)
+				pos = cible + ax * a_long + lat * clampf(o.dot(lat), -1.0, 1.0) \
+					+ Vector3.UP * (pente * a_long + clampf(o.y - pente * a_long, -0.4, 1.4))
 		PYLONE:
 			pos = _vue_pylone(lg, cible)
 			if pos == Vector3.INF:
@@ -169,9 +200,18 @@ func _process(delta: float) -> void:
 			lisser = false
 			fov = _teleobjectif(pos.distance_to(cible), 10.0)
 		GARE:
-			pos = _vue_gare(lg, cible)
+			pos = _vue_gare_funival(lg as Funival, cible) if lg is Funival else _vue_gare(lg, cible)
 			lisser = false
-			fov = _teleobjectif(pos.distance_to(cible), 12.0)
+			fov = _teleobjectif(pos.distance_to(cible), 12.0) if not lg is Funival else 50.0
+		TUNNEL:
+			# sur la voie, 30 m devant le véhicule (dans son sens de marche), à hauteur de son toit
+			var fv: Funival = lg as Funival
+			var loc_t: Vector3 = lg.to_local(cible)
+			var monte_t: bool = _sens.dot(-lg.global_basis.z) > 0.0
+			var d2: float = clampf(-loc_t.z + (30.0 if monte_t else -30.0), 2.0, lg.longueur_h() - 2.0)
+			pos = lg.to_global(Vector3(loc_t.x, fv.y_voie(d2) + 2.6, -d2))
+			regard = cible + Vector3(0, 0.3, 0)
+			fov = 60.0
 		TRAVELLING:
 			var cote: Vector3 = Vector3(-_sens.z, 0.0, _sens.x)
 			# du côté extérieur du brin où l'on est (on voit le véhicule, pas l'autre brin)
@@ -186,7 +226,10 @@ func _process(delta: float) -> void:
 			pos = cible - _sens * 40.0 + Vector3(0, 28.0, 0)
 			regard = cible + _sens * 25.0
 			fov = 65.0
-	pos = _au_dessus_du_sol(pos, 2.5)
+	# (sous terre — tube du Funival — la caméra reste où elle est : remontée au-dessus du relief, elle sortait sur le
+	# versant)
+	if not (lg is Funival and (_sous_terre(cible) or mode in [TUNNEL, GARE])):
+		pos = _au_dessus_du_sol(pos, 2.5)
 	if lisser and _lisse:
 		pos = camera.global_position.lerp(pos, clampf(delta * 5.0, 0.0, 1.0))
 	_lisse = true
@@ -252,6 +295,25 @@ func _vue_gare(lg: LigneRemontee, cible: Vector3) -> Vector3:
 	var s: float = signf(loc.x) if absf(loc.x) > 0.3 else 1.0
 	var y: float = maxf(lg.y_cable(d, true), lg.terrain(d)) + 7.0
 	return lg.to_global(Vector3(s * (lg.voie * 0.5 + 7.0), y, -d))
+
+
+## Sur le quai de la gare d'arrivée du Funival, à côté de la voie, regard vers le véhicule qui arrive.
+func _vue_gare_funival(fv: Funival, cible: Vector3) -> Vector3:
+	var loc: Vector3 = fv.to_local(cible)
+	var monte: bool = _sens.dot(-fv.global_basis.z) > 0.0
+	var L: float = fv.longueur_h()
+	var d: float = L - 6.0 if monte else 6.0
+	var s: float = signf(loc.x) if absf(loc.x) > 0.3 else 1.0
+	return fv.to_global(Vector3(s * (VehiculeFunival.DEMI_LARGEUR + 1.4), VehiculeFunival.y_plancher_monde(fv, d) + 1.8, -d))
+
+
+## Sous le relief (tube, salles souterraines) ?
+func _sous_terre(p: Vector3) -> bool:
+	var relief: Node = main.get("relief") if main != null else null
+	if relief == null or not relief.has_method("hauteur"):
+		return false
+	var h: float = float(relief.hauteur(p.x, p.z))
+	return not is_nan(h) and h > p.y + 1.0
 
 
 ## La caméra ne passe jamais sous le relief (vue de côté sur un versant, drone en contre-pente).

@@ -39,10 +39,27 @@ void fragment() {
 }
 """
 
+## Lune (retour d'utilisateur du 19/11/2026 : « phases plus belles ») : terminateur net (la largeur d'une
+## pénombre de relief, pas un fondu), mers placées comme sur la face visible (Imbrium, Serenitatis, Tranquillitatis,
+## Crisium, Fecunditatis, Nubium, Océan des Tempêtes) avec un grain de cratères, assombrissement léger du bord, et
+## lumière cendrée bleutée sur la part dans l'ombre (clair de Terre), plus visible aux fins croissants.
 const SHADER_LUNE: String = """shader_type spatial;
 render_mode unshaded, blend_mix, depth_draw_never, cull_disabled, fog_disabled, shadows_disabled;
 uniform vec3 soleil_local = vec3(0.0, 0.0, 1.0);   // direction du Soleil dans le repère du carré
 uniform float visibilite = 1.0;
+float h2(vec2 p) {
+	return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
+}
+float bruit(vec2 p) {
+	vec2 i = floor(p);
+	vec2 f = fract(p);
+	f = f * f * (3.0 - 2.0 * f);
+	return mix(mix(h2(i), h2(i + vec2(1.0, 0.0)), f.x), mix(h2(i + vec2(0.0, 1.0)), h2(i + vec2(1.0, 1.0)), f.x), f.y);
+}
+float tache(vec2 q, vec2 c, vec2 r) {
+	vec2 d = (q - c) / r;
+	return 1.0 - smoothstep(0.25, 1.0, dot(d, d));
+}
 void fragment() {
 	vec2 q = UV * 2.0 - 1.0;
 	q.y = -q.y;
@@ -51,13 +68,37 @@ void fragment() {
 		discard;
 	}
 	vec3 n = vec3(q, -sqrt(1.0 - r2));     // face visible : tournée vers le centre (axe local −z)
-	float jour = smoothstep(-0.04, 0.06, dot(n, normalize(soleil_local)));
-	// mers (taches sombres fixes, grossières) et lumière cendrée
-	float mers = 0.82 + 0.18 * sin(q.x * 5.1 + 1.3) * sin(q.y * 4.3 - 0.7);
-	vec3 c = vec3(1.0, 0.98, 0.92) * mers * (jour * 1.6 + 0.035);
-	ALBEDO = c;
-	// face non éclairée : presque aussi sombre que le ciel (elle cache à peine les étoiles qui passent derrière)
-	ALPHA = visibilite * smoothstep(1.0, 0.94, r2) * (0.15 + 0.85 * jour);
+	float mu = dot(n, normalize(soleil_local));
+	// terminateur net : une pénombre de relief étroite (le Soleil fait 0,5°), un peu dentelée par les cratères
+	float dent = (bruit(q * 38.0) - 0.5) * 0.025;
+	float jour = smoothstep(-0.006, 0.022, mu + dent);
+	// mers (face visible, nord en haut), aux bords déformés par un bruit (pas de taches rondes)
+	vec2 qm = q + 0.10 * (vec2(bruit(q * 4.0 + 3.1), bruit(q * 4.0 - 7.7)) - 0.5);
+	float mer = 0.0;
+	mer = max(mer, tache(qm, vec2(-0.30, 0.42), vec2(0.30, 0.24)));     // Imbrium
+	mer = max(mer, tache(qm, vec2(0.12, 0.40), vec2(0.17, 0.15)));      // Serenitatis
+	mer = max(mer, tache(qm, vec2(0.28, 0.12), vec2(0.21, 0.17)));      // Tranquillitatis
+	mer = max(mer, tache(qm, vec2(0.66, 0.30), vec2(0.11, 0.09)));      // Crisium
+	mer = max(mer, tache(qm, vec2(0.50, -0.14), vec2(0.13, 0.20)));     // Fecunditatis
+	mer = max(mer, tache(qm, vec2(0.30, -0.30), vec2(0.13, 0.10)));     // Nectaris
+	mer = max(mer, tache(qm, vec2(-0.18, -0.30), vec2(0.18, 0.13)));    // Nubium
+	mer = max(mer, tache(qm, vec2(-0.60, 0.05), vec2(0.24, 0.44)));     // Océan des Tempêtes
+	mer = max(mer, tache(qm, vec2(-0.05, 0.70), vec2(0.40, 0.08)) * 0.7);  // Frigoris
+	float grain = 0.5 * bruit(q * 9.0) + 0.3 * bruit(q * 23.0) + 0.2 * bruit(q * 61.0);
+	float albedo = mix(0.80, 0.40, mer * (0.7 + 0.6 * grain)) * (0.80 + 0.40 * grain);
+	// Tycho et Copernic : petits cratères clairs
+	albedo += 0.35 * (1.0 - smoothstep(0.0, 0.0018, dot(q - vec2(-0.12, -0.62), q - vec2(-0.12, -0.62))));
+	albedo += 0.25 * (1.0 - smoothstep(0.0, 0.0012, dot(q - vec2(-0.33, 0.17), q - vec2(-0.33, 0.17))));
+	// assombrissement léger vers le bord (surface rugueuse : faible)
+	float bord = mix(0.82, 1.0, sqrt(1.0 - r2));
+	vec3 eclaire = vec3(1.0, 0.97, 0.90) * albedo * bord * 1.05;
+	// lumière cendrée : la Terre presque pleine éclaire la part dans l'ombre au croissant ; elle s'efface vers la
+	// pleine Lune (la Terre vue de la Lune est alors nouvelle)
+	float croissant = 1.0 - smoothstep(-0.2, 0.6, dot(vec3(0.0, 0.0, -1.0), normalize(soleil_local)));
+	vec3 cendree = vec3(0.55, 0.62, 0.78) * albedo * 0.045 * croissant;
+	ALBEDO = mix(cendree, eclaire, jour);
+	// face non éclairée : sombre mais visible (cendrée), elle cache les étoiles qui passent derrière
+	ALPHA = visibilite * smoothstep(1.0, 0.985, r2) * mix(0.25 + 0.45 * croissant, 1.0, jour);
 }
 """
 
