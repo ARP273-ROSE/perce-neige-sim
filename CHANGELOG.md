@@ -5,6 +5,17 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.75.3 — 19 novembre 2026 (non publiée)
+
+**Plein écran du PC, mode skieur** (retour d'essai, écran 4K : « adapte tes boutons à la résolution de l'écran, tu me mets deux postes de conduite, les fenêtres je peux pas les déplacer ») :
+- **Boutons du PC à l'échelle de la 3D** : la colonne PLEIN ÉCRAN, PUPITRE, ÉCRANS, CONDUIRE, VUES, PAUSE, AIDE recouvrait le poste du skieur. Elle devient une rangée en haut à gauche, dans la bande libre au-dessus du compteur, du poste et de la carte. Sa taille suit l'échelle de l'interface de la vue 3D (toile de 1600 × 900 étirée à l'écran), pour garder les mêmes proportions en 4K, 1440p et 1080p.
+- **Un seul poste de conduite à la fois** : ouvrir le POSTE du skieur cache le pupitre en surimpression du PC, et déplier le pupitre (Tab, bouton PUPITRE) ferme le POSTE. En skieur, le pupitre se place à gauche, à la place du poste : à droite, il recouvrait la carte des pistes.
+- **Fenêtres déplaçables** : le POSTE du skieur se tire par son fond ou son titre, à la souris comme au doigt (`GlisserPanneau`). Le pupitre en surimpression se tire par son en-tête ; un toucher sans glisser le replie ou le déplie toujours. Les deux restent dans l'écran. Le POSTE rétrécit s'il est plus haut que l'écran : une panne l'allongeait sous le bas de l'écran.
+- Sur la PWA, un doigt posé sur le POSTE ne fait plus naître le joystick.
+- Vérifié par captures en vrai rendu à 3840 × 2160, 2560 × 1440 et 1920 × 1080 (Vulkan), et à 1668 × 2388 (OpenGL, format iPad). Les rectangles des fenêtres du PC sont calculés comme le client et ne chevauchent rien.
+
+**Plus d'oscillation verticale des câbles à ~1 Hz** (retour d'essai : « c'est relou ton oscillation verticale de 1 Hz de tous les câbles, enlève ce truc ») : la flèche locale par véhicule des monocâbles, ajoutée en 1.74.2 (`zone_locale`), est coupée. Le câble se cassait à chaque pince et se relevait entre deux pinces. En un point fixe, il montait et descendait à chaque passage de véhicule. Le câble ne porte plus que le poids réparti, immobile en marche normale. Le code reste en place, éteint, et le noyau C++ suit par le même indicateur, sans recompilation. L'onde d'arrêt d'urgence reste. Sonde sur la TCD10 de la Daille et le TSD6 Grattalu, avec le noyau C++ comme en GDScript seul : au milieu d'une portée, le câble avait une amplitude de 0,78 m, il n'en a plus aucune. L'écart pince − câble est nul, et l'accélération verticale des pinces tombe de 17 m/s² à 0,02 m/s² (99e centile).
+
 ## 1.75.2 — 19 novembre 2026
 
 **Film blanc dans la gare amont du Funival** (retour d'essai PWA, capture de l'iPad) : une nappe de neige traversait la salle sur les 14 m du haut du quai, jusqu'à 1,5 m au-dessus des marches. Le véhicule y était coupé à mi-hauteur. Cette neige venait de la grille fine du relief, autour de la caméra. Cette grille ne voit pas les trous des pièces fines. Elle gardait donc le terrain d'origine, remonté au niveau du plancher du bâtiment sur 10 m de fondu. L'intérieur de la salle est maintenant percé dans toutes les surfaces du relief : tuiles, pièces, grille fine et anneaux. C'est fait par 4 volumes qui suivent la pente (`ReliefBuilder.percer_volume`, comme la tranchée du portail), et la limite passe de 8 à 12 volumes. Vérifié par captures en OpenGL et en Vulkan : quai, escalier, bouche du tube, bâtiment et terrain dehors.

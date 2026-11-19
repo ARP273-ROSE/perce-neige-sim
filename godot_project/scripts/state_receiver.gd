@@ -36,6 +36,7 @@ var _last_skieur_ski: int = -1
 var _last_skieur_evac: int = -1
 var _last_skieur_auto: int = -1
 var _last_vue_ligne: int = -1
+var _last_poste_fermer: int = -1
 var _abime_annonce: bool = false
 var _jeton: String = ""             # --jeton=… : jeton de séance du PC
 var port: int = DEFAULT_PORT
@@ -346,6 +347,12 @@ func _apply(d: Dictionary) -> void:
 	# fenêtre du PC derrière une autre application ou réduite : 3D bridée à 20 i/s
 	if d.has("arriere_plan") and main != null and main.get("perf_manager") != null:
 		main.perf_manager.set_arriere_plan_pc(_b(d, "arriere_plan", false))
+	# pupitre en surimpression du PC déplié : le poste du skieur se ferme (un seul poste de conduite à la fois)
+	var npf: int = _i(d, "skieur_poste_fermer", 0)
+	if npf != _last_poste_fermer:
+		if _last_poste_fermer >= 0 and main != null and main.get("commandes_skieur") != null:
+			main.commandes_skieur.fermer_poste()
+		_last_poste_fermer = npf
 	var nl: int = _i(d, "skieur_vue_ligne", 0)
 	if nl != _last_vue_ligne:
 		if _last_vue_ligne >= 0 and main != null and main.mode_skieur and main.has_method("basculer_vue_ligne"):
