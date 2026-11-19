@@ -167,6 +167,11 @@ func _ready() -> void:
 	poste.position = Vector2(16.0, 140.0)
 	poste.visible = false
 	_racine.add_child(poste)
+	# déplaçable, borné à l'écran, et un seul poste de conduite à la fois sur le PC (retour d'utilisateur du
+	# 19/11/2026, plein écran 4K : « tu me mets deux postes de conduite, les fenêtres je peux pas les déplacer ») :
+	# ouvert, il replie le pupitre en surimpression du PC ; déplier celui-ci le ferme (fermer_poste)
+	GlisserPanneau.activer(poste)
+	poste.visibility_changed.connect(_poste_affiche)
 	_b_mesure = _bouton("MESURE", "Relevé de fluidité : une minute de mesures (images par seconde, à-coups), envoyé au développeur pour optimiser le jeu sur cet appareil (touche F10)")
 	_b_mesure.pressed.connect(func() -> void:
 		var pm: Node = main.get("perf_manager") if main != null else null
@@ -373,6 +378,8 @@ func _process_corps(delta: float) -> void:
 		if lg == null and poste.visible:
 			poste.visible = false
 			_b_poste.set_pressed_no_signal(false)
+		if poste.visible:
+			GlisserPanneau.borner(poste)       # (écran retaillé, plein écran)
 	if _t_pique > 0.0:
 		_t_pique -= delta
 		if _t_pique <= 0.0 and _pique != null:
@@ -407,6 +414,27 @@ func set_conduite_possible(oui: bool) -> void:
 		_b_conduire.visible = oui
 
 
+## Poste montré ou caché : première fois placé en haut à gauche (sur le PC, sous la rangée de boutons de la fenêtre
+## du simulateur), borné à l'écran ; le PC en est averti (un seul poste de conduite à la fois).
+func _poste_affiche() -> void:
+	var pc: bool = main != null and bool(main.get("client_mode"))
+	if poste.visible:
+		if not poste.has_meta("place"):
+			poste.set_meta("place", true)
+			poste.position = Vector2(16.0, 72.0 if pc else 140.0)
+		(func() -> void: GlisserPanneau.borner(poste)).call_deferred()
+	if pc and main.get("state_receiver") != null:
+		main.state_receiver.envoyer({"poste_skieur": poste.visible})
+
+
+## Le PC a déplié son pupitre en surimpression : notre poste se ferme.
+func fermer_poste() -> void:
+	if poste != null and poste.visible:
+		poste.visible = false
+		if _b_poste != null:
+			_b_poste.set_pressed_no_signal(false)
+
+
 func _dessiner_joy() -> void:
 	var c: Vector2 = Vector2(R_BASE, R_BASE)
 	_joy.draw_circle(c, R_BASE, Color(0.10, 0.13, 0.20, 0.35))
@@ -417,6 +445,10 @@ func _dessiner_joy() -> void:
 func _sur_un_bouton(p: Vector2) -> bool:
 	# la carte se glisse au doigt : elle ne doit pas tourner la vue en même temps
 	if carte != null and carte.is_visible_in_tree() and carte.get_global_rect().has_point(p):
+		return true
+	# le poste aussi (ses boutons, et on le tire par son fond) : un doigt posé dessus, à gauche, faisait naître le
+	# joystick
+	if poste != null and poste.is_visible_in_tree() and poste.get_global_rect().has_point(p):
 		return true
 	for b in _boutons:
 		if (b as Button).visible and (b as Button).get_global_rect().has_point(p):

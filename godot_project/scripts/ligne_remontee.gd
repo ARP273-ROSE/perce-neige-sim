@@ -6956,8 +6956,14 @@ func charges_ponctuelles_actives() -> bool:
 ## Plus loin, l'écart de charge réparti (_w_veh). Le câble dessiné (nuanceur), les pinces et les véhicules (noyau
 ## C++ ou _fleche) suivent la même flèche — la raison qui avait fait couper les charges ponctuelles le 02/11
 ## (« il oscillait sous les pinces, qui restaient fixes ») ne tient plus.
+##
+## COUPÉE le 19/11/2026 (retour d'utilisateur : « c'est relou ton oscillation verticale de 1 Hz de tous les câbles, tu
+## l'avais supprimée puis remise, enlève ce truc ») : en un point fixe, le câble cassé à chaque pince et relevé entre
+## elles montait et descendait à chaque passage de véhicule, ~1 Hz à la vitesse de ligne. Le code reste, éteint ici
+## (le noyau C++ reçoit l'indicateur par le dictionnaire de la ligne, « zone_locale ») ; l'onde d'arrêt d'urgence
+## (_exciter_onde) reste.
 func zone_locale() -> bool:
-	return not tricable() and not vaetvient() and not teleski() and not (self is Funival)
+	return false
 
 
 var _w_ref: Array = [0.0, 0.0]         # charge de référence des véhicules / H (1/m), géométrie précalculée

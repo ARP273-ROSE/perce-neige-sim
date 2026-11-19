@@ -7458,6 +7458,13 @@ class FaultPickerDialog(QDialog):
         self.accept()
 
 
+def echelle_toile_3d(largeur: float, hauteur: float) -> float:
+    """Échelle de l'interface de la vue 3D : toile de 1600 × 900 étirée à la
+    fenêtre en gardant ses proportions (stretch canvas_items, aspect expand
+    de project.godot)."""
+    return max(0.2, min(largeur / 1600.0, hauteur / 900.0))
+
+
 class BoutonHud(QPushButton):
     """Bouton de la barre du plein cadre, dans le style du HUD tactile de la
     3D (EXPLOIT., CARTE…) : fond gris bleuté arrondi, liseré bleu clair,
@@ -7518,9 +7525,13 @@ class BarrePleinCadre(QWidget):
     et de la 3D, cachée avec elle quand on la réduit, et qui ne prend ni
     l'activation ni le focus clavier (le clavier reste au skieur).
 
-    Colonne en haut à gauche : la colonne de droite du HUD du skieur, le
-    compteur du haut et la manette en bas à gauche restent dégagés. Taille
-    proportionnelle à la hauteur de la vue, comme les boutons du HUD."""
+    Rangée en haut à gauche, dans la bande libre au-dessus du compteur du
+    skieur, de son poste et de sa carte (retour d'utilisateur du 19/11/2026,
+    plein écran 4K : la colonne d'avant recouvrait le poste du skieur).
+    Taille à l'échelle de l'interface de la 3D, qui dessine sur une toile de
+    1600 × 900 étirée à l'écran (project.godot, stretch canvas_items,
+    expand) : les deux restent dans les mêmes proportions à toute
+    résolution."""
 
     CLES = ("ecran", "pupitre", "poste", "skieur", "ligne", "pause", "aide")
 
@@ -7534,7 +7545,7 @@ class BarrePleinCadre(QWidget):
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating, True)
         self.setFocusPolicy(Qt.FocusPolicy.NoFocus)
-        self._lay = QVBoxLayout(self)
+        self._lay = QHBoxLayout(self)
         self._lay.setContentsMargins(0, 0, 0, 0)
         self._boutons: dict[str, BoutonHud] = {}
         for cle in self.CLES:
@@ -7568,15 +7579,17 @@ class BarrePleinCadre(QWidget):
 
     def placer(self, zone) -> None:
         """En haut à gauche de la zone 3D (coordonnées écran)."""
-        h = int(max(44, min(120, zone.height() * 0.072)))
+        k = echelle_toile_3d(zone.width(), zone.height())
+        # (toile : boutons de 52 de haut et 124 de large, rangée de 7 × 132 = 924 au plus, en y 8 → 60 ; le poste du
+        # skieur commence à 72, son compteur à 76, sa carte à 1600 − 526 = 1074 et sa colonne à droite)
+        h = int(max(30, 52 * k))
         if h != self._haut_bouton:
             self._haut_bouton = h
-            w = int(h * 2.3)
-            self._lay.setSpacing(int(h * 0.20))
+            self._lay.setSpacing(max(4, int(8 * k)))
             for bt in self._boutons.values():
-                bt.setFixedSize(w, h)
+                bt.setFixedSize(int(max(70, 124 * k)), h)
             self.adjustSize()
-        m = int(h * 0.25)
+        m = max(4, int(8 * k))
         x, y = zone.x() + m, zone.y() + m
         if self.pos().x() != x or self.pos().y() != y:
             self.move(x, y)
@@ -7615,13 +7628,35 @@ class PupitreSurimpression(QWidget):
         self._pm: QPixmap | None = None
         self._sig = None
         self.peintures = []          # (durée en ms, refaite ?) : mesures
+        self._place: dict[str, tuple[float, float]] = {}     # place choisie à la main, par mode
+        self._zone = None
+        self._appui = None           # (point global de l'appui, coin de la fenêtre, glissé ?)
 
     def placer(self, zone) -> None:
-        s = max(0.45, min(zone.height() * 0.66 / self.HAUTEUR, zone.width() * 0.21 / self.LARGEUR))
+        # À l'échelle de l'interface de la 3D (toile 1600 × 900). En skieur, à gauche sous la rangée de boutons, à la
+        # place du poste du skieur (l'un ou l'autre : un seul poste de conduite à la fois) : à droite, il recouvrait
+        # la carte des pistes (retour d'utilisateur du 19/11/2026, plein écran 4K). En conduite, à droite comme
+        # avant. Déplaçable par son en-tête : la place choisie est gardée (fraction de la vue), bornée à l'écran.
+        k = echelle_toile_3d(zone.width(), zone.height())
+        s = max(0.45, min(zone.height() * 0.66 / self.HAUTEUR, zone.width() * 0.21 / self.LARGEUR,
+                          (zone.height() - 90 * k) / self.HAUTEUR))
         w = int(self.LARGEUR * s)
         h = int((self.BANDEAU if self.replie else self.HAUTEUR) * s)
-        x = int(zone.x() + zone.width() - w - zone.width() * 0.115)      # (colonne de boutons du skieur : ~11 %)
-        y = int(zone.y() + zone.height() * 0.06)
+        skieur = bool(getattr(self._jeu, "_skieur", False))
+        cle = "skieur" if skieur else "conduite"
+        if cle in self._place:
+            fx, fy = self._place[cle]
+            x = int(zone.x() + fx * zone.width())
+            y = int(zone.y() + fy * zone.height())
+        elif skieur:
+            x = int(zone.x() + 16 * k)
+            y = int(zone.y() + 72 * k)
+        else:
+            x = int(zone.x() + zone.width() - w - zone.width() * 0.115)      # (colonne de boutons du skieur : ~11 %)
+            y = int(zone.y() + zone.height() * 0.06)
+        x = max(zone.x(), min(x, zone.x() + zone.width() - w))
+        y = max(zone.y(), min(y, zone.y() + zone.height() - h))
+        self._zone = zone
         g = (x, y, w, h)
         if g != self._geo:
             self._geo = g
@@ -7671,14 +7706,41 @@ class PupitreSurimpression(QWidget):
             return
         pos = ev.position() / self._s
         if self.replie or (pos.y() < 44 and pos.x() < self.LARGEUR - 125):
-            # bandeau ou en-tête (hors bouton AUTO / MANUEL) : replier / déplier
-            self._jeu.basculer_pupitre()
+            # bandeau ou en-tête (hors bouton AUTO / MANUEL) : glissé, il déplace le pupitre ; touché sans bouger,
+            # il le replie ou le déplie (au relâché)
+            self._appui = (ev.globalPosition(), self.pos(), False)
         else:
+            self._appui = None
             self._jeu._clic_hud(pos)
         ev.accept()
 
+    def mouseMoveEvent(self, ev: QMouseEvent) -> None:  # noqa: N802
+        if self._appui is None:
+            return
+        g0, coin, glisse = self._appui
+        d = ev.globalPosition() - g0
+        if not glisse and abs(d.x()) + abs(d.y()) < 8:
+            return
+        self._appui = (g0, coin, True)
+        z = self._zone
+        x, y = int(coin.x() + d.x()), int(coin.y() + d.y())
+        if z is not None and z.width() > 0 and z.height() > 0:
+            x = max(z.x(), min(x, z.x() + z.width() - self.width()))
+            y = max(z.y(), min(y, z.y() + z.height() - self.height()))
+            cle = "skieur" if getattr(self._jeu, "_skieur", False) else "conduite"
+            self._place[cle] = ((x - z.x()) / z.width(), (y - z.y()) / z.height())
+        self._geo = (x, y, self.width(), self.height())
+        self.move(x, y)
+        ev.accept()
+
     def mouseReleaseEvent(self, ev: QMouseEvent) -> None:  # noqa: N802
-        self._jeu._relacher_hud()
+        if self._appui is not None:
+            glisse = self._appui[2]
+            self._appui = None
+            if not glisse:
+                self._jeu.basculer_pupitre()
+        else:
+            self._jeu._relacher_hud()
         ev.accept()
 
 
@@ -8013,6 +8075,8 @@ class GameWidget(QWidget):
         self._skieur_evac_n = 0                 # appuis sur I (évacuer)
         self._skieur_boucle_n = 0               # appuis sur B (BOUCLE du skieur)
         self._skieur_vue_ligne_n = 0            # appuis sur T (vues de la remontée)
+        self._skieur_poste_fermer_n = 0         # pupitre en surimpression déplié : poste du skieur fermé
+        self._poste_skieur_ouvert = False       # poste du skieur ouvert dans la vue 3D (message poste_skieur)
         # Vue 3D plein cadre (F12, 14/11/2026 : « le poste de conduite reste
         # celui du funiculaire même si on skie loin ») : None = automatique
         # (plein cadre quand le skieur est dehors, loin du funiculaire),
@@ -8126,6 +8190,14 @@ class GameWidget(QWidget):
         elif "ips_3d" in m:
             self._ips_3d = float(m["ips_3d"])
             self._t_ips_3d = time.monotonic()
+        elif "poste_skieur" in m:
+            # poste du skieur ouvert dans la vue 3D : le pupitre en surimpression se replie (un seul poste de
+            # conduite à la fois)
+            self._poste_skieur_ouvert = bool(m["poste_skieur"])
+            if self._poste_skieur_ouvert and not self._pupitre_replie:
+                self._pupitre_replie = True
+                self._t_surimpression = 0.0
+            self._maj_barre_3d()
         elif m.get("skieur_basculer"):
             self.basculer_skieur()
         elif m.get("skieur_conduire"):
@@ -9176,6 +9248,7 @@ class GameWidget(QWidget):
                 state_dict["skieur_evacuer"] = self._skieur_evac_n
                 state_dict["skieur_auto"] = self._skieur_boucle_n
                 state_dict["skieur_vue_ligne"] = self._skieur_vue_ligne_n
+                state_dict["skieur_poste_fermer"] = self._skieur_poste_fermer_n
                 state_dict["exploitation"] = bool(self.auto_ops.enabled)
                 # panneau des départs de la gare aval en rouge « fermé »
                 state_dict["hors_service"] = bool(
@@ -9600,8 +9673,9 @@ class GameWidget(QWidget):
         if not b.isVisible():
             b.show()
             b.raise_()
-        # pupitre en surimpression : caché sous l'aide (elle prend l'écran), repeint à 10 Hz
-        if self._show_help:
+        # pupitre en surimpression : caché sous l'aide (elle prend l'écran), repeint à 10 Hz ; caché aussi quand le
+        # poste du skieur est ouvert dans la vue 3D, à sa place (un seul poste de conduite à la fois)
+        if self._show_help or (self._skieur and self._poste_skieur_ouvert):
             if sp.isVisible():
                 sp.hide()
         else:
@@ -9643,6 +9717,11 @@ class GameWidget(QWidget):
     def basculer_pupitre(self) -> None:
         """Tab, bouton PUPITRE, clic sur l'en-tête : replie ou déplie le pupitre en surimpression."""
         self._pupitre_replie = not self._pupitre_replie
+        if not self._pupitre_replie and self._skieur:
+            # un seul poste de conduite à la fois (retour d'utilisateur du 19/11/2026) : déplié, il ferme le poste
+            # du skieur de la vue 3D
+            self._skieur_poste_fermer_n += 1
+            self._poste_skieur_ouvert = False
         self._t_surimpression = 0.0
         self._maj_barre_3d()
 
