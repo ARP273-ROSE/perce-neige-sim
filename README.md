@@ -253,6 +253,7 @@ L'écran d'accueil (F1) reprend ces touches.
 | ÉVACUER (touche U)           | Rame arrêtée en tunnel : enlever les issues de secours de la face, descendre sur la voie, l'escalier de service ramène en gare ou à la galerie de secours |
 | `F9` ou QUITTER              | Revenir à la conduite (l'exploitation automatique continue) |
 | `Page haut` / `Page bas`     | Heure de jeu : une heure de plus / de moins |
+| HEURE                        | Heure de jeu : réelle ou choisie, −1 h / +1 h (aussi au PC : menu Affichage → Heure de jeu…) |
 
 Pendant ce temps, la rame est en exploitation automatique, 24 h/24 : elle
 attend le skieur resté en gare et ferme les portes dès qu'il est dans la

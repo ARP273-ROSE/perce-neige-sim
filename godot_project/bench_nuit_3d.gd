@@ -213,6 +213,11 @@ func _tick() -> void:
 			_verif("la nuit : lampes du décor publiées", LampesDecor._publiees > 0, "%d" % LampesDecor._publiees)
 			_verif("la nuit : vraies lumières plafonnées", _main.eclairages_nuit != null
 				and _main.eclairages_nuit._lumieres.size() <= EclairagesNuit.lumieres_max())
+			# (1.75.1) fenêtres des villages, feux des dameuses lointaines, préchauffe des nuanceurs de nuit
+			_verif("la nuit : fenêtres des villages et des chalets", _main.villages != null and _main.villages.n_fenetres > 2000,
+				"%d" % (_main.villages.n_fenetres if _main.villages != null else 0))
+			_verif("préchauffe des nuanceurs de nuit à l'entrée en skieur", _main._prechauffe != null)
+			_verif("plus de dameuses autour de la caméra (PC : 4)", Dameuses.n_max() >= 2, "%d" % Dameuses.n_max())
 			# dameuse treuillée sur la piste la plus raide près du skieur
 			var dm: Dameuses = _main.dameuses
 			_verif("la nuit : dameuses actives", dm != null and dm.actives)
@@ -256,6 +261,20 @@ func _tick() -> void:
 		5:
 			if _f - _t < 240:
 				return
+			_verif("la nuit : feux des dameuses lointaines sur tout le domaine", _main.dameuses.n_lointaines_visibles() >= 10,
+				"%d" % _main.dameuses.n_lointaines_visibles())
+			# bouton HEURE : +1 h
+			var h_av: float = HeureJeu.heure()
+			var ph := PanneauHeure.new()
+			ph.decaler(1)
+			ph.appliquer()
+			ph.free()
+			_verif("bouton HEURE : +1 h", absf(fposmod(HeureJeu.heure() - h_av, 24.0) - 1.0) < 0.05,
+				"%.2f → %.2f" % [h_av, HeureJeu.heure()])
+			HeureJeu.regler(2026, 2, 15, 22, 5, 1.0, false)
+			# pique d'arrêt : pas tant que la ligne roule
+			var rd: RemonteesDomaine = _main.remontees
+			_verif("vitesse de ligne lue (piques à l'arrêt complet)", RemonteesDomaine.vitesse_ligne(_lg) >= 0.0)
 			var sp: SkieursPistes = _main.domaine.skieurs
 			var nf: int = 0
 			for fr in sp._frontales:
