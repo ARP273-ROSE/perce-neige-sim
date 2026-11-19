@@ -2521,6 +2521,7 @@ func _construire_boucle(pauses: bool = false) -> void:
 	if pauses:
 		await _pause("boucle : raccords")
 	_boucle = PackedVector3Array()
+	_d_sommets = []
 	_zones.clear()
 	var L: float = longueur_h()
 	var xm: float = _x_brin(true)
@@ -5019,9 +5020,13 @@ var collisions_actives: bool = true:
 		if v == collisions_actives:
 			return
 		collisions_actives = v
-		for c in _corps:
+		# (seulement les véhicules dessinés en entier : un véhicule allégé — VehiculesLod, PWA — n'est plus posé par
+		# _placer, son corps restait où il était, invisible, et l'on s'y cognait ; retour d'utilisateur du 19/11/2026)
+		for i in range(_corps.size()):
+			var c: Variant = _corps[i]
 			if c != null:
-				(c[0] as StaticBody3D).collision_layer = CollisionsJeu.COUCHE_VEHICULE if v else 0
+				var ok: bool = v and not construction_cachee and (i >= _lod_niv.size() or _lod_niv[i] == 0)
+				((c as Array)[0] as StaticBody3D).collision_layer = CollisionsJeu.COUCHE_VEHICULE if ok else 0
 
 
 func _tourner_pneus(delta: float) -> void:
@@ -6775,7 +6780,7 @@ func _lod_pose(i: int) -> Transform3D:
 		pt[0] = _pos_vehicule(i, s)
 	if _n_appuis >= 2 and en_ligne:
 		var p0: Vector3 = pt[0]
-		pt[0] = p0 - Vector3(0, _fleche(-p0.z, signf(p0.x) == signf(_x_brin(true))), 0)
+		pt[0] = p0 - Vector3(0, _fleche_affichee(-p0.z, signf(p0.x) == signf(_x_brin(true))), 0)
 	var dirh: Vector3 = pt[1] if en_ligne else (point(s + 1.5)[0] as Vector3) - (point(s - 1.5)[0] as Vector3)
 	if jumelee != null:
 		dirh = _pos_vehicule(i, s + 1.5) - _pos_vehicule(i, s - 1.5)
@@ -7091,6 +7096,29 @@ func _portee_de(d: float) -> int:
 		if d >= _appuis[i] and d <= _appuis[i + 1]:
 			return i
 	return -1
+
+
+## Flèche du câble TEL QU'IL EST DESSINÉ en d : le nuanceur ne déplace que les sommets du tube (tous les
+## _pas_ligne m, 3 m en ligne) et la carte graphique trace un segment droit entre eux ; la pince posée sur la
+## flèche exacte passait jusqu'à P/H × 3/4 m sous ce segment puis le rejoignait au sommet suivant — le câble
+## semblait monter et descendre dans la pince immobile (retour d'utilisateur du 19/11/2026, PWA).
+var _d_sommets: Array = []            # [montée, descente] : abscisses des sommets du câble, croissantes
+
+func _fleche_affichee(d: float, montee: bool) -> float:
+	if _d_sommets.is_empty():
+		var xm: float = signf(_x_brin(true))
+		var a: Array = [[], []]
+		for q in _boucle:
+			if absf(q.x) > 0.01:
+				(a[0 if signf(q.x) == xm else 1] as Array).append(-q.z)
+		for k in range(2):
+			(a[k] as Array).sort()
+		_d_sommets = [PackedFloat32Array(a[0]), PackedFloat32Array(a[1])]
+	var t: PackedFloat32Array = _d_sommets[0 if montee else 1]
+	var j: int = t.bsearch(d)
+	if j <= 0 or j >= t.size() or t[j] - t[j - 1] < 1e-4:
+		return _fleche(d, montee)
+	return lerpf(_fleche(t[j - 1], montee), _fleche(t[j], montee), (d - t[j - 1]) / (t[j] - t[j - 1]))
 
 
 ## Flèche locale (m, vers le bas) en d sur un brin : même calcul que le shader.
@@ -7514,7 +7542,7 @@ func _placer(i: int) -> void:
 	# en ligne : la flèche locale sous le poids des véhicules de la portée
 	if _n_appuis >= 2 and z[0] == "ligne":
 		var p0: Vector3 = pt[0]
-		pt[0] = p0 - Vector3(0, _fleche(-p0.z, signf(p0.x) == signf(_x_brin(true))), 0)
+		pt[0] = p0 - Vector3(0, _fleche_affichee(-p0.z, signf(p0.x) == signf(_x_brin(true))), 0)
 	# cap : corde de 3 m centrée sur le véhicule — sur l'arc de la poulie
 	# c'est la tangente exacte, et elle tourne continûment ; la direction du
 	# segment de la boucle (polygone de 24 côtés autour de la poulie) faisait

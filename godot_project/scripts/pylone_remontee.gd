@@ -775,7 +775,7 @@ func roues_tournantes(actif: bool) -> void:
 						RemonteeKit.poutre(cadre, Vector3(sx, -s * 0.11, -demi + 0.14), Vector3(sx, -s * 0.11, demi - 0.14), 0.016, 0.13, "acier_noir", Vector3.RIGHT)
 				RemonteeKit.cylindre(cadre, 0.035, 0.035, 0.26, Transform3D(Basis(Vector3.FORWARD, PI * 0.5), Vector3.ZERO), "acier_noir", 10)
 				MeshMerge.fusion_partagee(cadre, "Cadre")
-			for dz in ([-demi, demi] if demi > 0.0 else [0.0]):
+			for dz in ([-demi, demi] if absf(demi) > 0.001 else [0.0]):
 				var mi: MeshInstance3D = MeshInstance3D.new()
 				mi.mesh = _maillage_roue_ligne if modele_2026 else _maillage_roue
 				mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
