@@ -14,6 +14,15 @@ var lampe: SpotLight3D = null
 var lentille: MeshInstance3D = null
 ## Faux : la pastille seule (skieurs lointains, petites machines) ; vrai : la lumière aussi.
 var avec_lumiere: bool = true
+## Éclaire la neige (lampe du décor publiée par main) : la frontale du joueur, celle du skieur nocturne le plus proche.
+var eclaire: bool = true
+
+
+## Vraie lumière du moteur ? Pas en rendu de compatibilité (PWA) : une SpotLight y fait compiler une variante de
+## nuanceur pour tout ce qu'elle touche (gels de plusieurs secondes sur iPad) ; la neige reste éclairée par le
+## nuanceur du sol (LampesDecor), qui lit la position et l'axe de la lampe, même cachée.
+static func lumiere_reelle() -> bool:
+	return not OS.has_feature("web") and RenderingServer.get_current_rendering_method() != "gl_compatibility"
 
 
 static func materiau_lentille() -> StandardMaterial3D:
@@ -54,6 +63,7 @@ func _init(lumiere: bool = true) -> void:
 		lampe.light_specular = 0.2
 		# vers la neige devant les skis (≈ 15 m devant)
 		lampe.rotation = Vector3(deg_to_rad(-9.0), 0.0, 0.0)
+		lampe.visible = lumiere_reelle()
 		add_child(lampe)
 	visible = false
 

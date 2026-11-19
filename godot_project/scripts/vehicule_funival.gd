@@ -184,8 +184,8 @@ func _phares() -> void:
 		var sp: SpotLight3D = SpotLight3D.new()
 		sp.name = "Phare_amont" if sz < 0.0 else "Phare_aval"
 		sp.light_color = Color(1.0, 0.94, 0.84)      # blanc légèrement chaud (l'ocre saturait la paroi)
-		sp.light_energy = 3.5
-		sp.spot_range = 60.0
+		sp.light_energy = 8.0          # (3,5 éclairait très peu, retour d'essai du 19/11/2026)
+		sp.spot_range = 100.0
 		sp.spot_angle = 50.0
 		sp.spot_attenuation = 1.0
 		sp.shadow_enabled = false

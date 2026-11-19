@@ -318,6 +318,17 @@ void fragment() {
 	ALBEDO = mix(pow((c + 0.055) / 1.055, vec3(2.4)), c / 12.92, step(c, vec3(0.04045)));
 }
 """
+## Même chose, plus les phares du véhicule (retour d'essai PWA du 19/11/2026 : « les phares du Funival éclairent très
+## peu ») : publiés comme lampes du décor (LampesDecor) par main, ajoutés ici sur la paroi (béton gris, réflectance 0,5).
+const NUANCEUR_CUIT_COMPAT_CORPS: String = """
+void fragment() {
+	vec3 c = COLOR.rgb;
+	vec3 lin = mix(pow((c + 0.055) / 1.055, vec3(2.4)), c / 12.92, step(c, vec3(0.04045)));
+	vec3 pw = (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
+	vec3 nw = normalize((INV_VIEW_MATRIX * vec4(FRONT_FACING ? NORMAL : -NORMAL, 0.0)).xyz);
+	ALBEDO = lin + vec3(0.5) * lampes_decor(pw, nw);
+}
+"""
 
 
 static func mat_funi(nom: String) -> Material:
@@ -327,7 +338,8 @@ static func mat_funi(nom: String) -> Material:
 			var sh: Shader = Shader.new()
 			var compat: bool = String(ProjectSettings.get_setting_with_override("rendering/renderer/rendering_method")) == "gl_compatibility" \
 				or OS.has_feature("web") or RenderingServer.get_current_rendering_method() == "gl_compatibility"
-			sh.code = NUANCEUR_CUIT_COMPAT if compat else NUANCEUR_CUIT
+			sh.code = ("shader_type spatial;\nrender_mode unshaded, cull_disabled, fog_disabled;\n" + LampesDecor.code_glsl()
+				+ NUANCEUR_CUIT_COMPAT_CORPS) if compat else NUANCEUR_CUIT
 			_mat_cuit = ShaderMaterial.new()
 			_mat_cuit.shader = sh
 		RemonteeKit.verrou.unlock()

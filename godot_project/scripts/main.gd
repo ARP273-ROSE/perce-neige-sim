@@ -149,7 +149,19 @@ var _frontale: Frontale = null
 var _t_piste_nuit: float = 0.0
 var _atlas_ombres: int = 0
 var pn_jour: Vector3 = Vector3.ONE    # dernière teinte du décor publiée (bancs)
+var villages: LumieresVillages = null
+var _prechauffe: Node3D = null
+var _prechauffe_n: int = 0
 const FOG_COULEUR: Color = Color(0.55, 0.58, 0.65)
+## Lumière ambiante la nuit dans une gare ou un véhicule de remontée : chaude, plus basse que celle du jour.
+const AMBIENT_ABRI_NUIT: float = 0.32
+const AMBIANCE_ABRI: Color = Color(0.78, 0.62, 0.44)
+const AMBIANCE_ABRI_WEB: Color = Color(0.52, 0.42, 0.30)
+const AMBIANCE_PC: Color = Color(0.45, 0.50, 0.60)
+const AMBIENT_FUNI_SOUS: float = 0.9
+const AMBIANCE_NEONS: Color = Color(0.62, 0.64, 0.66)
+## 0 dehors, 1 abri à l'air libre (gare, véhicule de remontée), 2 souterrain ou rame du Perce-Neige (éclairage propre).
+var lieu_lumiere: int = 2
 const PROC_HAUT_JOUR: Color = Color(0.22, 0.42, 0.78)
 const PROC_HORIZON_JOUR: Color = Color(0.70, 0.78, 0.88)
 const STUDIO_ROTATION: Vector3 = Vector3(-0.6981317, 2.7925268, 0.0)     # (−40°, 160°)
@@ -1271,8 +1283,9 @@ func _suite_process(delta: float) -> void:
 		_maj_nuit(delta, dehors)
 	# (sauf caméra sous la roche du Funival : sa voie et ses véhicules ont la couche de la vue extérieure, que ce soleil
 	# éclaire — le tube était 3 fois plus clair que celui du Perce-Neige, protocole du PC du 08/11/2026)
+	# (ni dans la salle amont du Funival : le soleil y entrait de jour, pas de nuit — retour d'utilisateur du 19/11/2026)
 	if _ext_light != null and dehors and not _camera_sous_funival():
-		_ext_light.visible = _lumiere_dehors > 0.004
+		_ext_light.visible = _lumiere_dehors > 0.004 and not camera_souterrain_funival()
 	if _ext_light != null and dehors != _soleil_skieur:
 		_soleil_skieur = dehors
 		if not dehors:
@@ -1361,6 +1374,27 @@ func _suite_process(delta: float) -> void:
 			var sr: float = physics.s_render
 			if sr > tunnel.station_high_start - 20.0 or sr < tunnel.station_low_end + 20.0:
 				amb = AMBIENT_GARE_WEB
+		# la nuit, dans une gare ou un véhicule de remontée (abri à l'air libre) : plus la lumière grise du jour, une
+		# lumière intérieure chaude et plus basse (retour d'essai PWA du 19/11/2026 : « tout est blanc blafard »).
+		# Tunnels et gares souterraines (Perce-Neige, Funival) : leur éclairage propre, le même à toute heure.
+		var ecl: float = float(etat_jour.get("eclairage", 0.0))
+		lieu_lumiere = _lieu_lumiere(_soleil_skieur)
+		# (souterrain : l'éclairage propre du lieu, même si le skieur est dehors ailleurs — caméra détachée)
+		if lieu_lumiere == 2 and mode_skieur:
+			amb = AMBIENT_ON if tunnel_lights_on else AMBIENT_OFF
+		var coul: Color = _ambiance_base()
+		# salle et tube du Funival : néons, la même lumière jour et nuit (avant, le soleil du dehors y entrait le jour)
+		if mode_skieur and camera_souterrain_funival():
+			amb = AMBIENT_FUNI_SOUS
+			coul = AMBIANCE_NEONS
+		if lieu_lumiere == 1 and ecl > 0.0:
+			# (dans une cabine fermée, la lumière vient de son plafonnier : plus forte ; la PWA n'a que l'ambiante)
+			var a_nuit: float = AMBIENT_ABRI_NUIT * (9.0 if cabine_du_skieur() != null else 2.0) if _compat \
+				else AMBIENT_ABRI_NUIT * (3.0 if cabine_du_skieur() != null else 1.2)
+			amb = lerpf(amb, a_nuit, ecl)
+			coul = coul.lerp(AMBIANCE_ABRI_WEB if _compat else AMBIANCE_ABRI, ecl)
+		if not _env.ambient_light_color.is_equal_approx(coul):
+			_env.ambient_light_color = coul
 		_env.ambient_light_energy = move_toward(_env.ambient_light_energy, amb, delta * 1.5)
 	if machine_room != null and cabin != null:
 		# panorama photographié depuis la gare : vu des baies de la gare et
@@ -1393,6 +1427,7 @@ func _suite_process(delta: float) -> void:
 					int(collisions.progres() * 100.0), (Time.get_ticks_msec() - _t_skieur_attente) / 1000])
 	if mode_skieur:
 		_maj_skieur()
+		_maj_prechauffe()
 	elif skieur_auto != null and skieur != null and skieur.actif:
 		_maj_skieur()        # BOUCLE en coulisse : le skieur vit, l'exploitation l'attend
 	# numéros des supports : rétroréfléchissants dans les phares (vue cabine)
@@ -2591,6 +2626,7 @@ func _entrer_skieur() -> void:
 			and not physics.doors_open:
 		toggle_doors()
 	_mode_skieur_ui(true)
+	_prechauffer_nuit.call_deferred()
 	_flash("Skieur : joystick ou ZQSD pour marcher, glisser pour regarder")
 	# (le reste de la première image en vue skieur est du rendu : à comparer
 	# aux [Gel3D] et aux images lentes des relevés)
@@ -3193,26 +3229,44 @@ func _maj_jour(delta: float, dehors: bool) -> void:
 		# (rendu de compatibilité : ses nuanceurs relèvent les tons par γ = 0,625 au lieu de la courbe sRGB, bien plus
 		# sombre dans les noirs — décor relevé d'autant la nuit, identique de jour)
 		pn_jour = Vector3(decor.r, decor.g, decor.b)
-		if _compat:
+		# (caméra dans le tube ou la salle du Funival : ses parois de roche sont du relief, éclairées à toute heure)
+		if camera_souterrain_funival():
+			pn_jour = Vector3.ONE
+		elif _compat:
 			pn_jour = Vector3(pow(decor.r, 0.78), pow(decor.g, 0.78), pow(decor.b, 0.78))
 		RenderingServer.global_shader_parameter_set("pn_jour", pn_jour)
 		# matériaux non éclairés à couleurs de sommets (véhicules lointains, lignes cuites de la PWA)
+		var sous_funi: bool = camera_souterrain_funival()
+		var ext_vue: bool = (dehors and not sous_funi) or (cabin != null and cabin.view_mode == Cabin.ViewMode.EXTERIOR)
 		var teinte: Color = Color(decor.r, decor.g, decor.b).linear_to_srgb()
-		VehiculesLod.materiau().albedo_color = teinte
+		# (sous terre, ces couleurs cuites sont celles d'un tunnel éclairé, sans heure : tube et rames du Funival)
+		if (lieu_lumiere == 2 and not ext_vue) or sous_funi:
+			teinte = Color(1, 1, 1)
+		# reflets du ciel : pas sous la roche du Funival (le ciel du jour s'y reflétait, pas celui de la nuit)
+		if _env != null:
+			var refl: int = Environment.REFLECTION_SOURCE_DISABLED if sous_funi else Environment.REFLECTION_SOURCE_BG
+			if _env.reflected_light_source != refl:
+				_env.reflected_light_source = refl
+		# véhicules (cabines, sièges) en version allégée : couleurs cuites, sans lumière ; la nuit, une lueur chaude
+		# s'y ajoute (cabines éclairées de l'intérieur, vues de dehors ou de dedans — retour d'essai du 19/11/2026)
+		var ecl0: float = float(etat_jour.get("eclairage", 0.0))
+		var t_veh: Color = Color(decor.r, decor.g, decor.b) + Color(0.42, 0.33, 0.22) * ecl0
+		VehiculesLod.materiau_pylones().albedo_color = teinte
+		VehiculesLod.materiau().albedo_color = teinte if teinte == Color(1, 1, 1) else Color(minf(t_veh.r, 1.0),
+			minf(t_veh.g, 1.0), minf(t_veh.b, 1.0)).linear_to_srgb()
 		LigneCuite._verrou.lock()
 		for m in LigneCuite._materiaux_communs.values():
 			if m is StandardMaterial3D and (m as StandardMaterial3D).shading_mode == BaseMaterial3D.SHADING_MODE_UNSHADED \
 					and (m as StandardMaterial3D).vertex_color_use_as_albedo:
 				(m as StandardMaterial3D).albedo_color = teinte
 		LigneCuite._verrou.unlock()
-		_appliquer_ciel(decor)
+		_appliquer_ciel(decor, ext_vue)
 		var dsol: Color = Color(decor.r, decor.g, decor.b, 1.0)
 		if absf(dsol.r - _decor_sol.r) + absf(dsol.g - _decor_sol.g) + absf(dsol.b - _decor_sol.b) > 0.01:
 			_decor_sol = dsol
 			_sol_ext = -1                # le sol du ciel est repris par _suite_process
 		# brouillard : sa lumière suit le décor dehors (vue extérieure ou skieur), pas dans le tunnel
 		if _env != null:
-			var ext_vue: bool = dehors or (cabin != null and cabin.view_mode == Cabin.ViewMode.EXTERIOR)
 			_env.fog_light_color = FOG_COULEUR * (dsol if ext_vue else Color(1, 1, 1))
 		# lumière du skieur dehors : le Soleil, sinon la Lune ; ses ombres portées
 		var es: float = etat_jour["energie_soleil"]
@@ -3256,22 +3310,25 @@ func _regler_ombres() -> void:
 
 
 ## Couleurs du ciel (seulement quand elles changent : le ciel du PC refait ses reflets à chaque réglage).
-func _appliquer_ciel(decor: Color) -> void:
+func _appliquer_ciel(decor: Color, ext_vue: bool) -> void:
 	if _env == null or _env.sky == null:
 		return
 	var ds: Vector3 = etat_jour["dir_soleil"]
 	var haut: Color = etat_jour["ciel_haut"]
 	var hor: Color = etat_jour["ciel_horizon"]
 	if not _ciel_sig.is_empty() and (_ciel_sig[0] as Vector3).dot(ds) > 0.99999 \
-			and (_ciel_sig[1] as Color).is_equal_approx(hor) and (_ciel_sig[2] as Color).is_equal_approx(haut):
+			and (_ciel_sig[1] as Color).is_equal_approx(hor) and (_ciel_sig[2] as Color).is_equal_approx(haut) \
+			and bool(_ciel_sig[3]) == ext_vue:
 		return
-	_ciel_sig = [ds, hor, haut]
+	_ciel_sig = [ds, hor, haut, ext_vue]
 	var mat: Material = _env.sky.sky_material
 	if mat is ShaderMaterial:
 		var sm: ShaderMaterial = mat
 		sm.set_shader_parameter("haut", Vector3(haut.r, haut.g, haut.b))
 		sm.set_shader_parameter("horizon", Vector3(hor.r, hor.g, hor.b))
-		var amb: Color = etat_jour["ambiance_ciel"]
+		# (part de l'ambiante lue dans le ciel : de nuit dehors seulement ; dans un tunnel ou une gare, la même à toute
+		# heure — retour d'utilisateur du 19/11/2026)
+		var amb: Color = etat_jour["ambiance_ciel"] if ext_vue else CycleJour.AMBIANCE_CIEL_JOUR
 		sm.set_shader_parameter("ambiance", Vector3(amb.r, amb.g, amb.b))
 		sm.set_shader_parameter("soleil", ds)
 		var lu: Color = etat_jour["lueur"]
@@ -3310,7 +3367,13 @@ func _maj_nuit(delta: float, dehors: bool) -> void:
 	if eclairages_nuit != null:
 		var sup: Node3D = skieur.support if skieur != null and (skieur.assis or skieur.embarque) else null
 		var tete: Vector3 = skieur.global_position + Vector3(0.0, 1.3, 0.0) if skieur != null else Vector3.ZERO
-		eclairages_nuit.regler(ecl if mode_skieur else 0.0, pc, delta, sup, tete)
+		var sup2: Node3D = cabine_du_skieur()
+		if sup2 != null:
+			tete = pc                  # (la caméra est dans la cabine : le plafonnier au-dessus d'elle)
+		if sup2 == null:
+			sup2 = skieur.support if skieur != null and skieur.support != null else sup
+		eclairages_nuit.regler(ecl if mode_skieur else 0.0, pc, delta, sup2, tete)
+		eclairages_nuit.regler_funival(ecl if mode_skieur else 0.0)
 	var damage: bool = mode_skieur and CycleJour.heure_damage(HeureJeu.heure())
 	if dameuses == null and damage and domaine != null and domaine.pret:
 		dameuses = Dameuses.new()
@@ -3318,12 +3381,21 @@ func _maj_nuit(delta: float, dehors: bool) -> void:
 		dameuses.preparer(relief)
 	if dameuses != null:
 		dameuses.actives = damage
-		dameuses.phares_max = 1 if (PerfManager.allege or OS.has_feature("web")) else 2
+		dameuses.niveau_feux = ecl
+	# fenêtres des villages et des chalets
+	if villages == null and ecl > 0.0:
+		villages = LumieresVillages.new()
+		add_child(villages)
+		villages.construire(relief)
+	if villages != null:
+		villages.regler(ecl, HeureJeu.heure())
+		# (PWA : pas de vraies lumières, voir Frontale.lumiere_reelle ; les phares éclairent la neige par LampesDecor)
+		dameuses.phares_max = (1 if PerfManager.allege else 2) if Frontale.lumiere_reelle() else 0
 	if domaine != null and domaine.skieurs != null:
 		domaine.skieurs.nuit = ecl
 	# frontale du joueur : la nuit, à l'air libre
 	if skieur != null:
-		var on: bool = ecl > 0.35 and skieur.actif and dehors
+		var on: bool = ecl > 0.35 and skieur.actif and dehors and cabine_du_skieur() == null
 		if on and _frontale == null:
 			_frontale = Frontale.new(true)
 			_frontale.top_level = true
@@ -3385,6 +3457,14 @@ func decaler_heure(s: float) -> void:
 ## nocturnes, candélabres des gares ; les plus proches de la caméra d'abord.
 func _publier_lampes(ecl: float, pc: Vector3) -> void:
 	var l: Array = []
+	# phares du Funival, de jour comme de nuit (le tube de la PWA les reçoit par son nuanceur)
+	if mode_skieur and Funival.actif != null and is_instance_valid(Funival.actif):
+		for e0 in Funival.actif._vehicules:
+			var vf: Node3D = e0[0]
+			if is_instance_valid(vf) and vf is VehiculeFunival and vf.global_position.distance_to(pc) < 260.0:
+				for sp0 in (vf as VehiculeFunival)._phares_l:
+					if is_instance_valid(sp0) and (sp0 as SpotLight3D).visible:
+						l.append(LampesDecor.depuis_projecteur(sp0 as SpotLight3D, 0.8))
 	if ecl > 0.02 and mode_skieur:
 		if _frontale != null and _frontale.visible and _frontale.lampe != null:
 			l.append(LampesDecor.depuis_projecteur(_frontale.lampe))
@@ -3394,7 +3474,7 @@ func _publier_lampes(ecl: float, pc: Vector3) -> void:
 					l.append(LampesDecor.depuis_projecteur(sp as SpotLight3D))
 		if domaine != null and domaine.skieurs != null:
 			for fr in domaine.skieurs._frontales:
-				if (fr as Frontale).visible and (fr as Frontale).lampe != null and (fr as Frontale).lampe.visible:
+				if (fr as Frontale).visible and (fr as Frontale).lampe != null and (fr as Frontale).eclaire:
 					l.append(LampesDecor.depuis_projecteur((fr as Frontale).lampe))
 		if eclairages_nuit != null:
 			l.append_array(eclairages_nuit.lampes_decor(pc))
@@ -3403,3 +3483,130 @@ func _publier_lampes(ecl: float, pc: Vector3) -> void:
 	if l.is_empty() and LampesDecor._publiees == 0:
 		return
 	LampesDecor.publier(l)
+
+
+## Où est la caméra du skieur pour la lumière (voir lieu_lumiere). Hors vue skieur : 2 (vues du funiculaire).
+func _lieu_lumiere(dehors: bool) -> int:
+	if not mode_skieur or skieur == null:
+		return 2
+	if _camera_sous_funival() or skieur_au_perce_neige() or _skieur_en_tunnel():
+		return 2
+	# tube et salle amont du Funival (souterraine, éclairée à toute heure)
+	if camera_souterrain_funival():
+		return 2
+	if cabine_du_skieur() != null:
+		return 1
+	return 0 if dehors else 1
+
+
+## Cabine fermée (télécabine, 3S, téléphérique, Funival) où le skieur est à bord, sinon null. (À bord, le skieur n'a
+## pas de « support » : c'est RemonteesDomaine qui le porte, a_bord = [ligne, véhicule, …].)
+func cabine_du_skieur() -> Node3D:
+	if remontees == null or remontees.a_bord.is_empty():
+		return null
+	var lg: LigneRemontee = remontees.a_bord[0]
+	if not is_instance_valid(lg) or not (lg.famille.begins_with("cabine") or lg.vaetvient() or lg.tricable()):
+		return null
+	var i: int = int(remontees.a_bord[1])
+	if i < 0 or i >= lg._vehicules.size() or not is_instance_valid(lg._vehicules[i][0]):
+		return null
+	return lg._vehicules[i][0]
+
+
+## Couleur de l'ambiante hors nuit : celle du PC, ou celle de la PWA (avec la part de la neige dehors).
+func _ambiance_base() -> Color:
+	if _compat:
+		return AMBIANCE_WEB + (AMBIANCE_WEB_NEIGE if _sol_ext == 2 else Color(0, 0, 0, 0))
+	return AMBIANCE_PC
+
+
+## Préchauffe des nuanceurs de la nuit (19/11/2026, relevé de fluidité de la PWA 1.75.0 : gels de 4,2 s et 3,4 s
+## à la première image de nuit, « après le script », compilation de nuanceurs). À l'entrée en vue skieur, de jour
+## comme de nuit (l'heure accélérée peut faire tomber la nuit en cours de partie) : un exemplaire minuscule de chaque
+## matériau de la nuit est dessiné devant la caméra pendant quelques images, l'émission des vitres est activée (à 0),
+## la voûte étoilée construite. Les compilations ont lieu pendant la préparation du skieur, plus à la tombée de la nuit.
+func _prechauffer_nuit() -> void:
+	if _prechauffe != null:
+		return
+	var cam: Camera3D = get_viewport().get_camera_3d()
+	if cam == null:
+		return
+	_prechauffe = Node3D.new()
+	_prechauffe.name = "PrechauffeNuit"
+	_prechauffe.top_level = true
+	add_child(_prechauffe)
+	var mats: Array = []
+	# matériaux des dameuses (corps : une surface par matériau), flèche, ancrage, câble
+	var dm: ArrayMesh = Dameuses.modele()
+	var meshes: Array = [dm, Dameuses._maillage_fleche, Dameuses._maillage_ancre, Dameuses._cyl_cable]
+	# lentille de frontale, points lumineux (villages, dameuses lointaines), têtes de candélabres
+	Frontale.materiau_lentille()
+	var sph := SphereMesh.new()
+	sph.radius = 0.05
+	sph.height = 0.1
+	sph.radial_segments = 4
+	sph.rings = 2
+	mats.append(Frontale._mat_lentille)
+	mats.append(PointsLumineux.materiau())
+	var mt := StandardMaterial3D.new()
+	mt.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	mats.append(mt)
+	# vitres : émission activée (à 0) tout de suite
+	var vitres: Array = [VehiculeFunival.vitre_funi()]
+	for nom in EclairagesNuit.VITRES:
+		if nom != "#funi":
+			vitres.append(RemonteeKit.mat(nom))
+	for v in vitres:
+		var sm: StandardMaterial3D = v
+		if not sm.emission_enabled:
+			sm.emission_enabled = true
+			sm.emission = EclairagesNuit.COULEUR
+			sm.emission_energy_multiplier = 0.0
+		mats.append(sm)
+	var kk: Array = [0]
+	var poser := func(m: Mesh, mat: Material) -> void:
+		var k: int = kk[0]
+		var mi := MeshInstance3D.new()
+		mi.mesh = m
+		if mat != null:
+			mi.material_override = mat
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		mi.scale = Vector3.ONE * 0.0002
+		mi.position = Vector3(float(k % 8) * 0.0005 - 0.002, float(k / 8) * 0.0005, 0.0)
+		kk[0] = k + 1
+		_prechauffe.add_child(mi)
+	for m2 in meshes:
+		if m2 != null:
+			poser.call(m2, null)
+	for m3 in mats:
+		poser.call(sph, m3)
+	# voûte étoilée : construite et dessinée une fois (nuit = 1, invisible derrière le reste un instant)
+	if _voute == null:
+		_voute = VouteCeleste.new()
+		add_child(_voute)
+	_voute.construire()
+	_voute.visible = true
+	_prechauffe_n = 4
+	_prechauffe.global_transform = cam.global_transform.translated_local(Vector3(0.0, 0.0, -0.3))
+	print("[Nuit] préchauffe des nuanceurs de nuit : %d pièces" % int(kk[0]))
+
+
+func _maj_prechauffe() -> void:
+	if _prechauffe == null or _prechauffe_n <= 0:
+		return
+	var cam: Camera3D = get_viewport().get_camera_3d()
+	if cam != null:
+		_prechauffe.global_transform = cam.global_transform.translated_local(Vector3(0.0, 0.0, -0.3))
+	_prechauffe_n -= 1
+	if _prechauffe_n == 0:
+		_prechauffe.visible = false
+		for c in _prechauffe.get_children():
+			c.queue_free()
+		_t_jour = 0.0              # la voûte reprend son état (cachée de jour)
+
+
+## Caméra dans le tube ou la salle amont du Funival (souterrains, éclairés à toute heure).
+func camera_souterrain_funival() -> bool:
+	var cam: Camera3D = get_viewport().get_camera_3d()
+	return cam != null and Funival.actif != null and is_instance_valid(Funival.actif) and Funival.actif.pret \
+		and Funival.actif.souterrain(cam.global_position)

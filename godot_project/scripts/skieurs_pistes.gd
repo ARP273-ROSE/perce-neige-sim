@@ -283,8 +283,10 @@ func _process_corps(delta: float) -> void:
 		var fj: Frontale = _frontales[j]
 		if j >= n_front:
 			fj.allumer(false)
-		elif fj.lampe != null:
-			fj.lampe.visible = j == front_proche
+		else:
+			fj.eclaire = j == front_proche
+			if fj.lampe != null:
+				fj.lampe.visible = fj.eclaire and Frontale.lumiere_reelle()
 	for k3 in range(3):
 		var mm3: MultiMesh = (_mmi[k3] as MultiMeshInstance3D).multimesh
 		if n_c[k3] > 0:

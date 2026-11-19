@@ -35,6 +35,13 @@ var _ech_cases: Dictionary = {}
 var _rng := RandomNumberGenerator.new()
 var _t_maj: float = 0.0
 var _prete: bool = false
+## Dameuses lointaines : leurs seuls feux (phares blancs, gyrophare orange), sur tout le domaine.
+const N_LOIN: int = 36
+const LOIN_MIN: float = 450.0
+var _loin: Array = []                       # [piste, abscisse, sens, phase]
+var _points_loin: PointsLumineux = null
+var _t_loin: float = 0.0
+var niveau_feux: float = 1.0                # CycleJour « eclairage » (posé par main)
 var _n_forcees: int = 0
 ## Phares réels sur la plus proche : 0, 1 ou 2 (PerfManager).
 var phares_max: int = 2
@@ -47,10 +54,12 @@ static var _mat_cable: StandardMaterial3D = null
 static var _son: AudioStreamWAV = null
 
 
+## Dameuses dessinées en entier autour de la caméra (retour d'essai du 19/11/2026 : « une seule vue sur tout le
+## domaine », densité nettement augmentée) ; les autres, sur tout le domaine, ne sont que leurs feux (_lointaines).
 static func n_max() -> int:
 	if OS.has_feature("web"):
-		return 0 if PerfManager.secours_web >= 2 else 1
-	return 1 if PerfManager.allege else 2
+		return 1 if PerfManager.secours_web >= 2 else 2
+	return 2 if PerfManager.allege else 4
 
 
 func preparer(r: ReliefBuilder) -> void:
@@ -74,6 +83,19 @@ func preparer(r: ReliefBuilder) -> void:
 				_ech_cases[c] = []
 			(_ech_cases[c] as Array).append([i, s, q])
 			s += PAS_ECH
+	# dameuses lointaines : les pistes les plus longues, une ou deux chacune, réparties sur tout le domaine
+	var longues: Array = []
+	for i2 in range(_axes.size()):
+		if _long(i2) > 450.0:
+			longues.append([_long(i2), i2])
+	longues.sort_custom(func(a: Array, b: Array) -> bool: return float(a[0]) > float(b[0]))
+	var rl := RandomNumberGenerator.new()
+	rl.seed = 4242
+	for k2 in range(mini(N_LOIN, longues.size() * 2)):
+		var ip: int = int(longues[k2 % longues.size()][1])
+		_loin.append([ip, rl.randf() * _long(ip), 1.0 if rl.randf() < 0.5 else -1.0, rl.randf()])
+	_points_loin = PointsLumineux.new("FeuxDameusesLointaines", 4.5)
+	add_child(_points_loin)
 	_prete = true
 
 
@@ -420,6 +442,7 @@ func _process(delta: float) -> void:
 	for e in engins:
 		_poser(e, delta)
 	_phares(pc)
+	_maj_lointaines(delta, pc)
 
 
 func _poser(e: Dictionary, dt: float) -> void:
@@ -626,3 +649,46 @@ func _phares(pc: Vector3) -> void:
 			ph.append(sp)
 		while ph.size() > voulu:
 			(ph.pop_back() as Node).queue_free()
+
+
+## Feux des dameuses lointaines : elles avancent sur leur piste (demi-tour au bout) ; seuls les feux sont dessinés,
+## hors des 450 m autour de la caméra (là, les vraies dameuses).
+func _maj_lointaines(dt: float, pc: Vector3) -> void:
+	if _points_loin == null:
+		return
+	var on: bool = actives and niveau_feux > 0.02
+	if not on:
+		_points_loin.regler_niveau(0.0)
+		return
+	for e in _loin:
+		var i: int = e[0]
+		var s: float = float(e[1]) + float(e[2]) * V * dt
+		if s <= 2.0 or s >= _long(i) - 2.0:
+			e[2] = -float(e[2])
+			s = clampf(s, 2.0, _long(i) - 2.0)
+		e[1] = s
+	_t_loin -= dt
+	if _t_loin > 0.0:
+		return
+	_t_loin = 0.2
+	var pts := PackedVector3Array()
+	var cs := PackedColorArray()
+	for e2 in _loin:
+		var i2: int = e2[0]
+		var s2: float = e2[1]
+		var q: Vector2 = _point(i2, s2)
+		if Vector2(pc.x, pc.z).distance_to(q) < LOIN_MIN:
+			continue
+		var q2: Vector2 = _point(i2, clampf(s2 + float(e2[2]) * 3.0, 0.0, _long(i2)))
+		var tg: Vector2 = (q2 - q).normalized() if q2.distance_to(q) > 1e-3 else Vector2(0, -1)
+		var h: float = _h(q)
+		pts.append(Vector3(q.x + tg.x * 2.0, h + 2.9, q.y + tg.y * 2.0))
+		cs.append(Color(1.6, 1.55, 1.4, 0.0))
+		pts.append(Vector3(q.x, h + 3.0, q.y))
+		cs.append(Color(1.8, 0.75, 0.08, maxf(float(e2[3]), 0.01)))
+	_points_loin.poser(pts, cs)
+	_points_loin.regler_niveau(niveau_feux)
+
+
+func n_lointaines_visibles() -> int:
+	return _points_loin.multimesh.visible_instance_count / 2 if _points_loin != null and _points_loin.visible else 0

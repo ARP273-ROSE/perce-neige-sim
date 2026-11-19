@@ -173,6 +173,14 @@ func _ready() -> void:
 		if pm != null:
 			pm.call("releve"))
 	col.add_child(_b_mesure)
+	# heure de jeu, en jeu (retour d'essai du 19/11/2026 : sur iPad, pas de clavier pour Page haut / Page bas)
+	var b_h: Button = _bouton("HEURE", "Heure de jeu : heure réelle ou choisie, jour, accélération ; −1 h / +1 h (touches Page haut / Page bas)")
+	b_h.pressed.connect(func() -> void:
+		PanneauHeure.ouvrir(self, func() -> void:
+			if main != null:
+				main.set("_t_jour", 0.0)
+				message("Heure de jeu : " + HeureJeu.libelle(), 3.0)))
+	col.add_child(b_h)
 	_b_vue = _bouton("1re PERS.", "Vue à la première ou à la troisième personne (touche V)")
 	_b_vue.pressed.connect(basculer_vue)
 	col.add_child(_b_vue)

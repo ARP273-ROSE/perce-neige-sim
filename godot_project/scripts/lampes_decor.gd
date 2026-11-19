@@ -41,3 +41,31 @@ static func depuis_projecteur(sp: SpotLight3D, gain: float = 1.0) -> Dictionary:
 	var xf: Transform3D = sp.global_transform
 	return {"p": xf.origin, "r": sp.spot_range, "c": sp.light_color * sp.light_energy * gain * 0.22,
 		"d": -xf.basis.z.normalized(), "cos": cos(deg_to_rad(sp.spot_angle))}
+
+
+## Code GLSL des lampes (même texte que dans ReliefBuilder.SHADER_TERRAIN) : lampes_decor(p, n) en monde.
+static func code_glsl() -> String:
+	var s: String = "global uniform int pn_lampes_n;\n"
+	for k in range(N):
+		s += "global uniform vec4 pn_lampe_p%d;\nglobal uniform vec4 pn_lampe_c%d;\nglobal uniform vec4 pn_lampe_d%d;\n" % [k, k, k]
+	s += """vec3 une_lampe(vec3 p, vec3 n, vec4 lp, vec4 lc, vec4 ld) {
+	vec3 v = lp.xyz - p;
+	float d = length(v);
+	if (lp.w <= 0.0 || d > lp.w) {
+		return vec3(0.0);
+	}
+	vec3 l = v / max(d, 0.01);
+	float att = 1.0 - d / lp.w;
+	att *= att;
+	float cone = lc.w > -1.5 ? smoothstep(lc.w, mix(lc.w, 1.0, 0.6), dot(-l, ld.xyz)) : 1.0;
+	return lc.rgb * (att * cone * max(dot(n, l), 0.0));
+}
+vec3 lampes_decor(vec3 p, vec3 n) {
+	vec3 s = vec3(0.0);
+	if (pn_lampes_n > 0) {
+"""
+	for k in range(N):
+		s += "\t\t%ss += une_lampe(p, n, pn_lampe_p%d, pn_lampe_c%d, pn_lampe_d%d);\n" % [
+			"" if k == 0 else "if (pn_lampes_n > %d) " % k, k, k, k]
+	s += "\t}\n\treturn s;\n}\n"
+	return s
