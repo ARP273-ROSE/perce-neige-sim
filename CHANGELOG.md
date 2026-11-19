@@ -5,6 +5,28 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## Version suivante (branche « nuit », non publiée) — heure de jeu, jour et nuit
+
+Demande d'un utilisateur : régler l'heure et la date du jeu, avoir le vrai soleil, la nuit, le ciel étoilé, les dameuses.
+
+**Heure de jeu** (HeureJeu) : l'heure réelle de Tignes par défaut (fuseau Europe/Paris, heure d'été comprise, où que soit l'appareil), ou une date et une heure choisies sur l'écran de choix du scénario, qui avancent ensuite à ×1, ×10, ×60 ou ×360. Le choix est gardé (user://heure_jeu.cfg). Page haut / Page bas : une heure de plus ou de moins. Affluence des pistes et des remontées, exploitation du Perce-Neige, horloges (cabine, écran du pupitre, gare, portiques) suivent cette heure. Bancs sans écran : 15 février 2026, 11 h, quelle que soit l'heure à laquelle on les lance.
+
+**Soleil et Lune réels** (AstroCiel) : position calculée pour le site (formules basse précision de l'Astronomical Almanac, temps sidéral IAU 1982). Contre l'éphéméride JPL DE421 (skyfield) sur 14 dates : Soleil à 0,009° au plus, Lune à 0,18° au plus (parallaxe comprise), phase à 0,01 près ; étoiles à 0,01° (précession appliquée).
+
+**Jour, aube, crépuscule, nuit** (CycleJour) : au-dessus de +10°, couleurs et intensités d'avant, seule la direction du soleil change ; en dessous, la lumière jaunit puis s'éteint, le ciel passe par la lueur du couchant (du côté du soleil couché), le bleu de l'heure bleue, puis la nuit ; le décor dessiné sans éclairage (relief, forêt, gare du haut, panorama, véhicules lointains) suit par deux paramètres globaux de nuanceur (pn_soleil, pn_jour). La nuit, la Lune éclaire selon sa phase et sa hauteur.
+
+**Ciel étoilé** (VouteCeleste) : les 5 080 étoiles du catalogue BSC5 jusqu'à la magnitude 6, couleur selon l'indice B−V, placées par le temps sidéral local ; extinction près de l'horizon, fondu au crépuscule ; la Lune avec sa phase. Un seul maillage de points, caché de jour ; même rendu en Vulkan et sur la PWA.
+
+**Ombres portées** : orientées par le vrai soleil, ou par la Lune assez pleine et assez haute. Toujours au cran 0 du PC seulement ; sur puce intégrée, 2 tranches sur 350 m et une carte d'ombres de 2 048 px au lieu de 4 tranches sur 600 m.
+
+**La nuit** : candélabres aux gares des remontées (têtes émissives, quelques vraies lumières près de la caméra selon la machine), vitres des cabines et des gares éclairées, plafonnier de la cabine où l'on est assis, frontale du skieur, un ou deux skieurs nocturnes rares avec la leur. Le relief n'étant pas éclairé par le moteur, frontales, phares et candélabres éclairent la neige par le nuanceur du sol (LampesDecor, 8 lampes au plus).
+
+**Dameuses** (Dameuses) : de 17 h 30 au matin, une ou deux autour de la caméra (une sur machine allégée et sur la PWA), qui dament les pistes en bandes ; engin dessiné pour le jeu (chenilles, lame, fraise et peigne, cabine éclairée, gyrophares, phares, treuil). Sur pente raide, câble de treuil tendu vers un ancrage en amont : le toucher fait tomber. Moteur diesel de synthèse.
+
+**Piques de nuit** : piste fermée, dameuse, câble de treuil (proche, touché), dameuse percutée.
+
+Vérifié : bench_nuit_3d.gd (heure de jeu, astronomie contre l'éphéméride, jour et nuit, éclairages, frontales, dameuse treuillée, chute sur le câble, skieurs nocturnes, retour du jour)  ; les 77 bancs (76 + celui-ci) ; banc des nuanceurs en vrai rendu (Vulkan, et OpenGL de nuit au cran 4 allégé) ; temps d'image de jour inchangé (vue fixe, Radeon 740M : Vulkan 20,3 et 20,6 ms avant, 19,6 et 20,2 après ; OpenGL 10,7 avant, 9,8 après) ; captures de jour, d'aube, de crépuscule et de nuit en Vulkan et en OpenGL.
+
 ## 1.74.2 — 19 novembre 2026
 
 Retours d'essai sur la PWA : galets, téléphériques, gares, carte, sons, télécabines.

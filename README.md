@@ -252,10 +252,21 @@ L'écran d'accueil (F1) reprend ces touches.
 | EXPLOIT.                     | Exploitation automatique du funiculaire, marche / arrêt, même en skieur (Web : F3 ; PC : aussi le bouton AUTO du tableau de bord) |
 | ÉVACUER (touche U)           | Rame arrêtée en tunnel : enlever les issues de secours de la face, descendre sur la voie, l'escalier de service ramène en gare ou à la galerie de secours |
 | `F9` ou QUITTER              | Revenir à la conduite (l'exploitation automatique continue) |
+| `Page haut` / `Page bas`     | Heure de jeu : une heure de plus / de moins |
 
 Pendant ce temps, la rame est en exploitation automatique, 24 h/24 : elle
 attend le skieur resté en gare et ferme les portes dès qu'il est dans la
 voiture.
+
+**Heure de jeu** (écran de choix du scénario) : l'heure réelle de Tignes par
+défaut, ou une date et une heure choisies, qui avancent ensuite normalement
+(×1) ou en accéléré (×10, ×60, ×360). Le choix est gardé. Tout suit cette
+heure : affluence des pistes et des remontées, exploitation, horloges, Soleil
+et Lune à leur vraie place, aube, crépuscule et nuit, ciel étoilé réel. La
+nuit, les gares s'éclairent, les cabines aussi, le skieur porte une frontale,
+et les dameuses travaillent de 17 h 30 au matin, treuillées sur les pentes
+raides : attention au câble. En ligne de commande :
+`--heure-jeu=2026-02-15T21:30 --acceleration=60` (ou `--heure-jeu=reelle`).
 
 ## Commandes (version Web)
 
