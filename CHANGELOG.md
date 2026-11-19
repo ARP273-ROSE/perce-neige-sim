@@ -5,7 +5,7 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
-## Version suivante (branche « nuit », non publiée) — heure de jeu, jour et nuit
+## 1.75.0 — 19 novembre 2026
 
 Demande d'un utilisateur : régler l'heure et la date du jeu, avoir le vrai soleil, la nuit, le ciel étoilé, les dameuses.
 
@@ -22,6 +22,8 @@ Demande d'un utilisateur : régler l'heure et la date du jeu, avoir le vrai sole
 **La nuit** : candélabres aux gares des remontées (têtes émissives, quelques vraies lumières près de la caméra selon la machine), vitres des cabines et des gares éclairées, plafonnier de la cabine où l'on est assis, frontale du skieur, un ou deux skieurs nocturnes rares avec la leur. Le relief n'étant pas éclairé par le moteur, frontales, phares et candélabres éclairent la neige par le nuanceur du sol (LampesDecor, 8 lampes au plus).
 
 **Dameuses** (Dameuses) : de 17 h 30 au matin, une ou deux autour de la caméra (une sur machine allégée et sur la PWA), qui dament les pistes en bandes ; engin dessiné pour le jeu (chenilles, lame, fraise et peigne, cabine éclairée, gyrophares, phares, treuil). Sur pente raide, câble de treuil tendu vers un ancrage en amont : le toucher fait tomber. Moteur diesel de synthèse.
+
+**Câble dans la pince (PC)** : comme la PWA depuis la 1.74.2, le module C++ pose maintenant les véhicules sur le câble tel qu'il est dessiné (un sommet tous les 3 m), et non sur la courbe exacte. Le câble ne monte et ne descend plus dans la pince, vers 1 Hz.
 
 **Piques de nuit** : piste fermée, dameuse, câble de treuil (proche, touché), dameuse percutée.
 
