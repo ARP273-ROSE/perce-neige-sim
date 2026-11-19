@@ -85,10 +85,9 @@ func set_fault_manager(fm: FaultManager) -> void:
 
 # --- Horaire : pointe / creuse, charge selon l'heure (port du PC) ---------
 
-## Heure locale de l'appareil (dans le navigateur, l'heure système de Godot
-## est en UTC — PNConstants.heure_locale).
+## Heure de jeu à Tignes (HeureJeu : réelle par défaut, ou choisie par le joueur).
 static func heure_locale() -> Dictionary:
-	return PNConstants.heure_locale()
+	return HeureJeu.maintenant()
 
 
 ## Heure de pointe : 9 h-12 h et 14 h-16 h (PC AutoOps._is_peak, :6370).

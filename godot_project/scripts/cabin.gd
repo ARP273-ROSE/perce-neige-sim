@@ -1735,7 +1735,7 @@ func _process_corps(_delta: float) -> void:
 		_clock_next -= _delta
 		if _clock_next <= 0.0:
 			_clock_next = 1.0
-			var hl: Dictionary = PNConstants.heure_locale()
+			var hl: Dictionary = HeureJeu.maintenant()
 			for h in _horloges:
 				(h as Label3D).text = "%02d:%02d" % [hl.hour, hl.minute]
 

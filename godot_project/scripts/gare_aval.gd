@@ -998,7 +998,7 @@ func mettre_a_jour(dt: float, ph: TrainPhysics) -> void:
 	if _t_panneau > 0.0:
 		return
 	_t_panneau = 1.0
-	var hl: Dictionary = PNConstants.heure_locale()
+	var hl: Dictionary = HeureJeu.maintenant()
 	var en: bool = (int(hl.second) / 5) % 2 == 1
 	# prochain départ : la vraie attente (retour d'utilisateur, 12/10/2026 : « mets
 	# une vraie ETA, tu mets 2 min tout le temps et 0 ») — trajet restant,

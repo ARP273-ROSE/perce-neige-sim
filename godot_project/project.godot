@@ -91,3 +91,114 @@ limits/opengl/max_renderable_lights=128
 anti_aliasing/quality/msaa_3d=2
 textures/default_filters/anisotropic_filtering_level=3
 environment/defaults/default_clear_color=Color(0.02, 0.02, 0.04, 1)
+
+[shader_globals]
+
+pn_soleil={
+"type": "vec3",
+"value": Vector3(0.4, 0.78, 0.48)
+}
+pn_jour={
+"type": "vec3",
+"value": Vector3(1, 1, 1)
+}
+pn_lampes_n={
+"type": "int",
+"value": 0
+}
+pn_lampe_p0={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+pn_lampe_c0={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+pn_lampe_d0={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+pn_lampe_p1={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+pn_lampe_c1={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+pn_lampe_d1={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+pn_lampe_p2={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+pn_lampe_c2={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+pn_lampe_d2={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+pn_lampe_p3={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+pn_lampe_c3={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+pn_lampe_d3={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+pn_lampe_p4={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+pn_lampe_c4={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+pn_lampe_d4={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+pn_lampe_p5={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+pn_lampe_c5={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+pn_lampe_d5={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+pn_lampe_p6={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+pn_lampe_c6={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+pn_lampe_d6={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+pn_lampe_p7={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+pn_lampe_c7={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}
+pn_lampe_d7={
+"type": "vec4",
+"value": Vector4(0, 0, 0, 0)
+}

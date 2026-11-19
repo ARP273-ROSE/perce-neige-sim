@@ -13,19 +13,18 @@ extends RefCounted
 const PAX_KG: float = 80.0                 # skieur équipé (75 kg au Perce-Neige, sans les skis)
 const OUVERTURE: float = 8.75              # 8 h 45
 const FERMETURE: float = 16.75             # 16 h 45 (les dernières montées vers 16 h 30)
-## Heure forcée (bancs, captures) : négative = horloge du système.
+## Heure forcée (bancs, captures) : négative = heure de jeu (HeureJeu).
 static var heure_forcee: float = -1.0
 
 
 static func heure() -> float:
 	if heure_forcee >= 0.0:
 		return heure_forcee
-	var hl: Dictionary = PNConstants.heure_locale()
-	return float(int(hl.get("hour", 0))) + float(int(hl.get("minute", 0))) / 60.0
+	return HeureJeu.heure()
 
 
 static func ete() -> bool:
-	return AutoOperator.saison_ete(PNConstants.heure_locale()) if heure_forcee < 0.0 else false
+	return AutoOperator.saison_ete(HeureJeu.maintenant()) if heure_forcee < 0.0 else false
 
 
 ## Genre de ligne pour la loi de charge.
