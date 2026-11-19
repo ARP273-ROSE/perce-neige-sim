@@ -7533,7 +7533,9 @@ class BarrePleinCadre(QWidget):
     expand) : les deux restent dans les mêmes proportions à toute
     résolution."""
 
-    CLES = ("ecran", "pupitre", "poste", "skieur", "ligne", "pause", "aide")
+    # (VUES retiré : la 3D a son bouton VUE LIGNE, à bord seulement — retour d'utilisateur du 19/11/2026, « boutons
+    # en double ») ; PUPITRE seulement quand le pupitre concerne ce qu'on fait (voir GameWidget._pupitre_utile)
+    CLES = ("ecran", "pupitre", "poste", "skieur", "pause", "aide")
 
     def __init__(self, jeu: "GameWidget") -> None:
         super().__init__(jeu.window(),
@@ -7562,7 +7564,7 @@ class BarrePleinCadre(QWidget):
         if etat == self._vu:
             return
         self._vu = etat
-        plein, skieur, pause, aide, _lang = etat
+        plein, skieur, pause, aide, _lang, pupitre_utile = etat
         b = self._boutons
         b["ecran"].regler(T("WINDOW", "FENÊTRE") if plein else T("FULL SCREEN", "PLEIN ÉCRAN"),
                           T("Esc", "Échap") if plein else "")
@@ -7571,10 +7573,9 @@ class BarrePleinCadre(QWidget):
         b["pupitre"].regler(T("PANEL", "PUPITRE"), "Tab")
         b["poste"].regler(T("SCREENS", "ÉCRANS"), "F12")
         b["skieur"].regler(T("DRIVE", "CONDUIRE") if skieur else T("SKIER", "SKIEUR"), "F9")
-        b["ligne"].regler(T("VIEWS", "VUES"), "T")
         b["pause"].regler(T("RESUME", "REPRENDRE") if pause else T("PAUSE", "PAUSE"), "P")
         b["aide"].regler(T("CLOSE", "FERMER") if aide else T("HELP", "AIDE"), "F1")
-        b["ligne"].setVisible(skieur)
+        b["pupitre"].setVisible(pupitre_utile)
         self._haut_bouton = 0          # retaille au prochain placer()
 
     def placer(self, zone) -> None:
@@ -9665,8 +9666,9 @@ class GameWidget(QWidget):
         if b is None:
             b = self._barre_3d = BarrePleinCadre(self)
         fen = self.window()
+        utile = self._pupitre_utile()
         b.maj((bool(fen.isFullScreen()), self._skieur, st.mode == MODE_PAUSED,
-               bool(self._show_help), st.lang))
+               bool(self._show_help), st.lang, utile))
         from PyQt6.QtCore import QRect
         coin = self.mapToGlobal(self.rect().topLeft())
         b.placer(QRect(coin.x(), coin.y(), self.width(), self.height()))
@@ -9675,7 +9677,7 @@ class GameWidget(QWidget):
             b.raise_()
         # pupitre en surimpression : caché sous l'aide (elle prend l'écran), repeint à 10 Hz ; caché aussi quand le
         # poste du skieur est ouvert dans la vue 3D, à sa place (un seul poste de conduite à la fois)
-        if self._show_help or (self._skieur and self._poste_skieur_ouvert):
+        if self._show_help or (self._skieur and self._poste_skieur_ouvert) or not utile:
             if sp.isVisible():
                 sp.hide()
         else:
@@ -9689,6 +9691,15 @@ class GameWidget(QWidget):
                 self._t_surimpression = maintenant
                 if sp.signature() != sp._sig:
                     sp.update()
+
+    def _pupitre_utile(self) -> bool:
+        """Le pupitre en surimpression concerne-t-il ce qu'on fait ? En conduite, oui ; en skieur, seulement près
+        d'une remontée (sa télémesure arrive) ou au Perce-Neige (rame, gares, tunnel : écoute ≠ 2). Loin de tout,
+        le pupitre du funiculaire (INVERSER, PHARES, CABINE, TUNNEL…) ne sert à rien (retour d'utilisateur du
+        19/11/2026 : « chaque bouton visible doit concerner ce qu'on fait »)."""
+        if not self._skieur:
+            return True
+        return self._remontee_affichee() or bool(self._skieur_etat[0]) or int(self._skieur_etat[2]) != 2
 
     def _bouton_plein_cadre(self, cle: str) -> None:
         """Clic sur un bouton de la barre du plein cadre : même effet que la

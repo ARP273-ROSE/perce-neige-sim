@@ -14,6 +14,8 @@ uniform vec3 ambiance = vec3(0.13, 0.15, 0.18);
 uniform vec3 soleil = vec3(0.40, 0.78, 0.48);
 uniform float energie = 1.0;
 uniform float nuages = 1.0;
+// nuages selon l'heure (main._maj_ciel) : ciel dégagé la nuit, pour les étoiles (retour d'utilisateur du 19/11/2026)
+uniform float nuages_jour = 1.0;
 // heure de jeu (CycleJour) : lueur du couchant du côté du Soleil, teinte du disque et des nuages
 uniform vec3 lueur = vec3(0.0);
 uniform vec3 teinte_soleil = vec3(1.0);
@@ -55,10 +57,10 @@ void sky() {
 		vec2 hs = normalize(s.xz + vec2(1e-5));
 		float cote = 0.5 + 0.5 * dot(hz, hs);
 		c += lueur * pow(cote, 3.0) * exp(-max(y, 0.0) * 7.0);
-		if (nuages > 0.0 && y > 0.005) {
+		if (nuages * nuages_jour > 0.0 && y > 0.005) {
 			vec2 q = EYEDIR.xz / (y + 0.14) * 0.9 + vec2(40.0, 40.0);
 			float f = fbm(q);
-			float m = smoothstep(0.50, 0.78, f) * smoothstep(0.01, 0.16, y) * nuages;
+			float m = smoothstep(0.50, 0.78, f) * smoothstep(0.01, 0.16, y) * nuages * nuages_jour;
 			vec3 blanc = mix(vec3(0.72, 0.76, 0.82), vec3(1.05, 1.04, 1.02), smoothstep(0.55, 0.85, fbm(q + s.xz * 0.12)));
 			c = mix(c, blanc * teinte_nuages, m * 0.85);
 		}

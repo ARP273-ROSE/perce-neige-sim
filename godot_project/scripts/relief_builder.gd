@@ -1094,7 +1094,10 @@ func _fenetre_preparer(c: Vector2) -> Dictionary:
 	var toutes: Dictionary = dans_nouv.duplicate()
 	for k2 in _f_cellules:
 		toutes[k2] = true
+	# (altitudes et marques de la nouvelle fenêtre dans des copies, et tuiles refaites gardées à part : tout est
+	# échangé d'un coup à la fin — voir _fenetre_avancer)
 	return {"centre": c, "nouv": nouv, "dans_nouv": dans_nouv, "cellules": PackedInt32Array(toutes.keys()),
+		"h": _h.duplicate(), "raff": _raffine.duplicate(), "maillages": [],
 		"i": 0, "tuiles": [], "it": 0, "st": {}, "pire_ms": (Time.get_ticks_usec() - t0) / 1000.0, "images": 1,
 		"t0": t0, "noeuds": 0, "imin": 1 << 30, "imax": -1, "jmin": 1 << 30, "jmax": -1}
 
@@ -1124,6 +1127,14 @@ func _noeud_raffine0(i: int, j: int) -> bool:
 	return false
 
 
+## Double tampon (retour d'essai du 19/11/2026, PWA sur tablette : « des trous partout autour de Borsat /
+## Marmottes ») : les tuiles touchées étaient refaites une à une, chacune affichée dès qu'elle était prête, et les
+## altitudes (_h, le sol du skieur) changées dès l'étape 1. Pendant la reprise, une tuile refaite et sa voisine pas
+## encore ne partageaient plus les hauteurs de leur bord : des fentes jusqu'à 1,7 m de haut (sonde
+## _sonde_ski_trous, à 10 m/s de Tovière à Borsat et aux Marmottes), d'autant plus longues que l'appareil est lent,
+## à chaque reprise (tous les ~270 m). Maintenant les altitudes et marques nouvelles vont dans des copies, les tuiles
+## sont bâties sur elles et gardées à part, et le tout est échangé dans la même image à la fin : le sol affiché et
+## celui du skieur restent ceux de l'ancienne fenêtre jusque-là, sans fente.
 func _fenetre_avancer(fin_us: int) -> void:
 	var job: Dictionary = _f_job
 	var n: int = ReliefDonnees.NX
@@ -1131,7 +1142,12 @@ func _fenetre_avancer(fin_us: int) -> void:
 	var c: Vector2 = job["centre"]
 	var cellules: PackedInt32Array = job["cellules"]
 	var dans_nouv: Dictionary = job["dans_nouv"]
-	# 1. altitudes et marques des mailles reprises
+	var h_job: PackedFloat32Array = job["h"]
+	var raff_job: PackedByteArray = job["raff"]
+	# (sortis du travail le temps du pas : sinon la première écriture recopiait tout le tableau partagé)
+	job["h"] = null
+	job["raff"] = null
+	# 1. altitudes et marques des mailles reprises (dans les copies du travail)
 	while job["i"] < cellules.size():
 		var kc: int = cellules[job["i"]]
 		job["i"] += 1
@@ -1146,15 +1162,19 @@ func _fenetre_avancer(fin_us: int) -> void:
 					continue
 				# (nœud partagé avec une maille de la nouvelle fenêtre : c'est elle qui décide)
 				var dedans: bool = garder or _noeud_dans(i, j, dans_nouv)
-				_h[i * n + j] = _fenetre_noeud(i, j, c) if dedans else _h_aff0[i * n + j]
+				h_job[i * n + j] = _fenetre_noeud(i, j, c) if dedans else _h_aff0[i * n + j]
 				job["noeuds"] += 1
-		_raffine[kc] = 1 if garder else _raffine0[kc]
+		raff_job[kc] = 1 if garder else _raffine0[kc]
 		job["imin"] = mini(int(job["imin"]), ci * p)
 		job["imax"] = maxi(int(job["imax"]), ci * p + p)
 		job["jmin"] = mini(int(job["jmin"]), cj * p)
 		job["jmax"] = maxi(int(job["jmax"]), cj * p + p)
 		if Time.get_ticks_usec() > fin_us:
+			job["h"] = h_job
+			job["raff"] = raff_job
 			return
+	job["h"] = h_job
+	job["raff"] = raff_job
 	# 2. tuiles touchées, refaites une à une par tranches
 	if job["tuiles"].is_empty() and job["it"] == 0:
 		# tuiles du bloc qui croisent l'étendue des nœuds repris (bornes comprises : une tuile voisine partage
@@ -1165,11 +1185,18 @@ func _fenetre_avancer(fin_us: int) -> void:
 			if not t[4] and int(job["imin"]) <= t[1] and int(job["imax"]) >= t[0] and int(job["jmin"]) <= t[3] and int(job["jmax"]) >= t[2]:
 				tl[k] = true
 		job["tuiles"] = tl.keys()
+	# (tuiles bâties sur les altitudes du travail : _h et _raffine le temps du pas, puis rendus)
+	var h_vu: PackedFloat32Array = _h
+	var raff_vu: PackedByteArray = _raffine
+	_h = h_job
+	_raffine = raff_job
 	while job["it"] < (job["tuiles"] as Array).size():
 		var kt: int = job["tuiles"][job["it"]]
 		if (job["st"] as Dictionary).is_empty():
 			job["st"] = _tuile_debut(_tuiles[kt])
 		if not _tuile_pas(job["st"], fin_us):
+			_h = h_vu
+			_raffine = raff_vu
 			return
 		var arr: Array = _tuile_fin(job["st"])
 		job["st"] = {}
@@ -1178,10 +1205,14 @@ func _fenetre_avancer(fin_us: int) -> void:
 			var mesh: ArrayMesh = ArrayMesh.new()
 			mesh.add_surface_from_arrays(Mesh.PRIMITIVE_TRIANGLES, arr)
 			mesh.surface_set_material(0, _mat_terrain)
-			(_mi_tuiles[kt] as MeshInstance3D).mesh = mesh
+			(job["maillages"] as Array).append([kt, mesh])
 		if Time.get_ticks_usec() > fin_us:
+			_h = h_vu
+			_raffine = raff_vu
 			return
-	# 3. fini
+	# 3. fini : tuiles, altitudes et marques échangées dans la même image (_h et _raffine sont déjà ceux du travail)
+	for km in job["maillages"]:
+		(_mi_tuiles[int(km[0])] as MeshInstance3D).mesh = km[1]
 	_f_centre = c
 	_f_cellules = job["nouv"]
 	var tri: int = 0

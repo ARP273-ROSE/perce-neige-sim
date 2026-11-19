@@ -6289,6 +6289,39 @@ static func _fondre_pieces(pieces: Array) -> Mesh:
 func lointains_au_repos() -> void:
 	for rid in _rids_loin:
 		RenderingServer.multimesh_set_visible_instances(rid, 0)
+	# chemin GDScript (PWA, sans module) : la ligne ne sera plus avancée — ses véhicules sont cachés, sinon ils
+	# restaient dessinés, figés où ils étaient (et ceux d'une ligne jamais avancée depuis sa construction, à leur place
+	# de départ) : « au loin, les sièges et les cabines s'empilent, certains restent figés » (retour d'essai PWA du
+	# 19/11/2026). Ils reparaissent à leur place quand la ligne reprend.
+	if _noyau == null or not _noyau_valide():
+		for i in range(_vehicules.size()):
+			_cacher_loin(i, true)
+
+
+## Véhicule caché parce que trop loin (chemin GDScript sans niveaux de détail allégés) : au-delà de la portée des
+## véhicules il n'était plus posé, mais restait affiché à sa dernière place — à la limite de la portée, tous ceux
+## qui la passaient s'y empilaient, figés (sonde _sonde_lointains : paires de sièges à moins de 2 m à Tichot,
+## Grattalu, Col des Ves). Seuls les véhicules cachés ici sont remontrés ici.
+var _caches_loin: PackedByteArray = PackedByteArray()
+
+
+func _cacher_loin(i: int, cacher: bool) -> void:
+	if _caches_loin.size() != _vehicules.size():
+		_caches_loin.resize(_vehicules.size())
+		_caches_loin.fill(0)
+	if cacher == (_caches_loin[i] == 1):
+		return
+	var v: Node3D = _vehicules[i][0]
+	if cacher:
+		if not v.visible:
+			return              # (déjà caché pour une autre raison : rien à remontrer plus tard)
+		v.visible = false
+		_caches_loin[i] = 1
+		if i < _corps.size():
+			_corps_actif(i, false)
+	else:
+		v.visible = true
+		_caches_loin[i] = 0
 
 
 ## Portée des véhicules changée en jeu (régulateur) : la ligne et son noyau.
@@ -6856,7 +6889,9 @@ func _etape_gdscript(delta: float) -> void:
 				if niv > 0:
 					continue
 			if d2 > _vehicules_jusqua * _vehicules_jusqua:
+				_cacher_loin(i, true)
 				continue
+			_cacher_loin(i, false)
 			if d2 > 250.0 * 250.0:
 				if (i + _tour) % 4 != 0:
 					continue
@@ -6867,6 +6902,8 @@ func _etape_gdscript(delta: float) -> void:
 				continue
 		elif _lod_mm.size() == 2 and _lod_niveau(i, 0, 0.0):
 			lod_change = true
+		if not vue_active:
+			_cacher_loin(i, false)
 		_placer(i)
 	if lod_change:
 		RenderingServer.multimesh_set_buffer((_lod_mm[0] as MultiMesh).get_rid(), _lod_b1)
@@ -7179,10 +7216,34 @@ func _regler_vitesse(delta: float) -> void:
 	if vitesse_reelle < 0.0:
 		vitesse_reelle = vitesse * CRANS[cran]
 	var cible: float = vitesse * CRANS[cran] * cap_exploitation() if etat == "marche" else 0.0
+	if _jumelee_couplee():
+		cible = minf(cible, vitesse * jumelee._cible_regime())
 	var a: float = vitesse / T_DEMARRAGE if cible > vitesse_reelle else (a_urgence() if etat == "urgence" else A_ARRET)
 	vitesse_reelle = move_toward(vitesse_reelle, cible, a * delta)
 	if etat == "arret_normal" and vitesse_reelle <= 0.0:
 		etat = "arret"
+	_coupler_jumelee()
+
+
+## Régime visé par la ligne seule (consigne, exploitation ; 0 hors marche).
+func _cible_regime() -> float:
+	return CRANS[cran] * cap_exploitation() if etat == "marche" else 0.0
+
+
+func _jumelee_couplee() -> bool:
+	return jumelee != null and is_instance_valid(jumelee) and jumelee.roule and jumelee.vitesse_reelle >= 0.0
+
+
+## Tronçons jumelés (Bollin – Fresse : les sièges passent de l'un à l'autre à la gare intermédiaire) : un seul
+## régime pour les deux — l'un ralentit ou s'arrête (consigne, arrêt, arrêt d'urgence, panne), l'autre suit, sinon
+## les sièges se rattrapaient à l'échange (retour d'utilisateur du 19/11/2026 ; bench_jumelage). Même cible (la
+## plus basse des deux) et même accélération en régime au démarrage ; au freinage, la ligne qui freine le moins
+## prend le régime de l'autre. Les deux chemins (noyau C++ et GDScript) avancent les véhicules à ce régime.
+func _coupler_jumelee() -> void:
+	if not _jumelee_couplee():
+		return
+	if jumelee.regime() < regime() and jumelee._cible_regime() < jumelee.regime() + 1e-4:
+		vitesse_reelle = jumelee.regime() * vitesse
 
 
 ## Exploitation (mode auto/manuel, pannes : ExploitationRemontee), créée à la première demande (pupitre, ligne

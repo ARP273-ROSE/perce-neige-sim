@@ -52,6 +52,7 @@ var _carte_masquee: bool = false
 var _carte_a_pied: bool = false
 var _chausse: bool = false
 var _b_carte: Button = null
+var _b_quitter: Button = null           # caché sur le PC : la barre de la fenêtre a CONDUIRE (même geste)
 
 
 func _ready() -> void:
@@ -196,6 +197,7 @@ func _ready() -> void:
 			main.basculer_vue_ligne())
 	col.add_child(_b_vue_ligne)
 	var b_q: Button = _bouton("QUITTER", "Revenir à la conduite")
+	_b_quitter = b_q
 	b_q.pressed.connect(func() -> void:
 		if main != null:
 			main.basculer_skieur())
@@ -380,6 +382,9 @@ func _process_corps(delta: float) -> void:
 			_b_poste.set_pressed_no_signal(false)
 		if poste.visible:
 			GlisserPanneau.borner(poste)       # (écran retaillé, plein écran)
+		# boutons en double sur le PC (retour d'utilisateur du 19/11/2026) : QUITTER = CONDUIRE de la barre du PC
+		if _b_quitter != null and _b_quitter.visible == bool(main.get("client_mode")):
+			_b_quitter.visible = not bool(main.get("client_mode"))
 	if _t_pique > 0.0:
 		_t_pique -= delta
 		if _t_pique <= 0.0 and _pique != null:
