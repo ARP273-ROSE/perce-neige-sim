@@ -1,6 +1,7 @@
 class_name CielAlpin
 extends RefCounted
-## Ciel du PC (rendu Vulkan) : bleu d'altitude, horizon clair, soleil et quelques nuages, immobiles
+## Ciel du PC (rendu Vulkan) : bleu d'altitude, horizon clair, soleil et quelques nuages, immobiles ; couleurs,
+## lueur du couchant et nuit réglées par l'heure de jeu (CycleJour, main._maj_jour)
 ## (TIME referait les textures de reflets à chaque image).
 ## Le ciel physique sans soleil allumé sortait gris terne. Son éclairage reste celui d'avant :
 ## la passe qui nourrit l'ambiance et les reflets rend une couleur fixe, sans nuages.
@@ -13,6 +14,10 @@ uniform vec3 ambiance = vec3(0.13, 0.15, 0.18);
 uniform vec3 soleil = vec3(0.40, 0.78, 0.48);
 uniform float energie = 1.0;
 uniform float nuages = 1.0;
+// heure de jeu (CycleJour) : lueur du couchant du côté du Soleil, teinte du disque et des nuages
+uniform vec3 lueur = vec3(0.0);
+uniform vec3 teinte_soleil = vec3(1.0);
+uniform vec3 teinte_nuages = vec3(1.0);
 // (hachage entier : le « fract(sin(...)) » habituel variait d'un coin de cellule à l'autre et laissait des arêtes droites)
 float h2(vec2 p) {
 	uint x = uint(int(p.x)) * 1664525u + uint(int(p.y)) * 1013904223u;
@@ -44,13 +49,18 @@ void sky() {
 		vec3 c = mix(horizon, haut, 1.0 - exp(-max(y, 0.0) * 3.2));
 		vec3 s = normalize(soleil);
 		float d = max(dot(EYEDIR, s), 0.0);
-		c += vec3(1.0, 0.96, 0.88) * (pow(d, 12.0) * 0.10 + pow(d, 180.0) * 0.5 + smoothstep(0.99985, 0.99995, d) * 8.0);
+		c += vec3(1.0, 0.96, 0.88) * teinte_soleil * (pow(d, 12.0) * 0.10 + pow(d, 180.0) * 0.5 + smoothstep(0.99985, 0.99995, d) * 8.0);
+		// lueur du couchant : le long de l'horizon, plus forte vers l'azimut du Soleil (même couché)
+		vec2 hz = normalize(EYEDIR.xz + vec2(1e-5));
+		vec2 hs = normalize(s.xz + vec2(1e-5));
+		float cote = 0.5 + 0.5 * dot(hz, hs);
+		c += lueur * pow(cote, 3.0) * exp(-max(y, 0.0) * 7.0);
 		if (nuages > 0.0 && y > 0.005) {
 			vec2 q = EYEDIR.xz / (y + 0.14) * 0.9 + vec2(40.0, 40.0);
 			float f = fbm(q);
 			float m = smoothstep(0.50, 0.78, f) * smoothstep(0.01, 0.16, y) * nuages;
 			vec3 blanc = mix(vec3(0.72, 0.76, 0.82), vec3(1.05, 1.04, 1.02), smoothstep(0.55, 0.85, fbm(q + s.xz * 0.12)));
-			c = mix(c, blanc, m * 0.85);
+			c = mix(c, blanc * teinte_nuages, m * 0.85);
 		}
 		c = mix(sol, c, smoothstep(-0.015, 0.002, y));
 		COLOR = c * energie;

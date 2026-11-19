@@ -134,6 +134,25 @@ var _soleil_relief: DirectionalLight3D = null
 var ombres_relief_permises: bool = true
 const FOG_LIGHT_ON: float = 1.0
 const FOG_LIGHT_OFF: float = 0.0      # le brouillard ne doit pas « éclairer » le fond
+## Heure de jeu → jour, aube, crépuscule, nuit (19/11/2026, HeureJeu, AstroCiel, CycleJour) : soleil et Lune à leur
+## vraie place, couleurs du ciel, du décor, du brouillard et de l'ambiante, ciel étoilé ; de nuit, éclairages des
+## gares, frontales, dameuses (_maj_jour, _maj_nuit).
+var etat_jour: Dictionary = {}
+var _t_jour: float = 0.0
+var _voute: VouteCeleste = null
+var _ciel_sig: Array = []
+var _decor_sol: Color = Color(1, 1, 1)
+var _lumiere_dehors: float = 1.2      # énergie de la lumière du skieur dehors (Soleil ou Lune)
+var eclairages_nuit: EclairagesNuit = null
+var dameuses: Dameuses = null
+var _frontale: Frontale = null
+var _t_piste_nuit: float = 0.0
+var _atlas_ombres: int = 0
+var pn_jour: Vector3 = Vector3.ONE    # dernière teinte du décor publiée (bancs)
+const FOG_COULEUR: Color = Color(0.55, 0.58, 0.65)
+const PROC_HAUT_JOUR: Color = Color(0.22, 0.42, 0.78)
+const PROC_HORIZON_JOUR: Color = Color(0.70, 0.78, 0.88)
+const STUDIO_ROTATION: Vector3 = Vector3(-0.6981317, 2.7925268, 0.0)     # (−40°, 160°)
 
 # Contrôles
 var speed_cmd_rate: float = 0.4    # variation par seconde du setpoint
@@ -1247,20 +1266,27 @@ func _suite_process(delta: float) -> void:
 	# skieur : à l'air libre, c'est le jour (relief, ciel, soleil) ; dans
 	# une rame en plein tunnel, le relief ne sert à rien
 	var dehors: bool = mode_skieur and skieur != null and skieur.dehors(relief)
+	_maj_jour(delta, dehors)
+	if mode_skieur or (skieur != null and skieur.actif):
+		_maj_nuit(delta, dehors)
 	# (sauf caméra sous la roche du Funival : sa voie et ses véhicules ont la couche de la vue extérieure, que ce soleil
 	# éclaire — le tube était 3 fois plus clair que celui du Perce-Neige, protocole du PC du 08/11/2026)
 	if _ext_light != null and dehors and not _camera_sous_funival():
-		_ext_light.visible = true
+		_ext_light.visible = _lumiere_dehors > 0.004
 	if _ext_light != null and dehors != _soleil_skieur:
 		_soleil_skieur = dehors
-		if dehors:
-			_ext_light.basis = Basis.looking_at(-GareAmont.SOLEIL.normalized(), Vector3.UP)
-		else:
-			_ext_light.rotation = Vector3(deg_to_rad(-40.0), deg_to_rad(160.0), 0.0)
+		if not dehors:
+			# lumière de « studio » de la vue extérieure
+			_ext_light.rotation = STUDIO_ROTATION
+			_ext_light.light_energy = 1.2
+			_ext_light.light_color = CycleJour.LUMIERE_JOUR
+		_t_jour = 0.0                  # dehors : Soleil ou Lune réglés tout de suite (_maj_jour)
 	if relief != null and _soleil_relief != null and perf_manager != null:
 		var permises: bool = ombres_relief_permises and perf_manager.cran == 0 and not OS.has_feature("web") 			and RenderingServer.get_current_rendering_method() == "forward_plus"
-		_soleil_relief.visible = permises and dehors
-		relief.set_ombres_portees(permises, permises and dehors)
+		# ombres portées du Soleil, ou de la Lune assez haute et assez pleine ; aucune sinon
+		var portee: bool = _lumiere_dehors > 0.03
+		_soleil_relief.visible = permises and dehors and portee
+		relief.set_ombres_portees(permises, permises and dehors and portee)
 		# relief léger dès le cran 3 (PC) : son nuanceur pèse 30 à 40 % de la carte à ces crans (audit du moteur, 16/11/2026)
 		relief.set_leger(not OS.has_feature("web") and perf_manager.cran >= 3)
 	if relief != null and cabin != null:
@@ -1291,7 +1317,8 @@ func _suite_process(delta: float) -> void:
 			var etat_sol: int = (2 if dehors else 1) if ext else 0
 			if _env.sky != null and etat_sol != _sol_ext:
 				_sol_ext = etat_sol
-				var sol: Color = [SOL_CIEL, SOL_ROCHE, SOL_HIVER][etat_sol]
+				var sol: Color = [SOL_CIEL, SOL_ROCHE, SOL_HIVER][etat_sol] * _decor_sol
+				sol.a = 1.0
 				if _env.sky.sky_material is ShaderMaterial:
 					(_env.sky.sky_material as ShaderMaterial).set_shader_parameter("sol", Vector3(sol.r, sol.g, sol.b))
 				elif _env.sky.sky_material is PhysicalSkyMaterial:
@@ -1325,7 +1352,8 @@ func _suite_process(delta: float) -> void:
 		# (caméra sous la roche du Funival : l'ambiance du tunnel du Perce-Neige, même si le skieur est dehors — sinon
 		# l'ambiance du jour blanchissait le tube, captures du PC du 08/11/2026)
 		if mode_skieur and skieur != null and _soleil_skieur and not _camera_sous_funival():
-			amb = AMBIENT_DEHORS
+			amb = AMBIENT_DEHORS * (pow(float(etat_jour.get("k_ambiance", 1.0)), 0.6) if _compat
+				else float(etat_jour.get("k_ambiance", 1.0)))
 		# (pas pour le skieur dehors : la rame à quai ramenait sinon tout le domaine à 0,40 — bardage du Funival presque
 		# noir à l'ombre sur la PWA, captures du PC du 08/11/2026)
 		if _compat and (cabin.view_mode == Cabin.ViewMode.FPV or cabin.view_mode == Cabin.ViewMode.SKIEUR) \
@@ -1717,6 +1745,12 @@ func _unhandled_input(event: InputEvent) -> void:
 			state_receiver.envoyer({"cle": nom_ecran, "enfonce": event.pressed})
 			get_viewport().set_input_as_handled()
 			return
+	# heure de jeu : Page haut / Page bas (19/11/2026)
+	if event is InputEventKey and event.pressed and not event.echo \
+			and ((event as InputEventKey).keycode == KEY_PAGEUP or (event as InputEventKey).keycode == KEY_PAGEDOWN):
+		decaler_heure(3600.0 if (event as InputEventKey).keycode == KEY_PAGEUP else -3600.0)
+		get_viewport().set_input_as_handled()
+		return
 	# Pannes + auto-exploitation + inversion de sens
 	if event is InputEventKey and event.pressed and not event.echo:
 		# K dans la PWA ; F9 dans la vue 3D du PC (K y est le klaxon)
@@ -3139,3 +3173,233 @@ func _envoyer_remontee(delta: float) -> void:
 	_remontee_envoyee = id
 	var a_bord: bool = remontees != null and lg in remontees.a_bord
 	state_receiver.envoyer({"remontee": lg.exploitation().etat_pupitre(a_bord, cat)})
+
+
+# --- heure de jeu : jour, aube, crépuscule, nuit (19/11/2026) ------------------------------------------------------
+
+## Toutes les 0,25 s : état du ciel à l'heure de jeu (CycleJour), appliqué au décor non éclairé (paramètres
+## globaux des nuanceurs), au ciel, au brouillard, à la lumière du skieur dehors et à ses ombres, à la voûte
+## étoilée. De jour (Soleil à +10° et plus), couleurs et intensités sont celles d'avant ; seule la direction du
+## Soleil est la vraie.
+func _maj_jour(delta: float, dehors: bool) -> void:
+	_t_jour -= delta
+	var cam: Camera3D = get_viewport().get_camera_3d()
+	if _t_jour <= 0.0 or etat_jour.is_empty():
+		_t_jour = 0.25
+		var t: float = HeureJeu.unix_utc()
+		etat_jour = CycleJour.etat(t)
+		var decor: Color = etat_jour["decor"]
+		RenderingServer.global_shader_parameter_set("pn_soleil", etat_jour["dir_lumiere"])
+		# (rendu de compatibilité : ses nuanceurs relèvent les tons par γ = 0,625 au lieu de la courbe sRGB, bien plus
+		# sombre dans les noirs — décor relevé d'autant la nuit, identique de jour)
+		pn_jour = Vector3(decor.r, decor.g, decor.b)
+		if _compat:
+			pn_jour = Vector3(pow(decor.r, 0.78), pow(decor.g, 0.78), pow(decor.b, 0.78))
+		RenderingServer.global_shader_parameter_set("pn_jour", pn_jour)
+		# matériaux non éclairés à couleurs de sommets (véhicules lointains, lignes cuites de la PWA)
+		var teinte: Color = Color(decor.r, decor.g, decor.b).linear_to_srgb()
+		VehiculesLod.materiau().albedo_color = teinte
+		LigneCuite._verrou.lock()
+		for m in LigneCuite._materiaux_communs.values():
+			if m is StandardMaterial3D and (m as StandardMaterial3D).shading_mode == BaseMaterial3D.SHADING_MODE_UNSHADED \
+					and (m as StandardMaterial3D).vertex_color_use_as_albedo:
+				(m as StandardMaterial3D).albedo_color = teinte
+		LigneCuite._verrou.unlock()
+		_appliquer_ciel(decor)
+		var dsol: Color = Color(decor.r, decor.g, decor.b, 1.0)
+		if absf(dsol.r - _decor_sol.r) + absf(dsol.g - _decor_sol.g) + absf(dsol.b - _decor_sol.b) > 0.01:
+			_decor_sol = dsol
+			_sol_ext = -1                # le sol du ciel est repris par _suite_process
+		# brouillard : sa lumière suit le décor dehors (vue extérieure ou skieur), pas dans le tunnel
+		if _env != null:
+			var ext_vue: bool = dehors or (cabin != null and cabin.view_mode == Cabin.ViewMode.EXTERIOR)
+			_env.fog_light_color = FOG_COULEUR * (dsol if ext_vue else Color(1, 1, 1))
+		# lumière du skieur dehors : le Soleil, sinon la Lune ; ses ombres portées
+		var es: float = etat_jour["energie_soleil"]
+		var el: float = etat_jour["energie_lune"]
+		var d_l: Vector3 = (etat_jour["dir_soleil"] if es >= el else etat_jour["dir_lune"]) as Vector3
+		d_l = Vector3(d_l.x, maxf(d_l.y, 0.07), d_l.z).normalized()       # au moins 4° (ombres rasantes)
+		_lumiere_dehors = es + el
+		if dehors and _ext_light != null:
+			_ext_light.basis = Basis.looking_at(-d_l, Vector3.UP)
+			_ext_light.light_energy = _lumiere_dehors
+			_ext_light.light_color = (etat_jour["couleur_soleil"] if es >= el else CycleJour.LUMIERE_LUNE) as Color
+		if _soleil_relief != null:
+			_soleil_relief.basis = Basis.looking_at(-d_l, Vector3.UP)
+			_regler_ombres()
+		# ciel étoilé et Lune
+		var n: float = etat_jour["nuit"]
+		if n > 0.003:
+			if _voute == null:
+				_voute = VouteCeleste.new()
+				add_child(_voute)
+			_voute.visible = true
+			_voute.regler(t, n, etat_jour["dir_soleil"])
+		elif _voute != null:
+			_voute.visible = false
+	if _voute != null and _voute.visible and cam != null:
+		_voute.suivre(cam)
+
+
+## Ombres portées selon la machine (PerfManager) : carte dédiée, 4 tranches sur 600 m (comme avant) ; puce
+## intégrée ou machine allégée, 2 tranches sur 350 m et une carte d'ombres de 2 048 px. Le soleil qui les porte
+## n'est allumé qu'au cran 0 du PC (Vulkan), comme avant.
+func _regler_ombres() -> void:
+	var petite: bool = PerfManager.allege or PerfManager.type_gpu == "integre"
+	_soleil_relief.directional_shadow_mode = DirectionalLight3D.SHADOW_PARALLEL_2_SPLITS if petite \
+		else DirectionalLight3D.SHADOW_PARALLEL_4_SPLITS
+	_soleil_relief.directional_shadow_max_distance = 350.0 if petite else 600.0
+	var atlas: int = 2048 if petite else 4096
+	if atlas != _atlas_ombres and not OS.has_feature("web"):
+		_atlas_ombres = atlas
+		RenderingServer.directional_shadow_atlas_set_size(atlas, true)
+
+
+## Couleurs du ciel (seulement quand elles changent : le ciel du PC refait ses reflets à chaque réglage).
+func _appliquer_ciel(decor: Color) -> void:
+	if _env == null or _env.sky == null:
+		return
+	var ds: Vector3 = etat_jour["dir_soleil"]
+	var haut: Color = etat_jour["ciel_haut"]
+	var hor: Color = etat_jour["ciel_horizon"]
+	if not _ciel_sig.is_empty() and (_ciel_sig[0] as Vector3).dot(ds) > 0.99999 \
+			and (_ciel_sig[1] as Color).is_equal_approx(hor) and (_ciel_sig[2] as Color).is_equal_approx(haut):
+		return
+	_ciel_sig = [ds, hor, haut]
+	var mat: Material = _env.sky.sky_material
+	if mat is ShaderMaterial:
+		var sm: ShaderMaterial = mat
+		sm.set_shader_parameter("haut", Vector3(haut.r, haut.g, haut.b))
+		sm.set_shader_parameter("horizon", Vector3(hor.r, hor.g, hor.b))
+		var amb: Color = etat_jour["ambiance_ciel"]
+		sm.set_shader_parameter("ambiance", Vector3(amb.r, amb.g, amb.b))
+		sm.set_shader_parameter("soleil", ds)
+		var lu: Color = etat_jour["lueur"]
+		sm.set_shader_parameter("lueur", Vector3(lu.r, lu.g, lu.b))
+		var cs: Color = etat_jour["couleur_soleil"]
+		sm.set_shader_parameter("teinte_soleil", Vector3(cs.r / CycleJour.LUMIERE_JOUR.r, cs.g / CycleJour.LUMIERE_JOUR.g,
+			cs.b / CycleJour.LUMIERE_JOUR.b) * smoothstep(-0.02, 0.02, ds.y))
+		sm.set_shader_parameter("teinte_nuages", Vector3(decor.r, decor.g, decor.b))
+	elif mat is ProceduralSkyMaterial:
+		# PWA : mêmes rapports que le ciel du PC, appliqués à son ciel procédural
+		var ps: ProceduralSkyMaterial = mat
+		var rh: Color = Color(haut.r / CycleJour.CIEL_HAUT_JOUR.r, haut.g / CycleJour.CIEL_HAUT_JOUR.g, haut.b / CycleJour.CIEL_HAUT_JOUR.b)
+		var rz: Color = Color(hor.r / CycleJour.CIEL_HORIZON_JOUR.r, hor.g / CycleJour.CIEL_HORIZON_JOUR.g,
+			hor.b / CycleJour.CIEL_HORIZON_JOUR.b)
+		# (rapports appliqués en linéaire, puis repassés en sRGB : les couleurs du ciel procédural sont en sRGB)
+		var ph: Color = PROC_HAUT_JOUR.srgb_to_linear()
+		var pz: Color = PROC_HORIZON_JOUR.srgb_to_linear()
+		ps.sky_top_color = Color(ph.r * rh.r, ph.g * rh.g, ph.b * rh.b).linear_to_srgb()
+		ps.sky_horizon_color = Color(pz.r * rz.r, pz.g * rz.g, pz.b * rz.b).linear_to_srgb()
+	elif mat is PhysicalSkyMaterial:
+		(mat as PhysicalSkyMaterial).energy_multiplier = clampf(decor.g, 0.02, 1.0)
+
+
+## La nuit, en vue skieur : éclairages des gares et des cabines, dameuses et leur câble de treuil, frontales,
+## skieurs nocturnes, piques. Rien de tout ça ne se crée de jour (sauf les dameuses au soir, encore clair l'été).
+func _maj_nuit(delta: float, dehors: bool) -> void:
+	if etat_jour.is_empty() or relief == null:
+		return
+	var ecl: float = etat_jour["eclairage"]
+	var cam: Camera3D = get_viewport().get_camera_3d()
+	var pc: Vector3 = cam.global_position if cam != null else Vector3.ZERO
+	if eclairages_nuit == null and ecl > 0.0 and remontees != null and remontees.pret:
+		eclairages_nuit = EclairagesNuit.new()
+		add_child(eclairages_nuit)
+		eclairages_nuit.construire(relief, remontees)
+	if eclairages_nuit != null:
+		var sup: Node3D = skieur.support if skieur != null and (skieur.assis or skieur.embarque) else null
+		var tete: Vector3 = skieur.global_position + Vector3(0.0, 1.3, 0.0) if skieur != null else Vector3.ZERO
+		eclairages_nuit.regler(ecl if mode_skieur else 0.0, pc, delta, sup, tete)
+	var damage: bool = mode_skieur and CycleJour.heure_damage(HeureJeu.heure())
+	if dameuses == null and damage and domaine != null and domaine.pret:
+		dameuses = Dameuses.new()
+		add_child(dameuses)
+		dameuses.preparer(relief)
+	if dameuses != null:
+		dameuses.actives = damage
+		dameuses.phares_max = 1 if (PerfManager.allege or OS.has_feature("web")) else 2
+	if domaine != null and domaine.skieurs != null:
+		domaine.skieurs.nuit = ecl
+	# frontale du joueur : la nuit, à l'air libre
+	if skieur != null:
+		var on: bool = ecl > 0.35 and skieur.actif and dehors
+		if on and _frontale == null:
+			_frontale = Frontale.new(true)
+			_frontale.top_level = true
+			skieur.add_child(_frontale)
+		if _frontale != null:
+			_frontale.allumer(on)
+			if on:
+				_frontale.global_transform = skieur._visuel.global_transform.translated_local(
+					Vector3(0.0, Frontale.HAUTEUR, -0.13))
+				_frontale.lentille.visible = not skieur.premiere_personne
+	_publier_lampes(ecl, pc)
+	if not mode_skieur or skieur == null or not skieur.actif or skieur.support != null:
+		return
+	var lang: String = challenge.lang if challenge != null else "fr"
+	# câble de treuil : le toucher, c'est la chute ; s'en approcher, une pique
+	if dameuses != null and not skieur.a_terre():
+		var pied: Vector3 = skieur.global_position + Vector3(0.0, 0.25, 0.0)
+		var dc: float = dameuses.distance_cable(pied)
+		if dc < 0.45:
+			skieur._chuter()
+			if commandes_skieur != null:
+				commandes_skieur.pique(PNQuips.pique("NUIT_CABLE_TOUCHE", lang), 7.0)
+				commandes_skieur.message("Câble de treuil ! CHAUSSER (E) pour rechausser", 5.0)
+			_pique_attente = PIQUE_ECART
+		elif dc < 9.0:
+			_pique_skieur("NUIT_CABLE_PRES", 1.0)
+		var dd: float = dameuses.distance_dameuse(skieur.global_position)
+		if dd < 0.25 and skieur.vitesse_ski() > 1.0:
+			skieur._chuter()
+			if commandes_skieur != null:
+				commandes_skieur.pique(PNQuips.pique("NUIT_DAMEUSE_TOUCHE", lang), 7.0)
+			_pique_attente = PIQUE_ECART
+		elif dd < 28.0:
+			_pique_skieur("NUIT_DAMEUSE", 0.8)
+	# à ski sur une piste, la nuit : pistes fermées
+	if ecl > 0.6 and skieur.chausse and _sur_piste and skieur.vitesse_ski() > 4.0:
+		_t_piste_nuit += delta
+		if _t_piste_nuit > 6.0:
+			_t_piste_nuit = -60.0
+			_pique_skieur("NUIT_PISTE_FERMEE", 0.9)
+	elif _t_piste_nuit > 0.0:
+		_t_piste_nuit = 0.0
+	elif _t_piste_nuit < 0.0:
+		_t_piste_nuit = minf(0.0, _t_piste_nuit + delta)
+
+
+## Page haut / Page bas : une heure de jeu de plus ou de moins (l'heure choisie avance ensuite normalement).
+func decaler_heure(s: float) -> void:
+	HeureJeu.avancer(s)
+	_t_jour = 0.0
+	var txt: String = "Heure de jeu : " + HeureJeu.libelle()
+	if mode_skieur and commandes_skieur != null:
+		commandes_skieur.message(txt, 3.0)
+	else:
+		_flash(txt)
+
+
+## Lampes qui éclairent la neige (LampesDecor) : frontale du joueur, phares des dameuses, frontales des skieurs
+## nocturnes, candélabres des gares ; les plus proches de la caméra d'abord.
+func _publier_lampes(ecl: float, pc: Vector3) -> void:
+	var l: Array = []
+	if ecl > 0.02 and mode_skieur:
+		if _frontale != null and _frontale.visible and _frontale.lampe != null:
+			l.append(LampesDecor.depuis_projecteur(_frontale.lampe))
+		if dameuses != null:
+			for e in dameuses.engins:
+				for sp in e["phares"]:
+					l.append(LampesDecor.depuis_projecteur(sp as SpotLight3D))
+		if domaine != null and domaine.skieurs != null:
+			for fr in domaine.skieurs._frontales:
+				if (fr as Frontale).visible and (fr as Frontale).lampe != null and (fr as Frontale).lampe.visible:
+					l.append(LampesDecor.depuis_projecteur((fr as Frontale).lampe))
+		if eclairages_nuit != null:
+			l.append_array(eclairages_nuit.lampes_decor(pc))
+		l.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+			return (a["p"] as Vector3).distance_squared_to(pc) < (b["p"] as Vector3).distance_squared_to(pc))
+	if l.is_empty() and LampesDecor._publiees == 0:
+		return
+	LampesDecor.publier(l)
