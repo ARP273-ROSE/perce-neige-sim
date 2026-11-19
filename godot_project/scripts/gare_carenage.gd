@@ -627,49 +627,106 @@ static func emprise_batiment(lg: LigneRemontee, aval: bool) -> Array:
 	var sg: float = 1.0 if aval else -1.0
 	var xb: float = signf(lg._x_brin(aval))
 	var w: float = 7.5
-	var x: float = xb * (lg.voie * 0.5 + LigneRemontee.D_CAPOT + 1.2 + w * 0.5)
+	# (4,5 m du capot, retour d'utilisateur du 19/11/2026 : « elle est trop près des cabines, c'est galère » ; 1,2 m avant)
+	var x: float = xb * (lg.voie * 0.5 + LigneRemontee.D_CAPOT + 4.5 + w * 0.5)
 	var z0: float = znez + sg * 3.0
 	var z1: float = znez + sg * (lg.l_gare - 1.0)
 	# [centre au sol, taille (x, y, z), côté du quai]
 	return [Vector3(x, 0.0, (z0 + z1) * 0.5), Vector3(w, 6.2, absf(z1 - z0)), xb]
 
 
+## Chalet de la gare de départ (retour d'utilisateur du 19/11/2026 : « la cabane de départ est moche, fais un joli
+## chalet ») : soubassement de pierre, étage en mélèze aux poteaux d'angle sombres, fenêtres encadrées à volets, balcon
+## sur le pignon d'accueil, toit à deux pans largement débordant, faîtière, cheminée, porte en bois.
 func batiment(g: Node3D, aval: bool) -> void:
 	var e: Array = emprise_batiment(lg, aval)
 	var c: Vector3 = e[0]
 	var t: Vector3 = e[1]
 	var xb: float = e[2]
-	var h0: float = 3.4                     # soubassement de pierre
+	var h0: float = 2.6                     # soubassement de pierre (rez-de-chaussée)
+	var hx: float = t.x * 0.5
+	var hz: float = t.z * 0.5
+	# soubassement (descend sous la neige : pas de jour en pente) et étage en bois
 	RemonteeKit.boite_en(g, Vector3(t.x, h0 + 4.0, t.z), c + Vector3(0, (h0 - 4.0) * 0.5, 0), "pierre")
 	RemonteeKit.boite_en(g, Vector3(t.x - 0.2, t.y - h0, t.z - 0.2), c + Vector3(0, h0 + (t.y - h0) * 0.5, 0), "bois_meleze")
-	# toit à deux pans (faîtage dans la longueur), débord de 0,8 m
-	var pente: float = 0.45
-	var demi: float = t.x * 0.5 + 0.8
+	# lisse sombre entre pierre et bois, poteaux d'angle, bandeau à mi-étage
+	RemonteeKit.boite_en(g, Vector3(t.x + 0.06, 0.22, t.z + 0.06), c + Vector3(0, h0 + 0.05, 0), "bois_fonce")
+	RemonteeKit.boite_en(g, Vector3(t.x - 0.1, 0.12, t.z - 0.1), c + Vector3(0, h0 + (t.y - h0) * 0.55, 0), "bois_fonce")
+	for sx in [-1.0, 1.0]:
+		for sz in [-1.0, 1.0]:
+			RemonteeKit.boite_en(g, Vector3(0.28, t.y - h0, 0.28), c + Vector3(sx * (hx - 0.1), h0 + (t.y - h0) * 0.5, sz * (hz - 0.1)), "bois_fonce")
+	# toit à deux pans (faîtage dans la longueur) : débord de 1,3 m sur les côtés, 1,2 m sur les pignons
+	var pente: float = 0.52
+	var demi: float = hx + 1.3
 	var lp: float = demi / cos(pente)
+	var hp: float = demi * tan(pente)
 	for sx in [-1.0, 1.0]:
 		var b: Basis = Basis(Vector3.BACK, -sx * pente)
-		RemonteeKit.boite(g, Vector3(lp, 0.22, t.z + 1.6), Transform3D(b, c + Vector3(sx * demi * 0.5, t.y + demi * tan(pente) * 0.5, 0)), "toit_bardeaux")
-	# pignons en bois
+		RemonteeKit.boite(g, Vector3(lp, 0.24, t.z + 2.4), Transform3D(b, c + Vector3(sx * demi * 0.5, t.y + hp * 0.5 - 0.15, 0)), "toit_bardeaux")
+		# bandeau de rive sombre sous le bord du toit
+		RemonteeKit.boite(g, Vector3(lp, 0.10, 0.18), Transform3D(b, c + Vector3(sx * demi * 0.5, t.y + hp * 0.5 - 0.3, hz + 1.15)), "bois_fonce")
+		RemonteeKit.boite(g, Vector3(lp, 0.10, 0.18), Transform3D(b, c + Vector3(sx * demi * 0.5, t.y + hp * 0.5 - 0.3, -hz - 1.15)), "bois_fonce")
+	RemonteeKit.boite_en(g, Vector3(0.30, 0.22, t.z + 2.5), c + Vector3(0, t.y + hp - 0.02, 0), "bois_fonce")      # faîtière
+	# pignons en bois (planches sous la pente) et pannes qui dépassent
 	for sz in [-1.0, 1.0]:
-		var zp: float = c.z + sz * t.z * 0.5
-		var pts: PackedVector3Array = PackedVector3Array()
-		var hp: float = demi * tan(pente)
+		var zp: float = c.z + sz * hz
 		for k in range(7):
-			var u: float = float(k) / 6.0
-			var x: float = lerpf(-t.x * 0.5, t.x * 0.5, u)
-			var y: float = t.y + hp * (1.0 - absf(x) / demi) - 0.1
-			RemonteeKit.boite_en(g, Vector3(t.x / 6.0, maxf(y - t.y, 0.05), 0.12), Vector3(c.x + x, t.y + maxf(y - t.y, 0.05) * 0.5, zp), "bois_meleze")
-	# baies vitrées côté quai (rez-de-chaussée) et fenêtres de l'étage
-	var xf: float = c.x - xb * (t.x * 0.5 + 0.02)
-	var n: int = int(t.z / 3.0)
-	for k in range(n):
-		var z: float = c.z - t.z * 0.5 + 1.5 + 3.0 * k
-		RemonteeKit.boite_en(g, Vector3(0.05, 2.3, 2.3), Vector3(xf, 1.35, z), "vitrage_sombre")
-		RemonteeKit.boite_en(g, Vector3(0.05, 1.1, 1.3), Vector3(xf + xb * 0.1, h0 + 1.3, z), "vitrage_sombre")
-	# porte vers les portillons et nom de la ligne au-dessus
-	var zr: float = c.z + signf(c.z - (0.0 if aval else -lg.longueur_h())) * (t.z * 0.5 + 0.02)
-	RemonteeKit.boite_en(g, Vector3(2.2, 2.5, 0.05), Vector3(c.x, 1.25, zr), "vitrage_sombre")
-	_nom(g, lg.nom_court(), Vector3(c.x, h0 + 0.6, zr + signf(zr - c.z) * 0.03), 0.0 if zr > c.z else PI, Color(0.95, 0.95, 0.95), 0.0035)
+			var u: float = (float(k) + 0.5) / 7.0
+			var xk: float = lerpf(-hx, hx, u)
+			var yk: float = hp * (1.0 - absf(xk) / demi) * (demi - absf(xk)) / demi + 0.0
+			var hh: float = maxf(t.y + hp * (1.0 - absf(xk) / demi) - 0.2 - t.y, 0.05)
+			RemonteeKit.boite_en(g, Vector3(t.x / 7.0 - 0.02, hh, 0.10), Vector3(c.x + xk, t.y + hh * 0.5, zp), "bois_meleze")
+		for xpn in [-hx * 0.5, 0.0, hx * 0.5]:
+			var ypn: float = t.y + hp * (1.0 - absf(xpn) / demi) - 0.35
+			RemonteeKit.boite_en(g, Vector3(0.20, 0.24, 1.3), Vector3(c.x + xpn, ypn, zp + sz * 0.55), "bois_fonce")
+	# cheminée de pierre, chapeau
+	var xch: float = c.x - xb * hx * 0.35
+	var ych: float = t.y + hp * (1.0 - (hx * 0.35) / demi)
+	RemonteeKit.boite_en(g, Vector3(0.7, 1.6, 0.7), Vector3(xch, ych + 0.5, c.z - hz * 0.4), "pierre")
+	RemonteeKit.boite_en(g, Vector3(0.95, 0.10, 0.95), Vector3(xch, ych + 1.42, c.z - hz * 0.4), "toit_noir")
+	# fenêtres : encadrées de bois sombre, volets verts à l'étage ; sur les deux longs pans
+	for sxf in [-1.0, 1.0]:
+		var xf: float = c.x + sxf * (hx + 0.02)
+		var n: int = maxi(int(t.z / 3.2), 1)
+		for k in range(n):
+			var z: float = c.z - hz + t.z / float(n) * (k + 0.5)
+			# rez-de-chaussée (côté quai : baies plus grandes)
+			var lb: float = 1.9 if sxf == -xb else 1.0
+			RemonteeKit.boite_en(g, Vector3(0.06, 1.25, lb), Vector3(xf, 1.25, z), "vitrage_sombre")
+			RemonteeKit.boite_en(g, Vector3(0.10, 0.10, lb + 0.2), Vector3(xf, 1.92, z), "bois_fonce")
+			RemonteeKit.boite_en(g, Vector3(0.10, 0.10, lb + 0.2), Vector3(xf, 0.58, z), "bois_fonce")
+			# étage : fenêtre, appui, volets ouverts
+			var ye: float = h0 + 1.55
+			RemonteeKit.boite_en(g, Vector3(0.06, 1.15, 0.95), Vector3(xf + sxf * 0.03, ye, z), "vitrage_sombre")
+			RemonteeKit.boite_en(g, Vector3(0.14, 0.08, 1.15), Vector3(xf + sxf * 0.05, ye - 0.62, z), "bois_fonce")
+			RemonteeKit.boite_en(g, Vector3(0.14, 0.08, 1.15), Vector3(xf + sxf * 0.05, ye + 0.62, z), "bois_fonce")
+			for sv in [-1.0, 1.0]:
+				RemonteeKit.boite_en(g, Vector3(0.05, 1.2, 0.5), Vector3(xf + sxf * 0.06, ye, z + sv * 0.75), "bois_vert")
+			# jardinière sous la fenêtre
+			RemonteeKit.boite_en(g, Vector3(0.22, 0.18, 0.9), Vector3(xf + sxf * 0.14, ye - 0.75, z), "bois_fonce")
+	# pignon d'accueil (vers les portillons) : porte en bois, balcon de l'étage, nom de la ligne
+	var sgz: float = signf(c.z - (0.0 if aval else -lg.longueur_h()))
+	var zr: float = c.z + sgz * (hz + 0.02)
+	RemonteeKit.boite_en(g, Vector3(1.5, 2.3, 0.08), Vector3(c.x, 1.15, zr), "bois_fonce")
+	RemonteeKit.boite_en(g, Vector3(1.8, 0.14, 0.12), Vector3(c.x, 2.37, zr + sgz * 0.02), "bois_meleze")
+	for sxp in [-1.0, 1.0]:
+		RemonteeKit.boite_en(g, Vector3(0.14, 2.4, 0.12), Vector3(c.x + sxp * 0.85, 1.2, zr + sgz * 0.02), "bois_meleze")
+	# balcon : plancher en porte-à-faux, garde-corps à balustres découpés, sur deux consoles
+	var zb: float = zr + sgz * 0.6
+	var yb: float = h0 + 0.35
+	RemonteeKit.boite_en(g, Vector3(t.x - 0.6, 0.12, 1.2), Vector3(c.x, yb, zb), "bois_meleze")
+	for sxc in [-1.0, 1.0]:
+		RemonteeKit.poutre(g, Vector3(c.x + sxc * (hx - 0.8), yb - 0.9, zr), Vector3(c.x + sxc * (hx - 0.8), yb - 0.06, zb + sgz * 0.5), 0.12, 0.12, "bois_fonce")
+	RemonteeKit.boite_en(g, Vector3(t.x - 0.6, 0.10, 0.10), Vector3(c.x, yb + 1.0, zb + sgz * 0.55), "bois_fonce")
+	var nbal: int = int((t.x - 0.8) / 0.22)
+	for kb in range(nbal):
+		var xbal: float = c.x - (t.x - 0.8) * 0.5 + 0.22 * (kb + 0.5)
+		RemonteeKit.boite_en(g, Vector3(0.12, 0.9, 0.03), Vector3(xbal, yb + 0.5, zb + sgz * 0.57), "bois_meleze")
+	for sxl in [-1.0, 1.0]:
+		RemonteeKit.boite_en(g, Vector3(0.10, 1.0, 1.2), Vector3(c.x + sxl * (hx - 0.32), yb + 0.5, zb), "bois_fonce")
+	# porte-fenêtre sur le balcon
+	RemonteeKit.boite_en(g, Vector3(1.2, 2.0, 0.06), Vector3(c.x, yb + 1.05, zr + sgz * 0.02), "vitrage_sombre")
+	_nom(g, lg.nom_court(), Vector3(c.x, t.y + hp * 0.45, zr + sgz * 0.08), 0.0 if zr > c.z else PI, Color(0.95, 0.92, 0.85), 0.0035)
 
 
 ## Télésiège à pinces fixes (photos du Grand Pré) : pas de carénage sur la

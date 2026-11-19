@@ -2174,6 +2174,12 @@ func _cabine_tph() -> void:
 		RemonteeKit.boite_en(ch, Vector3(E_PORTEURS_TPH + 0.30, 0.22, 0.30), Vector3(0, 0.25, bz * lr * 0.30), coul)
 		RemonteeKit.boite_en(ch, Vector3(0.24, 0.55, 0.34), Vector3(0, 0.08, bz * (lr * 0.5 + 0.15)), gris)
 		RemonteeKit.cylindre(ch, 0.08, 0.08, 0.30, Transform3D(Basis(Vector3.FORWARD, PI * 0.5), Vector3(0, -0.15, bz * (lr * 0.5 + 0.15))), "acier", 10)
+	# attache du tracteur : UNE, au milieu du chariot, sous la poutre centrale ; le tracteur passe juste sous elle
+	# (retour d'utilisateur du 19/11/2026 : « il y a une attache, elle est au milieu, et c'est un peu plus haut »)
+	var yt: float = -Telepherique.Y_TRACTEUR_TPH
+	var y_haut: float = rg + 0.12 - 0.18
+	RemonteeKit.boite_en(ch, Vector3(0.20, y_haut - (yt - 0.05), 0.50), Vector3(0, (y_haut + yt - 0.05) * 0.5, 0), gris)
+	RemonteeKit.cylindre(ch, 0.055, 0.055, 0.60, Transform3D(Basis(Vector3.RIGHT, PI * 0.5), Vector3(0, yt, 0)), "acier", 10)
 	RemonteeKit.boite_en(ch, Vector3(0.05, 0.10, 0.12), Vector3(xr + 0.24, rg + 0.62, lr * 0.4), "cabine_rouge")       # feu
 	var hs: float = H_SUSP_TPH
 	_suspente_tph(hs, "alu_pince" if fornet else gris, coul, 1.55 if fornet else 2.55, fornet)
