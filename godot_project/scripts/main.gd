@@ -3382,6 +3382,8 @@ func _maj_nuit(delta: float, dehors: bool) -> void:
 	if dameuses != null:
 		dameuses.actives = damage
 		dameuses.niveau_feux = ecl
+		# (PWA : pas de vraies lumières, voir Frontale.lumiere_reelle ; les phares éclairent la neige par LampesDecor)
+		dameuses.phares_max = (1 if PerfManager.allege else 2) if Frontale.lumiere_reelle() else 0
 	# fenêtres des villages et des chalets
 	if villages == null and ecl > 0.0:
 		villages = LumieresVillages.new()
@@ -3389,8 +3391,6 @@ func _maj_nuit(delta: float, dehors: bool) -> void:
 		villages.construire(relief)
 	if villages != null:
 		villages.regler(ecl, HeureJeu.heure())
-		# (PWA : pas de vraies lumières, voir Frontale.lumiere_reelle ; les phares éclairent la neige par LampesDecor)
-		dameuses.phares_max = (1 if PerfManager.allege else 2) if Frontale.lumiere_reelle() else 0
 	if domaine != null and domaine.skieurs != null:
 		domaine.skieurs.nuit = ecl
 	# frontale du joueur : la nuit, à l'air libre

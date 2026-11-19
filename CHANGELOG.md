@@ -5,6 +5,37 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.75.1 — 19 novembre 2026 (branche « nuit », non publiée)
+
+Retours d'essai de la 1.75.0 sur la PWA (iPad) et relevé de fluidité.
+
+**Gels à la tombée de la nuit sur la PWA** (relevé : 4,2 s puis 3,4 s, « après le script ») : sur la PWA, plus aucune vraie lumière de nuit (frontales, phares des dameuses, candélabres, plafonniers). Dans le rendu de compatibilité, chaque type de lumière nouveau fait compiler une variante de nuanceur pour tout ce qu'il éclaire. La neige reste éclairée par le nuanceur du sol (LampesDecor). À l'entrée en vue skieur, de jour comme de nuit, les nuanceurs de la nuit sont préchauffés : dameuses, câble, ancrage, lentilles, points lumineux, voûte étoilée, et émission des vitres activée à 0. Ainsi, une nuit qui tombe en cours de partie, même en heure accélérée, ne compile plus rien.
+
+**Nuit « blanc blafard »** : la lumière dépend maintenant du lieu de la caméra du skieur.
+- Dehors : la nuit.
+- Dans une gare ou une cabine de remontée : une lumière intérieure chaude, au lieu du gris du jour.
+- Sous terre (tube et salle amont du Funival, tunnel et gares du Perce-Neige) : l'éclairage propre du lieu, le même à toute heure. Le soleil n'entre plus dans la salle amont du Funival, le ciel ne s'y reflète plus, et ses parois de roche ne s'assombrissent plus la nuit.
+
+**Cabines éclairées** : vitres lumineuses vues de dehors, éteintes vues de dedans pour qu'on voie le paysage. Le plafonnier est posé au plafond de la caisse ; il était mal placé et la cabine restait noire. Sur la PWA, la cabine où l'on est assis est éclairée par une lumière ambiante chaude. Les cabines en version allégée prennent une lueur chaude la nuit, mais plus les pylônes, qui ont maintenant leur propre matériau.
+
+**Intérieurs des gares la nuit** : plafonniers au-dessus des quais, aval et amont, en plus des candélabres, candidats aux vraies lumières sur PC. Vitres et vitrages des gares éclairés. Les véhicules du Funival ont une lumière intérieure (PC) et des vitres lumineuses.
+
+**Phares du Funival** : 8 au lieu de 3,5, portée 100 m. Sur la PWA, le tube du Funival les reçoit enfin, par son nuanceur (lampes du décor), de jour comme de nuit.
+
+**Dameuses** :
+- autour de la caméra : quatre sur PC, deux sur machine allégée et sur la PWA ;
+- sur tout le domaine : les feux de 36 dameuses lointaines (phares blancs, gyrophare orange qui clignote) sur les pistes les plus longues, en points lumineux de taille constante à l'écran.
+
+**Lumières des villages et des chalets** : 4 769 fenêtres éclairées sur les 2 572 bâtiments d'OpenStreetMap (tools_bati.py), à Tignes le Lac, Val Claret, Le Lavachet, Les Boisses, Les Brévières, Tignes 1800, Val d'Isère, La Daille, Le Fornet et Le Laisinant, ainsi que sur les chalets isolés. Elles s'éteignent peu à peu entre 21 h et 1 h, puis se rallument au matin. Une seule passe de dessin, aucune vraie lumière.
+
+**Heure de jeu en jeu** : bouton HEURE du skieur (heure réelle ou choisie, −1 h / +1 h, APPLIQUER). Sur le PC, menu Affichage → Heure de jeu…, appliqué tout de suite à la vue 3D par le flux d'état et retenu dans les réglages.
+
+**Piques de panne et d'arrêt** : elles sortent quand la remontée est arrêtée (vitesse nulle), et non plus dès qu'elle ralentit.
+
+**Étoiles en couleur** (retour d'essai : « toutes blanches » sur l'iPad) : la couleur tirée de l'indice B−V est plus saturée et n'est plus blanchie par l'éclat ; en Vulkan, une saturation de plus compense la courbe de tons. Les étoiles les plus brillantes sont plus grosses, avec un cœur de 2 à 4 px et un halo coloré. Bételgeuse est orangée, Rigel bleutée, en Vulkan comme sur la PWA (capture serrée d'Orion, 16 février, 21 h 30).
+
+Vérifié : bench_nuit_3d.gd complété (villages, feux lointains, préchauffe, bouton HEURE) ; les 77 bancs ; banc des nuanceurs en vrai rendu ; tests du programme PC (pytest, 166 passés) ; captures de jour et de nuit en Vulkan et en OpenGL.
+
 ## 1.75.0 — 19 novembre 2026
 
 Demande d'un utilisateur : régler l'heure et la date du jeu, avoir le vrai soleil, la nuit, le ciel étoilé, les dameuses.

@@ -11,6 +11,7 @@ const SHADER_ETOILES: String = """shader_type spatial;
 render_mode unshaded, blend_add, depth_draw_never, cull_disabled, fog_disabled, shadows_disabled;
 uniform float nuit = 0.0;           // 0 jour, 1 nuit noire
 uniform float echelle_px = 1.0;     // taille des points selon la définition de l'écran
+uniform float sat = 1.0;            // saturation en plus (Vulkan : la courbe de tons ACES pâlit les points brillants)
 varying float eclat;
 void vertex() {
 	vec3 w = normalize((MODEL_MATRIX * vec4(VERTEX, 0.0)).xyz);
@@ -20,7 +21,8 @@ void vertex() {
 	float masse = 1.0 / (h + 0.15 * pow(max(h * 57.3 + 3.885, 0.1), -1.253));
 	float m_vue = m + 0.25 * (masse - 1.0) + (1.0 - nuit) * 5.0;
 	eclat = clamp(pow(10.0, -0.4 * (m_vue - 3.2)), 0.0, 4.0) * smoothstep(-0.02, 0.03, w.y);
-	POINT_SIZE = echelle_px * clamp(2.0 + 0.6 * (4.5 - m_vue), 1.8, 5.0);
+	// les plus brillantes plus grosses (cœur de 2 à 4 px et un halo), pour que leur couleur se voie
+	POINT_SIZE = echelle_px * clamp(2.4 + 1.3 * (3.0 - m_vue), 1.8, 9.0);
 }
 void fragment() {
 	vec2 q = POINT_COORD * 2.0 - 1.0;
@@ -28,8 +30,12 @@ void fragment() {
 	if (r2 > 1.0) {
 		discard;
 	}
-	float a = (1.0 - smoothstep(0.15, 1.0, r2)) * min(eclat, 1.0) * nuit;
-	ALBEDO = COLOR.rgb * a * (1.2 + max(eclat - 1.0, 0.0) * 0.8);
+	// cœur (couleur pleine, jamais blanchie) et halo coloré qui s'éteint vers le bord
+	float coeur = 1.0 - smoothstep(0.10, 0.35, r2);
+	float halo = (1.0 - r2) * (1.0 - r2) * 0.45;
+	float a = (eclat >= 1.0 ? max(coeur, halo) : (1.0 - smoothstep(0.15, 1.0, r2))) * min(eclat, 1.0) * nuit;
+	float lum = dot(COLOR.rgb, vec3(0.3, 0.59, 0.11));
+	ALBEDO = clamp(mix(vec3(lum), COLOR.rgb, sat), 0.0, 1.0) * a;
 }
 """
 
@@ -78,9 +84,15 @@ static func couleur_bv(bv: float) -> Color:
 	var g: float = clampf(0.39008 * log(k) - 0.63184, 0.0, 1.0) if k <= 66.0 \
 		else clampf(1.129890 * pow(k - 60.0, -0.0755148492), 0.0, 1.0)
 	var b: float = 1.0 if k >= 66.0 else (0.0 if k <= 19.0 else clampf(0.543207 * log(k - 10.0) - 1.19625, 0.0, 1.0))
-	# désaturé : à l'œil nu, les étoiles sont à peine colorées
-	var c: Color = Color(r, g, b).lerp(Color(1, 1, 1), 0.45)
-	return c
+	# saturation accentuée (19/11/2026, retour d'essai PWA : « étoiles toutes blanches ») : l'écart à la luminance
+	# grossi de 1,6 ; Bételgeuse, Antarès, Aldébaran, Arcturus orangées, Rigel, Véga, Sirius, Spica bleutées ; la
+	# couleur est ramenée à 1 sur sa composante la plus forte, l'éclat est porté à part (pas de blanc par saturation)
+	var c0: Color = Color(r, g, b)
+	var l: float = c0.r * 0.3 + c0.g * 0.59 + c0.b * 0.11
+	var c: Color = Color(l + (c0.r - l) * 1.6, l + (c0.g - l) * 1.6, l + (c0.b - l) * 1.6)
+	c = Color(maxf(c.r, 0.05), maxf(c.g, 0.05), maxf(c.b, 0.05))
+	var m: float = maxf(c.r, maxf(c.g, c.b))
+	return Color(c.r / m, c.g / m, c.b / m)
 
 
 func construire() -> void:
@@ -114,6 +126,7 @@ func construire() -> void:
 	sh.code = SHADER_ETOILES
 	_mat_e = ShaderMaterial.new()
 	_mat_e.shader = sh
+	_mat_e.set_shader_parameter("sat", 1.0 if RenderingServer.get_current_rendering_method() == "gl_compatibility" else 1.9)
 	_mat_e.set_shader_parameter("echelle_px", clampf(float(DisplayServer.screen_get_scale()), 1.0, 2.0) \
 		if not OS.has_feature("web") else 1.5)
 	_etoiles = MeshInstance3D.new()
