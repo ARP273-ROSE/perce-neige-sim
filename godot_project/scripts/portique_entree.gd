@@ -46,11 +46,11 @@ static var HEURE_FIGEE: String = ""
 static func _heure() -> String:
 	if HEURE_FIGEE != "":
 		return HEURE_FIGEE
-	var t: Dictionary = Time.get_time_dict_from_system()
+	var t: Dictionary = HeureJeu.maintenant()
 	return "%02d:%02d" % [t["hour"], t["minute"]]
 
 
-## Pendule lumineuse : l'heure (de l'appareil) mise à jour chaque seconde.
+## Pendule lumineuse : l'heure de jeu (HeureJeu) mise à jour chaque seconde.
 ## Chiffres en textes figés (un maillage par caractère, calculés sur le fil de construction et gardés) : le Label3D
 ## d'avant, posé hors de la scène sur le fil, renvoyait sa mise en forme et ses glyphes au fil principal par appel
 ## différé, une image de 36 à 40 ms comptée « physique » au début de chaque séance (relevé du PC du 15/11/2026).

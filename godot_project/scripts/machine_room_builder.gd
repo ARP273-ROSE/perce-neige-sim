@@ -460,8 +460,9 @@ func _build_exterieur() -> void:
 render_mode unshaded, cull_disabled, fog_disabled;
 uniform sampler2D pano : source_color, filter_linear_mipmap, repeat_disable;
 uniform float gamma = 1.0;
+global uniform vec3 pn_jour;        // photo de jour, assombrie la nuit (CycleJour)
 void fragment() {
-	ALBEDO = pow(texture(pano, UV).rgb, vec3(gamma));
+	ALBEDO = pow(texture(pano, UV).rgb * pn_jour, vec3(gamma));
 }
 """
 	var mat: ShaderMaterial = ShaderMaterial.new()

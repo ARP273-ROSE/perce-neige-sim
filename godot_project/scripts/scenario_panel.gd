@@ -23,6 +23,13 @@ var _b_r1: Button = null
 var _b_r2: Button = null
 var _b_mode: Dictionary = {}    # mode → Button
 var _mode_hint: Label = null
+# Heure de jeu (19/11/2026) : réelle ou choisie (date, heure, accélération), gardée d'une partie à l'autre
+var _heure_choisie: bool = false
+var _b_reelle: Button = null
+var _b_choisie: Button = null
+var _champs: Dictionary = {}    # jour, mois, annee, heure, minute → SpinBox
+var _acc: OptionButton = null
+var _ligne_heure: HBoxContainer = null
 
 const MODE_HINTS: Dictionary = {
 	"normal": "Exploitation normale : enveloppe Von Roll, arret automatique en gare.",
@@ -142,6 +149,8 @@ func _build() -> void:
 	_mode_hint.add_theme_color_override("font_color", Color(0.82, 0.90, 1.0))
 	box.add_child(_mode_hint)
 
+	_construire_heure(box)
+
 	var go: Button = _mk_toggle("COMMENCER")
 	go.toggle_mode = false
 	go.custom_minimum_size = Vector2(300, 76)
@@ -151,6 +160,7 @@ func _build() -> void:
 	margin.add_child(go)
 	box.add_child(margin)
 	go.pressed.connect(func() -> void:
+		_appliquer_heure()
 		chosen.emit(_from_top, _rame2, _mode)
 		queue_free())
 
@@ -173,3 +183,75 @@ func _pick_mode(mode: String) -> void:
 		(_b_mode[mid] as Button).set_pressed_no_signal(mid == mode)
 	if _mode_hint != null:
 		_mode_hint.text = MODE_HINTS.get(mode, "")
+
+
+## Heure de jeu : HEURE REELLE (Tignes, l'heure de maintenant) ou CHOISIE (date et heure de départ, puis le temps
+## passe normalement, ou plus vite). Page haut / Page bas en jeu : une heure de plus ou de moins.
+func _construire_heure(box: VBoxContainer) -> void:
+	box.add_child(_mk_label("HEURE DE JEU (soleil, nuit, affluence)", 14))
+	var row: HBoxContainer = HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 14)
+	box.add_child(row)
+	_b_reelle = _mk_toggle("HEURE REELLE")
+	_b_choisie = _mk_toggle("CHOISIE")
+	for b in [_b_reelle, _b_choisie]:
+		(b as Button).custom_minimum_size = Vector2(200, 50)
+	_b_reelle.toggled.connect(func(on: bool) -> void: _pick_heure(not on))
+	_b_choisie.toggled.connect(func(on: bool) -> void: _pick_heure(on))
+	row.add_child(_b_reelle)
+	row.add_child(_b_choisie)
+	_ligne_heure = HBoxContainer.new()
+	_ligne_heure.alignment = BoxContainer.ALIGNMENT_CENTER
+	_ligne_heure.add_theme_constant_override("separation", 6)
+	box.add_child(_ligne_heure)
+	var d: Dictionary = HeureJeu.maintenant()
+	for e: Array in [["jour", 1, 31, int(d["day"]), ""], ["mois", 1, 12, int(d["month"]), "/"],
+			["annee", 2000, 2100, int(d["year"]), "/"], ["heure", 0, 23, int(d["hour"]), "   "],
+			["minute", 0, 59, int(d["minute"]), "h"]]:
+		if String(e[4]) != "":
+			var sep: Label = _mk_label(String(e[4]), 18)
+			_ligne_heure.add_child(sep)
+		var sb: SpinBox = SpinBox.new()
+		sb.min_value = float(e[1])
+		sb.max_value = float(e[2])
+		sb.step = 1.0
+		sb.value = float(e[3])
+		sb.rounded = true
+		sb.allow_greater = false
+		sb.custom_minimum_size = Vector2(96 if String(e[0]) == "annee" else 76, 44)
+		sb.get_line_edit().add_theme_font_size_override("font_size", 18)
+		_champs[e[0]] = sb
+		_ligne_heure.add_child(sb)
+	_acc = OptionButton.new()
+	_acc.focus_mode = Control.FOCUS_NONE
+	_acc.add_theme_font_size_override("font_size", 18)
+	_acc.custom_minimum_size = Vector2(110, 44)
+	for a in HeureJeu.ACCELERATIONS:
+		_acc.add_item("x%d" % int(a))
+	_acc.selected = maxi(HeureJeu.ACCELERATIONS.find(HeureJeu.acceleration), 0)
+	_ligne_heure.add_child(_mk_label("  temps", 14))
+	_ligne_heure.add_child(_acc)
+	_pick_heure(HeureJeu.choisie)
+
+
+func _pick_heure(choisie: bool) -> void:
+	_heure_choisie = choisie
+	_b_reelle.set_pressed_no_signal(not choisie)
+	_b_choisie.set_pressed_no_signal(choisie)
+	if _ligne_heure != null:
+		_ligne_heure.modulate = Color(1, 1, 1, 1.0 if choisie else 0.45)
+		for c in _ligne_heure.get_children():
+			if c is SpinBox:
+				(c as SpinBox).editable = choisie
+			elif c is OptionButton:
+				(c as OptionButton).disabled = not choisie
+
+
+func _appliquer_heure() -> void:
+	if not _heure_choisie:
+		HeureJeu.revenir_reelle()
+		return
+	HeureJeu.regler(int(_champs["annee"].value), int(_champs["mois"].value), int(_champs["jour"].value),
+		int(_champs["heure"].value), int(_champs["minute"].value),
+		float(HeureJeu.ACCELERATIONS[clampi(_acc.selected, 0, HeureJeu.ACCELERATIONS.size() - 1)]))
