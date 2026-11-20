@@ -136,5 +136,6 @@
     "tests"
   ],
   "journal_technique": "CHANGELOG.md",
-  "langue_principale": "fr"
+  "langue_principale": "fr",
+  "release_unique": true
 }
