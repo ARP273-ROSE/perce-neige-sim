@@ -5839,6 +5839,12 @@ func _process_corps(delta: float) -> void:
 	_maj_portillons(delta)
 	_dt = delta
 	if _noyau != null and _noyau_valide():
+		# (mise au repos pendant que le noyau n'était pas encore valide — construction, véhicules ajoutés : ses
+		# véhicules avaient été cachés « parce que loin », et l'étape du noyau ne les remontre pas ; PC, télécabine de
+		# la Daille entièrement invisible au retour du skieur — bench_vehicules_retour avec le module)
+		if not _caches_loin.is_empty():
+			remontrer_caches_loin()
+			_caches_loin.clear()
 		_etape_noyau(delta)
 	else:
 		_etape_gdscript(delta)
@@ -6293,9 +6299,28 @@ func lointains_au_repos() -> void:
 	# restaient dessinés, figés où ils étaient (et ceux d'une ligne jamais avancée depuis sa construction, à leur place
 	# de départ) : « au loin, les sièges et les cabines s'empilent, certains restent figés » (retour d'essai PWA du
 	# 19/11/2026). Ils reparaissent à leur place quand la ligne reprend.
-	if _noyau == null or not _noyau_valide():
+	# (seulement les lignes avancées par _etape_gdscript, seule à les remontrer : le Funival et les téléphériques ont
+	# leur propre _process_corps — leurs rames et cabines restaient cachées pour de bon, « il est où le wagon ? » en
+	# gare amont du Funival, retour d'essai PC du 20/11/2026 ; bench_vehicules_retour)
+	if (_noyau == null or not _noyau_valide()) and _etape_gdscript_cache_loin():
 		for i in range(_vehicules.size()):
 			_cacher_loin(i, true)
+
+
+## Vrai si la ligne est avancée par _etape_gdscript, qui remontre les véhicules cachés parce que loin.
+func _etape_gdscript_cache_loin() -> bool:
+	return true
+
+
+## Véhicules cachés parce que loin, remontrés d'un coup (ligne qui ne passe pas par _etape_gdscript).
+## (ceux passés depuis à un niveau de détail allégé — dessinés par instances — restent cachés : seul le drapeau tombe)
+func remontrer_caches_loin() -> void:
+	for i in range(mini(_caches_loin.size(), _vehicules.size())):
+		if _caches_loin[i] == 1:
+			if i >= _lod_niv.size() or _lod_niv[i] == 0:
+				_cacher_loin(i, false)
+			else:
+				_caches_loin[i] = 0
 
 
 ## Véhicule caché parce que trop loin (chemin GDScript sans niveaux de détail allégés) : au-delà de la portée des

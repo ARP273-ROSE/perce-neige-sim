@@ -5,6 +5,33 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.75.4 — 20 novembre 2026 (non publiée)
+
+- **Funival et téléphériques : rame et cabines disparues** (retours d'essai PC du 20/11/2026 : en gare amont du
+  Funival, « il est où le wagon ? » ; au Fornet, « la cabine est invisible »). La 1.75.3 cachait les véhicules d'une
+  ligne mise au repos (skieur loin) et seule l'étape GDScript des lignes à câble les remontrait. Le Funival et les
+  deux téléphériques (Fornet, Grande Motte) ont leur propre boucle et n'y passaient jamais : une fois la ligne mise
+  au repos, rame et cabines restaient cachées pour de bon, à quai comme en ligne, avec et sans le module C++. Ces
+  lignes ne cachent plus leurs véhicules au repos et remontrent d'un coup ceux qui l'avaient été.
+- **Télécabines avec le module C++** : une ligne mise au repos pendant que son noyau n'était pas encore prêt
+  (construction) cachait ses véhicules, que l'étape du noyau ne remontrait pas — la Daille entièrement invisible au
+  retour du skieur. Ils sont remontrés dès que le noyau reprend.
+- Banc `bench_vehicules_retour` : le skieur va loin (Solaise, Lac de Tignes), puis au Funival, aux deux
+  téléphériques (mise au repos forcée à l'arrivée) et à une télécabine ; aucun véhicule ne doit rester caché
+  « parce que loin » près du skieur. Il échouait sur la 1.75.3 (rame du Funival et cabines du Fornet et de la Grande
+  Motte invisibles ; avec le module, la Daille aussi).
+- **Écran très défini (plus de 2560×1600) sur carte dédiée modeste** (relevés du portable 4K : GTX 1050 Ti Max-Q,
+  écran 4K, parti au cran 5, 30 i/s) : la résolution du rendu 3D baisse avant les effets — rendu 85 %, puis 70 %
+  (FSR 1), puis seulement l'éclairage indirect, le MSAA, le brouillard, le halo, la cadence à 30 i/s. Départ à 70 %
+  avec tous les effets pour une carte de 4 Go, à 85 % pour 6 Go. Les écrans jusqu'à 2560×1600 gardent l'ordre
+  habituel (jamais sous 85 % avant le cran 6), une carte puissante en 4K reste au cran 0 à 100 %. Banc
+  `bench_ordre_4k` (machines simulées : portable 4K, PC fixe 4K, 1440p, PWA simulées).
+- **Relevé de fluidité : état du décor** — relief fin et son pas (5 m, 2,5 m, 1 m), pack HD (niveau), repli du
+  relief fin en cours, échelle du rendu 3D (FSR). « Mon relief est-il au détail max ? » a maintenant sa réponse dans
+  le relevé.
+- Connu, non traité : avec le module C++, `bench_vehicules_lointains` voit encore des sièges figés sur des lignes au
+  repos (Merles, Bollin ; déjà sur la 1.75.3) — le banc de la suite tourne en GDScript.
+
 ## 1.75.3 — 20 novembre 2026
 
 **Plein écran du PC, mode skieur** (retour d'essai, écran 4K : « adapte tes boutons à la résolution de l'écran, tu me mets deux postes de conduite, les fenêtres je peux pas les déplacer ») :
