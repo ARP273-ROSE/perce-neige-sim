@@ -779,3 +779,35 @@ jobs:
           draft: ${{ inputs.brouillon == true }}
           files: publication/*
           body_path: notes.md
+
+      # kit.json « release_unique » : true ne garde que la Release qui vient
+      # d'etre publiee. Les precedentes et les
+      # autres tags sont supprimes : une application installee ne regarde que
+      # la derniere version. Jamais apres un brouillon, et jamais si la
+      # nouvelle Release n'est pas en ligne avec ses fichiers.
+      - name: Ne garder que cette Release (release_unique)
+        if: ${{ inputs.brouillon != true }}
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN || github.token }}
+          DEPOT: ${{ steps.kit.outputs.depot_distribution }}
+          GARDER: v${{ steps.version.outputs.value }}
+        run: |
+          unique=$(python3 -c "import json; print(json.load(open('kit.json', encoding='utf-8')).get('release_unique') is True)")
+          if [ "$unique" != "True" ]; then echo "release_unique absent : historique garde"; exit 0; fi
+          actifs=$(gh release view "$GARDER" -R "$DEPOT" --json isDraft,assets -q 'select(.isDraft == false) | .assets | length')
+          if [ -z "$actifs" ] || [ "$actifs" -lt 1 ]; then
+            echo "::error::$GARDER n'est pas publiee avec ses fichiers : rien n'est supprime"; exit 1
+          fi
+          gh release list -R "$DEPOT" --limit 500 --json tagName -q '.[].tagName' | while read -r tag; do
+            if [ -n "$tag" ] && [ "$tag" != "$GARDER" ]; then
+              echo "suppression de la Release $tag"
+              gh release delete "$tag" -R "$DEPOT" --yes --cleanup-tag
+            fi
+          done
+          gh api "repos/$DEPOT/tags" --paginate -q '.[].name' | while read -r tag; do
+            if [ -n "$tag" ] && [ "$tag" != "$GARDER" ]; then
+              echo "suppression du tag orphelin $tag"
+              gh api -X DELETE "repos/$DEPOT/git/refs/tags/$tag" || true
+            fi
+          done
