@@ -286,12 +286,17 @@ func _cran_carte_dediee() -> int:
 	var go: float = _memoire_video_go()
 	if go <= 0.0 or go >= 7.5:
 		return 0
+	# écran très défini : la résolution du rendu d'abord, les effets ensuite (ordre_4k)
+	if ordre_4k():
+		return 1 if go >= 5.0 else 2
 	if go >= 5.0:
 		return 3 if _ecran_tres_defini() else 1
 	return 4 if _ecran_tres_defini() else 3
 
 
 func _memoire_video_go() -> float:
+	if vram_simulee >= 0.0:
+		return vram_simulee
 	# bancs : --simuler-vram=6 (GTX 1060 6 Go)
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--simuler-vram="):
@@ -305,25 +310,26 @@ func _memoire_video_go() -> float:
 
 func _appliquer(c: int, pourquoi: String) -> void:
 	cran = clampi(maxi(c, cran_min), 0, _cran_max())
+	var ce: int = _cran_effets(cran)
 	if _env != null and _rd:
-		_env.sdfgi_enabled = cran <= 0
-		_env.volumetric_fog_enabled = cran <= 2
+		_env.sdfgi_enabled = ce <= 0
+		_env.volumetric_fog_enabled = ce <= 2
 	if _env != null:
-		_env.glow_enabled = cran <= (4 if _web else 3)
-	cran_courant = cran
+		_env.glow_enabled = ce <= (4 if _web else 3)
+	cran_courant = ce
 	_appliquer_ips()
 	# néons des quais : un sur deux dès le cran 3 (puce intégrée, mesuré le 06/11/2026)
 	var st: Node = main.get("stations") as Node if main != null else null
 	if not _web and st != null and st.has_method("set_neons_alleges"):
-		st.call("set_neons_alleges", cran >= 3)
+		st.call("set_neons_alleges", ce >= 3)
 	for nom_rame in ["cabin", "cabin_ghost"]:
 		var rame: Node = main.get(nom_rame) as Node if main != null else null
 		if not _web and rame != null and rame.has_method("set_pare_brise_simple"):
-			rame.call("set_pare_brise_simple", cran >= 3)
+			rame.call("set_pare_brise_simple", ce >= 3)
 	# dernier cran (PC à carte intégrée) : portées de la PWA, détail minimal
 	var rm_loin: Node = main.get("remontees") as Node if main != null else null
 	if _env != null and _env.sky != null and _env.sky.sky_material is ShaderMaterial:
-		(_env.sky.sky_material as ShaderMaterial).set_shader_parameter("nuages", 0.0 if cran >= 3 or allege else 1.0)
+		(_env.sky.sky_material as ShaderMaterial).set_shader_parameter("nuages", 0.0 if ce >= 3 or allege else 1.0)
 	var reduites: bool = cran >= CRAN_MAX_PC or allege
 	if not _web and rm_loin != null and reduites != _portees_reduites:
 		_portees_reduites = reduites
@@ -335,9 +341,9 @@ func _appliquer(c: int, pourquoi: String) -> void:
 			# PC du père : « crénelage net au réglage haute ») — on ne se fie
 			# plus à la valeur lue sur la fenêtre, on l'impose
 			var cran_msaa: int = 1 if _rd else 2
-			vp.msaa_3d = maxi(_msaa_origine, Viewport.MSAA_4X) if cran <= cran_msaa else Viewport.MSAA_DISABLED
+			vp.msaa_3d = maxi(_msaa_origine, Viewport.MSAA_4X) if ce <= cran_msaa else Viewport.MSAA_DISABLED
 			# puce intégrée : ×2 suffit (bande passante de la mémoire partagée)
-			if cran <= cran_msaa and type_gpu == "integre":
+			if ce <= cran_msaa and type_gpu == "integre":
 				vp.msaa_3d = Viewport.MSAA_2X
 			# sans MSAA : anticrénelage d'écran plutôt que rien (crénelage reproché le 08/10/2026),
 			# SMAA en Vulkan, FXAA en OpenGL ; ~0,3-0,5 ms
@@ -380,6 +386,63 @@ func _appliquer(c: int, pourquoi: String) -> void:
 				libelle(cran), pourquoi, aa, (" — " + dernier_bilan) if dernier_bilan != "" else ""]})
 
 
+## Bancs : mémoire vidéo imposée (Go ; < 0 : lue sur la carte).
+var vram_simulee: float = -1.0
+
+
+## État du décor, pour le relevé (retour d'utilisateur du 20/11/2026 : « mon relief est-il au détail max ? ») :
+## relief fin et son pas, pack haute définition, repli du relief fin (ReliefFin.repli), échelle du rendu 3D.
+func etat_decor() -> String:
+	var rel: Node = main.get("relief") as Node if main != null else null
+	var fin: ReliefFin = rel.get("fin") as ReliefFin if rel != null else null
+	var t: String = "décor : "
+	if fin == null or not fin.pret:
+		t += "relief fin non (tuiles à 25 m)"
+	else:
+		t += "relief fin oui, pas de %s m" % String.num(ReliefFin.PX, 2).trim_suffix("0").trim_suffix("0").trim_suffix(".")
+	var niv: int = ReliefFin.niveau_hd() if not _web else 0
+	if fin != null and fin.hd:
+		t += " ; pack HD oui (niveau %d/2)" % niv
+	else:
+		t += " ; pack HD non" + (" (pack abîmé)" if ReliefFin.pack_abime else "")
+	if fin != null:
+		t += " ; repli du relief fin %d/%d%s" % [fin.repli, ReliefFin.REPLI_MAX, " (en cours)" if fin.repli > 0 else ""]
+	var vp: Viewport = main.get_viewport() if main != null else null
+	if vp != null:
+		t += " ; rendu 3D %d %%%s" % [int(round(vp.scaling_3d_scale * 100.0)),
+			(" (FSR 1)" if vp.scaling_3d_mode == Viewport.SCALING_3D_MODE_FSR and vp.scaling_3d_scale < 0.999 else "")]
+	if ordre_4k():
+		t += " ; écran très défini : résolution avant les effets"
+	return t
+
+
+## Écran très défini (plus de 2560×1600) sur carte dédiée, au PC : la résolution du rendu 3D baisse AVANT les
+## effets (retour d'utilisateur du 20/11/2026, portable 4K — GTX 1050 Ti Max-Q, écran 4K, parti au cran 5,
+## 30 i/s : « garder les effets en 4K »). Sur un tel écran, 85 % puis 70 % (FSR 1) restent plus fins qu'un écran
+## 1440p, et coûtent bien moins que l'éclairage indirect ou le MSAA à pleine définition. Crans :
+##   0 tout · 1 rendu 85 % · 2 rendu 70 % · 3 + sans éclairage indirect · 4 + SMAA · 5 + sans brouillard ·
+##   6 + sans halo · 7 + 30 i/s, remontées proches.
+## Les écrans ≤ 2560×1600 gardent l'ordre et la règle « jamais sous 85 % avant le cran 6 » ; une carte puissante
+## reste au cran 0, à 100 %.
+func ordre_4k() -> bool:
+	return not _web and type_gpu == "dedie" and _ecran_tres_defini()
+
+
+## Cran des effets (échelle de l'ordre habituel) au cran `c` : en ordre_4k, les deux premiers crans ne touchent
+## que la résolution. Lu pour les effets, les néons, les pare-brise, la cadence, et publié (cran_courant).
+func _cran_effets(c: int) -> int:
+	if ordre_4k():
+		return [0, 0, 0, 1, 2, 3, 4, 5][clampi(c, 0, 7)]
+	return c
+
+
+## Cadence verrouillée à 30 i/s au cran `c`.
+func _ips_30(c: int) -> bool:
+	if _web:
+		return c >= 6
+	return _cran_effets(c) >= 5
+
+
 ## Échelle du rendu 3D au cran `c` : PC jamais sous 85 %, PWA comme mesuré.
 func _cran_max() -> int:
 	return CRAN_MAX_WEB if _web else CRAN_MAX_PC
@@ -394,6 +457,8 @@ func _echelle(c: int) -> float:
 		if secours_web == 1:
 			return 1.0
 		return [1.0, 1.0, 1.0, 0.85, 0.75, 0.7, 0.7][c]
+	if ordre_4k():
+		return [1.0, 0.85, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7][c]
 	return [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.85, 0.7][c]
 
 
@@ -403,6 +468,10 @@ func libelle(c: int) -> String:
 		return ["tout", "sans éclairage indirect", "sans brouillard ni reflets",
 			"rendu 85 %", "rendu 75 %", "rendu 70 %, sans halo",
 			"30 i/s, sans anti-crénelage"][c]
+	if ordre_4k():
+		return ["tout", "rendu à 85 %", "rendu à 70 %", "rendu à 70 %, sans éclairage indirect",
+			"rendu à 70 %, anti-crénelage léger", "rendu à 70 %, sans brouillard", "rendu à 70 %, sans halo",
+			"rendu à 70 %, 30 i/s, remontées proches seulement"][c]
 	if _rd:
 		return ["tout", "sans éclairage indirect", "anti-crénelage léger (SMAA)",
 			"sans brouillard", "sans halo", "30 i/s", "rendu à 85 %",
@@ -417,7 +486,7 @@ var _ips_base: int = 0
 
 
 func _appliquer_ips() -> void:
-	var ips: int = 30 if cran >= (6 if _web else 5) else 0
+	var ips: int = 30 if _ips_30(cran) else 0
 	# puce intégrée sur un écran à plus de 60 Hz : 60 i/s au plus (chaleur, ventilateur, mémoire
 	# partagée avec le processeur ; au-delà, le gain ne se voit pas sur ce type de machine)
 	if ips == 0 and not _web and type_gpu == "integre" and float(machine.get("hz", 60.0)) > 61.0:
@@ -615,7 +684,7 @@ func _evaluer() -> void:
 	var n: int = _durees.size()
 	if n < 10:
 		return
-	var cible_ips: float = 30.0 if cran >= (6 if _web else 5) else minf(60.0, machine.get("hz", 60.0))
+	var cible_ips: float = 30.0 if _ips_30(cran) else minf(60.0, machine.get("hz", 60.0))
 	var budget: float = 1.0 / cible_ips
 	var tri: PackedFloat32Array = _durees.duplicate()
 	tri.sort()
@@ -669,7 +738,7 @@ func _evaluer() -> void:
 				var fin_hd: ReliefFin = main.get("relief").fin if main != null and main.get("relief") != null else null
 				# le cran verrouillé à 30 i/s seulement en vraie lenteur : 45-49 i/s réguliers y
 				# faisaient tomber (audit du 14/11/2026) — sinon on allège le décor HD
-				var vers_30: bool = cran + 1 >= (6 if _web else 5)
+				var vers_30: bool = _ips_30(cran + 1)
 				var vraie_lenteur: bool = ips < 40.0 or taux > 0.05
 				if vers_30 and not vraie_lenteur:
 					if fin_hd != null and fin_hd.hd and fin_hd.baisser_repli():
@@ -945,6 +1014,7 @@ func _finir_releve() -> void:
 	# durée réelle : un relevé arrêté par F10 au bout de 2 s se disait « en 60 s »
 	r.append("Relevé de fluidité — %s — %d images en %.1f s" % [_resume_machine(), n, duree_rel])
 	r.append("cran %d/%d — %s" % [cran, _cran_max(), libelle(cran)])
+	r.append(etat_decor())
 	r.append("noyau C++ des remontées : %s" % ("oui" if ClassDB.class_exists("NoyauRemontee") else "non (GDScript)"))
 	for nom in ["image", "principal", "rendu", "gpu"]:
 		var a: Array = cols[nom]

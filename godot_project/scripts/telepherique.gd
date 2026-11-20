@@ -410,9 +410,17 @@ func _s_cab1_attendu(a: float, b: float) -> float:
 	return _en_face(_s)
 
 
+## (avancé ici, jamais par _etape_gdscript : la mise au repos ne cache pas ses véhicules — LigneRemontee)
+func _etape_gdscript_cache_loin() -> bool:
+	return false
+
+
 func _process_corps(delta: float) -> void:
 	if not pret:
 		return
+	if not _caches_loin.is_empty():
+		remontrer_caches_loin()
+		_caches_loin.clear()
 	delta = _tic_lod(delta)
 	if delta < 0.0:
 		return
