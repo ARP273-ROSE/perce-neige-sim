@@ -5,7 +5,7 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
-## 1.75.3 — 19 novembre 2026 (non publiée)
+## 1.75.3 — 20 novembre 2026
 
 **Plein écran du PC, mode skieur** (retour d'essai, écran 4K : « adapte tes boutons à la résolution de l'écran, tu me mets deux postes de conduite, les fenêtres je peux pas les déplacer ») :
 - **Boutons du PC à l'échelle de la 3D** : la colonne PLEIN ÉCRAN, PUPITRE, ÉCRANS, CONDUIRE, VUES, PAUSE, AIDE recouvrait le poste du skieur. Elle devient une rangée en haut à gauche, dans la bande libre au-dessus du compteur, du poste et de la carte. Sa taille suit l'échelle de l'interface de la vue 3D (toile de 1600 × 900 étirée à l'écran), pour garder les mêmes proportions en 4K, 1440p et 1080p.
