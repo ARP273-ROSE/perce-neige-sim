@@ -5,7 +5,7 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
-## 1.76.1 — 21 novembre 2026 (non publiée)
+## 1.76.1 — 21 novembre 2026
 
 - **Piques du mode réseau** (« rajoute des phrases sarcastiques pour le réseau ») : nouvelle banque bilingue
   (`piques_reseau.gd`, 14 genres, plus de 45 piques, « {nom} » remplacé par l'autre joueur) — arrivée, départ,
