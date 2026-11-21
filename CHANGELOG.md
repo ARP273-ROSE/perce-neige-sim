@@ -7,6 +7,29 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## 1.75.4 — 20 novembre 2026 (non publiée)
 
+- **Funival, rame : rambarde en travers de la porte ouverte** (retour d'essai PWA du 21/11/2026, gare amont). Deux
+  pièces barraient les baies : la lisse rouge en long, à 1 m du plancher, courait d'un bout à l'autre de la caisse à
+  travers chaque porte, et l'arceau rouge de chaque baie était posé DANS l'ouverture, à 0,34 m du flanc, sur sa
+  moitié aval. La lisse est coupée au droit de chaque porte ; l'arceau devient un montant contre le jambage aval,
+  hors du passage.
+- **Funival, bout amont : barres rouges et tête du skieur à travers la vitre** (même essai, en marche). Le nez fuit de
+  1 m vers l'intérieur en montant : le cadre de barres du dernier palier amont (poteaux de 2,25 m) était posé
+  au-delà du haut du nez, et les parois de bout de la collision, à mi-recul, laissaient la tête et la caméra sortir
+  par le pare-brise. Plus de cadre au dernier palier (son bord amont est le nez) ; parois de bout au droit du haut
+  du nez.
+- **Relief : un Shader par code source** (même essai : contexte WebGL perdu après 22 min, 922 programmes ; gels de
+  3,9 s aux Tufs et 3,1 s près du Funival, « après le script »). Sur la PWA, chaque pièce fine des gares, posée à
+  l'arrivée du skieur, recevait un Shader neuf au code identique : un programme de plus à compiler (plusieurs
+  secondes sur iPad) et à garder. Les pièces partagent maintenant le Shader du relief. Export web sous WebKit,
+  skieur posé à une remontée toutes les 25 s : 723 programmes après 30 min avant, 364 après.
+- **PC : masque des gares retenu par les pièces** : copié du matériau du relief, chaque pièce gardait en vie le
+  masque des gares (2048², 4 Mo) du moment, remplacé à chaque pièce posée ensuite. Sonde de mémoire (OpenGL,
+  cran 5, une remontée toutes les 25 s) : +5 Mo de textures par gare visitée sans plafond (132 → 527 Mo en
+  20 min) ; après, stable (250 Mo) passé les premières gares. Une pièce ne lit pas ce masque : il n'y est plus.
+- Banc `bench_relief_programmes` : deux pièces de la PWA partagent leur Shader, aucune pièce ne tient de masque.
+- Pack lointain web recuit pour l'Olympique (galets de sabot relevés).
+- Reste : sous WebKit, le nombre de tampons croît encore avec les remontées visitées (7 000 → 26 600 en 30 min,
+  160 Mo) — caches de modèles et de textes par ligne ; non traité.
 - **3S : galets du chariot sur les porteurs DESSINÉS** (retour d'essai PWA du 21/11/2026, vidéo de l'Olympique :
   « tu vois bien le câble qui bouge sous les galets »). Le nuanceur creuse les porteurs sous chaque cabine en ne
   déplaçant que les sommets du tube (tous les 4 m en ligne) et la carte graphique trace un segment droit entre eux,
