@@ -24,6 +24,7 @@ func _initialize() -> void:
 	_banques()
 	_guet()
 	_corde()
+	_file_corde()
 	_identification_statique()
 	_cam = Camera3D.new()
 	get_root().add_child(_cam)
@@ -174,6 +175,64 @@ func _corde() -> void:
 			sortis.append([snappedf(t, 0.1), ev])
 	_verif("descente simulée : des piques sur la physique, espacées, pas d'avalanche", sortis.size() >= 1
 		and sortis.size() <= 5, str(sortis))
+
+
+## File de descente à la corde (FileCorde) : ordre, groupes de véhicules voisins, départ, oubli des muets.
+func _file_corde() -> void:
+	var f: FileCorde = FileCorde.new()
+	f.noter(7, "tsd6_grattalu", 500.0, 0, 10.0)
+	f.noter(3, "tsd6_grattalu", 505.0, 0, 10.0)        # même instant : l'identifiant le plus petit d'abord
+	f.noter(9, "tsd6_grattalu", 520.0, 0, 9.0)         # demande plus ancienne : devant
+	f.noter(4, "tsd6_grattalu", 900.0, 0, 8.0)         # autre groupe (véhicule loin)
+	f.noter(5, "tph_fornet", 100.0, 0, 8.0)
+	var fl: Array = f.calculer(10.5)
+	var par: Dictionary = {}
+	for e in fl:
+		par["%s:%s" % [e[0], str(e[1][0])]] = e[1]
+	_verif("corde : trois files (deux groupes sur Grattalu, une au Fornet)", fl.size() == 3, str(fl))
+	_verif("corde : ordre de demande puis identifiant", par.get("tsd6_grattalu:9", []) == [9, 3, 7],
+		str(par.get("tsd6_grattalu:9", [])))
+	f.noter(7, "tsd6_grattalu", 500.0, 1, 11.0)        # 7 descend : en tête
+	fl = f.calculer(11.0)
+	var g: Array = []
+	for e in fl:
+		if (e[1] as Array).has(7):
+			g = e[1]
+	_verif("corde : celui qui descend en tête", g == [7, 9, 3], str(g))
+	f.noter(7, "tsd6_grattalu", 500.0, 2, 30.0)        # au sol : sorti
+	fl = f.calculer(12.0)
+	g = []
+	for e in fl:
+		if (e[1] as Array).has(9):
+			g = e[1]
+	_verif("corde : au sol, sorti de la file", g == [9, 3], str(g))
+	var fd: FileCorde = FileCorde.new()
+	fd.noter(1, "tsd6_grattalu", 500.0, 1, 0.0)
+	fd.noter(2, "tsd6_grattalu", 501.0, 0, 0.0)
+	fd.noter(2, "tsd6_grattalu", 501.0, 0, 9.0)
+	var fl2: Array = fd.calculer(10.0)                 # 1 muet 10 s en pleine descente (image figée) : gardé
+	_verif("corde : celui qui descend n'est pas oublié sur un silence court", fl2.size() == 1 and fl2[0][1] == [1, 2],
+		str(fl2))
+	fl = f.calculer(16.5)                               # 9, 3, 4, 5 muets depuis plus de OUBLI_S
+	_verif("corde : demandes muettes oubliées (joueur parti)", fl.is_empty(), str(fl))
+	f.noter(1, "tsd6_grattalu", 500.0, 0, 20.0)
+	f.noter(2, "tsd6_grattalu", 501.0, 1, 20.0)
+	f.oublier(2)                                        # départ du salon pendant sa descente
+	fl = f.calculer(20.2)
+	_verif("corde : la file passe au suivant si celui qui descend part", fl.size() == 1 and fl[0][1] == [1], str(fl))
+	_verif("corde : rang", FileCorde.rang([4, 8, 2], 2) == 2 and FileCorde.rang([4], 9) == -1)
+	# piques de la corde à plusieurs : genres connus du guet, sortent espacés de ECART_CORDE_S
+	var gu: GuetReseau = GuetReseau.new()
+	gu.signaler("CORDE_FILE_APRES", 100.0, "Zoé")
+	gu.signaler("CORDE_AUTRE_DESCEND", 100.5, "Zoé")
+	var r1: Array = gu.observer(101.0, _o([]))
+	var r2: Array = gu.observer(102.0, _o([]))
+	var r3: Array = gu.observer(105.5, _o([]))
+	_verif("corde : piques à plusieurs en file, espacées de %.0f s" % GuetReseau.ECART_CORDE_S,
+		not r1.is_empty() and String(r1[0]) == "CORDE_FILE_APRES" and r2.is_empty() and not r3.is_empty()
+		and String(r3[0]) == "CORDE_AUTRE_DESCEND", "%s / %s / %s" % [r1, r2, r3])
+	var tx: String = PiquesReseau.texte("RESEAU_CORDE_AUTRE_TOURNE", "fr", "Zoé")
+	_verif("corde : texte « il tourne » avec le nom : " + tx, tx.find("Zoé") >= 0 and tx.find("{") < 0)
 
 
 func _identification_statique() -> void:

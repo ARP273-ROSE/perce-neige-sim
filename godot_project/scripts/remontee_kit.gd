@@ -134,8 +134,35 @@ static func _mat(nom: String) -> StandardMaterial3D:
 		m.albedo_color = c[0]
 		m.roughness = c[1]
 		m.metallic = c[2]
+	m.set_meta(&"metal0", m.metallic)
+	m.metallic *= _k_metal
 	_mats[nom] = m
 	return m
+
+
+## La nuit, les métaux des remontées (pylônes galvanisés à 0,75, jantes, pinces, câbles) n'ont plus que le ciel noir à
+## refléter : presque sans diffusion, ils passaient au noir et la ligne construite devenait monochrome, alors que sa
+## version cuite (lumière cuite dans la couleur), montrée pendant la construction, gardait ses gris et ses couleurs
+## (retour d'essai PWA du 21/11/2026 : « quand la remontée se construit c'est pas blafard mais ensuite c'est blafard de
+## nuit »). Part métallique réduite avec la nuit (main._maj_jour), rendue le jour.
+const REDUCTION_METAL_NUIT: float = 0.8
+static var _k_metal: float = 1.0
+
+
+static func regler_nuit(n: float) -> void:
+	var k: float = 1.0 - REDUCTION_METAL_NUIT * clampf(n, 0.0, 1.0)
+	if absf(k - _k_metal) < 0.01 and not (k == 1.0 and _k_metal != 1.0):
+		return
+	verrou.lock()
+	_k_metal = k
+	for m in _mats.values():
+		if (m as StandardMaterial3D).has_meta(&"metal0"):
+			(m as StandardMaterial3D).metallic = float((m as StandardMaterial3D).get_meta(&"metal0")) * k
+	verrou.unlock()
+
+
+static func facteur_metal() -> float:
+	return _k_metal
 
 
 static func _mi(parent: Node3D, mesh: Mesh, xf: Transform3D, nom: String) -> MeshInstance3D:

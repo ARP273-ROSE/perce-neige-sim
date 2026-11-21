@@ -131,6 +131,99 @@ const RESEAU_HOTE_AUTRE: Array = [
 ]
 
 
+# --- descente à la corde à plusieurs, chacun son tour (21/11/2026) ---
+const RESEAU_CORDE_FILE_PREMIER: Array = [
+	["File d'évacuation : vous passez avant {nom}. À vous l'honneur, et le vide.",
+	 "Evacuation queue: you go before {nom}. After you — into the void."],
+	["Vous descendez en premier. {nom} regardera comment il ne faut pas faire.",
+	 "You go first. {nom} gets to watch how not to do it."],
+	["Premier à la corde. {nom} vous remercie de tester le matériel.",
+	 "First on the rope. {nom} thanks you for testing the gear."],
+]
+const RESEAU_CORDE_FILE_APRES: Array = [
+	["{nom} passe d'abord. Vous, vous gardez le siège au chaud.",
+	 "{nom} goes first. You keep the seat warm."],
+	["Chacun son tour : {nom} descend, vous patientez. Comme au guichet, mais en l'air.",
+	 "One at a time: {nom} goes down, you wait. Like a ticket queue, but airborne."],
+	["File d'attente à la corde. {nom} est devant. La politesse, à 15 m du sol.",
+	 "Rope queue. {nom} is ahead. Courtesy, 15 m off the ground."],
+]
+const RESEAU_CORDE_AUTRE_DESCEND: Array = [
+	["{nom} descend à la corde. Regardez bien : c'est votre tour juste après.",
+	 "{nom} is going down the rope. Watch closely: you're next."],
+	["{nom} quitte le siège avec la grâce d'un sac de pommes de terre.",
+	 "{nom} leaves the seat with the grace of a sack of potatoes."],
+	["Et voilà {nom} au bout de la corde. Prenez des notes, pas des photos.",
+	 "And there goes {nom} on the rope. Take notes, not photos."],
+]
+const RESEAU_CORDE_AUTRE_TOURNE: Array = [
+	["{nom} tourne sur lui-même. La corde n'avait rien demandé.",
+	 "{nom} is spinning. The rope didn't ask for this."],
+	["{nom} fait la toupie. Dix sur dix pour l'artistique, zéro pour la dignité.",
+	 "{nom} is doing the spinning top. Ten for artistry, zero for dignity."],
+	["{nom} visite le panorama à 360°. Gratuitement.",
+	 "{nom} is enjoying a free 360° panorama."],
+]
+const RESEAU_CORDE_AUTRE_BALANCE: Array = [
+	["{nom} se balance comme un pendule. Galilée serait fier, le secouriste un peu moins.",
+	 "{nom} swings like a pendulum. Galileo would be proud, the rescuer less so."],
+	["{nom} fait de la balançoire. Le pylône n'est pas un trampoline.",
+	 "{nom} is on a swing. The tower is not a trampoline."],
+	["Gros balancement pour {nom}. Le vent a choisi son camp.",
+	 "Big swing for {nom}. The wind has picked a side."],
+]
+const RESEAU_CORDE_AUTRE_SOL: Array = [
+	["{nom} a touché le sol. Il prétendra qu'il n'a pas eu peur.",
+	 "{nom} touched down. They'll claim they weren't scared."],
+	["{nom} est en bas, entier. La barre est placée bas, mais placée.",
+	 "{nom} is down, in one piece. The bar is low, but it's set."],
+	["Atterrissage de {nom} réussi. Applaudissements polis du télésiège.",
+	 "{nom} landed. Polite applause from the chairlift."],
+]
+const RESEAU_CORDE_MON_TOUR: Array = [
+	["À vous. {nom} a survécu, statistiquement c'est encourageant.",
+	 "Your turn. {nom} survived — statistically encouraging."],
+	["Votre tour. Essayez de ne pas faire mieux que {nom}, ce serait vexant.",
+	 "Your turn. Try not to outdo {nom}, it'd be awkward."],
+	["C'est à vous. La corde est encore tiède.",
+	 "You're up. The rope is still warm."],
+]
+const RESEAU_CORDE_TRAINE: Array = [
+	["{nom} hésite à se lancer. Le siège est confortable, on sait.",
+	 "{nom} is hesitating. The seat is comfy, we know."],
+	["On attend {nom}. Le secouriste regarde sa montre, puis le ciel.",
+	 "Waiting for {nom}. The rescuer checks his watch, then the sky."],
+	["{nom} prend son temps. Il négocie peut-être avec la corde.",
+	 "{nom} is taking their time. Maybe negotiating with the rope."],
+]
+const RESEAU_CORDE_DERNIER: Array = [
+	["Dernier dans le siège. Seul, en l'air, avec une corde. Ambiance.",
+	 "Last one on the seat. Alone, in the air, with a rope. Lovely."],
+	["Tout le monde est en bas sauf vous. {nom} vous fait signe d'en bas.",
+	 "Everyone's down but you. {nom} is waving from below."],
+	["Vous êtes le dernier. Le capitaine quitte le navire en dernier, paraît-il.",
+	 "You're last. The captain leaves the ship last, they say."],
+]
+const RESEAU_CORDE_COMPARE_TOURS_LUI: Array = [
+	["{nom} a fait plus de tours sur lui-même que vous. Une victoire dont personne ne veut.",
+	 "{nom} spun more than you. A victory nobody wants."],
+	["Bilan : {nom} a tourné davantage. Vous gagnez à la dignité.",
+	 "Result: {nom} spun more. You win on dignity."],
+]
+const RESEAU_CORDE_COMPARE_TOURS_MOI: Array = [
+	["Vous avez fait plus de tours que {nom}. Record du salon, catégorie toupie.",
+	 "You spun more than {nom}. Lobby record, spinning-top category."],
+	["Plus de rotations que {nom}. Vous avez visiblement plus de panorama à voir.",
+	 "More spins than {nom}. You clearly had more view to see."],
+]
+const RESEAU_CORDE_COMPARE_BALANCE: Array = [
+	["Descente comparable à celle de {nom}. Deux pendules, zéro talent.",
+	 "Pretty much the same descent as {nom}. Two pendulums, zero talent."],
+	["Match nul avec {nom} à la corde. Les juges sont partis boire un vin chaud.",
+	 "A draw with {nom} on the rope. The judges went for mulled wine."],
+]
+
+
 ## Texte d'une pique `nom_liste` (« RESEAU_… ») où {nom}, {dist} et {vit} sont remplacés.
 static func texte(nom_liste: String, lang: String, nom: String = "", dist_m: float = 0.0, vit_ms: float = 0.0) -> String:
 	var t: String = PNQuips.pique(nom_liste, lang)

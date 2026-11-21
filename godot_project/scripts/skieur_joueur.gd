@@ -67,6 +67,16 @@ var cam_yaw: float = 0.0
 var cam_pitch: float = -0.28
 var cam_dist: float = 5.0
 var premiere_personne: bool = false
+## Descente à la corde (demande d'utilisateur du 21/11/2026 : « la caméra reste derrière le skieur en 3e personne et
+## solidaire de la tête en 1re ; comme ça tout le décor tourne quand on fait la toupie, et on a le vertige si on
+## regarde en bas ») : posés à chaque image par RemonteesDomaine pendant la descente — axe de la corde (de l'évacué
+## à l'ancrage) et lacet du corps suspendu ; ZERO / NAN hors corde.
+var corde_axe: Vector3 = Vector3.ZERO
+var corde_lacet: float = NAN
+var _corde_lacet_prec: float = NAN
+var _tilt_corde: Quaternion = Quaternion.IDENTITY
+const LISSAGE_TILT_CORDE: float = 12.0     # 1/s : très léger lissage du balancement (pas de tremblement)
+const RETOUR_TILT_CORDE: float = 3.0       # 1/s : retour en douceur à la vue normale, au sol
 ## Voiture qui porte le skieur (nœud de la voiture), ou null.
 var support: Node3D = null
 var _support_xf: Transform3D = Transform3D.IDENTITY
@@ -1688,7 +1698,22 @@ func _camera() -> void:
 	if not is_finite(cam_pitch):
 		cam_pitch = 0.0
 	cam_pitch = clampf(cam_pitch, _pitch_min(), _pitch_max())
-	pivot.rotation = Vector3(clampf(cam_pitch - _pitch_sol, _pitch_min(), _pitch_max()), cam_yaw, 0.0)
+	# suspendu à la corde : la vue suit la toupie (lacet du corps ajouté tel quel, le joueur garde son regard relatif)
+	# et le balancement (repère incliné le long de la corde, à peine lissé) ; au sol, retour en douceur
+	var dt_c: float = get_process_delta_time()
+	if corde_axe.length() > 0.3 and is_finite(corde_lacet):
+		if is_nan(_corde_lacet_prec):
+			cam_yaw = corde_lacet          # 3e personne : derrière son dos ; 1re : dans l'axe de son regard
+		else:
+			cam_yaw += wrapf(corde_lacet - _corde_lacet_prec, -PI, PI)
+		_corde_lacet_prec = corde_lacet
+		_tilt_corde = _tilt_corde.slerp(Quaternion(Vector3.UP, corde_axe.normalized()), 1.0 - exp(-LISSAGE_TILT_CORDE * dt_c))
+	else:
+		_corde_lacet_prec = NAN
+		if not _tilt_corde.is_equal_approx(Quaternion.IDENTITY):
+			_tilt_corde = _tilt_corde.slerp(Quaternion.IDENTITY, 1.0 - exp(-RETOUR_TILT_CORDE * dt_c))
+	pivot.basis = Basis(_tilt_corde) * Basis.from_euler(Vector3(clampf(cam_pitch - _pitch_sol, _pitch_min(), _pitch_max()),
+		cam_yaw, 0.0))
 	# le bras se raccourcit aussitôt (il ne doit pas traverser les parois) mais ne se
 	# rallonge qu'à RALLONGE_BRAS : dans la rame, passant devant une baie ou une barre,
 	# il faisait des bonds de 0,7 à 1,8 m en une image
@@ -1735,6 +1760,8 @@ func _camera() -> void:
 			# yeux du passager assis : au-dessus du bassin (en arrière des
 			# pieds), à 1,25 m au-dessus des pieds
 			pivot.position = Vector3(_visuel.position.x * 0.9, Y_YEUX_ASSIS, _visuel.position.z * 0.9)
+		# (suspendu : les yeux suivent l'inclinaison du corps le long de la corde)
+		pivot.position = Basis(_tilt_corde) * pivot.position
 	elif _chute_t <= 0.0:
 		if _mat_coupe != null:
 			_mat_coupe.set_shader_parameter("coupe", 1000.0)

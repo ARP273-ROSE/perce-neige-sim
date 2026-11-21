@@ -81,6 +81,15 @@ var guet: GuetReseau = GuetReseau.new()
 var _t_guet: float = 0.0
 var _seul_s: float = 0.0
 var _rtt: float = 0.0
+# descente à la corde chacun son tour (21/11/2026)
+var file_corde: FileCorde = FileCorde.new()     # (hôte) demandes et files
+var cordes: Dictionary = {}                     # id → {"ph", "l", "s", "t" (local), "snaps", "bilan", "vu": {}}
+var _ma_corde: Dictionary = {}                  # notre demande : {"l", "s", "ph", "t0", "rang", "go", "tours", "am"}
+var _file_recue: Dictionary = {}                # {"d": [ids], "t": local} : la file qui nous contient
+var _t_corde: float = 0.0
+var _t_file: float = 0.0
+var _files_publiees: bool = false
+var _cordes_mi: Dictionary = {}                 # id → [brin porteur, brin libre]
 
 
 func _init() -> void:
@@ -191,6 +200,12 @@ func _fin() -> void:
 	pilotes.clear()
 	_bail.clear()
 	LigneRemontee.sur_geste = Callable()
+	if RemonteesDomaine.corde_reseau == self:
+		RemonteesDomaine.corde_reseau = null
+	cordes.clear()
+	file_corde = FileCorde.new()
+	_file_recue = {}
+	_cacher_cordes([])
 	_prise.clear()
 	if main != null:
 		main.set("pn_reseau", {})
@@ -267,6 +282,7 @@ func _recevoir(txt: String) -> void:
 			_n_horloge = 0
 			_t_horloge = 0.0
 			LigneRemontee.sur_geste = _geste_ligne
+			RemonteesDomaine.corde_reseau = self
 			_statut("Salon %s — %d joueur(s)" % [code_lisible(code), pairs.size() + 1])
 		"arrivee":
 			_changer_hote(int(d.get("hote", hote_id)))
@@ -277,6 +293,8 @@ func _recevoir(txt: String) -> void:
 			if pairs.has(int(d["id"])):
 				guet.signaler("DEPART", temps_local(), String(pairs[int(d["id"])]["nom"]))
 			pairs.erase(int(d["id"]))
+			cordes.erase(int(d["id"]))
+			file_corde.oublier(int(d["id"]))
 			_changer_hote(int(d.get("hote", hote_id)))
 			if hote_id == mon_id:
 				var change_p: bool = false
@@ -318,6 +336,14 @@ func _recevoir(txt: String) -> void:
 				elif pilotes.get(String(d.get("l", "")), -1) == int(d.get("id", -1)):
 					pilotes.erase(String(d.get("l", "")))
 					_publier_pilotes()
+		"corde":
+			_recevoir_corde(d)
+		"file":
+			var fd: Array = []
+			for v in d.get("d", []):
+				fd.append(int(v))
+			if int(d.get("id", -1)) == hote_id and fd.has(mon_id):
+				_file_recue = {"d": fd, "t": temps_local()}
 		"pilotes":
 			if int(d.get("id", -1)) == hote_id:
 				_recevoir_pilotes(d.get("d", []))
@@ -347,7 +373,9 @@ func _envoyer(delta: float) -> void:
 		_ws.send_text(JSON.stringify({"t": "horloge", "c": temps_local()}))
 	_t_etat -= delta
 	if _t_etat <= 0.0:
-		_t_etat = PERIODE_ETAT
+		# (en descente à la corde, la position part à 10 Hz dans les messages « corde » : l'état seulement à 2 Hz, le
+		# relais coupe au-delà de 20 messages par seconde)
+		_t_etat = 0.5 if not _ma_corde.is_empty() and int(_ma_corde["ph"]) == 1 else PERIODE_ETAT
 		var e: Dictionary = etat_local()
 		if not e.is_empty():
 			_ws.send_text(JSON.stringify(e))
@@ -370,6 +398,7 @@ func _envoyer(delta: float) -> void:
 					morceau.append(dl[(debut + m * LIGNES_PAR_MESSAGE + k) % dl.size()])
 				_ws.send_text(JSON.stringify({"t": "lignes", "tc": maintenant(), "d": morceau}))
 			_rotation += n_msg
+	_envoyer_corde(delta)
 	if hote_id == mon_id:
 		_t_pilotes -= delta
 		if _t_pilotes <= 0.0:
@@ -394,7 +423,10 @@ func etat_local() -> Dictionary:
 		"cap": cap, "v": [_borne(v.x, 79.0), _borne(v.y, 79.0), _borne(v.z, 79.0)], "po": po, "tc": maintenant()}
 	var rd: Node = main.get("remontees")
 	var ab: Array = rd.get("a_bord") if rd != null else []
-	if ab.size() >= 2 and is_instance_valid(ab[0]):
+	var en_corde: bool = rd != null and not (rd.get("_corde") as Dictionary).is_empty()
+	if en_corde:
+		e["po"] = 2
+	elif ab.size() >= 2 and is_instance_valid(ab[0]):
 		var lg: LigneRemontee = ab[0]
 		var i: int = int(ab[1])
 		if ab.size() <= 5:
@@ -722,15 +754,24 @@ func _dessiner() -> void:
 	var t: float = maintenant() - DELAI_RENDU
 	var liste: Array = []
 	var carte: Array = []
+	var cordes_vues: Array = []
 	for id in pairs:
 		var e: Dictionary = etat_pair(id, t)
 		if e.is_empty():
 			continue
+		var cd: Dictionary = corde_pair(id, t)
+		if not cd.is_empty():
+			e["p"] = cd["p"]
+			e["po"] = 2
+			e["cap"] = float(e["cap"]) + float(cd["psi"])
+			e.erase("bord")
+			cordes_vues.append([id, cd["a"], cd["p"]])
 		pairs[id]["rendu"] = e
 		liste.append([e["p"], e["cap"], e["po"], pairs[id]["c"], pairs[id]["nom"]])
 		carte.append([Vector2((e["p"] as Vector3).x, (e["p"] as Vector3).z), pairs[id]["c"], pairs[id]["nom"], e["cap"]])
 	dessin.poser(liste)
 	_carte_distants(carte)
+	_cacher_cordes(cordes_vues)
 
 
 func _carte_distants(l: Array) -> void:
@@ -813,3 +854,322 @@ func observation() -> Dictionary:
 		if lg.etat == "urgence" and pil != mon_id and pairs.has(pil):
 			o["urgence_ici"] = String(pairs[pil]["nom"])
 	return o
+
+
+# --- descente à la corde, chacun son tour (retour d'utilisateur du 21/11/2026) -------------------------------
+## Celui qui doit descendre se signale (corde, phase 0) ; l'hôte range les demandes voisines en files (FileCorde)
+## et les publie ; on ne part que premier de sa file et personne de son groupe en descente. Celui qui descend
+## publie son pendule à 10 Hz (ancrage, position, rotation, longueur de corde) : les autres le voient au bout de sa
+## corde ; au sol, son bilan (tours, balancement) pour les comparaisons. Sans file de l'hôte après
+## CORDE_ATTENTE_FILE_S, ordre par identifiant (ordre d'arrivée au salon).
+
+const CORDE_PERIODE_ATTENTE: float = 0.5
+const CORDE_PERIODE_DESCENTE: float = 0.1
+const CORDE_ATTENTE_FILE_S: float = 3.0
+const CORDE_SEUL_S: float = 1.0               # seul à demander : on part après ce délai (une demande voisine en vol)
+const CORDE_OMEGA_AUTRE: float = 0.5          # rad/s : « il tourne »
+const CORDE_ANGLE_AUTRE: float = 0.12         # rad (7°) : « il balance »
+const CORDE_TRAINE_S: float = 8.0
+const CORDE_BILAN_S: float = 300.0
+## Celui qui descend ne sort de la file qu'au sol (phase 2) ou en quittant le salon (« depart ») ; son silence ne
+## compte qu'au-delà de ce délai (une image figée de plusieurs secondes, chez lui ou chez nous, sur une machine
+## chargée, laissait sinon le suivant partir pendant qu'il descendait encore — suite des bancs du 21/11/2026).
+const CORDE_SILENCE_DESCENTE_S: float = 20.0
+
+
+static func _v3(a: Variant) -> Vector3:
+	return Vector3(float(a[0]), float(a[1]), float(a[2])) if a is Array and (a as Array).size() == 3 else Vector3.ZERO
+
+
+static func _proches(l1: String, s1: float, l2: String, s2: float) -> bool:
+	return l1 == l2 and absf(s1 - s2) <= FileCorde.ECART_GROUPE_M
+
+
+func _envoyer_json(o: Dictionary) -> void:
+	if _ws != null and _ws.get_ready_state() == WebSocketPeer.STATE_OPEN:
+		_ws.send_text(JSON.stringify(o))
+
+
+func _nom_de(id: int) -> String:
+	return String(pairs[id]["nom"]) if pairs.has(id) else ""
+
+
+## Corde d'un pair en descente au temps commun t : {"a", "p", "psi"} interpolés, ou {}.
+func corde_pair(id: int, t: float) -> Dictionary:
+	var c: Dictionary = cordes.get(id, {})
+	if c.is_empty() or int(c["ph"]) != 1 or temps_local() - float(c["t"]) > 1.5:
+		return {}
+	var sn: Array = c["snaps"]
+	if sn.is_empty():
+		return {}
+	var a: Dictionary = sn[0]
+	var b: Dictionary = sn[0]
+	for k in range(sn.size()):
+		if float(sn[k]["tc"]) <= t:
+			a = sn[k]
+			b = sn[mini(k + 1, sn.size() - 1)]
+	var f: float = 0.0
+	if float(b["tc"]) > float(a["tc"]) + 1e-4:
+		f = clampf((t - float(a["tc"])) / (float(b["tc"]) - float(a["tc"])), 0.0, 1.0)
+	return {"a": _v3(a["a"]).lerp(_v3(b["a"]), f), "p": _v3(a["p"]).lerp(_v3(b["p"]), f),
+		"psi": lerpf(float(a["psi"]), float(b["psi"]), f)}
+
+
+func _recevoir_corde(d: Dictionary) -> void:
+	var id: int = int(d.get("id", -1))
+	if id == mon_id or id < 0:
+		return
+	var ph: int = int(d["ph"])
+	var l: String = String(d["l"])
+	var s: float = float(d["s"])
+	var c: Dictionary = cordes.get(id, {})
+	var avant: int = int(c.get("ph", -1))
+	if c.is_empty() or (avant == 2 and ph < 2):
+		c = {"snaps": [], "vu": {}, "bilan": {}}
+	c["ph"] = ph
+	c["l"] = l
+	c["s"] = s
+	c["t"] = temps_local()
+	cordes[id] = c
+	if hote_id == mon_id:
+		file_corde.noter(id, l, s, ph, maintenant())
+	var voisin: bool = not _ma_corde.is_empty() and _proches(l, s, String(_ma_corde["l"]), float(_ma_corde["s"]))
+	var nom_p: String = _nom_de(id)
+	if ph == 1:
+		var sn: Array = c["snaps"]
+		sn.append({"tc": float(d["tc"]), "a": d["a"], "p": d["p"], "psi": float(d["psi"])})
+		sn.sort_custom(func(x, y) -> bool: return float(x["tc"]) < float(y["tc"]))
+		while sn.size() > 24:
+			sn.pop_front()
+		if avant != 1 and voisin and int(_ma_corde["ph"]) == 0:
+			guet.signaler("CORDE_AUTRE_DESCEND", temps_local(), nom_p)
+		# sa physique : il tourne vite, il balance fort (une fois par descente chacune)
+		if voisin and sn.size() >= 2:
+			var e1: Dictionary = sn[sn.size() - 2]
+			var e2: Dictionary = sn[sn.size() - 1]
+			var dt: float = float(e2["tc"]) - float(e1["tc"])
+			var vu: Dictionary = c["vu"]
+			if dt > 1e-3 and absf(float(e2["psi"]) - float(e1["psi"])) / dt > CORDE_OMEGA_AUTRE and not vu.has("tourne"):
+				vu["tourne"] = true
+				guet.signaler("CORDE_AUTRE_TOURNE", temps_local(), nom_p)
+			var axe: Vector3 = _v3(e2["a"]) - _v3(e2["p"])
+			if axe.length() > 0.5 and Vector3.UP.angle_to(axe) > CORDE_ANGLE_AUTRE and not vu.has("balance"):
+				vu["balance"] = true
+				guet.signaler("CORDE_AUTRE_BALANCE", temps_local(), nom_p)
+	elif ph == 2:
+		c["bilan"] = {"tr": float(d.get("tr", 0.0)), "am": float(d.get("am", 0.0)), "t": temps_local()}
+		if avant == 1 and voisin:
+			guet.signaler("CORDE_AUTRE_SOL", temps_local(), nom_p)
+
+
+func _envoyer_corde(delta: float) -> void:
+	var tl: float = temps_local()
+	if not _ma_corde.is_empty():
+		var ph: int = int(_ma_corde["ph"])
+		if ph == 0 and tl - float(_ma_corde.get("t_dem", 0.0)) > 1.0:
+			_ma_corde = {}            # (le jeu ne demande plus : remontée repartie, skieur descendu autrement)
+		elif ph == 2 and tl - float(_ma_corde.get("fini", tl)) > CORDE_BILAN_S:
+			_ma_corde = {}
+	_t_corde -= delta
+	if not _ma_corde.is_empty() and int(_ma_corde["ph"]) == 0 and _t_corde <= 0.0:
+		_t_corde = CORDE_PERIODE_ATTENTE
+		_envoyer_json({"t": "corde", "l": _ma_corde["l"], "s": clampf(float(_ma_corde["s"]), 0.0, 99999.0), "ph": 0,
+			"tc": maintenant()})
+		if hote_id == mon_id:
+			file_corde.noter(mon_id, String(_ma_corde["l"]), float(_ma_corde["s"]), 0, maintenant())
+	if hote_id == mon_id:
+		_t_file -= delta
+		if _t_file <= 0.0:
+			_t_file = 0.5
+			var fl: Array = file_corde.calculer(maintenant())
+			for e in fl:
+				var ids: Array = (e[1] as Array).slice(0, 8)
+				_envoyer_json({"t": "file", "l": e[0], "d": ids})
+				if ids.has(mon_id):
+					_file_recue = {"d": ids, "t": tl}
+
+
+## (RemonteesDomaine, à chaque image tant que la descente attend son tour) Notre demande pour la ligne `l`, le
+## véhicule à l'abscisse `s`, `h` m au-dessus du sol → {"go": bool, "rang": int, "eta": s, "devant": nom}.
+func corde_demander(l: String, s: float, h: float) -> Dictionary:
+	var tl: float = temps_local()
+	if _ma_corde.is_empty() or int(_ma_corde["ph"]) != 0 or String(_ma_corde["l"]) != l:
+		_ma_corde = {"l": l, "s": s, "ph": 0, "t0": tl, "rang": -1, "go": false, "groupe": false, "tete": -1,
+			"t_tete": tl}
+		_t_corde = 0.0
+		if hote_id == mon_id:
+			file_corde.noter(mon_id, l, s, 0, maintenant())
+	_ma_corde["s"] = s
+	_ma_corde["t_dem"] = tl
+	if not connecte:
+		return {"go": true, "rang": 0, "eta": 0.0, "devant": ""}
+	var autres: Array = []
+	var descend: int = -1
+	var finis: int = 0
+	for id in cordes:
+		var c: Dictionary = cordes[id]
+		if not _proches(l, s, String(c["l"]), float(c["s"])):
+			continue
+		var vivant: float = CORDE_SILENCE_DESCENTE_S if int(c["ph"]) == 1 else FileCorde.OUBLI_S
+		if int(c["ph"]) < 2 and tl - float(c["t"]) < vivant and pairs.has(id):
+			autres.append(id)
+			if int(c["ph"]) == 1:
+				descend = id
+		elif int(c["ph"]) == 2 and tl - float((c["bilan"] as Dictionary).get("t", -1e9)) < CORDE_BILAN_S:
+			finis += 1
+	var ma_file: Array = []
+	if not _file_recue.is_empty() and tl - float(_file_recue["t"]) < 2.0:
+		ma_file = _file_recue["d"]
+	var go: bool = false
+	var rang: int = -1
+	if autres.is_empty():
+		rang = 0
+		go = tl - float(_ma_corde["t0"]) >= CORDE_SEUL_S or pairs.is_empty()
+	elif descend >= 0:
+		rang = maxi(1, FileCorde.rang(ma_file, mon_id))
+	elif not ma_file.is_empty() and ma_file.has(mon_id):
+		rang = FileCorde.rang(ma_file, mon_id)
+		go = rang == 0
+	elif tl - float(_ma_corde["t0"]) > CORDE_ATTENTE_FILE_S:
+		rang = 0
+		for id2 in autres:
+			if int(id2) < mon_id:
+				rang += 1
+		go = rang == 0
+	# piques : la file se forme, la tête traîne, c'est notre tour (ou on est le dernier)
+	if not autres.is_empty() and not bool(_ma_corde["groupe"]) and rang >= 0:
+		_ma_corde["groupe"] = true
+		if rang == 0:
+			guet.signaler("CORDE_FILE_PREMIER", tl, _nom_de(int(autres[0])))
+		else:
+			var tete: int = descend if descend >= 0 else (int(ma_file[0]) if not ma_file.is_empty() else int(autres[0]))
+			guet.signaler("CORDE_FILE_APRES", tl, _nom_de(tete))
+	if not ma_file.is_empty() and int(ma_file[0]) != mon_id:
+		var tete2: int = int(ma_file[0])
+		if tete2 != int(_ma_corde["tete"]):
+			_ma_corde["tete"] = tete2
+			_ma_corde["t_tete"] = tl
+		elif descend < 0 and tl - float(_ma_corde["t_tete"]) > CORDE_TRAINE_S and not _ma_corde.has("traine"):
+			_ma_corde["traine"] = true
+			guet.signaler("CORDE_TRAINE", tl, _nom_de(tete2))
+	if go and not bool(_ma_corde["go"]) and int(_ma_corde["rang"]) > 0:
+		guet.signaler("CORDE_DERNIER" if finis > 0 and autres.is_empty() else "CORDE_MON_TOUR", tl,
+			_nom_de(int(_ma_corde.get("dernier_devant", -1))))
+	if descend >= 0:
+		_ma_corde["dernier_devant"] = descend
+	_ma_corde["go"] = go
+	if rang >= 0:
+		_ma_corde["rang"] = rang
+	# temps d'attente estimé : la fin de la descente en cours, puis une descente entière par joueur devant
+	var eta: float = 0.0
+	var devant: String = ""
+	var v_d: float = RemonteesDomaine.V_DESCENTE_CORDE
+	if descend >= 0:
+		devant = _nom_de(descend)
+		var sn: Array = cordes[descend]["snaps"]
+		if not sn.is_empty():
+			var pd: Vector3 = _v3(sn[sn.size() - 1]["p"])
+			var rel: Node = main.get("relief") if main != null else null
+			var sol: float = rel.hauteur_sol(pd.x, pd.z) if rel != null else pd.y - h
+			eta += maxf(pd.y - sol, 0.0) / v_d + 3.0
+	elif not ma_file.is_empty() and int(ma_file[0]) != mon_id:
+		devant = _nom_de(int(ma_file[0]))
+	var n_devant: int = maxi(0, rang - (1 if descend >= 0 else 0))
+	eta += float(n_devant) * (maxf(h, 0.0) / v_d + 6.0)
+	return {"go": go, "rang": rang, "eta": eta, "devant": devant}
+
+
+## (RemonteesDomaine) Notre descente : phase 1 à chaque image (publiée à 10 Hz), phase 2 une fois au sol.
+## d : {"l", "s", "a": Vector3, "p": Vector3, "psi", "lc"} ; au sol {"l", "s"}.
+func corde_publier(ph: int, d: Dictionary) -> void:
+	if not connecte:
+		return
+	var tl: float = temps_local()
+	var l: String = String(d.get("l", ""))
+	var s: float = clampf(float(d.get("s", 0.0)), 0.0, 99999.0)
+	if _re.search(l) == null:
+		return
+	if ph == 1:
+		if _ma_corde.is_empty() or int(_ma_corde["ph"]) != 1:
+			_ma_corde = {"l": l, "s": s, "ph": 1, "t0": tl, "tours": 0.0, "am": 0.0, "t_dem": tl}
+			_t_corde = 0.0
+		var a: Vector3 = d["a"]
+		var p: Vector3 = d["p"]
+		var psi: float = float(d.get("psi", 0.0))
+		_ma_corde["tours"] = maxf(float(_ma_corde["tours"]), absf(psi) / TAU)
+		var axe: Vector3 = a - p
+		if axe.length() > 0.5:
+			_ma_corde["am"] = maxf(float(_ma_corde["am"]), rad_to_deg(Vector3.UP.angle_to(axe)))
+		if hote_id == mon_id:
+			file_corde.noter(mon_id, l, s, 1, maintenant())
+		_t_corde -= get_process_delta_time()
+		if _t_corde > 0.0:
+			return
+		_t_corde = CORDE_PERIODE_DESCENTE
+		_envoyer_json({"t": "corde", "l": l, "s": s, "ph": 1, "tc": maintenant(),
+			"a": [_borne(a.x, 39999.0), clampf(a.y, -499.0, 5999.0), _borne(a.z, 39999.0)],
+			"p": [_borne(p.x, 39999.0), clampf(p.y, -499.0, 5999.0), _borne(p.z, 39999.0)],
+			"psi": clampf(psi, -999.0, 999.0), "lc": clampf(float(d.get("lc", 0.0)), 0.0, 399.0)})
+		return
+	# au sol : bilan, trois fois (un message perdu ne bloque pas la file : l'hôte oublie aussi après OUBLI_S)
+	var tours: float = float(_ma_corde.get("tours", 0.0))
+	var am: float = clampf(float(_ma_corde.get("am", 0.0)), 0.0, 89.0)
+	var m: Dictionary = {"t": "corde", "l": l, "s": s, "ph": 2, "tc": maintenant(), "tr": clampf(tours, 0.0, 999.0),
+		"am": am}
+	for _k in range(3):
+		_envoyer_json(m)
+	if hote_id == mon_id:
+		file_corde.noter(mon_id, l, s, 2, maintenant())
+	_ma_corde = {"l": l, "s": s, "ph": 2, "fini": tl, "tours": tours, "am": am}
+	# comparaison avec la descente d'un voisin déjà au sol
+	var meilleur: int = -1
+	for id in cordes:
+		var c: Dictionary = cordes[id]
+		var b: Dictionary = c["bilan"]
+		if not b.is_empty() and tl - float(b["t"]) < CORDE_BILAN_S and _proches(l, s, String(c["l"]), float(c["s"])):
+			meilleur = id
+	if meilleur >= 0:
+		var b2: Dictionary = cordes[meilleur]["bilan"]
+		var genre: String = "CORDE_COMPARE_BALANCE"
+		if absf(float(b2["tr"]) - tours) >= 0.5:
+			genre = "CORDE_COMPARE_TOURS_LUI" if float(b2["tr"]) > tours else "CORDE_COMPARE_TOURS_MOI"
+		guet.signaler(genre, tl, _nom_de(meilleur))
+
+
+## Brins de corde des pairs en descente ([id, ancrage, position]) ; les autres cachés.
+func _cacher_cordes(vues: Array) -> void:
+	var gardes: Dictionary = {}
+	for v in vues:
+		var id: int = int(v[0])
+		gardes[id] = true
+		if not _cordes_mi.has(id):
+			var paire: Array = []
+			for _k in range(2):
+				var mi: MeshInstance3D = MeshInstance3D.new()
+				var cy: CylinderMesh = CylinderMesh.new()
+				cy.top_radius = 0.011
+				cy.bottom_radius = 0.011
+				cy.height = 1.0
+				cy.radial_segments = 6
+				cy.rings = 1
+				var m: StandardMaterial3D = StandardMaterial3D.new()
+				m.albedo_color = Color(0.95, 0.35, 0.10)
+				cy.material = m
+				mi.mesh = cy
+				mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+				if main != null:
+					main.add_child(mi)
+				paire.append(mi)
+			_cordes_mi[id] = paire
+		var a: Vector3 = v[1]
+		var p: Vector3 = v[2]
+		var rel: Node = main.get("relief") if main != null else null
+		var sol: float = rel.hauteur_sol(p.x, p.z) if rel != null else p.y - 1.0
+		RemonteesDomaine._poser_brin(_cordes_mi[id][0], a, p + Vector3(0, 0.9, 0))
+		RemonteesDomaine._poser_brin(_cordes_mi[id][1], p + Vector3(0, 0.9, 0), Vector3(p.x, sol, p.z))
+	for id2 in _cordes_mi.keys():
+		if not gardes.has(id2):
+			for mi2 in _cordes_mi[id2]:
+				if is_instance_valid(mi2):
+					(mi2 as Node).queue_free()
+			_cordes_mi.erase(id2)

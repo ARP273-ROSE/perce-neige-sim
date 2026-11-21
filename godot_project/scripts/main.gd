@@ -3307,6 +3307,9 @@ func _maj_jour(delta: float, dehors: bool) -> void:
 		var teinte_rm: Color = teinte if teinte == Color(1, 1, 1) else deco_rm.linear_to_srgb()
 		var t_veh: Color = deco_rm + Color(0.42, 0.33, 0.22) * ecl0
 		VehiculesLod.materiau_pylones().albedo_color = teinte_rm
+		VehiculesLod.materiau_ouverts().albedo_color = teinte_rm
+		# ligne construite (pièces éclairées) : métaux ternis la nuit, comme sa version cuite (RemonteeKit.regler_nuit)
+		RemonteeKit.regler_nuit(float(etat_jour.get("nuit", 0.0)) if teinte != Color(1, 1, 1) else 0.0)
 		VehiculesLod.materiau().albedo_color = teinte if teinte == Color(1, 1, 1) else Color(minf(t_veh.r, 1.0),
 			minf(t_veh.g, 1.0), minf(t_veh.b, 1.0)).linear_to_srgb()
 		LigneCuite._verrou.lock()

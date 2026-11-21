@@ -88,6 +88,30 @@ def test_cmd_et_pilotes():
         S.valider(json.dumps({"t": "pilotes", "d": [["a", -1]]}))
 
 
+def test_corde_et_file():
+    m = S.valider(json.dumps({"t": "corde", "l": "tsd6_grattalu", "s": 512.5, "ph": 0, "tc": 10.0, "x": 1}))
+    assert m == {"t": "corde", "l": "tsd6_grattalu", "s": 512.5, "ph": 0, "tc": 10.0}
+    m = S.valider(json.dumps({"t": "corde", "l": "tsd6_grattalu", "s": 512.5, "ph": 1, "tc": 10.0,
+                              "a": [10.0, 2100.0, -5.0], "p": [10.2, 2090.0, -5.1], "psi": 1.5, "lc": 10.0}))
+    assert m["p"] == [10.2, 2090.0, -5.1] and m["lc"] == 10.0 and m["psi"] == 1.5
+    m = S.valider(json.dumps({"t": "corde", "l": "tsd6_grattalu", "s": 1.0, "ph": 2, "tc": 1.0, "tr": 2.5, "am": 12.0}))
+    assert m["tr"] == 2.5 and m["am"] == 12.0 and "p" not in m
+    for mauvais in ({"t": "corde", "l": "x", "s": 1.0, "ph": 3, "tc": 1.0},
+                    {"t": "corde", "l": "../x", "s": 1.0, "ph": 0, "tc": 1.0},
+                    {"t": "corde", "l": "x", "s": 1.0, "ph": 1, "tc": 1.0},           # descente sans pendule
+                    {"t": "corde", "l": "x", "s": 1.0, "ph": 1, "tc": 1.0, "a": [0, 0, 0], "p": [0, 0, 0],
+                     "psi": 0.0, "lc": 5000.0},
+                    {"t": "corde", "l": "x", "s": 1.0, "ph": 2, "tc": 1.0, "am": 200.0}):
+        with pytest.raises(S.Refus):
+            S.valider(json.dumps(mauvais))
+    m = S.valider(json.dumps({"t": "file", "l": "tsd6_grattalu", "d": [3, 1]}))
+    assert m == {"t": "file", "l": "tsd6_grattalu", "d": [3, 1]}
+    for mauvais in ({"t": "file", "l": "x", "d": list(range(S.FILE_MAX + 1))}, {"t": "file", "l": "x", "d": [-1]},
+                    {"t": "file", "l": "x", "d": "1,2"}):
+        with pytest.raises(S.Refus):
+            S.valider(json.dumps(mauvais))
+
+
 def test_seau():
     t = [0.0]
     s = S.Seau(horloge=lambda: t[0])

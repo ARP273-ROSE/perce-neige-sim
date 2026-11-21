@@ -31,6 +31,8 @@ BORNE_XZ = 40000.0             # m (le domaine fait ~20 km)
 BORNE_Y = (-500.0, 6000.0)
 VITESSE_MAX = 80.0             # m/s
 DECALAGE_MAX = 40.0            # m, place dans un véhicule (rames de funiculaire : ~30 m)
+FILE_MAX = 8                   # joueurs dans une file de descente à la corde
+CORDE_MAX = 400.0              # m, longueur de corde / hauteur sous l'ancrage
 POSTURES = range(0, 6)         # 0 ski, 1 à pied, 2 assis à bord, 3 debout à bord, 4 chute, 5 échelle
 _RE_LIGNE = re.compile(r"^[a-z0-9_]{1,40}$")
 _RE_CODE = re.compile(r"^[%s]{%d}$" % (ALPHABET, LONGUEUR_CODE))
@@ -153,6 +155,36 @@ def valider(brut: str | bytes) -> dict:
                 raise Refus("pilote invalide")
             out.append([e[0], int(_nombre(e[1], 0, 1e9))])
         return {"t": "pilotes", "d": out}
+    if t == "corde":
+        # descente à la corde (21/11/2026, « chacun son tour ») : [ligne, abscisse du véhicule, phase (0 attend,
+        # 1 descend, 2 au sol)] ; en descente, ancrage, position, rotation sur soi, longueur de corde ; au sol, le
+        # bilan (tours, balancement le plus fort en degrés) pour les comparaisons
+        ligne = m.get("l")
+        if not isinstance(ligne, str) or not _RE_LIGNE.match(ligne):
+            raise Refus("ligne invalide")
+        ph = int(_nombre(m.get("ph"), 0, 2))
+        o = {"t": "corde", "l": ligne, "s": _nombre(m.get("s"), 0.0, 100000.0), "ph": ph,
+             "tc": _nombre(m.get("tc"), 0.0, 1e11)}
+        if ph == 1:
+            bas = (-BORNE_XZ, BORNE_Y[0], -BORNE_XZ)
+            haut = (BORNE_XZ, BORNE_Y[1], BORNE_XZ)
+            o["a"] = _vec3(m.get("a"), bas, haut)
+            o["p"] = _vec3(m.get("p"), bas, haut)
+            o["psi"] = _nombre(m.get("psi"), -1000.0, 1000.0)
+            o["lc"] = _nombre(m.get("lc"), 0.0, CORDE_MAX)
+        elif ph == 2:
+            o["tr"] = _nombre(m.get("tr", 0.0), 0.0, 1000.0)
+            o["am"] = _nombre(m.get("am", 0.0), 0.0, 90.0)
+        return o
+    if t == "file":
+        # (de l'hôte seulement) file de descente d'un groupe de véhicules d'une ligne : identifiants dans l'ordre
+        ligne = m.get("l")
+        if not isinstance(ligne, str) or not _RE_LIGNE.match(ligne):
+            raise Refus("ligne invalide")
+        d = m.get("d")
+        if not isinstance(d, list) or len(d) > FILE_MAX:
+            raise Refus("file invalide")
+        return {"t": "file", "l": ligne, "d": [int(_nombre(v, 0, 1e9)) for v in d]}
     if t == "creer":
         return {"t": "creer", "nom": nom_propre(m.get("nom", "")), "c": couleur(m.get("c", [0.8, 0.2, 0.2]))}
     if t == "rejoindre":

@@ -1937,6 +1937,11 @@ const H_ARRET_CORDE: float = 1.2
 const T_ARRET_CORDE: float = 0.7
 const V_POSE_CORDE: float = 0.5
 var _evac_annonce: String = ""
+## Mode réseau (21/11/2026, « chacun son tour ») : le client du salon (ReseauClient), posé à la connexion ; la descente
+## attend son tour dans la file des joueurs voisins (corde_demander) et se publie (corde_publier).
+static var corde_reseau: Object = null
+var _corde_attente: LigneRemontee = null
+var _t_ind_corde: float = 0.0
 
 
 func _evacuer_skieur(lg: LigneRemontee) -> bool:
@@ -1959,8 +1964,8 @@ func _evacuer_skieur(lg: LigneRemontee) -> bool:
 			return true
 		return false
 	if ex.evacuation() == "corde" and a_bord.size() <= 5 and av >= ExploitationRemontee.tour_evacuation(int(a_bord[1])):
-		_commencer_corde(lg)
-		return true
+		_corde_attente = lg
+		return _attendre_corde()
 	return false
 
 
@@ -1979,7 +1984,42 @@ func corde_possible() -> bool:
 
 func descendre_corde() -> void:
 	if corde_possible():
-		_commencer_corde(a_bord[0])
+		_corde_attente = a_bord[0]
+		_attendre_corde()
+
+
+## Descente demandée : tout de suite hors réseau ; en réseau, à notre tour dans la file des joueurs voisins
+## (indicateur « à toi dans … » en attendant). Vrai si elle a commencé.
+func _attendre_corde() -> bool:
+	var lg: LigneRemontee = _corde_attente
+	if lg == null or not is_instance_valid(lg) or a_bord.size() < 2 or a_bord[0] != lg or not _corde.is_empty() \
+			or skieur == null:
+		_corde_attente = null
+		return false
+	var rc: Object = corde_reseau
+	if rc != null and is_instance_valid(rc) and bool(rc.get("connecte")):
+		var i: int = int(a_bord[1])
+		var s: float = fposmod(float(lg._vehicules[i][1]), maxf(lg.longueur_boucle, 1.0))
+		var p: Vector3 = skieur.global_position
+		var h: float = p.y - (relief.hauteur_sol(p.x, p.z) if relief != null else p.y - 10.0)
+		var r: Dictionary = rc.call("corde_demander", String(lg.name), s, h)
+		if not bool(r.get("go", true)):
+			_t_ind_corde -= get_process_delta_time()
+			if _t_ind_corde <= 0.0:
+				_t_ind_corde = 4.0
+				var eta: int = maxi(roundi(float(r.get("eta", 0.0)) / 5.0) * 5, 5)
+				var dv: String = String(r.get("devant", ""))
+				if dv != "":
+					message.emit("Évacuation à la corde : %s d'abord — à toi dans ~%d s" % [dv, eta])
+				elif int(r.get("rang", -1)) < 0:
+					message.emit("Évacuation à la corde : l'équipe organise la file…")
+				else:
+					message.emit("Évacuation à la corde : %d avant toi — à toi dans ~%d s" % [int(r["rang"]), eta])
+			return false
+	_corde_attente = null
+	_t_ind_corde = 0.0
+	_commencer_corde(lg)
+	return true
 
 
 func _commencer_corde(lg: LigneRemontee) -> void:
@@ -1990,7 +2030,7 @@ func _commencer_corde(lg: LigneRemontee) -> void:
 	# pendant que le téléphérique continuait à descendre, il lévitait au-dessus) ; la ligne est tenue à l'arrêt
 	var haut0: Vector3 = _ancrage_corde(lg, a_bord[1], v.cabine)
 	_corde = {"lg": lg, "i": a_bord[1], "sous": maxf(haut0.y - p.y, 0.0), "sol": sol, "cap": skieur._cap, "cabine": v.cabine,
-		"t": 0.0, "arret": 0.0}
+		"t": 0.0, "arret": 0.0, "s": fposmod(float(lg._vehicules[int(a_bord[1])][1]), maxf(lg.longueur_boucle, 1.0))}
 	# pendule (21/11/2026) : l'évacué glisse du bord avec un peu de vitesse latérale (le véhicule arrêté balance
 	# encore) et une corde légèrement vrillée ; sens tirés du véhicule, mêmes d'une partie à l'autre
 	var pend: PenduleCorde = PenduleCorde.new()
@@ -2061,12 +2101,20 @@ func _descendre_corde(delta: float) -> void:
 	var p: Vector3 = pend.p
 	skieur.global_position = p
 	skieur.velocity = Vector3.ZERO
-	skieur._visuel.basis = Basis(Vector3.UP, float(_corde["cap"]) + pend.psi)
+	# corps incliné le long de la corde et tourné par sa torsion ; la caméra suit (SkieurJoueur._camera)
+	skieur.corde_axe = haut - p
+	skieur.corde_lacet = float(_corde["cap"]) + pend.psi
+	var axe_n: Vector3 = (haut - p).normalized() if (haut - p).length() > 0.3 else Vector3.UP
+	skieur._visuel.basis = Basis(Quaternion(Vector3.UP, axe_n)) * Basis(Vector3.UP, skieur.corde_lacet)
 	# brin porteur de l'ancrage (siège ou plancher de la cabine) à l'évacué, incliné quand il balance ; brin libre
 	# jusqu'au sol où le secouriste a jeté le sac à corde (retour d'utilisateur du 16/11/2026 : « la corde était 10
 	# fois trop courte pour atteindre le sol »)
 	_poser_brin(_corde_haut_mi, haut, p + Vector3(0, 0.9, 0))
 	_poser_brin(_corde_mi, p + Vector3(0, 0.9, 0), Vector3(p.x, sol, p.z))
+	var rc: Object = corde_reseau
+	if rc != null and is_instance_valid(rc):
+		rc.call("corde_publier", 1, {"l": String(lg.name), "s": float(_corde["s"]), "a": haut, "p": p, "psi": pend.psi,
+			"lc": pend.l0})
 	if p.y <= sol + 0.001 and t > T_TENU_CORDE:
 		var pied: Vector3 = Vector3(p.x, float(_corde["sol"]) + 0.02, p.z)
 		skieur.embarque = false
@@ -2083,7 +2131,7 @@ func _descendre_corde(delta: float) -> void:
 
 
 ## Brin de corde droit de `a` à `b` (cylindre d'un mètre étiré et orienté).
-func _poser_brin(mi: MeshInstance3D, a: Vector3, b: Vector3) -> void:
+static func _poser_brin(mi: MeshInstance3D, a: Vector3, b: Vector3) -> void:
 	if mi == null:
 		return
 	var d: Vector3 = a - b
@@ -2105,8 +2153,15 @@ func _ancrage_corde(lg: LigneRemontee, i: int, cabine: bool) -> Vector3:
 
 
 func _finir_corde() -> void:
+	if skieur != null and is_instance_valid(skieur):
+		skieur.corde_axe = Vector3.ZERO
+		skieur.corde_lacet = NAN
 	if not _corde.is_empty() and is_instance_valid(_corde.get("lg")):
 		(_corde["lg"] as LigneRemontee).corde_en_cours = false
+		# (en réseau : au sol, ou descente interrompue — la file passe au suivant)
+		var rc: Object = corde_reseau
+		if rc != null and is_instance_valid(rc):
+			rc.call("corde_publier", 2, {"l": String((_corde["lg"] as Node).name), "s": float(_corde.get("s", 0.0))})
 	_corde = {}
 	if _corde_mi != null:
 		_corde_mi.visible = false
@@ -2127,6 +2182,8 @@ func lacher_perche() -> void:
 func _suivre_siege() -> void:
 	if not _corde.is_empty():
 		_descendre_corde(get_process_delta_time())
+		return
+	if _corde_attente != null and _attendre_corde():
 		return
 	var lg0: LigneRemontee = a_bord[0]
 	if is_instance_valid(lg0):
