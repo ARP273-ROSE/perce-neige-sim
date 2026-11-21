@@ -99,6 +99,9 @@ func _init() -> void:
 	set_process(false)
 
 
+const RELAIS_PUBLIC: String = "wss://funiculaire.giff.re/reseau"
+
+
 ## Adresse du relais : réglage (user://reseau.cfg, ou --reseau=URL), sinon, dans le navigateur, /reseau de
 ## l'origine de la page (wss:// en https).
 static func url_par_defaut() -> String:
@@ -113,7 +116,10 @@ static func url_par_defaut() -> String:
 			"(location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/reseau'", true)
 		if u is String:
 			return u
-	return ""
+		return ""
+	# appli PC : le relais public de la PWA (retour d'utilisateur du 21/11/2026 : champ vide, le frère « a rejoint »
+	# sans jamais atteindre le relais — et il ne pouvait de toute façon rien y taper)
+	return RELAIS_PUBLIC
 
 
 func charger_reglages() -> void:

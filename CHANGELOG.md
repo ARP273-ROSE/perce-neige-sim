@@ -5,6 +5,21 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
+## 1.76.3 — 21 novembre 2026
+
+- **Mode réseau sur le PC : on peut taper le code du salon** (« sur l'app PC mon frère ne peut pas taper le code de
+  la session, ça fait les raccourcis à la place »). Sous Windows la vue 3D est une fenêtre enfant d'un autre
+  processus : le clavier restait au pupitre, qui en faisait des commandes du skieur. Quand un champ de texte de la 3D
+  a le focus, la 3D le dit au pupitre (`saisie_active`), qui lui relaie la frappe (texte, retour arrière,
+  suppression, flèches, début / fin, Entrée, Échap, Ctrl+V) dans le paquet d'état ; le skieur s'arrête pendant la
+  saisie. `StateReceiver.saisir` la prend dans chaque paquet reçu, pas seulement le dernier.
+- **Adresse du relais remplie d'office sur le PC** (« mon frère a mis le code et a rejoint mais je ne le vois pas ») :
+  le champ « Relais » était vide hors navigateur, la connexion ne partait nulle part. Par défaut : le relais public
+  de la PWA (`wss://…/reseau`) ; le réglage et `--reseau=` gardent la main.
+- Vérifié : banc `bench_saisie_relayee` (frappe, retour arrière, longueur maximale, Entrée, Échap), test
+  `test_saisie_relayee.py` (touches relayées côté pupitre), client Godot natif connecté au relais public (salon
+  créé). Non essayé sur un vrai Windows.
+
 ## 1.76.2 — 21 novembre 2026
 
 - **Descente à la corde en réseau, chacun son tour** (« si on doit descendre à la corde en réseau, c'est chacun son

@@ -8039,6 +8039,11 @@ class GameWidget(QWidget):
         # Accumulateur du heartbeat 1 Hz envoyé au viewer 3D hors MODE_RUN
         # (permet au viewer de distinguer « sim en menu » de « sim mort »).
         self._godot_hb_acc = 0.0
+        # Champ de texte de la 3D en cours de saisie (code du salon, nom…) : sous Windows la vue 3D est une fenêtre
+        # enfant d'un autre processus et le clavier reste ici — la frappe lui est relayée au lieu de faire les
+        # raccourcis (retour d'utilisateur du 21/11/2026 : « il ne peut pas taper le code de la session »)
+        self._saisie_3d = False
+        self._saisie_file: list = []
         self._tunnel_scroll = 0.0        # accumulated tunnel texture offset
         # Bridge vers le viewer Godot 3D pour la vue F4 (rendu FPV réaliste).
         # Le binaire viewer est BUNDLED dans la distribution PyInstaller
@@ -8210,6 +8215,13 @@ class GameWidget(QWidget):
             self.basculer_skieur()
         elif m.get("skieur_conduire"):
             self._sortir_skieur(conduire=True)
+        elif "saisie_active" in m:
+            self._saisie_3d = bool(m["saisie_active"])
+            self._saisie_file = []
+            if self._saisie_3d:
+                # le skieur s'arrête : les touches tenues ne le font plus marcher
+                if hasattr(self, "_touches_skieur"):
+                    self._touches_skieur.clear()
         elif "cle" in m:
             # touche tapée dans la fenêtre 3D hors skieur (le clavier y est
             # resté) : appui / relâché comme au clavier du PC
@@ -9192,6 +9204,9 @@ class GameWidget(QWidget):
                 if self._godot_hb_acc >= 1.0:
                     self._godot_hb_acc = 0.0
                     self._godot_bridge.send_state({"hb": 1})
+                if self._saisie_file:
+                    self._godot_bridge.send_state({"hb": 1, "saisie": self._saisie_file})
+                    self._saisie_file = []
             # retour de la 3D : boutons du pupitre, mode skieur
             if _g_running:
                 for msg in self._godot_bridge.poll_messages():
@@ -9261,6 +9276,9 @@ class GameWidget(QWidget):
                 # panneau des départs de la gare aval en rouge « fermé »
                 state_dict["hors_service"] = bool(
                     st.crashed or (st.panne_active and is_catastrophic(st.panne_kind)))
+                if self._saisie_file:
+                    state_dict["saisie"] = self._saisie_file
+                    self._saisie_file = []
                 self._godot_bridge.send_state(state_dict)
             self._autopilot_tick(dt)
             self._maj_plein_cadre()
@@ -10126,9 +10144,34 @@ class GameWidget(QWidget):
         except Exception:
             pass
 
+    def _saisie_relayer(self, ev: QKeyEvent) -> bool:
+        """Champ de texte de la 3D actif : la touche lui est relayée (vrai si elle est prise)."""
+        k = ev.key()
+        ctrl = bool(ev.modifiers() & Qt.KeyboardModifier.ControlModifier)
+        if ctrl and k == Qt.Key.Key_V:
+            txt = QApplication.clipboard().text().replace("\r", " ").replace("\n", " ")
+            if txt:
+                self._saisie_file.append({"t": txt[:200]})
+            return True
+        speciales = {Qt.Key.Key_Backspace: "BackSpace", Qt.Key.Key_Delete: "Delete", Qt.Key.Key_Left: "Left",
+                     Qt.Key.Key_Right: "Right", Qt.Key.Key_Home: "Home", Qt.Key.Key_End: "End",
+                     Qt.Key.Key_Return: "Enter", Qt.Key.Key_Enter: "Enter", Qt.Key.Key_Escape: "Escape",
+                     Qt.Key.Key_Tab: "Tab"}
+        if k in speciales:
+            self._saisie_file.append({"k": speciales[k]})
+            return True
+        txt = ev.text()
+        if txt and not ctrl and txt.isprintable():
+            self._saisie_file.append({"t": txt})
+            return True
+        return False
+
     def keyPressEvent(self, ev: QKeyEvent) -> None:  # noqa: N802
         st = self.state
         k = ev.key()
+        if self._saisie_3d and self._saisie_relayer(ev):
+            ev.accept()
+            return
         if k == Qt.Key.Key_F11 and hasattr(self.window(), "basculer_plein_ecran"):
             self.window().basculer_plein_ecran()
             ev.accept()
@@ -10919,6 +10962,9 @@ class GameWidget(QWidget):
         self._key_state.discard(k)
         if ev.spontaneous() and hasattr(self, "_touches_skieur"):
             self._touches_skieur.discard(k)
+        if self._saisie_3d and ev.spontaneous():
+            ev.accept()
+            return
         if self._skieur and ev.spontaneous() and int(k) not in self.SKIEUR_GARDE:
             return
         if k == Qt.Key.Key_Shift:

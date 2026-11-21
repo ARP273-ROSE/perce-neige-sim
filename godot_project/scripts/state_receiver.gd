@@ -83,6 +83,7 @@ func _ready() -> void:
 var _t_ips_envoi: int = 0
 var _releve_auto: Array = []   # situations à relever (pupitre : voir PerfManager.essai_releve_auto)
 var _hd_annonce: bool = false
+var _saisie_active: bool = false   # un champ de texte a le focus : le PC nous relaie la frappe
 
 
 func envoyer(d: Dictionary) -> void:
@@ -113,6 +114,13 @@ func _process(delta: float) -> void:
 func _process_corps(_delta: float) -> void:
 	if udp == null or physics == null:
 		return
+	# champ de texte (code du salon, nom…) : sous Windows le clavier reste au PC, qui relaie la frappe tant qu'on
+	# le lui dit (retour d'utilisateur du 21/11/2026 : « il ne peut pas taper le code de la session »)
+	var fo: Control = get_viewport().gui_get_focus_owner()
+	var saisie: bool = fo is LineEdit and fo.is_visible_in_tree() and (fo as LineEdit).editable
+	if saisie != _saisie_active:
+		_saisie_active = saisie
+		envoyer({"saisie_active": saisie})
 	# cadence réelle de la 3D, pour l'affichage du pupitre (il n'avait que la sienne, 62 fps fixes)
 	var t_ips: int = Time.get_ticks_msec()
 	if t_ips - _t_ips_envoi >= 1000:
@@ -141,6 +149,9 @@ func _process_corps(_delta: float) -> void:
 		var parsed: Variant = JSON.parse_string(line)
 		# jeton de la séance (GodotBridge) : un paquet sans lui vient d'un autre programme
 		if parsed is Dictionary and (_jeton == "" or str((parsed as Dictionary).get("jeton", "")) == _jeton):
+			# la frappe relayée part dans chaque paquet : on la prend dans tous, pas seulement le dernier
+			if (parsed as Dictionary).get("saisie") is Array:
+				saisir((parsed as Dictionary)["saisie"])
 			latest = parsed
 			_packet_count += 1
 	if not latest.is_empty():
@@ -174,6 +185,49 @@ static func _b(d: Dictionary, k: String, cur: bool) -> bool:
 
 
 var _heure_jeu_recue: String = ""
+
+
+## Frappe relayée par le PC vers le champ de texte qui a le focus : {"t": texte} ou {"k": touche spéciale}.
+func saisir(frappes: Array) -> void:
+	var le: LineEdit = get_viewport().gui_get_focus_owner() as LineEdit
+	if le == null or not le.editable:
+		return
+	for f in frappes:
+		if not f is Dictionary:
+			continue
+		if (f as Dictionary).has("t"):
+			if le.has_selection():
+				le.delete_text(le.get_selection_from_column(), le.get_selection_to_column())
+			le.insert_text_at_caret(str(f["t"]))
+			continue
+		var c: int = le.caret_column
+		match str((f as Dictionary).get("k", "")):
+			"BackSpace":
+				if le.has_selection():
+					le.delete_text(le.get_selection_from_column(), le.get_selection_to_column())
+				elif c > 0:
+					le.delete_text(c - 1, c)
+			"Delete":
+				if le.has_selection():
+					le.delete_text(le.get_selection_from_column(), le.get_selection_to_column())
+				elif c < le.text.length():
+					le.delete_text(c, c + 1)
+			"Left":
+				le.deselect()
+				le.caret_column = maxi(0, c - 1)
+			"Right":
+				le.deselect()
+				le.caret_column = mini(le.text.length(), c + 1)
+			"Home":
+				le.deselect()
+				le.caret_column = 0
+			"End":
+				le.deselect()
+				le.caret_column = le.text.length()
+			"Enter":
+				le.text_submitted.emit(le.text)
+			"Escape", "Tab":
+				le.release_focus()
 
 
 func _apply(d: Dictionary) -> void:
