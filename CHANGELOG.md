@@ -7,6 +7,31 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## 1.76.0 — (non publiée) — Mode réseau
 
+- **Toutes les remontées calées entre joueurs** (« cale tout », 21/11/2026). Chaque remontée a un **pilote**, l'hôte
+  du salon par défaut ; il publie deux fois par seconde l'état de celles qui tournent chez lui, et chacun ne retient
+  que celui du pilote :
+  - état d'exploitation (marche, arrêt, arrêt d'urgence — avec l'onde du câble —, réarmement), cran, plafond des
+    pannes, pour toutes ;
+  - débrayables, pinces fixes, téléskis : marche du temps ajustée jusqu'aux mêmes places ; **tronçons jumelés Bollin /
+    Fresse** compris, calés sur le tronçon haut (calés sur le bas, les sièges du haut pouvaient rester décalés d'un
+    siège du bas, l'autre solution du jumelage : 30 m d'écart mesurés) ;
+  - **téléphériques et Funival** : état complet (position, vitesse, sens, quai ou route, temps de quai, portes) ;
+  - **funiculaire Perce-Neige** : position de la rame, sens, portes, urgence ; chez les autres joueurs, la rame suit,
+    sa physique locale suspendue.
+  - Passager à bord : même véhicule et même place chez l'autre — par son numéro pour les va-et-vient, par la rame
+    (même place dans la rame) au funiculaire.
+- **Pilotage partagé** : une commande au poste ou au pupitre (ExploitationRemontee.commande), ou mener le
+  funiculaire, demande la main sur la remontée ; l'hôte l'accorde si personne d'autre n'y a touché depuis une minute
+  et publie les pilotes ; le geste n'est pas défait le temps de la réponse (1,5 s). Relais : nouveaux messages `cmd`
+  (relayés à tous ; seul l'hôte arbitre) et `pilotes` (de l'hôte seulement) ; état des remontées accepté de tout
+  joueur du salon, schéma strict (8 champs bornés, 16 remontées par message, 8 nombres propres au genre de ligne),
+  place dans un véhicule jusqu'à ±40 m (rames). Relais redéployé, mêmes options de sécurité.
+- **Banc** `bench_reseau` étendu (A avec le module C++, hôte ; B en GDScript comme la PWA), relevés sur une grille de
+  temps commun après 20 s de mise en route : funiculaire 0,00 m, Funival p95 0,13 m, TPH Grande Motte p95 0,12 m,
+  Bollin p95 0,55 m, Fresse p95 0,35 m, Grattalu p95 0,08 m ; arrêt d'urgence de Grattalu par A vu par B en 1 s ;
+  arrêt du TPH par B (pilote accordé par l'hôte) vu par A en 1 s. Essais du relais : `cmd`, `pilotes`, nouvelles
+  bornes.
+
 - **Skier à plusieurs, PC et tablette dans le même salon** (demande d'utilisateur du 21/11/2026 : « un mode réseau
   que je puisse skier avec mon frère, intercompatible PWA / PC », « de n'importe où sur terre », « sécu max »).
   Bouton **RÉSEAU** du skieur : nom, couleur, **CRÉER** (un code de 8 caractères, affiché XXXX-XXXX, à donner) ou

@@ -8,9 +8,17 @@
 ## - Horloge commune façon NTP : décalage local → serveur pris sur l'échange au plus court aller-retour.
 ## - Les autres skieurs sont dessinés DELAI_RENDU en retard, interpolés entre deux états (extrapolés au plus
 ##   EXTRAPOLATION_MAX) ; à bord, posés dans le véhicule de NOTRE ligne le plus proche de leur abscisse.
-## - Calage des remontées : l'hôte (premier du salon) diffuse chaque seconde, pour les lignes proches de lui,
-##   l'abscisse d'un de ses véhicules en ligne ; chacun ajuste de quelques % la marche du temps de la même ligne
-##   (LigneRemontee.facteur_temps) jusqu'à ce que ses véhicules soient aux mêmes places (modulo l'espacement).
+## - Remontées calées (« cale tout », 21/11/2026) : chaque remontée a un PILOTE, l'hôte (premier du salon) par
+##   défaut. Il publie deux fois par seconde l'état de celles qui tournent chez lui : état d'exploitation (marche,
+##   arrêt, urgence), cran, plafond des pannes ; pour les débrayables et pinces fixes, l'abscisse d'un véhicule en
+##   ligne (les autres ajustent de quelques % la marche du temps de la ligne, LigneRemontee.facteur_temps, jusqu'à
+##   avoir leurs véhicules aux mêmes places, modulo l'espacement ; tronçons jumelés ensemble) ; pour les va-et-vient
+##   (téléphériques, Funival), l'état complet (position, vitesse, sens, phase, quai, portes : Telepherique.
+##   appliquer_reseau) ; pour le funiculaire, la position de la rame, son sens, ses portes, l'urgence (Main.
+##   pn_reseau). Chacun ne retient que l'état publié par le pilote de la remontée.
+## - Pilotage : celui qui agit sur une remontée (poste, pupitre, arrêt d'urgence ; mener le funiculaire) en demande
+##   la main ; l'hôte l'accorde si personne d'autre n'y a touché depuis BAIL_S et publie les pilotes. Un seul
+##   pilote par remontée ; en attendant la réponse, son geste n'est pas défait par l'état de l'ancien pilote.
 ## Hors réseau, ce nœud n'existe pas (créé à la première ouverture du panneau RÉSEAU).
 class_name ReseauClient
 extends Node
@@ -18,7 +26,12 @@ extends Node
 signal change(texte: String)
 
 const PERIODE_ETAT: float = 0.1
-const PERIODE_LIGNES: float = 1.0
+const PERIODE_LIGNES: float = 0.5
+const LIGNES_PAR_MESSAGE: int = 12        # (1 Ko par message au plus, côté relais)
+const MESSAGES_LIGNES: int = 2            # messages d'état des remontées par période, au plus
+const BAIL_S: float = 60.0                # la main sur une remontée, sans geste, se perd après une minute
+const ATTENTE_PRISE: float = 1.5          # geste local protégé le temps que l'hôte réponde
+const PN: String = "perce_neige"
 const DELAI_RENDU: float = 0.12
 const EXTRAPOLATION_MAX: float = 0.3
 const PORTEE_CALAGE: float = 900.0
@@ -51,7 +64,14 @@ var _t_lignes: float = 0.0
 var _t_horloge: float = 0.0
 var _n_horloge: int = 0
 var _mesures: Array = []                   # [aller-retour, décalage]
-var _cal_lignes: Dictionary = {}           # LigneRemontee → instant local du dernier calage
+var _cal_lignes: Dictionary = {}           # LigneRemontee → instant local du dernier état reçu
+var pilotes: Dictionary = {}               # remontée → identifiant de son pilote (absente : l'hôte)
+var _bail: Dictionary = {}                 # (hôte) remontée → temps commun du dernier geste de son pilote
+var _prise: Dictionary = {}                # remontée → instant local de notre demande de pilotage
+var _t_vu: float = 0.0
+var _t_pilotes: float = 0.0
+var _t_pn: float = 0.0
+var _rotation: int = 0
 var _reconnexions: int = 0
 var _t_reconnexion: float = -1.0
 var _voulu: bool = false
@@ -161,7 +181,14 @@ func _fin() -> void:
 	for lg in _cal_lignes:
 		if is_instance_valid(lg):
 			(lg as LigneRemontee).facteur_temps = 1.0
+			(lg as LigneRemontee).cap_reseau = -1.0
 	_cal_lignes.clear()
+	pilotes.clear()
+	_bail.clear()
+	LigneRemontee.sur_geste = Callable()
+	_prise.clear()
+	if main != null:
+		main.set("pn_reseau", {})
 	if dessin != null:
 		dessin.vider()
 	_carte_distants([])
@@ -230,6 +257,7 @@ func _recevoir(txt: String) -> void:
 					_nouveau_pair(int(mb["id"]), String(mb["nom"]), mb["c"])
 			_n_horloge = 0
 			_t_horloge = 0.0
+			LigneRemontee.sur_geste = _geste_ligne
 			_statut("Salon %s — %d joueur(s)" % [code_lisible(code), pairs.size() + 1])
 		"arrivee":
 			hote_id = int(d.get("hote", hote_id))
@@ -238,6 +266,14 @@ func _recevoir(txt: String) -> void:
 		"depart":
 			hote_id = int(d.get("hote", hote_id))
 			pairs.erase(int(d["id"]))
+			if hote_id == mon_id:
+				var change_p: bool = false
+				for n in pilotes.keys():
+					if int(pilotes[n]) == int(d["id"]):
+						pilotes.erase(n)
+						change_p = true
+				if change_p:
+					_publier_pilotes()
 			_statut("Salon %s — %d joueur(s)" % [code_lisible(code), pairs.size() + 1])
 		"etat":
 			var id: int = int(d.get("id", -1))
@@ -261,8 +297,17 @@ func _recevoir(txt: String) -> void:
 			decalage = float(best[1])
 			a_decalage = true
 		"lignes":
+			_caler(d, int(d.get("id", -1)))
+		"cmd":
+			if hote_id == mon_id:
+				if int(d.get("a", 0)) == 0:
+					_arbitrer(String(d.get("l", "")), int(d.get("id", -1)))
+				elif pilotes.get(String(d.get("l", "")), -1) == int(d.get("id", -1)):
+					pilotes.erase(String(d.get("l", "")))
+					_publier_pilotes()
+		"pilotes":
 			if int(d.get("id", -1)) == hote_id:
-				_caler(d)
+				_recevoir_pilotes(d.get("d", []))
 		"erreur":
 			_voulu = false
 			_statut("Refusé : " + String(d.get("raison", "")))
@@ -293,13 +338,30 @@ func _envoyer(delta: float) -> void:
 		var e: Dictionary = etat_local()
 		if not e.is_empty():
 			_ws.send_text(JSON.stringify(e))
+	_t_vu -= delta
+	if _t_vu <= 0.0:
+		_t_vu = 0.1
+		_gestes_locaux()
+	_t_lignes -= delta
+	if _t_lignes <= 0.0:
+		_t_lignes = PERIODE_LIGNES
+		var dl: Array = _lignes_a_publier()
+		if not dl.is_empty():
+			var n_msg: int = mini(MESSAGES_LIGNES, int(ceil(float(dl.size()) / LIGNES_PAR_MESSAGE)))
+			var debut: int = (_rotation * LIGNES_PAR_MESSAGE) % dl.size()
+			for m in range(n_msg):
+				var morceau: Array = []
+				for k in range(LIGNES_PAR_MESSAGE):
+					if m * LIGNES_PAR_MESSAGE + k >= dl.size():
+						break
+					morceau.append(dl[(debut + m * LIGNES_PAR_MESSAGE + k) % dl.size()])
+				_ws.send_text(JSON.stringify({"t": "lignes", "tc": maintenant(), "d": morceau}))
+			_rotation += n_msg
 	if hote_id == mon_id:
-		_t_lignes -= delta
-		if _t_lignes <= 0.0:
-			_t_lignes = PERIODE_LIGNES
-			var dl: Array = _lignes_a_caler()
-			if not dl.is_empty():
-				_ws.send_text(JSON.stringify({"t": "lignes", "tc": maintenant(), "d": dl}))
+		_t_pilotes -= delta
+		if _t_pilotes <= 0.0:
+			_t_pilotes = 5.0
+			_expirer_bails()
 
 
 static func _borne(x: float, b: float) -> float:
@@ -330,15 +392,25 @@ func etat_local() -> Dictionary:
 			e["l"] = String(lg.name)
 			e["i"] = i
 			e["s"] = fposmod(float(lg._vehicules[i][1]), maxf(lg.longueur_boucle, 1.0))
-			e["o"] = [_borne(o.x, 11.9), _borne(o.y, 11.9), _borne(o.z, 11.9)]
+			e["o"] = [_borne(o.x, 39.9), _borne(o.y, 39.9), _borne(o.z, 39.9)]
 	elif sk.embarque and sk.support != null:
 		e["po"] = 3
+		# dans une rame du funiculaire : sa place dans la rame (même rame chez les autres, calée)
+		var rame: Node3D = main.call("_rame_du_skieur") if main.has_method("_rame_du_skieur") else null
+		if rame != null and main.get("physics") != null:
+			var o2: Vector3 = rame.global_transform.affine_inverse() * p
+			e["l"] = PN
+			e["i"] = 0 if rame == main.get("cabin") else 1
+			e["s"] = clampf(float(main.physics.s), 0.0, 99999.0)
+			e["o"] = [_borne(o2.x, 39.9), _borne(o2.y, 39.9), _borne(o2.z, 39.9)]
 	return e
 
 
+## Ligne à véhicules en boucle calable par la marche du temps (débrayables, pinces fixes, téléskis ; tronçons
+## jumelés compris : le tronçon bas mène, le haut suit au même facteur).
 static func calable(lg: LigneRemontee) -> bool:
-	return lg != null and is_instance_valid(lg) and lg.pret and lg.roule and lg.jumelee == null \
-		and not lg.vaetvient() and not lg._vehicules.is_empty() and lg.espacement > 1.0 and lg.longueur_boucle > 0.0
+	return lg != null and is_instance_valid(lg) and lg.pret and lg.roule and not lg.vaetvient() \
+		and not lg._vehicules.is_empty() and lg.espacement > 1.0 and lg.longueur_boucle > 0.0
 
 
 static func _reference(lg: LigneRemontee) -> int:
@@ -348,60 +420,196 @@ static func _reference(lg: LigneRemontee) -> int:
 	return -1
 
 
-func _lignes_a_caler() -> Array:
+## Pilote d'une remontée : celui que l'hôte a désigné, sinon l'hôte (aussi quand le pilote est parti).
+func pilote_de(n: String) -> int:
+	var id: int = int(pilotes.get(n, hote_id))
+	if id != mon_id and id != hote_id and not pairs.has(id):
+		return hote_id
+	return id
+
+
+static func _active(lg: LigneRemontee) -> bool:
+	return lg != null and is_instance_valid(lg) and lg.pret and lg.roule and lg.is_processing()
+
+
+## État des remontées que nous pilotons et qui tournent chez nous (les autres en prennent ce qu'ils voient).
+func _lignes_a_publier() -> Array:
 	var out: Array = []
-	var sk: SkieurJoueur = main.get("skieur")
-	var rd: Node = main.get("remontees")
-	if sk == null or rd == null:
-		return out
-	var p: Vector3 = sk.global_position
-	for e in rd.get("lignes"):
-		var lg: LigneRemontee = e[0]
-		if not calable(lg) or _re.search(String(lg.name)) == null:
-			continue
-		if Vector2(p.x, p.z).distance_to(Vector2((e[1] as Vector3).x, (e[1] as Vector3).z)) > PORTEE_CALAGE \
-				+ lg.longueur_h() * 0.5:
-			continue
-		var k: int = _reference(lg)
-		if k < 0:
-			continue
-		out.append([String(lg.name), fposmod(float(lg._vehicules[k][1]), lg.longueur_boucle),
-			clampf(lg.vitesse_reelle, -19.9, 19.9), clampf(lg.regime(), 0.0, 1.5)])
-		if out.size() >= 40:
-			break
+	var rd: Node = main.get("remontees") if main != null else null
+	if rd != null:
+		for e in rd.get("lignes"):
+			var lg: LigneRemontee = e[0]
+			var n: String = String(lg.name)
+			if not _active(lg) or _re.search(n) == null or pilote_de(n) != mon_id:
+				continue
+			var cap: float = clampf(lg.cap_exploitation(), 0.0, 1.5)
+			var base: Array = [n, 0.0, 0.0, clampf(lg.regime(), 0.0, 1.5), lg.etat_reseau_code(), clampi(lg.cran, 0, 9),
+				cap, []]
+			if lg.vaetvient() and lg is Telepherique:
+				var x: Array = (lg as Telepherique).etat_reseau()
+				base[1] = clampf(float(x[0]), -99999.0, 99999.0)
+				base[2] = clampf(float(x[1]), -39.9, 39.9)
+				base[7] = x
+			elif calable(lg):
+				var k: int = _reference(lg)
+				base[1] = fposmod(float(lg._vehicules[k][1]), lg.longueur_boucle) if k >= 0 else -1.0
+				base[2] = clampf(lg.vitesse_reelle, -39.9, 39.9)
+			else:
+				base[1] = -1.0
+				base[2] = clampf(lg.vitesse_reelle, -39.9, 39.9)
+			out.append(base)
+	var ph: Variant = main.get("physics") if main != null else null
+	if ph != null and pilote_de(PN) == mon_id:
+		out.append([PN, clampf(float(ph.s), 0.0, 99999.0), clampf(float(ph.v), -39.9, 39.9), 0.0,
+			3 if bool(ph.emergency) else 0, 0, 1.0, [float(ph.direction), 1.0 if bool(ph.doors_open) else 0.0]])
 	return out
 
 
-func _caler(d: Dictionary) -> void:
+## État publié par un joueur : seules les remontées dont il est le pilote sont prises.
+func _caler(d: Dictionary, id: int) -> void:
 	var rd: Node = main.get("remontees") if main != null else null
-	if rd == null:
+	if rd == null or id == mon_id:
 		return
 	var tc: float = float(d.get("tc", 0.0))
 	var tl: float = temps_local()
+	var age: float = maintenant() - tc
 	for e in d.get("d", []):
-		var lg: LigneRemontee = rd.call("_ligne_nommee", String(e[0]))
-		if not calable(lg):
+		var n: String = String(e[0])
+		if pilote_de(n) != id or (_prise.has(n) and tl - float(_prise[n]) < ATTENTE_PRISE):
 			continue
+		if n == PN:
+			var x0: Array = e[7]
+			if x0.size() >= 2 and main != null:
+				main.set("pn_reseau", {"s": float(e[1]), "v": float(e[2]), "dir": 1 if float(x0[0]) >= 0.0 else -1,
+					"portes": float(x0[1]) > 0.5, "urg": int(e[4]) == 3, "tc": tc})
+				calages += 1
+			continue
+		var lg: LigneRemontee = rd.call("_ligne_nommee", n)
+		if lg == null or not lg.pret:
+			continue
+		lg.appliquer_etat_reseau(int(e[4]), int(e[5]), float(e[6]))
+		_cal_lignes[lg] = tl
+		if lg.vaetvient() and lg is Telepherique:
+			(lg as Telepherique).appliquer_reseau(e[7], age)
+			calages += 1
+			continue
+		# (tronçons jumelés : calés sur le tronçon HAUT, dont les sièges sont tous pareils ; le bas suit au même
+		# facteur. Calé sur le bas, modulo son espacement, le haut pouvait rester décalé d'un siège du bas — l'autre
+		# solution du jumelage — et ses sièges à mi-chemin de ceux de l'hôte)
+		if not calable(lg) or float(e[1]) < 0.0 or lg.role == "bas":
+			continue
+		var jm: LigneRemontee = lg.jumelee if lg.jumelee != null and is_instance_valid(lg.jumelee) else null
 		var vh: float = float(e[2])
 		var v: float = lg.vitesse_reelle
-		if float(e[3]) < 0.98 or lg.regime() < 0.98 or absf(vh - v) > 0.05 or absf(v) < 0.3:
-			lg.facteur_temps = 1.0
-			continue
+		var f: float = 1.0
 		var k: int = _reference(lg)
-		if k < 0:
-			continue
-		var sh: float = float(e[1]) + vh * (maintenant() - tc)
-		var esp: float = lg.espacement
-		var ecart: float = wrapf(sh - float(lg._vehicules[k][1]), -esp * 0.5, esp * 0.5)
-		lg.facteur_temps = 1.0 if absf(ecart) < 0.02 else clampf(1.0 + ecart / (v * GAIN_CALAGE_S), 1.0 - FACTEUR_MAX,
-			1.0 + FACTEUR_MAX)
-		_cal_lignes[lg] = tl
-		calages += 1
+		if k >= 0 and float(e[3]) >= 0.98 and lg.regime() >= 0.98 and absf(vh - v) <= 0.05 and absf(v) >= 0.3:
+			var sh: float = float(e[1]) + vh * age
+			var esp: float = lg.espacement
+			var ecart: float = wrapf(sh - float(lg._vehicules[k][1]), -esp * 0.5, esp * 0.5)
+			f = 1.0 if absf(ecart) < 0.02 else clampf(1.0 + ecart / (v * GAIN_CALAGE_S), 1.0 - FACTEUR_MAX,
+				1.0 + FACTEUR_MAX)
+			calages += 1
+		lg.facteur_temps = f
+		if jm != null:
+			jm.facteur_temps = f
+			_cal_lignes[jm] = tl
 	for lg2 in _cal_lignes.keys():
 		if not is_instance_valid(lg2) or tl - float(_cal_lignes[lg2]) > 3.0:
 			if is_instance_valid(lg2):
 				(lg2 as LigneRemontee).facteur_temps = 1.0
+				(lg2 as LigneRemontee).cap_reseau = -1.0
 			_cal_lignes.erase(lg2)
+
+
+# --- pilotage ---------------------------------------------------------------------------------------------
+
+## Commande du joueur sur une ligne (ExploitationRemontee.commande : poste, pupitre) : on en demande la main.
+func _geste_ligne(lg: LigneRemontee) -> void:
+	if connecte and lg != null and is_instance_valid(lg) and _re.search(String(lg.name)) != null:
+		_demander(String(lg.name))
+
+
+## Mener le funiculaire (hors mode skieur) : on en demande la main, renouvelée toutes les 10 s.
+func _gestes_locaux() -> void:
+	_t_pn -= 0.1
+	if main != null and main.get("physics") != null and not bool(main.get("mode_skieur")) and _t_pn <= 0.0:
+		_t_pn = 10.0
+		_demander(PN)
+
+
+func _demander(n: String) -> void:
+	if hote_id == mon_id:
+		_arbitrer(n, mon_id)
+		return
+	if pilote_de(n) != mon_id:
+		_prise[n] = temps_local()
+	_ws.send_text(JSON.stringify({"t": "cmd", "l": n, "a": 0}))
+
+
+## (hôte) Demande de la main sur une remontée : accordée si le demandeur l'a déjà, ou si personne n'y a touché
+## depuis BAIL_S (ou que son pilote est parti). Les pilotes sont republiés dans tous les cas.
+func _arbitrer(n: String, id: int) -> void:
+	if _re.search(n) == null:
+		return
+	var t: float = maintenant()
+	var cur: int = pilote_de(n)
+	if cur == id or t - float(_bail.get(n, -1e9)) > BAIL_S:
+		if id == hote_id:
+			pilotes.erase(n)
+		else:
+			pilotes[n] = id
+		_bail[n] = t
+		_maj_pilote_local(n)
+	_publier_pilotes()
+
+
+func _expirer_bails() -> void:
+	var t: float = maintenant()
+	var change_p: bool = false
+	for n in pilotes.keys():
+		if t - float(_bail.get(n, -1e9)) > BAIL_S:
+			pilotes.erase(n)
+			change_p = true
+	if change_p or not pilotes.is_empty():
+		_publier_pilotes()
+
+
+func _publier_pilotes() -> void:
+	if _ws == null or _ws.get_ready_state() != WebSocketPeer.STATE_OPEN:
+		return
+	var d: Array = []
+	for n in pilotes:
+		d.append([n, int(pilotes[n])])
+		if d.size() >= 24:
+			break
+	_ws.send_text(JSON.stringify({"t": "pilotes", "d": d}))
+
+
+func _recevoir_pilotes(d: Array) -> void:
+	pilotes.clear()
+	for e in d:
+		pilotes[String(e[0])] = int(e[1])
+	for n in _prise.keys():
+		_maj_pilote_local(n)
+	_prise.clear()
+	for n2 in pilotes:
+		_maj_pilote_local(n2)
+
+
+## Remontée dont nous devenons le pilote : plus rien de reçu n'y est appliqué.
+func _maj_pilote_local(n: String) -> void:
+	if pilote_de(n) != mon_id or main == null:
+		return
+	if n == PN:
+		main.set("pn_reseau", {})
+		return
+	var rd: Node = main.get("remontees")
+	var lg: LigneRemontee = rd.call("_ligne_nommee", n) if rd != null else null
+	if lg != null:
+		lg.facteur_temps = 1.0
+		lg.cap_reseau = -1.0
+		_cal_lignes.erase(lg)
 
 
 # --- rendu des autres -------------------------------------------------------------------------------------
@@ -452,8 +660,21 @@ func _place_a_bord(id: int, ref: Dictionary, t: float) -> Vector3:
 	var rd: Node = main.get("remontees") if main != null else null
 	if rd == null:
 		return Vector3.INF
+	var o0: Vector3 = Vector3(ref["o"][0], ref["o"][1], ref["o"][2])
+	if String(ref["l"]) == PN:
+		# (rames du funiculaire calées : la même rame, à la même place)
+		var rame: Node3D = main.get("cabin") if int(ref["i"]) == 0 else main.get("cabin_ghost")
+		return rame.global_transform * o0 if rame != null else Vector3.INF
 	var lg: LigneRemontee = rd.call("_ligne_nommee", String(ref["l"]))
-	if lg == null or not lg.pret or lg._vehicules.is_empty() or lg.longueur_boucle <= 0.0:
+	if lg == null or not lg.pret or lg._vehicules.is_empty():
+		return Vector3.INF
+	if lg.vaetvient():
+		# (va-et-vient calés d'état complet : le même véhicule, par son numéro)
+		var iv: int = int(ref["i"])
+		if iv < 0 or iv >= lg._vehicules.size() or not lg.vehicule_a_jour(iv):
+			return Vector3.INF
+		return lg.vehicule(iv).global_transform * o0
+	if lg.longueur_boucle <= 0.0:
 		return Vector3.INF
 	var cle: String = "%s:%d" % [ref["l"], int(ref["i"])]
 	var pr: Dictionary = pairs[id]

@@ -500,6 +500,41 @@ func _process_corps(delta: float) -> void:
 	_dt = 0.0
 
 
+## Mode réseau (ReseauClient) : état complet du va-et-vient, publié par le pilote de la ligne (l'hôte par défaut)
+## et pris tel quel par les autres joueurs — position et vitesse de la cabine 0, sens, phase (quai / route), temps
+## de quai restant, portes. [s, v, sens, route ?, t_quai, portes (animation), portes (cible), portes manuelles ?]
+func etat_reseau() -> Array:
+	return [snappedf(_s, 0.001), snappedf(_v, 0.001), _sens, 1.0 if _phase == "route" else 0.0,
+		snappedf(clampf(_t_quai, -999.0, 9999.0), 0.01), snappedf(_porte_anim, 0.01), snappedf(_porte_cible, 0.01),
+		1.0 if portes_manu else 0.0]
+
+
+## État reçu (âge : temps commun écoulé depuis sa publication). Grand écart (autre phase, autre sens, plus de 3 m) :
+## posé d'un coup ; sinon rattrapé de moitié à chaque message (les deux jeux avancent pareil entre deux).
+func appliquer_reseau(x: Array, age: float) -> void:
+	if x.size() < 8:
+		return
+	var ph: String = "route" if float(x[3]) > 0.5 else "quai"
+	var sens: float = 1.0 if float(x[2]) >= 0.0 else -1.0
+	var v: float = float(x[1])
+	var s_h: float = float(x[0]) + (v * clampf(age, 0.0, 0.5) if ph == "route" else 0.0)
+	if ph != _phase or sens != _sens or absf(s_h - _s) > 3.0:
+		_phase = ph
+		_sens = sens
+		_s = s_h
+		_v = v
+		_t_quai_tot = 0.0
+		_s_cab1 = NAN           # (recalée sur la cabine 0 au prochain placement)
+	else:
+		_s += (s_h - _s) * 0.5
+		if not (self is Funival):
+			_s_cab1 = _en_face(_s)
+	_t_quai = float(x[4]) - (age if ph == "quai" else 0.0)
+	portes_manu = float(x[7]) > 0.5
+	_porte_anim = clampf(float(x[5]), 0.0, 1.0)
+	_porte_cible = clampf(float(x[6]), 0.0, 1.0)
+
+
 ## Élasticité du câble tracteur (audit du 14/11/2026) : chaque cabine est une masse au bout d'un ressort
 ## k = EA / L, L la longueur de tracteur jusqu'à la poulie motrice. Aux freinages et à l'arrêt d'urgence
 ## elle continue un peu, revient, et oscille quelques secondes (Grande Motte : T ≈ 3,6 s, ~0,5 m à

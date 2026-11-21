@@ -141,6 +141,94 @@ func _comparer(a: Dictionary, b: Dictionary) -> void:
 		int(b.get("calages", 0))])
 	if n_assis > 0 and bord < n_assis * 0.9:
 		ok = false
+	var ok_l: bool = _comparer_lignes(a, b, lignes)
+	ok = ok and ok_l
 	for l2 in lignes:
 		print("RESEAU " + l2)
 	_fin(ok, "mode réseau : " + " ; ".join(lignes))
+
+
+## Remontées « calées partout » : mêmes positions et mêmes états chez A et B, aux mêmes instants (grille de temps
+## commun) ; arrêt d'urgence de A vu par B ; arrêt du TPH par B (pilote accordé par l'hôte A) vu par A.
+func _comparer_lignes(a: Dictionary, b: Dictionary, lignes: Array) -> bool:
+	var la: Dictionary = {}
+	for e in a.get("lignes", []):
+		la[int(e[0])] = e[1]
+	var lb: Array = b.get("lignes", [])
+	if la.is_empty() or lb.is_empty():
+		lignes.append("remontées : aucun relevé (A %d, B %d)" % [la.size(), lb.size()])
+		return false
+	var ok: bool = true
+	var k0: int = -1
+	var ecarts: Dictionary = {}
+	var premier: Dictionary = {}
+	for e2 in lb:
+		var k: int = int(e2[0])
+		if not la.has(k):
+			continue
+		var da: Dictionary = la[k]
+		var db: Dictionary = e2[1]
+		if k0 < 0:
+			k0 = k
+		for n in db:
+			if not da.has(n):
+				continue
+			# 20 s de mise en route du calage, comptées depuis le premier relevé commun de la remontée
+			if not premier.has(n):
+				premier[n] = k
+			if k < int(premier[n]) + 40:
+				continue
+			var va: Array = da[n]
+			var vb: Array = db[n]
+			var err: float
+			if n == "perce_neige":
+				err = absf(float(va[1]) - float(vb[1]))
+			elif va.size() == 4 and va[2] is String:
+				if String(va[2]) != String(vb[2]):
+					err = 99.0
+				else:
+					err = absf(float(va[1]) - float(vb[1]))
+			else:
+				if String(va[0]) != "marche" or String(vb[0]) != "marche" or float(va[3]) < 0.98 or float(vb[3]) < 0.98:
+					continue
+				var esp: float = float(va[2])
+				err = absf(wrapf(float(va[1]) - float(vb[1]), -esp * 0.5, esp * 0.5))
+			if not ecarts.has(n):
+				ecarts[n] = []
+			(ecarts[n] as Array).append(err)
+	for n2 in ["perce_neige", "funival", "tph_grande_motte", "tsd6_bollin", "tsd6_fresse", "tsd6_grattalu"]:
+		var l: Array = ecarts.get(n2, [])
+		if l.size() < 10:
+			ok = false
+			lignes.append("%s : %d relevés communs (trop peu)" % [n2, l.size()])
+			continue
+		l.sort()
+		var p95: float = l[int(l.size() * 0.95)]
+		lignes.append("%s : %d relevés, écart médian %.2f m, p95 %.2f m" % [n2, l.size(), l[l.size() / 2], p95])
+		if p95 > SEUIL:
+			ok = false
+	# arrêt d'urgence de A (hôte, pilote par défaut) vu par B dans les 4 s
+	var ka: int = int((a.get("evts", {}) as Dictionary).get("urgence_A", -1))
+	var vu_b: int = -1
+	for e3 in lb:
+		var db3: Dictionary = e3[1]
+		if int(e3[0]) >= ka and db3.has("tsd6_grattalu") and String(db3["tsd6_grattalu"][0]) == "urgence":
+			vu_b = int(e3[0])
+			break
+	var ok_u: bool = ka >= 0 and vu_b >= 0 and vu_b - ka <= 8
+	lignes.append("urgence de A sur Grattalu vue par B : %s" % (("après %.1f s" % ((vu_b - ka) * 0.5)) if ok_u else "NON"))
+	ok = ok and ok_u
+	# arrêt du TPH demandé par B (il en prend la main) vu par A
+	var kb: int = int((b.get("evts", {}) as Dictionary).get("arret_B", -1))
+	var vu_a: int = -1
+	for k4 in la:
+		var da4: Dictionary = la[k4]
+		if k4 >= kb and da4.has("tph_grande_motte") and String(da4["tph_grande_motte"][0]) in ["arret_normal", "arret"]:
+			if vu_a < 0 or k4 < vu_a:
+				vu_a = k4
+	var pil: int = int((a.get("pilotes", {}) as Dictionary).get("tph_grande_motte", -1))
+	var ok_p: bool = kb >= 0 and vu_a >= 0 and vu_a - kb <= 8 and pil == int(b.get("id", -2))
+	lignes.append("arrêt du TPH par B vu par A : %s ; pilote du TPH chez A : %s" % [
+		("après %.1f s" % ((vu_a - kb) * 0.5)) if vu_a >= 0 and kb >= 0 else "NON", "B" if pil == int(b.get("id", -2)) else str(pil)])
+	ok = ok and ok_p
+	return ok

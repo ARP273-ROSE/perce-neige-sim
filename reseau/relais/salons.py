@@ -24,11 +24,13 @@ TAILLE_MAX = 1024              # octets par message
 DEBIT_PAR_S = 20.0             # messages par seconde (seau de jetons)
 RAFALE = 30.0
 NOM_MAX = 16
-LIGNES_MAX = 40                # lignes par message de calage
+LIGNES_MAX = 16                # lignes par message d'état des remontées (1 Ko au plus)
+PILOTES_MAX = 24               # lignes par message des pilotes
+EXTRA_MAX = 8                  # nombres propres au genre de ligne (va-et-vient, funiculaire)
 BORNE_XZ = 40000.0             # m (le domaine fait ~20 km)
 BORNE_Y = (-500.0, 6000.0)
 VITESSE_MAX = 80.0             # m/s
-DECALAGE_MAX = 12.0            # m, place dans un véhicule
+DECALAGE_MAX = 40.0            # m, place dans un véhicule (rames de funiculaire : ~30 m)
 POSTURES = range(0, 6)         # 0 ski, 1 à pied, 2 assis à bord, 3 debout à bord, 4 chute, 5 échelle
 _RE_LIGNE = re.compile(r"^[a-z0-9_]{1,40}$")
 _RE_CODE = re.compile(r"^[%s]{%d}$" % (ALPHABET, LONGUEUR_CODE))
@@ -123,10 +125,34 @@ def valider(brut: str | bytes) -> dict:
             raise Refus("lignes invalides")
         out = []
         for e in d:
-            if not isinstance(e, list) or len(e) != 4 or not isinstance(e[0], str) or not _RE_LIGNE.match(e[0]):
+            # [ligne, abscisse, vitesse, régime, état (0 marche, 1 arrêt demandé, 2 arrêt, 3 urgence), cran,
+            #  plafond d'exploitation, [nombres propres au genre de ligne]]
+            if not isinstance(e, list) or len(e) != 8 or not isinstance(e[0], str) or not _RE_LIGNE.match(e[0]):
                 raise Refus("ligne invalide")
-            out.append([e[0], _nombre(e[1], 0.0, 100000.0), _nombre(e[2], -20.0, 20.0), _nombre(e[3], 0.0, 1.5)])
+            x = e[7]
+            if not isinstance(x, list) or len(x) > EXTRA_MAX:
+                raise Refus("ligne invalide")
+            out.append([e[0], _nombre(e[1], -100000.0, 100000.0), _nombre(e[2], -40.0, 40.0),
+                        _nombre(e[3], 0.0, 1.5), int(_nombre(e[4], 0, 3)), int(_nombre(e[5], 0, 9)),
+                        _nombre(e[6], 0.0, 1.5), [_nombre(v, -100000.0, 100000.0) for v in x]])
         return {"t": "lignes", "d": out, "tc": _nombre(m.get("tc"), 0.0, 1e11)}
+    if t == "cmd":
+        # demande de pilotage d'une remontée (0 : prendre / garder la main, 1 : la rendre) ; l'hôte arbitre
+        ligne = m.get("l")
+        if not isinstance(ligne, str) or not _RE_LIGNE.match(ligne):
+            raise Refus("ligne invalide")
+        return {"t": "cmd", "l": ligne, "a": int(_nombre(m.get("a"), 0, 1))}
+    if t == "pilotes":
+        # pilote de chaque remontée pilotée (décidé par l'hôte) : [[ligne, identifiant du joueur]]
+        d = m.get("d")
+        if not isinstance(d, list) or len(d) > PILOTES_MAX:
+            raise Refus("pilotes invalides")
+        out = []
+        for e in d:
+            if not isinstance(e, list) or len(e) != 2 or not isinstance(e[0], str) or not _RE_LIGNE.match(e[0]):
+                raise Refus("pilote invalide")
+            out.append([e[0], int(_nombre(e[1], 0, 1e9))])
+        return {"t": "pilotes", "d": out}
     if t == "creer":
         return {"t": "creer", "nom": nom_propre(m.get("nom", "")), "c": couleur(m.get("c", [0.8, 0.2, 0.2]))}
     if t == "rejoindre":
