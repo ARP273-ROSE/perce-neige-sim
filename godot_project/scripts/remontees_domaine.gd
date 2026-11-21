@@ -800,6 +800,14 @@ var _t_message_preparation: int = -100000
 var _tour_construire: int = 0
 
 
+## Lignes au repos repassées une à la fois, chacune toutes les 8 passes (2 s) : voir lointains_au_repos.
+var _tour_repos: int = 0
+
+
+func _repasse_repos(lg: LigneRemontee) -> bool:
+	return (_tour_repos + int(lg.get_index())) % 8 == 0
+
+
 func _construire_proches() -> void:
 	_presser_construction()
 	if _en_cours != null or skieur == null or not skieur.actif or _sous_terre:
@@ -1108,6 +1116,7 @@ func _process_corps(delta: float) -> void:
 	if _t_lod > 0.0:
 		return
 	_t_lod = 0.25
+	_tour_repos += 1
 	# distance au skieur quand il est là (sa caméra le suit), sinon à la caméra
 	var p: Vector3
 	if skieur != null and skieur.actif:
@@ -1157,6 +1166,10 @@ func _process_corps(delta: float) -> void:
 				lg.synchroniser()
 		elif jm != null:
 			lg.set_process(false)          # il attend son jumeau
+			# (au repos comme les autres : ses véhicules restaient dessinés, figés)
+			if not lg.get_meta("au_repos", false) or _repasse_repos(lg):
+				lg.lointains_au_repos()
+				lg.set_meta("au_repos", true)
 			continue
 		# (ligne à version cuite : ni figée ni sans véhicules entre la portée et sa démolition, où la version
 		# cuite ne les remplace pas ; cabines du 3S figées vues du télésiège voisin, 05/11/2026)
@@ -1170,6 +1183,11 @@ func _process_corps(delta: float) -> void:
 		if not actif and (lg.is_processing() or not lg.get_meta("au_repos", false)):
 			lg.lointains_au_repos()
 			lg.set_meta("au_repos", true)
+		elif not actif and _repasse_repos(lg):
+			# (repassée toutes les 2 s : un nœud remontré après la mise au repos — fin de construction, set_lointains,
+			# jumelage — restait dessiné et figé, sièges de Bollin au PC une partie sur deux, bench_vehicules_lointains
+			# avec le noyau ; rien à faire, et presque rien à payer, s'ils sont tous cachés)
+			lg.lointains_au_repos()
 		elif actif:
 			lg.set_meta("au_repos", false)
 		lg.set_process(actif)

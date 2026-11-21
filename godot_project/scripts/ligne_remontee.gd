@@ -6024,6 +6024,9 @@ func _etape_noyau(delta: float) -> void:
 		_onde_amp, _onde_t, _a_montee, actives)
 	for i in range(mini(ss.size(), _vehicules.size())):
 		_vehicules[i][1] = ss[i]
+	if tricable() and _corps_proche:
+		for i3 in range(mini(ss.size(), _vehicules.size())):
+			_articuler_chariot_3s(i3)
 	if jumelee != null:
 		# tronçons jumelés : en gare, contour extérieur et traversée de la gare
 		# intermédiaire (_pos_vehicule) — reposés en GDScript, sans balancement
@@ -6207,6 +6210,7 @@ func _creer_lointains() -> void:
 	_rids_loin = rids
 	_rels_loin = rels
 	_noyau.set_lointains(rids, rels, LOINTAINS_DES, _vehicules_jusqua)
+	_repos_apres_lointains()
 
 
 var _rids_loin: Array = []
@@ -6302,7 +6306,11 @@ func lointains_au_repos() -> void:
 	# (seulement les lignes avancées par _etape_gdscript, seule à les remontrer : le Funival et les téléphériques ont
 	# leur propre _process_corps — leurs rames et cabines restaient cachées pour de bon, « il est où le wagon ? » en
 	# gare amont du Funival, retour d'essai PC du 20/11/2026 ; bench_vehicules_retour)
-	if (_noyau == null or not _noyau_valide()) and _etape_gdscript_cache_loin():
+	# (avec le module C++ aussi : les nœuds proches à la mise au repos — ni cachés par le noyau, ni dans les
+	# MultiMesh — restaient affichés, figés, sièges de Bollin et des Merles au PC, bench_vehicules_lointains NOYAU=1 ;
+	# le noyau ne change la visibilité d'un nœud qu'au passage de sa limite : ceux-ci, visibles pour lui, sont
+	# remontrés par _process_corps à la reprise, ceux qu'il avait cachés ne sont pas touchés)
+	if _etape_gdscript_cache_loin():
 		for i in range(_vehicules.size()):
 			_cacher_loin(i, true)
 
@@ -6356,6 +6364,19 @@ func regler_portee_vehicules(d: float) -> void:
 	_vehicules_jusqua = d
 	if _noyau != null and not _rids_loin.is_empty():
 		_noyau.set_lointains(_rids_loin, _rels_loin, LOINTAINS_DES, d)
+		_repos_apres_lointains()
+
+
+## set_lointains remontre tous les nœuds que le noyau avait cachés au loin : sur une ligne au repos (plus avancée),
+## ils restaient dessinés, figés — les 60 sièges de Bollin au PC, quelle que soit la distance (bench_vehicules_lointains
+## NOYAU=1). Recachés ici ; la reprise les remontre (_process_corps).
+func _repos_apres_lointains() -> void:
+	# (set_lointains vient aussi du fil de construction : la suite sur le fil principal)
+	if OS.get_thread_caller_id() != OS.get_main_thread_id():
+		call_deferred("_repos_apres_lointains")
+		return
+	if is_inside_tree() and not is_processing() and get_meta("au_repos", false) == true:
+		lointains_au_repos()
 
 
 ## (Sans passer par la scène : le contenu peut être hors de la scène, sur
@@ -7624,6 +7645,31 @@ func _roues_proches(delta: float) -> void:
 		(py2 as PyloneRemontee).tourner_roues(dphi)
 
 
+## 3S : demi-chariots avant et arrière posés chacun sur le rail du demi-tour de la gare, à sa place et dans sa
+## tangente (retour d'utilisateur du 20/11/2026 : « le chariot du 3S s'articule longitudinalement pour que les galets
+## roulent dans le support courbe du demi-tour de la gare ») ; en ligne, chariot droit. Le rail suit point(s) à
+## ±E_PORTEURS_3S/2 (_lanceurs) : chaque demi-chariot centré sur point(s ± 0,80) suffit.
+func _articuler_chariot_3s(i: int) -> void:
+	var v: VehiculeRemontee = _vehicules[i][0]
+	var s: float = _vehicules[i][1]
+	if not v.visible or v._pince == null or zone(s)[0] == "ligne":
+		v.articuler_chariot([])
+		return
+	var tc: Transform3D = v.transform * v._pince.transform
+	var inv: Transform3D = tc.affine_inverse()
+	var a: Vector3 = inv * (point(s + 1.0)[0] as Vector3)
+	var b: Vector3 = inv * (point(s - 1.0)[0] as Vector3)
+	var dsz: float = 1.0 if a.z >= b.z else -1.0
+	var poses: Array = []
+	for k in range(2):
+		var sk: float = s + v.z_demi_chariot(k) * dsz
+		var pk: Vector3 = inv * (point(sk)[0] as Vector3)
+		var tk: Vector3 = inv.basis * ((point(sk + 0.5)[0] as Vector3) - (point(sk - 0.5)[0] as Vector3))
+		var th: float = atan2(tk.x * dsz, tk.z * dsz)
+		poses.append(Transform3D(Basis(Vector3.UP, th), Vector3(pk.x, 0.0, pk.z)))
+	v.articuler_chariot(poses)
+
+
 func _placer(i: int) -> void:
 	var v: VehiculeRemontee = _vehicules[i][0]
 	var s: float = _vehicules[i][1]
@@ -7665,6 +7711,8 @@ func _placer(i: int) -> void:
 	var montee_v: bool = signf((pt[0] as Vector3).x) == signf(_x_brin(true))
 	if tricable() and _dt > 0.0 and _corps_proche:
 		v.rouler(vitesse_en(s) * regime() * _dt)
+	if tricable() and _corps_proche:
+		_articuler_chariot_3s(i)
 	var charge: float = OccupationRemontees.PAX_KG * passagers(i, montee_v) if not teleski() else 0.0
 	if _dt > 0.0:
 		var m0: float = v.masse

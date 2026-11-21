@@ -24,6 +24,30 @@ extends Node3D
 var _machoire: Node3D
 var _ressorts: Array = []
 var _galets_roul: Array = []      # galets du chariot du 3S (axe local X)
+var _demi_chariots: Array = []    # 3S : demi-chariots avant et arrière (balanciers et galets), articulés en gare
+var _chariot_articule: bool = false
+
+
+## 3S : pose des deux demi-chariots dans le repère du chariot (« Pince ») : [Transform3D, Transform3D] dans
+## l'ordre de _demi_chariots ; vide = chariot droit (en ligne).
+func articuler_chariot(poses: Array) -> void:
+	if _demi_chariots.size() != 2:
+		return
+	if poses.is_empty():
+		if not _chariot_articule:
+			return
+		_chariot_articule = false
+		for k0 in range(2):
+			(_demi_chariots[k0] as Node3D).transform = Transform3D(Basis.IDENTITY, Vector3(0, 0, z_demi_chariot(k0)))
+		return
+	_chariot_articule = true
+	for k in range(2):
+		(_demi_chariots[k] as Node3D).transform = poses[k]
+
+
+## Abscisse nominale (repère du chariot) du demi-chariot k.
+func z_demi_chariot(k: int) -> float:
+	return -Z_BALANCIER_3S if k == 0 else Z_BALANCIER_3S
 ## Rayon de roulement du galet, au fond de la gorge ; flasques à R_FLASQUE_CHARIOT (estimés sur photo).
 const R_GALET_CHARIOT: float = 0.19
 const R_FLASQUE_CHARIOT: float = 0.22
@@ -135,7 +159,7 @@ const VARIANTES: int = 8
 static var _numeros: Dictionary = {}      # type → numéros des variantes
 static var _modeles: Dictionary = {}      # type|numéro → [Node3D hors arbre, références, valeurs]
 const REFS: Array = ["_machoire", "_gc", "_bulle", "_susp", "_pince", "_corde", "_perche_tige", "_bras", "_assiette"]
-const LISTES: Array = ["_ressorts", "_galets_roul", "_skis_ranges", "_coulisses"]
+const LISTES: Array = ["_ressorts", "_galets_roul", "_skis_ranges", "_coulisses", "_demi_chariots"]
 const VALEURS: Array = ["places", "cabine", "pivot", "masse", "longueur_pendule", "_gc_releve", "_ressort_l0", "_etat_anim"]
 
 
@@ -283,6 +307,7 @@ func _phases_caisse() -> Array:
 func _fabriquer_pince() -> void:
 	_ressorts.clear()
 	_galets_roul.clear()
+	_demi_chariots.clear()
 	_portes.clear()
 	_skis_ranges.clear()
 	_etat_anim = PackedFloat32Array([-1.0, -1.0, -1.0, -1.0])
@@ -349,6 +374,8 @@ func _a_garder() -> Array:
 		garder.append(r)
 	for g in _galets_roul:
 		garder.append(g)
+	for dc in _demi_chariots:
+		garder.append(dc)
 	for p in _portes:
 		garder.append(p[0])
 	# perche télescopique du TKD : chaque élément coulisse dans le précédent, l'assiette au bout
@@ -1850,32 +1877,47 @@ func _zeta_chariot() -> void:
 	var gris: String = "peinture_anthracite"
 	var e: float = E_PORTEURS_3S * 0.5
 	var y_axe: float = R_GALET_CHARIOT + 0.0285
+	# deux demi-chariots articulés, avant et arrière (retour d'utilisateur du 20/11/2026 : « le chariot du 3S
+	# s'articule longitudinalement pour que les galets roulent dans le support courbe du demi-tour de la gare ») :
+	# chacun porte les deux balanciers de son bout, un par porteur ; en gare, chacun suit la tangente du rail à sa
+	# place (LigneRemontee._articuler_chariot_3s), le corps et la pince restent au milieu
+	var demis: Dictionary = {}
+	for bz0 in [-1.0, 1.0]:
+		var dc: Node3D = Node3D.new()
+		dc.name = "DemiChariot"
+		dc.position = Vector3(0, 0, bz0 * Z_BALANCIER_3S)
+		ch.add_child(dc)
+		_demi_chariots.append(dc)
+		demis[bz0] = dc
 	# quatre balanciers bleus de deux galets : un à chaque bout de chaque porteur
 	for sx in [-1.0, 1.0]:
 		var x: float = sx * e
 		for bz in [-1.0, 1.0]:
 			var zb: float = bz * Z_BALANCIER_3S
+			var hc: Node3D = demis[bz]
+			var o: Vector3 = Vector3(0, 0, zb)
 			for gz in [-0.5, 0.5]:
 				var gn: Node3D = Node3D.new()
 				gn.name = "GaletChariot"
-				gn.position = Vector3(x, y_axe, zb + gz * ENTRAXE_GALETS_3S)
-				ch.add_child(gn)
+				gn.position = Vector3(x, y_axe, gz * ENTRAXE_GALETS_3S)
+				hc.add_child(gn)
 				_galet_chariot(gn)
 				_galets_roul.append(gn)
 			# bras du balancier, côté extérieur et plus mince côté intérieur, avec la plaque qui monte au corps
+			# (dans le repère du demi-chariot : origine au milieu du balancier, o retiré)
 			var xb: float = x + sx * 0.105
-			var tete: Vector3 = Vector3(xb, y_axe, zb + bz * ENTRAXE_GALETS_3S * 0.5 + bz * 0.20)
-			var queue: Vector3 = Vector3(xb, y_axe, zb - bz * ENTRAXE_GALETS_3S * 0.5)
-			RemonteeKit.poutre(ch, queue, Vector3(xb, y_axe + 0.03, zb), 0.03, 0.09, "bleu_doppelmayr")
-			RemonteeKit.poutre(ch, Vector3(xb, y_axe + 0.03, zb), tete, 0.03, 0.09, "bleu_doppelmayr")
-			RemonteeKit.poutre(ch, Vector3(x - sx * 0.105, y_axe, zb - ENTRAXE_GALETS_3S * 0.5), Vector3(x - sx * 0.105, y_axe, zb + ENTRAXE_GALETS_3S * 0.5), 0.02, 0.06, "bleu_doppelmayr")
-			RemonteeKit.boite_en(ch, Vector3(0.03, Y_POUTRES_3S - y_axe, 0.14), Vector3(xb, (Y_POUTRES_3S + y_axe) * 0.5, zb), "bleu_doppelmayr")
-			RemonteeKit.cylindre(ch, 0.025, 0.025, 0.26, Transform3D(Basis(Vector3.FORWARD, PI * 0.5), Vector3(x, y_axe, zb)), "acier", 8)
+			var tete: Vector3 = Vector3(xb, y_axe, zb + bz * ENTRAXE_GALETS_3S * 0.5 + bz * 0.20) - o
+			var queue: Vector3 = Vector3(xb, y_axe, zb - bz * ENTRAXE_GALETS_3S * 0.5) - o
+			RemonteeKit.poutre(hc, queue, Vector3(xb, y_axe + 0.03, 0), 0.03, 0.09, "bleu_doppelmayr")
+			RemonteeKit.poutre(hc, Vector3(xb, y_axe + 0.03, 0), tete, 0.03, 0.09, "bleu_doppelmayr")
+			RemonteeKit.poutre(hc, Vector3(x - sx * 0.105, y_axe, -ENTRAXE_GALETS_3S * 0.5), Vector3(x - sx * 0.105, y_axe, ENTRAXE_GALETS_3S * 0.5), 0.02, 0.06, "bleu_doppelmayr")
+			RemonteeKit.boite_en(hc, Vector3(0.03, Y_POUTRES_3S - y_axe, 0.14), Vector3(xb, (Y_POUTRES_3S + y_axe) * 0.5, 0), "bleu_doppelmayr")
+			RemonteeKit.cylindre(hc, 0.025, 0.025, 0.26, Transform3D(Basis(Vector3.FORWARD, PI * 0.5), Vector3(x, y_axe, 0)), "acier", 8)
 			# crosse d'extrémité rouge et blanche
-			RemonteeKit.boite_en(ch, Vector3(0.20, 0.16, 0.035), tete + Vector3(-sx * 0.09, 0.0, bz * 0.02), "cabine_rouge")
-			RemonteeKit.boite_en(ch, Vector3(0.11, 0.08, 0.012), tete + Vector3(-sx * 0.09, 0.0, bz * 0.043), "polyurethane")
+			RemonteeKit.boite_en(hc, Vector3(0.20, 0.16, 0.035), tete + Vector3(-sx * 0.09, 0.0, bz * 0.02), "cabine_rouge")
+			RemonteeKit.boite_en(hc, Vector3(0.11, 0.08, 0.012), tete + Vector3(-sx * 0.09, 0.0, bz * 0.043), "polyurethane")
 			# traverse au-dessus du porteur, du corps au balancier
-			RemonteeKit.boite_en(ch, Vector3(xb * sx - 0.10, 0.08, 0.12), Vector3(sx * (xb * sx + 0.10) * 0.5, Y_POUTRES_3S, zb), gris)
+			RemonteeKit.boite_en(hc, Vector3(xb * sx - 0.10, 0.08, 0.12), Vector3(sx * (xb * sx + 0.10) * 0.5, Y_POUTRES_3S, 0), gris)
 	# corps au-dessus du tracteur : rien ne descend sous lui que les mâchoires, à 3 cm sous son axe, la hauteur du
 	# haut des galets des cavaliers et des pylônes (retour d'utilisateur du 06/11/2026 : la quille, 0,21 m sous le
 	# câble, traversait les galets ; le câble n'est soulevé que de l'épaisseur des mâchoires)
