@@ -5,7 +5,7 @@ Chaque entrée dit ce qui a changé, pourquoi (souvent un retour d'essai),
 et comment ça a été vérifié. Le README ne garde que la présentation du
 projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
-## 1.76.4 — (non publiée)
+## 1.76.4 — 21 novembre 2026
 
 - **Mode réseau : l'arrêt d'une remontée par un joueur est vu de tous** (« mon frère a demandé un arrêt que je n'ai
   pas eu, et du coup on est désynchronisés sur la télécabine de la Daille »). Reproduit avant correction
