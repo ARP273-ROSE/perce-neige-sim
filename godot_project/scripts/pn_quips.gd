@@ -254,6 +254,11 @@ static func liste(nom: String) -> Array:
 		var cn: Dictionary = (load("res://scripts/piques_nuit.gd") as Script).get_script_constant_map()
 		if cn.has(nom):
 			l.append_array(cn[nom])
+	# piques du mode réseau (RESEAU_*)
+	if nom.begins_with("RESEAU_"):
+		var cr: Dictionary = (load("res://scripts/piques_reseau.gd") as Script).get_script_constant_map()
+		if cr.has(nom):
+			l.append_array(cr[nom])
 	_listes[nom] = l
 	return l
 

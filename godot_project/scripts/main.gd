@@ -3300,15 +3300,20 @@ func _maj_jour(delta: float, dehors: bool) -> void:
 		# véhicules (cabines, sièges) en version allégée : couleurs cuites, sans lumière ; la nuit, une lueur chaude
 		# s'y ajoute (cabines éclairées de l'intérieur, vues de dehors ou de dedans — retour d'essai du 19/11/2026)
 		var ecl0: float = float(etat_jour.get("eclairage", 0.0))
-		var t_veh: Color = Color(decor.r, decor.g, decor.b) + Color(0.42, 0.33, 0.22) * ecl0
-		VehiculesLod.materiau_pylones().albedo_color = teinte
+		# remontées (pylônes, galets, sièges, cabines, gares cuites) : la nuit, la teinte bleue et très sombre du décor
+		# les rendait toutes du même gris (retour d'essai PWA 1.76.0 du 21/11/2026 : « les sièges sont monochromes,
+		# les pneus et tout, les pylônes aussi ») — teinte neutralisée et plancher de luminosité, couleurs lisibles
+		var deco_rm: Color = CycleJour.teinte_remontees(decor, float(etat_jour.get("nuit", 0.0)))
+		var teinte_rm: Color = teinte if teinte == Color(1, 1, 1) else deco_rm.linear_to_srgb()
+		var t_veh: Color = deco_rm + Color(0.42, 0.33, 0.22) * ecl0
+		VehiculesLod.materiau_pylones().albedo_color = teinte_rm
 		VehiculesLod.materiau().albedo_color = teinte if teinte == Color(1, 1, 1) else Color(minf(t_veh.r, 1.0),
 			minf(t_veh.g, 1.0), minf(t_veh.b, 1.0)).linear_to_srgb()
 		LigneCuite._verrou.lock()
 		for m in LigneCuite._materiaux_communs.values():
 			if m is StandardMaterial3D and (m as StandardMaterial3D).shading_mode == BaseMaterial3D.SHADING_MODE_UNSHADED \
 					and (m as StandardMaterial3D).vertex_color_use_as_albedo:
-				(m as StandardMaterial3D).albedo_color = teinte
+				(m as StandardMaterial3D).albedo_color = teinte_rm
 		LigneCuite._verrou.unlock()
 		_appliquer_ciel(decor, ext_vue)
 		var dsol: Color = Color(decor.r, decor.g, decor.b, 1.0)
