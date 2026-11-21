@@ -24,6 +24,8 @@ var sol_z: Callable = Callable()
 ## base, abscisse du brin montant, longueurs de poutre vers l'amont (−z) et vers l'aval (+z).
 var forme: String = "plots_bas"
 var cable_y: Callable = Callable()
+## 3S : galets du tracteur sur le sabot relevés d'autant (LigneRemontee.surhausse_tracteur_3s).
+var surhausse_tracteur: float = 0.0
 var sol_xz: Callable = Callable()
 var x_montee: float = 1.0
 var l_amont: float = 6.0
@@ -239,7 +241,7 @@ func _sabot_fin(e: Dictionary, y_c: Callable) -> void:
 			jj += 1
 		var zg: float = lerpf(zs[jj], zs[jj + 1], clampf((lk - ls[jj]) / maxf(ls[jj + 1] - ls[jj], 1e-6), 0.0, 1.0))
 		var y_cz: float = float(y_c.call(zg, montee))
-		var yg: float = y_cz + VehiculeRemontee.Y_TRACTEUR_3S - 0.03 - 0.21
+		var yg: float = y_cz + VehiculeRemontee.Y_TRACTEUR_3S + surhausse_tracteur - 0.03 - 0.21
 		RemonteeKit.galet(self, Vector3(x0, yg, zg), 0.21)
 		# chape : deux flasques du dessus de la poutre (y − 0,975) à l'axe du galet (12/11/2026)
 		for sxc in [-0.09, 0.09]:

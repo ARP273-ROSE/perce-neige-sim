@@ -7,6 +7,26 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
 
 ## 1.75.4 — 20 novembre 2026 (non publiée)
 
+- **3S : galets du chariot sur les porteurs DESSINÉS** (retour d'essai PWA du 21/11/2026, vidéo de l'Olympique :
+  « tu vois bien le câble qui bouge sous les galets »). Le nuanceur creuse les porteurs sous chaque cabine en ne
+  déplaçant que les sommets du tube (tous les 4 m en ligne) et la carte graphique trace un segment droit entre eux,
+  alors que le chariot, droit, était posé sur la flèche du tracteur (sommets tous les 3 m) et incliné à la pente du
+  câble non chargé : au fil du passage du creux d'un sommet à l'autre, les galets passaient de 7,5 cm sous le
+  porteur à 5 cm au-dessus. Chaque demi-chariot est maintenant posé en ligne sur le porteur dessiné, à sa place et
+  dans sa pente (`y_porteur_dessine`, `point_porteur`), à toute distance où la cabine est posée : écart galet ↔
+  porteur 0,5 cm au plus (mesuré perpendiculairement au porteur, 30 s, cabines à moins de 250 m).
+- **3S : tracteur posé sur ses galets de pylône** (même vidéo : « t'as vu le décollement des galets du pylône du câble
+  tracteur, pas réaliste »). Deux défauts : les appuis de la flèche étaient centrés sur le pylône alors que la poutre
+  de sabot de l'ouvrage (P3) est décentrée — un bout du sabot restait dans la portée, porteurs et tracteur creusés
+  jusqu'à 0,39 m sous lui (bouts réels `bouts_sabot_3s` pour les appuis, les appuis du tracteur et le pas fin des
+  porteurs) ; et la pince levait le tracteur de 0,28 m au-dessus des galets du sabot, en S raide sur un mètre. Les
+  galets du sabot sont maintenant à la hauteur de la pince moins 4 cm (`LEVEE_SABOT_3S`), que la pince franchit
+  en ne levant le câble que de ces 4 cm, et le tracteur redescend en douceur sur 8 m de part et d'autre jusqu'à la
+  hauteur des cavaliers (`surhausse_tracteur_3s`). Tracteur ↔ galets de sabot : 0,39 m → 0 hors pince,
+  0,28 → 0,04 m au passage d'une pince.
+- Bancs `bench_galets_3s` et `bench_galets_3s_noyau` (Olympique, 30 s en marche) : galets du chariot ↔ porteur
+  dessiné ≤ 2 cm ; tracteur ↔ galets de sabot ≤ 3 cm hors du passage d'une pince, ≤ 5 cm à son passage.
+  Non vérifié à l'image : en vrai rendu, l'Olympique n'a pas fini sa construction pendant les essais.
 - **Funival et téléphériques : rame et cabines disparues** (retours d'essai PC du 20/11/2026 : en gare amont du
   Funival, « il est où le wagon ? » ; au Fornet, « la cabine est invisible »). La 1.75.3 cachait les véhicules d'une
   ligne mise au repos (skieur loin) et seule l'étape GDScript des lignes à câble les remontrait. Le Funival et les

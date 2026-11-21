@@ -2675,7 +2675,7 @@ func _pas_ligne(d: float) -> float:
 			return 0.5
 		for p in pylones:
 			var bs: Vector2 = bouts_sabot_3s(p)
-			if d > bs.x - 1.0 and d < bs.y + 1.0:
+			if d > bs.x - RACCORD_SABOT_3S - 1.0 and d < bs.y + RACCORD_SABOT_3S + 1.0:
 				return 0.5
 		return 3.0
 	if d < 2.0 * _h_nez[0] + 1.0 or d > L - 2.0 * _h_nez[1] - 1.0:
@@ -5441,7 +5441,7 @@ func _cable() -> void:
 	if tricable():
 		# 3S : le tracteur passe sous les porteurs (la boucle suit le chariot)
 		for k in range(pts.size()):
-			pts[k] += Vector3(0, VehiculeRemontee.Y_TRACTEUR_3S, 0)
+			pts[k] += Vector3(0, VehiculeRemontee.Y_TRACTEUR_3S + surhausse_tracteur_3s(-pts[k].z), 0)
 		await _pause("câble : tracé")
 		await _porteurs(c)
 		await _cavaliers(c)
@@ -5571,9 +5571,9 @@ func _appuis_tracteur(montee: bool) -> PackedFloat32Array:
 		if bool(e[2]) == montee:
 			a.append(float(e[1]))
 	for p in pylones:
-		var hs: float = l_sabot_3s(p) * 0.5
-		var x: float = float(p["d"]) - hs
-		while x <= float(p["d"]) + hs + 0.01:
+		var bsa: Vector2 = bouts_sabot_3s(p)
+		var x: float = bsa.x
+		while x <= bsa.y + 0.01:
 			a.append(x)
 			x += 1.0
 	a.sort()
@@ -5588,7 +5588,43 @@ func _appuis_tracteur(montee: bool) -> PackedFloat32Array:
 ## au-dessus d'un galet, la levée ne couvre que la longueur des mâchoires. Nuanceur du câble : levee().
 const LEVEE_3S: float = VehiculeRemontee.Y_PINCE_3S - VehiculeRemontee.Y_TRACTEUR_3S
 const LEVEE_PORTEE: float = 400.0
+## Sur les sabots des pylônes, le tracteur reste posé sur ses galets (retour d'utilisateur du 21/11/2026, vidéo PWA :
+## « t'as vu le décollement des galets du pylône du câble tracteur, pas réaliste ») : galets du sabot à la hauteur de
+## la pince moins LEVEE_SABOT_3S, que la pince franchit en ne levant le câble que de ces quelques cm ; de part et
+## d'autre, le tracteur redescend en douceur (RACCORD_SABOT_3S m) à la hauteur des cavaliers. Avant : galets du sabot
+## 0,28 m sous la pince, le câble décollé d'eux sur les ±1 m d'appuis et un S raide à la pince.
+const LEVEE_SABOT_3S: float = 0.04
+const RACCORD_SABOT_3S: float = 8.0
+
+
+## 3S : surhausse du tracteur au repos en d (0 entre les pylônes, LEVEE_3S − LEVEE_SABOT_3S sur un sabot).
+func surhausse_tracteur_3s(d: float) -> float:
+	if not tricable():
+		return 0.0
+	var h: float = 0.0
+	for p in pylones:
+		var bs: Vector2 = bouts_sabot_3s(p)
+		var x: float = bs.x - d if d < bs.x else (d - bs.y if d > bs.y else 0.0)
+		if x < RACCORD_SABOT_3S:
+			h = maxf(h, (LEVEE_3S - LEVEE_SABOT_3S) * (1.0 - smoothstep(0.0, RACCORD_SABOT_3S, x)))
+	return h
 var _levees_vides: bool = false
+var _levees_lst: Dictionary = {true: [], false: []}
+
+
+## 3S : levée du tracteur dessiné en d (même calcul que levee() du nuanceur du câble), pour les bancs.
+func levee_tracteur(d: float, montee: bool) -> float:
+	var h: float = 0.0
+	const W: float = 0.25
+	var k: float = 1.0 / (1.0 - W * 0.5)
+	for q in _levees_lst.get(montee, []):
+		var x: float = d - (q as Vector4).x
+		var l: float = (q as Vector4).z if x < 0.0 else (q as Vector4).w
+		var u: float = absf(x) / maxf(l, 0.05)
+		if u < 1.0:
+			var g: float = 1.0 - k * u if u < 1.0 - W else k * 0.5 / W * (1.0 - u) * (1.0 - u)
+			h = maxf(h, (q as Vector4).y * g)
+	return h
 
 
 func _lever_tracteur_3s() -> void:
@@ -5613,7 +5649,8 @@ func _lever_tracteur_3s() -> void:
 		var l_av: float = maxf(d - g, CAV_LIBRE)
 		var l_am: float = maxf(dr - d, CAV_LIBRE)
 		if (lv[montee] as Array).size() < 48:
-			(lv[montee] as Array).append(Vector4(d, LEVEE_3S, l_av, l_am))
+			(lv[montee] as Array).append(Vector4(d, LEVEE_3S - surhausse_tracteur_3s(d), l_av, l_am))
+	_levees_lst = lv
 	if (lv[true] as Array).is_empty() and (lv[false] as Array).is_empty() and _levees_vides:
 		return              # (rien à soulever, déjà transmis : pas de tableaux envoyés au nuanceur à chaque image)
 	_levees_vides = (lv[true] as Array).is_empty() and (lv[false] as Array).is_empty()
@@ -5701,8 +5738,11 @@ func _porteurs(parent: Node3D) -> void:
 		ds.append(d)
 		var fin: bool = d < 30.0 or d > L - 30.0
 		for p3 in pylones:
-			fin = fin or absf(d - float(p3["d"])) < l_sabot_3s(p3) * 0.5 + 4.0
+			var bs3: Vector2 = bouts_sabot_3s(p3)
+			fin = fin or (d > bs3.x - 4.0 and d < bs3.y + 4.0)
 		d += 0.5 if fin else 4.0
+	_d_porteurs = ds.duplicate()
+	_d_porteurs.append(L)
 	for montee in [true, false]:
 		var x0: float = _x_brin(montee)
 		var ys: PackedFloat32Array = PackedFloat32Array()
@@ -6859,7 +6899,7 @@ func _lod_pose(i: int) -> Transform3D:
 		pt[0] = _pos_vehicule(i, s)
 	if _n_appuis >= 2 and en_ligne:
 		var p0: Vector3 = pt[0]
-		pt[0] = p0 - Vector3(0, _fleche_affichee(-p0.z, signf(p0.x) == signf(_x_brin(true))), 0)
+		pt[0] = point_porteur(s) if tricable() else p0 - Vector3(0, _fleche_affichee(-p0.z, signf(p0.x) == signf(_x_brin(true))), 0)
 	var dirh: Vector3 = pt[1] if en_ligne else (point(s + 1.5)[0] as Vector3) - (point(s - 1.5)[0] as Vector3)
 	if jumelee != null:
 		dirh = _pos_vehicule(i, s + 1.5) - _pos_vehicule(i, s - 1.5)
@@ -6981,9 +7021,11 @@ func _preparer_charges() -> void:
 		# le chemin de la cabine y faisait un coude de 2P/H = 8,7°, 4-5° de balancement parasite)
 		_appuis = PackedFloat32Array([0.0])
 		for p2 in pylones:
-			var hs2: float = (l_sabot_3s(p2) if tricable() else SABOT_TPH) * 0.5
-			_appuis.append(float(p2["d"]) - hs2)
-			_appuis.append(float(p2["d"]) + hs2)
+			# (3S : les bouts réels de la poutre, décentrée sur l'ouvrage — l_aval / l_amont ; centrés, les appuis
+			# laissaient un bout du sabot dans la portée, porteurs et tracteur creusés jusqu'à 0,48 m sous lui)
+			var bs2: Vector2 = bouts_sabot_3s(p2) if tricable() else Vector2(float(p2["d"]) - SABOT_TPH * 0.5, float(p2["d"]) + SABOT_TPH * 0.5)
+			_appuis.append(bs2.x)
+			_appuis.append(bs2.y)
 		_appuis.append(longueur_h())
 	_n_appuis = mini(_appuis.size(), 48)
 	_tension = tension_h()
@@ -7169,6 +7211,25 @@ func _charges_ponctuelles() -> void:
 
 
 var _charges_portee: Array = [{}, {}]
+
+
+## 3S : abscisses des sommets des porteurs dessinés (_porteurs : tous les 4 m en ligne, 0,5 m aux gares et aux sabots).
+var _d_porteurs: PackedFloat32Array = PackedFloat32Array()
+
+
+## 3S : axe du porteur TEL QU'IL EST DESSINÉ en d (repère de la ligne) : le nuanceur creuse chaque sommet du tube de sa
+## flèche et la carte graphique trace un segment droit entre deux sommets (4 m en ligne). Les galets du chariot
+## roulent sur ce segment-là (retour d'utilisateur du 21/11/2026, vidéo PWA : « le câble bouge sous les galets »).
+func y_porteur_dessine(d: float, montee: bool) -> float:
+	var t: PackedFloat32Array = _d_porteurs
+	if t.size() < 2:
+		return y_cable(d, montee) - _fleche(d, montee)
+	var j: int = clampi(t.bsearch(d), 1, t.size() - 1)
+	var a: float = t[j - 1]
+	var b: float = t[j]
+	var ya: float = y_cable(a, montee) - _fleche(a, montee)
+	var yb: float = y_cable(b, montee) - _fleche(b, montee)
+	return lerpf(ya, yb, clampf((d - a) / maxf(b - a, 1e-4), 0.0, 1.0))
 
 
 ## Flèche (vers le bas) de l'écart de charge réparti seul en d : celle des portées hors de la zone locale (bancs).
@@ -7457,6 +7518,7 @@ func _poser_pylones_treillis() -> void:
 			py.l_aval = d - bs.x
 			py.l_amont = bs.y - d
 			py.x_montee = _x_brin(true)
+			py.surhausse_tracteur = LEVEE_3S - LEVEE_SABOT_3S
 			py.cable_y = func(z: float, montee: bool) -> float:
 				return y_cable(d - z, montee) - t
 			py.sol_xz = func(x: float, z: float) -> float:
@@ -7649,12 +7711,18 @@ func _roues_proches(delta: float) -> void:
 ## tangente (retour d'utilisateur du 20/11/2026 : « le chariot du 3S s'articule longitudinalement pour que les galets
 ## roulent dans le support courbe du demi-tour de la gare ») ; en ligne, chariot droit. Le rail suit point(s) à
 ## ±E_PORTEURS_3S/2 (_lanceurs) : chaque demi-chariot centré sur point(s ± 0,80) suffit.
+##
+## En ligne (retour d'utilisateur du 21/11/2026, vidéo PWA : « tu vois bien le câble qui bouge sous les galets ») :
+## chaque demi-chariot est posé sur le porteur DESSINÉ (y_porteur_dessine : sommets tous les 4 m, creusés sous les
+## cabines par le nuanceur), à sa place et dans sa pente — chariot droit, les galets passaient de 5 cm dessous à 10 cm
+## au-dessus du porteur au fil du passage du creux d'un sommet à l'autre.
 func _articuler_chariot_3s(i: int) -> void:
 	var v: VehiculeRemontee = _vehicules[i][0]
 	var s: float = _vehicules[i][1]
-	if not v.visible or v._pince == null or zone(s)[0] == "ligne":
+	if not v.visible or v._pince == null:
 		v.articuler_chariot([])
 		return
+	var en_ligne: bool = zone(s)[0] == "ligne"
 	var tc: Transform3D = v.transform * v._pince.transform
 	var inv: Transform3D = tc.affine_inverse()
 	var a: Vector3 = inv * (point(s + 1.0)[0] as Vector3)
@@ -7663,11 +7731,25 @@ func _articuler_chariot_3s(i: int) -> void:
 	var poses: Array = []
 	for k in range(2):
 		var sk: float = s + v.z_demi_chariot(k) * dsz
+		if en_ligne:
+			var pk2: Vector3 = inv * point_porteur(sk)
+			var f: Vector3 = (inv.basis * (point_porteur(sk + 0.5) - point_porteur(sk - 0.5)) * dsz).normalized()
+			var xa: Vector3 = Vector3.UP.cross(f).normalized()
+			poses.append(Transform3D(Basis(xa, f.cross(xa), f), pk2))
+			continue
 		var pk: Vector3 = inv * (point(sk)[0] as Vector3)
 		var tk: Vector3 = inv.basis * ((point(sk + 0.5)[0] as Vector3) - (point(sk - 0.5)[0] as Vector3))
 		var th: float = atan2(tk.x * dsz, tk.z * dsz)
 		poses.append(Transform3D(Basis(Vector3.UP, th), Vector3(pk.x, 0.0, pk.z)))
 	v.articuler_chariot(poses)
+
+
+## 3S : point du câble en s, à la hauteur du porteur dessiné en ligne (ailleurs : point(s)).
+func point_porteur(s: float) -> Vector3:
+	var p: Vector3 = point(s)[0]
+	if _n_appuis >= 2 and zone(s)[0] == "ligne":
+		p.y = y_porteur_dessine(-p.z, signf(p.x) == signf(_x_brin(true)))
+	return p
 
 
 func _placer(i: int) -> void:
@@ -7680,7 +7762,13 @@ func _placer(i: int) -> void:
 	# en ligne : la flèche locale sous le poids des véhicules de la portée
 	if _n_appuis >= 2 and z[0] == "ligne":
 		var p0: Vector3 = pt[0]
-		pt[0] = p0 - Vector3(0, _fleche_affichee(-p0.z, signf(p0.x) == signf(_x_brin(true))), 0)
+		if tricable():
+			# (3S : sur le porteur dessiné, pente comprise — voir _articuler_chariot_3s)
+			pt[0] = point_porteur(s)
+			var zb: float = VehiculeRemontee.Z_BALANCIER_3S
+			pt[1] = (point_porteur(s + zb) - point_porteur(s - zb)).normalized()
+		else:
+			pt[0] = p0 - Vector3(0, _fleche_affichee(-p0.z, signf(p0.x) == signf(_x_brin(true))), 0)
 	# cap : corde de 3 m centrée sur le véhicule — sur l'arc de la poulie
 	# c'est la tangente exacte, et elle tourne continûment ; la direction du
 	# segment de la boucle (polygone de 24 côtés autour de la poulie) faisait
@@ -7711,8 +7799,8 @@ func _placer(i: int) -> void:
 	var montee_v: bool = signf((pt[0] as Vector3).x) == signf(_x_brin(true))
 	if tricable() and _dt > 0.0 and _corps_proche:
 		v.rouler(vitesse_en(s) * regime() * _dt)
-	if tricable() and _corps_proche:
-		_articuler_chariot_3s(i)
+	if tricable():
+		_articuler_chariot_3s(i)     # (à toute distance posée : les galets restent sur le porteur dessiné)
 	var charge: float = OccupationRemontees.PAX_KG * passagers(i, montee_v) if not teleski() else 0.0
 	if _dt > 0.0:
 		var m0: float = v.masse
