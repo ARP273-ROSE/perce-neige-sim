@@ -546,20 +546,22 @@ func _interieur() -> void:
 				# nez de marche inox
 				RemonteeKit.boite(self, Vector3(lw, 0.012, 0.05), Transform3D(R, R * Vector3(0, haut + 0.006, zc + course / float(N_MARCHES) * 0.5 - 0.03)), "acier")
 		# cadre au bord amont du palier : deux poteaux du sol au plafond, lisses vers les flancs (passage au milieu)
+		# (pas au dernier palier amont : son bord amont est le nez, qui fuit vers l'intérieur en montant — les poteaux
+		# de 2,25 m sortaient par le pare-brise, retour d'essai PWA du 21/11/2026 « les barres rouges sortent au
+		# travers de la vitre »)
 		var e: Vector3 = c + Vector3(0, 0, -L_PALIER * 0.5 + 0.05)
-		for sx in [-1.0, 1.0]:
+		for sx in ([] if k == N_COMP - 1 else [-1.0, 1.0]):
 			RemonteeKit.barre(self, R * (e + Vector3(sx * 0.38, 0.0, 0)), R * (e + Vector3(sx * 0.38, 2.25, 0)), 0.024, "rouge_val", 6)
 			for hb in [1.05, 1.95]:
 				RemonteeKit.barre(self, R * (e + Vector3(sx * 0.38, hb, 0)), R * (e + Vector3(sx * (W - 0.14), hb, 0)), 0.02, "rouge_val", 6)
-			# arceau dans la baie de porte (ok-46, quai amont) : deux montants et un dessus arrondi, le côté aval de la baie
-			var ax: float = sx * (W - 0.34)
-			var zh0: float = c.z + L_PORTE * 0.5 - 0.10
-			var zh1: float = c.z + 0.05
-			var pts: Array = [Vector3(ax, 0.0, zh0), Vector3(ax, 0.95, zh0), Vector3(ax, 1.08, zh0 - 0.10), Vector3(ax, 1.12, zh0 - 0.26),
-				Vector3(ax, 1.12, zh1 + 0.26), Vector3(ax, 1.08, zh1 + 0.10), Vector3(ax, 0.95, zh1), Vector3(ax, 0.0, zh1)]
+		for sx in [-1.0, 1.0]:
+			# main courante de porte (ok-46, quai amont) : un montant rouge contre le jambage aval de la baie, hors du
+			# passage (retour d'essai PWA du 21/11/2026 : l'arceau posé DANS la baie, à 0,34 m du flanc, barrait la
+			# moitié aval de la porte ouverte — « la rambarde est en travers de la porte ouverte »)
+			var ax: float = sx * (W - 0.10)
+			var zj: float = c.z + L_PORTE * 0.5 + 0.06
 			var cf: Vector3 = Vector3(0, c.y, 0)
-			for ip in range(pts.size() - 1):
-				RemonteeKit.barre(self, R * (cf + pts[ip]), R * (cf + pts[ip + 1]), 0.022, "rouge_val", 6)
+			RemonteeKit.barre(self, R * (cf + Vector3(ax, 0.0, zj)), R * (cf + Vector3(ax, 1.90, zj)), 0.022, "rouge_val", 6)
 		# extincteur en housse rouge, un compartiment sur trois (ok-52)
 		if k % 3 == 1:
 			RemonteeKit.boite(self, Vector3(0.22, 0.55, 0.26), Transform3D(R, R * (c + Vector3(-(W - 0.22), 0.30, -L_PALIER * 0.5 - 0.35))), "rouge_val")
@@ -579,7 +581,19 @@ func _interieur() -> void:
 		# lisse en long sous les vitres, de chaque côté
 		# (le long de la caisse, pas de niveau : posée de niveau sur 29 m, elle sortait par le toit d'un bout et par le
 		# plancher de l'autre — les deux longs traits rouges, retour d'utilisateur du 10/11/2026)
-		RemonteeKit.boite_en(self, Vector3(0.04, 0.04, long_i), Vector3(sx * (W - 0.11), H_PLANCHER + 1.0, 0), "rouge_val")
+		# (coupée au droit de chaque porte : continue, elle barrait toutes les baies ouvertes à hauteur de hanche —
+		# retour d'essai PWA du 21/11/2026, « la rambarde est en travers de la porte ouverte »)
+		var bornes: Array = [-long_i * 0.5]
+		for kp in range(N_COMP - 1, -1, -1):
+			var zp: float = z_comp(kp)
+			bornes.append(zp - L_PORTE * 0.5 - 0.03)
+			bornes.append(zp + L_PORTE * 0.5 + 0.03)
+		bornes.append(long_i * 0.5)
+		for ib in range(0, bornes.size(), 2):
+			var za: float = maxf(float(bornes[ib]), -long_i * 0.5)
+			var zb2: float = minf(float(bornes[ib + 1]), long_i * 0.5)
+			if zb2 - za > 0.05:
+				RemonteeKit.boite_en(self, Vector3(0.04, 0.04, zb2 - za), Vector3(sx * (W - 0.11), H_PLANCHER + 1.0, (za + zb2) * 0.5), "rouge_val")
 	# banquettes de bout : assise et dossier en moquette grise, dos au nez (ok-54)
 	for sz in [-1.0, 1.0]:
 		var k2: int = 0 if sz > 0.0 else N_COMP - 1
@@ -678,7 +692,9 @@ func formes_funi() -> Array:
 			r.append([Vector3(2.0 * W, ep, e1.distance_to(e2) + 0.2), Transform3D(R * bt, R * m), false])
 	for sx in [-1.0, 1.0]:
 		r.append([Vector3(0.1, H_TOIT, DEMI_L * 2.0), Transform3D(Basis.IDENTITY, Vector3(sx * DEMI_LARGEUR, H_TOIT * 0.5, 0)), true])
+	# parois de bout au droit du HAUT du nez (il fuit de NEZ_RECUL vers l'intérieur en montant) : posées à mi-recul,
+	# elles laissaient la tête du skieur et la caméra sortir par le pare-brise (retour d'essai PWA du 21/11/2026)
 	for sz in [-1.0, 1.0]:
-		r.append([Vector3(2.0 * W, H_TOIT, 0.2), Transform3D(Basis.IDENTITY, Vector3(0, H_TOIT * 0.5, sz * (DEMI_L - NEZ_RECUL * 0.5))), false])
+		r.append([Vector3(2.0 * W, H_TOIT, 0.2), Transform3D(Basis.IDENTITY, Vector3(0, H_TOIT * 0.5, sz * (DEMI_L - NEZ_RECUL - 0.05))), false])
 	r.append([Vector3(2.0 * DEMI_LARGEUR, 0.2, DEMI_L * 2.0), Transform3D(Basis.IDENTITY, Vector3(0, H_TOIT + 0.1, 0)), false])
 	return r

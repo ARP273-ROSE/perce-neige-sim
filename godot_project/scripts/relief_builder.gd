@@ -2354,6 +2354,10 @@ func _materiau_piece(r: Rect2, img: Image) -> ShaderMaterial:
 	# (pack haute définition : même photo et mêmes normales que le sol alentour)
 	var hd_piece: bool = _tex_normales != null and ((fin != null and fin.hd) or _normales_seules != null)
 	var mat: ShaderMaterial = _mat_terrain.duplicate() if hd_piece or _detail_seul else _shader(SHADER_TERRAIN)
+	# (une pièce ne lit pas le masque des gares : copié du relief, il gardait en vie chaque masque de 2048² remplacé
+	# depuis, 4 Mo par pièce posée en cours de partie — sonde de mémoire du 21/11/2026)
+	mat.set_shader_parameter("masque_gares", null)
+	mat.set_shader_parameter("avec_masque", 0.0)
 	mat.set_shader_parameter("ortho", _tex_ortho)
 	if hd_piece:
 		ReliefAnneaux.regler_hd(mat, _tex_normales, _tex_ortho_hd)
@@ -2454,9 +2458,20 @@ func set_rames(s1: float, s2: float) -> void:
 			m.set_shader_parameter("s_rame2", s2)
 
 
+## Un Shader par code source, partagé par tous les matériaux qui l'emploient : chaque Shader neuf est un programme de
+## plus à compiler et à garder sur la carte, même au code identique. Sur la PWA, chaque pièce fine des gares (une
+## soixantaine, posées au fil de la partie) recevait le sien — compilation de plusieurs secondes sur iPad à
+## l'arrivée près d'une gare (relevés du 21/11/2026 : 3,9 s aux Tufs, « après le script »), et 922 programmes au
+## moment où la tablette a perdu son contexte WebGL.
+var _shaders_code: Dictionary = {}
+
+
 func _shader(code: String) -> ShaderMaterial:
-	var sh: Shader = Shader.new()
-	sh.code = code
+	var sh: Shader = _shaders_code.get(code)
+	if sh == null:
+		sh = Shader.new()
+		sh.code = code
+		_shaders_code[code] = sh
 	var m: ShaderMaterial = ShaderMaterial.new()
 	m.shader = sh
 	m.set_shader_parameter("gamma", _gamma())
