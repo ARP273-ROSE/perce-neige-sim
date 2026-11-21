@@ -2488,6 +2488,19 @@ func _creer_skieur() -> void:
 	add_child(vues_remontee)
 
 
+## Mode réseau : client du relais, créé à la première ouverture du panneau RÉSEAU (rien hors réseau).
+var reseau: ReseauClient = null
+
+
+func reseau_client() -> ReseauClient:
+	if reseau == null:
+		reseau = ReseauClient.new()
+		reseau.main = self
+		reseau.charger_reglages()
+		add_child(reseau)
+	return reseau
+
+
 ## Vue suivante sur la remontée où l'on est assis (bouton VUE LIGNE, touche T).
 func basculer_vue_ligne() -> void:
 	if vues_remontee == null or commandes_skieur == null:

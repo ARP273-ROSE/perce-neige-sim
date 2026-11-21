@@ -28,7 +28,7 @@ jobs:
           sudo apt-get install -y -qq libgl1 libegl1 libxkbcommon0 libdbus-1-3 libfontconfig1 poppler-utils
 
       - name: Install deps
-        run: pip install PyQt6 pytest numpy
+        run: pip install PyQt6 pytest pytest-timeout numpy
 
       - name: Run physics tests
         env:

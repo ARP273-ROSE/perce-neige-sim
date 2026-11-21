@@ -5887,12 +5887,18 @@ func _process(delta: float) -> void:
 		_process_corps(delta)
 
 
+## Mode réseau (ReseauClient) : marche du temps de la ligne, ajustée de quelques % pour caler ses véhicules sur
+## ceux de l'hôte du salon (même place chez tous les joueurs). 1 hors réseau.
+var facteur_temps: float = 1.0
+
+
 func _process_corps(delta: float) -> void:
 	if not roule:
 		return
 	delta = _tic_lod(delta)
 	if delta < 0.0:
 		return
+	delta *= facteur_temps
 	_maj_vent()
 	_maj_occupation(delta)
 	_maj_poids_vehicules(delta)
