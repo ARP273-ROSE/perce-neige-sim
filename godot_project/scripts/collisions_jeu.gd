@@ -90,6 +90,8 @@ func construire(main: Node, zones_terrain: Array, synchrone: bool = false) -> vo
 		if c != null:
 			_taches.append(_rame.bind(c))
 	var relief: ReliefBuilder = main.get("relief")
+	if relief != null and relief.has_signal("sol_modifie") and not relief.sol_modifie.is_connected(_sur_sol_modifie):
+		relief.sol_modifie.connect(_sur_sol_modifie)
 	if relief != null:
 		for z in zones_terrain:
 			_zones_relief.append(z as Rect2)
@@ -874,6 +876,23 @@ func _terrain(relief: ReliefBuilder, r: Rect2, quoi: int = TERRAIN_TOUT) -> void
 	if quoi != TERRAIN_PIECES and relief.fin != null and relief.fin.hd:
 		_terrain(relief, r, TERRAIN_PIECES)   # (le reste : _sol_autour)
 		return
+	if quoi != TERRAIN_PIECES:
+		_poser_relief("G%d|%s" % [quoi, r], [quoi, r], _faces_grille(relief, r, quoi), false)
+	if quoi == TERRAIN_GRILLE:
+		return
+	# pièces fines des gares (2 m), étendues aux mailles du bloc qu'elles
+	# touchent (hors de la pièce : les triangles du bloc, échantillonnés)
+	for pc3 in relief._rects_pieces + relief._rects_masque + relief._rects_couloirs:
+		var pr: Rect2 = pc3 as Rect2
+		if not pr.intersects(r) or _pieces_faites.has(pr):
+			continue
+		# (une seule fois : chaque carré qui la touchait la refaisait en entier, en double, 26 à 54 ms)
+		_pieces_faites[pr] = true
+		_poser_relief("P|%s" % pr, [TERRAIN_PIECES, pr], _faces_piece(relief, pr), false)
+
+
+## Triangles du relief (grille du bloc, au pas affiché) dans `r`, hors des pièces fines.
+func _faces_grille(relief: ReliefBuilder, r: Rect2, quoi: int) -> PackedVector3Array:
 	var faces: PackedVector3Array = PackedVector3Array()
 	# (gares de plain-pied comprises ; et les traces damées des TKD, relevées par leur couloir)
 	var pieces: Array = relief._rects_pieces + relief._rects_masque + relief._rects_couloirs
@@ -927,14 +946,15 @@ func _terrain(relief: ReliefBuilder, r: Rect2, quoi: int = TERRAIN_TOUT) -> void
 			var pd: Vector3 = Vector3(x0 + dx, relief._h[((i + 1) * p) * n + (j + 1) * p], z0 + dz)
 			# même découpe que les tuiles : (a, b, c) puis (b, d, c)
 			faces.append_array([pa, pb, pc2, pb, pd, pc2])
-	# pièces fines des gares (2 m), étendues aux mailles du bloc qu'elles
-	# touchent (hors de la pièce : les triangles du bloc, échantillonnés)
-	for pc3 in pieces:
-		var pr: Rect2 = pc3 as Rect2
-		if quoi == TERRAIN_GRILLE or not pr.intersects(r) or _pieces_faites.has(pr):
-			continue
-		# (une seule fois : chaque carré qui la touchait la refaisait en entier, en double, 26 à 54 ms)
-		_pieces_faites[pr] = true
+	return faces
+
+
+## Triangles d'une pièce fine (2 m) étendue aux mailles du bloc qu'elle touche.
+func _faces_piece(relief: ReliefBuilder, pr: Rect2) -> PackedVector3Array:
+	var faces: PackedVector3Array = PackedVector3Array()
+	var dx: float = relief._dx * relief._pas
+	var dz: float = relief._dz * relief._pas
+	if true:
 		var gx0: float = ReliefDonnees.X_OUEST + floor((pr.position.x - ReliefDonnees.X_OUEST) / dx) * dx
 		var gx1: float = ReliefDonnees.X_OUEST + ceil((pr.end.x - ReliefDonnees.X_OUEST) / dx) * dx
 		var gz0: float = ReliefDonnees.Z_NORD + floor((pr.position.y - ReliefDonnees.Z_NORD) / dz) * dz
@@ -959,7 +979,7 @@ func _terrain(relief: ReliefBuilder, r: Rect2, quoi: int = TERRAIN_TOUT) -> void
 				relief.couloirs.relever_grille(rp, pas, nx, nz, hc)
 			faces.append_array(nd.piece_faces(rp, pas, nx, nz, hc, g[1]))
 			_bords_trous(relief, rp, pas, nx, nz, hc, g[1], faces)
-			continue
+			return faces
 		var h: PackedFloat32Array = PackedFloat32Array()
 		h.resize((nx + 1) * (nz + 1))
 		var trou: PackedByteArray = PackedByteArray()
@@ -993,20 +1013,108 @@ func _terrain(relief: ReliefBuilder, r: Rect2, quoi: int = TERRAIN_TOUT) -> void
 					Vector3(xa, h[c3], za + pas), Vector3(xa + pas, h[b], za),
 					Vector3(xa + pas, h[d], za + pas), Vector3(xa, h[c3], za + pas)])
 		_bords_trous(relief, rp, pas, nx, nz, h, trou, faces)
-	if faces.is_empty():
-		return
-	# par morceaux de RELIEF_MORCEAU triangles, un par tâche (06/11/2026) : une seule forme
-	# de 22 000 triangles faisait 10 ms de set_faces puis 15 ms d'entrée dans le monde
-	# physique, d'un seul tenant (image figée à l'entrée du skieur). Mêmes triangles.
+	return faces
+
+
+## Formes du relief posées, par clé (bloc de grille ou pièce) : [génération, [CollisionShape3D…]] ; et ce qu'il faut
+## pour les refaire : clé → [quoi, rect].
+var _relief_formes: Dictionary = {}
+var _relief_cles: Dictionary = {}
+var _relief_gen: int = 0
+## Formes du relief refaites parce que le sol affiché a changé (bancs).
+var refaits: int = 0
+
+
+## Pose (ou remplace) les formes d'une clé. Par morceaux de RELIEF_MORCEAU triangles, un par tâche (06/11/2026) : une
+## seule forme de 22 000 triangles faisait 10 ms de set_faces puis 15 ms d'entrée dans le monde physique, d'un seul
+## tenant (image figée à l'entrée du skieur). `d_un_coup` : tous les morceaux tout de suite, et les anciennes formes
+## retirées dans la même image (jamais de trou pendant le remplacement).
+func _poser_relief(cle: String, info: Array, faces: PackedVector3Array, d_un_coup: bool) -> void:
+	_relief_cles[cle] = info
+	_relief_gen += 1
+	var gen: int = _relief_gen
+	var anciennes: Array = (_relief_formes[cle][1] as Array) if _relief_formes.has(cle) else []
+	_relief_formes[cle] = [gen, []]
 	var nv: int = RELIEF_MORCEAU * 3
 	var k: int = 0
 	var morceaux: Array = []
 	while k < faces.size():
 		morceaux.append(faces.slice(k, mini(k + nv, faces.size())))
 		k += nv
-	for i in range(morceaux.size() - 1, 0, -1):
-		_taches.push_front(_forme_relief.bind(morceaux[i]))
-	_forme_relief(morceaux[0])
+	if d_un_coup:
+		for m in morceaux:
+			_forme_relief(m, cle, gen)
+	elif not morceaux.is_empty():
+		for i in range(morceaux.size() - 1, 0, -1):
+			_taches.push_front(_forme_relief.bind(morceaux[i], cle, gen))
+		_forme_relief(morceaux[0], cle, gen)
+	for cs in anciennes:
+		if is_instance_valid(cs):
+			triangles -= ((cs as CollisionShape3D).shape as ConcavePolygonShape3D).get_faces().size() / 3
+			(cs as CollisionShape3D).queue_free()
+
+
+## Sol affiché changé (fenêtre fine de la PWA, ReliefBuilder.sol_modifie) : les formes du relief qui le touchent sont
+## refaites sur le nouveau sol. Sinon le sol de collision restait celui d'avant — jusqu'à 37 m sous la neige affichée
+## au col au nord du Montet (retour d'essai du 21/11/2026 : à pied vers les gorges du Malpasset, le joueur « passe au
+## travers » puis est téléporté ; sonde _sonde_malpasset_trous). Celles à moins de PROCHE m du joueur tout de suite,
+## les autres par tâches, les plus proches d'abord.
+const PROCHE: float = 120.0
+## Plus grand écart entre deux sols affichés (fenêtre fine ou non) sous un joueur qui y était posé (m).
+const SOL_MONTE_MAX: float = 40.0
+## Joueurs reposés sur un sol monté (bancs).
+var reposes: int = 0
+
+
+func _sur_sol_modifie(rect: Rect2) -> void:
+	var relief: ReliefBuilder = _main.get("relief") if _main != null else null
+	if relief == null or (relief.fin != null and relief.fin.hd):
+		return
+	var sk: Node3D = _main.get("skieur") as Node3D
+	var ici: Vector2 = Vector2(sk.global_position.x, sk.global_position.z) if sk != null else rect.get_center()
+	var a_faire: Array = []
+	for cle in _relief_cles:
+		var r: Rect2 = _relief_cles[cle][1]
+		if r.intersects(rect):
+			var d: float = 0.0 if r.has_point(ici) else ici.distance_to(Vector2(clampf(ici.x, r.position.x, r.end.x),
+				clampf(ici.y, r.position.y, r.end.y)))
+			a_faire.append([d, cle])
+	a_faire.sort_custom(func(a, b) -> bool: return float(a[0]) < float(b[0]))
+	var plus_tard: Array = []
+	for e in a_faire:
+		if float(e[0]) < PROCHE:
+			_refaire_relief(String(e[1]))
+		else:
+			plus_tard.append(String(e[1]))
+	for i in range(plus_tard.size() - 1, -1, -1):
+		_taches.push_front(_refaire_relief.bind(plus_tard[i]))
+	# sol monté sous un joueur à pied, dehors : il était posé sur l'ancien, il se retrouvait dessous (1,5 m au col,
+	# bench_col_malpasset_3d) et tombait jusqu'au rattrapage — reposé sur le nouveau
+	var sj: SkieurJoueur = sk as SkieurJoueur
+	if sj != null and sj.actif and not sj.chausse and sj.support == null and not sj.embarque \
+			and rect.has_point(ici) and is_nan(float(relief.terrain_piece(ici.x, ici.y)[0])):
+		var hs: float = relief.hauteur_sol(ici.x, ici.y)
+		var y: float = sj.global_position.y
+		if y < hs + 0.05 and y > hs - SOL_MONTE_MAX:
+			sj.global_position.y = hs + 0.05
+			sj.velocity.y = maxf(sj.velocity.y, 0.0)
+			reposes += 1
+	if not plus_tard.is_empty():
+		if synchrone_sans_ecran and DisplayServer.get_name() == "headless":
+			_avancer(1 << 62)
+		else:
+			set_process(true)
+
+
+func _refaire_relief(cle: String) -> void:
+	var relief: ReliefBuilder = _main.get("relief")
+	var info: Array = _relief_cles.get(cle, [])
+	if relief == null or info.is_empty():
+		return
+	var faces: PackedVector3Array = _faces_piece(relief, info[1]) if int(info[0]) == TERRAIN_PIECES \
+		else _faces_grille(relief, info[1], int(info[0]))
+	_poser_relief(cle, info, faces, true)
+	refaits += 1
 
 
 ## Mailles de 2 m retirées parce que leur centre est dans un bâtiment, mais qui débordent du bâtiment : la part
@@ -1061,7 +1169,10 @@ func _bords_trous(relief: ReliefBuilder, rp: Rect2, pas: float, nx: int, nz: int
 const RELIEF_MORCEAU: int = 3000
 
 
-func _forme_relief(faces: PackedVector3Array) -> void:
+func _forme_relief(faces: PackedVector3Array, cle: String = "", gen: int = -1) -> void:
+	# (morceau d'une pose remplacée depuis : il ne vaut plus rien)
+	if cle != "" and (not _relief_formes.has(cle) or int(_relief_formes[cle][0]) != gen):
+		return
 	var f: ConcavePolygonShape3D = ConcavePolygonShape3D.new()
 	f.set_faces(faces)
 	f.backface_collision = true
@@ -1070,3 +1181,5 @@ func _forme_relief(faces: PackedVector3Array) -> void:
 	cs.shape = f
 	_decor.add_child(cs)
 	triangles += faces.size() / 3
+	if cle != "":
+		(_relief_formes[cle][1] as Array).append(cs)

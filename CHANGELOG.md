@@ -28,6 +28,22 @@ projet ; les versions antérieures à la 1.12 sont résumées dans le manuel.
   74 s après l'arrêt trouve la Daille arrêtée (40 relevés, 0 en marche), B ne la voit pas repartir ; perche
   partagée : chacun voit l'autre à sa place à 0,02 m (p95), 0,70 m en travers, sur la même perche. Relais
   redéployé (même configuration), 426 / 101 / 403 vérifiés.
+- **PWA, à pied hors piste : plus de chute à travers le sol** (« au col au nord de la piste du Montet, vers les
+  gorges du Malpasset, on a fini à pied, il est passé au travers et s'est retrouvé satellisé ailleurs »). Le col
+  (vers 3 000 m, x ≈ 12 050, z ≈ 2 600 à 2 850 du repère du jeu) a été retrouvé sur le relief : col le plus bas
+  entre la piste du Montet et le vallon du nord. Cause : sur la PWA (maille à 50 m), la fenêtre fine à 25 m suit le
+  joueur et change le sol affiché, mais le sol de collision du piéton, posé avant son arrivée, restait celui d'avant
+  — jusqu'à 37 m sous la neige affichée dans le secteur (sonde sur 407 000 points : 42 500 à plus de 0,7 m d'écart).
+  Un joueur à pied restait alors sous la neige (vu « au travers » par l'autre), ou, quand le sol montait sous ses
+  pieds, tombait : rattrapé au dernier sol sûr, retombé, puis renvoyé à la gare de départ au troisième rattrapage.
+  Les formes du relief sont maintenant rangées par bloc et refaites quand le sol affiché change
+  (`ReliefBuilder.sol_modifie` → `CollisionsJeu._sur_sol_modifie`) : celles à moins de 120 m du joueur dans la même
+  image, en remplaçant les anciennes sans trou, les autres par tâches, les plus proches d'abord ; un joueur à pied
+  dehors que le sol nouveau a laissé dessous est reposé dessus.
+- Vérifié : `bench_col_malpasset_3d` (configuration de la PWA, 20 images/s, collisions étalées comme en jeu, fenêtre
+  qui arrive pendant la marche) — sans la correction, 19,8 s sous la neige affichée ; avec, 0 rattrapage, 0 s sous
+  le sol, sol de collision à 0,00 m du sol affiché sur 300 m autour du joueur. Sonde de tout le secteur après le
+  déplacement de la fenêtre : 0 point à plus de 0,7 m (42 500 avant).
 
 ## 1.76.3 — 21 novembre 2026
 
