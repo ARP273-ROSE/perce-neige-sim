@@ -5887,12 +5887,18 @@ func _process(delta: float) -> void:
 		_process_corps(delta)
 
 
+## Mode réseau (ReseauClient) : marche du temps de la ligne, ajustée de quelques % pour caler ses véhicules sur
+## ceux de l'hôte du salon (même place chez tous les joueurs). 1 hors réseau.
+var facteur_temps: float = 1.0
+
+
 func _process_corps(delta: float) -> void:
 	if not roule:
 		return
 	delta = _tic_lod(delta)
 	if delta < 0.0:
 		return
+	delta *= facteur_temps
 	_maj_vent()
 	_maj_occupation(delta)
 	_maj_poids_vehicules(delta)
@@ -7415,7 +7421,40 @@ func _pique_exploitation(evt: String) -> void:
 func cap_exploitation() -> float:
 	if corde_en_cours:
 		return 0.0
+	if cap_reseau >= 0.0:
+		return cap_reseau
 	return _exploit.cap() if _exploit != null else 1.0
+
+
+## Mode réseau (ReseauClient) : plafond d'exploitation (pannes, moteur de secours) de la ligne chez son pilote,
+## appliqué ici tel quel ; −1 hors réseau ou quand on la pilote soi-même.
+var cap_reseau: float = -1.0
+## Mode réseau : appelé à chaque commande du joueur sur une ligne (poste, pupitre : ExploitationRemontee.commande),
+## pour en demander la main ; vide hors réseau.
+static var sur_geste: Callable = Callable()
+const ETATS_RESEAU: Array = ["marche", "arret_normal", "arret", "urgence"]
+
+
+## État d'exploitation en code réseau (0 marche, 1 arrêt demandé, 2 arrêt, 3 urgence).
+func etat_reseau_code() -> int:
+	return maxi(ETATS_RESEAU.find(etat), 0)
+
+
+## État et cran reçus du pilote de la ligne : l'arrêt d'urgence et l'arrêt passent par leurs fonctions (onde du
+## câble, comme si on avait appuyé), le reste est posé tel quel.
+func appliquer_etat_reseau(code: int, k: int, cap: float) -> void:
+	var e: String = ETATS_RESEAU[clampi(code, 0, 3)]
+	cap_reseau = clampf(cap, 0.0, 1.5)
+	if k != cran:
+		regler_cran(k)
+	if e == etat:
+		return
+	if e == "urgence":
+		arret_urgence()
+	elif e == "arret_normal" and etat == "marche":
+		arreter()
+	else:
+		etat = e
 
 
 ## Évacuation à la corde en cours sous un véhicule de la ligne (retour d'utilisateur du 16/11/2026 : « le TPH est

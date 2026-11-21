@@ -1132,7 +1132,9 @@ func _process_corps(delta: float) -> void:
 		return
 
 	# Inputs continus (désactivés en mode client : Python pilote)
-	if not client_mode:
+	if _suivre_pn_reseau(delta):
+		pass
+	elif not client_mode:
 		_handle_continuous_input(delta)
 
 		# Physique à pas fixe
@@ -2486,6 +2488,49 @@ func _creer_skieur() -> void:
 	vues_remontee.main = self
 	vues_remontee.skieur = skieur
 	add_child(vues_remontee)
+
+
+## Mode réseau : client du relais, créé à la première ouverture du panneau RÉSEAU (rien hors réseau).
+var reseau: ReseauClient = null
+## Mode réseau : état du funiculaire chez son pilote (un autre joueur du salon) — {s, v, dir, portes, urg, tc} ;
+## vide quand c'est nous qui le menons (ou hors réseau). Rame posée là, sa physique locale suspendue.
+var pn_reseau: Dictionary = {}
+
+
+func _suivre_pn_reseau(delta: float) -> bool:
+	if pn_reseau.is_empty() or physics == null:
+		return false
+	if reseau == null or not reseau.connecte:
+		pn_reseau = {}
+		return false
+	var age: float = reseau.maintenant() - float(pn_reseau["tc"])
+	if age > 3.0:
+		return false
+	var v: float = float(pn_reseau["v"])
+	var cible: float = float(pn_reseau["s"]) + v * clampf(age, 0.0, 0.5)
+	if absf(cible - physics.s) > 5.0:
+		physics.s = cible
+	else:
+		physics.s += v * delta
+		physics.s += (cible - physics.s) * minf(1.0, delta / 0.2)
+	physics.s_prev_step = physics.s
+	physics.v = v
+	physics.direction = int(pn_reseau["dir"])
+	physics.doors_open = bool(pn_reseau["portes"])
+	physics.emergency = bool(pn_reseau["urg"])
+	physics.s_poulie_render = physics.s
+	physics.s_render = physics.s
+	_client_s = physics.s
+	return true
+
+
+func reseau_client() -> ReseauClient:
+	if reseau == null:
+		reseau = ReseauClient.new()
+		reseau.main = self
+		reseau.charger_reglages()
+		add_child(reseau)
+	return reseau
 
 
 ## Vue suivante sur la remontée où l'on est assis (bouton VUE LIGNE, touche T).
